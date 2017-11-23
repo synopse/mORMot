@@ -5980,8 +5980,7 @@ type
     // ! finally
     // !   Safe.Unlock;
     // ! end;
-    procedure Lock;
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure Lock;               {$ifdef HASINLINE}inline;{$endif}
     /// will try to acquire the mutex
     // - use as such to avoid race condition (from a Safe: TSynLocker property):
     // ! if Safe.TryLock then
@@ -5990,11 +5989,9 @@ type
     // ! finally
     // !   Safe.Unlock;
     // ! end;
-    function TryLock: boolean;
-      {$ifdef HASINLINE}inline;{$endif}
+    function TryLock: boolean;    {$ifdef HASINLINE}inline;{$endif}
     /// release the instance for exclusive access
-    procedure UnLock;
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure UnLock;             {$ifdef HASINLINE}inline;{$endif}
     /// will enter the mutex until the IUnknown reference is released
     // - could be used as such under Delphi:
     // !begin
@@ -7198,10 +7195,6 @@ function IntegerDynArrayLoadFrom(Source: PAnsiChar; var Count: integer): PIntege
 // - will return -1 if no match or invalid data, or the matched entry index
 function RawUTF8DynArrayLoadFromContains(Source: PAnsiChar;
   Value: PUTF8Char; ValueLen: integer; CaseSensitive: boolean): integer;
-
-var
-  /// mORMot.pas will registry here its T*ObjArray serialization process
-  DynArrayIsObjArray: function(aDynArrayTypeInfo: Pointer): boolean;
 
 
 { ****************** text buffer and JSON functions and classes ************ }
@@ -9659,6 +9652,11 @@ const
   SQLDBFIELDTYPE_TO_DELPHITYPE: array[TSQLDBFieldType] of RawUTF8 = (
     '???','???', 'Int64', 'Double', 'Currency', 'TDateTime', 'RawUTF8', 'TSQLRawBlob');
 
+var
+  /// mORMot.pas will registry here its T*ObjArray serialization process
+  // - will be used by TDynArray.GetIsObjArray
+  DynArrayIsObjArray: function(aDynArrayTypeInfo: Pointer): TPointerClassHashed;
+
 type
   /// handle memory mapping of a file content
   /// used to store and retrieve Words in a sorted array
@@ -11468,6 +11466,11 @@ procedure Int64ToHexShort(aInt64: Int64; out result: TShort16); overload;
 // - use internally BinToHexDisplay()
 // - such result type would avoid a string allocation on heap
 function Int64ToHexShort(aInt64: Int64): TShort16; overload;
+
+/// fast conversion from a Int64 value into hexa chars, ready to be displayed
+// - use internally BinToHexDisplay()
+// - reverse function of HexDisplayToInt64()
+function Int64ToHexString(aInt64: Int64): string;
 
 /// fast conversion from hexa chars into a pointer
 function HexDisplayToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: integer): boolean;
@@ -17260,21 +17263,40 @@ type
     property TaskLock: TSynLocker read fTaskLock;
   end;
 
+  /// an alternative to TSynPersistentLocked, but via PSynLocker and not TSynLocker
+  // - TSynLocker will increase inherited fields offset so it may be fine if
+  // you want to avoid allocation of a PSynLocker buffer, but you may
+  // prefer this implementation for general-purpose processing class
+  TSynPersistentPLocked = class(TSynPersistent)
+  protected
+    fSafe: PSynLocker; // TSynLocker will increase inherited fields offset
+  public
+    /// initialize the instance, and its associated lock
+    constructor Create; override;
+    /// finalize the instance, and its associated lock
+    destructor Destroy; override;
+    /// access to the associated instance critical section
+    // - call Safe.Lock/UnLock to protect multi-thread access on this storage
+    property Safe: PSynLocker read fSafe;
+  end;
+
+  /// class-reference type (metaclass) of an TSynPersistentPLocked class
+  TSynPersistentPLockedClass = class of TSynPersistentPLocked;
+
+  /// abstract dynamic array of TSynPersistentPLocked instance
+  // - note defined as T*ObjArray, since it won't
+  TSynPersistentPLockedDynArray = array of TSynPersistentPLocked;
+
   /// abstract high-level handling of SynLZ-compressed persisted storage
   // - LoadFromReader/SaveToWriter abstract methods should be overriden
   // with proper persistence implementation
-  TSynPersistentStore = class(TSynPersistent)
+  TSynPersistentStore = class(TSynPersistentPLocked)
   protected
     fName: RawUTF8;
-    {$ifndef DELPHI5OROLDER}
-    fLock: IAutoLocker; // TSynLocker will increase inherited fields offset
-    {$endif}
     /// low-level virtual methods implementing the persistence reading
     procedure LoadFromReader(var Source: TFastReader); virtual;
     procedure SaveToWriter(aWriter: TFileBufferWriter); virtual;
   public
-    /// initialize a void storage with no name
-    constructor Create; overload; override;
     /// initialize a void storage with the supplied name
     constructor Create(const aName: RawUTF8); reintroduce; overload; virtual;
     /// initialize a storage from a SaveTo persisted buffer
@@ -17311,11 +17333,45 @@ type
     /// one optional text associated with this storage
     // - you can define it as published to serialize its value
     property Name: RawUTF8 read fName;
-    {$ifndef DELPHI5OROLDER}
-    /// access to the associated instance critical section
-    // - call Lock.Enter/Leave to protect multi-thread access on this storage
-    property Lock: IAutoLocker read fLock;
-    {$endif}
+  end;
+
+  /// maintain a thread-safe sorted list of TSynPersistentPLocked objects
+  // - will use fast O(log(n)) binary search for efficient search - it is
+  // a lighter alternative to TObjectListHashedAbstract/TObjectListPropertyHashed
+  // if hashing has a performance cost (e.g. if there are a few items, or
+  // deletion occurs regularly)
+  // - in practice, insertion becomes slower after around 100,000 items stored
+  // - expect to store only TSynPersistentPLocked inherited items, so that
+  // the process is explicitly thread-safe
+  // - inherited classes should override the Compare and NewItem abstract methods
+  TObjectListSorted = class(TSynPersistentPLocked)
+  protected
+    fCount: integer;
+    fObjArray: TSynPersistentPLockedDynArray;
+    function FastLocate(const Value; out Index: Integer): boolean;
+    procedure InsertNew(Item: TSynPersistentPLocked; Index: integer);
+    // override those methods for actual implementation
+    function Compare(Item: TSynPersistentPLocked; const Value): integer; virtual; abstract;
+    function NewItem(const Value): TSynPersistentPLocked; virtual; abstract;
+  public
+    /// finalize the list
+    destructor Destroy; override;
+    /// search a given TSynPersistentPLocked instance from a value
+    // - if returns not nil, caller should make result.Safe.UnLock once finished
+    // - will use the TObjectListSortedCompare function for the search
+    function FindLocked(const Value): pointer;
+    /// search or add a given TSynPersistentPLocked instance from a value
+    // - if returns not nil, caller should make result.Safe.UnLock once finished
+    // - added is TRUE if a new void item has just been created
+    // - will use the TObjectListSortedCompare function for the search
+    function FindOrAddLocked(const Value; out added: boolean): pointer;
+    /// remove a given TSynPersistentPLocked instance from a value
+    function Delete(const Value): boolean;
+    /// how many items are actually stored
+    property Count: Integer read fCount;
+    /// low-level access to the stored items
+    // - warning: use should be protected by Lock.Enter/Lock.Leave
+    property ObjArray: TSynPersistentPLockedDynArray read fObjArray;
   end;
 
 type
@@ -27603,6 +27659,14 @@ begin
   result[0] := AnsiChar(sizeof(aInt64)*2);
   BinToHexDisplay(@aInt64,@result[1],sizeof(aInt64));
 end;
+
+function Int64ToHexString(aInt64: Int64): string;
+var temp: TShort16;
+begin
+  Int64ToHexShort(aInt64,temp);
+  Ansi7ToString(@temp[1],ord(temp[0]),result);
+end;
+
 
 {$ifdef FPC_OR_PUREPASCAL} // Alf reported asm below fails with FPC/Linux32
 type TWordRec = packed record YDiv100, YMod100: cardinal; end;
@@ -47519,7 +47583,7 @@ function TDynArray.GetIsObjArray: boolean;
 begin
   if fIsObjArray=oaUnknown then
     if (fElemSize=sizeof(pointer)) and (fElemType=nil) and
-       Assigned(DynArrayIsObjArray) and DynArrayIsObjArray(fTypeInfo) then
+       Assigned(DynArrayIsObjArray) and (DynArrayIsObjArray(fTypeInfo)<>nil) then
       fIsObjArray := oaTrue else
       fIsObjArray := oaFalse;
   result := fIsObjArray=oaTrue;
@@ -49405,15 +49469,25 @@ begin
 end;
 
 
-{ TSynPersistentStore }
+{ TSynPersistentPLocked }
 
-constructor TSynPersistentStore.Create;
+constructor TSynPersistentPLocked.Create;
 begin
   inherited Create;
-  {$ifndef DELPHI5OROLDER}
-  fLock := TAutoLocker.Create;
-  {$endif}
+  GetMem(fSafe,SizeOf(TSynLocker));
+  FillCharFast(fSafe^,SizeOf(TSynLocker),0);
+  fSafe^.Init;
 end;
+
+destructor TSynPersistentPLocked.Destroy;
+begin
+  fSafe^.Done;
+  FreeMem(fSafe);
+  inherited;
+end;
+
+
+{ TSynPersistentStore }
 
 constructor TSynPersistentStore.Create(const aName: RawUTF8);
 begin
@@ -49496,6 +49570,109 @@ var temp: RawByteString;
 begin
   SaveTo(temp,nocompression);
   FileFromString(temp,aFileName);
+end;
+
+
+
+{ TObjectListSorted }
+
+destructor TObjectListSorted.Destroy;
+var i: integer;
+begin
+  for i := 0 to fCount-1 do
+    fObjArray[i].Free;
+  inherited;
+end;
+
+function TObjectListSorted.FastLocate(const Value; out Index: Integer): boolean;
+var n, i, cmp: integer;
+begin
+  result := False;
+  n := Count;
+  if n=0 then // a void array is always sorted
+    Index := 0 else begin
+    dec(n);
+    if Compare(fObjArray[n],Value)<0 then begin // already sorted
+      Index := n+1; // returns false + last position index to insert
+      exit;
+    end;
+    Index := 0;
+    while Index<=n do begin // O(log(n)) binary search of the sorted position
+      i := (Index+n) shr 1;
+      cmp := Compare(fObjArray[i],Value);
+      if cmp=0 then begin
+        Index := i; // index of existing Elem
+        result := True;
+        exit;
+      end else
+        if cmp<0 then
+          Index := i+1 else
+          n := i-1;
+    end;
+    // Elem not found: returns false + the index where to insert
+  end;
+end;
+
+procedure TObjectListSorted.InsertNew(Item: TSynPersistentPLocked;
+  Index: integer);
+begin
+  if fCount=length(fObjArray) then
+    SetLength(fObjArray,fCount+256+fCount shr 3);
+  if cardinal(Index)<cardinal(fCount) then
+    MoveFast(fObjArray[Index],fObjArray[Index+1],(fCount-Index)*SizeOf(TObject)) else
+    Index := fCount;
+  fObjArray[Index] := Item;
+  inc(fCount);
+end;
+
+function TObjectListSorted.Delete(const Value): boolean;
+var i: integer;
+begin
+  result := false;
+  fSafe.Lock;
+  try
+    if FastLocate(Value,i) and (cardinal(i)<cardinal(fCount)) then begin
+      fObjArray[i].Free;
+      dec(fCount);
+      if fCount>i then
+        MoveFast(fObjArray[i+1],fObjArray[i],(fCount-i)*SizeOf(TObject));
+      result := true;
+    end;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TObjectListSorted.FindLocked(const Value): pointer;
+var i: integer;
+begin
+  result := nil;
+  fSafe.Lock;
+  try
+    if FastLocate(Value,i) then begin
+      result := fObjArray[i];
+      TSynPersistentPLocked(result).Safe.Lock;
+    end;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TObjectListSorted.FindOrAddLocked(const Value; out added: boolean): pointer;
+var i: integer;
+begin
+  added := false;
+  fSafe.Lock;
+  try
+    if not FastLocate(Value,i) then begin
+      InsertNew(NewItem(Value),i);
+      added := true;
+    end;
+    result := fObjArray[i];
+    TSynPersistentPLocked(result).Safe.Lock;
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 

@@ -319,6 +319,8 @@ type
     procedure _TDynArrayHashed;
     /// test TObjectListHashed class
     procedure _TObjectListHashed;
+    /// test TObjectListSorted class
+    procedure _TObjectListSorted;
     /// test TSynNameValue class
     procedure _TSynNameValue;
     /// test TRawUTF8Interning process
@@ -4727,6 +4729,57 @@ begin
   end;
 end;
 
+type
+  TSynPersistentStoreList = class(TObjectListSorted)
+  protected
+    function Compare(Item: TSynPersistentPLocked; const Value): integer; override;
+    function NewItem(const Value): TSynPersistentPLocked; override;
+  end;
+
+function TSynPersistentStoreList.Compare(Item: TSynPersistentPLocked;
+  const Value): integer;
+begin
+  result := StrComp(pointer(TSynPersistentStore(Item).Name),pointer(Value));
+end;
+
+function TSynPersistentStoreList.NewItem(const Value): TSynPersistentPLocked;
+begin
+  result := TSynPersistentStore.Create(RawUTF8(Value));
+end;
+
+procedure TTestLowLevelCommon._TObjectListSorted;
+const MAX = 20000;
+var obj: TSynPersistentStoreList;
+    i, n: integer;
+    v: RawUTF8;
+    item: TSynPersistentStore;
+    added: boolean;
+begin
+  obj := TSynPersistentStoreList.Create;
+  try
+    n := 0;
+    Check(obj.Count=0);
+    for i := 1 to MAX do begin
+      UInt32ToUtf8(Random32 shr 10,v);
+      item := obj.FindOrAddLocked(v,added);
+      Check(item<>nil);
+      Check(item.Name=v);
+      if added then
+        inc(n);
+      item.Safe.UnLock;
+    end;
+    Check(obj.Count=n);
+    for i := 0 to obj.Count-1 do begin
+      item := obj.FindLocked(TSynPersistentStore(obj.ObjArray[i]).Name);
+      Check(item<>nil);
+      Check(pointer(item)=obj.ObjArray[i]);
+      item.Safe.UnLock;
+    end;
+  finally
+    obj.Free;
+  end;
+end;
+
 procedure TTestLowLevelCommon._TSynUniqueIdentifier;
 const JAN2015_UNIX = 1420070400;
 var gen: TSynUniqueIdentifierGenerator;
@@ -4787,7 +4840,7 @@ var dict: TSynDictionary;
   begin
     check(dict.Count=MAX);
     for i := 1 to MAX do begin
-      Int32ToUTF8(i,k);
+      UInt32ToUTF8(i,k);
       v := 0;
       check(dict.Exists(k));
       check(dict.FindAndCopy(k, v));
@@ -4802,7 +4855,7 @@ begin
   dict := TSynDictionary.Create(TypeInfo(TRawUTF8DynArray), TypeInfo(tvalues));
   try
     for i := 1 to MAX do begin
-      Int32ToUTF8(i,k);
+      UInt32ToUTF8(i,k);
       v := i;
       dict.Add(k,v);
     end;
@@ -4824,12 +4877,12 @@ begin
     Test;
     for i := MAX downto 1 do
     if i and 127=0 then begin
-      Int32ToUTF8(i,k);
+      UInt32ToUTF8(i,k);
       check(dict.Delete(k)=i-1);
     end;
     for i := 1 to MAX do begin
       exists := (i and 127)<>0;
-      Int32ToUTF8(i,k);
+      UInt32ToUTF8(i,k);
       check(dict.Exists(k)=exists);
       if exists then begin
         v := 0;
@@ -17269,6 +17322,7 @@ begin
     proxy.Free;
   end;
 end;
+
 
 initialization
   _uE0 := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[0],1);
