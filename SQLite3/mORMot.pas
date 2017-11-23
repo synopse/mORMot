@@ -4261,6 +4261,11 @@ type
     // via TJSONSerializer.RegisterObjArrayForJSON() overloaded methods
     // - returns nil if the supplied type is not a registered T*ObjArray
     class function RegisterObjArrayFindType(aDynArray: PTypeInfo): PClassInstance;
+    /// retrieve the T*ObjArray dynamic array type RTTI for a given item class
+    // - the T*ObjArray dynamic array should have been previously registered
+    // via TJSONSerializer.RegisterObjArrayForJSON() overloaded methods
+    // - returns nil if the supplied type is not a registered T*ObjArray
+    class function RegisterObjArrayFindTypeInfo(aClass: TClass): PTypeInfo;
   end;
 
 const
@@ -23001,9 +23006,9 @@ begin
   result := JSONToObject(aValue,P,aValid,nil,JSONTOOBJECT_TOLERANTOPTIONS);
 end;
 
-function InternalIsObjArray(aDynArrayTypeInfo: pointer): boolean;
+function InternalIsObjArray(aDynArrayTypeInfo: pointer): TPointerClassHashed;
 begin
-  result := ObjArraySerializers.Find(aDynArrayTypeInfo)<>nil;
+  result := ObjArraySerializers.Find(aDynArrayTypeInfo);
 end;
 
 
@@ -48218,6 +48223,20 @@ begin
   if serializer=nil then
     result := nil else
     result := @TObjArraySerializer(serializer).Instance;
+end;
+
+class function TJSONSerializer.RegisterObjArrayFindTypeInfo(aClass: TClass): PTypeInfo;
+var i: integer;
+    item: ^TObjArraySerializer;
+begin
+  item := pointer(ObjArraySerializers.List);
+  for i := 1 to ObjArraySerializers.Count do
+    if item^.Instance.ItemClass=aClass then begin
+      result := item^.fInfo;
+      exit;
+    end else
+    inc(item);
+  result := nil;
 end;
 
 class procedure TJSONSerializer.RegisterObjArrayForJSON(
