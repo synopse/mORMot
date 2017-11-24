@@ -21691,6 +21691,28 @@ type
   end;
   PPropInfo = ^TPropInfo;
 
+{$ifdef HASDIRECTTYPEINFO}
+type
+  Deref = PTypeInfo;
+{$else}
+function Deref(Info: PTypeInfoStored): PTypeInfo;
+{$ifdef HASINLINENOTX86} inline;
+begin
+  if Info=nil then
+    result := pointer(Info) else
+    result := Info^;
+end;
+{$else}
+asm // Delphi is so bad at compiling above code...
+        or      eax, eax
+        jz      @z
+        mov     eax, [eax]
+        ret
+@z:     db      $f3 // rep ret
+end;
+{$endif HASINLINENOTX86}
+{$endif HASDIRECTTYPEINFO}
+
 const
   /// codePage offset = string header size
   // - used to calc the beginning of memory allocation of a string
@@ -21701,11 +21723,12 @@ begin
   result := GetEnumName(TypeInfo(TTypeKind),ord(k));
 end;
 
-function ToText(k: TDynArrayKind): PShortString; overload; 
+function ToText(k: TDynArrayKind): PShortString; overload;
 begin
   result := GetEnumName(TypeInfo(TDynArrayKind),ord(k));
 end;
 
+{$ifdef TYPEINFOSAVED} // this feature is not finished yet -> disable
 type
   TTypeInfoSaved = type TRawByteStringDynArray;
 
@@ -21741,28 +21764,6 @@ end;
 
 var
   KnownTypeInfo: array of PTypeInfo;
-
-{$ifdef HASDIRECTTYPEINFO}
-type
-  Deref = PTypeInfo;
-{$else}
-function Deref(Info: PTypeInfoStored): PTypeInfo;
-{$ifdef HASINLINENOTX86} inline;
-begin
-  if Info=nil then
-    result := pointer(Info) else
-    result := Info^;
-end;
-{$else}
-asm // Delphi is so bad at compiling above code...
-        or      eax, eax
-        jz      @z
-        mov     eax, [eax]
-        ret
-@z:     db      $f3 // rep ret
-end;
-{$endif HASINLINENOTX86}
-{$endif HASDIRECTTYPEINFO}
 
 /// add some TypeInfo() RTTI for TypeInfoSave/TypeInfoLoad function
 // - warning: calling this after TypeInfoLoad() would trigger GPF
@@ -22073,6 +22074,8 @@ begin
       {$endif}
   end;
 end;
+
+{$endif TYPEINFOSAVED}
 
 procedure SetRawUTF8(var Dest: RawUTF8; text: pointer; len: integer);
 {$ifdef FPC}inline;

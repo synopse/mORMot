@@ -6016,17 +6016,19 @@ begin
     Content := '';
     // get headers and content
     GetHeader;
-    L := length(fServer.fRemoteIPHeaderUpper);
-    if L<>0 then  begin
-      H := pointer(Headers);
-      for i := 1 to length(Headers) do
-      if IdemPChar(H^,pointer(fServer.fRemoteIPHeaderUpper)) and (H^[L]=':') then begin
-        repeat inc(L) until H^[L]<>' ';
-        if H^<>#0 then
-          fRemoteIP := H^;
-        break;
-      end else
-        inc(H);
+    if fServer<>nil then begin // e.g. =nil from TRTSPOverHTTPServer
+      L := length(fServer.fRemoteIPHeaderUpper);
+      if L<>0 then  begin
+        H := pointer(Headers);
+        for i := 1 to length(Headers) do
+        if IdemPChar(H^,pointer(fServer.fRemoteIPHeaderUpper)) and (H^[L]=':') then begin
+          repeat inc(L) until H^[L]<>' ';
+          if H^<>#0 then
+            fRemoteIP := H^;
+          break;
+        end else
+          inc(H);
+      end;
     end;
     if ConnectionClose then
       fKeepAliveClient := false;
