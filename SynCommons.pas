@@ -9451,6 +9451,142 @@ type
     function GetEventByName(const aText: RawUTF8; out aEvent: TMethod): boolean;
   end;
 
+  
+  /// abstract low-level parent class for generic compression/decompression algorithms
+  // - will encapsulate the compression algorithm with crc32c hashing
+  // - all Algo* abtract methods should be overriden by inherited classes
+  TAlgoCompress = class(TSynPersistent)
+  public
+    /// should return a genuine byte identifier
+    // - 0 is reserved for stored content, 1 for TAlgoSynLz, and 2/3 for
+    // TSynDeflateCompress/TSynDeflateFastCompress (in mORMot.pas)
+    function AlgoID: byte; virtual; abstract;
+    /// computes by default the crc32c() digital signature of the buffer
+    function AlgoHash(Previous: cardinal; Data: pointer; DataLen: integer): cardinal; virtual;
+    /// get maximum possible (worse) compressed size for the supplied length
+    function AlgoCompressDestLen(PlainLen: integer): integer; virtual; abstract;
+    /// this method will compress the supplied data
+    function AlgoCompress(Plain: pointer; PlainLen: integer; Comp: pointer): integer; virtual; abstract;
+    /// this method will return the size of the decompressed data
+    function AlgoDecompressDestLen(Comp: pointer): integer; virtual; abstract;
+    /// this method will decompress the supplied data
+    function AlgoDecompress(Comp: pointer; CompLen: integer; Plain: pointer): integer; virtual; abstract;
+    /// this method will partially and safely decompress the supplied data
+    function AlgoDecompressPartial(Comp: pointer; CompLen: integer;
+      Partial: pointer; PartialLenMax: integer): integer; virtual; abstract;
+  public
+    /// will register AlgoID in the global list, for Algo() class methods
+    // - no need to free this instance, since it will be owned by the global list
+    // - raise a ESynException if the class or its AlgoID are already registered
+    // - you should never have to call this constructor, but define a global
+    // variable holding a reference to a shared instance
+    constructor Create; override;
+    /// get maximum possible (worse) compressed size for the supplied length
+    function CompressDestLen(PlainLen: integer): integer;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// compress a memory buffer with crc32c hashing to a RawByteString
+    function Compress(const Plain: RawByteString; CompressionSizeTrigger: integer=100;
+      CheckMagicForCompressed: boolean=false): RawByteString; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// compress a memory buffer with crc32c hashing to a RawByteString
+    procedure Compress(Plain: PAnsiChar; PlainLen: integer; out Result: RawByteString;
+      CompressionSizeTrigger: integer=100; CheckMagicForCompressed: boolean=false); overload;
+    /// compress a memory buffer with crc32c hashing
+    // - supplied Comp buffer should contain at least CompressDestLen(PlainLen) bytes
+    function Compress(Plain, Comp: PAnsiChar; PlainLen, CompLen: integer;
+      CompressionSizeTrigger: integer=100; CheckMagicForCompressed: boolean=false): integer; overload;
+    /// compress a memory buffer with crc32c hashing to a TByteDynArray
+    function CompressToBytes(const Plain: RawByteString; CompressionSizeTrigger: integer=100;
+      CheckMagicForCompressed: boolean=false): TByteDynArray; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// compress a memory buffer with crc32c hashing to a TByteDynArray
+    function CompressToBytes(Plain: PAnsiChar; PlainLen: integer; CompressionSizeTrigger: integer=100;
+      CheckMagicForCompressed: boolean=false): TByteDynArray; overload;
+    /// uncompress a RawByteString memory buffer with crc32c hashing
+    function Decompress(const Comp: RawByteString; SafeDecompression: boolean=false): RawByteString; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// uncompress a memory buffer with crc32c hashing
+    // - SafeDecompression=true will use slower AlgoDecompressPartial() which
+    // will avoid any buffer overflow
+    procedure Decompress(Comp: PAnsiChar; CompLen: integer; out Result: RawByteString;
+      SafeDecompression: boolean=false); overload;
+    /// uncompress a RawByteString memory buffer with crc32c hashing
+    function Decompress(const Comp: TByteDynArray): RawByteString; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// uncompress a RawByteString memory buffer with crc32c hashing
+    // - returns nil if crc32 hash failed, i.e. if the supplied Comp is not correct
+    // - returns a pointer to the uncompressed data and fill PlainLen variable,
+    // after crc32c hash
+    // - avoid any memory allocation in case of a stored content - otherwise, would
+    // uncompress to the tmp variable, and return pointer(tmp) and length(tmp)
+    function Decompress(const Comp: RawByteString; out PlainLen: integer;
+      var tmp: RawByteString; SafeDecompression: boolean=false): pointer; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// uncompress a RawByteString memory buffer with crc32c hashing
+    // - returns nil if crc32 hash failed, i.e. if the supplied Data is not correct
+    // - returns a pointer to the raw data and fill Len variable, after crc32c hash
+    // - avoid any memory allocation in case of a stored content - otherwise, would
+    // uncompress to the tmp variable, and return pointer(tmp) and length(tmp)
+    function Decompress(Comp: PAnsiChar; CompLen: integer; out PlainLen: integer;
+      var tmp: RawByteString; SafeDecompression: boolean=false): pointer; overload;
+    /// decode the header of a memory buffer compressed via the Compress() method
+    // - validates the crc32c of the compressed data, then return the uncompressed
+    // size in bytes on success
+    // - returns 0 if the crc32c does not match
+    // - should call DecompressBody() later on to actually retrieve the content
+    function DecompressHeader(Comp: PAnsiChar; CompLen: integer): integer;
+    /// decode the content of a memory buffer compressed via the Compress() method
+    // - PlainLen has been returned by a previous call to DecompressHeader()
+    // - SafeDecompression=true will use slower AlgoDecompressPartial() which
+    // will avoid any buffer overflow
+    function DecompressBody(Comp,Plain: PAnsiChar; CompLen,PlainLen: integer;
+      SafeDecompression: boolean=false): boolean;
+    /// partial decoding of a memory buffer compressed via the Compress() method
+    // - returns 0 on error, or how many bytes have been written to Partial
+    // - will call virtual AlgoDecompressPartial() which is slower, but expected
+    // to avoid any buffer overflow on the Partial destination buffer
+    function DecompressPartial(Comp,Partial: PAnsiChar; CompLen,PartialLen: integer): integer;
+    /// get the TAlgoCompress instance corresponding to the AlgoID stored
+    // in the supplied compressed buffer
+    // - returns nil if no algorithm was identified
+    class function Algo(Comp: PAnsiChar; CompLen: integer): TAlgoCompress; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// get the TAlgoCompress instance corresponding to the AlgoID stored
+    // in the supplied compressed buffer
+    // - returns nil if no algorithm was identified
+    class function Algo(const Comp: RawByteString): TAlgoCompress; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// get the TAlgoCompress instance corresponding to the AlgoID stored
+    // in the supplied compressed buffer
+    // - returns nil if no algorithm was identified
+    class function Algo(const Comp: TByteDynArray): TAlgoCompress; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// get the TAlgoCompress instance corresponding to the supplied AlgoID
+    // - returns nil if no algorithm was identified
+    class function Algo(AlgoID: byte): TAlgoCompress; overload;
+  end;
+
+  /// implement our fast SynLZ compression as a TAlgoCompress class
+  // - please use the AlgoSynLZ global variable methods instead of the deprecated
+  // SynLZCompress/SynLZDecompress wrapper functions
+  TAlgoSynLz = class(TAlgoCompress)
+  public
+    /// returns 1 as genuine byte identifier for SynLZ
+    function AlgoID: byte; override;
+    /// get maximum possible (worse) SynLZ compressed size for the supplied length
+    function AlgoCompressDestLen(PlainLen: integer): integer; override;
+    /// compress the supplied data using SynLZ
+    function AlgoCompress(Plain: pointer; PlainLen: integer; Comp: pointer): integer; override;
+    /// return the size of the SynLZ decompressed data
+    function AlgoDecompressDestLen(Comp: pointer): integer; override;
+    /// decompress the supplied data using SynLZ
+    function AlgoDecompress(Comp: pointer; CompLen: integer; Plain: pointer): integer; override;
+    /// partial (and safe) decompression of the supplied data using SynLZ
+    function AlgoDecompressPartial(Comp: pointer; CompLen: integer;
+      Partial: pointer; PartialLenMax: integer): integer; override;
+  end;
+
+
   TSynDictionaryInArray = (
     iaFind, iaFindAndDelete, iaFindAndUpdate, iaFindAndAddIfNotExisting, iaAdd);
 
@@ -9475,9 +9611,10 @@ type
     fValues: TDynArray;
     fTimeOut: TCardinalDynArray;
     fTimeOuts: TDynArray;
+    fCompressAlgo: TAlgoCompress;
     function InArray(const aKey,aArrayValue; aAction: TSynDictionaryInArray): boolean;
     procedure SetTimeouts;
-    function GetTimeOut: cardinal; 
+    function GetTimeOut: cardinal;
   public
     /// initialize the dictionary storage, for a given dynamic array value
     // - aKeyTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
@@ -9489,7 +9626,8 @@ type
     // - you can set an optional timeout period, in seconds - you should call
     // DeleteDeprecated periodically to search for deprecated items
     constructor Create(aKeyTypeInfo,aValueTypeInfo: pointer;
-      aKeyCaseInsensitive: boolean=false; aTimeoutSeconds: cardinal=0); reintroduce; virtual;
+      aKeyCaseInsensitive: boolean=false; aTimeoutSeconds: cardinal=0;
+      aCompressAlgo: TAlgoCompress=nil); reintroduce; virtual;
     /// finalize the storage
     // - would release all internal stored values
     destructor Destroy; override;
@@ -9638,6 +9776,8 @@ type
     property Values: TDynArray read fValues;
     /// defines how many items are currently stored in Keys/Values internal arrays
     property Capacity: integer read GetCapacity write SetCapacity;
+    /// the compression algorithm used for binary serialization
+    property CompressAlgo: TAlgoCompress read fCompressAlgo write fCompressAlgo;
   end;
 
   /// event signature to locate a service for a given string key
@@ -9979,11 +10119,12 @@ type
     // - after a Flush, it's possible to call FileSeek64(aFile,....)
     // - returns the number of bytes written between two FLush method calls
     function Flush: Int64;
-    /// write any pending data, then call SynLZCompress() on the buffer
+    /// write any pending data, then call algo.Compress() on the buffer
     // - expect the instance to have been created via
     // ! TFileBufferWriter.Create(TRawByteStringStream)
+    // - if algo is left to its default nil, will use global AlgoSynLZ
     // - features direct compression from internal buffer, if stream was not used
-    function FlushAndCompress(nocompression: boolean=false): RawByteString;
+    function FlushAndCompress(nocompression: boolean=false; algo: TAlgoCompress=nil): RawByteString;
     /// rewind the Stream to the position when Create() was called
     // - note that this does not clear the Stream content itself, just
     // move back its writing position to its initial place
@@ -17287,54 +17428,6 @@ type
   // - note defined as T*ObjArray, since it won't
   TSynPersistentLockDynArray = array of TSynPersistentLock;
 
-  /// abstract high-level handling of SynLZ-compressed persisted storage
-  // - LoadFromReader/SaveToWriter abstract methods should be overriden
-  // with proper persistence implementation
-  TSynPersistentStore = class(TSynPersistentLock)
-  protected
-    fName: RawUTF8;
-    /// low-level virtual methods implementing the persistence reading
-    procedure LoadFromReader(var Source: TFastReader); virtual;
-    procedure SaveToWriter(aWriter: TFileBufferWriter); virtual;
-  public
-    /// initialize a void storage with the supplied name
-    constructor Create(const aName: RawUTF8); reintroduce; overload; virtual;
-    /// initialize a storage from a SaveTo persisted buffer
-    // - raise a EFastReader exception on decoding error
-    constructor CreateFrom(const aBuffer: RawByteString);
-    /// initialize a storage from a SaveTo persisted buffer
-    // - raise a EFastReader exception on decoding error
-    constructor CreateFromBuffer(aBuffer: pointer; aBufferLen: integer);
-    /// initialize a storage from a SaveTo persisted buffer
-    // - raise a EFastReader exception on decoding error
-    constructor CreateFromFile(const aFileName: TFileName);
-    /// fill the storage from a SaveTo persisted buffer
-    // - actually call the LoadFromReader() virtual method for persistence
-    // - raise a EFastReader exception on decoding error
-    procedure LoadFrom(const aBuffer: RawByteString); overload;
-    /// initialize the storage from a SaveTo persisted buffer
-    // - actually call the LoadFromReader() virtual method for persistence
-    // - raise a EFastReader exception on decoding error
-    procedure LoadFrom(aBuffer: pointer; aBufferLen: integer); overload; virtual;
-    /// initialize the storage from a SaveToFile content
-    // - actually call the LoadFromReader() virtual method for persistence
-    // - returns false if the file is not found, true if the file was loaded
-    // without any problem, or raise a EFastReader exception on decoding error
-    function LoadFromFile(const aFileName: TFileName): boolean;
-    /// persist the content as a SynLZ-compressed binary blob
-    // - to be retrieved later on via LoadFrom method
-    // - actually call the SaveToWriter() protected virtual method for persistence
-    procedure SaveTo(out aBuffer: RawByteString; nocompression: boolean=false;
-      BufLen: integer=65536); virtual;
-    /// persist the content as a SynLZ-compressed binary file
-    // - to be retrieved later on via LoadFromFile method
-    // - actually call the SaveTo method for persistence
-    procedure SaveToFile(const aFileName: TFileName; nocompression: boolean=false);
-    /// one optional text associated with this storage
-    // - you can define it as published to serialize its value
-    property Name: RawUTF8 read fName;
-  end;
-
   /// maintain a thread-safe sorted list of TSynPersistentLock objects
   // - will use fast O(log(n)) binary search for efficient search - it is
   // a lighter alternative to TObjectListHashedAbstract/TObjectListPropertyHashed
@@ -17372,6 +17465,56 @@ type
     /// low-level access to the stored items
     // - warning: use should be protected by Lock.Enter/Lock.Leave
     property ObjArray: TSynPersistentLockDynArray read fObjArray;
+  end;
+
+  /// abstract high-level handling of SynLZ-compressed persisted storage
+  // - LoadFromReader/SaveToWriter abstract methods should be overriden
+  // with proper persistence implementation
+  TSynPersistentStore = class(TSynPersistentLock)
+  protected
+    fName: RawUTF8;
+    /// low-level virtual methods implementing the persistence reading
+    procedure LoadFromReader(var Source: TFastReader); virtual;
+    procedure SaveToWriter(aWriter: TFileBufferWriter); virtual;
+    // will return AlgoSynLZ by default, but you may override it
+    function Algo: TAlgoCompress; virtual;
+  public
+    /// initialize a void storage with the supplied name
+    constructor Create(const aName: RawUTF8); reintroduce; overload; virtual;
+    /// initialize a storage from a SaveTo persisted buffer
+    // - raise a EFastReader exception on decoding error
+    constructor CreateFrom(const aBuffer: RawByteString);
+    /// initialize a storage from a SaveTo persisted buffer
+    // - raise a EFastReader exception on decoding error
+    constructor CreateFromBuffer(aBuffer: pointer; aBufferLen: integer);
+    /// initialize a storage from a SaveTo persisted buffer
+    // - raise a EFastReader exception on decoding error
+    constructor CreateFromFile(const aFileName: TFileName);
+    /// fill the storage from a SaveTo persisted buffer
+    // - actually call the LoadFromReader() virtual method for persistence
+    // - raise a EFastReader exception on decoding error
+    procedure LoadFrom(const aBuffer: RawByteString); overload;
+    /// initialize the storage from a SaveTo persisted buffer
+    // - actually call the LoadFromReader() virtual method for persistence
+    // - raise a EFastReader exception on decoding error
+    procedure LoadFrom(aBuffer: pointer; aBufferLen: integer); overload; virtual;
+    /// initialize the storage from a SaveToFile content
+    // - actually call the LoadFromReader() virtual method for persistence
+    // - returns false if the file is not found, true if the file was loaded
+    // without any problem, or raise a EFastReader exception on decoding error
+    function LoadFromFile(const aFileName: TFileName): boolean;
+    /// persist the content as a SynLZ-compressed binary blob
+    // - to be retrieved later on via LoadFrom method
+    // - actually call the SaveToWriter() protected virtual method for persistence
+    procedure SaveTo(out aBuffer: RawByteString; nocompression: boolean=false;
+      BufLen: integer=65536); virtual;
+    /// persist the content as a SynLZ-compressed binary file
+    // - to be retrieved later on via LoadFromFile method
+    // - actually call the SaveTo method for persistence
+    procedure SaveToFile(const aFileName: TFileName; nocompression: boolean=false);
+    /// one optional text associated with this storage
+    // - you can define it as published to serialize its value
+    property Name: RawUTF8 read fName;
   end;
 
 type
@@ -17852,83 +17995,65 @@ function FileUnSynLZ(const Source, Dest: TFileName; Magic: Cardinal): boolean;
 // matching the Magic number as supplied to FileSynLZ() function
 function FileIsSynLZ(const Name: TFileName; Magic: Cardinal): boolean;
 
+var
+  /// acccess to our fast SynLZ compression as a TAlgoCompress class
+  // - please use this global variable methods instead of the deprecated
+  // SynLZCompress/SynLZDecompress wrapper functions
+  AlgoSynLZ: TAlgoCompress;
+
 const
   /// CompressionSizeTrigger parameter SYNLZTRIG[true] will disable then
   // SynLZCompress() compression
   SYNLZTRIG: array[boolean] of integer = (100, maxInt);
 
-/// compress a memory bufer using the SynLZ algorithm and crc32c hashing
+/// deprecated function - please call AlgoSynLZ.Compress() method
 function SynLZCompress(const Data: RawByteString; CompressionSizeTrigger: integer=100;
-  CheckMagicForCompressed: boolean=false): RawByteString; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  CheckMagicForCompressed: boolean=false): RawByteString; overload; 
 
-/// compress a memory bufer using the SynLZ algorithm and crc32c hashing
+/// deprecated function - please call AlgoSynLZ.Compress() method
 procedure SynLZCompress(P: PAnsiChar; PLen: integer; out Result: RawByteString;
-  CompressionSizeTrigger: integer=100; CheckMagicForCompressed: boolean=false); overload;
+  CompressionSizeTrigger: integer=100; CheckMagicForCompressed: boolean=false); overload; 
 
-/// compress a memory bufer using the SynLZ algorithm and crc32c hashing
-// - supplied Dest buffer should contain at least SynLZcompressdestlen(PLen)+9 bytes
-// - returns the number of bytes written into Dest^, 0 in case of error (e.g.
-// if DestLen is too small)
+/// deprecated function - please call AlgoSynLZ.Compress() method
 function SynLZCompress(P, Dest: PAnsiChar; PLen, DestLen: integer;
-  CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean=false): integer; overload;
+  CompressionSizeTrigger: integer=100; CheckMagicForCompressed: boolean=false): integer; overload; 
 
-/// uncompress a memory bufer using the SynLZ algorithm and crc32c hashing
-function SynLZDecompress(const Data: RawByteString): RawByteString; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+/// deprecated function - please call AlgoSynLZ.Decompress() method
+function SynLZDecompress(const Data: RawByteString): RawByteString; overload; 
 
-/// uncompress a memory bufer using the SynLZ algorithm and crc32c hashing
-// - SafeDecompression=true will use slower SynLZdecompress1partial() which
-// will avoid any buffer overflow
+/// deprecated function - please call AlgoSynLZ.Decompress() method
 procedure SynLZDecompress(P: PAnsiChar; PLen: integer; out Result: RawByteString;
-  SafeDecompression: boolean=false); overload;
+  SafeDecompression: boolean=false); overload; 
 
-/// compress a memory bufer using the SynLZ algorithm and crc32c hashing
+/// deprecated function - please call AlgoSynLZ.DecompressToBytes() method
 function SynLZCompressToBytes(const Data: RawByteString;
-  CompressionSizeTrigger: integer=100): TByteDynArray; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  CompressionSizeTrigger: integer=100): TByteDynArray; overload; 
 
-/// compress a memory bufer using the SynLZ algorithm and crc32c hashing
+/// deprecated function - please call AlgoSynLZ.CompressToBytes() method
 function SynLZCompressToBytes(P: PAnsiChar; PLen: integer;
-  CompressionSizeTrigger: integer=100): TByteDynArray; overload;
+  CompressionSizeTrigger: integer=100): TByteDynArray; overload; 
 
-/// uncompress a memory bufer using the SynLZ algorithm and crc32c hashing
-function SynLZDecompress(const Data: TByteDynArray): RawByteString; overload;
+/// deprecated function - please call AlgoSynLZ.Decompress() method
+function SynLZDecompress(const Data: TByteDynArray): RawByteString; overload;  
 
-/// directly returns the buffer
-// - returns nil if crc32 hash failed, i.e. if the supplied Data is not correct
-// - returns a pointer to the raw data and fill Len variable, after crc32c hash
-// - avoid any memory allocation in case of a stored content - otherwise, would
-// uncompress to the tmp variable, and return pointer(tmp) and length(tmp)
+/// deprecated function - please call AlgoSynLZ.Decompress() method
 function SynLZDecompress(const Data: RawByteString; out Len: integer;
-  var tmp: RawByteString): pointer; overload;
+  var tmp: RawByteString): pointer; overload; 
 
-/// directly returns a stored buffer, if SynLZCompress() just stored it
-// - returns nil if crc32 hash failed, i.e. if the supplied Data is not correct
-// - returns a pointer to the raw data and fill Len variable, after crc32c hash
-// - avoid any memory allocation in case of a stored content - otherwise, would
-// uncompress to the tmp variable, and return pointer(tmp) and length(tmp)
+/// deprecated function - please call AlgoSynLZ.Decompress() method
 function SynLZDecompress(P: PAnsiChar; PLen: integer; out Len: integer;
-  var tmp: RawByteString): pointer; overload;
+  var tmp: RawByteString): pointer; overload; 
 
-/// decode the header of a memory buffer compressed via SynCompress
-// - validates the crc32c of the compressed data, then return the uncompressed
-// size in bytes on success
-// - returns 0 if the crc32c does not match
-function SynLZDecompressHeader(P: PAnsiChar; PLen: integer): integer;
+/// deprecated function - please call AlgoSynLZ.DecompressHeader() method
+function SynLZDecompressHeader(P: PAnsiChar; PLen: integer): integer; 
 
-/// decode the content of a memory buffer compressed via SynCompress
-// - BodyLen has been returned by a previous call to SynLZDecompressHeader
-// - SafeDecompression=true will use slower SynLZdecompress1partial() which
-// will avoid any buffer overflow
+/// deprecated function - please call AlgoSynLZ.DecompressBody() method
 function SynLZDecompressBody(P,Body: PAnsiChar; PLen,BodyLen: integer;
-  SafeDecompression: boolean=false): boolean;
+  SafeDecompression: boolean=false): boolean; 
 
-/// partial decoding of a memory buffer compressed via SynCompress
-// - will use slower SynLZdecompress1partial() to retrieve the beginning of
-// the content
-// - returns 0 on error, or how many bytes have been written to Partial
-function SynLZDecompressPartial(P,Partial: PAnsiChar; PLen,PartialLen: integer): integer;
+/// deprecated function - please call AlgoSynLZ.DecompressPartial() method
+function SynLZDecompressPartial(P,Partial: PAnsiChar; PLen,PartialLen: integer): integer; 
+
 
 /// RLE compression of a memory buffer containing mostly zeros
 // - will store the number of consecutive zeros instead of plain zero bytes
@@ -36329,7 +36454,7 @@ begin // see http://www.garykessler.net/library/file_sigs.html
           result := true;
         else
         case PCardinalArray(Content)^[1] of // 4 byte offset
-        1{SYNLZCOMPRESS_SYNLZ}: // crc32 01 00 00 00 crc32 SynLZCompress() header
+        1{TAlgoSynLz.AlgoID}: // crc32 01 00 00 00 crc32 = Compress() header
           result := PCardinalArray(Content)^[0]<>PCardinalArray(Content)^[2];
         $70797466, // mp4,mov = 66 74 79 70 [33 67 70 35/4D 53 4E 56..]
         $766f6f6d: // mov = 6D 6F 6F 76
@@ -49515,6 +49640,11 @@ begin
   LoadFromFile(aFileName);
 end;
 
+function TSynPersistentStore.Algo: TAlgoCompress;
+begin
+  result := AlgoSynLZ;
+end;
+
 procedure TSynPersistentStore.LoadFromReader(var Source: TFastReader);
 begin
   Source.VarUTF8(fName);
@@ -49536,9 +49666,9 @@ var temp: RawByteString;
 begin
   if (aBuffer = nil) or (aBufferLen <= 0) then
     exit; // nothing to load
-  SynLZDecompress(aBuffer,aBufferLen,temp);
+  Algo.Decompress(aBuffer,aBufferLen,temp);
   if temp = '' then
-    reader.ErrorData('%.LoadFrom SynLZDecompress failed',[self]);
+    reader.ErrorData('%.LoadFrom %.Decompress failed',[self,Algo]);
   reader.Init(temp);
   LoadFromReader(reader);
 end;
@@ -49562,7 +49692,7 @@ begin
     writer := TFileBufferWriter.Create(TRawByteStringStream,BufLen);
   try
     SaveToWriter(writer);
-    aBuffer := writer.FlushAndCompress(nocompression);
+    aBuffer := writer.FlushAndCompress(nocompression,Algo);
   finally
     writer.Free;
   end;
@@ -57697,7 +57827,6 @@ begin
 end;
 
 
-
 { TSynDictionary }
 
 const
@@ -57710,7 +57839,7 @@ const
   DIC_TIMETIX = 6;
 
 constructor TSynDictionary.Create(aKeyTypeInfo,aValueTypeInfo: pointer;
-  aKeyCaseInsensitive: boolean; aTimeoutSeconds: cardinal);
+  aKeyCaseInsensitive: boolean; aTimeoutSeconds: cardinal; aCompressAlgo: TAlgoCompress);
 begin
   inherited Create;
   fSafe.Padding[DIC_KEYCOUNT].VType := varInteger;
@@ -57727,6 +57856,9 @@ begin
     @fSafe.Padding[DIC_VALUECOUNT].VInteger);
   fTimeouts.Init(TypeInfo(TIntegerDynArray),fTimeOut,@fSafe.Padding[DIC_TIMECOUNT].VInteger);
   fSafe.Padding[DIC_TIMESEC].VInteger := aTimeoutSeconds;
+  if aCompressAlgo=nil then
+    fCompressAlgo := AlgoSynLZ else
+    fCompressAlgo := aCompressAlgo;
 end;
 
 function TSynDictionary.GetTimeOut: cardinal;
@@ -58158,7 +58290,7 @@ function TSynDictionary.LoadFromBinary(const binary: RawByteString): boolean;
 var P: PAnsiChar;
 begin
   result := false;
-  P := pointer(SynLZDecompress(binary));
+  P := pointer(fCompressAlgo.Decompress(binary));
   if P=nil then
     exit;
   fSafe.Lock;
@@ -58186,7 +58318,7 @@ begin
       exit;
     tmp.Init(fKeys.SaveToLength+fValues.SaveToLength);
     if fValues.SaveTo(fKeys.SaveTo(tmp.buf))-tmp.buf=tmp.len then
-      SynLZCompress(tmp.buf,tmp.len,result);
+      fCompressAlgo.Compress(tmp.buf,tmp.len,result);
     tmp.Done;
   finally
     fSafe.UnLock;
@@ -59047,14 +59179,16 @@ begin
   until false;
 end;
 
-function TFileBufferWriter.FlushAndCompress(nocompression: boolean): RawByteString;
+function TFileBufferWriter.FlushAndCompress(nocompression: boolean; algo: TAlgoCompress): RawByteString;
 var trig: integer;
 begin
+  if algo=nil then
+    algo := AlgoSynLZ;
   trig := SYNLZTRIG[nocompression];
   if fStream.Position=0 then // direct compression from internal buffer
-    SynLZCompress(PAnsiChar(fBuffer),fPos,result,trig) else begin
+    algo.Compress(PAnsiChar(fBuffer),fPos,result,trig) else begin
     Flush;
-    result := SynLZCompress((fStream as TRawByteStringStream).DataString,trig);
+    result := algo.Compress((fStream as TRawByteStringStream).DataString,trig);
   end;
 end;
 
@@ -60305,52 +60439,106 @@ begin
   until (result=nil) or (sourcePosition>=sourceSize);
 end;
 
-function SynLZCompress(const Data: RawByteString; CompressionSizeTrigger: integer;
-  CheckMagicForCompressed: boolean): RawByteString;
-begin
-  SynLZCompress(pointer(Data),length(Data),result,CompressionSizeTrigger,
-    CheckMagicForCompressed);
-end;
+
+{ TAlgoCompress }
 
 const
-  SYNLZCOMPRESS_STORED = #0;
-  SYNLZCOMPRESS_SYNLZ = #1;
+  COMPRESS_STORED = #0;
 
-procedure SynLZCompress(P: PAnsiChar; PLen: integer; out Result: RawByteString;
+var
+  SynCompressAlgos: TObjectList;
+
+constructor TAlgoCompress.Create;
+var existing: TAlgoCompress;
+begin
+  inherited Create;
+  if SynCompressAlgos=nil then
+    GarbageCollectorFreeAndNil(SynCompressAlgos,TObjectList.Create(true)) else begin
+      existing := Algo(AlgoID);
+      if existing<>nil then
+        raise ESynException.CreateUTF8('%.Create: AlgoID=% already registered by %',
+          [self,AlgoID,existing.ClassType]);
+    end;
+  SynCompressAlgos.Add(self);
+end;
+
+class function TAlgoCompress.Algo(const Comp: RawByteString): TAlgoCompress;
+begin
+  result := Algo(Pointer(Comp),Length(Comp));
+end;
+
+class function TAlgoCompress.Algo(const Comp: TByteDynArray): TAlgoCompress;
+begin
+  result := Algo(Pointer(Comp),Length(Comp));
+end;
+
+class function TAlgoCompress.Algo(Comp: PAnsiChar; CompLen: integer): TAlgoCompress;
+begin
+  if (Comp<>nil) and (CompLen>9) then
+    result := Algo(ord(Comp[4])) else
+    result := nil;
+end;
+
+class function TAlgoCompress.Algo(AlgoID: byte): TAlgoCompress;
+var i: integer;
+begin
+  if SynCompressAlgos<>nil then
+    with SynCompressAlgos do
+    for i := 0 to Count - 1 do
+      if TAlgoCompress(List[i]).AlgoID=AlgoID then begin
+        result := List[i];
+        exit;
+      end;
+  result := nil;
+end;
+
+function TAlgoCompress.AlgoHash(Previous: cardinal; Data: pointer; DataLen: integer): cardinal;
+begin
+  result := crc32c(Previous,Data,DataLen);
+end;
+
+function TAlgoCompress.Compress(const Plain: RawByteString;
+  CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean): RawByteString;
+begin
+  Compress(pointer(Plain),Length(Plain),result,CompressionSizeTrigger,CheckMagicForCompressed);
+end;
+
+procedure TAlgoCompress.Compress(Plain: PAnsiChar; PlainLen: integer;
+  out Result: RawByteString;
   CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean);
 var len: integer;
     R: PAnsiChar;
     crc: cardinal;
     tmp: array[0..16383] of AnsiChar;  // will resize Result in-place
 begin
-  if PLen=0 then
+  if (self=nil) or (PlainLen=0) then
     exit;
-  crc := crc32c(0,P,PLen);
-  if (PLen<CompressionSizeTrigger) or
-     (CheckMagicForCompressed and IsContentCompressed(P,PLen)) then begin
-    SetString(result,nil,PLen+9);
+  crc := AlgoHash(0,Plain,PlainLen);
+  if (PlainLen<CompressionSizeTrigger) or
+     (CheckMagicForCompressed and IsContentCompressed(Plain,PlainLen)) then begin
+    SetString(result,nil,PlainLen+9);
     R := pointer(result);
     PCardinal(R)^ := crc;
-    R[4] := SYNLZCOMPRESS_STORED;
+    R[4] := COMPRESS_STORED;
     PCardinal(R+5)^ := crc;
-    MoveFast(P^,R[9],PLen);
+    MoveFast(Plain^,R[9],PlainLen);
   end else begin
-    len := SynLZcompressdestlen(PLen)+9;
+    len := CompressDestLen(PlainLen);
     if len>sizeof(tmp) then begin
       SetString(result,nil,len);
       R := pointer(result);
     end else
       R := @tmp;
     PCardinal(R)^ := crc;
-    len := SynLZcompress1(P,PLen,R+9);
-    if len>PLen then begin // store if compression not worth it
-      R[4] := SYNLZCOMPRESS_STORED;
+    len := AlgoCompress(Plain,PlainLen,R+9);
+    if len>PlainLen then begin // store if compression not worth it
+      R[4] := COMPRESS_STORED;
       PCardinal(R+5)^ := crc;
-      MoveFast(P^,R[9],PLen);
-      len := PLen;
+      MoveFast(Plain^,R[9],PlainLen);
+      len := PlainLen;
     end else begin
-      R[4] := SYNLZCOMPRESS_SYNLZ;
-      PCardinal(R+5)^ := crc32c(0,pointer(R+9),len);
+      R[4] := AnsiChar(AlgoID);
+      PCardinal(R+5)^ := AlgoHash(0,R+9,len);
     end;
     if R=@tmp then
       SetString(result,tmp,len+9) else
@@ -60358,174 +60546,292 @@ begin
   end;
 end;
 
-function SynLZCompress(P, Dest: PAnsiChar; PLen, DestLen: integer;
+function TAlgoCompress.Compress(Plain, Comp: PAnsiChar; PlainLen, CompLen,
   CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean): integer;
 var len: integer;
 begin
   result := 0;
-  if (PLen=0) or (DestLen<PLen+9) then
+  if (self=nil) or (PlainLen=0) or (CompLen<PlainLen+9) then
     exit;
-  PCardinal(Dest)^ := crc32c(0,P,PLen);
-  if (PLen>=CompressionSizeTrigger) and
-     not(CheckMagicForCompressed and IsContentCompressed(P,PLen)) then begin
-    len := SynLZcompressdestlen(PLen)+9;
-    if DestLen<len then
+  PCardinal(Comp)^ := AlgoHash(0,Plain,PlainLen);
+  if (PlainLen>=CompressionSizeTrigger) and
+     not(CheckMagicForCompressed and IsContentCompressed(Plain,PlainLen)) then begin
+    len := CompressDestLen(PlainLen);
+    if CompLen<len then
       exit;
-    len := SynLZcompress1(P,PLen,Dest+9);
-    if len<PLen then begin
-      Dest[4] := SYNLZCOMPRESS_SYNLZ;
-      PCardinal(Dest+5)^ := crc32c(0,pointer(Dest+9),len);
+    len := AlgoCompress(Plain,PlainLen,Comp+9);
+    if len<PlainLen then begin
+      Comp[4] := AnsiChar(AlgoID);
+      PCardinal(Comp+5)^ := AlgoHash(0,Comp+9,len);
       result := len+9;
       exit;
     end;
   end;
-  Dest[4] := SYNLZCOMPRESS_STORED;
-  PCardinal(Dest+5)^ := PCardinal(Dest)^;
-  MoveFast(P^,Dest[9],PLen);
-  result := PLen+9;
+  Comp[4] := COMPRESS_STORED;
+  PCardinal(Comp+5)^ := PCardinal(Comp)^;
+  MoveFast(Plain^,Comp[9],PlainLen);
+  result := PlainLen+9;
 end;
 
-function SynLZDecompress(const Data: RawByteString): RawByteString;
+function TAlgoCompress.CompressDestLen(PlainLen: integer): integer;
 begin
-  SynLZDecompress(pointer(Data),Length(Data),result);
+  if self=nil then
+    result := 0 else
+    result := AlgoCompressDestLen(PLainLen)+9;
 end;
 
-function SynLZDecompressHeader(P: PAnsiChar; PLen: integer): integer;
-begin
-  result := 0; // error
-  if (PLen<=9) or (P=nil) or (crc32c(0,pointer(P+9),PLen-9)<>PCardinal(P+5)^) then
-    exit;
-  case P[4] of
-  SYNLZCOMPRESS_STORED:
-    if PCardinal(P)^=PCardinal(P+5)^ then
-      result := PLen-9;
-  SYNLZCOMPRESS_SYNLZ:
-    result := SynLZdecompressdestlen(P+9);
-  end;
-end;
-
-function SynLZDecompressBody(P,Body: PAnsiChar; PLen,BodyLen: integer;
-  SafeDecompression: boolean): boolean;
-begin
-  result := false;
-  case P[4] of
-  SYNLZCOMPRESS_STORED:
-    MoveFast(P[9],Body[0],BodyLen);
-  SYNLZCOMPRESS_SYNLZ:
-    if SafeDecompression then begin
-      if (SynLZDecompress1Partial(P+9,PLen-9,Body,BodyLen)<>BodyLen) or
-         (crc32c(0,Body,BodyLen)<>PCardinal(P)^) then
-        exit;
-    end else
-    if (SynLZDecompress1(P+9,PLen-9,Body)<>BodyLen) or
-       (crc32c(0,Body,BodyLen)<>PCardinal(P)^) then
-      exit;
-  else exit;
-  end;
-  result := true;
-end;
-
-function SynLZDecompressPartial(P,Partial: PAnsiChar; PLen,PartialLen: integer): integer;
-var BodyLen: integer;
-begin
-  result := 0;
-  if (PLen<=9) or (P=nil) then
-    exit;
-  case P[4] of
-  SYNLZCOMPRESS_STORED:
-    if PCardinal(P)^=PCardinal(P+5)^ then
-      BodyLen := PLen-9 else
-      exit;
-  SYNLZCOMPRESS_SYNLZ:
-    BodyLen := SynLZdecompressdestlen(P+9);
-  else exit;
-  end;
-  if PartialLen>BodyLen then
-    PartialLen := BodyLen;
-  case P[4] of
-  SYNLZCOMPRESS_STORED:
-    MoveFast(P[9],Partial[0],PartialLen);
-  SYNLZCOMPRESS_SYNLZ:
-    if SynLZDecompress1Partial(P+9,PLen-9,Partial,PartialLen)<>PartialLen then
-      exit;
-  end;
-  result := PartialLen;
-end;
-
-procedure SynLZDecompress(P: PAnsiChar; PLen: integer; out Result: RawByteString;
-  SafeDecompression: boolean);
-var len: integer;
-begin
-  len := SynLZDecompressHeader(P,PLen);
-  if len=0 then
-    exit;
-  SetString(result,nil,len);
-  if not SynLZDecompressBody(P,pointer(result),PLen,len,SafeDecompression) then
-    result := '';
-end;
-
-function SynLZDecompress(const Data: RawByteString; out Len: integer;
-  var tmp: RawByteString): pointer;
-begin
-  result := SynLZDecompress(pointer(Data),length(Data),Len,tmp);
-end;
-
-function SynLZDecompress(P: PAnsiChar; PLen: integer; out Len: integer;
-  var tmp: RawByteString): pointer;
-begin
-  result := nil;
-  Len := SynLZDecompressHeader(P,PLen);
-  if Len=0 then
-    exit;
-  if P[4]=SYNLZCOMPRESS_STORED then
-    result := P+9 else begin
-    SetString(tmp,nil,Len);
-    if SynLZDecompressBody(P,pointer(tmp),PLen,len) then
-      result := pointer(tmp);
-  end;
-end;
-
-function SynLZCompressToBytes(const Data: RawByteString;
-  CompressionSizeTrigger: integer): TByteDynArray;
-begin
-  result := SynLZCompressToBytes(pointer(Data),length(Data),CompressionSizeTrigger);
-end;
-
-function SynLZCompressToBytes(P: PAnsiChar; PLen,CompressionSizeTrigger: integer): TByteDynArray;
+function TAlgoCompress.CompressToBytes(Plain: PAnsiChar; PlainLen,
+  CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean): TByteDynArray;
 var len: integer;
     R: PAnsiChar;
     crc: cardinal;
 begin
-  if PLen=0 then
+  if (self=nil) or (PlainLen=0) then
     exit;
-  crc := crc32c(0,P,PLen);
-  if PLen<CompressionSizeTrigger then begin
-    SetLength(result,PLen+9);
+  crc := AlgoHash(0,Plain,PlainLen);
+  if PlainLen<CompressionSizeTrigger then begin
+    SetLength(result,PlainLen+9);
     R := pointer(result);
     PCardinal(R)^ := crc;
-    R[4] := SYNLZCOMPRESS_STORED;
+    R[4] := COMPRESS_STORED;
     PCardinal(R+5)^ := crc;
-    MoveFast(P^,R[9],PLen);
+    MoveFast(Plain^,R[9],PlainLen);
   end else begin
-    SetLength(result,SynLZcompressdestlen(PLen)+9);
+    SetLength(result,CompressDestLen(PlainLen));
     R := pointer(result);
     PCardinal(R)^ := crc;
-    len := SynLZcompress1(P,PLen,R+9);
-    if len>PLen then begin // store if compression not worth it
-      R[4] := SYNLZCOMPRESS_STORED;
+    len := AlgoCompress(Plain,PlainLen,R+9);
+    if len>PlainLen then begin // store if compression not worth it
+      R[4] := COMPRESS_STORED;
       PCardinal(R+5)^ := crc;
-      MoveFast(P^,R[9],PLen);
+      MoveFast(Plain^,R[9],PlainLen);
     end else begin
-      R[4] := SYNLZCOMPRESS_SYNLZ;
-      PCardinal(R+5)^ := crc32c(0,pointer(R+9),len);
+      R[4] := AnsiChar(AlgoID);
+      PCardinal(R+5)^ := AlgoHash(0,R+9,len);
     end;
     SetLength(result,len+9);
   end;
 end;
 
-function SynLZDecompress(const Data: TByteDynArray): RawByteString; overload;
+function TAlgoCompress.CompressToBytes(const Plain: RawByteString;
+  CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean): TByteDynArray;
 begin
-  SynLZDecompress(pointer(Data),length(Data),result);
+  result := CompressToBytes(pointer(Plain),Length(Plain),
+    CompressionSizeTrigger,CheckMagicForCompressed);
+end;
+
+function TAlgoCompress.Decompress(const Comp: TByteDynArray): RawByteString;
+begin
+  Decompress(pointer(Comp),length(Comp),result);
+end;
+
+procedure TAlgoCompress.Decompress(Comp: PAnsiChar; CompLen: integer;
+  out Result: RawByteString; SafeDecompression: boolean);
+var len: integer;
+begin
+  len := DecompressHeader(Comp,CompLen);
+  if len=0 then
+    exit;
+  SetString(result,nil,len);
+  if not DecompressBody(Comp,pointer(result),CompLen,len,SafeDecompression) then
+    result := '';
+end;
+
+function TAlgoCompress.Decompress(const Comp: RawByteString;
+  SafeDecompression: boolean): RawByteString;
+begin
+  Decompress(pointer(Comp),length(Comp),result,SafeDecompression);
+end;
+
+function TAlgoCompress.Decompress(const Comp: RawByteString;
+  out PlainLen: integer; var tmp: RawByteString; SafeDecompression: boolean): pointer;
+begin
+  result := Decompress(pointer(Comp),length(Comp),PlainLen,tmp,SafeDecompression);
+end;
+
+function TAlgoCompress.Decompress(Comp: PAnsiChar; CompLen: integer;
+  out PlainLen: integer; var tmp: RawByteString; SafeDecompression: boolean): pointer;
+begin
+  result := nil;
+  PlainLen := DecompressHeader(Comp,CompLen);
+  if PlainLen=0 then
+    exit;
+  if Comp[4]=COMPRESS_STORED then
+    result := Comp+9 else begin
+    SetString(tmp,nil,PlainLen);
+    if DecompressBody(Comp,pointer(tmp),CompLen,PlainLen,SafeDecompression) then
+      result := pointer(tmp);
+  end;
+end;
+
+function TAlgoCompress.DecompressPartial(Comp, Partial: PAnsiChar;
+  CompLen, PartialLen: integer): integer;
+var BodyLen: integer;
+begin
+  result := 0;
+  if (self=nil) or (CompLen<=9) or (Comp=nil) then
+    exit;
+  if Comp[4]=COMPRESS_STORED then begin
+    if PCardinal(Comp)^=PCardinal(Comp+5)^ then
+      BodyLen := CompLen-9 else
+      exit;
+  end else
+  if Comp[4]=AnsiChar(AlgoID) then
+    BodyLen := AlgoDecompressDestLen(Comp+9) else
+    exit;
+  if PartialLen>BodyLen then
+    PartialLen := BodyLen;
+  if Comp[4]=COMPRESS_STORED then
+    MoveFast(Comp[9],Partial[0],PartialLen) else
+    if AlgoDecompressPartial(Comp+9,CompLen-9,Partial,PartialLen)<>PartialLen then
+      exit;
+  result := PartialLen;
+end;
+
+function TAlgoCompress.DecompressHeader(Comp: PAnsiChar; CompLen: integer): integer;
+begin
+  result := 0;
+  if (self=nil) or (CompLen<=9) or (Comp=nil) or
+     (AlgoHash(0,Comp+9,CompLen-9)<>PCardinal(Comp+5)^) then
+    exit;
+  if Comp[4]=COMPRESS_STORED then begin
+    if PCardinal(Comp)^=PCardinal(Comp+5)^ then
+      result := CompLen-9;
+  end else
+  if Comp[4]=AnsiChar(AlgoID) then
+    result := AlgoDecompressDestLen(Comp+9);
+end;
+
+function TAlgoCompress.DecompressBody(Comp, Plain: PAnsiChar;
+  CompLen, PlainLen: integer; SafeDecompression: boolean): boolean;
+begin
+  result := false;
+  if (self=nil) or (PlainLen<=0) then
+    exit;
+  if Comp[4]=COMPRESS_STORED then
+    MoveFast(Comp[9],Plain[0],PlainLen) else
+  if Comp[4]=AnsiChar(AlgoID) then
+    if SafeDecompression then begin
+      if (AlgoDecompressPartial(Comp+9,CompLen-9,Plain,PlainLen)<>PlainLen) or
+         (AlgoHash(0,Plain,PlainLen)<>PCardinal(Comp)^) then
+        exit;
+    end else
+    if (AlgoDecompress(Comp+9,CompLen-9,Plain)<>PlainLen) or
+       (AlgoHash(0,Plain,PlainLen)<>PCardinal(Comp)^) then
+      exit;
+  result := true;
+end;
+
+
+{ TAlgoSynLz }
+
+function TAlgoSynLz.AlgoID: byte;
+begin
+  result := 1;
+end;
+
+function TAlgoSynLz.AlgoCompress(Plain: pointer; PlainLen: integer;
+  Comp: pointer): integer;
+begin
+  result := SynLZcompress1(Plain,PlainLen,Comp);
+end;
+
+function TAlgoSynLz.AlgoCompressDestLen(PlainLen: integer): integer;
+begin
+  result := SynLZcompressdestlen(PlainLen);
+end;
+
+function TAlgoSynLz.AlgoDecompress(Comp: pointer; CompLen: integer;
+  Plain: pointer): integer;
+begin
+  result := SynLZdecompress1(Comp,CompLen,Plain);
+end;
+
+function TAlgoSynLz.AlgoDecompressDestLen(Comp: pointer): integer;
+begin
+  result := SynLZdecompressdestlen(Comp);
+end;
+
+function TAlgoSynLz.AlgoDecompressPartial(Comp: pointer;
+  CompLen: integer; Partial: pointer; PartialLenMax: integer): integer;
+begin
+  result := SynLZdecompress1partial(Comp,CompLen,Partial,PartialLenMax);
+end;
+
+// deprecated wrapper methods - use SynLZ global variable instead
+
+function SynLZCompress(const Data: RawByteString; CompressionSizeTrigger: integer;
+  CheckMagicForCompressed: boolean): RawByteString;
+begin
+  AlgoSynLZ.Compress(pointer(Data),length(Data),result,CompressionSizeTrigger,
+    CheckMagicForCompressed);
+end;
+
+procedure SynLZCompress(P: PAnsiChar; PLen: integer; out Result: RawByteString;
+  CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean);
+begin
+  AlgoSynLZ.Compress(P,PLen,Result,CompressionSizeTrigger,CheckMagicForCompressed);
+end;
+
+function SynLZCompress(P, Dest: PAnsiChar; PLen, DestLen: integer;
+  CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean): integer;
+begin
+  result := AlgoSynLZ.Compress(P,Dest,PLen,DestLen,CompressionSizeTrigger,CheckMagicForCompressed);
+end;
+
+function SynLZDecompress(const Data: RawByteString): RawByteString;
+begin
+  AlgoSynLZ.Decompress(pointer(Data),Length(Data),result);
+end;
+
+function SynLZDecompressHeader(P: PAnsiChar; PLen: integer): integer;
+begin
+  result := AlgoSynLZ.DecompressHeader(P,PLen);
+end;
+
+function SynLZDecompressBody(P,Body: PAnsiChar; PLen,BodyLen: integer;
+  SafeDecompression: boolean): boolean;
+begin
+  result := AlgoSynLZ.DecompressBody(P,Body,PLen,BodyLen,SafeDecompression);
+end;
+
+function SynLZDecompressPartial(P,Partial: PAnsiChar; PLen,PartialLen: integer): integer;
+begin
+  result := AlgoSynLZ.DecompressPartial(P,Partial,PLen,PartialLen);
+end;
+
+procedure SynLZDecompress(P: PAnsiChar; PLen: integer; out Result: RawByteString;
+  SafeDecompression: boolean);
+begin
+  AlgoSynLZ.Decompress(P,PLen,Result);
+end;
+
+function SynLZDecompress(const Data: RawByteString; out Len: integer;
+  var tmp: RawByteString): pointer;
+begin
+  result := AlgoSynLZ.Decompress(pointer(Data),length(Data),Len,tmp);
+end;
+
+function SynLZDecompress(P: PAnsiChar; PLen: integer; out Len: integer;
+  var tmp: RawByteString): pointer;
+begin
+  result := AlgoSynLZ.Decompress(P,PLen,Len,tmp);
+end;
+
+function SynLZCompressToBytes(const Data: RawByteString;
+  CompressionSizeTrigger: integer): TByteDynArray;
+begin
+  result := AlgoSynLZ.CompressToBytes(pointer(Data),length(Data),CompressionSizeTrigger);
+end;
+
+function SynLZCompressToBytes(P: PAnsiChar; PLen,CompressionSizeTrigger: integer): TByteDynArray;
+begin
+  result := AlgoSynLZ.CompressToBytes(P,PLen,CompressionSizeTrigger);
+end;
+
+function SynLZDecompress(const Data: TByteDynArray): RawByteString;
+begin
+  AlgoSynLZ.Decompress(pointer(Data),length(Data),result);
 end;
 
 procedure ZeroCompress(P: PAnsiChar; Len: integer; Dest: TFileBufferWriter);
@@ -63788,6 +64094,7 @@ initialization
   InitSynCommonsConversionTables;
   RetrieveSystemInfo;
   SetExecutableVersion(0,0,0,0);
+  AlgoSynLZ := TAlgoSynLz.Create;
   TTextWriter.RegisterCustomJSONSerializerFromText([
     TypeInfo(TFindFilesDynArray),
      'Name string Attr Integer Size Int64 TimeStamp TDateTime',
