@@ -4590,6 +4590,7 @@ function FastFindIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): Ptr
 // - return index of Values[result]=Value
 // - return -1 if Value was not found
 function FastFindIntegerSorted(const Values: TIntegerDynArray; Value: integer): PtrInt; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fast O(log(n)) binary search of a 64 bit signed integer value in a sorted array
 // - R is the last index of available integer entries in P^ (i.e. Count-1)
@@ -30034,6 +30035,11 @@ begin
   result := -1
 end;
 
+function FastFindIntegerSorted(const Values: TIntegerDynArray; Value: integer): PtrInt;
+begin
+  result := FastFindIntegerSorted(pointer(Values),length(Values)-1,Value);
+end;
+
 function FastFindInt64Sorted(P: PInt64Array; R: PtrInt; const Value: Int64): PtrInt; overload;
 var L: PtrInt;
     {$ifdef CPUX86}
@@ -30084,11 +30090,6 @@ begin
       R := result - 1;
   until (L > R);
   result := -1
-end;
-
-function FastFindIntegerSorted(const Values: TIntegerDynArray; Value: integer): PtrInt;
-begin
-  result := FastFindIntegerSorted(pointer(Values),length(Values)-1,Value);
 end;
 
 function FastLocateIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt;

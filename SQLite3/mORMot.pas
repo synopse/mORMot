@@ -36696,7 +36696,7 @@ begin
     exit;
   fSafe.Lock;
   try
-    i := FastFindIntegerSorted(pointer(fIP4),ip4);
+    i := FastFindIntegerSorted(pointer(fIP4),fCount-1,ip4);
     if i<0 then
       exit;
     DeleteInteger(fIP4,fCount,i);
@@ -36714,7 +36714,7 @@ begin
     exit;
   fSafe.Lock;
   try
-    if FastFindIntegerSorted(pointer(fIP4),ip4)>=0 then
+    if FastFindIntegerSorted(pointer(fIP4),fCount-1,ip4)>=0 then
       result := true;
   finally
     fSafe.UnLock;
