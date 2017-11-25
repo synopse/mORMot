@@ -344,6 +344,11 @@ type
     function NewRestServerDB(const aDBFileName: TFileName; const aModelRoot: RawUTF8;
       const aModelTables: array of TSQLRecordClass; aOptions: TDDDRestSettingsOptions=[];
       aCacheSize: cardinal=10000): TSQLRestServerDB;
+    /// if DB is a TSQLRestServerDB, will define the expection options
+    // - DB.FileName will be erased from disk if optEraseDBFileAtStartup is defined
+    // - force LockingMode=exclusive and Synchrounous=off unless
+    // optSQlite3FileSafeNonExclusive/optSQlite3FileSafeSlowMode options are set
+    class procedure RestServerDBSetOptions(DB: TSQLRestServer; Options: TDDDRestSettingsOptions);
     /// returns the WrapperTemplateFolder property, all / chars replaced by \
     // - so that you would be able to store the paths with /, avoiding JSON escape
     function WrapperTemplateFolderFixed(ReturnLocalIfNoneSet: boolean=false): TFileName;
@@ -603,7 +608,7 @@ type
     property SMTP: RawUTF8 read fSMTP write fSMTP;
     property Recipients: RawUTF8 read fRecipients write fRecipients;
   end;
-  
+
 
 implementation
 
@@ -850,15 +855,7 @@ begin
       if (WrapperTemplateFolder<>'') and DirectoryExists(WrapperTemplateFolderFixed) then
         AddToServerWrapperMethod(TSQLRestServer(result),[WrapperTemplateFolderFixed],
           WrapperSourceFolderFixed);
-      if result.InheritsFrom(TSQLRestServerDB) then
-        with TSQLRestServerDB(result).DB do begin // tune internal SQlite3 engine
-          if optSQlite3FileSafeNonExclusive in Options then
-            LockingMode := lmNormal else
-            LockingMode := lmExclusive;
-          if optSQlite3FileSafeSlowMode in Options then
-            Synchronous := smNormal else
-            Synchronous := smOff;
-        end;
+      RestServerDBSetOptions(TSQLRestServer(result), Options);
       if riCreateMissingTables in aOptions then
         TSQLRestServer(result).CreateMissingTables;
     except
@@ -878,13 +875,11 @@ begin
   end;
 end;
 
-function TDDDRestSettings.NewRestServerDB(const aDBFileName: TFileName;
-  const aModelRoot: RawUTF8; const aModelTables: array of TSQLRecordClass;
-  aOptions: TDDDRestSettingsOptions; aCacheSize: cardinal): TSQLRestServerDB;
+class procedure TDDDRestSettings.RestServerDBSetOptions(DB: TSQLRestServer;
+  Options: TDDDRestSettingsOptions);
 begin
-  result := TSQLRestServerDB.CreateWithOwnModel(aModelTables, DefaultDataFolder +
-    UTF8ToString(DefaultDataFileName) + aDBFileName, false, aModelRoot, '', aCacheSize);
-  with result.DB do begin // tune internal SQlite3 engine
+  if (DB <> nil) and DB.InheritsFrom(TSQLRestServerDB) then
+  with TSQLRestServerDB(DB).DB do begin // tune internal SQlite3 engine
     if optEraseDBFileAtStartup in Options then
       DeleteFile(FileName);
     if optSQlite3FileSafeNonExclusive in Options then
@@ -894,6 +889,15 @@ begin
       Synchronous := smNormal else
       Synchronous := smOff;
   end;
+end;
+
+function TDDDRestSettings.NewRestServerDB(const aDBFileName: TFileName;
+  const aModelRoot: RawUTF8; const aModelTables: array of TSQLRecordClass;
+  aOptions: TDDDRestSettingsOptions; aCacheSize: cardinal): TSQLRestServerDB;
+begin
+  result := TSQLRestServerDB.CreateWithOwnModel(aModelTables, DefaultDataFolder +
+    UTF8ToString(DefaultDataFileName) + aDBFileName, false, aModelRoot, '', aCacheSize);
+  RestServerDBSetOptions(result, Options); // tune internal SQlite3 engine
   result.CreateMissingTables;
 end;
 
