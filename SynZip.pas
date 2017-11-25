@@ -598,6 +598,7 @@ const
 
   Z_OK = 0;
   Z_STREAM_END = 1;
+  Z_DATA_ERROR = -3;
   Z_MEM_ERROR = -4;
   Z_BUF_ERROR = -5;
 

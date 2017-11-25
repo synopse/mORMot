@@ -476,6 +476,8 @@ type
     procedure _SynLZO;
     /// SynLZ internal format
     procedure _SynLZ;
+    /// TSynCompress classes
+    procedure _TSynCompress;
   end;
 
   /// this test case will test most functions, classes and types defined and
@@ -9351,6 +9353,30 @@ begin
   Check(CompressSynLZ(s,true)='synlz');
   Check(CompressSynLZ(s,false)='synlz');
   Check(s=Data);
+end;
+
+procedure TTestCompression._TSynCompress;
+  procedure TestAlgo(algo: TAlgoCompress);
+  var s,t: RawByteString;
+      i: integer;
+  begin
+    for i := 1 to 200 do begin
+      t := StringOfChar(AnsiChar(i),i);
+      s := StringOfChar(AnsiChar(i),i);
+      Check(algo.Decompress(algo.Compress(s))=t);
+    end;
+    for i := 0 to 1000 do begin
+      s := RandomString(i*8);
+      Check(algo.Decompress(algo.Compress(s),false)=s);
+      Check(algo.Decompress(algo.Compress(s),true)=s);
+    end;
+  end;
+begin
+  TestAlgo(AlgoSynLZ);
+  {$ifndef DELPHI5OROLDER}
+  TestAlgo(AlgoDeflate);
+  TestAlgo(AlgoDeflateFast);
+  {$endif}
 end;
 
 
