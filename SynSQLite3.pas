@@ -2102,6 +2102,9 @@ procedure sqlite3InternalFreeRawByteString(p: pointer); {$ifndef SQLITE3_FASTCAL
 /// wrapper around sqlite3.result_error() to be called if wrong number of arguments
 procedure ErrorWrongNumberOfArgs(Context: TSQLite3FunctionContext);
 
+/// wrapper around sqlite3.result_error() validating the expected number of arguments
+function CheckNumberOfArgs(Context: TSQLite3FunctionContext; expected,sent: integer): boolean;
+
 /// create a TSQLite3Module.pzErr UTF-8 text buffer according to the given
 // Delphi exception
 procedure ExceptionToSqlite3Err(E: Exception; var pzErr: PUTF8Char);

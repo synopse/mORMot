@@ -808,10 +808,12 @@ type
   /// internal 256-bit structure used for TAESAbstractAEAD MAC storage
   TAESMAC256 = record
     /// the AES-encrypted MAC of the plain content
-    // - encrypt the plain text crc, to perform message authentication and integrity
+    // - plain text digital signature, to perform message authentication
+    // and integrity
     plain: THash128;
     /// the plain MAC of the encrypted content
-    // - store the encrypted text crc, to check for errors, with no compromission
+    // - encrypted text digital signature, to check for errors,
+    // with no compromission of the plain content
     encrypted: THash128;
   end;
   
