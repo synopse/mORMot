@@ -13,6 +13,8 @@ uses
   SpiderMonkey,
   SyNode;
 
+function os_realpath(const FileName: SynUnicode; var TargetName: SynUnicode): Boolean;
+
 implementation
 
 uses
