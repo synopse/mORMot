@@ -9459,8 +9459,8 @@ type
   TAlgoCompress = class(TSynPersistent)
   public
     /// should return a genuine byte identifier
-    // - 0 is reserved for stored content, 1 for TAlgoSynLz, and 2/3 for
-    // TSynDeflateCompress/TSynDeflateFastCompress (in mORMot.pas)
+    // - 0 is reserved for stored, 1 for TAlgoSynLz, 2/3 for TAlgoDeflate(Fast)
+    // in mORMot.pas, 4/5 for TAlgoLizard(Fast) in SynLizard.pas
     function AlgoID: byte; virtual; abstract;
     /// computes by default the crc32c() digital signature of the buffer
     function AlgoHash(Previous: cardinal; Data: pointer; DataLen: integer): cardinal; virtual;
@@ -9583,6 +9583,29 @@ type
     /// decompress the supplied data using SynLZ
     function AlgoDecompress(Comp: pointer; CompLen: integer; Plain: pointer): integer; override;
     /// partial (and safe) decompression of the supplied data using SynLZ
+    function AlgoDecompressPartial(Comp: pointer; CompLen: integer;
+      Partial: pointer; PartialLenMax: integer): integer; override;
+  end;
+
+  TAlgoCompressWithNoDestLenProcess = (doCompress, doUnCompress, doUncompressPartial);
+
+  /// abstract class storing the plain length before calling compression API
+  // - some libraries (e.g. Deflate or Lizard) don't provide the uncompressed
+  // length from its output buffer - inherit from this class to store this value
+  // as ToVarUInt32, and override the RawProcess abstract protected method
+  TAlgoCompressWithNoDestLen = class(TAlgoCompress)
+  protected
+    /// inherited classes should implement this single method for the actual process
+    function RawProcess(src,dst: pointer; srcLen,dstLen: integer;
+      process: TAlgoCompressWithNoDestLenProcess): integer; virtual; abstract;
+  public
+    /// performs the compression, storing PlainLen and calling protected RawProcess
+    function AlgoCompress(Plain: pointer; PlainLen: integer; Comp: pointer): integer; override;
+    /// return the size of the decompressed data (using FromVarUInt32)
+    function AlgoDecompressDestLen(Comp: pointer): integer; override;
+    /// performs the decompression, retrieving PlainLen and calling protected RawProcess
+    function AlgoDecompress(Comp: pointer; CompLen: integer; Plain: pointer): integer; override;
+    /// performs the decompression, retrieving PlainLen and calling protected RawProcess
     function AlgoDecompressPartial(Comp: pointer; CompLen: integer;
       Partial: pointer; PartialLenMax: integer): integer; override;
   end;
@@ -60834,6 +60857,47 @@ function SynLZDecompress(const Data: TByteDynArray): RawByteString;
 begin
   AlgoSynLZ.Decompress(pointer(Data),length(Data),result);
 end;
+
+
+{ TAlgoCompressWithNoDestLen }
+
+function TAlgoCompressWithNoDestLen.AlgoCompress(Plain: pointer;
+  PlainLen: integer; Comp: pointer): integer;
+begin
+  Comp := ToVarUInt32(PlainLen,Comp); // deflate don't store PlainLen
+  result := RawProcess(Plain,Comp,PlainLen,AlgoCompressDestLen(PlainLen),doCompress);
+  if result>0 then
+    inc(result,ToVarUInt32Length(PlainLen));
+end;
+
+function TAlgoCompressWithNoDestLen.AlgoDecompress(Comp: pointer;
+  CompLen: integer; Plain: pointer): integer;
+var start: PAnsiChar;
+begin
+  start := Comp;
+  result := FromVarUInt32(PByte(Comp));
+  if RawProcess(Comp,Plain,CompLen+(Start-Comp),result,doUnCompress)<>result then
+    result := 0;
+end;
+
+function TAlgoCompressWithNoDestLen.AlgoDecompressDestLen(Comp: pointer): integer;
+begin
+  if Comp=nil then
+    result := 0 else
+    result := FromVarUInt32(PByte(Comp));
+end;
+
+function TAlgoCompressWithNoDestLen.AlgoDecompressPartial(Comp: pointer;
+  CompLen: integer; Partial: pointer; PartialLenMax: integer): integer;
+var start: PAnsiChar;
+begin
+  start := Comp;
+  result := FromVarUInt32(PByte(Comp));
+  if PartialLenMax>result then
+    PartialLenMax := result;
+  result := RawProcess(Comp,Partial,CompLen+(Start-Comp),PartialLenMax,doUncompressPartial);
+end;
+
 
 procedure ZeroCompress(P: PAnsiChar; Len: integer; Dest: TFileBufferWriter);
 var PEnd,beg,zero: PAnsiChar;

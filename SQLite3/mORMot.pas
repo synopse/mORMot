@@ -4719,43 +4719,6 @@ type
     property OnKeyResolve: TOnKeyResolve read fOnKeyResolve write fOnKeyResolve;
   end;
 
-  /// implement Zip Deflate compression in level 6 as a TSynCompress class
-  // - use the AlgoDeflate global variable
-  TAlgoDeflate = class(TAlgoCompress)
-  protected
-    fDeflateLevel: integer;
-  public
-    /// will register AlgoID=2 in the global list, and Deflate level 6
-    // - you should never have to call this constructor, but use SynDeflate
-    // global variable
-    constructor Create; override;
-    /// returns 2 as genuine byte identifier for Deflate level 6
-    function AlgoID: byte; override;
-    /// get maximum possible (worse) Deflate compressed size for the supplied length
-    function AlgoCompressDestLen(PlainLen: integer): integer; override;
-    /// compress the supplied data using Deflate
-    function AlgoCompress(Plain: pointer; PlainLen: integer; Comp: pointer): integer; override;
-    /// return the size of the Deflate decompressed data
-    function AlgoDecompressDestLen(Comp: pointer): integer; override;
-    /// decompress the supplied data using Deflate
-    function AlgoDecompress(Comp: pointer; CompLen: integer; Plain: pointer): integer; override;
-    /// partial (and safe) decompression of the supplied data using Deflate
-    function AlgoDecompressPartial(Comp: pointer; CompLen: integer;
-      Partial: pointer; PartialLenMax: integer): integer; override;
-  end;
-
-  /// implement Zip Deflate compression in level 1 as a TSynCompress class
-  // - use the AlgoDeflateFast global variable
-  TAlgoDeflateFast = class(TAlgoDeflate)
-  public
-    /// will register AlgoID=3 in the global list, and Deflate level 1
-    // - you should never have to call this constructor, but use SynDeflate
-    // global variable
-    constructor Create; override;
-    /// returns 3 as genuine byte identifier for Deflate level 1
-    function AlgoID: byte; override;
-  end;
-
 var
   /// acccess to Zip Deflate compression in level 6 as a TSynCompress class
   AlgoDeflate: TAlgoCompress;
@@ -59701,10 +59664,17 @@ end;
 
 { TAlgoDeflate }
 
-function TAlgoDeflate.AlgoID: byte;
-begin
-  result := 2;
-end;
+type // implements the AlgoDeflate global variable
+  TAlgoDeflate = class(TAlgoCompressWithNoDestLen)
+  protected
+    fDeflateLevel: integer;
+    function RawProcess(src,dst: pointer; srcLen,dstLen: integer;
+      process: TAlgoCompressWithNoDestLenProcess): integer;  override;
+  public
+    constructor Create; override;
+    function AlgoID: byte; override;
+    function AlgoCompressDestLen(PlainLen: integer): integer; override;
+  end;
 
 constructor TAlgoDeflate.Create;
 begin
@@ -59712,13 +59682,22 @@ begin
   fDeflateLevel := 6;
 end;
 
-function TAlgoDeflate.AlgoCompress(Plain: pointer; PlainLen: integer;
-  Comp: pointer): integer;
+function TAlgoDeflate.AlgoID: byte;
 begin
-  Comp := ToVarUInt32(PlainLen,Comp); // deflate don't store PlainLen
-  result := SynZip.CompressMem(Plain,Comp,PlainLen,AlgoCompressDestLen(PlainLen),fDeflateLevel);
-  if result>0 then
-    inc(result,ToVarUInt32Length(PlainLen));
+  result := 2;
+end;
+
+function TAlgoDeflate.RawProcess(src,dst: pointer; srcLen,dstLen: integer;
+  process: TAlgoCompressWithNoDestLenProcess): integer;
+begin
+  case process of
+  doCompress:
+    result := SynZip.CompressMem(src,dst,srcLen,dstLen,fDeflateLevel);
+  doUnCompress, doUncompressPartial:
+    result := SynZip.UnCompressMem(src,dst,srcLen,dstLen);
+  else
+    result := 0;
+  end;
 end;
 
 function TAlgoDeflate.AlgoCompressDestLen(PlainLen: integer): integer;
@@ -59726,36 +59705,15 @@ begin
   result := PlainLen+256+PlainLen shr 3;
 end;
 
-function TAlgoDeflate.AlgoDecompress(Comp: pointer; CompLen: integer;
-  Plain: pointer): integer;
-var start: PAnsiChar;
-begin
-  start := Comp;
-  result := FromVarUInt32(PByte(Comp));
-  if SynZip.UnCompressMem(Comp,Plain,CompLen+(Start-Comp),result)<>result then
-    result := 0;
-end;
-
-function TAlgoDeflate.AlgoDecompressDestLen(Comp: pointer): integer;
-begin
-  if Comp=nil then
-    result := 0 else
-    result := FromVarUInt32(PByte(Comp));
-end;
-
-function TAlgoDeflate.AlgoDecompressPartial(Comp: pointer;
-  CompLen: integer; Partial: pointer; PartialLenMax: integer): integer;
-var start: PAnsiChar;
-begin
-  start := Comp;
-  result := FromVarUInt32(PByte(Comp));
-  if PartialLenMax>result then
-    PartialLenMax := result;
-  result := SynZip.UnCompressMem(Comp,Partial,CompLen+(Start-Comp),PartialLenMax);
-end;
-
 
 { TAlgoDeflateFast }
+
+type // implements the AlgoDeflateFast global variable
+  TAlgoDeflateFast = class(TAlgoDeflate)
+  public
+    constructor Create; override;
+    function AlgoID: byte; override;
+  end;
 
 function TAlgoDeflateFast.AlgoID: byte;
 begin
