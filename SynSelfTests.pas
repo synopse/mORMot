@@ -476,8 +476,8 @@ type
     procedure _SynLZO;
     /// SynLZ internal format
     procedure _SynLZ;
-    /// TSynCompress classes
-    procedure _TSynCompress;
+    /// TAlgoCompress classes
+    procedure _TAlgoCompress;
   end;
 
   /// this test case will test most functions, classes and types defined and
@@ -1373,7 +1373,8 @@ uses
   SynCrypto,
   SynZip,
   SynLZO,
-  SynLZ;
+  SynLZ,
+  SynLizard;
 
 
 { TTestLowLevelCommon }
@@ -9355,24 +9356,55 @@ begin
   Check(s=Data);
 end;
 
-procedure TTestCompression._TSynCompress;
+procedure TTestCompression._TAlgoCompress;
   procedure TestAlgo(algo: TAlgoCompress);
-  var s,t: RawByteString;
-      i: integer;
+  var s,t,s2,log: RawByteString;
+      i, plain, comp: integer;
+      timer: TPrecisionTimer;
+      timecomp, timedecomp: Int64;
   begin
-    for i := 1 to 200 do begin
-      t := StringOfChar(AnsiChar(i),i);
-      s := StringOfChar(AnsiChar(i),i);
+    if algo=nil then
+      exit;
+    for i := 1 to 50 do begin
+      t := StringOfChar(AnsiChar(i),i)+t;
+      s := StringOfChar(AnsiChar(i),i)+s;
       Check(algo.Decompress(algo.Compress(s))=t);
     end;
-    for i := 0 to 1000 do begin
-      s := RandomString(i*8);
-      Check(algo.Decompress(algo.Compress(s),false)=s);
-      Check(algo.Decompress(algo.Compress(s),true)=s);
+    plain := 0;
+    comp := 0;
+    timecomp := 0;
+    timedecomp := 0;
+    log := StringFromFile('bigTest.log');
+    for i := 0 to 100 do begin
+      if log<>'' then
+        s := log else
+        s := RandomTextParagraph(i*8);
+      timer.Start;
+      t := algo.Compress(s);
+      timer.ComputeTime;
+      inc(timecomp, timer.LastTimeInMicroSec);
+      timer.Start;
+      s2 := algo.Decompress(t,false);
+      timer.ComputeTime;
+      inc(timedecomp, timer.LastTimeInMicroSec);
+      Check(s2=s, algo.ClassName);
+      if (log<>'') and (s2<>s) then FileFromString(s2,'bigTest'+algo.ClassName+'.log');
+      inc(plain, length(s));
+      inc(comp, length(t));
+      if log<>'' then
+        break;
     end;
+    AddConsole(format('%s %s->%s: comp %s/s decomp %s/s', [algo.ClassName,
+      KB(plain), KB(comp), KB((plain*Int64(1000*1000)) div timecomp),
+      KB((plain*Int64(1000*1000)) div timedecomp)]));
+    s2 := algo.Decompress(algo.Compress(s),false);
+    Check(s2=s, algo.ClassName);
+    if (log<>'') and (s2<>s) then FileFromString(s2,'bigTestPartial'+algo.ClassName+'.log');
   end;
 begin
   TestAlgo(AlgoSynLZ);
+  TestAlgo(AlgoLizard);
+  TestAlgo(AlgoLizardFast);
   {$ifndef DELPHI5OROLDER}
   TestAlgo(AlgoDeflate);
   TestAlgo(AlgoDeflateFast);
