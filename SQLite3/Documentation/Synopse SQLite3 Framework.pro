@@ -9922,16 +9922,28 @@ Then your client code can use it as such:
 !    Repository: ICustomerRepository;
 !    Customer: TCustomer;
 !...
-!  Customer := TCustomer.Create;
+!  Customer := TCustomer.Create; // client side manage object instance
 !  try
-!    Factory.NewCustomer(Customer); // get a new object instance
 !    Customer.FirstName := StringToUTF8(EditFirstName.Text);
 !    Customer.LastName := StringToUTF8(EditLastName.Text);
 !    NewCutomerID := Repository.Save(Customer); // persist the object
 !  finally
 !    Customer.Free; // properly manage memory
 !  end;
-In this example, we use both {\i @*Factory@} and {\i @*Repository@} patterns, as proposed by @68@.
+Or, using both {\i @*Factory@} and {\i @*Repository@} patterns, as proposed by @68@:
+!var Factory: ICustomerFactory;
+!    Repository: ICustomerRepository;
+!    Customer: TCustomer;
+!...
+!  Factory.NewCustomer(Customer); // get a new object instance
+!  try
+!    Customer.FirstName := StringToUTF8(EditFirstName.Text);
+!    Customer.LastName := StringToUTF8(EditLastName.Text);
+!    NewCutomerID := Repository.Save(Customer); // persist the object
+!  finally
+!    Customer.Free; // properly manage memory
+!  end;
+In real live, it may be very easy to wrongly write a server method returning an existing instance, which will be released by the server SOA caller, and will trigger unexpected A/V randomly - very difficult to track - on the server side. Which is what we want to avoid... Whereas a pointer to nil gives always a clear access violation on the client side, which doesn't affect the server.\line So this requirement/limitation was designed as such to make the server side more resilient to errors, even if the client side is a bit more complex to work with. Usually, on the client side, you can safely pre-allocate your object instances, and reuse them.
 :  Record parameters
 By default, any {\f1\fs20 @*record@} parameter or function result will be serialized with a proprietary binary (and optimized) layout, then transmitted as a JSON string, after @*Base64@ encoding.
 Even if older versions of {\i Delphi} are not able to generate the needed RTTI information for such serialization, allowing us only to use an efficient but proprietary binary layout, the {\i mORMot} framework offers a common way of implementing any custom serialization of records. See @51@.
