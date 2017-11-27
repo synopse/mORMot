@@ -9394,15 +9394,22 @@ procedure TTestCompression._TAlgoCompress;
       if log<>'' then
         break;
     end;
-    AddConsole(format('%s %s->%s: comp %s/s decomp %s/s', [algo.ClassName,
-      KB(plain), KB(comp), KB((plain*Int64(1000*1000)) div timecomp),
-      KB((plain*Int64(1000*1000)) div timedecomp)]));
+    AddConsole(format('%s %s->%s: comp %d:%dMB/s decomp %d:%dMB/s',
+      [algo.ClassName, KB(plain), KB(comp),
+      ((plain*Int64(1000*1000)) div timecomp)shr 20,
+      ((comp*Int64(1000*1000)) div timecomp)shr 20,
+      ((comp*Int64(1000*1000)) div timedecomp)shr 20,
+      ((plain*Int64(1000*1000)) div timedecomp)shr 20]));
     s2 := algo.Decompress(algo.Compress(s),false);
     Check(s2=s, algo.ClassName);
     if (log<>'') and (s2<>s) then FileFromString(s2,'bigTestPartial'+algo.ClassName+'.log');
   end;
 begin
   TestAlgo(AlgoSynLZ);
+  {$ifdef MSWINDOWS}
+  if (Lizard=nil) and FileExists(ExeVersion.ProgramFilePath+LIZARD_LIB_NAME) then
+    Lizard := TSynLizardDynamic.Create;
+  {$endif}
   TestAlgo(AlgoLizard);
   TestAlgo(AlgoLizardFast);
   {$ifndef DELPHI5OROLDER}
@@ -9411,6 +9418,13 @@ begin
   {$endif}
 end;
 
+{ FPC Linux x86-64 for a 53MB log file:
+     TAlgoSynLz 53 MB->5 MB: comp 650:62MB/s decomp 90:945MB/s
+     TAlgoLizard 53 MB->3.9 MB: comp 55:4MB/s decomp 139:1881MB/s
+     TAlgoLizardFast 53 MB->6.8 MB: comp 695:89MB/s decomp 196:1522MB/s
+     TAlgoDeflate 53 MB->4.8 MB: comp 71:6MB/s decomp 48:540MB/s
+     TAlgoDeflateFast 53 MB->7 MB: comp 142:18MB/s decomp 56:428MB/s
+}
 
 { TTestCryptographicRoutines }
 

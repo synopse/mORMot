@@ -1,4 +1,4 @@
-/// fast Lizard (LZ5) Compression routines (FPC only yet)
+/// fast Lizard (LZ5) Compression routines (static for FPC only yet)
 // - licensed under a MPL/GPL/LGPL tri-license; original Lizard is BSD 2-Clause
 unit SynLizard;
 
@@ -115,9 +115,6 @@ unit SynLizard;
     external Lizard1-32.dll/Lizard1-64.dll/liblizard.so.1
     from https://synopse.info/files/SynLizardLibs.7z
 
-  WARNING: Lizard1-32.dll/Lizard1-64.dll files currently DON'T WORK :(
-   -> use FPC for proper static linking
-    
 }
 
 interface
@@ -220,7 +217,7 @@ type
   end;
 
 var
-  /// direct access to the low-level Lizard (LZ5) library 
+  /// direct access to the low-level Lizard (LZ5) library
   // - is defined by default if Lizard was statically linked (under FPC)
   // - otherwise, you should execute explictly:
   // ! if Lizard = nil then
@@ -230,8 +227,10 @@ var
 type
   /// try to load a LIZARD_LIB_NAME external library
   // - static linking is currently available only on FPC Win32/64 and Linux32/64
-  // - this class is expected to access .dll files for Delphi - but it is NOT
-  // WORKING YET, due to not good support of the Windows platform for Lizard :(
+  // - this class is expected to access Lizard1-32.dll/Lizard1-64.dll files for
+  // Delphi, as such:
+  // ! if Lizard = nil then
+  // !   Lizard := TSynLizardDynamic.Create;
   TSynLizardDynamic = class(TSynLizard)
   protected
     {$ifdef FPC}
@@ -257,7 +256,16 @@ type
   end;
 {$endif LIZARD_EXTERNALONLY}
 
-{$ifndef LIZARD_STANDALONE}
+{$ifdef LIZARD_STANDALONE}
+function Lizard_versionNumber: integer; cdecl;
+function Lizard_compressBound(inputSize: integer): integer; cdecl;
+function Lizard_compress(src, dst: pointer; srcSize, maxDstSize, compressionLevel: integer): integer; cdecl;
+function Lizard_sizeofState(compressionLevel: integer): integer; cdecl;
+function Lizard_compress_extState(state: pointer;
+  src, dst: pointer; srcSize, maxDstSize, compressionLevel: integer): integer; cdecl;
+function Lizard_decompress_safe(src, dst: pointer; srcSize, maxDstSize: integer): integer; cdecl;
+function Lizard_decompress_safe_partial(src, dst: pointer; srcSize, targetDstSize: integer): integer; cdecl;
+{$else}
 var
   /// implement Lizard compression in level 17 (LIZARD_DEFAULT_CLEVEL) as AlgoID=4
   // - is set by TSynLizard.Create, so available e.g. if library is statically linked
@@ -462,7 +470,7 @@ end;
 
 const
   LIZARD_ENTRIES: array[0..6] of TFileName =
-  ('versionNumber', 'compressbound', 'compress', 'sizeofState',
+  ('versionNumber', 'compressBound', 'compress', 'sizeofState',
    'compress_extState', 'decompress_safe', 'decompress_safe_partial');
 
 constructor TSynLizardDynamic.Create(const aLibraryFile: TFileName);
