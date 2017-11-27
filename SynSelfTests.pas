@@ -9396,10 +9396,10 @@ procedure TTestCompression._TAlgoCompress;
     end;
     AddConsole(format('%s %s->%s: comp %d:%dMB/s decomp %d:%dMB/s',
       [algo.ClassName, KB(plain), KB(comp),
-      ((plain*Int64(1000*1000)) div timecomp)shr 20,
-      ((comp*Int64(1000*1000)) div timecomp)shr 20,
-      ((comp*Int64(1000*1000)) div timedecomp)shr 20,
-      ((plain*Int64(1000*1000)) div timedecomp)shr 20]));
+       ((plain*Int64(1000*1000)) div timecomp)shr 20,
+       ((comp*Int64(1000*1000)) div timecomp)shr 20,
+       ((comp*Int64(1000*1000)) div timedecomp)shr 20,
+       ((plain*Int64(1000*1000)) div timedecomp)shr 20]));
     s2 := algo.Decompress(algo.Compress(s),false);
     Check(s2=s, algo.ClassName);
     if (log<>'') and (s2<>s) then FileFromString(s2,'bigTestPartial'+algo.ClassName+'.log');
@@ -9418,12 +9418,19 @@ begin
   {$endif}
 end;
 
-{ FPC Linux x86-64 for a 53MB log file:
+{ FPC Linux x86-64 (in VM) with static linked library for a 53MB log file:
      TAlgoSynLz 53 MB->5 MB: comp 650:62MB/s decomp 90:945MB/s
      TAlgoLizard 53 MB->3.9 MB: comp 55:4MB/s decomp 139:1881MB/s
      TAlgoLizardFast 53 MB->6.8 MB: comp 695:89MB/s decomp 196:1522MB/s
      TAlgoDeflate 53 MB->4.8 MB: comp 71:6MB/s decomp 48:540MB/s
      TAlgoDeflateFast 53 MB->7 MB: comp 142:18MB/s decomp 56:428MB/s
+  Delphi Win64 with external lizard1-64.dll:
+     TAlgoSynLz 53 MB->5 MB: comp 642:61MB/s decomp 99:1038MB/s
+     TAlgoLizard 53 MB->3.9 MB: comp 62:4MB/s decomp 168:2277MB/s
+     TAlgoLizardFast 53 MB->6.8 MB: comp 679:87MB/s decomp 262:2030MB/s
+     TAlgoDeflate 53 MB->4.8 MB: comp 25:2MB/s decomp 19:214MB/s
+     TAlgoDeflateFast 53 MB->7 MB: comp 52:6MB/s decomp 24:181MB/s
+  speed difference may come from the FPC/Delphi heap manager, and/or the Linux VM
 }
 
 { TTestCryptographicRoutines }

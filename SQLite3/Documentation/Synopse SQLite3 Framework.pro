@@ -10837,7 +10837,7 @@ The easiest implementation path is to have each part registering from its side. 
 You may try {\f1\fs20 TSQLRest.MultiRedirect} and register once to a remote service, then use an internal registration mechanism to have every part of your business logic registering and consuming the events. The method returns an {\f1\fs20 IMultiCallbackRedirect} interface, allowing registration of sub-callbacks, with an optional set of method names, if only a sub-set of events are needed.
 Note that sub-callbacks do not need to inherit from the {\f1\fs20 TInterfacedCallback} type: a regular {\f1\fs20 TInterfacedObject} is enough. They will be automatically unregistered from the internal list, if they raise an exception.
 :196   Proper threaded implementation
-A {\i mORMot} @*multi-thread@ed server will use critical sections to protect shared data, and avoid potential race conditions. But even on client side, callbacks will be executed in the context of the {\i @*WebSocket@} transmission thread. And in a typical micro-services or event-driven architecture, most nodes are clients and servers at the same time, creating a peer-to-peer mesh of services. So you should prevent any race conditions in each and every node, by protecting access to any shared data.
+A {\i mORMot} @*multi-thread@ed server will use critical sections to protect shared data, and avoid potential race conditions. But even on client side, callbacks will be executed in the context of the {\i @*WebSockets@} transmission thread. And in a typical micro-services or event-driven architecture, most nodes are clients and servers at the same time, creating a peer-to-peer mesh of services. So you should prevent any race conditions in each and every node, by protecting access to any shared data.
 Likewise, if your callback triggers another method which shares the same critical section in another thread, you may encounter @**deadlock@ issues. If an event triggers a callback within a critical section used to protect a shared resource, and if this callback runs a blocking REST request, the REST answer will be received in the context of the transmission thread. If this answer tries to access the same shared resource, there will be a conflict with the main critical section lock, so the execution will lock.
 To implement proper thread-safety of your callback process you could follow some patterns.
 - Use several small critical sections, protecting any shared data, with the smallest granularity possible. You may use {\f1\fs20 TSynLocker} mutex or {\f1\fs20 TLockedDocVariant} schema-less storage.
@@ -16179,19 +16179,20 @@ In the {\i Root folder}, some common files are defined:
 |%30%70
 |\b File|Description\b0
 |{\f1\fs20 CPort.*}|A fork of the freeware {\i ComPort} Library ver. 2.63
-|{\f1\fs20 PasZip.pas}|ZIP/LZ77 Deflate/Inflate Compression in pure pascal
+|{\f1\fs20 PasZip.pas}|ZIP/LZ77 Deflate/Inflate Compression in pure pascal ({\f1\fs20 SynZip.pas} is faster)
 |{\f1\fs20 SynBigTable.pas}|class used to store huge amount of data with fast retrieval
 |{\f1\fs20 SynBz.pas bunzipasm.inc}|fast BZ2 compression/decompression
 |{\f1\fs20 SynBzPas.pas}|pascal implementation of BZ2 decompression
 |{\f1\fs20 SynCommons.pas}|common functions used by most Synopse projects
-|{\f1\fs20 SynCrtSock.pas}|classes implementing @*HTTP@/1.1 client and server protocol
+|{\f1\fs20 SynCrtSock.pas SynBidirSock.pas}|classes implementing @*HTTP@ and @*WebSockets@ client and server protocol
 |{\f1\fs20 SynCrypto.pas}|fast cryptographic routines (hashing and cypher)
 |{\f1\fs20 SynDprUses.inc}|generic header included in the beginning of the uses clause of a .dpr source code
 |{\f1\fs20 SynEcc.pas}|certificate-based public-key cryptography using ECC-secp256r1
 |{\f1\fs20 SynGdiPlus.pas}|GDI+ library API access with anti-aliasing drawing
 |{\f1\fs20 SynLog.pas}|logging functions used by most Synopse projects
-|{\f1\fs20 SynLZ.pas}|@**SynLZ@ compression decompression unit - used by {\f1\fs20 SynCommons.pas}
-|{\f1\fs20 SynLZO.pas}|LZO compression decompression unit
+|{\f1\fs20 SynLizard.pas}|Lizard (LZ5) compression/decompression unit
+|{\f1\fs20 SynLZ.pas}|@**SynLZ@ compression/decompression unit - used by {\f1\fs20 SynCommons.pas}
+|{\f1\fs20 SynLZO.pas}|LZO compression/decompression unit
 |{\f1\fs20 SynMemoEx.pas}|Synopse extended {\f1\fs20 TMemo} visual component (used e.g. in {\i @*SynProject@}) - for pre-Unicode {\i Delphi} only
 |{\f1\fs20 SynMongoDB.pas}|Direct {\i @*MongoDB@} @*NoSQL@ database access
 |{\f1\fs20 SynMustache.pas}|{\i @*Mustache@} logic-less template engine

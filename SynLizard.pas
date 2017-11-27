@@ -1,4 +1,4 @@
-/// fast Lizard (LZ5) Compression routines (static for FPC only yet)
+/// Lizard (LZ5) compression routines (statically linked for FPC)
 // - licensed under a MPL/GPL/LGPL tri-license; original Lizard is BSD 2-Clause
 unit SynLizard;
 
@@ -108,11 +108,12 @@ unit SynLizard;
        TAlgoDeflate 53 MB->4.8 MB: comp 70.5 MB/s decomp 544.5 MB/s
        TAlgoDeflateFast 53 MB->7 MB: comp 141.4 MB/s decomp 420.2 MB/s
   Conclusion: SynLZ has the best compression ratio for its compression speed,
-    but Lizard is much faster at decompression
+    but Lizard is much faster at decompression, when working with big log filesiles.
+
+  For small files (<MB), SynLZ is always faster, and uses less memory than Lizard.
 
   NOTE:
-  - FOR DELPHI PLEASE DOWNLOAD
-    external Lizard1-32.dll/Lizard1-64.dll/liblizard.so.1
+  - FOR DELPHI PLEASE DOWNLOAD external Lizard1-32.dll / Lizard1-64.dll
     from https://synopse.info/files/SynLizardLibs.7z
 
 }
@@ -125,16 +126,24 @@ interface
 // will force to use an external Lizard1-32.dll/Lizard1-64.dll/liblizard.so.1
 // as available from https://synopse.info/files/SynLizardLibs.7z
 
-{$ifndef FPC}
+{$ifdef FPC}
+  {$ifdef CPUINTEL}
+    {$ifdef BSD}
+      {$define LIZARD_EXTERNALONLY} // no static .o outside Windows/Linux yet
+    {$endif BSD}
+  {$else}
+    {$define LIZARD_EXTERNALONLY} // no static .o outside Intel x86/x64 yet
+  {$endif CPUINTEL}
+{$else}
   {$define LIZARD_EXTERNALONLY} // no static .obj for Delphi Win32/Win64 yet
-{$endif}
+{$endif FPC}
 
 {.$define LIZARD_STANDALONE}
 /// if not defined (by default), will register Lizard as TAlgoCompress.AlgoID=4/5
 
 uses
   {$ifndef LIZARD_STANDALONE}
-  SynCommons, // TAlgoCompress definition
+  SynCommons,
   {$endif LIZARD_STANDALONE}
   {$ifdef MSWINDOWS}
   Windows,
@@ -149,11 +158,21 @@ uses
   SysUtils;
 
 const
+  /// default compression level for TSynLizard.compress
+  // - 0 value will let the library use level 17 - slow but efficient - method
+  // - as used by AlgoLizard global TSynCompress instance
+  LIZARD_DEFAULT_CLEVEL = 0;
+  /// minimum compression level for TSynLizard.compress
+  // - as used by AlgoLizardFast global TSynCompress instance
   LIZARD_MIN_CLEVEL = 10;
+  /// maximum compression level for TSynLizard.compress
   LIZARD_MAX_CLEVEL = 49;
-  LIZARD_DEFAULT_CLEVEL = 0; // equals level 17
 
 {$ifdef Win32}
+  /// default TSynLizardDynamic file name
+  // - mainly for Delphi, since FPC will use static linked .o files under
+  // Windows and Linux Intel 32/64 bits
+  // - to be downloaded from from https://synopse.info/files/SynLizardLibs.7z
   LIZARD_LIB_NAME = 'Lizard1-32.dll';
 {$endif Win32}
 {$ifdef Win64}
@@ -166,6 +185,8 @@ const
 type
   /// Lizard (formerly LZ5) lossless compression algorithm
   // - provides efficient compression with very fast decompression
+  // - this class implements direct low-level access to the Lizard API - consider
+  // using AlgoLizard/AlgoLizardFast global instances for easier use
   TSynLizard = class
   public
     //// will initialize the library
@@ -180,7 +201,7 @@ type
     // - returns number of bytes written into dst (necessarily <= maxDstSize),
     // or 0 if compression fails due to too small maxDstSize, <0 on other failure
     // - compressionLevel is from LIZARD_MIN_CLEVEL (10) to LIZARD_MAX_CLEVEL(49),
-    // any value <10 (e.g. 0) will use 17, >49 will use 49
+    // any value <10 (e.g. 0) will use 17, and value >49 will use 49
     // $ Lev Comp     Decomp    CompSize Ratio
     // $    7332 MB/s 8719 MB/s 211947520 100.00 (move)
     // $ 10 346 MB/s  2610 MB/s 103402971 48.79
@@ -225,7 +246,7 @@ var
   Lizard: TSynLizard;
 
 type
-  /// try to load a LIZARD_LIB_NAME external library
+  /// try to load Lizard as an external library
   // - static linking is currently available only on FPC Win32/64 and Linux32/64
   // - this class is expected to access Lizard1-32.dll/Lizard1-64.dll files for
   // Delphi, as such:
@@ -241,20 +262,13 @@ type
     fLibraryName: TFileName;
   public
     /// will first search in the executable folder, then within the system path
+    // - raise an Exception if the library file is not found, or not valid
     constructor Create(const aLibraryFile: TFileName = ''); reintroduce;
     /// unload the external library
     destructor Destroy; override;
     /// the loaded library file name
     property LibraryName: TFileName read fLibraryName;
   end;
-
-{$ifndef LIZARD_EXTERNALONLY}
-type
-  TSynLizardStatic = class(TSynLizard)
-  public
-    constructor Create;
-  end;
-{$endif LIZARD_EXTERNALONLY}
 
 {$ifdef LIZARD_STANDALONE}
 function Lizard_versionNumber: integer; cdecl;
@@ -268,10 +282,12 @@ function Lizard_decompress_safe_partial(src, dst: pointer; srcSize, targetDstSiz
 {$else}
 var
   /// implement Lizard compression in level 17 (LIZARD_DEFAULT_CLEVEL) as AlgoID=4
-  // - is set by TSynLizard.Create, so available e.g. if library is statically linked
+  // - is set by TSynLizard.Create, so available e.g. if library is statically
+  // linked, or once TSynLizardDynamic.Create has been successfully called
   AlgoLizard: TAlgoCompress;
   /// implement Lizard compression in level 10 (LIZARD_MIN_CLEVEL) as AlgoID=5
-  // - is set by TSynLizard.Create, so available e.g. if library is statically linked
+  // - is set by TSynLizard.Create, so available e.g. if library is statically
+  // linked, or once TSynLizardDynamic.Create has been successfully called
   AlgoLizardFast: TAlgoCompress;
 {$endif LIZARD_STANDALONE}
 
@@ -363,6 +379,12 @@ function Lizard_decompress_safe_usingDict(src, dst: pointer; srcSize, maxDstSize
 {$endif CPUX86}
 
 { TSynLizardStatic }
+
+type
+  TSynLizardStatic = class(TSynLizard)
+  public
+    constructor Create;
+  end;
 
 constructor TSynLizardStatic.Create;
 begin
@@ -506,6 +528,9 @@ begin
       raise Exception.CreateFmt('Unable to load %s - Missing Lizard_%s',
         [fLibraryName,LIZARD_ENTRIES[i]]);
   end;
+  if versionNumber div 10000<>1 then
+    raise Exception.CreateFmt('%s has unexpected versionNumber=%d',
+      [fLibraryName,versionNumber]);
   inherited Create; // register AlgoLizard/AlgoLizardFast
 end;
 
