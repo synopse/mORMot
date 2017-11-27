@@ -502,7 +502,7 @@ begin
     obj.ptr.DefineFunction(cx, 'internalModuleReadFile', fs_internalModuleReadFile, 1, JSPROP_READONLY or JSPROP_PERMANENT);
     obj.ptr.DefineFunction(cx, 'internalModuleStat', fs_internalModuleStat, 1, JSPROP_READONLY or JSPROP_PERMANENT);
     obj.ptr.DefineFunction(cx, 'readDir', fs_readDir, 2, JSPROP_READONLY or JSPROP_PERMANENT);
-    obj.ptr.DefineFunction(cx, 'realPath', fs_realPath, 1, JSPROP_READONLY or JSPROP_PERMANENT);
+    obj.ptr.DefineFunction(cx, 'realpath', fs_realPath, 1, JSPROP_READONLY or JSPROP_PERMANENT);
 
     Result := obj.ptr.ToJSValue;
   finally
