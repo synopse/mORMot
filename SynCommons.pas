@@ -10311,6 +10311,9 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// read the next 32-bit unsigned value from the buffer
     function VarUInt32: PtrUInt;
+    /// read the next 16-bit unsigned value from the buffer
+    function VarUInt16: PtrUInt;
+      {$ifdef HASINLINE}inline;{$endif}
     /// read the next 32-bit unsigned value from the buffer
     // - this version won't call ErrorOverflow, but return false on error
     // - returns true on read success
@@ -59867,27 +59870,66 @@ begin
 {$endif}
 end;
 
-function TFastReader.VarUInt32: PtrUInt;
-var c, n: PtrUInt;
+function TFastReader.VarUInt16: PtrUInt;
+var c: PtrUInt;
 begin
   if P>=Last then
     ErrorOverflow;
   result := ord(P^);
   inc(P);
-  if result>$7f then begin
-    n := 0;
-    result := result and $7F;
-    repeat
-      if P>=Last then
-        ErrorOverflow;
-      c := ord(P^);
-      inc(P);
-      inc(n,7);
-      if c<=$7f then break;
-      result := result or ((c and $7f) shl n);
-    until false;
-    result := result or (c shl n);
-  end;
+  if result<=$7f then
+    exit;
+  if P>=Last then
+    ErrorOverflow;
+  c := ord(P^) shl 7;
+  inc(P);
+  result := result and $7F or c;
+  if c<=$7f shl 7 then
+    exit; // Values between 128 and 16256
+  if P>=Last then
+    ErrorOverflow;
+  c := ord(P^) shl 14;
+  inc(P);
+  result := result and $3FFF or c;
+  if c>$7f shl 14 then
+    ErrorOverflow; // Values between 16257 and 2080768
+end;
+
+function TFastReader.VarUInt32: PtrUInt;
+var c: PtrUInt;
+begin
+  if P>=Last then
+    ErrorOverflow;
+  result := ord(P^);
+  inc(P);
+  if result<=$7f then
+    exit;
+  if P>=Last then
+    ErrorOverflow;
+  c := ord(P^) shl 7;
+  inc(P);
+  result := result and $7F or c;
+  if c<=$7f shl 7 then
+    exit; // Values between 128 and 16256
+  if P>=Last then
+    ErrorOverflow;
+  c := ord(P^) shl 14;
+  inc(P);
+  result := result and $3FFF or c;
+  if c<=$7f shl 14 then
+    exit; // Values between 16257 and 2080768
+  if P>=Last then
+    ErrorOverflow;
+  c := ord(P^) shl 21;
+  inc(P);
+  result := result and $1FFFFF or c;
+  if c<=$7f shl 21 then
+    exit; // Values between 2080769 and 266338304
+  if P>=Last then
+    ErrorOverflow;
+  c := ord(P^) shl 28;
+  inc(P);
+  result := result and $FFFFFFF or c;
 end;
 
 function TFastReader.VarUInt32Safe(out Value: cardinal): boolean;

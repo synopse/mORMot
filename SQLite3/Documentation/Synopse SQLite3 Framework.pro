@@ -1862,22 +1862,22 @@ The resolution of such values is one second. In fact, it uses internally for com
 - 22..25 bits will map {\i months} (minus one),
 - 26..38 bits will map {\i years}.
 The {\i ISO 8601} standard allows millisecond resolution, encoded as {\f1\fs20 hh:mm:ss.sss} or {\f1\fs20 hhmmss.sss}. Our {\f1\fs20 TTimeLog}/{\f1\fs20 TTimeLogBits} integer encoding uses a second time resolution, and a 64-bit integer storage, so is not able to handle such precision. You could use {\f1\fs20 @*TDateTimeMS@} values instead, if milliseconds are required.
-Note that since {\f1\fs20 TTimeLog} type is bit-oriented, you can't just use {\i add} or {\i subtract} two {\f1\fs20 TTimeLog} values when doing such date/time computation: use a {\f1\fs20 TDateTime} temporary conversion in such case. See for instance how the {\f1\fs20 TSQLRest.ServerTimeStamp} property is computed:
-!function TSQLRest.GetServerTimeStamp: TTimeLog;
+Note that since {\f1\fs20 TTimeLog} type is bit-oriented, you can't just use {\i add} or {\i subtract} two {\f1\fs20 TTimeLog} values when doing such date/time computation: use a {\f1\fs20 TDateTime} temporary conversion in such case. See for instance how the {\f1\fs20 TSQLRest.ServerTimestamp} property is computed:
+!function TSQLRest.GetServerTimestamp: TTimeLog;
 !begin
-!  PTimeLogBits(@result)^.From(Now+fServerTimeStampOffset);
+!  PTimeLogBits(@result)^.From(Now+fServerTimestampOffset);
 !end;
 !
-!procedure TSQLRest.SetServerTimeStamp(const Value: TTimeLog);
+!procedure TSQLRest.SetServerTimestamp(const Value: TTimeLog);
 !begin
-!  fServerTimeStampOffset := PTimeLogBits(@Value)^.ToDateTime-Now;
+!  fServerTimestampOffset := PTimeLogBits(@Value)^.ToDateTime-Now;
 !end;
 But if you simply want to {\i compare} {\f1\fs20 TTimeLog} kind of date/time, it is safe to directly compare their {\f1\fs20 Int64} underlying value, since timestamps will be stored in increasing order, with a resolution of one second.
 Due to compiler limitation in older versions of {\i Delphi}, direct typecast of a {\f1\fs20 TTimeLog} or {\f1\fs20 Int64} variable into a {\f1\fs20 TTimeLogBits} record (as with {\f1\fs20 TTimeLogBits(aTimeLog).ToDateTime}) could lead to an internal compiler error. In order to circumvent this bug, you will have to use a {\f1\fs20 pointer} typecast, e.g. as in {\f1\fs20 TimeLogBits(@Value)^.ToDateTime} above.\line But in most case, you should better use the following functions to manage such timestamps:
 ! function TimeLogNow: TTimeLog;
 ! function TimeLogNowUTC: TTimeLog;
 ! function TimeLogFromDateTime(DateTime: TDateTime): TTimeLog;
-! function TimeLogToDateTime(const TimeStamp: TTimeLog): TDateTime; overload;
+! function TimeLogToDateTime(const Timestamp: TTimeLog): TDateTime; overload;
 ! function Iso8601ToTimeLog(const S: RawByteString): TTimeLog;
 See @174@ for additional information about this {\f1\fs20 TTimeLog} storage, and how it is handled by the framework @*ORM@, via the additional {\f1\fs20 @*TModTime@} and {\f1\fs20 @*TCreateTime@} types.
 :   TUnixTime
@@ -2446,7 +2446,7 @@ In order to define a {\f1\fs20 NULLable} column of such types, you could use the
 !    fFlt: TNullableFloat;
 !    fCurr: TNullableCurrency;
 !    fDate: TNullableDateTime;
-!    fTimeStamp: TNullableTimeLog;
+!    fTimestamp: TNullableTimeLog;
 !    fCLOB: TNullableUTF8Text;
 !    fText: TNullableUTF8Text;
 !  published
@@ -2455,7 +2455,7 @@ In order to define a {\f1\fs20 NULLable} column of such types, you could use the
 !    property Flt: TNullableFloat read fFlt write fFlt;
 !    property Curr: TNullableCurrency read fCurr write fCurr;
 !    property Date: TNullableDateTime read fDate write fDate;
-!    property TimeStamp: TNullableTimeLog read fTimeStamp write fTimeStamp;
+!    property Timestamp: TNullableTimeLog read fTimestamp write fTimestamp;
 !    property CLOB: TNullableUTF8Text read fCLOB write fCLOB;
 !    property Text: TNullableUTF8Text index 32 read fText write fText;
 !  end;
@@ -2564,7 +2564,7 @@ Any {\f1\fs20 @*TDateTime@} bound parameter shall better be specified using {\f1
 ! aRec.CreateAndFillPrepare(Client,'Datum=?',[DateToSQL(EncodeDate(2012,5,4))]);
 ! aRec.CreateAndFillPrepare(Client,'Datum>=?',[DateToSQL(2012,5,4)]);
 ! aRec.CreateAndFillPrepare(Client,'Datum<=?',[DateTimeToSQL(Now)]);
-! aRec.CreateAndFillPrepare(Client,'Datum<=?',[TimeLogToSQL(Client.ServerTimeStamp)]);
+! aRec.CreateAndFillPrepare(Client,'Datum<=?',[TimeLogToSQL(Client.ServerTimestamp)]);
 For {\f1\fs20 @*TTimeLog@ / @*TModTime@ / @*TCreateTime@ / @*TUnixTime@} kind of properties, please use the underlying {\f1\fs20 Int64} value as bound parameter.
 As stated previously, @*BLOB@ (i.e. {\f1\fs20 sftBlob} or {\f1\fs20 @*TSQLRawBlob@}) properties are handled separately, via dedicated {\f1\fs20 RetrieveBlob} and {\f1\fs20 UpdateBlob} method calls (or their global {\f1\fs20 RetrieveBlobFields} / {\f1\fs20 UpdateBlobFields} twins). In fact, BLOB data is expected to be potentially big (more than a few MB). But you can specify a small BLOB content using an explicit conversion to the corresponding TEXT format, by calling {\f1\fs20 @*BinToBase64WithMagic@()} overloaded functions when preparing an UPDATE query, or by defining a {\f1\fs20 TByteDynArray} published field instead of {\f1\fs20 TSQLRawBlob}.\line See also {\f1\fs20 @*ForceBlobTransfert@} and {\f1\fs20 ForceBlobTransfertTable[]} properties of {\f1\fs20 TSQLRestClientURI}.
 Note that there was a {\i breaking change} about the {\f1\fs20 TSQLRecord.Create / FillPrepare  / CreateAndFillPrepare} and {\f1\fs20 TSQLRest.OneFieldValue / MultiFieldValues} methods: for historical reasons, they expected parameters to be marked as {\f1\fs20 %} in the SQL WHERE clause, and inlined via {\f1\fs20 :(...):} as stated @61@ - since revision 1.17 of the framework, those methods expect parameters marked as {\f1\fs20 ?} and with no {\f1\fs20 :(...):}. Due to this {\i breaking change}, user code review is necessary if you want to upgrade the engine from 1.16 or previous. In all cases, using {\f1\fs20 ?} is less confusing for new users, and more close to the usual way of preparing database queries - e.g. as stated @27@. Both {\f1\fs20 TSQLRestClient.ExecuteFmt / ListFmt} methods are not affected by this change, since they are just wrappers to the {\f1\fs20 FormatUTF8()} function.
@@ -3569,11 +3569,11 @@ By default, this method will compute the {\f1\fs20 @*TModTime@ / sftModTime} and
 !      if HasModTimeFields then
 !        for F := 0 to high(FieldType) do
 !        if FieldType[f]=sftModTime then
-!!          SetInt64Prop(Self,Fields[F],aRest.ServerTimeStamp);
+!!          SetInt64Prop(Self,Fields[F],aRest.ServerTimestamp);
 !      if HasCreateTimeField and (aOccasion=seAdd) then
 !        for F := 0 to high(FieldType) do
 !        if FieldType[f]=sftCreateTime then
-!!          SetInt64Prop(Self,Fields[F],aRest.ServerTimeStamp);
+!!          SetInt64Prop(Self,Fields[F],aRest.ServerTimestamp);
 !    end;
 !end;
 You may override this method for you own purpose, saved the fact that you call this inherited implementation to properly handle {\f1\fs20 TModTime} and {\f1\fs20 TCreateTime} @*published properties@.
@@ -3595,17 +3595,17 @@ Once the object changes are tracked, you can later on browse the history of the 
 !var aHist: TSQLRecordHistory;
 !    aInvoice: TSQLInvoice;
 !    aEvent: TSQLHistoryEvent; // will be either heAdd, heUpdate or heDelete
-!    aTimeStamp: TModTime;
+!    aTimestamp: TModTime;
 !(...)
 !aInvoice := TSQLInvoice.Create;
 !aHist := TSQLRecordHistory.CreateHistory(aClient,TSQLInvoice,400);
 !try
 !  writeln('Number of items in the record history: ',aHist.HistoryCount);
 !  for i := 0 to aHist.HistoryCount-1 do begin
-!    aHist.HistoryGet(i,aEvent,aTimeStamp,aInvoice);
+!    aHist.HistoryGet(i,aEvent,aTimestamp,aInvoice);
 !    writeln;
 !    writeln('Event: ',GetEnumName(TypeInfo(TSQLHistoryEvent),ord(aEvent))^);
-!    writeln('TimeStamp: ',TTimeLogBits(aTimeStamp).ToText);
+!    writeln('Timestamp: ',TTimeLogBits(aTimestamp).ToText);
 !    writeln('Identifier: ',aInvoice.Number);
 !    writeln('Value: ',aInvoice.GetJSONValues(true,true,soSelect));
 !  end;
@@ -3621,7 +3621,7 @@ This {\f1\fs20 TSQLRecordHistory} class will in fact create a {\f1\fs20 History}
 \graph DBHistory History Record Layout
 rankdir=LR;
 node [shape=Mrecord];
-struct1 [label="ID : TID|Event : TSQLHistoryEvent|History : TSQLRawBlob|ModifiedRecord : PtrInt|SentDataJSON : RawUTF8|TimeStamp : TModTime"];
+struct1 [label="ID : TID|Event : TSQLHistoryEvent|History : TSQLRawBlob|ModifiedRecord : PtrInt|SentDataJSON : RawUTF8|Timestamp : TModTime"];
 \
 In short, any modification via the ORM will be stored in the {\f1\fs20 TSQLRecordHistory} table, as a JSON object of the changed fields, in {\f1\fs20 TSQLRecordHistory.SentDataJSON}.
 By design, direct SQL changes are not handled. If you run some SQL statements like {\f1\fs20 DELETE FROM ...} or {\f1\fs20 UPDATE ... SET ...} within your application or from any external program, then the History table won't be updated.\line In fact, the ORM does not set any DB trigger to track low-level changes: it will slow down the process, and void the {\i persistence agnosticism} paradigm we want to follow, e.g. allowing to use a @*NoSQL@ database like @*MongoDB@.
@@ -5958,7 +5958,7 @@ Here is an extract of the regression test corresponding to external databases:
 !  Check(aExternalClient.Server.CreateSQLMultiIndex(
 !    TSQLRecordPeopleExt,['FirstName','LastName'],false));
 !  (...)
-!  Start := aExternalClient.ServerTimeStamp;
+!  Start := aExternalClient.ServerTimestamp;
 !  (...)
 !  aID := aExternalClient.Add(RExt,true);
 !  (...)
@@ -5975,7 +5975,7 @@ Here is an extract of the regression test corresponding to external databases:
 !    [RInt.FirstName,RInt.LastName]); // query will use index -> fast :)
 !  while RExt.FillOne do ...
 !  (...)
-!  Updated := aExternalClient.ServerTimeStamp;
+!  Updated := aExternalClient.ServerTimestamp;
 !  (...)
 !  aExternalClient.Update(RExt);
 !  aExternalClient.UnLock(RExt);
@@ -6029,7 +6029,7 @@ struct1:yod -> struct2:yod;
 \
 The only specific instruction is the global {\f1\fs20 @*VirtualTableExternalRegister@()} function, which has to be run on the server side (it does not make any sense to run it on the client side, since for the client there is no difference between any tables - in short, the client do not care about storage; the server does).
 In order to work as expected, {\f1\fs20 VirtualTableExternalRegister()} shall be called {\i before} {\f1\fs20 TSQLRestServer.Create} constructor: when the server initializes, the ORM server must know whenever an {\i internal} or {\i external} database shall be managed. In the above code, {\f1\fs20 TSQLRestClientDB.Create()} will instantiate its own embedded {\f1\fs20 TSQLRestServerDB} instance.
-Note that the {\f1\fs20 TSQLRecordExternal.LastChange} field was defined as a {\f1\fs20 TModTime}: in fact, the current date and time will be stored each time the record is updated, i.e. for each {\f1\fs20 aExternalClient.Add} or {\f1\fs20 aExternalClient.Update} calls. This is tested by both {\f1\fs20 RExt.LastChange>=Start} and {\f1\fs20 RExt.LastChange<=Updated} checks in the latest loop. The time used is the "server-time", i.e. the current time and date on the server (not on the client), and, in the case of external databases, the time of the remote server (it will execute e.g. a {\f1\fs20 select getdate()} under @*MS SQL@ to synchronize the date to be inserted for {\f1\fs20 LastChange}). In order to retrieve this server-side time stamp, we use {\f1\fs20 Start := aExternalClient.ServerTimeStamp} instead of the local {\f1\fs20 TimeLogNow} function.
+Note that the {\f1\fs20 TSQLRecordExternal.LastChange} field was defined as a {\f1\fs20 TModTime}: in fact, the current date and time will be stored each time the record is updated, i.e. for each {\f1\fs20 aExternalClient.Add} or {\f1\fs20 aExternalClient.Update} calls. This is tested by both {\f1\fs20 RExt.LastChange>=Start} and {\f1\fs20 RExt.LastChange<=Updated} checks in the latest loop. The time used is the "server-time", i.e. the current time and date on the server (not on the client), and, in the case of external databases, the time of the remote server (it will execute e.g. a {\f1\fs20 select getdate()} under @*MS SQL@ to synchronize the date to be inserted for {\f1\fs20 LastChange}). In order to retrieve this server-side time stamp, we use {\f1\fs20 Start := aExternalClient.ServerTimestamp} instead of the local {\f1\fs20 TimeLogNow} function.
 A similar feature is tested for the {\f1\fs20 CreatedAt} published field, which was defined as {\f1\fs20 TCreateTime}: it will be set automatically to the current server time at record creation (and not changed on modifications). This is the purpose of the {\f1\fs20 RExt.CreatedAt<=Updated} check in the above code.
 :120  Database-first ORM
 As we have just seen, the following line initializes the ORM to let {\f1\fs20 TSQLRecordPeopleExt} data be accessed via SQL, over an external database connection {\f1\fs20 fProperties}:
@@ -6811,7 +6811,7 @@ Then the {\f1\fs20 Reader} and {\f1\fs20 Writer} callbacks can be defined by two
 For instance, if you want to serialize the following {\f1\fs20 record}:
 !  TSQLRestCacheEntryValue = record
 !    ID: TID;
-!    TimeStamp: cardinal;
+!    Timestamp: cardinal;
 !    JSON: RawUTF8;
 !  end;
 With the following code:
@@ -6819,26 +6819,26 @@ With the following code:
 !    TTestServiceOrientedArchitecture.CustomReader,
 !    TTestServiceOrientedArchitecture.CustomWriter);
 The expected format will be as such:
-& {"ID":1786554763,"TimeStamp":323618765,"JSON":"D:\\TestSQL3.exe"}
+& {"ID":1786554763,"Timestamp":323618765,"JSON":"D:\\TestSQL3.exe"}
 Therefore, the writer callback could be:
 !class procedure TTestServiceOrientedArchitecture.CustomWriter(
 !  const aWriter: TTextWriter; const aValue);
 !var V: TSQLRestCacheEntryValue absolute aValue;
 !begin
-!  aWriter.AddJSONEscape(['ID',V.ID,'TimeStamp',Int64(V.TimeStamp),'JSON',V.JSON]);
+!  aWriter.AddJSONEscape(['ID',V.ID,'Timestamp',Int64(V.Timestamp),'JSON',V.JSON]);
 !end;
-In the above code, the {\f1\fs20 cardinal} field named {\f1\fs20 TimeStamp} is type-casted to a {\f1\fs20 Int64}: in fact, as stated by the documentation of the {\f1\fs20 AddJSONEscape} method, an {\f1\fs20 array of const} will handle by default any {\f1\fs20 cardinal} as an {\f1\fs20 integer} value (this is a limitation of the {\i Delphi} compiler). By forcing the type to be an {\f1\fs20 Int64}, the expected {\f1\fs20 cardinal} value will be transmitted, and not a wrongly negative versions for numbers {\f1\fs20 > $7fffffff}.
+In the above code, the {\f1\fs20 cardinal} field named {\f1\fs20 Timestamp} is type-casted to a {\f1\fs20 Int64}: in fact, as stated by the documentation of the {\f1\fs20 AddJSONEscape} method, an {\f1\fs20 array of const} will handle by default any {\f1\fs20 cardinal} as an {\f1\fs20 integer} value (this is a limitation of the {\i Delphi} compiler). By forcing the type to be an {\f1\fs20 Int64}, the expected {\f1\fs20 cardinal} value will be transmitted, and not a wrongly negative versions for numbers {\f1\fs20 > $7fffffff}.
 On the other side, the corresponding reader callback will be like:
 !class function TTestServiceOrientedArchitecture.CustomReader(P: PUTF8Char;
 !  var aValue; out aValid: Boolean): PUTF8Char;
 !var V: TSQLRestCacheEntryValue absolute aValue;
 !    Values: TPUtf8CharDynArray;
 !begin
-!  result := JSONDecode(P,['ID','TimeStamp','JSON'],Values);
+!  result := JSONDecode(P,['ID','Timestamp','JSON'],Values);
 !  if result=nil then
 !    aValid := false else begin
 !    V.ID := GetInt64(Values[0]);
-!    V.TimeStamp := GetCardinal(Values[1]);
+!    V.Timestamp := GetCardinal(Values[1]);
 !    V.JSON := Values[2];
 !    aValid := true;
 !  end;
@@ -6848,10 +6848,10 @@ Writing those callbacks by hand could be error-prone, especially for the {\f1\fs
 You can use the {\f1\fs20 TTextWriter.@*RegisterCustomJSONSerializerFromText@} method to define the {\f1\fs20 record} layout in a convenient text-based format. Once more, those types need to be defined as {\f1\fs20 packed record}, so that the text layout definition will not depend on compiler-specific field alignment.
 The very same {\f1\fs20 TSQLRestCacheEntryValue} can be defined as with a typical {\i pascal} {\f1\fs20 record}:
 ! const
-!  __TSQLRestCacheEntryValue = 'ID: Int64; TimeStamp: cardinal; JSON: RawUTF8';
+!  __TSQLRestCacheEntryValue = 'ID: Int64; Timestamp: cardinal; JSON: RawUTF8';
 Or with a shorter syntax:
 ! const
-!  __TSQLRestCacheEntryValue = 'ID Int64 TimeStamp cardinal JSON RawUTF8';
+!  __TSQLRestCacheEntryValue = 'ID Int64 Timestamp cardinal JSON RawUTF8';
 Both declarations will do the same definition. Note that the supplied text should match {\i exactly} the original {\f1\fs20 record} type definition: do not swap or forget any property!
 By convention, we use two underscore characters ({\f1\fs20 __}) before the {\f1\fs20 record} type name, to easily identify the layout definition. It may indeed be convenient to write it as a constant, close to the {\f1\fs20 record} type definition itself, and not in-lined at {\f1\fs20 RegisterCustomJSONSerializerFromText()} call level.
 Then you register your type as such:
@@ -6859,15 +6859,15 @@ Then you register your type as such:
 !    TypeInfo(TSQLRestCacheEntryValue),__TSQLRestCacheEntryValue);
 Now you are able to serialize any {\f1\fs20 record} value directly:
 !  Cache.ID := 10;
-!  Cache.TimeStamp := 200;
+!  Cache.Timestamp := 200;
 !  Cache.JSON := 'test';
 !!  U := RecordSaveJSON(Cache,TypeInfo(TSQLRestCacheEntryValue));
-!  Check(U='{"ID":10,"TimeStamp":200,"JSON":"test"}');
+!  Check(U='{"ID":10,"Timestamp":200,"JSON":"test"}');
 You can also unserialize some existing JSON content:
-!  U := '{"ID":210,"TimeStamp":2200,"JSON":"test2"}';
+!  U := '{"ID":210,"Timestamp":2200,"JSON":"test2"}';
 !!  RecordLoadJSON(Cache,@U[1],TypeInfo(TSQLRestCacheEntryValue));
 !  Check(Cache.ID=210);
-!  Check(Cache.TimeStamp=2200);
+!  Check(Cache.Timestamp=2200);
 !  Check(Cache.JSON='test2');
 Note that this text-based definition is very powerful, and is able to handle any level of nested {\f1\fs20 record} or {\i dynamic arrays}.
 By default, it will write the JSON content in a compact form, and will expect only existing fields to be available in the incoming JSON. You can specify some options at registration, to ignore all non defined fields. It can be very useful when you want to consume some remote service, and are interested only in a few fields.
@@ -8707,9 +8707,9 @@ $ {"Result":["One","two"]}
 : Returns non-JSON content
 Using {\f1\fs20 Ctxt.Returns()} will let the method return the content in any format, e.g. as a JSON object (via the overloaded {\f1\fs20 Ctxt.Returns([])} method expecting field name/value pairs), or any content, since the returned @**MIME@-type can be defined as a parameter to {\f1\fs20 Ctxt.Returns()} - it may be useful to specify another mime-type than the default constant {\f1\fs20 JSON_CONTENT_TYPE}, i.e. {\f1\fs20 'application/json; charset=UTF-8'}, and returns plain text, HTML or binary.
 For instance, you can return directly a value as plain text:
-!procedure TSQLRestServer.TimeStamp(Ctxt: TSQLRestServerURIContext);
+!procedure TSQLRestServer.Timestamp(Ctxt: TSQLRestServerURIContext);
 !begin
-!  Ctxt.Returns(Int64ToUtf8(ServerTimeStamp),HTTP_SUCCESS,TEXT_CONTENT_TYPE_HEADER);
+!  Ctxt.Returns(Int64ToUtf8(ServerTimestamp),HTTP_SUCCESS,TEXT_CONTENT_TYPE_HEADER);
 !end;
 Or you can return some binary file, retrieving the corresponding MIME type from its binary content:
 !procedure TSQLRestServer.GetFile(Ctxt: TSQLRestServerURIContext);
@@ -10496,7 +10496,7 @@ From the client point of view, it will be consumed as such:
 !  (...)
 !  fModel := TSQLModel.Create([],ROOT_NAME);
 !!  fClient := TSQLHttpClient.Create('localhost','888',fModel);
-!  if not fClient.ServerTimeStampSynchronize then begin
+!  if not fClient.ServerTimestampSynchronize then begin
 !    ShowLastClientError(fClient,'Please run Project16ServerHttp.exe');
 !    Close;
 !    exit;
@@ -10582,7 +10582,7 @@ On the client side, you will use a {\f1\fs20 TSQLHttpClientWebsockets} instance,
 !  Client.WebSocketsUpgrade('encryptionkey');
 The expected protocol detail should match the one on the server, i.e. {\f1\fs20 'encryptionkey'} encryption over our binary protocol.
 Once upgraded to {\i WebSockets}, you may use regular REST commands, as usual:
-!  Client.ServerTimeStampSynchronize;
+!  Client.ServerTimestampSynchronize;
 But in addition to regular query/answer commands as defined for @63@, you will be able to define callbacks using {\f1\fs20 interface} parameters to the service methods.
 Under the hood, both client and server will communicate using {\i WebSockets} frames, maintaining the connection active using heartbeats (via ping/pong frames), and with clean connection shutdown, from any side. You can use the {\f1\fs20 Settings} property of the {\f1\fs20 TWebSocketServerRest} instance, as returned by {\f1\fs20 TSQLHttpServer.WebSocketsEnable()}, to customize the low-level {\i WebSockets} protocol (e.g. timeouts or heartbeats) on the server side. The {\f1\fs20 TSQLHttpClientWebsockets.WebSockets}.{\f1\fs20 Settings} property will allow the same, on the client side.
 We have observed, from our regression tests and internal benchmarking, that using our {\i WebSockets} may be faster than regular HTTP, since its frames will be sent as once, whereas HTTP headers and body are not sent in the same TCP packet, and compression will be available for the whole frame, whereas HTTP headers are not compressed. The ability to use strong AES encryption will make this mean of communication even safer than plain HTTP, even with @151@.
@@ -11365,7 +11365,7 @@ And its implementation:
 !  SetLength(Str2,i+1);
 !  Str2[i] := UTF8ToWideString(RawUTF8ArrayToCSV(Strs1));
 !  inc(Rec2.ID);
-!  dec(Rec2.TimeStamp);
+!  dec(Rec2.Timestamp);
 !  Rec2.JSON := IntegerDynArrayToCSV(Ints,length(Ints));
 !end;
 Note that {\f1\fs20 TIntegerDynArray}, {\f1\fs20 TRawUTF8DynArray} and {\f1\fs20 TWideStringDynArray} values were marshaled as JSON arrays, whereas complex records (like {\f1\fs20 TSQLRestCacheEntryValue}) have been @*Base64@ encoded.
@@ -11934,7 +11934,7 @@ You could manually connect to a {\i mORMot} server as such:
 !  Client := TSQLRestClientHTTP.Create('localhost',SERVER_PORT,Model);
 !  if not Client.Connect then
 !    raise Exception.Create('Impossible to connect to the server');
-!  if Client.ServerTimeStamp=0 then
+!  if Client.ServerTimestamp=0 then
 !    raise Exception.Create('Incorrect server');
 !  if not Client.SetUser(TSQLRestAuthenticationDefault,'User','synopse') then
 !    raise Exception.Create('Impossible to authenticate to the server');
@@ -12774,7 +12774,7 @@ For the sake of the simplicity, the sample will create some fake data in its own
 : MVCModel
 :  Data Model
 The {\f1\fs20 MVCModel.pas} unit defines the database {\i Model}, as regular {\f1\fs20 TSQLRecord} classes.\line For instance, you will find the following type definitions:
-!  TSQLContent = class(TSQLRecordTimeStamped)
+!  TSQLContent = class(TSQLRecordTimestamped)
 !  private ...
 !  published
 !    property Title: RawUTF8 index 80 read fTitle write fTitle;
@@ -13667,7 +13667,7 @@ Such a classical 3 points signature will avoid most {\i man-in-the-middle} (MITM
 Here is typical signature to access the {\f1\fs20 root} URL
 $ root?session_signature=0000004C000F6BE365D8D454
 In this case, {\f1\fs20 0000004C} is the Session ID, {\f1\fs20 000F6BE3} is the client time stamp (aka nonce), and {\f1\fs20 65D8D454} is the signature, computed by the following {\i Delphi} expression:
-!(crc32(crc32(fPrivateSaltHash,PTimeStamp,8),pointer(aURL),aURLlength)=aSignature);
+!(crc32(crc32(fPrivateSaltHash,PTimestamp,8),pointer(aURL),aURLlength)=aSignature);
 For instance, a RESTful GET of the {\f1\fs20 TSQLRecordPeople} table with RowID=6 will have the following URI:
 $ root/People/6?session_signature=0000004C000F6DD02E24541C
 For better Server-side performance, the URI signature will use fast {\i crc32} hashing method, and not the more secure (but much slower) @*SHA256@. Since our security model is not officially validated as a standard method (there is no standard for per URI authentication of RESTful applications), the better security will be handled by encrypting the whole transmission channel, using standard @*HTTPS@ with certificates signed by a trusted CA, validated for both client and server side. The security involved by using {\i @*crc32@} will be enough for most common use. Note that the password hashing and the session opening will use @*SHA256@ or @*PBKDF2_HMAC_SHA256@, to enhance security with no performance penalty.
@@ -13793,7 +13793,7 @@ If security is a real concern, you should enable @98@ and URI signature on your 
 :   Service execution
 The {\f1\fs20 reService} flag of {\f1\fs20 AllowRemoteExecute: TSQLAllowRemoteExecute} can be used to enable or unable the @63@ feature of {\i mORMot}.
 In addition to this global parameter, you can set per-service and per-method @77@.
-For @49@, if authentication is enabled, any method execution will be processed only from a signed URI.\line You can use {\f1\fs20 TSQLRestServer.ServiceMethodByPassAuthentication()} to disable the need of a signature for a given service method - e.g. it is the case for {\f1\fs20 Auth} and {\f1\fs20 TimeStamp} standard method services.
+For @49@, if authentication is enabled, any method execution will be processed only from a signed URI.\line You can use {\f1\fs20 TSQLRestServer.ServiceMethodByPassAuthentication()} to disable the need of a signature for a given service method - e.g. it is the case for {\f1\fs20 Auth} and {\f1\fs20 Timestamp} standard method services.
 For @63@, if authentication is enabled, any service execution will be processed only from a signed URI.\line You can use the {\f1\fs20 TServiceFactoryServer.ByPassAuthentication} property, to let a given service URI not be signed.
 Do not forget to remove authentication for the services for which you want to enable @97@. In fact, such world-wide @*CDN@ caching services expect the URI to be generic, and not tied to a particular client session.
 :79Scripting Engine
@@ -15798,7 +15798,7 @@ First of all, you need to define your logging setup via code:
 !  with TSynLog.Family do begin
 !    Level := LOG_VERBOSE;
 !    //Level := [sllException,sllExceptionOS];
-!    //HighResolutionTimeStamp := true;
+!    //HighResolutionTimestamp := true;
 !    //AutoFlushTimeOut := 5;
 !    OnArchive := EventArchiveSynLZ;
 !    //OnArchive := EventArchiveZip;
@@ -16008,7 +16008,7 @@ Log file rotation is as easy as:
 Such a logging definition will create those files on disk, e.g. for the {\f1\fs20 TestSQL3.dpr} regression tests:
 - {\f1\fs20 TestSQL3.log} which will be the latest (current) log file, uncompressed;
 - {\f1\fs20 TestSQL3.1.synlz} to {\f1\fs20 TestSQL3.4.synlz} will be the 4 latest log files, after compression. Our {\i Log Viewer} tool - see @103@ - is able to uncompress those {\f1\fs20 .synlz} files directly.
-Note that as soon as you active file rotation, {\f1\fs20 PerThreadLog = ptOneFilePerThread} and {\f1\fs20 HighResolutionTimeStamp} properties will be ignored, since both features expect a single file to exist per {\f1\fs20 TSynLog} class.
+Note that as soon as you active file rotation, {\f1\fs20 PerThreadLog = ptOneFilePerThread} and {\f1\fs20 HighResolutionTimestamp} properties will be ignored, since both features expect a single file to exist per {\f1\fs20 TSynLog} class.
 As an alternative, or in addition to this {\i by-size} rotation pattern, you could specify a fixed time of the day to perform the rotation.\line For instance, the following will perform automatic rotation of the log files, whatever their size, at {\f1\fs20 23:00} each evening:
 !  with TSQLLog.Family do begin
 !    Level := LOG_VERBOSE;
@@ -16091,7 +16091,7 @@ As a result, if you execute the following statement at the beginning of {\f1\fs2
 !  TSynLogTestLog := TSQLLog; // share the same log file with whole mORMot
 !  with TSQLLog.Family do begin
 !    Level := LOG_VERBOSE;
-!    HighResolutionTimeStamp := true;
+!    HighResolutionTimestamp := true;
 !    PerThreadLog := ptIdentifiedInOnFile;
 !  end;
 Creating so much log content won't increase the processing time much. On a recent laptop, whole regression tests process will spent only 2 seconds to write the additional logging, which is the bottleneck of the hard disk writing.
