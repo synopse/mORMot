@@ -630,7 +630,7 @@ begin
     RotateFileSizeKB := Log.RotateFileSizeKB;
     RotateFileDailyAtHour := Log.RotateFileDailyAtHour;
     if Log.RotateFileCount<=0 then
-      HighResolutionTimeStamp := true;
+      HighResolutionTimestamp := true;
     FileExistsAction := acAppend; // default rotation mode
     if Log.StackTraceViaAPI then
       StackTraceUse := stOnlyAPI;

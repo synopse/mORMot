@@ -1855,7 +1855,7 @@ begin
       pass := fClient.PasswordPlain;
       if pass <> '' then
         (result as TSQLHttpClientWebsockets).WebSocketsConnect(pass)
-      else if not result.ServerTimeStampSynchronize then
+      else if not result.ServerTimestampSynchronize then
         raise EDDDRestClient.CreateUTF8('%.Create: HTTP access failure on %/%',
           [self, ORM.ServerName, aModel.Root]);
       result.OnAuthentificationFailed := OnAuthentificationFailed;

@@ -322,7 +322,7 @@ type
     function WebSocketsUpgrade(const aWebSocketsEncryptionKey: RawUTF8;
       aWebSocketsAJAX: boolean=false; aWebSocketsCompression: boolean=true): RawUTF8;
     /// connect using a specified WebSockets protocol
-    // - this method would call WebSocketsUpgrade, then ServerTimeStampSynchronize
+    // - this method would call WebSocketsUpgrade, then ServerTimestampSynchronize
     // - it therefore expects SetUser() to have been previously called
     function WebSocketsConnect(const aWebSocketsEncryptionKey: RawUTF8;
       aWebSocketsAJAX: boolean=false; aWebSocketsCompression: boolean=true): RawUTF8;
@@ -859,8 +859,8 @@ begin
       WebSockets.Settings.SetFullLog;
     result := WebSocketsUpgrade(aWebSocketsEncryptionKey,aWebSocketsAJAX,aWebSocketsCompression);
     if result='' then
-      if not ServerTimeStampSynchronize then
-        result := 'ServerTimeStampSynchronize';
+      if not ServerTimestampSynchronize then
+        result := 'ServerTimestampSynchronize';
   end;
   if result<>'' then
     raise ECommunicationException.CreateUTF8('%.WebSocketsConnect failed on %:%/% -> %',

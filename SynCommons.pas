@@ -3986,7 +3986,7 @@ function FileSize(const FileName: TFileName): Int64;
 
 /// get a file date and time, from a FindFirst/FindNext search
 // - the returned timestamp is in local time, not UTC
-// - this method would use the F.TimeStamp field available since Delphi XE2
+// - this method would use the F.Timestamp field available since Delphi XE2
 function SearchRecToDateTime(const F: TSearchRec): TDateTime;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -4026,7 +4026,7 @@ type
     /// the matching file size
     Size: Int64;
     /// the matching file date/time
-    TimeStamp: TDateTime;
+    Timestamp: TDateTime;
     /// fill the item properties from a FindFirst/FindNext's TSearchRec
     procedure FromSearchRec(const Directory: TFileName; const F: TSearchRec);
   end;
@@ -6123,9 +6123,9 @@ type
 
   /// internal item definition, used by TPendingTaskList storage
   TPendingTaskListItem = packed record
-    /// the task should be executed when TPendingTaskList.GetTimeStamp reaches
+    /// the task should be executed when TPendingTaskList.GetTimestamp reaches
     // this value
-    TimeStamp: Int64;
+    Timestamp: Int64;
     /// the associated task, stored by representation as raw binary
     Task: RawByteString;
   end;
@@ -6147,7 +6147,7 @@ type
     fTasks: TDynArray;
     fSafe: TSynLocker;
     function GetCount: integer;
-    function GetTimeStamp: Int64; virtual;
+    function GetTimestamp: Int64; virtual;
   public
     /// initialize the list memory and resources
     constructor Create; override;
@@ -6169,11 +6169,11 @@ type
     /// access to the locking methods of this instance
     // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
     property Safe: TSynlocker read fSafe;
-    /// access to the internal TPendingTaskListItem.TimeStamp stored value
+    /// access to the internal TPendingTaskListItem.Timestamp stored value
     // - corresponding to the current time
     // - default implementation is to return GetTickCount64, with a 16 ms
     // typical resolution under Windows
-    property TimeStamp: Int64 read GetTimeStamp;
+    property Timestamp: Int64 read GetTimestamp;
     /// how many pending tasks are currently defined
     property Count: integer read GetCount;
     /// direct low-level access to the internal task list
@@ -6181,7 +6181,7 @@ type
     // property to retrieve the exact number of stored items
     // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block for
     // thread-safe access to this array
-    // - items are stored in increasing TimeStamp, i.e. the first item is
+    // - items are stored in increasing Timestamp, i.e. the first item is
     // the next one which would be returned by the NextPendingTask method
     property Task: TPendingTaskListItemDynArray read fTask;
   end;
@@ -10452,7 +10452,7 @@ type
     fRevision: Int64;
     fSnapShotAfterMinutes: cardinal;
     fSnapshotAfterInsertCount: cardinal;
-    fSnapshotTimeStamp: Int64;
+    fSnapshotTimestamp: Int64;
     fSnapshotInsertCount: cardinal;
     fKnownRevision: Int64;
     fKnownStore: RawByteString;
@@ -11351,7 +11351,7 @@ type
     /// the timestamp of this exception, as number of seconds since UNIX Epoch
     // - UnixTimeUTC is faster than NowUTC or GetSystemTime
     // - use UnixTimeToDateTime() to convert it into a regular TDateTime
-    ETimeStamp: TUnixTime;
+    ETimestamp: TUnixTime;
   end;
 
   /// global hook callback to customize exceptions logged by TSynLog
@@ -12840,7 +12840,7 @@ type
   // - since TTimeLog type is bit-oriented, you can't just add or substract two
   // TTimeLog values when doing date/time computation: use a TDateTime temporary
   // conversion in such case:
-  // ! aTimeStamp := TimeLogFromDateTime(IncDay(TimeLogToDateTime(aTimeStamp)));
+  // ! aTimestamp := TimeLogFromDateTime(IncDay(TimeLogToDateTime(aTimestamp)));
   TTimeLog = type Int64;
 
   /// dynamic array of TTimeLog
@@ -12953,10 +12953,10 @@ function TimeLogFromDateTime(DateTime: TDateTime): TTimeLog;
 
 /// Date/Time conversion from a TTimeLog value
 // - handle TTimeLog bit-encoded Int64 format
-// - just a wrapper around PTimeLogBits(@TimeStamp)^.ToDateTime
+// - just a wrapper around PTimeLogBits(@Timestamp)^.ToDateTime
 // - we defined such a function since TTimeLogBits(aTimeLog).ToDateTime gives an
 // internall compiler error on some Delphi IDE versions (e.g. Delphi 6)
-function TimeLogToDateTime(const TimeStamp: TTimeLog): TDateTime; overload;
+function TimeLogToDateTime(const Timestamp: TTimeLog): TDateTime; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a Iso8601 encoded string into a TTimeLog value
@@ -12985,7 +12985,7 @@ function Iso8601ToTimeLog(const S: RawByteString): TTimeLog;
 // (JSON_SQLDATE_MAGIC will be used as prefix to create '\uFFF1...' pattern)
 // - to be used e.g. as in:
 // ! aRec.CreateAndFillPrepare(Client,'Datum<=?',[TimeLogToSQL(TimeLogNow)]);
-function TimeLogToSQL(const TimeStamp: TTimeLog): RawUTF8;
+function TimeLogToSQL(const Timestamp: TTimeLog): RawUTF8;
 
 /// test if P^ contains a valid ISO-8601 text encoded value
 // - calls internally Iso8601ToTimeLogPUTF8Char() and returns true if contains
@@ -17547,7 +17547,7 @@ type
   // - as used by TSystemUse class
   TSystemUseData = packed record
     /// when the data has been sampled
-    TimeStamp: TDateTime;
+    Timestamp: TDateTime;
     /// percent of current Kernel-space CPU usage for this process
     Kernel: single;
     /// percent of current User-space CPU usage for this process
@@ -17648,7 +17648,7 @@ type
     function Data(out aData: TSystemUseData; aProcessID: integer=0): boolean; overload;
     /// returns the detailed CPU and RAM usage percent of the supplied process
     // - aProcessID=0 will return information from the current process
-    // - returns TimeStamp=0 if the Process ID was not registered via Create/Subscribe
+    // - returns Timestamp=0 if the Process ID was not registered via Create/Subscribe
     function Data(aProcessID: integer=0): TSystemUseData; overload;
     /// returns total (Kernel+User) CPU usage percent history of the supplied process
     // - aProcessID=0 will return information from the current process
@@ -27544,13 +27544,13 @@ begin
   end;
 end;
 
-function TimeLogToSQL(const TimeStamp: TTimeLog): RawUTF8;
+function TimeLogToSQL(const Timestamp: TTimeLog): RawUTF8;
 begin
-  if TimeStamp=0 then
+  if Timestamp=0 then
     result := '' else begin
     SetLength(result,3);
     PCardinal(pointer(result))^ := JSON_SQLDATE_MAGIC;
-    result := result+PTimeLogBits(@TimeStamp)^.Text(true);
+    result := result+PTimeLogBits(@Timestamp)^.Text(true);
   end;
 end;
 
@@ -28898,7 +28898,7 @@ end;
 function SearchRecToDateTime(const F: TSearchRec): TDateTime;
 begin
   {$ifdef ISDELPHIXE}
-  result := F.TimeStamp;
+  result := F.Timestamp;
   {$else}
   result := FileDateToDateTime(F.Time);
   {$endif}
@@ -28981,7 +28981,7 @@ begin
   Size := F.Size;
   {$endif}
   Attr := F.Attr;
-  TimeStamp := SearchRecToDateTime(F);
+  Timestamp := SearchRecToDateTime(F);
 end;
 
 function FindFiles(const Directory,Mask,IgnoreFileName: TFileName;
@@ -34504,9 +34504,9 @@ begin
   result := Iso8601ToDateTimePUTF8Char(pointer(S),length(S));
 end;
 
-function TimeLogToDateTime(const TimeStamp: TTimeLog): TDateTime;
+function TimeLogToDateTime(const Timestamp: TTimeLog): TDateTime;
 begin
-  result := PTimeLogBits(@TimeStamp)^.ToDateTime;
+  result := PTimeLogBits(@Timestamp)^.ToDateTime;
 end;
 
 procedure DateToIso8601PChar(P: PUTF8Char; Expanded: boolean; Y,M,D: cardinal); overload;
@@ -35125,7 +35125,7 @@ function TryEncodeDayOfWeekInMonth(AYear, AMonth, ANthDayOfWeek, ADayOfWeek: int
   out AValue: TDateTime): Boolean;
 var LStartOfMonth, LDay: integer;
 begin // adapted from DateUtils
-  LStartOfMonth := (DateTimeToTimeStamp(EncodeDate(AYear,AMonth,1)).Date-1)mod 7+1;
+  LStartOfMonth := (DateTimeToTimestamp(EncodeDate(AYear,AMonth,1)).Date-1)mod 7+1;
   if LStartOfMonth<=ADayOfWeek then
     dec(ANthDayOfWeek);
   LDay := (ADayOfWeek-LStartOfMonth+1)+7*ANthDayOfWeek;
@@ -61558,7 +61558,7 @@ begin
     inherited Reset;
     fSnapshotAfterInsertCount := fSize shr 5;
     fSnapShotAfterMinutes := 30;
-    fSnapshotTimeStamp := 0;
+    fSnapshotTimestamp := 0;
     fSnapshotInsertCount := 0;
     fRevision := UnixTimeUTC shl 31;
     fKnownRevision := 0;
@@ -61576,8 +61576,8 @@ begin
     fSnapshotInsertCount := 0;
     SetString(fKnownStore,PAnsiChar(pointer(fStore)),length(fStore));
     if fSnapShotAfterMinutes=0 then
-      fSnapshotTimeStamp := 0 else
-      fSnapshotTimeStamp := GetTickCount64+fSnapShotAfterMinutes*60000;
+      fSnapshotTimestamp := 0 else
+      fSnapshotTimestamp := GetTickCount64+fSnapShotAfterMinutes*60000;
   finally
     Safe.UnLock;
   end;
@@ -61594,8 +61594,8 @@ begin
       head.kind := bdUpToDate else
     if (fKnownRevision=0) or
        (fSnapshotInsertCount>fSnapshotAfterInsertCount) or
-       ((fSnapshotInsertCount>0) and (fSnapshotTimeStamp<>0) and
-        (GetTickCount64>fSnapshotTimeStamp)) then begin
+       ((fSnapshotInsertCount>0) and (fSnapshotTimestamp<>0) and
+        (GetTickCount64>fSnapshotTimestamp)) then begin
       DiffSnapshot;
       head.kind := bdFull;
     end else
@@ -61691,7 +61691,7 @@ begin
   inherited Destroy;
 end;
 
-function TPendingTaskList.GetTimeStamp: Int64;
+function TPendingTaskList.GetTimestamp: Int64;
 begin
   result := GetTickCount64;
 end;
@@ -61701,7 +61701,7 @@ procedure TPendingTaskList.AddTask(aMilliSecondsDelayFromNow: integer;
 var item: TPendingTaskListItem;
     ndx: integer;
 begin
-  item.TimeStamp := GetTimeStamp+aMilliSecondsDelayFromNow;
+  item.Timestamp := GetTimestamp+aMilliSecondsDelayFromNow;
   item.Task := aTask;
   fSafe.Lock;
   try
@@ -61721,11 +61721,11 @@ var item: TPendingTaskListItem;
 begin
   if length(aTasks)<>length(aMilliSecondsDelays) then
     exit;
-  item.TimeStamp := GetTimeStamp;
+  item.Timestamp := GetTimestamp;
   fSafe.Lock;
   try
     for i := 0 to High(aTasks) do begin
-      inc(item.TimeStamp,aMilliSecondsDelays[i]);
+      inc(item.Timestamp,aMilliSecondsDelays[i]);
       item.Task := aTasks[i];
       if fTasks.FastLocateSorted(item,ndx) then
         inc(ndx); // always insert just after any existing timestamp
@@ -61757,7 +61757,7 @@ begin
   fSafe.Lock;
   try
     if fCount>0 then
-      if GetTimeStamp>=fTask[0].TimeStamp then begin
+      if GetTimestamp>=fTask[0].Timestamp then begin
         result := fTask[0].Task;
         fTasks.FastDeleteSorted(0);
       end;
@@ -63306,7 +63306,7 @@ begin
             mem.cb := sizeof(mem);
             GetProcessMemoryInfo(hnd,mem,SizeOf(mem));
             with Data[fDataIndex] do begin
-              TimeStamp := now;
+              Timestamp := now;
               if difftot>0 then begin
                 Kernel := diffkrn*100/difftot;
                 User := diffusr*100/difftot;
@@ -63466,7 +63466,7 @@ begin
       if i>=0 then begin
         with fProcess[i] do
           aData := Data[fDataIndex];
-        result := aData.TimeStamp<>0;
+        result := aData.Timestamp<>0;
         if result then
           exit;
       end;
@@ -63526,7 +63526,7 @@ begin
             result[i] := Data[last];
             dec(last);
           end;
-          if PInt64(@result[i].TimeStamp)^=0 then begin
+          if PInt64(@result[i].Timestamp)^=0 then begin
             SetLength(result,i); // truncate to latest available sample
             break;
           end;
@@ -64163,9 +64163,9 @@ initialization
   AlgoSynLZ := TAlgoSynLz.Create;
   TTextWriter.RegisterCustomJSONSerializerFromText([
     TypeInfo(TFindFilesDynArray),
-     'Name string Attr Integer Size Int64 TimeStamp TDateTime',
+     'Name:string Attr:Integer Size:Int64 Timestamp:TDateTime',
     TypeInfo(TSystemUseDataDynArray),
-     'TimeStamp TDateTime Kernel,User single WorkDB,VirtualKB cardinal']);
+     'Timestamp:TDateTime Kernel,User:single WorkDB,VirtualKB:cardinal']);
   // some type definition assertions
   {$ifndef NOVARIANTS}
   Assert(SizeOf(TDocVariantData)=sizeof(TVarData));

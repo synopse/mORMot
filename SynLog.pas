@@ -51,7 +51,7 @@ unit SynLog;
   - WARNING: any user of the framework in heavy-loaded multi-threaded application
     should UPGRADE to at least revision 1.18.1351, fixing a long-standing bug
   - all logged timestamps are now in much less error-prone UTC by default,
-    unless the TSynLogFamily.LocalTimeStamp property is defined
+    unless the TSynLogFamily.LocalTimestamp property is defined
   - Delphi XE4/XE5/XE6/XE7/XE8/10/10.1 compatibility (Windows target platforms)
   - unit fixed and tested with Delphi XE2 (and up) 64-bit compiler under Windows
   - compatibility with (Cross)Kylix 3 and FPC 3.1 under Linux (and Darwin)
@@ -454,8 +454,8 @@ type
     fDestinationPath: TFileName;
     fDefaultExtension: TFileName;
     fBufferSize: integer;
-    fHRTimeStamp: boolean;
-    fLocalTimeStamp: boolean;
+    fHRTimestamp: boolean;
+    fLocalTimestamp: boolean;
     fWithUnitName: boolean;
     fNoFile: boolean;
     {$ifdef MSWINDOWS}
@@ -617,10 +617,10 @@ type
     // - set to FALSE by default, or if RotateFileCount and RotateFileSizeKB /
     // RotateFileDailyAtHour are set (the high resolution frequency is set
     // in the log file header, so expects a single file)
-    property HighResolutionTimeStamp: boolean read fHRTimeStamp write fHRTimeStamp;
+    property HighResolutionTimestamp: boolean read fHRTimestamp write fHRTimestamp;
     /// by default, time logging will use error-safe UTC values as reference
     // - you may set this property to TRUE to store local time instead
-    property LocalTimeStamp: boolean read fLocalTimeStamp write fLocalTimeStamp;
+    property LocalTimestamp: boolean read fLocalTimestamp write fLocalTimestamp;
     /// if TRUE, will log the unit name with an object instance if available
     // - unit name is available from RTTI if the class has published properties
     // - set to TRUE by default, for better debugging experience
@@ -706,7 +706,7 @@ type
     /// the caller address, ready to display stack trace dump if needed
     Caller: PtrUInt;
     /// the time stamp at enter time
-    EnterTimeStamp: Int64;
+    EnterTimestamp: Int64;
     /// if the method name is local, i.e. shall not be displayed at Leave()
     MethodNameLocal: (mnAlways, mnEnter, mnLeave, mnEnterOwnMethodName);
   end;
@@ -749,10 +749,10 @@ type
     fThreadID: TThreadID;
     fThreadLastHash: integer;
     fThreadIndex: integer;
-    fStartTimeStamp: Int64;
-    fCurrentTimeStamp: Int64;
-    fFrequencyTimeStamp: Int64;
-    fStartTimeStampDateTime: TDateTime;
+    fStartTimestamp: Int64;
+    fCurrentTimestamp: Int64;
+    fFrequencyTimestamp: Int64;
+    fStartTimestampDateTime: TDateTime;
     fStreamPositionAfterHeader: cardinal;
     fFileName: TFileName;
     fFileRotationSize: cardinal;
@@ -879,7 +879,7 @@ type
     // use a .map file - note that this method name shall be a constant, and not
     // a locally computed variable, since it may trigger some random GPF at
     // runtime - if it is a local variable, you can set aMethodNameLocal=true
-    // - if TSynLogFamily.HighResolutionTimeStamp is TRUE, high-resolution
+    // - if TSynLogFamily.HighResolutionTimestamp is TRUE, high-resolution
     // time stamp will be written instead of ISO 8601 date and time: this will
     // allow performance profiling of the application on the customer side
     // - Enter() will write the class name (and the unit name for classes with
@@ -2249,7 +2249,7 @@ begin
     if ELevel<>sllNone then
       FormatUTF8('% % at %: % [%]',[LogInfoCaption[ELevel],EClass,
         GetInstanceMapFile.FindLocation(EAddr),DateTimeToIso8601Text(
-        UnixTimeToDateTime(ETimeStamp),' '),StringToUTF8(info.Message)],result) else
+        UnixTimeToDateTime(ETimestamp),' '),StringToUTF8(info.Message)],result) else
       result := '';
 end;
 
@@ -2680,7 +2680,7 @@ begin
             Ctxt.ELevel := sllException;
           end;
           Ctxt.EStack := nil;
-          Ctxt.ETimeStamp := UnixTimeUTC; // very fast API call
+          Ctxt.ETimestamp := UnixTimeUTC; // very fast API call
           SynLogException(Ctxt);
         end;
         // (ExcRec^.Flags and Internal_excIsBeingHandled)<>0)
@@ -2853,7 +2853,7 @@ begin
     Ctxt.EAddr := Exc.ExceptionAddress;
   end;
   Ctxt.EStack := stack;
-  Ctxt.ETimeStamp := UnixTimeUTC; // fast API call
+  Ctxt.ETimestamp := UnixTimeUTC; // fast API call
   SynLogException(Ctxt);
   SetLastError(LastError); // code above could have changed this
 end;
@@ -3958,17 +3958,17 @@ end;
 
 procedure TSynLog.LogFileInit;
 begin
-  if not QueryPerformanceFrequency(fFrequencyTimeStamp) then begin
-    fFamily.HighResolutionTimeStamp := false;
-    fFrequencyTimeStamp := 0;
+  if not QueryPerformanceFrequency(fFrequencyTimestamp) then begin
+    fFamily.HighResolutionTimestamp := false;
+    fFrequencyTimestamp := 0;
   end else
     if (fFileRotationSize>0) or (fFileRotationNextHour<>0) then
-      fFamily.HighResolutionTimeStamp := false;
+      fFamily.HighResolutionTimestamp := false;
   fStreamPositionAfterHeader := fWriter.WrittenBytes;
-  QueryPerformanceCounter(fStartTimeStamp);
-  if fFamily.LocalTimeStamp then
-    fStartTimeStampDateTime := Now else
-    fStartTimeStampDateTime := NowUTC;
+  QueryPerformanceCounter(fStartTimestamp);
+  if fFamily.LocalTimestamp then
+    fStartTimestampDateTime := Now else
+    fStartTimestampDateTime := NowUTC;
   Include(fInternalFlags,logInitDone);
 end;
 
@@ -4032,8 +4032,8 @@ begin
     AddReplace(@SystemInfo.uts.version,' ','-');
     AddShort(' Wow64=0');
     {$endif}
-    QueryPerformanceFrequency(fFrequencyTimeStamp);
-    AddShort(' Freq='); Add(fFrequencyTimeStamp);
+    QueryPerformanceFrequency(fFrequencyTimestamp);
+    AddShort(' Freq='); Add(fFrequencyTimestamp);
     if IsLibrary then begin
       AddShort(' Instance=');
       AddNoJSONEscapeString(InstanceFileName);
@@ -4059,7 +4059,7 @@ begin
     NewLine;
     AddClassName(self.ClassType);
     AddShort(' '+SYNOPSE_FRAMEWORK_FULLVERSION+' ');
-    if fFamily.LocalTimeStamp then
+    if fFamily.LocalTimestamp then
       AddDateTime(Now) else
       AddDateTime(NowUTC);
     if WithinEvents then
@@ -4111,12 +4111,12 @@ end;
 
 procedure TSynLog.LogCurrentTime;
 begin
-  if fFamily.HighResolutionTimeStamp and (fFrequencyTimeStamp<>0) then begin
-    QueryPerformanceCounter(fCurrentTimeStamp);
-    dec(fCurrentTimeStamp,fStartTimeStamp);
-    fWriter.AddBinToHexDisplay(@fCurrentTimeStamp,sizeof(fCurrentTimeStamp));
+  if fFamily.HighResolutionTimestamp and (fFrequencyTimestamp<>0) then begin
+    QueryPerformanceCounter(fCurrentTimestamp);
+    dec(fCurrentTimestamp,fStartTimestamp);
+    fWriter.AddBinToHexDisplay(@fCurrentTimestamp,sizeof(fCurrentTimestamp));
   end else
-    fWriter.AddCurrentLogTime(fFamily.LocalTimeStamp);
+    fWriter.AddCurrentLogTime(fFamily.LocalTimestamp);
 end;
 
 function TSynLog.LogHeaderLock(Level: TSynLogInfo; AlreadyLocked: boolean): boolean;
@@ -4133,7 +4133,7 @@ begin
         LogFileInit;
     if not (sllEnter in fFamily.Level) and (Level in fFamily.fLevelStackTrace) then
        for i := 0 to fThreadContext^.RecursionCount-1 do begin
-         fWriter.AddChars(' ',i+24-byte(fFamily.HighResolutionTimeStamp));
+         fWriter.AddChars(' ',i+24-byte(fFamily.HighResolutionTimestamp));
          AddRecursion(i,sllNone);
        end;
     LogCurrentTime;
@@ -4417,16 +4417,16 @@ begin // aLevel = sllEnter,sllLeave or sllNone
       end else
         TSynMapFile.Log(fWriter,Caller,false);
     end;
-    if (aLevel<>sllNone) and (fFrequencyTimeStamp<>0) then begin
-      if not fFamily.HighResolutionTimeStamp then begin
-        QueryPerformanceCounter(fCurrentTimeStamp);
-        dec(fCurrentTimeStamp,fStartTimeStamp);
+    if (aLevel<>sllNone) and (fFrequencyTimestamp<>0) then begin
+      if not fFamily.HighResolutionTimestamp then begin
+        QueryPerformanceCounter(fCurrentTimestamp);
+        dec(fCurrentTimestamp,fStartTimestamp);
       end;
       case aLevel of
       sllEnter:
-        EnterTimeStamp := fCurrentTimeStamp;
+        EnterTimestamp := fCurrentTimestamp;
       sllLeave: begin
-        MS := ((fCurrentTimeStamp-EnterTimeStamp)*(1000*1000))div fFrequencyTimeStamp;
+        MS := ((fCurrentTimestamp-EnterTimestamp)*(1000*1000))div fFrequencyTimestamp;
         fWriter.AddMicroSec(MS);
       end;
       end; // may be sllNone when called from LogHeaderLock()
@@ -4602,7 +4602,7 @@ begin
 end;
 
 function TSynLogFile.EventDateTime(aIndex: integer): TDateTime;
-var TimeStamp: Int64;
+var Timestamp: Int64;
     P: PUTF8Char;
     Y,M,D, HH,MM,SS,MS: cardinal;
 begin
@@ -4619,8 +4619,8 @@ begin
           result := result+EncodeTime(HH,MM,SS,MS shl 4) else
           result := 0;
     end else
-      if HexDisplayToBin(fLines[aIndex],@TimeStamp,sizeof(TimeStamp)) then
-        result := fStartDateTime+(TimeStamp/fFreqPerDay) else
+      if HexDisplayToBin(fLines[aIndex],@Timestamp,sizeof(Timestamp)) then
+        result := fStartDateTime+(Timestamp/fFreqPerDay) else
         result := 0;
 end;
 
@@ -4990,7 +4990,7 @@ begin
     if (fCount>50) or not (LineBeg[0] in ['0'..'9']) then
       exit; // definitively does not sound like a .log content
     if LineBeg[8]=' ' then begin
-      // YYYYMMDD HHMMSS is one char bigger than TimeStamp
+      // YYYYMMDD HHMMSS is one char bigger than Timestamp
       fLineLevelOffset := 19;
       fDayCurrent := PInt64(LineBeg)^;
       AddInteger(fDayChangeIndex,fCount-1);
@@ -5271,10 +5271,10 @@ begin
     if ReceiveExistingKB>0 then begin
       EnterCriticalSection(GlobalThreadLock);
       previousContent := TrackedLog.GetExistingLog(ReceiveExistingKB);
-      if TrackedLog.HighResolutionTimeStamp and (TrackedLog.fGlobalLog<>nil) then
+      if TrackedLog.HighResolutionTimestamp and (TrackedLog.fGlobalLog<>nil) then
         with TrackedLog.fGlobalLog do
         Callback.Log(sllNone,FormatUTF8('freq=%,%,%',
-          [fFrequencyTimeStamp,double(fStartTimeStampDateTime),fFileName]));
+          [fFrequencyTimestamp,double(fStartTimestampDateTime),fFileName]));
       Callback.Log(sllNone,previousContent);
     end;
     Reg.Levels := Levels;

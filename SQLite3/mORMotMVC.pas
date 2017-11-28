@@ -154,8 +154,8 @@ type
       FileExt: TFileName;
       ContentType: RawUTF8;
       Locker: IAutoLocker;
-      FileTimeStamp: TDateTime;
-      FileTimeStampCheckTick: Int64;
+      FileTimestamp: TDateTime;
+      FileTimestampCheckTick: Int64;
     end;
     function GetRenderer(methodIndex: integer; out aContentType: RawUTF8): TSynMustache;
     class procedure md5(const Value: variant; out result: variant);
@@ -1110,11 +1110,11 @@ begin
       raise EMVCException.CreateUTF8('%.Render(''%''): Missing Template in ''%''',
         [self,MethodName,SearchPattern]);
     if (Mustache=nil) or ((fViewTemplateFileTimestampMonitor<>0) and
-       (FileTimeStampCheckTick<GetTickCount64)) then begin
+       (FileTimestampCheckTick<GetTickCount64)) then begin
       age := FileAgeToDateTime(FileName);
-      if (Mustache=nil) or (age<>FileTimeStamp) then begin
+      if (Mustache=nil) or (age<>FileTimestamp) then begin
         Mustache := nil; // no Mustache.Free: TSynMustache instances are cached
-        FileTimeStamp := age;
+        FileTimestamp := age;
         Template := AnyTextFileToRawUTF8(FileName,true);
         if Template<>'' then
         try
@@ -1127,7 +1127,7 @@ begin
           raise EMVCException.CreateUTF8('%.Render(''%''): Missing Template in ''%''',
             [self,ShortFileName,SearchPattern]);
         if fViewTemplateFileTimestampMonitor<>0 then
-          FileTimeStampCheckTick := GetTickCount64+
+          FileTimestampCheckTick := GetTickCount64+
             Int64(fViewTemplateFileTimestampMonitor)*Int64(1000);
       end;
     end;

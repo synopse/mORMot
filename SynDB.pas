@@ -83,7 +83,7 @@ unit SynDB;
   - new TSQLDBConnectionProperties.NewThreadSafeStatementPrepared and
     TSQLDBConnection.NewStatementPrepared methods, able to be overridden to
     implement a SQL statement caching (used e.g. for SynDBSQLite3)
-  - new TSQLDBConnection.ServerTimeStamp property, which will return the
+  - new TSQLDBConnection.ServerTimestamp property, which will return the
     external database Server current date and time as TTimeLog/Int64 value
     (current implementation handle Oracle, MSSQL and MySQL database engines -
     with SQLite3, this will be the local PC time, just as for other DB engines)
@@ -92,7 +92,7 @@ unit SynDB;
   - new overloaded TSQLDBStatement.Bind() and ColumnToVarData() methods, able
     to bind or retrieve values from a TVarData/TVarDataDynArray (used e.g.
     for direct access to/from SQLite3 virtual table in the SQLite3DB unit)
-  - new ColumnTimeStamp method for TSQLDBStatement/ISQLDBRows, returning a
+  - new ColumnTimestamp method for TSQLDBStatement/ISQLDBRows, returning a
     TTimeLog/Int64 value for a date/time column
 
   Version 1.16
@@ -106,11 +106,11 @@ unit SynDB;
     statement according to a DB column expected layout
   - new TSQLDBConnectionProperties.ClearConnectionPool method (could be used
     to recreate all connections in case of DB or network failure/timeout)
-  - fixed issue in TSQLDBConnection.GetServerTimeStamp method
+  - fixed issue in TSQLDBConnection.GetServerTimestamp method
 
   Version 1.17
   - code refactoring to allow direct ODBC connection implementation
-  - fixed random issue in TSQLDBConnection.GetServerTimeStamp method (using
+  - fixed random issue in TSQLDBConnection.GetServerTimestamp method (using
     wrongly TTimeLog direct arithmetic, therefore raising EncodeTime() errors)
   - fixed issue about creating unexisting NCLOB instead of CLOB/NCLOB
   - fixed TQuery implementation to match the expected original behavior
@@ -643,7 +643,7 @@ type
     /// return a Column floating point value of the current Row, first Col is 0
     function ColumnDateTime(Col: integer): TDateTime; overload;
     /// return a column date and time value of the current Row, first Col is 0
-    function ColumnTimeStamp(Col: integer): TTimeLog; overload;
+    function ColumnTimestamp(Col: integer): TTimeLog; overload;
     /// return a Column currency value of the current Row, first Col is 0
     function ColumnCurrency(Col: integer): currency; overload;
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
@@ -689,7 +689,7 @@ type
     /// return a Column floating point value of the current Row, from a supplied column name
     function ColumnDateTime(const ColName: RawUTF8): TDateTime; overload;
     /// return a column date and time value of the current Row, from a supplied column name
-    function ColumnTimeStamp(const ColName: RawUTF8): TTimeLog; overload;
+    function ColumnTimestamp(const ColName: RawUTF8): TTimeLog; overload;
     /// return a Column currency value of the current Row, from a supplied column name
     function ColumnCurrency(const ColName: RawUTF8): currency; overload;
     /// return a Column UTF-8 encoded text value of the current Row, from a supplied column name
@@ -982,7 +982,7 @@ type
   /// proxy commands implemented by TSQLDBProxyConnectionProperties.Process()
   // - method signature expect "const Input" and "var Output" arguments
   // - Input is not used for cConnect, cDisconnect, cGetForeignKeys,
-  // cTryStartTransaction, cCommit, cRollback and cServerTimeStamp
+  // cTryStartTransaction, cCommit, cRollback and cServerTimestamp
   // - Input is the TSQLDBProxyConnectionProperties instance for cInitialize
   // - Input is the RawUTF8 table name for most cGet* metadata commands
   // - Input is the SQL statement and associated bound parameters for cExecute,
@@ -990,7 +990,7 @@ type
   // TSQLDBProxyConnectionCommandExecute record
   // - Output is not used for cConnect, cDisconnect, cCommit, cRollback and cExecute
   // - Output is TSQLDBDefinition (i.e. DBMS type) for cInitialize
-  // - Output is TTimeLog for cServerTimeStamp
+  // - Output is TTimeLog for cServerTimestamp
   // - Output is boolean for cTryStartTransaction
   // - Output is TSQLDBColumnDefineDynArray for cGetFields
   // - Output is TSQLDBIndexDefineDynArray for cGetIndexes
@@ -1007,7 +1007,7 @@ type
   // ! Process(cTryStartTransaction,?,started: boolean);
   // ! Process(cCommit,?,?);
   // ! Process(cRollback,?,?);
-  // ! Process(cServerTimeStamp,?,result: TTimeLog);
+  // ! Process(cServerTimestamp,?,result: TTimeLog);
   // ! Process(cGetFields,aTableName: RawUTF8,Fields: TSQLDBColumnDefineDynArray);
   // ! Process(cGetIndexes,aTableName: RawUTF8,Indexes: TSQLDBIndexDefineDynArray);
   // ! Process(cGetTableNames,?,Tables: TRawUTF8DynArray);
@@ -1021,7 +1021,7 @@ type
   TSQLDBProxyConnectionCommand = (
     cGetToken,cGetDBMS,
     cConnect, cDisconnect, cTryStartTransaction, cCommit, cRollback,
-    cServerTimeStamp,
+    cServerTimestamp,
     cGetFields, cGetIndexes, cGetTableNames, cGetForeignKeys,
     cExecute, cExecuteToBinary, cExecuteToJSON, cExecuteToExpandedJSON,
     cQuit, cExceptionRaised);
@@ -1141,7 +1141,7 @@ type
     fForeignKeys: TSynNameValue;
     fSQLCreateField: TSQLDBFieldTypeDefinition;
     fSQLCreateFieldMax: cardinal;
-    fSQLGetServerTimeStamp: RawUTF8;
+    fSQLGetServerTimestamp: RawUTF8;
     fEngineName: RawUTF8;
     fDBMS: TSQLDBDefinition;
     fOnProcess: TOnSQLDBProcess;
@@ -1734,8 +1734,8 @@ type
     fErrorException: ExceptClass;
     fErrorMessage: RawUTF8;
     fTransactionCount: integer;
-    fServerTimeStampOffset: TDateTime;
-    fServerTimeStampAtConnection: TDateTime;
+    fServerTimestampOffset: TDateTime;
+    fServerTimestampAtConnection: TDateTime;
     fCache: TRawUTF8ListHashed;
     fOnProcess: TOnSQLDBProcess;
     fTotalConnectionCount: integer;
@@ -1744,7 +1744,7 @@ type
     fLastAccessTicks: Int64;
     function IsOutdated: boolean; // do not make virtual
     function GetInTransaction: boolean; virtual;
-    function GetServerTimeStamp: TTimeLog;
+    function GetServerTimestamp: TTimeLog;
     function GetServerDateTime: TDateTime; virtual;
     function GetLastErrorWasAboutConnection: boolean;
     /// raise an exception if IsConnected returns false
@@ -1823,7 +1823,7 @@ type
     // will most likely return a local time, not an UTC time
     // - this property will return the timestamp in TTimeLog / TTimeLogBits /
     // Int64 value
-    property ServerTimeStamp: TTimeLog read GetServerTimeStamp;
+    property ServerTimestamp: TTimeLog read GetServerTimestamp;
     /// the current Date and Time, as retrieved from the server
     // - note that this value is the DB_SERVERTIME[] constant SQL value, so
     // will most likely return a local time, not an UTC time
@@ -1837,7 +1837,7 @@ type
     /// returns TRUE if the connection was set
     property Connected: boolean read IsConnected;
     /// the time returned by the server when the connection occurred
-    property ServerTimeStampAtConnection: TDateTime read fServerTimeStampAtConnection;
+    property ServerTimestampAtConnection: TDateTime read fServerTimestampAtConnection;
     /// number of sucessfull connections for this instance
     // - can be greater than 1 in case of re-connection via Disconnect/Connect
     property TotalConnectionCount: integer read fTotalConnectionCount;
@@ -2182,7 +2182,7 @@ type
     /// return a column date and time value of the current Row, first Col is 0
     // - call ColumnDateTime or ColumnUTF8 to convert into TTimeLogBits/Int64 time
     // stamp from a TDateTime or text
-    function ColumnTimeStamp(Col: integer): TTimeLog; overload;
+    function ColumnTimestamp(Col: integer): TTimeLog; overload;
     /// return a Column currency value of the current Row, first Col is 0
     function ColumnCurrency(Col: integer): currency; overload; virtual; abstract;
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
@@ -2233,7 +2233,7 @@ type
     /// return a column date and time value of the current Row, from a supplied column name
     // - call ColumnDateTime or ColumnUTF8 to convert into TTimeLogBits/Int64 time
     // stamp from a TDateTime or text
-    function ColumnTimeStamp(const ColName: RawUTF8): TTimeLog; overload;
+    function ColumnTimestamp(const ColName: RawUTF8): TTimeLog; overload;
     /// return a Column currency value of the current Row, from a supplied column name
     function ColumnCurrency(const ColName: RawUTF8): currency; overload;
     /// return a Column UTF-8 encoded text value of the current Row, from a supplied column name
@@ -4151,11 +4151,11 @@ begin
   InternalProcess(speConnected);
   if fTotalConnectionCount>1 then
     InternalProcess(speReconnected);
-  if fServerTimeStampAtConnection=0 then
+  if fServerTimestampAtConnection=0 then
     try
-      fServerTimeStampAtConnection := ServerDateTime;
+      fServerTimestampAtConnection := ServerDateTime;
     except
-      fServerTimeStampAtConnection := Now;
+      fServerTimestampAtConnection := Now;
     end;
 end;
 
@@ -4221,7 +4221,7 @@ begin
   result := TransactionCount>0;
 end;
 
-function TSQLDBConnection.GetServerTimeStamp: TTimeLog;
+function TSQLDBConnection.GetServerTimestamp: TTimeLog;
 begin
   PTimeLogBits(@result)^.From(GetServerDateTime);
 end;
@@ -4230,16 +4230,16 @@ function TSQLDBConnection.GetServerDateTime: TDateTime;
 var Current: TDateTime;
 begin
   Current := NowUTC; // so won't conflict with any potential time zone change
-  if (fServerTimeStampOffset=0) and
-     (fProperties.fSQLGetServerTimeStamp<>'') then begin
+  if (fServerTimestampOffset=0) and
+     (fProperties.fSQLGetServerTimestamp<>'') then begin
     with fProperties do
-      with Execute(fSQLGetServerTimeStamp,[]) do
+      with Execute(fSQLGetServerTimestamp,[]) do
         if Step then
-        fServerTimeStampOffset := ColumnDateTime(0)-Current;
-    if fServerTimeStampOffset=0 then
-      fServerTimeStampOffset := 0.000001; // request server only once
+        fServerTimestampOffset := ColumnDateTime(0)-Current;
+    if fServerTimestampOffset=0 then
+      fServerTimestampOffset := 0.000001; // request server only once
   end;
-  result := Current+fServerTimeStampOffset;
+  result := Current+fServerTimestampOffset;
 end;
 
 function TSQLDBConnection.GetLastErrorWasAboutConnection: boolean;
@@ -4572,8 +4572,8 @@ begin // follow TSQLDBRemoteConnectionPropertiesAbstract.Process binary layout
       Protocol.TransactionEnd(header.SessionID);
       Rollback;
     end;
-    cServerTimeStamp:
-      AppendOutput(ServerTimeStamp);
+    cServerTimestamp:
+      AppendOutput(ServerTimestamp);
     cGetFields: begin
       Properties.GetFields(O,OutputSQLDBColumnDefineDynArray);
       msgOutput := msgOutput+DynArraySave(
@@ -4681,8 +4681,8 @@ begin
     fSQLCreateField := DB_FIELDS[aDBMS];
   if fSQLCreateFieldMax=0 then
     fSQLCreateFieldMax := DB_FIELDSMAX[aDBMS];
-  if fSQLGetServerTimeStamp='' then
-    fSQLGetServerTimeStamp := DB_SERVERTIME[aDBMS];
+  if fSQLGetServerTimestamp='' then
+    fSQLGetServerTimestamp := DB_SERVERTIME[aDBMS];
   case aDBMS of
   dMSSQL, dJet: fStoreVoidStringAsNull := true;
   end;
@@ -6525,7 +6525,7 @@ end;
 
 {
   tmBackgroundThread should handle TSQLRestStorageExternal methods:
-  Create: ServerTimeStamp+GetFields
+  Create: ServerTimestamp+GetFields
   BeginTransaction
   Commit
   Rollback
@@ -6870,7 +6870,7 @@ begin
 end;
 {$endif}
 
-function TSQLDBStatement.ColumnTimeStamp(Col: integer): TTimeLog;
+function TSQLDBStatement.ColumnTimestamp(Col: integer): TTimeLog;
 begin
   case ColumnType(Col) of // will call GetCol() to check Col
     ftNull:  result := 0;
@@ -6880,9 +6880,9 @@ begin
   end;
 end;
 
-function TSQLDBStatement.ColumnTimeStamp(const ColName: RawUTF8): TTimeLog;
+function TSQLDBStatement.ColumnTimestamp(const ColName: RawUTF8): TTimeLog;
 begin
-  result := ColumnTimeStamp(ColumnIndex(ColName));
+  result := ColumnTimestamp(ColumnIndex(ColName));
 end;
 
 procedure TSQLDBStatement.ColumnsToJSON(WR: TJSONWriter);
@@ -8157,7 +8157,7 @@ begin // use our optimized RecordLoadSave/DynArrayLoadSave binary serialization
   SetString(msgInput,PAnsiChar(@header),sizeof(header));
   case Command of
   cGetToken, cConnect, cDisconnect, cTryStartTransaction, cCommit, cRollback,
-  cServerTimeStamp, cGetTableNames, cGetForeignKeys, cQuit:
+  cServerTimestamp, cGetTableNames, cGetForeignKeys, cQuit:
     ; // no input parameters here, just the command
   cGetDBMS, cGetFields, cGetIndexes:
     msgInput := msgInput+InputText;
@@ -8175,7 +8175,7 @@ begin // use our optimized RecordLoadSave/DynArrayLoadSave binary serialization
   O := pointer(msgOutput);
   inc(O,sizeof(header));
   case outheader.Command of
-  cGetToken, cServerTimeStamp:
+  cGetToken, cServerTimestamp:
     OutputInt64 := PInt64(O)^;
   cGetDBMS:
     OutputSQLDBDefinition := TSQLDBDefinition(O^);
@@ -8257,10 +8257,10 @@ begin
 end;
 
 function TSQLDBProxyConnection.GetServerDateTime: TDateTime;
-var TimeStamp: TTimeLogBits;
+var timestamp: TTimeLogBits;
 begin
-  fProxy.Process(cServerTimeStamp,self,TimeStamp);
-  result := TimeStamp.ToDateTime;
+  fProxy.Process(cServerTimestamp,self,timestamp);
+  result := timestamp.ToDateTime;
 end;
 
 function TSQLDBProxyConnection.IsConnected: boolean;

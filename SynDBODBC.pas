@@ -1635,7 +1635,7 @@ var p: integer;
     InputOutputType, CValueType: SqlSmallint;
     ColumnSize: SqlULen;
     ParameterValue: SqlPointer;
-    TimeStamp: SQL_TIMESTAMP_STRUCT;
+    timestamp: SQL_TIMESTAMP_STRUCT;
     DriverDoesNotHandleUnicode: boolean;
     StrLen_or_Ind: array of PtrInt;
 label retry;
@@ -1681,8 +1681,8 @@ begin
             ParameterValue := pointer(@VInt64);
           end;
         ftDate: begin
-          CValueType := TimeStamp.From(PDateTime(@VInt64)^,ColumnSize);
-          SetString(VData,PAnsiChar(@TimeStamp),ColumnSize);
+          CValueType := timestamp.From(PDateTime(@VInt64)^,ColumnSize);
+          SetString(VData,PAnsiChar(@timestamp),ColumnSize);
         end;
         ftUTF8:
           if DriverDoesNotHandleUnicode then begin

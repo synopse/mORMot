@@ -902,7 +902,7 @@ begin
             for j := 0 to fParamsArrayCount -1 do
               if not fNullArray[p][j] then
                 fDateDynArray[n][j] := Iso8601ToDateTime(UnQuoteSQLString(VArray[j]));
-            fStatement.SetDataArray(p+FirstDbcIndex,fDateDynArray[n],stTimeStamp);
+            fStatement.SetDataArray(p+FirstDbcIndex,fDateDynArray[n],stTimestamp);
           end;
           ftUTF8: begin
             SetLength(fUTF8DynArray[n],fParamsArrayCount);
@@ -1275,7 +1275,7 @@ begin // take care of the layout of internal ZDBC buffers for each provider
           WR.AddCurr64(fResultSet.GetCurrency(col+FirstDbcIndex));
       ftDate: begin
         WR.Add('"');
-        WR.AddDateTime(fResultSet.GetTimeStamp(col+FirstDbcIndex),fForceDateWithMS);
+        WR.AddDateTime(fResultSet.GetTimestamp(col+FirstDbcIndex),fForceDateWithMS);
         WR.Add('"');
       end;
       ftUTF8: begin

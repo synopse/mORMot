@@ -394,8 +394,8 @@ unit mORMot;
       be set to the current server time stamp before update/adding
     - new sftCreateTime / TCreateTime published field type in TSQLRecord, which
       will be set to the current server time stamp at record creation
-    - new TSQLRest.ServerTimeStamp property, which will return the current
-      server time as TTimeLog/Int64 value (will use the new /TimeStamp RESTful
+    - new TSQLRest.ServerTimestamp property, which will return the current
+      server time as TTimeLog/Int64 value (will use the new /Timestamp RESTful
       service to retrieve the exact server time)
     - TSQLRestServerStaticInMemory uses a per-Table Critical Section to have
       its EngineList, EngineRetrieve, EngineAdd, EngineUpdate, EngineDelete,
@@ -612,9 +612,9 @@ unit mORMot;
     - change vague boolean parameter into a TSQLOccasion enumerate in
       TJSONObjectDecoder.EncodeAsSQLPrepared()
     - added ForceID: boolean parameter to TSQLRest.Add() method
-    - fixed random issue in TSQLRest.GetServerTimeStamp method (using wrongly
+    - fixed random issue in TSQLRest.GetServerTimestamp method (using wrongly
       TTimeLog direct arithmetic, therefore raising EncodeTime() errors)
-    - internal cache added in TSQLRest.GetServerTimeStamp method for better speed
+    - internal cache added in TSQLRest.GetServerTimestamp method for better speed
     - added TSQLRest.Retrieve() overloaded method for easy parameter binding
     - added TSQLRest.Delete() overloaded method with a WHERE clause parameter
     - implemented transaction process for (external database) virtual tables
@@ -1081,7 +1081,7 @@ unit mORMot;
     - implemented automatic transaction generation during BATCH process via
       a new AutomaticTransactionPerRow parameter in BatchStart()
     - fixed unexpected issue in TSQLRest.BatchSend() when nothing is to be sent
-    - added TSQLRestClientURI.ServerTimeStampSynchronize method to force time
+    - added TSQLRestClientURI.ServerTimestampSynchronize method to force time
       synchronization with the server - can be handy to test the connection
     - added TSQLRestClientURI.ServerRemoteLog wrapper to method-based service,
       and corresponding ServerRemoteLogStart and ServerRemoteLogStop methods
@@ -1180,8 +1180,8 @@ unit mORMot;
     - added TSQLRestServerAuthentication.Options, e.g. saoUserByLogonOrID to
       allow login via TSQLAuthUser.ID in addition to LogonName
     - return also "logongroup":TSQLAuthGroup.ID on successful authentication
-    - added TSQLRestServerAuthenticationSignedURI.NoTimeStampCoherencyCheck and
-      TimeStampCoherencySeconds properties to tune or disable the session
+    - added TSQLRestServerAuthenticationSignedURI.NoTimestampCoherencyCheck and
+      TimestampCoherencySeconds properties to tune or disable the session
       timestamp check during URI signature authentication (default to 5 seconds)
     - new TSQLRestServerAuthenticationNone weak but simple method
     - force almost-random session ID for TSQLRestServer to avoid collision
@@ -11739,7 +11739,7 @@ type
   TInterfaceStubLog = {$ifndef ISDELPHI2010}object{$else}record{$endif}
     /// call timestamp, in milliseconds
     // - is filled with GetTickCount64() API returned value
-    TimeStamp64: Int64;
+    Timestamp64: Int64;
     /// set to TRUE if this calls failed
     // - i.e. if EInterfaceFactoryException was raised for TInterfaceStub, or
     // if TInterfaceMock did notify its associated TSynTestCase via a Check()
@@ -12766,8 +12766,8 @@ type
     // but you may use this property to use another value, e.g. if you are
     // accessign a non mORMot REST server (probably with aContractExpected set
     // to SERVICE_CONTRACT_NONE_EXPECTED, and running
-    // Client.ServerTimeStamp := TimeLogNowUTC to avoid an unsupported
-    // ServerTimeStampSynchronize call)
+    // Client.ServerTimestamp := TimeLogNowUTC to avoid an unsupported
+    // ServerTimestampSynchronize call)
     property ForcedURI: RawUTF8 read fForcedURI write fForcedURI;
     /// set to TRUE to send the interface's methods parameters as JSON object
     // - by default (FALSE), any method execution will send a JSON array with
@@ -13273,7 +13273,7 @@ type
     // - resulting time period has therefore a resolution of 512 ms, and
     // overflows after 70 years without computer reboot
     // - equals 0 when there is no JSON value cached
-    TimeStamp512: cardinal;
+    Timestamp512: cardinal;
     /// some associated unsigned integer value
     // - not used by TSQLRestCache, but available at TSQLRestCacheEntry level
     Tag: cardinal;
@@ -13641,13 +13641,13 @@ type
     fCache: TSQLRestCache;
     fTransactionActiveSession: cardinal;
     fTransactionTable: TSQLRecordClass;
-    fServerTimeStampOffset: TDateTime;
-    fServerTimeStampCacheTix: cardinal;
-    fServerTimeStampCacheValue: TTimeLogBits;
+    fServerTimestampOffset: TDateTime;
+    fServerTimestampCacheTix: cardinal;
+    fServerTimestampCacheValue: TTimeLogBits;
     fServices: TServiceContainer;
     fPrivateGarbageCollector: TObjectList;
     fRoutingClass: TSQLRestServerURIContextClass;
-    fFrequencyTimeStamp: Int64;
+    fFrequencyTimestamp: Int64;
     fBackgroundTimer: TSQLRestBackgroundTimer;
     fAcquireExecution: array[TSQLRestServerURIContextCommand] of TSQLRestAcquireExecution;
     {$ifdef WITHLOG}
@@ -13666,13 +13666,13 @@ type
     function InternalDeleteNotifyAndGetIDs(Table: TSQLRecordClass; const SQLWhere: RawUTF8;
       var IDs: TIDDynArray): boolean;
     /// retrieve the server time stamp
-    // - default implementation will use fServerTimeStampOffset to compute
-    // the value from PC time (i.e. NowUTC+fServerTimeStampOffset as TTimeLog)
+    // - default implementation will use fServerTimestampOffset to compute
+    // the value from PC time (i.e. NowUTC+fServerTimestampOffset as TTimeLog)
     // - inherited classes may override this method, or set the appropriate
-    // value in fServerTimeStampOffset protected field
-    function GetServerTimeStamp: TTimeLog; virtual;
+    // value in fServerTimestampOffset protected field
+    function GetServerTimestamp: TTimeLog; virtual;
     /// compute the server time stamp offset from the given
-    procedure SetServerTimeStamp(const Value: TTimeLog);
+    procedure SetServerTimestamp(const Value: TTimeLog);
     /// handle Client or Server side fast in-memory cache
     // - creates the internal fCache instance, if necessary
     function GetCache: TSQLRestCache;
@@ -14997,12 +14997,12 @@ type
     // - default implementation will return the executable UTC time, i.e. NowUTC
     // so that any GUI code should convert this UTC value into local time
     // - on TSQLRestServer, if you use an external database, the TSQLDBConnection
-    // ServerTimeStamp value will be set to this property
+    // ServerTimestamp value will be set to this property
     // - you can use this value in a WHERE clause for a query, as such:
-    // ! aRec.CreateAndFillPrepare(Client,'Datum<=?',[TimeLogToSQL(Client.ServerTimeStamp)]);
-    // - or you could use ServerTimeStamp everywhere in your code, when you need
+    // ! aRec.CreateAndFillPrepare(Client,'Datum<=?',[TimeLogToSQL(Client.ServerTimestamp)]);
+    // - or you could use ServerTimestamp everywhere in your code, when you need
     // a reference time base
-    property ServerTimeStamp: TTimeLog read GetServerTimeStamp write SetServerTimeStamp;
+    property ServerTimestamp: TTimeLog read GetServerTimestamp write SetServerTimestamp;
     {$ifdef WITHLOG}
     /// the logging class used for this instance
     // - is set by default to SQLite3Log, but could be set to a custom class
@@ -15419,7 +15419,7 @@ type
     fSentHeaders: RawUTF8;
     fRemoteIP: RawUTF8;
     fPrivateSaltHash: Cardinal;
-    fLastTimeStamp: Cardinal;
+    fLastTimestamp: Cardinal;
     fExpectedHttpAuthentication: RawUTF8;
     fAccessRights: TSQLAccessRights;
     fMethods: TSynMonitorInputOutputObjArray;
@@ -15658,17 +15658,17 @@ type
   /// secure authentication scheme using URL-level digital signature
   // - default suaCRC32 format of session_signature is
   // !Hexa8(SessionID)+
-  // !Hexa8(TimeStamp)+
+  // !Hexa8(Timestamp)+
   // !Hexa8(crc32('SessionID+HexaSessionPrivateKey'+Sha256('salt'+PassWord)+
-  // !            Hexa8(TimeStamp)+url))
+  // !            Hexa8(Timestamp)+url))
   TSQLRestServerAuthenticationSignedURI = class(TSQLRestServerAuthenticationURI)
   protected
-    fNoTimeStampCoherencyCheck: Boolean;
-    fTimeStampCoherencySeconds: cardinal;
-    fTimeStampCoherencyTicks: cardinal;
+    fNoTimestampCoherencyCheck: Boolean;
+    fTimestampCoherencySeconds: cardinal;
+    fTimestampCoherencyTicks: cardinal;
     fComputeSignature: TSQLRestServerAuthenticationSignedURIComputeSignature;
-    procedure SetNoTimeStampCoherencyCheck(value: boolean);
-    procedure SetTimeStampCoherencySeconds(value: cardinal);
+    procedure SetNoTimestampCoherencyCheck(value: boolean);
+    procedure SetTimestampCoherencySeconds(value: cardinal);
     procedure SetAlgorithm(value: TSQLRestServerAuthenticationSignedURIAlgo);
     // class functions implementing TSQLRestServerAuthenticationSignedURIAlgo
     class function ComputeSignatureCrc32(privatesalt: cardinal;
@@ -15701,22 +15701,22 @@ type
     /// allow any order when creating sessions
     // - by default, signed sessions are expected to be sequential, and new
     // signed session signature can't be older in time than the last one,
-    // with a tolerance of TimeStampCoherencySeconds
+    // with a tolerance of TimestampCoherencySeconds
     // - but if your client is asynchronous (e.g. for AJAX requests), session
     // may be rejected due to the delay involved on the client side: you can set
     // this property to TRUE to enabled a weaker but more tolerant behavior
     // ! (aServer.AuthenticationRegister(TSQLRestServerAuthenticationDefault) as
-    // !   TSQLRestServerAuthenticationSignedURI).NoTimeStampCoherencyCheck := true;
-    property NoTimeStampCoherencyCheck: Boolean read fNoTimeStampCoherencyCheck
-      write SetNoTimeStampCoherencyCheck;
+    // !   TSQLRestServerAuthenticationSignedURI).NoTimestampCoherencyCheck := true;
+    property NoTimestampCoherencyCheck: Boolean read fNoTimestampCoherencyCheck
+      write SetNoTimestampCoherencyCheck;
     /// time tolerance in seconds for the signature timestamps coherency check
     // - by default, signed sessions are expected to be sequential, and new
     // signed session signature can't be older in time than the last one,
     // with a tolerance time defined by this property
     // - default value is 5 seconds, which cover most kind of clients (AJAX or
     // WebSockets), even over a slow Internet connection
-    property TimeStampCoherencySeconds: cardinal read fTimeStampCoherencySeconds
-      write SetTimeStampCoherencySeconds;
+    property TimestampCoherencySeconds: cardinal read fTimestampCoherencySeconds
+      write SetTimestampCoherencySeconds;
     /// customize the session_signature signing algorithm with a specific function
     // - the very same function should be set on TSQLRestClientURI
     // - to select a known hash algorithm, you may change the Algorithm property
@@ -15764,13 +15764,13 @@ type
     // as such:
     // $ ModelRoot/url?A=1&B=2&session_signature=012345670123456701234567
     // were the session_signature= parameter will be computed as such:
-    // ! Hexa8(SessionID)+Hexa8(TimeStamp)+
+    // ! Hexa8(SessionID)+Hexa8(Timestamp)+
     // ! Hexa8(crc32('SessionID+HexaSessionPrivateKey'+Sha256('salt'+PassWord)+
-    // !  Hexa8(TimeStamp)+url))
+    // !  Hexa8(Timestamp)+url))
     // ! with url='ModelRoot/url?A=1&B=2'
     // this query authentication uses crc32 for hashing instead of SHA-256 in
     // in order to lower the Server-side CPU consumption; the salted password
-    // (i.e. TSQLAuthUser.PasswordHashHexa) and client-side TimeStamp are
+    // (i.e. TSQLAuthUser.PasswordHashHexa) and client-side Timestamp are
     // inserted inside the session_signature calculation to prevent naive
     // man-in-the-middle attack (MITM)
     // - the session ID will be used to retrieve the rights associated with the
@@ -16011,7 +16011,7 @@ type
   TSQLRecordModification = class(TSQLRecord)
   protected
     fModifiedRecord: TID;
-    fTimeStamp: TModTime;
+    fTimestamp: TModTime;
   public
     /// returns the modified record table, as stored in ModifiedRecord
     function ModifiedTable(Model: TSQLModel): TSQLRecordClass;
@@ -16032,10 +16032,10 @@ type
     property ModifiedRecord: TID read fModifiedRecord write fModifiedRecord;
     /// when the modification was recorded
     // - even if in most cases, this timestamp may be synchronized over TSQLRest
-    // instances (thanks to TSQLRestClientURI.ServerTimeStampSynchronize), it
+    // instances (thanks to TSQLRestClientURI.ServerTimestampSynchronize), it
     // is not safe to use this field as absolute: you should rather rely on
     // pure monotonic ID/RowID increasing values (see e.g. TSQLRecordVersion)
-    property TimeStamp: TModTime read fTimeStamp write fTimeStamp;
+    property Timestamp: TModTime read fTimestamp write fTimestamp;
   end;
 
   /// common ancestor for tracking changes on TSQLRecord tables
@@ -16083,10 +16083,10 @@ type
     /// retrieve an historical version
     // - HistoryOpen() or CreateHistory() should have been called before
     // - this method will ignore any previous HistoryAdd() call
-    // - if Rec=nil, will only retrieve Event and TimeStamp
+    // - if Rec=nil, will only retrieve Event and Timestamp
     // - if Rec is set, will fill all simple properties of this TSQLRecord
     function HistoryGet(Index: integer; out Event: TSQLHistoryEvent;
-      out TimeStamp: TModTime; Rec: TSQLRecord): boolean; overload;
+      out Timestamp: TModTime; Rec: TSQLRecord): boolean; overload;
     /// retrieve an historical version
     // - HistoryOpen() or CreateHistory() should have been called before
     // - this method will ignore any previous HistoryAdd() call
@@ -16591,7 +16591,7 @@ type
   // - TSQLRestServerURIContext.AuthenticationBearerToken will return the
   // ?authenticationbearer=... URI parameter value alternatively to the HTTP
   // header unless rsoAuthenticationURIDisable is set (for security reasons)
-  // - you can switch off root/timestamp/info URI via rsoTimeStampInfoURIDisable
+  // - you can switch off root/timestamp/info URI via rsoTimestampInfoURIDisable
   // - URI() header output will be sanitized for any EOL injection, unless
   // rsoHttpHeaderCheckDisable is defined (to gain a few cycles?)
   // - by default, TSQLAuthUser.Data blob is retrieved from the database,
@@ -16608,7 +16608,7 @@ type
     rsoCookieIncludeRootPath,
     rsoCookieHttpOnlyFlagDisable,
     rsoAuthenticationURIDisable,
-    rsoTimeStampInfoURIDisable,
+    rsoTimestampInfoURIDisable,
     rsoHttpHeaderCheckDisable,
     rsoGetUserRetrieveNoBlobData);
   /// allow to customize the TSQLRestServer process via its Options property
@@ -16661,7 +16661,7 @@ type
     {$endif}
     fPublishedMethod: TSQLRestServerMethods;
     fPublishedMethods: TDynArrayHashed;
-    fPublishedMethodTimeStampIndex: integer;
+    fPublishedMethodTimestampIndex: integer;
     fPublishedMethodAuthIndex: integer;
     fPublishedMethodBatchIndex: integer;
     fPublicURI: TSQLRestServerURI;
@@ -17293,7 +17293,7 @@ type
     // - you can use this method to tune the authentication, e.g. if you have
     // troubles with AJAX asynchronous callbacks:
     // ! (aServer.AuthenticationRegister(TSQLRestServerAuthenticationDefault) as
-    // !   TSQLRestServerAuthenticationDefault).NoTimeStampCoherencyCheck := true;
+    // !   TSQLRestServerAuthenticationDefault).NoTimestampCoherencyCheck := true;
     // or if you want to customize the session_signature parameter algorithm:
     // ! (aServer.AuthenticationRegister(TSQLRestServerAuthenticationDefault) as
     // !   TSQLRestServerAuthenticationDefault).Algorithm := suaMD5;
@@ -17323,7 +17323,7 @@ type
       const aEvent: TSQLRestServerCallBack; aByPassAuthentication: boolean=false);
     /// call this method to disable Authentication method check for a given
     // published method-based service name
-    // - by default, only Auth and TimeStamp methods do not require the RESTful
+    // - by default, only Auth and Timestamp methods do not require the RESTful
     // authentication of the URI; you may call this method to add another method
     // to the list (e.g. for returning some HTML content from a public URI)
     // - if the supplied aMethodName='', all method-based services will
@@ -17622,13 +17622,13 @@ type
     // initiate authentication
     // - this global callback method is thread-safe
     procedure Auth(Ctxt: TSQLRestServerURIContext);
-    /// REST service accessible from the ModelRoot/TimeStamp URI
+    /// REST service accessible from the ModelRoot/Timestamp URI
     // - returns the server time stamp TTimeLog/Int64 value as UTF-8 text
     // - this method will not require an authenticated client
-    // - hidden ModelRoot/TimeStamp/info command will return basic execution
+    // - hidden ModelRoot/Timestamp/info command will return basic execution
     // information, less verbose (and sensitive) than Stat(), calling virtual
     // InternalInfo() protected method
-    procedure TimeStamp(Ctxt: TSQLRestServerURIContext);
+    procedure Timestamp(Ctxt: TSQLRestServerURIContext);
     /// REST service accessible from the ModelRoot/CacheFlush URI
     // - it will flush the server result cache
     // - this method shall be called by the clients when the Server cache may be
@@ -18963,13 +18963,13 @@ type
     // - ServerCacheFlush(aTable) will flush the cache for a given table
     // - ServerCacheFlush(aTable,aID) will flush the cache for a given record
     function ServerCacheFlush(aTable: TSQLRecordClass=nil; aID: TID=0): boolean; virtual;
-    /// you can call this method to call the remote URI root/TimeStamp
+    /// you can call this method to call the remote URI root/Timestamp
     // - this can be an handy way of testing the connection, since this method
     // is always available, even without authentication
     // - returns TRUE if the client time correction has been retrieved
     // - returns FALSE on any connection error - check LastErrorMessage and
     // LastErrorException to find out the exact connection error
-    function ServerTimeStampSynchronize: boolean;
+    function ServerTimestampSynchronize: boolean;
     /// asynchronous call a 'RemoteLog' remote logging method on the server
     // - as implemented by mORMot's LogView tool in server mode
     // - to be used via ServerRemoteLogStart/ServerRemoteLogStop methods
@@ -32861,7 +32861,7 @@ begin
       if (sftCreateTime in HasTypeFields) and (aOccasion=seAdd) then
         include(types,sftCreateTime);
       if integer(types)<>0 then begin
-        i64 := aRest.ServerTimeStamp;
+        i64 := aRest.ServerTimestamp;
         for F := 0 to Fields.Count-1 do
         with TSQLPropInfoRTTIInt64(Fields.List[f]) do
         if SQLFieldType in types then
@@ -34393,7 +34393,7 @@ begin
   AcquireWriteMode := amLocked;
   AcquireWriteTimeOut := 5000; // default 5 seconds
   fRoutingClass := TSQLRestRoutingREST;
-  QueryPerformanceFrequency(fFrequencyTimeStamp);
+  QueryPerformanceFrequency(fFrequencyTimestamp);
   {$ifdef WITHLOG}
   SetLogClass(SQLite3Log); // by default
   {$endif}
@@ -34698,7 +34698,7 @@ begin
   if (SQL<>'') and (SQL[1]='#') then begin
     // pseudo SQL for a given TSQLRest[Server] instance
     case IdemPCharArray(@SQL[2],['TIME','MODEL','REST','HELP']) of
-    0: result.Content := Int64ToUtf8(ServerTimeStamp);
+    0: result.Content := Int64ToUtf8(ServerTimestamp);
     1: result.Content := ObjectToJSON(Model);
     2: result.Content := ObjectToJSON(self);
     3: begin
@@ -36029,23 +36029,23 @@ begin
   result := FTSMatch(Table,WhereClause,DocID);
 end;
 
-function TSQLRest.GetServerTimeStamp: TTimeLog;
+function TSQLRest.GetServerTimestamp: TTimeLog;
 var Tix: cardinal;
 begin
   Tix := GetTickCount shr 9; // resolution change 1 ms -> 512 ms
-  if fServerTimeStampCacheTix=Tix then
-    result := fServerTimeStampCacheValue.Value else begin
-    fServerTimeStampCacheTix := Tix;
-    fServerTimeStampCacheValue.From(NowUTC+fServerTimeStampOffset);
-    result := fServerTimeStampCacheValue.Value;
+  if fServerTimestampCacheTix=Tix then
+    result := fServerTimestampCacheValue.Value else begin
+    fServerTimestampCacheTix := Tix;
+    fServerTimestampCacheValue.From(NowUTC+fServerTimestampOffset);
+    result := fServerTimestampCacheValue.Value;
   end;
 end;
 
-procedure TSQLRest.SetServerTimeStamp(const Value: TTimeLog);
+procedure TSQLRest.SetServerTimestamp(const Value: TTimeLog);
 begin
-  fServerTimeStampOffset := PTimeLogBits(@Value)^.ToDateTime-NowUTC;
-  if fServerTimeStampOffset=0 then
-    fServerTimeStampOffset := 0.000001; // retrieve server date/time only once
+  fServerTimestampOffset := PTimeLogBits(@Value)^.ToDateTime-NowUTC;
+  if fServerTimestampOffset=0 then
+    fServerTimestampOffset := 0.000001; // retrieve server date/time only once
 end;
 
 function TSQLRest.GetCache: TSQLRestCache;
@@ -36195,7 +36195,7 @@ begin
     if CacheAll then
       Value.FastDeleteSorted(Index) else
       with Values[Index] do begin
-        TimeStamp512 := 0;
+        Timestamp512 := 0;
         JSON := '';
         Tag := 0;
       end;
@@ -36212,7 +36212,7 @@ begin
       Value.Clear else
       for i := 0 to Count-1 do
       with Values[i] do begin
-        TimeStamp512 := 0;
+        Timestamp512 := 0;
         JSON := '';
         Tag := 0;
       end;
@@ -36230,7 +36230,7 @@ begin
     CacheEnable := true;
     if not CacheAll and not Value.FastLocateSorted(aID,i) and (i>=0) then begin
       Rec.ID := aID;
-      Rec.TimeStamp512 := 0; // indicates no value cache yet
+      Rec.Timestamp512 := 0; // indicates no value cache yet
       Rec.Tag := 0;
       Value.FastAddSorted(i,Rec);
     end; // do nothing if aID is already in Values[]
@@ -36245,7 +36245,7 @@ var Rec: TSQLRestCacheEntryValue;
 begin
   Rec.ID := aID;
   Rec.JSON := aJSON;
-  Rec.TimeStamp512 := GetTickCount64 shr 9;
+  Rec.Timestamp512 := GetTickCount64 shr 9;
   Rec.Tag := aTag;
   Mutex.Lock;
   try
@@ -36273,8 +36273,8 @@ begin
     i := Value.Find(aID); // fast O(log(n)) binary search by first ID field
     if i>=0 then
       with Values[i] do
-      if TimeStamp512<>0 then // 0 when there is no JSON value cached
-        if (TimeOutMS<>0) and ((GetTickCount64-TimeOutMS) shr 9>TimeStamp512) then
+      if Timestamp512<>0 then // 0 when there is no JSON value cached
+        if (TimeOutMS<>0) and ((GetTickCount64-TimeOutMS) shr 9>Timestamp512) then
           FlushCacheEntry(i) else begin
           if aTag<>nil then
             aTag^ := Tag;
@@ -36309,8 +36309,8 @@ begin
     try
       for i := Count-1 downto 0 do
         with Values[i] do
-        if TimeStamp512<>0 then
-          if (TimeOutMS<>0) and (tix512>TimeStamp512) then begin
+        if Timestamp512<>0 then
+          if (TimeOutMS<>0) and (tix512>Timestamp512) then begin
             FlushCacheEntry(i);
             if FlushedEntriesCount<>nil then
               inc(FlushedEntriesCount^);
@@ -36355,7 +36355,7 @@ begin
         Mutex.Lock;
         try
           for j := 0 to Count-1 do
-            if Values[j].TimeStamp512<>0 then
+            if Values[j].Timestamp512<>0 then
               inc(result);
         finally
           Mutex.UnLock;
@@ -37014,7 +37014,7 @@ begin
     result := CallBackGet('CacheFlush',[],aResp,aTable,aID) in [HTTP_SUCCESS,HTTP_NOCONTENT];
 end;
 
-function TSQLRestClientURI.ServerTimeStampSynchronize: boolean;
+function TSQLRestClientURI.ServerTimestampSynchronize: boolean;
 var status: integer;
     aResp: RawUTF8;
 begin
@@ -37022,12 +37022,12 @@ begin
     result := false;
     exit;
   end;
-  fServerTimeStampOffset := 0.0001; // avoid endless recursive call
-  status := CallBackGet('TimeStamp',[],aResp);
+  fServerTimestampOffset := 0.0001; // avoid endless recursive call
+  status := CallBackGet('Timestamp',[],aResp);
   result := (status=HTTP_SUCCESS) and (aResp<>'');
   if result then
-    SetServerTimeStamp(GetInt64(pointer(aResp))) else begin
-    InternalLog('/TimeStamp call failed -> Server not available',sllWarning);
+    SetServerTimestamp(GetInt64(pointer(aResp))) else begin
+    InternalLog('/Timestamp call failed -> Server not available',sllWarning);
     fLastErrorMessage := 'Server not available  - '+Trim(fLastErrorMessage);
   end;
 end;
@@ -37786,10 +37786,10 @@ begin
   end;
   fLastErrorMessage := '';
   fLastErrorException := nil;
-  if fServerTimeStampOffset=0 then begin
-    if not ServerTimeStampSynchronize then begin
+  if fServerTimestampOffset=0 then begin
+    if not ServerTimestampSynchronize then begin
       Int64(result) := HTTP_UNAVAILABLE;
-      exit; // if TimeStamp is not available,server is down!
+      exit; // if Timestamp is not available,server is down!
     end;
   end;
   Call.Init;
@@ -38518,10 +38518,10 @@ begin
     fPublishedMethod,djRawUTF8,nil,true);
   ServiceMethodRegisterPublishedMethods('',self);
   fPublishedMethodAuthIndex := ServiceMethodByPassAuthentication('Auth');
-  fPublishedMethodTimeStampIndex := ServiceMethodByPassAuthentication('TimeStamp');
+  fPublishedMethodTimestampIndex := ServiceMethodByPassAuthentication('Timestamp');
   tmp := 'Batch';
   fPublishedMethodBatchIndex := fPublishedMethods.FindHashed(tmp);
-  if (fPublishedMethodBatchIndex<0) or (fPublishedMethodTimeStampIndex<0) then
+  if (fPublishedMethodBatchIndex<0) or (fPublishedMethodTimestampIndex<0) then
     raise EORMException.CreateUTF8('%.Create: missing method!',[self]);
   fSafeRootUpper := UpperCase(fModel.Root)+'/_SAFE_/';
 end;
@@ -41536,7 +41536,7 @@ begin
         Ctxt.URIDecodeSOAByInterface;
       // 2. handle security
       if (rsoSecureConnectionRequired in fOptions) and
-         (Ctxt.MethodIndex<>fPublishedMethodTimeStampIndex) and
+         (Ctxt.MethodIndex<>fPublishedMethodTimestampIndex) and
          not (llfSecured in Call.LowLevelFlags) then
         Ctxt.AuthenticationFailed(afSecureConnectionRequired) else
       if not Ctxt.Authenticate then
@@ -41548,7 +41548,7 @@ begin
           Ctxt.AuthenticationFailed(afRemoteServiceExecutionNotAllowed) else
       if (Ctxt.Session=CONST_AUTHENTICATION_NOT_USED) and
          (fJWTForUnauthenticatedRequest<>nil) and
-         (Ctxt.MethodIndex<>fPublishedMethodTimeStampIndex) and
+         (Ctxt.MethodIndex<>fPublishedMethodTimestampIndex) and
          (not(llfSecured in Call.LowLevelFlags) or
              (llfHttps in Call.LowLevelFlags)) and // HTTPS does not authenticate
           (fJWTForUnauthenticatedRequest.Verify(Ctxt.AuthenticationBearerToken)<>jwtValid) then
@@ -41671,10 +41671,10 @@ procedure TSQLRestServer.InternalInfo(var info: TDocVariantData);
 var cpu,mem,free: RawUTF8;
     now: TTimeLogBits;
     m: TSynMonitorMemory;
-begin // called by root/TimeStamp/info REST method
+begin // called by root/Timestamp/info REST method
   m := TSynMonitorMemory.Create;
   try
-    now.Value := ServerTimeStamp;
+    now.Value := ServerTimestamp;
     cpu := TSystemUse.Current(false).HistoryText(0,15,@mem);
     FormatUTF8('% / %',[m.PhysicalMemoryFree.Text,m.PhysicalMemoryTotal.Text],free);
     info.AddNameValuesToObject(['nowutc',now.Text(true,' ') , 'timestamp',now.Value,
@@ -41924,20 +41924,20 @@ begin
   end;
 end;
 
-procedure TSQLRestServer.TimeStamp(Ctxt: TSQLRestServerURIContext);
+procedure TSQLRestServer.Timestamp(Ctxt: TSQLRestServerURIContext);
 {$ifdef NOVARIANTS}
 begin
 {$else}
 var info: TDocVariantData;
 begin
   if IdemPropNameU(Ctxt.URIBlobFieldName,'info') and
-     not (rsoTimeStampInfoURIDisable in fOptions) then begin
+     not (rsoTimestampInfoURIDisable in fOptions) then begin
     info.InitFast;
     InternalInfo(info);
     Ctxt.Returns(info.ToJSON('','',jsonHumanReadable));
   end else
 {$endif}
-    Ctxt.Returns(Int64ToUtf8(ServerTimeStamp),HTTP_SUCCESS,TEXT_CONTENT_TYPE_HEADER);
+    Ctxt.Returns(Int64ToUtf8(ServerTimestamp),HTTP_SUCCESS,TEXT_CONTENT_TYPE_HEADER);
 end;
 
 procedure TSQLRestServer.CacheFlush(Ctxt: TSQLRestServerURIContext);
@@ -42491,7 +42491,7 @@ begin
 end;
 
 function TSQLRecordHistory.HistoryGet(Index: integer;
-  out Event: TSQLHistoryEvent; out TimeStamp: TModTime; Rec: TSQLRecord): boolean;
+  out Event: TSQLHistoryEvent; out Timestamp: TModTime; Rec: TSQLRecord): boolean;
 var P: PAnsiChar;
 begin
   if cardinal(Index)>=cardinal(HistoryCount) then
@@ -42499,7 +42499,7 @@ begin
     P := pointer(fHistoryUncompressed);
     inc(P,fHistoryUncompressedOffset[Index]);
     Event := TSQLHistoryEvent(P^); inc(P);
-    TimeStamp := FromVarUInt64(PByte(P));
+    Timestamp := FromVarUInt64(PByte(P));
     if (Rec<>nil) and (Rec.RecordClass=fHistoryTable)  then begin
       if Event=heDelete then
         Rec.ClearProperties else
@@ -42512,19 +42512,19 @@ end;
 
 function TSQLRecordHistory.HistoryGet(Index: integer; Rec: TSQLRecord): boolean;
 var Event: TSQLHistoryEvent;
-    TimeStamp: TModTime;
+    Timestamp: TModTime;
 begin
-  result := HistoryGet(Index,Event,TimeStamp,Rec);
+  result := HistoryGet(Index,Event,Timestamp,Rec);
 end;
 
 function TSQLRecordHistory.HistoryGet(Index: integer): TSQLRecord;
 var Event: TSQLHistoryEvent;
-    TimeStamp: TModTime;
+    Timestamp: TModTime;
 begin
   if fHistoryTable=nil then
     result := nil else begin
     result := fHistoryTable.Create;
-    if not HistoryGet(Index,Event,TimeStamp,result) then
+    if not HistoryGet(Index,Event,Timestamp,result) then
       FreeAndNil(result);
   end;
 end;
@@ -42536,12 +42536,12 @@ end;
 
 function TSQLRecordHistory.HistoryGetLast: TSQLRecord;
 var Event: TSQLHistoryEvent;
-    TimeStamp: TModTime;
+    Timestamp: TModTime;
 begin
   if fHistoryTable=nil then
     result := nil else begin
     result := fHistoryTable.Create; // always return an instance
-    HistoryGet(fHistoryUncompressedCount-1,Event,TimeStamp,result);
+    HistoryGet(fHistoryUncompressedCount-1,Event,Timestamp,result);
   end;
 end;
 
@@ -42553,7 +42553,7 @@ begin
     fHistoryAdd := TFileBufferWriter.Create(TRawByteStringStream);
   AddInteger(fHistoryAddOffset,fHistoryAddCount,fHistoryAdd.TotalWritten);
   fHistoryAdd.Write1(Ord(Hist.Event));
-  fHistoryAdd.WriteVarUInt64(Hist.TimeStamp);
+  fHistoryAdd.WriteVarUInt64(Hist.Timestamp);
   if Hist.Event<>heDelete then
     Rec.GetBinaryValuesSimpleFields(fHistoryAdd);
 end;
@@ -42580,7 +42580,7 @@ begin
           HistTemp := RecordClass.Create as TSQLRecordHistory;
           try
             HistTemp.fEvent := heUpdate;
-            HistTemp.fTimeStamp := Server.ServerTimeStamp;
+            HistTemp.fTimestamp := Server.ServerTimestamp;
             HistoryAdd(DBRec,HistTemp);
           finally
             HistTemp.Free;
@@ -42636,7 +42636,7 @@ begin
       fHistory := SynLZCompress(fHistoryUncompressed);
       if (Server<>nil) and (fID<>0) then begin
         Server.EngineUpdateField(TableHistoryIndex,
-          'TimeStamp',Int64ToUTF8(Server.ServerTimeStamp),'RowID',Int64ToUtf8(fID));
+          'Timestamp',Int64ToUTF8(Server.ServerTimestamp),'RowID',Int64ToUtf8(fID));
         Server.EngineUpdateBlob(TableHistoryIndex,fID,
           RecordProps.BlobFields[0].PropInfo,fHistory);
       end;
@@ -42742,7 +42742,7 @@ begin
             Rec := HistBlob.HistoryGetLast else begin
             // HistBlob.fID=0 -> no previous BLOB content
             JSON := JSONEncode(['ModifiedRecord',HistJson.ModifiedRecord,
-              'TimeStamp',ServerTimeStamp,'Event',ord(heArchiveBlob)]);
+              'Timestamp',ServerTimestamp,'Event',ord(heArchiveBlob)]);
             if HistJson.Event=heAdd then begin // allow versioning from scratch
               HistBlob.fID := EngineAdd(TableHistoryIndex,JSON);
               Rec := HistJson.ModifiedTable(Model).Create;
@@ -42796,7 +42796,7 @@ begin
   fAcquireExecution[execORMWrite].Safe.Lock; // avoid race condition
   try // low-level Add(TSQLRecordHistory) without cache
     JSON := JSONEncode(['ModifiedRecord',aTableIndex+aID shl 6,'Event',ord(Event),
-                        'SentDataJSON',aSentData,'TimeStamp',ServerTimeStamp]);
+                        'SentDataJSON',aSentData,'Timestamp',ServerTimestamp]);
     fAcquireExecution[execORMWrite].fSafe.Lock;
     try // may be within a batch in another thread
       EngineAdd(TableHistoryIndex,JSON);
@@ -52329,31 +52329,31 @@ end;
 
 // expected format is session_signature=
 // Hexa8(SessionID)+
-// Hexa8(TimeStamp)+
+// Hexa8(Timestamp)+
 // Hexa8(crc32('SessionID+HexaSessionPrivateKey'+Sha256('salt'+PassWord)+
-//             Hexa8(TimeStamp)+url))
+//             Hexa8(Timestamp)+url))
 
 constructor TSQLRestServerAuthenticationSignedURI.Create(aServer: TSQLRestServer);
 begin
   inherited Create(aServer);
   fComputeSignature := TSQLRestServerAuthenticationSignedURI.ComputeSignatureCrc32;
-  TimeStampCoherencySeconds := 5;
+  TimestampCoherencySeconds := 5;
 end;
 
-procedure TSQLRestServerAuthenticationSignedURI.SetNoTimeStampCoherencyCheck(
+procedure TSQLRestServerAuthenticationSignedURI.SetNoTimestampCoherencyCheck(
   value: boolean);
 begin
   if self<>nil then
-    fNoTimeStampCoherencyCheck := value;
+    fNoTimestampCoherencyCheck := value;
 end;
 
-procedure TSQLRestServerAuthenticationSignedURI.SetTimeStampCoherencySeconds(
+procedure TSQLRestServerAuthenticationSignedURI.SetTimestampCoherencySeconds(
   value: cardinal);
 begin
   if self=nil then
     exit;
-  fTimeStampCoherencySeconds := value;
-  fTimeStampCoherencyTicks := round(value*(1000/256)); // 256 ms resolution
+  fTimestampCoherencySeconds := value;
+  fTimestampCoherencyTicks := round(value*(1000/256)); // 256 ms resolution
 end;
 
 procedure TSQLRestServerAuthenticationSignedURI.SetAlgorithm(
@@ -52463,8 +52463,8 @@ end;
 
 function TSQLRestServerAuthenticationSignedURI.RetrieveSession(
   Ctxt: TSQLRestServerURIContext): TAuthSession;
-var aTimeStamp, aSignature, aMinimalTimeStamp, aExpectedSignature: cardinal;
-    PTimeStamp: PAnsiChar;
+var aTimestamp, aSignature, aMinimalTimestamp, aExpectedSignature: cardinal;
+    PTimestamp: PAnsiChar;
     aURLlength: Integer;
 begin
   result := inherited RetrieveSession(Ctxt);
@@ -52475,17 +52475,17 @@ begin
     exit;
   end;
   aURLlength := Ctxt.URISessionSignaturePos-1;
-  PTimeStamp := @Ctxt.Call^.url[aURLLength+(20+8)]; // points to Hexa8(TimeStamp)
-  aMinimalTimeStamp := result.fLastTimeStamp-fTimeStampCoherencyTicks;
-  if HexDisplayToCardinal(PTimeStamp,aTimeStamp) and
-     (fNoTimeStampCoherencyCheck or (integer(aMinimalTimeStamp)<0) or // <0 just after login
-      (aTimeStamp>=aMinimalTimeStamp)) then begin
-    aExpectedSignature := fComputeSignature(result.fPrivateSaltHash,PTimeStamp,
+  PTimestamp := @Ctxt.Call^.url[aURLLength+(20+8)]; // points to Hexa8(Timestamp)
+  aMinimalTimestamp := result.fLastTimestamp-fTimestampCoherencyTicks;
+  if HexDisplayToCardinal(PTimestamp,aTimestamp) and
+     (fNoTimestampCoherencyCheck or (integer(aMinimalTimestamp)<0) or // <0 just after login
+      (aTimestamp>=aMinimalTimestamp)) then begin
+    aExpectedSignature := fComputeSignature(result.fPrivateSaltHash,PTimestamp,
       pointer(Ctxt.Call^.url),aURLlength);
-    if HexDisplayToCardinal(PTimeStamp+8,aSignature) and
+    if HexDisplayToCardinal(PTimestamp+8,aSignature) and
        (aSignature=aExpectedSignature) then begin
-      if aTimeStamp>result.fLastTimeStamp then
-        result.fLastTimeStamp := aTimeStamp;
+      if aTimestamp>result.fLastTimestamp then
+        result.fLastTimestamp := aTimestamp;
       exit;
     end else begin
       {$ifdef WITHLOG}
@@ -52495,8 +52495,8 @@ begin
     end;
   end else begin
     {$ifdef WITHLOG}
-    Ctxt.Log.Log(sllUserAuth,'Invalid TimeStamp: expected >=%, got %',
-      [aMinimalTimeStamp,Int64(aTimeStamp)],self);
+    Ctxt.Log.Log(sllUserAuth,'Invalid Timestamp: expected >=%, got %',
+      [aMinimalTimestamp,Int64(aTimestamp)],self);
     {$endif}
   end;
   result := nil; // indicates invalid signature
@@ -56654,7 +56654,7 @@ begin
       if aErrorMsg<>nil then
         aErrorMsg^ := log.CustomResults;
       if imoLogMethodCallsAndResults in Options then begin
-        log.TimeStamp64 := GetTickCount64;
+        log.Timestamp64 := GetTickCount64;
         log.WasError := not result;
         log.Method := @aMethod;
         log.Params := aParams;

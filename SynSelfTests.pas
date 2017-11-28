@@ -13242,13 +13242,13 @@ var RInt,RInt1: TSQLRecordPeople;
     Start, Updated: TTimeLog; // will work with both TModTime and TCreateTime properties
 procedure HistoryCheck(aIndex,aYOB: Integer; aEvent: TSQLHistoryEvent);
 var Event: TSQLHistoryEvent;
-    TimeStamp: TModTime;
+    Timestamp: TModTime;
     R: TSQLRecordPeopleExt;
 begin
   RExt.ClearProperties;
-  Check(RHist.HistoryGet(aIndex,Event,TimeStamp,RExt));
+  Check(RHist.HistoryGet(aIndex,Event,Timestamp,RExt));
   Check(Event=aEvent);
-  Check(TimeStamp>=Start);
+  Check(Timestamp>=Start);
   if Event=heDelete then
     exit;
   Check(RExt.ID=400);
@@ -13316,7 +13316,7 @@ begin
     aExternalClient.Server.DB.LockingMode := lmExclusive;
     aExternalClient.Server.DB.GetTableNames(Tables);
     Check(Tables=nil); // we reset the testExternal.db3 file
-    Start := aExternalClient.ServerTimeStamp;
+    Start := aExternalClient.ServerTimestamp;
     aExternalClient.Server.StaticVirtualTableDirect := StaticVirtualTableDirect;
     aExternalClient.Server.CreateMissingTables;
     if TrackChanges then
@@ -13404,7 +13404,7 @@ begin
             {$endif}
           end;
         end;
-        Updated := aExternalClient.ServerTimeStamp;
+        Updated := aExternalClient.ServerTimestamp;
         Check(Updated>=Start);
         for i := 1 to BatchID[high(BatchID)] do
           if i mod 100=0 then begin
@@ -14862,7 +14862,7 @@ begin
   SetLength(Str2,i+1);
   Str2[i] := UTF8ToWideString(RawUTF8ArrayToCSV(Strs1));
   inc(Rec2.ID);
-  dec(Rec2.TimeStamp512);
+  dec(Rec2.Timestamp512);
   Rec2.JSON := IntegerDynArrayToCSV(Ints,length(Ints));
   Float2 := Float1;
 end;
@@ -15141,7 +15141,7 @@ begin
     Rec1.Features := [vtTransaction,vtSavePoint];
     Rec1.FileExtension := ExeVersion.ProgramFileName;
     Rec2.ID := i1;
-    Rec2.TimeStamp512 := c;
+    Rec2.Timestamp512 := c;
     Rec2.JSON := 'abc';
     RecRes := I.ComplexCall(Ints,Strs1,Str2,Rec1,Rec2,n1,n2);
     Check(length(Str2)=4);
@@ -15152,10 +15152,10 @@ begin
     Check(Rec1.Features=[vtTransaction,vtSavePoint]);
     Check(Rec1.FileExtension=ExeVersion.ProgramFileName);
     Check(Rec2.ID=i1+1);
-    Check(Rec2.TimeStamp512=c-1);
+    Check(Rec2.Timestamp512=c-1);
     Check(Rec2.JSON=IntegerDynArrayToCSV(Ints,length(Ints)));
     Check(RecRes.ID=i1);
-    Check(RecRes.TimeStamp512=c);
+    Check(RecRes.Timestamp512=c);
     Check(RecRes.JSON=StringToUTF8(Rec1.FileExtension));
     CheckSame(n1,n2);
     Rec1.FileExtension := ''; // to avoid memory leak
@@ -15968,12 +15968,12 @@ class function TTestServiceOrientedArchitecture.CustomReader(P: PUTF8Char;
   var aValue; out aValid: Boolean): PUTF8Char;
 var V: TSQLRestCacheEntryValue absolute aValue;
     Values: TPUtf8CharDynArray;
-begin // {"ID":1786554763,"TimeStamp":323618765,"JSON":"D:\\TestSQL3.exe"}
-  result := JSONDecode(P,['ID','TimeStamp','JSON'],Values);
+begin // {"ID":1786554763,"Timestamp":323618765,"JSON":"D:\\TestSQL3.exe"}
+  result := JSONDecode(P,['ID','Timestamp','JSON'],Values);
   if result=nil then
     aValid := false else begin
     V.ID := GetInteger(Values[0]);
-    V.TimeStamp512 := GetCardinal(Values[1]);
+    V.Timestamp512 := GetCardinal(Values[1]);
     V.JSON := Values[2];
     aValid := true;
   end;
@@ -15983,7 +15983,7 @@ class procedure TTestServiceOrientedArchitecture.CustomWriter(
   const aWriter: TTextWriter; const aValue);
 var V: TSQLRestCacheEntryValue absolute aValue;
 begin
-  aWriter.AddJSONEscape(['ID',V.ID,'TimeStamp',Int64(V.TimeStamp512),'JSON',V.JSON]);
+  aWriter.AddJSONEscape(['ID',V.ID,'Timestamp',Int64(V.Timestamp512),'JSON',V.JSON]);
 end;
 
 procedure TTestServiceOrientedArchitecture.Cleanup;
@@ -17052,7 +17052,7 @@ var Client: TSQLHttpClientWebsockets;
 begin
   Client := TSQLHttpClientWebsockets.Create('127.0.0.1',HTTP_DEFAULTPORT,fServer.Model);
   try
-    Check(Client.ServerTimeStampSynchronize);
+    Check(Client.ServerTimestampSynchronize);
     Check(Client.SetUser('User','synopse'));
     Check(Client.ServiceDefine(IBidirService,sicShared)<>nil);
     TestRest(Client);

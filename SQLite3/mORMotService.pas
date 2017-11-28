@@ -1253,7 +1253,7 @@ begin
         FileExistsAction := acAppend;  // as expected in rotation mode
       end
       else
-        HighResolutionTimeStamp := true;
+        HighResolutionTimestamp := true;
       Level := Log;
       fLogClass := aLogClass;
     end;

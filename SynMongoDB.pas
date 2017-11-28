@@ -259,7 +259,7 @@ type
     betEOF, betFloat, betString, betDoc, betArray, betBinary,
     betDeprecatedUndefined, betObjectID, betBoolean, betDateTime,
     betNull, betRegEx, betDeprecatedDbptr, betJS, betDeprecatedSymbol,
-    betJSScope, betInt32, betTimeStamp, betInt64, betDecimal128);
+    betJSScope, betInt32, betTimestamp, betInt64, betDecimal128);
 
   /// points to an element type for BSON internal representation
   PBSONElementType = ^TBSONElementType;
@@ -339,7 +339,7 @@ type
   // - betBinary kind will store a BLOB content as RawByteString
   // - betDoc and betArray kind will store a BSON document, in its original
   // binary format as RawByteString (TBSONDocument)
-  // - betDeprecatedDbptr, betJSScope, betTimeStamp and betRegEx will store the
+  // - betDeprecatedDbptr, betJSScope, betTimestamp and betRegEx will store the
   // raw original BSON content as RawByteString
   // - betJS and betDeprecatedSymbol will store the UTF-8 encoded string
   // as a RawUTF8
@@ -358,7 +358,7 @@ type
       {$HINTS ON}
       VObjectID: TBSONObjectID
     );
-    betBinary, betDoc, betArray, betRegEx, betDeprecatedDbptr, betTimeStamp,
+    betBinary, betDoc, betArray, betRegEx, betDeprecatedDbptr, betTimestamp,
     betJSScope, betDecimal128: (
       /// store the raw binary content as a RawByteString (or TBSONDocument for
       // betDoc/betArray, i.e. the "int32 e_list #0" standard layout)
@@ -545,7 +545,7 @@ type
       JavaScriptLen: integer;
       ScopeDocument: PByte;
     );
-    betTimeStamp: (
+    betTimestamp: (
       { map InternalStorage: Int64 }
       time_t: cardinal;
       ordinal: cardinal;
@@ -832,7 +832,7 @@ const
   // within its TBSONVariant kind
   // - i.e. TBSONVariantData.VBlob/VText field is to be managed
   BSON_ELEMENTVARIANTMANAGED =
-   [betBinary, betDoc, betArray, betRegEx, betDeprecatedDbptr, betTimeStamp,
+   [betBinary, betDoc, betArray, betRegEx, betDeprecatedDbptr, betTimestamp,
     betJSScope, betJS, betDeprecatedSymbol, betDecimal128];
 
   /// by definition, maximum MongoDB document size is 16 MB
@@ -2689,7 +2689,7 @@ var
       0,                    sizeof(TBSONObjectID), 1, sizeof(Int64),
     //betNull, betRegEx, betDeprecatedDbptr, betJS, betDeprecatedSymbol,
       0,        -1,           -1,             -1,        -1,
-    //betJSScope, betInt32, betTimeStamp, betInt64, betDecimal128
+    //betJSScope, betInt32, betTimestamp, betInt64, betDecimal128
       -1, sizeof(Integer), sizeof(Int64), SizeOf(Int64), Sizeof(TDecimal128));
 
   /// types which do not have an exact equivalency to a standard variant
@@ -2702,7 +2702,7 @@ var
     varEmpty, varUnknown, varBoolean, varDate,
     //betNull, betRegEx, betDeprecatedDbptr, betJS, betDeprecatedSymbol,
     varNull, varUnknown, varUnknown, varUnknown, varUnknown,
-    //betJSScope, betInt32, betTimeStamp, betInt64, betDecimal128
+    //betJSScope, betInt32, betTimestamp, betInt64, betDecimal128
     varUnknown, varInteger, varUnknown, varInt64, varUnknown);
 
 function TBSONElement.ToVariant(DocArrayConversion: TBSONDocArrayConversion): variant;
@@ -2731,7 +2731,7 @@ begin
       BSONItemsToDocVariant(Kind,Data.DocList,TDocVariantData(result),DocArrayConversion);
       exit;
     end;
-  betBinary, betRegEx, betDeprecatedDbptr, betJSScope, betTimeStamp, betDecimal128:
+  betBinary, betRegEx, betDeprecatedDbptr, betJSScope, betTimestamp, betDecimal128:
     SetString(RawByteString(resBSON.VBlob),PAnsiChar(Element),ElementBytes);
   betObjectID:
     resBSON.VObjectID := PBSONObjectID(Element)^;
@@ -2883,7 +2883,7 @@ regex:  W.AddShort(BSON_JSON_REGEX[0]);
     goto bin; // no specific JSON construct for this deprecated item
   betJSScope:
     goto bin; // no specific JSON construct for this item yet
-  betTimeStamp:
+  betTimestamp:
     goto bin; // internal content will always be written as raw binary
   betBoolean:
     W.Add(PBoolean(Element)^);

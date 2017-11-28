@@ -113,6 +113,7 @@ type
 
 procedure TTestSynopsemORMotFramework.SynopseLibraries;
 begin
+//  AddCase(TTestCompression);
   // exit;
   AddCase([TTestLowLevelCommon,
     TTestLowLevelTypes,
@@ -170,7 +171,7 @@ begin
     Level := LOG_VERBOSE;
     //DestinationPath := ExeVersion.ProgramFilePath+'logs'; folder should exist
     PerThreadLog := ptIdentifiedInOnFile;
-    //HighResolutionTimeStamp := true;
+    //HighResolutionTimestamp := true;
     //RotateFileCount := 5; RotateFileSizeKB := 20*1024; // rotate by 20 MB logs
   end
   else

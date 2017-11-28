@@ -1044,7 +1044,7 @@ begin
     Level := withLogs;
     //DestinationPath := ExtractFilePath(paramstr(0))+'logs'; folder should exist
     PerThreadLog := ptIdentifiedInOnFile;
-    //HighResolutionTimeStamp := true;
+    //HighResolutionTimestamp := true;
     //RotateFileCount := 5; RotateFileSizeKB := 20*1024; // rotate by 20 MB logs
   end;
   // testing is performed by some dedicated classes defined in the caller units

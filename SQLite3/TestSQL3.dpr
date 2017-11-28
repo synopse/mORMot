@@ -103,6 +103,7 @@ uses
   //SynFastWideString,   // no speed benefit for mORMot, but OleDB/Jet works!
   SynLZ in '..\SynLZ.pas',
   SynLZO in '..\SynLZO.pas',
+  SynLizard in '..\SynLizard.pas',
   SynCrypto in '..\SynCrypto.pas',
   SynEcc in '..\SynEcc.pas',
   SynCrtSock in '..\SynCrtSock.pas',
