@@ -447,7 +447,7 @@ begin
   end;
 end;
 {$else}
-// TODO - need to implement a realpath from libc? or enother alternative
+// TODO - need to implement a realpath from libc? or another alternative
 function os_realpath(const FileName: SynUnicode; var TargetName: SynUnicode): Boolean;
 begin
    Result := false;
@@ -487,6 +487,8 @@ end;
 
 function SyNodeBindingProc_fs(const Engine: TSMEngine;
   const bindingNamespaceName: SynUnicode): jsval;
+const
+  attrs = JSPROP_READONLY or JSPROP_PERMANENT;
 var
   obj: PJSRootedObject;
   cx: PJSContext;
@@ -494,15 +496,15 @@ begin
   cx := Engine.cx;
   obj := cx.NewRootedObject(cx.NewObject(nil));
   try
-    obj.ptr.DefineFunction(cx, 'loadFile', fs_loadFile, 1, JSPROP_READONLY or JSPROP_PERMANENT);
-    obj.ptr.DefineFunction(cx, 'relToAbs', fs_relToAbs, 2, JSPROP_READONLY or JSPROP_PERMANENT);
-    obj.ptr.DefineFunction(cx, 'fileStat', fs_fileStat, 1, JSPROP_READONLY or JSPROP_PERMANENT);
-    obj.ptr.DefineFunction(cx, 'directoryExists', fs_directoryExists, 1, JSPROP_READONLY or JSPROP_PERMANENT);
-    obj.ptr.DefineFunction(cx, 'fileExists', fs_fileExists, 1, JSPROP_READONLY or JSPROP_PERMANENT);
-    obj.ptr.DefineFunction(cx, 'internalModuleReadFile', fs_internalModuleReadFile, 1, JSPROP_READONLY or JSPROP_PERMANENT);
-    obj.ptr.DefineFunction(cx, 'internalModuleStat', fs_internalModuleStat, 1, JSPROP_READONLY or JSPROP_PERMANENT);
-    obj.ptr.DefineFunction(cx, 'readDir', fs_readDir, 2, JSPROP_READONLY or JSPROP_PERMANENT);
-    obj.ptr.DefineFunction(cx, 'realpath', fs_realPath, 1, JSPROP_READONLY or JSPROP_PERMANENT);
+    obj.ptr.DefineFunction(cx, 'loadFile', fs_loadFile, 1, attrs);
+    obj.ptr.DefineFunction(cx, 'relToAbs', fs_relToAbs, 2, attrs);
+    obj.ptr.DefineFunction(cx, 'fileStat', fs_fileStat, 1, attrs);
+    obj.ptr.DefineFunction(cx, 'directoryExists', fs_directoryExists, 1, attrs);
+    obj.ptr.DefineFunction(cx, 'fileExists', fs_fileExists, 1, attrs);
+    obj.ptr.DefineFunction(cx, 'internalModuleReadFile', fs_internalModuleReadFile, 1, attrs);
+    obj.ptr.DefineFunction(cx, 'internalModuleStat', fs_internalModuleStat, 1, attrs);
+    obj.ptr.DefineFunction(cx, 'readDir', fs_readDir, 2, attrs);
+    obj.ptr.DefineFunction(cx, 'realpath', fs_realPath, 1, attrs);
 
     Result := obj.ptr.ToJSValue;
   finally
