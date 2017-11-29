@@ -4691,6 +4691,9 @@ procedure DeleteInt64(var Values: TInt64DynArray; Index: PtrInt); overload;
 function MaxInteger(const Values: TIntegerDynArray; ValuesCount: integer;
   MaxStart: integer=-1): Integer;
 
+/// sum all 32-bit integers in Values[]
+function SumInteger(const Values: TIntegerDynArray; ValuesCount: integer): Integer;
+
 /// fill already allocated Reversed[] so that Reversed[Values[i]]=i
 procedure Reverse(const Values: TIntegerDynArray; ValuesCount: integer;
   Reversed: PIntegerArray);
@@ -21423,7 +21426,7 @@ begin
 end;
 
 {$ifdef CPU64}
-procedure Exchg16(P1,P2: PInt64Array);
+procedure Exchg16(P1,P2: PInt64Array); inline;
 var c: Int64;
 begin
   c := P1[0];
@@ -29514,6 +29517,14 @@ begin
   for i := 0 to ValuesCount-1 do
     if Values[i]>result then
       result := Values[i];
+end;
+
+function SumInteger(const Values: TIntegerDynArray; ValuesCount: integer): Integer;
+var i: integer;
+begin
+  result := 0;
+  for i := 0 to ValuesCount-1 do
+    inc(result,Values[i]);
 end;
 
 procedure Reverse(const Values: TIntegerDynArray; ValuesCount: integer;
