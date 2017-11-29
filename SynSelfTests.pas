@@ -9412,6 +9412,7 @@ begin
   {$endif}
   TestAlgo(AlgoLizard);
   TestAlgo(AlgoLizardFast);
+  TestAlgo(AlgoLizardHuffman);
   {$ifndef DELPHI5OROLDER}
   TestAlgo(AlgoDeflate);
   TestAlgo(AlgoDeflateFast);
@@ -9425,11 +9426,12 @@ end;
      TAlgoDeflate 53 MB->4.8 MB: comp 71:6MB/s decomp 48:540MB/s
      TAlgoDeflateFast 53 MB->7 MB: comp 142:18MB/s decomp 56:428MB/s
   Delphi Win64 with external lizard1-64.dll:
-     TAlgoSynLz 53 MB->5 MB: comp 642:61MB/s decomp 99:1038MB/s
-     TAlgoLizard 53 MB->3.9 MB: comp 62:4MB/s decomp 168:2277MB/s
-     TAlgoLizardFast 53 MB->6.8 MB: comp 679:87MB/s decomp 262:2030MB/s
+     TAlgoSynLz 53 MB->5 MB: comp 667:63MB/s decomp 103:1087MB/s
+     TAlgoLizard 53 MB->3.9 MB: comp 61:4MB/s decomp 169:2290MB/s
+     TAlgoLizardFast 53 MB->6.8 MB: comp 690:89MB/s decomp 263:2039MB/s
+     TAlgoLizardHuffman 53 MB->2 MB: comp 658:25MB/s decomp 86:2200MB/s
      TAlgoDeflate 53 MB->4.8 MB: comp 25:2MB/s decomp 19:214MB/s
-     TAlgoDeflateFast 53 MB->7 MB: comp 52:6MB/s decomp 24:181MB/s
+     TAlgoDeflateFast 53 MB->7 MB: comp 52:6MB/s decomp 23:176MB/s
   speed difference may come from the FPC/Delphi heap manager, and/or the Linux VM
 }
 

@@ -139,7 +139,7 @@ interface
 {$endif FPC}
 
 {.$define LIZARD_STANDALONE}
-/// if not defined (by default), will register Lizard as TAlgoCompress.AlgoID=4/5
+/// if not defined (by default), register Lizard as TAlgoCompress.AlgoID=4/5/6
 
 uses
   {$ifndef LIZARD_STANDALONE}
@@ -165,6 +165,10 @@ const
   /// minimum compression level for TSynLizard.compress
   // - as used by AlgoLizardFast global TSynCompress instance
   LIZARD_MIN_CLEVEL = 10;
+  /// fast huffman compression level for TSynLizard.compress
+  // - better compression ratio than LIZARD_DEFAULT_CLEVEL, better compression
+  // speed, but slower decompression
+  LIZARD_HUFFMAN_CLEVEL = 41;
   /// maximum compression level for TSynLizard.compress
   LIZARD_MAX_CLEVEL = 49;
 
@@ -289,6 +293,10 @@ var
   // - is set by TSynLizard.Create, so available e.g. if library is statically
   // linked, or once TSynLizardDynamic.Create has been successfully called
   AlgoLizardFast: TAlgoCompress;
+  /// implement Lizard compression in level 41 (LIZARD_HUFFMAN_CLEVEL) as AlgoID=6
+  // - is set by TSynLizard.Create, so available e.g. if library is statically
+  // linked, or once TSynLizardDynamic.Create has been successfully called
+  AlgoLizardHuffman: TAlgoCompress;
 {$endif LIZARD_STANDALONE}
 
 
@@ -395,7 +403,7 @@ begin
   compress_extState := Lizard_compress_extState;
   decompress_safe := Lizard_decompress_safe;
   decompress_safe_partial := Lizard_decompress_safe_partial;
-  inherited Create; // register AlgoLizard/AlgoLizardFast
+  inherited Create; // register AlgoLizard/AlgoLizardFast/AlgoLizardHuff
 end;
 
 {$endif LIZARD_EXTERNALONLY}
@@ -415,6 +423,12 @@ type
   end;
 
   TAlgoLizardFast = class(TAlgoLizard)
+  public
+    constructor Create; override;
+    function AlgoID: byte; override;
+  end;
+
+  TAlgoLizardHuffman = class(TAlgoLizard)
   public
     constructor Create; override;
     function AlgoID: byte; override;
@@ -473,6 +487,21 @@ begin
   result := 5;
 end;
 
+
+{ TAlgoLizardHuffman }
+
+constructor TAlgoLizardHuffman.Create;
+begin
+  inherited Create;
+  fCompressionLevel := LIZARD_HUFFMAN_CLEVEL;
+end;
+
+function TAlgoLizardHuffman.AlgoID: byte;
+begin
+  result := 6;
+end;
+
+
 {$endif LIZARD_STANDALONE}
 
 { TSynLizard }
@@ -484,6 +513,8 @@ begin
     AlgoLizard := TAlgoLizard.Create;
   if AlgoLizardFast = nil then
     AlgoLizardFast := TAlgoLizardFast.Create;
+  if AlgoLizardHuffman = nil then
+    AlgoLizardHuffman := TAlgoLizardHuffman.Create;
   {$endif LIZARD_STANDALONE}
 end;
 

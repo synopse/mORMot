@@ -9460,8 +9460,8 @@ type
   TAlgoCompress = class(TSynPersistent)
   public
     /// should return a genuine byte identifier
-    // - 0 is reserved for stored, 1 for TAlgoSynLz, 2/3 for TAlgoDeflate(Fast)
-    // in mORMot.pas, 4/5 for TAlgoLizard(Fast) in SynLizard.pas
+    // - 0 is reserved for stored, 1 for TAlgoSynLz, 2/3 for TAlgoDeflate/Fast
+    // (in mORMot.pas), 4/5/6 for TAlgoLizard/Fast/Huffman (in SynLizard.pas)
     function AlgoID: byte; virtual; abstract;
     /// computes by default the crc32c() digital signature of the buffer
     function AlgoHash(Previous: cardinal; Data: pointer; DataLen: integer): cardinal; virtual;
