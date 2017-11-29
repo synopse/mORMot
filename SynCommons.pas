@@ -17506,8 +17506,6 @@ type
     /// low-level virtual methods implementing the persistence reading
     procedure LoadFromReader; virtual;
     procedure SaveToWriter(aWriter: TFileBufferWriter); virtual;
-    // will return AlgoSynLZ by default, but you may override it
-    function Algo: TAlgoCompress; virtual;
   public
     /// initialize a void storage with the supplied name
     constructor Create(const aName: RawUTF8); reintroduce; overload; virtual;
@@ -17536,12 +17534,14 @@ type
     /// persist the content as a SynLZ-compressed binary blob
     // - to be retrieved later on via LoadFrom method
     // - actually call the SaveToWriter() protected virtual method for persistence
+    // - you can specify ForcedAlgo if you want to override the default AlgoSynLZ
     procedure SaveTo(out aBuffer: RawByteString; nocompression: boolean=false;
-      BufLen: integer=65536); virtual;
+      BufLen: integer=65536; ForcedAlgo: TAlgoCompress=nil); virtual;
     /// persist the content as a SynLZ-compressed binary file
     // - to be retrieved later on via LoadFromFile method
     // - actually call the SaveTo method for persistence
-    procedure SaveToFile(const aFileName: TFileName; nocompression: boolean=false);
+    procedure SaveToFile(const aFileName: TFileName; nocompression: boolean=false;
+      ForcedAlgo: TAlgoCompress=nil);
     /// one optional text associated with this storage
     // - you can define it as published to serialize its value
     property Name: RawUTF8 read fName;
@@ -49661,18 +49661,13 @@ end;
 constructor TSynPersistentStore.CreateFromBuffer(aBuffer: pointer; aBufferLen: integer);
 begin
   Create;
-  LoadFrom(aBuffer, aBufferLen);
+  LoadFrom(aBuffer,aBufferLen);
 end;
 
 constructor TSynPersistentStore.CreateFromFile(const aFileName: TFileName);
 begin
   Create;
   LoadFromFile(aFileName);
-end;
-
-function TSynPersistentStore.Algo: TAlgoCompress;
-begin
-  result := AlgoSynLZ;
 end;
 
 procedure TSynPersistentStore.LoadFromReader;
@@ -49687,21 +49682,26 @@ end;
 
 procedure TSynPersistentStore.LoadFrom(const aBuffer: RawByteString);
 begin
-  LoadFrom(pointer(aBuffer), length(aBuffer));
+  LoadFrom(pointer(aBuffer),length(aBuffer));
 end;
 
 procedure TSynPersistentStore.LoadFrom(aBuffer: pointer; aBufferLen: integer);
 var localtemp: RawByteString;
     temp: PRawByteString;
+    algo: TAlgoCompress;
 begin
-  if (aBuffer = nil) or (aBufferLen <= 0) then
+  if (aBuffer=nil) or (aBufferLen<=0) then
     exit; // nothing to load
+  algo := TAlgoCompress.Algo(aBuffer,aBufferLen);
+  if algo = nil then
+    fReader.ErrorData('%.LoadFrom unknown TAlgoCompress AlgoID=%',
+      [self,PByteArray(aBuffer)[4]]);
   temp := fReaderTemp;
   if temp=nil then
     temp := @localtemp;
-  Algo.Decompress(aBuffer,aBufferLen,temp^);
+  algo.Decompress(aBuffer,aBufferLen,temp^);
   if temp^ = '' then
-    fReader.ErrorData('%.LoadFrom %.Decompress failed',[self,Algo]);
+    fReader.ErrorData('%.LoadFrom %.Decompress failed',[self,algo]);
   fReader.Init(temp^);
   LoadFromReader;
 end;
@@ -49716,7 +49716,7 @@ begin
 end;
 
 procedure TSynPersistentStore.SaveTo(out aBuffer: RawByteString; nocompression: boolean;
-  BufLen: integer);
+  BufLen: integer; ForcedAlgo: TAlgoCompress);
 var writer: TFileBufferWriter;
     temp: array[word] of byte;
 begin
@@ -49725,16 +49725,17 @@ begin
     writer := TFileBufferWriter.Create(TRawByteStringStream,BufLen);
   try
     SaveToWriter(writer);
-    aBuffer := writer.FlushAndCompress(nocompression,Algo);
+    aBuffer := writer.FlushAndCompress(nocompression,ForcedAlgo);
   finally
     writer.Free;
   end;
 end;
 
-procedure TSynPersistentStore.SaveToFile(const aFileName: TFileName; nocompression: boolean);
+procedure TSynPersistentStore.SaveToFile(const aFileName: TFileName;
+  nocompression: boolean; ForcedAlgo: TAlgoCompress);
 var temp: RawByteString;
 begin
-  SaveTo(temp,nocompression);
+  SaveTo(temp,nocompression,65536,ForcedAlgo);
   FileFromString(temp,aFileName);
 end;
 
