@@ -17501,8 +17501,10 @@ type
   TSynPersistentStore = class(TSynPersistentLock)
   protected
     fName: RawUTF8;
+    fReader: TFastReader;
+    fReaderTemp: PRawByteString;
     /// low-level virtual methods implementing the persistence reading
-    procedure LoadFromReader(var Source: TFastReader); virtual;
+    procedure LoadFromReader; virtual;
     procedure SaveToWriter(aWriter: TFileBufferWriter); virtual;
     // will return AlgoSynLZ by default, but you may override it
     function Algo: TAlgoCompress; virtual;
@@ -49673,9 +49675,9 @@ begin
   result := AlgoSynLZ;
 end;
 
-procedure TSynPersistentStore.LoadFromReader(var Source: TFastReader);
+procedure TSynPersistentStore.LoadFromReader;
 begin
-  Source.VarUTF8(fName);
+  fReader.VarUTF8(fName);
 end;
 
 procedure TSynPersistentStore.SaveToWriter(aWriter: TFileBufferWriter);
@@ -49689,16 +49691,19 @@ begin
 end;
 
 procedure TSynPersistentStore.LoadFrom(aBuffer: pointer; aBufferLen: integer);
-var temp: RawByteString;
-    reader: TFastReader;
+var localtemp: RawByteString;
+    temp: PRawByteString;
 begin
   if (aBuffer = nil) or (aBufferLen <= 0) then
     exit; // nothing to load
-  Algo.Decompress(aBuffer,aBufferLen,temp);
-  if temp = '' then
-    reader.ErrorData('%.LoadFrom %.Decompress failed',[self,Algo]);
-  reader.Init(temp);
-  LoadFromReader(reader);
+  temp := fReaderTemp;
+  if temp=nil then
+    temp := @localtemp;
+  Algo.Decompress(aBuffer,aBufferLen,temp^);
+  if temp^ = '' then
+    fReader.ErrorData('%.LoadFrom %.Decompress failed',[self,Algo]);
+  fReader.Init(temp^);
+  LoadFromReader;
 end;
 
 function TSynPersistentStore.LoadFromFile(const aFileName: TFileName): boolean;
