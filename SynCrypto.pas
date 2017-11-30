@@ -785,6 +785,7 @@ type
   // - this class will use AES-NI hardware instructions, if available, e.g.
   // ! OFB256: 27.69ms in x86 optimized code, 9.94ms with AES-NI
   // - expect IV to be set before process, or IVAtBeginning=true
+  // - TAESOFB 128-bit has its own optimized asm version under x86_64 + AES_NI
   TAESOFB = class(TAESAbstractEncryptOnly)
   public
     /// perform the AES cypher in the OFB mode
@@ -11286,6 +11287,57 @@ end;
 
 { TAESOFB }
 
+{$ifdef USEAESNI64}
+procedure AesNiEncryptOFB_128(self: TAESOFB; source, dest: pointer; blockcount: PtrUInt);
+{$ifdef FPC}nostackframe; assembler;
+asm
+{$else}
+asm // rcx=TAESOFB,rdx=source,r8=dest,r9=blockcount Linux:rdi,rsi,rdx,r8
+  .noframe
+{$endif}
+    {$ifndef win64}
+    mov r9,r8
+    mov r8,rdx
+    mov rdx,rsi
+    mov rcx,rdi
+    {$endif win64}
+    test   r9,r9
+    jz     @z
+    movdqu xmm7,dqword ptr [rcx].TAESOFB.fIV  // xmm7 = fCV
+    lea    rcx,[rcx].TAESOFB.AES
+    movdqu xmm0,[rcx+16*0]
+    movdqu xmm1,[rcx+16*1]
+    movdqu xmm2,[rcx+16*2]
+    movdqu xmm3,[rcx+16*3]
+    movdqu xmm4,[rcx+16*4]
+    movdqu xmm5,[rcx+16*5]
+    movdqu xmm6,[rcx+16*6]
+    movdqu xmm8,[rcx+16*7]
+    movdqu xmm9,[rcx+16*8]
+    movdqu xmm10,[rcx+16*9]
+    movdqu xmm11,[rcx+16*10]
+@s: movdqu xmm15,dqword ptr [rdx]
+    pxor xmm7,xmm0
+    aesenc xmm7,xmm1
+    aesenc xmm7,xmm2
+    aesenc xmm7,xmm3
+    aesenc xmm7,xmm4
+    aesenc xmm7,xmm5
+    aesenc xmm7,xmm6
+    aesenc xmm7,xmm8
+    aesenc xmm7,xmm9
+    aesenc xmm7,xmm10
+    aesenclast xmm7,xmm11
+    pxor   xmm15,xmm7
+    movdqu dqword ptr [r8],xmm15  // fOut := fIn xor fCV
+    add    rdx,16
+    add    r8,16
+    dec    r9
+    jnz    @s
+@z:
+end;
+{$endif USEAESNI64}
+
 procedure TAESOFB.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
 begin
   Encrypt(BufIn, BufOut, Count); // by definition
@@ -11294,6 +11346,11 @@ end;
 procedure TAESOFB.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var i: integer;
 begin
+  {$ifdef USEAESNI64}
+  with TAESContext(AES.Context) do
+  if (Count and AESBlockMod=0) and Assigned(AesNi) and (KeyBits=128) then
+    AesNiEncryptOFB_128(self,BufIn,BufOut,Count shr 4) else
+  {$endif USEAESNI64}
   {$ifdef USEAESNI32}
   if Assigned(TAESContext(AES.Context).AesNi) then
   asm
@@ -11303,8 +11360,8 @@ begin
     mov    ecx,Count
     mov    esi,BufIn
     mov    edi,BufOut
-    movdqu xmm7,dqword ptr [eax].TAESCFB.fIV  // xmm7 = fCV
-    lea    eax,[eax].TAESCFB.AES
+    movdqu xmm7,dqword ptr [eax].TAESOFB.fIV  // xmm7 = fCV
+    lea    eax,[eax].TAESOFB.AES
     push   ecx
     shr    ecx,4
     jz     @z
