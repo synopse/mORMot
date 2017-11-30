@@ -5760,7 +5760,7 @@ type
     // - resulting time period has therefore a resolution of 512 ms, and
     // overflows after 70 years without computer reboot
     // - equals 0 when there is no JSON value cached
-    TimeStamp512: cardinal;
+    Timestamp512: cardinal;
     /// some associated unsigned integer value
     // - not used by TSQLRestCache, but available at TSQLRestCacheEntry level
     Tag: cardinal;
@@ -5884,7 +5884,7 @@ const // convention may be to use __ before the type name
     'TRRMK RawUTF8]';
   __TTestCustomDiscogs = 'pagination{per_page,items,page Integer}'+
     'releases[status,title,format,label,artist RawUTF8 year,id integer]';
-  __TSQLRestCacheEntryValue = 'ID: Int64; TimeStamp512,Tag: cardinal; JSON: RawUTF8';
+  __TSQLRestCacheEntryValue = 'ID: Int64; Timestamp512,Tag: cardinal; JSON: RawUTF8';
   __TSubAB = 'a : RawUTF8; b : integer;';
   __TSubCD = 'c : byte; d : RawUTF8;';
   __TAggregate = 'abArr : array of TSubAB; cdArr : array of TSubCD;';
@@ -6346,23 +6346,23 @@ begin
   Finalize(Cache);
   FillCharFast(Cache,sizeof(Cache),0);
   U := RecordSaveJSON(Cache,TypeInfo(TSQLRestCacheEntryValue));
-  Check(U='{"ID":0,"TimeStamp512":0,"Tag":0,"JSON":""}');
+  Check(U='{"ID":0,"Timestamp512":0,"Tag":0,"JSON":""}');
   Cache.ID := 10;
-  Cache.TimeStamp512 := 200;
+  Cache.Timestamp512 := 200;
   Cache.JSON := 'test';
   Cache.Tag := 12;
   U := RecordSaveJSON(Cache,TypeInfo(TSQLRestCacheEntryValue));
-  Check(U='{"ID":10,"TimeStamp512":200,"Tag":12,"JSON":"test"}');
-  U := '{"ID":210,"TimeStamp512":2200,"JSON":"test2"}';
+  Check(U='{"ID":10,"Timestamp512":200,"Tag":12,"JSON":"test"}');
+  U := '{"ID":210,"Timestamp512":2200,"JSON":"test2"}';
   RecordLoadJSON(Cache,UniqueRawUTF8(U),TypeInfo(TSQLRestCacheEntryValue));
   Check(Cache.ID=210);
-  Check(Cache.TimeStamp512=2200);
+  Check(Cache.Timestamp512=2200);
   Check(Cache.JSON='test2');
   Check(Cache.Tag=12);
-  U := '{ID:220,JSON:"test3",TimeStamp512:2300}';
+  U := '{ID:220,JSON:"test3",Timestamp512:2300}';
   RecordLoadJSON(Cache,UniqueRawUTF8(U),TypeInfo(TSQLRestCacheEntryValue));
   Check(Cache.ID=220);
-  Check(Cache.TimeStamp512=2300);
+  Check(Cache.Timestamp512=2300);
   Check(Cache.JSON='test3');
   Check(Cache.Tag=12);
 
@@ -8563,7 +8563,7 @@ begin
       {$endif}
       try
         Client.ForceBlobTransfert := true;
-        Check(Client.ServerTimeStampSynchronize);
+        Check(Client.ServerTimestampSynchronize);
         Check(Client.SetUser('User','synopse'));
         Client.TransactionBegin(TSQLRecordTest);
         R := TSQLRecordTest.Create;
@@ -8607,7 +8607,7 @@ begin
       {$endif}
       try
         Client.ForceBlobTransfert := true;
-        Check(Client.ServerTimeStampSynchronize);
+        Check(Client.ServerTimestampSynchronize);
         Check(Client.SetUser('User','synopse'));
         R := TSQLRecordTest.CreateAndFillPrepare(Client,'','*');
         try
