@@ -352,6 +352,7 @@ type
   // WinHTTP or libcurl API
   // - not to be called directly, but via TSQLHttpClientWinINet or (even
   // better) TSQLHttpClientWinHTTP overridden classes under Windows
+  // - consider also calling NewSQLHttpClient() global function
   TSQLHttpClientRequest = class(TSQLHttpClientGeneric)
   protected
     fRequest: THttpRequest;
@@ -456,29 +457,33 @@ type
   {$endif USELIBCURL}
 
   {$ifdef ONLYUSEHTTPSOCKET}
-  /// HTTP/1.1 RESTful JSON deault mORMot Client class
+  /// HTTP/1.1 RESTful JSON default mORMot Client class
   // -  maps the raw socket implementation class
   TSQLHttpClient = TSQLHttpClientWinSock;
   {$ifdef USELIBCURL}
   TSQLHttpsClient = TSQLHttpClientCurl;
   {$else}
-  {$ifndef ANDROID}
+  {$ifdef USEWININET}
   TSQLHttpsClient = TSQLHttpClientWinHTTP;
-  {$endif}
-  {$endif}
   {$else}
+  TSQLHttpsClient = TSQLHttpClientWinSock; // (Android) fallback to non-TLS class
+  {$endif USEWININET}
+  {$endif USELIBCURL}
+  {$else ONLYUSEHTTPSOCKET}
   /// HTTP/1.1 RESTful JSON default mORMot Client class
   // - under Windows, maps the TSQLHttpClientWinHTTP class
+  // - consider also calling NewSQLHttpClient() global function
   TSQLHttpClient = TSQLHttpClientWinHTTP;
   /// HTTP/HTTPS RESTful JSON default mORMot Client class
   // - under Windows, maps the TSQLHttpClientWinHTTP class, or TSQLHttpClientCurl
   // under Linux
+  // - consider also calling NewSQLHttpClient() global function
   TSQLHttpsClient = TSQLHttpClientWinHTTP;
   {$endif ONLYUSEHTTPSOCKET}
 
 var
-  /// a global hook variable, able to enhance WebSockets logging
-  // - checked by TSQLHttpClientWebsockets.WebSocketsConnect() 
+  /// a global hook variable, able to set WebSockets logging to full verbose
+  // - checked by TSQLHttpClientWebsockets.WebSocketsConnect()
   HttpClientFullWebSocketsLog: Boolean;
 
 
@@ -495,11 +500,12 @@ implementation
 function NewSQLHttpClient(const aURI: TURI; aModel: TSQLModel; aOwnModel, aWeakHttps: boolean;
   const aProxyName, aProxyByPass: RawUTF8): TSQLHttpClientGeneric;
 begin
-  if aURI.Https or (aProxyName <> '') then begin
-    result := TSQLHttpsClient.Create(aURI.Server, aURI.Port, aModel,
+  if (aURI.Https or (aProxyName <> '')) and
+     TSQLHttpsClient.InheritsFrom(TSQLHttpClientRequest) then begin
+    result := TSQLHttpClientRequest(TSQLHttpsClient).Create(aURI.Server, aURI.Port, aModel,
       aURI.Https, AnsiString(aProxyName), AnsiString(aProxyByPass));
     if aWeakHttps then
-      (result as TSQLHttpsClient).IgnoreSSLCertificateErrors := true;
+      (result as TSQLHttpClientRequest).IgnoreSSLCertificateErrors := true;
   end
   else
     result := TSQLHttpClientWinSock.Create(aURI.Server, aURI.Port, aModel);

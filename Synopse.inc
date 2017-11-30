@@ -605,6 +605,8 @@
   {$ifndef ANDROID}
     // cross-platform libcurl for https -> TCurlHttp and TSQLHttpClientCurl
     {$define USELIBCURL}
+    // for Android, consider using https://github.com/gcesarmza/curl-android-ios
+    // static libraries and force USELIBCURL in the project conditionals
   {$endif}
 {$endif}
 
