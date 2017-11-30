@@ -11327,7 +11327,7 @@ asm // rcx=TAESOFB,rdx=source,r8=dest,r9=blockcount Linux:rdi,rsi,rdx,rcx
     aesenc xmm7,xmm8
     aesenc xmm7,xmm9
     aesenc xmm7,xmm10
-    aesenclast xmm7,xmm11
+    aesenclast xmm7,xmm11         // AES.Encrypt(fCV,fCV)
     pxor   xmm15,xmm7
     movdqu dqword ptr [r8],xmm15  // fOut := fIn xor fCV
     add    rdx,16
