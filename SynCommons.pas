@@ -59875,16 +59875,12 @@ end;
 
 function TFastReader.VarInt64: Int64;
 begin
-{$ifdef CPU64}
-  result := VarInt32; // already returns a PtrInt=Int64
-{$else}
   result := VarUInt64;
   if result and 1<>0 then
     // 1->1, 3->2..
     result := result shr 1+1 else
     // 0->0, 2->-1, 4->-2..
     result := -(result shr 1);
-{$endif}
 end;
 
 function TFastReader.VarUInt16: PtrUInt;
@@ -59975,11 +59971,6 @@ begin
 end;
 
 function TFastReader.VarUInt64: QWord;
-{$ifdef CPU64}
-begin
-  result := VarUInt32; // already returns a PtrUInt=QWord
-end;
-{$else}
 var c, n: PtrUInt;
 begin
   if P>=Last then
@@ -60002,7 +59993,6 @@ begin
   end else
     result := c;
 end;
-{$endif}
 
 function TFastReader.VarString: RawByteString;
 begin
@@ -60565,14 +60555,18 @@ end;
 
 class function TAlgoCompress.Algo(AlgoID: byte): TAlgoCompress;
 var i: integer;
+    ptr: ^TAlgoCompress;
 begin
-  if SynCompressAlgos<>nil then
-    with SynCompressAlgos do
-    for i := 0 to Count - 1 do
-      if TAlgoCompress(List[i]).AlgoID=AlgoID then begin
-        result := List[i];
+  if SynCompressAlgos<>nil then begin
+    ptr := @SynCompressAlgos.List[0];
+    for i := 1 to SynCompressAlgos.Count  do
+      if ptr^.AlgoID=AlgoID then begin
+        result := ptr^;
         exit;
-      end;
+      end
+      else
+        inc(ptr);
+  end;
   result := nil;
 end;
 

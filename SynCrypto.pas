@@ -11292,15 +11292,15 @@ procedure AesNiEncryptOFB_128(self: TAESOFB; source, dest: pointer; blockcount: 
 {$ifdef FPC}nostackframe; assembler;
 asm
 {$else}
-asm // rcx=TAESOFB,rdx=source,r8=dest,r9=blockcount Linux:rdi,rsi,rdx,r8
+asm // rcx=TAESOFB,rdx=source,r8=dest,r9=blockcount Linux:rdi,rsi,rdx,rcx
   .noframe
 {$endif}
     {$ifndef win64}
-    mov r9,r8
-    mov r8,rdx
-    mov rdx,rsi
-    mov rcx,rdi
-    {$endif win64}
+    mov    r9,rcx
+    mov    r8,rdx
+    mov    rdx,rsi
+    mov    rcx,rdi
+    {$endif}
     test   r9,r9
     jz     @z
     movdqu xmm7,dqword ptr [rcx].TAESOFB.fIV  // xmm7 = fCV
