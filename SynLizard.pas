@@ -253,9 +253,8 @@ type
   /// try to load Lizard as an external library
   // - static linking is currently available only on FPC Win32/64 and Linux32/64
   // - this class is expected to access Lizard1-32.dll/Lizard1-64.dll files for
-  // Delphi, as such:
-  // ! if Lizard = nil then
-  // !   Lizard := TSynLizardDynamic.Create;
+  // Delphi, e.g. as such:
+  // ! TSynLizardDynamic.AlgoRegister;
   TSynLizardDynamic = class(TSynLizard)
   protected
     {$ifdef FPC}
@@ -264,12 +263,21 @@ type
     fHandle: THandle;
     {$endif}
     fLibraryName: TFileName;
+    fLoaded: boolean;
   public
     /// will first search in the executable folder, then within the system path
-    // - raise an Exception if the library file is not found, or not valid
-    constructor Create(const aLibraryFile: TFileName = ''); reintroduce;
+    // - raise an Exception if the library file is not found, or not valid -
+    // unless aRaiseNoException is set to true
+    constructor Create(const aLibraryFile: TFileName = ''; aRaiseNoException: boolean = false); reintroduce;
     /// unload the external library
     destructor Destroy; override;
+    /// ensure Lizard compression is available
+    // - returns TRUE if Lizard compression is available
+    // - if there is a local Lizard1-32.dll/Lizard1-64.dll file, try to load it
+    class function AlgoRegister: boolean;
+    /// set to TRUE if Create successed
+    // - may be used if aRaiseNoException parameter has been defined  
+    property Loaded: boolean read fLoaded;
     /// the loaded library file name
     property LibraryName: TFileName read fLibraryName;
   end;
@@ -526,7 +534,8 @@ const
   ('versionNumber', 'compressBound', 'compress', 'sizeofState',
    'compress_extState', 'decompress_safe', 'decompress_safe_partial');
 
-constructor TSynLizardDynamic.Create(const aLibraryFile: TFileName);
+constructor TSynLizardDynamic.Create(const aLibraryFile: TFileName;
+  aRaiseNoException: boolean);
 var P: PPointerArray;
     i: integer;
 begin
@@ -548,21 +557,31 @@ begin
     if fHandle=0 then
     {$endif}
   {$endif MSWINDOWS}
-    raise Exception.CreateFmt('Unable to load %s - %s/'#13#10 +
-      'Please download from https://synopse.info/files/SynLizardLibs.7z',
-      [fLibraryName, {$ifdef MSWINDOWS}SysErrorMessage(GetLastError){$else}''{$endif}]);
+    if aRaiseNoException then
+      exit
+    else
+      raise Exception.CreateFmt('Unable to load %s - %s/'#13#10 +
+        'Please download from https://synopse.info/files/SynLizardLibs.7z',
+        [fLibraryName, {$ifdef MSWINDOWS}SysErrorMessage(GetLastError){$else}''{$endif}]);
   P := @@versionNumber;
   for i := 0 to High(LIZARD_ENTRIES) do begin
     P^[i] := {$ifdef BSDNOTDARWIN}dlsym{$else}GetProcAddress{$endif}(
       fHandle,PChar('Lizard_'+LIZARD_ENTRIES[i]));
     if not Assigned(P^[i]) then
-      raise Exception.CreateFmt('Unable to load %s - Missing Lizard_%s',
-        [fLibraryName,LIZARD_ENTRIES[i]]);
+      if aRaiseNoException then
+        exit
+      else
+        raise Exception.CreateFmt('Unable to load %s - Missing Lizard_%s',
+          [fLibraryName,LIZARD_ENTRIES[i]]);
   end;
   if versionNumber div 10000<>1 then
-    raise Exception.CreateFmt('%s has unexpected versionNumber=%d',
-      [fLibraryName,versionNumber]);
+    if aRaiseNoException then
+      exit
+    else
+      raise Exception.CreateFmt('%s has unexpected versionNumber=%d',
+        [fLibraryName, versionNumber]);
   inherited Create; // register AlgoLizard/AlgoLizardFast
+  fLoaded := true;
 end;
 
 destructor TSynLizardDynamic.Destroy;
@@ -576,6 +595,22 @@ begin
   {$endif}
   inherited;
 end;
+
+class function TSynLizardDynamic.AlgoRegister: boolean;
+var
+  lib: TSynLizardDynamic;
+begin
+  result := Lizard <> nil;
+  if result then
+    exit; // already registered
+  lib := TSynLizardDynamic.Create('', true);
+  result := lib.Loaded;
+  if result then
+    Lizard := lib
+  else
+    lib.Free;
+end;
+
 
 initialization
   {$ifndef LIZARD_EXTERNALONLY}
