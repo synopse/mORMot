@@ -495,6 +495,7 @@ implementation
 function NewSQLHttpClient(const aURI: TURI; aModel: TSQLModel; aOwnModel, aWeakHttps: boolean;
   const aProxyName, aProxyByPass: RawUTF8): TSQLHttpClientGeneric;
 begin
+{$ifndef ANDROID}
   if aURI.Https or (aProxyName <> '') then begin
     result := TSQLHttpsClient.Create(aURI.Server, aURI.Port, aModel,
       aURI.Https, AnsiString(aProxyName), AnsiString(aProxyByPass));
@@ -502,6 +503,7 @@ begin
       (result as TSQLHttpsClient).IgnoreSSLCertificateErrors := true;
   end
   else
+{$endif}
     result := TSQLHttpClientWinSock.Create(aURI.Server, aURI.Port, aModel);
   if aOwnModel then
     aModel.Owner := result;
