@@ -463,26 +463,26 @@ type
     function DecryptPKCS7Len(var InputLen,ivsize: integer; Input: pointer;
       IVAtBeginning, RaiseESynCryptoOnError: boolean): boolean;
   public
-    /// Initialize AES contexts for cypher
+    /// Initialize AES context for cypher
     // - first method to call before using this class
     // - KeySize is in bits, i.e. 128,192,256
     constructor Create(const aKey; aKeySize: cardinal); reintroduce; overload; virtual;
-    /// Initialize AES contexts for AES-128 cypher
+    /// Initialize AES context for AES-128 cypher
     // - first method to call before using this class
     // - just a wrapper around Create(aKey,128);
     constructor Create(const aKey: THash128); reintroduce; overload;
-    /// Initialize AES contexts for AES-256 cypher
+    /// Initialize AES context for AES-256 cypher
     // - first method to call before using this class
     // - just a wrapper around Create(aKey,256);
     constructor Create(const aKey: THash256); reintroduce; overload;
-    /// Initialize AES contexts for cypher, from some TAESPRNG random bytes
+    /// Initialize AES context for cypher, from some TAESPRNG random bytes
     // - may be used to hide some sensitive information from memory, like
     // CryptDataForCurrentUser but with a temporary key
     constructor CreateTemp(aKeySize: cardinal);
-    /// Initialize AES contexts for cypher, from SHA-256 hash
+    /// Initialize AES context for cypher, from SHA-256 hash
     // - here the Key is supplied as a string, and will be hashed using SHA-256
     constructor CreateFromSha256(const aKey: RawUTF8);
-    /// Initialize AES contexts for cypher, from PBKDF2_HMAC_SHA256 derivation
+    /// Initialize AES context for cypher, from PBKDF2_HMAC_SHA256 derivation
     // - here the Key is supplied as a string, and will be hashed using
     // PBKDF2_HMAC_SHA256 with the specified salt and rounds
     constructor CreateFromPBKDF2(const aKey: RawUTF8; const aSalt: RawByteString;
@@ -759,7 +759,7 @@ type
   /// abstract parent class for chaining modes using only AES encryption 
   TAESAbstractEncryptOnly = class(TAESAbstractSyn)
   public
-    /// Initialize AES contexts for cypher
+    /// Initialize AES context for cypher
     // - will pre-generate the encryption key
     constructor Create(const aKey; aKeySize: cardinal); override;
     /// compute a class instance similar to this one, for performing the
@@ -2818,7 +2818,7 @@ type
     ViaCtx: pointer; // padlock_*() context
     {$endif}
     AesNi: procedure{$ifdef CPU64}(const ctxt, source, dest){$endif};
-      // set if the CPU supports AES-NI new asm instructions
+      // AesNi set if the CPU supports AES-NI new asm instructions
     Initialized: boolean;
     Rounds: byte;    // Number of rounds
     KeyBits: byte;   // Number of bits in key
@@ -10760,17 +10760,14 @@ end;
 
 procedure TAESAbstractSyn.TrailerBytes;
 begin
-  fCount := fCount and AESBlockMod;
-  if fCount<>0 then begin
-    if fAESInit<>initEncrypt then
-      EncryptInit;
-    {$ifdef USEAESNI64}
-    if Assigned(TAESContext(AES.Context).AesNi) then
-      TAESContext(AES.Context).AesNi(AES.Context,fCV,fCV) else
-    {$endif USEAESNI64}
-      AES.Encrypt(fCV,fCV);
-    XorMemory(pointer(fOut),pointer(fIn),@fCV,fCount);
-  end;
+  if fAESInit<>initEncrypt then
+    EncryptInit;
+  {$ifdef USEAESNI64}
+  if Assigned(TAESContext(AES.Context).AesNi) then
+    TAESContext(AES.Context).AesNi(AES.Context,fCV,fCV) else
+  {$endif USEAESNI64}
+    AES.Encrypt(fCV,fCV);
+  XorMemory(pointer(fOut),pointer(fIn),@fCV,fCount);
 end;
 
 
@@ -10787,7 +10784,9 @@ begin
     inc(fIn);
     inc(fOut);
   end;
-  TrailerBytes;
+  fCount := fCount and AESBlockMod;
+  if fCount<>0 then
+    TrailerBytes;
 end;
 
 procedure TAESECB.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
@@ -10805,7 +10804,9 @@ begin
     inc(fIn);
     inc(fOut);
   end;
-  TrailerBytes;
+  fCount := fCount and AESBlockMod;
+  if fCount<>0 then
+    TrailerBytes;
 end;
 
 
@@ -10828,7 +10829,9 @@ begin
       inc(fOut);
     end;
   end;
-  TrailerBytes;
+  fCount := fCount and AESBlockMod;
+  if fCount<>0 then
+    TrailerBytes;
 end;
 
 procedure TAESCBC.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
@@ -10848,7 +10851,9 @@ begin
     inc(fIn);
     inc(fOut);
   end;
-  TrailerBytes;
+  fCount := fCount and AESBlockMod;
+  if fCount<>0 then
+    TrailerBytes;
 end;
 
 { TAESAbstractEncryptOnly }
@@ -10931,7 +10936,9 @@ begin
       inc(fIn);
       inc(fOut);
     end;
-    TrailerBytes;
+    fCount := fCount and AESBlockMod;
+    if fCount<>0 then
+      TrailerBytes;
   end;
 end;
 
@@ -10980,7 +10987,9 @@ begin
       inc(fIn);
       inc(fOut);
     end;
-    TrailerBytes;
+    fCount := fCount and AESBlockMod;
+    if fCount<>0 then
+      TrailerBytes;
   end;
 end;
 
@@ -11087,9 +11096,12 @@ begin
       inc(fIn);
       inc(fOut);
     end;
-    TrailerBytes;
-    with fMAC do // includes trailing bytes to the plain crc
-      PCardinal(@plain)^ := crc32c(PCardinal(@plain)^,pointer(fOut),fCount);
+    fCount := fCount and AESBlockMod;
+    if fCount<>0 then begin
+      TrailerBytes;
+      with fMAC do // includes trailing bytes to the plain crc
+        PCardinal(@plain)^ := crc32c(PCardinal(@plain)^,pointer(fOut),fCount);
+    end;
   end;
 end;
 
@@ -11143,9 +11155,12 @@ begin
       inc(fIn);
       inc(fOut);
     end;
-    TrailerBytes;
-    with fMAC do // includes trailing bytes to the plain crc
-      PCardinal(@plain)^ := crc32c(PCardinal(@plain)^,pointer(fIn),fCount);
+    fCount := fCount and AESBlockMod;
+    if fCount<>0 then begin
+      TrailerBytes;
+      with fMAC do // includes trailing bytes to the plain crc
+        PCardinal(@plain)^ := crc32c(PCardinal(@plain)^,pointer(fIn),fCount);
+    end;
   end;
 end;
 
@@ -11201,9 +11216,12 @@ begin
       inc(fIn);
       inc(fOut);
     end;
-    TrailerBytes;
-    with fMAC do // includes trailing bytes to the plain crc
-      PCardinal(@plain)^ := crc32c(PCardinal(@plain)^,pointer(fOut),fCount);
+    fCount := fCount and AESBlockMod;
+    if fCount<>0 then begin
+      TrailerBytes;
+      with fMAC do // includes trailing bytes to the plain crc
+        PCardinal(@plain)^ := crc32c(PCardinal(@plain)^,pointer(fOut),fCount);
+    end;
   end;
 end;
 
@@ -11256,9 +11274,12 @@ begin
       inc(fIn);
       inc(fOut);
     end;
-    TrailerBytes;
-    with fMAC do // includes trailing bytes to the plain crc
-      PCardinal(@plain)^ := crc32c(PCardinal(@plain)^,pointer(fIn),fCount);
+    fCount := fCount and AESBlockMod;
+    if fCount<>0 then begin
+      TrailerBytes;
+      with fMAC do // includes trailing bytes to the plain crc
+        PCardinal(@plain)^ := crc32c(PCardinal(@plain)^,pointer(fIn),fCount);
+    end;
   end;
 end;
 
@@ -11314,7 +11335,9 @@ begin
       inc(fIn);
       inc(fOut);
     end;
-    TrailerBytes;
+    fCount := fCount and AESBlockMod;
+    if fCount<>0 then 
+      TrailerBytes;
   end;
 end;
 
