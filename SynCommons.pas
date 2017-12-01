@@ -1178,6 +1178,8 @@ type
   TIntegerArray = array[0..MaxInt div SizeOf(integer)-1] of integer;
   PIntegerArray = ^TIntegerArray;
   PIntegerArrayDynArray = array of PIntegerArray;
+  TPIntegerArray = array[0..MaxInt div SizeOf(PIntegerArray)-1] of PInteger;
+  PPIntegerArray = ^TPIntegerArray;
 
   TCardinalArray = array[0..MaxInt div SizeOf(cardinal)-1] of cardinal;
   PCardinalArray = ^TCardinalArray;
@@ -10398,8 +10400,12 @@ type
     procedure Add(const aItem: RawByteString); overload;
     /// add a new item to Values[]
     procedure Add(aItem: pointer; aItemLen: integer); overload;
+    {$ifndef DELPHI5OROLDER}
     /// add another TRawByteStringGroup to Values[]
     procedure Add(const aAnother: TRawByteStringGroup); overload;
+    /// compare two TRawByteStringGroup instance stored text
+    function Equals(const aAnother: TRawByteStringGroup): boolean;
+    {$endif}
     /// clear any stored information
     procedure Clear;
     /// return all content as a single RawByteString
@@ -10424,10 +10430,12 @@ type
     // - text should be in a single Values[] entry
     function FindAsText(aPosition, aLength: integer): RawByteString;
       {$ifdef HASINLINE}inline;{$endif}
+    {$ifndef NOVARIANTS}
     /// returns the text at a given position in Values[]
     // - text should be in a single Values[] entry
     procedure FindAsVariant(aPosition, aLength: integer; out aDest: variant);
       {$ifdef HASINLINE}inline;{$endif}
+    {$endif}
     /// append the text at a given position in Values[], JSON escaped by default
     // - text should be in a single Values[] entry
     procedure FindWrite(aPosition, aLength: integer; W: TTextWriter;
@@ -10441,8 +10449,6 @@ type
     /// copy the text at a given position in Values[]
     // - text should be in a single Values[] entry
     procedure FindMove(aPosition, aLength: integer; aDest: pointer);
-    /// compare two TRawByteStringGroup instance stored text
-    function Equals(const aAnother: TRawByteStringGroup): boolean;
   end;
   /// pointer reference to a TRawByteStringGroup
   PRawByteStringGroup = ^TRawByteStringGroup;
@@ -28045,7 +28051,6 @@ begin
   Sum := t;
 end;
 
-/// return the index of Value in Values[], -1 if not found
 function FindRawUTF8(const Values: TRawUTF8DynArray; const Value: RawUTF8;
   CaseSensitive: boolean=true): integer;
 begin
@@ -28108,7 +28113,6 @@ begin
 end;
 {$endif}
 
-/// true if Value was added successfully in Values[]
 function AddRawUTF8(var Values: TRawUTF8DynArray; const Value: RawUTF8;
   NoDuplicates: boolean=false; CaseSensitive: boolean=true): boolean;
 var i: integer;
@@ -60172,6 +60176,8 @@ begin
   Add(tmp);
 end;
 
+{$ifndef DELPHI5OROLDER} // circumvent Delphi 5 compiler bug
+
 procedure TRawByteStringGroup.Add(const aAnother: TRawByteStringGroup);
 var i: integer;
     s,d: PRawByteStringGroupValue;
@@ -60191,6 +60197,18 @@ begin
   end;
   inc(Count,aAnother.Count);
 end;
+
+function TRawByteStringGroup.Equals(const aAnother: TRawByteStringGroup): boolean;
+begin
+  if ((Values=nil) and (aAnother.Values<>nil)) or ((Values<>nil) and (aAnother.Values=nil)) or
+     (Position<>aAnother.Position) then
+    result := false else
+    if (Count<>1) or (aAnother.Count<>1) or (Values[0].Value<>aAnother.Values[0].Value) then
+      result := AsText=aAnother.AsText else
+      result := true;
+end;
+
+{$endif DELPHI5OROLDER}
 
 procedure TRawByteStringGroup.Clear;
 begin
@@ -60304,6 +60322,7 @@ begin
     SetString(result,P,aLength);
 end;
 
+{$ifndef NOVARIANTS}
 procedure TRawByteStringGroup.FindAsVariant(aPosition, aLength: integer; out aDest: variant);
 var P: pointer;
 begin
@@ -60311,6 +60330,7 @@ begin
   if P<>nil then
     RawUTF8ToVariant(P,aLength,aDest);
 end;
+{$endif}
 
 procedure TRawByteStringGroup.FindWrite(aPosition, aLength: integer; W: TTextWriter;
   Escape: TTextWriterKind);
@@ -60336,16 +60356,6 @@ begin
   P := Find(aPosition, aLength);
   if P<>nil then
     MoveFast(P^,aDest^,aLength);
-end;
-
-function TRawByteStringGroup.Equals(const aAnother: TRawByteStringGroup): boolean;
-begin
-  if ((Values=nil) and (aAnother.Values<>nil)) or ((Values<>nil) and (aAnother.Values=nil)) or
-     (Position<>aAnother.Position) then
-    result := false else
-    if (Count<>1) or (aAnother.Count<>1) or (Values[0].Value<>aAnother.Values[0].Value) then
-      result := AsText=aAnother.AsText else
-      result := true;
 end;
 
 
