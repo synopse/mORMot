@@ -1700,7 +1700,7 @@ begin
         FValue := JSVAL_FALSE;
     vtInteger:
       FValue := INT_TO_JSVAL(V.VInteger);
-    vtInt64:
+    vtInt64{$ifdef FPC},vtQWord{$endif}:
       SetInt64(V.VInt64^);
     vtCurrency:
       FValue := DOUBLE_TO_JSVAL(V.VCurrency^);

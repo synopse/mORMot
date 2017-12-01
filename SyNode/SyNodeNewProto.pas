@@ -469,9 +469,9 @@ begin
   case V.VType of
     vtString:     Result.asJSString := cx.NewJSString(RawUTF8(V.VString^));
     vtAnsiString: Result.asJSString := cx.NewJSString(RawUTF8(V.VAnsiString)); // expect UTF-8 content
-{$ifdef UNICODE}
+    {$ifdef UNICODE}
     vtUnicodeString: Result.asJSString := cx.NewJSString(string(V.VUnicodeString));
-{$endif}
+    {$endif}
     vtWideString: Result.asJSString := cx.NewJSString(V.VWideString, length(WideString(V.VWideString)));
     vtPChar:      Result.asJSString := cx.NewJSString(string(V.VPChar));
     vtChar:       Result.asJSString := cx.NewJSString(string(V.VChar));
@@ -480,13 +480,15 @@ begin
     vtBoolean:    Result.AsBoolean := V.VBoolean;
     vtInteger:    Result.AsInteger := V.VInteger;
     vtInt64:      Result.AsInt64 := V.VInt64^;
+    {$ifdef FPC}
+    vtQWord:      Result.AsInt64 := V.VQWord^;
+    {$endif}
     vtCurrency:   Result.AsDouble := V.VCurrency^;
     vtExtended:   Result.AsDouble := V.VExtended^;
     vtObject:     begin
       New(inst);
       Result := Inst.CreateForObj(cx, V.VObject, TSMNewRTTIProtoObject, Eng.GlobalObject);
     end;
-
     vtPointer:    begin
       if V.VPointer = nil then
         Result.SetNull

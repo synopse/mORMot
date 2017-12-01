@@ -1178,6 +1178,8 @@ type
   TIntegerArray = array[0..MaxInt div SizeOf(integer)-1] of integer;
   PIntegerArray = ^TIntegerArray;
   PIntegerArrayDynArray = array of PIntegerArray;
+  TPIntegerArray = array[0..MaxInt div SizeOf(PIntegerArray)-1] of PInteger;
+  PPIntegerArray = ^TPIntegerArray;
 
   TCardinalArray = array[0..MaxInt div SizeOf(cardinal)-1] of cardinal;
   PCardinalArray = ^TCardinalArray;
@@ -10072,6 +10074,8 @@ type
     procedure Write(Data: pointer; DataLen: integer); overload;
     /// append 1 byte of data at the current position
     procedure Write1(Data: Byte); {$ifdef HASINLINE}inline;{$endif}
+    /// append 2 bytes of data at the current position
+    procedure Write2(Data: Word); {$ifdef HASINLINE}inline;{$endif}
     /// append 4 bytes of data at the current position
     procedure Write4(Data: integer); {$ifdef HASINLINE}inline;{$endif}
     /// append 4 bytes of data, encoded as BigEndian, at the current position
@@ -10398,8 +10402,12 @@ type
     procedure Add(const aItem: RawByteString); overload;
     /// add a new item to Values[]
     procedure Add(aItem: pointer; aItemLen: integer); overload;
+    {$ifndef DELPHI5OROLDER}
     /// add another TRawByteStringGroup to Values[]
     procedure Add(const aAnother: TRawByteStringGroup); overload;
+    /// compare two TRawByteStringGroup instance stored text
+    function Equals(const aAnother: TRawByteStringGroup): boolean;
+    {$endif}
     /// clear any stored information
     procedure Clear;
     /// return all content as a single RawByteString
@@ -10424,10 +10432,12 @@ type
     // - text should be in a single Values[] entry
     function FindAsText(aPosition, aLength: integer): RawByteString;
       {$ifdef HASINLINE}inline;{$endif}
+    {$ifndef NOVARIANTS}
     /// returns the text at a given position in Values[]
     // - text should be in a single Values[] entry
     procedure FindAsVariant(aPosition, aLength: integer; out aDest: variant);
       {$ifdef HASINLINE}inline;{$endif}
+    {$endif}
     /// append the text at a given position in Values[], JSON escaped by default
     // - text should be in a single Values[] entry
     procedure FindWrite(aPosition, aLength: integer; W: TTextWriter;
@@ -10441,8 +10451,6 @@ type
     /// copy the text at a given position in Values[]
     // - text should be in a single Values[] entry
     procedure FindMove(aPosition, aLength: integer; aDest: pointer);
-    /// compare two TRawByteStringGroup instance stored text
-    function Equals(const aAnother: TRawByteStringGroup): boolean;
   end;
   /// pointer reference to a TRawByteStringGroup
   PRawByteStringGroup = ^TRawByteStringGroup;
@@ -20676,7 +20684,7 @@ function VarRecToInt64(const V: TVarRec; out value: Int64): boolean;
 begin
   case V.VType of
     vtInteger: value := V.VInteger;
-    vtInt64:   value := V.VInt64^;
+    vtInt64 {$ifdef FPC}, vtQWord{$endif}:   value := V.VInt64^;
     vtBoolean: if V.VBoolean then value := 1 else value := 0; // normalize
     {$ifndef NOVARIANTS}
     vtVariant: value := V.VVariant^;
@@ -20694,6 +20702,9 @@ begin
   case V.VType of
     vtInteger: value := V.VInteger;
     vtInt64:   value := V.VInt64^;
+    {$ifdef FPC}
+    vtQWord:   value := V.VQWord^;
+    {$endif}
     vtBoolean: if V.VBoolean then value := 1 else value := 0; // normalize
     vtExtended: value := V.VExtended^;
     vtCurrency: value := V.VCurrency^;
@@ -20712,6 +20723,7 @@ function VarRecToTempUTF8(const V: TVarRec; var tmpStr: RawUTF8; var Res: TTempU
 {$ifndef NOVARIANTS}
 var isString: boolean;
 {$endif}
+label smlu32;
 begin
   case V.VType of
     vtString: begin
@@ -20775,7 +20787,7 @@ begin
     vtInt64:
       if (PCardinalArray(V.VInt64)^[0]<=high(SmallUInt32UTF8)) and
          (PCardinalArray(V.VInt64)^[1]=0) then begin
-        Res.Text := pointer(SmallUInt32UTF8[PCardinalArray(V.VInt64)^[0]]);
+smlu32: Res.Text := pointer(SmallUInt32UTF8[V.VInt64^]);
         Res.Len := length(RawByteString(pointer(Res.Text)));
         result := Res.Len;
         exit;
@@ -20785,6 +20797,16 @@ begin
         result := Res.Len;
         exit;
       end;
+    {$ifdef FPC}
+    vtQWord:
+    if (PCardinalArray(V.VQWord)^[0]<=high(SmallUInt32UTF8)) and
+       (PCardinalArray(V.VQWord)^[1]=0) then goto smlu32 else begin
+      Res.Text := PUTF8Char(StrUInt64(@Res.Temp[23],V.VQWord^));
+      Res.Len := @Res.Temp[23]-Res.Text;
+      result := Res.Len;
+      exit;
+    end;
+    {$endif}
     vtCurrency: begin
       Res.Text := @Res.Temp;
       Res.Len := Curr64ToPChar(V.VInt64^,Res.Temp);
@@ -20836,7 +20858,8 @@ end;
 procedure VarRecToUTF8(const V: TVarRec; var result: RawUTF8; wasString: PBoolean=nil);
 var isString: boolean;
 begin
-  isString := not (V.VType in [vtBoolean,vtInteger,vtInt64,vtCurrency,vtExtended]);
+  isString := not (V.VType in [
+    vtBoolean,vtInteger,vtInt64{$ifdef FPC},vtQWord{$endif},vtCurrency,vtExtended]);
   with V do
   case V.VType of
     vtString:
@@ -20865,6 +20888,10 @@ begin
       Int32ToUtf8(VInteger,result);
     vtInt64:
       Int64ToUtf8(VInt64^,result);
+    {$ifdef FPC}
+    vtQWord:
+      UInt64ToUtf8(VQWord^,result);
+    {$endif}
     vtCurrency:
       Curr64ToStr(VInt64^,result);
     vtExtended:
@@ -25245,8 +25272,8 @@ var i, tmpN, L, A, P, len: PtrInt;
     F,FDeb: PUTF8Char;
     wasString: Boolean;
 const NOTTOQUOTE: array[boolean] of set of 0..31 = (
-        [vtBoolean,vtInteger,vtInt64,vtCurrency,vtExtended],
-        [vtBoolean,vtInteger,vtInt64,vtCurrency,vtExtended,vtVariant]);
+        [vtBoolean,vtInteger,vtInt64{$ifdef FPC},vtQWord{$endif},vtCurrency,vtExtended],
+        [vtBoolean,vtInteger,vtInt64{$ifdef FPC},vtQWord{$endif},vtCurrency,vtExtended,vtVariant]);
 label Txt;
 begin
   if Format='' then begin
@@ -28045,7 +28072,6 @@ begin
   Sum := t;
 end;
 
-/// return the index of Value in Values[], -1 if not found
 function FindRawUTF8(const Values: TRawUTF8DynArray; const Value: RawUTF8;
   CaseSensitive: boolean=true): integer;
 begin
@@ -28108,7 +28134,6 @@ begin
 end;
 {$endif}
 
-/// true if Value was added successfully in Values[]
 function AddRawUTF8(var Values: TRawUTF8DynArray; const Value: RawUTF8;
   NoDuplicates: boolean=false; CaseSensitive: boolean=true): boolean;
 var i: integer;
@@ -42886,6 +42911,12 @@ begin
       VType := varInt64;
       VInt64 := V.VInt64^;
     end;
+    {$ifdef FPC}
+    vtQWord: begin
+      VType := varQWord;
+      VQWord := V.VQWord^;
+    end;
+    {$endif}
     vtCurrency: begin
       VType := varCurrency;
       VCurrency := V.VCurrency^;
@@ -51986,6 +52017,9 @@ begin
     vtBoolean:  Add(VBoolean); // 'true'/'false'
     vtInteger:  Add(VInteger);
     vtInt64:    Add(VInt64^);
+    {$ifdef FPC}
+    vtQWord:    AddQ(V.VQWord^);
+    {$endif}
     vtExtended: Add(VExtended^,DOUBLE_PRECISION);
     vtCurrency: AddCurr64(VInt64^);
     vtObject:   WriteObject(VObject);
@@ -52012,6 +52046,9 @@ begin
   vtExtended:     Add(VExtended^,DOUBLE_PRECISION);
   vtCurrency:     AddCurr64(VInt64^);
   vtInt64:        Add(VInt64^);
+  {$ifdef FPC}
+  vtQWord:        AddQ(VQWord^);
+  {$endif}
   {$ifndef NOVARIANTS}
   vtVariant:      AddVariant(VVariant^,Escape);
   {$endif}
@@ -58763,6 +58800,17 @@ begin
   inc(fTotalWritten);
 end;
 
+procedure TFileBufferWriter.Write2(Data: word);
+begin
+  if fPos+2>fBufLen then begin
+    fStream.Write(fBuffer^,fPos);
+    fPos := 0;
+  end;
+  PWord(@fBuffer^[fPos])^ := Data;
+  inc(fPos,sizeof(Word));
+  inc(fTotalWritten,sizeof(Word));
+end;
+
 procedure TFileBufferWriter.Write4(Data: integer);
 begin
   if fPos+sizeof(integer)>fBufLen then begin
@@ -60172,6 +60220,8 @@ begin
   Add(tmp);
 end;
 
+{$ifndef DELPHI5OROLDER} // circumvent Delphi 5 compiler bug
+
 procedure TRawByteStringGroup.Add(const aAnother: TRawByteStringGroup);
 var i: integer;
     s,d: PRawByteStringGroupValue;
@@ -60191,6 +60241,18 @@ begin
   end;
   inc(Count,aAnother.Count);
 end;
+
+function TRawByteStringGroup.Equals(const aAnother: TRawByteStringGroup): boolean;
+begin
+  if ((Values=nil) and (aAnother.Values<>nil)) or ((Values<>nil) and (aAnother.Values=nil)) or
+     (Position<>aAnother.Position) then
+    result := false else
+    if (Count<>1) or (aAnother.Count<>1) or (Values[0].Value<>aAnother.Values[0].Value) then
+      result := AsText=aAnother.AsText else
+      result := true;
+end;
+
+{$endif DELPHI5OROLDER}
 
 procedure TRawByteStringGroup.Clear;
 begin
@@ -60304,6 +60366,7 @@ begin
     SetString(result,P,aLength);
 end;
 
+{$ifndef NOVARIANTS}
 procedure TRawByteStringGroup.FindAsVariant(aPosition, aLength: integer; out aDest: variant);
 var P: pointer;
 begin
@@ -60311,6 +60374,7 @@ begin
   if P<>nil then
     RawUTF8ToVariant(P,aLength,aDest);
 end;
+{$endif}
 
 procedure TRawByteStringGroup.FindWrite(aPosition, aLength: integer; W: TTextWriter;
   Escape: TTextWriterKind);
@@ -60336,16 +60400,6 @@ begin
   P := Find(aPosition, aLength);
   if P<>nil then
     MoveFast(P^,aDest^,aLength);
-end;
-
-function TRawByteStringGroup.Equals(const aAnother: TRawByteStringGroup): boolean;
-begin
-  if ((Values=nil) and (aAnother.Values<>nil)) or ((Values<>nil) and (aAnother.Values=nil)) or
-     (Position<>aAnother.Position) then
-    result := false else
-    if (Count<>1) or (aAnother.Count<>1) or (Values[0].Value<>aAnother.Values[0].Value) then
-      result := AsText=aAnother.AsText else
-      result := true;
 end;
 
 

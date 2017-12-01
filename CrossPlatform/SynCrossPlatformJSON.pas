@@ -849,6 +849,9 @@ begin
   vtBoolean:    if VBoolean then result := '1' else result := '0';
   vtInteger:    result := IntToStr(VInteger);
   vtInt64:      result := IntToStr(VInt64^);
+  {$ifdef FPC}
+  vtQWord:      result := IntToStr(VQWord^);
+  {$endif}
   vtCurrency:   DoubleToJSON(VCurrency^,result);
   vtExtended:   DoubleToJSON(VExtended^,result);
   vtObject:     result := ObjectToJSON(VObject);

@@ -6639,6 +6639,9 @@ begin
     vtBoolean:    Bind(i,integer(VBoolean),IO);
     vtInteger:    Bind(i,VInteger,IO);
     vtInt64:      Bind(i,VInt64^,IO);
+    {$ifdef FPC}
+    vtQWord:      Bind(i,VQWord^,IO);
+    {$endif}
     vtCurrency:   BindCurrency(i,VCurrency^,IO);
     vtExtended:   Bind(i,VExtended^,IO);
     vtPointer:
