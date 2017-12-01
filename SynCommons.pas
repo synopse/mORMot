@@ -20684,7 +20684,7 @@ function VarRecToInt64(const V: TVarRec; out value: Int64): boolean;
 begin
   case V.VType of
     vtInteger: value := V.VInteger;
-    vtInt64:   value := V.VInt64^;
+    vtInt64 {$ifdef FPC}, vtQWord{$endif}:   value := V.VInt64^;
     vtBoolean: if V.VBoolean then value := 1 else value := 0; // normalize
     {$ifndef NOVARIANTS}
     vtVariant: value := V.VVariant^;
@@ -20702,6 +20702,9 @@ begin
   case V.VType of
     vtInteger: value := V.VInteger;
     vtInt64:   value := V.VInt64^;
+    {$ifdef FPC}
+    vtQWord:   value := V.VQWord^;
+    {$endif}
     vtBoolean: if V.VBoolean then value := 1 else value := 0; // normalize
     vtExtended: value := V.VExtended^;
     vtCurrency: value := V.VCurrency^;
@@ -20720,6 +20723,7 @@ function VarRecToTempUTF8(const V: TVarRec; var tmpStr: RawUTF8; var Res: TTempU
 {$ifndef NOVARIANTS}
 var isString: boolean;
 {$endif}
+label smlu32;
 begin
   case V.VType of
     vtString: begin
@@ -20783,7 +20787,7 @@ begin
     vtInt64:
       if (PCardinalArray(V.VInt64)^[0]<=high(SmallUInt32UTF8)) and
          (PCardinalArray(V.VInt64)^[1]=0) then begin
-        Res.Text := pointer(SmallUInt32UTF8[PCardinalArray(V.VInt64)^[0]]);
+smlu32: Res.Text := pointer(SmallUInt32UTF8[V.VInt64^]);
         Res.Len := length(RawByteString(pointer(Res.Text)));
         result := Res.Len;
         exit;
@@ -20793,6 +20797,16 @@ begin
         result := Res.Len;
         exit;
       end;
+    {$ifdef FPC}
+    vtQWord:
+    if (PCardinalArray(V.VQWord)^[0]<=high(SmallUInt32UTF8)) and
+       (PCardinalArray(V.VQWord)^[1]=0) then goto smlu32 else begin
+      Res.Text := PUTF8Char(StrUInt64(@Res.Temp[23],V.VQWord^));
+      Res.Len := @Res.Temp[23]-Res.Text;
+      result := Res.Len;
+      exit;
+    end;
+    {$endif}
     vtCurrency: begin
       Res.Text := @Res.Temp;
       Res.Len := Curr64ToPChar(V.VInt64^,Res.Temp);
@@ -20844,7 +20858,8 @@ end;
 procedure VarRecToUTF8(const V: TVarRec; var result: RawUTF8; wasString: PBoolean=nil);
 var isString: boolean;
 begin
-  isString := not (V.VType in [vtBoolean,vtInteger,vtInt64,vtCurrency,vtExtended]);
+  isString := not (V.VType in [
+    vtBoolean,vtInteger,vtInt64{$ifdef FPC},vtQWord{$endif},vtCurrency,vtExtended]);
   with V do
   case V.VType of
     vtString:
@@ -20873,6 +20888,10 @@ begin
       Int32ToUtf8(VInteger,result);
     vtInt64:
       Int64ToUtf8(VInt64^,result);
+    {$ifdef FPC}
+    vtQWord:
+      UInt64ToUtf8(VQWord^,result);
+    {$endif}
     vtCurrency:
       Curr64ToStr(VInt64^,result);
     vtExtended:
@@ -25253,8 +25272,8 @@ var i, tmpN, L, A, P, len: PtrInt;
     F,FDeb: PUTF8Char;
     wasString: Boolean;
 const NOTTOQUOTE: array[boolean] of set of 0..31 = (
-        [vtBoolean,vtInteger,vtInt64,vtCurrency,vtExtended],
-        [vtBoolean,vtInteger,vtInt64,vtCurrency,vtExtended,vtVariant]);
+        [vtBoolean,vtInteger,vtInt64{$ifdef FPC},vtQWord{$endif},vtCurrency,vtExtended],
+        [vtBoolean,vtInteger,vtInt64{$ifdef FPC},vtQWord{$endif},vtCurrency,vtExtended,vtVariant]);
 label Txt;
 begin
   if Format='' then begin
@@ -42892,6 +42911,12 @@ begin
       VType := varInt64;
       VInt64 := V.VInt64^;
     end;
+    {$ifdef FPC}
+    vtQWord: begin
+      VType := varQWord;
+      VQWord := V.VQWord^;
+    end;
+    {$endif}
     vtCurrency: begin
       VType := varCurrency;
       VCurrency := V.VCurrency^;
@@ -51992,6 +52017,9 @@ begin
     vtBoolean:  Add(VBoolean); // 'true'/'false'
     vtInteger:  Add(VInteger);
     vtInt64:    Add(VInt64^);
+    {$ifdef FPC}
+    vtQWord:    AddQ(V.VQWord^);
+    {$endif}
     vtExtended: Add(VExtended^,DOUBLE_PRECISION);
     vtCurrency: AddCurr64(VInt64^);
     vtObject:   WriteObject(VObject);
@@ -52018,6 +52046,9 @@ begin
   vtExtended:     Add(VExtended^,DOUBLE_PRECISION);
   vtCurrency:     AddCurr64(VInt64^);
   vtInt64:        Add(VInt64^);
+  {$ifdef FPC}
+  vtQWord:        AddQ(VQWord^);
+  {$endif}
   {$ifndef NOVARIANTS}
   vtVariant:      AddVariant(VVariant^,Escape);
   {$endif}

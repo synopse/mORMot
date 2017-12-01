@@ -4391,7 +4391,7 @@ begin
       Str(VInteger,tmp);
       SockSend(@tmp[1],length(tmp));
     end;
-    vtInt64: begin
+    vtInt64{$ifdef FPC},vtQWord{$endif}: begin
       Str(VInt64^,tmp);
       SockSend(@tmp[1],length(tmp));
     end;

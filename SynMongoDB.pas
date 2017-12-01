@@ -3505,10 +3505,11 @@ begin
   case value.VType of
     vtBoolean:  BSONWrite(name,value.VBoolean);
     vtInteger:  BSONWrite(name,value.VInteger);
-    vtInt64:    BSONWrite(name,value.VInt64^);
     vtCurrency: BSONWrite(name,value.VCurrency^);
     vtExtended: BSONWrite(name,value.VExtended^);
     vtVariant:  BSONWriteVariant(name,value.VVariant^);
+    vtInt64{$ifdef FPC},vtQWord{$endif}:
+      BSONWrite(name,value.VInt64^);
     vtString, vtAnsiString, {$ifdef HASVARUSTRING}vtUnicodeString,{$endif}
     vtPChar, vtChar, vtWideChar, vtWideString: begin
       VarRecToUTF8(value,tmp);
