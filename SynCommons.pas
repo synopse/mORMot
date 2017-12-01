@@ -10074,6 +10074,8 @@ type
     procedure Write(Data: pointer; DataLen: integer); overload;
     /// append 1 byte of data at the current position
     procedure Write1(Data: Byte); {$ifdef HASINLINE}inline;{$endif}
+    /// append 2 bytes of data at the current position
+    procedure Write2(Data: Word); {$ifdef HASINLINE}inline;{$endif}
     /// append 4 bytes of data at the current position
     procedure Write4(Data: integer); {$ifdef HASINLINE}inline;{$endif}
     /// append 4 bytes of data, encoded as BigEndian, at the current position
@@ -58765,6 +58767,17 @@ begin
   fBuffer^[fPos] := Data;
   inc(fPos);
   inc(fTotalWritten);
+end;
+
+procedure TFileBufferWriter.Write2(Data: word);
+begin
+  if fPos+2>fBufLen then begin
+    fStream.Write(fBuffer^,fPos);
+    fPos := 0;
+  end;
+  PWord(@fBuffer^[fPos])^ := Data;
+  inc(fPos,sizeof(Word));
+  inc(fTotalWritten,sizeof(Word));
 end;
 
 procedure TFileBufferWriter.Write4(Data: integer);
