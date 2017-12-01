@@ -1626,9 +1626,9 @@ type
   protected
     fCertificate: TECCCertificate;
     fOwnCertificate: boolean;
-    function ComputeSignature(const payload64: RawUTF8): RawUTF8; override;
-    procedure CheckSignature(var JWT: TJWTContent; const payload64: RawUTF8;
-      const signature: RawByteString); override;
+    function ComputeSignature(const headpayload: RawUTF8): RawUTF8; override;
+    procedure CheckSignature(const headpayload: RawUTF8; const signature: RawByteString;
+      var JWT: TJWTContent); override;
   public
     /// initialize the JWT processing instance using ECDSA P-256 algorithm
     // - the supplied set of claims are expected to be defined in the JWT payload
@@ -4277,20 +4277,20 @@ begin
   inherited;
 end;
 
-procedure TJWTES256.CheckSignature(var JWT: TJWTContent;
-  const payload64: RawUTF8; const signature: RawByteString);
+procedure TJWTES256.CheckSignature(const headpayload: RawUTF8; const signature: RawByteString;
+  var JWT: TJWTContent);
 var sha: TSHA256;
     hash: TSHA256Digest;
 begin
   JWT.result := jwtInvalidSignature;
   if length(signature)<>sizeof(TECCSignature) then
     exit;
-  sha.Full(pointer(payload64),length(payload64),hash);
+  sha.Full(pointer(headpayload),length(headpayload),hash);
   if ecdsa_verify(fCertificate.fContent.Signed.PublicKey,hash,PECCSignature(signature)^) then
     JWT.result := jwtValid;
 end;
 
-function TJWTES256.ComputeSignature(const payload64: RawUTF8): RawUTF8;
+function TJWTES256.ComputeSignature(const headpayload: RawUTF8): RawUTF8;
 var sha: TSHA256;
     hash: TSHA256Digest;
     sign: TECCSignature;
@@ -4299,7 +4299,7 @@ begin
      not TECCCertificateSecret(fCertificate).HasSecret then
     raise EECCException.CreateUTF8('%.ComputeSignature expects % (%) to hold '+
       'a private key',[self,fCertificate,fCertificate.Serial]);
-  sha.Full(pointer(payload64),length(payload64),hash);
+  sha.Full(pointer(headpayload),length(headpayload),hash);
   if not ecdsa_sign(TECCCertificateSecret(fCertificate).fPrivateKey,hash,sign) then
     raise EECCException.CreateUTF8('%.ComputeSignature: ecdsa_sign?',[self]);
   result := BinToBase64URI(@sign,sizeof(sign));

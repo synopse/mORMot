@@ -2360,12 +2360,12 @@ type
       const Issuer, Subject, Audience: RawUTF8; NotBefore: TDateTime;
       ExpirationMinutes: cardinal): RawUTF8; virtual;
     procedure Parse(const Token: RawUTF8; var JWT: TJWTContent;
-      out payload64: RawUTF8; out signature: RawByteString); virtual;
+      out headpayload: RawUTF8; out signature: RawByteString); virtual;
     function CheckAgainstActualTimestamp(var JWT: TJWTContent): boolean;
     // abstract methods which should be overriden by inherited classes
-    function ComputeSignature(const payload64: RawUTF8): RawUTF8; virtual; abstract;
-    procedure CheckSignature(var JWT: TJWTContent; const payload64: RawUTF8;
-      const signature: RawByteString); virtual; abstract;
+    function ComputeSignature(const headpayload: RawUTF8): RawUTF8; virtual; abstract;
+    procedure CheckSignature(const headpayload: RawUTF8; const signature: RawByteString;
+      var JWT: TJWTContent); virtual; abstract;
   public
     /// initialize the JWT processing instance
     // - the supplied set of claims are expected to be defined in the JWT payload
@@ -2472,9 +2472,9 @@ type
   // communication is already secured by other means, and use JWT as cookies
   TJWTNone = class(TJWTAbstract)
   protected
-    function ComputeSignature(const payload64: RawUTF8): RawUTF8; override;
-    procedure CheckSignature(var JWT: TJWTContent; const payload64: RawUTF8;
-      const signature: RawByteString); override;
+    function ComputeSignature(const headpayload: RawUTF8): RawUTF8; override;
+    procedure CheckSignature(const headpayload: RawUTF8; const signature: RawByteString;
+      var JWT: TJWTContent); override;
   public
     /// initialize the JWT processing using the 'none' algorithm
     // - the supplied set of claims are expected to be defined in the JWT payload
@@ -2497,9 +2497,9 @@ type
   TJWTHS256 = class(TJWTAbstract)
   protected
     fHmacPrepared: THMAC_SHA256;
-    function ComputeSignature(const payload64: RawUTF8): RawUTF8; override;
-    procedure CheckSignature(var JWT: TJWTContent; const payload64: RawUTF8;
-      const signature: RawByteString); override;
+    function ComputeSignature(const headpayload: RawUTF8): RawUTF8; override;
+    procedure CheckSignature(const headpayload: RawUTF8; const signature: RawByteString;
+      var JWT: TJWTContent); override;
   public
     /// initialize the JWT processing using 'HS256' (HMAC SHA-256) algorithm
     // - the supplied set of claims are expected to be defined in the JWT payload
@@ -2531,9 +2531,9 @@ type
   TJWTHS384 = class(TJWTAbstract)
   protected
     fHmacPrepared: THMAC_SHA384;
-    function ComputeSignature(const payload64: RawUTF8): RawUTF8; override;
-    procedure CheckSignature(var JWT: TJWTContent; const payload64: RawUTF8;
-      const signature: RawByteString); override;
+    function ComputeSignature(const headpayload: RawUTF8): RawUTF8; override;
+    procedure CheckSignature(const headpayload: RawUTF8; const signature: RawByteString;
+      var JWT: TJWTContent); override;
   public
     /// initialize the JWT processing using 'HS384' (HMAC SHA-384) algorithm
     // - the supplied set of claims are expected to be defined in the JWT payload
@@ -2565,9 +2565,9 @@ type
   TJWTHS512 = class(TJWTAbstract)
   protected
     fHmacPrepared: THMAC_SHA512;
-    function ComputeSignature(const payload64: RawUTF8): RawUTF8; override;
-    procedure CheckSignature(var JWT: TJWTContent; const payload64: RawUTF8;
-      const signature: RawByteString); override;
+    function ComputeSignature(const headpayload: RawUTF8): RawUTF8; override;
+    procedure CheckSignature(const headpayload: RawUTF8; const signature: RawByteString;
+      var JWT: TJWTContent); override;
   public
     /// initialize the JWT processing using 'HS512' (HMAC SHA-512) algorithm
     // - the supplied set of claims are expected to be defined in the JWT payload
@@ -12535,16 +12535,16 @@ const
 function TJWTAbstract.Compute(const DataNameValue: array of const;
   const Issuer, Subject, Audience: RawUTF8; NotBefore: TDateTime;
   ExpirationMinutes: integer; Signature: PRawUTF8): RawUTF8;
-var payload, signat: RawUTF8;
+var payload, headpayload, signat: RawUTF8;
 begin
   if self=nil then begin
     result := '';
     exit;
   end;
   payload := PayloadToJSON(DataNameValue,Issuer,Subject,Audience,NotBefore,ExpirationMinutes);
-  payload := BinToBase64URI(payload);
-  signat := ComputeSignature(payload);
-  result := fHeaderB64+payload+'.'+signat;
+  headpayload := fHeaderB64+BinToBase64URI(payload);
+  signat := ComputeSignature(headpayload);
+  result := headpayload+'.'+signat;
   if length(result)>JWT_MAXSIZE then
     raise EJWTException.CreateUTF8('%.Compute oversize: len=%',[self,length(result)]);
   if Signature<>nil then
@@ -12613,7 +12613,7 @@ begin
 end;
 
 procedure TJWTAbstract.Verify(const Token: RawUTF8; out JWT: TJWTContent);
-var payload64: RawUTF8;
+var headpayload: RawUTF8;
     signature: RawByteString;
     fromcache: boolean;
 begin
@@ -12623,10 +12623,10 @@ begin
     fCache.DeleteDeprecated;
   end;
   if not fromcache then
-    Parse(Token,JWT,payload64,signature);
+    Parse(Token,JWT,headpayload,signature);
   if JWT.result in [jwtValid,jwtNotBeforeFailed] then
     if CheckAgainstActualTimestamp(JWT) and not fromcache then
-      CheckSignature(JWT,payload64,signature); // depending on the algorithm used
+      CheckSignature(headpayload,signature,JWT); // depending on the algorithm used
   if not fromcache and (self<>nil) and (fCache<>nil) and (JWT.result in fCacheResults) then
     fCache.Add(Token,JWT);
 end;
@@ -12665,7 +12665,7 @@ begin
 end;
 
 procedure TJWTAbstract.Parse(const Token: RawUTF8; var JWT: TJWTContent;
-  out payload64: RawUTF8; out signature: RawByteString);
+  out headpayload: RawUTF8; out signature: RawByteString);
 var i,j,c,cap,len,a: integer;
     P: PUTF8Char;
     N,V: PUTF8Char;
@@ -12674,7 +12674,7 @@ var i,j,c,cap,len,a: integer;
     claim: TJWTClaim;
     id: TSynUniqueIdentifierBits;
     value: variant;
-    payload, signature64: RawUTF8;
+    payload64, signature64: RawUTF8;
     head,aud: TDocVariantData;
 begin
   JWT.data.InitFast(0,dvObject);
@@ -12694,7 +12694,7 @@ begin
     signature := Base64URIToBin(signature64);
     if (head.InitJSONInPlace(pointer(signature),JSON_OPTIONS_FAST)=nil) or
        (head.U['alg']<>fAlgorithm) or
-       (head.GetAsRawUTF8('typ',payload) and (payload<>'JWT')) then
+       (head.GetAsRawUTF8('typ',payload64) and (payload64<>'JWT')) then
       exit;
   end else begin
     len := length(fHeaderB64); // fast direct compare of fHeaderB64 (including "alg")
@@ -12707,19 +12707,19 @@ begin
   i := PosEx('.',Token,len+1);
   if (i=0) or (i-len>2700) then
     exit;
-  payload64 := copy(Token,len+1,i-len-1);
+  headpayload := copy(Token,1,i-1);
   signature64 := copy(Token,i+1,maxInt);
   Base64FromURI(signature64);
   signature := Base64ToBin(signature64);
   if (signature='') and (signature64<>'') then
     exit;
   JWT.result := jwtInvalidPayload;
-  payload := payload64;
-  Base64FromURI(payload);
-  payload := Base64ToBin(payload);
-  if payload='' then
+  payload64 := copy(Token,len+1,i-len-1);
+  Base64FromURI(payload64);
+  payload64 := Base64ToBin(payload64);
+  if payload64='' then
     exit;
-  P := GotoNextNotSpace(pointer(payload));
+  P := GotoNextNotSpace(pointer(payload64));
   if P^<>'{' then
     exit;
   P := GotoNextNotSpace(P+1);
@@ -12879,15 +12879,15 @@ begin
     aIDIdentifier,aIDObfuscationKey);
 end;
 
-procedure TJWTNone.CheckSignature(var JWT: TJWTContent; const payload64: RawUTF8;
-  const signature: RawByteString);
+procedure TJWTNone.CheckSignature(const headpayload: RawUTF8; const signature: RawByteString;
+  var JWT: TJWTContent);
 begin
   if signature='' then // JWA defined empty string for "none" JWS
     JWT.result := jwtValid else
     JWT.result := jwtInvalidSignature;
 end;
 
-function TJWTNone.ComputeSignature(const payload64: RawUTF8): RawUTF8;
+function TJWTNone.ComputeSignature(const headpayload: RawUTF8): RawUTF8;
 begin
   result := '';
 end;
@@ -12908,7 +12908,6 @@ begin
     FillZero(secret);
   end else
     fHmacPrepared.Init(pointer(aSecret),length(aSecret));
-  fHmacPrepared.Update(pointer(fHeaderB64),length(fHeaderB64));
 end;
 
 procedure TJWTHS256.ComputeHMACSecret(const aSecret: RawUTF8; aSecretPBKDF2Rounds: integer;
@@ -12919,26 +12918,26 @@ begin
     FillZero(aHMACSecret);
 end;
 
-function TJWTHS256.ComputeSignature(const payload64: RawUTF8): RawUTF8;
+function TJWTHS256.ComputeSignature(const headpayload: RawUTF8): RawUTF8;
 var hmac: THMAC_SHA256;
     res: TSHA256Digest;
 begin
-  hmac := fHmacPrepared; // thread-safe re-use of prepared HMAC(header+'.')
-  hmac.Update(pointer(payload64),length(payload64));
+  hmac := fHmacPrepared; // thread-safe re-use of prepared HMAC
+  hmac.Update(pointer(headpayload),length(headpayload));
   hmac.Done(res);
   result := BinToBase64URI(@res,sizeof(res));
 end;
 
-procedure TJWTHS256.CheckSignature(var JWT: TJWTContent; const payload64: RawUTF8;
-  const signature: RawByteString);
+procedure TJWTHS256.CheckSignature(const headpayload: RawUTF8;
+  const signature: RawByteString; var JWT: TJWTContent);
 var hmac: THMAC_SHA256;
     res: TSHA256Digest;
 begin
   JWT.result := jwtInvalidSignature;
   if length(signature)<>sizeof(res) then
     exit;
-  hmac := fHmacPrepared; // thread-safe re-use of prepared HMAC(header+'.')
-  hmac.Update(pointer(payload64),length(payload64));
+  hmac := fHmacPrepared; // thread-safe re-use of prepared HMAC
+  hmac.Update(pointer(headpayload),length(headpayload));
   hmac.Done(res);
   if IsEqual(res,PSHA256Digest(signature)^) then
     JWT.result := jwtValid;
@@ -12965,7 +12964,6 @@ begin
     FillZero(secret);
   end else
     fHmacPrepared.Init(pointer(aSecret),length(aSecret));
-  fHmacPrepared.Update(pointer(fHeaderB64),length(fHeaderB64));
 end;
 
 procedure TJWTHS384.ComputeHMACSecret(const aSecret: RawUTF8; aSecretPBKDF2Rounds: integer;
@@ -12976,18 +12974,18 @@ begin
     FillZero(aHMACSecret);
 end;
 
-function TJWTHS384.ComputeSignature(const payload64: RawUTF8): RawUTF8;
+function TJWTHS384.ComputeSignature(const headpayload: RawUTF8): RawUTF8;
 var hmac: THMAC_SHA384;
     res: TSHA384Digest;
 begin
   hmac := fHmacPrepared; // thread-safe re-use of prepared HMAC(header+'.')
-  hmac.Update(pointer(payload64),length(payload64));
+  hmac.Update(pointer(headpayload),length(headpayload));
   hmac.Done(res);
   result := BinToBase64URI(@res,sizeof(res));
 end;
 
-procedure TJWTHS384.CheckSignature(var JWT: TJWTContent; const payload64: RawUTF8;
-  const signature: RawByteString);
+procedure TJWTHS384.CheckSignature(const headpayload: RawUTF8;
+  const signature: RawByteString; var JWT: TJWTContent);
 var hmac: THMAC_SHA384;
     res: TSHA384Digest;
 begin
@@ -12995,7 +12993,7 @@ begin
   if length(signature)<>sizeof(res) then
     exit;
   hmac := fHmacPrepared; // thread-safe re-use of prepared HMAC(header+'.')
-  hmac.Update(pointer(payload64),length(payload64));
+  hmac.Update(pointer(headpayload),length(headpayload));
   hmac.Done(res);
   if IsEqual(res,PSHA384Digest(signature)^) then
     JWT.result := jwtValid;
@@ -13022,7 +13020,6 @@ begin
     FillZero(secret);
   end else
     fHmacPrepared.Init(pointer(aSecret),length(aSecret));
-  fHmacPrepared.Update(pointer(fHeaderB64),length(fHeaderB64));
 end;
 
 procedure TJWTHS512.ComputeHMACSecret(const aSecret: RawUTF8; aSecretPBKDF2Rounds: integer;
@@ -13033,26 +13030,26 @@ begin
     FillZero(aHMACSecret);
 end;
 
-function TJWTHS512.ComputeSignature(const payload64: RawUTF8): RawUTF8;
+function TJWTHS512.ComputeSignature(const headpayload: RawUTF8): RawUTF8;
 var hmac: THMAC_SHA512;
     res: TSHA512Digest;
 begin
-  hmac := fHmacPrepared; // thread-safe re-use of prepared HMAC(header+'.')
-  hmac.Update(pointer(payload64),length(payload64));
+  hmac := fHmacPrepared; // thread-safe re-use of prepared HMAC
+  hmac.Update(pointer(headpayload),length(headpayload));
   hmac.Done(res);
   result := BinToBase64URI(@res,sizeof(res));
 end;
 
-procedure TJWTHS512.CheckSignature(var JWT: TJWTContent; const payload64: RawUTF8;
-  const signature: RawByteString);
+procedure TJWTHS512.CheckSignature(const headpayload: RawUTF8;
+  const signature: RawByteString; var JWT: TJWTContent);
 var hmac: THMAC_SHA512;
     res: TSHA512Digest;
 begin
   JWT.result := jwtInvalidSignature;
   if length(signature)<>sizeof(res) then
     exit;
-  hmac := fHmacPrepared; // thread-safe re-use of prepared HMAC(header+'.')
-  hmac.Update(pointer(payload64),length(payload64));
+  hmac := fHmacPrepared; // thread-safe re-use of prepared HMAC
+  hmac.Update(pointer(headpayload),length(headpayload));
   hmac.Done(res);
   if IsEqual(res,PSHA512Digest(signature)^) then
     JWT.result := jwtValid;
