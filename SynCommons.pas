@@ -10372,11 +10372,16 @@ type
 
   /// store several RawByteString as a gathering
   // - clever concatenation of RawByteString items
-  // - an optimized compaction algorithm will occur to ensure that 64 items will
-  // eventually consume at last 1MB of memory: this reduces memory fragmentation
-  // with no performance impact
-  TRawByteStringGroup = object
+  // - an optimized compaction algorithm will occur to ensure that every
+  // 64 items will eventually consume at last 1MB of memory: this reduces memory
+  // fragmentation with almost no performance impact
+  {$ifdef UNICODE}
+  TRawByteStringGroup = record
   private
+  {$else}
+  TRawByteStringGroup = object
+  protected
+  {$endif}
     procedure Compact(len: integer);
   public
     /// actual list storing the data
@@ -10410,14 +10415,29 @@ type
     procedure WriteString(W: TFileBufferWriter);
     /// returns a pointer to Values[] containing a given position
     // - returns nil if not found
-    function Find(aPosition: integer): PRawByteStringGroupValue;
+    function Find(aPosition: integer): PRawByteStringGroupValue; overload;
+    /// returns a pointer to Values[].Value containing a given position and length
+    // - returns nil if not found
+    function Find(aPosition, aLength: integer): pointer; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// returns the text at a given position in Values[]
     // - text should be in a single Values[] entry
     function FindAsText(aPosition, aLength: integer): RawByteString;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// returns the text at a given position in Values[]
+    // - text should be in a single Values[] entry
+    procedure FindAsVariant(aPosition, aLength: integer; out aDest: variant);
+      {$ifdef HASINLINE}inline;{$endif}
     /// append the text at a given position in Values[], JSON escaped by default
     // - text should be in a single Values[] entry
     procedure FindWrite(aPosition, aLength: integer; W: TTextWriter;
       Escape: TTextWriterKind=twJSONEscape);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// append the blob at a given position in Values[], base-64 encoded
+    // - text should be in a single Values[] entry
+    procedure FindWriteBase64(aPosition, aLength: integer; W: TTextWriter;
+      withMagic: boolean);
+      {$ifdef HASINLINE}inline;{$endif}
     /// copy the text at a given position in Values[]
     // - text should be in a single Values[] entry
     procedure FindMove(aPosition, aLength: integer; aDest: pointer);
@@ -60099,22 +60119,26 @@ end;
 
 { TRawByteStringGroup }
 
+const
+  COMPACT_COUNT = 64; // auto-compaction if 64 last items < 1MB
+  COMPACT_LEN = 1 shl 20;
+
 procedure TRawByteStringGroup.Compact(len: integer);
 var tmp: RawByteString;
-    i, v: integer;
+    i, L: integer;
     P: PAnsiChar;
 begin
   SetLength(tmp,len);
   P := pointer(tmp);
-  for i := Count-64 to Count-1 do
+  for i := Count-COMPACT_COUNT to Count-1 do
     with Values[i] do begin
-      v := length(Value);
-      MoveFast(pointer(Value)^,P^,v);
-      inc(P,v);
+      L := length(Value);
+      MoveFast(pointer(Value)^,P^,L);
+      inc(P,L);
       Value := '';
     end;
   //assert(P-pointer(tmp)=len);
-  dec(Count,64);
+  dec(Count,COMPACT_COUNT);
   Values[Count].Value := tmp;
   LastFind := Count;
   inc(Count);
@@ -60125,16 +60149,18 @@ var len: integer;
 begin
   if Values=nil then
     Clear else
-  if Count=NextCompact then begin // auto-compaction if 64 last items < 1MB
-    len := Position-Values[Count-64].Position;
-    if len<1 shl 20 then
+  if Count=NextCompact then begin
+    len := Position-Values[Count-COMPACT_COUNT].Position;
+    if len<COMPACT_LEN then
       Compact(len);
     inc(NextCompact); // always slide the compaction window
   end;
   if Count=Length(Values) then
-    SetLength(Values,Count+64+Count shr 3);
-  Values[Count].Position := Position;
-  Values[Count].Value := aItem;
+    SetLength(Values,Count+COMPACT_COUNT+Count shr 5);
+  with Values[Count] do begin
+    Position := self.Position;
+    Value := aItem;
+  end;
   inc(Count);
   inc(Position,Length(aItem));
 end;
@@ -60148,15 +60174,20 @@ end;
 
 procedure TRawByteStringGroup.Add(const aAnother: TRawByteStringGroup);
 var i: integer;
+    s,d: PRawByteStringGroupValue;
 begin
   if aAnother.Values=nil then
     exit;
   if Count+aAnother.Count>Length(Values) then
     SetLength(Values,Count+aAnother.Count);
-  for i := 0 to aAnother.Count-1 do begin
-    Values[Count+i].Position := Position;
-    Values[Count+i].Value := aAnother.Values[i].Value;
-    inc(Position,length(Values[Count+i].Value));
+  s := pointer(aAnother.Values);
+  d := @Values[Count];
+  for i := 1 to aAnother.Count do begin
+    d^.Position := Position;
+    d^.Value := s^.Value;
+    inc(Position,length(s^.Value));
+    inc(s);
+    inc(d);
   end;
   inc(Count,aAnother.Count);
 end;
@@ -60167,23 +60198,25 @@ begin
   Position := 0;
   Count := 0;
   LastFind := 0;
-  NextCompact := 64;
+  NextCompact := COMPACT_COUNT;
 end;
 
 function TRawByteStringGroup.AsText: RawByteString;
 var i: integer;
+    v: PRawByteStringGroupValue;
 begin
   if Values=nil then
     result := '' else
   if Count=1 then
     result := Values[0].Value else begin
     SetString(result,nil,Position);
-    for i := 0 to Count-1 do
-    with Values[i] do begin
-      MoveFast(pointer(Value)^, PByteArray(result)[Position], length(Value));
-      Value := '';
+    v := pointer(Values);
+    for i := 1 to Count do begin
+      MoveFast(pointer(v^.Value)^,PByteArray(result)[v^.Position],length(v^.Value));
+      v^.Value := '';
+      inc(v);
     end;
-    Values[0].Value := result; // we can use it for absolute compaction
+    Values[0].Value := result; // use result for absolute compaction ;)
     Count := 1;
   end;
 end;
@@ -60197,7 +60230,7 @@ begin
   SetLength(result, Position);
   for i := 0 to Count-1 do
   with Values[i] do
-    MoveFast(pointer(Value)^, PByteArray(result)[Position], length(Value));
+    MoveFast(pointer(Value)^,PByteArray(result)[Position],length(Value));
 end;
 
 procedure TRawByteStringGroup.Write(W: TTextWriter; Escape: TTextWriterKind);
@@ -60230,7 +60263,7 @@ end;
 function TRawByteStringGroup.Find(aPosition: integer): PRawByteStringGroupValue;
 var i: integer;
 begin
-  if (pointer(Values)<>nil) and (aPosition>=0) and (aPosition<Position) then begin
+  if (pointer(Values)<>nil) and (cardinal(aPosition)<cardinal(Position)) then begin
     result := @Values[LastFind]; // this cache is very efficient in practice
     if (aPosition>=result^.Position) and (aPosition<result^.Position+length(result^.Value)) then
       exit;
@@ -60249,40 +60282,60 @@ begin
     result := nil;
 end;
 
-function TRawByteStringGroup.FindAsText(aPosition, aLength: integer): RawByteString;
+function TRawByteStringGroup.Find(aPosition, aLength: integer): pointer;
 var P: PRawByteStringGroupValue;
 begin
   P := Find(aPosition);
   if P=nil then
-    result := '' else begin
+    result := nil else begin
     dec(aPosition,P^.Position);
     if cardinal(aPosition+aLength)>cardinal(length(P^.Value)) then
-      result := '' else
-      SetString(result,PAnsiChar(@PByteArray(P^.Value)[aPosition]),aLength);
+      result := nil else
+      result := @PByteArray(P^.Value)[aPosition];
   end;
+end;
+
+function TRawByteStringGroup.FindAsText(aPosition, aLength: integer): RawByteString;
+var P: PAnsiChar;
+begin
+  P := Find(aPosition, aLength);
+  if P=nil then
+    result := '' else
+    SetString(result,P,aLength);
+end;
+
+procedure TRawByteStringGroup.FindAsVariant(aPosition, aLength: integer; out aDest: variant);
+var P: pointer;
+begin
+  P := Find(aPosition, aLength);
+  if P<>nil then
+    RawUTF8ToVariant(P,aLength,aDest);
 end;
 
 procedure TRawByteStringGroup.FindWrite(aPosition, aLength: integer; W: TTextWriter;
   Escape: TTextWriterKind);
-var P: PRawByteStringGroupValue;
+var P: pointer;
 begin
-  P := Find(aPosition);
-  if P<>nil then begin
-    dec(aPosition,P^.Position);
-    if cardinal(aPosition+aLength)<=cardinal(length(P^.Value)) then
-      W.Add(PUTF8Char(@PByteArray(P^.Value)[aPosition]),aLength,Escape);
-  end;
+  P := Find(aPosition, aLength);
+  if P<>nil then
+    W.Add(P,aLength,Escape);
+end;
+
+procedure TRawByteStringGroup.FindWriteBase64(aPosition, aLength: integer;
+  W: TTextWriter; withMagic: boolean);
+var P: pointer;
+begin
+  P := Find(aPosition, aLength);
+  if P<>nil then
+    W.WrBase64(P,aLength,withMagic);
 end;
 
 procedure TRawByteStringGroup.FindMove(aPosition, aLength: integer; aDest: pointer);
-var P: PRawByteStringGroupValue;
+var P: pointer;
 begin
-  P := Find(aPosition);
-  if P<>nil then begin
-    dec(aPosition,P^.Position);
-    if cardinal(aPosition+aLength)<=cardinal(length(P^.Value)) then
-        MoveFast(PByteArray(P^.Value)[aPosition],aDest^,aLength);
-    end;
+  P := Find(aPosition, aLength);
+  if P<>nil then
+    MoveFast(P^,aDest^,aLength);
 end;
 
 function TRawByteStringGroup.Equals(const aAnother: TRawByteStringGroup): boolean;
