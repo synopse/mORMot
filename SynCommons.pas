@@ -8761,7 +8761,12 @@ type
     /// this class method could be used to compute the encrypted password,
     // ready to be stored as JSON, according to a given private key
     class function ComputePassword(const PlainPassword: RawUTF8;
-      CustomKey: cardinal=0): RawUTF8;
+      CustomKey: cardinal=0): RawUTF8; overload;
+    /// this class method could be used to compute the encrypted password from
+    // a binary digest, ready to be stored as JSON, according to a given private key
+    // - just a wrapper around ComputePassword(BinToBase64URI())
+    class function ComputePassword(PlainPassword: pointer; PlainPasswordLen: integer;
+      CustomKey: cardinal=0): RawUTF8; overload;
     /// this class method could be used to decrypt a password, stored as JSON,
     // according to a given private key
     // - may trigger a ESynException if the password was stored using a custom
@@ -11777,30 +11782,6 @@ function BinToBase64(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
 // - with optional JSON_BASE64_MAGIC prefix (UTF-8 encoded \uFFF0 special code)
 function BinToBase64(const data, Prefix, Suffix: RawByteString; WithMagic: boolean): RawUTF8; overload;
 
-/// fast conversion from binary data into Base64-like URI-compatible encoded text
-// - will trim any right-sided '=' unsignificant characters, and replace
-// '+' or '/' by '_' or '-'
-function BinToBase64URI(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
-
-/// fast conversion from a binary buffer into Base64-like URI-compatible encoded text
-// - will trim any right-sided '=' unsignificant characters, and replace
-// '+' or '/' by '_' or '-'
-function BinToBase64URI(const Bin: RawByteString): RawUTF8; overload;
-
-/// conversion from any Base64 encoded value into URI-compatible encoded text
-// - will trim any right-sided '=' unsignificant characters, and replace
-// '+' or '/' by '_' or '-'
-procedure Base64ToURI(var base64: RawUTF8);
-
-/// conversion from URI-compatible encoded text into its original Base64 value
-// - will add any right-sided '=' unsignificant characters, and replace back
-// '_' or '-' by '+' or '/'
-procedure Base64FromURI(var base64: RawUTF8);
-
-/// conversion from URI-compatible encoded text into its decoded Base64 value
-function Base64URIToBin(var base64: RawUTF8): RawByteString;
-  {$ifdef HASINLINE}inline;{$endif}
-
 /// fast conversion from binary data into Base64 encoded UTF-8 text
 // with JSON_BASE64_MAGIC prefix (UTF-8 encoded \uFFF0 special code)
 function BinToBase64WithMagic(const data: RawByteString): RawUTF8; overload;
@@ -11894,6 +11875,74 @@ function Base64ToBinLengthSafe(sp: PAnsiChar; len: PtrInt): PtrInt;
 // - here len is the number of 4 chars chunks in sp input
 // - you should better not use this, but Base64ToBin() overloaded functions
 procedure Base64Decode(sp,rp: PAnsiChar; len: PtrInt);
+
+
+/// fast conversion from binary data into Base64-like URI-compatible encoded text
+// - in comparison to Base64 standard encoding, will trim any right-sided '='
+// unsignificant characters, and replace '+' or '/' by '_' or '-'
+function BinToBase64uri(const s: RawByteString): RawUTF8; overload;
+
+/// fast conversion from a binary buffer into Base64-like URI-compatible encoded text
+// - in comparison to Base64 standard encoding, will trim any right-sided '='
+// unsignificant characters, and replace '+' or '/' by '_' or '-'
+function BinToBase64uri(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
+
+/// conversion from any Base64 encoded value into URI-compatible encoded text
+// - warning: will modify the supplied base64 string in-place 
+// - in comparison to Base64 standard encoding, will trim any right-sided '='
+// unsignificant characters, and replace '+' or '/' by '_' or '-'
+procedure Base64ToURI(var base64: RawUTF8);
+
+/// retrieve the expected encoded length after Base64-URI process
+// - in comparison to Base64 standard encoding, will trim any right-sided '='
+// unsignificant characters, and replace '+' or '/' by '_' or '-'
+function BinToBase64uriLength(len: PtrUInt): PtrUInt;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// retrieve the expected undecoded length of a Base64-URI encoded buffer
+// - here len is the number of bytes in sp
+// - in comparison to Base64 standard encoding, will trim any right-sided '='
+// unsignificant characters, and replace '+' or '/' by '_' or '-'
+function Base64uriToBinLength(len: PtrInt): PtrInt;
+
+/// fast conversion from Base64-URI encoded text into binary data
+// - in comparison to Base64 standard encoding, will trim any right-sided '='
+// unsignificant characters, and replace '+' or '/' by '_' or '-'
+function Base64uriToBin(sp: PAnsiChar; len: PtrInt): RawByteString; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fast conversion from Base64-URI encoded text into binary data
+// - in comparison to Base64 standard encoding, will trim any right-sided '='
+// unsignificant characters, and replace '+' or '/' by '_' or '-'
+procedure Base64uriToBin(sp: PAnsiChar; len: PtrInt; var result: RawByteString); overload;
+
+/// fast conversion from Base64-URI encoded text into binary data
+// - in comparison to Base64 standard encoding, will trim any right-sided '='
+// unsignificant characters, and replace '+' or '/' by '_' or '-'
+function Base64uriToBin(const s: RawByteString): RawByteString; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fast conversion from Base64-URI encoded text into binary data
+// - in comparison to Base64 standard encoding, will trim any right-sided '='
+// unsignificant characters, and replace '+' or '/' by '_' or '-'
+// - will check supplied text is a valid Base64-URI encoded stream
+function Base64uriToBin(base64, bin: PAnsiChar; base64len, binlen: PtrInt): boolean; overload;
+
+/// fast conversion from Base64-URI encoded text into binary data
+// - in comparison to Base64 standard encoding, will trim any right-sided '='
+// unsignificant characters, and replace '+' or '/' by '_' or '-'
+// - will check supplied text is a valid Base64-URI encoded stream
+function Base64uriToBin(const base64: RawByteString; bin: PAnsiChar; binlen: PtrInt): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// direct low-level decoding of a Base64-URI encoded buffer
+// - returns true if the supplied sp[] buffer has been successfully decoded
+// into rp[] - will break at any invalid character, so is always safe to use
+// - in comparison to Base64 standard encoding, will trim any right-sided '='
+// unsignificant characters, and replace '+' or '/' by '_' or '-'
+// - you should better not use this, but Base64uriToBin() overloaded functions
+function Base64uriDecode(sp,rp: PAnsiChar; len: PtrInt): boolean;
+
 
 /// generate some pascal source code holding some data binary as constant
 // - can store sensitive information (e.g. certificates) within the executable
@@ -27110,13 +27159,77 @@ begin
   result := 0;
 end;
 
+{ --------- Base64 encoding/decoding }
+
+type
+  TBase64Enc = array[0..63] of AnsiChar;
+  TBase64Dec = array[AnsiChar] of shortint;
 const
-  b64enc: array[0..63] of AnsiChar =
+  b64enc: TBase64Enc =
     'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  b64URIenc: TBase64Enc =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+var
+  /// a conversion table from Base64 text into binary data
+  // - used by Base64ToBin/IsBase64 functions
+  // - contains -1 for invalid char, -2 for '=', 0..63 for b64enc[] chars
+  ConvertBase64ToBin, ConvertBase64URIToBin: TBase64Dec;
+
+function Base64AnyDecode(const decode: TBase64Dec; sp,rp: PAnsiChar; len: PtrInt): boolean;
+var c, ch: PtrInt;
+begin
+  result := false;
+  while len>=4 do begin
+    c := decode[sp[0]];
+    if c<0 then
+      exit;
+    c := c shl 6;
+    ch := decode[sp[1]];
+    if ch<0 then
+      exit;
+    c := (c or ch) shl 6;
+    ch := decode[sp[2]];
+    if ch<0 then
+      exit;
+    c := (c or ch) shl 6;
+    ch := decode[sp[3]];
+    if ch<0 then
+      exit;
+    c := c or ch;
+    rp[2] := AnsiChar(c);
+    c := c shr 8;
+    rp[1] := AnsiChar(c);
+    c := c shr 8;
+    rp[0] := AnsiChar(c);
+    dec(len,4);
+    inc(rp,3);
+    inc(sp,4);
+  end;
+  if len>=2 then begin
+    c := decode[sp[0]];
+    if c<0 then
+      exit;
+    c := c shl 6;
+    ch := decode[sp[1]];
+    if ch<0 then
+      exit;
+    if len=2 then
+      rp[0] := AnsiChar((c or ch) shr 4) else begin
+      c := (c or ch) shl 6;
+      ch := decode[sp[2]];
+      if ch<0 then
+        exit;
+      c := (c or ch) shr 2;
+      rp[1] := AnsiChar(c);
+      rp[0] := AnsiChar(c shr 8);
+    end;
+  end;
+  result := true;
+end;
+
+{$ifdef PUREPASCAL}
 
 function Base64EncodeMain(rp, sp: PAnsiChar; len: cardinal): integer;
-{$ifdef PUREPASCAL}
-  {$ifdef HASINLINE}inline;{$endif}
 var i: integer;
     c: cardinal;
 begin
@@ -27131,7 +27244,20 @@ begin
     inc(sp,3);
   end;
 end;
-{$else}
+
+procedure Base64Decode(sp,rp: PAnsiChar; len: PtrInt); {$ifdef FPC}inline;{$endif}
+begin
+  len := len shl 2; // len was the number of 4 chars chunks in sp
+  if (len>0) and (ConvertBase64ToBin[sp[len-2]]>=0) then
+    if ConvertBase64ToBin[sp[len-1]]>=0 then else
+      dec(len) else
+      dec(len,2); // adjust for Base64AnyDecode() algorithm
+  Base64AnyDecode(ConvertBase64ToBin,sp,rp,len);
+end;
+
+{$else PUREPASCAL}
+
+function Base64EncodeMain(rp, sp: PAnsiChar; len: cardinal): integer;
 asm // eax=rp edx=sp ecx=len - pipeline optimized version by AB
         push    ebx
         push    esi
@@ -27187,7 +27313,64 @@ asm // eax=rp edx=sp ecx=len - pipeline optimized version by AB
         pop     ebx
 end;
 
-{$endif}
+procedure Base64Decode(sp,rp: PAnsiChar; len: PtrInt);
+asm // eax=sp edx=rp ecx=len - pipeline optimized version by AB
+        push    ebx
+        push    esi
+        push    edi
+        push    ebp
+        push    eax
+        test    ecx, ecx
+        mov     ebp, edx
+        lea     edi, [ConvertBase64ToBin]
+        mov     [esp], ecx
+        jz      @4
+@0:     movzx   edx, byte ptr[eax]
+        movzx   ebx, byte ptr[eax + $01]
+        movsx   ecx, byte ptr[edi + edx]
+        movsx   esi, byte ptr[edi + ebx]
+        test    ecx, ecx
+        jl      @1
+        shl     ecx, $06
+        test    esi, esi
+        jl      @1
+        or      ecx, esi
+        movzx   edx, byte ptr[eax + $02]
+        movzx   ebx, byte ptr[eax + $03]
+        shl     ecx, $06
+        movsx   esi, byte ptr[edi + edx]
+        movsx   edx, byte ptr[edi + ebx]
+        test    esi, esi
+        jl      @1
+        or      ecx, esi
+        shl     ecx, $06
+        test    edx, edx
+        jl      @2
+        or      ecx, edx
+        lea     eax, [eax + 4]
+        mov     [ebp + 2], cl
+        mov     [ebp + 1], ch
+        shr     ecx, 16
+        dec     dword ptr[esp]
+        mov     [ebp], cl
+        lea     ebp, [ebp + 3]
+        jnz     @0
+@4:     pop     eax
+        pop     ebp
+        pop     edi
+        pop     esi
+        pop     ebx
+        ret
+@2:     shr     ecx, $08
+        mov     [ebp + $01], cl
+        mov     [ebp], ch
+        jmp     @4
+@1:     shr     ecx, $0a
+        mov     [ebp], cl
+        jmp     @4
+end;
+
+{$endif PUREPASCAL}
 
 procedure Base64EncodeTrailing(rp, sp: PAnsiChar; len: cardinal);
   {$ifdef HASINLINE}inline;{$endif}
@@ -27266,67 +27449,6 @@ begin
   MoveFast(pointer(Suffix)^,res[len-lensuffix],lensuffix);
 end;
 
-procedure Base64ToURI(var base64: RawUTF8);
-var P: PUTF8Char;
-begin
-  P := UniqueRawUTF8(base64);
-  if P<>nil then
-    repeat
-      case P^ of
-      #0: break;
-      '+': P^ := '-';
-      '/': P^ := '_';
-      '=': begin // trim unsignificant trailing '=' characters
-        SetLength(base64,P-pointer(base64));
-        break;
-      end;
-      end;
-      inc(P);
-    until false;
-end;
-
-procedure Base64FromURI(var base64: RawUTF8);
-var P: PUTF8Char;
-    len,i,append: integer;
-begin
-  len := length(base64);
-  if len=0 then
-    exit;
-  P := UniqueRawUTF8(base64);
-  repeat
-    case P^ of
-    #0: break;
-    '-': P^ := '+';
-    '_': P^ := '/';
-    end;
-    inc(P);
-  until false;
-  append := 4-(len and 3);
-  if append<>4 then begin // add unsignificant trailing '=' characters
-    SetLength(base64,len+append);
-    for i := len to len+append-1 do
-      PByteArray(base64)[i] := ord('=');
-  end;
-end;
-
-function Base64URIToBin(var base64: RawUTF8): RawByteString;
-begin
-  Base64FromURI(base64);
-  result := Base64ToBin(base64);
-end;
-
-function BinToBase64URI(Bin: PAnsiChar; BinBytes: integer): RawUTF8;
-begin
-  result := BinToBase64(Bin,BinBytes);
-  Base64ToURI(result);
-end;
-
-function BinToBase64URI(const Bin: RawByteString): RawUTF8; overload;
-begin
-  result := BinToBase64(pointer(Bin),length(Bin));
-  Base64ToURI(result);
-end;
-
 function BinToBase64WithMagic(const data: RawByteString): RawUTF8;
 var len: integer;
 begin
@@ -27348,12 +27470,6 @@ begin
   PInteger(pointer(result))^ := JSON_BASE64_MAGIC;
   Base64Encode(PAnsiChar(pointer(result))+3,Data,DataLen);
 end;
-
-var
-  /// a conversion table from Base64 text into binary data
-  // - used by Base64ToBin/IsBase64 functions
-  // - contains -1 for invalid char, -2 for '=', 0..63 for b64enc[] chars
-  ConvertBase64ToBin: array[AnsiChar] of shortint;
 
 function IsBase64(sp: PAnsiChar; len: PtrInt): boolean;
 var i: PtrInt;
@@ -27402,115 +27518,9 @@ begin
   result := (len shr 2)*3-result;
 end;
 
-procedure Base64Decode(sp,rp: PAnsiChar; len: PtrInt);
-{$ifdef PUREPASCAL}
-var i: PtrInt;
-    c, ch: PtrInt;
-begin
-  for i := 1 to len do begin
-    c := ConvertBase64ToBin[sp[0]];
-    if c>=0 then begin
-      c := c shl 6;
-      ch := ConvertBase64ToBin[sp[1]];
-      if ch>=0 then begin
-        c := (c or ch) shl 6;
-        ch := ConvertBase64ToBin[sp[2]];
-        if ch>=0 then begin
-          c := (c or ch) shl 6;
-          ch := ConvertBase64ToBin[sp[3]];
-          if ch>=0 then begin
-            c := c or ch;
-            rp[2] := AnsiChar(c);
-            c := c shr 8;
-            rp[1] := AnsiChar(c);
-            c := c shr 8;
-            rp[0] := AnsiChar(c);
-            inc(rp,3);
-            inc(sp,4);
-            continue;
-          end else begin
-            c := c shr 8;
-            rp[1] := AnsiChar(c);
-            rp[0] := AnsiChar(c shr 8);
-            //assert(resultlen=len*3-1);
-            exit;
-          end;
-        end;
-      end;
-    end;
-    rp[0] := AnsiChar(c shr 10);
-    //assert(resultlen=len*3-2);
-    exit;
-  end;
-end;
-{$else}
-asm // eax=sp edx=rp ecx=len - pipeline optimized version by AB
-        push    ebx
-        push    esi
-        push    edi
-        push    ebp
-        push    eax
-        test    ecx, ecx
-        mov     ebp, edx
-        lea     edi, [ConvertBase64ToBin]
-        mov     [esp], ecx
-        jz      @4
-@0:     movzx   edx, byte ptr[eax]
-        movzx   ebx, byte ptr[eax + $01]
-        movsx   ecx, byte ptr[edi + edx]
-        movsx   esi, byte ptr[edi + ebx]
-        test    ecx, ecx
-        jl      @1
-        shl     ecx, $06
-        test    esi, esi
-        jl      @1
-        or      ecx, esi
-        movzx   edx, byte ptr[eax + $02]
-        movzx   ebx, byte ptr[eax + $03]
-        shl     ecx, $06
-        movsx   esi, byte ptr[edi + edx]
-        movsx   edx, byte ptr[edi + ebx]
-        test    esi, esi
-        jl      @1
-        or      ecx, esi
-        shl     ecx, $06
-        test    edx, edx
-        jl      @2
-        or      ecx, edx
-        lea     eax, [eax + 4]
-        mov     [ebp + 2], cl
-        mov     [ebp + 1], ch
-        shr     ecx, 16
-        dec     dword ptr[esp]
-        mov     [ebp], cl
-        lea     ebp, [ebp + 3]
-        jnz     @0
-@4:     pop     eax
-        pop     ebp
-        pop     edi
-        pop     esi
-        pop     ebx
-        ret
-@2:     shr     ecx, $08
-        mov     [ebp + $01], cl
-        mov     [ebp], ch
-        jmp     @4
-@1:     shr     ecx, $0a
-        mov     [ebp], cl
-        jmp     @4
-end;
-{$endif}
-
 function Base64ToBin(const s: RawByteString): RawByteString;
-var len, resultLen: PtrInt;
 begin
-  len := length(s);
-  resultLen := Base64ToBinLength(pointer(s),len);
-  if resultLen=0 then
-    result := '' else begin
-    SetString(result,nil,resultLen);
-    Base64Decode(pointer(s),pointer(result),len shr 2);
-  end;
+  Base64ToBin(pointer(s),length(s),result);
 end;
 
 function Base64ToBin(sp: PAnsiChar; len: PtrInt): RawByteString;
@@ -27530,15 +27540,9 @@ begin
 end;
 
 function Base64ToBinSafe(const s: RawByteString): RawByteString;
-var len, resultLen: PtrInt;
 begin
-  len := length(s);
-  resultLen := Base64ToBinLengthSafe(pointer(s),len);
-  if resultLen=0 then
-    result := '' else begin
-    SetString(result,nil,resultLen);
-    Base64Decode(pointer(s),pointer(result),len shr 2);
-  end;
+  if not Base64ToBinSafe(pointer(s),length(s),result) then
+    result := '';
 end;
 
 function Base64ToBinSafe(sp: PAnsiChar; len: PtrInt): RawByteString;
@@ -27547,6 +27551,12 @@ begin
 end;
 
 function Base64ToBinSafe(sp: PAnsiChar; len: PtrInt; var data: RawByteString): boolean;
+{$ifdef PUREPASCAL} // Base64AnyDecode() is safe
+begin
+  Base64ToBin(sp,len,data);
+  result := data<>'';
+end;
+{$else}
 var datalen: PtrInt;
 begin
   datalen := Base64ToBinLengthSafe(sp,len);
@@ -27557,6 +27567,7 @@ begin
     result := true;
   end;
 end;
+{$endif}
 
 procedure Base64ToBin(sp: PAnsiChar; len: PtrInt; var result: TSynTempBuffer);
 begin
@@ -27568,10 +27579,21 @@ end;
 function Base64ToBin(base64, bin: PAnsiChar; base64len, binlen: PtrInt;
   nofullcheck: boolean): boolean;
 begin
-  result := (bin<>nil) and (Base64ToBinLength(base64,base64len)=binlen) and
-     (nofullcheck or IsBase64(base64,base64len));
+  {$ifdef PUREPASCAL} // Base64AnyDecode() is safe
+  result := (bin<>nil) and (Base64ToBinLength(base64,base64len)=binlen); 
+  if result then begin 
+    if (base64len>0) and (ConvertBase64ToBin[base64[base64len-2]]>=0) then
+      if ConvertBase64ToBin[base64[base64len-1]]>=0 then else
+        dec(base64len) else
+        dec(base64len,2); // adjust for Base64AnyDecode() algorithm
+    result := Base64AnyDecode(ConvertBase64ToBin,base64,bin,base64len);
+  end;
+  {$else}
+  result := (bin<>nil) and (Base64ToBinLength(base64,base64len)=binlen) and 
+    (nofullcheck or IsBase64(base64,base64len));
   if result then
     Base64Decode(base64,bin,base64len shr 2);
+  {$endif}
 end;
 
 function Base64ToBin(const base64: RawByteString; bin: PAnsiChar; binlen: PtrInt;
@@ -27579,6 +27601,210 @@ function Base64ToBin(const base64: RawByteString; bin: PAnsiChar; binlen: PtrInt
 begin
   result := Base64ToBin(pointer(base64),bin,length(base64),binlen,nofullcheck);
 end;
+
+{ --------- Base64 URI encoding/decoding }
+
+{$ifdef PUREPASCAL}
+function Base64uriEncodeMain(rp, sp: PAnsiChar; len: cardinal): integer;
+var i: integer;
+    c: cardinal;
+begin
+  result := len div 3;
+  for i := 1 to result do begin
+    c := ord(sp[0]) shl 16 + ord(sp[1]) shl 8 + ord(sp[2]);
+    rp[0] := b64urienc[(c shr 18) and $3f];
+    rp[1] := b64urienc[(c shr 12) and $3f];
+    rp[2] := b64urienc[(c shr 6) and $3f];
+    rp[3] := b64urienc[c and $3f];
+    inc(rp,4);
+    inc(sp,3);
+  end;
+end;
+{$else PUREPASCAL}
+function Base64uriEncodeMain(rp, sp: PAnsiChar; len: cardinal): integer;
+asm // eax=rp edx=sp ecx=len - pipeline optimized version by AB
+        push    ebx
+        push    esi
+        push    edi
+        push    ebp
+        mov     ebx, edx
+        mov     esi, eax
+        mov     eax, ecx
+        mov     edx, 1431655766 // faster eax=len div 3 using reciprocal
+        sar     ecx, 31
+        imul    edx
+        mov     eax, edx
+        sub     eax, ecx
+        mov     edi, offset b64urienc
+        mov     ebp, eax
+        push    eax
+        jz      @z
+        // edi=b64urienc[] ebx=sp esi=rp ebp=len div 3
+        xor     eax, eax
+@1:    // read 3 bytes from sp
+        movzx   edx, byte ptr[ebx]
+        shl     edx, 16
+        mov     al, [ebx + 2]
+        mov     ah, [ebx + 1]
+        lea     ebx, [ebx + 3]
+        or      eax, edx
+        // encode as Base64uri
+        mov     ecx, eax
+        mov     edx, eax
+        shr     ecx, 6
+        and     edx, $3f
+        and     ecx, $3f
+        mov     dh, [edi + edx]
+        mov     dl, [edi + ecx]
+        mov     ecx, eax
+        shr     eax, 12
+        shr     ecx, 18
+        shl     edx, 16
+        and     ecx, $3f
+        and     eax, $3f
+        mov     cl, [edi + ecx]
+        mov     ch, [edi + eax]
+        or      ecx, edx
+        // write the 4 encoded bytes into rp
+        dec     ebp
+        mov     [esi], ecx
+        lea     esi, [esi + 4]
+        jnz     @1
+@z:     pop     eax // result := len div 3
+        pop     ebp
+        pop     edi
+        pop     esi
+        pop     ebx
+end;
+{$endif PUREPASCAL}
+
+procedure Base64uriEncodeTrailing(rp, sp: PAnsiChar; len: cardinal);
+  {$ifdef HASINLINE}inline;{$endif}
+var c: cardinal;
+begin
+  case len of
+    1: begin
+      c := ord(sp[0]) shl 4;
+      rp[0] := b64urienc[(c shr 6) and $3f];
+      rp[1] := b64urienc[c and $3f];
+    end;
+    2: begin
+      c := ord(sp[0]) shl 10 + ord(sp[1]) shl 2;
+      rp[0] := b64urienc[(c shr 12) and $3f];
+      rp[1] := b64urienc[(c shr 6) and $3f];
+      rp[2] := b64urienc[c and $3f];
+    end;
+  end;
+end;
+
+procedure Base64uriEncode(rp, sp: PAnsiChar; len: cardinal);
+var main: cardinal;
+begin
+  main := Base64uriEncodeMain(rp,sp,len);
+  Base64uriEncodeTrailing(rp+main*4,sp+main*3,len-main*3);
+end;
+
+function BinToBase64uriLength(len: PtrUInt): PtrUInt;
+begin
+  result := (len div 3)*4;
+  case len-(result shr 2)*3 of // fast len mod 3
+  1: inc(result,2);
+  2: inc(result,3);
+  end;
+end;
+
+function BinToBase64uri(const s: RawByteString): RawUTF8;
+var len: integer;
+begin
+  result := '';
+  len := length(s);
+  if len=0 then
+    exit;
+  SetLength(result,BinToBase64uriLength(len));
+  Base64uriEncode(pointer(result),pointer(s),len);
+end;
+
+function BinToBase64uri(Bin: PAnsiChar; BinBytes: integer): RawUTF8;
+begin
+  result := '';
+  if BinBytes=0 then
+    exit;
+  SetLength(result,BinToBase64uriLength(BinBytes));
+  Base64uriEncode(pointer(result),Bin,BinBytes);
+end;
+
+function Base64uriToBinLength(len: PtrInt): PtrInt;
+begin
+  if len=0 then
+    result := 0 else begin
+    result := (len shr 2)*3;
+    case len and 3 of
+    1: result := 0;
+    2: inc(result,1);
+    3: inc(result,2);
+    end;
+  end;
+end;
+
+function Base64uriDecode(sp,rp: PAnsiChar; len: PtrInt): boolean;
+begin
+  result := Base64AnyDecode(ConvertBase64URIToBin,sp,rp,len);
+end;
+
+function Base64uriToBin(sp: PAnsiChar; len: PtrInt): RawByteString;
+begin
+  Base64uriToBin(sp,len,result);
+end;
+
+function Base64uriToBin(const s: RawByteString): RawByteString;
+begin
+  Base64uriToBin(pointer(s),length(s),result);
+end;
+
+procedure Base64uriToBin(sp: PAnsiChar; len: PtrInt; var result: RawByteString);
+var resultLen: PtrInt;
+begin
+  resultLen := Base64uriToBinLength(len);
+  if resultLen<>0 then begin
+    SetString(result,nil,resultLen);
+    if Base64AnyDecode(ConvertBase64URIToBin,sp,pointer(result),len) then
+      exit;
+  end;
+  result := '';
+end;
+
+function Base64uriToBin(const base64: RawByteString; bin: PAnsiChar; binlen: PtrInt): boolean;
+begin
+  result := Base64uriToBin(pointer(base64),bin,length(base64),binlen);
+end;
+
+function Base64uriToBin(base64, bin: PAnsiChar; base64len, binlen: PtrInt): boolean; overload;
+var resultLen: PtrInt;
+begin
+  resultLen := Base64uriToBinLength(base64len);
+  result := (resultLen=binlen) and
+    Base64AnyDecode(ConvertBase64URIToBin,base64,bin,base64len);
+end;
+
+procedure Base64ToURI(var base64: RawUTF8);
+var P: PUTF8Char;
+begin
+  P := UniqueRawUTF8(base64);
+  if P<>nil then
+    repeat
+      case P^ of
+      #0: break;
+      '+': P^ := '-';
+      '/': P^ := '_';
+      '=': begin // trim unsignificant trailing '=' characters
+        SetLength(base64,P-pointer(base64));
+        break;
+      end;
+      end;
+      inc(P);
+    until false;
+end;
+
 
 function BinToSource(const ConstName, Comment: RawUTF8;
   Data: pointer; Len, PerLine: integer; const Suffix: RawUTF8): RawUTF8;
@@ -38843,17 +39069,13 @@ end;
 function RecordLoadBase64(Source: PAnsiChar; Len: integer; var Rec;
   TypeInfo: pointer; UriCompatible: boolean): boolean;
 var data: RawByteString;
-    uri: RawUTF8;
 begin
   result := false;
   if Len<=6 then
     exit;
-  if UriCompatible then begin
-    SetString(uri,Source,Len);
-    Base64FromURI(uri);
-    data := Base64ToBin(uri);
-  end else
-    data := Base64ToBin(Source,Len);
+  if UriCompatible then
+    Base64uriToBin(Source,Len,data) else
+    Base64ToBin(Source,Len,data);
   Len := length(data);
   if Len<=4 then
     exit;
@@ -54224,6 +54446,12 @@ begin
   end;
 end;
 
+class function TSynPersistentWithPassword.ComputePassword(PlainPassword: pointer;
+  PlainPasswordLen: integer; CustomKey: cardinal): RawUTF8;
+begin
+  result := ComputePassword(BinToBase64uri(PlainPassword,PlainPasswordLen));
+end;
+
 class function TSynPersistentWithPassword.ComputePlainPassword(const CypheredPassword: RawUTF8;
   CustomKey: cardinal; const AppSecret: RawUTF8): RawUTF8;
 var instance: TSynPersistentWithPassword;
@@ -64501,6 +64729,8 @@ begin
   for i := 0 to high(b64enc) do
     ConvertBase64ToBin[b64enc[i]] := i;
   ConvertBase64ToBin['='] := -2; // special value for '='
+  for i := 0 to high(b64urienc) do
+    ConvertBase64uriToBin[b64urienc[i]] := i;
   for i := high(Baudot2Char) downto 0 do
     if Baudot2Char[i]<#128 then
       Char2Baudot[Baudot2Char[i]] := i;

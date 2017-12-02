@@ -1261,10 +1261,9 @@ begin
   cookie := GetCookie;
   if cookie='' then
     exit;
-  Base64FromURI(cookie);
-  len := Base64ToBinLengthSafe(pointer(cookie),length(cookie));
-  if (len>=sizeof(tmp.head)) and (len<=sizeof(tmp)) then begin
-    Base64Decode(pointer(cookie),@tmp,length(cookie) shr 2);
+  len := Base64uriToBinLength(length(cookie));
+  if (len>=sizeof(tmp.head)) and (len<=sizeof(tmp)) and
+     Base64uriDecode(pointer(cookie),@tmp,len) then begin
     Crypt(@tmp,len);
     now := UnixTimeUTC;
     if (tmp.head.session<=fContext.SessionCount) and
