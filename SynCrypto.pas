@@ -12666,7 +12666,7 @@ end;
 
 procedure TJWTAbstract.Parse(const Token: RawUTF8; var JWT: TJWTContent;
   out headpayload: RawUTF8; out signature: RawByteString);
-var i,j,c,cap,len,a: integer;
+var i,j,toklen,c,cap,len,a: integer;
     P: PUTF8Char;
     N,V: PUTF8Char;
     wasString: boolean;
@@ -12674,14 +12674,16 @@ var i,j,c,cap,len,a: integer;
     claim: TJWTClaim;
     id: TSynUniqueIdentifierBits;
     value: variant;
-    payload64, signature64: RawUTF8;
-    head,aud: TDocVariantData;
+    payload: RawUTF8;
+    head: TPUtf8CharDynArray;
+    aud: TDocVariantData;
+    tok: PAnsiChar absolute Token;
 begin
   JWT.data.InitFast(0,dvObject);
   byte(JWT.claims) := 0;
   word(JWT.audience) := 0;
-  c := length(Token);
-  if (c=0) or (self=nil) then begin
+  toklen := length(Token);
+  if (toklen=0) or (self=nil) then begin
     JWT.result := jwtNoToken;
     exit;
   end;
@@ -12690,36 +12692,31 @@ begin
     len := PosEx('.',Token);
     if (len=0) or (len>512) then
       exit;
-    signature64 := copy(Token,1,len-1);
-    signature := Base64URIToBin(signature64);
-    if (head.InitJSONInPlace(pointer(signature),JSON_OPTIONS_FAST)=nil) or
-       (head.U['alg']<>fAlgorithm) or
-       (head.GetAsRawUTF8('typ',payload64) and (payload64<>'JWT')) then
+    Base64URIToBin(tok,len-1,signature);
+    JSONDecode(pointer(signature),['alg','typ'],head);
+    if not IdemPropNameU(fAlgorithm,head[0],StrLen(head[0])) or
+       ((head[1]<>nil) and not IdemPropNameU('JWT',head[1],StrLen(head[1]))) then
       exit;
   end else begin
     len := length(fHeaderB64); // fast direct compare of fHeaderB64 (including "alg")
-    if (c<=len) or not CompareMem(pointer(fHeaderB64),pointer(Token),len) then
+    if (toklen<=len) or not CompareMem(pointer(fHeaderB64),tok,len) then
       exit;
   end;
   JWT.result := jwtWrongFormat;
-  if c>JWT_MAXSIZE Then
+  if toklen>JWT_MAXSIZE Then
     exit;
   i := PosEx('.',Token,len+1);
   if (i=0) or (i-len>2700) then
     exit;
   headpayload := copy(Token,1,i-1);
-  signature64 := copy(Token,i+1,maxInt);
-  Base64FromURI(signature64);
-  signature := Base64ToBin(signature64);
-  if (signature='') and (signature64<>'') then
+  Base64URIToBin(tok+i,toklen-i,signature);
+  if (signature='') and (i<>toklen) then
     exit;
   JWT.result := jwtInvalidPayload;
-  payload64 := copy(Token,len+1,i-len-1);
-  Base64FromURI(payload64);
-  payload64 := Base64ToBin(payload64);
-  if payload64='' then
+  Base64URIToBin(tok+len,i-len-1,RawByteString(payload));
+  if payload='' then
     exit;
-  P := GotoNextNotSpace(pointer(payload64));
+  P := GotoNextNotSpace(pointer(payload));
   if P^<>'{' then
     exit;
   P := GotoNextNotSpace(P+1);
@@ -12811,24 +12808,28 @@ end;
 
 class function TJWTAbstract.VerifyPayload(const Token, ExpectedSubject, ExpectedIssuer,
   ExpectedAudience: RawUTF8; Expiration: PUnixTime; Signature: PRawUTF8): TJWTResult;
-var text: RawUTF8;
-    P: PUTF8Char;
+var P,B: PUTF8Char;
     V: TPUtf8CharDynArray;
-    now, time: cardinal;
+    now, time: PtrUInt;
+    text: RawUTF8;
 begin
   result := jwtInvalidAlgorithm;
-  P := pointer(Token);
+  B := pointer(Token);
+  P := PosChar(B,'.');
   if P=nil then
     exit;
-  GetNextItem(P,'.',text);
   if self<>TJWTAbstract then begin
-    text := Base64URIToBin(text);
+    text := Base64URIToBin(PAnsiChar(B),P-B);
     if not IdemPropNameU(copy(ToText(self),5,10),JSONDecode(text,'alg')) then
       exit;
   end;
+  B := P+1;
+  P := PosChar(B,'.');
+  result := jwtInvalidSignature;
+  if P=nil then
+    exit;
   result := jwtInvalidPayload;
-  GetNextItem(P,'.',text);
-  text := Base64URIToBin(text);
+  text := Base64URIToBin(PAnsiChar(B),P-B);
   if text='' then
     exit;
   JSONDecode(pointer(text),['iss','aud','exp','nbf','sub'],V,true);
@@ -12859,9 +12860,7 @@ begin
         exit;
     end;
   end;
-  result := jwtInvalidSignature;
-  if P=nil then
-    exit;
+  inc(P);
   if Signature<>nil then
     SetRawUTF8(Signature^,P,StrLen(P));
   result := jwtValid;
