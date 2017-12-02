@@ -8761,7 +8761,12 @@ type
     /// this class method could be used to compute the encrypted password,
     // ready to be stored as JSON, according to a given private key
     class function ComputePassword(const PlainPassword: RawUTF8;
-      CustomKey: cardinal=0): RawUTF8;
+      CustomKey: cardinal=0): RawUTF8; overload;
+    /// this class method could be used to compute the encrypted password from
+    // a binary digest, ready to be stored as JSON, according to a given private key
+    // - just a wrapper around ComputePassword(BinToBase64URI())
+    class function ComputePassword(PlainPassword: pointer; PlainPasswordLen: integer;
+      CustomKey: cardinal=0): RawUTF8; overload;
     /// this class method could be used to decrypt a password, stored as JSON,
     // according to a given private key
     // - may trigger a ESynException if the password was stored using a custom
@@ -27514,15 +27519,8 @@ begin
 end;
 
 function Base64ToBin(const s: RawByteString): RawByteString;
-var len, resultLen: PtrInt;
 begin
-  len := length(s);
-  resultLen := Base64ToBinLength(pointer(s),len);
-  if resultLen=0 then
-    result := '' else begin
-    SetString(result,nil,resultLen);
-    Base64Decode(pointer(s),pointer(result),len shr 2);
-  end;
+  Base64ToBin(pointer(s),length(s),result);
 end;
 
 function Base64ToBin(sp: PAnsiChar; len: PtrInt): RawByteString;
@@ -27591,8 +27589,8 @@ begin
     result := Base64AnyDecode(ConvertBase64ToBin,base64,bin,base64len);
   end;
   {$else}
-  result := (bin<>nil) and (Base64ToBinLength(base64,base64len)=binlen) and
-     (nofullcheck or IsBase64(base64,base64len));
+  result := (bin<>nil) and (Base64ToBinLength(base64,base64len)=binlen) and 
+    (nofullcheck or IsBase64(base64,base64len));
   if result then
     Base64Decode(base64,bin,base64len shr 2);
   {$endif}
@@ -39071,7 +39069,6 @@ end;
 function RecordLoadBase64(Source: PAnsiChar; Len: integer; var Rec;
   TypeInfo: pointer; UriCompatible: boolean): boolean;
 var data: RawByteString;
-    uri: RawUTF8;
 begin
   result := false;
   if Len<=6 then
@@ -54447,6 +54444,12 @@ begin
   finally
     instance.Free;
   end;
+end;
+
+class function TSynPersistentWithPassword.ComputePassword(PlainPassword: pointer;
+  PlainPasswordLen: integer; CustomKey: cardinal): RawUTF8;
+begin
+  result := ComputePassword(BinToBase64uri(PlainPassword,PlainPasswordLen));
 end;
 
 class function TSynPersistentWithPassword.ComputePlainPassword(const CypheredPassword: RawUTF8;
