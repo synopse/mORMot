@@ -2730,10 +2730,8 @@ begin
   end;
   utf := BinToBase64URI(@GUID,sizeof(GUID));
   Check(utf='00amyWGct0y_ze4lIsj2Mw');
-  Base64FromURI(utf);
-  Check(Base64ToBinLength(pointer(utf),length(utf))=sizeof(GUID2));
   FillCharFast(GUID2,sizeof(GUID2),0);
-  SynCommons.Base64Decode(Pointer(utf),@GUID2,SizeOf(GUID2));
+  Check(Base64uriToBin(utf,@GUID2,SizeOf(GUID2)));
   Check(IsEqualGUID(GUID2,GUID));
   Check(U.From('toto.com'));
   Check(U.URI='http://toto.com/');
@@ -9477,6 +9475,8 @@ begin
       b64[Random(L)+1] := '&';
       Check(not IsBase64(pointer(b64),L));
     end;
+    b64 := BinToBase64uri(tmp);
+    Check(Base64uriToBin(b64)=tmp);
     tmp := tmp+AnsiChar(Random(255));
   end;
 end;

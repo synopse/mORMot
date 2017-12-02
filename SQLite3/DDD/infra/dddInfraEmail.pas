@@ -323,9 +323,7 @@ begin
   signature := Copy(Ctxt.URIBlobFieldName,1,SHA256DIGESTSTRLEN);
   if length(signature)<>SHA256DIGESTSTRLEN then
     exit;
-  code := Copy(Ctxt.URIBlobFieldName,SHA256DIGESTSTRLEN+1,200);
-  Base64FromURI(code);
-  code := Base64ToBin(code);
+  code := Base64uriToBin(Copy(Ctxt.URIBlobFieldName,SHA256DIGESTSTRLEN+1,200));
   Split(code,#1,logon,email);
   if (logon='') or (email='') then
     exit;
