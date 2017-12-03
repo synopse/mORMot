@@ -532,6 +532,9 @@ var
 implementation
 
 uses
+  {$IFNDEF MSWINDOWS}
+  Errors, SynFPCLinux,
+  {$ENDIF}
   SyNodeRemoteDebugger,
   SyNodeBinding_fs {used by other core modules},
   SyNodeBinding_const,
@@ -1230,7 +1233,6 @@ const
   UNINIT_PROC_NAME = 'UnInitPlugin';
 
 begin
-{$IFDEF MSWINDOWS}
   Lock;
   try
     cx.BeginRequest;
@@ -1238,9 +1240,9 @@ begin
       dirname := ExtractFilePath(UTF8ToString(filename)) ;
       ModuleRec := PDllModuleRec(FDllModules.GetObjectByName(filename));
       if ModuleRec = nil then begin
-        fHandle := SafeLoadLibrary(UTF8ToString(filename));
+        fHandle := {$IFDEF FPC}dynlibs.{$ENDIF}SafeLoadLibrary(UTF8ToString(filename));
         if fHandle=0 then
-          raise ESMException.CreateFmt('Unable to load %s',[filename]);
+          raise ESMException.CreateFmt('Unable to load %s (%s)',[filename, StrError(GetLastError)]);
         new(ModuleRec);
         ModuleRec.init := GetProcAddress(fHandle, INIT_PROC_NAME);
         if not Assigned(ModuleRec.init) then begin
@@ -1294,9 +1296,6 @@ begin
   end;
 
   Result := ModuleRec.unInit;
-{$ELSE}
-  raise ENotImplemented.Create('TODO');
-{$ENDIF}
 end;
 
 function TSMEngineManager.getPauseDebuggerOnFirstStep: boolean;
