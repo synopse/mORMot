@@ -3639,6 +3639,7 @@ type
   end;
 
   /// information about a RawUTF8 published property
+  // - will also serialize a RawJSON property without JSON escape
   TSQLPropInfoRTTIRawUTF8 = class(TSQLPropInfoRTTIAnsi)
   protected
     procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: TObject); override;
@@ -22523,19 +22524,22 @@ end;
 procedure TSQLPropInfoRTTIRawUTF8.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 var tmp: RawByteString;
 begin
-  W.Add('"');
   fPropInfo.GetLongStrProp(Instance,tmp);
-  if PtrUInt(tmp)<>0 then
-    W.AddJSONEscape(pointer(tmp),
-      {$ifdef FPC}length(tmp){$else}PInteger(PtrUInt(tmp)-4)^{$endif});
-  W.Add('"');
+  if fPropType=TypeInfo(RawJSON) then
+    W.AddRawJSON(tmp) else begin
+    W.Add('"');
+    if PtrUInt(tmp)<>0 then
+      W.AddJSONEscape(pointer(tmp),
+        {$ifdef FPC}length(tmp){$else}PInteger(PtrUInt(tmp)-4)^{$endif});
+    W.Add('"');
+  end;
 end;
 
 procedure TSQLPropInfoRTTIRawUTF8.GetValueVar(Instance: TObject;
   ToSQL: boolean; var result: RawUTF8; wasSQLString: PBoolean);
 begin
   if wasSQLString<>nil then
-    wasSQLString^ := true;
+    wasSQLString^ := fPropType<>TypeInfo(RawJSON);
   fPropInfo.GetLongStrProp(Instance,RawByteString(result));
 end;
 
@@ -22601,7 +22605,8 @@ begin
   fPropInfo.SetLongStrProp(Instance,tmp);
 end;
 
-procedure TSQLPropInfoRTTIRawUTF8.SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean);
+procedure TSQLPropInfoRTTIRawUTF8.SetValueVar(Instance: TObject; const Value: RawUTF8;
+  wasString: boolean);
 begin
   fPropInfo.SetLongStrProp(Instance,Value);
 end;
