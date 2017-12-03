@@ -10432,7 +10432,6 @@ type
     /// returns a pointer to Values[].Value containing a given position and length
     // - returns nil if not found
     function Find(aPosition, aLength: integer): pointer; overload;
-      {$ifdef HASINLINE}inline;{$endif}
     /// returns the text at a given position in Values[]
     // - text should be in a single Values[] entry
     function FindAsText(aPosition, aLength: integer): RawByteString;
@@ -60574,21 +60573,39 @@ end;
 
 function TRawByteStringGroup.Find(aPosition, aLength: integer): pointer;
 var P: PRawByteStringGroupValue;
+    i: integer;
+label found;
 begin
-  P := Find(aPosition);
-  if P=nil then
-    result := nil else begin
-    dec(aPosition,P^.Position);
-    if cardinal(aPosition+aLength)>cardinal(length(P^.Value)) then
-      result := nil else
-      result := @PByteArray(P^.Value)[aPosition];
-  end;
+  if (pointer(Values)<>nil) and (cardinal(aPosition)<cardinal(Position)) then begin
+    P := @Values[LastFind]; // this cache is very efficient in practice
+    i := aPosition-P^.Position;
+    if (i>=0) and (i+aLength<length(P^.Value)) then begin
+      result := @PByteArray(P^.Value)[i];
+      exit;
+    end;
+    P := @Values[1]; // seldom O(n) brute force search (in CPU L1 cache)
+    for i := 0 to Count-2 do
+      if P^.Position>aPosition then begin
+        LastFind := i;
+found:  dec(P);
+        dec(aPosition,P^.Position);
+        if aLength-aPosition<=length(P^.Value) then
+          result := @PByteArray(P^.Value)[aPosition] else
+          result := nil;
+        exit;
+      end else
+        inc(P);
+    LastFind := Count-1;
+    goto found;
+  end
+  else
+    result := nil;
 end;
 
 function TRawByteStringGroup.FindAsText(aPosition, aLength: integer): RawByteString;
 var P: PAnsiChar;
 begin
-  P := Find(aPosition, aLength);
+  P := Find(aPosition,aLength);
   if P=nil then
     result := '' else
     SetString(result,P,aLength);
@@ -60598,7 +60615,7 @@ end;
 procedure TRawByteStringGroup.FindAsVariant(aPosition, aLength: integer; out aDest: variant);
 var P: pointer;
 begin
-  P := Find(aPosition, aLength);
+  P := Find(aPosition,aLength);
   if P<>nil then
     RawUTF8ToVariant(P,aLength,aDest);
 end;
@@ -60608,7 +60625,7 @@ procedure TRawByteStringGroup.FindWrite(aPosition, aLength: integer; W: TTextWri
   Escape: TTextWriterKind);
 var P: pointer;
 begin
-  P := Find(aPosition, aLength);
+  P := Find(aPosition,aLength);
   if P<>nil then
     W.Add(P,aLength,Escape);
 end;
@@ -60617,7 +60634,7 @@ procedure TRawByteStringGroup.FindWriteBase64(aPosition, aLength: integer;
   W: TTextWriter; withMagic: boolean);
 var P: pointer;
 begin
-  P := Find(aPosition, aLength);
+  P := Find(aPosition,aLength);
   if P<>nil then
     W.WrBase64(P,aLength,withMagic);
 end;
@@ -60625,7 +60642,7 @@ end;
 procedure TRawByteStringGroup.FindMove(aPosition, aLength: integer; aDest: pointer);
 var P: pointer;
 begin
-  P := Find(aPosition, aLength);
+  P := Find(aPosition,aLength);
   if P<>nil then
     MoveFast(P^,aDest^,aLength);
 end;
