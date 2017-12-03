@@ -16060,6 +16060,8 @@ type
     fHistoryAdd: TFileBufferWriter;
     fHistoryAddCount: integer;
     fHistoryAddOffset: TIntegerDynArray;
+    /// override this to customize fields intialization
+    class procedure InitializeFields(const Fields: array of const; var JSON: RawUTF8); virtual; 
   public
     /// load the change history of a given record
     // - then you can use HistoryGetLast, HistoryCount or HistoryGet() to access
@@ -42458,6 +42460,12 @@ begin
   HistoryOpen(aClient.Model);
 end;
 
+class procedure TSQLRecordHistory.InitializeFields(const Fields: array of const;
+  var JSON: RawUTF8);
+begin // you may use a TDocVariant to add some custom fields in your own class
+  JSON := JSONEncode(Fields);
+end;
+
 function TSQLRecordHistory.HistoryOpen(Model: TSQLModel): boolean;
 var len: cardinal;
     start,i: integer;
@@ -42786,41 +42794,37 @@ end;
 
 function TSQLRestServer.InternalUpdateEvent(aEvent: TSQLEvent; aTableIndex: integer;
   aID: TID; const aSentData: RawUTF8; aIsBlobFields: PSQLFieldBits): boolean;
-procedure DoTrackChanges;
-var TableHistoryIndex: integer;
-    JSON: RawUTF8;
-    Event: TSQLHistoryEvent;
-begin
-  case aEvent of
-  seAdd:    Event := heAdd;
-  seUpdate: Event := heUpdate;
-  seDelete: Event := heDelete;
-  else exit;
-  end;
-  TableHistoryIndex := fTrackChangesHistoryTableIndex[aTableIndex];
-  fAcquireExecution[execORMWrite].Safe.Lock; // avoid race condition
-  try // low-level Add(TSQLRecordHistory) without cache
-    JSON := JSONEncode(['ModifiedRecord',aTableIndex+aID shl 6,'Event',ord(Event),
-                        'SentDataJSON',aSentData,'Timestamp',ServerTimestamp]);
-    fAcquireExecution[execORMWrite].fSafe.Lock;
-    try // may be within a batch in another thread
-      EngineAdd(TableHistoryIndex,JSON);
-    finally
-      fAcquireExecution[execORMWrite].fSafe.Unlock;
+  procedure DoTrackChanges(TableHistoryIndex: integer);
+  var TableHistoryClass: TSQLRecordHistoryClass;
+      JSON: RawUTF8;
+      Event: TSQLHistoryEvent;
+  begin
+    case aEvent of
+    seAdd:    Event := heAdd;
+    seUpdate: Event := heUpdate;
+    seDelete: Event := heDelete;
+    else exit;
     end;
-    { TODO: use a BATCH (in background thread) to speed up TSQLHistory storage }
-    if fTrackChangesHistory[TableHistoryIndex].CurrentRow>
-        fTrackChangesHistory[TableHistoryIndex].MaxSentDataJsonRow then begin
-      // gather & compress TSQLRecordHistory.SentDataJson into History BLOB
-      TrackChangesFlush(TSQLRecordHistoryClass(Model.Tables[TableHistoryIndex]));
-      fTrackChangesHistory[TableHistoryIndex].CurrentRow := 0;
-    end else
-      // fast append as JSON until reached MaxSentDataJsonRow
-      inc(fTrackChangesHistory[TableHistoryIndex].CurrentRow);
-  finally
-    fAcquireExecution[execORMWrite].Safe.UnLock;
+    TableHistoryClass := TSQLRecordHistoryClass(Model.Tables[TableHistoryIndex]);
+    TableHistoryClass.InitializeFields(['ModifiedRecord',aTableIndex+aID shl 6,
+      'Event',ord(Event),'SentDataJSON',aSentData,'Timestamp',ServerTimestamp],JSON);
+    fAcquireExecution[execORMWrite].Safe.Lock; // avoid race condition
+    try // low-level Add(TSQLRecordHistory) without cache
+      EngineAdd(TableHistoryIndex,JSON);
+      { TODO: use a BATCH (in background thread) to speed up TSQLHistory storage? }
+      if fTrackChangesHistory[TableHistoryIndex].CurrentRow>
+          fTrackChangesHistory[TableHistoryIndex].MaxSentDataJsonRow then begin
+        // gather & compress TSQLRecordHistory.SentDataJson into History BLOB
+        TrackChangesFlush(TableHistoryClass);
+        fTrackChangesHistory[TableHistoryIndex].CurrentRow := 0;
+      end else
+        // fast append as JSON until reached MaxSentDataJsonRow
+        inc(fTrackChangesHistory[TableHistoryIndex].CurrentRow);
+    finally
+      fAcquireExecution[execORMWrite].Safe.UnLock;
+    end;
   end;
-end;
+var TableHistoryIndex: integer;
 begin
   if aID<=0 then
     result := false else
@@ -42830,10 +42834,12 @@ begin
         result := OnBlobUpdateEvent(
           self,seUpdate,fModel.Tables[aTableIndex],aID,aIsBlobFields^) else
         result := true else begin
-      // simple fields modification
-      if (cardinal(aTableIndex)<fTrackChangesHistoryTableIndexCount) and
-         (fTrackChangesHistoryTableIndex[aTableIndex]>=0) then
-        DoTrackChanges;
+      // track simple fields modification
+      if cardinal(aTableIndex)<fTrackChangesHistoryTableIndexCount then begin
+        TableHistoryIndex := fTrackChangesHistoryTableIndex[aTableIndex];
+        if TableHistoryIndex>=0 then
+          DoTrackChanges(TableHistoryIndex);
+      end;
       if Assigned(OnUpdateEvent) then
         result := OnUpdateEvent(self,aEvent,fModel.Tables[aTableIndex],aID,aSentData) else
         result := true; // true on success, false if error (but action continues)
