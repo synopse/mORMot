@@ -45,7 +45,17 @@ const
   ptBuffer = 100;
   ptAny = 500;
 
-function nsmCallFunc(cx: PJSContext; argc: uintN;  var vp: JSArgRec; const Params: array of uintN; isConstructor: Boolean = false): Boolean; cdecl;
+type
+  PNSMCallInfo = ^TNSMCallInfo;
+  TNSMCallInfo = record
+    func: TNsmFunction;
+    argc: Integer;
+    argt: PInt64Array;
+  end;
+
+  TNSMCallInfoArray = array of TNSMCallInfo;
+
+function nsmCallFunc(cx: PJSContext; argc: uintN;  var vp: JSArgRec; Calls: TNSMCallInfoArray; CallCount: Integer = 1; isConstructor: Boolean = false): Boolean; cdecl;
 
 const
   StaticROAttrs = JSPROP_ENUMERATE or JSPROP_READONLY or JSPROP_PERMANENT;
@@ -74,48 +84,40 @@ end;
 ///  param_count_case2(N2),param1_case2,param2_case2...paramN2_case2,Integer(call_case2),...
 ///  param_count_caseK(NK),param1_caseK,param2_caseK...paramNK_caseK,Integer(call_caseK2)
 ///  )
-function nsmCallFunc(cx: PJSContext; argc: uintN; var vp: JSArgRec; const Params: array of uintN; isConstructor: Boolean = false): Boolean; cdecl;
+function nsmCallFunc(cx: PJSContext; argc: uintN; var vp: JSArgRec; Calls: TNSMCallInfoArray; CallCount: Integer = 1; isConstructor: Boolean = false): Boolean; cdecl;
 var
   thisObj, calleeObj: PJSObject;
   vals: PjsvalVector;
-  i,j: uintN;
-  paramsCount: uintN;
-  call: TNsmFunction;
+  i,j: Integer;
+  call: PNSMCallInfo;
   IsCalled, IsCorrect: Boolean;
 begin
   Result := False;
   try
     if isConstructor xor vp.IsConstructing then
-    begin
       raise ESMException.Create('JS_IS_CONSTRUCTING');
-    end;
+
     thisObj := vp.thisObject[cx];
     calleeObj := vp.calleObject;
-
     vals := vp.argv;
-
     IsCalled := false;
 
-    i := Low(Params);
-    while i<=uintN(High(Params)) do begin
-      paramsCount := Params[i];
-      Inc(i);
-      if argc = paramsCount then begin
-        IsCorrect := true;
-        if paramsCount>0 then
-          for j := 0 to paramsCount - 1 do begin
-            IsCorrect := isParamCorrect(Params[i+j], vals[j]);
+    for i := 0 to CallCount do begin
+      call := @Calls[i];
+      if (call <> nil) then begin
+        if argc = call.argc then begin
+          IsCorrect := true;
+          for j := 0 to call.argc do begin
+            IsCorrect := isParamCorrect(call.argt[j], vals[j]);
             if not IsCorrect then Break;
           end;
-        if IsCorrect then begin
-          call := TNsmFunction(Params[i+paramsCount]);
-
-          vp.rval := call(cx, argc, vals, thisObj, calleeObj);
-          IsCalled := True;
-          Break;
+          if IsCorrect then begin
+            vp.rval := call.func(cx, argc, vals, thisObj, calleeObj);
+            IsCalled := True;
+            Break;
+          end;
         end;
       end;
-      inc(i, paramsCount+1);
     end;
 
     if not IsCalled then
