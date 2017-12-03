@@ -10688,6 +10688,12 @@ procedure JSONDecode(var JSON: RawUTF8;
   const Names: array of PUTF8Char; var Values: TPUtf8CharDynArray;
   HandleValuesAsObjectOrArray: Boolean=false); overload;
 
+/// decode the supplied UTF-8 JSON content for the supplied names
+// - an overloaded function when the JSON is supplied as a RawJSON variable  
+procedure JSONDecode(var JSON: RawJSON;
+  const Names: array of PUTF8Char; var Values: TPUtf8CharDynArray;
+  HandleValuesAsObjectOrArray: Boolean=false); overload;
+
 /// wrapper to serialize a T*ObjArray dynamic array as JSON
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
 function ObjArrayToJSON(const aObjArray;
@@ -53128,6 +53134,12 @@ procedure JSONDecode(var JSON: RawUTF8; const Names: array of PUTF8Char;
   var Values: TPUtf8CharDynArray; HandleValuesAsObjectOrArray: Boolean);
 begin
   JSONDecode(UniqueRawUTF8(JSON),Names,Values,HandleValuesAsObjectOrArray);
+end;
+
+procedure JSONDecode(var JSON: RawJSON; const Names: array of PUTF8Char;
+  var Values: TPUtf8CharDynArray; HandleValuesAsObjectOrArray: Boolean);
+begin
+  JSONDecode(UniqueRawUTF8(RawUTF8(JSON)),Names,Values,HandleValuesAsObjectOrArray);
 end;
 
 function JSONDecode(P: PUTF8Char; const Names: array of PUTF8Char;

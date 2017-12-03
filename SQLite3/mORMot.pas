@@ -48668,6 +48668,7 @@ procedure TJSONToObject.Parse;
 var V: PtrInt;
     DynArray: TDynArray;
     U: RawUTF8;
+    Beg: PAnsiChar;
 begin
   Valid := false;
   Dest := From;
@@ -48790,6 +48791,14 @@ begin
         From := DynArray.LoadFromJSON(From);
         if From=nil then
           exit; // invalid '[dynamic array]' content
+      end else
+      if P^.TypeInfo=TypeInfo(RawJSON) then begin
+        Beg := pointer(From);
+        From := GotoNextJSONObjectOrArray(From);
+        if From=nil then
+          exit;
+        SetString(U,Beg,From-Beg);
+        P^.SetLongStrProp(Value,U);
       end else
       if (Kind=tkSet) and (From^='[') then begin // set as string array
         V := GetSetNameValue(P^.TypeInfo,From,EndOfObject);
@@ -50958,7 +50967,14 @@ var Added: boolean;
               Add(V); // typecast enums and sets as plain integer by default
         end;
       end;
-      {$ifdef FPC}tkAString,{$endif} tkLString: begin
+      {$ifdef FPC}tkAString,{$endif} tkLString:
+      if P^.TypeInfo=TypeInfo(RawJSON) then begin
+        P^.GetLongStrProp(Value,tmp);
+        if tmp<>'' then begin
+          HR(P);
+          AddString(tmp);
+        end;
+      end else begin
         codepage := P^.PropType^.AnsiStringCodePage;
         if (codepage=CP_SQLRAWBLOB) and not (woSQLRawBlobAsBase64 in Options) then begin
           if not (woDontStoreEmptyString in Options) then begin

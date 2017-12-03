@@ -5765,6 +5765,54 @@ type
     /// JSON encoded UTF-8 serialization of the record
     JSON: RawUTF8;
   end;
+{$else}
+  TRange = record
+    Min, Max: Integer;
+  end;
+  TOffense = record
+    Damage, AttackSpeed: TRange;
+  end;
+  TEnemy = class(TSynPersistent)
+  private
+    fEnabled: Boolean;
+    fName: string;
+    function GetOffense: RawJSON;
+    procedure SetOffense(Value: RawJSON);
+  public
+    Off: TOffense;
+  published
+    property Enabled: Boolean read fEnabled write fEnabled;
+    property Name: string read fName write fName;
+    property Offense: RawJSON read GetOffense write SetOffense;
+  end;
+
+function TEnemy.GetOffense: RawJSON;
+begin
+  result := JSONEncode([
+    'damage','{','min',Off.Damage.Min,'max',Off.Damage.Max,'}',
+    'attackspeed','{','min',Off.AttackSpeed.Min,'max',Off.AttackSpeed.Max,'}']);
+end;
+
+procedure RangeFromJSON(out Range: TRange; JSON: PUTF8Char);
+var V: TPUtf8CharDynArray;
+begin
+  JSONDecode(JSON, ['min', 'max'], V);
+  if V=nil then
+    exit;
+  Range.Min := GetInteger(V[0]);
+  Range.Max := GetInteger(V[1]);
+end;
+
+procedure TEnemy.SetOffense(Value: RawJSON);
+var V: TPUtf8CharDynArray;
+begin
+  JSONDecode(Value,['damage','attackspeed'],V,true);
+  if V=nil then
+    exit;
+  RangeFromJSON(Off.Damage, V[0]);
+  RangeFromJSON(Off.AttackSpeed, V[1]);
+end;
+
 {$endif}
 
 type
@@ -5912,6 +5960,7 @@ var J,U: RawUTF8;
     K,U2: RawUTF8;
     Valid: boolean;
     RB: TSQLRawBlob;
+    Enemy: TEnemy;
 {$ifndef LVCL}
     Instance: TClassInstance;
     Coll, C2: TCollTst;
@@ -7174,6 +7223,29 @@ begin
   Check(IdemPChar(GetJSONField(pointer(U),P),'TRUE'));
   Check(P=nil);
   Check(U='true'#0'footer,','3cce80e8df');
+  {$ifndef DELPHI5OROLDER}
+  // validates RawJSON (custom) serialization
+  Enemy := TEnemy.Create;
+  try
+    U := ObjectToJSON(Enemy);
+    check(U='{"Enabled":false,"Name":"","Offense":{"damage":{"min":0,"max":0},'+
+      '"attackspeed":{"min":0,"max":0}}}');
+    Enemy.Off.Damage.Min := 10;
+    Enemy.Off.AttackSpeed.Max := 100;
+    U := ObjectToJSON(Enemy);
+    check(U='{"Enabled":false,"Name":"","Offense":{"damage":{"min":10,"max":0},'+
+      '"attackspeed":{"min":0,"max":100}}}');
+    FillcharFast(Enemy.Off, sizeof(Enemy.Off), 0);
+    check(Enemy.Off.Damage.Min = 0);
+    check(Enemy.Off.AttackSpeed.Max = 0);
+    JSONToObject(Enemy, pointer(U), valid);
+    check(valid);
+    check(Enemy.Off.Damage.Min = 10);
+    check(Enemy.Off.AttackSpeed.Max = 100);
+  finally
+    Enemy.Free;
+  end;
+  {$endif}
 end;
 
 
