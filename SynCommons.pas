@@ -18296,7 +18296,7 @@ uses
   {$endif}
   {$endif}
   {$ifndef MSWINDOWS}
-    {$ifdef FPCUSEVERSIONINFO}, // should be enabled in Synopse.inc
+    {$ifdef FPCUSEVERSIONINFO} // should be enabled in Synopse.inc
     fileinfo, // FPC 3.0 and up
     winpeimagereader, // winpe exe info
     elfreader,  // ELF executables
