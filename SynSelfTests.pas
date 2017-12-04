@@ -10208,8 +10208,6 @@ begin
     'ONFh7hgQ',jwt); // altered one char in signature
   check(jwt.result=jwtInvalidSignature);
   j.Free;
-  if not ecc_available then 
-    exit;
   for i := 1 to 10 do begin
     secret := TECCCertificateSecret.CreateNew(nil); // self-signed certificate
     test(TJWTES256.Create(secret,[jrcIssuer,jrcExpirationTime],[],60));
@@ -10620,12 +10618,10 @@ const
 procedure TTestECCCryptography.ReferenceVectors;
 var pr1,pr2: TECCPrivateKey;
     pu1,pu2: TECCPublicKey;
-    h: TECCHash;
-    si: TECCSignature;
+    h1,h2: TECCHash;
+    si1,si2: TECCSignature;
     s1,s2,s3: TECCSecretKey;
 begin
-  if not ecc_available then
-    exit;
   SetLength(pub, ECC_COUNT);
   SetLength(priv, ECC_COUNT);
   SetLength(sign, ECC_COUNT);
@@ -10639,61 +10635,65 @@ begin
   Check(SynCommons.HexToBin(PAnsiChar(
     '0298D0D01FCE73146C10CD05E08BEA573BEE4EFC56D5EBAAC64B32672C8FAC1502'),@pu2,sizeof(pu2)));
   Check(SynCommons.HexToBin(PAnsiChar(
-    '9509D00BBBA2308445BC73311C3887E935183F65D361D4C39E2FA432B7168599'),@h,sizeof(h)));
+    '9509D00BBBA2308445BC73311C3887E935183F65D361D4C39E2FA432B7168599'),@h1,sizeof(h1)));
   Check(SynCommons.HexToBin(
     PAnsiChar('F04CD0AA3D40433C51F35D07DBF4E11C91C922791A8BA7B930B5C30716D8B26E4B65EFBF'+
-    'BDC0526A94ABDAA31130248F0413AC33D5BFA903E09847AAF42FD043'),@si,sizeof(si)));
-  Check(ecdsa_verify(pu1,h,si));
+    'BDC0526A94ABDAA31130248F0413AC33D5BFA903E09847AAF42FD043'),@si1,sizeof(si1)));
   Check(SynCommons.HexToBin(PAnsiChar(
-    '3366C112F95B2F52836171CAD3F3441C4B3C75348859092B200DE5024CB0C91B'),@h,sizeof(h)));
+    '3366C112F95B2F52836171CAD3F3441C4B3C75348859092B200DE5024CB0C91B'),@h2,sizeof(h2)));
   Check(SynCommons.HexToBin(PAnsiChar(
     'EEEF6F1D0A590BFC72B9D7DC0DB4BF36A8928DA2B8078FEE567808BB082525438CF68546'+
-    '26E17FBB28528450E50E43AB2598ED2CD3ACC7B43865BEB843452713'),@si,sizeof(si)));
-  Check(ecdsa_verify(pu2,h,si));
+    '26E17FBB28528450E50E43AB2598ED2CD3ACC7B43865BEB843452713'),@si2,sizeof(si2)));
   Check(SynCommons.HexToBin(PAnsiChar(
     '51A0C8018EC725F9B9F821D826FEEC4CAE8843066685522F1961D25935EAA39E'),@s1,sizeof(s1)));
+  Check(ecdsa_verify(pu1,h1,si1));
+  Check(ecdsa_verify(pu2,h2,si2));
   Check(ecdh_shared_secret(pu1,pr2,s2));
   Check(IsEqual(s1,s2));
   Check(CompareMem(@s1,@s2,sizeof(s1)));
   Check(ecdh_shared_secret(pu2,pr1,s3));
   Check(IsEqual(s1,s3));
   Check(CompareMem(@s1,@s3,sizeof(s1)));
+  {$ifdef HASUINT64} // pascal (fallback) version
+  Check(ecdsa_verify_pas(pu1,h1,si1));
+  Check(ecdsa_verify_pas(pu2,h2,si2));
+  Check(ecdh_shared_secret_pas(pu1,pr2,s2));
+  Check(IsEqual(s1,s2));
+  Check(ecdh_shared_secret_pas(pu2,pr1,s3));
+  Check(IsEqual(s1,s3));
+  {$endif}
 end;
 
 procedure TTestECCCryptography._ecc_make_key;
 var i: integer;
 begin
-  if ecc_available then
-    for i := 0 to ECC_COUNT-1 do
-      Check(ecc_make_key(pub[i], priv[i]));
+  for i := 0 to ECC_COUNT-1 do
+    Check(ecc_make_key(pub[i], priv[i]));
 end;
 
 procedure TTestECCCryptography._ecdsa_sign;
 var i: integer;
 begin
-  if ecc_available then
-    for i := 0 to ECC_COUNT-1 do
-      Check(ecdsa_sign(priv[i], hash, sign[i]));
+  for i := 0 to ECC_COUNT-1 do
+    Check(ecdsa_sign(priv[i], hash, sign[i]));
 end;
 
 procedure TTestECCCryptography._ecdsa_verify;
 var i: integer;
 begin
-  if ecc_available then
-    for i := 0 to ECC_COUNT-1 do
-      check(ecdsa_verify(pub[i], hash, sign[i]));
+  for i := 0 to ECC_COUNT-1 do
+    check(ecdsa_verify(pub[i], hash, sign[i]));
 end;
 
 procedure TTestECCCryptography._ecdh_shared_secret;
 var sec1,sec2: TECCSecretKey;
     i: integer;
 begin
-  if ecc_available then
-    for i := 0 to ECC_COUNT-2 do begin
-      check(ecdh_shared_secret(pub[i],priv[i+1],sec1));
-      check(ecdh_shared_secret(pub[i+1],priv[i],sec2));
-      check(IsEqual(sec1,sec2));
-    end;
+  for i := 0 to ECC_COUNT-2 do begin
+    check(ecdh_shared_secret(pub[i],priv[i+1],sec1));
+    check(ecdh_shared_secret(pub[i+1],priv[i],sec2));
+    check(IsEqual(sec1,sec2));
+  end;
 end;
 
 procedure TTestECCCryptography.CertificatesAndSignatures;
@@ -10743,8 +10743,6 @@ var selfsignedroot, secret: TECCCertificateSecret;
     sign: TECCSignatureCertified;
     signcontent: TECCSignatureCertifiedContent;
 begin
-  if not ecc_available then
-    exit;
   chain := TECCCertificateChain.Create;
   try
     check(chain.Count=0);

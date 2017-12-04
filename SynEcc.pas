@@ -45,7 +45,7 @@ unit SynEcc;
 
   ***** END LICENSE BLOCK *****
 
-  
+
   Using secp256r1 curve from "simple and secure ECDH and ECDSA library"
   Copyright (c) 2013, Kenneth MacKay - BSD 2-clause license
   https://github.com/esxgx/easy-ecc
@@ -73,6 +73,16 @@ unit SynEcc;
   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   ***** END LICENSE BLOCK *****
+
+
+  Pure pascal version adapted from original ECC.pas by Jerome Vollet for XLMRAD
+  Thanks Jerome for sharing and allowing us to adapt the source code!
+
+  *** BEGIN LICENSE BLOCK *****
+  XMLRAD LTD (Long Term Development) - http://xmlrad.sourceforge.net
+  License: ISC (equivalent to the 2-clause BSD license) }
+  ***** END LICENSE BLOCK *****
+
 
   Version 1.18
   - first public release, corresponding to mORMot Framework 1.18
@@ -110,17 +120,13 @@ uses
 
 {$ifdef CPUINTEL}
 
-  {$ifndef BSD}
-  {$define ECC_AVAILABLE}
-  {$endif}
-
   {$ifdef CPUX86}
     {$ifdef KYLIX3}
+      {$define ECC_STATICLIB_AVAILABLE}
       {$define ECC_32ASM}     // gcc -g -O1 -c ecc.c
     {$else}
-      {$ifdef BSD}
-        {.$define ECC_32ASM}    // gcc -g -O1 -c ecc.c
-      {$else}
+      {$ifndef BSD}
+        {$define ECC_STATICLIB_AVAILABLE}
         {.$define ECC_32ASM}    // gcc -g -O1 -c ecc.c
         {.$define ECC_O1}       // gcc -g -O1 -c ecc.c
         {$define ECC_O2}        // gcc -g -O2 -c ecc.c
@@ -130,19 +136,17 @@ uses
   {$endif CPUX86}
 
   {$ifdef CPUX64}
-    {.$define ECC_O1}       // gcc -g -O1 -c ecc.c
-    {$define ECC_O2}        // gcc -g -O2 -c ecc.c
-    {.$define ECC_O3}       // gcc -g -O3 -c ecc.c
+    {$ifndef BSD}
+      {$define ECC_STATICLIB_AVAILABLE}
+      {.$define ECC_O1}       // gcc -g -O1 -c ecc.c
+      {$define ECC_O2}        // gcc -g -O2 -c ecc.c
+      {.$define ECC_O3}       // gcc -g -O3 -c ecc.c
+    {$endif}
   {$endif CPUX64}
 
 {$endif CPUINTEL}
 
 const
-  /// equals true if the ECDSA/ECDH cryptographic functions are available
-  // - only CPUINTEL is supported by now, i.e. x86/x64
-  // - other CPUs, like ARM, would have false here, as all ECC functions return
-  ecc_available = {$ifdef ECC_AVAILABLE}true{$else}false{$endif};
-
   /// the size of the 256-bit memory structure used for secp256r1
   // - map 32 bytes of memory
   ECC_BYTES = sizeof(THash256);
@@ -217,9 +221,10 @@ var
 // - using secp256r1 curve, i.e. NIST P-256, or OpenSSL prime256v1
 // - directly low-level access to the statically linked easy-ecc library function
 // - returns true if the key pair was generated successfully in pub/priv
-// - returns false if an error occurred, or if ecc_available=false
+// - returns false if an error occurred
 // - this function is thread-safe and does not perform any memory allocation
-function ecc_make_key(out pub: TECCPublicKey; out priv: TECCPrivateKey): boolean; cdecl;
+function ecc_make_key(out pub: TECCPublicKey; out priv: TECCPrivateKey): boolean;
+  {$ifdef ECC_STATICLIB_AVAILABLE}cdecl;{$else}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// compute a shared secret given your secret key and someone else's public key
 // - using secp256r1 curve, i.e. NIST P-256, or OpenSSL prime256v1
@@ -227,30 +232,54 @@ function ecc_make_key(out pub: TECCPublicKey; out priv: TECCPrivateKey): boolean
 // - note: it is recommended that you hash the result of ecdh_shared_secret
 // before using it for symmetric encryption or HMAC (via an intermediate KDF)
 // - returns true if the shared secret was generated successfully in secret
-// - returns false if an error occurred, or if ecc_available=false
+// - returns false if an error occurred
 // - this function is thread-safe and does not perform any memory allocation
 function ecdh_shared_secret(const pub: TECCPublicKey; const priv: TECCPrivateKey;
-  out secret: TECCSecretKey): boolean; cdecl;
+  out secret: TECCSecretKey): boolean;
+  {$ifdef ECC_STATICLIB_AVAILABLE}cdecl;{$else}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// generate an ECDSA signature for a given hash value
 // - using secp256r1 curve, i.e. NIST P-256, or OpenSSL prime256v1
 // - directly low-level access to the statically linked easy-ecc library function
 // - returns true if the signature generated successfully in sign
-// - returns false if an error occurred, or if ecc_available=false
+// - returns false if an error occurred
 // - this function is thread-safe and does not perform any memory allocation
 function ecdsa_sign(const priv: TECCPrivateKey; const hash: TECCHash;
-  out sign: TECCSignature): boolean; cdecl;
+  out sign: TECCSignature): boolean;
+  {$ifdef ECC_STATICLIB_AVAILABLE}cdecl;{$else}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// verify an ECDSA signature
 // - using secp256r1 curve, i.e. NIST P-256, or OpenSSL prime256v1
 // - directly low-level access to the statically linked easy-ecc library function
 // - returns true if the signature is valid
-// - returns false if sign is invalid, or if ecc_available=false
+// - returns false if an error occurred
 // - this function is thread-safe and does not perform any memory allocation
 function ecdsa_verify(const pub: TECCPublicKey; const hash: TECCHash;
-  const sign: TECCSignature): boolean; cdecl;
+  const sign: TECCSignature): boolean;
+  {$ifdef ECC_STATICLIB_AVAILABLE}cdecl;{$else}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 {$endif ECC_32ASM}
+
+
+/// pascal function to create a secp256r1 public/private key pair
+// - used only on targets when the static .o version is not available
+function ecc_make_key_pas(out PublicKey: TECCPublicKey; out PrivateKey: TECCPrivateKey): boolean;
+
+/// pascal function to compute a secp256r1 shared secret given your secret key
+// and someone else's public key
+// - used only on targets when the static .o version is not available
+function ecdh_shared_secret_pas(const PublicKey: TECCPublicKey;
+  const PrivateKey: TECCPrivateKey; out Secret: TECCSecretKey): boolean;
+
+/// pascal function to generate an ECDSA secp256r1 signature for a given hash value
+// - used only on targets when the static .o version is not available
+function ecdsa_sign_pas(const PrivateKey: TECCPrivateKey; const Hash: TECCHash;
+  out Signature: TECCSignature): boolean;
+
+/// pascal function to verify an ECDSA secp256r1 signature
+// - used only on targets when the static .o version is not available
+function ecdsa_verify_pas(const PublicKey: TECCPublicKey; const Hash: TECCHash;
+  const Signature: TECCSignature): boolean;
 
 
 
@@ -311,7 +340,7 @@ type
   PECCCertificateSigned = ^TECCCertificateSigned;
 
   /// store a TECCCertificate binary buffer for ECC secp256r1 cryptography
-  // - i.e. a certificate public key, with its ECDSA signature 
+  // - i.e. a certificate public key, with its ECDSA signature
   // - would be stored in 173 bytes
   TECCCertificateContent = packed record
     /// the TECCCertificate format version
@@ -452,7 +481,7 @@ type
   /// the Message Authentication Codes recognized by TECDHEProtocol
   // - default macDuringEF (680MB/s for efAesCrc128 with SSE4.2 and AES-NI)
   // means that no separated MAC is performed, but done during encryption step:
-  // only supported by efAesCrc128 or efAesCrc256 (may be a future AES-GCM) 
+  // only supported by efAesCrc128 or efAesCrc256 (may be a future AES-GCM)
   // - macHmacSha256 is the safest, but slow, especially when used as MAC for
   // AES-NI accellerated encryption (110MB/s with efAesCfb128, to be compared
   // with macDuringEF, which produces a similar level of MAC)
@@ -463,7 +492,7 @@ type
   // - macNone (800MB/s, which is the speed of AES-NI encryption itself for a
   // random set of small messages) won't check errors, but only replay attacks
   TECDHEMAC = (macDuringEF, macHmacSha256, macHmacCrc256c, macHmacCrc32c, macNone);
-                
+
   /// defines one protocol Algorithm recognized by TECDHEProtocol
   // - only safe and strong parameters are allowed, and the default values
   // (i.e. all fields set to 0) will ensure a very good combination
@@ -1514,7 +1543,7 @@ type
     class function FromKeyCompute(const privkey, privpassword: RawUTF8;
       privrounds: integer=DEFAULT_ECCROUNDS; const pki: RawUTF8=''; auth: TECDHEAuth=authMutual;
       kdf: TECDHEKDF=kdfHmacSha256; ef: TECDHEEF=efAesCrc128;
-      mac: TECDHEMAC=macDuringEF; customkey: cardinal=0): RawUTF8;  
+      mac: TECDHEMAC=macDuringEF; customkey: cardinal=0): RawUTF8;
     /// finalize the instance
     // - also erase all temporary secret keys, for safety
     destructor Destroy; override;
@@ -1533,7 +1562,7 @@ type
     // - returns sprInvalidMAC in case of wrong aEncrypted input
     // - is only implemented for MAC=macDuringEF, otherwise returns sprUnsupported
     // - to be called before Decrypt(), since this later method will change the
-    // internal kM[false] sequence number 
+    // internal kM[false] sequence number
     function CheckError(const aEncrypted: RawByteString): TProtocolResult; virtual;
     /// will create another instance of this communication protocol
     function Clone: IProtocol;
@@ -1679,13 +1708,13 @@ const
 // - as used in the ECC.dpr command-line sample project
 // - returns true and set the full file name of the matching file
 // - returns false is there is no match, or more than one matching file
-// - will also search in ECCKeyFileFolder, if the supplied folder is not enough 
+// - will also search in ECCKeyFileFolder, if the supplied folder is not enough
 function ECCKeyFileFind(var TruncatedFileName: TFileName; privkey: boolean): boolean;
 
 /// search the single .public or .private file used to crypt a given content
 // - match the format generated by TECCCertificate.Encrypt/EncryptFile
 // - returns true on success, false otherwise
-// - will also search in ECCKeyFileFolder, if the current folder is not enough 
+// - will also search in ECCKeyFileFolder, if the current folder is not enough
 function ECIESKeyFileFind(const encrypted: RawByteString; out keyfile: TFileName;
   privkey: boolean=true): boolean;
 
@@ -1710,6 +1739,15 @@ implementation
 
 
 { *********** low-level ECC secp256r1 ECDSA and ECDH functions *********** }
+
+function getRandomNumber(dest: pointer): integer;
+{$ifdef ECC_STATICLIB_AVAILABLE} cdecl;
+  {$ifdef FPC}public name{$ifdef Win32}'_getRandomNumber'{$else}'getRandomNumber'{$endif};{$endif}
+ {$endif}
+begin
+  TAESPRNG.Fill(dest,ECC_BYTES);
+  result := 1;
+end;
 
 {
   Benchmark of all available x86/32-bit variants, compiled with MinGW-W64 5.2.0
@@ -1785,14 +1823,7 @@ implementation
 
 }
 
-{$ifdef ECC_AVAILABLE}
-
-function getRandomNumber(dest: pointer): integer; cdecl;
-  {$ifdef FPC}public name{$ifdef Win32}'_getRandomNumber'{$else}'getRandomNumber'{$endif};{$endif}
-begin
-  TAESPRNG.Fill(dest,ECC_BYTES);
-  result := 1;
-end;
+{$ifdef ECC_STATICLIB_AVAILABLE}
 
 {$ifdef ECC_32ASM}
 
@@ -1869,35 +1900,1096 @@ function ecdsa_verify; external;
 
 {$endif ECC_32ASM}
 
-{$else ECC_AVAILABLE}
+{$else ECC_STATICLIB_AVAILABLE}
 
 // currently no .o file available under ARM -> stub functions returning 0 (error)
 
 function ecc_make_key(out pub: TECCPublicKey; out priv: TECCPrivateKey): boolean;
 begin
-  result := false;
+  result := ecc_make_key_pas(pub, priv);
 end;
 
 function ecdh_shared_secret(const pub: TECCPublicKey; const priv: TECCPrivateKey;
   out secret: TECCSecretKey): boolean;
 begin
-  result := false;
+  result := ecdh_shared_secret_pas(pub, priv, secret);
 end;
 
 function ecdsa_sign(const priv: TECCPrivateKey; const hash: TECCHash;
   out sign: TECCSignature): boolean;
 begin
-  result := false;
+  result := ecdsa_sign_pas(priv, hash, sign);
 end;
 
 function ecdsa_verify(const pub: TECCPublicKey; const hash: TECCHash;
   const sign: TECCSignature): boolean;
 begin
-  result := false;
+  result := ecdsa_verify_pas(pub, hash, sign);
 end;
 
-{$endif ECC_AVAILABLE}
+{$endif ECC_STATICLIB_AVAILABLE}
 
+
+{$ifdef HASUINT64}
+
+{ pure pascal version of ECC code
+  deeply optimized (especially for 32bit CPUs) from Jerome Vollet's XLMRAD  
+  XMLRAD LTD (Long Term Development) - http://xmlrad.sourceforge.net
+  License: ISC (equivalent to the 2-clause BSD license)
+
+Some numbers of our pascal version (on another slower computer than the previous
+values above), which is quite acceptable, since it is faster than gcc -O1 mode :)
+(of course, UInt128 support in gcc -O2 is still preferred on x86_64)
+
+Delphi 7 pascal
+  - ecc_make_key: 1,000 assertions passed  2.75s
+  - ecdsa_sign: 1,000 assertions passed  2.80s
+  - ecdsa_verify: 1,000 assertions passed  3.39s
+  - ecdh_shared_secret: 2,997 assertions passed  5.68s
+  Total failed: 0 / 529,825  - ECC cryptography PASSED  18.77s
+
+Delphi 7 ECC_32ASM
+  - ecc_make_key: 1,000 assertions passed  2.86s
+  - ecdsa_sign: 1,000 assertions passed  2.92s
+  - ecdsa_verify: 1,000 assertions passed  3.75s
+  - ecdh_shared_secret: 2,997 assertions passed  6.11s
+  Total failed: 0 / 529,825  - ECC cryptography PASSED  19.89s
+
+FPC Win32 pascal
+  - ecc_make_key: 1,000 assertions passed  2.78s
+  - ecdsa_sign: 1,000 assertions passed  2.85s
+  - ecdsa_verify: 1,000 assertions passed  3.46s
+  - ecdh_shared_secret: 2,997 assertions passed  5.89s
+  Total failed: 0 / 529,825  - ECC cryptography PASSED  19.72s
+
+Delphi 7 -O2
+  - ecc_make_key: 1,000 assertions passed  2.58s
+  - ecdsa_sign: 1,000 assertions passed  2.64s
+  - ecdsa_verify: 1,000 assertions passed  3.19s
+  - ecdh_shared_secret: 2,997 assertions passed  5.43s
+  Total failed: 0 / 529,825  - ECC cryptography PASSED  17.86s
+
+Delphi XE7-32 pascal
+  - ecc_make_key: 1,000 assertions passed  2.74s
+  - ecdsa_sign: 1,000 assertions passed  2.79s
+  - ecdsa_verify: 1,000 assertions passed  3.40s
+  - ecdh_shared_secret: 2,997 assertions passed  5.84s
+  Total failed: 0 / 529,825  - ECC cryptography PASSED  18.82s
+
+Delphi XE7-32 -O2
+  - ecc_make_key: 1,000 assertions passed  2.43s
+  - ecdsa_sign: 1,000 assertions passed  2.52s
+  - ecdsa_verify: 1,000 assertions passed  3.06s
+  - ecdh_shared_secret: 2,997 assertions passed  5.27s
+  Total failed: 0 / 529,825  - ECC cryptography PASSED  17.12s
+
+Delphi XE7-64 pascal
+  - ecc_make_key: 1,000 assertions passed  1.70s
+  - ecdsa_sign: 1,000 assertions passed  1.72s
+  - ecdsa_verify: 1,000 assertions passed  2.08s
+  - ecdh_shared_secret: 2,997 assertions passed  3.51s
+  Total failed: 0 / 529,825  - ECC cryptography PASSED  12.20s
+
+Delphi XE7-64 -O2
+  - ecc_make_key: 1,000 assertions passed  729.49ms
+  - ecdsa_sign: 1,000 assertions passed  740.38ms
+  - ecdsa_verify: 1,000 assertions passed  914.80ms
+  - ecdh_shared_secret: 2,997 assertions passed  1.55s
+  Total failed: 0 / 529,825  - ECC cryptography PASSED  6.29s
+
+FPC Win64 pascal
+  - ecc_make_key: 1,000 assertions passed  1.66s
+  - ecdsa_sign: 1,000 assertions passed  1.73s
+  - ecdsa_verify: 1,000 assertions passed  2.05s
+  - ecdh_shared_secret: 2,997 assertions passed  3.63s
+  Total failed: 0 / 529,825  - ECC cryptography PASSED  12.80s
+}
+
+const
+  NUM_ECC_DIGITS = ECC_BYTES div 8; // =4
+  MAX_TRIES = 16;
+
+type // we use UInt64 instead of QWord
+  TVLI = array[0..NUM_ECC_DIGITS-1] of UInt64;
+  PVLI = ^TVLI;
+  TVLI2 = array[0..(2*NUM_ECC_DIGITS)-1] of UInt64;
+
+  UInt128 = record
+    m_low: UInt64;
+    m_high: UInt64;
+  end;
+  TEccPoint = record
+    x: TVLI;
+    y: TVLI;
+  end;
+  PEccPoint = ^TEccPoint;
+
+const
+  Curve_P_32: TVLI = (
+    UInt64($FFFFFFFFFFFFFFFF), UInt64($00000000FFFFFFFF),
+    UInt64($0000000000000000), UInt64($FFFFFFFF00000001));
+  Curve_B_32: TVLI = (
+    UInt64($3BCE3C3E27D2604B), UInt64($651D06B0CC53B0F6),
+    UInt64($B3EBBD55769886BC), UInt64($5AC635D8AA3A93E7));
+  Curve_G_32: TEccPoint = (
+    x: (UInt64($F4A13945D898C296), UInt64($77037D812DEB33A0),
+        UInt64($F8BCE6E563A440F2), UInt64($6B17D1F2E12C4247));
+    y: (UInt64($CBB6406837BF51F5), UInt64($2BCE33576B315ECE),
+        UInt64($8EE7EB4A7C0F9E16), UInt64($4FE342E2FE1A7F9B)));
+  Curve_N_32: TVLI = (
+    UInt64($F3B9CAC2FC632551), UInt64($BCE6FAADA7179E84),
+    UInt64($FFFFFFFFFFFFFFFF), UInt64($FFFFFFFF00000000));
+
+  _1: TVLI = (1, 0, 0, 0);
+  _3: TVLI = (3, 0, 0, 0);
+
+procedure _clear(out VLI: TVLI); {$ifdef HASINLINE}inline;{$endif}
+begin
+  VLI[0] := 0;
+  VLI[1] := 0;
+  VLI[2] := 0;
+  VLI[3] := 0;
+end;
+
+function _isZero(const VLI: TVLI): boolean; {$ifdef HASINLINE}inline;{$endif}
+begin
+  result := (VLI[0]=0) and (VLI[1]=0) and (VLI[2]=0) and (VLI[3]=0);
+end;
+
+// counts the number of bits required for VLI
+function _numBits(const VLI: TVLI): integer;
+var i: integer;
+    digit: UInt64;
+begin
+  if VLI[3]<>0 then
+    result := 4 else
+  if VLI[2]<>0 then
+    result := 3 else
+  if VLI[1]<>0 then
+    result := 2 else
+  if VLI[0]<>0 then
+    result := 1 else begin
+    result := 0;
+    exit;
+  end;
+  digit := VLI[result-1];
+  i := 0;
+  while digit > 0 do begin
+    inc(i);
+    digit := digit shr 1;
+  end;
+  result := (result-1)*64 + i
+end;
+
+// returns sign of Left - Right
+function _cmp(const Left, Right: TVLI): integer; {$ifdef HASINLINE}inline;{$endif}
+begin
+  if Left[3] > Right[3] then
+    result := 1 else
+  if Left[3] < Right[3] then
+    result := -1 else
+  if Left[2] > Right[2] then
+    result := 1 else
+  if Left[2] < Right[2] then
+    result := -1 else
+  if Left[1] > Right[1] then
+    result := 1 else
+  if Left[1] < Right[1] then
+    result := -1 else
+  if Left[0] > Right[0] then
+    result := 1 else
+  if Left[0] < Right[0] then
+    result := -1 else
+    result := 0;
+end;
+
+// computes Output = Input shl Shift, returning carry
+// can modify in place (if Output == Input). 0 < Shift < 64
+function _lshift(var Output: TVLI; const Input: TVLI; Shift: integer): UInt64;
+var temp: UInt64;
+    revShift: integer;
+begin
+  revShift := 64 - Shift;
+  result := Input[0] shr revShift;
+  Output[0] := Input[0] shl Shift;
+  temp := Input[1];
+  Output[1] := (temp shl Shift) or result;
+  result := temp shr revShift;
+  temp := Input[2];
+  Output[2] := (temp shl Shift) or result;
+  result := temp shr revShift;
+  temp := Input[3];
+  Output[3] := (temp shl Shift) or result;
+  result := temp shr revShift;
+end;
+
+{$ifdef CPU32}
+procedure _rshift1(var VLI64: TVLI);
+var VLI: TCardinalArray absolute VLI64;
+    carry, temp: cardinal;
+begin
+  carry := VLI[7] shl 31;
+  VLI[7] := VLI[7] shr 1;
+  temp := VLI[6];
+  VLI[6] := (temp shr 1) or carry;
+  carry := temp shl 31;
+  temp := VLI[5];
+  VLI[5] := (temp shr 1) or carry;
+  carry := temp shl 31;
+  temp := VLI[4];
+  VLI[4] := (temp shr 1) or carry;
+  carry := temp shl 31;
+  temp := VLI[3];
+  VLI[3] := (temp shr 1) or carry;
+  carry := temp shl 31;
+  temp := VLI[2];
+  VLI[2] := (temp shr 1) or carry;
+  carry := temp shl 31;
+  temp := VLI[1];
+  VLI[1] := (temp shr 1) or carry;
+  carry := temp shl 31;
+  temp := VLI[0];
+  VLI[0] := (temp shr 1) or carry;
+end;
+{$else}
+procedure _rshift1(var VLI: TVLI);
+var carry, temp: UInt64;
+begin
+  carry := VLI[3] shl 63;
+  VLI[3] := VLI[3] shr 1;
+  temp := VLI[2];
+  VLI[2] := (temp shr 1) or carry;
+  carry := temp shl 63;
+  temp := VLI[1];
+  VLI[1] := (temp shr 1) or carry;
+  carry := temp shl 63;
+  temp := VLI[0];
+  VLI[0] := (temp shr 1) or carry;
+end;
+{$endif}
+
+{$ifdef CPU32}
+function _lshift1(var VLI64: TVLI): cardinal;
+var VLI: TCardinalArray absolute VLI64;
+    temp: cardinal;
+begin
+  result := VLI[0] shr 31;
+  VLI[0] := VLI[0] shl 1;
+  temp := VLI[1];
+  VLI[1] := (temp shl 1) or result;
+  result := temp shr 31;
+  temp := VLI[2];
+  VLI[2] := (temp shl 1) or result;
+  result := temp shr 31;
+  temp := VLI[3];
+  VLI[3] := (temp shl 1) or result;
+  result := temp shr 31;
+  temp := VLI[4];
+  VLI[4] := (temp shl 1) or result;
+  result := temp shr 31;
+  temp := VLI[5];
+  VLI[5] := (temp shl 1) or result;
+  result := temp shr 31;
+  temp := VLI[6];
+  VLI[6] := (temp shl 1) or result;
+  result := temp shr 31;
+  temp := VLI[7];
+  VLI[7] := (temp shl 1) or result;
+  result := temp shr 31;
+end;
+{$else}
+function _lshift1(var VLI: TVLI): UInt64;
+var temp: UInt64;
+begin
+  result := VLI[0] shr 63;
+  VLI[0] := VLI[0] shl 1;
+  temp := VLI[1];
+  VLI[1] := (temp shl 1) or result;
+  result := temp shr 63;
+  temp := VLI[2];
+  VLI[2] := (temp shl 1) or result;
+  result := temp shr 63;
+  temp := VLI[3];
+  VLI[3] := (temp shl 1) or result;
+  result := temp shr 63;
+end;
+{$endif}
+
+// computes Output = Left + Right, returning carry. Can modify in place
+{$ifdef CPU32}
+function _add(var Output64: TVLI; const Left64, Right64: TVLI): PtrUInt;
+var Output: TCardinalArray absolute Output64;
+    Left: TCardinalArray absolute Left64;
+    Right: TCardinalArray absolute Right64;
+{$else}
+function _add(var Output: TVLI; const Left, Right: TVLI): PtrUInt;
+{$endif}
+var sum: PtrUInt;
+begin
+  result := 0;
+  sum := Left[0] + Right[0];
+  if sum <> Left[0] then
+    if sum < Left[0] then
+      result := 1;
+  Output[0] := sum;
+  sum := Left[1] + Right[1] + result;
+  if sum <> Left[1] then
+    if sum < Left[1] then
+      result := 1 else
+      result := 0;
+  Output[1] := sum;
+  sum := Left[2] + Right[2] + result;
+  if sum <> Left[2] then
+    if sum < Left[2] then
+      result := 1 else
+      result := 0;
+  Output[2] := sum;
+  sum := Left[3] + Right[3] + result;
+  if sum <> Left[3] then
+    if sum < Left[3] then
+      result := 1 else
+      result := 0;
+  Output[3] := sum;
+  {$ifdef CPU32}
+  sum := Left[4] + Right[4] + result;
+  if sum <> Left[4] then
+    if sum < Left[4] then
+      result := 1 else
+      result := 0;
+  Output[4] := sum;
+  sum := Left[5] + Right[5] + result;
+  if sum <> Left[5] then
+    if sum < Left[5] then
+      result := 1 else
+      result := 0;
+  Output[5] := sum;
+  sum := Left[6] + Right[6] + result;
+  if sum <> Left[6] then
+    if sum < Left[6] then
+      result := 1 else
+      result := 0;
+  Output[6] := sum;
+  sum := Left[7] + Right[7] + result;
+  if sum <> Left[7] then
+    if sum < Left[7] then
+      result := 1 else
+      result := 0;
+  Output[7] := sum;
+  {$endif}
+end;
+
+// computes Output = Left + Right, returning borrow. Can modify in place.
+{$ifdef CPU32}
+function _sub(var Output64: TVLI; const Left64, Right64: TVLI): PtrUInt;
+var Output: TCardinalArray absolute Output64;
+    Left: TCardinalArray absolute Left64;
+    Right: TCardinalArray absolute Right64;
+{$else}
+function _sub(var Output: TVLI; const Left, Right: TVLI): PtrUInt;
+{$endif}
+var diff: PtrUInt;
+begin
+  result := 0;
+  diff := Left[0] - Right[0] - result;
+  if diff <> Left[0] then
+    if diff > Left[0] then
+      result := 1;
+  Output[0] := diff;
+  diff := Left[1] - Right[1] - result;
+  if diff <> Left[1] then
+    if diff > Left[1] then
+      result := 1 else
+      result := 0;
+  Output[1] := diff;
+  diff := Left[2] - Right[2] - result;
+  if diff <> Left[2] then
+    if diff > Left[2] then
+      result := 1 else
+      result := 0;
+  Output[2] := diff;
+  diff := Left[3] - Right[3] - result;
+  if diff <> Left[3] then
+    if diff > Left[3] then
+      result := 1 else
+      result := 0;
+  Output[3] := diff;
+  {$ifdef CPU32}
+  diff := Left[4] - Right[4] - result;
+  if diff <> Left[4] then
+    if diff > Left[4] then
+      result := 1 else
+      result := 0;
+  Output[4] := diff;
+  diff := Left[5] - Right[5] - result;
+  if diff <> Left[5] then
+    if diff > Left[5] then
+      result := 1 else
+      result := 0;
+  Output[5] := diff;
+  diff := Left[6] - Right[6] - result;
+  if diff <> Left[6] then
+    if diff > Left[6] then
+      result := 1 else
+      result := 0;
+  Output[6] := diff;
+  diff := Left[7] - Right[7] - result;
+  if diff <> Left[7] then
+    if diff > Left[7] then
+      result := 1 else
+      result := 0;
+  Output[7] := diff;
+  {$endif}
+end;
+
+procedure _mult(out Output: TVLI2; const Left, Right: TVLI);
+var i, k, l_min: integer;
+    Product, r01: UInt128;
+    carry, prev: UInt64;
+begin
+  r01.m_low := 0;
+  r01.m_high := 0;
+  carry := 0;
+  // Compute each digit of Output in sequence, maintaining the carries
+  for k := 0 to 2 * NUM_ECC_DIGITS - 2 do begin
+    if k < NUM_ECC_DIGITS then
+      l_min := 0 else
+      l_min := (k + 1) - NUM_ECC_DIGITS;
+    for i := l_min to k do begin
+      if i >= NUM_ECC_DIGITS then
+        break;
+      mul64x64(Left[i], Right[k-i], THash128Rec(Product));
+      prev := r01.m_low;
+      inc(r01.m_low, Product.m_low);
+      inc(r01.m_high, Product.m_high);
+      if r01.m_low < prev then
+        inc(r01.m_high);
+      if r01.m_high < Product.m_high then
+        inc(carry);
+    end;
+    Output[k] := r01.m_low;
+    r01.m_low := r01.m_high;
+    r01.m_high := carry;
+    carry := 0;
+  end;
+  Output[NUM_ECC_DIGITS * 2 - 1] := r01.m_low;
+end;
+
+procedure _square(out Output: TVLI2; const Left: TVLI);
+var i, k, l_min: integer;
+    Product, r01: UInt128;
+    carry, prev: UInt64;
+begin
+  r01.m_low := 0;
+  r01.m_high := 0;
+  carry := 0;
+  for k := 0 to 2 * NUM_ECC_DIGITS - 2 do begin
+    if k < NUM_ECC_DIGITS then
+      l_min := 0 else
+      l_min := (k + 1) - NUM_ECC_DIGITS;
+    for i := l_min to k do begin
+      if i > k-i then
+        break;
+      mul64x64(Left[i], Left[k-i], THash128Rec(Product));
+      if i < k-i then begin
+        inc(carry, Product.m_high shr 63);
+        Product.m_high := (Product.m_high shl 1) or (Product.m_low shr 63);
+        Product.m_low := Product.m_low shl 1;
+      end;
+      prev := r01.m_low;
+      inc(r01.m_low, Product.m_low);
+      inc(r01.m_high, Product.m_high);
+      if r01.m_low < prev then
+        inc(r01.m_high);
+      if r01.m_high < Product.m_high then
+        inc(carry);
+    end;
+    Output[k] := r01.m_low;
+    r01.m_low := r01.m_high;
+    r01.m_high := carry;
+    carry := 0;
+  end;
+  Output[NUM_ECC_DIGITS*2-1] := r01.m_low;
+end;
+
+// computes result = (Left + Right) mod Modulo
+// assumes that p_left < p_mod and p_right < p_mod, p_result != p_mod
+procedure _modAdd(var Output: TVLI; const Left, Right, Modulo: TVLI); {$ifdef HASINLINE}inline;{$endif}
+begin
+  if (_add(Output, Left, Right) <> 0) or (_cmp(Output, Modulo) >= 0) then
+    // result > Modulo (result = Modulo + Remainder), so subtract Modulo to get remainder
+    _sub(Output, Output, Modulo);
+end;
+
+// computes result = (Left - Right) mod Modulo.
+// assumes that Left < Modulo and Right < Modulo, result != Modulo
+procedure _modSub(out Output: TVLI; const Left, Right, Modulo: TVLI); {$ifdef HASINLINE}inline;{$endif}
+begin
+  if _sub(Output, Left, Right) > 0 then
+    // In this case, Output == -diff == (max int) - diff.
+    // Since -x mod d == d - x, we can get the correct result from Output + Modulo (with overflow)
+    _add(Output, Output, Modulo);
+end;
+
+// computes result = Product mod Curve
+// from http://www.nsa.gov/ia/_files/nist-routines.pdf
+procedure _mmod_fast(out Output: TVLI; var p_product: TVLI2);
+var carry: integer;
+    l_tmp: TVLI;
+begin
+  // t
+  Output := PVLI(@p_product)^;
+  // s1
+  l_tmp[0] := 0;
+  l_tmp[1] := p_product[5] and $FFFFFFFF00000000;
+  l_tmp[2] := p_product[6];
+  l_tmp[3] := p_product[7];
+  carry := _lshift1(l_tmp);
+  inc(carry, _add(Output, Output, l_tmp));
+  // s2
+  l_tmp[1] := p_product[6] shl 32;
+  l_tmp[2] := (p_product[6] shr 32) or (p_product[7] shl 32);
+  l_tmp[3] := p_product[7] shr 32;
+  inc(carry, _lshift1(l_tmp));
+  inc(carry, _add(Output, Output, l_tmp));
+  // s3
+  l_tmp[0] := p_product[4];
+  l_tmp[1] := p_product[5] and $FFFFFFFF;
+  l_tmp[2] := 0;
+  l_tmp[3] := p_product[7];
+  inc(carry, _add(Output, Output, l_tmp));
+  // s4
+  l_tmp[0] := (p_product[4] shr 32) or (p_product[5] shl 32);
+  l_tmp[1] := (p_product[5] shr 32) or (p_product[6] and $FFFFFFFF00000000);
+  l_tmp[2] := p_product[7];
+  l_tmp[3] := (p_product[6] shr 32) or (p_product[4] shl 32);
+  inc(carry, _add(Output, Output, l_tmp));
+  // d1
+  l_tmp[0] := (p_product[5] shr 32) or (p_product[6] shl 32);
+  l_tmp[1] := (p_product[6] shr 32);
+  l_tmp[2] := 0;
+  l_tmp[3] := (p_product[4] and $FFFFFFFF) or (p_product[5] shl 32);
+  dec(carry, _sub(Output, Output, l_tmp));
+  // d2
+  l_tmp[0] := p_product[6];
+  l_tmp[1] := p_product[7];
+  l_tmp[2] := 0;
+  l_tmp[3] := (p_product[4] shr 32) or (p_product[5] and $FFFFFFFF00000000);
+  dec(carry, _sub(Output, Output, l_tmp));
+  // d3
+  l_tmp[0] := (p_product[6] shr 32) or (p_product[7] shl 32);
+  l_tmp[1] := (p_product[7] shr 32) or (p_product[4] shl 32);
+  l_tmp[2] := (p_product[4] shr 32) or (p_product[5] shl 32);
+  l_tmp[3] := (p_product[6] shl 32);
+  dec(carry, _sub(Output, Output, l_tmp));
+  // d4
+  l_tmp[0] := p_product[7];
+  l_tmp[1] := p_product[4] and $FFFFFFFF00000000;
+  l_tmp[2] := p_product[5];
+  l_tmp[3] := p_product[6] and $FFFFFFFF00000000;
+  dec(carry, _sub(Output, Output, l_tmp));
+  if carry < 0 then
+    repeat
+      inc(carry, _add(Output, Output, Curve_P_32));
+    until carry >= 0 else
+    while (carry <> 0) or (_cmp(Curve_P_32, Output) <> 1) do
+      dec(carry, _sub(Output, Output, Curve_P_32));
+end;
+
+// computes result = (Left * Right) mod Curve
+procedure _modMult_fast(out Output: TVLI; const Left, Right: TVLI); {$ifdef HASINLINE}inline;{$endif}
+var Product: TVLI2;
+begin
+  _mult(Product, Left, Right);
+  _mmod_fast(Output, Product);
+end;
+
+// computes result = Left^2 mod Curve
+procedure _modSquare_fast(out Output: TVLI; const Left: TVLI; const Debug: boolean); {$ifdef HASINLINE}inline;{$endif}
+var Product: TVLI2;
+begin
+  _square(Product, Left);
+  _mmod_fast(Output, Product);
+end;
+
+// computes result = (1 / p_input) mod Modulo. All VLIs are the same size
+// See "From Euclid's GCD to Montgomery Multiplication to the Great Divide"
+// https://labs.oracle.com/techrep/2001/smli_tr-2001-95.pdf
+procedure _modInv(out Output: TVLI; const Input, Modulo: TVLI);
+var a, b, u, v: TVLI;
+    carry: PtrUInt;
+    cmp: integer;
+begin
+  if _isZero(Input) then begin
+    _clear(Output);
+    exit;
+  end;
+  a := Input;
+  b := Modulo;
+  u := _1;
+  _clear(v);
+  while true do begin
+    cmp := _cmp(a, b);
+    if cmp = 0 then
+      break;
+    carry := 0;
+    if (byte(a[0]) and 1) = 0 then begin
+      _rshift1(a);
+      if (byte(u[0]) and 1) = 1 then
+        carry := _add(u, u, Modulo);
+      _rshift1(u);
+      if carry <> 0 then
+        THash256(u)[ECC_BYTES-1] := THash256(u)[ECC_BYTES-1] or $80;
+    end else
+    if (byte(b[0]) and 1) = 0 then begin
+      _rshift1(b);
+      if (byte(v[0]) and 1) = 1 then
+        carry := _add(v, v, Modulo);
+      _rshift1(v);
+      if carry <> 0 then
+        THash256(v)[ECC_BYTES-1] := THash256(v)[ECC_BYTES-1] or $80;
+    end else
+    if cmp > 0 then begin
+      _sub(a, a, b);
+      _rshift1(a);
+      if _cmp(u, v) < 0 then
+        _add(u, u, Modulo);
+      _sub(u, u, v);
+      if (byte(u[0]) and 1) = 1 then
+        carry := _add(u, u, Modulo);
+      _rshift1(u);
+      if carry <> 0 then
+        THash256(u)[ECC_BYTES-1] := THash256(u)[ECC_BYTES-1] or $80;
+    end else begin
+      _sub(b, b, a);
+      _rshift1(b);
+      if _cmp(v, u) < 0 then
+        _add(v, v, Modulo);
+      _sub(v, v, u);
+      if (byte(v[0]) and 1) = 1 then
+        carry := _add(v, v, Modulo);
+      _rshift1(v);
+      if carry > 0 then
+        THash256(v)[ECC_BYTES-1] := THash256(v)[ECC_BYTES-1] or $80;
+    end;
+  end;
+  Output := u;
+end;
+
+// Point multiplication algorithm using Montgomery's ladder with co-Z coordinates.
+// From http://eprint.iacr.org/2011/338.pdf
+
+// Double in place
+procedure EccPointDoubleJacobian(var X1, Y1, Z1: TVLI);
+var carry: UInt64;
+    t4, t5: TVLI;
+begin
+  // t1 = X, t2 = Y, t3 = Z
+  if _isZero(Z1) then
+    exit;
+  _modSquare_fast(t4, Y1, false);  // t4 = y1^2
+  _modMult_fast(t5, X1, t4);       // t5 = x1*y1^2 = A
+  _modSquare_fast(t4, t4, false);  // t4 = y1^4
+  _modMult_fast(Y1, Y1, Z1);       // t2 = y1*z1 = z3
+  _modSquare_fast(Z1, Z1, false);  // t3 = z1^2
+  _modAdd(X1, X1, Z1, Curve_P_32); // t1 = x1 + z1^2
+  _modAdd(Z1, Z1, Z1, Curve_P_32); // t3 = 2*z1^2
+  _modSub(Z1, X1, Z1, Curve_P_32); // t3 = x1 - z1^2
+  _modMult_fast(X1, X1, Z1);       // t1 = x1^2 - z1^4
+  _modAdd(Z1, X1, X1, Curve_P_32); // t3 = 2*(x1^2 - z1^4)
+  _modAdd(X1, X1, Z1, Curve_P_32); // t1 = 3*(x1^2 - z1^4)
+  if GetBit(X1, 0) then begin
+    carry := _add(X1, X1, Curve_P_32);
+    _rshift1(X1);
+    X1[NUM_ECC_DIGITS-1] := X1[NUM_ECC_DIGITS-1] or (carry shl 63);
+  end else
+    _rshift1(X1);
+  // t1 = 3/2*(x1^2 - z1^4) = B
+  _modSquare_fast(Z1, X1, false);  // t3 = B^2
+  _modSub(Z1, Z1, t5, Curve_P_32); // t3 = B^2 - A
+  _modSub(Z1, Z1, t5, Curve_P_32); // t3 = B^2 - 2A = x3
+  _modSub(t5, t5, Z1, Curve_P_32); // t5 = A - x3
+  _modMult_fast(X1, X1, t5);       // t1 = B * (A - x3)
+  _modSub(t4, X1, t4, Curve_P_32); // t4 = B * (A - x3) - y1^4 = y3
+  X1 := Z1;
+  Z1 := Y1;
+  Y1 := t4;
+end;
+
+// Modify (x1, y1) => (x1 * z^2, y1 * z^3)
+procedure _apply_z(var X1, Y1, Z: TVLI);
+var t1: TVLI;
+begin
+  _modSquare_fast(t1, Z, false); // z^2
+  _modMult_fast(X1, X1, t1);     // x1 * z^2
+  _modMult_fast(t1, t1, Z);      // z^3
+  _modMult_fast(Y1, Y1, t1);     // y1 * z^3
+end;
+
+// P = (x1, y1) => 2P, (x2, y2) => P'
+procedure _XYcZ_initial_double(var X1, Y1, X2, Y2: TVLI; InitialZ: PVLI);
+var z: TVLI;
+begin
+  X2 := X1;
+  Y2 := Y1;
+  if InitialZ <> nil then
+    z := InitialZ^ else
+    z := _1;
+  _apply_z(X1, Y1, z);
+  EccPointDoubleJacobian(X1, Y1, z);
+  _apply_z(X2, Y2, z);
+end;
+
+// Input P = (x1, y1, Z), Q = (x2, y2, Z)
+// Output P' = (x1', y1', Z3), P + Q = (x3, y3, Z3)
+// or P => P', Q => P + Q
+procedure _XYcZ_add(var X1, Y1, X2, Y2: TVLI);
+var t5: TVLI;
+begin
+  // t1 = X1, t2 = Y1, t3 = X2, t4 = Y2
+  _modSub(t5, X2, X1, Curve_P_32); // t5 = x2 - x1
+  _modSquare_fast(t5, t5, false);  // t5 = (x2 - x1)^2 = A
+  _modMult_fast(X1, X1, t5);       // t1 = x1*A = B
+  _modMult_fast(X2, X2, t5);       // t3 = x2*A = C
+  _modSub(Y2, Y2, Y1, Curve_P_32); // t4 = y2 - y1
+  _modSquare_fast(t5, Y2, false);  // t5 = (y2 - y1)^2 = D
+  _modSub(t5, t5, X1, Curve_P_32); // t5 = D - B
+  _modSub(t5, t5, X2, Curve_P_32); // t5 = D - B - C = x3
+  _modSub(X2, X2, X1, Curve_P_32); // t3 = C - B
+  _modMult_fast(Y1, Y1, X2);       // t2 = y1*(C - B)
+  _modSub(X2, X1, t5, Curve_P_32); // t3 = B - x3
+  _modMult_fast(Y2, Y2, X2);       // t4 = (y2 - y1)*(B - x3)
+  _modSub(Y2, Y2, Y1, Curve_P_32); // t4 = y3
+  X2 := t5;
+end;
+
+// Input P = (x1, y1, Z), Q = (x2, y2, Z)
+//  Output P + Q = (x3, y3, Z3), P - Q = (x3', y3', Z3)
+//  or P => P - Q, Q => P + Q
+procedure _XYcZ_addC(var X1, Y1, X2, Y2: TVLI);
+var t5, t6, t7: TVLI;
+begin
+  // t1 = X1, t2 = Y1, t3 = X2, t4 = Y2
+  _modSub(t5, X2, X1, Curve_P_32); // t5 = x2 - x1
+  _modSquare_fast(t5, t5, false);  // t5 = (x2 - x1)^2 = A
+  _modMult_fast(X1, X1, t5);       // t1 = x1*A = B
+  _modMult_fast(X2, X2, t5);       // t3 = x2*A = C
+  _modAdd(t5, Y2, Y1, Curve_P_32); // t4 = y2 + y1
+  _modSub(Y2, Y2, Y1, Curve_P_32); // t4 = y2 - y1
+  _modSub(t6, X2, X1, Curve_P_32); // t6 = C - B
+  _modMult_fast(Y1, Y1, t6);       // t2 = y1 * (C - B)
+  _modAdd(t6, X1, X2, Curve_P_32); // t6 = B + C
+  _modSquare_fast(X2, Y2, false);  // t3 = (y2 - y1)^2
+  _modSub(X2, X2, t6, Curve_P_32); // t3 = x3
+  _modSub(t7, X1, X2, Curve_P_32); // t7 = B - x3
+  _modMult_fast(Y2, Y2, t7);       // t4 = (y2 - y1)*(B - x3)
+  _modSub(Y2, Y2, Y1, Curve_P_32); // t4 = y3
+  _modSquare_fast(t7, t5, false);  // t7 = (y2 + y1)^2 = F
+  _modSub(t7, t7, t6, Curve_P_32); // t7 = x3'
+  _modSub(t6, t7, X1, Curve_P_32); // t6 = x3' - B
+  _modMult_fast(t6, t6, t5);       // t6 = (y2 + y1)*(x3' - B)
+  _modSub(Y1, t6, Y1, Curve_P_32); // t2 = y3'
+  X1 := t7;
+end;
+
+procedure EccPointMult(out Output: TEccPoint; const Point: TEccPoint; Scalar: TVLI; InitialZ: PVLI);
+var Rx, Ry: array[0..1] of TVLI;
+    z: TVLI;
+    i, nb: integer;
+begin
+  // R0 and R1
+  Rx[1] := Point.x;
+  Ry[1] := Point.y;
+  _XYcZ_initial_double(Rx[1], Ry[1], Rx[0], Ry[0], InitialZ);
+  for i := _numBits(Scalar) - 2 downto 1 do begin
+    if GetBit(Scalar, i) then
+      nb := 0 else
+      nb := 1;
+    _XYcZ_addC(Rx[1-nb], Ry[1-nb], Rx[nb], Ry[nb]);
+    _XYcZ_add(Rx[nb], Ry[nb], Rx[1-nb], Ry[1-nb]);
+  end;
+  if GetBit(Scalar, 0) then
+    nb := 0 else
+    nb := 1;
+  _XYcZ_addC(Rx[1-nb], Ry[1-nb], Rx[nb], Ry[nb]);
+  // Find final 1/Z value
+  _modSub(z, Rx[1], Rx[0], Curve_P_32);  // X1 - X0
+  _modMult_fast(z, z, Ry[1-nb]);         // Yb * (X1 - X0)
+  _modMult_fast(z, z, Point.x);          // xP * Yb * (X1 - X0)
+  _modInv(z, z, Curve_P_32);             // 1 / (xP * Yb * (X1 - X0))
+  _modMult_fast(z, z, Point.y);          // yP / (xP * Yb * (X1 - X0))
+  _modMult_fast(z, z, Rx[1-nb]);         // Xb * yP / (xP * Yb * (X1 - X0))
+  // End 1/Z calculation
+  _XYcZ_add(Rx[nb], Ry[nb], Rx[1-nb], Ry[1-nb]);
+  _apply_z(Rx[0], Ry[0], z);
+  Output.x := Rx[0];
+  Output.y := Ry[0];
+end;
+
+procedure _bswap256(dest, source: PQWordArray);
+begin
+  dest[0] := bswap64(source[3]);
+  dest[1] := bswap64(source[2]);
+  dest[2] := bswap64(source[1]);
+  dest[3] := bswap64(source[0]);
+end;
+
+// Compute a = sqrt(a) (mod curve_p)
+procedure ModSqrt(var a: TVLI);
+var i: integer;
+    p1, result: TVLI;
+begin
+  result := _1;
+  // Since curve_p == 3 (mod 4) for all supported curves, we can compute
+  // sqrt(a) = a^((curve_p + 1) / 4) (mod curve_p)
+  _add(p1, Curve_P_32, _1); // p1 = curve_p + 1
+  for i := _numBits(p1) - 1 downto 2 do begin
+    _modSquare_fast(result, result, false);
+    if GetBit(p1, i) then
+      _modMult_fast(result, result, a);
+  end;
+  a := result;
+end;
+
+procedure EccPointDecompress(out Point: TEccPoint; Compressed: PByteArray);
+begin
+  _bswap256(@Point.x, @Compressed[1]);
+  _modSquare_fast(Point.y, Point.x, false);           // y = x^2
+  _modSub(Point.y, Point.y, _3, Curve_P_32);          // y = x^2 - 3
+  _modMult_fast(Point.y, Point.y, Point.x);           // y = x^3 - 3x
+  _modAdd(Point.y, Point.y, Curve_B_32, Curve_P_32);  // y = x^3 - 3x + b
+  ModSqrt(Point.y);
+  if (Point.y[0] and $01) <> (Compressed[0] and $01) then
+    _sub(Point.y, Curve_P_32, Point.y);
+end;
+
+function ecc_make_key_pas(out PublicKey: TECCPublicKey; out PrivateKey: TECCPrivateKey): boolean;
+var PrivateK: TVLI;
+    PublicPoint: TEccPoint;
+    tries: integer;
+begin
+  result := false;
+  tries := 0;
+  repeat
+    inc(tries);
+    GetRandomNumber(@PrivateK);
+    if tries >= MAX_TRIES then
+      exit;
+    if _isZero(PrivateK) then
+      continue;
+    // Make sure the private key is in the range [1, n-1]
+    // For the supported curves, n is always large enough that we only need
+    // to subtract once at most
+    if _cmp(Curve_N_32, PrivateK) <> 1 then
+      _sub(PrivateK, PrivateK, Curve_N_32);
+    EccPointMult(PublicPoint, Curve_G_32, PrivateK, nil);
+  until not (_isZero(PublicPoint.x) and _isZero(PublicPoint.y));
+  _bswap256(@PrivateKey, @PrivateK);
+  _bswap256(@PublicKey[1], @PublicPoint.x);
+  PublicKey[0] := 2 + (PublicPoint.y[0] and $01);
+  result := true;
+end;
+
+function ecdh_shared_secret_pas(const PublicKey: TECCPublicKey;
+  const PrivateKey: TECCPrivateKey; out Secret: TEccSecretKey): boolean;
+var PublicPoint: TEccPoint;
+    PrivateK: TVLI;
+    Product: TEccPoint;
+    RandomKey: TVLI;
+begin
+  GetRandomNumber(@RandomKey);
+  EccPointDecompress(PublicPoint, @PublicKey);
+  _bswap256(@PrivateK, @PrivateKey);
+  EccPointMult(Product, PublicPoint, PrivateK, @RandomKey);
+  _bswap256(@Secret, @Product.x);
+  result := not (_isZero(Product.x) and _isZero(Product.y));
+end;
+
+// computes result = (Left * Right) mod Modulo
+procedure _modMult(out Output: TVLI; const Left, Right, Modulo: TVLI);
+var carry: UInt64;
+    cmp: integer;
+    ModMultiple, Product: TVLI2;
+    ModMultipleVLI_Lo, ModMultipleVLI_Hi, ProductVLI_Lo, ProductVLI_Hi: PVLI;
+    DigitShift, BitShift, ProductBits, ModBits: integer;
+    VLI: PVLI;
+begin
+  ModBits := _numBits(Modulo);
+  _mult(Product, Left, Right);
+  ProductVLI_Hi := @Product[NUM_ECC_DIGITS];
+  ProductVLI_Lo := @Product;
+  ProductBits := _numBits(ProductVLI_Hi^);
+  if ProductBits > 0 then
+    ProductBits := ProductBits + NUM_ECC_DIGITS*64 else
+    ProductBits := _numBits(ProductVLI_Lo^);
+  if ProductBits < ModBits then begin // l_product < p_mod
+    Output := PVLI(@Product)^;
+    exit;
+  end;
+  // Shift p_mod by (LeftBits - ModBits). This multiplies p_mod by the largest
+  // power of two possible while still resulting in a number less than p_left
+  ModMultipleVLI_Lo := @ModMultiple;
+  ModMultipleVLI_Hi := @ModMultiple[NUM_ECC_DIGITS];
+  _clear(ModMultipleVLI_Lo^);
+  _clear(ModMultipleVLI_Hi^);
+  DigitShift := (ProductBits-ModBits) shr 6;
+  BitShift := (ProductBits-ModBits) and 63;
+  if BitShift > 0 then begin
+    VLI := @ModMultiple[DigitShift];
+    ModMultiple[DigitShift+NUM_ECC_DIGITS] := _lshift(VLI^, Modulo, BitShift)
+  end else begin
+    VLI := @ModMultiple[DigitShift];
+    VLI^ := Modulo;
+  end;
+  // Subtract all multiples of Modulo to get the remainder
+  while (ProductBits > NUM_ECC_DIGITS*64) or (_cmp(ModMultipleVLI_Lo^, Modulo) >= 0) do begin
+    cmp := _cmp(ModMultipleVLI_Hi^, ProductVLI_Hi^);
+    if (cmp < 0) or ((cmp = 0) and (_cmp(ModMultipleVLI_Lo^, ProductVLI_Lo^) <= 0)) then begin
+      if _sub(ProductVLI_Lo^, ProductVLI_Lo^, ModMultipleVLI_Lo^) > 0 then
+        _sub(ProductVLI_Hi^, ProductVLI_Hi^, _1); // borrow
+      _sub(ProductVLI_Hi^, ProductVLI_Hi^, ModMultipleVLI_Hi^);
+    end;
+    carry := (ModMultiple[NUM_ECC_DIGITS] and $01) shl 63;
+    _rshift1(ModMultipleVLI_Hi^);
+    _rshift1(ModMultipleVLI_Lo^);
+    if carry > 0 then
+      ModMultiple[NUM_ECC_DIGITS-1] := ModMultiple[NUM_ECC_DIGITS-1] or carry;
+    dec(ProductBits);
+  end;
+  Output := PVLI(@Product)^;
+end;
+
+function ecdsa_sign_pas(const PrivateKey: TECCPrivateKey; const Hash: TEccHash;
+  out Signature: TECCSignature): boolean;
+var K, Temp, S: TVLI;
+    P: TEccPoint;
+    Tries: integer;
+begin
+  result := false;
+  Tries := 0;
+  repeat
+    inc(Tries);
+    GetRandomNumber(@k);
+    if Tries >= MAX_TRIES then
+      exit;
+    if _isZero(k) then
+      continue;
+    if _cmp(Curve_N_32, k) <> 1 then
+      _sub(k, k, Curve_N_32);
+    // Temp = k * G
+    EccPointMult(P, Curve_G_32, k, nil);
+    // r = x1 (mod n)
+    if _cmp(Curve_N_32, P.x) <> 1 then
+      _sub(P.x, P.x, Curve_N_32);
+  until not _isZero(p.x);
+  _bswap256(@Signature, @P.x);
+  _bswap256(@Temp, @PrivateKey);
+  _modMult(S, P.x, Temp, Curve_N_32); // s = r*d
+  _bswap256(@Temp, @Hash);
+  _modAdd(S, Temp, S, Curve_N_32);    // s = e + r*d
+  _modInv(k, k, Curve_N_32);          // k = 1 / k
+  _modMult(S, S, k, Curve_N_32);      // s = (e + r*d) / k
+  _bswap256(@Signature[ECC_BYTES], @S);
+  result := true;
+end;
+
+function ecdsa_verify_pas(const PublicKey: TECCPublicKey; const Hash: TEccHash;
+  const Signature: TECCSignature): boolean;
+var i, Index, NumBits: integer;
+    PublicPoint, SumPoint: TEccPoint;
+    Point: PEccPoint;
+    Points: array[0..3] of PEccPoint;
+    rx, ry, tx, ty, tz, l_r, l_s, u1, u2, z: TVLI;
+begin
+  result := false;
+  EccPointDecompress(PublicPoint, @PublicKey);
+  _bswap256(@l_r, @Signature);
+  _bswap256(@l_s, @Signature[ECC_BYTES]);
+  if _isZero(l_r) or _isZero(l_s) or
+     (_cmp(Curve_N_32, l_r) <> 1) or (_cmp(Curve_N_32, l_s) <> 1) then
+    exit; // r, s must be <> 0 and < n
+  // calculate u1 and u2
+  _modInv(z, l_s, Curve_N_32);      // Z = s^-1
+  _bswap256(@u1, @Hash);
+  _modMult(u1, u1, z, Curve_N_32);  // u1 = e/s
+  _modMult(u2, l_r, z, Curve_N_32); // u2 = r/s
+  // calculate l_sum = G + Q
+  SumPoint.x := PublicPoint.x;
+  SumPoint.y := PublicPoint.y;
+  tx := Curve_G_32.x;
+  ty := Curve_G_32.y;
+  _modSub(z, SumPoint.x, tx, Curve_P_32); // Z = x2 - x1
+  _XYcZ_add(tx, ty, SumPoint.x, SumPoint.y);
+  _modInv(z, z, Curve_P_32);              // Z = 1/Z
+  _apply_z(SumPoint.x, SumPoint.y, z);
+  // use Shamir's trick to calculate u1*G + u2*Q
+  Points[0] := nil;
+  Points[1] := @Curve_G_32;
+  Points[2] := @PublicPoint;
+  Points[3] := @SumPoint;
+  NumBits := _numBits(u1);
+  Index := _numBits(u2);
+  if Index > NumBits then
+    NumBits := Index;
+  if GetBit(u1, NumBits-1) then
+    Index := 1 else
+    Index := 0;
+  if GetBit(u2, NumBits-1) then
+    inc(Index, 2);
+  Point := Points[Index];
+  rx := Point.x;
+  ry := Point.y;
+  z := _1;
+  for i := NumBits-2 downto 0 do begin
+    EccPointDoubleJacobian(rx, ry, z);
+    if GetBit(u1, i) then
+      Index := 1 else
+      Index := 0;
+    if GetBit(u2, i) then
+      inc(Index, 2);
+    Point := Points[Index];
+    if Point <> nil then begin
+      tx := Point.x;
+      ty := Point.y;
+      _apply_z(tx, ty, z);
+      _modSub(tz, rx, tx, Curve_P_32); // Z = x2 - x1
+      _XYcZ_add(tx, ty, rx, ry);
+      _modMult_fast(z, z, tz);
+    end;
+  end;
+  _modInv(z, z, Curve_P_32); // Z = 1/Z
+  _apply_z(rx, ry, z);
+  // v = x1 (mod n)
+  if _cmp(Curve_N_32, rx) <> 1 then
+    _sub(rx, rx, Curve_N_32);
+  result := IsEqual(THash256(rx), THash256(l_r)); // Accept only if v == r
+end;
+
+{$else}
+
+function ecc_make_key_pas(out PublicKey: TECCPublicKey; out PrivateKey: TECCPrivateKey): boolean;
+begin
+  result := false; // we need proper UInt64 support at compiler level
+end;
+
+function ecdh_shared_secret_pas(const PublicKey: TECCPublicKey;
+  const PrivateKey: TECCPrivateKey; out Secret: TECCSecretKey): boolean;
+begin
+  result := false; // we need proper UInt64 support at compiler level
+end;
+
+function ecdsa_sign_pas(const PrivateKey: TECCPrivateKey; const Hash: TECCHash;
+  out Signature: TECCSignature): boolean;
+begin
+  result := false; // we need proper UInt64 support at compiler level
+end;
+
+function ecdsa_verify_pas(const PublicKey: TECCPublicKey; const Hash: TECCHash;
+  const Signature: TECCSignature): boolean;
+begin
+  result := false; // we need proper UInt64 support at compiler level
+end;
+
+{$endif HASUINT64}
 
 
 { *********** middle-level certificate-based public-key cryptography *********** }
@@ -2065,8 +3157,6 @@ end;
 function ECCVerify(const sign: TECCSignatureCertifiedContent;
   const hash: THash256; const auth: TECCCertificateContent): TECCValidity;
 begin
-  if not ecc_available then
-    result := ecvNotSupported else
   if IsZero(hash) then
     result := ecvBadParameter else
   if not ECCCheck(sign) then
@@ -2086,7 +3176,7 @@ end;
 
 const
   ECIES_MAGIC: array[0..1] of array[0..15] of AnsiChar =
-    ('SynEccEncrypted'#26, 'SynEccEncrypt01'#26); 
+    ('SynEccEncrypted'#26, 'SynEccEncrypt01'#26);
   ECIES_NOSYNLZ: array[ecaPBKDF2_HMAC_SHA256_AES256_CFB_SYNLZ..
     ecaPBKDF2_HMAC_SHA256_AES128_CTR_SYNLZ] of TECIESAlgo = (
       ecaPBKDF2_HMAC_SHA256_AES256_CFB, ecaPBKDF2_HMAC_SHA256_AES256_CBC,
@@ -3338,10 +4428,6 @@ var auth: TECCCertificateContent;
     hash: TSHA256Digest;
     crc: Int64;
 begin
-  if not ecc_available then begin
-    result := ecvNotSupported;
-    exit;
-  end;
   result := ecvCorrupted;
   if not ECCCheck(content) then
     exit;
@@ -3781,8 +4867,6 @@ constructor TECDHEProtocol.Create(aAuth: TECDHEAuth; aPKI: TECCCertificateChain;
   aPrivate: TECCCertificateSecret);
 var res: TECCValidity;
 begin
-  if not ecc_available then
-    raise EECCException.CreateUTF8('%.Create but ECC not supported',[self]);
   if (aPKI<>nil) and (aPrivate<>nil) then begin
     res := aPKI.IsValid(aPrivate);
     if not (res in ECC_VALIDSIGN) then
@@ -4308,6 +5392,9 @@ end;
 {$endif NOVARIANTS}
 
 initialization
+  {$ifdef HASUINT64}
+  assert(NUM_ECC_DIGITS=4);
+  {$endif}
   assert(sizeof(TECCCertificateContent)=173); // on all platforms and compilers
   assert(sizeof(TECDHEFrameClient)=290);
   assert(sizeof(TECDHEFrameServer)=306);

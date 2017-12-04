@@ -882,6 +882,10 @@ type
   // older compilers will fallback to signed Int64 values
   // - anyway, consider using SortDynArrayQWord() to compare QWord values
   // in a safe and efficient way, under a CPUX86
+  // - you may use UInt64 explicitly in your computation (like in SynEcc.pas),
+  // if you are sure that Delphi 6-2007 compiler handles your code as expected,
+  // but mORMot code will expect to use QWord for its internal process
+  // (e.g. ORM/SOA serialization)
   {$ifdef FPC_OR_UNICODE}
   QWord = UInt64;
   {$else}
@@ -12405,6 +12409,9 @@ procedure crc512c(buf: PAnsiChar; len: cardinal; out crc: THash512);
 // ! ... finally FillZero(secret); end;
 procedure FillZero(var secret: RawByteString); overload;
   {$ifdef HASINLINE}inline;{$endif} overload;
+
+/// fast computation of two 64-bit unsigned integers into a 128-bit value
+procedure mul64x64(const left, right: QWord; out product: THash128Rec);
 
 type
   /// the potential features, retrieved from an Intel CPU
@@ -34488,6 +34495,69 @@ procedure FillZero(var secret: RawByteString); overload;
 begin
   FillcharFast(pointer(secret)^,length(secret),0);
 end;
+
+{$ifdef CPU32DELPHI}
+procedure mul64(a,b: cardinal; out product64: QWord);
+asm // Delphi is not efficient for x86 target with QWord -> optimize
+      imul  edx
+      mov   [ecx], eax
+      mov   [ecx + 4], edx
+end;
+{$endif}
+
+procedure mul64x64(const left, right: QWord; out product: THash128Rec);
+{$ifdef CPUX86}
+asm // adapted from FPC compiler output, which is much better than Delphi's here
+        mov     ecx, eax
+        mov     eax, dword ptr [ebp+8H]
+        mul     dword ptr [ebp+10H]
+        mov     dword ptr [ecx], eax
+        mov     dword ptr [ebp-4H], edx
+        mov     eax, dword ptr [ebp+8H]
+        mul     dword ptr [ebp+14H]
+        add     eax, dword ptr [ebp-4H]
+        adc     edx, 0
+        mov     dword ptr [ebp-10H], eax
+        mov     dword ptr [ebp-0CH], edx
+        mov     eax, dword ptr [ebp+0CH]
+        mul     dword ptr [ebp+10H]
+        add     eax, dword ptr [ebp-10H]
+        adc     edx, 0
+        mov     dword ptr [ecx+4H], eax
+        mov     dword ptr [ebp-14H], edx
+        mov     eax, dword ptr [ebp+0CH]
+        mul     dword ptr [ebp+14H]
+        add     eax, dword ptr [ebp-0CH]
+        adc     edx, 0
+        add     eax, dword ptr [ebp-14H]
+        adc     edx, 0
+        mov     dword ptr [ecx+8H], eax
+        mov     dword ptr [ecx+0CH], edx
+end;
+{$else}
+var l: TQWordRec absolute left;
+    r: TQWordRec absolute right;
+    t1,t2,t3: TQWordRec;
+begin
+  {$ifdef CPU32DELPHI}
+  mul64(l.L,r.L,t1.V);
+  mul64(l.H,r.L,t2.V);
+  inc(t2.V,t1.H);
+  mul64(l.L,r.H,t3.V);
+  inc(t3.V,t2.L);
+  mul64(l.H,r.H,product.H);
+  inc(product.H,t2.H+t3.H);
+  product.c0 := t1.L;
+  product.c1 := t3.V;
+  {$else}
+  t1.V := QWord(l.L)*r.L;
+  t2.V := QWord(l.H)*r.L+t1.H;
+  t3.V := QWord(l.L)*r.H+t2.L;
+  product.H := QWord(l.H)*r.H+t2.H+t3.H;
+  product.L := t3.V shl 32 or t1.L;
+  {$endif}
+end;
+{$endif}
 
 procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
 var i,len: integer;

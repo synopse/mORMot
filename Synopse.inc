@@ -211,6 +211,7 @@
   {$define DELPHI5ORFPC}
   {$define USETYPEINFO}  // will use SynFPCTypInfo.pas wrapper
   {$define HASINLINE}
+  {$define HASUINT64}
   {$define HASINLINENOTX86}
   {$define NODELPHIASM}   // ignore low-level System.@LStrFromPCharLen calls
   {$define HASAESNI}
@@ -398,6 +399,7 @@
       {$else}
         {$define ISDELPHI7ANDUP} // Delphi 7 or newer
         {$define WITHUXTHEME}   // VCL handle UI theming
+        {$define HASUINT64}
         {$warn UNSAFE_CODE OFF} // Delphi for .Net does not exist any more!
         {$warn UNSAFE_TYPE OFF}
         {$warn UNSAFE_CAST OFF}
