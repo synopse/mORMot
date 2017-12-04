@@ -48391,6 +48391,7 @@ begin
   if tmp.len<>0 then
     try
       parser.From := tmp.buf;
+      parser.TObjectListItemClass := TObjectListItemClass;
       parser.Options := Options;
       parser.Value := TObject(ObjectInstance);
       parser.Parse;
