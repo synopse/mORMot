@@ -407,9 +407,13 @@ function GetFinalPathNameByHandleW(hFile: THandle; lpszFilePath: PWideChar;
 
 const LONG_PATH_PREFIX: PWideChar = '\\?\';
 const UNC_PATH_PREFIX: PWideChar = '\\?\UNC\';
+{$else}
+function realpath(name: PChar; resolved: PChar): PChar; cdecl; external 'c' name 'realpath';
+{$endif}
 
-/// Implementation of unix realpath as in libuv
+/// Implementation of realpath as in libuv
 function os_realpath(const FileName: SynUnicode; var TargetName: SynUnicode): Boolean;
+{$ifdef MSWINDOWS}
 var
   Handle: THandle;
   w_realpath_len: Cardinal;
@@ -447,10 +451,15 @@ begin
   end;
 end;
 {$else}
-// TODO - need to implement a realpath from libc? or another alternative
-function os_realpath(const FileName: SynUnicode; var TargetName: SynUnicode): Boolean;
+var
+  Buf: AnsiString;
 begin
-   Result := false;
+  SetLength(Buf, PATH_MAX);
+  Result := realpath(PChar(SynUnicodeToString(FileName)), PChar(Buf)) <> nil;
+  if Result then
+    TargetName := PChar(Buf)
+  else
+    TargetName := '';
 end;
 {$endif}
 
