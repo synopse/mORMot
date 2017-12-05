@@ -2031,9 +2031,9 @@ const
     UInt64($FFFFFFFFFFFFFFFF), UInt64($FFFFFFFF00000000));
 
   _1: TVLI = (1, 0, 0, 0);
+  _3: TVLI = (3, 0, 0, 0);
   _11: TVLI = (UInt64($0101010101010101), UInt64($0101010101010101),
                UInt64($0101010101010101), UInt64($0101010101010101));
-  _3: TVLI = (3, 0, 0, 0);
 
 procedure _clear(out VLI: TVLI); {$ifdef HASINLINE}inline;{$endif}
 begin
@@ -2779,6 +2779,9 @@ begin
   _bswap256(@PublicKey[1], @PublicPoint.x);
   PublicKey[0] := 2 + (PublicPoint.y[0] and $01);
   result := true;
+  _clear(PrivateK); // erase sensitive information from stack
+  _clear(PublicPoint.x);
+  _clear(PublicPoint.y);
 end;
 
 function ecdh_shared_secret_pas(const PublicKey: TECCPublicKey;
@@ -2794,6 +2797,10 @@ begin
   EccPointMult(Product, PublicPoint, PrivateK, @RandomKey);
   _bswap256(@Secret, @Product.x);
   result := not (_isZero(Product.x) and _isZero(Product.y));
+  _clear(Product.x); // erase sensitive information from stack
+  _clear(Product.y);
+  _clear(PrivateK);
+  _clear(RandomKey);
 end;
 
 // computes result = (Left * Right) mod Modulo
@@ -3677,55 +3684,58 @@ end;
 constructor TECCCertificateSecret.CreateNew(Authority: TECCCertificateSecret;
   const IssuerText: RawUTF8; ExpirationDays: integer; StartDate: TDateTime;
   ParanoidVerify: boolean);
-var priv: TECCPrivateKey;
-    pub: TECCPublicKey;
+var priv: PECCPrivateKey;
+    pub: PECCPublicKey;
     now: TECCDate;
     sha: TSHA256;
     hash: TSHA256Digest;
+    temp: TECCSignature;
     retry: boolean;
 begin
   Create;
-  try
-    now := NowECCDate;
-    with fContent.Signed do begin
-      IssueDate := now;
-      if ExpirationDays>0 then begin
-        if StartDate=0 then
-          ValidityStart := now else
-          ValidityStart := ECCDate(StartDate);
-        ValidityEnd := ValidityStart+ExpirationDays;
-      end;
-      TAESPRNG.Fill(TAESBlock(Serial));
-      if IssuerText='' then
-        TAESPRNG.Fill(TAESBlock(Issuer)) else
-        ECCIssuer(IssuerText,Issuer);
-      for retry := false to true do begin
-        if not ecc_make_key(PublicKey,fPrivateKey) then
-          raise EECCException.CreateUTF8('%.CreateNew: ecc_make_key?',[self]);
-        if Authority=nil then begin
-          AuthoritySerial := Serial;
-          AuthorityIssuer := Issuer;
-          priv := fPrivateKey; // self-signing
-          pub := PublicKey;
-        end else begin
-          AuthoritySerial := Authority.fContent.Signed.Serial;
-          AuthorityIssuer := Authority.fContent.Signed.Issuer;
-          priv := Authority.fPrivateKey;
-          pub := Authority.fContent.Signed.PublicKey;
-        end;
-        sha.Full(@fContent.Signed,sizeof(TECCCertificateSigned),hash);
-        if not ecdsa_sign(priv,hash,fContent.Signature) then
-          raise EECCException.CreateUTF8('%.CreateNew: ecdsa_sign?',[self]);
-        if not ParanoidVerify or ecdsa_verify(pub,hash,fContent.Signature) then
-          break else
-          if retry then
-            raise EECCException.CreateUTF8('%.CreateNew: ParanoidVerify?',[self]);
-      end;
+  now := NowECCDate;
+  with fContent.Signed do begin
+    IssueDate := now;
+    if ExpirationDays>0 then begin
+      if StartDate=0 then
+        ValidityStart := now else
+        ValidityStart := ECCDate(StartDate);
+      ValidityEnd := ValidityStart+ExpirationDays;
     end;
-    fContent.CRC := fnv32(0,@fContent,sizeof(fContent)-4);
-  finally
-    FillZero(THash256(priv));
+    TAESPRNG.Fill(TAESBlock(Serial));
+    if IssuerText='' then
+      TAESPRNG.Fill(TAESBlock(Issuer)) else
+      ECCIssuer(IssuerText,Issuer);
+    for retry := false to true do begin
+      if not ecc_make_key(PublicKey,fPrivateKey) then
+        raise EECCException.CreateUTF8('%.CreateNew: ecc_make_key?',[self]);
+      if Authority=nil then begin
+        AuthoritySerial := Serial;
+        AuthorityIssuer := Issuer;
+        priv := @fPrivateKey; // self-signing
+        pub := @PublicKey;
+      end else begin
+        AuthoritySerial := Authority.fContent.Signed.Serial;
+        AuthorityIssuer := Authority.fContent.Signed.Issuer;
+        priv := @Authority.fPrivateKey;
+        pub := @Authority.fContent.Signed.PublicKey;
+        if ParanoidVerify then // check below will be on Authority keys
+          if not ecdsa_sign(fPrivateKey,hash,temp) or
+             not ecdsa_verify(PublicKey,hash,temp) then
+          if retry then
+            raise EECCException.CreateUTF8('%.CreateNew: ParanoidVerify1?',[self]) else
+            continue;
+      end;
+      sha.Full(@fContent.Signed,sizeof(TECCCertificateSigned),hash);
+      if not ecdsa_sign(priv^,hash,fContent.Signature) then
+        raise EECCException.CreateUTF8('%.CreateNew: ecdsa_sign?',[self]);
+      if not ParanoidVerify or ecdsa_verify(pub^,hash,fContent.Signature) then
+        break else
+        if retry then
+          raise EECCException.CreateUTF8('%.CreateNew: ParanoidVerify2?',[self]);
+    end;
   end;
+  fContent.CRC := fnv32(0,@fContent,sizeof(fContent)-4);
 end;
 
 constructor TECCCertificateSecret.CreateFromSecureBinary(
