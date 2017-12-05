@@ -1144,6 +1144,8 @@ type
   TSingleDynArray = array of Single;
   PInt64DynArray = ^TInt64DynArray;
   TInt64DynArray = array of Int64;
+  PQwordDynArray = ^TQwordDynArray;
+  TQwordDynArray = array of Qword;
   PDoubleDynArray = ^TDoubleDynArray;
   TDoubleDynArray = array of double;
   PCurrencyDynArray = ^TCurrencyDynArray;
@@ -4716,7 +4718,10 @@ procedure CSVToIntegerDynArray(CSV: PUTF8Char; var Result: TIntegerDynArray;
 
 /// add the strings in the specified CSV text into a dynamic array of integer
 procedure CSVToInt64DynArray(CSV: PUTF8Char; var Result: TInt64DynArray;
-  Sep: AnsiChar= ',');
+  Sep: AnsiChar= ','); overload;
+
+/// add the strings in the specified CSV text into a dynamic array of integer
+function CSVToInt64DynArray(CSV: PUTF8Char; Sep: AnsiChar= ','): TInt64DynArray; overload;
 
 /// return the corresponding CSV text from a dynamic array of 32-bit integer
 // - you can set some custom Prefix and Suffix text
@@ -4754,6 +4759,25 @@ function TIntegerDynArrayFrom64(const Values: TInt64DynArray;
 
 /// quick helper to initialize a dynamic array of 64-bit integers from 32-bit values
 function TInt64DynArrayFrom(const Values: TIntegerDynArray): TInt64DynArray;
+
+/// quick helper to initialize a dynamic array of 64-bit integers from 32-bit values
+function TQWordDynArrayFrom(const Values: TCardinalDynArray): TQWordDynArray;
+
+/// initializes a dynamic array from a set of 32-bit integer signed values
+function FromI32(const Values: array of integer): TIntegerDynArray;
+  {$ifdef FPC}{$ifdef HASINLINE}inline;{$endif}{$endif}
+
+/// initializes a dynamic array from a set of 32-bit integer unsigned values
+function FromU32(const Values: array of cardinal): TCardinalDynArray;
+  {$ifdef FPC}{$ifdef HASINLINE}inline;{$endif}{$endif}
+
+/// initializes a dynamic array from a set of 64-bit integer signed values
+function FromI64(const Values: array of Int64): TInt64DynArray;
+  {$ifdef FPC}{$ifdef HASINLINE}inline;{$endif}{$endif}
+
+/// initializes a dynamic array from a set of 64-bit integer unsigned values
+function FromU64(const Values: array of QWord): TQWordDynArray;
+  {$ifdef FPC}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 type
   /// used to store and retrieve Words in a sorted array
@@ -7408,7 +7432,7 @@ type
   // - the last item should be ptCustom, for non simple types
   TJSONCustomParserRTTIType = (
     ptArray, ptBoolean, ptByte, ptCardinal, ptCurrency, ptDouble, ptExtended,
-    ptInt64, ptInteger, ptRawByteString, ptRawJSON, ptRawUTF8, ptRecord,
+    ptInt64, ptInteger, ptQWord, ptRawByteString, ptRawJSON, ptRawUTF8, ptRecord,
     ptSingle, ptString, ptSynUnicode, ptDateTime, ptDateTimeMS, ptGUID,
     ptID, ptTimeLog, {$ifndef NOVARIANTS} ptVariant, {$endif}
     ptWideString, ptWord, ptCustom);
@@ -11027,7 +11051,7 @@ const
   /// map a PtrInt type to the TJSONCustomParserRTTIType set
   ptPtrInt  = {$ifdef CPU64}ptInt64{$else}ptInteger{$endif};
   /// map a PtrUInt type to the TJSONCustomParserRTTIType set
-  ptPtrUInt = {$ifdef CPU64}ptInt64{$else}ptCardinal{$endif};
+  ptPtrUInt = {$ifdef CPU64}ptQWord{$else}ptCardinal{$endif};
   /// which TJSONCustomParserRTTIType types are not simple types
   // - ptTimeLog is complex, since could be also TCreateTime or TModTime
   PT_COMPLEXTYPES = [ptArray, ptRecord, ptCustom, ptTimeLog];
@@ -22329,7 +22353,7 @@ begin
     case k of
     tkChar, tkWChar, tkLString, tkWString, tkVariant, tkInt64
     {$ifdef UNICODE}, tkUString{$endif}
-    {$ifdef FPC}, tkBool{$endif}:
+    {$ifdef FPC}, tkQword, tkBool{$endif}:
       ; // no additional RTTI needed for those types
     tkDynArray: begin // elSize,elType,elType2
       {$ifdef FPC}
@@ -29932,6 +29956,14 @@ begin
   end;
 end;
 
+function CSVToInt64DynArray(CSV: PUTF8Char; Sep: AnsiChar): TInt64DynArray;
+begin
+  while CSV<>nil do begin
+    SetLength(Result,length(Result)+1);
+    Result[high(Result)] := GetNextItemInt64(CSV,Sep);
+  end;
+end;
+
 function IntegerDynArrayToCSV(const Values: array of integer; ValuesCount: integer;
   const Prefix: RawUTF8=''; const Suffix: RawUTF8=''): RawUTF8;
 type
@@ -30576,6 +30608,46 @@ begin
 end;
 
 function TInt64DynArrayFrom(const Values: TIntegerDynArray): TInt64DynArray;
+var i: integer;
+begin
+  SetLength(result,length(Values));
+  for i := 0 to high(Values) do
+    result[i] := Values[i];
+end;
+
+function TQwordDynArrayFrom(const Values: TCardinalDynArray): TQwordDynArray;
+var i: integer;
+begin
+  SetLength(result,length(Values));
+  for i := 0 to high(Values) do
+    result[i] := Values[i];
+end;
+
+function FromI32(const Values: array of integer): TIntegerDynArray;
+var i: integer;
+begin
+  SetLength(result,length(Values));
+  for i := 0 to high(Values) do
+    result[i] := Values[i];
+end;
+
+function FromU32(const Values: array of cardinal): TCardinalDynArray;
+var i: integer;
+begin
+  SetLength(result,length(Values));
+  for i := 0 to high(Values) do
+    result[i] := Values[i];
+end;
+
+function FromI64(const Values: array of Int64): TInt64DynArray;
+var i: integer;
+begin
+  SetLength(result,length(Values));
+  for i := 0 to high(Values) do
+    result[i] := Values[i];
+end;
+
+function FromU64(const Values: array of QWord): TQWordDynArray;
 var i: integer;
 begin
   SetLength(result,length(Values));
@@ -41650,10 +41722,10 @@ end;
 class function TJSONCustomParserRTTI.TypeNameToSimpleRTTIType(TypeName: PUTF8Char;
   TypeNameLen: Integer; var ItemTypeName: RawUTF8): TJSONCustomParserRTTIType;
 const
-  SORTEDMAX = {$ifdef NOVARIANTS}31{$else}32{$endif};
+  SORTEDMAX = {$ifdef NOVARIANTS}32{$else}33{$endif};
   SORTEDNAMES: array[0..SORTEDMAX] of PUTF8Char =
     ('ARRAY','BOOLEAN','BYTE','CARDINAL','CURRENCY',
-     'DOUBLE','EXTENDED','INT64','INTEGER','PTRINT','PTRUINT',
+     'DOUBLE','EXTENDED','INT64','INTEGER','PTRINT','PTRUINT','QWORD',
      'RAWBYTESTRING','RAWJSON','RAWUTF8','RECORD','SINGLE',
      'STRING','SYNUNICODE','TCREATETIME','TDATETIME','TDATETIMEMS','TGUID',
      'TID','TMODTIME','TRECORDREFERENCE','TRECORDREFERENCETOBEDELETED',
@@ -41663,7 +41735,7 @@ const
    // warning: recognized types should match at binary storage level!
    SORTEDTYPES: array[0..SORTEDMAX] of TJSONCustomParserRTTIType =
      (ptArray,ptBoolean,ptByte,ptCardinal,ptCurrency,
-      ptDouble,ptExtended,ptInt64,ptInteger,ptPtrInt,ptPtrUInt,
+      ptDouble,ptExtended,ptInt64,ptInteger,ptPtrInt,ptPtrUInt,ptQWord,
       ptRawByteString,ptRawJSON,ptRawUTF8,ptRecord,ptSingle,
       ptString,ptSynUnicode,ptTimeLog,ptDateTime,ptDateTimeMS,ptGUID,
       ptID,ptTimeLog,ptInt64,ptInt64,
@@ -41714,7 +41786,7 @@ begin
     1: result := ptByte;
     2: result := ptWord;
     4: result := ptCardinal;
-    8: result := ptInt64;
+    8: result := ptQWord;
     else result := ptPtrInt;
     end;
   {$endif}
@@ -41732,12 +41804,19 @@ begin
     otSLong: result := ptInteger;
     otULong: result := ptCardinal;
     {$ifdef FPC_NEWRTTI}
-    otSQWord,otUQWord: result := ptInt64;
+    otSQWord: result := ptInt64;
+    otUQWord: result := ptQWord;
     {$endif}
     end;
-  tkInt64: result := ptInt64;
+  tkInt64:
+    {$ifndef FPC}
+    if Info=TypeInfo(QWord) then
+      result := ptQWord else
+    {$endif}
+      result := ptInt64;
   {$ifdef FPC}
-  tkBool: result := ptBoolean;
+  tkQWord: result := ptQWord;
+  tkBool:  result := ptBoolean;
   {$else}
   tkEnumeration:
     if Info=TypeInfo(boolean) then
@@ -41830,9 +41909,10 @@ procedure TJSONCustomParserRTTI.ComputeDataSizeAfterAdd;
 const // binary size (in bytes) of each kind of property - 0 for ptRecord/ptCustom
   JSONRTTI_SIZE: array[TJSONCustomParserRTTIType] of byte = (
     SizeOf(PtrUInt),SizeOf(Boolean),SizeOf(Byte),SizeOf(Cardinal),SizeOf(Currency),
-    SizeOf(Double),SizeOf(Extended),SizeOf(Int64),SizeOf(Integer),SizeOf(RawByteString),
-    SizeOf(RawJSON),SizeOf(RawUTF8),0,SizeOf(Single),SizeOf(String),SizeOf(SynUnicode),
-    SizeOf(TDateTime),SizeOf(TDateTimeMS),SizeOf(TGUID),SizeOf(Int64),SizeOf(TTimeLog),
+    SizeOf(Double),SizeOf(Extended),SizeOf(Int64),SizeOf(Integer),SizeOf(QWord),
+    SizeOf(RawByteString),SizeOf(RawJSON),SizeOf(RawUTF8),0,SizeOf(Single),
+    SizeOf(String),SizeOf(SynUnicode),SizeOf(TDateTime),SizeOf(TDateTimeMS),
+    SizeOf(TGUID),SizeOf(Int64),SizeOf(TTimeLog),
     {$ifndef NOVARIANTS}SizeOf(Variant),{$endif}
     SizeOf(WideString),SizeOf(Word),0);
 var i: integer;
@@ -42058,6 +42138,7 @@ Error:      Prop.FinalizeNestedArray(PPtrUInt(Data)^);
       ptDouble:    PDouble(Data)^ := GetExtended(PropValue);
       ptExtended:  PExtended(Data)^ := GetExtended(PropValue);
       ptInt64,ptID,ptTimeLog: SetInt64(PropValue,PInt64(Data)^);
+      ptQWord:     SetQWord(PropValue,PQWord(Data)^);
       ptInteger:   PInteger(Data)^ := GetInteger(PropValue);
       ptSingle:    PSingle(Data)^ := GetExtended(PropValue);
       ptRawUTF8:   SetString(PRawUTF8(Data)^,PropValue,PropValueLen);
@@ -42198,7 +42279,7 @@ begin
     ptWord:      result := PWord(Value)^=0;
     ptInteger,ptCardinal,ptSingle:
                  result := PInteger(Value)^=0;
-    ptCurrency,ptDouble,ptInt64,ptID,ptTimeLog,ptDateTime,ptDateTimeMS:
+    ptCurrency,ptDouble,ptInt64,ptQWord,ptID,ptTimeLog,ptDateTime,ptDateTimeMS:
                  result := PInt64(Value)^=0;
     ptExtended:  result := PExtended(Value)^=0;
     {$ifndef NOVARIANTS}
@@ -42228,6 +42309,7 @@ begin
   ptExtended:  aWriter.Add(PExtended(Value)^,EXTENDED_PRECISION);
   ptInt64,ptID,ptTimeLog:
                aWriter.Add(PInt64(Value)^);
+  ptQWord:     aWriter.AddQ(PQWord(Value)^);
   ptInteger:   aWriter.Add(PInteger(Value)^);
   ptSingle:    aWriter.AddSingle(PSingle(Value)^);
   ptWord:      aWriter.AddU(PWord(Value)^);
