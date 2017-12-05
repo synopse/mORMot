@@ -1476,30 +1476,36 @@ type
   // by copying the whole TRC4 variable into another (stack-allocated) variable
   TRC4 = {$ifndef UNICODE}object{$else}record{$endif}
   private
-    key: array[byte] of byte;
-    currI, currJ: byte;
+    {$ifdef CPUINTEL}
+    state: array[byte] of PtrInt; // PtrInt=270MB/s  byte=240MB/s on x86
+    {$else}
+    state: array[byte] of byte; // on ARM, keep the CPU cache usage low
+    {$endif}
+    currI, currJ: PtrInt;
   public
     /// initialize the RC4 encryption/decryption
     // - KeyLen is in bytes, and should be within 1..255 range
     procedure Init(const aKey; aKeyLen: integer);
-    /// initialize RC4-drop[3072] encryption/decryption and SHA-3 hashing
-    // - will use SHAKE-128 generator in XOF mode to generate a 256 bytes key
+    /// initialize RC4-drop[3072] encryption/decryption after SHA-3 hashing
+    // - will use SHAKE-128 generator in XOF mode to generate a 256 bytes key,
+    // then drop the first 3072 bytes from the RC4 stream
     // - this initializer is much safer than plain Init, so should be considered
-    // for any use on RC4 for new projects - even if AES-NI is 3 times faster :)
+    // for any use on RC4 for new projects - even if AES-NI is 2 times faster,
+    // and safer SHAKE-128 operates in XOF mode at a similar speed range
     procedure InitSHA3(const aKey; aKeyLen: integer);
     /// drop the next Count bytes from the RC4 cypher state
-    // - may be used in Stream mode
+    // - may be used in Stream mode, or to initialize in RC4-drop[n] mode
     procedure Drop(Count: cardinal);
     /// perform the RC4 cypher encryption/decryption on a buffer
-    // - each call to this method shall be preceded with an Init() call
-    // - RC4 is a symmetrical algorithm: use this Encrypt() method for both
-    // encryption and decryption of any buffer
+    // - each call to this method shall be preceeded with an Init() call
+    // - RC4 is a symmetrical algorithm: use this Encrypt() method
+    // for both encryption and decryption of any buffer
     procedure Encrypt(const BufIn; var BufOut; Count: cardinal);
       {$ifdef HASINLINE}inline;{$endif}
     /// perform the RC4 cypher encryption/decryption on a buffer
-    // - each call to this method shall be preceded with an Init() call
-    // - RC4 is a symmetrical algorithm: use this Encrypt() method for both
-    // encryption and decryption of any buffer
+    // - each call to this method shall be preceeded with an Init() call
+    // - RC4 is a symmetrical algorithm: use this EncryptBuffer() method
+    // for both encryption and decryption of any buffer
     procedure EncryptBuffer(BufIn, BufOut: PByte; Count: cardinal);
   end;
 
@@ -12114,20 +12120,20 @@ end;
 
 procedure TRC4.Init(const aKey; aKeyLen: integer);
 var i,k: integer;
-    j,tmp: byte;
+    j,tmp: PtrInt;
 begin
   if aKeyLen<=0 then
     raise ESynCrypto.CreateUTF8('TRC4.Init(invalid aKeyLen=%)',[aKeyLen]);
   dec(aKeyLen);
-  for i := 0 to high(key) do
-    key[i] := i;
+  for i := 0 to high(state) do
+    state[i] := i;
   j := 0;
   k := 0;
-  for i := 0 to high(key) do begin
-    inc(j,key[i]+TByteArray(aKey)[k]);
-    tmp := key[i];
-    key[i] := key[j];
-    key[j] := tmp;
+  for i := 0 to high(state) do begin
+    j := (j+state[i]+TByteArray(aKey)[k]) and $ff;
+    tmp := state[i];
+    state[i] := state[j];
+    state[j] := tmp;
     if k>=aKeyLen then // avoid slow mod operation within loop
       k := 0 else
       inc(k);
@@ -12138,7 +12144,7 @@ end;
 
 procedure TRC4.InitSHA3(const aKey; aKeyLen: integer);
 var sha: TSHA3;
-    dig: array[byte] of byte; // max RC4 key size is 256 bytes
+    dig: array[byte] of byte; // max RC4 state size is 256 bytes
 begin
   sha.Full(SHAKE_128,@aKey,aKeyLen,@dig,SizeOf(dig)shl 3); // XOF mode
   Init(dig,SizeOf(dig));
@@ -12147,20 +12153,54 @@ begin
 end;
 
 procedure TRC4.EncryptBuffer(BufIn, BufOut: PByte; Count: cardinal);
-var i,j,ki,kj: byte;
+var i,j,ki,kj: PtrInt;
+    by4: array[0..3] of byte;
 begin
   i := currI;
   j := currJ;
+  while Count>3 do begin
+    dec(Count,4);
+    i := (i+1) and $ff;
+    ki := State[i];
+    j := (j+ki) and $ff;
+    kj := (ki+State[j]) and $ff;
+    State[i] := State[j];
+    i := (i+1) and $ff;
+    State[j] := ki;
+    ki := State[i];
+    by4[0] := State[kj];
+    j := (j+ki) and $ff;
+    kj := (ki+State[j]) and $ff;
+    State[i] := State[j];
+    i := (i+1) and $ff;
+    State[j] := ki;
+    by4[1] := State[kj];
+    ki := State[i];
+    j := (j+ki) and $ff;
+    kj := (ki+State[j]) and $ff;
+    State[i] := State[j];
+    i := (i+1) and $ff;
+    State[j] := ki;
+    by4[2] := State[kj];
+    ki := State[i];
+    j := (j+ki) and $ff;
+    kj := (ki+State[j]) and $ff;
+    State[i] := State[j];
+    State[j] := ki;
+    by4[3] := State[kj];
+    PCardinal(BufOut)^ := PCardinal(BufIn)^ xor cardinal(by4);
+    inc(BufIn,4);
+    inc(BufOut,4);
+  end;
   while Count>0 do begin
     dec(Count);
-    inc(i);
-    ki := key[i];
-    inc(j,ki);
-    kj := key[j];
-    key[i] := kj;
-    inc(kj,ki);
-    key[j] := ki;
-    BufOut^ := BufIn^ xor key[kj];
+    i := (i+1) and $ff;
+    ki := State[i];
+    j := (j+ki) and $ff;
+    kj := (ki+State[j]) and $ff;
+    State[i] := State[j];
+    State[j] := ki;
+    BufOut^ := BufIn^ xor State[kj];
     inc(BufIn);
     inc(BufOut);
   end;
@@ -12174,17 +12214,17 @@ begin
 end;
 
 procedure TRC4.Drop(Count: cardinal);
-var i,j,ki: byte;
+var i,j,ki: PtrInt;
 begin
   i := currI;
   j := currJ;
   while Count>0 do begin
     dec(Count);
-    inc(i);
-    ki := key[i];
-    inc(j,ki);
-    key[i] := key[j];
-    key[j] := ki;
+    i := (i+1) and $ff;
+    ki := state[i];
+    j := (j+ki) and $ff;
+    state[i] := state[j];
+    state[j] := ki;
   end;
   currI := i;
   currJ := j;

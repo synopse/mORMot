@@ -752,8 +752,8 @@ type
   protected
     fLastObjectNumber: integer;
     fLastGenerationNumber: Integer;
-    fLastRC4Key: TRC4;
     fUserPass, fOwnerPass: TPdfBuffer32;
+    fLastRC4Key: TRC4;
     procedure EncodeBuffer(const BufIn; var BufOut; Count: cardinal); override;
   public
     /// prepare a specific document to be encrypted
