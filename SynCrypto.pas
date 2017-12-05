@@ -1088,6 +1088,10 @@ type
     // - this method is thread-safe, but you may use your own TAESPRNG instance
     // if you need some custom entropy level
     class procedure Fill(out Block: TAESBlock); overload;
+    /// just a wrapper around TAESPRNG.Main.FillRandom() function
+    // - this method is thread-safe, but you may use your own TAESPRNG instance
+    // if you need some custom entropy level
+    class procedure Fill(out Block: THash256); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// just a wrapper around TAESPRNG.Main.FillRandom() function
     // - this method is thread-safe, but you may use your own TAESPRNG instance
@@ -12057,6 +12061,11 @@ begin
 end;
 
 class procedure TAESPRNG.Fill(out Block: TAESBlock);
+begin
+  Main.FillRandom(Block);
+end;
+
+class procedure TAESPRNG.Fill(out Block: THash256);
 begin
   Main.FillRandom(Block);
 end;

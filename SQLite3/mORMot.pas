@@ -53619,7 +53619,7 @@ var Params: TJSONSerializer;
     R, Val: PUTF8Char;
     wasString, resultAsJSONObject: boolean;
     ServiceCustomAnswerPoint: PServiceCustomAnswer;
-    parser: TJSONToObject;
+    parser: TJSONToObject; // inlined JSONToObject()
     DynArrays: array[0..MAX_METHOD_ARGS-1] of TDynArray;
     Value: array[0..MAX_METHOD_ARGS-1] of pointer;
     I64s: array[0..MAX_METHOD_ARGS-1] of Int64;

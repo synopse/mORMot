@@ -75,15 +75,6 @@ unit SynEcc;
   ***** END LICENSE BLOCK *****
 
 
-  Pure pascal version adapted from original ECC.pas by Jerome Vollet for XLMRAD
-  Thanks Jerome for sharing and allowing us to adapt the source code!
-
-  *** BEGIN LICENSE BLOCK *****
-  XMLRAD LTD (Long Term Development) - http://xmlrad.sourceforge.net
-  License: ISC (equivalent to the 2-clause BSD license) }
-  ***** END LICENSE BLOCK *****
-
-
   Version 1.18
   - first public release, corresponding to mORMot Framework 1.18
 
@@ -869,9 +860,11 @@ type
     // truncated to the Issuer buffer size, i.e. 16 bytes - if Issuer is '',
     // TAESPRNG.Fill() will be used
     // - you may specify some validity time range, if needed
+    // - default ParanoidVerify=true will validate the certificate digital
+    // signature via a call ecdsa_verify() to ensure its usefulness
     // - would take around 4 ms under a 32-bit compiler, and 1 ms under 64-bit
     constructor CreateNew(Authority: TECCCertificateSecret; const IssuerText: RawUTF8='';
-      ExpirationDays: integer=0; StartDate: TDateTime=0);
+      ExpirationDays: integer=0; StartDate: TDateTime=0; ParanoidVerify: boolean=true);
     /// create a certificate with its private secret key from a password-protected
     // secure binary buffer
     // - perform all reverse steps from SaveToSecureBinary() method
@@ -1740,12 +1733,12 @@ implementation
 
 { *********** low-level ECC secp256r1 ECDSA and ECDH functions *********** }
 
-function getRandomNumber(dest: pointer): integer;
+function getRandomNumber(out dest: THash256): integer;
 {$ifdef ECC_STATICLIB_AVAILABLE} cdecl;
   {$ifdef FPC}public name{$ifdef Win32}'_getRandomNumber'{$else}'getRandomNumber'{$endif};{$endif}
  {$endif}
 begin
-  TAESPRNG.Fill(dest,ECC_BYTES);
+  TAESPRNG.Fill(dest);
   result := 1;
 end;
 
@@ -1932,14 +1925,11 @@ end;
 
 {$ifdef HASUINT64}
 
-{ pure pascal version of ECC code
-  deeply optimized (especially for 32bit CPUs) from Jerome Vollet's XLMRAD  
-  XMLRAD LTD (Long Term Development) - http://xmlrad.sourceforge.net
-  License: ISC (equivalent to the 2-clause BSD license)
+{ Pure Pascal Version of low-level ECC process (adapted from easy-ecc.c code)
 
-Some numbers of our pascal version (on another slower computer than the previous
-values above), which is quite acceptable, since it is faster than gcc -O1 mode :)
-(of course, UInt128 support in gcc -O2 is still preferred on x86_64)
+ Some numbers (on another slower computer than the previous values above),
+ which is quite acceptable, since it is faster than gcc -O1 mode :)
+ (of course, UInt128 support in gcc -O2 is still preferred on x86_64)
 
 Delphi 7 pascal
   - ecc_make_key: 1,000 assertions passed  2.75s
@@ -1962,7 +1952,7 @@ FPC Win32 pascal
   - ecdh_shared_secret: 2,997 assertions passed  5.89s
   Total failed: 0 / 529,825  - ECC cryptography PASSED  19.72s
 
-Delphi 7 -O2
+Delphi 7 ECC_O2
   - ecc_make_key: 1,000 assertions passed  2.58s
   - ecdsa_sign: 1,000 assertions passed  2.64s
   - ecdsa_verify: 1,000 assertions passed  3.19s
@@ -1976,7 +1966,7 @@ Delphi XE7-32 pascal
   - ecdh_shared_secret: 2,997 assertions passed  5.84s
   Total failed: 0 / 529,825  - ECC cryptography PASSED  18.82s
 
-Delphi XE7-32 -O2
+Delphi XE7-32 ECC_O2
   - ecc_make_key: 1,000 assertions passed  2.43s
   - ecdsa_sign: 1,000 assertions passed  2.52s
   - ecdsa_verify: 1,000 assertions passed  3.06s
@@ -1990,7 +1980,7 @@ Delphi XE7-64 pascal
   - ecdh_shared_secret: 2,997 assertions passed  3.51s
   Total failed: 0 / 529,825  - ECC cryptography PASSED  12.20s
 
-Delphi XE7-64 -O2
+Delphi XE7-64 ECC_O2
   - ecc_make_key: 1,000 assertions passed  729.49ms
   - ecdsa_sign: 1,000 assertions passed  740.38ms
   - ecdsa_verify: 1,000 assertions passed  914.80ms
@@ -2041,6 +2031,8 @@ const
     UInt64($FFFFFFFFFFFFFFFF), UInt64($FFFFFFFF00000000));
 
   _1: TVLI = (1, 0, 0, 0);
+  _11: TVLI = (UInt64($0101010101010101), UInt64($0101010101010101),
+               UInt64($0101010101010101), UInt64($0101010101010101));
   _3: TVLI = (3, 0, 0, 0);
 
 procedure _clear(out VLI: TVLI); {$ifdef HASINLINE}inline;{$endif}
@@ -2771,10 +2763,10 @@ begin
   tries := 0;
   repeat
     inc(tries);
-    GetRandomNumber(@PrivateK);
+    TAESPRNG.Fill(THash256(PrivateK));
     if tries >= MAX_TRIES then
       exit;
-    if _isZero(PrivateK) then
+    if _isZero(PrivateK) or (_cmp(PrivateK, _1) = 0) or (_cmp(PrivateK, _11) = 0) then
       continue;
     // Make sure the private key is in the range [1, n-1]
     // For the supported curves, n is always large enough that we only need
@@ -2796,7 +2788,7 @@ var PublicPoint: TEccPoint;
     Product: TEccPoint;
     RandomKey: TVLI;
 begin
-  GetRandomNumber(@RandomKey);
+  TAESPRNG.Fill(THash256(RandomKey));
   EccPointDecompress(PublicPoint, @PublicKey);
   _bswap256(@PrivateK, @PrivateKey);
   EccPointMult(Product, PublicPoint, PrivateK, @RandomKey);
@@ -2860,7 +2852,7 @@ end;
 
 function ecdsa_sign_pas(const PrivateKey: TECCPrivateKey; const Hash: TEccHash;
   out Signature: TECCSignature): boolean;
-var K, Temp, S: TVLI;
+var k, Temp, S: TVLI;
     P: TEccPoint;
     Tries: integer;
 begin
@@ -2868,7 +2860,7 @@ begin
   Tries := 0;
   repeat
     inc(Tries);
-    GetRandomNumber(@k);
+    TAESPRNG.Fill(THash256(k));
     if Tries >= MAX_TRIES then
       exit;
     if _isZero(k) then
@@ -3683,11 +3675,14 @@ end;
 { TECCCertificateSecret }
 
 constructor TECCCertificateSecret.CreateNew(Authority: TECCCertificateSecret;
-  const IssuerText: RawUTF8; ExpirationDays: integer; StartDate: TDateTime);
+  const IssuerText: RawUTF8; ExpirationDays: integer; StartDate: TDateTime;
+  ParanoidVerify: boolean);
 var priv: TECCPrivateKey;
+    pub: TECCPublicKey;
     now: TECCDate;
     sha: TSHA256;
     hash: TSHA256Digest;
+    retry: boolean;
 begin
   Create;
   try
@@ -3704,21 +3699,29 @@ begin
       if IssuerText='' then
         TAESPRNG.Fill(TAESBlock(Issuer)) else
         ECCIssuer(IssuerText,Issuer);
-      if not ecc_make_key(PublicKey,fPrivateKey) then
-        raise EECCException.CreateUTF8('%.CreateNew: ecc_make_key?',[self]);
-      if Authority=nil then begin
-        AuthoritySerial := Serial;
-        AuthorityIssuer := Issuer;
-        priv := fPrivateKey; // self-signing
-      end else begin
-        AuthoritySerial := Authority.fContent.Signed.Serial;
-        AuthorityIssuer := Authority.fContent.Signed.Issuer;
-        priv := Authority.fPrivateKey;
+      for retry := false to true do begin
+        if not ecc_make_key(PublicKey,fPrivateKey) then
+          raise EECCException.CreateUTF8('%.CreateNew: ecc_make_key?',[self]);
+        if Authority=nil then begin
+          AuthoritySerial := Serial;
+          AuthorityIssuer := Issuer;
+          priv := fPrivateKey; // self-signing
+          pub := PublicKey;
+        end else begin
+          AuthoritySerial := Authority.fContent.Signed.Serial;
+          AuthorityIssuer := Authority.fContent.Signed.Issuer;
+          priv := Authority.fPrivateKey;
+          pub := Authority.fContent.Signed.PublicKey;
+        end;
+        sha.Full(@fContent.Signed,sizeof(TECCCertificateSigned),hash);
+        if not ecdsa_sign(priv,hash,fContent.Signature) then
+          raise EECCException.CreateUTF8('%.CreateNew: ecdsa_sign?',[self]);
+        if not ParanoidVerify or ecdsa_verify(pub,hash,fContent.Signature) then
+          break else
+          if retry then
+            raise EECCException.CreateUTF8('%.CreateNew: ParanoidVerify?',[self]);
       end;
     end;
-    sha.Full(@fContent.Signed,sizeof(TECCCertificateSigned),hash);
-    if not ecdsa_sign(priv,hash,fContent.Signature) then
-      raise EECCException.CreateUTF8('%.CreateNew: ecdsa_sign?',[self]);
     fContent.CRC := fnv32(0,@fContent,sizeof(fContent)-4);
   finally
     FillZero(THash256(priv));
