@@ -17721,9 +17721,10 @@ type
       BufLen: integer=65536; ForcedAlgo: TAlgoCompress=nil); virtual;
     /// persist the content as a SynLZ-compressed binary file
     // - to be retrieved later on via LoadFromFile method
+    // - returns the number of bytes of the resulting file
     // - actually call the SaveTo method for persistence
-    procedure SaveToFile(const aFileName: TFileName; nocompression: boolean=false;
-      ForcedAlgo: TAlgoCompress=nil);
+    function SaveToFile(const aFileName: TFileName; nocompression: boolean=false;
+      ForcedAlgo: TAlgoCompress=nil): PtrUInt;
     /// one optional text associated with this storage
     // - you can define it as published to serialize its value
     property Name: RawUTF8 read fName;
@@ -50238,12 +50239,14 @@ begin
   end;
 end;
 
-procedure TSynPersistentStore.SaveToFile(const aFileName: TFileName;
-  nocompression: boolean; ForcedAlgo: TAlgoCompress);
+function TSynPersistentStore.SaveToFile(const aFileName: TFileName;
+  nocompression: boolean; ForcedAlgo: TAlgoCompress): PtrUInt;
 var temp: RawByteString;
 begin
   SaveTo(temp,nocompression,65536,ForcedAlgo);
-  FileFromString(temp,aFileName);
+  if FileFromString(temp,aFileName) then
+    result := length(temp) else
+    result := 0;
 end;
 
 
