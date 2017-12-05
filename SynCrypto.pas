@@ -1469,30 +1469,38 @@ type
     procedure Full(Buffer: pointer; Len: integer; out Digest: TMD5Digest);
   end;
 
-  /// internal key permutation buffer, as used by TRC4
-  TRC4InternalKey = array[byte] of byte;
-
   /// handle RC4 encryption/decryption
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance
+  // - you can also restore and backup any previous state of the RC4 encryption
+  // by copying the whole TRC4 variable into another (stack-allocated) variable
   TRC4 = {$ifndef UNICODE}object{$else}record{$endif}
   private
-    key: TRC4InternalKey;
+    key: array[byte] of byte;
+    currI, currJ: byte;
   public
     /// initialize the RC4 encryption/decryption
     // - KeyLen is in bytes, and should be within 1..255 range
     procedure Init(const aKey; aKeyLen: integer);
+    /// initialize RC4-drop[3072] encryption/decryption and SHA-3 hashing
+    // - will use SHAKE-128 generator in XOF mode to generate a 256 bytes key
+    // - this initializer is much safer than plain Init, so should be considered
+    // for any use on RC4 for new projects - even if AES-NI is 3 times faster :)
+    procedure InitSHA3(const aKey; aKeyLen: integer);
+    /// drop the next Count bytes from the RC4 cypher state
+    // - may be used in Stream mode
+    procedure Drop(Count: cardinal);
     /// perform the RC4 cypher encryption/decryption on a buffer
-    // - each call to this method shall be preceded with an Init() call,
-    // or a RestoreKey() from a previous SaveKey(), since it will change
-    // the internal key[] during its process
+    // - each call to this method shall be preceded with an Init() call
     // - RC4 is a symmetrical algorithm: use this Encrypt() method for both
     // encryption and decryption of any buffer
     procedure Encrypt(const BufIn; var BufOut; Count: cardinal);
-    /// save the internal key computed by Init()
-    procedure SaveKey(out Backup: TRC4InternalKey);
-    /// restore the internal key as computed by Init()
-    procedure RestoreKey(const Backup: TRC4InternalKey);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// perform the RC4 cypher encryption/decryption on a buffer
+    // - each call to this method shall be preceded with an Init() call
+    // - RC4 is a symmetrical algorithm: use this Encrypt() method for both
+    // encryption and decryption of any buffer
+    procedure EncryptBuffer(BufIn, BufOut: PByte; Count: cardinal);
   end;
 
 {$A-} { packed memory structure }
@@ -4369,7 +4377,6 @@ begin
     end;
   end;
   inc(PtrUInt(pK), (ctx.rounds shl 4));
-
   TWA4(BO)[0] := ((SBox[t0        and $ff])        xor
                   (SBox[t1 shr  8 and $ff]) shl  8 xor
                   (SBox[t2 shr 16 and $ff]) shl 16 xor
@@ -12125,15 +12132,27 @@ begin
       k := 0 else
       inc(k);
   end;
+  currI := 0;
+  currJ := 0;
 end;
 
-procedure TRC4.Encrypt(const BufIn; var BufOut; Count: cardinal);
-var ndx: cardinal;
-    i,j,ki,kj: byte;
+procedure TRC4.InitSHA3(const aKey; aKeyLen: integer);
+var sha: TSHA3;
+    dig: array[byte] of byte; // max RC4 key size is 256 bytes
 begin
-  i := 0;
-  j := 0;
-  for ndx := 0 to Count-1 do begin
+  sha.Full(SHAKE_128,@aKey,aKeyLen,@dig,SizeOf(dig)shl 3); // XOF mode
+  Init(dig,SizeOf(dig));
+  FillCharFast(dig,SizeOf(dig),0);
+  Drop(3072);
+end;
+
+procedure TRC4.EncryptBuffer(BufIn, BufOut: PByte; Count: cardinal);
+var i,j,ki,kj: byte;
+begin
+  i := currI;
+  j := currJ;
+  while Count>0 do begin
+    dec(Count);
     inc(i);
     ki := key[i];
     inc(j,ki);
@@ -12141,18 +12160,34 @@ begin
     key[i] := kj;
     inc(kj,ki);
     key[j] := ki;
-    TByteArray(BufOut)[ndx] := TByteArray(BufIn)[ndx] xor key[kj];
+    BufOut^ := BufIn^ xor key[kj];
+    inc(BufIn);
+    inc(BufOut);
   end;
+  currI := i;
+  currJ := j;
 end;
 
-procedure TRC4.RestoreKey(const Backup: TRC4InternalKey);
+procedure TRC4.Encrypt(const BufIn; var BufOut; Count: cardinal);
 begin
-  MoveFast(Backup,key,sizeof(key));
+  EncryptBuffer(@BufIn,@BufOut,Count);
 end;
 
-procedure TRC4.SaveKey(out Backup: TRC4InternalKey);
+procedure TRC4.Drop(Count: cardinal);
+var i,j,ki: byte;
 begin
-  MoveFast(key,Backup,sizeof(key));
+  i := currI;
+  j := currJ;
+  while Count>0 do begin
+    dec(Count);
+    inc(i);
+    ki := key[i];
+    inc(j,ki);
+    key[i] := key[j];
+    key[j] := ki;
+  end;
+  currI := i;
+  currJ := j;
 end;
 
 function RC4SelfTest: boolean;
@@ -12167,7 +12202,7 @@ const
   Res2: array[0..9] of byte = ($d6,$a1,$41,$a7,$ec,$3c,$38,$df,$bd,$61);
 var RC4: TRC4;
     Dat: array[0..9] of byte;
-    Backup: TRC4InternalKey;
+    Backup: TRC4;
 begin
   RC4.Init(Test1,8);
   RC4.Encrypt(Test1,Dat,8);
@@ -12179,13 +12214,13 @@ begin
   RC4.Encrypt(InDat,Dat,sizeof(InDat));
   result := result and CompareMem(@Dat,@OutDat,sizeof(OutDat));
   RC4.Init(Key,sizeof(Key));
-  RC4.SaveKey(Backup);
+  Backup := RC4;
   RC4.Encrypt(InDat,Dat,sizeof(InDat));
   result := result and CompareMem(@Dat,@OutDat,sizeof(OutDat));
-  RC4.RestoreKey(Backup);
+  RC4 := Backup;
   RC4.Encrypt(InDat,Dat,sizeof(InDat));
   result := result and CompareMem(@Dat,@OutDat,sizeof(OutDat));
-  RC4.RestoreKey(Backup);
+  RC4 := Backup;
   RC4.Encrypt(OutDat,Dat,sizeof(InDat));
   result := result and CompareMem(@Dat,@InDat,sizeof(OutDat));
 end;

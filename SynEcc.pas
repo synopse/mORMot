@@ -557,6 +557,10 @@ const
   /// TECCDecrypt results indicating a valid decryption process
   ECC_VALIDDECRYPT = [ecdDecrypted, ecdDecryptedWithSignature];
 
+/// fill all bytes of this ECC private key buffer with zero
+// - may be used to cleanup stack-allocated content
+// ! ... finally FillZero(PrivateKey); end;
+procedure FillZero(out Priv: TECCPrivateKey); overload;
 
 /// returns the current UTC date, as a TECCDate integer value
 // - i.e. 16-bit number of days since 1 August 2016
@@ -2993,6 +2997,14 @@ end;
 
 { *********** middle-level certificate-based public-key cryptography *********** }
 
+procedure FillZero(out Priv: TECCPrivateKey); overload;
+begin
+  PInt64Array(@Priv)^[0] := 0;
+  PInt64Array(@Priv)^[1] := 0;
+  PInt64Array(@Priv)^[2] := 0;
+  PInt64Array(@Priv)^[3] := 0;
+end;
+
 const
   // Mon, 01 Aug 2016 encoded as COM/TDateTime value
   ECC_DELTA = 42583;
@@ -3774,7 +3786,7 @@ end;
 
 destructor TECCCertificateSecret.Destroy;
 begin
-  FillZero(THash256(fPrivateKey));
+  FillZero(fPrivateKey);
   inherited Destroy;
 end;
 
@@ -5249,7 +5261,7 @@ begin
   finally
     FillZero(sA);
     FillZero(sB);
-    FillZero(THash256(fdE));
+    FillZero(fdE);
   end;
   result := sprSuccess;
 end;
@@ -5331,7 +5343,7 @@ begin
   finally
     FillZero(sA);
     FillZero(sB);
-    FillZero(THash256(dF));
+    FillZero(dF);
   end;
   if fAlgo.auth<>authClient then
     Sign(@aServer,sizeof(aServer),aServer.QCB);

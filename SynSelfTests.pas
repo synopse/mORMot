@@ -9724,8 +9724,25 @@ begin
 end;
 
 procedure TTestCryptographicRoutines._RC4;
+var key, s, d: RawByteString;
+    ks, i, len: integer;
+    rc4, ref: TRC4;
 begin
   Check(RC4SelfTest);
+  key := RandomString(100);
+  for ks := 1 to 10 do begin
+    ref.InitSHA3(pointer(key)^,ks*10);
+    for i := 0 to 100 do begin
+      len := i*3;
+      s := RandomAnsi7(len);
+      SetString(d,nil,len);
+      rc4 := ref;
+      rc4.EncryptBuffer(pointer(s),pointer(d),len); // encrypt
+      rc4 := ref;
+      rc4.EncryptBuffer(pointer(d),pointer(d),len); // decrypt
+      check(s=d);
+    end;
+  end;
 end;
 
 procedure TTestCryptographicRoutines._SHA1;
@@ -10242,6 +10259,7 @@ type
     bMD5, bSHA1, bHMACSHA1, bSHA256, bHMACSHA256, bSHA512, bHMACSHA512,
     bSHA3_256, bSHA3_512,
     // encryption
+    bRC4,
     bAES128CFB, bAES128OFB, bAES128CFBCRC, bAES128OFBCRC,
     bAES256CFB, bAES256OFB, bAES256CFBCRC, bAES256OFBCRC,
     bSHAKE128, bSHAKE256
@@ -10264,6 +10282,7 @@ var b: TBenchmark;
     SHA256: TSHA256;
     SHA512: TSHA512;
     SHA3, SHAKE128, SHAKE256: TSHA3;
+    RC4: TRC4;
     timer: TPrecisionTimer;
     time: array[TBenchmark] of Int64;
     AES: array[bAES128CFB .. bAES256OFBCRC] of TAESAbstract;
@@ -10276,6 +10295,7 @@ begin
     AES[b] := AESCLASS[b].Create(dig, AESBITS[b]);
   SHAKE128.InitCypher('secret', SHAKE_128);
   SHAKE256.InitCypher('secret', SHAKE_256);
+  RC4.InitSHA3(dig,SizeOf(dig));
   FillCharFast(time,sizeof(time),0);
   size := 0;
   n := 0;
@@ -10299,6 +10319,7 @@ begin
         bHMACSHA512: HMAC_SHA512('secret',data,dig.b);
         bSHA3_256:   SHA3.Full(pointer(data),SIZ[s],dig.Lo);
         bSHA3_512:   SHA3.Full(pointer(data),SIZ[s],dig.b);
+        bRC4:        RC4.EncryptBuffer(pointer(data), pointer(Encrypted), SIZ[s]);
         bAES128CFB, bAES128OFB, bAES256CFB, bAES256OFB:
                      AES[b].EncryptPKCS7(Data, true);
         bAES128CFBCRC, bAES128OFBCRC, bAES256CFBCRC, bAES256OFBCRC:
@@ -10306,7 +10327,7 @@ begin
         bSHAKE128:   SHAKE128.Cypher(pointer(Data), pointer(Encrypted), SIZ[s]);
         bSHAKE256:   SHAKE256.Cypher(pointer(Data), pointer(Encrypted), SIZ[s]);
         end;
-        Check((b >= bAES128CFB) or (dig.d0 <> 0) or (dig.d1 <> 0));
+        Check((b >= bRC4) or (dig.d0 <> 0) or (dig.d1 <> 0));
       end;
       //NotifyTestSpeed(format('%s %s',[TXT[b],KB(SIZ[s])]),COUNT,SIZ[s]*COUNT,@timer);
       timer.ComputeTime;
