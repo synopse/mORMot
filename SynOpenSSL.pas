@@ -118,6 +118,7 @@ const
   BIO_FLAGS_SHOULD_RETRY = 8;
   BIO_NOCLOSE = 0;
   BIO_CLOSE = 1;
+  BIO_C_GET_MD_CTX = 120;
 
 type
   {$ifdef CPU64}
@@ -233,6 +234,7 @@ type
     BIO_new_socket: function(sock: integer; close_flag: integer): PBIO; cdecl;
     X509_get_issuer_name: function(cert: PX509): PX509_NAME; cdecl;
     X509_get_subject_name: function(cert: PX509): PX509_NAME; cdecl;
+    X509_get_pubkey: function(cert: PX509): PEVP_PKEY; cdecl;
     X509_free: procedure(cert: PX509); cdecl;
     X509_NAME_print_ex: function(bout: PBIO; nm: PX509_NAME; indent: integer; flags: cardinal): integer; cdecl;
     sk_num: function(stack: PSTACK): integer; cdecl;
@@ -248,6 +250,8 @@ type
     EVP_MD_CTX_create: function: PEVP_MD_CTX; cdecl;
     EVP_MD_CTX_destroy: procedure(ctx: PEVP_MD_CTX); cdecl;
     EVP_sha256: function: PEVP_MD; cdecl;
+    EVP_sha384: function: PEVP_MD; cdecl;
+    EVP_sha512: function: PEVP_MD; cdecl;
     EVP_PKEY_size: function(key: PEVP_PKEY): integer; cdecl;
     EVP_DigestSignInit: function(aCtx: PEVP_MD_CTX; aPCtx: PEVP_PKEY_CTX; aType: PEVP_MD; aEngine: ENGINE; aKey: PEVP_PKEY): integer; cdecl;
     EVP_DigestUpdate: function(ctx: PEVP_MD_CTX; d: pointer; cnt: cardinal): integer; cdecl;
@@ -496,7 +500,7 @@ const
   LIBCRYPTO_NAME = 'libcrypto.so.1.0.0';
   {$endif}
 
-  LIBCRYPTO_ENTRIES: array[0..50] of PChar = ('CRYPTO_num_locks',
+  LIBCRYPTO_ENTRIES: array[0..53] of PChar = ('CRYPTO_num_locks',
     'CRYPTO_set_locking_callback', 'CRYPTO_set_dynlock_create_callback',
     'CRYPTO_set_dynlock_lock_callback', 'CRYPTO_set_dynlock_destroy_callback',
     'CRYPTO_cleanup_all_ex_data', 'ERR_remove_state', 'ERR_free_strings',
@@ -504,12 +508,12 @@ const
     'ERR_load_BIO_strings', 'EVP_cleanup', 'EVP_PKEY_free', 'BIO_new',
     'BIO_ctrl', 'BIO_set_flags', 'BIO_test_flags', 'BIO_clear_flags',
     'BIO_new_mem_buf', 'BIO_free', 'BIO_s_mem', 'BIO_read', 'BIO_write',
-    'BIO_new_socket', 'X509_get_issuer_name', 'X509_get_subject_name',
+    'BIO_new_socket', 'X509_get_issuer_name', 'X509_get_subject_name', 'X509_get_pubkey',
     'X509_free', 'X509_NAME_print_ex', 'sk_num', 'sk_pop',
     'ASN1_BIT_STRING_get_bit', 'OBJ_obj2nid', 'OBJ_nid2sn', 'ASN1_STRING_data',
     'PEM_read_bio_X509', 'PEM_read_bio_PrivateKey', 'PEM_read_bio_RSAPrivateKey',
     'PEM_read_bio_PUBKEY', 'EVP_MD_CTX_create', 'EVP_MD_CTX_destroy',
-    'EVP_sha256', 'EVP_PKEY_size', 'EVP_DigestSignInit', 'EVP_DigestUpdate',
+    'EVP_sha256', 'EVP_sha384', 'EVP_sha512', 'EVP_PKEY_size', 'EVP_DigestSignInit', 'EVP_DigestUpdate',
     'EVP_DigestSignFinal', 'EVP_DigestVerifyInit', 'EVP_DigestVerifyFinal',
     'CRYPTO_malloc', 'CRYPTO_free', 'SSLeay_version');
   LIBSSL_ENTRIES: array[0..37] of PChar = ('SSL_library_init',
