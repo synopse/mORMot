@@ -4012,7 +4012,7 @@ function DirectoryDelete(const Directory: TFileName; const Mask: TFileName='*.*'
 // - only one level of file is deleted within the folder: no recursive deletion
 // is processed by this function, unless Recursive is TRUE
 function DirectoryDeleteOlderFiles(const Directory: TFileName; TimePeriod: TDateTime;
-   const Mask: TFileName='*.*'; Recursive: Boolean=false): Boolean;
+   const Mask: TFileName='*.*'; Recursive: Boolean=false; TotalSize: PInt64=nil): Boolean;
 
 /// creates a directory if not already existing
 // - returns the full expanded directory name, including trailing backslash
@@ -29320,7 +29320,7 @@ begin
 end;
 
 function DirectoryDeleteOlderFiles(const Directory: TFileName; TimePeriod: TDateTime;
-   const Mask: TFileName; Recursive: Boolean): Boolean;
+   const Mask: TFileName; Recursive: Boolean; TotalSize: PInt64): Boolean;
 var F: TSearchRec;
     Dir: TFileName;
     old: TDateTime;
@@ -29334,14 +29334,16 @@ begin
     repeat
       if F.Name[1]<>'.' then
         if Recursive and (F.Attr and faDirectory<>0) then
-          DirectoryDeleteOlderFiles(Dir+F.Name,TimePeriod,Mask,true) else
+          DirectoryDeleteOlderFiles(Dir+F.Name,TimePeriod,Mask,true,TotalSize) else
         {$ifndef DELPHI5OROLDER}
         {$WARN SYMBOL_DEPRECATED OFF} // for faVolumeID
         {$endif}
         if (F.Attr and (faDirectory+faVolumeID+faSysFile+faHidden)=0) then
           if SearchRecToDateTime(F) < old then
             if not DeleteFile(Dir+F.Name) then
-              result := false;
+              result := false else
+              if TotalSize<>nil then
+                inc(TotalSize^,F.Size);
         {$ifndef DELPHI5OROLDER}
         {$WARN SYMBOL_DEPRECATED ON}
         {$endif}
@@ -60591,14 +60593,14 @@ var len: integer;
 begin
   if Values=nil then
     Clear else
-  if Count=NextCompact then begin
-    len := Position-Values[Count-COMPACT_COUNT].Position;
-    if len<COMPACT_LEN then
-      Compact(len);
-    inc(NextCompact); // always slide the compaction window
-  end;
+    if Count=NextCompact then begin
+      len := Position-Values[Count-COMPACT_COUNT].Position;
+      if len<COMPACT_LEN then
+        Compact(len);
+      inc(NextCompact); // always slide the compaction window
+    end;
   if Count=Length(Values) then
-    SetLength(Values,Count+COMPACT_COUNT+Count shr 5);
+    SetLength(Values,Count+COMPACT_COUNT+Count shr 3);
   with Values[Count] do begin
     Position := self.Position;
     Value := aItem;
