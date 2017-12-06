@@ -118,6 +118,9 @@ function GetFileSize(hFile: cInt; lpFileSizeHigh: PDWORD): DWORD;
 /// compatibility function, wrapping Win32 API file truncate at current position
 procedure SetEndOfFile(hFile: cInt); inline;
 
+/// compatibility function, wrapping Win32 API file flush to disk
+procedure FlushFileBuffers(hFile: cInt);
+
 /// compatibility function, wrapping Win32 API last error code
 function GetLastError: longint; inline;
 
@@ -380,6 +383,11 @@ end;
 procedure SetEndOfFile(hFile: cInt);
 begin
   FpFtruncate(hFile,FPLseek(hFile,0,SEEK_CUR));
+end;
+
+procedure FlushFileBuffers(hFile: cInt);
+begin
+  FpFsync(hFile);
 end;
 
 function GetLastError: longint;

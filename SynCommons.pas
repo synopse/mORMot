@@ -27815,7 +27815,7 @@ begin
   result := Base64uriToBin(pointer(base64),bin,length(base64),binlen);
 end;
 
-function Base64uriToBin(base64, bin: PAnsiChar; base64len, binlen: PtrInt): boolean; overload;
+function Base64uriToBin(base64, bin: PAnsiChar; base64len, binlen: PtrInt): boolean;
 var resultLen: PtrInt;
 begin
   resultLen := Base64uriToBinLength(base64len);
@@ -29008,9 +29008,9 @@ begin
     L := FileWrite(F,pointer(Content)^,length(Content)) else
     L := 0;
   result := (L=length(Content));
-{$ifdef MSWINDOWS}
   if FlushOnDisk then
     FlushFileBuffers(F);
+{$ifdef MSWINDOWS}
   if FileDate<>0 then
     FileSetDate(F,DateTimeToFileDate(FileDate));
   FileClose(F);
