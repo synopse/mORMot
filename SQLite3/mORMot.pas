@@ -17167,6 +17167,10 @@ type
     // note that this will work only for ORM sessions, NOT complex SOA state
     // - this method is called by Destroy itself
     procedure Shutdown(const aStateFileName: TFileName=''); virtual;
+    /// wait for the specified number of milliseconds
+    // - if Shutdown is called in-between, returns true
+    // - if the thread waited the supplied time, returns false
+    function SleepOrShutdown(MS: integer): boolean;
 
     /// Missing tables are created if they don't exist yet for every TSQLRecord
     // class of the Database Model
@@ -38640,6 +38644,23 @@ begin
   until (fStats.AddCurrentRequestCount(0)=0) or (GetTickCount64>timeout);
   if aStateFileName<>'' then
     SessionsSaveToFile(aStateFileName);
+end;
+
+function TSQLRestServer.SleepOrShutdown(MS: integer): boolean;
+var timeout: Int64;
+begin
+  result := true;
+  timeout := GetTickCount64+MS;
+  repeat
+    if fShutdownRequested then
+      exit;
+    if MS<=10 then
+      SleepHiRes(MS) else
+      SleepHiRes(1);
+    if fShutdownRequested then
+      exit;
+  until (MS<=10) or (GetTickCount64>=timeout);
+  result := false;
 end;
 
 function TSQLRestServer.GetStaticDataServer(aClass: TSQLRecordClass): TSQLRest;

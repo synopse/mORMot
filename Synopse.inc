@@ -416,6 +416,7 @@
       {$define ISDELPHI2006ANDUP} // Delphi 2006 or newer
       {$define HASNEWFILEAGE}
       {$define HASINLINE}
+      {$define HASINLINEDELPHI}
       {$define HASINLINENOTX86}
       {$define HASREGION}
       {$define HASFASTMM4}
