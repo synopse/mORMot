@@ -10422,6 +10422,9 @@ type
     // - will unserialize a previously appended dynamic array, e.g. as
     // ! aWriter.WriteDynArray(DA);
     procedure Read(var DA: TDynArray; NoCheckHash: boolean=false);
+    /// returns TRUE if the current position is the end of the input stream
+    function EOF: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// item as stored in a TRawByteStringGroup instance
@@ -60497,6 +60500,11 @@ end;
 procedure TFastReader.ErrorData(const fmt: RawUTF8; const args: array of const);
 begin
   raise EFastReader.CreateUTF8('Incorrect Data: '+fmt,args);
+end;
+
+function TFastReader.EOF: boolean;
+begin
+  result := P>=Last;
 end;
 
 function TFastReader.NextByte: byte;
