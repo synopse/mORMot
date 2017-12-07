@@ -9656,7 +9656,7 @@ type
   /// event called by TSynDictionary.ForEach methods to iterate over stored items
   // - if the implementation method returns TRUE, will continue the loopp
   // - if the implementation method returns FALSE, will stop values browsing
-  TSynDictionaryEvent = function(const aKey, aValue; aIndex,aCount: integer): boolean of object;
+  TSynDictionaryEvent = function(const aKey; var aValue; aIndex,aCount: integer): boolean of object;
 
   /// thread-safe dictionary to store some values from associated keys
   // - will maintain a dynamic array of values, associated with a hashed dynamic
