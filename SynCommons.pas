@@ -8111,6 +8111,7 @@ type
     procedure AddQ(Value: QWord);
     /// append an Unsigned 64-bit Integer Value as a quoted hexadecimal String
     procedure AddQHex(Value: Qword);
+      {$ifdef HASINLINE}inline;{$endif}
     /// append a GUID value, encoded as text without any {}
     // - will store e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
     procedure Add(const guid: TGUID); overload;
@@ -8329,10 +8330,13 @@ type
     /// append some binary data as hexadecimal text conversion
     procedure AddBinToHex(Bin: Pointer; BinBytes: integer);
     /// fast conversion from binary data into hexa chars, ready to be displayed
-    // - using this function with Bin^ as an integer value will encode it
-    // in big-endian order (most-signignifican byte first): use it for display
-    // - up to 128 bytes may be converted
+    // - using this function with Bin^ as an integer value will serialize it
+    // in big-endian order (most-significant byte first), as used by humans
+    // - up to the internal buffer bytes may be converted
     procedure AddBinToHexDisplay(Bin: pointer; BinBytes: integer);
+    /// fast conversion from binary data into quoted MSB hexa chars
+    // - up to the internal buffer bytes may be converted
+    procedure AddBinToHexDisplayQuoted(Bin: pointer; BinBytes: integer);
     /// add the pointer into hexa chars, ready to be displayed
     procedure AddPointer(P: PtrUInt);
     /// write a byte as hexa chars
@@ -50685,11 +50689,7 @@ end;
 
 procedure TTextWriter.AddQHex(Value: QWord);
 begin
-  if BEnd-B<=32 then
-    FlushToStream;
-  Add('"');
-  AddBinToHexDisplay(@Value,sizeof(Value));
-  Add('"');
+  AddBinToHexDisplayQuoted(@Value,sizeof(Value));
 end;
 
 procedure TTextWriter.Add(Value: Extended; precision: integer; noexp: boolean);
@@ -51828,6 +51828,19 @@ begin
     FlushToStream;
   BinToHexDisplay(Bin,PAnsiChar(B+1),BinBytes);
   inc(B,BinBytes*2);
+end;
+
+procedure TTextWriter.AddBinToHexDisplayQuoted(Bin: pointer; BinBytes: integer);
+begin
+  if cardinal(BinBytes*2+2)>=cardinal(fTempBufSize) then
+    exit;
+  if BEnd-B<=BinBytes*2+2 then
+    FlushToStream;
+  B[1] := '"';
+  BinToHexDisplayLower(Bin,PAnsiChar(B+2),BinBytes);
+  inc(B,BinBytes*2);
+  B[2] := '"';
+  inc(B,2);
 end;
 
 procedure TTextWriter.AddBinToHex(Bin: Pointer; BinBytes: integer);
