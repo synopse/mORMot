@@ -10031,6 +10031,7 @@ begin
     '75f8b0591e2baeae027d56c14ef3bc014d9dd29cce08b8b184528589147fc252');
   encrypted := instance.Cypher('secret', 'toto');
   Check(SynCommons.BinToHex(encrypted) = 'BF013A29');
+  Check(SynCommons.BinToHexLower(encrypted) = 'bf013a29');
   for s := 0 to 3 do begin
     secret := RandomString(s * 3);
     Check(instance.Cypher(secret, '') = '');

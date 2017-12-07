@@ -2058,38 +2058,47 @@ type
 /// compute the hexadecial representation of an AES 16-byte block
 // - returns a stack-allocated short string
 function AESBlockToShortString(const block: TAESBlock): short32; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the hexadecial representation of an AES 16-byte block
 // - fill a stack-allocated short string
 procedure AESBlockToShortString(const block: TAESBlock; out result: short32); overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the hexadecial representation of an AES 16-byte block
 function AESBlockToString(const block: TAESBlock): RawUTF8;
 
 /// compute the hexadecimal representation of a SHA-1 digest
 function SHA1DigestToString(const D: TSHA1Digest): RawUTF8;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the SHA-1 digest from its hexadecimal representation
 // - returns true on success (i.e. Source has the expected size and characters)
 // - just a wrapper around SynCommons.HexToBin()
 function SHA1StringToDigest(const Source: RawUTF8; out Dest: TSHA1Digest): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the hexadecimal representation of a SHA-256 digest
 function SHA256DigestToString(const D: TSHA256Digest): RawUTF8;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the SHA-256 digest from its hexadecimal representation
 // - returns true on success (i.e. Source has the expected size and characters)
 // - just a wrapper around SynCommons.HexToBin()
 function SHA256StringToDigest(const Source: RawUTF8; out Dest: TSHA256Digest): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the hexadecimal representation of a SHA-384 digest
 function SHA384DigestToString(const D: TSHA384Digest): RawUTF8;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the hexadecimal representation of a SHA-512 digest
 function SHA512DigestToString(const D: TSHA512Digest): RawUTF8;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the hexadecimal representation of a MD5 digest
 function MD5DigestToString(const D: TMD5Digest): RawUTF8;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the MD5 digest from its hexadecimal representation
 // - returns true on success (i.e. Source has the expected size and characters)
@@ -10029,23 +10038,9 @@ begin
   SynCommons.BinToHex(@block,pointer(result),16);
 end;
 
-procedure HexLowerCase(digest: PByteArray; bytes: integer; var result: RawUTF8);
-const LOWHEX: array[0..15] of AnsiChar = '0123456789abcdef';
-var P: PAnsiChar;
-    i: Integer;
-begin
-  SetString(result,nil,bytes*2);
-  P := pointer(result);
-  for i := 0 to bytes-1 do begin
-    P[0] := LOWHEX[digest[i] shr 4];
-    P[1] := LOWHEX[digest[i] and 15];
-    inc(P,2);
-  end;
-end;
-
 function MD5DigestToString(const D: TMD5Digest): RawUTF8;
 begin
-  HexLowerCase(@D,sizeof(D),result);
+  BinToHexLower(@D,sizeof(D),result);
 end;
 
 function MD5StringToDigest(const Source: RawUTF8; out Dest: TMD5Digest): boolean;
@@ -10055,7 +10050,7 @@ end;
 
 function SHA1DigestToString(const D: TSHA1Digest): RawUTF8;
 begin
-  HexLowerCase(@D,sizeof(D),result);
+  BinToHexLower(@D,sizeof(D),result);
 end;
 
 function SHA1StringToDigest(const Source: RawUTF8; out Dest: TSHA1Digest): boolean;
@@ -10065,7 +10060,7 @@ end;
 
 function SHA256DigestToString(const D: TSHA256Digest): RawUTF8;
 begin
-  HexLowerCase(@D,sizeof(D),result);
+  BinToHexLower(@D,sizeof(D),result);
 end;
 
 function SHA256StringToDigest(const Source: RawUTF8; out Dest: TSHA256Digest): boolean;
@@ -10075,12 +10070,12 @@ end;
 
 function SHA512DigestToString(const D: TSHA512Digest): RawUTF8;
 begin
-  HexLowerCase(@D, sizeof(D), result);
+  BinToHexLower(@D, sizeof(D), result);
 end;
 
 function SHA384DigestToString(const D: TSHA384Digest): RawUTF8;
 begin
-  HexLowerCase(@D, sizeof(D), result);
+  BinToHexLower(@D, sizeof(D), result);
 end;
 
 function htdigest(const user, realm, pass: RawByteString): RawUTF8;

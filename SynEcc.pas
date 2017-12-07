@@ -2874,7 +2874,7 @@ begin
     TAESPRNG.Fill(THash256(k));
     if Tries >= MAX_TRIES then
       exit;
-    if _isZero(k) then
+    if _isZero(k) or (_cmp(k, _1) = 0) or (_cmp(k, _11) = 0) then
       continue;
     if _cmp(Curve_N_32, k) <> 1 then
       _sub(k, k, Curve_N_32);

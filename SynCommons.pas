@@ -11704,6 +11704,38 @@ procedure BinToHexDisplay(Bin, Hex: PAnsiChar; BinBytes: integer); overload;
 /// fast conversion from binary data into hexa chars, ready to be displayed
 function BinToHexDisplay(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
 
+/// fast conversion from binary data into lowercase hexa chars
+// - BinBytes contain the bytes count to be converted: Hex^ must contain
+// enough space for at least BinBytes*2 chars
+// - using this function with BinBytes^ as an integer value will encode it
+// in low-endian order (less-signignifican byte first): don't use it for display
+procedure BinToHexLower(Bin, Hex: PAnsiChar; BinBytes: integer); overload;
+
+/// fast conversion from binary data into lowercase hexa chars
+function BinToHexLower(const Bin: RawByteString): RawUTF8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fast conversion from binary data into lowercase hexa chars
+function BinToHexLower(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fast conversion from binary data into lowercase hexa chars
+procedure BinToHexLower(Bin: PAnsiChar; BinBytes: integer; var result: RawUTF8); overload;
+
+/// fast conversion from binary data into lowercase hexa chars
+// - BinBytes contain the bytes count to be converted: Hex^ must contain
+// enough space for at least BinBytes*2 chars
+// - using this function with Bin^ as an integer value will encode it
+// in big-endian order (most-signignifican byte first): use it for display
+procedure BinToHexDisplayLower(Bin, Hex: PAnsiChar; BinBytes: integer); overload;
+
+/// fast conversion from binary data into lowercase hexa chars
+function BinToHexDisplayLower(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
+
+/// fast conversion from binary data into hexa lowercase chars, ready to be
+// used as a TFileName
+function BinToHexDisplayFile(Bin: PAnsiChar; BinBytes: integer): TFileName;
+
 /// append one byte as hexadecimal char pairs, into a text buffer
 function ByteToHex(P: PAnsiChar; Value: byte): PAnsiChar;
 
@@ -28082,6 +28114,10 @@ var
   TwoDigitsHex: array[byte] of array[1..2] of AnsiChar;
   TwoDigitsHexW: array[AnsiChar] of word absolute TwoDigitsHex;
   TwoDigitsHexWB: array[byte] of word absolute TwoDigitsHex;
+  /// lowercase hexadecimal lookup table
+  TwoDigitsHexLower: array[byte] of array[1..2] of AnsiChar;
+  TwoDigitsHexWLower: array[AnsiChar] of word absolute TwoDigitsHexLower;
+  TwoDigitsHexWBLower: array[byte] of word absolute TwoDigitsHexLower;
 
 procedure BinToHex(Bin, Hex: PAnsiChar; BinBytes: integer);
 var j: cardinal;
@@ -28167,11 +28203,68 @@ begin
   end;
 end;
 
-function BinToHexDisplay(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
+function BinToHexDisplay(Bin: PAnsiChar; BinBytes: integer): RawUTF8;
 begin
   FastNewRawUTF8(result,BinBytes*2);
   BinToHexDisplay(Bin,pointer(result),BinBytes);
 end;
+
+procedure BinToHexLower(Bin, Hex: PAnsiChar; BinBytes: integer);
+var j: cardinal;
+begin
+  for j := 1 to BinBytes do begin
+    PWord(Hex)^ := TwoDigitsHexWLower[Bin^];
+    inc(Hex,2);
+    inc(Bin);
+  end;
+end;
+
+function BinToHexLower(const Bin: RawByteString): RawUTF8;
+begin
+  BinToHexLower(pointer(Bin),length(Bin),result);
+end;
+
+procedure BinToHexLower(Bin: PAnsiChar; BinBytes: integer; var result: RawUTF8);
+begin
+  FastNewRawUTF8(result,BinBytes*2);
+  BinToHexLower(Bin,pointer(result),BinBytes);
+end;
+
+function BinToHexLower(Bin: PAnsiChar; BinBytes: integer): RawUTF8;
+begin
+  BinToHexLower(Bin,BinBytes,result);
+end;
+
+procedure BinToHexDisplayLower(Bin, Hex: PAnsiChar; BinBytes: integer);
+var j: integer;
+begin
+  for j := BinBytes-1 downto 0 do begin
+    PWord(Hex+j*2)^ := TwoDigitsHexWLower[Bin^];
+    inc(Bin);
+  end;
+end;
+
+function BinToHexDisplayLower(Bin: PAnsiChar; BinBytes: integer): RawUTF8;
+begin
+  FastNewRawUTF8(result,BinBytes*2);
+  BinToHexDisplayLower(Bin,pointer(result),BinBytes);
+end;
+
+function BinToHexDisplayFile(Bin: PAnsiChar; BinBytes: integer): TFileName;
+{$ifdef UNICODE}
+var temp: TSynTempBuffer;
+begin
+  temp.Init(BinBytes*2);
+  BinToHexDisplayLower(Bin,temp.Buf,BinBytes);
+  Ansi7ToString(PWinAnsiChar(temp.buf),BinBytes*2,string(result));
+  temp.Done;
+end;
+{$else}
+begin
+  SetString(result,nil,BinBytes*2);
+  BinToHexDisplayLower(Bin,pointer(result),BinBytes);
+end;
+{$endif}
 
 procedure PointerToHex(aPointer: Pointer; var result: RawUTF8);
 begin
@@ -64887,6 +64980,7 @@ const n2u: array[138..255] of byte =
    79,79,79,79,247,79,85,85,85,85,89,222,89);
 {$endif OWNNORMTOUPPER}
 const HexChars: array[0..15] of AnsiChar = '0123456789ABCDEF';
+      HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
 begin
   JSON_CONTENT_TYPE_VAR := JSON_CONTENT_TYPE;
   JSON_CONTENT_TYPE_HEADER_VAR := JSON_CONTENT_TYPE_HEADER;
@@ -64940,6 +65034,10 @@ begin
   for i := 0 to 255 do begin
     TwoDigitsHex[i][1] := HexChars[i shr 4];
     TwoDigitsHex[i][2] := HexChars[i and $f];
+  end;
+  for i := 0 to 255 do begin
+    TwoDigitsHexLower[i][1] := HexCharsLower[i shr 4];
+    TwoDigitsHexLower[i][2] := HexCharsLower[i and $f];
   end;
   FillcharFast(ConvertBase64ToBin,256,255); // invalid value set to -1
   for i := 0 to high(b64enc) do
