@@ -5372,10 +5372,19 @@ type
     function Equals(const B: TDynArray; ignorecompare: boolean=false): boolean;
     /// set all content of one dynamic array to the current array
     // - both must be of the same exact type
-    procedure Copy(const Source: TDynArray);
+    // - T*ObjArray will be reallocated and copied by content (using a temporary
+    // JSON serialization), unless ObjArrayByRef is true
+    procedure Copy(const Source: TDynArray; ObjArrayByRef: boolean=false);
     /// set all content of one dynamic array to the current array
     // - both must be of the same exact type
-    procedure CopyFrom(const Source; MaxElem: integer);
+    // - T*ObjArray will be reallocated and copied by content (using a temporary
+    // JSON serialization), unless ObjArrayByRef is true
+    procedure CopyFrom(const Source; MaxElem: integer; ObjArrayByRef: boolean=false);
+    /// set all content of the current dynamic array to another array variable
+    // - both must be of the same exact type
+    // - T*ObjArray will be reallocated and copied by content (using a temporary
+    // JSON serialization), unless ObjArrayByRef is true
+    procedure CopyTo(out Dest; ObjArrayByRef: boolean=false);
     {$endif}
     /// returns a pointer to an element of the array
     // - returns nil if aIndex is out of range
@@ -9814,6 +9823,13 @@ type
     // not found
     // - this method is thread-safe, since it will lock the instance
     function UpdateInArray(const aKey, aArrayValue): boolean;
+    {$ifndef DELPHI5OROLDER}
+    /// make a copy of the stored values
+    // - this method is thread-safe, since it will lock the instance during copy
+    // - T*ObjArray will be reallocated and copied by content (using a temporary
+    // JSON serialization), unless ObjArrayByRef is true
+    procedure CopyValues(out Dest; ObjArrayByRef: boolean=false);
+    {$endif DELPHI5OROLDER}
     /// serialize the content as a "key":value JSON object
     procedure SaveToJSON(W: TTextWriter; EnumSetsAsText: boolean=false); overload;
     /// serialize the content as a "key":value JSON object
@@ -48214,7 +48230,7 @@ begin
   result := true;
 end;
 
-procedure TDynArray.Copy(const Source: TDynArray);
+procedure TDynArray.Copy(const Source: TDynArray; ObjArrayByRef: boolean);
 var n: Cardinal;
 begin
   if (fValue=nil) or (ArrayType<>Source.ArrayType) then
@@ -48224,18 +48240,25 @@ begin
   SetCount(n);
   if n<>0 then
     if ElemType=nil then
-      if GetIsObjArray then
+      if not ObjArrayByRef and GetIsObjArray then
         LoadFromJSON(pointer(Source.SaveToJSON)) else
         MoveFast(Source.fValue^^,fValue^^,n*ElemSize) else
       CopyArray(fValue^,Source.fValue^,ElemType,n);
 end;
 
-procedure TDynArray.CopyFrom(const Source; MaxElem: integer);
+procedure TDynArray.CopyFrom(const Source; MaxElem: integer; ObjArrayByRef: boolean);
 var SourceDynArray: TDynArray;
 begin
   SourceDynArray.Init(fTypeInfo,pointer(@Source)^);
   SourceDynArray.fCountP := @MaxElem; // would set Count=0 at Init()
-  Copy(SourceDynArray);
+  Copy(SourceDynArray,ObjArrayByRef);
+end;
+
+procedure TDynArray.CopyTo(out Dest; ObjArrayByRef: boolean);
+var DestDynArray: TDynArray;
+begin
+  DestDynArray.Init(fTypeInfo,Dest);
+  DestDynArray.Copy(self,ObjArrayByRef);
 end;
 {$endif DELPHI5OROLDER}
 
@@ -58844,6 +58867,18 @@ begin
     fSafe.UnLock;
   end;
 end;
+
+{$ifndef DELPHI5OROLDER}
+procedure TSynDictionary.CopyValues(out Dest; ObjArrayByRef: boolean);
+begin
+  fSafe.Lock;
+  try
+    fValues.CopyTo(Dest,ObjArrayByRef);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+{$endif DELPHI5OROLDER}
 
 function TSynDictionary.ForEach(const OnEach: TSynDictionaryEvent): integer;
 var k,v: PAnsiChar;
