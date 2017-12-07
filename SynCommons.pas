@@ -3412,6 +3412,11 @@ procedure UpperCaseCopy(Text: PUTF8Char; Len: integer; var result: RawUTF8); ove
 // will therefore by correct with true UTF-8 content, but only for 7 bit
 procedure UpperCaseCopy(const Source: RawUTF8; var Dest: RawUTF8); overload;
 
+/// fast in-place conversion of the supplied variable text into uppercase
+// - this will only convert 'a'..'z' into 'A'..'Z' (no NormToUpper use), and
+// will therefore by correct with true UTF-8 content, but only for 7 bit
+procedure UpperCaseSelf(var S: RawUTF8);
+
 /// fast conversion of the supplied text into lowercase
 // - this will only convert 'A'..'Z' into 'a'..'z' (no NormToLower use), and
 // will therefore by correct with true UTF-8 content
@@ -3421,6 +3426,11 @@ function LowerCase(const S: RawUTF8): RawUTF8;
 // - this will only convert 'A'..'Z' into 'a'..'z' (no NormToLower use), and
 // will therefore by correct with true UTF-8 content
 procedure LowerCaseCopy(Text: PUTF8Char; Len: integer; var result: RawUTF8);
+
+/// fast in-place conversion of the supplied variable text into lowercase
+// - this will only convert 'A'..'Z' into 'a'..'z' (no NormToLower use), and
+// will therefore by correct with true UTF-8 content, but only for 7 bit
+procedure LowerCaseSelf(var S: RawUTF8);
 
 /// accurate conversion of the supplied UTF-8 content into the corresponding
 // upper-case Unicode characters
@@ -28007,6 +28017,16 @@ begin
       dec(PByteArray(Dest)[i],32);
 end;
 
+procedure UpperCaseSelf(var S: RawUTF8);
+var i: PtrInt;
+    P: PByteArray;
+begin
+  P := UniqueRawUTF8(S);
+  for i := 0 to length(S)-1 do
+    if P[i] in [ord('a')..ord('z')] then
+      dec(P[i],32);
+end;
+
 function LowerCase(const S: RawUTF8): RawUTF8;
 var L, i: PtrInt;
 begin
@@ -28024,6 +28044,16 @@ begin
   for i := 0 to Len-1 do
     if PByteArray(result)[i] in [ord('A')..ord('Z')] then
       inc(PByteArray(result)[i],32);
+end;
+
+procedure LowerCaseSelf(var S: RawUTF8);
+var i: PtrInt;
+    P: PByteArray;
+begin
+  P := UniqueRawUTF8(S);
+  for i := 0 to length(S)-1 do
+    if P[i] in [ord('A')..ord('Z')] then
+      inc(P[i],32);
 end;
 
 function TrimLeft(const S: RawUTF8): RawUTF8;
