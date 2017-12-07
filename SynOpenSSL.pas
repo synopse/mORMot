@@ -118,7 +118,7 @@ const
   BIO_FLAGS_SHOULD_RETRY = 8;
   BIO_NOCLOSE = 0;
   BIO_CLOSE = 1;
-  BIO_C_GET_MD_CTX   = 120;
+  BIO_C_GET_MD_CTX = 120;
 
 type
   {$ifdef CPU64}
@@ -508,15 +508,14 @@ const
     'ERR_load_BIO_strings', 'EVP_cleanup', 'EVP_PKEY_free', 'BIO_new',
     'BIO_ctrl', 'BIO_set_flags', 'BIO_test_flags', 'BIO_clear_flags',
     'BIO_new_mem_buf', 'BIO_free', 'BIO_s_mem', 'BIO_read', 'BIO_write',
-    'BIO_new_socket', 'X509_get_issuer_name', 'X509_get_subject_name',
-    'X509_get_pubkey', 'X509_free', 'X509_NAME_print_ex', 'sk_num', 'sk_pop',
+    'BIO_new_socket', 'X509_get_issuer_name', 'X509_get_subject_name', 'X509_get_pubkey',
+    'X509_free', 'X509_NAME_print_ex', 'sk_num', 'sk_pop',
     'ASN1_BIT_STRING_get_bit', 'OBJ_obj2nid', 'OBJ_nid2sn', 'ASN1_STRING_data',
     'PEM_read_bio_X509', 'PEM_read_bio_PrivateKey', 'PEM_read_bio_RSAPrivateKey',
     'PEM_read_bio_PUBKEY', 'EVP_MD_CTX_create', 'EVP_MD_CTX_destroy',
-    'EVP_sha256', 'EVP_sha384', 'EVP_sha512', 'EVP_PKEY_size',
-    'EVP_DigestSignInit', 'EVP_DigestUpdate', 'EVP_DigestSignFinal',
-    'EVP_DigestVerifyInit', 'EVP_DigestVerifyFinal', 'CRYPTO_malloc',
-    'CRYPTO_free', 'SSLeay_version');
+    'EVP_sha256', 'EVP_sha384', 'EVP_sha512', 'EVP_PKEY_size', 'EVP_DigestSignInit', 'EVP_DigestUpdate',
+    'EVP_DigestSignFinal', 'EVP_DigestVerifyInit', 'EVP_DigestVerifyFinal',
+    'CRYPTO_malloc', 'CRYPTO_free', 'SSLeay_version');
   LIBSSL_ENTRIES: array[0..37] of PChar = ('SSL_library_init',
     'SSL_load_error_strings', 'SSLv3_method', 'SSLv23_method', 'TLSv1_method',
     'TLSv1_1_method', 'TLSv1_2_method', 'SSL_CTX_new', 'SSL_CTX_free',

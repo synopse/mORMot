@@ -5765,6 +5765,54 @@ type
     /// JSON encoded UTF-8 serialization of the record
     JSON: RawUTF8;
   end;
+{$else}
+  TRange = record
+    Min, Max: Integer;
+  end;
+  TOffense = record
+    Damage, AttackSpeed: TRange;
+  end;
+  TEnemy = class(TSynPersistent)
+  private
+    fEnabled: Boolean;
+    fName: string;
+    function GetOffense: RawJSON;
+    procedure SetOffense(Value: RawJSON);
+  public
+    Off: TOffense;
+  published
+    property Enabled: Boolean read fEnabled write fEnabled;
+    property Name: string read fName write fName;
+    property Offense: RawJSON read GetOffense write SetOffense;
+  end;
+
+function TEnemy.GetOffense: RawJSON;
+begin
+  result := JSONEncode([
+    'damage','{','min',Off.Damage.Min,'max',Off.Damage.Max,'}',
+    'attackspeed','{','min',Off.AttackSpeed.Min,'max',Off.AttackSpeed.Max,'}']);
+end;
+
+procedure RangeFromJSON(out Range: TRange; JSON: PUTF8Char);
+var V: TPUtf8CharDynArray;
+begin
+  JSONDecode(JSON, ['min', 'max'], V);
+  if V=nil then
+    exit;
+  Range.Min := GetInteger(V[0]);
+  Range.Max := GetInteger(V[1]);
+end;
+
+procedure TEnemy.SetOffense(Value: RawJSON);
+var V: TPUtf8CharDynArray;
+begin
+  JSONDecode(Value,['damage','attackspeed'],V,true);
+  if V=nil then
+    exit;
+  RangeFromJSON(Off.Damage, V[0]);
+  RangeFromJSON(Off.AttackSpeed, V[1]);
+end;
+
 {$endif}
 
 type
@@ -5912,6 +5960,7 @@ var J,U: RawUTF8;
     K,U2: RawUTF8;
     Valid: boolean;
     RB: TSQLRawBlob;
+    Enemy: TEnemy;
 {$ifndef LVCL}
     Instance: TClassInstance;
     Coll, C2: TCollTst;
@@ -7174,6 +7223,29 @@ begin
   Check(IdemPChar(GetJSONField(pointer(U),P),'TRUE'));
   Check(P=nil);
   Check(U='true'#0'footer,','3cce80e8df');
+  {$ifndef DELPHI5OROLDER}
+  // validates RawJSON (custom) serialization
+  Enemy := TEnemy.Create;
+  try
+    U := ObjectToJSON(Enemy);
+    check(U='{"Enabled":false,"Name":"","Offense":{"damage":{"min":0,"max":0},'+
+      '"attackspeed":{"min":0,"max":0}}}');
+    Enemy.Off.Damage.Min := 10;
+    Enemy.Off.AttackSpeed.Max := 100;
+    U := ObjectToJSON(Enemy);
+    check(U='{"Enabled":false,"Name":"","Offense":{"damage":{"min":10,"max":0},'+
+      '"attackspeed":{"min":0,"max":100}}}');
+    FillcharFast(Enemy.Off, sizeof(Enemy.Off), 0);
+    check(Enemy.Off.Damage.Min = 0);
+    check(Enemy.Off.AttackSpeed.Max = 0);
+    JSONToObject(Enemy, pointer(U), valid);
+    check(valid);
+    check(Enemy.Off.Damage.Min = 10);
+    check(Enemy.Off.AttackSpeed.Max = 100);
+  finally
+    Enemy.Free;
+  end;
+  {$endif}
 end;
 
 
@@ -9652,8 +9724,25 @@ begin
 end;
 
 procedure TTestCryptographicRoutines._RC4;
+var key, s, d: RawByteString;
+    ks, i, len: integer;
+    rc4, ref: TRC4;
 begin
   Check(RC4SelfTest);
+  key := RandomString(100);
+  for ks := 1 to 10 do begin
+    ref.InitSHA3(pointer(key)^,ks*10);
+    for i := 0 to 100 do begin
+      len := i*3;
+      s := RandomAnsi7(len);
+      SetString(d,nil,len);
+      rc4 := ref;
+      rc4.EncryptBuffer(pointer(s),pointer(d),len); // encrypt
+      rc4 := ref;
+      rc4.EncryptBuffer(pointer(d),pointer(d),len); // decrypt
+      check(s=d);
+    end;
+  end;
 end;
 
 procedure TTestCryptographicRoutines._SHA1;
@@ -9942,6 +10031,7 @@ begin
     '75f8b0591e2baeae027d56c14ef3bc014d9dd29cce08b8b184528589147fc252');
   encrypted := instance.Cypher('secret', 'toto');
   Check(SynCommons.BinToHex(encrypted) = 'BF013A29');
+  Check(SynCommons.BinToHexLower(encrypted) = 'bf013a29');
   for s := 0 to 3 do begin
     secret := RandomString(s * 3);
     Check(instance.Cypher(secret, '') = '');
@@ -10136,8 +10226,6 @@ begin
     'ONFh7hgQ',jwt); // altered one char in signature
   check(jwt.result=jwtInvalidSignature);
   j.Free;
-  if not ecc_available then 
-    exit;
   for i := 1 to 10 do begin
     secret := TECCCertificateSecret.CreateNew(nil); // self-signed certificate
     test(TJWTES256.Create(secret,[jrcIssuer,jrcExpirationTime],[],60));
@@ -10172,6 +10260,7 @@ type
     bMD5, bSHA1, bHMACSHA1, bSHA256, bHMACSHA256, bSHA512, bHMACSHA512,
     bSHA3_256, bSHA3_512,
     // encryption
+    bRC4,
     bAES128CFB, bAES128OFB, bAES128CFBCRC, bAES128OFBCRC,
     bAES256CFB, bAES256OFB, bAES256CFBCRC, bAES256OFBCRC,
     bSHAKE128, bSHAKE256
@@ -10194,6 +10283,7 @@ var b: TBenchmark;
     SHA256: TSHA256;
     SHA512: TSHA512;
     SHA3, SHAKE128, SHAKE256: TSHA3;
+    RC4: TRC4;
     timer: TPrecisionTimer;
     time: array[TBenchmark] of Int64;
     AES: array[bAES128CFB .. bAES256OFBCRC] of TAESAbstract;
@@ -10206,6 +10296,7 @@ begin
     AES[b] := AESCLASS[b].Create(dig, AESBITS[b]);
   SHAKE128.InitCypher('secret', SHAKE_128);
   SHAKE256.InitCypher('secret', SHAKE_256);
+  RC4.InitSHA3(dig,SizeOf(dig));
   FillCharFast(time,sizeof(time),0);
   size := 0;
   n := 0;
@@ -10229,6 +10320,7 @@ begin
         bHMACSHA512: HMAC_SHA512('secret',data,dig.b);
         bSHA3_256:   SHA3.Full(pointer(data),SIZ[s],dig.Lo);
         bSHA3_512:   SHA3.Full(pointer(data),SIZ[s],dig.b);
+        bRC4:        RC4.EncryptBuffer(pointer(data), pointer(Encrypted), SIZ[s]);
         bAES128CFB, bAES128OFB, bAES256CFB, bAES256OFB:
                      AES[b].EncryptPKCS7(Data, true);
         bAES128CFBCRC, bAES128OFBCRC, bAES256CFBCRC, bAES256OFBCRC:
@@ -10236,7 +10328,7 @@ begin
         bSHAKE128:   SHAKE128.Cypher(pointer(Data), pointer(Encrypted), SIZ[s]);
         bSHAKE256:   SHAKE256.Cypher(pointer(Data), pointer(Encrypted), SIZ[s]);
         end;
-        Check((b >= bAES128CFB) or (dig.d0 <> 0) or (dig.d1 <> 0));
+        Check((b >= bRC4) or (dig.d0 <> 0) or (dig.d1 <> 0));
       end;
       //NotifyTestSpeed(format('%s %s',[TXT[b],KB(SIZ[s])]),COUNT,SIZ[s]*COUNT,@timer);
       timer.ComputeTime;
@@ -10548,12 +10640,10 @@ const
 procedure TTestECCCryptography.ReferenceVectors;
 var pr1,pr2: TECCPrivateKey;
     pu1,pu2: TECCPublicKey;
-    h: TECCHash;
-    si: TECCSignature;
+    h1,h2: TECCHash;
+    si1,si2: TECCSignature;
     s1,s2,s3: TECCSecretKey;
 begin
-  if not ecc_available then
-    exit;
   SetLength(pub, ECC_COUNT);
   SetLength(priv, ECC_COUNT);
   SetLength(sign, ECC_COUNT);
@@ -10567,61 +10657,65 @@ begin
   Check(SynCommons.HexToBin(PAnsiChar(
     '0298D0D01FCE73146C10CD05E08BEA573BEE4EFC56D5EBAAC64B32672C8FAC1502'),@pu2,sizeof(pu2)));
   Check(SynCommons.HexToBin(PAnsiChar(
-    '9509D00BBBA2308445BC73311C3887E935183F65D361D4C39E2FA432B7168599'),@h,sizeof(h)));
+    '9509D00BBBA2308445BC73311C3887E935183F65D361D4C39E2FA432B7168599'),@h1,sizeof(h1)));
   Check(SynCommons.HexToBin(
     PAnsiChar('F04CD0AA3D40433C51F35D07DBF4E11C91C922791A8BA7B930B5C30716D8B26E4B65EFBF'+
-    'BDC0526A94ABDAA31130248F0413AC33D5BFA903E09847AAF42FD043'),@si,sizeof(si)));
-  Check(ecdsa_verify(pu1,h,si));
+    'BDC0526A94ABDAA31130248F0413AC33D5BFA903E09847AAF42FD043'),@si1,sizeof(si1)));
   Check(SynCommons.HexToBin(PAnsiChar(
-    '3366C112F95B2F52836171CAD3F3441C4B3C75348859092B200DE5024CB0C91B'),@h,sizeof(h)));
+    '3366C112F95B2F52836171CAD3F3441C4B3C75348859092B200DE5024CB0C91B'),@h2,sizeof(h2)));
   Check(SynCommons.HexToBin(PAnsiChar(
     'EEEF6F1D0A590BFC72B9D7DC0DB4BF36A8928DA2B8078FEE567808BB082525438CF68546'+
-    '26E17FBB28528450E50E43AB2598ED2CD3ACC7B43865BEB843452713'),@si,sizeof(si)));
-  Check(ecdsa_verify(pu2,h,si));
+    '26E17FBB28528450E50E43AB2598ED2CD3ACC7B43865BEB843452713'),@si2,sizeof(si2)));
   Check(SynCommons.HexToBin(PAnsiChar(
     '51A0C8018EC725F9B9F821D826FEEC4CAE8843066685522F1961D25935EAA39E'),@s1,sizeof(s1)));
+  Check(ecdsa_verify(pu1,h1,si1));
+  Check(ecdsa_verify(pu2,h2,si2));
   Check(ecdh_shared_secret(pu1,pr2,s2));
   Check(IsEqual(s1,s2));
   Check(CompareMem(@s1,@s2,sizeof(s1)));
   Check(ecdh_shared_secret(pu2,pr1,s3));
   Check(IsEqual(s1,s3));
   Check(CompareMem(@s1,@s3,sizeof(s1)));
+  {$ifdef HASUINT64} // pascal (fallback) version
+  Check(ecdsa_verify_pas(pu1,h1,si1));
+  Check(ecdsa_verify_pas(pu2,h2,si2));
+  Check(ecdh_shared_secret_pas(pu1,pr2,s2));
+  Check(IsEqual(s1,s2));
+  Check(ecdh_shared_secret_pas(pu2,pr1,s3));
+  Check(IsEqual(s1,s3));
+  {$endif}
 end;
 
 procedure TTestECCCryptography._ecc_make_key;
 var i: integer;
 begin
-  if ecc_available then
-    for i := 0 to ECC_COUNT-1 do
-      Check(ecc_make_key(pub[i], priv[i]));
+  for i := 0 to ECC_COUNT-1 do
+    Check(ecc_make_key(pub[i], priv[i]));
 end;
 
 procedure TTestECCCryptography._ecdsa_sign;
 var i: integer;
 begin
-  if ecc_available then
-    for i := 0 to ECC_COUNT-1 do
-      Check(ecdsa_sign(priv[i], hash, sign[i]));
+  for i := 0 to ECC_COUNT-1 do
+    Check(ecdsa_sign(priv[i], hash, sign[i]));
 end;
 
 procedure TTestECCCryptography._ecdsa_verify;
 var i: integer;
 begin
-  if ecc_available then
-    for i := 0 to ECC_COUNT-1 do
-      check(ecdsa_verify(pub[i], hash, sign[i]));
+  for i := 0 to ECC_COUNT-1 do
+    check(ecdsa_verify(pub[i], hash, sign[i]));
 end;
 
 procedure TTestECCCryptography._ecdh_shared_secret;
 var sec1,sec2: TECCSecretKey;
     i: integer;
 begin
-  if ecc_available then
-    for i := 0 to ECC_COUNT-2 do begin
-      check(ecdh_shared_secret(pub[i],priv[i+1],sec1));
-      check(ecdh_shared_secret(pub[i+1],priv[i],sec2));
-      check(IsEqual(sec1,sec2));
-    end;
+  for i := 0 to ECC_COUNT-2 do begin
+    check(ecdh_shared_secret(pub[i],priv[i+1],sec1));
+    check(ecdh_shared_secret(pub[i+1],priv[i],sec2));
+    check(IsEqual(sec1,sec2));
+  end;
 end;
 
 procedure TTestECCCryptography.CertificatesAndSignatures;
@@ -10671,8 +10765,6 @@ var selfsignedroot, secret: TECCCertificateSecret;
     sign: TECCSignatureCertified;
     signcontent: TECCSignatureCertifiedContent;
 begin
-  if not ecc_available then
-    exit;
   chain := TECCCertificateChain.Create;
   try
     check(chain.Count=0);

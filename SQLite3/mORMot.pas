@@ -3639,6 +3639,7 @@ type
   end;
 
   /// information about a RawUTF8 published property
+  // - will also serialize a RawJSON property without JSON escape
   TSQLPropInfoRTTIRawUTF8 = class(TSQLPropInfoRTTIAnsi)
   protected
     procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: TObject); override;
@@ -16059,6 +16060,8 @@ type
     fHistoryAdd: TFileBufferWriter;
     fHistoryAddCount: integer;
     fHistoryAddOffset: TIntegerDynArray;
+    /// override this to customize fields intialization
+    class procedure InitializeFields(const Fields: array of const; var JSON: RawUTF8); virtual; 
   public
     /// load the change history of a given record
     // - then you can use HistoryGetLast, HistoryCount or HistoryGet() to access
@@ -17164,6 +17167,10 @@ type
     // note that this will work only for ORM sessions, NOT complex SOA state
     // - this method is called by Destroy itself
     procedure Shutdown(const aStateFileName: TFileName=''); virtual;
+    /// wait for the specified number of milliseconds
+    // - if Shutdown is called in-between, returns true
+    // - if the thread waited the supplied time, returns false
+    function SleepOrShutdown(MS: integer): boolean;
 
     /// Missing tables are created if they don't exist yet for every TSQLRecord
     // class of the Database Model
@@ -22523,19 +22530,22 @@ end;
 procedure TSQLPropInfoRTTIRawUTF8.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 var tmp: RawByteString;
 begin
-  W.Add('"');
   fPropInfo.GetLongStrProp(Instance,tmp);
-  if PtrUInt(tmp)<>0 then
-    W.AddJSONEscape(pointer(tmp),
-      {$ifdef FPC}length(tmp){$else}PInteger(PtrUInt(tmp)-4)^{$endif});
-  W.Add('"');
+  if fPropType=TypeInfo(RawJSON) then
+    W.AddRawJSON(tmp) else begin
+    W.Add('"');
+    if PtrUInt(tmp)<>0 then
+      W.AddJSONEscape(pointer(tmp),
+        {$ifdef FPC}length(tmp){$else}PInteger(PtrUInt(tmp)-4)^{$endif});
+    W.Add('"');
+  end;
 end;
 
 procedure TSQLPropInfoRTTIRawUTF8.GetValueVar(Instance: TObject;
   ToSQL: boolean; var result: RawUTF8; wasSQLString: PBoolean);
 begin
   if wasSQLString<>nil then
-    wasSQLString^ := true;
+    wasSQLString^ := fPropType<>TypeInfo(RawJSON);
   fPropInfo.GetLongStrProp(Instance,RawByteString(result));
 end;
 
@@ -22601,7 +22611,8 @@ begin
   fPropInfo.SetLongStrProp(Instance,tmp);
 end;
 
-procedure TSQLPropInfoRTTIRawUTF8.SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean);
+procedure TSQLPropInfoRTTIRawUTF8.SetValueVar(Instance: TObject; const Value: RawUTF8;
+  wasString: boolean);
 begin
   fPropInfo.SetLongStrProp(Instance,Value);
 end;
@@ -38635,6 +38646,23 @@ begin
     SessionsSaveToFile(aStateFileName);
 end;
 
+function TSQLRestServer.SleepOrShutdown(MS: integer): boolean;
+var timeout: Int64;
+begin
+  result := true;
+  timeout := GetTickCount64+MS;
+  repeat
+    if fShutdownRequested then
+      exit;
+    if MS<=10 then
+      SleepHiRes(MS) else
+      SleepHiRes(1);
+    if fShutdownRequested then
+      exit;
+  until (MS<=10) or (GetTickCount64>=timeout);
+  result := false;
+end;
+
 function TSQLRestServer.GetStaticDataServer(aClass: TSQLRecordClass): TSQLRest;
 var i: cardinal;
 begin
@@ -42453,6 +42481,12 @@ begin
   HistoryOpen(aClient.Model);
 end;
 
+class procedure TSQLRecordHistory.InitializeFields(const Fields: array of const;
+  var JSON: RawUTF8);
+begin // you may use a TDocVariant to add some custom fields in your own class
+  JSON := JSONEncode(Fields);
+end;
+
 function TSQLRecordHistory.HistoryOpen(Model: TSQLModel): boolean;
 var len: cardinal;
     start,i: integer;
@@ -42781,41 +42815,37 @@ end;
 
 function TSQLRestServer.InternalUpdateEvent(aEvent: TSQLEvent; aTableIndex: integer;
   aID: TID; const aSentData: RawUTF8; aIsBlobFields: PSQLFieldBits): boolean;
-procedure DoTrackChanges;
-var TableHistoryIndex: integer;
-    JSON: RawUTF8;
-    Event: TSQLHistoryEvent;
-begin
-  case aEvent of
-  seAdd:    Event := heAdd;
-  seUpdate: Event := heUpdate;
-  seDelete: Event := heDelete;
-  else exit;
-  end;
-  TableHistoryIndex := fTrackChangesHistoryTableIndex[aTableIndex];
-  fAcquireExecution[execORMWrite].Safe.Lock; // avoid race condition
-  try // low-level Add(TSQLRecordHistory) without cache
-    JSON := JSONEncode(['ModifiedRecord',aTableIndex+aID shl 6,'Event',ord(Event),
-                        'SentDataJSON',aSentData,'Timestamp',ServerTimestamp]);
-    fAcquireExecution[execORMWrite].fSafe.Lock;
-    try // may be within a batch in another thread
-      EngineAdd(TableHistoryIndex,JSON);
-    finally
-      fAcquireExecution[execORMWrite].fSafe.Unlock;
+  procedure DoTrackChanges(TableHistoryIndex: integer);
+  var TableHistoryClass: TSQLRecordHistoryClass;
+      JSON: RawUTF8;
+      Event: TSQLHistoryEvent;
+  begin
+    case aEvent of
+    seAdd:    Event := heAdd;
+    seUpdate: Event := heUpdate;
+    seDelete: Event := heDelete;
+    else exit;
     end;
-    { TODO: use a BATCH (in background thread) to speed up TSQLHistory storage }
-    if fTrackChangesHistory[TableHistoryIndex].CurrentRow>
-        fTrackChangesHistory[TableHistoryIndex].MaxSentDataJsonRow then begin
-      // gather & compress TSQLRecordHistory.SentDataJson into History BLOB
-      TrackChangesFlush(TSQLRecordHistoryClass(Model.Tables[TableHistoryIndex]));
-      fTrackChangesHistory[TableHistoryIndex].CurrentRow := 0;
-    end else
-      // fast append as JSON until reached MaxSentDataJsonRow
-      inc(fTrackChangesHistory[TableHistoryIndex].CurrentRow);
-  finally
-    fAcquireExecution[execORMWrite].Safe.UnLock;
+    TableHistoryClass := TSQLRecordHistoryClass(Model.Tables[TableHistoryIndex]);
+    TableHistoryClass.InitializeFields(['ModifiedRecord',aTableIndex+aID shl 6,
+      'Event',ord(Event),'SentDataJSON',aSentData,'Timestamp',ServerTimestamp],JSON);
+    fAcquireExecution[execORMWrite].Safe.Lock; // avoid race condition
+    try // low-level Add(TSQLRecordHistory) without cache
+      EngineAdd(TableHistoryIndex,JSON);
+      { TODO: use a BATCH (in background thread) to speed up TSQLHistory storage? }
+      if fTrackChangesHistory[TableHistoryIndex].CurrentRow>
+          fTrackChangesHistory[TableHistoryIndex].MaxSentDataJsonRow then begin
+        // gather & compress TSQLRecordHistory.SentDataJson into History BLOB
+        TrackChangesFlush(TableHistoryClass);
+        fTrackChangesHistory[TableHistoryIndex].CurrentRow := 0;
+      end else
+        // fast append as JSON until reached MaxSentDataJsonRow
+        inc(fTrackChangesHistory[TableHistoryIndex].CurrentRow);
+    finally
+      fAcquireExecution[execORMWrite].Safe.UnLock;
+    end;
   end;
-end;
+var TableHistoryIndex: integer;
 begin
   if aID<=0 then
     result := false else
@@ -42825,10 +42855,12 @@ begin
         result := OnBlobUpdateEvent(
           self,seUpdate,fModel.Tables[aTableIndex],aID,aIsBlobFields^) else
         result := true else begin
-      // simple fields modification
-      if (cardinal(aTableIndex)<fTrackChangesHistoryTableIndexCount) and
-         (fTrackChangesHistoryTableIndex[aTableIndex]>=0) then
-        DoTrackChanges;
+      // track simple fields modification
+      if cardinal(aTableIndex)<fTrackChangesHistoryTableIndexCount then begin
+        TableHistoryIndex := fTrackChangesHistoryTableIndex[aTableIndex];
+        if TableHistoryIndex>=0 then
+          DoTrackChanges(TableHistoryIndex);
+      end;
       if Assigned(OnUpdateEvent) then
         result := OnUpdateEvent(self,aEvent,fModel.Tables[aTableIndex],aID,aSentData) else
         result := true; // true on success, false if error (but action continues)
@@ -48380,6 +48412,7 @@ begin
   if tmp.len<>0 then
     try
       parser.From := tmp.buf;
+      parser.TObjectListItemClass := TObjectListItemClass;
       parser.Options := Options;
       parser.Value := TObject(ObjectInstance);
       parser.Parse;
@@ -48668,6 +48701,7 @@ procedure TJSONToObject.Parse;
 var V: PtrInt;
     DynArray: TDynArray;
     U: RawUTF8;
+    Beg: PAnsiChar;
 begin
   Valid := false;
   Dest := From;
@@ -48790,6 +48824,14 @@ begin
         From := DynArray.LoadFromJSON(From);
         if From=nil then
           exit; // invalid '[dynamic array]' content
+      end else
+      if P^.TypeInfo=TypeInfo(RawJSON) then begin
+        Beg := pointer(From);
+        From := GotoNextJSONObjectOrArray(From);
+        if From=nil then
+          exit;
+        SetString(U,Beg,From-Beg);
+        P^.SetLongStrProp(Value,U);
       end else
       if (Kind=tkSet) and (From^='[') then begin // set as string array
         V := GetSetNameValue(P^.TypeInfo,From,EndOfObject);
@@ -50958,7 +51000,14 @@ var Added: boolean;
               Add(V); // typecast enums and sets as plain integer by default
         end;
       end;
-      {$ifdef FPC}tkAString,{$endif} tkLString: begin
+      {$ifdef FPC}tkAString,{$endif} tkLString:
+      if P^.TypeInfo=TypeInfo(RawJSON) then begin
+        P^.GetLongStrProp(Value,tmp);
+        if tmp<>'' then begin
+          HR(P);
+          AddString(tmp);
+        end;
+      end else begin
         codepage := P^.PropType^.AnsiStringCodePage;
         if (codepage=CP_SQLRAWBLOB) and not (woSQLRawBlobAsBase64 in Options) then begin
           if not (woDontStoreEmptyString in Options) then begin
@@ -53591,7 +53640,7 @@ var Params: TJSONSerializer;
     R, Val: PUTF8Char;
     wasString, resultAsJSONObject: boolean;
     ServiceCustomAnswerPoint: PServiceCustomAnswer;
-    parser: TJSONToObject;
+    parser: TJSONToObject; // inlined JSONToObject()
     DynArrays: array[0..MAX_METHOD_ARGS-1] of TDynArray;
     Value: array[0..MAX_METHOD_ARGS-1] of pointer;
     I64s: array[0..MAX_METHOD_ARGS-1] of Int64;

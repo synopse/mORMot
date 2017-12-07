@@ -460,8 +460,6 @@ begin
     raise EECCException.Create('ECCCommand(nil)');
   try
   try
-    if not ecc_available then
-      raise EECCException.Create('ECC is not implemented on this platform');
     case cmd of
     ecNew: begin
       repeat

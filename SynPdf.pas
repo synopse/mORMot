@@ -752,8 +752,8 @@ type
   protected
     fLastObjectNumber: integer;
     fLastGenerationNumber: Integer;
-    fLastRC4Key: TRC4InternalKey;
     fUserPass, fOwnerPass: TPdfBuffer32;
+    fLastRC4Key: TRC4;
     procedure EncodeBuffer(const BufIn; var BufOut; Count: cardinal); override;
   public
     /// prepare a specific document to be encrypted
@@ -11196,7 +11196,7 @@ var RC4: TRC4;
     MD5.Update(fDoc.fCurrentGenerationNumber,2);
     MD5.Final(Digest);
     RC4.Init(Digest,KEYSIZE[fLevel]);
-    RC4.SaveKey(fLastRC4Key); // a lot of string encodings have the same context
+    fLastRC4Key := RC4; // a lot of string encodings have the same context
     fLastObjectNumber := fDoc.fCurrentObjectNumber;
     fLastGenerationNumber := fDoc.fCurrentGenerationNumber;
   end;
@@ -11204,7 +11204,7 @@ begin
   if (fDoc.fCurrentObjectNumber<>fLastObjectNumber) or
      (fDoc.fCurrentGenerationNumber<>fLastGenerationNumber) then
     ComputeNewRC4Key else
-    RC4.RestoreKey(fLastRC4Key);
+    RC4 := fLastRC4Key;
   RC4.Encrypt(BufIn,BufOut,Count); // RC4 allows in-place encryption :)
 end;
 

@@ -115,6 +115,9 @@ function SetFilePointer(hFile: THandle; lDistanceToMove: integer;
 /// compatibility function, wrapping Win32 API file truncate at current position
 procedure SetEndOfFile(hFile: integer);
 
+/// compatibility function, wrapping Win32 API file flush to disk
+procedure FlushFileBuffers(hFile: THandle);
+
 /// compatibility function, wrapping Win32 API text comparison
 function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pwidechar;
   cchCount1: longint; lpString2: Pwidechar; cchCount2: longint): longint;
@@ -211,6 +214,11 @@ end;
 procedure SetEndOfFile(hFile: integer);
 begin
   ftruncate64(hFile,lseek64(hFile,0,SEEK_CUR));
+end;
+
+procedure FlushFileBuffers(hFile: THandle);
+begin
+  fsync(hFile);
 end;
 
 function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pwidechar;

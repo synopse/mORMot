@@ -1088,6 +1088,10 @@ type
     // - this method is thread-safe, but you may use your own TAESPRNG instance
     // if you need some custom entropy level
     class procedure Fill(out Block: TAESBlock); overload;
+    /// just a wrapper around TAESPRNG.Main.FillRandom() function
+    // - this method is thread-safe, but you may use your own TAESPRNG instance
+    // if you need some custom entropy level
+    class procedure Fill(out Block: THash256); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// just a wrapper around TAESPRNG.Main.FillRandom() function
     // - this method is thread-safe, but you may use your own TAESPRNG instance
@@ -1465,30 +1469,44 @@ type
     procedure Full(Buffer: pointer; Len: integer; out Digest: TMD5Digest);
   end;
 
-  /// internal key permutation buffer, as used by TRC4
-  TRC4InternalKey = array[byte] of byte;
-
   /// handle RC4 encryption/decryption
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance
+  // - you can also restore and backup any previous state of the RC4 encryption
+  // by copying the whole TRC4 variable into another (stack-allocated) variable
   TRC4 = {$ifndef UNICODE}object{$else}record{$endif}
   private
-    key: TRC4InternalKey;
+    {$ifdef CPUINTEL}
+    state: array[byte] of PtrInt; // PtrInt=270MB/s  byte=240MB/s on x86
+    {$else}
+    state: array[byte] of byte; // on ARM, keep the CPU cache usage low
+    {$endif}
+    currI, currJ: PtrInt;
   public
     /// initialize the RC4 encryption/decryption
     // - KeyLen is in bytes, and should be within 1..255 range
     procedure Init(const aKey; aKeyLen: integer);
+    /// initialize RC4-drop[3072] encryption/decryption after SHA-3 hashing
+    // - will use SHAKE-128 generator in XOF mode to generate a 256 bytes key,
+    // then drop the first 3072 bytes from the RC4 stream
+    // - this initializer is much safer than plain Init, so should be considered
+    // for any use on RC4 for new projects - even if AES-NI is 2 times faster,
+    // and safer SHAKE-128 operates in XOF mode at a similar speed range
+    procedure InitSHA3(const aKey; aKeyLen: integer);
+    /// drop the next Count bytes from the RC4 cypher state
+    // - may be used in Stream mode, or to initialize in RC4-drop[n] mode
+    procedure Drop(Count: cardinal);
     /// perform the RC4 cypher encryption/decryption on a buffer
-    // - each call to this method shall be preceded with an Init() call,
-    // or a RestoreKey() from a previous SaveKey(), since it will change
-    // the internal key[] during its process
-    // - RC4 is a symmetrical algorithm: use this Encrypt() method for both
-    // encryption and decryption of any buffer
+    // - each call to this method shall be preceeded with an Init() call
+    // - RC4 is a symmetrical algorithm: use this Encrypt() method
+    // for both encryption and decryption of any buffer
     procedure Encrypt(const BufIn; var BufOut; Count: cardinal);
-    /// save the internal key computed by Init()
-    procedure SaveKey(out Backup: TRC4InternalKey);
-    /// restore the internal key as computed by Init()
-    procedure RestoreKey(const Backup: TRC4InternalKey);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// perform the RC4 cypher encryption/decryption on a buffer
+    // - each call to this method shall be preceeded with an Init() call
+    // - RC4 is a symmetrical algorithm: use this EncryptBuffer() method
+    // for both encryption and decryption of any buffer
+    procedure EncryptBuffer(BufIn, BufOut: PByte; Count: cardinal);
   end;
 
 {$A-} { packed memory structure }
@@ -2040,38 +2058,47 @@ type
 /// compute the hexadecial representation of an AES 16-byte block
 // - returns a stack-allocated short string
 function AESBlockToShortString(const block: TAESBlock): short32; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the hexadecial representation of an AES 16-byte block
 // - fill a stack-allocated short string
 procedure AESBlockToShortString(const block: TAESBlock; out result: short32); overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the hexadecial representation of an AES 16-byte block
 function AESBlockToString(const block: TAESBlock): RawUTF8;
 
 /// compute the hexadecimal representation of a SHA-1 digest
 function SHA1DigestToString(const D: TSHA1Digest): RawUTF8;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the SHA-1 digest from its hexadecimal representation
 // - returns true on success (i.e. Source has the expected size and characters)
 // - just a wrapper around SynCommons.HexToBin()
 function SHA1StringToDigest(const Source: RawUTF8; out Dest: TSHA1Digest): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the hexadecimal representation of a SHA-256 digest
 function SHA256DigestToString(const D: TSHA256Digest): RawUTF8;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the SHA-256 digest from its hexadecimal representation
 // - returns true on success (i.e. Source has the expected size and characters)
 // - just a wrapper around SynCommons.HexToBin()
 function SHA256StringToDigest(const Source: RawUTF8; out Dest: TSHA256Digest): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the hexadecimal representation of a SHA-384 digest
 function SHA384DigestToString(const D: TSHA384Digest): RawUTF8;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the hexadecimal representation of a SHA-512 digest
 function SHA512DigestToString(const D: TSHA512Digest): RawUTF8;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the hexadecimal representation of a MD5 digest
 function MD5DigestToString(const D: TMD5Digest): RawUTF8;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the MD5 digest from its hexadecimal representation
 // - returns true on success (i.e. Source has the expected size and characters)
@@ -4365,7 +4392,6 @@ begin
     end;
   end;
   inc(PtrUInt(pK), (ctx.rounds shl 4));
-
   TWA4(BO)[0] := ((SBox[t0        and $ff])        xor
                   (SBox[t1 shr  8 and $ff]) shl  8 xor
                   (SBox[t2 shr 16 and $ff]) shl 16 xor
@@ -10012,23 +10038,9 @@ begin
   SynCommons.BinToHex(@block,pointer(result),16);
 end;
 
-procedure HexLowerCase(digest: PByteArray; bytes: integer; var result: RawUTF8);
-const LOWHEX: array[0..15] of AnsiChar = '0123456789abcdef';
-var P: PAnsiChar;
-    i: Integer;
-begin
-  SetString(result,nil,bytes*2);
-  P := pointer(result);
-  for i := 0 to bytes-1 do begin
-    P[0] := LOWHEX[digest[i] shr 4];
-    P[1] := LOWHEX[digest[i] and 15];
-    inc(P,2);
-  end;
-end;
-
 function MD5DigestToString(const D: TMD5Digest): RawUTF8;
 begin
-  HexLowerCase(@D,sizeof(D),result);
+  BinToHexLower(@D,sizeof(D),result);
 end;
 
 function MD5StringToDigest(const Source: RawUTF8; out Dest: TMD5Digest): boolean;
@@ -10038,7 +10050,7 @@ end;
 
 function SHA1DigestToString(const D: TSHA1Digest): RawUTF8;
 begin
-  HexLowerCase(@D,sizeof(D),result);
+  BinToHexLower(@D,sizeof(D),result);
 end;
 
 function SHA1StringToDigest(const Source: RawUTF8; out Dest: TSHA1Digest): boolean;
@@ -10048,7 +10060,7 @@ end;
 
 function SHA256DigestToString(const D: TSHA256Digest): RawUTF8;
 begin
-  HexLowerCase(@D,sizeof(D),result);
+  BinToHexLower(@D,sizeof(D),result);
 end;
 
 function SHA256StringToDigest(const Source: RawUTF8; out Dest: TSHA256Digest): boolean;
@@ -10058,12 +10070,12 @@ end;
 
 function SHA512DigestToString(const D: TSHA512Digest): RawUTF8;
 begin
-  HexLowerCase(@D, sizeof(D), result);
+  BinToHexLower(@D, sizeof(D), result);
 end;
 
 function SHA384DigestToString(const D: TSHA384Digest): RawUTF8;
 begin
-  HexLowerCase(@D, sizeof(D), result);
+  BinToHexLower(@D, sizeof(D), result);
 end;
 
 function htdigest(const user, realm, pass: RawByteString): RawUTF8;
@@ -12061,6 +12073,11 @@ begin
   Main.FillRandom(Block);
 end;
 
+class procedure TAESPRNG.Fill(out Block: THash256);
+begin
+  Main.FillRandom(Block);
+end;
+
 class function TAESPRNG.Fill(Len: integer): RawByteString;
 begin
   result := Main.FillRandom(Len);
@@ -12098,52 +12115,114 @@ end;
 
 procedure TRC4.Init(const aKey; aKeyLen: integer);
 var i,k: integer;
-    j,tmp: byte;
+    j,tmp: PtrInt;
 begin
   if aKeyLen<=0 then
     raise ESynCrypto.CreateUTF8('TRC4.Init(invalid aKeyLen=%)',[aKeyLen]);
   dec(aKeyLen);
-  for i := 0 to high(key) do
-    key[i] := i;
+  for i := 0 to high(state) do
+    state[i] := i;
   j := 0;
   k := 0;
-  for i := 0 to high(key) do begin
-    inc(j,key[i]+TByteArray(aKey)[k]);
-    tmp := key[i];
-    key[i] := key[j];
-    key[j] := tmp;
+  for i := 0 to high(state) do begin
+    j := (j+state[i]+TByteArray(aKey)[k]) and $ff;
+    tmp := state[i];
+    state[i] := state[j];
+    state[j] := tmp;
     if k>=aKeyLen then // avoid slow mod operation within loop
       k := 0 else
       inc(k);
   end;
+  currI := 0;
+  currJ := 0;
+end;
+
+procedure TRC4.InitSHA3(const aKey; aKeyLen: integer);
+var sha: TSHA3;
+    dig: array[byte] of byte; // max RC4 state size is 256 bytes
+begin
+  sha.Full(SHAKE_128,@aKey,aKeyLen,@dig,SizeOf(dig)shl 3); // XOF mode
+  Init(dig,SizeOf(dig));
+  FillCharFast(dig,SizeOf(dig),0);
+  Drop(3072);
+end;
+
+procedure TRC4.EncryptBuffer(BufIn, BufOut: PByte; Count: cardinal);
+var i,j,ki,kj: PtrInt;
+    by4: array[0..3] of byte;
+begin
+  i := currI;
+  j := currJ;
+  while Count>3 do begin
+    dec(Count,4);
+    i := (i+1) and $ff;
+    ki := State[i];
+    j := (j+ki) and $ff;
+    kj := (ki+State[j]) and $ff;
+    State[i] := State[j];
+    i := (i+1) and $ff;
+    State[j] := ki;
+    ki := State[i];
+    by4[0] := State[kj];
+    j := (j+ki) and $ff;
+    kj := (ki+State[j]) and $ff;
+    State[i] := State[j];
+    i := (i+1) and $ff;
+    State[j] := ki;
+    by4[1] := State[kj];
+    ki := State[i];
+    j := (j+ki) and $ff;
+    kj := (ki+State[j]) and $ff;
+    State[i] := State[j];
+    i := (i+1) and $ff;
+    State[j] := ki;
+    by4[2] := State[kj];
+    ki := State[i];
+    j := (j+ki) and $ff;
+    kj := (ki+State[j]) and $ff;
+    State[i] := State[j];
+    State[j] := ki;
+    by4[3] := State[kj];
+    PCardinal(BufOut)^ := PCardinal(BufIn)^ xor cardinal(by4);
+    inc(BufIn,4);
+    inc(BufOut,4);
+  end;
+  while Count>0 do begin
+    dec(Count);
+    i := (i+1) and $ff;
+    ki := State[i];
+    j := (j+ki) and $ff;
+    kj := (ki+State[j]) and $ff;
+    State[i] := State[j];
+    State[j] := ki;
+    BufOut^ := BufIn^ xor State[kj];
+    inc(BufIn);
+    inc(BufOut);
+  end;
+  currI := i;
+  currJ := j;
 end;
 
 procedure TRC4.Encrypt(const BufIn; var BufOut; Count: cardinal);
-var ndx: cardinal;
-    i,j,ki,kj: byte;
 begin
-  i := 0;
-  j := 0;
-  for ndx := 0 to Count-1 do begin
-    inc(i);
-    ki := key[i];
-    inc(j,ki);
-    kj := key[j];
-    key[i] := kj;
-    inc(kj,ki);
-    key[j] := ki;
-    TByteArray(BufOut)[ndx] := TByteArray(BufIn)[ndx] xor key[kj];
+  EncryptBuffer(@BufIn,@BufOut,Count);
+end;
+
+procedure TRC4.Drop(Count: cardinal);
+var i,j,ki: PtrInt;
+begin
+  i := currI;
+  j := currJ;
+  while Count>0 do begin
+    dec(Count);
+    i := (i+1) and $ff;
+    ki := state[i];
+    j := (j+ki) and $ff;
+    state[i] := state[j];
+    state[j] := ki;
   end;
-end;
-
-procedure TRC4.RestoreKey(const Backup: TRC4InternalKey);
-begin
-  MoveFast(Backup,key,sizeof(key));
-end;
-
-procedure TRC4.SaveKey(out Backup: TRC4InternalKey);
-begin
-  MoveFast(key,Backup,sizeof(key));
+  currI := i;
+  currJ := j;
 end;
 
 function RC4SelfTest: boolean;
@@ -12158,7 +12237,7 @@ const
   Res2: array[0..9] of byte = ($d6,$a1,$41,$a7,$ec,$3c,$38,$df,$bd,$61);
 var RC4: TRC4;
     Dat: array[0..9] of byte;
-    Backup: TRC4InternalKey;
+    Backup: TRC4;
 begin
   RC4.Init(Test1,8);
   RC4.Encrypt(Test1,Dat,8);
@@ -12170,13 +12249,13 @@ begin
   RC4.Encrypt(InDat,Dat,sizeof(InDat));
   result := result and CompareMem(@Dat,@OutDat,sizeof(OutDat));
   RC4.Init(Key,sizeof(Key));
-  RC4.SaveKey(Backup);
+  Backup := RC4;
   RC4.Encrypt(InDat,Dat,sizeof(InDat));
   result := result and CompareMem(@Dat,@OutDat,sizeof(OutDat));
-  RC4.RestoreKey(Backup);
+  RC4 := Backup;
   RC4.Encrypt(InDat,Dat,sizeof(InDat));
   result := result and CompareMem(@Dat,@OutDat,sizeof(OutDat));
-  RC4.RestoreKey(Backup);
+  RC4 := Backup;
   RC4.Encrypt(OutDat,Dat,sizeof(InDat));
   result := result and CompareMem(@Dat,@InDat,sizeof(OutDat));
 end;

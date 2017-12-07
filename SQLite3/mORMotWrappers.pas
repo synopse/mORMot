@@ -229,7 +229,7 @@ type
     wUnknown,
     wBoolean, wEnum, wSet,
     wByte, wWord, wInteger, wCardinal,
-    wInt64, wID, wReference, wTimeLog, wModTime, wCreateTime,
+    wInt64, wQWord, wID, wReference, wTimeLog, wModTime, wCreateTime,
     wCurrency, wSingle, wDouble, wDateTime,
     wRawUTF8, wString, wRawJSON, wBlob,
     wGUID, wCustomAnswer, wRecord, wArray, wVariant,
@@ -257,35 +257,35 @@ const
     'integer','byte','word','integer','integer','int64','int64','int64','int64');
 
   TYPES_SIZE: array[0..8] of TWrapperType = (
-    winteger,wbyte,wword,winteger,winteger,wint64,wint64,wint64,wint64);
+    wInteger,wByte,wWord,wInteger,wInteger,wInt64,wInt64,wInt64,wInt64);
 
   { TODO: refactor TID and Int64 for JavaScript (integers truncated to 53-bit) }
   TYPES_LANG: array[TWrapperLanguage,TWrapperType] of RawUTF8 = (
    // lngDelphi
-   ('', 'Boolean', '', '', 'Byte', 'Word', 'Integer', 'Cardinal',
-    'Int64', 'TID', 'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime',
+   ('', 'Boolean', '', '', 'Byte', 'Word', 'Integer', 'Cardinal', 'Int64',
+    'UInt64', 'TID', 'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime',
     'Currency', 'Single', 'Double', 'TDateTime', 'RawUTF8','String', 'RawJSON',
     'TSQLRawBlob', 'TGUID', 'TServiceCustomAnswer', '', '', 'Variant', '', '', '',
     'TRecordVersion'),
    // lngPascal
-   ('', 'Boolean', '', '', 'Byte', 'Word', 'Integer', 'Cardinal',
-    'Int64', 'TID', 'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime',
+   ('', 'Boolean', '', '', 'Byte', 'Word', 'Integer', 'Cardinal', 'Int64',
+    'UInt64', 'TID', 'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime',
     'Currency', 'Single', 'Double', 'TDateTime', 'String', 'String', 'Variant',
     'TSQLRawBlob', 'TGUID', 'THttpBody', '', '', 'Variant', '', 'TID', '',
     'TRecordVersion'),
    // lngCS
-   ('', 'bool', '', '', 'byte', 'word', 'integer', 'uint',
-    'long', 'TID', 'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime',
+   ('', 'bool', '', '', 'byte', 'word', 'integer', 'uint', 'long', 'ulong',
+    'TID', 'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime',
     'decimal', 'single', 'double', 'double', 'string', 'string', 'dynamic',
     'byte[]', 'Guid', 'byte[]', '', '', 'dynamic', '', 'TID', '',
     'TRecordVersion'),
    // lngJava
-   ('', 'boolean', '', '', 'byte', 'int', 'int', 'long', 'long', 'TID',
+   ('', 'boolean', '', '', 'byte', 'int', 'int', 'long', 'long', 'long', 'TID',
     'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime', 'BigDecimal',
     'single', 'double', 'double', 'String', 'String', 'Object', 'byte[]',
     'String', 'byte[]', '', '', 'Object', '', 'TID', '', 'TRecordVersion'),
    // lngTypeScript
-   ('', 'boolean', '', '', 'number', 'number', 'number', 'number',
+   ('', 'boolean', '', '', 'number', 'number', 'number', 'number', 'number',
     'number', 'mORMot.TID', 'mORMot.TRecordReference', 'mORMot.TTimeLog',
     'mORMot.TModTime', 'mORMot.TCreateTime', 'number', 'number', 'number',
     'mORMot.TDateTime', 'string', 'string', 'any', 'mORMot.TSQLRawBlob',
@@ -326,8 +326,8 @@ const
   TYPES_SIMPLE: array[TJSONCustomParserRTTIType] of TWrapperType = (
   //ptArray, ptBoolean, ptByte, ptCardinal, ptCurrency, ptDouble, ptExtended,
     wArray, wBoolean,   wByte,  wCardinal,  wCurrency,  wDouble,  wDouble,
-  //ptInt64, ptInteger, ptRawByteString, ptRawJSON, ptRawUTF8, ptRecord,
-    wInt64,  wInteger,  wBlob,           wRawJSON,  wRawUTF8,  wRecord,
+  //ptInt64, ptInteger, ptQWord, ptRawByteString, ptRawJSON, ptRawUTF8, ptRecord,
+    wInt64,  wInteger,  wQWord,  wBlob,           wRawJSON,  wRawUTF8,  wRecord,
   //ptSingle, ptString, ptSynUnicode, ptDateTime, ptDateTimeMS,
     wSingle,  wString,  wRawUTF8,     wDateTime,  wDateTime,
   //ptGUID, ptID, ptTimeLog,
@@ -861,7 +861,7 @@ begin
     AddUnit(typInfo^.ClassType^.UnitName,@result);
   end;
   case typ of
-  wBoolean,wByte,wWord,wInteger,wCardinal,wInt64,wID,wReference,wTimeLog,
+  wBoolean,wByte,wWord,wInteger,wCardinal,wInt64,wQWord,wID,wReference,wTimeLog,
   wModTime,wCreateTime,wSingle,wDouble,wRawUTF8,wString:
     ; // simple types have no special marshalling
   wDateTime:

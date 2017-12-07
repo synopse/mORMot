@@ -1514,7 +1514,7 @@ implementation
 uses
   SynFPCTypInfo // small wrapper unit around FPC's TypInfo.pp
   {$ifdef Linux}
-  , SynFPCLinux,BaseUnix, Unix, dynlibs
+  , SynFPCLinux, BaseUnix, Unix, Errors, dynlibs
   {$endif} ;
 {$endif}
 
@@ -4103,7 +4103,9 @@ begin
   fWriter.AddShort('" (');
 {$else}
 begin
-  fWriter.AddShort('Error ');
+  fWriter.AddShort('Error "');
+  fWriter.AddAnsiString(StrError(Error), twOnSameLine);
+  fWriter.AddShort('" (');
 {$endif}
   fWriter.Add(Error);
   fWriter.Add(')',' ');
