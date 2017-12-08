@@ -11989,7 +11989,7 @@ function BinToBase64uri(const s: RawByteString): RawUTF8; overload;
 function BinToBase64uri(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
 
 /// conversion from any Base64 encoded value into URI-compatible encoded text
-// - warning: will modify the supplied base64 string in-place 
+// - warning: will modify the supplied base64 string in-place
 // - in comparison to Base64 standard encoding, will trim any right-sided '='
 // unsignificant characters, and replace '+' or '/' by '_' or '-'
 procedure Base64ToURI(var base64: RawUTF8);
@@ -39304,7 +39304,15 @@ begin
   field := @info^.ManagedFields[0];
   for F := 1 to info^.ManagedCount do begin
   {$endif}
+    {$ifdef HASDIRECTTYPEINFO} // inlined DeRef()
+    fieldinfo := field^.TypeInfo;
+    {$else}
+    {$ifdef CPUINTEL}
+    fieldinfo := PPointer(field^.TypeInfo)^;
+    {$else}
     fieldinfo := DeRef(field^.TypeInfo);
+    {$endif}
+    {$endif}
     {$ifdef FPC_OLDRTTI} // FPC did include RTTI for unmanaged fields! :)
     if not (fieldinfo^.Kind in tkManagedTypes) then begin
       inc(field);
@@ -39481,7 +39489,15 @@ begin
   {$else}
   for F := 1 to info^.ManagedCount do begin
   {$endif}
+    {$ifdef HASDIRECTTYPEINFO} // inlined DeRef()
+    fieldinfo := field^.TypeInfo;
+    {$else}
+    {$ifdef CPUINTEL}
+    fieldinfo := PPointer(field^.TypeInfo)^;
+    {$else}
     fieldinfo := DeRef(field^.TypeInfo);
+    {$endif}
+    {$endif}
     {$ifdef FPC_OLDRTTI} // FPC did include RTTI for unmanaged fields! :)
     if not (fieldinfo^.Kind in tkManagedTypes) then begin
       inc(field);
