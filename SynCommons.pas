@@ -9627,6 +9627,9 @@ type
     /// get the TAlgoCompress instance corresponding to the supplied AlgoID
     // - returns nil if no algorithm was identified
     class function Algo(AlgoID: byte): TAlgoCompress; overload;
+    /// returns the algorithm name, from its classname
+    // - e.g. TAlgoSynLZ->'SynLZ' TAlgoLizard->'Lizard'
+    class function AlgoName: TGUIDShortString;
   end;
 
   /// implement our fast SynLZ compression as a TAlgoCompress class
@@ -11756,7 +11759,7 @@ procedure BinToHexDisplayLower(Bin, Hex: PAnsiChar; BinBytes: integer); overload
 function BinToHexDisplayLower(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
 
 /// fast conversion from binary data into hexa lowercase chars, ready to be
-// used as a TFileName
+// used as a convenient TFileName prefix
 function BinToHexDisplayFile(Bin: PAnsiChar; BinBytes: integer): TFileName;
 
 /// append one byte as hexadecimal char pairs, into a text buffer
@@ -11990,6 +11993,10 @@ function BinToBase64uri(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
 // - in comparison to Base64 standard encoding, will trim any right-sided '='
 // unsignificant characters, and replace '+' or '/' by '_' or '-'
 procedure Base64ToURI(var base64: RawUTF8);
+
+/// low-level conversion from a binary buffer into Base64-like URI-compatible encoded text
+// - you should rather use the overloaded BinToBase64uri() functions
+procedure Base64uriEncode(rp, sp: PAnsiChar; len: cardinal);
 
 /// retrieve the expected encoded length after Base64-URI process
 // - in comparison to Base64 standard encoding, will trim any right-sided '='
@@ -17789,7 +17796,7 @@ type
     // - returns the number of bytes of the resulting file
     // - actually call the SaveTo method for persistence
     function SaveToFile(const aFileName: TFileName; nocompression: boolean=false;
-      ForcedAlgo: TAlgoCompress=nil): PtrUInt;
+      BufLen: integer=65536; ForcedAlgo: TAlgoCompress=nil): PtrUInt;
     /// one optional text associated with this storage
     // - you can define it as published to serialize its value
     property Name: RawUTF8 read fName;
@@ -50395,10 +50402,10 @@ begin
 end;
 
 function TSynPersistentStore.SaveToFile(const aFileName: TFileName;
-  nocompression: boolean; ForcedAlgo: TAlgoCompress): PtrUInt;
+  nocompression: boolean; BufLen: integer; ForcedAlgo: TAlgoCompress): PtrUInt;
 var temp: RawByteString;
 begin
-  SaveTo(temp,nocompression,65536,ForcedAlgo);
+  SaveTo(temp,nocompression,BufLen,ForcedAlgo);
   if FileFromString(temp,aFileName) then
     result := length(temp) else
     result := 0;
@@ -61534,6 +61541,17 @@ begin
         inc(ptr);
   end;
   result := nil;
+end;
+
+class function TAlgoCompress.AlgoName: TGUIDShortString;
+var s: PShortString;
+begin
+  s := ClassNameShort(self);
+  if IdemPChar(@s^[1],'TALGO') then begin
+    result[0] := AnsiChar(ord(s^[0])-5);
+    MoveFast(s^[6],result[1],ord(result[0]));
+  end else
+    result := s^;
 end;
 
 function TAlgoCompress.AlgoHash(Previous: cardinal; Data: pointer; DataLen: integer): cardinal;
