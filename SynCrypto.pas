@@ -11945,22 +11945,25 @@ begin
 end;
 
 function TAESPRNG.RandomPassword(Len: integer): RawUTF8;
-const CHARS: array[0..137] of AnsiChar =
+const CHARS: array[0..127] of AnsiChar =
   'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'+
-  'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789$.:()?%!-+*/@#';
-var i,j: integer;
+  ':bcd.fgh(jklmn)pqrst?vwxyz+BCD%FGH!JKLMN/PQRST@VWX#Z$.:()?%!-+*/@#';
+var i: integer;
     haspunct: boolean;
+    P: PAnsiChar;
 begin
   repeat
     result := FillRandom(Len);
     haspunct := false;
+    P := pointer(result);
     for i := 1 to Len do begin
-      j := ord(result[i]) mod sizeof(CHARS);
-      if j>=124 then
+      P^ := CHARS[ord(P^) mod sizeof(CHARS)];
+      if not haspunct and
+         not (ord(P^) in [ord('A')..ord('Z'),ord('a')..ord('z'),ord('0')..ord('9')]) then
         haspunct := true;
-      result[i] := CHARS[j];
+      inc(P);
     end;
-  until (Len<=2) or (haspunct and (LowerCase(result)<>result));
+  until (Len<=4) or (haspunct and (LowerCase(result)<>result));
 end;
 
 procedure SetMainAESPRNG;
