@@ -9635,7 +9635,7 @@ type
   /// implement our fast SynLZ compression as a TAlgoCompress class
   // - please use the AlgoSynLZ global variable methods instead of the deprecated
   // SynLZCompress/SynLZDecompress wrapper functions
-  TAlgoSynLz = class(TAlgoCompress)
+  TAlgoSynLZ = class(TAlgoCompress)
   public
     /// returns 1 as genuine byte identifier for SynLZ
     function AlgoID: byte; override;
@@ -33984,22 +33984,21 @@ var c1, c2, c3, c4: cardinal;
     PLimit, PEnd: PAnsiChar;
 begin
   PEnd := P + len;
-  if len >= 16 then
-    begin
-      PLimit := PEnd - 16;
-      c3 := crc;
-      c2 := c3 + PRIME32_2;
-      c1 := c2 + PRIME32_1;
-      c4 := c3 - PRIME32_1;
-      repeat
-        c1 := PRIME32_1 * Rol13(c1 + PRIME32_2 * PCardinal(P)^);
-        c2 := PRIME32_1 * Rol13(c2 + PRIME32_2 * PCardinal(P+4)^);
-        c3 := PRIME32_1 * Rol13(c3 + PRIME32_2 * PCardinal(P+8)^);
-        c4 := PRIME32_1 * Rol13(c4 + PRIME32_2 * PCardinal(P+12)^);
-        inc(P, 16);
-      until not (P <= PLimit);
-      result := RolDWord(c1, 1) + RolDWord(c2, 7) + RolDWord(c3, 12) + RolDWord(c4, 18);
-    end else
+  if len >= 16 then begin
+    PLimit := PEnd - 16;
+    c3 := crc;
+    c2 := c3 + PRIME32_2;
+    c1 := c2 + PRIME32_1;
+    c4 := c3 - PRIME32_1;
+    repeat
+      c1 := PRIME32_1 * Rol13(c1 + PRIME32_2 * PCardinal(P)^);
+      c2 := PRIME32_1 * Rol13(c2 + PRIME32_2 * PCardinal(P+4)^);
+      c3 := PRIME32_1 * Rol13(c3 + PRIME32_2 * PCardinal(P+8)^);
+      c4 := PRIME32_1 * Rol13(c4 + PRIME32_2 * PCardinal(P+12)^);
+      inc(P, 16);
+    until not (P <= PLimit);
+    result := RolDWord(c1, 1) + RolDWord(c2, 7) + RolDWord(c3, 12) + RolDWord(c4, 18);
+  end else
     result := crc + PRIME32_5;
   inc(result, len);
   while P <= PEnd - 4 do begin
@@ -37135,7 +37134,7 @@ begin // see http://www.garykessler.net/library/file_sigs.html
           result := true;
         else
         case PCardinalArray(Content)^[1] of // 4 byte offset
-        1{TAlgoSynLz.AlgoID}: // crc32 01 00 00 00 crc32 = Compress() header
+        1{TAlgoSynLZ.AlgoID}: // crc32 01 00 00 00 crc32 = Compress() header
           result := PCardinalArray(Content)^[0]<>PCardinalArray(Content)^[2];
         $70797466, // mp4,mov = 66 74 79 70 [33 67 70 35/4D 53 4E 56..]
         $766f6f6d: // mov = 6D 6F 6F 76
@@ -61801,36 +61800,36 @@ begin
 end;
 
 
-{ TAlgoSynLz }
+{ TAlgoSynLZ }
 
-function TAlgoSynLz.AlgoID: byte;
+function TAlgoSynLZ.AlgoID: byte;
 begin
   result := 1;
 end;
 
-function TAlgoSynLz.AlgoCompress(Plain: pointer; PlainLen: integer;
+function TAlgoSynLZ.AlgoCompress(Plain: pointer; PlainLen: integer;
   Comp: pointer): integer;
 begin
   result := SynLZcompress1(Plain,PlainLen,Comp);
 end;
 
-function TAlgoSynLz.AlgoCompressDestLen(PlainLen: integer): integer;
+function TAlgoSynLZ.AlgoCompressDestLen(PlainLen: integer): integer;
 begin
   result := SynLZcompressdestlen(PlainLen);
 end;
 
-function TAlgoSynLz.AlgoDecompress(Comp: pointer; CompLen: integer;
+function TAlgoSynLZ.AlgoDecompress(Comp: pointer; CompLen: integer;
   Plain: pointer): integer;
 begin
   result := SynLZdecompress1(Comp,CompLen,Plain);
 end;
 
-function TAlgoSynLz.AlgoDecompressDestLen(Comp: pointer): integer;
+function TAlgoSynLZ.AlgoDecompressDestLen(Comp: pointer): integer;
 begin
   result := SynLZdecompressdestlen(Comp);
 end;
 
-function TAlgoSynLz.AlgoDecompressPartial(Comp: pointer;
+function TAlgoSynLZ.AlgoDecompressPartial(Comp: pointer;
   CompLen: integer; Partial: pointer; PartialLenMax: integer): integer;
 begin
   result := SynLZdecompress1partial(Comp,CompLen,Partial,PartialLenMax);
@@ -65220,7 +65219,7 @@ initialization
   InitSynCommonsConversionTables;
   RetrieveSystemInfo;
   SetExecutableVersion(0,0,0,0);
-  AlgoSynLZ := TAlgoSynLz.Create;
+  AlgoSynLZ := TAlgoSynLZ.Create;
   TTextWriter.RegisterCustomJSONSerializerFromText([
     TypeInfo(TFindFilesDynArray),
      'Name:string Attr:Integer Size:Int64 Timestamp:TDateTime',

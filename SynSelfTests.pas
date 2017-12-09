@@ -9476,6 +9476,7 @@ procedure TTestCompression._TAlgoCompress;
   end;
 begin
   TestAlgo(AlgoSynLZ);
+  Check(AlgoSynLZ.AlgoName='SynLZ');
   {$ifdef MSWINDOWS}
   if (Lizard=nil) and FileExists(ExeVersion.ProgramFilePath+LIZARD_LIB_NAME) then
     Lizard := TSynLizardDynamic.Create;
@@ -9486,6 +9487,7 @@ begin
   {$ifndef DELPHI5OROLDER}
   TestAlgo(AlgoDeflate);
   TestAlgo(AlgoDeflateFast);
+  Check(AlgoDeflateFast.AlgoName ='DeflateFast');
   {$endif}
 end;
 

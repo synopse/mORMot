@@ -9903,8 +9903,6 @@ const
   hWebSocketApiFirst = hWebSocketCompleteUpgrade;
 
 const
-  WINHTTP_DLL = 'winhttp.dll';
-
   WinHttpNames: array[TWinHttpAPIs] of PChar = (
     'WinHttpOpen', 'WinHttpSetStatusCallback', 'WinHttpConnect',
     'WinHttpOpenRequest', 'WinHttpCloseHandle', 'WinHttpAddRequestHeaders',
@@ -9919,10 +9917,10 @@ var api: TWinHttpAPIs;
 begin
   if WinHttpAPI.LibraryHandle<>0 then
     exit; // already loaded
-  WinHttpAPI.LibraryHandle := SafeLoadLibrary(WINHTTP_DLL);
+  WinHttpAPI.LibraryHandle := SafeLoadLibrary(winhttpdll);
   WinHttpAPI.WebSocketEnabled := true; // WebSocketEnabled if all functions are available
   if WinHttpAPI.LibraryHandle=0 then
-    raise ECrtSocket.CreateFmt('Unable to load library %s',[WINHTTP_DLL]);
+    raise ECrtSocket.CreateFmt('Unable to load library %s',[winhttpdll]);
   P := @@WinHttpAPI.Open;
   for api := low(api) to high(api) do begin
     P^ := GetProcAddress(WinHttpAPI.LibraryHandle,WinHttpNames[api]);
@@ -9930,7 +9928,7 @@ begin
       if api<hWebSocketApiFirst then begin
         FreeLibrary(WinHttpAPI.LibraryHandle);
         WinHttpAPI.LibraryHandle := 0;
-        raise ECrtSocket.CreateFmt('Unable to find %s() in %s',[WinHttpNames[api], WINHTTP_DLL]);
+        raise ECrtSocket.CreateFmt('Unable to find %s() in %s',[WinHttpNames[api], winhttpdll]);
       end else
         WinHttpAPI.WebSocketEnabled := false; // e.g. version is lower than Windows 8
     inc(P);
