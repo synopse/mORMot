@@ -36,6 +36,7 @@ uses
   mORMotUILogin,
   mORMotToolBar,
   SynTaskDialog, // also fix QC 37403 for Delphi 6/7/2006
+  SynTable, // for TSynFilter and TSynValidate
   SynDB,
   SynDBOracle,
   SynOleDB,

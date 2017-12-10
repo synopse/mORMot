@@ -60,6 +60,7 @@ uses
   SynCommons,
   SynCrypto,
   SynTests,
+  SynTable, // for TSynFilter and TSynValidate
   mORMot,
   mORMotDDD,
   dddDomUserTypes,

@@ -1272,7 +1272,7 @@ uses
   SynSSPIAuth,
 {$endif}
   SynCommons,
-  SynTable, // for TSynTableStatement
+  SynTable, // for SynTable, TSynFilter and TSynValidate
   SynLog,
   SynCrypto, // SHA-256 and IProtocol
   SynTests;  // for mocks integration

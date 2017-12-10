@@ -67,6 +67,7 @@ uses
   SynCommons,
   SynLog,
   SynCrypto,
+  SynTable, // for TSynFilter and TSynValidate
   mORMot;
 
 { some mORMot conventions about DDD implementation:

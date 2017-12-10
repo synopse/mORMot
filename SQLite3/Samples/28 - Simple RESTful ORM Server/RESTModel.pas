@@ -4,6 +4,7 @@ interface
 
 uses
   SynCommons,
+  SynTable, // for TSynValidateText
   mORMot;
 
 type
