@@ -743,8 +743,9 @@ unit SynCommons;
   - extend TFileVersion by version resources stored in strings in the
     first locale section. Windows only
   - added Latin-1  ISO/IEC 8859-1 Code Page support to TSynAnsiConvert
-  - move TSynTableStatement/TSynTable to a new SynTable.pas unit, to circumvent
-    limitation to 65535 code lines in Delphi 5/6/7 (internal error PRO-3006)
+  - move TSynTableStatement/TSynTable/TSynFilter/TSynValidate to a new
+    SynTable.pas unit, to circumvent limitation to 65535 code lines in
+    Delphi 5/6/7 (internal error PRO-3006)
 
 *)
 
@@ -1510,13 +1511,13 @@ type
   TSynTempBuffer = object
   {$endif}
   public
-    /// the text length, in bytes, excluding the trailing #0
+    /// the text/binary length, in bytes, excluding the trailing #0
     len: integer;
-    /// where the text has been copied
+    /// where the text/binary is available (and any Source has been copied)
     // - equals nil if len=0
     buf: pointer;
-    /// initialize a temporary copy of the supplied text supplied as RawByteString
-    // - will also allocate and copy the ending #0
+    /// initialize a temporary copy of the content supplied as RawByteString
+    // - will also allocate and copy the ending #0 (even for binary)
     procedure Init(const Source: RawByteString); overload;
     /// initialize a temporary copy of the supplied text buffer, ending with #0
     function Init(Source: PUTF8Char): PUTF8Char; overload;
@@ -3231,6 +3232,11 @@ function IdemFileExt(p: PUTF8Char; extup: PAnsiChar; sepChar: AnsiChar='.'): Boo
 /// internal function, used to retrieve a UCS4 char (>127) from UTF-8
 // - not to be called directly, but from inlined higher-level functions
 // - here U^ shall be always >= #80
+// - typical use is as such:
+// !  ch := ord(P^);
+// !  if ch and $80=0 then
+// !    inc(P) else
+// !    ch := GetHighUTF8UCS4(P);
 function GetHighUTF8UCS4(var U: PUTF8Char): cardinal;
 
 /// retrieve the next UCS4 value stored in U, then update the U pointer
@@ -8731,12 +8737,12 @@ type
     // - if no Stream is supplied, a temporary memory stream will be created
     // (it's faster to supply one, e.g. any TSQLRest.TempMemoryStream)
     constructor Create(aStream: TStream; Expand, withID: boolean;
-      const Fields: TSQLFieldBits); overload;
+      const Fields: TSQLFieldBits; aBufSize: integer=8192); overload;
     /// the data will be written to the specified Stream
     // - if no Stream is supplied, a temporary memory stream will be created
     // (it's faster to supply one, e.g. any TSQLRest.TempMemoryStream)
     constructor Create(aStream: TStream; Expand, withID: boolean;
-      const Fields: TSQLFieldIndexDynArray=nil); overload;
+      const Fields: TSQLFieldIndexDynArray=nil; aBufSize: integer=8192); overload;
     /// rewind the Stream position and write void JSON object
     procedure CancelAllVoid;
     /// write or init field names for appropriate JSON Expand later use
@@ -10187,6 +10193,11 @@ type
     // variable-length integer encoding or other specialized algorithm,
     // depending on the data layout
     procedure WriteVarUInt32Array(const Values: TIntegerDynArray; ValuesCount: integer;
+      DataLayout: TFileBufferWriterKind);
+    /// append cardinal values (NONE must be negative!) using 32-bit
+    // variable-length integer encoding or other specialized algorithm,
+    // depending on the data layout
+    procedure WriteVarUInt32Values(Values: PIntegerArray; ValuesCount: integer;
       DataLayout: TFileBufferWriterKind);
     /// append UInt64 values using 64-bit variable length integer encoding
     // - if Offset is TRUE, then it will store the difference between
@@ -13821,12 +13832,13 @@ procedure FixedWaitForever(Event: TEvent);
 type
   /// to be used instead of TMemoryStream, for speed
   // - allocates memory from Delphi heap (i.e. FastMM4/SynScaleMM)
-  // and not GlobalAlloc()
+  // and not GlobalAlloc(), as was the case for oldest versions of Delphi
   // - uses bigger growing size of the capacity
+  // - consider using TRawByteStringStream, as we do in our units
 {$ifdef LVCL} // LVCL already use Delphi heap instead of GlobalAlloc()
   THeapMemoryStream = TMemoryStream;
 {$else}
-  {$ifdef FPC} // FPC already use Delphi heap instead of GlobalAlloc()
+  {$ifdef FPC} // FPC already use heap instead of GlobalAlloc()
   THeapMemoryStream = TMemoryStream;
   {$else}
   {$ifdef MSWINDOWS}
@@ -37370,7 +37382,7 @@ var M,D: word;
   LanguageInfo: String;
   TI, I: Integer;
 {$endif}
-{$endif}
+{$endif MSWINDOWS}
 begin
   fFileName := aFileName;
   {$ifdef MSWINDOWS}
@@ -37418,7 +37430,7 @@ begin
       end;
     end;
   end;
-  {$else}
+  {$else MSWINDOWS}
   {$ifdef FPCUSEVERSIONINFO} // from FPC 3.0, if enabled in Synopse.inc
   if aFileName<>'' then begin
     VI := TVersionInfo.Create;
@@ -37465,8 +37477,8 @@ begin
       VI.Free;
     end;
   end;
-  {$endif}
-  {$endif}
+  {$endif FPCUSEVERSIONINFO}
+  {$endif MSWINDOWS}
   SetVersion(aMajor,aMinor,aRelease,aBuild);
   if fBuildDateTime=0 then  // get build date from file age
     fBuildDateTime := FileAgeToDateTime(aFileName);
@@ -37655,11 +37667,8 @@ end;
 
 {$ifdef BSD}
 function mprotect(Addr: Pointer; Len: size_t; Prot: Integer): Integer;
-  {$ifdef Darwin}
-  cdecl external 'libc.dylib' name 'mprotect';
-  {$else}
-  cdecl external 'libc.so' name 'mprotect';
-  {$endif}
+  {$ifdef Darwin} cdecl external 'libc.dylib' name 'mprotect';
+  {$else} cdecl external 'libc.so' name 'mprotect'; {$endif}
   {$define USEMPROTECT}
 {$endif}
 {$ifdef KYLIX3}
@@ -37742,13 +37751,9 @@ end;
 
 {$endif CPUINTEL}
 
-
 {$ifndef LVCL}
 {$ifndef FPC}
 {$ifdef MSWINDOWS}
-
-{ THeapMemoryStream = faster TMemoryStream using FastMM4/SynScaleMM heap,
-  not windows.GlobalAlloc() }
 
 const
   MemoryDelta = $8000; // 32 KB granularity (must be a power of 2)
@@ -37788,7 +37793,6 @@ end;
 {$endif MSWINDOWS}
 {$endif FPC}
 {$endif LVCL}
-
 
 { TSortedWordArray }
 
@@ -38577,25 +38581,21 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
 end;
 
 procedure _DynArrayClear(var a: Pointer; typeInfo: Pointer);
-{$ifdef FPC}
-  [external name 'FPC_DYNARRAY_CLEAR'];
-{$else}
+{$ifdef FPC} [external name 'FPC_DYNARRAY_CLEAR']; {$else}
 asm
-{$ifdef CPU64}
+  {$ifdef CPU64}
   .NOFRAME
-{$endif}
+  {$endif}
   jmp System.@DynArrayClear
 end;
 {$endif}
 
 procedure _FinalizeArray(p: Pointer; typeInfo: Pointer; elemCount: PtrUInt);
-{$ifdef FPC}
-  [external name 'FPC_FINALIZE_ARRAY'];
-{$else}
+{$ifdef FPC} [external name 'FPC_FINALIZE_ARRAY']; {$else}
 asm
-{$ifdef CPU64}
+  {$ifdef CPU64}
   .NOFRAME
-{$endif}
+  {$endif}
   jmp System.@FinalizeArray
 end;
 {$endif}
@@ -39532,313 +39532,6 @@ end;
     it fetch the corresponding cache line from memory into the cache hierarchy.
     By-passing the cache should enhance move() speed of big memory blocks. }
 
-procedure MoveJBon; // Johan Bontes refactored revision
-asm // rcx=Source, rdx=Dest, r8=Count
-               .noframe
-               .align 16
-               sub rcx,rdx
-               push rbx                 //allow better alignment of loops (saves a cycle).
-               mov rax,r8
-               mov r11d,128             //code shink in prefetch loop
-               je @done
-               jnc @MoveForwards
-               add rax,rcx
-               jc @MoveBackwards
-@MoveForwards: cmp r8,8
-               jl @Below8
-               test dl,07H
-               jz @IsAbove32
-               test dl,01H
-               jz @TryMoveWord
-               mov al,[rcx+rdx]
-               dec r8
-               mov [rdx],al
-               dec rdx
-@TryMoveWord:  test dl,02H
-               jz @TryMoveDWord
-               mov ax,[rcx+rdx]
-               sub r8,2
-               mov [rdx],ax
-               add rdx,2
-@TryMoveDWord: test dl,04H
-               jz @IsAbove32
-               mov eax,[rcx+rdx]
-               sub r8,4
-               mov [rdx],eax
-               add rdx,4
-@IsAbove32:    mov rbx,r8
-               shr rbx,5
-               jnz @Above32
-@IsBelow8:     mov rax,r8
-               shr eax,3
-               jz @Below8
-@Loop8:        dec eax
-               mov rbx,[rcx+rdx]
-               mov [rdx],rbx
-               lea rdx,[rdx+8]
-               jnz @Loop8
-               and r8d,7
-@Below8:       test r8,r8
-               jle @done
-@MovePerByte:  dec r8
-               mov al,[rcx+rdx]
-               mov [rdx],al
-               lea rdx,[rdx+1]
-               jnz @MovePerByte
-@done:         pop rbx
-               ret
-               nop
-@Above32:      cmp rbx,8192
-               jc @Below8192
-               mov eax,32
-               cmp rcx,4096
-               jnc @Prefetch_4K
-@Below8192:
-@loop8192:     dec ebx
-               mov rax,[rcx+rdx]
-               mov r11,[rcx+rdx+08H]
-               mov [rdx],rax
-               mov [rdx+08H],r11
-               mov rax,[rcx+rdx+10H]
-               mov r11,[rcx+rdx+18H]
-               mov [rdx+10H],rax
-               mov [rdx+18H],r11
-               lea rdx,rdx+32
-               jnz @Loop8192
-               and r8d,1FH
-               jmp @IsBelow8
-@Prefetch_4K:  //assert eax=32
-@PrefetchLoop: prefetchnta [rcx+rdx]
-               prefetchnta [rcx+rdx+40H]
-               add rdx,r11
-               dec eax
-               jnz @PrefetchLoop
-               sub rdx,4096
-               mov eax,64
-               db $0F,$1F,$40,$00                           //nop4
-@Loop64:       mov rbx,[rcx+rdx]
-               mov r10,[rcx+rdx+08H]
-               db $48,$0F,$C3,$1A     // movnti [rdx],rbx
-               db $4C,$0F,$C3,$52,$08 // movnti [rdx+08H],r10
-               mov rbx,[rcx+rdx+10H]
-               mov r10,[rcx+rdx+18H]
-               dec eax
-               db $48,$0F,$C3,$5A,$10 // movnti [rdx+10H],rbx
-               db $4C,$0F,$C3,$52,$18 // movnti [rdx+18],r10
-               mov rbx,[rcx+rdx+20H]
-               mov r10,[rcx+rdx+28H]
-               db $48,$0F,$C3,$5A,$20 // movnti [rdx+20H],rbx
-               db $4C,$0F,$C3,$52,$28 // movnti [rdx+28H],r10
-               mov rbx,[rcx+rdx+30H]
-               mov r10,[rcx+rdx+38H]
-               db $48,$0F,$C3,$5A,$30 // movnti [rdx+30H],rbx
-               db $4C,$0F,$C3,$52,$38 // movnti [rdx+38H],r10
-               lea rdx,rdx+64
-               jnz @Loop64
-               cmp r8,(4096*2)
-               lea r8,r8-4096
-               mov eax,32
-               jnc @Prefetch_4K
-               mfence
-               jmp @IsAbove32
-
-@MoveBackwards:add rdx,r8
-               cmp r8,8
-               jl @IsEmpty
-               test dl,07H
-               jz @IsAbove32_2
-               test dl,01H
-               jz @TryMoveWord2
-               dec rdx
-               mov al,[rcx+rdx]
-               dec r8
-               mov [rdx],al
-@TryMoveWord2: test dl,02H
-               jz @TryMoveDWord2
-               sub rdx,2
-               mov ax,[rcx+rdx]
-               sub r8,2
-               mov [rdx],ax
-@TryMoveDWord2:test dl,04H
-               jz @IsAbove32_2
-               sub rdx,4
-               mov eax,[rcx+rdx]
-               sub r8,4
-               rep mov [rdx],eax
-@IsAbove32_2:  rep mov rbx,r8
-               shr rbx,5
-               jnz @Below8K
-@IsBelow8_2:   rep mov rbx,r8
-               shr rbx,3
-               jz @IsEmpty
-@Loop8_2:      sub rdx,8
-               mov rax,[rcx+rdx]
-               dec rbx
-               mov [rdx],rax
-               jnz @Loop8_2
-               and r8d,07H
-@IsEmpty:      test r8,r8
-               jle @Return
-@MovePerByte2: dec rdx
-               mov al,[rcx+rdx]
-               dec r8
-               mov  [rdx],al
-               jnz @MovePerByte2
-@Return:       pop rbx
-               ret
-@Below8K:      cmp rbx,8192
-               jc @Loop32
-               cmp rcx,-4096
-               jc @Prefetch_4K2
-@Loop32:       sub rdx,32
-               dec ebx
-               mov rax,[rcx+rdx+18H]
-               mov r10,[rcx+rdx+10H]
-               mov [rdx+18H],rax
-               mov [rdx+10H],r10
-               mov rax,[rcx+rdx+8H]
-               mov r10,[rcx+rdx]
-               mov [rdx+8H],rax
-               mov [rdx],r10
-               jnz @Loop32
-               and r8d,1FH
-               jmp @IsBelow8_2
-@Prefetch_4K2: rep mov eax,32
-@PrefetchLoop2:sub rdx,r11
-               prefetchnta [rcx+rdx]
-               prefetchnta [rcx+rdx+40H]
-               dec eax
-               jnz @PrefetchLoop2
-               add rdx,4096
-               mov eax,64              //eax is always zero at this point.
-               db $66,$0F,$1F,$00
-@Loop64_2:     sub rdx,64
-               dec eax
-               mov rbx,[rcx+rdx+38H]
-               mov r10,[rcx+rdx+30H]
-               db $48,$0F,$C3,$5A,$38 // movnti [rdx+38H],rbx
-               db $4C,$0F,$C3,$52,$30 // movnti [rdx+30H],r10
-               mov rbx,[rcx+rdx+28H]
-               mov r10,[rcx+rdx+20H]
-               db $48,$0F,$C3,$5A,$28 // movnti [rdx+28H],rbx
-               db $4C,$0F,$C3,$52,$20 // movnti [rdx+20H],r10
-
-               mov rbx,[rcx+rdx+18H]
-               mov r10,[rcx+rdx+10H]
-               db $48,$0F,$C3,$5A,$18 // movnti [rdx+18H],rbx
-               db $4C,$0F,$C3,$52,$10 // movnti [rdx+10H],r10
-               mov rbx,[rcx+rdx+8H]
-               mov r10,[rcx+rdx]
-               db $48,$0F,$C3,$5A,$08 // movnti [rdx+8H],rbx
-               db $4C,$0F,$C3,$12     // movnti [rdx],r10
-               jnz @Loop64_2
-               cmp r8,(4096*2)
-               lea r8,r8-4096
-               jnc @Prefetch_4K2
-               mfence
-               jmp @IsAbove32_2
-end;
-
-procedure FillCharJBon; // Johan Bontes refactored revision
-asm
-              .noframe
-              .align 16
-              movzx r8,r8b           //There's no need to optimize for count <= 3
-              mov rax,$0101010101010101
-              mov r11d,edx
-              imul rax,r8            //fill rax with value.
-              cmp rdx,63             //fix: allow fills > 4GB
-              jg  @Above32
-@Below32:     and  r11d,not(3)
-              lea   r10,[rip + @SmallFill + (15*4)]
-              jz @SizeIs3
-              sub   r10,r11
-              jmp   r10
-              db $66,$90
-@SmallFill:   rep mov [rcx+56], eax
-              rep mov [rcx+52], eax
-              rep mov [rcx+48], eax
-              rep mov [rcx+44], eax
-              rep mov [rcx+40], eax
-              rep mov [rcx+36], eax
-              rep mov [rcx+32], eax
-              rep mov [rcx+28], eax
-              rep mov [rcx+24], eax
-              rep mov [rcx+20], eax
-              rep mov [rcx+16], eax
-              rep mov [rcx+12], eax
-              rep mov [rcx+08], eax
-              rep mov [rcx+04], eax
-              mov [rcx],eax
-@Fallthough:  mov [rcx+rdx-4],eax  //unaligned write to fix up tail
-              rep ret
-@SizeIs3:     lea edx,[edx*2+edx]           //r9 <= 3  r9*4
-              add r10,$1B                   //reuse rip (saves 4 bytes)
-              sub r10,rdx
-              jmp r10
-@do3:         mov [rcx+2],al
-@do2:         mov [rcx+1],al
-@do1:         mov [rcx],al
-              ret
-@do0:         rep ret
-@Above32:     mov r11,rcx
-              mov r8b,7              //code shrink to help alignment.
-              lea r9,[rcx+rdx]       //r9=end of array
-              sub rdx,8
-              mov [rcx],rax
-              add rcx,8
-              and r11,r8             //and 7 See if dest is aligned
-              add rdx,r11
-              mov [r9-8],rax         //do a tail write to align.
-@tail:        and r9,r8              //and 7 is tail aligned?
-@tailwrite:   sub rdx,r9             //dec(count, tailcount)
-@alignOK:     mov r10,rdx
-              xor rcx,r11            //align dest
-              shr r10,6
-              and edx,(32+16+8)      //count the partial iterations of the loop
-              mov r8b,64             //code shrink to help alignment.
-              mov r9,rdx
-              jz @Initloop64
-@partialloop: lea r11,[rip + @partial +(4*7)] //start at the end of the loop
-              shr r9,1               //every instruction is 4 bytes
-              sub r11,r9             //step back as needed
-              add rcx,rdx            //add the partial loop count to dest
-              test r10,r10           //do we need to do more loops after partial?
-              stc                    //CF=1: we're in a partial loop
-              jmp r11                //do a partial loop
-
-@Initloop64:  mov rdx,r10
-              shr r10,(19-6)         //use non-temporal move for > 512kb
-              jnz @InitFillHuge
-@Doloop64:    add rcx,r8
-              dec edx
-              mov [rcx-64+00H],rax
-@partial:     mov [rcx-64+08H],rax
-              mov [rcx-64+10H],rax
-              mov [rcx-64+18H],rax
-              mov [rcx-64+20H],rax
-              mov [rcx-64+28H],rax
-              mov [rcx-64+30H],rax
-              mov [rcx-64+38H],rax
-              jnbe @DoLoop64         //repeat while not(partial) and not(done)
-              jnz @InitLoop64        //(re)start the loop if not done
-@done:        rep ret                //rep ret saves 25! cycles.
-              db $66,$90             //nop
-@InitFillHuge:
-@FillHuge:    add rcx,r8             // movdqnt is the same speed, but more hassle
-              dec rdx
-              db $48,$0F,$C3,$41,$C0 // movnti  [rcx-64+00H],rax
-              db $48,$0F,$C3,$41,$C8 // movnti  [rcx-64+08H],rax
-              db $48,$0F,$C3,$41,$D0 // movnti  [rcx-64+10H],rax
-              db $48,$0F,$C3,$41,$D8 // movnti  [rcx-64+18H],rax
-              db $48,$0F,$C3,$41,$E0 // movnti  [rcx-64+20H],rax
-              db $48,$0F,$C3,$41,$E8 // movnti  [rcx-64+28H],rax
-              db $48,$0F,$C3,$41,$F0 // movnti  [rcx-64+30H],rax
-              db $48,$0F,$C3,$41,$F8 // movnti  [rcx-64+38H],rax
-              jnz @FillHuge
-@donefillhuge:mfence
-end;
-
 procedure Movex64; // A. Bouchez' version
 asm // rcx=Source, rdx=Dest, r8=Count
         .noframe
@@ -40136,6 +39829,7 @@ asm  // rcx=Dest rdx=Count r8=Value
 @@done:
 end;
 
+{$ifdef WITH_ERMS} // x64 version only for Windows ABI 
 procedure MoveERMSB; // Ivy Bridge+ Enhanced REP MOVSB/STOSB CPUs
 asm // rcx=Source, rdx=Dest, r8=Count
         .noframe
@@ -40177,6 +39871,7 @@ asm // rcx=Dest, rdx=Count, r8b=Value
         pop     rdi
 @none:
 end;
+{$endif WITH_ERMS}
 
 function StrLenSSE2(S: pointer): PtrInt;
 asm // from GPL strlen64.asm by Agner Fog - www.agner.org/optimize
@@ -40605,14 +40300,8 @@ begin
   {$endif CPUINTEL}
   {$ifdef DELPHI5OROLDER}
   StrLen := @StrLenX86;
-  {$ifdef WITH_ERMS}
-  if cfERMS in CpuFeatures then begin
-    MoveFast := @MoveERMSB;
-    FillcharFast := @FillCharERMSB;
-  end else {$endif} begin
-    MoveFast := @MoveX87;
-    FillcharFast := @FillCharX87;
-  end;
+  MoveFast := @MoveX87;
+  FillcharFast := @FillCharX87;
   {$else DELPHI5OROLDER}
   {$ifdef CPU64}
   {$ifdef HASAESNI}
@@ -40620,14 +40309,11 @@ begin
     StrLen := @StrLenSSE42 else
   {$endif HASAESNI}
     StrLen := @StrLenSSE2;
-  {$ifdef WITH_ERMS}
+  {$ifdef WITH_ERMS}{$ifdef MSWINDOWS} // disabled (slower for small blocks)
   if cfERMS in CpuFeatures then begin
     MoveFast := @MoveERMSB;
     FillcharFast := @FillCharERMSB;
-  end else
-  {$endif WITH_ERMS} begin
-    //MoveFast := @MoveJBon; // Johan Bontes' is actually slower than RTL's
-    //FillcharFast := @FillCharJBon; // this Johan Bontes' version is buggy
+  end else {$endif}{$endif} begin
     MoveFast := @Movex64;
     FillCharFast := @Fillcharx64;
   end;
@@ -40642,7 +40328,7 @@ begin
     StrLen := @StrLenX86;
     FillcharFast := @FillCharX87;
   end;
-  {$ifdef WITH_ERMS}
+  {$ifdef WITH_ERMS} // disabled by default (much slower for small blocks)
   if cfERMS in CpuFeatures then begin
     MoveFast := @MoveERMSB;
     FillcharFast := @FillCharERMSB;
@@ -52875,17 +52561,17 @@ begin
 end;
 
 constructor TJSONWriter.Create(aStream: TStream; Expand, withID: boolean;
-  const Fields: TSQLFieldBits);
+  const Fields: TSQLFieldBits; aBufSize: integer);
 begin
-  Create(aStream,Expand,withID,FieldBitsToIndex(Fields));
+  Create(aStream,Expand,withID,FieldBitsToIndex(Fields),aBufSize);
 end;
 
 constructor TJSONWriter.Create(aStream: TStream; Expand, withID: boolean;
-  const Fields: TSQLFieldIndexDynArray);
+  const Fields: TSQLFieldIndexDynArray; aBufSize: integer);
 begin
   if aStream=nil then
     CreateOwnedStream else
-    inherited Create(aStream);
+    inherited Create(aStream,aBufSize);
   fExpand := Expand;
   fWithID := withID;
   fFields := Fields;
@@ -58764,23 +58450,27 @@ end;
 
 procedure TFileBufferWriter.WriteVarUInt32Array(const Values: TIntegerDynArray;
   ValuesCount: integer; DataLayout: TFileBufferWriterKind);
+begin
+  WriteVarUInt32Values(pointer(Values),ValuesCount,DataLayout);
+end;
+
+procedure TFileBufferWriter.WriteVarUInt32Values(Values: PIntegerArray;
+  ValuesCount: integer; DataLayout: TFileBufferWriterKind);
 var n, i, pos, diff: integer;
     P: PByte;
-    PI: PIntegerArray;
     PBeg, PEnd: PAnsiChar;
 begin
   WriteVarUInt32(ValuesCount);
   if ValuesCount=0 then
     exit;
-  PI := pointer(Values);
   fBuffer^[fPos] := ord(DataLayout);
   inc(fPos);
   inc(fTotalWritten);
   if DataLayout in [wkOffsetU, wkOffsetI] then begin
     pos := fPos;
-    fPos := PtrUInt(ToVarUInt32(PI^[0],@fBuffer^[fPos]))-PtrUInt(fBuffer);
-    diff := PI^[1]-PI^[0];
-    inc(PtrUInt(PI),4);
+    fPos := PtrUInt(ToVarUInt32(Values^[0],@fBuffer^[fPos]))-PtrUInt(fBuffer);
+    diff := Values^[1]-Values^[0];
+    inc(PInteger(Values));
     dec(ValuesCount);
     if ValuesCount=0 then begin
       inc(fTotalWritten,PtrUInt(fPos-pos));
@@ -58788,7 +58478,7 @@ begin
     end;
     if diff>0 then begin
       for i := 1 to ValuesCount-1 do
-        if PI^[i]-PI^[i-1]<>diff then begin
+        if Values^[i]-Values^[i-1]<>diff then begin
           diff := 0; // not always the same offset
           break;
         end;
@@ -58809,7 +58499,7 @@ begin
         n := (fBufLen-fPos)shr 2;
         if ValuesCount<n then
           n := ValuesCount;
-        MoveFast(PI^,P^,n*4);
+        MoveFast(Values^,P^,n*4);
         inc(P,n*4);
       end;
       wkVarInt32, wkVarUInt32, wkOffsetU, wkOffsetI: begin
@@ -58819,7 +58509,7 @@ begin
         case DataLayout of
         wkVarInt32:
           for i := 0 to ValuesCount-1 do begin
-            P := ToVarInt32(PI^[i],P);
+            P := ToVarInt32(Values^[i],P);
             if PtrUInt(P)>=PtrUInt(PEnd) then begin
               n := i+1;
               break; // avoid buffer overflow
@@ -58827,7 +58517,7 @@ begin
           end;
         wkVarUInt32:
           for i := 0 to ValuesCount-1 do begin
-            P := ToVarUInt32(PI^[i],P);
+            P := ToVarUInt32(Values^[i],P);
             if PtrUInt(P)>=PtrUInt(PEnd) then begin
               n := i+1;
               break; // avoid buffer overflow
@@ -58835,7 +58525,7 @@ begin
           end;
         wkOffsetU:
           for i := 0 to ValuesCount-1 do begin
-            P := ToVarUInt32(PI^[i]-PI^[i-1],P);
+            P := ToVarUInt32(Values^[i]-Values^[i-1],P);
             if PtrUInt(P)>=PtrUInt(PEnd) then begin
               n := i+1;
               break; // avoid buffer overflow
@@ -58843,7 +58533,7 @@ begin
           end;
         wkOffsetI:
           for i := 0 to ValuesCount-1 do begin
-            P := ToVarInt32(PI^[i]-PI^[i-1],P);
+            P := ToVarInt32(Values^[i]-Values^[i-1],P);
             if PtrUInt(P)>=PtrUInt(PEnd) then begin
               n := i+1;
               break; // avoid buffer overflow
@@ -58854,13 +58544,13 @@ begin
       end;
       wkSorted: begin
         PBeg := PAnsiChar(P)+4; // leave space for chunk size
-        P := PByte(CleverStoreInteger(pointer(PI),PBeg,PEnd,ValuesCount,n));
+        P := PByte(CleverStoreInteger(pointer(Values),PBeg,PEnd,ValuesCount,n));
         if P=nil then
           raise ESynException.CreateUTF8('%.WriteVarUInt32Array: data not sorted',[self]);
         PInteger(PBeg-4)^ := PAnsiChar(P)-PBeg; // format: Isize+cleverStorage
       end;
       end;
-      inc(PtrUInt(PI),n*4);
+      inc(PtrUInt(Values),n*4);
       fPos := PtrUInt(P)-PtrUInt(fBuffer);
       inc(fTotalWritten,PtrUInt(fPos-pos));
       dec(ValuesCount,n);

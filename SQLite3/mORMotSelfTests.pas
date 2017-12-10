@@ -101,11 +101,11 @@ type
     // - low level functions and classes, cryptographic or compression routines,
     // PDF generation
     procedure SynopseLibraries;
-{$ifndef DELPHI5OROLDER}
+    {$ifndef DELPHI5OROLDER}
     /// test the freeware Synopse mORMot framework
     // - access to SQLite3 or external engines, ORM features, Client/Server
     procedure _mORMot;
-{$endif DELPHI5OROLDER}
+    {$endif DELPHI5OROLDER}
   end;
 
 
@@ -113,8 +113,8 @@ type
 
 procedure TTestSynopsemORMotFramework.SynopseLibraries;
 begin
-//  AddCase(TTestCompression);
-  // exit;
+  //AddCase(TTestCompression);
+  //exit;
   AddCase([TTestLowLevelCommon,
     TTestLowLevelTypes,
 {$ifdef MSWINDOWS}
@@ -128,9 +128,7 @@ begin
 {$endif}
 {$endif}
     TTestCryptographicRoutines,
-    {$ifndef BSD} // todo: proper ECC support for BSD/Darwin
     TTestECCCryptography,
-    {$endif}
     TTestCompression,
     TTestProtocols
    ]);
@@ -142,12 +140,14 @@ type // mORMot.pas unit doesn't compile with Delphi 5 yet
 {$else}
 procedure TTestSynopsemORMotFramework._mORMot;
 begin
-  // exit; // (*
+  //AddCase(TTestFileBased);
+  //exit; // (*
   AddCase([TTestFileBased,TTestFileBasedMemoryMap,TTestFileBasedWAL]);
   AddCase(TTestMemoryBased);
   AddCase(TTestBasicClasses);
   // *)
-  AddCase(TTestClientServerAccess); // (*
+  AddCase(TTestClientServerAccess);
+  // (*
   AddCase(TTestServiceOrientedArchitecture);
   AddCase(TTestBidirectionalRemoteConnection);
   AddCase(TTestExternalDatabase);

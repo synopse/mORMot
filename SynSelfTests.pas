@@ -464,7 +464,7 @@ type
     /// release used instances and memory
     procedure CleanUp; override;
   published
-    /// direct LZ77 deflate/inflate functions
+    /// direct deflate/inflate functions
     procedure InMemoryCompression;
     /// .gzip archive handling
     procedure GZIPFormat;
@@ -2022,7 +2022,7 @@ begin
   end;
   Check(not dyniter.Step(B));
   Check(not dyniter.FirstField(B));
-  Check(dyniter.CheckHash);
+  Check(dyniter.CheckHash,'checkhash');
   // validate TIntegerDynArray
   Test64K;
   AIP.Init(TypeInfo(TIntegerDynArray),AI);
@@ -2051,7 +2051,7 @@ begin
   P := pointer(U);
   for i := 0 to 1000 do
     Check(GetNextItemCardinal(P)=cardinal(i));
-  Check(Hash32(U)=$CBDFDAFC);
+  Check(Hash32(U)=$CBDFDAFC,'hash32a');
   for i := 0 to 1000 do begin
     Test2 := AIP.ElemSave(i);
     Check(length(Test2)=4);
@@ -2092,7 +2092,7 @@ begin
   for i := 0 to AIP.Count-1 do
     Check(AIP.Find(i)=i);
   Test := AIP.SaveTo;
-  Check(Hash32(Test)=$B9F2502A);
+  Check(Hash32(Test)=$B9F2502A,'hash32b');
   AIP.Reverse;
   for i := 0 to 50000 do
     Check(AI[i]=50000-i);
@@ -2101,7 +2101,7 @@ begin
   AIP.Compare := SortDynArrayInteger;
   AIP.Sort;
   Test := AIP.SaveTo;
-  Check(Hash32(Test)=$B9F2502A);
+  Check(Hash32(Test)=$B9F2502A,'hash32c');
   AIP.Reverse;
   AIP.Slice(AI2,2000,1000);
   Check(length(AI2)=2000);
@@ -2153,7 +2153,7 @@ begin
     Check(AVP.IndexOf(V)=i);
   end;
   Test := AVP.SaveTo;
-  Check(Hash32(Test)={$ifdef CPU64}$31484630{$else}$924462C{$endif});
+  Check(Hash32(Test)={$ifdef CPU64}$31484630{$else}$924462C{$endif},'hash32d');
   // validate TRawUTF8DynArray
   AUP.Init(TypeInfo(TRawUTF8DynArray),AU);
   for i := 0 to 1000 do begin
@@ -2168,7 +2168,7 @@ begin
     Check(AUP.IndexOf(U)=i);
   end;
   Test := AUP.SaveTo;
-  Check(Hash32(@Test[2],length(Test)-1)=$D9359F89); // trim Test[1]=ElemSize
+  Check(Hash32(@Test[2],length(Test)-1)=$D9359F89,'hash32e'); // trim Test[1]=ElemSize
   for i := 0 to 1000 do begin
     U := Int32ToUtf8(i+1000);
     Check(RawUTF8DynArrayLoadFromContains(pointer(Test),pointer(U),length(U),false)=i);
@@ -2186,7 +2186,7 @@ begin
   W.CancelAll;
   W.AddDynArrayJSON(AUP);
   W.SetText(U);
-  Check(Hash32(U)=$1D682EF8);
+  Check(Hash32(U)=$1D682EF8,'hash32f');
   P := pointer(U);
   if not CheckFailed(P^='[') then inc(P);
   for i := 0 to 1000 do begin
@@ -2298,7 +2298,7 @@ begin
   W.CancelAll;
   W.AddDynArrayJSON(ARP);
   U := W.Text;
-  Check(Hash32(U)={$ifdef Darwin}$54659D65{$else}{$ifdef CPUARM}$9F98936D{$else}{$ifdef CPU64}$9F98936D{$else}$54659D65{$endif}{$endif}{$endif});
+  // no check(Hash32(U)) since it is very platform-dependent: LoadFromJSON is enough
   P := pointer(U);
   JSON_BASE64_MAGIC_UTF8 := RawUnicodeToUtf8(@MAGIC,2);
   U2 := RawUTF8('[')+JSON_BASE64_MAGIC_UTF8+RawUTF8(BinToBase64(ARP.SaveTo))+RawUTF8('"]');
@@ -2357,7 +2357,7 @@ begin
   end;
   Test := AFP.SaveTo;
   Check(Hash32(Test)={$ifdef CPU64}{$ifdef FPC}$3DE22166{$else}$A29C10E{$endif}{$else}
-    {$ifdef UNICODE}$62F9C106{$else}$6AA2215E{$endif}{$endif});
+    {$ifdef UNICODE}$62F9C106{$else}$6AA2215E{$endif}{$endif},'hash32h');
   for i := 0 to 1000 do begin
     Fill(F,i);
     AFP.ElemCopy(F,F1);
@@ -2376,7 +2376,7 @@ begin
   Check(IdemPChar(pointer(U),'[{"MAJOR":0,"MINOR":1,"RELEASE":2,"BUILD":3,'+
     '"MAIN":"1000","DETAILED":"2000","BUILDDATETIME":"1999-02-24T02:52:48",'+
     '"BUILDYEAR":2011},{"MAJOR":1,"MINOR":2,"RELEASE":3,"BUILD":4,'));
-  Check(Hash32(U)=$74523E0F);
+  Check(Hash32(U)=$74523E0F,'hash32i');
   {$else}
   Check(U='['+JSON_BASE64_MAGIC_UTF8+BinToBase64(Test)+'"]');
   {$endif}
@@ -9226,39 +9226,39 @@ var i: integer;
 begin
   with Z do
   try
-    Check(Count=aCount);
+    Check(Count=aCount,'count');
     i := NameToIndex('REP1\ONE.exe');
-    Check(i=0);
+    Check(i=0,'0');
     FillcharFast(info,sizeof(info),0);
-    Check(RetrieveFileInfo(i,info));
-    Check(integer(info.zfullSize)=length(Data));
-    Check(info.zcrc32=crc0);
-    Check(UnZip(i)=Data);
+    Check(RetrieveFileInfo(i,info),'info');
+    Check(integer(info.zfullSize)=length(Data),'siz');
+    Check(info.zcrc32=crc0,'crc0');
+    Check(UnZip(i)=Data,'unzip1');
     i := NameToIndex('REp2\ident.gz');
-    Check(i=1);
-    Check(Entry[i].infoLocal^.zcrc32=crc1);
+    Check(i=1,'unzip2');
+    Check(Entry[i].infoLocal^.zcrc32=crc1,'crc1a');
     tmp := UnZip(i);
-    Check(tmp<>'');
-    Check(crc32(0,pointer(tmp),length(tmp))=crc1);
+    Check(tmp<>'','unzip3');
+    Check(crc32(0,pointer(tmp),length(tmp))=crc1,'crc1b');
     i := NameToIndex(ExeName);
-    Check(i=2);
-    Check(UnZip(i)=Data);
-    Check(Entry[i].infoLocal^.zcrc32=info.zcrc32);
+    Check(i=2,'unzip4');
+    Check(UnZip(i)=Data,'unzip6');
+    Check(Entry[i].infoLocal^.zcrc32=info.zcrc32,'crc32');
     i := NameToIndex('REp2\ident2.gz');
-    Check(i=3);
-    Check(Entry[i].infoLocal^.zcrc32=crc1);
+    Check(i=3,'unzip5');
+    Check(Entry[i].infoLocal^.zcrc32=crc1,'crc1c');
     tmp := UnZip(i);
-    Check(tmp<>'');
-    Check(crc32(0,pointer(tmp),length(tmp))=crc1);
+    Check(tmp<>'','unzip7');
+    Check(crc32(0,pointer(tmp),length(tmp))=crc1,'crc1d');
     if aCount=4 then
       Exit;
     i := NameToIndex('REP1\twO.exe');
-    Check(i=4);
-    Check(UnZip(i)=Data);
+    Check(i=4,'unzip8');
+    Check(UnZip(i)=Data,'unzip9');
     tmpFN := 'TestSQL3zipformat.tmp';
-    Check(UnZip('REP1\one.exe',tmpFN,true));
-    Check(StringFromFile(tmpFN)=Data);
-    Check(DeleteFile(tmpFN));
+    Check(UnZip('REP1\one.exe',tmpFN,true),'unzipa');
+    Check(StringFromFile(tmpFN)=Data,'unzipb');
+    Check(DeleteFile(tmpFN),'unzipc');
   finally
     Free;
   end;
@@ -9268,15 +9268,15 @@ begin
   with Z do
   try
     AddDeflated('rep1\one.exe',pointer(Data),length(Data));
-    Check(Count=1);
+    Check(Count=1,'cnt1');
     AddDeflated('rep2\ident.gz',M.Memory,M.Position);
-    Check(Count=2);
+    Check(Count=2,'cnt2');
     if Z is TZipWrite then
       TZipWrite(Z).AddDeflated(ExeVersion.ProgramFileName) else
       Z.AddDeflated(ExeName,pointer(Data),length(Data));
-    Check(Count=3,'direct zip file');
+    Check(Count=3,'cnt3');
     AddStored('rep2\ident2.gz',M.Memory,M.Position);
-    Check(Count=4);
+    Check(Count=4,'cnt4');
   finally
     Free;
   end;
@@ -9286,9 +9286,9 @@ var pasZR: PasZip.TZipRead;
 begin
   pasZR := PasZip.TZipRead.Create(FN);
   try
-    Check(pasZR.Count=Count);
-    Check(pasZR.NameToIndex('rep1\ONE.exe')=0);
-    Check(pasZR.UnZip(0)=data);
+    Check(pasZR.Count=Count,'paszip1');
+    Check(pasZR.NameToIndex('rep1\ONE.exe')=0,'paszip2');
+    Check(pasZR.UnZip(0)=data,'paszip3');
   finally
     pasZR.Free;
   end;
@@ -9309,9 +9309,9 @@ begin
   end;
   with TZipWrite.CreateFrom(FN) do
   try
-    Check(Count=4);
+    Check(Count=4,'two4');
     AddDeflated('rep1\two.exe',pointer(Data),length(Data));
-    Check(Count=5);
+    Check(Count=5,'two5');
   finally
     Free;
   end;
@@ -9321,13 +9321,13 @@ begin
   pasZW := PasZip.TZipWrite.Create(FN2);
   try
     pasZW.AddDeflated('rep1\one.exe',pointer(Data),length(Data));
-    Check(pasZW.Count=1);
+    Check(pasZW.Count=1,'paszipA');
     pasZW.AddDeflated('rep2\ident.gz',M.Memory,M.Position);
-    Check(pasZW.Count=2);
+    Check(pasZW.Count=2,'paszipB');
     pasZW.AddDeflated(ExeVersion.ProgramFileName);
-    Check(pasZW.Count=3,'direct zip file');
+    Check(pasZW.Count=3,'paszipC');
     pasZW.AddStored('rep2\ident2.gz',M.Memory,M.Position);
-    Check(pasZW.Count=4);
+    Check(pasZW.Count=4,'paszipD');
   finally
     pasZW.Free;
   end;
@@ -9344,7 +9344,7 @@ begin
       AddFolder(FN,'*.pas');
       Check(Count>10);
       for i := 0 to Count-1 do
-        Check(SameText(ExtractFileExt(Ansi7ToString(Entry[i].intName)),'.pas'));
+        Check(SameText(ExtractFileExt(Ansi7ToString(Entry[i].intName)),'.pas'),'ddd');
     end;
   finally
     Free;
@@ -13952,7 +13952,7 @@ end;
 {$endif}
 procedure TestVirtual(aClient: TSQLRestClient; DirectSQL: boolean; const Msg: string;
   aClass: TSQLRecordClass);
-var n, i, ndx: integer;
+var n, i, ndx, added: integer;
     VD, VD2: TSQLRecordDali1;
     Rest: TSQLRest;
 begin
@@ -13971,7 +13971,8 @@ begin
         VD.YearOfBirth := V2.YearOfBirth;
         VD.YearOfDeath := V2.YearOfDeath;
         inc(n);
-        Check(aClient.Add(VD,true)=n,Msg);
+        added := aClient.Add(VD,true);
+        CheckUTF8(added=n,'% Add %<>%',[Msg,added,n]);
       end;
       // update some items in the file
       Check(aClient.TableRowCount(aClass)=1001,'Check SQL Count(*)');
@@ -13997,12 +13998,12 @@ begin
         Check(VD.FirstName='');
         Check(VD.YearOfBirth=0);
         Check(VD.YearOfDeath=0);
-        Check(aClient.Retrieve(i,VD),Msg);
+        CheckUTF8(aClient.Retrieve(i,VD),'% Retrieve',[Msg]);
         Check(IdemPChar(pointer(VD.FirstName),'SALVADOR'));
         Check(VD.YearOfBirth=1904+i);
         Check(VD.YearOfDeath=1989+i);
       end;
-      Check(aClient.TableRowCount(aClass)=1001);
+      CheckUTF8(aClient.TableRowCount(aClass)=1001,'% RowCount',[Msg]);
       Rest := Client.Server.StaticVirtualTable[aClass];
       Check((Rest as TSQLRestStorageInMemoryExternal).Modified);
       aClient.Commit; // write to file
@@ -14073,17 +14074,18 @@ var i: integer;
 begin
   try
     Check(ClientDist.SetUser('User','synopse'));
-{$ifdef INCLUDE_FTS3}
+    {$ifdef INCLUDE_FTS3}
     TestFTS3(ClientDist);
-{$endif}TestDynArray(ClientDist);
-{$ifndef LVCL}
+    {$endif}
+    TestDynArray(ClientDist);
+    {$ifndef LVCL}
     TestObject(ClientDist);
-{$endif}
+    {$endif}
     InternalTestMany(self,ClientDist);
     TestVirtual(ClientDist,false,'Remote Virtual Table access via SQLite',TSQLRecordDali1);
     TestVirtual(ClientDist,false,'Remote Virtual Table access via SQLite',TSQLRecordDali2);
-    TestVirtual(ClientDist,true,'Remote Direct Virtual Table access',TSQLRecordDali1);
-    TestVirtual(ClientDist,true,'Remote Direct Virtual Table access',TSQLRecordDali2);
+    TestVirtual(ClientDist,true,'Remote Direct Virtual Table',TSQLRecordDali1);
+    TestVirtual(ClientDist,true,'Remote Direct Virtual Table',TSQLRecordDali2);
     Check(Test(ClientDist.List([TSQLRecordPeople],'*',s)),'through URI and JSON');
     for i := 0 to high(IntArray) do begin
       Check(ClientDist.RetrieveBlob(TSQLRecordPeople,IntArray[i],'Data',Data));
@@ -14149,9 +14151,9 @@ var ClientDist: TSQLRestClientURI;
 begin
   V := TSQLRecordPeople.Create;
   VA := TSQLRecordPeopleArray.Create;
-{$ifndef LVCL}
+  {$ifndef LVCL}
   VO := TSQLRecordPeopleObject.Create;
-{$endif}
+  {$endif}
   VP := TSQLRecordCustomProps.Create;
   V2 := nil;
   if ClassType<>TTestMemoryBased then begin
@@ -14319,10 +14321,10 @@ begin
 {$endif}
       InternalTestMany(self,Client);
       // RegisterVirtualTableModule(TSQLVirtualTableJSON) already done
-      TestVirtual(Client,false,'Virtual Table access via SQLite',TSQLRecordDali1);
-      TestVirtual(Client,false,'Virtual Table access via SQLite',TSQLRecordDali2);
-      TestVirtual(Client,true,'Direct Virtual Table access',TSQLRecordDali1);
-      TestVirtual(Client,true,'Direct Virtual Table access',TSQLRecordDali2);
+      TestVirtual(Client,false,'Virtual Table access via SQLite 1',TSQLRecordDali1);
+      TestVirtual(Client,false,'Virtual Table access via SQLite 1',TSQLRecordDali2);
+      TestVirtual(Client,true,'Direct Virtual Table access 1',TSQLRecordDali1);
+      TestVirtual(Client,true,'Direct Virtual Table access 2',TSQLRecordDali2);
       // remote client access test (via named pipes)
       {$ifdef MSWINDOWS}
       Check(Client.Server.ExportServerNamedPipe('Test'),'declare Test server');

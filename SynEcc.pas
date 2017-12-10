@@ -2149,6 +2149,7 @@ begin
 end;
 {$else}
 procedure _rshift1(var VLI: TVLI);
+  {$ifdef HASINLINE}inline;{$endif}
 var carry, temp: UInt64;
 begin
   carry := VLI[3] shl 63;
@@ -2195,6 +2196,7 @@ begin
 end;
 {$else}
 function _lshift1(var VLI: TVLI): UInt64;
+  {$ifdef HASINLINE}inline;{$endif} 
 var temp: UInt64;
 begin
   result := VLI[0] shr 63;
@@ -2219,6 +2221,7 @@ var Output: TCardinalArray absolute Output64;
     Right: TCardinalArray absolute Right64;
 {$else}
 function _add(var Output: TVLI; const Left, Right: TVLI): PtrUInt;
+  {$ifdef HASINLINE}inline;{$endif} 
 {$endif}
 var sum: PtrUInt;
 begin
@@ -2282,6 +2285,7 @@ var Output: TCardinalArray absolute Output64;
     Right: TCardinalArray absolute Right64;
 {$else}
 function _sub(var Output: TVLI; const Left, Right: TVLI): PtrUInt;
+  {$ifdef HASINLINE}inline;{$endif} 
 {$endif}
 var diff: PtrUInt;
 begin

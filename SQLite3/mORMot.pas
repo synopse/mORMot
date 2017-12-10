@@ -5504,17 +5504,20 @@ type
     // - you can use TSQLRecordProperties.FieldBitsFromCSV() or
     // TSQLRecordProperties.FieldBitsFromRawUTF8() to compute aFields
     function CreateJSONWriter(JSON: TStream; Expand: boolean; withID: boolean;
-      const aFields: TSQLFieldBits; KnownRowsCount: integer): TJSONSerializer; overload;
+      const aFields: TSQLFieldBits; KnownRowsCount: integer;
+      aBufSize: integer=8192): TJSONSerializer; overload;
     /// create a TJSONWriter, ready to be filled with TSQLRecord.GetJSONValues(W)
     // - you can use TSQLRecordProperties.FieldBitsFromCSV() or
     // TSQLRecordProperties.FieldBitsFromRawUTF8() to compute aFields
     function CreateJSONWriter(JSON: TStream; Expand: boolean; withID: boolean;
-      const aFields: TSQLFieldIndexDynArray; KnownRowsCount: integer): TJSONSerializer; overload;
+      const aFields: TSQLFieldIndexDynArray; KnownRowsCount: integer;
+      aBufSize: integer=8192): TJSONSerializer; overload;
     /// create a TJSONWriter, ready to be filled with TSQLRecord.GetJSONValues(W)
     // - this overloaded method will call FieldBitsFromCSV(aFieldsCSV,bits,withID)
     // to retrieve the bits just like a SELECT (i.e. '*' for simple fields)
     function CreateJSONWriter(JSON: TStream; Expand: boolean;
-       const aFieldsCSV: RawUTF8; KnownRowsCount: integer): TJSONSerializer; overload;
+       const aFieldsCSV: RawUTF8; KnownRowsCount: integer;
+       aBufSize: integer=8192): TJSONSerializer; overload;
     /// set the W.ColNames[] array content + W.AddColumns
     procedure SetJSONWriterColumnNames(W: TJSONSerializer; KnownRowsCount: integer);
     /// save the TSQLRecord RTTI into a binary header
@@ -22340,9 +22343,15 @@ end;
 
 function TSQLPropInfoRTTIObject.SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar;
 var valid: boolean;
+    tmp: TSynTempBuffer;
 begin
   // unserialize object from JSON UTF-8 TEXT - not fast, but works
-  PropInfo^.ClassFromJSON(Instance,pointer(FromVarString(PByte(P))),valid);
+  FromVarString(PByte(P),tmp);
+  try
+    PropInfo^.ClassFromJSON(Instance,tmp.buf,valid);
+  finally
+    tmp.Done;
+  end;
   if valid then
     result := P else
     result := nil;
@@ -37870,9 +37879,9 @@ function TSQLRestClientURI.CallBack(method: TSQLURIMethod;
   const aMethodName,aSentData: RawUTF8; out aResponse: RawUTF8;
   aTable: TSQLRecordClass; aID: TID; aResponseHead: PRawUTF8): integer;
 var u, m: RawUTF8;
-{$ifdef WITHLOG}
-   log: ISynLog; // for Enter auto-leave to work with FPC
-{$endif}
+    {$ifdef WITHLOG}
+    log: ISynLog; // for Enter auto-leave to work with FPC
+    {$endif}
 begin
   if (self=nil) or (method=mNone) then
     result := HTTP_UNAVAILABLE else begin
@@ -38619,9 +38628,9 @@ end;
 
 procedure TSQLRestServer.Shutdown(const aStateFileName: TFileName);
 var timeout: Int64;
-{$ifdef WITHLOG}
-   log: ISynLog; // for Enter auto-leave to work with FPC
-{$endif}
+    {$ifdef WITHLOG}
+    log: ISynLog; // for Enter auto-leave to work with FPC
+    {$endif}
 begin
   if fSessions=nil then
     exit; // avoid GPF e.g. in case of missing sqlite3-64.dll
@@ -38969,21 +38978,21 @@ function TSQLRestServer.RecordVersionSynchronizeSlave(Table: TSQLRecordClass;
   Master: TSQLRest; ChunkRowLimit: integer; OnWrite: TOnBatchWrite): TRecordVersion;
 var Writer: TSQLRestBatch;
     IDs: TIDDynArray;
-    static: TSQLRest;
-{$ifdef WITHLOG}
+    rest: TSQLRest;
+    {$ifdef WITHLOG}
     log: ISynLog; // for Enter auto-leave to work with FPC
+    {$endif}
 begin
+  {$ifdef WITHLOG}
   log := fLogClass.Enter('RecordVersionSynchronizeSlave %',[Table],self);
-{$else}
-begin
-{$endif}
+  {$endif}
   result := -1; // error
   if fRecordVersionMax=0 then
     InternalRecordVersionMaxFromExisting(nil);
-  static := GetStaticDataServer(Table); 
-  if (static<>nil) and static.InheritsFrom(TSQLRestStorageInMemory) then
+  rest := GetStaticDataServer(Table); 
+  if (rest<>nil) and rest.InheritsFrom(TSQLRestStorageInMemory) then
     // consistency is checked on server side, and AddOne() could be very slow
-    TSQLRestStorageInMemory(static).NoUniqueFieldCheckOnAdd := true;
+    TSQLRestStorageInMemory(rest).NoUniqueFieldCheckOnAdd := true;
   repeat
     Writer := RecordVersionSynchronizeSlaveToBatch(
       Table,Master,fRecordVersionMax,ChunkRowLimit,OnWrite);
@@ -39028,13 +39037,13 @@ var TableIndex,SourceTableIndex,UpdatedRow,DeletedRow: integer;
     Rec: TSQLRecord;
     DeletedMinID: TID;
     Deleted: TSQLRecordTableDeleted;
-{$ifdef WITHLOG}
+    {$ifdef WITHLOG}
     log: ISynLog; // for Enter auto-leave to work with FPC
+    {$endif}
 begin
+  {$ifdef WITHLOG}
   log := fLogClass.Enter('RecordVersionSynchronizeSlaveToBatch %',[Table],self);
-{$else}
-begin
-{$endif}
+  {$endif}
   result := nil;
   if Master=nil then
     raise EORMException.CreateUTF8('%.RecordVersionSynchronizeSlaveToBatch(Master=nil)',[self]);
@@ -39168,14 +39177,14 @@ var current,previous: TRecordVersion;
     service: IServiceRecordVersion;
     callback: IServiceRecordVersionCallback;
     retry: integer;
-{$ifdef WITHLOG}
+    {$ifdef WITHLOG}
     log: ISynLog; // for Enter auto-leave to work with FPC
+    {$endif}
 begin
+  {$ifdef WITHLOG}
   log := fLogClass.Enter('RecordVersionSynchronizeSlaveStart % over %',
     [Table, MasterRemoteAccess],self);
-{$else}
-begin
-{$endif}
+  {$endif}
   callback := nil; // weird fix for FPC/ARM
   result := false;
   if (self=nil) or (MasterRemoteAccess=nil) then
@@ -41519,13 +41528,13 @@ var Ctxt: TSQLRestServerURIContext;
     outcomingfile: boolean;
     safeid: integer;
     P: PUTF8Char;
-{$ifdef WITHLOG}
+    {$ifdef WITHLOG}
     log: ISynLog; // for Enter auto-leave to work with FPC
+    {$endif}
 begin
+  {$ifdef WITHLOG}
   log := fLogClass.Enter('URI(% % inlen=%)',[Call.Method,Call.Url,length(Call.InBody)],self);
-{$else}
-begin
-{$endif}
+  {$endif}
   QueryPerformanceCounter(timeStart);
   fStats.AddCurrentRequestCount(1);
   Call.OutInternalState := InternalState; // other threads may change it
@@ -42695,13 +42704,13 @@ var HistBlob: TSQLRecordHistory;
     HistID, ModifiedRecord: TInt64DynArray;
     TableHistoryIndex,i,HistIDCount,n: integer;
     ModifRecord, ModifRecordCount, MaxRevisionJSON: integer;
-{$ifdef WITHLOG}
+    {$ifdef WITHLOG}
     log: ISynLog; // for Enter auto-leave to work with FPC
+    {$endif}
 begin
+  {$ifdef WITHLOG}
   log := fLogClass.Enter('TrackChangesFlush(%)',[aTableHistory],self);
-{$else}
-begin
-{$endif}
+  {$endif}
   fAcquireExecution[execORMWrite].Safe.Lock; // avoid race condition
   try // low-level Add(TSQLRecordHistory) without cache
     TableHistoryIndex := Model.GetTableIndexExisting(aTableHistory);
@@ -43081,11 +43090,11 @@ var EndOfObject: AnsiChar;
 
 {$ifdef WITHLOG}
 var log: ISynLog; // for Enter auto-leave to work with FPC
-begin
-  log := fLogClass.Enter('EngineBatchSend % inlen=%',[Table,length(Data)],self);
-{$else}
-begin
 {$endif}
+begin
+  {$ifdef WITHLOG}
+  log := fLogClass.Enter('EngineBatchSend % inlen=%',[Table,length(Data)],self);
+  {$endif}
   Sent := UniqueRawUTF8(Data); // parsed, therefore modified in-placed
   if Sent=nil then
     raise EORMBatchException.CreateUTF8('%.EngineBatchSend(%,"")',[self,Table]);
@@ -43996,13 +44005,13 @@ var Card: cardinal;
     {$ifdef TSQLRestClientURIDll_TIMEOUT}
     i: integer;
     {$endif}
-{$ifdef WITHLOG}
-    log: ISynLog;
+    {$ifdef WITHLOG}
+    log: ISynLog; // for Enter auto-leave to work with FPC
+    {$endif}
 begin
+  {$ifdef WITHLOG}
   log := fLogClass.Enter(self);
-{$else}
-begin
-{$endif}
+  {$endif}
   Call.OutStatus := HTTP_NOTIMPLEMENTED; // 501 (no valid application or library)
   fSafe.Enter;
   try
@@ -45358,7 +45367,7 @@ begin
   StorageLock(false,'SaveToJSON');
   try
     W := fStoredClassRecordProps.CreateJSONWriter(
-      Stream,Expand,true,ALL_FIELDS,fValue.Count);
+      Stream,Expand,true,ALL_FIELDS,fValue.Count,65536);
     try
       if Expand then
         W.Add('[');
@@ -45508,19 +45517,20 @@ end;
 function TSQLRestStorageInMemory.SaveToBinary(Stream: TStream): integer;
 var W: TFileBufferWriter;
     MS: THeapMemoryStream;
-    ID32: TIntegerDynArray;
     i, f: integer;
     hasInt64ID: boolean;
     p: PID;
     lastID,newID: TID;
+    ID32: TSynTempBuffer;
 begin
   result := 0;
   if (self=nil) or (Stream=nil) then
     exit;
   MS := THeapMemoryStream.Create;
-  W := TFileBufferWriter.Create(MS);
+  W := TFileBufferWriter.Create(MS,65536);
   try
     StorageLock(false,'SaveToBinary');
+    ID32.Init(Count*4);
     with fStoredClassRecordProps do
     try
       // primitive magic and fields signature for file type identification
@@ -45528,7 +45538,6 @@ begin
       SaveBinaryHeader(W);
       // write IDs
       hasInt64ID := false;
-      SetLength(ID32,Count);
       with fValue do
         for i := 0 to Count-1 do begin
           p := @TSQLRecord(List[i]).fID;
@@ -45536,7 +45545,7 @@ begin
             hasInt64ID := true;
             break;
           end else
-            ID32[i] := PInteger(p)^;
+            PCardinalArray(ID32.buf)[i] := PInteger(p)^;
         end;
       if hasInt64ID then begin
         W.WriteVarUInt32(fValue.Count);
@@ -45552,7 +45561,7 @@ begin
           lastID := newID;
         end;
       end else
-        W.WriteVarUInt32Array(ID32,Count,wkSorted); // efficient ID storage
+        W.WriteVarUInt32Values(ID32.buf,Count,wkSorted); // efficient ID storage
       // write content, grouped by field (for better compression)
       for f := 0 to Fields.Count-1 do
         with Fields.List[f], fValue do
@@ -45560,6 +45569,7 @@ begin
             GetBinary(TSQLRecord(List[i]),W);
     finally
       StorageUnLock;
+      ID32.Done;
     end;
     W.Flush;
     result := StreamSynLZ(MS,Stream,TSQLRESTSTORAGEINMEMORY_MAGIC);
@@ -45919,42 +45929,19 @@ end;
 procedure TSQLRestStorageInMemory.UpdateFile;
 var F: TFileStream;
     Timer: TPrecisionTimer;
-    ErrorMsg: string;
 begin
   if (self=nil) or not Modified or (FileName='') then
     exit;
   Timer.Start;
   StorageLock(false,'UpdateFile');
   try
-    if fValue.Count=0 then
-      DeleteFile(FileName) else begin
-      try
-        if FileExists(FileName) then begin
-          {$ifdef Linux}
-          // on Linux, we have to do something special unfortunately ...
-          ErrorMsg := 'Deleting and again creating existing file';
-          DeleteFile(FileName);
-          F := TFileStream.Create(FileName,fmCreate);
-          {$else}
-          ErrorMsg := 'Open existing file';
-          F := TFileStream.Create(FileName,fmOpenWrite);
-          F.Seek(0,soFromBeginning);
-          {$endif}
-        end else
-        begin
-          ErrorMsg := 'Create new file';
-          F := TFileStream.Create(FileName,fmCreate);
-        end;
-      except
-        on E: Exception do
-          raise EORMException.CreateUTF8('% error. Failure in %.UpdateFile(%) due to %',
-           [ErrorMsg,self,FileName,E]);
-      end;
+    DeleteFile(FileName); // always erase previous file
+    if fValue.Count>0 then begin
+      F := TFileStream.Create(FileName,fmCreate);
       try
         if BinaryFile then
           SaveToBinary(F) else
           SaveToJSON(F,true);
-        F.Size := F.Position; // truncate file
       finally
         F.Free;
       end;
@@ -49251,13 +49238,13 @@ var Msg: RawUTF8;
     Finished64: Int64;
     P: PUTF8Char;
     aMsg: TMsg;
-{$ifdef WITHLOG}
-    log: ISynLog;
+    {$ifdef WITHLOG}
+    log: ISynLog; // for Enter auto-leave to work with FPC
+    {$endif}
 begin
+  {$ifdef WITHLOG}
   log := fLogClass.Enter(self);
-{$else}
-begin
-{$endif}
+  {$endif}
   if (fClientWindow=0) or not InternalCheckOpen then begin
     Call.OutStatus := HTTP_NOTIMPLEMENTED; // 501
     InternalLog('InternalCheckOpen failure',sllClient);
@@ -50410,29 +50397,29 @@ begin
 end;
 
 function TSQLRecordProperties.CreateJSONWriter(JSON: TStream; Expand,
-  withID: boolean; const aFields: TSQLFieldBits; KnownRowsCount: integer): TJSONSerializer;
+  withID: boolean; const aFields: TSQLFieldBits; KnownRowsCount,aBufSize: integer): TJSONSerializer;
 begin
   result := CreateJSONWriter(JSON,Expand,withID,
-    FieldBitsToIndex(aFields,Fields.Count),KnownRowsCount);
+    FieldBitsToIndex(aFields,Fields.Count),KnownRowsCount,aBufSize);
 end;
 
 function TSQLRecordProperties.CreateJSONWriter(JSON: TStream; Expand,
-  withID: boolean; const aFields: TSQLFieldIndexDynArray; KnownRowsCount: integer): TJSONSerializer;
+  withID: boolean; const aFields: TSQLFieldIndexDynArray; KnownRowsCount,aBufSize: integer): TJSONSerializer;
 begin
   if (self=nil) or ((Fields=nil) and not withID) then  // no data
     result := nil else begin
-    result := TJSONSerializer.Create(JSON,Expand,withID,aFields);
+    result := TJSONSerializer.Create(JSON,Expand,withID,aFields,aBufSize);
     SetJSONWriterColumnNames(result,KnownRowsCount);
   end;
 end;
 
 function TSQLRecordProperties.CreateJSONWriter(JSON: TStream; Expand: boolean;
-   const aFieldsCSV: RawUTF8; KnownRowsCount: integer): TJSONSerializer;
+   const aFieldsCSV: RawUTF8; KnownRowsCount,aBufSize: integer): TJSONSerializer;
 var withID: boolean;
     bits: TSQLFieldBits;
 begin
   FieldBitsFromCSV(aFieldsCSV,bits,withID);
-  result := CreateJSONWriter(JSON,Expand,withID,bits,KnownRowsCount);
+  result := CreateJSONWriter(JSON,Expand,withID,bits,KnownRowsCount,aBufSize);
 end;
 
 function TSQLRecordProperties.SaveSimpleFieldsFromJsonArray(var P: PUTF8Char;
