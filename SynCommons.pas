@@ -12873,6 +12873,16 @@ function Iso8601ToTimeLog(const S: RawByteString): TTimeLog;
 // ! aRec.CreateAndFillPrepare(Client,'Datum<=?',[TimeLogToSQL(TimeLogNow)]);
 function TimeLogToSQL(const Timestamp: TTimeLog): RawUTF8;
 
+/// convert a Iso8601 encoded string into a ISO-8601 string format for SQL
+// '?' inlined parameters
+// - follows the same pattern as DateToSQL or DateTimeToSQL functions, i.e.
+// will return the date or time encoded as '\uFFF1YYYY-MM-DDThh:mm:ss' -
+// therefore ':("\uFFF12012-05-04T20:12:13"):' pattern will be recognized as a
+// sftDateTime inline parameter in  SQLParamContent() / ExtractInlineParameters()
+// (JSON_SQLDATE_MAGIC will be used as prefix to create '\uFFF1...' pattern)
+// - in practice, just append the JSON_SQLDATE_MAGIC prefix to the supplied text
+function Iso8601ToSQL(const S: RawByteString): RawUTF8;
+
 /// test if P^ contains a valid ISO-8601 text encoded value
 // - calls internally Iso8601ToTimeLogPUTF8Char() and returns true if contains
 // at least a valid year (YYYY)
@@ -27607,7 +27617,7 @@ begin
   end;
 end;
 
-function DateToSQL(Year,Month,Day: Cardinal): RawUTF8; overload;
+function DateToSQL(Year,Month,Day: Cardinal): RawUTF8;
 begin
   if (Year=0) or (Month-1>11) or (Day-1>30) then
     result := '' else begin
@@ -27617,28 +27627,33 @@ begin
   end;
 end;
 
+var
+  JSON_SQLDATE_MAGIC_TEXT: RawUTF8;
+
 function DateTimeToSQL(DT: TDateTime; WithMS: boolean): RawUTF8;
 begin
   if DT<=0 then
     result := '' else begin
-    SetLength(result,3);
-    PCardinal(pointer(result))^ := JSON_SQLDATE_MAGIC;
     if frac(DT)=0 then
-      result := result+DateToIso8601(DT,true) else
+      result := JSON_SQLDATE_MAGIC_TEXT+DateToIso8601(DT,true) else
     if trunc(DT)=0 then
-      result := result+TimeToIso8601(DT,true,'T',WithMS) else
-      result := result+DateTimeToIso8601(DT,true,'T',WithMS);
+      result := JSON_SQLDATE_MAGIC_TEXT+TimeToIso8601(DT,true,'T',WithMS) else
+      result := JSON_SQLDATE_MAGIC_TEXT+DateTimeToIso8601(DT,true,'T',WithMS);
   end;
 end;
 
 function TimeLogToSQL(const Timestamp: TTimeLog): RawUTF8;
 begin
   if Timestamp=0 then
-    result := '' else begin
-    SetLength(result,3);
-    PCardinal(pointer(result))^ := JSON_SQLDATE_MAGIC;
-    result := result+PTimeLogBits(@Timestamp)^.Text(true);
-  end;
+    result := '' else
+    result := JSON_SQLDATE_MAGIC_TEXT+PTimeLogBits(@Timestamp)^.Text(true);
+end;
+
+function Iso8601ToSQL(const S: RawByteString): RawUTF8;
+begin
+  if IsIso8601(pointer(S),length(S)) then
+    result := JSON_SQLDATE_MAGIC_TEXT+S else
+    result := '';
 end;
 
 function SQLToDateTime(const ParamValueWithMagic: RawUTF8): TDateTime;
@@ -63765,6 +63780,8 @@ begin
   JSON_CONTENT_TYPE_VAR := JSON_CONTENT_TYPE;
   JSON_CONTENT_TYPE_HEADER_VAR := JSON_CONTENT_TYPE_HEADER;
   NULL_STR_VAR := 'null';
+  SetLength(JSON_SQLDATE_MAGIC_TEXT,3);
+  PCardinal(pointer(JSON_SQLDATE_MAGIC_TEXT))^ := JSON_SQLDATE_MAGIC;
   {$ifdef FPC}
   {$ifdef ISFPC27}
   SetMultiByteConversionCodePage(CP_UTF8);
