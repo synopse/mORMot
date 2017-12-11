@@ -12748,7 +12748,7 @@ end;
 
 procedure TJWTAbstract.Parse(const Token: RawUTF8; var JWT: TJWTContent;
   out headpayload: RawUTF8; out signature: RawByteString);
-var i,j,toklen,c,cap,len,a: integer;
+var payloadend,j,toklen,c,cap,headerlen,len,a: integer;
     P: PUTF8Char;
     N,V: PUTF8Char;
     wasString: boolean;
@@ -12771,31 +12771,30 @@ begin
   end;
   JWT.result := jwtInvalidAlgorithm;
   if joHeaderParse in fOptions then begin
-    len := PosEx('.',Token);
-    if (len=0) or (len>512) then
+    headerlen := PosEx('.',Token);
+    if (headerlen=0) or (headerlen>512) then
       exit;
-    Base64URIToBin(tok,len-1,signature);
+    Base64URIToBin(tok,headerlen-1,signature);
     JSONDecode(pointer(signature),['alg','typ'],head);
     if not IdemPropNameU(fAlgorithm,head[0],StrLen(head[0])) or
        ((head[1]<>nil) and not IdemPropNameU('JWT',head[1],StrLen(head[1]))) then
       exit;
   end else begin
-    len := length(fHeaderB64); // fast direct compare of fHeaderB64 (including "alg")
-    if (toklen<=len) or not CompareMem(pointer(fHeaderB64),tok,len) then
+    headerlen := length(fHeaderB64); // fast direct compare of fHeaderB64 (including "alg")
+    if (toklen<=headerlen) or not CompareMem(pointer(fHeaderB64),tok,headerlen) then
       exit;
   end;
   JWT.result := jwtWrongFormat;
   if toklen>JWT_MAXSIZE Then
     exit;
-  i := PosEx('.',Token,len+1);
-  if (i=0) or (i-len>2700) then
+  payloadend := PosEx('.',Token,headerlen+1);
+  if (payloadend=0) or (payloadend-headerlen>2700) then
     exit;
-  headpayload := copy(Token,1,i-1);
-  Base64URIToBin(tok+i,toklen-i,signature);
-  if (signature='') and (i<>toklen) then
+  Base64URIToBin(tok+payloadend,toklen-payloadend,signature);
+  if (signature='') and (payloadend<>toklen) then
     exit;
   JWT.result := jwtInvalidPayload;
-  Base64URIToBin(tok+len,i-len-1,RawByteString(payload));
+  Base64URIToBin(tok+headerlen,payloadend-headerlen-1,RawByteString(payload));
   if payload='' then
     exit;
   P := GotoNextNotSpace(pointer(payload));
@@ -12874,8 +12873,10 @@ begin
   if JWT.data.Count>0 then
     JWT.data.Capacity := JWT.data.Count;
   if fClaims-JWT.claims<>[] then
-    JWT.result := jwtMissingClaim else
+    JWT.result := jwtMissingClaim else begin
+    SetString(headpayload,tok,payloadend-1);
     JWT.result := jwtValid;
+  end;
 end;
 
 function TJWTAbstract.VerifyAuthorizationHeader(const HttpAuthorizationHeader: RawUTF8;

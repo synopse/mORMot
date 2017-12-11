@@ -36693,7 +36693,7 @@ function TIPBan.Exists(const aIP: RawUTF8): boolean;
 var ip4: cardinal;
 begin
   result := false;
-  if (self=nil) or not IPToCardinal(aIP,ip4) then
+  if (self=nil) or (fCount=0) or not IPToCardinal(aIP,ip4) then
     exit;
   fSafe.Lock;
   try

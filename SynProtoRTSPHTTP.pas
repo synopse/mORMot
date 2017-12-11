@@ -237,6 +237,9 @@ type
     property RemoteIP;
   end;
 
+const
+  RTSP_MIME = 'application/x-rtsp-tunnelled';
+
 function TRTSPOverHTTPServer.ConnectionCreate(aSocket: TSocket;
   out aConnection: TAsynchConnection): boolean;
 var
@@ -264,7 +267,7 @@ begin
     sock := TProxySocket.Create(nil);
     try
       sock.InitRequest(aSocket);
-      if sock.GetRequest(false) and (sock.URL <> '') then begin
+      if sock.GetRequest({withBody=}false) and (sock.URL <> '') then begin
         if log<>nil then
           log.Log(sllTrace, 'ConnectionCreate received % % %', [sock.Method, sock.URL,
             sock.HeaderGetText], self);
@@ -293,7 +296,7 @@ begin
                 'Date: Thu, 19 Aug 1982 18:30:00 GMT'#13#10 +
                 'Cache-Control: no-store'#13#10 +
                 'Pragma: no-cache'#13#10 +
-                'Content-Type: application/x-rtsp-tunnelled'#13#10#13#10,
+                'Content-Type: ' + RTSP_MIME + #13#10#13#10,
                 [ExeVersion.ProgramName, ExeVersion.Version.DetailedOrVoid]));
               sock.fExpires := now + 60 * 15; // deprecated after 15 minutes
               sock.CloseSockIn; // we won't use it any more
@@ -306,8 +309,7 @@ begin
             if i < 0 then begin
               if log<>nil then
                 log.Log(sllDebug, 'ConnectionCreate rejected on unknonwn %', [sock], self)
-            end else if not IdemPropNameU(sock.ContentType,
-              'application/x-rtsp-tunnelled') then
+            end else if not IdemPropNameU(sock.ContentType, RTSP_MIME) then
               PendingDelete(i, sock.ContentType)
             else begin
               get := fPendingGet.Objects[i] as TProxySocket;
@@ -394,7 +396,7 @@ begin // here we follow the steps and content stated by https://goo.gl/CX6VA3
           'GET /sw.mov HTTP/1.0'#13#10 +
           'User-Agent: QTS (qtver=4.1;cpu=PPC;os=Mac 8.6)'#13#10 +
           'x-sessioncookie: ' + session + #13#10 +
-          'Accept: application/x-rtsp-tunnelled'#13#10 +
+          'Accept: ' + RTSP_MIME + #13#10 +
           'Pragma: no-cache'#13#10 +
           'Cache-Control: no-cache'#13#10#13#10);
         get.SockRecvLn(text);
@@ -402,7 +404,7 @@ begin // here we follow the steps and content stated by https://goo.gl/CX6VA3
         get.GetHeader;
         test.Check(get.ConnectionClose);
         test.Check(get.SockConnected);
-        test.Check(get.ContentType = 'application/x-rtsp-tunnelled');
+        test.Check(get.ContentType = RTSP_MIME);
       end;
       if log<>nil then
         log.Log(sllCustom1, 'RegressionTests % POST', [clientcount], self);
@@ -413,7 +415,7 @@ begin // here we follow the steps and content stated by https://goo.gl/CX6VA3
           'POST /sw.mov HTTP/1.0'#13#10 +
           'User-Agent: QTS (qtver=4.1;cpu=PPC;os=Mac 8.6)'#13#10 +
           'x-sessioncookie: ' + session + #13#10 +
-          'Content-Type: application/x-rtsp-tunnelled'#13#10 +
+          'Content-Type: ' + RTSP_MIME + #13#10 +
           'Pragma: no-cache'#13#10 +
           'Cache-Control: no-cache'#13#10 +
           'Content-Length: 32767'#13#10 +
