@@ -551,6 +551,11 @@ type
     /// on the server side, allows to send a message over the wire to a
     // specified client connection
     function SendFrame(Sender: THttpServerResp; const Frame: TWebSocketFrame): boolean;
+    /// on the server side, allows to send a JSON message over the wire to a
+    // specified client connection
+    // - the supplied JSON content is supplied as "var", since it may be
+    // modified during execution, e.g. XORed for frame masking
+    function SendFrameJson(Sender: THttpServerResp; var JSON: RawUTF8): boolean;
     /// you can assign an event to this property to be notified of incoming messages
     property OnIncomingFrame: TOnWebSocketProtocolChatIncomingFrame
       read fOnIncomingFrame write fOnIncomingFrame;
@@ -1277,9 +1282,6 @@ begin
 end;
 
 
-type
-  TThreadHook = class(TThread);
-
 const
   STATUS_WEBSOCKETCLOSED = 0;
 
@@ -1492,18 +1494,31 @@ end;
 
 function TWebSocketProtocolChat.SendFrame(Sender: THttpServerResp;
   const frame: TWebSocketFrame): boolean;
-var tmp: TWebSocketFrame; // SendFrame() may change frame content
+var tmp: TWebSocketFrame; // SendFrame() may change frame content (e.g. mask)
 begin
   result := false;
-  if (self=nil) or (Sender=nil) or TThreadHook(Sender).Terminated or
-     not (Frame.opcode in [focText,focBinary]) then
-    exit;
-  if (Sender.Server as TWebSocketServer).IsActiveWebSocket(Sender)<>Sender then
+  if (self=nil) or (Sender=nil) or Sender.Terminated or
+     not (Frame.opcode in [focText,focBinary]) or
+     ((Sender.Server as TWebSocketServer).IsActiveWebSocket(Sender)<>Sender) then
     exit;
   tmp.opcode := frame.opcode;
   tmp.content := frame.content;
   SetString(tmp.payload,PAnsiChar(Pointer(frame.payload)),length(frame.payload));
   result := (Sender as TWebSocketServerResp).fProcess.SendFrame(tmp)
+end;
+
+function TWebSocketProtocolChat.SendFrameJson(Sender: THttpServerResp;
+  var JSON: RawUTF8): boolean;
+var frame: TWebSocketFrame;
+begin
+  result := false;
+  if (self=nil) or (Sender=nil) or Sender.Terminated or
+     ((Sender.Server as TWebSocketServer).IsActiveWebSocket(Sender)<>Sender) then
+    exit;
+  frame.opcode := focText;
+  frame.content := [];
+  frame.payload := JSON;
+  result := (Sender as TWebSocketServerResp).fProcess.SendFrame(frame)
 end;
 
 
@@ -2588,8 +2603,7 @@ begin
   ProcessStart;
   SetLastPingTicks;
   fState := wpsRun;
-  while (fState<>wpsDestroy) and
-        not TThreadHook(fOwnerThread).Terminated do
+  while (fState<>wpsDestroy) and not fOwnerThread.Terminated do
     try
       InterlockedIncrement(fProcessCount);
       try
@@ -2612,7 +2626,7 @@ begin
           end;
           end;
         end else
-        if TThreadHook(fOwnerThread).Terminated then
+        if fOwnerThread.Terminated then
           break else begin
           elapsed := LastPingDelay;
           if (elapsed>0) and (fOutgoing.Count>0) then
