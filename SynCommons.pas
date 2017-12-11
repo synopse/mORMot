@@ -1622,7 +1622,7 @@ const
   HEADER_REMOTEIP_UPPER = 'REMOTEIP: ';
 
   /// HTTP header name for the authorization token, in upper case
-  // - could be used e.g. with IdemPChar() to retrieve the JWT value
+  // - could be used e.g. with IdemPChar() to retrieve a JWT value
   HEADER_BEARER_UPPER = 'AUTHORIZATION: BEARER ';
 
   /// MIME content type used for JSON communication (as used by the Microsoft
@@ -5391,7 +5391,7 @@ type
     // - T*ObjArray will be reallocated and copied by content (using a temporary
     // JSON serialization), unless ObjArrayByRef is true
     procedure CopyTo(out Dest; ObjArrayByRef: boolean=false);
-    {$endif}
+    {$endif DELPHI5OROLDER}
     /// returns a pointer to an element of the array
     // - returns nil if aIndex is out of range
     // - since TDynArray is just a wrapper around an existing array, you should
@@ -6964,7 +6964,7 @@ procedure RecordClear(var Dest; TypeInfo: pointer);
 // TDynArray wrappers
 procedure DynArrayCopy(var Dest; const Source; SourceMaxElem: integer;
   TypeInfo: pointer);
-{$endif}
+{$endif DELPHI5OROLDER}
 
 /// fill a dynamic array content from a binary serialization as saved by
 // DynArraySave() / TDynArray.Save()
@@ -7005,7 +7005,7 @@ function DynArraySaveJSON(const Value; TypeInfo: pointer;
 /// compare two dynamic arrays by calling TDynArray.Equals
 function DynArrayEquals(TypeInfo: pointer; var Array1, Array2;
   Array1Count: PInteger=nil; Array2Count: PInteger=nil): boolean;
-{$endif}
+{$endif DELPHI5OROLDER}
 
 /// serialize a dynamic array content, supplied as raw binary buffer, as JSON
 // - Value shall be set to the source dynamic array field
@@ -10487,7 +10487,7 @@ type
     procedure Add(const aAnother: TRawByteStringGroup); overload;
     /// compare two TRawByteStringGroup instance stored text
     function Equals(const aAnother: TRawByteStringGroup): boolean;
-    {$endif}
+    {$endif DELPHI5OROLDER}
     /// clear any stored information
     procedure Clear;
     /// return all content as a single RawByteString
@@ -16928,6 +16928,7 @@ type
     // - faster than IAutoLocker.Safe function
     property Locker: TSynLocker read fSafe;
   end;
+  {$ifdef DELPHI5OROLDER}IAutoLocker = TAutoLocker;{$endif}
 
   /// the current state of a TBlockingProcess instance
   TBlockingEvent = (evNone,evWaiting,evTimeOut,evRaised);
@@ -17721,7 +17722,7 @@ type
     /// compare two Identifiers
     function Equal(const Another: TSynUniqueIdentifierBits): boolean;
       {$ifdef HASINLINE}inline;{$endif}
-    {$endif}
+    {$endif DELPHI5OROLDER}
     /// convert the identifier into a 16 chars hexadecimal string
     function ToHexa: RawUTF8;
       {$ifdef HASINLINE}inline;{$endif}
@@ -45863,7 +45864,7 @@ begin
   DestDynArray.Init(TypeInfo,Dest);
   DestDynArray.CopyFrom(Source,SourceMaxElem);
 end;
-{$endif}
+{$endif DELPHI5OROLDER}
 
 function DynArrayLoad(var Value; Source: PAnsiChar; TypeInfo: pointer): PAnsiChar;
 var DynArray: TDynArray;
@@ -45902,7 +45903,7 @@ begin
   DA2.Init(TypeInfo,Array2,Array2Count);
   result := DA1.Equals(DA2);
 end;
-{$endif}
+{$endif DELPHI5OROLDER}
 
 function DynArrayBlobSaveJSON(TypeInfo, BlobValue: pointer): RawUTF8;
 var DynArray: TDynArray;
@@ -46720,7 +46721,7 @@ begin
     {$ifndef DELPHI5OROLDER}
     if fTypeInfo=TypeInfo(TInterfaceDynArray) then
       fKnownType := djInterface
-    {$endif}
+    {$endif DELPHI5OROLDER}
   {$ifdef CPU64} else {$else} ; 8: {$endif}
      if fTypeInfo=TypeInfo(TDoubleDynArray) then
        fKnownType := djDouble else
