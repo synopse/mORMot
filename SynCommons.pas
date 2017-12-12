@@ -7170,7 +7170,6 @@ function HashInt64(const Elem; Hasher: THasher): cardinal;
 // use the hasher function
 function HashPointer(const Elem; Hasher: THasher): cardinal;
 
-
 var
   /// helper array to get the comparison function corresponding to a given
   // standard array type
@@ -47326,12 +47325,24 @@ begin
           L := result+1 else
           n := result-1;
       until L>n;
-    end else
+    end else begin
       // array is very small, or not sorted -> use O(n) iterating search
+      if (ElemType=nil) and (@fCompare=@DYNARRAY_SORTFIRSTFIELD[false,fKnownType]) then
+      case fElemSize of // call optimized version for most simple types
+      4: begin
+        result := IntegerScanIndex(pointer(P),n+1,Integer(Elem));
+        exit;
+      end;
+      8: begin
+        result := Int64ScanIndex(pointer(P),n+1,Int64(Elem));
+        exit;
+      end;
+      end;
       for result := 0 to n do
         if fCompare(P^,Elem)=0 then
           exit else
           inc(P,ElemSize);
+    end;
   end;
   result := -1;
 end;
@@ -48213,26 +48224,16 @@ function TDynArrayHashed.Scan(const Elem): integer;
 var P: PAnsiChar;
     n: integer;
 begin
-  n := Count;
-  if n>0 then begin
+  if Assigned(fEventCompare) then begin
     P := fValue^; // Count<fHashCountTrigger -> O(n) is faster than O(1)
-    if Assigned(fEventCompare) then begin
-      for result := 0 to n-1 do
-        if fEventCompare(P^,Elem)=0 then
-          exit else
-          inc(P,ElemSize);
-    end else
-      if @{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare=
-         @DYNARRAY_SORTFIRSTFIELD[false,djPointer] then begin
-        result := PtrUIntScanIndex(pointer(P),n,PtrUInt(Elem));
-        exit; // optimized for TObject/TClass/pointer arrays
-      end else
-      for result := 0 to n-1 do
-        if {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare(P^,Elem)=0 then
-          exit else
-          inc(P,ElemSize);
-  end;
-  result := -1;
+    n := Count;
+    for result := 0 to n-1 do
+      if fEventCompare(P^,Elem)=0 then
+        exit else
+        inc(P,ElemSize);
+    result := -1;
+  end else
+    result := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}Find(Elem);
 end;
 
 function TDynArrayHashed.FindHashed(const Elem; aHashCode: cardinal): integer;
@@ -48243,8 +48244,10 @@ begin
     result := HashFindAndCompare(aHashCode,Elem);
     if result<0 then
       result := -1; // for coherency with most methods
-  end else begin
-    result := Scan(Elem); // Count<fHashCountTrigger
+  end else begin // Count<fHashCountTrigger
+    if Assigned(fEventCompare) then 
+      result := Scan(Elem) else
+      result := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}Find(Elem);
     if (result>=0) and (fHashCountTrigger>0) then begin
       inc(fHashFindCount);
       if fHashFindCount>=fHashCountTrigger then begin
