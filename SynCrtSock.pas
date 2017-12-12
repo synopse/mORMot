@@ -9821,12 +9821,6 @@ const
     // https://github.com/nihon-tc/Rtest/blob/master/header/Microsoft%20SDKs/Windows/v7.0A/Include/winhttp.h
     WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_1 = $00000200;
     WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2 = $00000800;
-    // MPV - don't know why, but if I pass WINHTTP_FLAG_SECURE_PROTOCOL_SSL2
-    // flag also, TLS1.2 do not work
-    WINHTTP_FLAG_SECURE_PROTOCOL_MODERN: DWORD =
-      WINHTTP_FLAG_SECURE_PROTOCOL_SSL3
-         or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1
-         or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_1 or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;
 
    // Sets an unsigned long integer value that specifies which secure protocols are acceptable.
    // By default only SSL3 and TLS1 are enabled in Windows 7 and Windows 8.
@@ -10019,6 +10013,9 @@ procedure TWinHTTP.InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout:
 var OpenType: integer;
     Callback: WINHTTP_STATUS_CALLBACK;
     CallbackRes: PtrInt absolute Callback; // for FPC compatibility
+    // MPV - don't know why, but if I pass WINHTTP_FLAG_SECURE_PROTOCOL_SSL2
+    // flag also, TLS1.2 do not work
+    protocols: DWORD;
 begin
   if OSVersionInfo.dwOSVersionInfoSize=0 then begin // API call once
     OSVersionInfo.dwOSVersionInfoSize := sizeof(OSVersionInfo);
@@ -10039,8 +10036,15 @@ begin
      ConnectionTimeOut,SendTimeout,ReceiveTimeout) then
     RaiseLastModuleError(winhttpdll,EWinHTTP);
   if fHTTPS then begin
+     protocols := WINHTTP_FLAG_SECURE_PROTOCOL_SSL3
+       or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1;
+     // Windows 7 and newer support TLS 1.1 & 1.2
+     if (OSVersionInfo.dwMajorVersion>6) or
+       ((OSVersionInfo.dwMajorVersion=6) and (OSVersionInfo.dwMinorVersion>=1)) then
+       protocols := protocols or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_1
+         or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;
     if not WinHttpAPI.SetOption(fSession, WINHTTP_OPTION_SECURE_PROTOCOLS,
-       @WINHTTP_FLAG_SECURE_PROTOCOL_MODERN, SizeOf(WINHTTP_FLAG_SECURE_PROTOCOL_MODERN)) then
+       @protocols, SizeOf(protocols)) then
       RaiseLastModuleError(winhttpdll,EWinHTTP);
     Callback := WinHttpAPI.SetStatusCallback(fSession, WinHTTPSecurityErrorCallback,
        WINHTTP_CALLBACK_FLAG_SECURE_FAILURE, nil);
