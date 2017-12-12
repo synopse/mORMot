@@ -150,6 +150,8 @@ const NODE_CORE_MODULES = ['fs', 'util', 'path', 'assert', 'module', 'console', 
  'crypto', 'zlib', 'dns', //fake modules
  'buffer', 'string_decoder', 'internal/util', 'internal/module', 'stream', '_stream_readable', '_stream_writable', 
  'internal/streams/BufferList', '_stream_duplex', '_stream_transform', '_stream_passthrough',
+ 'internal/fs',
+ 'internal/errors', 'internal/querystring',  
  'polyfill/WindowTimer']; 
 
 NativeModule._source = {};

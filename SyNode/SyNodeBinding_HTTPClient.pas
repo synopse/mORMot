@@ -12,8 +12,7 @@ interface
 {$I Synopse.inc}
 {$I SyNode.inc}
 uses
-  {$IFDEF MSWINDOWS}Windows, {$ENDIF}SysUtils, SynCrtSock, SynCommons,
-  SpiderMonkey;
+  SysUtils, SynCrtSock, SynCommons, SpiderMonkey;
 
 type
   {$M+}
@@ -259,8 +258,6 @@ function SyNodeBindingProc_synode_http(const aEngine: TSMEngine; const bindingNa
 var
   obj: PJSRootedObject;
   cx: PJSContext;
-const
-  props = JSPROP_ENUMERATE or JSPROP_READONLY or JSPROP_PERMANENT;
 begin
   cx := aEngine.cx;
   obj := cx.NewRootedObject(cx.NewObject(nil));

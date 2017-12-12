@@ -390,6 +390,7 @@ type
     procedure SetMaxPerEngineMemory(AMaxMem: Cardinal);
     procedure SetMaxNurseryBytes(AMaxNurseryBytes: Cardinal);
   protected
+    grandParent: TSMEngine;
     /// Release a javaScript engine for specified thread
     procedure ReleaseEngineForThread(aThreadID: DWORD);
     /// returns -1 if none was defined yet
@@ -531,8 +532,12 @@ var
 implementation
 
 uses
+  {$IFNDEF MSWINDOWS}
+  Errors, SynFPCLinux,
+  {$ENDIF}
   SyNodeRemoteDebugger,
   SyNodeBinding_fs {used by other core modules},
+  SyNodeBinding_const,
   SyNodeBinding_buffer,
   SyNodeBinding_util,
   SyNodeBinding_uv;
@@ -641,7 +646,13 @@ begin
   FManager := aManager;
   FEngineContentVersion := FManager.ContentVersion;
 {$IFDEF SM52}
-  fCx := PJSContext(nil).CreateNew(FManager.MaxPerEngineMemory, $01000000, nil);
+// TODO - solve problem of destroying parent engine before slave and uncomment a code below
+// this will save up to 20% of RAM - some internal structures of SM Engines will be reused 
+// between threads
+//  if aManager.grandParent <> nil then
+//    fCx := PJSContext(nil).CreateNew(FManager.MaxPerEngineMemory, $01000000, aManager.grandParent.cx)
+//  else
+    fCx := PJSContext(nil).CreateNew(FManager.MaxPerEngineMemory, $01000000, nil);
   if fCx = nil then
     raise ESMException.Create('Create context: out of memory');
 {$IFNDEF CPUX64} // This check does not always work correctly under 64-bit configurations. Need more investigation to understand the problem
@@ -1222,7 +1233,6 @@ const
   UNINIT_PROC_NAME = 'UnInitPlugin';
 
 begin
-{$IFDEF MSWINDOWS}
   Lock;
   try
     cx.BeginRequest;
@@ -1230,9 +1240,9 @@ begin
       dirname := ExtractFilePath(UTF8ToString(filename)) ;
       ModuleRec := PDllModuleRec(FDllModules.GetObjectByName(filename));
       if ModuleRec = nil then begin
-        fHandle := SafeLoadLibrary(UTF8ToString(filename));
+        fHandle := {$IFDEF FPC}dynlibs.{$ENDIF}SafeLoadLibrary(UTF8ToString(filename));
         if fHandle=0 then
-          raise ESMException.CreateFmt('Unable to load %s',[filename]);
+          raise ESMException.CreateFmt('Unable to load %s (%s)',[filename, StrError(GetLastError)]);
         new(ModuleRec);
         ModuleRec.init := GetProcAddress(fHandle, INIT_PROC_NAME);
         if not Assigned(ModuleRec.init) then begin
@@ -1286,9 +1296,6 @@ begin
   end;
 
   Result := ModuleRec.unInit;
-{$ELSE}
-  raise ENotImplemented.Create('TODO');
-{$ENDIF}
 end;
 
 function TSMEngineManager.getPauseDebuggerOnFirstStep: boolean;
@@ -1343,6 +1350,9 @@ begin
     {$endif}
 
     Result := FEngineClass.Create(Self);
+    if grandParent = nil then
+      grandParent := Result;
+
     if (pThreadData <> nil) then
       Result.SetThreadData(pThreadData);
 
