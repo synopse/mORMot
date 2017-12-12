@@ -3699,6 +3699,12 @@ function GetBitCSV(const Bits; BitsCount: integer): RawUTF8;
 // - output text would be trimmed from any left or right space
 procedure GetNextItemShortString(var P: PUTF8Char; out Dest: ShortString; Sep: AnsiChar= ',');
 
+/// decode next CSV hexadecimal string from P, nil if no more or not matching BinBytes
+// - Bin is filled with 0 if the supplied CSV content is invalid
+function GetNextItemHexDisplayToBin(var P: PUTF8Char; Bin: PByte; BinBytes: integer;
+  Sep: AnsiChar= ','): boolean;
+
+
 type
   /// some stack-allocated zero-terminated character buffer
   // - as used by GetNextTChar64
@@ -8340,7 +8346,10 @@ type
     // in big-endian order (most-significant byte first), as used by humans
     // - up to the internal buffer bytes may be converted
     procedure AddBinToHexDisplay(Bin: pointer; BinBytes: integer);
-    /// fast conversion from binary data into quoted MSB hexa chars
+    /// fast conversion from binary data into MSB hexa chars
+    // - up to the internal buffer bytes may be converted
+    procedure AddBinToHexDisplayLower(Bin: pointer; BinBytes: integer);
+    /// fast conversion from binary data into quoted MSB lowercase hexa chars
     // - up to the internal buffer bytes may be converted
     procedure AddBinToHexDisplayQuoted(Bin: pointer; BinBytes: integer);
     /// add the pointer into hexa chars, ready to be displayed
@@ -10764,7 +10773,7 @@ procedure JSONDecode(var JSON: RawUTF8;
   HandleValuesAsObjectOrArray: Boolean=false); overload;
 
 /// decode the supplied UTF-8 JSON content for the supplied names
-// - an overloaded function when the JSON is supplied as a RawJSON variable  
+// - an overloaded function when the JSON is supplied as a RawJSON variable
 procedure JSONDecode(var JSON: RawJSON;
   const Names: array of PUTF8Char; var Values: TPUtf8CharDynArray;
   HandleValuesAsObjectOrArray: Boolean=false); overload;
@@ -10773,6 +10782,19 @@ procedure JSONDecode(var JSON: RawJSON;
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
 function ObjArrayToJSON(const aObjArray;
   Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]): RawUTF8;
+
+/// decode the supplied UTF-8 JSON content for the supplied names
+// - data will be set in Values, according to the Names supplied e.g.
+// ! JSONDecode(P,['name','year'],Values) -> Values[0]^='John'; Values[1]^='1972';
+// - if any supplied name wasn't found its corresponding Values[] will be nil
+// - this procedure will decode the JSON content in-memory, i.e. the PUtf8Char
+// array is created inside P, which is therefore modified: make a private
+// copy first if you want to reuse the JSON content
+// - if HandleValuesAsObjectOrArray is TRUE, then this procedure will handle
+// JSON arrays or objects
+// - returns a pointer to the next content item in the JSON buffer
+function JSONDecode(P: PUTF8Char; const Names: array of PUTF8Char;
+  var Values: TPUtf8CharDynArray; HandleValuesAsObjectOrArray: Boolean=false): PUTF8Char; overload;
 
 type
   /// store one name/value pair of raw UTF-8 content, from a JSON buffer
@@ -10798,19 +10820,6 @@ type
 // just like '{"name":'"John","year":1972}'
 function JSONDecode(P: PUTF8Char; out Values: TNameValuePUTF8CharDynArray;
   HandleValuesAsObjectOrArray: Boolean=false): PUTF8Char; overload;
-
-/// decode the supplied UTF-8 JSON content for the supplied names
-// - data will be set in Values, according to the Names supplied e.g.
-// ! JSONDecode(P,['name','year'],Values) -> Values[0]^='John'; Values[1]^='1972';
-// - if any supplied name wasn't found its corresponding Values[] will be nil
-// - this procedure will decode the JSON content in-memory, i.e. the PUtf8Char
-// array is created inside P, which is therefore modified: make a private
-// copy first if you want to reuse the JSON content
-// - if HandleValuesAsObjectOrArray is TRUE, then this procedure will handle
-// JSON arrays or objects
-// - returns a pointer to the next content item in the JSON buffer
-function JSONDecode(P: PUTF8Char; const Names: array of PUTF8Char;
-  var Values: TPUtf8CharDynArray; HandleValuesAsObjectOrArray: Boolean=false): PUTF8Char; overload;
 
 /// decode the supplied UTF-8 JSON content for the one supplied name
 // - this function will decode the JSON content in-memory, so will unescape it
@@ -14447,6 +14456,13 @@ function TextToVariantNumberTypeNoDouble(JSON: PUTF8Char): word;
 function GetNumericVariantFromJSON(JSON: PUTF8Char; var Value: TVarData;
   AllowVarDouble: boolean): boolean;
 
+/// convert the next CSV item from an UTF-8 encoded text buffer
+// into a variant number or RawUTF8 varString
+// - first try with GetNumericVariantFromJSON(), then fallback to RawUTF8ToVariant
+// - is a wrapper around GetNextItem() + TextToVariant()
+function GetNextItemToVariant(var P: PUTF8Char; out Value: Variant;
+  Sep: AnsiChar= ','; AllowDouble: boolean=true): boolean;
+
 /// convert an UTF-8 encoded text buffer into a variant number or RawUTF8 varString
 // - first try with GetNumericVariantFromJSON(), then fallback to RawUTF8ToVariant
 procedure TextToVariant(const aValue: RawUTF8; AllowVarDouble: boolean;
@@ -14504,7 +14520,6 @@ function ValuesToVariantDynArray(const items: array of const): TVariantDynArray;
 
 /// guess the correct TSQLDBFieldType from a variant value
 function VariantTypeToSQLDBFieldType(const V: Variant): TSQLDBFieldType;
-
 
 type
   /// pointer to a TDocVariant storage
@@ -31946,6 +31961,32 @@ begin
   end;
 end;
 
+function GetNextItemHexDisplayToBin(var P: PUTF8Char; Bin: PByte; BinBytes: integer;
+  Sep: AnsiChar= ','): boolean;
+var S: PUTF8Char;
+    len: integer;
+begin
+  result := false;
+  FillCharFast(Bin,BinBytes,0);
+  if P=nil then
+    exit;
+  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+  S := P;
+  while (S^<>#0) and (S^<>Sep) do
+    inc(S);
+  len := S-P;
+  while (P[len-1] in [#1..' ']) and (len>0) do dec(len); // trim right spaces
+  if len<>BinBytes*2 then
+    exit;
+  if not HexDisplayToBin(PAnsiChar(P),Bin,BinBytes) then
+    FillCharFast(Bin,BinBytes,0) else begin
+    if S^<>#0 then
+      P := S+1 else
+      P := nil;
+    result := true;
+  end;
+end;
+
 function GetNextItemCardinal(var P: PUTF8Char; Sep: AnsiChar= ','): PtrUInt;
 var c: PtrUInt;
 begin
@@ -32228,16 +32269,18 @@ end;
 procedure CSVToRawUTF8DynArray(CSV: PUTF8Char; var Result: TRawUTF8DynArray;
   Sep: AnsiChar; TrimItems: boolean);
 var s: RawUTF8;
+    n: integer;
 begin
+  n := length(Result);
   while CSV<>nil do begin
     if TrimItems then
       GetNextItemTrimed(CSV,Sep,s) else
       GetNextItem(CSV,Sep,s);
-    if s<>'' then begin
-      SetLength(Result,length(Result)+1);
-      Result[high(Result)] := s;
-    end;
+    if s<>'' then
+      AddRawUTF8(Result,n,s);
   end;
+  if n<>length(Result) then
+    SetLength(Result,n);
 end;
 
 procedure CSVToRawUTF8DynArray(const CSV,Sep,SepEnd: RawUTF8; var Result: TRawUTF8DynArray);
@@ -43244,6 +43287,19 @@ begin
     RawUTF8ToVariant(aValue,aDest);
 end;
 
+function GetNextItemToVariant(var P: PUTF8Char; out Value: Variant;
+  Sep: AnsiChar; AllowDouble: boolean): boolean;
+var temp: RawUTF8;
+begin
+  if P=nil then
+    result := false else begin
+    GetNextItem(P,Sep,temp);
+    if not GetNumericVariantFromJSON(pointer(temp),TVarData(Value),AllowDouble) then
+      RawUTF8ToVariant(temp,Value);
+    result := true;
+  end;
+end;
+
 function GetVariantFromNotStringJSON(JSON: PUTF8Char; var Value: TVarData;
   AllowDouble: boolean): boolean;
 begin
@@ -51172,6 +51228,16 @@ begin
   inc(B,BinBytes*2);
 end;
 
+procedure TTextWriter.AddBinToHexDisplayLower(Bin: pointer; BinBytes: integer);
+begin
+  if cardinal(BinBytes*2-1)>=cardinal(fTempBufSize) then
+    exit;
+  if BEnd-B<=BinBytes*2 then
+    FlushToStream;
+  BinToHexDisplayLower(Bin,PAnsiChar(B+1),BinBytes);
+  inc(B,BinBytes*2);
+end;
+
 procedure TTextWriter.AddBinToHexDisplayQuoted(Bin: pointer; BinBytes: integer);
 begin
   if cardinal(BinBytes*2+2)>=cardinal(fTempBufSize) then
@@ -52468,7 +52534,7 @@ begin
       SetRawUTF8(result,PAnsiChar(pointer(DataString))+fInitialStreamPosition,Len) else
   if fStream.InheritsFrom(TCustomMemoryStream) then
     with TCustomMemoryStream(fStream) do
-    SetRawUTF8(result,PAnsiChar(Memory)+fInitialStreamPosition,Len) else begin
+      SetRawUTF8(result,PAnsiChar(Memory)+fInitialStreamPosition,Len) else begin
     FastNewRawUTF8(result,Len);
     fStream.Seek(fInitialStreamPosition,soBeginning);
     fStream.Read(pointer(result)^,Len);
