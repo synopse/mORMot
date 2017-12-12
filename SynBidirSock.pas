@@ -485,7 +485,7 @@ type
     fEncryption: IProtocol;
     function ProcessHandshake(const ExtIn: TRawUTF8DynArray; out ExtOut: RawUTF8;
       ErrorMsg: PRawUTF8): boolean; virtual;
-    function ProcessURI(const URI: RawUTF8): boolean; virtual; // e.g. for authentication
+    function ProcessURI(const aClientURI: RawUTF8): boolean; virtual; // e.g. for authentication
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
       var request: TWebSocketFrame; const info: RawUTF8); virtual; abstract;
     function SendFrames(Owner: TWebSocketProcess;
@@ -506,7 +506,7 @@ type
     // specify an URI to limit the protocol upgrade to a single resource
     constructor Create(const aName,aURI: RawUTF8); reintroduce;
     /// compute a new instance of the WebSockets protocol, with same parameters
-    function Clone: TWebSocketProtocol; virtual; abstract;
+    function Clone(const aClientURI: RawUTF8): TWebSocketProtocol; virtual; abstract;
   published
     /// the Sec-WebSocket-Protocol application name currently involved
     // - e.g. 'synopsejson', 'synopsebin' or 'synopsebinary'
@@ -548,7 +548,7 @@ type
       var request: TWebSocketFrame; const info: RawUTF8); override;
   public
     /// compute a new instance of the WebSockets protocol, with same parameters
-    function Clone: TWebSocketProtocol; override;
+    function Clone(const aClientURI: RawUTF8): TWebSocketProtocol; override;
     /// on the server side, allows to send a message over the wire to a
     // specified client connection
     function SendFrame(Sender: THttpServerResp; const Frame: TWebSocketFrame): boolean;
@@ -614,7 +614,7 @@ type
     // specify an URI to limit the protocol upgrade to a single resource
     constructor Create(const aURI: RawUTF8); reintroduce;
     /// compute a new instance of the WebSockets protocol, with same parameters
-    function Clone: TWebSocketProtocol; override;
+    function Clone(const aClientURI: RawUTF8): TWebSocketProtocol; override;
   end;
 
   /// handle a REST application-level WebSockets protocol using compressed and
@@ -673,7 +673,7 @@ type
     constructor Create(const aURI: RawUTF8; aServer: boolean; const aKey: RawUTF8;
       aCompressed: boolean=true); reintroduce; overload;
     /// compute a new instance of the WebSockets protocol, with same parameters
-    function Clone: TWebSocketProtocol; override;
+    function Clone(const aClientURI: RawUTF8): TWebSocketProtocol; override;
   published
     /// defines if SynLZ compression is enabled during the transmission
     // - is set to TRUE by default
@@ -711,9 +711,9 @@ type
     /// finalize the list storage
     destructor Destroy; override;
     /// create a new protocol instance, from the internal list
-    function CloneByName(const aProtocolName, aURI: RawUTF8): TWebSocketProtocol;
+    function CloneByName(const aProtocolName, aClientURI: RawUTF8): TWebSocketProtocol;
     /// create a new protocol instance, from the internal list
-    function CloneByURI(const aURI: RawUTF8): TWebSocketProtocol;
+    function CloneByURI(const aClientURI: RawUTF8): TWebSocketProtocol;
     /// how many protocols are stored
     function Count: integer;
   end;
@@ -934,8 +934,6 @@ type
   protected
     fServerResp: TWebSocketServerResp;
     function ComputeContext(out RequestProcess: TOnHttpServerRequest): THttpServerRequest; override;
-    procedure ProcessStart; override;
-    procedure ProcessStop; override;
   end;
 
   /// an enhanced input/output structure used for HTTP and WebSockets requests
@@ -1368,7 +1366,7 @@ begin
   result := true; // just ignore any unknown extension
 end;
 
-function TWebSocketProtocol.ProcessURI(const URI: RawUTF8): boolean;
+function TWebSocketProtocol.ProcessURI(const aClientURI: RawUTF8): boolean;
 begin
   result := true; // override and return false to return STATUS_UNAUTHORIZED
 end;
@@ -1501,7 +1499,7 @@ end;
 
 { TWebSocketProtocolChat }
 
-function TWebSocketProtocolChat.Clone: TWebSocketProtocol;
+function TWebSocketProtocolChat.Clone(const aClientURI: RawUTF8): TWebSocketProtocol;
 begin
   result := TWebSocketProtocolChat.Create(fName,fURI);
   TWebSocketProtocolChat(result).OnIncomingFrame := OnIncomingFrame;
@@ -1670,7 +1668,7 @@ begin
   inherited Create('synopsejson',aURI);
 end;
 
-function TWebSocketProtocolJSON.Clone: TWebSocketProtocol;
+function TWebSocketProtocolJSON.Clone(const aClientURI: RawUTF8): TWebSocketProtocol;
 begin
   result := TWebSocketProtocolJSON.Create(fURI);
 end;
@@ -1822,7 +1820,7 @@ begin
   end;
 end;
 
-function TWebSocketProtocolBinary.Clone: TWebSocketProtocol;
+function TWebSocketProtocolBinary.Clone(const aClientURI: RawUTF8): TWebSocketProtocol;
 begin
   result := TWebSocketProtocolBinary.Create(fURI,self,0,fCompressed);
   TWebSocketProtocolBinary(result).fSequencing := fSequencing;
@@ -2097,7 +2095,8 @@ end;
 
 { TWebSocketProtocolList }
 
-function TWebSocketProtocolList.CloneByName(const aProtocolName, aURI: RawUTF8): TWebSocketProtocol;
+function TWebSocketProtocolList.CloneByName(
+  const aProtocolName, aClientURI: RawUTF8): TWebSocketProtocol;
 var i: Integer;
 begin
   result := nil;
@@ -2107,8 +2106,8 @@ begin
   try
     for i := 0 to length(fProtocols)-1 do
       with fProtocols[i] do
-      if ((fURI='') or IdemPropNameU(fURI,aURI)) and SetSubprotocol(aProtocolName) then begin
-        result := fProtocols[i].Clone;
+      if ((fURI='') or IdemPropNameU(fURI,aClientURI)) and SetSubprotocol(aProtocolName) then begin
+        result := fProtocols[i].Clone(aClientURI);
         result.fName := aProtocolName;
         exit;
       end;
@@ -2117,17 +2116,17 @@ begin
   end;
 end;
 
-function TWebSocketProtocolList.CloneByURI(const aURI: RawUTF8): TWebSocketProtocol;
+function TWebSocketProtocolList.CloneByURI(const aClientURI: RawUTF8): TWebSocketProtocol;
 var i: integer;
 begin
   result := nil;
-  if (self=nil) or (aURI='') then
+  if (self=nil) or (aClientURI='') then
     exit;
   fSafe.Lock;
   try
     for i := 0 to length(fProtocols)-1 do
-      if IdemPropNameU(fProtocols[i].fURI,aURI) then begin
-        result := fProtocols[i].Clone;
+      if IdemPropNameU(fProtocols[i].fURI,aClientURI) then begin
+        result := fProtocols[i].Clone(aClientURI);
         exit;
       end;
   finally
@@ -2274,16 +2273,22 @@ begin
 end;
 
 procedure TWebSocketProcess.ProcessStart;
+var frame: TWebSocketFrame; // notify e.g. TOnWebSocketProtocolChatIncomingFrame
 begin
   if Assigned(fSettings.OnClientConnected) then
   try
     fSettings.OnClientConnected(Self);
   except
   end;
+  frame.opcode := focContinuation;
+  fProtocol.ProcessIncomingFrame(self,frame,'');
 end;
 
 procedure TWebSocketProcess.ProcessStop;
+var frame: TWebSocketFrame; // notify e.g. TOnWebSocketProtocolChatIncomingFrame
 begin
+  frame.opcode := focConnectionClose;
+  fProtocol.ProcessIncomingFrame(self,frame,'');
   if Assigned(fSettings.OnClientDisconnected) then
   try
     fSettings.OnClientDisconnected(Self);
@@ -2948,22 +2953,6 @@ begin
   RequestProcess := TWebSocketServerResp(fOwnerThread).fServer.Request;
 end;
 
-procedure TWebSocketProcessServer.ProcessStart;
-var frame: TWebSocketFrame;
-begin // notify e.g. TOnWebSocketProtocolChatIncomingFrame
-  inherited ProcessStart;
-  frame.opcode := focContinuation;
-  fProtocol.ProcessIncomingFrame(self,frame,'');
-end;
-
-procedure TWebSocketProcessServer.ProcessStop;
-var frame: TWebSocketFrame;
-begin // notify e.g. TOnWebSocketProtocolChatIncomingFrame
-  frame.opcode := focConnectionClose;
-  fProtocol.ProcessIncomingFrame(self,frame,'');
-  inherited ProcessStop;
-end;
-
 
 { -------------- WebSockets Client classes for bidirectional remote access }
 
@@ -3454,7 +3443,7 @@ begin
   fConnectionLock.Lock;
   try
     fTempConnection.fHandle := aHandle;
-    i := fConnections.Find(fTempConnection); // fast binary search
+    i := fConnections.Find(fTempConnection); // fast O(log(n)) binary search
     if i>=0 then begin
       result := fConnection[i];
       if aIndex<>nil then
