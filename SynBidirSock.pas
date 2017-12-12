@@ -746,6 +746,9 @@ type
     /// add a WebSocket frame in the list
     // - this method is thread-safe
     procedure Push(const frame: TWebSocketFrame);
+    /// add a void WebSocket frame in the list
+    // - this method is thread-safe
+    procedure PushVoidFrame(opcode: TWebSocketFrameOpCode);
     /// retrieve a WebSocket frame from the list, oldest first
     // - you should specify a frame type to search for, according to the
     // specified WebSockets protocl
@@ -1475,6 +1478,14 @@ begin
   finally
     Safe.Leave;
   end;
+end;
+
+procedure TWebSocketFrameList.PushVoidFrame(opcode: TWebSocketFrameOpCode);
+var frame: TWebSocketFrame;
+begin
+  frame.opcode := opcode;
+  frame.content := [];
+  Push(frame);
 end;
 
 procedure TWebSocketFrameList.Delete(i: integer);
