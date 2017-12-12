@@ -1094,7 +1094,8 @@ type
   // error code (e.g. STATUS_FORBIDDEN or STATUS_PAYLOADTOOLARGE) to reject
   // the request
   TOnHttpServerBeforeBody = function(const aURL,aMethod,aInHeaders,
-    aInContentType,aRemoteIP: SockString; aContentLength: integer): cardinal of object;
+    aInContentType,aRemoteIP: SockString; aContentLength: integer;
+    aUseSSL: boolean): cardinal of object;
 
   {$M+}
   /// abstract class to implement a server thread
@@ -1184,7 +1185,7 @@ type
     property OnRequest: TOnHttpServerRequest read fOnRequest write fOnRequest;
     /// event handler called just before the body is retrieved from the client
     // - should return STATUS_SUCCESS=200 to continue the process, or an HTTP
-    // error code to reject the request
+    // error code to reject the request immediatly, and close the connection
     property OnBeforeBody: TOnHttpServerBeforeBody read fOnBeforeBody write SetOnBeforeBody;
     /// event handler called after each working Thread is just initiated
     // - called in the thread context at first place in THttpServerGeneric.Execute
@@ -5936,7 +5937,7 @@ begin
       end;
       if Assigned(fServer.OnBeforeBody) then begin
         status := fServer.OnBeforeBody(
-          fURL,fMethod,HeaderGetText,ContentType,RemoteIP,ContentLength);
+          fURL,fMethod,HeaderGetText,ContentType,RemoteIP,ContentLength,false);
         if status<>STATUS_SUCCESS then begin
           SockSend(['HTTP/1.0 ',status,' ',StatusCodeToReason(status),
             #13#10#13#10,'Rejected']);
@@ -7800,7 +7801,7 @@ begin
           end;
           if Assigned(OnBeforeBody) then begin
             with Context do
-              Err := OnBeforeBody(URL,Method,InHeaders,InContentType,RemoteIP,InContentLength);
+              Err := OnBeforeBody(URL,Method,InHeaders,InContentType,RemoteIP,InContentLength,fUseSSL);
             if Err<>STATUS_SUCCESS then begin
               SendError(Err,'Rejected');
               continue;
@@ -11400,8 +11401,7 @@ begin
   end;
 end;
 
-function TPollAsynchSockets.Write(connection: TObject; const data;
-  datalen: integer): boolean;
+function TPollAsynchSockets.Write(connection: TObject; const data; datalen: integer): boolean;
 var tag: TPollSocketTag;
     slot: PPollSocketsSlot;
     P: PByte;
