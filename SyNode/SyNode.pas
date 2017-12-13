@@ -1242,7 +1242,8 @@ begin
       if ModuleRec = nil then begin
         fHandle := {$IFDEF FPC}dynlibs.{$ENDIF}SafeLoadLibrary(UTF8ToString(filename));
         if fHandle=0 then
-          raise ESMException.CreateFmt('Unable to load %s (%s)',[filename, StrError(GetLastError)]);
+          raise ESMException.CreateFmt('Unable to load %s (%s)',
+            [filename, {$ifdef FPC}GetLoadErrorStr{$else}SysErrorMessage(GetLastError){$endif}]);
         new(ModuleRec);
         ModuleRec.init := GetProcAddress(fHandle, INIT_PROC_NAME);
         if not Assigned(ModuleRec.init) then begin

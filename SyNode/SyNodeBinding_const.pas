@@ -30,7 +30,7 @@ begin
    jsv.asInteger := fmOpenWrite; obj_fs.ptr.DefineProperty(cx, 'O_WRONLY', jsv, attrs);
    jsv.asInteger := fmOpenReadWrite; obj_fs.ptr.DefineProperty(cx, 'O_RDWR', jsv, attrs);
 
-   jsv.asInteger := fmExclusive; obj_fs.ptr.DefineProperty(cx, 'O_EXCL', jsv, attrs);
+   jsv.asInteger := {$ifdef FPC}fmShareExclusive{$else}fmExclusive{$endif}; obj_fs.ptr.DefineProperty(cx, 'O_EXCL', jsv, attrs);
 
 // TODO define all other consts
 //   obj_fs.ptr.DefineProperty(cx, 'O_APPEND', , attrs)
