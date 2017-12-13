@@ -16938,7 +16938,7 @@ var C1,C2: THttpServerRequest;
 begin
   C1 := THttpServerRequest.Create(nil,0,nil);
   C2 := THttpServerRequest.Create(nil,0,nil);
-  P2 := protocol.Clone;
+  P2 := protocol.Clone('');
   try
     C1.Prepare('url','POST','headers',content,contentType,'');
     noAnswer1 := opcode=focBinary;

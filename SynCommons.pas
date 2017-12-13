@@ -10462,7 +10462,7 @@ type
     // ! aWriter.WriteDynArray(DA);
     procedure Read(var DA: TDynArray; NoCheckHash: boolean=false);
     /// retrieved cardinal values encoded with TFileBufferWriter.WriteVarUInt32Array
-    // - only supports wkUint32, wkVarInt32, wkVarUInt32 kind of encoding 
+    // - only supports wkUInt32, wkVarInt32, wkVarUInt32 kind of encoding 
     function ReadVarUInt32Array(var Values: TIntegerDynArray): PtrInt;
     /// returns TRUE if the current position is the end of the input stream
     function EOF: boolean;
@@ -47469,10 +47469,9 @@ begin
   QS.Value := pointer(Values);
   QS.ElemSize := sizeof(PUTF8Char);
   SetLength(SortedIndexes,Count);
-  dec(Count);
   FillIncreasing(pointer(SortedIndexes),0,Count);
   QS.Index := pointer(SortedIndexes);
-  QS.QuickSortIndexed(0,Count);
+  QS.QuickSortIndexed(0,Count-1);
 end;
 
 procedure DynArraySortIndexed(Values: pointer; ElemSize, Count: Integer;
@@ -59147,7 +59146,7 @@ begin
       exit;
     end;
   end;
-  if DataLayout=wkUint32 then
+  if DataLayout=wkUInt32 then
     Read(@Values[0],count*4) else begin
     repeat
       ReadChunk(P,PEnd,BufTemp); // raise ErrorInvalidContent on error
@@ -59592,10 +59591,13 @@ var i: integer;
 begin
   result := VarUInt32;
   SetLength(Values,result);
-  k := TFileBufferWriterKind(NextByte);
+  Copy(k,1);
+  if k=wkUInt32 then begin
+    Copy(Values[0],result*4);
+    exit;
+  end;
   Next(4); // format: Isize+varUInt32s
   case k of
-  wkUint32:    Copy(Values[0],result*4);
   wkVarInt32:  for i := 0 to result-1 do Values[i] := VarInt32;
   wkVarUInt32: for i := 0 to result-1 do Values[i] := VarUInt32;
   else ErrorData('ReadVarUInt32Array: unhandled kind=%', [ord(k)]);
