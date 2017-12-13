@@ -150,7 +150,7 @@ type
     fGlobalObjectDbg: PJSRootedObject;
 
     fEngineContentVersion: Cardinal;
-    fThreadID: DWORD;
+    fThreadID: TThreadID;
     fLastErrorMsg: SynUnicode;
     fLastErrorNum: integer;
     fLastErrorFileName: RawUTF8;
@@ -392,10 +392,10 @@ type
   protected
     grandParent: TSMEngine;
     /// Release a javaScript engine for specified thread
-    procedure ReleaseEngineForThread(aThreadID: DWORD);
+    procedure ReleaseEngineForThread(aThreadID: TThreadID);
     /// returns -1 if none was defined yet
     // - this method is not protected via the global FEngineCS mutex/lock
-    function ThreadEngineIndex(ThreadID: DWORD): Integer;
+    function ThreadEngineIndex(ThreadID: TThreadID): Integer;
     /// returns nil if none was defined yet
     function CurrentThreadEngine: TSMEngine;
     /// called when a new Engine is created
@@ -429,7 +429,7 @@ type
     // overriden method
     procedure ReleaseCurrentThreadEngine;
     /// returns nil if none was defined yet
-    function EngineForThread(ThreadID: DWORD): TSMEngine;
+    function EngineForThread(ThreadID: TTHreadID): TSMEngine;
     /// internal version of the script files
     // - used in TSMEngine.ThreadSafeEngine to determine if context is up to
     // date, in order to trigger on-the-fly reload of scripts without the need
@@ -1154,7 +1154,7 @@ begin
   FMaxNurseryBytes := AMaxNurseryBytes;
 end;
 
-function TSMEngineManager.ThreadEngineIndex(ThreadID: DWORD): Integer;
+function TSMEngineManager.ThreadEngineIndex(ThreadID: TThreadID): Integer;
 begin
   if self <> nil then
     for result := 0 to FEnginePool.Count-1 do
@@ -1197,7 +1197,7 @@ begin
   end;
 end;
 
-function TSMEngineManager.EngineForThread(ThreadID: DWORD): TSMEngine;
+function TSMEngineManager.EngineForThread(ThreadID: TThreadID): TSMEngine;
 var
   i: integer;
 begin
@@ -1309,7 +1309,7 @@ end;
 
 function TSMEngineManager.ThreadSafeEngine(pThreadData: pointer): TSMEngine;
 var i: integer;
-    ThreadID: DWORD;
+    ThreadID: TThreadID;
 begin
   FEnginePool.Safe.Lock;
   try
@@ -1391,7 +1391,7 @@ begin
   FEnginePool.Safe.UnLock;
 end;
 
-procedure TSMEngineManager.ReleaseEngineForThread(aThreadID: DWORD);
+procedure TSMEngineManager.ReleaseEngineForThread(aThreadID: TThreadID);
 var
   i: integer;
 begin
