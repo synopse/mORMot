@@ -10525,6 +10525,8 @@ type
     /// save all content as a string into a TFileBufferWriter instance
     // - storing the length as WriteVarUInt32() prefix
     procedure WriteString(W: TFileBufferWriter);
+    /// add another TRawByteStringGroup previously serialized via WriteString()
+    procedure AddFromReader(var aReader: TFastReader);
     /// returns a pointer to Values[] containing a given position
     // - returns nil if not found
     function Find(aPosition: integer): PRawByteStringGroupValue; overload;
@@ -58158,7 +58160,9 @@ procedure TFileBufferWriter.CancelAll;
 begin
   fTotalWritten := 0;
   fPos := 0;
-  fStream.Seek(0,soBeginning);
+  if fStream.ClassType = TRawByteStringStream then
+    TRawByteStringStream(fStream).Size := 0 else
+    fStream.Seek(0,soBeginning);
 end;
 
 procedure TFileBufferWriter.Write(Data: pointer; DataLen: integer);
@@ -59754,6 +59758,14 @@ begin
   end;
   W.WriteVarUInt32(Position);
   WriteBinary(W);
+end;
+
+procedure TRawByteStringGroup.AddFromReader(var aReader: TFastReader);
+var n: integer;
+begin
+  n := aReader.VarUInt32;
+  if n>0 then
+    Add(aReader.Next(n),n);
 end;
 
 function TRawByteStringGroup.Find(aPosition: integer): PRawByteStringGroupValue;
