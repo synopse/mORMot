@@ -1168,7 +1168,7 @@ var
   dllModule: PDllModuleRec;
   i: Integer;
 begin
-  FWorkersManager.free;
+  FWorkersManager.Free;
   FWorkersManager := nil;
   stopDebugger;
   if FEnginePool.Count>0 then
