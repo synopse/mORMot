@@ -486,6 +486,7 @@ type
     function ProcessHandshake(const ExtIn: TRawUTF8DynArray; out ExtOut: RawUTF8;
       ErrorMsg: PRawUTF8): boolean; virtual;
     function ProcessURI(const aClientURI: RawUTF8): boolean; virtual; // e.g. for authentication
+    // focText/focBinary or focContinuation/focConnectionClose from ProcessStart/ProcessStop
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
       var request: TWebSocketFrame; const info: RawUTF8); virtual; abstract;
     function SendFrames(Owner: TWebSocketProcess;
@@ -2629,7 +2630,7 @@ var request: TWebSocketFrame;
 begin
   if fProtocol=nil then
     exit;
-  ProcessStart;
+  ProcessStart; // any exception will close the socket
   SetLastPingTicks;
   fState := wpsRun;
   while (fState<>wpsDestroy) and not fOwnerThread.Terminated do

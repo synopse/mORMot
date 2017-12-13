@@ -5261,7 +5261,13 @@ type
     // - if the lookup table has less elements than the main dynamic array,
     // its content will be recreated
     procedure CreateOrderedIndex(var aIndex: TIntegerDynArray;
-      aCompare: TDynArraySortCompare);
+      aCompare: TDynArraySortCompare); overload;
+    /// sort the dynamic array elements using a lookup array of indexes
+    // - this overloaded method will use the supplied TSynTempBuffer for
+    // index storage, so use PIntegerArray(aIndex.buf) to access the values
+    // - caller should always make aIndex.Done once done
+    procedure CreateOrderedIndex(out aIndex: TSynTempBuffer;
+      aCompare: TDynArraySortCompare); overload;
     /// save the dynamic array content into a (memory) stream
     // - will handle array of binaries values (byte, word, integer...), array of
     // strings or array of packed records, with binaries and string properties
@@ -6725,6 +6731,13 @@ function RecordTypeInfoSize(aRecordTypeInfo: pointer): integer;
 /// retrieve the item type information of a dynamic array low-level RTTI
 function DynArrayTypeInfoToRecordInfo(aDynArrayTypeInfo: pointer;
   aDataSize: PInteger=nil): pointer;
+
+/// sort any dynamic array, via an external array of indexes
+// - this function will use the supplied TSynTempBuffer for index storage,
+// so use PIntegerArray(Indexes.buf) to access the values
+// - caller should always make Indexes.Done once done
+procedure DynArraySortIndexed(Values: pointer; ElemSize, Count: Integer;
+  out Indexes: TSynTempBuffer; Compare: TDynArraySortCompare);
 
 /// compare two TGUID values
 // - this version is faster than the one supplied by SysUtils
@@ -47376,8 +47389,12 @@ begin
     if fSorted then begin
       P := fValue^;
       dec(n);
-      if fCompare(P[cardinal(n)*ElemSize],Elem)<0 then begin // already sorted
-        Index := n+1; // returns false + last position index to insert
+      cmp := fCompare(Elem,P[cardinal(n)*ElemSize]);
+      if cmp>=0 then begin // greater than last sorted item
+        Index := n;
+        if cmp=0 then
+          result := true else // returns true + index of existing Elem
+          inc(Index); // returns false + insert after last position
         exit;
       end;
       Index := 0;
@@ -47385,7 +47402,7 @@ begin
         i := (Index+n) shr 1;
         cmp := fCompare(P[cardinal(i)*ElemSize],Elem);
         if cmp=0 then begin
-          Index := i; // index of existing Elem
+          Index := i; // returns true + index of existing Elem
           result := True;
           exit;
         end else
@@ -47440,7 +47457,6 @@ type
 procedure QuickSortIndexedPUTF8Char(Values: PPUtf8CharArray; Count: Integer;
   var SortedIndexes: TCardinalDynArray; CaseSensitive: boolean);
 var QS: TDynArrayQuickSort;
-    i: integer;
 begin
   if CaseSensitive then
     QS.Compare := SortDynArrayPUTF8Char else
@@ -47449,10 +47465,20 @@ begin
   QS.ElemSize := sizeof(PUTF8Char);
   SetLength(SortedIndexes,Count);
   dec(Count);
-  for i := 0 to Count do
-    SortedIndexes[i] := i;
+  FillIncreasing(pointer(SortedIndexes),0,Count);
   QS.Index := pointer(SortedIndexes);
   QS.QuickSortIndexed(0,Count);
+end;
+
+procedure DynArraySortIndexed(Values: pointer; ElemSize, Count: Integer;
+  out Indexes: TSynTempBuffer; Compare: TDynArraySortCompare);
+var QS: TDynArrayQuickSort;
+begin
+  QS.Compare := Compare;
+  QS.Value := Values;
+  QS.ElemSize := ElemSize;
+  QS.Index := pointer(Indexes.InitIncreasing(Count));
+  QS.QuickSortIndexed(0,Count-1);
 end;
 
 procedure TDynArrayQuickSort.QuickSort(L, R: PtrInt);
@@ -47464,14 +47490,14 @@ begin
     I := L; J := R;
     P := (L + R) shr 1;
     repeat
-      pivot := Value+cardinal(P)*ElemSize;
+      Pivot := Value+cardinal(P)*ElemSize;
       IP := Value+cardinal(I)*ElemSize;
       JP := Value+cardinal(J)*ElemSize;
-      while Compare(IP^,pivot^)<0 do begin
+      while Compare(IP^,Pivot^)<0 do begin
         inc(I);
         inc(IP,ElemSize);
       end;
-      while Compare(JP^,pivot^)>0 do begin
+      while Compare(JP^,Pivot^)>0 do begin
         dec(J);
         dec(JP,ElemSize);
       end;
@@ -47504,9 +47530,9 @@ begin
     I := L; J := R;
     P := (L + R) shr 1;
     repeat
-      pivot := Value+Index[P]*ElemSize;
-      while Compare(Value[Index[I]*ElemSize],pivot^)<0 do inc(I);
-      while Compare(Value[Index[J]*ElemSize],pivot^)>0 do dec(J);
+      Pivot := Value+Index[P]*ElemSize;
+      while Compare(Value[Index[I]*ElemSize],Pivot^)<0 do inc(I);
+      while Compare(Value[Index[J]*ElemSize],Pivot^)>0 do dec(J);
       if I <= J then begin
         if I<>J then begin
           tmp := Index[I];
@@ -47555,6 +47581,23 @@ begin
     Quicksort.Value := fValue^;
     Quicksort.ElemSize := ElemSize;
     Quicksort.Index := pointer(aIndex);
+    Quicksort.QuickSortIndexed(0,n-1);
+  end;
+end;
+
+procedure TDynArray.CreateOrderedIndex(out aIndex: TSynTempBuffer;
+  aCompare: TDynArraySortCompare);
+var QuickSort: TDynArrayQuickSort;
+    n: integer;
+begin
+  if @aCompare=nil then
+    Quicksort.Compare := @fCompare else
+    Quicksort.Compare := aCompare;
+  if (@QuickSort.Compare<>nil) and (fValue<>nil) and (fValue^<>nil) then begin
+    n := Count;
+    Quicksort.Value := fValue^;
+    Quicksort.ElemSize := ElemSize;
+    Quicksort.Index := PCardinalArray(aIndex.InitIncreasing(n));
     Quicksort.QuickSortIndexed(0,n-1);
   end;
 end;
