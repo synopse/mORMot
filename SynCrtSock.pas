@@ -5234,7 +5234,7 @@ begin
   fSock := TCrtSocket.Bind(aPort); // BIND + LISTEN
   ServerKeepAliveTimeOut := 3000; // HTTP.1/1 KeepAlive is 3 seconds by default
   fInternalHttpServerRespList := TList.Create;
-  // Event handlers should be set earler then in inherited Create to be visible in child thread
+  // event handlers set before inherited Create to be visible in childs
   fOnHttpThreadStart := OnStart;
   SetOnTerminate(OnStop);
   if fThreadRespClass=nil then
@@ -9270,8 +9270,8 @@ constructor TSynThreadPoolHttpApiWebSocketServer.Create(Server: THttpApiWebSocke
   NumberOfThreads: Integer);
 begin
   fServer := Server;
-  FOnThreadStart := onThreadStart;
-  FOnTerminate := onThreadTerminate;
+  fOnThreadStart := onThreadStart;
+  fOnTerminate := onThreadTerminate;
   inherited Create(NumberOfThreads, Server.fReqQueue);
 end;
 
