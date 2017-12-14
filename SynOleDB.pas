@@ -2369,8 +2369,9 @@ begin
 end;
 
 procedure TOleDBConnection.Disconnect;
+var Log: ISynLog;
 begin
-  SynDBLog.Enter(self);
+  Log := SynDBLog.Enter(self);
   try
     inherited Disconnect; // flush any cached statement
   finally
@@ -2462,8 +2463,9 @@ begin // do nothing by default
 end;
 
 procedure TOleDBConnection.Commit;
+var Log: ISynLog;
 begin
-  SynDBLog.Enter(self,nil,true);
+  Log := SynDBLog.Enter(self,nil,true);
   if assigned(fTransaction) then begin
     inherited Commit;
     try
@@ -2476,8 +2478,9 @@ begin
 end;
 
 procedure TOleDBConnection.Rollback;
+var Log: ISynLog;
 begin
-  SynDBLog.Enter(self,nil,true);
+  Log := SynDBLog.Enter(self,nil,true);
   if assigned(fTransaction) then begin
     inherited Rollback;
     OleDbCheck(nil,fTransaction.Abort(nil,False,False));
@@ -2485,8 +2488,9 @@ begin
 end;
 
 procedure TOleDBConnection.StartTransaction;
+var Log: ISynLog;
 begin
-  SynDBLog.Enter(self,nil,true);
+  Log := SynDBLog.Enter(self,nil,true);
   if assigned(fTransaction) then begin
     inherited StartTransaction;
     OleDbCheck(nil,fTransaction.StartTransaction(ISOLATIONLEVEL_READCOMMITTED,0,nil,nil));
