@@ -60387,17 +60387,20 @@ class function TAlgoCompress.Algo(AlgoID: byte): TAlgoCompress;
 var i: integer;
     ptr: ^TAlgoCompress;
 begin
-  if SynCompressAlgos<>nil then begin
-    ptr := @SynCompressAlgos.List[0];
-    for i := 1 to SynCompressAlgos.Count  do
-      if ptr^.AlgoID=AlgoID then begin
-        result := ptr^;
-        exit;
-      end
-      else
-        inc(ptr);
+  if AlgoID=byte(COMPRESS_STORED) then // "stored" is identifed as SynLZ
+    result := AlgoSynLZ else begin
+    if SynCompressAlgos<>nil then begin
+      ptr := @SynCompressAlgos.List[0];
+      for i := 1 to SynCompressAlgos.Count  do
+        if ptr^.AlgoID=AlgoID then begin
+          result := ptr^;
+          exit;
+        end
+        else
+          inc(ptr);
+    end;
+    result := nil;
   end;
-  result := nil;
 end;
 
 class function TAlgoCompress.AlgoName: TGUIDShortString;
