@@ -6695,7 +6695,8 @@ function GetSetName(aTypeInfo: pointer; const value): RawUTF8;
 
 /// helper to retrieve the CSV text of all enumerate items defined in a set
 // - you'd better use RTTI related classes of mORMot.pas unit, e.g. TEnumType
-procedure GetSetNameShort(aTypeInfo: pointer; const value; out result: ShortString);
+procedure GetSetNameShort(aTypeInfo: pointer; const value; out result: ShortString;
+  trimlowercase: boolean=false);
 
 /// fast search of an exact case-insensitive match of a RTTI's PShortString array
 function FindShortStringListExact(List: PShortString; MaxValue: integer;
@@ -22656,16 +22657,25 @@ begin
     SetLength(result,length(result)-1); // trim last comma
 end;
 
-procedure AppendShortComma(const text: shortstring; var result: shortstring);
+procedure AppendShortComma(text: PAnsiChar; len: integer; var result: shortstring;
+  trimlowercase: boolean);
 begin
-  if integer(ord(result[0]))+ord(text[0])>=255 then
+  if trimlowercase then
+    while text^ in ['a'..'z'] do
+      if len=1 then
+        exit else begin
+        inc(text);
+        dec(len);
+      end;
+  if integer(ord(result[0]))+len>=255 then
     exit;
-  MoveFast(text[1],result[ord(result[0])+1],ord(text[0]));
-  inc(result[0],ord(text[0])+1);
+  MoveFast(text^,result[ord(result[0])+1],len);
+  inc(result[0],len+1);
   result[ord(result[0])] := ',';
 end;
 
-procedure GetSetNameShort(aTypeInfo: pointer; const value; out result: ShortString);
+procedure GetSetNameShort(aTypeInfo: pointer; const value; out result: ShortString;
+  trimlowercase: boolean);
 var PS: PShortString;
     i,max: integer;
 begin
@@ -22673,7 +22683,7 @@ begin
   if GetSetInfo(aTypeInfo,max,PS) then
     for i := 0 to max do begin
       if GetBit(value,i) then
-        AppendShortComma(PS^,result);
+        AppendShortComma(@PS^[1],ord(PS^[0]),result,trimlowercase);
       inc(PByte(PS),ord(PS^[0])+1); // next short string
     end;
   if result[ord(result[0])]=',' then
@@ -31305,7 +31315,7 @@ asm
         test    edx, edx
         push    ebx
         jz      @t            // up=nil -> true
-        mov     ecx, [edx]    // optimized for DWORD aligned read
+        mov     ecx, [edx]    // optimized for DWORD aligned read up^
         xor     ebx, ebx
 @1:     test    cl, cl
         mov     bl, [eax]
