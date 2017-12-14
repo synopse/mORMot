@@ -10409,29 +10409,23 @@ type
     /// raise a EFastReader with an "incorrect data" error message
     procedure ErrorData(const fmt: RawUTF8; const args: array of const);
     /// read the next byte from the buffer
-    function NextByte: byte;
-      {$ifdef HASINLINE}inline;{$endif}
+    function NextByte: byte;      {$ifdef HASINLINE}inline;{$endif}
     /// read the next 32-bit signed value from the buffer
-    function VarInt32: PtrInt;
-      {$ifdef HASINLINE}inline;{$endif}
+    function VarInt32: PtrInt;    {$ifdef HASINLINE}inline;{$endif}
     /// read the next 32-bit unsigned value from the buffer
-    function VarUInt32: PtrUInt;
+    function VarUInt32: PtrUInt;  {$ifdef HASINLINE}inline;{$endif}
     /// read the next 16-bit unsigned value from the buffer
-    function VarUInt16: PtrUInt;
-      {$ifdef HASINLINE}inline;{$endif}
+    function VarUInt16: PtrUInt;  {$ifdef HASINLINE}inline;{$endif}
     /// read the next 32-bit unsigned value from the buffer
     // - this version won't call ErrorOverflow, but return false on error
     // - returns true on read success
     function VarUInt32Safe(out Value: cardinal): boolean;
     /// read the next 64-bit signed value from the buffer
-    function VarInt64: Int64;
-      {$ifdef HASINLINE}inline;{$endif}
+    function VarInt64: Int64;     {$ifdef HASINLINE}inline;{$endif}
     /// read the next 64-bit unsigned value from the buffer
-    function VarUInt64: QWord;
-      {$ifdef CPU64}{$ifdef HASINLINE}inline;{$endif}{$endif}
+    function VarUInt64: QWord;    {$ifdef CPU64}{$ifdef HASINLINE}inline;{$endif}{$endif}
     /// read the next RawUTF8 value from the buffer
-    function VarUTF8: RawUTF8; overload;
-      {$ifdef HASINLINE}inline;{$endif}
+    function VarUTF8: RawUTF8; overload; {$ifdef HASINLINE}inline;{$endif}
     /// read the next RawUTF8 value from the buffer
     procedure VarUTF8(out result: RawUTF8); overload;
     /// read the next RawUTF8 value from the buffer
@@ -10439,20 +10433,15 @@ type
     // - returns true on read success
     function VarUTF8Safe(out Value: RawUTF8): boolean;
     /// read the next RawByteString value from the buffer
-    function VarString: RawByteString;
-      {$ifdef HASINLINE}inline;{$endif}
+    function VarString: RawByteString;         {$ifdef HASINLINE}inline;{$endif}
     /// read the next pointer and length value from the buffer
-    procedure VarBlob(out result: TValueResult); overload;
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure VarBlob(out result: TValueResult); overload; {$ifdef HASINLINE}inline;{$endif}
     /// read the next pointer and length value from the buffer
-    function VarBlob: TValueResult; overload;
-      {$ifdef HASINLINE}inline;{$endif}
+    function VarBlob: TValueResult; overload;  {$ifdef HASINLINE}inline;{$endif}
     /// returns the current position, and move ahead the specified bytes
-    function Next(DataLen: PtrInt): pointer;
-      {$ifdef HASINLINE}inline;{$endif}
+    function Next(DataLen: PtrInt): pointer;   {$ifdef HASINLINE}inline;{$endif}
     /// copy data from the current position, and move ahead the specified bytes
-    procedure Copy(out Dest; DataLen: PtrInt);
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure Copy(out Dest; DataLen: PtrInt); {$ifdef HASINLINE}inline;{$endif}
     /// copy data from the current position, and move ahead the specified bytes
     // - this version won't call ErrorOverflow, but return false on error
     // - returns true on read success
@@ -10462,11 +10451,10 @@ type
     // ! aWriter.WriteDynArray(DA);
     procedure Read(var DA: TDynArray; NoCheckHash: boolean=false);
     /// retrieved cardinal values encoded with TFileBufferWriter.WriteVarUInt32Array
-    // - only supports wkUInt32, wkVarInt32, wkVarUInt32 kind of encoding 
+    // - only supports wkUInt32, wkVarInt32, wkVarUInt32 kind of encoding
     function ReadVarUInt32Array(var Values: TIntegerDynArray): PtrInt;
     /// returns TRUE if the current position is the end of the input stream
-    function EOF: boolean;
-      {$ifdef HASINLINE}inline;{$endif}
+    function EOF: boolean;        {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// item as stored in a TRawByteStringGroup instance
@@ -59440,61 +59428,63 @@ end;
 
 function TFastReader.VarUInt16: PtrUInt;
 var c: PtrUInt;
+label err;
 begin
-  if P>=Last then
-    ErrorOverflow;
   result := ord(P^);
+  if P>=Last then
+    goto err;
   inc(P);
   if result<=$7f then
     exit;
   if P>=Last then
-    ErrorOverflow;
+    goto err;
   c := ord(P^) shl 7;
   inc(P);
   result := result and $7F or c;
   if c<=$7f shl 7 then
     exit; // Values between 128 and 16256
   if P>=Last then
-    ErrorOverflow;
+    goto err;
   c := ord(P^) shl 14;
   inc(P);
   result := result and $3FFF or c;
   if c>$7f shl 14 then
-    ErrorOverflow; // Values between 16257 and 2080768
+err:ErrorOverflow; // Values between 16257 and 2080768
 end;
 
 function TFastReader.VarUInt32: PtrUInt;
 var c: PtrUInt;
+label err;
 begin
-  if P>=Last then
-    ErrorOverflow;
   result := ord(P^);
+  if P>=Last then
+    goto err;
   inc(P);
   if result<=$7f then
     exit;
   if P>=Last then
-    ErrorOverflow;
+    goto err;
   c := ord(P^) shl 7;
   inc(P);
   result := result and $7F or c;
   if c<=$7f shl 7 then
     exit; // Values between 128 and 16256
   if P>=Last then
-    ErrorOverflow;
+    goto err;
   c := ord(P^) shl 14;
   inc(P);
   result := result and $3FFF or c;
   if c<=$7f shl 14 then
     exit; // Values between 16257 and 2080768
   if P>=Last then
-    ErrorOverflow;
+    goto err;
   c := ord(P^) shl 21;
   inc(P);
   result := result and $1FFFFF or c;
   if c<=$7f shl 21 then
     exit; // Values between 2080769 and 266338304
   if P>=Last then
-    ErrorOverflow;
+err:ErrorOverflow;
   c := ord(P^) shl 28;
   inc(P);
   result := result and $FFFFFFF or c;
@@ -59527,9 +59517,10 @@ end;
 
 function TFastReader.VarUInt64: QWord;
 var c, n: PtrUInt;
+label err;
 begin
   if P>=Last then
-    ErrorOverflow;
+err: ErrorOverflow;
   c := ord(P^);
   inc(P);
   if c>$7f then begin
@@ -59537,7 +59528,7 @@ begin
     n := 0;
     repeat
       if P>=Last then
-        ErrorOverflow;
+        goto err;
       c := ord(P^);
       inc(P);
       inc(n,7);
