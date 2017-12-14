@@ -51992,7 +51992,7 @@ begin
     vtPChar, vtChar, vtWideChar, vtWideString, vtClass: begin
       Add('"');
       case VType of
-        vtString:     AddJSONEscape(@VString^[1],ord(VString^[0]));
+        vtString: if VString^[0]<>#0 then AddJSONEscape(@VString^[1],ord(VString^[0]));
         vtAnsiString: AddJSONEscape(pointer(RawUTF8(VAnsiString)));
         {$ifdef HASVARUSTRING}
         vtUnicodeString: AddJSONEscapeW(
@@ -52044,7 +52044,7 @@ begin
   {$ifndef NOVARIANTS}
   vtVariant:      AddVariant(VVariant^,Escape);
   {$endif}
-  vtString:       Add(@VString^[1],ord(VString^[0]),Escape);
+  vtString:  if VString^[0]<>#0 then Add(@VString^[1],ord(VString^[0]),Escape);
   vtInterface,
   vtPointer:      AddPointer(PtrUInt(VPointer));
   vtPChar:        Add(PUTF8Char(VPChar),Escape);
