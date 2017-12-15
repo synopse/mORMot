@@ -59629,7 +59629,6 @@ begin
   //assert(P-pointer(tmp)=len);
   dec(Count,COMPACT_COUNT);
   Values[Count].Value := tmp;
-  LastFind := Count;
   inc(Count);
 end;
 
@@ -59650,6 +59649,7 @@ begin
     Position := self.Position;
     Value := aItem;
   end;
+  LastFind := Count;
   inc(Count);
   inc(Position,Length(aItem));
 end;
