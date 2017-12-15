@@ -991,6 +991,13 @@ type
       const ProcessName: SockString; ServerThreadPoolCount: integer=0); override;
     /// close the server
     destructor Destroy; override;
+    /// will send a given frame to all connected clients
+    // - expect aFrame.opcode to be either focText or focBinary
+    procedure WebSocketBroadcast(const aFrame: TWebSocketFrame); overload;
+    /// will send a given frame to all clients matching the supplied connection IDs
+    // - expect aFrame.opcode to be either focText or focBinary
+    procedure WebSocketBroadcast(const aFrame: TWebSocketFrame;
+      const aClientsConnectionID: TIntegerDynArray); overload;
     /// access to the protocol list handled by this server
     property WebSocketProtocols: TWebSocketProtocolList read fProtocols;
     /// the settings to be used for WebSockets process
@@ -2649,8 +2656,8 @@ begin
             fProtocol.ProcessIncomingFrame(self,request,'');
           focConnectionClose: begin
             if fState=wpsRun then begin
-              SendFrame(request);
               fState := wpsClose;
+              SendFrame(request);
             end;
             break; // will close the connection
           end;
@@ -2835,14 +2842,26 @@ begin
 end;
 
 function TWebSocketServer.IsActiveWebSocket(ConnectionThread: TSynThread): TWebSocketServerResp;
+var i: Integer;
+    c: ^TWebSocketServerResp;
 begin
   result := nil;
-  if Terminated or (ConnectionThread=nil) then
+  if Terminated or (ConnectionThread=nil) or
+     not ConnectionThread.InheritsFrom(TWebSocketServerResp) then
     exit;
-  if fWebSocketConnections.SafeExists(ConnectionThread) and
-     ConnectionThread.InheritsFrom(TWebSocketServerResp) then
-    //  this request is a websocket, on a non broken connection
-    result := TWebSocketServerResp(ConnectionThread);
+  fWebSocketConnections.Safe.Lock;
+  try
+    c := pointer(fWebSocketConnections.List);
+    for i := 1 to fWebSocketConnections.Count do
+      if c^=ConnectionThread then begin
+        if c^.fProcess.State=wpsRun then
+          result := c^;
+        exit;
+      end else
+      inc(c);
+  finally
+    fWebSocketConnections.Safe.UnLock;
+  end;
 end;
 
 function TWebSocketServer.IsActiveWebSocket(ConnectionID: integer): TWebSocketServerResp;
@@ -2857,7 +2876,8 @@ begin
     c := pointer(fWebSocketConnections.List);
     for i := 1 to fWebSocketConnections.Count do
       if c^.ConnectionID=ConnectionID then begin
-        result := c^;
+        if c^.fProcess.State=wpsRun then
+          result := c^;
         exit;
       end else
       inc(c);
@@ -2866,6 +2886,47 @@ begin
   end;
 end;
 
+procedure TWebSocketServer.WebSocketBroadcast(const aFrame: TWebSocketFrame);
+begin
+  WebSocketBroadcast(aFrame,nil);
+end;
+
+procedure TWebSocketServer.WebSocketBroadcast(const aFrame: TWebSocketFrame;
+  const aClientsConnectionID: TIntegerDynArray);
+var i, len, ids: Integer;
+    c: ^TWebSocketServerResp;
+    temp: TWebSocketFrame; // local copy since SendFrame() modifies the payload
+    sorted: TSynTempBuffer;
+begin
+  if Terminated or not(aFrame.opcode in [focText, focBinary]) then
+    exit;
+  ids := length(aClientsConnectionID);
+  if ids>0 then begin
+    sorted.Init(pointer(aClientsConnectionID),ids*4);
+    QuickSortInteger(sorted.buf,0,ids-1); // faster O(log(n)) binary search
+  end;
+  dec(ids);
+  temp.opcode := aFrame.opcode;
+  temp.content := aFrame.content;
+  len := length(aFrame.payload);
+  SetLength(temp.payload,len); // pre-allocate
+  fWebSocketConnections.Safe.Lock;
+  try
+    c := pointer(fWebSocketConnections.List);
+    for i := 1 to fWebSocketConnections.Count do begin
+      if (c^.fProcess.State=wpsRun) and
+         ((ids<0) or (FastFindIntegerSorted(sorted.buf,ids,c^.ConnectionID)>=0)) then begin
+        MoveFast(pointer(aFrame.payload)^,pointer(temp.payload)^,len);
+        c^.fProcess.SendFrame(temp);
+      end;
+      inc(c);
+    end;
+  finally
+    fWebSocketConnections.Safe.UnLock;
+    if ids>=0 then
+      sorted.Done;
+  end;
+end;
 
 { TWebSocketServerRest }
 
@@ -3103,7 +3164,7 @@ end;
 constructor TWebSocketProcessClient.Create(aSender: THttpClientWebSockets;
   aProtocol: TWebSocketProtocol; const aProcessName: RawUTF8);
 begin
-  fMaskSentFrames := 128;
+  fMaskSentFrames := 128; // always mask the frames by default
   inherited Create(aSender,aProtocol,0,nil,aSender.fSettings,aProcessName);
   // initialize the thread after everything is set (Execute may be instant)
   fClientThread := TWebSocketProcessClientThread.Create(self);
