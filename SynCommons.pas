@@ -3756,7 +3756,7 @@ function FindCSVIndex(CSV: PUTF8Char; const Value: RawUTF8; Sep: AnsiChar = ',';
 
 /// add the strings in the specified CSV text into a dynamic array of UTF-8 strings
 procedure CSVToRawUTF8DynArray(CSV: PUTF8Char; var Result: TRawUTF8DynArray;
-  Sep: AnsiChar=','; TrimItems: boolean=false); overload;
+  Sep: AnsiChar=','; TrimItems: boolean=false; AddVoidItems: boolean=false); overload;
 
 /// add the strings in the specified CSV text into a dynamic array of UTF-8 strings
 procedure CSVToRawUTF8DynArray(const CSV,Sep,SepEnd: RawUTF8; var Result: TRawUTF8DynArray); overload;
@@ -32282,7 +32282,7 @@ begin
 end;
 
 procedure CSVToRawUTF8DynArray(CSV: PUTF8Char; var Result: TRawUTF8DynArray;
-  Sep: AnsiChar; TrimItems: boolean);
+  Sep: AnsiChar; TrimItems, AddVoidItems: boolean);
 var s: RawUTF8;
     n: integer;
 begin
@@ -32291,7 +32291,7 @@ begin
     if TrimItems then
       GetNextItemTrimed(CSV,Sep,s) else
       GetNextItem(CSV,Sep,s);
-    if s<>'' then
+    if (s<>'') or AddVoidItems then
       AddRawUTF8(Result,n,s);
   end;
   if n<>length(Result) then
