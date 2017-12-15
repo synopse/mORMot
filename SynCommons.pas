@@ -3195,7 +3195,14 @@ function IdemPCharWithoutWhiteSpace(p: PUTF8Char; up: PAnsiChar): boolean;
 // - chars are compared as 7 bit Ansi only (no accentuated characters)
 // - warning: this function expects upArray[] items to have AT LEAST TWO
 // CHARS (it will use a fast comparison of initial 2 bytes)
-function IdemPCharArray(p: PUTF8Char; const upArray: array of PAnsiChar): integer;
+function IdemPCharArray(p: PUTF8Char; const upArray: array of PAnsiChar): integer; overload;
+
+/// returns the index of a matching beginning of p^ in upArray two characters
+// - returns -1 if no item matched
+// - ignore case - upArray^ must be already Upper
+// - chars are compared as 7 bit Ansi only (no accentuated characters)
+function IdemPCharArray(p: PUTF8Char; const upArrayBy2Chars: RawUTF8): integer; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// returns true if the beginning of p^ is the same as up^
 // - ignore case - up^ must be already Upper
@@ -31361,6 +31368,18 @@ begin
   result := -1;
 end;
 
+function IdemPCharArray(p: PUTF8Char; const upArrayBy2Chars: RawUTF8): integer;
+var W: word;
+begin
+  if p<>nil then begin
+    w := NormToUpperAnsi7Byte[ord(p[0])]+NormToUpperAnsi7Byte[ord(p[1])]shl 8;
+    for result := 0 to pred(length(upArrayBy2Chars) shr 1) do
+      if PWordArray(upArrayBy2Chars)[result]=w then
+        exit;
+  end;
+  result := -1;
+end;
+
 function IdemPCharU(p, up: PUTF8Char): boolean;
 begin
   result := false;
@@ -59458,8 +59477,8 @@ begin
   c := ord(P^) shl 14;
   inc(P);
   result := result and $3FFF or c;
-  if c>$7f shl 14 then
-err:ErrorOverflow; // Values between 16257 and 2080768
+  if c>$7f shl 14 then // Values between 16257 and 2080768
+err:ErrorOverflow;
 end;
 
 function TFastReader.VarUInt32: PtrUInt;
