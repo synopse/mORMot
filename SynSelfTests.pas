@@ -9562,9 +9562,30 @@ end;
   {$endif}
 {$endif}
 
+const
+  TEST_AES_REF: array[0..2,0..4] of RawByteString = (
+  // 128-bit
+ ('aS24Jm0RHPz26P_RHqX-pGktuCZtERz89uj_0R6l_qRpLbgmbREc_Pbo_9Eepf6kB7pVFdRAcIoVhoTQPytzTQ',
+  'aS24Jm0RHPz26P_RHqX-pCTLpnA2lH7fAWpovxWR8Voytqn9B_zTt6Zrt1Gjb4J5HUs6E7C9Uf4fV83SxyILCg',
+  '0YRWak2ZiQj-cncKQ3atJtcclNgW9OiQPpY6mLvrfYQc_mORQygR9LFU2z2Prc8I5anMvOABB62Ei5AAWY8M0Q',
+  '0YRWak2ZiQj-cncKQ3atJingGAyjpdvuFAvnZ4vDXweTPTJOFSBVUuqs9SW6vSkAyhtoFM9p-gO3IRZh227twA',
+  '0YRWak2ZiQj-cncKQ3atJjjmhYzJAYmaqNOy9bCBqYa0YYLiSrlUwv9f4JqyVmPQg7w2zQjjdyHSCuYxA-coGQ'),
+  // 192-bit
+ ('3S2QhC78T0eesG3hiqtA2N0tkIQu_E9HnrBt4YqrQNjdLZCELvxPR56wbeGKq0DYJob7gbbvgBaFdm_Bwed4RQ',
+  '3S2QhC78T0eesG3hiqtA2HNVuHHzMsrQOruEy1t6Q-AMQMszIPd_86pnqzIyzdSZut-CCacA9T5O8e8ZJKvZOQ',
+  'a6wXR1K29yQvbGGkawiHN1RcFhrbtbne2w13ziEURY1Btg1oqiL-BqTGtEsu4LH5wLYcGNQJ21CR58LBtRysQg',
+  'a6wXR1K29yQvbGGkawiHN4Cloz_9GlJhlEozeNI4MFjKwihToQP6_FDpDVHz21qUonhk6MZ9_-6vNvnGqbOTcg',
+  'a6wXR1K29yQvbGGkawiHN7koCYngh0WS5R-rsGy5zSaC9txKnyHDavH1tkXlWZuxTjQCNHbiAIIRYK4giZDHzA'),
+  // 256-bit
+ ('Kw50ybT0hl8MXw1IcBFm5isOdMm09IZfDF8NSHARZuYrDnTJtPSGXwxfDUhwEWbmn9aUUA6_ZwXpKRiFMlXRiw',
+  'Kw50ybT0hl8MXw1IcBFm5iV4ZAxvgHN-4j2F7ch7PWr6yHhbcp0Scqd2WDHZMRygi3thq9H3jKVo34_NPKdK1A',
+  'vf-UrsBFA2NkziMn6szalnw24-wbPmG9lySgx0WLZZpfkTpw2euPIm6ZkFzjFa-lqr4yngOkvW99hPGzYEAjDw',
+  'vf-UrsBFA2NkziMn6szalgQnKyYBxXxLhVI9s8D3cZkYsLsdfSUCTUY8moP2SenmHCWQWwaq_ibRCr4JngSkZQ',
+  'vf-UrsBFA2NkziMn6szalimh8XYdFObdg_TwNyfX8Zy2Dk8YVPSDzzAvZ2Xx6WP_4owC6MIq7kZ2xPZ_d6vZmg'));
+
 procedure TTestCryptographicRoutines._AES256;
 var A: TAES;
-    st, orig, crypted, s2: RawByteString;
+    st, orig, crypted, s2, s3: RawByteString;
     Key: TSHA256Digest;
     s,b,p: TAESBlock;
     i,k,ks,m, len: integer;
@@ -9577,8 +9598,8 @@ var A: TAES;
     backup: TIntelCpuFeatures;
     {$endif CPUINTEL}
 const MAX = 4096*1024;  // test 4 MB data, i.e. multi-threaded AES
-      MODES: array[0..4{$ifdef USE_PROV_RSA_AES}+2{$endif}] of TAESAbstractClass =
-        (TAESECB, TAESCBC, TAESCFB, TAESOFB, TAESCTR
+      MODES: array[0..6{$ifdef USE_PROV_RSA_AES}+2{$endif}] of TAESAbstractClass =
+        (TAESECB, TAESCBC, TAESCFB, TAESOFB, TAESCTR, TAESCFBCRC, TAESOFBCRC
          {$ifdef USE_PROV_RSA_AES}, TAESECB_API, TAESCBC_API{$endif});
       // TAESCFB_API and TAESOFB_API just do not work
 begin
@@ -9594,6 +9615,23 @@ begin
     Timer[noaesni].Init;
     for k := 0 to 2 do begin
       ks := 128+k*64; // test keysize of 128, 192 and 256 bits
+      for m := 0 to high(MODES) do begin
+        st := RawUTF8(StringOfChar('x',50));
+        with MODES[m].Create(pointer(st)^,ks) do
+        try
+          s2 := EncryptPKCS7(st,false);
+          s3 := BinToBase64uri(s2);
+          i := m;
+          if i>=7 then // e.g. TAESECB_API -> TAESECB
+            dec(i,7) else
+          if i>=5 then
+            dec(i,3);  // e.g. TAESCFBCRC -> TAESCFB
+          CheckUTF8(TEST_AES_REF[k,i]=s3,'test vector %-%',[MODES[m],ks]);
+          check(DecryptPKCS7(s2,false)=st);
+        finally
+          Free;
+        end;
+      end;
       SHA256Weak(st,Key);
       for i := 1 to 100 do begin
         move(Key,s,16);
@@ -9655,9 +9693,9 @@ begin
               ValuesCrypted[m] := Copy(crypted,1,len);
               ValuesOrig[m] := s2;
             end else
-            if m>4 then begin
-              Check(ValuesOrig[m-5]=s2);
-              Check(ValuesCrypted[m-5]=Copy(crypted,1,len),MODES[m].ClassName);
+            if m>6 then begin
+              Check(ValuesOrig[m-7]=s2);
+              Check(ValuesCrypted[m-7]=Copy(crypted,1,len),MODES[m].ClassName);
             end;
           finally
             Free;
