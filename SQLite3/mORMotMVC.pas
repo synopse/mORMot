@@ -1200,19 +1200,21 @@ begin
   fContext.Secret.Init(@rnd,sizeof(rnd));
 end;
 
-procedure XorMemoryCTR(data: PCardinal; key: PCardinalArray; size,ctr: cardinal);
+procedure XorMemoryCTR(data: PCardinal; key256bytes: PCardinalArray; size,ctr: cardinal);
 begin
   while size>=sizeof(Cardinal) do begin
     dec(size,sizeof(Cardinal));
-    data^ := data^ xor key[ctr and $3f] xor ctr;
+    data^ := data^ xor key256bytes[ctr and $3f] xor ctr;
     inc(data);
-    inc(ctr);
+    ctr := ((ctr xor (ctr shr 15))*2246822519); // prime-number ctr diffusion
+    ctr := ((ctr xor (ctr shr 13))*3266489917);
+    ctr := ctr xor (ctr shr 16);
   end;
   if size=0 then
     exit; // no padding
   repeat
     dec(size);
-    PByteArray(data)[size] := PByteArray(data)[size] xor PByteArray(key)[ctr and $ff] xor ctr;
+    PByteArray(data)[size] := PByteArray(data)[size] xor PByteArray(key256bytes)[ctr and $ff] xor ctr;
     inc(ctr);
   until size=0;
 end;
@@ -1255,16 +1257,16 @@ begin
   if (len>=sizeof(tmp.head)) and (len<=sizeof(tmp)) and
      Base64uriDecode(pointer(cookie),@tmp,clen) then begin
     Crypt(@tmp,len);
-    now := UnixTimeUTC;
-    if (tmp.head.session<=fContext.SessionCount) and
-       (tmp.head.issued<=now) and
-       (tmp.head.expires>=now) and
-       (fContext.Secret.Compute(@tmp.head.session,len-8)=tmp.head.hmac) then
-    if PRecordData=nil then
-      result := tmp.head.session else
-      if (PRecordTypeInfo<>nil) and (len>sizeof(tmp.head)) and
-         (RecordLoad(PRecordData^,@tmp.data,PRecordTypeInfo)<>nil) then
-        result := tmp.head.session;
+    if (cardinal(tmp.head.session)<=cardinal(fContext.SessionCount)) then begin
+      now := UnixTimeUTC;
+      if (tmp.head.issued<=now) and (tmp.head.expires>=now) and
+         (fContext.Secret.Compute(@tmp.head.session,len-8)=tmp.head.hmac) then
+      if PRecordData=nil then
+        result := tmp.head.session else
+        if (PRecordTypeInfo<>nil) and (len>sizeof(tmp.head)) and
+           (RecordLoad(PRecordData^,@tmp.data,PRecordTypeInfo)<>nil) then
+          result := tmp.head.session;
+    end;
   end;
   if result=0 then
     Finalize; // delete any invalid/expired cookie on server side
