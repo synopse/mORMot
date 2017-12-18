@@ -11997,6 +11997,7 @@ type
   3: (c0,c1,c2,c3: cardinal);
   4: (c: TBlock128);
   5: (b: THash128);
+  6: (w: array[0..7] of word);
   end;
   /// pointer to 128-bit hash map variable record
   PHash128Rec = ^THash128Rec;
@@ -12019,6 +12020,7 @@ type
   2: (i0,i1,i2,i3,i4,i5,i6,i7: integer);
   3: (c0,c1: TBlock128);
   4: (b: THash256);
+  5: (w: array[0..15] of word);
   end;
   /// pointer to 256-bit hash map variable record
   PHash256Rec = ^THash256Rec;
@@ -12033,7 +12035,7 @@ type
   // - consumes 64 bytes of memory per item
   THash512DynArray = array of THash512;
   /// map a 512-bit hash as an array of lower bit size values
-  // - consumes 32 bytes of memory
+  // - consumes 64 bytes of memory
   THash512Rec = packed record
   case integer of
   0: (Lo,Hi: THash256);
@@ -12042,6 +12044,7 @@ type
   3: (i0,i1,i2,i3,i4,i5,i6,i7,i8,i9,i10,i11,i12,i13,i14,i15: integer);
   4: (c0,c1,c2,c3: TBlock128);
   5: (b: THash512);
+  6: (w: array[0..31] of word);
   end;
   /// pointer to 512-bit hash map variable record
   PHash512Rec = ^THash512Rec;
