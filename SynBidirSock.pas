@@ -854,6 +854,7 @@ type
     /// abstract low level incoming WebSockets framing protocol -> to be overriden
     function GetFrame(out Frame: TWebSocketFrame; TimeOut: cardinal; IgnoreExceptions: boolean): boolean; virtual; abstract;
     /// abstract low level outgoing WebSockets framing protocol -> to be overriden
+    // - use Outgoing.Push() to send frames asynchronously
     function SendFrame(var Frame: TWebSocketFrame): boolean; virtual; abstract;
     /// will push a request or notification to the other end of the connection
     // - caller should set the aRequest with the outgoing parameters, and
@@ -870,6 +871,8 @@ type
     /// direct access to the low-level incoming frame stack
     property Incoming: TWebSocketFrameList read fIncoming;
     /// direct access to the low-level outgoing frame stack
+    // - call Outgoing.Push() to send frames asynchronously, with optional
+    // jumboframe gathering (if supported by the protocol)
     property Outgoing: TWebSocketFrameList read fOutgoing;
     /// the associated low-level processing thread
     property  OwnerThread: TSynThread read fOwnerThread;
@@ -993,9 +996,11 @@ type
     destructor Destroy; override;
     /// will send a given frame to all connected clients
     // - expect aFrame.opcode to be either focText or focBinary
+    // - will call TWebSocketProcess.Outgoing.Push for asynchronous sending
     procedure WebSocketBroadcast(const aFrame: TWebSocketFrame); overload;
-    /// will send a given frame to all clients matching the supplied connection IDs
+    /// will send a given frame to clients matching the supplied connection IDs
     // - expect aFrame.opcode to be either focText or focBinary
+    // - will call TWebSocketProcess.Outgoing.Push for asynchronous sending
     procedure WebSocketBroadcast(const aFrame: TWebSocketFrame;
       const aClientsConnectionID: TIntegerDynArray); overload;
     /// access to the protocol list handled by this server
@@ -2909,15 +2914,14 @@ begin
   temp.opcode := aFrame.opcode;
   temp.content := aFrame.content;
   len := length(aFrame.payload);
-  SetLength(temp.payload,len); // pre-allocate
   fWebSocketConnections.Safe.Lock;
   try
     c := pointer(fWebSocketConnections.List);
     for i := 1 to fWebSocketConnections.Count do begin
       if (c^.fProcess.State=wpsRun) and
          ((ids<0) or (FastFindIntegerSorted(sorted.buf,ids,c^.ConnectionID)>=0)) then begin
-        MoveFast(pointer(aFrame.payload)^,pointer(temp.payload)^,len);
-        c^.fProcess.SendFrame(temp);
+        SetString(temp.payload,PAnsiChar(pointer(aFrame.payload)),len);
+        c^.fProcess.Outgoing.Push(temp); // non blocking asynchronous sending
       end;
       inc(c);
     end;

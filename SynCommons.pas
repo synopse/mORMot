@@ -4777,6 +4777,7 @@ function Int64DynArrayToCSV(const Values: TInt64DynArray;
 /// quick helper to initialize a dynamic array of integer from some constants
 // - can be used e.g. as:
 // ! MyArray := TIntegerDynArrayFrom([1,2,3]);
+// - see also FromI32()
 function TIntegerDynArrayFrom(const Values: array of integer): TIntegerDynArray;
 
 /// quick helper to initialize a dynamic array of integer from 64-bit integers
@@ -4787,9 +4788,11 @@ function TIntegerDynArrayFrom64(const Values: TInt64DynArray;
   raiseExceptionOnOverflow: boolean=true): TIntegerDynArray;
 
 /// quick helper to initialize a dynamic array of 64-bit integers from 32-bit values
+// - see also FromI64() for 64-bit signed integer values input
 function TInt64DynArrayFrom(const Values: TIntegerDynArray): TInt64DynArray;
 
 /// quick helper to initialize a dynamic array of 64-bit integers from 32-bit values
+// - see also FromU64() for 64-bit unsigned integer values input
 function TQWordDynArrayFrom(const Values: TCardinalDynArray): TQWordDynArray;
 
 /// initializes a dynamic array from a set of 32-bit integer signed values
@@ -38038,7 +38041,8 @@ end;
 
 function MedianQuickSelect(const OnCompare: TOnValueGreater; n: integer;
   var TempBuffer: TSynTempBuffer): integer;
-var low, high, middle, median, ll, hh, tmp: PtrInt;
+var low, high, middle, median, ll, hh: PtrInt;
+    tmp: integer;
     ndx: PIntegerArray;
 begin
   if n<=1 then begin
