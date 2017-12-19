@@ -42073,13 +42073,11 @@ var Data: PByte;
 begin
   if Root.PropertyType=ptCustom then begin
     result := TJSONCustomParserCustom(Root).CustomReader(P,aValue,EndOfObject);
-    if result=nil then
-      aValid := false else
-      if EndOfObject<>#0 then begin
-         dec(result);
-         result^ := EndOfObject; // emulates simple read
-         aValid := true;
-       end;
+    aValid := result<>nil;
+    if EndOfObject<>#0 then begin
+       dec(result);
+       result^ := EndOfObject; // emulates simple read
+     end;
     exit;
   end;
   Data := @aValue;
