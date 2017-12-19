@@ -7625,7 +7625,7 @@ type
   /// which kind of property does TJSONCustomParserCustomSimple refer to
   TJSONCustomParserCustomSimpleKnownType = (
     ktNone, ktEnumeration, ktSet, ktGUID,
-    ktFixedArray, ktStaticArray, ktDynamicArray);
+    ktFixedArray, ktStaticArray, ktDynamicArray, ktBinary);
 
   /// used to store additional RTTI for simple type as a ptCustom kind
   // - this class handle currently enumerate, TGUID or static/dynamic arrays
@@ -7642,6 +7642,9 @@ type
     /// initialize the instance for a static array
     constructor CreateFixedArray(const aPropertyName: RawUTF8;
       aFixedSize: cardinal);
+    /// initialize the instance for a binary blob
+    constructor CreateBinary(const aPropertyName: RawUTF8;
+      aDataSize, aFixedSize: cardinal);
     /// released used memory
     destructor Destroy; override;
     /// method to write the instance as JSON
@@ -8674,7 +8677,15 @@ type
     // - since Delphi 2010, any record type can be supplied - which is more
     // convenient than calling RegisterCustomJSONSerializerFromText()
     class procedure RegisterCustomJSONSerializerFromTextSimpleType(aTypeInfo: pointer;
-      aTypeName: RawUTF8=''); overload;
+      const aTypeName: RawUTF8=''); overload;
+    /// define a custom binary serialization for a given simple type
+    // - you should be able to use this type in the RTTI text definition
+    // of any further RegisterCustomJSONSerializerFromText() call
+    // - data will be serialized as BinToHexDisplayLower() JSON hexadecimal string
+    // - you can truncate the original data size (e.g. if all bits of an integer
+    // are not used) by specifying the aFieldSize optional parameter
+    class procedure RegisterCustomJSONSerializerFromTextBinaryType(aTypeInfo: pointer;
+      aDataSize: integer; aFieldSize: integer=0);
     /// define a custom serialization for several simple types
     // - will call the overloaded RegisterCustomJSONSerializerFromTextSimpleType
     // method for each supplied type information
@@ -22392,6 +22403,13 @@ begin
     SetRawUTF8(result,PAnsiChar(@PTypeInfo(aTypeInfo)^.NameLen)+1,
       PTypeInfo(aTypeInfo)^.NameLen) else
     result := default;
+end;
+
+function TypeInfoToShortString(aTypeInfo: pointer): PShortString;
+begin
+  if aTypeInfo<>nil then
+    result := @PTypeInfo(aTypeInfo)^.NameLen else
+    result := nil;
 end;
 
 procedure TypeInfoToQualifiedName(aTypeInfo: pointer; var result: RawUTF8;
@@ -40565,22 +40583,34 @@ function TJSONCustomParsers.TryToGetFromRTTI(aDynArrayTypeInfo,
   aRecordTypeInfo: pointer): integer;
 var Reg: TJSONCustomParserRegistration;
     RegRoot: TJSONCustomParserRTTI;
+    {$ifdef ISDELPHI2010}
     info: PTypeInfo;
+    {$endif}
     added: boolean;
-    ndx: integer;
+    ndx, len: integer;
+    name: PShortString;
 begin
   result := -1;
-  info := GetTypeInfo(aRecordTypeInfo,tkRecordTypeOrSet);
-  if info=nil then
-    exit; // not enough RTTI
   Reg.RecordTypeInfo := aRecordTypeInfo;
   Reg.DynArrayTypeInfo := aDynArrayTypeInfo;
   TypeInfoToName(Reg.RecordTypeInfo,Reg.RecordTypeName);
-  if Reg.RecordTypeName='' then
-    exit; // we need a type name!
+  if Reg.RecordTypeName='' then begin
+    name := TypeInfoToShortString(Reg.DynArrayTypeInfo);
+    if name=nil then
+      exit; // we need a type name!
+    len := length(name^); // try to guess from T*DynArray or T*s names
+    if (len>12) and (IdemPropName('DynArray',@name^[len-7],8)) then
+      SetString(Reg.RecordTypeName,PAnsiChar(@name^[1]),len-8) else
+    if (len>3) and (name^[len]='s') then
+      SetString(Reg.RecordTypeName,PAnsiChar(@name^[1]),len-1) else
+      exit;
+  end;
   RegRoot := TJSONCustomParserRTTI.CreateFromTypeName('',Reg.RecordTypeName);
   {$ifdef ISDELPHI2010}
   if RegRoot=nil then begin
+    info := GetTypeInfo(aRecordTypeInfo,tkRecordTypeOrSet);
+    if info=nil then
+      exit; // not enough RTTI
     inc(PByte(info),info^.ManagedCount*sizeof(TFieldInfo)-sizeof(TFieldInfo));
     inc(PByte(info),info^.NumOps*sizeof(pointer)); // jump RecOps[]
     if info^.AllCount=0 then
@@ -41102,6 +41132,15 @@ begin
   fDataSize := aFixedSize;
 end;
 
+constructor TJSONCustomParserCustomSimple.CreateBinary(
+  const aPropertyName: RawUTF8; aDataSize, aFixedSize: cardinal);
+begin
+  inherited Create(aPropertyName,FormatUTF8('BinHex%Byte',[aFixedSize]));
+  fKnownType := ktBinary;
+  fFixedSize := aFixedSize;
+  fDataSize := aDataSize;
+end;
+
 destructor TJSONCustomParserCustomSimple.Destroy;
 begin
   inherited;
@@ -41129,6 +41168,8 @@ begin
   ktDynamicArray:
     raise ESynException.CreateUTF8('%.CustomWriter("%"): unsupported',
         [self,fCustomTypeName]);
+  ktBinary:
+    aWriter.AddBinToHexDisplayQuoted(@aValue,fFixedSize);
   else begin // encoded as JSON strings
     aWriter.Add('"');
     case fKnownType of
@@ -41145,7 +41186,8 @@ end;
 function TJSONCustomParserCustomSimple.CustomReader(P: PUTF8Char;
   var aValue; out EndOfObject: AnsiChar): PUTF8Char;
 var PropValue: PUTF8Char;
-    i,i32, PropValueLen: integer;
+    i, PropValueLen, i32: integer;
+    u64: QWord;
     wasString: boolean;
     Val: PByte;
 begin
@@ -41181,8 +41223,8 @@ begin
     PropValue := GetJSONField(P,P,@wasString,@EndOfObject,@PropValueLen);
     if PropValue=nil then
       exit;
-    if P=nil then
-      P := @NULCHAR; // result=nil indicates error
+    if P=nil then // result=nil=error + caller may dec(P); P^:=EndOfObject; 
+      P := PropValue+PropValueLen;
     case fKnownType of
     ktGUID:
       if wasString and (TextToGUID(PropValue,@aValue)<>nil) then
@@ -41200,6 +41242,19 @@ begin
       if wasString and (PropValueLen=fFixedSize*2) and
          SynCommons.HexToBin(PAnsiChar(PropValue),@aValue,fFixedSize) then
         result := P;
+    ktBinary: begin
+      FillCharFast(aValue,fDataSize,0);
+      if wasString then begin
+        if (PropValueLen=fFixedSize*2) and
+           SynCommons.HexDisplayToBin(PAnsiChar(PropValue),@aValue,fFixedSize) then
+          result := P;
+      end else
+        if fFixedSize<=sizeof(u64) then begin
+          SetQWord(PropValue,u64);
+          MoveFast(u64,aValue,fFixedSize);
+          result := P;
+        end;
+    end;
     end;
   end;
   end;
@@ -41268,19 +41323,31 @@ end;
 
 { TJSONCustomParserRTTI }
 
-var
-  GlobalCustomJSONSerializerFromTextSimpleType_: TRawUTF8ListHashed;
-
-function GlobalCustomJSONSerializerFromTextSimpleType: TRawUTF8ListHashed;
-begin
-  if GlobalCustomJSONSerializerFromTextSimpleType_=nil then begin
-    GarbageCollectorFreeAndNil(GlobalCustomJSONSerializerFromTextSimpleType_,
-      TRawUTF8ListHashed.Create(false));
-    GlobalCustomJSONSerializerFromTextSimpleType_.CaseSensitive := false;
-    GlobalCustomJSONSerializerFromTextSimpleType_.AddObjectIfNotExisting(
-      'TGUID',{$ifdef ISDELPHI2010}TypeInfo(TGUID){$else}nil{$endif});
+type
+  TJSONSerializerFromTextSimple = record
+    TypeInfo: pointer;
+    BinaryDataSize, BinaryFieldSize: integer;
   end;
-  result := GlobalCustomJSONSerializerFromTextSimpleType_;
+  TJSONSerializerFromTextSimpleDynArray = array of TJSONSerializerFromTextSimple;
+var // RawUTF8/TJSONSerializerFromTextSimpleDynArray
+  GlobalCustomJSONSerializerFromTextSimpleType: TSynDictionary;
+
+procedure JSONSerializerFromTextSimpleTypeAdd(aTypeName: RawUTF8;
+  aTypeInfo: pointer; aDataSize, aFieldSize: integer);
+var simple: TJSONSerializerFromTextSimple;
+begin
+  if aTypeName='' then
+    TypeInfoToName(aTypeInfo,aTypeName);
+  if aDataSize<>0 then
+    if aFieldSize>aDataSize then
+      raise ESynException.CreateUTF8('% fieldsize=%>%',[aTypeName,aFieldSize,aDataSize]) else
+    if aFieldSize=0 then
+      aFieldSize := aDataSize; // not truncated
+  simple.TypeInfo := aTypeInfo;
+  simple.BinaryDataSize := aDataSize;
+  simple.BinaryFieldSize := aFieldSize;
+  UpperCaseSelf(aTypeName);
+  GlobalCustomJSONSerializerFromTextSimpleType.Add(aTypeName,simple);
 end;
 
 /// if defined, will try to mimic the default record alignment
@@ -41442,12 +41509,15 @@ end;
 class function TJSONCustomParserRTTI.CreateFromTypeName(
   const aPropertyName, aCustomRecordTypeName: RawUTF8): TJSONCustomParserRTTI;
 var ndx: integer;
+    simple: ^TJSONSerializerFromTextSimple;
 begin
-  ndx := GlobalCustomJSONSerializerFromTextSimpleType.IndexOf(aCustomRecordTypeName);
-  if ndx>=0 then
-    result := TJSONCustomParserCustomSimple.Create(
-      aPropertyName,aCustomRecordTypeName,
-      GlobalCustomJSONSerializerFromTextSimpleType_.Objects[ndx]) else begin
+  simple := GlobalCustomJSONSerializerFromTextSimpleType.FindValue(aCustomRecordTypeName);
+  if simple<>nil then
+    if simple^.BinaryFieldSize<>0 then
+      result := TJSONCustomParserCustomSimple.CreateBinary(
+        aPropertyName,simple^.BinaryDataSize,simple^.BinaryFieldSize) else
+      result := TJSONCustomParserCustomSimple.Create(
+        aPropertyName,aCustomRecordTypeName,simple^.TypeInfo) else begin
     ndx := GlobalJSONCustomParsers.RecordSearch(aCustomRecordTypeName);
     if ndx<0 then
       result := nil else
@@ -41999,7 +42069,19 @@ end;
 
 function TJSONRecordAbstract.CustomReader(P: PUTF8Char; var aValue; out aValid: Boolean): PUTF8Char;
 var Data: PByte;
+    EndOfObject: AnsiChar;
 begin
+  if Root.PropertyType=ptCustom then begin
+    result := TJSONCustomParserCustom(Root).CustomReader(P,aValue,EndOfObject);
+    if result=nil then
+      aValid := false else
+      if EndOfObject<>#0 then begin
+         dec(result);
+         result^ := EndOfObject; // emulates simple read
+         aValid := true;
+       end;
+    exit;
+  end;
   Data := @aValue;
   aValid := Root.ReadOneLevel(P,Data,Options);
   result := P;
@@ -42063,7 +42145,6 @@ end;
 
 procedure TJSONRecordTextDefinition.Parse(Props: TJSONCustomParserRTTI;
   var P: PUTF8Char; PEnd: TJSONCustomParserRTTIExpectedEnd);
-const DYNARRAYTEXT: PUTF8Char = 'DynArray'; // make Delphi 5 compiler happy
   function GetNextFieldType(var P: PUTF8Char;
     var TypIdent: RawUTF8): TJSONCustomParserRTTIType;
   begin
@@ -42128,14 +42209,20 @@ begin
           ExpectedEnd := eeEndKeyWord;
         ptCustom: begin
           len := length(TypIdent);
-          if (len>12) and (TypIdent[1]='T') and
-             IdemPropNameUSameLen(DYNARRAYTEXT,@PByteArray(TypIdent)[len-8],8) then begin
+          if (len>12) and IdemPropName('DynArray',@PByteArray(TypIdent)[len-8],8) then
+            dec(len,8) else
+          if (len>3) and (TypIdent[len]='S') then
+            dec(len,1) else
+            len := 0;
+          if len>0 then begin
             ArrayTyp := TJSONCustomParserRTTI.TypeNameToSimpleRTTIType(
-              @PByteArray(TypIdent)[1],len-9,ArrayTypIdent);
-            if ArrayTyp=ptCustom then
-              raise ESynException.CreateUTF8('%.Parse: % is not a T*DynArray of a simple type',
-                [self,TypIdent]);
-            Typ := ptArray;
+              @PByteArray(TypIdent)[1],len-1,ArrayTypIdent); // TByteDynArray -> byte
+            if ArrayTyp=ptCustom then begin // TMyTypeDynArray/TMyTypes -> TMyType
+              SetString(ArrayTypIdent,PAnsiChar(pointer(TypIdent)),len);
+              if GlobalCustomJSONSerializerFromTextSimpleType.Find(ArrayTypIdent)>=0 then
+                Typ := ptArray;
+            end else
+              Typ := ptArray;
           end;
           ExpectedEnd := eeNothing;
         end;
@@ -50690,11 +50777,9 @@ begin
 end;
 
 class procedure TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(
-  aTypeInfo: pointer; aTypeName: RawUTF8='');
+  aTypeInfo: pointer; const aTypeName: RawUTF8);
 begin
-  if aTypeName='' then
-    TypeInfoToName(aTypeInfo,aTypeName);
-  GlobalCustomJSONSerializerFromTextSimpleType.AddObjectIfNotExisting(aTypeName,aTypeInfo);
+  JSONSerializerFromTextSimpleTypeAdd(aTypeName,aTypeInfo,0,0);
 end;
 
 class procedure TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(
@@ -50703,6 +50788,12 @@ var i: integer;
 begin
   for i := 0 to high(aTypeInfos) do
     RegisterCustomJSONSerializerFromTextSimpleType(aTypeInfos[i],'');
+end;
+
+class procedure TTextWriter.RegisterCustomJSONSerializerFromTextBinaryType(
+  aTypeInfo: pointer; aDataSize, aFieldSize: integer);
+begin
+  JSONSerializerFromTextSimpleTypeAdd('',aTypeInfo,aDataSize,aFieldSize);
 end;
 
 procedure TTextWriter.AddRecordJSON(const Rec; TypeInfo: pointer);
@@ -57675,7 +57766,9 @@ end;
 function TSynDictionary.FindValue(const aKey): pointer;
 var ndx: integer;
 begin
-  ndx := fKeys.FindHashed(aKey);
+  if self=nil then
+    ndx := -1 else
+    ndx := fKeys.FindHashed(aKey);
   if ndx<0 then
     result := nil else
     result := fValues.ElemPtr(ndx);
@@ -64075,6 +64168,11 @@ begin
   KINDTYPE_INFO[djWideString] := TypeInfo(WideString);
   KINDTYPE_INFO[djSynUnicode] := TypeInfo(SynUnicode);
   {$ifndef NOVARIANTS}KINDTYPE_INFO[djVariant] := TypeInfo(variant);{$endif}
+  GarbageCollectorFreeAndNil(GlobalCustomJSONSerializerFromTextSimpleType,
+    TSynDictionary.Create(TypeInfo(TRawUTF8DynArray),
+      TypeInfo(TJSONSerializerFromTextSimpleDynArray),true));
+  JSONSerializerFromTextSimpleTypeAdd(
+    'TGUID',{$ifdef ISDELPHI2010}TypeInfo(TGUID){$else}nil{$endif},0,0);
 end;
 
 initialization
