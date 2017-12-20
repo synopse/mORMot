@@ -2343,6 +2343,7 @@ type
     // - registered claims will be available from reg[], not in this field
     // - e.g. data.U['name']='John Doe' and data.B['admin']=true for
     // $ {"sub": "1234567890","name": "John Doe","admin": true}
+    // but data.U['sub'] if not defined, and reg[jrcSubject]='1234567890'
     data: TDocVariantData;
   end;
   /// pointer to a JWT decoded content, as processed by TJWTAbstract

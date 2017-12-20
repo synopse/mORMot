@@ -33708,7 +33708,7 @@ begin
   result := (value shl count) or (value shr (32-count));
 end;
 
-function Rol13(value: cardinal): cardinal;
+function Rol13(value: cardinal): cardinal; inline;
 begin
   result := (value shl 13) or (value shr 19);
 end;
