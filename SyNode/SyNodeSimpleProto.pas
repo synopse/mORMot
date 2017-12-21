@@ -77,7 +77,6 @@ type
   //  - all published methods of a original calss MUST have a TSMFastNativeCall signature
   TSMSimpleRTTIProtoObject = class(TSMCustomProtoObject)
   protected
-    fCP: PClassProp;
     procedure InitObject(aParent: PJSRootedObject); override;
     function GetPropertyAddInformation(cx: PJSContext; PI:PPropInfo; out isReadonly: boolean;
       out isDeterministic: boolean; aParent: PJSRootedObject): boolean; virtual;
@@ -204,7 +203,7 @@ begin
     if mc = nil then
       raise ESMException.CreateUTF8('The class has no method "%"', [lfunc.GetFunctionId().ToSynUnicode(cx)]);
 
-    fCallMethod.Code := PMethodInfo(mc^.method)^.MethodAddr;
+    fCallMethod.Code := mc^.method;
     fCallMethod.Data := Pointer(Inst.instance);
     fCallFn := TSMFastNativeCall(fCallMethod);
     Result := fCallFn(cx, argc, vp);
@@ -397,102 +396,68 @@ var
   i: integer;
   idx: Integer;
 
-  C: PtrInt;
-  M: PMethodInfo;
+  CT: TClass;
   n: integer;
-  MethodName: SynUnicode;
   added: boolean;
   isReadonly: boolean;
   isDeterministic: boolean;
   skip: boolean;
+  methods: TPublishedMethodInfoDynArray;
 begin
-  C := PtrInt(fRttiCls);
-
-  while C<>0 do begin
-    M := PPointer(C+vmtMethodTable)^;
-    if M<>nil then begin
-      {$ifdef FPC}
-      n := PCardinal(M)^;
-      inc(PCardinal(M));
-      {$else}
-      n := PWord(M)^;
-      inc(PWord(M));
-      {$endif}
-      for i := 1 to n do begin
-        MethodName := UTF8ToSynUnicode(ShortStringToUTF8(M^.Name{$ifdef FPC}^{$endif}));
-        idx := FMethodsDA.FindHashedForAdding(MethodName, added);
-        if added then with FMethods[idx] do begin
-          ujsName := MethodName;
-          method := m;
-          nargs := 0;
-          isNativeCall := true;
-          call := @JSRTTINativeMethodCall;
-          flags := [jspEnumerate];
-        end;
-        {$ifdef FPC}
-        inc(M);
-        {$else}
-        inc(PByte(M),M^.Len);
-        {$endif}
-      end;
+  for i := 0 to GetPublishedMethods(nil, methods, fRttiCls) - 1 do begin
+    idx := FMethodsDA.FindHashedForAdding(methods[i].Name, added);
+    if added then with FMethods[idx] do begin
+      ujsName := UTF8ToSynUnicode(methods[i].Name);
+      method := methods[i].Method.Code;
+      nargs := 0;
+      isNativeCall := true;
+      call := @JSRTTINativeMethodCall;
+      flags := [jspEnumerate];
     end;
-    C := PPtrInt(C+vmtParent)^;
-    {$ifndef FPC}
-    if C<>0 then
-      C := PPtrInt(C)^;
-    {$endif}
   end;
 
   fDeterministicCnt := 0;
-  C := PtrInt(fRttiCls);
-  while C<>0 do begin
-    fCP := InternalClassProp(TClass(C));
-    if fCP<>nil then begin
-      PI := @fCP.PropList;
-      for i := 0 to fCP.PropCount -1 do begin
-        idx := Length(FJSProps);
+  CT := fRttiCls;
+  repeat
+    for i := 1 to InternalClassPropInfo(fRttiCls,PI) do begin
+      idx := Length(FJSProps);
 
-        skip := PI.PropType^.Kind = tkMethod;
-        if not skip then
-          for n := 0 to idx - 1 do
-            if camelize(PI.Name) = FRTTIPropsCache[n].jsName then begin
-              skip := true;
-              break;
-            end;
-
-        if skip or not GetPropertyAddInformation(fCx, PI, isReadonly, isDeterministic, aParent) then begin
-          PI := PI^.Next;
-          Continue;
+      skip := PI^.PropType^.Kind = tkMethod;
+      if not skip then
+        for n := 0 to idx - 1 do begin
+          if StrLIComp(PAnsiChar(@PI.Name[1]), PAnsiChar(FRTTIPropsCache[n].jsName), length(PI.Name)) = 0 then begin
+            skip := true;
+            break;
+          end;
         end;
 
-        SetLength(FJSProps, idx + 1);
-        SetLength(FRTTIPropsCache, idx + 1);
-        FRTTIPropsCache[idx].jsName := camelize(PI.Name);
-        FRTTIPropsCache[idx].mbr := PI;
-        FRTTIPropsCache[idx].typeInfo := PI^.PropType{$IFNDEF FPC}^{$ENDIF};
-        if isDeterministic then begin
-          FRTTIPropsCache[idx].DeterministicIndex := fDeterministicCnt;
-          Inc(fDeterministicCnt);
-        end else
-          FRTTIPropsCache[idx].DeterministicIndex := -1;
-
-        FJSProps[idx].flags := JSPROP_ENUMERATE or JSPROP_PERMANENT or JSPROP_SHARED;
-        FJSProps[idx].Name := PCChar(RTTIPropsCache[idx].jsName);
-    //    FJSProps[idx].tinyid := idx;
-        FJSProps[idx].setter.native.info := nil;
-        FJSProps[idx].setter.native.op := JSRTTIPropWrite;
-        FJSProps[idx].getter.native.info := nil;
-        FJSProps[idx].getter.native.op := JSRTTIPropRead;
-
+      if skip or not GetPropertyAddInformation(fCx, PI, isReadonly, isDeterministic, aParent) then begin
         PI := PI^.Next;
+        Continue;
       end;
+
+      SetLength(FJSProps, idx + 1);
+      SetLength(FRTTIPropsCache, idx + 1);
+      FRTTIPropsCache[idx].jsName := camelize(PI.Name);
+      FRTTIPropsCache[idx].mbr := PI;
+      FRTTIPropsCache[idx].typeInfo := PI^.PropType{$IFNDEF FPC}^{$ENDIF};
+      if isDeterministic then begin
+        FRTTIPropsCache[idx].DeterministicIndex := fDeterministicCnt;
+        Inc(fDeterministicCnt);
+      end else
+        FRTTIPropsCache[idx].DeterministicIndex := -1;
+
+      FJSProps[idx].flags := JSPROP_ENUMERATE or JSPROP_PERMANENT or JSPROP_SHARED;
+      FJSProps[idx].Name := PCChar(RTTIPropsCache[idx].jsName);
+  //    FJSProps[idx].tinyid := idx;
+      FJSProps[idx].setter.native.info := nil;
+      FJSProps[idx].setter.native.op := JSRTTIPropWrite;
+      FJSProps[idx].getter.native.info := nil;
+      FJSProps[idx].getter.native.op := JSRTTIPropRead;
+      PI := PI^.Next;
     end;
-    C := PPtrInt(C+vmtParent)^;
-    {$ifndef FPC}
-    if C<>0 then
-      C := PPtrInt(C)^;
-    {$endif}
-  end;
+    CT := CT.ClassParent;
+  until CT=nil;
   inherited; //MPV !! do not use  FMethodsDA.Add()
 end;
 
@@ -507,7 +472,7 @@ begin
     tkClass:
       defineClass(Cx, PI^.PropType^{$IFNDEF FPC}^{$ENDIF}.ClassType^.ClassType, TSMSimpleRTTIProtoObject, aParent);
     tkEnumeration:
-      defineEnum(Cx, PI.PropType{$IFNDEF FPC}^{$ENDIF}, aParent);
+      defineEnum(Cx, PI.PropType{$IFNDEF FPC_NEWRTTI}^{$ENDIF}, aParent);
   end;
   isReadonly := false;
   isDeterministic := false;
