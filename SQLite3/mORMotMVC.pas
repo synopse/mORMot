@@ -291,7 +291,7 @@ type
     fContext: TMVCSessionWithCookiesContext;
     function GetCookie: RawUTF8; virtual; abstract;
     procedure SetCookie(const cookie: RawUTF8); virtual; abstract;
-    procedure Crypt(P: PByteArray; bytes: integer);
+    procedure Crypt(P: PAnsiChar; bytes: integer);
   public
     /// create an instance of this ViewModel implementation class
     constructor Create; override;
@@ -1200,37 +1200,28 @@ begin
   fContext.Secret.Init(@rnd,sizeof(rnd));
 end;
 
-procedure XorMemoryCTR(Data,Key: PByteArray; size: integer; var ctr: cardinal);
+procedure XorMemoryCTR(data: PCardinal; key256bytes: PCardinalArray; size,ctr: cardinal);
 begin
   while size>=sizeof(Cardinal) do begin
     dec(size,sizeof(Cardinal));
-    PCardinal(Data)^ := PCardinal(Data)^ xor PCardinal(Key)^ xor ctr;
-    inc(PCardinal(Data));
-    inc(PCardinal(Key));
-    inc(ctr);
+    data^ := data^ xor key256bytes[ctr and $3f] xor ctr;
+    inc(data);
+    ctr := ((ctr xor (ctr shr 15))*2246822519); // prime-number ctr diffusion
+    ctr := ((ctr xor (ctr shr 13))*3266489917);
+    ctr := ctr xor (ctr shr 16);
   end;
   if size=0 then
     exit; // no padding
   repeat
     dec(size);
-    Data[size] := Data[size] xor Key[size] xor PByteArray(@ctr)^[size];
+    PByteArray(data)[size] := PByteArray(data)[size] xor PByteArray(key256bytes)[ctr and $ff] xor ctr;
+    inc(ctr);
   until size=0;
-  inc(ctr);
 end;
 
-procedure TMVCSessionWithCookies.Crypt(P: PByteArray; bytes: integer);
-var chunk: integer;
-    ctr: cardinal;
+procedure TMVCSessionWithCookies.Crypt(P: PAnsiChar; bytes: integer);
 begin
-  ctr := fContext.CryptNonce;
-  while bytes>0 do begin
-    if bytes>sizeof(fContext.Crypt) then // encrypt by 256 bytes chunks
-      chunk := sizeof(fContext.Crypt) else
-      chunk := bytes;
-    XorMemoryCTR(P,@fContext.Crypt,chunk,ctr);
-    inc(PByte(P),chunk);
-    dec(bytes,chunk);
-  end;
+  XorMemoryCTR(@P[4],@fContext.Crypt,bytes-4,xxHash32(fContext.CryptNonce,P,4));
 end;
 
 function TMVCSessionWithCookies.Exists: boolean;
@@ -1241,19 +1232,19 @@ end;
 type
   TCookieContent = packed record
     head: packed record
+      cryptnonce: cardinal;
       hmac: cardinal;    // = signature
       session: integer;  // = jti claim
       issued: cardinal;  // = iat claim
       expires: cardinal; // = exp claim
     end;
-    data: array[0..2048-1] of byte; // binary serialization of record value
+    data: array[0..2047] of byte; // binary serialization of record value
   end;
   PCookieContent = ^TCookieContent;
 
-function TMVCSessionWithCookies.CheckAndRetrieve(
-  PRecordData,PRecordTypeInfo: pointer): integer;
+function TMVCSessionWithCookies.CheckAndRetrieve(PRecordData,PRecordTypeInfo: pointer): integer;
 var cookie: RawUTF8;
-    len: integer;
+    clen, len: integer;
     now: cardinal;
     tmp: TCookieContent;
 begin
@@ -1261,20 +1252,21 @@ begin
   cookie := GetCookie;
   if cookie='' then
     exit;
-  len := Base64uriToBinLength(length(cookie));
+  clen := length(cookie);
+  len := Base64uriToBinLength(clen);
   if (len>=sizeof(tmp.head)) and (len<=sizeof(tmp)) and
-     Base64uriDecode(pointer(cookie),@tmp,len) then begin
+     Base64uriDecode(pointer(cookie),@tmp,clen) then begin
     Crypt(@tmp,len);
-    now := UnixTimeUTC;
-    if (tmp.head.session<=fContext.SessionCount) and
-       (tmp.head.issued<=now) and
-       (tmp.head.expires>=now) and
-       (fContext.Secret.Compute(@tmp.head.session,len-4)=tmp.head.hmac) then
-    if PRecordData=nil then
-      result := tmp.head.session else
-      if (PRecordTypeInfo<>nil) and (len>sizeof(tmp.head)) and
-         (RecordLoad(PRecordData^,@tmp.data,PRecordTypeInfo)<>nil) then
-        result := tmp.head.session;
+    if (cardinal(tmp.head.session)<=cardinal(fContext.SessionCount)) then begin
+      now := UnixTimeUTC;
+      if (tmp.head.issued<=now) and (tmp.head.expires>=now) and
+         (fContext.Secret.Compute(@tmp.head.session,len-8)=tmp.head.hmac) then
+      if PRecordData=nil then
+        result := tmp.head.session else
+        if (PRecordTypeInfo<>nil) and (len>sizeof(tmp.head)) and
+           (RecordLoad(PRecordData^,@tmp.data,PRecordTypeInfo)<>nil) then
+          result := tmp.head.session;
+    end;
   end;
   if result=0 then
     Finalize; // delete any invalid/expired cookie on server side
@@ -1282,16 +1274,16 @@ end;
 
 function TMVCSessionWithCookies.Initialize(
   PRecordData,PRecordTypeInfo: pointer; SessionTimeOutMinutes: cardinal): integer;
-var cookie: RawUTF8;
-    len: integer;
+var len: integer;
     tmp: TCookieContent;
 begin
   if (PRecordData<>nil) and (PRecordTypeInfo<>nil) then
     len := RecordSaveLength(PRecordData^,PRecordTypeInfo) else
     len := 0;
-  if len>sizeof(tmp.data)-4 then // all cookies storage should be < 4K
+  if len>sizeof(tmp.data) then // all cookies storage should be < 4K
     raise EMVCApplication.CreateGotoError('Big Fat Cookie');
   result := InterlockedIncrement(fContext.SessionCount);
+  tmp.head.cryptnonce := Random32;
   tmp.head.session := result;
   tmp.head.issued := UnixTimeUTC;
   if SessionTimeOutMinutes=0 then
@@ -1300,10 +1292,9 @@ begin
   if len>0 then
     RecordSave(PRecordData^,@tmp.data,PRecordTypeInfo);
   inc(len,sizeof(tmp.head));
-  tmp.head.hmac := fContext.Secret.Compute(@tmp.head.session,len-4);
+  tmp.head.hmac := fContext.Secret.Compute(@tmp.head.session,len-8);
   Crypt(@tmp,len);
-  cookie := BinToBase64URI(@tmp,len);
-  SetCookie(cookie);
+  SetCookie(BinToBase64URI(@tmp,len));
 end;
 
 procedure TMVCSessionWithCookies.Finalize;
@@ -1331,11 +1322,11 @@ begin
 end;
 
 procedure TMVCSessionWithRestServer.SetCookie(const cookie: RawUTF8);
+var ctxt: TSQLRestServerURIContext;
 begin
-  with ServiceContext.Request do begin
-    OutSetCookie := fContext.CookieName+'='+cookie;
-    InCookie[fContext.CookieName] := cookie;
-  end;
+  ctxt := ServiceContext.Request;
+  ctxt.OutSetCookie := fContext.CookieName+'='+cookie;
+  ctxt.InCookie[CookieName] := cookie;
 end;
 
 

@@ -6314,6 +6314,8 @@ type
     /// high-resolution timimg of the execution command, in micro-seconds
     // - only set when TSQLRestServer.URI finished
     MicroSecondsElapsed: QWord;
+    /// JWT validation information, as filled by AuthenticationCheck()
+    JWTContent: TJWTContent;
     {$ifdef WITHLOG}
     /// associated logging instance for the current thread on the server
     // - you can use it to log some process on the server side
@@ -6450,16 +6452,16 @@ type
     // URI parameter (may be convenient when embedding resources in HTML DOM)
     function AuthenticationBearerToken: RawUTF8;
     /// validate "Authorization: Bearer <JWT>" content from incoming HTTP headers
-    // - returns jwtValid on success, optionally returning the payload in res^
-    // - returns jwtNoToken if jwt is nil
-    // - on failure (i.e. result <> jwtValid), will set the error context as
-    // 401 HTTP_UNAUTHORIZED so that you may directly write:
+    // - returns true on success, storing the payload in the JWTContent field
+    // - set JWTContent.result = jwtNoToken if jwt is nil
+    // - on failure (i.e. returns false), will set the error context as
+    // 403 HTTP_FORBIDDEN so that you may directly write:
     // ! procedure TMyDaemon.Files(Ctxt: TSQLRestServerURIContext);
     // ! begin
-    // !   if Ctxt.AuthenticationCheck(fJWT)=jwtValid then
+    // !   if Ctxt.AuthenticationCheck(fJWT) then
     // !     Ctxt.ReturnFileFromFolder('c:\datafolder');
     // ! end;
-    function AuthenticationCheck(jwt: TJWTAbstract; res: PJWTContent=nil): TJWTResult;
+    function AuthenticationCheck(jwt: TJWTAbstract): boolean;
     /// identify which kind of client is actually connected
     // - the "User-Agent" HTTP will be checked for 'mORMot' substring, and
     // set ckFramework on match
@@ -17490,7 +17492,7 @@ type
     /// how many authentication methods are registered in AuthenticationSchemes
     property AuthenticationSchemesCount: integer
       read GetAuthenticationSchemesCount;
-    /// define if unsecure connections (i.e. not in-process, HTTPS or encrypted
+    /// define if unsecure connections (i.e. not in-process or encrypted
     // WebSockets) require a JWT for authentication
     // - once set, this instance will be owned by the TSQLRestServer 
     property JWTForUnauthenticatedRequest: TJWTAbstract
@@ -40998,19 +41000,14 @@ begin
   end;
 end;
 
-function TSQLRestServerURIContext.AuthenticationCheck(jwt: TJWTAbstract;
-  res: PJWTContent): TJWTResult;
-var tmp: TJWTContent;
+function TSQLRestServerURIContext.AuthenticationCheck(jwt: TJWTAbstract): boolean;
 begin
-  if res=nil then
-    res := @tmp;
   if jwt=nil then
-    result := jwtNoToken else begin
-    jwt.Verify(AuthenticationBearerToken,res^);
-    result := res^.result;
-  end;
-  if result<>jwtValid then
-    Error('Invalid Bearer [%]',[ToText(result)^],HTTP_UNAUTHORIZED);
+    JWTContent.result := jwtNoToken else
+    jwt.Verify(AuthenticationBearerToken,JWTContent);
+  result := JWTContent.result=jwtValid;
+  if not result then
+    Error('Invalid Bearer [%]',[ToText(JWTContent.result)^],HTTP_FORBIDDEN);
 end;
 
 function TSQLRestServerURIContext.ClientKind: TSQLRestServerURIContextClientKind;
@@ -41583,13 +41580,12 @@ begin
         if (rsoRedirectForbiddenToAuth in Options) and (Ctxt.ClientKind=ckAjax) then
           Ctxt.Redirect(Model.Root+'/auth') else
           Ctxt.AuthenticationFailed(afRemoteServiceExecutionNotAllowed) else
-      if (Ctxt.Session=CONST_AUTHENTICATION_NOT_USED) and
-         (fJWTForUnauthenticatedRequest<>nil) and
-         (Ctxt.MethodIndex<>fPublishedMethodTimestampIndex) and
-         (not(llfSecured in Call.LowLevelFlags) or
-             (llfHttps in Call.LowLevelFlags)) and // HTTPS does not authenticate
-          (fJWTForUnauthenticatedRequest.Verify(Ctxt.AuthenticationBearerToken)<>jwtValid) then
-        Ctxt.AuthenticationFailed(afJWTRequired) else
+      if (Ctxt.Session<>CONST_AUTHENTICATION_NOT_USED) or
+         (fJWTForUnauthenticatedRequest=nil) or
+         (Ctxt.MethodIndex=fPublishedMethodTimestampIndex) or
+         ((llfSecured in Call.LowLevelFlags) and
+          not (llfHttps in Call.LowLevelFlags)) or // HTTPS does not authenticate
+         Ctxt.AuthenticationCheck(fJWTForUnauthenticatedRequest) then
       // 3. call appropriate ORM / SOA commands in fAcquireExecution[] context
       try
         if Ctxt.MethodIndex>=0 then
@@ -52560,8 +52556,7 @@ end;
 
 { TSQLRestServerAuthenticationDefault }
 
-function TSQLRestServerAuthenticationDefault.Auth(
-  Ctxt: TSQLRestServerURIContext): boolean;
+function TSQLRestServerAuthenticationDefault.Auth(Ctxt: TSQLRestServerURIContext): boolean;
 var aUserName, aPassWord, aClientNonce: RawUTF8;
     User: TSQLAuthUser;
 begin
@@ -60933,6 +60928,7 @@ begin
     HTTP_NOTIMPLEMENTED: result := 'Server not reachable or broken connection';
     HTTP_NOTALLOWED: result := 'Method forbidden for this User group';
     HTTP_UNAUTHORIZED: result := 'No active session';
+    HTTP_FORBIDDEN: result := 'Security error';
     HTTP_NOTACCEPTABLE: result := 'Invalid input parameters';
     HTTP_NOTFOUND: result := 'Network problem or request timeout';
     else result := '';

@@ -3195,7 +3195,14 @@ function IdemPCharWithoutWhiteSpace(p: PUTF8Char; up: PAnsiChar): boolean;
 // - chars are compared as 7 bit Ansi only (no accentuated characters)
 // - warning: this function expects upArray[] items to have AT LEAST TWO
 // CHARS (it will use a fast comparison of initial 2 bytes)
-function IdemPCharArray(p: PUTF8Char; const upArray: array of PAnsiChar): integer;
+function IdemPCharArray(p: PUTF8Char; const upArray: array of PAnsiChar): integer; overload;
+
+/// returns the index of a matching beginning of p^ in upArray two characters
+// - returns -1 if no item matched
+// - ignore case - upArray^ must be already Upper
+// - chars are compared as 7 bit Ansi only (no accentuated characters)
+function IdemPCharArray(p: PUTF8Char; const upArrayBy2Chars: RawUTF8): integer; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// returns true if the beginning of p^ is the same as up^
 // - ignore case - up^ must be already Upper
@@ -3756,7 +3763,7 @@ function FindCSVIndex(CSV: PUTF8Char; const Value: RawUTF8; Sep: AnsiChar = ',';
 
 /// add the strings in the specified CSV text into a dynamic array of UTF-8 strings
 procedure CSVToRawUTF8DynArray(CSV: PUTF8Char; var Result: TRawUTF8DynArray;
-  Sep: AnsiChar=','; TrimItems: boolean=false); overload;
+  Sep: AnsiChar=','; TrimItems: boolean=false; AddVoidItems: boolean=false); overload;
 
 /// add the strings in the specified CSV text into a dynamic array of UTF-8 strings
 procedure CSVToRawUTF8DynArray(const CSV,Sep,SepEnd: RawUTF8; var Result: TRawUTF8DynArray); overload;
@@ -4593,6 +4600,9 @@ procedure QuickSortInteger(ID,CoValues: PIntegerArray; L, R: PtrInt); overload;
 /// sort an Integer array, low values first
 procedure QuickSortInteger(var ID: TIntegerDynArray); overload;
 
+/// sort a 16 bit unsigned Integer array, low values first
+procedure QuickSortWord(ID: PWordArray; L, R: PtrInt);
+
 /// sort a 64 bit signed Integer array, low values first
 procedure QuickSortInt64(ID: PInt64Array; L, R: PtrInt); overload;
 
@@ -4623,6 +4633,9 @@ function FastFindIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): Ptr
 // - return -1 if Value was not found
 function FastFindIntegerSorted(const Values: TIntegerDynArray; Value: integer): PtrInt; overload;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// fast O(log(n)) binary search of a 16 bit unsigned integer value in a sorted array
+function FastFindWordSorted(P: PWordArray; R: PtrInt; Value: Word): PtrInt;
 
 /// fast O(log(n)) binary search of a 64 bit signed integer value in a sorted array
 // - R is the last index of available integer entries in P^ (i.e. Count-1)
@@ -4658,6 +4671,11 @@ function FastFindPointerSorted(P: PPointerArray; R: PtrInt; Value: Pointer): Ptr
 // - R is the last index of available integer entries in P^ (i.e. Count-1)
 // - returns -1 if the specified Value was found (i.e. adding will duplicate a value)
 function FastLocateIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt;
+
+/// retrieve the index where to insert a word value in a sorted word array
+// - R is the last index of available integer entries in P^ (i.e. Count-1)
+// - returns -1 if the specified Value was found (i.e. adding will duplicate a value)
+function FastLocateWordSorted(P: PWordArray; R: integer; Value: word): PtrInt;
 
 /// add an integer value in a sorted dynamic array of integers
 // - returns the index where the Value was added successfully in Values[]
@@ -4715,6 +4733,9 @@ procedure DeleteInteger(var Values: TIntegerDynArray; Index: PtrInt); overload;
 /// delete any 32-bit integer in Values[]
 procedure DeleteInteger(var Values: TIntegerDynArray; var ValuesCount: Integer; Index: PtrInt); overload;
 
+/// delete any 16-bit integer in Values[]
+procedure DeleteWord(var Values: TWordDynArray; Index: PtrInt);
+
 /// delete any 64-bit integer in Values[]
 procedure DeleteInt64(var Values: TInt64DynArray; Index: PtrInt); overload;
 
@@ -4771,6 +4792,7 @@ function Int64DynArrayToCSV(const Values: TInt64DynArray;
 /// quick helper to initialize a dynamic array of integer from some constants
 // - can be used e.g. as:
 // ! MyArray := TIntegerDynArrayFrom([1,2,3]);
+// - see also FromI32()
 function TIntegerDynArrayFrom(const Values: array of integer): TIntegerDynArray;
 
 /// quick helper to initialize a dynamic array of integer from 64-bit integers
@@ -4781,9 +4803,11 @@ function TIntegerDynArrayFrom64(const Values: TInt64DynArray;
   raiseExceptionOnOverflow: boolean=true): TIntegerDynArray;
 
 /// quick helper to initialize a dynamic array of 64-bit integers from 32-bit values
+// - see also FromI64() for 64-bit signed integer values input
 function TInt64DynArrayFrom(const Values: TIntegerDynArray): TInt64DynArray;
 
 /// quick helper to initialize a dynamic array of 64-bit integers from 32-bit values
+// - see also FromU64() for 64-bit unsigned integer values input
 function TQWordDynArrayFrom(const Values: TCardinalDynArray): TQWordDynArray;
 
 /// initializes a dynamic array from a set of 32-bit integer signed values
@@ -7616,7 +7640,7 @@ type
   /// which kind of property does TJSONCustomParserCustomSimple refer to
   TJSONCustomParserCustomSimpleKnownType = (
     ktNone, ktEnumeration, ktSet, ktGUID,
-    ktFixedArray, ktStaticArray, ktDynamicArray);
+    ktFixedArray, ktStaticArray, ktDynamicArray, ktBinary);
 
   /// used to store additional RTTI for simple type as a ptCustom kind
   // - this class handle currently enumerate, TGUID or static/dynamic arrays
@@ -7633,6 +7657,9 @@ type
     /// initialize the instance for a static array
     constructor CreateFixedArray(const aPropertyName: RawUTF8;
       aFixedSize: cardinal);
+    /// initialize the instance for a binary blob
+    constructor CreateBinary(const aPropertyName: RawUTF8;
+      aDataSize, aFixedSize: cardinal);
     /// released used memory
     destructor Destroy; override;
     /// method to write the instance as JSON
@@ -8665,7 +8692,15 @@ type
     // - since Delphi 2010, any record type can be supplied - which is more
     // convenient than calling RegisterCustomJSONSerializerFromText()
     class procedure RegisterCustomJSONSerializerFromTextSimpleType(aTypeInfo: pointer;
-      aTypeName: RawUTF8=''); overload;
+      const aTypeName: RawUTF8=''); overload;
+    /// define a custom binary serialization for a given simple type
+    // - you should be able to use this type in the RTTI text definition
+    // of any further RegisterCustomJSONSerializerFromText() call
+    // - data will be serialized as BinToHexDisplayLower() JSON hexadecimal string
+    // - you can truncate the original data size (e.g. if all bits of an integer
+    // are not used) by specifying the aFieldSize optional parameter
+    class procedure RegisterCustomJSONSerializerFromTextBinaryType(aTypeInfo: pointer;
+      aDataSize: integer; aFieldSize: integer=0);
     /// define a custom serialization for several simple types
     // - will call the overloaded RegisterCustomJSONSerializerFromTextSimpleType
     // method for each supplied type information
@@ -11988,6 +12023,7 @@ type
   3: (c0,c1,c2,c3: cardinal);
   4: (c: TBlock128);
   5: (b: THash128);
+  6: (w: array[0..7] of word);
   end;
   /// pointer to 128-bit hash map variable record
   PHash128Rec = ^THash128Rec;
@@ -12010,6 +12046,7 @@ type
   2: (i0,i1,i2,i3,i4,i5,i6,i7: integer);
   3: (c0,c1: TBlock128);
   4: (b: THash256);
+  5: (w: array[0..15] of word);
   end;
   /// pointer to 256-bit hash map variable record
   PHash256Rec = ^THash256Rec;
@@ -12024,7 +12061,7 @@ type
   // - consumes 64 bytes of memory per item
   THash512DynArray = array of THash512;
   /// map a 512-bit hash as an array of lower bit size values
-  // - consumes 32 bytes of memory
+  // - consumes 64 bytes of memory
   THash512Rec = packed record
   case integer of
   0: (Lo,Hi: THash256);
@@ -12033,6 +12070,7 @@ type
   3: (i0,i1,i2,i3,i4,i5,i6,i7,i8,i9,i10,i11,i12,i13,i14,i15: integer);
   4: (c0,c1,c2,c3: TBlock128);
   5: (b: THash512);
+  6: (w: array[0..31] of word);
   end;
   /// pointer to 512-bit hash map variable record
   PHash512Rec = ^THash512Rec;
@@ -22382,6 +22420,13 @@ begin
     result := default;
 end;
 
+function TypeInfoToShortString(aTypeInfo: pointer): PShortString;
+begin
+  if aTypeInfo<>nil then
+    result := @PTypeInfo(aTypeInfo)^.NameLen else
+    result := nil;
+end;
+
 procedure TypeInfoToQualifiedName(aTypeInfo: pointer; var result: RawUTF8;
   const default: RawUTF8='');
 var unitname: RawUTF8;
@@ -29692,7 +29737,19 @@ begin
   SetLength(Values,n);
 end;
 
-procedure DeleteInt64(var Values: TInt64DynArray; Index: PtrInt); overload;
+procedure DeleteWord(var Values: TWordDynArray; Index: PtrInt);
+var n: PtrInt;
+begin
+  n := Length(Values);
+  if PtrUInt(Index)>=PtrUInt(n) then
+    exit; // wrong Index
+  dec(n);
+  if n>Index then
+    MoveFast(Values[Index+1],Values[Index],(n-Index)*sizeof(Word));
+  SetLength(Values,n);
+end;
+
+procedure DeleteInt64(var Values: TInt64DynArray; Index: PtrInt);
 var n: PtrInt;
 begin
   n := Length(Values);
@@ -29704,7 +29761,7 @@ begin
   SetLength(Values,n);
 end;
 
-procedure DeleteInteger(var Values: TIntegerDynArray; var ValuesCount: Integer; Index: PtrInt); overload;
+procedure DeleteInteger(var Values: TIntegerDynArray; var ValuesCount: Integer; Index: PtrInt);
 var n: PtrInt;
 begin
   n := ValuesCount;
@@ -30139,7 +30196,31 @@ begin
   until I >= R;
 end;
 
-procedure QuickSortInt64(ID: PInt64Array; L, R: PtrInt); overload;
+procedure QuickSortWord(ID: PWordArray; L, R: PtrInt);
+var I, J, P: PtrInt;
+    pivot, Tmp: word;
+begin
+  if L<R then
+  repeat
+    I := L; J := R;
+    P := (L + R) shr 1;
+    repeat
+      pivot := ID^[P];
+      while ID[I]<pivot do inc(I);
+      while ID[J]>pivot do dec(J);
+      if I <= J then begin
+        Tmp := ID[J]; ID[J] := ID[I]; ID[I] := Tmp;
+        if P = I then P := J else if P = J then P := I;
+        inc(I); dec(J);
+      end;
+    until I > J;
+    if L < J then
+      QuickSortWord(ID,L,J);
+    L := I;
+  until I >= R;
+end;
+
+procedure QuickSortInt64(ID: PInt64Array; L, R: PtrInt);
 var I, J, P: PtrInt;
     pivot, Tmp: Int64;
 begin
@@ -30163,7 +30244,7 @@ begin
   until I >= R;
 end;
 
-procedure QuickSortQWord(ID: PQWordArray; L, R: PtrInt); overload;
+procedure QuickSortQWord(ID: PQWordArray; L, R: PtrInt);
 var I, J, P: PtrInt;
     pivot, Tmp: QWord;
 begin
@@ -30192,7 +30273,7 @@ begin
   until I >= R;
 end;
 
-procedure QuickSortInt64(ID,CoValues: PInt64Array; L, R: PtrInt); overload;
+procedure QuickSortInt64(ID,CoValues: PInt64Array; L, R: PtrInt);
 var I, J, P: PtrInt;
     pivot, Tmp: Int64;
 begin
@@ -30226,7 +30307,7 @@ begin
   {$endif}
 end;
 
-function FastFindPtrIntSorted(P: PPtrIntArray; R: PtrInt; Value: PtrInt): PtrInt; overload;
+function FastFindPtrIntSorted(P: PPtrIntArray; R: PtrInt; Value: PtrInt): PtrInt;
 begin
   {$ifdef CPU64}
   result := FastFindInt64Sorted(PInt64Array(P),R,Value);
@@ -30244,7 +30325,7 @@ begin
   {$endif}
 end;
 
-function FastFindPointerSorted(P: PPointerArray; R: PtrInt; Value: pointer): PtrInt; overload;
+function FastFindPointerSorted(P: PPointerArray; R: PtrInt; Value: pointer): PtrInt;
 begin
   {$ifdef CPU64}
   result := FastFindInt64Sorted(PInt64Array(P),R,Int64(Value));
@@ -30294,7 +30375,7 @@ begin
   result := FastFindIntegerSorted(pointer(Values),length(Values)-1,Value);
 end;
 
-function FastFindInt64Sorted(P: PInt64Array; R: PtrInt; const Value: Int64): PtrInt; overload;
+function FastFindInt64Sorted(P: PInt64Array; R: PtrInt; const Value: Int64): PtrInt;
 var L: PtrInt;
     {$ifdef CPUX86}
     cmp: Integer;
@@ -31362,6 +31443,18 @@ begin
   result := -1;
 end;
 
+function IdemPCharArray(p: PUTF8Char; const upArrayBy2Chars: RawUTF8): integer;
+var W: word;
+begin
+  if p<>nil then begin
+    w := NormToUpperAnsi7Byte[ord(p[0])]+NormToUpperAnsi7Byte[ord(p[1])]shl 8;
+    for result := 0 to pred(length(upArrayBy2Chars) shr 1) do
+      if PWordArray(upArrayBy2Chars)[result]=w then
+        exit;
+  end;
+  result := -1;
+end;
+
 function IdemPCharU(p, up: PUTF8Char): boolean;
 begin
   result := false;
@@ -32283,7 +32376,7 @@ begin
 end;
 
 procedure CSVToRawUTF8DynArray(CSV: PUTF8Char; var Result: TRawUTF8DynArray;
-  Sep: AnsiChar; TrimItems: boolean);
+  Sep: AnsiChar; TrimItems, AddVoidItems: boolean);
 var s: RawUTF8;
     n: integer;
 begin
@@ -32292,7 +32385,7 @@ begin
     if TrimItems then
       GetNextItemTrimed(CSV,Sep,s) else
       GetNextItem(CSV,Sep,s);
-    if s<>'' then
+    if (s<>'') or AddVoidItems then
       AddRawUTF8(Result,n,s);
   end;
   if n<>length(Result) then
@@ -33666,7 +33759,7 @@ begin
   result := (value shl count) or (value shr (32-count));
 end;
 
-function Rol13(value: cardinal): cardinal;
+function Rol13(value: cardinal): cardinal; inline;
 begin
   result := (value shl 13) or (value shr 19);
 end;
@@ -37895,6 +37988,24 @@ begin
   end;
 end;
 
+function FastFindWordSorted(P: PWordArray; R: PtrInt; Value: Word): PtrInt;
+var L: PtrInt;
+    cmp: integer;
+begin
+  L := 0;
+  if 0<=R then
+  repeat
+    result := (L + R) shr 1;
+    cmp := P^[result]-Value;
+    if cmp=0 then
+      exit;
+    if cmp<0 then
+      L := result + 1 else
+      R := result - 1;
+  until (L > R);
+  result := -1
+end;
+
 function TSortedWordArray.Add(aValue: Word): PtrInt;
 begin
   result := FastLocateWordSorted(pointer(Values),Count-1,aValue);
@@ -37910,22 +38021,8 @@ begin
 end;
 
 function TSortedWordArray.IndexOf(aValue: Word): PtrInt;
-var L,R: PtrInt;
-    cmp: integer;
 begin
-  L := 0;
-  R := Count-1;
-  if 0<=R then
-  repeat
-    result := (L + R) shr 1;
-    cmp := Values[result]-aValue;
-    if cmp=0 then
-      exit else
-    if cmp<0 then
-      L := result + 1 else
-      R := result - 1;
-  until (L > R);
-  result := -1;
+  result := FastFindWordSorted(pointer(Values),Count-1,aValue);
 end;
 
 procedure QuickSortCompare(const OnCompare: TOnValueGreater;
@@ -38022,7 +38119,8 @@ end;
 
 function MedianQuickSelect(const OnCompare: TOnValueGreater; n: integer;
   var TempBuffer: TSynTempBuffer): integer;
-var low, high, middle, median, ll, hh, tmp: PtrInt;
+var low, high, middle, median, ll, hh: PtrInt;
+    tmp: integer;
     ndx: PIntegerArray;
 begin
   if n<=1 then begin
@@ -40542,22 +40640,34 @@ function TJSONCustomParsers.TryToGetFromRTTI(aDynArrayTypeInfo,
   aRecordTypeInfo: pointer): integer;
 var Reg: TJSONCustomParserRegistration;
     RegRoot: TJSONCustomParserRTTI;
+    {$ifdef ISDELPHI2010}
     info: PTypeInfo;
+    {$endif}
     added: boolean;
-    ndx: integer;
+    ndx, len: integer;
+    name: PShortString;
 begin
   result := -1;
-  info := GetTypeInfo(aRecordTypeInfo,tkRecordTypeOrSet);
-  if info=nil then
-    exit; // not enough RTTI
   Reg.RecordTypeInfo := aRecordTypeInfo;
   Reg.DynArrayTypeInfo := aDynArrayTypeInfo;
   TypeInfoToName(Reg.RecordTypeInfo,Reg.RecordTypeName);
-  if Reg.RecordTypeName='' then
-    exit; // we need a type name!
+  if Reg.RecordTypeName='' then begin
+    name := TypeInfoToShortString(Reg.DynArrayTypeInfo);
+    if name=nil then
+      exit; // we need a type name!
+    len := length(name^); // try to guess from T*DynArray or T*s names
+    if (len>12) and (IdemPropName('DynArray',@name^[len-7],8)) then
+      SetString(Reg.RecordTypeName,PAnsiChar(@name^[1]),len-8) else
+    if (len>3) and (name^[len]='s') then
+      SetString(Reg.RecordTypeName,PAnsiChar(@name^[1]),len-1) else
+      exit;
+  end;
   RegRoot := TJSONCustomParserRTTI.CreateFromTypeName('',Reg.RecordTypeName);
   {$ifdef ISDELPHI2010}
   if RegRoot=nil then begin
+    info := GetTypeInfo(aRecordTypeInfo,tkRecordTypeOrSet);
+    if info=nil then
+      exit; // not enough RTTI
     inc(PByte(info),info^.ManagedCount*sizeof(TFieldInfo)-sizeof(TFieldInfo));
     inc(PByte(info),info^.NumOps*sizeof(pointer)); // jump RecOps[]
     if info^.AllCount=0 then
@@ -41079,6 +41189,15 @@ begin
   fDataSize := aFixedSize;
 end;
 
+constructor TJSONCustomParserCustomSimple.CreateBinary(
+  const aPropertyName: RawUTF8; aDataSize, aFixedSize: cardinal);
+begin
+  inherited Create(aPropertyName,FormatUTF8('BinHex%Byte',[aFixedSize]));
+  fKnownType := ktBinary;
+  fFixedSize := aFixedSize;
+  fDataSize := aDataSize;
+end;
+
 destructor TJSONCustomParserCustomSimple.Destroy;
 begin
   inherited;
@@ -41106,6 +41225,8 @@ begin
   ktDynamicArray:
     raise ESynException.CreateUTF8('%.CustomWriter("%"): unsupported',
         [self,fCustomTypeName]);
+  ktBinary:
+    aWriter.AddBinToHexDisplayQuoted(@aValue,fFixedSize);
   else begin // encoded as JSON strings
     aWriter.Add('"');
     case fKnownType of
@@ -41122,7 +41243,8 @@ end;
 function TJSONCustomParserCustomSimple.CustomReader(P: PUTF8Char;
   var aValue; out EndOfObject: AnsiChar): PUTF8Char;
 var PropValue: PUTF8Char;
-    i,i32, PropValueLen: integer;
+    i, PropValueLen, i32: integer;
+    u64: QWord;
     wasString: boolean;
     Val: PByte;
 begin
@@ -41158,8 +41280,8 @@ begin
     PropValue := GetJSONField(P,P,@wasString,@EndOfObject,@PropValueLen);
     if PropValue=nil then
       exit;
-    if P=nil then
-      P := @NULCHAR; // result=nil indicates error
+    if P=nil then // result=nil=error + caller may dec(P); P^:=EndOfObject; 
+      P := PropValue+PropValueLen;
     case fKnownType of
     ktGUID:
       if wasString and (TextToGUID(PropValue,@aValue)<>nil) then
@@ -41177,6 +41299,19 @@ begin
       if wasString and (PropValueLen=fFixedSize*2) and
          SynCommons.HexToBin(PAnsiChar(PropValue),@aValue,fFixedSize) then
         result := P;
+    ktBinary: begin
+      FillCharFast(aValue,fDataSize,0);
+      if wasString then begin
+        if (PropValueLen=fFixedSize*2) and
+           SynCommons.HexDisplayToBin(PAnsiChar(PropValue),@aValue,fFixedSize) then
+          result := P;
+      end else
+        if fFixedSize<=sizeof(u64) then begin
+          SetQWord(PropValue,u64);
+          MoveFast(u64,aValue,fFixedSize);
+          result := P;
+        end;
+    end;
     end;
   end;
   end;
@@ -41245,19 +41380,31 @@ end;
 
 { TJSONCustomParserRTTI }
 
-var
-  GlobalCustomJSONSerializerFromTextSimpleType_: TRawUTF8ListHashed;
-
-function GlobalCustomJSONSerializerFromTextSimpleType: TRawUTF8ListHashed;
-begin
-  if GlobalCustomJSONSerializerFromTextSimpleType_=nil then begin
-    GarbageCollectorFreeAndNil(GlobalCustomJSONSerializerFromTextSimpleType_,
-      TRawUTF8ListHashed.Create(false));
-    GlobalCustomJSONSerializerFromTextSimpleType_.CaseSensitive := false;
-    GlobalCustomJSONSerializerFromTextSimpleType_.AddObjectIfNotExisting(
-      'TGUID',{$ifdef ISDELPHI2010}TypeInfo(TGUID){$else}nil{$endif});
+type
+  TJSONSerializerFromTextSimple = record
+    TypeInfo: pointer;
+    BinaryDataSize, BinaryFieldSize: integer;
   end;
-  result := GlobalCustomJSONSerializerFromTextSimpleType_;
+  TJSONSerializerFromTextSimpleDynArray = array of TJSONSerializerFromTextSimple;
+var // RawUTF8/TJSONSerializerFromTextSimpleDynArray
+  GlobalCustomJSONSerializerFromTextSimpleType: TSynDictionary;
+
+procedure JSONSerializerFromTextSimpleTypeAdd(aTypeName: RawUTF8;
+  aTypeInfo: pointer; aDataSize, aFieldSize: integer);
+var simple: TJSONSerializerFromTextSimple;
+begin
+  if aTypeName='' then
+    TypeInfoToName(aTypeInfo,aTypeName);
+  if aDataSize<>0 then
+    if aFieldSize>aDataSize then
+      raise ESynException.CreateUTF8('% fieldsize=%>%',[aTypeName,aFieldSize,aDataSize]) else
+    if aFieldSize=0 then
+      aFieldSize := aDataSize; // not truncated
+  simple.TypeInfo := aTypeInfo;
+  simple.BinaryDataSize := aDataSize;
+  simple.BinaryFieldSize := aFieldSize;
+  UpperCaseSelf(aTypeName);
+  GlobalCustomJSONSerializerFromTextSimpleType.Add(aTypeName,simple);
 end;
 
 /// if defined, will try to mimic the default record alignment
@@ -41419,12 +41566,15 @@ end;
 class function TJSONCustomParserRTTI.CreateFromTypeName(
   const aPropertyName, aCustomRecordTypeName: RawUTF8): TJSONCustomParserRTTI;
 var ndx: integer;
+    simple: ^TJSONSerializerFromTextSimple;
 begin
-  ndx := GlobalCustomJSONSerializerFromTextSimpleType.IndexOf(aCustomRecordTypeName);
-  if ndx>=0 then
-    result := TJSONCustomParserCustomSimple.Create(
-      aPropertyName,aCustomRecordTypeName,
-      GlobalCustomJSONSerializerFromTextSimpleType_.Objects[ndx]) else begin
+  simple := GlobalCustomJSONSerializerFromTextSimpleType.FindValue(aCustomRecordTypeName);
+  if simple<>nil then
+    if simple^.BinaryFieldSize<>0 then
+      result := TJSONCustomParserCustomSimple.CreateBinary(
+        aPropertyName,simple^.BinaryDataSize,simple^.BinaryFieldSize) else
+      result := TJSONCustomParserCustomSimple.Create(
+        aPropertyName,aCustomRecordTypeName,simple^.TypeInfo) else begin
     ndx := GlobalJSONCustomParsers.RecordSearch(aCustomRecordTypeName);
     if ndx<0 then
       result := nil else
@@ -41976,7 +42126,17 @@ end;
 
 function TJSONRecordAbstract.CustomReader(P: PUTF8Char; var aValue; out aValid: Boolean): PUTF8Char;
 var Data: PByte;
+    EndOfObject: AnsiChar;
 begin
+  if Root.PropertyType=ptCustom then begin
+    result := TJSONCustomParserCustom(Root).CustomReader(P,aValue,EndOfObject);
+    aValid := result<>nil;
+    if EndOfObject<>#0 then begin
+       dec(result);
+       result^ := EndOfObject; // emulates simple read
+     end;
+    exit;
+  end;
   Data := @aValue;
   aValid := Root.ReadOneLevel(P,Data,Options);
   result := P;
@@ -42040,7 +42200,6 @@ end;
 
 procedure TJSONRecordTextDefinition.Parse(Props: TJSONCustomParserRTTI;
   var P: PUTF8Char; PEnd: TJSONCustomParserRTTIExpectedEnd);
-const DYNARRAYTEXT: PUTF8Char = 'DynArray'; // make Delphi 5 compiler happy
   function GetNextFieldType(var P: PUTF8Char;
     var TypIdent: RawUTF8): TJSONCustomParserRTTIType;
   begin
@@ -42105,14 +42264,20 @@ begin
           ExpectedEnd := eeEndKeyWord;
         ptCustom: begin
           len := length(TypIdent);
-          if (len>12) and (TypIdent[1]='T') and
-             IdemPropNameUSameLen(DYNARRAYTEXT,@PByteArray(TypIdent)[len-8],8) then begin
+          if (len>12) and IdemPropName('DynArray',@PByteArray(TypIdent)[len-8],8) then
+            dec(len,8) else
+          if (len>3) and (TypIdent[len]='S') then
+            dec(len,1) else
+            len := 0;
+          if len>0 then begin
             ArrayTyp := TJSONCustomParserRTTI.TypeNameToSimpleRTTIType(
-              @PByteArray(TypIdent)[1],len-9,ArrayTypIdent);
-            if ArrayTyp=ptCustom then
-              raise ESynException.CreateUTF8('%.Parse: % is not a T*DynArray of a simple type',
-                [self,TypIdent]);
-            Typ := ptArray;
+              @PByteArray(TypIdent)[1],len-1,ArrayTypIdent); // TByteDynArray -> byte
+            if ArrayTyp=ptCustom then begin // TMyTypeDynArray/TMyTypes -> TMyType
+              SetString(ArrayTypIdent,PAnsiChar(pointer(TypIdent)),len);
+              if GlobalCustomJSONSerializerFromTextSimpleType.Find(ArrayTypIdent)>=0 then
+                Typ := ptArray;
+            end else
+              Typ := ptArray;
           end;
           ExpectedEnd := eeNothing;
         end;
@@ -50667,11 +50832,9 @@ begin
 end;
 
 class procedure TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(
-  aTypeInfo: pointer; aTypeName: RawUTF8='');
+  aTypeInfo: pointer; const aTypeName: RawUTF8);
 begin
-  if aTypeName='' then
-    TypeInfoToName(aTypeInfo,aTypeName);
-  GlobalCustomJSONSerializerFromTextSimpleType.AddObjectIfNotExisting(aTypeName,aTypeInfo);
+  JSONSerializerFromTextSimpleTypeAdd(aTypeName,aTypeInfo,0,0);
 end;
 
 class procedure TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(
@@ -50680,6 +50843,12 @@ var i: integer;
 begin
   for i := 0 to high(aTypeInfos) do
     RegisterCustomJSONSerializerFromTextSimpleType(aTypeInfos[i],'');
+end;
+
+class procedure TTextWriter.RegisterCustomJSONSerializerFromTextBinaryType(
+  aTypeInfo: pointer; aDataSize, aFieldSize: integer);
+begin
+  JSONSerializerFromTextSimpleTypeAdd('',aTypeInfo,aDataSize,aFieldSize);
 end;
 
 procedure TTextWriter.AddRecordJSON(const Rec; TypeInfo: pointer);
@@ -57652,7 +57821,9 @@ end;
 function TSynDictionary.FindValue(const aKey): pointer;
 var ndx: integer;
 begin
-  ndx := fKeys.FindHashed(aKey);
+  if self=nil then
+    ndx := -1 else
+    ndx := fKeys.FindHashed(aKey);
   if ndx<0 then
     result := nil else
     result := fValues.ElemPtr(ndx);
@@ -59461,8 +59632,8 @@ begin
   c := ord(P^) shl 14;
   inc(P);
   result := result and $3FFF or c;
-  if c>$7f shl 14 then
-err:ErrorOverflow; // Values between 16257 and 2080768
+  if c>$7f shl 14 then // Values between 16257 and 2080768
+err:ErrorOverflow;
 end;
 
 function TFastReader.VarUInt32: PtrUInt;
@@ -59632,7 +59803,6 @@ begin
   //assert(P-pointer(tmp)=len);
   dec(Count,COMPACT_COUNT);
   Values[Count].Value := tmp;
-  LastFind := Count;
   inc(Count);
 end;
 
@@ -59653,6 +59823,7 @@ begin
     Position := self.Position;
     Value := aItem;
   end;
+  LastFind := Count;
   inc(Count);
   inc(Position,Length(aItem));
 end;
@@ -64052,6 +64223,11 @@ begin
   KINDTYPE_INFO[djWideString] := TypeInfo(WideString);
   KINDTYPE_INFO[djSynUnicode] := TypeInfo(SynUnicode);
   {$ifndef NOVARIANTS}KINDTYPE_INFO[djVariant] := TypeInfo(variant);{$endif}
+  GarbageCollectorFreeAndNil(GlobalCustomJSONSerializerFromTextSimpleType,
+    TSynDictionary.Create(TypeInfo(TRawUTF8DynArray),
+      TypeInfo(TJSONSerializerFromTextSimpleDynArray),true));
+  JSONSerializerFromTextSimpleTypeAdd(
+    'TGUID',{$ifdef ISDELPHI2010}TypeInfo(TGUID){$else}nil{$endif},0,0);
 end;
 
 initialization

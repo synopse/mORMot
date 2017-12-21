@@ -1622,8 +1622,8 @@ type
   // thread-safe reuse of one initialized instance via Compute(), e.g. for fast PBKDF2
   THMAC_SHA1 = {$ifndef UNICODE}object{$else}record{$endif}
   private
-    step7data: TByte64;
     sha: TSHA1;
+    step7data: TByte64;
   public
     /// prepare the HMAC authentication with the supplied key
     // - content of this record is stateless, so you can prepare a HMAC for a
@@ -1669,8 +1669,8 @@ type
   // thread-safe reuse of one initialized instance via Compute(), e.g. for fast PBKDF2
   THMAC_SHA384 = {$ifndef UNICODE}object{$else}record{$endif}
   private
-    step7data: array[0..31] of cardinal;
     sha: TSHA384;
+    step7data: array[0..31] of cardinal;
   public
     /// prepare the HMAC authentication with the supplied key
     // - content of this record is stateless, so you can prepare a HMAC for a
@@ -1716,8 +1716,8 @@ type
   // thread-safe reuse of one initialized instance via Compute(), e.g. for fast PBKDF2
   THMAC_SHA512 = {$ifndef UNICODE}object{$else}record{$endif}
   private
-    step7data: array[0..31] of cardinal;
     sha: TSHA512;
+    step7data: array[0..31] of cardinal;
   public
     /// prepare the HMAC authentication with the supplied key
     // - content of this record is stateless, so you can prepare a HMAC for a
@@ -1793,8 +1793,8 @@ type
   // thread-safe reuse of one initialized instance via Compute(), e.g. for fast PBKDF2
   THMAC_SHA256 = {$ifndef UNICODE}object{$else}record{$endif}
   private
-    step7data: TByte64;
     sha: TSha256;
+    step7data: TByte64;
   public
     /// prepare the HMAC authentication with the supplied key
     // - content of this record is stateless, so you can prepare a HMAC for a
@@ -2343,6 +2343,7 @@ type
     // - registered claims will be available from reg[], not in this field
     // - e.g. data.U['name']='John Doe' and data.B['admin']=true for
     // $ {"sub": "1234567890","name": "John Doe","admin": true}
+    // but data.U['sub'] if not defined, and reg[jrcSubject]='1234567890'
     data: TDocVariantData;
   end;
   /// pointer to a JWT decoded content, as processed by TJWTAbstract

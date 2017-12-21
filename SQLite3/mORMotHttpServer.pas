@@ -286,6 +286,7 @@ type
       RestAccessRights: PSQLAccessRights;
       Security: TSQLHttpServerSecurity;
     end;
+    fDBServersSafe: IAutoLocker;
     fHosts: TSynNameValue;
     fAccessControlAllowOrigin: RawUTF8;
     fAccessControlAllowOriginHeader: RawUTF8;
@@ -581,6 +582,7 @@ begin
   if (self=nil) or (aServer=nil) or (aServer.Model=nil) then
     exit;
   fLog.Enter(self);
+  fDBServersSafe.Enter;
   try
     n := length(fDBServers);
     for i := 0 to n-1 do
@@ -598,6 +600,7 @@ begin
     fHttpServer.ProcessName := GetDBServerNames;
     result := true;
   finally
+    fDBServersSafe.Leave;
     fLog.Add.Log(sllHttp,'%.AddServer(%,Root=%,Port=%,Public=%:%)=%',
       [self,aServer,aServer.Model.Root,fPort,fPublicAddress,fPublicPort,
        BOOL_STR[result]],self);
@@ -606,10 +609,15 @@ end;
 
 function TSQLHttpServer.DBServerFind(aServer: TSQLRestServer): integer;
 begin
-  for result := 0 to Length(fDBServers)-1 do
-    if fDBServers[result].Server=aServer then
-      exit;
-  result := -1;
+  fDBServersSafe.Enter;
+  try
+    for result := 0 to Length(fDBServers)-1 do
+      if fDBServers[result].Server=aServer then
+        exit;
+    result := -1;
+  finally
+    fDBServersSafe.Leave;
+  end;
 end;
 
 function TSQLHttpServer.RemoveServer(aServer: TSQLRestServer): boolean;
@@ -619,10 +627,11 @@ begin
   if (self=nil) or (aServer=nil) or (aServer.Model=nil) then
     exit;
   fLog.Enter(self);
+  fDBServersSafe.Enter;
   try
     n := high(fDBServers);
     for i := n downto 0 do // may appear several times, with another Security
-    if fDBServers[i].Server=aServer then begin 
+    if fDBServers[i].Server=aServer then begin
       {$ifndef ONLYUSEHTTPSOCKET}
       if fHttpServer.InheritsFrom(THttpApiServer) then
         if THttpApiServer(fHttpServer).RemoveUrl(aServer.Model.Root,fPublicPort,
@@ -638,6 +647,7 @@ begin
       result := true; // don't break here: may appear with another Security
     end;
   finally
+    fDBServersSafe.Leave;
     fLog.Add.Log(sllHttp,'%.RemoveServer(Root=%)=%',
       [self,aServer.Model.Root,BOOL_STR[result]],self);
   end;
@@ -666,6 +676,7 @@ begin
   fLog.Enter('Create % (%) on port %',[ToText(aHttpServerKind)^,
     ToText(aHttpServerSecurity)^,aPort],self);
   {$endif}
+  fDBServersSafe := TAutoLocker.Create;
   inherited Create;
   SetAccessControlAllowOrigin(''); // deny CORS by default
   fHosts.Init(false);
@@ -780,20 +791,32 @@ begin
     fLog.Enter('Shutdown(%)',[BOOL_STR[noRestServerShutdown]],self);
     fShutdownInProgress := true;
     fHttpServer.Shutdown;
-    for i := 0 to high(fDBServers) do begin
-      if not noRestServerShutdown then
-        fDBServers[i].Server.Shutdown;
-      if TMethod(fDBServers[i].Server.OnNotifyCallback).Data=self then
-        fDBServers[i].Server.OnNotifyCallback := nil; // avoid unexpected GPF
+    fDBServersSafe.Enter;
+    try
+      for i := 0 to high(fDBServers) do begin
+        if not noRestServerShutdown then
+          fDBServers[i].Server.Shutdown;
+        if TMethod(fDBServers[i].Server.OnNotifyCallback).Data=self then
+          fDBServers[i].Server.OnNotifyCallback := nil; // avoid unexpected GPF
+      end;
+    finally
+      fDBServersSafe.Leave;
     end;
   end;
 end;
 
 function TSQLHttpServer.GetDBServer(Index: Integer): TSQLRestServer;
 begin
-  if (Self<>nil) and (cardinal(Index)<cardinal(length(fDBServers))) then
-    result := fDBServers[Index].Server else
-    result := nil;
+  result := nil;
+  if self=nil then
+    exit;
+  fDBServersSafe.Enter;
+  try
+    if cardinal(Index)<cardinal(length(fDBServers)) then
+      result := fDBServers[Index].Server;
+  finally
+    fDBServersSafe.Leave;
+  end;
 end;
 
 function TSQLHttpServer.GetDBServerCount: integer;
@@ -805,23 +828,37 @@ function TSQLHttpServer.GetDBServerNames: RawUTF8;
 var i: integer;
 begin
   result := '';
-  for i := 0 to high(fDBServers) do
-    result := result+fDBServers[i].Server.Model.Root+' ';
+  if self=nil then
+    exit;
+  fDBServersSafe.Enter;
+  try
+    for i := 0 to high(fDBServers) do
+      result := result+fDBServers[i].Server.Model.Root+' ';
+  finally
+    fDBServersSafe.Leave;
+  end;
 end;
 
 procedure TSQLHttpServer.SetDBServerAccessRight(Index: integer;
   Value: PSQLAccessRights);
 begin
-  if Value=nil then
-    Value := HTTP_DEFAULT_ACCESS_RIGHTS;
-  if (Self<>nil) and (cardinal(Index)<cardinal(length(fDBServers))) then
-    fDBServers[Index].RestAccessRights := Value;
+  if self=nil then
+    exit;
+  fDBServersSafe.Enter;
+  try
+    if Value=nil then
+      Value := HTTP_DEFAULT_ACCESS_RIGHTS;
+    if cardinal(Index)<cardinal(length(fDBServers)) then
+      fDBServers[Index].RestAccessRights := Value;
+  finally
+    fDBServersSafe.Leave;
+  end;
 end;
 
 procedure TSQLHttpServer.SetDBServer(aIndex: integer; aServer: TSQLRestServer;
   aSecurity: TSQLHttpServerSecurity; aRestAccessRights: PSQLAccessRights);
 begin
-  if (Self<>nil) and (cardinal(aIndex)<cardinal(length(fDBServers))) then
+  if (self<>nil) and (cardinal(aIndex)<cardinal(length(fDBServers))) then
     with fDBServers[aIndex] do begin
       Server := aServer;
       if (fHttpServer<>nil) and fHttpServer.CanNotifyCallback then
@@ -886,6 +923,7 @@ var call: TSQLRestURIParams;
     P: PUTF8Char;
     hostroot,redirect: RawUTF8;
     match: TSQLRestModelMatch;
+    serv: TSQLRestServer;
 begin
   if (self=nil) or fShutdownInProgress then
     result := HTTP_NOTFOUND else
@@ -936,68 +974,84 @@ begin
         call.Url := Ctxt.URL;
     // search and call any matching TSQLRestServer instance
     result := HTTP_NOTFOUND; // page not found by default (in case of wrong URL)
-    for i := 0 to high(fDBServers) do
-    with fDBServers[i] do
-    if Ctxt.UseSSL=(Security=secSSL) then begin // registered for http or https
-      match := Server.Model.URIMatch(call.Url);
-      if match=rmNoMatch then
-        continue;
-      if fRedirectServerRootUriForExactCase and (match=rmMatchWithCaseChange) then begin
-        // force redirection to exact Server.Model.Root case sensitivity
-        call.OutStatus := HTTP_TEMPORARYREDIRECT;
-        call.OutHead := 'Location: '+Server.Model.Root+
-          copy(call.Url,length(Server.Model.Root)+1,maxInt);
-      end else begin
-        // call matching TSQLRestServer.URI()
-        call.Method := Ctxt.Method;
-        call.InHead := Ctxt.InHeaders;
-        call.InBody := Ctxt.InContent;
+    serv := nil;
+    match := rmNoMatch;
+    fDBServersSafe.Enter;
+    try
+      for i := 0 to length(fDBServers)-1 do
+      with fDBServers[i] do
+      if Ctxt.UseSSL=(Security=secSSL) then begin // registered for http or https
+        match := Server.Model.URIMatch(call.Url);
+        if match=rmNoMatch then
+          continue;
         call.RestAccessRights := RestAccessRights;
-        Server.URI(call);
+        serv := Server;
+        break;
       end;
-      // set output content
-      result := call.OutStatus;
-      Ctxt.OutContent := call.OutBody;
-      Ctxt.OutContentType := call.OutBodyType;
-      P := pointer(call.OutHead);
-      if IdemPChar(P,'CONTENT-TYPE: ') then begin
-        // change mime type if modified in HTTP header (e.g. GET blob fields)
-        Ctxt.OutContentType := GetNextLine(P+14,P);
-        call.OutHead := P;
-      end else
-        // default content type is JSON
-        Ctxt.OutContentType := JSON_CONTENT_TYPE_VAR;
-      // handle HTTP redirection and cookies over virtual hosts
-      if hostroot<>'' then begin
-        if ((result=HTTP_MOVEDPERMANENTLY) or (result=HTTP_TEMPORARYREDIRECT)) then begin
-          redirect := FindIniNameValue(P,'LOCATION: ');
-          hostlen := length(hostroot);
-          if (length(redirect)>hostlen) and (redirect[hostlen+1]='/') and
-             IdemPropNameU(hostroot,pointer(redirect),hostlen) then
-            // hostroot/method -> method on same domain
-            call.OutHead := 'Location: '+copy(redirect,hostlen+1,maxInt);
-        end else
-        if ExistsIniName(P,'SET-COOKIE:') then
-          Call.OutHead := StringReplaceAll(
-            Call.OutHead,'; Path=/'+Server.Model.Root,'; Path=/')
-      end;
-      Ctxt.OutCustomHeaders := Trim(call.OutHead)+
-        #13#10'Server-InternalState: '+Int32ToUtf8(call.OutInternalState);
-      // handle optional CORS origin
-      if ExistsIniName(pointer(call.InHead),'ORIGIN:') then
-        Ctxt.OutCustomHeaders := Trim(Ctxt.OutCustomHeaders+fAccessControlAllowOriginHeader) else
-        Ctxt.OutCustomHeaders := Trim(Ctxt.OutCustomHeaders);
-      break;
+    finally
+      fDBServersSafe.Leave;
     end;
+    if (match=rmNoMatch) or (serv=nil) then
+      exit;
+    if fRedirectServerRootUriForExactCase and (match=rmMatchWithCaseChange) then begin
+      // force redirection to exact Server.Model.Root case sensitivity
+      call.OutStatus := HTTP_TEMPORARYREDIRECT;
+      call.OutHead := 'Location: '+serv.Model.Root+
+        copy(call.Url,length(serv.Model.Root)+1,maxInt);
+    end else begin
+      // call matching TSQLRestServer.URI()
+      call.Method := Ctxt.Method;
+      call.InHead := Ctxt.InHeaders;
+      call.InBody := Ctxt.InContent;
+      serv.URI(call);
+    end;
+    // set output content
+    result := call.OutStatus;
+    Ctxt.OutContent := call.OutBody;
+    Ctxt.OutContentType := call.OutBodyType;
+    P := pointer(call.OutHead);
+    if IdemPChar(P,'CONTENT-TYPE: ') then begin
+      // change mime type if modified in HTTP header (e.g. GET blob fields)
+      Ctxt.OutContentType := GetNextLine(P+14,P);
+      call.OutHead := P;
+    end else
+      // default content type is JSON
+      Ctxt.OutContentType := JSON_CONTENT_TYPE_VAR;
+    // handle HTTP redirection and cookies over virtual hosts
+    if hostroot<>'' then begin
+      if ((result=HTTP_MOVEDPERMANENTLY) or (result=HTTP_TEMPORARYREDIRECT)) then begin
+        redirect := FindIniNameValue(P,'LOCATION: ');
+        hostlen := length(hostroot);
+        if (length(redirect)>hostlen) and (redirect[hostlen+1]='/') and
+           IdemPropNameU(hostroot,pointer(redirect),hostlen) then
+          // hostroot/method -> method on same domain
+          call.OutHead := 'Location: '+copy(redirect,hostlen+1,maxInt);
+      end else
+      if ExistsIniName(P,'SET-COOKIE:') then
+        Call.OutHead := StringReplaceAll(
+          Call.OutHead,'; Path=/'+serv.Model.Root,'; Path=/')
+    end;
+    Ctxt.OutCustomHeaders := Trim(call.OutHead)+
+      #13#10'Server-InternalState: '+Int32ToUtf8(call.OutInternalState);
+    // handle optional CORS origin
+    if ExistsIniName(pointer(call.InHead),'ORIGIN:') then
+      Ctxt.OutCustomHeaders := Trim(Ctxt.OutCustomHeaders+fAccessControlAllowOriginHeader) else
+      Ctxt.OutCustomHeaders := Trim(Ctxt.OutCustomHeaders);
   end;
 end;
 
 procedure TSQLHttpServer.HttpThreadTerminate(Sender: TThread);
 var i: integer;
 begin
-  if self<>nil then
+  if self=nil then
+    exit;
+  fDBServersSafe.Enter;
+  try
     for i := 0 to high(fDBServers) do
       fDBServers[i].Server.EndCurrentThread(Sender);
+  finally
+    fDBServersSafe.Leave;
+  end;
 end;
 
 procedure TSQLHttpServer.HttpThreadStart(Sender: TThread);
@@ -1006,8 +1060,13 @@ begin
   if self=nil then
     exit;
   SetCurrentThreadName('% %/%%',[self,fPort,GetDBServerNames,Sender]);
-  for i := 0 to high(fDBServers) do
-    fDBServers[i].Server.BeginCurrentThread(Sender);
+  fDBServersSafe.Enter;
+  try
+    for i := 0 to high(fDBServers) do
+      fDBServers[i].Server.BeginCurrentThread(Sender);
+  finally
+    fDBServersSafe.Leave;
+  end;
 end;
 
 procedure TSQLHttpServer.SetAccessControlAllowCredential(Value: boolean);
