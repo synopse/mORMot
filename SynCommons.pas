@@ -4599,6 +4599,9 @@ procedure QuickSortInteger(ID,CoValues: PIntegerArray; L, R: PtrInt); overload;
 /// sort an Integer array, low values first
 procedure QuickSortInteger(var ID: TIntegerDynArray); overload;
 
+/// sort a 16 bit unsigned Integer array, low values first
+procedure QuickSortWord(ID: PWordArray; L, R: PtrInt);
+
 /// sort a 64 bit signed Integer array, low values first
 procedure QuickSortInt64(ID: PInt64Array; L, R: PtrInt); overload;
 
@@ -4629,6 +4632,9 @@ function FastFindIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): Ptr
 // - return -1 if Value was not found
 function FastFindIntegerSorted(const Values: TIntegerDynArray; Value: integer): PtrInt; overload;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// fast O(log(n)) binary search of a 16 bit unsigned integer value in a sorted array
+function FastFindWordSorted(P: PWordArray; R: PtrInt; Value: Word): PtrInt;
 
 /// fast O(log(n)) binary search of a 64 bit signed integer value in a sorted array
 // - R is the last index of available integer entries in P^ (i.e. Count-1)
@@ -4664,6 +4670,11 @@ function FastFindPointerSorted(P: PPointerArray; R: PtrInt; Value: Pointer): Ptr
 // - R is the last index of available integer entries in P^ (i.e. Count-1)
 // - returns -1 if the specified Value was found (i.e. adding will duplicate a value)
 function FastLocateIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt;
+
+/// retrieve the index where to insert a word value in a sorted word array
+// - R is the last index of available integer entries in P^ (i.e. Count-1)
+// - returns -1 if the specified Value was found (i.e. adding will duplicate a value)
+function FastLocateWordSorted(P: PWordArray; R: integer; Value: word): PtrInt;
 
 /// add an integer value in a sorted dynamic array of integers
 // - returns the index where the Value was added successfully in Values[]
@@ -4720,6 +4731,9 @@ procedure DeleteInteger(var Values: TIntegerDynArray; Index: PtrInt); overload;
 
 /// delete any 32-bit integer in Values[]
 procedure DeleteInteger(var Values: TIntegerDynArray; var ValuesCount: Integer; Index: PtrInt); overload;
+
+/// delete any 16-bit integer in Values[]
+procedure DeleteWord(var Values: TWordDynArray; Index: PtrInt);
 
 /// delete any 64-bit integer in Values[]
 procedure DeleteInt64(var Values: TInt64DynArray; Index: PtrInt); overload;
@@ -29722,7 +29736,19 @@ begin
   SetLength(Values,n);
 end;
 
-procedure DeleteInt64(var Values: TInt64DynArray; Index: PtrInt); overload;
+procedure DeleteWord(var Values: TWordDynArray; Index: PtrInt);
+var n: PtrInt;
+begin
+  n := Length(Values);
+  if PtrUInt(Index)>=PtrUInt(n) then
+    exit; // wrong Index
+  dec(n);
+  if n>Index then
+    MoveFast(Values[Index+1],Values[Index],(n-Index)*sizeof(Word));
+  SetLength(Values,n);
+end;
+
+procedure DeleteInt64(var Values: TInt64DynArray; Index: PtrInt);
 var n: PtrInt;
 begin
   n := Length(Values);
@@ -29734,7 +29760,7 @@ begin
   SetLength(Values,n);
 end;
 
-procedure DeleteInteger(var Values: TIntegerDynArray; var ValuesCount: Integer; Index: PtrInt); overload;
+procedure DeleteInteger(var Values: TIntegerDynArray; var ValuesCount: Integer; Index: PtrInt);
 var n: PtrInt;
 begin
   n := ValuesCount;
@@ -30169,7 +30195,31 @@ begin
   until I >= R;
 end;
 
-procedure QuickSortInt64(ID: PInt64Array; L, R: PtrInt); overload;
+procedure QuickSortWord(ID: PWordArray; L, R: PtrInt);
+var I, J, P: PtrInt;
+    pivot, Tmp: word;
+begin
+  if L<R then
+  repeat
+    I := L; J := R;
+    P := (L + R) shr 1;
+    repeat
+      pivot := ID^[P];
+      while ID[I]<pivot do inc(I);
+      while ID[J]>pivot do dec(J);
+      if I <= J then begin
+        Tmp := ID[J]; ID[J] := ID[I]; ID[I] := Tmp;
+        if P = I then P := J else if P = J then P := I;
+        inc(I); dec(J);
+      end;
+    until I > J;
+    if L < J then
+      QuickSortWord(ID,L,J);
+    L := I;
+  until I >= R;
+end;
+
+procedure QuickSortInt64(ID: PInt64Array; L, R: PtrInt);
 var I, J, P: PtrInt;
     pivot, Tmp: Int64;
 begin
@@ -30193,7 +30243,7 @@ begin
   until I >= R;
 end;
 
-procedure QuickSortQWord(ID: PQWordArray; L, R: PtrInt); overload;
+procedure QuickSortQWord(ID: PQWordArray; L, R: PtrInt);
 var I, J, P: PtrInt;
     pivot, Tmp: QWord;
 begin
@@ -30222,7 +30272,7 @@ begin
   until I >= R;
 end;
 
-procedure QuickSortInt64(ID,CoValues: PInt64Array; L, R: PtrInt); overload;
+procedure QuickSortInt64(ID,CoValues: PInt64Array; L, R: PtrInt);
 var I, J, P: PtrInt;
     pivot, Tmp: Int64;
 begin
@@ -30256,7 +30306,7 @@ begin
   {$endif}
 end;
 
-function FastFindPtrIntSorted(P: PPtrIntArray; R: PtrInt; Value: PtrInt): PtrInt; overload;
+function FastFindPtrIntSorted(P: PPtrIntArray; R: PtrInt; Value: PtrInt): PtrInt;
 begin
   {$ifdef CPU64}
   result := FastFindInt64Sorted(PInt64Array(P),R,Value);
@@ -30274,7 +30324,7 @@ begin
   {$endif}
 end;
 
-function FastFindPointerSorted(P: PPointerArray; R: PtrInt; Value: pointer): PtrInt; overload;
+function FastFindPointerSorted(P: PPointerArray; R: PtrInt; Value: pointer): PtrInt;
 begin
   {$ifdef CPU64}
   result := FastFindInt64Sorted(PInt64Array(P),R,Int64(Value));
@@ -30324,7 +30374,7 @@ begin
   result := FastFindIntegerSorted(pointer(Values),length(Values)-1,Value);
 end;
 
-function FastFindInt64Sorted(P: PInt64Array; R: PtrInt; const Value: Int64): PtrInt; overload;
+function FastFindInt64Sorted(P: PInt64Array; R: PtrInt; const Value: Int64): PtrInt;
 var L: PtrInt;
     {$ifdef CPUX86}
     cmp: Integer;
@@ -37935,6 +37985,24 @@ begin
   end;
 end;
 
+function FastFindWordSorted(P: PWordArray; R: PtrInt; Value: Word): PtrInt;
+var L: PtrInt;
+    cmp: integer;
+begin
+  L := 0;
+  if 0<=R then
+  repeat
+    result := (L + R) shr 1;
+    cmp := P^[result]-Value;
+    if cmp=0 then
+      exit;
+    if cmp<0 then
+      L := result + 1 else
+      R := result - 1;
+  until (L > R);
+  result := -1
+end;
+
 function TSortedWordArray.Add(aValue: Word): PtrInt;
 begin
   result := FastLocateWordSorted(pointer(Values),Count-1,aValue);
@@ -37950,22 +38018,8 @@ begin
 end;
 
 function TSortedWordArray.IndexOf(aValue: Word): PtrInt;
-var L,R: PtrInt;
-    cmp: integer;
 begin
-  L := 0;
-  R := Count-1;
-  if 0<=R then
-  repeat
-    result := (L + R) shr 1;
-    cmp := Values[result]-aValue;
-    if cmp=0 then
-      exit else
-    if cmp<0 then
-      L := result + 1 else
-      R := result - 1;
-  until (L > R);
-  result := -1;
+  result := FastFindWordSorted(pointer(Values),Count-1,aValue);
 end;
 
 procedure QuickSortCompare(const OnCompare: TOnValueGreater;
