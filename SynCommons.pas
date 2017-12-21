@@ -59599,6 +59599,8 @@ end;
 procedure TFastReader.NextVariant(var Value: variant; CustomVariantOptions: pointer);
 begin
   P := VariantLoad(Value, P, CustomVariantOptions);
+  if P=nil then
+    ErrorData('VariantLoad=nil',[]) else
   if P>Last then
     ErrorOverFlow;
 end;
