@@ -6366,7 +6366,7 @@ type
       aAllowVarDouble: boolean=false); overload;
     /// ensure a variant contains only RawUTF8 stored within this class
     // - supplied variant should be a varString containing a RawUTF8 value
-    procedure UniqueVariant(var aResult: variant); overload;
+    procedure UniqueVariant(var aResult: variant); overload; {$ifdef HASINLINE}inline;{$endif}
     {$endif NOVARIANTS}
     /// delete any previous storage pool
     procedure Clear;
@@ -10453,6 +10453,8 @@ type
     procedure ErrorData(const fmt: RawUTF8; const args: array of const);
     /// read the next byte from the buffer
     function NextByte: byte;      {$ifdef HASINLINE}inline;{$endif}
+    /// consumes the next byte from the buffer, if matches a given value
+    function NextByteEquals(Value: byte): boolean; {$ifdef HASINLINE}inline;{$endif}
     /// read the next 32-bit signed value from the buffer
     function VarInt32: PtrInt;    {$ifdef HASINLINE}inline;{$endif}
     /// read the next 32-bit unsigned value from the buffer
@@ -10506,7 +10508,7 @@ type
     // - only supports wkUInt32, wkVarInt32, wkVarUInt32 kind of encoding
     function ReadVarUInt32Array(var Values: TIntegerDynArray): PtrInt;
     /// returns TRUE if the current position is the end of the input stream
-    function EOF: boolean;        {$ifdef HASINLINE}inline;{$endif}
+    function EOF: boolean; {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// item as stored in a TRawByteStringGroup instance
@@ -21444,7 +21446,7 @@ begin
 end;
 {$endif}
 
-procedure Exchg(P1,P2: PAnsiChar; count: PtrInt);
+procedure Exchg(P1,P2: PAnsiChar; count: PtrInt); 
 {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif}
 var i, c: PtrInt;
     u: AnsiChar;
@@ -25346,26 +25348,31 @@ end;
 
 function StrIComp(Str1, Str2: pointer): PtrInt;
 {$ifdef PUREPASCAL}
-var C1, C2: AnsiChar;
+var C1,C2: PtrInt;
+    lookupper: PByteArray; // better x86-64 / PIC asm generation
 begin
-  if Str1<>Str2 then
-  if Str1<>nil then
-  if Str2<>nil then begin
-    repeat
-      C1 := PAnsiChar(Str1)^;
-      C2 := PAnsiChar(Str2)^;
-      if C1 in ['a'..'z'] then dec(C1,32);
-      if C2 in ['a'..'z'] then dec(C2,32);
-      if (C1<>C2) or (C1=#0) then
-        break;
-      Inc(PtrUInt(Str1));
-      Inc(PtrUInt(Str2));
-    until false;
-    Result := Ord(C1) - Ord(C2);
-  end else
-  result := 1 else  // Str2=''
-  result := -1 else // Str1=''
-  result := 0;      // Str1=Str2
+  result := PtrInt(Str2)-PtrInt(Str1);
+  if result<>0 then
+    if Str1<>nil then
+      if Str2<>nil then begin
+        lookupper := @NormToUpperAnsi7Byte;
+        repeat
+          C1 := PByteArray(Str1)[0];
+          C2 := PByteArray(Str1)[result];
+          inc(PByte(Str1));
+          if C1=0 then
+            break;
+          if C1=C2 then
+            continue; // fast optimistic loop for exact chars match
+          C1 := lookupper[C1];
+          C2 := lookupper[C2];
+          if C1<>C2 then
+            break;   // no branch taken if first chars differ 
+        until false; // slower "continue" above if "until C1<>C2"
+        result := C1-C2;
+      end else
+      result := 1 else  // Str2=''
+    result := -1;     // Str1=''
 end;
 {$else}
 asm // faster version by AB, from Agner Fog's original
@@ -44457,7 +44464,9 @@ end;
 procedure QuickSortDocVariant(names: PPointerArray; values: PVariantArray;
   L, R: PtrInt; Compare: TUTF8Compare);
 var I, J, P: PtrInt;
-    pivot, Tmp: pointer;
+    pivot, tempname: pointer;
+    tempvalue: TVarData;
+    vi, vj: PVarData;
 begin
   if L<R then
   repeat
@@ -44468,12 +44477,9 @@ begin
       while Compare(names[I],pivot)<0 do Inc(I);
       while Compare(names[J],pivot)>0 do Dec(J);
       if I <= J then begin
-        Tmp := names[J]; names[J] := names[I]; names[I] := Tmp;
-        {$ifdef CPU64}
-        Exchg(@values[I],@values[J],sizeof(TVarData));
-        {$else}
-        Exchg16(@values[I],@values[J]);
-        {$endif}
+        tempname := names[J]; names[J] := names[I]; names[I] := tempname;
+        vi := @values[I]; vj := @values[J];
+        tempvalue := vj^; vj^ := vi^; vi^ := tempvalue;
         if P = I then P := J else if P = J then P := I;
         inc(I); dec(J);
       end;
