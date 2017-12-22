@@ -10231,6 +10231,9 @@ type
     /// append some variant value at the current position
     // - matches FromVarVariant() and VariantSave/VariantLoad format
     procedure Write(const Value: variant); overload;
+    /// append some TDocVariant value at the current position, as JSON string
+    // - matches TFastReader.NextDocVariantData format
+    procedure WriteDocVariantData(const Value: variant);
     {$endif}
     /// append some dynamic array at the current position
     // - will use the binary serialization as for:
@@ -10465,7 +10468,7 @@ type
     /// read the next 64-bit unsigned value from the buffer
     function VarUInt64: QWord;    {$ifdef CPU64}{$ifdef HASINLINE}inline;{$endif}{$endif}
     /// read the next RawUTF8 value from the buffer
-    function VarUTF8: RawUTF8; overload; {$ifdef HASINLINE}inline;{$endif}
+    function VarUTF8: RawUTF8; overload;
     /// read the next RawUTF8 value from the buffer
     procedure VarUTF8(out result: RawUTF8); overload;
     /// read the next RawUTF8 value from the buffer
@@ -10480,8 +10483,13 @@ type
     function VarBlob: TValueResult; overload;  {$ifdef HASINLINE}inline;{$endif}
     {$ifndef NOVARIANTS}
     /// read the next variant from the buffer
+    // - is a wrapper around VariantLoad(), so may suffer from buffer overflow
     procedure NextVariant(var Value: variant; CustomVariantOptions: pointer);
-    {$endif}
+    /// read the JSON-serialized TDocVariant from the buffer
+    // - matches TFileBufferWriter.WriteDocVariantData format
+    procedure NextDocVariantData(out Value: variant; CustomVariantOptions: pointer);
+      {$ifdef FPC}inline;{$endif}
+    {$endif NOVARIANTS}
     /// returns the current position, and move ahead the specified bytes
     function Next(DataLen: PtrInt): pointer;   {$ifdef HASINLINE}inline;{$endif}
     /// copy data from the current position, and move ahead the specified bytes
@@ -14308,13 +14316,15 @@ const
     [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference,
      dvoSerializeAsExtendedJson];
 
-  /// TDocVariant options to be used so that JSON serialization would
-  // use the unquoted JSON syntax for field names and RawUTF8 interning
+  /// TDocVariant options for JSON serialization with efficient storage
+  // - i.e. unquoted JSON syntax for field names and RawUTF8 interning
+  // - may be used e.g. for efficient persistence of similar data
   // - consider using JSON_OPTIONS_FAST_EXTENDED if you don't expect
-  // RawUTF8 names and values interning
+  // RawUTF8 names and values interning, or need BSON variants parsing
   JSON_OPTIONS_FAST_EXTENDEDINTERN: TDocVariantOptions =
     [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference,
-     dvoSerializeAsExtendedJson,dvoInternNames,dvoInternValues];
+     dvoSerializeAsExtendedJson,dvoJSONParseDoNotTryCustomVariants,
+     dvoInternNames,dvoInternValues];
 
 /// same as Dest := Source, but copying by reference
 // - i.e. VType is defined as varVariant or varByRef
@@ -15066,7 +15076,7 @@ type
     // - could be used to fast add items to the internal Values[]/Names[] arrays
     // - just set protected VCount field, do not resize the arrays: caller
     // should ensure that Capacity is big enough
-    procedure SetCount(aCount: integer);
+    procedure SetCount(aCount: integer); {$ifdef HASINLINE}inline;{$endif}
     /// low-level method called internally to reserve place for new values
     // - returns the index of the newly created item in Values[]/Names[] arrays
     // - you should not have to use it, unless you want to add some items
@@ -21435,7 +21445,7 @@ end;
 {$endif}
 
 procedure Exchg(P1,P2: PAnsiChar; count: PtrInt);
-{$ifdef PUREPASCAL}
+{$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif}
 var i, c: PtrInt;
     u: AnsiChar;
 begin
@@ -31439,7 +31449,7 @@ end;
 {$endif}
 
 function IdemPCharArray(p: PUTF8Char; const upArray: array of PAnsiChar): integer;
-var W: word;
+var w: word;
 begin
   if p<>nil then begin
     w := NormToUpperAnsi7Byte[ord(p[0])]+NormToUpperAnsi7Byte[ord(p[1])]shl 8;
@@ -31451,7 +31461,7 @@ begin
 end;
 
 function IdemPCharArray(p: PUTF8Char; const upArrayBy2Chars: RawUTF8): integer;
-var W: word;
+var w: word;
 begin
   if p<>nil then begin
     w := NormToUpperAnsi7Byte[ord(p[0])]+NormToUpperAnsi7Byte[ord(p[1])]shl 8;
@@ -42848,7 +42858,7 @@ begin
       VInteger := PInteger(Source)^;
       inc(Source,sizeof(VInteger));
     end;
-    varInt64, varWord64, varDouble, varDate, varCurrency:begin
+    varInt64, varWord64, varDouble, varDate, varCurrency: begin
       VInt64 := PInt64(Source)^;
       inc(Source,sizeof(VInt64));
     end;
@@ -44077,9 +44087,9 @@ begin
         Name := GetJSONPropName(JSON,@NameLen);
         if Name=nil then
           exit;
+        SetString(VName[VCount],PAnsiChar(Name),NameLen);
         if intnames<>nil then
-          intnames.Unique(VName[VCount],Name,NameLen) else
-          SetString(VName[VCount],PAnsiChar(Name),NameLen);
+          intnames.UniqueText(VName[VCount]);
         GetJSONToAnyVariant(VValue[VCount],JSON,@EndOfObject,@VOptions,false);
         if JSON=nil then
           exit;
@@ -44218,8 +44228,12 @@ end;
 
 procedure TDocVariantData.Clear;
 begin
-  if VType=DocVariantVType then
-    DocVariantType.Clear(TVarData(self)) else
+  if VType=DocVariantVType then begin
+    PInteger(@VType)^ := 0;
+    VName := nil;
+    VariantDynArrayClear(VValue);
+    VCount := 0;
+  end else
     VarClear(variant(self));
 end;
 
@@ -58530,7 +58544,15 @@ begin
     FreeMem(tmp);
   end;
 end;
-{$endif}
+
+procedure TFileBufferWriter.WriteDocVariantData(const Value: variant);
+begin
+  with _Safe(Value)^ do
+    if Count=0 then
+      Write1(0) else
+      Write(ToJSON);
+end;
+{$endif NOVARIANTS}
 
 procedure TFileBufferWriter.WriteXor(New,Old: PAnsiChar; Len: integer; crc: PCardinal);
 var L: integer;
@@ -59570,6 +59592,17 @@ begin
   inc(P);
 end;
 
+function TFastReader.NextByteEquals(Value: byte): boolean;
+begin
+  if P>=Last then
+    ErrorOverflow;
+  if ord(P^) = Value then begin
+    inc(P);
+    result := true;
+  end else
+    result := false;
+end;
+
 function TFastReader.Next(DataLen: PtrInt): pointer;
 begin
   if P+DataLen>Last then
@@ -59623,7 +59656,30 @@ begin
   if P>Last then
     ErrorOverFlow;
 end;
-{$endif}
+
+procedure FastReaderDocVariant(var Value: TDocVariantData;
+  const JSON: TValueResult; CustomVariantOptions: PDocVariantOptions);
+var
+  temp: TSynTempBuffer;
+begin
+  temp.Init(JSON.Ptr,JSON.Len); // parsing will modify input buffer in-place
+  try
+    if CustomVariantOptions=nil then
+      CustomVariantOptions := @JSON_OPTIONS[true];
+    Value.InitJSONInPlace(temp.buf,CustomVariantOptions^);
+  finally
+    temp.Done;
+  end;
+end;
+
+procedure TFastReader.NextDocVariantData(out Value: variant; CustomVariantOptions: pointer);
+var json: TValueResult;
+begin
+  VarBlob(json);
+  if json.Len > 0 then
+    FastReaderDocVariant(TDocVariantData(Value), json, CustomVariantOptions);
+end;
+{$endif NOVARIANTS}
 
 function TFastReader.VarInt32: PtrInt;
 begin
