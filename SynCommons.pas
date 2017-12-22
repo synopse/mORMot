@@ -10475,6 +10475,10 @@ type
     procedure VarBlob(out result: TValueResult); overload; {$ifdef HASINLINE}inline;{$endif}
     /// read the next pointer and length value from the buffer
     function VarBlob: TValueResult; overload;  {$ifdef HASINLINE}inline;{$endif}
+    {$ifndef NOVARIANTS}
+    /// read the next variant from the buffer
+    procedure NextVariant(var Value: variant; CustomVariantOptions: pointer);
+    {$endif}
     /// returns the current position, and move ahead the specified bytes
     function Next(DataLen: PtrInt): pointer;   {$ifdef HASINLINE}inline;{$endif}
     /// copy data from the current position, and move ahead the specified bytes
@@ -42718,6 +42722,7 @@ begin
     PWord(Dest)^ := VType;
     inc(Dest,sizeof(VType));
     case VType of
+    varNull, varEmpty: ;
     varShortInt, varByte: begin
       Dest^ := AnsiChar(VByte);
       inc(Dest);
@@ -42770,6 +42775,8 @@ begin // match VariantSave() storage
       end;
   with TVarData(Value) do
   case VType of
+  varEmpty, varNull:
+    result := sizeof(VType);
   varShortInt, varByte:
     result := sizeof(VByte)+sizeof(VType);
   varSmallint, varWord, varBoolean:
@@ -42827,6 +42834,7 @@ begin
     VType := PWord(Source)^;
     inc(Source,SizeOf(VType));
     case VType of
+    varNull, varEmpty: ;
     varShortInt, varByte: begin
       VByte := byte(Source^);
       inc(Source);
@@ -59589,6 +59597,17 @@ begin
   result.Ptr := P;
   inc(P,result.Len);
 end;
+
+{$ifndef NOVARIANTS}
+procedure TFastReader.NextVariant(var Value: variant; CustomVariantOptions: pointer);
+begin
+  P := VariantLoad(Value, P, CustomVariantOptions);
+  if P=nil then
+    ErrorData('VariantLoad=nil',[]) else
+  if P>Last then
+    ErrorOverFlow;
+end;
+{$endif}
 
 function TFastReader.VarInt32: PtrInt;
 begin
