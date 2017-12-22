@@ -464,7 +464,7 @@ begin
               Writer.AddShort(TSMDebugger(fParent.fDebuggers[i]).fDebuggerName);
               Writer.AddShort('.conn1.thread_');
               { TODO : check that in multithread mode this field equal thread id with js context that we debug, otherwire replace with proper assigment }
-              Writer.AddQ(TSMDebugger(fParent.fDebuggers[i]).fSmThreadID);
+              Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fSmThreadID);
               // id should be addon id, value from DoOnGetEngineName event
               // Writer.AddShort('","id":"server1.conn1.addon');
               // Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fIndex);
