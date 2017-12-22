@@ -5292,6 +5292,10 @@ type
     // - caller should always make aIndex.Done once done
     procedure CreateOrderedIndex(out aIndex: TSynTempBuffer;
       aCompare: TDynArraySortCompare); overload;
+    /// sort using a lookup array of indexes, after a Add()
+    // - will resize aIndex if necessary, and set aIndex[Count-1] := Count-1
+    procedure CreateOrderedIndexAfterAdd(var aIndex: TIntegerDynArray;
+      aCompare: TDynArraySortCompare);
     /// save the dynamic array content into a (memory) stream
     // - will handle array of binaries values (byte, word, integer...), array of
     // strings or array of packed records, with binaries and string properties
@@ -47775,6 +47779,21 @@ begin
     Quicksort.Index := PCardinalArray(aIndex.InitIncreasing(n));
     Quicksort.QuickSortIndexed(0,n-1);
   end;
+end;
+
+procedure TDynArray.CreateOrderedIndexAfterAdd(var aIndex: TIntegerDynArray;
+  aCompare: TDynArraySortCompare);
+var ndx: integer;
+begin
+  ndx := Count-1;
+  if ndx<0 then
+    exit;
+  if aIndex<>nil then begin // whole FillIncreasing(aIndex[]) for first time
+    if ndx>=length(aIndex) then
+      SetLength(aIndex,ndx+ndx shr 3+64); // grow aIndex[] if needed
+    aIndex[ndx] := ndx;
+  end;
+  CreateOrderedIndex(aIndex,aCompare);
 end;
 
 function TDynArray.ElemEquals(const A,B): boolean;
