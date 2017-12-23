@@ -17,6 +17,11 @@ function os_realpath(const FileName: SynUnicode; var TargetName: SynUnicode): Bo
 
 implementation
 
+{$IFNDEF SM_DEBUG}
+  {$UNDEF SM_DEBUG_FSTRACEFILEREAD}
+  {$UNDEF SM_DEBUG_FSDUMPFILEEXCERPT}
+{$ENDIF}
+
 uses
   SysUtils,
 {$IFDEF MSWINDOWS}
@@ -50,6 +55,9 @@ begin
       forceUTF8 := in_argv[1].asBoolean;
 
     name := in_argv[0].asJSString.ToString(cx);
+    {$ifdef SM_DEBUG_FSTRACEFILEREAD}
+    SynSMLog.Add.Log(sllDebug, 'fs_loadFile (%) called', name);
+    {$ENDIF}
     if not FileExists(name) then
       raise ESMException.Create('file  not exists');
     // implementation below dont work if called in the same time from differnt thread
@@ -138,17 +146,23 @@ begin
     obj := cx.NewRootedObject(cx.NewObject(nil));
     try
       {$IFNDEF MSWINDOWS}
-      if fpstat(fn, info) <> 0 then
-        raise EOSError.CreateFmt('fstat failed with error no #', [fpgeterrno]);
-      val.asDate[cx] := UnixToDateTime(info.st_atime);
-      obj.ptr.DefineProperty(cx, 'atime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
-      val.asDate[cx] := UnixToDateTime(info.st_mtime);
-      obj.ptr.DefineProperty(cx, 'mtime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
-      val.asDate[cx] := UnixToDateTime(info.st_ctime);
-      obj.ptr.DefineProperty(cx, 'ctime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
-      val.asInt64 := info.st_size;
-      obj.ptr.DefineProperty(cx, 'size', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
-      vp.rval := obj.ptr.ToJSValue;
+      if fpstat(fn, info) = 0 then begin
+        val.asDate[cx] := UnixToDateTime(info.st_atime);
+        obj.ptr.DefineProperty(cx, 'atime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+        val.asDate[cx] := UnixToDateTime(info.st_mtime);
+        obj.ptr.DefineProperty(cx, 'mtime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+        val.asDate[cx] := UnixToDateTime(info.st_ctime);
+        obj.ptr.DefineProperty(cx, 'ctime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+        val.asInt64 := info.st_size;
+        obj.ptr.DefineProperty(cx, 'size', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+        vp.rval := obj.ptr.ToJSValue;
+      end else begin
+        {$ifdef SM_DEBUG}
+        SynSMLog.Add.Log(sllWarning, StringToUTF8(Format('fstat(%s) failed with error %s',
+          [fn, SysErrorMessage(errno)])));
+        {$endif}
+        vp.rval := JSVAL_NULL;
+      end;
       {$ELSE}
       {$ifdef ISDELPHIXE2}
       if FileGetDateTimeInfo(fn, infoRec, true) then begin
@@ -262,16 +276,39 @@ const
 var
   in_argv: PjsvalVector;
   filePath: string;
+  fileContent: jsval;
+  {$ifdef SM_DEBUG_FSDUMPFILEEXCERPT}
+  len: size_t;
+  content: RawUTF8;
+  {$endif}
 begin
   try
     in_argv := vp.argv;
     if (argc < 1) or not in_argv[0].isString then
       raise ESMException.Create(USAGE);
     filePath := in_argv[0].asJSString.ToString(cx);
-    if FileExists(filePath) then
-      vp.rval := cx.NewJSString(AnyTextFileToRawUTF8(filePath, true)).ToJSVal
-    else
+    {$ifdef SM_DEBUG_FSTRACEFILEREAD}
+    SynSMLog.Add.Log(sllDebug, 'fs_internalModuleReadFile (%) called', filePath);
+    {$ENDIF}
+    if FileExists(filePath) then begin
+      fileContent := cx.NewJSString(AnyTextFileToRawUTF8(filePath, true)).ToJSVal;
+      vp.rval := fileContent;
+      {$ifdef SM_DEBUG_FSDUMPFILEEXCERPT}
+      len := fileContent.asJSString.Length;
+      content := fileContent.asJSString.ToUTF8(cx);
+      if len > 120 then
+        content := Format('%s .. %s', [Copy(content, 1, 58), Copy(content, len-58, 58)]);
+      SynSMLog.Add.Log(sllDebug,
+        'fs_internalModuleReadFile (%): content loaded, length = % content:'#13'%',
+        [filePath, len, content]);
+      {$endif}
+    end else begin
       vp.rval := JSVAL_VOID;
+      {$ifdef SM_DEBUG}
+      SynSMLog.Add.Log(sllDebug,
+        'fs_internalModuleReadFile (%): file not found', filePath);
+      {$endif}
+    end;
 
     Result := True;
   except
