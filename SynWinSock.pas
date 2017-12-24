@@ -1211,8 +1211,8 @@ begin
     Addr := nil;
     try
       FillChar(Hints, Sizeof(Hints), 0);
-      Hints.ai_socktype := SockType;
       Hints.ai_protocol := SockProtocol;
+      Hints.ai_socktype := SockType;
       r := GetAddrInfo(pointer(Name), nil, @Hints, Addr);
       if r = 0 then begin
         AddrNext := Addr;

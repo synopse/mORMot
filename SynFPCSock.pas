@@ -465,8 +465,8 @@ function SetVarSin(var Sin: TVarSin; const IP,Port: string;
   Family,SockProtocol,SockType: integer; PreferIP4: Boolean): integer;
 function GetSinIP(const Sin: TVarSin): string;
 function GetSinPort(const Sin: TVarSin): Integer;
-procedure ResolveNameToIP(const Name: string;  Family,SockProtocol,SockType: integer;
-  IPList: TStrings);
+procedure ResolveNameToIP(const Name: AnsiString; Family, SockProtocol, SockType: integer;
+  IPList: TStrings; WillClearIPList: boolean = true);
 
 const
   // poll() flag when there is data to read
@@ -1012,8 +1012,8 @@ begin
     result := '';
 end;
 
-procedure ResolveNameToIP(const Name: string; Family, SockProtocol, SockType: integer;
-  IPList: TStrings);
+procedure ResolveNameToIP(const Name: AnsiString; Family, SockProtocol, SockType: integer;
+  IPList: TStrings; WillClearIPList: boolean = true);
 var
   Hints: TAddressInfo;
   Addr: PAddressInfo;
@@ -1022,7 +1022,7 @@ var
   host, serv: string;
   hostlen, servlen: integer;
 begin
-  IPList.Clear;
+  if (WillClearIPList) then IPList.Clear;
   Addr := nil;
   try // we force to find TCP/IP
     FillChar(Hints, Sizeof(Hints), 0);
@@ -1148,14 +1148,14 @@ begin
   end;
 end;
 
-procedure ResolveNameToIP(const Name: string;
-  Family,SockProtocol,SockType: integer; IPList: TStrings);
+procedure ResolveNameToIP(const Name: AnsiString; Family, SockProtocol, SockType: integer;
+  IPList: TStrings; WillClearIPList: boolean = true);
 var x,n: integer;
     a4: array[1..255] of in_addr;
     a6: array[1..255] of Tin6_addr;
     he: THostEntry;
 begin
-  IPList.Clear;
+  if (WillClearIPList) then IPList.Clear;
   if (family=AF_INET) or (family=AF_UNSPEC) then begin
     if lowercase(name)=cLocalHostStr then
       IpList.Add(cLocalHost) else begin
