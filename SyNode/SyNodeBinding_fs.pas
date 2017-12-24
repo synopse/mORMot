@@ -59,7 +59,7 @@ begin
     SynSMLog.Add.Log(sllDebug, 'fs_loadFile (%) called', name);
     {$ENDIF}
     if not FileExists(name) then
-      raise ESMException.Create('file  not exists');
+      raise ESMException.Create('file does not exist');
     // implementation below dont work if called in the same time from differnt thread
     // TFileStream.Create(name, fmOpenRead).Free; // Check that file exists and can be opened;
     vp.rval := cx.NewJSString(AnyTextFileToRawUTF8(name, forceUTF8)).ToJSVal;
@@ -106,7 +106,7 @@ end;
 //    ctime: Date  // create time
 //    size: Number
 //  }
-// or null is file not exists
+// or null is file does not exist
 function fs_fileStat(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
 const
   USAGE = 'usage: fileStat(filePath: string;)';
@@ -158,7 +158,7 @@ begin
         vp.rval := obj.ptr.ToJSValue;
       end else begin
         {$ifdef SM_DEBUG}
-        SynSMLog.Add.Log(sllWarning, StringToUTF8(Format('fstat(%s) failed with error %s',
+        SynSMLog.Add.Log(sllDebug, StringToUTF8(Format('fstat(%s) failed with error %s',
           [fn, SysErrorMessage(errno)])));
         {$endif}
         vp.rval := JSVAL_NULL;
