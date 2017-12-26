@@ -44217,6 +44217,10 @@ begin
       SetLength(VName,VCount);
       for ndx := 0 to VCount-1 do
         VName[ndx] := Source^.VName[ndx]; // manual copy is needed
+      if dvoInternNames in VOptions then
+        with DocVariantType.InternNames do
+          for ndx := 0 to VCount-1 do
+            UniqueText(VName[ndx]);
     end;
   end else begin
     SetOptions(aOptions);
@@ -44240,6 +44244,10 @@ begin
           Handler.Copy(TVarData(VValue[ndx]),v^,false) else
         VValue[ndx] := variant(v^); // default copy
     end;
+    if dvoInternValues in VOptions then
+      with DocVariantType.InternValues do
+        for ndx := 0 to VCount-1 do
+          UniqueVariant(VValue[ndx]);
   end;
   VariantDynArrayClear(SourceVValue); // faster alternative
 end;
@@ -45569,15 +45577,15 @@ end;
 
 procedure TDocVariant.IntGet(var Dest: TVarData;
   const V: TVarData; Name: PAnsiChar);
-procedure Execute(ndx: integer;
-  const source: TDocVariantData; var Dest: variant);
-begin
-  case ndx of
-  0: Dest := source.Count;
-  1: Dest := ord(source.Kind);
-  2: RawUTF8ToVariant(source.ToJSON,Dest);
+  procedure Execute(ndx: integer;
+    const source: TDocVariantData; var Dest: variant);
+  begin
+    case ndx of
+    0: Dest := source.Count;
+    1: Dest := ord(source.Kind);
+    2: RawUTF8ToVariant(source.ToJSON,Dest);
+    end;
   end;
-end;
 var NameLen, ndx: integer;
 begin
   //Assert(V.VType=DocVariantVType);
