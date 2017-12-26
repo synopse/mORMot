@@ -2117,6 +2117,9 @@ function VariantToUTF8(const V: Variant; var Text: RawUTF8): boolean; overload;
 // ISO-8601 parsing if possible
 function VariantToDateTime(const V: Variant; var Value: TDateTime): boolean;
 
+/// fast conversion from hexa chars, supplied as a variant string, into a binary buffer
+function VariantHexDisplayToBin(const Hex: variant; Bin: PByte; BinBytes: integer): boolean;
+
 /// fast comparison of a Variant and UTF-8 encoded String (or number)
 // - slightly faster than plain V=Str, which computes a temporary variant
 // - here Str='' equals unassigned, null or false
@@ -11540,7 +11543,7 @@ function Int64ToHexShort(aInt64: Int64): TShort16; overload;
 // - reverse function of HexDisplayToInt64()
 function Int64ToHexString(aInt64: Int64): string;
 
-/// fast conversion from hexa chars into a pointer
+/// fast conversion from hexa chars into a binary buffer
 function HexDisplayToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: integer): boolean;
 
 /// fast conversion from hexa chars into a cardinal
@@ -22982,6 +22985,14 @@ begin
 end;
 
 {$ifndef NOVARIANTS}
+
+function VariantHexDisplayToBin(const Hex: variant; Bin: PByte; BinBytes: integer): boolean;
+var tmp: RawUTF8;
+    wasString: boolean;
+begin
+  VariantToUTF8(hex,tmp,wasString);
+  result := wasstring and HexDisplayToBin(pointer(tmp),Bin,BinBytes);
+end;
 
 function VariantToDateTime(const V: Variant; var Value: TDateTime): boolean;
 var tmp: RawUTF8;
@@ -44477,9 +44488,11 @@ begin
       while Compare(names[I],pivot)<0 do Inc(I);
       while Compare(names[J],pivot)>0 do Dec(J);
       if I <= J then begin
-        tempname := names[J]; names[J] := names[I]; names[I] := tempname;
-        vi := @values[I]; vj := @values[J];
-        tempvalue := vj^; vj^ := vi^; vi^ := tempvalue;
+        if I <> J then begin
+          tempname := names[J]; names[J] := names[I]; names[I] := tempname;
+          vi := @values[I]; vj := @values[J];
+          tempvalue := vj^; vj^ := vi^; vi^ := tempvalue;
+        end;
         if P = I then P := J else if P = J then P := I;
         inc(I); dec(J);
       end;
@@ -45970,7 +45983,7 @@ begin
 end;
 {$endif}
 
-function _Safe(const DocVariant: variant; ExpectedKind: TDocVariantKind): PDocVariantData; overload;
+function _Safe(const DocVariant: variant; ExpectedKind: TDocVariantKind): PDocVariantData;
 begin
   result := _Safe(DocVariant);
   if result^.Kind<>ExpectedKind then
