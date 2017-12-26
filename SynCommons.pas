@@ -11982,7 +11982,7 @@ type
     case integer of
     0: (V: Qword);
     1: (L,H: cardinal);
-    2: (B: array[0..3] of byte);
+    2: (B: array[0..7] of byte);
   end;
   /// points to the binary of an unsigned 64-bit value
   PQWordRec = ^TQWordRec;
