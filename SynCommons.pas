@@ -15408,6 +15408,9 @@ type
     // - supplied document should be of the same kind than the current one,
     // otherwise nothing is added
     procedure AddFrom(const aDocVariant: Variant);
+    /// add or update or on several valeus from another object
+    // - current document should be an object
+    procedure AddOrUpdateFrom(const aDocVariant: Variant; aOnlyAddMissing: boolean=false);
     /// add one or several properties, specified by path, from another object
     // - path are defined as a dotted name-space, e.g. 'doc.glossary.title'
     // - matching values would be added as root values, with the path as name
@@ -44327,11 +44330,10 @@ begin
 end;
 
 function TDocVariantData.AddValue(const aName: RawUTF8; const aValue: variant): integer;
-var ndx: integer;
 begin
   if dvoCheckForDuplicatedNames in VOptions then begin
-    ndx := GetValueIndex(aName);
-    if ndx>=0 then
+    result := GetValueIndex(aName);
+    if result>=0 then
       raise EDocVariant.CreateUTF8('Duplicated "%" name',[aName]);
   end;
   result := InternalAdd(aName); // FPC does not allow VValue[InternalAdd(aName)]
@@ -44386,23 +44388,32 @@ begin
 end;
 
 procedure TDocVariantData.AddFrom(const aDocVariant: Variant);
-var source: PDocVariantData;
+var src: PDocVariantData;
     ndx: integer;
 begin
-  source := _Safe(aDocVariant);
-  if source^.Count=0 then
+  src := _Safe(aDocVariant);
+  if src^.Count=0 then
     exit; // nothing to add
-  if dvoIsArray in source^.VOptions then
+  if dvoIsArray in src^.VOptions then
     // add array items
     if dvoIsObject in VOptions then // types should match
       exit else
-    for ndx := 0 to source^.Count-1 do
-      AddItem(source^.VValue[ndx]) else
+    for ndx := 0 to src^.Count-1 do
+      AddItem(src^.VValue[ndx]) else
     // add object items
     if dvoIsArray in VOptions then // types should match
       exit else
-    for ndx := 0 to source^.Count-1 do
-      AddValue(source^.VName[ndx],source^.VValue[ndx]);
+    for ndx := 0 to src^.Count-1 do
+      AddValue(src^.VName[ndx],src^.VValue[ndx]);
+end;
+
+procedure TDocVariantData.AddOrUpdateFrom(const aDocVariant: Variant; aOnlyAddMissing: boolean);
+var src: PDocVariantData;
+    ndx: integer;
+begin
+  src := _Safe(aDocVariant,dvObject);
+  for ndx := 0 to src^.Count-1 do
+    AddOrUpdateValue(src^.VName[ndx],src^.VValue[ndx],nil,aOnlyAddMissing);
 end;
 
 function TDocVariantData.AddItem(const aValue: variant): integer;
