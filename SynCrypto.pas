@@ -1209,7 +1209,11 @@ type
     /// finalize and compute the resulting SHA-1 hash Digest of all data
     // affected to Update() method
     // - will also call Init to reset all internal temporary context, for safety
-    procedure Final(out Digest: TSHA1Digest; NoInit: boolean=false);
+    procedure Final(out Digest: TSHA1Digest; NoInit: boolean=false); overload;
+    /// finalize and compute the resulting SHA-1 hash Digest of all data
+    // affected to Update() method
+    // - will also call Init to reset all internal temporary context, for safety
+    function Final(NoInit: boolean=false): TSHA1Digest; overload; {$ifdef HASINLINE}inline;{$endif}
     /// one method to rule them all
     // - call Init, then Update(), then Final()
     // - only Full() is Padlock-implemented - use this rather than Update()
@@ -1236,7 +1240,10 @@ type
     procedure Update(const Buffer: RawByteString); overload;
     /// finalize and compute the resulting SHA-256 hash Digest of all data
     // affected to Update() method
-    procedure Final(out Digest: TSHA256Digest; NoInit: boolean=false);
+    procedure Final(out Digest: TSHA256Digest; NoInit: boolean=false); overload;
+    /// finalize and compute the resulting SHA-256 hash Digest of all data
+    // affected to Update() method
+    function Final(NoInit: boolean=false): TSHA256Digest; overload; {$ifdef HASINLINE}inline;{$endif}
     /// one method to rule them all
     // - call Init, then Update(), then Final()
     // - only Full() is Padlock-implemented - use this rather than Update()
@@ -1269,7 +1276,10 @@ type
     /// finalize and compute the resulting SHA-384 hash Digest of all data
     // affected to Update() method
     // - will also call Init to reset all internal temporary context, for safety
-    procedure Final(out Digest: TSHA384Digest; NoInit: boolean=false);
+    procedure Final(out Digest: TSHA384Digest; NoInit: boolean=false); overload;
+    /// finalize and compute the resulting SHA-384 hash Digest of all data
+    // affected to Update() method
+    function Final(NoInit: boolean=false): TSHA384Digest; overload; {$ifdef HASINLINE}inline;{$endif}
     /// one method to rule them all
     // - call Init, then Update(), then Final()
     procedure Full(Buffer: pointer; Len: integer; out Digest: TSHA384Digest);
@@ -1309,7 +1319,10 @@ type
     /// finalize and compute the resulting SHA-512 hash Digest of all data
     // affected to Update() method
     // - will also call Init to reset all internal temporary context, for safety
-    procedure Final(out Digest: TSHA512Digest; NoInit: boolean=false);
+    procedure Final(out Digest: TSHA512Digest; NoInit: boolean=false); overload;
+    /// finalize and compute the resulting SHA-512 hash Digest of all data
+    // affected to Update() method
+    function Final(NoInit: boolean=false): TSHA512Digest; overload; {$ifdef HASINLINE}inline;{$endif}
     /// one method to rule them all
     // - call Init, then Update(), then Final()
     procedure Full(Buffer: pointer; Len: integer; out Digest: TSHA512Digest);
@@ -1348,6 +1361,10 @@ type
     procedure Final(out Digest: THash256; NoInit: boolean=false); overload;
     /// finalize and compute the resulting SHA-3 hash 512-bit Digest
     procedure Final(out Digest: THash512; NoInit: boolean=false); overload;
+    /// finalize and compute the resulting SHA-3 hash 256-bit Digest
+    function Final256(NoInit: boolean=false): THash256;
+    /// finalize and compute the resulting SHA-3 hash 512-bit Digest
+    function Final512(NoInit: boolean=false): THash512; 
     /// finalize and compute the resulting SHA-3 hash Digest
     // - Digest destination buffer must contain enough bytes
     // - default DigestBits=0 will write the default number of bits to Digest
@@ -1856,13 +1873,21 @@ procedure PBKDF2_HMAC_SHA256(const password,salt: RawByteString; count: Integer;
 function SHA3(Algo: TSHA3Algo; const s: RawByteString;
   DigestBits: integer=0): RawUTF8; overload;
 
-/// direct SHA-3 hash calculation of some binary buffer 
+/// direct SHA-3 hash calculation of some binary buffer
 // - result is returned in hexadecimal format
 // - default DigestBits=0 will write the default number of bits to Digest
 // output memory buffer, according to the specified TSHA3Algo
 function SHA3(Algo: TSHA3Algo; Buffer: pointer; Len: integer;
   DigestBits: integer=0): RawUTF8; overload;
 
+
+type
+  /// hash algorithms available for HashFile() function
+  THashAlgo = (hfMD5, hfSHA1, hfSHA256, hfSHA384, hfSHA512, hfSHA3_256, hfSHA3_512);
+
+/// compute the hexadecimal hash of any (big) file
+// - using a temporary buffer of 1MB for the reading
+function HashFile(const aFileName: TFileName; aAlgo: THashAlgo): RawUTF8;
 
 
 /// compute the HMAC message authentication code using crc256c as hash function
@@ -7017,6 +7042,11 @@ begin
     Init;
 end;
 
+function TSHA256.Final(NoInit: boolean): TSHA256Digest;
+begin
+  Final(result,NoInit);
+end;
+
 procedure TSHA256.Full(Buffer: pointer; Len: integer; out Digest: TSHA256Digest);
 begin
 {$ifdef USEPADLOCK}
@@ -7258,6 +7288,11 @@ begin
     Init;
 end;
 
+function TSHA384.Final(NoInit: boolean): TSHA384Digest;
+begin
+  Final(result,NoInit);
+end;
+
 procedure TSHA384.Full(Buffer: pointer; Len: integer; out Digest: TSHA384Digest);
 begin
   Init;
@@ -7358,6 +7393,11 @@ begin
   bswap64array(@Hash,@Digest,8);
   if not NoInit then
     Init;
+end;
+
+function TSHA512.Final(NoInit: boolean): TSHA512Digest;
+begin
+  Final(result,NoInit);
 end;
 
 procedure TSHA512.Full(Buffer: pointer; Len: integer; out Digest: TSHA512Digest);
@@ -8467,6 +8507,16 @@ begin
     FillCharFast(Context, sizeof(Context), 0);
 end;
 
+function TSHA3.Final256(NoInit: boolean): THash256;
+begin
+  Final(result,NoInit);
+end;
+
+function TSHA3.Final512(NoInit: boolean): THash512;
+begin
+  Final(result,NoInit);
+end;
+
 procedure TSHA3.Full(Buffer: pointer; Len: integer; out Digest: THash256);
 begin
   Full(SHA3_256, Buffer, Len, @Digest, 256);
@@ -8561,6 +8611,66 @@ var
   instance: TSHA3;
 begin
   result := instance.FullStr(algo, Buffer, Len, DigestBits);
+end;
+
+function HashFile(const aFileName: TFileName; aAlgo: THashAlgo): RawUTF8;
+var
+  temp: RawByteString;
+  md5: TMD5;
+  sha1: TSHA1;
+  sha256: TSHA256;
+  sha384: TSHA384;
+  sha512: TSHA512;
+  sha3: TSHA3;
+  F: THandle;
+  size: TQWordRec;
+  read: cardinal;
+begin
+  result := '';
+  if aFileName='' then
+    exit;
+  F := FileOpenSequentialRead(aFileName);
+  if PtrInt(F)>=0 then
+    try
+      size.L := GetFileSize(F,@size.H);
+      case aAlgo of
+      hfMD5:    md5.Init;
+      hfSHA1:   sha1.Init;
+      hfSHA256: sha256.Init;
+      hfSHA384: sha384.Init;
+      hfSHA512: sha512.Init;
+      hfSHA3_256: sha3.Init(SHA3_256);
+      hfSHA3_512: sha3.Init(SHA3_512);
+      else exit;
+      end;
+      SetLength(temp,1 shl 20);
+      while size.V>0 do begin
+        read := FileRead(F,pointer(temp)^,1 shl 20);
+        if read<=0 then
+          exit;
+        case aAlgo of
+        hfMD5:    md5.Update(pointer(temp)^,read);
+        hfSHA1:   sha1.Update(pointer(temp),read);
+        hfSHA256: sha256.Update(pointer(temp),read);
+        hfSHA384: sha384.Update(pointer(temp),read);
+        hfSHA512: sha512.Update(pointer(temp),read);
+        hfSHA3_256: sha3.Update(pointer(temp),read);
+        hfSHA3_512: sha3.Update(pointer(temp),read);
+        end;
+        dec(size.V,read);
+      end;
+      case aAlgo of
+      hfMD5:    result := MD5DigestToString(md5.Final);
+      hfSHA1:   result := SHA1DigestToString(sha1.Final);
+      hfSHA256: result := SHA256DigestToString(sha256.Final);
+      hfSHA384: result := SHA384DigestToString(sha384.Final);
+      hfSHA512: result := SHA512DigestToString(sha512.Final);
+      hfSHA3_256: result := SHA256DigestToString(sha3.Final256);
+      hfSHA3_512: result := SHA512DigestToString(sha3.Final512);
+      end;
+    finally
+      FileClose(F);
+    end;
 end;
 
 
@@ -10230,6 +10340,11 @@ begin
   // Clear Data
   if not NoInit then
     Init;
+end;
+
+function TSHA1.Final(NoInit: boolean): TSHA1Digest;
+begin
+  Final(result,NoInit);
 end;
 
 procedure TSHA1.Full(Buffer: pointer; Len: integer; out Digest: TSHA1Digest);
