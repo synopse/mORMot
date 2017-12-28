@@ -1904,10 +1904,53 @@ procedure PBKDF2_SHA3_Crypt(algo: TSHA3Algo; const password,salt: RawByteString;
 
 
 type
+  /// the HMAC/SHA-3 algorithms known by TSynSigner
+  TSignAlgo = (
+    saSha1, saSha256, saSha384, saSha512,
+    saSha3224, saSha3256, saSha3384, saSha3512, saSha3S128, saSha3S256);
+
+  /// a generic wrapper object to handle digital HMAC-SHA-2/SHA-3 signatures
+  TSynSigner = object
+  private
+    ctxt: array[1..SHA3ContextSize] of byte; // enough space for all algorithms
+    fSignatureSize: integer;
+    fAlgo: TSignAlgo;
+  public
+    /// initialize the digital HMAC/SHA-3 signing context with some secret text
+    procedure Init(aAlgo: TSignAlgo; const aSecret: RawUTF8); overload;
+    /// initialize the digital HMAC/SHA-3 signing context with some secret binary
+    procedure Init(aAlgo: TSignAlgo; aSecret: pointer; aSecretLen: integer); overload;
+    /// initialize the digital HMAC/SHA-3 signing context with PBKDF2 safe
+    // iterative key derivation of a secret salted text
+    procedure Init(aAlgo: TSignAlgo; const aSecret, aSalt: RawUTF8;
+      aSecretPBKDF2Rounds: integer); overload;
+    /// process some message content supplied as memory buffer
+    procedure Update(aBuffer: pointer; aLen: integer); overload;
+    /// process some message content supplied as string
+    procedure Update(const aBuffer: RawByteString); overload; {$ifdef HASINLINE}inline;{$endif}
+    /// returns the computed digital signature as lowercase hexadecimal text
+    function Final: RawUTF8; overload;
+    /// returns the raw computed digital signature
+    // - SignatureSize bytes will be written: use Signature.Lo/h0/b3/b accessors
+    procedure Final(out aSignature: THash512Rec; aNoInit: boolean=false); overload;
+    /// one-step digital signature of a buffer as lowercase hexadecimal string
+    function Full(aAlgo: TSignAlgo; const aSecret: RawUTF8;
+      aBuffer: Pointer; aLen: integer): RawUTF8; overload;
+    /// one-step digital signature of a buffer with PBKDF2 derivation
+    function Full(aAlgo: TSignAlgo; const aSecret, aSalt: RawUTF8;
+      aSecretPBKDF2Rounds: integer; aBuffer: Pointer; aLen: integer): RawUTF8; overload;
+    /// convenient wrapper to perform PBKDF2 safe iterative key derivation
+    procedure PBKDF2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUTF8;
+      aSecretPBKDF2Rounds: integer; out aDerivatedKey: THash512Rec);
+    /// the algorithm used for digitial signature
+    property Algo: TSignAlgo read fAlgo;
+    /// the size, in bytes, of the digital signature of this algorithm
+    property SignatureSize: integer read fSignatureSize;
+  end;
+
   /// hash algorithms available for HashFile/HashFull functions and TSynHasher object
   THashAlgo = (hfMD5, hfSHA1, hfSHA256, hfSHA384, hfSHA512, hfSHA3_256, hfSHA3_512);
 
-type
   /// convenient multi-algorithm hashing wrapper
   // - as used e.g. by HashFile/HashFull functions
   // - we defined a record instead of a class, to allow stack allocation and
@@ -8754,14 +8797,14 @@ var i: integer;
     first: TSHA3;
 begin
   if resultbytes<=0 then
-    resultbytes := SHA3_DEF_LEN[algo];
+    resultbytes := SHA3_DEF_LEN[algo] shr 3;
   SetLength(tmp,resultbytes);
   first.Init(algo);
   first.Update(password);
   mac := first;
   mac.Update(salt);
   mac.Final(pointer(tmp),resultbytes shl 3,true);
-  MoveFast(pointer(tmp),result^,resultbytes);
+  MoveFast(pointer(tmp)^,result^,resultbytes);
   for i := 2 to count do begin
     mac := first;
     mac.Update(pointer(tmp),resultbytes);
@@ -8875,6 +8918,122 @@ begin
     finally
       FileClose(F);
     end;
+end;
+
+{ TSynSigner }
+
+procedure TSynSigner.Init(aAlgo: TSignAlgo; aSecret: pointer; aSecretLen: integer);
+const
+  DEF_BITS: array[TSignAlgo] of byte = (
+    20, 32, 48, 64, 28, 32, 48, 64, 32, 64);
+  SHA3_ALGO: array[saSha3224..saSha3S256] of TSHA3Algo = (
+    SHA3_224, SHA3_256, SHA3_384, SHA3_512, SHAKE_128, SHAKE_256);
+begin
+  fAlgo := aAlgo;
+  fSignatureSize := DEF_BITS[fAlgo];
+  case fAlgo of
+  saSha1:   PHMAC_SHA1(@ctxt)^.Init(aSecret,aSecretLen);
+  saSha256: PHMAC_SHA256(@ctxt)^.Init(aSecret,aSecretLen);
+  saSha384: PHMAC_SHA384(@ctxt)^.Init(aSecret,aSecretLen);
+  saSha512: PHMAC_SHA512(@ctxt)^.Init(aSecret,aSecretLen);
+  saSha3224..saSha3S256: begin
+    PSHA3(@ctxt)^.Init(SHA3_ALGO[fAlgo]);
+    PSHA3(@ctxt)^.Update(aSecret,aSecretLen); // HMAC pattern included in SHA-3
+  end;
+  end;
+end;
+
+procedure TSynSigner.Init(aAlgo: TSignAlgo; const aSecret: RawUTF8);
+begin
+  Init(aAlgo,pointer(aSecret),length(aSecret));
+end;
+
+procedure TSynSigner.Init(aAlgo: TSignAlgo; const aSecret, aSalt: RawUTF8;
+  aSecretPBKDF2Rounds: integer);
+var temp: THash512Rec;
+begin
+  if aSecretPBKDF2Rounds>1 then begin
+    PBKDF2(aAlgo,aSecret,aSalt,aSecretPBKDF2Rounds,temp);
+    Init(aAlgo,@temp,fSignatureSize);
+    FillZero(temp.b);
+  end else
+    Init(aAlgo,aSecret);
+end;
+
+procedure TSynSigner.Update(const aBuffer: RawByteString);
+begin
+  Update(pointer(aBuffer),length(aBuffer));
+end;
+
+procedure TSynSigner.Update(aBuffer: pointer; aLen: integer);
+begin
+  case fAlgo of
+  saSha1:   PHMAC_SHA1(@ctxt)^.Update(aBuffer,aLen);
+  saSha256: PHMAC_SHA256(@ctxt)^.Update(aBuffer,aLen);
+  saSha384: PHMAC_SHA384(@ctxt)^.Update(aBuffer,aLen);
+  saSha512: PHMAC_SHA512(@ctxt)^.Update(aBuffer,aLen);
+  saSha3224..saSha3S256: PSHA3(@ctxt)^.Update(aBuffer,aLen);
+  end;
+end;
+
+procedure TSynSigner.Final(out aSignature: THash512Rec; aNoInit: boolean);
+begin
+  case fAlgo of
+  saSha1:   PHMAC_SHA1(@ctxt)^.Done(PSHA1Digest(@aSignature)^,aNoInit);
+  saSha256: PHMAC_SHA256(@ctxt)^.Done(aSignature.Lo,aNoInit);
+  saSha384: PHMAC_SHA384(@ctxt)^.Done(aSignature.b3,aNoInit);
+  saSha512: PHMAC_SHA512(@ctxt)^.Done(aSignature.b,aNoInit);
+  saSha3224..saSha3S256: PSHA3(@ctxt)^.Final(@aSignature,fSignatureSize shl 3,aNoInit);
+  end;
+end;
+
+function TSynSigner.Final: RawUTF8;
+var sig: THash512Rec;
+begin
+  Final(sig);
+  result := BinToHexLower(@sig,fSignatureSize);
+end;
+
+function TSynSigner.Full(aAlgo: TSignAlgo; const aSecret: RawUTF8;
+  aBuffer: Pointer; aLen: integer): RawUTF8;
+begin
+  Init(aAlgo,aSecret);
+  Update(aBuffer,aLen);
+  result := Final;
+end;
+
+function TSynSigner.Full(aAlgo: TSignAlgo; const aSecret, aSalt: RawUTF8;
+  aSecretPBKDF2Rounds: integer; aBuffer: Pointer; aLen: integer): RawUTF8;
+begin
+  Init(aAlgo,aSecret,aSalt,aSecretPBKDF2Rounds);
+  Update(aBuffer,aLen);
+  result := Final;
+end;
+
+procedure TSynSigner.PBKDF2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUTF8;
+  aSecretPBKDF2Rounds: integer; out aDerivatedKey: THash512Rec);
+var iter: TSynSigner;
+    temp: THash512Rec;
+    i: integer;
+begin
+  Init(aAlgo,aSecret);
+  iter := self;
+  iter.Update(aSalt);
+  if fAlgo<saSha3224 then
+    iter.Update(#0#0#0#1); // padding and XoF mode already part of SHA-3 process
+  iter.Final(aDerivatedKey,true);
+  if aSecretPBKDF2Rounds<2 then
+    exit;
+  temp := aDerivatedKey;
+  for i := 2 to aSecretPBKDF2Rounds do begin
+    iter := self;
+    iter.Update(@temp,fSignatureSize);
+    iter.Final(temp,true);
+    XorMemory(@aDerivatedKey,@temp,fSignatureSize);
+  end;
+  FillZero(temp.b);
+  FillCharFast(iter.ctxt,SizeOf(iter.ctxt),0);
+  FillCharFast(ctxt,SizeOf(ctxt),0);
 end;
 
 
@@ -13477,7 +13636,7 @@ begin
   SetAlgo;
   inherited Create(ALG[fSha3Algo],aClaims,aAudience,aExpirationMinutes,aIDIdentifier,aIDObfuscationKey);
   if aSHA3SignatureSize=0 then
-    fSha3Size := SHA3_DEF_LEN[fSha3Algo] else
+    fSha3Size := SHA3_DEF_LEN[fSha3Algo] shr 3 else
     fSha3Size := aSHA3SignatureSize;
   fSha3Prepared.Init(fSha3Algo);
   if (aSecret<>'') and (aSecretPBKDF2Rounds>0) then begin
@@ -13733,6 +13892,7 @@ initialization
   assert(sizeof(TAESIVCTR)=sizeof(TAESBlock));
   assert(sizeof(TSHA256)>=sizeof(TSHA1));
   assert(sizeof(TSHA512)>=sizeof(TSHA256));
+  assert(sizeof(TSHA3)>=sizeof(TSHA512));
 
 finalization
 {$ifdef USEPADLOCKDLL}
