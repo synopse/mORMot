@@ -2595,8 +2595,9 @@ type
       aIDObfuscationKey: RawUTF8=''); reintroduce;
   end;
 
-  /// matches TJWTHS256, TJWTHS385 and TJWTHS512 algoritms
-  TJWTHSAlgo = (hs256, hs384, hs512);
+  /// matches TJWTHS256, TJWTHS385, TJWTHS512 and TJWTS3224, TJWTS3256,
+  // TJWTS3384, TJWTS3512, TJWTS3S128, TJWTS3S256 algoritms
+  TJWTHSAlgo = (hs256, hs384, hs512, hs3224, hs3256, hs3384, hs3512, hs3S128, hs3S256);
 
   /// implements JSON Web Tokens using 'HS256' (HMAC SHA-256) algorithm
   // - as defined in @http://tools.ietf.org/html/rfc7518 paragraph 3.2
@@ -2700,6 +2701,82 @@ type
       out aHMACSecret: THash512);
   end;
 
+  /// experimental JSON Web Tokens using SHA3 algorithms
+  // - SHA-3 is not yet officially defined in @http://tools.ietf.org/html/rfc7518
+  // but could be used as a safer (and sometimes faster) alternative to HMAC-SHA2
+  // - don't use this abstract class, but rather TJWTS3224, TJWTS3256, TJWTS3384,
+  // TJWTS3512, TJWTS3S128 or TJWTS3S256 classes
+  TJWTSHA3Abstract = class(TJWTAbstract)
+  protected
+    fSha3Prepared: TSHA3;
+    fSha3Size: integer;
+    fSha3Algo: TSHA3Algo;
+    procedure SetAlgo; virtual; abstract;
+    function ComputeSignature(const headpayload: RawUTF8): RawUTF8; override;
+    procedure CheckSignature(const headpayload: RawUTF8; const signature: RawByteString;
+      var JWT: TJWTContent); override;
+  public
+    /// initialize the JWT processing using SHA3 algorithm
+    // - the supplied set of claims are expected to be defined in the JWT payload
+    // - the supplied secret text will be used to compute SHA-3 authentication,
+    // directly if aSecretPBKDF2Rounds=0, or via PBKDF2_SHA3() if some
+    // number of rounds were specified
+    // - aAudience are the allowed values for the jrcAudience claim
+    // - aExpirationMinutes is the deprecation time for the jrcExpirationTime claim
+    // - aIDIdentifier and aIDObfuscationKey are passed to a
+    // TSynUniqueIdentifierGenerator instance used for jrcJwtID claim
+    constructor Create(const aSecret: RawUTF8; aSecretPBKDF2Rounds: integer;
+      aClaims: TJWTClaims; const aAudience: array of RawUTF8; aExpirationMinutes: integer=0;
+      aIDIdentifier: TSynUniqueIdentifierProcess=0; aIDObfuscationKey: RawUTF8='';
+      aSHA3SignatureSize: integer=0); reintroduce;
+    /// finalize the instance
+    destructor Destroy; override;
+  end;
+  TJWTSHA3AbstractClass = class of TJWTSHA3Abstract;
+
+  /// experimental JSON Web Tokens using SHA3-224 algorithm
+  // - resulting signature size will be of 224 bits
+  TJWTS3224 = class(TJWTSHA3Abstract)
+  protected
+    procedure SetAlgo; override;
+  end;
+
+  /// experimental JSON Web Tokens using SHA3-256 algorithm
+  // - resulting signature size will be of 256 bits
+  TJWTS3256 = class(TJWTSHA3Abstract)
+  protected
+    procedure SetAlgo; override;
+  end;
+
+  /// experimental JSON Web Tokens using SHA3-384 algorithm
+  // - resulting signature size will be of 384 bits
+  TJWTS3384 = class(TJWTSHA3Abstract)
+  protected
+    procedure SetAlgo; override;
+  end;
+
+  /// experimental JSON Web Tokens using SHA3-512 algorithm
+  // - resulting signature size will be of 512 bits
+  TJWTS3512 = class(TJWTSHA3Abstract)
+  protected
+    procedure SetAlgo; override;
+  end;
+
+  /// experimental JSON Web Tokens using SHA3-SHAKE128 algorithm
+  // - resulting signature size will be of 256 bits
+  TJWTS3S128 = class(TJWTSHA3Abstract)
+  protected
+    procedure SetAlgo; override;
+  end;
+
+  /// experimental JSON Web Tokens using SHA3-SHAKE256 algorithm
+  // - resulting signature size will be of 512 bits
+  TJWTS3S256 = class(TJWTSHA3Abstract)
+  protected
+    procedure SetAlgo; override;
+  end;
+
+
 const
   /// the text field names of the registerd claims, as defined by RFC 7519
   // - see TJWTClaim enumeration and TJWTClaims set
@@ -2709,9 +2786,10 @@ const
 
   /// able to instantiate any of the TJWAbstract instance expected
   JWT_HS_TEXT: array[TJWTHSAlgo] of RawUTF8 = (
-    'HS256', 'HS384', 'HS512');
+    'HS256', 'HS384', 'HS512', 'S3224', 'S3256', 'S3384', 'S3512', 'S3S128', 'S3S256');
 
-/// will create an instance of TJWTHS256/TJWTHS384/TJWTHS512
+/// will create an instance of TJWTHS256/TJWTHS384/TJWTHS512 or TJWTSHA3Abstract
+// inherited class (with no aHmacSecretHexa computation for the later)
 function JWTHS(algo: TJWTHSAlgo; const aSecret: RawUTF8; aSecretPBKDF2Rounds: integer;
   aClaims: TJWTClaims; const aAudience: array of RawUTF8; aExpirationMinutes: integer=0;
   aIDIdentifier: TSynUniqueIdentifierProcess=0; aIDObfuscationKey: RawUTF8='';
@@ -13386,43 +13464,144 @@ begin
   FillcharFast(fHmacPrepared,sizeof(fHmacPrepared),0); // erase secret on heap
 end;
 
+
+{ TJWTSHA3Abstract }
+
+constructor TJWTSHA3Abstract.Create(const aSecret: RawUTF8;
+  aSecretPBKDF2Rounds: integer; aClaims: TJWTClaims; const aAudience: array of RawUTF8;
+  aExpirationMinutes: integer; aIDIdentifier: TSynUniqueIdentifierProcess;
+  aIDObfuscationKey: RawUTF8; aSHA3SignatureSize: integer);
+const ALG: array[TSHA3Algo] of RawUTF8 = ('S3224','S3256','S3384','S3512','S3S128','S3S256');
+var temp: THash512;
+begin
+  SetAlgo;
+  inherited Create(ALG[fSha3Algo],aClaims,aAudience,aExpirationMinutes,aIDIdentifier,aIDObfuscationKey);
+  if aSHA3SignatureSize=0 then
+    fSha3Size := SHA3_DEF_LEN[fSha3Algo] else
+    fSha3Size := aSHA3SignatureSize;
+  fSha3Prepared.Init(fSha3Algo);
+  if (aSecret<>'') and (aSecretPBKDF2Rounds>0) then begin
+    PBKDF2_SHA3(fSha3Algo,aSecret,fHeaderB64,aSecretPBKDF2Rounds,@temp,fSha3Size);
+    fSha3Prepared.Update(@temp,fSha3Size);
+    FillZero(temp);
+  end else
+    fSha3Prepared.Update(aSecret);
+end;
+
+procedure TJWTSHA3Abstract.CheckSignature(const headpayload: RawUTF8;
+  const signature: RawByteString; var JWT: TJWTContent);
+var sha3: TSHA3;
+    temp: THash512;
+begin
+  JWT.result := jwtInvalidSignature;
+  if length(signature)<>fSha3Size then
+    exit;
+  sha3 := fSha3Prepared; // thread-safe re-use of prepared SHA3(aSecret)
+  sha3.Update(pointer(headpayload),length(headpayload));
+  sha3.Final(@temp,fSha3Size shl 3);
+  if CompareMem(@temp,pointer(signature),fSha3Size) then
+    JWT.result := jwtValid;
+end;
+
+function TJWTSHA3Abstract.ComputeSignature(const headpayload: RawUTF8): RawUTF8;
+var sha3: TSHA3;
+    temp: THash512;
+begin
+  sha3 := fSha3Prepared; // thread-safe re-use of prepared SHA3(aSecret)
+  sha3.Update(pointer(headpayload),length(headpayload));
+  sha3.Final(@temp,fSha3Size shl 3);
+  result := BinToBase64URI(@temp,fSha3Size);
+end;
+
+destructor TJWTSHA3Abstract.Destroy;
+begin
+  FillCharFast(fSha3Prepared,SizeOf(fSha3Prepared),0);
+  inherited;
+end;
+
+{ TJWTS3224 }
+
+procedure TJWTS3224.SetAlgo;
+begin
+  fSha3Algo := SHA3_224;
+end;
+
+{ TJWTS3256 }
+
+procedure TJWTS3256.SetAlgo;
+begin
+  fSha3Algo := SHA3_256;
+end;
+
+{ TJWTS3384 }
+
+procedure TJWTS3384.SetAlgo;
+begin
+  fSha3Algo := SHA3_384;
+end;
+
+{ TJWTS3512 }
+
+procedure TJWTS3512.SetAlgo;
+begin
+  fSha3Algo := SHA3_512;
+end;
+
+{ TJWTS3S128 }
+
+procedure TJWTS3S128.SetAlgo;
+begin
+  fSha3Algo := SHAKE_128;
+end;
+
+{ TJWTS3S256 }
+
+procedure TJWTS3S256.SetAlgo;
+begin
+  fSha3Algo := SHAKE_256;
+end;
+
+
 function JWTHS(algo: TJWTHSAlgo; const aSecret: RawUTF8; aSecretPBKDF2Rounds: integer;
   aClaims: TJWTClaims; const aAudience: array of RawUTF8; aExpirationMinutes: integer=0;
   aIDIdentifier: TSynUniqueIdentifierProcess=0; aIDObfuscationKey: RawUTF8='';
   aHmacSecretHexa: PRawUTF8=nil): TJWTAbstract;
+const SHA3: array[hs3224..hs3S256] of TJWTSHA3AbstractClass = (
+        TJWTS3224, TJWTS3256, TJWTS3384, TJWTS3512, TJWTS3S128, TJWTS3S256);
 var
-  sec256: THash256;
-  sec384: THash384;
-  sec512: THash512;
+  sec: THash512Rec;
 begin
   case algo of
   HS256: begin
     result := TJWTHS256.Create(aSecret,aSecretPBKDF2Rounds,aClaims,aAudience,
       aExpirationMinutes,aIDIdentifier,aIDObfuscationKey);
     if aHmacSecretHexa<>nil then begin
-      TJWTHS256(result).ComputeHMACSecret(aSecret,aSecretPBKDF2Rounds,sec256);
-      aHmacSecretHexa^ := SHA256DigestToString(sec256);
-      FillZero(sec256);
+      TJWTHS256(result).ComputeHMACSecret(aSecret,aSecretPBKDF2Rounds,sec.Lo);
+      aHmacSecretHexa^ := SHA256DigestToString(sec.Lo);
+      FillZero(sec.Lo);
     end;
   end;
   HS384: begin
     result := TJWTHS384.Create(aSecret,aSecretPBKDF2Rounds,aClaims,aAudience,
       aExpirationMinutes,aIDIdentifier,aIDObfuscationKey);
     if aHmacSecretHexa<>nil then begin
-      TJWTHS384(result).ComputeHMACSecret(aSecret,aSecretPBKDF2Rounds,sec384);
-      aHmacSecretHexa^ := SHA384DigestToString(sec384);
-      FillZero(sec384);
+      TJWTHS384(result).ComputeHMACSecret(aSecret,aSecretPBKDF2Rounds,sec.b3);
+      aHmacSecretHexa^ := SHA384DigestToString(sec.b3);
+      FillZero(sec.b3);
     end;
   end;
   HS512: begin
     result := TJWTHS512.Create(aSecret,aSecretPBKDF2Rounds,aClaims,aAudience,
       aExpirationMinutes,aIDIdentifier,aIDObfuscationKey);
     if aHmacSecretHexa<>nil then begin
-      TJWTHS512(result).ComputeHMACSecret(aSecret,aSecretPBKDF2Rounds,sec512);
-      aHmacSecretHexa^ := SHA512DigestToString(sec512);
-      FillZero(sec512);
+      TJWTHS512(result).ComputeHMACSecret(aSecret,aSecretPBKDF2Rounds,sec.b);
+      aHmacSecretHexa^ := SHA512DigestToString(sec.b);
+      FillZero(sec.b);
     end;
   end;
+  hs3224..hs3S256:
+    result := SHA3[algo].Create(aSecret,aSecretPBKDF2Rounds,aClaims,aAudience,
+      aExpirationMinutes,aIDIdentifier,aIDObfuscationKey);
   else result := nil;
   end;
 end;
@@ -13552,6 +13731,8 @@ initialization
   assert(1 shl AESBlockShift=sizeof(TAESBlock));
   assert(sizeof(TAESFullHeader)=sizeof(TAESBlock));
   assert(sizeof(TAESIVCTR)=sizeof(TAESBlock));
+  assert(sizeof(TSHA256)>=sizeof(TSHA1));
+  assert(sizeof(TSHA512)>=sizeof(TSHA256));
 
 finalization
 {$ifdef USEPADLOCKDLL}

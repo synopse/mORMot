@@ -12090,7 +12090,8 @@ type
   3: (i0,i1,i2,i3,i4,i5,i6,i7,i8,i9,i10,i11,i12,i13,i14,i15: integer);
   4: (c0,c1,c2,c3: TBlock128);
   5: (b: THash512);
-  6: (w: array[0..31] of word);
+  6: (b3: THash384);
+  7: (w: array[0..31] of word);
   end;
   /// pointer to 512-bit hash map variable record
   PHash512Rec = ^THash512Rec;
