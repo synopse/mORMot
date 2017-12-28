@@ -2946,7 +2946,7 @@ begin
   rx := Point.x;
   ry := Point.y;
   z := _1;
-  for i := NumBits-2 downto 0 do begin
+  for i := NumBits - 2 downto 0 do begin
     EccPointDoubleJacobian(rx, ry, z);
     if GetBit(u1, i) then
       Index := 1 else

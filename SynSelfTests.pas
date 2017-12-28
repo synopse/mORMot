@@ -10267,12 +10267,35 @@ procedure TTestCryptographicRoutines._JWT;
     end;
     one.Free;
   end;
+  procedure Benchmark(algo: TSignAlgo);
+  var i: integer;
+      tok: RawUTF8;
+      j: TJWTAbstract;
+      jwt: TJWTContent;
+      tim: TPrecisionTimer;
+  begin
+    j := JWT_CLASS[algo].Create('secret',0,[jrcIssuer,jrcExpirationTime],[]);
+    try
+      tok := j.Compute([],'myself');
+      tim.Start;
+      for i := 1 to 1000 do begin
+        jwt.result := jwtWrongFormat;
+        j.Verify(tok,jwt);
+        check(jwt.result=jwtValid);
+        check(jwt.reg[jrcIssuer]='myself');
+      end;
+      NotifyTestSpeed(string(JWT_TEXT[algo]),1000,0,@tim);
+    finally
+      j.Free;
+    end;
+  end;
 var i: integer;
     j: TJWTAbstract;
     jwt: TJWTContent;
     secret: TECCCertificateSecret;
-    tim: TPrecisionTimer;
     tok: RawUTF8;
+    tim: TPrecisionTimer;
+    a: TSignAlgo;
 begin
   test(TJWTNone.Create([jrcIssuer,jrcExpirationTime],[],60));
   test(TJWTNone.Create([jrcIssuer,jrcExpirationTime,jrcIssuedAt],[],60));
@@ -10281,8 +10304,7 @@ begin
   test(TJWTHS256.Create('sec',200,[jrcIssuer,jrcExpirationTime,jrcIssuedAt],[],60));
   test(TJWTHS256.Create('sec',10,[jrcIssuer,jrcExpirationTime,jrcIssuedAt,jrcJWTID],[],60));
   j := TJWTHS256.Create('secret',0,[jrcSubject],[]);
-  tim.Start;
-  for i := 1 to 10000 do begin
+  try
     jwt.result := jwtWrongFormat;
     j.Verify('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibm'+
       'FtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeF'+
@@ -10291,13 +10313,13 @@ begin
     check(jwt.reg[jrcSubject]='1234567890');
     check(jwt.data.U['name']='John Doe');
     check(jwt.data.B['admin']);
+    j.Verify('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibm'+
+      'FtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeF'+
+      'ONFh7hgQ',jwt); // altered one char in signature
+    check(jwt.result=jwtInvalidSignature);
+  finally
+    j.Free;
   end;
-  NotifyTestSpeed('HS256',10000,0,@tim);
-  j.Verify('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibm'+
-    'FtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeF'+
-    'ONFh7hgQ',jwt); // altered one char in signature
-  check(jwt.result=jwtInvalidSignature);
-  j.Free;
   for i := 1 to 10 do begin
     secret := TECCCertificateSecret.CreateNew(nil); // self-signed certificate
     test(TJWTES256.Create(secret,[jrcIssuer,jrcExpirationTime],[],60));
@@ -10305,6 +10327,8 @@ begin
     test(TJWTES256.Create(secret,[jrcIssuer,jrcExpirationTime,jrcIssuedAt,jrcJWTID],[],60));
     secret.Free;
   end;
+  for a := saSha256 to high(a) do
+    Benchmark(a);
   secret := TECCCertificateSecret.CreateNew(nil);
   j := TJWTES256.Create(secret,[jrcIssuer,jrcExpirationTime],[],60);
   try
