@@ -1196,6 +1196,7 @@ type
   /// handle SHA-1 hashing
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance, e.g. for THMAC_SHA1
+  // - see TSynHasher if you expect to support more than one algorithm at runtime
   TSHA1 = {$ifndef UNICODE}object{$else}record{$endif}
   private
     Context: packed array[1..SHAContextSize div 4] of cardinal;
@@ -1228,6 +1229,7 @@ type
   /// handle SHA-256 hashing
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance, e.g. for THMAC_SHA256
+  // - see TSynHasher if you expect to support more than one algorithm at runtime
   TSHA256 = {$ifndef UNICODE}object{$else}record{$endif}
   private
     Context: packed array[1..SHAContextSize] of byte;
@@ -1260,6 +1262,7 @@ type
   // - it is in fact a TSHA512 truncated hash, with other initial hash values
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance, e.g. for THMAC_SHA384
+  // - see TSynHasher if you expect to support more than one algorithm at runtime
   TSHA384 = {$ifndef UNICODE}object{$else}record{$endif}
   private
     Hash: TSHA512Hash;
@@ -1303,6 +1306,7 @@ type
   // which outperforms other cryptographic hashes to more than 380MB/s
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance, e.g. for THMAC_SHA512
+  // - see TSynHasher if you expect to support more than one algorithm at runtime
   TSHA512 = {$ifndef UNICODE}object{$else}record{$endif}
   private
     Hash: TSHA512Hash;
@@ -1341,10 +1345,11 @@ type
   // named by NIST a FIPS 180-4, then FIPS 202 hashing standard in 2015
   // - by design, SHA-3 doesn't need to be encapsulated into a HMAC algorithm,
   // since it already includes proper padding, so keys could be concatenated
-  // - this version is based on Wolfgang Ehrhardt's and Eric Grange's code,
+  // - this implementation is based on Wolfgang Ehrhardt's and Eric Grange's,
   // with our own manually optimized x64 assembly
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance, e.g. after InitCypher
+  // - see TSynHasher if you expect to support more than one algorithm at runtime
   TSHA3 = {$ifndef UNICODE}object{$else}record{$endif}
   private
     Context: packed array[1..SHA3ContextSize] of byte;
@@ -1460,6 +1465,7 @@ type
   /// handle MD5 hashing
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance
+  // - see TSynHasher if you expect to support more than one algorithm at runtime
   TMD5 = {$ifndef UNICODE}object{$else}record{$endif}
   private
     in_: TMD5In;
@@ -1882,12 +1888,45 @@ function SHA3(Algo: TSHA3Algo; Buffer: pointer; Len: integer;
 
 
 type
-  /// hash algorithms available for HashFile() function
+  /// hash algorithms available for HashFile/HashFull functions and TSynHasher object
   THashAlgo = (hfMD5, hfSHA1, hfSHA256, hfSHA384, hfSHA512, hfSHA3_256, hfSHA3_512);
 
+type
+  /// convenient multi-algorithm hashing wrapper
+  // - as used e.g. by HashFile/HashFull functions
+  // - we defined a record instead of a class, to allow stack allocation and
+  // thread-safe reuse of one initialized instance
+  TSynHasher = object
+  private
+    fAlgo: THashAlgo;
+    md5: TMD5;
+    sha1: TSHA1;
+    sha256: TSHA256;
+    sha384: TSHA384;
+    sha512: TSHA512;
+    sha3: TSHA3;
+  public
+    /// initialize the internal hashing structure for a specific algorithm
+    // - returns false on unknown/unsupported algorithm
+    function Init(aAlgo: THashAlgo): boolean;
+    /// hash the supplied memory buffer
+    procedure Update(aBuffer: Pointer; aLen: integer); overload;
+    /// hash the supplied string content
+    procedure Update(const aBuffer: RawByteString); overload; {$ifdef HASINLINE}inline;{$endif}
+    /// returns the resulting hash as lowercase hexadecimal string
+    function Final: RawUTF8;
+    /// one-step hash computation of a buffer as lowercase hexadecimal string
+    function Full(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUTF8;
+    /// the hash algorithm used by this instance
+    property Algo: THashAlgo read fAlgo;
+  end;
+
 /// compute the hexadecimal hash of any (big) file
-// - using a temporary buffer of 1MB for the reading
+// - using a temporary buffer of 1MB for the sequential reading
 function HashFile(const aFileName: TFileName; aAlgo: THashAlgo): RawUTF8;
+
+/// one-step hash computation of a buffer as lowercase hexadecimal string
+function HashFull(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUTF8;
 
 
 /// compute the HMAC message authentication code using crc256c as hash function
@@ -8613,61 +8652,93 @@ begin
   result := instance.FullStr(algo, Buffer, Len, DigestBits);
 end;
 
+
+{ TSynHasher }
+
+function TSynHasher.Init(aAlgo: THashAlgo): boolean;
+begin
+  fAlgo := aAlgo;
+  result := true;
+  case aAlgo of
+  hfMD5:      md5.Init;
+  hfSHA1:     sha1.Init;
+  hfSHA256:   sha256.Init;
+  hfSHA384:   sha384.Init;
+  hfSHA512:   sha512.Init;
+  hfSHA3_256: sha3.Init(SHA3_256);
+  hfSHA3_512: sha3.Init(SHA3_512);
+  else result := false;
+  end;
+end;
+
+procedure TSynHasher.Update(aBuffer: Pointer; aLen: integer);
+begin
+  case fAlgo of
+  hfMD5:      md5.Update(aBuffer^,aLen);
+  hfSHA1:     sha1.Update(aBuffer,aLen);
+  hfSHA256:   sha256.Update(aBuffer,aLen);
+  hfSHA384:   sha384.Update(aBuffer,aLen);
+  hfSHA512:   sha512.Update(aBuffer,aLen);
+  hfSHA3_256: sha3.Update(aBuffer,aLen);
+  hfSHA3_512: sha3.Update(aBuffer,aLen);
+  end;
+end;
+
+procedure TSynHasher.Update(const aBuffer: RawByteString);
+begin
+  Update(pointer(aBuffer),length(aBuffer));
+end;
+
+function TSynHasher.Final: RawUTF8;
+begin
+  case fAlgo of
+  hfMD5:      result := MD5DigestToString(md5.Final);
+  hfSHA1:     result := SHA1DigestToString(sha1.Final);
+  hfSHA256:   result := SHA256DigestToString(sha256.Final);
+  hfSHA384:   result := SHA384DigestToString(sha384.Final);
+  hfSHA512:   result := SHA512DigestToString(sha512.Final);
+  hfSHA3_256: result := SHA256DigestToString(sha3.Final256);
+  hfSHA3_512: result := SHA512DigestToString(sha3.Final512);
+  end;
+end;
+
+function TSynHasher.Full(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUTF8;
+begin
+  Init(aAlgo);
+  Update(aBuffer,aLen);
+  result := Final;
+end;
+
+function HashFull(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUTF8;
+var hasher: TSynHasher;
+begin
+  result := hasher.Full(aAlgo,aBuffer,aLen);
+end;
+
 function HashFile(const aFileName: TFileName; aAlgo: THashAlgo): RawUTF8;
 var
+  hasher: TSynHasher;
   temp: RawByteString;
-  md5: TMD5;
-  sha1: TSHA1;
-  sha256: TSHA256;
-  sha384: TSHA384;
-  sha512: TSHA512;
-  sha3: TSHA3;
   F: THandle;
   size: TQWordRec;
   read: cardinal;
 begin
   result := '';
-  if aFileName='' then
+  if (aFileName='') or not hasher.Init(aAlgo) then
     exit;
   F := FileOpenSequentialRead(aFileName);
   if PtrInt(F)>=0 then
     try
       size.L := GetFileSize(F,@size.H);
-      case aAlgo of
-      hfMD5:    md5.Init;
-      hfSHA1:   sha1.Init;
-      hfSHA256: sha256.Init;
-      hfSHA384: sha384.Init;
-      hfSHA512: sha512.Init;
-      hfSHA3_256: sha3.Init(SHA3_256);
-      hfSHA3_512: sha3.Init(SHA3_512);
-      else exit;
-      end;
       SetLength(temp,1 shl 20);
       while size.V>0 do begin
         read := FileRead(F,pointer(temp)^,1 shl 20);
         if read<=0 then
           exit;
-        case aAlgo of
-        hfMD5:    md5.Update(pointer(temp)^,read);
-        hfSHA1:   sha1.Update(pointer(temp),read);
-        hfSHA256: sha256.Update(pointer(temp),read);
-        hfSHA384: sha384.Update(pointer(temp),read);
-        hfSHA512: sha512.Update(pointer(temp),read);
-        hfSHA3_256: sha3.Update(pointer(temp),read);
-        hfSHA3_512: sha3.Update(pointer(temp),read);
-        end;
+        hasher.Update(pointer(temp),read);
         dec(size.V,read);
       end;
-      case aAlgo of
-      hfMD5:    result := MD5DigestToString(md5.Final);
-      hfSHA1:   result := SHA1DigestToString(sha1.Final);
-      hfSHA256: result := SHA256DigestToString(sha256.Final);
-      hfSHA384: result := SHA384DigestToString(sha384.Final);
-      hfSHA512: result := SHA512DigestToString(sha512.Final);
-      hfSHA3_256: result := SHA256DigestToString(sha3.Final256);
-      hfSHA3_512: result := SHA512DigestToString(sha3.Final512);
-      end;
+      result := hasher.Final;
     finally
       FileClose(F);
     end;
@@ -10205,7 +10276,8 @@ begin
     'agent007:download area:8364d0044ef57b3defcfa141e8f77b65') and
     (MD5('')='d41d8cd98f00b204e9800998ecf8427e') and
     (MD5('a')='0cc175b9c0f1b6a831c399e269772661') and
-    (MD5('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789')='d174ab98d277d9f5a5611c2c9f419d9f');
+    (MD5('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789')=
+     'd174ab98d277d9f5a5611c2c9f419d9f');
 end;
 
 
