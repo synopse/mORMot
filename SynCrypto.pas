@@ -1886,6 +1886,22 @@ function SHA3(Algo: TSHA3Algo; const s: RawByteString;
 function SHA3(Algo: TSHA3Algo; Buffer: pointer; Len: integer;
   DigestBits: integer=0): RawUTF8; overload;
 
+/// safe key derivation using iterated SHA-3 hashing
+// - you can use SHA3_224, SHA3_256, SHA3_384, SHA3_512 algorithm to fill
+// the result buffer with the default sized derivated key of 224,256,384 or 512
+// bytes (leaving resultbytes = 0)
+// - or you may select SHAKE_128 or SHAKE_256, and specify any custom key size
+// in resultbytes (used e.g. by PBKDF2_SHA3_Crypt)
+procedure PBKDF2_SHA3(algo: TSHA3Algo; const password,salt: RawByteString;
+  count: Integer; result: PByte; resultbytes: integer=0);
+
+/// encryption/decryption of any data using iterated SHA-3 hashing key derivation
+// - specified algo is expected to be SHAKE_128 or SHAKE_256
+// - expected the supplied data buffer to be small - for bigger content, consider
+// using TSHA.Cypher after 256-bit PBKDF2_SHA3 key derivation
+procedure PBKDF2_SHA3_Crypt(algo: TSHA3Algo; const password,salt: RawByteString;
+  count: Integer; var data: RawByteString);
+
 
 type
   /// hash algorithms available for HashFile/HashFull functions and TSynHasher object
@@ -8650,6 +8666,45 @@ var
   instance: TSHA3;
 begin
   result := instance.FullStr(algo, Buffer, Len, DigestBits);
+end;
+
+procedure PBKDF2_SHA3(algo: TSHA3Algo; const password,salt: RawByteString;
+  count: Integer; result: PByte; resultbytes: Integer);
+var i: integer;
+    tmp: RawByteString;
+    mac: TSHA3;
+    first: TSHA3;
+begin
+  if resultbytes<=0 then
+    resultbytes := SHA3_DEF_LEN[algo];
+  SetLength(tmp,resultbytes);
+  first.Init(algo);
+  first.Update(password);
+  mac := first;
+  mac.Update(salt);
+  mac.Final(pointer(tmp),resultbytes shl 3,true);
+  MoveFast(pointer(tmp),result^,resultbytes);
+  for i := 2 to count do begin
+    mac := first;
+    mac.Update(pointer(tmp),resultbytes);
+    mac.Final(pointer(tmp),resultbytes shl 3,true);
+    XorMemory(pointer(result),pointer(tmp),resultbytes);
+  end;
+  FillcharFast(mac,sizeof(mac),0);
+  FillcharFast(first,sizeof(first),0);
+  FillZero(tmp);
+end;
+
+procedure PBKDF2_SHA3_Crypt(algo: TSHA3Algo; const password,salt: RawByteString;
+  count: Integer; var data: RawByteString);
+var key: RawByteString;
+    len: integer;
+begin
+  len := length(data);
+  SetLength(key,len);
+  PBKDF2_SHA3(algo,password,salt,count,pointer(key),len);
+  XorMemory(pointer(data),pointer(key),len);
+  FillZero(key);
 end;
 
 
