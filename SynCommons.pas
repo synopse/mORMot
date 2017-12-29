@@ -2778,7 +2778,10 @@ function StrCompSSE42(Str1, Str2: pointer): PtrInt;
 
 /// fastest available version of StrComp(), to be used with PUTF8Char/PAnsiChar
 // - will use SSE4.2 instructions on supported CPUs - and potentiall read up
-// to 15 bytes beyond the string: use StrCompFast() for a safe memory read
+// to 15 bytes beyond the string: use StrCompFast() for a safe memory read;
+// if you want to disable StrCompSSE42 for your whole project, add in the
+// initialization section of one of your units:
+// !  StrComp := @StrCompFast;
 var StrComp: function (Str1, Str2: pointer): PtrInt = StrCompFast;
 
 {$endif}
@@ -2804,7 +2807,10 @@ var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte) = System.FillC
 // Win32 and Win64 platforms: please note that in this case, it may read up to
 // 15 bytes before or beyond the string; this is rarely a problem but it can in
 // principle generate a protection violation (e.g. when used over mapped files):
-// you can use the slightly slower StrLenPas() function instead with such input
+// you can use the slightly slower StrLenPas() function instead with such input;
+// if you want to disable StrCompSSE42 for your whole project, add in the
+// initialization section of one of your units:
+// !  StrLen := @StrLenPas;
 var StrLen: function(S: pointer): PtrInt = StrLenPas;
 
 /// our fast version of FillChar()
@@ -9774,6 +9780,8 @@ type
     function InArray(const aKey,aArrayValue; aAction: TSynDictionaryInArray): boolean;
     procedure SetTimeouts;
     function GetTimeOut: cardinal;
+    function KeyFullHash(const Elem): cardinal;
+    function KeyFullCompare(const A,B): integer;
   public
     /// initialize the dictionary storage, for a given dynamic array value
     // - aKeyTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
@@ -50014,13 +50022,13 @@ end;
 
 constructor TSynPersistentStore.CreateFromBuffer(aBuffer: pointer; aBufferLen: integer);
 begin
-  Create;
+  Create('');
   LoadFrom(aBuffer,aBufferLen);
 end;
 
 constructor TSynPersistentStore.CreateFromFile(const aFileName: TFileName);
 begin
-  Create;
+  Create('');
   LoadFromFile(aFileName);
 end;
 
@@ -57651,6 +57659,22 @@ const
   DIC_TIMESEC = 5;
   DIC_TIMETIX = 6;
 
+function TSynDictionary.KeyFullHash(const Elem): cardinal;
+begin
+  result := fKeys.fHasher(0,@Elem,fKeys.ElemSize);
+end;
+
+function TSynDictionary.KeyFullCompare(const A,B): integer;
+var i: integer;
+begin
+  for i := 0 to fKeys.ElemSize - 1 do begin
+    result := TByteArray(A)[i] - TByteArray(B)[i];
+    if result<>0 then
+      exit;
+  end;
+  result := 0;
+end;
+
 constructor TSynDictionary.Create(aKeyTypeInfo,aValueTypeInfo: pointer;
   aKeyCaseInsensitive: boolean; aTimeoutSeconds: cardinal; aCompressAlgo: TAlgoCompress);
 begin
@@ -57665,6 +57689,10 @@ begin
   fSafe.PaddingMaxUsedIndex := DIC_TIMETIX;
   fKeys.Init(aKeyTypeInfo,fSafe.Padding[DIC_KEY].VAny,nil,nil,nil,
     @fSafe.Padding[DIC_KEYCOUNT].VInteger,aKeyCaseInsensitive);
+  if not Assigned(fKeys.fHashElement) then
+    fKeys.fEventHash := KeyFullHash;
+  if not Assigned(fKeys.fCompare) then
+    fKeys.fEventCompare := KeyFullCompare;
   fValues.Init(aValueTypeInfo,fSafe.Padding[DIC_VALUE].VAny,
     @fSafe.Padding[DIC_VALUECOUNT].VInteger);
   fTimeouts.Init(TypeInfo(TIntegerDynArray),fTimeOut,@fSafe.Padding[DIC_TIMECOUNT].VInteger);
@@ -57738,6 +57766,8 @@ end;
 
 procedure TSynDictionary.DeleteAll;
 begin
+  if self=nil then
+    exit;
   fSafe.Lock;
   try
     fKeys.Clear;

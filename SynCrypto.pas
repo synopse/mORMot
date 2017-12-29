@@ -5815,9 +5815,9 @@ procedure TAES.Done;
 var ctx: TAESContext absolute Context;
 begin
   {$ifdef USEPADLOCK}
-  if initialized and padlock_available and (ctx.ViaCtx<>nil) then begin
+  if Initialized and padlock_available and (ctx.ViaCtx<>nil) then begin
     padlock_aes_close(ctx.ViaCtx);
-    ctx.initialized := false;
+    ctx.Initialized := false;
     ctx.ViaCtx := nil;
   end;
   {$endif USEPADLOCK}
