@@ -57691,7 +57691,7 @@ begin
     @fSafe.Padding[DIC_KEYCOUNT].VInteger,aKeyCaseInsensitive);
   if not Assigned(fKeys.fHashElement) then
     fKeys.fEventHash := KeyFullHash;
-  if not Assigned(fKeys.fCompare) then
+  if not Assigned(fKeys.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare) then
     fKeys.fEventCompare := KeyFullCompare;
   fValues.Init(aValueTypeInfo,fSafe.Padding[DIC_VALUE].VAny,
     @fSafe.Padding[DIC_VALUECOUNT].VInteger);
