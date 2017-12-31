@@ -74,10 +74,7 @@ you can install an update from microsoft}
 for name resolution. If you leave this directive inactive, then the new API
 is used, when running system allows it. For IPv6 support you must have the new API! }
 
-{$IFDEF FPC}
-  {$MODE DELPHI}
-{$ENDIF}
-{$H+}
+{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
 
 interface
 
@@ -90,11 +87,11 @@ function InitSocketInterface(const stack: TFileName=''): Boolean;
 function DestroySocketInterface: Boolean;
 
 const
-{$IFDEF WINSOCK1}
+{$ifdef WINSOCK1}
   WinsockLevel = $0101;
 {$ELSE}
   WinsockLevel = $0202;
-{$ENDIF}
+{$endif}
 
 type
   u_char = AnsiChar;
@@ -115,12 +112,13 @@ type
 
 
 const
-  {$IFDEF WINSOCK1}
+  {$ifdef WINSOCK1}
   DLLStackName: PChar = 'wsock32.dll';
   {$ELSE}
   DLLStackName: PChar = 'ws2_32.dll';
-  {$ENDIF}
+  {$endif}
   DLLwship6: PChar = 'wship6.dll';
+  DLLSecur32: PChar = 'secur32.dll';
 
   cLocalhost = '127.0.0.1';
   cAnyHost = '0.0.0.0';
@@ -259,7 +257,7 @@ const
   SOCKET_ERROR			= -1;
 
 Const
-  {$IFDEF WINSOCK1}
+  {$ifdef WINSOCK1}
     IP_OPTIONS          = 1;
     IP_MULTICAST_IF     = 2;           { set/get IP multicast interface   }
     IP_MULTICAST_TTL    = 3;           { set/get IP multicast timetolive  }
@@ -280,7 +278,7 @@ Const
     IP_ADD_MEMBERSHIP   = 12;           { add  an IP group membership      }
     IP_DROP_MEMBERSHIP  = 13;           { drop an IP group membership      }
     IP_DONTFRAGMENT     = 14;           { set/get IP Don't Fragment flag   }
-  {$ENDIF}
+  {$endif}
 
   IP_DEFAULT_MULTICAST_TTL   = 1;    { normally limit m'casts to 1 hop  }
   IP_DEFAULT_MULTICAST_LOOP  = 1;    { normally hear sends if a member  }
@@ -790,6 +788,7 @@ var
   SynSockCS: TRTLCriticalSection;
   SockEnhancedApi: Boolean;
   SockWship6Api: Boolean;
+  SockSChannelApi: Boolean;
 
 type
   PVarSin = ^TVarSin;
@@ -830,12 +829,159 @@ function ResolveIPToName(const IP: AnsiString; Family, SockProtocol, SockType: i
 function ResolvePort(const Port: AnsiString; Family, SockProtocol, SockType: integer): Word;
 
 
+{ SChannel low-level API
+  inspired by https://github.com/stijnsanders/TMongoWire/blob/master/simpleSock.pas
+  Copyright (c) 2010-2014 Stijn Sanders - MIT licensed  }
+
+type
+  TCredHandle = record
+    dwLower: pointer;
+    dwUpper: pointer;
+  end;
+  PCredHandle = ^TCredHandle;
+
+  TCtxtHandle = type TCredHandle;
+  PCtxtHandle = ^TCtxtHandle;
+
+  TSChannelCred = record
+    dwVersion: cardinal;
+    cCreds: cardinal;
+    paCred: pointer; //PCertContext;
+    hRootStore: THandle;
+    cMappers: cardinal;
+    aphMappers: pointer;
+    cSupportedAlgs: cardinal;
+    palgSupportedAlgs: PCardinal;
+    grbitEnabledProtocols: cardinal;
+    dwMinimumCipherStrength: cardinal;
+    dwMaximumCipherStrength: cardinal;
+    dwSessionLifespan: cardinal;
+    dwFlags: cardinal;
+    dwCredFormat: cardinal;
+  end;
+  PSChannelCred = ^TSChannelCred;
+
+  TSecBuffer = record
+    cbBuffer: cardinal;
+    BufferType: cardinal;
+    pvBuffer: pointer;
+  end;
+  PSecBuffer = ^TSecBuffer;
+
+  TSecBufferDesc = record
+    ulVersion: cardinal;
+    cBuffers: cardinal;
+    pBuffers: PSecBuffer;
+  end;
+  PSecBufferDesc = ^TSecBufferDesc;
+
+  TTimeStamp = record
+    dwLowDateTime: cardinal;
+    dwHighDateTime: cardinal;
+  end;
+  PTimeStamp = ^TTimeStamp;
+
+  TSecPkgContextStreamSizes = record
+    cbHeader: cardinal;
+    cbTrailer: cardinal;
+    cbMaximumMessage: cardinal;
+    cBuffers: cardinal;
+    cbBlockSize: cardinal;
+  end;
+  PSecPkgContextStreamSizes = ^TSecPkgContextStreamSizes;
+
+  ESChannel = class(Exception);
+  TSChannelClient = object
+    Initialized: boolean;
+    Cred: TCredHandle;
+    Ctxt: TCtxtHandle;
+    Sizes: TSecPkgContextStreamSizes;
+    Data, PartialIn, PartialOut: AnsiString;
+    Start, Count: integer;
+    procedure AfterConnection(aSocket: THandle; aAddress: PAnsiChar);
+    procedure BeforeDisconnection(aSocket: THandle);
+    function Receive(aSocket: THandle; aBuffer: pointer; aLength: integer): integer;
+    function Send(aSocket: THandle; aBuffer: pointer; aLength: integer): integer;
+  end;
+
+var
+  AcquireCredentialsHandle: function(pszPrincipal: PAnsiChar;
+    pszPackage: PAnsiChar; fCredentialUse: cardinal; pvLogonID: PInt64;
+    pAuthData: PSChannelCred; pGetKeyFn: pointer; pvGetKeyArgument: pointer;
+    phCredential: PCredHandle; ptsExpiry: PTimeStamp): cardinal; stdcall;
+  FreeCredentialsHandle: function(phCredential: PCredHandle): cardinal; stdcall;
+  InitializeSecurityContext: function(phCredential: PCredHandle;
+    phContext: PCtxtHandle; pszTargetName: PAnsiChar; fContextReq: cardinal;
+    Reserved1: cardinal; TargetDataRep: cardinal; pInput: PSecBufferDesc;
+    Reserved2: cardinal; phNewContext: PCtxtHandle; pOutput: PSecBufferDesc;
+    pfContextAttr: PCardinal; ptsExpiry: PTimeStamp): cardinal; stdcall;
+  DeleteSecurityContext: function(phContext: PCtxtHandle): cardinal; stdcall;
+  ApplyControlToken: function(phContext: PCtxtHandle;
+    pInput: PSecBufferDesc): cardinal; stdcall;
+  QueryContextAttributes: function(phContext: PCtxtHandle;
+    ulAttribute: cardinal; pBuffer: pointer): cardinal; stdcall;
+  FreeContextBuffer: function(pvContextBuffer: pointer): cardinal; stdcall;
+  EncryptMessage: function(phContext: PCtxtHandle; fQOP: cardinal;
+    pMessage: PSecBufferDesc; MessageSeqNo: cardinal): cardinal; stdcall;
+  DecryptMessage: function(phContext: PCtxtHandle; pMessage: PSecBufferDesc;
+    MessageSeqNo: cardinal; pfQOP: PCardinal): cardinal; stdcall;
+
+const
+  SP_PROT_TLS1 = $0C0;
+  SP_PROT_TLS1_SERVER = $040;
+  SP_PROT_TLS1_CLIENT = $080;
+  SP_PROT_TLS1_1 = $300;
+  SP_PROT_TLS1_1_SERVER = $100;
+  SP_PROT_TLS1_1_CLIENT = $200;
+  SP_PROT_TLS1_2 = $C00;
+  SP_PROT_TLS1_2_SERVER = $400;
+  SP_PROT_TLS1_2_CLIENT = $800;
+  SECPKG_CRED_INBOUND = 1;
+  SECPKG_CRED_OUTBOUND = 2;
+  ISC_REQ_DELEGATE = $00000001;
+  ISC_REQ_MUTUAL_AUTH = $00000002;
+  ISC_REQ_REPLAY_DETECT = $00000004;
+  ISC_REQ_SEQUENCE_DETECT = $00000008;
+  ISC_REQ_CONFIDENTIALITY = $00000010;
+  ISC_REQ_USE_SESSION_KEY = $00000020;
+  ISC_REQ_PROMPT_FOR_CREDS = $00000040;
+  ISC_REQ_USE_SUPPLIED_CREDS = $00000080;
+  ISC_REQ_ALLOCATE_MEMORY = $00000100;
+  ISC_REQ_USE_DCE_STYLE = $00000200;
+  ISC_REQ_DATAGRAM = $00000400;
+  ISC_REQ_CONNECTION = $00000800;
+  ISC_REQ_CALL_LEVEL = $00001000;
+  ISC_REQ_FRAGMENT_SUPPLIED = $00002000;
+  ISC_REQ_EXTENDED_ERROR = $00004000;
+  ISC_REQ_STREAM = $00008000;
+  ISC_REQ_INTEGRITY = $00010000;
+  ISC_REQ_IDENTIFY = $00020000;
+  ISC_REQ_NULL_SESSION = $00040000;
+  ISC_REQ_MANUAL_CRED_VALIDATION = $00080000;
+  ISC_REQ_RESERVED1 = $00100000;
+  ISC_REQ_FRAGMENT_TO_FIT = $00200000;
+  ISC_REQ_FLAGS = ISC_REQ_SEQUENCE_DETECT or ISC_REQ_REPLAY_DETECT or ISC_REQ_CONFIDENTIALITY or ISC_REQ_EXTENDED_ERROR or ISC_REQ_ALLOCATE_MEMORY or ISC_REQ_STREAM;
+  SECBUFFER_VERSION = 0;
+  SECBUFFER_EMPTY = 0;
+  SECBUFFER_DATA = 1;
+  SECBUFFER_TOKEN = 2;
+  SECBUFFER_EXTRA = 5;
+  SECBUFFER_STREAM_TRAILER = 6;
+  SECBUFFER_STREAM_HEADER = 7;
+  SEC_E_OK = 0;
+  SEC_I_CONTINUE_NEEDED = $00090312;
+  SEC_E_INCOMPLETE_MESSAGE = $80090318;
+  SECPKG_NAME = 'Microsoft Unified Security Protocol Provider';
+  SECPKG_ATTR_STREAM_SIZES = 4;
+  SECURITY_NATIVE_DREP = $10;
+  SCHANNEL_SHUTDOWN = 1;
 implementation
 
 var
-  SynSockCount: integer = 0;
-  LibHandle: THandle = 0;
-  Libwship6Handle: THandle = 0;
+  SynSockCount: integer;
+  LibHandle: THandle;
+  Libwship6Handle: THandle;
+  LibSecurHandle: THandle;
 
 function IN6_IS_ADDR_UNSPECIFIED(const a: PInAddr6): boolean;
 begin
@@ -1341,10 +1487,10 @@ function InitSocketInterface(const Stack: TFileName= ''): Boolean;
 begin
   Result := False;
   SockEnhancedApi := False;
+  SockSChannelApi := False;
   EnterCriticalSection(SynSockCS);
   try
     if SynSockCount = 0 then begin
-      SockEnhancedApi := False;
       SockWship6Api := False;
       if Stack = '' then
         LibHandle := LoadLibrary(DLLStackName) else
@@ -1403,6 +1549,23 @@ begin
           end;
         end;
         {$endif}
+        if not SockSChannelApi then begin
+          LibSecurHandle := LoadLibrary(DLLSecur32);
+          if LibSecurHandle <> 0 then begin
+            AcquireCredentialsHandle := GetProcAddress(LibSecurHandle, 'AcquireCredentialsHandleA');
+            FreeCredentialsHandle := GetProcAddress(LibSecurHandle, 'FreeCredentialsHandle');
+            InitializeSecurityContext := GetProcAddress(LibSecurHandle, 'InitializeSecurityContextA');
+            DeleteSecurityContext := GetProcAddress(LibSecurHandle, 'DeleteSecurityContext');
+            ApplyControlToken := GetProcAddress(LibSecurHandle, 'ApplyControlToken');
+            QueryContextAttributes := GetProcAddress(LibSecurHandle, 'QueryContextAttributesA');
+            FreeContextBuffer := GetProcAddress(LibSecurHandle, 'FreeContextBuffer');
+            EncryptMessage := GetProcAddress(LibSecurHandle, 'EncryptMessage');
+            DecryptMessage := GetProcAddress(LibSecurHandle, 'DecryptMessage');
+            SockSChannelApi := Assigned(AcquireCredentialsHandle) and
+              Assigned(InitializeSecurityContext) and
+              Assigned(QueryContextAttributes) and Assigned(EncryptMessage);
+          end;
+        end;
         Result := True;
       end;
     end
@@ -1462,14 +1625,22 @@ begin
         GetServByName := nil;
         GetServByPort := nil;
         ssGetHostName := nil;
-{$IFNDEF FORCEOLDAPI}
+{$ifndef FORCEOLDAPI}
         GetAddrInfo := nil;
         FreeAddrInfo := nil;
         GetNameInfo := nil;
         GetAddrInfo := nil;
         FreeAddrInfo := nil;
         GetNameInfo := nil;
-{$ENDIF}
+{$endif}AcquireCredentialsHandle := nil;
+        FreeCredentialsHandle := nil;
+        InitializeSecurityContext := nil;
+        DeleteSecurityContext := nil;
+        ApplyControlToken := nil;
+        QueryContextAttributes := nil;
+        FreeContextBuffer := nil;
+        EncryptMessage := nil;
+        DecryptMessage := nil;
       end;
       if LibWship6Handle <> 0 then begin
         FreeLibrary(LibWship6Handle);
@@ -1480,6 +1651,260 @@ begin
     LeaveCriticalSection(SynSockCS);
   end;
   Result := True;
+end;
+
+
+{ TSChannel }
+
+procedure TSChannelClient.AfterConnection(aSocket: THandle; aAddress: PAnsiChar);
+
+  function Check(res: integer): cardinal;
+  begin
+    if res = SOCKET_ERROR then
+      RaiseLastOSError;
+    if res = 0 then
+      raise ESChannel.Create('Handshake aborted');
+    result := res;
+  end;
+
+var
+  buf: array[0..2] of TSecBuffer;
+  desc1, desc2: TSecBufferDesc;
+  res, f: cardinal;
+  tmp: AnsiString;
+  len: integer;
+begin
+  if Cred.dwLower = nil then
+    if AcquireCredentialsHandle(nil, SECPKG_NAME, SECPKG_CRED_OUTBOUND, nil, nil, nil, nil, @Cred, nil) <> 0 then
+      RaiseLastOSError;
+  desc1.ulVersion := SECBUFFER_VERSION;
+  desc1.cBuffers := 2;
+  desc1.pBuffers := @buf[0];
+  buf[0].cbBuffer := 0;
+  buf[0].BufferType := SECBUFFER_TOKEN;
+  buf[0].pvBuffer := nil;
+  buf[1].cbBuffer := 0;
+  buf[1].BufferType := SECBUFFER_EMPTY;
+  buf[1].pvBuffer := nil;
+  desc2.ulVersion := SECBUFFER_VERSION;
+  desc2.cBuffers := 1;
+  desc2.pBuffers := @buf[2];
+  buf[2].cbBuffer := 0;
+  buf[2].BufferType := SECBUFFER_TOKEN;
+  buf[2].pvBuffer := nil;
+  res := InitializeSecurityContext(@Cred, nil, aAddress, ISC_REQ_FLAGS, 0, SECURITY_NATIVE_DREP, nil, 0, @Ctxt, @desc2, @f, nil);
+  if res <> SEC_I_CONTINUE_NEEDED then
+    RaiseLastOSError;
+  Check(SynWinSock.send(aSocket, buf[2].pvBuffer, buf[2].cbBuffer, 0));
+  len := 0;
+  SetLength(tmp, 65536);
+  while (res = SEC_I_CONTINUE_NEEDED) or (res = SEC_E_INCOMPLETE_MESSAGE) do begin
+    if res <> SEC_E_INCOMPLETE_MESSAGE then
+      len := 0;
+    inc(len, Check(recv(aSocket, @PByteArray(tmp)[len], length(tmp) - len, 0)));
+    buf[0].cbBuffer := len;
+    buf[0].BufferType := SECBUFFER_TOKEN;
+    buf[0].pvBuffer := pointer(tmp);
+    res := InitializeSecurityContext(@Cred, @Ctxt, nil, ISC_REQ_FLAGS, 0, SECURITY_NATIVE_DREP, @desc1, 0, @Ctxt, @desc2, @f, nil);
+    if (res = SEC_E_OK) or (res = SEC_I_CONTINUE_NEEDED) or
+       ((f and ISC_REQ_EXTENDED_ERROR) <> 0) then begin
+      if (buf[2].cbBuffer <> 0) and (buf[2].pvBuffer <> nil) then begin
+        Check(SynWinSock.send(aSocket, buf[2].pvBuffer, buf[2].cbBuffer, 0));
+        FreeContextBuffer(buf[2].pvBuffer);
+        buf[2].pvBuffer := nil;
+      end;
+    end;
+  end;
+  if res <> SEC_E_OK then
+    RaiseLastOSError;
+  if QueryContextAttributes(@Ctxt, SECPKG_ATTR_STREAM_SIZES, @Sizes) <> SEC_E_OK then
+    RaiseLastOSError;
+  SetLength(Data, Sizes.cbMaximumMessage);
+  len := Sizes.cbHeader + Sizes.cbMaximumMessage + Sizes.cbTrailer;
+  SetLength(PartialIn, len);
+  SetLength(PartialOut, len);
+  Start := 0;
+  Count := 0;
+  if buf[1].BufferType = SECBUFFER_EXTRA then begin
+    Count := buf[1].cbBuffer;
+    Move(buf[1].pvBuffer^, pointer(Data)^, Count);
+  end;
+  Initialized := true;
+end;
+
+procedure TSChannelClient.BeforeDisconnection(aSocket: THandle);
+var
+  desc: TSecBufferDesc;
+  buf: TSecBuffer;
+  dt, res, f: cardinal;
+begin
+  if (Data <> '') and (aSocket <> 0) then
+  try
+    desc.ulVersion := SECBUFFER_VERSION;
+    desc.cBuffers := 1;
+    desc.pBuffers := @buf;
+    buf.cbBuffer := 4;
+    buf.BufferType := SECBUFFER_TOKEN;
+    buf.pvBuffer := @dt;
+    dt := SCHANNEL_SHUTDOWN;
+    res := ApplyControlToken(@Ctxt, @desc);
+    if res <> SEC_E_OK then
+      RaiseLastOSError;
+    buf.cbBuffer := 0;
+    buf.BufferType := SECBUFFER_TOKEN;
+    buf.pvBuffer := nil;
+    res := InitializeSecurityContext(@Cred, @Ctxt, nil, ISC_REQ_FLAGS, 0, SECURITY_NATIVE_DREP, nil, 0, @Ctxt, @desc, @f, nil);
+    if res <> SEC_E_OK then
+      RaiseLastOSError;
+    SynWinSock.Send(aSocket, buf.pvBuffer, buf.cbBuffer, 0);
+  finally
+    FreeContextBuffer(buf.pvBuffer);
+    Initialized := false;
+  end;
+end;
+
+function TSChannelClient.Receive(aSocket: THandle; aBuffer: pointer; aLength: integer): integer;
+var
+  desc: TSecBufferDesc;
+  buf: array[0..3] of TSecBuffer;
+  res: cardinal;
+  PartialLen, j: integer;
+begin
+  if not Initialized then begin // use plain socket API
+    result := Recv(aSocket, aBuffer, aLength, MSG_NOSIGNAL);
+    exit;
+  end;
+  result := 0;
+  if Count = 0 then begin
+    PartialLen := 0;
+    desc.ulVersion := SECBUFFER_VERSION;
+    desc.cBuffers := 4;
+    desc.pBuffers := @buf[0];
+    buf[0].cbBuffer := 0;
+    buf[0].BufferType := SECBUFFER_DATA;
+    buf[0].pvBuffer := pointer(PartialIn);
+    buf[1].cbBuffer := 0;
+    buf[1].BufferType := SECBUFFER_EMPTY;
+    buf[1].pvBuffer := nil;
+    buf[2].cbBuffer := 0;
+    buf[2].BufferType := SECBUFFER_EMPTY;
+    buf[2].pvBuffer := nil;
+    buf[3].cbBuffer := 0;
+    buf[3].BufferType := SECBUFFER_EMPTY;
+    buf[3].pvBuffer := nil;
+    res := SEC_E_INCOMPLETE_MESSAGE;
+    while res = SEC_E_INCOMPLETE_MESSAGE do begin
+      j := Recv(aSocket, @PByteArray(PartialIn)[PartialLen], Length(PartialIn) - PartialLen, MSG_NOSIGNAL);
+      if j <= 0 then begin
+        result := j; // return socket error (may be WSATRY_AGAIN)
+        exit;
+      end;
+      inc(PartialLen, j);
+      buf[0].cbBuffer := PartialLen;
+      res := DecryptMessage(@Ctxt, @desc, 0, nil);
+    end;
+    if res <> SEC_E_OK then
+      RaiseLastOSError;
+    if buf[1].BufferType = SECBUFFER_DATA then
+      if buf[1].cbBuffer > cardinal(aLength) then begin
+        Start := 0;
+        Count := buf[1].cbBuffer;
+        Move(buf[1].pvBuffer^, Pointer(Data)^, buf[1].cbBuffer);
+        if buf[3].BufferType = SECBUFFER_EXTRA then begin
+          Move(buf[3].pvBuffer^, PByteArray(Data)[Count], buf[3].cbBuffer);
+          inc(Count, buf[3].cbBuffer);
+        end;
+      end
+      else begin
+        result := buf[1].cbBuffer;
+        Move(buf[1].pvBuffer^, aBuffer^, buf[1].cbBuffer);
+        if buf[3].BufferType = SECBUFFER_EXTRA then begin
+          Start := 0;
+          Count := buf[3].cbBuffer;
+          Move(buf[3].pvBuffer^, Pointer(Data)^, Count);
+        end;
+        exit; // we have something to return
+      end
+    else
+      raise ESChannel.CreateFmt('DecryptMessage=%d', [res]);
+  end;
+  if Count <> 0 then
+    if aLength > Count then begin
+      result := Count;
+      Move(PByteArray(Data)[Start], aBuffer^, result);
+      Start := 0;
+      Count := 0;
+    end
+    else begin
+      result := aLength;
+      Move(PByteArray(Data)[Start], aBuffer^, result);
+      inc(Start, result);
+      dec(Count, result);
+    end;
+end;
+
+function TSChannelClient.Send(aSocket: THandle; aBuffer: pointer; aLength: integer): integer;
+var
+  desc: TSecBufferDesc;
+  buf: array[0..3] of TSecBuffer;
+  res, sent, len, notrailer, c, PartialLen: cardinal;
+  s: integer;
+begin
+  if not Initialized then begin // use plain socket API
+    result := SynWinSock.Send(aSocket, aBuffer, aLength, MSG_NOSIGNAL);
+    exit;
+  end;
+  result := 0;
+  desc.ulVersion := SECBUFFER_VERSION;
+  desc.cBuffers := 4;
+  desc.pBuffers := @buf[0];
+  c := cardinal(aLength);
+  while c <> 0 do begin
+    if c > Sizes.cbMaximumMessage then
+      PartialLen := Sizes.cbMaximumMessage
+    else
+      PartialLen := c;
+    Move(aBuffer^, PByteArray(PartialOut)[Sizes.cbHeader], PartialLen);
+    notrailer := Sizes.cbHeader + PartialLen;
+    len := notrailer + Sizes.cbTrailer;
+    buf[0].cbBuffer := Sizes.cbHeader;
+    buf[0].BufferType := SECBUFFER_STREAM_HEADER;
+    buf[0].pvBuffer := pointer(PartialOut);
+    buf[1].cbBuffer := PartialLen;
+    buf[1].BufferType := SECBUFFER_DATA;
+    buf[1].pvBuffer := @PByteArray(PartialOut)[Sizes.cbHeader];
+    buf[2].cbBuffer := Sizes.cbTrailer;
+    buf[2].BufferType := SECBUFFER_STREAM_TRAILER;
+    buf[2].pvBuffer := @PByteArray(PartialOut)[notrailer];
+    buf[3].cbBuffer := 0;
+    buf[3].BufferType := SECBUFFER_EMPTY;
+    buf[3].pvBuffer := nil;
+    res := EncryptMessage(@Ctxt, 0, @desc, 0);
+    if res <> SEC_E_OK then
+      raise ESChannel.CreateFmt('EncryptMessage=%d', [res]);
+    sent := 0;
+    repeat
+      s := SynWinSock.Send(aSocket, @PByteArray(PartialOut)[sent], len, MSG_NOSIGNAL);
+      if s = integer(len) then
+        break;
+      if s = 0 then
+        exit; // report connection closed
+      if s < 0 then begin
+        res := WSAGetLastError;
+        if (res<>WSATRY_AGAIN) and (res<>WSAEINTR) then begin
+          result := s;
+          exit;
+        end;
+      end else begin
+        dec(len, s);
+        inc(sent, s);
+      end;
+      Sleep(1); // try again 
+    until false;
+    inc(PByte(aBuffer), PartialLen);
+    dec(c, PartialLen);
+  end;
+  result := aLength;
 end;
 
 initialization

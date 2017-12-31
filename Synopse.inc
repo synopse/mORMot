@@ -518,6 +518,7 @@
 {$else}
 {$endif PUREPASCAL}
 
+{$H+} // we use long strings
 {$R-} // disable Range checking in our code
 {$S-} // disable Stack checking in our code
 {$X+} // expect extended syntax

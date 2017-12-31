@@ -440,8 +440,6 @@ function SetSockOpt(s: TSocket; level,optname: Integer; optval: pointer;
   optlen: Integer): Integer;
 function GetSockOpt(s: TSocket; level,optname: Integer; optval: pointer;
   var optlen: Integer): Integer;
-function Send(s: TSocket; Buf: pointer; len,flags,timeout: Integer): Integer;
-function Recv(s: TSocket; Buf: pointer; len,flags,timeout: Integer): Integer;
 function SendTo(s: TSocket; Buf: pointer; len,flags: Integer; addrto: TVarSin): Integer;
 function RecvFrom(s: TSocket; Buf: pointer; len,flags: Integer; var from: TVarSin): Integer;
 function ntohs(netshort: word): word;
@@ -745,50 +743,6 @@ begin
   result := unix.GetHostName;
 end;
 {$endif}
-
-function Send(s: TSocket; Buf: pointer; len,flags,timeout: Integer): Integer;
-var maxTicks: Int64;
-begin
-  maxTicks := GetTickCount64+timeout;
-  repeat
-    {$ifdef KYLIX3}
-    result := LibC.Send(s,Buf^,len,flags);
-    {$else}
-    result := fpSend(s,pointer(Buf),len,flags);
-    {$endif}
-    if result>=0 then
-      exit; // success
-    if timeout<=0 then
-      break;
-    if (errno<>WSATRY_AGAIN) and (errno<>WSAEINTR) then
-      break;
-    sleep(1);
-  until GetTickCount64>maxTicks;
-  writeln('errno Send()=',errno);
-  result := SOCKET_ERROR; 
-end;
-
-function Recv(s: TSocket; Buf: pointer; len,flags,timeout: Integer): Integer;
-var maxTicks: Int64;
-begin
-  maxTicks := GetTickCount64+timeout;
-  repeat
-    {$ifdef KYLIX3}
-    result := LibC.Recv(s,Buf^,len,flags);
-    {$else}
-    result := fpRecv(s,pointer(Buf),len,flags);
-    {$endif}
-    if result>=0 then
-      exit; // success
-    if timeout<=0 then
-      break;
-    if (errno<>WSATRY_AGAIN) and (errno<>WSAEINTR) then
-      break;
-    sleep(1);
-  until GetTickCount64>maxTicks;
-  writeln('errno Recv()=',errno);
-  result := SOCKET_ERROR;
-end;
 
 function SendTo(s: TSocket; Buf: pointer; len,flags: Integer; addrto: TVarSin): Integer;
 begin
