@@ -28,7 +28,7 @@
         <FormatVersion Value="1"/>
       </local>
     </RunParams>
-    <Units Count="47">
+    <Units Count="51">
       <Unit0>
         <Filename Value="TestSQL3.dpr"/>
         <IsPartOfProject Value="True"/>
@@ -217,6 +217,22 @@
         <Filename Value="..\SynZip.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit46>
+      <Unit47>
+        <Filename Value="..\SynTable.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit47>
+      <Unit48>
+        <Filename Value="..\SynProtoRTSPHTTP.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit48>
+      <Unit49>
+        <Filename Value="..\SynZLibSSE.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit49>
+      <Unit50>
+        <Filename Value="..\SynLizard.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit50>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
