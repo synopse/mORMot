@@ -513,8 +513,10 @@ type
     // - use TimeOut milliseconds wait for incoming data
     // - bypass the SockIn^ buffers
     // - return false on any fatal socket error, true on success
+    // - call Close if the socket is identified as shutdown from the other side 
     // - you may optionally set StopBeforeLength=true, then the read bytes count
-    // are set in Length, even if not all expected data has been received
+    // are set in Length, even if not all expected data has been received - in
+    // this case, Close method won't be called 
     function TrySockRecv(Buffer: pointer; var Length: integer; StopBeforeLength: boolean=false): boolean;
     /// call readln(SockIn^,Line) or simulate it with direct use of Recv(Sock, ..)
     // - char are read one by one
@@ -4584,8 +4586,9 @@ begin
       {$endif MSWINDOWS}
         read := AsynchRecv(fSock,Buffer,read);
       if read=0 then begin // socket closed gracefully
-        Close;
-        result := StopBeforeLength and (Length>0); // but we got something
+        if StopBeforeLength then
+          result := Length>0 else // but we got something
+          Close;
         exit;
       end else
       if read>0 then begin
@@ -4767,6 +4770,7 @@ begin
     SetLength(result,resultlen+available); // append to result
     read := available;
     if not TrySockRecv(@PByteArray(result)[resultlen],read,true) then begin
+      Close;
       SetLength(result,resultlen);
       exit;
     end;
