@@ -279,13 +279,14 @@ function StaticMongoDBRegisterAll(aServer: TSQLRestServer;
 /// create a new TSQLRest instance, possibly using MongoDB for its ORM process
 // - if aDefinition.Kind matches a TSQLRest registered class, one new instance
 // of this kind will be created and returned
-// - if aDefinition.Kind is 'MongoDB', it will instantiate an in-memory
-// TSQLRestServerDB or a TSQLRestServerFullMemory instance (calling
+// - if aDefinition.Kind is 'MongoDB' or 'MongoDBS', it will instantiate an
+// in-memory TSQLRestServerDB or a TSQLRestServerFullMemory instance (calling
 // TSQLRestServer.CreateInMemoryForAllVirtualTables), then call
 // StaticMongoDBRegisterAll() with a TMongoClient initialized from
-// aDefinition.ServerName ('server' or 'server:port'), and a TMongoDatabase
-// created from aDefinition.DatabaseName, using authentication if
-// aDefinition.User/Password credentials are set
+// aDefinition.ServerName ('server' or 'server:port') - optionally with TLS
+// enabled if Kind equals 'MongoDBS' - and a TMongoDatabase created from
+// aDefinition.DatabaseName, using authentication if aDefinition.User/Password
+// credentials are set
 // - it will return nil if the supplied aDefinition is invalid
 // - if aMongoDBIdentifier is not 0, then SetEngineAddComputeIdentifier()
 // would be called for all created TSQLRestStorageMongoDB
@@ -362,15 +363,19 @@ function TSQLRestMongoDBCreate(aModel: TSQLModel;
 var client: TMongoClient;
     database: TMongoDatabase;
     server,port, pwd: RawUTF8;
+    tls: boolean;
+    p: integer;
 begin
   result := nil;
   if aDefinition=nil then
     exit;
-  if SameText(aDefinition.Kind,'MongoDB') then begin
+  if IdemPChar(pointer(aDefinition.Kind),'MONGODB') then begin
     Split(aDefinition.ServerName,':',server,port);
     if (server='') or (server[1] in ['?','*']) or (aDefinition.DatabaseName='') then
       exit; // check mandatory MongoDB IP and Database
-    client := TMongoClient.Create(server,UTF8ToInteger(port,1024,65535,MONGODB_DEFAULTPORT));
+    p := UTF8ToInteger(port,1024,65535,MONGODB_DEFAULTPORT);
+    tls := ord(aDefinition.Kind[8]) in [ord('S'),ord('s')]; // 'MongoDBS'
+    client := TMongoClient.Create(server,p,tls);
     try
       with aDefinition do
         if (User<>'') and (Password<>'') then begin
