@@ -2309,11 +2309,11 @@ function MainHttpClass: THttpRequestClass;
 
 /// create a TCrtSocket, returning nil on error
 // (useful to easily catch socket error exception ECrtSocket)
-function Open(const aServer, aPort: SockString): TCrtSocket;
+function Open(const aServer, aPort: SockString; aTLS: boolean=false): TCrtSocket;
 
 /// create a THttpClientSocket, returning nil on error
 // - useful to easily catch socket error exception ECrtSocket
-function OpenHttp(const aServer, aPort: SockString): THttpClientSocket; overload;
+function OpenHttp(const aServer, aPort: SockString; aTLS: boolean=false): THttpClientSocket; overload;
 
 /// create a THttpClientSocket, returning nil on error
 // - useful to easily catch socket error exception ECrtSocket
@@ -2379,7 +2379,8 @@ type
 // - you can optionally set the encoding charset to be used for the Text body
 function SendEmail(const Server, From, CSVDest, Subject, Text: SockString;
   const Headers: SockString=''; const User: SockString=''; const Pass: SockString='';
-  const Port: SockString='25'; const TextCharSet: SockString = 'ISO-8859-1'): boolean; overload;
+  const Port: SockString='25'; const TextCharSet: SockString = 'ISO-8859-1';
+  aTLS: boolean=false): boolean; overload;
 
 /// send an email using the SMTP protocol
 // - retry true on success
@@ -2388,7 +2389,7 @@ function SendEmail(const Server, From, CSVDest, Subject, Text: SockString;
 // - you can optionally set the encoding charset to be used for the Text body
 function SendEmail(const Server: TSMTPConnection;
   const From, CSVDest, Subject, Text: SockString; const Headers: SockString='';
-  const TextCharSet: SockString = 'ISO-8859-1'): boolean; overload;
+  const TextCharSet: SockString = 'ISO-8859-1'; aTLS: boolean=false): boolean; overload;
 
 /// convert a supplied subject text into an Unicode encoding
 // - will convert the text into UTF-8 and append '=?UTF-8?B?'
@@ -4250,7 +4251,7 @@ begin
   fSocketLayer := aLayer;
   if aSock<0 then begin
     if aPort='' then
-      fPort := '80' else // default port is 80 (HTTP)
+      fPort := DEFAULT_PORT[aTLS] else // default port is 80/443 (HTTP/S)
       fPort := aPort;
     fServer := aServer;
     fSock := CallServer(aServer,Port,doBind,aLayer,Timeout); // OPEN or BIND
@@ -4934,20 +4935,20 @@ begin
   end;
 end;
 
-function Open(const aServer, aPort: SockString): TCrtSocket;
+function Open(const aServer, aPort: SockString; aTLS: boolean): TCrtSocket;
 begin
   try
-    result := TCrtSocket.Open(aServer,aPort);
+    result := TCrtSocket.Open(aServer,aPort,cslTCP,10000,aTLS);
   except
     on ECrtSocket do
       result := nil;
   end;
 end;
 
-function OpenHttp(const aServer, aPort: SockString): THttpClientSocket;
+function OpenHttp(const aServer, aPort: SockString; aTLS: boolean): THttpClientSocket;
 begin
   try
-    result := THttpClientSocket.Open(aServer,aPort,cslTCP,0); // HTTP_DEFAULT_RECEIVETIMEOUT
+    result := THttpClientSocket.Open(aServer,aPort,cslTCP,0,aTLS); // HTTP_DEFAULT_RECEIVETIMEOUT
   except
     on ECrtSocket do
       result := nil;
@@ -4959,8 +4960,7 @@ var URI: TURI;
 begin
   result := nil;
   if URI.From(aURI) then begin
-    if not URI.Https then
-      result := OpenHttp(URI.Server,URI.Port);
+    result := OpenHttp(URI.Server,URI.Port,URI.Https);
     if aAddress <> nil then
       aAddress^ := URI.Address;
   end;
@@ -5064,15 +5064,16 @@ begin
   result := Host<>'';
 end;
 
-function SendEmail(const Server: TSMTPConnection;
-  const From, CSVDest, Subject, Text, Headers, TextCharSet: SockString): boolean;
+function SendEmail(const Server: TSMTPConnection; const From, CSVDest, Subject,
+  Text, Headers, TextCharSet: SockString; aTLS: boolean): boolean;
 begin
   result := SendEmail(Server.Host, From, CSVDest, Subject, Text, Headers,
-    Server.User, Server.Pass, Server.Port, TextCharSet);
+    Server.User, Server.Pass, Server.Port, TextCharSet,
+    (Server.Port = '465') or (Server.Port = '587'));
 end;
 
 function SendEmail(const Server, From, CSVDest, Subject, Text, Headers,
-  User, Pass, Port, TextCharSet: SockString): boolean;
+  User, Pass, Port, TextCharSet: SockString; aTLS: boolean): boolean;
 var TCP: TCrtSocket;
 procedure Expect(const Answer: SockString);
 var Res: SockString;
@@ -5094,7 +5095,7 @@ begin
   result := false;
   P := pointer(CSVDest);
   if P=nil then exit;
-  TCP := Open(Server, Port);
+  TCP := Open(Server,Port,aTLS);
   if TCP<>nil then
   try
     TCP.CreateSockIn; // we use SockIn and SockOut here

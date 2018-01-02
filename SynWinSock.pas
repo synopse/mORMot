@@ -647,98 +647,55 @@ function poll(fds: PPollFD; nfds, timeout: integer): integer;
 
 
 type
-  TWSAStartup = function(wVersionRequired: Word; var WSData: TWSAData): integer;
-    stdcall;
-  TWSACleanup = function: integer;
-    stdcall;
-  TWSAGetLastError = function: integer;
-    stdcall;
-  TGetServByName = function(name, proto: PAnsiChar): PServEnt;
-    stdcall;
-  TGetServByPort = function(port: integer; proto: PAnsiChar): PServEnt;
-    stdcall;
-  TGetProtoByName = function(name: PAnsiChar): PProtoEnt;
-    stdcall;
-  TGetProtoByNumber = function(proto: integer): PProtoEnt;
-    stdcall;
-  TGetHostByName = function(name: PAnsiChar): PHostEnt;
-    stdcall;
-  TGetHostByAddr = function(addr: Pointer; len, Struc: integer): PHostEnt;
-    stdcall;
-  TGetHostName = function(name: PAnsiChar; len: integer): integer;
-    stdcall;
-  TShutdown = function(s: TSocket; how: integer): integer;
-    stdcall;
+  TWSAStartup = function(wVersionRequired: Word; var WSData: TWSAData): integer; stdcall;
+  TWSACleanup = function: integer; stdcall;
+  TWSAGetLastError = function: integer; stdcall;
+  TGetServByName = function(name, proto: PAnsiChar): PServEnt; stdcall;
+  TGetServByPort = function(port: integer; proto: PAnsiChar): PServEnt; stdcall;
+  TGetProtoByName = function(name: PAnsiChar): PProtoEnt; stdcall;
+  TGetProtoByNumber = function(proto: integer): PProtoEnt; stdcall;
+  TGetHostByName = function(name: PAnsiChar): PHostEnt; stdcall;
+  TGetHostByAddr = function(addr: Pointer; len, Struc: integer): PHostEnt; stdcall;
+  TGetHostName = function(name: PAnsiChar; len: integer): integer; stdcall;
+  TShutdown = function(s: TSocket; how: integer): integer; stdcall;
   TSetSockOpt = function(s: TSocket; level, optname: integer; optval: PAnsiChar;
-    optlen: integer): integer;
-    stdcall;
+    optlen: integer): integer; stdcall;
   TGetSockOpt = function(s: TSocket; level, optname: integer; optval: PAnsiChar;
-    var optlen: integer): integer;
-    stdcall;
+    var optlen: integer): integer; stdcall;
   TSendTo = function(s: TSocket; Buf: pointer; len, flags: integer; addrto: PSockAddr;
-    tolen: integer): integer;
-    stdcall;
-  TSend = function(s: TSocket; Buf: pointer; len, flags: integer): integer;
-    stdcall;
-  TRecv = function(s: TSocket; Buf: pointer; len, flags: integer): integer;
-    stdcall;
+    tolen: integer): integer; stdcall;
+  TSend = function(s: TSocket; Buf: pointer; len, flags: integer): integer; stdcall;
+  TRecv = function(s: TSocket; Buf: pointer; len, flags: integer): integer; stdcall;
   TRecvFrom = function(s: TSocket; Buf: pointer; len, flags: integer; from: PSockAddr;
-    fromlen: PInteger): integer;
-    stdcall;
-  Tntohs = function(netshort: u_short): u_short;
-    stdcall;
-  Tntohl = function(netlong: u_long): u_long;
-    stdcall;
-  TListen = function(s: TSocket; backlog: integer): integer;
-    stdcall;
-  TIoctlSocket = function(s: TSocket; cmd: DWORD; var arg: integer): integer;
-    stdcall;
-  TInet_ntoa = function(inaddr: TInAddr): PAnsiChar;
-    stdcall;
-  TInet_addr = function(cp: PAnsiChar): u_long;
-    stdcall;
-  Thtons = function(hostshort: u_short): u_short;
-    stdcall;
-  Thtonl = function(hostlong: u_long): u_long;
-    stdcall;
-  TGetSockName = function(s: TSocket; name: PSockAddr; var namelen: integer): integer;
-    stdcall;
-  TGetPeerName = function(s: TSocket; name: PSockAddr; var namelen: integer): integer;
-    stdcall;
-  TConnect = function(s: TSocket; name: PSockAddr; namelen: integer): integer;
-    stdcall;
-  TCloseSocket = function(s: TSocket): integer;
-    stdcall;
-  TBind = function(s: TSocket; addr: PSockAddr; namelen: integer): integer;
-    stdcall;
-  TAccept = function(s: TSocket; addr: PSockAddr; var addrlen: integer): TSocket;
-    stdcall;
-  TTSocket = function(af, Struc, Protocol: integer): TSocket;
-    stdcall;
+    fromlen: PInteger): integer; stdcall;
+  Tntohs = function(netshort: u_short): u_short; stdcall;
+  Tntohl = function(netlong: u_long): u_long; stdcall;
+  TListen = function(s: TSocket; backlog: integer): integer; stdcall;
+  TIoctlSocket = function(s: TSocket; cmd: DWORD; var arg: integer): integer; stdcall;
+  TInet_ntoa = function(inaddr: TInAddr): PAnsiChar; stdcall;
+  TInet_addr = function(cp: PAnsiChar): u_long; stdcall;
+  Thtons = function(hostshort: u_short): u_short; stdcall;
+  Thtonl = function(hostlong: u_long): u_long; stdcall;
+  TGetSockName = function(s: TSocket; name: PSockAddr; var namelen: integer): integer; stdcall;
+  TGetPeerName = function(s: TSocket; name: PSockAddr; var namelen: integer): integer; stdcall;
+  TConnect = function(s: TSocket; name: PSockAddr; namelen: integer): integer; stdcall;
+  TCloseSocket = function(s: TSocket): integer; stdcall;
+  TBind = function(s: TSocket; addr: PSockAddr; namelen: integer): integer; stdcall;
+  TAccept = function(s: TSocket; addr: PSockAddr; var addrlen: integer): TSocket; stdcall;
+  TTSocket = function(af, Struc, Protocol: integer): TSocket; stdcall;
   TSelect = function(nfds: integer; readfds, writefds, exceptfds: PFDSet;
-    timeout: PTimeVal): Longint;
-    stdcall;
-
+    timeout: PTimeVal): Longint; stdcall;
   TGetAddrInfo = function(NodeName: PAnsiChar; ServName: PAnsiChar; Hints: PAddrInfo;
-    var Addrinfo: PAddrInfo): integer;
-    stdcall;
-  TFreeAddrInfo = procedure(ai: PAddrInfo);
-    stdcall;
+    var Addrinfo: PAddrInfo): integer; stdcall;
+  TFreeAddrInfo = procedure(ai: PAddrInfo); stdcall;
   TGetNameInfo = function( addr: PSockAddr; namelen: integer; host: PAnsiChar;
-    hostlen: DWORD; serv: PAnsiChar; servlen: DWORD; flags: integer): integer;
-    stdcall;
-
-  T__WSAFDIsSet = function (s: TSocket; var FDSet: TFDSet): Bool;
-    stdcall;
-
+    hostlen: DWORD; serv: PAnsiChar; servlen: DWORD; flags: integer): integer; stdcall;
+  T__WSAFDIsSet = function (s: TSocket; var FDSet: TFDSet): Bool; stdcall;
   TWSAIoctl = function (s: TSocket; dwIoControlCode: DWORD; lpvInBuffer: Pointer;
     cbInBuffer: DWORD; lpvOutBuffer: Pointer; cbOutBuffer: DWORD;
     lpcbBytesReturned: PDWORD; lpOverlapped: Pointer;
-    lpCompletionRoutine: pointer): u_int;
-    stdcall;
-
-  TWSAPoll = function(fds: PPollFD; nfds, timeout: integer): integer;
-    stdcall;
+    lpCompletionRoutine: pointer): u_int; stdcall;
+  TWSAPoll = function(fds: PPollFD; nfds, timeout: integer): integer; stdcall;
 
 var
   WSAStartup: TWSAStartup;
@@ -774,13 +731,10 @@ var
   ssAccept: TAccept;
   Socket: TTSocket;
   Select: TSelect;
-
   GetAddrInfo: TGetAddrInfo;
   FreeAddrInfo: TFreeAddrInfo;
   GetNameInfo: TGetNameInfo;
-
   __WSAFDIsSet: T__WSAFDIsSet;
-
   WSAIoctl: TWSAIoctl;
   WSAPoll: TWSAPoll;
 
@@ -829,9 +783,7 @@ function ResolveIPToName(const IP: AnsiString; Family, SockProtocol, SockType: i
 function ResolvePort(const Port: AnsiString; Family, SockProtocol, SockType: integer): Word;
 
 
-{ SChannel low-level API
-  inspired by https://github.com/stijnsanders/TMongoWire/blob/master/simpleSock.pas
-  Copyright (c) 2010-2014 Stijn Sanders - MIT licensed  }
+{ SChannel low-level API  }
 
 type
   TCredHandle = record
@@ -843,10 +795,14 @@ type
   TCtxtHandle = type TCredHandle;
   PCtxtHandle = ^TCtxtHandle;
 
+  {$ifdef DELPHI5OROLDER}
+  PCardinal = ^Cardinal;
+  {$endif}
+
   TSChannelCred = record
     dwVersion: cardinal;
     cCreds: cardinal;
-    paCred: pointer; //PCertContext;
+    paCred: pointer; 
     hRootStore: THandle;
     cMappers: cardinal;
     aphMappers: pointer;
@@ -892,12 +848,15 @@ type
 
   ESChannel = class(Exception);
   TSChannelClient = object
-    Initialized: boolean;
+  private
     Cred: TCredHandle;
     Ctxt: TCtxtHandle;
     Sizes: TSecPkgContextStreamSizes;
-    Data, PartialIn, PartialOut: AnsiString;
-    Start, Count: integer;
+    Data: AnsiString;
+    RecLen, Start, Count: integer;
+    procedure HandshakeLoop(aSocket: THandle);
+  public
+    Initialized: boolean;
     procedure AfterConnection(aSocket: THandle; aAddress: PAnsiChar);
     procedure BeforeDisconnection(aSocket: THandle);
     function Receive(aSocket: THandle; aBuffer: pointer; aLength: integer): integer;
@@ -936,8 +895,10 @@ const
   SP_PROT_TLS1_2 = $C00;
   SP_PROT_TLS1_2_SERVER = $400;
   SP_PROT_TLS1_2_CLIENT = $800;
+
   SECPKG_CRED_INBOUND = 1;
   SECPKG_CRED_OUTBOUND = 2;
+
   ISC_REQ_DELEGATE = $00000001;
   ISC_REQ_MUTUAL_AUTH = $00000002;
   ISC_REQ_REPLAY_DETECT = $00000004;
@@ -960,7 +921,11 @@ const
   ISC_REQ_MANUAL_CRED_VALIDATION = $00080000;
   ISC_REQ_RESERVED1 = $00100000;
   ISC_REQ_FRAGMENT_TO_FIT = $00200000;
-  ISC_REQ_FLAGS = ISC_REQ_SEQUENCE_DETECT or ISC_REQ_REPLAY_DETECT or ISC_REQ_CONFIDENTIALITY or ISC_REQ_EXTENDED_ERROR or ISC_REQ_ALLOCATE_MEMORY or ISC_REQ_STREAM;
+  ISC_REQ_FLAGS =
+    ISC_REQ_SEQUENCE_DETECT or ISC_REQ_REPLAY_DETECT or
+    ISC_REQ_CONFIDENTIALITY or ISC_REQ_EXTENDED_ERROR or
+    ISC_REQ_ALLOCATE_MEMORY or ISC_REQ_STREAM;
+
   SECBUFFER_VERSION = 0;
   SECBUFFER_EMPTY = 0;
   SECBUFFER_DATA = 1;
@@ -968,13 +933,18 @@ const
   SECBUFFER_EXTRA = 5;
   SECBUFFER_STREAM_TRAILER = 6;
   SECBUFFER_STREAM_HEADER = 7;
+
   SEC_E_OK = 0;
   SEC_I_CONTINUE_NEEDED = $00090312;
+  SEC_I_RENEGOTIATE = $00090321;
   SEC_E_INCOMPLETE_MESSAGE = $80090318;
-  SECPKG_NAME = 'Microsoft Unified Security Protocol Provider';
+  SEC_E_INVALID_TOKEN = $80090308;
+
+  UNISP_NAME = 'Microsoft Unified Security Protocol Provider';
   SECPKG_ATTR_STREAM_SIZES = 4;
   SECURITY_NATIVE_DREP = $10;
   SCHANNEL_SHUTDOWN = 1;
+
 implementation
 
 var
@@ -985,13 +955,13 @@ var
 
 function IN6_IS_ADDR_UNSPECIFIED(const a: PInAddr6): boolean;
 begin
-  Result := ((a^.u6_addr32[0] = 0) and (a^.u6_addr32[1] = 0) and
+  result := ((a^.u6_addr32[0] = 0) and (a^.u6_addr32[1] = 0) and
              (a^.u6_addr32[2] = 0) and (a^.u6_addr32[3] = 0));
 end;
 
 function IN6_IS_ADDR_LOOPBACK(const a: PInAddr6): boolean;
 begin
-  Result := ((a^.u6_addr32[0] = 0) and (a^.u6_addr32[1] = 0) and
+  result := ((a^.u6_addr32[0] = 0) and (a^.u6_addr32[1] = 0) and
              (a^.u6_addr32[2] = 0) and
              (a^.u6_addr8[12] = 0) and (a^.u6_addr8[13] = 0) and
              (a^.u6_addr8[14] = 0) and (a^.u6_addr8[15] = 1));
@@ -999,22 +969,22 @@ end;
 
 function IN6_IS_ADDR_LINKLOCAL(const a: PInAddr6): boolean;
 begin
-  Result := ((a^.u6_addr8[0] = $FE) and (a^.u6_addr8[1] = $80));
+  result := ((a^.u6_addr8[0] = $FE) and (a^.u6_addr8[1] = $80));
 end;
 
 function IN6_IS_ADDR_SITELOCAL(const a: PInAddr6): boolean;
 begin
-  Result := ((a^.u6_addr8[0] = $FE) and (a^.u6_addr8[1] = $C0));
+  result := ((a^.u6_addr8[0] = $FE) and (a^.u6_addr8[1] = $C0));
 end;
 
 function IN6_IS_ADDR_MULTICAST(const a: PInAddr6): boolean;
 begin
-  Result := (a^.u6_addr8[0] = $FF);
+  result := (a^.u6_addr8[0] = $FF);
 end;
 
 function IN6_ADDR_EQUAL(const a: PInAddr6; const b: PInAddr6): boolean;
 begin
-  Result := (CompareMem(a, b, sizeof(TInAddr6)));
+  result := (CompareMem(a, b, sizeof(TInAddr6)));
 end;
 
 procedure SET_IN6_IF_ADDR_ANY(const a: PInAddr6);
@@ -1031,7 +1001,8 @@ end;
 // faster purepascal versions of FD_ISSET/FD_CLR/FD_SET/FD_ZERO API functions
 
 function FD_ISSET(Socket: TSocket; const FDSet: TFDSet): boolean;
-var i: integer;
+var
+  i: integer;
 begin
   result := true;
   for i := 0 to FDSet.fd_count - 1 do
@@ -1041,7 +1012,8 @@ begin
 end;
 
 procedure FD_CLR(Socket: TSocket; var FDSet: TFDSet);
-var i: integer;
+var
+  i: integer;
 begin
   for i := 0 to FDSet.fd_count - 1 do
     if FDSet.fd_array[i] = Socket then begin
@@ -1053,7 +1025,8 @@ begin
 end;
 
 procedure FD_SET(Socket: TSocket; var FDSet: TFDSet);
-var i: integer;
+var
+  i: integer;
 begin
   if FDSet.fd_count >= FD_SETSIZE then
     exit;
@@ -1072,62 +1045,67 @@ end;
 function SizeOfVarSin(const sin: TVarSin): integer;
 begin
   case sin.sin_family of
-    AF_INET:  Result := SizeOf(TSockAddrIn);
-    AF_INET6: Result := SizeOf(TSockAddrIn6);
-  else Result := 0;
+    AF_INET:
+      result := SizeOf(TSockAddrIn);
+    AF_INET6:
+      result := SizeOf(TSockAddrIn6);
+  else
+    result := 0;
   end;
 end;
 
 function GetSockName(s: TSocket; var name: TVarSin): integer;
-var len: integer;
+var
+  len: integer;
 begin
   len := SizeOf(name);
   FillChar(name, len, 0);
-  Result := ssGetSockName(s, @name, Len);
+  result := ssGetSockName(s, @name, len);
 end;
 
 function GetPeerName(s: TSocket; var name: TVarSin): integer;
-var len: integer;
+var
+  len: integer;
 begin
   len := SizeOf(name);
   FillChar(name, len, 0);
-  Result := ssGetPeerName(s, @name, Len);
+  result := ssGetPeerName(s, @name, len);
 end;
 
 function GetHostName: AnsiString;
-var s: array[0..255] of AnsiChar;
+var
+  s: array[0..255] of AnsiChar;
 begin
   ssGetHostName(@s, 255);
-  Result := s;
+  result := s;
 end;
 
 function Accept(s: TSocket; var addr: TVarSin): TSocket;
-var x: integer;
+var
+  x: integer;
 begin
   x := SizeOf(addr);
-  Result := ssAccept(s, @addr, x);
+  result := ssAccept(s, @addr, x);
 end;
 
 function Bind(s: TSocket; const addr: TVarSin): integer;
 begin
-  Result := ssBind(s, @addr, SizeOfVarSin(addr));
+  result := ssBind(s, @addr, SizeOfVarSin(addr));
 end;
 
 function Connect(s: TSocket; const name: TVarSin): integer;
 begin
-  Result := ssConnect(s, @name, SizeOfVarSin(name));
+  result := ssConnect(s, @name, SizeOfVarSin(name));
 end;
-
 
 function IsNewApi(Family: integer): Boolean;
 begin
-  Result := SockEnhancedApi;
-  if not Result then
-    Result := (Family = AF_INET6) and SockWship6Api;
+  result := SockEnhancedApi;
+  if not result then
+    result := (Family = AF_INET6) and SockWship6Api;
 end;
 
-function SetVarSin(var Sin: TVarSin; const IP, Port: AnsiString; Family, SockProtocol, SockType: integer;
-   PreferIP4: Boolean): integer;
+function SetVarSin(var Sin: TVarSin; const IP, Port: AnsiString; Family, SockProtocol, SockType: integer; PreferIP4: Boolean): integer;
 type
   pu_long = ^u_long;
 var
@@ -1140,7 +1118,8 @@ var
   TwoPass: boolean;
 
   function GetAddr(const IP, port: AnsiString; var Hints: TAddrInfo; var Sin: TVarSin): integer;
-  var Addr: PAddrInfo;
+  var
+    Addr: PAddrInfo;
   begin
     Addr := nil;
     try
@@ -1153,12 +1132,12 @@ var
       else begin
         if (IP = cAnyHost) or (IP = c6AnyHost) then begin
           Hints.ai_flags := AI_PASSIVE;
-          result := GetAddrInfo(nil, pointer(Port), @Hints, Addr);
+          result := GetAddrInfo(nil, pointer(port), @Hints, Addr);
         end
+        else if (IP = cLocalhost) or (IP = c6Localhost) then
+          result := GetAddrInfo(nil, pointer(port), @Hints, Addr)
         else
-          if (IP = cLocalhost) or (IP = c6Localhost) then
-            result := GetAddrInfo(nil, pointer(Port), @Hints, Addr) else
-            result := GetAddrInfo(pointer(IP), pointer(Port), @Hints, Addr);
+          result := GetAddrInfo(pointer(IP), pointer(port), @Hints, Addr);
       end;
       if result = 0 then
         if (Addr <> nil) then
@@ -1172,8 +1151,7 @@ var
 begin
   result := 0;
   FillChar(Sin, Sizeof(Sin), 0);
-  if not IsNewApi(family) then
-  begin
+  if not IsNewApi(Family) then begin
     EnterCriticalSection(SynSockCS);
     try
       Sin.sin_family := AF_INET;
@@ -1182,12 +1160,12 @@ begin
       if ProtoEnt <> nil then
         ServEnt := GetServByName(pointer(Port), ProtoEnt^.p_name);
       if ServEnt = nil then
-        Sin.sin_port := htons(StrToIntDef(string(Port), 0)) else
+        Sin.sin_port := htons(StrToIntDef(string(Port), 0))
+      else
         Sin.sin_port := ServEnt^.s_port;
       if IP = cBroadcast then
         Sin.sin_addr.s_addr := u_long(INADDR_BROADCAST)
-      else
-      begin
+      else begin
         Sin.sin_addr.s_addr := inet_addr(pointer(IP));
         if Sin.sin_addr.s_addr = u_long(INADDR_NONE) then begin
           HostEnt := GetHostByName(pointer(IP));
@@ -1224,97 +1202,85 @@ begin
     Hints2.ai_protocol := Hints1.ai_protocol;
     r := GetAddr(IP, Port, Hints1, Sin1);
     result := r;
-    sin := sin1;
+    Sin := Sin1;
     if r <> 0 then
       if TwoPass then begin
         r := GetAddr(IP, Port, Hints2, Sin2);
         result := r;
         if r = 0 then
-          sin := sin2;
+          Sin := Sin2;
       end;
   end;
 end;
 
 function GetSinIP(const Sin: TVarSin): AnsiString;
-var p: PAnsiChar;
-    host: array[0..NI_MAXHOST] of AnsiChar;
-    serv: array[0..NI_MAXSERV] of AnsiChar;
-    hostlen, servlen: integer;
-    r: integer;
+var
+  p: PAnsiChar;
+  host: array[0..NI_MAXHOST] of AnsiChar;
+  serv: array[0..NI_MAXSERV] of AnsiChar;
+  hostlen, servlen: integer;
+  r: integer;
 begin
   result := '';
   if not IsNewApi(Sin.AddressFamily) then begin
     p := inet_ntoa(Sin.sin_addr);
     if p <> nil then
       result := p;
-  end else begin
+  end
+  else begin
     hostlen := NI_MAXHOST;
     servlen := NI_MAXSERV;
-    r := getnameinfo(@sin, SizeOfVarSin(sin), host, hostlen,
-      serv, servlen, NI_NUMERICHOST + NI_NUMERICSERV);
+    r := getnameinfo(@Sin, SizeOfVarSin(Sin), host, hostlen, serv, servlen,
+      NI_NUMERICHOST + NI_NUMERICSERV);
     if r = 0 then
       result := host;
   end;
 end;
 
-function StrLen(S: PAnsiChar): integer;
+function StrLen255(S: PAnsiChar): integer;
 begin
-  result := 0;
-  if S<>nil then
-  while true do
-    if S[0]<>#0 then
-    if S[1]<>#0 then
-    if S[2]<>#0 then
-    if S[3]<>#0 then begin
-      inc(S,4);
-      inc(result,4);
-    end else begin
-      inc(result,3);
+  for result := 0 to 254 do
+    if S[result] = #0 then
       exit;
-    end else begin
-      inc(result,2);
-      exit;
-    end else begin
-      inc(result);
-      exit;
-    end else
-      exit;
+  result := 255;
 end;
 
 procedure GetSinIPShort(const Sin: TVarSin; var result: shortstring);
-var p: PAnsiChar;
-    host: array[0..NI_MAXHOST] of AnsiChar;
-    serv: array[0..NI_MAXSERV] of AnsiChar;
-    hostlen, servlen: integer;
-    r: integer;
+var
+  p: PAnsiChar;
+  host: array[0..NI_MAXHOST] of AnsiChar;
+  serv: array[0..NI_MAXSERV] of AnsiChar;
+  hostlen, servlen: integer;
+  r: integer;
 begin
   result[0] := #0;
   if not IsNewApi(Sin.AddressFamily) then begin
     p := inet_ntoa(Sin.sin_addr);
     if p <> nil then
-      SetString(result,p,StrLen(p));
-  end else begin
+      SetString(result, p, StrLen255(p));
+  end
+  else begin
     hostlen := NI_MAXHOST;
     servlen := NI_MAXSERV;
-    r := getnameinfo(@sin, SizeOfVarSin(sin), host, hostlen,
-      serv, servlen, NI_NUMERICHOST + NI_NUMERICSERV);
+    r := getnameinfo(@Sin, SizeOfVarSin(Sin), host, hostlen, serv, servlen,
+      NI_NUMERICHOST + NI_NUMERICSERV);
     if r = 0 then
-      SetString(result,PAnsiChar(@host),StrLen(host));
+      SetString(result, PAnsiChar(@host), StrLen255(host));
   end;
 end;
 
 function GetSinPort(const Sin: TVarSin): integer;
 begin
   if (Sin.sin_family = AF_INET6) then
-    result := ntohs(Sin.sin6_port) else
+    result := ntohs(Sin.sin6_port)
+  else
     result := ntohs(Sin.sin_port);
 end;
 
-procedure ResolveNameToIP(const Name: AnsiString; Family, SockProtocol, SockType: integer;
-  IPList: TStrings; WillClearIPList: boolean = true);
+procedure ResolveNameToIP(const Name: AnsiString; Family, SockProtocol,
+  SockType: integer; IPList: TStrings; WillClearIPList: boolean = true);
 type
   TaPInAddr = array[0..250] of PInAddr;
-  PaPInAddr = ^TaPInAddr;
 var
   Hints: TAddrInfo;
   Addr: PAddrInfo;
@@ -1325,11 +1291,12 @@ var
   hostlen, servlen: integer;
   RemoteHost: PHostEnt;
   IP: u_long;
-  PAdrPtr: PaPInAddr;
+  PAdrPtr: ^TaPInAddr;
   i: integer;
   InAddr: TInAddr;
 begin
-  if (WillClearIPList) then IPList.Clear;
+  if (WillClearIPList) then
+    IPList.Clear;
   if not IsNewApi(Family) then begin
     IP := inet_addr(pointer(Name));
     if IP = u_long(INADDR_NONE) then begin
@@ -1337,12 +1304,12 @@ begin
       try
         RemoteHost := GetHostByName(pointer(Name));
         if RemoteHost <> nil then begin
-          PAdrPtr := PAPInAddr(RemoteHost^.h_addr_list);
+          PAdrPtr := pointer(RemoteHost^.h_addr_list);
           i := 0;
           while PAdrPtr^[i] <> nil do begin
             InAddr := PAdrPtr^[i]^;
-            IPList.Add(Format('%d.%d.%d.%d', [InAddr.S_bytes[0], InAddr.S_bytes[1],
-              InAddr.S_bytes[2], InAddr.S_bytes[3]]));
+            IPList.Add(Format('%d.%d.%d.%d', [InAddr.S_bytes[0],
+              InAddr.S_bytes[1], InAddr.S_bytes[2], InAddr.S_bytes[3]]));
             Inc(i);
           end;
         end;
@@ -1362,14 +1329,13 @@ begin
       r := GetAddrInfo(pointer(Name), nil, @Hints, Addr);
       if r = 0 then begin
         AddrNext := Addr;
-        while not(AddrNext = nil) do begin
-          if not(((Family = AF_INET6) and (AddrNext^.ai_family = AF_INET))
-            or ((Family = AF_INET) and (AddrNext^.ai_family = AF_INET6))) then begin
+        while not (AddrNext = nil) do begin
+          if not (((Family = AF_INET6) and (AddrNext^.ai_family = AF_INET)) or
+             ((Family = AF_INET) and (AddrNext^.ai_family = AF_INET6))) then begin
             hostlen := NI_MAXHOST;
             servlen := NI_MAXSERV;
-            r := getnameinfo(AddrNext^.ai_addr, AddrNext^.ai_addrlen,
-              host, hostlen, serv, servlen,
-              NI_NUMERICHOST + NI_NUMERICSERV);
+            r := getnameinfo(AddrNext^.ai_addr, AddrNext^.ai_addrlen, host, hostlen,
+              serv, servlen, NI_NUMERICHOST + NI_NUMERICSERV);
             if r = 0 then
               IPList.Add(string(host));
           end;
@@ -1386,13 +1352,14 @@ begin
 end;
 
 function ResolvePort(const Port: AnsiString; Family, SockProtocol, SockType: integer): Word;
-var ProtoEnt: PProtoEnt;
-    ServEnt: PServEnt;
-    Hints: TAddrInfo;
-    Addr: PAddrInfo;
-    r: integer;
+var
+  ProtoEnt: PProtoEnt;
+  ServEnt: PServEnt;
+  Hints: TAddrInfo;
+  Addr: PAddrInfo;
+  r: integer;
 begin
-  Result := 0;
+  result := 0;
   if not IsNewApi(Family) then begin
     EnterCriticalSection(SynSockCS);
     try
@@ -1401,26 +1368,26 @@ begin
       if ProtoEnt <> nil then
         ServEnt := GetServByName(pointer(Port), ProtoEnt^.p_name);
       if ServEnt = nil then
-        Result := StrToIntDef(string(Port), 0) else
-        Result := htons(ServEnt^.s_port);
+        result := StrToIntDef(string(Port), 0)
+      else
+        result := htons(ServEnt^.s_port);
     finally
       LeaveCriticalSection(SynSockCS);
     end;
   end
-  else
-  begin
+  else begin
     Addr := nil;
     try
       FillChar(Hints, Sizeof(Hints), 0);
       Hints.ai_socktype := SockType;
-      Hints.ai_protocol := Sockprotocol;
+      Hints.ai_protocol := SockProtocol;
       Hints.ai_flags := AI_PASSIVE;
       r := GetAddrInfo(nil, pointer(Port), @Hints, Addr);
       if (r = 0) and Assigned(Addr) then begin
         if Addr^.ai_family = AF_INET then
-          Result := htons(Addr^.ai_addr^.sin_port);
+          result := htons(Addr^.ai_addr^.sin_port);
         if Addr^.ai_family = AF_INET6 then
-          Result := htons(PSockAddrIn6(Addr^.ai_addr)^.sin6_port);
+          result := htons(PSockAddrIn6(Addr^.ai_addr)^.sin6_port);
       end;
     finally
       if Assigned(Addr) then
@@ -1440,7 +1407,7 @@ var
   RemoteHost: PHostEnt;
   IPn: u_long;
 begin
-  Result := IP;
+  result := IP;
   if not IsNewApi(Family) then begin
     IPn := inet_addr(pointer(IP));
     if IPn <> u_long(INADDR_NONE) then begin
@@ -1448,7 +1415,7 @@ begin
       try
         RemoteHost := GetHostByAddr(@IPn, SizeOf(IPn), AF_INET);
         if RemoteHost <> nil then
-          Result := RemoteHost^.h_name;
+          result := RemoteHost^.h_name;
       finally
         LeaveCriticalSection(SynSockCS);
       end;
@@ -1464,10 +1431,10 @@ begin
       if (r = 0) and Assigned(Addr) then begin
         hostlen := NI_MAXHOST;
         servlen := NI_MAXSERV;
-        r := getnameinfo(Addr^.ai_addr, Addr^.ai_addrlen,
-          host, hostlen, serv, servlen, NI_NUMERICSERV);
+        r := getnameinfo(Addr^.ai_addr, Addr^.ai_addrlen, host, hostlen,
+          serv, servlen, NI_NUMERICSERV);
         if r = 0 then
-          Result := host;
+          result := host;
       end;
     finally
       if Assigned(Addr) then
@@ -1479,13 +1446,14 @@ end;
 function poll(fds: PPollFD; nfds, timeout: integer): integer;
 begin
   if Assigned(WSAPoll) then
-    result := WSAPoll(fds,nfds,timeout) else
+    result := WSAPoll(fds, nfds, timeout)
+  else
     result := -1; // not available on XP/2K
 end;
 
-function InitSocketInterface(const Stack: TFileName= ''): Boolean;
+function InitSocketInterface(const Stack: TFileName = ''): Boolean;
 begin
-  Result := False;
+  result := False;
   SockEnhancedApi := False;
   SockSChannelApi := False;
   EnterCriticalSection(SynSockCS);
@@ -1493,7 +1461,8 @@ begin
     if SynSockCount = 0 then begin
       SockWship6Api := False;
       if Stack = '' then
-        LibHandle := LoadLibrary(DLLStackName) else
+        LibHandle := LoadLibrary(DLLStackName)
+      else
         LibHandle := LoadLibrary(pointer(Stack));
       if LibHandle <> 0 then begin
         WSAPoll := GetProcAddress(LibHandle, 'WSAPoll');
@@ -1536,16 +1505,14 @@ begin
         GetAddrInfo := GetProcAddress(LibHandle, 'getaddrinfo');
         FreeAddrInfo := GetProcAddress(LibHandle, 'freeaddrinfo');
         GetNameInfo := GetProcAddress(LibHandle, 'getnameinfo');
-        SockEnhancedApi := Assigned(GetAddrInfo) and Assigned(FreeAddrInfo)
-          and Assigned(GetNameInfo);
+        SockEnhancedApi := Assigned(GetAddrInfo) and Assigned(FreeAddrInfo) and Assigned(GetNameInfo);
         if not SockEnhancedApi then begin
           LibWship6Handle := LoadLibrary(DLLWship6);
           if LibWship6Handle <> 0 then begin
             GetAddrInfo := GetProcAddress(LibWship6Handle, 'getaddrinfo');
             FreeAddrInfo := GetProcAddress(LibWship6Handle, 'freeaddrinfo');
             GetNameInfo := GetProcAddress(LibWship6Handle, 'getnameinfo');
-            SockWship6Api := Assigned(GetAddrInfo) and Assigned(FreeAddrInfo)
-              and Assigned(GetNameInfo);
+            SockWship6Api := Assigned(GetAddrInfo) and Assigned(FreeAddrInfo) and Assigned(GetNameInfo);
           end;
         end;
         {$endif}
@@ -1561,16 +1528,15 @@ begin
             FreeContextBuffer := GetProcAddress(LibSecurHandle, 'FreeContextBuffer');
             EncryptMessage := GetProcAddress(LibSecurHandle, 'EncryptMessage');
             DecryptMessage := GetProcAddress(LibSecurHandle, 'DecryptMessage');
-            SockSChannelApi := Assigned(AcquireCredentialsHandle) and
-              Assigned(InitializeSecurityContext) and
-              Assigned(QueryContextAttributes) and Assigned(EncryptMessage);
+            SockSChannelApi := Assigned(AcquireCredentialsHandle) and Assigned(InitializeSecurityContext) and Assigned(QueryContextAttributes) and Assigned(EncryptMessage);
           end;
         end;
-        Result := True;
+        result := True;
       end;
     end
-    else Result := True;
-    if Result then
+    else
+      result := True;
+    if result then
       Inc(SynSockCount);
   finally
     LeaveCriticalSection(SynSockCS);
@@ -1650,115 +1616,161 @@ begin
   finally
     LeaveCriticalSection(SynSockCS);
   end;
-  Result := True;
+  result := True;
 end;
+
+
 
 
 { TSChannel }
 
-procedure TSChannelClient.AfterConnection(aSocket: THandle; aAddress: PAnsiChar);
+procedure RaiseLastError; // not defined e.g. with Delphi 5
+var
+  LastError: Integer;
+begin
+  LastError := GetLastError;
+  raise ESChannel.CreateFmt('System Error %d [%s]', [LastError, SysErrorMessage(LastError)]);
+end;
 
-  function Check(res: integer): cardinal;
-  begin
-    if res = SOCKET_ERROR then
-      RaiseLastOSError;
-    if res = 0 then
-      raise ESChannel.Create('Handshake aborted');
-    result := res;
+function CheckSEC_E_OK(res: integer): cardinal;
+begin
+  if res <> SEC_E_OK then
+    RaiseLastError;
+  result := res;
+end;
+
+function CheckSocket(res: integer): cardinal;
+begin
+  if res = SOCKET_ERROR then
+    raise ESChannel.CreateFmt('Socket Error %d', [WSAGetLastError]);
+  if res = 0 then
+    raise ESChannel.Create('Handshake aborted');
+  result := res;
+end;
+
+const
+  TLSRECMAXSIZE = 19000; // stack buffers for TSChannelClient.Receive/Send
+
+type
+  THandshakeBuf = object
+    buf: array[0..2] of TSecBuffer;
+    input, output: TSecBufferDesc;
+    procedure Init;
   end;
 
-var
-  buf: array[0..2] of TSecBuffer;
-  desc1, desc2: TSecBufferDesc;
-  res, f: cardinal;
-  tmp: AnsiString;
-  len: integer;
+procedure THandshakeBuf.Init;
 begin
-  if Cred.dwLower = nil then
-    if AcquireCredentialsHandle(nil, SECPKG_NAME, SECPKG_CRED_OUTBOUND, nil, nil, nil, nil, @Cred, nil) <> 0 then
-      RaiseLastOSError;
-  desc1.ulVersion := SECBUFFER_VERSION;
-  desc1.cBuffers := 2;
-  desc1.pBuffers := @buf[0];
+  input.ulVersion := SECBUFFER_VERSION;
+  input.cBuffers := 2;
+  input.pBuffers := @buf[0];
   buf[0].cbBuffer := 0;
   buf[0].BufferType := SECBUFFER_TOKEN;
   buf[0].pvBuffer := nil;
   buf[1].cbBuffer := 0;
   buf[1].BufferType := SECBUFFER_EMPTY;
   buf[1].pvBuffer := nil;
-  desc2.ulVersion := SECBUFFER_VERSION;
-  desc2.cBuffers := 1;
-  desc2.pBuffers := @buf[2];
+  output.ulVersion := SECBUFFER_VERSION;
+  output.cBuffers := 1;
+  output.pBuffers := @buf[2];
   buf[2].cbBuffer := 0;
   buf[2].BufferType := SECBUFFER_TOKEN;
   buf[2].pvBuffer := nil;
-  res := InitializeSecurityContext(@Cred, nil, aAddress, ISC_REQ_FLAGS, 0, SECURITY_NATIVE_DREP, nil, 0, @Ctxt, @desc2, @f, nil);
+end;
+
+procedure TSChannelClient.AfterConnection(aSocket: THandle; aAddress: PAnsiChar);
+var
+  buf: THandshakeBuf;
+  res, f: cardinal;
+begin
+  if not SockSChannelApi then
+    raise ESChannel.Create('SChannel API not available');
+  CheckSEC_E_OK(AcquireCredentialsHandle(nil, UNISP_NAME, SECPKG_CRED_OUTBOUND,
+    nil, nil, nil, nil, @Cred, nil));
+  buf.Init;
+  res := InitializeSecurityContext(@Cred, nil, aAddress, ISC_REQ_FLAGS, 0,
+    SECURITY_NATIVE_DREP, nil, 0, @Ctxt, @buf.output, @f, nil);
   if res <> SEC_I_CONTINUE_NEEDED then
-    RaiseLastOSError;
-  Check(SynWinSock.send(aSocket, buf[2].pvBuffer, buf[2].cbBuffer, 0));
+    RaiseLastError;
+  CheckSocket(SynWinSock.Send(aSocket, buf.buf[2].pvBuffer, buf.buf[2].cbBuffer, 0));
+  CheckSEC_E_OK(FreeContextBuffer(buf.buf[2].pvBuffer));
+  HandshakeLoop(aSocket);
+  CheckSEC_E_OK(QueryContextAttributes(@Ctxt, SECPKG_ATTR_STREAM_SIZES, @Sizes));
+  SetLength(Data, Sizes.cbMaximumMessage);
+  RecLen := Sizes.cbHeader + Sizes.cbMaximumMessage + Sizes.cbTrailer;
+  if RecLen > TLSRECMAXSIZE then
+    raise ESChannel.CreateFmt('RecLen=%d>%d', [RecLen, TLSRECMAXSIZE]);
+  Initialized := true;
+end;
+
+procedure TSChannelClient.HandshakeLoop(aSocket: THandle);
+var
+  buf: THandshakeBuf;
+  len: integer;
+  tmp: AnsiString;
+  res, f: cardinal;
+begin
   len := 0;
   SetLength(tmp, 65536);
+  res := SEC_I_CONTINUE_NEEDED;
   while (res = SEC_I_CONTINUE_NEEDED) or (res = SEC_E_INCOMPLETE_MESSAGE) do begin
     if res <> SEC_E_INCOMPLETE_MESSAGE then
       len := 0;
-    inc(len, Check(recv(aSocket, @PByteArray(tmp)[len], length(tmp) - len, 0)));
-    buf[0].cbBuffer := len;
-    buf[0].BufferType := SECBUFFER_TOKEN;
-    buf[0].pvBuffer := pointer(tmp);
-    res := InitializeSecurityContext(@Cred, @Ctxt, nil, ISC_REQ_FLAGS, 0, SECURITY_NATIVE_DREP, @desc1, 0, @Ctxt, @desc2, @f, nil);
+    inc(len, CheckSocket(Recv(aSocket, @PByteArray(tmp)[len], length(tmp) - len, 0)));
+    buf.Init;
+    buf.buf[0].cbBuffer := len;
+    buf.buf[0].BufferType := SECBUFFER_TOKEN;
+    buf.buf[0].pvBuffer := pointer(tmp);
+    res := InitializeSecurityContext(@Cred, @Ctxt, nil, ISC_REQ_FLAGS, 0,
+      SECURITY_NATIVE_DREP, @buf.input, 0, @Ctxt, @buf.output, @f, nil);
     if (res = SEC_E_OK) or (res = SEC_I_CONTINUE_NEEDED) or
        ((f and ISC_REQ_EXTENDED_ERROR) <> 0) then begin
-      if (buf[2].cbBuffer <> 0) and (buf[2].pvBuffer <> nil) then begin
-        Check(SynWinSock.send(aSocket, buf[2].pvBuffer, buf[2].cbBuffer, 0));
-        FreeContextBuffer(buf[2].pvBuffer);
-        buf[2].pvBuffer := nil;
+      if (buf.buf[2].cbBuffer <> 0) and (buf.buf[2].pvBuffer <> nil) then begin
+        CheckSocket(SynWinSock.Send(aSocket, buf.buf[2].pvBuffer, buf.buf[2].cbBuffer, 0));
+        CheckSEC_E_OK(FreeContextBuffer(buf.buf[2].pvBuffer));
       end;
     end;
   end;
-  if res <> SEC_E_OK then
-    RaiseLastOSError;
-  if QueryContextAttributes(@Ctxt, SECPKG_ATTR_STREAM_SIZES, @Sizes) <> SEC_E_OK then
-    RaiseLastOSError;
-  SetLength(Data, Sizes.cbMaximumMessage);
-  len := Sizes.cbHeader + Sizes.cbMaximumMessage + Sizes.cbTrailer;
-  SetLength(PartialIn, len);
-  SetLength(PartialOut, len);
+  CheckSEC_E_OK(res); // TODO: handle SEC_I_INCOMPLETE_CREDENTIALS
   Start := 0;
   Count := 0;
-  if buf[1].BufferType = SECBUFFER_EXTRA then begin
-    Count := buf[1].cbBuffer;
-    Move(buf[1].pvBuffer^, pointer(Data)^, Count);
+  if buf.buf[1].BufferType = SECBUFFER_EXTRA then begin
+    Count := buf.buf[1].cbBuffer;
+    Move(buf.buf[1].pvBuffer^, pointer(Data)^, Count);
   end;
-  Initialized := true;
 end;
 
 procedure TSChannelClient.BeforeDisconnection(aSocket: THandle);
 var
   desc: TSecBufferDesc;
   buf: TSecBuffer;
-  dt, res, f: cardinal;
+  dt, f: cardinal;
 begin
-  if (Data <> '') and (aSocket <> 0) then
+  if Initialized then
   try
-    desc.ulVersion := SECBUFFER_VERSION;
-    desc.cBuffers := 1;
-    desc.pBuffers := @buf;
-    buf.cbBuffer := 4;
-    buf.BufferType := SECBUFFER_TOKEN;
-    buf.pvBuffer := @dt;
-    dt := SCHANNEL_SHUTDOWN;
-    res := ApplyControlToken(@Ctxt, @desc);
-    if res <> SEC_E_OK then
-      RaiseLastOSError;
-    buf.cbBuffer := 0;
-    buf.BufferType := SECBUFFER_TOKEN;
-    buf.pvBuffer := nil;
-    res := InitializeSecurityContext(@Cred, @Ctxt, nil, ISC_REQ_FLAGS, 0, SECURITY_NATIVE_DREP, nil, 0, @Ctxt, @desc, @f, nil);
-    if res <> SEC_E_OK then
-      RaiseLastOSError;
-    SynWinSock.Send(aSocket, buf.pvBuffer, buf.cbBuffer, 0);
+    if aSocket > 0 then begin
+      desc.ulVersion := SECBUFFER_VERSION;
+      desc.cBuffers := 1;
+      desc.pBuffers := @buf;
+      buf.cbBuffer := 4;
+      buf.BufferType := SECBUFFER_TOKEN;
+      dt := SCHANNEL_SHUTDOWN;
+      buf.pvBuffer := @dt;
+      if ApplyControlToken(@Ctxt, @desc) = SEC_E_OK then begin
+        buf.cbBuffer := 0;
+        buf.BufferType := SECBUFFER_TOKEN;
+        buf.pvBuffer := nil;
+        if InitializeSecurityContext(@Cred, @Ctxt, nil, ISC_REQ_FLAGS, 0,
+           SECURITY_NATIVE_DREP, nil, 0, @Ctxt, @desc, @f, nil) = SEC_E_OK then begin
+          SynWinSock.Send(aSocket, buf.pvBuffer, buf.cbBuffer, 0);
+          FreeContextBuffer(buf.pvBuffer);
+        end;
+      end;
+    end;
+    DeleteSecurityContext(@Ctxt);
+    FreeCredentialsHandle(@Cred);
   finally
-    FreeContextBuffer(buf.pvBuffer);
+    Cred.dwLower := nil;
+    Cred.dwUpper := nil;
     Initialized := false;
   end;
 end;
@@ -1768,7 +1780,8 @@ var
   desc: TSecBufferDesc;
   buf: array[0..3] of TSecBuffer;
   res: cardinal;
-  PartialLen, j: integer;
+  templen, read, i, content, extra: integer;
+  temp: array[0..TLSRECMAXSIZE] of byte;
 begin
   if not Initialized then begin // use plain socket API
     result := Recv(aSocket, aBuffer, aLength, MSG_NOSIGNAL);
@@ -1776,60 +1789,61 @@ begin
   end;
   result := 0;
   if Count = 0 then begin
-    PartialLen := 0;
+    templen := 0;
     desc.ulVersion := SECBUFFER_VERSION;
     desc.cBuffers := 4;
     desc.pBuffers := @buf[0];
-    buf[0].cbBuffer := 0;
-    buf[0].BufferType := SECBUFFER_DATA;
-    buf[0].pvBuffer := pointer(PartialIn);
-    buf[1].cbBuffer := 0;
-    buf[1].BufferType := SECBUFFER_EMPTY;
-    buf[1].pvBuffer := nil;
-    buf[2].cbBuffer := 0;
-    buf[2].BufferType := SECBUFFER_EMPTY;
-    buf[2].pvBuffer := nil;
-    buf[3].cbBuffer := 0;
-    buf[3].BufferType := SECBUFFER_EMPTY;
-    buf[3].pvBuffer := nil;
-    res := SEC_E_INCOMPLETE_MESSAGE;
-    while res = SEC_E_INCOMPLETE_MESSAGE do begin
-      j := Recv(aSocket, @PByteArray(PartialIn)[PartialLen], Length(PartialIn) - PartialLen, MSG_NOSIGNAL);
-      if j <= 0 then begin
-        result := j; // return socket error (may be WSATRY_AGAIN)
+    repeat
+      read := Recv(aSocket, @temp[templen], RecLen - templen, MSG_NOSIGNAL);
+      if read <= 0 then begin
+        result := read; // return socket error (may be WSATRY_AGAIN)
         exit;
       end;
-      inc(PartialLen, j);
-      buf[0].cbBuffer := PartialLen;
+      inc(templen, read);
+      buf[0].cbBuffer := templen;
+      buf[0].BufferType := SECBUFFER_DATA;
+      buf[0].pvBuffer := @temp;
+      buf[1].cbBuffer := 0;
+      buf[1].BufferType := SECBUFFER_EMPTY;
+      buf[1].pvBuffer := nil;
+      buf[2].cbBuffer := 0;
+      buf[2].BufferType := SECBUFFER_EMPTY;
+      buf[2].pvBuffer := nil;
+      buf[3].cbBuffer := 0;
+      buf[3].BufferType := SECBUFFER_EMPTY;
+      buf[3].pvBuffer := nil;
       res := DecryptMessage(@Ctxt, @desc, 0, nil);
+      if res = SEC_I_RENEGOTIATE then begin
+        HandshakeLoop(aSocket);
+        if Count <> 0 then
+          break; // something was received
+        continue;
+      end;
+    until res <> SEC_E_INCOMPLETE_MESSAGE;
+    if Count = 0 then begin
+      CheckSEC_E_OK(res);
+      content := 0;
+      extra := 0;
+      for i := 1 to 3 do
+        if buf[i].BufferType = SECBUFFER_DATA then
+          content := i
+        else if buf[i].BufferType = SECBUFFER_EXTRA then
+          extra := i;
+      if content = 0 then
+        raise ESChannel.Create('Receive: no data');
+      Start := 0;
+      Count := buf[content].cbBuffer;
+      Move(buf[content].pvBuffer^, Pointer(Data)^, Count);
+      if extra <> 0 then begin
+        inc(Count, buf[extra].cbBuffer);
+        if Count > Length(Data) then
+          SetLength(Data, Count);
+        Move(buf[extra].pvBuffer^, PByteArray(Data)[Count], buf[extra].cbBuffer);
+      end;
     end;
-    if res <> SEC_E_OK then
-      RaiseLastOSError;
-    if buf[1].BufferType = SECBUFFER_DATA then
-      if buf[1].cbBuffer > cardinal(aLength) then begin
-        Start := 0;
-        Count := buf[1].cbBuffer;
-        Move(buf[1].pvBuffer^, Pointer(Data)^, buf[1].cbBuffer);
-        if buf[3].BufferType = SECBUFFER_EXTRA then begin
-          Move(buf[3].pvBuffer^, PByteArray(Data)[Count], buf[3].cbBuffer);
-          inc(Count, buf[3].cbBuffer);
-        end;
-      end
-      else begin
-        result := buf[1].cbBuffer;
-        Move(buf[1].pvBuffer^, aBuffer^, buf[1].cbBuffer);
-        if buf[3].BufferType = SECBUFFER_EXTRA then begin
-          Start := 0;
-          Count := buf[3].cbBuffer;
-          Move(buf[3].pvBuffer^, Pointer(Data)^, Count);
-        end;
-        exit; // we have something to return
-      end
-    else
-      raise ESChannel.CreateFmt('DecryptMessage=%d', [res]);
   end;
   if Count <> 0 then
-    if aLength > Count then begin
+    if aLength >= Count then begin
       result := Count;
       Move(PByteArray(Data)[Start], aBuffer^, result);
       Start := 0;
@@ -1847,8 +1861,9 @@ function TSChannelClient.Send(aSocket: THandle; aBuffer: pointer; aLength: integ
 var
   desc: TSecBufferDesc;
   buf: array[0..3] of TSecBuffer;
-  res, sent, len, notrailer, c, PartialLen: cardinal;
+  res, sent, len, trailer, c, templen: cardinal;
   s: integer;
+  temp: array[0..TLSRECMAXSIZE] of byte;
 begin
   if not Initialized then begin // use plain socket API
     result := SynWinSock.Send(aSocket, aBuffer, aLength, MSG_NOSIGNAL);
@@ -1860,64 +1875,63 @@ begin
   desc.pBuffers := @buf[0];
   c := cardinal(aLength);
   while c <> 0 do begin
-    if c > Sizes.cbMaximumMessage then
-      PartialLen := Sizes.cbMaximumMessage
-    else
-      PartialLen := c;
-    Move(aBuffer^, PByteArray(PartialOut)[Sizes.cbHeader], PartialLen);
-    notrailer := Sizes.cbHeader + PartialLen;
-    len := notrailer + Sizes.cbTrailer;
+    templen := c;
+    if templen > Sizes.cbMaximumMessage then
+      templen := Sizes.cbMaximumMessage;
+    Move(aBuffer^, temp[Sizes.cbHeader], templen);
+    trailer := Sizes.cbHeader + templen;
+    len := trailer + Sizes.cbTrailer;
     buf[0].cbBuffer := Sizes.cbHeader;
     buf[0].BufferType := SECBUFFER_STREAM_HEADER;
-    buf[0].pvBuffer := pointer(PartialOut);
-    buf[1].cbBuffer := PartialLen;
+    buf[0].pvBuffer := @temp;
+    buf[1].cbBuffer := templen;
     buf[1].BufferType := SECBUFFER_DATA;
-    buf[1].pvBuffer := @PByteArray(PartialOut)[Sizes.cbHeader];
+    buf[1].pvBuffer := @temp[Sizes.cbHeader];
     buf[2].cbBuffer := Sizes.cbTrailer;
     buf[2].BufferType := SECBUFFER_STREAM_TRAILER;
-    buf[2].pvBuffer := @PByteArray(PartialOut)[notrailer];
+    buf[2].pvBuffer := @temp[trailer];
     buf[3].cbBuffer := 0;
     buf[3].BufferType := SECBUFFER_EMPTY;
     buf[3].pvBuffer := nil;
-    res := EncryptMessage(@Ctxt, 0, @desc, 0);
-    if res <> SEC_E_OK then
-      raise ESChannel.CreateFmt('EncryptMessage=%d', [res]);
+    CheckSEC_E_OK(EncryptMessage(@Ctxt, 0, @desc, 0));
     sent := 0;
     repeat
-      s := SynWinSock.Send(aSocket, @PByteArray(PartialOut)[sent], len, MSG_NOSIGNAL);
+      s := SynWinSock.Send(aSocket, @temp[sent], len, MSG_NOSIGNAL);
       if s = integer(len) then
         break;
       if s = 0 then
         exit; // report connection closed
       if s < 0 then begin
         res := WSAGetLastError;
-        if (res<>WSATRY_AGAIN) and (res<>WSAEINTR) then begin
+        if (res <> WSATRY_AGAIN) and (res <> WSAEINTR) then begin
           result := s;
-          exit;
+          exit; // report socket fatal error
         end;
-      end else begin
+      end
+      else begin
         dec(len, s);
         inc(sent, s);
       end;
-      Sleep(1); // try again 
+      Sleep(1); // try again
     until false;
-    inc(PByte(aBuffer), PartialLen);
-    dec(c, PartialLen);
+    inc(PByte(aBuffer), templen);
+    dec(c, templen);
   end;
   result := aLength;
 end;
 
 initialization
-  assert(SizeOf(TInAddr)=SizeOf(cardinal));
-  assert(SizeOf(TSockAddrIn)=16);
-  assert(SizeOf(TInAddr6)=16);
+  assert(SizeOf(TInAddr) = SizeOf(cardinal));
+  assert(SizeOf(TSockAddrIn) = 16);
+  assert(SizeOf(TInAddr6) = 16);
 
   InitializeCriticalSection(SynSockCS);
-  SET_IN6_IF_ADDR_ANY (@in6addr_any);
-  SET_LOOPBACK_ADDR6  (@in6addr_loopback);
+  SET_IN6_IF_ADDR_ANY(@in6addr_any);
+  SET_LOOPBACK_ADDR6(@in6addr_loopback);
 
 finalization
   SynSockCount := -254; // force release library
   DestroySocketInterface;
   DeleteCriticalSection(SynSockCS);
 end.
+
