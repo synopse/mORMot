@@ -9,11 +9,12 @@ interface
 {$I SyNode.inc}
 
 uses
+  SysUtils,
   SynCommons,
   SpiderMonkey,
   SyNode;
 
-function os_realpath(const FileName: SynUnicode; var TargetName: SynUnicode): Boolean;
+function os_realpath(const FileName: TFileName; var TargetName: TFileName): Boolean;
 
 implementation
 
@@ -23,13 +24,13 @@ implementation
 {$ENDIF}
 
 uses
-  SysUtils,
 {$IFDEF MSWINDOWS}
   Windows,
 {$ELSE}
   Unix, BaseUnix, DateUtils,
 {$ENDIF}
-  Classes;
+  Classes,
+  SynLog;
 
 /// decode text file to string using BOM
 //  if BOM not fount - use current system code page to convert ANSI content to unicode
@@ -139,7 +140,7 @@ begin
     if (argc < 1) or not in_argv[0].isString then
       raise ESMException.Create(USAGE);
     try
-      fn := in_argv[0].asJSString.ToSynUnicode(cx);
+      fn := in_argv[0].asJSString.ToString(cx);
     except
       raise
     end;
@@ -218,14 +219,14 @@ const
   USAGE = 'usage: directoryExists(dirPath: string;)';
 var
   in_argv: PjsvalVector;
-  filePath: string;
+  filePath: TFileName;
   val: jsval;
 begin
   try
     in_argv := vp.argv;
     if (argc < 1) or not in_argv[0].isString then
       raise ESMException.Create(USAGE);
-    filePath := in_argv[0].asJSString.ToSynUnicode(cx);
+    filePath := in_argv[0].asJSString.ToString(cx);
     val.asBoolean := DirectoryExists(filePath);
     vp.rval := val;
     Result := True;
@@ -246,14 +247,14 @@ const
   USAGE = 'usage: fileExists(filePath: string;)';
 var
   in_argv: PjsvalVector;
-  filePath: string;
+  filePath: TFileName;
   val: jsval;
 begin
   try
     in_argv := vp.argv;
     if (argc < 1) or not in_argv[0].isString then
       raise ESMException.Create(USAGE);
-    filePath := in_argv[0].asJSString.ToSynUnicode(cx);
+    filePath := in_argv[0].asJSString.ToString(cx);
     val.asBoolean := FileExists(filePath);
     vp.rval := val;
     Result := True;
@@ -275,7 +276,7 @@ const
   USAGE = 'usage: internalModuleReadFile(filePath: string;)';
 var
   in_argv: PjsvalVector;
-  filePath: string;
+  filePath: TFileName;
   fileContent: jsval;
   {$ifdef SM_DEBUG_FSDUMPFILEEXCERPT}
   len: size_t;
@@ -306,7 +307,7 @@ begin
       vp.rval := JSVAL_VOID;
       {$ifdef SM_DEBUG}
       SynSMLog.Add.Log(sllDebug,
-        'fs_internalModuleReadFile (%): file not found', filePath);
+        'fs_internalModuleReadFile (%): file not found', StringToUTF8(filePath));
       {$endif}
     end;
 
@@ -338,7 +339,7 @@ begin
     if (argc < 1) or not in_argv[0].isString then
       raise ESMException.Create(USAGE);
     try
-      fn := in_argv[0].asJSString.ToSynUnicode(cx);
+      fn := in_argv[0].asJSString.ToString(cx);
     except
       raise
     end;
@@ -375,7 +376,7 @@ end;
 function fs_readDir(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
 var
   in_argv: PjsvalVector;
-  dir, founded: TFileName;
+  dir: TFileName;
   F: TSearchRec;
   res: PJSRootedObject;
   cNum, searchAttr: integer;
@@ -392,7 +393,7 @@ begin
     else
       includeFolders := false;
 
-    dir := in_argv[0].asJSString.ToSynUnicode(cx);
+    dir := in_argv[0].asJSString.ToString(cx);
     if not DirectoryExists(Dir) then
     begin
       vp.rval := JSVAL_NULL;
@@ -412,8 +413,7 @@ begin
         cNum := 0;
         repeat
           if (F.Name <> '.') and (F.Name <> '..') then begin
-            founded := F.Name;
-            res.ptr.SetElement(cx, cNum, cx.NewJSString(founded).ToJSVal);
+            res.ptr.SetElement(cx, cNum, cx.NewJSString(F.Name).ToJSVal);
             inc(cNum);
           end;
         until FindNext(F) <> 0;
@@ -436,21 +436,22 @@ begin
 end;
 
 {$ifdef MSWINDOWS}
-{$ifdef FPC}
+{$if defined(FPC) or not defined(ISDELPHIXE2)}
 const VOLUME_NAME_DOS = $0;
-function GetFinalPathNameByHandleW(hFile: THandle; lpszFilePath: LPWSTR;
-  cchFilePath, dwFlags: DWORD): DWORD; stdcall; external kernel32;
-{$endif}
+function GetFinalPathNameByHandle(hFile: THandle; lpszFilePath: LPSTR;
+  cchFilePath: DWORD; dwFlags: DWORD): DWORD; stdcall; external kernel32;
+{$ifend}
 
-const LONG_PATH_PREFIX: PWideChar = '\\?\';
-const UNC_PATH_PREFIX: PWideChar = '\\?\UNC\';
+const LONG_PATH_PREFIX: PChar = '\\?\';
+const UNC_PATH_PREFIX: PChar = '\\?\UNC\';
 {$else}
 function realpath(name: PChar; resolved: PChar): PChar; cdecl; external 'c' name 'realpath';
 {$endif}
 
 /// Implementation of realpath as in libuv
-function os_realpath(const FileName: SynUnicode; var TargetName: SynUnicode): Boolean;
+function os_realpath(const FileName: TFileName; var TargetName: TFileName): Boolean;
 {$ifdef MSWINDOWS}
+{$WARN SYMBOL_PLATFORM OFF}
 var
   Handle: THandle;
   w_realpath_len: Cardinal;
@@ -458,36 +459,37 @@ begin
   Result := False;
   if not CheckWin32Version(6, 0) then
     exit;
-  Handle := CreateFileW(pointer(FileName), GENERIC_READ, FILE_SHARE_READ, nil,
+  Handle := CreateFile(PChar(FileName), GENERIC_READ, FILE_SHARE_READ, nil,
     OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL or FILE_FLAG_BACKUP_SEMANTICS, 0);
   if Handle = INVALID_HANDLE_VALUE then
     exit;
   try
-    w_realpath_len := GetFinalPathNameByHandleW(Handle, nil, 0, VOLUME_NAME_DOS);
+    w_realpath_len := GetFinalPathNameByHandle(Handle, nil, 0, VOLUME_NAME_DOS);
     if (w_realpath_len = 0) then
       exit;
     SetLength(TargetName, w_realpath_len);
-    if GetFinalPathNameByHandleW(Handle, PWideChar(TargetName), w_realpath_len, VOLUME_NAME_DOS) > 0 then begin
-      if StrLComp(PWideChar(TargetName), UNC_PATH_PREFIX, length(UNC_PATH_PREFIX)) = 0 then begin
+    if GetFinalPathNameByHandle(Handle, PChar(TargetName), w_realpath_len, VOLUME_NAME_DOS) > 0 then begin
+      if StrLComp(PChar(TargetName), UNC_PATH_PREFIX, length(UNC_PATH_PREFIX)) = 0 then begin
         // convert \\?\UNC\host\folder -> \\host\folder
         TargetName := Copy(TargetName, 7, length(TargetName)-7);
         TargetName[1] := '\';
-      end else if StrLComp(PWideChar(TargetName), LONG_PATH_PREFIX, length(LONG_PATH_PREFIX)) = 0 then
+      end else if StrLComp(PChar(TargetName), LONG_PATH_PREFIX, length(LONG_PATH_PREFIX)) = 0 then
         TargetName := Copy(TargetName, length(LONG_PATH_PREFIX)+1, length(TargetName)-length(LONG_PATH_PREFIX)-1)
       else
-       Exit; // error
+        Exit; // error
       Result := True;
     end;
   finally
     CloseHandle(Handle);
   end;
 end;
+{$WARN SYMBOL_PLATFORM ON}
 {$else}
 var
-  Buf: AnsiString;
+  Buf: TFileName;
 begin
   SetLength(Buf, PATH_MAX);
-  Result := realpath(PChar(SynUnicodeToString(FileName)), PChar(Buf)) <> nil;
+  Result := realpath(PChar(FileName), PChar(Buf)) <> nil;
   if Result then
     TargetName := PChar(Buf)
   else
@@ -501,7 +503,7 @@ end;
 // to produce a canonicalized absolute pathname
 function fs_realPath(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
 var
-  dir, target: SynUnicode;
+  dir, target: TFileName;
 const
   USAGE = 'usage: realpath(dirPath: String): string';
 begin
@@ -509,7 +511,7 @@ begin
     if (argc < 1) or not vp.argv[0].isString then
       raise ESMException.Create(USAGE);
 
-    dir := vp.argv[0].asJSString.ToSynUnicode(cx);
+    dir := vp.argv[0].asJSString.ToString(cx);
     //if not FileGetSymLinkTarget(dir, target) then
     if not os_realpath(dir, target) then
       target := dir;
@@ -530,20 +532,22 @@ function fs_rename(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdec
 const
   USAGE = 'usage: rename(fromPath, toPath: String)';
 var
-  fromPath, toPath: SynUnicode;
-  f : file;
+  fromPath, toPath: TFileName;
+  //f : file;
 begin
   try
     if (argc <> 2) or not vp.argv[0].isString or not vp.argv[1].isString then
       raise ESMException.Create(USAGE);
-    fromPath := vp.argv[0].asJSString.ToSynUnicode(cx);
-    toPath := vp.argv[1].asJSString.ToSynUnicode(cx);
-    AssignFile(f, fromPath);
+    fromPath := vp.argv[0].asJSString.ToString(cx);
+    toPath := vp.argv[1].asJSString.ToString(cx);
+{    AssignFile(f, fromPath);
     // libc rename implementation rewrite destination if it exists
     // Rename in delphi fail with Access deny. let's fix it
     if FileExists(toPath) then
       SysUtils.DeleteFile(toPath);
-    Rename(f, toPath);
+    Rename(f, toPath);}
+    if not SysUtils.RenameFile(fromPath, toPath) then
+      RaiseLastOSError;
     Result := True;
   except
     on E: Exception do begin
