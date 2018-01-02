@@ -48423,6 +48423,9 @@ const
   HASH_VOID = 0;
   // marks a hash colision with a void entry in the hash table
   HASH_ONVOIDCOLISION = 1;
+  // fHashsCount<=HASH_PO2 is expected to be a power of two (fast binary division)
+  // -> 262,144 TSynHash slots = 2MB, for a TDynArray.Capacity of 131,072 items  
+  HASH_PO2 = 1 shl 18;
 
 {$ifdef UNDIRECTDYNARRAY}
 
@@ -48950,7 +48953,9 @@ begin
   end;
   if aHashCode=HASH_VOID then
     aHashCode := HASH_ONVOIDCOLISION; // 0 means void slot in the loop below
-  result := (aHashCode-1) and (fHashsCount-1); // fHashs[] has a power of 2 length
+  if fHashsCount<=HASH_PO2 then // fHashs[] has a power of 2 length -> binary div
+    result := (aHashCode-1) and (fHashsCount-1) else
+    result := (aHashCode-1) mod cardinal(fHashsCount);
   last := fHashsCount;
   first := result;
   repeat
@@ -48985,7 +48990,9 @@ begin
   end;
   if aHashCode=HASH_VOID then
     aHashCode := HASH_ONVOIDCOLISION; // 0 means void slot in the loop below
-  result := (aHashCode-1) and (fHashsCount-1); // fHashs[] has a power of 2 length
+  if fHashsCount<=HASH_PO2 then // fHashs[] has a power of 2 length -> binary div
+    result := (aHashCode-1) and (fHashsCount-1) else
+    result := (aHashCode-1) mod cardinal(fHashsCount);
   last := fHashsCount;
   first := result;
   repeat
@@ -49089,11 +49096,13 @@ begin
     exit; // hash only if needed, and avoid GPF after TDynArray.Clear (Count=0)
   if not Assigned(fEventHash) and not Assigned(fHashElement) then
     exit;
-  // find nearest power of two for new fHashs[] size
-  cap := Capacity*2; // Capacity sounds better than Count
-  fHashsCount := 256;
-  while fHashsCount<cap do
-    fHashsCount := fHashsCount shl 1;
+  cap := Capacity*2; // Capacity better than Count; *2 to have void slots
+  if cap>HASH_PO2 then // slightly slower lookup, but much less memory use
+    fHashsCount := cap else begin
+    fHashsCount := 256; // find nearest power of two for fast binary division
+    while fHashsCount<cap do
+      fHashsCount := fHashsCount shl 1;
+  end;
   SetLength(fHashs,fHashsCount); // fill all fHashs[]=HASH_VOID=0
   // fill fHashs[] from all existing items
   P := fValue^;
