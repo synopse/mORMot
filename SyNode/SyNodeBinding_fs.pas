@@ -438,7 +438,9 @@ end;
 {$ifdef MSWINDOWS}
 {$if defined(FPC) or not defined(ISDELPHIXE2)}
 const VOLUME_NAME_DOS = $0;
-function GetFinalPathNameByHandle(hFile: THandle; lpszFilePath: LPSTR;
+
+// Only Wide version return a value
+function GetFinalPathNameByHandleW(hFile: THandle; lpszFilePath: LPWSTR;
   cchFilePath: DWORD; dwFlags: DWORD): DWORD; stdcall; external kernel32;
 {$ifend}
 
@@ -455,6 +457,7 @@ function os_realpath(const FileName: TFileName; var TargetName: TFileName): Bool
 var
   Handle: THandle;
   w_realpath_len: Cardinal;
+  Res: WideString;
 begin
   Result := False;
   if not CheckWin32Version(6, 0) then
@@ -464,17 +467,18 @@ begin
   if Handle = INVALID_HANDLE_VALUE then
     exit;
   try
-    w_realpath_len := GetFinalPathNameByHandle(Handle, nil, 0, VOLUME_NAME_DOS);
+    w_realpath_len := GetFinalPathNameByHandleW(Handle, nil, 0, VOLUME_NAME_DOS);
     if (w_realpath_len = 0) then
       exit;
-    SetLength(TargetName, w_realpath_len);
-    if GetFinalPathNameByHandle(Handle, PChar(TargetName), w_realpath_len, VOLUME_NAME_DOS) > 0 then begin
+    SetLength(Res, w_realpath_len);
+    if GetFinalPathNameByHandleW(Handle, PWideChar(Res), w_realpath_len, VOLUME_NAME_DOS) > 0 then begin
+      WideCharToStrVar(PWideChar(Res), String(TargetName));
       if StrLComp(PChar(TargetName), UNC_PATH_PREFIX, length(UNC_PATH_PREFIX)) = 0 then begin
         // convert \\?\UNC\host\folder -> \\host\folder
         TargetName := Copy(TargetName, 7, length(TargetName)-7);
         TargetName[1] := '\';
       end else if StrLComp(PChar(TargetName), LONG_PATH_PREFIX, length(LONG_PATH_PREFIX)) = 0 then
-        TargetName := Copy(TargetName, length(LONG_PATH_PREFIX)+1, length(TargetName)-length(LONG_PATH_PREFIX)-1)
+        TargetName := Copy(TargetName, length(LONG_PATH_PREFIX)+1, length(TargetName)-length(LONG_PATH_PREFIX))
       else
         Exit; // error
       Result := True;
@@ -540,12 +544,11 @@ begin
       raise ESMException.Create(USAGE);
     fromPath := vp.argv[0].asJSString.ToString(cx);
     toPath := vp.argv[1].asJSString.ToString(cx);
-{    AssignFile(f, fromPath);
-    // libc rename implementation rewrite destination if it exists
-    // Rename in delphi fail with Access deny. let's fix it
+    {$IFDEF MSWINDOWS} // libc rename implementation rewrites destination if it's already exist
     if FileExists(toPath) then
-      SysUtils.DeleteFile(toPath);
-    Rename(f, toPath);}
+      if not SysUtils.DeleteFile(toPath) then
+        RaiseLastOSError;
+    {$ENDIF}
     if not SysUtils.RenameFile(fromPath, toPath) then
       RaiseLastOSError;
     Result := True;
