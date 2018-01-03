@@ -2120,6 +2120,9 @@ function VariantToDateTime(const V: Variant; var Value: TDateTime): boolean;
 /// fast conversion from hexa chars, supplied as a variant string, into a binary buffer
 function VariantHexDisplayToBin(const Hex: variant; Bin: PByte; BinBytes: integer): boolean;
 
+/// fast conversion of a binary buffer into hexa chars, as a variant string
+function BinToHexDisplayLowerVariant(Bin: pointer; BinBytes: integer): variant;
+
 /// fast comparison of a Variant and UTF-8 encoded String (or number)
 // - slightly faster than plain V=Str, which computes a temporary variant
 // - here Str='' equals unassigned, null or false
@@ -22998,6 +23001,11 @@ end;
 
 {$ifndef NOVARIANTS}
 
+function BinToHexDisplayLowerVariant(Bin: pointer; BinBytes: integer): variant;
+begin
+  RawUTF8ToVariant(BinToHexDisplayLower(Bin,BinBytes),result);
+end;
+
 function VariantHexDisplayToBin(const Hex: variant; Bin: PByte; BinBytes: integer): boolean;
 var tmp: RawUTF8;
     wasString: boolean;
@@ -37646,7 +37654,7 @@ begin
     end;
   end;
   {$else MSWINDOWS}
-  {$ifdef FPCUSEVERSIONINFO} // from FPC 3.0, if enabled in Synopse.inc
+  {$ifdef FPCUSEVERSIONINFO} // FPC 3.0+ if enabled in Synopse.inc / project options
   if aFileName<>'' then begin
     VI := TVersionInfo.Create;
     try
@@ -39595,7 +39603,7 @@ asm  // faster version of _CopyRecord{dest, source, typeInfo: Pointer} by AB
         mov     esi, edx                     // esi = source
         mov     edi, eax                     // edi = dest
         add     ebx, ecx                     // ebx = TFieldTable
-        XOR     eax, eax                     // eax = current offset
+        xor     eax, eax                     // eax = current offset
         mov     ebp, [ebx].TTypeInfo.ManagedCount // ebp = TFieldInfo count
         mov     ecx, [ebx].TTypeInfo.recSize
         test    ebp, ebp
