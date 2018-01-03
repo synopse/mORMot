@@ -91,7 +91,12 @@ unit SyNode;
 interface
 
 uses
-  {$ifndef FPC} Windows, ShLwApi,{$else}FileUtil, LazFileUtils, dynlibs,{$endif}
+  {$ifndef FPC}
+  Windows,
+  ShLwApi, // for older Delphi versions download this file from JEDI library
+  {$else}
+  FileUtil, LazFileUtils, dynlibs,
+  {$endif}
   {$ifdef ISDELPHIXE2}System.SysUtils,{$else}SysUtils,{$endif}
   Classes,
   {$ifndef LVCL}
@@ -799,7 +804,7 @@ var process: PJSRootedObject;
     {$IFDEF FPC}
     I, Cnt: Integer;
     EnvStr: AnsiString;
-    Parts: TStringArray;
+    Parts: array of AnsiString;
     {$ELSE}
     EnvBlock, P, pEq: PChar;
     strName, strVal: SynUnicode;
@@ -826,7 +831,7 @@ begin
       EnvStr := GetEnvironmentString(I);
       Parts := EnvStr.Split('=', TStringSplitOptions.ExcludeEmpty);
       if (Length(Parts) = 2) and (Trim(Parts[0]) <> '') then begin
-        env.ptr.DefineUCProperty(cx, Trim(Parts[0]), cx.NewJSString(Trim(Parts[1])).ToJSVal,
+        env.ptr.DefineUCProperty(cx, StringToSynUnicode(Trim(Parts[0])), cx.NewJSString(Trim(Parts[1])).ToJSVal,
           JSPROP_ENUMERATE or JSPROP_PERMANENT or JSPROP_READONLY, nil, nil);
       end
     end;
