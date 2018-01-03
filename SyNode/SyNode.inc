@@ -63,10 +63,14 @@
 // ensure *TO_JSVAL() macros will check explicitly for the target type
 
 {$ifndef FPC}
+{$IFDEF CONDITIONALEXPRESSIONS}
 {$if CompilerVersion = 24.0}
   // see http://synopse.info/forum/viewtopic.php?pid=12598#p12598
   {$define FIXBUGXE3}
 {$ifend}
+{$ELSE}
+  Error: SyNode requires Delphi 7 of higher
+{$ENDIF}
 {$endif}
 
 {$IFNDEF SM52}

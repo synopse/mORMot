@@ -550,11 +550,13 @@ function TSMRemoteDebuggerCommunicationThread.sockRead(out packet: RawUTF8): boo
 const
   bufSize = 8;
 var
-  buf: string[bufSize];
+  buf: array [0..bufSize] of Byte;
   ch: PUTF8Char;
-  len, head: integer;
+  len, head, bytesToRead: integer;
 begin
-  Result := (fCommunicationSock <> nil) and fCommunicationSock.TrySockRecv(@buf[1], bufSize);
+  bytesToRead := bufSize;
+  FillChar(buf, Length(buf), #0);
+  Result := (fCommunicationSock <> nil) and fCommunicationSock.TrySockRecv(@buf[1], bytesToRead);
   if not Result then
     exit;
   ch := @buf[1];
@@ -562,7 +564,8 @@ begin
   SetLength(packet, len);
   head := bufSize - (ch - @buf[1]);
   Move(ch^, packet[1], head);
-  Result := fCommunicationSock.TrySockRecv(@packet[head + 1], len - head);
+  bytesToRead := len - head;
+  Result := fCommunicationSock.TrySockRecv(@packet[head + 1], bytesToRead);
 end;
 
 procedure TSMRemoteDebuggerCommunicationThread.sockWrite(const packet: RawUTF8);
