@@ -41281,8 +41281,10 @@ begin
   ktDynamicArray:
     raise ESynException.CreateUTF8('%.CustomWriter("%"): unsupported',
         [self,fCustomTypeName]);
-  ktBinary:
-    aWriter.AddBinToHexDisplayQuoted(@aValue,fFixedSize);
+  ktBinary: 
+    if (fFixedSize<=sizeof(QWord)) and IsZero(@aValue,fFixedSize) then
+      aWriter.AddShort('""') else // 0 -> ""
+      aWriter.AddBinToHexDisplayQuoted(@aValue,fFixedSize);
   else begin // encoded as JSON strings
     aWriter.Add('"');
     case fKnownType of
@@ -41355,19 +41357,17 @@ begin
       if wasString and (PropValueLen=fFixedSize*2) and
          SynCommons.HexToBin(PAnsiChar(PropValue),@aValue,fFixedSize) then
         result := P;
-    ktBinary: begin
-      FillCharFast(aValue,fDataSize,0);
-      if wasString then begin
+    ktBinary:
+      if wasString and (PropValueLen>0) then begin // default hexa serialization
         if (PropValueLen=fFixedSize*2) and
-           SynCommons.HexDisplayToBin(PAnsiChar(PropValue),@aValue,fFixedSize) then
+           HexDisplayToBin(PAnsiChar(PropValue),@aValue,fFixedSize) then
           result := P;
       end else
-        if fFixedSize<=sizeof(u64) then begin
-          SetQWord(PropValue,u64);
+        if fFixedSize<=sizeof(u64) then begin // allow integer serialization
+          SetQWord(PropValue,u64); // "" -> PropValueLen=0 -> u64=0
           MoveFast(u64,aValue,fFixedSize);
           result := P;
         end;
-    end;
     end;
   end;
   end;
@@ -42323,7 +42323,7 @@ begin
           if (len>12) and IdemPropName('DynArray',@PByteArray(TypIdent)[len-8],8) then
             dec(len,8) else
           if (len>3) and (TypIdent[len]='S') then
-            dec(len,1) else
+            dec(len) else
             len := 0;
           if len>0 then begin
             ArrayTyp := TJSONCustomParserRTTI.TypeNameToSimpleRTTIType(
