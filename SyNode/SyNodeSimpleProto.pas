@@ -64,6 +64,9 @@ unit SyNodeSimpleProto;
   - initial release. Use SpiderMonkey 45
 
 }
+
+{$I Synopse.inc}
+
 interface
 
 uses
@@ -472,7 +475,7 @@ begin
     tkClass:
       defineClass(Cx, PI^.PropType^{$IFNDEF FPC}^{$ENDIF}.ClassType^.ClassType, TSMSimpleRTTIProtoObject, aParent);
     tkEnumeration:
-      defineEnum(Cx, PI.PropType{$IFNDEF FPC_NEWRTTI}^{$ENDIF}, aParent);
+      defineEnum(Cx, PI^.PropType{$IFNDEF FPC_OLDRTTI}^{$ENDIF}, aParent);
   end;
   isReadonly := false;
   isDeterministic := false;
