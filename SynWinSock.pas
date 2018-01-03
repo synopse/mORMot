@@ -852,9 +852,10 @@ type
     Cred: TCredHandle;
     Ctxt: TCtxtHandle;
     Sizes: TSecPkgContextStreamSizes;
-    Data: AnsiString;
-    RecLen, Start, Count: integer;
+    Data, Input: AnsiString;
+    InputSize, DataPos, DataCount, InputCount: integer;
     procedure HandshakeLoop(aSocket: THandle);
+    procedure AppendData(const aBuffer: TSecBuffer);
   public
     Initialized: boolean;
     procedure AfterConnection(aSocket: THandle; aAddress: PAnsiChar);
@@ -1591,14 +1592,15 @@ begin
         GetServByName := nil;
         GetServByPort := nil;
         ssGetHostName := nil;
-{$ifndef FORCEOLDAPI}
+        {$ifndef FORCEOLDAPI}
         GetAddrInfo := nil;
         FreeAddrInfo := nil;
         GetNameInfo := nil;
         GetAddrInfo := nil;
         FreeAddrInfo := nil;
         GetNameInfo := nil;
-{$endif}AcquireCredentialsHandle := nil;
+        {$endif}
+        AcquireCredentialsHandle := nil;
         FreeCredentialsHandle := nil;
         InitializeSecurityContext := nil;
         DeleteSecurityContext := nil;
@@ -1677,6 +1679,17 @@ begin
   buf[2].pvBuffer := nil;
 end;
 
+procedure TSChannelClient.AppendData(const aBuffer: TSecBuffer);
+var
+  newlen: integer;
+begin
+  newlen := DataCount + integer(aBuffer.cbBuffer);
+  if newlen > Length(Data) then
+    SetLength(Data, newlen);
+  Move(aBuffer.pvBuffer^, PByteArray(Data)[DataCount], aBuffer.cbBuffer);
+  inc(DataCount, aBuffer.cbBuffer);
+end;
+
 procedure TSChannelClient.AfterConnection(aSocket: THandle; aAddress: PAnsiChar);
 var
   buf: THandshakeBuf;
@@ -1686,6 +1699,8 @@ begin
     raise ESChannel.Create('SChannel API not available');
   CheckSEC_E_OK(AcquireCredentialsHandle(nil, UNISP_NAME, SECPKG_CRED_OUTBOUND,
     nil, nil, nil, nil, @Cred, nil));
+  DataPos := 0;
+  DataCount := 0;
   buf.Init;
   res := InitializeSecurityContext(@Cred, nil, aAddress, ISC_REQ_FLAGS, 0,
     SECURITY_NATIVE_DREP, nil, 0, @Ctxt, @buf.output, @f, nil);
@@ -1696,9 +1711,11 @@ begin
   HandshakeLoop(aSocket);
   CheckSEC_E_OK(QueryContextAttributes(@Ctxt, SECPKG_ATTR_STREAM_SIZES, @Sizes));
   SetLength(Data, Sizes.cbMaximumMessage);
-  RecLen := Sizes.cbHeader + Sizes.cbMaximumMessage + Sizes.cbTrailer;
-  if RecLen > TLSRECMAXSIZE then
-    raise ESChannel.CreateFmt('RecLen=%d>%d', [RecLen, TLSRECMAXSIZE]);
+  InputSize := Sizes.cbHeader + Sizes.cbMaximumMessage + Sizes.cbTrailer;
+  if InputSize > TLSRECMAXSIZE then
+    raise ESChannel.CreateFmt('InputSize=%d>%d', [InputSize, TLSRECMAXSIZE]);
+  SetLength(Input, InputSize);
+  InputCount := 0;
   Initialized := true;
 end;
 
@@ -1730,13 +1747,11 @@ begin
       end;
     end;
   end;
-  CheckSEC_E_OK(res); // TODO: handle SEC_I_INCOMPLETE_CREDENTIALS
-  Start := 0;
-  Count := 0;
-  if buf.buf[1].BufferType = SECBUFFER_EXTRA then begin
-    Count := buf.buf[1].cbBuffer;
-    Move(buf.buf[1].pvBuffer^, pointer(Data)^, Count);
-  end;
+  // TODO: handle SEC_I_INCOMPLETE_CREDENTIALS ?
+  // see https://github.com/curl/curl/blob/master/lib/vtls/schannel.c
+  CheckSEC_E_OK(res);
+  if buf.buf[1].BufferType = SECBUFFER_EXTRA then
+    AppendData(buf.buf[1]);
 end;
 
 procedure TSChannelClient.BeforeDisconnection(aSocket: THandle);
@@ -1780,29 +1795,27 @@ var
   desc: TSecBufferDesc;
   buf: array[0..3] of TSecBuffer;
   res: cardinal;
-  templen, read, i, content, extra: integer;
-  temp: array[0..TLSRECMAXSIZE] of byte;
+  read, i: integer;
 begin
   if not Initialized then begin // use plain socket API
     result := Recv(aSocket, aBuffer, aLength, MSG_NOSIGNAL);
     exit;
   end;
-  result := 0;
-  if Count = 0 then begin
-    templen := 0;
+  while DataCount = 0 do begin
+    DataPos := 0;
     desc.ulVersion := SECBUFFER_VERSION;
     desc.cBuffers := 4;
     desc.pBuffers := @buf[0];
     repeat
-      read := Recv(aSocket, @temp[templen], RecLen - templen, MSG_NOSIGNAL);
+      read := Recv(aSocket, @PByteArray(Input)[InputCount], InputSize - InputCount, MSG_NOSIGNAL);
       if read <= 0 then begin
         result := read; // return socket error (may be WSATRY_AGAIN)
         exit;
       end;
-      inc(templen, read);
-      buf[0].cbBuffer := templen;
+      inc(InputCount, read);
+      buf[0].cbBuffer := InputCount;
       buf[0].BufferType := SECBUFFER_DATA;
-      buf[0].pvBuffer := @temp;
+      buf[0].pvBuffer := pointer(Input);
       buf[1].cbBuffer := 0;
       buf[1].BufferType := SECBUFFER_EMPTY;
       buf[1].pvBuffer := nil;
@@ -1813,48 +1826,22 @@ begin
       buf[3].BufferType := SECBUFFER_EMPTY;
       buf[3].pvBuffer := nil;
       res := DecryptMessage(@Ctxt, @desc, 0, nil);
-      if res = SEC_I_RENEGOTIATE then begin
-        HandshakeLoop(aSocket);
-        if Count <> 0 then
-          break; // something was received
-        continue;
-      end;
     until res <> SEC_E_INCOMPLETE_MESSAGE;
-    if Count = 0 then begin
+    InputCount := 0;
+    if res <> SEC_I_RENEGOTIATE then // handle data, even with renegotiation
       CheckSEC_E_OK(res);
-      content := 0;
-      extra := 0;
-      for i := 1 to 3 do
-        if buf[i].BufferType = SECBUFFER_DATA then
-          content := i
-        else if buf[i].BufferType = SECBUFFER_EXTRA then
-          extra := i;
-      if content = 0 then
-        raise ESChannel.Create('Receive: no data');
-      Start := 0;
-      Count := buf[content].cbBuffer;
-      Move(buf[content].pvBuffer^, Pointer(Data)^, Count);
-      if extra <> 0 then begin
-        inc(Count, buf[extra].cbBuffer);
-        if Count > Length(Data) then
-          SetLength(Data, Count);
-        Move(buf[extra].pvBuffer^, PByteArray(Data)[Count], buf[extra].cbBuffer);
-      end;
-    end;
+    for i := 1 to 3 do
+      if buf[i].BufferType in [SECBUFFER_DATA, SECBUFFER_EXTRA] then
+        AppendData(buf[i]);
+    if res = SEC_I_RENEGOTIATE then
+      HandshakeLoop(aSocket);
   end;
-  if Count <> 0 then
-    if aLength >= Count then begin
-      result := Count;
-      Move(PByteArray(Data)[Start], aBuffer^, result);
-      Start := 0;
-      Count := 0;
-    end
-    else begin
-      result := aLength;
-      Move(PByteArray(Data)[Start], aBuffer^, result);
-      inc(Start, result);
-      dec(Count, result);
-    end;
+  result := DataCount;
+  if aLength < result then
+    result := aLength;
+  Move(PByteArray(Data)[DataPos], aBuffer^, result);
+  inc(DataPos, result);
+  dec(DataCount, result);
 end;
 
 function TSChannelClient.Send(aSocket: THandle; aBuffer: pointer; aLength: integer): integer;
