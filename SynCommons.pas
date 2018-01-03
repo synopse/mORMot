@@ -2122,6 +2122,7 @@ function VariantHexDisplayToBin(const Hex: variant; Bin: PByte; BinBytes: intege
 
 /// fast conversion of a binary buffer into hexa chars, as a variant string
 function BinToHexDisplayLowerVariant(Bin: pointer; BinBytes: integer): variant;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fast comparison of a Variant and UTF-8 encoded String (or number)
 // - slightly faster than plain V=Str, which computes a temporary variant
@@ -14555,6 +14556,7 @@ procedure RawUTF8ToVariant(const Txt: RawUTF8; var Value: variant); overload;
 
 /// convert an UTF-8 encoded string into a variant RawUTF8 varString
 function RawUTF8ToVariant(const Txt: RawUTF8): variant; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert an UTF-8 encoded text buffer into a variant RawUTF8 varString
 // - this overloaded version expects a destination variant type (e.g. varString
@@ -15445,6 +15447,7 @@ type
     // - returns the number of deleted items
     // - returns 0 if the document is not a dvObject, or if no match was found
     // - if the value exists several times, all occurences would be removed
+    // - is optimized for DeleteByValue(null) call
     function DeleteByValue(const aValue: Variant; CaseInsensitive: boolean=false): integer;
     /// delete all values matching the first characters of a property name
     // - returns the number of deleted items
@@ -44765,11 +44768,18 @@ function TDocVariantData.DeleteByValue(const aValue: Variant;
 var ndx: integer;
 begin
   result := 0;
-  for ndx := VCount-1 downto 0 do
-  if SortDynArrayVariantComp(TVarData(VValue[ndx]),TVarData(aValue),CaseInsensitive)=0 then begin
-    Delete(ndx);
-    inc(result);
-  end;
+  if VarIsEmptyOrNull(aValue) then begin
+    for ndx := VCount-1 downto 0 do
+    if VarDataIsEmptyOrNull(@VValue[ndx]) then begin
+      Delete(ndx);
+      inc(result);
+    end;
+  end else
+    for ndx := VCount-1 downto 0 do
+    if SortDynArrayVariantComp(TVarData(VValue[ndx]),TVarData(aValue),CaseInsensitive)=0 then begin
+      Delete(ndx);
+      inc(result);
+    end;
 end;
 
 function TDocVariantData.DeleteByStartName(aStartName: PUTF8Char; aStartNameLen: integer): integer;
@@ -45986,7 +45996,22 @@ begin
 end;
 
 function _Safe(const DocVariant: variant): PDocVariantData;
-{$ifndef HASINLINENOTX86}
+{$ifdef HASINLINENOTX86}
+begin
+  with TVarData(DocVariant) do
+    if VType=word(DocVariantVType) then begin
+      result := @DocVariant;
+      exit;
+    end else
+    if VType=varByRef or varVariant then begin
+      result := _Safe(PVariant(VPointer)^);
+      exit;
+    end else begin
+      result := @DocVariantDataFake;
+      exit;
+    end;
+end;
+{$else}
 asm
       mov   ecx,DocVariantVType
       movzx edx,word ptr [eax].TVarData.VType
@@ -46002,28 +46027,13 @@ asm
       lea   eax,[DocVariantDataFake]
 @ok:
 end;
-{$else}
-begin
-  with TVarData(DocVariant) do
-    if VType=word(DocVariantVType) then begin
-      result := @DocVariant;
-      exit;
-    end else
-    if VType=varByRef or varVariant then begin
-      result := _Safe(PVariant(VPointer)^);
-      exit;
-    end else begin
-      result := @DocVariantDataFake;
-      exit;
-    end;
-end;
 {$endif}
 
 function _Safe(const DocVariant: variant; ExpectedKind: TDocVariantKind): PDocVariantData;
 begin
   result := _Safe(DocVariant);
   if result^.Kind<>ExpectedKind then
-    raise EDocVariant.CreateUTF8('_Safe(%)<>%',[ord(result^.Kind),ord(ExpectedKind)]);
+    raise EDocVariant.CreateUTF8('_Safe(%)<>%',[ToText(result^.Kind)^,ToText(ExpectedKind)^]);
 end;
 
 function _Obj(const NameValuePairs: array of const;
