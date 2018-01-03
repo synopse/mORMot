@@ -6,7 +6,7 @@ unit SynCommons;
 (*
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2017 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynCommons;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2017
+  Portions created by the Initial Developer are Copyright (C) 2018
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -2117,6 +2117,12 @@ function VariantToUTF8(const V: Variant; var Text: RawUTF8): boolean; overload;
 // ISO-8601 parsing if possible
 function VariantToDateTime(const V: Variant; var Value: TDateTime): boolean;
 
+/// fast conversion from hexa chars, supplied as a variant string, into a binary buffer
+function VariantHexDisplayToBin(const Hex: variant; Bin: PByte; BinBytes: integer): boolean;
+
+/// fast conversion of a binary buffer into hexa chars, as a variant string
+function BinToHexDisplayLowerVariant(Bin: pointer; BinBytes: integer): variant;
+
 /// fast comparison of a Variant and UTF-8 encoded String (or number)
 // - slightly faster than plain V=Str, which computes a temporary variant
 // - here Str='' equals unassigned, null or false
@@ -2775,7 +2781,10 @@ function StrCompSSE42(Str1, Str2: pointer): PtrInt;
 
 /// fastest available version of StrComp(), to be used with PUTF8Char/PAnsiChar
 // - will use SSE4.2 instructions on supported CPUs - and potentiall read up
-// to 15 bytes beyond the string: use StrCompFast() for a safe memory read
+// to 15 bytes beyond the string: use StrCompFast() for a safe memory read;
+// if you want to disable StrCompSSE42 for your whole project, add in the
+// initialization section of one of your units:
+// !  StrComp := @StrCompFast;
 var StrComp: function (Str1, Str2: pointer): PtrInt = StrCompFast;
 
 {$endif}
@@ -2801,7 +2810,10 @@ var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte) = System.FillC
 // Win32 and Win64 platforms: please note that in this case, it may read up to
 // 15 bytes before or beyond the string; this is rarely a problem but it can in
 // principle generate a protection violation (e.g. when used over mapped files):
-// you can use the slightly slower StrLenPas() function instead with such input
+// you can use the slightly slower StrLenPas() function instead with such input;
+// if you want to disable StrCompSSE42 for your whole project, add in the
+// initialization section of one of your units:
+// !  StrLen := @StrLenPas;
 var StrLen: function(S: pointer): PtrInt = StrLenPas;
 
 /// our fast version of FillChar()
@@ -9772,6 +9784,8 @@ type
     function InArray(const aKey,aArrayValue; aAction: TSynDictionaryInArray): boolean;
     procedure SetTimeouts;
     function GetTimeOut: cardinal;
+    function KeyFullHash(const Elem): cardinal;
+    function KeyFullCompare(const A,B): integer;
   public
     /// initialize the dictionary storage, for a given dynamic array value
     // - aKeyTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
@@ -11541,7 +11555,7 @@ function Int64ToHexShort(aInt64: Int64): TShort16; overload;
 // - reverse function of HexDisplayToInt64()
 function Int64ToHexString(aInt64: Int64): string;
 
-/// fast conversion from hexa chars into a pointer
+/// fast conversion from hexa chars into a binary buffer
 function HexDisplayToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: integer): boolean;
 
 /// fast conversion from hexa chars into a cardinal
@@ -11980,7 +11994,7 @@ type
     case integer of
     0: (V: Qword);
     1: (L,H: cardinal);
-    2: (B: array[0..3] of byte);
+    2: (B: array[0..7] of byte);
   end;
   /// points to the binary of an unsigned 64-bit value
   PQWordRec = ^TQWordRec;
@@ -12088,7 +12102,8 @@ type
   3: (i0,i1,i2,i3,i4,i5,i6,i7,i8,i9,i10,i11,i12,i13,i14,i15: integer);
   4: (c0,c1,c2,c3: TBlock128);
   5: (b: THash512);
-  6: (w: array[0..31] of word);
+  6: (b3: THash384);
+  7: (w: array[0..31] of word);
   end;
   /// pointer to 512-bit hash map variable record
   PHash512Rec = ^THash512Rec;
@@ -15406,6 +15421,9 @@ type
     // - supplied document should be of the same kind than the current one,
     // otherwise nothing is added
     procedure AddFrom(const aDocVariant: Variant);
+    /// add or update or on several valeus from another object
+    // - current document should be an object
+    procedure AddOrUpdateFrom(const aDocVariant: Variant; aOnlyAddMissing: boolean=false);
     /// add one or several properties, specified by path, from another object
     // - path are defined as a dotted name-space, e.g. 'doc.glossary.title'
     // - matching values would be added as root values, with the path as name
@@ -22983,6 +23001,19 @@ begin
 end;
 
 {$ifndef NOVARIANTS}
+
+function BinToHexDisplayLowerVariant(Bin: pointer; BinBytes: integer): variant;
+begin
+  RawUTF8ToVariant(BinToHexDisplayLower(Bin,BinBytes),result);
+end;
+
+function VariantHexDisplayToBin(const Hex: variant; Bin: PByte; BinBytes: integer): boolean;
+var tmp: RawUTF8;
+    wasString: boolean;
+begin
+  VariantToUTF8(hex,tmp,wasString);
+  result := wasstring and HexDisplayToBin(pointer(tmp),Bin,BinBytes);
+end;
 
 function VariantToDateTime(const V: Variant; var Value: TDateTime): boolean;
 var tmp: RawUTF8;
@@ -37626,7 +37657,7 @@ begin
     end;
   end;
   {$else MSWINDOWS}
-  {$ifdef FPCUSEVERSIONINFO} // from FPC 3.0, if enabled in Synopse.inc
+  {$ifdef FPCUSEVERSIONINFO} // FPC 3.0+ if enabled in Synopse.inc / project options
   if aFileName<>'' then begin
     VI := TVersionInfo.Create;
     try
@@ -39575,7 +39606,7 @@ asm  // faster version of _CopyRecord{dest, source, typeInfo: Pointer} by AB
         mov     esi, edx                     // esi = source
         mov     edi, eax                     // edi = dest
         add     ebx, ecx                     // ebx = TFieldTable
-        XOR     eax, eax                     // eax = current offset
+        xor     eax, eax                     // eax = current offset
         mov     ebp, [ebx].TTypeInfo.ManagedCount // ebp = TFieldInfo count
         mov     ecx, [ebx].TTypeInfo.recSize
         test    ebp, ebp
@@ -44209,6 +44240,10 @@ begin
       SetLength(VName,VCount);
       for ndx := 0 to VCount-1 do
         VName[ndx] := Source^.VName[ndx]; // manual copy is needed
+      if dvoInternNames in VOptions then
+        with DocVariantType.InternNames do
+          for ndx := 0 to VCount-1 do
+            UniqueText(VName[ndx]);
     end;
   end else begin
     SetOptions(aOptions);
@@ -44232,6 +44267,10 @@ begin
           Handler.Copy(TVarData(VValue[ndx]),v^,false) else
         VValue[ndx] := variant(v^); // default copy
     end;
+    if dvoInternValues in VOptions then
+      with DocVariantType.InternValues do
+        for ndx := 0 to VCount-1 do
+          UniqueVariant(VValue[ndx]);
   end;
   VariantDynArrayClear(SourceVValue); // faster alternative
 end;
@@ -44311,11 +44350,10 @@ begin
 end;
 
 function TDocVariantData.AddValue(const aName: RawUTF8; const aValue: variant): integer;
-var ndx: integer;
 begin
   if dvoCheckForDuplicatedNames in VOptions then begin
-    ndx := GetValueIndex(aName);
-    if ndx>=0 then
+    result := GetValueIndex(aName);
+    if result>=0 then
       raise EDocVariant.CreateUTF8('Duplicated "%" name',[aName]);
   end;
   result := InternalAdd(aName); // FPC does not allow VValue[InternalAdd(aName)]
@@ -44370,23 +44408,32 @@ begin
 end;
 
 procedure TDocVariantData.AddFrom(const aDocVariant: Variant);
-var source: PDocVariantData;
+var src: PDocVariantData;
     ndx: integer;
 begin
-  source := _Safe(aDocVariant);
-  if source^.Count=0 then
+  src := _Safe(aDocVariant);
+  if src^.Count=0 then
     exit; // nothing to add
-  if dvoIsArray in source^.VOptions then
+  if dvoIsArray in src^.VOptions then
     // add array items
     if dvoIsObject in VOptions then // types should match
       exit else
-    for ndx := 0 to source^.Count-1 do
-      AddItem(source^.VValue[ndx]) else
+    for ndx := 0 to src^.Count-1 do
+      AddItem(src^.VValue[ndx]) else
     // add object items
     if dvoIsArray in VOptions then // types should match
       exit else
-    for ndx := 0 to source^.Count-1 do
-      AddValue(source^.VName[ndx],source^.VValue[ndx]);
+    for ndx := 0 to src^.Count-1 do
+      AddValue(src^.VName[ndx],src^.VValue[ndx]);
+end;
+
+procedure TDocVariantData.AddOrUpdateFrom(const aDocVariant: Variant; aOnlyAddMissing: boolean);
+var src: PDocVariantData;
+    ndx: integer;
+begin
+  src := _Safe(aDocVariant,dvObject);
+  for ndx := 0 to src^.Count-1 do
+    AddOrUpdateValue(src^.VName[ndx],src^.VValue[ndx],nil,aOnlyAddMissing);
 end;
 
 function TDocVariantData.AddItem(const aValue: variant): integer;
@@ -44480,9 +44527,11 @@ begin
       while Compare(names[I],pivot)<0 do Inc(I);
       while Compare(names[J],pivot)>0 do Dec(J);
       if I <= J then begin
-        tempname := names[J]; names[J] := names[I]; names[I] := tempname;
-        vi := @values[I]; vj := @values[J];
-        tempvalue := vj^; vj^ := vi^; vi^ := tempvalue;
+        if I <> J then begin
+          tempname := names[J]; names[J] := names[I]; names[I] := tempname;
+          vi := @values[I]; vj := @values[J];
+          tempvalue := vj^; vj^ := vi^; vi^ := tempvalue;
+        end;
         if P = I then P := J else if P = J then P := I;
         inc(I); dec(J);
       end;
@@ -45559,15 +45608,15 @@ end;
 
 procedure TDocVariant.IntGet(var Dest: TVarData;
   const V: TVarData; Name: PAnsiChar);
-procedure Execute(ndx: integer;
-  const source: TDocVariantData; var Dest: variant);
-begin
-  case ndx of
-  0: Dest := source.Count;
-  1: Dest := ord(source.Kind);
-  2: RawUTF8ToVariant(source.ToJSON,Dest);
+  procedure Execute(ndx: integer;
+    const source: TDocVariantData; var Dest: variant);
+  begin
+    case ndx of
+    0: Dest := source.Count;
+    1: Dest := ord(source.Kind);
+    2: RawUTF8ToVariant(source.ToJSON,Dest);
+    end;
   end;
-end;
 var NameLen, ndx: integer;
 begin
   //Assert(V.VType=DocVariantVType);
@@ -45973,7 +46022,7 @@ begin
 end;
 {$endif}
 
-function _Safe(const DocVariant: variant; ExpectedKind: TDocVariantKind): PDocVariantData; overload;
+function _Safe(const DocVariant: variant; ExpectedKind: TDocVariantKind): PDocVariantData;
 begin
   result := _Safe(DocVariant);
   if result^.Kind<>ExpectedKind then
@@ -48385,6 +48434,9 @@ const
   HASH_VOID = 0;
   // marks a hash colision with a void entry in the hash table
   HASH_ONVOIDCOLISION = 1;
+  // fHashsCount<=HASH_PO2 is expected to be a power of two (fast binary division)
+  // -> 262,144 TSynHash slots = 2MB, for a TDynArray.Capacity of 131,072 items  
+  HASH_PO2 = 1 shl 18;
 
 {$ifdef UNDIRECTDYNARRAY}
 
@@ -48912,7 +48964,9 @@ begin
   end;
   if aHashCode=HASH_VOID then
     aHashCode := HASH_ONVOIDCOLISION; // 0 means void slot in the loop below
-  result := (aHashCode-1) and (fHashsCount-1); // fHashs[] has a power of 2 length
+  if fHashsCount<=HASH_PO2 then // fHashs[] has a power of 2 length -> binary div
+    result := (aHashCode-1) and (fHashsCount-1) else
+    result := (aHashCode-1) mod cardinal(fHashsCount);
   last := fHashsCount;
   first := result;
   repeat
@@ -48947,7 +49001,9 @@ begin
   end;
   if aHashCode=HASH_VOID then
     aHashCode := HASH_ONVOIDCOLISION; // 0 means void slot in the loop below
-  result := (aHashCode-1) and (fHashsCount-1); // fHashs[] has a power of 2 length
+  if fHashsCount<=HASH_PO2 then // fHashs[] has a power of 2 length -> binary div
+    result := (aHashCode-1) and (fHashsCount-1) else
+    result := (aHashCode-1) mod cardinal(fHashsCount);
   last := fHashsCount;
   first := result;
   repeat
@@ -49051,11 +49107,13 @@ begin
     exit; // hash only if needed, and avoid GPF after TDynArray.Clear (Count=0)
   if not Assigned(fEventHash) and not Assigned(fHashElement) then
     exit;
-  // find nearest power of two for new fHashs[] size
-  cap := Capacity*2; // Capacity sounds better than Count
-  fHashsCount := 256;
-  while fHashsCount<cap do
-    fHashsCount := fHashsCount shl 1;
+  cap := Capacity*2; // Capacity better than Count; *2 to have void slots
+  if cap>HASH_PO2 then // slightly slower lookup, but much less memory use
+    fHashsCount := cap else begin
+    fHashsCount := 256; // find nearest power of two for fast binary division
+    while fHashsCount<cap do
+      fHashsCount := fHashsCount shl 1;
+  end;
   SetLength(fHashs,fHashsCount); // fill all fHashs[]=HASH_VOID=0
   // fill fHashs[] from all existing items
   P := fValue^;
@@ -49984,13 +50042,13 @@ end;
 
 constructor TSynPersistentStore.CreateFromBuffer(aBuffer: pointer; aBufferLen: integer);
 begin
-  Create;
+  Create('');
   LoadFrom(aBuffer,aBufferLen);
 end;
 
 constructor TSynPersistentStore.CreateFromFile(const aFileName: TFileName);
 begin
-  Create;
+  Create('');
   LoadFromFile(aFileName);
 end;
 
@@ -57621,6 +57679,22 @@ const
   DIC_TIMESEC = 5;
   DIC_TIMETIX = 6;
 
+function TSynDictionary.KeyFullHash(const Elem): cardinal;
+begin
+  result := fKeys.fHasher(0,@Elem,fKeys.ElemSize);
+end;
+
+function TSynDictionary.KeyFullCompare(const A,B): integer;
+var i: integer;
+begin
+  for i := 0 to fKeys.ElemSize - 1 do begin
+    result := TByteArray(A)[i] - TByteArray(B)[i];
+    if result<>0 then
+      exit;
+  end;
+  result := 0;
+end;
+
 constructor TSynDictionary.Create(aKeyTypeInfo,aValueTypeInfo: pointer;
   aKeyCaseInsensitive: boolean; aTimeoutSeconds: cardinal; aCompressAlgo: TAlgoCompress);
 begin
@@ -57635,6 +57709,10 @@ begin
   fSafe.PaddingMaxUsedIndex := DIC_TIMETIX;
   fKeys.Init(aKeyTypeInfo,fSafe.Padding[DIC_KEY].VAny,nil,nil,nil,
     @fSafe.Padding[DIC_KEYCOUNT].VInteger,aKeyCaseInsensitive);
+  if not Assigned(fKeys.fHashElement) then
+    fKeys.fEventHash := KeyFullHash;
+  if not Assigned(fKeys.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare) then
+    fKeys.fEventCompare := KeyFullCompare;
   fValues.Init(aValueTypeInfo,fSafe.Padding[DIC_VALUE].VAny,
     @fSafe.Padding[DIC_VALUECOUNT].VInteger);
   fTimeouts.Init(TypeInfo(TIntegerDynArray),fTimeOut,@fSafe.Padding[DIC_TIMECOUNT].VInteger);
@@ -57685,7 +57763,7 @@ var i: integer;
     now: cardinal;
 begin
   result := 0;
-  if (fSafe.Padding[DIC_TIMECOUNT].VInteger=0) or // no entry
+  if (self=nil) or (fSafe.Padding[DIC_TIMECOUNT].VInteger=0) or // no entry
      (fSafe.Padding[DIC_TIMESEC].VInteger=0) then // nothing in fTimeOut[]
     exit;
   now := GetTickCount64 shr 10;
@@ -57708,6 +57786,8 @@ end;
 
 procedure TSynDictionary.DeleteAll;
 begin
+  if self=nil then
+    exit;
   fSafe.Lock;
   try
     fKeys.Clear;

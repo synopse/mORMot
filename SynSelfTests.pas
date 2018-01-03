@@ -6,7 +6,7 @@ unit SynSelfTests;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse framework. Copyright (C) 2017 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynSelfTests;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2017
+  Portions created by the Initial Developer are Copyright (C) 2018
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -9814,9 +9814,14 @@ const
     ($A9,$99,$3E,$36,$47,$06,$81,$6A,$BA,$3E,$25,$71,$78,$50,$C2,$6C,$9C,$D0,$D8,$9D);
   Test2Out: TSHA1Digest=
     ($84,$98,$3E,$44,$1C,$3B,$D2,$6E,$BA,$AE,$4A,$A1,$F9,$51,$29,$E5,$E5,$46,$70,$F1);
+  DIG1 = '0c60c80f961f0e71f3a9b524af6012062fe037a6';
+  DIG2 = 'ea6c014dc72d6f8ccd1ed92ace1d41f0d8de8957';
+  DIG4096 = '4b007901b765489abead49d926f721d065a429c1';
 var s: AnsiString;
     SHA: TSHA1;
-    Digest: TSHA1Digest;
+    Hash: THash512Rec;
+    Digest: TSHA1Digest absolute Hash;
+    sign: TSynSigner;
 begin
   SingleTest('abc',Test1Out);
   SingleTest('abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq',Test2Out);
@@ -9829,11 +9834,17 @@ begin
   check(SHA1DigestToString(Digest)='de7c9b85b8b78aa6bc8a7a36f70a90701c9db4d9');
   // from https://www.ietf.org/rfc/rfc6070.txt
   PBKDF2_HMAC_SHA1('password','salt',1,Digest);
-  check(SHA1DigestToString(Digest)='0c60c80f961f0e71f3a9b524af6012062fe037a6');
+  check(SHA1DigestToString(Digest)=DIG1);
   PBKDF2_HMAC_SHA1('password','salt',2,Digest);
-  check(SHA1DigestToString(Digest)='ea6c014dc72d6f8ccd1ed92ace1d41f0d8de8957');
+  check(SHA1DigestToString(Digest)=DIG2);
   PBKDF2_HMAC_SHA1('password','salt',4096,Digest);
-  check(SHA1DigestToString(Digest)='4b007901b765489abead49d926f721d065a429c1');
+  check(SHA1DigestToString(Digest)=DIG4096);
+  sign.PBKDF2(saSHA1,'password','salt',1,Hash);
+  check(SHA1DigestToString(Digest)=DIG1);
+  sign.PBKDF2(saSHA1,'password','salt',2,Hash);
+  check(SHA1DigestToString(Digest)=DIG2);
+  sign.PBKDF2(saSHA1,'password','salt',4096,Hash);
+  check(SHA1DigestToString(Digest)=DIG4096);
 end;
 
 procedure TTestCryptographicRoutines._SHA256;
@@ -9865,40 +9876,44 @@ const
   D3: TSHA256Digest =
     ($94,$E4,$A9,$D9,$05,$31,$23,$1D,$BE,$D8,$7E,$D2,$E4,$F3,$5E,$4A,
      $0B,$F4,$B3,$BC,$CE,$EB,$17,$16,$D5,$77,$B1,$E0,$8B,$A9,$BA,$A3);
-var Digest: TSHA256Digest;
+  DIG4096 = 'c5e478d59288c841aa530db6845c4c8d962893a001ce4e11a4963873aa98134a';
+var Digest: THash512Rec;
     Digests: THash256DynArray;
+    sign: TSynSigner;
     c: AnsiChar;
     i: integer;
     sha: TSHA256;
 begin
   SingleTest('abc',D1);
   SingleTest('abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq',D2);
-  SHA256Weak('lagrangehommage',Digest); // test with len=256>64
-  Check(IsEqual(Digest,D3));
-  Check(Comparemem(@Digest,@D3,sizeof(Digest)));
-  PBKDF2_HMAC_SHA256('password','salt',1,Digest);
-  check(SHA256DigestToString(Digest)=
+  SHA256Weak('lagrangehommage',Digest.Lo); // test with len=256>64
+  Check(IsEqual(Digest.Lo,D3));
+  Check(Comparemem(@Digest,@D3,sizeof(Digest.Lo)));
+  PBKDF2_HMAC_SHA256('password','salt',1,Digest.Lo);
+  check(SHA256DigestToString(Digest.Lo)=
     '120fb6cffcf8b32c43e7225256c4f837a86548c92ccc35480805987cb70be17b');
-  PBKDF2_HMAC_SHA256('password','salt',2,Digest);
-  check(SHA256DigestToString(Digest)=
+  PBKDF2_HMAC_SHA256('password','salt',2,Digest.Lo);
+  check(SHA256DigestToString(Digest.Lo)=
    'ae4d0c95af6b46d32d0adff928f06dd02a303f8ef3c251dfd6e2d85a95474c43');
   SetLength(Digests,2);
   check(IsZero(Digests[0]));
   check(IsZero(Digests[1]));
   PBKDF2_HMAC_SHA256('password','salt',2,Digests);
-  check(IsEqual(Digests[0],Digest));
-  check(not IsEqual(Digests[1],Digest));
+  check(IsEqual(Digests[0],Digest.Lo));
+  check(not IsEqual(Digests[1],Digest.Lo));
   check(SHA256DigestToString(Digests[1])=
     '830651afcb5c862f0b249bd031f7a67520d136470f5ec271ece91c07773253d9');
-  PBKDF2_HMAC_SHA256('password','salt',4096,Digest);
-  check(SHA256DigestToString(Digest)=
-    'c5e478d59288c841aa530db6845c4c8d962893a001ce4e11a4963873aa98134a');
+  PBKDF2_HMAC_SHA256('password','salt',4096,Digest.Lo);
+  check(SHA256DigestToString(Digest.Lo)= DIG4096);
+  FillZero(Digest.b);
+  sign.PBKDF2(saSha256,'password','salt',4096,Digest);
+  check(SHA256DigestToString(Digest.Lo)= DIG4096);
   c := 'a';
   sha.Init;
   for i := 1 to 1000000 do
     sha.Update(@c,1);
-  sha.Final(Digest);
-  Check(SHA256DigestToString(Digest)=
+  sha.Final(Digest.Lo);
+  Check(SHA256DigestToString(Digest.Lo)=
     'cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0');
 end;
 begin
@@ -9922,6 +9937,24 @@ begin
 end;
 
 procedure TTestCryptographicRoutines._SHA512;
+  procedure Test(const password,secret,expected: RawUTF8; rounds: integer=0);
+  var dig: THash512Rec;
+      sign: TSynSigner;
+  begin
+    if rounds=0 then begin
+      HMAC_SHA512(password,secret,dig.b);
+      Check(SHA512DigestToString(dig.b)=expected);
+      sign.Init(saSha512,password);
+      sign.Update(secret);
+      Check(sign.Final=expected);
+    end else begin
+      PBKDF2_HMAC_SHA512(password,secret,rounds,dig.b);
+      Check(SHA512DigestToString(dig.b)=expected);
+      FillZero(dig.b);
+      sign.PBKDF2(saSha512,password,secret,rounds,dig);
+      Check(SHA512DigestToString(dig.b)=expected);
+    end;
+  end;
 const FOX: RawByteString = 'The quick brown fox jumps over the lazy dog';
 var dig: TSHA512Digest;
     i: integer;
@@ -9963,21 +9996,18 @@ begin // includes SHA-384, which is a truncated SHA-512
   sha.Final(dig);
   Check(SHA512DigestToString(dig)='e718483d0ce769644e2e42c7bc15b4638e1f98b13b2'+
     '044285632a803afa973ebde0ff244877ea60a4cb0432ce577c31beb009c5c2c49aa2e4eadb217ad8cc09b');
-  HMAC_SHA512('','',dig);
-  Check(SHA512DigestToString(dig)='b936cee86c9f87aa5d3c6f2e84cb5a4239a5fe50480a'+
+  Test('','','b936cee86c9f87aa5d3c6f2e84cb5a4239a5fe50480a'+
     '6ec66b70ab5b1f4ac6730c6c515421b327ec1d69402e53dfb49ad7381eb067b338fd7b0cb22247225d47');
-  HMAC_SHA512('key',FOX,dig);
-  Check(SHA512DigestToString(dig)= 'b42af09057bac1e2d41708e48a902e09b5ff7f12ab42'+
+  Test('key',FOX,'b42af09057bac1e2d41708e48a902e09b5ff7f12ab42'+
     '8a4fe86653c73dd248fb82f948a549f7b791a5b41915ee4d1ec3935357e4e2317250d0372afa2ebeeb3a');
-  HMAC_SHA512(FOX+FOX,FOX,dig);
-  Check(SHA512DigestToString(dig)='19e504ba787674baa63471436a4ec5a71ba359a0f2d375'+
+  Test(FOX+FOX,FOX,'19e504ba787674baa63471436a4ec5a71ba359a0f2d375'+
     '12edd4db69dce1ec6a0e48f0ae460fc9342fbb453cf2942a0e3fa512dd361e30f0e8b8fc8c7a4ece96');
-  PBKDF2_HMAC_SHA512('password','salt',1,dig);
-  Check(SHA512DigestToString(dig)='867f70cf1ade02cff3752599a3a53dc4af34c7a669815ae5'+
-    'd513554e1c8cf252c02d470a285a0501bad999bfe943c08f050235d7d68b1da55e63f73b60a57fce');
-  PBKDF2_HMAC_SHA512('password','salt',4096,dig);
-  Check(SHA512DigestToString(dig)='d197b1b33db0143e018b12f3d1d1479e6cdebdcc97c5c0f87'+
-    'f6902e072f457b5143f30602641b3d55cd335988cb36b84376060ecd532e039b742a239434af2d5');
+  Test('Jefe','what do ya want for nothing?','164b7a7bfcf819e2e395fbe73b56e0a387bd64222e8'+
+    '31fd610270cd7ea2505549758bf75c05a994a6d034f65f8f0e6fdcaeab1a34d4a6b4b636e070a38bce737');
+  Test('password','salt','867f70cf1ade02cff3752599a3a53dc4af34c7a669815ae5'+
+    'd513554e1c8cf252c02d470a285a0501bad999bfe943c08f050235d7d68b1da55e63f73b60a57fce',1);
+  Test('password','salt','d197b1b33db0143e018b12f3d1d1479e6cdebdcc97c5c0f87'+
+    'f6902e072f457b5143f30602641b3d55cd335988cb36b84376060ecd532e039b742a239434af2d5',4096);
   HMAC_SHA256('Jefe','what do ya want for nothing?',PHash256(@dig)^);
   Check(SHA256DigestToString(PHash256(@dig)^)='5bdcc146bf60754e6a042426089575c'+
     '75a003f089d2739839dec58b964ec3843');
@@ -9987,9 +10017,6 @@ begin // includes SHA-384, which is a truncated SHA-512
   PBKDF2_HMAC_SHA384('password','salt',4096,PHash384(@dig)^);
   Check(SHA384DigestToString(PHash384(@dig)^)='559726be38db125bc85ed7895f6e3cf574c7a01c'+
     '080c3447db1e8a76764deb3c307b94853fbe424f6488c5f4f1289626');
-  HMAC_SHA512('Jefe','what do ya want for nothing?',dig);
-  Check(SHA512DigestToString(dig)='164b7a7bfcf819e2e395fbe73b56e0a387bd64222e8'+
-    '31fd610270cd7ea2505549758bf75c05a994a6d034f65f8f0e6fdcaeab1a34d4a6b4b636e070a38bce737');
   PBKDF2_HMAC_SHA512('passDATAb00AB7YxDTT','saltKEYbcTcXHCBxtjD',1,dig);
   Check(SHA512DigestToString(dig)='cbe6088ad4359af42e603c2a33760ef9d4017a7b2aad10af46'+
     'f992c660a0b461ecb0dc2a79c2570941bea6a08d15d6887e79f32b132e1c134e9525eeddd744fa');
@@ -9997,7 +10024,7 @@ begin // includes SHA-384, which is a truncated SHA-512
    'saltKEYbcTcXHCBxtjD2PnBh44AIQ6XUOCESOhXpEp3HrcG',1,PHash384(@dig)^);
   Check(SHA384DigestToString(PHash384(@dig)^)='0644a3489b088ad85a0e42be3e7f82500ec189366'+
     '99151a2c90497151bac7bb69300386a5e798795be3cef0a3c803227');
-  { // rounds=100000 is slow, so not integrated by default
+  { // rounds=100000 is slow, so not test by default
   PBKDF2_HMAC_SHA512('passDATAb00AB7YxDTT','saltKEYbcTcXHCBxtjD',100000,dig);
   Check(SHA512DigestToString(dig)='accdcd8798ae5cd85804739015ef2a11e32591b7b7d16f76819b30'+
     'b0d49d80e1abea6c9822b80a1fdfe421e26f5603eca8a47a64c9a004fb5af8229f762ff41f');
@@ -10008,14 +10035,15 @@ begin // includes SHA-384, which is a truncated SHA-512
   }
 end;
 
-
-
 procedure TTestCryptographicRoutines._SHA3;
-var
-  instance: TSHA3;
-  secret, data, encrypted: RawByteString;
-  dig: THash256;
-  s, i: integer;
+const HASH1 = '79f38adec5c20307a98ef76e8324afbfd46cfd81b22e3973c65fa1bd9de31787';
+      DK = '7bbdbe37ea70dd2ed640837ff8a926d381806ffa931695addd38ab950d35ad18801a8290e8d97fe14cdfd3cfdbcd0fe766d3e6e4636bd0a17d710a61678db363';
+var instance: TSHA3;
+    secret, data, encrypted: RawByteString;
+    dig: THash256;
+    h512: THash512Rec;
+    s, i: integer;
+    sign: TSynSigner;
 begin
   // validate against official NIST vectors
   // taken from http://csrc.nist.gov/groups/ST/toolkit/examples.html#aHashing
@@ -10045,8 +10073,8 @@ begin
   for i := 1 to length(data) do
     instance.Update(pointer(data), 1);
   instance.Final(dig);
-  Check(SHA256DigestToString(dig) =
-    '79f38adec5c20307a98ef76e8324afbfd46cfd81b22e3973c65fa1bd9de31787');
+  Check(SHA256DigestToString(dig) = HASH1);
+  Check(sign.Full(saSha3256,data,nil,0) = HASH1);
   instance.Init(SHA3_256);
   instance.Update(pointer(data), 100);
   instance.Update(pointer(data), 50);
@@ -10056,19 +10084,18 @@ begin
   instance.Update(pointer(data), 5);
   instance.Update(pointer(data), 5);
   instance.Final(dig, true); // NoInit=true to check Extendable-Output Function
-  Check(SHA256DigestToString(dig) =
-    '79f38adec5c20307a98ef76e8324afbfd46cfd81b22e3973c65fa1bd9de31787');
+  Check(SHA256DigestToString(dig) = HASH1);
   instance.Final(dig, true);
   Check(SHA256DigestToString(dig) =
     'f85500852a5b9bb4a35440e7e4b4dba9184477a4c97b97ab0b24b91a8b04d1c8');
   for i := 1 to 200 do begin
     FillZero(dig);
     instance.Final(dig, true);
-    Check(not IsZero(dig));
+    Check(not IsZero(dig),'XOF mode');
   end;
   instance.Final(dig);
   Check(SHA256DigestToString(dig) =
-    '75f8b0591e2baeae027d56c14ef3bc014d9dd29cce08b8b184528589147fc252');
+    '75f8b0591e2baeae027d56c14ef3bc014d9dd29cce08b8b184528589147fc252','XOF vector');
   encrypted := instance.Cypher('secret', 'toto');
   Check(SynCommons.BinToHex(encrypted) = 'BF013A29');
   Check(SynCommons.BinToHexLower(encrypted) = 'bf013a29');
@@ -10083,6 +10110,11 @@ begin
       Check(instance.Cypher(encrypted) = data);
     end;
   end;
+  PBKDF2_SHA3(SHA3_512,'pass','salt',1000,@h512);
+  check(SHA512DigestToString(h512.b)=DK);
+  FillZero(h512.b);
+  sign.PBKDF2(saSha3512,'pass','salt',1000,h512);
+  check(SHA512DigestToString(h512.b)=DK);
   // taken from https://en.wikipedia.org/wiki/SHA-3
   Check(SHA3(SHAKE_128, 'The quick brown fox jumps over the lazy dog') =
     'F4202E3C5852F9182A0430FD8144F0A74B95E7417ECAE17DB0F8CFEED0E3E66E');
@@ -10235,12 +10267,35 @@ procedure TTestCryptographicRoutines._JWT;
     end;
     one.Free;
   end;
+  procedure Benchmark(algo: TSignAlgo);
+  var i: integer;
+      tok: RawUTF8;
+      j: TJWTAbstract;
+      jwt: TJWTContent;
+      tim: TPrecisionTimer;
+  begin
+    j := JWT_CLASS[algo].Create('secret',0,[jrcIssuer,jrcExpirationTime],[]);
+    try
+      tok := j.Compute([],'myself');
+      tim.Start;
+      for i := 1 to 1000 do begin
+        jwt.result := jwtWrongFormat;
+        j.Verify(tok,jwt);
+        check(jwt.result=jwtValid);
+        check(jwt.reg[jrcIssuer]='myself');
+      end;
+      NotifyTestSpeed(string(JWT_TEXT[algo]),1000,0,@tim);
+    finally
+      j.Free;
+    end;
+  end;
 var i: integer;
     j: TJWTAbstract;
     jwt: TJWTContent;
     secret: TECCCertificateSecret;
-    tim: TPrecisionTimer;
     tok: RawUTF8;
+    tim: TPrecisionTimer;
+    a: TSignAlgo;
 begin
   test(TJWTNone.Create([jrcIssuer,jrcExpirationTime],[],60));
   test(TJWTNone.Create([jrcIssuer,jrcExpirationTime,jrcIssuedAt],[],60));
@@ -10249,8 +10304,7 @@ begin
   test(TJWTHS256.Create('sec',200,[jrcIssuer,jrcExpirationTime,jrcIssuedAt],[],60));
   test(TJWTHS256.Create('sec',10,[jrcIssuer,jrcExpirationTime,jrcIssuedAt,jrcJWTID],[],60));
   j := TJWTHS256.Create('secret',0,[jrcSubject],[]);
-  tim.Start;
-  for i := 1 to 10000 do begin
+  try
     jwt.result := jwtWrongFormat;
     j.Verify('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibm'+
       'FtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeF'+
@@ -10259,13 +10313,13 @@ begin
     check(jwt.reg[jrcSubject]='1234567890');
     check(jwt.data.U['name']='John Doe');
     check(jwt.data.B['admin']);
+    j.Verify('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibm'+
+      'FtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeF'+
+      'ONFh7hgQ',jwt); // altered one char in signature
+    check(jwt.result=jwtInvalidSignature);
+  finally
+    j.Free;
   end;
-  NotifyTestSpeed('HS256',10000,0,@tim);
-  j.Verify('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibm'+
-    'FtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeF'+
-    'ONFh7hgQ',jwt); // altered one char in signature
-  check(jwt.result=jwtInvalidSignature);
-  j.Free;
   for i := 1 to 10 do begin
     secret := TECCCertificateSecret.CreateNew(nil); // self-signed certificate
     test(TJWTES256.Create(secret,[jrcIssuer,jrcExpirationTime],[],60));
@@ -10273,6 +10327,8 @@ begin
     test(TJWTES256.Create(secret,[jrcIssuer,jrcExpirationTime,jrcIssuedAt,jrcJWTID],[],60));
     secret.Free;
   end;
+  for a := saSha256 to high(a) do
+    Benchmark(a);
   secret := TECCCertificateSecret.CreateNew(nil);
   j := TJWTES256.Create(secret,[jrcIssuer,jrcExpirationTime],[],60);
   try

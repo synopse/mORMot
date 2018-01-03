@@ -6,7 +6,7 @@ unit dddInfraSettings;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2018 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit dddInfraSettings;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2017
+  Portions created by the Initial Developer are Copyright (C) 2018
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -312,8 +312,9 @@ type
   public
     /// is able to instantiate a REST instance according to the stored definition
     // - Definition.Kind will identify the TSQLRestServer or TSQLRestClient class
-    // to be instantiated, or if equals 'MongoDB' use a full MongoDB store, or an
-    // external SQL database if it matches a TSQLDBConnectionProperties classname
+    // to be instantiated, or if equals 'MongoDB'/'MongoDBS' use a full MongoDB
+    // engine, or an external SQL database if it matches a TSQLDBConnectionProperties
+    // classname
     // - if aDefaultLocalSQlite3 is TRUE, then if Definition.Kind is '',
     // a local SQlite3 file database will be initiated
     // - if aMongoDBIdentifier is not 0, then it will be supplied to every
@@ -595,7 +596,7 @@ type
     // remote MongoDB server IP is known, you may just replace '?' to use it
     // - if MongoUser and MongoPassword are set, would call TMongoClient.OpenAuth()
     procedure SetDefaults(const Root, MongoServerAddress, MongoDatabase,
-      MongoUser, MongoPassword: RawUTF8);
+      MongoUser, MongoPassword: RawUTF8; TLS: boolean=false);
   end;
 
   TDDDEmailerSettings = class(TSynPersistent)
@@ -1095,12 +1096,14 @@ end;
 { TDDDMongoDBRestSettings }
 
 procedure TDDDMongoDBRestSettings.SetDefaults(const Root, MongoServerAddress,
-  MongoDatabase, MongoUser, MongoPassword: RawUTF8);
+  MongoDatabase, MongoUser, MongoPassword: RawUTF8; TLS: boolean);
 begin
   if fORM.Kind<>'' then
     exit;
   fRoot := Root;
-  fORM.Kind := 'MongoDB';
+  if TLS then
+    fORM.Kind := 'MongoDBS' else
+    fORM.Kind := 'MongoDB';
   fORM.ServerName := MongoServerAddress;
   fORM.DatabaseName := MongoDatabase;
   fORM.User := MongoUser;

@@ -6,7 +6,7 @@ unit SynCrtSock;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2017 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynCrtSock;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2017
+  Portions created by the Initial Developer are Copyright (C) 2018
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -414,6 +414,9 @@ type
     fSndBufLen: integer;
     // updated during UDP connection, accessed via PeerAddress/PeerPort
     fPeerAddr: TSockAddr;
+    {$ifdef MSWINDOWS}
+    fSecure: TSChannelClient;
+    {$endif MSWINDOWS}
     procedure SetInt32OptionByIndex(OptName, OptVal: integer); virtual;
     procedure AcceptRequest(aClientSock: TSocket; aRemoteIP: PSockString);
   public
@@ -421,8 +424,10 @@ type
     // - do not call directly, but use Open / Bind constructors instead
     constructor Create(aTimeOut: cardinal=10000); reintroduce; virtual;
     /// connect to aServer:aPort
+    // - you may ask for a TLS secured client connection (only available under
+    // Windows by now, using the SChanell API - and not fully tested)
     constructor Open(const aServer, aPort: SockString; aLayer: TCrtSocketLayer=cslTCP;
-      aTimeOut: cardinal=10000);
+      aTimeOut: cardinal=10000; aTLS: boolean=false);
     /// bind to a Port
     // - expects the port to be specified as Ansi string, e.g. '1234'
     // - you can optionally specify a server address to bind to, e.g.
@@ -430,8 +435,10 @@ type
     constructor Bind(const aPort: SockString; aLayer: TCrtSocketLayer=cslTCP);
     /// low-level internal method called by Open() and Bind() constructors
     // - raise an ECrtSocket exception on error
+    // - you may ask for a TLS secured client connection (only available under
+    // Windows by now, using the SChanell API - and not fully tested)
     procedure OpenBind(const aServer, aPort: SockString; doBind: boolean;
-      aSock: integer=-1; aLayer: TCrtSocketLayer=cslTCP);
+      aSock: integer=-1; aLayer: TCrtSocketLayer=cslTCP; aTLS: boolean=false);
     /// initialize SockIn for receiving with read[ln](SockIn^,...)
     // - data is buffered, filled as the data is available
     // - read(char) or readln() is indeed very fast
@@ -505,8 +512,12 @@ type
     /// fill the Buffer with Length bytes
     // - use TimeOut milliseconds wait for incoming data
     // - bypass the SockIn^ buffers
-    // - return false on any error, true on success
-    function TrySockRecv(Buffer: pointer; Length: integer): boolean;
+    // - return false on any fatal socket error, true on success
+    // - call Close if the socket is identified as shutdown from the other side 
+    // - you may optionally set StopBeforeLength=true, then the read bytes count
+    // are set in Length, even if not all expected data has been received - in
+    // this case, Close method won't be called 
+    function TrySockRecv(Buffer: pointer; var Length: integer; StopBeforeLength: boolean=false): boolean;
     /// call readln(SockIn^,Line) or simulate it with direct use of Recv(Sock, ..)
     // - char are read one by one
     // - use TimeOut milliseconds wait for incoming data
@@ -2298,11 +2309,11 @@ function MainHttpClass: THttpRequestClass;
 
 /// create a TCrtSocket, returning nil on error
 // (useful to easily catch socket error exception ECrtSocket)
-function Open(const aServer, aPort: SockString): TCrtSocket;
+function Open(const aServer, aPort: SockString; aTLS: boolean=false): TCrtSocket;
 
 /// create a THttpClientSocket, returning nil on error
 // - useful to easily catch socket error exception ECrtSocket
-function OpenHttp(const aServer, aPort: SockString): THttpClientSocket; overload;
+function OpenHttp(const aServer, aPort: SockString; aTLS: boolean=false): THttpClientSocket; overload;
 
 /// create a THttpClientSocket, returning nil on error
 // - useful to easily catch socket error exception ECrtSocket
@@ -2368,7 +2379,8 @@ type
 // - you can optionally set the encoding charset to be used for the Text body
 function SendEmail(const Server, From, CSVDest, Subject, Text: SockString;
   const Headers: SockString=''; const User: SockString=''; const Pass: SockString='';
-  const Port: SockString='25'; const TextCharSet: SockString = 'ISO-8859-1'): boolean; overload;
+  const Port: SockString='25'; const TextCharSet: SockString = 'ISO-8859-1';
+  aTLS: boolean=false): boolean; overload;
 
 /// send an email using the SMTP protocol
 // - retry true on success
@@ -2377,7 +2389,7 @@ function SendEmail(const Server, From, CSVDest, Subject, Text: SockString;
 // - you can optionally set the encoding charset to be used for the Text body
 function SendEmail(const Server: TSMTPConnection;
   const From, CSVDest, Subject, Text: SockString; const Headers: SockString='';
-  const TextCharSet: SockString = 'ISO-8859-1'): boolean; overload;
+  const TextCharSet: SockString = 'ISO-8859-1'; aTLS: boolean=false): boolean; overload;
 
 /// convert a supplied subject text into an Unicode encoding
 // - will convert the text into UTF-8 and append '=?UTF-8?B?'
@@ -4101,10 +4113,10 @@ begin
   end else
     Size := F.BufSize;
   case Sock.SocketLayer of
-  cslTCP:
-    Size := Recv(Sock.Sock, F.BufPtr, Size, 0
-      {$ifndef MSWINDOWS}{$ifdef FPC_OR_KYLIX},Sock.TimeOut{$endif}{$endif});
-  else begin
+  cslTCP, cslUNIX: begin
+    if not Sock.TrySockRecv(F.BufPtr, Size, true) then
+      Size := -1; // fatal socket error
+  end else begin
     {$ifdef MSWINDOWS}
     iSize := SizeOf(TSockAddr);
     Size := RecvFrom(Sock.Sock, F.BufPtr, Size, 0, @Sock.fPeerAddr, @iSize);
@@ -4180,10 +4192,10 @@ begin
 end;
 
 constructor TCrtSocket.Open(const aServer, aPort: SockString; aLayer: TCrtSocketLayer;
-  aTimeOut: cardinal);
+  aTimeOut: cardinal; aTLS: boolean);
 begin
   Create(aTimeOut); // default read timeout is 10 seconds
-  OpenBind(aServer,aPort,false,-1,aLayer); // raise an ECrtSocket exception on error
+  OpenBind(aServer,aPort,false,-1,aLayer,aTLS); // raise an ECrtSocket exception on error
 end;
 
 type
@@ -4205,6 +4217,10 @@ begin
   end;
   if fSock<=0 then
     exit; // no opened connection, or Close already executed
+  {$ifdef MSWINDOWS}
+  if fSecure.Initialized then
+    fSecure.BeforeDisconnection(fSock);
+  {$endif MSWINDOWS}
   DirectShutdown(fSock);
   fSock := -1; // don't change Server or Port, since may try to reconnect
 end;
@@ -4229,18 +4245,19 @@ begin
 end;
 
 procedure TCrtSocket.OpenBind(const aServer, aPort: SockString;
-  doBind: boolean; aSock: integer=-1; aLayer: TCrtSocketLayer=cslTCP);
+  doBind: boolean; aSock: integer; aLayer: TCrtSocketLayer; aTLS: boolean);
 const BINDTXT: array[boolean] of string = ('open','bind');
 begin
   fSocketLayer := aLayer;
   if aSock<0 then begin
     if aPort='' then
-      fPort := '80' else // default port is 80 (HTTP)
+      fPort := DEFAULT_PORT[aTLS] else // default port is 80/443 (HTTP/S)
       fPort := aPort;
     fServer := aServer;
     fSock := CallServer(aServer,Port,doBind,aLayer,Timeout); // OPEN or BIND
     if fSock<0 then
-      raise ECrtSocket.CreateFmt('OpenBind(%s:%s,%s)',[aServer,Port,BINDTXT[doBind]],-1);
+      raise ECrtSocket.CreateFmt('OpenBind(%s:%s,%s): CallServer=%d',
+        [aServer,Port,BINDTXT[doBind],fSock],-1);
   end else
     fSock := aSock; // ACCEPT mode -> socket is already created by caller
   if TimeOut>0 then begin // set timout values for both directions
@@ -4250,6 +4267,18 @@ begin
   if aLayer = cslTCP then begin
     TCPNoDelay := 1; // disable Nagle algorithm since we use our own buffers
     KeepAlive := 1; // enable TCP keepalive (even if we rely on transport layer)
+    if aTLS and (aSock<0) and not doBind then
+    try
+      {$ifdef MSWINDOWS}
+      fSecure.AfterConnection(fSock,pointer(aServer));
+      {$else}
+      raise ECrtSocket.Create('Unsupported');
+      {$endif MSWINDOWS}
+    except
+      on E: Exception do
+        raise ECrtSocket.CreateFmt('OpenBind(%s:%s): aTLS failed [%s %s]',
+          [aServer,Port,E.ClassName,E.Message],-1);
+    end;
   end;
 end;
 
@@ -4310,20 +4339,35 @@ begin
 end;
 
 function TCrtSocket.TrySndLow(P: pointer; Len: integer): boolean;
-var SentLen: integer;
+var sent, err: integer;
+    starttix,endtix,tix: cardinal;
 begin
-  result := false;
-  if (self=nil) or (fSock<=0) or (Len<0) or (P=nil) then
+  result := Len=0;
+  if (self=nil) or (fSock<=0) or (Len<=0) or (P=nil) then
     exit;
+  starttix := GetTickCount;
+  endtix := starttix+TimeOut;
   repeat
-    SentLen := Send(fSock, P, Len, MSG_NOSIGNAL
-      {$ifndef MSWINDOWS}{$ifdef FPC_OR_KYLIX},TimeOut{$endif}{$endif});
-    if SentLen<0 then
-      exit; // error sending -> returns false
-    dec(Len,SentLen);
-    inc(fBytesOut,SentLen);
-    if Len<=0 then break;
-    inc(PtrUInt(P),SentLen);
+    {$ifdef MSWINDOWS}
+    if fSecure.Initialized then
+      sent := fSecure.Send(fSock, P, Len) else
+    {$endif MSWINDOWS}
+      sent := AsynchSend(fSock, P, Len);
+    if sent>0 then begin
+      inc(fBytesOut,sent);
+      dec(Len,sent);
+      if Len<=0 then
+        break;
+      inc(PByte(P),sent);
+    end else begin
+      err := WSAGetLastError;
+      if (err<>WSATRY_AGAIN) and (err<>WSAEINTR) then
+        exit; // fatal socket error
+    end;
+    tix := GetTickCount;
+    if (tix>endtix) or (tix<starttix) then
+      exit; // identify read timeout as error
+    sleep(1);
   until false;
   result := true;
 end;
@@ -4519,35 +4563,49 @@ end;
 procedure TCrtSocket.SockRecv(Buffer: pointer; Length: integer);
 begin
   if not TrySockRecv(Buffer,Length) then
-    raise ECrtSocket.Create('SockRecv');
+    raise ECrtSocket.CreateFmt('SockRecv(%d)',[Length]);
 end;
 
-function TCrtSocket.TrySockRecv(Buffer: pointer; Length: integer): boolean;
-var Size: PtrInt;
+function TCrtSocket.TrySockRecv(Buffer: pointer; var Length: integer;
+  StopBeforeLength: boolean): boolean;
+var expected,read,err: PtrInt;
     starttix,endtix,tix: cardinal;
 begin
   result := false;
   if (self=nil) or (fSock<0) then
     exit;
   if (Buffer<>nil) and (Length>0) then begin
+    expected := Length;
+    Length := 0;
     starttix := GetTickCount;
     endtix := starttix+TimeOut;
     repeat
-      Size := Recv(fSock, Buffer, Length, MSG_NOSIGNAL
-        {$ifndef MSWINDOWS}{$ifdef FPC_OR_KYLIX},TimeOut{$endif}{$endif});
-      if Size<=0 then begin
-        if Size=0 then
-          Close; // socket closed gracefully (otherwise SOCKET_ERROR=-1)
+      read := expected-Length;
+      {$ifdef MSWINDOWS}
+      if fSecure.Initialized then
+        read := fSecure.Receive(fSock,Buffer,read) else
+      {$endif MSWINDOWS}
+        read := AsynchRecv(fSock,Buffer,read);
+      if read=0 then begin // socket closed gracefully
+        if not StopBeforeLength then
+          Close;
         exit;
+      end else
+      if read>0 then begin
+        inc(fBytesIn,read);
+        inc(Length,read);
+        if StopBeforeLength or (Length=expected) then
+          break; // good enough for now
+        inc(PByte(Buffer),read);
+      end else begin
+        err := WSAGetLastError;
+        if (err<>WSATRY_AGAIN) and (err<>WSAEINTR) then
+          exit; // fatal socket error
       end;
-      inc(fBytesIn,Size);
-      dec(Length,Size);
-      inc(PByte(Buffer),Size);
-      if Length=0 then
-        break;
       tix := GetTickCount;
       if (tix>endtix) or (tix<starttix) then
-        exit; // identify read time out as error
+        exit; // identify read timeout as error
+      sleep(1);
     until false;
   end;
   result := true;
@@ -4692,30 +4750,32 @@ end;
 {$endif}
 
 function TCrtSocket.SockReceiveString: SockString;
-var Size, L, Read: integer;
+var available, resultlen, read: integer;
 begin
   result := '';
   if (self=nil) or (fSock<=0) then
     exit;
-  L := 0;
+  resultlen := 0;
   repeat
     SleepHiRes(0);
-    if IOCtlSocket(fSock, FIONREAD, Size)<>0 then // get exact count
+    if IOCtlSocket(fSock, FIONREAD, available)<>0 then // get exact count
       exit; // raw socket error
-    if Size=0 then // no data in the allowed timeout
+    if available=0 then // no data in the allowed timeout
       if result='' then begin // wait till something
         SleepHiRes(10); // 10 ms delay in infinite loop
         continue;
       end else
         break; // return what we have
-    SetLength(result,L+Size); // append to result
-    Read := recv(fSock,PAnsiChar(pointer(result))+L,Size,MSG_NOSIGNAL
-      {$ifndef MSWINDOWS}{$ifdef FPC_OR_KYLIX},TimeOut{$endif}{$endif});
-    if Read<0 then
+    SetLength(result,resultlen+available); // append to result
+    read := available;
+    if not TrySockRecv(@PByteArray(result)[resultlen],read,true) then begin
+      Close;
+      SetLength(result,resultlen);
       exit;
-    inc(L,Read);
-    if Read<Size then
-      SetLength(result,L); // e.g. Read=0 may happen
+    end;
+    inc(resultlen,read);
+    if read<available then
+      SetLength(result,resultlen); // e.g. Read=0 may happen
   until false;
 end;
 
@@ -4873,20 +4933,20 @@ begin
   end;
 end;
 
-function Open(const aServer, aPort: SockString): TCrtSocket;
+function Open(const aServer, aPort: SockString; aTLS: boolean): TCrtSocket;
 begin
   try
-    result := TCrtSocket.Open(aServer,aPort);
+    result := TCrtSocket.Open(aServer,aPort,cslTCP,10000,aTLS);
   except
     on ECrtSocket do
       result := nil;
   end;
 end;
 
-function OpenHttp(const aServer, aPort: SockString): THttpClientSocket;
+function OpenHttp(const aServer, aPort: SockString; aTLS: boolean): THttpClientSocket;
 begin
   try
-    result := THttpClientSocket.Open(aServer,aPort,cslTCP,0); // HTTP_DEFAULT_RECEIVETIMEOUT
+    result := THttpClientSocket.Open(aServer,aPort,cslTCP,0,aTLS); // HTTP_DEFAULT_RECEIVETIMEOUT
   except
     on ECrtSocket do
       result := nil;
@@ -4898,8 +4958,7 @@ var URI: TURI;
 begin
   result := nil;
   if URI.From(aURI) then begin
-    if not URI.Https then
-      result := OpenHttp(URI.Server,URI.Port);
+    result := OpenHttp(URI.Server,URI.Port,URI.Https);
     if aAddress <> nil then
       aAddress^ := URI.Address;
   end;
@@ -5003,15 +5062,16 @@ begin
   result := Host<>'';
 end;
 
-function SendEmail(const Server: TSMTPConnection;
-  const From, CSVDest, Subject, Text, Headers, TextCharSet: SockString): boolean;
+function SendEmail(const Server: TSMTPConnection; const From, CSVDest, Subject,
+  Text, Headers, TextCharSet: SockString; aTLS: boolean): boolean;
 begin
   result := SendEmail(Server.Host, From, CSVDest, Subject, Text, Headers,
-    Server.User, Server.Pass, Server.Port, TextCharSet);
+    Server.User, Server.Pass, Server.Port, TextCharSet,
+    (Server.Port = '465') or (Server.Port = '587'));
 end;
 
 function SendEmail(const Server, From, CSVDest, Subject, Text, Headers,
-  User, Pass, Port, TextCharSet: SockString): boolean;
+  User, Pass, Port, TextCharSet: SockString; aTLS: boolean): boolean;
 var TCP: TCrtSocket;
 procedure Expect(const Answer: SockString);
 var Res: SockString;
@@ -5033,7 +5093,7 @@ begin
   result := false;
   P := pointer(CSVDest);
   if P=nil then exit;
-  TCP := Open(Server, Port);
+  TCP := Open(Server,Port,aTLS);
   if TCP<>nil then
   try
     TCP.CreateSockIn; // we use SockIn and SockOut here

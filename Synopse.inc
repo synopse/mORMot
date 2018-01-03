@@ -20,7 +20,7 @@
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2017
+  Portions created by the Initial Developer are Copyright (C) 2018
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -518,6 +518,7 @@
 {$else}
 {$endif PUREPASCAL}
 
+{$H+} // we use long strings
 {$R-} // disable Range checking in our code
 {$S-} // disable Stack checking in our code
 {$X+} // expect extended syntax

@@ -6,7 +6,7 @@ unit SynMongoDB;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2017 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynMongoDB;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2017
+  Portions created by the Initial Developer are Copyright (C) 2018
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -1909,6 +1909,7 @@ type
     fReadPreference: TMongoClientReplicaSetReadPreference;
     fWriteConcern: TMongoClientWriteConcern;
     fConnectionTimeOut: Cardinal;
+    fConnectionTLS: boolean;
     fGracefulReconnect: record
       Enabled, ForcedDBCR: boolean;
       User, Database: RawUTF8;
@@ -1933,8 +1934,9 @@ type
     // - this constructor won't create the connection until the Open method
     // is called
     // - you can specify multiple hosts, as CSV values, if necessary
+    // - depending on the platform, you may request for a TLS secured connection
     constructor Create(const Host: RawUTF8; Port: Integer=MONGODB_DEFAULTPORT;
-      const SecondaryHostCSV: RawUTF8=''; const SecondaryPortCSV: RawUTF8=''); overload;
+      aTLS: boolean=false; const SecondaryHostCSV: RawUTF8=''; const SecondaryPortCSV: RawUTF8=''); overload;
     /// connect to a database on a remote MongoDB primary server
     // - this method won't use authentication, and will return the corresponding
     // MongoDB database instance
@@ -2010,6 +2012,8 @@ type
     /// the connection time out, in milli seconds
     // - default value is 30000, i.e. 30 seconds
     property ConnectionTimeOut: Cardinal read fConnectionTimeOut write fConnectionTimeOut;
+    /// if the socket connection is secured over TLS
+    property ConnectionTLS: boolean read fConnectionTLS;
     /// allow automatic reconnection (with authentication, if applying), if the
     // socket is closed (e.g. was dropped from the server)
     property GracefulReconnect: boolean
@@ -5168,11 +5172,12 @@ begin
     raise EMongoConnectionException.Create('Duplicate Open',self);
   try
     fSocket := TCrtSocket.Open(fServerAddress,UInt32ToUtf8(fServerPort),
-      cslTCP,Client.ConnectionTimeOut);
+      cslTCP,Client.ConnectionTimeOut,Client.ConnectionTLS);
   except
     on E: Exception do
       raise EMongoException.CreateUTF8(
-        '%.Open unable to connect to MongoDB server: % "%"',[self,E,E.Message]);
+        '%.Open unable to connect to MongoDB server %: % [%]',
+          [self,Client.ConnectionString,E,E.Message]);      
   end;
   fSocket.TCPNoDelay := ord(true); // we buffer all output data before sending
   fSocket.KeepAlive := ord(true);  // do not close the connection without notice
@@ -5399,16 +5404,17 @@ end;
 
 procedure TMongoConnection.GetReply(Request: TMongoRequest; out result: TMongoReply);
 var Header: TMongoReplyHeader;
-    DataLen: integer;
+    HeaderLen, DataLen: integer;
 begin
   if self=nil then
     raise EMongoRequestException.Create('Connection=nil',self,Request);
   FillCharFast(Header,sizeof(Header),0);
+  HeaderLen := SizeOf(Header);
   try
     Lock;
     if Send(Request) then
       while true do
-      if fSocket.TrySockRecv(@Header,sizeof(Header)) then begin
+      if fSocket.TrySockRecv(@Header,HeaderLen) then begin
         if (Header.MessageLength<SizeOf(Header)) or
            (Header.MessageLength>MONGODB_MAXMESSAGESIZE) then
           raise EMongoRequestException.CreateUTF8('%.GetReply: MessageLength=%',
@@ -5600,15 +5606,17 @@ end;
 { TMongoClient }
 
 constructor TMongoClient.Create(const Host: RawUTF8; Port: Integer;
-  const SecondaryHostCSV, SecondaryPortCSV: RawUTF8);
+  aTLS: boolean; const SecondaryHostCSV, SecondaryPortCSV: RawUTF8);
+const PROT: array[boolean] of string[1] = ('', 's');
 var secHost: TRawUTF8DynArray;
     secPort: TIntegerDynArray;
     nHost, i: integer;
 begin
   fConnectionTimeOut := 30000;
+  fConnectionTLS := aTLS;
   fLogReplyEventMaxSize := 1024;
   fGracefulReconnect.Enabled := true;
-  FormatUTF8('mongodb://%:%',[Host,Port],fConnectionString);
+  FormatUTF8('mongodb%://%:%',[PROT[aTLS],Host,Port],fConnectionString);
   CSVToRawUTF8DynArray(pointer(SecondaryHostCSV),secHost);
   nHost := length(secHost);
   SetLength(fConnections,nHost+1);

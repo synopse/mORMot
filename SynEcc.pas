@@ -6,7 +6,7 @@ unit SynEcc;
 (*
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2017 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynEcc;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2017
+  Portions created by the Initial Developer are Copyright (C) 2018
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -2946,7 +2946,7 @@ begin
   rx := Point.x;
   ry := Point.y;
   z := _1;
-  for i := NumBits-2 downto 0 do begin
+  for i := NumBits - 2 downto 0 do begin
     EccPointDoubleJacobian(rx, ry, z);
     if GetBit(u1, i) then
       Index := 1 else
