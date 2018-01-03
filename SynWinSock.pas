@@ -1801,7 +1801,9 @@ begin
     result := Recv(aSocket, aBuffer, aLength, MSG_NOSIGNAL);
     exit;
   end;
-  while DataCount = 0 do begin
+  result := 0;
+  while DataCount = 0 do
+  try
     DataPos := 0;
     desc.ulVersion := SECBUFFER_VERSION;
     desc.cBuffers := 4;
@@ -1835,6 +1837,8 @@ begin
         AppendData(buf[i]);
     if res = SEC_I_RENEGOTIATE then
       HandshakeLoop(aSocket);
+  except
+    exit; // shutdown the connection on ESChannel fatal error
   end;
   result := DataCount;
   if aLength < result then
@@ -1861,7 +1865,8 @@ begin
   desc.cBuffers := 4;
   desc.pBuffers := @buf[0];
   c := cardinal(aLength);
-  while c <> 0 do begin
+  while c <> 0 do
+  try
     templen := c;
     if templen > Sizes.cbMaximumMessage then
       templen := Sizes.cbMaximumMessage;
@@ -1903,6 +1908,8 @@ begin
     until false;
     inc(PByte(aBuffer), templen);
     dec(c, templen);
+  except
+    exit; // shutdown the connection on ESChannel fatal error
   end;
   result := aLength;
 end;

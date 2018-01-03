@@ -4587,16 +4587,14 @@ begin
       {$endif MSWINDOWS}
         read := AsynchRecv(fSock,Buffer,read);
       if read=0 then begin // socket closed gracefully
-        if StopBeforeLength then
-          result := Length>0 else // but we got something
+        if not StopBeforeLength then
           Close;
         exit;
       end else
       if read>0 then begin
         inc(fBytesIn,read);
         inc(Length,read);
-        result := StopBeforeLength or (Length=expected);
-        if result then
+        if StopBeforeLength or (Length=expected) then
           break; // good enough for now
         inc(PByte(Buffer),read);
       end else begin
