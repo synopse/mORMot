@@ -10451,6 +10451,7 @@ type
     smvString,
     smvRawByteString,
     smvWideString,
+    smvBinary,
     smvRecord,
     {$ifndef NOVARIANTS}
     smvVariant,
@@ -53413,7 +53414,7 @@ const
   CONST_ARGS_TO_VAR: array[TServiceMethodValueType] of TServiceMethodValueVar = (
     smvvNone, smvvSelf, smvv64, smvv64, smvv64, smvv64, smvv64, smvv64, smvv64,
     smvv64, smvv64,
-    smvvRawUTF8, smvvString, smvvRawUTF8, smvvWideString, smvvRecord,
+    smvvRawUTF8, smvvString, smvvRawUTF8, smvvWideString, smvv64, smvvRecord,
     {$ifndef NOVARIANTS}smvvRecord,{$endif} smvvObject, smvvRawUTF8,
     smvvDynArray, smvvInterface);
 
@@ -53422,8 +53423,8 @@ const
   CONST_ARGS_IN_STACK_SIZE: array[TServiceMethodValueType] of Cardinal = (
      0,  PTRSIZ,PTRSIZ, PTRSIZ,PTRSIZ,PTRSIZ, PTRSIZ,    8,     8,      8,
  // None, Self, Boolean, Enum, Set,  Integer, Cardinal, Int64, Double, DateTime,
-     8,       PTRSIZ,  PTRSIZ, PTRSIZ,        PTRSIZ,     PTRSIZ,
- // Currency, RawUTF8, String, RawByteString, WideString, Record,
+     8,       PTRSIZ,  PTRSIZ, PTRSIZ,        PTRSIZ,     0,      PTRSIZ,
+ // Currency, RawUTF8, String, RawByteString, WideString, Binary, Record,
     {$ifndef NOVARIANTS}PTRSIZ,{$endif} // Variant
     PTRSIZ, PTRSIZ,  PTRSIZ, PTRSIZ);
  // Object, RawJSON, DynArray, Interface
@@ -53758,7 +53759,7 @@ begin
             RaiseError('returned array',[]);
           IgnoreComma(R);
         end;
-        smvBoolean..smvWideString: begin
+        smvBoolean..smvBinary: begin
           Val := GetJSONField(R,R,@wasString,nil,@ValLen);
           if (Val=nil) or (wasString<>(vIsString in ValueKindAsm)) then
             if resultAsJSONObject then
@@ -53782,6 +53783,10 @@ begin
           smvString:        UTF8DecodeToString(Val,ValLen,PString(V)^);
           smvRawByteString: Base64ToBin(PAnsiChar(Val),ValLen,PRawByteString(V)^);
           smvWideString:    UTF8ToWideString(Val,ValLen,PWideString(V)^);
+          smvBinary:
+            if ValLen=SizeInStorage*2 then
+              HexDisplayToBin(PAnsiChar(Val),PByte(V),SizeInStorage) else
+              FillCharFast(V^,SizeInStorage,0);
           else RaiseError('ValueType=%',[ord(ValueType)]);
           end;
         end;
@@ -54242,7 +54247,7 @@ end;
 
 var
   GlobalUnsafeSPIType: array of PTypeInfo;
-  
+
 class procedure TInterfaceFactory.RegisterUnsafeSPIType(const Types: array of pointer);
 var a: integer;
 begin
@@ -54423,6 +54428,12 @@ begin
          ((ValueDirection=smdResult) and (ValueType in CONST_ARGS_RESULT_BY_REF)) then
         Include(ValueKindAsm,vPassedByReference);
       case ValueType of
+      smvInteger, smvInt64:
+        if TJSONCustomParserRTTI.TypeNameToSimpleBinary(ShortStringToUTF8(ArgTypeName^),
+           SizeInStack, SizeInStorage) then begin
+          ValueType := smvBinary; // transmitted as hexa string
+          Include(ValueKindAsm,vIsString);
+        end;
       smvRawUTF8..smvWideString:
         Include(ValueKindAsm,vIsString);
       smvDynArray:
@@ -54449,6 +54460,7 @@ begin
               '%.Create: % set too big in %.% method % parameter',
               [self,ArgTypeName^,fInterfaceTypeInfo^.Name,URI,ParamName^]);
         end;
+        smvBinary: ; // already set SizeInStack + SizeInStorage
         smvRecord:
           if ArgTypeInfo^.RecordType^.Size<=PTRSIZ then
             raise EInterfaceFactoryException.CreateUTF8(
@@ -54459,7 +54471,7 @@ begin
           SizeInStorage := PTRSIZ;
       end;
       if ValueDirection=smdResult then begin
-        if not(ValueType in CONST_ARGS_RESULT_BY_REF) then
+        if not (ValueType in CONST_ARGS_RESULT_BY_REF) then
           continue; // ordinal/real/class results are returned in CPU/FPU registers
         {$ifndef CPUX86}
         InStackOffset := STACKOFFSET_NONE;
@@ -54469,7 +54481,7 @@ begin
         // CPUX86 will add an additional by-ref parameter
       end;
       {$ifdef CPU32}
-      if ValueDirection=smdConst then
+      if (ValueDirection=smdConst) and (ValueType<>smvBinary) then
         SizeInStack := CONST_ARGS_IN_STACK_SIZE[ValueType] else
       {$endif}
         SizeInStack := PTRSIZ; // always aligned to 8 bytes boundaries for 64-bit
@@ -58960,7 +58972,7 @@ const
   // AnsiString (Delphi <2009) may loose data depending on the client
   CONST_ARGTYPETOJSON: array[TServiceMethodValueType] of string[8] = (
     '??','self','boolean', '', '','integer','cardinal','int64',
-    'double','datetime','currency','utf8','utf8','utf8','utf8','',
+    'double','datetime','currency','utf8','utf8','utf8','utf8','utf8','',
     {$ifndef NOVARIANTS}'variant',{$endif}'','json','','');
 begin
   WR.AddShort('{"argument":"');
@@ -59000,6 +59012,8 @@ begin
                  {$endif}
   smvRawByteString: WR.WrBase64(PPointer(V)^,length(PRawBytestring(V)^),false);
   smvWideString: WR.AddJSONEscapeW(PPointer(V)^);
+  smvBinary:     if not IsZero(V,SizeInStorage) then
+                   WR.AddBinToHexDisplayLower(V,SizeInStorage);
   smvObject:     WR.WriteObject(PPointer(V)^);
   smvInterface:  WR.AddShort('null'); // or written by InterfaceWrite()
   smvRecord:     WR.AddRecordJSON(V^,ArgTypeInfo);
@@ -60428,6 +60442,9 @@ begin
             Base64ToBin(PAnsiChar(Val),ValLen,RawByteString(fRawUTF8s[IndexVar]));
           smvWideString:
             UTF8ToWideString(Val,ValLen,fWideStrings[IndexVar]);
+          smvBinary:
+            if ValLen=SizeInStorage*2 then
+              HexDisplayToBin(PAnsiChar(Val),@fInt64s[IndexVar],SizeInStorage);
           else exit; // should not happen
           end;
           continue; // here Par=nil or Val=nil is correct
