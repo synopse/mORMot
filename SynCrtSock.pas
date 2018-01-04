@@ -216,6 +216,7 @@ unit SynCrtSock;
   - added advanced exception text if case of HTTPS connection problems
   - added HTTP.SYS 2.0 web socket API TWebSocketAPI
   - added HTTP.SYS 2.0 based WebSocket server THttpApiWebSocketServer
+  - added direct SChannel API TLS support on Windows 
 
 }
 

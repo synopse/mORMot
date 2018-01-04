@@ -1852,8 +1852,7 @@ function TSChannelClient.Send(aSocket: THandle; aBuffer: pointer; aLength: integ
 var
   desc: TSecBufferDesc;
   buf: array[0..3] of TSecBuffer;
-  res, sent, len, trailer, c, templen: cardinal;
-  s: integer;
+  res, sent, s, len, trailer, pending, templen: cardinal;
   temp: array[0..TLSRECMAXSIZE] of byte;
 begin
   if not Initialized then begin // use plain socket API
@@ -1864,13 +1863,14 @@ begin
   desc.ulVersion := SECBUFFER_VERSION;
   desc.cBuffers := 4;
   desc.pBuffers := @buf[0];
-  c := cardinal(aLength);
-  while c <> 0 do
-  try
-    templen := c;
+  pending := aLength;
+  while pending > 0 do begin
+    templen := pending;
     if templen > Sizes.cbMaximumMessage then
       templen := Sizes.cbMaximumMessage;
     Move(aBuffer^, temp[Sizes.cbHeader], templen);
+    inc(PByte(aBuffer), templen);
+    dec(pending, templen);
     trailer := Sizes.cbHeader + templen;
     len := trailer + Sizes.cbTrailer;
     buf[0].cbBuffer := Sizes.cbHeader;
@@ -1885,15 +1885,16 @@ begin
     buf[3].cbBuffer := 0;
     buf[3].BufferType := SECBUFFER_EMPTY;
     buf[3].pvBuffer := nil;
-    CheckSEC_E_OK(EncryptMessage(@Ctxt, 0, @desc, 0));
+    if EncryptMessage(@Ctxt, 0, @desc, 0) <> SEC_E_OK then
+      exit; // shutdown the connection on SChannel error
     sent := 0;
     repeat
       s := SynWinSock.Send(aSocket, @temp[sent], len, MSG_NOSIGNAL);
-      if s = integer(len) then
-        break;
+      if s = len then
+        break; // whole message sent
       if s = 0 then
-        exit; // report connection closed
-      if s < 0 then begin
+        exit;  // report connection closed
+      if integer(s) < 0 then begin
         res := WSAGetLastError;
         if (res <> WSATRY_AGAIN) and (res <> WSAEINTR) then begin
           result := s;
@@ -1906,10 +1907,6 @@ begin
       end;
       Sleep(1); // try again
     until false;
-    inc(PByte(aBuffer), templen);
-    dec(c, templen);
-  except
-    exit; // shutdown the connection on ESChannel fatal error
   end;
   result := aLength;
 end;
