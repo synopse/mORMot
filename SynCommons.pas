@@ -1118,6 +1118,8 @@ type
 
   /// a dynamic array of pointers to shortstring values
   PShortStringDynArray = array of PShortString;
+  PShortStringArray = array[0..MaxInt div SizeOf(pointer)-1] of PShortString;
+  PPShortStringArray = ^PShortStringArray;
 
   /// a dynamic array of TDateTime values
   TDateTimeDynArray = array of TDateTime;
