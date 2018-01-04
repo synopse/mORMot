@@ -13727,6 +13727,8 @@ var
   // - contains e.g. 'Windows Seven 64 SP1 (6.1.7601)' or 
   // 'Linux 3.13.0 110 generic#157 Ubuntu SMP Mon Feb 20 11:55:25 UTC 2017'
   OSVersionText: RawUTF8;
+  /// some textual information about the current CPU
+  CpuInfoText: RawUTF8;
 
 /// this function can be used to create a GDI compatible window, able to
 // receive Windows Messages for fast local communication
@@ -13771,10 +13773,10 @@ procedure SleepHiRes(ms: cardinal);
 
 var
   SystemInfo: record
-    nprocs: integer;
+    dwNumberOfProcessors: integer;
     uts: UtsName;
   end;
-  OSVersionText: RawUTF8;
+  OSVersionText, CpuInfoText: RawUTF8;
 
 {$ifdef KYLIX3}
 
@@ -18143,7 +18145,10 @@ uses
   SynFPCLinux,
   Unix,
   dynlibs,
-  {$ifndef BSD}
+  {$ifdef BSD}
+  ctypes,
+  sysctl,
+  {$else}
   Linux,
   SysCall,
   {$endif}
@@ -25925,6 +25930,7 @@ var
   Kernel: THandle;
   P: pointer;
   Vers: TWindowsVersion;
+  cpu: string;
 begin
   Kernel := GetModuleHandle(kernel32);
   GetTickCount64 := GetProcAddress(Kernel,'GetTickCount64');
@@ -25984,20 +25990,83 @@ begin
         dwMajorVersion,dwMinorVersion,dwBuildNumber],OSVersionText) else
       FormatUTF8('Windows % SP% (%.%.%)',[WINDOWS_NAME[Vers],wServicePackMajor,
         dwMajorVersion,dwMinorVersion,dwBuildNumber],OSVersionText);
+  {$ifndef LVCL}
+  with TRegistry.Create do
+  try
+    RootKey := HKEY_LOCAL_MACHINE;
+    if OpenKeyReadOnly('\Hardware\Description\System\CentralProcessor\0') then begin
+      cpu := ReadString('ProcessorNameString');
+      if cpu='' then
+        cpu := ReadString('Identifier');
+    end;
+  finally
+    Free;
+  end;
+  {$endif}
+  if cpu='' then
+    cpu := GetEnvironmentVariable('PROCESSOR_IDENTIFIER');
+  FormatUTF8('% x %',[SystemInfo.dwNumberOfProcessors,cpu],CpuInfoText);
 end;
 
 {$else}
 
 procedure RetrieveSystemInfo;
+var modname, beg: PUTF8Char;
+    {$ifdef BSD}
+    mib: array[0..1] of cint;
+    model: array[byte] of AnsiChar;
+    len: cint;
+    {$else}
+    cpuinfo: PUTF8Char;
+    {$endif BSD}
 begin
+  modname := nil;
+  {$ifdef BSD}
+  fpuname(SystemInfo.uts);
+  mib[0] := CTL_HW;
+  mib[1] := HW_NCPU;
+  len := SizeOf(len);
+  fpsysctl(pointer(@mib),2,@SystemInfo.dwNumberOfProcessors,@len,nil,0);
+  mib[0] := CTL_HW;
+  mib[1] := HW_MODEL;
+  FillChar(model,SizeOf(model),0);
+  len := SizeOf(model);
+  fpsysctl(pointer(@mib),2,@model,@len,nil,0);
+  if model[0]<>#0 then
+    modname := @model;
+  {$else}
   {$ifdef KYLIX3}
-  SystemInfo.nprocs := LibC.get_nprocs;
   uname(SystemInfo.uts);
   {$else}
-  FPUname(SystemInfo.uts);
-  {$endif}
+  fpuname(SystemInfo.uts);
+  {$endif KYLIX3}
+  SystemInfo.dwNumberOfProcessors := 0;
+  cpuinfo := pointer(StringFromFile('/proc/cpuinfo',true));
+  while cpuinfo<>nil do begin
+    beg := GetNextLineBegin(cpuinfo,cpuinfo);
+    if IdemPChar(beg,'PROCESSOR') then
+      if beg^='P' then
+        modname := beg else // Processor : ARMv7
+        inc(SystemInfo.dwNumberOfProcessors) else // processor : 0
+    if IdemPChar(beg,'MODEL NAME') then
+      modname := beg;
+  end;
+  modname := PosChar(modname,':');
+  if modname<>nil then
+    modname := GotoNextNotSpace(modname+1);
+  {$endif BSD}
   with SystemInfo.uts do
     FormatUTF8('%-% %',[sysname,release,version],OSVersionText);
+  if (SystemInfo.dwNumberOfProcessors>0) and (modname<>nil) then begin
+    beg := modname;
+    while not (ord(modname^) in [0,10,13]) do begin
+      if modname^<' ' then
+        modname^ := ' ';
+      inc(modname);
+    end;
+    modname^ := #0;
+    FormatUTF8('% x %',[SystemInfo.dwNumberOfProcessors,beg],CpuInfoText);
+  end;
 end;
 
 {$ifdef KYLIX3}
@@ -26040,7 +26109,6 @@ function GetTickCount64: Int64;
 begin
   result := SynKylix.GetTickCount64;
 end;
-
 {$endif KYLIX3}
 
 {$ifdef FPC}
@@ -26088,7 +26156,6 @@ end;
 
 {$ifndef FPC} // FPC has its built-in InterlockedIncrement/InterlockedDecrement
 {$ifdef PUREPASCAL}
-
 function InterlockedIncrement(var I: Integer): Integer;
 begin
   {$ifdef MSWINDOWS} // AtomicIncrement() may not be available e.g. on Delphi XE2
@@ -26106,9 +26173,7 @@ begin
   result := AtomicDecrement(I);
   {$endif}
 end;
-
 {$else}
-
 function InterlockedIncrement(var I: Integer): Integer;
 asm
         mov     edx, 1
@@ -26124,9 +26189,8 @@ asm
    lock xadd    [edx], eax
         dec     eax
 end;
-
 {$endif}
-{$endif}
+{$endif FPC}
 
 procedure SoundExComputeAnsi(var p: PAnsiChar; var result: cardinal; Values: PSoundExValues);
 var n,v,old: cardinal;
@@ -37468,12 +37532,8 @@ begin
   with SystemInfo do
     result := JSONEncode([
       'host',ExeVersion.Host,'user',ExeVersion.User,'os',OSVersionText,
-      'cpucount',
-      {$ifdef MSWINDOWS}
-      dwNumberOfProcessors,{$ifndef CPU64}'wow64',IsWow64,{$endif}
-      {$else MSWINDOWS}
-      nprocs,
-      {$endif MSWINDOWS}
+      'cpu',CpuInfoText,
+      {$ifdef MSWINDOWS}{$ifndef CPU64}'wow64',IsWow64,{$endif}{$endif MSWINDOWS}
       {$ifndef PUREPASCAL}{$ifdef CPUINTEL}
       'cpufeatures', LowerCase(ToText(CpuFeatures, ' ')),
       {$endif}{$endif}
@@ -55887,7 +55947,7 @@ begin
   // virtual memory information is not available under Linux
 {$else}
 begin // e.g. Darwin
-{$endif LINUX}
+{$endif BSD}
 {$endif MSWINDOWS}
 {$ifdef FPC}
   with GetHeapStatus do begin

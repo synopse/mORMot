@@ -3974,6 +3974,7 @@ end;
 
 procedure TSynLog.LogFileHeader;
 var WithinEvents: boolean;
+    i: integer;
     {$ifdef MSWINDOWS}
     Env: PAnsiChar;
     P: PUTF8Char;
@@ -4004,9 +4005,15 @@ begin
     NewLine;
     AddShort('Host=');  AddString(Host);
     AddShort(' User='); AddString(User);
+    AddShort(' CPU=');
+    if CpuInfoText='' then
+      Add(SystemInfo.dwNumberOfProcessors) else
+      for i := 1 to length(CpuInfoText) do
+        if not (ord(CpuInfoText[i]) in [1..32,ord(':')]) then
+          Add(CpuInfoText[i]);
     {$ifdef MSWINDOWS}
     with SystemInfo, OSVersionInfo do begin
-      AddShort(' CPU=');  Add(dwNumberOfProcessors); Add('*');
+      Add('*');
       Add(wProcessorArchitecture); Add('-'); Add(wProcessorLevel); Add('-');
       Add(wProcessorRevision);
       {$ifdef CPUINTEL}
@@ -4018,11 +4025,6 @@ begin
       AddShort(' Wow64='); Add(integer(IsWow64));
     end;
     {$else}
-    AddShort(' CPU=');
-    Add(SystemInfo.nprocs);
-    {$ifdef KYLIX3}
-    Add('/'); Add(LibC.get_nprocs_conf);
-    {$endif}
     {$ifdef CPUINTEL}
     Add(':'); AddBinToHex(@CpuFeatures,SizeOf(CpuFeatures));
     {$endif}
