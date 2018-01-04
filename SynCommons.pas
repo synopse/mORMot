@@ -3798,6 +3798,10 @@ function AddPrefixToCSV(CSV: PUTF8Char; const Prefix: RawUTF8;
 procedure AddToCSV(const Value: RawUTF8; var CSV: RawUTF8; const Sep: RawUTF8 = ',');
   {$ifdef HASINLINE}inline;{$endif}
 
+/// change a Value within a CSV string
+function RenameInCSV(const OldValue, NewValue: RawUTF8; var CSV: RawUTF8;
+  const Sep: RawUTF8 = ','): boolean;
+
 /// quick helper to initialize a dynamic array of RawUTF8 from some constants
 // - can be used e.g. as:
 // ! MyArray := TRawUTF8DynArrayFrom(['a','b','c']);
@@ -32493,6 +32497,28 @@ begin
   if CSV='' then
     CSV := Value else
     CSV := CSV+Sep+Value;
+end;
+
+function RenameInCSV(const OldValue, NewValue: RawUTF8; var CSV: RawUTF8;
+  const Sep: RawUTF8 = ','): boolean;
+var pattern: RawUTF8;
+    i,j: integer;
+begin
+  result := OldValue=NewValue;
+  if result or (length(Sep)<>1) then
+    exit;
+  j := 1;
+  pattern := Sep+OldValue;
+  repeat
+    i := PosEx(pattern,CSV,j);
+    if i=0 then
+      exit;
+    j := i+length(pattern);
+  until (CSV[j]=Sep[1]) or (CSV[j]=#0);
+  inc(i);
+  delete(CSV,i,length(OldValue));
+  insert(NewValue,CSV,i);
+  result := true;
 end;
 
 function RawUTF8ArrayToCSV(const Values: array of RawUTF8; const Sep: RawUTF8 = ','): RawUTF8;
