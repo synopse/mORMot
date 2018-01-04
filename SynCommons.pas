@@ -7602,6 +7602,10 @@ type
     // - to be called if TypeNameToSimpleRTTIType() did fail, i.e. return ptCustom
     // - will return ptCustom for any unknown type
     class function TypeInfoToSimpleRTTIType(Info: pointer; ItemSize: integer): TJSONCustomParserRTTIType;
+    /// recognize a ktBinary simple type from a supplied type name
+    // - as registered by TTextWriter.RegisterCustomJSONSerializerFromTextBinaryType
+    class function TypeNameToSimpleBinary(const aTypeName: RawUTF8;
+      out aDataSize, aFieldSize: integer): boolean;
     /// unserialize some JSON content into its binary internal representation
     // - on error, returns false and P should point to the faulty text input
     function ReadOneLevel(var P: PUTF8Char; var Data: PByte;
@@ -33116,15 +33120,15 @@ begin
        (PCardinalArray(P)^[2]<>0) or (PCardinalArray(P)^[3]<>0) then
     {$endif}
       exit else
-      inc(PtrUInt(P),16);
+      inc(PByte(P),16);
   for i := 1 to (Length shr 2)and 3 do // 4 bytes (1 DWORD) by loop
     if PCardinal(P)^<>0 then
       exit else
-      inc(PtrUInt(P),4);
+      inc(PByte(P),4);
   for i := 1 to Length and 3 do // remaining content
     if PByte(P)^<>0 then
       exit else
-      inc(PtrUInt(P));
+      inc(PByte(P));
   result := true;
 end;
 
@@ -41587,6 +41591,19 @@ begin
     // ftComp: not implemented yet
     end;
   end;
+end;
+
+class function TJSONCustomParserRTTI.TypeNameToSimpleBinary(const aTypeName: RawUTF8;
+  out aDataSize, aFieldSize: integer): boolean;
+var simple: ^TJSONSerializerFromTextSimple;
+begin
+  simple := GlobalCustomJSONSerializerFromTextSimpleType.FindValue(aTypeName);
+  if (simple<>nil) and (simple^.BinaryFieldSize<>0) then begin
+    aDataSize := simple^.BinaryDataSize;
+    aFieldSize := simple^.BinaryFieldSize;
+    result := true;
+  end else
+    result := false;
 end;
 
 class function TJSONCustomParserRTTI.CreateFromRTTI(
