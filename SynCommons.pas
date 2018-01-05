@@ -26014,6 +26014,19 @@ end;
 
 {$else}
 
+{$ifdef BSD}
+function fpsysctlhw(hwid: cint): Int64;
+var mib: array[0..1] of cint;
+    len: cint;
+begin
+  result := 0;
+  mib[0] := CTL_HW;
+  mib[1] := hwid;
+  len := SizeOf(result);
+  fpsysctl(pointer(@mib),2,@result,@len,nil,0);
+end;
+{$endif}
+
 procedure RetrieveSystemInfo;
 var modname, beg: PUTF8Char;
     {$ifdef BSD}
@@ -26027,10 +26040,7 @@ begin
   modname := nil;
   {$ifdef BSD}
   fpuname(SystemInfo.uts);
-  mib[0] := CTL_HW;
-  mib[1] := HW_NCPU;
-  len := SizeOf(len);
-  fpsysctl(pointer(@mib),2,@SystemInfo.dwNumberOfProcessors,@len,nil,0);
+  SystemInfo.dwNumberOfProcessors := fpsysctlhw(HW_NCPU);
   mib[0] := CTL_HW;
   mib[1] := HW_MODEL;
   FillChar(model,SizeOf(model),0);
@@ -55955,8 +55965,13 @@ begin
   FVirtualMemoryTotal.fBytes := MemoryStatus.ullTotalVirtual;
   FVirtualMemoryFree.fBytes := MemoryStatus.ullAvailVirtual;
 {$else}
-{$ifndef BSD}
-var si: TSysInfo;
+{$ifdef BSD}
+begin
+  FPhysicalMemoryTotal.fBytes := fpsysctlhw(
+    {$ifdef DARWIN}HW_MEMSIZE{$else}HW_PHYSMEM{$endif});
+  FPhysicalMemoryFree.fBytes := FPhysicalMemoryTotal.fBytes-fpsysctlhw(HW_USERMEM);
+{$else}
+var si: TSysInfo; // Linuxism
 begin
   {$ifdef FPC}
   SysInfo(@si);
@@ -55970,8 +55985,6 @@ begin
   FPagingFileTotal.fBytes := si.totalswap;
   FPagingFileFree.fBytes := si.freeswap;
   // virtual memory information is not available under Linux
-{$else}
-begin // e.g. Darwin
 {$endif BSD}
 {$endif MSWINDOWS}
 {$ifdef FPC}
