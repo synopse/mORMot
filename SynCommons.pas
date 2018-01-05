@@ -32573,17 +32573,23 @@ var pattern: RawUTF8;
     i,j: integer;
 begin
   result := OldValue=NewValue;
-  if result or (length(Sep)<>1) then
+  i := length(OldValue);
+  if result or (length(Sep)<>1) or (length(CSV)<i) or
+     (PosEx(Sep,OldValue)>0) or (PosEx(Sep,NewValue)>0) then
     exit;
-  j := 1;
-  pattern := Sep+OldValue;
-  repeat
-    i := PosEx(pattern,CSV,j);
-    if i=0 then
-      exit;
-    j := i+length(pattern);
-  until (CSV[j]=Sep[1]) or (CSV[j]=#0);
-  inc(i);
+  if CompareMem(pointer(OldValue),pointer(CSV),i) and // first (or unique) item
+     ((CSV[i+1]=Sep[1]) or (CSV[i+1]=#0)) then
+    i := 1 else begin
+    j := 1;
+    pattern := Sep+OldValue;
+    repeat
+      i := PosEx(pattern,CSV,j);
+      if i=0 then
+        exit;
+      j := i+length(pattern);
+    until (CSV[j]=Sep[1]) or (CSV[j]=#0);
+    inc(i);
+  end;
   delete(CSV,i,length(OldValue));
   insert(NewValue,CSV,i);
   result := true;
