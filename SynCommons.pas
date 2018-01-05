@@ -16707,6 +16707,8 @@ type
     /// some text corresponding to current 'free/total' memory information
     // - returns e.g. '10.3 GB / 15.6 GB'
     class function FreeAsText: RawUTF8;
+    /// how many physical memory is currently installed, as text (e.g. '32GB'); 
+    class function PhysicalAsText: RawUTF8;
     {$ifndef NOVARIANTS}
     /// fill a TDocVariant with the current system memory information
     // - numbers would be given in KB (Bytes shl 10)
@@ -55814,6 +55816,21 @@ begin
   finally
     Free;
   end;
+end;
+
+var
+  PhysicalAsTextCache: RawUTF8; // this value doesn't change usually
+
+class function TSynMonitorMemory.PhysicalAsText: RawUTF8;
+begin
+  if PhysicalAsTextCache='' then
+    with TSynMonitorMemory.Create do
+    try
+      PhysicalAsTextCache := PhysicalMemoryTotal.Text;
+    finally
+      Free;
+    end;
+  result := PhysicalAsTextCache;
 end;
 
 {$ifndef NOVARIANTS}
