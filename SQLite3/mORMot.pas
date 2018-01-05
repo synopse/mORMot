@@ -8446,14 +8446,15 @@ type
     // & { "fieldCount":1,"values":["col1","col2",val11,"val12",val21,..] }
     // - RowFirst and RowLast can be used to ask for a specified row extent
     // of the returned data (by default, all rows are retrieved)
+    // - IDBinarySize will force the ID field to be stored as hexadecimal text
     procedure GetJSONValues(JSON: TStream; Expand: boolean;
-      RowFirst: integer=0; RowLast: integer=0); overload;
+      RowFirst: integer=0; RowLast: integer=0; IDBinarySize: integer=0); overload;
     /// same as the overloaded method, but returning result into a RawUTF8
-    function GetJSONValues(Expand: boolean): RawUTF8; overload;
+    function GetJSONValues(Expand: boolean; IDBinarySize: integer=0): RawUTF8; overload;
     /// same as the overloaded method, but appending an array to a TTextWriter
     // - will call W.FlushToStream, then append all content
     procedure GetJSONValues(W: TTextWriter; Expand: boolean;
-      RowFirst: integer=0; RowLast: integer=0); overload;
+      RowFirst: integer=0; RowLast: integer=0; IDBinarySize: integer=0); overload;
     /// save the table as CSV format, into a stream
     // - if Tab=TRUE, will use TAB instead of ',' between columns
     // - you can customize the ',' separator - use e.g. the global ListSeparator
@@ -25708,10 +25709,11 @@ begin
 end;
 
 procedure TSQLTable.GetJSONValues(JSON: TStream; Expand: boolean;
-  RowFirst: integer=0; RowLast: integer=0);
+  RowFirst, RowLast, IDBinarySize: integer);
 var W: TJSONWriter;
     F,R: integer;
     U: PPUTF8Char;
+    i64: Int64;
     directWrites: set of 0..255;
 begin
   W := TJSONWriter.Create(JSON,Expand,false);
@@ -25734,11 +25736,17 @@ begin
     FillCharFast(directWrites,(FieldCount shr 3)+1,0);
     for F := 0 to FieldCount-1 do begin
       W.ColNames[F] := fResults[F]; // first Row is field Names
-      if (QueryTables<>nil) and not Assigned(OnExportValue) then
-        with fFieldType[F] do
-        if SQLFieldTypeToDBField(ContentType,ContentTypeInfo) in
-           [ftInt64,ftDouble,ftCurrency] then
-          include(directWrites,F);
+      if not Assigned(OnExportValue) then
+        if F=fFieldIndexID then begin
+          include(directWrites,F); // RowID is a ftInt64
+          if IDBinarySize>0 then
+            W.ColNames[F] := 'id'; // ajax-friendly
+        end else
+        if QueryTables<>nil then
+          with fFieldType[F] do
+          if SQLFieldTypeToDBField(ContentType,ContentTypeInfo) in
+             [ftInt64,ftDouble,ftCurrency] then
+            include(directWrites,F);
     end;
     W.AddColumns(RowLast-RowFirst+1); // write or init field names (see JSON Expand)
     if Expand then
@@ -25753,10 +25761,14 @@ begin
           W.AddString(W.ColNames[F]); // '"'+ColNames[]+'":'
         if Assigned(OnExportValue) then
           W.AddString(OnExportValue(self,R,F,false)) else
+        if (IDBinarySize>0) and (F=fFieldIndexID) then begin
+          SetInt64(U^,i64);
+          W.AddBinToHexDisplayQuoted(@i64,IDBinarySize);
+        end else
         if U^=nil then
           W.AddShort('null') else
         // IsStringJSON() is fast and safe: no need to guess exact value type
-        if (F in directWrites) or not IsStringJSON(U^) then
+        if (F in directWrites) or ((QueryTables=nil) and not IsStringJSON(U^)) then
           W.AddNoJSONEscape(U^,StrLen(U^)) else begin
           W.Add('"');
           W.AddJSONEscape(U^,StrLen(U^));
@@ -25765,7 +25777,7 @@ begin
         W.Add(',');
         inc(U); // points to next value
       end;
-      W.CancelLastComma; // cancel last ','
+      W.CancelLastComma;
       if Expand then begin
         W.Add('}',',');
         if R<>RowLast then
@@ -25780,12 +25792,12 @@ begin
 end;
 
 procedure TSQLTable.GetJSONValues(W: TTextWriter; Expand: boolean;
-  RowFirst: integer=0; RowLast: integer=0);
+  RowFirst, RowLast, IDBinarySize: integer);
 begin
   if (self=nil) or (FieldCount<=0) or (fRowCount<=0) then
     W.Add('[',']') else begin
     W.FlushToStream;
-    GetJSONValues(W.Stream,Expand,RowFirst,RowLast);
+    GetJSONValues(W.Stream,Expand,RowFirst,RowLast,IDBinarySize);
   end;
 end;
 
@@ -26045,12 +26057,12 @@ begin
   end;
 end;
 
-function TSQLTable.GetJSONValues(Expand: boolean): RawUTF8;
+function TSQLTable.GetJSONValues(Expand: boolean; IDBinarySize: integer): RawUTF8;
 var MS: TRawByteStringStream;
 begin
   MS := TRawByteStringStream.Create;
   try
-    GetJSONValues(MS,Expand); // create JSON data in MS
+    GetJSONValues(MS,Expand,0,0,IDBinarySize); // create JSON data in MS
     result := MS.DataString;
   finally
     MS.Free;
