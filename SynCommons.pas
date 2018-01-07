@@ -14155,7 +14155,7 @@ type
     function FixupIdent(const AText: string): string;
     {$endif}
     {$endif}
-    procedure DispInvoke(Dest: PVarData; const Source: TVarData;
+    procedure DispInvoke(Dest: PVarData; {$ifdef FPC_VARIANTSETVAR}var{$ELSE}const{$ENDIF} Source: TVarData;
       CallDesc: PCallDesc; Params: Pointer); override;
     /// override those two abstract methods for fast getter/setter implementation
     procedure IntGet(var Dest: TVarData; const V: TVarData; Name: PAnsiChar); virtual; abstract;
@@ -43354,8 +43354,7 @@ begin
   SetVarAsError(V, VAR_PARAMNOTFOUND);
 end;
 
-procedure TSynInvokeableVariantType.DispInvoke(Dest: PVarData; const Source: TVarData;
-  CallDesc: PCallDesc; Params: Pointer);
+procedure TSynInvokeableVariantType.DispInvoke;
 type
   PParamRec = ^TParamRec;
   TParamRec = array[0..3] of LongInt;
@@ -43415,7 +43414,8 @@ var
     else if LArgByRef then
     begin
       if (LArgType = varVariant) and
-         ((PVarData(LParamPtr^)^.VType = varString) or (PVarData(LParamPtr^)^.VType = varUString)) then
+         ((PVarData(LParamPtr^)^.VType = varString)
+         {$ifdef HASVARUSTRING} or (PVarData(LParamPtr^)^.VType = varUString){$ENDIF} )then
         //VarCast(PVariant(ParamPtr^)^, PVariant(ParamPtr^)^, varOleStr);
         VarDataCastTo(PVarData(LParamPtr^)^, PVarData(LParamPtr^)^, varOleStr);
       LArguments[I].VType := LArgType or varByRef;
@@ -43424,16 +43424,18 @@ var
 
     // value is a variant
     else if LArgType = varVariant then
-      if (PVarData(LParamPtr)^.VType = varString) or
-         (PVarData(LParamPtr)^.VType = varUString) then
+      if (PVarData(LParamPtr)^.VType = varString)
+        {$ifdef HASVARUSTRING}or (PVarData(LParamPtr)^.VType = varUString){$ENDIF} then
       begin
         with LStrings[LStrCount] do
         begin
-          //BStr := StringToOleStr(AnsiString(PVarData(ParamPtr)^.VString));
           if (PVarData(LParamPtr)^.VType = varString) then
             BStr := WideString(System.Copy(AnsiString(PVarData(LParamPtr)^.VString), 1, MaxInt))
           else
-            BStr := WideString(System.Copy(UnicodeString(PVarData(LParamPtr)^.VUString), 1, MaxInt));
+            {$ifdef HASVARUSTRING}
+            BStr := WideString(System.Copy(UnicodeString(PVarData(LParamPtr)^.VAny), 1, MaxInt));
+            {$ELSE};
+            {$ENDIF}
           PStr := nil;
           LArguments[I].VType := varOleStr;
           LArguments[I].VOleStr := PWideChar(BStr);
@@ -43443,7 +43445,7 @@ var
       else
       begin
         LArguments[I] := PVarData(LParamPtr)^;
-        Inc(Integer(LParamPtr), SizeOf(TVarData) - SizeOf(Pointer));
+        Inc(PtrUInt(LParamPtr), SizeOf(TVarData) - SizeOf(Pointer));
       end
     else
     begin
@@ -43457,22 +43459,27 @@ var
         begin
           LArguments[I].VLongs[1] := PParamRec(LParamPtr)^[0];
           LArguments[I].VLongs[2] := PParamRec(LParamPtr)^[1];
-          Inc(Integer(LParamPtr), 8 - SizeOf(Pointer));
+          Inc(PtrUInt(LParamPtr), 8 - SizeOf(Pointer));
         end;
       else
         RaiseDispError;
       end;
     end;
-    Inc(Integer(LParamPtr), SizeOf(Pointer));
+    Inc(PtrUInt(LParamPtr), SizeOf(Pointer));
   end;
 
 var
   I, LArgCount: Integer;
   LIdent: string;
+  success: Boolean;
 begin
   // Grab the identifier
   LArgCount := CallDesc^.ArgCount;
+  {$ifndef FPC}
+  {$ifndef DELPHI6OROLDER}
   LIdent := FixupIdent(string(AnsiString(PAnsiChar(@CallDesc^.ArgTypes[LArgCount]))));
+  {$ENDIF}
+  {$ENDIF}
 
   // Parse the arguments
   LParamPtr := Params;
@@ -43486,24 +43493,23 @@ begin
   case CallDesc^.CallType of
     CDoMethod:
       // property get or function with 0 argument
-      if (LArgCount > 0) or not GetProperty(Dest, Source, LIdent, LArguments) then
-        if not DoFunction(Dest, Source, LIdent, LArguments) then
-          RaiseDispError;
+      success := DoFunction(Dest, Source, LIdent, LArguments) or
+          ( (LArgCount = 0) and GetProperty(Dest, Source, LIdent, LArguments) );
 
     CPropertyGet:
-      if not Assigned(Dest) // there must be a dest
-        or not GetProperty(Dest, Source, LIdent, LArguments) then  // get op be valid
-        RaiseDispError;
-
+      success := Assigned(Dest) // there must be a dest
+        and GetProperty(Dest, Source, LIdent, LArguments);  // get op be valid
 
     CPropertySet:
-      if Assigned(Dest) // there can't be a dest
-        or not SetProperty(Source, LIdent, LArguments) then // set op be valid
-        RaiseDispError;
+      success := not Assigned(Dest) // there can't be a dest
+        and SetProperty(Source, LIdent, LArguments); // set op be valid
   else
-    RaiseDispError;
+    success := False;
   end;
 
+  if not success then
+    RaiseDispError;
+    
   // copy back the string info
   I := LStrCount;
   while I <> 0 do
@@ -43578,8 +43584,7 @@ begin
   end;
 end;
 
-function TSynInvokeableVariantType.SetPropertyNoSubscript(const V: TVarData;
-  const Name: string; const Value: TVarData): Boolean;
+function TSynInvokeableVariantType.SetPropertyNoSubscript;
 var
   PropName: PAnsiChar;
   ValueSet: TVarData;
