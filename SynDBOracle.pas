@@ -150,6 +150,8 @@ interface
 uses
   {$ifdef MSWINDOWS}
   Windows,
+  {$else}
+  dynlibs,
   {$endif}
   SysUtils,
   {$ifndef DELPHI5OROLDER}
@@ -1802,37 +1804,45 @@ begin
     result := OCI_WE8MSWIN1252;
 end;
 
+{$ifndef MSWINDOWS}
+function SafeLoadLibrary(const aFileName: TFileName): HMODULE;
+begin
+ result := LoadLibrary(PAnsiChar(AnsiString(aFileName)));
+end;
+{$endif}
+
 constructor TSQLDBOracleLib.Create;
+const LIBNAME = {$ifdef MSWINDOWS}'oci.dll'{$else}'libclntsh.so'{$endif};
 var P: PPointer;
     i: integer;
     orhome: string;
 begin
-  fLibraryPath := 'oci.dll';
+  fLibraryPath := LIBNAME;
   if (SynDBOracleOCIpath<>'') and DirectoryExists(SynDBOracleOCIpath) then
-    fLibraryPath := ExtractFilePath(ExpandFileName(SynDBOracleOCIpath+'\'))+fLibraryPath;
+    fLibraryPath := ExtractFilePath(ExpandFileName(SynDBOracleOCIpath+PathDelim))+fLibraryPath;
   fHandle := SafeLoadLibrary(fLibraryPath);
   if fHandle=0 then begin
     if fHandle=0 then begin
       orhome := GetEnvironmentVariable('ORACLE_HOME');
       if orhome<>'' then begin
-        fLibraryPath := IncludeTrailingPathDelimiter(orhome)+'bin\oci.dll';
+        fLibraryPath := IncludeTrailingPathDelimiter(orhome)+'bin'+PathDelim+LIBNAME;
         fHandle := SafeLoadLibrary(fLibraryPath);
       end;
     end;
   end;
   if fHandle=0 then begin
-    fLibraryPath := ExeVersion.ProgramFilePath+'OracleInstantClient\oci.dll';
+    fLibraryPath := ExeVersion.ProgramFilePath+'OracleInstantClient'+PathDelim+LIBNAME;
     fHandle := SafeLoadLibrary(fLibraryPath);
   end;
   if fHandle=0 then
-    raise ESQLDBOracle.Create('Unable to find Oracle Client Interface (oci.dll)');
+    raise ESQLDBOracle.Create('Unable to find Oracle Client Interface '+LIBNAME);
   P := @@ClientVersion;
   for i := 0 to High(OCI_ENTRIES) do begin
     P^ := GetProcAddress(fHandle,OCI_ENTRIES[i]);
     if P^=nil then begin
       FreeLibrary(fHandle);
       fHandle := 0;
-      raise ESQLDBOracle.CreateFmt('Invalid oci.dll: missing %s',[OCI_ENTRIES[i]]);
+      raise ESQLDBOracle.CreateUTF8('Invalid %: missing %',[LIBNAME,OCI_ENTRIES[i]]);
     end;
     inc(P);
   end;
@@ -3415,7 +3425,7 @@ begin
       fTimeElapsed.Resume;
       try
 {      if OCI.major_version<9 then
-        raise ESQLDBOracle.CreateFmt('Oracle Client %s does not support OCI_FETCH_FIRST',
+        raise ESQLDBOracle.CreateUTF8('Oracle Client % does not support OCI_FETCH_FIRST',
           [OCI.ClientRevision]); }
         status := OCI.StmtFetch(fStatement,fError,fRowCount,OCI_FETCH_FIRST,OCI_DEFAULT);
         FetchTest(Status); // error + set fRowCount+fRowFetchedCurrent
