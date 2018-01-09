@@ -1118,6 +1118,8 @@ type
 
   /// a dynamic array of pointers to shortstring values
   PShortStringDynArray = array of PShortString;
+  PShortStringArray = array[0..MaxInt div SizeOf(pointer)-1] of PShortString;
+  PPShortStringArray = ^PShortStringArray;
 
   /// a dynamic array of TDateTime values
   TDateTimeDynArray = array of TDateTime;
@@ -2122,6 +2124,7 @@ function VariantHexDisplayToBin(const Hex: variant; Bin: PByte; BinBytes: intege
 
 /// fast conversion of a binary buffer into hexa chars, as a variant string
 function BinToHexDisplayLowerVariant(Bin: pointer; BinBytes: integer): variant;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fast comparison of a Variant and UTF-8 encoded String (or number)
 // - slightly faster than plain V=Str, which computes a temporary variant
@@ -3796,6 +3799,10 @@ function AddPrefixToCSV(CSV: PUTF8Char; const Prefix: RawUTF8;
 /// append a Value to a CSV string
 procedure AddToCSV(const Value: RawUTF8; var CSV: RawUTF8; const Sep: RawUTF8 = ',');
   {$ifdef HASINLINE}inline;{$endif}
+
+/// change a Value within a CSV string
+function RenameInCSV(const OldValue, NewValue: RawUTF8; var CSV: RawUTF8;
+  const Sep: RawUTF8 = ','): boolean;
 
 /// quick helper to initialize a dynamic array of RawUTF8 from some constants
 // - can be used e.g. as:
@@ -7602,6 +7609,10 @@ type
     // - to be called if TypeNameToSimpleRTTIType() did fail, i.e. return ptCustom
     // - will return ptCustom for any unknown type
     class function TypeInfoToSimpleRTTIType(Info: pointer; ItemSize: integer): TJSONCustomParserRTTIType;
+    /// recognize a ktBinary simple type from a supplied type name
+    // - as registered by TTextWriter.RegisterCustomJSONSerializerFromTextBinaryType
+    class function TypeNameToSimpleBinary(const aTypeName: RawUTF8;
+      out aDataSize, aFieldSize: integer): boolean;
     /// unserialize some JSON content into its binary internal representation
     // - on error, returns false and P should point to the faulty text input
     function ReadOneLevel(var P: PUTF8Char; var Data: PByte;
@@ -13719,6 +13730,8 @@ var
   // - contains e.g. 'Windows Seven 64 SP1 (6.1.7601)' or 
   // 'Linux 3.13.0 110 generic#157 Ubuntu SMP Mon Feb 20 11:55:25 UTC 2017'
   OSVersionText: RawUTF8;
+  /// some textual information about the current CPU
+  CpuInfoText: RawUTF8;
 
 /// this function can be used to create a GDI compatible window, able to
 // receive Windows Messages for fast local communication
@@ -13763,10 +13776,10 @@ procedure SleepHiRes(ms: cardinal);
 
 var
   SystemInfo: record
-    nprocs: integer;
+    dwNumberOfProcessors: integer;
     uts: UtsName;
   end;
-  OSVersionText: RawUTF8;
+  OSVersionText, CpuInfoText: RawUTF8;
 
 {$ifdef KYLIX3}
 
@@ -14556,6 +14569,7 @@ procedure RawUTF8ToVariant(const Txt: RawUTF8; var Value: variant); overload;
 
 /// convert an UTF-8 encoded string into a variant RawUTF8 varString
 function RawUTF8ToVariant(const Txt: RawUTF8): variant; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert an UTF-8 encoded text buffer into a variant RawUTF8 varString
 // - this overloaded version expects a destination variant type (e.g. varString
@@ -15446,6 +15460,7 @@ type
     // - returns the number of deleted items
     // - returns 0 if the document is not a dvObject, or if no match was found
     // - if the value exists several times, all occurences would be removed
+    // - is optimized for DeleteByValue(null) call
     function DeleteByValue(const aValue: Variant; CaseInsensitive: boolean=false): integer;
     /// delete all values matching the first characters of a property name
     // - returns the number of deleted items
@@ -16693,6 +16708,8 @@ type
     /// some text corresponding to current 'free/total' memory information
     // - returns e.g. '10.3 GB / 15.6 GB'
     class function FreeAsText: RawUTF8;
+    /// how many physical memory is currently installed, as text (e.g. '32GB'); 
+    class function PhysicalAsText: RawUTF8;
     {$ifndef NOVARIANTS}
     /// fill a TDocVariant with the current system memory information
     // - numbers would be given in KB (Bytes shl 10)
@@ -18133,7 +18150,10 @@ uses
   SynFPCLinux,
   Unix,
   dynlibs,
-  {$ifndef BSD}
+  {$ifdef BSD}
+  ctypes,
+  sysctl,
+  {$else}
   Linux,
   SysCall,
   {$endif}
@@ -25915,6 +25935,7 @@ var
   Kernel: THandle;
   P: pointer;
   Vers: TWindowsVersion;
+  cpu: string;
 begin
   Kernel := GetModuleHandle(kernel32);
   GetTickCount64 := GetProcAddress(Kernel,'GetTickCount64');
@@ -25974,20 +25995,93 @@ begin
         dwMajorVersion,dwMinorVersion,dwBuildNumber],OSVersionText) else
       FormatUTF8('Windows % SP% (%.%.%)',[WINDOWS_NAME[Vers],wServicePackMajor,
         dwMajorVersion,dwMinorVersion,dwBuildNumber],OSVersionText);
+  {$ifndef LVCL}
+  with TRegistry.Create do
+  try
+    RootKey := HKEY_LOCAL_MACHINE;
+    if OpenKeyReadOnly('\Hardware\Description\System\CentralProcessor\0') then begin
+      cpu := ReadString('ProcessorNameString');
+      if cpu='' then
+        cpu := ReadString('Identifier');
+    end;
+  finally
+    Free;
+  end;
+  {$endif}
+  if cpu='' then
+    cpu := GetEnvironmentVariable('PROCESSOR_IDENTIFIER');
+  FormatUTF8('% x %',[SystemInfo.dwNumberOfProcessors,cpu],CpuInfoText);
 end;
 
 {$else}
 
-procedure RetrieveSystemInfo;
+{$ifdef BSD}
+function fpsysctlhw(hwid: cint): Int64;
+var mib: array[0..1] of cint;
+    len: cint;
 begin
+  result := 0;
+  mib[0] := CTL_HW;
+  mib[1] := hwid;
+  len := SizeOf(result);
+  fpsysctl(pointer(@mib),2,@result,@len,nil,0);
+end;
+{$endif}
+
+procedure RetrieveSystemInfo;
+var modname, beg: PUTF8Char;
+    {$ifdef BSD}
+    mib: array[0..1] of cint;
+    model: array[byte] of AnsiChar;
+    len: cint;
+    {$else}
+    cpuinfo: PUTF8Char;
+    {$endif BSD}
+begin
+  modname := nil;
+  {$ifdef BSD}
+  fpuname(SystemInfo.uts);
+  SystemInfo.dwNumberOfProcessors := fpsysctlhw(HW_NCPU);
+  mib[0] := CTL_HW;
+  mib[1] := HW_MODEL;
+  FillChar(model,SizeOf(model),0);
+  len := SizeOf(model);
+  fpsysctl(pointer(@mib),2,@model,@len,nil,0);
+  if model[0]<>#0 then
+    modname := @model;
+  {$else}
   {$ifdef KYLIX3}
-  SystemInfo.nprocs := LibC.get_nprocs;
   uname(SystemInfo.uts);
   {$else}
-  FPUname(SystemInfo.uts);
-  {$endif}
+  fpuname(SystemInfo.uts);
+  {$endif KYLIX3}
+  SystemInfo.dwNumberOfProcessors := 0;
+  cpuinfo := pointer(StringFromFile('/proc/cpuinfo',true));
+  while cpuinfo<>nil do begin
+    beg := GetNextLineBegin(cpuinfo,cpuinfo);
+    if IdemPChar(beg,'PROCESSOR') then
+      if beg^='P' then
+        modname := beg else // Processor : ARMv7
+        inc(SystemInfo.dwNumberOfProcessors) else // processor : 0
+    if IdemPChar(beg,'MODEL NAME') then
+      modname := beg;
+  end;
+  modname := PosChar(modname,':');
+  if modname<>nil then
+    modname := GotoNextNotSpace(modname+1);
+  {$endif BSD}
   with SystemInfo.uts do
     FormatUTF8('%-% %',[sysname,release,version],OSVersionText);
+  if (SystemInfo.dwNumberOfProcessors>0) and (modname<>nil) then begin
+    beg := modname;
+    while not (ord(modname^) in [0,10,13]) do begin
+      if modname^<' ' then
+        modname^ := ' ';
+      inc(modname);
+    end;
+    modname^ := #0;
+    FormatUTF8('% x %',[SystemInfo.dwNumberOfProcessors,beg],CpuInfoText);
+  end;
 end;
 
 {$ifdef KYLIX3}
@@ -26030,7 +26124,6 @@ function GetTickCount64: Int64;
 begin
   result := SynKylix.GetTickCount64;
 end;
-
 {$endif KYLIX3}
 
 {$ifdef FPC}
@@ -26078,7 +26171,6 @@ end;
 
 {$ifndef FPC} // FPC has its built-in InterlockedIncrement/InterlockedDecrement
 {$ifdef PUREPASCAL}
-
 function InterlockedIncrement(var I: Integer): Integer;
 begin
   {$ifdef MSWINDOWS} // AtomicIncrement() may not be available e.g. on Delphi XE2
@@ -26096,9 +26188,7 @@ begin
   result := AtomicDecrement(I);
   {$endif}
 end;
-
 {$else}
-
 function InterlockedIncrement(var I: Integer): Integer;
 asm
         mov     edx, 1
@@ -26114,9 +26204,8 @@ asm
    lock xadd    [edx], eax
         dec     eax
 end;
-
 {$endif}
-{$endif}
+{$endif FPC}
 
 procedure SoundExComputeAnsi(var p: PAnsiChar; var result: cardinal; Values: PSoundExValues);
 var n,v,old: cardinal;
@@ -32489,6 +32578,34 @@ begin
     CSV := CSV+Sep+Value;
 end;
 
+function RenameInCSV(const OldValue, NewValue: RawUTF8; var CSV: RawUTF8;
+  const Sep: RawUTF8 = ','): boolean;
+var pattern: RawUTF8;
+    i,j: integer;
+begin
+  result := OldValue=NewValue;
+  i := length(OldValue);
+  if result or (length(Sep)<>1) or (length(CSV)<i) or
+     (PosEx(Sep,OldValue)>0) or (PosEx(Sep,NewValue)>0) then
+    exit;
+  if CompareMem(pointer(OldValue),pointer(CSV),i) and // first (or unique) item
+     ((CSV[i+1]=Sep[1]) or (CSV[i+1]=#0)) then
+    i := 1 else begin
+    j := 1;
+    pattern := Sep+OldValue;
+    repeat
+      i := PosEx(pattern,CSV,j);
+      if i=0 then
+        exit;
+      j := i+length(pattern);
+    until (CSV[j]=Sep[1]) or (CSV[j]=#0);
+    inc(i);
+  end;
+  delete(CSV,i,length(OldValue));
+  insert(NewValue,CSV,i);
+  result := true;
+end;
+
 function RawUTF8ArrayToCSV(const Values: array of RawUTF8; const Sep: RawUTF8 = ','): RawUTF8;
 var i, len, seplen, L: Integer;
     P: PAnsiChar;
@@ -33114,15 +33231,15 @@ begin
        (PCardinalArray(P)^[2]<>0) or (PCardinalArray(P)^[3]<>0) then
     {$endif}
       exit else
-      inc(PtrUInt(P),16);
+      inc(PByte(P),16);
   for i := 1 to (Length shr 2)and 3 do // 4 bytes (1 DWORD) by loop
     if PCardinal(P)^<>0 then
       exit else
-      inc(PtrUInt(P),4);
+      inc(PByte(P),4);
   for i := 1 to Length and 3 do // remaining content
     if PByte(P)^<>0 then
       exit else
-      inc(PtrUInt(P));
+      inc(PByte(P));
   result := true;
 end;
 
@@ -37438,12 +37555,8 @@ begin
   with SystemInfo do
     result := JSONEncode([
       'host',ExeVersion.Host,'user',ExeVersion.User,'os',OSVersionText,
-      'cpucount',
-      {$ifdef MSWINDOWS}
-      dwNumberOfProcessors,{$ifndef CPU64}'wow64',IsWow64,{$endif}
-      {$else MSWINDOWS}
-      nprocs,
-      {$endif MSWINDOWS}
+      'cpu',CpuInfoText,
+      {$ifdef MSWINDOWS}{$ifndef CPU64}'wow64',IsWow64,{$endif}{$endif MSWINDOWS}
       {$ifndef PUREPASCAL}{$ifdef CPUINTEL}
       'cpufeatures', LowerCase(ToText(CpuFeatures, ' ')),
       {$endif}{$endif}
@@ -41281,8 +41394,10 @@ begin
   ktDynamicArray:
     raise ESynException.CreateUTF8('%.CustomWriter("%"): unsupported',
         [self,fCustomTypeName]);
-  ktBinary:
-    aWriter.AddBinToHexDisplayQuoted(@aValue,fFixedSize);
+  ktBinary: 
+    if (fFixedSize<=sizeof(QWord)) and IsZero(@aValue,fFixedSize) then
+      aWriter.AddShort('""') else // 0 -> ""
+      aWriter.AddBinToHexDisplayQuoted(@aValue,fFixedSize);
   else begin // encoded as JSON strings
     aWriter.Add('"');
     case fKnownType of
@@ -41355,19 +41470,17 @@ begin
       if wasString and (PropValueLen=fFixedSize*2) and
          SynCommons.HexToBin(PAnsiChar(PropValue),@aValue,fFixedSize) then
         result := P;
-    ktBinary: begin
-      FillCharFast(aValue,fDataSize,0);
-      if wasString then begin
+    ktBinary:
+      if wasString and (PropValueLen>0) then begin // default hexa serialization
         if (PropValueLen=fFixedSize*2) and
-           SynCommons.HexDisplayToBin(PAnsiChar(PropValue),@aValue,fFixedSize) then
+           HexDisplayToBin(PAnsiChar(PropValue),@aValue,fFixedSize) then
           result := P;
       end else
-        if fFixedSize<=sizeof(u64) then begin
-          SetQWord(PropValue,u64);
+        if fFixedSize<=sizeof(u64) then begin // allow integer serialization
+          SetQWord(PropValue,u64); // "" -> PropValueLen=0 -> u64=0
           MoveFast(u64,aValue,fFixedSize);
           result := P;
         end;
-    end;
     end;
   end;
   end;
@@ -41587,6 +41700,19 @@ begin
     // ftComp: not implemented yet
     end;
   end;
+end;
+
+class function TJSONCustomParserRTTI.TypeNameToSimpleBinary(const aTypeName: RawUTF8;
+  out aDataSize, aFieldSize: integer): boolean;
+var simple: ^TJSONSerializerFromTextSimple;
+begin
+  simple := GlobalCustomJSONSerializerFromTextSimpleType.FindValue(aTypeName);
+  if (simple<>nil) and (simple^.BinaryFieldSize<>0) then begin
+    aDataSize := simple^.BinaryDataSize;
+    aFieldSize := simple^.BinaryFieldSize;
+    result := true;
+  end else
+    result := false;
 end;
 
 class function TJSONCustomParserRTTI.CreateFromRTTI(
@@ -42323,7 +42449,7 @@ begin
           if (len>12) and IdemPropName('DynArray',@PByteArray(TypIdent)[len-8],8) then
             dec(len,8) else
           if (len>3) and (TypIdent[len]='S') then
-            dec(len,1) else
+            dec(len) else
             len := 0;
           if len>0 then begin
             ArrayTyp := TJSONCustomParserRTTI.TypeNameToSimpleRTTIType(
@@ -44768,11 +44894,18 @@ function TDocVariantData.DeleteByValue(const aValue: Variant;
 var ndx: integer;
 begin
   result := 0;
-  for ndx := VCount-1 downto 0 do
-  if SortDynArrayVariantComp(TVarData(VValue[ndx]),TVarData(aValue),CaseInsensitive)=0 then begin
-    Delete(ndx);
-    inc(result);
-  end;
+  if VarIsEmptyOrNull(aValue) then begin
+    for ndx := VCount-1 downto 0 do
+    if VarDataIsEmptyOrNull(@VValue[ndx]) then begin
+      Delete(ndx);
+      inc(result);
+    end;
+  end else
+    for ndx := VCount-1 downto 0 do
+    if SortDynArrayVariantComp(TVarData(VValue[ndx]),TVarData(aValue),CaseInsensitive)=0 then begin
+      Delete(ndx);
+      inc(result);
+    end;
 end;
 
 function TDocVariantData.DeleteByStartName(aStartName: PUTF8Char; aStartNameLen: integer): integer;
@@ -45989,7 +46122,22 @@ begin
 end;
 
 function _Safe(const DocVariant: variant): PDocVariantData;
-{$ifndef HASINLINENOTX86}
+{$ifdef HASINLINENOTX86}
+begin
+  with TVarData(DocVariant) do
+    if VType=word(DocVariantVType) then begin
+      result := @DocVariant;
+      exit;
+    end else
+    if VType=varByRef or varVariant then begin
+      result := _Safe(PVariant(VPointer)^);
+      exit;
+    end else begin
+      result := @DocVariantDataFake;
+      exit;
+    end;
+end;
+{$else}
 asm
       mov   ecx,DocVariantVType
       movzx edx,word ptr [eax].TVarData.VType
@@ -46005,28 +46153,13 @@ asm
       lea   eax,[DocVariantDataFake]
 @ok:
 end;
-{$else}
-begin
-  with TVarData(DocVariant) do
-    if VType=word(DocVariantVType) then begin
-      result := @DocVariant;
-      exit;
-    end else
-    if VType=varByRef or varVariant then begin
-      result := _Safe(PVariant(VPointer)^);
-      exit;
-    end else begin
-      result := @DocVariantDataFake;
-      exit;
-    end;
-end;
 {$endif}
 
 function _Safe(const DocVariant: variant; ExpectedKind: TDocVariantKind): PDocVariantData;
 begin
   result := _Safe(DocVariant);
   if result^.Kind<>ExpectedKind then
-    raise EDocVariant.CreateUTF8('_Safe(%)<>%',[ord(result^.Kind),ord(ExpectedKind)]);
+    raise EDocVariant.CreateUTF8('_Safe(%)<>%',[ToText(result^.Kind)^,ToText(ExpectedKind)^]);
 end;
 
 function _Obj(const NameValuePairs: array of const;
@@ -55704,6 +55837,21 @@ begin
   end;
 end;
 
+var
+  PhysicalAsTextCache: RawUTF8; // this value doesn't change usually
+
+class function TSynMonitorMemory.PhysicalAsText: RawUTF8;
+begin
+  if PhysicalAsTextCache='' then
+    with TSynMonitorMemory.Create do
+    try
+      PhysicalAsTextCache := PhysicalMemoryTotal.Text;
+    finally
+      Free;
+    end;
+  result := PhysicalAsTextCache;
+end;
+
 {$ifndef NOVARIANTS}
 class function TSynMonitorMemory.ToVariant: variant;
 begin
@@ -55820,8 +55968,13 @@ begin
   FVirtualMemoryTotal.fBytes := MemoryStatus.ullTotalVirtual;
   FVirtualMemoryFree.fBytes := MemoryStatus.ullAvailVirtual;
 {$else}
-{$ifndef BSD}
-var si: TSysInfo;
+{$ifdef BSD}
+begin
+  FPhysicalMemoryTotal.fBytes := fpsysctlhw(
+    {$ifdef DARWIN}HW_MEMSIZE{$else}HW_PHYSMEM{$endif});
+  FPhysicalMemoryFree.fBytes := FPhysicalMemoryTotal.fBytes-fpsysctlhw(HW_USERMEM);
+{$else}
+var si: TSysInfo; // Linuxism
 begin
   {$ifdef FPC}
   SysInfo(@si);
@@ -55835,9 +55988,7 @@ begin
   FPagingFileTotal.fBytes := si.totalswap;
   FPagingFileFree.fBytes := si.freeswap;
   // virtual memory information is not available under Linux
-{$else}
-begin // e.g. Darwin
-{$endif LINUX}
+{$endif BSD}
 {$endif MSWINDOWS}
 {$ifdef FPC}
   with GetHeapStatus do begin

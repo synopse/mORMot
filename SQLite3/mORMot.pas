@@ -8446,14 +8446,15 @@ type
     // & { "fieldCount":1,"values":["col1","col2",val11,"val12",val21,..] }
     // - RowFirst and RowLast can be used to ask for a specified row extent
     // of the returned data (by default, all rows are retrieved)
+    // - IDBinarySize will force the ID field to be stored as hexadecimal text
     procedure GetJSONValues(JSON: TStream; Expand: boolean;
-      RowFirst: integer=0; RowLast: integer=0); overload;
+      RowFirst: integer=0; RowLast: integer=0; IDBinarySize: integer=0); overload;
     /// same as the overloaded method, but returning result into a RawUTF8
-    function GetJSONValues(Expand: boolean): RawUTF8; overload;
+    function GetJSONValues(Expand: boolean; IDBinarySize: integer=0): RawUTF8; overload;
     /// same as the overloaded method, but appending an array to a TTextWriter
     // - will call W.FlushToStream, then append all content
     procedure GetJSONValues(W: TTextWriter; Expand: boolean;
-      RowFirst: integer=0; RowLast: integer=0); overload;
+      RowFirst: integer=0; RowLast: integer=0; IDBinarySize: integer=0); overload;
     /// save the table as CSV format, into a stream
     // - if Tab=TRUE, will use TAB instead of ',' between columns
     // - you can customize the ',' separator - use e.g. the global ListSeparator
@@ -10451,6 +10452,7 @@ type
     smvString,
     smvRawByteString,
     smvWideString,
+    smvBinary,
     smvRecord,
     {$ifndef NOVARIANTS}
     smvVariant,
@@ -25707,10 +25709,11 @@ begin
 end;
 
 procedure TSQLTable.GetJSONValues(JSON: TStream; Expand: boolean;
-  RowFirst: integer=0; RowLast: integer=0);
+  RowFirst, RowLast, IDBinarySize: integer);
 var W: TJSONWriter;
     F,R: integer;
     U: PPUTF8Char;
+    i64: Int64;
     directWrites: set of 0..255;
 begin
   W := TJSONWriter.Create(JSON,Expand,false);
@@ -25733,11 +25736,17 @@ begin
     FillCharFast(directWrites,(FieldCount shr 3)+1,0);
     for F := 0 to FieldCount-1 do begin
       W.ColNames[F] := fResults[F]; // first Row is field Names
-      if (QueryTables<>nil) and not Assigned(OnExportValue) then
-        with fFieldType[F] do
-        if SQLFieldTypeToDBField(ContentType,ContentTypeInfo) in
-           [ftInt64,ftDouble,ftCurrency] then
-          include(directWrites,F);
+      if not Assigned(OnExportValue) then
+        if F=fFieldIndexID then begin
+          include(directWrites,F); // RowID is a ftInt64
+          if IDBinarySize>0 then
+            W.ColNames[F] := 'id'; // ajax-friendly
+        end else
+        if QueryTables<>nil then
+          with fFieldType[F] do
+          if SQLFieldTypeToDBField(ContentType,ContentTypeInfo) in
+             [ftInt64,ftDouble,ftCurrency] then
+            include(directWrites,F);
     end;
     W.AddColumns(RowLast-RowFirst+1); // write or init field names (see JSON Expand)
     if Expand then
@@ -25752,10 +25761,14 @@ begin
           W.AddString(W.ColNames[F]); // '"'+ColNames[]+'":'
         if Assigned(OnExportValue) then
           W.AddString(OnExportValue(self,R,F,false)) else
+        if (IDBinarySize>0) and (F=fFieldIndexID) then begin
+          SetInt64(U^,i64);
+          W.AddBinToHexDisplayQuoted(@i64,IDBinarySize);
+        end else
         if U^=nil then
           W.AddShort('null') else
         // IsStringJSON() is fast and safe: no need to guess exact value type
-        if (F in directWrites) or not IsStringJSON(U^) then
+        if (F in directWrites) or ((QueryTables=nil) and not IsStringJSON(U^)) then
           W.AddNoJSONEscape(U^,StrLen(U^)) else begin
           W.Add('"');
           W.AddJSONEscape(U^,StrLen(U^));
@@ -25764,7 +25777,7 @@ begin
         W.Add(',');
         inc(U); // points to next value
       end;
-      W.CancelLastComma; // cancel last ','
+      W.CancelLastComma;
       if Expand then begin
         W.Add('}',',');
         if R<>RowLast then
@@ -25779,12 +25792,12 @@ begin
 end;
 
 procedure TSQLTable.GetJSONValues(W: TTextWriter; Expand: boolean;
-  RowFirst: integer=0; RowLast: integer=0);
+  RowFirst, RowLast, IDBinarySize: integer);
 begin
   if (self=nil) or (FieldCount<=0) or (fRowCount<=0) then
     W.Add('[',']') else begin
     W.FlushToStream;
-    GetJSONValues(W.Stream,Expand,RowFirst,RowLast);
+    GetJSONValues(W.Stream,Expand,RowFirst,RowLast,IDBinarySize);
   end;
 end;
 
@@ -26044,12 +26057,12 @@ begin
   end;
 end;
 
-function TSQLTable.GetJSONValues(Expand: boolean): RawUTF8;
+function TSQLTable.GetJSONValues(Expand: boolean; IDBinarySize: integer): RawUTF8;
 var MS: TRawByteStringStream;
 begin
   MS := TRawByteStringStream.Create;
   try
-    GetJSONValues(MS,Expand); // create JSON data in MS
+    GetJSONValues(MS,Expand,0,0,IDBinarySize); // create JSON data in MS
     result := MS.DataString;
   finally
     MS.Free;
@@ -53413,7 +53426,7 @@ const
   CONST_ARGS_TO_VAR: array[TServiceMethodValueType] of TServiceMethodValueVar = (
     smvvNone, smvvSelf, smvv64, smvv64, smvv64, smvv64, smvv64, smvv64, smvv64,
     smvv64, smvv64,
-    smvvRawUTF8, smvvString, smvvRawUTF8, smvvWideString, smvvRecord,
+    smvvRawUTF8, smvvString, smvvRawUTF8, smvvWideString, smvv64, smvvRecord,
     {$ifndef NOVARIANTS}smvvRecord,{$endif} smvvObject, smvvRawUTF8,
     smvvDynArray, smvvInterface);
 
@@ -53422,8 +53435,8 @@ const
   CONST_ARGS_IN_STACK_SIZE: array[TServiceMethodValueType] of Cardinal = (
      0,  PTRSIZ,PTRSIZ, PTRSIZ,PTRSIZ,PTRSIZ, PTRSIZ,    8,     8,      8,
  // None, Self, Boolean, Enum, Set,  Integer, Cardinal, Int64, Double, DateTime,
-     8,       PTRSIZ,  PTRSIZ, PTRSIZ,        PTRSIZ,     PTRSIZ,
- // Currency, RawUTF8, String, RawByteString, WideString, Record,
+     8,       PTRSIZ,  PTRSIZ, PTRSIZ,        PTRSIZ,     0,      PTRSIZ,
+ // Currency, RawUTF8, String, RawByteString, WideString, Binary, Record,
     {$ifndef NOVARIANTS}PTRSIZ,{$endif} // Variant
     PTRSIZ, PTRSIZ,  PTRSIZ, PTRSIZ);
  // Object, RawJSON, DynArray, Interface
@@ -53758,7 +53771,7 @@ begin
             RaiseError('returned array',[]);
           IgnoreComma(R);
         end;
-        smvBoolean..smvWideString: begin
+        smvBoolean..smvBinary: begin
           Val := GetJSONField(R,R,@wasString,nil,@ValLen);
           if (Val=nil) or (wasString<>(vIsString in ValueKindAsm)) then
             if resultAsJSONObject then
@@ -53782,6 +53795,10 @@ begin
           smvString:        UTF8DecodeToString(Val,ValLen,PString(V)^);
           smvRawByteString: Base64ToBin(PAnsiChar(Val),ValLen,PRawByteString(V)^);
           smvWideString:    UTF8ToWideString(Val,ValLen,PWideString(V)^);
+          smvBinary:
+            if ValLen=SizeInStorage*2 then
+              HexDisplayToBin(PAnsiChar(Val),PByte(V),SizeInStorage) else
+              FillCharFast(V^,SizeInStorage,0);
           else RaiseError('ValueType=%',[ord(ValueType)]);
           end;
         end;
@@ -54242,7 +54259,7 @@ end;
 
 var
   GlobalUnsafeSPIType: array of PTypeInfo;
-  
+
 class procedure TInterfaceFactory.RegisterUnsafeSPIType(const Types: array of pointer);
 var a: integer;
 begin
@@ -54423,6 +54440,12 @@ begin
          ((ValueDirection=smdResult) and (ValueType in CONST_ARGS_RESULT_BY_REF)) then
         Include(ValueKindAsm,vPassedByReference);
       case ValueType of
+      smvInteger, smvInt64:
+        if TJSONCustomParserRTTI.TypeNameToSimpleBinary(ShortStringToUTF8(ArgTypeName^),
+           SizeInStack, SizeInStorage) then begin
+          ValueType := smvBinary; // transmitted as hexa string
+          Include(ValueKindAsm,vIsString);
+        end;
       smvRawUTF8..smvWideString:
         Include(ValueKindAsm,vIsString);
       smvDynArray:
@@ -54449,6 +54472,7 @@ begin
               '%.Create: % set too big in %.% method % parameter',
               [self,ArgTypeName^,fInterfaceTypeInfo^.Name,URI,ParamName^]);
         end;
+        smvBinary: ; // already set SizeInStack + SizeInStorage
         smvRecord:
           if ArgTypeInfo^.RecordType^.Size<=PTRSIZ then
             raise EInterfaceFactoryException.CreateUTF8(
@@ -54459,7 +54483,7 @@ begin
           SizeInStorage := PTRSIZ;
       end;
       if ValueDirection=smdResult then begin
-        if not(ValueType in CONST_ARGS_RESULT_BY_REF) then
+        if not (ValueType in CONST_ARGS_RESULT_BY_REF) then
           continue; // ordinal/real/class results are returned in CPU/FPU registers
         {$ifndef CPUX86}
         InStackOffset := STACKOFFSET_NONE;
@@ -54469,7 +54493,7 @@ begin
         // CPUX86 will add an additional by-ref parameter
       end;
       {$ifdef CPU32}
-      if ValueDirection=smdConst then
+      if (ValueDirection=smdConst) and (ValueType<>smvBinary) then
         SizeInStack := CONST_ARGS_IN_STACK_SIZE[ValueType] else
       {$endif}
         SizeInStack := PTRSIZ; // always aligned to 8 bytes boundaries for 64-bit
@@ -58960,7 +58984,7 @@ const
   // AnsiString (Delphi <2009) may loose data depending on the client
   CONST_ARGTYPETOJSON: array[TServiceMethodValueType] of string[8] = (
     '??','self','boolean', '', '','integer','cardinal','int64',
-    'double','datetime','currency','utf8','utf8','utf8','utf8','',
+    'double','datetime','currency','utf8','utf8','utf8','utf8','utf8','',
     {$ifndef NOVARIANTS}'variant',{$endif}'','json','','');
 begin
   WR.AddShort('{"argument":"');
@@ -59000,6 +59024,8 @@ begin
                  {$endif}
   smvRawByteString: WR.WrBase64(PPointer(V)^,length(PRawBytestring(V)^),false);
   smvWideString: WR.AddJSONEscapeW(PPointer(V)^);
+  smvBinary:     if not IsZero(V,SizeInStorage) then
+                   WR.AddBinToHexDisplayLower(V,SizeInStorage);
   smvObject:     WR.WriteObject(PPointer(V)^);
   smvInterface:  WR.AddShort('null'); // or written by InterfaceWrite()
   smvRecord:     WR.AddRecordJSON(V^,ArgTypeInfo);
@@ -60428,6 +60454,9 @@ begin
             Base64ToBin(PAnsiChar(Val),ValLen,RawByteString(fRawUTF8s[IndexVar]));
           smvWideString:
             UTF8ToWideString(Val,ValLen,fWideStrings[IndexVar]);
+          smvBinary:
+            if ValLen=SizeInStorage*2 then
+              HexDisplayToBin(PAnsiChar(Val),@fInt64s[IndexVar],SizeInStorage);
           else exit; // should not happen
           end;
           continue; // here Par=nil or Val=nil is correct
