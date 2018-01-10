@@ -14139,6 +14139,21 @@ type
   // manually register each type by calling SynRegisterCustomVariantType()
   // - also feature custom JSON parsing, via TryJSONToVariant() protected method
   TSynInvokeableVariantType = class(TInvokeableVariantType)
+  private
+    /// retrieve the field/column value, support subscript
+    // - this method will call protected IntGet abstract method
+    function GetSubscript(var Dest: TVarData; const V: TVarData;
+      const Name: String; const Arguments: TVarDataArray): Boolean;
+
+    /// set the field/column value, support subscript
+    // - this method will call protected IntSet abstract method
+    {$ifdef FPC_VARIANTSETVAR} // see http://mantis.freepascal.org/view.php?id=26773
+    function SetSubscript(var V: TVarData; const Name: string;
+      const Arguments: TVarDataArray): Boolean;
+    {$else}
+    function SetSubscript(const V: TVarData; const Name: string;
+      const Arguments: TVarDataArray): Boolean;
+    {$endif}
   protected
     {$ifndef FPC}
     {$ifndef DELPHI6OROLDER}
@@ -14146,9 +14161,14 @@ type
     function FixupIdent(const AText: string): string; override;
     {$endif}
     {$endif}
+    /// our custom DispInvoke support subscript access
+    procedure DispInvoke(Dest: PVarData; {$ifdef FPC_VARIANTSETVAR}var{$ELSE}const{$ENDIF} Source: TVarData;
+      ACallDesc: PCallDesc; Params: Pointer); override;
     /// override those two abstract methods for fast getter/setter implementation
     procedure IntGet(var Dest: TVarData; const V: TVarData; Name: PAnsiChar); virtual; abstract;
     procedure IntSet(const V, Value: TVarData; Name: PAnsiChar); virtual; abstract;
+    function IntDoFunction(var Dest: TVarData; const V: TVarData; const Name: string;
+      const Arguments: TVarDataArray): Boolean; virtual; abstract;
   public
     /// customization of JSON parsing into variants
     // - will be called by e.g. by VariantLoadJSON() or GetVariantFromJSON()
@@ -14176,6 +14196,10 @@ type
     function SetProperty(const V: TVarData; const Name: string;
       const Value: TVarData): Boolean; override;
     {$endif}
+
+    function DoFunction(var Dest: TVarData; const V: TVarData; const Name: string;
+      const Arguments: TVarDataArray): Boolean; override;
+
     /// clear the content
     // - this default implementation will set VType := varEmpty
     // - override it if your custom type needs to manage its internal memory
@@ -14810,7 +14834,7 @@ type
     /// low-level callback to access internal pseudo-methods
     // - mainly the _(Index: integer): variant method to retrieve an item
     // if the document is an array
-    function DoFunction(var Dest: TVarData; const V: TVarData;
+    function IntDoFunction(var Dest: TVarData; const V: TVarData;
       const Name: string; const Arguments: TVarDataArray): Boolean; override;
     /// low-level callback to clear the content
     procedure Clear(var V: TVarData); override;
@@ -43318,6 +43342,62 @@ end;
 {$endif DELPHI6OROLDER}
 {$endif FPC}
 
+const
+  CDoMethod    = $01;
+  CPropertyGet = $02;
+  CPropertySet = $04;
+
+type
+  PDispInvokeDest = ^TDispInvokeDest;
+  TDispInvokeDest = packed record
+    value: TVarData;
+    selfptr: PDispInvokeDest;
+    CallType: Integer;
+  end;
+
+procedure TSynInvokeableVariantType.DispInvoke;
+var
+  TempDest: TDispInvokeDest;
+  CallDesc: TCallDesc;
+begin
+  ///
+  /// Variants.TInvokeableVariantType.DispInvoke does not support subscript property access,
+  /// so we backup original CallType to TempDest, copy CallDesc and change CallType to CDoMethod,
+  /// and then call Variants.TInvokeableVariantType.DispInvoke,
+  /// it will call our overrided TSynInvokeableVariantType.DoFunction
+  ///
+
+  // backup original CallType
+  TempDest.selfptr := @TempDest;
+  TempDest.CallType:= ACallDesc^.CallType;
+  ZeroFill(@TempDest.value);
+
+  ///
+  ///  copy CallDesc and change CallType to CDoMethod,
+  ///  make Variants.TInvokeableVariantType.DispInvoke treat it as function call,
+  ///  thus Variants.TInvokeableVariantType.DispInvoke will parse parameters
+  ///  and call our DoFunction
+  ///
+  CallDesc := ACallDesc^;
+  CallDesc.CallType := CDoMethod;
+
+  ///
+  /// pass @TempDest instread of original Dest to Variants.TInvokeableVariantType.DispInvoke,
+  /// TempDest stores orignal CallType, Variants.TInvokeableVariantType.DispInvoke will pass it back
+  /// to our DoFunction
+  /// but in FPC, Variants.TInvokeableVariantType.DispInvoke set TempDest to Unassigned before it
+  /// call out DoFunction
+  ///
+  inherited DispInvoke(@TempDest, Source, @CallDesc, Params);
+
+  if Dest <> nil then
+  begin
+    // copy result value
+    VarClear(Variant(Dest^));
+    Dest^ := TempDest.value;
+  end;
+end;
+
 function TSynInvokeableVariantType.GetProperty(var Dest: TVarData;
   const V: TVarData; const Name: String): Boolean;
 {$ifdef UNICODE}
@@ -43383,6 +43463,145 @@ begin
     RawUTF8(ValueSet.VString) := ''; // avoid memory leak
   end;
   result := True;
+end;
+
+function TSynInvokeableVariantType.GetSubscript(var Dest: TVarData; const V: TVarData;
+  const Name: String; const Arguments: TVarDataArray): Boolean;
+var
+  ndx, LArgCnt: Integer;
+  pDest: PVarData;
+  Indices: array of Integer;
+  LKind: TDocVariantKind;
+  pIndex: PVariant;
+  PropName: RawUTF8;
+{$ifdef UNICODE}
+  Buf: array[byte] of AnsiChar; // to avoid heap allocation
+{$endif}
+begin
+  Result := False;
+{$ifdef UNICODE}
+  RawUnicodeToUtf8(Buf,SizeOf(Buf),pointer(Name),length(Name),[]);
+  IntGet(Dest,V,Buf);
+{$else}
+  IntGet(Dest,V,pointer(Name));
+{$endif}
+  LArgCnt := Length(Arguments);
+  if LArgCnt = 0 then
+  begin
+    result := True;
+    Exit;
+  end;
+
+  pDest := FindVarData(Variant(Dest));
+  pIndex := PVariant(@Arguments[0]);
+  if (pDest.VType = DocVariantVType) and (LArgCnt = 1) then
+  begin
+    LKind := TDocVariantData(pDest^).Kind;
+    if (LKind = dvArray) and VariantToInteger(pIndex^, ndx) then
+    begin
+      // get array item
+      TDocVariantData(pDest^).RetrieveValueOrRaiseException(ndx, Variant(Dest), True);
+      Result := True;
+    end
+
+    // get property
+    else if (LKind = dvObject) and VarIsStr(pIndex^) then
+    begin
+      PropName := VariantToUTF8(pIndex^);
+      IntGet(Dest, pDest^, PAnsiChar(PropName));
+      Result := True;
+    end;
+  end
+  else if VarIsArray(Variant(pDest^), True) then
+  begin
+    // get OLE-Variant-Aarray item
+    SetLength(Indices, LArgCnt);
+    for ndx := 0 to LArgCnt - 1 do
+      if not VariantToInteger(variant(Arguments[ndx]), Indices[ndx]) then
+        Exit;
+
+    Variant(Dest) := VarArrayGet(Variant(pDest^), Indices);
+    Result := True;
+  end;
+end;
+
+function TSynInvokeableVariantType.SetSubscript;
+var
+  Dest: TVarData;
+  ndx, LArgCnt: Integer;
+  pDest: PVarData;
+  Indices: array of Integer;
+  PropName: PAnsiChar;
+  LKind: TDocVariantKind;
+  pIndex: PVariant;
+{$ifdef UNICODE}
+  Buf: array[byte] of AnsiChar; // to avoid heap allocation
+{$endif}
+begin
+  LArgCnt := Length(Arguments);
+  if LArgCnt = 1 then
+  begin
+    Result := SetProperty(V, Name, Arguments[0]);
+    Exit;
+  end;
+
+{$ifdef UNICODE}
+  RawUnicodeToUtf8(Buf,SizeOf(Buf),pointer(Name),length(Name),[]);
+  PropName := @Buf[0];
+{$else}
+  PropName := pointer(Name);
+{$endif}
+  ZeroFill(@Dest);
+  IntGet(Dest,V,PropName);
+  Result := False;
+  pDest := FindVarData(Variant(Dest));
+
+  if(pDest.VType = DocVariantVType) and (LArgCnt = 2) then
+  begin
+    LKind := TDocVariantData(pDest^).Kind;
+    pIndex := PVariant(@Arguments[0]);
+    if (LKind = dvArray) and VariantToInteger(pIndex^, ndx) then
+    begin
+      // set array item
+      TDocVariantData(pDest^).SetValueOrRaiseException(ndx, Variant(Arguments[1]));
+      Result := True;
+    end
+
+    // set property
+    else if (LKind = dvObject) and VarIsStr(pIndex^) then
+      Result := SetProperty(pDest^, pIndex^, Arguments[1]);
+  end
+  else if VarIsArray(Variant(Dest), True) then
+  begin
+    // set OLE-Variant-Aarray item
+    SetLength(Indices, LArgCnt - 1);
+    for ndx := 0 to LArgCnt - 2 do
+      if not VariantToInteger(variant(Arguments[ndx]), Indices[ndx]) then
+        Exit;
+
+    VarArrayPut(Variant(pDest^), Variant(Arguments[LArgCnt - 1]), Indices);
+    Result := True;
+  end;
+end;
+
+function TSynInvokeableVariantType.DoFunction(var Dest: TVarData; const V: TVarData; const Name: string;
+  const Arguments: TVarDataArray): Boolean;
+begin
+  //  Dest indicate the original CallType
+  if PDispInvokeDest(@Dest)^.selfptr = PDispInvokeDest(@Dest) then
+    case PDispInvokeDest(@Dest)^.CallType of
+      CPropertyGet:
+        begin
+          Result := GetSubscript(Dest, V, Name, Arguments);
+          Exit;
+        end;
+      CPropertySet:
+        begin
+          Result := SetSubscript(PVarData(@V)^, Name, Arguments);
+          Exit;
+        end;
+    end;
+  Result := IntDoFunction(Dest, V, Name, Arguments);
 end;
 
 procedure TSynInvokeableVariantType.Clear(var V: TVarData);
@@ -45801,7 +46020,7 @@ begin
     Dest.VType := varEmpty;
 end;
 
-function TDocVariant.DoFunction(var Dest: TVarData; const V: TVarData;
+function TDocVariant.IntDoFunction(var Dest: TVarData; const V: TVarData;
   const Name: string; const Arguments: TVarDataArray): boolean;
 var ndx: integer;
     Data: PDocVariantData;
@@ -51111,7 +51330,21 @@ end;
 {$ifndef NOVARIANTS}
 procedure TTextWriter.AddVariant(const Value: variant; Escape: TTextWriterKind);
 var CustomVariantType: TCustomVariantType;
+  ndx: Integer;
 begin
+  if VarIsArray(Value) and (1 = VarArrayDimCount(Value)) then
+  begin
+    Self.Add('[');
+    for ndx := VarArrayLowBound(Value, 1) to VarArrayHighBound(Value, 1) do
+    begin
+      Self.AddVariant(Value[ndx],twJSONEscape);
+      Self.Add(',');
+    end;
+    Self.CancelLastComma;
+    Self.Add(']');
+    Exit;
+  end;
+
   with TVarData(Value) do
   case VType of
   varEmpty,
