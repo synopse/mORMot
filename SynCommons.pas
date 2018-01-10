@@ -61725,7 +61725,7 @@ begin
   if Count<=0 then
     Result := 0 else begin
     Result := Count;
-    SetLength(fDataString,(fPosition+Result));
+    SetLength(fDataString,fPosition+Result);
     MoveFast(Buffer,PByteArray(fDataString)[fPosition],Result);
     inc(FPosition,Result);
   end;

@@ -3069,7 +3069,7 @@ type
     /// sets a busy handler that sleeps for a specified amount of time
     // (in milliseconds) when a table is locked, before returning an error
     property BusyTimeout: Integer read fBusyTimeout write SetBusyTimeout;
-    /// auery or change the suggested maximum number of database disk pages
+    /// query or change the suggested maximum number of database disk pages
     // that SQLite will hold in memory at once per open database file
     // - DBOpen method will set this cache size to a big 10000 default, which
     // sounds reasonnable in the context of a server application (will use
