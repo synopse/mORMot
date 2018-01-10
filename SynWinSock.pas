@@ -778,7 +778,7 @@ function GetSinIP(const Sin: TVarSin): AnsiString;
 procedure GetSinIPShort(const Sin: TVarSin; var result: shortstring);
 function GetSinPort(const Sin: TVarSin): integer;
 procedure ResolveNameToIP(const Name: AnsiString; Family, SockProtocol, SockType: integer;
-  IPList: TStrings; WillClearIPList: boolean = true);
+  IPList: TStrings; IPListClear: boolean = true);
 function ResolveIPToName(const IP: AnsiString; Family, SockProtocol, SockType: integer): AnsiString;
 function ResolvePort(const Port: AnsiString; Family, SockProtocol, SockType: integer): Word;
 
@@ -1279,7 +1279,7 @@ begin
 end;
 
 procedure ResolveNameToIP(const Name: AnsiString; Family, SockProtocol,
-  SockType: integer; IPList: TStrings; WillClearIPList: boolean = true);
+  SockType: integer; IPList: TStrings; IPListClear: boolean);
 type
   TaPInAddr = array[0..250] of PInAddr;
 var
@@ -1296,7 +1296,7 @@ var
   i: integer;
   InAddr: TInAddr;
 begin
-  if (WillClearIPList) then
+  if IPListClear then
     IPList.Clear;
   if not IsNewApi(Family) then begin
     IP := inet_addr(pointer(Name));
