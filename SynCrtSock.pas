@@ -5988,7 +5988,7 @@ begin
     end;
     if ConnectionClose then
       fKeepAliveClient := false;
-    if (ContentLength<0) and KeepAliveClient then
+    if (ContentLength<0) and (KeepAliveClient or (fMethod = 'GET')) then
       ContentLength := 0; // HTTP/1.1 and no content length -> no eof
     if GetTickCount>maxtix then // time wrap after 49.7 days is just ignored
       exit;
@@ -9895,9 +9895,21 @@ const
    // This option takes no parameters.
    WINHTTP_OPTION_UPGRADE_TO_WEB_SOCKET = 114;
 
-    // if the following value is returned by WinHttpSetStatusCallback, then
-    // probably an invalid (non-code) address was supplied for the callback
-    WINHTTP_INVALID_STATUS_CALLBACK = -1;
+   // if the following value is returned by WinHttpSetStatusCallback, then
+   // probably an invalid (non-code) address was supplied for the callback
+   WINHTTP_INVALID_STATUS_CALLBACK = -1;
+
+   WINHTTP_OPTION_DISABLE_FEATURE = 63;
+   // values for WINHTTP_OPTION_DISABLE_FEATURE
+   WINHTTP_DISABLE_COOKIES = $00000001;
+   WINHTTP_DISABLE_REDIRECTS = $00000002;
+   WINHTTP_DISABLE_AUTHENTICATION = $00000004;
+   WINHTTP_DISABLE_KEEP_ALIVE = $00000008;
+
+   WINHTTP_OPTION_ENABLE_FEATURE = 79;
+   // values for WINHTTP_OPTION_ENABLE_FEATURE
+   WINHTTP_ENABLE_SSL_REVOCATION = $00000001;
+   WINHTTP_ENABLE_SSL_REVERT_IMPERSONATION = $00000002;
 
 type
   WINHTTP_STATUS_CALLBACK = procedure(hInternet: HINTERNET; dwContext: PDWORD;
@@ -10168,6 +10180,11 @@ begin
     pointer(Ansi7ToUnicode(aURL)), nil, nil, @ALL_ACCEPT, Flags);
   if fRequest=nil then
     RaiseLastModuleError(winhttpdll,EWinHTTP);
+  if fKeepAlive = 0 then begin
+    Flags := WINHTTP_DISABLE_KEEP_ALIVE;
+    if not WinHttpAPI.SetOption(fRequest, WINHTTP_OPTION_DISABLE_FEATURE, @Flags, sizeOf(Flags)) then
+      RaiseLastModuleError(winhttpdll,EWinHTTP);
+  end;
 end;
 
 const
