@@ -464,7 +464,7 @@ function SetVarSin(var Sin: TVarSin; const IP,Port: string;
 function GetSinIP(const Sin: TVarSin): string;
 function GetSinPort(const Sin: TVarSin): Integer;
 procedure ResolveNameToIP(const Name: AnsiString; Family, SockProtocol, SockType: integer;
-  IPList: TStrings; WillClearIPList: boolean = true);
+  IPList: TStrings; IPListClear: boolean = true);
 
 const
   // poll() flag when there is data to read
@@ -967,16 +967,17 @@ begin
 end;
 
 procedure ResolveNameToIP(const Name: AnsiString; Family, SockProtocol, SockType: integer;
-  IPList: TStrings; WillClearIPList: boolean = true);
+  IPList: TStrings; IPListClear: boolean);
 var
   Hints: TAddressInfo;
   Addr: PAddressInfo;
   AddrNext: PAddressInfo;
-  r: integer;
+  r, prev: integer;
   host, serv: string;
   hostlen, servlen: integer;
 begin
-  if (WillClearIPList) then IPList.Clear;
+  if IPListClear then
+    IPList.Clear;
   Addr := nil;
   try // we force to find TCP/IP
     FillChar(Hints, Sizeof(Hints), 0);
@@ -1103,13 +1104,14 @@ begin
 end;
 
 procedure ResolveNameToIP(const Name: AnsiString; Family, SockProtocol, SockType: integer;
-  IPList: TStrings; WillClearIPList: boolean = true);
+  IPList: TStrings; IPListClear: boolean);
 var x,n: integer;
     a4: array[1..255] of in_addr;
     a6: array[1..255] of Tin6_addr;
     he: THostEntry;
 begin
-  if (WillClearIPList) then IPList.Clear;
+  if IPListClear then
+    IPList.Clear;
   if (family=AF_INET) or (family=AF_UNSPEC) then begin
     if lowercase(name)=cLocalHostStr then
       IpList.Add(cLocalHost) else begin
