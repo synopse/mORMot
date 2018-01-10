@@ -5988,7 +5988,7 @@ begin
     end;
     if ConnectionClose then
       fKeepAliveClient := false;
-    if (ContentLength<0) and KeepAliveClient then
+    if (ContentLength<0) and (KeepAliveClient or (fMethod = 'GET')) then
       ContentLength := 0; // HTTP/1.1 and no content length -> no eof
     if GetTickCount>maxtix then // time wrap after 49.7 days is just ignored
       exit;
