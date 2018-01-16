@@ -7091,6 +7091,10 @@ function DynArrayBlobSaveJSON(TypeInfo, BlobValue: pointer): RawUTF8;
 // - this low-level function is used e.g. by mORMotWrappers unit
 function DynArrayElementTypeName(TypeInfo: pointer; ElemTypeInfo: PPointer=nil): RawUTF8;
 
+/// trim ending 'DynArray' or 's' chars from a dynamic array type name
+// - used internally to guess the associated item type name
+function DynArrayItemTypeLen(const aDynArrayTypeName: RawUTF8): integer;
+
 /// compare two "array of boolean" elements
 function SortDynArrayBoolean(const A,B): integer;
 
@@ -42376,6 +42380,16 @@ begin
       [self,fRoot.fCustomTypeName,recordInfoSize,fRoot.fDataSize]);
 end;
 
+function DynArrayItemTypeLen(const aDynArrayTypeName: RawUTF8): integer;
+begin
+  result := length(aDynArrayTypeName);
+  if (result>12) and IdemPropName('DynArray',@PByteArray(aDynArrayTypeName)[result-8],8) then
+    dec(result,8) else
+  if (result>3) and (NormToUpperAnsi7[aDynArrayTypeName[result]]='S') then
+    dec(result) else
+    result := 0;
+end;
+
 procedure TJSONRecordTextDefinition.Parse(Props: TJSONCustomParserRTTI;
   var P: PUTF8Char; PEnd: TJSONCustomParserRTTIExpectedEnd);
   function GetNextFieldType(var P: PUTF8Char;
@@ -42441,12 +42455,7 @@ begin
         ptRecord:
           ExpectedEnd := eeEndKeyWord;
         ptCustom: begin
-          len := length(TypIdent);
-          if (len>12) and IdemPropName('DynArray',@PByteArray(TypIdent)[len-8],8) then
-            dec(len,8) else
-          if (len>3) and (TypIdent[len]='S') then
-            dec(len) else
-            len := 0;
+          len := DynArrayItemTypeLen(TypIdent);
           if len>0 then begin
             ArrayTyp := TJSONCustomParserRTTI.TypeNameToSimpleRTTIType(
               @PByteArray(TypIdent)[1],len-1,ArrayTypIdent); // TByteDynArray -> byte
