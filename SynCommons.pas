@@ -9782,9 +9782,6 @@ type
   // is able to store both keys and values, and provide convenient methods to
   // access the stored data, including JSON serialization and binary storage
   TSynDictionary = class(TSynPersistentLocked)
-  private
-    function GetCapacity: integer;
-    procedure SetCapacity(const Value: integer);
   protected
     fKeys: TDynArrayHashed;
     fValues: TDynArray;
@@ -9796,6 +9793,8 @@ type
     function GetTimeOut: cardinal;
     function KeyFullHash(const Elem): cardinal;
     function KeyFullCompare(const A,B): integer;
+    function GetCapacity: integer;
+    procedure SetCapacity(const Value: integer);
   public
     /// initialize the dictionary storage, for a given dynamic array value
     // - aKeyTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
@@ -58094,14 +58093,14 @@ begin // caller is expected to call fSafe.Lock/Unlock
 end;
 
 function TSynDictionary.FindValue(const aKey): pointer;
-var ndx: integer;
+var ndx: PtrInt;
 begin
   if self=nil then
     ndx := -1 else
     ndx := fKeys.FindHashed(aKey);
   if ndx<0 then
     result := nil else
-    result := fValues.ElemPtr(ndx);
+    result := pointer(PtrUInt(fValues.fValue^)+PtrUInt(ndx)*fValues.ElemSize);
 end;
 
 function TSynDictionary.FindValueOrAdd(const aKey; var added: boolean): pointer;
