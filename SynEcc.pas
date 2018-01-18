@@ -148,9 +148,13 @@ type
   // - stored in compressed form with its standard byte header, i.e. each
   // public key consumes 33 bytes of memory
   TECCPublicKey = array[0..ECC_BYTES] of byte;
+  /// store a public key for ECC secp256r1 cryptography
+  // - use ecc_uncompress_key_pas() to compute such a key from a TECCPublicKey
+  // - stored in uncompressed form, consuming 64 bytes of memory
+  TECCPublicKeyUncompressed = array[0..(ECC_BYTES*2)-1] of byte;
   /// store a private key for ECC secp256r1 cryptography
   // - use ecc_make_key() to generate such a key
-  // - stored in compressed form, i.e. each private key consumes 33 bytes of memory
+  // - stored in compressed form, i.e. each private key consumes 32 bytes of memory
   TECCPrivateKey = array[0..ECC_BYTES-1] of byte;
 
   /// store a 256-bit hash, as expected by ECC secp256r1 cryptography
@@ -253,24 +257,45 @@ function ecdsa_verify(const pub: TECCPublicKey; const hash: TECCHash;
 
 
 /// pascal function to create a secp256r1 public/private key pair
-// - used only on targets when the static .o version is not available
+// - used only on targets (e.g. ARM/PPC) when the static .o version is not available
 function ecc_make_key_pas(out PublicKey: TECCPublicKey; out PrivateKey: TECCPrivateKey): boolean;
 
 /// pascal function to compute a secp256r1 shared secret given your secret key
-// and someone else's public key
-// - used only on targets when the static .o version is not available
+// and someone else's public key (in compressed format)
+// - used only on targets (e.g. ARM/PPC) when the static .o version is not available
 function ecdh_shared_secret_pas(const PublicKey: TECCPublicKey;
-  const PrivateKey: TECCPrivateKey; out Secret: TECCSecretKey): boolean;
+  const PrivateKey: TECCPrivateKey; out Secret: TECCSecretKey): boolean; overload;
+
+/// pascal function to compute a secp256r1 shared secret given your secret key
+// and someone else's public key (in uncompressed/flat format)
+// - this overloaded function is slightly faster than the one using TECCPublicKey,
+// since public key doesn't need to be uncompressed
+function ecdh_shared_secret_pas(const PublicPoint: TECCPublicKeyUncompressed;
+  const PrivateKey: TECCPrivateKey; out Secret: TEccSecretKey): boolean; overload;
 
 /// pascal function to generate an ECDSA secp256r1 signature for a given hash value
-// - used only on targets when the static .o version is not available
+// - used only on targets (e.g. ARM/PPC) when the static .o version is not available
 function ecdsa_sign_pas(const PrivateKey: TECCPrivateKey; const Hash: TECCHash;
   out Signature: TECCSignature): boolean;
 
-/// pascal function to verify an ECDSA secp256r1 signature
-// - used only on targets when the static .o version is not available
+/// pascal function to verify an ECDSA secp256r1 signature from someone else's
+// public key (in compressed format)
+// - used only on targets (e.g. ARM/PPC) when the static .o version is not available
 function ecdsa_verify_pas(const PublicKey: TECCPublicKey; const Hash: TECCHash;
-  const Signature: TECCSignature): boolean;
+  const Signature: TECCSignature): boolean; overload;
+
+/// pascal function to verify an ECDSA secp256r1 signature from someone else's
+// public key (in uncompressed/flat format)
+// - this overloaded function is slightly faster than the one using TECCPublicKey,
+// since public key doesn't need to be uncompressed
+function ecdsa_verify_pas(const PublicKey: TECCPublicKeyUncompressed;
+  const Hash: TECCHash; const Signature: TECCSignature): boolean; overload;
+
+/// uncompress a public key for ECC secp256r1 cryptography
+// - convert from its compressed form with its standard byte header
+// (33 bytes of memory) into uncompressed/flat form (64 bytes of memory)
+procedure ecc_uncompress_key_pas(const Compressed: TECCPublicKey;
+  out Uncompressed: TECCPublicKeyUncompressed);
 
 
 
@@ -1899,7 +1924,7 @@ function ecdsa_verify; external;
 
 {$else ECC_STATICLIB_AVAILABLE}
 
-// currently no .o file available under ARM -> stub functions returning 0 (error)
+// currently no .o file available under ARM/PPC -> stub calls of pascal functions
 
 function ecc_make_key(out pub: TECCPublicKey; out priv: TECCPrivateKey): boolean;
 begin
@@ -2013,8 +2038,7 @@ type // we use UInt64 instead of QWord
     m_high: UInt64;
   end;
   TEccPoint = record
-    x: TVLI;
-    y: TVLI;
+    x, y: TVLI;
   end;
   PEccPoint = ^TEccPoint;
 
@@ -2792,23 +2816,36 @@ begin
   _clear(PublicPoint.y);
 end;
 
-function ecdh_shared_secret_pas(const PublicKey: TECCPublicKey;
+function ecdh_shared_secret_pas(const PublicPoint: TECCPublicKeyUncompressed;
   const PrivateKey: TECCPrivateKey; out Secret: TEccSecretKey): boolean;
-var PublicPoint: TEccPoint;
+var
     PrivateK: TVLI;
     Product: TEccPoint;
     RandomKey: TVLI;
 begin
   TAESPRNG.Fill(THash256(RandomKey));
-  EccPointDecompress(PublicPoint, @PublicKey);
   _bswap256(@PrivateK, @PrivateKey);
-  EccPointMult(Product, PublicPoint, PrivateK, @RandomKey);
+  EccPointMult(Product, TEccPoint(PublicPoint), PrivateK, @RandomKey);
   _bswap256(@Secret, @Product.x);
   result := not (_isZero(Product.x) and _isZero(Product.y));
   _clear(Product.x); // erase sensitive information from stack
   _clear(Product.y);
   _clear(PrivateK);
   _clear(RandomKey);
+end;
+
+procedure ecc_uncompress_key_pas(const Compressed: TECCPublicKey;
+  out Uncompressed: TECCPublicKeyUncompressed);
+begin
+  EccPointDecompress(TEccPoint(Uncompressed), @Compressed);
+end;
+
+function ecdh_shared_secret_pas(const PublicKey: TECCPublicKey;
+  const PrivateKey: TECCPrivateKey; out Secret: TEccSecretKey): boolean;
+var PublicPoint: TECCPublicKeyUncompressed;
+begin
+  EccPointDecompress(TEccPoint(PublicPoint), @PublicKey);
+  result := ecdh_shared_secret_pas(PublicPoint, PrivateKey, Secret);
 end;
 
 // computes result = (Left * Right) mod Modulo
@@ -2899,16 +2936,16 @@ begin
   result := true;
 end;
 
-function ecdsa_verify_pas(const PublicKey: TECCPublicKey; const Hash: TEccHash;
-  const Signature: TECCSignature): boolean;
+function ecdsa_verify_pas(const PublicKey: TECCPublicKeyUncompressed;
+  const Hash: TECCHash; const Signature: TECCSignature): boolean; 
 var i, Index, NumBits: integer;
-    PublicPoint, SumPoint: TEccPoint;
+    PublicPoint: TEccPoint absolute PublicKey;
+    SumPoint: TEccPoint;
     Point: PEccPoint;
     Points: array[0..3] of PEccPoint;
     rx, ry, tx, ty, tz, l_r, l_s, u1, u2, z: TVLI;
 begin
   result := false;
-  EccPointDecompress(PublicPoint, @PublicKey);
   _bswap256(@l_r, @Signature);
   _bswap256(@l_s, @Signature[ECC_BYTES]);
   if _isZero(l_r) or _isZero(l_s) or
@@ -2971,6 +3008,14 @@ begin
   result := IsEqual(THash256(rx), THash256(l_r)); // Accept only if v == r
 end;
 
+function ecdsa_verify_pas(const PublicKey: TECCPublicKey; const Hash: TEccHash;
+  const Signature: TECCSignature): boolean;
+var PublicPoint: TECCPublicKeyUncompressed;
+begin
+  EccPointDecompress(TEccPoint(PublicPoint), @PublicKey);
+  result := ecdsa_verify_pas(PublicPoint, Hash, Signature);
+end;
+
 {$else}
 
 function ecc_make_key_pas(out PublicKey: TECCPublicKey; out PrivateKey: TECCPrivateKey): boolean;
@@ -2984,6 +3029,18 @@ begin
   result := false; // we need proper UInt64 support at compiler level
 end;
 
+function ecdh_shared_secret_pas(const PublicPoint: TECCPublicKeyUncompressed;
+  const PrivateKey: TECCPrivateKey; out Secret: TEccSecretKey): boolean;
+begin
+  result := false; // we need proper UInt64 support at compiler level
+end;
+
+procedure ecc_uncompress_key_pas(const Compressed: TECCPublicKey;
+  out Uncompressed: TECCPublicKeyUncompressed);
+begin
+  FillZero(THash512(Uncompressed));
+end;
+
 function ecdsa_sign_pas(const PrivateKey: TECCPrivateKey; const Hash: TECCHash;
   out Signature: TECCSignature): boolean;
 begin
@@ -2992,6 +3049,12 @@ end;
 
 function ecdsa_verify_pas(const PublicKey: TECCPublicKey; const Hash: TECCHash;
   const Signature: TECCSignature): boolean;
+begin
+  result := false; // we need proper UInt64 support at compiler level
+end;
+
+function ecdsa_verify_pas(const PublicKey: TECCPublicKeyUncompressed;
+  const Hash: TEccHash; const Signature: TECCSignature): boolean;
 begin
   result := false; // we need proper UInt64 support at compiler level
 end;
