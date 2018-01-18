@@ -7098,8 +7098,14 @@ function DynArrayItemTypeLen(const aDynArrayTypeName: RawUTF8): integer;
 /// compare two "array of boolean" elements
 function SortDynArrayBoolean(const A,B): integer;
 
+/// compare two "array of shortint" elements
+function SortDynArrayShortint(const A,B): integer;
+
 /// compare two "array of byte" elements
 function SortDynArrayByte(const A,B): integer;
+
+/// compare two "array of smallint" elements
+function SortDynArraySmallint(const A,B): integer;
 
 /// compare two "array of word" elements
 function SortDynArrayWord(const A,B): integer;
@@ -7163,9 +7169,11 @@ function SortDynArrayFileName(const A,B): integer;
 {$ifndef NOVARIANTS}
 /// compare two "array of variant" elements, with case sensitivity
 function SortDynArrayVariant(const A,B): integer;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compare two "array of variant" elements, with no case sensitivity
 function SortDynArrayVariantI(const A,B): integer;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compare two "array of variant" elements, with or without case sensitivity
 function SortDynArrayVariantComp(const A,B: TVarData; caseInsensitive: boolean): integer;
@@ -30505,15 +30513,22 @@ var L: PtrInt;
 begin
   L := 0;
   if 0<=R then
-  repeat
-    result := (L + R) shr 1;
-    cmp := P^[result]-Value;
-    if cmp=0 then
-      exit;
-    if cmp<0 then
-      L := result + 1 else
-      R := result - 1;
-  until (L > R);
+    repeat
+      result := (L + R) shr 1;
+      cmp := P^[result]-Value;
+      if cmp=0 then
+        exit;
+      if cmp<0 then begin
+        L := result+1;
+        if L<=R then
+          continue;
+        break;
+      end;
+      R := result-1;
+      if L<=R  then
+        continue;
+      break;
+    until false;
   result := -1
 end;
 
@@ -30530,21 +30545,28 @@ var L: PtrInt;
 begin
   L := 0;
   if 0<=R then
-  repeat
-    result := (L + R) shr 1;
-    {$ifdef CPUX86} // circumvent Int64 comparison slowness
-    cmp := SortDynArrayInt64(P^[result],Value);
-    if cmp=0 then
-      exit else
-    if cmp<0 then
-    {$else}
-    if P^[result]=Value then
-      exit else
-    if P^[result]<Value then
-    {$endif}
-      L := result + 1 else
-      R := result - 1;
-  until (L > R);
+    repeat
+      result := (L + R) shr 1;
+      {$ifdef CPUX86} // circumvent Int64 comparison slowness
+      cmp := SortDynArrayInt64(P^[result],Value);
+      if cmp=0 then
+        exit else
+      if cmp<0 then begin
+      {$else}
+      if P^[result]=Value then
+        exit else
+      if P^[result]<Value then begin
+      {$endif}
+        L := result+1;
+        if L<=R then
+          continue;
+        break;
+      end;
+      R := result-1;
+      if L<=R  then
+        continue;
+      break;
+    until false;
   result := -1
 end;
 
@@ -30556,21 +30578,28 @@ var L: PtrInt;
 begin
   L := 0;
   if 0<=R then
-  repeat
-    result := (L + R) shr 1;
-    {$ifdef CPUX86} // circumvent QWord comparison slowness (and bug)
-    cmp := SortDynArrayQWord(P^[result],Value);
-    if cmp=0 then
-      exit else
-    if cmp<0 then
-    {$else}
-    if P^[result]=Value then
-      exit else
-    if P^[result]<Value then
-    {$endif}
-      L := result + 1 else
-      R := result - 1;
-  until (L > R);
+    repeat
+      result := (L + R) shr 1;
+      {$ifdef CPUX86} // circumvent QWord comparison slowness (and bug)
+      cmp := SortDynArrayQWord(P^[result],Value);
+      if cmp=0 then
+        exit else
+      if cmp<0 then begin
+      {$else}
+      if P^[result]=Value then
+        exit else
+      if P^[result]<Value then begin
+      {$endif}
+        L := result+1;
+        if L<=R then
+          continue;
+        break;
+      end;
+      R := result-1;
+      if L<=R  then
+        continue;
+      break;
+    until false;
   result := -1
 end;
 
@@ -30590,7 +30619,7 @@ begin
       if cmp<0 then
         L := i + 1 else
         R := i - 1;
-    until (L > R);
+    until L > R;
     while (i>=0) and (P^[i]>=Value) do dec(i);
     result := i+1; // return the index where to insert
   end;
@@ -37368,10 +37397,17 @@ begin // fast O(log(n)) binary search
       cmp := Compare(P^[result],Value);
       if cmp=0 then
         exit;
-      if cmp<0 then
-        L := result+1 else
-        R := result-1;
-    until L>R;
+      if cmp<0 then begin
+        L := result+1;
+        if L<=R then
+          continue;
+        break;
+      end;
+      R := result-1;
+      if L<=R  then
+        continue;
+      break;
+    until false;
   result := -1;
 end;
 
@@ -37387,17 +37423,24 @@ var L, cmp: PtrInt;
 begin // fast O(log(n)) binary search
   L := 0;
   if 0<=R then
-  repeat
-    result := (L + R) shr 1;
-    cmp := ItemComp(P^[SortedIndexes[result]],Value);
-    if cmp=0 then begin
-      result := SortedIndexes[result];
-      exit;
-    end;
-    if cmp<0 then
-      L := result + 1 else
-      R := result - 1;
-  until (L > R);
+    repeat
+      result := (L + R) shr 1;
+      cmp := ItemComp(P^[SortedIndexes[result]],Value);
+      if cmp=0 then begin
+        result := SortedIndexes[result];
+        exit;
+      end;
+      if cmp<0 then begin
+        L := result+1;
+        if L<=R then
+          continue;
+        break;
+      end;
+      R := result-1;
+      if L<=R  then
+        continue;
+      break;
+    until false;
   result := -1;
 end;
 
@@ -38163,15 +38206,22 @@ var L: PtrInt;
 begin
   L := 0;
   if 0<=R then
-  repeat
-    result := (L + R) shr 1;
-    cmp := P^[result]-Value;
-    if cmp=0 then
-      exit;
-    if cmp<0 then
-      L := result + 1 else
-      R := result - 1;
-  until (L > R);
+    repeat
+      result := (L + R) shr 1;
+      cmp := P^[result]-Value;
+      if cmp=0 then
+        exit;
+      if cmp<0 then begin
+        L := result+1;
+        if L<=R then
+          continue;
+        break;
+      end;
+      R := result-1;
+      if L<=R  then
+        continue;
+      break;
+    until false;
   result := -1
 end;
 
@@ -46434,15 +46484,43 @@ begin
   result := byte(A)-byte(B);
 end;
 
+function SortDynArraySmallint(const A,B): integer;
+begin
+  result := smallint(A)-smallint(B);
+end;
+
+function SortDynArrayShortint(const A,B): integer;
+begin
+  result := shortint(A)-shortint(B);
+end;
+
 function SortDynArrayWord(const A,B): integer;
 begin
   result := word(A)-word(B);
 end;
 
 function SortDynArrayInteger(const A,B): integer;
-begin
-  result := Integer(A)-Integer(B);
+{$ifdef CPUX86}
+asm
+        mov     ecx, [eax]
+        xor     eax, eax
+        mov     edx, [edx]
+        cmp     ecx, edx
+        je      @0
+        jg      @1
+        dec     eax
+@0:     ret
+@1:     inc     eax
 end;
+{$else}
+begin
+  if integer(A)<integer(B) then
+    result := -1 else
+  if integer(A)>integer(B) then
+    result := 1 else
+    result := 0;
+end;
+{$endif}
 
 function SortDynArrayCardinal(const A,B): integer;
 begin
@@ -46701,6 +46779,11 @@ begin
   result := StrIComp(pointer(UA),pointer(UB));
 end;
 
+function SortDynArrayZero(const A,B): integer;
+begin
+  result := 0;
+end;
+
 function SortDynArrayVariantComp(const A,B: TVarData; caseInsensitive: boolean): integer;
 type
   TSortDynArrayVariantComp = function(const A,B: variant): integer;
@@ -46708,6 +46791,12 @@ const
   CMP: array[boolean] of TSortDynArrayVariantComp = (
     SortDynArrayVariantCompareAsString,SortDynArrayVariantCompareAsStringI);
   ICMP: array[TVariantRelationship] of integer = (0,-1,1,1);
+  SORT1: array[varEmpty..varDate] of TDynArraySortCompare = (
+    SortDynArrayZero, SortDynArrayZero, SortDynArraySmallInt, SortDynArrayInteger,
+    SortDynArraySingle, SortDynArrayDouble, SortDynArrayInt64, SortDynArrayDouble);
+  SORT2: array[varShortInt..varWord64] of TDynArraySortCompare = (
+    SortDynArrayShortInt, SortDynArrayByte, SortDynArrayWord, SortDynArrayCardinal,
+    SortDynArrayInt64, SortDynArrayQWord);
 begin
   if A.VType=varVariant or varByRef then
     result := SortDynArrayVariantComp(PVarData(A.VPointer)^,B,caseInsensitive) else
@@ -46715,26 +46804,14 @@ begin
     result := SortDynArrayVariantComp(A,PVarData(B.VPointer)^,caseInsensitive) else
   if A.VType=B.VType then
     case A.VType of // optimized value comparison if A and B share the same type
-    varNull,varEmpty:
-      result := 0;
+    low(SORT1)..high(SORT1):
+      result := SORT1[A.VType](A.VAny,B.VAny);
+    low(SORT2)..high(SORT2):
+      result := SORT2[A.VType](A.VAny,B.VAny);
     varString: // RawUTF8 most of the time (e.g. from TDocVariant)
       if caseInsensitive then
         result := StrIComp(A.VAny,B.VAny) else
         result := StrComp(A.VAny,B.VAny);
-    varInteger:
-      result := A.VInteger-B.VInteger;
-    varInt64,varCurrency:
-      if A.VInt64<B.VInt64 then
-        result := -1 else
-      if A.VInt64>B.VInt64 then
-        result := 1 else
-        result := 0;
-    varDouble:
-      if A.VDouble<B.VDouble then
-        result := -1 else
-      if A.VDouble>B.VDouble then
-        result := 1 else
-        result := 0;
     varBoolean:
       if A.VBoolean then // normalize
         if B.VBoolean then
@@ -46752,10 +46829,10 @@ begin
         result := ICMP[VarCompareValue(variant(A),variant(B))] else
         result := CMP[caseInsensitive](variant(A),variant(B));
     end else
-    if (A.VType and VTYPE_STATIC=0) and
-       (B.VType and VTYPE_STATIC=0) then
-      result := ICMP[VarCompareValue(variant(A),variant(B))] else
-      result := CMP[caseInsensitive](variant(A),variant(B));
+  if (A.VType and VTYPE_STATIC=0) and
+     (B.VType and VTYPE_STATIC=0) then
+    result := ICMP[VarCompareValue(variant(A),variant(B))] else
+    result := CMP[caseInsensitive](variant(A),variant(B));
 end;
 
 function SortDynArrayVariant(const A,B): integer;

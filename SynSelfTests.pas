@@ -10780,17 +10780,21 @@ begin
     '51A0C8018EC725F9B9F821D826FEEC4CAE8843066685522F1961D25935EAA39E'),@s1,sizeof(s1)));
   Check(ecdsa_verify(pu1,h1,si1));
   Check(ecdsa_verify(pu2,h2,si2));
+  FillZero(s2);
   Check(ecdh_shared_secret(pu1,pr2,s2));
   Check(IsEqual(s1,s2));
   Check(CompareMem(@s1,@s2,sizeof(s1)));
+  FillZero(s3);
   Check(ecdh_shared_secret(pu2,pr1,s3));
   Check(IsEqual(s1,s3));
   Check(CompareMem(@s1,@s3,sizeof(s1)));
   {$ifdef HASUINT64} // pascal (fallback) version
   Check(ecdsa_verify_pas(pu1,h1,si1));
   Check(ecdsa_verify_pas(pu2,h2,si2));
+  FillZero(s2);
   Check(ecdh_shared_secret_pas(pu1,pr2,s2));
   Check(IsEqual(s1,s2));
+  FillZero(s3);
   Check(ecdh_shared_secret_pas(pu2,pr1,s3));
   Check(IsEqual(s1,s3));
   {$endif}
