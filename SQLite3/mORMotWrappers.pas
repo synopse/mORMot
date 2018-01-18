@@ -1150,10 +1150,9 @@ function WrapperFromModel(aServer: TSQLRestServer; const aMustacheTemplate,
 var context: variant;
 begin // no context.uri nor context.host here
   context := ContextFromModel(aServer,'',aDescriptions);
-  if aPort=0 then
-    aPort := 80;
   with _Safe(context)^ do begin
-    I['port'] := aPort;
+    if aPort<>0 then
+      I['port'] := aPort;
     U['filename'] := aFileName;
     if aContext<>nil then begin
       AddFrom(aContext^);
