@@ -1104,12 +1104,12 @@ end;
 
 class procedure TSynMustache.Lower(const Value: variant; out result: variant);
 begin
-  result := LowerCase(string(Value));
+  result := SysUtils.LowerCase(Value);
 end;
 
 class procedure TSynMustache.Upper(const Value: variant; out result: variant);
 begin
-  result := UpperCase(string(Value));
+  result := SysUtils.UpperCase(Value);
 end;
 
 
