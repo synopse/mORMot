@@ -4757,6 +4757,9 @@ procedure DeleteWord(var Values: TWordDynArray; Index: PtrInt);
 /// delete any 64-bit integer in Values[]
 procedure DeleteInt64(var Values: TInt64DynArray; Index: PtrInt); overload;
 
+/// delete any 64-bit integer in Values[]
+procedure DeleteInt64(var Values: TInt64DynArray; var ValuesCount: Integer; Index: PtrInt); overload;
+
 /// find the maximum 32-bit integer in Values[]
 function MaxInteger(const Values: TIntegerDynArray; ValuesCount: integer;
   MaxStart: integer=-1): Integer;
@@ -6562,7 +6565,7 @@ function PtrArrayAdd(var aPtrArray; aItem: pointer): integer;
 procedure PtrArrayAddOnce(var aPtrArray; aItem: pointer);
 
 /// wrapper to delete an item from a array of pointer dynamic array storage
-function PtrArrayDelete(var aPtrArray; aItem: pointer): integer;
+function PtrArrayDelete(var aPtrArray; aItem: pointer): integer; overload;
 
 /// wrapper to find an item to a array of pointer dynamic array storage
 function PtrArrayFind(var aPtrArray; aItem: pointer): integer;
@@ -29916,6 +29919,18 @@ begin
   SetLength(Values,n);
 end;
 
+procedure DeleteInt64(var Values: TInt64DynArray; var ValuesCount: Integer; Index: PtrInt);
+var n: PtrInt;
+begin
+  n := ValuesCount;
+  if PtrUInt(Index)>=PtrUInt(n) then
+    exit; // wrong Index
+  dec(n,Index+1);
+  if n>0 then
+    MoveFast(Values[Index+1],Values[Index],n*sizeof(Int64));
+  dec(ValuesCount);
+end;
+
 procedure DeleteInteger(var Values: TIntegerDynArray; var ValuesCount: Integer; Index: PtrInt);
 var n: PtrInt;
 begin
@@ -48305,7 +48320,7 @@ begin
 end;
 
 procedure TDynArray.InitSpecific(aTypeInfo: pointer; var aValue; aKind: TDynArrayKind;
-  aCountPointer: PInteger=nil; aCaseInsensitive: boolean=false);
+  aCountPointer: PInteger; aCaseInsensitive: boolean);
 var Comp: TDynArraySortCompare;
 begin
   Init(aTypeInfo,aValue,aCountPointer);
