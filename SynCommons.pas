@@ -22391,7 +22391,7 @@ begin
   if Value=nil then
     result := PtrInt(Value) else begin
     {$ifdef FPC}
-    result := PDynArrayRec(PtrUInt(Value)-SizeOf(TDynArrayRec))^.length;
+    result := PDynArrayRec(PtrUInt(Value)-SizeOf(TDynArrayRec))^.high+1;
     {$else}
     result := PInteger(PtrUInt(Value)-sizeof(PtrInt))^;
     {$endif}
@@ -46956,7 +46956,7 @@ begin
       exit;
   end else
     {$ifdef FPC}
-    if cardinal(aIndex)>=cardinal(PDynArrayRec(PtrUInt(fValue^)-SizeOf(TDynArrayRec))^.length) then
+    if cardinal(aIndex)>cardinal(PDynArrayRec(PtrUInt(fValue^)-SizeOf(TDynArrayRec))^.high) then
     {$else}
     if cardinal(aIndex)>=PCardinal(PtrUInt(fValue^)-sizeof(PtrInt))^ then
     {$endif}
@@ -46982,7 +46982,7 @@ begin
     if fCountP=nil then
       if PtrUInt(fValue^)<>0 then begin
         {$ifdef FPC}
-        result := PDynArrayRec(PtrUInt(fValue^)-SizeOf(TDynArrayRec))^.length;
+        result := PDynArrayRec(PtrUInt(fValue^)-SizeOf(TDynArrayRec))^.high+1;
         {$else}
         result := PInteger(PtrUInt(fValue^)-sizeof(PtrInt))^;
         {$endif}
@@ -47823,7 +47823,7 @@ begin
     end else begin
       // array is very small, or not sorted -> use O(n) iterating search
       if (ElemType=nil) and (@fCompare=@DYNARRAY_SORTFIRSTFIELD[false,fKnownType]) then
-      case fElemSize of // call optimized version for most simple types
+      case fElemSize of // optimized for simple key types (e.g. TSynDictionary)
       4: begin
         result := IntegerScanIndex(pointer(P),n+1,Integer(Elem));
         exit;
@@ -48830,7 +48830,9 @@ var n: integer;
 begin
   n := Count;
   if n<fHashCountTrigger then begin
-    result := Scan(Elem);
+    if Assigned(fEventCompare) then 
+      result := Scan(Elem) else
+      result := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}Find(Elem);
     if result<0 then begin
       SetCount(n+1); // reserve space for added item, as in HashAdd()
       result := n;
