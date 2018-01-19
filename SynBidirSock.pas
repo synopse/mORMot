@@ -1124,9 +1124,12 @@ type
     // - if aWebSocketsAJAX is TRUE, it will register the slower and less secure
     // TWebSocketProtocolJSON (to be used for AJAX debugging/test purposes only)
     // and aWebSocketsEncryptionKey/aWebSocketsCompression parameters won't be used
+    // - alternatively, you can specify your own custom TWebSocketProtocol instance
+    // (owned by this method and immediately released on error)
     // - will return '' on success, or an error message on failure
     function WebSocketsUpgrade(const aWebSocketsURI, aWebSocketsEncryptionKey: RawUTF8;
-      aWebSocketsAJAX: boolean=false; aWebSocketsCompression: boolean=true): RawUTF8;
+      aWebSocketsAJAX: boolean=false; aWebSocketsCompression: boolean=true;
+      aProtocol: TWebSocketProtocol=nil): RawUTF8;
     /// the settings to be used for WebSockets process
     // - note that those parameters won't be propagated to existing connections
     // - defined as a pointer so that you may be able to change the values
@@ -2821,7 +2824,7 @@ procedure TWebSocketServer.Process(ClientSock: THttpServerSocket;
 var err: integer;
 begin
   if ClientSock.ConnectionUpgrade and ClientSock.KeepAliveClient and
-     IdemPropName('GET',pointer(ClientSock.Method),length(ClientSock.Method)) and
+     IdemPropNameU('GET',ClientSock.Method) and
      ConnectionThread.InheritsFrom(TWebSocketServerResp) then begin
     err := WebSocketProcessUpgrade(ClientSock,TWebSocketServerResp(ConnectionThread));
     if err<>STATUS_SUCCESS then begin
@@ -3085,37 +3088,38 @@ begin
 end;
 
 function THttpClientWebSockets.WebSocketsUpgrade(const aWebSocketsURI,
-  aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX,aWebSocketsCompression: boolean): RawUTF8;
-var protocol: TWebSocketProtocolRest;
-    key: TAESBlock;
+  aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX,aWebSocketsCompression: boolean;
+  aProtocol: TWebSocketProtocol): RawUTF8;
+var key: TAESBlock;
     bin1,bin2: RawByteString;
     extin,extout,prot: RawUTF8;
     extins: TRawUTF8DynArray;
     cmd: SockString;
     digest1,digest2: TSHA1Digest;
 begin
-  if fProcess<>nil then begin
-    result := 'Already upgraded to WebSockets';
-    if IdemPropNameU(fProcess.Protocol.URI,aWebSocketsURI) then
-      result := result+' on this URI' else
-      result := FormatUTF8('% with URI="%" but requested "%"',
-        [result,fProcess.Protocol.URI,aWebSocketsURI]);
-    exit;
-  end;
   try
-    if aWebSocketsAJAX then
-      protocol := TWebSocketProtocolJSON.Create(aWebSocketsURI) else
-      protocol := TWebSocketProtocolBinary.Create(
-        aWebSocketsURI,false,aWebSocketsEncryptionKey,aWebSocketsCompression);
     try
+      if fProcess<>nil then begin
+        result := 'Already upgraded to WebSockets';
+        if IdemPropNameU(fProcess.Protocol.URI,aWebSocketsURI) then
+          result := result+' on this URI' else
+          result := FormatUTF8('% with URI="%" but requested "%"',
+            [result,fProcess.Protocol.URI,aWebSocketsURI]);
+        exit;
+      end;
+      if aProtocol = nil then
+        if aWebSocketsAJAX then
+          aProtocol := TWebSocketProtocolJSON.Create(aWebSocketsURI) else
+          aProtocol := TWebSocketProtocolBinary.Create(
+            aWebSocketsURI,false,aWebSocketsEncryptionKey,aWebSocketsCompression);
       RequestSendHeader(aWebSocketsURI,'GET');
       TAESPRNG.Main.FillRandom(key);
       bin1 := BinToBase64(@key,sizeof(key));
       SockSend(['Content-Length: 0'#13#10'Connection: Upgrade'#13#10+
         'Upgrade: websocket'#13#10'Sec-WebSocket-Key: ',bin1,#13#10+
-        'Sec-WebSocket-Protocol: ',protocol.GetSubprotocols,#13#10+
+        'Sec-WebSocket-Protocol: ',aProtocol.GetSubprotocols,#13#10+
         'Sec-WebSocket-Version: 13']);
-      if protocol.ProcessHandshake(nil,extout,nil) and (extout<>'') then
+      if aProtocol.ProcessHandshake(nil,extout,nil) and (extout<>'') then
         SockSend(['Sec-WebSocket-Extensions: ',extout]);
       SockSend;
       SockSendFlush;
@@ -3126,9 +3130,9 @@ begin
       if not IdemPChar(pointer(cmd),'HTTP/1.1 101') or
          not ConnectionUpgrade or (ContentLength>0) or
          not IdemPropNameU(HeaderValue('upgrade'),'websocket') or
-         not protocol.SetSubprotocol(prot) then
+         not aProtocol.SetSubprotocol(prot) then
         exit;
-      protocol.fName := prot;
+      aProtocol.fName := prot;
       result := 'Invalid HTTP Upgrade Accept Challenge';
       ComputeChallenge(bin1,digest1);
       bin2 := HeaderValue('Sec-WebSocket-Accept');
@@ -3139,20 +3143,20 @@ begin
         result := 'Invalid HTTP Upgrade ProcessHandshake';
         extin := HeaderValue('Sec-WebSocket-Extensions');
         CSVToRawUTF8DynArray(pointer(extin),extins,';',true);
-        if (extins=nil) or not protocol.ProcessHandshake(extins,extout,@result) then
+        if (extins=nil) or not aProtocol.ProcessHandshake(extins,extout,@result) then
           exit;
       end;
       // if we reached here, connection is successfully upgraded to WebSockets
       if (Server='localhost') or (Server='127.0.0.1') then begin
-        protocol.fRemoteIP := '127.0.0.1';
-        protocol.fRemoteLocalhost := true;
+        aProtocol.fRemoteIP := '127.0.0.1';
+        aProtocol.fRemoteLocalhost := true;
       end else
-        protocol.fRemoteIP := Server;
+        aProtocol.fRemoteIP := Server;
       result := ''; // no error message = success
-      fProcess := TWebSocketProcessClient.Create(self,protocol,fProcessName);
-      protocol := nil; // protocol will be owned by fProcess now
+      fProcess := TWebSocketProcessClient.Create(self,aProtocol,fProcessName);
+      aProtocol := nil; // protocol will be owned by fProcess now
     finally
-      protocol.Free;
+      aProtocol.Free;
     end;
   except
     on E: Exception do begin
