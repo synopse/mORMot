@@ -409,7 +409,7 @@ type
     fBytesIn: Int64;
     fBytesOut: Int64;
     fSocketLayer: TCrtSocketLayer;
-    fSockInEof: boolean;
+    fSockInEof, fTLS: boolean;
     // updated by every SockSend() call
     fSndBuf: SockString;
     fSndBufLen: integer;
@@ -4275,6 +4275,7 @@ begin
       {$else}
       raise ECrtSocket.Create('Unsupported');
       {$endif MSWINDOWS}
+      fTLS := true;
     except
       on E: Exception do
         raise ECrtSocket.CreateFmt('OpenBind(%s:%s): aTLS failed [%s %s]',
@@ -4845,7 +4846,7 @@ begin
     aURL := '/'+url else // need valid url according to the HTTP/1.1 RFC
     aURL := url;
   SockSend([method,' ',aURL,' HTTP/1.1']);
-  if Port='80' then
+  if Port=DEFAULT_PORT[fTLS] then
     SockSend(['Host: ',Server]) else
     SockSend(['Host: ',Server,':',Port]);
   SockSend(['Accept: */*'#13#10'User-Agent: ',UserAgent]);
@@ -7398,7 +7399,7 @@ function RegURL(aRoot, aPort: SockString; Https: boolean;
 const Prefix: array[boolean] of SockString = ('http://','https://');
 begin
   if aPort='' then
-    aPort := '80';
+    aPort := DEFAULT_PORT[Https];
   aRoot := trim(aRoot);
   aDomainName := trim(aDomainName);
   if aDomainName='' then begin
