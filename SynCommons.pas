@@ -11627,28 +11627,38 @@ function BinToBase64WithMagic(const data: RawByteString): RawUTF8; overload;
 function BinToBase64WithMagic(Data: pointer; DataLen: integer): RawUTF8; overload;
 
 /// fast conversion from Base64 encoded text into binary data
+// - is now just an alias to Base64ToBinSafe() overloaded function
+// - returns '' if s was not a valid Base64-encoded input
 function Base64ToBin(const s: RawByteString): RawByteString; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast conversion from Base64 encoded text into binary data
+// - is now just an alias to Base64ToBinSafe() overloaded function
+// - returns '' if sp/len buffer was not a valid Base64-encoded input
 function Base64ToBin(sp: PAnsiChar; len: PtrInt): RawByteString; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast conversion from Base64 encoded text into binary data
-procedure Base64ToBin(sp: PAnsiChar; len: PtrInt; var result: RawByteString); overload;
+// - is now just an alias to Base64ToBinSafe() overloaded function
+// - returns false and data='' if sp/len buffer was invalid
+function Base64ToBin(sp: PAnsiChar; len: PtrInt; var data: RawByteString): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fast conversion from Base64 encoded text into binary data
-procedure Base64ToBin(sp: PAnsiChar; len: PtrInt; var result: TSynTempBuffer); overload;
+// - returns TRUE on success, FALSE if sp/len buffer was invvalid
+function Base64ToBin(sp: PAnsiChar; len: PtrInt; var Blob: TSynTempBuffer): boolean; overload;
 
 /// fast conversion from Base64 encoded text into binary data
 // - returns TRUE on success, FALSE if base64 does not match binlen
-// - if nofullcheck is FALSE, IsBase64() will be first called to validate the input
+// - nofullcheck is deprecated and not used any more, since nofullcheck=false
+// is now processed with no performance cost
 function Base64ToBin(base64, bin: PAnsiChar; base64len, binlen: PtrInt;
   nofullcheck: boolean=true): boolean; overload;
 
 /// fast conversion from Base64 encoded text into binary data
 // - returns TRUE on success, FALSE if base64 does not match binlen
-// - if nofullcheck is FALSE, IsBase64() will be first called to validate the input
+// - nofullcheck is deprecated and not used any more, since nofullcheck=false
+// is now processed with no performance cost
 function Base64ToBin(const base64: RawByteString; bin: PAnsiChar; binlen: PtrInt;
   nofullcheck: boolean=true): boolean; overload;
 
@@ -11709,9 +11719,8 @@ function Base64ToBinLengthSafe(sp: PAnsiChar; len: PtrInt): PtrInt;
 
 /// direct low-level decoding of a Base64 encoded buffer
 // - here len is the number of 4 chars chunks in sp input
-// - you should better not use this, but Base64ToBin() overloaded functions
-procedure Base64Decode(sp,rp: PAnsiChar; len: PtrInt);
-
+// - deprecated low-level function: use Base64ToBin/Base64ToBinSafe instead
+function Base64Decode(sp,rp: PAnsiChar; len: PtrInt): boolean;
 
 /// fast conversion from binary data into Base64-like URI-compatible encoded text
 // - in comparison to Base64 standard encoding, will trim any right-sided '='
@@ -24765,8 +24774,12 @@ begin
 end;
 
 procedure Base64MagicDecode(var ParamValue: RawUTF8);
+var
+  tmp: RawUTF8;
 begin // '\uFFF0base64encodedbinary' decode into binary (input shall have been checked)
-  ParamValue := Base64ToBin(PAnsiChar(pointer(ParamValue))+3,length(ParamValue)-3);
+  tmp := ParamValue;
+  if not Base64ToBinSafe(PAnsiChar(pointer(tmp))+3,length(tmp)-3,RawByteString(ParamValue)) then
+    ParamValue := '';
 end;
 
 function Base64MagicCheckAndDecode(Value: PUTF8Char; var Blob: RawByteString): boolean;
@@ -24776,10 +24789,8 @@ begin // '\uFFF0base64encodedbinary' checked and decode into binary
      (PCardinal(Value)^ and $ffffff<>JSON_BASE64_MAGIC) then
     result := false else begin
     ValueLen := StrLen(Value)-3;
-    if ValueLen>0 then begin
-      Blob := Base64ToBin(PAnsiChar(Value)+3,ValueLen);
-      result := true;
-    end else
+    if ValueLen>0 then
+      result := Base64ToBinSafe(PAnsiChar(Value)+3,ValueLen,Blob) else
       result := false;
   end;
 end;
@@ -24791,10 +24802,8 @@ begin // '\uFFF0base64encodedbinary' checked and decode into binary
      (PCardinal(Value)^ and $ffffff<>JSON_BASE64_MAGIC) then
     result := false else begin
     ValueLen := StrLen(Value)-3;
-    if ValueLen>0 then begin
-      Base64ToBin(PAnsiChar(Value)+3,ValueLen,Blob);
-      result := true;
-    end else
+    if ValueLen>0 then
+      result := Base64ToBin(PAnsiChar(Value)+3,ValueLen,Blob) else
       result := false;
   end;
 end;
@@ -24803,10 +24812,8 @@ function Base64MagicCheckAndDecode(Value: PUTF8Char; ValueLen: integer;
   var Blob: RawByteString): boolean;
 begin // '\uFFF0base64encodedbinary' checked and decode into binary
   if (ValueLen<4) or (PCardinal(Value)^ and $ffffff<>JSON_BASE64_MAGIC) then
-    result := false else begin
-    Blob := Base64ToBin(PAnsiChar(Value)+3,ValueLen-3);
-    result := true;
-  end;
+    result := false else
+    result := Base64ToBinSafe(PAnsiChar(Value)+3,ValueLen-3,Blob);
 end;
 
 function SQLParamContent(P: PUTF8Char; out ParamType: TSQLParamType; out ParamValue: RawUTF8;
@@ -27211,9 +27218,18 @@ begin
   result := true;
 end;
 
-{$ifdef PUREPASCAL}
+function Base64Decode(sp,rp: PAnsiChar; len: PtrInt): boolean; {$ifdef FPC}inline;{$endif}
+begin
+  len := len shl 2; // len was the number of 4 chars chunks in sp
+  if (len>0) and (ConvertBase64ToBin[sp[len-2]]>=0) then
+    if ConvertBase64ToBin[sp[len-1]]>=0 then else
+      dec(len) else
+      dec(len,2); // Base64AnyDecode() algorithm ignores the trailing '='
+  result := Base64AnyDecode(ConvertBase64ToBin,sp,rp,len);
+end;
 
 function Base64EncodeMain(rp, sp: PAnsiChar; len: cardinal): integer;
+{$ifdef PUREPASCAL}
 var i: integer;
     c: cardinal;
 begin
@@ -27228,20 +27244,7 @@ begin
     inc(sp,3);
   end;
 end;
-
-procedure Base64Decode(sp,rp: PAnsiChar; len: PtrInt); {$ifdef FPC}inline;{$endif}
-begin
-  len := len shl 2; // len was the number of 4 chars chunks in sp
-  if (len>0) and (ConvertBase64ToBin[sp[len-2]]>=0) then
-    if ConvertBase64ToBin[sp[len-1]]>=0 then else
-      dec(len) else
-      dec(len,2); // adjust for Base64AnyDecode() algorithm
-  Base64AnyDecode(ConvertBase64ToBin,sp,rp,len);
-end;
-
 {$else PUREPASCAL}
-
-function Base64EncodeMain(rp, sp: PAnsiChar; len: cardinal): integer;
 asm // eax=rp edx=sp ecx=len - pipeline optimized version by AB
         push    ebx
         push    esi
@@ -27296,64 +27299,6 @@ asm // eax=rp edx=sp ecx=len - pipeline optimized version by AB
         pop     esi
         pop     ebx
 end;
-
-procedure Base64Decode(sp,rp: PAnsiChar; len: PtrInt);
-asm // eax=sp edx=rp ecx=len - pipeline optimized version by AB
-        push    ebx
-        push    esi
-        push    edi
-        push    ebp
-        push    eax
-        test    ecx, ecx
-        mov     ebp, edx
-        lea     edi, [ConvertBase64ToBin]
-        mov     [esp], ecx
-        jz      @4
-@0:     movzx   edx, byte ptr[eax]
-        movzx   ebx, byte ptr[eax + $01]
-        movsx   ecx, byte ptr[edi + edx]
-        movsx   esi, byte ptr[edi + ebx]
-        test    ecx, ecx
-        jl      @1
-        shl     ecx, $06
-        test    esi, esi
-        jl      @1
-        or      ecx, esi
-        movzx   edx, byte ptr[eax + $02]
-        movzx   ebx, byte ptr[eax + $03]
-        shl     ecx, $06
-        movsx   esi, byte ptr[edi + edx]
-        movsx   edx, byte ptr[edi + ebx]
-        test    esi, esi
-        jl      @1
-        or      ecx, esi
-        shl     ecx, $06
-        test    edx, edx
-        jl      @2
-        or      ecx, edx
-        lea     eax, [eax + 4]
-        mov     [ebp + 2], cl
-        mov     [ebp + 1], ch
-        shr     ecx, 16
-        dec     dword ptr[esp]
-        mov     [ebp], cl
-        lea     ebp, [ebp + 3]
-        jnz     @0
-@4:     pop     eax
-        pop     ebp
-        pop     edi
-        pop     esi
-        pop     ebx
-        ret
-@2:     shr     ecx, $08
-        mov     [ebp + $01], cl
-        mov     [ebp], ch
-        jmp     @4
-@1:     shr     ecx, $0a
-        mov     [ebp], cl
-        jmp     @4
-end;
-
 {$endif PUREPASCAL}
 
 procedure Base64EncodeTrailing(rp, sp: PAnsiChar; len: cardinal);
@@ -27504,29 +27449,22 @@ end;
 
 function Base64ToBin(const s: RawByteString): RawByteString;
 begin
-  Base64ToBin(pointer(s),length(s),result);
+  Base64ToBinSafe(pointer(s),length(s),result);
 end;
 
 function Base64ToBin(sp: PAnsiChar; len: PtrInt): RawByteString;
 begin
-  Base64ToBin(sp,len,result);
+  Base64ToBinSafe(sp,len,result);
 end;
 
-procedure Base64ToBin(sp: PAnsiChar; len: PtrInt; var result: RawByteString);
-var resultLen: PtrInt;
+function Base64ToBin(sp: PAnsiChar; len: PtrInt; var data: RawByteString): boolean;
 begin
-  resultLen := Base64ToBinLength(sp,len);
-  if resultLen=0 then
-    result := '' else begin
-    SetString(result,nil,resultLen);
-    Base64Decode(sp,pointer(result),len shr 2);
-  end;
+  result := Base64ToBinSafe(sp,len,data);
 end;
 
 function Base64ToBinSafe(const s: RawByteString): RawByteString;
 begin
-  if not Base64ToBinSafe(pointer(s),length(s),result) then
-    result := '';
+  Base64ToBinSafe(pointer(s),length(s),result);
 end;
 
 function Base64ToBinSafe(sp: PAnsiChar; len: PtrInt): RawByteString;
@@ -27535,49 +27473,33 @@ begin
 end;
 
 function Base64ToBinSafe(sp: PAnsiChar; len: PtrInt; var data: RawByteString): boolean;
-{$ifdef PUREPASCAL} // Base64AnyDecode() is safe
+var resultLen: PtrInt;
 begin
-  Base64ToBin(sp,len,data);
-  result := data<>'';
+  resultLen := Base64ToBinLength(sp,len);
+  if resultLen<>0 then begin
+    SetString(data,nil,resultLen);
+    if ConvertBase64ToBin[sp[len-2]]>=0 then
+      if ConvertBase64ToBin[sp[len-1]]>=0 then else
+        dec(len) else
+        dec(len,2); // adjust for Base64AnyDecode() algorithm
+    result := Base64AnyDecode(ConvertBase64ToBin,sp,pointer(data),len);
+    if not result then
+      data := '';
+  end else
+    result := false;
 end;
-{$else}
-var datalen: PtrInt;
-begin
-  datalen := Base64ToBinLengthSafe(sp,len);
-  if datalen=0 then
-    result := false else begin
-    SetString(data,nil,datalen);
-    Base64Decode(sp,pointer(data),len shr 2);
-    result := true;
-  end;
-end;
-{$endif}
 
-procedure Base64ToBin(sp: PAnsiChar; len: PtrInt; var result: TSynTempBuffer);
+function Base64ToBin(sp: PAnsiChar; len: PtrInt; var blob: TSynTempBuffer): boolean;
 begin
-  result.Init(Base64ToBinLength(sp,len));
-  if result.len>0 then
-    Base64Decode(sp,result.buf,len shr 2);
+  blob.Init(Base64ToBinLength(sp,len));
+  result := (blob.len>0) and Base64Decode(sp,blob.buf,len shr 2);
 end;
 
 function Base64ToBin(base64, bin: PAnsiChar; base64len, binlen: PtrInt;
   nofullcheck: boolean): boolean;
-begin
-  {$ifdef PUREPASCAL} // Base64AnyDecode() is safe
-  result := (bin<>nil) and (Base64ToBinLength(base64,base64len)=binlen); 
-  if result then begin 
-    if (base64len>0) and (ConvertBase64ToBin[base64[base64len-2]]>=0) then
-      if ConvertBase64ToBin[base64[base64len-1]]>=0 then else
-        dec(base64len) else
-        dec(base64len,2); // adjust for Base64AnyDecode() algorithm
-    result := Base64AnyDecode(ConvertBase64ToBin,base64,bin,base64len);
-  end;
-  {$else}
-  result := (bin<>nil) and (Base64ToBinLength(base64,base64len)=binlen) and 
-    (nofullcheck or IsBase64(base64,base64len));
-  if result then
+begin // nofullcheck is just ignored and deprecated
+  result := (bin<>nil) and (Base64ToBinLength(base64,base64len)=binlen) and
     Base64Decode(base64,bin,base64len shr 2);
-  {$endif}
 end;
 
 function Base64ToBin(const base64: RawByteString; bin: PAnsiChar; binlen: PtrInt;
