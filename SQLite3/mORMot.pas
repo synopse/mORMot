@@ -23051,6 +23051,8 @@ constructor TSQLPropInfoRTTIDynArray.Create(aPropInfo: PPropInfo;
 begin
   inherited Create(aPropInfo,aPropIndex,aSQLFieldType);
   fObjArray := aPropInfo^.DynArrayIsObjArrayInstance;
+  if fObjArray<>nil then
+    fSQLDBFieldType := ftUTF8; // stored as JSON text, not as BLOB
   if fGetterIsFieldPropOffset=0 then
     raise EModelException.CreateUTF8('%.Create(%) getter!',[self,fPropType^.Name]);
 end;
