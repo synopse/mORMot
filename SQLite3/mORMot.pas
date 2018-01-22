@@ -16597,7 +16597,8 @@ type
   // ComputeFieldsBeforeWrite virtual method, before writing to the database
   // - rsoSecureConnectionRequired will ensure Call is flagged as llfSecured
   // (i.e. in-process, HTTPS, or encrypted WebSockets) - with the only exception
-  // of the Timestamp method-based service (for monitoring purposes)
+  // of the Timestamp method-based service (for monitoring purposes) - note that
+  // this option doesn't make sense behind a proxy, just with a true HTTPS server
   // - by default, cookies will contain only 'Path=/Model.Root', but
   // '; Path=/' may be also added setting rsoCookieIncludeRootPath
   // - you can disable the 'HttpOnly' flag via rsoCookieHttpOnlyFlagDisable
