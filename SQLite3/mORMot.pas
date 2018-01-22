@@ -13456,7 +13456,8 @@ type
     procedure NotifyDeletion(aTableIndex, aID: TID); overload;
   end;
 
-  /// optimized thread-safe storage of a list of IP adresses
+  /// optimized thread-safe storage of a list of IP v4 adresses
+  //  - can be used e.g. as white-list or black-list of clients 
   TIPBan = class(TSynPersistentStore)
   protected
     fIP4: TIntegerDynArray;
@@ -16693,7 +16694,7 @@ type
     fOnIdleLastTix: cardinal;
     fSQLRecordVersionDeleteTable: TSQLRecordTableDeletedClass;
     fRecordVersionSlaveCallbacks: array of IServiceRecordVersionCallback;
-    fIPBan: TIPBan;
+    fIPBan, fIPWhiteJWT: TIPBan;
     // TSQLRecordHistory.ModifiedRecord handles up to 64 (=1 shl 6) tables
     fTrackChangesHistoryTableIndex: TIntegerDynArray;
     fTrackChangesHistoryTableIndexCount: cardinal;
@@ -17329,6 +17330,10 @@ type
     /// (un)register a banned IPv4 value
     // - any connection attempt from this IP Address will be rejected by
     function BanIP(const aIP: RawUTF8; aRemoveBan: boolean=false): boolean;
+    /// (un)register a an IPv4 value to the JWT white list
+    // - JWT connection attempts will be validated against this IP list
+    // - WebSockets connections are secure enough to bypass this list
+    function JWTForUnauthenticatedRequestWhiteIP(const aIP: RawUTF8; aRemoveWhite: boolean=false): boolean;
     /// add all published methods of a given object instance to the method-based
     // list of services
     // - all those published method signature should match TSQLRestServerCallBack
@@ -17498,7 +17503,8 @@ type
       read GetAuthenticationSchemesCount;
     /// define if unsecure connections (i.e. not in-process or encrypted
     // WebSockets) require a JWT for authentication
-    // - once set, this instance will be owned by the TSQLRestServer 
+    // - once set, this instance will be owned by the TSQLRestServer
+    // - see also JWTForUnauthenticatedRequestWhiteIP() for additional security
     property JWTForUnauthenticatedRequest: TJWTAbstract
       read fJWTForUnauthenticatedRequest write fJWTForUnauthenticatedRequest;
     /// retrieve the TSQLRestStorage instance used to store and manage
@@ -23052,7 +23058,7 @@ begin
   inherited Create(aPropInfo,aPropIndex,aSQLFieldType);
   fObjArray := aPropInfo^.DynArrayIsObjArrayInstance;
   if fObjArray<>nil then
-    fSQLDBFieldType := ftUTF8; // stored as JSON text, not as BLOB
+    fSQLDBFieldType := ftUTF8; // matches GetFieldSQLVar() below
   if fGetterIsFieldPropOffset=0 then
     raise EModelException.CreateUTF8('%.Create(%) getter!',[self,fPropType^.Name]);
 end;
@@ -25487,11 +25493,9 @@ begin
     if SynCommons.HexToBin(@P[2],pointer(result),LenHex) then
       exit; // valid hexa data
   end else
-  if (PInteger(P)^ and $00ffffff=JSON_BASE64_MAGIC) and IsBase64(@P[3],Len-3) then begin
-    // safe decode Base-64 content ('\uFFF0base64encodedbinary')
-    Base64ToBin(@P[3],Len-3,RawByteString(result));
-    exit;
-  end;
+  if (PInteger(P)^ and $00ffffff=JSON_BASE64_MAGIC) and
+     Base64ToBinSafe(@P[3],Len-3,RawByteString(result)) then
+    exit; // safe decode Base-64 content ('\uFFF0base64encodedbinary')
   // TEXT format
   SetString(result,PAnsiChar(P),Len);
 end;
@@ -25513,11 +25517,9 @@ begin
     if SynCommons.HexToBin(@P[2],pointer(result),LenHex) then
       exit; // valid hexa data
   end else
-  if (PInteger(P)^ and $00ffffff=JSON_BASE64_MAGIC) and IsBase64(@P[3],Len-3) then begin
-    // Base-64 encoded content ('\uFFF0base64encodedbinary')
-    Base64ToBin(@P[3],Len-3,RawByteString(result));
-    exit;
-  end;
+  if (PInteger(P)^ and $00ffffff=JSON_BASE64_MAGIC) and
+     Base64ToBinSafe(@P[3],Len-3,RawByteString(result)) then
+    exit; // safe decode Base-64 content ('\uFFF0base64encodedbinary')
   // TEXT format
   result := Blob;
 end;
@@ -39584,7 +39586,7 @@ begin
   end;
 end;
 
-function TSQLRestServer.BanIP(const aIP: RawUTF8; aRemoveBan: boolean=false): boolean;
+function TSQLRestServer.BanIP(const aIP: RawUTF8; aRemoveBan: boolean): boolean;
 begin
   result := false;
   if fIPBan=nil then begin
@@ -39597,6 +39599,24 @@ begin
     result := fIPBan.Delete(aIP) else
     result := fIPBan.Add(aIP);
   InternalLog('BanIP(%,%)=%',[aIP,BOOL_STR[aRemoveBan],BOOL_STR[result]]);
+end;
+
+function TSQLRestServer.JWTForUnauthenticatedRequestWhiteIP(const aIP: RawUTF8;
+  aRemoveWhite: boolean): boolean;
+begin
+  result := false;
+  if fJWTForUnauthenticatedRequest=nil then
+    exit;
+  if fIPWhiteJWT=nil then begin
+    if aRemoveWhite then
+      exit;
+    fIPWhiteJWT := TIPBan.Create;
+    fPrivateGarbageCollector.Add(fIPWhiteJWT);
+  end;
+  if aRemoveWhite then
+    result := fIPWhiteJWT.Delete(aIP) else
+    result := fIPWhiteJWT.Add(aIP);
+  InternalLog('WhiteIP(%,%)=%',[aIP,BOOL_STR[aRemoveWhite],BOOL_STR[result]]);
 end;
 
 function TSQLRestServer.GetServiceMethodStat(const aMethod: RawUTF8): TSynMonitorInputOutput;
@@ -41036,7 +41056,11 @@ begin
     jwt.Verify(AuthenticationBearerToken,JWTContent);
   result := JWTContent.result=jwtValid;
   if not result then
-    Error('Invalid Bearer [%]',[ToText(JWTContent.result)^],HTTP_FORBIDDEN);
+    Error('Invalid Bearer [%]',[ToText(JWTContent.result)^],HTTP_FORBIDDEN) else
+    if (Server.fIPWhiteJWT<>nil) and not Server.fIPWhiteJWT.Exists(RemoteIP) then begin
+      Error('Invalid IP [%]',[RemoteIP],HTTP_FORBIDDEN);
+      result := false;
+    end;
 end;
 
 function TSQLRestServerURIContext.ClientKind: TSQLRestServerURIContextClientKind;
