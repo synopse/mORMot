@@ -630,6 +630,8 @@ type
     // implementation
     // - the SortField feature is also tested
     procedure _TSQLTableJSON;
+    /// test the TSQLTableWritable table
+    procedure _TSQLTableWritable;
     /// test the TSQLRestClientDB, i.e. a local Client/Server driven usage
     // of the framework
     // - validates TSQLModel, TSQLRestServer and TSQLRestStorage by checking
@@ -14842,6 +14844,54 @@ begin
   finally
     J.Free;
   end;
+end;
+
+procedure TTestSQLite3Engine._TSQLTableWritable;
+  procedure Test(intern: TRawUTF8Interning);
+  var s1,s2: TSQLTableJSON;
+      w: TSQLTableWritable;
+      f,r: integer;
+  begin
+    s1 := TSQLTableJSON.CreateFromTables([TSQLRecordPeople],'',JS);
+    s2 := TSQLTableJSON.CreateFromTables([TSQLRecordPeople],'',JS);
+    w := TSQLTableWritable.CreateFromTables([TSQLRecordPeople],'',JS);
+    try // merge the same data twice, and validate duplicated columns
+      w.NewValuesInterning := intern;
+      check(w.RowCount=s1.RowCount);
+      check(w.FieldCount=s1.FieldCount);
+      w.Join(s2,'rowid','ID'); // s2 will be sorted -> keep s1 untouched
+      check(w.RowCount=s1.RowCount);
+      check(w.FieldCount=s1.FieldCount*2-1);
+      for f := 0 to s1.FieldCount-1 do begin
+        check(w.FieldIndex(s1.FieldNames[f])=f);
+        if f>0 then // f=0='ID' is not duplicated
+          check(w.FieldIndex(s1.FieldNames[f]+'2')=f+s1.FieldCount-1);
+      end;
+      for r := 1 to w.RowCount do begin
+        for f := 0 to s1.FieldCount-1 do begin
+          check(StrComp(s1.Get(r,f),w.Get(r,f))=0);
+          if f>0 then
+            check(StrComp(s1.Get(r,f),W.Get(r,f+s1.FieldCount-1))=0);
+        end;
+      end;
+      if intern<>nil then
+        check(intern.Count=0);
+      for r := 0 to w.RowCount do
+        w.Update(r,1,UInt32ToUTF8(r and 127));
+      for r := 1 to w.RowCount do
+        check(w.GetAsInteger(r,1)=r and 127);
+      if intern<>nil then
+        check(intern.Count=128);
+    finally
+      s1.Free;
+      s2.Free;
+      w.Free;
+      intern.Free;
+    end;
+  end;
+begin
+  Test(nil);
+//  Test(TRawUTF8Interning.Create);
 end;
 
 {$ifdef UNICODE}

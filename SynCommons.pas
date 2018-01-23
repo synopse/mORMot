@@ -6570,7 +6570,7 @@ function PtrArrayAdd(var aPtrArray; aItem: pointer): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// wrapper to add once an item to a array of pointer dynamic array storage
-procedure PtrArrayAddOnce(var aPtrArray; aItem: pointer);
+function PtrArrayAddOnce(var aPtrArray; aItem: pointer): integer;
 
 /// wrapper to delete an item from a array of pointer dynamic array storage
 function PtrArrayDelete(var aPtrArray; aItem: pointer): integer; overload;
@@ -49435,15 +49435,17 @@ begin
   a[result] := aItem;
 end;
 
-procedure PtrArrayAddOnce(var aPtrArray; aItem: pointer);
+function PtrArrayAddOnce(var aPtrArray; aItem: pointer): integer;
 var a: TPointerDynArray absolute aPtrArray;
     n: integer;
 begin
   n := length(a);
-  if not PtrUIntScanExists(pointer(a),n,PtrUInt(aItem)) then begin
-    SetLength(a,n+1);
-    a[n] := aItem;
-  end;
+  result := PtrUIntScanIndex(pointer(a),n,PtrUInt(aItem));
+  if result>=0 then
+    exit;
+  SetLength(a,n+1);
+  a[n] := aItem;
+  result := n;
 end;
 
 function PtrArrayDelete(var aPtrArray; aItem: pointer): integer;
