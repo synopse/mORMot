@@ -8151,7 +8151,7 @@ type
     /// the field kind, as in JSON (match TSQLPropInfo.SQLFieldTypeStored)
     ContentType: TSQLFieldType;
     /// how this field could be stored in a database
-    // - equals ftUnknown if InitFields guessed the field type
+    // - equals ftUnknown if InitFields guessed the field type, or for sftVariant
     ContentDB: TSQLDBFieldType;
     /// the field size in bytes; -1 means not computed yet
     ContentSize: integer;
@@ -25296,7 +25296,11 @@ begin
       end;
       {$endif}
       end;
-    ContentDB := SQLFieldTypeToDBField(ContentType,ContentTypeInfo);
+    {$ifndef NOVARIANTS}
+    if ContentType in [sftVariant,sftNullable] then
+      ContentDB := ftUnknown else // ftUTF8/ftNull are not precise enough
+    {$endif}
+      ContentDB := SQLFIELDTYPETODBFIELDTYPE[ContentType];
     TableIndex := FieldTableIndex;
   end;
 end;
@@ -26026,7 +26030,7 @@ const
   ODSmimetype: RawUTF8 = 'application/vnd.oasis.opendocument.spreadsheet';
   ODSContentHeader: RawUTF8 = '<office:document-content office:version="1.2" xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"'+
   ' xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"'+
-  ' xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0" ><office:body><office:spreadsheet><table:table table:name="Sheet1" >'+
+  ' xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0" ><office:body><office:spreadsheet><table:table table:name="Sheet1">'+
   '<table:table-column table:number-columns-repeated="';
   ODSContentFooter = '</table:table><table:named-expressions/></office:spreadsheet></office:body></office:document-content>';
   ODSstyles: RawUTF8 = XMLUTF8_HEADER+'<office:document-styles xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" office:version="1.2"></office:document-styles>';
@@ -26059,45 +26063,31 @@ begin
         W.Add(FieldCount);
         W.AddShort('" />');
         if (self<>nil) and ((FieldCount>0) or (fRowCount>0)) then begin
-          if withColumnTypes then begin
-            // retrieve normalized field names and types
-            if length(fFieldNames)<>fFieldCount then
-              InitFieldNames;
-            if not Assigned(fFieldType) then
-              InitFieldTypes;
-          end;
-          // write column names
-          W.AddShort('<table:table-row>');
+          if withColumnTypes and (fFieldType=nil) then
+            InitFieldTypes;
           U := pointer(fResults);
-          for f := 1 to FieldCount do begin
-            W.AddShort('<table:table-cell office:value-type="string"><text:p>');
-            W.AddXmlEscape(U^);
-            W.AddShort('</text:p></table:table-cell>');
-            inc(U); // points to next value
-          end;
-          W.AddShort('</table:table-row>');
-          // and values
-          for r := 1 to fRowCount do begin
+          for r := 0 to fRowCount do begin
             W.AddShort('<table:table-row>');
-            if withColumnTypes then begin
+            if withColumnTypes and (r>0) then begin
               for f := 0 to FieldCount-1 do begin
                 W.AddShort('<table:table-cell office:value-type="');
                 case fFieldType[f].ContentDB of
                   ftInt64,ftDouble,ftCurrency: begin
                     W.AddShort('float" office:value="');
                     W.AddXmlEscape(U^);
+                    W.AddShort('" />');
                   end;
                   ftDate: begin
                     W.AddShort('date" office:date-value="');
                     W.AddXmlEscape(U^);
+                    W.AddShort('" />');
                   end;
-                else //ftUnknown, ftNull, ftUTF8, ftBlob:
-                  W.AddShort('string');
+                  else begin //ftUnknown,ftNull,ftUTF8,ftBlob:
+                    W.AddShort('string"><text:p>');
+                    W.AddXmlEscape(U^);
+                    W.AddShort('</text:p></table:table-cell>');
+                  end;
                 end;
-                W.AddShort('"><text:p>');
-                if fFieldType[f].ContentDB in [ftUnknown, ftUTF8, ftBlob] then
-                  W.AddXmlEscape(U^);
-                W.AddShort('</text:p></table:table-cell>');
                 inc(U); // points to next value
               end;
             end else

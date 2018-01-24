@@ -3248,7 +3248,6 @@ type
     procedure First;
     /// after successfull Open and First, go the the next row of results
     procedure Next;
-    { procedure Last;  BUGGY method -> use ORDER DESC instead }
     /// end the SQL query
     // - will release the SQL statement, results and bound parameters
     // - the query should be released with a call to Close before reopen
@@ -3948,22 +3947,6 @@ begin
   end;
 end;
 
-{
-procedure TQuery.Last;
-var i: integer;
-begin
-  if (self=nil) or (fPrepared=nil) then
-    raise ESQLQueryException.Create('Next: Invalid call');
-  while fPrepared.Step(false) do begin
-    inc(fRowIndex);
-    for i := 0 to fPrepared.ColumnCount-1 do begin
-      fPrepared.ColumnToVariant(i,fResults[i].fValue);
-      fResults[i].fRowIndex := fRowIndex;
-    end;
-  end;
-end;
-}
-
 procedure TQuery.Open;
 var i, h: integer;
     added: boolean;
@@ -3984,9 +3967,9 @@ begin
       fName := ColumnName;
     end;
   end;
-  assert(fResultCount=fPrepared.ColumnCount);
-  // always read the first row
-  First;
+  if fResultCount<>fPrepared.ColumnCount then
+    raise ESQLQueryException.CreateUTF8('%.Open count %<>%',[self,fResultCount,fPrepared.ColumnCount]);
+  First; // always read the first row
 end;
 
 function TQuery.ParamByName(const aParamName: string;
