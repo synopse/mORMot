@@ -5389,18 +5389,22 @@ begin
       {$else}
       if Assigned(fThreadPoolPush) then begin
         // use thread pool to process the request header, and probably its body
-        if not fThreadPoolPush(pointer(ClientSock)) then begin
+        i := 0;
+        while not fThreadPoolPush(pointer(ClientSock)) do begin
           // returned false if there is no idle thread in the pool
-          for i := 1 to 1500 do begin
-            inc(fThreadPoolContentionCount);
-            SleepHiRes(20); // wait a little until a thread is available
-            if Terminated then
-              break;
-            if fThreadPoolPush(pointer(ClientSock)) then
-              exit; // the thread pool acquired the client sock
+          inc(fThreadPoolContentionCount);
+          if i>=1500 then begin
+            // could not acquire thread after 1500*20 = 30 seconds timeout
+            inc(fThreadPoolContentionAbortCount);
+            DirectShutdown(ClientSock);
+            break;
           end;
-          inc(fThreadPoolContentionAbortCount);
-          DirectShutdown(ClientSock); // 1500*20 = 30 seconds timeout
+          SleepHiRes(20); // wait a little until a thread is available
+          if Terminated then begin
+            DirectShutdown(ClientSock);
+            exit; // get out of Execute method.
+          end;
+          Inc(i);
         end;
       end else
         // default implementation creates one thread for each incoming socket
