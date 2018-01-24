@@ -5391,16 +5391,20 @@ begin
         // use thread pool to process the request header, and probably its body
         if not fThreadPoolPush(pointer(ClientSock)) then begin
           // returned false if there is no idle thread in the pool
-          for i := 1 to 1500 do begin
+          i := 1;
+          repeat
             inc(fThreadPoolContentionCount);
             SleepHiRes(20); // wait a little until a thread is available
             if Terminated then
+              exit; // get out of Execute method.
+            if i>=1500 then begin
+              // could not acquire thread after 1500*20 = 30 seconds timeout
+              inc(fThreadPoolContentionAbortCount);
+              DirectShutdown(ClientSock);
               break;
-            if fThreadPoolPush(pointer(ClientSock)) then
-              exit; // the thread pool acquired the client sock
-          end;
-          inc(fThreadPoolContentionAbortCount);
-          DirectShutdown(ClientSock); // 1500*20 = 30 seconds timeout
+            end;
+            Inc(i);
+          until fThreadPoolPush(pointer(ClientSock)); // the thread pool acquired the client sock
         end;
       end else
         // default implementation creates one thread for each incoming socket
