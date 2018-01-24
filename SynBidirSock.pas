@@ -1755,6 +1755,8 @@ function TWebSocketProtocolJSON.FrameDecompress(
   var contentType,content: RawByteString): Boolean;
 var i: Integer;
     P: PUTF8Char;
+    b64: PUTF8Char;
+    b64len: integer;
   procedure GetNext(var content: RawByteString);
   var txt: PUTF8Char;
       txtlen: integer;
@@ -1775,14 +1777,14 @@ begin
   GetNext(contentType);
   if P=nil then
     exit;
-  if (contentType='') or
-     IdemPropNameU(contentType,JSON_CONTENT_TYPE) then
-    GetJSONItemAsRawJSON(P,RawJSON(content)) else begin
-    GetNext(content);
-    if not IdemPChar(pointer(contentType),'TEXT/') then
-      if not Base64MagicCheckAndDecode(pointer(content),length(content),content) then
+  if (contentType='') or IdemPropNameU(contentType,JSON_CONTENT_TYPE) then
+    GetJSONItemAsRawJSON(P,RawJSON(content)) else
+    if IdemPChar(pointer(contentType),'TEXT/') then
+      GetNext(content) else begin
+      b64 := GetJSONField(P,P,nil,nil,@b64len);
+      if not Base64MagicCheckAndDecode(b64,b64len,content) then
         exit;
-  end;
+    end;
   result := true;
 end;
 

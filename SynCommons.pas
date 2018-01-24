@@ -2687,6 +2687,7 @@ function DoubleToStr(Value: Double): RawUTF8;
 
 /// fast retrieve the position of a given character
 function PosChar(Str: PUTF8Char; Chr: AnsiChar): PUTF8Char;
+  {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// fast retrieve the position of any value of a given set of characters
 function PosCharAny(Str: PUTF8Char; Characters: PAnsiChar): PUTF8Char;
@@ -42031,10 +42032,10 @@ Error:      Prop.FinalizeNestedArray(PPtrUInt(Data)^);
         @JSON_OPTIONS[soCustomVariantCopiedByReference in Options]);
     {$endif}
     ptRawByteString: begin
-      PropValue := GetJSONField(P,ptr,@wasString,@EndOfObject);
+      PropValue := GetJSONField(P,ptr,@wasString,@EndOfObject,@PropValueLen);
       if PropValue=nil then // null -> Blob=''
         PRawByteString(Data)^ := '' else
-        if not Base64MagicCheckAndDecode(PropValue,PRawByteString(Data)^) then
+        if not Base64MagicCheckAndDecode(PropValue,PropValueLen,PRawByteString(Data)^) then
           exit;
       P := ptr;
     end;
@@ -42235,7 +42236,7 @@ begin
   {$endif}
   ptRawJSON:   aWriter.AddRawJSON(PRawJSON(Value)^);
   ptRawByteString:
-    aWriter.WrBase64(PPointer(Value)^,length(PRawByteString(Value)^),true);
+    aWriter.WrBase64(PPointer(Value)^,length(PRawByteString(Value)^),{withMagic=}true);
   ptRawUTF8, ptString, ptSynUnicode,
   ptDateTime, ptDateTimeMS, ptGUID, ptWideString: begin
     aWriter.Add('"');
@@ -51580,7 +51581,7 @@ begin // code below must match TDynArray.LoadFromJSON
       end;
     end else begin
       tmp := aDynArray.SaveTo;
-      WrBase64(pointer(tmp),length(tmp),true); // magic=true
+      WrBase64(pointer(tmp),length(tmp),{withMagic=}true);
     end;
   djCustom: begin
       if customParser=nil then
@@ -51608,7 +51609,7 @@ begin // code below must match TDynArray.LoadFromJSON
   {$endif}
   djRawByteString:
     for i := 0 to n do begin
-      WrBase64(PPointerArray(P)^[i],Length(PRawByteStringArray(P)^[i]),true);
+      WrBase64(PPointerArray(P)^[i],Length(PRawByteStringArray(P)^[i]),{withMagic=}true);
       Add(',');
     end;
   djTimeLog..djString,djWideString..djInterface: // add textual JSON content
@@ -52235,7 +52236,7 @@ begin
     AddW(PWord(P),0,Escape); // direct write of UTF-16 content
   CP_SQLRAWBLOB: begin
     AddNoJSONEscape(@PByteArray(@JSON_BASE64_MAGIC_QUOTE_VAR)[1],3);
-    WrBase64(P,Len,false);
+    WrBase64(P,Len,{withMagic=}false);
   end;
   else begin
     // first handle trailing 7 bit ASCII chars, by quad
@@ -53076,7 +53077,7 @@ begin
   SetString(tmp,nil,L);
   if L<>0 then
     RecordSave(Rec,pointer(tmp),TypeInfo);
-  WrBase64(pointer(tmp),L,true);
+  WrBase64(pointer(tmp),L,{withMagic=}true);
 end;
 
 procedure TTextWriter.WrBase64(P: PAnsiChar; Len: cardinal; withMagic: boolean);
