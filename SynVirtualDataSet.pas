@@ -448,17 +448,14 @@ var Data, Dest: pointer;
     OnlyTestForNull: boolean;
     TS: TTimeStamp;
 begin
-  result := false;
   OnlyTestForNull := (Buffer=nil);
   RowIndex := PRecInfo(ActiveBuffer).RowIndentifier;
   Data := GetRowFieldData(Field,RowIndex,DataLen,OnlyTestForNull);
-  if Data=nil then // on success, points to Int64,Double,Blob,UTF8
-    exit;
-  result := true;
+  result := Data<>nil; // null field or out-of-range RowIndex/Field
   if OnlyTestForNull then
     exit;
   Dest := pointer(Buffer); // works also if Buffer is [var] TValueBuffer
-  case Field.DataType of
+  case Field.DataType of // Data^ points to Int64,Double,Blob,UTF8
   ftBoolean:
     PWORDBOOL(Dest)^ := PBoolean(Data)^;
   ftInteger:

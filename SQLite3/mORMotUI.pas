@@ -1875,7 +1875,7 @@ begin
   if fFieldIndexTimeLogForMark=-2 then begin
     fFieldIndexTimeLogForMark := -1;
     for F := 0 to Table.FieldCount-1 do
-      if Table.FieldType(F,nil)=sftTimeLog then begin
+      if Table.FieldType(F)=sftTimeLog then begin
         fFieldIndexTimeLogForMark := F;
         break;
       end;
