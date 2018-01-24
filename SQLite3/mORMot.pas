@@ -8150,6 +8150,9 @@ type
   TSQLTableFieldType = record
     /// the field kind, as in JSON (match TSQLPropInfo.SQLFieldTypeStored)
     ContentType: TSQLFieldType;
+    /// how this field could be stored in a database
+    // - equals ftUnknown if InitFields guessed the field type
+    ContentDB: TSQLDBFieldType;
     /// the field size in bytes; -1 means not computed yet
     ContentSize: integer;
     /// used for sftEnumerate, sftSet and sftBlobDynArray fields
@@ -8157,6 +8160,7 @@ type
     /// the corresponding index in fQueryTables[]
     TableIndex: integer;
   end;
+  PSQLTableFieldType = ^TSQLTableFieldType;
 
   /// wrapper to an ORM result table, staticaly stored as UTF-8 text
   // - contain all result in memory, until destroyed
@@ -8571,7 +8575,7 @@ type
     // - sftBlob is returned if the field is encoded as SQLite3 BLOB literals
     // (X'53514C697465' e.g.)
     // - since TSQLTable data is PUTF8Char, string type is sftUTF8Text only
-    function FieldType(Field: integer; out FieldTypeInfo: TSQLTableFieldType): TSQLFieldType; overload;
+    function FieldType(Field: integer; out FieldTypeInfo: PSQLTableFieldType): TSQLFieldType; overload;
     /// get the appropriate Sort comparaison function for a field,
     // nil if not available (bad field index or field is blob)
     // - field type is guessed from first data row
@@ -8622,6 +8626,8 @@ type
     // ! aTable.SetFieldType('Samples',sftSet,TypeInfo(TSetSamples));
     procedure SetFieldType(const FieldName: RawUTF8; FieldType: TSQLFieldType;
       FieldTypeInfo: pointer=nil; FieldSize: integer=-1); overload;
+    /// set the exact type of all fields, from the DB-like information
+    procedure SetFieldTypes(const DBTypes: TSQLDBFieldTypeDynArray);
     /// increase a particular Field Length Mean value
     // - to be used to customize the field appareance (e.g. for adding of left
     // checkbox for Marked[] fields)
@@ -25290,14 +25296,28 @@ begin
       end;
       {$endif}
       end;
+    ContentDB := SQLFieldTypeToDBField(ContentType,ContentTypeInfo);
     TableIndex := FieldTableIndex;
   end;
 end;
 
 procedure TSQLTable.SetFieldType(const FieldName: RawUTF8; FieldType: TSQLFieldType;
-   FieldTypeInfo: pointer=nil; FieldSize: integer=-1);
+   FieldTypeInfo: pointer; FieldSize: integer);
 begin
   SetFieldType(FieldIndex(FieldName),FieldType,FieldTypeInfo,FieldSize);
+end;
+
+const
+  DBTOFIELDTYPE: array[TSQLDBFieldType] of TSQLFieldType  = (sftUnknown,
+    sftUnknown,sftInteger,sftFloat,sftCurrency,sftDateTime,sftUTF8Text,sftBlob);
+
+procedure TSQLTable.SetFieldTypes(const DBTypes: TSQLDBFieldTypeDynArray);
+var f: integer;
+begin
+  if length(DBTypes)<>FieldCount then
+    raise ESQLTableException.CreateUTF8('%.SetFieldTypes(DBTypes?)',[self]);
+  for f := 0 to FieldCount-1 do
+    SetFieldType(f,DBTOFIELDTYPE[DBTypes[f]]);
 end;
 
 function TSQLTable.GetRowCount: integer;
@@ -25314,6 +25334,7 @@ var f,i,len: integer;
     prop: TSQLPropInfo;
     size,tableindex: integer;
     U: PPUTF8Char;
+    guessed: boolean;
     tlog: TTimeLog;
 begin
   if Assigned(fQueryColumnTypes) and (FieldCount<>length(fQueryColumnTypes)) then
@@ -25326,6 +25347,7 @@ begin
     info := nil;
     size := -1;
     tableindex := -1;
+    guessed := false;
     // init fFieldType[] from fQueryTables/fQueryColumnTypes[]
     if Assigned(fQueryColumnTypes) then
       sft := fQueryColumnTypes[f] else
@@ -25341,39 +25363,43 @@ begin
     if sft=sftUnknown then
       // not found in fQueryTables/fQueryColumnTypes[]: guess from content
       if IsRowID(fResults[f]) then
-        sft := sftInteger else
-      if f in fFieldParsedAsString then  begin
-        // the parser identified string values -> check if was sftDateTime
-        sft := sftUTF8Text;
-        U := @fResults[FieldCount+f];
-        for i := 1 to fRowCount do
-          if U^=nil then  // search for a non void column
-            inc(U,FieldCount) else begin
-            len := StrLen(U^);
-            tlog := Iso8601ToTimeLogPUTF8Char(U^,len);
-            if tlog<>0 then
-              if (len in [8,10]) and (cardinal(tlog shr 26)-1800<300) then
-                sft := sftDateTime else // e.g. YYYYMMDD date (Y=1800..2100)
-              if len>=15 then
-                sft := sftDateTime; // e.g. YYYYMMDDThhmmss date/time value
-            break;
+        sft := sftInteger else begin
+        guessed := true;
+        if f in fFieldParsedAsString then  begin
+          // the parser identified string values -> check if was sftDateTime
+          sft := sftUTF8Text;
+          U := @fResults[FieldCount+f];
+          for i := 1 to fRowCount do
+            if U^=nil then  // search for a non void column
+              inc(U,FieldCount) else begin
+              len := StrLen(U^);
+              tlog := Iso8601ToTimeLogPUTF8Char(U^,len);
+              if tlog<>0 then
+                if (len in [8,10]) and (cardinal(tlog shr 26)-1800<300) then
+                  sft := sftDateTime else // e.g. YYYYMMDD date (Y=1800..2100)
+                if len>=15 then
+                  sft := sftDateTime; // e.g. YYYYMMDDThhmmss date/time value
+              break;
+            end;
+        end else begin
+          U := @fResults[FieldCount+f];
+          for i := 1 to fRowCount do begin
+            sft := UTF8ContentNumberType(U^);
+            inc(U,FieldCount);
+            if sft=sftUnknown then
+              continue else // null -> search for a non void column
+            if sft=sftInteger then // may be a floating point with no decimal
+              if FieldTypeIntegerDetectionOnAllRows then
+                continue else
+                // we only checked the first field -> best guess...
+                sft := sftCurrency;
+            break; // found a non-integer content (e.g. sftFloat/sftUtf8Text)
           end;
-      end else begin
-        U := @fResults[FieldCount+f];
-        for i := 1 to fRowCount do begin
-          sft := UTF8ContentNumberType(U^);
-          inc(U,FieldCount);
-          if sft=sftUnknown then
-            continue else // null -> search for a non void column
-          if sft=sftInteger then // may be a floating point with no decimal
-            if FieldTypeIntegerDetectionOnAllRows then
-              continue else
-              // we only checked the first field -> best guess...
-              sft := sftCurrency;
-          break; // found a non-integer content (e.g. sftFloat/sftUtf8Text)
         end;
       end;
     SetFieldType(f,sft,info,size,tableindex);
+    if guessed then
+      fFieldType[f].ContentDB := ftUnknown; // may fail on some later row
   end;
 end;
 
@@ -25387,15 +25413,17 @@ begin
     result := sftUnknown;
 end;
 
-function TSQLTable.FieldType(Field: integer; out FieldTypeInfo: TSQLTableFieldType): TSQLFieldType;
+function TSQLTable.FieldType(Field: integer; out FieldTypeInfo: PSQLTableFieldType): TSQLFieldType;
 begin
   if (self<>nil) and (cardinal(Field)<cardinal(FieldCount)) then begin
     if not Assigned(fFieldType) then
       InitFieldTypes;
-    FieldTypeInfo := fFieldType[Field];
-    result := FieldTypeInfo.ContentType;
-  end else
+    FieldTypeInfo := @fFieldType[Field];
+    result := FieldTypeInfo^.ContentType;
+  end else begin
+    FieldTypeInfo := nil;
     result := sftUnknown;
+  end;
 end;
 
 function TSQLTable.Get(Row, Field: integer): PUTF8Char;
@@ -25774,10 +25802,10 @@ end;
 procedure TSQLTable.GetJSONValues(JSON: TStream; Expand: boolean;
   RowFirst, RowLast, IDBinarySize: integer);
 var W: TJSONWriter;
-    F,R: integer;
     U: PPUTF8Char;
+    f,r: integer;
     i64: Int64;
-    directWrites: set of 0..255;
+label nostr,str;
 begin
   W := TJSONWriter.Create(JSON,Expand,false);
   try
@@ -25796,46 +25824,42 @@ begin
     if QueryTables<>nil then
       InitFieldTypes;
     SetLength(W.ColNames,FieldCount);
-    FillCharFast(directWrites,(FieldCount shr 3)+1,0);
-    for F := 0 to FieldCount-1 do begin
-      W.ColNames[F] := fResults[F]; // first Row is field Names
+    for f := 0 to FieldCount-1 do begin
+      W.ColNames[f] := fResults[f]; // first Row is field Names
       if not Assigned(OnExportValue) then
-        if F=fFieldIndexID then begin
-          include(directWrites,F); // RowID is a ftInt64
-          if IDBinarySize>0 then
-            W.ColNames[F] := 'id'; // ajax-friendly
-        end else
-        if QueryTables<>nil then
-          with fFieldType[F] do
-          if SQLFieldTypeToDBField(ContentType,ContentTypeInfo) in
-             [ftInt64,ftDouble,ftCurrency] then
-            include(directWrites,F);
+        if (f=fFieldIndexID) and (IDBinarySize>0) then
+          W.ColNames[f] := 'id'; // ajax-friendly
     end;
     W.AddColumns(RowLast-RowFirst+1); // write or init field names (see JSON Expand)
     if Expand then
       W.Add('[');
     // write rows data
     U := @fResults[FieldCount*RowFirst];
-    for R := RowFirst to RowLast do begin
+    for r := RowFirst to RowLast do begin
       if Expand then
         W.Add('{');
-      for F := 0 to FieldCount-1 do begin
+      for f := 0 to FieldCount-1 do begin
         if Expand then
-          W.AddString(W.ColNames[F]); // '"'+ColNames[]+'":'
+          W.AddString(W.ColNames[f]); // '"'+ColNames[]+'":'
         if Assigned(OnExportValue) then
-          W.AddString(OnExportValue(self,R,F,false)) else
-        if (IDBinarySize>0) and (F=fFieldIndexID) then begin
+          W.AddString(OnExportValue(self,r,f,false)) else
+        if (IDBinarySize>0) and (f=fFieldIndexID) then begin
           SetInt64(U^,i64);
           W.AddBinToHexDisplayQuoted(@i64,IDBinarySize);
         end else
         if U^=nil then
           W.AddShort('null') else
-        // IsStringJSON() is fast and safe: no need to guess exact value type
-        if (F in directWrites) or ((QueryTables=nil) and not IsStringJSON(U^)) then
-          W.AddNoJSONEscape(U^,StrLen(U^)) else begin
-          W.Add('"');
-          W.AddJSONEscape(U^,StrLen(U^));
-          W.Add('"');
+        case fFieldType[f].ContentDB of
+          ftInt64,ftDouble,ftCurrency:
+nostr:      W.AddNoJSONEscape(U^,StrLen(U^));
+          ftDate,ftUTF8,ftBlob: begin
+str:        W.Add('"');
+            W.AddJSONEscape(U^,StrLen(U^));
+            W.Add('"');
+          end;
+          else if IsStringJSON(U^) then // fast and safe enough
+            goto str else
+            goto nostr;
         end;
         W.Add(',');
         inc(U); // points to next value
@@ -25843,7 +25867,7 @@ begin
       W.CancelLastComma;
       if Expand then begin
         W.Add('}',',');
-        if R<>RowLast then
+        if r<>RowLast then
           W.AddCR; // make expanded json more human readable
       end else
         W.Add(',');
@@ -25928,7 +25952,6 @@ const FIELDTYPE_TOXML: array[TSQLDBFieldType] of RawUTF8 = (
 var W: TJSONWriter;
     f,r: integer;
     U: PPUTF8Char;
-    fieldType: TSQLDBFieldTypeDynArray;
 begin
   W := TJSONWriter.Create(Dest,16384);
   try
@@ -25941,10 +25964,6 @@ begin
         InitFieldNames;
       if not Assigned(fFieldType) then
         InitFieldTypes;
-      SetLength(fieldType,FieldCount);
-      for f := 0 to FieldCount-1 do
-        with fFieldType[F] do
-          fieldType[f] := SQLFieldTypeToDBField(ContentType,ContentTypeInfo);
       // check range
       if RowLast=0 then
         RowLast := fRowCount else
@@ -25960,7 +25979,7 @@ begin
         W.AddShort('" rs:name="');
         W.AddString(fFieldNames[f]);
         W.Add('"');
-        W.AddString(FIELDTYPE_TOXML[fieldType[f]]);
+        W.AddString(FIELDTYPE_TOXML[fFieldType[f].ContentDB]);
         W.Add('/','>');
       end;
       W.AddShort('</s:ElementType></s:Schema>');
@@ -25974,16 +25993,7 @@ begin
             W.Add('f');
             W.Add(f);
             W.Add('=','"');
-            case fieldType[f] of
-            ftUnknown:
-              if IsStringJSON(U^) then // no need to guess exact value type here
-                W.AddXmlEscape(U^) else
-                W.AddNoJSONEscape(U^,StrLen(U^));
-            ftInt64, ftDouble, ftCurrency:
-              W.AddNoJSONEscape(U^,StrLen(U^));
-            ftDate, ftUTF8, ftBlob:
-              W.AddXmlEscape(U^);
-            end;
+            W.AddXmlEscape(U^);
             W.Add('"',' ');
           end;
           inc(U); // points to next value
@@ -26031,8 +26041,7 @@ var Zip: TZipWriteToStream;
     content: RawUTF8;
     W: TTextWriter;
     U: PPUTF8Char;
-    R,F: integer;
-    fieldType: TSQLDBFieldTypeDynArray;
+    r,f: integer;
 begin
   Dest := TRawByteStringStream.Create;
   try
@@ -26056,15 +26065,11 @@ begin
               InitFieldNames;
             if not Assigned(fFieldType) then
               InitFieldTypes;
-            SetLength(fieldType,FieldCount);
-            for f := 0 to FieldCount-1 do
-              with fFieldType[F] do
-                fieldType[f] := SQLFieldTypeToDBField(ContentType,ContentTypeInfo);
           end;
           // write column names
           W.AddShort('<table:table-row>');
           U := pointer(fResults);
-          for F := 1 to FieldCount do begin
+          for f := 1 to FieldCount do begin
             W.AddShort('<table:table-cell office:value-type="string"><text:p>');
             W.AddXmlEscape(U^);
             W.AddShort('</text:p></table:table-cell>');
@@ -26072,31 +26077,31 @@ begin
           end;
           W.AddShort('</table:table-row>');
           // and values
-          for R := 1 to fRowCount do begin
+          for r := 1 to fRowCount do begin
             W.AddShort('<table:table-row>');
             if withColumnTypes then begin
-              for F := 0 to FieldCount-1 do begin
+              for f := 0 to FieldCount-1 do begin
                 W.AddShort('<table:table-cell office:value-type="');
-                case fieldType[F] of
-                  ftInt64, ftDouble, ftCurrency: begin
+                case fFieldType[f].ContentDB of
+                  ftInt64,ftDouble,ftCurrency: begin
                     W.AddShort('float" office:value="');
                     W.AddXmlEscape(U^);
                   end;
                   ftDate: begin
-                   W.AddShort('date" office:date-value="');
-                   W.AddXmlEscape(U^);
+                    W.AddShort('date" office:date-value="');
+                    W.AddXmlEscape(U^);
                   end;
                 else //ftUnknown, ftNull, ftUTF8, ftBlob:
                   W.AddShort('string');
                 end;
                 W.AddShort('"><text:p>');
-                if fieldType[F] in [ftUnknown, ftUTF8, ftBlob] then
+                if fFieldType[f].ContentDB in [ftUnknown, ftUTF8, ftBlob] then
                   W.AddXmlEscape(U^);
                 W.AddShort('</text:p></table:table-cell>');
                 inc(U); // points to next value
               end;
             end else
-              for F := 0 to FieldCount-1 do begin
+              for f := 0 to FieldCount-1 do begin
                 W.AddShort('<table:table-cell office:value-type="string"><text:p>');
                 W.AddXmlEscape(U^);
                 W.AddShort('</text:p></table:table-cell>');
@@ -27226,7 +27231,7 @@ var U: PPUTF8Char;
     Search: PAnsiChar;
     UpperUnicode: RawUnicode;
     UpperUnicodeLen: integer;
-    info: TSQLTableFieldType;
+    info: PSQLTableFieldType;
     Val64: Int64;
     ValTimeLog: TTimelogBits absolute Val64;
     i,err: integer;
@@ -27421,7 +27426,7 @@ end;
 
 procedure TSQLTable.GetVariant(Row,Field: integer; var result: variant);
 var aType: TSQLFieldType;
-    info: TSQLTableFieldType;
+    info: PSQLTableFieldType;
 begin
   if Row=0 then // Field Name
     RawUTF8ToVariant(GetU(0,Field),result) else begin
@@ -27447,7 +27452,7 @@ end;
 
 function TSQLTable.ExpandAsString(Row, Field: integer; Client: TObject;
   out Text: string; const CustomFormat: string): TSQLFieldType;
-var info: TSQLTableFieldType;
+var info: PSQLTableFieldType;
     err: integer;
     Value: Int64;
     ValueTimeLog: TTimeLogBits absolute Value;
@@ -27512,10 +27517,11 @@ IsDateTime:
       // not an integer -> to be displayed as sftUTF8Text
       result := sftUTF8Text else
     case result of
-      sftEnumerate: begin
-        Text := PEnumType(info.ContentTypeInfo)^.GetCaption(Value);
-        exit;
-      end;
+      sftEnumerate:
+        if info.ContentTypeInfo<>nil then begin
+          Text := PEnumType(info.ContentTypeInfo)^.GetCaption(Value);
+          exit;
+        end;
       sftTimeLog, sftModTime, sftCreateTime:
         goto IsDateTime;
       sftUnixTime: begin
@@ -28585,7 +28591,7 @@ end;
 procedure TSQLTableWritable.Join(From: TSQLTable; const FromKeyField, KeyField: RawUTF8);
 var fk,dk,f,i,k,ndx: integer;
     n,fn: RawUTF8;
-    info: TSQLTableFieldType;
+    info: PSQLTableFieldType;
     new: TIntegerDynArray;
 begin
   dk := FieldIndexExisting(KeyField);
@@ -28609,7 +28615,7 @@ begin
           i := AddField(fn);
           if i>=length(fFieldType) then
             SetLength(fFieldType,i+1);
-          fFieldType[i] := info;
+          fFieldType[i] := info^;
         end;
       new[f] := i;
     end;
@@ -50507,10 +50513,6 @@ begin
     end;
   result := nil;
 end;
-
-const
-  DBTOFIELDTYPE: array[TSQLDBFieldType] of TSQLFieldType  = (sftUnknown,
-    sftUnknown,sftInteger,sftFloat,sftCurrency,sftDateTime,sftUTF8Text,sftBlob);
 
 function TSQLRecordProperties.SQLFieldTypeToSQL(FieldIndex: integer): RawUTF8;
 const
