@@ -234,9 +234,9 @@
   // -> could be disabled to force external .so/.dll linking
   {$ifdef MSWINDOWS}
   {$ifdef CPUX86}
-    {$define FPCSQLITE3STATIC} // we supply Win32 .obj
+    {$define FPCSQLITE3STATIC} // we supply Win32 .o
   {$else}
-    {$define FPCSQLITE3STATIC} // we supply Win64 .o (compiled with -O1)
+    {.$define FPCSQLITE3STATIC} // Win64 .o are buggy (even compiled with -O1)
   {$endif}
   {$endif}
   {$ifdef LINUX}

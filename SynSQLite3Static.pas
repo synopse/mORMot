@@ -1,4 +1,4 @@
-/// SQLite3 3.21.0 Database engine - statically linked for Windows/Linux 32 bit
+/// SQLite3 3.22.0 Database engine - statically linked for Windows/Linux 32 bit
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynSQLite3Static;
@@ -48,7 +48,7 @@ unit SynSQLite3Static;
 
 
 
-    Statically linked SQLite3 3.21.0 engine
+    Statically linked SQLite3 3.22.0 engine
    *****************************************
 
   To be declared in your project uses clause:  will fill SynSQlite3.sqlite3
@@ -75,7 +75,7 @@ unit SynSQLite3Static;
 
   Version 1.18
   - initial revision, extracted from SynSQLite3.pas unit
-  - updated SQLite3 engine to latest version 3.21.0
+  - updated SQLite3 engine to latest version 3.22.0
   - now all sqlite3_*() API calls are accessible via sqlite3.*()
   - our custom file encryption is now called via sqlite3.key() - i.e. official
     SQLite Encryption Extension (SEE) sqlite3_key() API
@@ -308,7 +308,18 @@ begin
   result := ln(x);
 end;
 
+{$ifdef MSWINDOWS}
+{$ifdef CPUX86} // not a compiler intrinsic on x86
+function _InterlockedCompareExchange(var Dest: longint; New,Comp: longint): longint; stdcall;
+  [public, alias: '_InterlockedCompareExchange@12'];
+begin
+  result := InterlockedCompareExchange(Dest,New,Comp);
+end;
+{$endif CPUX86}
+{$endif MSWINDOWS}
+
 {$ifdef Darwin}
+
 function moddi3(num,den:int64):int64; cdecl; [public, alias: '___moddi3'];
 begin
  result := num mod den;
@@ -512,6 +523,28 @@ function strcmp(p1,p2: PAnsiChar): integer; cdecl; { always cdecl }
 // a fast full pascal version of the standard C library function
 begin // called only by some obscure FTS3 functions (normal code use dedicated functions)
   result := SynCommons.StrComp(p1,p2);
+end;
+
+function strcspn(p1,p2: PAnsiChar): integer; cdecl;
+  {$ifdef FPC}public name{$ifdef CPU64}'strcspn'{$else}'_strcspn'{$endif};{$endif}
+var s: PAnsiChar;
+    c: AnsiChar;
+begin // span the complement of string p2
+  result := 0;
+  repeat
+    c := p1[result];
+    if c=#0 then
+      break;
+    s := p2;
+    repeat
+      if s^=c then // stop as soon as we find any character from p2
+        exit else
+      if s^=#0 then
+        break else
+        inc(s);
+    until false;
+    inc(result);
+  until false;
 end;
 
 function memcmp(p1, p2: pByte; Size: integer): integer; cdecl; { always cdecl }
@@ -1330,7 +1363,7 @@ function sqlite3_trace_v2(DB: TSQLite3DB; Mask: integer; Callback: TSQLTraceCall
 
 const
   // error message if linked sqlite3.obj does not match this
-  EXPECTED_SQLITE3_VERSION = '3.21.0';
+  EXPECTED_SQLITE3_VERSION = '3.22.0';
   
 constructor TSQLite3LibraryStatic.Create;
 var error: RawUTF8;
@@ -1439,7 +1472,7 @@ begin
   {$endif}
   sqlite3_initialize;
   inherited Create; // set fVersionNumber/fVersionText
-  if fVersionText=EXPECTED_SQLITE3_VERSION then
+  if (EXPECTED_SQLITE3_VERSION='') or (fVersionText=EXPECTED_SQLITE3_VERSION) then
     exit;
   FormatUTF8('Static sqlite3.obj as included within % is outdated!'#13+
     'Linked version is % whereas the current/expected is '+EXPECTED_SQLITE3_VERSION+'.'#13#13+

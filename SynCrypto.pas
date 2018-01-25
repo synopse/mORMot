@@ -3938,8 +3938,6 @@ end;
         {$define SHA512_X64} // external sha512_sse4 for win64/lin64
       {$endif}
     {$else}
-      {$define USEAESNI}
-      {$define USEAESNI32}
       {$ifdef MSWINDOWS}
         {$define SHA512_X86} // external sha512-x86.obj/.o
       {$endif}
@@ -3947,6 +3945,13 @@ end;
         {$ifdef LINUX}
           {$define SHA512_X86} // external linux32/sha512-x86.o
         {$endif}
+        {$ifdef DARWIN}
+          {$define AES_PASCAL} // x86 AES asm below is not PIC-safe
+        {$endif DARWIN}
+        {$ifndef AES_PASCAL}
+           {$define USEAESNI}
+          {$define USEAESNI32}
+        {$endif AES_PASCAL}
       {$endif FPC}
     {$endif}
   {$else}
