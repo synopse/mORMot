@@ -1,7 +1,8 @@
 @rem Use MINGW to compile our version of sqlite3.c amalgation file for FPC compatibility
 
 set mingwvers=5.2.0
-set mingw=c:\progs\mingw\i686-%mingwvers%-posix-dwarf-rt_v4-rev0\mingw32
+ret set mingw=c:\progs\mingw\i686-%mingwvers%-posix-dwarf-rt_v4-rev0\mingw32
+set mingw=c:\progs\msys64\mingw32
 
 set path=%path%;%mingw%\bin
 

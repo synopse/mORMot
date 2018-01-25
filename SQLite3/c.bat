@@ -5,8 +5,8 @@ attrib -r sqlite3.obj
 del sqlite3fts3.obj
 del sqlite3.obj
 
-set bcc=\dev\bccXE7
-rem set bcc=d:\dev\bcc101
+rem set bcc=\dev\bccXE7
+set bcc=d:\dev\bcc
 
 %bcc%\bin\bcc32 -6 -O2 -c -d -DSQLITE_ENABLE_FTS3 -u- sqlite3.c
 copy sqlite3.obj sqlite3fts3.obj
