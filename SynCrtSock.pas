@@ -1810,6 +1810,8 @@ type
     fTCPPrefix: SockString;
     fSock: TCrtSocket;
     fThreadRespClass: THttpServerRespClass;
+	// This allows to override thread pool in a descendants
+    function CreateThreadPool(ServerThreadPoolCount: integer): TSynThreadPoolTHttpServer; virtual;
     // this overridden version will return e.g. 'Winsock 2.514'
     function GetAPIVersion: string; override;
     /// server main loop - don't change directly
@@ -5302,10 +5304,15 @@ begin
   if fThreadRespClass=nil then
     fThreadRespClass := THttpServerResp;
   if ServerThreadPoolCount>0 then begin
-    fThreadPool := TSynThreadPoolTHttpServer.Create(self,ServerThreadPoolCount);
+    fThreadPool := CreateThreadPool(ServerThreadPoolCount);
     fThreadPoolPush := fThreadPool.Push;
   end;
   inherited Create(false,OnStart,OnStop,ProcessName);
+end;
+
+function THttpServer.CreateThreadPool(ServerThreadPoolCount: integer): TSynThreadPoolTHttpServer;
+begin
+  Result := TSynThreadPoolTHttpServer.Create(self,ServerThreadPoolCount);
 end;
 
 function THttpServer.GetAPIVersion: string;
