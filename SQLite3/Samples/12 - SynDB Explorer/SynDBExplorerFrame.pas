@@ -568,7 +568,7 @@ function TDBExplorerFrame.GridValue(Row, Col: integer): RawUTF8;
 begin
   result := fGrid.Table.GetU(Row,Col);
   if Row>0 then
-  case fGrid.Table.FieldType(Col,nil) of
+  case fGrid.Table.FieldType(Col) of
   sftAnsiText, sftUTF8Text, sftObject:
     result := QuotedStr(result);
   sftDateTime, sftDateTimeMS:

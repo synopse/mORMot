@@ -1911,7 +1911,7 @@ type
 
   /// a generic wrapper object to handle digital HMAC-SHA-2/SHA-3 signatures
   // - used e.g. to implement TJWTSynSignerAbstract
-  TSynSigner = object
+  TSynSigner = {$ifndef UNICODE}object{$else}record{$endif}
   private
     ctxt: packed array[1..SHA3ContextSize] of byte; // enough space for all
     fSignatureSize: integer;
@@ -1956,7 +1956,7 @@ type
   // - as used e.g. by HashFile/HashFull functions
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance
-  TSynHasher = object
+  TSynHasher = {$ifndef UNICODE}object{$else}record{$endif}
   private
     fAlgo: THashAlgo;
     ctxt: array[1..SHA3ContextSize] of byte; // enough space for all algorithms
@@ -7613,7 +7613,8 @@ const
     QWord($8000000000008080), QWord($0000000080000001), QWord($8000000080008008));
 
 type
-  TSHA3Context = object
+  TSHA3Context = {$ifndef UNICODE}object{$else}record{$endif}
+  public
     State: packed array[0..cKeccakPermutationSizeInBytes-1] of byte;
     DataQueue: packed array[0..cKeccakMaximumRateInBytes-1] of byte;
     Algo: TSHA3Algo;
@@ -11882,7 +11883,7 @@ type
   HCRYPTKEY = pointer;
   HCRYPTHASH = pointer;
 
-  TCryptLibrary = object
+  TCryptLibrary = {$ifndef UNICODE}object{$else}record{$endif}
   public
     AcquireContextA: function(var phProv: HCRYPTPROV; pszContainer: PAnsiChar;
       pszProvider: PAnsiChar; dwProvType: DWORD; dwFlags: DWORD): BOOL; stdcall;
@@ -11897,10 +11898,9 @@ type
     Decrypt: function(hKey: HCRYPTKEY; hHash: HCRYPTHASH; Final: BOOL;
       dwFlags: DWORD; pbData: pointer; var pdwDataLen: DWORD): BOOL; stdcall;
     GenRandom: function(hProv: HCRYPTPROV; dwLen: DWORD; pbBuffer: Pointer): BOOL; stdcall;
-    function Available: boolean;
-  protected
     Tested: boolean;
     Handle: THandle;
+    function Available: boolean;
   end;
 
 const

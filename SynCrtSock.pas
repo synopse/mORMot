@@ -409,7 +409,7 @@ type
     fBytesIn: Int64;
     fBytesOut: Int64;
     fSocketLayer: TCrtSocketLayer;
-    fSockInEof: boolean;
+    fSockInEof, fTLS: boolean;
     // updated by every SockSend() call
     fSndBuf: SockString;
     fSndBufLen: integer;
@@ -1810,6 +1810,8 @@ type
     fTCPPrefix: SockString;
     fSock: TCrtSocket;
     fThreadRespClass: THttpServerRespClass;
+	// This allows to override thread pool in a descendants
+    function CreateThreadPool(ServerThreadPoolCount: integer): TSynThreadPoolTHttpServer; virtual;
     // this overridden version will return e.g. 'Winsock 2.514'
     function GetAPIVersion: string; override;
     /// server main loop - don't change directly
@@ -4275,6 +4277,7 @@ begin
       {$else}
       raise ECrtSocket.Create('Unsupported');
       {$endif MSWINDOWS}
+      fTLS := true;
     except
       on E: Exception do
         raise ECrtSocket.CreateFmt('OpenBind(%s:%s): aTLS failed [%s %s]',
@@ -4845,7 +4848,7 @@ begin
     aURL := '/'+url else // need valid url according to the HTTP/1.1 RFC
     aURL := url;
   SockSend([method,' ',aURL,' HTTP/1.1']);
-  if Port='80' then
+  if Port=DEFAULT_PORT[fTLS] then
     SockSend(['Host: ',Server]) else
     SockSend(['Host: ',Server,':',Port]);
   SockSend(['Accept: */*'#13#10'User-Agent: ',UserAgent]);
@@ -5301,10 +5304,15 @@ begin
   if fThreadRespClass=nil then
     fThreadRespClass := THttpServerResp;
   if ServerThreadPoolCount>0 then begin
-    fThreadPool := TSynThreadPoolTHttpServer.Create(self,ServerThreadPoolCount);
+    fThreadPool := CreateThreadPool(ServerThreadPoolCount);
     fThreadPoolPush := fThreadPool.Push;
   end;
   inherited Create(false,OnStart,OnStop,ProcessName);
+end;
+
+function THttpServer.CreateThreadPool(ServerThreadPoolCount: integer): TSynThreadPoolTHttpServer;
+begin
+  Result := TSynThreadPoolTHttpServer.Create(self,ServerThreadPoolCount);
 end;
 
 function THttpServer.GetAPIVersion: string;
@@ -5390,16 +5398,20 @@ begin
         // use thread pool to process the request header, and probably its body
         if not fThreadPoolPush(pointer(ClientSock)) then begin
           // returned false if there is no idle thread in the pool
-          for i := 1 to 1500 do begin
+          i := 1;
+          repeat
             inc(fThreadPoolContentionCount);
             SleepHiRes(20); // wait a little until a thread is available
             if Terminated then
+              exit; // get out of Execute method.
+            if i>=1500 then begin
+              // could not acquire thread after 1500*20 = 30 seconds timeout
+              inc(fThreadPoolContentionAbortCount);
+              DirectShutdown(ClientSock);
               break;
-            if fThreadPoolPush(pointer(ClientSock)) then
-              exit; // the thread pool acquired the client sock
-          end;
-          inc(fThreadPoolContentionAbortCount);
-          DirectShutdown(ClientSock); // 1500*20 = 30 seconds timeout
+            end;
+            Inc(i);
+          until fThreadPoolPush(pointer(ClientSock)); // the thread pool acquired the client sock
         end;
       end else
         // default implementation creates one thread for each incoming socket
@@ -7398,7 +7410,7 @@ function RegURL(aRoot, aPort: SockString; Https: boolean;
 const Prefix: array[boolean] of SockString = ('http://','https://');
 begin
   if aPort='' then
-    aPort := '80';
+    aPort := DEFAULT_PORT[Https];
   aRoot := trim(aRoot);
   aDomainName := trim(aDomainName);
   if aDomainName='' then begin
