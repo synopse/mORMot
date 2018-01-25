@@ -5778,8 +5778,8 @@ begin
   if fHandle=0 then
   {$else}
     {$ifdef BSDNOTDARWIN}
-    fHandle := dlopen(PChar(LibraryName),0);
-    if fHandle=nil then
+    fHandle := TLibHandle(dlopen(PChar(LibraryName),0));
+    if fHandle=TLibHandle(nil) then
     {$else}
     fHandle := LoadLibrary({$ifndef FPC}pointer{$endif}(LibraryName));
     if fHandle=0 then
@@ -5796,7 +5796,7 @@ begin
      not Assigned(prepare_v2) or not Assigned(create_module_v2) then begin
     {$ifdef BSDNOTDARWIN}
     dlclose(fHandle);
-    fHandle := nil;
+    fHandle := TLibHandle(nil);
     {$else}
     FreeLibrary(fHandle);
     fHandle := 0;
@@ -5812,7 +5812,7 @@ end;
 destructor TSQLite3LibraryDynamic.Destroy;
 begin
   {$ifdef BSDNOTDARWIN}
-  if fHandle<>nil then
+  if fHandle<>TLibHandle(nil) then
     dlclose(fHandle);
   {$else}
   if fHandle<>0 then
