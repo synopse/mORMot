@@ -1847,7 +1847,7 @@ type
   published
     /// flag to disable HTTP/1.1 keep alive features and fall back to
     // HTTP/1.0 compatibility
-    // Only threads from thread pool will be used to process requests
+    // - only threads from thread pool will be used to process requests
     // when this flag set to true
     property DisableKeepAliveSupport: boolean read fDisableKeepAliveSupport;
     /// will contain the total number of connection to the server
