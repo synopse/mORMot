@@ -987,11 +987,12 @@ type
     // - note that this constructor will not register any protocol, so is
     // useless until you execute Protocols.Add()
     // - in the current implementation, the ServerThreadPoolCount parameter will
-    // be ignored, and two threads will handle shortliving HTTP/1.0
-    // "connection: close" requests, and one thread will be maintained per
-    // keep-alive/websockets client
+    // use two threads by default to handle shortliving HTTP/1.0 "connection: close"
+    // requests, and one thread will be maintained per keep-alive/websockets client
+    // - by design, the KeepAliveTimeOut=0 value is ignored with this server
     constructor Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
-      const ProcessName: SockString; ServerThreadPoolCount: integer=0); override;
+      const ProcessName: SockString; ServerThreadPoolCount: integer=2;
+      KeepAliveTimeOut: integer=3000); override;
     /// close the server
     destructor Destroy; override;
     /// will send a given frame to all connected clients
@@ -2790,7 +2791,7 @@ end;
 { TWebSocketServer }
 
 constructor TWebSocketServer.Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
-  const ProcessName: SockString; ServerThreadPoolCount: integer);
+  const ProcessName: SockString; ServerThreadPoolCount, KeepAliveTimeOut: integer);
 begin
   fThreadRespClass := TWebSocketServerResp;
   fWebSocketConnections := TObjectListLocked.Create(false);
@@ -2798,7 +2799,7 @@ begin
   fSettings.SetDefaults;
   fSettings.HeartbeatDelay := 20000;
   fCanNotifyCallback := true;
-  inherited Create(aPort,OnStart,OnStop,ProcessName,2); // 2 threads for HTTP/1.0
+  inherited Create(aPort,OnStart,OnStop,ProcessName,ServerThreadPoolCount,KeepAliveTimeOut);
 end;
 
 function TWebSocketServer.WebSocketProcessUpgrade(ClientSock: THttpServerSocket;

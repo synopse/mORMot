@@ -1793,17 +1793,18 @@ type
   // - a Thread Pool is used internaly to speed up HTTP/1.0 connections - a
   // typical use, under Linux, is to run this class behind a NGINX frontend,
   // configured as https reverse proxy, leaving default "proxy_http_version 1.0"
-  // and "proxy_request_buffering on" options for best performance
-  // - it will trigger the Windows firewall popup UAC window at first run
-  // - don't forget to use Free procedure when you are finished
+  // and "proxy_request_buffering on" options for best performance, and
+  // setting KeepAliveTimeOut=0 in the THttpServer.Create constructor
+  // - under windows, will trigger the firewall UAC popup at first run
+  // - don't forget to use Free method when you are finished
   THttpServer = class(THttpServerGeneric)
   protected
-    fDisableKeepAliveSupport: boolean;
     /// used to protect Process() call
     fProcessCS: TRTLCriticalSection;
     fThreadPoolPush: TOnThreadPoolSocketPush;
-    fThreadPoolContentionCount: cardinal;
+    fThreadPoolContentionTime: cardinal;
     fThreadPoolContentionAbortCount: cardinal;
+    fThreadPoolContentionAbortDelay: cardinal;
     fThreadPool: TSynThreadPoolTHttpServer;
     fInternalHttpServerRespList: TList;
     fServerConnectionCount: cardinal;
@@ -1833,9 +1834,10 @@ type
     // incoming connections (default is 32, which may be sufficient for most
     // cases, maximum is 256) - if you set 0, the thread pool will be disabled
     // and one thread will be created for any incoming connection
+    // - you can also tune (or disable with 0) HTTP/1.1 keep alive delay                             
     constructor Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
       const ProcessName: SockString; ServerThreadPoolCount: integer=32;
-      const aDisableKeepAliveSupport: boolean = false); reintroduce; virtual;
+      KeepAliveTimeOut: integer=3000); reintroduce; virtual;
     /// release all memory and handlers
     destructor Destroy; override;
     /// access to the main server low-level Socket
@@ -1845,17 +1847,15 @@ type
     // a THttpServerResp thread is created for handling this THttpServerSocket
     property Sock: TCrtSocket read fSock;
   published
-    /// flag to disable HTTP/1.1 keep alive features and fall back to
-    // HTTP/1.0 compatibility
-    // - only threads from thread pool will be used to process requests
-    // when this flag set to true
-    property DisableKeepAliveSupport: boolean read fDisableKeepAliveSupport;
-    /// will contain the total number of connection to the server
+    /// will contain the total number of connections to the server
     // - it's the global count since the server started
     property ServerConnectionCount: cardinal
       read fServerConnectionCount write fServerConnectionCount;
-    /// time, in milliseconds, for the HTTP.1/1 connections to be kept alive;
-    // default is 3000 ms
+    /// time, in milliseconds, for the HTTP/1.1 connections to be kept alive
+    // - default is 3000 ms
+    // - setting 0 here (or in KeepAliveTimeOut constructor parameter) will
+    // disable keep-alive, and fallback to HTTP.1/0 for all incoming requests
+    // (may be a good idea e.g. behind a NGINX reverse proxy)
     // - see THttpApiServer.SetTimeOutLimits(aIdleConnection) parameter
     property ServerKeepAliveTimeOut: cardinal
       read fServerKeepAliveTimeOut write fServerKeepAliveTimeOut;
@@ -1870,13 +1870,19 @@ type
     /// the associated thread pool
     // - may be nil if ServerThreadPoolCount was 0 on constructor
     property ThreadPool: TSynThreadPoolTHttpServer read fThreadPool;
-    /// number of times there was no availibility in the internal thread pool
-    // to handle an incoming request
-    // - this won't make any error, but just delay for 20 ms and try again
-    property ThreadPoolContentionCount: cardinal read fThreadPoolContentionCount;
-    /// number of times there an incoming request is rejected due to overload
-    // - this is an error after 30 seconds of not any process availability
+    /// milliseconds spent waiting for an available thread in the pool
+    // - no available thread won't make any error at first, but try again until
+    // ThreadPoolContentionAbortDelay is reached and the incoming socket aborded
+    // - if this number is high, consider setting a higher number of threads,
+    // or profile and tune the Request method processing
+    property ThreadPoolContentionTime: cardinal read fThreadPoolContentionTime;
+    /// how many connections were rejected due to thread pool contention
+    // - disconnect the client socket after ThreadPoolContentionAbortDelay
+    // - any high number here requires code refactoring of Request method! :)
     property ThreadPoolContentionAbortCount: cardinal read fThreadPoolContentionAbortCount;
+    /// milliseconds delay to reject a connection due to thread pool contention
+    // - default is 5000, i.e. 5 seconds
+    property ThreadPoolContentionAbortDelay: cardinal read fThreadPoolContentionAbortDelay;
   end;
   {$M-}
 
@@ -5298,12 +5304,11 @@ end;
 
 constructor THttpServer.Create(const aPort: SockString; OnStart,
   OnStop: TNotifyThreadEvent; const ProcessName: SockString;
-  ServerThreadPoolCount: integer; const aDisableKeepAliveSupport: boolean);
+  ServerThreadPoolCount, KeepAliveTimeOut: integer);
 begin
   InitializeCriticalSection(fProcessCS);
   fSock := TCrtSocket.Bind(aPort); // BIND + LISTEN
-  ServerKeepAliveTimeOut := 3000; // HTTP.1/1 KeepAlive is 3 seconds by default
-  fDisableKeepAliveSupport := aDisableKeepAliveSupport;
+  fServerKeepAliveTimeOut := KeepAliveTimeOut; // 3 seconds by default
   fInternalHttpServerRespList := TList.Create;
   // event handlers set before inherited Create to be visible in childs
   fOnHttpThreadStart := OnStart;
@@ -5364,7 +5369,7 @@ var ClientSock: TSocket;
     {$ifdef MONOTHREAD}
     ClientCrtSock: THttpServerSocket;
     {$endif}
-    i: integer;
+    tix,starttix,aborttix: cardinal;
 begin
   // THttpServerGeneric thread preparation: launch any OnHttpThreadStart event
   NotifyThreadStart(self);
@@ -5398,22 +5403,30 @@ begin
       {$else}
       if Assigned(fThreadPoolPush) then begin
         // use thread pool to process the request header, and probably its body
-        i := 0;
-        while not fThreadPoolPush(pointer(ClientSock)) do begin
+        if not fThreadPoolPush(pointer(ClientSock)) then begin
           // returned false if there is no idle thread in the pool
-          inc(fThreadPoolContentionCount);
-          if i>=1500 then begin
-            // could not acquire thread after 1500*20 = 30 seconds timeout
+          tix := GetTickCount;
+          starttix := tix;
+          aborttix := tix+fThreadPoolContentionAbortDelay; // default 5 sec
+          repeat
+            if tix-starttix<50 then // wait for an available thread
+              SleepHiRes(1) else
+              SleepHiRes(10);
+            if Terminated then
+              break;
+            if fThreadPoolPush(pointer(ClientSock)) then begin
+              aborttix := 0; // thread pool acquired the client sock
+              break;
+            end;
+            tix := GetTickCount;
+          until Terminated or (tix>aborttix) or (tix<starttix);
+          dec(tix,starttix);
+          if integer(tix)>0 then
+            inc(fThreadPoolContentionTime,tix);
+          if aborttix<>0 then begin
             inc(fThreadPoolContentionAbortCount);
             DirectShutdown(ClientSock);
-            break;
           end;
-          SleepHiRes(20); // wait a little until a thread is available
-          if Terminated then begin
-            DirectShutdown(ClientSock);
-            exit; // get out of Execute method.
-          end;
-          Inc(i);
         end;
       end else
         // default implementation creates one thread for each incoming socket
@@ -5982,7 +5995,8 @@ begin
     P := pointer(Command);
     GetNextItem(P,' ',fMethod); // 'GET'
     GetNextItem(P,' ',fURL);    // '/path'
-    fKeepAliveClient := not fServer.DisableKeepAliveSupport and IdemPChar(P,'HTTP/1.1');
+    fKeepAliveClient := ((fServer=nil) or (fServer.ServerKeepAliveTimeOut>0)) and
+       IdemPChar(P,'HTTP/1.1');
     Content := '';
     // get headers and content
     GetHeader;
@@ -6331,7 +6345,7 @@ begin
     if ServerSock.GetRequest(false) then begin
       InterlockedIncrement(fHeaderProcessed);
       // connection and header seem valid -> process request further
-      if not fServer.DisableKeepAliveSupport and
+      if (fServer.ServerKeepAliveTimeOut>0) and
          (fServer.fInternalHttpServerRespList.Count<THREADPOOL_MAXWORKTHREADS) and
          (ServerSock.KeepAliveClient or
           (ServerSock.ContentLength>THREADPOOL_BIGBODYSIZE)) then begin
