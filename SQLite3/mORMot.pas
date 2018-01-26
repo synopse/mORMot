@@ -23265,9 +23265,11 @@ begin
   if Value=nil then
     da.Clear else
     try
-      if (fObjArray=nil) and Base64MagicCheckAndDecode(Value,tmp) then
-        da.LoadFrom(tmp.buf) else 
-        da.LoadFromJSON(tmp.Init(Value));
+      if not Base64MagicCheckAndDecode(Value,tmp) then
+        tmp.Init(Value);
+      if (fObjArray=nil) then
+        da.LoadFrom(tmp.buf) else
+        da.LoadFromJSON(tmp.buf);
     finally
       tmp.Done;
     end;
