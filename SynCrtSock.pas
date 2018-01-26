@@ -1798,6 +1798,7 @@ type
   // - don't forget to use Free procedure when you are finished
   THttpServer = class(THttpServerGeneric)
   protected
+    fDisableKeepAliveSupport: boolean;
     /// used to protect Process() call
     fProcessCS: TRTLCriticalSection;
     fThreadPoolPush: TOnThreadPoolSocketPush;
@@ -1833,7 +1834,8 @@ type
     // cases, maximum is 256) - if you set 0, the thread pool will be disabled
     // and one thread will be created for any incoming connection
     constructor Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
-      const ProcessName: SockString; ServerThreadPoolCount: integer=32); reintroduce; virtual;
+      const ProcessName: SockString; ServerThreadPoolCount: integer=32;
+      const aDisableKeepAliveSupport: boolean = false); reintroduce; virtual;
     /// release all memory and handlers
     destructor Destroy; override;
     /// access to the main server low-level Socket
@@ -1843,6 +1845,11 @@ type
     // a THttpServerResp thread is created for handling this THttpServerSocket
     property Sock: TCrtSocket read fSock;
   published
+    /// flag to disable HTTP/1.1 keep alive features and fall back to
+    // HTTP/1.0 compatibility
+    // - only threads from thread pool will be used to process requests
+    // when this flag set to true
+    property DisableKeepAliveSupport: boolean read fDisableKeepAliveSupport;
     /// will contain the total number of connection to the server
     // - it's the global count since the server started
     property ServerConnectionCount: cardinal
@@ -5289,12 +5296,14 @@ end;
 
 { THttpServer }
 
-constructor THttpServer.Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
-  const ProcessName: SockString; ServerThreadPoolCount: integer);
+constructor THttpServer.Create(const aPort: SockString; OnStart,
+  OnStop: TNotifyThreadEvent; const ProcessName: SockString;
+  ServerThreadPoolCount: integer; const aDisableKeepAliveSupport: boolean);
 begin
   InitializeCriticalSection(fProcessCS);
   fSock := TCrtSocket.Bind(aPort); // BIND + LISTEN
   ServerKeepAliveTimeOut := 3000; // HTTP.1/1 KeepAlive is 3 seconds by default
+  fDisableKeepAliveSupport := aDisableKeepAliveSupport;
   fInternalHttpServerRespList := TList.Create;
   // event handlers set before inherited Create to be visible in childs
   fOnHttpThreadStart := OnStart;
@@ -5389,18 +5398,22 @@ begin
       {$else}
       if Assigned(fThreadPoolPush) then begin
         // use thread pool to process the request header, and probably its body
-        if not fThreadPoolPush(pointer(ClientSock)) then begin
+        i := 0;
+        while not fThreadPoolPush(pointer(ClientSock)) do begin
           // returned false if there is no idle thread in the pool
-          for i := 1 to 1500 do begin
-            inc(fThreadPoolContentionCount);
-            SleepHiRes(20); // wait a little until a thread is available
-            if Terminated then
-              break;
-            if fThreadPoolPush(pointer(ClientSock)) then
-              exit; // the thread pool acquired the client sock
+          inc(fThreadPoolContentionCount);
+          if i>=1500 then begin
+            // could not acquire thread after 1500*20 = 30 seconds timeout
+            inc(fThreadPoolContentionAbortCount);
+            DirectShutdown(ClientSock);
+            break;
           end;
-          inc(fThreadPoolContentionAbortCount);
-          DirectShutdown(ClientSock); // 1500*20 = 30 seconds timeout
+          SleepHiRes(20); // wait a little until a thread is available
+          if Terminated then begin
+            DirectShutdown(ClientSock);
+            exit; // get out of Execute method.
+          end;
+          Inc(i);
         end;
       end else
         // default implementation creates one thread for each incoming socket
@@ -5969,7 +5982,7 @@ begin
     P := pointer(Command);
     GetNextItem(P,' ',fMethod); // 'GET'
     GetNextItem(P,' ',fURL);    // '/path'
-    fKeepAliveClient := IdemPChar(P,'HTTP/1.1');
+    fKeepAliveClient := not fServer.DisableKeepAliveSupport and IdemPChar(P,'HTTP/1.1');
     Content := '';
     // get headers and content
     GetHeader;
@@ -6318,7 +6331,8 @@ begin
     if ServerSock.GetRequest(false) then begin
       InterlockedIncrement(fHeaderProcessed);
       // connection and header seem valid -> process request further
-      if (fServer.fInternalHttpServerRespList.Count<THREADPOOL_MAXWORKTHREADS) and
+      if not fServer.DisableKeepAliveSupport and
+         (fServer.fInternalHttpServerRespList.Count<THREADPOOL_MAXWORKTHREADS) and
          (ServerSock.KeepAliveClient or
           (ServerSock.ContentLength>THREADPOOL_BIGBODYSIZE)) then begin
         // HTTP/1.1 Keep Alive (including WebSockets) or posted data > 1 MB
