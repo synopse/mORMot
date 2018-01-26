@@ -1783,6 +1783,15 @@ type
   // - should return false if there is no thread available in the pool
   TOnThreadPoolSocketPush = function(aClientSock: pointer): boolean of object;
 
+  /// event handler used by THttpServer.Process to send a local file
+  // when HTTP_RESP_STATICFILE content-type is returned by the service 
+  // - can be defined e.g. to use NGINX X-Accel-Redirect header
+  // - should return true if the Context has been modified to serve the file, or
+  // false so that the file will be manually read and sent from memory
+  // - any exception during process will be returned as a STATUS_NOTFOUND page
+  TOnHttpServerSendFile = function(Context: THttpServerRequest;
+    const LocalFileName: TFileName): boolean of object;
+
   /// main HTTP server Thread using the standard Sockets API (e.g. WinSock)
   // - bind to a port and listen to incoming requests
   // - assign this requests to THttpServerResp threads
@@ -1812,6 +1821,9 @@ type
     fTCPPrefix: SockString;
     fSock: TCrtSocket;
     fThreadRespClass: THttpServerRespClass;
+    fOnSendFile: TOnHttpServerSendFile;
+    fNginxSendFileFrom: TFileName;
+    function OnNginxAllowSend(Context: THttpServerRequest; const LocalFileName: TFileName): boolean;
     // this overridden version will return e.g. 'Winsock 2.514'
     function GetAPIVersion: string; override;
     /// server main loop - don't change directly
@@ -1838,6 +1850,17 @@ type
     constructor Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
       const ProcessName: SockString; ServerThreadPoolCount: integer=32;
       KeepAliveTimeOut: integer=3000); reintroduce; virtual;
+    /// enable NGINX X-Accel internal redirection for HTTP_RESP_STATICFILE
+    // - will define internally a matching OnSendFile event handler
+    // - generating "X-Accel-Redirect: " header, trimming any supplied left
+    // case-sensitive file name prefix, e.g. with NginxSendFileFrom('/var/www'):
+    // $ # Will serve /var/www/protected_files/myfile.tar.gz
+    // $ # When passed URI /protected_files/myfile.tar.gz
+    // $ location /protected_files {
+    // $  internal;
+    // $  root /var/www;
+    // $ }
+    procedure NginxSendFileFrom(const FileNameLeftTrim: TFileName);
     /// release all memory and handlers
     destructor Destroy; override;
     /// access to the main server low-level Socket
@@ -1883,6 +1906,9 @@ type
     /// milliseconds delay to reject a connection due to thread pool contention
     // - default is 5000, i.e. 5 seconds
     property ThreadPoolContentionAbortDelay: cardinal read fThreadPoolContentionAbortDelay;
+    /// custom event handler used to send a local file for HTTP_RESP_STATICFILE
+    // - see also NginxSendFileFrom() method
+    property OnSendFile: TOnHttpServerSendFile read fOnSendFile write fOnSendFile;
   end;
   {$M-}
 
@@ -5360,6 +5386,28 @@ begin
   DeleteCriticalSection(fProcessCS);
 end;
 
+function THttpServer.OnNginxAllowSend(Context: THttpServerRequest;
+  const LocalFileName: TFileName): boolean;
+var n,i: integer;
+begin
+  result := false;
+  n := length(fNginxSendFileFrom);
+  for i := 1 to n do
+    if LocalFileName[i]<>fNginxSendFileFrom[i] then
+      exit; // no match -> manual send
+  delete(Context.fOutContent,1,n); // remove e.g. '/var/www'
+  Context.OutCustomHeaders := Trim(Context.OutCustomHeaders+#13#10+
+    'X-Accel-Redirect: '+Context.OutContent);
+  Context.OutContent := '';
+  result := true;
+end;
+
+procedure THttpServer.NginxSendFileFrom(const FileNameLeftTrim: TFileName);
+begin
+  fNginxSendFileFrom := FileNameLeftTrim;
+  fOnSendFile := OnNginxAllowSend;
+end;
+
 {.$define MONOTHREAD}
 // define this not to create a thread at every connection (not recommended)
 
@@ -5451,25 +5499,25 @@ end;
 
 procedure THttpServer.Process(ClientSock: THttpServerSocket;
   ConnectionID: integer; ConnectionThread: TSynThread);
-var Context: THttpServerRequest;
+var ctxt: THttpServerRequest;
     P: PAnsiChar;
     Code: cardinal;
     s, reason: SockString;
-    staticfn, ErrorMsg: string;
-    FileToSend: TFileStream;
+    fn, ErrorMsg: string;
+    fs: TFileStream;
 begin
   if (ClientSock=nil) or (ClientSock.Headers=nil) then
     // we didn't get the request = socket read error
     exit; // -> send will probably fail -> nothing to send back
   if Terminated then
     exit;
-  Context := THttpServerRequest.Create(self,ConnectionID,ConnectionThread);
+  ctxt := THttpServerRequest.Create(self,ConnectionID,ConnectionThread);
   try
     // calc answer
     with ClientSock do
-      Context.Prepare(URL,Method,HeaderGetText,Content,ContentType,'');
+      ctxt.Prepare(URL,Method,HeaderGetText,Content,ContentType,'');
     try
-      Code := Request(Context);
+      Code := Request(ctxt);
     except
       on E: Exception do begin
         ErrorMsg := E.ClassName+': '+E.Message;
@@ -5479,33 +5527,35 @@ begin
     if Terminated then
       exit;
     // handle case of direct sending of static file (as with http.sys)
-    if (Context.OutContent<>'') and (Context.OutContentType=HTTP_RESP_STATICFILE) then
+    if (ctxt.OutContent<>'') and (ctxt.OutContentType=HTTP_RESP_STATICFILE) then
       try
-        staticfn := {$ifdef UNICODE}UTF8ToUnicodeString{$else}Utf8ToAnsi{$endif}(Context.OutContent);
-        FileToSend := TFileStream.Create(staticfn,fmOpenRead or fmShareDenyNone);
-        try
-          SetString(Context.fOutContent,nil,FileToSend.Size);
-          FileToSend.Read(Pointer(Context.fOutContent)^,length(Context.fOutContent));
-          Context.OutContentType := GetHeaderValue(Context.fOutCustomHeaders,'CONTENT-TYPE:',true);
-       finally
-          FileToSend.Free;
-        end;
+        ctxt.OutContentType := GetHeaderValue(ctxt.fOutCustomHeaders,'CONTENT-TYPE:',true);
+        fn := {$ifdef UNICODE}UTF8ToUnicodeString{$else}Utf8ToAnsi{$endif}(ctxt.OutContent);
+        if not Assigned(fOnSendFile) or not fOnSendFile(ctxt,fn) then begin
+          fs := TFileStream.Create(fn,fmOpenRead or fmShareDenyNone);
+          try
+            SetString(ctxt.fOutContent,nil,fs.Size);
+            fs.Read(Pointer(ctxt.fOutContent)^,length(ctxt.fOutContent));
+         finally
+            fs.Free;
+          end;
+         end;
       except
         on E: Exception do begin // error reading or sending file
          ErrorMsg := E.ClassName+': '+E.Message;
          Code := STATUS_NOTFOUND;
         end;
       end;
-    if Context.OutContentType=HTTP_RESP_NORESPONSE then
-      Context.OutContentType := ''; // true HTTP always expects a response
+    if ctxt.OutContentType=HTTP_RESP_NORESPONSE then
+      ctxt.OutContentType := ''; // true HTTP always expects a response
     // send response (multi-thread OK) at once
     if (Code<STATUS_SUCCESS) or (ClientSock.Headers=nil) then
       Code := STATUS_NOTFOUND;
     reason := StatusCodeToReason(Code);
     if ErrorMsg<>'' then begin
-      Context.OutCustomHeaders := '';
-      Context.OutContentType := 'text/html; charset=utf-8'; // create message to display
-      Context.OutContent := {$ifdef UNICODE}UTF8String{$else}UTF8Encode{$endif}(
+      ctxt.OutCustomHeaders := '';
+      ctxt.OutContentType := 'text/html; charset=utf-8'; // create message to display
+      ctxt.OutContent := {$ifdef UNICODE}UTF8String{$else}UTF8Encode{$endif}(
         format('<body style="font-family:verdana">'#13+
         '<h1>%s Server Error %d</h1><hr><p>HTTP %d %s<p>%s<p><small>%s',
         [ClassName,Code,Code,reason,HtmlEncodeString(ErrorMsg),fServerName]));
@@ -5518,7 +5568,7 @@ begin
       ClientSock.SockSend(['HTTP/1.0 ',Code,' ',reason]);
     // 2. send headers
     // 2.1. custom headers from Request() method
-    P := pointer(Context.fOutCustomHeaders);
+    P := pointer(ctxt.fOutCustomHeaders);
     while P<>nil do begin
       s := GetNextLine(P);
       if s<>'' then begin // no void line (means headers ending)
@@ -5531,7 +5581,7 @@ begin
     ClientSock.SockSend([
       {$ifndef NOXPOWEREDNAME}XPOWEREDNAME+': '+XPOWEREDVALUE+#13#10+{$endif}
       'Server: ',fServerName]);
-    ClientSock.CompressDataAndWriteHeaders(Context.OutContentType,Context.fOutContent);
+    ClientSock.CompressDataAndWriteHeaders(ctxt.OutContentType,ctxt.fOutContent);
     if ClientSock.KeepAliveClient then begin
       if ClientSock.fCompressAcceptEncoding<>'' then
         ClientSock.SockSend(ClientSock.fCompressAcceptEncoding);
@@ -5540,9 +5590,9 @@ begin
       ClientSock.SockSend; // headers must end with a void line
     ClientSock.SockSendFlush; // flush all pending data (i.e. headers) to network
     // 3. sent HTTP body content (if any)
-    if Context.OutContent<>'' then
+    if ctxt.OutContent<>'' then
       // direct send to socket (no CRLF at the end of data)
-      ClientSock.SndLow(pointer(Context.OutContent),length(Context.OutContent));
+      ClientSock.SndLow(pointer(ctxt.OutContent),length(ctxt.OutContent));
   finally
     if Sock<>nil then begin // add transfert stats to main socket
       EnterCriticalSection(fProcessCS);
@@ -5552,7 +5602,7 @@ begin
       ClientSock.fBytesIn := 0;
       ClientSock.fBytesOut := 0;
     end;
-    Context.Free;
+    ctxt.Free;
   end;
 end;
 
