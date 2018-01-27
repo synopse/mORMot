@@ -1822,7 +1822,7 @@ type
     fSock: TCrtSocket;
     fThreadRespClass: THttpServerRespClass;
     fOnSendFile: TOnHttpServerSendFile;
-    fNginxSendFileFrom: TFileName;
+    fNginxSendFileFrom: array of TFileName;
     function OnNginxAllowSend(Context: THttpServerRequest; const LocalFileName: TFileName): boolean;
     // this overridden version will return e.g. 'Winsock 2.514'
     function GetAPIVersion: string; override;
@@ -1860,6 +1860,7 @@ type
     // $  internal;
     // $  root /var/www;
     // $ }
+    // - call this method several times to register several folders
     procedure NginxSendFileFrom(const FileNameLeftTrim: TFileName);
     /// release all memory and handlers
     destructor Destroy; override;
@@ -5388,23 +5389,38 @@ end;
 
 function THttpServer.OnNginxAllowSend(Context: THttpServerRequest;
   const LocalFileName: TFileName): boolean;
-var n,i: integer;
+var n,i,f: integer;
+    folder: PSockString;
 begin
-  result := false;
-  n := length(fNginxSendFileFrom);
-  for i := 1 to n do
-    if LocalFileName[i]<>fNginxSendFileFrom[i] then
+  n := 0;
+  folder := pointer(fNginxSendFileFrom);
+  if LocalFileName<>'' then
+    for f := 1 to length(fNginxSendFileFrom) do begin
+      n := length(folder^);
+      for i := 1 to n do // case sensitive left search
+        if LocalFileName[i]<>folder^[i] then begin
+          n := 0;
+          break;
+        end;
+      if n<>0 then
+        break; // found matching folder
+      inc(folder);
+    end;
+  result := n<>0;
+  if not result then
       exit; // no match -> manual send
   delete(Context.fOutContent,1,n); // remove e.g. '/var/www'
   Context.OutCustomHeaders := Trim(Context.OutCustomHeaders+#13#10+
     'X-Accel-Redirect: '+Context.OutContent);
   Context.OutContent := '';
-  result := true;
 end;
 
 procedure THttpServer.NginxSendFileFrom(const FileNameLeftTrim: TFileName);
+var n: integer;
 begin
-  fNginxSendFileFrom := FileNameLeftTrim;
+  n := length(fNginxSendFileFrom);
+  SetLength(fNginxSendFileFrom,n+1);
+  fNginxSendFileFrom[n] := FileNameLeftTrim;
   fOnSendFile := OnNginxAllowSend;
 end;
 
