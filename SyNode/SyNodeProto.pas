@@ -423,12 +423,12 @@ begin
 
   obj_ := cx.NewRootedObject(cx.NewObject(nil));
   try
-    aParent.ptr.DefineUCProperty(cx, Pointer(s), Length(s), obj_.ptr.ToJSValue, JSPROP_ENUMERATE or JSPROP_PERMANENT or JSPROP_READONLY, nil, nil);
+    aParent.ptr.DefineUCProperty(cx, Pointer(s), Length(s), obj_.ptr.ToJSValue, JSPROP_ENUMERATE or JSPROP_PERMANENT, nil, nil);
     with ti^.EnumBaseType^ do begin
       for i := MinValue to MaxValue do begin
         s := UTF8ToSynUnicode(GetEnumNameTrimed(i));
         val.asInteger := i;
-        obj_.ptr.DefineUCProperty(cx, Pointer(s), Length(s), val, JSPROP_ENUMERATE or JSPROP_PERMANENT or JSPROP_READONLY, nil, nil);
+        obj_.ptr.DefineUCProperty(cx, Pointer(s), Length(s), val, JSPROP_ENUMERATE or JSPROP_PERMANENT, nil, nil);
       end;
     end;
   finally
