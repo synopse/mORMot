@@ -1812,6 +1812,7 @@ type
     fProcessCS: TRTLCriticalSection;
     fThreadPoolPush: TOnThreadPoolSocketPush;
     fThreadPoolContentionTime: cardinal;
+    fThreadPoolContentionCount: cardinal;
     fThreadPoolContentionAbortCount: cardinal;
     fThreadPoolContentionAbortDelay: cardinal;
     fThreadPool: TSynThreadPoolTHttpServer;
@@ -1900,13 +1901,22 @@ type
     // - if this number is high, consider setting a higher number of threads,
     // or profile and tune the Request method processing
     property ThreadPoolContentionTime: cardinal read fThreadPoolContentionTime;
+    /// how many time the process was waiting for an available thread in the pool
+    // - no available thread won't make any error at first, but try again until
+    // ThreadPoolContentionAbortDelay is reached and the incoming socket aborded
+    // - if this number is high, consider setting a higher number of threads,
+    // or profile and tune the Request method processing
+    // - use this property and ThreadPoolContentionTime to compute the
+    // average contention time
+    property ThreadPoolContentionCount: cardinal read fThreadPoolContentionCount;
     /// how many connections were rejected due to thread pool contention
     // - disconnect the client socket after ThreadPoolContentionAbortDelay
     // - any high number here requires code refactoring of Request method! :)
     property ThreadPoolContentionAbortCount: cardinal read fThreadPoolContentionAbortCount;
     /// milliseconds delay to reject a connection due to thread pool contention
     // - default is 5000, i.e. 5 seconds
-    property ThreadPoolContentionAbortDelay: cardinal read fThreadPoolContentionAbortDelay;
+    property ThreadPoolContentionAbortDelay: cardinal read fThreadPoolContentionAbortDelay
+      write fThreadPoolContentionAbortDelay;
     /// custom event handler used to send a local file for HTTP_RESP_STATICFILE
     // - see also NginxSendFileFrom() method
     property OnSendFile: TOnHttpServerSendFile read fOnSendFile write fOnSendFile;
@@ -5338,6 +5348,7 @@ begin
   InitializeCriticalSection(fProcessCS);
   fSock := TCrtSocket.Bind(aPort); // BIND + LISTEN
   fServerKeepAliveTimeOut := KeepAliveTimeOut; // 3 seconds by default
+  fThreadPoolContentionAbortDelay := 5000; // 5 seconds default
   fInternalHttpServerRespList := TList.Create;
   // event handlers set before inherited Create to be visible in childs
   fOnHttpThreadStart := OnStart;
@@ -5471,6 +5482,7 @@ begin
         // use thread pool to process the request header, and probably its body
         if not fThreadPoolPush(pointer(ClientSock)) then begin
           // returned false if there is no idle thread in the pool
+          inc(fThreadPoolContentionCount);
           tix := GetTickCount;
           starttix := tix;
           aborttix := tix+fThreadPoolContentionAbortDelay; // default 5 sec
