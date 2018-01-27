@@ -663,6 +663,8 @@ type
   protected
     function CreateShardDB(maxshard: Integer): TSQLRestServer;
   published
+    /// test the TSQLTableWritable table
+    procedure _TSQLTableWritable;
     /// validate RTREE virtual tables
     procedure _RTree;
     /// validate TSQLRestStorageShardDB add operation, with or without batch
@@ -10780,17 +10782,21 @@ begin
     '51A0C8018EC725F9B9F821D826FEEC4CAE8843066685522F1961D25935EAA39E'),@s1,sizeof(s1)));
   Check(ecdsa_verify(pu1,h1,si1));
   Check(ecdsa_verify(pu2,h2,si2));
+  FillZero(s2);
   Check(ecdh_shared_secret(pu1,pr2,s2));
   Check(IsEqual(s1,s2));
   Check(CompareMem(@s1,@s2,sizeof(s1)));
+  FillZero(s3);
   Check(ecdh_shared_secret(pu2,pr1,s3));
   Check(IsEqual(s1,s3));
   Check(CompareMem(@s1,@s3,sizeof(s1)));
   {$ifdef HASUINT64} // pascal (fallback) version
   Check(ecdsa_verify_pas(pu1,h1,si1));
   Check(ecdsa_verify_pas(pu2,h2,si2));
+  FillZero(s2);
   Check(ecdh_shared_secret_pas(pu1,pr2,s2));
   Check(IsEqual(s1,s2));
+  FillZero(s3);
   Check(ecdh_shared_secret_pas(pu2,pr1,s3));
   Check(IsEqual(s1,s3));
   {$endif}
@@ -11966,6 +11972,54 @@ end;
 procedure TTestSQLite3Engine._TRecordVersion;
 begin
   TestMasterSlaveRecordVersion(self,'.db3');
+end;
+
+procedure TTestMemoryBased._TSQLTableWritable;
+  procedure Test(intern: TRawUTF8Interning);
+  var s1,s2: TSQLTableJSON;
+      w: TSQLTableWritable;
+      f,r: integer;
+  begin
+    s1 := TSQLTableJSON.CreateFromTables([TSQLRecordPeople],'',JS);
+    s2 := TSQLTableJSON.CreateFromTables([TSQLRecordPeople],'',JS);
+    w := TSQLTableWritable.CreateFromTables([TSQLRecordPeople],'',JS);
+    try // merge the same data twice, and validate duplicated columns
+      w.NewValuesInterning := intern;
+      check(w.RowCount=s1.RowCount);
+      check(w.FieldCount=s1.FieldCount);
+      w.Join(s2,'rowid','ID'); // s2 will be sorted -> keep s1 untouched
+      check(w.RowCount=s1.RowCount);
+      check(w.FieldCount=s1.FieldCount*2-1);
+      for f := 0 to s1.FieldCount-1 do begin
+        check(w.FieldIndex(s1.FieldNames[f])=f);
+        if f>0 then // f=0='ID' is not duplicated
+          check(w.FieldIndex(s1.FieldNames[f]+'2')=f+s1.FieldCount-1);
+      end;
+      for r := 1 to w.RowCount do begin
+        for f := 0 to s1.FieldCount-1 do begin
+          check(StrComp(s1.Get(r,f),w.Get(r,f))=0);
+          if f>0 then
+            check(StrComp(s1.Get(r,f),w.Get(r,f+s1.FieldCount-1))=0);
+        end;
+      end;
+      if intern<>nil then
+        check(intern.Count=0);
+      for r := 0 to w.RowCount do
+        w.Update(r,1,UInt32ToUTF8(r and 127));
+      for r := 1 to w.RowCount do
+        check(w.GetAsInteger(r,1)=r and 127);
+      if intern<>nil then
+        check(intern.Count=128);
+    finally
+      s1.Free;
+      s2.Free;
+      w.Free;
+      intern.Free;
+    end;
+  end;
+begin
+  Test(nil);
+  Test(TRawUTF8Interning.Create);
 end;
 
 type
@@ -14703,27 +14757,27 @@ begin
   try
     J.SetFieldType('YearOfBirth',sftModTime);
     if JS<>'' then // avoid memory leak
-    with TSQLTableDB.Create(Demo,[],Req,true) do
-    try
-      Check(RowCount=J.RowCount);
-      Check(FieldCount=J.FieldCount);
-      SetFieldType('YearOfBirth',sftModTime);
-      for aR := 0 to RowCount do
-        for aF := 0 to FieldCount-1 do
-         if (aR>0) and (aF=3) then  // aF=3=Blob
-           Check(GetBlob(aR,aF)=J.GetBlob(aR,aF)) else begin
-           Check((GetW(aR,aF)=J.GetW(aR,aF)) and
-                (GetA(aR,aF)=J.GetA(aR,aF)) and
-                (length(GetW(aR,aF))shr 1=LengthW(aR,aF)),
-                Format('Get() in Row=%d Field=%d',[aR,aF]));
-            if (aR>0) and (aF>3) then begin
-              Check(GetDateTime(aR,af)=J.GetDateTime(aR,aF));
-              Check(GetAsDateTime(aR,af)=J.GetAsDateTime(aR,aF));
+      with TSQLTableDB.Create(Demo,[],Req,true) do
+      try
+        Check(RowCount=J.RowCount);
+        Check(FieldCount=J.FieldCount);
+        SetFieldType('YearOfBirth',sftModTime);
+        for aR := 0 to RowCount do
+          for aF := 0 to FieldCount-1 do
+           if (aR>0) and (aF=3) then  // aF=3=Blob
+             Check(GetBlob(aR,aF)=J.GetBlob(aR,aF)) else begin
+             Check((GetW(aR,aF)=J.GetW(aR,aF)) and
+                  (GetA(aR,aF)=J.GetA(aR,aF)) and
+                  (length(GetW(aR,aF))shr 1=LengthW(aR,aF)),
+                  Format('Get() in Row=%d Field=%d',[aR,aF]));
+              if (aR>0) and (aF>3) then begin
+                Check(GetDateTime(aR,af)=J.GetDateTime(aR,aF));
+                Check(GetAsDateTime(aR,af)=J.GetAsDateTime(aR,aF));
+              end;
             end;
-          end;
-    finally
-      Free;
-    end;
+      finally
+        Free;
+      end;
     Demo.Execute('VACUUM;');
     with TSQLTableDB.Create(Demo,[],Req,true) do // re-test after VACCUM
     try
@@ -14838,6 +14892,15 @@ begin
   finally
     J.Free;
   end;
+  if false then
+    with TSQLTableDB.Create(Demo,[TSQLRecordPeople],
+      'select id,FirstName,LastName,YearOfBirth,YearOfDeath from people',true) do
+    try
+      FileFromString(GetODSDocument(false),'false.ods');
+      FileFromString(GetODSDocument(true),'true.ods');
+    finally
+      Free;
+    end;
 end;
 
 {$ifdef UNICODE}

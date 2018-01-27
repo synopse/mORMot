@@ -107,7 +107,7 @@ uses
   {$endif}
   SynCommons,
   SynLog,
-  mORMot; // for TSynJsonFileSettings
+  mORMot; // for TSynJsonFileSettings (i.e. JSON serialization)
 
 {$ifdef MSWINDOWS}
 

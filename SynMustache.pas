@@ -283,6 +283,8 @@ type
     class procedure JSONQuote(const Value: variant; out result: variant);
     class procedure JSONQuoteURI(const Value: variant; out result: variant);
     class procedure WikiToHtml(const Value: variant; out result: variant);
+    class procedure Lower(const Value: variant; out result: variant);
+    class procedure Upper(const Value: variant; out result: variant);
     class procedure EnumTrim(const Value: variant; out result: variant);
     class procedure EnumTrimRight(const Value: variant; out result: variant);
     class procedure PowerOfTwo(const Value: variant; out result: variant);
@@ -337,7 +339,7 @@ type
     /// returns a list of most used static Expression Helpers
     // - registered helpers are DateTimeToText, DateToText, DateFmt, TimeLogToText,
     // BlobToBase64, JSONQuote, JSONQuoteURI, ToJSON, EnumTrim, EnumTrimRight,
-    // PowerOfTwo, Equals (expecting two parameters) and WikiToHtml
+    // Lower, Upper, PowerOfTwo, Equals (expecting two parameters) and WikiToHtml
     // - an additional #if helper is also registered, which would allow runtime
     // view logic, via = < > <= >= <> operators over two values:
     // $ {{#if .,"=",123}}  {{#if Total,">",1000}}  {{#if info,"<>",""}}
@@ -923,10 +925,10 @@ begin
     HelperAdd(HelpersStandardList,
       ['DateTimeToText','DateToText','DateFmt','TimeLogToText','JSONQuote','JSONQuoteURI',
        'ToJSON','WikiToHtml','BlobToBase64','EnumTrim','EnumTrimRight','PowerOfTwo',
-       'Equals','If','NewGUID','ExtractFileName'],
+       'Equals','If','NewGUID','ExtractFileName','Lower','Upper'],
       [DateTimeToText,DateToText,DateFmt,TimeLogToText,JSONQuote,JSONQuoteURI,
        ToJSON,WikiToHtml,BlobToBase64,EnumTrim,EnumTrimRight,PowerOfTwo,
-       Equals_,If_,NewGUID,ExtractFileName]);
+       Equals_,If_,NewGUID,ExtractFileName,Lower,Upper]);
   result := HelpersStandardList;
 end;
 
@@ -1095,10 +1097,19 @@ begin
   RawUTF8ToVariant(GUIDToRawUTF8(g),result);
 end;
 
-class procedure TSynMustache.ExtractFileName(const Value: variant;
-  out result: variant);
+class procedure TSynMustache.ExtractFileName(const Value: variant; out result: variant);
 begin
   result := SysUtils.ExtractFileName(Value);
+end;
+
+class procedure TSynMustache.Lower(const Value: variant; out result: variant);
+begin
+  result := SysUtils.LowerCase(Value);
+end;
+
+class procedure TSynMustache.Upper(const Value: variant; out result: variant);
+begin
+  result := SysUtils.UpperCase(Value);
 end;
 
 

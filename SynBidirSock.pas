@@ -987,11 +987,12 @@ type
     // - note that this constructor will not register any protocol, so is
     // useless until you execute Protocols.Add()
     // - in the current implementation, the ServerThreadPoolCount parameter will
-    // be ignored, and two threads will handle shortliving HTTP/1.0
-    // "connection: close" requests, and one thread will be maintained per
-    // keep-alive/websockets client
+    // use two threads by default to handle shortliving HTTP/1.0 "connection: close"
+    // requests, and one thread will be maintained per keep-alive/websockets client
+    // - by design, the KeepAliveTimeOut=0 value is ignored with this server
     constructor Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
-      const ProcessName: SockString; ServerThreadPoolCount: integer=0); override;
+      const ProcessName: SockString; ServerThreadPoolCount: integer=2;
+      KeepAliveTimeOut: integer=3000); override;
     /// close the server
     destructor Destroy; override;
     /// will send a given frame to all connected clients
@@ -1124,9 +1125,12 @@ type
     // - if aWebSocketsAJAX is TRUE, it will register the slower and less secure
     // TWebSocketProtocolJSON (to be used for AJAX debugging/test purposes only)
     // and aWebSocketsEncryptionKey/aWebSocketsCompression parameters won't be used
+    // - alternatively, you can specify your own custom TWebSocketProtocol instance
+    // (owned by this method and immediately released on error)
     // - will return '' on success, or an error message on failure
     function WebSocketsUpgrade(const aWebSocketsURI, aWebSocketsEncryptionKey: RawUTF8;
-      aWebSocketsAJAX: boolean=false; aWebSocketsCompression: boolean=true): RawUTF8;
+      aWebSocketsAJAX: boolean=false; aWebSocketsCompression: boolean=true;
+      aProtocol: TWebSocketProtocol=nil): RawUTF8;
     /// the settings to be used for WebSockets process
     // - note that those parameters won't be propagated to existing connections
     // - defined as a pointer so that you may be able to change the values
@@ -1752,6 +1756,8 @@ function TWebSocketProtocolJSON.FrameDecompress(
   var contentType,content: RawByteString): Boolean;
 var i: Integer;
     P: PUTF8Char;
+    b64: PUTF8Char;
+    b64len: integer;
   procedure GetNext(var content: RawByteString);
   var txt: PUTF8Char;
       txtlen: integer;
@@ -1772,14 +1778,14 @@ begin
   GetNext(contentType);
   if P=nil then
     exit;
-  if (contentType='') or
-     IdemPropNameU(contentType,JSON_CONTENT_TYPE) then
-    GetJSONItemAsRawJSON(P,RawJSON(content)) else begin
-    GetNext(content);
-    if not IdemPChar(pointer(contentType),'TEXT/') then
-      if not Base64MagicCheckAndDecode(pointer(content),length(content),content) then
+  if (contentType='') or IdemPropNameU(contentType,JSON_CONTENT_TYPE) then
+    GetJSONItemAsRawJSON(P,RawJSON(content)) else
+    if IdemPChar(pointer(contentType),'TEXT/') then
+      GetNext(content) else begin
+      b64 := GetJSONField(P,P,nil,nil,@b64len);
+      if not Base64MagicCheckAndDecode(b64,b64len,content) then
         exit;
-  end;
+    end;
   result := true;
 end;
 
@@ -2785,7 +2791,7 @@ end;
 { TWebSocketServer }
 
 constructor TWebSocketServer.Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
-  const ProcessName: SockString; ServerThreadPoolCount: integer);
+  const ProcessName: SockString; ServerThreadPoolCount, KeepAliveTimeOut: integer);
 begin
   fThreadRespClass := TWebSocketServerResp;
   fWebSocketConnections := TObjectListLocked.Create(false);
@@ -2793,7 +2799,7 @@ begin
   fSettings.SetDefaults;
   fSettings.HeartbeatDelay := 20000;
   fCanNotifyCallback := true;
-  inherited Create(aPort,OnStart,OnStop,ProcessName,2); // 2 threads for HTTP/1.0
+  inherited Create(aPort,OnStart,OnStop,ProcessName,ServerThreadPoolCount,KeepAliveTimeOut);
 end;
 
 function TWebSocketServer.WebSocketProcessUpgrade(ClientSock: THttpServerSocket;
@@ -2821,7 +2827,7 @@ procedure TWebSocketServer.Process(ClientSock: THttpServerSocket;
 var err: integer;
 begin
   if ClientSock.ConnectionUpgrade and ClientSock.KeepAliveClient and
-     IdemPropName('GET',pointer(ClientSock.Method),length(ClientSock.Method)) and
+     IdemPropNameU('GET',ClientSock.Method) and
      ConnectionThread.InheritsFrom(TWebSocketServerResp) then begin
     err := WebSocketProcessUpgrade(ClientSock,TWebSocketServerResp(ConnectionThread));
     if err<>STATUS_SUCCESS then begin
@@ -3085,37 +3091,38 @@ begin
 end;
 
 function THttpClientWebSockets.WebSocketsUpgrade(const aWebSocketsURI,
-  aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX,aWebSocketsCompression: boolean): RawUTF8;
-var protocol: TWebSocketProtocolRest;
-    key: TAESBlock;
+  aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX,aWebSocketsCompression: boolean;
+  aProtocol: TWebSocketProtocol): RawUTF8;
+var key: TAESBlock;
     bin1,bin2: RawByteString;
     extin,extout,prot: RawUTF8;
     extins: TRawUTF8DynArray;
     cmd: SockString;
     digest1,digest2: TSHA1Digest;
 begin
-  if fProcess<>nil then begin
-    result := 'Already upgraded to WebSockets';
-    if IdemPropNameU(fProcess.Protocol.URI,aWebSocketsURI) then
-      result := result+' on this URI' else
-      result := FormatUTF8('% with URI="%" but requested "%"',
-        [result,fProcess.Protocol.URI,aWebSocketsURI]);
-    exit;
-  end;
   try
-    if aWebSocketsAJAX then
-      protocol := TWebSocketProtocolJSON.Create(aWebSocketsURI) else
-      protocol := TWebSocketProtocolBinary.Create(
-        aWebSocketsURI,false,aWebSocketsEncryptionKey,aWebSocketsCompression);
     try
+      if fProcess<>nil then begin
+        result := 'Already upgraded to WebSockets';
+        if IdemPropNameU(fProcess.Protocol.URI,aWebSocketsURI) then
+          result := result+' on this URI' else
+          result := FormatUTF8('% with URI="%" but requested "%"',
+            [result,fProcess.Protocol.URI,aWebSocketsURI]);
+        exit;
+      end;
+      if aProtocol = nil then
+        if aWebSocketsAJAX then
+          aProtocol := TWebSocketProtocolJSON.Create(aWebSocketsURI) else
+          aProtocol := TWebSocketProtocolBinary.Create(
+            aWebSocketsURI,false,aWebSocketsEncryptionKey,aWebSocketsCompression);
       RequestSendHeader(aWebSocketsURI,'GET');
       TAESPRNG.Main.FillRandom(key);
       bin1 := BinToBase64(@key,sizeof(key));
       SockSend(['Content-Length: 0'#13#10'Connection: Upgrade'#13#10+
         'Upgrade: websocket'#13#10'Sec-WebSocket-Key: ',bin1,#13#10+
-        'Sec-WebSocket-Protocol: ',protocol.GetSubprotocols,#13#10+
+        'Sec-WebSocket-Protocol: ',aProtocol.GetSubprotocols,#13#10+
         'Sec-WebSocket-Version: 13']);
-      if protocol.ProcessHandshake(nil,extout,nil) and (extout<>'') then
+      if aProtocol.ProcessHandshake(nil,extout,nil) and (extout<>'') then
         SockSend(['Sec-WebSocket-Extensions: ',extout]);
       SockSend;
       SockSendFlush;
@@ -3126,9 +3133,9 @@ begin
       if not IdemPChar(pointer(cmd),'HTTP/1.1 101') or
          not ConnectionUpgrade or (ContentLength>0) or
          not IdemPropNameU(HeaderValue('upgrade'),'websocket') or
-         not protocol.SetSubprotocol(prot) then
+         not aProtocol.SetSubprotocol(prot) then
         exit;
-      protocol.fName := prot;
+      aProtocol.fName := prot;
       result := 'Invalid HTTP Upgrade Accept Challenge';
       ComputeChallenge(bin1,digest1);
       bin2 := HeaderValue('Sec-WebSocket-Accept');
@@ -3139,20 +3146,20 @@ begin
         result := 'Invalid HTTP Upgrade ProcessHandshake';
         extin := HeaderValue('Sec-WebSocket-Extensions');
         CSVToRawUTF8DynArray(pointer(extin),extins,';',true);
-        if (extins=nil) or not protocol.ProcessHandshake(extins,extout,@result) then
+        if (extins=nil) or not aProtocol.ProcessHandshake(extins,extout,@result) then
           exit;
       end;
       // if we reached here, connection is successfully upgraded to WebSockets
       if (Server='localhost') or (Server='127.0.0.1') then begin
-        protocol.fRemoteIP := '127.0.0.1';
-        protocol.fRemoteLocalhost := true;
+        aProtocol.fRemoteIP := '127.0.0.1';
+        aProtocol.fRemoteLocalhost := true;
       end else
-        protocol.fRemoteIP := Server;
+        aProtocol.fRemoteIP := Server;
       result := ''; // no error message = success
-      fProcess := TWebSocketProcessClient.Create(self,protocol,fProcessName);
-      protocol := nil; // protocol will be owned by fProcess now
+      fProcess := TWebSocketProcessClient.Create(self,aProtocol,fProcessName);
+      aProtocol := nil; // protocol will be owned by fProcess now
     finally
-      protocol.Free;
+      aProtocol.Free;
     end;
   except
     on E: Exception do begin

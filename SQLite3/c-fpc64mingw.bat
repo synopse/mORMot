@@ -1,7 +1,7 @@
 @rem Use MINGW64 to compile sqlite3.c amalgation file for FPC compatibility
 
-set mingwvers=5.2.0
-set mingw=c:\progs\mingw\x86_64-%mingwvers%-posix-seh-rt_v4-rev0\mingw64
+set mingwvers=7.0.0
+set mingw=c:\progs\msys64\mingw64
 
 set path=%path%;%mingw%\bin
 
@@ -22,10 +22,12 @@ del sqlite3-64.o
 attrib -r ..\SQLite3\exe\sqlite3-64.dll
 del ..\SQLite3\exe\sqlite3-64.dll
 
-gcc -O2 -shared -DSQLITE_MMAP_READWRITE -DSQLITE_ENABLE_RTREE=1 -DSQLITE_ENABLE_FTS3 -DSQLITE_ENABLE_FTS4 -DSQLITE_ENABLE_FTS3_PARENTHESIS -DSQLITE_ENABLE_JSON1 -DWIN64 -DNDEBUG -D_WINDOWS -D_USRDLL -DNO_TCL -D_CRT_SECURE_NO_DEPRECATE -DTHREADSAFE=1 -DTEMP_STORE=1 -m64 -I. ..\SQLite3\amalgamation\sqlite3.c -o ..\SQLite3\exe\sqlite3-64.dll -Wl,--out-implib,libsqlite3-64.a
+gcc -O2 -shared -DSQLITE_MMAP_READWRITE -DSQLITE_ENABLE_RTREE=1 -DSQLITE_ENABLE_FTS3 -DSQLITE_ENABLE_FTS4 -DSQLITE_ENABLE_FTS3_PARENTHESIS -DSQLITE_ENABLE_JSON1 -DWIN64 -DNDEBUG -D_WINDOWS -D_USRDLL -DNO_TCL -D_CRT_SECURE_NO_DEPRECATE -DSQLITE_MAX_EXPR_DEPTH=0 -DSQLITE_THREADSAFE=1 -DTEMP_STORE=1 -m64 -I. ..\SQLite3\amalgamation\sqlite3.c -o ..\SQLite3\exe\sqlite3-64.dll -Wl,--out-implib,libsqlite3-64.a
 
 @rem here we use -O1 since -O2 triggers unexpected GPF :(
-gcc -c -O1 -static -DSQLITE_ENABLE_RTREE=1 -DSQLITE_ENABLE_FTS3 -DSQLITE_ENABLE_FTS4 -DSQLITE_ENABLE_FTS3_PARENTHESIS -DSQLITE_ENABLE_JSON1 -DWIN64 -DNDEBUG -D_WINDOWS -DNO_TCL -D_CRT_SECURE_NO_DEPRECATE -DTHREADSAFE=1 -DTEMP_STORE=1 -DSQLITE_MAX_EXPR_DEPTH=0 -fno-stack-check -fno-stack-protector -mno-stack-arg-probe -m64 -I. ..\SQLite3\sqlite3.c -o sqlite3-64.o
+gcc -c -O1 -static -DSQLITE_ENABLE_FTS3 -DWIN64 -DNDEBUG -D_WINDOWS -DNO_TCL -D_CRT_SECURE_NO_DEPRECATE -DSQLITE_TEMP_STORE=1 -m64 -I. ..\SQLite3\sqlite3.c -o sqlite3-64.o
+
+@rem -fno-stack-check -fno-stack-protector -mno-stack-arg-probe 
 
 attrib +r sqlite3-64.o 
 attrib +r ..\SQLite3\exe\sqlite3-64.dll

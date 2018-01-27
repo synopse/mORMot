@@ -550,8 +550,8 @@ begin
   if fHandle=0 then
   {$else}
     {$ifdef BSDNOTDARWIN}
-    fHandle := dlopen(PChar(fLibraryName),0);
-    if fHandle=nil then
+    fHandle := TLibHandle(dlopen(PChar(fLibraryName),0));
+    if fHandle=TLibHandle(nil) then
     {$else}
     fHandle := LoadLibrary({$ifndef FPC}pointer{$endif}(fLibraryName));
     if fHandle=0 then
@@ -587,7 +587,7 @@ end;
 destructor TSynLizardDynamic.Destroy;
 begin
   {$ifdef BSDNOTDARWIN}
-  if fHandle<>nil then
+  if fHandle<>TLibHandle(nil) then
     dlclose(fHandle);
   {$else}
   if fHandle<>0 then

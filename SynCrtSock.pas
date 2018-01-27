@@ -409,7 +409,7 @@ type
     fBytesIn: Int64;
     fBytesOut: Int64;
     fSocketLayer: TCrtSocketLayer;
-    fSockInEof: boolean;
+    fSockInEof, fTLS: boolean;
     // updated by every SockSend() call
     fSndBuf: SockString;
     fSndBufLen: integer;
@@ -1783,6 +1783,15 @@ type
   // - should return false if there is no thread available in the pool
   TOnThreadPoolSocketPush = function(aClientSock: pointer): boolean of object;
 
+  /// event handler used by THttpServer.Process to send a local file
+  // when HTTP_RESP_STATICFILE content-type is returned by the service 
+  // - can be defined e.g. to use NGINX X-Accel-Redirect header
+  // - should return true if the Context has been modified to serve the file, or
+  // false so that the file will be manually read and sent from memory
+  // - any exception during process will be returned as a STATUS_NOTFOUND page
+  TOnHttpServerSendFile = function(Context: THttpServerRequest;
+    const LocalFileName: TFileName): boolean of object;
+
   /// main HTTP server Thread using the standard Sockets API (e.g. WinSock)
   // - bind to a port and listen to incoming requests
   // - assign this requests to THttpServerResp threads
@@ -1793,16 +1802,18 @@ type
   // - a Thread Pool is used internaly to speed up HTTP/1.0 connections - a
   // typical use, under Linux, is to run this class behind a NGINX frontend,
   // configured as https reverse proxy, leaving default "proxy_http_version 1.0"
-  // and "proxy_request_buffering on" options for best performance
-  // - it will trigger the Windows firewall popup UAC window at first run
-  // - don't forget to use Free procedure when you are finished
+  // and "proxy_request_buffering on" options for best performance, and
+  // setting KeepAliveTimeOut=0 in the THttpServer.Create constructor
+  // - under windows, will trigger the firewall UAC popup at first run
+  // - don't forget to use Free method when you are finished
   THttpServer = class(THttpServerGeneric)
   protected
     /// used to protect Process() call
     fProcessCS: TRTLCriticalSection;
     fThreadPoolPush: TOnThreadPoolSocketPush;
-    fThreadPoolContentionCount: cardinal;
+    fThreadPoolContentionTime: cardinal;
     fThreadPoolContentionAbortCount: cardinal;
+    fThreadPoolContentionAbortDelay: cardinal;
     fThreadPool: TSynThreadPoolTHttpServer;
     fInternalHttpServerRespList: TList;
     fServerConnectionCount: cardinal;
@@ -1810,6 +1821,9 @@ type
     fTCPPrefix: SockString;
     fSock: TCrtSocket;
     fThreadRespClass: THttpServerRespClass;
+    fOnSendFile: TOnHttpServerSendFile;
+    fNginxSendFileFrom: TFileName;
+    function OnNginxAllowSend(Context: THttpServerRequest; const LocalFileName: TFileName): boolean;
     // this overridden version will return e.g. 'Winsock 2.514'
     function GetAPIVersion: string; override;
     /// server main loop - don't change directly
@@ -1832,8 +1846,21 @@ type
     // incoming connections (default is 32, which may be sufficient for most
     // cases, maximum is 256) - if you set 0, the thread pool will be disabled
     // and one thread will be created for any incoming connection
+    // - you can also tune (or disable with 0) HTTP/1.1 keep alive delay                             
     constructor Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
-      const ProcessName: SockString; ServerThreadPoolCount: integer=32); reintroduce; virtual;
+      const ProcessName: SockString; ServerThreadPoolCount: integer=32;
+      KeepAliveTimeOut: integer=3000); reintroduce; virtual;
+    /// enable NGINX X-Accel internal redirection for HTTP_RESP_STATICFILE
+    // - will define internally a matching OnSendFile event handler
+    // - generating "X-Accel-Redirect: " header, trimming any supplied left
+    // case-sensitive file name prefix, e.g. with NginxSendFileFrom('/var/www'):
+    // $ # Will serve /var/www/protected_files/myfile.tar.gz
+    // $ # When passed URI /protected_files/myfile.tar.gz
+    // $ location /protected_files {
+    // $  internal;
+    // $  root /var/www;
+    // $ }
+    procedure NginxSendFileFrom(const FileNameLeftTrim: TFileName);
     /// release all memory and handlers
     destructor Destroy; override;
     /// access to the main server low-level Socket
@@ -1843,12 +1870,15 @@ type
     // a THttpServerResp thread is created for handling this THttpServerSocket
     property Sock: TCrtSocket read fSock;
   published
-    /// will contain the total number of connection to the server
+    /// will contain the total number of connections to the server
     // - it's the global count since the server started
     property ServerConnectionCount: cardinal
       read fServerConnectionCount write fServerConnectionCount;
-    /// time, in milliseconds, for the HTTP.1/1 connections to be kept alive;
-    // default is 3000 ms
+    /// time, in milliseconds, for the HTTP/1.1 connections to be kept alive
+    // - default is 3000 ms
+    // - setting 0 here (or in KeepAliveTimeOut constructor parameter) will
+    // disable keep-alive, and fallback to HTTP.1/0 for all incoming requests
+    // (may be a good idea e.g. behind a NGINX reverse proxy)
     // - see THttpApiServer.SetTimeOutLimits(aIdleConnection) parameter
     property ServerKeepAliveTimeOut: cardinal
       read fServerKeepAliveTimeOut write fServerKeepAliveTimeOut;
@@ -1863,13 +1893,22 @@ type
     /// the associated thread pool
     // - may be nil if ServerThreadPoolCount was 0 on constructor
     property ThreadPool: TSynThreadPoolTHttpServer read fThreadPool;
-    /// number of times there was no availibility in the internal thread pool
-    // to handle an incoming request
-    // - this won't make any error, but just delay for 20 ms and try again
-    property ThreadPoolContentionCount: cardinal read fThreadPoolContentionCount;
-    /// number of times there an incoming request is rejected due to overload
-    // - this is an error after 30 seconds of not any process availability
+    /// milliseconds spent waiting for an available thread in the pool
+    // - no available thread won't make any error at first, but try again until
+    // ThreadPoolContentionAbortDelay is reached and the incoming socket aborded
+    // - if this number is high, consider setting a higher number of threads,
+    // or profile and tune the Request method processing
+    property ThreadPoolContentionTime: cardinal read fThreadPoolContentionTime;
+    /// how many connections were rejected due to thread pool contention
+    // - disconnect the client socket after ThreadPoolContentionAbortDelay
+    // - any high number here requires code refactoring of Request method! :)
     property ThreadPoolContentionAbortCount: cardinal read fThreadPoolContentionAbortCount;
+    /// milliseconds delay to reject a connection due to thread pool contention
+    // - default is 5000, i.e. 5 seconds
+    property ThreadPoolContentionAbortDelay: cardinal read fThreadPoolContentionAbortDelay;
+    /// custom event handler used to send a local file for HTTP_RESP_STATICFILE
+    // - see also NginxSendFileFrom() method
+    property OnSendFile: TOnHttpServerSendFile read fOnSendFile write fOnSendFile;
   end;
   {$M-}
 
@@ -4275,6 +4314,7 @@ begin
       {$else}
       raise ECrtSocket.Create('Unsupported');
       {$endif MSWINDOWS}
+      fTLS := true;
     except
       on E: Exception do
         raise ECrtSocket.CreateFmt('OpenBind(%s:%s): aTLS failed [%s %s]',
@@ -4845,7 +4885,7 @@ begin
     aURL := '/'+url else // need valid url according to the HTTP/1.1 RFC
     aURL := url;
   SockSend([method,' ',aURL,' HTTP/1.1']);
-  if Port='80' then
+  if Port=DEFAULT_PORT[fTLS] then
     SockSend(['Host: ',Server]) else
     SockSend(['Host: ',Server,':',Port]);
   SockSend(['Accept: */*'#13#10'User-Agent: ',UserAgent]);
@@ -5288,12 +5328,13 @@ end;
 
 { THttpServer }
 
-constructor THttpServer.Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
-  const ProcessName: SockString; ServerThreadPoolCount: integer);
+constructor THttpServer.Create(const aPort: SockString; OnStart,
+  OnStop: TNotifyThreadEvent; const ProcessName: SockString;
+  ServerThreadPoolCount, KeepAliveTimeOut: integer);
 begin
   InitializeCriticalSection(fProcessCS);
   fSock := TCrtSocket.Bind(aPort); // BIND + LISTEN
-  ServerKeepAliveTimeOut := 3000; // HTTP.1/1 KeepAlive is 3 seconds by default
+  fServerKeepAliveTimeOut := KeepAliveTimeOut; // 3 seconds by default
   fInternalHttpServerRespList := TList.Create;
   // event handlers set before inherited Create to be visible in childs
   fOnHttpThreadStart := OnStart;
@@ -5345,6 +5386,28 @@ begin
   DeleteCriticalSection(fProcessCS);
 end;
 
+function THttpServer.OnNginxAllowSend(Context: THttpServerRequest;
+  const LocalFileName: TFileName): boolean;
+var n,i: integer;
+begin
+  result := false;
+  n := length(fNginxSendFileFrom);
+  for i := 1 to n do
+    if LocalFileName[i]<>fNginxSendFileFrom[i] then
+      exit; // no match -> manual send
+  delete(Context.fOutContent,1,n); // remove e.g. '/var/www'
+  Context.OutCustomHeaders := Trim(Context.OutCustomHeaders+#13#10+
+    'X-Accel-Redirect: '+Context.OutContent);
+  Context.OutContent := '';
+  result := true;
+end;
+
+procedure THttpServer.NginxSendFileFrom(const FileNameLeftTrim: TFileName);
+begin
+  fNginxSendFileFrom := FileNameLeftTrim;
+  fOnSendFile := OnNginxAllowSend;
+end;
+
 {.$define MONOTHREAD}
 // define this not to create a thread at every connection (not recommended)
 
@@ -5354,7 +5417,7 @@ var ClientSock: TSocket;
     {$ifdef MONOTHREAD}
     ClientCrtSock: THttpServerSocket;
     {$endif}
-    i: integer;
+    tix,starttix,aborttix: cardinal;
 begin
   // THttpServerGeneric thread preparation: launch any OnHttpThreadStart event
   NotifyThreadStart(self);
@@ -5390,16 +5453,28 @@ begin
         // use thread pool to process the request header, and probably its body
         if not fThreadPoolPush(pointer(ClientSock)) then begin
           // returned false if there is no idle thread in the pool
-          for i := 1 to 1500 do begin
-            inc(fThreadPoolContentionCount);
-            SleepHiRes(20); // wait a little until a thread is available
+          tix := GetTickCount;
+          starttix := tix;
+          aborttix := tix+fThreadPoolContentionAbortDelay; // default 5 sec
+          repeat
+            if tix-starttix<50 then // wait for an available thread
+              SleepHiRes(1) else
+              SleepHiRes(10);
             if Terminated then
               break;
-            if fThreadPoolPush(pointer(ClientSock)) then
-              exit; // the thread pool acquired the client sock
+            if fThreadPoolPush(pointer(ClientSock)) then begin
+              aborttix := 0; // thread pool acquired the client sock
+              break;
+            end;
+            tix := GetTickCount;
+          until Terminated or (tix>aborttix) or (tix<starttix);
+          dec(tix,starttix);
+          if integer(tix)>0 then
+            inc(fThreadPoolContentionTime,tix);
+          if aborttix<>0 then begin
+            inc(fThreadPoolContentionAbortCount);
+            DirectShutdown(ClientSock);
           end;
-          inc(fThreadPoolContentionAbortCount);
-          DirectShutdown(ClientSock); // 1500*20 = 30 seconds timeout
         end;
       end else
         // default implementation creates one thread for each incoming socket
@@ -5424,25 +5499,25 @@ end;
 
 procedure THttpServer.Process(ClientSock: THttpServerSocket;
   ConnectionID: integer; ConnectionThread: TSynThread);
-var Context: THttpServerRequest;
+var ctxt: THttpServerRequest;
     P: PAnsiChar;
     Code: cardinal;
     s, reason: SockString;
-    staticfn, ErrorMsg: string;
-    FileToSend: TFileStream;
+    fn, ErrorMsg: string;
+    fs: TFileStream;
 begin
   if (ClientSock=nil) or (ClientSock.Headers=nil) then
     // we didn't get the request = socket read error
     exit; // -> send will probably fail -> nothing to send back
   if Terminated then
     exit;
-  Context := THttpServerRequest.Create(self,ConnectionID,ConnectionThread);
+  ctxt := THttpServerRequest.Create(self,ConnectionID,ConnectionThread);
   try
     // calc answer
     with ClientSock do
-      Context.Prepare(URL,Method,HeaderGetText,Content,ContentType,'');
+      ctxt.Prepare(URL,Method,HeaderGetText,Content,ContentType,'');
     try
-      Code := Request(Context);
+      Code := Request(ctxt);
     except
       on E: Exception do begin
         ErrorMsg := E.ClassName+': '+E.Message;
@@ -5452,33 +5527,35 @@ begin
     if Terminated then
       exit;
     // handle case of direct sending of static file (as with http.sys)
-    if (Context.OutContent<>'') and (Context.OutContentType=HTTP_RESP_STATICFILE) then
+    if (ctxt.OutContent<>'') and (ctxt.OutContentType=HTTP_RESP_STATICFILE) then
       try
-        staticfn := {$ifdef UNICODE}UTF8ToUnicodeString{$else}Utf8ToAnsi{$endif}(Context.OutContent);
-        FileToSend := TFileStream.Create(staticfn,fmOpenRead or fmShareDenyNone);
-        try
-          SetString(Context.fOutContent,nil,FileToSend.Size);
-          FileToSend.Read(Pointer(Context.fOutContent)^,length(Context.fOutContent));
-          Context.OutContentType := GetHeaderValue(Context.fOutCustomHeaders,'CONTENT-TYPE:',true);
-       finally
-          FileToSend.Free;
-        end;
+        ctxt.OutContentType := GetHeaderValue(ctxt.fOutCustomHeaders,'CONTENT-TYPE:',true);
+        fn := {$ifdef UNICODE}UTF8ToUnicodeString{$else}Utf8ToAnsi{$endif}(ctxt.OutContent);
+        if not Assigned(fOnSendFile) or not fOnSendFile(ctxt,fn) then begin
+          fs := TFileStream.Create(fn,fmOpenRead or fmShareDenyNone);
+          try
+            SetString(ctxt.fOutContent,nil,fs.Size);
+            fs.Read(Pointer(ctxt.fOutContent)^,length(ctxt.fOutContent));
+         finally
+            fs.Free;
+          end;
+         end;
       except
         on E: Exception do begin // error reading or sending file
          ErrorMsg := E.ClassName+': '+E.Message;
          Code := STATUS_NOTFOUND;
         end;
       end;
-    if Context.OutContentType=HTTP_RESP_NORESPONSE then
-      Context.OutContentType := ''; // true HTTP always expects a response
+    if ctxt.OutContentType=HTTP_RESP_NORESPONSE then
+      ctxt.OutContentType := ''; // true HTTP always expects a response
     // send response (multi-thread OK) at once
     if (Code<STATUS_SUCCESS) or (ClientSock.Headers=nil) then
       Code := STATUS_NOTFOUND;
     reason := StatusCodeToReason(Code);
     if ErrorMsg<>'' then begin
-      Context.OutCustomHeaders := '';
-      Context.OutContentType := 'text/html; charset=utf-8'; // create message to display
-      Context.OutContent := {$ifdef UNICODE}UTF8String{$else}UTF8Encode{$endif}(
+      ctxt.OutCustomHeaders := '';
+      ctxt.OutContentType := 'text/html; charset=utf-8'; // create message to display
+      ctxt.OutContent := {$ifdef UNICODE}UTF8String{$else}UTF8Encode{$endif}(
         format('<body style="font-family:verdana">'#13+
         '<h1>%s Server Error %d</h1><hr><p>HTTP %d %s<p>%s<p><small>%s',
         [ClassName,Code,Code,reason,HtmlEncodeString(ErrorMsg),fServerName]));
@@ -5491,7 +5568,7 @@ begin
       ClientSock.SockSend(['HTTP/1.0 ',Code,' ',reason]);
     // 2. send headers
     // 2.1. custom headers from Request() method
-    P := pointer(Context.fOutCustomHeaders);
+    P := pointer(ctxt.fOutCustomHeaders);
     while P<>nil do begin
       s := GetNextLine(P);
       if s<>'' then begin // no void line (means headers ending)
@@ -5504,7 +5581,7 @@ begin
     ClientSock.SockSend([
       {$ifndef NOXPOWEREDNAME}XPOWEREDNAME+': '+XPOWEREDVALUE+#13#10+{$endif}
       'Server: ',fServerName]);
-    ClientSock.CompressDataAndWriteHeaders(Context.OutContentType,Context.fOutContent);
+    ClientSock.CompressDataAndWriteHeaders(ctxt.OutContentType,ctxt.fOutContent);
     if ClientSock.KeepAliveClient then begin
       if ClientSock.fCompressAcceptEncoding<>'' then
         ClientSock.SockSend(ClientSock.fCompressAcceptEncoding);
@@ -5513,9 +5590,9 @@ begin
       ClientSock.SockSend; // headers must end with a void line
     ClientSock.SockSendFlush; // flush all pending data (i.e. headers) to network
     // 3. sent HTTP body content (if any)
-    if Context.OutContent<>'' then
+    if ctxt.OutContent<>'' then
       // direct send to socket (no CRLF at the end of data)
-      ClientSock.SndLow(pointer(Context.OutContent),length(Context.OutContent));
+      ClientSock.SndLow(pointer(ctxt.OutContent),length(ctxt.OutContent));
   finally
     if Sock<>nil then begin // add transfert stats to main socket
       EnterCriticalSection(fProcessCS);
@@ -5525,7 +5602,7 @@ begin
       ClientSock.fBytesIn := 0;
       ClientSock.fBytesOut := 0;
     end;
-    Context.Free;
+    ctxt.Free;
   end;
 end;
 
@@ -5968,7 +6045,8 @@ begin
     P := pointer(Command);
     GetNextItem(P,' ',fMethod); // 'GET'
     GetNextItem(P,' ',fURL);    // '/path'
-    fKeepAliveClient := IdemPChar(P,'HTTP/1.1');
+    fKeepAliveClient := ((fServer=nil) or (fServer.ServerKeepAliveTimeOut>0)) and
+       IdemPChar(P,'HTTP/1.1');
     Content := '';
     // get headers and content
     GetHeader;
@@ -6317,7 +6395,8 @@ begin
     if ServerSock.GetRequest(false) then begin
       InterlockedIncrement(fHeaderProcessed);
       // connection and header seem valid -> process request further
-      if (fServer.fInternalHttpServerRespList.Count<THREADPOOL_MAXWORKTHREADS) and
+      if (fServer.ServerKeepAliveTimeOut>0) and
+         (fServer.fInternalHttpServerRespList.Count<THREADPOOL_MAXWORKTHREADS) and
          (ServerSock.KeepAliveClient or
           (ServerSock.ContentLength>THREADPOOL_BIGBODYSIZE)) then begin
         // HTTP/1.1 Keep Alive (including WebSockets) or posted data > 1 MB
@@ -7398,7 +7477,7 @@ function RegURL(aRoot, aPort: SockString; Https: boolean;
 const Prefix: array[boolean] of SockString = ('http://','https://');
 begin
   if aPort='' then
-    aPort := '80';
+    aPort := DEFAULT_PORT[Https];
   aRoot := trim(aRoot);
   aDomainName := trim(aDomainName);
   if aDomainName='' then begin
