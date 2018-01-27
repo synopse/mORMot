@@ -10946,15 +10946,15 @@ function JSONRetrieveStringField(P: PUTF8Char; out Field: PUTF8Char;
 /// decode a JSON field in an UTF-8 encoded buffer (used in TSQLTableJSON.Create)
 // - this function decodes in the P^ buffer memory itself (no memory allocation
 // or copy), for faster process - so take care that P^ is not shared
-// - PDest points to the next field to be decoded, or nil on any unexpected end
+// - PDest points to the next field to be decoded, or nil when end is reached
+// - EndOfObject (if not nil) is set to the JSON value char (',' ':' or '}' e.g.)
 // - optional wasString is set to true if the JSON value was a JSON "string"
-// - null is decoded as nil, with wasString=false
-// - true/false boolean values are returned as 'true'/'false', with wasString=false
 // - '"strings"' are decoded as 'strings', with wasString=true, properly JSON
 // unescaped (e.g. any \u0123 pattern would be converted into UTF-8 content)
-// - any integer value is left as its ascii representation, with wasString=true
+// - null is decoded as nil, with wasString=false
+// - true/false boolean values are returned as 'true'/'false', with wasString=false
+// - any number value is returned as its ascii representation, with wasString=false
 // - works for both field names or values (e.g. '"FieldName":' or 'Value,')
-// - EndOfObject (if not nil) is set to the JSON value char (',' ':' or '}' e.g.)
 function GetJSONField(P: PUTF8Char; out PDest: PUTF8Char;
   wasString: PBoolean=nil; EndOfObject: PUTF8Char=nil; Len: PInteger=nil): PUTF8Char;
 
@@ -22838,7 +22838,7 @@ begin
     if P^='[' then begin
       P := GotoNextNotSpace(P+1);
       if P^=']' then 
-        inc(P) else
+        inc(P) else begin
         repeat
           Text := GetJSONField(P,P,@wasString,@EndOfObject,@TextLen);
           if (Text=nil) or not wasString then begin
@@ -22860,6 +22860,9 @@ begin
             SetBit(result,i);
           // unknown enum names (i=-1) would just be ignored
         until EndOfObject=']';
+        if P=nil then
+          exit; // avoid GPF below if already reached the input end
+      end;
       while not (P^ in EndOfJSONField) do begin // mimics GetJSONField()
         if P^=#0 then begin
           P := nil;
@@ -41291,7 +41294,7 @@ begin // code below must match TTextWriter.AddRecordJSON
       end else
       EndOfObj := #0;
   end;
-  if JSON=nil then
+  if JSON=nil then // end reached, but valid content decoded
     result := @NULCHAR else
     result := JSON;
   if EndOfObject<>nil then
@@ -41481,10 +41484,10 @@ begin
     MoveFast(i32,aValue,fDataSize);
     result := P;
   end;
-  else begin // encoded as JSON strings
+  else begin // encoded as JSON strings or number
     PropValue := GetJSONField(P,P,@wasString,@EndOfObject,@PropValueLen);
     if PropValue=nil then
-      exit;
+      exit; // not a JSON string or number
     if P=nil then // result=nil=error + caller may dec(P); P^:=EndOfObject; 
       P := PropValue+PropValueLen;
     case fKnownType of
@@ -43134,7 +43137,7 @@ begin
     GetVariantFromJSON(Val,wasString,Value,nil,AllowDouble);
   end;
   if result=nil then
-    result := @NULCHAR;
+    result := @NULCHAR; // reached end, but not invalid input
 end;
 
 procedure VariantLoadJSON(var Value: Variant; const JSON: RawUTF8;
@@ -44264,7 +44267,9 @@ begin
           exit; // unexpected array size means invalid JSON
         GetJSONToAnyVariant(VValue[VCount],JSON,@EndOfObject,@VOptions,false);
         if JSON=nil then
-          exit;
+          if EndOfObject=']' then // valid end input
+            JSON := @NULCHAR else
+            exit; // invalid input
         if intvalues<>nil then
           intvalues.UniqueVariant(VValue[VCount]);
         inc(VCount);
@@ -44298,7 +44303,9 @@ begin
           intnames.UniqueText(VName[VCount]);
         GetJSONToAnyVariant(VValue[VCount],JSON,@EndOfObject,@VOptions,false);
         if JSON=nil then
-          exit;
+          if EndOfObject=']' then // valid end input
+            JSON := @NULCHAR else
+            exit; // invalid input
         if intvalues<>nil then
           intvalues.UniqueVariant(VValue[VCount]);
         inc(VCount);
