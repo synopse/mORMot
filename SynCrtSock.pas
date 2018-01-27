@@ -2527,10 +2527,13 @@ function ResolveName(const Name: SockString;
   SockType: integer=SOCK_STREAM): SockString;
 
 /// Base64 encoding of a string
-function Base64Encode(const s: SockString): SockString;
+// - used internally for STMP email sending 
+// - consider using more efficient BinToBase64() from SynCommons.pas instead
+function SockBase64Encode(const s: SockString): SockString;
 
 /// Base64 decoding of a string
-function Base64Decode(const s: SockString): SockString;
+// - consider using more efficient Base64ToBin() from SynCommons.pas instead
+function SockBase64Decode(const s: SockString): SockString;
 
 /// escaping of HTML codes like < > & "
 function HtmlEncode(const s: SockString): SockString;
@@ -3084,41 +3087,40 @@ begin
   end;
 end;
 
-// Base64 string encoding
-function Base64Encode(const s: SockString): SockString;
-procedure Encode(rp, sp: PAnsiChar; len: integer);
-const
-  b64: array[0..63] of AnsiChar =
-    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-var i: integer;
-    c: cardinal;
-begin
-  for i := 1 to len div 3 do begin
-    c := ord(sp[0]) shl 16 + ord(sp[1]) shl 8 + ord(sp[2]);
-    rp[0] := b64[(c shr 18) and $3f];
-    rp[1] := b64[(c shr 12) and $3f];
-    rp[2] := b64[(c shr 6) and $3f];
-    rp[3] := b64[c and $3f];
-    inc(rp,4);
-    inc(sp,3);
-  end;
-  case len mod 3 of
-    1: begin
-      c := ord(sp[0]) shl 16;
-      rp[0] := b64[(c shr 18) and $3f];
-      rp[1] := b64[(c shr 12) and $3f];
-      rp[2] := '=';
-      rp[3] := '=';
-    end;
-    2: begin
-      c := ord(sp[0]) shl 16 + ord(sp[1]) shl 8;
+function SockBase64Encode(const s: SockString): SockString;
+  procedure Encode(rp, sp: PAnsiChar; len: integer);
+  const
+    b64: array[0..63] of AnsiChar =
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  var i: integer;
+      c: cardinal;
+  begin
+    for i := 1 to len div 3 do begin
+      c := ord(sp[0]) shl 16 + ord(sp[1]) shl 8 + ord(sp[2]);
       rp[0] := b64[(c shr 18) and $3f];
       rp[1] := b64[(c shr 12) and $3f];
       rp[2] := b64[(c shr 6) and $3f];
-      rp[3] := '=';
+      rp[3] := b64[c and $3f];
+      inc(rp,4);
+      inc(sp,3);
+    end;
+    case len mod 3 of
+      1: begin
+        c := ord(sp[0]) shl 16;
+        rp[0] := b64[(c shr 18) and $3f];
+        rp[1] := b64[(c shr 12) and $3f];
+        rp[2] := '=';
+        rp[3] := '=';
+      end;
+      2: begin
+        c := ord(sp[0]) shl 16 + ord(sp[1]) shl 8;
+        rp[0] := b64[(c shr 18) and $3f];
+        rp[1] := b64[(c shr 12) and $3f];
+        rp[2] := b64[(c shr 6) and $3f];
+        rp[3] := '=';
+      end;
     end;
   end;
-end;
 var len: integer;
 begin
   result:='';
@@ -3128,7 +3130,7 @@ begin
   Encode(pointer(result),pointer(s),len);
 end;
 
-function Base64Decode(const s: SockString): SockString;
+function SockBase64Decode(const s: SockString): SockString;
 var i, j, len: integer;
     sp, rp: PAnsiChar;
     c, ch: integer;
@@ -5144,8 +5146,8 @@ begin
     if (User<>'') and (Pass<>'') then begin
       Exec('EHLO '+Server,'25');
       Exec('AUTH LOGIN','334');
-      Exec(Base64Encode(User),'334');
-      Exec(Base64Encode(Pass),'235');
+      Exec(SockBase64Encode(User),'334');
+      Exec(SockBase64Encode(Pass),'235');
     end else
       Exec('HELO '+Server,'25');
     writeln(TCP.SockOut^,'MAIL FROM:<',From,'>'); Expect('250');
@@ -5191,7 +5193,7 @@ begin
   if IsAnsi7(Text) then
     result := SockString(Text) else begin
     utf8 := UTF8String(Text);
-    result := '=?UTF-8?B?'+Base64Encode(utf8);
+    result := '=?UTF-8?B?'+SockBase64Encode(utf8);
   end;
 end;
 
@@ -5408,7 +5410,7 @@ begin
     end;
   result := n<>0;
   if not result then
-      exit; // no match -> manual send
+    exit; // no match -> manual send
   delete(Context.fOutContent,1,n); // remove e.g. '/var/www'
   Context.OutCustomHeaders := Trim(Context.OutCustomHeaders+#13#10+
     'X-Accel-Redirect: '+Context.OutContent);
