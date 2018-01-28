@@ -5490,9 +5490,9 @@ begin
             if tix-starttix<50 then // wait for an available thread
               SleepHiRes(1) else
               SleepHiRes(10);
+            tix := GetTickCount;
             if Terminated then
               break;
-            tix := GetTickCount;
             if fThreadPoolPush(pointer(ClientSock)) then begin
               aborttix := 0; // thread pool acquired the client sock
               break;
