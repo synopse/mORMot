@@ -10137,16 +10137,26 @@ type
   // - default TStringStream uses WideChars since Delphi 2009, so it is
   // not compatible with previous versions, and it does make sense to
   // work with RawByteString in our UTF-8 oriented framework
+  // - jus tlike TStringSTream, is designed for appending data, not modifying
+  // in-place, as requested e.g. by TTextWriter or TFileBufferWriter classes
   TRawByteStringStream = class(TStream)
   protected
     fDataString: RawByteString;
     fPosition: Integer;
     procedure SetSize(NewSize: Longint); override;
   public
+    /// initialize the storage, optionally with some RawByteString content
     constructor Create(const aString: RawByteString=''); overload;
+    /// read some bytes from the internal storage
+    // - returns the number of bytes filled into Buffer (<=Count)
     function Read(var Buffer; Count: Longint): Longint; override;
+    /// change the current Read/Write position, within current stored range
     function Seek(Offset: Longint; Origin: Word): Longint; override;
+    /// append some data to the buffer
+    // - will resize the buffer, i.e. will replace the end of the string from
+    // the current position with the supplied data
     function Write(const Buffer; Count: Longint): Longint; override;
+    /// direct low-level access to the internal RawByteString storage
     property DataString: RawByteString read fDataString write fDataString;
   end;
 
