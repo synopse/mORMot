@@ -490,7 +490,8 @@ type
   // property should be macDuringEF
   // - other values will define TAESCFB/TAESOFB/TAESCTR/TAESCBC in 128-bit or
   // 256-bit mode, in conjunction with a TECDHEMAC setting
-  // - AES-NI hardware acceleration will be used, if available
+  // - AES-NI hardware acceleration will be used, if available - under x86-64,
+  // efAesOfb128 will potentially give the best performance
   // - of course, weack ECB mode is not available
   TECDHEEF = (efAesCrc128, efAesCfb128, efAesOfb128, efAesCtr128, efAesCbc128,
               efAesCrc256, efAesCfb256, efAesOfb256, efAesCtr256, efAesCbc256);
@@ -505,9 +506,11 @@ type
   // and prevent transmission errors but not message integrity or authentication
   // since composition of two crcs is a multiplication by a polynomial - see
   // http://mslc.ctf.su/wp/boston-key-party-ctf-2016-hmac-crc-crypto-5pts
+  // - macXxHash32 will use the xxhash32() algorithm, fastest without SSE4.2
   // - macNone (800MB/s, which is the speed of AES-NI encryption itself for a
   // random set of small messages) won't check errors, but only replay attacks
-  TECDHEMAC = (macDuringEF, macHmacSha256, macHmacCrc256c, macHmacCrc32c, macNone);
+  TECDHEMAC = (macDuringEF, macHmacSha256, macHmacCrc256c, macHmacCrc32c,
+    macXxHash32, macNone);
 
   /// defines one protocol Algorithm recognized by TECDHEProtocol
   // - only safe and strong parameters are allowed, and the default values
@@ -1516,11 +1519,11 @@ type
     fCertificateValidity: TECCValidity;
     fRndA,fRndB: THash128;
     fAES: array[boolean] of TAESAbstract;
-    fkM: array[boolean] of THash256;
+    fkM: array[boolean] of THash256Rec;
     // contains inc(PInt64(@aKey)^) to maintain RX/TX sequence number
     procedure SetKey(aEncrypt: boolean);
     procedure ComputeMAC(aEncrypt: boolean; aEncrypted: pointer; aLen: integer;
-      out aMAC: THash256);
+      out aMAC: THash256Rec);
     function Verify(frame: PByteArray; len: integer; const QC: TECCCertificateContent;
       out res: TProtocolResult): boolean;
     procedure Sign(frame: PByteArray; len: integer; out QC: TECCCertificateContent);
@@ -4989,8 +4992,8 @@ begin
   if fAES[true]<>fAES[false] then
     fAES[true].Free; // occurs only for TAESCBC
   fAES[false].Free;
-  FillZero(fkM[false]);
-  FillZero(fkM[true]);
+  FillZero(fkM[false].b);
+  FillZero(fkM[true].b);
   if fPKI<>nil then
     if ownPKI in fOwned then
       fPKI.Free else
@@ -5100,44 +5103,53 @@ procedure TECDHEProtocol.SetKey(aEncrypt: boolean);
 begin
   if fAES[aEncrypt]=nil then
     raise EECCException.CreateUTF8('%.% with no handshake',[self,ED[aEncrypt]]);
-  fAES[aEncrypt].IV := PHash128(@fkM[aEncrypt])^; // kM is a CTR -> IV unicity
+  fAES[aEncrypt].IV := fkM[aEncrypt].Lo; // kM is a CTR -> IV unicity
   if fAlgo.mac=macDuringEF then
-    if not fAES[aEncrypt].MACSetNonce(fkM[aEncrypt]) then
+    if not fAES[aEncrypt].MACSetNonce(fkM[aEncrypt].b) then
       raise EECCException.CreateUTF8('%.%: macDuringEF not available in %/%',
         [self,ED[aEncrypt],ToText(fAlgo.ef)^,fAES[aEncrypt]]);
 end;
 
 procedure TECDHEProtocol.ComputeMAC(aEncrypt: boolean;
-  aEncrypted: pointer; aLen: integer; out aMAC: THash256);
+  aEncrypted: pointer; aLen: integer; out aMAC: THash256Rec);
 var i,c: cardinal;
 begin
   case fAlgo.mac of
     macDuringEF:
-      if not fAES[aEncrypt].MACGetLast(aMac) then // computed during EF process
+      if not fAES[aEncrypt].MACGetLast(aMac.b) then // computed during EF process
         raise EECCException.CreateUTF8('%.%: macDuringEF not available in %/%',
           [self,ED[aEncrypt],ToText(fAlgo.ef)^,fAES[aEncrypt]]);
     macHmacCrc256c:
-      HMAC_CRC256C(@fkM[aEncrypt],aEncrypted,sizeof(THash256),aLen,aMAC);
+      HMAC_CRC256C(@fkM[aEncrypt],aEncrypted,sizeof(THash256),aLen,aMAC.b);
     macHmacSha256:
-      HMAC_SHA256(@fkM[aEncrypt],aEncrypted,sizeof(THash256),aLen,aMAC);
+      HMAC_SHA256(@fkM[aEncrypt],aEncrypted,sizeof(THash256),aLen,aMAC.b);
     macHmacCrc32c: begin
       c := HMAC_CRC32C(@fkM[aEncrypt],aEncrypted,sizeof(THash256),aLen);
       for i := 0 to 7 do
-        PCardinalArray(@aMac)^[i] := c; // naive 256-bit diffusion
+        aMac.c[i] := c; // naive 256-bit diffusion
+    end;
+    macXxHash32: begin
+      c := xxHash32(fkM[aEncrypt].i0,aEncrypted,aLen);
+      for i := 0 to 7 do
+        aMac.c[i] := c; // naive 256-bit diffusion
     end;
     macNone:
-      crc256c(@fkM[aEncrypt],sizeof(THash256),aMAC); // replay attack only
+      crc256c(@fkM[aEncrypt],sizeof(THash256),aMAC.b); // replay attack only
     else
       raise EECCException.CreateUTF8('%.%: ComputeMAC %?',
         [self,ED[aEncrypt],ToText(fAlgo.mac)^]);
   end;
-  inc(PInt64(@fkM[aEncrypt])^); // 64-bit sequence number against replay attacks
+  with fkM[aEncrypt] do
+    for i := 0 to 3 do begin
+      inc(q[i]); // sequence number against replay attacks
+      if q[i]<>0 then
+        break;
+    end;
 end;
 
 procedure TECDHEProtocol.Encrypt(const aPlain: RawByteString;
   out aEncrypted: RawByteString);
 var len: integer;
-    mac: PHash256;
 begin
   fSafe.Lock;
   try
@@ -5146,8 +5158,7 @@ begin
     SetString(aEncrypted,nil,len+sizeof(THash256));
     fAES[true].EncryptPKCS7Buffer(Pointer(aPlain),pointer(aEncrypted),
       length(aPlain),len,false);
-    mac := @PByteArray(aEncrypted)[len];
-    ComputeMac(true,pointer(aEncrypted),len,mac^);
+    ComputeMac(true,pointer(aEncrypted),len,PHash256Rec(@PByteArray(aEncrypted)[len])^);
   finally
     fSafe.UnLock;
   end;
@@ -5156,8 +5167,8 @@ end;
 function TECDHEProtocol.Decrypt(const aEncrypted: RawByteString;
   out aPlain: RawByteString): TProtocolResult;
 var P: PAnsiChar absolute aEncrypted;
-    len: integer;
-    mac: THash256;
+    len, i: integer;
+    mac: THash256Rec;
 begin
   result := sprInvalidMAC;
   len := length(aEncrypted)-sizeof(THash256);
@@ -5168,11 +5179,16 @@ begin
     SetKey(false);
     aPlain := fAES[false].DecryptPKCS7Buffer(P,len,false,false);
     if aPlain='' then begin
-      inc(PInt64(@fkM[false])^); // don't compute MAC, but increase sequence
+      with fkM[false] do
+        for i := 0 to 3 do begin
+          inc(q[i]); // don't compute MAC, but increase sequence
+          if q[i]<>0 then
+            break;
+        end;
       exit;
     end;
     ComputeMac(false,P,len,mac);
-    if IsEqual(mac,PHash256(P+len)^) then
+    if IsEqual(mac.b,PHash256(P+len)^) then
       result := sprSuccess;
   finally
     fSafe.Unlock;
@@ -5227,8 +5243,8 @@ begin
     fAES[false] := AES_CLASS[fAlgo.ef].Create(secret,AES_BITS[fAlgo.ef]);
     fAES[true] := fAES[false].CloneEncryptDecrypt;
     ComputeSecret(fMACSalt);
-    fkM[false] := secret; // first 128-bit also used as AES IV
-    fkM[true] := secret;
+    fkM[false].b := secret; // first 128-bit also used as AES IV
+    fkM[true].b := secret;
   finally
     FillZero(secret);
   end;

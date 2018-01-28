@@ -12131,7 +12131,9 @@ type
   2: (i0,i1,i2,i3,i4,i5,i6,i7: integer);
   3: (c0,c1: TBlock128);
   4: (b: THash256);
-  5: (w: array[0..15] of word);
+  5: (q: array[0..3] of QWord);
+  6: (c: array[0..7] of cardinal);
+  7: (w: array[0..15] of word);
   end;
   /// pointer to 256-bit hash map variable record
   PHash256Rec = ^THash256Rec;

@@ -5490,13 +5490,13 @@ begin
             if tix-starttix<50 then // wait for an available thread
               SleepHiRes(1) else
               SleepHiRes(10);
+            tix := GetTickCount;
             if Terminated then
               break;
             if fThreadPoolPush(pointer(ClientSock)) then begin
               aborttix := 0; // thread pool acquired the client sock
               break;
             end;
-            tix := GetTickCount;
           until Terminated or (tix>aborttix) or (tix<starttix);
           dec(tix,starttix);
           if integer(tix)>0 then
@@ -6257,7 +6257,7 @@ destructor TSynThreadPool.Destroy;
 var i: integer;
     endtix: cardinal;
 begin
-  fTerminated := true;
+  fTerminated := true; // fSubThread[].Execute will check this flag
   try
     // notify the threads we are shutting down
     for i := 0 to fSubThread.Count-1 do
@@ -6292,7 +6292,7 @@ begin
   result := PostQueuedCompletionStatus(fRequestQueue,0,0,aContext);
   {$else}
   thread := pointer(fSubThread.List);
-  for i := 1 to fSubThread.Count do
+  for i := 1 to fSubThread.Count do // fast search for an available thread
     if (thread^.fProcessingContext=nil) and thread^.AssignProcess(aContext) then begin
       result := true;
       exit;
@@ -6380,7 +6380,7 @@ begin
             fOwner.Task(Self,Context);
           finally
             EnterCriticalSection(fProcessingContextCS);
-            fProcessingContext := nil;
+            fProcessingContext := nil; // indicates this thread is now available
             LeaveCriticalSection(fProcessingContextCS);
           end;
         except
