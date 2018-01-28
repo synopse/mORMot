@@ -5403,20 +5403,23 @@ end;
 function THttpServer.OnNginxAllowSend(Context: THttpServerRequest;
   const LocalFileName: TFileName): boolean;
 var n,i,f: integer;
-    folder: TFileName;
+    folder: ^TFileName;
 begin
-  result := false;
-  if LocalFileName='' then
-    exit;
-  for f := 1 to length(fNginxSendFileFrom) do begin
-    folder := fNginxSendFileFrom[f];
-    i := 1; n := length(folder);
-    while (i<=n) and (LocalFileName[i]=folder[i]) do // case sensitive left search
-      inc(i);
-    result := (i=n+1);
-    if result then
-      break; // found matching folder
-  end;
+  n := 0;
+  folder := pointer(fNginxSendFileFrom);
+  if LocalFileName<>'' then
+    for f := 1 to length(fNginxSendFileFrom) do begin
+      n := length(folder^);
+      for i := 1 to n do // case sensitive left search
+        if LocalFileName[i]<>folder^[i] then begin
+          n := 0;
+          break;
+        end;
+      if n<>0 then
+        break; // found matching folder
+      inc(folder);
+    end;
+  result := n<>0;
   if not result then
     exit; // no match -> manual send
   delete(Context.fOutContent,1,n); // remove e.g. '/var/www'
