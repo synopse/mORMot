@@ -9543,19 +9543,19 @@ begin
   Value[16] := #$E7;
   Value[17] := #$E0;
   Check(not IsBase64(Value));
-  Check(Base64Encode(Value)=Value64);
+  Check(SockBase64Encode(Value)=Value64);
   Check(BinToBase64(Value)=Value64);
   Check(IsBase64(Value64));
   tmp := StringFromFile(ExeVersion.ProgramFileName);
-  b64 := Base64Encode(tmp);
+  b64 := SockBase64Encode(tmp);
   Check(IsBase64(b64));
-  Check(SynCrtSock.Base64Decode(b64)=tmp);
+  Check(SynCrtSock.SockBase64Decode(b64)=tmp);
   Check(BinToBase64(tmp)=b64);
   Check(Base64ToBin(b64)=tmp);
   tmp := '';
   for i := 1 to 1998 do begin
-    b64 := Base64Encode(tmp);
-    Check(SynCrtSock.Base64Decode(b64)=tmp);
+    b64 := SockBase64Encode(tmp);
+    Check(SynCrtSock.SockBase64Decode(b64)=tmp);
     Check((tmp='') or IsBase64(b64));
     Check(BinToBase64(tmp)=b64);
     Check(Base64ToBin(b64)=tmp);
@@ -11406,7 +11406,7 @@ var S: RawByteString;
     i,j: integer;
 //    E: RawByteString; i,L,n: integer;
 begin
-{  S := Base64Encode(CompressString(StringFromFile('d:\temp\tmpCurve.emf')));
+{  S := SockBase64Encode(CompressString(StringFromFile('d:\temp\tmpCurve.emf')));
   E := '  EMF: RawByteString = // some compressed simple EMF file'#13#10;
   L := length(S);
   i := 1;

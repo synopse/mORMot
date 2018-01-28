@@ -20456,6 +20456,7 @@ threadvar
 /// wrapper function to retrieve the global ServiceContext threadvar value
 // - to be used when accessing the value from a package, to circumvent a
 // Delphi RTL/compiler restriction (bug?)
+// - for a cleaner SOA/DI approach, consider using TInjectableObjectRest
 function CurrentServiceContext: TServiceRunningContext;
 
 /// wrapper function to retrieve the current REST server instance from
@@ -20465,8 +20466,9 @@ function CurrentServiceContext: TServiceRunningContext;
 // class from TInjectableObjectRest
 function CurrentServiceContextServer: TSQLRestServer;
 
-/// returns a low-level nonce, which will change every 5 minutes
+/// returns a safe 256-bit hexadecimal nonce, changing every 5 minutes
 // - as used e.g. by TSQLRestServerAuthenticationDefault.Auth
+// - this function is very fast, even if cryptographically-level secure
 function CurrentServerNonce(Previous: boolean=false): RawUTF8;
 
 function ToText(ft: TSQLFieldType): PShortString; overload;
