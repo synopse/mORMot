@@ -270,7 +270,8 @@ type
     (optEraseDBFileAtStartup,
      optSQlite3FileSafeSlowMode,
      optSQlite3FileSafeNonExclusive,
-     optNoSystemUse);
+     optNoSystemUse,
+     optSQlite3File4MBCacheSize);
 
   /// define options to be used for TDDDRestSettings
   TDDDRestSettingsOptions = set of TDDDRestSettingsOption;
@@ -889,6 +890,8 @@ begin
     if optSQlite3FileSafeSlowMode in Options then
       Synchronous := smNormal else
       Synchronous := smOff;
+    if optSQlite3File4MBCacheSize in Options then
+      CacheSize := (4 shl 20) div PageSize;
   end;
 end;
 
