@@ -2555,18 +2555,6 @@ function HtmlEncode(const s: SockString): SockString;
 // - return the MAC address as a 12 hexa chars ('0050C204C80A' e.g.)
 function GetRemoteMacAddress(const IP: SockString): SockString;
 
-type
-  TIPAddress = (tiaAny, tiaPublic, tiaPrivate);
-  
-/// enumerate all IP addresses of the current computer
-// - may be used to enumerate all adapters
-function GetIPAddresses(Kind: TIPAddress = tiaAny): TSockStringDynArray;
-
-/// returns all IP addresses of the current computer as a single CSV text
-// - may be used to enumerate all adapters
-function GetIPAddressesText(const Sep: SockString = ' ';
-  PublicOnly: boolean = false): SockString;
-
 {$else}
 
 /// returns how many files could be opened at once on this POSIX system
@@ -2584,6 +2572,18 @@ function GetFileOpenLimit(hard: boolean=false): integer;
 function SetFileOpenLimit(max: integer; hard: boolean=false): integer;
 
 {$endif MSWINDOWS}
+
+type
+  TIPAddress = (tiaAny, tiaPublic, tiaPrivate);
+  
+/// enumerate all IP addresses of the current computer
+// - may be used to enumerate all adapters
+function GetIPAddresses(Kind: TIPAddress = tiaAny): TSockStringDynArray;
+
+/// returns all IP addresses of the current computer as a single CSV text
+// - may be used to enumerate all adapters
+function GetIPAddressesText(const Sep: SockString = ' ';
+  PublicOnly: boolean = false): SockString;
 
 /// low-level text description of  Socket error code
 // - if Error is -1, will call WSAGetLastError to retrieve the last error code
@@ -3747,6 +3747,27 @@ begin
     result := SockString(Format('%d.%d.%d.%d',[b[0],b[1],b[2],b[3]]))
 end;
 
+procedure GetSinIPFromCache(const sin: TVarSin; var result: SockString);
+begin
+  if sin.sin_family=AF_INET then
+    IP4Text(sin.sin_addr,result) else begin
+    result := GetSinIP(sin); // AF_INET6 may be optimized in a future revision
+    if result='::1' then
+      result := '127.0.0.1'; // IP6 localhost loopback benefits of matching IP4
+  end;
+end;
+
+function IsPublicIP(ip4: cardinal): boolean;
+begin
+  result := false;
+  case ip4 and 255 of // ignore IANA private IP4 address spaces
+    10: exit;
+    172: if ((ip4 shr 8) and 255) in [16..31] then exit;
+    192: if (ip4 shr 8) and 255=168 then exit;
+  end;
+  result := true;
+end;
+
 {$ifdef MSWINDOWS}
 
 function SendARP(DestIp: DWORD; srcIP: DWORD; pMacAddr: pointer;
@@ -3796,17 +3817,6 @@ type
 function GetIpAddrTable(pIpAddrTable: PMIB_IPADDRTABLE;
   var pdwSize: DWORD; bOrder: BOOL): DWORD; stdcall; external 'iphlpapi.dll';
 
-function IsPublicIP(ip4: cardinal): boolean;
-begin
-  result := false;
-  case ip4 and 255 of // ignore IANA private IP4 address spaces
-    10: exit;
-    172: if ((ip4 shr 8) and 255) in [16..31] then exit;
-    192: if (ip4 shr 8) and 255=168 then exit;
-  end;
-  result := true;
-end;
-
 function GetIPAddresses(Kind: TIPAddress): TSockStringDynArray;
 var Table: MIB_IPADDRTABLE;
     Size: DWORD;
@@ -3831,31 +3841,6 @@ begin
     end;
   if n<>Table.dwNumEntries then
     SetLength(result,n);
-end;
-
-var
-  // should not change during process livetime
-  IPAddressesText: array[boolean] of SockString;
-
-function GetIPAddressesText(const Sep: SockString; PublicOnly: boolean): SockString;
-var ip: TSockStringDynArray;
-    i: integer;
-begin
-  if Sep=' ' then
-    result := IPAddressesText[PublicOnly] else
-    result := '';
-  if result<>'' then
-    exit;
-  if PublicOnly then
-    ip := GetIPAddresses(tiaPublic) else
-    ip := GetIPAddresses(tiaAny);
-  if ip=nil then
-    exit;
-  result := ip[0];
-  for i := 1 to high(ip) do
-    result := result+Sep+ip[i];
-  if Sep=' ' then
-    IPAddressesText[PublicOnly] := result;
 end;
 
 {$else}
@@ -3900,7 +3885,109 @@ begin
     result := GetFileOpenLimit(hard);
 end;
 
+{$define USE_IFADDRS}
+
+{$ifdef USE_IFADDRS}
+type
+  Pifaddrs = ^ifaddrs;
+  ifaddrs = record
+    ifa_next: Pifaddrs;
+    ifa_name: PAnsiChar;
+    ifa_flags: cardinal;
+    ifa_addr: Psockaddr;
+    ifa_netmask: Psockaddr;
+    ifa_dstaddr: Psockaddr;
+    ifa_data: Pointer;
+  end;
+
+const
+  IFF_UP = $1;
+  IFF_LOOPBACK = $8;
+  {$ifndef KYLIX3}
+  libcmodulename = 'c';
+  {$endif}
+
+function getifaddrs(var ifap: Pifaddrs): Integer; cdecl;
+  external libcmodulename name 'getifaddrs';
+procedure freeifaddrs(ifap: Pifaddrs); cdecl;
+  external libcmodulename name 'freeifaddrs';
+
+function GetIPAddresses(Kind: TIPAddress): TSockStringDynArray;
+var list, info: Pifaddrs;
+    n, dwAddr: integer;
+    s: SockString;
+begin
+  result := nil;
+  n := 0;
+  if getifaddrs(list)=0 then
+  try
+    info := list;
+    repeat
+      if (info^.ifa_addr<>nil) and (info^.ifa_flags and IFF_LOOPBACK=0) and
+         (info^.ifa_flags and IFF_UP<>0) then begin
+        s := '';
+        case info^.ifa_addr^.sa_family of
+        AF_INET: begin
+          dwAddr := integer(info^.ifa_addr^.sin_addr);
+          if (dwAddr<>$0100007f) and (dwAddr<>0) then
+            case Kind of
+            tiaPublic: if IsPublicIP(dwAddr) then IP4Text(dwAddr,s);
+            tiaPrivate: if not IsPublicIP(dwAddr) then IP4Text(dwAddr,s);
+            tiaAny: IP4Text(dwAddr,s);
+            end;
+            //s := s+'@'+info^.ifa_name;
+        end;
+        //AF_INET6: GetSinIPFromCache(PVarSin(info^.ifa_addr)^,s);
+        end;
+        if s<>'' then begin
+          if n=length(result) then
+            SetLength(result,n+8);
+          result[n] := s;
+          inc(n);
+        end;
+      end;
+      info := info^.ifa_next;
+    until info=nil;
+  finally
+    freeifaddrs(list);
+  end;
+  if n<>length(result) then
+    SetLength(result,n);
+end;
+{$else}
+function GetIPAddresses(Kind: TIPAddress): TSockStringDynArray;
+begin
+  result := nil;
+end;
+{$endif USE_IFADDRS}
+
 {$endif MSWINDOWS}
+
+var
+  // should not change during process livetime
+  IPAddressesText: array[boolean] of SockString;
+
+function GetIPAddressesText(const Sep: SockString; PublicOnly: boolean): SockString;
+var ip: TSockStringDynArray;
+    i: integer;
+begin
+  if Sep=' ' then
+    result := IPAddressesText[PublicOnly] else
+    result := '';
+  if result<>'' then
+    exit;
+  if PublicOnly then
+    ip := GetIPAddresses(tiaPublic) else
+    ip := GetIPAddresses(tiaAny);
+  if ip=nil then
+    exit;
+  result := ip[0];
+  for i := 1 to high(ip) do
+    result := result+Sep+ip[i];
+  if Sep=' ' then
+    IPAddressesText[PublicOnly] := result;
+end;
+
 
 {$ifndef NOXPOWEREDNAME}
 const
@@ -6016,16 +6103,6 @@ begin
   SockSend(['Content-Length: ',length(OutContent)]); // needed even 0
   if (OutContent<>'') and (OutContentType<>'') then
     SockSend(['Content-Type: ',OutContentType]);
-end;
-
-procedure GetSinIPFromCache(const sin: TVarSin; var result: SockString);
-begin
-  if sin.sin_family=AF_INET then
-    IP4Text(sin.sin_addr,result) else begin
-    result := GetSinIP(sin); // AF_INET6 may be optimized in a future revision
-    if result='::1' then
-      result := '127.0.0.1'; // IP6 localhost loopback benefits of matching IP4
-  end;
 end;
 
 
