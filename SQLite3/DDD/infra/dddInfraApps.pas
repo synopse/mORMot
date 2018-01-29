@@ -828,8 +828,6 @@ begin
 end;
 
 function TDDDDaemon.ExecuteAndWaitStarted(TimeoutMS: integer): boolean;
-var
-  tix: Int64;
 begin
   try
     Execute;

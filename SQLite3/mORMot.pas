@@ -57673,11 +57673,7 @@ begin
       raise EServiceException.CreateUTF8('%.Create: %.% unexpected result type %',
         [self,fInterface.fInterfaceName,URI,ArgTypeName^]);
     smvRecord:
-      if ArgTypeInfo=System.TypeInfo(TServiceCustomAnswer) then
-        if InstanceCreation=sicClientDriven then
-          raise EServiceException.CreateUTF8('%.Create: %.% '+
-            'sicClientDriven mode not allowed with TServiceCustomAnswer result',
-            [self,fInterface.fInterfaceName,URI]) else begin
+      if ArgTypeInfo=System.TypeInfo(TServiceCustomAnswer) then begin
         for j := ArgsOutFirst to ArgsOutLast do
           if Args[j].ValueDirection in [smdVar,smdOut] then
             raise EServiceException.CreateUTF8('%.Create: %.% '+
@@ -61326,8 +61322,7 @@ begin
     aServiceCustomAnswer^.Status := status;
     aServiceCustomAnswer^.Header := head;
     aServiceCustomAnswer^.Content := resp;
-    if aClientDrivenID<>nil then
-      aClientDrivenID^ := 0;
+    // no "id" field returned, but aClientDrivenID^ should not change
   end;
   result := true;
 end;
