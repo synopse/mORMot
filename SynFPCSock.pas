@@ -411,6 +411,7 @@ const
   SockWship6Api = true;
 
 type
+  PVarSin = ^TVarSin;
   TVarSin = packed record
     {$ifdef SOCK_HAS_SINLEN}
     sin_len: cuchar;
@@ -818,7 +819,7 @@ begin
     result := SOCKET_ERROR;
 end;
 
-function  IoctlSocket(s: TSocket; cmd: DWORD; var arg: integer): Integer;
+function IoctlSocket(s: TSocket; cmd: DWORD; var arg: integer): Integer;
 begin
   {$ifdef KYLIX3}
   result := ioctl(s,cmd,@arg);

@@ -13124,6 +13124,7 @@ var headpayload: RawUTF8;
     signature: RawByteString;
     fromcache: boolean;
 begin
+  JWT.result := jwtNoToken;
   if (self=nil) or (fCache=nil) then
     fromcache := false else begin
     fromcache := fCache.FindAndCopy(Token,JWT);
@@ -13427,6 +13428,9 @@ begin
   signer := fSignPrepared; // thread-safe re-use of prepared TSynSigner
   signer.Update(pointer(headpayload),length(headpayload));
   signer.Final(temp);
+{  writeln('payload=',headpayload);
+  writeln('sign=',bintohex(@temp,SignatureSize));
+  writeln('expected=',bintohex(pointer(signature),SignatureSize)); }
   if CompareMem(@temp,pointer(signature),SignatureSize) then
     JWT.result := jwtValid;
 end;
