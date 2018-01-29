@@ -28125,13 +28125,13 @@ end;
 procedure PointerToHex(aPointer: Pointer; var result: RawUTF8);
 begin
   FastNewRawUTF8(result,SizeOf(Pointer)*2);
-  BinToHexDisplay(aPointer,pointer(result),SizeOf(Pointer));
+  BinToHexDisplay(@aPointer,pointer(result),SizeOf(Pointer));
 end;
 
 function PointerToHex(aPointer: Pointer): RawUTF8;
 begin
   FastNewRawUTF8(result,SizeOf(aPointer)*2);
-  BinToHexDisplay(aPointer,pointer(result),SizeOf(aPointer));
+  BinToHexDisplay(@aPointer,pointer(result),SizeOf(aPointer));
 end;
 
 function CardinalToHex(aCardinal: Cardinal): RawUTF8;
