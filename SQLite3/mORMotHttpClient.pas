@@ -229,6 +229,8 @@ type
     // the TSQLRestClientURI.SetUser() information, and Definition.DatabaseName
     // to store the extended options as an URL-encoded string
     procedure DefinitionTo(Definition: TSynConnectionDefinition); override;
+    /// returns 'Server:Port' current value
+    function HostName: AnsiString;
   published
     /// the Server IP address
     property Server: AnsiString read fServer;
@@ -659,6 +661,15 @@ begin
   if URI.Port='' then
     URI.Port := Int32ToUtf8(aDefaultPort);
   Create(SockString(URI.Address),SockString(URI.Port),aModel);
+end;
+
+function TSQLHttpClientGeneric.HostName: AnsiString;
+begin
+  if fServer<>'' then
+    if fPort<>'' then
+      result := fServer+':'+fPort else
+      result := fServer else
+    result := '';  
 end;
 
 
