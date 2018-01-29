@@ -6079,6 +6079,7 @@ begin
        IdemPChar(P,'HTTP/1.1');
     Content := '';
     // get headers and content
+    fHeaderText := '';
     GetHeader;
     if fServer<>nil then begin // e.g. =nil from TRTSPOverHTTPServer
       L := length(fServer.fRemoteIPHeaderUpper);
