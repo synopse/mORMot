@@ -37,8 +37,9 @@ unit SynCrypto;
   - Intel's sha256_sse4.asm under under a three-clause Open Software license
   - Johan Bontes
   - souchaud
-  - Project Nayuki (MIT License) for SHA-512 optimized x86 asm 
+  - Project Nayuki (MIT License) for SHA-512 optimized x86 asm
   - Wolfgang Ehrhardt under zlib license for SHA-3 and AES "pure pascal" code
+  - Maxim Masiutin for the MD5 asm
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -223,7 +224,7 @@ unit SynCrypto;
    - added AES-NI hardware support on newer CPUs, for huge performance boost
      and enhanced security
    - AES encryption will compute its own tables, to get rid of 4KB of const
-   - optimized x86 asm version for MD5
+   - optimized x86 and x64 asm version for MD5
    - tested compilation for Win64 platform
    - run with FPC under Windows and Linux (including AES-NI support), and Kylix
    - added Intel's SSE4 x64 optimized asm for SHA-256 on Win64
@@ -309,7 +310,7 @@ const
   AESContextSize = 275+sizeof(pointer){$ifdef USEPADLOCK}*2{$endif};
   /// hide all SHA-1/SHA-2 complex code by storing the context as buffer
   SHAContextSize = 108;
-  /// hide all SHA-3 complex code by storing the Keccak Sponge as buffer 
+  /// hide all SHA-3 complex code by storing the Keccak Sponge as buffer
   SHA3ContextSize = 412;
   /// power of two for a standard AES block size during cypher/uncypher
   // - to be used as 1 shl AESBlockShift or 1 shr AESBlockShift for fast div/mod
@@ -704,10 +705,10 @@ type
     fCV: TAESBlock;
     AES: TAES;
     fCount: Cardinal;
-    fAESInit: (initNone, initEncrypt, initDecrypt); 
+    fAESInit: (initNone, initEncrypt, initDecrypt);
     procedure EncryptInit;
     procedure DecryptInit;
-    procedure TrailerBytes; 
+    procedure TrailerBytes;
   public
     /// creates a new instance with the very same values
     // - by design, our classes will use stateless context, so this method
@@ -756,7 +757,7 @@ type
     procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); override;
   end;
 
-  /// abstract parent class for chaining modes using only AES encryption 
+  /// abstract parent class for chaining modes using only AES encryption
   TAESAbstractEncryptOnly = class(TAESAbstractSyn)
   public
     /// Initialize AES context for cypher
@@ -817,7 +818,7 @@ type
     // with no compromission of the plain content
     encrypted: THash128;
   end;
-  
+
   /// AEAD (authenticated-encryption with associated-data) abstract class
   // - perform AES encryption and on-the-fly MAC computation, i.e. computes
   // a proprietary 256-bit MAC during AES cyphering, as 128-bit CRC of the
@@ -915,7 +916,7 @@ type
       aiKeyAlg: cardinal;
       dwKeyLength: cardinal;
     end;
-    fKeyHeaderKey: TAESKey; // should be just after fKeyHeader record 
+    fKeyHeaderKey: TAESKey; // should be just after fKeyHeader record
     fKeyCryptoAPI: pointer;
     fInternalMode: cardinal;
     procedure InternalSetMode; virtual; abstract;
@@ -1369,14 +1370,14 @@ type
     /// finalize and compute the resulting SHA-3 hash 256-bit Digest
     function Final256(NoInit: boolean=false): THash256;
     /// finalize and compute the resulting SHA-3 hash 512-bit Digest
-    function Final512(NoInit: boolean=false): THash512; 
+    function Final512(NoInit: boolean=false): THash512;
     /// finalize and compute the resulting SHA-3 hash Digest
     // - Digest destination buffer must contain enough bytes
     // - default DigestBits=0 will write the default number of bits to Digest
     // output memory buffer, according to the current TSHA3Algo
     // - you can call this method several times, to use this SHA-3 hasher as
     // "Extendable-Output Function" (XOF), e.g. for stream encryption (ensure
-    // NoInit is set to true, to enable recall) 
+    // NoInit is set to true, to enable recall)
     procedure Final(Digest: pointer; DigestBits: integer=0; NoInit: boolean=false); overload;
     /// compute a SHA-3 hash 256-bit Digest from a buffer, in one call
     // - call Init, then Update(), then Final() using SHA3_256 into a THash256
@@ -1447,7 +1448,7 @@ type
     /// returns the algorithm specified at Init()
     function Algorithm: TSHA3Algo;
     /// fill all used memory context with zeros, for safety
-    // - is necessary only when NoInit is set to true (e.g. after InitCypher)  
+    // - is necessary only when NoInit is set to true (e.g. after InitCypher)
     procedure Done;
   end;
 
@@ -2016,10 +2017,10 @@ type
     step7data: TByte64;
   public
     /// prepare the HMAC authentication with the supplied key
-    // - consider using Compute to re-use a prepared HMAC instance 
+    // - consider using Compute to re-use a prepared HMAC instance
     procedure Init(key: pointer; keylen: integer); overload;
     /// prepare the HMAC authentication with the supplied key
-    // - consider using Compute to re-use a prepared HMAC instance 
+    // - consider using Compute to re-use a prepared HMAC instance
     procedure Init(const key: RawByteString); overload;
     /// call this method for each continuous message block
     // - iterate over all message blocks, then call Done to retrieve the HMAC
@@ -2123,7 +2124,7 @@ var
 /// protect some data for the current user, using Windows DPAPI
 // - the application can specify a secret salt text, which should reflect the
 // current execution context, to ensure nobody could decrypt the data without
-// knowing this application-specific AppSecret value 
+// knowing this application-specific AppSecret value
 // - will use CryptProtectData DPAPI function call under Windows
 // - see https://msdn.microsoft.com/en-us/library/ms995355
 // - this function is Windows-only, could be slow, and you don't know which
@@ -2137,7 +2138,7 @@ function CryptDataForCurrentUserDPAPI(const Data,AppSecret: RawByteString; Encry
 /// protect some data via AES-256-CFB and a secret known by the current user only
 // - the application can specify a secret salt text, which should reflect the
 // current execution context, to ensure nobody could decrypt the data without
-// knowing this application-specific AppSecret value 
+// knowing this application-specific AppSecret value
 // - here data is cyphered using a random secret key, stored in a file located in
 // ! GetSystemPath(spUserData)+sep+PBKDF2_HMAC_SHA256(CryptProtectDataEntropy,User)
 // with sep='_' under Windows, and sep='.syn-' under Linux/Posix
@@ -2426,7 +2427,7 @@ type
   // generated, e.g. "iat":1477438667
   // - jrcJwtID provides a unique identifier for the JWT, to prevent any replay;
   // TJWTAbstract.Compute will set an obfuscated TSynUniqueIdentifierGenerator
-  // hexadecimal value  
+  // hexadecimal value
   TJWTClaim = (
     jrcIssuer, jrcSubject, jrcAudience, jrcExpirationTime, jrcNotBefore,
     jrcIssuedAt, jrcJwtID);
@@ -2579,7 +2580,7 @@ type
     // - it will decode the JWT payload and check for its expiration, and some
     // mandatory fied values
     // - may be used on client side to quickly validate a JWT received from
-    // server, without knowing the exact algorithm or secret keys 
+    // server, without knowing the exact algorithm or secret keys
     class function VerifyPayload(const Token, ExpectedSubject, ExpectedIssuer,
       ExpectedAudience: RawUTF8; Expiration: PUnixTime=nil; Signature: PRawUTF8=nil): TJWTResult;
   published
@@ -2591,7 +2592,7 @@ type
     // - Verify() method will ensure all claims are defined in the payload,
     // then fill TJWTContent.reg[] with all corresponding values
     property Claims: TJWTClaims read fClaims;
-    /// the period, in seconds, for the "exp" claim 
+    /// the period, in seconds, for the "exp" claim
     property ExpirationSeconds: integer read fExpirationSeconds;
     /// the audience string values associated with this instance
     // - will be checked by Verify() method, and set in TJWTContent.audience
@@ -2764,7 +2765,7 @@ const
   JWT_CLAIMS_TEXT: array[TJWTClaim] of RawUTF8 = (
     'iss','sub','aud','exp','nbf','iat','jti');
 
-  /// how TJWTSynSignerAbstract algorithms are identified in the JWT 
+  /// how TJWTSynSignerAbstract algorithms are identified in the JWT
   // - SHA-1 will fallback to HS256 (since there will never be SHA-1 support)
   // - SHA-3 is not yet officially defined in @http://tools.ietf.org/html/rfc7518
   JWT_TEXT: array[TSignAlgo] of RawUTF8 = (
@@ -3922,7 +3923,7 @@ end;
 {$ifdef DELPHI5OROLDER}
   {$define AES_PASCAL} // Delphi 5 internal asm is buggy :(
   {$define SHA3_PASCAL}
-  {$define SHA512_X86} // external sha512-x86.obj 
+  {$define SHA512_X86} // external sha512-x86.obj
 {$else}
   {$ifdef CPUINTEL} // AES-NI supported for x86 and x64 under Windows
     {$ifdef CPU64}
@@ -9626,6 +9627,739 @@ end;
 { TMD5 }
 
 procedure MD5Transform(var buf: TMD5Buf; const in_: TMD5In);
+{$ifdef CPUX64}
+{
+ MD5_Transform-x64
+ MD5 transform routine oprimized for x64 processors
+ Copyright 2018 Ritlabs, SRL
+ The 64-bit version is written by Maxim Masiutin <max@ritlabs.com>
+
+ The main advantage of this 64-bit version is that it loads 64 bytes of hashed
+ message into 8 64-bit registers (RBP, R8, R9, R10, R11, R12, R13, R14) at the
+ beginning, to avoid excessive memory load operations througout the routine.
+
+ MD5_Transform-x64 is released under a dual license, and you may choose to use
+ it under either the Mozilla Public License 2.0 (MPL 2.1, available from
+ https://www.mozilla.org/en-US/MPL/2.0/) or the GNU Lesser General Public
+ License Version 3, dated 29 June 2007 (LGPL 3, available from
+ https://www.gnu.org/licenses/lgpl.html).
+
+ MD5_Transform-x64 is based on Peter Sawatzki's code.
+ Taken from https://github.com/maximmasiutin/MD5_Transform-x64
+}
+{$ifdef FPC}nostackframe; assembler;
+asm
+{$else}
+asm // W=rcx Buf=rdx
+        .noframe
+{$endif}
+        {$ifndef win64}
+        mov     rdx, rsi
+        mov     rcx, rdi
+        {$endif win64}
+        push    rbx
+        push    rsi
+        push    rdi
+        push    rbp
+        push    r12
+        push    r13
+        push    r14
+        mov     r14, rdx
+        mov     rsi, rcx
+        push    rsi
+        mov     eax, dword ptr [rsi]
+        mov     ebx, dword ptr [rsi+4H]
+        mov     ecx, dword ptr [rsi+8H]
+        mov     edx, dword ptr [rsi+0CH]
+        mov     rbp, qword ptr [r14]
+        add     eax, -680876936
+        add     eax, ebp
+        mov     esi, ebx
+        not     esi
+        and     esi, edx
+        mov     edi, ecx
+        and     edi, ebx
+        or      esi, edi
+        add     eax, esi
+        rol     eax, 7
+        add     eax, ebx
+        ror     rbp, 32
+        add     edx, -389564586
+        add     edx, ebp
+        mov     esi, eax
+        not     esi
+        and     esi, ecx
+        mov     edi, ebx
+        and     edi, eax
+        or      esi, edi
+        add     edx, esi
+        rol     edx, 12
+        add     edx, eax
+        mov     r8, qword ptr [r14+8H]
+        add     ecx, 606105819
+        add     ecx, r8d
+        mov     esi, edx
+        not     esi
+        and     esi, ebx
+        mov     edi, eax
+        and     edi, edx
+        or      esi, edi
+        add     ecx, esi
+        rol     ecx, 17
+        add     ecx, edx
+        ror     r8, 32
+        add     ebx, -1044525330
+        add     ebx, r8d
+        mov     esi, ecx
+        not     esi
+        and     esi, eax
+        mov     edi, edx
+        and     edi, ecx
+        or      esi, edi
+        add     ebx, esi
+        rol     ebx, 22
+        add     ebx, ecx
+        mov     r9, qword ptr [r14+10H]
+        add     eax, -176418897
+        add     eax, r9d
+        mov     esi, ebx
+        not     esi
+        and     esi, edx
+        mov     edi, ecx
+        and     edi, ebx
+        or      esi, edi
+        add     eax, esi
+        rol     eax, 7
+        add     eax, ebx
+        ror     r9, 32
+        add     edx, 1200080426
+        add     edx, r9d
+        mov     esi, eax
+        not     esi
+        and     esi, ecx
+        mov     edi, ebx
+        and     edi, eax
+        or      esi, edi
+        add     edx, esi
+        rol     edx, 12
+        add     edx, eax
+        mov     r10, qword ptr [r14+18H]
+        add     ecx, -1473231341
+        add     ecx, r10d
+        mov     esi, edx
+        not     esi
+        and     esi, ebx
+        mov     edi, eax
+        and     edi, edx
+        or      esi, edi
+        add     ecx, esi
+        rol     ecx, 17
+        add     ecx, edx
+        ror     r10, 32
+        add     ebx, -45705983
+        add     ebx, r10d
+        mov     esi, ecx
+        not     esi
+        and     esi, eax
+        mov     edi, edx
+        and     edi, ecx
+        or      esi, edi
+        add     ebx, esi
+        rol     ebx, 22
+        add     ebx, ecx
+        mov     r11, qword ptr [r14+20H]
+        add     eax, 1770035416
+        add     eax, r11d
+        mov     esi, ebx
+        not     esi
+        and     esi, edx
+        mov     edi, ecx
+        and     edi, ebx
+        or      esi, edi
+        add     eax, esi
+        rol     eax, 7
+        add     eax, ebx
+        ror     r11, 32
+        add     edx, -1958414417
+        add     edx, r11d
+        mov     esi, eax
+        not     esi
+        and     esi, ecx
+        mov     edi, ebx
+        and     edi, eax
+        or      esi, edi
+        add     edx, esi
+        rol     edx, 12
+        add     edx, eax
+        mov     r12, qword ptr [r14+28H]
+        add     ecx, -42063
+        add     ecx, r12d
+        mov     esi, edx
+        not     esi
+        and     esi, ebx
+        mov     edi, eax
+        and     edi, edx
+        or      esi, edi
+        add     ecx, esi
+        rol     ecx, 17
+        add     ecx, edx
+        ror     r12, 32
+        add     ebx, -1990404162
+        add     ebx, r12d
+        mov     esi, ecx
+        not     esi
+        and     esi, eax
+        mov     edi, edx
+        and     edi, ecx
+        or      esi, edi
+        add     ebx, esi
+        rol     ebx, 22
+        add     ebx, ecx
+        mov     r13, qword ptr [r14+30H]
+        add     eax, 1804603682
+        add     eax, r13d
+        mov     esi, ebx
+        not     esi
+        and     esi, edx
+        mov     edi, ecx
+        and     edi, ebx
+        or      esi, edi
+        add     eax, esi
+        rol     eax, 7
+        add     eax, ebx
+        ror     r13, 32
+        add     edx, -40341101
+        add     edx, r13d
+        mov     esi, eax
+        not     esi
+        and     esi, ecx
+        mov     edi, ebx
+        and     edi, eax
+        or      esi, edi
+        add     edx, esi
+        rol     edx, 12
+        add     edx, eax
+        mov     r14, qword ptr [r14+38H]
+        add     ecx, -1502002290
+        add     ecx, r14d
+        mov     esi, edx
+        not     esi
+        and     esi, ebx
+        mov     edi, eax
+        and     edi, edx
+        or      esi, edi
+        add     ecx, esi
+        rol     ecx, 17
+        add     ecx, edx
+        ror     r14, 32
+        add     ebx, 1236535329
+        add     ebx, r14d
+        mov     esi, ecx
+        not     esi
+        and     esi, eax
+        mov     edi, edx
+        and     edi, ecx
+        or      esi, edi
+        add     ebx, esi
+        rol     ebx, 22
+        add     ebx, ecx
+        add     eax, -165796510
+        add     eax, ebp
+        mov     esi, edx
+        not     esi
+        and     esi, ecx
+        mov     edi, edx
+        and     edi, ebx
+        or      esi, edi
+        add     eax, esi
+        rol     eax, 5
+        add     eax, ebx
+        ror     r10, 32
+        add     edx, -1069501632
+        add     edx, r10d
+        mov     esi, ecx
+        not     esi
+        and     esi, ebx
+        mov     edi, ecx
+        and     edi, eax
+        or      esi, edi
+        add     edx, esi
+        rol     edx, 9
+        add     edx, eax
+        add     ecx, 643717713
+        add     ecx, r12d
+        mov     esi, ebx
+        not     esi
+        and     esi, eax
+        mov     edi, ebx
+        and     edi, edx
+        or      esi, edi
+        add     ecx, esi
+        rol     ecx, 14
+        add     ecx, edx
+        ror     rbp, 32
+        add     ebx, -373897302
+        add     ebx, ebp
+        mov     esi, eax
+        not     esi
+        and     esi, edx
+        mov     edi, eax
+        and     edi, ecx
+        or      esi, edi
+        add     ebx, esi
+        rol     ebx, 20
+        add     ebx, ecx
+        add     eax, -701558691
+        add     eax, r9d
+        mov     esi, edx
+        not     esi
+        and     esi, ecx
+        mov     edi, edx
+        and     edi, ebx
+        or      esi, edi
+        add     eax, esi
+        rol     eax, 5
+        add     eax, ebx
+        ror     r12, 32
+        add     edx, 38016083
+        add     edx, r12d
+        mov     esi, ecx
+        not     esi
+        and     esi, ebx
+        mov     edi, ecx
+        and     edi, eax
+        or      esi, edi
+        add     edx, esi
+        rol     edx, 9
+        add     edx, eax
+        add     ecx, -660478335
+        add     ecx, r14d
+        mov     esi, ebx
+        not     esi
+        and     esi, eax
+        mov     edi, ebx
+        and     edi, edx
+        or      esi, edi
+        add     ecx, esi
+        rol     ecx, 14
+        add     ecx, edx
+        ror     r9, 32
+        add     ebx, -405537848
+        add     ebx, r9d
+        mov     esi, eax
+        not     esi
+        and     esi, edx
+        mov     edi, eax
+        and     edi, ecx
+        or      esi, edi
+        add     ebx, esi
+        rol     ebx, 20
+        add     ebx, ecx
+        add     eax, 568446438
+        add     eax, r11d
+        mov     esi, edx
+        not     esi
+        and     esi, ecx
+        mov     edi, edx
+        and     edi, ebx
+        or      esi, edi
+        add     eax, esi
+        rol     eax, 5
+        add     eax, ebx
+        ror     r14, 32
+        add     edx, -1019803690
+        add     edx, r14d
+        mov     esi, ecx
+        not     esi
+        and     esi, ebx
+        mov     edi, ecx
+        and     edi, eax
+        or      esi, edi
+        add     edx, esi
+        rol     edx, 9
+        add     edx, eax
+        add     ecx, -187363961
+        add     ecx, r8d
+        mov     esi, ebx
+        not     esi
+        and     esi, eax
+        mov     edi, ebx
+        and     edi, edx
+        or      esi, edi
+        add     ecx, esi
+        rol     ecx, 14
+        add     ecx, edx
+        ror     r11, 32
+        add     ebx, 1163531501
+        add     ebx, r11d
+        mov     esi, eax
+        not     esi
+        and     esi, edx
+        mov     edi, eax
+        and     edi, ecx
+        or      esi, edi
+        add     ebx, esi
+        rol     ebx, 20
+        add     ebx, ecx
+        add     eax, -1444681467
+        add     eax, r13d
+        mov     esi, edx
+        not     esi
+        and     esi, ecx
+        mov     edi, edx
+        and     edi, ebx
+        or      esi, edi
+        add     eax, esi
+        rol     eax, 5
+        add     eax, ebx
+        ror     r8, 32
+        add     edx, -51403784
+        add     edx, r8d
+        mov     esi, ecx
+        not     esi
+        and     esi, ebx
+        mov     edi, ecx
+        and     edi, eax
+        or      esi, edi
+        add     edx, esi
+        rol     edx, 9
+        add     edx, eax
+        ror     r10, 32
+        add     ecx, 1735328473
+        add     ecx, r10d
+        mov     esi, ebx
+        not     esi
+        and     esi, eax
+        mov     edi, ebx
+        and     edi, edx
+        or      esi, edi
+        add     ecx, esi
+        rol     ecx, 14
+        add     ecx, edx
+        ror     r13, 32
+        add     ebx, -1926607734
+        add     ebx, r13d
+        mov     esi, eax
+        not     esi
+        and     esi, edx
+        mov     edi, eax
+        and     edi, ecx
+        or      esi, edi
+        add     ebx, esi
+        rol     ebx, 20
+        add     ebx, ecx
+        ror     r9, 32
+        add     eax, -378558
+        add     eax, r9d
+        mov     esi, edx
+        xor     esi, ecx
+        xor     esi, ebx
+        add     eax, esi
+        rol     eax, 4
+        add     eax, ebx
+        add     edx, -2022574463
+        add     edx, r11d
+        mov     esi, ecx
+        xor     esi, ebx
+        xor     esi, eax
+        add     edx, esi
+        rol     edx, 11
+        add     edx, eax
+        ror     r12, 32
+        add     ecx, 1839030562
+        add     ecx, r12d
+        mov     esi, ebx
+        xor     esi, eax
+        xor     esi, edx
+        add     ecx, esi
+        rol     ecx, 16
+        add     ecx, edx
+        add     ebx, -35309556
+        add     ebx, r14d
+        mov     esi, eax
+        xor     esi, edx
+        xor     esi, ecx
+        add     ebx, esi
+        rol     ebx, 23
+        add     ebx, ecx
+        ror     rbp, 32
+        add     eax, -1530992060
+        add     eax, ebp
+        mov     esi, edx
+        xor     esi, ecx
+        xor     esi, ebx
+        add     eax, esi
+        rol     eax, 4
+        add     eax, ebx
+        ror     r9, 32
+        add     edx, 1272893353
+        add     edx, r9d
+        mov     esi, ecx
+        xor     esi, ebx
+        xor     esi, eax
+        add     edx, esi
+        rol     edx, 11
+        add     edx, eax
+        add     ecx, -155497632
+        add     ecx, r10d
+        mov     esi, ebx
+        xor     esi, eax
+        xor     esi, edx
+        add     ecx, esi
+        rol     ecx, 16
+        add     ecx, edx
+        ror     r12, 32
+        add     ebx, -1094730640
+        add     ebx, r12d
+        mov     esi, eax
+        xor     esi, edx
+        xor     esi, ecx
+        add     ebx, esi
+        rol     ebx, 23
+        add     ebx, ecx
+        ror     r13, 32
+        add     eax, 681279174
+        add     eax, r13d
+        mov     esi, edx
+        xor     esi, ecx
+        xor     esi, ebx
+        add     eax, esi
+        rol     eax, 4
+        add     eax, ebx
+        ror     rbp, 32
+        add     edx, -358537222
+        add     edx, ebp
+        mov     esi, ecx
+        xor     esi, ebx
+        xor     esi, eax
+        add     edx, esi
+        rol     edx, 11
+        add     edx, eax
+        ror     r8, 32
+        add     ecx, -722521979
+        add     ecx, r8d
+        mov     esi, ebx
+        xor     esi, eax
+        xor     esi, edx
+        add     ecx, esi
+        rol     ecx, 16
+        add     ecx, edx
+        ror     r10, 32
+        add     ebx, 76029189
+        add     ebx, r10d
+        mov     esi, eax
+        xor     esi, edx
+        xor     esi, ecx
+        add     ebx, esi
+        rol     ebx, 23
+        add     ebx, ecx
+        ror     r11, 32
+        add     eax, -640364487
+        add     eax, r11d
+        mov     esi, edx
+        xor     esi, ecx
+        xor     esi, ebx
+        add     eax, esi
+        rol     eax, 4
+        add     eax, ebx
+        ror     r13, 32
+        add     edx, -421815835
+        add     edx, r13d
+        mov     esi, ecx
+        xor     esi, ebx
+        xor     esi, eax
+        add     edx, esi
+        rol     edx, 11
+        add     edx, eax
+        ror     r14, 32
+        add     ecx, 530742520
+        add     ecx, r14d
+        mov     esi, ebx
+        xor     esi, eax
+        xor     esi, edx
+        add     ecx, esi
+        rol     ecx, 16
+        add     ecx, edx
+        ror     r8, 32
+        add     ebx, -995338651
+        add     ebx, r8d
+        mov     esi, eax
+        xor     esi, edx
+        xor     esi, ecx
+        add     ebx, esi
+        rol     ebx, 23
+        add     ebx, ecx
+        add     eax, -198630844
+        add     eax, ebp
+        mov     esi, edx
+        not     esi
+        or      esi, ebx
+        xor     esi, ecx
+        add     eax, esi
+        rol     eax, 6
+        add     eax, ebx
+        ror     r10, 32
+        add     edx, 1126891415
+        add     edx, r10d
+        mov     esi, ecx
+        not     esi
+        or      esi, eax
+        xor     esi, ebx
+        add     edx, esi
+        rol     edx, 10
+        add     edx, eax
+        ror     r14, 32
+        add     ecx, -1416354905
+        add     ecx, r14d
+        mov     esi, ebx
+        not     esi
+        or      esi, edx
+        xor     esi, eax
+        add     ecx, esi
+        rol     ecx, 15
+        add     ecx, edx
+        ror     r9, 32
+        add     ebx, -57434055
+        add     ebx, r9d
+        mov     esi, eax
+        not     esi
+        or      esi, ecx
+        xor     esi, edx
+        add     ebx, esi
+        rol     ebx, 21
+        add     ebx, ecx
+        add     eax, 1700485571
+        add     eax, r13d
+        mov     esi, edx
+        not     esi
+        or      esi, ebx
+        xor     esi, ecx
+        add     eax, esi
+        rol     eax, 6
+        add     eax, ebx
+        ror     r8, 32
+        add     edx, -1894986606
+        add     edx, r8d
+        mov     esi, ecx
+        not     esi
+        or      esi, eax
+        xor     esi, ebx
+        add     edx, esi
+        rol     edx, 10
+        add     edx, eax
+        add     ecx, -1051523
+        add     ecx, r12d
+        mov     esi, ebx
+        not     esi
+        or      esi, edx
+        xor     esi, eax
+        add     ecx, esi
+        rol     ecx, 15
+        add     ecx, edx
+        ror     rbp, 32
+        add     ebx, -2054922799
+        add     ebx, ebp
+        mov     esi, eax
+        not     esi
+        or      esi, ecx
+        xor     esi, edx
+        add     ebx, esi
+        rol     ebx, 21
+        add     ebx, ecx
+        ror     r11, 32
+        add     eax, 1873313359
+        add     eax, r11d
+        mov     esi, edx
+        not     esi
+        or      esi, ebx
+        xor     esi, ecx
+        add     eax, esi
+        rol     eax, 6
+        add     eax, ebx
+        ror     r14, 32
+        add     edx, -30611744
+        add     edx, r14d
+        mov     esi, ecx
+        not     esi
+        or      esi, eax
+        xor     esi, ebx
+        add     edx, esi
+        rol     edx, 10
+        add     edx, eax
+        ror     r10, 32
+        add     ecx, -1560198380
+        add     ecx, r10d
+        mov     esi, ebx
+        not     esi
+        or      esi, edx
+        xor     esi, eax
+        add     ecx, esi
+        rol     ecx, 15
+        add     ecx, edx
+        ror     r13, 32
+        add     ebx, 1309151649
+        add     ebx, r13d
+        mov     esi, eax
+        not     esi
+        or      esi, ecx
+        xor     esi, edx
+        add     ebx, esi
+        rol     ebx, 21
+        add     ebx, ecx
+        ror     r9, 32
+        add     eax, -145523070
+        add     eax, r9d
+        mov     esi, edx
+        not     esi
+        or      esi, ebx
+        xor     esi, ecx
+        add     eax, esi
+        rol     eax, 6
+        add     eax, ebx
+        ror     r12, 32
+        add     edx, -1120210379
+        add     edx, r12d
+        mov     esi, ecx
+        not     esi
+        or      esi, eax
+        xor     esi, ebx
+        add     edx, esi
+        rol     edx, 10
+        add     edx, eax
+        ror     r8, 32
+        add     ecx, 718787259
+        add     ecx, r8d
+        mov     esi, ebx
+        not     esi
+        or      esi, edx
+        xor     esi, eax
+        add     ecx, esi
+        rol     ecx, 15
+        add     ecx, edx
+        ror     r11, 32
+        add     ebx, -343485551
+        add     ebx, r11d
+        mov     esi, eax
+        not     esi
+        or      esi, ecx
+        xor     esi, edx
+        add     ebx, esi
+        rol     ebx, 21
+        add     ebx, ecx
+        pop     rsi
+        add     dword ptr [rsi], eax
+        add     dword ptr [rsi+4H], ebx
+        add     dword ptr [rsi+8H], ecx
+        add     dword ptr [rsi+0CH], edx
+        pop     r14
+        pop     r13
+        pop     r12
+        pop     rbp
+        pop     rdi
+        pop     rsi
+        pop     rbx
+end;
+{$else}
 {$ifdef PUREPASCAL}
 var a,b,c,d: cardinal; // unrolled -> compiler will only use cpu registers :)
 // the code below is very fast, and can be compared proudly against C or ASM
@@ -9770,558 +10504,665 @@ begin
   inc(buf[2],c);
   inc(buf[3],d);
 end;
-{$else} // MD5 don't use CPU pipelines: this optimized asm is only 10-15% faster
+{$else PUREPASCAL}
+{
+ MD5_386.Asm   -  386 optimized helper routine for calculating
+                  MD Message-Digest values
+ written 2/2/94 by Peter Sawatzki
+ Buchenhof 3, D58091 Hagen, Germany Fed Rep
+ Peter@Sawatzki.de http://www.sawatzki.de
+
+ original C Source was found in Dr. Dobbs Journal Sep 91
+ MD5 algorithm from RSA Data Security, Inc.
+ Taken from https://github.com/maximmasiutin/MD5_Transform-x64
+}
 asm // eax=buf:TMD5Buf edx=in_:TMD5In
-  push ebx
-  push esi
-  push edi
-  push ebp
-  push eax
-  mov esi,eax
-  mov ebp,edx
-  mov eax,[esi]
-  mov ebx,[esi+4H]
-  mov ecx,[esi+8H]
-  mov edx,[esi+0CH]
-  mov esi,ecx
-  add eax,[ebp]
-  xor esi,edx
-  and esi,ebx
-  xor esi,edx
-  lea eax,[esi+eax-28955B88H]
-  rol eax,7
-  add eax,ebx
-  mov esi,ebx
-  add edx,[ebp+4H]
-  xor esi,ecx
-  and esi,eax
-  xor esi,ecx
-  lea edx,[esi+edx-173848AAH]
-  rol edx,12
-  add edx,eax
-  mov esi,eax
-  add ecx,[ebp+8H]
-  xor esi,ebx
-  and esi,edx
-  xor esi,ebx
-  lea ecx,[esi+ecx+242070DBH]
-  rol ecx,17
-  add ecx,edx
-  mov esi,edx
-  add ebx,[ebp+0CH]
-  xor esi,eax
-  and esi,ecx
-  xor esi,eax
-  lea ebx,[esi+ebx-3E423112H]
-  rol ebx,22
-  add ebx,ecx
-  mov esi,ecx
-  add eax,[ebp+10H]
-  xor esi,edx
-  and esi,ebx
-  xor esi,edx
-  lea eax,[esi+eax-0A83F051H]
-  rol eax,7
-  add eax,ebx
-  mov esi,ebx
-  add edx,[ebp+14H]
-  xor esi,ecx
-  and esi,eax
-  xor esi,ecx
-  lea edx,[esi+edx+4787C62AH]
-  rol edx,12
-  add edx,eax
-  mov esi,eax
-  add ecx,[ebp+18H]
-  xor esi,ebx
-  and esi,edx
-  xor esi,ebx
-  lea ecx,[esi+ecx-57CFB9EDH]
-  rol ecx,17
-  add ecx,edx
-  mov esi,edx
-  add ebx,[ebp+1CH]
-  xor esi,eax
-  and esi,ecx
-  xor esi,eax
-  lea ebx,[esi+ebx-2B96AFFH]
-  rol ebx,22
-  add ebx,ecx
-  mov esi,ecx
-  add eax,[ebp+20H]
-  xor esi,edx
-  and esi,ebx
-  xor esi,edx
-  lea eax,[esi+eax+698098D8H]
-  rol eax,7
-  add eax,ebx
-  mov esi,ebx
-  add edx,[ebp+24H]
-  xor esi,ecx
-  and esi,eax
-  xor esi,ecx
-  lea edx,[esi+edx-74BB0851H]
-  rol edx,12
-  add edx,eax
-  mov esi,eax
-  add ecx,[ebp+28H]
-  xor esi,ebx
-  and esi,edx
-  xor esi,ebx
-  lea ecx,[esi+ecx-0A44FH]
-  rol ecx,17
-  add ecx,edx
-  mov esi,edx
-  add ebx,[ebp+2CH]
-  xor esi,eax
-  and esi,ecx
-  xor esi,eax
-  lea ebx,[esi+ebx-76A32842H]
-  rol ebx,22
-  add ebx,ecx
-  mov esi,ecx
-  add eax,[ebp+30H]
-  xor esi,edx
-  and esi,ebx
-  xor esi,edx
-  lea eax,[esi+eax+6B901122H]
-  rol eax,7
-  add eax,ebx
-  mov esi,ebx
-  add edx,[ebp+34H]
-  xor esi,ecx
-  and esi,eax
-  xor esi,ecx
-  lea edx,[esi+edx-2678E6DH]
-  rol edx,12
-  add edx,eax
-  mov esi,eax
-  add ecx,[ebp+38H]
-  xor esi,ebx
-  and esi,edx
-  xor esi,ebx
-  lea ecx,[esi+ecx-5986BC72H]
-  rol ecx,17
-  add ecx,edx
-  mov esi,edx
-  add ebx,[ebp+3CH]
-  xor esi,eax
-  and esi,ecx
-  xor esi,eax
-  lea ebx,[esi+ebx+49B40821H]
-  rol ebx,22
-  add ebx,ecx
-  mov esi,edx
-  mov edi,edx
-  add eax,[ebp+4H]
-  not esi
-  and edi,ebx
-  and esi,ecx
-  or  esi,edi
-  lea eax,[esi+eax-9E1DA9EH]
-  rol eax,5
-  add eax,ebx
-  mov esi,ecx
-  mov edi,ecx
-  add edx,[ebp+18H]
-  not esi
-  and edi,eax
-  and esi,ebx
-  or  esi,edi
-  lea edx,[esi+edx-3FBF4CC0H]
-  rol edx,9
-  add edx,eax
-  mov esi,ebx
-  mov edi,ebx
-  add ecx,[ebp+2CH]
-  not esi
-  and edi,edx
-  and esi,eax
-  or  esi,edi
-  lea ecx,[esi+ecx+265E5A51H]
-  rol ecx,14
-  add ecx,edx
-  mov esi,eax
-  mov edi,eax
-  add ebx,[ebp]
-  not esi
-  and edi,ecx
-  and esi,edx
-  or  esi,edi
-  lea ebx,[esi+ebx-16493856H]
-  rol ebx,20
-  add ebx,ecx
-  mov esi,edx
-  mov edi,edx
-  add eax,[ebp+14H]
-  not esi
-  and edi,ebx
-  and esi,ecx
-  or  esi,edi
-  lea eax,[esi+eax-29D0EFA3H]
-  rol eax,5
-  add eax,ebx
-  mov esi,ecx
-  mov edi,ecx
-  add edx,[ebp+28H]
-  not esi
-  and edi,eax
-  and esi,ebx
-  or  esi,edi
-  lea edx,[esi+edx+2441453H]
-  rol edx,9
-  add edx,eax
-  mov esi,ebx
-  mov edi,ebx
-  add ecx,[ebp+3CH]
-  not esi
-  and edi,edx
-  and esi,eax
-  or  esi,edi
-  lea ecx,[esi+ecx-275E197FH]
-  rol ecx,14
-  add ecx,edx
-  mov esi,eax
-  mov edi,eax
-  add ebx,[ebp+10H]
-  not esi
-  and edi,ecx
-  and esi,edx
-  or  esi,edi
-  lea ebx,[esi+ebx-182C0438H]
-  rol ebx,20
-  add ebx,ecx
-  mov esi,edx
-  mov edi,edx
-  add eax,[ebp+24H]
-  not esi
-  and edi,ebx
-  and esi,ecx
-  or  esi,edi
-  lea eax,[esi+eax+21E1CDE6H]
-  rol eax,5
-  add eax,ebx
-  mov esi,ecx
-  mov edi,ecx
-  add edx,[ebp+38H]
-  not esi
-  and edi,eax
-  and esi,ebx
-  or  esi,edi
-  lea edx,[esi+edx-3CC8F82AH]
-  rol edx,9
-  add edx,eax
-  mov esi,ebx
-  mov edi,ebx
-  add ecx,[ebp+0CH]
-  not esi
-  and edi,edx
-  and esi,eax
-  or  esi,edi
-  lea ecx,[esi+ecx-0B2AF279H]
-  rol ecx,14
-  add ecx,edx
-  mov esi,eax
-  mov edi,eax
-  add ebx,[ebp+20H]
-  not esi
-  and edi,ecx
-  and esi,edx
-  or  esi,edi
-  lea ebx,[esi+ebx+455A14EDH]
-  rol ebx,20
-  add ebx,ecx
-  mov esi,edx
-  mov edi,edx
-  add eax,[ebp+34H]
-  not esi
-  and edi,ebx
-  and esi,ecx
-  or  esi,edi
-  lea eax,[esi+eax-561C16FBH]
-  rol eax,5
-  add eax,ebx
-  mov esi,ecx
-  mov edi,ecx
-  add edx,[ebp+8H]
-  not esi
-  and edi,eax
-  and esi,ebx
-  or  esi,edi
-  lea edx,[esi+edx-3105C08H]
-  rol edx,9
-  add edx,eax
-  mov esi,ebx
-  mov edi,ebx
-  add ecx,[ebp+1CH]
-  not esi
-  and edi,edx
-  and esi,eax
-  or  esi,edi
-  lea ecx,[esi+ecx+676F02D9H]
-  rol ecx,14
-  add ecx,edx
-  mov esi,eax
-  mov edi,eax
-  add ebx,[ebp+30H]
-  not esi
-  and edi,ecx
-  and esi,edx
-  or  esi,edi
-  lea ebx,[esi+ebx-72D5B376H]
-  rol ebx,20
-  add ebx,ecx
-  mov esi,ecx
-  add eax,[ebp+14H]
-  xor esi,edx
-  xor esi,ebx
-  lea eax,[esi+eax-5C6BEH]
-  rol eax,4
-  add eax,ebx
-  mov esi,ebx
-  add edx,[ebp+20H]
-  xor esi,ecx
-  xor esi,eax
-  lea edx,[esi+edx-788E097FH]
-  rol edx,11
-  add edx,eax
-  mov esi,eax
-  add ecx,[ebp+2CH]
-  xor esi,ebx
-  xor esi,edx
-  lea ecx,[esi+ecx+6D9D6122H]
-  rol ecx,16
-  add ecx,edx
-  mov esi,edx
-  add ebx,[ebp+38H]
-  xor esi,eax
-  xor esi,ecx
-  lea ebx,[esi+ebx-21AC7F4H]
-  rol ebx,23
-  add ebx,ecx
-  mov esi,ecx
-  add eax,[ebp+4H]
-  xor esi,edx
-  xor esi,ebx
-  lea eax,[esi+eax-5B4115BCH]
-  rol eax,4
-  add eax,ebx
-  mov esi,ebx
-  add edx,[ebp+10H]
-  xor esi,ecx
-  xor esi,eax
-  lea edx,[esi+edx+4BDECFA9H]
-  rol edx,11
-  add edx,eax
-  mov esi,eax
-  add ecx,[ebp+1CH]
-  xor esi,ebx
-  xor esi,edx
-  lea ecx,[esi+ecx-944B4A0H]
-  rol ecx,16
-  add ecx,edx
-  mov esi,edx
-  add ebx,[ebp+28H]
-  xor esi,eax
-  xor esi,ecx
-  lea ebx,[esi+ebx-41404390H]
-  rol ebx,23
-  add ebx,ecx
-  mov esi,ecx
-  add eax,[ebp+34H]
-  xor esi,edx
-  xor esi,ebx
-  lea eax,[esi+eax+289B7EC6H]
-  rol eax,4
-  add eax,ebx
-  mov esi,ebx
-  add edx,[ebp]
-  xor esi,ecx
-  xor esi,eax
-  lea edx,[esi+edx-155ED806H]
-  rol edx,11
-  add edx,eax
-  mov esi,eax
-  add ecx,[ebp+0CH]
-  xor esi,ebx
-  xor esi,edx
-  lea ecx,[esi+ecx-2B10CF7BH]
-  rol ecx,16
-  add ecx,edx
-  mov esi,edx
-  add ebx,[ebp+18H]
-  xor esi,eax
-  xor esi,ecx
-  lea ebx,[esi+ebx+4881D05H]
-  rol ebx,23
-  add ebx,ecx
-  mov esi,ecx
-  add eax,[ebp+24H]
-  xor esi,edx
-  xor esi,ebx
-  lea eax,[esi+eax-262B2FC7H]
-  rol eax,4
-  add eax,ebx
-  mov esi,ebx
-  add edx,[ebp+30H]
-  xor esi,ecx
-  xor esi,eax
-  lea edx,[esi+edx-1924661BH]
-  rol edx,11
-  add edx,eax
-  mov esi,eax
-  add ecx,[ebp+3CH]
-  xor esi,ebx
-  xor esi,edx
-  lea ecx,[esi+ecx+1FA27CF8H]
-  rol ecx,16
-  add ecx,edx
-  mov esi,edx
-  add ebx,[ebp+8H]
-  xor esi,eax
-  xor esi,ecx
-  lea ebx,[esi+ebx-3B53A99BH]
-  rol ebx,23
-  add ebx,ecx
-  mov esi,edx
-  not esi
-  add eax,[ebp]
-  or  esi,ebx
-  xor esi,ecx
-  lea eax,[esi+eax-0BD6DDBCH]
-  rol eax,6
-  add eax,ebx
-  mov esi,ecx
-  not esi
-  add edx,[ebp+1CH]
-  or  esi,eax
-  xor esi,ebx
-  lea edx,[esi+edx+432AFF97H]
-  rol edx,10
-  add edx,eax
-  mov esi,ebx
-  not esi
-  add ecx,[ebp+38H]
-  or  esi,edx
-  xor esi,eax
-  lea ecx,[esi+ecx-546BDC59H]
-  rol ecx,15
-  add ecx,edx
-  mov esi,eax
-  not esi
-  add ebx,[ebp+14H]
-  or  esi,ecx
-  xor esi,edx
-  lea ebx,[esi+ebx-36C5FC7H]
-  rol ebx,21
-  add ebx,ecx
-  mov esi,edx
-  not esi
-  add eax,[ebp+30H]
-  or  esi,ebx
-  xor esi,ecx
-  lea eax,[esi+eax+655B59C3H]
-  rol eax,6
-  add eax,ebx
-  mov esi,ecx
-  not esi
-  add edx,[ebp+0CH]
-  or  esi,eax
-  xor esi,ebx
-  lea edx,[esi+edx-70F3336EH]
-  rol edx,10
-  add edx,eax
-  mov esi,ebx
-  not esi
-  add ecx,[ebp+28H]
-  or  esi,edx
-  xor esi,eax
-  lea ecx,[esi+ecx-100B83H]
-  rol ecx,15
-  add ecx,edx
-  mov esi,eax
-  not esi
-  add ebx,[ebp+4H]
-  or  esi,ecx
-  xor esi,edx
-  lea ebx,[esi+ebx-7A7BA22FH]
-  rol ebx,21
-  add ebx,ecx
-  mov esi,edx
-  not esi
-  add eax,[ebp+20H]
-  or  esi,ebx
-  xor esi,ecx
-  lea eax,[esi+eax+6FA87E4FH]
-  rol eax,6
-  add eax,ebx
-  mov esi,ecx
-  not esi
-  add edx,[ebp+3CH]
-  or  esi,eax
-  xor esi,ebx
-  lea edx,[esi+edx-1D31920H]
-  rol edx,10
-  add edx,eax
-  mov esi,ebx
-  not esi
-  add ecx,[ebp+18H]
-  or  esi,edx
-  xor esi,eax
-  lea ecx,[esi+ecx-5CFEBCECH]
-  rol ecx,15
-  add ecx,edx
-  mov esi,eax
-  not esi
-  add ebx,[ebp+34H]
-  or  esi,ecx
-  xor esi,edx
-  lea ebx,[esi+ebx+4E0811A1H]
-  rol ebx,21
-  add ebx,ecx
-  mov esi,edx
-  not esi
-  add eax,[ebp+10H]
-  or  esi,ebx
-  xor esi,ecx
-  lea eax,[esi+eax-8AC817EH]
-  rol eax,6
-  add eax,ebx
-  mov esi,ecx
-  not esi
-  add edx,[ebp+2CH]
-  or  esi,eax
-  xor esi,ebx
-  lea edx,[esi+edx-42C50DCBH]
-  rol edx,10
-  add edx,eax
-  mov esi,ebx
-  not esi
-  add ecx,[ebp+8H]
-  or  esi,edx
-  xor esi,eax
-  lea ecx,[esi+ecx+2AD7D2BBH]
-  rol ecx,15
-  add ecx,edx
-  mov esi,eax
-  not esi
-  add ebx,[ebp+24H]
-  or  esi,ecx
-  xor esi,edx
-  lea ebx,[esi+ebx-14792C6FH]
-  rol ebx,21
-  add ebx,ecx
-  pop esi
-  add [esi],eax
-  add [esi+4H],ebx
-  add [esi+8H],ecx
-  add [esi+0CH],edx
-  pop ebp
-  pop edi
-  pop esi
-  pop ebx
+        push    ebx
+        push    esi
+        push    edi
+        push    ebp
+        mov     ebp, edx
+        push    eax
+        mov     edx, dword ptr [eax+0CH]
+        mov     ecx, dword ptr [eax+8H]
+        mov     ebx, dword ptr [eax+4H]
+        mov     eax, dword ptr [eax]
+        add     eax, dword ptr [ebp]
+        add     eax, -680876936
+        mov     esi, ebx
+        not     esi
+        and     esi, edx
+        mov     edi, ecx
+        and     edi, ebx
+        or      esi, edi
+        add     eax, esi
+        rol     eax, 7
+        add     eax, ebx
+        add     edx, dword ptr [ebp+4H]
+        add     edx, -389564586
+        mov     esi, eax
+        not     esi
+        and     esi, ecx
+        mov     edi, ebx
+        and     edi, eax
+        or      esi, edi
+        add     edx, esi
+        rol     edx, 12
+        add     edx, eax
+        add     ecx, dword ptr [ebp+8H]
+        add     ecx, 606105819
+        mov     esi, edx
+        not     esi
+        and     esi, ebx
+        mov     edi, eax
+        and     edi, edx
+        or      esi, edi
+        add     ecx, esi
+        rol     ecx, 17
+        add     ecx, edx
+        add     ebx, dword ptr [ebp+0CH]
+        add     ebx, -1044525330
+        mov     esi, ecx
+        not     esi
+        and     esi, eax
+        mov     edi, edx
+        and     edi, ecx
+        or      esi, edi
+        add     ebx, esi
+        rol     ebx, 22
+        add     ebx, ecx
+        add     eax, dword ptr [ebp+10H]
+        add     eax, -176418897
+        mov     esi, ebx
+        not     esi
+        and     esi, edx
+        mov     edi, ecx
+        and     edi, ebx
+        or      esi, edi
+        add     eax, esi
+        rol     eax, 7
+        add     eax, ebx
+        add     edx, dword ptr [ebp+14H]
+        add     edx, 1200080426
+        mov     esi, eax
+        not     esi
+        and     esi, ecx
+        mov     edi, ebx
+        and     edi, eax
+        or      esi, edi
+        add     edx, esi
+        rol     edx, 12
+        add     edx, eax
+        add     ecx, dword ptr [ebp+18H]
+        add     ecx, -1473231341
+        mov     esi, edx
+        not     esi
+        and     esi, ebx
+        mov     edi, eax
+        and     edi, edx
+        or      esi, edi
+        add     ecx, esi
+        rol     ecx, 17
+        add     ecx, edx
+        add     ebx, dword ptr [ebp+1CH]
+        add     ebx, -45705983
+        mov     esi, ecx
+        not     esi
+        and     esi, eax
+        mov     edi, edx
+        and     edi, ecx
+        or      esi, edi
+        add     ebx, esi
+        rol     ebx, 22
+        add     ebx, ecx
+        add     eax, dword ptr [ebp+20H]
+        add     eax, 1770035416
+        mov     esi, ebx
+        not     esi
+        and     esi, edx
+        mov     edi, ecx
+        and     edi, ebx
+        or      esi, edi
+        add     eax, esi
+        rol     eax, 7
+        add     eax, ebx
+        add     edx, dword ptr [ebp+24H]
+        add     edx, -1958414417
+        mov     esi, eax
+        not     esi
+        and     esi, ecx
+        mov     edi, ebx
+        and     edi, eax
+        or      esi, edi
+        add     edx, esi
+        rol     edx, 12
+        add     edx, eax
+        add     ecx, dword ptr [ebp+28H]
+        add     ecx, -42063
+        mov     esi, edx
+        not     esi
+        and     esi, ebx
+        mov     edi, eax
+        and     edi, edx
+        or      esi, edi
+        add     ecx, esi
+        rol     ecx, 17
+        add     ecx, edx
+        add     ebx, dword ptr [ebp+2CH]
+        add     ebx, -1990404162
+        mov     esi, ecx
+        not     esi
+        and     esi, eax
+        mov     edi, edx
+        and     edi, ecx
+        or      esi, edi
+        add     ebx, esi
+        rol     ebx, 22
+        add     ebx, ecx
+        add     eax, dword ptr [ebp+30H]
+        add     eax, 1804603682
+        mov     esi, ebx
+        not     esi
+        and     esi, edx
+        mov     edi, ecx
+        and     edi, ebx
+        or      esi, edi
+        add     eax, esi
+        rol     eax, 7
+        add     eax, ebx
+        add     edx, dword ptr [ebp+34H]
+        add     edx, -40341101
+        mov     esi, eax
+        not     esi
+        and     esi, ecx
+        mov     edi, ebx
+        and     edi, eax
+        or      esi, edi
+        add     edx, esi
+        rol     edx, 12
+        add     edx, eax
+        add     ecx, dword ptr [ebp+38H]
+        add     ecx, -1502002290
+        mov     esi, edx
+        not     esi
+        and     esi, ebx
+        mov     edi, eax
+        and     edi, edx
+        or      esi, edi
+        add     ecx, esi
+        rol     ecx, 17
+        add     ecx, edx
+        add     ebx, dword ptr [ebp+3CH]
+        add     ebx, 1236535329
+        mov     esi, ecx
+        not     esi
+        and     esi, eax
+        mov     edi, edx
+        and     edi, ecx
+        or      esi, edi
+        add     ebx, esi
+        rol     ebx, 22
+        add     ebx, ecx
+        add     eax, dword ptr [ebp+4H]
+        add     eax, -165796510
+        mov     esi, edx
+        not     esi
+        and     esi, ecx
+        mov     edi, edx
+        and     edi, ebx
+        or      esi, edi
+        add     eax, esi
+        rol     eax, 5
+        add     eax, ebx
+        add     edx, dword ptr [ebp+18H]
+        add     edx, -1069501632
+        mov     esi, ecx
+        not     esi
+        and     esi, ebx
+        mov     edi, ecx
+        and     edi, eax
+        or      esi, edi
+        add     edx, esi
+        rol     edx, 9
+        add     edx, eax
+        add     ecx, dword ptr [ebp+2CH]
+        add     ecx, 643717713
+        mov     esi, ebx
+        not     esi
+        and     esi, eax
+        mov     edi, ebx
+        and     edi, edx
+        or      esi, edi
+        add     ecx, esi
+        rol     ecx, 14
+        add     ecx, edx
+        add     ebx, dword ptr [ebp]
+        add     ebx, -373897302
+        mov     esi, eax
+        not     esi
+        and     esi, edx
+        mov     edi, eax
+        and     edi, ecx
+        or      esi, edi
+        add     ebx, esi
+        rol     ebx, 20
+        add     ebx, ecx
+        add     eax, dword ptr [ebp+14H]
+        add     eax, -701558691
+        mov     esi, edx
+        not     esi
+        and     esi, ecx
+        mov     edi, edx
+        and     edi, ebx
+        or      esi, edi
+        add     eax, esi
+        rol     eax, 5
+        add     eax, ebx
+        add     edx, dword ptr [ebp+28H]
+        add     edx, 38016083
+        mov     esi, ecx
+        not     esi
+        and     esi, ebx
+        mov     edi, ecx
+        and     edi, eax
+        or      esi, edi
+        add     edx, esi
+        rol     edx, 9
+        add     edx, eax
+        add     ecx, dword ptr [ebp+3CH]
+        add     ecx, -660478335
+        mov     esi, ebx
+        not     esi
+        and     esi, eax
+        mov     edi, ebx
+        and     edi, edx
+        or      esi, edi
+        add     ecx, esi
+        rol     ecx, 14
+        add     ecx, edx
+        add     ebx, dword ptr [ebp+10H]
+        add     ebx, -405537848
+        mov     esi, eax
+        not     esi
+        and     esi, edx
+        mov     edi, eax
+        and     edi, ecx
+        or      esi, edi
+        add     ebx, esi
+        rol     ebx, 20
+        add     ebx, ecx
+        add     eax, dword ptr [ebp+24H]
+        add     eax, 568446438
+        mov     esi, edx
+        not     esi
+        and     esi, ecx
+        mov     edi, edx
+        and     edi, ebx
+        or      esi, edi
+        add     eax, esi
+        rol     eax, 5
+        add     eax, ebx
+        add     edx, dword ptr [ebp+38H]
+        add     edx, -1019803690
+        mov     esi, ecx
+        not     esi
+        and     esi, ebx
+        mov     edi, ecx
+        and     edi, eax
+        or      esi, edi
+        add     edx, esi
+        rol     edx, 9
+        add     edx, eax
+        add     ecx, dword ptr [ebp+0CH]
+        add     ecx, -187363961
+        mov     esi, ebx
+        not     esi
+        and     esi, eax
+        mov     edi, ebx
+        and     edi, edx
+        or      esi, edi
+        add     ecx, esi
+        rol     ecx, 14
+        add     ecx, edx
+        add     ebx, dword ptr [ebp+20H]
+        add     ebx, 1163531501
+        mov     esi, eax
+        not     esi
+        and     esi, edx
+        mov     edi, eax
+        and     edi, ecx
+        or      esi, edi
+        add     ebx, esi
+        rol     ebx, 20
+        add     ebx, ecx
+        add     eax, dword ptr [ebp+34H]
+        add     eax, -1444681467
+        mov     esi, edx
+        not     esi
+        and     esi, ecx
+        mov     edi, edx
+        and     edi, ebx
+        or      esi, edi
+        add     eax, esi
+        rol     eax, 5
+        add     eax, ebx
+        add     edx, dword ptr [ebp+8H]
+        add     edx, -51403784
+        mov     esi, ecx
+        not     esi
+        and     esi, ebx
+        mov     edi, ecx
+        and     edi, eax
+        or      esi, edi
+        add     edx, esi
+        rol     edx, 9
+        add     edx, eax
+        add     ecx, dword ptr [ebp+1CH]
+        add     ecx, 1735328473
+        mov     esi, ebx
+        not     esi
+        and     esi, eax
+        mov     edi, ebx
+        and     edi, edx
+        or      esi, edi
+        add     ecx, esi
+        rol     ecx, 14
+        add     ecx, edx
+        add     ebx, dword ptr [ebp+30H]
+        add     ebx, -1926607734
+        mov     esi, eax
+        not     esi
+        and     esi, edx
+        mov     edi, eax
+        and     edi, ecx
+        or      esi, edi
+        add     ebx, esi
+        rol     ebx, 20
+        add     ebx, ecx
+        add     eax, dword ptr [ebp+14H]
+        add     eax, -378558
+        mov     esi, edx
+        xor     esi, ecx
+        xor     esi, ebx
+        add     eax, esi
+        rol     eax, 4
+        add     eax, ebx
+        add     edx, dword ptr [ebp+20H]
+        add     edx, -2022574463
+        mov     esi, ecx
+        xor     esi, ebx
+        xor     esi, eax
+        add     edx, esi
+        rol     edx, 11
+        add     edx, eax
+        add     ecx, dword ptr [ebp+2CH]
+        add     ecx, 1839030562
+        mov     esi, ebx
+        xor     esi, eax
+        xor     esi, edx
+        add     ecx, esi
+        rol     ecx, 16
+        add     ecx, edx
+        add     ebx, dword ptr [ebp+38H]
+        add     ebx, -35309556
+        mov     esi, eax
+        xor     esi, edx
+        xor     esi, ecx
+        add     ebx, esi
+        rol     ebx, 23
+        add     ebx, ecx
+        add     eax, dword ptr [ebp+4H]
+        add     eax, -1530992060
+        mov     esi, edx
+        xor     esi, ecx
+        xor     esi, ebx
+        add     eax, esi
+        rol     eax, 4
+        add     eax, ebx
+        add     edx, dword ptr [ebp+10H]
+        add     edx, 1272893353
+        mov     esi, ecx
+        xor     esi, ebx
+        xor     esi, eax
+        add     edx, esi
+        rol     edx, 11
+        add     edx, eax
+        add     ecx, dword ptr [ebp+1CH]
+        add     ecx, -155497632
+        mov     esi, ebx
+        xor     esi, eax
+        xor     esi, edx
+        add     ecx, esi
+        rol     ecx, 16
+        add     ecx, edx
+        add     ebx, dword ptr [ebp+28H]
+        add     ebx, -1094730640
+        mov     esi, eax
+        xor     esi, edx
+        xor     esi, ecx
+        add     ebx, esi
+        rol     ebx, 23
+        add     ebx, ecx
+        add     eax, dword ptr [ebp+34H]
+        add     eax, 681279174
+        mov     esi, edx
+        xor     esi, ecx
+        xor     esi, ebx
+        add     eax, esi
+        rol     eax, 4
+        add     eax, ebx
+        add     edx, dword ptr [ebp]
+        add     edx, -358537222
+        mov     esi, ecx
+        xor     esi, ebx
+        xor     esi, eax
+        add     edx, esi
+        rol     edx, 11
+        add     edx, eax
+        add     ecx, dword ptr [ebp+0CH]
+        add     ecx, -722521979
+        mov     esi, ebx
+        xor     esi, eax
+        xor     esi, edx
+        add     ecx, esi
+        rol     ecx, 16
+        add     ecx, edx
+        add     ebx, dword ptr [ebp+18H]
+        add     ebx, 76029189
+        mov     esi, eax
+        xor     esi, edx
+        xor     esi, ecx
+        add     ebx, esi
+        rol     ebx, 23
+        add     ebx, ecx
+        add     eax, dword ptr [ebp+24H]
+        add     eax, -640364487
+        mov     esi, edx
+        xor     esi, ecx
+        xor     esi, ebx
+        add     eax, esi
+        rol     eax, 4
+        add     eax, ebx
+        add     edx, dword ptr [ebp+30H]
+        add     edx, -421815835
+        mov     esi, ecx
+        xor     esi, ebx
+        xor     esi, eax
+        add     edx, esi
+        rol     edx, 11
+        add     edx, eax
+        add     ecx, dword ptr [ebp+3CH]
+        add     ecx, 530742520
+        mov     esi, ebx
+        xor     esi, eax
+        xor     esi, edx
+        add     ecx, esi
+        rol     ecx, 16
+        add     ecx, edx
+        add     ebx, dword ptr [ebp+8H]
+        add     ebx, -995338651
+        mov     esi, eax
+        xor     esi, edx
+        xor     esi, ecx
+        add     ebx, esi
+        rol     ebx, 23
+        add     ebx, ecx
+        add     eax, dword ptr [ebp]
+        add     eax, -198630844
+        mov     esi, edx
+        not     esi
+        or      esi, ebx
+        xor     esi, ecx
+        add     eax, esi
+        rol     eax, 6
+        add     eax, ebx
+        add     edx, dword ptr [ebp+1CH]
+        add     edx, 1126891415
+        mov     esi, ecx
+        not     esi
+        or      esi, eax
+        xor     esi, ebx
+        add     edx, esi
+        rol     edx, 10
+        add     edx, eax
+        add     ecx, dword ptr [ebp+38H]
+        add     ecx, -1416354905
+        mov     esi, ebx
+        not     esi
+        or      esi, edx
+        xor     esi, eax
+        add     ecx, esi
+        rol     ecx, 15
+        add     ecx, edx
+        add     ebx, dword ptr [ebp+14H]
+        add     ebx, -57434055
+        mov     esi, eax
+        not     esi
+        or      esi, ecx
+        xor     esi, edx
+        add     ebx, esi
+        rol     ebx, 21
+        add     ebx, ecx
+        add     eax, dword ptr [ebp+30H]
+        add     eax, 1700485571
+        mov     esi, edx
+        not     esi
+        or      esi, ebx
+        xor     esi, ecx
+        add     eax, esi
+        rol     eax, 6
+        add     eax, ebx
+        add     edx, dword ptr [ebp+0CH]
+        add     edx, -1894986606
+        mov     esi, ecx
+        not     esi
+        or      esi, eax
+        xor     esi, ebx
+        add     edx, esi
+        rol     edx, 10
+        add     edx, eax
+        add     ecx, dword ptr [ebp+28H]
+        add     ecx, -1051523
+        mov     esi, ebx
+        not     esi
+        or      esi, edx
+        xor     esi, eax
+        add     ecx, esi
+        rol     ecx, 15
+        add     ecx, edx
+        add     ebx, dword ptr [ebp+4H]
+        add     ebx, -2054922799
+        mov     esi, eax
+        not     esi
+        or      esi, ecx
+        xor     esi, edx
+        add     ebx, esi
+        rol     ebx, 21
+        add     ebx, ecx
+        add     eax, dword ptr [ebp+20H]
+        add     eax, 1873313359
+        mov     esi, edx
+        not     esi
+        or      esi, ebx
+        xor     esi, ecx
+        add     eax, esi
+        rol     eax, 6
+        add     eax, ebx
+        add     edx, dword ptr [ebp+3CH]
+        add     edx, -30611744
+        mov     esi, ecx
+        not     esi
+        or      esi, eax
+        xor     esi, ebx
+        add     edx, esi
+        rol     edx, 10
+        add     edx, eax
+        add     ecx, dword ptr [ebp+18H]
+        add     ecx, -1560198380
+        mov     esi, ebx
+        not     esi
+        or      esi, edx
+        xor     esi, eax
+        add     ecx, esi
+        rol     ecx, 15
+        add     ecx, edx
+        add     ebx, dword ptr [ebp+34H]
+        add     ebx, 1309151649
+        mov     esi, eax
+        not     esi
+        or      esi, ecx
+        xor     esi, edx
+        add     ebx, esi
+        rol     ebx, 21
+        add     ebx, ecx
+        add     eax, dword ptr [ebp+10H]
+        add     eax, -145523070
+        mov     esi, edx
+        not     esi
+        or      esi, ebx
+        xor     esi, ecx
+        add     eax, esi
+        rol     eax, 6
+        add     eax, ebx
+        add     edx, dword ptr [ebp+2CH]
+        add     edx, -1120210379
+        mov     esi, ecx
+        not     esi
+        or      esi, eax
+        xor     esi, ebx
+        add     edx, esi
+        rol     edx, 10
+        add     edx, eax
+        add     ecx, dword ptr [ebp+8H]
+        add     ecx, 718787259
+        mov     esi, ebx
+        not     esi
+        or      esi, edx
+        xor     esi, eax
+        add     ecx, esi
+        rol     ecx, 15
+        add     ecx, edx
+        add     ebx, dword ptr [ebp+24H]
+        add     ebx, -343485551
+        mov     esi, eax
+        not     esi
+        or      esi, ecx
+        xor     esi, edx
+        add     ebx, esi
+        rol     ebx, 21
+        add     ebx, ecx
+        pop     esi
+        add     dword ptr [esi], eax
+        add     dword ptr [esi+4H], ebx
+        add     dword ptr [esi+8H], ecx
+        add     dword ptr [esi+0CH], edx
+        pop     ebp
+        pop     edi
+        pop     esi
+        pop     ebx
 end;
-{$endif}
+{$endif PUREPASCAL}
+{$endif CPUX64}
 
 function TMD5.Final: TMD5Digest;
 begin
@@ -11300,7 +12141,7 @@ end;
 constructor TAESAbstractEncryptOnly.Create(const aKey; aKeySize: cardinal);
 begin
   inherited Create(aKey,aKeySize);
-  EncryptInit; // as expected by overriden Encrypt/Decrypt methods below 
+  EncryptInit; // as expected by overriden Encrypt/Decrypt methods below
 end;
 
 function TAESAbstractEncryptOnly.CloneEncryptDecrypt: TAESAbstract;
@@ -11588,7 +12429,7 @@ begin
       {$endif USEAESNI64}
         AES.Encrypt(fCV,fCV);
       crcblock(@fMAC.plain,pointer(fIn)); // fOut may be = fIn
-      XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV)); 
+      XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
       fCV := fOut^;
       crcblock(@fMAC.encrypted,pointer(fOut));
       inc(fIn);
@@ -11731,7 +12572,7 @@ procedure AesNiEncryptOFB_128(self: TAESOFB; source, dest: pointer; blockcount: 
 asm
 {$else}
 asm // rcx=TAESOFB,rdx=source,r8=dest,r9=blockcount Linux:rdi,rsi,rdx,rcx
-  .noframe
+    .noframe
 {$endif}
     {$ifndef win64}
     mov    r9,rcx
@@ -11831,7 +12672,7 @@ begin
       inc(fOut);
     end;
     fCount := fCount and AESBlockMod;
-    if fCount<>0 then 
+    if fCount<>0 then
       TrailerBytes;
   end;
 end;
@@ -12327,7 +13168,7 @@ begin
   SetString(result,nil,Len*2);
   if Len=0 then
     exit;
-  bin := @PByteArray(result)[Len]; // temporary store random bytes at the end 
+  bin := @PByteArray(result)[Len]; // temporary store random bytes at the end
   FillRandom(bin,Len);
   SynCommons.BinToHex(bin,pointer(result),Len);
 end;
@@ -12431,7 +13272,7 @@ begin
   sha.Final(dig);
   MoveFast(dig,buf^,size);
 end;
- 
+
 function TAESPRNG.AFSplit(const Buffer; BufferBytes, StripesCount: integer): RawByteString;
 var dst: pointer;
     tmp: TByteDynArray;
@@ -12449,7 +13290,7 @@ begin
     _afdiffusesha256(pointer(tmp),dst,BufferBytes);
     inc(PByte(dst),BufferBytes);
   end;
-  XorMemory(dst,@Buffer,pointer(tmp),BufferBytes); 
+  XorMemory(dst,@Buffer,pointer(tmp),BufferBytes);
 end;
 
 function TAESPRNG.AFSplit(const Buffer: RawByteString; StripesCount: integer): RawByteString;
@@ -12836,7 +13677,7 @@ begin
   FillZero(appsec);
   appsec := BinToBase64URI(@instance,15); // local file has 21 chars length
   keyfile := format({$ifdef MSWINDOWS}'%s_%s'{$else}'%s.syn-%s'{$endif},
-    [GetSystemPath(spUserData),appsec]); // .* files are hidden under Linux 
+    [GetSystemPath(spUserData),appsec]); // .* files are hidden under Linux
   SetString(appsec,PAnsiChar(@instance[15]),17); // use remaining bytes as key
   try
     key := StringFromFile(keyfile);
@@ -13661,7 +14502,3 @@ finalization
   end;
 {$endif}
 end.
-
-
-
-
