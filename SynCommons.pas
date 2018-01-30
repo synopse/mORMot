@@ -11569,6 +11569,11 @@ function PointerToHexShort(aPointer: Pointer): TShort16; overload;
 function CardinalToHex(aCardinal: Cardinal): RawUTF8;
 
 /// fast conversion from a Cardinal value into hexa chars, ready to be displayed
+// - use internally BinToHexDisplayLower()
+// - reverse function of HexDisplayToCardinal()
+function CardinalToHexLower(aCardinal: Cardinal): RawUTF8;
+
+/// fast conversion from a Cardinal value into hexa chars, ready to be displayed
 // - use internally BinToHexDisplay()
 // - such result type would avoid a string allocation on heap
 function CardinalToHexShort(aCardinal: Cardinal): TShort16;
@@ -28138,6 +28143,12 @@ function CardinalToHex(aCardinal: Cardinal): RawUTF8;
 begin
   FastNewRawUTF8(result,SizeOf(aCardinal)*2);
   BinToHexDisplay(@aCardinal,pointer(result),SizeOf(aCardinal));
+end;
+
+function CardinalToHexLower(aCardinal: Cardinal): RawUTF8;
+begin
+  FastNewRawUTF8(result,SizeOf(aCardinal)*2);
+  BinToHexDisplayLower(@aCardinal,pointer(result),SizeOf(aCardinal));
 end;
 
 function Int64ToHex(aInt64: Int64): RawUTF8;

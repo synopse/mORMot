@@ -6188,10 +6188,10 @@ type
     // - this property will be set from incoming URI, even if RESTful
     // authentication is not enabled
     Method: TSQLURIMethod;
-    /// the URI address, excluding ?par1=.... parameters
+    /// the URI address, excluding trailing /info and ?par1=.... parameters
     // - can be either the table name (in RESTful protocol), or a service name
     URI: RawUTF8;
-    /// same as URI, but without the &session_signature=... ending
+    /// same as Call^.URI, but without the &session_signature=... ending
     URIWithoutSignature: RawUTF8;
     /// the optional Blob field name as specified in URI
     // - e.g. retrieved from "ModelRoot/TableName/TableID/BlobFieldName"
@@ -37688,7 +37688,7 @@ begin
   fSessionID := GetCardinal(pointer(aSessionKey));
   if fSessionID=0 then
     exit;
-  fSessionIDHexa8 := CardinalToHex(fSessionID);
+  fSessionIDHexa8 := CardinalToHexLower(fSessionID);
   fSessionPrivateKey := crc32(crc32(0,Pointer(aSessionKey),length(aSessionKey)),
     pointer(aUser.PasswordHashHexa),length(aUser.PasswordHashHexa));
   fSessionUser := aUser;
@@ -52805,8 +52805,8 @@ begin
     Call.url := Call.Url+'&session_signature=';
   with Sender do begin
     fSessionLastTick64 := GetTickCount64;
-    nonce := CardinalToHex(fSessionLastTick64 shr 8); // 256 ms resolution
-    Call.url := Call.url+fSessionIDHexa8+nonce+CardinalToHex(
+    nonce := CardinalToHexLower(fSessionLastTick64 shr 8); // 256 ms resolution
+    Call.url := Call.url+fSessionIDHexa8+nonce+CardinalToHexLower(
       Sender.fComputeSignature(fSessionPrivateKey,Pointer(nonce),
         Pointer(blankURI),length(blankURI)));
   end;
@@ -53043,7 +53043,7 @@ begin
         fServer.SessionCreate(U,Ctxt,Session); // call Ctxt.AuthenticationFailed on error
         if Session<>nil then begin
           // see TSQLRestServerAuthenticationHttpAbstract.ClientSessionSign()
-          Ctxt.SetOutSetCookie((COOKIE_SESSION+'=')+CardinalToHex(Session.IDCardinal));
+          Ctxt.SetOutSetCookie((COOKIE_SESSION+'=')+CardinalToHexLower(Session.IDCardinal));
           if (rsoRedirectForbiddenToAuth in fServer.Options) and (Ctxt.ClientKind=ckAjax) then
             Ctxt.Redirect(fServer.Model.Root) else
             SessionCreateReturns(Ctxt,Session,'','','');
