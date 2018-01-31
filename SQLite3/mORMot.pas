@@ -8942,7 +8942,7 @@ type
   // - if you want a per-representation stateless variant, use ObjectToVariant()
   TObjectVariant = class(TSynInvokeableVariantType)
   protected
-    function GetInfo(const V: TVarData; Name: PAnsiChar): PPropInfo;
+    function GetInfo(const V: TVarData; Name: PUTF8Char): PPropInfo;
     procedure IntGet(var Dest: TVarData; const V: TVarData; Name: PAnsiChar); override;
     procedure IntSet(const V, Value: TVarData; Name: PAnsiChar); override;
   public
@@ -27695,14 +27695,13 @@ begin
   W.WriteObject(TVarData(Value).VPointer);
 end;
 
-function TObjectVariant.GetInfo(const V: TVarData; Name: PAnsiChar): PPropInfo;
+function TObjectVariant.GetInfo(const V: TVarData; Name: PUTF8Char): PPropInfo;
 begin
   if (V.VPointer=nil) or (Name=nil) then
     raise EObjectVariant.CreateUTF8('Invalid %.% call',[self,Name]);
   result := ClassFieldPropWithParentsFromUTF8(PPointer(V.VPointer)^,
-    PUTF8Char(Name), StrLen(PUTF8Char(Name)));
-  if (result=nil) and IsRowID(PUTF8Char(Name)) and
-     TObject(V.VPointer).InheritsFrom(TSQLRecord) then
+    Name, StrLen(Name));
+  if (result=nil) and IsRowID(Name) and TObject(V.VPointer).InheritsFrom(TSQLRecord) then
     result := pointer(1); // recognize TSQLRecord.ID pseudo-property
   if result=nil then
     raise EObjectVariant.CreateUTF8('Unknown %.%',[self,Name]);
@@ -27712,7 +27711,7 @@ procedure TObjectVariant.IntGet(var Dest: TVarData; const V: TVarData;
   Name: PAnsiChar);
 var info: PPropInfo;
 begin
-  info := GetInfo(V,Name);
+  info := GetInfo(V,PUTF8Char(Name));
   if info=pointer(1) then
     variant(Dest) := TSQLRecord(V.VPointer).IDValue else
     if info^.PropType^.Kind=tkClass then
@@ -27723,10 +27722,10 @@ end;
 procedure TObjectVariant.IntSet(const V, Value: TVarData; Name: PAnsiChar);
 var info: PPropInfo;
 begin
-  info := GetInfo(V,Name);
+  info := GetInfo(V,PUTF8Char(Name));
   if info=pointer(1) then
-    VariantToInt64(Variant(Value),Int64(TSQLRecord(V.VPointer).fID)) else
-    GetInfo(V,Name)^.SetFromVariant(V.VPointer,Variant(Value));
+    VariantToInt64(Variant(Value),PInt64(@TSQLRecord(V.VPointer).fID)^) else
+    info^.SetFromVariant(V.VPointer,Variant(Value));
 end;
 
 {$endif NOVARIANTS}
