@@ -8724,7 +8724,6 @@ const
 
 initialization
   assert(SizeOf(TSQLDBColumnProperty)=sizeof(PTrUInt)*2+20);
-  assert(SizeOf(TSQLDBParam)=sizeof(PTrUInt)*3+sizeof(Int64));
   {$ifndef ISDELPHI2010}
   TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TSQLDBFieldType));
   TTextWriter.RegisterCustomJSONSerializerFromText(
