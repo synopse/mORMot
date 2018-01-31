@@ -2448,6 +2448,8 @@ type
   // this type can be used to implement a generic parameter
   // - used e.g. by TSQLDBStatementWithParams as a dynamic array
   // (and its inherited TSQLDBOracleStatement)
+  // - don't change this structure, since it will be serialized as binary
+  // for TSQLDBProxyConnectionCommandExecute
   TSQLDBParam = packed record
     /// storage used for TEXT (ftUTF8) and BLOB (ftBlob) values
     // - ftBlob are stored as RawByteString
@@ -2466,10 +2468,6 @@ type
     VInOut: TSQLDBParamInOutType;
     /// used e.g. by TSQLDBOracleStatement
     VDBType: word;
-    {$ifdef CPU64}
-    // so that VInt64 will be 8 bytes aligned
-    VFill: cardinal;
-    {$endif}
     /// storage used for ftInt64, ftDouble, ftDate and ftCurrency value
     VInt64: Int64;
   end;
