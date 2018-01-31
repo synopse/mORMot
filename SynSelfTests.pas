@@ -6641,6 +6641,18 @@ begin
     J := ObjectToJSON(peop);
     Check(J='{"ID":-1234,"FirstName":"","LastName":"",'+
       '"Data":"","YearOfBirth":0,"YearOfDeath":0}');
+   {$ifndef NOVARIANTS}
+   peop.YearOfDeath := 10;
+   peop.LastName := 'john';
+   TObjectVariant.New(Va,peop);
+   Check(Va.id=-1234);
+   Check(Va.FirstName='');
+   Check(Va.LastName='john');
+   Check(Va.YearOfDeath=10);
+   J := VariantSaveJSON(Va);
+   check(J='{"ID":-1234,"FirstName":"","LastName":"john","Data":"",'+
+     '"YearOfBirth":0,"YearOfDeath":10}');
+   {$endif}
   finally
     peop.Free;
   end;

@@ -9050,29 +9050,6 @@ function ObjectToJSON(Value: TObject;
 function ObjectsToJSON(const Names: array of RawUTF8; const Values: array of TObject;
   Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]): RawUTF8;
 
-{$ifndef NOVARIANTS}
-
-/// will convert any TObject into a TDocVariant document instance
-// - a faster alternative to Dest := _JsonFast(ObjectToJSON(Value))
-// - this would convert the TObject by representation, using only serializable
-// published properties: do not use this function to store temporary a class
-// instance, but e.g. to store an object values in a NoSQL database
-procedure ObjectToVariant(Value: TObject; out Dest: variant); overload;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// will convert any TObject into a TDocVariant document instance
-// - a faster alternative to _JsonFast(ObjectToJSON(Value))
-function ObjectToVariant(Value: TObject; EnumSetsAsText: boolean=false): variant; overload;
-
-/// will convert any TObject into a TDocVariant document instance
-// - a faster alternative to _Json(ObjectToJSON(Value),Options)
-// - note that the result variable should already be cleared: no VarClear()
-// is done by this function
-// - would be used e.g. by VarRecToVariant() function
-procedure ObjectToVariant(Value: TObject; var result: variant;
-  Options: TTextWriterWriteObjectOptions); overload;
-
-{$endif NOVARIANTS}
 
 type
   /// implement a cache of some key/value pairs, e.g. to improve reading speed
@@ -16569,6 +16546,9 @@ type
     // - typical use is with a HTTP status, e.g. as ProcessError(Call.OutStatus)
     // - just a wraper around overloaded ProcessError(), so a thread-safe method
     procedure ProcessErrorNumber(info: integer);
+    /// should be called when an error occurred
+    // - just a wraper around overloaded ProcessError(), so a thread-safe method
+    procedure ProcessErrorFmt(const Fmt: RawUTF8; const Args: array of const);
     /// should be called when the process stops, to pause the internal timer
     // - thread-safe method
     procedure ProcessEnd; virtual;
@@ -43259,6 +43239,14 @@ begin
   VarRecToVariant(V,result);
 end;
 
+procedure ObjectToVariant(Value: TObject; var result: variant;
+  Options: TTextWriterWriteObjectOptions);
+var json: RawUTF8;
+begin
+  json := ObjectToJSON(Value,Options);
+  PDocVariantData(@result)^.InitJSONInPlace(pointer(json),JSON_OPTIONS_FAST);
+end;
+
 procedure VarRecToVariant(const V: TVarRec; var result: variant);
 begin
   if TVarData(result).VType and VTYPE_STATIC=0 then
@@ -43311,27 +43299,6 @@ begin
       ObjectToVariant(V.VObject,result,[woDontStoreDefault]);
     else raise ESynException.CreateUTF8('Unhandled TVarRec.VType=%',[V.VType]);
   end;
-end;
-
-function ObjectToVariant(Value: TObject; EnumSetsAsText: boolean): variant;
-const OPTIONS: array[boolean] of TTextWriterWriteObjectOptions = (
-     [woDontStoreDefault],[woDontStoreDefault,woEnumSetsAsText]);
-begin
-  VarClear(result);
-  ObjectToVariant(Value,result,OPTIONS[EnumSetsAsText]);
-end;
-
-procedure ObjectToVariant(Value: TObject; out Dest: variant);
-begin
-  ObjectToVariant(Value,Dest,[woDontStoreDefault]);
-end;
-
-procedure ObjectToVariant(Value: TObject; var result: variant;
-  Options: TTextWriterWriteObjectOptions);
-var json: RawUTF8;
-begin
-  json := ObjectToJSON(Value,Options);
-  PDocVariantData(@result)^.InitJSONInPlace(pointer(json),JSON_OPTIONS_FAST);
 end;
 
 
@@ -55678,6 +55645,11 @@ begin
   end;
 end;
 
+procedure TSynMonitor.ProcessErrorFmt(const Fmt: RawUTF8; const Args: array of const);
+begin
+  ProcessError({$ifndef NOVARIANTS}RawUTF8ToVariant{$endif}(FormatUTF8(Fmt,Args)));
+end;
+
 procedure TSynMonitor.ProcessErrorNumber(info: integer);
 begin
   ProcessError(info);
@@ -63553,7 +63525,7 @@ begin
         end;
       except
         on E: Exception do begin
-          fStats.ProcessError({$ifdef NOVARIANTS}E.ClassName{$else}ObjectToVariant(E){$endif});
+          fStats.ProcessErrorFmt('%: %', [E.ClassType,E.Message]);
           if Assigned(fOnException) then
             fOnException(E);
         end;
