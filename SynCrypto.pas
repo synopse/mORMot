@@ -1467,6 +1467,10 @@ type
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance
   // - see TSynHasher if you expect to support more than one algorithm at runtime
+  // - even if MD5 is now seldom used, it is still faster than SHA alternatives,
+  // when you need a 128-bit cryptographic hash, but can afford some collisions
+  // - this implementation has optimized x86 and x64 assembly, for processing
+  // around 500MB/s, and a pure-pascal fallback code on other platforms
   TMD5 = {$ifndef UNICODE}object{$else}record{$endif}
   private
     in_: TMD5In;
@@ -9444,9 +9448,9 @@ asm
     mov   cl,[esi+15]
     add   edi,ebx
     add   ebx,ecx
-    cmp   eax,16
-    lea   esi,[esi+16]
+    add   esi,16
     lea   edi,[edi+ebx]
+    cmp   eax,16
     jge   @39
 @38:test  eax,eax
   	je    @42
@@ -9627,6 +9631,7 @@ end;
 { TMD5 }
 
 procedure MD5Transform(var buf: TMD5Buf; const in_: TMD5In);
+// see https://synopse.info/forum/viewtopic.php?id=4369 for asm numbers
 {$ifdef CPUX64}
 {
  MD5_Transform-x64
