@@ -2125,7 +2125,7 @@ function VariantHexDisplayToBin(const Hex: variant; Bin: PByte; BinBytes: intege
 /// fast conversion of a binary buffer into hexa chars, as a variant string
 function BinToHexDisplayLowerVariant(Bin: pointer; BinBytes: integer): variant;
   {$ifdef HASINLINE}inline;{$endif}
-
+  
 /// fast comparison of a Variant and UTF-8 encoded String (or number)
 // - slightly faster than plain V=Str, which computes a temporary variant
 // - here Str='' equals unassigned, null or false
@@ -2472,6 +2472,10 @@ function CompareMem(P1, P2: Pointer; Length: Integer): Boolean;
 {$endif PUREPASCAL}
 
 {$endif ENHANCEDRTL}
+
+
+/// convert an IPv4 'x.x.x.x' text into its 32-bit value
+function IPToCardinal(const aIP: RawUTF8; out aValue: cardinal): boolean;
 
 /// convert some ASCII-7 text into binary, using Emile Baudot code
 // - as used in telegraphs, covering a-z 0-9 - ' , ! : ( + ) $ ? @ . / ; charset
@@ -21371,6 +21375,24 @@ begin
   end else
     P := StrUInt64(P,val);
   result := P;
+end;
+
+function IPToCardinal(const aIP: RawUTF8; out aValue: cardinal): boolean;
+var P: PUTF8Char;
+    i,c: cardinal;
+    b: array[0..3] of byte absolute aValue;
+begin
+  result := false;
+  if (aIP='') or (aIP='127.0.0.1') then
+    exit;
+  P := pointer(aIP);
+  for i := 0 to 3 do begin
+    c := GetNextItemCardinal(P,'.');
+    if (c>255) or ((i<3) and (P=nil)) then
+      exit;
+    b[i] := c;
+  end;
+  result := aValue<>$0100007f;
 end;
 
 const

@@ -36880,24 +36880,6 @@ begin
   aWriter.WriteVarUInt32Array(fIP4, fCount, wkUInt32);
 end;
 
-function IPToCardinal(const aIP: RawUTF8; out aValue: cardinal): boolean;
-var P: PUTF8Char;
-    i,c: cardinal;
-    b: array[0..3] of byte absolute aValue;
-begin
-  result := false;
-  if (aIP='') or (aIP='127.0.0.1') then
-    exit;
-  P := pointer(aIP);
-  for i := 0 to 3 do begin
-    c := GetNextItemCardinal(P,'.');
-    if (c>255) or ((i<3) and (P=nil)) then
-      exit;
-    b[i] := c;
-  end;
-  result := aValue<>$0100007f;
-end;
-
 function TIPBan.Add(const aIP: RawUTF8): boolean;
 var ip4: cardinal;
 begin
