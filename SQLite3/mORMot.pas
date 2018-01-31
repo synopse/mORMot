@@ -8911,6 +8911,19 @@ type
     procedure CastTo(var Dest: TVarData; const Source: TVarData;
       const AVarType: TVarType); override;
   end;
+
+  /// a custom variant type used to have direct access to object published properties
+  // - very usable for cases where conversion from object to variant is not sufficient.
+  // TObjProxyVariant provides direct access to object properties from Variant instead of
+  // conversion to Variant.
+  TObjProxyVariant = class(TSynInvokeableVariantType)
+  protected
+    function CreatePropInfo(aClass: TClass; Name: PAnsiChar): TSQLPropInfoRTTI;
+    procedure IntGet(var Dest: TVarData; const V: TVarData; Name: PAnsiChar); override;
+    procedure IntSet(const V, Value: TVarData; Name: PAnsiChar); override;
+  public
+    class procedure New(var v: Variant; obj: TObject);
+  end;
 {$endif NOVARIANTS}
 
 
@@ -27630,6 +27643,64 @@ begin
     r := TSQLTableRowVariantData(Value).VTable.fStepRow;
   TSQLTableRowVariantData(Value).VTable.ToDocVariant(r,tmp);
   W.AddVariant(tmp,Escape);
+end;
+
+var
+  ObjProxyVariantType: TCustomVariantType = nil;
+
+function TObjProxyVariant.CreatePropInfo(aClass: TClass; Name: PAnsiChar): TSQLPropInfoRTTI;
+var i: integer;
+    p: PPropInfo;
+begin
+  repeat
+    for i := 1 to InternalClassPropInfo(aClass,p) do
+      if IdemPropName(p.Name,Name) then begin
+        Result := TSQLPropInfoRTTI(TSQLPropInfoRTTI.CreateFrom(p,0,[],nil));
+        Exit;
+      end else
+        p := p.Next;
+    aClass := aClass.ClassParent;
+  until aClass=nil;
+  Result := nil;
+end;
+
+procedure TObjProxyVariant.IntGet(var Dest: TVarData; const V: TVarData;
+  Name: PAnsiChar);
+var pi: TSQLPropInfoRTTI;
+begin
+  pi := CreatePropInfo(PClass(V.VPointer)^, Name);
+  if pi=nil then
+    RaiseInvalidOp;
+  try
+    if pi.PropType^.Kind=tkClass then
+      TObjProxyVariant.New(Variant(Dest), TSQLPropInfoRTTIInstance(pi).GetInstance(V.VPointer))
+    else
+      pi.GetVariant(V.VPointer,Variant(Dest));
+  finally
+    pi.Free;
+  end;
+end;
+
+procedure TObjProxyVariant.IntSet(const V, Value: TVarData; Name: PAnsiChar);
+var pi: TSQLPropInfoRTTI;
+begin
+  pi := CreatePropInfo(PClass(V.VPointer)^, Name);
+  if pi=nil then
+    RaiseInvalidOp;
+  try
+    pi.SetVariant(V.VPointer,Variant(Value));
+  finally
+    pi.Free;
+  end;
+end;
+
+class procedure TObjProxyVariant.New(var v: Variant; obj: TObject);
+begin
+  if ObjProxyVariantType=nil then
+    ObjProxyVariantType := SynRegisterCustomVariantType(TObjProxyVariant);
+
+  TVarData(v).VType := ObjProxyVariantType.VarType;
+  TVarData(v).VPointer := obj;
 end;
 
 {$endif NOVARIANTS}
