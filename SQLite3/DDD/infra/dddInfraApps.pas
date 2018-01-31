@@ -142,6 +142,13 @@ type
     procedure ExecuteCommandLine(ForceRun: boolean=false);
     /// start the daemon, until the instance is released
     procedure Execute;
+    /// wait for Daemon property to be set
+    // - Execute method should have been previously caleld
+    // - returns true if the daemon has been started in the specified time
+    function WaitStarted(TimeoutMS: integer=10000): boolean;
+    /// start the daemon and wait for Daemon property to be set
+    // - returns true if the daemon has been started in the specified time
+    function ExecuteAndWaitStarted(TimeoutMS: integer=10000): boolean;
     /// read-only access to the underlying daemon instance
     // - equals nil if the daemon is not started
     property Daemon: IAdministratedDaemon read fDaemon;
@@ -807,6 +814,27 @@ begin
   {$endif}
   fDaemon := NewDaemon;
   fDaemon.Start;
+end;
+
+function TDDDDaemon.WaitStarted(TimeoutMS: integer): boolean;
+var
+  tix: Int64;
+begin
+  tix := GetTickCount64 + TimeoutMS;
+  repeat
+    sleep(50);
+    result := Daemon <> nil;
+  until result or (GetTickCount64 > tix);
+end;
+
+function TDDDDaemon.ExecuteAndWaitStarted(TimeoutMS: integer): boolean;
+begin
+  try
+    Execute;
+    result := WaitStarted(TimeoutMS);
+  except
+    result := false;
+  end;
 end;
 
 type

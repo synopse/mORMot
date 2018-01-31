@@ -374,8 +374,8 @@ asm
         or      ebp, ebp
         jz      @@0897
         sub     eax, ebp
-        cmp     eax, 2
         mov     ecx, [esp+18H]
+        cmp     eax, 2
         jle     @@0897
         lea     esi, [esi+2]
         or      dword ptr[ecx], ebx
@@ -860,8 +860,8 @@ asm
 @@0908: mov     ecx, [ebx]
         add     ebx, 4
         mov     [esp+14H], ecx
-        cmp     ebx, [esp+10H]
         mov     edi, 1             // edi=CWbit
+        cmp     ebx, [esp+10H]
         jnc     @@0917
 @@0909: mov     ecx, [esp+14H]
 @@090A: test    ecx, edi
@@ -950,8 +950,8 @@ asm
         shr     edx, 12
         xor     eax, edx
         and     eax, 0FFFH
-        cmp     esi, ebp
         mov     [esp+eax*4+1CH], ebp
+        cmp     esi, ebp
         ja      @@0915
 @@0916: add     esi, [esp+18H]
         cmp     ebx, [esp+10H]

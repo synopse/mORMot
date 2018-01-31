@@ -2282,6 +2282,26 @@ function ObjectToVariantDebug(Value: TObject;
   const ContextFormat: RawUTF8; const ContextArgs: array of const;
   const ContextName: RawUTF8='context'): variant; overload;
 
+/// will convert any TObject into a TDocVariant document instance
+// - a faster alternative to Dest := _JsonFast(ObjectToJSON(Value))
+// - this would convert the TObject by representation, using only serializable
+// published properties: do not use this function to store temporary a class
+// instance, but e.g. to store an object values in a NoSQL database
+procedure ObjectToVariant(Value: TObject; out Dest: variant); overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// will convert any TObject into a TDocVariant document instance
+// - a faster alternative to _JsonFast(ObjectToJSON(Value))
+function ObjectToVariant(Value: TObject; EnumSetsAsText: boolean=false): variant; overload;
+
+/// will convert any TObject into a TDocVariant document instance
+// - a faster alternative to _Json(ObjectToJSON(Value),Options)
+// - note that the result variable should already be cleared: no VarClear()
+// is done by this function
+// - would be used e.g. by VarRecToVariant() function
+procedure ObjectToVariant(Value: TObject; var result: variant;
+  Options: TTextWriterWriteObjectOptions); overload;
+
 /// will serialize any TObject into a TDocVariant debugging document
 // - just a wrapper around _JsonFast(ObjectToJSONDebug())
 function ObjectToVariantDebug(Value: TObject): variant; overload;
@@ -3110,6 +3130,8 @@ type
     {$ifndef NOVARIANTS}
     /// low-level setter of the property value from a supplied variant
     procedure SetFromVariant(Instance: TObject; const Value: variant);
+    /// low-level getter of the property value into a variant value
+    procedure GetVariant(Instance: TObject; var Dest: variant);
     {$endif NOVARIANTS}
     /// read an TObject published property, as saved by ObjectToJSON() function
     // - will use direct in-memory reference to the object, or call the corresponding
@@ -6188,10 +6210,10 @@ type
     // - this property will be set from incoming URI, even if RESTful
     // authentication is not enabled
     Method: TSQLURIMethod;
-    /// the URI address, excluding ?par1=.... parameters
+    /// the URI address, excluding trailing /info and ?par1=.... parameters
     // - can be either the table name (in RESTful protocol), or a service name
     URI: RawUTF8;
-    /// same as URI, but without the &session_signature=... ending
+    /// same as Call^.URI, but without the &session_signature=... ending
     URIWithoutSignature: RawUTF8;
     /// the optional Blob field name as specified in URI
     // - e.g. retrieved from "ModelRoot/TableName/TableID/BlobFieldName"
@@ -8911,6 +8933,27 @@ type
     procedure CastTo(var Dest: TVarData; const Source: TVarData;
       const AVarType: TVarType); override;
   end;
+  
+  EObjectVariant = ESynException;
+
+  /// a custom variant type used to have direct access to object published properties
+  // - TObjectVariant provides lazy-loading to object properties from Variant without
+  // converting all properties into a TDocVariant, as ObjectToVariant() does
+  // - if you want a per-representation stateless variant, use ObjectToVariant()
+  TObjectVariant = class(TSynInvokeableVariantType)
+  protected
+    function GetInfo(const V: TVarData; Name: PUTF8Char): PPropInfo;
+    procedure IntGet(var Dest: TVarData; const V: TVarData; Name: PAnsiChar); override;
+    procedure IntSet(const V, Value: TVarData; Name: PAnsiChar); override;
+  public
+    /// initialize a new custom variant instance, wrapping the specified object
+    // - warning: this custom variant is just a wrapper around an existing TObject
+    // instance, which should remain available as long as the variant is used
+    class procedure New(var V: Variant; Obj: TObject);
+    /// will perform proper JSON serialization using ObjectToJson()
+    procedure ToJSON(W: TTextWriter; const Value: variant; Escape: TTextWriterKind); override;
+  end;
+
 {$endif NOVARIANTS}
 
 
@@ -21403,11 +21446,13 @@ function ObjectLoadVariant(var ObjectInstance; const aDocVariant: variant;
   TObjectListItemClass: TClass=nil; Options: TJSONToObjectOptions=[]): boolean;
 var tmp: RawUTF8;
 begin
-  if _Safe(aDocVariant)^.Kind<>dvObject then
-    result := false else begin
-    VariantSaveJSON(aDocVariant,twJSONEscape,tmp);
-    JSONToObject(ObjectInstance,pointer(tmp),result,TObjectListItemClass,Options);
-  end;
+  result := false;
+  if _Safe(aDocVariant)^.Kind=dvObject then
+    VariantSaveJSON(aDocVariant,twJSONEscape,tmp) else
+    if VariantToUTF8(aDocVariant, tmp) and (tmp<>'') and (tmp[1]='{') then
+      UniqueRawUTF8(tmp) else
+      exit;
+  JSONToObject(ObjectInstance,pointer(tmp),result,TObjectListItemClass,Options);
 end;
 
 procedure TSQLPropInfo.GetVariant(Instance: TObject; var Dest: Variant);
@@ -27573,7 +27618,7 @@ procedure TSQLTableRowVariant.IntGet(var Dest: TVarData;
 var r,f: integer;
 begin
   if (TSQLTableRowVariantData(V).VTable=nil) or (Name=nil) then
-    ESQLTableException.CreateUTF8('Invalid %.% call',[self,Name]);
+    raise ESQLTableException.CreateUTF8('Invalid %.% call',[self,Name]);
   r := TSQLTableRowVariantData(V).VRow;
   if r<0 then begin
     r := TSQLTableRowVariantData(V).VTable.fStepRow;
@@ -27588,7 +27633,7 @@ end;
 
 procedure TSQLTableRowVariant.IntSet(const V, Value: TVarData; Name: PAnsiChar);
 begin
-  ESQLTableException.CreateUTF8('% is read-only',[self]);
+  raise ESQLTableException.CreateUTF8('% is read-only',[self]);
 end;
 
 procedure TSQLTableRowVariant.Cast(var Dest: TVarData; const Source: TVarData);
@@ -27628,6 +27673,59 @@ begin
     r := TSQLTableRowVariantData(Value).VTable.fStepRow;
   TSQLTableRowVariantData(Value).VTable.ToDocVariant(r,tmp);
   W.AddVariant(tmp,Escape);
+end;
+
+
+{ TObjectVariant }
+
+var
+  ObjectVariantType: TCustomVariantType;
+
+class procedure TObjectVariant.New(var V: Variant; Obj: TObject);
+begin
+  VarClear(V);
+  if ObjectVariantType=nil then
+    ObjectVariantType := SynRegisterCustomVariantType(TObjectVariant);
+  TVarData(V).VType := ObjectVariantType.VarType;
+  TVarData(V).VPointer := Obj;
+end;
+
+procedure TObjectVariant.ToJSON(W: TTextWriter; const Value: variant; Escape: TTextWriterKind);
+begin
+  W.WriteObject(TVarData(Value).VPointer);
+end;
+
+function TObjectVariant.GetInfo(const V: TVarData; Name: PUTF8Char): PPropInfo;
+begin
+  if (V.VPointer=nil) or (Name=nil) then
+    raise EObjectVariant.CreateUTF8('Invalid %.% call',[self,Name]);
+  result := ClassFieldPropWithParentsFromUTF8(PPointer(V.VPointer)^,
+    Name, StrLen(Name));
+  if (result=nil) and IsRowID(Name) and TObject(V.VPointer).InheritsFrom(TSQLRecord) then
+    result := pointer(1); // recognize TSQLRecord.ID pseudo-property
+  if result=nil then
+    raise EObjectVariant.CreateUTF8('Unknown %.%',[self,Name]);
+end;
+
+procedure TObjectVariant.IntGet(var Dest: TVarData; const V: TVarData;
+  Name: PAnsiChar);
+var info: PPropInfo;
+begin
+  info := GetInfo(V,PUTF8Char(Name));
+  if info=pointer(1) then
+    variant(Dest) := TSQLRecord(V.VPointer).IDValue else
+    if info^.PropType^.Kind=tkClass then
+      New(Variant(Dest),info^.GetObjProp(V.VPointer)) else
+      info^.GetVariant(V.VPointer,Variant(Dest));
+end;
+
+procedure TObjectVariant.IntSet(const V, Value: TVarData; Name: PAnsiChar);
+var info: PPropInfo;
+begin
+  info := GetInfo(V,PUTF8Char(Name));
+  if info=pointer(1) then
+    VariantToInt64(Variant(Value),PInt64(@TSQLRecord(V.VPointer).fID)^) else
+    info^.SetFromVariant(V.VPointer,Variant(Value));
 end;
 
 {$endif NOVARIANTS}
@@ -28970,6 +29068,44 @@ begin
     RecordLoadJSON(GetFieldAddr(Instance)^,pointer(u),TypeInfo);
   end;
   {$endif}
+  end;
+end;
+
+procedure TPropInfo.GetVariant(Instance: TObject; var Dest: variant);
+var i: PtrInt;
+    U: RawUTF8;
+begin
+  if (Instance<>nil) and (@self<>nil) then
+  case PropType^.Kind of
+  tkInteger,tkEnumeration,tkSet,tkChar,tkWChar{$ifdef FPC},tkBool{$endif}: begin
+    i := GetOrdProp(Instance);
+    case PropType^.Kind of
+    tkInteger,tkSet: Dest := i;
+    tkChar: Dest := AnsiChar(i);
+    tkWChar: Dest := WideChar(i);
+    {$ifdef FPC}
+    tkBool: Dest := boolean(i);
+    tkEnumeration: Dest := i;
+    {$else}
+    tkEnumeration:
+      if TypeInfo=system.TypeInfo(boolean) then
+        Dest := boolean(i) else
+        Dest := i;
+    {$endif}
+    end;
+  end;
+  tkInt64{$ifdef FPC},tkQWord{$endif}:
+    Dest := GetInt64Prop(Instance);
+  tkLString,tkWString{$ifdef HASVARUSTRING},tkUString{$endif}{$ifdef FPC},tkAString{$endif}: begin
+    GetLongStrValue(Instance,U);
+    RawUTF8ToVariant(U,Dest);
+  end;
+  tkFloat: Dest := GetFloatProp(Instance);
+  tkVariant: GetVariantProp(Instance,Dest);
+  tkClass: ObjectToVariant(GetObjProp(Instance),Dest);
+  tkDynArray: TDocVariantData(Dest).InitArrayFromObjArray(
+    pointer(GetOrdProp(Instance))^,JSON_OPTIONS_FAST);
+  else VarClear(Dest);
   end;
 end;
 {$endif NOVARIANTS}
@@ -36878,24 +37014,6 @@ begin
   aWriter.WriteVarUInt32Array(fIP4, fCount, wkUInt32);
 end;
 
-function IPToCardinal(const aIP: RawUTF8; out aValue: cardinal): boolean;
-var P: PUTF8Char;
-    i,c: cardinal;
-    b: array[0..3] of byte absolute aValue;
-begin
-  result := false;
-  if (aIP='') or (aIP='127.0.0.1') then
-    exit;
-  P := pointer(aIP);
-  for i := 0 to 3 do begin
-    c := GetNextItemCardinal(P,'.');
-    if (c>255) or ((i<3) and (P=nil)) then
-      exit;
-    b[i] := c;
-  end;
-  result := aValue<>$0100007f;
-end;
-
 function TIPBan.Add(const aIP: RawUTF8): boolean;
 var ip4: cardinal;
 begin
@@ -37686,7 +37804,7 @@ begin
   fSessionID := GetCardinal(pointer(aSessionKey));
   if fSessionID=0 then
     exit;
-  fSessionIDHexa8 := CardinalToHex(fSessionID);
+  fSessionIDHexa8 := CardinalToHexLower(fSessionID);
   fSessionPrivateKey := crc32(crc32(0,Pointer(aSessionKey),length(aSessionKey)),
     pointer(aUser.PasswordHashHexa),length(aUser.PasswordHashHexa));
   fSessionUser := aUser;
@@ -43340,7 +43458,7 @@ var EndOfObject: AnsiChar;
   end;
   function IsNotAllowed: boolean;
   begin
-    result := (CurrentContext<>nil) and
+    result := (CurrentContext<>nil) and (CurrentContext.Command=execORMWrite) and
       not CurrentContext.Call.RestAccessRights^.CanExecuteORMWrite(
         URIMethod,RunTable,RunTableIndex,ID,CurrentContext);
   end;
@@ -48112,6 +48230,27 @@ begin
   end;
 end;
 
+function ObjectToVariant(Value: TObject; EnumSetsAsText: boolean): variant;
+const OPTIONS: array[boolean] of TTextWriterWriteObjectOptions = (
+     [woDontStoreDefault],[woDontStoreDefault,woEnumSetsAsText]);
+begin
+  VarClear(result);
+  ObjectToVariant(Value,result,OPTIONS[EnumSetsAsText]);
+end;
+
+procedure ObjectToVariant(Value: TObject; out Dest: variant);
+begin
+  ObjectToVariant(Value,Dest,[woDontStoreDefault]);
+end;
+
+procedure ObjectToVariant(Value: TObject; var result: variant;
+  Options: TTextWriterWriteObjectOptions);
+var json: RawUTF8;
+begin
+  json := ObjectToJSON(Value,Options);
+  PDocVariantData(@result)^.InitJSONInPlace(pointer(json),JSON_OPTIONS_FAST);
+end;
+
 function ObjectToJSONDebug(Value: TObject; Options: TTextWriterWriteObjectOptions): RawUTF8;
 begin
   if Value=nil then
@@ -52803,8 +52942,8 @@ begin
     Call.url := Call.Url+'&session_signature=';
   with Sender do begin
     fSessionLastTick64 := GetTickCount64;
-    nonce := CardinalToHex(fSessionLastTick64 shr 8); // 256 ms resolution
-    Call.url := Call.url+fSessionIDHexa8+nonce+CardinalToHex(
+    nonce := CardinalToHexLower(fSessionLastTick64 shr 8); // 256 ms resolution
+    Call.url := Call.url+fSessionIDHexa8+nonce+CardinalToHexLower(
       Sender.fComputeSignature(fSessionPrivateKey,Pointer(nonce),
         Pointer(blankURI),length(blankURI)));
   end;
@@ -53041,7 +53180,7 @@ begin
         fServer.SessionCreate(U,Ctxt,Session); // call Ctxt.AuthenticationFailed on error
         if Session<>nil then begin
           // see TSQLRestServerAuthenticationHttpAbstract.ClientSessionSign()
-          Ctxt.SetOutSetCookie((COOKIE_SESSION+'=')+CardinalToHex(Session.IDCardinal));
+          Ctxt.SetOutSetCookie((COOKIE_SESSION+'=')+CardinalToHexLower(Session.IDCardinal));
           if (rsoRedirectForbiddenToAuth in fServer.Options) and (Ctxt.ClientKind=ckAjax) then
             Ctxt.Redirect(fServer.Model.Root) else
             SessionCreateReturns(Ctxt,Session,'','','');
@@ -57673,11 +57812,7 @@ begin
       raise EServiceException.CreateUTF8('%.Create: %.% unexpected result type %',
         [self,fInterface.fInterfaceName,URI,ArgTypeName^]);
     smvRecord:
-      if ArgTypeInfo=System.TypeInfo(TServiceCustomAnswer) then
-        if InstanceCreation=sicClientDriven then
-          raise EServiceException.CreateUTF8('%.Create: %.% '+
-            'sicClientDriven mode not allowed with TServiceCustomAnswer result',
-            [self,fInterface.fInterfaceName,URI]) else begin
+      if ArgTypeInfo=System.TypeInfo(TServiceCustomAnswer) then begin
         for j := ArgsOutFirst to ArgsOutLast do
           if Args[j].ValueDirection in [smdVar,smdOut] then
             raise EServiceException.CreateUTF8('%.Create: %.% '+
@@ -57697,7 +57832,9 @@ begin
   fContractHash := '"'+CardinalToHex(Hash32(fContract))+
     CardinalToHex(CRC32string(fContract))+'"'; // 2 hashes to avoid collision
   if aContractExpected<>'' then // override default contract
-    fContractExpected := aContractExpected else
+    if aContractExpected[1]<>'"' then // stored as JSON string
+      fContractExpected := '"'+aContractExpected+'"' else
+      fContractExpected := aContractExpected else
     fContractExpected := fContractHash; // for security
 end;
 
@@ -61326,8 +61463,7 @@ begin
     aServiceCustomAnswer^.Status := status;
     aServiceCustomAnswer^.Header := head;
     aServiceCustomAnswer^.Content := resp;
-    if aClientDrivenID<>nil then
-      aClientDrivenID^ := 0;
+    // no "id" field returned, but aClientDrivenID^ should not change
   end;
   result := true;
 end;
@@ -61361,7 +61497,7 @@ begin
     if not InternalInvoke(SERVICE_PSEUDO_METHOD[imContract],
        TSQLRestClientURI(fRest).fServicePublishOwnInterfaces,@RemoteContract,@Error) then
       raise EServiceException.CreateUTF8('%.Create(): I% interface or % routing not '+
-        'supported by server: %',[self,fInterfaceURI,fRest.ServicesRouting,Error]);
+        'supported by server [%]',[self,fInterfaceURI,fRest.ServicesRouting,Error]);
     if ('['+ContractExpected+']'<>RemoteContract) and
        ('{"contract":'+ContractExpected+'}'<>RemoteContract) then
       raise EServiceException.CreateUTF8('%.Create(): server''s I% contract '+

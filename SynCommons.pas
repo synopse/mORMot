@@ -2125,7 +2125,7 @@ function VariantHexDisplayToBin(const Hex: variant; Bin: PByte; BinBytes: intege
 /// fast conversion of a binary buffer into hexa chars, as a variant string
 function BinToHexDisplayLowerVariant(Bin: pointer; BinBytes: integer): variant;
   {$ifdef HASINLINE}inline;{$endif}
-
+  
 /// fast comparison of a Variant and UTF-8 encoded String (or number)
 // - slightly faster than plain V=Str, which computes a temporary variant
 // - here Str='' equals unassigned, null or false
@@ -2472,6 +2472,10 @@ function CompareMem(P1, P2: Pointer; Length: Integer): Boolean;
 {$endif PUREPASCAL}
 
 {$endif ENHANCEDRTL}
+
+
+/// convert an IPv4 'x.x.x.x' text into its 32-bit value
+function IPToCardinal(const aIP: RawUTF8; out aValue: cardinal): boolean;
 
 /// convert some ASCII-7 text into binary, using Emile Baudot code
 // - as used in telegraphs, covering a-z 0-9 - ' , ! : ( + ) $ ? @ . / ; charset
@@ -9047,29 +9051,6 @@ function ObjectToJSON(Value: TObject;
 function ObjectsToJSON(const Names: array of RawUTF8; const Values: array of TObject;
   Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]): RawUTF8;
 
-{$ifndef NOVARIANTS}
-
-/// will convert any TObject into a TDocVariant document instance
-// - a faster alternative to Dest := _JsonFast(ObjectToJSON(Value))
-// - this would convert the TObject by representation, using only serializable
-// published properties: do not use this function to store temporary a class
-// instance, but e.g. to store an object values in a NoSQL database
-procedure ObjectToVariant(Value: TObject; out Dest: variant); overload;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// will convert any TObject into a TDocVariant document instance
-// - a faster alternative to _JsonFast(ObjectToJSON(Value))
-function ObjectToVariant(Value: TObject; EnumSetsAsText: boolean=false): variant; overload;
-
-/// will convert any TObject into a TDocVariant document instance
-// - a faster alternative to _Json(ObjectToJSON(Value),Options)
-// - note that the result variable should already be cleared: no VarClear()
-// is done by this function
-// - would be used e.g. by VarRecToVariant() function
-procedure ObjectToVariant(Value: TObject; var result: variant;
-  Options: TTextWriterWriteObjectOptions); overload;
-
-{$endif NOVARIANTS}
 
 type
   /// implement a cache of some key/value pairs, e.g. to improve reading speed
@@ -11568,6 +11549,11 @@ function PointerToHexShort(aPointer: Pointer): TShort16; overload;
 // - use internally BinToHexDisplay()
 // - reverse function of HexDisplayToCardinal()
 function CardinalToHex(aCardinal: Cardinal): RawUTF8;
+
+/// fast conversion from a Cardinal value into hexa chars, ready to be displayed
+// - use internally BinToHexDisplayLower()
+// - reverse function of HexDisplayToCardinal()
+function CardinalToHexLower(aCardinal: Cardinal): RawUTF8;
 
 /// fast conversion from a Cardinal value into hexa chars, ready to be displayed
 // - use internally BinToHexDisplay()
@@ -16561,6 +16547,9 @@ type
     // - typical use is with a HTTP status, e.g. as ProcessError(Call.OutStatus)
     // - just a wraper around overloaded ProcessError(), so a thread-safe method
     procedure ProcessErrorNumber(info: integer);
+    /// should be called when an error occurred
+    // - just a wraper around overloaded ProcessError(), so a thread-safe method
+    procedure ProcessErrorFmt(const Fmt: RawUTF8; const Args: array of const);
     /// should be called when the process stops, to pause the internal timer
     // - thread-safe method
     procedure ProcessEnd; virtual;
@@ -18410,8 +18399,8 @@ end;
 {$else}
 asm // eax=s edx=len
         test    edx, edx
-        mov     ecx, [eax]
         jz      System.@LStrClr
+        mov     ecx, [eax]
         test    ecx, ecx
         jz      @set
         cmp     dword ptr[ecx - 8], 1
@@ -21107,8 +21096,8 @@ asm // rcx=P, rdx=val (Linux: rdi,rsi)
         jb      @3              // direct process of common val<10
         mov     rax, rdx
         lea     r8, [rip + TwoDigitLookup]
-@s:     cmp     rax, 100
-        lea     rcx, [rcx - 2]
+@s:     lea     rcx, [rcx - 2]
+        cmp     rax, 100
         jb      @2
         lea     r9, [rax * 2]
         shr     rax, 2
@@ -21159,8 +21148,8 @@ asm // eax=P, edx=val
         push    edi
         mov     edi, eax
         mov     eax, edx
-@s:     cmp     eax, 100
-        lea     edi, [edi - 2]
+@s:     lea     edi, [edi - 2]
+        cmp     eax, 100
         jb      @2
         mov     ecx, eax
         mov     edx, 1374389535 // use power of two reciprocal to avoid division
@@ -21215,8 +21204,8 @@ asm // rcx=P, rdx=val (Linux: rdi,rsi)
         jb      @3           // direct process of common val<10
         mov     rax, rdx
         lea     r8, [rip + TwoDigitLookup]
-@s:     cmp     rax, 100
-        lea     rcx, [rcx - 2]
+@s:     lea     rcx, [rcx - 2]
+        cmp     rax, 100
         jb      @2
         lea     r9, [rax * 2]
         shr     rax, 2
@@ -21276,8 +21265,8 @@ asm     // eax=P, edx=val
         mov     eax, edx
         nop
         nop         // @s loop alignment
-@s:     cmp     eax, 100
-        lea     edi, [edi - 2]
+@s:     lea     edi, [edi - 2]
+        cmp     eax, 100
         jb      @2
         mov     ecx, eax
         mov     edx, 1374389535 // use power of two reciprocal to avoid division
@@ -21367,6 +21356,24 @@ begin
   end else
     P := StrUInt64(P,val);
   result := P;
+end;
+
+function IPToCardinal(const aIP: RawUTF8; out aValue: cardinal): boolean;
+var P: PUTF8Char;
+    i,c: cardinal;
+    b: array[0..3] of byte absolute aValue;
+begin
+  result := false;
+  if (aIP='') or (aIP='127.0.0.1') then
+    exit;
+  P := pointer(aIP);
+  for i := 0 to 3 do begin
+    c := GetNextItemCardinal(P,'.');
+    if (c>255) or ((i<3) and (P=nil)) then
+      exit;
+    b[i] := c;
+  end;
+  result := aValue<>$0100007f;
 end;
 
 const
@@ -22446,8 +22453,8 @@ end;
 asm
         test    eax, eax
         jz      @n
-        cmp     dl, [eax]
         movzx   ecx, byte ptr[eax + TTypeInfo.NameLen]
+        cmp     dl, [eax]
         jne     @n
         add     eax, ecx
         ret
@@ -26638,6 +26645,7 @@ asm // fast 8 bits WinAnsi comparaison using the NormToUpper[] array
         pop     ebx
         sub     eax, ecx // return S1[1]-S2[1]
         ret
+@2b:    pop     ebx
 @2:     xor     eax, eax
         ret
 @3:     test    eax, eax // S1=''
@@ -26663,8 +26671,8 @@ asm // fast 8 bits WinAnsi comparaison using the NormToUpper[] array
         sub     eax, ecx // return S1[i]-S2[i]
         ret
 @z:     cmp     ebx, ecx // S1=S2?
+        jz      @2b
         pop     ebx
-        jz      @2
 @4:     or      eax, -1 // return -1 (S1<S2)
 end;
 {$endif}
@@ -28126,19 +28134,25 @@ end;
 procedure PointerToHex(aPointer: Pointer; var result: RawUTF8);
 begin
   FastNewRawUTF8(result,SizeOf(Pointer)*2);
-  BinToHexDisplay(aPointer,pointer(result),SizeOf(Pointer));
+  BinToHexDisplay(@aPointer,pointer(result),SizeOf(Pointer));
 end;
 
 function PointerToHex(aPointer: Pointer): RawUTF8;
 begin
   FastNewRawUTF8(result,SizeOf(aPointer)*2);
-  BinToHexDisplay(aPointer,pointer(result),SizeOf(aPointer));
+  BinToHexDisplay(@aPointer,pointer(result),SizeOf(aPointer));
 end;
 
 function CardinalToHex(aCardinal: Cardinal): RawUTF8;
 begin
   FastNewRawUTF8(result,SizeOf(aCardinal)*2);
   BinToHexDisplay(@aCardinal,pointer(result),SizeOf(aCardinal));
+end;
+
+function CardinalToHexLower(aCardinal: Cardinal): RawUTF8;
+begin
+  FastNewRawUTF8(result,SizeOf(aCardinal)*2);
+  BinToHexDisplayLower(@aCardinal,pointer(result),SizeOf(aCardinal));
 end;
 
 function Int64ToHex(aInt64: Int64): RawUTF8;
@@ -28216,9 +28230,9 @@ begin
 end;
 {$else}
 asm // eax=Y, edx=P
-        cmp     eax, 9999
         push    edx
         mov     ecx, eax
+        cmp     eax, 9999
         ja      @big
         mov     edx, 1374389535 // use power of two reciprocal to avoid division
         mul     edx
@@ -29598,9 +29612,9 @@ asm // eax=P, edx=Count, Value=ecx
         je      @ok
         cmp     [eax + 28], ecx
         je      @ok
+        add     eax, 32
         cmp     edx, 8
-        lea     eax, [eax + 32] // preserve flags during 'cmp edx,8' computation
-@s2:    jae     @s1
+        jae     @s1
         jmp     dword ptr[edx * 4 + @Table]
 @7:     cmp     [eax + 24], ecx
         je      @ok
@@ -29696,8 +29710,8 @@ asm // eax=P, edx=Count, Value=ecx
         je      @ok24
         cmp     [eax + 28], ecx
         je      @ok28
+        add     eax, 32
         cmp     edx, 8
-        lea     eax, [eax + 32]  // preserve flags during 'cmp edx,8' computation
         jae     @s1
 @s2:    test    edx, edx
         jz      @z
@@ -31573,14 +31587,14 @@ asm
         test    edx, edx
         push    ebx
         jz      @t            // up=nil -> true
-        mov     ecx, [edx]    // optimized for DWORD aligned read up^
         xor     ebx, ebx
-@1:     test    cl, cl
+@1:     mov     ecx, [edx]    // optimized for DWORD aligned read up^
+        test    cl, cl
         mov     bl, [eax]
         jz      @t            // up^[0]=#0 -> OK
         cmp     cl, byte ptr[ebx + NormToUpperAnsi7] // NormToUpperAnsi7[p^[0]]
-        mov     bl, [eax + 1]
         jne     @f
+        mov     bl, [eax + 1]
         test    ch, ch
         jz      @t            // up^[1]=#0 -> OK
         cmp     ch, byte ptr[ebx + NormToUpperAnsi7] // NormToUpperAnsi7[p^[1]]
@@ -31590,14 +31604,13 @@ asm
         test    cl, cl
         jz      @t            // up^[2]=#0 -> OK
         cmp     cl, byte ptr[ebx + NormToUpperAnsi7] // NormToUpperAnsi7[p^[2]]
-        mov     bl, [eax + 3]
         jne     @f
+        mov     bl, [eax + 3]
+        add     eax, 4
+        add     edx, 4
         test    ch, ch
-        lea     eax, [eax + 4]
-        lea     edx, [edx + 4]
         jz      @t            // up^[3]=#0 -> OK
         cmp     ch, byte ptr[ebx + NormToUpperAnsi7] // NormToUpperAnsi7[p^[3]]
-        mov     ecx, [edx]    // next DWORD from up^
         je      @1
 @f:     pop     ebx // NormToUpperAnsi7[p^]<>up^ -> FALSE
 @e:     xor     eax, eax
@@ -31711,9 +31724,9 @@ function UpperCopy255BufSSE42(dest: PAnsiChar; source: PUTF8Char; sourceLen: int
 asm // eax=dest edx=source ecx=sourceLen
        test    ecx,ecx
        jz      @z
-       cmp     ecx,16
        movdqu  xmm1,dqword ptr [@az]
        movdqu  xmm3,dqword ptr [@bits]
+       cmp     ecx,16
        ja      @big
        // optimize the common case of sourceLen<=16
        movdqu  xmm2,[edx]
@@ -31727,8 +31740,8 @@ asm // eax=dest edx=source ecx=sourceLen
        movdqu  [eax],xmm2
        add     eax,ecx
 @z:    ret
-@big:  cmp     ecx,240
-       push    eax
+@big:  push    eax
+       cmp     ecx,240
        jb      @ok
        mov     ecx,239
 @ok:   add     [esp],ecx // save to return end position with the exact size
@@ -33754,10 +33767,10 @@ asm
         push    esi
         push    ebx
         sub     esp, 8
-        cmp     edx, 15
         mov     ebx, eax
         mov     dword ptr [esp], edx
         lea     eax, [ebx+165667B1H]
+        cmp     edx, 15
         jbe     @2
         lea     eax, [ebp-10H]
         lea     edi, [ebx+24234428H]
@@ -33862,8 +33875,8 @@ asm
         // P=r8 len=rcx crc=rdx
         push    rbx
         lea     r10, [rcx+rdx]
-        cmp     rdx, 15
         lea     eax, [r8+165667B1H]
+        cmp     rdx, 15
         jbe     @2
         lea     rsi, [r10-10H]
         lea     ebx, [r8+24234428H]
@@ -38498,18 +38511,18 @@ asm // eax=Value edx=Dest
 @s:     and     cl, $7F // handle two bytes per loop
         shr     eax, 7
         or      cl, $80
-        cmp     eax, $7f
         mov     [edx], cl
-        lea     edx, [edx + 1]
+        inc     edx
         mov     ecx, eax
+        cmp     eax, $7f
         jbe     @z
         and     cl, $7f
         shr     eax, 7
         or      cl, $80
-        cmp     eax, $7f
         mov     [edx], cl
         mov     ecx, eax
-        lea     edx, [edx + 1]
+        inc     edx
+        cmp     eax, $7f
         ja      @s
 @z:     mov     [edx], al
         lea     eax, [edx + 1]
@@ -39840,8 +39853,8 @@ asm  // faster version of _CopyRecord{dest, source, typeInfo: Pointer} by AB
 {$ifdef NOVARCOPYPROC}
         mov     edx, esi
         call    System.@VarCopy
-{$else} cmp     dword ptr[VarCopyProc], 0
-        mov     edx, esi
+{$else} mov     edx, esi
+        cmp     dword ptr[VarCopyProc], 0
         jz      @errv
         call    [VarCopyProc]
 {$endif}
@@ -40126,8 +40139,8 @@ end;
 procedure FillCharx64; // A. Bouchez' version
 asm  // rcx=Dest rdx=Count r8=Value
         .noframe
-        cmp     rdx, 32
         mov     rax, r8
+        cmp     rdx, 32
         jle     @small
         and     r8, 0FFH
         mov     r9, 101010101010101H
@@ -40232,9 +40245,9 @@ asm // rcx=Source, rdx=Dest, r8=Count
         test    r8, r8
         jle     @none
         cld
-        cmp     rdx, rcx
         push    rsi
         push    rdi
+        cmp     rdx, rcx
         ja      @down
         mov     rsi, rcx
         mov     rdi, rdx
@@ -40332,8 +40345,8 @@ end;
 procedure FillCharX87;
 asm // eax=Dest edx=Count cl=Value
         // faster version by John O'Harrow  (Code Size = 153 Bytes)
-        cmp     edx, 32
         mov     ch, cl                 // copy value into both bytes of cx
+        cmp     edx, 32
         jl      @small
         mov     [eax], cx              // fill first 8 bytes
         mov     [eax + 2], cx
@@ -40506,9 +40519,9 @@ asm // eax=source edx=dest ecx=count
       test    ecx, ecx
       jle     @none
       cld
-      cmp     edx, eax
       push    esi
       push    edi
+      cmp     edx, eax
       ja      @down
       mov     esi, eax
       mov     edi, edx
@@ -40566,8 +40579,8 @@ end;
 
 procedure FillCharSSE2;
 asm // Dest=eax Count=edx Value=cl
-        cmp     edx, 32
         mov     ch, cl                {copy value into both bytes of cx}
+        cmp     edx, 32
         jl      @small
         sub     edx, 16
         movd    xmm0, ecx
@@ -43229,6 +43242,14 @@ begin
   VarRecToVariant(V,result);
 end;
 
+procedure ObjectToVariant(Value: TObject; var result: variant;
+  Options: TTextWriterWriteObjectOptions);
+var json: RawUTF8;
+begin
+  json := ObjectToJSON(Value,Options);
+  PDocVariantData(@result)^.InitJSONInPlace(pointer(json),JSON_OPTIONS_FAST);
+end;
+
 procedure VarRecToVariant(const V: TVarRec; var result: variant);
 begin
   if TVarData(result).VType and VTYPE_STATIC=0 then
@@ -43281,27 +43302,6 @@ begin
       ObjectToVariant(V.VObject,result,[woDontStoreDefault]);
     else raise ESynException.CreateUTF8('Unhandled TVarRec.VType=%',[V.VType]);
   end;
-end;
-
-function ObjectToVariant(Value: TObject; EnumSetsAsText: boolean): variant;
-const OPTIONS: array[boolean] of TTextWriterWriteObjectOptions = (
-     [woDontStoreDefault],[woDontStoreDefault,woEnumSetsAsText]);
-begin
-  VarClear(result);
-  ObjectToVariant(Value,result,OPTIONS[EnumSetsAsText]);
-end;
-
-procedure ObjectToVariant(Value: TObject; out Dest: variant);
-begin
-  ObjectToVariant(Value,Dest,[woDontStoreDefault]);
-end;
-
-procedure ObjectToVariant(Value: TObject; var result: variant;
-  Options: TTextWriterWriteObjectOptions);
-var json: RawUTF8;
-begin
-  json := ObjectToJSON(Value,Options);
-  PDocVariantData(@result)^.InitJSONInPlace(pointer(json),JSON_OPTIONS_FAST);
 end;
 
 
@@ -55648,6 +55648,11 @@ begin
   end;
 end;
 
+procedure TSynMonitor.ProcessErrorFmt(const Fmt: RawUTF8; const Args: array of const);
+begin
+  ProcessError({$ifndef NOVARIANTS}RawUTF8ToVariant{$endif}(FormatUTF8(Fmt,Args)));
+end;
+
 procedure TSynMonitor.ProcessErrorNumber(info: integer);
 begin
   ProcessError(info);
@@ -63523,7 +63528,7 @@ begin
         end;
       except
         on E: Exception do begin
-          fStats.ProcessError({$ifdef NOVARIANTS}E.ClassName{$else}ObjectToVariant(E){$endif});
+          fStats.ProcessErrorFmt('%: %', [E.ClassType,E.Message]);
           if Assigned(fOnException) then
             fOnException(E);
         end;
