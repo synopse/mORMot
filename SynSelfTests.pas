@@ -391,6 +391,8 @@ type
     procedure _TSynUniqueIdentifier;
     /// test the TSynDictionary class
     procedure _TSynDictionary;
+    /// validate the TSynQueue class
+    procedure _TSynQueue;
   end;
 
   /// this test case will test most low-level functions, classes and types
@@ -4841,7 +4843,6 @@ begin
     gen.Free;
   end;
 end;
-
 procedure TTestLowLevelCommon._TSynDictionary;
 type tvalue = {$ifdef NOVARIANTS}integer{$else}variant{$endif};
      tvalues = {$ifdef NOVARIANTS}TIntegerDynArray{$else}TVariantDynArray{$endif};
@@ -4906,6 +4907,110 @@ begin
     end;
   finally
     dict.Free;
+  end;
+end;
+
+procedure TTestLowLevelCommon._TSynQueue;
+var o,i,j,k,n: integer;
+    f: TSynQueue;
+    u,v: RawUTF8;
+    savedint: TIntegerDynArray;
+    savedu: TRawUTF8DynArray;
+begin
+  f := TSynQueue.Create(TypeInfo(TIntegerDynArray));
+  try
+    for o := 1 to 1000 do begin
+      check(f.Count=0);
+      for i := 1 to o do
+        f.Push(i);
+      check(f.Count=o);
+      check(f.Capacity>=o);
+      f.Save(savedint);
+      check(Length(savedint)=o);
+      for i := 1 to o do begin
+        j := -1;
+        check(f.Peek(j));
+        check(j=i);
+        j := -1;
+        check(f.Pop(j));
+        check(j=i);
+      end;
+      check(f.Count=0);
+      check(f.Capacity>0);
+      f.Clear; // ensure f.Pop(j) will use leading storage
+      check(f.Count=0);
+      check(f.Capacity=0);
+      check(Length(savedint)=o);
+      for i := 1 to o do
+        check(savedint[i-1]=i);
+      n := 0;
+      for i := 1 to o do
+        if i and 7=0 then begin
+          j := -1;
+          check(f.Pop(j));
+          check(j and 7<>0);
+          dec(n);
+        end else begin
+          f.Push(i);
+          inc(n);
+        end;
+      check(f.Count=n);
+      f.Save(savedint);
+      check(Length(savedint)=n);
+      for i := 1 to n do
+        check(savedint[i-1] and 7<>0);
+      for i := 1 to n do begin
+        j := -1;
+        check(f.Peek(j));
+        k := -1;
+        check(f.Pop(k));
+        check(j=k);
+        check(j and 7<>0);
+      end;
+      check(f.Count=0);
+      check(f.Capacity>0);
+    end;
+  finally
+    f.Free;
+  end;
+  f := TSynQueue.Create(TypeInfo(TRawUTF8DynArray));
+  try
+    for o := 1 to 1000 do begin
+      check(f.Count=0);
+      f.Clear; // ensure f.Pop(j) will use leading storage
+      check(f.Count=0);
+      check(f.Capacity=0);
+      n := 0;
+      for i := 1 to o do
+        if i and 7=0 then begin
+          u := '7';
+          check(f.Pop(u));
+          check(GetInteger(pointer(u)) and 7<>0);
+          dec(n);
+        end else begin
+          u := UInt32ToUtf8(i);
+          f.Push(u);
+          inc(n);
+        end;
+      check(f.Count=n);
+      f.Save(savedu);
+      check(Length(savedu)=n);
+      for i := 1 to n do
+        check(GetInteger(pointer(savedu[i-1])) and 7<>0);
+      for i := 1 to n do begin
+        u := '';
+        check(f.Peek(u));
+        v := '';
+        check(f.Pop(v));
+        check(u=v);
+        check(GetInteger(pointer(u)) and 7<>0);
+      end;
+      check(f.Count=0);
+      check(f.Capacity>0);
+    end;
+    check(Length(savedu)=length(savedint));
+  finally
+    f.Free;
   end;
 end;
 

@@ -5477,7 +5477,7 @@ type
     // - will erase the internal item ater copy
     // - do nothing if index is out of range
     procedure ElemMoveTo(index: integer; var Dest);
-    /// will copy one variable content into an indexed element 
+    /// will copy one variable content into an indexed element
     // - do nothing if index is out of range
     procedure ElemCopyFrom(const Source; index: integer);
       {$ifdef HASINLINE}inline;{$endif}
@@ -5563,6 +5563,8 @@ type
     /// if this dynamic aray is a T*ObjArray
     property IsObjArray: boolean read GetIsObjArray write SetIsObjArray;
   end;
+  /// a pointer to a TDynArray wrapper instance
+  PDynArray = ^TDynArray;
 
   /// allows to iterate over a TDynArray.SaveTo binary buffer
   // - may be used as alternative to TDynArray.LoadFrom, if you don't want
@@ -9970,6 +9972,56 @@ type
     /// the compression algorithm used for binary serialization
     property CompressAlgo: TAlgoCompress read fCompressAlgo write fCompressAlgo;
   end;
+
+  /// thread-safe FIFO (First-In-First-Out) in-order queue of records
+  // - uses internally a dynamic array storage, with a sliding algorithm
+  // (more efficient than the FPC or Delphi TQueue)
+  TSynQueue = class(TSynPersistentLocked)
+  protected
+    fValues: TDynArray;
+    fValueVar: pointer;
+    fCount, fFirst, fLast: integer;
+    function InternalPop(out aValue; aDelete: boolean): boolean;
+  public
+    /// initialize the queue storage, specifyng dynamic array values
+    // - aTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
+    // would store the values within this TSynQueue instance
+    constructor Create(aTypeInfo: pointer); reintroduce; virtual;
+    /// finalize the storage
+    // - would release all internal stored values
+    destructor Destroy; override;
+    /// store one item into the queue
+    // - this method is thread-safe, since it will lock the instance
+    procedure Push(const aValue);
+    /// extract one item from the queue, as FIFO (First-In-First-Out)
+    // - returns true if aValue has been filled with a pending item, which
+    // is removed from the queue (use Peek if you don't want to remove it)
+    // - returns false if the queue is empty
+    // - this method is thread-safe, since it will lock the instance
+    function Pop(out aValue): boolean;
+    /// lookup one item from the queue, as FIFO (First-In-First-Out)
+    // - returns true if aValue has been filled with a pending item, without
+    // removing it from the queue (as Pop method does)
+    // - returns false if the queue is empty
+    // - this method is thread-safe, since it will lock the instance
+    function Peek(out aValue): boolean;
+    /// delete all items currently stored in this queue, and void its capacity
+    procedure Clear;
+    /// initialize a dynamic array with the stored queue items
+    // - may be used to persist as binary or JSON the queue content
+    // - aDynArrayValues should be a variable defined as aTypeInfo from Create
+    // - you can specify an optional TDynArray wrapper 
+    procedure Save(out aDynArrayValues; aDynArray: PDynArray=nil);
+    /// returns how many items are currently stored in this queue
+    // - this method is thread-safe
+    function Count: Integer;
+    /// returns how much slots is currently reserved in memory   
+    // - the queue has an optimized auto-sizing algorithm, you can use this
+    // method to return its current capacity
+    // - this method is thread-safe
+    function Capacity: integer;
+  end;
+
 
   /// event signature to locate a service for a given string key
   // - used e.g. by TRawUTF8ObjectCacheList.OnKeyResolve property
@@ -58511,6 +58563,149 @@ begin
   finally
     fSafe.UnLock;
   end;
+end;
+
+
+{ TSynQueue }
+
+constructor TSynQueue.Create(aTypeInfo: pointer);
+begin
+  inherited Create;
+  fFirst := -1;
+  fLast := -2;
+  fValues.Init(aTypeInfo,fValueVar,@fCount);
+end;
+
+destructor TSynQueue.Destroy;
+begin
+  fValues.Clear;
+  inherited Destroy;
+end;
+
+procedure TSynQueue.Clear;
+begin
+  fSafe.Lock;
+  try
+    fValues.Clear;
+    fFirst := -1;
+    fLast := -2;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TSynQueue.Count: Integer;
+begin
+  if self=nil then
+    result := 0 else begin
+    fSafe.Lock;
+    try
+      if fFirst<0 then
+        result := 0 else
+        if fFirst<=fLast then
+          result := fLast-fFirst+1 else
+          result := fCount-fFirst+fLast+1;
+    finally
+      fSafe.UnLock;
+    end;
+  end;
+end;
+
+function TSynQueue.Capacity: integer;
+begin
+  if self=nil then
+    result := 0 else begin
+    fSafe.Lock;
+    try
+      result := fValues.Capacity;
+    finally
+      fSafe.UnLock;
+    end;
+  end;
+end;
+
+procedure TSynQueue.Push(const aValue);
+begin
+  fSafe.Lock;
+  try // very efficient thanks to fValues.Capacity - faster than TQueue
+    if fFirst<0 then begin
+      fFirst := 0;
+      fLast := 0;
+      if fCount=0 then
+        fValues.Count := 16;
+    end else
+      if fFirst<=fLast then begin // stored in-order
+        inc(fLast);
+        if fLast=fCount then
+          if fFirst>fValues.Capacity-fCount then // use leading space (if worth it)
+            fLast := 0 else // append at the end
+            fValues.Count := fCount+32; // TDynArray won't always allocate
+      end else begin
+        inc(fLast);
+        if fLast=fFirst then begin // colision -> arrange
+          fValues.AddArray(fValueVar,0,fLast); // move 0..fLast at the end
+          fLast := 0; // will push next items at the beginning
+        end;
+      end;
+    //assert(fLast<fCount);
+    fValues.ElemCopyFrom(aValue,fLast);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TSynQueue.InternalPop(out aValue; aDelete: boolean): boolean;
+begin
+  fSafe.Lock;
+  try
+    result := fFirst>=0;
+    if result then
+      if aDelete then begin
+        fValues.ElemMoveTo(fFirst,aValue);
+        if fFirst=fLast then begin
+          fFirst := -1; // reset whole store (keeping current capacity)
+          fLast := -2;
+        end else begin
+          inc(fFirst);
+          if fFirst=fCount then
+            fFirst := 0; // will retrieve from leading items
+        end;
+      end else
+        fValues.ElemCopyAt(fFirst,aValue);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TSynQueue.Peek(out aValue): boolean;
+begin
+  result := InternalPop(aValue,{aDelete=}false);
+end;
+
+function TSynQueue.Pop(out aValue): boolean;
+begin
+  result := InternalPop(aValue,{aDelete=}true);
+end;
+
+procedure TSynQueue.Save(out aDynArrayValues; aDynArray: PDynArray);
+var n: integer;
+    DA: TDynArray;
+begin
+  DA.Init(fValues.ArrayType,aDynArrayValues,@n);
+  fSafe.Lock;
+  try
+    DA.Capacity := Count; // pre-allocate whole array, and set its length
+    if fFirst>=0 then
+      if fFirst<=fLast then
+        DA.AddArray(fValueVar,fFirst,fLast-fFirst+1) else begin
+        DA.AddArray(fValueVar,fFirst,fCount-fFirst);
+        DA.AddArray(fValueVar,0,fLast+1);
+      end;
+  finally
+    fSafe.UnLock;
+  end;
+  if aDynArray<>nil then
+    aDynArray^.Init(fValues.ArrayType,aDynArrayValues);
 end;
 
 
