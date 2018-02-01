@@ -520,7 +520,7 @@ type
     /// JWT classes
     procedure _JWT;
     {$endif NOVARIANTS}
-    /// compute some performance numbers, mostly against regression 
+    /// compute some performance numbers, mostly against regression
     procedure Benchmark;
   end;
 
@@ -1135,7 +1135,7 @@ type
     /// convert a floating-point value into text
     function ToTextFunc(Value: double): string;
     /// swap two by-reference floating-point values
-    // - would validate pointer use instead of XMM1/XMM2 registers under Win64 
+    // - would validate pointer use instead of XMM1/XMM2 registers under Win64
     procedure Swap(var n1,n2: double);
     // test unaligned stack access
     function StackIntMultiply(n1,n2,n3,n4,n5,n6,n7,n8,n9,n10: integer): Int64;
@@ -2850,7 +2850,7 @@ var int: TRawUTF8Interning;
     vs: TRawUTF8DynArray;
     timer: TPrecisionTimer;
 const MAX=500000;
-      DIRSIZE = 16*(MAX+1); // assume each SmallUInt32UTF8[] uses 16 heap bytes 
+      DIRSIZE = 16*(MAX+1); // assume each SmallUInt32UTF8[] uses 16 heap bytes
       INTSIZE = 512*16;
 begin
   {$ifndef HASINLINE} // inlining induces optimizations which trigger Clean
@@ -10492,7 +10492,7 @@ end;
 type
   TBenchmark = (
     // non cryptographic hashes
-    bCRC32c, bXXHash32, 
+    bCRC32c, bXXHash32,
     // cryptographic hashes
     bMD5, bSHA1, bHMACSHA1, bSHA256, bHMACSHA256, bSHA512, bHMACSHA512,
     bSHA3_256, bSHA3_512,
@@ -11723,7 +11723,7 @@ end;
 var
   SoundexValues: array[0..5] of RawUTF8;
   Names: TRawUTF8DynArray;
-  i1,i2: integer;
+  i,i1,i2: integer;
   Res: Int64;
   id: TID;
   password, s: RawUTF8;
@@ -11861,6 +11861,11 @@ begin
   Check(Names[0]='People');
   Demo.Execute('SELECT Concat(FirstName," and ") FROM People WHERE LastName="Einstein"',s);
   Check(Hash32(s)=$68A74D8E,'Albert1 and Albert1 and Albert2 and Albert3 and ...');
+  i1 := Demo.Execute('SELECT FirstName from People WHERE FirstName like "%eona%"',Names);
+  check(i1=2002);
+  check(Names[i1]='');
+  for i := 0 to i1-1 do
+    check(PosEx('eona',Names[i])>0,'like/strcspn');
 end;
 
 procedure TTestSQLite3Engine.VirtualTableDirectAccess;
@@ -16233,7 +16238,7 @@ begin
     FillCharFast(Inst,sizeof(Inst),0); // all Expected..ID=0
     HTTPClient := TSQLHttpClient.Create('127.0.0.1',HTTP_DEFAULTPORT,fModel);
     try
-      HTTPClient.ServicePublishOwnInterfaces(fClient.Server); 
+      HTTPClient.ServicePublishOwnInterfaces(fClient.Server);
       //HTTPClient.OnIdle := TLoginForm.OnIdleProcess; // from mORMotUILogin
       // HTTPClient.Compression := [hcSynShaAes]; // 350ms (300ms for [])
       Check(HTTPClient.SetUser('User','synopse'));

@@ -525,26 +525,91 @@ begin // called only by some obscure FTS3 functions (normal code use dedicated f
   result := SynCommons.StrComp(p1,p2);
 end;
 
+function strcspn2(p1: PAnsiChar; c1, c2: AnsiChar): integer;
+{$ifdef CPUX86}
+asm // eax=p1 dl=c1 cl=c2
+    push ebx
+    mov dh, cl
+    mov ecx, eax
+    xor eax, eax
+@s: mov ebx, dword ptr[ecx + eax] // read text by DWORD
+    test bl, bl
+    jz @z
+    cmp bl, dl
+    jz @z
+    cmp bl, dh
+    jz @z
+    inc eax
+    test bh, bh
+    jz @z
+    cmp bh, dl
+    jz @z
+    cmp bh, dh
+    jz @z
+    inc eax
+    shr ebx, 16
+    test bl, bl
+    jz @z
+    cmp bl, dl
+    jz @z
+    cmp bl, dh
+    jz @z
+    inc eax
+    test bh, bh
+    jz @z
+    cmp bh, dl
+    jz @z
+    cmp bh, dh
+    jz @z
+    inc eax
+    jmp @s
+@z: pop ebx
+end;
+{$else}
+var c: AnsiChar;
+begin
+  result := 0;
+  repeat
+    c := p1[result];
+    if (c=#0) or (c=c1) or (c=c2) then
+      exit;
+    inc(result);
+  until false;
+end;
+{$endif}
+
 function strcspn(p1,p2: PAnsiChar): integer; cdecl;
   {$ifdef FPC}public name{$ifdef CPU64}'strcspn'{$else}'_strcspn'{$endif};{$endif}
 var s: PAnsiChar;
     c: AnsiChar;
 begin // span the complement of string p2
   result := 0;
-  repeat
-    c := p1[result];
-    if c=#0 then
-      break;
-    s := p2;
+  if (p2=nil) or (p2[0]=#0) then
+    exit;
+  if p2[1]<>#0 then
+    if p2[2]=#0 then // most used case for LIKE in SQLite3 - e.g. p2='Ee'
+      result := strcspn2(p1,p2[0],p2[1]) else
     repeat
-      if s^=c then // stop as soon as we find any character from p2
+      c := p1[result];
+      if c=#0 then
+        break;
+      s := pointer(p2);
+      repeat
+        if s^=c then // stop as soon as we find any character from p2
+          exit else
+        if s^=#0 then
+          break else
+          inc(s);
+      until false;
+      inc(result);
+    until false
+  else begin
+    c := p2[0];
+    while p1[result]<>#0 do
+      if p1[result]=c then
         exit else
-      if s^=#0 then
-        break else
-        inc(s);
-    until false;
-    inc(result);
-  until false;
+        inc(result);
+  end;
 end;
 
 function memcmp(p1, p2: pByte; Size: integer): integer; cdecl; { always cdecl }
@@ -1364,7 +1429,7 @@ function sqlite3_trace_v2(DB: TSQLite3DB; Mask: integer; Callback: TSQLTraceCall
 const
   // error message if linked sqlite3.obj does not match this
   EXPECTED_SQLITE3_VERSION = '3.22.0';
-  
+
 constructor TSQLite3LibraryStatic.Create;
 var error: RawUTF8;
 begin
@@ -1481,7 +1546,7 @@ begin
     [ExeVersion.ProgramName,fVersionText],error);
   LogToTextFile(error); // annoyning enough on all platforms
   // SynSQLite3Log.Add.Log() would do nothing: we are in .exe initialization
-  {$ifdef MSWINDOWS} // PITA popup 
+  {$ifdef MSWINDOWS} // PITA popup
   MessageBoxA(0,pointer(error),' WARNING: deprecated SQLite3 engine',MB_OK or MB_ICONWARNING);
   {$endif}
 end;
