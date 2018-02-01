@@ -30405,10 +30405,14 @@ end;
 
 function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): integer;
 begin
+{$ifdef FPC}
+  result := IndexWord(P^,Count,Value);
+{$else}
   for result := 0 to Count-1 do
     if P^[result]=Value then
       exit;
   result := -1;
+{$endif}
 end;
 
 procedure QuickSortInteger(ID: PIntegerArray; L,R: PtrInt);

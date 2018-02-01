@@ -613,7 +613,12 @@ begin // span the complement of string p2
 end;
 
 function memcmp(p1, p2: pByte; Size: integer): integer; cdecl; { always cdecl }
-  {$ifdef FPC}public name{$ifdef CPU64}'memcmp'{$else}'_memcmp'{$endif};{$endif}
+{$ifdef FPC}
+  public name{$ifdef CPU64}'memcmp'{$else}'_memcmp'{$endif};
+begin
+  result := CompareByte(p1,p2,Size); // use FPC
+end;
+{$else}
 // a fast full pascal version of the standard C library function
 begin
   if (p1<>p2) and (Size<>0) then
@@ -634,6 +639,7 @@ begin
     result := -1 else
   result := 0;
 end;
+{$endif}
 
 function strncmp(p1, p2: PByte; Size: integer): integer; cdecl; { always cdecl }
   {$ifdef FPC}public name{$ifdef CPU64}'strncmp'{$else}'_strncmp'{$endif};{$endif}
