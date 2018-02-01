@@ -299,7 +299,7 @@ function ToText(eac: TSQLRestStorageMongoDBEngineAddComputeID): PShortString; ov
 
 implementation
 
-function ToText(eac: TSQLRestStorageMongoDBEngineAddComputeID): PShortString; 
+function ToText(eac: TSQLRestStorageMongoDBEngineAddComputeID): PShortString;
 begin
   result := GetEnumName(TypeInfo(TSQLRestStorageMongoDBEngineAddComputeID),ord(eac));
 end;

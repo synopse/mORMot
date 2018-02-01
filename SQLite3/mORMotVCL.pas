@@ -190,7 +190,7 @@ function JSONToDataSet(aOwner: TComponent; const aJSON: RawUTF8
 // - with Unicode version of Delphi (2009+), string/UnicodeString will be used
 function JSONTableToDataSet(aOwner: TComponent; const aJSON: RawUTF8;
   const Tables: array of TSQLRecordClass
-  {$ifndef UNICODE}; aForceWideString: boolean=false{$endif}): TSynSQLTableDataSet; 
+  {$ifndef UNICODE}; aForceWideString: boolean=false{$endif}): TSynSQLTableDataSet;
 
 /// convert a JSON result into a VCL DataSet, with a given set of column types
 // - this function is just a wrapper around TSynSQLTableDataSet.CreateFromJSON()

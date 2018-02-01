@@ -4942,6 +4942,7 @@ begin
         inc(result);
       end;
     until res=SQLITE_DONE;
+    SetLength(Values,LValues);
   finally
     Close; // always release statement
   end;

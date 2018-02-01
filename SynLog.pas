@@ -1025,7 +1025,7 @@ type
     property GenericFamily: TSynLogFamily read fFamily;
   end;
 
-  /// reference-counted block code critical section with context logging 
+  /// reference-counted block code critical section with context logging
   // - race conditions are difficult to track: you could use this TAutoLockerDebug
   // instead of plain TAutoLocker class, to log some information at each
   // Enter/Leave process, and track unexpected blocking issues
@@ -1417,14 +1417,14 @@ const
   // sllLastError, sllException, sllExceptionOS, sllMemory, sllStackTrace,
   ssNotice, ssDebug, ssDebug, ssDebug, ssDebug, ssDebug, ssDebug, ssDebug,
   // sllFail, sllSQL, sllCache, sllResult, sllDB, sllHTTP, sllClient, sllServer,
-  ssDebug, ssDebug, ssDebug, 
+  ssDebug, ssDebug, ssDebug,
   // sllServiceCall, sllServiceReturn, sllUserAuth,
   ssDebug, ssDebug, ssDebug, ssDebug, ssNotice,
   // sllCustom1, sllCustom2, sllCustom3, sllCustom4, sllNewRun,
   ssWarn, ssInfo, ssDebug);
   // sllDDDError, sllDDDInfo, sllMonitoring);
 
-  
+
 /// returns the trimmed text value of a logging level
 // - i.e. 'Warning' for sllWarning
 function ToText(event: TSynLogInfo): RawUTF8; overload;
@@ -1592,7 +1592,7 @@ begin
   for i := 1 to n-1 do begin
     inc(Addr,FromVarUInt32(P));
     S^.Stop := Addr-1;
-    inc(PtrUInt(S),A.ElemSize); 
+    inc(PtrUInt(S),A.ElemSize);
     S^.Start := Addr;
   end;
   S^.Stop := Addr+FromVarUInt32(P);
@@ -2313,7 +2313,7 @@ begin
   inc(destbuffer);
   len := length(msg);
   P := pointer(msg);
-  if trimmsgfromlog and (len>27) then 
+  if trimmsgfromlog and (len>27) then
     if (P[0]='2') and (P[8]=' ') then begin
       inc(P,27); // trim e.g. '20160607 06442255  ! trace '
       dec(len,27);
@@ -2396,7 +2396,7 @@ procedure GetLastExceptions(out result: TSynLogExceptionInfoDynArray;
 var infos: TSynLogExceptionInfos; // use thread-safe local copy
     index,last,n,i: integer;
 begin
-  if GlobalLastExceptionIndex<0 then 
+  if GlobalLastExceptionIndex<0 then
     exit; // no exception intercepted yet
   EnterCriticalSection(GlobalThreadLock);
   try
@@ -3229,7 +3229,7 @@ begin
           if log.Writer.Stream.InheritsFrom(TFileStream) then begin
             stream := TFileStream(log.Writer.Stream);
             endpos := stream.Position;
-            if endpos>MAXPREVIOUSCONTENTSIZE then 
+            if endpos>MAXPREVIOUSCONTENTSIZE then
               len := MAXPREVIOUSCONTENTSIZE else
               len := MaximumKB shl 10;
             start := log.fStreamPositionAfterHeader;
@@ -3973,7 +3973,7 @@ var WithinEvents: boolean;
     P: PUTF8Char;
     L: Integer;
     {$endif}
-    
+
   procedure NewLine;
   begin
     if WithinEvents then begin
@@ -5099,7 +5099,7 @@ begin
   if fThreadInfo=nil then
     exit;
   for i := 1 to fThreadMax do
-    result[i-1] := ThreadName(i,CurrentLogIndex);   
+    result[i-1] := ThreadName(i,CurrentLogIndex);
 end;
 
 procedure TSynLogFile.GetDays(out Days: TDateTimeDynArray);
@@ -5147,7 +5147,7 @@ begin
   if includeFirstColumns then begin
     UTF8DecodeToString(fLines[index],fLineTextOffset,header);
     result := header+result;
-  end;   
+  end;
 end;
 
 procedure TSynLogFile.SetLogProcMerged(const Value: boolean);

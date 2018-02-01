@@ -40,7 +40,7 @@ unit PasZip;
    Version 1.18
    - enhanced compatibility with new targets and compilers (Win32, Win64,
      Delphi 2009+, FPC)
-   - even more refactoring, and fixes 
+   - even more refactoring, and fixes
 
 }
 
@@ -177,7 +177,7 @@ const
 
 type
   /// generic file information structure, as used in .zip file format
-  // - used in any header, contains info about following block 
+  // - used in any header, contains info about following block
   TFileInfo = packed record
     neededVersion: word;       // $14
     flags: word;               // 0
@@ -331,7 +331,7 @@ type
     destructor Destroy; override;
   end;
 
-  
+
 implementation
 
 // special tuned Move() routine, including data overlap bug correction

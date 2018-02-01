@@ -135,7 +135,7 @@ uses
   LResources,
   SynFPCMetaFile,
   {$endif}
-  Classes, 
+  Classes,
   SysUtils,
   {$ifdef ISDELPHIXE2}
   VCL.Graphics,
@@ -760,7 +760,7 @@ procedure GdipUnlock;
 var
   /// mutex used by GdipLock/GdipUnlock
   GdipCS: TRTLCriticalSection;
-  
+
 
 implementation
 

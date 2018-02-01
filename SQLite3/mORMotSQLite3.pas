@@ -817,7 +817,7 @@ end;
 procedure TSQLRestServerDB.GetAndPrepareStatementRelease(E: Exception; const Msg: RawUTF8);
 var
   tmp: TSynTempBuffer;
-  P: PAnsiChar; 
+  P: PAnsiChar;
 begin
   try
     if fStatementTimer<>nil then begin
@@ -890,7 +890,7 @@ begin
   SQL := Props.SQLTableName;
   if fBatchMethod<>mNone then begin
     result := 0; // indicates error
-    if SentData='' then 
+    if SentData='' then
       InternalLog('BATCH with MainEngineAdd(%,SentData="") -> '+
         'DEFAULT VALUES not implemented',[SQL],sllError) else
     if (fBatchMethod=mPOST) and (fBatchIDMax>=0) and

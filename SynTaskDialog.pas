@@ -129,7 +129,7 @@ var
     ResRadio: PInteger; VerifyFlag: PBOOL): HRESULT; stdcall;
 
 const
-  /// match the 1st custom button ID 
+  /// match the 1st custom button ID
   mrBtn1 = 100;
   /// match the 2nd custom button ID
   mrBtn2 = 101;

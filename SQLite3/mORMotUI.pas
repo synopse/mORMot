@@ -522,7 +522,7 @@ type
 
   /// allow to track and load/save UI components as JSON
   // - may be used to persist TEdit / TCheckBox / TComboBox values on a form
-  // when the application leaves 
+  // when the application leaves
   TUIComponentsPersist = class
   protected
     fTracked: array of TComponent;
@@ -541,7 +541,7 @@ type
     /// save all tracked controls properties as JSON in a local file
     procedure SaveToFile;
     /// the local JSON file used for persistence
-    // - is set to 'executablename.default' if none is specified   
+    // - is set to 'executablename.default' if none is specified
     property FileName: TFileName read GetFileName write fFileName;
   end;
 

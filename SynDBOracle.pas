@@ -200,7 +200,7 @@ type
   TOracleDateArray = array[0..(maxInt div sizeof(TOracleDate))-1] of TOracleDate;
 
   /// event triggered when an expired password is detected
-  // - will allow to provide a new password 
+  // - will allow to provide a new password
   TOnPasswordExpired = function (Sender: TSQLDBConnection; var APassword: RawUTF8): Boolean of object;
 
   /// will implement properties shared by native Oracle Client Interface connections

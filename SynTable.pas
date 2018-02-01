@@ -1633,7 +1633,7 @@ begin
     result := 0;      // P1=P2
 end;
 
-{$endif CPUX86} 
+{$endif CPUX86}
 
 {$endif CPU64}
 
@@ -3112,7 +3112,7 @@ begin
       end;
       {$else}
       {$ifdef CPU64} // PtrInt = Int64
-      tftInt64, tftCurrency: 
+      tftInt64, tftCurrency:
         result := PInt64(P1)^-PInt64(P2)^;
       tftVarUInt64:
       with SortCompareTmp do begin

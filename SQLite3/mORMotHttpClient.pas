@@ -216,7 +216,7 @@ type
     // - if port is not specified, aDefaultPort is used
     // - if root is not specified, aModel.Root is used
     constructor Create(const aServer: TSQLRestServerURIString; aModel: TSQLModel;
-      aDefaultPort: integer); reintroduce; overload; 
+      aDefaultPort: integer); reintroduce; overload;
     /// connnect to a LogView HTTP Server for remote logging
     // - will associate the EchoCustom callback of the log class to this server
     // - the aLogClass.Family will manage this TSQLHttpClientGeneric instance
@@ -332,7 +332,7 @@ type
     // - you could use its properties after upgrading the connection to WebSockets
     function WebSockets: THttpClientWebSockets;
     /// returns true if the connection is a running WebSockets
-    // - may be false even if fSocket<>nil, e.g. when gracefully disconnected  
+    // - may be false even if fSocket<>nil, e.g. when gracefully disconnected
     function WebSocketsConnected: boolean;
     /// this event will be executed just after the HTTP client has been
     // upgraded to the expected WebSockets protocol
@@ -555,7 +555,7 @@ begin
     Call.OutHead := Head;
     Call.OutBody := Content;
   end else
-    Call.OutStatus := HTTP_NOTIMPLEMENTED; // 501 indicates not socket closed 
+    Call.OutStatus := HTTP_NOTIMPLEMENTED; // 501 indicates not socket closed
 {$ifdef WITHLOG}
   with Call do
     fLogFamily.SynLog.Log(sllClient,'% % status=% len=% state=%',
@@ -669,7 +669,7 @@ begin
     if fPort<>'' then
       result := fServer+':'+fPort else
       result := fServer else
-    result := '';  
+    result := '';
 end;
 
 

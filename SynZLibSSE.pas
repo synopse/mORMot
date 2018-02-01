@@ -96,7 +96,7 @@ function UnCompressStreamSSE3(src: pointer; srcLen: integer; aStream: TStream;
   checkCRC: PCardinal; tmpbuf: pointer; tmpsize: integer;
   ZlibFormat: Boolean=false): integer;
 
-  
+
 implementation
 
 type
@@ -188,7 +188,7 @@ end;
 
 const
   ZLIB_VERSION = '1.2.8';
-  
+
   Z_NO_FLUSH = 0;
   Z_PARTIAL_FLUSH = 1;
   Z_SYNC_FLUSH = 2;

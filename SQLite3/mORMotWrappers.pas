@@ -212,7 +212,7 @@ var
 // the blocking service may be specified in queries array; a set of unit names
 // in which those TCQRSServiceClass are defined may be specified
 // - a Mustache template content should be provided - e.g. asynch.pas.mustache
-// as published in SQLite3\DDD\dom folder of the source code repository   
+// as published in SQLite3\DDD\dom folder of the source code repository
 // - FileName would contain the resulting unit filename (without the .pas)
 // - ProjectName would be written in the main unit comment
 // - CallType should be the type used at Domain level to identify each
@@ -223,7 +223,7 @@ var
 // - ExceptionType may be customize, mainly to use a Domain-specific class
 // - blocking execution may reach some timeout waiting for the asynchronous
 // acknowledgement: a default delay (in ms) is to be supplied, and some custom
-// delays may be specified as trios, e.g. ['IMyInterface', 'Method', 10000, ...] 
+// delays may be specified as trios, e.g. ['IMyInterface', 'Method', 10000, ...]
 function GenerateAsynchServices(const services: array of TGUID;
   const queries: array of TClass; const units: array of const;
   const additionalcontext: array of const; Template, FileName, ProjectName,
@@ -983,8 +983,8 @@ begin
     'mORMotVersion',SYNOPSE_FRAMEWORK_VERSION,
     'exeVersion',ExeVersion.Version.Detailed,
     'exeInfo',ExeVersion.ProgramFullSpec,
-    'orm',variant(fORM), 
-    'soa',fSOA]);      
+    'orm',variant(fORM),
+    'soa',fSOA]);
   if fServer<>nil then
     _ObjAddProps(['root',fServer.Model.Root],result);
   if fHasAnyRecord then
@@ -1296,7 +1296,7 @@ end;
 function GenerateAsynchServices(const services: array of TGUID;
   const queries: array of TClass; const units: array of const;
   const additionalcontext: array of const; Template, FileName, ProjectName,
-  CallType, CallFunction, Key, KeyType, ExceptionType: RawUTF8; 
+  CallType, CallFunction, Key, KeyType, ExceptionType: RawUTF8;
   DefaultDelay: integer; const CustomDelays: array of const): RawUTF8;
 var
   server: TSQLRestServerFullMemory;

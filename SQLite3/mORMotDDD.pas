@@ -161,7 +161,7 @@ type
   // - TCQRSService class will allow to easily implement LastError* members
   // - all CQRS services, which may be executed remotely, would favor a function
   // result as TCQRSResult enumeration for error handling, rather than a local
-  // Exception, which is not likely to be transferred easily on consummer side 
+  // Exception, which is not likely to be transferred easily on consummer side
   ICQRSService = interface(IInvokable)
     /// should return the last error as an enumerate
     // - when stubed or mocked via TInterfaceStub, any method interface would
@@ -219,7 +219,7 @@ type
   // - in addition to Start/Stop methods, Halt would force the whole executable
   // to abort its execution, SubscribeLog allows log monitoring, and
   // DatabaseList/DatabaseExecute remote SQL/SOA execution on one or several
-  // logicial REST servers 
+  // logicial REST servers
   // - those methods would allow a single administration daemon (installed e.g.
   // as a Windows Service) to be able to launch and monitor child processes as
   // individual executables, or via a custom DDD's ToolsAdmin tool
@@ -242,7 +242,7 @@ type
     /// execute a SQL query on an internal database
     // - the database name should match one existing in the DatabaseList
     // - the supplied SQL parameter may be #cmd internal commands: in this case,
-    // the database name may not be mandatory 
+    // the database name may not be mandatory
     // - will return JSON most of the time, but may return binary if needed
     function DatabaseExecute(const DatabaseName,SQL: RawUTF8): TServiceCustomAnswer;
     /// used to subscribe for real-time remote log monitoring
@@ -382,10 +382,10 @@ type
 
   /// a CQRS Service, ready to implement a set of synchronous (blocking) commands
   // over an asynchronous (non-blocking) service
-  // - you may use this class e.g. at API level, over a blocking REST server, 
+  // - you may use this class e.g. at API level, over a blocking REST server,
   // and communicate with the Domain event-driven services via asynchronous calls
   // - this class won't inherit from TCQRSService, since it would be called
-  // from multiple threads at once, so all CQRSSetResult() methods would fail 
+  // from multiple threads at once, so all CQRSSetResult() methods would fail
   TCQRSServiceSynch = class(TInterfacedObject)
   protected
     fSharedCallbackRef: IUnknown;

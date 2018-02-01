@@ -123,7 +123,7 @@ type
   public
     /// initialize the instance
     constructor Create(AOwner: TComponent); override;
-    procedure FetchParams; 
+    procedure FetchParams;
     /// initialize the internal TDataSet from a SynDB TSQLDBStatement result set
     // - the supplied TSQLDBStatement can then be freed by the caller, since
     // a private binary copy will be owned by this instance (in fDataSet.Data)

@@ -389,7 +389,7 @@ type
     ColumnPrecision: PtrInt;
     /// the Column data scale
     // - used e.g. for numerical values
-    // - may be -1 if the metadata SQL statement returned NULL 
+    // - may be -1 if the metadata SQL statement returned NULL
     ColumnScale: PtrInt;
     /// the Column type, as recognized by our SynDB classes
     // - should not be ftUnknown nor ftNull
@@ -453,7 +453,7 @@ type
     ColumnPrecision: PtrInt;
     /// the Column data scale
     // - used e.g. for numerical values
-    // - may be -1 if the metadata SQL statement returned NULL 
+    // - may be -1 if the metadata SQL statement returned NULL
     ColumnScale: PtrInt;
     /// the Column type, as recognized by our SynDB classes
     // - should not be ftUnknown nor ftNull
@@ -635,7 +635,7 @@ type
     // (0 means BLOB kind of TEXT column)
     function ColumnType(Col: integer; FieldSize: PInteger=nil): TSQLDBFieldType;
     /// returns TRUE if the column contains NULL
-    function ColumnNull(Col: integer): boolean; 
+    function ColumnNull(Col: integer): boolean;
     /// return a Column integer value of the current Row, first Col is 0
     function ColumnInt(Col: integer): Int64; overload;
     /// return a Column floating point value of the current Row, first Col is 0
@@ -745,7 +745,7 @@ type
     /// create a TDocVariant custom variant containing all columns values
     // - will create a "fast" TDocVariant object instance with all fields
     procedure RowDocVariant(out aDocument: variant;
-      aOptions: TDocVariantOptions=JSON_OPTIONS_FAST); 
+      aOptions: TDocVariantOptions=JSON_OPTIONS_FAST);
     {$endif DELPHI5OROLDER}
     {$endif LVCL}
     /// return the associated statement instance
@@ -2891,7 +2891,7 @@ type
       DataRowPosition: PCardinalDynArray=nil): cardinal; override;
     /// gets a number of updates made by latest executed statement
     // - this overriden method will return the integer value returned by
-    // cExecute command 
+    // cExecute command
     function UpdateCount: integer; override;
     /// force no UpdateCount method call on server side
     // - may be needed to reduce server load, if this information is not needed
@@ -3364,7 +3364,7 @@ const
    ' TIMESTAMP',' TEXT',' BYTEA'),
     // like SQLite3, we will create TEXT column instead of VARCHAR(%), as stated
     // by http://www.postgresql.org/docs/current/static/datatype-character.html
-   
+
   // dDB2 (for CCSID Unicode tables)
   (' int',' varchar(%)',' bigint',' real',' decimal(19,4)',' timestamp',' clob', ' blob'),
     { note: bigint needs 9.1 and up }
@@ -3469,7 +3469,7 @@ begin
 end;
 
 {$ifdef WITH_PROXY}
-function ToText(cmd: TSQLDBProxyConnectionCommand): PShortString; 
+function ToText(cmd: TSQLDBProxyConnectionCommand): PShortString;
 begin
   result := GetEnumName(TypeInfo(TSQLDBProxyConnectionCommand),ord(cmd));
 end;
@@ -4847,7 +4847,7 @@ function TSQLDBConnectionProperties.SharedTransaction(SessionID: cardinal;
         '%.SharedTransaction(sessionID=%) with mixed thread connections: % and %',
           [self,SessionID,result,fSharedTransactions[index].Connection]);
   end;
-  
+
 var i,n: integer;
 begin
   n := Length(fSharedTransactions);
@@ -5403,7 +5403,7 @@ begin
       SetSchemaNameToOwner(Owner);
     end
     else if fDBMS=dMSSQL then
-      Split(ProcName, ';', ProcName); // discard ;1 when MSSQL stored procedure name is ProcName;1 
+      Split(ProcName, ';', ProcName); // discard ;1 when MSSQL stored procedure name is ProcName;1
   end;
   end;
 end;
@@ -7882,7 +7882,7 @@ begin
         VarRecToUTF8(aValues[i],VArray[fParamsArrayCount]);
         case VType of
         ftUTF8:
-          if (VArray[fParamsArrayCount]='') and (fConnection<>nil) and 
+          if (VArray[fParamsArrayCount]='') and (fConnection<>nil) and
              fConnection.Properties.StoreVoidStringAsNull then
           VArray[fParamsArrayCount] := 'null' else
           VArray[fParamsArrayCount] := QuotedStr(VArray[fParamsArrayCount]);

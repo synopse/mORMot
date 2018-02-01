@@ -802,7 +802,7 @@ type
   TSChannelCred = record
     dwVersion: cardinal;
     cCreds: cardinal;
-    paCred: pointer; 
+    paCred: pointer;
     hRootStore: THandle;
     cMappers: cardinal;
     aphMappers: pointer;

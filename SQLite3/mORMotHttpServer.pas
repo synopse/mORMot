@@ -462,12 +462,12 @@ type
     /// the TCP/IP (address and) port on which this server is listening to
     // - may contain the public server address to bind to: e.g. '1.2.3.4:1234'
     // - see PublicAddress and PublicPort properties if you want to get the
-    // true IP port or address 
+    // true IP port or address
     property Port: AnsiString read fPort;
     /// the TCP/IP public address on which this server is listening to
     // - equals e.g. '1.2.3.4' if Port = '1.2.3.4:1234'
     // - if Port does not contain an explicit address (e.g. '1234'), the current
-    // computer host name would be assigned as PublicAddress 
+    // computer host name would be assigned as PublicAddress
     property PublicAddress: RawUTF8 read fPublicAddress;
     /// the TCP/IP public port on which this server is listening to
     // - equals e.g. '1234' if Port = '1.2.3.4:1234'
@@ -704,7 +704,7 @@ begin
        raise EHttpServerException.CreateUTF8('%.Create(% ): %',[self,ServersRoot,ErrMsg]);
     // associate before HTTP server is started, for TSQLRestServer.BeginCurrentThread
     SetLength(fDBServers,length(aServers));
-    for i := 0 to high(aServers) do 
+    for i := 0 to high(aServers) do
       SetDBServer(i,aServers[i],aHttpServerSecurity,HTTP_DEFAULT_ACCESS_RIGHTS);
   end;
   {$ifndef USETCPPREFIX}
@@ -756,7 +756,7 @@ begin
       THttpApiServer(fHttpServer).Clone(ServerThreadPoolCount-1);
 {$endif}
   // last HTTP server handling callbacks would be set for the TSQLRestServer(s)
-  if fHttpServer.CanNotifyCallback then 
+  if fHttpServer.CanNotifyCallback then
     for i := 0 to high(fDBServers) do
       fDBServers[i].Server.OnNotifyCallback := NotifyCallback;
   fLog.Add.Log(sllHttp,'% initialized for%',[fHttpServer,ServersRoot],self);

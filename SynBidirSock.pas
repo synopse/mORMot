@@ -188,15 +188,15 @@ type
     /// this method is called when the instance is connected to a poll
     // - default implementation will set fLastOperation content
     procedure AfterCreate(Sender: TAsynchConnections); virtual;
-    /// this method is called when the some input data is pending on the socket 
+    /// this method is called when the some input data is pending on the socket
     // - should extract frames or requests from fSlot.readbuf, and handle them
     // - this is where the input should be parsed and extracted according to
     // the implemented procotol
     // - Sender.Write() could be used for asynchronous answer sending
-    // - Sender.LogVerbose() allows logging of escaped data 
+    // - Sender.LogVerbose() allows logging of escaped data
     // - could return sorClose to shutdown the socket, e.g. on parsing error
     function OnRead(Sender: TAsynchConnections): TPollAsynchSocketOnRead; virtual; abstract;
-    /// this method is called when some data has been written to the socket 
+    /// this method is called when some data has been written to the socket
     // - default implementation will do nothing
     procedure AfterWrite(Sender: TAsynchConnections); virtual;
     /// this method is called when the instance is about to be deleted from a poll
@@ -788,7 +788,7 @@ type
     // - defaut is 30000, i.e. 30 seconds
     CallbackAnswerTimeOutMS: cardinal;
     /// callback run when a WebSockets client is just connected
-    // - triggerred by TWebSocketProcess.ProcessStart 
+    // - triggerred by TWebSocketProcess.ProcessStart
     OnClientConnected: TNotifyEvent;
     /// callback run when a WebSockets client is just disconnected
     // - triggerred by TWebSocketProcess.ProcessStop
@@ -805,7 +805,7 @@ type
     // - used only if WebSocketLog global variable is set
     procedure SetFullLog;
   end;
-                              
+
   /// points to parameters to be used for WebSockets process
   // - using a pointer/reference type will allow in-place modification of
   // any TWebSocketProcess.Settings, TWebSocketServer.Settings or
@@ -1067,7 +1067,7 @@ function ToText(opcode: TWebSocketFrameOpCode): PShortString; overload;
 type
   {$M+}
   THttpClientWebSockets = class;
-  TWebSocketProcessClientThread = class;        
+  TWebSocketProcessClientThread = class;
   {$M-}
 
   /// implements WebSockets process as used on client side

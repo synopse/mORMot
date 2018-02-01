@@ -32,7 +32,7 @@ unit SynDBODBC;
   - Esteban Martin (EMartin)
   - squirrel
   - zed
-  
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -1025,7 +1025,7 @@ const
   {$else}
   ODBC_LIB = 'libodbc.so.1';
   {$endif}
-  
+
   ODBC_ENTRIES: array[0..66] of PChar =
     ('SQLAllocEnv','SQLAllocHandle','SQLAllocStmt',
      'SQLBindCol','SQLBindParameter','SQLCancel','SQLCloseCursor',
@@ -1046,7 +1046,7 @@ const
      'SQLProcedureColumnsA','SQLProcedureColumnsW','SQLProcedures');
 
 var
-  ODBC: TODBCLib = nil;    
+  ODBC: TODBCLib = nil;
 
 {$ifdef MSWINDOWS}
 function ODBCInstalledDriversList(const aIncludeVersion: Boolean; out aDrivers: TStrings): Boolean;
@@ -1054,7 +1054,7 @@ function ODBCInstalledDriversList(const aIncludeVersion: Boolean; out aDrivers: 
   // expand environment variables, i.e %windir%
   // adapted from http://delphidabbler.com/articles?article=6
   function ExpandEnvVars(const aStr: string): string;
-  var size: Integer; 
+  var size: Integer;
   begin
     // Get required buffer size
     size := ExpandEnvironmentStrings(pointer(aStr),nil,0);
@@ -1415,7 +1415,7 @@ begin
         //FillcharFast(P^,ExpectedDataLen,ord('~'));
         Status := ODBC.GetData(fStatement,ColIndex+1,ExpectedDataType,
           P,ExpectedDataLen,@Indicator);
-        CheckStatus; 
+        CheckStatus;
       end else
       CheckStatus else
     CheckStatus;
@@ -2268,7 +2268,7 @@ begin
       result := 25;
     end else begin
       inc(Dest,9);
-      result := 21; 
+      result := 21;
     end;
   end else
     result := 12; // only date

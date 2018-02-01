@@ -311,7 +311,7 @@ type
     /// clear the session
     // - by deleting the cookie on the client side
     procedure Finalize; override;
-    /// return all cookie generation information as base64 encoded text 
+    /// return all cookie generation information as base64 encoded text
     // - to be retrieved via LoadContext
     function SaveContext: RawUTF8; override;
     /// restore cookie generation information from SaveContext text format

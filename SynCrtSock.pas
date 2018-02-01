@@ -216,7 +216,7 @@ unit SynCrtSock;
   - added advanced exception text if case of HTTPS connection problems
   - added HTTP.SYS 2.0 web socket API TWebSocketAPI
   - added HTTP.SYS 2.0 based WebSocket server THttpApiWebSocketServer
-  - added direct SChannel API TLS support on Windows 
+  - added direct SChannel API TLS support on Windows
 
 }
 
@@ -514,10 +514,10 @@ type
     // - use TimeOut milliseconds wait for incoming data
     // - bypass the SockIn^ buffers
     // - return false on any fatal socket error, true on success
-    // - call Close if the socket is identified as shutdown from the other side 
+    // - call Close if the socket is identified as shutdown from the other side
     // - you may optionally set StopBeforeLength=true, then the read bytes count
     // are set in Length, even if not all expected data has been received - in
-    // this case, Close method won't be called 
+    // this case, Close method won't be called
     function TrySockRecv(Buffer: pointer; var Length: integer; StopBeforeLength: boolean=false): boolean;
     /// call readln(SockIn^,Line) or simulate it with direct use of Recv(Sock, ..)
     // - char are read one by one
@@ -552,7 +552,7 @@ type
     // - instance should have been setup as a server via a previous Bind() call
     // - returns nil on error or a ResultClass instance on success
     // - if ResultClass is nil, will return a plain TCrtSocket, but you may
-    // specify e.g. THttpServerSocket if you expect incoming HTTP requests  
+    // specify e.g. THttpServerSocket if you expect incoming HTTP requests
     function AcceptIncoming(RemoteIP: PSockString=nil;
       ResultClass: TCrtSocketClass=nil): TCrtSocket;
     /// remote IP address of the last packet received (SocketLayer=slUDP only)
@@ -1083,7 +1083,7 @@ type
     property AuthenticatedUser: SockString read fAuthenticatedUser;
     {$ifdef MSWINDOWS}
     /// for THttpApiServer, points to a PHTTP_REQUEST structure
-    // - not used by now for other servers 
+    // - not used by now for other servers
     property HttpApiRequest: Pointer read fHttpApiRequest;
     {$endif}
   end;
@@ -1340,7 +1340,7 @@ type
     // - will call the Request public virtual method with the appropriate
     // parameters to retrive the content
     procedure Execute; override;
-    /// retrieve flags for SendHttpResponse 
+    /// retrieve flags for SendHttpResponse
    // - if response content type is not HTTP_RESP_STATICFILE
     function GetSendResponseFlags(Ctxt: THttpServerRequest): integer; virtual;
     /// executed after successfully SendHttpResponse() API call
@@ -1582,7 +1582,7 @@ type
     procedure Ping;
     procedure Disconnect;
     procedure CheckIsActive;
-    // call onAccept Method of protocol, and if protocol not accept connection or 
+    // call onAccept Method of protocol, and if protocol not accept connection or
     // can not be accepted from other reasons return false else return true
     function TryAcceptConnection(aProtocol: THttpApiWebSocketServerProtocol; Ctxt: THttpServerRequest; aNeedHeader: boolean): boolean;
   public
@@ -1784,7 +1784,7 @@ type
   TOnThreadPoolSocketPush = function(aClientSock: pointer): boolean of object;
 
   /// event handler used by THttpServer.Process to send a local file
-  // when HTTP_RESP_STATICFILE content-type is returned by the service 
+  // when HTTP_RESP_STATICFILE content-type is returned by the service
   // - can be defined e.g. to use NGINX X-Accel-Redirect header
   // - should return true if the Context has been modified to serve the file, or
   // false so that the file will be manually read and sent from memory
@@ -1847,7 +1847,7 @@ type
     // incoming connections (default is 32, which may be sufficient for most
     // cases, maximum is 256) - if you set 0, the thread pool will be disabled
     // and one thread will be created for any incoming connection
-    // - you can also tune (or disable with 0) HTTP/1.1 keep alive delay                             
+    // - you can also tune (or disable with 0) HTTP/1.1 keep alive delay
     constructor Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
       const ProcessName: SockString; ServerThreadPoolCount: integer=32;
       KeepAliveTimeOut: integer=3000); reintroduce; virtual;
@@ -2537,7 +2537,7 @@ function ResolveName(const Name: SockString;
   SockType: integer=SOCK_STREAM): SockString;
 
 /// Base64 encoding of a string
-// - used internally for STMP email sending 
+// - used internally for STMP email sending
 // - consider using more efficient BinToBase64() from SynCommons.pas instead
 function SockBase64Encode(const s: SockString): SockString;
 
@@ -2575,7 +2575,7 @@ function SetFileOpenLimit(max: integer; hard: boolean=false): integer;
 
 type
   TIPAddress = (tiaAny, tiaPublic, tiaPrivate);
-  
+
 /// enumerate all IP addresses of the current computer
 // - may be used to enumerate all adapters
 function GetIPAddresses(Kind: TIPAddress = tiaAny): TSockStringDynArray;
@@ -2858,7 +2858,7 @@ type
     function GetOneWithinPending(out notif: TPollSocketResult): boolean;
     /// notify any GetOne waiting method to stop its polling loop
     procedure Terminate;
-    /// the actual polling class used to track socket state changes 
+    /// the actual polling class used to track socket state changes
     property PollClass: TPollSocketClass read fPollClass;
     /// set to true by the Terminate method
     property Terminated: boolean read fTerminated;
@@ -3309,7 +3309,7 @@ begin
     exit;
   for i := 1 to n do begin
     c := a[i];
-    if c in ['a'..'z'] then 
+    if c in ['a'..'z'] then
       dec(c,32);
     d := b[i];
     if d in ['a'..'z'] then
@@ -9021,7 +9021,7 @@ begin
       @wsRequestHeaders[0], Length(wsRequestHeaders), wsServerHeaders, wsServerHeadersCount) = S_OK else
     result := WebSocketAPI.BeginServerHandshake(fWSHandle, nil, nil, 0,
       @wsRequestHeaders[0], Length(wsRequestHeaders), wsServerHeaders, wsServerHeadersCount) = S_OK;
-  if result then 
+  if result then
     try
       Ctxt.OutCustomHeaders := WebSocketHeadersToSockString(wsServerHeaders, wsServerHeadersCount);
     finally
@@ -9052,7 +9052,7 @@ begin
       fProtocol.OnFragment(self,aBufferType,aBuffer,aBufferSize);
   end else begin // last Fragment
     if Assigned(fProtocol.OnMessage) then begin
-      if fProtocol.ManualFragmentManagement then 
+      if fProtocol.ManualFragmentManagement then
         fProtocol.OnMessage(self,aBufferType,aBuffer,aBufferSize) else begin
         PushFragmentIntoBuffer;
         fProtocol.OnMessage(self,aBufferType,Pointer(fBuffer),Length(fBuffer));
@@ -9409,7 +9409,7 @@ begin
   result := AddUrl(aRoot, aPort, Https, aDomainName, aRegisterURI, WEB_SOCKET_URL_CONTEXT);
 end;
 
-procedure THttpApiWebSocketServer.RegisterProtocol(const aName: SockString; 
+procedure THttpApiWebSocketServer.RegisterProtocol(const aName: SockString;
   aManualFragmentManagement: Boolean;
   aOnAccept: THttpApiWebSocketServerOnAcceptEvent;
   aOnMessage: THttpApiWebSocketServerOnMessageEvent;
@@ -9458,7 +9458,7 @@ end;
 
 function TSynThreadPoolHttpApiWebSocketServer.NeedStopOnIOError: Boolean;
 begin
-  // If connection closed by guard than ERROR_HANDLE_EOF or ERROR_OPERATION_ABORTED 
+  // If connection closed by guard than ERROR_HANDLE_EOF or ERROR_OPERATION_ABORTED
   // can be returned - Other connections must work normally
   result := False;
 end;
@@ -10875,7 +10875,7 @@ const HTTPS: array[boolean] of string = ('','s');
 begin
   inherited;
   if curl.Module=0 then
-    LibCurlInitialize;     
+    LibCurlInitialize;
   fHandle := curl.easy_init;
   fRootURL := AnsiString(Format('http%s://%s:%d',[HTTPS[fHttps],fServer,fPort]));
 end;
@@ -11137,7 +11137,7 @@ begin
   if result<=0 then
     exit;
   result := 0;
-  for i := 0 to fCount-1 do 
+  for i := 0 to fCount-1 do
     with fTag[i] do begin
       byte(ev) := 0;
       if (rdp<>nil) and FD_ISSET(socket,rd) then
