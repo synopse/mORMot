@@ -5146,10 +5146,8 @@ type
     // and must be a reference to a variable (you can't write Add(i+10) e.g.)
     // - returns the index of the added element in the dynamic array
     // - note that because of dynamic array internal memory managment, adding
-    // will be a bit slower than e.g. with a TList: the list is reallocated
-    // every time a record is added - but in practice, with FastMM4 or
-    // SynScaleMM, there is no big speed penalty - for even better speed, you
-    // can also specify an external count variable in Init(...,@Count) method
+    // may reallocate the list every time a record is added, unless an external
+    // count variable has been specified in Init(...,@Count) method
     function Add(const Elem): integer;
     /// add an element to the dynamic array
     // - this version add a void element to the array, and returns its index
@@ -5158,6 +5156,18 @@ type
     // - warning: Elem must be of the same exact type than the dynamic array,
     // and must be a reference to a variable (you can't write Insert(10,i+10) e.g.)
     procedure Insert(Index: Integer; const Elem);
+    /// get and remove the last element stored in the dynamic array
+    // - Add + Pop/Peek will implement a LIFO (Last-In-First-Out) stack
+    // - warning: Elem must be of the same exact type than the dynamic array
+    // - returns true if the item was successfully copied and removed
+    // - use Peek() if you don't want to remove the item
+    function Pop(var Dest): boolean;
+    /// get the last element stored in the dynamic array
+    // - Add + Pop/Peek will implement a LIFO (Last-In-First-Out) stack
+    // - warning: Elem must be of the same exact type than the dynamic array
+    // - returns true if the item was successfully copied into Dest
+    // - use Pop() if you also want to remove the item
+    function Peek(var Dest): boolean;
     /// delete the whole dynamic array content
     // - this method will recognize T*ObjArray types and free all instances
     procedure Clear; {$ifdef HASINLINE}inline;{$endif}
@@ -9981,7 +9991,7 @@ type
     fValues: TDynArray;
     fValueVar: pointer;
     fCount, fFirst, fLast: integer;
-    function InternalPop(out aValue; aDelete: boolean): boolean;
+    procedure InternalGrow;
   public
     /// initialize the queue storage, specifyng dynamic array values
     // - aTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
@@ -46974,6 +46984,26 @@ begin
   SetCount(result+1);
 end;
 
+function TDynArray.Peek(var Dest): boolean;
+var index: integer;
+begin
+  index := Count-1;
+  result := index>=0;
+  if result then
+    ElemCopy(pointer(PtrUInt(fValue^)+PtrUInt(index)*ElemSize)^,Dest);
+end;
+
+function TDynArray.Pop(var Dest): boolean;
+var index: integer;
+begin
+  index := Count-1;
+  result := index>=0;
+  if result then begin
+    ElemMoveTo(index,Dest);
+    Count := index;
+  end;
+end;
+
 procedure TDynArray.Insert(Index: Integer; const Elem);
 var n: integer;
     P: PByteArray;
@@ -58636,24 +58666,23 @@ end;
 procedure TSynQueue.Push(const aValue);
 begin
   fSafe.Lock;
-  try // very efficient thanks to fValues.Capacity - faster than TQueue
+  try
     if fFirst<0 then begin
       fFirst := 0; // start from the bottom of the void queue
       fLast := 0;
       if fCount=0 then
-        fValues.Count := 16;
+        fValues.Count := 64;
     end else
       if fFirst<=fLast then begin // stored in-order
         inc(fLast);
         if fLast=fCount then
-          if fFirst>fValues.Capacity-fCount then // use leading space (if worth it)
-            fLast := 0 else // append at the end
-            fValues.Count := fCount+32; // TDynArray won't always allocate
+          InternalGrow;
       end else begin
         inc(fLast);
-        if fLast=fFirst then begin // colision -> arrange
+        if fLast=fFirst then begin // collision -> arrange
           fValues.AddArray(fValueVar,0,fLast); // move 0..fLast at the end
-          fLast := 0; // will push next items in the leading space
+          fLast := fCount;
+          InternalGrow;
         end;
       end;
     fValues.ElemCopyFrom(aValue,fLast);
@@ -58662,37 +58691,48 @@ begin
   end;
 end;
 
-function TSynQueue.InternalPop(out aValue; aDelete: boolean): boolean;
+procedure TSynQueue.InternalGrow;
+var cap: integer;
+begin
+  cap := fValues.Capacity;
+  if fFirst>cap-fCount then // use leading space if worth it
+    fLast := 0 else // append at the end
+    if fCount=cap then // reallocation needed
+      fValues.Count := cap+cap shr 3+64 else
+      fCount := cap; // fill trailing memory as much as possible
+end;
+
+function TSynQueue.Peek(out aValue): boolean;
 begin
   fSafe.Lock;
   try
     result := fFirst>=0;
     if result then
-      if aDelete then begin
-        fValues.ElemMoveTo(fFirst,aValue);
-        if fFirst=fLast then begin
-          fFirst := -1; // reset whole store (keeping current capacity)
-          fLast := -2;
-        end else begin
-          inc(fFirst);
-          if fFirst=fCount then
-            fFirst := 0; // will retrieve from leading items
-        end;
-      end else
-        fValues.ElemCopyAt(fFirst,aValue);
+      fValues.ElemCopyAt(fFirst,aValue);
   finally
     fSafe.UnLock;
   end;
 end;
 
-function TSynQueue.Peek(out aValue): boolean;
-begin
-  result := InternalPop(aValue,{aDelete=}false);
-end;
-
 function TSynQueue.Pop(out aValue): boolean;
 begin
-  result := InternalPop(aValue,{aDelete=}true);
+  fSafe.Lock;
+  try
+    result := fFirst>=0;
+    if result then begin
+      fValues.ElemMoveTo(fFirst,aValue);
+      if fFirst=fLast then begin
+        fFirst := -1; // reset whole store (keeping current capacity)
+        fLast := -2;
+      end else begin
+        inc(fFirst);
+        if fFirst=fCount then
+          fFirst := 0; // will retrieve from leading items
+      end;
+    end;
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 procedure TSynQueue.Save(out aDynArrayValues; aDynArray: PDynArray);
