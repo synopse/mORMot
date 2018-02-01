@@ -4921,8 +4921,10 @@ begin
   try
     for o := 1 to 1000 do begin
       check(f.Count=0);
+      check(not f.Pending);
       for i := 1 to o do
         f.Push(i);
+      check(f.Pending);
       check(f.Count=o);
       check(f.Capacity>=o);
       f.Save(savedint);
@@ -4935,9 +4937,11 @@ begin
         check(f.Pop(j));
         check(j=i);
       end;
+      check(not f.Pending);
       check(f.Count=0);
       check(f.Capacity>0);
       f.Clear; // ensure f.Pop(j) will use leading storage
+      check(not f.Pending);
       check(f.Count=0);
       check(f.Capacity=0);
       check(Length(savedint)=o);
@@ -4955,6 +4959,7 @@ begin
           inc(n);
         end;
       check(f.Count=n);
+      check(f.Pending);
       f.Save(savedint);
       check(Length(savedint)=n);
       for i := 1 to n do
@@ -4976,6 +4981,7 @@ begin
   f := TSynQueue.Create(TypeInfo(TRawUTF8DynArray));
   try
     for o := 1 to 1000 do begin
+      check(not f.Pending);
       check(f.Count=0);
       f.Clear; // ensure f.Pop(j) will use leading storage
       check(f.Count=0);
@@ -4992,6 +4998,7 @@ begin
           f.Push(u);
           inc(n);
         end;
+      check(f.Pending);
       check(f.Count=n);
       f.Save(savedu);
       check(Length(savedu)=n);
@@ -5005,6 +5012,7 @@ begin
         check(u=v);
         check(GetInteger(pointer(u)) and 7<>0);
       end;
+      check(not f.Pending);
       check(f.Count=0);
       check(f.Capacity>0);
     end;

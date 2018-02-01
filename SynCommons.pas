@@ -10011,6 +10011,7 @@ type
     // - may be used to persist as binary or JSON the queue content
     // - aDynArrayValues should be a variable defined as aTypeInfo from Create
     // - you can specify an optional TDynArray wrapper 
+    // - this method is thread-safe, and will make a copy of the queue data
     procedure Save(out aDynArrayValues; aDynArray: PDynArray=nil);
     /// returns how many items are currently stored in this queue
     // - this method is thread-safe
@@ -10020,6 +10021,9 @@ type
     // method to return its current capacity
     // - this method is thread-safe
     function Capacity: integer;
+    /// returns true if there are some items currently pending in the queue
+    // - slightly faster than checking Count=0, and much faster than Pop or Peek
+    function Pending: boolean;
   end;
 
 
@@ -58624,12 +58628,17 @@ begin
   end;
 end;
 
+function TSynQueue.Pending: boolean;
+begin // allow some false positive: fSafe.Lock not used here
+  result := (self<>nil) and (fFirst>=0);
+end;
+
 procedure TSynQueue.Push(const aValue);
 begin
   fSafe.Lock;
   try // very efficient thanks to fValues.Capacity - faster than TQueue
     if fFirst<0 then begin
-      fFirst := 0;
+      fFirst := 0; // start from the bottom of the void queue
       fLast := 0;
       if fCount=0 then
         fValues.Count := 16;
@@ -58644,10 +58653,9 @@ begin
         inc(fLast);
         if fLast=fFirst then begin // colision -> arrange
           fValues.AddArray(fValueVar,0,fLast); // move 0..fLast at the end
-          fLast := 0; // will push next items at the beginning
+          fLast := 0; // will push next items in the leading space
         end;
       end;
-    //assert(fLast<fCount);
     fValues.ElemCopyFrom(aValue,fLast);
   finally
     fSafe.UnLock;
