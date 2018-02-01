@@ -2282,26 +2282,6 @@ function ObjectToVariantDebug(Value: TObject;
   const ContextFormat: RawUTF8; const ContextArgs: array of const;
   const ContextName: RawUTF8='context'): variant; overload;
 
-/// will convert any TObject into a TDocVariant document instance
-// - a faster alternative to Dest := _JsonFast(ObjectToJSON(Value))
-// - this would convert the TObject by representation, using only serializable
-// published properties: do not use this function to store temporary a class
-// instance, but e.g. to store an object values in a NoSQL database
-procedure ObjectToVariant(Value: TObject; out Dest: variant); overload;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// will convert any TObject into a TDocVariant document instance
-// - a faster alternative to _JsonFast(ObjectToJSON(Value))
-function ObjectToVariant(Value: TObject; EnumSetsAsText: boolean=false): variant; overload;
-
-/// will convert any TObject into a TDocVariant document instance
-// - a faster alternative to _Json(ObjectToJSON(Value),Options)
-// - note that the result variable should already be cleared: no VarClear()
-// is done by this function
-// - would be used e.g. by VarRecToVariant() function
-procedure ObjectToVariant(Value: TObject; var result: variant;
-  Options: TTextWriterWriteObjectOptions); overload;
-
 /// will serialize any TObject into a TDocVariant debugging document
 // - just a wrapper around _JsonFast(ObjectToJSONDebug())
 function ObjectToVariantDebug(Value: TObject): variant; overload;
@@ -8937,9 +8917,12 @@ type
   EObjectVariant = ESynException;
 
   /// a custom variant type used to have direct access to object published properties
-  // - TObjectVariant provides lazy-loading to object properties from Variant without
-  // converting all properties into a TDocVariant, as ObjectToVariant() does
+  // - TObjectVariant provides lazy-loading to object properties from a Variant
+  // variable - which may be used with SynMustache or with late-binding
+  // - warning: this custom variant is just a wrapper around an existing TObject
+  // instance, which should remain available as long as the variant is used
   // - if you want a per-representation stateless variant, use ObjectToVariant()
+  // which convert all properties into a TDocVariant, so may use more resource
   TObjectVariant = class(TSynInvokeableVariantType)
   protected
     function GetInfo(const V: TVarData; Name: PUTF8Char): PPropInfo;
@@ -8950,7 +8933,7 @@ type
     // - warning: this custom variant is just a wrapper around an existing TObject
     // instance, which should remain available as long as the variant is used
     class procedure New(var V: Variant; Obj: TObject);
-    /// will perform proper JSON serialization using ObjectToJson()
+    /// will perform proper JSON serialization calling W.WriteObject()
     procedure ToJSON(W: TTextWriter; const Value: variant; Escape: TTextWriterKind); override;
   end;
 
@@ -48228,27 +48211,6 @@ begin
     until C1=TObject;
     result := true;
   end;
-end;
-
-function ObjectToVariant(Value: TObject; EnumSetsAsText: boolean): variant;
-const OPTIONS: array[boolean] of TTextWriterWriteObjectOptions = (
-     [woDontStoreDefault],[woDontStoreDefault,woEnumSetsAsText]);
-begin
-  VarClear(result);
-  ObjectToVariant(Value,result,OPTIONS[EnumSetsAsText]);
-end;
-
-procedure ObjectToVariant(Value: TObject; out Dest: variant);
-begin
-  ObjectToVariant(Value,Dest,[woDontStoreDefault]);
-end;
-
-procedure ObjectToVariant(Value: TObject; var result: variant;
-  Options: TTextWriterWriteObjectOptions);
-var json: RawUTF8;
-begin
-  json := ObjectToJSON(Value,Options);
-  PDocVariantData(@result)^.InitJSONInPlace(pointer(json),JSON_OPTIONS_FAST);
 end;
 
 function ObjectToJSONDebug(Value: TObject; Options: TTextWriterWriteObjectOptions): RawUTF8;

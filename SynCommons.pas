@@ -16011,6 +16011,29 @@ function _ByRef(const DocVariant: variant; Options: TDocVariantOptions): variant
 procedure _ByRef(const DocVariant: variant; out Dest: variant;
   Options: TDocVariantOptions); overload;
 
+/// will convert any TObject into a TDocVariant document instance
+// - a slightly faster alternative to Dest := _JsonFast(ObjectToJSON(Value))
+// - this would convert the TObject by representation, using only serializable
+// published properties: do not use this function to store temporary a class
+// instance, but e.g. to store an object values in a NoSQL database
+// - if you expect lazy-loading of a TObject, see TObjectVariant.New()
+procedure ObjectToVariant(Value: TObject; out Dest: variant); overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// will convert any TObject into a TDocVariant document instance
+// - a faster alternative to _JsonFast(ObjectToJSON(Value))
+// - if you expect lazy-loading of a TObject, see TObjectVariant.New()
+function ObjectToVariant(Value: TObject; EnumSetsAsText: boolean=false): variant; overload;
+
+/// will convert any TObject into a TDocVariant document instance
+// - a faster alternative to _Json(ObjectToJSON(Value),Options)
+// - note that the result variable should already be cleared: no VarClear()
+// is done by this function
+// - would be used e.g. by VarRecToVariant() function
+// - if you expect lazy-loading of a TObject, see TObjectVariant.New()
+procedure ObjectToVariant(Value: TObject; var result: variant;
+  Options: TTextWriterWriteObjectOptions); overload;
+
 {$endif NOVARIANTS}
 
 { ************ some console functions ************************************** }
@@ -43242,14 +43265,6 @@ begin
   VarRecToVariant(V,result);
 end;
 
-procedure ObjectToVariant(Value: TObject; var result: variant;
-  Options: TTextWriterWriteObjectOptions);
-var json: RawUTF8;
-begin
-  json := ObjectToJSON(Value,Options);
-  PDocVariantData(@result)^.InitJSONInPlace(pointer(json),JSON_OPTIONS_FAST);
-end;
-
 procedure VarRecToVariant(const V: TVarRec; var result: variant);
 begin
   if TVarData(result).VType and VTYPE_STATIC=0 then
@@ -46378,6 +46393,27 @@ procedure _ByRef(const DocVariant: variant; out Dest: variant;
 begin
   TDocVariantData(Dest) := _Safe(DocVariant)^; // fast byref copy
   TDocVariantData(Dest).SetOptions(Options);
+end;
+
+function ObjectToVariant(Value: TObject; EnumSetsAsText: boolean): variant;
+const OPTIONS: array[boolean] of TTextWriterWriteObjectOptions = (
+     [woDontStoreDefault],[woDontStoreDefault,woEnumSetsAsText]);
+begin
+  VarClear(result);
+  ObjectToVariant(Value,result,OPTIONS[EnumSetsAsText]);
+end;
+
+procedure ObjectToVariant(Value: TObject; out Dest: variant);
+begin
+  ObjectToVariant(Value,Dest,[woDontStoreDefault]);
+end;
+
+procedure ObjectToVariant(Value: TObject; var result: variant;
+  Options: TTextWriterWriteObjectOptions);
+var json: RawUTF8;
+begin
+  json := ObjectToJSON(Value,Options);
+  PDocVariantData(@result)^.InitJSONInPlace(pointer(json),JSON_OPTIONS_FAST);
 end;
 
 {$endif NOVARIANTS}
