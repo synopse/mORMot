@@ -16549,6 +16549,9 @@ type
     /// should be called when an error occurred
     // - just a wraper around overloaded ProcessError(), so a thread-safe method
     procedure ProcessErrorFmt(const Fmt: RawUTF8; const Args: array of const);
+    /// should be called when an Exception occurred
+    // - just a wraper around overloaded ProcessError(), so a thread-safe method
+    procedure ProcessErrorRaised(E: Exception);
     /// should be called when the process stops, to pause the internal timer
     // - thread-safe method
     procedure ProcessEnd; virtual;
@@ -55650,6 +55653,13 @@ begin
   ProcessError({$ifndef NOVARIANTS}RawUTF8ToVariant{$endif}(FormatUTF8(Fmt,Args)));
 end;
 
+procedure TSynMonitor.ProcessErrorRaised(E: Exception);
+begin
+  {$ifndef NOVARIANTS}if E.InheritsFrom(ESynException) then
+    ProcessError(_ObjFast([E,ObjectToVariant(E,true)])) else{$endif}
+    ProcessErrorFmt('%: %', [E,E.Message]);
+end;
+
 procedure TSynMonitor.ProcessErrorNumber(info: integer);
 begin
   ProcessError(info);
@@ -63525,7 +63535,7 @@ begin
         end;
       except
         on E: Exception do begin
-          fStats.ProcessErrorFmt('%: %', [E.ClassType,E.Message]);
+          fStats.ProcessErrorRaised(E);
           if Assigned(fOnException) then
             fOnException(E);
         end;
