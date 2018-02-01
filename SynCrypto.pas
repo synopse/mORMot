@@ -1191,7 +1191,7 @@ procedure FillSystemRandom(Buffer: PByteArray; Len: integer; AllowBlocking: bool
 type
   PSHA1Digest = ^TSHA1Digest;
   /// 160 bits memory block for SHA-1 hash digest storage
-  TSHA1Digest   = packed array[0..19] of byte;
+  TSHA1Digest = packed array[0..19] of byte;
 
   PSHA1 = ^TSHA1;
   /// handle SHA-1 hashing
@@ -1623,6 +1623,9 @@ procedure FillZero(var hash: TByte64); overload;
 // - may be used to cleanup stack-allocated content
 // ! ... finally FillZero(temp); end;
 procedure FillZero(var hash: TSHA1Digest); overload;
+
+/// compare two SHA-1 digest buffers
+function IsEqual(const A,B: TSHA1Digest): boolean; overload;
 
 /// direct MD5 hash calculation of some data
 function MD5Buf(const Buffer; Len: Cardinal): TMD5Digest;
@@ -3293,6 +3296,14 @@ begin
   FillCharFast(hash,sizeof(hash),0);
 end;
 
+function IsEqual(const A,B: TSHA1Digest): boolean;
+var a_: TIntegerArray absolute A;
+    b_: TIntegerArray absolute B;
+begin // uses anti-forensic time constant "xor/or" pattern
+  result := ((a_[0] xor b_[0]) or (a_[1] xor b_[1]) or (a_[2] xor b_[2]) or
+    (a_[3] xor b_[3]) or (a_[4] xor b_[4]))=0;
+end;
+
 procedure THMAC_SHA1.Init(key: pointer; keylen: integer);
 var i: integer;
     k0,k0xorIpad: TByte64;
@@ -3864,19 +3875,19 @@ var SHA: TSHA1;
 begin
   // 1. Hash complete RawByteString
   SHA.Full(pointer(s),length(s),Digest);
-  result := CompareMem(@Digest,@TDig,sizeof(Digest));
+  result := IsEqual(Digest,TDig);
   if not result then exit;
   // 2. one update call for all chars
   for i := 1 to length(s) do
     SHA.Update(@s[i],1);
   SHA.Final(Digest);
-  result := CompareMem(@Digest,@TDig,sizeof(Digest));
+  result := IsEqual(Digest,TDig);
   // 3. test consistency with Padlock engine down results
 {$ifdef USEPADLOCK}
   if not result or not padlock_available then exit;
   padlock_available := false;  // force PadLock engine down
   SHA.Full(pointer(s),length(s),Digest);
-  result := CompareMem(@Digest,@TDig,sizeof(Digest));
+  result := IsEqual(Digest,TDig);
 {$ifdef PADLOCKDEBUG} write('=padlock '); {$endif}
   padlock_available := true;
 {$endif}
@@ -13515,7 +13526,7 @@ var RC4: TRC4;
 begin
   RC4.Init(Test1,8);
   RC4.Encrypt(Test1,Dat,8);
-  result := CompareMem(@Dat,@Res1,sizeof(Res1));
+  result := SysUtils.CompareMem(@Dat,@Res1,sizeof(Res1));
   RC4.Init(Key2,4);
   RC4.Encrypt(Test2,Dat,10);
   result := result and CompareMem(@Dat,@Res2,sizeof(Res2));
