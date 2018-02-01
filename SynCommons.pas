@@ -2462,14 +2462,9 @@ function Trim(const S: RawUTF8): RawUTF8;
 
 {$define OWNNORMTOUPPER} { NormToUpper[] exists only in our enhanced RTL }
 
-{$ifndef PUREPASCAL}
-{$ifndef LVCL} { don't define these functions twice }
-
-/// use our fast asm version of CompareMem()
-function CompareMem(P1, P2: Pointer; Length: Integer): Boolean;
-
-{$endif LVCL}
-{$endif PUREPASCAL}
+/// our fast version of CompareMem() with optimized asm for x86
+function CompareMem(P1, P2: Pointer; Length: PtrInt): Boolean;
+  {$ifdef HASINLINE}{$ifdef PUREPASCAL}inline;{$endif}{$endif}
 
 {$endif ENHANCEDRTL}
 
@@ -3159,19 +3154,19 @@ function IdemPropName(const P1,P2: shortstring): boolean; overload;
 /// case unsensitive test of P1 and P2 content
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
 // - this version expects P2 to be a PAnsiChar with a specified length
-function IdemPropName(const P1: shortstring; P2: PUTF8Char; P2Len: integer): boolean; overload;
+function IdemPropName(const P1: shortstring; P2: PUTF8Char; P2Len: PtrInt): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// case unsensitive test of P1 and P2 content
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
 // - this version expects P1 and P2 to be a PAnsiChar with specified lengths
-function IdemPropName(P1,P2: PUTF8Char; P1Len,P2Len: integer): boolean; overload;
+function IdemPropName(P1,P2: PUTF8Char; P1Len,P2Len: PtrInt): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// case unsensitive test of P1 and P2 content
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
 // - this version expects P2 to be a PAnsiChar with specified length
-function IdemPropNameU(const P1: RawUTF8; P2: PUTF8Char; P2Len: integer): boolean; overload;
+function IdemPropNameU(const P1: RawUTF8; P2: PUTF8Char; P2Len: PtrInt): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// case unsensitive test of P1 and P2 content of same length
@@ -3181,7 +3176,7 @@ function IdemPropNameU(const P1: RawUTF8; P2: PUTF8Char; P2Len: integer): boolea
 // - if P1 and P2 are RawUTF8, you should better call overloaded function
 // IdemPropNameU(const P1,P2: RawUTF8), which would be slightly faster by
 // using the length stored before the actual text buffer of each RawUTF8
-function IdemPropNameUSameLen(P1,P2: PUTF8Char; P1P2Len: integer): boolean;
+function IdemPropNameUSameLen(P1,P2: PUTF8Char; P1P2Len: PtrInt): boolean;
   {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// case unsensitive test of P1 and P2 content
@@ -3264,14 +3259,14 @@ function IdemFileExt(p: PUTF8Char; extup: PAnsiChar; sepChar: AnsiChar='.'): Boo
 // !  if ch and $80=0 then
 // !    inc(P) else
 // !    ch := GetHighUTF8UCS4(P);
-function GetHighUTF8UCS4(var U: PUTF8Char): cardinal;
+function GetHighUTF8UCS4(var U: PUTF8Char): PtrUInt;
 
 /// retrieve the next UCS4 value stored in U, then update the U pointer
 // - this function will decode the UTF-8 content before using NormToUpper[]
 // - will return '?' if the UCS4 value is higher than #255: so use this function
 // only if you need to deal with ASCII characters (e.g. it's used for Soundex
 // and for ContainsUTF8 function)
-function GetNextUTF8Upper(var U: PUTF8Char): cardinal;
+function GetNextUTF8Upper(var U: PUTF8Char): PtrUInt;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// points to the beginning of the next word stored in U
@@ -23619,7 +23614,7 @@ end;
 
 {$ifndef PUREPASCAL} { these functions are implemented in asm }
 {$ifndef LVCL}       { don't define these functions twice }
-{$ifndef FPC}        { these asm function use some low-level system.pas calls }
+{$ifndef FPC}        { some asm functions use some low-level system.pas calls }
 
 {$define DEFINED_INT32TOUTF8}
 
@@ -23966,76 +23961,24 @@ end;
 
 {$endif FPC}  { above asm function had some low-level system.pas calls }
 
-function CompareMem(P1, P2: Pointer; Length: Integer): Boolean;
-asm     // eax=P1 edx=P2 ecx=Length
-        cmp     eax, edx
-        je      @0                 // P1=P2
-        sub     ecx, 8
-        jl      @small
-        push    ebx
-        mov     ebx, [eax]         // Compare First 4 Bytes
-        cmp     ebx, [edx]
-        jne     @setbig
-        lea     ebx, [eax + ecx]   // Compare Last 8 Bytes
-        add     edx, ecx
-        mov     eax, [ebx]
-        cmp     eax, [edx]
-        jne     @setbig
-        mov     eax, [ebx + 4]
-        cmp     eax, [edx + 4]
-        jne     @setbig
-        sub     ecx, 4
-        jle     @true              // All Bytes already Compared
-        neg     ecx                // ecx=-(Length-12)
-        add     ecx, ebx           // DWORD Align Reads
-        and     ecx, -4
-        sub     ecx, ebx
-@loop:  mov     eax, [ebx + ecx]   // Compare 8 Bytes per Loop
-        cmp     eax, [edx + ecx]
-        jne     @setbig
-        mov     eax, [ebx + ecx + 4]
-        cmp     eax, [edx + ecx + 4]
-        jne     @setbig
-        add     ecx, 8
-        jl      @loop
-@true:  pop     ebx
-@0:     mov     al, 1
-        ret
-@setbig:pop     ebx
-        setz    al
-        ret
-@small: add     ecx, 8             // ecx=0..7
-        jle     @0                 // Length <= 0
-        neg     ecx                // ecx=-1..-7
-        lea     ecx, [@1 + ecx * 8 + 8]   // each @#: block below = 8 bytes
-        jmp     ecx
-@7:     mov     cl, [eax + 6]
-        cmp     cl, [edx + 6]
-        jne     @setsml
-@6:     mov     ch, [eax + 5]
-        cmp     ch, [edx + 5]
-        jne     @setsml
-@5:     mov     cl, [eax + 4]
-        cmp     cl, [edx + 4]
-        jne     @setsml
-@4:     mov     ch, [eax + 3]
-        cmp     ch, [edx + 3]
-        jne     @setsml
-@3:     mov     cl, [eax + 2]
-        cmp     cl, [edx + 2]
-        jne     @setsml
-@2:     mov     ch, [eax + 1]
-        cmp     ch, [edx + 1]
-        jne     @setsml
-@1:     mov     al, [eax]
-        cmp     al, [edx]
-@setsml:setz    al
-end;
-
 {$endif LVCL}
 {$endif PUREPASCAL}
 
-{$ifdef PUREPASCAL} // from Aleksandr Sharahov's PosEx_Sha_Pas_2()
+{$ifdef PUREPASCAL}
+function CompareMem(P1, P2: Pointer; Length: PtrInt): Boolean;
+var i: PtrInt;
+begin // inlining this code is more efficient than FPC's CompareByte
+  result := false;
+  for i := 0 to (Length shr 2)-1 do
+    if PCardinalArray(P1)^[i]<>PCardinalArray(P2)^[i] then
+      exit;
+  for i := Length-(Length and 3) to Length-1 do
+    if PByteArray(P1)^[i]<>PByteArray(P2)^[i] then
+      exit;
+  result := true;
+end;
+
+// from Aleksandr Sharahov's PosEx_Sha_Pas_2()
 function PosEx(const SubStr, S: RawUTF8; Offset: PtrUInt = 1): Integer;
 var len, lenSub: PtrInt;
     ch: AnsiChar;
@@ -24114,6 +24057,72 @@ Ret:
 Exit:
 end;
 {$else}
+function CompareMem(P1, P2: Pointer; Length: PtrInt): Boolean;
+asm     // eax=P1 edx=P2 ecx=Length
+        cmp     eax, edx
+        je      @0                 // P1=P2
+        sub     ecx, 8
+        jl      @small
+        push    ebx
+        mov     ebx, [eax]         // Compare First 4 Bytes
+        cmp     ebx, [edx]
+        jne     @setbig
+        lea     ebx, [eax + ecx]   // Compare Last 8 Bytes
+        add     edx, ecx
+        mov     eax, [ebx]
+        cmp     eax, [edx]
+        jne     @setbig
+        mov     eax, [ebx + 4]
+        cmp     eax, [edx + 4]
+        jne     @setbig
+        sub     ecx, 4
+        jle     @true              // All Bytes already Compared
+        neg     ecx                // ecx=-(Length-12)
+        add     ecx, ebx           // DWORD Align Reads
+        and     ecx, -4
+        sub     ecx, ebx
+@loop:  mov     eax, [ebx + ecx]   // Compare 8 Bytes per Loop
+        cmp     eax, [edx + ecx]
+        jne     @setbig
+        mov     eax, [ebx + ecx + 4]
+        cmp     eax, [edx + ecx + 4]
+        jne     @setbig
+        add     ecx, 8
+        jl      @loop
+@true:  pop     ebx
+@0:     mov     al, 1
+        ret
+@setbig:pop     ebx
+        setz    al
+        ret
+@small: add     ecx, 8             // ecx=0..7
+        jle     @0                 // Length <= 0
+        neg     ecx                // ecx=-1..-7
+        lea     ecx, [@1 + ecx * 8 + 8]   // each @#: block below = 8 bytes
+        jmp     ecx
+@7:     mov     cl, [eax + 6]
+        cmp     cl, [edx + 6]
+        jne     @setsml
+@6:     mov     ch, [eax + 5]
+        cmp     ch, [edx + 5]
+        jne     @setsml
+@5:     mov     cl, [eax + 4]
+        cmp     cl, [edx + 4]
+        jne     @setsml
+@4:     mov     ch, [eax + 3]
+        cmp     ch, [edx + 3]
+        jne     @setsml
+@3:     mov     cl, [eax + 2]
+        cmp     cl, [edx + 2]
+        jne     @setsml
+@2:     mov     ch, [eax + 1]
+        cmp     ch, [edx + 1]
+        jne     @setsml
+@1:     mov     al, [eax]
+        cmp     al, [edx]
+@setsml:setz    al
+end;
+
 function PosEx(const SubStr, S: RawUTF8; Offset: PtrUInt = 1): Integer;
 asm     // eax=SubStr, edx=S, ecx=Offset
         push    ebx
@@ -25415,7 +25424,7 @@ Txt:  len := F-FDeb;
 end;
 
 function RawByteStringArrayConcat(const Values: array of RawByteString): RawByteString;
-var i, L: integer;
+var i, L: PtrInt;
     P: PAnsiChar;
 begin
   L := 0;
@@ -25814,19 +25823,17 @@ end;
 
 function IdemPropNameU(const P1,P2: RawUTF8): boolean;
 {$ifdef PUREPASCAL}
-var i,j,L: integer;
+var i,L: PtrInt;
 begin
   result := false;
   L := length(P1);
   if L<>length(P2) then
     exit;
-  j := 1;
-  for i := 1 to L shr 2 do
-    if (PCardinal(@P1[j])^ xor PCardinal(@P2[j])^) and $dfdfdfdf<>0 then
-      exit else
-      inc(j,4);
-  for i := j to L do
-    if (ord(P1[i]) xor ord(P2[i])) and $df<>0 then
+  for i := 0 to (L shr 2)-1 do
+    if (PCardinalArray(P1)^[i] xor PCardinalArray(P2)^[i]) and $dfdfdfdf<>0 then
+      exit;
+  for i := L-(L and 3) to L-1 do
+    if (PByteArray(P1)^[i] xor PByteArray(P2)^[i]) and $df<>0 then
       exit;
   result := true;
 end;
@@ -25869,46 +25876,44 @@ asm // eax=p1, edx=p2
 end;
 {$endif}
 
-function IdemPropName(const P1,P2: shortstring): boolean; overload;
+function IdemPropName(const P1,P2: shortstring): boolean;
 begin
   if P1[0]=P2[0] then
     result := IdemPropNameUSameLen(@P1[1],@P2[1],ord(P2[0])) else
     result := false;
 end;
 
-function IdemPropName(const P1: shortstring; P2: PUTF8Char; P2Len: integer): boolean; overload;
+function IdemPropName(const P1: shortstring; P2: PUTF8Char; P2Len: PtrInt): boolean;
 begin
   if ord(P1[0])=P2Len then
     result := IdemPropNameUSameLen(@P1[1],P2,P2Len) else
     result := false;
 end;
 
-function IdemPropName(P1,P2: PUTF8Char; P1Len,P2Len: integer): boolean; overload;
+function IdemPropName(P1,P2: PUTF8Char; P1Len,P2Len: PtrInt): boolean;
 begin
   if P1Len=P2Len then
     result := IdemPropNameUSameLen(P1,P2,P2Len) else
     result := false;
 end;
 
-function IdemPropNameU(const P1: RawUTF8; P2: PUTF8Char; P2Len: integer): boolean;
+function IdemPropNameU(const P1: RawUTF8; P2: PUTF8Char; P2Len: PtrInt): boolean;
 begin
   if length(P1)=P2Len then
     result := IdemPropNameUSameLen(pointer(P1),P2,P2Len) else
     result := false;
 end;
 
-function IdemPropNameUSameLen(P1,P2: PUTF8Char; P1P2Len: integer): boolean;
+function IdemPropNameUSameLen(P1,P2: PUTF8Char; P1P2Len: PtrInt): boolean;
 {$ifdef PUREPASCAL}
-var i,j: integer;
+var i: PtrInt;
 begin
   result := false;
-  j := 0;
-  for i := 1 to P1P2Len shr 2 do
-    if (PCardinal(PtrInt(P1)+j)^ xor PCardinal(@P2[j])^) and $dfdfdfdf<>0 then
-      exit else
-      inc(j,4);
-  for i := j to P1P2Len-1 do
-    if (PByteArray(P1)^[i] xor ord(P2[i])) and $df<>0 then
+  for i := 0 to (P1P2Len shr 2)-1 do
+    if (PCardinalArray(P1)^[i] xor PCardinalArray(P2)^[i]) and $dfdfdfdf<>0 then
+      exit;
+  for i := P1P2Len-(P1P2Len and 3) to P1P2Len-1 do
+    if (PByteArray(P1)^[i] xor PByteArray(P2)^[i]) and $df<>0 then
       exit;
   result := true;
 end;
@@ -26285,7 +26290,7 @@ end;
 {$endif FPC}
 
 procedure SoundExComputeAnsi(var p: PAnsiChar; var result: cardinal; Values: PSoundExValues);
-var n,v,old: cardinal;
+var n,v,old: PtrUInt;
 begin
   n := 0;
   old := 0;
@@ -26331,9 +26336,9 @@ Err:result := 0;
   until AnsiChar(result) in ['A'..'G','I'..'Z'];
 end;
 
-function GetHighUTF8UCS4(var U: PUTF8Char): cardinal;
-var extra,i: integer;
-    c: cardinal;
+function GetHighUTF8UCS4(var U: PUTF8Char): PtrUInt;
+var extra,i: PtrInt;
+    c: PtrUInt;
 begin
   result := 0;
   c := byte(U^); // here U^>=#80
@@ -26354,10 +26359,10 @@ begin
   result := c;
 end;
 
-function GetHighUTF8UCS4Inlined(var U: PUTF8Char): cardinal;
+function GetHighUTF8UCS4Inlined(var U: PUTF8Char): PtrUInt;
   {$ifdef HASINLINE}inline;{$endif}
-var extra,i: integer;
-    c: cardinal;
+var extra,i: PtrInt;
+    c: PtrUInt;
 begin
   result := 0;
   c := byte(U^); // here U^>=#80
@@ -26378,7 +26383,7 @@ begin
   result := c;
 end;
 
-function GetNextUTF8Upper(var U: PUTF8Char): cardinal;
+function GetNextUTF8Upper(var U: PUTF8Char): PtrUInt;
 begin
   result := ord(U^);
   if result=0 then
@@ -60617,13 +60622,22 @@ begin
 end;
 
 function IsRowID(FieldName: PUTF8Char): boolean;
+{$ifdef CPU64}
+var f: Int64;
 begin
-  if FieldName=nil then
-    result := false else
+  if FieldName<>nil then begin
+    f := PInt64(FieldName)^;
+    result := (f and $ffdfdf=(ord('I')+ord('D')shl 8)) or (f and $ffdfdfdfdfdf=
+      (ord('R')+ord('O')shl 8+ord('W')shl 16+ord('I')shl 24+Int64(ord('D')) shl 32))
+  end
+{$else}
+begin
+  if FieldName<>nil then
     result := (PInteger(FieldName)^ and $ffdfdf=ord('I')+ord('D')shl 8) or
-              ((PIntegerArray(FieldName)^[0] and $dfdfdfdf=
-                 ord('R')+ord('O')shl 8+ord('W')shl 16+ord('I')shl 24) and
-               (PIntegerArray(FieldName)^[1] and $ffdf=ord('D')));
+      ((PIntegerArray(FieldName)^[0] and $dfdfdfdf=
+        ord('R')+ord('O')shl 8+ord('W')shl 16+ord('I')shl 24) and
+       (PIntegerArray(FieldName)^[1] and $ffdf=ord('D')))
+{$endif} else result := false;           
 end;
 
 function IsRowID(FieldName: PUTF8Char; FieldLen: integer): boolean;
@@ -61681,7 +61695,7 @@ begin
 end;
 
 function GetLineContains(p,pEnd, up: PUTF8Char): boolean;
-var i: integer;
+var i: PtrInt;
 label Fnd;
 begin
   if (p<>nil) and (up<>nil) then

@@ -4181,7 +4181,7 @@ var bsonvalue: TBSONVariantData absolute Value;
     if P^<>',' then Exit; // $regex:"acme*.corp",$options:"i"}
     P := GotoNextNotSpace(P+1);
     if P^='"' then inc(P);
-    if not CompareMem(P,@BSON_JSON_REGEX[1][4],8) then exit else inc(P,8);
+    if PInt64(P)^<>PInt64(@BSON_JSON_REGEX[1][4])^ then exit else inc(P,8);
     if P^='"' then inc(P);
     P := GotoNextNotSpace(P);
     if P^<>':' then exit;
@@ -4209,7 +4209,7 @@ begin // here JSON does not start with " or 1..9 (obvious simple types)
            Return(betMinKey,P+9) else
          if CompareMem(P+2,@BSON_JSON_MAXKEY[false][5],7) then
            Return(betMaxKey,P+9);
-    'o': if CompareMem(P+2,@BSON_JSON_OBJECTID[false,modMongoStrict][5],4) then
+    'o': if PInteger(P+2)^=PInteger(@BSON_JSON_OBJECTID[false,modMongoStrict][5])^ then
            TryObjectID(P+6,'}');
     'd': if CompareMem(P+2,@BSON_JSON_DATE[modMongoStrict,false][5],5) then
            TryDate(P+7,'}');
