@@ -5468,11 +5468,15 @@ type
     // better use direct access to its wrapped variable, and not using this
     // slower and more error prone method (such pointer access lacks of strong
     // typing abilities), which was designed for TDynArray internal use
-    function ElemPtr(aIndex: integer): pointer;
+    function ElemPtr(index: integer): pointer;
     /// will copy one element content from its index into another variable
     // - do nothing if index is out of range
     procedure ElemCopyAt(index: integer; var Dest);
       {$ifdef HASINLINE}inline;{$endif}
+    /// will move one element content from its index into another variable
+    // - will erase the internal item ater copy
+    // - do nothing if index is out of range
+    procedure ElemMoveTo(index: integer; var Dest);
     /// will copy one variable content into an indexed element 
     // - do nothing if index is out of range
     procedure ElemCopyFrom(const Source; index: integer);
@@ -9796,7 +9800,7 @@ type
     function GetCapacity: integer;
     procedure SetCapacity(const Value: integer);
   public
-    /// initialize the dictionary storage, for a given dynamic array value
+    /// initialize the dictionary storage, specifyng dynamic array keys/values
     // - aKeyTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
     // would store the keys within this TSynDictionary instance
     // - aValueTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
@@ -46978,28 +46982,39 @@ begin
   SetCount(n);
 end;
 
-function TDynArray.ElemPtr(aIndex: integer): pointer;
+function TDynArray.ElemPtr(index: integer): pointer;
 begin
   result := nil;
   if (fValue=nil) or (fValue^=nil) then
     exit;
   if fCountP<>nil then begin // inlined cardinal(aIndex)>=cardinal(GetCount)
-    if cardinal(aIndex)>=PCardinal(fCountP)^ then
+    if cardinal(index)>=PCardinal(fCountP)^ then
       exit;
   end else
     {$ifdef FPC}
-    if cardinal(aIndex)>cardinal(PDynArrayRec(PtrUInt(fValue^)-SizeOf(TDynArrayRec))^.high) then
+    if cardinal(index)>cardinal(PDynArrayRec(PtrUInt(fValue^)-SizeOf(TDynArrayRec))^.high) then
     {$else}
-    if cardinal(aIndex)>=PCardinal(PtrUInt(fValue^)-SizeOf(PtrInt))^ then
+    if cardinal(index)>=PCardinal(PtrUInt(fValue^)-SizeOf(PtrInt))^ then
     {$endif}
       exit;
-  result := pointer(PtrUInt(fValue^)+PtrUInt(aIndex)*ElemSize);
+  result := pointer(PtrUInt(fValue^)+PtrUInt(index)*ElemSize);
 end;
 
 procedure TDynArray.ElemCopyAt(index: integer; var Dest);
 begin
   if cardinal(index)<cardinal(GetCount) then
     ElemCopy(pointer(PtrUInt(fValue^)+PtrUInt(index)*ElemSize)^,Dest);
+end;
+
+procedure TDynArray.ElemMoveTo(index: integer; var Dest);
+var P: pointer;
+begin
+  P := ElemPtr(index);
+  if (P=nil) or (@Dest=nil) then
+    exit;
+  ElemClear(Dest);
+  MoveFast(P^,Dest,ElemSize);
+  FillCharFast(P^,ElemSize,0); // ElemType=nil for ObjArray
 end;
 
 procedure TDynArray.ElemCopyFrom(const Source; index: integer);
@@ -48601,7 +48616,7 @@ begin
   if @Elem=nil then
     exit; // avoid GPF
   if ElemType<>nil then
-    _FinalizeArray(@Elem,ElemType,1) else
+    {$ifdef FPC}RecordClear(Elem,ElemType){$else}_FinalizeArray(@Elem,ElemType,1){$endif} else
     if GetIsObjArray then
       TObject(Elem).Free;
   FillcharFast(Elem,ElemSize,0); // always fill with zero binary content

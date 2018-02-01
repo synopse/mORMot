@@ -1584,7 +1584,7 @@ begin
     L := FromVarUInt32(P); // inlined R.Read(S^.Name)
     SetString(S^.Name,PAnsiChar(P),L);
     inc(P,L);
-    inc(PtrUInt(S),A.ElemSize);
+    inc(PtrUInt(S),A.ElemSize); // may be TSynMapSymbol or TSynMapUnit
   end;
   S := A.Value^;
   Addr := FromVarUInt32(P);
@@ -1592,7 +1592,7 @@ begin
   for i := 1 to n-1 do begin
     inc(Addr,FromVarUInt32(P));
     S^.Stop := Addr-1;
-    inc(PtrUInt(S),A.ElemSize);
+    inc(PtrUInt(S),A.ElemSize); 
     S^.Start := Addr;
   end;
   S^.Stop := Addr+FromVarUInt32(P);
@@ -1602,13 +1602,6 @@ end;
 const
   /// Delphi linker starts the code section at this fixed offset
   CODE_SECTION = $1000;
-
-{$ifdef UNICODE}
-{ due to a bug in Delphi 2009+, we need to fake inheritance of record,
-  since TDynArrayHashed = object(TDynArray) fails to initialize
-  http://blog.synopse.info/post/2011/01/29/record-and-object-issue-in-Delphi-2010 }
-{$define UNDIRECTDYNARRAY}
-{$endif}
 
 constructor TSynMapFile.Create(const aExeName: TFileName=''; MabCreate: boolean=true);
 
@@ -1898,7 +1891,7 @@ begin
   S := A.Value^;
   for i := 0 to n-1 do begin
     W.Write(S^.Name);
-    inc(PtrUInt(S),A.ElemSize);
+    inc(PtrUInt(S),A.ElemSize); // may be TSynMapSymbol or TSynMapUnit
   end;
   S := A.Value^;
   Diff := S^.Start;
@@ -1993,36 +1986,36 @@ begin
 end;
 
 procedure TSynMapFile.SaveToExe(const aExeName: TFileName);
-var FN: TFileName;
-    MS, MAB: TMemoryStream;
-    Len, LenMAB: PtrUInt;
+var mabfilename: TFileName;
+    exe, mab: TMemoryStream;
+    exesize, mabsize: PtrUInt;
 begin
   if not FileExists(aExeName) then
     exit;
-  FN := SaveToFile(ChangeFileExt(aExeName,'.mab'));
+  mabfilename := SaveToFile(ChangeFileExt(aExeName,'.mab'));
   try
-    MS := THeapMemoryStream.Create;
-    MAB := THeapMemoryStream.Create;
+    exe := THeapMemoryStream.Create;
+    mab := THeapMemoryStream.Create;
     try
       // load both files
-      MAB.LoadFromFile(FN);
-      LenMAB := MAB.Size;
-      MS.LoadFromFile(aExeName);
-      Len := MS.Size;
-      if Len<16 then
+      mab.LoadFromFile(mabfilename);
+      mabsize := mab.Size;
+      exe.LoadFromFile(aExeName);
+      exesize := exe.Size;
+      if exesize<16 then
         exit;
       // trim existing mab content
-      Len := StreamSynLZComputeLen(MS.Memory,Len,MAGIC_MAB);
+      exesize := StreamSynLZComputeLen(exe.Memory,exesize,MAGIC_MAB);
+      exe.Size := exesize+mabsize;
       // append mab content to exe
-      MS.Size := Len+LenMAB;
-      MoveFast(MAB.Memory^,PAnsiChar(MS.Memory)[Len],LenMAB);
-      MS.SaveToFile(aExeName);
+      MoveFast(mab.Memory^,PAnsiChar(exe.Memory)[exesize],mabsize);
+      exe.SaveToFile(aExeName);
     finally
-      MAB.Free;
-      MS.Free;
+      mab.Free;
+      exe.Free;
     end;
   finally
-    DeleteFile(FN);
+    DeleteFile(mabfilename);
   end;
 end;
 
