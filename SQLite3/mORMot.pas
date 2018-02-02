@@ -30379,6 +30379,10 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
       result := sftBoolean;
       exit;
     end;
+    tkQWord: begin
+      result := sftInteger;
+      exit;
+    end;
     {$endif}
     tkSet: begin
       result := sftSet;
