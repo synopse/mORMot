@@ -9788,7 +9788,9 @@ type
   /// event called by TSynDictionary.ForEach methods to iterate over stored items
   // - if the implementation method returns TRUE, will continue the loopp
   // - if the implementation method returns FALSE, will stop values browsing
-  TSynDictionaryEvent = function(const aKey; var aValue; aIndex,aCount: integer): boolean of object;
+  // - aOpaque is a custom value specified at ForEach() method call
+  TSynDictionaryEvent = function(const aKey; var aValue; aIndex,aCount: integer;
+    aOpaque: pointer): boolean of object;
 
   /// thread-safe dictionary to store some values from associated keys
   // - will maintain a dynamic array of values, associated with a hashed dynamic
@@ -9889,7 +9891,7 @@ type
     // - would browse the list in the adding order
     // - returns the number of times OnEach has been called
     // - this method is thread-safe, since it will lock the instance
-    function ForEach(const OnEach: TSynDictionaryEvent): integer; overload;
+    function ForEach(const OnEach: TSynDictionaryEvent; Opaque: pointer=nil): integer; overload;
     /// apply a specified event over matching items stored in this dictionnary
     // - would browse the list in the adding order, comparing each key and/or
     // value item with the supplied comparison functions and aKey/aValue content
@@ -9897,7 +9899,8 @@ type
     // KeyCompare(aKey,Keys[#])=0 or ValueCompare(aValue,Values[#])=0
     // - this method is thread-safe, since it will lock the instance
     function ForEach(const OnMatch: TSynDictionaryEvent;
-      KeyCompare,ValueCompare: TDynArraySortCompare; const aKey,aValue): integer; overload;
+      KeyCompare,ValueCompare: TDynArraySortCompare; const aKey,aValue;
+      Opaque: pointer=nil): integer; overload;
     /// search aArrayValue item in a dynamic-array value associated via aKey
     // - expect the stored value to be a dynamic array itself
     // - would search for aKey as primary key, then use TDynArray.Find
@@ -10018,9 +10021,9 @@ type
     /// delete all items currently stored in this queue, and void its capacity
     procedure Clear;
     /// initialize a dynamic array with the stored queue items
-    // - may be used to persist as binary or JSON the queue content
     // - aDynArrayValues should be a variable defined as aTypeInfo from Create
-    // - you can specify an optional TDynArray wrapper
+    // - you can retrieve an optional TDynArray wrapper, e.g. for binary or JSON
+    // persistence 
     // - this method is thread-safe, and will make a copy of the queue data
     procedure Save(out aDynArrayValues; aDynArray: PDynArray=nil);
     /// returns how many items are currently stored in this queue
@@ -58436,7 +58439,7 @@ begin
 end;
 {$endif DELPHI5OROLDER}
 
-function TSynDictionary.ForEach(const OnEach: TSynDictionaryEvent): integer;
+function TSynDictionary.ForEach(const OnEach: TSynDictionaryEvent; Opaque: pointer): integer;
 var k,v: PAnsiChar;
     i,n,ks,vs: integer;
 begin
@@ -58452,7 +58455,7 @@ begin
     vs := fValues.ElemSize;
     for i := 0 to n-1 do begin
       inc(result);
-      if not OnEach(k^,v^,i,n) then
+      if not OnEach(k^,v^,i,n,Opaque) then
         break;
       inc(k,ks);
       inc(v,vs);
@@ -58463,7 +58466,8 @@ begin
 end;
 
 function TSynDictionary.ForEach(const OnMatch: TSynDictionaryEvent;
-  KeyCompare,ValueCompare: TDynArraySortCompare; const aKey,aValue): integer;
+  KeyCompare,ValueCompare: TDynArraySortCompare; const aKey,aValue;
+  Opaque: pointer): integer;
 var k,v: PAnsiChar;
     i,n,ks,vs: integer;
 begin
@@ -58482,7 +58486,7 @@ begin
       if (Assigned(KeyCompare) and (KeyCompare(k^,aKey)=0)) or
          (Assigned(ValueCompare) and (ValueCompare(v^,aValue)=0)) then begin
         inc(result);
-        if not OnMatch(k^,v^,i,n) then
+        if not OnMatch(k^,v^,i,n,Opaque) then
           break;
       end;
       inc(k,ks);
@@ -58684,7 +58688,7 @@ begin
       end else begin
         inc(fLast);
         if fLast=fFirst then begin // collision -> arrange
-          fValues.AddArray(fValueVar,0,fLast); // move 0..fLast at the end
+          fValues.AddArray(fValueVar,0,fLast); // move 0..fLast to the end
           fLast := fCount;
           InternalGrow;
         end;
@@ -58700,10 +58704,10 @@ var cap: integer;
 begin
   cap := fValues.Capacity;
   if fFirst>cap-fCount then // use leading space if worth it
-    fLast := 0 else // append at the end
-    if fCount=cap then // reallocation needed
+    fLast := 0 else         // append at the end
+    if fCount=cap then      // reallocation needed
       fValues.Count := cap+cap shr 3+64 else
-      fCount := cap; // fill trailing memory as much as possible
+      fCount := cap;        // fill trailing memory as much as possible
 end;
 
 function TSynQueue.Peek(out aValue): boolean;

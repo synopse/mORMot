@@ -11862,10 +11862,10 @@ begin
   Demo.Execute('SELECT Concat(FirstName," and ") FROM People WHERE LastName="Einstein"',s);
   Check(Hash32(s)=$68A74D8E,'Albert1 and Albert1 and Albert2 and Albert3 and ...');
   i1 := Demo.Execute('SELECT FirstName from People WHERE FirstName like "%eona%"',Names);
-  check(i1=2002);
+  check(i1=2002,'like/strcspn');
   check(Names[i1]='');
   for i := 0 to i1-1 do
-    check(PosEx('eona',Names[i])>0,'like/strcspn');
+    check(PosEx('eona',Names[i])>0);
 end;
 
 procedure TTestSQLite3Engine.VirtualTableDirectAccess;
