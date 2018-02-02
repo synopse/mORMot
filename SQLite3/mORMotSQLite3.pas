@@ -1135,7 +1135,7 @@ var i: integer;
 {$ifdef WITHLOG}
     Log: ISynLog;
 begin
-  Log := fLogClass.Enter(self);
+  Log := fLogClass.Enter(self, 'Destroy');
 {$else}
 begin
 {$endif}
@@ -2712,8 +2712,6 @@ begin
   if fShardLastID<0 then
     fShardLastID := 0; // no data yet
 end;
-
-
 
 
 function RegisterVirtualTableModule(aModule: TSQLVirtualTableClass; aDatabase: TSQLDataBase): TSQLVirtualTableModule;

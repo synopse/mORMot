@@ -38981,8 +38981,8 @@ begin
   if fSessions=nil then
     exit; // avoid GPF e.g. in case of missing sqlite3-64.dll
   {$ifdef WITHLOG}
-  log := fLogClass.Enter('Shutdown CurrentRequestCount=% File=%',
-    [fStats.AddCurrentRequestCount(0),aStateFileName],self);
+  log := fLogClass.Enter('Shutdown(%) % CurrentRequestCount=%',
+    [aStateFileName,fModel.Root,fStats.AddCurrentRequestCount(0)],self);
   {$endif}
   OnNotifyCallback := nil;
   fSessions.Safe.Lock;
@@ -44301,7 +44301,7 @@ begin
 end;
 begin
   {$ifdef WITHLOG}
-  log := fLogClass.Enter(self);
+  log := fLogClass.Enter(self, 'InternalCheckOpen');
   {$endif}
 {$ifdef ANONYMOUSNAMEDPIPE}
   if not ImpersonateAnonymousToken(GetCurrentThread) then
@@ -44372,7 +44372,7 @@ var Card: cardinal;
     {$endif}
 begin
   {$ifdef WITHLOG}
-  log := fLogClass.Enter(self);
+  log := fLogClass.Enter(self, 'InternalURI');
   {$endif}
   Call.OutStatus := HTTP_NOTIMPLEMENTED; // 501 (no valid application or library)
   fSafe.Enter;
@@ -49607,7 +49607,7 @@ var Msg: RawUTF8;
     {$endif}
 begin
   {$ifdef WITHLOG}
-  log := fLogClass.Enter(self);
+  log := fLogClass.Enter(self, 'InternalURI');
   {$endif}
   if (fClientWindow=0) or not InternalCheckOpen then begin
     Call.OutStatus := HTTP_NOTIMPLEMENTED; // 501

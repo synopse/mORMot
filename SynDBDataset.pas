@@ -366,7 +366,7 @@ procedure TSQLDBDatasetStatementAbstract.Prepare(const aSQL: RawUTF8; ExpectResu
 var Log: ISynLog;
     oSQL: RawUTF8;
 begin
-  Log := SynDBLog.Enter(Self);
+  Log := SynDBLog.Enter(Self, 'Prepare');
   if fPrepared then
     raise ESQLDBDataset.CreateUTF8('%.Prepare() shall be called once',[self]);
   inherited Prepare(aSQL,ExpectResults); // connect if necessary
@@ -382,7 +382,7 @@ var Log: ISynLog;
     lArrayIndex: integer;
     Field: TField;
 begin
-  Log := SynDBLog.Enter(Self);
+  Log := SynDBLog.Enter(Self, 'ExecutePrepared');
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
   with Log.Instance do
     if sllSQL in Family.Level then

@@ -753,7 +753,7 @@ procedure TSQLDBFirebirdStatement.Prepare(const aSQL: RawUTF8; ExpectResults: Bo
 var Log: ISynLog;
     Conn: TSQLDBFirebirdConnection;
 begin
-  Log := SynDBLog.Enter(self);
+  Log := SynDBLog.Enter(self, 'Prepare');
   if (fColumnCount>0) or (fAutoCommit.Statement<>nil) or (fCurrent<>nil) then
     raise EFirebirdException.CreateFmt('%s.Prepare should be called only once',[ClassName]);
   // 1. process SQL

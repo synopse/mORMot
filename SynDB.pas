@@ -6783,7 +6783,6 @@ end;
 
 constructor TSQLDBStatement.Create(aConnection: TSQLDBConnection);
 begin
-  // SynDBLog.Enter(self);
   inherited Create;
   fConnection := aConnection;
   fStripSemicolon := true;

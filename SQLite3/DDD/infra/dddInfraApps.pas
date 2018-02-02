@@ -767,7 +767,7 @@ var log: ISynLog;
 begin
   {$ifdef WITHLOG}
   SQLite3Log.Add.LogThreadName('Service Start Handler', true);
-  log := SQLite3Log.Enter(self);
+  log := SQLite3Log.Enter(self, 'DoStart');
   with ExeVersion do
     log.Log(sllNewRun, 'Daemon Start svc=% ver=% usr=%',
       [fSettings.ServiceName, Version.Detailed, LowerCase(User)], self);
@@ -779,13 +779,16 @@ begin
 end;
 
 procedure TDDDDaemon.DoStop(Sender: TService);
+{$ifdef WITHLOG}
+var log: ISynLog;
 begin
-  {$ifdef WITHLOG}
   SQLite3Log.Add.LogThreadName('Service Stop Handler', true);
-  SQLite3Log.Enter(self).
-    Log(sllNewRun, 'Daemon Stop svc=% ver=% usr=%', [fSettings.ServiceName,
-      ExeVersion.Version.Detailed, LowerCase(ExeVersion.User)], self);
-  {$endif}
+  log := SQLite3Log.Enter(self, 'DoStop');
+  log.Log(sllNewRun, 'Daemon Stop svc=% ver=% usr=%', [fSettings.ServiceName,
+    ExeVersion.Version.Detailed, LowerCase(ExeVersion.User)], self);
+{$else}
+begin
+{$endif}
   fDaemon := nil; // will stop the daemon
 end;
 
@@ -808,10 +811,13 @@ begin
 end;
 
 procedure TDDDDaemon.Execute;
+{$ifdef WITHLOG}
+var log: ISynLog;
 begin
-  {$ifdef WITHLOG}
-  SQLite3Log.Enter(self);
-  {$endif}
+  log := SQLite3Log.Enter(self, 'Execute');
+{$else}
+begin
+{$endif}
   fDaemon := NewDaemon;
   fDaemon.Start;
 end;
@@ -1298,10 +1304,13 @@ begin
 end;
 
 procedure TDDDSocketThread.ExecuteConnect;
+{$ifdef WITHLOG}
+var log: ISynLog;
 begin
-  {$ifdef WITHLOG}
-  FLog.Enter('ExecuteConnect %:%',[fHost,fPort],self);
-  {$endif}
+  log := FLog.Enter('ExecuteConnect %:%',[fHost,fPort],self);
+{$else}
+begin
+{$endif}
   if fSocket <> nil then
     raise EDDDInfraException.CreateUTF8('%.ExecuteConnect: fSocket<>nil', [self]);
   if fMonitoring.State <> tpsDisconnected then
@@ -1320,14 +1329,14 @@ begin
     fMonitoring.State := tpsConnected; // to be done ASAP to allow sending
     InternalExecuteConnected;
     {$ifdef WITHLOG}
-    FLog.Log(sllTrace, 'ExecuteConnect: Connected via Socket % - %',
+    log.Log(sllTrace, 'ExecuteConnect: Connected via Socket % - %',
       [fSocket.Identifier, fMonitoring], self);
     {$endif}
   except
     on E: Exception do begin
       fMonitoring.ProcessException(E);
       {$ifdef WITHLOG}
-      FLog.Log(sllTrace, 'ExecuteConnect: Impossible to Connect to %:% (%) %',
+      log.Log(sllTrace, 'ExecuteConnect: Impossible to Connect to %:% (%) %',
         [Host, Port, E.ClassType, fMonitoring], self);
       {$endif}
       fSocket := nil;
@@ -1340,19 +1349,22 @@ begin
     else if fSettings.ConnectionAttemptsInterval > 0 then // on error, retry
       if SleepOrTerminated(fSettings.ConnectionAttemptsInterval * 1000) then
       {$ifdef WITHLOG}
-        FLog.Log(sllTrace, 'ExecuteConnect: thread terminated', self)
+        log.Log(sllTrace, 'ExecuteConnect: thread terminated', self)
       else
-        FLog.Log(sllTrace, 'ExecuteConnect: wait finished -> retry connect', self)
+        log.Log(sllTrace, 'ExecuteConnect: wait finished -> retry connect', self)
       {$endif};
 end;
 
 procedure TDDDSocketThread.ExecuteDisconnect;
 var
   info: RawUTF8;
+{$ifdef WITHLOG}
+  log: ISynLog;
 begin
-  {$ifdef WITHLOG}
-  FLog.Enter('ExecuteDisconnect %:%',[fHost,fPort],self);
-  {$endif}
+  log := FLog.Enter('ExecuteDisconnect %:%',[fHost,fPort],self);
+{$else}
+begin
+{$endif}
   try
     fSafe.Lock;
     try
@@ -1368,7 +1380,7 @@ begin
         fSocket := nil;
       end;
       {$ifdef WITHLOG}
-      FLog.Log(sllTrace, 'Socket % disconnected', [info], self);
+      log.Log(sllTrace, 'Socket % disconnected', [info], self);
       {$endif}
       InternalLogMonitoring;
     finally
@@ -1378,7 +1390,7 @@ begin
     on E: Exception do begin
       fMonitoring.ProcessException(E);
       {$ifdef WITHLOG}
-      FLog.Log(sllTrace, 'Socket disconnection error (%)', [E.ClassType], self);
+      log.Log(sllTrace, 'Socket disconnection error (%)', [E.ClassType], self);
       {$endif}
     end;
   end;
@@ -2031,7 +2043,7 @@ var
 begin
   CqrsBeginMethod(qaNone, result);
   if (fProxy <> nil) or (fProxyClient <> nil) then begin
-    CqrsSetResult(cqrsAlreadyExists);
+    CqrsSetResult(cqrsAlreadyExists,result);
     exit;
   end;
   def := TDDDRestClientSettings.Create;
@@ -2039,7 +2051,7 @@ begin
     JSONToObject(def, pointer(VariantSaveJSON(aDDDRestClientSettings)), valid);
     if not valid then begin
       CqrsSetResultMsg(cqrsBadRequest, '%.StartProxy(%): invalid def', [self,
-        aDDDRestClientSettings]);
+        aDDDRestClientSettings],result);
       exit;
     end;
     try
@@ -2047,12 +2059,12 @@ begin
       if not fProxyClient.Services.Resolve(IAdministratedDaemon, fProxy) then
         raise EDDDRestClient.CreateUTF8('%.StartProxy(%): IAdministratedDaemon not supported',
           [self, aDDDRestClientSettings]);
-      CqrsSetResult(cqrsSuccess);
+      CqrsSetResult(cqrsSuccess,result);
     except
       on E: Exception do begin
         fProxy := nil;
         FreeAndNil(fProxyClient);
-        CqrsSetResult(E);
+        CqrsSetResult(E,result);
       end;
     end;
   finally
@@ -2227,6 +2239,7 @@ constructor TDDDRestClientWebSockets.Create(aSettings: TDDDRestClientSettings;
 var
   u: TURI;
   t: integer;
+  log: ISynLog;
 begin
   DefineApplication; // should fill fApplicationName
   fOnFailed := ClientFailed;
@@ -2239,7 +2252,7 @@ begin
   if not u.From(aSettings.ORM.ServerName) then
     raise EDDDRestClient.CreateUTF8('%.Create(%): invalid ORM.ServerName=%',
       [self, fApplicationName, aSettings.ORM.ServerName]);
-  SQLite3Log.Enter('Create(%): connect to %', [fApplicationName, aSettings.ORM.ServerName], self);
+  log := SQLite3Log.Enter('Create(%): connect to %', [fApplicationName, aSettings.ORM.ServerName], self);
   t := aSettings.Timeout;
   inherited Create(u.Server, u.Port, CreateModel(aSettings), t, t, t);
   Model.Owner := self; // just allocated by CreateModel()
@@ -2256,7 +2269,7 @@ end;
 
 destructor TDDDRestClientWebSockets.Destroy;
 begin
-  fLogClass.Enter(self);
+  with fLogClass.Enter(self, 'Destroy') do
   try
     ClientDisconnect;
   finally

@@ -221,8 +221,9 @@ begin
 end;
 
 destructor TRTSPOverHTTPServer.Destroy;
+var log: ISynLog;
 begin
-  fLog.Enter(self);
+  log := fLog.Enter(self, 'Destroy');
   inherited Destroy;
   fPendingGet.Free;
 end;
@@ -377,7 +378,7 @@ var
   text: SockString;
   log: ISynLog;
 begin // here we follow the steps and content stated by https://goo.gl/CX6VA3
-  log := fLog.Enter(self);
+  log := fLog.Enter(self, 'RegressionTests');
   if (self = nil) or (fRtspServer <> '127.0.0.1') then
     test.Check(false, 'expect a running proxy on 127.0.0.1')
   else

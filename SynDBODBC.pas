@@ -1190,7 +1190,7 @@ end;
 constructor TODBCConnection.Create(aProperties: TSQLDBConnectionProperties);
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self);
+  Log := SynDBLog.Enter(self, 'Create');
   if not aProperties.InheritsFrom(TODBCConnectionProperties) then
     raise EODBCException.CreateUTF8('Invalid %.Create(%)',[self,aProperties]);
   fODBCProperties := TODBCConnectionProperties(aProperties);
@@ -1211,7 +1211,7 @@ begin
   finally
     if (ODBC<>nil) and (fDbc<>nil) then
     with ODBC do begin
-      SynDBLog.Enter(self);
+      SynDBLog.Enter(self, 'Disconnect');
       Disconnect(fDbc);
       FreeHandle(SQL_HANDLE_DBC,fDbc);
       fDbc := nil;

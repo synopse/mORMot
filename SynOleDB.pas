@@ -2307,7 +2307,7 @@ var DataInitialize : IDataInitialize;
     unknown: IUnknown;
     Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self);
+  Log := SynDBLog.Enter(self, 'Connect');
   // check context
   if Connected then
     Disconnect;
@@ -2345,7 +2345,7 @@ end;
 constructor TOleDBConnection.Create(aProperties: TSQLDBConnectionProperties);
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self);
+  Log := SynDBLog.Enter(self, 'Create');
   if not aProperties.InheritsFrom(TOleDBConnectionProperties) then
     raise EOleDBException.CreateUTF8('Invalid %.Create(%)',[self,aProperties]);
   fOleDBProperties := TOleDBConnectionProperties(aProperties);
@@ -2357,7 +2357,7 @@ end;
 destructor TOleDBConnection.Destroy;
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self);
+  Log := SynDBLog.Enter(self, 'Destroy');
   try
     inherited Destroy; // call Disconnect;
     fMalloc := nil;
@@ -2371,7 +2371,7 @@ end;
 procedure TOleDBConnection.Disconnect;
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self);
+  Log := SynDBLog.Enter(self, 'Disconnect');
   try
     inherited Disconnect; // flush any cached statement
   finally
