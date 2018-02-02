@@ -542,21 +542,27 @@ type
 
   /// storage class for a ServicesLog settings
   TDDDServicesLogRestSettings = class(TDDDRestSettings)
+  protected
+    fShardDBCount: Integer;
   public
     /// compute a stand-alone REST instance for interface-based services logging
-    // - by default, will create a local SQLite3 file for storage
     // - all services of aMainRestWithServices would log their calling information
     // into a dedicated table, but the methods defined in aExcludedMethodNamesCSV
+    // - by default, will create a local SQLite3 file for storage, optionally
+    // via TSQLRestStorageShardDB if ShardDBCount is set
     // - the first supplied item of aLogClass array would be used for the
     // service logging; any additional item would be part of the model of the
     // returned REST instance, but may be used later on (e.g. to handle
     // DB-based asynchronous remote notifications as processed by
     // TServiceFactoryClient.SendNotificationsVia method)
-    // - if aLogClass=[], TSQLRecordServiceLog would be used as a class
+    // - if aLogClass=[], plain TSQLRecordServiceLog would be used as default
+    // - aShardRange is used for TSQLRestStorageShardDB if ShardDBCount>0
     function NewRestInstance(aRootSettings: TDDDAppSettingsAbstract;
-      aMainRestWithServices: TSQLRestServer;
-      const aLogClass: array of TSQLRecordServiceLogClass;
-      const aExcludedMethodNamesCSV: RawUTF8=''): TSQLRest; reintroduce;
+      aMainRestWithServices: TSQLRestServer; const aLogClass: array of TSQLRecordServiceLogClass;
+      const aExcludedMethodNamesCSV: RawUTF8=''; aShardRange: TID=50000): TSQLRest; reintroduce;
+  published
+    /// if set, will define MaxShardCount for TSQLRestStorageShardDB persistence
+    property ShardDBCount: Integer read fShardDBCount write fShardDBCount;
   end;
 
   /// parent class for storing a HTTP published service/daemon settings
@@ -1014,8 +1020,10 @@ end;
 function TDDDServicesLogRestSettings.NewRestInstance(
   aRootSettings: TDDDAppSettingsAbstract; aMainRestWithServices: TSQLRestServer;
   const aLogClass: array of TSQLRecordServiceLogClass;
-  const aExcludedMethodNamesCSV: RawUTF8): TSQLRest;
+  const aExcludedMethodNamesCSV: RawUTF8; aShardRange: TID): TSQLRest;
 var classes: TSQLRecordClassDynArray;
+    server: TSQLRestServer;
+    fn: TFileName;
     i: integer;
 begin
   if length(aLogClass)=0 then begin
@@ -1026,14 +1034,22 @@ begin
     for i := 0 to high(aLogClass) do
       classes[i] := aLogClass[i];
   end;
-  result := inherited NewRestInstance(aRootSettings,TSQLModel.Create(classes),
-    [riOwnModel,riDefaultLocalSQlite3IfNone,riCreateMissingTables]);
+  if (fShardDBCount > 0) and (aShardRange > 100) and (length(classes)=1) then 
+    result := TSQLRestServer.CreateWithOwnModel(classes, false, fRoot) else
+    result := inherited NewRestInstance(aRootSettings,TSQLModel.Create(classes),
+      [riOwnModel,riDefaultLocalSQlite3IfNone,riCreateMissingTables]);
   if result=nil then
     exit;
-  if result.InheritsFrom(TSQLRestServerDB) then
-    TSQLRestServerDB(result).DB.UseCache := false;
+  if (fShardDBCount > 0) and (aShardRange > 100) then begin
+    server := result as TSQLRestServer;
+    fn := IncludeTrailingPathDelimiter(fDefaultDataFolder)+TFileName(fDefaultDataFileName);
+    server.StaticDataAdd(TSQLRestStorageShardDB.Create(classes[0], server,
+      aShardRange, [], fn, fShardDBCount));
+  end else
+    if result.InheritsFrom(TSQLRestServerDB) then
+      TSQLRestServerDB(result).DB.UseCache := false;
   // set the first supplied class type to log services
-  if aMainRestWithServices <> nil then
+  if (aMainRestWithServices <> nil) and classes[0].InheritsFrom(TSQLRecordServiceLog) then
     (aMainRestWithServices.ServiceContainer as TServiceContainerServer).
       SetServiceLog(result,TSQLRecordServiceLogClass(classes[0]),aExcludedMethodNamesCSV);
 end;

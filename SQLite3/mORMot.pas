@@ -46571,6 +46571,8 @@ begin
     if fShards[i]=nil then
       fShardTableIndex[i] := -1 else
       fShardTableIndex[i] := fShards[i].Model.GetTableIndexExisting(aClass);
+  InternalLog('Create(%,range=%,maxcount=%) [%..%]',[fStoredClass,fShardRange,
+    fMaxShardCount,fShardOffset,fShardOffset+n-1],sllDebug);
 end;
 
 destructor TSQLRestStorageShard.Destroy;
@@ -46620,7 +46622,7 @@ var rest: TSQLRest;
     {$endif}
 begin
   {$ifdef WITHLOG}
-  log := fLogClass.Enter('%.InternalAddNewShard: #% for %',[fShardLast+1,fStoredClass],self);
+  log := fLogClass.Enter('InternalAddNewShard: #% for %',[fShardLast+1,fStoredClass],self);
   {$endif}
   rest := InitNewShard;
   if rest=nil then
