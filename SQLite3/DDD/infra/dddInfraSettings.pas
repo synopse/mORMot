@@ -548,6 +548,7 @@ type
     /// compute a stand-alone REST instance for interface-based services logging
     // - all services of aMainRestWithServices would log their calling information
     // into a dedicated table, but the methods defined in aExcludedMethodNamesCSV
+    // (which should be specified, even as '', to avoid FPC compilation error)
     // - by default, will create a local SQLite3 file for storage, optionally
     // via TSQLRestStorageShardDB if ShardDBCount is set
     // - the first supplied item of aLogClass array would be used for the
@@ -559,7 +560,7 @@ type
     // - aShardRange is used for TSQLRestStorageShardDB if ShardDBCount>0
     function NewRestInstance(aRootSettings: TDDDAppSettingsAbstract;
       aMainRestWithServices: TSQLRestServer; const aLogClass: array of TSQLRecordServiceLogClass;
-      const aExcludedMethodNamesCSV: RawUTF8=''; aShardRange: TID=50000): TSQLRest; reintroduce;
+      const aExcludedMethodNamesCSV: RawUTF8; aShardRange: TID=50000): TSQLRest; reintroduce;
   published
     /// if set, will define MaxShardCount for TSQLRestStorageShardDB persistence
     property ShardDBCount: Integer read fShardDBCount write fShardDBCount;
@@ -1034,8 +1035,12 @@ begin
     for i := 0 to high(aLogClass) do
       classes[i] := aLogClass[i];
   end;
-  if (fShardDBCount > 0) and (aShardRange > 100) and (length(classes)=1) then 
-    result := TSQLRestServer.CreateWithOwnModel(classes, false, fRoot) else
+  if (fShardDBCount > 0) and (aShardRange > 100) and (length(classes)=1) then begin
+    result := TSQLRestServerDB.Create(TSQLModel.Create(classes, fRoot),
+      SQLITE_MEMORY_DATABASE_NAME);
+    result.Model.Owner := result;
+    TSQLRestServerDB(result).CreateMissingTables;
+  end else
     result := inherited NewRestInstance(aRootSettings,TSQLModel.Create(classes),
       [riOwnModel,riDefaultLocalSQlite3IfNone,riCreateMissingTables]);
   if result=nil then
