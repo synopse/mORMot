@@ -1574,6 +1574,20 @@ begin
   Check(strcspnpas('12345678ab','a')=8);
   Check(strcspnpas('1234ab','c')=6);
   Check(strcspnpas('12345678901234567ab','cccccccccccccccccccd')=19);
+  Assert(strspn('abcdef','debca')=5);
+  Assert(strspn('baabbaabcd','ab')=8);
+  Assert(strspnpas('abcdef','g')=0);
+  Assert(strspnpas('abcdef','a')=1);
+  Assert(strspnpas('bbcdef','b')=2);
+  Assert(strspnpas('bbcdef','bf')=2);
+  Assert(strspnpas('bcbdef','cb')=3);
+  Assert(strspnpas('baabcd','ab')=4);
+  Assert(strspnpas('abcdef','debca')=5);
+  Assert(strspnpas('baabbaabcd','ab')=8);
+  Assert(strspnpas('baabbaabbaabcd','ab')=12);
+  Assert(strspnpas('baabbaabbaabbabcd','ab')=15);
+  Assert(strspnpas('baabbaabbaabbaabcd','ab')=16);
+  Assert(strspnpas('baabbaabbaababaabcd','ab')=17);
   if cfSSE42 in CpuFeatures then begin
     Check(strcspnsse42('ab','a')=0);
     Check(strcspnsse42('ab','b')=1);
@@ -1593,6 +1607,18 @@ begin
     Check(strcspnsse42('12345678901234567ab','ccccccccccccccccca')=17);
     Check(strcspnsse42('12345678901234567ab','ccccccccccccccccccca')=17);
     Check(strcspnsse42('12345678901234567ab','cccccccccccccccccccd')=19);
+    Check(strspnsse42('abcdef','g')=0);
+    Check(strspnsse42('abcdef','a')=1);
+    Check(strspnsse42('bbcdef','b')=2);
+    Check(strspnsse42('bbcdef','bf')=2);
+    Check(strspnsse42('bcbdef','cb')=3);
+    Check(strspnsse42('baabcd','ab')=4);
+    Check(strspnsse42('abcdef','debca')=5);
+    Check(strspnsse42('baabbaabcd','ab')=8);
+    Check(strspnsse42('baabbaabbaabcd','ab')=12);
+    Check(strspnsse42('baabbaabbaabbabcd','ab')=15);
+    Check(strspnsse42('baabbaabbaabbaabcd','ab')=16);
+    Check(strspnsse42('baabbaabbaababaabcd','ab')=17);
   end;
 end;
 

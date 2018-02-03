@@ -528,7 +528,7 @@ end;
 function strcspn(str,reject: PAnsiChar): integer; cdecl;
   {$ifdef FPC}public name{$ifdef CPU64}'strcspn'{$else}'_strcspn'{$endif};{$endif}
 begin // called e.g. during LIKE process
-  result := SynCommons.strcspn(str,reject); // will use fast SSE4.2 opcode
+  result := SynCommons.strcspn(str,reject); // use SSE4.2 if available
 end;
 
 function memcmp(p1, p2: pByte; Size: integer): integer; cdecl; { always cdecl }

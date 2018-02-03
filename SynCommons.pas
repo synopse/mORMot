@@ -2772,14 +2772,14 @@ function StrCompFast(Str1, Str2: pointer): PtrInt;
 
 /// x86 asm version of StrComp(), to be used with PUTF8Char/PAnsiChar
 // - this version won't access the memory beyond the string, so may be
-// preferred to StrCompSSE42 or StrComp, when using e.g. mapped files
+// preferred to StrCompSSE42 or StrComp, when using e.g. memory mapped files
 function StrCompFast(Str1, Str2: pointer): PtrInt;
 
 /// SSE 4.2 version of StrComp(), to be used with PUTF8Char/PAnsiChar
 // - please note that this optimized version may read up to 15 bytes
 // beyond the string; this is rarely a problem but it may in principle
-// generate a protection violation (e.g. when used over mapped files) - in this
-// case, you can use the slightly slower StrCompFast() function instead
+// generate a protection violation (e.g. when used over memory mapped files) - 
+// you can use the slightly slower but safe StrCompFast() function instead
 function StrCompSSE42(Str1, Str2: pointer): PtrInt;
 
 /// fastest available version of StrComp(), to be used with PUTF8Char/PAnsiChar
@@ -2792,26 +2792,42 @@ var StrComp: function (Str1, Str2: pointer): PtrInt = StrCompFast;
 
 {$endif}
 
+/// pure pascal version of strspn(), to be used with PUTF8Char/PAnsiChar
+// - please note that this optimized version may read up to 3 bytes
+// beyond the string, so should be avoided e.g. over memory mapped files
+function strspnpas(s,accept: PAnsiChar): integer;
+
+{$ifdef CPUINTEL}
+/// SSE 4.2 version of strspn(), to be used with PUTF8Char/PAnsiChar
+// - please note that this optimized version may read up to 15 bytes
+// beyond the string, so should be avoided e.g. over memory mapped files
+function strspnsse42(s,accept: PAnsiChar): integer;
+{$endif}
+
+/// fastest available version of strspn(), to be used with PUTF8Char/PAnsiChar
+// - returns how many accept chars appear in the initial segment of s
+// - will use SSE4.2 instructions on supported CPUs
+// - please note that this function may read some bytes beyond the string,
+// so should be avoided e.g. over memory mapped files
+var strspn: function (s,accept: PAnsiChar): integer = strspnpas;
+
 /// pure pascal version of strcspn(), to be used with PUTF8Char/PAnsiChar
-// - this version won't access the memory beyond the string, so may be
-// preferred to strcspn or strcspnsse42, when using e.g. mapped files
+// - please note that this optimized version may read up to 3 bytes
+// beyond the string, so should be avoided e.g. over memory mapped files
 function strcspnpas(s,reject: PAnsiChar): integer;
 
 {$ifdef CPUINTEL}
 /// SSE 4.2 version of strcspn(), to be used with PUTF8Char/PAnsiChar
 // - please note that this optimized version may read up to 15 bytes
-// beyond the string; this is rarely a problem but it may in principle
-// generate a protection violation (e.g. when used over mapped files) - in this
-// case, you can use the slower strcspnpas() function instead
+// beyond the string, so should be avoided e.g. over memory mapped files
 function strcspnsse42(s,reject: PAnsiChar): integer;
 {$endif}
 
 /// fastest available version of strcspn(), to be used with PUTF8Char/PAnsiChar
-// - will use SSE4.2 instructions on supported CPUs - and potentiall read up
-// to 15 bytes beyond the string: use strcspnpas() for a safe memory read;
-// if you want to disable strcspnsse42 for your whole project, add in the
-// initialization section of one of your units:
-// !  strcspn := @strcspnpas;
+// - returns how many reject chars do not appear in the initial segment of s
+// - will use SSE4.2 instructions on supported CPUs
+// - please note that this function may read some bytes beyond the string,
+// so should be avoided e.g. over memory mapped files
 var strcspn: function (s,reject: PAnsiChar): integer = strcspnpas;
 
 /// use our fast version of StrIComp(), to be used with PUTF8Char/PAnsiChar
@@ -2820,7 +2836,7 @@ function StrIComp(Str1, Str2: pointer): PtrInt;
 
 /// slower version of StrLen(), but which will never read beyond the string
 // - this version won't access the memory beyond the string, so may be
-// preferred to StrLen(), when using e.g. mapped files or any memory
+// preferred to StrLen(), when using e.g. memory mapped files or any memory
 // protected buffer
 function StrLenPas(S: pointer): PtrInt;
 
@@ -2834,7 +2850,7 @@ var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte) = System.FillC
 // - this version will use fast SSE2/SSE4.2 instructions (if available), on both
 // Win32 and Win64 platforms: please note that in this case, it may read up to
 // 15 bytes before or beyond the string; this is rarely a problem but it can in
-// principle generate a protection violation (e.g. when used over mapped files):
+// principle generate a protection violation (e.g. when used over memory mapped files):
 // you can use the slightly slower StrLenPas() function instead with such input;
 // if you want to disable StrCompSSE42 for your whole project, add in the
 // initialization section of one of your units:
@@ -25931,6 +25947,44 @@ end;
 
 {$endif PUREPASCAL}
 
+function strspnpas(s,accept: PAnsiChar): integer;
+var p: PCardinal;
+    c: AnsiChar;
+    d: cardinal;
+begin // returns size of initial segment of s which are in accept
+  result := 0;
+  repeat
+    c := s[result];
+    if c=#0 then
+      break;
+    p := pointer(accept);
+    repeat // stop as soon as we find any character not from accept
+      d := p^;
+      inc(p);
+      if AnsiChar(d)=c then
+        break else
+      if AnsiChar(d)=#0 then
+        exit;
+      d := d shr 8;
+      if AnsiChar(d)=c then
+        break else
+      if AnsiChar(d)=#0 then
+        exit;
+      d := d shr 8;
+      if AnsiChar(d)=c then
+        break else
+      if AnsiChar(d)=#0 then
+        exit;
+      d := d shr 8;
+      if AnsiChar(d)=c then
+        break else
+      if AnsiChar(d)=#0 then
+        exit;
+    until false;
+    inc(result);
+  until false;
+end;
+
 function strcspnpas(s,reject: PAnsiChar): integer;
 var p: PCardinal;
     c: AnsiChar;
@@ -25942,7 +25996,7 @@ begin // returns size of initial segment of s which are not in reject
     if c=#0 then
       break;
     p := pointer(reject);
-    repeat // stop as soon as we find any character from p2
+    repeat // stop as soon as we find any character from reject
       d := p^;
       inc(p);
       if AnsiChar(d)=c then
@@ -26007,13 +26061,61 @@ asm // rcx=s, rdx=reject (Linux: rdi,rsi)
         pop     rdi
 {$endif}ret
 @4:     and     eax, edx // accumulate matches
-@5:     // the set is more than 16 bytes
-        add     rsi, 16
+@5:     add     rsi, 16  // the set is more than 16 bytes
         movdqu  xmm1, [rsi]
         {$ifdef HASAESNI}
         pcmpistrm xmm1, xmm2, $30
         {$else}
         db $66,$0F,$3A,$62,$CA,$30
+        {$endif}
+        movd    edx, xmm0
+        jns     @4
+        mov     rsi, r8    // restore set pointer
+        and     eax, edx   // accumulate matches
+        jmp     @2
+end;
+function strspnsse42(s,accept: PAnsiChar): integer;
+{$ifdef FPC}nostackframe; assembler;
+asm
+{$else}
+asm // rcx=s, rdx=accept (Linux: rdi,rsi)
+       .noframe
+{$endif FPC}
+{$ifdef win64}
+        push    rdi
+        push    rsi
+        mov     rdi, rcx
+        mov     rsi, rdx
+{$endif}mov     r8,  rsi
+        xor     ecx, ecx
+@1:     movdqu  xmm2, [rdi]
+        movdqu  xmm1, [rsi]
+        {$ifdef HASAESNI}
+        pcmpistrm xmm1, xmm2, $00 //  find in set, return bit mask in xmm0
+        {$else}
+        db $66,$0F,$3A,$62,$CA,$00
+        {$endif}
+        movd    eax, xmm0
+        jns     @5
+@2:     cmp     ax, -1
+        jne     @3
+        add     rdi, 16 // first 16 chars matched, continue with next 16 chars
+        add     rcx, 16
+        jmp     @1
+@3:     not     eax
+        bsf     eax, eax
+        add     rax, rcx
+{$ifdef win64}
+        pop     rsi
+        pop     rdi
+{$endif}ret
+@4:     and     eax, edx // accumulate matches
+@5:     add     rsi, 16  // the set is more than 16 bytes
+        movdqu  xmm1, [rsi]
+        {$ifdef HASAESNI}
+        pcmpistrm xmm1, xmm2, $00
+        {$else}
+        db $66,$0F,$3A,$62,$CA,$00
         {$endif}
         movd    edx, xmm0
         jns     @4
@@ -26056,9 +26158,8 @@ asm // eax=s, edx=reject
         pop     esi
         pop     edi
         ret
-@4:     and     eax, edx // accumulate matches
-@5:     // the set is more than 16 bytes
-        add     esi, 16
+@4:     and     eax, edx  // accumulate matches
+@5:     add     esi, 16   // the set is more than 16 bytes
         {$ifdef HASAESNI}
         movdqu  xmm1, [esi]
         pcmpistrm xmm1, xmm2, $30
@@ -26069,7 +26170,56 @@ asm // eax=s, edx=reject
         db $66,$0F,$7E,$C2
         {$endif}
         jns     @4
-        mov     esi, ebx    // restore set pointer
+        mov     esi, ebx   // restore set pointer
+        and     eax, edx   // accumulate matches
+        jmp     @2
+end;
+function strspnsse42(s,accept: PAnsiChar): integer;
+asm // eax=s, edx=accept
+        push    edi
+        push    esi
+        push    ebx
+        mov     edi, eax
+        mov     esi, edx
+        mov     ebx,  esi
+        xor     ecx, ecx
+@1:     {$ifdef HASAESNI}
+        movdqu  xmm2, dqword [edi]
+        movdqu  xmm1, dqword [esi]
+        pcmpistrm xmm1, xmm2, $00 //  find in set, return bit mask in xmm0
+        movd    eax, xmm0
+        {$else}
+        db $F3,$0F,$6F,$17
+        db $F3,$0F,$6F,$0E
+        db $66,$0F,$3A,$62,$CA,$00
+        db $66,$0F,$7E,$C0
+        {$endif}
+        jns     @5
+@2:     cmp     ax, -1
+        jne     @3
+        add     edi, 16 // first 16 chars matched, continue with next 16 chars
+        add     ecx, 16
+        jmp     @1
+@3:     not     eax
+        bsf     eax, eax
+        add     eax, ecx
+        pop     ebx
+        pop     esi
+        pop     edi
+        ret
+@4:     and     eax, edx // accumulate matches
+@5:     add     esi, 16  // the set is more than 16 bytes
+        {$ifdef HASAESNI}
+        movdqu  xmm1, [esi]
+        pcmpistrm xmm1, xmm2, $00
+        movd    edx, xmm0
+        {$else}
+        db $F3,$0F,$6F,$0E
+        db $66,$0F,$3A,$62,$CA,$00
+        db $66,$0F,$7E,$C2
+        {$endif}
+        jns     @4
+        mov     esi, ebx   // restore set pointer
         and     eax, edx   // accumulate matches
         jmp     @2
 end;
@@ -65126,6 +65276,7 @@ begin
   if cfSSE42 in CpuFeatures then begin
     crc32c := @crc32csse42;
     crcblock := @crcblockSSE42;
+    strspn := @strspnSSE42;
     strcspn := @strcspnSSE42;
     {$ifndef PUREPASCAL}
     StrComp := @StrCompSSE42;
