@@ -2792,6 +2792,28 @@ var StrComp: function (Str1, Str2: pointer): PtrInt = StrCompFast;
 
 {$endif}
 
+/// pure pascal version of strcspn(), to be used with PUTF8Char/PAnsiChar
+// - this version won't access the memory beyond the string, so may be
+// preferred to strcspn or strcspnsse42, when using e.g. mapped files
+function strcspnpas(s,reject: PAnsiChar): integer;
+
+{$ifdef CPUINTEL}
+/// SSE 4.2 version of strcspn(), to be used with PUTF8Char/PAnsiChar
+// - please note that this optimized version may read up to 15 bytes
+// beyond the string; this is rarely a problem but it may in principle
+// generate a protection violation (e.g. when used over mapped files) - in this
+// case, you can use the slower strcspnpas() function instead
+function strcspnsse42(s,reject: PAnsiChar): integer;
+{$endif}
+
+/// fastest available version of strcspn(), to be used with PUTF8Char/PAnsiChar
+// - will use SSE4.2 instructions on supported CPUs - and potentiall read up
+// to 15 bytes beyond the string: use strcspnpas() for a safe memory read;
+// if you want to disable strcspnsse42 for your whole project, add in the
+// initialization section of one of your units:
+// !  strcspn := @strcspnpas;
+var strcspn: function (s,reject: PAnsiChar): integer = strcspnpas;
+
 /// use our fast version of StrIComp(), to be used with PUTF8Char/PAnsiChar
 function StrIComp(Str1, Str2: pointer): PtrInt;
   {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
@@ -10023,7 +10045,7 @@ type
     /// initialize a dynamic array with the stored queue items
     // - aDynArrayValues should be a variable defined as aTypeInfo from Create
     // - you can retrieve an optional TDynArray wrapper, e.g. for binary or JSON
-    // persistence 
+    // persistence
     // - this method is thread-safe, and will make a copy of the queue data
     procedure Save(out aDynArrayValues; aDynArray: PDynArray=nil);
     /// returns how many items are currently stored in this queue
@@ -24430,18 +24452,33 @@ end;
 
 function PosChar(Str: PUTF8Char; Chr: AnsiChar): PUTF8Char;
 {$ifdef PUREPASCAL}
-begin
+var c: cardinal;
+begin // FPC is efficient at compiling this code
   result := nil;
   if Str<>nil then begin
     repeat
-      if Str^=#0 then
+      c := PCardinal(str)^;
+      if byte(c)=0 then
         exit else
-      if Str^=Chr then
+      if byte(c)=byte(Chr) then
         break;
+      c := c shr 8;
       inc(Str);
-      if Str^=#0 then
+      if byte(c)=0 then
         exit else
-      if Str^=Chr then
+      if byte(c)=byte(Chr) then
+        break;
+      c := c shr 8;
+      inc(Str);
+      if byte(c)=0 then
+        exit else
+      if byte(c)=byte(Chr) then
+        break;
+      c := c shr 8;
+      inc(Str);
+      if byte(c)=0 then
+        exit else
+      if byte(c)=byte(Chr) then
         break;
       inc(Str);
     until false;
@@ -24452,33 +24489,33 @@ end;
 asm // faster version by AB - eax=Str dl=Chr
         test    eax, eax
         jz      @z
-@1:     mov     ecx, [eax]
+@1:     mov     ecx, dword ptr [eax]
         cmp     cl, dl
         je      @z
-        lea     eax, [eax + 1]
+        inc     eax
         test    cl, cl
         jz      @e
         cmp     ch, dl
         je      @z
-        lea     eax, [eax + 1]
+        inc     eax
         test    ch, ch
         jz      @e
         shr     ecx, 16
         cmp     cl, dl
         je      @z
-        lea     eax, [eax + 1]
+        inc     eax
         test    cl, cl
         jz      @e
         cmp     ch, dl
         je      @z
-        lea     eax, [eax + 1]
+        inc     eax
         test    ch, ch
         jnz     @1
 @e:     xor     eax, eax
         ret
 @z:     db      $f3 // rep ret
 end;
-{$endif}
+{$endif PUREPASCAL}
 
 function PosCharAny(Str: PUTF8Char; Characters: PAnsiChar): PUTF8Char;
 var s: PAnsiChar;
@@ -25893,6 +25930,151 @@ asm // warning: may read up to 15 bytes beyond the string itself
 end;
 
 {$endif PUREPASCAL}
+
+function strcspnpas(s,reject: PAnsiChar): integer;
+var p: PCardinal;
+    c: AnsiChar;
+    d: cardinal;
+begin // returns size of initial segment of s which are not in reject
+  result := 0;
+  repeat
+    c := s[result];
+    if c=#0 then
+      break;
+    p := pointer(reject);
+    repeat // stop as soon as we find any character from p2
+      d := p^;
+      inc(p);
+      if AnsiChar(d)=c then
+        exit else
+      if AnsiChar(d)=#0 then
+        break;
+      d := d shr 8;
+      if AnsiChar(d)=c then
+        exit else
+      if AnsiChar(d)=#0 then
+        break;
+      d := d shr 8;
+      if AnsiChar(d)=c then
+        exit else
+      if AnsiChar(d)=#0 then
+        break;
+      d := d shr 8;
+      if AnsiChar(d)=c then
+        exit else
+      if AnsiChar(d)=#0 then
+        break;
+    until false;
+    inc(result);
+  until false;
+end;
+
+{$ifdef CPUINTEL}
+{$ifdef CPUX64}
+function strcspnsse42(s,reject: PAnsiChar): integer;
+{$ifdef FPC}nostackframe; assembler;
+asm
+{$else}
+asm // rcx=s, rdx=reject (Linux: rdi,rsi)
+       .noframe
+{$endif FPC}
+{$ifdef win64}
+        push    rdi
+        push    rsi
+        mov     rdi, rcx
+        mov     rsi, rdx
+{$endif}mov     r8,  rsi
+        xor     ecx, ecx
+@1:     movdqu  xmm2, [rdi]
+        movdqu  xmm1, [rsi]
+        {$ifdef HASAESNI}
+        pcmpistrm xmm1, xmm2, $30 //  find in set, invert valid bits, return bit mask in xmm0
+        {$else}
+        db $66,$0F,$3A,$62,$CA,$30
+        {$endif}
+        movd    eax, xmm0
+        jns     @5
+@2:     cmp     ax, -1
+        jne     @3
+        add     rdi, 16 // first 16 chars matched, continue with next 16 chars
+        add     rcx, 16
+        jmp     @1
+@3:     not     eax
+        bsf     eax, eax
+        add     rax, rcx
+{$ifdef win64}
+        pop     rsi
+        pop     rdi
+{$endif}ret
+@4:     and     eax, edx // accumulate matches
+@5:     // the set is more than 16 bytes
+        add     rsi, 16
+        movdqu  xmm1, [rsi]
+        {$ifdef HASAESNI}
+        pcmpistrm xmm1, xmm2, $30
+        {$else}
+        db $66,$0F,$3A,$62,$CA,$30
+        {$endif}
+        movd    edx, xmm0
+        jns     @4
+        mov     rsi, r8    // restore set pointer
+        and     eax, edx   // accumulate matches
+        jmp     @2
+end;
+{$endif CPUX64}
+{$ifdef CPUX86}
+function strcspnsse42(s,reject: PAnsiChar): integer;
+asm // eax=s, edx=reject
+        push    edi
+        push    esi
+        push    ebx
+        mov     edi, eax
+        mov     esi, edx
+        mov     ebx,  esi
+        xor     ecx, ecx
+@1:     {$ifdef HASAESNI}
+        movdqu  xmm2, dqword [edi]
+        movdqu  xmm1, dqword [esi]
+        pcmpistrm xmm1, xmm2, $30 //  find in set, invert valid bits, return bit mask in xmm0
+        movd    eax, xmm0
+        {$else}
+        db $F3,$0F,$6F,$17
+        db $F3,$0F,$6F,$0E
+        db $66,$0F,$3A,$62,$CA,$30
+        db $66,$0F,$7E,$C0
+        {$endif}
+        jns     @5
+@2:     cmp     ax, -1
+        jne     @3
+        add     edi, 16 // first 16 chars matched, continue with next 16 chars
+        add     ecx, 16
+        jmp     @1
+@3:     not     eax
+        bsf     eax, eax
+        add     eax, ecx
+        pop     ebx
+        pop     esi
+        pop     edi
+        ret
+@4:     and     eax, edx // accumulate matches
+@5:     // the set is more than 16 bytes
+        add     esi, 16
+        {$ifdef HASAESNI}
+        movdqu  xmm1, [esi]
+        pcmpistrm xmm1, xmm2, $30
+        movd    edx, xmm0
+        {$else}
+        db $F3,$0F,$6F,$0E
+        db $66,$0F,$3A,$62,$CA,$30
+        db $66,$0F,$7E,$C2
+        {$endif}
+        jns     @4
+        mov     esi, ebx    // restore set pointer
+        and     eax, edx   // accumulate matches
+        jmp     @2
+end;
+{$endif CPUX86}
+{$endif CPUINTEL}
 
 function IdemPropNameU(const P1,P2: RawUTF8): boolean;
 {$ifdef PUREPASCAL}
@@ -40441,7 +40623,7 @@ asm // rcx=S
         ret
 @null:  xor     rax, rax
 end;
-{$endif}
+{$endif HASAESNI}
 
 {$else CPU64}
 
@@ -40808,10 +40990,6 @@ end;
 
 procedure InitRedirectCode;
 begin
-  {$ifdef CPUINTEL}
-  if cfSSE42 in CpuFeatures then
-    crcblock := @crcblockSSE42;
-  {$endif CPUINTEL}
   {$ifdef DELPHI5OROLDER}
   StrLen := @StrLenX86;
   MoveFast := @MoveX87;
@@ -64947,6 +65125,8 @@ begin
   {$ifdef CPUINTEL}
   if cfSSE42 in CpuFeatures then begin
     crc32c := @crc32csse42;
+    crcblock := @crcblockSSE42;
+    strcspn := @strcspnSSE42;
     {$ifndef PUREPASCAL}
     StrComp := @StrCompSSE42;
     DYNARRAY_SORTFIRSTFIELD[false,djRawUTF8] := @SortDynArrayAnsiStringSSE42;
