@@ -1190,7 +1190,7 @@ end;
 constructor TODBCConnection.Create(aProperties: TSQLDBConnectionProperties);
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self, 'Create');
+  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Create'{$endif});
   if not aProperties.InheritsFrom(TODBCConnectionProperties) then
     raise EODBCException.CreateUTF8('Invalid %.Create(%)',[self,aProperties]);
   fODBCProperties := TODBCConnectionProperties(aProperties);
@@ -1211,7 +1211,7 @@ begin
   finally
     if (ODBC<>nil) and (fDbc<>nil) then
     with ODBC do begin
-      SynDBLog.Enter(self, 'Disconnect');
+      SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Disconnect'{$endif});
       Disconnect(fDbc);
       FreeHandle(SQL_HANDLE_DBC,fDbc);
       fDbc := nil;
@@ -1645,7 +1645,7 @@ begin
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
   DriverDoesNotHandleUnicode := TODBCConnection(fConnection).fODBCProperties.fDriverDoesNotHandleUnicode;
   if fSQL<>'' then
-    with SynDBLog.Enter(Self,nil,true).Instance do
+    with SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'ExecutePrepared'{$endif}).Instance do
       if sllSQL in Family.Level then
         Log(sllSQL,SQLWithInlinedParams,self,2048);
   try
@@ -1768,7 +1768,7 @@ end;
 procedure TODBCStatement.Prepare(const aSQL: RawUTF8; ExpectResults: Boolean);
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self,nil,true);
+  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Prepare'{$endif});
   if (fStatement<>nil) or (fColumnCount>0) then
     raise EODBCException.CreateUTF8('%.Prepare should be called only once',[self]);
   // 1. process SQL

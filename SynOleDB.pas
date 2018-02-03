@@ -2307,7 +2307,7 @@ var DataInitialize : IDataInitialize;
     unknown: IUnknown;
     Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self, 'Connect');
+  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Connect'{$endif});
   // check context
   if Connected then
     Disconnect;
@@ -2345,7 +2345,7 @@ end;
 constructor TOleDBConnection.Create(aProperties: TSQLDBConnectionProperties);
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self, 'Create');
+  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Create'{$endif});
   if not aProperties.InheritsFrom(TOleDBConnectionProperties) then
     raise EOleDBException.CreateUTF8('Invalid %.Create(%)',[self,aProperties]);
   fOleDBProperties := TOleDBConnectionProperties(aProperties);
@@ -2357,7 +2357,7 @@ end;
 destructor TOleDBConnection.Destroy;
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self, 'Destroy');
+  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Destroy'{$endif});
   try
     inherited Destroy; // call Disconnect;
     fMalloc := nil;
@@ -2371,7 +2371,7 @@ end;
 procedure TOleDBConnection.Disconnect;
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self, 'Disconnect');
+  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Disconnect'{$endif});
   try
     inherited Disconnect; // flush any cached statement
   finally
@@ -2465,7 +2465,7 @@ end;
 procedure TOleDBConnection.Commit;
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self,nil,true);
+  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Commit'{$endif});
   if assigned(fTransaction) then begin
     inherited Commit;
     try
@@ -2480,7 +2480,7 @@ end;
 procedure TOleDBConnection.Rollback;
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self,nil,true);
+  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Rollback'{$endif});
   if assigned(fTransaction) then begin
     inherited Rollback;
     OleDbCheck(nil,fTransaction.Abort(nil,False,False));
@@ -2490,7 +2490,7 @@ end;
 procedure TOleDBConnection.StartTransaction;
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self,nil,true);
+  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'StartTransaction'{$endif});
   if assigned(fTransaction) then begin
     inherited StartTransaction;
     OleDbCheck(nil,fTransaction.StartTransaction(ISOLATIONLEVEL_READCOMMITTED,0,nil,nil));
@@ -2508,7 +2508,7 @@ var DataInitialize: IDataInitialize;
     tmp: PWideChar;
     Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self,nil,true);
+  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'ConnectionStringDialog'{$endif});
   result := false;
   if self<>nil then
   try

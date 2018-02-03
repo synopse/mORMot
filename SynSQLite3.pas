@@ -3969,7 +3969,7 @@ begin
     exit; // avoid GPF in case of call from a static-only server
   {$ifdef WITHLOG}
   if SQLShouldBeLogged(aSQL) then begin
-    log := fLog.Enter(self, 'ExecuteAll');
+    log := fLog.Enter(self{$ifndef DELPHI5OROLDER},'ExecuteAll'{$endif});
     log.Log(sllSQL,aSQL,self,4096);
   {$endif}
   end;
@@ -4009,7 +4009,7 @@ begin
   end;
   {$ifdef WITHLOG}
   if SQLShouldBeLogged(aSQL) then begin
-    log := fLog.Enter(self, 'Execute');
+    log := fLog.Enter(self{$ifndef DELPHI5OROLDER},'Execute'{$endif});
     log.Log(sllSQL,aSQL,self,2048);
   end;
   {$endif}

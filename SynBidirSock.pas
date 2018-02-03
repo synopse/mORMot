@@ -2261,7 +2261,7 @@ var frame: TWebSocketFrame;
     timeout: Int64;
     log: ISynLog;
 begin
-  log := WebSocketLog.Enter(self, 'Destroy');
+  log := WebSocketLog.Enter(self{$ifndef DELPHI5OROLDER},'Destroy'{$endif});
   if (fState<>wpsClose) and not fNoConnectionCloseAtDestroy then
     try
       InterlockedIncrement(fProcessCount);
@@ -3605,7 +3605,7 @@ begin
       if fConnection[i].fLastOperation<allowed then
       try
         if log=nil then
-          log := fLog.Enter(self, 'IdleEverySecond');
+          log := fLog.Enter(self{$ifndef DELPHI5OROLDER},'IdleEverySecond'{$endif});
         fConnection[i].OnLastOperationIdle(self);
         inc(n);
       except
