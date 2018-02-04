@@ -39334,6 +39334,7 @@ function TSQLRestServer.RecordVersionSynchronizeSlave(Table: TSQLRecordClass;
 var Writer: TSQLRestBatch;
     IDs: TIDDynArray;
     rest: TSQLRest;
+    status: integer;
     {$ifdef WITHLOG}
     log: ISynLog; // for Enter auto-leave to work with FPC
     {$endif}
@@ -39361,15 +39362,16 @@ begin
     try
       fAcquireExecution[execORMWrite].Safe.Lock;
       fRecordVersionDeleteIgnore := true;
-      if BatchSend(Writer,IDs)=HTTP_SUCCESS then begin
-        InternalLog('%.RecordVersionSynchronize Added=% Updated=% Deleted=% on %',
-          [ClassType,Writer.AddCount,Writer.UpdateCount,Writer.DeleteCount,Master],sllDebug);
+      status := BatchSend(Writer,IDs);
+      if status=HTTP_SUCCESS then begin
+        InternalLog('RecordVersionSynchronize(%) Added=% Updated=% Deleted=% on %',
+          [Table,Writer.AddCount,Writer.UpdateCount,Writer.DeleteCount,Master],sllDebug);
         if ChunkRowLimit=0 then begin
           result := fRecordVersionMax;
           break;
         end;
       end else begin
-        InternalLog('%.RecordVersionSynchronize BatchSend() failed',[ClassType],sllError);
+        InternalLog('RecordVersionSynchronize(%) BatchSend=%',[Table,status],sllError);
         fRecordVersionMax := 0; // force recompute the maximum from DB
         break;
       end;
@@ -39547,8 +39549,8 @@ begin
   tableIndex := Model.GetTableIndexExisting(Table);
   if (fRecordVersionSlaveCallbacks<>nil) and
      (fRecordVersionSlaveCallbacks[tableIndex]<>nil) then begin
-    InternalLog('%.RecordVersionSynchronizeSlaveStart(%): already running',
-      [ClassType,Table],sllWarning);
+    InternalLog('RecordVersionSynchronizeSlaveStart(%): already running',
+      [Table],sllWarning);
     exit;
   end;
   tableName := Model.TableProps[tableIndex].Props.SQLTableName;
@@ -39564,29 +39566,29 @@ begin
       previous := current;
       current := RecordVersionSynchronizeSlave(Table,MasterRemoteAccess,10000,OnNotify);
       if current<0 then begin
-        InternalLog('%.RecordVersionSynchronizeSlaveStart(%): REST failure',
-          [ClassType,Table],sllError);
+        InternalLog('RecordVersionSynchronizeSlaveStart(%): REST failure',
+          [Table],sllError);
         exit;
       end;
     until current=previous;
     // subscribe for any further modification
     if callback=nil then
       callback := TServiceRecordVersionCallback.Create(self,MasterRemoteAccess,Table,OnNotify);
-    InternalLog('%.RecordVersionSynchronizeSlaveStart(%) current=% Subscribe(%)',
-      [ClassType,Table,current,pointer(callback)],sllDebug);
+    InternalLog('RecordVersionSynchronizeSlaveStart(%) current=% Subscribe(%)',
+      [Table,current,pointer(callback)],sllDebug);
     if service.Subscribe(tableName,current,callback) then begin // push notifications
       if fRecordVersionSlaveCallbacks=nil then
         SetLength(fRecordVersionSlaveCallbacks,Model.TablesMax+1);
       fRecordVersionSlaveCallbacks[tableIndex] := callback;
-      InternalLog('%.RecordVersionSynchronizeSlaveStart(%): started from revision %',
-        [ClassType,Table,current],sllDebug);
+      InternalLog('RecordVersionSynchronizeSlaveStart(%): started from revision %',
+        [Table,current],sllDebug);
       result := true;
       exit;
     end;
     // some modifications since version (i.e. last RecordVersionSynchronizeSlave)
     inc(retry);
   until retry=5; // avoid endless loop (most of the time, not needed)
-  InternalLog('%.RecordVersionSynchronizeSlaveStart(%): retry failure',[self,Table],sllError);
+  InternalLog('RecordVersionSynchronizeSlaveStart(%): retry failure',[Table],sllError);
 end;
 
 function TSQLRestServer.RecordVersionSynchronizeSlaveStop(Table: TSQLRecordClass): boolean;
@@ -39598,7 +39600,7 @@ begin
   tableIndex := Model.GetTableIndexExisting(Table);
   if (fRecordVersionSlaveCallbacks=nil) or
      (fRecordVersionSlaveCallbacks[tableIndex]=nil) then begin
-    InternalLog('%.RecordVersionSynchronizeSlaveStop(%): not running',[self,Table],sllWarning);
+    InternalLog('RecordVersionSynchronizeSlaveStop(%): not running',[Table],sllWarning);
     exit;
   end;
   fRecordVersionSlaveCallbacks[tableIndex] := nil; // will notify the server
@@ -39714,8 +39716,8 @@ function TSQLRestServer.AfterDeleteForceCoherency(aTableIndex: integer;
           Ref^.FieldType.Name,'0',Ref^.FieldType.Name,W);
     end;
     if not cascadeOK then
-      InternalLog('%.AfterDeleteForceCoherency() failed to handle field %.%',
-        [ClassType,Model.Tables[Ref^.TableIndex],Ref^.FieldType.Name],sllWarning);
+      InternalLog('AfterDeleteForceCoherency() failed to handle field %.%',
+        [Model.Tables[Ref^.TableIndex],Ref^.FieldType.Name],sllWarning);
   end;
 
 var i: integer;
@@ -44987,15 +44989,15 @@ begin
           hash := fUniqueFields.List[i];
           ndx := hash.Scan(Rec,fValue.Count); // O(n) search to avoid hashing
           if ndx>=0 then begin
-            InternalLog('%.AddOne: Duplicated field "%" value for % and %',
-              [ClassType,hash.Field.Name,Rec,TSQLRecord(fValue.List[ndx])]);
+            InternalLog('AddOne: Duplicated field "%" value for % and %',
+              [hash.Field.Name,Rec,TSQLRecord(fValue.List[ndx])]);
             result := 0; // duplicate unique fields -> error
             exit;
           end;
           hash.Invalidate;
         end;
-        InternalLog('%.AddOne(%.ForceID=%<=lastID=%) -> UniqueFields[].Invalidate',
-          [ClassType,Rec.ClassType,Rec.fID,lastID]);
+        InternalLog('AddOne(%.ForceID=%<=lastID=%) -> UniqueFields[].Invalidate',
+          [Rec.ClassType,Rec.fID,lastID]);
       end;
       needSort := true; // brutal, but working
     end;
@@ -45010,8 +45012,8 @@ begin
     if (fUniqueFields<>nil) and not NoUniqueFieldCheckOnAdd then
       for i := 0 to fUniqueFields.Count-1 do // perform hash of List[Count-1]
       if not TListFieldHash(fUniqueFields.List[i]).EnsureJustAddedNotDuplicated then begin
-        InternalLog('%.AddOne: Duplicated field "%" value for %',
-          [ClassType,TListFieldHash(fUniqueFields.List[i]).Field.Name,Rec]);
+        InternalLog('AddOne: Duplicated field "%" value for %',
+          [TListFieldHash(fUniqueFields.List[i]).Field.Name,Rec]);
         result := 0; // duplicate unique fields -> error
         fValue.List[ndx] := nil; // avoid GPF within Delete()
         fValue.Delete(ndx);
@@ -46964,8 +46966,8 @@ begin
     for i := 0 to high(fShardBatch) do
       if fShardBatch[i]<>nil then
         if fShards[i].BatchSend(fShardBatch[i])<>HTTP_SUCCESS then
-          InternalLog('%.InternalBatchStop(%): %.BatchSend failed for shard #%',
-            [ClassType,fStoredClass,fShards[i].ClassType,i],sllWarning);
+          InternalLog('InternalBatchStop(%): %.BatchSend failed for shard #%',
+            [fStoredClass,fShards[i].ClassType,i],sllWarning);
   finally
     ObjArrayClear(fShardBatch);
     StorageUnLock;
