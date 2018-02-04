@@ -10573,9 +10573,22 @@ type
     smdVar,
     smdOut,
     smdResult);
-
   /// set of parameters direction for an interface-based service method
   TServiceMethodValueDirections = set of TServiceMethodValueDirection;
+
+  /// set of low-level processing options at assembly level
+  // - vIsString is included for smvRawUTF8, smvString, smvRawByteString and
+  // smvWideString kind of parameter (smvRecord has it to false, even if they
+  // are Base-64 encoded within the JSON content, and also smvVariant/smvRawJSON)
+  // - vPassedByReference is included if the parameter is passed as reference
+  // (i.e. defined as var/out, or is a record or a reference-counted type result)
+  // - vIsObjArray is set if the dynamic array is a T*ObjArray, so should be
+  // cleared with ObjArrClear() and not TDynArray.Clear
+  // - vIsSPI indicates that the value contains some Sensitive Personal
+  // Information (e.g. a bank card number or a plain password), which type has
+  // been previously registered via TInterfaceFactory.RegisterUnsafeSPIType
+  // so that low-level logging won't include such values
+  TServiceMethodValueAsm = set of (vIsString, vPassedByReference, vIsObjArray, vIsSPI);
 
   /// describe a service provider method argument
   TServiceMethodArgument = {$ifndef ISDELPHI2010}object{$else}record{$endif}
@@ -10593,18 +10606,7 @@ type
     /// how the variable may be stored
     ValueVar: TServiceMethodValueVar;
     /// how the variable is to be passed at asm level
-    // - vIsString is included for smvRawUTF8, smvString, smvRawByteString and
-    // smvWideString kind of parameter (smvRecord has it to false, even if they
-    // are Base-64 encoded within the JSON content, and also smvVariant/smvRawJSON)
-    // - vPassedByReference is included if the parameter is passed as reference
-    // (i.e. defined as var/out, or is a record or a reference-counted type result)
-    // - vIsObjArray is set if the dynamic array is a T*ObjArray, so should be
-    // cleared with ObjArrClear() and not TDynArray.Clear
-    // - vIsSPI indicates that the value contains some Sensitive Personal
-    // Information (e.g. a bank card number or a plain password), which type has
-    // been previously registered via TInterfaceFactory.RegisterUnsafeSPIType
-    // so that low-level logging won't include such values
-    ValueKindAsm: set of (vIsString, vPassedByReference, vIsObjArray, vIsSPI);
+    ValueKindAsm: TServiceMethodValueAsm;
     /// byte offset in the CPU stack of this argument
     // - may be -1 if pure register parameter with no backup on stack (x86)
     InStackOffset: integer;
@@ -44418,7 +44420,7 @@ begin
       WriteString(fServerPipe,Call.InBody);
       FlushFileBuffers(fServerPipe);
       // receive the answer
-{$ifdef TSQLRestClientURIDll_TIMEOUT}
+      {$ifdef TSQLRestClientURIDll_TIMEOUT}
       for i := 0 to 25 do // wait up to 325 ms
         if PeekNamedPipe(fServerPipe,nil,0,nil,@Card,nil) and
            (Card>=SizeOf(Int64)) then begin
@@ -44430,7 +44432,7 @@ begin
         end else
         SleepHiRes(i);
       Call.OutStatus := HTTP_TIMEOUT; // 408 Request Timeout Error
-{$else}
+      {$else}
       if FileRead(fServerPipe,Call.OutStatus,SizeOf(cardinal))=SizeOf(cardinal) then begin
         // FileRead() waits till response arrived (or pipe is broken)
         FileRead(fServerPipe,Call.OutInternalState,SizeOf(cardinal));
@@ -44438,7 +44440,7 @@ begin
         Call.OutBody := ReadString(fServerPipe);
       end else
         Call.OutStatus := HTTP_NOTFOUND;
-{$endif}
+      {$endif}
      except
        on E: Exception do begin // error in ReadString()
          InternalLog('% for PipeName=%',[E,fPipeName],sllLastError);
@@ -53870,7 +53872,7 @@ type
     function Fake_Release: Integer; stdcall;
     {$endif}
     function SelfFromInterface: TInterfacedObjectFake;
-      {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     procedure InterfaceWrite(W: TJSONSerializer; const aMethod: TServiceMethod;
       const aParamInfo: TServiceMethodArgument; aParamValue: Pointer); virtual;
   public
@@ -53927,17 +53929,15 @@ begin
 end;
 
 function TInterfacedObjectFake.SelfFromInterface: TInterfacedObjectFake;
-{$ifdef PUREPASCAL}
+{$ifdef HASINLINE}
 begin
   result := pointer(PtrInt(self)-PtrInt(@TInterfacedObjectFake(nil).fVTable));
 end;
 {$else}
-{$ifdef CPUINTEL}
 asm
   sub eax,TInterfacedObjectFake.fVTable
 end;
-{$endif CPUINTEL}
-{$endif}
+{$endif HASINLINE}
 
 function TInterfacedObjectFake.Fake_AddRef: {$ifdef FPC}longint{$else}integer{$endif};
 begin
@@ -54044,13 +54044,10 @@ begin
         V := PPointer(V)^;
       case ValueType of
       smvDynArray:
-        {$ifdef FPC} // FIXME ?
-          if vIsObjArray in ValueKindAsm then
-             DynArrays[IndexVar].Init(ArgTypeInfo,V^) else
-             DynArrays[IndexVar].Init(ArgTypeInfo,V);
-        {$else}
-        DynArrays[IndexVar].Init(ArgTypeInfo,V^);
-        {$endif}
+        with DynArrays[IndexVar] do begin
+          Init(ArgTypeInfo,V^);
+          IsObjArray := vIsObjArray in ValueKindAsm; // no need to search
+        end;
       end;
       Value[arg] := V;
       if ValueDirection in [smdConst,smdVar] then
@@ -54798,8 +54795,7 @@ begin
       IndexVar := ArgsUsedCount[ValueVar];
       inc(ArgsUsedCount[ValueVar]);
       include(ArgsUsed,ValueType);
-      if (ValueType in [smvRecord{$ifndef NOVARIANTS},smvVariant{$endif}
-          {$ifdef FPC},smvDynArray{$endif}]) or
+      if (ValueType in [smvRecord{$ifndef NOVARIANTS},smvVariant{$endif}]) or
          (ValueDirection in [smdVar,smdOut]) or
          ((ValueDirection=smdResult) and (ValueType in CONST_ARGS_RESULT_BY_REF)) then
         Include(ValueKindAsm,vPassedByReference);
@@ -54875,8 +54871,8 @@ begin
         (reg>PARAMREG_LAST) // Win64
         {$endif Linux}
         {$endif CPUX86}
-        // alf: TODO: fix smvDynArray as expected by fpc\compiler\i386\cpupara.pas
-        {$ifdef FPC}or ((ValueType in [smvRecord,smvDynArray]) and
+        {$ifdef FPC}or ((ValueType in [smvRecord]) and
+          // trunk i386/x86_64\cpupara.pas: DynArray const is passed as register
           not (vPassedByReference in ValueKindAsm)){$endif} then begin
         // this parameter will go on the stack
         InStackOffset := ArgsSizeInStack;
@@ -54973,6 +54969,11 @@ begin
     WR.CancelLastComma;
     WR.Add(']');
     WR.SetText(fContract);
+    {.$define SOA_DEBUG} // write the low-level interface info as json
+    {$ifdef SOA_DEBUG}
+    JSONReformatToFile(fContract,TFileName(fInterfaceName+
+      '-'+COMP_TEXT+OS_TEXT+CPU_ARCH_TEXT+'.json'));
+    {$endif}
   finally
     WR.Free;
   end;
@@ -59357,7 +59358,21 @@ begin
   if CONST_ARGTYPETOJSON[ValueType]='' then
     WR.AddShort(ArgTypeInfo^.Name) else
     WR.AddShort(CONST_ARGTYPETOJSON[ValueType]);
+{$ifdef SOA_DEBUG}
+  WR.Add('"','"');
+  WR.AddPropJSONInt64('index',IndexVar);
+  WR.AddPropJSONString('var',GetEnumNameTrimed(TypeInfo(TServiceMethodValueVar),ValueVar));
+  WR.AddPropJSONInt64('stackoffset',InStackOffset);
+  WR.AddPropJSONInt64('reg',RegisterIdent);
+  WR.AddPropJSONInt64('fpreg',FPRegisterIdent);
+  WR.AddPropJSONInt64('stacksize',SizeInStack);
+  WR.AddPropJSONInt64('storsize',SizeInStorage);
+  WR.AddPropName('asm');
+  WR.AddString(GetSetNameCSV(TypeInfo(TServiceMethodValueAsm),ValueKindAsm));
+  WR.AddShort('},');
+{$else}
   WR.AddShort('"},');
+{$endif SOA_DEBUG}
 end;
 
 procedure TServiceMethodArgument.AddJSON(WR: TTextWriter; V: pointer);
