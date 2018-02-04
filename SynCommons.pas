@@ -23644,11 +23644,33 @@ asm
     mov   ebx, dword ptr[eax + 4]
     bswap ebx
     mov   dword ptr[edx], ebx
+    add   eax, 8
+    add   edx, 8
     dec   ecx
-    lea   eax, [eax + 8]
-    lea   edx, [edx + 8]
     jnz   @1
     pop   ebx
+end;
+{$else}
+{$ifdef CPUX64} {$ifdef FPC}nostackframe; assembler; asm {$else}
+asm
+    .noframe // rcx=@a rdx=@b r8=n (Linux: rdi,rsi,rdx)
+{$endif}
+@1: {$ifdef win64}
+    mov   rax, qword ptr[rcx]
+    bswap rax
+    mov   qword ptr[rdx], rax
+    add   rcx, 8
+    add   rdx, 8
+    dec   r8
+    {$else}
+    mov   rax, qword ptr[rdi]
+    bswap rax
+    mov   qword ptr[rsi], rax
+    add   rdi, 8
+    add   rsi, 8
+    dec   rdx
+    {$endif win64}
+    jnz @1
 end;
 {$else}
 {$ifdef FPC}
@@ -23657,31 +23679,12 @@ begin
   for i := 0 to n-1 do
     b^[i] := SwapEndian(a^[i]);
 end;
-{$else}
-asm
-    .NOFRAME // rcx=@a rdx=@b r8=n (Linux: rdi,rsi,rdx)
-@1: {$ifdef win64}
-    mov   rax, qword ptr[rcx]
-    bswap rax
-    mov   qword ptr[rdx], rax
-    dec   r8
-    lea   rcx, [rcx + 8]
-    lea   rdx, [rdx + 8]
-    {$else}
-    mov   rax, qword ptr[rdi]
-    bswap rax
-    mov   qword ptr[rsi], rax
-    dec   rdx
-    lea   rdi, [rdi + 8]
-    lea   rsi, [rsi + 8]
-    {$endif win64}
-    jnz @1
-end;
-{$endif}
-{$endif}
+{$endif FPC}
+{$endif CPUX64}
+{$endif CPUX86}
 
 {$ifdef FPC}
-function bswap32(a: cardinal): cardinal; inline;
+function bswap32(a: cardinal): cardinal;
 begin
   result := SwapEndian(a); // use fast platform-specific function
 end;
