@@ -41384,36 +41384,47 @@ end;
 
 function TJSONCustomParsers.DynArraySearch(aDynArrayTypeInfo,aRecordTypeInfo: pointer;
   AddIfNotExisting: boolean): Integer;
-begin
+var threadsafe: integer;
+    parser: PJSONCustomParserRegistration;
+begin // O(n) brute force is fast enough, since n remains small (mostly<64)
   if self<>nil then
-  if (aDynArrayTypeInfo<>nil) and (fParsersCount<>0) then
-    if fParser[fLastDynArrayIndex].DynArrayTypeInfo=aDynArrayTypeInfo then begin
-      result := fLastDynArrayIndex;
+  if (aDynArrayTypeInfo<>nil) and (fParsersCount<>0) then begin
+    threadsafe := fLastDynArrayIndex;
+    if (cardinal(threadsafe)<cardinal(fParsersCount)) and
+       (fParser[threadsafe].DynArrayTypeInfo=aDynArrayTypeInfo) then begin
+      result := threadsafe;
       exit;
     end else begin
       if aRecordTypeInfo=nil then // record RTTI not specified: guess now
         aRecordTypeInfo := DynArrayTypeInfoToRecordInfo(aDynArrayTypeInfo);
       if aRecordTypeInfo=nil then begin
+        parser := pointer(fParser);
         for result := 0 to fParsersCount-1 do
-          if fParser[result].DynArrayTypeInfo=aDynArrayTypeInfo then begin
+          if parser^.DynArrayTypeInfo=aDynArrayTypeInfo then begin
             fLastDynArrayIndex := result;
             exit;
-          end;
-      end else
-      if (cardinal(fLastRecordIndex)<cardinal(fParsersCount)) and
-         (fParser[fLastRecordIndex].RecordTypeInfo=aRecordTypeInfo) then begin
-        result := fLastRecordIndex;
-        exit;
-      end else
-      for result := 0 to fParsersCount-1 do
-        with fParser[result] do
-        if (DynArrayTypeInfo=aDynArrayTypeInfo) or
-           (RecordTypeInfo=aRecordTypeInfo) then begin
-          fLastDynArrayIndex := result;
-          fLastRecordIndex := result;
+          end else
+          inc(parser);
+      end else begin
+        threadsafe := fLastRecordIndex;
+        if (cardinal(threadsafe)<cardinal(fParsersCount)) and
+           (fParser[threadsafe].RecordTypeInfo=aRecordTypeInfo) then begin
+          result := threadsafe;
           exit;
+        end else begin
+          parser := pointer(fParser);
+          for result := 0 to fParsersCount-1 do
+            if (parser^.DynArrayTypeInfo=aDynArrayTypeInfo) or
+               (parser^.RecordTypeInfo=aRecordTypeInfo) then begin
+              fLastDynArrayIndex := result;
+              fLastRecordIndex := result;
+              exit;
+            end else
+            inc(parser);
         end;
+      end;
     end;
+  end;
   if AddIfNotExisting then begin
     result := TryToGetFromRTTI(aDynArrayTypeInfo,aRecordTypeInfo);
     if result>=0 then
