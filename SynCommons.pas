@@ -8378,6 +8378,8 @@ type
     /// append a JSON field name, followed by an escaped UTF-8 JSON String and
     // a comma (',')
     procedure AddPropJSONString(const PropName: shortstring; const Text: RawUTF8);
+    /// append a JSON field name, followed by a number value and a comma (',')
+    procedure AddPropJSONInt64(const PropName: shortstring; Value: Int64);
     /// append a RawUTF8 property name, as '"FieldName":'
     // - FieldName content should not need to be JSON escaped (e.g. no " within)
     procedure AddFieldName(const FieldName: RawUTF8); overload;
@@ -53211,6 +53213,13 @@ procedure TTextWriter.AddPropJSONString(const PropName: shortstring; const Text:
 begin
   AddPropName(PropName);
   AddJSONString(Text);
+  Add(',');
+end;
+
+procedure TTextWriter.AddPropJSONInt64(const PropName: shortstring; Value: Int64);
+begin
+  AddPropName(PropName);
+  Add(Value);
   Add(',');
 end;
 
