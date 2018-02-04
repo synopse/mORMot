@@ -2796,6 +2796,7 @@ var StrComp: function (Str1, Str2: pointer): PtrInt = StrCompFast;
 // - please note that this optimized version may read up to 3 bytes
 // beyond the string, so should be avoided e.g. over memory mapped files
 function strspnpas(s,accept: PAnsiChar): integer;
+  {$ifdef HASINLINE}inline;{$endif}
 
 {$ifdef CPUINTEL}
 /// SSE 4.2 version of strspn(), to be used with PUTF8Char/PAnsiChar
@@ -2805,7 +2806,8 @@ function strspnsse42(s,accept: PAnsiChar): integer;
 {$endif}
 
 /// fastest available version of strspn(), to be used with PUTF8Char/PAnsiChar
-// - returns how many accept chars appear in the initial segment of s
+// - returns how many accept chars appear in the initial segment of s, e.g.
+// ! strspn('abcdef','debca')=5
 // - will use SSE4.2 instructions on supported CPUs
 // - please note that this function may read some bytes beyond the string,
 // so should be avoided e.g. over memory mapped files
@@ -2815,6 +2817,7 @@ var strspn: function (s,accept: PAnsiChar): integer = strspnpas;
 // - please note that this optimized version may read up to 3 bytes
 // beyond the string, so should be avoided e.g. over memory mapped files
 function strcspnpas(s,reject: PAnsiChar): integer;
+  {$ifdef HASINLINE}inline;{$endif}
 
 {$ifdef CPUINTEL}
 /// SSE 4.2 version of strcspn(), to be used with PUTF8Char/PAnsiChar
@@ -2824,7 +2827,8 @@ function strcspnsse42(s,reject: PAnsiChar): integer;
 {$endif}
 
 /// fastest available version of strcspn(), to be used with PUTF8Char/PAnsiChar
-// - returns how many reject chars do not appear in the initial segment of s
+// - returns how many reject chars do not appear in the initial segment of s, e.g.
+// ! strcspn('1234ab','a')=4
 // - will use SSE4.2 instructions on supported CPUs
 // - please note that this function may read some bytes beyond the string,
 // so should be avoided e.g. over memory mapped files
