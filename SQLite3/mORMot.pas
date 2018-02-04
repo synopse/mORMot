@@ -9862,6 +9862,8 @@ type
     // - to be used to release locked records if the client crashed
     // - default value is 30 minutes, which seems correct for common usage
     procedure PurgeOlderThan(MinutesFromNow: cardinal=30);
+    /// returns the Root property, or '' if the instance is nil
+    function SafeRoot: RawUTF8;
     /// get the classes list (TSQLRecord descendent) of all available tables
     property Tables: TSQLRecordClassDynArray read fTables;
     /// get a class from a table name
@@ -33820,6 +33822,13 @@ begin
   raise EModelException.CreateUTF8('Plain %.Create is not allowed: use overloaded Create()',[self]);
 end;
 
+function TSQLModel.SafeRoot: RawUTF8;
+begin
+  if self=nil then
+    result := '' else
+    result := fRoot;
+end;
+
 procedure TSQLModel.SetRoot(const aRoot: RawUTF8);
 var i: integer;
 begin
@@ -34775,7 +34784,7 @@ destructor TSQLRest.Destroy;
 var cmd: TSQLRestServerURIContextCommand;
     i: integer;
 begin
-  InternalLog('%.Destroy',[ClassType],sllInfo); // don't include self (->GPF)
+  InternalLog('Destroy %',[fModel.SafeRoot],sllInfo); // self->GPF
   AsynchBatchStop(nil);
   FreeAndNil(fBackgroundTimer);
   FreeAndNil(fServices);
