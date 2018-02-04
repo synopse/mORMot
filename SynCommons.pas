@@ -13811,6 +13811,20 @@ function GetFileVersion(const FileName: TFileName): cardinal;
 // - including Host, User, CPU, OS, freemem, freedisk...
 function SystemInfoJson: RawUTF8;
 
+const
+  /// the compiler family used
+  COMP_TEXT = {$ifdef FPC}'fpc'{$else}'delphi'{$endif};
+  /// the target Operating System used for compilation
+  OS_TEXT = {$ifdef MSWINDOWS}'win'{$else}{$ifdef DARWIN}'osx'{$else}
+  {$ifdef BSD}'bsd'{$else}{$ifdef LINUX}'linux'{$else}'posix'
+  {$endif}{$endif}{$endif}{$endif};
+  /// the CPU architecture used for compilation
+  CPU_ARCH_TEXT = {$ifdef CPUX86}'x86'{$else}{$ifdef CPUX64}'x64'{$else}
+    {$ifdef CPUARM}'arm'+{$else}
+    {$ifdef CPUPOWERPC}'ppc'+{$else}
+    {$ifdef CPUSPARC}'sparc'+{$endif}{$endif}{$endif}
+    {$ifdef CPU32}'32'{$else}'64'{$endif}{$endif}{$endif};
+
 {$ifdef MSWINDOWS}
 
 type
