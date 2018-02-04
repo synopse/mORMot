@@ -2462,12 +2462,10 @@ function Trim(const S: RawUTF8): RawUTF8;
 
 {$define OWNNORMTOUPPER} { NormToUpper[] exists only in our enhanced RTL }
 
-/// our fast version of CompareMem() with optimized asm for x86
-function CompareMem(P1, P2: Pointer; Length: PtrInt): Boolean;
-  {$ifdef HASINLINE}{$ifdef PUREPASCAL}inline;{$endif}{$endif}
-
 {$endif ENHANCEDRTL}
 
+/// our fast version of CompareMem() with optimized asm for x86
+function CompareMem(P1, P2: Pointer; Length: PtrInt): Boolean;
 
 /// convert an IPv4 'x.x.x.x' text into its 32-bit value
 function IPToCardinal(const aIP: RawUTF8; out aValue: cardinal): boolean;
@@ -2795,14 +2793,25 @@ var StrComp: function (Str1, Str2: pointer): PtrInt = StrCompFast;
 /// pure pascal version of strspn(), to be used with PUTF8Char/PAnsiChar
 // - please note that this optimized version may read up to 3 bytes
 // beyond the string, so should be avoided e.g. over memory mapped files
-function strspnpas(s,accept: PAnsiChar): integer;
+function strspnpas(s,accept: pointer): integer;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// pure pascal version of strcspn(), to be used with PUTF8Char/PAnsiChar
+// - please note that this optimized version may read up to 3 bytes
+// beyond the string, so should be avoided e.g. over memory mapped files
+function strcspnpas(s,reject: pointer): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
 {$ifdef CPUINTEL}
 /// SSE 4.2 version of strspn(), to be used with PUTF8Char/PAnsiChar
 // - please note that this optimized version may read up to 15 bytes
 // beyond the string, so should be avoided e.g. over memory mapped files
-function strspnsse42(s,accept: PAnsiChar): integer;
+function strspnsse42(s,accept: pointer): integer;
+
+/// SSE 4.2 version of strcspn(), to be used with PUTF8Char/PAnsiChar
+// - please note that this optimized version may read up to 15 bytes
+// beyond the string, so should be avoided e.g. over memory mapped files
+function strcspnsse42(s,reject: pointer): integer;
 {$endif}
 
 /// fastest available version of strspn(), to be used with PUTF8Char/PAnsiChar
@@ -2811,20 +2820,7 @@ function strspnsse42(s,accept: PAnsiChar): integer;
 // - will use SSE4.2 instructions on supported CPUs
 // - please note that this function may read some bytes beyond the string,
 // so should be avoided e.g. over memory mapped files
-var strspn: function (s,accept: PAnsiChar): integer = strspnpas;
-
-/// pure pascal version of strcspn(), to be used with PUTF8Char/PAnsiChar
-// - please note that this optimized version may read up to 3 bytes
-// beyond the string, so should be avoided e.g. over memory mapped files
-function strcspnpas(s,reject: PAnsiChar): integer;
-  {$ifdef HASINLINE}inline;{$endif}
-
-{$ifdef CPUINTEL}
-/// SSE 4.2 version of strcspn(), to be used with PUTF8Char/PAnsiChar
-// - please note that this optimized version may read up to 15 bytes
-// beyond the string, so should be avoided e.g. over memory mapped files
-function strcspnsse42(s,reject: PAnsiChar): integer;
-{$endif}
+var strspn: function (s,accept: pointer): integer = strspnpas;
 
 /// fastest available version of strcspn(), to be used with PUTF8Char/PAnsiChar
 // - returns how many reject chars do not appear in the initial segment of s, e.g.
@@ -2832,7 +2828,7 @@ function strcspnsse42(s,reject: PAnsiChar): integer;
 // - will use SSE4.2 instructions on supported CPUs
 // - please note that this function may read some bytes beyond the string,
 // so should be avoided e.g. over memory mapped files
-var strcspn: function (s,reject: PAnsiChar): integer = strcspnpas;
+var strcspn: function (s,reject: pointer): integer = strcspnpas;
 
 /// use our fast version of StrIComp(), to be used with PUTF8Char/PAnsiChar
 function StrIComp(Str1, Str2: pointer): PtrInt;
@@ -21230,12 +21226,9 @@ begin // fallback to pure pascal version, since asm version below make GPFs for 
   end else
     result := StrUInt32(P,val);
 end;
-{$else}
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
+{$else} {$ifdef FPC}nostackframe; assembler; asm {$else}
 asm // rcx=P, rdx=val (Linux: rdi,rsi)
-    .NOFRAME
+        .noframe
 {$endif FPC}
         {$ifndef win64}
         mov     rcx, rdi
@@ -21342,12 +21335,9 @@ end;
 {$endif PUREPASCAL}
 
 function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
-{$ifdef CPUX64}
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
+{$ifdef CPUX64} {$ifdef FPC}nostackframe; assembler; asm {$else}
 asm // rcx=P, rdx=val (Linux: rdi,rsi)
-        .NOFRAME
+        .noframe
 {$endif FPC}
         {$ifndef win64}
         mov     rcx, rdi
@@ -23693,7 +23683,6 @@ function bswap64(const a: QWord): QWord;
 begin
   result := SwapEndian(a); // use fast platform-specific function
 end;
-
 {$else}
 {$ifdef CPUX64}
 function bswap32(a: cardinal): cardinal;
@@ -23717,7 +23706,6 @@ asm
   {$endif win64}
   bswap rax
 end;
-
 {$else}
 {$ifdef CPUX86}
 function bswap32(a: cardinal): cardinal;
@@ -24102,16 +24090,62 @@ end;
 
 {$ifdef PUREPASCAL}
 function CompareMem(P1, P2: Pointer; Length: PtrInt): Boolean;
-var i: PtrInt;
-begin // inlining this code is more efficient than FPC's CompareByte
-  result := false;
-  for i := 0 to (Length shr 2)-1 do
-    if PCardinalArray(P1)^[i]<>PCardinalArray(P2)^[i] then
-      exit;
-  for i := Length-(Length and 3) to Length-1 do
-    if PByteArray(P1)^[i]<>PByteArray(P2)^[i] then
-      exit;
+label zero;
+begin // this code compiles well under FPC and Delphi on both 32-bit and 64-bit
+  inc(Length,PtrInt(P1)-SizeOf(PtrInt)*2);
+  if Length>=PtrInt(P1) then begin
+    if PPtrInt(P1)^<>PPtrInt(P2)^ then
+      goto zero;
+    inc(PtrInt(P1),SizeOf(PtrInt));
+    inc(PtrInt(P2),SizeOf(PtrInt));
+    dec(PtrInt(P2),PtrInt(P1));
+    PtrInt(P1) := PtrInt(P1) and -SizeOf(PtrInt);
+    inc(PtrInt(P2),PtrInt(P1));
+    if Length>=PtrInt(P1) then
+      repeat // compare 4 aligned PtrInt per loop
+        if (PPtrInt(P1)^<>PPtrInt(P2)^) or (PPtrIntArray(P1)[1]<>PPtrIntArray(P2)[1]) then
+          goto zero;
+        inc(PtrInt(P1),SizeOf(PtrInt)*2);
+        inc(PtrInt(P2),SizeOf(PtrInt)*2);
+        if Length<PtrInt(P1) then
+          break;
+        if (PPtrInt(P1)^<>PPtrInt(P2)^) or (PPtrIntArray(P1)[1]<>PPtrIntArray(P2)[1]) then
+          goto zero;
+        inc(PtrInt(P1),SizeOf(PtrInt)*2);
+        inc(PtrInt(P2),SizeOf(PtrInt)*2);
+      until Length<PtrInt(P1);
+  end;
+  inc(Length,SizeOf(PtrInt)*2-PtrInt(P1));
+  if Length>=SizeOf(PtrInt) then begin
+    if PPtrInt(P1)^<>PPtrInt(P2)^ then
+      goto zero;
+    inc(PtrInt(P1),SizeOf(PtrInt));
+    inc(PtrInt(P2),SizeOf(PtrInt));
+    dec(Length,SizeOf(PtrInt));
+  end;
+  {$ifdef CPU64}
+  if Length>=4 then begin
+    if PCardinal(P1)^<>PCardinal(P2)^ then
+      goto zero;
+    inc(PtrInt(P1),4);
+    inc(PtrInt(P2),4);
+    dec(Length,4);
+  end;
+  {$endif}
+  if Length>=2 then begin
+    if PWord(P1)^<>PWord(P2)^ then
+      goto zero;
+    inc(PtrInt(P1),2);
+    inc(PtrInt(P2),2);
+    dec(Length,2);
+  end;
+  if Length>=1 then
+    if PByte(P1)^<>PByte(P2)^ then
+      goto zero;
   result := true;
+  exit;
+zero:
+  result := false;
 end;
 
 // from Aleksandr Sharahov's PosEx_Sha_Pas_2()
@@ -25972,17 +26006,17 @@ end;
 
 {$endif PUREPASCAL}
 
-function strspnpas(s,accept: PAnsiChar): integer;
+function strspnpas(s,accept: pointer): integer;
 var p: PCardinal;
     c: AnsiChar;
     d: cardinal;
 begin // returns size of initial segment of s which are in accept
   result := 0;
   repeat
-    c := s[result];
+    c := PAnsiChar(s)[result];
     if c=#0 then
       break;
-    p := pointer(accept);
+    p := accept;
     repeat // stop as soon as we find any character not from accept
       d := p^;
       inc(p);
@@ -26010,17 +26044,17 @@ begin // returns size of initial segment of s which are in accept
   until false;
 end;
 
-function strcspnpas(s,reject: PAnsiChar): integer;
+function strcspnpas(s,reject: pointer): integer;
 var p: PCardinal;
     c: AnsiChar;
     d: cardinal;
 begin // returns size of initial segment of s which are not in reject
   result := 0;
   repeat
-    c := s[result];
+    c := PAnsiChar(s)[result];
     if c=#0 then
       break;
-    p := pointer(reject);
+    p := reject;
     repeat // stop as soon as we find any character from reject
       d := p^;
       inc(p);
@@ -26050,12 +26084,10 @@ end;
 
 {$ifdef CPUINTEL}
 {$ifdef CPUX64}
-function strcspnsse42(s,reject: PAnsiChar): integer;
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
+function strcspnsse42(s,reject: pointer): integer;
+{$ifdef FPC}nostackframe; assembler; asm {$else}
 asm // rcx=s, rdx=reject (Linux: rdi,rsi)
-       .noframe
+        .noframe
 {$endif FPC}
 {$ifdef win64}
         push    rdi
@@ -26099,12 +26131,10 @@ asm // rcx=s, rdx=reject (Linux: rdi,rsi)
         and     eax, edx   // accumulate matches
         jmp     @2
 end;
-function strspnsse42(s,accept: PAnsiChar): integer;
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
+function strspnsse42(s,accept: pointer): integer;
+{$ifdef FPC}nostackframe; assembler; asm {$else}
 asm // rcx=s, rdx=accept (Linux: rdi,rsi)
-       .noframe
+        .noframe
 {$endif FPC}
 {$ifdef win64}
         push    rdi
@@ -26150,7 +26180,7 @@ asm // rcx=s, rdx=accept (Linux: rdi,rsi)
 end;
 {$endif CPUX64}
 {$ifdef CPUX86}
-function strcspnsse42(s,reject: PAnsiChar): integer;
+function strcspnsse42(s,reject: pointer): integer;
 asm // eax=s, edx=reject
         push    edi
         push    esi
@@ -26199,7 +26229,7 @@ asm // eax=s, edx=reject
         and     eax, edx   // accumulate matches
         jmp     @2
 end;
-function strspnsse42(s,accept: PAnsiChar): integer;
+function strspnsse42(s,accept: pointer): integer;
 asm // eax=s, edx=accept
         push    edi
         push    esi
@@ -34509,11 +34539,9 @@ type
 {$ifdef CPUINTEL}
 {$ifdef CPU64}
 procedure GetCPUID(Param: Cardinal; var Registers: TRegisters);
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
+{$ifdef FPC}nostackframe; assembler; asm {$else}
 asm // ecx=param, rdx=Registers (Linux: edi,rsi)
-        .NOFRAME
+        .noframe
 {$endif FPC}
         {$ifdef win64}
         mov     eax, ecx
@@ -34535,11 +34563,9 @@ asm // ecx=param, rdx=Registers (Linux: edi,rsi)
 end;
 
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
+{$ifdef FPC}nostackframe; assembler; asm {$else}
 asm // ecx=crc, rdx=buf, r8=len (Linux: edi,rsi,rdx)
-        .NOFRAME
+        .noframe
 {$endif FPC}
         {$ifdef win64}
         mov     eax, ecx
@@ -34703,12 +34729,9 @@ end;
 {$endif}
 {$ifdef CPUINTEL}
 procedure crcblockSSE42(crc128, data128: PBlock128);
-{$ifdef CPU64}
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
+{$ifdef CPU64} {$ifdef FPC}nostackframe; assembler; asm {$else}
 asm // rcx=crc128, rdx=data128 (Linux: rdi,rsi)
-        .NOFRAME
+        .noframe
 {$endif FPC}
         {$ifdef Linux}
         mov     eax, dword ptr[rdi]
@@ -36767,14 +36790,10 @@ end;
 {$ifdef CPUINTEL}
 /// get 32-bit value from NIST SP 800-90A compliant RDRAND Intel x86/x64 opcode
 function RdRand32: cardinal;
-{$ifdef CPU64}
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
+{$ifdef CPU64} {$ifdef FPC}nostackframe; assembler; asm {$else}
 asm
   .noframe
-{$endif FPC}
-{$endif CPU64}
+{$endif FPC} {$endif CPU64}
 {$ifdef CPU32}
 asm
 {$endif}
