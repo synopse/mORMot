@@ -1,4 +1,5 @@
-/// Firebird 2.5+ direct access classes to be used with our SynDB architecture
+/// experimental Firebird 2.5+ direct access classes to be used with our SynDB architecture
+// - not finished, nor working yet: we urge you to use SynDBZeos (or SynDBODBC) instead
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynDBFirebird;
@@ -83,6 +84,7 @@ type
   // TSQLDBFirebirdConnectionClientProperties to force either of the two modes
   // - we focus on Firebird 2.5.0 and up (released on October 2010), since it
   // was the first multi-thread-capable and thread-safe client implementation
+  // - not finished, nor working yet: we urge you to use SynDBZeos (or SynDBODBC) instead
   TSQLDBFirebirdConnectionProperties = class(TSQLDBConnectionPropertiesThreadSafe)
   protected
     fDefaultPageSize: Integer;
@@ -673,7 +675,6 @@ end;
 
 
 { TSQLDBFirebirdStatement }
-
 
 function TSQLDBFirebirdStatement.ColumnBlob(Col: integer): RawByteString;
 begin
