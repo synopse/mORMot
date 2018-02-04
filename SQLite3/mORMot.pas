@@ -18357,11 +18357,11 @@ type
   protected
     fShardRange: TID;
     fShardOffset: integer;
-    fMaxShardCount: cardinal;
+    fMaxShardCount: integer;
     fLastID: TID;
     fOptions: TSQLRestStorageShardOptions;
     fShards: array of TSQLRest;
-    fShardLast: cardinal;
+    fShardLast: integer;
     fShardLastID: TID;
     fShardNextID: TID;
     fShardTableIndex: TIntegerDynArray;
@@ -18435,7 +18435,7 @@ type
     // - if some older shards are available on disk, they won't be loaded by
     // InitShards, and newly added shard via InitNewShard will trigger
     // RemoveShard if the total number of shards
-    property MaxShardCount: cardinal read fMaxShardCount;
+    property MaxShardCount: integer read fMaxShardCount;
     /// defines how this instance will handle its sharding process
     // - by default, update/delete operations or per ID retrieval will take
     // place on all shards, whereas EngineList and EngineExecute will only run
@@ -46562,7 +46562,7 @@ begin
       [self,aClass,aShardRange,MIN_SHARD]);
   inherited Create(aClass,aServer);
   fShardRange := aShardRange;
-  fShardLast := cardinal(-1);
+  fShardLast := -1;
   fOptions := aOptions;
   if aMaxShardCount<2 then
     fMaxShardCount := 2 else
@@ -46609,7 +46609,7 @@ procedure TSQLRestStorageShard.RemoveShard(aShardIndex: integer);
 begin
   StorageLock(true,'RemoveShard');
   try
-    if (fShards<>nil) and (cardinal(aShardIndex)<=fShardLast) then begin
+    if (fShards<>nil) and (cardinal(aShardIndex)<=cardinal(fShardLast)) then begin
       FreeAndNil(fShards[aShardIndex]);
       fShardTableIndex[aShardIndex] := -1;
     end;
@@ -46658,13 +46658,13 @@ begin
         exit;
   end;
   ndx := ((aID-1) div fShardRange)-fShardOffset;
-  if (ndx<=fShardLast) and (fShards[ndx]<>nil) then begin
+  if (ndx<=cardinal(fShardLast)) and (fShards[ndx]<>nil) then begin
     case aOccasion of
       soUpdate:
-        if (ssoNoUpdateButLastShard in fOptions) and (ndx<>fShardLast) then
+        if (ssoNoUpdateButLastShard in fOptions) and (ndx<>cardinal(fShardLast)) then
           exit;
       soDelete:
-        if (ssoNoDeleteButLastShard in fOptions) and (ndx<>fShardLast) then
+        if (ssoNoDeleteButLastShard in fOptions) and (ndx<>cardinal(fShardLast)) then
           exit;
     end;
     aShard := fShards[ndx];
@@ -46744,9 +46744,9 @@ begin
     SetLength(idn,fShardLast+1);
     for i := 0 to high(IDs) do begin
       ndx := ((IDs[i]-1) div fShardRange)-fShardOffset; // inlined ShardFromID()
-      if (ndx>=fShardLast) or (fShards[ndx]=nil) then
+      if (ndx>=cardinal(fShardLast)) or (fShards[ndx]=nil) then
         continue;
-      if (ssoNoDeleteButLastShard in fOptions) and (ndx<>fShardLast) then
+      if (ssoNoDeleteButLastShard in fOptions) and (ndx<>cardinal(fShardLast)) then
         continue;
       AddInt64(id[ndx],idn[ndx],IDs[i]);
     end;
@@ -46766,7 +46766,7 @@ function TSQLRestStorageShard.EngineExecute(const aSQL: RawUTF8): boolean;
 begin
   StorageLock(false,'EngineExecute');
   try
-    if (integer(fShardLast)>=0) and not (ssoNoExecute in fOptions) then
+    if (fShardLast>=0) and not (ssoNoExecute in fOptions) then
       result := fShards[fShardLast].EngineExecute(aSQL) else
       result := false;
   finally
@@ -46808,7 +46808,7 @@ begin
         ResCount := 1;
       end else
         result := '{"fieldCount":1,"values":["RowID"]}'#$A else begin
-        if (integer(fShardLast)>=0) and not (ssoNoList in fOptions) then
+        if (fShardLast>=0) and not (ssoNoList in fOptions) then
           result := fShards[fShardLast].EngineList(SQL,ForceAJAX,@ResCount);
     end;
     if ReturnedRowCount<>nil then
@@ -46922,7 +46922,9 @@ begin
   try
     if fShardBatch<>nil then
       raise EORMException.CreateUTF8('%.InternalBatchStop should have been called',[self]);
-    SetLength(fShardBatch,fShardLast+1);
+    if fShardLast<0 then // new DB -> force fShardBatch<>nil
+      SetLength(fShardBatch,1) else
+      SetLength(fShardBatch,fShardLast+1);
     result := true;
   finally
     if not result then // release lock on error
@@ -46932,7 +46934,7 @@ end;
 
 function TSQLRestStorageShard.InternalShardBatch(ShardIndex: integer): TSQLRestBatch;
 begin
-  if cardinal(ShardIndex)>fShardLast then
+  if cardinal(ShardIndex)>cardinal(fShardLast) then
     raise EORMException.CreateUTF8('%.InternalShardBatch(%)',[self,ShardIndex]);
   if fShardBatch=nil then
     raise EORMException.CreateUTF8('%.InternalBatchStart should have been called',[self]);
