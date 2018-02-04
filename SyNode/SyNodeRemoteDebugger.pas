@@ -129,6 +129,7 @@ type
     fNeedClose: boolean;
     fDebugger: TSMDebugger;
     fCommunicationSock: TCrtSocket;
+    // read a packages in format package-length:JSON
     function sockRead(out packet: RawUTF8): boolean;
     procedure sockWrite(const packet: RawUTF8);
     procedure HandleMessage(const request: Variant);
@@ -560,7 +561,7 @@ begin
   if not Result then
     exit;
   ch := @buf[1];
-  len := GetNextItemInteger(ch, ':');
+  len := GetNextItemCardinal(ch, ':');
   SetLength(packet, len);
   head := bufSize - (ch - @buf[1]);
   Move(ch^, packet[1], head);

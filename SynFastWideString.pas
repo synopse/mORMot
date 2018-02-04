@@ -153,7 +153,7 @@ implementation
   {$define NOOVERRIDE}
 {$endif}
 {$ifdef FPC}
-  // our low-level Delphi Win32 specific hack won't work with FPC 
+  // our low-level Delphi Win32 specific hack won't work with FPC
   {$define NOOVERRIDE}
 {$endif}
 

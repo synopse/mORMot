@@ -299,7 +299,7 @@ type
     // - ComputeNew will derivate it from MainThreadID
     ProcessID: word;
     /// 3-byte counter, starting with a random value
-    // - used to avoid collision 
+    // - used to avoid collision
     Counter: TBSON24;
     /// ObjectID content be filled with some unique values
     // - this implementation is thread-safe
@@ -344,7 +344,7 @@ type
   // - betJS and betDeprecatedSymbol will store the UTF-8 encoded string
   // as a RawUTF8
   // - betDeprecatedUndefined or betMinKey/betMaxKey do not contain any data
-  // - betDecimal128 will store the TDecimal128 16 bytes binary buffer 
+  // - betDecimal128 will store the TDecimal128 16 bytes binary buffer
   // - warning: VBlob/VText use should match BSON_ELEMENTVARIANTMANAGED constant
   TBSONVariantData = packed record
     /// the variant type
@@ -448,7 +448,7 @@ type
   // settings:
   // ! [dvoValueCopiedByReference,dvoReturnNullForUnknownProperty]
   // - asDocVariantInternNamesPerValue and asDocVariantInternNamesPerReference
-  // will include dvoInternalNames to the TDocVariant.Options 
+  // will include dvoInternalNames to the TDocVariant.Options
   TBSONDocArrayConversion = (
     asBSONVariant, asDocVariantPerValue, asDocVariantPerReference,
     asDocVariantInternNamesPerValue, asDocVariantInternNamesPerReference);
@@ -1922,7 +1922,7 @@ type
     fServerBuildInfo: variant;
     fServerBuildInfoNumber: cardinal;
     fLatestReadConnectionIndex: integer;
-    procedure AfterOpen; virtual; 
+    procedure AfterOpen; virtual;
     function GetOneReadConnection: TMongoConnection;
     function GetBytesReceived: Int64;
     function GetBytesSent: Int64;
@@ -1946,7 +1946,7 @@ type
     // - this method will use authentication and will return the corresponding
     // MongoDB database instance, with a dedicated secured connection
     // - will use MONGODB-CR for MongoDB engines up to 2.6 (or if ForceMongoDBCR
-    // is TRUE), and SCRAM-SHA-1 since MongoDB 3.x 
+    // is TRUE), and SCRAM-SHA-1 since MongoDB 3.x
     // - see http://docs.mongodb.org/manual/administration/security-access-control
     function OpenAuth(const DatabaseName,UserName,PassWord: RawUTF8;
       ForceMongoDBCR: boolean=false): TMongoDatabase;
@@ -2464,7 +2464,7 @@ type
     // to skip before counting
     function FindCount(Criteria: PUTF8Char; const Args,Params: array of const;
       MaxNumberToReturn: integer=0; NumberToSkip: Integer=0): Int64; overload;
-    /// returns TRUE if the collection has no document, FALSE otherwise 
+    /// returns TRUE if the collection has no document, FALSE otherwise
     // - is much faster than Count, especially for huge collections
     function IsEmpty: boolean;
     /// calculate aggregate values using the MongoDB aggregation framework
@@ -2990,14 +2990,14 @@ str:Kind := betString;
   if aVarData.VType=BSONVariantType.VarType then begin
     Kind := aBson.VKind;
     case Kind of
-    betObjectID: FromBSON(@aBson.VObjectID); // stored inlined 
+    betObjectID: FromBSON(@aBson.VObjectID); // stored inlined
     else         FromBSON(aBson.VBlob); // complex type stored as a RawByteString
     end;
     if ElementBytes<0 then
       raise EBSONException.CreateUTF8('TBSONElement.FromVariant(bson,%)',[ToText(Kind)^]);
   end else
   if aVarData.VType=DocVariantType.VarType then begin
-    with TBSONWriter.Create(TRawByteStringStream) do // inlined BSON()   
+    with TBSONWriter.Create(TRawByteStringStream) do // inlined BSON()
     try
       BSONWriteDoc(aDoc);
       ToBSONDocument(aTemp);
@@ -4143,7 +4143,7 @@ var bsonvalue: TBSONVariantData absolute Value;
     while P[L]<>'"' do
       if not(P[L] in ['0'..'9','e','E','+','-','.']) then exit else inc(L);
     if dec.FromText(P,L)=dsvError then
-      exit;                             
+      exit;
     bsonvalue.VBlob := nil; // avoid GPF
     SetString(RawByteString(bsonvalue.VBlob),PAnsiChar(@dec),sizeof(TDecimal128));
     Return(betDecimal128,P+L+1,GotoEndOfObject);
@@ -4181,7 +4181,7 @@ var bsonvalue: TBSONVariantData absolute Value;
     if P^<>',' then Exit; // $regex:"acme*.corp",$options:"i"}
     P := GotoNextNotSpace(P+1);
     if P^='"' then inc(P);
-    if not CompareMem(P,@BSON_JSON_REGEX[1][4],8) then exit else inc(P,8);
+    if PInt64(P)^<>PInt64(@BSON_JSON_REGEX[1][4])^ then exit else inc(P,8);
     if P^='"' then inc(P);
     P := GotoNextNotSpace(P);
     if P^<>':' then exit;
@@ -4209,7 +4209,7 @@ begin // here JSON does not start with " or 1..9 (obvious simple types)
            Return(betMinKey,P+9) else
          if CompareMem(P+2,@BSON_JSON_MAXKEY[false][5],7) then
            Return(betMaxKey,P+9);
-    'o': if CompareMem(P+2,@BSON_JSON_OBJECTID[false,modMongoStrict][5],4) then
+    'o': if PInteger(P+2)^=PInteger(@BSON_JSON_OBJECTID[false,modMongoStrict][5])^ then
            TryObjectID(P+6,'}');
     'd': if CompareMem(P+2,@BSON_JSON_DATE[modMongoStrict,false][5],5) then
            TryDate(P+7,'}');
@@ -4599,7 +4599,7 @@ begin
     end;
   end;
   JSON := FormatUTF8(Format,Args,Params,true);
-  UniqueRawUTF8(JSON); // ensure Format is untouched if Args=[] 
+  UniqueRawUTF8(JSON); // ensure Format is untouched if Args=[]
   k := JSONBufferToBSONDocument(pointer(JSON),result);
   if kind<>nil then
     kind^ := k;
@@ -5177,7 +5177,7 @@ begin
     on E: Exception do
       raise EMongoException.CreateUTF8(
         '%.Open unable to connect to MongoDB server %: % [%]',
-          [self,Client.ConnectionString,E,E.Message]);      
+          [self,Client.ConnectionString,E,E.Message]);
   end;
   fSocket.TCPNoDelay := ord(true); // we buffer all output data before sending
   fSocket.KeepAlive := ord(true);  // do not close the connection without notice
@@ -6852,7 +6852,7 @@ begin
     if digstored<digcount then
       if (text[digcount-1+ord(signed in flags)+ord(radix in flags)]<>'0') and
          (signdig<>0) then
-        exit else // overflow 
+        exit else // overflow
         dec(digcount) else // adjust to non stored digits
       if digits[diglast]<>0 then
         exit else // inexact rounding

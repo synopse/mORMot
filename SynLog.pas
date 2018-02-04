@@ -1025,7 +1025,7 @@ type
     property GenericFamily: TSynLogFamily read fFamily;
   end;
 
-  /// reference-counted block code critical section with context logging 
+  /// reference-counted block code critical section with context logging
   // - race conditions are difficult to track: you could use this TAutoLockerDebug
   // instead of plain TAutoLocker class, to log some information at each
   // Enter/Leave process, and track unexpected blocking issues
@@ -1417,14 +1417,14 @@ const
   // sllLastError, sllException, sllExceptionOS, sllMemory, sllStackTrace,
   ssNotice, ssDebug, ssDebug, ssDebug, ssDebug, ssDebug, ssDebug, ssDebug,
   // sllFail, sllSQL, sllCache, sllResult, sllDB, sllHTTP, sllClient, sllServer,
-  ssDebug, ssDebug, ssDebug, 
+  ssDebug, ssDebug, ssDebug,
   // sllServiceCall, sllServiceReturn, sllUserAuth,
   ssDebug, ssDebug, ssDebug, ssDebug, ssNotice,
   // sllCustom1, sllCustom2, sllCustom3, sllCustom4, sllNewRun,
   ssWarn, ssInfo, ssDebug);
   // sllDDDError, sllDDDInfo, sllMonitoring);
 
-  
+
 /// returns the trimmed text value of a logging level
 // - i.e. 'Warning' for sllWarning
 function ToText(event: TSynLogInfo): RawUTF8; overload;
@@ -1584,7 +1584,7 @@ begin
     L := FromVarUInt32(P); // inlined R.Read(S^.Name)
     SetString(S^.Name,PAnsiChar(P),L);
     inc(P,L);
-    inc(PtrUInt(S),A.ElemSize);
+    inc(PtrUInt(S),A.ElemSize); // may be TSynMapSymbol or TSynMapUnit
   end;
   S := A.Value^;
   Addr := FromVarUInt32(P);
@@ -1602,13 +1602,6 @@ end;
 const
   /// Delphi linker starts the code section at this fixed offset
   CODE_SECTION = $1000;
-
-{$ifdef UNICODE}
-{ due to a bug in Delphi 2009+, we need to fake inheritance of record,
-  since TDynArrayHashed = object(TDynArray) fails to initialize
-  http://blog.synopse.info/post/2011/01/29/record-and-object-issue-in-Delphi-2010 }
-{$define UNDIRECTDYNARRAY}
-{$endif}
 
 constructor TSynMapFile.Create(const aExeName: TFileName=''; MabCreate: boolean=true);
 
@@ -1898,7 +1891,7 @@ begin
   S := A.Value^;
   for i := 0 to n-1 do begin
     W.Write(S^.Name);
-    inc(PtrUInt(S),A.ElemSize);
+    inc(PtrUInt(S),A.ElemSize); // may be TSynMapSymbol or TSynMapUnit
   end;
   S := A.Value^;
   Diff := S^.Start;
@@ -1993,36 +1986,36 @@ begin
 end;
 
 procedure TSynMapFile.SaveToExe(const aExeName: TFileName);
-var FN: TFileName;
-    MS, MAB: TMemoryStream;
-    Len, LenMAB: PtrUInt;
+var mabfilename: TFileName;
+    exe, mab: TMemoryStream;
+    exesize, mabsize: PtrUInt;
 begin
   if not FileExists(aExeName) then
     exit;
-  FN := SaveToFile(ChangeFileExt(aExeName,'.mab'));
+  mabfilename := SaveToFile(ChangeFileExt(aExeName,'.mab'));
   try
-    MS := THeapMemoryStream.Create;
-    MAB := THeapMemoryStream.Create;
+    exe := THeapMemoryStream.Create;
+    mab := THeapMemoryStream.Create;
     try
       // load both files
-      MAB.LoadFromFile(FN);
-      LenMAB := MAB.Size;
-      MS.LoadFromFile(aExeName);
-      Len := MS.Size;
-      if Len<16 then
+      mab.LoadFromFile(mabfilename);
+      mabsize := mab.Size;
+      exe.LoadFromFile(aExeName);
+      exesize := exe.Size;
+      if exesize<16 then
         exit;
       // trim existing mab content
-      Len := StreamSynLZComputeLen(MS.Memory,Len,MAGIC_MAB);
+      exesize := StreamSynLZComputeLen(exe.Memory,exesize,MAGIC_MAB);
+      exe.Size := exesize+mabsize;
       // append mab content to exe
-      MS.Size := Len+LenMAB;
-      MoveFast(MAB.Memory^,PAnsiChar(MS.Memory)[Len],LenMAB);
-      MS.SaveToFile(aExeName);
+      MoveFast(mab.Memory^,PAnsiChar(exe.Memory)[exesize],mabsize);
+      exe.SaveToFile(aExeName);
     finally
-      MAB.Free;
-      MS.Free;
+      mab.Free;
+      exe.Free;
     end;
   finally
-    DeleteFile(FN);
+    DeleteFile(mabfilename);
   end;
 end;
 
@@ -2320,7 +2313,7 @@ begin
   inc(destbuffer);
   len := length(msg);
   P := pointer(msg);
-  if trimmsgfromlog and (len>27) then 
+  if trimmsgfromlog and (len>27) then
     if (P[0]='2') and (P[8]=' ') then begin
       inc(P,27); // trim e.g. '20160607 06442255  ! trace '
       dec(len,27);
@@ -2403,7 +2396,7 @@ procedure GetLastExceptions(out result: TSynLogExceptionInfoDynArray;
 var infos: TSynLogExceptionInfos; // use thread-safe local copy
     index,last,n,i: integer;
 begin
-  if GlobalLastExceptionIndex<0 then 
+  if GlobalLastExceptionIndex<0 then
     exit; // no exception intercepted yet
   EnterCriticalSection(GlobalThreadLock);
   try
@@ -3236,7 +3229,7 @@ begin
           if log.Writer.Stream.InheritsFrom(TFileStream) then begin
             stream := TFileStream(log.Writer.Stream);
             endpos := stream.Position;
-            if endpos>MAXPREVIOUSCONTENTSIZE then 
+            if endpos>MAXPREVIOUSCONTENTSIZE then
               len := MAXPREVIOUSCONTENTSIZE else
               len := MaximumKB shl 10;
             start := log.fStreamPositionAfterHeader;
@@ -3980,7 +3973,7 @@ var WithinEvents: boolean;
     P: PUTF8Char;
     L: Integer;
     {$endif}
-    
+
   procedure NewLine;
   begin
     if WithinEvents then begin
@@ -5106,7 +5099,7 @@ begin
   if fThreadInfo=nil then
     exit;
   for i := 1 to fThreadMax do
-    result[i-1] := ThreadName(i,CurrentLogIndex);   
+    result[i-1] := ThreadName(i,CurrentLogIndex);
 end;
 
 procedure TSynLogFile.GetDays(out Days: TDateTimeDynArray);
@@ -5154,7 +5147,7 @@ begin
   if includeFirstColumns then begin
     UTF8DecodeToString(fLines[index],fLineTextOffset,header);
     result := header+result;
-  end;   
+  end;
 end;
 
 procedure TSynLogFile.SetLogProcMerged(const Value: boolean);

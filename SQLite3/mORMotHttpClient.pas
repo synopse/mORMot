@@ -216,7 +216,7 @@ type
     // - if port is not specified, aDefaultPort is used
     // - if root is not specified, aModel.Root is used
     constructor Create(const aServer: TSQLRestServerURIString; aModel: TSQLModel;
-      aDefaultPort: integer); reintroduce; overload; 
+      aDefaultPort: integer); reintroduce; overload;
     /// connnect to a LogView HTTP Server for remote logging
     // - will associate the EchoCustom callback of the log class to this server
     // - the aLogClass.Family will manage this TSQLHttpClientGeneric instance
@@ -332,7 +332,7 @@ type
     // - you could use its properties after upgrading the connection to WebSockets
     function WebSockets: THttpClientWebSockets;
     /// returns true if the connection is a running WebSockets
-    // - may be false even if fSocket<>nil, e.g. when gracefully disconnected  
+    // - may be false even if fSocket<>nil, e.g. when gracefully disconnected
     function WebSocketsConnected: boolean;
     /// this event will be executed just after the HTTP client has been
     // upgraded to the expected WebSockets protocol
@@ -522,9 +522,12 @@ procedure TSQLHttpClientGeneric.InternalURI(var Call: TSQLRestURIParams);
 var Head, Content, ContentType: RawUTF8;
     P, PBeg: PUTF8Char;
     res: Int64Rec;
-begin
 {$ifdef WITHLOG}
-  fLogClass.Enter(self);
+    log: ISynLog;
+begin
+  log := fLogClass.Enter('InternalURI %', [Call.Method], self);
+{$else}
+begin
 {$endif}
   if InternalCheckOpen then begin
     Head := Call.InHead;
@@ -555,10 +558,10 @@ begin
     Call.OutHead := Head;
     Call.OutBody := Content;
   end else
-    Call.OutStatus := HTTP_NOTIMPLEMENTED; // 501 indicates not socket closed 
+    Call.OutStatus := HTTP_NOTIMPLEMENTED; // 501 indicates not socket closed
 {$ifdef WITHLOG}
   with Call do
-    fLogFamily.SynLog.Log(sllClient,'% % status=% len=% state=%',
+    log.Log(sllClient,'% % status=% len=% state=%',
       [method,url,OutStatus,length(OutBody),OutInternalState],self);
 {$endif}
 end;
@@ -669,7 +672,7 @@ begin
     if fPort<>'' then
       result := fServer+':'+fPort else
       result := fServer else
-    result := '';  
+    result := '';
 end;
 
 
@@ -838,9 +841,12 @@ function TSQLHttpClientWebsockets.WebSocketsUpgrade(
   const aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX,
   aWebSocketsCompression: boolean): RawUTF8;
 var sockets: THttpClientWebSockets;
-begin
 {$ifdef WITHLOG}
-  fLogFamily.SynLog.Enter(self);
+    log: ISynLog;
+begin
+  log := fLogFamily.SynLog.Enter(self, 'WebSocketsUpgrade');
+{$else}
+begin
 {$endif}
   sockets := WebSockets;
   if sockets=nil then
@@ -858,10 +864,9 @@ begin
       end;
   end;
 {$ifdef WITHLOG}
-  with fLogFamily.SynLog do
-    if result<>'' then
-      Log(sllWarning,'[%] error upgrading %',[result,sockets],self) else
-      Log(sllHTTP,'HTTP link upgraded to WebSockets using %',[sockets],self);
+  if result<>'' then
+    log.Log(sllWarning,'[%] error upgrading %',[result,sockets],self) else
+    log.Log(sllHTTP,'HTTP link upgraded to WebSockets using %',[sockets],self);
 {$endif}
 end;
 

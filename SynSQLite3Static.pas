@@ -525,30 +525,19 @@ begin // called only by some obscure FTS3 functions (normal code use dedicated f
   result := SynCommons.StrComp(p1,p2);
 end;
 
-function strcspn(p1,p2: PAnsiChar): integer; cdecl;
+function strcspn(str,reject: PAnsiChar): integer; cdecl;
   {$ifdef FPC}public name{$ifdef CPU64}'strcspn'{$else}'_strcspn'{$endif};{$endif}
-var s: PAnsiChar;
-    c: AnsiChar;
-begin // span the complement of string p2
-  result := 0;
-  repeat
-    c := p1[result];
-    if c=#0 then
-      break;
-    s := p2;
-    repeat
-      if s^=c then // stop as soon as we find any character from p2
-        exit else
-      if s^=#0 then
-        break else
-        inc(s);
-    until false;
-    inc(result);
-  until false;
+begin // called e.g. during LIKE process
+  result := SynCommons.strcspn(str,reject); // use SSE4.2 if available
 end;
 
 function memcmp(p1, p2: pByte; Size: integer): integer; cdecl; { always cdecl }
-  {$ifdef FPC}public name{$ifdef CPU64}'memcmp'{$else}'_memcmp'{$endif};{$endif}
+{$ifdef FPC}
+  public name{$ifdef CPU64}'memcmp'{$else}'_memcmp'{$endif};
+begin
+  result := CompareByte(p1,p2,Size); // use FPC
+end;
+{$else}
 // a fast full pascal version of the standard C library function
 begin
   if (p1<>p2) and (Size<>0) then
@@ -569,6 +558,7 @@ begin
     result := -1 else
   result := 0;
 end;
+{$endif}
 
 function strncmp(p1, p2: PByte; Size: integer): integer; cdecl; { always cdecl }
   {$ifdef FPC}public name{$ifdef CPU64}'strncmp'{$else}'_strncmp'{$endif};{$endif}
@@ -1364,7 +1354,7 @@ function sqlite3_trace_v2(DB: TSQLite3DB; Mask: integer; Callback: TSQLTraceCall
 const
   // error message if linked sqlite3.obj does not match this
   EXPECTED_SQLITE3_VERSION = '3.22.0';
-  
+
 constructor TSQLite3LibraryStatic.Create;
 var error: RawUTF8;
 begin
@@ -1481,7 +1471,7 @@ begin
     [ExeVersion.ProgramName,fVersionText],error);
   LogToTextFile(error); // annoyning enough on all platforms
   // SynSQLite3Log.Add.Log() would do nothing: we are in .exe initialization
-  {$ifdef MSWINDOWS} // PITA popup 
+  {$ifdef MSWINDOWS} // PITA popup
   MessageBoxA(0,pointer(error),' WARNING: deprecated SQLite3 engine',MB_OK or MB_ICONWARNING);
   {$endif}
 end;

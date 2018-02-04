@@ -886,8 +886,9 @@ begin
 end;
 
 procedure TService.DoCtrlHandle(Code: DWORD);
+var log: ISynLog;
 begin
-  ServiceLog.Enter(self);
+  log := ServiceLog.Enter(self, 'DoCtrlHandle');
   ServiceLog.Add.Log(sllInfo,'%: command % received from OS',[ServiceName,Code],self);
   try
     case Code of

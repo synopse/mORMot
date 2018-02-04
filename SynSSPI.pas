@@ -96,7 +96,7 @@ type
   // - used to hold information between calls to ServerSSPIAuth
   TSecContextDynArray = array of TSecContext;
 
-  /// defines a SSPI buffer 
+  /// defines a SSPI buffer
   TSecBuffer = object
     cbBuffer: Cardinal;
     BufferType: Cardinal;
@@ -290,7 +290,7 @@ function CertFindCertificateInStore(hCertStore: HCERTSTORE;
   pPrevCertContext: PCCERT_CONTEXT): PCCERT_CONTEXT; stdcall;
 
 
-  
+
 (* ========================= High-Level SSPI / SChannel API wrappers  ======= *)
 
 /// Sets aSecHandle fields to empty state for a given connection ID

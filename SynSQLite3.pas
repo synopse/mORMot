@@ -3963,13 +3963,16 @@ end;
 
 procedure TSQLDataBase.ExecuteAll(const aSQL: RawUTF8);
 var R: TSQLRequest;
+{$ifdef WITHLOG} log: ISynLog; {$endif}
 begin
   if self=nil then
     exit; // avoid GPF in case of call from a static-only server
   {$ifdef WITHLOG}
-  if SQLShouldBeLogged(aSQL) then
-    fLog.Enter(self).Log(sllSQL,aSQL,self,4096);
+  if SQLShouldBeLogged(aSQL) then begin
+    log := fLog.Enter(self{$ifndef DELPHI5OROLDER},'ExecuteAll'{$endif});
+    log.Log(sllSQL,aSQL,self,4096);
   {$endif}
+  end;
   LockAndFlushCache; // don't trust aSQL -> assume modify -> inc(InternalState^)
   try
     R.ExecuteAll(DB,aSQl);
@@ -3998,15 +4001,18 @@ end;
 
 function TSQLDataBase.Execute(const aSQL: RawUTF8; var ID: TInt64DynArray): integer;
 var R: TSQLRequest;
+{$ifdef WITHLOG} log: ISynLog; {$endif}
 begin
   if self=nil then begin
     result := 0;
     exit; // avoid GPF in case of call from a static-only server
   end;
-{$ifdef WITHLOG}
-  if SQLShouldBeLogged(aSQL) then
-    fLog.Enter(self).Log(sllSQL,aSQL,self,2048);
-{$endif}
+  {$ifdef WITHLOG}
+  if SQLShouldBeLogged(aSQL) then begin
+    log := fLog.Enter(self{$ifndef DELPHI5OROLDER},'Execute'{$endif});
+    log.Log(sllSQL,aSQL,self,2048);
+  end;
+  {$endif}
   Lock(aSQL);
   try
     result := R.Execute(DB,aSQL,ID);
@@ -4942,6 +4948,7 @@ begin
         inc(result);
       end;
     until res=SQLITE_DONE;
+    SetLength(Values,LValues);
   finally
     Close; // always release statement
   end;

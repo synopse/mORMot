@@ -358,7 +358,7 @@ type
     reserved: Int64;
   end;
   PZStream64 = ^TZStream64;
-  
+
   /// the internal memory structure as expected by the ZLib library
   {$ifdef USECFZLIB}
   { CloudFlare zip uses uLong for total_in, total_out, adler and reserved }
@@ -660,7 +660,7 @@ type
     constructor Create(outStream: TStream; CompressionLevel: Integer;
       Format: TSynZipCompressorFormat = szcfRaw);
     /// release memory
-    destructor Destroy; override;            
+    destructor Destroy; override;
     /// this method will raise an error: it's a compression-only stream
     function Read(var Buffer; Count: Longint): Longint; override;
     /// add some data to be compressed

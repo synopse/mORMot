@@ -462,12 +462,12 @@ type
     /// the TCP/IP (address and) port on which this server is listening to
     // - may contain the public server address to bind to: e.g. '1.2.3.4:1234'
     // - see PublicAddress and PublicPort properties if you want to get the
-    // true IP port or address 
+    // true IP port or address
     property Port: AnsiString read fPort;
     /// the TCP/IP public address on which this server is listening to
     // - equals e.g. '1.2.3.4' if Port = '1.2.3.4:1234'
     // - if Port does not contain an explicit address (e.g. '1234'), the current
-    // computer host name would be assigned as PublicAddress 
+    // computer host name would be assigned as PublicAddress
     property PublicAddress: RawUTF8 read fPublicAddress;
     /// the TCP/IP public port on which this server is listening to
     // - equals e.g. '1234' if Port = '1.2.3.4:1234'
@@ -577,11 +577,12 @@ end;
 function TSQLHttpServer.AddServer(aServer: TSQLRestServer;
   aRestAccessRights: PSQLAccessRights; aHttpServerSecurity: TSQLHttpServerSecurity): boolean;
 var i,n: integer;
+    log: ISynLog;
 begin
   result := False;
   if (self=nil) or (aServer=nil) or (aServer.Model=nil) then
     exit;
-  fLog.Enter(self);
+  log := fLog.Enter(self, 'AddServer');
   fDBServersSafe.Enter;
   try
     n := length(fDBServers);
@@ -601,8 +602,8 @@ begin
     result := true;
   finally
     fDBServersSafe.Leave;
-    fLog.Add.Log(sllHttp,'%.AddServer(%,Root=%,Port=%,Public=%:%)=%',
-      [self,aServer,aServer.Model.Root,fPort,fPublicAddress,fPublicPort,
+    log.Log(sllHttp,'AddServer(%,Root=%,Port=%,Public=%:%)=%',
+      [aServer,aServer.Model.Root,fPort,fPublicAddress,fPublicPort,
        BOOL_STR[result]],self);
   end;
 end;
@@ -622,11 +623,12 @@ end;
 
 function TSQLHttpServer.RemoveServer(aServer: TSQLRestServer): boolean;
 var i,j,n: integer;
+    log: ISynLog;
 begin
   result := False;
   if (self=nil) or (aServer=nil) or (aServer.Model=nil) then
     exit;
-  fLog.Enter(self);
+  log := fLog.Enter(self, 'RemoveServer');
   fDBServersSafe.Enter;
   try
     n := high(fDBServers);
@@ -636,7 +638,7 @@ begin
       if fHttpServer.InheritsFrom(THttpApiServer) then
         if THttpApiServer(fHttpServer).RemoveUrl(aServer.Model.Root,fPublicPort,
            fDBServers[i].Security=secSSL,fDomainName)<>NO_ERROR then
-          fLog.Add.Log(sllLastError,'%.RemoveUrl(%)',[self,aServer.Model.Root],self);
+          log.Log(sllLastError,'%.RemoveUrl(%)',[self,aServer.Model.Root],self);
       {$endif}
       for j := i to n-1 do
         fDBServers[j] := fDBServers[j+1];
@@ -648,7 +650,7 @@ begin
     end;
   finally
     fDBServersSafe.Leave;
-    fLog.Add.Log(sllHttp,'%.RemoveServer(Root=%)=%',
+    log.Log(sllHttp,'%.RemoveServer(Root=%)=%',
       [self,aServer.Model.Root,BOOL_STR[result]],self);
   end;
 end;
@@ -668,12 +670,13 @@ constructor TSQLHttpServer.Create(const aPort: AnsiString;
 var i,j: integer;
     ServersRoot: RawUTF8;
     ErrMsg: RawUTF8;
+    log: ISynLog;
 begin
   {$ifdef WITHLOG} // this is the only place where we check for WITHLOG
   if high(aServers)<0 then
     fLog := TSQLLog else
     fLog := aServers[0].LogClass;
-  fLog.Enter('Create % (%) on port %',[ToText(aHttpServerKind)^,
+  log := fLog.Enter('Create % (%) on port %',[ToText(aHttpServerKind)^,
     ToText(aHttpServerSecurity)^,aPort],self);
   {$endif}
   fDBServersSafe := TAutoLocker.Create;
@@ -704,7 +707,7 @@ begin
        raise EHttpServerException.CreateUTF8('%.Create(% ): %',[self,ServersRoot,ErrMsg]);
     // associate before HTTP server is started, for TSQLRestServer.BeginCurrentThread
     SetLength(fDBServers,length(aServers));
-    for i := 0 to high(aServers) do 
+    for i := 0 to high(aServers) do
       SetDBServer(i,aServers[i],aHttpServerSecurity,HTTP_DEFAULT_ACCESS_RIGHTS);
   end;
   {$ifndef USETCPPREFIX}
@@ -722,7 +725,7 @@ begin
         fHttpServerKind=useHttpApiRegisteringURI,true);
   except
     on E: Exception do begin
-      fLog.Add.Log(sllError,'% for % at%  -> fallback to socket-based server',
+      log.Log(sllError,'% for % at%  -> fallback to socket-based server',
         [E,fHttpServer,ServersRoot],self);
       FreeAndNil(fHttpServer); // if http.sys initialization failed
     end;
@@ -756,10 +759,10 @@ begin
       THttpApiServer(fHttpServer).Clone(ServerThreadPoolCount-1);
 {$endif}
   // last HTTP server handling callbacks would be set for the TSQLRestServer(s)
-  if fHttpServer.CanNotifyCallback then 
+  if fHttpServer.CanNotifyCallback then
     for i := 0 to high(fDBServers) do
       fDBServers[i].Server.OnNotifyCallback := NotifyCallback;
-  fLog.Add.Log(sllHttp,'% initialized for%',[fHttpServer,ServersRoot],self);
+  log.Log(sllHttp,'% initialized for%',[fHttpServer,ServersRoot],self);
 end;
 
 constructor TSQLHttpServer.Create(const aPort: AnsiString;
@@ -775,8 +778,9 @@ begin
 end;
 
 destructor TSQLHttpServer.Destroy;
+var log: ISynLog;
 begin
-  fLog.Enter(self);
+  log := fLog.Enter(self, 'Destroy');
   fLog.Add.Log(sllHttp,'% finalized for %',[fHttpServer,
     Plural('server',length(fDBServers))],self);
   Shutdown(true); // but don't call fDBServers[i].Server.Shutdown
@@ -786,9 +790,10 @@ end;
 
 procedure TSQLHttpServer.Shutdown(noRestServerShutdown: boolean);
 var i: integer;
+    log: ISynLog;
 begin
   if (self<>nil) and not fShutdownInProgress then begin
-    fLog.Enter('Shutdown(%)',[BOOL_STR[noRestServerShutdown]],self);
+    log := fLog.Enter('Shutdown(%)',[BOOL_STR[noRestServerShutdown]],self);
     fShutdownInProgress := true;
     fHttpServer.Shutdown;
     fDBServersSafe.Enter;

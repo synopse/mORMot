@@ -1,3 +1,6 @@
+// original FireFox implementation is in:
+// git clone https://github.com/mozilla/gecko-dev.git
+// cd gecko-dev/devtools/server 
 import * as DevToolsUtils from 'DevTools/DevToolsUtils.js';
 import {JSPropertyProvider} from 'DevTools/js-property-provider.js';
 import {ObjectActorPreviewers} from 'DevTools/ObjectActorPreviewers.js';
@@ -1603,14 +1606,21 @@ class AddonActor extends Actor {
     }
     attach(aRequest){
         return {
-            "type": "tabAttached",
-            "threadActor": actorManager.thread.fullActor
+            type: "tabAttached",
+            threadActor: actorManager.thread.fullActor,
+            traits: {reconfigure: false}
         }
     }
     detach(aRequest) {
         return {
             "type": "detached"
         }
+    }
+    reconfigure(aRequest) {
+        return {};
+    }
+    listWorkers(aRequest) {
+        return { from: this.fullActor, "workers":[] }
     }
 }
 

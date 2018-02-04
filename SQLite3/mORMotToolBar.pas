@@ -33,7 +33,7 @@ interface
 
   Contributor(s):
   - kevinday
-  
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -334,7 +334,7 @@ type
   TSQLLister = class;
 
   /// this event is called when a button is pressed
-  // - here ActionValue contains the ordinal value of the custom button 
+  // - here ActionValue contains the ordinal value of the custom button
   TSQLListerEvent = procedure(Sender: TObject;
     RecordClass: TSQLRecordClass;
     ActionValue: integer) of object;
@@ -1064,7 +1064,7 @@ var TypeName: PShortString;
       PTypeInfo(TypeInfo(TSQLAction))^.EnumBaseType^.GetEnumName(A2)),
       iAction,nil,iAction-1,integer(A2));
   end;
-  
+
 begin
   result := nil;
   if fPage=nil then
@@ -1134,7 +1134,7 @@ begin
             if TSQLAction(iAction)=actMark then begin // Mark sub-menu
               InsertSubMenu(actmarkAllEntries);
               InsertSubMenu(actmarkInverse);
-              if TableToGrid.FieldIndexTimeLogForMark>=0 then 
+              if TableToGrid.FieldIndexTimeLogForMark>=0 then
                 for A2 := actmarkToday to actmarkOlderThanOneYear do begin
                   if A2 in [actmarkToday,actmarkOlderThanOneDay] then
                     CreateSubMenuItem('-',iAction,nil);

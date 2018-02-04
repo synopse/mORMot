@@ -41,7 +41,7 @@ unit SynPdf;
    Harald Simon
    Josh Kelley (joshkel)
    Karel (vandrovnik)
-   LoukaO  
+   LoukaO
    Marsh
    MChaos
    Mehrdad Momeni (nosa)
@@ -288,7 +288,7 @@ unit SynPdf;
   - EMR_INTERSECTCLIPRECT fix supplied by Marsh - but patch disabled by default
   - huge UniScribe fixes supplied by Mehrdad Momeni (nosa) - THANKS A LOT!
   - enhanced clipping process by Achim Kalwa
-  - added Support for ARC ARCTO PIE and CHORD - thanks ProHolz for the patch 
+  - added Support for ARC ARCTO PIE and CHORD - thanks ProHolz for the patch
 
 }
 
@@ -3606,7 +3606,7 @@ begin
   lstartx := xB;
   lstarty := yB;
   // calculate and reserve Space for the result
-  ressize := n; 
+  ressize := n;
   case fArctype of
     acArc :     inc(ressize,1); // first move
     acArcTo:    inc(ressize,3); // first line and move
@@ -9610,7 +9610,7 @@ begin
         E.Canvas.Stroke else
         E.Canvas.NewPath;
   end;
-  EMR_POLYDRAW16: 
+  EMR_POLYDRAW16:
   if PEMRPolyDraw16(R)^.cpts>0 then begin
     if not pen.null then
       E.NeedPen;

@@ -528,10 +528,10 @@ begin
     Email.MessageCompressed := SynLZCompressToBytes(aBody);
     CqrsBeginMethod(qaNone,result);
     if not Email.FilterAndValidate(Rest,msg) then
-      CqrsSetResultString(cqrsDDDValidationFailed,msg) else
+      CqrsSetResultString(cqrsDDDValidationFailed,msg,result) else
       if Rest.Add(Email,true)=0 then
-        CqrsSetResult(cqrsDataLayerError) else
-        CqrsSetResult(cqrsSuccess);
+        CqrsSetResult(cqrsDataLayerError,result) else
+        CqrsSetResult(cqrsSuccess,result);
   finally
     Email.Free;
   end;

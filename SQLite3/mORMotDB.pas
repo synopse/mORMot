@@ -389,7 +389,7 @@ type
     // supplied, but a fixed "fake ID" is returned by the Add() method; at
     // external DB level, no such ID field would be computed nor set at INSERT -
     // this feature may be useful when working with a legacy database - of
-    // course any ID-based ORM method would probably fail to work 
+    // course any ID-based ORM method would probably fail to work
     property EngineAddForcedID: TID read fEngineAddForcedID write fEngineAddForcedID;
     /// define an alternate method of compute the ID for INSERT
     // - by default, a new ID will be with 'select max(ID)', and an internal
@@ -778,7 +778,7 @@ var SQL: RawUTF8;
           exit;
     result := -1;
   end;
-begin       
+begin
   {$ifdef WITHLOG}
   log := Owner.LogClass.Add;
   log.Enter('Create %',[aClass],self);

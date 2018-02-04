@@ -161,7 +161,7 @@ type
   // - TCQRSService class will allow to easily implement LastError* members
   // - all CQRS services, which may be executed remotely, would favor a function
   // result as TCQRSResult enumeration for error handling, rather than a local
-  // Exception, which is not likely to be transferred easily on consummer side 
+  // Exception, which is not likely to be transferred easily on consummer side
   ICQRSService = interface(IInvokable)
     /// should return the last error as an enumerate
     // - when stubed or mocked via TInterfaceStub, any method interface would
@@ -219,7 +219,7 @@ type
   // - in addition to Start/Stop methods, Halt would force the whole executable
   // to abort its execution, SubscribeLog allows log monitoring, and
   // DatabaseList/DatabaseExecute remote SQL/SOA execution on one or several
-  // logicial REST servers 
+  // logicial REST servers
   // - those methods would allow a single administration daemon (installed e.g.
   // as a Windows Service) to be able to launch and monitor child processes as
   // individual executables, or via a custom DDD's ToolsAdmin tool
@@ -242,7 +242,7 @@ type
     /// execute a SQL query on an internal database
     // - the database name should match one existing in the DatabaseList
     // - the supplied SQL parameter may be #cmd internal commands: in this case,
-    // the database name may not be mandatory 
+    // the database name may not be mandatory
     // - will return JSON most of the time, but may return binary if needed
     function DatabaseExecute(const DatabaseName,SQL: RawUTF8): TServiceCustomAnswer;
     /// used to subscribe for real-time remote log monitoring
@@ -313,8 +313,8 @@ type
   // !   CqrsBeginMethod(qsNone,result); // reset the error information to cqrsUnspecifiedError
   // !   ... // do some work
   // !   if error then
-  // !     CqrsSetResultMsg(cqrsUnspecifiedError,'Oups! For "%"',[name]) else
-  // !     CqrsSetResult(cqrsSuccess); // instead of result := cqrsSuccess
+  // !     CqrsSetResultMsg(cqrsUnspecifiedError,'Oups! For "%"',[name],result) else
+  // !     CqrsSetResult(cqrsSuccess,result); // instead of result := cqrsSuccess
   // !   end;
   // - the methods are implemented as a simple state machine, following
   // the TCQRSQueryAction and TCQRSQueryState definitions
@@ -322,7 +322,6 @@ type
   // CqrsBeginMethod/CqrsSetResult feature should be used in a single context
   TCQRSService = class(TInjectableObject, ICQRSService)
   protected
-    fLastErrorAddress: ^TCQRSResult;
     fLastError: TCQRSResult;
     fLastErrorContext: variant;
     fAction: TCQRSQueryAction;
@@ -336,20 +335,23 @@ type
       aError: TCQRSResult=cqrsUnspecifiedError): boolean; virtual;
     function CqrsSetResultError(aError: TCQRSResult): TCQRSResult; virtual;
     // methods to be used to set the process end status
-    procedure CqrsSetResult(Error: TCQRSResult); overload;
-    procedure CqrsSetResult(E: Exception); overload;
-    procedure CqrsSetResultSuccessIf(SuccessCondition: boolean;
+    procedure CqrsSetResult(Error: TCQRSResult; var Result: TCQRSResult); overload;
+    procedure CqrsSetResult(E: Exception; var Result: TCQRSResult); overload;
+    procedure CqrsSetResultSuccessIf(SuccessCondition: boolean; var Result: TCQRSResult;
       ErrorIfFalse: TCQRSResult=cqrsDataLayerError);
-    procedure CqrsSetResultMsg(Error: TCQRSResult; const ErrorMessage: RawUTF8); overload;
-    procedure CqrsSetResultMsg(Error: TCQRSResult;
-      const ErrorMsgFmt: RawUTF8; const ErrorMsgArgs: array of const); overload;
-    procedure CqrsSetResultString(Error: TCQRSResult; const ErrorMessage: string);
-    procedure CqrsSetResultDoc(Error: TCQRSResult; const ErrorInfo: variant);
-    procedure CqrsSetResultJSON(Error: TCQRSResult;
-      const JSONFmt: RawUTF8; const Args,Params: array of const);
+    procedure CqrsSetResultMsg(Error: TCQRSResult; const ErrorMessage: RawUTF8;
+        var Result: TCQRSResult); overload;
+    procedure CqrsSetResultMsg(Error: TCQRSResult; const ErrorMsgFmt: RawUTF8;
+      const ErrorMsgArgs: array of const; var Result: TCQRSResult); overload;
+    procedure CqrsSetResultString(Error: TCQRSResult; const ErrorMessage: string;
+      var Result: TCQRSResult);
+    procedure CqrsSetResultDoc(Error: TCQRSResult; const ErrorInfo: variant;
+      var Result: TCQRSResult);
+    procedure CqrsSetResultJSON(Error: TCQRSResult; const JSONFmt: RawUTF8;
+      const Args,Params: array of const; var Result: TCQRSResult);
     function GetLastError: TCQRSResult;
     function GetLastErrorInfo: variant; virtual;
-    procedure InternalCqrsSetResult(Error: TCQRSResult); virtual;
+    procedure InternalCqrsSetResult(Error: TCQRSResult; var Result: TCQRSResult); virtual;
     procedure AfterInternalCqrsSetResult; virtual;
   public
     /// initialize the instance
@@ -382,10 +384,10 @@ type
 
   /// a CQRS Service, ready to implement a set of synchronous (blocking) commands
   // over an asynchronous (non-blocking) service
-  // - you may use this class e.g. at API level, over a blocking REST server, 
+  // - you may use this class e.g. at API level, over a blocking REST server,
   // and communicate with the Domain event-driven services via asynchronous calls
   // - this class won't inherit from TCQRSService, since it would be called
-  // from multiple threads at once, so all CQRSSetResult() methods would fail 
+  // from multiple threads at once, so all CQRSSetResult() methods would fail
   TCQRSServiceSynch = class(TInterfacedObject)
   protected
     fSharedCallbackRef: IUnknown;
@@ -678,13 +680,13 @@ type
     // - if aAggregate is nil, fCurrentORMInstance field values would be used
     // - if aAggregate is set, its fields would be set to fCurrentORMInstance
     procedure ORMPrepareForCommit(aCommand: TSQLOccasion;
-      aAggregate: TObject); virtual;
+      aAggregate: TObject; var Result: TCQRSResult); virtual;
     /// minimal implementation using AggregateToTable() conversion
     function ORMAdd(aAggregate: TObject): TCQRSResult; virtual;
     function ORMUpdate(aAggregate: TObject): TCQRSResult; virtual;
     /// this default implementation will send the internal BATCH
     // - you should override it, if you need a specific behavior
-    procedure InternalCommit; virtual;
+    procedure InternalCommit(var Result: TCQRSResult); virtual;
     /// on rollback, delete the internal BATCH - called by Destroy
     procedure InternalRollback; virtual;
   public
@@ -1100,16 +1102,15 @@ const
 function TCQRSService.CqrsBeginMethod(aAction: TCQRSQueryAction;
   var aResult: TCQRSResult; aError: TCQRSResult): boolean;
 begin
-  fLastErrorAddress := @aResult;
-  fLastErrorAddress^ := aError;
+  aResult := aError;
   VarClear(fLastErrorContext);
   if (aAction in NEEDS_QUERY) and (fState<qsQuery) then begin
-    CqrsSetResult(cqrsNoPriorQuery);
+    CqrsSetResult(cqrsNoPriorQuery, aResult);
     result := false;
     exit;
   end;
   if (aAction in NEEDS_COMMAND) and (fState<qsCommand) then begin
-    CqrsSetResult(cqrsNoPriorCommand);
+    CqrsSetResult(cqrsNoPriorCommand, aResult);
     result := false;
     exit;
   end;
@@ -1120,28 +1121,25 @@ end;
 function TCQRSService.CqrsSetResultError(aError: TCQRSResult): TCQRSResult;
 begin
   CqrsBeginMethod(qaNone,result);
-  CqrsSetResult(aError);
+  CqrsSetResult(aError,result);
 end;
 
-procedure TCQRSService.CqrsSetResult(Error: TCQRSResult);
+procedure TCQRSService.CqrsSetResult(Error: TCQRSResult; var Result: TCQRSResult);
 begin
-  InternalCqrsSetResult(Error);
+  InternalCqrsSetResult(Error,Result);
   AfterInternalCqrsSetResult;
 end;
 
-procedure TCQRSService.CqrsSetResult(E: Exception);
+procedure TCQRSService.CqrsSetResult(E: Exception; var Result: TCQRSResult);
 begin
-  InternalCqrsSetResult(cqrsInternalError);
+  InternalCqrsSetResult(cqrsInternalError,Result);
   _ObjAddProps(['Exception',ObjectToVariantDebug(E)],fLastErrorContext);
   AfterInternalCqrsSetResult;
 end;
 
-procedure TCQRSService.InternalCqrsSetResult(Error: TCQRSResult);
+procedure TCQRSService.InternalCqrsSetResult(Error: TCQRSResult; var Result: TCQRSResult);
 begin
-  if fLastErrorAddress=nil then
-    raise ECQRSException.CreateUTF8(
-      '%.CqrsSetResult(%) with no prior CqrsBeginMethod',[self,ToText(Error)^]);
-  fLastErrorAddress^ := Error;
+  Result := Error;
   fLastError := Error;
   if Error<>cqrsSuccess then
     fLastErrorContext := ObjectToVariantDebug(self,'%',[NowToString]) else
@@ -1169,47 +1167,47 @@ begin
 end;
 
 procedure TCQRSService.CqrsSetResultSuccessIf(SuccessCondition: boolean;
-  ErrorIfFalse: TCQRSResult);
+  var Result: TCQRSResult; ErrorIfFalse: TCQRSResult);
 begin
   if SuccessCondition then
-    CqrsSetResult(cqrsSuccess) else
-    CqrsSetResult(ErrorIfFalse);
+    CqrsSetResult(cqrsSuccess,Result) else
+    CqrsSetResult(ErrorIfFalse,Result);
 end;
 
-procedure TCQRSService.CqrsSetResultDoc(Error: TCQRSResult;
-  const ErrorInfo: variant);
+procedure TCQRSService.CqrsSetResultDoc(Error: TCQRSResult; const ErrorInfo: variant;
+  var Result: TCQRSResult);
 begin
-  InternalCqrsSetResult(Error);
+  InternalCqrsSetResult(Error,Result);
   _ObjAddProps(['ErrorInfo',ErrorInfo],fLastErrorContext);
   AfterInternalCqrsSetResult;
 end;
 
 procedure TCQRSService.CqrsSetResultJSON(Error: TCQRSResult;
-  const JSONFmt: RawUTF8; const Args,Params: array of const);
+  const JSONFmt: RawUTF8; const Args,Params: array of const; var Result: TCQRSResult);
 begin
-  CqrsSetResultDoc(Error,_JsonFastFmt(JSONFmt,Args,Params));
+  CqrsSetResultDoc(Error,_JsonFastFmt(JSONFmt,Args,Params),Result);
 end;
 
 procedure TCQRSService.CqrsSetResultMsg(Error: TCQRSResult;
-  const ErrorMessage: RawUTF8);
+  const ErrorMessage: RawUTF8; var Result: TCQRSResult);
 begin
-  InternalCqrsSetResult(Error);
+  InternalCqrsSetResult(Error,Result);
   _ObjAddProps(['Msg',ErrorMessage],fLastErrorContext);
   AfterInternalCqrsSetResult;
 end;
 
 procedure TCQRSService.CqrsSetResultString(Error: TCQRSResult;
-  const ErrorMessage: string);
+  const ErrorMessage: string; var Result: TCQRSResult);
 begin
-  InternalCqrsSetResult(Error);
+  InternalCqrsSetResult(Error,Result);
   _ObjAddProps(['Msg',ErrorMessage],fLastErrorContext);
   AfterInternalCqrsSetResult;
 end;
 
 procedure TCQRSService.CqrsSetResultMsg(Error: TCQRSResult;
-  const ErrorMsgFmt: RawUTF8; const ErrorMsgArgs: array of const);
+  const ErrorMsgFmt: RawUTF8; const ErrorMsgArgs: array of const; var Result: TCQRSResult);
 begin
-  CqrsSetResultMsg(Error,FormatUTF8(ErrorMsgFmt,ErrorMsgArgs));
+  CqrsSetResultMsg(Error,FormatUTF8(ErrorMsgFmt,ErrorMsgArgs),Result);
 end;
 
 destructor TCQRSService.Destroy;
@@ -1808,9 +1806,9 @@ function TDDDRepositoryRestQuery.ORMSelectOne(const ORMWhereClauseFmt: RawUTF8;
 begin
   CqrsBeginMethod(qaSelect,result);
   if ForcedBadRequest then
-    CqrsSetResult(cqrsBadRequest) else
+    CqrsSetResult(cqrsBadRequest,result) else
     CqrsSetResultSuccessIf(Factory.Rest.Retrieve(ORMWhereClauseFmt,[],Bounds,
-      fCurrentORMInstance),cqrsNotFound);
+      fCurrentORMInstance),result,cqrsNotFound);
 end;
 
 function TDDDRepositoryRestQuery.ORMSelectID(const ID: TID;
@@ -1818,12 +1816,12 @@ function TDDDRepositoryRestQuery.ORMSelectID(const ID: TID;
 begin
   CqrsBeginMethod(qaSelect,result);
   if ForcedBadRequest or (ID=0) then
-    CqrsSetResult(cqrsBadRequest) else
+    CqrsSetResult(cqrsBadRequest,result) else
   if RetrieveRecord then
-    CqrsSetResultSuccessIf(Factory.Rest.Retrieve(ID,fCurrentORMInstance),cqrsNotFound)
+    CqrsSetResultSuccessIf(Factory.Rest.Retrieve(ID,fCurrentORMInstance),result,cqrsNotFound)
   else begin
     fCurrentORMInstance.IDValue := ID;
-    CqrsSetResult(cqrsSuccess);
+    CqrsSetResult(cqrsSuccess,result);
   end
 end;
 
@@ -1839,9 +1837,9 @@ function TDDDRepositoryRestQuery.ORMSelectAll(
 begin
   CqrsBeginMethod(qaSelect,result);
   if ForcedBadRequest then
-    CqrsSetResult(cqrsBadRequest) else
+    CqrsSetResult(cqrsBadRequest,result) else
     CqrsSetResultSuccessIf(fCurrentORMInstance.FillPrepare(
-      Factory.Rest,ORMWhereClauseFmt,[],Bounds),cqrsNotFound);
+      Factory.Rest,ORMWhereClauseFmt,[],Bounds),result,cqrsNotFound);
 end;
 
 function TDDDRepositoryRestQuery.ORMSelectCount(
@@ -1851,13 +1849,13 @@ var tmp: Int64;
 begin
   CqrsBeginMethod(qaNone,result); // qaNone and not qaSelect which would fill ORM
   if ForcedBadRequest then
-    CqrsSetResult(cqrsBadRequest) else
+    CqrsSetResult(cqrsBadRequest,result) else
     if Factory.Rest.OneFieldValue(
         Factory.Table,'count(*)',ORMWhereClauseFmt,Args,Bounds,tmp) then begin
        aResultCount := tmp;
-       CqrsSetResult(cqrsSuccess)
+       CqrsSetResult(cqrsSuccess,result)
     end else
-      CqrsSetResult(cqrsNotFound);
+      CqrsSetResult(cqrsNotFound,result);
 end;
 
 function TDDDRepositoryRestQuery.GetCount: integer;
@@ -1877,7 +1875,7 @@ function TDDDRepositoryRestQuery.ORMGetAggregate(
 begin
   if CqrsBeginMethod(qaGet,result) then begin
     Factory.AggregateFromTable(fCurrentORMInstance,aAggregate);
-    CqrsSetResult(cqrsSuccess);
+    CqrsSetResult(cqrsSuccess,result);
   end;
 end;
 
@@ -1888,9 +1886,9 @@ begin
     if (aRewind and fCurrentORMInstance.FillRewind) or
        (not aRewind and fCurrentORMInstance.FillOne) then begin
       Factory.AggregateFromTable(fCurrentORMInstance,aAggregate);
-      CqrsSetResult(cqrsSuccess);
+      CqrsSetResult(cqrsSuccess,result);
     end else
-      CqrsSetResult(cqrsNoMoreData);
+      CqrsSetResult(cqrsNoMoreData,result);
 end;
 
 function TDDDRepositoryRestQuery.ORMGetAllAggregates(
@@ -1899,11 +1897,11 @@ begin
   if CqrsBeginMethod(qaGet,result) then
   if (fCurrentORMInstance.FillTable=nil) or
      (fCurrentORMInstance.FillTable.RowCount=0) then
-    CqrsSetResult(cqrsSuccess) else begin
+    CqrsSetResult(cqrsSuccess,result) else begin
     Factory.AggregatesFromTableFill(fCurrentORMInstance,aAggregateObjArray);
     if Pointer(aAggregateObjArray)=nil then
-      CqrsSetResult(cqrsNoMoreData) else
-      CqrsSetResult(cqrsSuccess);
+      CqrsSetResult(cqrsNoMoreData,result) else
+      CqrsSetResult(cqrsSuccess,result);
   end;
 end;
 
@@ -1928,7 +1926,7 @@ end;
 function TDDDRepositoryRestCommand.Delete: TCQRSResult;
 begin
   if CqrsBeginMethod(qaCommandOnSelect,result) then
-    ORMPrepareForCommit(soDelete,nil);
+    ORMPrepareForCommit(soDelete,nil,result);
 end;
 
 function TDDDRepositoryRestCommand.DeleteAll: TCQRSResult;
@@ -1936,29 +1934,29 @@ var i: integer;
 begin
   if CqrsBeginMethod(qaCommandOnSelect,result) then
     if fCurrentORMInstance.FillTable=nil then
-      ORMPrepareForCommit(soDelete,nil) else
+      ORMPrepareForCommit(soDelete,nil,result) else
       if fState<qsQuery then
-        CqrsSetResult(cqrsNoPriorQuery) else begin
+        CqrsSetResult(cqrsNoPriorQuery,result) else begin
         ORMEnsureBatchExists;
         for i := 1 to fCurrentORMInstance.FillTable.RowCount do
           if fBatch.Delete(fCurrentORMInstance.FillTable.IDColumnHiddenValue(i))<0 then begin
-            CqrsSetResult(cqrsDataLayerError);
+            CqrsSetResult(cqrsDataLayerError,result);
             exit;
           end;
-        CqrsSetResult(cqrsSuccess);
+        CqrsSetResult(cqrsSuccess,result);
       end;
 end;
 
 function TDDDRepositoryRestCommand.ORMAdd(aAggregate: TObject): TCQRSResult;
 begin
   if CqrsBeginMethod(qaCommandDirect,result) then
-    ORMPrepareForCommit(soInsert,aAggregate);
+    ORMPrepareForCommit(soInsert,aAggregate,result);
 end;
 
 function TDDDRepositoryRestCommand.ORMUpdate(aAggregate: TObject): TCQRSResult;
 begin
   if CqrsBeginMethod(qaCommandOnSelect,result) then
-    ORMPrepareForCommit(soUpdate,aAggregate);
+    ORMPrepareForCommit(soUpdate,aAggregate,result);
 end;
 
 procedure TDDDRepositoryRestCommand.ORMEnsureBatchExists;
@@ -1969,7 +1967,7 @@ begin
 end;
 
 procedure TDDDRepositoryRestCommand.ORMPrepareForCommit(
-  aCommand: TSQLOccasion; aAggregate: TObject);
+  aCommand: TSQLOccasion; aAggregate: TObject; var Result: TCQRSResult);
 var msg: RawUTF8;
     validator: TSynValidate;
     ndx: integer;
@@ -1978,19 +1976,19 @@ var msg: RawUTF8;
   begin
     if (validator<>nil) and
        (validator.ClassType=TSynValidateUniqueField) then
-      CqrsSetResultMsg(cqrsAlreadyExists,msg) else
-      CqrsSetResultMsg(default,msg);
+      CqrsSetResultMsg(cqrsAlreadyExists,msg,Result) else
+      CqrsSetResultMsg(default,msg,Result);
   end;
 
 begin
   case aCommand of
   soSelect: begin
-    CqrsSetResult(cqrsBadRequest);
+    CqrsSetResult(cqrsBadRequest,Result);
     exit;
   end;
   soUpdate,soDelete:
     if (fState<qsQuery) or (fCurrentORMInstance.IDValue=0) then begin
-      CqrsSetResult(cqrsNoPriorQuery);
+      CqrsSetResult(cqrsNoPriorQuery,Result);
       exit;
     end;
   end;
@@ -2017,14 +2015,14 @@ begin
   soUpdate: ndx := fBatch.Update(fCurrentORMInstance);
   soDelete: ndx := fBatch.Delete(fCurrentORMInstance.IDValue);
   end;
-  CqrsSetResultSuccessIf(ndx>=0);
+  CqrsSetResultSuccessIf(ndx>=0,Result);
 end;
 
-procedure TDDDRepositoryRestCommand.InternalCommit;
+procedure TDDDRepositoryRestCommand.InternalCommit(var Result: TCQRSResult);
 begin
   if fBatch.Count=0 then
-    CqrsSetResult(cqrsBadRequest) else begin
-    CqrsSetResultSuccessIf(Factory.Rest.BatchSend(fBatch,fBatchResults)=HTTP_SUCCESS);
+    CqrsSetResult(cqrsBadRequest,Result) else begin
+    CqrsSetResultSuccessIf(Factory.Rest.BatchSend(fBatch,fBatchResults)=HTTP_SUCCESS,Result);
     FreeAndNil(fBatch);
   end;
 end;
@@ -2038,14 +2036,14 @@ end;
 function TDDDRepositoryRestCommand.Commit: TCQRSResult;
 begin
   if CqrsBeginMethod(qaCommit,result) then
-    InternalCommit;
+    InternalCommit(result);
 end;
 
 function TDDDRepositoryRestCommand.Rollback: TCQRSResult;
 begin
   CqrsBeginMethod(qaNone,result,cqrsSuccess);
   if fBatch.Count=0 then
-    CqrsSetResult(cqrsNoPriorCommand) else
+    CqrsSetResult(cqrsNoPriorCommand,result) else
     InternalRollback;
 end;
 
@@ -2320,10 +2318,10 @@ begin
         fProcessLock.Leave;
       end;
     end;
-    CqrsSetResult(cqrsSuccess);
+    CqrsSetResult(cqrsSuccess,result);
   except
     on E: Exception do
-      CqrsSetResult(E);
+      CqrsSetResult(E,result);
   end;
 end;
 
@@ -2369,10 +2367,13 @@ end;
 
 destructor TDDDAdministratedDaemon.Destroy;
 var dummy: variant;
+{$ifdef WITHLOG}
+    log: ISynLog;
 begin
-  {$ifdef WITHLOG}
-  fLog.SynLog.Enter(self);
-  {$endif}
+  log := fLog.SynLog.Enter(self, 'Destroy');
+{$else}
+begin
+{$endif}
   if InternalIsRunning then
     Halt(dummy);
   try
@@ -2387,91 +2388,100 @@ begin
 end;
 
 function TDDDAdministratedDaemon.Start: TCQRSResult;
+{$ifdef WITHLOG}
+var log: ISynLog;
 begin
-  {$ifdef WITHLOG}
-  fLog.SynLog.Enter(self);
-  {$endif}
+  log := fLog.SynLog.Enter(self, 'Start');
+{$else}
+begin
+{$endif}
   CqrsBeginMethod(qaNone,result);
   if not (fStatus in [dsCreated,dsStopped]) then
     CqrsSetResultError(cqrsBadRequest) else
   if InternalIsRunning then
-    CqrsSetResult(cqrsAlreadyExists) else
+    CqrsSetResult(cqrsAlreadyExists,result) else
     try
       {$ifdef WITHLOG}
-      fLog.SynLog.Log(sllDDDInfo,'Starting',self);
+      log.Log(sllDDDInfo,'Starting',self);
       {$endif}
       InternalStart;
       fStatus := dsStarted;
-      CqrsSetResult(cqrsSuccess);
+      CqrsSetResult(cqrsSuccess,result);
     except
       on E: Exception do
       try
-        CqrsSetResult(E);
+        CqrsSetResult(E,result);
         InternalStop; // automatically release resources on starting error
       except
       end;
     end;
 end;
 
-function TDDDAdministratedDaemon.RetrieveState(
-  out Status: variant): TCQRSResult;
+function TDDDAdministratedDaemon.RetrieveState(out Status: variant): TCQRSResult;
 begin
   CqrsBeginMethod(qaNone,result);
   try
     if not InternalIsRunning then
-      CqrsSetResult(cqrsBadRequest) else
+      CqrsSetResult(cqrsBadRequest,result) else
     if InternalRetrieveState(Status) then
-      CqrsSetResult(cqrsSuccess) else
-      CqrsSetResult(cqrsInternalError);
+      CqrsSetResult(cqrsSuccess,result) else
+      CqrsSetResult(cqrsInternalError,result);
   except
     on E: Exception do
-      CqrsSetResult(E);
+      CqrsSetResult(E,result);
   end;
 end;
 
-function TDDDAdministratedDaemon.Stop(
-  out Information: variant): TCQRSResult;
+function TDDDAdministratedDaemon.Stop(out Information: variant): TCQRSResult;
+{$ifdef WITHLOG}
+var log: ISynLog;
 begin
-  {$ifdef WITHLOG}
-  fLog.SynLog.Enter(self);
-  {$endif}
+  log := fLog.SynLog.Enter(self, 'Stop');
+{$else}
+begin
+{$endif}
   CqrsBeginMethod(qaNone,result);
   if fStatus<>dsStarted then
     CqrsSetResultError(cqrsBadRequest) else begin
     if InternalRetrieveState(Information) then
     try
+      {$ifdef WITHLOG}
+      log.Log(sllDDDInfo,'Stopping %',[Information],self);
+      {$endif}
       InternalStop; // always stop
       fStatus := dsStopped;
       {$ifdef WITHLOG}
-      fLog.SynLog.Log(sllDDDInfo,'Stopped: %',[Information],self);
+      log.Log(sllDDDInfo,'Stopped: %',[Information],self);
       {$endif}
-      CqrsSetResult(cqrsSuccess);
+      CqrsSetResult(cqrsSuccess,result);
     except
       on E: Exception do
-        CqrsSetResult(E);
+        CqrsSetResult(E,result);
     end else
-      CqrsSetResult(cqrsInternalError);
+      CqrsSetResult(cqrsInternalError,result);
   end;
 end;
 
-function TDDDAdministratedDaemon.Halt(
-  out Information: variant): TCQRSResult;
+function TDDDAdministratedDaemon.Halt(out Information: variant): TCQRSResult;
+{$ifdef WITHLOG}
+var log: ISynLog;
 begin
-  {$ifdef WITHLOG}
-  fLog.SynLog.Enter(self);
-  {$endif}
+  log := fLog.SynLog.Enter(self, 'Halt');
+{$else}
+begin
+{$endif}
   CqrsBeginMethod(qaNone,result);
   if InternalIsRunning then
   try
     {$ifdef WITHLOG}
-    fLog.SynLog.Log(sllDDDInfo,'Halting',self);
+    log.Log(sllDDDInfo,'Halting',self);
     {$endif}
-    CqrsSetResult(Stop(Information));
+    CqrsSetResult(Stop(Information),result);
   except
     on E: Exception do
-      CqrsSetResult(E);
+      CqrsSetResult(E,result);
   end else
-    CqrsSetResult(cqrsSuccess);
+    CqrsSetResult(cqrsSuccess,result);
   fStatus := dsHalted;
   fFinished.SetEvent;
 end;
@@ -2481,7 +2491,7 @@ begin
   if fStatus in [dsUnknown] then
     exit;
   {$ifdef WITHLOG}
-  fLog.SynLog.Enter(self);
+  with fLog.SynLog.Enter(self, 'WaitUntilHalted') do
   {$endif}
   FixedWaitForever(fFinished);
 end;
@@ -2489,10 +2499,13 @@ end;
 procedure TDDDAdministratedDaemon.Execute(RemotelyAdministrated: boolean);
 var name: string;
     msg: RawUTF8;
+{$ifdef WITHLOG}
+    log: ISynLog;
 begin
-  {$ifdef WITHLOG}
-  fLog.SynLog.Enter(self);
-  {$endif}
+  log := fLog.SynLog.Enter(self, 'Execute');
+{$else}
+begin
+{$endif}
   name := ClassName;
   {$I-}
   if RemotelyAdministrated then begin

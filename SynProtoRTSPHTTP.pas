@@ -30,7 +30,7 @@ unit SynProtoRTSPHTTP;
 
   Contributor(s):
 
-  
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -221,8 +221,9 @@ begin
 end;
 
 destructor TRTSPOverHTTPServer.Destroy;
+var log: ISynLog;
 begin
-  fLog.Enter(self);
+  log := fLog.Enter(self{$ifndef DELPHI5OROLDER},'Destroy'{$endif});
   inherited Destroy;
   fPendingGet.Free;
 end;
@@ -377,7 +378,7 @@ var
   text: SockString;
   log: ISynLog;
 begin // here we follow the steps and content stated by https://goo.gl/CX6VA3
-  log := fLog.Enter(self);
+  log := fLog.Enter(self{$ifndef DELPHI5OROLDER},'Tests'{$endif});
   if (self = nil) or (fRtspServer <> '127.0.0.1') then
     test.Check(false, 'expect a running proxy on 127.0.0.1')
   else

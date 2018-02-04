@@ -203,9 +203,9 @@ begin
   if DoHash(fChallengeLogonName+':'+fChallengeNonce+':'+
      (fCurrentORMInstance as TSQLRecordUserAuth).HashedPassword)=aChallengedPassword then begin
     fLogged := true;
-    CqrsSetResult(cqrsSuccess);
+    CqrsSetResult(cqrsSuccess,result);
   end else
-    CqrsSetResultMsg(cqrsBadRequest,'Wrong Password for "%"',[fChallengeLogonName]);
+    CqrsSetResultMsg(cqrsBadRequest,'Wrong Password for "%"',[fChallengeLogonName],result);
   fChallengeNonce := '';
   fChallengeLogonName := '';
 end;
@@ -256,7 +256,7 @@ begin
     Logon := aLogonName;
     HashedPassword := aHashedPassword;
   end;
-  ORMPrepareForCommit(soInsert,nil);
+  ORMPrepareForCommit(soInsert,nil,result);
 end;
 
 function TDDDAuthenticationAbstract.UpdatePassword(
@@ -265,7 +265,7 @@ begin
   if not CqrsBeginMethod(qaCommandOnSelect,result) then
     exit;
   (fCurrentORMInstance as TSQLRecordUserAuth).HashedPassword := aHashedPassword;
-  ORMPrepareForCommit(soUpdate,nil);
+  ORMPrepareForCommit(soUpdate,nil,result);
 end;
 
 class procedure TDDDAuthenticationAbstract.RegressionTests(

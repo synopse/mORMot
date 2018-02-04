@@ -311,7 +311,7 @@ type
     /// clear the session
     // - by deleting the cookie on the client side
     procedure Finalize; override;
-    /// return all cookie generation information as base64 encoded text 
+    /// return all cookie generation information as base64 encoded text
     // - to be retrieved via LoadContext
     function SaveContext: RawUTF8; override;
     /// restore cookie generation information from SaveContext text format
@@ -622,7 +622,7 @@ type
     // if any TMVCRun instance is store here, will be freed by Destroy
     // but note that a single TMVCApplication logic may handle several TMVCRun
     fMainRunner: TMVCRun;
-    procedure SetSession(const Value: TMVCSessionAbstract);
+    procedure SetSession(Value: TMVCSessionAbstract);
     /// to be called when the data model did change to force content re-creation
     // - this default implementation will call fMainRunner.NotifyContentChanged
     procedure FlushAnyCache; virtual;
@@ -1443,7 +1443,7 @@ begin
   Action.RedirectToMethodParameters := '';
 end;
 
-procedure TMVCApplication.SetSession(const Value: TMVCSessionAbstract);
+procedure TMVCApplication.SetSession(Value: TMVCSessionAbstract);
 begin
   FreeAndNil(fSession);
   fSession := Value;

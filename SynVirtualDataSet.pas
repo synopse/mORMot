@@ -235,7 +235,7 @@ procedure AddBcd(WR: TTextWriter; const AValue: TBcd);
 type
   /// a string buffer, used by InternalBCDToBuffer to store its output text
   TBCDBuffer = array[0..66] of AnsiChar;
-  
+
 /// convert a TBcd value as text to the output buffer
 // - buffer is to be array[0..66] of AnsiChar
 // - returns the resulting text start in PBeg, and the length as function result

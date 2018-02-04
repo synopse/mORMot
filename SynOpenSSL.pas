@@ -391,7 +391,7 @@ type
   TOnOpenSSLNotify = procedure(Sender: TOpenSSLConnectionClient) of object;
 
   /// event raised when reading or writing some data over an Open SSL connection
-  // - Sender will actually be a TOpenSSLConnectionClient instance, but is 
+  // - Sender will actually be a TOpenSSLConnectionClient instance, but is
   // defined as a TObject so that it may be implemented on a class without any
   // dependency to the SynOpenSSL unit
   TOnOpenSSLData = procedure(Sender: TObject; Buffer: pointer; Len: integer) of object;
@@ -436,9 +436,9 @@ type
     // - by default, a TLS 1.0 minimum level is defined, since SSL 2/3 are unsafe
     function Connect(const Read, Write: TOnOpenSSLData; Level: TOpenSSLConnectionLevel = tls10;
       Options: TOpenSSLConnectionOptions = []): boolean;
-    /// read some data from the secured SSL connection 
+    /// read some data from the secured SSL connection
     procedure SecureRead(Buffer: pointer; Len: integer);
-    /// write some data to the secured SSL connection 
+    /// write some data to the secured SSL connection
     function SecureWrite(Buffer: pointer; Len: integer): boolean;
     /// closes a client TSL connection
     procedure Disconnect;

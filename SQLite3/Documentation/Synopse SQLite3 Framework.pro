@@ -11006,10 +11006,10 @@ When any {\f1\fs20 exception} is raised in a service method, a {\f1\fs20 TCQRSRe
 !!  CqrsBeginMethod(qaNone,result);
 !  try
 !....
-!    CqrsSetResult(cqrsSuccess);
+!    CqrsSetResult(cqrsSuccess,result);
 !  except
 !!    on E: Exception do
-!!      CqrsSetResult(E,cqrsInternalError);
+!!      CqrsSetResult(E,cqrsInternalError,result);
 !  end;
 !end;
 But such {\f1\fs20 exception} should be {\f1\fs20 exception}al, as we already stated.

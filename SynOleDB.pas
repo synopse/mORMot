@@ -153,7 +153,7 @@ const
   IID_IDBPromptInitialize: TGUID = '{2206CCB0-19C1-11D1-89E0-00C04FD7A829}';
   CLSID_DATALINKS: TGUID = '{2206CDB2-19C1-11D1-89E0-00C04FD7A829}';
   CLSID_MSDAINITIALIZE: TGUID = '{2206CDB0-19C1-11D1-89E0-00C04FD7A829}';
-  CLSID_ROWSET_TVP: TGUID = '{C7EF28D5-7BEE-443F-86DA-E3984FCD4DF9}';  
+  CLSID_ROWSET_TVP: TGUID = '{C7EF28D5-7BEE-443F-86DA-E3984FCD4DF9}';
   DB_NULLGUID: TGuid = '{00000000-0000-0000-0000-000000000000}';
   DBGUID_DEFAULT: TGUID = '{C8B521FB-5CF3-11CE-ADE5-00AA0044773D}';
   DBSCHEMA_TABLES: TGUID = '{C8B52229-5CF3-11CE-ADE5-00AA0044773D}';
@@ -372,7 +372,7 @@ type
       0: (pwszName: PWideChar);
       1: (ulPropid: UINT);
   end;
-  PDBID = ^DBID;  
+  PDBID = ^DBID;
   DBID = record
     uGuid: DBIDGUID;
     eKind: DBKIND;
@@ -410,7 +410,7 @@ type
   end;
   PDBPropSet = ^TDBPropSet;
   PDBPropSetArray = ^TDBPropSetArray;
-  TDBPropSetArray = array[0..MAXBOUND] of TDBPropSet;  
+  TDBPropSetArray = array[0..MAXBOUND] of TDBPropSet;
   TDBSchemaRec = record
     SchemaGuid: TGuid;
     SupportedRestrictions: Integer;
@@ -2307,7 +2307,7 @@ var DataInitialize : IDataInitialize;
     unknown: IUnknown;
     Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self);
+  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Connect'{$endif});
   // check context
   if Connected then
     Disconnect;
@@ -2345,7 +2345,7 @@ end;
 constructor TOleDBConnection.Create(aProperties: TSQLDBConnectionProperties);
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self);
+  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Create'{$endif});
   if not aProperties.InheritsFrom(TOleDBConnectionProperties) then
     raise EOleDBException.CreateUTF8('Invalid %.Create(%)',[self,aProperties]);
   fOleDBProperties := TOleDBConnectionProperties(aProperties);
@@ -2357,7 +2357,7 @@ end;
 destructor TOleDBConnection.Destroy;
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self);
+  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Destroy'{$endif});
   try
     inherited Destroy; // call Disconnect;
     fMalloc := nil;
@@ -2371,7 +2371,7 @@ end;
 procedure TOleDBConnection.Disconnect;
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self);
+  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Disconnect'{$endif});
   try
     inherited Disconnect; // flush any cached statement
   finally
@@ -2465,7 +2465,7 @@ end;
 procedure TOleDBConnection.Commit;
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self,nil,true);
+  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Commit'{$endif});
   if assigned(fTransaction) then begin
     inherited Commit;
     try
@@ -2480,7 +2480,7 @@ end;
 procedure TOleDBConnection.Rollback;
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self,nil,true);
+  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Rollback'{$endif});
   if assigned(fTransaction) then begin
     inherited Rollback;
     OleDbCheck(nil,fTransaction.Abort(nil,False,False));
@@ -2490,7 +2490,7 @@ end;
 procedure TOleDBConnection.StartTransaction;
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self,nil,true);
+  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'StartTransaction'{$endif});
   if assigned(fTransaction) then begin
     inherited StartTransaction;
     OleDbCheck(nil,fTransaction.StartTransaction(ISOLATIONLEVEL_READCOMMITTED,0,nil,nil));
@@ -2508,7 +2508,7 @@ var DataInitialize: IDataInitialize;
     tmp: PWideChar;
     Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(self,nil,true);
+  Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'ConnectionStringDialog'{$endif});
   result := false;
   if self<>nil then
   try

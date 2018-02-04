@@ -810,7 +810,7 @@ procedure TSQLDBZEOSStatement.Prepare(const aSQL: RawUTF8;
   ExpectResults: boolean);
 var Log: ISynLog;
 begin
-  Log := SynDBLog.Enter(Self);
+  Log := SynDBLog.Enter(Self, 'Prepare');
   if (fStatement<>nil) or (fResultSet<>nil) then
     raise ESQLDBZEOS.CreateUTF8('%.Prepare() shall be called once',[self]);
   inherited Prepare(aSQL,ExpectResults); // connect if necessary
@@ -1025,11 +1025,11 @@ var i,n: integer;
     Props: TSQLDBZEOSConnectionProperties;
     Log: ISynLog;
     name: string;
-{$ifdef ZEOS72UP}
+    {$ifdef ZEOS72UP}
     arrayBinding: TZeosArrayBinding;
-{$endif}
+    {$endif}
 begin
-  Log := SynDBLog.Enter(Self);
+  Log := SynDBLog.Enter(Self, 'ExecutePrepared');
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
   with Log.Instance do
     if sllSQL in Family.Level then
