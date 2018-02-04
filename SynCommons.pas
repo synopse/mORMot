@@ -4101,6 +4101,7 @@ function DirectoryDelete(const Directory: TFileName; const Mask: TFileName='*.*'
 // ! DirectoryDeleteOlderFiles(FolderName, 1);
 // - only one level of file is deleted within the folder: no recursive deletion
 // is processed by this function, unless Recursive is TRUE
+// - if Recursive=true, caller should set TotalSize^=0 to have an accurate value
 function DirectoryDeleteOlderFiles(const Directory: TFileName; TimePeriod: TDateTime;
    const Mask: TFileName='*.*'; Recursive: Boolean=false; TotalSize: PInt64=nil): Boolean;
 
@@ -13885,6 +13886,7 @@ var
   OSVersionText: RawUTF8;
   /// some textual information about the current CPU
   CpuInfoText: RawUTF8;
+
 
 /// this function can be used to create a GDI compatible window, able to
 // receive Windows Messages for fast local communication
@@ -26515,7 +26517,7 @@ begin
   {$endif}
   if cpu='' then
     cpu := GetEnvironmentVariable('PROCESSOR_IDENTIFIER');
-  FormatUTF8('% x %',[SystemInfo.dwNumberOfProcessors,cpu],CpuInfoText);
+  FormatUTF8('% x % ('+CPU_ARCH_TEXT+')',[SystemInfo.dwNumberOfProcessors,cpu],CpuInfoText);
 end;
 
 {$else}
@@ -26585,7 +26587,7 @@ begin
       inc(modname);
     end;
     modname^ := #0;
-    FormatUTF8('% x %',[SystemInfo.dwNumberOfProcessors,beg],CpuInfoText);
+    FormatUTF8('% x % ('+CPU_ARCH_TEXT+')',[SystemInfo.dwNumberOfProcessors,beg],CpuInfoText);
   end;
 end;
 
@@ -29772,6 +29774,8 @@ var F: TSearchRec;
     Dir: TFileName;
     old: TDateTime;
 begin
+  if not Recursive and (TotalSize<>nil) then
+    TotalSize^ := 0;
   result := true;
   if (Directory='') or not DirectoryExists(Directory) then
     exit;
