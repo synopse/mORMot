@@ -522,9 +522,12 @@ procedure TSQLHttpClientGeneric.InternalURI(var Call: TSQLRestURIParams);
 var Head, Content, ContentType: RawUTF8;
     P, PBeg: PUTF8Char;
     res: Int64Rec;
-begin
 {$ifdef WITHLOG}
-  fLogClass.Enter(self);
+    log: ISynLog;
+begin
+  log := fLogClass.Enter('InternalURI %', [Call.Method], self);
+{$else}
+begin
 {$endif}
   if InternalCheckOpen then begin
     Head := Call.InHead;
@@ -558,7 +561,7 @@ begin
     Call.OutStatus := HTTP_NOTIMPLEMENTED; // 501 indicates not socket closed
 {$ifdef WITHLOG}
   with Call do
-    fLogFamily.SynLog.Log(sllClient,'% % status=% len=% state=%',
+    log.Log(sllClient,'% % status=% len=% state=%',
       [method,url,OutStatus,length(OutBody),OutInternalState],self);
 {$endif}
 end;
@@ -838,9 +841,12 @@ function TSQLHttpClientWebsockets.WebSocketsUpgrade(
   const aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX,
   aWebSocketsCompression: boolean): RawUTF8;
 var sockets: THttpClientWebSockets;
-begin
 {$ifdef WITHLOG}
-  fLogFamily.SynLog.Enter(self);
+    log: ISynLog;
+begin
+  log := fLogFamily.SynLog.Enter(self, 'WebSocketsUpgrade');
+{$else}
+begin
 {$endif}
   sockets := WebSockets;
   if sockets=nil then
@@ -858,10 +864,9 @@ begin
       end;
   end;
 {$ifdef WITHLOG}
-  with fLogFamily.SynLog do
-    if result<>'' then
-      Log(sllWarning,'[%] error upgrading %',[result,sockets],self) else
-      Log(sllHTTP,'HTTP link upgraded to WebSockets using %',[sockets],self);
+  if result<>'' then
+    log.Log(sllWarning,'[%] error upgrading %',[result,sockets],self) else
+    log.Log(sllHTTP,'HTTP link upgraded to WebSockets using %',[sockets],self);
 {$endif}
 end;
 
