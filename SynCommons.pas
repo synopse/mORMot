@@ -5132,7 +5132,7 @@ type
     procedure SetCapacity(aCapacity: integer);
     procedure SetCompare(const aCompare: TDynArraySortCompare); {$ifdef HASINLINE}inline;{$endif}
     function FindIndex(const Elem; aIndex: PIntegerDynArray;
-      aCompare: TDynArraySortCompare): integer;
+      aCompare: TDynArraySortCompare): PtrInt;
     function GetArrayTypeName: RawUTF8;
     function GetIsObjArray: boolean; {$ifdef HASINLINE}inline;{$endif}
     procedure SetIsObjArray(aValue: boolean); {$ifdef HASINLINE}inline;{$endif}
@@ -5246,7 +5246,7 @@ type
     // there is no way with standard RTTI do know which they are)
     // - warning: Elem must be of the same exact type than the dynamic array,
     // and must be a reference to a variable (you can't write IndexOf(i+10) e.g.)
-    function IndexOf(const Elem): integer;
+    function IndexOf(const Elem): PtrInt;
     /// search for an element value inside the dynamic array
     // - this method will use the Compare property function for the search
     // - return the index found (0..Count-1), or -1 if Elem was not found
@@ -5254,7 +5254,7 @@ type
     // - if the array is not sorted, it will use slower O(n) iterating search
     // - warning: Elem must be of the same exact type than the dynamic array,
     // and must be a reference to a variable (you can't write Find(i+10) e.g.)
-    function Find(const Elem): integer; overload;
+    function Find(const Elem): PtrInt; overload;
     /// search for an element value inside the dynamic array, from an external
     // indexed lookup table
     // - return the index found (0..Count-1), or -1 if Elem was not found
@@ -5268,7 +5268,7 @@ type
     // - warning; the lookup index should be synchronized if array content
     // is modified (in case of adding or deletion)
     function Find(const Elem; const aIndex: TIntegerDynArray;
-      aCompare: TDynArraySortCompare): integer; overload;
+      aCompare: TDynArraySortCompare): PtrInt; overload;
     /// search for an element value, then fill all properties if match
     // - this method will use the Compare property function for the search,
     // or the supplied indexed lookup table and its associated compare function
@@ -5492,6 +5492,11 @@ type
     // the source dynamic array (leave as -1 to add till the end)
     procedure AddArray(const DynArrayVar; aStartIndex: integer=0; aCount: integer=-1);
     {$ifndef DELPHI5OROLDER}
+    /// fast initialize a wrapper for an existing dynamic array of the same type
+    // - is slightly faster than
+    // ! Init(aAnother.ArrayType,aValue,nil);
+    procedure InitFrom(const aAnother: TDynArray; var aValue);
+      {$ifdef HASINLINE}inline;{$endif}
     /// add elements from a given TDynArray
     // - the supplied source TDynArray MUST be of the same exact type as the
     // current used for this TDynArray, otherwise it won't do anything
@@ -15092,7 +15097,6 @@ type
     function GetArrayExistingByName(const aName: RawUTF8): PDocVariantData;
     function GetArrayOrAddByName(const aName: RawUTF8): PDocVariantData;
     function GetAsDocVariantByIndex(aIndex: integer): PDocVariantData;
-    procedure ExchgValues(v1,v2: integer);
   public
     /// initialize a TDocVariantData to store some document-based content
     // - can be used with a stack-allocated TDocVariantData variable:
@@ -39713,7 +39717,7 @@ var info,fieldinfo: PTypeInfo;
     {$ifdef FPC_NEWRTTI}
     recInitData: PRecInitData;
     {$endif}
-    F, offset: integer;
+    F, offset: PtrInt;
     field: PFieldInfo;
     A, B: PAnsiChar;
 begin
@@ -48277,8 +48281,9 @@ begin
 end;
 
 function TDynArray.Find(const Elem; const aIndex: TIntegerDynArray;
-  aCompare: TDynArraySortCompare): integer;
-var n, L, cmp: integer;
+  aCompare: TDynArraySortCompare): PtrInt;
+var n, L: PtrInt;
+    cmp: integer;
     P: PAnsiChar;
 begin
   n := Count;
@@ -48310,7 +48315,7 @@ begin
 end;
 
 function TDynArray.FindIndex(const Elem; aIndex: PIntegerDynArray;
-  aCompare: TDynArraySortCompare): integer;
+  aCompare: TDynArraySortCompare): PtrInt;
 begin
   if aIndex<>nil then
     result := Find(Elem,aIndex^,aCompare) else
@@ -48351,8 +48356,9 @@ begin
     Add(Elem); // -1 will mark success
 end;
 
-function TDynArray.Find(const Elem): integer;
-var n, L, cmp: integer;
+function TDynArray.Find(const Elem): PtrInt;
+var n, L: PtrInt;
+    cmp: integer;
     P: PAnsiChar;
 begin
   n := Count;
@@ -48666,7 +48672,25 @@ begin
         result := ManagedTypeCompare(@A,@B,ElemType)>0; // other complex types
 end;
 
-{$ifndef DELPHI5OROLDER} // do not know why Delphi 5 compiler does not like it
+{$ifndef DELPHI5OROLDER} // disabled for Delphi 5 buggy compiler
+procedure TDynArray.InitFrom(const aAnother: TDynArray; var aValue);
+begin
+  self := aAnother;
+  fValue := @aValue;
+  fCountP := nil;
+end;
+
+procedure TDynArray.AddDynArray(const aSource: TDynArray; aStartIndex,aCount: integer);
+var SourceCount: integer;
+begin
+  if (aSource.fValue<>nil) and (ArrayType=aSource.ArrayType) then begin
+    SourceCount := aSource.Count;
+    if (aCount<0) or (aCount>SourceCount) then
+      aCount := SourceCount; // force use of external Source.Count, if any
+    AddArray(aSource.fValue^,aStartIndex,aCount);
+  end;
+end;
+
 function TDynArray.Equals(const B: TDynArray; ignorecompare: boolean): boolean;
 var i, n: integer;
     P1,P2: PAnsiChar;
@@ -48768,10 +48792,10 @@ begin
 end;
 {$endif DELPHI5OROLDER}
 
-function TDynArray.IndexOf(const Elem): integer;
+function TDynArray.IndexOf(const Elem): PtrInt;
 var P: pointer;
     PP: PPointerArray absolute P;
-    max: integer;
+    max: PtrInt;
 begin
   if fValue=nil then begin
     result := -1;
@@ -48791,7 +48815,7 @@ begin
          if PIntegerArray(P)^[result]=integer(Elem) then exit;
     8: for result := 0 to max do // Int64,Currency,Double,64bitPointer
          if PInt64Array(P)^[result]=Int64(Elem) then exit;
-  else // generic binary comparison (fast with our overloaded CompareMem)
+  else // generic binary comparison (fast with our overloaded CompareMemFixed)
     for result := 0 to max do
       if CompareMemFixed(P,@Elem,ElemSize) then
         exit else
@@ -49101,19 +49125,6 @@ begin
     MoveFast(PS^,PD^,cardinal(aCount)*ElemSize) else
     CopyArray(PD,PS,ElemType,aCount);
 end;
-
-{$ifndef DELPHI5OROLDER} // don't know why Delphi 5 does not like this signature
-procedure TDynArray.AddDynArray(const aSource: TDynArray; aStartIndex,aCount: integer);
-var SourceCount: integer;
-begin
-  if (aSource.fValue<>nil) and (ArrayType=aSource.ArrayType) then begin
-    SourceCount := aSource.Count;
-    if (aCount<0) or (aCount>SourceCount) then
-      aCount := SourceCount; // force use of external Source.Count, if any
-    AddArray(aSource.fValue^,aStartIndex,aCount);
-  end;
-end;
-{$endif DELPHI5OROLDER}
 
 procedure TDynArray.ElemClear(var Elem);
 begin
