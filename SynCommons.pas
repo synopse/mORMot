@@ -15364,7 +15364,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// find an item index in this document from its name
     // - returns -1 if not found
-    function GetValueIndex(aName: PUTF8Char; aNameLen: integer; aCaseSensitive: boolean): integer; overload;
+    function GetValueIndex(aName: PUTF8Char; aNameLen: PtrInt; aCaseSensitive: boolean): integer; overload;
     /// find an item in this document, and returns its value
     // - raise an EDocVariant if not found and dvoReturnNullForUnknownProperty
     // is not set in Options (in this case, it will return Null)
@@ -45250,20 +45250,20 @@ begin
   QuickSortDocVariant(pointer(VName),pointer(VValue),0,VCount-1,Compare);
 end;
 
-procedure TDocVariantData.ExchgValues(v1,v2: integer);
-var n: pointer;
-    v: TVarData;
+procedure ExchgValues(v1,v2: PVarData);
+var v: TVarData;
 begin
-  if v1=v2 then
-    exit;
-  if VName<>nil then begin // VName=[] for dvArray
-    n := pointer(VName[v2]);
-    pointer(VName[v2]) := pointer(VName[v1]);
-    PPointerArray(VName)[v1] := n;
-  end;
-  v := TVarData(VValue[v2]);
-  TVarData(VValue[v2]) := TVarData(VValue[v1]);
-  TVarData(VValue[v1]) := v;
+  v := v2^;
+  v2^ := v1^;
+  v1^ := v;
+end;
+
+procedure ExchgNames(n1,n2: PPointer);
+var n: pointer;
+begin
+  n := n2^;
+  n2^ := n1^;
+  n1^ := n;
 end;
 
 procedure QuickSortDocVariantValues(var Doc: TDocVariantData;
@@ -45280,7 +45280,11 @@ begin
       while Compare(Doc.VValue[I],pivot^)<0 do Inc(I);
       while Compare(Doc.VValue[J],pivot^)>0 do Dec(J);
       if I <= J then begin
-        Doc.ExchgValues(I,J);
+        if I <> J then begin
+          if Doc.VName<>nil then
+            ExchgNames(pointer(Doc.VName[I]),pointer(Doc.VName[J]));
+          ExchgValues(@Doc.VValue[I],@Doc.VValue[J]);
+        end;
         if P = I then P := J else if P = J then P := I;
         inc(I); dec(J);
       end;
@@ -45498,9 +45502,10 @@ begin
     end;
 end;
 
-function TDocVariantData.GetValueIndex(aName: PUTF8Char; aNameLen: integer;
+function TDocVariantData.GetValueIndex(aName: PUTF8Char; aNameLen: PtrInt;
   aCaseSensitive: boolean): integer;
 var err: integer;
+    n: PRawUTF8;
 begin
   if (VType=DocVariantVType) and (VCount>0) then begin
     if dvoIsArray in VOptions then begin
@@ -45512,16 +45517,19 @@ begin
       exit;
     end;
     // optimized O(n) lookup for object names -> huge count may take some time
+    n := pointer(VName);
     if aCaseSensitive then begin
       for result := 0 to VCount-1 do
-        if (length(VName[result])=aNameLen) and
-           CompareMem(pointer(VName[result]),aName,aNameLen) then
-          exit;
+        if (length(n^)=aNameLen) and
+           CompareMem(pointer(n^),aName,aNameLen) then
+          exit else
+          inc(n);
     end else
       for result := 0 to VCount-1 do
-        if (length(VName[result])=aNameLen) and
-           IdemPropNameUSameLen(pointer(VName[result]),aName,aNameLen) then
-          exit;
+        if (length(n^)=aNameLen) and
+           IdemPropNameUSameLen(pointer(n^),aName,aNameLen) then
+          exit else
+          inc(n);
   end;
   result := -1;
 end;
@@ -46051,7 +46059,7 @@ begin
     for r := 0 to VCount-1 do begin
       row := _Safe(VValue[r]);
       if (r>0) and (not(dvoIsObject in row^.VOptions) or (row^.VCount<>fieldsCount)) then
-        raise EDocVariant.CreateUTF8('ToNonExpandedJSON: Value[%] not object',[r]);
+        raise EDocVariant.CreateUTF8('ToNonExpandedJSON: Value[%] not expected object',[r]);
       for f := 0 to fieldsCount-1 do
         if (r>0) and not IdemPropNameU(row^.VName[f],fields[f]) then
           raise EDocVariant.CreateUTF8('ToNonExpandedJSON: Value[%] field=% expected=%',
