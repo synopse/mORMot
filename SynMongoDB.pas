@@ -4066,6 +4066,7 @@ begin
       VariantLoadJSON(result,json);
 end;
 
+{$HINTS OFF} // avoid hints with CompareMemFixed() inlining
 function TBSONVariant.TryJSONToVariant(var JSON: PUTF8Char;
   var Value: variant; EndOfObject: PUTF8Char): boolean;
 var bsonvalue: TBSONVariantData absolute Value;
@@ -4203,19 +4204,19 @@ begin // here JSON does not start with " or 1..9 (obvious simple types)
     repeat inc(P) until not(P^ in [#1..' ']);
     if P[0]='$' then
     case P[1] of
-    'u': if CompareMem(P+2,@BSON_JSON_UNDEFINED[false][5],10) then
+    'u': if CompareMemFixed(P+2,@BSON_JSON_UNDEFINED[false][5],10) then
            Return(betDeprecatedUndefined,P+12);
-    'm': if CompareMem(P+2,@BSON_JSON_MINKEY[false][5],7) then
+    'm': if CompareMemFixed(P+2,@BSON_JSON_MINKEY[false][5],7) then
            Return(betMinKey,P+9) else
-         if CompareMem(P+2,@BSON_JSON_MAXKEY[false][5],7) then
+         if CompareMemFixed(P+2,@BSON_JSON_MAXKEY[false][5],7) then
            Return(betMaxKey,P+9);
     'o': if PInteger(P+2)^=PInteger(@BSON_JSON_OBJECTID[false,modMongoStrict][5])^ then
            TryObjectID(P+6,'}');
-    'd': if CompareMem(P+2,@BSON_JSON_DATE[modMongoStrict,false][5],5) then
+    'd': if CompareMemFixed(P+2,@BSON_JSON_DATE[modMongoStrict,false][5],5) then
            TryDate(P+7,'}');
-    'r': if CompareMem(P+2,@BSON_JSON_REGEX[0][5],6) then
+    'r': if CompareMemFixed(P+2,@BSON_JSON_REGEX[0][5],6) then
            TryRegExStrict(P+8);
-    'n': if CompareMem(P+2,@BSON_JSON_DECIMAL[false,modMongoStrict][5],14) then
+    'n': if CompareMemFixed(P+2,@BSON_JSON_DECIMAL[false,modMongoStrict][5],14) then
            TryDecimal(P+16,'}');
     end;
   end;
@@ -4237,6 +4238,7 @@ begin // here JSON does not start with " or 1..9 (obvious simple types)
   '/': TryRegExShell(JSON+1);
   end;
 end;
+{$HINTS ON}
 
 procedure TBSONVariant.Cast(var Dest: TVarData; const Source: TVarData);
 begin

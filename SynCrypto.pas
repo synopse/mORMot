@@ -13526,7 +13526,7 @@ var RC4: TRC4;
 begin
   RC4.Init(Test1,8);
   RC4.Encrypt(Test1,Dat,8);
-  result := SysUtils.CompareMem(@Dat,@Res1,sizeof(Res1));
+  result := CompareMem(@Dat,@Res1,sizeof(Res1));
   RC4.Init(Key2,4);
   RC4.Encrypt(Test2,Dat,10);
   result := result and CompareMem(@Dat,@Res2,sizeof(Res2));
