@@ -15916,7 +15916,7 @@ const
 // !   for ndx := 0 to Count-1 do // here Count=0 for the "fake" result
 // !     writeln(Names[ndx]);
 function _Safe(const DocVariant: variant): PDocVariantData; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef FPC}inline;{$endif} // Delphi has problems inlining this :(
 
 /// direct access to a TDocVariantData from a given variant instance
 // - return a pointer to the TDocVariantData corresponding to the variant
@@ -46703,20 +46703,16 @@ begin
 end;
 
 function _Safe(const DocVariant: variant): PDocVariantData;
-{$ifdef HASINLINENOTX86}
+{$ifdef FPC_OR_PUREPASCAL}
+var w: word;
 begin
-  with TVarData(DocVariant) do
-    if VType=word(DocVariantVType) then begin
-      result := @DocVariant;
-      exit;
-    end else
-    if VType=varByRef or varVariant then begin
-      result := _Safe(PVariant(VPointer)^);
-      exit;
-    end else begin
+  result := @DocVariant;
+  w := DocVariantVType;
+  if result.VType<>w then
+    if (result.VType=varByRef or varVariant) and
+       (PVarData(PVarData(result)^.VPointer).VType=w) then
+      result := pointer(PVarData(result)^.VPointer) else
       result := @DocVariantDataFake;
-      exit;
-    end;
 end;
 {$else}
 asm
