@@ -1035,12 +1035,10 @@ begin
     for i := 0 to high(aLogClass) do
       classes[i] := aLogClass[i];
   end;
-  if (fShardDBCount > 0) and (aShardRange > 100) and (length(classes)=1) then begin
-    result := TSQLRestServerDB.Create(TSQLModel.Create(classes, fRoot),
-      SQLITE_MEMORY_DATABASE_NAME);
-    result.Model.Owner := result;
-    TSQLRestServerDB(result).CreateMissingTables;
-  end else
+  if (fShardDBCount > 0) and (aShardRange > 100) and (length(classes)=1) then
+    {$WARNINGS OFF} // methods are pure abstract, but fine with a single class
+    result := TSQLRestServer.CreateWithOwnModel(classes,false,fRoot) else
+    {$WARNINGS ON}
     result := inherited NewRestInstance(aRootSettings,TSQLModel.Create(classes),
       [riOwnModel,riDefaultLocalSQlite3IfNone,riCreateMissingTables]);
   if result=nil then
@@ -1048,8 +1046,10 @@ begin
   if (fShardDBCount > 0) and (aShardRange > 100) then begin
     server := result as TSQLRestServer;
     fn := IncludeTrailingPathDelimiter(fDefaultDataFolder)+TFileName(fDefaultDataFileName);
-    server.StaticDataAdd(TSQLRestStorageShardDB.Create(classes[0], server,
-      aShardRange, [], fn, fShardDBCount));
+    if not server.StaticDataAdd(TSQLRestStorageShardDB.Create(
+       classes[0], server, aShardRange, [], fn, fShardDBCount)) then
+      raise EDDDInfraException.CreateUTF8('%.NewRestInstance(%) StaticDataAdd(%)=false',
+        [self,fRoot,classes[0]]);
   end else
     if result.InheritsFrom(TSQLRestServerDB) then
       TSQLRestServerDB(result).DB.UseCache := false;
