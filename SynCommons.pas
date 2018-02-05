@@ -5118,11 +5118,12 @@ type
   {$endif}
     fValue: PPointer;
     fTypeInfo: pointer;
-    fElemSize: PtrUInt;
     fElemType: pointer;
     fCountP: PInteger;
     fCompare: TDynArraySortCompare;
+    fElemSize: cardinal;
     fKnownSize: integer;
+    fParser: integer; // index to GlobalJSONCustomParsers.fParsers[] 
     fSorted: boolean;
     fKnownType: TDynArrayKind;
     fIsObjArray: (oaUnknown, oaTrue, oaFalse);
@@ -5185,6 +5186,9 @@ type
     // the current value
     procedure UseExternalCount(var aCountPointer: Integer);
       {$ifdef HASINLINE}inline;{$endif}
+    /// check this dynamic array from the GlobalJSONCustomParsers list
+    // - returns TRUE if this array has a custom JSON parser 
+    function HasCustomJSONParser: boolean;
     /// initialize the wrapper to point to no dynamic array
     procedure Void;
     /// check if the wrapper points to a dynamic array
@@ -5620,7 +5624,7 @@ type
     /// the known type name of the whole array
     property ArrayTypeName: RawUTF8 read GetArrayTypeName;
     /// the internal in-memory size of one element, as retrieved from RTTI
-    property ElemSize: PtrUInt read fElemSize;
+    property ElemSize: cardinal read fElemSize;
     /// the internal type information of one element, as retrieved from RTTI
     property ElemType: pointer read fElemType;
     /// if this dynamic aray is a T*ObjArray
@@ -8627,20 +8631,17 @@ type
     // - by default, custom serializers defined via RegisterCustomJSONSerializer()
     // would write enumerates and sets as integer numbers, unless
     // twoEnumSetsAsTextInRecord is set in the instance Options
-    procedure AddDynArrayJSON(const aDynArray: TDynArray); overload;
+    procedure AddDynArrayJSON(var aDynArray: TDynArray); overload;
+    /// append a dynamic array content as UTF-8 encoded JSON array
+    // - expect a dynamic array TDynArrayHashed wrapper as incoming parameter
+    procedure AddDynArrayJSON(var aDynArray: TDynArrayHashed); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// append a dynamic array content as UTF-8 encoded JSON array
     // - just a wrapper around the other overloaded method, creating a
     // temporary TDynArray wrapper on the stack
     // - to be used e.g. for custom record JSON serialization, within a
     // TDynArrayJSONCustomWriter callback
     procedure AddDynArrayJSON(aTypeInfo: pointer; const aValue); overload;
-    {$ifdef UNDIRECTDYNARRAY}
-    /// append a dynamic array content as UTF-8 encoded JSON array
-    // - expect a dynamic array TDynArrayHashed wrapper as incoming parameter
-    // - this method is needed by the fact that "object" is buggy under
-    // newest versions of the Delphi compiler
-    procedure AddDynArrayJSON(const aDynArray: TDynArrayHashed); overload; inline;
-    {$endif}
     /// same as AddDynArrayJSON(), but will double all internal " and bound with "
     // - this implementation will avoid most memory allocations
     procedure AddDynArrayJSONAsString(aTypeInfo: pointer; var aValue);
@@ -41342,10 +41343,6 @@ type
       AddIfNotExisting: boolean): integer;
     function DynArraySearch(aDynArrayTypeInfo, aRecordTypeInfo: pointer;
       AddIfNotExisting: boolean=true): integer; overload;
-    function DynArraySearch(aDynArrayTypeInfo, aRecordTypeInfo: pointer;
-      out Reader: TDynArrayJSONCustomReader): boolean; overload;
-    function DynArraySearch(aDynArrayTypeInfo, aRecordTypeInfo: pointer;
-      out Writer: TDynArrayJSONCustomWriter; PParser: PTJSONCustomParserAbstract): boolean; overload;
     function RecordSearch(aRecordTypeInfo: pointer;
       AddIfNotExisting: boolean=true): integer; overload;
     function RecordSearch(aRecordTypeInfo: pointer;
@@ -41483,32 +41480,6 @@ begin // O(n) brute force is fast enough, since n remains small (mostly<64)
       fLastRecordIndex := result;
   end else
     result := -1;
-end;
-
-function TJSONCustomParsers.DynArraySearch(aDynArrayTypeInfo,aRecordTypeInfo: pointer;
-  out Reader: TDynArrayJSONCustomReader): boolean;
-var ndx: integer;
-begin
-  ndx := DynArraySearch(aDynArrayTypeInfo,aRecordTypeInfo);
-  if (ndx>=0) and Assigned(fParser[ndx].Reader) then begin
-    Reader := fParser[ndx].Reader;
-    result := true;
-  end else
-    result := false;
-end;
-
-function TJSONCustomParsers.DynArraySearch(aDynArrayTypeInfo,aRecordTypeInfo: pointer;
-  out Writer: TDynArrayJSONCustomWriter; PParser: PTJSONCustomParserAbstract): boolean;
-var ndx: integer;
-begin
-  ndx := DynArraySearch(aDynArrayTypeInfo,aRecordTypeInfo);
-  if (ndx>=0) and Assigned(fParser[ndx].Writer) then begin
-    Writer := fParser[ndx].Writer;
-    if PParser<>nil then
-      PParser^ := fParser[ndx].RecordCustomParser;
-    result := true;
-  end else
-    result := false;
 end;
 
 function TJSONCustomParsers.RecordSearch(aRecordTypeInfo: pointer;
@@ -47798,6 +47769,8 @@ const
   KNOWNTYPE_SIZE: array[TDynArrayKind] of byte = (
     0, 1,1, 2, 4,4,4, 8,8,8,8,8,8,8, PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,
     {$ifndef NOVARIANTS}SizeOf(Variant),{$endif} 0);
+  DYNARRAY_PARSERUNKNOWN = -2;
+
 var
   KINDTYPE_INFO: array[TDynArrayKind] of pointer;
 
@@ -48004,7 +47977,10 @@ begin // code below must match TTextWriter.AddDynArrayJSON()
     end;
     exit; // handle '[]' array
   end;
-  if GlobalJSONCustomParsers.DynArraySearch(ArrayType,ElemType,CustomReader) then
+  if HasCustomJSONParser then
+    CustomReader := GlobalJSONCustomParsers.fParser[fParser].Reader else
+    CustomReader := nil;
+  if Assigned(CustomReader) then
     T := djCustom else
     T := ToKnownType;
   if (T=djNone) and (P^='[') and (PTypeKind(ElemType)^=tkDynArray) then begin
@@ -48892,6 +48868,7 @@ begin
   if fCountP<>nil then
     fCountP^ := 0;
   fCompare := nil;
+  fParser := DYNARRAY_PARSERUNKNOWN;
   fKnownSize := 0;
   fSorted := false;
   fKnownType := djNone;
@@ -48915,6 +48892,13 @@ end;
 procedure TDynArray.UseExternalCount(var aCountPointer: Integer);
 begin
   fCountP := @aCountPointer;
+end;
+
+function TDynArray.HasCustomJSONParser: boolean;
+begin
+  if fParser=DYNARRAY_PARSERUNKNOWN then
+    fParser := GlobalJSONCustomParsers.DynArraySearch(ArrayType,ElemType);
+  result := cardinal(fParser)<cardinal(GlobalJSONCustomParsers.fParsersCount);
 end;
 
 procedure TDynArray.Void;
@@ -51849,19 +51833,17 @@ begin
 end;
 {$endif NOVARIANTS}
 
+procedure TTextWriter.AddDynArrayJSON(var aDynArray: TDynArrayHashed);
+begin
+  AddDynArrayJson(PDynArray(@aDynArray)^);
+end;
+
 procedure TTextWriter.AddDynArrayJSON(aTypeInfo: pointer; const aValue);
 var DynArray: TDynArray;
 begin
   DynArray.Init(aTypeInfo,pointer(@aValue)^);
   AddDynArrayJSON(DynArray);
 end;
-
-{$ifdef UNDIRECTDYNARRAY}
-procedure TTextWriter.AddDynArrayJSON(const aDynArray: TDynArrayHashed);
-begin
-  AddDynArrayJson(aDynArray.InternalDynArray);
-end;
-{$endif}
 
 procedure TTextWriter.AddDynArrayJSONAsString(aTypeInfo: pointer; var aValue);
 begin
@@ -51871,8 +51853,7 @@ begin
   Add('"');
 end;
 
-procedure TTextWriter.AddObjArrayJSON(const aObjArray;
-  Options: TTextWriterWriteObjectOptions);
+procedure TTextWriter.AddObjArrayJSON(const aObjArray; Options: TTextWriterWriteObjectOptions);
 var i: integer;
     a: TObjectDynArray absolute aObjArray;
 begin
@@ -51889,6 +51870,7 @@ procedure TTextWriter.AddTypedJSON(aTypeInfo: pointer; const aValue);
 var max, i: Integer;
     PS: PShortString;
     customWriter: TDynArrayJSONCustomWriter;
+    DynArray: TDynArray;
   procedure AddPS; overload;
   begin
     Add('"');
@@ -51957,8 +51939,10 @@ begin
       if GlobalJSONCustomParsers.RecordSearch(aTypeInfo,customWriter,nil) then
         customWriter(self,aValue) else
         WrRecord(aValue,aTypeInfo);
-    tkDynArray:
-      AddDynArrayJSON(DynArray(aTypeInfo,(@aValue)^));
+    tkDynArray: begin
+      DynArray.Init(aTypeInfo,(@aValue)^);
+      AddDynArrayJSON(DynArray);
+    end;
 {$ifndef NOVARIANTS}
     tkVariant:
       AddVariant(variant(aValue),twJSONEscape);
@@ -52145,23 +52129,30 @@ begin
   result := JSON;
 end;
 
-procedure TTextWriter.AddDynArrayJSON(const aDynArray: TDynArray);
+procedure TTextWriter.AddDynArrayJSON(var aDynArray: TDynArray);
 var i,n: integer;
     P: Pointer;
     T: TDynArrayKind;
     tmp: RawByteString;
     customWriter: TDynArrayJSONCustomWriter;
     customParser: TJSONRecordAbstract;
-    Options: TJSONCustomParserSerializationOptions;
-    NestedDynArray: TDynArray;
+    nested: TDynArray;
+    hr: boolean;
 begin // code below must match TDynArray.LoadFromJSON
   n := aDynArray.Count-1;
   if n<0 then begin
     Add('[',']');
     exit;
   end;
-  if GlobalJSONCustomParsers.DynArraySearch(
-      aDynArray.ArrayType,aDynArray.ElemType,customWriter,@customParser) then
+  if aDynArray.HasCustomJSONParser then 
+    with GlobalJSONCustomParsers.fParser[aDynArray.fParser] do begin
+      customWriter := Writer;
+      customParser := RecordCustomParser;
+    end else begin
+      customWriter := nil;
+      customParser := nil;
+    end;
+  if Assigned(customWriter) then
     T := djCustom else
     T := aDynArray.ToKnownType;
   P := aDynArray.fValue^;
@@ -52171,8 +52162,8 @@ begin // code below must match TDynArray.LoadFromJSON
     if (aDynArray.ElemType<>nil) and
        (PTypeKind(aDynArray.ElemType)^=tkDynArray) then begin
       for i := 0 to n do begin
-        NestedDynArray.Init(aDynArray.ElemType,P^);
-        AddDynArrayJSON(NestedDynArray);
+        nested.Init(aDynArray.ElemType,P^);
+        AddDynArrayJSON(nested);
         Add(',');
         inc(PtrUInt(P),aDynArray.ElemSize);
       end;
@@ -52182,16 +52173,16 @@ begin // code below must match TDynArray.LoadFromJSON
     end;
   djCustom: begin
       if customParser=nil then
-        byte(Options) := 0 else
-        Options := customParser.Options;
-      if soWriteHumanReadable in Options then
+        hr := false else
+        hr := soWriteHumanReadable in customParser.Options;
+      if hr then
         Inc(fHumanReadableLevel);
       for i := 0 to n do begin
         customWriter(self,P^);
         Add(',');
         inc(PtrUInt(P),aDynArray.ElemSize);
       end;
-      if soWriteHumanReadable in Options then begin
+      if hr then begin
         dec(fHumanReadableLevel);
         CancelLastComma;
         AddCRAndIndent;
