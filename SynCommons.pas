@@ -2464,8 +2464,17 @@ function Trim(const S: RawUTF8): RawUTF8;
 
 {$endif ENHANCEDRTL}
 
-/// our fast version of CompareMem() with optimized asm for x86
+/// our fast version of CompareMem() with optimized asm for x86 and tune pascal
 function CompareMem(P1, P2: Pointer; Length: PtrInt): Boolean;
+
+{$ifdef HASINLINE}
+function CompareMemFixed(P1, P2: Pointer; Length: PtrInt): Boolean; inline;
+{$else}
+/// a CompareMem()-like function designed for small and fixed-sized content
+// - here, Length is expected to be a constant value - typically from sizeof() -
+// so that inlining has better performance than calling the CompareMem() function
+var CompareMemFixed: function(P1, P2: Pointer; Length: PtrInt): Boolean = CompareMem;
+{$endif HASINLINE}
 
 /// convert an IPv4 'x.x.x.x' text into its 32-bit value
 function IPToCardinal(const aIP: RawUTF8; out aValue: cardinal): boolean;
@@ -11320,6 +11329,8 @@ const
   PT_COMPLEXTYPES = [ptArray, ptRecord, ptCustom, ptTimeLog];
   /// could be used to compute the index in a pointer list from its position
   POINTERSHR = {$ifdef CPU64}3{$else}2{$endif};
+  /// could be used to compute the bitmask of a pointer integer
+  POINTERAND = {$ifdef CPU64}7{$else}3{$endif};
 
 
 { ************ some other common types and conversion routines ************** }
@@ -24088,6 +24099,21 @@ end;
 {$endif LVCL}
 {$endif PUREPASCAL}
 
+{$ifdef HASINLINE}
+function CompareMemFixed(P1, P2: Pointer; Length: PtrInt): Boolean;
+var i: PtrInt;
+begin
+  result := false;
+  for i := 0 to (Length shr POINTERSHR)-1 do
+    if PPtrIntArray(P1)[i]<>PPtrIntArray(P2)[i] then
+      exit;
+  for i := Length-(Length and POINTERAND) to Length-1 do
+    if PByteArray(P1)[i]<>PByteArray(P2)[i] then
+      exit;
+  result := true;
+end;
+{$endif}
+
 {$ifdef PUREPASCAL}
 function CompareMem(P1, P2: Pointer; Length: PtrInt): Boolean;
 label zero;
@@ -33867,7 +33893,7 @@ begin
     result := (a_[0]=b_[0]) and (a_[1]=b_[1]) and (a_[2]=b_[2]) and (a_[3]=b_[3])
           and (a_[4]=b_[4]) and (a_[5]=b_[5]) and (a_[6]=b_[6]) and (a_[7]=b_[7]) else
   {$endif}
-    result := CompareMem(@A,@B,SizeOf(TSQLFieldBits))
+    result := CompareMemFixed(@A,@B,SizeOf(TSQLFieldBits))
 end;
 
 procedure FillZero(var Fields: TSQLFieldBits);
@@ -38571,7 +38597,7 @@ begin
     if not LeaveUnprotected then
       VirtualProtect(Old, Size, RestoreProtection, Ignore);
     FlushInstructionCache(GetCurrentProcess, Old, Size);
-    if not CompareMem(Old,New,Size) then
+    if not CompareMemFixed(Old,New,Size) then
       raise ESynException.Create('PatchCode?');
   end;
 end;
@@ -39454,7 +39480,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
     if info=nil then
       result := -1 else
       if itemtype=nil then
-        if CompareMem(A,B,arraysize) then
+        if CompareMemFixed(A,B,arraysize) then
           result := arraysize else
           result := 0 else begin
         for i := 1 to info^.elCount do begin // only compare managed fields
@@ -39721,7 +39747,7 @@ begin
     {$endif}
     offset := integer(field^.Offset)-offset;
     if offset<>0 then begin
-      if not CompareMem(A,B,offset) then
+      if not CompareMemFixed(A,B,offset) then
         exit; // binary block not equal
       inc(A,offset);
       inc(B,offset);
@@ -39737,7 +39763,7 @@ begin
     inc(offset,field^.Offset);
     inc(field);
   end;
-  if CompareMem(A,B,integer(info^.recSize)-offset) then
+  if CompareMemFixed(A,B,integer(info^.recSize)-offset) then
     result := true;
 end;
 
@@ -48115,7 +48141,7 @@ begin
   for result := 0 to Count-1 do begin
     Len := FromVarUInt32(PByte(Source));
     if CaseSensitive then begin
-      if (Len=ValueLen) and CompareMem(Value,Source,Len) then
+      if (Len=ValueLen) and CompareMemFixed(Value,Source,Len) then
         exit;
     end else
       if UTF8ILComp(Value,pointer(Source),ValueLen,Len)=0 then
@@ -48633,7 +48659,7 @@ begin
         2: result := word(A)=word(B);
         4: result := cardinal(A)=cardinal(B);
         8: result := Int64(A)=Int64(B);
-      else result := CompareMem(@A,@B,ElemSize); // binary comparison
+      else result := CompareMemFixed(@A,@B,ElemSize); // binary comparison
       end else
       if PTypeKind(ElemType)^ in tkRecordTypes then // most likely
         result := RecordEquals(A,B,ElemType) else
@@ -48767,7 +48793,7 @@ begin
          if PInt64Array(P)^[result]=Int64(Elem) then exit;
   else // generic binary comparison (fast with our overloaded CompareMem)
     for result := 0 to max do
-      if CompareMem(P,@Elem,ElemSize) then
+      if CompareMemFixed(P,@Elem,ElemSize) then
         exit else
         inc(PByte(P),ElemSize);
   end else

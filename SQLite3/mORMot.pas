@@ -28137,7 +28137,7 @@ begin
     if Value='' then
       result := false else begin
       L := length(Value);
-      result := CompareMem(P,pointer(Value),L);
+      result := CompareMemFixed(P,pointer(Value),L);
       if result then
         inc(P,L);
     end;
@@ -28223,7 +28223,7 @@ begin
     ']',',':
       exit;
     ':': begin
-      if CompareMem(PEnd-i-11,pointer(ROWCOUNT_PATTERN),11) then
+      if CompareMemFixed(PEnd-i-11,pointer(ROWCOUNT_PATTERN),11) then
         result := PEnd-i+1;
       exit;
     end;
@@ -34095,7 +34095,7 @@ begin
   if IdemPChar(pointer(URI),pointer(fRootUpper)) then begin
     URILen := length(fRoot);
     if URI[URILen+1] in [#0,'/','?'] then
-      if CompareMem(pointer(URI),pointer(fRoot),URILen) then
+      if CompareMemFixed(pointer(URI),pointer(fRoot),URILen) then
         result := rmMatchExact else
         result := rmMatchWithCaseChange;
   end;
@@ -40566,7 +40566,7 @@ begin // expects Service, ServiceParameters, ServiceMethod(Index) to be set
     ServiceParameters := nil; // ensure no GPF later if points to some local data
   end;
   if ForceServiceResultAsXMLObject and (Call.OutBody<>'') and (Call.OutHead<>'') and
-     CompareMem(pointer(Call.OutHead),pointer(JSON_CONTENT_TYPE_HEADER_VAR),45) then begin
+     CompareMemFixed(pointer(Call.OutHead),pointer(JSON_CONTENT_TYPE_HEADER_VAR),45) then begin
     delete(Call.OutHead,15,31);
     insert(XML_CONTENT_TYPE,Call.OutHead,15);
     JSONBufferToXML(pointer(Call.OutBody),XMLUTF8_HEADER,
