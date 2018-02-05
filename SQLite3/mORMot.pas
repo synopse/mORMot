@@ -10633,6 +10633,8 @@ type
     // - for smdConst argument, contains -1 (no need to a local var: the value
     // will be on the stack only)
     IndexVar: integer;
+    /// a TDynArray wrapper initialized properly for this smvDynArray
+    DynArrayWrapper: TDynArray;
     {$ifndef FPC}
     /// set ArgTypeName and ArgTypeInfo values from RTTI
     procedure SetFromRTTI(var P: PByte);
@@ -54042,13 +54044,8 @@ begin
       {$endif}
       if vPassedByReference in ValueKindAsm then
         V := PPointer(V)^;
-      case ValueType of
-      smvDynArray:
-        with DynArrays[IndexVar] do begin
-          Init(ArgTypeInfo,V^);
-          IsObjArray := vIsObjArray in ValueKindAsm; // no need to search
-        end;
-      end;
+      if ValueType=smvDynArray then
+        DynArrays[IndexVar].InitFrom(DynArrayWrapper,V^);
       Value[arg] := V;
       if ValueDirection in [smdConst,smdVar] then
         case ValueType of
@@ -54634,6 +54631,7 @@ var m,a,reg: integer;
     WR: TTextWriter;
     C: TClass;
     ErrorMsg: RawUTF8;
+    dummy: pointer;
     {$ifdef HAS_FPREG}
     ValueIsInFPR:boolean;
     {$endif}
@@ -54808,9 +54806,12 @@ begin
         end;
       smvRawUTF8..smvWideString:
         Include(ValueKindAsm,vIsString);
-      smvDynArray:
+      smvDynArray: begin
         if ObjArraySerializers.Find(ArgTypeInfo)<>nil then
           Include(ValueKindAsm,vIsObjArray);
+        DynArrayWrapper.Init(ArgTypeInfo,dummy);
+        DynArrayWrapper.IsObjArray := vIsObjArray in ValueKindAsm; // search once
+      end;
       {$ifdef HAS_FPREG}
       smvDouble,smvDateTime:
         ValueIsInFPR := not (vPassedByReference in ValueKindAsm);
@@ -59376,6 +59377,7 @@ begin
 end;
 
 procedure TServiceMethodArgument.AddJSON(WR: TTextWriter; V: pointer);
+var wrapper: TDynArray;
 begin
   if vIsString in ValueKindAsm then
     WR.Add('"');
@@ -59406,9 +59408,12 @@ begin
   smvObject:     WR.WriteObject(PPointer(V)^);
   smvInterface:  WR.AddShort('null'); // or written by InterfaceWrite()
   smvRecord:     WR.AddRecordJSON(V^,ArgTypeInfo);
-  smvDynArray:   WR.AddDynArrayJSON(ArgTypeInfo,V^);
+  smvDynArray: begin // slightly faster than WR.AddDynArrayJSON(ArgTypeInfo,V^);
+    wrapper.InitFrom(DynArrayWrapper,V^);
+    WR.AddDynArrayJSON(wrapper);
+  end;
   {$ifndef NOVARIANTS}
-  smvVariant:    WR.AddVariant(PVariant(V)^,twJSONEscape);
+  smvVariant: WR.AddVariant(PVariant(V)^,twJSONEscape);
   {$endif}
   end;
   if vIsString in ValueKindAsm then
@@ -59580,7 +59585,7 @@ begin
   smvDynArray:
     if _Safe(Value)^.Kind=dvArray then begin
       arr := nil;
-      dyn.Init(ArgTypeInfo,arr);
+      dyn.InitFrom(DynArrayWrapper,arr);
       try
         VariantSaveJSON(Value,twJSONEscape,json);
         dyn.LoadFromJSON(pointer(json));
@@ -60387,10 +60392,8 @@ begin
     with Args[a] do
       case ValueType of
       smvDynArray:
-        with fDynArrays[IndexVar] do begin
-          Wrapper.Init(ArgTypeInfo,Value);
-          Wrapper.IsObjArray := vIsObjArray in ValueKindAsm; // no need to search
-        end;
+        with fDynArrays[IndexVar] do
+          Wrapper.InitFrom(DynArrayWrapper,Value);
       smvRecord:
         SetLength(fRecords[IndexVar],ArgTypeInfo^.RecordType^.Size);
       {$ifndef NOVARIANTS}
@@ -60430,8 +60433,6 @@ begin
         FillcharFast(fInt64s,ArgsUsedCount[smvv64]*SizeOf(Int64),0);
       if ArgsUsedCount[smvvInterface]>0 then
         FillcharFast(fInterfaces,ArgsUsedCount[smvvInterface]*SizeOf(pointer),0);
-      if ArgsUsedCount[smvvDynArray]>0 then
-        FillcharFast(fDynArrays,ArgsUsedCount[smvvDynArray]*SizeOf(TDynArrayFake),0);
     end;
     for a := ArgsManagedFirst to ArgsManagedLast do
     with Args[a] do
@@ -60633,7 +60634,7 @@ begin
     for i := 0 to ArgsUsedCount[smvvInterface]-1 do
       IUnknown(fInterfaces[i]) := nil;
     for i := 0 to ArgsUsedCount[smvvDynArray]-1 do
-      fDynArrays[i].Wrapper.Clear; // will handle T*ObjArray as expected
+      fDynArrays[i].Wrapper.Clear; // will handle T*ObjArray, and set Value^=nil
     if fRecords<>nil then begin
       i := 0;
       for a := ArgsManagedFirst to ArgsManagedLast do
@@ -60865,7 +60866,13 @@ begin
       if ValueDirection in [smdVar,smdOut,smdResult] then begin
         if ResAsJSONObject then
           Res.AddPropName(ParamName^);
-        AddJSON(Res,fValues[a]);
+        case ValueType of
+        smvDynArray: begin
+          Res.AddDynArrayJSON(fDynArrays[IndexVar].Wrapper);
+          Res.Add(',');
+        end;
+        else AddJSON(Res,fValues[a]);
+        end;
       end;
       Res.CancelLastComma;
     end;
