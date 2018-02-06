@@ -29462,7 +29462,7 @@ type // function(Instance: TObject) trick does not work with CPU64 :(
 var Call: TMethod;
 begin
 {$ifdef FPC} // extracted from IsStoredProp() function in typinfo.pp
-  result := ((PropProcs shr 4) and 3=ptconst) and LongBool(StoredProc);
+  result := IsStoredProp(Instance, @Self);
 {$else}      // Delphi version
   if (StoredProc and (not PtrInt($ff)))=0 then
     result := boolean(StoredProc) else
