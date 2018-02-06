@@ -600,7 +600,8 @@ type
     // (executable folder under Windows, or /etc /var/log on Linux)
     constructor Create(aSettingsClass: TSynDaemonSettingsClass;
       const aWorkFolder, aSettingsFolder, aLogFolder: TFileName;
-      const aSettingsExt: TFileName = '.settings'); reintroduce;
+      const aSettingsExt: TFileName = '.settings';
+      const aSettingsName: TFileName = ''); reintroduce;
     /// main entry point of the daemon, to process the command line switches
     // - aAutoStart is used only under Windows
     procedure CommandLine(aAutoStart: boolean=true);
@@ -1264,9 +1265,9 @@ end;
 { TSynDaemon }
 
 constructor TSynDaemon.Create(aSettingsClass: TSynDaemonSettingsClass;
-  const aWorkFolder, aSettingsFolder, aLogFolder, aSettingsExt: TFileName);
+  const aWorkFolder, aSettingsFolder, aLogFolder, aSettingsExt, aSettingsName: TFileName);
 var
-  setf: TFileName;
+  fn: TFileName;
 begin
   inherited Create;
   if aWorkFolder = '' then
@@ -1276,10 +1277,14 @@ begin
   if aSettingsClass = nil then
     aSettingsClass := TSynDaemonSettings;
   fSettings := aSettingsClass.Create;
-  setf := aSettingsFolder;
-  if setf = '' then
-    setf := {$ifdef MSWINDOWS}fWorkFolderName{$else}'/etc/'{$endif};
-  fSettings.LoadFromFile(format('%s%s%s', [setf, ExeVersion.ProgramName, aSettingsExt]));
+  fn := aSettingsFolder;
+  if fn = '' then
+    fn := {$ifdef MSWINDOWS}fWorkFolderName{$else}'/etc/'{$endif};
+  if aSettingsName = '' then
+    fn := fn + UTF8ToString(ExeVersion.ProgramName)
+  else
+    fn := fn + aSettingsName;
+  fSettings.LoadFromFile(fn + aSettingsExt);
   if fSettings.LogPath = '' then
     if aLogFolder = '' then
       fSettings.LogPath := {$ifdef MSWINDOWS}fWorkFolderName{$else}'/var/log/'{$endif}

@@ -1625,6 +1625,7 @@ end;
 procedure TTestLowLevelCommon.IniFiles;
 var Content,S,N,V: RawUTF8;
     Si,Ni,Vi,i,j: integer;
+    P: PUTF8Char;
 begin
   Content := '';
   Randomize;
@@ -1650,6 +1651,13 @@ begin
     Exit;
   S := StringFromFile('test2.ini');
   Check(S=Content,'test2.ini');
+  Content := 'abc'#13#10'def'#10'ghijkl'#13'1234567890';
+  P := pointer(Content);
+  Check(GetNextLine(P,P)='abc');
+  Check(GetNextLine(P,P)='def');
+  Check(GetNextLine(P,P)='ghijkl');
+  Check(GetNextLine(P,P)='1234567890');
+  Check(P=nil);
 end;
 
 procedure TTestLowLevelCommon.Soundex;

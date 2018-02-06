@@ -632,16 +632,16 @@ begin
     exit;
   withinCode := false;
   repeat // rough parsing of the .pas unit file to extract /// description
-    P := GetNextLineBegin(S,S);
     P := GotoNextNotSpace(P);
+    S := GotoNextLine(S);
     if IdemPChar(P,'IMPLEMENTATION') then
       break; // only the "interface" section is parsed
     if IdemPChar(P,'{$IFDEF ') then begin
       repeat // just ignore any $ifdef ... $endif
-        GetNextLineBegin(P,P);
+        P := GotoNextLine(P);
         if P=nil then exit;
       until IdemPChar(GotoNextNotSpace(P),'{$ENDIF');
-      GetNextLineBegin(P,P);
+      P := GotoNextLine(P);
       P := GotoNextNotSpace(P);
     end;
     if (P[0]='/') and (P[1]='/') and (P[2]='/') then begin
@@ -655,10 +655,10 @@ begin
         P := GotoNextNotSpace(P);
         if IdemPChar(P,'{$IFDEF ') then begin
           repeat // just ignore any $ifdef ... $endif
-            GetNextLineBegin(P,P);
+            P := GotoNextLine(P);
             if P=nil then exit;
           until IdemPChar(GotoNextNotSpace(P),'{$ENDIF');
-          GetNextLineBegin(P,P);
+          P := GotoNextLine(P);
         end else
         if (P[0]='/') and (P[1]='/') then begin
           if P[2]='/' then inc(P,3) else inc(P,2);
