@@ -3702,9 +3702,9 @@ function IdemPCharAndGetNextLine(var source: PUTF8Char; searchUp: PAnsiChar): bo
 function IdemPCharAndGetNextItem(var source: PUTF8Char; const searchUp: RawUTF8;
   var Item: RawUTF8; Sep: AnsiChar=#13): boolean;
 
-/// return line begin from source array of chars, and go to next line
-// - next will contain the beginning of next line, or nil if source if ended
-function GetNextLineBegin(source: PUTF8Char; out next: PUTF8Char): PUTF8Char;
+/// fast go to next text line, ended by #13 or #13#10
+// - returns the beginning of next line, or nil if source^=#0 was reached
+function GotoNextLine(source: PUTF8Char): PUTF8Char;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the line length from source array of chars
@@ -22680,7 +22680,7 @@ begin
 end;
 
 procedure TypeInfoToName(aTypeInfo: pointer; var result: RawUTF8;
-  const default: RawUTF8='');
+  const default: RawUTF8);
 begin
   if aTypeInfo<>nil then
     SetRawUTF8(result,PAnsiChar(@PTypeInfo(aTypeInfo)^.NameLen)+1,
@@ -22696,7 +22696,7 @@ begin
 end;
 
 procedure TypeInfoToQualifiedName(aTypeInfo: pointer; var result: RawUTF8;
-  const default: RawUTF8='');
+  const default: RawUTF8);
 var unitname: RawUTF8;
 begin
   if aTypeInfo<>nil then begin
@@ -26633,7 +26633,8 @@ begin
   SystemInfo.dwNumberOfProcessors := 0;
   cpuinfo := pointer(StringFromFile('/proc/cpuinfo',true));
   while cpuinfo<>nil do begin
-    beg := GetNextLineBegin(cpuinfo,cpuinfo);
+    beg := cpuinfo;
+    cpuinfo := GotoNextLine(cpuinfo);
     if IdemPChar(beg,'PROCESSOR') then
       if beg^='P' then
         modname := beg else // Processor : ARMv7
@@ -29268,14 +29269,15 @@ begin
   result := true;
   if high(UpperValues)>=0 then
     while (P<>nil) and (P^<>'[') do begin
-      PBeg := GetNextLineBegin(P,P); // since PBeg=P, we have PBeg<>nil
-      if PBeg^=' ' then repeat inc(PBeg) until PBeg^<>' ';   // trim left ' '
+      if P^=' ' then repeat inc(P) until P^<>' ';   // trim left ' '
+      PBeg := P;
       if IdemPChar(PBeg,pointer(UpperName)) then begin
         inc(PBeg,length(UpperName));
         if IdemPCharArray(PBeg,UpperValues)>=0 then
           exit; // found one value
         break;
       end;
+      P := GotoNextLine(P);
     end;
   result := false;
 end;
@@ -29290,7 +29292,7 @@ var PBeg: PUTF8Char;
 begin
   PBeg := SectionFirstLine;
   while (SectionFirstLine<>nil) and (SectionFirstLine^<>'[') do
-    GetNextLineBegin(SectionFirstLine,SectionFirstLine);
+    SectionFirstLine := GotoNextLine(SectionFirstLine);
   if SectionFirstLine=nil then
     result := PBeg else
     SetString(result,PBeg,SectionFirstLine-PBeg);
@@ -29329,7 +29331,7 @@ begin
   if EraseSectionHeader then // erase [Section] header line
     while (PtrUInt(SectionFirstLine)>PtrUInt(Content)) and (SectionFirstLine^<>'[') do dec(SectionFirstLine);
   while (PEnd<>nil) and (PEnd^<>'[') do
-    GetNextLineBegin(PEnd,PEnd);
+    PEnd := GotoNextLine(PEnd);
   IndexBegin := SectionFirstLine-pointer(Content);
   if IndexBegin=0 then
     exit; // no modification
@@ -29349,7 +29351,7 @@ begin
   // delete existing [Section] content
   PEnd := SectionFirstLine;
   while (PEnd<>nil) and (PEnd^<>'[') do
-    GetNextLineBegin(PEnd,PEnd);
+    PEnd := GotoNextLine(PEnd);
   IndexBegin := SectionFirstLine-pointer(Content);
   if PEnd=nil then
     SetLength(Content,IndexBegin) else
@@ -29438,8 +29440,9 @@ begin
   if FindSectionFirstLine(P,UpperSection) then begin
 Sec:SectionFound := true;
     while (P<>nil) and (P^<>'[') do begin
-      PBeg := GetNextLineBegin(P,P); // since PBeg=P, we have PBeg<>nil
-      while PBeg^=' ' do inc(PBeg);   // trim left ' '
+      while P^=' ' do inc(P);   // trim left ' '
+      PBeg := P;
+      P := GotoNextLine(P);
       if IdemPChar(PBeg,UpperName) then begin
         // update Name=Value entry
         inc(PBeg,UpperNameLength);
@@ -30549,7 +30552,7 @@ begin
 end;
 
 function IntegerDynArrayToCSV(const Values: array of integer; ValuesCount: integer;
-  const Prefix: RawUTF8=''; const Suffix: RawUTF8=''): RawUTF8;
+  const Prefix, Suffix: RawUTF8): RawUTF8;
 type
   TInts16 = packed array[word] of string[15]; // shortstring are faster (no heap allocation)
 var i, L, Len: PtrInt;
@@ -30595,7 +30598,7 @@ begin
 end;
 
 function Int64DynArrayToCSV(const Values: array of Int64; ValuesCount: integer;
-  const Prefix: RawUTF8=''; const Suffix: RawUTF8=''): RawUTF8;
+  const Prefix, Suffix: RawUTF8): RawUTF8;
 type
   TInt = packed record
     Len: byte;
@@ -30650,13 +30653,13 @@ begin
 end;
 
 function IntegerDynArrayToCSV(const Values: TIntegerDynArray;
-  const Prefix: RawUTF8=''; const Suffix: RawUTF8=''): RawUTF8;
+  const Prefix, Suffix: RawUTF8): RawUTF8;
 begin
   result := IntegerDynArrayToCSV(Values,length(Values),Prefix,Suffix);
 end;
 
 function Int64DynArrayToCSV(const Values: TInt64DynArray;
-  const Prefix: RawUTF8=''; const Suffix: RawUTF8=''): RawUTF8;
+  const Prefix: RawUTF8; const Suffix: RawUTF8): RawUTF8;
 begin
   result := Int64DynArrayToCSV(Values,length(Values),Prefix,Suffix);
 end;
@@ -32575,10 +32578,7 @@ begin
   if source=nil then
     result := false else begin
     result := IdemPChar(source,searchUp);
-    while source^ in ANSICHARNOT01310 do inc(source);
-    while source^ in [#13,#10] do inc(source);
-    if source^=#0 then
-      source := nil;
+    source := GotoNextLine(source);
   end;
 end;
 {$else}
@@ -32627,18 +32627,35 @@ begin
   end;
 end;
 
-function GetNextLineBegin(source: PUTF8Char; out next: PUTF8Char): PUTF8Char;
+{$WARNINGS OFF} // some Delphi compilers do not analyse well code below
+function GotoNextLine(source: PUTF8Char): PUTF8Char;
 begin
-  result := pointer(source);
-  if source=nil then
-    exit;
-  while source^ in ANSICHARNOT01310 do inc(source);
-  if source^=#13 then inc(source);
-  if source^=#10 then inc(source);
-  if source^=#0 then
-    next := nil else
-    next := source;
+  if source<>nil then
+    repeat
+      if source[0]>#13 then
+        if source[1]>#13 then
+          if source[2]>#13 then
+            if source[3]>#13 then begin
+              inc(source,4);
+              continue;
+            end else
+            inc(source,3) else
+          inc(source,2) else
+        inc(source);
+      case source^ of
+        #0: result := nil;
+        #10: result := source+1;
+        #13: if source[1]=#10 then result := source+2 else result := source+1;
+        else begin
+          inc(source);
+          continue;
+        end;
+      end;
+      exit;
+    until false else
+    result := source;
 end;
+{$WARNINGS ON}
 
 function GetLineSize(P,PEnd: PUTF8Char): PtrUInt;
 begin
@@ -32652,7 +32669,7 @@ begin
   result := PtrUInt(P)-result;
 end;
 
-function GetNextItem(var P: PUTF8Char; Sep: AnsiChar= ','): RawUTF8;
+function GetNextItem(var P: PUTF8Char; Sep: AnsiChar): RawUTF8;
 begin
   GetNextItem(P,Sep,result);
 end;
@@ -32865,7 +32882,7 @@ begin
     P := nil;
 end;
 
-function CSVOfValue(const Value: RawUTF8; Count: cardinal; const Sep: RawUTF8=','): RawUTF8;
+function CSVOfValue(const Value: RawUTF8; Count: cardinal; const Sep: RawUTF8): RawUTF8;
 var ValueLen, SepLen: cardinal;
     i: cardinal;
     P: PAnsiChar;
@@ -33044,7 +33061,7 @@ begin
     result := 0;
 end;
 
-function GetCSVItem(P: PUTF8Char; Index: PtrUInt; Sep: AnsiChar = ','): RawUTF8;
+function GetCSVItem(P: PUTF8Char; Index: PtrUInt; Sep: AnsiChar): RawUTF8;
 var i: PtrUInt;
 begin
   if P=nil then
@@ -33053,7 +33070,7 @@ begin
       GetNextItem(P,Sep,result);
 end;
 
-function GetLastCSVItem(const CSV: RawUTF8; Sep: AnsiChar=','): RawUTF8;
+function GetLastCSVItem(const CSV: RawUTF8; Sep: AnsiChar): RawUTF8;
 var i: integer;
 begin
   for i := length(CSV) downto 1 do
@@ -33064,7 +33081,7 @@ begin
   result := CSV;
 end;
 
-function GetCSVItemString(P: PChar; Index: PtrUInt; Sep: Char = ','): string;
+function GetCSVItemString(P: PChar; Index: PtrUInt; Sep: Char): string;
 var i: PtrUInt;
 begin
   if P=nil then
@@ -33130,7 +33147,7 @@ begin
   end;
 end;
 
-function AddPrefixToCSV(CSV: PUTF8Char; const Prefix: RawUTF8; Sep: AnsiChar = ','): RawUTF8;
+function AddPrefixToCSV(CSV: PUTF8Char; const Prefix: RawUTF8; Sep: AnsiChar): RawUTF8;
 var s: RawUTF8;
 begin
   GetNextItem(CSV,Sep,result);
@@ -33144,7 +33161,7 @@ begin
   end;
 end;
 
-procedure AddToCSV(const Value: RawUTF8; var CSV: RawUTF8; const Sep: RawUTF8 = ',');
+procedure AddToCSV(const Value: RawUTF8; var CSV: RawUTF8; const Sep: RawUTF8);
 begin
   if CSV='' then
     CSV := Value else
@@ -33152,7 +33169,7 @@ begin
 end;
 
 function RenameInCSV(const OldValue, NewValue: RawUTF8; var CSV: RawUTF8;
-  const Sep: RawUTF8 = ','): boolean;
+  const Sep: RawUTF8): boolean;
 var pattern: RawUTF8;
     i,j: integer;
 begin
@@ -33179,7 +33196,7 @@ begin
   result := true;
 end;
 
-function RawUTF8ArrayToCSV(const Values: array of RawUTF8; const Sep: RawUTF8 = ','): RawUTF8;
+function RawUTF8ArrayToCSV(const Values: array of RawUTF8; const Sep: RawUTF8): RawUTF8;
 var i, len, seplen, L: Integer;
     P: PAnsiChar;
 begin
@@ -33210,8 +33227,8 @@ begin
 //  Assert(P-pointer(result)=len);
 end;
 
-function RawUTF8ArrayToQuotedCSV(const Values: array of RawUTF8; const Sep: RawUTF8=',';
-  Quote: AnsiChar=''''): RawUTF8;
+function RawUTF8ArrayToQuotedCSV(const Values: array of RawUTF8; const Sep: RawUTF8;
+  Quote: AnsiChar): RawUTF8;
 var i: integer;
     tmp: TRawUTF8DynArray;
 begin
@@ -37569,7 +37586,7 @@ begin
 end;
 
 function GetMimeContentType(Content: Pointer; Len: integer;
-  const FileName: TFileName=''): RawUTF8;
+  const FileName: TFileName): RawUTF8;
 begin // see http://www.garykessler.net/library/file_sigs.html for magic numbers
   if Content<>nil then
     result := GetMimeContentTypeFromBuffer(Content,Len,'') else
@@ -37757,7 +37774,7 @@ begin
       end else
       if not IdemPCharAndGetNextItem(P,'CONTENT-TYPE: ',part.ContentType) then
          IdemPCharAndGetNextItem(P,'CONTENT-TRANSFER-ENCODING: ',part.Encoding);
-      GetNextLineBegin(P,P);
+      P := GotoNextLine(P);
       if P=nil then
         exit;
     until PWord(P)^=13+10 shl 8;
@@ -46063,7 +46080,7 @@ begin
   ToRawUTF8DynArray(result);
 end;
 
-function TDocVariantData.ToCSV(const Separator: RawUTF8=','): RawUTF8;
+function TDocVariantData.ToCSV(const Separator: RawUTF8): RawUTF8;
 var tmp: TRawUTF8DynArray; // fast enough in practice
 begin
   ToRawUTF8DynArray(tmp);
@@ -55780,7 +55797,7 @@ begin
     result := UInt32ToUtf8(PtrUInt(bytes))+' B';
 end;
 
-function IntToThousandString(Value: integer; const ThousandSep: RawUTF8=','): RawUTF8;
+function IntToThousandString(Value: integer; const ThousandSep: RawUTF8): RawUTF8;
 var i,L,Len: cardinal;
 begin
   Int32ToUtf8(value,result);
