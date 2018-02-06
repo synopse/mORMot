@@ -2898,6 +2898,7 @@ function StrCompIL(P1,P2: PUTF8Char; L: Integer; Default: Integer=0): PtrInt;
 {$ifdef OWNNORMTOUPPER}
 type
   TNormTable = packed array[AnsiChar] of AnsiChar;
+  PNormTable = ^TNormTable;
   TNormTableByte = packed array[byte] of byte;
 
 var
@@ -29207,12 +29208,14 @@ end;
 function FindIniNameValue(P: PUTF8Char; UpperName: PAnsiChar): RawUTF8;
 var PBeg: PUTF8Char;
     i: integer;
+    table: PNormTable;
 begin // expect UpperName as 'NAME='
+  table := @NormToUpperAnsi7;
   PBeg := nil;
   if (P<>nil) and (P^<>'[') and (UpperName<>nil) then
   repeat
     if P^=' ' then repeat inc(P) until P^<>' ';   // trim left ' '
-    if NormToUpperAnsi7[P[0]]=UpperName[0] then
+    if table^[P[0]]=UpperName[0] then
       PBeg := P;
     repeat
       if P[0]>#13 then
@@ -29249,17 +29252,58 @@ begin // expect UpperName as 'NAME='
   result := '';
 end;
 
-function ExistsIniName(P: PUTF8Char; UpperName: PAnsiChar): boolean;
-var PBeg: PUTF8Char;
-begin
-  result := true;
-  while (P<>nil) and (P^<>'[') do begin
-    PBeg := GetNextLineBegin(P,P); // since PBeg=P, we have PBeg<>nil
-    if PBeg^=' ' then repeat inc(PBeg) until PBeg^<>' ';   // trim left ' '
-    if IdemPChar(PBeg,UpperName) then
-      exit;
-  end;
+function IdemPChar2(p: PUTF8Char; up: PAnsiChar; table: PNormTable): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+var u: AnsiChar;
+begin // here p and up are expected to be <> nil
   result := false;
+  dec(PtrInt(p),PtrInt(up));
+  repeat
+    u := up^;
+    if u=#0 then
+      break;
+    if u<>table^[up[PtrInt(p)]] then
+      exit;
+    inc(up);
+  until false;
+  result := true;
+end;
+
+function ExistsIniName(P: PUTF8Char; UpperName: PAnsiChar): boolean;
+var table: PNormTable;
+begin
+  result := false;
+  table := @NormToUpperAnsi7;
+  if P^<>'[' then
+    repeat
+      if P^=' ' then begin
+        repeat inc(P) until P^<>' '; // trim left ' '
+        if P^=#0 then
+          break;
+      end;
+      if IdemPChar2(P,UpperName,table) then begin
+        result := true;
+        exit;
+      end;
+      repeat
+        if P[0]>#13 then
+          if P[1]>#13 then
+            if P[2]>#13 then
+              if P[3]>#13 then begin
+                inc(P,4);
+                continue;
+              end else
+              inc(P,3) else
+            inc(P,2) else
+          inc(P);
+        case P^ of
+        #0: exit;
+        #10: begin inc(P); break; end;
+        #13: begin if P[1]=#10 then inc(P,2) else inc(P); break; end;
+        else inc(P);
+        end;
+      until false;
+    until P^='[';
 end;
 
 function ExistsIniNameValue(P: PUTF8Char; const UpperName: RawUTF8;
@@ -32096,17 +32140,24 @@ end;
 {$ifdef PUREPASCAL}
 function IdemPChar(p: PUTF8Char; up: PAnsiChar): boolean;
 // if the beginning of p^ is same as up^ (ignore case - up^ must be already Upper)
+var table: PNormTable;
+    u: AnsiChar;
 begin
   result := false;
   if p=nil then
     exit;
-  if (up<>nil) and (up^<>#0) then
+  if up<>nil then begin
+    dec(PtrInt(p),PtrInt(up));
+    table := @NormToUpperAnsi7;
     repeat
-      if up^<>NormToUpperAnsi7[p^] then
+      u := up^;
+      if u=#0 then
+        break;
+      if u<>table^[up[PtrInt(p)]] then
         exit;
       inc(up);
-      inc(p);
-    until up^=#0;
+    until false;
+  end;
   result := true;
 end;
 {$else}
@@ -32154,12 +32205,21 @@ end;
 
 function IdemPCharArray(p: PUTF8Char; const upArray: array of PAnsiChar): integer;
 var w: word;
+    table: ^TNormTableByte;
+    up: ^PAnsiChar;
 begin
   if p<>nil then begin
-    w := NormToUpperAnsi7Byte[ord(p[0])]+NormToUpperAnsi7Byte[ord(p[1])]shl 8;
+    table := @NormToUpperAnsi7;
+    w := table^[ord(p[0])]+table^[ord(p[1])]shl 8;
+    up := @upArray[0];
     for result := 0 to high(upArray) do
-      if (PWord(upArray[result])^=w) and IdemPChar(p+2,upArray[result]+2) then
-        exit;
+      {$ifdef PUREPASCAL}
+      if (PWord(up^)^=w) and IdemPChar2(p+2,up^+2,pointer(table)) then
+      {$else}
+      if (PWord(up^)^=w) and IdemPChar(p+2,up^+2) then
+      {$endif}
+        exit else
+        inc(up);
   end;
   result := -1;
 end;
@@ -32498,19 +32558,37 @@ end;
 {$endif}
 
 function GetNextLine(source: PUTF8Char; out next: PUTF8Char): RawUTF8;
+var beg: PAnsiChar;
 begin
-  next := source;
   if source=nil then begin
     result := '';
+    next := source;
     exit;
   end;
-  while source^ in ANSICHARNOT01310 do inc(source);
-  SetString(result,PAnsiChar(next),source-next);
-  if source^=#13 then inc(source);
-  if source^=#10 then inc(source);
-  if source^=#0 then
-    next := nil else
-    next := source;
+  beg := pointer(source);
+  repeat
+    if source[0]>#13 then
+      if source[1]>#13 then
+        if source[2]>#13 then
+          if source[3]>#13 then begin
+            inc(source,4);
+            continue;
+          end else
+          inc(source,3) else
+        inc(source,2) else
+      inc(source);
+    case source^ of
+      #0: next := nil;
+      #10: next := source+1;
+      #13: if source[1]=#10 then next := source+2 else next := source+1;
+      else begin
+        inc(source);
+        continue;
+      end;
+    end;
+    SetString(result,beg,source-beg);
+    exit;
+  until false;
 end;
 
 {$ifdef UNICODE}

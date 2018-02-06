@@ -369,10 +369,10 @@ begin
   fName := GetNextItem(Text,' ');
   CSVToRawUTF8DynArray(Pointer(GetNextItem(Text,']')),fFields);
   fFieldCount := length(fFields);
-  GetNextLineBegin(Text,Text);
+  Text := GotoNextLine(Text);
   P := pointer(Text);
   while (Text<>nil) and (Text^='"') do begin
-    GetNextLineBegin(Text,Text);
+    Text := GotoNextLine(Text);
     inc(fRowCount);
   end;
   if Text=nil then
@@ -416,7 +416,7 @@ begin
       if (P[0]=',')and(P[1]='"') then
         inc(P,2);
     end;
-    GetNextLineBegin(P,P);
+    P := GotoNextLine(P);
   end;
 end;
 
@@ -428,7 +428,7 @@ begin
   P := pointer(aFlatExport);
   repeat
     while (P<>nil) and (P^<>'[') do
-      GetNextLineBegin(P,P);
+      P := GotoNextLine(P);
     if P=nil then
       exit;
     inc(P);

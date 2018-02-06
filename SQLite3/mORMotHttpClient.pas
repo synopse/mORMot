@@ -535,7 +535,7 @@ begin
     ContentType := JSON_CONTENT_TYPE_VAR; // consider JSON by default
     P := pointer(Head);
     while P<>nil do begin
-      PBeg := GetNextLineBegin(P,P);
+      PBeg := P;
       if IdemPChar(PBeg,'CONTENT-TYPE:') then begin
         ContentType := GetNextLine(PBeg+14,P); // retrieve customized type
         if P=nil then // last entry in header
@@ -544,6 +544,7 @@ begin
         Head := trim(Head);
         break;
       end;
+      P := GotoNextLine(P);
     end;
     if Content<>'' then // always favor content type from binary
       ContentType := GetMimeContentTypeFromBuffer(pointer(Content),Length(Content),ContentType);
