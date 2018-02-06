@@ -2462,12 +2462,19 @@ function Trim(const S: RawUTF8): RawUTF8;
 
 {$define OWNNORMTOUPPER} { NormToUpper[] exists only in our enhanced RTL }
 
-/// our fast version of CompareMem() with optimized asm for x86
-function CompareMem(P1, P2: Pointer; Length: PtrInt): Boolean;
-  {$ifdef HASINLINE}{$ifdef PUREPASCAL}inline;{$endif}{$endif}
-
 {$endif ENHANCEDRTL}
 
+/// our fast version of CompareMem() with optimized asm for x86 and tune pascal
+function CompareMem(P1, P2: Pointer; Length: PtrInt): Boolean;
+
+{$ifdef HASINLINE}
+function CompareMemFixed(P1, P2: Pointer; Length: PtrInt): Boolean; inline;
+{$else}
+/// a CompareMem()-like function designed for small and fixed-sized content
+// - here, Length is expected to be a constant value - typically from sizeof() -
+// so that inlining has better performance than calling the CompareMem() function
+var CompareMemFixed: function(P1, P2: Pointer; Length: PtrInt): Boolean = CompareMem;
+{$endif HASINLINE}
 
 /// convert an IPv4 'x.x.x.x' text into its 32-bit value
 function IPToCardinal(const aIP: RawUTF8; out aValue: cardinal): boolean;
@@ -2778,7 +2785,7 @@ function StrCompFast(Str1, Str2: pointer): PtrInt;
 /// SSE 4.2 version of StrComp(), to be used with PUTF8Char/PAnsiChar
 // - please note that this optimized version may read up to 15 bytes
 // beyond the string; this is rarely a problem but it may in principle
-// generate a protection violation (e.g. when used over memory mapped files) - 
+// generate a protection violation (e.g. when used over memory mapped files) -
 // you can use the slightly slower but safe StrCompFast() function instead
 function StrCompSSE42(Str1, Str2: pointer): PtrInt;
 
@@ -2795,14 +2802,25 @@ var StrComp: function (Str1, Str2: pointer): PtrInt = StrCompFast;
 /// pure pascal version of strspn(), to be used with PUTF8Char/PAnsiChar
 // - please note that this optimized version may read up to 3 bytes
 // beyond the string, so should be avoided e.g. over memory mapped files
-function strspnpas(s,accept: PAnsiChar): integer;
+function strspnpas(s,accept: pointer): integer;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// pure pascal version of strcspn(), to be used with PUTF8Char/PAnsiChar
+// - please note that this optimized version may read up to 3 bytes
+// beyond the string, so should be avoided e.g. over memory mapped files
+function strcspnpas(s,reject: pointer): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
 {$ifdef CPUINTEL}
 /// SSE 4.2 version of strspn(), to be used with PUTF8Char/PAnsiChar
 // - please note that this optimized version may read up to 15 bytes
 // beyond the string, so should be avoided e.g. over memory mapped files
-function strspnsse42(s,accept: PAnsiChar): integer;
+function strspnsse42(s,accept: pointer): integer;
+
+/// SSE 4.2 version of strcspn(), to be used with PUTF8Char/PAnsiChar
+// - please note that this optimized version may read up to 15 bytes
+// beyond the string, so should be avoided e.g. over memory mapped files
+function strcspnsse42(s,reject: pointer): integer;
 {$endif}
 
 /// fastest available version of strspn(), to be used with PUTF8Char/PAnsiChar
@@ -2811,20 +2829,7 @@ function strspnsse42(s,accept: PAnsiChar): integer;
 // - will use SSE4.2 instructions on supported CPUs
 // - please note that this function may read some bytes beyond the string,
 // so should be avoided e.g. over memory mapped files
-var strspn: function (s,accept: PAnsiChar): integer = strspnpas;
-
-/// pure pascal version of strcspn(), to be used with PUTF8Char/PAnsiChar
-// - please note that this optimized version may read up to 3 bytes
-// beyond the string, so should be avoided e.g. over memory mapped files
-function strcspnpas(s,reject: PAnsiChar): integer;
-  {$ifdef HASINLINE}inline;{$endif}
-
-{$ifdef CPUINTEL}
-/// SSE 4.2 version of strcspn(), to be used with PUTF8Char/PAnsiChar
-// - please note that this optimized version may read up to 15 bytes
-// beyond the string, so should be avoided e.g. over memory mapped files
-function strcspnsse42(s,reject: PAnsiChar): integer;
-{$endif}
+var strspn: function (s,accept: pointer): integer = strspnpas;
 
 /// fastest available version of strcspn(), to be used with PUTF8Char/PAnsiChar
 // - returns how many reject chars do not appear in the initial segment of s, e.g.
@@ -2832,7 +2837,7 @@ function strcspnsse42(s,reject: PAnsiChar): integer;
 // - will use SSE4.2 instructions on supported CPUs
 // - please note that this function may read some bytes beyond the string,
 // so should be avoided e.g. over memory mapped files
-var strcspn: function (s,reject: PAnsiChar): integer = strcspnpas;
+var strcspn: function (s,reject: pointer): integer = strcspnpas;
 
 /// use our fast version of StrIComp(), to be used with PUTF8Char/PAnsiChar
 function StrIComp(Str1, Str2: pointer): PtrInt;
@@ -4101,6 +4106,7 @@ function DirectoryDelete(const Directory: TFileName; const Mask: TFileName='*.*'
 // ! DirectoryDeleteOlderFiles(FolderName, 1);
 // - only one level of file is deleted within the folder: no recursive deletion
 // is processed by this function, unless Recursive is TRUE
+// - if Recursive=true, caller should set TotalSize^=0 to have an accurate value
 function DirectoryDeleteOlderFiles(const Directory: TFileName; TimePeriod: TDateTime;
    const Mask: TFileName='*.*'; Recursive: Boolean=false; TotalSize: PInt64=nil): Boolean;
 
@@ -5113,11 +5119,12 @@ type
   {$endif}
     fValue: PPointer;
     fTypeInfo: pointer;
-    fElemSize: PtrUInt;
     fElemType: pointer;
     fCountP: PInteger;
     fCompare: TDynArraySortCompare;
+    fElemSize: cardinal;
     fKnownSize: integer;
+    fParser: integer; // index to GlobalJSONCustomParsers.fParsers[]
     fSorted: boolean;
     fKnownType: TDynArrayKind;
     fIsObjArray: (oaUnknown, oaTrue, oaFalse);
@@ -5127,7 +5134,7 @@ type
     procedure SetCapacity(aCapacity: integer);
     procedure SetCompare(const aCompare: TDynArraySortCompare); {$ifdef HASINLINE}inline;{$endif}
     function FindIndex(const Elem; aIndex: PIntegerDynArray;
-      aCompare: TDynArraySortCompare): integer;
+      aCompare: TDynArraySortCompare): PtrInt;
     function GetArrayTypeName: RawUTF8;
     function GetIsObjArray: boolean; {$ifdef HASINLINE}inline;{$endif}
     procedure SetIsObjArray(aValue: boolean); {$ifdef HASINLINE}inline;{$endif}
@@ -5180,6 +5187,9 @@ type
     // the current value
     procedure UseExternalCount(var aCountPointer: Integer);
       {$ifdef HASINLINE}inline;{$endif}
+    /// check this dynamic array from the GlobalJSONCustomParsers list
+    // - returns TRUE if this array has a custom JSON parser
+    function HasCustomJSONParser: boolean;
     /// initialize the wrapper to point to no dynamic array
     procedure Void;
     /// check if the wrapper points to a dynamic array
@@ -5241,7 +5251,7 @@ type
     // there is no way with standard RTTI do know which they are)
     // - warning: Elem must be of the same exact type than the dynamic array,
     // and must be a reference to a variable (you can't write IndexOf(i+10) e.g.)
-    function IndexOf(const Elem): integer;
+    function IndexOf(const Elem): PtrInt;
     /// search for an element value inside the dynamic array
     // - this method will use the Compare property function for the search
     // - return the index found (0..Count-1), or -1 if Elem was not found
@@ -5249,7 +5259,7 @@ type
     // - if the array is not sorted, it will use slower O(n) iterating search
     // - warning: Elem must be of the same exact type than the dynamic array,
     // and must be a reference to a variable (you can't write Find(i+10) e.g.)
-    function Find(const Elem): integer; overload;
+    function Find(const Elem): PtrInt; overload;
     /// search for an element value inside the dynamic array, from an external
     // indexed lookup table
     // - return the index found (0..Count-1), or -1 if Elem was not found
@@ -5263,7 +5273,7 @@ type
     // - warning; the lookup index should be synchronized if array content
     // is modified (in case of adding or deletion)
     function Find(const Elem; const aIndex: TIntegerDynArray;
-      aCompare: TDynArraySortCompare): integer; overload;
+      aCompare: TDynArraySortCompare): PtrInt; overload;
     /// search for an element value, then fill all properties if match
     // - this method will use the Compare property function for the search,
     // or the supplied indexed lookup table and its associated compare function
@@ -5487,6 +5497,11 @@ type
     // the source dynamic array (leave as -1 to add till the end)
     procedure AddArray(const DynArrayVar; aStartIndex: integer=0; aCount: integer=-1);
     {$ifndef DELPHI5OROLDER}
+    /// fast initialize a wrapper for an existing dynamic array of the same type
+    // - is slightly faster than
+    // ! Init(aAnother.ArrayType,aValue,nil);
+    procedure InitFrom(const aAnother: TDynArray; var aValue);
+      {$ifdef HASINLINE}inline;{$endif}
     /// add elements from a given TDynArray
     // - the supplied source TDynArray MUST be of the same exact type as the
     // current used for this TDynArray, otherwise it won't do anything
@@ -5610,7 +5625,7 @@ type
     /// the known type name of the whole array
     property ArrayTypeName: RawUTF8 read GetArrayTypeName;
     /// the internal in-memory size of one element, as retrieved from RTTI
-    property ElemSize: PtrUInt read fElemSize;
+    property ElemSize: cardinal read fElemSize;
     /// the internal type information of one element, as retrieved from RTTI
     property ElemType: pointer read fElemType;
     /// if this dynamic aray is a T*ObjArray
@@ -8378,6 +8393,8 @@ type
     /// append a JSON field name, followed by an escaped UTF-8 JSON String and
     // a comma (',')
     procedure AddPropJSONString(const PropName: shortstring; const Text: RawUTF8);
+    /// append a JSON field name, followed by a number value and a comma (',')
+    procedure AddPropJSONInt64(const PropName: shortstring; Value: Int64);
     /// append a RawUTF8 property name, as '"FieldName":'
     // - FieldName content should not need to be JSON escaped (e.g. no " within)
     procedure AddFieldName(const FieldName: RawUTF8); overload;
@@ -8615,20 +8632,17 @@ type
     // - by default, custom serializers defined via RegisterCustomJSONSerializer()
     // would write enumerates and sets as integer numbers, unless
     // twoEnumSetsAsTextInRecord is set in the instance Options
-    procedure AddDynArrayJSON(const aDynArray: TDynArray); overload;
+    procedure AddDynArrayJSON(var aDynArray: TDynArray); overload;
+    /// append a dynamic array content as UTF-8 encoded JSON array
+    // - expect a dynamic array TDynArrayHashed wrapper as incoming parameter
+    procedure AddDynArrayJSON(var aDynArray: TDynArrayHashed); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// append a dynamic array content as UTF-8 encoded JSON array
     // - just a wrapper around the other overloaded method, creating a
     // temporary TDynArray wrapper on the stack
     // - to be used e.g. for custom record JSON serialization, within a
     // TDynArrayJSONCustomWriter callback
     procedure AddDynArrayJSON(aTypeInfo: pointer; const aValue); overload;
-    {$ifdef UNDIRECTDYNARRAY}
-    /// append a dynamic array content as UTF-8 encoded JSON array
-    // - expect a dynamic array TDynArrayHashed wrapper as incoming parameter
-    // - this method is needed by the fact that "object" is buggy under
-    // newest versions of the Delphi compiler
-    procedure AddDynArrayJSON(const aDynArray: TDynArrayHashed); overload; inline;
-    {$endif}
     /// same as AddDynArrayJSON(), but will double all internal " and bound with "
     // - this implementation will avoid most memory allocations
     procedure AddDynArrayJSONAsString(aTypeInfo: pointer; var aValue);
@@ -11322,6 +11336,8 @@ const
   PT_COMPLEXTYPES = [ptArray, ptRecord, ptCustom, ptTimeLog];
   /// could be used to compute the index in a pointer list from its position
   POINTERSHR = {$ifdef CPU64}3{$else}2{$endif};
+  /// could be used to compute the bitmask of a pointer integer
+  POINTERAND = {$ifdef CPU64}7{$else}3{$endif};
 
 
 { ************ some other common types and conversion routines ************** }
@@ -12265,13 +12281,6 @@ type
 // - by design, such combined hashes cannot be cascaded
 procedure crc128c(buf: PAnsiChar; len: cardinal; out crc: THash128);
 
-/// compute a proprietary 128-bit CRC of a 128-bit binary buffer
-// - apply four crc32c() calls on the 128-bit input chunk, into a 128-bit crc
-// - its output won't match crc128c() value, which works on 8-bit input
-// - will use SSE 4.2 hardware accelerated instruction, if available
-// - is used e.g. by SynCrypto's TAESCFBCRC to check for data integrity
-var crcblock: procedure(crc128, data128: PBlock128);
-
 /// compute a proprietary 128-bit CRC of 128-bit binary buffers
 // - apply four crc32c() calls on the 128-bit input chunks, into a 128-bit crc
 // - its output won't match crc128c() value, which works on 8-bit input
@@ -12283,6 +12292,13 @@ procedure crcblocks(crc128, data128: PBlock128; count: integer);
 // - to be used for regression tests only: crcblock will use the fastest
 // implementation available on the current CPU
 procedure crcblockNoSSE42(crc128, data128: PBlock128);
+
+/// compute a proprietary 128-bit CRC of a 128-bit binary buffer
+// - apply four crc32c() calls on the 128-bit input chunk, into a 128-bit crc
+// - its output won't match crc128c() value, which works on 8-bit input
+// - will use SSE 4.2 hardware accelerated instruction, if available
+// - is used e.g. by SynCrypto's TAESCFBCRC to check for data integrity
+var crcblock: procedure(crc128, data128: PBlock128)  = crcblockNoSSE42;
 
 /// returns TRUE if all 16 bytes of this 128-bit buffer equal zero
 // - e.g. a MD5 digest, or an AES block
@@ -12380,17 +12396,17 @@ type
   /// the potential features, retrieved from an Intel CPU
   // - see https://en.wikipedia.org/wiki/CPUID#EAX.3D1:_Processor_Info_and_Feature_Bits
   TIntelCpuFeature =
-   ( { in EDX }
+   ( { CPUID 1 in EDX }
    cfFPU, cfVME, cfDE, cfPSE, cfTSC, cfMSR, cfPAE, cfMCE,
    cfCX8, cfAPIC, cf_d10, cfSEP, cfMTRR, cfPGE, cfMCA, cfCMOV,
    cfPAT, cfPSE36, cfPSN, cfCLFSH, cf_d20, cfDS, cfACPI, cfMMX,
    cfFXSR, cfSSE, cfSSE2, cfSS, cfHTT, cfTM, cfIA64, cfPBE,
-   { in ECX }
+   { CPUID 1 in ECX }
    cfSSE3, cfCLMUL, cfDS64, cfMON, cfDSCPL, cfVMX, cfSMX, cfEST,
    cfTM2, cfSSSE3, cfCID, cfSDBG, cfFMA, cfCX16, cfXTPR, cfPDCM,
    cf_c16, cfPCID, cfDCA, cfSSE41, cfSSE42, cfX2A, cfMOVBE, cfPOPCNT,
    cfTSC2, cfAESNI, cfXS, cfOSXS, cfAVX, cfF16C, cfRAND, cfHYP,
-   { extended features in EBX, ECX }
+   { extended features CPUID 7 in EBX, ECX, DL }
    cfFSGS, cf_b01, cfSGX, cfBMI1, cfHLE, cfAVX2, cf_b06, cfSMEP,
    cfBMI2, cfERMS, cfINVPCID, cfRTM, cfPQM, cf_b13, cfMPX, cfPQE,
    cfAVX512F, cfAVX512DQ, cfRDSEED, cfADX, cfSMAP, cfAVX512IFMA, cfPCOMMIT, cfCLFLUSH,
@@ -13812,6 +13828,20 @@ function GetFileVersion(const FileName: TFileName): cardinal;
 // - including Host, User, CPU, OS, freemem, freedisk...
 function SystemInfoJson: RawUTF8;
 
+const
+  /// the compiler family used
+  COMP_TEXT = {$ifdef FPC}'fpc'{$else}'delphi'{$endif};
+  /// the target Operating System used for compilation
+  OS_TEXT = {$ifdef MSWINDOWS}'win'{$else}{$ifdef DARWIN}'osx'{$else}
+  {$ifdef BSD}'bsd'{$else}{$ifdef LINUX}'linux'{$else}'posix'
+  {$endif}{$endif}{$endif}{$endif};
+  /// the CPU architecture used for compilation
+  CPU_ARCH_TEXT = {$ifdef CPUX86}'x86'{$else}{$ifdef CPUX64}'x64'{$else}
+    {$ifdef CPUARM}'arm'+{$else}
+    {$ifdef CPUPOWERPC}'ppc'+{$else}
+    {$ifdef CPUSPARC}'sparc'+{$endif}{$endif}{$endif}
+    {$ifdef CPU32}'32'{$else}'64'{$endif}{$endif}{$endif};
+
 {$ifdef MSWINDOWS}
 
 type
@@ -13872,6 +13902,7 @@ var
   OSVersionText: RawUTF8;
   /// some textual information about the current CPU
   CpuInfoText: RawUTF8;
+
 
 /// this function can be used to create a GDI compatible window, able to
 // receive Windows Messages for fast local communication
@@ -15068,7 +15099,6 @@ type
     function GetArrayExistingByName(const aName: RawUTF8): PDocVariantData;
     function GetArrayOrAddByName(const aName: RawUTF8): PDocVariantData;
     function GetAsDocVariantByIndex(aIndex: integer): PDocVariantData;
-    procedure ExchgValues(v1,v2: integer);
   public
     /// initialize a TDocVariantData to store some document-based content
     // - can be used with a stack-allocated TDocVariantData variable:
@@ -15336,7 +15366,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// find an item index in this document from its name
     // - returns -1 if not found
-    function GetValueIndex(aName: PUTF8Char; aNameLen: integer; aCaseSensitive: boolean): integer; overload;
+    function GetValueIndex(aName: PUTF8Char; aNameLen: PtrInt; aCaseSensitive: boolean): integer; overload;
     /// find an item in this document, and returns its value
     // - raise an EDocVariant if not found and dvoReturnNullForUnknownProperty
     // is not set in Options (in this case, it will return Null)
@@ -15888,7 +15918,7 @@ const
 // !   for ndx := 0 to Count-1 do // here Count=0 for the "fake" result
 // !     writeln(Names[ndx]);
 function _Safe(const DocVariant: variant): PDocVariantData; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef FPC}inline;{$endif} // Delphi has problems inlining this :(
 
 /// direct access to a TDocVariantData from a given variant instance
 // - return a pointer to the TDocVariantData corresponding to the variant
@@ -21213,12 +21243,9 @@ begin // fallback to pure pascal version, since asm version below make GPFs for 
   end else
     result := StrUInt32(P,val);
 end;
-{$else}
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
+{$else} {$ifdef FPC}nostackframe; assembler; asm {$else}
 asm // rcx=P, rdx=val (Linux: rdi,rsi)
-    .NOFRAME
+        .noframe
 {$endif FPC}
         {$ifndef win64}
         mov     rcx, rdi
@@ -21325,12 +21352,9 @@ end;
 {$endif PUREPASCAL}
 
 function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
-{$ifdef CPUX64}
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
+{$ifdef CPUX64} {$ifdef FPC}nostackframe; assembler; asm {$else}
 asm // rcx=P, rdx=val (Linux: rdi,rsi)
-        .NOFRAME
+        .noframe
 {$endif FPC}
         {$ifndef win64}
         mov     rcx, rdi
@@ -23480,6 +23504,7 @@ procedure VariantDynArrayClear(var Value: TVariantDynArray);
 var p: PDynArrayRec;
     V: PVarData;
     i: integer;
+    docv: word;
     handler: TCustomVariantType;
 begin
   if pointer(Value)=nil then
@@ -23492,6 +23517,7 @@ begin
     exit;
   end;
   handler := nil;
+  docv := DocVariantVType;
   for i := 1 to p^.length do begin
     case V^.VType of
     varEmpty..varDate,varError,varBoolean,varShortInt..varWord64: ;
@@ -23501,7 +23527,7 @@ begin
     varUString: UnicodeString(V^.VAny) := '';
     {$endif}
     else
-    if V^.VType=word(DocVariantVType) then
+    if V^.VType=docv then
       DocVariantType.Clear(V^) else
     if V^.VType=varVariant or varByRef then
       VarClear(PVariant(V^.VPointer)^) else
@@ -23627,11 +23653,33 @@ asm
     mov   ebx, dword ptr[eax + 4]
     bswap ebx
     mov   dword ptr[edx], ebx
+    add   eax, 8
+    add   edx, 8
     dec   ecx
-    lea   eax, [eax + 8]
-    lea   edx, [edx + 8]
     jnz   @1
     pop   ebx
+end;
+{$else}
+{$ifdef CPUX64} {$ifdef FPC}nostackframe; assembler; asm {$else}
+asm
+    .noframe // rcx=@a rdx=@b r8=n (Linux: rdi,rsi,rdx)
+{$endif}
+@1: {$ifdef win64}
+    mov   rax, qword ptr[rcx]
+    bswap rax
+    mov   qword ptr[rdx], rax
+    add   rcx, 8
+    add   rdx, 8
+    dec   r8
+    {$else}
+    mov   rax, qword ptr[rdi]
+    bswap rax
+    mov   qword ptr[rsi], rax
+    add   rdi, 8
+    add   rsi, 8
+    dec   rdx
+    {$endif win64}
+    jnz @1
 end;
 {$else}
 {$ifdef FPC}
@@ -23640,31 +23688,12 @@ begin
   for i := 0 to n-1 do
     b^[i] := SwapEndian(a^[i]);
 end;
-{$else}
-asm
-    .NOFRAME // rcx=@a rdx=@b r8=n (Linux: rdi,rsi,rdx)
-@1: {$ifdef win64}
-    mov   rax, qword ptr[rcx]
-    bswap rax
-    mov   qword ptr[rdx], rax
-    dec   r8
-    lea   rcx, [rcx + 8]
-    lea   rdx, [rdx + 8]
-    {$else}
-    mov   rax, qword ptr[rdi]
-    bswap rax
-    mov   qword ptr[rsi], rax
-    dec   rdx
-    lea   rdi, [rdi + 8]
-    lea   rsi, [rsi + 8]
-    {$endif win64}
-    jnz @1
-end;
-{$endif}
-{$endif}
+{$endif FPC}
+{$endif CPUX64}
+{$endif CPUX86}
 
 {$ifdef FPC}
-function bswap32(a: cardinal): cardinal; inline;
+function bswap32(a: cardinal): cardinal;
 begin
   result := SwapEndian(a); // use fast platform-specific function
 end;
@@ -23673,7 +23702,6 @@ function bswap64(const a: QWord): QWord;
 begin
   result := SwapEndian(a); // use fast platform-specific function
 end;
-
 {$else}
 {$ifdef CPUX64}
 function bswap32(a: cardinal): cardinal;
@@ -23697,7 +23725,6 @@ asm
   {$endif win64}
   bswap rax
 end;
-
 {$else}
 {$ifdef CPUX86}
 function bswap32(a: cardinal): cardinal;
@@ -24080,18 +24107,79 @@ end;
 {$endif LVCL}
 {$endif PUREPASCAL}
 
-{$ifdef PUREPASCAL}
-function CompareMem(P1, P2: Pointer; Length: PtrInt): Boolean;
+{$ifdef HASINLINE}
+function CompareMemFixed(P1, P2: Pointer; Length: PtrInt): Boolean;
 var i: PtrInt;
-begin // inlining this code is more efficient than FPC's CompareByte
+begin
   result := false;
-  for i := 0 to (Length shr 2)-1 do
-    if PCardinalArray(P1)^[i]<>PCardinalArray(P2)^[i] then
+  for i := 0 to (Length shr POINTERSHR)-1 do
+    if PPtrIntArray(P1)[i]<>PPtrIntArray(P2)[i] then
       exit;
-  for i := Length-(Length and 3) to Length-1 do
-    if PByteArray(P1)^[i]<>PByteArray(P2)^[i] then
+  for i := Length-(Length and POINTERAND) to Length-1 do
+    if PByteArray(P1)[i]<>PByteArray(P2)[i] then
       exit;
   result := true;
+end;
+{$endif}
+
+{$ifdef PUREPASCAL}
+function CompareMem(P1, P2: Pointer; Length: PtrInt): Boolean;
+label zero;
+begin // this code compiles well under FPC and Delphi on both 32-bit and 64-bit
+  inc(Length,PtrInt(P1)-SizeOf(PtrInt)*2);
+  if Length>=PtrInt(P1) then begin
+    if PPtrInt(P1)^<>PPtrInt(P2)^ then
+      goto zero;
+    inc(PtrInt(P1),SizeOf(PtrInt));
+    inc(PtrInt(P2),SizeOf(PtrInt));
+    dec(PtrInt(P2),PtrInt(P1));
+    PtrInt(P1) := PtrInt(P1) and -SizeOf(PtrInt);
+    inc(PtrInt(P2),PtrInt(P1));
+    if Length>=PtrInt(P1) then
+      repeat // compare 4 aligned PtrInt per loop
+        if (PPtrInt(P1)^<>PPtrInt(P2)^) or (PPtrIntArray(P1)[1]<>PPtrIntArray(P2)[1]) then
+          goto zero;
+        inc(PtrInt(P1),SizeOf(PtrInt)*2);
+        inc(PtrInt(P2),SizeOf(PtrInt)*2);
+        if Length<PtrInt(P1) then
+          break;
+        if (PPtrInt(P1)^<>PPtrInt(P2)^) or (PPtrIntArray(P1)[1]<>PPtrIntArray(P2)[1]) then
+          goto zero;
+        inc(PtrInt(P1),SizeOf(PtrInt)*2);
+        inc(PtrInt(P2),SizeOf(PtrInt)*2);
+      until Length<PtrInt(P1);
+  end;
+  inc(Length,SizeOf(PtrInt)*2-PtrInt(P1));
+  if Length>=SizeOf(PtrInt) then begin
+    if PPtrInt(P1)^<>PPtrInt(P2)^ then
+      goto zero;
+    inc(PtrInt(P1),SizeOf(PtrInt));
+    inc(PtrInt(P2),SizeOf(PtrInt));
+    dec(Length,SizeOf(PtrInt));
+  end;
+  {$ifdef CPU64}
+  if Length>=4 then begin
+    if PCardinal(P1)^<>PCardinal(P2)^ then
+      goto zero;
+    inc(PtrInt(P1),4);
+    inc(PtrInt(P2),4);
+    dec(Length,4);
+  end;
+  {$endif}
+  if Length>=2 then begin
+    if PWord(P1)^<>PWord(P2)^ then
+      goto zero;
+    inc(PtrInt(P1),2);
+    inc(PtrInt(P2),2);
+    dec(Length,2);
+  end;
+  if Length>=1 then
+    if PByte(P1)^<>PByte(P2)^ then
+      goto zero;
+  result := true;
+  exit;
+zero:
+  result := false;
 end;
 
 // from Aleksandr Sharahov's PosEx_Sha_Pas_2()
@@ -25952,17 +26040,17 @@ end;
 
 {$endif PUREPASCAL}
 
-function strspnpas(s,accept: PAnsiChar): integer;
+function strspnpas(s,accept: pointer): integer;
 var p: PCardinal;
     c: AnsiChar;
     d: cardinal;
 begin // returns size of initial segment of s which are in accept
   result := 0;
   repeat
-    c := s[result];
+    c := PAnsiChar(s)[result];
     if c=#0 then
       break;
-    p := pointer(accept);
+    p := accept;
     repeat // stop as soon as we find any character not from accept
       d := p^;
       inc(p);
@@ -25990,17 +26078,17 @@ begin // returns size of initial segment of s which are in accept
   until false;
 end;
 
-function strcspnpas(s,reject: PAnsiChar): integer;
+function strcspnpas(s,reject: pointer): integer;
 var p: PCardinal;
     c: AnsiChar;
     d: cardinal;
 begin // returns size of initial segment of s which are not in reject
   result := 0;
   repeat
-    c := s[result];
+    c := PAnsiChar(s)[result];
     if c=#0 then
       break;
-    p := pointer(reject);
+    p := reject;
     repeat // stop as soon as we find any character from reject
       d := p^;
       inc(p);
@@ -26030,12 +26118,10 @@ end;
 
 {$ifdef CPUINTEL}
 {$ifdef CPUX64}
-function strcspnsse42(s,reject: PAnsiChar): integer;
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
+function strcspnsse42(s,reject: pointer): integer;
+{$ifdef FPC}nostackframe; assembler; asm {$else}
 asm // rcx=s, rdx=reject (Linux: rdi,rsi)
-       .noframe
+        .noframe
 {$endif FPC}
 {$ifdef win64}
         push    rdi
@@ -26079,12 +26165,10 @@ asm // rcx=s, rdx=reject (Linux: rdi,rsi)
         and     eax, edx   // accumulate matches
         jmp     @2
 end;
-function strspnsse42(s,accept: PAnsiChar): integer;
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
+function strspnsse42(s,accept: pointer): integer;
+{$ifdef FPC}nostackframe; assembler; asm {$else}
 asm // rcx=s, rdx=accept (Linux: rdi,rsi)
-       .noframe
+        .noframe
 {$endif FPC}
 {$ifdef win64}
         push    rdi
@@ -26130,7 +26214,7 @@ asm // rcx=s, rdx=accept (Linux: rdi,rsi)
 end;
 {$endif CPUX64}
 {$ifdef CPUX86}
-function strcspnsse42(s,reject: PAnsiChar): integer;
+function strcspnsse42(s,reject: pointer): integer;
 asm // eax=s, edx=reject
         push    edi
         push    esi
@@ -26179,7 +26263,7 @@ asm // eax=s, edx=reject
         and     eax, edx   // accumulate matches
         jmp     @2
 end;
-function strspnsse42(s,accept: PAnsiChar): integer;
+function strspnsse42(s,accept: pointer): integer;
 asm // eax=s, edx=accept
         push    edi
         push    esi
@@ -26502,7 +26586,7 @@ begin
   {$endif}
   if cpu='' then
     cpu := GetEnvironmentVariable('PROCESSOR_IDENTIFIER');
-  FormatUTF8('% x %',[SystemInfo.dwNumberOfProcessors,cpu],CpuInfoText);
+  FormatUTF8('% x % ('+CPU_ARCH_TEXT+')',[SystemInfo.dwNumberOfProcessors,cpu],CpuInfoText);
 end;
 
 {$else}
@@ -26572,7 +26656,7 @@ begin
       inc(modname);
     end;
     modname^ := #0;
-    FormatUTF8('% x %',[SystemInfo.dwNumberOfProcessors,beg],CpuInfoText);
+    FormatUTF8('% x % ('+CPU_ARCH_TEXT+')',[SystemInfo.dwNumberOfProcessors,beg],CpuInfoText);
   end;
 end;
 
@@ -27551,24 +27635,24 @@ begin
   if Hex=nil then
     exit;
   if Bin<>nil then
-  for I := 1 to BinBytes do begin
-    B := ConvertHexToBin[Ord(Hex^)];
-    inc(Hex);
-    if B>15 then exit;
-    C := ConvertHexToBin[Ord(Hex^)];
-    Inc(Hex);
-    if C>15 then exit;
-    Bin^ := B shl 4+C;
-    Inc(Bin);
-  end else
-  for I := 1 to BinBytes do begin // no Bin^ -> just validate Hex^ Stream format
-    B := ConvertHexToBin[Ord(Hex^)];
-    inc(Hex);
-    if B>15 then exit;
-    C := ConvertHexToBin[Ord(Hex^)];
-    Inc(Hex);
-    if C>15 then exit;
-  end;
+    for I := 1 to BinBytes do begin
+      B := ConvertHexToBin[Ord(Hex^)];
+      inc(Hex);
+      if B>15 then exit;
+      C := ConvertHexToBin[Ord(Hex^)];
+      Inc(Hex);
+      if C>15 then exit;
+      Bin^ := B shl 4+C;
+      Inc(Bin);
+    end else
+    for I := 1 to BinBytes do begin // Bin=nil -> validate Hex^ input
+      B := ConvertHexToBin[Ord(Hex^)];
+      inc(Hex);
+      if B>15 then exit;
+      C := ConvertHexToBin[Ord(Hex^)];
+      Inc(Hex);
+      if C>15 then exit;
+    end;
   result := true; // conversion OK
 end;
 
@@ -29759,6 +29843,8 @@ var F: TSearchRec;
     Dir: TFileName;
     old: TDateTime;
 begin
+  if not Recursive and (TotalSize<>nil) then
+    TotalSize^ := 0;
   result := true;
   if (Directory='') or not DirectoryExists(Directory) then
     exit;
@@ -33815,7 +33901,7 @@ begin
     result := (a_[0]=b_[0]) and (a_[1]=b_[1]) and (a_[2]=b_[2]) and (a_[3]=b_[3])
           and (a_[4]=b_[4]) and (a_[5]=b_[5]) and (a_[6]=b_[6]) and (a_[7]=b_[7]) else
   {$endif}
-    result := CompareMem(@A,@B,SizeOf(TSQLFieldBits))
+    result := CompareMemFixed(@A,@B,SizeOf(TSQLFieldBits))
 end;
 
 procedure FillZero(var Fields: TSQLFieldBits);
@@ -34487,11 +34573,9 @@ type
 {$ifdef CPUINTEL}
 {$ifdef CPU64}
 procedure GetCPUID(Param: Cardinal; var Registers: TRegisters);
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
+{$ifdef FPC}nostackframe; assembler; asm {$else}
 asm // ecx=param, rdx=Registers (Linux: edi,rsi)
-        .NOFRAME
+        .noframe
 {$endif FPC}
         {$ifdef win64}
         mov     eax, ecx
@@ -34513,11 +34597,9 @@ asm // ecx=param, rdx=Registers (Linux: edi,rsi)
 end;
 
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
+{$ifdef FPC}nostackframe; assembler; asm {$else}
 asm // ecx=crc, rdx=buf, r8=len (Linux: edi,rsi,rdx)
-        .NOFRAME
+        .noframe
 {$endif FPC}
         {$ifdef win64}
         mov     eax, ecx
@@ -34681,12 +34763,9 @@ end;
 {$endif}
 {$ifdef CPUINTEL}
 procedure crcblockSSE42(crc128, data128: PBlock128);
-{$ifdef CPU64}
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
+{$ifdef CPU64} {$ifdef FPC}nostackframe; assembler; asm {$else}
 asm // rcx=crc128, rdx=data128 (Linux: rdi,rsi)
-        .NOFRAME
+        .noframe
 {$endif FPC}
         {$ifdef Linux}
         mov     eax, dword ptr[rdi]
@@ -36745,14 +36824,10 @@ end;
 {$ifdef CPUINTEL}
 /// get 32-bit value from NIST SP 800-90A compliant RDRAND Intel x86/x64 opcode
 function RdRand32: cardinal;
-{$ifdef CPU64}
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
+{$ifdef CPU64} {$ifdef FPC}nostackframe; assembler; asm {$else}
 asm
   .noframe
-{$endif FPC}
-{$endif CPU64}
+{$endif FPC} {$endif CPU64}
 {$ifdef CPU32}
 asm
 {$endif}
@@ -38532,7 +38607,7 @@ begin
     if not LeaveUnprotected then
       VirtualProtect(Old, Size, RestoreProtection, Ignore);
     FlushInstructionCache(GetCurrentProcess, Old, Size);
-    if not CompareMem(Old,New,Size) then
+    if not CompareMemFixed(Old,New,Size) then
       raise ESynException.Create('PatchCode?');
   end;
 end;
@@ -39415,7 +39490,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
     if info=nil then
       result := -1 else
       if itemtype=nil then
-        if CompareMem(A,B,arraysize) then
+        if CompareMemFixed(A,B,arraysize) then
           result := arraysize else
           result := 0 else begin
         for i := 1 to info^.elCount do begin // only compare managed fields
@@ -39648,7 +39723,7 @@ var info,fieldinfo: PTypeInfo;
     {$ifdef FPC_NEWRTTI}
     recInitData: PRecInitData;
     {$endif}
-    F, offset: integer;
+    F, offset: PtrInt;
     field: PFieldInfo;
     A, B: PAnsiChar;
 begin
@@ -39682,7 +39757,7 @@ begin
     {$endif}
     offset := integer(field^.Offset)-offset;
     if offset<>0 then begin
-      if not CompareMem(A,B,offset) then
+      if not CompareMemFixed(A,B,offset) then
         exit; // binary block not equal
       inc(A,offset);
       inc(B,offset);
@@ -39698,7 +39773,7 @@ begin
     inc(offset,field^.Offset);
     inc(field);
   end;
-  if CompareMem(A,B,integer(info^.recSize)-offset) then
+  if CompareMemFixed(A,B,integer(info^.recSize)-offset) then
     result := true;
 end;
 
@@ -41273,10 +41348,6 @@ type
       AddIfNotExisting: boolean): integer;
     function DynArraySearch(aDynArrayTypeInfo, aRecordTypeInfo: pointer;
       AddIfNotExisting: boolean=true): integer; overload;
-    function DynArraySearch(aDynArrayTypeInfo, aRecordTypeInfo: pointer;
-      out Reader: TDynArrayJSONCustomReader): boolean; overload;
-    function DynArraySearch(aDynArrayTypeInfo, aRecordTypeInfo: pointer;
-      out Writer: TDynArrayJSONCustomWriter; PParser: PTJSONCustomParserAbstract): boolean; overload;
     function RecordSearch(aRecordTypeInfo: pointer;
       AddIfNotExisting: boolean=true): integer; overload;
     function RecordSearch(aRecordTypeInfo: pointer;
@@ -41367,68 +41438,53 @@ end;
 
 function TJSONCustomParsers.DynArraySearch(aDynArrayTypeInfo,aRecordTypeInfo: pointer;
   AddIfNotExisting: boolean): Integer;
-begin
+var threadsafe: integer;
+    parser: PJSONCustomParserRegistration;
+begin // O(n) brute force is fast enough, since n remains small (mostly<64)
   if self<>nil then
-  if (aDynArrayTypeInfo<>nil) and (fParsersCount<>0) then
-    if fParser[fLastDynArrayIndex].DynArrayTypeInfo=aDynArrayTypeInfo then begin
-      result := fLastDynArrayIndex;
+  if (aDynArrayTypeInfo<>nil) and (fParsersCount<>0) then begin
+    threadsafe := fLastDynArrayIndex;
+    if (cardinal(threadsafe)<cardinal(fParsersCount)) and
+       (fParser[threadsafe].DynArrayTypeInfo=aDynArrayTypeInfo) then begin
+      result := threadsafe;
       exit;
     end else begin
       if aRecordTypeInfo=nil then // record RTTI not specified: guess now
         aRecordTypeInfo := DynArrayTypeInfoToRecordInfo(aDynArrayTypeInfo);
       if aRecordTypeInfo=nil then begin
+        parser := pointer(fParser);
         for result := 0 to fParsersCount-1 do
-          if fParser[result].DynArrayTypeInfo=aDynArrayTypeInfo then begin
+          if parser^.DynArrayTypeInfo=aDynArrayTypeInfo then begin
             fLastDynArrayIndex := result;
             exit;
-          end;
-      end else
-      if (cardinal(fLastRecordIndex)<cardinal(fParsersCount)) and
-         (fParser[fLastRecordIndex].RecordTypeInfo=aRecordTypeInfo) then begin
-        result := fLastRecordIndex;
-        exit;
-      end else
-      for result := 0 to fParsersCount-1 do
-        with fParser[result] do
-        if (DynArrayTypeInfo=aDynArrayTypeInfo) or
-           (RecordTypeInfo=aRecordTypeInfo) then begin
-          fLastDynArrayIndex := result;
-          fLastRecordIndex := result;
+          end else
+          inc(parser);
+      end else begin
+        threadsafe := fLastRecordIndex;
+        if (cardinal(threadsafe)<cardinal(fParsersCount)) and
+           (fParser[threadsafe].RecordTypeInfo=aRecordTypeInfo) then begin
+          result := threadsafe;
           exit;
+        end else begin
+          parser := pointer(fParser);
+          for result := 0 to fParsersCount-1 do
+            if (parser^.DynArrayTypeInfo=aDynArrayTypeInfo) or
+               (parser^.RecordTypeInfo=aRecordTypeInfo) then begin
+              fLastDynArrayIndex := result;
+              fLastRecordIndex := result;
+              exit;
+            end else
+            inc(parser);
         end;
+      end;
     end;
+  end;
   if AddIfNotExisting then begin
     result := TryToGetFromRTTI(aDynArrayTypeInfo,aRecordTypeInfo);
     if result>=0 then
       fLastRecordIndex := result;
   end else
     result := -1;
-end;
-
-function TJSONCustomParsers.DynArraySearch(aDynArrayTypeInfo,aRecordTypeInfo: pointer;
-  out Reader: TDynArrayJSONCustomReader): boolean;
-var ndx: integer;
-begin
-  ndx := DynArraySearch(aDynArrayTypeInfo,aRecordTypeInfo);
-  if (ndx>=0) and Assigned(fParser[ndx].Reader) then begin
-    Reader := fParser[ndx].Reader;
-    result := true;
-  end else
-    result := false;
-end;
-
-function TJSONCustomParsers.DynArraySearch(aDynArrayTypeInfo,aRecordTypeInfo: pointer;
-  out Writer: TDynArrayJSONCustomWriter; PParser: PTJSONCustomParserAbstract): boolean;
-var ndx: integer;
-begin
-  ndx := DynArraySearch(aDynArrayTypeInfo,aRecordTypeInfo);
-  if (ndx>=0) and Assigned(fParser[ndx].Writer) then begin
-    Writer := fParser[ndx].Writer;
-    if PParser<>nil then
-      PParser^ := fParser[ndx].RecordCustomParser;
-    result := true;
-  end else
-    result := false;
 end;
 
 function TJSONCustomParsers.RecordSearch(aRecordTypeInfo: pointer;
@@ -43744,16 +43800,18 @@ procedure TSynInvokeableVariantType.Lookup(var Dest: TVarData; const V: TVarData
 var itemName: RawUTF8;
     Handler: TSynInvokeableVariantType;
     DestVar,LookupVar: TVarData;
+    docv: word;
 begin
   Dest.VType := varEmpty; // left to Unassigned if not found
   DestVar := V;
   while DestVar.VType=varByRef or varVariant do
     DestVar := PVarData(DestVar.VPointer)^;
+  docv := DocVariantVType;
   repeat
     GetNextItem(FullName,'.',itemName);
     if itemName='' then
       exit;
-    if DestVar.VType=DocVariantVType then begin
+    if DestVar.VType=docv then begin
       if not TDocVariantData(DestVar).GetVarData(itemName,DestVar) then
         exit;
     end else
@@ -43774,7 +43832,7 @@ begin
       exit;
     while DestVar.VType=varByRef or varVariant do
       DestVar := PVarData(DestVar.VPointer)^;
-    if (DestVar.VType=DocVariantVType) and
+    if (DestVar.VType=docv) and
        (TDocVariantData(DestVar).VCount=0) then
       DestVar.VType := varNull; // recognize void TDocVariant as null
     if FullName=nil then begin // found full name scope
@@ -44392,8 +44450,6 @@ begin
     end;
   result :=  aClass.Create; // register variant type
   SynVariantTypes.Add(result);
-  if aClass=TDocVariant then
-    DocVariantVType := result.VarType;
 end;
 
 
@@ -44466,8 +44522,6 @@ end;
 
 procedure TDocVariantData.Init(aOptions: TDocVariantOptions; aKind: TDocVariantKind);
 begin
-  if DocVariantType=nil then
-    DocVariantType := TDocVariant(SynRegisterCustomVariantType(TDocVariant));
   ZeroFill(@self);
   VType := DocVariantVType;
   VOptions := aOptions-[dvoIsArray,dvoIsObject];
@@ -44479,8 +44533,6 @@ end;
 
 procedure TDocVariantData.InitFast;
 begin
-  if DocVariantType=nil then
-    DocVariantType := TDocVariant(SynRegisterCustomVariantType(TDocVariant));
   ZeroFill(@self);
   VType := DocVariantVType;
   VOptions := JSON_OPTIONS_FAST;
@@ -44847,7 +44899,7 @@ begin
     raise ESynException.CreateUTF8('No TDocVariant for InitCopy(%)',[Source.VType]);
   SourceVValue := Source^.VValue; // local fast per-reference copy
   if Source<>@self then begin
-    VType := DocVariantVType;
+    VType := Source^.VType;
     VCount := Source^.VCount;
     pointer(VName) := nil;  // avoid GPF
     pointer(VValue) := nil;
@@ -45170,20 +45222,20 @@ begin
   QuickSortDocVariant(pointer(VName),pointer(VValue),0,VCount-1,Compare);
 end;
 
-procedure TDocVariantData.ExchgValues(v1,v2: integer);
-var n: pointer;
-    v: TVarData;
+procedure ExchgValues(v1,v2: PVarData);
+var v: TVarData;
 begin
-  if v1=v2 then
-    exit;
-  if VName<>nil then begin // VName=[] for dvArray
-    n := pointer(VName[v2]);
-    pointer(VName[v2]) := pointer(VName[v1]);
-    PPointerArray(VName)[v1] := n;
-  end;
-  v := TVarData(VValue[v2]);
-  TVarData(VValue[v2]) := TVarData(VValue[v1]);
-  TVarData(VValue[v1]) := v;
+  v := v2^;
+  v2^ := v1^;
+  v1^ := v;
+end;
+
+procedure ExchgNames(n1,n2: PPointer);
+var n: pointer;
+begin
+  n := n2^;
+  n2^ := n1^;
+  n1^ := n;
 end;
 
 procedure QuickSortDocVariantValues(var Doc: TDocVariantData;
@@ -45200,7 +45252,11 @@ begin
       while Compare(Doc.VValue[I],pivot^)<0 do Inc(I);
       while Compare(Doc.VValue[J],pivot^)>0 do Dec(J);
       if I <= J then begin
-        Doc.ExchgValues(I,J);
+        if I <> J then begin
+          if Doc.VName<>nil then
+            ExchgNames(@Doc.VName[I],@Doc.VName[J]);
+          ExchgValues(@Doc.VValue[I],@Doc.VValue[J]);
+        end;
         if P = I then P := J else if P = J then P := I;
         inc(I); dec(J);
       end;
@@ -45418,9 +45474,10 @@ begin
     end;
 end;
 
-function TDocVariantData.GetValueIndex(aName: PUTF8Char; aNameLen: integer;
+function TDocVariantData.GetValueIndex(aName: PUTF8Char; aNameLen: PtrInt;
   aCaseSensitive: boolean): integer;
 var err: integer;
+    n: PRawUTF8;
 begin
   if (VType=DocVariantVType) and (VCount>0) then begin
     if dvoIsArray in VOptions then begin
@@ -45432,16 +45489,19 @@ begin
       exit;
     end;
     // optimized O(n) lookup for object names -> huge count may take some time
+    n := pointer(VName);
     if aCaseSensitive then begin
       for result := 0 to VCount-1 do
-        if (length(VName[result])=aNameLen) and
-           CompareMem(pointer(VName[result]),aName,aNameLen) then
-          exit;
+        if (length(n^)=aNameLen) and
+           CompareMem(pointer(n^),aName,aNameLen) then
+          exit else
+          inc(n);
     end else
       for result := 0 to VCount-1 do
-        if (length(VName[result])=aNameLen) and
-           IdemPropNameUSameLen(pointer(VName[result]),aName,aNameLen) then
-          exit;
+        if (length(n^)=aNameLen) and
+           IdemPropNameUSameLen(pointer(n^),aName,aNameLen) then
+          exit else
+          inc(n);
   end;
   result := -1;
 end;
@@ -45744,7 +45804,7 @@ begin
   if ndx<0 then
     exit;
   Dest := _Safe(VValue[ndx]);
-  result := Dest^.VType=DocVariantVType;
+  result := Dest^.VType<=varNull;
 end;
 
 function TDocVariantData.GetJsonByStartName(const aStartName: RawUTF8): RawUTF8;
@@ -45971,7 +46031,7 @@ begin
     for r := 0 to VCount-1 do begin
       row := _Safe(VValue[r]);
       if (r>0) and (not(dvoIsObject in row^.VOptions) or (row^.VCount<>fieldsCount)) then
-        raise EDocVariant.CreateUTF8('ToNonExpandedJSON: Value[%] not object',[r]);
+        raise EDocVariant.CreateUTF8('ToNonExpandedJSON: Value[%] not expected object',[r]);
       for f := 0 to fieldsCount-1 do
         if (r>0) and not IdemPropNameU(row^.VName[f],fields[f]) then
           raise EDocVariant.CreateUTF8('ToNonExpandedJSON: Value[%] field=% expected=%',
@@ -46615,20 +46675,16 @@ begin
 end;
 
 function _Safe(const DocVariant: variant): PDocVariantData;
-{$ifdef HASINLINENOTX86}
+{$ifdef FPC_OR_PUREPASCAL}
+var docv: word;
 begin
-  with TVarData(DocVariant) do
-    if VType=word(DocVariantVType) then begin
-      result := @DocVariant;
-      exit;
-    end else
-    if VType=varByRef or varVariant then begin
-      result := _Safe(PVariant(VPointer)^);
-      exit;
-    end else begin
+  result := @DocVariant;
+  docv := DocVariantVType;
+  if result.VType<>docv then
+    if (result.VType=varByRef or varVariant) and
+       (PVarData(PVarData(result)^.VPointer).VType=docv) then
+      result := pointer(PVarData(result)^.VPointer) else
       result := @DocVariantDataFake;
-      exit;
-    end;
 end;
 {$else}
 asm
@@ -47714,6 +47770,8 @@ const
   KNOWNTYPE_SIZE: array[TDynArrayKind] of byte = (
     0, 1,1, 2, 4,4,4, 8,8,8,8,8,8,8, PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,
     {$ifndef NOVARIANTS}SizeOf(Variant),{$endif} 0);
+  DYNARRAY_PARSERUNKNOWN = -2;
+
 var
   KINDTYPE_INFO: array[TDynArrayKind] of pointer;
 
@@ -47920,7 +47978,10 @@ begin // code below must match TTextWriter.AddDynArrayJSON()
     end;
     exit; // handle '[]' array
   end;
-  if GlobalJSONCustomParsers.DynArraySearch(ArrayType,ElemType,CustomReader) then
+  if HasCustomJSONParser then
+    CustomReader := GlobalJSONCustomParsers.fParser[fParser].Reader else
+    CustomReader := nil;
+  if Assigned(CustomReader) then
     T := djCustom else
     T := ToKnownType;
   if (T=djNone) and (P^='[') and (PTypeKind(ElemType)^=tkDynArray) then begin
@@ -48065,7 +48126,7 @@ begin
   for result := 0 to Count-1 do begin
     Len := FromVarUInt32(PByte(Source));
     if CaseSensitive then begin
-      if (Len=ValueLen) and CompareMem(Value,Source,Len) then
+      if (Len=ValueLen) and CompareMemFixed(Value,Source,Len) then
         exit;
     end else
       if UTF8ILComp(Value,pointer(Source),ValueLen,Len)=0 then
@@ -48201,8 +48262,9 @@ begin
 end;
 
 function TDynArray.Find(const Elem; const aIndex: TIntegerDynArray;
-  aCompare: TDynArraySortCompare): integer;
-var n, L, cmp: integer;
+  aCompare: TDynArraySortCompare): PtrInt;
+var n, L: PtrInt;
+    cmp: integer;
     P: PAnsiChar;
 begin
   n := Count;
@@ -48234,7 +48296,7 @@ begin
 end;
 
 function TDynArray.FindIndex(const Elem; aIndex: PIntegerDynArray;
-  aCompare: TDynArraySortCompare): integer;
+  aCompare: TDynArraySortCompare): PtrInt;
 begin
   if aIndex<>nil then
     result := Find(Elem,aIndex^,aCompare) else
@@ -48275,8 +48337,9 @@ begin
     Add(Elem); // -1 will mark success
 end;
 
-function TDynArray.Find(const Elem): integer;
-var n, L, cmp: integer;
+function TDynArray.Find(const Elem): PtrInt;
+var n, L: PtrInt;
+    cmp: integer;
     P: PAnsiChar;
 begin
   n := Count;
@@ -48583,14 +48646,32 @@ begin
         2: result := word(A)=word(B);
         4: result := cardinal(A)=cardinal(B);
         8: result := Int64(A)=Int64(B);
-      else result := CompareMem(@A,@B,ElemSize); // binary comparison
+      else result := CompareMemFixed(@A,@B,ElemSize); // binary comparison
       end else
       if PTypeKind(ElemType)^ in tkRecordTypes then // most likely
         result := RecordEquals(A,B,ElemType) else
         result := ManagedTypeCompare(@A,@B,ElemType)>0; // other complex types
 end;
 
-{$ifndef DELPHI5OROLDER} // do not know why Delphi 5 compiler does not like it
+{$ifndef DELPHI5OROLDER} // disabled for Delphi 5 buggy compiler
+procedure TDynArray.InitFrom(const aAnother: TDynArray; var aValue);
+begin
+  self := aAnother;
+  fValue := @aValue;
+  fCountP := nil;
+end;
+
+procedure TDynArray.AddDynArray(const aSource: TDynArray; aStartIndex,aCount: integer);
+var SourceCount: integer;
+begin
+  if (aSource.fValue<>nil) and (ArrayType=aSource.ArrayType) then begin
+    SourceCount := aSource.Count;
+    if (aCount<0) or (aCount>SourceCount) then
+      aCount := SourceCount; // force use of external Source.Count, if any
+    AddArray(aSource.fValue^,aStartIndex,aCount);
+  end;
+end;
+
 function TDynArray.Equals(const B: TDynArray; ignorecompare: boolean): boolean;
 var i, n: integer;
     P1,P2: PAnsiChar;
@@ -48692,10 +48773,10 @@ begin
 end;
 {$endif DELPHI5OROLDER}
 
-function TDynArray.IndexOf(const Elem): integer;
+function TDynArray.IndexOf(const Elem): PtrInt;
 var P: pointer;
     PP: PPointerArray absolute P;
-    max: integer;
+    max: PtrInt;
 begin
   if fValue=nil then begin
     result := -1;
@@ -48715,9 +48796,9 @@ begin
          if PIntegerArray(P)^[result]=integer(Elem) then exit;
     8: for result := 0 to max do // Int64,Currency,Double,64bitPointer
          if PInt64Array(P)^[result]=Int64(Elem) then exit;
-  else // generic binary comparison (fast with our overloaded CompareMem)
+  else // generic binary comparison (fast with our overloaded CompareMemFixed)
     for result := 0 to max do
-      if CompareMem(P,@Elem,ElemSize) then
+      if CompareMemFixed(P,@Elem,ElemSize) then
         exit else
         inc(PByte(P),ElemSize);
   end else
@@ -48788,6 +48869,7 @@ begin
   if fCountP<>nil then
     fCountP^ := 0;
   fCompare := nil;
+  fParser := DYNARRAY_PARSERUNKNOWN;
   fKnownSize := 0;
   fSorted := false;
   fKnownType := djNone;
@@ -48811,6 +48893,13 @@ end;
 procedure TDynArray.UseExternalCount(var aCountPointer: Integer);
 begin
   fCountP := @aCountPointer;
+end;
+
+function TDynArray.HasCustomJSONParser: boolean;
+begin
+  if fParser=DYNARRAY_PARSERUNKNOWN then
+    fParser := GlobalJSONCustomParsers.DynArraySearch(ArrayType,ElemType);
+  result := cardinal(fParser)<cardinal(GlobalJSONCustomParsers.fParsersCount);
 end;
 
 procedure TDynArray.Void;
@@ -49025,19 +49114,6 @@ begin
     MoveFast(PS^,PD^,cardinal(aCount)*ElemSize) else
     CopyArray(PD,PS,ElemType,aCount);
 end;
-
-{$ifndef DELPHI5OROLDER} // don't know why Delphi 5 does not like this signature
-procedure TDynArray.AddDynArray(const aSource: TDynArray; aStartIndex,aCount: integer);
-var SourceCount: integer;
-begin
-  if (aSource.fValue<>nil) and (ArrayType=aSource.ArrayType) then begin
-    SourceCount := aSource.Count;
-    if (aCount<0) or (aCount>SourceCount) then
-      aCount := SourceCount; // force use of external Source.Count, if any
-    AddArray(aSource.fValue^,aStartIndex,aCount);
-  end;
-end;
-{$endif DELPHI5OROLDER}
 
 procedure TDynArray.ElemClear(var Elem);
 begin
@@ -51758,19 +51834,17 @@ begin
 end;
 {$endif NOVARIANTS}
 
+procedure TTextWriter.AddDynArrayJSON(var aDynArray: TDynArrayHashed);
+begin
+  AddDynArrayJson(PDynArray(@aDynArray)^);
+end;
+
 procedure TTextWriter.AddDynArrayJSON(aTypeInfo: pointer; const aValue);
 var DynArray: TDynArray;
 begin
   DynArray.Init(aTypeInfo,pointer(@aValue)^);
   AddDynArrayJSON(DynArray);
 end;
-
-{$ifdef UNDIRECTDYNARRAY}
-procedure TTextWriter.AddDynArrayJSON(const aDynArray: TDynArrayHashed);
-begin
-  AddDynArrayJson(aDynArray.InternalDynArray);
-end;
-{$endif}
 
 procedure TTextWriter.AddDynArrayJSONAsString(aTypeInfo: pointer; var aValue);
 begin
@@ -51780,8 +51854,7 @@ begin
   Add('"');
 end;
 
-procedure TTextWriter.AddObjArrayJSON(const aObjArray;
-  Options: TTextWriterWriteObjectOptions);
+procedure TTextWriter.AddObjArrayJSON(const aObjArray; Options: TTextWriterWriteObjectOptions);
 var i: integer;
     a: TObjectDynArray absolute aObjArray;
 begin
@@ -51798,6 +51871,7 @@ procedure TTextWriter.AddTypedJSON(aTypeInfo: pointer; const aValue);
 var max, i: Integer;
     PS: PShortString;
     customWriter: TDynArrayJSONCustomWriter;
+    DynArray: TDynArray;
   procedure AddPS; overload;
   begin
     Add('"');
@@ -51866,8 +51940,10 @@ begin
       if GlobalJSONCustomParsers.RecordSearch(aTypeInfo,customWriter,nil) then
         customWriter(self,aValue) else
         WrRecord(aValue,aTypeInfo);
-    tkDynArray:
-      AddDynArrayJSON(DynArray(aTypeInfo,(@aValue)^));
+    tkDynArray: begin
+      DynArray.Init(aTypeInfo,(@aValue)^);
+      AddDynArrayJSON(DynArray);
+    end;
 {$ifndef NOVARIANTS}
     tkVariant:
       AddVariant(variant(aValue),twJSONEscape);
@@ -52054,23 +52130,30 @@ begin
   result := JSON;
 end;
 
-procedure TTextWriter.AddDynArrayJSON(const aDynArray: TDynArray);
+procedure TTextWriter.AddDynArrayJSON(var aDynArray: TDynArray);
 var i,n: integer;
     P: Pointer;
     T: TDynArrayKind;
     tmp: RawByteString;
     customWriter: TDynArrayJSONCustomWriter;
     customParser: TJSONRecordAbstract;
-    Options: TJSONCustomParserSerializationOptions;
-    NestedDynArray: TDynArray;
+    nested: TDynArray;
+    hr: boolean;
 begin // code below must match TDynArray.LoadFromJSON
   n := aDynArray.Count-1;
   if n<0 then begin
     Add('[',']');
     exit;
   end;
-  if GlobalJSONCustomParsers.DynArraySearch(
-      aDynArray.ArrayType,aDynArray.ElemType,customWriter,@customParser) then
+  if aDynArray.HasCustomJSONParser then
+    with GlobalJSONCustomParsers.fParser[aDynArray.fParser] do begin
+      customWriter := Writer;
+      customParser := RecordCustomParser;
+    end else begin
+      customWriter := nil;
+      customParser := nil;
+    end;
+  if Assigned(customWriter) then
     T := djCustom else
     T := aDynArray.ToKnownType;
   P := aDynArray.fValue^;
@@ -52080,8 +52163,8 @@ begin // code below must match TDynArray.LoadFromJSON
     if (aDynArray.ElemType<>nil) and
        (PTypeKind(aDynArray.ElemType)^=tkDynArray) then begin
       for i := 0 to n do begin
-        NestedDynArray.Init(aDynArray.ElemType,P^);
-        AddDynArrayJSON(NestedDynArray);
+        nested.Init(aDynArray.ElemType,P^);
+        AddDynArrayJSON(nested);
         Add(',');
         inc(PtrUInt(P),aDynArray.ElemSize);
       end;
@@ -52091,16 +52174,16 @@ begin // code below must match TDynArray.LoadFromJSON
     end;
   djCustom: begin
       if customParser=nil then
-        byte(Options) := 0 else
-        Options := customParser.Options;
-      if soWriteHumanReadable in Options then
+        hr := false else
+        hr := soWriteHumanReadable in customParser.Options;
+      if hr then
         Inc(fHumanReadableLevel);
       for i := 0 to n do begin
         customWriter(self,P^);
         Add(',');
         inc(PtrUInt(P),aDynArray.ElemSize);
       end;
-      if soWriteHumanReadable in Options then begin
+      if hr then begin
         dec(fHumanReadableLevel);
         CancelLastComma;
         AddCRAndIndent;
@@ -53196,6 +53279,13 @@ procedure TTextWriter.AddPropJSONString(const PropName: shortstring; const Text:
 begin
   AddPropName(PropName);
   AddJSONString(Text);
+  Add(',');
+end;
+
+procedure TTextWriter.AddPropJSONInt64(const PropName: shortstring; Value: Int64);
+begin
+  AddPropName(PropName);
+  Add(Value);
   Add(',');
 end;
 
@@ -65279,6 +65369,7 @@ begin
     SetString(SmallUInt32UTF8[i],P,@tmp[15]-P);
   end;
   UpperCopy255Buf := @UpperCopy255BufPas;
+  DefaultHasher := @xxHash32; // faster than crc32cfast for small content
   {$ifdef CPUINTEL}
   if cfSSE42 in CpuFeatures then begin
     crc32c := @crc32csse42;
@@ -65299,11 +65390,8 @@ begin
     {$endif}
     {$endif PUREPASCAL}
     DefaultHasher := crc32c;
-  end else
-  {$endif CPUINTEL} begin
-    crc32c := @crc32cfast;
-    DefaultHasher := @xxHash32; // faster than crc32cfast for small content
   end;
+  {$endif CPUINTEL}
   InterningHasher := DefaultHasher;
   KINDTYPE_INFO[djRawUTF8] := TypeInfo(RawUTF8); // for TDynArray.LoadKnownType
   KINDTYPE_INFO[djWinAnsi] := TypeInfo(WinAnsiString);
@@ -65327,8 +65415,8 @@ initialization
   {$ifdef CPUINTEL}
   TestIntelCpuFeatures;
   {$endif}
+  crc32c := @crc32cfast; // now to circumvent Internal Error C11715 for Delphi 5
   MoveFast := @System.Move;
-  crcblock := @crcblockNoSSE42;
   {$ifdef FPC}
   FillCharFast := @System.FillChar; // FPC cross-platform RTL is optimized enough
   {$else}
@@ -65353,6 +65441,8 @@ initialization
   // some type definition assertions
   {$ifndef NOVARIANTS}
   Assert(SizeOf(TDocVariantData)=SizeOf(TVarData));
+  DocVariantType := TDocVariant(SynRegisterCustomVariantType(TDocVariant));
+  DocVariantVType := DocVariantType.VarType;
   {$endif NOVARIANTS}
   {$warnings OFF}
   Assert((MAX_SQLFIELDS>=64)and(MAX_SQLFIELDS<=256));

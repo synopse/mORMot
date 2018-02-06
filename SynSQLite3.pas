@@ -4565,8 +4565,12 @@ begin
   for i := 0 to fSQLFunctions.Count-1 do
     TSQLDataBaseSQLFunction(fSQLFunctions.List[i]).CreateFunction(DB);
   {$ifdef WITHLOG}
+  i := CacheSize;
+  if i<0 then
+    i := (-i) shr 10 else
+    i := PageSize*CacheSize;
   FPCLog.Log(sllDB,'"%" database file of % opened with PageSize=% and CacheSize=% (%)',
-    [FileName,KB(GetFileSize),PageSize,CacheSize,KB(PageSize*CacheSize)],self);
+    [FileName,KB(GetFileSize),PageSize,CacheSize,KB(i)],self);
   {$endif}
 end;
 

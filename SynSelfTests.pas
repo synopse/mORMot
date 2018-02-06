@@ -1557,68 +1557,68 @@ begin
   Check(AnsiIComp('abcD','ABcF')=StrComp(PAnsiChar('ABCD'),PAnsiChar('ABCF')));
   Check(StrIComp(PAnsiChar('abcD'),PAnsiChar('ABcd'))=AnsiIComp('abcD','ABcd'));
   Check(StrIComp(PAnsiChar('abcD'),PAnsiChar('ABcF'))=AnsiIComp('ABCD','ABCF'));
-  Check(strcspn('ab','a')=0);
-  Check(strcspn('ab','b')=1);
-  Check(strcspn('1234ab','a')=4);
-  Check(strcspn('12345ab','a')=5);
-  Check(strcspn('123456ab','a')=6);
-  Check(strcspn('1234567ab','a')=7);
-  Check(strcspn('12345678ab','a')=8);
-  Check(strcspn('1234ab','c')=6);
-  Check(strcspnpas('ab','a')=0);
-  Check(strcspnpas('ab','b')=1);
-  Check(strcspnpas('1234ab','a')=4);
-  Check(strcspnpas('12345ab','a')=5);
-  Check(strcspnpas('123456ab','a')=6);
-  Check(strcspnpas('1234567ab','a')=7);
-  Check(strcspnpas('12345678ab','a')=8);
-  Check(strcspnpas('1234ab','c')=6);
-  Check(strcspnpas('12345678901234567ab','cccccccccccccccccccd')=19);
-  Assert(strspn('abcdef','debca')=5);
-  Assert(strspn('baabbaabcd','ab')=8);
-  Assert(strspnpas('abcdef','g')=0);
-  Assert(strspnpas('abcdef','a')=1);
-  Assert(strspnpas('bbcdef','b')=2);
-  Assert(strspnpas('bbcdef','bf')=2);
-  Assert(strspnpas('bcbdef','cb')=3);
-  Assert(strspnpas('baabcd','ab')=4);
-  Assert(strspnpas('abcdef','debca')=5);
-  Assert(strspnpas('baabbaabcd','ab')=8);
-  Assert(strspnpas('baabbaabbaabcd','ab')=12);
-  Assert(strspnpas('baabbaabbaabbabcd','ab')=15);
-  Assert(strspnpas('baabbaabbaabbaabcd','ab')=16);
-  Assert(strspnpas('baabbaabbaababaabcd','ab')=17);
+  Check(strcspn(PAnsiChar('ab'),PAnsiChar('a'#0))=0);
+  Check(strcspn(PAnsiChar('ab'),PAnsiChar('b'#0))=1);
+  Check(strcspn(PAnsiChar('1234ab'),PAnsiChar('a'#0))=4);
+  Check(strcspn(PAnsiChar('12345ab'),PAnsiChar('a'#0))=5);
+  Check(strcspn(PAnsiChar('123456ab'),PAnsiChar('a'#0))=6);
+  Check(strcspn(PAnsiChar('1234567ab'),PAnsiChar('a'#0))=7);
+  Check(strcspn(PAnsiChar('12345678ab'),PAnsiChar('a'#0))=8);
+  Check(strcspn(PAnsiChar('1234ab'),PAnsiChar('c'#0))=6);
+  Check(strcspnpas(PAnsiChar('ab'),PAnsiChar('a'#0))=0);
+  Check(strcspnpas(PAnsiChar('ab'),PAnsiChar('b'#0))=1);
+  Check(strcspnpas(PAnsiChar('1234ab'),PAnsiChar('a'#0))=4);
+  Check(strcspnpas(PAnsiChar('12345ab'),PAnsiChar('a'#0))=5);
+  Check(strcspnpas(PAnsiChar('123456ab'),PAnsiChar('a'#0))=6);
+  Check(strcspnpas(PAnsiChar('1234567ab'),PAnsiChar('a'#0))=7);
+  Check(strcspnpas(PAnsiChar('12345678ab'),PAnsiChar('a'#0))=8);
+  Check(strcspnpas(PAnsiChar('1234ab'),PAnsiChar('c'#0))=6);
+  Check(strcspnpas(PAnsiChar('12345678901234567ab'),PAnsiChar('cccccccccccccccccccd'))=19);
+  Assert(strspn(PAnsiChar('abcdef'),PAnsiChar('debca'))=5);
+  Assert(strspn(PAnsiChar('baabbaabcd'),PAnsiChar('ab'))=8);
+  Assert(strspnpas(PAnsiChar('abcdef'),PAnsiChar('g'#0))=0);
+  Assert(strspnpas(PAnsiChar('abcdef'),PAnsiChar('a'#0))=1);
+  Assert(strspnpas(PAnsiChar('bbcdef'),PAnsiChar('b'#0))=2);
+  Assert(strspnpas(PAnsiChar('bbcdef'),PAnsiChar('bf'))=2);
+  Assert(strspnpas(PAnsiChar('bcbdef'),PAnsiChar('cb'))=3);
+  Assert(strspnpas(PAnsiChar('baabcd'),PAnsiChar('ab'))=4);
+  Assert(strspnpas(PAnsiChar('abcdef'),PAnsiChar('debca'))=5);
+  Assert(strspnpas(PAnsiChar('baabbaabcd'),PAnsiChar('ab'))=8);
+  Assert(strspnpas(PAnsiChar('baabbaabbaabcd'),PAnsiChar('ab'))=12);
+  Assert(strspnpas(PAnsiChar('baabbaabbaabbabcd'),PAnsiChar('ab'))=15);
+  Assert(strspnpas(PAnsiChar('baabbaabbaabbaabcd'),PAnsiChar('ab'))=16);
+  Assert(strspnpas(PAnsiChar('baabbaabbaababaabcd'),PAnsiChar('ab'))=17);
   if cfSSE42 in CpuFeatures then begin
-    Check(strcspnsse42('ab','a')=0);
-    Check(strcspnsse42('ab','b')=1);
-    Check(strcspnsse42('1234ab','a')=4);
-    Check(strcspnsse42('12345ab','a')=5);
-    Check(strcspnsse42('123456ab','a')=6);
-    Check(strcspnsse42('1234567ab','a')=7);
-    Check(strcspnsse42('12345678ab','a')=8);
-    Check(strcspnsse42('123456789ab','a')=9);
-    Check(strcspnsse42('1234ab','c')=6);
-    Check(strcspnsse42('123456789012345ab','a')=15);
-    Check(strcspnsse42('1234567890123456ab','a')=16);
-    Check(strcspnsse42('12345678901234567ab','a')=17);
-    Check(strcspnsse42('12345678901234567ab','cccccccccccccca')=17);
-    Check(strcspnsse42('12345678901234567ab','ccccccccccccccca')=17);
-    Check(strcspnsse42('12345678901234567ab','cccccccccccccccca')=17);
-    Check(strcspnsse42('12345678901234567ab','ccccccccccccccccca')=17);
-    Check(strcspnsse42('12345678901234567ab','ccccccccccccccccccca')=17);
-    Check(strcspnsse42('12345678901234567ab','cccccccccccccccccccd')=19);
-    Check(strspnsse42('abcdef','g')=0);
-    Check(strspnsse42('abcdef','a')=1);
-    Check(strspnsse42('bbcdef','b')=2);
-    Check(strspnsse42('bbcdef','bf')=2);
-    Check(strspnsse42('bcbdef','cb')=3);
-    Check(strspnsse42('baabcd','ab')=4);
-    Check(strspnsse42('abcdef','debca')=5);
-    Check(strspnsse42('baabbaabcd','ab')=8);
-    Check(strspnsse42('baabbaabbaabcd','ab')=12);
-    Check(strspnsse42('baabbaabbaabbabcd','ab')=15);
-    Check(strspnsse42('baabbaabbaabbaabcd','ab')=16);
-    Check(strspnsse42('baabbaabbaababaabcd','ab')=17);
+    Check(strcspnsse42(PAnsiChar('ab'),PAnsiChar('a'#0))=0);
+    Check(strcspnsse42(PAnsiChar('ab'),PAnsiChar('b'#0))=1);
+    Check(strcspnsse42(PAnsiChar('1234ab'),PAnsiChar('a'#0))=4);
+    Check(strcspnsse42(PAnsiChar('12345ab'),PAnsiChar('a'#0))=5);
+    Check(strcspnsse42(PAnsiChar('123456ab'),PAnsiChar('a'#0))=6);
+    Check(strcspnsse42(PAnsiChar('1234567ab'),PAnsiChar('a'#0))=7);
+    Check(strcspnsse42(PAnsiChar('12345678ab'),PAnsiChar('a'#0))=8);
+    Check(strcspnsse42(PAnsiChar('123456789ab'),PAnsiChar('a'#0))=9);
+    Check(strcspnsse42(PAnsiChar('1234ab'),PAnsiChar('c'#0))=6);
+    Check(strcspnsse42(PAnsiChar('123456789012345ab'),PAnsiChar('a'#0))=15);
+    Check(strcspnsse42(PAnsiChar('1234567890123456ab'),PAnsiChar('a'#0))=16);
+    Check(strcspnsse42(PAnsiChar('12345678901234567ab'),PAnsiChar('a'#0))=17);
+    Check(strcspnsse42(PAnsiChar('12345678901234567ab'),PAnsiChar('cccccccccccccca'))=17);
+    Check(strcspnsse42(PAnsiChar('12345678901234567ab'),PAnsiChar('ccccccccccccccca'))=17);
+    Check(strcspnsse42(PAnsiChar('12345678901234567ab'),PAnsiChar('cccccccccccccccca'))=17);
+    Check(strcspnsse42(PAnsiChar('12345678901234567ab'),PAnsiChar('ccccccccccccccccca'))=17);
+    Check(strcspnsse42(PAnsiChar('12345678901234567ab'),PAnsiChar('ccccccccccccccccccca'))=17);
+    Check(strcspnsse42(PAnsiChar('12345678901234567ab'),PAnsiChar('cccccccccccccccccccd'))=19);
+    Check(strspnsse42(PAnsiChar('abcdef'),PAnsiChar('g'#0))=0);
+    Check(strspnsse42(PAnsiChar('abcdef'),PAnsiChar('a'#0))=1);
+    Check(strspnsse42(PAnsiChar('bbcdef'),PAnsiChar('b'#0))=2);
+    Check(strspnsse42(PAnsiChar('bbcdef'),PAnsiChar('bf'))=2);
+    Check(strspnsse42(PAnsiChar('bcbdef'),PAnsiChar('cb'))=3);
+    Check(strspnsse42(PAnsiChar('baabcd'),PAnsiChar('ab'))=4);
+    Check(strspnsse42(PAnsiChar('abcdef'),PAnsiChar('debca'))=5);
+    Check(strspnsse42(PAnsiChar('baabbaabcd'),PAnsiChar('ab'))=8);
+    Check(strspnsse42(PAnsiChar('baabbaabbaabcd'),PAnsiChar('ab'))=12);
+    Check(strspnsse42(PAnsiChar('baabbaabbaabbabcd'),PAnsiChar('ab'))=15);
+    Check(strspnsse42(PAnsiChar('baabbaabbaabbaabcd'),PAnsiChar('ab'))=16);
+    Check(strspnsse42(PAnsiChar('baabbaabbaababaabcd'),PAnsiChar('ab'))=17);
   end;
 end;
 
@@ -9842,7 +9842,7 @@ begin
         A.DecryptInit(Key,ks);
         A.Decrypt(b,p);
         A.Done;
-        Check(SysUtils.CompareMem(@p,@s,sizeof(p)));
+        Check(CompareMem(@p,@s,sizeof(p)));
         Check(IsEqual(p,s));
         Timer[noaesni].Resume;
         Check(SynCrypto.AES(Key,ks,SynCrypto.AES(Key,ks,st,true),false)=st);
@@ -9866,7 +9866,7 @@ begin
       len := AES.EncodeDecode(Key,ks,len,False,nil,nil,pointer(crypted),nil);
       try
         Check(len=MAX);
-        Check(SysUtils.CompareMem(AES.outStreamCreated.Memory,pointer(orig),MAX));
+        Check(CompareMem(AES.outStreamCreated.Memory,pointer(orig),MAX));
         if not noaesni then begin
           for m := low(MODES) to high(MODES) do
           with MODES[m].Create(Key,ks) do
@@ -9960,7 +9960,7 @@ begin
     md.Final(dig);
     md.Full(pointer(tmp),n,dig2);
     check(IsEqual(dig,dig2));
-    check(SysUtils.CompareMem(@dig,@dig2,sizeof(dig)));
+    check(CompareMem(@dig,@dig2,sizeof(dig)));
   end;
 end;
 
@@ -9994,20 +9994,20 @@ var SHA: TSHA1;
 begin
   // 1. Hash complete AnsiString
   SHA.Full(pointer(s),length(s),Digest);
-  Check(SysUtils.CompareMem(@Digest,@TDig,sizeof(Digest)));
+  Check(CompareMem(@Digest,@TDig,sizeof(Digest)));
   Check(IsEqual(Digest,TDig));
   // 2. one update call for all chars
   for i := 1 to length(s) do
     SHA.Update(@s[i],1);
   SHA.Final(Digest);
-  Check(SysUtils.CompareMem(@Digest,@TDig,sizeof(Digest)));
+  Check(CompareMem(@Digest,@TDig,sizeof(Digest)));
   Check(IsEqual(Digest,TDig));
   // 3. test consistency with Padlock engine down results
 {$ifdef USEPADLOCK}
   if not padlock_available then exit;
   padlock_available := false;  // force PadLock engine down
   SHA.Full(pointer(s),length(s),Digest);
-  Check(SysUtils.CompareMem(@Digest,@TDig,sizeof(Digest)));
+  Check(CompareMem(@Digest,@TDig,sizeof(Digest)));
   Check(IsEqual(Digest,TDig));
 {$ifdef PADLOCKDEBUG} write('=padlock '); {$endif}
   padlock_available := true; // restore previous value
@@ -10061,14 +10061,14 @@ begin
   // 1. Hash complete AnsiString
   SHA.Full(pointer(s),length(s),Digest);
   Check(IsEqual(Digest,TDig));
-  Check(SysUtils.CompareMem(@Digest,@TDig,sizeof(Digest)));
+  Check(CompareMem(@Digest,@TDig,sizeof(Digest)));
   // 2. one update call for each char
   SHA.Init;
   for i := 1 to length(s) do
     SHA.Update(@s[i],1);
   SHA.Final(Digest);
   Check(IsEqual(Digest,TDig));
-  Check(SysUtils.CompareMem(@Digest,@TDig,sizeof(Digest)));
+  Check(CompareMem(@Digest,@TDig,sizeof(Digest)));
 end;
 const
   D1: TSHA256Digest =
@@ -10092,7 +10092,7 @@ begin
   SingleTest('abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq',D2);
   SHA256Weak('lagrangehommage',Digest.Lo); // test with len=256>64
   Check(IsEqual(Digest.Lo,D3));
-  Check(SysUtils.Comparemem(@Digest,@D3,sizeof(Digest.Lo)));
+  Check(CompareMem(@Digest,@D3,sizeof(Digest.Lo)));
   PBKDF2_HMAC_SHA256('password','salt',1,Digest.Lo);
   check(SHA256DigestToString(Digest.Lo)=
     '120fb6cffcf8b32c43e7225256c4f837a86548c92ccc35480805987cb70be17b');
@@ -10336,14 +10336,14 @@ begin
   TAESPRNG.Main.FillRandom(b1);
   TAESPRNG.Main.FillRandom(b2);
   Check(not IsEqual(b1,b2));
-  Check(not SysUtils.CompareMem(@b1,@b2,sizeof(b1)));
+  Check(not CompareMem(@b1,@b2,sizeof(b1)));
   a1 := TAESPRNG.Create;
   a2 := TAESPRNG.Create;
   try
     a1.FillRandom(b1);
     a2.FillRandom(b2);
     Check(not IsEqual(b1,b2));
-    Check(not SysUtils.CompareMem(@b1,@b2,sizeof(b1)));
+    Check(not CompareMem(@b1,@b2,sizeof(b1)));
     Check(a1.FillRandom(0)='');
     Check(a1.FillRandomHex(0)='');
     for i := 1 to 2000 do begin
@@ -10973,11 +10973,11 @@ begin
   FillZero(s2);
   Check(ecdh_shared_secret(pu1,pr2,s2));
   Check(IsEqual(s1,s2));
-  Check(SysUtils.CompareMem(@s1,@s2,sizeof(s1)));
+  Check(CompareMem(@s1,@s2,sizeof(s1)));
   FillZero(s3);
   Check(ecdh_shared_secret(pu2,pr1,s3));
   Check(IsEqual(s1,s3));
-  Check(SysUtils.CompareMem(@s1,@s3,sizeof(s1)));
+  Check(CompareMem(@s1,@s3,sizeof(s1)));
   {$ifdef HASUINT64} // pascal (fallback) version
   Check(ecdsa_verify_pas(pu1,h1,si1));
   Check(ecdsa_verify_pas(pu2,h2,si2));
@@ -14598,7 +14598,7 @@ begin
       for i := 0 to high(IntArray) do begin
         Check(Client.RetrieveBlob(TSQLRecordPeople,IntArray[i],'Data',Data));
         Check(Length(Data)=sizeof(BlobDali));
-        Check(SysUtils.CompareMem(pointer(Data),@BlobDali,sizeof(BlobDali)));
+        Check(CompareMem(pointer(Data),@BlobDali,sizeof(BlobDali)));
         Check(Client.RetrieveBlob(TSQLRecordPeople,IntArray[i],'Data',DataS));
         Check((DataS.Size=4) and (PCardinal(DataS.Memory)^=$E7E0E961));
         DataS.Free;
