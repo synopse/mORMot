@@ -2880,49 +2880,33 @@ type
   TPropInfo = packed record
   private
   {$endif}
+    {$ifdef USETYPEINFO}
+    function RetrieveFieldSize: integer;
+    {$endif}
     function GetOrdProp(Instance: TObject): PtrInt;
      {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
     function GetObjProp(Instance: TObject): TObject;
-     {$ifdef HASINLINE}inline;{$endif}
     procedure SetOrdProp(Instance: TObject; Value: PtrInt);
-     {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
     function GetInt64Prop(Instance: TObject): Int64;
-     {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
     procedure SetInt64Prop(Instance: TObject; const Value: Int64);
-     {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
     procedure GetLongStrProp(Instance: TObject; var Value: RawByteString);
-     {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
     procedure SetLongStrProp(Instance: TObject; const Value: RawByteString);
-     {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
     procedure CopyLongStrProp(Source,Dest: TObject);
-     {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
     procedure GetWideStrProp(Instance: TObject; var Value: WideString);
-     {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
     procedure SetWideStrProp(Instance: TObject; const Value: WideString);
-     {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
     {$ifdef HASVARUSTRING}
     function GetUnicodeStrProp(Instance: TObject): UnicodeString;
-     {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
     procedure SetUnicodeStrProp(Instance: TObject; const Value: UnicodeString);
-     {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
     {$endif HASVARUSTRING}
     function GetCurrencyProp(Instance: TObject): currency;
-     {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
     procedure SetCurrencyProp(Instance: TObject; const Value: Currency);
-     {$ifdef HASINLINE}inline;{$endif}
     function GetDoubleProp(Instance: TObject): double;
-     {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
     procedure SetDoubleProp(Instance: TObject; Value: Double);
-     {$ifdef HASINLINE}inline;{$endif}
     function GetFloatProp(Instance: TObject): double;
-     {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
     procedure SetFloatProp(Instance: TObject; Value: TSynExtended);
-     {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
     {$ifndef NOVARIANTS}
     procedure GetVariantProp(Instance: TObject; var result: Variant);
-     {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
     procedure SetVariantProp(Instance: TObject; const Value: Variant);
-     {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
     {$endif}
   public
     /// the type definition of this property
@@ -29024,6 +29008,13 @@ begin
   end;
 end;
 
+procedure TPropInfo.CopyLongStrProp(Source,Dest: TObject);
+var tmp: RawByteString;
+begin
+  GetLongStrProp(Source,tmp);
+  SetLongStrProp(Dest,tmp);
+end;
+
 {$ifndef NOVARIANTS}
 procedure TPropInfo.SetFromVariant(Instance: TObject; const Value: variant);
 var i: integer;
@@ -29456,30 +29447,6 @@ begin
   result := (@self<>nil) and (TypeInfo=system.TypeInfo(TSQLRawBlob));
 end;
 
-function TPropInfo.IsStored(Instance: TObject): boolean;
-type // function(Instance: TObject) trick does not work with CPU64 :(
-  TStoredProc = function: Boolean of object;
-var Call: TMethod;
-begin
-{$ifdef FPC} // extracted from IsStoredProp() function in typinfo.pp
-  result := ((PropProcs shr 4) and 3=ptconst) and LongBool(StoredProc);
-{$else}      // Delphi version
-  if (StoredProc and (not PtrInt($ff)))=0 then
-    result := boolean(StoredProc) else
-  if Instance=nil then
-    // field or method without Instance specified -> assume "stored true"
-    result := true else
-  if PropWrap(StoredProc).Kind=$ff then
-    result := PBoolean(PtrInt(Instance)+StoredProc and $00FFFFFF)^ else begin
-    if PropWrap(StoredProc).Kind=$fe then
-      Call.Code := pointer((PPtrUInt(PPtrInt(Instance)^+SmallInt(StoredProc))^)) else
-      Call.Code := pointer(StoredProc);
-    Call.Data := Instance;
-    result := TStoredProc(Call);
-  end;
-{$endif}
-end;
-
 function TPropInfo.GetterIsField: boolean;
 begin
   {$ifdef FPC}
@@ -29563,9 +29530,31 @@ end;
 
 {$ifdef USETYPEINFO}
 
-function TPropInfo.GetOrdProp(Instance: TObject): PtrInt;
+function TPropInfo.IsStored(Instance: TObject): boolean;
 begin
-  result := TypInfo.GetOrdProp(Instance,@self);
+  result := TypInfo.IsStoredProp(Instance,@self);
+end;
+
+function TPropInfo.RetrieveFieldSize: integer;
+begin
+  case PropType^.Kind of
+  tkInteger,tkEnumeration,tkSet,tkChar,tkWChar{$ifdef FPC},tkBool{$endif}:
+    case PropType^.OrdType of
+    otSByte, otUByte: result := 1;
+    otSWord, otUWord: result := 2;
+    else result := 4;
+    end;
+  tkFloat:
+    case PropType^.FloatType of
+    ftSingle:   result := 4;
+    ftExtended: result := 10;
+    else result := 8;
+    end;
+  tkLString,tkWString,tkClass,tkInterface,tkDynArray: result := SizeOf(pointer);
+  tkInt64{$ifdef FPC},tkQWord{$endif}: result := 8;
+  tkVariant: result := SizeOf(variant);
+  else result := 0;
+  end;
 end;
 
 function TPropInfo.GetObjProp(Instance: TObject): TObject;
@@ -29575,13 +29564,28 @@ begin
     result := pointer(TypInfo.GetOrdProp(Instance,@self));
 end;
 
-procedure TPropInfo.SetOrdProp(Instance: TObject; Value: PtrInt);
+function TPropInfo.GetOrdProp(Instance: TObject): PtrInt;
 begin
-  if {$ifndef FPC}(PropType^.Kind=tkClass) and {$endif}
-     (SetProc=0) and GetterIsField then
-    // allow setting a class instance even if there is no "write ..." attribute
-    PPtrInt(GetterAddr(Instance))^ := Value else
+  result := TypInfo.GetOrdProp(Instance,@self);
+end;
+
+procedure TPropInfo.SetOrdProp(Instance: TObject; Value: PtrInt);
+var P: pointer;
+begin
+  if SetterIsField then
+    P := SetterAddr(Instance) else
+  if (SetProc=0) and GetterIsField then
+    P := GetterAddr(Instance) else begin
     TypInfo.SetOrdProp(Instance,@self,Value);
+    exit;
+  end;
+  if PropType^.Kind=tkClass then
+    PPTrInt(P)^ := Value else
+    case PropType^.OrdType of
+    otUByte,otSByte: PByte(P)^ := Value;
+    otUWord,otSWord: PWord(P)^ := Value;
+    otULong,otSLong: PCardinal(P)^ := Value;
+    end;
 end;
 
 function TPropInfo.GetInt64Prop(Instance: TObject): Int64;
@@ -29602,29 +29606,26 @@ end;
 
 procedure TPropInfo.GetLongStrProp(Instance: TObject; var Value: RawByteString);
 begin
-  {$ifdef UNICODE}
-  Value := TypInfo.GetAnsiStrProp(Instance,@self);
-  {$else}
-  Value := TypInfo.GetStrProp(Instance,@self);
-  {$endif}
+  if GetterIsField then
+    Value := PRawByteString(GetterAddr(Instance))^ else
+    {$ifdef UNICODE}
+    Value := TypInfo.GetAnsiStrProp(Instance,@self);
+    {$else}
+    Value := TypInfo.GetStrProp(Instance,@self);
+    {$endif}
 end;
 
 procedure TPropInfo.SetLongStrProp(Instance: TObject; const Value: RawByteString);
 begin
-  {$ifdef UNICODE}
-  TypInfo.SetAnsiStrProp(Instance,@self,Value);
-  {$else}
-  TypInfo.SetStrProp(Instance,@self,Value);
-  {$endif}
-end;
-
-procedure TPropInfo.CopyLongStrProp(Source,Dest: TObject);
-begin
-  {$ifdef UNICODE}
-  TypInfo.SetAnsiStrProp(Dest,@self,TypInfo.GetAnsiStrProp(Source,@self));
-  {$else}
-  SetStrProp(Dest,@self,TypInfo.GetStrProp(Source,@self));
-  {$endif}
+  if SetterIsField then
+    PRawByteString(SetterAddr(Instance))^ := Value else
+  if (SetProc=0) and GetterIsField then
+    PRawByteString(GetterAddr(Instance))^ := Value else
+    {$ifdef UNICODE}
+    TypInfo.SetAnsiStrProp(Instance,@self,Value);
+    {$else}
+    TypInfo.SetStrProp(Instance,@self,Value);
+    {$endif}
 end;
 
 procedure TPropInfo.GetWideStrProp(Instance: TObject; var Value: WideString);
@@ -29645,7 +29646,11 @@ end;
 
 procedure TPropInfo.SetUnicodeStrProp(Instance: TObject; const Value: UnicodeString);
 begin
-  TypInfo.SetUnicodeStrProp(Instance,@self,Value);
+  if SetterIsField then
+    PUnicodeString(SetterAddr(Instance))^ := Value else
+  if (SetProc=0) and GetterIsField then
+    PUnicodeString(GetterAddr(Instance))^ := Value else
+    TypInfo.SetUnicodeStrProp(Instance,@self,Value);
 end;
 {$endif HASVARUSTRING}
 
@@ -29687,14 +29692,29 @@ begin
 end;
 
 procedure TPropInfo.SetFloatProp(Instance: TObject; Value: TSynExtended);
+var P: pointer;
 begin
-  TypInfo.SetFloatProp(Instance,@self,value);
+  if SetterIsField then
+    P := SetterAddr(Instance) else
+  if (SetProc=0) and GetterIsField then
+    P := GetterAddr(Instance) else begin
+    TypInfo.SetFloatProp(Instance,@self,value);
+    exit;
+  end;
+  case PropType^.FloatType of
+    ftSingle:    PSingle(P)^ := Value;
+    ftDoub:      PDouble(P)^ := Value;
+    ftExtended:  PExtended(P)^ := Value;
+    ftCurr:      PCurrency(P)^ := Value;
+  end;
 end;
 
 {$ifndef NOVARIANTS}
 procedure TPropInfo.GetVariantProp(Instance: TObject; var result: Variant);
 begin
-  result := TypInfo.GetVariantProp(Instance,@self);
+  if GetterIsField then
+    SetVariantByValue(PVariant(GetterAddr(Instance))^,result) else
+    result := TypInfo.GetVariantProp(Instance,@self);
 end;
 
 procedure TPropInfo.SetVariantProp(Instance: TObject; const Value: Variant);
@@ -29705,7 +29725,27 @@ begin
 end;
 {$endif}
 
-{$else USETYPEINFO}
+{$else USETYPEINFO} // Delphi-only version below
+
+function TPropInfo.IsStored(Instance: TObject): boolean;
+type // function(Instance: TObject) trick does not work with CPU64 :(
+  TStoredProc = function: Boolean of object;
+var Call: TMethod;
+begin
+  if (StoredProc and (not PtrInt($ff)))=0 then
+    result := boolean(StoredProc) else
+  if Instance=nil then
+    // field or method without Instance specified -> assume "stored true"
+    result := true else
+  if PropWrap(StoredProc).Kind=$ff then
+    result := PBoolean(PtrInt(Instance)+StoredProc and $00FFFFFF)^ else begin
+    if PropWrap(StoredProc).Kind=$fe then
+      Call.Code := pointer((PPtrUInt(PPtrInt(Instance)^+SmallInt(StoredProc))^)) else
+      Call.Code := pointer(StoredProc);
+    Call.Data := Instance;
+    result := TStoredProc(Call);
+  end;
+end;
 
 function TPropInfo.GetOrdProp(Instance: TObject): PtrInt;
 type // function(Instance: TObject) trick does not work with CPU64 :(
@@ -29733,7 +29773,7 @@ begin
       P := @value;
     end;
   with TypeInfo^ do
-  if Kind=tkClass then
+  if Kind in [tkClass,tkInterface,tkDynArray] then
     result := PPtrInt(P)^ else
     case TOrdType(PByte(AlignToPtr(@Name[ord(Name[0])+1]))^) of // OrdType of
     otSByte: result := PShortInt(P)^;
@@ -29769,7 +29809,7 @@ begin
       exit;
     end;
   with PropType^^ do
-  if Kind=tkClass then
+  if Kind in [tkClass,tkInterface,tkDynArray] then
     PPtrInt(P)^ := Value else
     case TOrdType(PByte(AlignToPtr(@Name[ord(Name[0])+1]))^) of // OrdType of
     otSByte: PShortInt(P)^ := Value;
@@ -29875,13 +29915,6 @@ begin // caller must check that PropType^.Kind = tkLString
         TSetProp(Call)(Value) else
         TIndexedProp(Call)(Index,Value);
   end;
-end;
-
-procedure TPropInfo.CopyLongStrProp(Source,Dest: TObject);
-var tmp: RawByteString;
-begin
-  GetLongStrProp(Source,tmp);
-  SetLongStrProp(Dest,tmp);
 end;
 
 procedure TPropInfo.GetWideStrProp(Instance: TObject; var Value: WideString);
