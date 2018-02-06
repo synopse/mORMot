@@ -98,6 +98,7 @@ unit SynLog;
     values, and TSynMapFile.AbsoluteToOffset(), as reported by [0aeaa1353149]
   - introduced ISynLogCallback and TSynLogCallbacks types for easy integration
     with mORMot's interface-based services real-time notification
+  - FPC compatibility - with source lines if compiled using -g or -gl switches
 
 *)
 
@@ -796,7 +797,9 @@ type
     procedure AddMemoryStats; virtual;
     {$endif}
     procedure AddErrorMessage(Error: cardinal);
+    {$ifndef FPC}
     procedure AddStackTrace(Stack: PPtrUInt);
+    {$endif}
     procedure ComputeFileName; virtual;
     function GetFileSize: Int64; virtual;
     procedure PerformRotation; virtual;
@@ -1462,6 +1465,8 @@ type
     Context: TSynLogExceptionContext;
     /// associated Exception.Message content (if any)
     Message: string;
+    /// ready-to-be-displayed text of the exception address
+    Addr: RawUTF8;
   end;
   /// storage of the information associated with one or several exceptions
   // - as returned by GetLastExceptions() function
@@ -1484,7 +1489,7 @@ function GetLastExceptions(Depth: integer=0): variant; overload;
 {$endif}
 
 /// convert low-level exception information into some human-friendly text
-function ToText(const info: TSynLogExceptionInfo): RawUTF8; overload;
+function ToText(var info: TSynLogExceptionInfo): RawUTF8; overload;
 
 
 /// a TSynLogArchiveEvent handler which will delete older .log files
@@ -2233,16 +2238,19 @@ threadvar
 /// if defined, will use AddVectoredExceptionHandler() API call
 // - this one does not produce accurate stack trace by now, and is supported
 // only since Windows XP
-// - so default method using RTLUnwindProc should be prefered
+// - so default method using RTLUnwindProc should be prefered with Delphi
 {.$define WITH_VECTOREXCEPT}
 
-function ToText(const info: TSynLogExceptionInfo): RawUTF8;
+function ToText(var info: TSynLogExceptionInfo): RawUTF8;
 begin
   with info.Context do
-    if ELevel<>sllNone then
-      FormatUTF8('% % at %: % [%]',[LogInfoCaption[ELevel],EClass,
-        GetInstanceMapFile.FindLocation(EAddr),DateTimeToIso8601Text(
-        UnixTimeToDateTime(ETimestamp),' '),StringToUTF8(info.Message)],result) else
+    if ELevel<>sllNone then begin
+      if info.Addr='' then
+        info.Addr := GetInstanceMapFile.FindLocation(EAddr);
+      FormatUTF8('% % at %: % [%]',[LogInfoCaption[ELevel],EClass,info.Addr,
+        DateTimeToIso8601Text(UnixTimeToDateTime(ETimestamp),' '),
+        StringToUTF8(info.Message)],result);
+    end else
       result := '';
 end;
 
@@ -2253,6 +2261,21 @@ begin
     result := ToText(info) else
     result := '';
 end;
+
+{$ifndef NOVARIANTS}
+function GetLastExceptions(Depth: integer): variant;
+var info: TSynLogExceptionInfoDynArray;
+    i: integer;
+begin
+  VarClear(result);
+  GetLastExceptions(info,Depth);
+  if info=nil then
+    exit;
+  TDocVariantData(result).InitFast(length(info),dvArray);
+  for i := 0 to high(info) do
+    TDocVariantData(result).AddItemText(ToText(info[i]));
+end;
+{$endif}
 
 function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
   const msg, procid, msgid: RawUTF8; destbuffer: PUTF8Char; destsize: integer;
@@ -2336,21 +2359,6 @@ begin
   inc(result,len);
 end;
 
-{$ifndef NOVARIANTS}
-function GetLastExceptions(Depth: integer): variant;
-var info: TSynLogExceptionInfoDynArray;
-    i: integer;
-begin
-  VarClear(result);
-  GetLastExceptions(info,Depth);
-  if info=nil then
-    exit;
-  TDocVariantData(result).InitFast(length(info),dvArray);
-  for i := 0 to high(info) do
-    TDocVariantData(result).AddItemText(ToText(info[i]));
-end;
-{$endif}
-
 {$ifdef NOEXCEPTIONINTERCEPT}
 
 function GetLastException(out info: TSynLogExceptionInfo): boolean;
@@ -2364,6 +2372,28 @@ begin
 end;
 
 {$else}
+
+{$ifdef DELPHI5OROLDER}
+  {$define WITH_PATCHEXCEPT}
+{$endif}
+
+{$ifdef KYLIX3}
+  // Kylix has a totally diverse exception scheme
+  {$define WITH_MAPPED_EXCEPTIONS}
+{$endif}
+
+{$ifdef FPC}
+  {$ifdef WIN64}
+    {$define WITH_VECTOREXCEPT} // use AddVectoredExceptionHandler Win64 API
+  {$else}
+    // Win32, Linux: intercept via the RaiseProc global variable
+    {$define WITH_RAISEPROC}
+  {$endif}
+{$else}
+  {$ifdef CPU64}
+    {$define WITH_VECTOREXCEPT}
+  {$endif}
+{$endif}
 
 const
   MAX_EXCEPTHISTORY = 15;
@@ -2468,6 +2498,8 @@ procedure SynLogException(const Ctxt: TSynLogExceptionContext);
     end;
   end;
 var SynLog: TSynLog;
+    info: ^TSynLogExceptionInfo;
+    {$ifdef FPC}i: integer;{$endif}
 label adr,fin;
 begin
   {$ifdef CPU64DELPHI} // Delphi<XE6 in System.pas to retrieve x64 dll exit code
@@ -2490,9 +2522,10 @@ begin
     if GlobalLastExceptionIndex=MAX_EXCEPTHISTORY then
       GlobalLastExceptionIndex := 0 else
       inc(GlobalLastExceptionIndex);
-    GlobalLastException[GlobalLastExceptionIndex].Context := Ctxt;
+    info := @GlobalLastException[GlobalLastExceptionIndex];
+    info^.Context := Ctxt;
     if (Ctxt.ELevel=sllException) and (Ctxt.EInstance<>nil) then begin
-      GlobalLastException[GlobalLastExceptionIndex].Message := Ctxt.EInstance.Message;
+      info^.Message := Ctxt.EInstance.Message;
       if Ctxt.EInstance.InheritsFrom(ESynException) then begin
         ESynException(Ctxt.EInstance).RaisedAt := pointer(Ctxt.EAddr);
         if ESynException(Ctxt.EInstance).CustomLog(SynLog.fWriter,Ctxt) then
@@ -2500,15 +2533,34 @@ begin
         goto adr;
       end;
     end else
-      GlobalLastException[GlobalLastExceptionIndex].Message := '';
+      info^.Message := '';
+    info^.Addr := '';
     if Assigned(DefaultSynLogExceptionToStr) and
        DefaultSynLogExceptionToStr(SynLog.fWriter,Ctxt) then
       goto fin;
 adr:SynLog.fWriter.AddShort(' at ');
+    {$ifdef FPC} // note: BackTraceStrFunc is slower than TSynMapFile.Log
+    with SynLog.fWriter do
+    if @BackTraceStrFunc=@SysBackTraceStr then begin // no debug information
+      AddPointer(Ctxt.EAddr); // write addresses as hexa
+      for i := 0 to Ctxt.EStackCount-1 do
+        if (i=0) or (Ctxt.EStack[i]<>Ctxt.EStack[i-1]) then begin
+          Add(' ');
+          AddPointer(Ctxt.EStack[i]);
+        end;
+    end else begin
+      ShortStringToAnsi7String(BackTraceStrFunc(pointer(Ctxt.EAddr)),info^.Addr);
+      AddString(info^.Addr);
+      for i := 0 to Ctxt.EStackCount-1 do
+        if (i=0) or (Ctxt.EStack[i]<>Ctxt.EStack[i-1]) then
+          AddShort(BackTraceStrFunc(pointer(Ctxt.EStack[i])));
+    end;
+    {$else}
     TSynMapFile.Log(SynLog.fWriter,Ctxt.EAddr,true);
     {$ifndef WITH_VECTOREXCEPT} // stack frame OK for RTLUnwindProc by now
     SynLog.AddStackTrace(Ctxt.EStack);
     {$endif}
+    {$endif FPC}
 fin:SynLog.fWriter.AddEndOfLine(SynLog.fCurrentLevel);
     SynLog.fWriter.FlushToStream; // we expect exceptions to be available on disk
   finally
@@ -2516,19 +2568,6 @@ fin:SynLog.fWriter.AddEndOfLine(SynLog.fCurrentLevel);
     LeaveCriticalSection(GlobalThreadLock);
   end;
 end;
-
-{$ifdef CPU64}
-  {$define WITH_VECTOREXCEPT}
-{$endif}
-
-{$ifdef DELPHI5OROLDER}
-  {$define WITH_PATCHEXCEPT}
-{$endif}
-
-{$ifdef KYLIX3}
-  // Kylix has a totally diverse exception scheme
-  {$define WITH_MAPPED_EXCEPTIONS}
-{$endif}
 
 {$ifdef WITH_PATCHEXCEPT}
 
@@ -2687,8 +2726,10 @@ begin
     result := false;
 end;
 
-{$else} // "regular" exception handling as defined in System.pas
+{$else}
 
+{$ifndef WITH_RAISEPROC}
+// "regular" exception handling as defined in System.pas
 type
   PExceptionRecord = ^TExceptionRecord;
   TExceptionRecord = record
@@ -2705,9 +2746,12 @@ type
 
 const
   cDelphiExcept = $0EEDFAE0;
-  cDelphiException = $0EEDFADE;
+  cDelphiException = {$ifdef FPC}$E0465043{$else}$0EEDFADE{$endif};
+{$endif WITH_RAISEPROC}
+{$endif WITH_MAPPED_EXCEPTIONS}
 
 {$ifdef MSWINDOWS}
+const
   // see http://msdn.microsoft.com/en-us/library/xcb2z8hs
   cSetThreadNameException = $406D1388;
 
@@ -2771,8 +2815,6 @@ end;
 
 {$endif MSWINDOWS}
 
-{$endif WITH_MAPPED_EXCEPTIONS}
-
 function InternalDefaultSynLogExceptionToStr(
   WR: TTextWriter; const Context: TSynLogExceptionContext): boolean;
 {$ifdef MSWINDOWS}
@@ -2804,7 +2846,8 @@ begin
       WR.AddShort('")');
     end else
        WR.WriteObject(Context.EInstance);
-  end else begin
+  end else
+  if Context.ECode<>0 then begin
     WR.AddShort(' (');
     WR.AddPointer(Context.ECode);
     WR.AddShort(')');
@@ -2812,11 +2855,34 @@ begin
   result := false; // caller should append "at EAddr" and the stack trace
 end;
 
+{$ifdef WITH_RAISEPROC}
+var
+  OldRaiseProc : TExceptProc;
+
+procedure SynRaiseProc(Obj: TObject; Addr: CodePointer; FrameCount: Longint; Frame: PCodePointer);
+var Ctxt: TSynLogExceptionContext;
+    LastError: DWORD;
+begin
+  if (Obj<>nil) and (Obj.InheritsFrom(Exception)) then begin
+    LastError := GetLastError;
+    Ctxt.EClass := PPointer(Obj)^;
+    Ctxt.EInstance := Exception(Obj);
+    Ctxt.EAddr := PtrUInt(Addr);
+    if Obj.InheritsFrom(EExternal) then
+      Ctxt.ELevel := sllExceptionOS else
+      Ctxt.ELevel := sllException;
+    Ctxt.ETimestamp := UnixTimeUTC;
+    Ctxt.EStack := pointer(Frame);
+    Ctxt.EStackCount := FrameCount;
+    SynLogException(Ctxt);
+    SetLastError(LastError); // SynLogException() above could have changed this
+  end;
+  if Assigned(OldRaiseProc) then
+    OldRaiseProc(Obj, Addr, FrameCount, Frame);
+end;
+{$else}
 {$ifndef WITH_PATCHEXCEPT}
-
-{$ifdef WITH_MAPPED_EXCEPTIONS}
-
-{$else NO WITH_MAPPED_EXCEPTIONS}
+{$ifndef WITH_MAPPED_EXCEPTIONS}
 
 procedure LogExcept(stack: PPtrUInt; const Exc: TExceptionRecord);
 var Ctxt: TSynLogExceptionContext;
@@ -2846,6 +2912,7 @@ begin
     Ctxt.EAddr := Exc.ExceptionAddress;
   end;
   Ctxt.EStack := stack;
+  Ctxt.EStackCount := 0;
   Ctxt.ETimestamp := UnixTimeUTC; // fast API call
   SynLogException(Ctxt);
   SetLastError(LastError); // code above could have changed this
@@ -2892,10 +2959,9 @@ asm
 end;
 
 {$endif WITH_VECTOREXCEPT}
-
 {$endif WITH_MAPPED_EXCEPTIONS}
-
 {$endif WITH_PATCHEXCEPT}
+{$endif WITH_RAISEPROC}
 
 {$endif NOEXCEPTIONINTERCEPT}
 
@@ -2939,9 +3005,14 @@ begin
       {$ifdef WITH_PATCHEXCEPT}
       PatchCallRtlUnWind;
       {$else}
+      {$ifdef WITH_RAISEPROC}
+      OldRaiseProc := RaiseProc;
+      RaiseProc := @SynRaiseProc;
+      {$else}
       oldUnWindProc := RTLUnwindProc;
       RTLUnwindProc := @SynRtlUnwind;
-      {$endif}
+      {$endif WITH_RAISEPROC}
+      {$endif WITH_PATCHEXCEPT}
       {$endif WITH_VECTOREXCEPT}
       {$endif WITH_MAPPED_EXCEPTIONS}
     end;
@@ -3890,8 +3961,8 @@ end;
 
 {$STACKFRAMES ON}
 procedure TSynLog.Log(Level: TSynLogInfo);
-var aCaller: PtrUInt;
-    LastError: DWORD;
+var LastError: DWORD;
+    {$ifndef FPC}aCaller: PtrUInt;{$endif}
 begin
   if Level=sllLastError then
     LastError := GetLastError else
@@ -3901,6 +3972,7 @@ begin
   try
     if LastError<>0 then
       AddErrorMessage(LastError);
+    {$ifndef FPC}
     {$ifdef CPU64}
     {$ifdef MSWINDOWS}
     if RtlCaptureStackBackTrace(1,1,@aCaller,nil)=0 then
@@ -3921,6 +3993,7 @@ begin
     {$endif}
     {$endif}
     TSynMapFile.Log(fWriter,aCaller,false);
+    {$endif}
   finally
     LogTrailerUnLock(Level);
     if LastError<>0 then
@@ -4194,8 +4267,10 @@ end;
 procedure TSynLog.LogTrailerUnLock(Level: TSynLogInfo);
 begin
   try
+    {$ifndef FPC}
     if Level in fFamily.fLevelStackTrace then
       AddStackTrace(nil);
+    {$endif}
     fWriter.AddEndOfLine(fCurrentLevel);
     if (fFileRotationNextHour<>0) and (GetTickCount64>=fFileRotationNextHour) then begin
       inc(fFileRotationNextHour,MSecsPerDay);
@@ -4411,8 +4486,8 @@ begin // aLevel = sllEnter,sllLeave or sllNone
           end;
           end;
         end;
-      end else
-        TSynMapFile.Log(fWriter,Caller,false);
+      end {$ifndef FPC} else
+        TSynMapFile.Log(fWriter,Caller,false){$endif};
     end;
     if (aLevel<>sllNone) and (fFrequencyTimestamp<>0) then begin
       if not fFamily.HighResolutionTimestamp then begin
@@ -4435,8 +4510,8 @@ end;
 const
   MINIMUM_EXPECTED_STACKTRACE_DEPTH = 2;
 
-procedure TSynLog.AddStackTrace(Stack: PPtrUInt);
 {$ifndef FPC}
+procedure TSynLog.AddStackTrace(Stack: PPtrUInt);
 {$ifndef CPU64}
 procedure AddStackManual(Stack: PPtrUInt);
   function check2(xret: PtrUInt): Boolean;
@@ -4490,7 +4565,6 @@ begin
   end;
 end;
 {$endif}
-{$endif}
 {$ifdef WITH_MAPPED_EXCEPTIONS}
 begin
   AddStackManual(Stack);
@@ -4531,6 +4605,7 @@ begin
   {$endif MSWINDOWS}
 end;
 {$endif WITH_MAPPED_EXCEPTIONS}
+{$endif FPC}
 
 
 { TAutoLockerDebug }

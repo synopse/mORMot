@@ -11381,13 +11381,15 @@ type
     EAddr: PtrUInt;
     /// the optional stack trace
     EStack: PPtrUInt;
-    /// the logging level corresponding to this exception
-    // - may be either sllException or sllExceptionOS
-    ELevel: TSynLogInfo;
+    /// = FPC's RaiseProc() FrameCount if EStack is Frame: PCodePointer
+    EStackCount: integer;
     /// the timestamp of this exception, as number of seconds since UNIX Epoch
     // - UnixTimeUTC is faster than NowUTC or GetSystemTime
     // - use UnixTimeToDateTime() to convert it into a regular TDateTime
     ETimestamp: TUnixTime;
+    /// the logging level corresponding to this exception
+    // - may be either sllException or sllExceptionOS
+    ELevel: TSynLogInfo;
   end;
 
   /// global hook callback to customize exceptions logged by TSynLog
@@ -52415,14 +52417,13 @@ procedure TTextWriter.AddPointer(P: PtrUInt);
 begin
   if BEnd-B<=SizeOf(P)*2 then
     FlushToStream;
-{$ifdef CPU64}
+  {$ifdef CPU64} // truncate to for most heap-allocated 4 bytes pointers
   if P and $ffffffff00000000<>0 then begin
     BinToHexDisplay(@P,PAnsiChar(B+1),8);
     inc(B,16);
     exit;
   end;
-  // truncate to 8 hexa chars for most heap-allocated pointers
-{$endif}
+  {$endif}
   Pointer4ToHex(@B[1],P);
   inc(B,8);
 end;
