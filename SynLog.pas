@@ -2712,6 +2712,7 @@ begin
             Ctxt.ELevel := sllException;
           end;
           Ctxt.EStack := nil;
+          Ctxt.EStackCount := 0;
           Ctxt.ETimestamp := UnixTimeUTC; // very fast API call
           SynLogException(Ctxt);
         end;
@@ -2863,20 +2864,21 @@ procedure SynRaiseProc(Obj: TObject; Addr: CodePointer; FrameCount: Longint; Fra
 var Ctxt: TSynLogExceptionContext;
     LastError: DWORD;
 begin
-  if (Obj<>nil) and (Obj.InheritsFrom(Exception)) then begin
-    LastError := GetLastError;
-    Ctxt.EClass := PPointer(Obj)^;
-    Ctxt.EInstance := Exception(Obj);
-    Ctxt.EAddr := PtrUInt(Addr);
-    if Obj.InheritsFrom(EExternal) then
-      Ctxt.ELevel := sllExceptionOS else
-      Ctxt.ELevel := sllException;
-    Ctxt.ETimestamp := UnixTimeUTC;
-    Ctxt.EStack := pointer(Frame);
-    Ctxt.EStackCount := FrameCount;
-    SynLogException(Ctxt);
-    SetLastError(LastError); // SynLogException() above could have changed this
-  end;
+  if GlobalCurrentHandleExceptionSynLog<>nil then
+    if (Obj<>nil) and (Obj.InheritsFrom(Exception)) then begin
+      LastError := GetLastError;
+      Ctxt.EClass := PPointer(Obj)^;
+      Ctxt.EInstance := Exception(Obj);
+      Ctxt.EAddr := PtrUInt(Addr);
+      if Obj.InheritsFrom(EExternal) then
+        Ctxt.ELevel := sllExceptionOS else
+        Ctxt.ELevel := sllException;
+      Ctxt.ETimestamp := UnixTimeUTC;
+      Ctxt.EStack := pointer(Frame);
+      Ctxt.EStackCount := FrameCount;
+      SynLogException(Ctxt);
+      SetLastError(LastError); // SynLogException() above may have changed this
+    end;
   if Assigned(OldRaiseProc) then
     OldRaiseProc(Obj, Addr, FrameCount, Frame);
 end;
