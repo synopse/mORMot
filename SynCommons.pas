@@ -2785,7 +2785,7 @@ function StrCompFast(Str1, Str2: pointer): PtrInt;
 /// SSE 4.2 version of StrComp(), to be used with PUTF8Char/PAnsiChar
 // - please note that this optimized version may read up to 15 bytes
 // beyond the string; this is rarely a problem but it may in principle
-// generate a protection violation (e.g. when used over memory mapped files) - 
+// generate a protection violation (e.g. when used over memory mapped files) -
 // you can use the slightly slower but safe StrCompFast() function instead
 function StrCompSSE42(Str1, Str2: pointer): PtrInt;
 
@@ -5123,7 +5123,7 @@ type
     fCompare: TDynArraySortCompare;
     fElemSize: cardinal;
     fKnownSize: integer;
-    fParser: integer; // index to GlobalJSONCustomParsers.fParsers[] 
+    fParser: integer; // index to GlobalJSONCustomParsers.fParsers[]
     fSorted: boolean;
     fKnownType: TDynArrayKind;
     fIsObjArray: (oaUnknown, oaTrue, oaFalse);
@@ -5187,7 +5187,7 @@ type
     procedure UseExternalCount(var aCountPointer: Integer);
       {$ifdef HASINLINE}inline;{$endif}
     /// check this dynamic array from the GlobalJSONCustomParsers list
-    // - returns TRUE if this array has a custom JSON parser 
+    // - returns TRUE if this array has a custom JSON parser
     function HasCustomJSONParser: boolean;
     /// initialize the wrapper to point to no dynamic array
     procedure Void;
@@ -12280,13 +12280,6 @@ type
 // - by design, such combined hashes cannot be cascaded
 procedure crc128c(buf: PAnsiChar; len: cardinal; out crc: THash128);
 
-/// compute a proprietary 128-bit CRC of a 128-bit binary buffer
-// - apply four crc32c() calls on the 128-bit input chunk, into a 128-bit crc
-// - its output won't match crc128c() value, which works on 8-bit input
-// - will use SSE 4.2 hardware accelerated instruction, if available
-// - is used e.g. by SynCrypto's TAESCFBCRC to check for data integrity
-var crcblock: procedure(crc128, data128: PBlock128);
-
 /// compute a proprietary 128-bit CRC of 128-bit binary buffers
 // - apply four crc32c() calls on the 128-bit input chunks, into a 128-bit crc
 // - its output won't match crc128c() value, which works on 8-bit input
@@ -12298,6 +12291,13 @@ procedure crcblocks(crc128, data128: PBlock128; count: integer);
 // - to be used for regression tests only: crcblock will use the fastest
 // implementation available on the current CPU
 procedure crcblockNoSSE42(crc128, data128: PBlock128);
+
+/// compute a proprietary 128-bit CRC of a 128-bit binary buffer
+// - apply four crc32c() calls on the 128-bit input chunk, into a 128-bit crc
+// - its output won't match crc128c() value, which works on 8-bit input
+// - will use SSE 4.2 hardware accelerated instruction, if available
+// - is used e.g. by SynCrypto's TAESCFBCRC to check for data integrity
+var crcblock: procedure(crc128, data128: PBlock128)  = crcblockNoSSE42;
 
 /// returns TRUE if all 16 bytes of this 128-bit buffer equal zero
 // - e.g. a MD5 digest, or an AES block
@@ -12395,17 +12395,17 @@ type
   /// the potential features, retrieved from an Intel CPU
   // - see https://en.wikipedia.org/wiki/CPUID#EAX.3D1:_Processor_Info_and_Feature_Bits
   TIntelCpuFeature =
-   ( { in EDX }
+   ( { CPUID 1 in EDX }
    cfFPU, cfVME, cfDE, cfPSE, cfTSC, cfMSR, cfPAE, cfMCE,
    cfCX8, cfAPIC, cf_d10, cfSEP, cfMTRR, cfPGE, cfMCA, cfCMOV,
    cfPAT, cfPSE36, cfPSN, cfCLFSH, cf_d20, cfDS, cfACPI, cfMMX,
    cfFXSR, cfSSE, cfSSE2, cfSS, cfHTT, cfTM, cfIA64, cfPBE,
-   { in ECX }
+   { CPUID 1 in ECX }
    cfSSE3, cfCLMUL, cfDS64, cfMON, cfDSCPL, cfVMX, cfSMX, cfEST,
    cfTM2, cfSSSE3, cfCID, cfSDBG, cfFMA, cfCX16, cfXTPR, cfPDCM,
    cf_c16, cfPCID, cfDCA, cfSSE41, cfSSE42, cfX2A, cfMOVBE, cfPOPCNT,
    cfTSC2, cfAESNI, cfXS, cfOSXS, cfAVX, cfF16C, cfRAND, cfHYP,
-   { extended features in EBX, ECX }
+   { extended features CPUID 7 in EBX, ECX, DL }
    cfFSGS, cf_b01, cfSGX, cfBMI1, cfHLE, cfAVX2, cf_b06, cfSMEP,
    cfBMI2, cfERMS, cfINVPCID, cfRTM, cfPQM, cf_b13, cfMPX, cfPQE,
    cfAVX512F, cfAVX512DQ, cfRDSEED, cfADX, cfSMAP, cfAVX512IFMA, cfPCOMMIT, cfCLFLUSH,
@@ -23503,6 +23503,7 @@ procedure VariantDynArrayClear(var Value: TVariantDynArray);
 var p: PDynArrayRec;
     V: PVarData;
     i: integer;
+    docv: word;
     handler: TCustomVariantType;
 begin
   if pointer(Value)=nil then
@@ -23515,6 +23516,7 @@ begin
     exit;
   end;
   handler := nil;
+  docv := DocVariantVType;
   for i := 1 to p^.length do begin
     case V^.VType of
     varEmpty..varDate,varError,varBoolean,varShortInt..varWord64: ;
@@ -23524,7 +23526,7 @@ begin
     varUString: UnicodeString(V^.VAny) := '';
     {$endif}
     else
-    if V^.VType=word(DocVariantVType) then
+    if V^.VType=docv then
       DocVariantType.Clear(V^) else
     if V^.VType=varVariant or varByRef then
       VarClear(PVariant(V^.VPointer)^) else
@@ -27632,24 +27634,24 @@ begin
   if Hex=nil then
     exit;
   if Bin<>nil then
-  for I := 1 to BinBytes do begin
-    B := ConvertHexToBin[Ord(Hex^)];
-    inc(Hex);
-    if B>15 then exit;
-    C := ConvertHexToBin[Ord(Hex^)];
-    Inc(Hex);
-    if C>15 then exit;
-    Bin^ := B shl 4+C;
-    Inc(Bin);
-  end else
-  for I := 1 to BinBytes do begin // no Bin^ -> just validate Hex^ Stream format
-    B := ConvertHexToBin[Ord(Hex^)];
-    inc(Hex);
-    if B>15 then exit;
-    C := ConvertHexToBin[Ord(Hex^)];
-    Inc(Hex);
-    if C>15 then exit;
-  end;
+    for I := 1 to BinBytes do begin
+      B := ConvertHexToBin[Ord(Hex^)];
+      inc(Hex);
+      if B>15 then exit;
+      C := ConvertHexToBin[Ord(Hex^)];
+      Inc(Hex);
+      if C>15 then exit;
+      Bin^ := B shl 4+C;
+      Inc(Bin);
+    end else
+    for I := 1 to BinBytes do begin // Bin=nil -> validate Hex^ input
+      B := ConvertHexToBin[Ord(Hex^)];
+      inc(Hex);
+      if B>15 then exit;
+      C := ConvertHexToBin[Ord(Hex^)];
+      Inc(Hex);
+      if C>15 then exit;
+    end;
   result := true; // conversion OK
 end;
 
@@ -43795,16 +43797,18 @@ procedure TSynInvokeableVariantType.Lookup(var Dest: TVarData; const V: TVarData
 var itemName: RawUTF8;
     Handler: TSynInvokeableVariantType;
     DestVar,LookupVar: TVarData;
+    docv: word;
 begin
   Dest.VType := varEmpty; // left to Unassigned if not found
   DestVar := V;
   while DestVar.VType=varByRef or varVariant do
     DestVar := PVarData(DestVar.VPointer)^;
+  docv := DocVariantVType;
   repeat
     GetNextItem(FullName,'.',itemName);
     if itemName='' then
       exit;
-    if DestVar.VType=DocVariantVType then begin
+    if DestVar.VType=docv then begin
       if not TDocVariantData(DestVar).GetVarData(itemName,DestVar) then
         exit;
     end else
@@ -43825,7 +43829,7 @@ begin
       exit;
     while DestVar.VType=varByRef or varVariant do
       DestVar := PVarData(DestVar.VPointer)^;
-    if (DestVar.VType=DocVariantVType) and
+    if (DestVar.VType=docv) and
        (TDocVariantData(DestVar).VCount=0) then
       DestVar.VType := varNull; // recognize void TDocVariant as null
     if FullName=nil then begin // found full name scope
@@ -44443,8 +44447,6 @@ begin
     end;
   result :=  aClass.Create; // register variant type
   SynVariantTypes.Add(result);
-  if aClass=TDocVariant then
-    DocVariantVType := result.VarType;
 end;
 
 
@@ -44517,8 +44519,6 @@ end;
 
 procedure TDocVariantData.Init(aOptions: TDocVariantOptions; aKind: TDocVariantKind);
 begin
-  if DocVariantType=nil then
-    DocVariantType := TDocVariant(SynRegisterCustomVariantType(TDocVariant));
   ZeroFill(@self);
   VType := DocVariantVType;
   VOptions := aOptions-[dvoIsArray,dvoIsObject];
@@ -44530,8 +44530,6 @@ end;
 
 procedure TDocVariantData.InitFast;
 begin
-  if DocVariantType=nil then
-    DocVariantType := TDocVariant(SynRegisterCustomVariantType(TDocVariant));
   ZeroFill(@self);
   VType := DocVariantVType;
   VOptions := JSON_OPTIONS_FAST;
@@ -44898,7 +44896,7 @@ begin
     raise ESynException.CreateUTF8('No TDocVariant for InitCopy(%)',[Source.VType]);
   SourceVValue := Source^.VValue; // local fast per-reference copy
   if Source<>@self then begin
-    VType := DocVariantVType;
+    VType := Source^.VType;
     VCount := Source^.VCount;
     pointer(VName) := nil;  // avoid GPF
     pointer(VValue) := nil;
@@ -45803,7 +45801,7 @@ begin
   if ndx<0 then
     exit;
   Dest := _Safe(VValue[ndx]);
-  result := Dest^.VType=DocVariantVType;
+  result := Dest^.VType<=varNull;
 end;
 
 function TDocVariantData.GetJsonByStartName(const aStartName: RawUTF8): RawUTF8;
@@ -46675,13 +46673,13 @@ end;
 
 function _Safe(const DocVariant: variant): PDocVariantData;
 {$ifdef FPC_OR_PUREPASCAL}
-var w: word;
+var docv: word;
 begin
   result := @DocVariant;
-  w := DocVariantVType;
-  if result.VType<>w then
+  docv := DocVariantVType;
+  if result.VType<>docv then
     if (result.VType=varByRef or varVariant) and
-       (PVarData(PVarData(result)^.VPointer).VType=w) then
+       (PVarData(PVarData(result)^.VPointer).VType=docv) then
       result := pointer(PVarData(result)^.VPointer) else
       result := @DocVariantDataFake;
 end;
@@ -52144,7 +52142,7 @@ begin // code below must match TDynArray.LoadFromJSON
     Add('[',']');
     exit;
   end;
-  if aDynArray.HasCustomJSONParser then 
+  if aDynArray.HasCustomJSONParser then
     with GlobalJSONCustomParsers.fParser[aDynArray.fParser] do begin
       customWriter := Writer;
       customParser := RecordCustomParser;
@@ -65368,6 +65366,7 @@ begin
     SetString(SmallUInt32UTF8[i],P,@tmp[15]-P);
   end;
   UpperCopy255Buf := @UpperCopy255BufPas;
+  DefaultHasher := @xxHash32; // faster than crc32cfast for small content
   {$ifdef CPUINTEL}
   if cfSSE42 in CpuFeatures then begin
     crc32c := @crc32csse42;
@@ -65388,11 +65387,8 @@ begin
     {$endif}
     {$endif PUREPASCAL}
     DefaultHasher := crc32c;
-  end else
-  {$endif CPUINTEL} begin
-    crc32c := @crc32cfast;
-    DefaultHasher := @xxHash32; // faster than crc32cfast for small content
   end;
+  {$endif CPUINTEL}
   InterningHasher := DefaultHasher;
   KINDTYPE_INFO[djRawUTF8] := TypeInfo(RawUTF8); // for TDynArray.LoadKnownType
   KINDTYPE_INFO[djWinAnsi] := TypeInfo(WinAnsiString);
@@ -65416,8 +65412,8 @@ initialization
   {$ifdef CPUINTEL}
   TestIntelCpuFeatures;
   {$endif}
+  crc32c := @crc32cfast; // now to circumvent Internal Error C11715 for Delphi 5
   MoveFast := @System.Move;
-  crcblock := @crcblockNoSSE42;
   {$ifdef FPC}
   FillCharFast := @System.FillChar; // FPC cross-platform RTL is optimized enough
   {$else}
@@ -65442,6 +65438,8 @@ initialization
   // some type definition assertions
   {$ifndef NOVARIANTS}
   Assert(SizeOf(TDocVariantData)=SizeOf(TVarData));
+  DocVariantType := TDocVariant(SynRegisterCustomVariantType(TDocVariant));
+  DocVariantVType := DocVariantType.VarType;
   {$endif NOVARIANTS}
   {$warnings OFF}
   Assert((MAX_SQLFIELDS>=64)and(MAX_SQLFIELDS<=256));
