@@ -45253,7 +45253,7 @@ begin
       if I <= J then begin
         if I <> J then begin
           if Doc.VName<>nil then
-            ExchgNames(pointer(Doc.VName[I]),pointer(Doc.VName[J]));
+            ExchgNames(@Doc.VName[I],@Doc.VName[J]);
           ExchgValues(@Doc.VValue[I],@Doc.VValue[J]);
         end;
         if P = I then P := J else if P = J then P := I;
