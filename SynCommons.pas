@@ -4365,9 +4365,6 @@ function GetDisplayNameFromClass(C: TClass): RawUTF8;
 // - return generic VCL string type, i.e. UnicodeString for Delphi 2009+
 function GetCaptionFromClass(C: TClass): string;
 
-/// UnCamelCase and translate the enumeration item
-function GetCaptionFromEnum(aTypeInfo: pointer; aIndex: integer): string;
-
 /// just a wrapper around vmtClassName to avoid a string conversion
 function ClassNameShort(C: TClass): PShortString; overload;
   {$ifdef HASINLINE}inline;{$endif}
@@ -6794,6 +6791,13 @@ procedure GetEnumTrimmedNames(aTypeInfo: pointer; aDest: PRawUTF8);
 /// helper to retrieve all (translated) caption texts of an enumerate
 // - may be used as cache for overloaded ToCaption() content
 procedure GetEnumCaptions(aTypeInfo: pointer; aDest: PString);
+
+/// UnCamelCase and translate the enumeration item
+function GetCaptionFromEnum(aTypeInfo: pointer; aIndex: integer): string;
+
+/// low-level helper to retrieve a (translated) caption from a PShortString
+// - as used e.g. by GetEnumCaptions or GetCaptionFromEnum
+procedure GetCaptionFromTrimmed(PS: PShortString; var result: string);
 
 /// helper to retrieve the index of an enumerate item from its text
 // - returns -1 if aValue was not found
@@ -22816,13 +22820,13 @@ begin
     end;
 end;
 
-procedure GetCaptionFromTrimmed(PS: PAnsiChar; var result: string);
+procedure GetCaptionFromTrimmed(PS: PShortString; var result: string);
 var tmp: array[byte] of AnsiChar;
     L: integer;
 begin
-  L := ord(PS^);
+  L := ord(PS^[0]);
   inc(PS);
-  while (L>0) and (PS^ in ['a'..'z']) do begin inc(PS); dec(L); end;
+  while (L>0) and (PS^[0] in ['a'..'z']) do begin inc(PByte(PS)); dec(L); end;
   tmp[L] := #0; // as expected by GetCaptionFromPCharLen/UnCamelCase
   MoveFast(PS^,tmp,L);
   GetCaptionFromPCharLen(tmp,result);
@@ -22834,7 +22838,7 @@ var MaxValue, i: integer;
 begin
   if GetEnumInfo(aTypeInfo,MaxValue,res) then
     for i := 0 to MaxValue do begin
-      GetCaptionFromTrimmed(pointer(res),aDest^);
+      GetCaptionFromTrimmed(res,aDest^);
       inc(PByte(res),ord(res^[0])+1); // next short string
       inc(aDest);
     end;
@@ -37560,7 +37564,7 @@ end;
 
 function GetCaptionFromEnum(aTypeInfo: pointer; aIndex: integer): string;
 begin
-  GetCaptionFromTrimmed(pointer(GetEnumName(aTypeInfo,aIndex)),result);
+  GetCaptionFromTrimmed(GetEnumName(aTypeInfo,aIndex),result);
 end;
 
 function CharSetToCodePage(CharSet: integer): cardinal;
