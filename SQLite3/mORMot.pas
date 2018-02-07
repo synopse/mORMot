@@ -20983,7 +20983,7 @@ begin
 end;
 
 function ClassFieldInstance(Instance: TObject; PropClassType: TClass;
-  out PropInstance): boolean; overload;
+  out PropInstance): boolean;
 var P: PPropInfo;
 begin
   result := false;
@@ -25679,7 +25679,7 @@ begin
   result := TSQLRawBlobToBlob(pointer(RawBlob),length(RawBlob));
 end;
 
-function TSQLRawBlobToBlob(RawBlob: pointer; RawBlobLength: integer): RawUTF8; overload;
+function TSQLRawBlobToBlob(RawBlob: pointer; RawBlobLength: integer): RawUTF8;
 // BLOB literals are string literals containing hexadecimal data and
 //  preceded by a single "x" or "X" character. For example: X'53514C697465'
 var P: PAnsiChar;
@@ -28103,7 +28103,7 @@ const
     pQuoted, pInlined);
 
 function GetJSONObjectAsSQL(var P: PUTF8Char; const Fields: TRawUTF8DynArray;
-  Update, InlinedParams: boolean; RowID: TID=0; ReplaceRowIDWithID: Boolean=false): RawUTF8;
+  Update, InlinedParams: boolean; RowID: TID; ReplaceRowIDWithID: Boolean): RawUTF8;
 var Decoder: TJSONObjectDecoder;
 begin
   Decoder.Decode(P,Fields,FROMINLINED[InlinedParams],RowID,ReplaceRowIDWithID);
@@ -28111,7 +28111,7 @@ begin
 end;
 
 function GetJSONObjectAsSQL(const JSON: RawUTF8; Update, InlinedParams: boolean;
- RowID: TID=0; ReplaceRowIDWithID: Boolean=false): RawUTF8; overload;
+ RowID: TID; ReplaceRowIDWithID: Boolean): RawUTF8;
 var Decoder: TJSONObjectDecoder;
 begin
   Decoder.Decode(JSON,nil,FROMINLINED[InlinedParams],RowID,ReplaceRowIDWithID);
@@ -31252,7 +31252,7 @@ begin
 end;
 
 function SelectInClause(const PropName: RawUTF8; const Values: array of Int64;
-  const Suffix: RawUTF8=''; ValuesInlined: boolean=false): RawUTF8; overload;
+  const Suffix: RawUTF8; ValuesInlined: boolean): RawUTF8;
 var i: integer;
     temp: TTextWriterStackBuffer;
 begin
@@ -48196,7 +48196,7 @@ begin
 end;
 
 procedure WriteObject(Value: TObject; var IniContent: RawUTF8; const Section: RawUTF8;
-  const SubCompName: RawUTF8=''); overload;
+  const SubCompName: RawUTF8);
 var P: PPropInfo;
     i, V: integer;
     Obj: TObject;
@@ -49327,7 +49327,7 @@ begin
     result := FileFromString(json,JSONFile);
 end;
 
-procedure ReadObject(Value: TObject; From: PUTF8Char; const SubCompName: RawUTF8=''); overload;
+procedure ReadObject(Value: TObject; From: PUTF8Char; const SubCompName: RawUTF8);
 var P: PPropInfo;
     i, V, err: integer;
     V64: Int64;
@@ -49404,8 +49404,7 @@ begin
   end;
 end;
 
-procedure ReadObject(Value: TObject; const FromContent: RawUTF8;
-  const SubCompName: RawUTF8=''); overload;
+procedure ReadObject(Value: TObject; const FromContent,SubCompName: RawUTF8);
 var source: PUTF8Char;
     UpperSection: array[byte] of AnsiChar;
 begin
@@ -53453,7 +53452,7 @@ end;
 
 function TServiceContainer.AddInterface(aInterface: PTypeInfo;
   aInstanceCreation: TServiceInstanceImplementation;
-  const aContractExpected: RawUTF8=''): TServiceFactoryClient;
+  const aContractExpected: RawUTF8): TServiceFactoryClient;
 begin
   CheckInterface([aInterface]);
   result := TServiceFactoryClient.Create(Rest,aInterface,aInstanceCreation,aContractExpected);
