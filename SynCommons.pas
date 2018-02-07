@@ -42130,14 +42130,15 @@ begin
          SynCommons.HexToBin(PAnsiChar(PropValue),@aValue,fFixedSize) then
         result := P;
     ktBinary:
-      if wasString and (PropValueLen>0) then begin // default hexa serialization
-        if (PropValueLen=fFixedSize*2) and
-           HexDisplayToBin(PAnsiChar(PropValue),@aValue,fFixedSize) then
+      if wasString then begin // default hexa serialization
+        FillcharFast(aValue,fDataSize,0);
+        if (PropValueLen=0) or ((PropValueLen=fFixedSize*2) and
+           HexDisplayToBin(PAnsiChar(PropValue),@aValue,fFixedSize)) then
           result := P;
       end else
         if fFixedSize<=SizeOf(u64) then begin // allow integer serialization
-          SetQWord(PropValue,u64); // "" -> PropValueLen=0 -> u64=0
-          MoveFast(u64,aValue,fFixedSize);
+          SetQWord(PropValue,u64);
+          MoveFast(u64,aValue,fDataSize);
           result := P;
         end;
     end;
@@ -42225,14 +42226,16 @@ begin
     TypeInfoToName(aTypeInfo,aTypeName);
   if aDataSize<>0 then
     if aFieldSize>aDataSize then
-      raise ESynException.CreateUTF8('% fieldsize=%>%',[aTypeName,aFieldSize,aDataSize]) else
+      raise ESynException.CreateUTF8('JSONSerializerFromTextSimpleTypeAdd(%) fieldsize=%>%',
+        [aTypeName,aFieldSize,aDataSize]) else
     if aFieldSize=0 then
       aFieldSize := aDataSize; // not truncated
   simple.TypeInfo := aTypeInfo;
   simple.BinaryDataSize := aDataSize;
   simple.BinaryFieldSize := aFieldSize;
   UpperCaseSelf(aTypeName);
-  GlobalCustomJSONSerializerFromTextSimpleType.Add(aTypeName,simple);
+  if GlobalCustomJSONSerializerFromTextSimpleType.Add(aTypeName,simple)<0 then
+    raise ESynException.CreateUTF8('JSONSerializerFromTextSimpleTypeAdd(%) duplicated', [aTypeName]);
 end;
 
 /// if defined, will try to mimic the default record alignment
@@ -65347,7 +65350,7 @@ begin
 //  assert(SizeOf(CpuFeatures)=4*4+1);
   {$ifdef Darwin}
   {$ifdef CPU64}
-  // SSE42 asm does not (yet) work on Darwin x64 ...
+  // SSE42 asm does not (yet) work on Darwin x64 (as reported by alf)
   Exclude(CpuFeatures, cfSSE42);
   {$endif}
   {$endif}
