@@ -2524,6 +2524,11 @@ begin
       inc(GlobalLastExceptionIndex);
     info := @GlobalLastException[GlobalLastExceptionIndex];
     info^.Context := Ctxt;
+    {$ifdef FPC}
+    if @BackTraceStrFunc<>@SysBackTraceStr then
+      ShortStringToAnsi7String(BackTraceStrFunc(pointer(Ctxt.EAddr)),info^.Addr) else
+    {$endif FPC}
+      info^.Addr := '';
     if (Ctxt.ELevel=sllException) and (Ctxt.EInstance<>nil) then begin
       info^.Message := Ctxt.EInstance.Message;
       if Ctxt.EInstance.InheritsFrom(ESynException) then begin
@@ -2534,7 +2539,6 @@ begin
       end;
     end else
       info^.Message := '';
-    info^.Addr := '';
     if Assigned(DefaultSynLogExceptionToStr) and
        DefaultSynLogExceptionToStr(SynLog.fWriter,Ctxt) then
       goto fin;
@@ -2549,7 +2553,6 @@ adr:SynLog.fWriter.AddShort(' at ');
           AddPointer(Ctxt.EStack[i]);
         end;
     end else begin
-      ShortStringToAnsi7String(BackTraceStrFunc(pointer(Ctxt.EAddr)),info^.Addr);
       AddString(info^.Addr);
       for i := 0 to Ctxt.EStackCount-1 do
         if (i=0) or (Ctxt.EStack[i]<>Ctxt.EStack[i-1]) then
