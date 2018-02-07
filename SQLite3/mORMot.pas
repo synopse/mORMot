@@ -19407,6 +19407,10 @@ type
     // TSQLAuthGroup ID casted as a pointer) properties - you can retrieve any
     // optional binary data associated with this user via RetrieveBlobFields()
     property SessionUser: TSQLAuthUser read fSessionUser;
+    /// access to the low-level HTTP header used for authentication
+    // - e.g. after TSQLRestServerAuthenticationHttpBasic.SetUser
+    // - you can force here you own header, a JWT as authentication bearer 
+    property SessionHttpHeader: RawUTF8 read fSessionHttpHeader write fSessionHttpHeader;
 {$ifndef LVCL}
     /// set a callback event to be executed in loop during remote blocking
     // process, e.g. to refresh the UI during a somewhat long request
