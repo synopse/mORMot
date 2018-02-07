@@ -624,16 +624,15 @@ end;
 procedure FillDescriptionFromSource(var Descriptions: TDocVariantData;
   const SourceFileName: TFileName);
 var desc,typeName,interfaceName: RawUTF8;
-    P,S: PUTF8Char;
+    P: PUTF8Char;
     withinCode: boolean;
 begin
-  S := pointer(StringFromFile(SourceFileName));
-  if S=nil then
+  P := pointer(StringFromFile(SourceFileName));
+  if P=nil then
     exit;
   withinCode := false;
   repeat // rough parsing of the .pas unit file to extract /// description
     P := GotoNextNotSpace(P);
-    S := GotoNextLine(S);
     if IdemPChar(P,'IMPLEMENTATION') then
       break; // only the "interface" section is parsed
     if IdemPChar(P,'{$IFDEF ') then begin
@@ -701,9 +700,9 @@ begin
              IdemPropNameU(typeName,'procedure') then
             if GetNextFieldProp(P,typeName) then
               Descriptions.AddValue(interfaceName+'.'+typeName,RawUTF8ToVariant(desc));
-      S := P;
-    end;
-  until (S=nil) or (P=nil);
+    end else
+      P := GotoNextLine(P);
+  until (P=nil);
 end;
 
 procedure TWrapperContext.AddUnit(const aUnitName: ShortString;
