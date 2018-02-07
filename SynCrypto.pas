@@ -13901,11 +13901,11 @@ function TJWTAbstract.Compute(const DataNameValue: array of const;
   ExpirationMinutes: integer; Signature: PRawUTF8): RawUTF8;
 var payload, headpayload, signat: RawUTF8;
 begin
-  if self=nil then begin
-    result := '';
-    exit;
-  end;
-  payload := PayloadToJSON(DataNameValue,Issuer,Subject,Audience,NotBefore,ExpirationMinutes);
+  result := '';
+  if self<>nil then
+    payload := PayloadToJSON(DataNameValue,Issuer,Subject,Audience,NotBefore,ExpirationMinutes);
+  if payload='' then
+    raise EJWTException.CreateUTF8('%.Compute with missing parameter',[self]);
   headpayload := fHeaderB64+BinToBase64URI(payload);
   signat := ComputeSignature(headpayload);
   result := headpayload+'.'+signat;
@@ -14371,15 +14371,17 @@ begin
   result := saSha3S256;
 end;
 
+var
+  _TJWTResult: array[TJWTResult] of PShortString;
 
 function ToText(res: TJWTResult): PShortString;
 begin
-  result := GetEnumName(TypeInfo(TJWTResult),ord(res));
+  result := _TJWTResult[res];
 end;
 
 function ToCaption(res: TJWTResult): string;
 begin
-  result := GetCaptionFromEnum(TypeInfo(TJWTResult),ord(res));
+  GetCaptionFromTrimmed(pointer(_TJWTResult[res]),result);
 end;
 
 {$endif NOVARIANTS}
@@ -14490,6 +14492,7 @@ initialization
   if (cfSSE42 in CpuFeatures) and (cfAesNi in CpuFeatures) then
     crc32c := @crc32c_sse42_aesni;
 {$endif}
+  GetEnumNames(TypeInfo(TJWTResult),@_TJWTResult);
   assert(sizeof(TMD5Buf)=sizeof(TMD5Digest));
   assert(sizeof(TAESContext)=AESContextSize);
   assert(sizeof(TSHAContext)=SHAContextSize);
