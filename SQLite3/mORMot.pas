@@ -38058,8 +38058,9 @@ var url, header: RawUTF8;
 begin
   if self=nil then
     result := HTTP_UNAVAILABLE else begin
-    url := Model.getURICallBack(aMethodName,aTable,aID)+
-      UrlEncode(aNameValueParameters);
+    url := Model.getURICallBack(aMethodName,aTable,aID);
+    if high(aNameValueParameters)>0 then
+      url := url+UrlEncode(aNameValueParameters);
     {$ifdef WITHLOG}
     log := fLogClass.Enter('CallBackGet %',[url],self);
     {$endif}
@@ -61540,7 +61541,7 @@ begin
     TInterfacedObjectFake(fSharedInstance)._AddRef; // force stay alive
   end;
   // check if this interface is supported on the server
-  if ContractExpected<>SERVICE_CONTRACT_NONE_EXPECTED then begin
+  if PosEx(SERVICE_CONTRACT_NONE_EXPECTED,ContractExpected)=0 then begin
     if not InternalInvoke(SERVICE_PSEUDO_METHOD[imContract],
        TSQLRestClientURI(fRest).fServicePublishOwnInterfaces,@RemoteContract,@Error) then
       raise EServiceException.CreateUTF8('%.Create(): I% interface or % routing not '+
