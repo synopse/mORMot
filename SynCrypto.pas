@@ -2790,6 +2790,7 @@ const
 
 function ToText(res: TJWTResult): PShortString; overload;
 function ToCaption(res: TJWTResult): string; overload;
+function ToText(claim: TJWTClaim): PShortString; overload;
 
 {$endif NOVARIANTS}
 
@@ -13902,10 +13903,9 @@ function TJWTAbstract.Compute(const DataNameValue: array of const;
 var payload, headpayload, signat: RawUTF8;
 begin
   result := '';
-  if self<>nil then
-    payload := PayloadToJSON(DataNameValue,Issuer,Subject,Audience,NotBefore,ExpirationMinutes);
-  if payload='' then
-    raise EJWTException.CreateUTF8('%.Compute with missing parameter',[self]);
+  if self=nil then
+    exit;
+  payload := PayloadToJSON(DataNameValue,Issuer,Subject,Audience,NotBefore,ExpirationMinutes);
   headpayload := fHeaderB64+BinToBase64URI(payload);
   signat := ComputeSignature(headpayload);
   result := headpayload+'.'+signat;
@@ -13928,21 +13928,25 @@ end;
 function TJWTAbstract.PayloadToJSON(const DataNameValue: array of const;
   const Issuer, Subject, Audience: RawUTF8; NotBefore: TDateTime;
   ExpirationMinutes: cardinal): RawUTF8;
+  procedure RaiseMissing(c: TJWTClaim);
+  begin
+    raise EJWTException.CreateUTF8('%.PayloadJSON: missing %', [self, ToText(c)^]);
+  end;
 var payload: TDocVariantData;
 begin
   result := '';
   payload.InitObject(DataNameValue,JSON_OPTIONS_FAST);
   if jrcIssuer in fClaims then
     if Issuer='' then
-      exit else
+      RaiseMissing(jrcIssuer) else
       payload.AddValueFromText(JWT_CLAIMS_TEXT[jrcIssuer],Issuer,true);
   if jrcSubject in fClaims then
     if Subject='' then
-      exit else
+      RaiseMissing(jrcSubject) else
       payload.AddValueFromText(JWT_CLAIMS_TEXT[jrcSubject],Subject,true);
   if jrcAudience in fClaims then
     if Audience='' then
-      exit else
+      RaiseMissing(jrcAudience) else
       if Audience[1]='[' then
         payload.AddOrUpdateValue(JWT_CLAIMS_TEXT[jrcAudience],_JsonFast(Audience)) else
         payload.AddValueFromText(JWT_CLAIMS_TEXT[jrcAudience],Audience,true);
@@ -14373,6 +14377,7 @@ end;
 
 var
   _TJWTResult: array[TJWTResult] of PShortString;
+  _TJWTClaim: array[TJWTClaim] of PShortString;
 
 function ToText(res: TJWTResult): PShortString;
 begin
@@ -14381,8 +14386,14 @@ end;
 
 function ToCaption(res: TJWTResult): string;
 begin
-  GetCaptionFromTrimmed(pointer(_TJWTResult[res]),result);
+  GetCaptionFromTrimmed(_TJWTResult[res],result);
 end;
+
+function ToText(claim: TJWTClaim): PShortString;
+begin
+  result := _TJWTClaim[claim];
+end;
+
 
 {$endif NOVARIANTS}
 
@@ -14493,6 +14504,7 @@ initialization
     crc32c := @crc32c_sse42_aesni;
 {$endif}
   GetEnumNames(TypeInfo(TJWTResult),@_TJWTResult);
+  GetEnumNames(TypeInfo(TJWTClaim),@_TJWTClaim);
   assert(sizeof(TMD5Buf)=sizeof(TMD5Digest));
   assert(sizeof(TAESContext)=AESContextSize);
   assert(sizeof(TSHAContext)=SHAContextSize);
