@@ -10613,6 +10613,9 @@ type
     /// size (in bytes) of this smvv64 ordinal value
     // - e.g. depending of the associated kind of enumeration
     SizeInStorage: integer;
+    /// hexadecimal binary size (in bytes) of this smvv64 ordinal value
+    // - set only if ValueType=smvBinary
+    SizeInBinary: integer;
     /// index of the associated variable in the local array[ArgsUsedCount[]]
     // - for smdConst argument, contains -1 (no need to a local var: the value
     // will be on the stack only)
@@ -54197,10 +54200,9 @@ begin
           smvString:        UTF8DecodeToString(Val,ValLen,PString(V)^);
           smvRawByteString: Base64ToBin(PAnsiChar(Val),ValLen,PRawByteString(V)^);
           smvWideString:    UTF8ToWideString(Val,ValLen,PWideString(V)^);
-          smvBinary:
+          smvBinary: 
             if ValLen=SizeInStorage*2 then
-              HexDisplayToBin(PAnsiChar(Val),PByte(V),SizeInStorage) else
-              FillCharFast(V^,SizeInStorage,0);
+              HexDisplayToBin(PAnsiChar(Val),PByte(V),SizeInStorage);
           else RaiseError('ValueType=%',[ord(ValueType)]);
           end;
         end;
@@ -54844,7 +54846,7 @@ begin
       case ValueType of
       smvInteger, smvInt64:
         if TJSONCustomParserRTTI.TypeNameToSimpleBinary(ShortStringToUTF8(ArgTypeName^),
-           SizeInStack, SizeInStorage) then begin
+            SizeInBinary, SizeInStorage) then begin
           ValueType := smvBinary; // transmitted as hexa string
           Include(ValueKindAsm,vIsString);
         end;
@@ -54878,7 +54880,7 @@ begin
               '%.Create: % set too big in %.% method % parameter',
               [self,ArgTypeName^,fInterfaceTypeInfo^.Name,URI,ParamName^]);
         end;
-        smvBinary: ; // already set SizeInStack + SizeInStorage
+        smvBinary: ; // already set SizeInStorage
         smvRecord:
           if ArgTypeInfo^.RecordType^.Size<=PTRSIZ then
             raise EInterfaceFactoryException.CreateUTF8(
@@ -54899,8 +54901,10 @@ begin
         // CPUX86 will add an additional by-ref parameter
       end;
       {$ifdef CPU32}
-      if (ValueDirection=smdConst) and (ValueType<>smvBinary) then
-        SizeInStack := CONST_ARGS_IN_STACK_SIZE[ValueType] else
+      if ValueDirection=smdConst then
+        if ValueType=smvBinary then
+          SizeInStack := SizeInBinary else
+          SizeInStack := CONST_ARGS_IN_STACK_SIZE[ValueType] else
       {$endif}
         SizeInStack := PTRSIZ; // always aligned to 8 bytes boundaries for 64-bit
       if{$ifndef CPUARM}
@@ -59405,7 +59409,7 @@ begin
     WR.AddShort(ArgTypeInfo^.Name) else
     WR.AddShort(CONST_ARGTYPETOJSON[ValueType]);
 {$ifdef SOA_DEBUG}
-  WR.Add('"','"');
+  WR.Add('"',',');
   WR.AddPropJSONInt64('index',IndexVar);
   WR.AddPropJSONString('var',GetEnumNameTrimed(TypeInfo(TServiceMethodValueVar),ValueVar));
   WR.AddPropJSONInt64('stackoffset',InStackOffset);
@@ -59413,6 +59417,8 @@ begin
   WR.AddPropJSONInt64('fpreg',FPRegisterIdent);
   WR.AddPropJSONInt64('stacksize',SizeInStack);
   WR.AddPropJSONInt64('storsize',SizeInStorage);
+  if ValueType=smvBinary then
+    WR.AddPropJSONInt64('binsize',SizeInBinary);
   WR.AddPropName('asm');
   WR.AddString(GetSetNameCSV(TypeInfo(TServiceMethodValueAsm),ValueKindAsm));
   WR.AddShort('},');
@@ -60853,7 +60859,7 @@ begin
           Par := VariantLoadJSON(PVariant(pointer(fRecords[IndexVar]))^,Par,nil,
             @JSON_OPTIONS[optVariantCopiedByReference in Options]);
         {$endif}
-        smvBoolean..smvWideString: begin
+        smvBoolean..smvBinary: begin
           Val := GetJSONField(Par,Par,@wasString,@EndOfObject,@ValLen);
           if (Val=nil) and (Par=nil) and (EndOfObject<>'}') then
             exit;  // 'null': Val=nil and Par<>nil
