@@ -4799,7 +4799,9 @@ procedure DeleteInteger(var Values: TIntegerDynArray; var ValuesCount: Integer; 
 
 /// remove some 32-bit integer from Values[]
 // - Excluded is declared as var, since it will be sorted in-place during process
-procedure ExcludeInteger(var Values, Excluded: TIntegerDynArray);
+// if it contains more than ExcludedSortSize items (i.e. if the sort is worth it)
+procedure ExcludeInteger(var Values, Excluded: TIntegerDynArray;
+  ExcludedSortSize: Integer=32);
 
 /// delete any 16-bit integer in Values[]
 procedure DeleteWord(var Values: TWordDynArray; Index: PtrInt);
@@ -4812,7 +4814,9 @@ procedure DeleteInt64(var Values: TInt64DynArray; var ValuesCount: Integer; Inde
 
 /// remove some 64-bit integer from Values[]
 // - Excluded is declared as var, since it will be sorted in-place during process
-procedure ExcludeInt64(var Values, Excluded: TInt64DynArray);
+// if it contains more than ExcludedSortSize items (i.e. if the sort is worth it)
+procedure ExcludeInt64(var Values, Excluded: TInt64DynArray;
+  ExcludedSortSize: Integer=32);
 
 /// find the maximum 32-bit integer in Values[]
 function MaxInteger(const Values: TIntegerDynArray; ValuesCount: integer;
@@ -30470,21 +30474,30 @@ begin
   dec(ValuesCount);
 end;
 
-procedure ExcludeInt64(var Values, Excluded: TInt64DynArray);
+procedure ExcludeInt64(var Values, Excluded: TInt64DynArray; ExcludedSortSize: Integer);
 var i,v,x,n: integer;
 begin
   if (Values=nil) or (Excluded=nil) then
     exit; // nothing to exclude
-  x := high(Excluded);
-  QuickSortInt64(pointer(Excluded),0,x);
   v := length(Values);
   n := 0;
-  for i := 0 to v-1 do
-    if FastFindInt64Sorted(pointer(Excluded),x,Values[i])<0 then begin
-      if n<>i then
-        Values[n] := Values[i];
-      inc(n);
-    end;
+  x := Length(Excluded);
+  if (x>ExcludedSortSize) or (v>ExcludedSortSize) then begin // sort if worth it
+    dec(x);
+    QuickSortInt64(pointer(Excluded),0,x);
+    for i := 0 to v-1 do
+      if FastFindInt64Sorted(pointer(Excluded),x,Values[i])<0 then begin
+        if n<>i then
+          Values[n] := Values[i];
+        inc(n);
+      end;
+  end else
+    for i := 0 to v-1 do
+      if not Int64ScanExists(pointer(Excluded),x,Values[i]) then begin
+        if n<>i then
+          Values[n] := Values[i];
+        inc(n);
+      end;
   if n<>v then
     SetLength(Values,n);
 end;
@@ -30501,21 +30514,30 @@ begin
   dec(ValuesCount);
 end;
 
-procedure ExcludeInteger(var Values, Excluded: TIntegerDynArray);
+procedure ExcludeInteger(var Values, Excluded: TIntegerDynArray; ExcludedSortSize: integer);
 var i,v,x,n: integer;
 begin
   if (Values=nil) or (Excluded=nil) then
     exit; // nothing to exclude
-  x := high(Excluded);
-  QuickSortInteger(pointer(Excluded),0,x);
   v := length(Values);
   n := 0;
-  for i := 0 to v-1 do
-    if FastFindIntegerSorted(pointer(Excluded),x,Values[i])<0 then begin
-      if n<>i then
-        Values[n] := Values[i];
-      inc(n);
-    end;
+  x := Length(Excluded);
+  if (x>ExcludedSortSize) or (v>ExcludedSortSize) then begin // sort if worth it
+    dec(x);
+    QuickSortInteger(pointer(Excluded),0,x);
+    for i := 0 to v-1 do
+      if FastFindIntegerSorted(pointer(Excluded),x,Values[i])<0 then begin
+        if n<>i then
+          Values[n] := Values[i];
+        inc(n);
+      end;
+  end else
+    for i := 0 to v-1 do
+      if not IntegerScanExists(pointer(Excluded),x,Values[i]) then begin
+        if n<>i then
+          Values[n] := Values[i];
+        inc(n);
+      end;
   if n<>v then
     SetLength(Values,n);
 end;
