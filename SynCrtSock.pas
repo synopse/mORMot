@@ -2013,6 +2013,7 @@ type
     // IP addresses, or both, that should not be routed through the proxy:
     // aProxyName/aProxyByPass will be recognized by TWinHTTP and TWinINet,
     // and aProxyName will set the CURLOPT_PROXY option to TCurlHttp
+    // (see https://curl.haxx.se/libcurl/c/CURLOPT_PROXY.html as reference)
     // - you can customize the default client timeouts by setting appropriate
     // SendTimeout and ReceiveTimeout parameters (in ms) - note that after
     // creation of this instance, the connection is tied to the initial

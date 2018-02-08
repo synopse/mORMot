@@ -819,6 +819,12 @@ type
     /// flush all log content to file
     // - if ForceDiskWrite is TRUE, will wait until written on disk (slow)
     procedure Flush(ForceDiskWrite: boolean);
+    /// a TSynBackgroundThreadProcess compatible event to flush log content
+    // - matches TOnSynBackgroundTimerProcess callback signature
+    // - to be supplied e.g. to a TSynBackgroundTimer.Enable method so that it
+    // will run every few seconds and write any pending log content to disk
+    procedure BackgroundExecute(Sender: TSynBackgroundTimer;
+      Event: TWaitResult; const Msg: RawUTF8);
     /// flush all log content to file and close the file
     procedure CloseLogFile;
     /// flush all log content to file, close the file, and release the instance
@@ -3637,13 +3643,18 @@ begin
   EnterCriticalSection(GlobalThreadLock);
   try
     fWriter.FlushToStream;
-    {$ifdef MSWINDOWS}
     if ForceDiskWrite and fWriterStream.InheritsFrom(TFileStream) then
       FlushFileBuffers(TFileStream(fWriterStream).Handle);
-    {$endif}
   finally
     LeaveCriticalSection(GlobalThreadLock);
   end;
+end;
+
+procedure TSynLog.BackgroundExecute(Sender: TSynBackgroundTimer; Event: TWaitResult;
+  const Msg: RawUTF8);
+begin
+  if (fWriter<>nil) and (fWriter.PendingBytes>10) then
+    Flush(false);
 end;
 
 function TSynLog.QueryInterface(
