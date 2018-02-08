@@ -9799,8 +9799,8 @@ type
     // - returns nil if no algorithm was identified
     class function Algo(AlgoID: byte): TAlgoCompress; overload;
     /// returns the algorithm name, from its classname
-    // - e.g. TAlgoSynLZ->'SynLZ' TAlgoLizard->'Lizard'
-    class function AlgoName: TGUIDShortString;
+    // - e.g. TAlgoSynLZ->'synlz' TAlgoLizard->'lizard' nil->'none'
+    function AlgoName: TGUIDShortString;
   end;
 
   /// implement our fast SynLZ compression as a TAlgoCompress class
@@ -17722,6 +17722,7 @@ type
     fName: RawUTF8;
     fReader: TFastReader;
     fReaderTemp: PRawByteString;
+    fSaveToLastUncompressed: PtrInt;
     /// low-level virtual methods implementing the persistence reading
     procedure LoadFromReader; virtual;
     procedure SaveToWriter(aWriter: TFileBufferWriter); virtual;
@@ -51015,6 +51016,7 @@ begin
     writer := TFileBufferWriter.Create(TRawByteStringStream,BufLen);
   try
     SaveToWriter(writer);
+    fSaveToLastUncompressed := writer.TotalWritten;
     aBuffer := writer.FlushAndCompress(nocompression,ForcedAlgo);
   finally
     writer.Free;
@@ -61885,15 +61887,21 @@ begin
   end;
 end;
 
-class function TAlgoCompress.AlgoName: TGUIDShortString;
+function TAlgoCompress.AlgoName: TGUIDShortString;
 var s: PShortString;
+    i: integer;
 begin
-  s := ClassNameShort(self);
-  if IdemPChar(@s^[1],'TALGO') then begin
-    result[0] := AnsiChar(ord(s^[0])-5);
-    MoveFast(s^[6],result[1],ord(result[0]));
-  end else
-    result := s^;
+  if self=nil then
+    result := 'stored' else begin
+    s := ClassNameShort(self);
+    if IdemPChar(@s^[1],'TALGO') then begin
+      result[0] := AnsiChar(ord(s^[0])-5);
+      inc(PtrInt(s),5);
+    end else
+      result[0] := s^[0];
+    for i := 1 to ord(result[0]) do
+      result[i] := NormToLower[s^[i]];
+  end;
 end;
 
 function TAlgoCompress.AlgoHash(Previous: cardinal; Data: pointer; DataLen: integer): cardinal;
