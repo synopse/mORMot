@@ -10613,6 +10613,9 @@ type
     /// size (in bytes) of this smvv64 ordinal value
     // - e.g. depending of the associated kind of enumeration
     SizeInStorage: integer;
+    /// hexadecimal binary size (in bytes) of this smvv64 ordinal value
+    // - set only if ValueType=smvBinary
+    SizeInBinary: integer;
     /// index of the associated variable in the local array[ArgsUsedCount[]]
     // - for smdConst argument, contains -1 (no need to a local var: the value
     // will be on the stack only)
@@ -19407,6 +19410,10 @@ type
     // TSQLAuthGroup ID casted as a pointer) properties - you can retrieve any
     // optional binary data associated with this user via RetrieveBlobFields()
     property SessionUser: TSQLAuthUser read fSessionUser;
+    /// access to the low-level HTTP header used for authentication
+    // - e.g. after TSQLRestServerAuthenticationHttpBasic.SetUser
+    // - you can force here you own header, a JWT as authentication bearer 
+    property SessionHttpHeader: RawUTF8 read fSessionHttpHeader write fSessionHttpHeader;
 {$ifndef LVCL}
     /// set a callback event to be executed in loop during remote blocking
     // process, e.g. to refresh the UI during a somewhat long request
@@ -20983,7 +20990,7 @@ begin
 end;
 
 function ClassFieldInstance(Instance: TObject; PropClassType: TClass;
-  out PropInstance): boolean; overload;
+  out PropInstance): boolean;
 var P: PPropInfo;
 begin
   result := false;
@@ -25679,7 +25686,7 @@ begin
   result := TSQLRawBlobToBlob(pointer(RawBlob),length(RawBlob));
 end;
 
-function TSQLRawBlobToBlob(RawBlob: pointer; RawBlobLength: integer): RawUTF8; overload;
+function TSQLRawBlobToBlob(RawBlob: pointer; RawBlobLength: integer): RawUTF8;
 // BLOB literals are string literals containing hexadecimal data and
 //  preceded by a single "x" or "X" character. For example: X'53514C697465'
 var P: PAnsiChar;
@@ -28103,7 +28110,7 @@ const
     pQuoted, pInlined);
 
 function GetJSONObjectAsSQL(var P: PUTF8Char; const Fields: TRawUTF8DynArray;
-  Update, InlinedParams: boolean; RowID: TID=0; ReplaceRowIDWithID: Boolean=false): RawUTF8;
+  Update, InlinedParams: boolean; RowID: TID; ReplaceRowIDWithID: Boolean): RawUTF8;
 var Decoder: TJSONObjectDecoder;
 begin
   Decoder.Decode(P,Fields,FROMINLINED[InlinedParams],RowID,ReplaceRowIDWithID);
@@ -28111,7 +28118,7 @@ begin
 end;
 
 function GetJSONObjectAsSQL(const JSON: RawUTF8; Update, InlinedParams: boolean;
- RowID: TID=0; ReplaceRowIDWithID: Boolean=false): RawUTF8; overload;
+ RowID: TID; ReplaceRowIDWithID: Boolean): RawUTF8;
 var Decoder: TJSONObjectDecoder;
 begin
   Decoder.Decode(JSON,nil,FROMINLINED[InlinedParams],RowID,ReplaceRowIDWithID);
@@ -31252,7 +31259,7 @@ begin
 end;
 
 function SelectInClause(const PropName: RawUTF8; const Values: array of Int64;
-  const Suffix: RawUTF8=''; ValuesInlined: boolean=false): RawUTF8; overload;
+  const Suffix: RawUTF8; ValuesInlined: boolean): RawUTF8;
 var i: integer;
     temp: TTextWriterStackBuffer;
 begin
@@ -38054,8 +38061,9 @@ var url, header: RawUTF8;
 begin
   if self=nil then
     result := HTTP_UNAVAILABLE else begin
-    url := Model.getURICallBack(aMethodName,aTable,aID)+
-      UrlEncode(aNameValueParameters);
+    url := Model.getURICallBack(aMethodName,aTable,aID);
+    if high(aNameValueParameters)>0 then
+      url := url+UrlEncode(aNameValueParameters);
     {$ifdef WITHLOG}
     log := fLogClass.Enter('CallBackGet %',[url],self);
     {$endif}
@@ -48196,7 +48204,7 @@ begin
 end;
 
 procedure WriteObject(Value: TObject; var IniContent: RawUTF8; const Section: RawUTF8;
-  const SubCompName: RawUTF8=''); overload;
+  const SubCompName: RawUTF8);
 var P: PPropInfo;
     i, V: integer;
     Obj: TObject;
@@ -49327,7 +49335,7 @@ begin
     result := FileFromString(json,JSONFile);
 end;
 
-procedure ReadObject(Value: TObject; From: PUTF8Char; const SubCompName: RawUTF8=''); overload;
+procedure ReadObject(Value: TObject; From: PUTF8Char; const SubCompName: RawUTF8);
 var P: PPropInfo;
     i, V, err: integer;
     V64: Int64;
@@ -49404,8 +49412,7 @@ begin
   end;
 end;
 
-procedure ReadObject(Value: TObject; const FromContent: RawUTF8;
-  const SubCompName: RawUTF8=''); overload;
+procedure ReadObject(Value: TObject; const FromContent,SubCompName: RawUTF8);
 var source: PUTF8Char;
     UpperSection: array[byte] of AnsiChar;
 begin
@@ -53453,7 +53460,7 @@ end;
 
 function TServiceContainer.AddInterface(aInterface: PTypeInfo;
   aInstanceCreation: TServiceInstanceImplementation;
-  const aContractExpected: RawUTF8=''): TServiceFactoryClient;
+  const aContractExpected: RawUTF8): TServiceFactoryClient;
 begin
   CheckInterface([aInterface]);
   result := TServiceFactoryClient.Create(Rest,aInterface,aInstanceCreation,aContractExpected);
@@ -54193,10 +54200,9 @@ begin
           smvString:        UTF8DecodeToString(Val,ValLen,PString(V)^);
           smvRawByteString: Base64ToBin(PAnsiChar(Val),ValLen,PRawByteString(V)^);
           smvWideString:    UTF8ToWideString(Val,ValLen,PWideString(V)^);
-          smvBinary:
+          smvBinary: 
             if ValLen=SizeInStorage*2 then
-              HexDisplayToBin(PAnsiChar(Val),PByte(V),SizeInStorage) else
-              FillCharFast(V^,SizeInStorage,0);
+              HexDisplayToBin(PAnsiChar(Val),PByte(V),SizeInStorage);
           else RaiseError('ValueType=%',[ord(ValueType)]);
           end;
         end;
@@ -54840,7 +54846,7 @@ begin
       case ValueType of
       smvInteger, smvInt64:
         if TJSONCustomParserRTTI.TypeNameToSimpleBinary(ShortStringToUTF8(ArgTypeName^),
-           SizeInStack, SizeInStorage) then begin
+            SizeInBinary, SizeInStorage) then begin
           ValueType := smvBinary; // transmitted as hexa string
           Include(ValueKindAsm,vIsString);
         end;
@@ -54874,7 +54880,7 @@ begin
               '%.Create: % set too big in %.% method % parameter',
               [self,ArgTypeName^,fInterfaceTypeInfo^.Name,URI,ParamName^]);
         end;
-        smvBinary: ; // already set SizeInStack + SizeInStorage
+        smvBinary: ; // already set SizeInStorage
         smvRecord:
           if ArgTypeInfo^.RecordType^.Size<=PTRSIZ then
             raise EInterfaceFactoryException.CreateUTF8(
@@ -54895,8 +54901,10 @@ begin
         // CPUX86 will add an additional by-ref parameter
       end;
       {$ifdef CPU32}
-      if (ValueDirection=smdConst) and (ValueType<>smvBinary) then
-        SizeInStack := CONST_ARGS_IN_STACK_SIZE[ValueType] else
+      if ValueDirection=smdConst then
+        if ValueType=smvBinary then
+          SizeInStack := SizeInBinary else
+          SizeInStack := CONST_ARGS_IN_STACK_SIZE[ValueType] else
       {$endif}
         SizeInStack := PTRSIZ; // always aligned to 8 bytes boundaries for 64-bit
       if{$ifndef CPUARM}
@@ -59401,7 +59409,7 @@ begin
     WR.AddShort(ArgTypeInfo^.Name) else
     WR.AddShort(CONST_ARGTYPETOJSON[ValueType]);
 {$ifdef SOA_DEBUG}
-  WR.Add('"','"');
+  WR.Add('"',',');
   WR.AddPropJSONInt64('index',IndexVar);
   WR.AddPropJSONString('var',GetEnumNameTrimed(TypeInfo(TServiceMethodValueVar),ValueVar));
   WR.AddPropJSONInt64('stackoffset',InStackOffset);
@@ -59409,6 +59417,8 @@ begin
   WR.AddPropJSONInt64('fpreg',FPRegisterIdent);
   WR.AddPropJSONInt64('stacksize',SizeInStack);
   WR.AddPropJSONInt64('storsize',SizeInStorage);
+  if ValueType=smvBinary then
+    WR.AddPropJSONInt64('binsize',SizeInBinary);
   WR.AddPropName('asm');
   WR.AddString(GetSetNameCSV(TypeInfo(TServiceMethodValueAsm),ValueKindAsm));
   WR.AddShort('},');
@@ -60849,7 +60859,7 @@ begin
           Par := VariantLoadJSON(PVariant(pointer(fRecords[IndexVar]))^,Par,nil,
             @JSON_OPTIONS[optVariantCopiedByReference in Options]);
         {$endif}
-        smvBoolean..smvWideString: begin
+        smvBoolean..smvBinary: begin
           Val := GetJSONField(Par,Par,@wasString,@EndOfObject,@ValLen);
           if (Val=nil) and (Par=nil) and (EndOfObject<>'}') then
             exit;  // 'null': Val=nil and Par<>nil
@@ -61537,7 +61547,7 @@ begin
     TInterfacedObjectFake(fSharedInstance)._AddRef; // force stay alive
   end;
   // check if this interface is supported on the server
-  if ContractExpected<>SERVICE_CONTRACT_NONE_EXPECTED then begin
+  if PosEx(SERVICE_CONTRACT_NONE_EXPECTED,ContractExpected)=0 then begin
     if not InternalInvoke(SERVICE_PSEUDO_METHOD[imContract],
        TSQLRestClientURI(fRest).fServicePublishOwnInterfaces,@RemoteContract,@Error) then
       raise EServiceException.CreateUTF8('%.Create(): I% interface or % routing not '+

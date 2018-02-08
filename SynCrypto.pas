@@ -2790,6 +2790,7 @@ const
 
 function ToText(res: TJWTResult): PShortString; overload;
 function ToCaption(res: TJWTResult): string; overload;
+function ToText(claim: TJWTClaim): PShortString; overload;
 
 {$endif NOVARIANTS}
 
@@ -13901,10 +13902,9 @@ function TJWTAbstract.Compute(const DataNameValue: array of const;
   ExpirationMinutes: integer; Signature: PRawUTF8): RawUTF8;
 var payload, headpayload, signat: RawUTF8;
 begin
-  if self=nil then begin
-    result := '';
+  result := '';
+  if self=nil then
     exit;
-  end;
   payload := PayloadToJSON(DataNameValue,Issuer,Subject,Audience,NotBefore,ExpirationMinutes);
   headpayload := fHeaderB64+BinToBase64URI(payload);
   signat := ComputeSignature(headpayload);
@@ -13928,21 +13928,25 @@ end;
 function TJWTAbstract.PayloadToJSON(const DataNameValue: array of const;
   const Issuer, Subject, Audience: RawUTF8; NotBefore: TDateTime;
   ExpirationMinutes: cardinal): RawUTF8;
+  procedure RaiseMissing(c: TJWTClaim);
+  begin
+    raise EJWTException.CreateUTF8('%.PayloadJSON: missing %', [self, ToText(c)^]);
+  end;
 var payload: TDocVariantData;
 begin
   result := '';
   payload.InitObject(DataNameValue,JSON_OPTIONS_FAST);
   if jrcIssuer in fClaims then
     if Issuer='' then
-      exit else
+      RaiseMissing(jrcIssuer) else
       payload.AddValueFromText(JWT_CLAIMS_TEXT[jrcIssuer],Issuer,true);
   if jrcSubject in fClaims then
     if Subject='' then
-      exit else
+      RaiseMissing(jrcSubject) else
       payload.AddValueFromText(JWT_CLAIMS_TEXT[jrcSubject],Subject,true);
   if jrcAudience in fClaims then
     if Audience='' then
-      exit else
+      RaiseMissing(jrcAudience) else
       if Audience[1]='[' then
         payload.AddOrUpdateValue(JWT_CLAIMS_TEXT[jrcAudience],_JsonFast(Audience)) else
         payload.AddValueFromText(JWT_CLAIMS_TEXT[jrcAudience],Audience,true);
@@ -14371,16 +14375,25 @@ begin
   result := saSha3S256;
 end;
 
+var
+  _TJWTResult: array[TJWTResult] of PShortString;
+  _TJWTClaim: array[TJWTClaim] of PShortString;
 
 function ToText(res: TJWTResult): PShortString;
 begin
-  result := GetEnumName(TypeInfo(TJWTResult),ord(res));
+  result := _TJWTResult[res];
 end;
 
 function ToCaption(res: TJWTResult): string;
 begin
-  result := GetCaptionFromEnum(TypeInfo(TJWTResult),ord(res));
+  GetCaptionFromTrimmed(_TJWTResult[res],result);
 end;
+
+function ToText(claim: TJWTClaim): PShortString;
+begin
+  result := _TJWTClaim[claim];
+end;
+
 
 {$endif NOVARIANTS}
 
@@ -14490,6 +14503,8 @@ initialization
   if (cfSSE42 in CpuFeatures) and (cfAesNi in CpuFeatures) then
     crc32c := @crc32c_sse42_aesni;
 {$endif}
+  GetEnumNames(TypeInfo(TJWTResult),@_TJWTResult);
+  GetEnumNames(TypeInfo(TJWTClaim),@_TJWTClaim);
   assert(sizeof(TMD5Buf)=sizeof(TMD5Digest));
   assert(sizeof(TAESContext)=AESContextSize);
   assert(sizeof(TSHAContext)=SHAContextSize);

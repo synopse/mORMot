@@ -4365,9 +4365,6 @@ function GetDisplayNameFromClass(C: TClass): RawUTF8;
 // - return generic VCL string type, i.e. UnicodeString for Delphi 2009+
 function GetCaptionFromClass(C: TClass): string;
 
-/// UnCamelCase and translate the enumeration item
-function GetCaptionFromEnum(aTypeInfo: pointer; aIndex: integer): string;
-
 /// just a wrapper around vmtClassName to avoid a string conversion
 function ClassNameShort(C: TClass): PShortString; overload;
   {$ifdef HASINLINE}inline;{$endif}
@@ -4803,7 +4800,9 @@ procedure DeleteInteger(var Values: TIntegerDynArray; var ValuesCount: Integer; 
 
 /// remove some 32-bit integer from Values[]
 // - Excluded is declared as var, since it will be sorted in-place during process
-procedure ExcludeInteger(var Values, Excluded: TIntegerDynArray);
+// if it contains more than ExcludedSortSize items (i.e. if the sort is worth it)
+procedure ExcludeInteger(var Values, Excluded: TIntegerDynArray;
+  ExcludedSortSize: Integer=32);
 
 /// delete any 16-bit integer in Values[]
 procedure DeleteWord(var Values: TWordDynArray; Index: PtrInt);
@@ -4816,7 +4815,9 @@ procedure DeleteInt64(var Values: TInt64DynArray; var ValuesCount: Integer; Inde
 
 /// remove some 64-bit integer from Values[]
 // - Excluded is declared as var, since it will be sorted in-place during process
-procedure ExcludeInt64(var Values, Excluded: TInt64DynArray);
+// if it contains more than ExcludedSortSize items (i.e. if the sort is worth it)
+procedure ExcludeInt64(var Values, Excluded: TInt64DynArray;
+  ExcludedSortSize: Integer=32);
 
 /// find the maximum 32-bit integer in Values[]
 function MaxInteger(const Values: TIntegerDynArray; ValuesCount: integer;
@@ -6795,6 +6796,13 @@ procedure GetEnumTrimmedNames(aTypeInfo: pointer; aDest: PRawUTF8);
 /// helper to retrieve all (translated) caption texts of an enumerate
 // - may be used as cache for overloaded ToCaption() content
 procedure GetEnumCaptions(aTypeInfo: pointer; aDest: PString);
+
+/// UnCamelCase and translate the enumeration item
+function GetCaptionFromEnum(aTypeInfo: pointer; aIndex: integer): string;
+
+/// low-level helper to retrieve a (translated) caption from a PShortString
+// - as used e.g. by GetEnumCaptions or GetCaptionFromEnum
+procedure GetCaptionFromTrimmed(PS: PShortString; var result: string);
 
 /// helper to retrieve the index of an enumerate item from its text
 // - returns -1 if aValue was not found
@@ -11382,13 +11390,15 @@ type
     EAddr: PtrUInt;
     /// the optional stack trace
     EStack: PPtrUInt;
-    /// the logging level corresponding to this exception
-    // - may be either sllException or sllExceptionOS
-    ELevel: TSynLogInfo;
+    /// = FPC's RaiseProc() FrameCount if EStack is Frame: PCodePointer
+    EStackCount: integer;
     /// the timestamp of this exception, as number of seconds since UNIX Epoch
     // - UnixTimeUTC is faster than NowUTC or GetSystemTime
     // - use UnixTimeToDateTime() to convert it into a regular TDateTime
     ETimestamp: TUnixTime;
+    /// the logging level corresponding to this exception
+    // - may be either sllException or sllExceptionOS
+    ELevel: TSynLogInfo;
   end;
 
   /// global hook callback to customize exceptions logged by TSynLog
@@ -22815,13 +22825,13 @@ begin
     end;
 end;
 
-procedure GetCaptionFromTrimmed(PS: PAnsiChar; var result: string);
+procedure GetCaptionFromTrimmed(PS: PShortString; var result: string);
 var tmp: array[byte] of AnsiChar;
     L: integer;
 begin
-  L := ord(PS^);
+  L := ord(PS^[0]);
   inc(PS);
-  while (L>0) and (PS^ in ['a'..'z']) do begin inc(PS); dec(L); end;
+  while (L>0) and (PS^[0] in ['a'..'z']) do begin inc(PByte(PS)); dec(L); end;
   tmp[L] := #0; // as expected by GetCaptionFromPCharLen/UnCamelCase
   MoveFast(PS^,tmp,L);
   GetCaptionFromPCharLen(tmp,result);
@@ -22833,7 +22843,7 @@ var MaxValue, i: integer;
 begin
   if GetEnumInfo(aTypeInfo,MaxValue,res) then
     for i := 0 to MaxValue do begin
-      GetCaptionFromTrimmed(pointer(res),aDest^);
+      GetCaptionFromTrimmed(res,aDest^);
       inc(PByte(res),ord(res^[0])+1); // next short string
       inc(aDest);
     end;
@@ -30465,21 +30475,30 @@ begin
   dec(ValuesCount);
 end;
 
-procedure ExcludeInt64(var Values, Excluded: TInt64DynArray);
+procedure ExcludeInt64(var Values, Excluded: TInt64DynArray; ExcludedSortSize: Integer);
 var i,v,x,n: integer;
 begin
   if (Values=nil) or (Excluded=nil) then
     exit; // nothing to exclude
-  x := high(Excluded);
-  QuickSortInt64(pointer(Excluded),0,x);
   v := length(Values);
   n := 0;
-  for i := 0 to v-1 do
-    if FastFindInt64Sorted(pointer(Excluded),x,Values[i])<0 then begin
-      if n<>i then
-        Values[n] := Values[i];
-      inc(n);
-    end;
+  x := Length(Excluded);
+  if (x>ExcludedSortSize) or (v>ExcludedSortSize) then begin // sort if worth it
+    dec(x);
+    QuickSortInt64(pointer(Excluded),0,x);
+    for i := 0 to v-1 do
+      if FastFindInt64Sorted(pointer(Excluded),x,Values[i])<0 then begin
+        if n<>i then
+          Values[n] := Values[i];
+        inc(n);
+      end;
+  end else
+    for i := 0 to v-1 do
+      if not Int64ScanExists(pointer(Excluded),x,Values[i]) then begin
+        if n<>i then
+          Values[n] := Values[i];
+        inc(n);
+      end;
   if n<>v then
     SetLength(Values,n);
 end;
@@ -30496,21 +30515,30 @@ begin
   dec(ValuesCount);
 end;
 
-procedure ExcludeInteger(var Values, Excluded: TIntegerDynArray);
+procedure ExcludeInteger(var Values, Excluded: TIntegerDynArray; ExcludedSortSize: integer);
 var i,v,x,n: integer;
 begin
   if (Values=nil) or (Excluded=nil) then
     exit; // nothing to exclude
-  x := high(Excluded);
-  QuickSortInteger(pointer(Excluded),0,x);
   v := length(Values);
   n := 0;
-  for i := 0 to v-1 do
-    if FastFindIntegerSorted(pointer(Excluded),x,Values[i])<0 then begin
-      if n<>i then
-        Values[n] := Values[i];
-      inc(n);
-    end;
+  x := Length(Excluded);
+  if (x>ExcludedSortSize) or (v>ExcludedSortSize) then begin // sort if worth it
+    dec(x);
+    QuickSortInteger(pointer(Excluded),0,x);
+    for i := 0 to v-1 do
+      if FastFindIntegerSorted(pointer(Excluded),x,Values[i])<0 then begin
+        if n<>i then
+          Values[n] := Values[i];
+        inc(n);
+      end;
+  end else
+    for i := 0 to v-1 do
+      if not IntegerScanExists(pointer(Excluded),x,Values[i]) then begin
+        if n<>i then
+          Values[n] := Values[i];
+        inc(n);
+      end;
   if n<>v then
     SetLength(Values,n);
 end;
@@ -37561,7 +37589,7 @@ end;
 
 function GetCaptionFromEnum(aTypeInfo: pointer; aIndex: integer): string;
 begin
-  GetCaptionFromTrimmed(pointer(GetEnumName(aTypeInfo,aIndex)),result);
+  GetCaptionFromTrimmed(GetEnumName(aTypeInfo,aIndex),result);
 end;
 
 function CharSetToCodePage(CharSet: integer): cardinal;
@@ -42127,14 +42155,15 @@ begin
          SynCommons.HexToBin(PAnsiChar(PropValue),@aValue,fFixedSize) then
         result := P;
     ktBinary:
-      if wasString and (PropValueLen>0) then begin // default hexa serialization
-        if (PropValueLen=fFixedSize*2) and
-           HexDisplayToBin(PAnsiChar(PropValue),@aValue,fFixedSize) then
+      if wasString then begin // default hexa serialization
+        FillcharFast(aValue,fDataSize,0);
+        if (PropValueLen=0) or ((PropValueLen=fFixedSize*2) and
+           HexDisplayToBin(PAnsiChar(PropValue),@aValue,fFixedSize)) then
           result := P;
       end else
         if fFixedSize<=SizeOf(u64) then begin // allow integer serialization
-          SetQWord(PropValue,u64); // "" -> PropValueLen=0 -> u64=0
-          MoveFast(u64,aValue,fFixedSize);
+          SetQWord(PropValue,u64);
+          MoveFast(u64,aValue,fDataSize);
           result := P;
         end;
     end;
@@ -42222,14 +42251,16 @@ begin
     TypeInfoToName(aTypeInfo,aTypeName);
   if aDataSize<>0 then
     if aFieldSize>aDataSize then
-      raise ESynException.CreateUTF8('% fieldsize=%>%',[aTypeName,aFieldSize,aDataSize]) else
+      raise ESynException.CreateUTF8('JSONSerializerFromTextSimpleTypeAdd(%) fieldsize=%>%',
+        [aTypeName,aFieldSize,aDataSize]) else
     if aFieldSize=0 then
       aFieldSize := aDataSize; // not truncated
   simple.TypeInfo := aTypeInfo;
   simple.BinaryDataSize := aDataSize;
   simple.BinaryFieldSize := aFieldSize;
   UpperCaseSelf(aTypeName);
-  GlobalCustomJSONSerializerFromTextSimpleType.Add(aTypeName,simple);
+  if GlobalCustomJSONSerializerFromTextSimpleType.Add(aTypeName,simple)<0 then
+    raise ESynException.CreateUTF8('JSONSerializerFromTextSimpleTypeAdd(%) duplicated', [aTypeName]);
 end;
 
 /// if defined, will try to mimic the default record alignment
@@ -52418,14 +52449,13 @@ procedure TTextWriter.AddPointer(P: PtrUInt);
 begin
   if BEnd-B<=SizeOf(P)*2 then
     FlushToStream;
-{$ifdef CPU64}
+  {$ifdef CPU64} // truncate to for most heap-allocated 4 bytes pointers
   if P and $ffffffff00000000<>0 then begin
     BinToHexDisplay(@P,PAnsiChar(B+1),8);
     inc(B,16);
     exit;
   end;
-  // truncate to 8 hexa chars for most heap-allocated pointers
-{$endif}
+  {$endif}
   Pointer4ToHex(@B[1],P);
   inc(B,8);
 end;
@@ -65345,7 +65375,7 @@ begin
 //  assert(SizeOf(CpuFeatures)=4*4+1);
   {$ifdef Darwin}
   {$ifdef CPU64}
-  // SSE42 asm does not (yet) work on Darwin x64 ...
+  // SSE42 asm does not (yet) work on Darwin x64 (as reported by alf)
   Exclude(CpuFeatures, cfSSE42);
   {$endif}
   {$endif}

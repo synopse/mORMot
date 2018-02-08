@@ -1290,14 +1290,13 @@ end;
 
 { -------------- WebSockets shared classes for bidirectional remote access }
 
+var
+  _TWebSocketFrameOpCode: array[TWebSocketFrameOpCode] of PShortString;
+  _TWebSocketProcessNotifyCallback: array[TWebSocketProcessNotifyCallback] of PShortString;
+
 function ToText(opcode: TWebSocketFrameOpCode): PShortString; overload;
 begin
-  result := GetEnumName(TypeInfo(TWebSocketFrameOpCode),ord(opcode));
-end;
-
-function ToText(block: TWebSocketProcessNotifyCallback): PShortString; overload;
-begin
-  result := GetEnumName(TypeInfo(TWebSocketProcessNotifyCallback),ord(block));
+  result := _TWebSocketFrameOpCode[opcode];
 end;
 
 function ToText(st: TWebSocketProcessClientThreadState): PShortString; overload;
@@ -1884,15 +1883,16 @@ end;
 function TWebSocketProtocolBinary.FrameData(const frame: TWebSocketFrame;
   const Head: RawUTF8; HeadFound: PRawUTF8): pointer;
 var len: integer;
+    P: PAnsiChar;
 begin
+  P := pointer(frame.payload);
   len := length(Head);
   if (frame.opcode=focBinary) and (length(frame.payload)>=len+6) and
-     CompareMem(pointer(Head),pointer(frame.payload),len) then begin
-    result := PosChar(PUTF8Char(pointer(frame.payload))+len,FRAME_HEAD_SEP);
+     CompareMem(pointer(Head),P,len) then begin
+    result := PosChar(PUTF8Char(P)+len,FRAME_HEAD_SEP);
     if result<>nil then begin
       if HeadFound<>nil then
-        SetString(HeadFound^,PAnsiChar(pointer(frame.payload)),
-          PAnsiChar(result)-pointer(frame.payload));
+        SetString(HeadFound^,P,PAnsiChar(result)-P);
       inc(PByte(result));
     end;
   end else
@@ -2355,7 +2355,8 @@ begin
      not fProtocol.InheritsFrom(TWebSocketProtocolRest) then
     exit;
   if WebSocketLog<>nil then
-    WebSocketLog.Add.Log(sllTrace,'NotifyCallback(%,%)',[aRequest.URL,ToText(aMode)^],self);
+    WebSocketLog.Add.Log(sllTrace,'NotifyCallback(%,%)',
+      [aRequest.URL,_TWebSocketProcessNotifyCallback[aMode]^],self);
   TWebSocketProtocolRest(fProtocol).InputToFrame(
     aRequest,aMode in [wscBlockWithoutAnswer,wscNonBlockWithoutAnswer],request,head);
   case aMode of
@@ -2452,8 +2453,8 @@ begin
           Protocol.FrameType(frame),frame.PayLoad],self) else begin
         len := length(frame.PayLoad);
         log.Log(aEvent,'% % % len=%%',[aMethodName,Protocol.FrameType(frame),
-          ToText(frame.opcode)^,len,LogEscape(pointer(frame.PayLoad),len,tmp,
-          logBinaryFrameContent in fSettings.LogDetails)],self);
+          _TWebSocketFrameOpCode[frame.opcode]^,len,LogEscape(pointer(frame.PayLoad),
+          len,tmp,logBinaryFrameContent in fSettings.LogDetails)],self);
       end;
     finally
       log.DisableRemoteLog(false);
@@ -2576,7 +2577,7 @@ begin
         if IgnoreExceptions then
           exit else
           raise EWebSockets.CreateUTF8('%.GetFrame: received %, expected %',
-            [self,ToText(opcode)^,ToText(Frame.opcode)^]);
+            [self,_TWebSocketFrameOpCode[opcode]^,_TWebSocketFrameOpCode[Frame.opcode]^]);
       GetData(data);
       Frame.payload := Frame.payload+data;
     end;
@@ -3702,4 +3703,7 @@ begin
 end;
 
 
+initialization
+  GetEnumNames(TypeInfo(TWebSocketFrameOpCode),@_TWebSocketFrameOpCode);
+  GetEnumNames(TypeInfo(TWebSocketProcessNotifyCallback),@_TWebSocketProcessNotifyCallback);
 end.

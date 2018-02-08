@@ -267,28 +267,26 @@ begin
   result := in_len+in_len shr 3+16; // worse case
 end;
 
-{$ifndef FPC}
 type
+  {$ifndef FPC}
   PtrUInt = {$ifdef CPUX64} NativeUInt {$else} cardinal {$endif};
-{$endif}
-
-{$ifdef DELPHI5OROLDER}
-type // Delphi 5 doesn't have those base types defined :(
+  {$endif}
+  {$ifdef DELPHI5OROLDER} // Delphi 5 doesn't have those base types defined :(
   PByte = ^Byte;
   PWord = ^Word;
   PInteger = ^integer;
   PCardinal = ^Cardinal;
   IntegerArray  = array[0..$effffff] of integer;
   PIntegerArray = ^IntegerArray;
-{$endif}
+  {$endif}
+  TOffsets = array[0..4095] of PAnsiChar; // 16KB/32KB hashing code
 
 function SynLZdecompressdestlen(in_p: PAnsiChar): integer;
 // get uncompressed size from lz-compressed buffer (to reserve memory, e.g.)
 begin
   result := PWord(in_p)^;
-  inc(in_p,2);
   if result and $8000<>0 then
-    result := (result and $7fff) or (integer(PWord(in_p)^) shl 15);
+    result := (result and $7fff) or (integer(PWord(in_p+2)^) shl 15);
 end;
 
 {$ifdef CPUINTEL}
@@ -463,7 +461,7 @@ asm
         pop     ebx
         pop     ebp
 {$else CPUX86}
-var off: array[0..4095] of PAnsiChar;
+var off: TOffsets;
     cache: array[0..4095] of cardinal; // uses 32B+16KB=48KB on stack
 asm // rcx=src, edx=size, r8=dest
         {$ifndef win64} // Linux 64-bit ABI
@@ -625,7 +623,7 @@ var dst_beg,          // initial dst value
     CWbit: byte;
     CWpoint: PCardinal;
     v, h, cached, t, tmax: PtrUInt;
-    offset: array[0..4095] of PAnsiChar;
+    offset: TOffsets;
     cache: array[0..4095] of cardinal; // 16KB+16KB=32KB on stack (48KB under Win64)
 begin
   dst_beg := dst;
@@ -716,13 +714,16 @@ begin
   result := dst-dst_beg;
 end;
 
-procedure movechars(s,d: PAnsiChar; t: integer);
+procedure movechars(s,d: PAnsiChar; t: PtrUInt); {$ifdef HASINLINE}inline;{$endif}
 // fast code for unaligned and overlapping (see {$define WT}) small blocks
-// this code is sometimes used rather than system.Move() by decompress2()
-var i: integer;
+// this code is sometimes used rather than system.move()
 begin
-  for i := 0 to t-1 do
-    d[i] := s[i];
+  dec(PtrUInt(s), PtrUInt(d));
+  inc(t, PtrUInt(d));
+  repeat
+    d^ := s[PtrUInt(d)];
+    inc(d);
+  until PtrUInt(d)=t;
 end;
 
 const
@@ -735,7 +736,7 @@ var last_hashed: PAnsiChar; // initial src and dst value
     src_end: PAnsiChar;
     CWbit: integer;
     CW, v, t, h: integer;
-    offset: array[0..4095] of PAnsiChar; // 16KB hashing code
+    offset: TOffsets;
 label nextCW;
 begin
 //  src_beg := src;
@@ -800,11 +801,12 @@ nextCW:
       if dst-offset[h]<t then
         movechars(offset[h],dst,t) else
         move(offset[h]^,dst^,t);
-      while last_hashed<dst do begin
-        inc(last_hashed);
-        v := PCardinal(last_hashed)^;
-        offset[((v shr 12) xor v) and 4095] := last_hashed;
-      end;
+      if last_hashed<dst then
+        repeat
+          inc(last_hashed);
+          v := PCardinal(last_hashed)^;
+          offset[((v shr 12) xor v) and 4095] := last_hashed;
+        until last_hashed>=dst;
       inc(dst,t);
       if src>=src_end then break;
       last_hashed := dst-1;
@@ -976,7 +978,7 @@ asm
         pop     ebx
         pop     ebp
 {$else CPUX86}
-var off: array[0..4095] of PAnsiChar; // use 32KB of stack space
+var off: TOffsets;
 asm // rcx=src, edx=size, r8=dest
         {$ifndef win64} // Linux 64-bit ABI
         mov     r8, rdx
@@ -1105,28 +1107,16 @@ asm // rcx=src, edx=size, r8=dest
 end;
 {$endif CPUINTEL}
 
-function SynLZdecompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
+// better code generation with sub-functions for raw decoding
+procedure SynLZdecompress1passub(src, src_end, dst: PAnsiChar; var offset: TOffsets);
 var last_hashed: PAnsiChar; // initial src and dst value
-    src_end: PAnsiChar;
     {$ifdef CPU64}
     o: PAnsiChar;
-    i: PtrUInt;
     {$endif}
-    CW, CWbit: integer;
+    CW, CWbit: cardinal;
     v, t, h: PtrUInt;
-    offset: array[0..4095] of PAnsiChar; // 16KB hashing code
 label nextCW;
 begin
-  src_end := src+size;
-  // 1. retrieve out_len
-  result := PWord(src)^;
-  if result=0 then exit;
-  inc(src,2);
-  if result and $8000<>0 then begin
-    result := (result and $7fff) or (integer(PWord(src)^) shl 15);
-    inc(src,2);
-  end;
-  // 2. decompress
   last_hashed := dst-1;
 nextCW:
   CW := PCardinal(src)^;
@@ -1160,8 +1150,7 @@ nextCW:
       {$ifdef CPU64}
       o := offset[h];
       if PtrUInt(dst-o)<t then
-        for i := 0 to t-1 do
-          dst[i] := o[i] else
+        movechars(o,dst,t) else
         if t<=8 then
           PInt64(dst)^ := PInt64(o)^ else
           move(o^,dst^,t);
@@ -1173,11 +1162,12 @@ nextCW:
           PInt64(dst)^ := PInt64(offset[h])^; // much faster in practice
       {$endif}
       if src>=src_end then break;
-      while last_hashed<dst do begin
-        inc(last_hashed);
-        v := PCardinal(last_hashed)^;
-        offset[((v shr 12) xor v) and 4095] := last_hashed;
-      end;
+      if last_hashed<dst then
+        repeat
+          inc(last_hashed);
+          v := PCardinal(last_hashed)^;
+          offset[((v shr 12) xor v) and 4095] := last_hashed;
+        until last_hashed>=dst;
       inc(dst,t);
       last_hashed := dst-1;
       CWbit := CWbit shl 1;
@@ -1188,16 +1178,11 @@ nextCW:
   until false;
 end;
 
-function SynLZdecompress1partial(src: PAnsiChar; size: integer; dst: PAnsiChar; maxDst: integer): integer;
-var last_hashed: PAnsiChar; // initial src and dst value
-    src_end,dst_End: PAnsiChar;
-    CWbit: integer;
-    CW, v, t, h: integer;
-    offset: array[0..4095] of PAnsiChar; // 16KB hashing code
-label nextCW;
+function SynLZdecompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
+var offset: TOffsets;
+    src_end: PAnsiChar;
 begin
   src_end := src+size;
-  // 1. retrieve out_len
   result := PWord(src)^;
   if result=0 then exit;
   inc(src,2);
@@ -1205,12 +1190,18 @@ begin
     result := (result and $7fff) or (integer(PWord(src)^) shl 15);
     inc(src,2);
   end;
-  if maxDst<result then
-    result := maxDst;
-  if result<=0 then
-    exit; // nothing to decompress
-  dst_end := dst+result; // will also avoid any buffer overflow errors
-  // 2. decompress
+  SynLZdecompress1passub(src, src_end, dst, offset);
+end;
+
+procedure SynLZdecompress1partialsub(src, dst, src_end, dst_end: PAnsiChar; var offset: TOffsets);
+var last_hashed: PAnsiChar; // initial src and dst value
+    CWbit, CW: integer;
+    v, t, h: PtrUInt;
+    {$ifdef CPU64}
+    o: PAnsiChar;
+    {$endif}
+label nextCW;
+begin
   last_hashed := dst-1;
 nextCW:
   CW := PCardinal(src)^;
@@ -1222,7 +1213,8 @@ nextCW:
       dst^ := src^;
       inc(src);
       inc(dst);
-      if (src>=src_end) or (dst>=dst_end) then break;
+      if (src>=src_end) or (dst>=dst_end) then
+        break;
       if last_hashed<dst-3 then begin
         inc(last_hashed);
         v := PCardinal(last_hashed)^;
@@ -1241,19 +1233,32 @@ nextCW:
         t := ord(src^)+(16+2);
         inc(src);
       end;
-      if dst+t>=dst_end then begin
+      if dst+t>=dst_end then begin // avoid buffer overflow by all means
         movechars(offset[h],dst,dst_end-dst);
         break;
       end;
-      if dst-offset[h]<t then // avoid overlaping move() bug
+      {$ifdef CPU64}
+      o := offset[h];
+      if PtrUInt(dst-o)<t then
+        movechars(o,dst,t) else
+        if t<=8 then
+          PInt64(dst)^ := PInt64(o)^ else
+          move(o^,dst^,t);
+      {$else}
+      if PtrUInt(dst-offset[h])<t then
         movechars(offset[h],dst,t) else
-        move(offset[h]^,dst^,t);
-      if src>=src_end then break;
-      while last_hashed<dst do begin
-        inc(last_hashed);
-        v := PCardinal(last_hashed)^;
-        offset[((v shr 12) xor v) and 4095] := last_hashed;
-      end;
+        if t>8 then // safe since src_endmatch := src_end-(6+5)
+          move(offset[h]^,dst^,t) else
+          PInt64(dst)^ := PInt64(offset[h])^; // much faster in practice
+      {$endif}
+      if src>=src_end then
+        break;
+      if last_hashed<dst then
+        repeat
+          inc(last_hashed);
+          v := PCardinal(last_hashed)^;
+          offset[((v shr 12) xor v) and 4095] := last_hashed;
+        until last_hashed>=dst;
       inc(dst,t);
       last_hashed := dst-1;
       CWbit := CWbit shl 1;
@@ -1262,6 +1267,24 @@ nextCW:
         goto nextCW;
     end;
   until false;
+end;
+
+function SynLZdecompress1partial(src: PAnsiChar; size: integer; dst: PAnsiChar; maxDst: integer): integer;
+var offset: TOffsets;
+    src_end: PAnsiChar;
+begin
+  src_end := src+size;
+  result := PWord(src)^;
+  if result=0 then exit;
+  inc(src,2);
+  if result and $8000<>0 then begin
+    result := (result and $7fff) or (integer(PWord(src)^) shl 15);
+    inc(src,2);
+  end;
+  if maxDst<result then
+    result := maxDst;
+  if result>0 then
+    SynLZdecompress1partialsub(src, dst, src_end, dst+result, offset);
 end;
 
 
@@ -1274,7 +1297,7 @@ var dst_beg,      // initial dst value
     CWpoint: PCardinal;
     h, v, cached: integer;
     t, tmax, tdiff, i: integer;
-    offset: array[0..4095] of PAnsiChar; // 16KB+16KB=32KB hashing code
+    offset: TOffsets; // 16KB+16KB=32KB hashing code
     cache: array[0..4095] of integer;
     label dotdiff;
 begin
@@ -1433,7 +1456,7 @@ var {$ifopt C+}dst_beg,{$endif} last_hashed: PAnsiChar; // initial src and dst v
     src_end: PAnsiChar;
     CWbit: integer;
     CW, v, t, h, i: integer;
-    offset: array[0..4095] of PAnsiChar; // 16KB hashing code
+    offset: TOffsets; // 16KB hashing code
 label nextCW;
 begin
   {$ifopt C+}
@@ -1513,11 +1536,12 @@ nextCW:
           move(offset[h]^,dst^,t);
       end;
       end;
-      while last_hashed<dst do begin
-        inc(last_hashed);
-        v := PCardinal(last_hashed)^;
-        offset[((v shr 12) xor v) and 4095] := last_hashed;
-      end;
+      if last_hashed<dst then
+        repeat
+          inc(last_hashed);
+          v := PCardinal(last_hashed)^;
+          offset[((v shr 12) xor v) and 4095] := last_hashed;
+        until last_hashed>=dst;
       inc(dst,t);
       if src>=src_end then break;
       last_hashed := dst-1;

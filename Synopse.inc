@@ -126,6 +126,9 @@
 // if defined, SetThreadName() would not raise the exception used to set the
 // thread name: to be defined if you have issues when debugging your application
 
+{.$define NOEXCEPTIONINTERCEPT}
+// if defined, exceptions shall not be intercepted and logged
+
 {.$define USELOCKERDEBUG}
 // by default, some IAutoLocker instances would use TAutoLocker, unless this
 // conditional is defined to use more verbose TAutoLockerDebug
@@ -302,8 +305,6 @@
 
   {$define FPC_OR_PUREPASCAL}
   {$define FPC_OR_KYLIX}
-  // exceptions interception code in FPC differs from Delphi
-  {$define NOEXCEPTIONINTERCEPT}
 
   // $if FPC_FULLVERSION>20700 breaks Delphi 6-7 and SynProject :(
   {$ifdef VER2_7}
@@ -371,9 +372,6 @@
     {$undef CPU64}
     {$define CPUX86} // for compatibility with older versions of Delphi
   {$endif CPUX64}
-
-  // defines if exceptions shall not be intercepted
-  {.$define NOEXCEPTIONINTERCEPT}
 
   {$IFDEF CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
     {$define HASINTERFACERTTI} // interface RTTI (not FPC)
