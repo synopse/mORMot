@@ -61,12 +61,12 @@ interface
 uses
   {$ifdef MSWINDOWS}
   Windows,
-  mORMotService, // for running the daemon as a regular Windows Service
   {$else}
   {$ifdef FPC}
   SynFPCLinux,
   {$endif}
   {$endif}
+  mORMotService, // for running the daemon as a regular Windows Service
   SysUtils,
   Classes,
   Variants,
@@ -92,6 +92,9 @@ type
   // - you should inherit from this class, then override the abstract NewDaemon
   // protected method to launch and return a IAdministratedDaemon instance
   {$M+}
+
+  { TDDDDaemon }
+
   TDDDDaemon = class
   protected
     fSettings: TDDDAdministratedDaemonSettings;
@@ -103,10 +106,8 @@ type
     function NewDaemon: TDDDAdministratedDaemon; virtual;
     /// returns some text to be supplied to the console for /help - '' by default
     function CustomHelp: string; virtual;
-    {$ifdef MSWINDOWS} // to support Windows Services
-    procedure DoStart(Sender: TService);
-    procedure DoStop(Sender: TService);
-    {$endif}
+    procedure DoStart{$ifdef MSWINDOWS}(Sender: TService){$endif};
+    procedure DoStop{$ifdef MSWINDOWS}(Sender: TService){$endif};
   public
     /// initialize the service/daemon application thanks to some information
     // - actual settings would inherit from TDDDAdministratedDaemonSettingsFile,
@@ -759,14 +760,14 @@ begin
   inherited;
 end;
 
-{$ifdef MSWINDOWS} // to support Windows Services
-
-procedure TDDDDaemon.DoStart(Sender: TService);
+procedure TDDDDaemon.DoStart{$ifdef MSWINDOWS}(Sender: TService){$endif};
 var log: ISynLog;
     res: TCQRSResult;
 begin
   {$ifdef WITHLOG}
+  {$ifdef MSWINDOWS}
   SQLite3Log.Add.LogThreadName('Service Start Handler', true);
+  {$endif}
   log := SQLite3Log.Enter(self, 'DoStart');
   with ExeVersion do
     log.Log(sllNewRun, 'Daemon Start svc=% ver=% usr=%',
@@ -778,11 +779,13 @@ begin
     log.Log(sllTrace, 'fDaemon.Start=%', [ToText(res)^], self);
 end;
 
-procedure TDDDDaemon.DoStop(Sender: TService);
+procedure TDDDDaemon.DoStop{$ifdef MSWINDOWS}(Sender: TService){$endif};
 {$ifdef WITHLOG}
 var log: ISynLog;
 begin
+  {$ifdef MSWINDOWS}
   SQLite3Log.Add.LogThreadName('Service Stop Handler', true);
+  {$endif}
   log := SQLite3Log.Enter(self, 'DoStop');
   log.Log(sllNewRun, 'Daemon Stop svc=% ver=% usr=%', [fSettings.ServiceName,
     ExeVersion.Version.Detailed, LowerCase(ExeVersion.User)], self);
@@ -791,8 +794,6 @@ begin
 {$endif}
   fDaemon := nil; // will stop the daemon
 end;
-
-{$endif MSWINDOWS} // to support Windows Services
 
 function TDDDDaemon.NewDaemon: TDDDAdministratedDaemon;
 begin
@@ -845,7 +846,8 @@ end;
 
 type
   TExecuteCommandLineCmd = (cNone, cInstall, cUninstall, cStart, cStop, cState,
-    cVersion, cVerbose, cHelp, cHardenPasswords, cPlainPasswords, cConsole, cDaemon);
+    cVersion, cVerbose, cHelp, cHardenPasswords, cPlainPasswords,
+    cConsole, cDaemon, cRun, cFork);
 
 procedure TDDDDaemon.ExecuteCommandLine(ForceRun: boolean);
 var
@@ -957,11 +959,13 @@ var
   var spaces: string;
   begin
     writeln('Try with one of the switches:');
-    writeln({$ifdef MSWINDOWS}' '{$else}' ./'{$endif}, ExeVersion.ProgramName,
+    writeln({$ifdef MSWINDOWS}'   '{$else}' ./'{$endif}, ExeVersion.ProgramName,
       ' /console -c /verbose /daemon -d /help -h /version');
-    spaces := StringOfChar(' ', length(ExeVersion.ProgramName) + 2);
+    spaces := StringOfChar(' ', length(ExeVersion.ProgramName) + 4);
     {$ifdef MSWINDOWS}
     writeln(spaces, '/install /uninstall /start /stop /state');
+    {$else}
+    writeln(spaces, '/run -r /fork -f');
     {$endif}
     if passwords <> '' then
       writeln(spaces, '/hardenpasswords /plainpasswords');
@@ -1001,6 +1005,10 @@ begin
           cmd := cConsole;
         'd', 'D':
           cmd := cDaemon;
+        'r', 'R':
+          cmd := cRun;
+        'f', 'F':
+          cmd := cFork;
       else
         byte(cmd) := ord(cInstall) + IdemPCharArray(@param[2],
           ['INST', 'UNINST', 'START', 'STOP', 'STAT', 'VERS', 'VERB', 'HELP',
@@ -1054,9 +1062,8 @@ begin
           TextColor(ccLightRed);
           writeln('No "passwords" resource bound to ', ExeVersion.ProgramFullSpec);
         end;
-    else
     {$ifdef MSWINDOWS} // implement the daemon as a Windows Service
-      with fSettings do
+    else with fSettings do
         if ServiceName = '' then
           if cmd = cNone then
             Syntax
@@ -1120,6 +1127,10 @@ begin
             end;
           end;
     {$else}
+    cRun, cFork:
+      RunUntilSigTerminated(self, (cmd=cFork), DoStart, DoStop
+        {$ifdef WITHLOG},SQLite3Log.Add, fSettings.ServiceName{$endif});
+    else
       Syntax;
     {$endif MSWINDOWS}
     end;
