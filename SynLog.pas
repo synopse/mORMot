@@ -3368,7 +3368,7 @@ begin // should match TSynLog.ThreadContextRehash
     hash := 0; // efficient TThreadID hash on all architectures
     repeat
       hash := hash xor (id and (MAXLOGTHREAD-1));
-      id := id shr MAXLOGTHREADBITS;
+      id := id shr (MAXLOGTHREADBITS-1); // -1 for less collisions under Linux
     until id=0;
     fThreadIndex := fThreadHash[hash];
     fThreadLastHash := hash;
@@ -3408,33 +3408,36 @@ procedure TSynLog.ThreadContextRehash;
 var i: integer;
     id, hash: PtrUInt;
     secondpass: boolean;
+    ctxt: ^TSynLogThreadContext;
 begin // should match TSynLog.GetThreadContextInternal
   if fFamily.fPerThreadLog=ptNoThreadProcess then
     exit;
   FillcharFast(fThreadHash[0],MAXLOGTHREAD*sizeof(fThreadHash[0]),0);
-  for i := 0 to fThreadContextCount-1 do begin
-    id := PtrUInt(fThreadContexts[i].ID); // TThreadID  = ^TThreadRec under BSD
-    if id=0 then
-      continue; // empty slot
-    hash := 0; // efficient TThreadID hash on all architectures
-    repeat
-      hash := hash xor (id and (MAXLOGTHREAD-1));
-      id := id shr MAXLOGTHREADBITS;
-    until id=0;
-    secondpass := false;
-    repeat
-      if fThreadHash[hash]=0 then
-        break;
-      // hash collision (no need to check the ID here)
-      if hash=MAXLOGTHREAD-1 then
-        if secondpass then // avoid endless loop
-          break else begin
-          hash := 0;
-          secondpass := true;
-        end else
-        inc(hash);
-    until false;
-    fThreadHash[hash] := i+1;
+  ctxt := pointer(fThreadContexts);
+  for i := 1 to fThreadContextCount do begin
+    id := PtrUInt(ctxt^.ID); // TThreadID  = ^TThreadRec under BSD
+    if id<>0 then begin // not empty slot
+      hash := 0; // efficient TThreadID hash on all architectures
+      repeat
+        hash := hash xor (id and (MAXLOGTHREAD-1));
+        id := id shr (MAXLOGTHREADBITS-1); // -1 for less collisions under Linux
+      until id=0;
+      secondpass := false;
+      repeat
+        if fThreadHash[hash]=0 then
+          break;
+        // hash collision (no need to check the ID here)
+        if hash=MAXLOGTHREAD-1 then
+          if secondpass then // avoid endless loop
+            break else begin
+            hash := 0;
+            secondpass := true;
+          end else
+          inc(hash);
+      until false;
+      fThreadHash[hash] := i;
+    end;
+    inc(ctxt);
   end;
 end;
 
