@@ -1239,17 +1239,13 @@ nextCW:
       end;
       {$ifdef CPU64}
       o := offset[h];
-      if PtrUInt(dst-o)<t then
+      if (t<=8) or (PtrUInt(dst-o)<t) then
         movechars(o,dst,t) else
-        if t<=8 then
-          PInt64(dst)^ := PInt64(o)^ else
-          move(o^,dst^,t);
+        move(o^,dst^,t);
       {$else}
-      if PtrUInt(dst-offset[h])<t then
+      if (t<=8) or (PtrUInt(dst-offset[h])<t) then
         movechars(offset[h],dst,t) else
-        if t>8 then // safe since src_endmatch := src_end-(6+5)
-          move(offset[h]^,dst^,t) else
-          PInt64(dst)^ := PInt64(offset[h])^; // much faster in practice
+        move(offset[h]^,dst^,t);
       {$endif}
       if src>=src_end then
         break;
