@@ -14503,8 +14503,10 @@ initialization
   if (cfSSE42 in CpuFeatures) and (cfAesNi in CpuFeatures) then
     crc32c := @crc32c_sse42_aesni;
 {$endif}
+  {$ifndef NOVARIANTS}
   GetEnumNames(TypeInfo(TJWTResult),@_TJWTResult);
   GetEnumNames(TypeInfo(TJWTClaim),@_TJWTClaim);
+  {$endif NOVARIANTS}
   assert(sizeof(TMD5Buf)=sizeof(TMD5Digest));
   assert(sizeof(TAESContext)=AESContextSize);
   assert(sizeof(TSHAContext)=SHAContextSize);
