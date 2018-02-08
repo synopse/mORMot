@@ -38252,9 +38252,7 @@ begin
       'host',ExeVersion.Host,'user',ExeVersion.User,'os',OSVersionText,
       'cpu',CpuInfoText,
       {$ifdef MSWINDOWS}{$ifndef CPU64}'wow64',IsWow64,{$endif}{$endif MSWINDOWS}
-      {$ifndef PUREPASCAL}{$ifdef CPUINTEL}
-      'cpufeatures', LowerCase(ToText(CpuFeatures, ' ')),
-      {$endif}{$endif}
+      {$ifdef CPUINTEL}'cpufeatures', LowerCase(ToText(CpuFeatures, ' ')),{$endif}
       'processcpu',cpu,'processmem',mem,
       'freemem',TSynMonitorMemory.FreeAsText,
       'freedisk',TSynMonitorDisk.FreeAsText]);
