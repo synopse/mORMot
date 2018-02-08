@@ -3360,12 +3360,18 @@ const
 
 procedure TSynLog.GetThreadContextInternal;
 var secondpass: boolean;
+    id, hash: PtrUInt;
 begin // should match TSynLog.ThreadContextRehash
   if fFamily.fPerThreadLog<>ptNoThreadProcess then begin
     secondpass := false;
-    fThreadLastHash := PtrUInt(fThreadID xor (fThreadID shr MAXLOGTHREADBITS)
-      xor (fThreadID shr (MAXLOGTHREADBITS*2))) and (MAXLOGTHREAD-1);
-    fThreadIndex := fThreadHash[fThreadLastHash];
+    id := PtrUInt(fThreadID); // TThreadID  = ^TThreadRec under BSD
+    hash := 0; // efficient TThreadID hash on all architectures
+    repeat
+      hash := hash xor (id and (MAXLOGTHREAD-1));
+      id := id shr MAXLOGTHREADBITS;
+    until id=0;
+    fThreadIndex := fThreadHash[hash];
+    fThreadLastHash := hash;
     if fThreadIndex<>0 then
       repeat
         fThreadContext := @fThreadContexts[fThreadIndex-1];
@@ -3399,18 +3405,22 @@ begin // should match TSynLog.ThreadContextRehash
 end;
 
 procedure TSynLog.ThreadContextRehash;
-var i, id, hash: integer;
+var i: integer;
+    id, hash: PtrUInt;
     secondpass: boolean;
 begin // should match TSynLog.GetThreadContextInternal
   if fFamily.fPerThreadLog=ptNoThreadProcess then
     exit;
   FillcharFast(fThreadHash[0],MAXLOGTHREAD*sizeof(fThreadHash[0]),0);
   for i := 0 to fThreadContextCount-1 do begin
-    id := fThreadContexts[i].ID;
+    id := PtrUInt(fThreadContexts[i].ID); // TThreadID  = ^TThreadRec under BSD
     if id=0 then
       continue; // empty slot
-    hash := PtrUInt(id xor (id shr MAXLOGTHREADBITS)
-      xor (id shr (MAXLOGTHREADBITS*2))) and (MAXLOGTHREAD-1);
+    hash := 0; // efficient TThreadID hash on all architectures
+    repeat
+      hash := hash xor (id and (MAXLOGTHREAD-1));
+      id := id shr MAXLOGTHREADBITS;
+    until id=0;
     secondpass := false;
     repeat
       if fThreadHash[hash]=0 then
@@ -3429,12 +3439,12 @@ begin // should match TSynLog.GetThreadContextInternal
 end;
 
 procedure TSynLog.LockAndGetThreadContext;
-var ID: TThreadID;
+var id: TThreadID;
 begin
   EnterCriticalSection(GlobalThreadLock);
-  ID := TThreadID(GetCurrentThreadId);
-  if ID<>fThreadID then begin
-    fThreadID := ID;
+  id := GetCurrentThreadId;
+  if id<>fThreadID then begin
+    fThreadID := id;
     GetThreadContextInternal;
   end;
   {$ifndef NOEXCEPTIONINTERCEPT} // for IsBadCodePtr() or any internal exception
@@ -4260,11 +4270,11 @@ begin
   if fFamily.fPerThreadLog=ptIdentifiedInOnFile then
     for i := 0 to fThreadContextCount-1 do
     with fThreadContexts[i] do
-      if (ID<>0) and (ThreadName<>'') then begin // see TSynLog.LogThreadName
+      if (pointer(ID)<>nil) and (ThreadName<>'') then begin // see TSynLog.LogThreadName
         LogCurrentTime;
         fWriter.AddInt18ToChars3(i+1);
         fWriter.AddShort(LOG_LEVEL_TEXT[sllInfo]);
-        fWriter.Add('SetThreadName %=%',[ID,ThreadName],twOnSameLine);
+        fWriter.Add('SetThreadName %=%',[pointer(ID),ThreadName],twOnSameLine);
         fWriter.AddEndOfLine(sllInfo);
       end;
 end;
@@ -4395,7 +4405,7 @@ begin
     fFileName := fFileName+' '+ExtractFileName(GetModuleName(HInstance));
   {$endif}
   if fFamily.fPerThreadLog=ptOneFilePerThread then
-    fFileName := fFileName+' '+IntToString(Int64(GetCurrentThreadId));
+    fFileName := fFileName+' '+Ansi7ToString(PointerToHex(pointer(GetCurrentThreadId)));
   fFileName := fFamily.fDestinationPath+fFileName+fFamily.fDefaultExtension;
 end;
 

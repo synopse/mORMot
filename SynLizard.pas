@@ -602,7 +602,7 @@ var
 begin
   result := Lizard <> nil;
   if result then
-    exit; // already registered
+    exit; // already registered (maybe as TSynLizardStatic)
   lib := TSynLizardDynamic.Create('', true);
   result := lib.Loaded;
   if result then

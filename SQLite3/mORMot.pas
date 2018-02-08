@@ -42770,18 +42770,18 @@ end;
 
 procedure TSQLRestServer.BeginCurrentThread(Sender: TThread);
 var i, tc: integer;
-    CurrentThreadId: TThreadID;
+    id: TThreadID;
 begin
   tc := fStats.NotifyThreadCount(1);
-  CurrentThreadId := TThreadID(GetCurrentThreadId);
+  id := GetCurrentThreadId;
   if Sender=nil then
     raise ECommunicationException.CreateUTF8('%.BeginCurrentThread(nil)',[self]);
   InternalLog('BeginCurrentThread(%) root=% ThreadID=% ThreadCount=%',
-    [Sender.ClassType,Model.Root,pointer(CurrentThreadId),tc]);
-  if TThreadID(Sender.ThreadID)<>CurrentThreadId then
+    [Sender.ClassType,Model.Root,pointer(id),tc]);
+  if Sender.ThreadID<>id then
     raise ECommunicationException.CreateUTF8(
       '%.BeginCurrentThread(Thread.ID=%) and CurrentThreadID=% should match',
-      [self,Sender.ThreadID,CurrentThreadId]);
+      [self,pointer(Sender.ThreadID),pointer(id)]);
   with PServiceRunningContext(@ServiceContext)^ do // P..(@..)^ for ONE GetTls()
     if RunningThread<>Sender then // e.g. if length(TSQLHttpServer.fDBServers)>1
       if RunningThread<>nil then
@@ -42796,26 +42796,26 @@ end;
 
 procedure TSQLRestServer.EndCurrentThread(Sender: TThread);
 var i, tc: integer;
-    CurrentThreadId: TThreadID;
+    id: TThreadID;
     Inst: TServiceFactoryServerInstance;
 begin
   tc := fStats.NotifyThreadCount(-1);
-  CurrentThreadId := TThreadID(GetCurrentThreadId);
+  id := GetCurrentThreadId;
   if Sender=nil then
     raise ECommunicationException.CreateUTF8('%.EndCurrentThread(nil)',[self]);
   InternalLog('EndCurrentThread(%) ThreadID=% ThreadCount=%',
-    [Sender.ClassType,pointer(CurrentThreadId),tc]);
-  if TThreadID(Sender.ThreadID)<>CurrentThreadId then
+    [Sender.ClassType,pointer(id),tc]);
+  if Sender.ThreadID<>id then
     raise ECommunicationException.CreateUTF8(
       '%.EndCurrentThread(%.ID=%) should match CurrentThreadID=%',
-      [self,Sender,Sender.ThreadID,CurrentThreadId]);
+      [self,Sender,pointer(Sender.ThreadID),pointer(id)]);
  if fStaticVirtualTable<>nil then
    for i := 0 to high(fStaticVirtualTable) do
      if (fStaticVirtualTable[i]<>nil) and
         fStaticVirtualTable[i].InheritsFrom(TSQLRestStorage) then
        TSQLRestStorage(fStaticVirtualTable[i]).EndCurrentThread(Sender);
   if Services<>nil then begin
-    Inst.InstanceID := PtrUInt(CurrentThreadId);
+    Inst.InstanceID := PtrUInt(id);
     for i := 0 to Services.Count-1 do
       with TServiceFactoryServer(Services.fList.Objects[i]) do
       if InstanceCreation=sicPerThread then
@@ -44586,14 +44586,17 @@ end;
 
 function TSQLRestServerMonitor.NotifyThreadCount(delta: integer): integer;
 begin
-  EnterCriticalSection(fLock);
-  try
-    inc(fCurrentThreadCount,delta);
-    result := fCurrentThreadCount;
-    if delta<>0 then
-      Changed;
-  finally
-    LeaveCriticalSection(fLock);
+  if self=nil then
+    result := 0 else begin
+    EnterCriticalSection(fLock);
+    try
+      inc(fCurrentThreadCount,delta);
+      result := fCurrentThreadCount;
+      if delta<>0 then
+        Changed;
+    finally
+      LeaveCriticalSection(fLock);
+    end;
   end;
 end;
 
@@ -61970,7 +61973,7 @@ end;
 procedure SetThreadNameWithLog(ThreadID: TThreadID; const Name: RawUTF8);
 begin
   {$ifdef WITHLOG}
-  if (SetThreadNameLog<>nil) and (ThreadID=TThreadID(GetCurrentThreadId)) then
+  if (SetThreadNameLog<>nil) and (ThreadID=GetCurrentThreadId) then
     SetThreadNameLog.Add.LogThreadName(Name);
   {$endif}
   SetThreadNameDefault(ThreadID,Name);
@@ -61987,7 +61990,7 @@ initialization
   {$ifndef USENORMTOUPPER}
   pointer(@SQLFieldTypeComp[sftUTF8Text]) := @AnsiIComp;
   {$endif}
-  SetThreadNameDefault(TThreadID(GetCurrentThreadID),'Main Thread');
+  SetThreadNameDefault(GetCurrentThreadID,'Main Thread');
   SetThreadNameInternal := SetThreadNameWithLog;
   StatusCodeToErrorMessage := StatusCodeToErrorMsgBasic;
   GarbageCollectorFreeAndNil(JSONCustomParsers,TSynDictionary.Create(

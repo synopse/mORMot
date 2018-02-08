@@ -841,9 +841,6 @@ const
 
 type
   PBoolean = ^Boolean;
-  {$ifdef BSD}
-  TThreadID = Cardinal;
-  {$endif}
 
 {$else FPC}
 
@@ -63902,7 +63899,7 @@ function IsDebuggerPresent: BOOL; stdcall; external kernel32; // since XP
 
 procedure SetCurrentThreadName(const Format: RawUTF8; const Args: array of const);
 begin
-  SetThreadName(TThreadID(GetCurrentThreadId),Format,Args);
+  SetThreadName(GetCurrentThreadId,Format,Args);
 end;
 
 procedure SetThreadName(ThreadID: TThreadID; const Format: RawUTF8;
@@ -64203,7 +64200,7 @@ begin
     result := fPendingProcessFlag;
     if result=flagIdle then begin // we just acquired the thread! congrats!
       fPendingProcessFlag := flagStarted; // atomic set "started" flag
-      fCallerThreadID := TThreadID(ThreadID);
+      fCallerThreadID := ThreadID;
     end;
   finally
     fPendingProcessLock.UnLock;
@@ -64254,7 +64251,7 @@ var start: Int64;
     ThreadID: TThreadID;
 begin
   result := false;
-  ThreadID := TThreadID(GetCurrentThreadId);
+  ThreadID := GetCurrentThreadId;
   if (self=nil) or (ThreadID=fCallerThreadID) then
     // avoid endless loop when waiting in same thread (e.g. UI + OnIdle)
     exit;
