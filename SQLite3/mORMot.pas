@@ -16048,6 +16048,7 @@ type
     FThreadCount: byte;
     FHttps: boolean;
     FHttpSysQueueName: SynUnicode;
+    FRemoteIPHeader: RawUTF8;
   published
     /// defines the port to be used for REST publishing
     // - may include an optional IP address to bind, e.g. '127.0.0.1:8888'
@@ -16073,6 +16074,12 @@ type
     /// the displayed name in the http.sys queue
     // - used only by http.sys server under Windows, not by socket-based servers
     property HttpSysQueueName: SynUnicode read FHttpSysQueueName write FHttpSysQueueName;
+    /// the value of a custom HTTP header containing the real client IP
+    // - by default, the RemoteIP information will be retrieved from the socket
+    // layer - but if the server runs behind some proxy service, you should
+    // define here the HTTP header name which indicates the true remote client
+    // IP value, mostly as 'X-Real-IP' or 'X-Forwarded-For'
+    property RemoteIPHeader: RawUTF8 read fRemoteIPHeader write fRemoteIPHeader;
     /// if defined, this HTTP server will use WebSockets, and our secure
     // encrypted binary protocol
     // - when stored in the settings JSON file, the password will be safely

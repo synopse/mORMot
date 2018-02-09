@@ -1184,6 +1184,8 @@ begin
     HTTPS_SECURITY[aDefinition.Https],'',aDefinition.HttpSysQueueName);
   if aDefinition.EnableCORS then
     AccessControlAllowOrigin := '*';
+  if fHttpServer<>nil then
+    fHttpServer.RemoteIPHeader := aDefinition.RemoteIPHeader;
   a := aDefinition.Authentication;
   if aServer.HandleAuthentication then
     if AUTH[a]=nil then
