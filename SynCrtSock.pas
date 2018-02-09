@@ -909,6 +909,7 @@ type
   TSynThreadPoolSubThread = class(TSynThread)
   protected
     fOwner: TSynThreadPool;
+    fNotifyThreadStartName: AnsiString;
     fProcessingContext: pointer;
     fProcessingContextCS: TRTLCriticalSection;
     {$ifndef USE_WINIOCP}
@@ -4182,7 +4183,6 @@ begin
     end;
     else exit;
   end;
-
   if SameText(Server,'localhost')
     {$ifndef MSWINDOWS}or ((Server='') and not doBind){$endif} then
     IP := cLocalHost else
@@ -4323,8 +4323,7 @@ end;
 constructor TCrtSocket.Bind(const aPort: SockString; aLayer: TCrtSocketLayer=cslTCP);
 var s,p: SockString;
 begin
-  // on Linux, Accept() blocks even after Shutdown() -> use 0.5 second timeout
-  Create({$ifdef LINUX}500{$else}5000{$endif});
+  Create(10000);
   if not Split(aPort,':',s,p) then begin
     s := '0.0.0.0';
     p := aPort;
@@ -6477,6 +6476,14 @@ procedure TSynThreadPoolSubThread.NotifyThreadStart(Sender: TSynThread);
 begin
   if Sender=nil then
     raise ECrtSocket.Create('NotifyThreadStart(nil)');
+  {$ifdef FPC}
+  {$ifdef LINUX}
+  if fNotifyThreadStartName='' then begin
+    fNotifyThreadStartName := format('Pool%d-%4x',[fOwner.fRunningThreads,PtrInt(fOwner)]);
+    SetUnixThreadName(fThreadID,fNotifyThreadStartName);
+  end;
+  {$endif}
+  {$endif}
   if Assigned(fOwner.fOnThreadStart) and not Assigned(Sender.fStartNotified) then begin
     fOwner.fOnThreadStart(Sender);
     Sender.fStartNotified := self;
