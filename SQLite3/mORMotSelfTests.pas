@@ -78,13 +78,13 @@ uses
   SysUtils,
   SynCommons,
   {$ifdef MSWINDOWS}
-  Windows, // for AllocConsole
-  {$ifndef DELPHI5OROLDER}
-  SynBigTable,
+    Windows, // for AllocConsole
+    {$ifndef DELPHI5OROLDER}
+      SynBigTable,
+    {$endif}
   {$endif}
-  {$endif}
   {$ifndef DELPHI5OROLDER}
-  mORMot, // for TSQLLog
+    mORMot, // for TSQLLog
   {$endif}
   SynLog,
   SynBidirSock, // for WebSocketLog

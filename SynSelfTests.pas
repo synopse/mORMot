@@ -119,40 +119,40 @@ interface
 
 uses
   {$ifdef MSWINDOWS}
-  Windows,
+    Windows,
   {$else}
-  {$ifdef KYLIX3}
-  Types,
-  LibC,
-  SynKylix,
-  {$endif}
-  {$ifdef FPC}
-  SynFPCLinux,
-  BaseUnix,
-  {$endif}
+    {$ifdef KYLIX3}
+    Types,
+    LibC,
+    SynKylix,
+    {$endif}
+    {$ifdef FPC}
+    SynFPCLinux,
+    BaseUnix,
+    {$endif}
   {$endif}
   Classes,
   SynCrtSock,
   SynTable, // for TSynTableStatement
-{$ifndef NOVARIANTS}
-  SynMongoDB,
-  SynMustache,
-  Variants,
-{$endif}
-{$ifdef UNICODE}
-  Generics.Collections,
-{$endif}
+  {$ifndef NOVARIANTS}
+    SynMongoDB,
+    SynMustache,
+    Variants,
+  {$endif}
+  {$ifdef UNICODE}
+    Generics.Collections,
+  {$endif}
   SysUtils,
-{$ifndef LVCL}
-  Contnrs,
-  {$ifdef MSWINDOWS}
-  SynOleDB,
-  {$ifndef FPC}
-  SynGdiPlus,
-  SynPdf,
-  {$endif}
-  {$endif}
-{$endif LVCL}
+  {$ifndef LVCL}
+    Contnrs,
+    {$ifdef MSWINDOWS}
+    SynOleDB,
+    {$ifndef FPC}
+      SynGdiPlus,
+      SynPdf,
+    {$endif}
+    {$endif}
+  {$endif LVCL}
   SynEcc,
   SynDB,
   SynSQLite3,
@@ -160,36 +160,36 @@ uses
   SynDBSQLite3,
   SynDBRemote,
   SynDBODBC,
-{$ifndef DELPHI5OROLDER}
-  mORMot,
-  mORMotDB,
-  mORMotSQLite3,
-  mORMotHttpServer,
-  mORMotHttpClient,
-  {$ifndef NOVARIANTS}
-  mORMotMongoDB,
-  mORMotMVC,
-  {$endif}
-  SynBidirSock,
-  mORMotDDD,
-  dddDomUserTypes,
-  dddDomUserInterfaces,
-  dddDomAuthInterfaces,
-  dddInfraEmail,
-  dddInfraEmailer,
-  dddInfraAuthRest,
-  dddInfraRepoUser,
-  ECCProcess,
-{$endif DELPHI5OROLDER}
+  {$ifndef DELPHI5OROLDER}
+    mORMot,
+    mORMotDB,
+    mORMotSQLite3,
+    mORMotHttpServer,
+    mORMotHttpClient,
+    {$ifndef NOVARIANTS}
+      mORMotMongoDB,
+      mORMotMVC,
+    {$endif}
+    SynBidirSock,
+    mORMotDDD,
+    dddDomUserTypes,
+    dddDomUserInterfaces,
+    dddDomAuthInterfaces,
+    dddInfraEmail,
+    dddInfraEmailer,
+    dddInfraAuthRest,
+    dddInfraRepoUser,
+    ECCProcess,
+  {$endif DELPHI5OROLDER}
   SynProtoRTSPHTTP,
-{$ifdef TEST_REGEXP}
-  SynSQLite3RegEx,
-{$endif TEST_REGEXP}
-{$ifdef MSWINDOWS}
-{$ifdef USEZEOS}
-  SynDBZeos,
-{$endif}
-{$endif}
+  {$ifdef TEST_REGEXP}
+    SynSQLite3RegEx,
+  {$endif TEST_REGEXP}
+  {$ifdef MSWINDOWS}
+    {$ifdef USEZEOS}
+      SynDBZeos,
+    {$endif}
+  {$endif}
   SynCommons,
   SynLog,
   SynTests;
