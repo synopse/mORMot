@@ -1291,11 +1291,8 @@ begin
   pid := GetInteger(pointer(StringFromFile(pidfile)));
   if pid <= 0 then
     exit;
-  if {$ifdef FPC}fpkill{$else}kill{$endif}(pid, SIGTERM) <> 0 then begin
-    writeln('sigterm failed');
-    if {$ifdef FPC}fpkill{$else}kill{$endif}(pid, SIGKILL) <> 0 then
-      exit;
-  end;
+  if {$ifdef FPC}fpkill{$else}kill{$endif}(pid, SIGTERM) <> 0 then
+    exit;
   if waitseconds <= 0 then
     exit(true);
   tix := GetTickCount64 + waitseconds * 1000;
@@ -1304,6 +1301,8 @@ begin
     if not FileExists(pidfile) then
       result := true;
   until result or (GetTickCount64 > tix);
+  if not result then
+    {$ifdef FPC}fpkill{$else}kill{$endif}(pid, SIGKILL); // finesse
 end;
 
 procedure RunUntilSigTerminated(daemon: TObject; dofork: boolean;
