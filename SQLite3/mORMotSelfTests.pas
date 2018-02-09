@@ -75,6 +75,8 @@ procedure SQLite3ConsoleTests;
 implementation
 
 uses
+  SysUtils,
+  SynCommons,
   {$ifdef MSWINDOWS}
   Windows, // for AllocConsole
   {$ifndef DELPHI5OROLDER}
@@ -87,6 +89,7 @@ uses
   SynLog,
   SynBidirSock, // for WebSocketLog
   SynTests,
+  SynSQLite3, // for Sqlite3 used version
   SynSelfTests;
 
 type
@@ -96,6 +99,9 @@ type
   // - inherits from TSynTestsLogged in order to create enhanced log information
   // in case of any test case failure
   TTestSynopsemORMotFramework = class(TSynTestsLogged)
+  public
+    /// provide additional information
+    function Run: boolean; override;
   published
     /// test the freeware Synopse library
     // - low level functions and classes, cryptographic or compression routines,
@@ -110,6 +116,16 @@ type
 
 
 { TTestSynopsemORMotFramework }
+
+function TTestSynopsemORMotFramework.Run: boolean;
+begin
+  CustomVersions := format(#13#10#13#10'Run on: %s' +
+    {$ifdef MSWINDOWS} ' with code page %d' + {$endif} #13#10 +
+    '    %s'#13#10'Using mORMot %s'#13#10'    %s %s', [OSVersionText,
+    {$ifdef MSWINDOWS}GetACP,{$endif} CpuInfoText, SYNOPSE_FRAMEWORK_FULLVERSION,
+    sqlite3.ClassName, sqlite3.Version]);
+  result := inherited Run;
+end;
 
 procedure TTestSynopsemORMotFramework.SynopseLibraries;
 begin

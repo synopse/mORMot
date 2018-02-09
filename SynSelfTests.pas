@@ -2688,10 +2688,6 @@ type TR = record
 var A,B,C: TR;
     i: integer;
 begin
-  if Pos('Using mORMot',Owner.CustomVersions)=0 then
-    Owner.CustomVersions := Owner.CustomVersions+#13#10'Using mORMot '+
-      SYNOPSE_FRAMEWORK_FULLVERSION+#13#10'Running on '+string(OSVersionText)
-      {$ifdef MSWINDOWS}+' with code page '+IntToString(GetACP){$endif};
   FillCharFast(A,sizeof(A),0);
   for i := 0 to High(A.Bulk) do
     A.Bulk[i] := i;
@@ -11800,9 +11796,6 @@ var
   password, s: RawUTF8;
   R: TSQLRequest;
 begin
-  if Pos('TSQLite3Library',Owner.CustomVersions)=0 then
-    Owner.CustomVersions := Owner.CustomVersions+#13#10+
-      string(sqlite3.ClassName)+' '+string(sqlite3.Version);
   Check(JSONGetID('{"id":123}',id) and (id=123));
   Check(JSONGetID('{"rowid":1234}',id) and (id=1234));
   Check(JSONGetID(' { "id": 123}',id) and (id=123));

@@ -371,6 +371,14 @@ type
     // - the Failed[] list is cleared at the beginning of the run
     // - Assertions and AssertionsFailed properties are reset and computed during
     // the run
+    // - you may override this method to provide additional information, e.g.
+    // ! function TMySynTests.Run: Boolean;
+    // ! begin // need SynSQLite3.pas unit in the uses clause
+    // !   CustomVersions := format(#13#10#13#10'Run on: %s'#13#10'    %s'#13#10 +
+    // !     'Using mORMot %s'#13#10'    %s %s', [OSVersionText, CpuInfoText,
+    // !      SYNOPSE_FRAMEWORK_FULLVERSION, sqlite3.ClassName, sqlite3.Version]);
+    // !   result := inherited Run;
+    // ! end;
     function Run: Boolean; virtual;
     /// the number of items in the TestCase[] array
     property TestCaseCount: Integer read GetTestCaseCount;
