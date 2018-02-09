@@ -6166,8 +6166,8 @@ begin
         for i := 1 to length(Headers) do
         if IdemPChar(H^,pointer(fServer.fRemoteIPHeaderUpper)) and (H^[L]=':') then begin
           repeat inc(L) until H^[L]<>' ';
-          if H^<>#0 then
-            fRemoteIP := H^;
+          if H^[L]<>#0 then
+            fRemoteIP := H^+L;
           break;
         end else
           inc(H);
