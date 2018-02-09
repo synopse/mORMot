@@ -542,8 +542,18 @@ function ServiceStateText(State: TServiceState): string;
 
 /// low-level function able to properly run or fork the current process
 // then execute the start/stop methods of a TSynDaemon / TDDDDaemon instance
+// - fork will create a local /run/[ProgramName]-[ProgramPathHash].pid file name
 procedure RunUntilSigTerminated(daemon: TObject; dofork: boolean;
   const start, stop: TThreadMethod; log: TSynLog = nil; const servicename: string = '');
+
+/// kill a process previously created by RunUntilSigTerminated(dofork=true)
+// - will lookup a local /run/[ProgramName]-[ProgramPathHash].pid file name to
+// retrieve the actual PID to be killed, then send a SIGTERM, and wait
+// waitseconds for the .pid file to disapear
+// - returns true on success, false on error (e.g. no valid .pid file or
+// the file didn't disappear, which may mean that the daemon is broken)
+function RunUntilSigTerminatedForkKill(waitseconds: integer = 30): boolean;
+
 
 {$endif MSWINDOWS}
 
@@ -1261,6 +1271,41 @@ begin
 {$endif}
 end;
 
+var
+  _pidfile: TFileName;
+
+function pidfile: TFileName;
+begin
+  if _pidfile = '' then
+    _pidfile := format('/run/%s-%s.pid', [ExeVersion.ProgramName,
+      CardinalToHexLower(ExeVersion.Hash.c3)]); // InstanceFileName hash
+  result := _pidfile;
+end;
+
+function RunUntilSigTerminatedForkKill(waitseconds: integer): boolean;
+var
+  pid: PtrInt;
+  tix: Int64;
+begin
+  result := false;
+  pid := GetInteger(pointer(StringFromFile(pidfile)));
+  if pid <= 0 then
+    exit;
+  if {$ifdef FPC}fpkill{$else}kill{$endif}(pid, SIGTERM) <> 0 then begin
+    writeln('sigterm failed');
+    if {$ifdef FPC}fpkill{$else}kill{$endif}(pid, SIGKILL) <> 0 then
+      exit;
+  end;
+  if waitseconds <= 0 then
+    exit(true);
+  tix := GetTickCount64 + waitseconds * 1000;
+  repeat // RunUntilSigTerminated() below should delete the .pid file
+    sleep(100);
+    if not FileExists(pidfile) then
+      result := true;
+  until result or (GetTickCount64 > tix);
+end;
+
 procedure RunUntilSigTerminated(daemon: TObject; dofork: boolean;
   const start, stop: TThreadMethod; log: TSynLog; const servicename: string);
 var
@@ -1269,26 +1314,31 @@ begin
   SigIntercept;
   try
     if dofork then begin
+      if FileExists(pidfile) then
+        exit; // already forked
       pid := {$ifdef FPC}fpFork{$else}fork{$endif};
       if pid < 0 then
         raise ESynException.CreateUTF8('%.CommandLine Fork failed', [daemon]);
       if pid > 0 then begin // main program - just terminate
         //{$ifdef FPC}fpExit{$else}__exit{$endif}(0);
         exit;
-      end else begin // clean forked instance
-        sid := {$ifdef FPC}fpSetSID{$else}setsid{$endif};
-        if sid < 0 then // new session (process group) created?
-          raise ESynException.CreateUTF8('%.CommandLine SetSID failed', [daemon]);
-        {$ifdef FPC}fpUMask{$else}umask{$endif}(0); // reset file mask
-        chdir('/'); // avoid locking current directory
-        Close(input);
-        AssignFile(input, '/dev/null');
-        ReWrite(input);
-        Close(output);
-        AssignFile(output, '/dev/null');
-        ReWrite(output);
-        {$ifdef FPC}Close{$else}__close{$endif}(stderr);
       end;
+      // clean forked instance
+      sid := {$ifdef FPC}fpSetSID{$else}setsid{$endif};
+      if sid < 0 then // new session (process group) created?
+        raise ESynException.CreateUTF8('%.CommandLine SetSID failed', [daemon]);
+      {$ifdef FPC}fpUMask{$else}umask{$endif}(0); // reset file mask
+      chdir('/'); // avoid locking current directory
+      Close(input);
+      AssignFile(input, '/dev/null');
+      ReWrite(input);
+      Close(output);
+      AssignFile(output, '/dev/null');
+      ReWrite(output);
+      {$ifdef FPC}Close{$else}__close{$endif}(stderr);
+      // create local /run/[ExeVersion.ProgramName].pid file
+      pid := {$ifdef FPC}fpgetpid{$else}getpid{$endif};
+      FileFromString(Int64ToUtf8(pid), pidfile);
     end;
     try
       if log <> nil then
@@ -1299,13 +1349,18 @@ begin
     finally
       if log <> nil then
         log.Log(sllNewRun, 'Stop from Sig=%', [SynDaemonTerminated], daemon);
-      stop;
+      try
+        stop;
+      finally
+        if dofork then
+          DeleteFile(pidfile);
+      end;
     end;
   except
     on E: Exception do begin
       if not dofork then
         ConsoleShowFatalException(E, true);
-      Halt(1); // notify error to caller process
+      ExitCode := 1; // indicates error
     end;
   end;
 end;
@@ -1417,12 +1472,14 @@ end;
 
 type
   TExecuteCommandLineCmd = (
-     cNone, cInstall, cUninstall, cVersion, cConsole, cVerbose, cRun, cFork,
-     cStart, cStop, cState, cHelp);
+     cNone, cVersion, cVerbose, cStart, cStop, cState,
+     cHelp, cInstall, cRun, cFork, cUninstall, cConsole, cKill);
 
 procedure TSynDaemon.CommandLine(aAutoStart: boolean);
+const CMD_CHR: array[cHelp .. cKill] of AnsiChar = ('H', 'I', 'R', 'F', 'U', 'C', 'K');
 var
-  cmd: TExecuteCommandLineCmd;
+  cmd, c: TExecuteCommandLineCmd;
+  ch: AnsiChar;
   param: RawUTF8;
   log: TSynLog;
   {$ifdef MSWINDOWS}
@@ -1465,7 +1522,7 @@ var
     {$ifdef MSWINDOWS}
     writeln(spaces, '/install /uninstall /start /stop /state');
     {$else}
-    writeln(spaces, '/run -r /fork -f');
+    writeln(spaces, '/run -r /fork -f /kill -k');
     {$endif}
   end;
 
@@ -1503,21 +1560,16 @@ begin
     exit;
   log := nil;
   param := trim(StringToUTF8(paramstr(1)));
-  if (param = '') or not (param[1] in ['/', '-']) then
-    cmd := cNone
-  else
-    case upcase(param[2]) of
-    'C':
-      cmd := cConsole;
-    'R':
-      cmd := cRun;
-    'F':
-      cmd := cFork;
-    'H':
-      cmd := cHelp;
-    else
-      byte(cmd) := ord(cInstall) + IdemPCharArray(@param[2], ['INST', 'UNINST',
-        'VERS', 'CONS', 'VERB', 'RUN', 'FORK', 'START', 'STOP', 'STAT', 'HELP']);
+  cmd := cNone;
+  if (param <> '') and (param[1] in ['/', '-']) then begin
+    ch := NormToUpper[param[2]];
+    for c := low(CMD_CHR) to high(CMD_CHR) do
+      if CMD_CHR[c] = ch then begin
+        cmd := c;
+        break;
+      end;
+    if cmd = cNone then
+      byte(cmd) := ord(cVersion) + IdemPCharArray(@param[2], ['VERS', 'VERB', 'START', 'STOP', 'STAT']);
     end;
   case cmd of
   cHelp:
@@ -1552,8 +1604,10 @@ begin
         Stop;
       end;
     except
-      on E: Exception do
+      on E: Exception do begin
         ConsoleShowFatalException(E, true);
+        ExitCode := 1; // indicates error
+      end;
     end;
   {$ifdef MSWINDOWS} // implement the daemon as a Windows Service
   else if fSettings.ServiceName = '' then
@@ -1615,6 +1669,14 @@ begin
   {$else}
   cRun, cFork:
     RunUntilSigTerminated(self,(cmd=cFork),Start,Stop,fSettings.fLogClass.Add,fSettings.ServiceName);
+  cKill:
+    if RunUntilSigTerminatedForkKill then
+      writeln('Forked process killed successfully')
+    else begin
+      TextColor(ccLightRed);
+      writeln('No forked process found to be killed');
+      ExitCode := 1; // indicates error
+    end
   else
     Syntax;
   {$endif MSWINDOWS}

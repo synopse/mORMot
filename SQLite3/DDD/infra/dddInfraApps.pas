@@ -845,9 +845,10 @@ begin
 end;
 
 type
-  TExecuteCommandLineCmd = (cNone, cInstall, cUninstall, cStart, cStop, cState,
+  TExecuteCommandLineCmd = (
+    cNone, cInstall, cUninstall, cStart, cStop, cState,
     cVersion, cVerbose, cHelp, cHardenPasswords, cPlainPasswords,
-    cConsole, cDaemon, cRun, cFork);
+    cConsole, cDaemon, cRun, cFork, cKill);
 
 procedure TDDDDaemon.ExecuteCommandLine(ForceRun: boolean);
 var
@@ -965,7 +966,7 @@ var
     {$ifdef MSWINDOWS}
     writeln(spaces, '/install /uninstall /start /stop /state');
     {$else}
-    writeln(spaces, '/run -r /fork -f');
+    writeln(spaces, '/run -r /fork -f /kill -k');
     {$endif}
     if passwords <> '' then
       writeln(spaces, '/hardenpasswords /plainpasswords');
@@ -1000,15 +1001,17 @@ begin
     if (param = '') or not (param[1] in ['/', '-']) then
       cmd := cNone
     else
-      case param[2] of
-        'c', 'C':
+      case NormToUpper[param[2]] of
+        'C':
           cmd := cConsole;
-        'd', 'D':
+        'D':
           cmd := cDaemon;
-        'r', 'R':
+        'R':
           cmd := cRun;
-        'f', 'F':
+        'F':
           cmd := cFork;
+        'K':
+          cmd := cKill;
       else
         byte(cmd) := ord(cInstall) + IdemPCharArray(@param[2],
           ['INST', 'UNINST', 'START', 'STOP', 'STAT', 'VERS', 'VERB', 'HELP',
@@ -1130,13 +1133,18 @@ begin
     cRun, cFork:
       RunUntilSigTerminated(self, (cmd=cFork), DoStart, DoStop
         {$ifdef WITHLOG},SQLite3Log.Add, fSettings.ServiceName{$endif});
+    cKill:
+      if not RunUntilSigTerminatedForkKill then
+        raise EServiceException.Create('No forked process found to be killed');
     else
       Syntax;
     {$endif MSWINDOWS}
     end;
   except
-    on E: Exception do
+    on E: Exception do begin
       ConsoleShowFatalException(E);
+      ExitCode := 1; // indicates error
+    end;
   end;
   TextColor(ccLightGray);
   ioresult;
