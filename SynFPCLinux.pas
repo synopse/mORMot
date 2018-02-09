@@ -149,6 +149,10 @@ var
   // - e.g. $030d02 for 3.13.2, or $020620 for 2.6.32
   KernelRevision: cardinal;
 
+/// calls the pthread_setname_np() function, if available on this system
+// - under Linux/FPC, this API truncates the name to 16 chars
+procedure SetUnixThreadName(ThreadID: TThreadID; const Name: RawByteString);
+
 {$endif Linux}
 
 /// compatibility function, to be implemented according to the running OS
@@ -169,7 +173,7 @@ implementation
 
 {$ifdef Linux}
 uses
-  Classes, Unix, BaseUnix, {$ifndef BSD}linux,{$endif} dynlibs;
+  Classes, Unix, BaseUnix, {$ifndef BSD}linux,{$endif} dl;
 {$endif}
 
 procedure InitializeCriticalSection(var cs : TRTLCriticalSection);
@@ -460,7 +464,84 @@ begin
   {$endif}
 end;
 
+
+type
+  TExternalLibraries = object
+    Loaded: boolean;
+    {$ifdef LINUX}
+    pthread: pointer;
+    {$ifndef BSD} // see https://stackoverflow.com/a/7989973/458259
+    pthread_setname_np: function(thread: pointer; name: PAnsiChar): LongInt; cdecl;
+    {$endif BSD}
+    {$endif LINUX}
+    procedure EnsureLoaded;
+    procedure Done;
+  end;
+var
+  ExternalLibraries: TExternalLibraries;
+
+procedure TExternalLibraries.EnsureLoaded;
+begin
+  if Loaded then
+    exit;
+  {$ifdef LINUX}
+  pthread := dlopen({$ifdef ANDROID}'libc.so'{$else}'libpthread.so.0'{$endif}, RTLD_LAZY);
+  if pthread <> nil then begin
+    {$ifndef BSD}
+    pointer(pthread_setname_np) := dlsym(pthread, 'pthread_setname_np');
+    {$endif BSD}
+  end;
+  {$endif}
+  Loaded := true;
+end;
+
+procedure TExternalLibraries.Done;
+begin
+  if not Loaded then
+    exit;
+  {$ifdef LINUX}
+  if pthread <> nil then
+    dlclose(pthread);
+  {$endif}
+  Loaded := false;
+end;
+
+procedure SetUnixThreadName(ThreadID: TThreadID; const Name: RawByteString);
+var trunc: array[0..15] of AnsiChar; // truncated to 16 chars
+    i,L: integer;
+begin
+  if Name = '' then
+    exit;
+  L := 0; // trim unrelevant spaces and prefixs when filling the 16 chars 
+  i := 1;
+  if Name[1] = 'T' then
+    if PCardinal(Name)^ = ord('T') + ord('S') shl 8 + ord('Q') shl 16 + ord('L') shl 24 then
+      i := 5
+    else
+      i := 2;
+  while i < length(Name) do begin
+    if Name[i]>' ' then begin
+      trunc[L] := Name[i];
+      inc(L);
+      if L = high(trunc) then
+        break;
+    end;
+    inc(i);
+  end;
+  if L = 0 then
+    exit;
+  trunc[L] := #0;
+  {$ifndef BSD}
+  ExternalLibraries.EnsureLoaded;
+  if Assigned(ExternalLibraries.pthread_setname_np) then
+    ExternalLibraries.pthread_setname_np(pointer(ThreadID), @trunc);
+  {$endif}
+end;
+
 initialization
   GetKernelRevision;
+
+finalization
+  ExternalLibraries.Done;
 {$endif Linux}
 end.

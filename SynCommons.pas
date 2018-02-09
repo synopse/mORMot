@@ -12616,6 +12616,7 @@ procedure SetThreadName(ThreadID: TThreadID; const Format: RawUTF8;
   const Args: array of const);
 
 /// could be used to override SetThreadNameInternal()
+// - under Linux/FPC, calls pthread_setname_np API which truncates to 16 chars
 procedure SetThreadNameDefault(ThreadID: TThreadID; const Name: RawUTF8);
 
 var
@@ -63910,7 +63911,11 @@ end;
 
 procedure SetThreadNameDefault(ThreadID: TThreadID; const Name: RawUTF8);
 {$ifdef FPC}
-begin // not implemented yet
+begin
+  {$ifdef LINUX}
+  SetUnixThreadName(ThreadID, Name); // call pthread_setname_np()
+  {$endif}
+end;
 {$else}
 var s: RawByteString;
     {$ifndef ISDELPHIXE2}
@@ -63945,8 +63950,8 @@ begin
   except {ignore} end;
   {$endif MSWINDOWS}
   {$endif ISDELPHIXE2}
-{$endif FPC}
 end;
+{$endif FPC}
 
 {$ifdef KYLIX3}
 type
