@@ -512,14 +512,14 @@ var trunc: array[0..15] of AnsiChar; // truncated to 16 chars
 begin
   if Name = '' then
     exit;
-  L := 0; // trim unrelevant spaces and prefixs when filling the 16 chars 
+  L := 0; // trim unrelevant spaces and prefixes when filling the 16 chars 
   i := 1;
   if Name[1] = 'T' then
     if PCardinal(Name)^ = ord('T') + ord('S') shl 8 + ord('Q') shl 16 + ord('L') shl 24 then
       i := 5
     else
       i := 2;
-  while i < length(Name) do begin
+  while i <= length(Name) do begin
     if Name[i]>' ' then begin
       trunc[L] := Name[i];
       inc(L);
