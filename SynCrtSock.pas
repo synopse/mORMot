@@ -6140,6 +6140,7 @@ var P: PAnsiChar;
     i, L: integer;
     H: ^PAnsiChar;
     maxtix, status: cardinal;
+    reason: SockString;
 begin
   result := false;
   try
@@ -6190,8 +6191,8 @@ begin
         status := fServer.OnBeforeBody(
           fURL,fMethod,HeaderGetText,ContentType,RemoteIP,ContentLength,false);
         if status<>STATUS_SUCCESS then begin
-          SockSend(['HTTP/1.0 ',status,' ',StatusCodeToReason(status),
-            #13#10#13#10,'Rejected']);
+          reason := StatusCodeToReason(status);
+          SockSend(['HTTP/1.0 ',status,' ',reason,#13#10#13#10,reason,' ', status]);
           SockSendFlush;
           exit;
         end;
