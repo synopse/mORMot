@@ -18657,7 +18657,7 @@ end;
 function IsFixedWidthCodePage(aCodePage: cardinal): boolean;
 begin
   result := ((aCodePage>=1250) and (aCodePage<=1258)) or
-             (aCodePage=CODEPAGE_LATIN1);
+             (aCodePage=CODEPAGE_LATIN1) or (aCodePage=CP_RAWBYTESTRING);
 end;
 
 class function TSynAnsiConvert.Engine(aCodePage: cardinal): TSynAnsiConvert;
@@ -18999,7 +18999,8 @@ begin
       [ClassName,fCodePage]);
   // create internal look-up tables
   SetLength(fAnsiToWide,256);
-  if (aCodePage=CODEPAGE_US) or (aCodePage=CODEPAGE_LATIN1) then begin
+  if (aCodePage=CODEPAGE_US) or (aCodePage=CODEPAGE_LATIN1) or
+     (aCodePage=CP_RAWBYTESTRING) then begin
     for i := 0 to 255 do
       fAnsiToWide[i] := i;
     if aCodePage=CODEPAGE_US then // do not trust the Windows API :(
