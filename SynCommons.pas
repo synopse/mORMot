@@ -17558,6 +17558,7 @@ type
     /// access to the delay, in milliseconds, of the periodic task processing
     property OnProcessMS: cardinal read fOnProcessMS write fOnProcessMS;
     /// processing statistics
+    // - may be nil if aStats was nil in the class constructor
     property Stats: TSynMonitor read fStats;
   end;
 
@@ -64372,8 +64373,7 @@ begin
   if not Assigned(aOnProcess) then
     raise ESynException.CreateUTF8('%.Create(aOnProcess=nil)',[self]);
   if aStats<>nil then
-    fStats := aStats.Create(aThreadName) else
-    fStats := TSynMonitor.Create(aThreadName);
+    fStats := aStats.Create(aThreadName);
   fOnProcess := aOnProcess;
   fOnProcessMS := aOnProcessMS;
   if fOnProcessMS=0 then
@@ -64399,15 +64399,18 @@ begin
     if fExecuteLoopPause then // pause -> try again later
       fProcessEvent.SetEvent else
       try
-        fStats.ProcessStartTask;
+        if fStats<>nil then
+          fStats.ProcessStartTask;
         try
           fOnProcess(self,wait);
         finally
-          fStats.ProcessEnd;
+          if fStats<>nil then
+            fStats.ProcessEnd;
         end;
       except
         on E: Exception do begin
-          fStats.ProcessErrorRaised(E);
+          if fStats<>nil then
+            fStats.ProcessErrorRaised(E);
           if Assigned(fOnException) then
             fOnException(E);
         end;

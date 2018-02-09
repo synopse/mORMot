@@ -42180,7 +42180,7 @@ begin
     W.AddU(fCache.CachedMemory); // will also flush outdated JSON
     W.Add(',');
   end;
-  if fBackgroundTimer<>nil then begin
+  if (fBackgroundTimer<>nil) and (fBackgroundTimer.Stats<>nil) then begin
     W.CancelLastComma;
     W.AddShort(',"backgroundTimer":');
     fBackgroundTimer.Stats.ComputeDetailsTo(W);
