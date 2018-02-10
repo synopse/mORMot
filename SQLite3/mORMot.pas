@@ -8429,23 +8429,22 @@ type
     {$endif NOVARIANTS}
 
     /// save the table values in JSON format
-    // - JSON data is added to TStream, with UTF-8 encoding
+    // - JSON data is added to TJSONWriter, with UTF-8 encoding, and not flushed
     // - if Expand is true, JSON data is an array of objects, for direct use
     // with any Ajax or .NET client:
     // & [ {"col1":val11,"col2":"val12"},{"col1":val21,... ]
-    // - if Expand is false, JSON data is serialized (used in TSQLTableJSON)
+    // - if W.Expand is false, JSON data is serialized (used in TSQLTableJSON)
     // & { "fieldCount":1,"values":["col1","col2",val11,"val12",val21,..] }
     // - RowFirst and RowLast can be used to ask for a specified row extent
     // of the returned data (by default, all rows are retrieved)
     // - IDBinarySize will force the ID field to be stored as hexadecimal text
+    procedure GetJSONValues(W: TJSONWriter; RowFirst: integer=0;
+      RowLast: integer=0; IDBinarySize: integer=0); overload;
+    /// same as the overloaded method, but appending an array to a TStream
     procedure GetJSONValues(JSON: TStream; Expand: boolean;
       RowFirst: integer=0; RowLast: integer=0; IDBinarySize: integer=0); overload;
     /// same as the overloaded method, but returning result into a RawUTF8
     function GetJSONValues(Expand: boolean; IDBinarySize: integer=0): RawUTF8; overload;
-    /// same as the overloaded method, but appending an array to a TTextWriter
-    // - will call W.FlushToStream, then append all content
-    procedure GetJSONValues(W: TTextWriter; Expand: boolean;
-      RowFirst: integer=0; RowLast: integer=0; IDBinarySize: integer=0); overload;
     /// save the table as CSV format, into a stream
     // - if Tab=TRUE, will use TAB instead of ',' between columns
     // - you can customize the ',' separator - use e.g. the global ListSeparator
@@ -25138,7 +25137,7 @@ begin
   if (self=nil) or (row<1) or (row>fRowCount) or
      (cardinal(field)>=cardinal(fFieldCount)) then
     exit; // out of range
-  if not Assigned(fFieldType) then
+  if fFieldType=nil then
     InitFieldTypes;
   V := fResults[row*fFieldCount+field];
   with fFieldType[field] do
@@ -25453,7 +25452,7 @@ end;
 function TSQLTable.FieldType(Field: integer): TSQLFieldType;
 begin
   if (self<>nil) and (cardinal(Field)<cardinal(FieldCount)) then begin
-    if not Assigned(fFieldType) then
+    if fFieldType=nil then
       InitFieldTypes;
     result := fFieldType[Field].ContentType;
   end else
@@ -25463,7 +25462,7 @@ end;
 function TSQLTable.FieldType(Field: integer; out FieldTypeInfo: PSQLTableFieldType): TSQLFieldType;
 begin
   if (self<>nil) and (cardinal(Field)<cardinal(FieldCount)) then begin
-    if not Assigned(fFieldType) then
+    if fFieldType=nil then
       InitFieldTypes;
     FieldTypeInfo := @fFieldType[Field];
     result := FieldTypeInfo^.ContentType;
@@ -25846,92 +25845,102 @@ begin
   tmp.Done;
 end;
 
-procedure TSQLTable.GetJSONValues(JSON: TStream; Expand: boolean;
-  RowFirst, RowLast, IDBinarySize: integer);
-var W: TJSONWriter;
-    U: PPUTF8Char;
+procedure TSQLTable.GetJSONValues(W: TJSONWriter; RowFirst, RowLast, IDBinarySize: integer);
+var U: PPUTF8Char;
     f,r: integer;
     i64: Int64;
 label nostr,str;
 begin
+  if (self=nil) or (FieldCount<=0) or (fRowCount<=0) then begin
+    W.Add('[',']');
+    exit;
+  end;
+  // check range
+  if RowLast=0 then
+    RowLast := fRowCount else
+  if RowLast>fRowCount then
+    RowLast := fRowCount;
+  if RowFirst<=0 then
+    RowFirst := 1; // start reading after first Row (Row 0 = Field Names)
+  // get col names and types
+  if fFieldType=nil then
+    InitFieldTypes;
+  SetLength(W.ColNames,FieldCount);
+  for f := 0 to FieldCount-1 do begin
+    W.ColNames[f] := fResults[f]; // first Row is field Names
+    if not Assigned(OnExportValue) then
+      if (f=fFieldIndexID) and (IDBinarySize>0) then
+        W.ColNames[f] := 'id'; // ajax-friendly
+  end;
+  W.AddColumns(RowLast-RowFirst+1); // write or init field names (see JSON Expand)
+  if W.Expand then
+    W.Add('[');
+  // write rows data
+  U := @fResults[FieldCount*RowFirst];
+  for r := RowFirst to RowLast do begin
+    if W.Expand then
+      W.Add('{');
+    for f := 0 to FieldCount-1 do begin
+      if W.Expand then
+        W.AddString(W.ColNames[f]); // '"'+ColNames[]+'":'
+      if Assigned(OnExportValue) then
+        W.AddString(OnExportValue(self,r,f,false)) else
+      if (IDBinarySize>0) and (f=fFieldIndexID) then begin
+        SetInt64(U^,i64);
+        W.AddBinToHexDisplayQuoted(@i64,IDBinarySize);
+      end else
+      if U^=nil then
+        W.AddShort('null') else
+      case fFieldType[f].ContentDB of
+        ftInt64,ftDouble,ftCurrency:
+nostr:      W.AddNoJSONEscape(U^,StrLen(U^));
+        ftDate,ftUTF8,ftBlob: begin
+str:        W.Add('"');
+          W.AddJSONEscape(U^,StrLen(U^));
+          W.Add('"');
+        end;
+        else if IsStringJSON(U^) then // fast and safe enough
+          goto str else
+          goto nostr;
+      end;
+      W.Add(',');
+      inc(U); // points to next value
+    end;
+    W.CancelLastComma;
+    if W.Expand then begin
+      W.Add('}',',');
+      if r<>RowLast then
+        W.AddCR; // make expanded json more human readable
+    end else
+      W.Add(',');
+  end;
+  W.EndJSONObject(1,0,false); // "RowCount": set by W.AddColumns() above
+end;
+
+procedure TSQLTable.GetJSONValues(JSON: TStream; Expand: boolean;
+  RowFirst, RowLast, IDBinarySize: integer);
+var W: TJSONWriter;
+begin
   W := TJSONWriter.Create(JSON,Expand,false);
   try
-    if (self=nil) or (FieldCount<=0) or (fRowCount<=0) then begin
-      W.CancelAllVoid;
-      exit;
-    end;
-    // check range
-    if RowLast=0 then
-      RowLast := fRowCount else
-    if RowLast>fRowCount then
-      RowLast := fRowCount;
-    if RowFirst<=0 then
-      RowFirst := 1; // start reading after first Row (Row 0 = Field Names)
-    // get col names and types
-    if QueryTables<>nil then
-      InitFieldTypes;
-    SetLength(W.ColNames,FieldCount);
-    for f := 0 to FieldCount-1 do begin
-      W.ColNames[f] := fResults[f]; // first Row is field Names
-      if not Assigned(OnExportValue) then
-        if (f=fFieldIndexID) and (IDBinarySize>0) then
-          W.ColNames[f] := 'id'; // ajax-friendly
-    end;
-    W.AddColumns(RowLast-RowFirst+1); // write or init field names (see JSON Expand)
-    if Expand then
-      W.Add('[');
-    // write rows data
-    U := @fResults[FieldCount*RowFirst];
-    for r := RowFirst to RowLast do begin
-      if Expand then
-        W.Add('{');
-      for f := 0 to FieldCount-1 do begin
-        if Expand then
-          W.AddString(W.ColNames[f]); // '"'+ColNames[]+'":'
-        if Assigned(OnExportValue) then
-          W.AddString(OnExportValue(self,r,f,false)) else
-        if (IDBinarySize>0) and (f=fFieldIndexID) then begin
-          SetInt64(U^,i64);
-          W.AddBinToHexDisplayQuoted(@i64,IDBinarySize);
-        end else
-        if U^=nil then
-          W.AddShort('null') else
-        case fFieldType[f].ContentDB of
-          ftInt64,ftDouble,ftCurrency:
-nostr:      W.AddNoJSONEscape(U^,StrLen(U^));
-          ftDate,ftUTF8,ftBlob: begin
-str:        W.Add('"');
-            W.AddJSONEscape(U^,StrLen(U^));
-            W.Add('"');
-          end;
-          else if IsStringJSON(U^) then // fast and safe enough
-            goto str else
-            goto nostr;
-        end;
-        W.Add(',');
-        inc(U); // points to next value
-      end;
-      W.CancelLastComma;
-      if Expand then begin
-        W.Add('}',',');
-        if r<>RowLast then
-          W.AddCR; // make expanded json more human readable
-      end else
-        W.Add(',');
-    end;
-    W.EndJSONObject(1,0); // "RowCount": set by W.AddColumns(RowLast-RowFirst+1)
+    GetJSONValues(W,RowFirst,RowLast,IDBinarySize);
+    W.FlushFinal;
   finally
     W.Free;
   end;
 end;
 
-procedure TSQLTable.GetJSONValues(W: TTextWriter; Expand: boolean;
-  RowFirst, RowLast, IDBinarySize: integer);
+function TSQLTable.GetJSONValues(Expand: boolean; IDBinarySize: integer): RawUTF8;
+var W: TJSONWriter;
+    tmp: TTextWriterStackBuffer;
 begin
-  if (self=nil) or (FieldCount<=0) or (fRowCount<=0) then
-    W.Add('[',']') else begin
-    W.FlushToStream;
-    GetJSONValues(W.Stream,Expand,RowFirst,RowLast,IDBinarySize);
+  W := TJSONWriter.CreateOwnedStream(tmp);
+  try
+    W.Expand := Expand;
+    GetJSONValues(W,0,0,IDBinarySize); // create JSON data in MS
+    W.SetText(result);
+  finally
+    W.Free;
   end;
 end;
 
@@ -26009,7 +26018,7 @@ begin
       // retrieve normalized field names and types
       if length(fFieldNames)<>fFieldCount then
         InitFieldNames;
-      if not Assigned(fFieldType) then
+      if fFieldType=nil then
         InitFieldTypes;
       // check range
       if RowLast=0 then
@@ -26155,18 +26164,6 @@ begin
     result := Dest.DataString;
   finally
     Dest.Free;
-  end;
-end;
-
-function TSQLTable.GetJSONValues(Expand: boolean; IDBinarySize: integer): RawUTF8;
-var MS: TRawByteStringStream;
-begin
-  MS := TRawByteStringStream.Create;
-  try
-    GetJSONValues(MS,Expand,0,0,IDBinarySize); // create JSON data in MS
-    result := MS.DataString;
-  finally
-    MS.Free;
   end;
 end;
 
@@ -27125,7 +27122,7 @@ begin
     end;
     Tot := 1;
   end else begin
-    if not Assigned(fFieldType) then
+    if fFieldType=nil then
       InitFieldTypes;
     U := @fResults[FieldCount]; // start reading after first Row
     for R := 1 to fRowCount do // sum all lengths by field
@@ -27186,7 +27183,7 @@ var i: integer;
 begin
   result := 0;
   if (self<>nil) and (cardinal(Field)<cardinal(FieldCount)) then begin
-    if not Assigned(fFieldType) then
+    if fFieldType=nil then
       InitFieldTypes;
     with fFieldType[Field] do
     if ContentSize>=0 then
@@ -27220,8 +27217,8 @@ function TSQLTable.FieldTable(Field: integer): TSQLRecordClass;
 begin
   if (self=nil) or (cardinal(Field)>=cardinal(FieldCount)) or (fQueryTables=nil) then
     result := nil else begin
-    if not Assigned(fFieldType) then
-       InitFieldTypes;
+    if fFieldType=nil then
+      InitFieldTypes;
     Field := fFieldType[Field].TableIndex;
     if Field<0 then
       result := nil else

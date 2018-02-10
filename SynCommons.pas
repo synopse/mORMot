@@ -8943,8 +8943,8 @@ type
     // - cancel last ','
     // - close the JSON object ']' or ']}'
     // - write non expanded postlog (,"rowcount":...), if needed
-    // - flush the internal buffer content
-    procedure EndJSONObject(aKnownRowsCount,aRowsCount: integer);
+    // - flush the internal buffer content if aFlushFinal=true
+    procedure EndJSONObject(aKnownRowsCount,aRowsCount: integer; aFlushFinal: boolean=true);
       {$ifdef HASINLINE}inline;{$endif}
     /// the first data row is erased from the content
     // - only works if the associated storage stream is TMemoryStream
@@ -53944,7 +53944,8 @@ begin
   fFields := aFields;
 end;
 
-procedure TJSONWriter.EndJSONObject(aKnownRowsCount,aRowsCount: integer);
+procedure TJSONWriter.EndJSONObject(aKnownRowsCount,aRowsCount: integer;
+  aFlushFinal: boolean);
 begin
   CancelLastComma; // cancel last ','
   Add(']');
@@ -53956,7 +53957,8 @@ begin
     Add('}');
   end;
   Add(#10);
-  FlushFinal;
+  if aFlushFinal then
+    FlushFinal;
 end;
 
 procedure TJSONWriter.TrimFirstRow;
