@@ -452,7 +452,7 @@ begin
   RowIndex := PRecInfo(ActiveBuffer).RowIndentifier;
   Data := GetRowFieldData(Field,RowIndex,DataLen,OnlyTestForNull);
   result := Data<>nil; // null field or out-of-range RowIndex/Field
-  if OnlyTestForNull then
+  if OnlyTestForNull or not result then
     exit;
   Dest := pointer(Buffer); // works also if Buffer is [var] TValueBuffer
   case Field.DataType of // Data^ points to Int64,Double,Blob,UTF8
