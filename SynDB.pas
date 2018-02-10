@@ -6431,16 +6431,16 @@ begin
 end;
 
 function TSQLDBConnectionPropertiesThreadSafe.CurrentThreadConnectionIndex: Integer;
-var ID: TThreadID;
+var id: TThreadID;
 begin
   if self<>nil then begin
-    ID := TThreadID(GetCurrentThreadId);
+    id := GetCurrentThreadId;
     result := fLatestConnectionRetrievedInPool;
     if (result>=0) and
-       (TSQLDBConnectionThreadSafe(fConnectionPool.List[result]).fThreadID=ID) then
+       (TSQLDBConnectionThreadSafe(fConnectionPool.List[result]).fThreadID=id) then
       exit;
     for result := 0 to fConnectionPool.Count-1 do
-      if TSQLDBConnectionThreadSafe(fConnectionPool.List[result]).fThreadID=ID then begin
+      if TSQLDBConnectionThreadSafe(fConnectionPool.List[result]).fThreadID=id then begin
         fLatestConnectionRetrievedInPool := result;
         exit;
       end;
@@ -6491,7 +6491,7 @@ begin
           exit;
       end;
       result := NewConnection;
-      (result as TSQLDBConnectionThreadSafe).fThreadID := TThreadID(GetCurrentThreadId);
+      (result as TSQLDBConnectionThreadSafe).fThreadID := GetCurrentThreadId;
       fLatestConnectionRetrievedInPool := fConnectionPool.Add(result)
     finally
       LeaveCriticalSection(fConnectionCS);

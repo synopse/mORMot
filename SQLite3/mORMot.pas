@@ -14987,6 +14987,10 @@ type
     // the TSystemUse.Current class function
     // - do nothing if global TSystemUse.Current was already assigned
     function SystemUseTrack(periodSec: integer=10): TSystemUse;
+    /// use a background thread to flush the associated LogClass content 
+    // - useful if TSynLog.AutoFlushTimeOut is not set (or available on the OS)
+    // - you can specify the update frequency, in seconds
+    procedure LogBackgroundFlush(periodSec: integer=5);
 
     /// how this class execute its internal commands
     // - by default, TSQLRestServer.URI() will lock for Write ORM according to
@@ -16044,6 +16048,7 @@ type
     FThreadCount: byte;
     FHttps: boolean;
     FHttpSysQueueName: SynUnicode;
+    FRemoteIPHeader: RawUTF8;
   published
     /// defines the port to be used for REST publishing
     // - may include an optional IP address to bind, e.g. '127.0.0.1:8888'
@@ -16069,6 +16074,12 @@ type
     /// the displayed name in the http.sys queue
     // - used only by http.sys server under Windows, not by socket-based servers
     property HttpSysQueueName: SynUnicode read FHttpSysQueueName write FHttpSysQueueName;
+    /// the value of a custom HTTP header containing the real client IP
+    // - by default, the RemoteIP information will be retrieved from the socket
+    // layer - but if the server runs behind some proxy service, you should
+    // define here the HTTP header name which indicates the true remote client
+    // IP value, mostly as 'X-Real-IP' or 'X-Forwarded-For'
+    property RemoteIPHeader: RawUTF8 read fRemoteIPHeader write fRemoteIPHeader;
     /// if defined, this HTTP server will use WebSockets, and our secure
     // encrypted binary protocol
     // - when stored in the settings JSON file, the password will be safely
@@ -35120,8 +35131,18 @@ begin
      ((BackgroundTimer<>nil) and (result.Timer=BackgroundTimer)) then begin
     if periodSec>0 then
       result.Timer := EnsureBackgroundTimerExists;
-    TimerEnable(result.BackgroundExecute,periodSec);
+    TimerEnable(result.BackgroundExecute,periodSec); // disable if periodSec=0
   end;
+end;
+
+var
+  AutoLogFlushSet: boolean;
+
+procedure TSQLRest.LogBackgroundFlush(periodSec: integer);
+begin
+  if (self<>nil) and (fLogClass<>nil) and not AutoLogFlushSet
+    {$ifdef MSWINDOWS}and (fLogClass.Family.AutoFlushTimeOut=0){$endif} then
+    AutoLogFlushSet := TimerEnable(fLogClass.Add.BackgroundExecute,periodSec)<>nil;
 end;
 
 procedure TSQLRest.AdministrationExecute(const DatabaseName,SQL: RawUTF8;
@@ -42166,7 +42187,7 @@ begin
     W.AddU(fCache.CachedMemory); // will also flush outdated JSON
     W.Add(',');
   end;
-  if fBackgroundTimer<>nil then begin
+  if (fBackgroundTimer<>nil) and (fBackgroundTimer.Stats<>nil) then begin
     W.CancelLastComma;
     W.AddShort(',"backgroundTimer":');
     fBackgroundTimer.Stats.ComputeDetailsTo(W);
@@ -42770,18 +42791,18 @@ end;
 
 procedure TSQLRestServer.BeginCurrentThread(Sender: TThread);
 var i, tc: integer;
-    CurrentThreadId: TThreadID;
+    id: TThreadID;
 begin
   tc := fStats.NotifyThreadCount(1);
-  CurrentThreadId := TThreadID(GetCurrentThreadId);
+  id := GetCurrentThreadId;
   if Sender=nil then
     raise ECommunicationException.CreateUTF8('%.BeginCurrentThread(nil)',[self]);
   InternalLog('BeginCurrentThread(%) root=% ThreadID=% ThreadCount=%',
-    [Sender.ClassType,Model.Root,pointer(CurrentThreadId),tc]);
-  if TThreadID(Sender.ThreadID)<>CurrentThreadId then
+    [Sender.ClassType,Model.Root,pointer(id),tc]);
+  if Sender.ThreadID<>id then
     raise ECommunicationException.CreateUTF8(
       '%.BeginCurrentThread(Thread.ID=%) and CurrentThreadID=% should match',
-      [self,Sender.ThreadID,CurrentThreadId]);
+      [self,pointer(Sender.ThreadID),pointer(id)]);
   with PServiceRunningContext(@ServiceContext)^ do // P..(@..)^ for ONE GetTls()
     if RunningThread<>Sender then // e.g. if length(TSQLHttpServer.fDBServers)>1
       if RunningThread<>nil then
@@ -42796,26 +42817,26 @@ end;
 
 procedure TSQLRestServer.EndCurrentThread(Sender: TThread);
 var i, tc: integer;
-    CurrentThreadId: TThreadID;
+    id: TThreadID;
     Inst: TServiceFactoryServerInstance;
 begin
   tc := fStats.NotifyThreadCount(-1);
-  CurrentThreadId := TThreadID(GetCurrentThreadId);
+  id := GetCurrentThreadId;
   if Sender=nil then
     raise ECommunicationException.CreateUTF8('%.EndCurrentThread(nil)',[self]);
   InternalLog('EndCurrentThread(%) ThreadID=% ThreadCount=%',
-    [Sender.ClassType,pointer(CurrentThreadId),tc]);
-  if TThreadID(Sender.ThreadID)<>CurrentThreadId then
+    [Sender.ClassType,pointer(id),tc]);
+  if Sender.ThreadID<>id then
     raise ECommunicationException.CreateUTF8(
       '%.EndCurrentThread(%.ID=%) should match CurrentThreadID=%',
-      [self,Sender,Sender.ThreadID,CurrentThreadId]);
+      [self,Sender,pointer(Sender.ThreadID),pointer(id)]);
  if fStaticVirtualTable<>nil then
    for i := 0 to high(fStaticVirtualTable) do
      if (fStaticVirtualTable[i]<>nil) and
         fStaticVirtualTable[i].InheritsFrom(TSQLRestStorage) then
        TSQLRestStorage(fStaticVirtualTable[i]).EndCurrentThread(Sender);
   if Services<>nil then begin
-    Inst.InstanceID := PtrUInt(CurrentThreadId);
+    Inst.InstanceID := PtrUInt(id);
     for i := 0 to Services.Count-1 do
       with TServiceFactoryServer(Services.fList.Objects[i]) do
       if InstanceCreation=sicPerThread then
@@ -44586,14 +44607,17 @@ end;
 
 function TSQLRestServerMonitor.NotifyThreadCount(delta: integer): integer;
 begin
-  EnterCriticalSection(fLock);
-  try
-    inc(fCurrentThreadCount,delta);
-    result := fCurrentThreadCount;
-    if delta<>0 then
-      Changed;
-  finally
-    LeaveCriticalSection(fLock);
+  if self=nil then
+    result := 0 else begin
+    EnterCriticalSection(fLock);
+    try
+      inc(fCurrentThreadCount,delta);
+      result := fCurrentThreadCount;
+      if delta<>0 then
+        Changed;
+    finally
+      LeaveCriticalSection(fLock);
+    end;
   end;
 end;
 
@@ -61970,7 +61994,7 @@ end;
 procedure SetThreadNameWithLog(ThreadID: TThreadID; const Name: RawUTF8);
 begin
   {$ifdef WITHLOG}
-  if (SetThreadNameLog<>nil) and (ThreadID=TThreadID(GetCurrentThreadId)) then
+  if (SetThreadNameLog<>nil) and (ThreadID=GetCurrentThreadId) then
     SetThreadNameLog.Add.LogThreadName(Name);
   {$endif}
   SetThreadNameDefault(ThreadID,Name);
@@ -61987,7 +62011,7 @@ initialization
   {$ifndef USENORMTOUPPER}
   pointer(@SQLFieldTypeComp[sftUTF8Text]) := @AnsiIComp;
   {$endif}
-  SetThreadNameDefault(TThreadID(GetCurrentThreadID),'Main Thread');
+  SetThreadNameDefault(GetCurrentThreadID,'Main Thread');
   SetThreadNameInternal := SetThreadNameWithLog;
   StatusCodeToErrorMessage := StatusCodeToErrorMsgBasic;
   GarbageCollectorFreeAndNil(JSONCustomParsers,TSynDictionary.Create(

@@ -119,40 +119,40 @@ interface
 
 uses
   {$ifdef MSWINDOWS}
-  Windows,
+    Windows,
   {$else}
-  {$ifdef KYLIX3}
-  Types,
-  LibC,
-  SynKylix,
-  {$endif}
-  {$ifdef FPC}
-  SynFPCLinux,
-  BaseUnix,
-  {$endif}
+    {$ifdef KYLIX3}
+    Types,
+    LibC,
+    SynKylix,
+    {$endif}
+    {$ifdef FPC}
+    SynFPCLinux,
+    BaseUnix,
+    {$endif}
   {$endif}
   Classes,
   SynCrtSock,
   SynTable, // for TSynTableStatement
-{$ifndef NOVARIANTS}
-  SynMongoDB,
-  SynMustache,
-  Variants,
-{$endif}
-{$ifdef UNICODE}
-  Generics.Collections,
-{$endif}
+  {$ifndef NOVARIANTS}
+    SynMongoDB,
+    SynMustache,
+    Variants,
+  {$endif}
+  {$ifdef UNICODE}
+    Generics.Collections,
+  {$endif}
   SysUtils,
-{$ifndef LVCL}
-  Contnrs,
-  {$ifdef MSWINDOWS}
-  SynOleDB,
-  {$ifndef FPC}
-  SynGdiPlus,
-  SynPdf,
-  {$endif}
-  {$endif}
-{$endif LVCL}
+  {$ifndef LVCL}
+    Contnrs,
+    {$ifdef MSWINDOWS}
+    SynOleDB,
+    {$ifndef FPC}
+      SynGdiPlus,
+      SynPdf,
+    {$endif}
+    {$endif}
+  {$endif LVCL}
   SynEcc,
   SynDB,
   SynSQLite3,
@@ -160,36 +160,36 @@ uses
   SynDBSQLite3,
   SynDBRemote,
   SynDBODBC,
-{$ifndef DELPHI5OROLDER}
-  mORMot,
-  mORMotDB,
-  mORMotSQLite3,
-  mORMotHttpServer,
-  mORMotHttpClient,
-  {$ifndef NOVARIANTS}
-  mORMotMongoDB,
-  mORMotMVC,
-  {$endif}
-  SynBidirSock,
-  mORMotDDD,
-  dddDomUserTypes,
-  dddDomUserInterfaces,
-  dddDomAuthInterfaces,
-  dddInfraEmail,
-  dddInfraEmailer,
-  dddInfraAuthRest,
-  dddInfraRepoUser,
-  ECCProcess,
-{$endif DELPHI5OROLDER}
+  {$ifndef DELPHI5OROLDER}
+    mORMot,
+    mORMotDB,
+    mORMotSQLite3,
+    mORMotHttpServer,
+    mORMotHttpClient,
+    {$ifndef NOVARIANTS}
+      mORMotMongoDB,
+      mORMotMVC,
+    {$endif}
+    SynBidirSock,
+    mORMotDDD,
+    dddDomUserTypes,
+    dddDomUserInterfaces,
+    dddDomAuthInterfaces,
+    dddInfraEmail,
+    dddInfraEmailer,
+    dddInfraAuthRest,
+    dddInfraRepoUser,
+    ECCProcess,
+  {$endif DELPHI5OROLDER}
   SynProtoRTSPHTTP,
-{$ifdef TEST_REGEXP}
-  SynSQLite3RegEx,
-{$endif TEST_REGEXP}
-{$ifdef MSWINDOWS}
-{$ifdef USEZEOS}
-  SynDBZeos,
-{$endif}
-{$endif}
+  {$ifdef TEST_REGEXP}
+    SynSQLite3RegEx,
+  {$endif TEST_REGEXP}
+  {$ifdef MSWINDOWS}
+    {$ifdef USEZEOS}
+      SynDBZeos,
+    {$endif}
+  {$endif}
   SynCommons,
   SynLog,
   SynTests;
@@ -1231,9 +1231,9 @@ type
   ITestPerThread = interface(IInvokable)
     ['{202B6C9F-FCCB-488D-A425-5472554FD9B1}']
     function GetContextServiceInstanceID: PtrUInt;
-    function GetThreadIDAtCreation: TThreadID;
-    function GetCurrentThreadID: TThreadID;
-    function GetCurrentRunningThreadID: TThreadID;
+    function GetThreadIDAtCreation: PtrUInt;
+    function GetCurrentThreadID: PtrUInt;
+    function GetCurrentRunningThreadID: PtrUInt;
   end;
 
   /// a test value object, used by IUserRepository/ISmsSender interfaces
@@ -2688,10 +2688,6 @@ type TR = record
 var A,B,C: TR;
     i: integer;
 begin
-  if Pos('Using mORMot',Owner.CustomVersions)=0 then
-    Owner.CustomVersions := Owner.CustomVersions+#13#10'Using mORMot '+
-      SYNOPSE_FRAMEWORK_FULLVERSION+#13#10'Running on '+string(OSVersionText)
-      {$ifdef MSWINDOWS}+' with code page '+IntToString(GetACP){$endif};
   FillCharFast(A,sizeof(A),0);
   for i := 0 to High(A.Bulk) do
     A.Bulk[i] := i;
@@ -9685,7 +9681,7 @@ procedure TTestCompression._TAlgoCompress;
   end;
 begin
   TestAlgo(AlgoSynLZ);
-  Check(AlgoSynLZ.AlgoName='SynLZ');
+  Check(AlgoSynLZ.AlgoName='synlz');
   {$ifdef MSWINDOWS}
   if (Lizard=nil) and FileExists(ExeVersion.ProgramFilePath+LIZARD_LIB_NAME) then
     Lizard := TSynLizardDynamic.Create;
@@ -9696,7 +9692,7 @@ begin
   {$ifndef DELPHI5OROLDER}
   TestAlgo(AlgoDeflate);
   TestAlgo(AlgoDeflateFast);
-  Check(AlgoDeflateFast.AlgoName ='DeflateFast');
+  Check(AlgoDeflateFast.AlgoName ='deflatefast');
   {$endif}
 end;
 
@@ -11800,9 +11796,6 @@ var
   password, s: RawUTF8;
   R: TSQLRequest;
 begin
-  if Pos('TSQLite3Library',Owner.CustomVersions)=0 then
-    Owner.CustomVersions := Owner.CustomVersions+#13#10+
-      string(sqlite3.ClassName)+' '+string(sqlite3.Version);
   Check(JSONGetID('{"id":123}',id) and (id=123));
   Check(JSONGetID('{"rowid":1234}',id) and (id=1234));
   Check(JSONGetID(' { "id": 123}',id) and (id=123));
@@ -15250,13 +15243,13 @@ type
 
   TServicePerThread = class(TInterfacedObjectWithCustomCreate,ITestPerThread)
   protected
-    fThreadIDAtCreation: TThreadID;
+    fThreadIDAtCreation: PtrUInt; // TThreadID  = ^TThreadRec under BSD
   public
     constructor Create; override;
     function GetContextServiceInstanceID: PtrUInt;
-    function GetThreadIDAtCreation: TThreadID;
-    function GetCurrentThreadID: TThreadID;
-    function GetCurrentRunningThreadID: TThreadID;
+    function GetThreadIDAtCreation: PtrUInt;
+    function GetCurrentThreadID: PtrUInt;
+    function GetCurrentRunningThreadID: PtrUInt;
   end;
 
 
@@ -15367,17 +15360,17 @@ end;
 
 function GetThreadID: TThreadID;
 begin // avoid name conflict with TServiceComplexCalculator.GetCurrentThreadID
-  result := TThreadID(GetCurrentThreadId);
+  result := GetCurrentThreadId;
 end;
 
 procedure TServiceComplexCalculator.EnsureInExpectedThread;
 begin
   case GlobalInterfaceTestMode of
   itmDirect, itmClient, itmMainThread:
-    if GetThreadID<>TThreadID(MainThreadID) then
+    if GetThreadID<>MainThreadID then
       raise Exception.Create('Shall be in main thread');
   itmPerInterfaceThread, itmHttp, itmLocked:
-    if GetThreadID=TThreadID(MainThreadID) then
+    if GetThreadID=MainThreadID then
       raise Exception.Create('Shall NOT be in main thread') else
     if ServiceContext.RunningThread=nil then
       raise Exception.Create('Shall have a known RunningThread');
@@ -15501,19 +15494,19 @@ end;
 constructor TServicePerThread.Create;
 begin
   inherited;
-  fThreadIDAtCreation := GetThreadID;
+  fThreadIDAtCreation := PtrUInt(GetThreadID);
 end;
 
-function TServicePerThread.GetCurrentThreadID: TThreadID;
+function TServicePerThread.GetCurrentThreadID: PtrUInt;
 begin
-  result := GetThreadID;
+  result := PtrUInt(GetThreadID);
   with PServiceRunningContext(@ServiceContext)^ do
     if Request<>nil then
       if PtrUInt(Result)<>Request.ServiceInstanceID then
         raise Exception.Create('Unexpected ServiceInstanceID');
 end;
 
-function TServicePerThread.GetThreadIDAtCreation: TThreadID;
+function TServicePerThread.GetThreadIDAtCreation: PtrUInt;
 begin
   result := fThreadIDAtCreation;
 end;
@@ -15529,7 +15522,7 @@ begin
     end;
 end;
 
-function TServicePerThread.GetCurrentRunningThreadID: TThreadID;
+function TServicePerThread.GetCurrentRunningThreadID: PtrUInt;
 var Thread: TThread;
 begin
   Thread := ServiceContext.RunningThread;
@@ -15537,8 +15530,8 @@ begin
     raise Exception.Create('Unexpected Thread=nil');
   if Thread=nil then
     result := 0 else begin
-    result := TThreadID(Thread.ThreadID);
-    if result<>GetThreadID then
+    result := PtrUInt(Thread.ThreadID);
+    if result<>PtrUInt(GetThreadID) then
       raise Exception.Create('Unexpected ThreadID');
   end;
 end;
@@ -15655,7 +15648,7 @@ var s: RawUTF8;
     Item: TCollTest;
     List,Copy: TCollTestsI;
     j: integer;
-    x,y: TThreadID; // alf: to help debugging
+    x,y: PtrUInt; // TThreadID  = ^TThreadRec under BSD
 {$endif}
 {$ifndef NOVARIANTS}
     V1,V2,V3: variant;
@@ -15679,9 +15672,9 @@ begin
   end;
   case GlobalInterfaceTestMode of
   itmMainThread:
-    Check(Inst.CC.GetCurrentThreadID=TThreadID(MainThreadID));
+    Check(Inst.CC.GetCurrentThreadID=MainThreadID);
   itmPerInterfaceThread,itmLocked:
-    Check(Inst.CC.GetCurrentThreadID<>TThreadID(MainThreadID));
+    Check(Inst.CC.GetCurrentThreadID<>MainThreadID);
   end;
   TestCalculator(Inst.I);
   TestCalculator(Inst.CC); // test the fact that CC inherits from ICalculator
@@ -15801,22 +15794,22 @@ begin
   case GlobalInterfaceTestMode of
   itmDirect: begin
     Check(x=y);
-    Check(Inst.CT.GetCurrentRunningThreadID=TThreadID(0));
+    Check(Inst.CT.GetCurrentRunningThreadID=0);
     Check(Inst.CT.GetContextServiceInstanceID=0);
   end;
   itmClient, itmPerInterfaceThread: begin
     Check(x=y);
-    Check(Inst.CT.GetCurrentRunningThreadID=TThreadID(0));
+    Check(Inst.CT.GetCurrentRunningThreadID=0);
     Check(Inst.CT.GetContextServiceInstanceID<>0);
   end;
   itmLocked, itmMainThread: begin
     Check(x=y);
-    Check(Inst.CT.GetCurrentRunningThreadID<>TThreadID(0));
+    Check(Inst.CT.GetCurrentRunningThreadID<>0);
     Check(Inst.CT.GetContextServiceInstanceID<>0);
   end;
   itmHttp: begin
-    Check(Inst.CT.GetCurrentRunningThreadID<>TThreadID(0));
-    Check(Inst.CT.GetCurrentThreadID<>TThreadID(MainThreadID));
+    Check(Inst.CT.GetCurrentRunningThreadID<>0);
+    Check(Inst.CT.GetCurrentThreadID<>PtrUInt(MainThreadID));
     Check(Inst.CT.GetContextServiceInstanceID<>0);
   end;
   end;

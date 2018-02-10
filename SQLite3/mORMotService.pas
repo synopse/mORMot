@@ -194,8 +194,9 @@ type
   SERVICE_STATUS_HANDLE = DWORD;
   TServiceTableEntry = record
     lpServiceName: PChar;
-    lpServiceProc: TFarProc;
+    lpServiceProc: procedure(ArgCount: DWORD; Args: PPChar); stdcall;
   end;
+  PServiceTableEntry = ^TServiceTableEntry;
 
 function OpenSCManager(lpMachineName, lpDatabaseName: PChar;
   dwDesiredAccess: DWORD): SC_HANDLE; stdcall; external advapi32
@@ -225,7 +226,7 @@ function RegisterServiceCtrlHandler(lpServiceName: PChar;
   lpHandlerProc: TFarProc): SERVICE_STATUS_HANDLE; stdcall; external advapi32
   name 'RegisterServiceCtrlHandler'+{$ifdef UNICODE}'W'{$else}'A'{$endif};
 function StartServiceCtrlDispatcher(
-  var lpServiceStartTable: TServiceTableEntry): BOOL; stdcall; external advapi32
+  lpServiceStartTable: PServiceTableEntry): BOOL; stdcall; external advapi32
   name 'StartServiceCtrlDispatcher'+{$ifdef UNICODE}'W'{$else}'A'{$endif};
 
 
@@ -537,6 +538,23 @@ function CurrentStateToServiceState(CurrentState: DWORD): TServiceState;
 /// return the ready to be displayed text of a TServiceState value
 function ServiceStateText(State: TServiceState): string;
 
+{$else}
+
+/// low-level function able to properly run or fork the current process
+// then execute the start/stop methods of a TSynDaemon / TDDDDaemon instance
+// - fork will create a local /run/[ProgramName]-[ProgramPathHash].pid file name
+procedure RunUntilSigTerminated(daemon: TObject; dofork: boolean;
+  const start, stop: TThreadMethod; log: TSynLog = nil; const servicename: string = '');
+
+/// kill a process previously created by RunUntilSigTerminated(dofork=true)
+// - will lookup a local /run/[ProgramName]-[ProgramPathHash].pid file name to
+// retrieve the actual PID to be killed, then send a SIGTERM, and wait
+// waitseconds for the .pid file to disapear
+// - returns true on success, false on error (e.g. no valid .pid file or
+// the file didn't disappear, which may mean that the daemon is broken)
+function RunUntilSigTerminatedForkKill(waitseconds: integer = 30): boolean;
+
+
 {$endif MSWINDOWS}
 
 
@@ -847,8 +865,8 @@ end;
 constructor TService.Create(const aServiceName, aDisplayName: String);
 begin
   if FindServiceIndex(aServiceName)>=0 then
-    raise Exception.CreateFmt('Attempt to install a service ' +
-          'with duplicated name: %s', [aServiceName]);
+    raise EServiceException.CreateUTF8('%.Create: Attempt to install a service ' +
+      'with duplicated name: %', [self, aServiceName]);
   fSName := aServiceName;
   fDName := aDisplayName;
   if aDisplayName = '' then
@@ -862,7 +880,7 @@ begin
   fStatusRec.dwCurrentState := SERVICE_STOPPED;
   fStatusRec.dwControlsAccepted := 31;
   fStatusRec.dwWin32ExitCode := NO_ERROR;
-  ServiceLog.Add.Log(sllInfo,'% (%) running as "%"',
+  ServiceLog.Add.Log(sllInfo,'Create: % (%) running as "%"',
     [ServiceName,aDisplayName,ExeVersion.ProgramFullSpec],self);
 end;
 
@@ -877,13 +895,13 @@ begin
   if fsName<>'' then begin
     i := FindServiceIndex(fsName);
     if i<0 then
-      raise Exception.CreateFmt('Cannot find service %s to remove from the list',
-        [fsName]);
+      raise EServiceException.CreateUTF8('%.Destroy: Cannot find service % to remove',
+       [self, fsName]);
     Services.Delete(i);
-    if Assigned(fJumper) then
+    if fJumper<>nil then
       VirtualFree(fJumper, 0, MEM_RELEASE);
   end;
-  inherited;
+  inherited Destroy;
 end;
 
 procedure TService.DoCtrlHandle(Code: DWORD);
@@ -990,12 +1008,12 @@ begin
   exit;
   if not Assigned(Result) then
   begin
-    raise Exception.Create('Automated jumper generation is not working: '+
+    raise EServiceException.Create('Automated jumper generation is not working: '+
      'use TServiceSingle or set a custom ControlHandler');
     if fJumper=nil then begin
       fJumper := VirtualAlloc(nil, 5+sizeof(Pointer), MEM_COMMIT, PAGE_EXECUTE_READWRITE);
       if fJumper=nil then
-        raise Exception.CreateFmt('Cannot allocate memory for service jump gate: %s',
+        raise EServiceException.CreateUTF8('Cannot allocate memory for service jump gate: %',
           [fSName]);
       AfterCallAddr := Pointer(PtrUInt(fJumper)+5);
       Offset :=  PtrInt(@JumpToService)-PtrInt(AfterCallAddr);
@@ -1078,7 +1096,7 @@ end;
 procedure TService.SetControlHandler(const Value: TServiceControlHandler);
 begin
   fControlHandler := Value;
-  if Assigned(fJumper) then
+  if fJumper<>nil then
     VirtualFree(fJumper, 0, MEM_RELEASE);
 end;
 
@@ -1163,6 +1181,7 @@ function ServicesRun: boolean;
 var S: array of TServiceTableEntry;
     service: TService;
     i: integer;
+    dummy: TSynLog;
 begin
   if (Services=nil) or (Services.Count=0) then begin
     result := false;
@@ -1171,15 +1190,21 @@ begin
   for i := 0 to Services.Count-1 do begin
     service := Services.List[i];
     if not assigned(service.fControlHandler) then
-      raise ESynException.CreateUTF8('%.ControlHandler=nil (ServiceName="%"): '+
+      raise EServiceException.CreateUTF8('%.ControlHandler=nil (ServiceName="%"): '+
        'use TServiceSingle or set a custom ControlHandler',[service,service.ServiceName]);
   end;
   SetLength(S,Services.Count+1); // +1 so that the latest entry is nil
   for i := 0 to Services.Count-1 do begin
     S[i].lpServiceName := pointer(TService(Services.List[i]).ServiceName);
-    S[i].lpServiceProc := @ServiceProc;
+    S[i].lpServiceProc := ServiceProc;
   end;
-  result := StartServiceCtrlDispatcher(S[0]);
+  dummy := GlobalCurrentHandleExceptionSynLog;
+  GlobalCurrentHandleExceptionSynLog := nil; // don't log any EExternalException
+  try
+    result := StartServiceCtrlDispatcher(pointer(S));
+  finally
+    GlobalCurrentHandleExceptionSynLog := dummy;
+  end;
 end;
 
 
@@ -1196,7 +1221,7 @@ constructor TServiceSingle.Create(const aServiceName,
 begin
   inherited Create(aServiceName,aDisplayName);
   if ServiceSingle<>nil then
-    raise Exception.Create('Only one TServiceSingle is allowed at a time');
+    raise EServiceException.Create('Only one TServiceSingle is allowed at a time');
   ServiceSingle := self;
   ControlHandler := SingleServiceControlHandler;
 end;
@@ -1207,6 +1232,135 @@ begin
     inherited;
   finally
     ServiceSingle := nil;
+  end;
+end;
+
+{$else} // Linux/POSIX signal interception
+
+var
+  SynDaemonTerminated: integer;
+
+{$ifdef FPC}
+procedure DoShutDown(Sig: Longint; Info: PSigInfo; Context: PSigContext); cdecl;
+{$else}
+procedure DoShutDown(Sig: integer); cdecl;
+{$endif}
+begin
+  SynDaemonTerminated := Sig;
+end;
+
+procedure SigIntercept;
+{$ifdef FPC}
+var
+  saOld, saNew: SigactionRec;
+begin
+  FillCharFast(saNew, SizeOf(saNew), 0);
+  saNew.sa_handler := @DoShutDown;
+  fpSigaction(SIGQUIT, @saNew, @saOld);
+  fpSigaction(SIGTERM, @saNew, @saOld);
+  fpSigaction(SIGINT, @saNew, @saOld);
+{$else} // Kylix
+var
+  saOld, saNew: TSigAction;
+begin
+  FillCharFast(saNew, SizeOf(saNew), 0);
+  saNew.__sigaction_handler := @DoShutDown;
+  sigaction(SIGQUIT, @saNew, @saOld);
+  sigaction(SIGTERM, @saNew, @saOld);
+  sigaction(SIGINT, @saNew, @saOld);
+{$endif}
+end;
+
+var
+  _pidfile: TFileName;
+
+function pidfile: TFileName;
+begin
+  if _pidfile = '' then
+    _pidfile := format('/run/%s-%s.pid', [ExeVersion.ProgramName,
+      CardinalToHexLower(ExeVersion.Hash.c3)]); // InstanceFileName hash
+  result := _pidfile;
+end;
+
+function RunUntilSigTerminatedForkKill(waitseconds: integer): boolean;
+var
+  pid: PtrInt;
+  tix: Int64;
+begin
+  result := false;
+  pid := GetInteger(pointer(StringFromFile(pidfile)));
+  if pid <= 0 then
+    exit;
+  if {$ifdef FPC}fpkill{$else}kill{$endif}(pid, SIGTERM) <> 0 then
+    exit;
+  if waitseconds <= 0 then
+    exit(true);
+  tix := GetTickCount64 + waitseconds * 1000;
+  repeat // RunUntilSigTerminated() below should delete the .pid file
+    sleep(100);
+    if not FileExists(pidfile) then
+      result := true;
+  until result or (GetTickCount64 > tix);
+  if not result then
+    {$ifdef FPC}fpkill{$else}kill{$endif}(pid, SIGKILL); // finesse
+end;
+
+procedure RunUntilSigTerminated(daemon: TObject; dofork: boolean;
+  const start, stop: TThreadMethod; log: TSynLog; const servicename: string);
+var
+  pid, sid: {$ifdef FPC}TPID{$else}pid_t{$endif};
+begin
+  SigIntercept;
+  try
+    if dofork then begin
+      if FileExists(pidfile) then
+        exit; // already forked
+      pid := {$ifdef FPC}fpFork{$else}fork{$endif};
+      if pid < 0 then
+        raise ESynException.CreateUTF8('%.CommandLine Fork failed', [daemon]);
+      if pid > 0 then begin // main program - just terminate
+        //{$ifdef FPC}fpExit{$else}__exit{$endif}(0);
+        exit;
+      end;
+      // clean forked instance
+      sid := {$ifdef FPC}fpSetSID{$else}setsid{$endif};
+      if sid < 0 then // new session (process group) created?
+        raise ESynException.CreateUTF8('%.CommandLine SetSID failed', [daemon]);
+      {$ifdef FPC}fpUMask{$else}umask{$endif}(0); // reset file mask
+      chdir('/'); // avoid locking current directory
+      Close(input);
+      AssignFile(input, '/dev/null');
+      ReWrite(input);
+      Close(output);
+      AssignFile(output, '/dev/null');
+      ReWrite(output);
+      {$ifdef FPC}Close{$else}__close{$endif}(stderr);
+      // create local /run/[ExeVersion.ProgramName].pid file
+      pid := {$ifdef FPC}fpgetpid{$else}getpid{$endif};
+      FileFromString(Int64ToUtf8(pid), pidfile);
+    end;
+    try
+      if log <> nil then
+        log.Log(sllNewRun, 'Start % %', [serviceName, ExeVersion.Version.DetailedOrVoid], daemon);
+      start;
+      while SynDaemonTerminated = 0 do
+        {$ifdef FPC}fpPause{$else}pause{$endif};
+    finally
+      if log <> nil then
+        log.Log(sllNewRun, 'Stop from Sig=%', [SynDaemonTerminated], daemon);
+      try
+        stop;
+      finally
+        if dofork then
+          DeleteFile(pidfile);
+      end;
+    end;
+  except
+    on E: Exception do begin
+      if not dofork then
+        ConsoleShowFatalException(E, true);
+      ExitCode := 1; // indicates error
+    end;
   end;
 end;
 
@@ -1294,7 +1448,8 @@ end;
 
 destructor TSynDaemon.Destroy;
 begin
-  fSettings.SaveIfNeeded;
+  if fSettings <> nil then
+    fSettings.SaveIfNeeded;
   Stop;
   inherited Destroy;
   FreeAndNil(fSettings);
@@ -1310,107 +1465,25 @@ procedure TSynDaemon.DoStop(Sender: TService);
 begin
   Stop;
 end;
-
-{$else} // Linux/POSIX signal interception
-
-var
-  SynDaemonTerminated: integer;
-
-{$ifdef FPC}
-procedure DoShutDown(Sig: Longint; Info: PSigInfo; Context: PSigContext); cdecl;
-{$else}
-procedure DoShutDown(Sig: integer); cdecl;
-{$endif}
-begin
-  SynDaemonTerminated := Sig;
-end;
-
-procedure SigIntercept;
-{$ifdef FPC}
-var
-  saOld, saNew: SigactionRec;
-begin
-  FillCharFast(saNew, SizeOf(saNew), 0);
-  saNew.sa_handler := @DoShutDown;
-  fpSigaction(SIGQUIT, @saNew, @saOld);
-  fpSigaction(SIGTERM, @saNew, @saOld);
-  fpSigaction(SIGINT, @saNew, @saOld);
-{$else} // Kylix
-var
-  saOld, saNew: TSigAction;
-begin
-  FillCharFast(saNew, SizeOf(saNew), 0);
-  saNew.__sigaction_handler := @DoShutDown;
-  sigaction(SIGQUIT, @saNew, @saOld);
-  sigaction(SIGTERM, @saNew, @saOld);
-  sigaction(SIGINT, @saNew, @saOld);
-{$endif}
-end;
-
 {$endif MSWINDOWS}
+
+{$I-}
 
 type
   TExecuteCommandLineCmd = (
-     cNone, cInstall, cUninstall, cVersion, cConsole, cVerbose, cRun, cFork,
-     cStart, cStop, cState, cHelp);
+     cNone, cVersion, cVerbose, cStart, cStop, cState,
+     cHelp, cInstall, cRun, cFork, cUninstall, cConsole, cKill);
 
 procedure TSynDaemon.CommandLine(aAutoStart: boolean);
+const CMD_CHR: array[cHelp .. cKill] of AnsiChar = ('H', 'I', 'R', 'F', 'U', 'C', 'K');
 var
-  cmd: TExecuteCommandLineCmd;
+  cmd, c: TExecuteCommandLineCmd;
+  ch: AnsiChar;
   param: RawUTF8;
   log: TSynLog;
   {$ifdef MSWINDOWS}
   service: TServiceSingle;
   ctrl: TServiceController;
-  {$else}
-
-  procedure RunUntilSigTerminated(dofork: boolean);
-  var
-    pid, sid: {$ifdef FPC}TPID{$else}pid_t{$endif};
-  begin
-    SigIntercept;
-    try
-      if dofork then begin
-        pid := {$ifdef FPC}fpFork{$else}fork{$endif};
-        if pid < 0 then
-          raise ESynException.CreateUTF8('%.CommandLine Fork failed', [self]);
-        if pid > 0 then begin // main program - just terminate
-          //{$ifdef FPC}fpExit{$else}__exit{$endif}(0);
-          exit;
-        end else begin // clean forked instance
-          sid := {$ifdef FPC}fpSetSID{$else}setsid{$endif};
-          if sid < 0 then // new session (process group) created?
-            raise ESynException.CreateUTF8('%.CommandLine SetSID failed', [self]);
-          {$ifdef FPC}fpUMask{$else}umask{$endif}(0); // reset file mask
-          chdir('/'); // avoid locking current directory
-          Close(input);
-          AssignFile(input, '/dev/null');
-          ReWrite(input);
-          Close(output);
-          AssignFile(output, '/dev/null');
-          ReWrite(output);
-          {$ifdef FPC}Close{$else}__close{$endif}(stderr);
-        end;
-      end;
-      log := fSettings.fLogClass.Add;
-      try
-        log.Log(sllNewRun, 'Start % %', [fSettings.ServiceName,
-          ExeVersion.Version.DetailedOrVoid], self);
-        Start;
-        while SynDaemonTerminated = 0 do
-          {$ifdef FPC}fpPause{$else}pause{$endif};
-      finally
-        log.Log(sllNewRun, 'Stop from Sig=%', [SynDaemonTerminated], self);
-        Stop;
-      end;
-    except
-      on E: Exception do begin
-        if not dofork then
-          ConsoleShowFatalException(E, true);
-        Halt(1); // notify error to caller process
-      end;
-    end;
-  end;
   {$endif MSWINDOWS}
 
   procedure WriteCopyright;
@@ -1442,13 +1515,13 @@ var
   begin
     WriteCopyright;
     writeln('Try with one of the switches:');
-    writeln({$ifdef MSWINDOWS}' '{$else}' ./'{$endif}, ExeVersion.ProgramName,
+    writeln({$ifdef MSWINDOWS}'   '{$else}' ./'{$endif}, ExeVersion.ProgramName,
       ' /console -c /verbose /help -h /version');
-    spaces := StringOfChar(' ', length(ExeVersion.ProgramName) + 2);
+    spaces := StringOfChar(' ', length(ExeVersion.ProgramName) + 4);
     {$ifdef MSWINDOWS}
     writeln(spaces, '/install /uninstall /start /stop /state');
     {$else}
-    writeln(spaces, ' /run -r /fork -f');
+    writeln(spaces, '/run -r /fork -f /kill -k');
     {$endif}
   end;
 
@@ -1485,23 +1558,17 @@ begin
   if (self = nil) or (fSettings = nil) then
     exit;
   log := nil;
-  {$I-}
   param := trim(StringToUTF8(paramstr(1)));
-  if (param = '') or not (param[1] in ['/', '-']) then
-    cmd := cNone
-  else
-    case upcase(param[2]) of
-    'C':
-      cmd := cConsole;
-    'R':
-      cmd := cRun;
-    'F':
-      cmd := cFork;
-    'H':
-      cmd := cHelp;
-    else
-      byte(cmd) := ord(cInstall) + IdemPCharArray(@param[2], ['INST', 'UNINST',
-        'VERS', 'CONS', 'VERB', 'RUN', 'FORK', 'START', 'STOP', 'STAT', 'HELP']);
+  cmd := cNone;
+  if (param <> '') and (param[1] in ['/', '-']) then begin
+    ch := NormToUpper[param[2]];
+    for c := low(CMD_CHR) to high(CMD_CHR) do
+      if CMD_CHR[c] = ch then begin
+        cmd := c;
+        break;
+      end;
+    if cmd = cNone then
+      byte(cmd) := ord(cVersion) + IdemPCharArray(@param[2], ['VERS', 'VERB', 'START', 'STOP', 'STAT']);
     end;
   case cmd of
   cHelp:
@@ -1536,8 +1603,10 @@ begin
         Stop;
       end;
     except
-      on E: Exception do
+      on E: Exception do begin
         ConsoleShowFatalException(E, true);
+        ExitCode := 1; // indicates error
+      end;
     end;
   {$ifdef MSWINDOWS} // implement the daemon as a Windows Service
   else if fSettings.ServiceName = '' then
@@ -1597,16 +1666,23 @@ begin
       Syntax;
   end;
   {$else}
-  cRun:
-    RunUntilSigTerminated(false);
-  cFork:
-    RunUntilSigTerminated(true);
+  cRun, cFork:
+    RunUntilSigTerminated(self,(cmd=cFork),Start,Stop,fSettings.fLogClass.Add,fSettings.ServiceName);
+  cKill:
+    if RunUntilSigTerminatedForkKill then
+      writeln('Forked process killed successfully')
+    else begin
+      TextColor(ccLightRed);
+      writeln('No forked process found to be killed');
+      ExitCode := 1; // indicates error
+    end
   else
     Syntax;
   {$endif MSWINDOWS}
   end;
-  {$I+}
+  ioresult;
 end;
 
+{$I+}
 
 end.

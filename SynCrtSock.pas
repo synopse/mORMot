@@ -909,6 +909,7 @@ type
   TSynThreadPoolSubThread = class(TSynThread)
   protected
     fOwner: TSynThreadPool;
+    fNotifyThreadStartName: AnsiString;
     fProcessingContext: pointer;
     fProcessingContextCS: TRTLCriticalSection;
     {$ifndef USE_WINIOCP}
@@ -2013,6 +2014,7 @@ type
     // IP addresses, or both, that should not be routed through the proxy:
     // aProxyName/aProxyByPass will be recognized by TWinHTTP and TWinINet,
     // and aProxyName will set the CURLOPT_PROXY option to TCurlHttp
+    // (see https://curl.haxx.se/libcurl/c/CURLOPT_PROXY.html as reference)
     // - you can customize the default client timeouts by setting appropriate
     // SendTimeout and ReceiveTimeout parameters (in ms) - note that after
     // creation of this instance, the connection is tied to the initial
@@ -4181,7 +4183,6 @@ begin
     end;
     else exit;
   end;
-
   if SameText(Server,'localhost')
     {$ifndef MSWINDOWS}or ((Server='') and not doBind){$endif} then
     IP := cLocalHost else
@@ -4322,8 +4323,7 @@ end;
 constructor TCrtSocket.Bind(const aPort: SockString; aLayer: TCrtSocketLayer=cslTCP);
 var s,p: SockString;
 begin
-  // on Linux, Accept() blocks even after Shutdown() -> use 0.5 second timeout
-  Create({$ifdef LINUX}500{$else}5000{$endif});
+  Create(10000);
   if not Split(aPort,':',s,p) then begin
     s := '0.0.0.0';
     p := aPort;
@@ -6139,6 +6139,7 @@ var P: PAnsiChar;
     i, L: integer;
     H: ^PAnsiChar;
     maxtix, status: cardinal;
+    reason: SockString;
 begin
   result := false;
   try
@@ -6165,8 +6166,8 @@ begin
         for i := 1 to length(Headers) do
         if IdemPChar(H^,pointer(fServer.fRemoteIPHeaderUpper)) and (H^[L]=':') then begin
           repeat inc(L) until H^[L]<>' ';
-          if H^<>#0 then
-            fRemoteIP := H^;
+          if H^[L]<>#0 then
+            fRemoteIP := H^+L;
           break;
         end else
           inc(H);
@@ -6189,8 +6190,8 @@ begin
         status := fServer.OnBeforeBody(
           fURL,fMethod,HeaderGetText,ContentType,RemoteIP,ContentLength,false);
         if status<>STATUS_SUCCESS then begin
-          SockSend(['HTTP/1.0 ',status,' ',StatusCodeToReason(status),
-            #13#10#13#10,'Rejected']);
+          reason := StatusCodeToReason(status);
+          SockSend(['HTTP/1.0 ',status,' ',reason,#13#10#13#10,reason,' ', status]);
           SockSendFlush;
           exit;
         end;
@@ -6475,6 +6476,14 @@ procedure TSynThreadPoolSubThread.NotifyThreadStart(Sender: TSynThread);
 begin
   if Sender=nil then
     raise ECrtSocket.Create('NotifyThreadStart(nil)');
+  {$ifdef FPC}
+  {$ifdef LINUX}
+  if fNotifyThreadStartName='' then begin
+    fNotifyThreadStartName := format('Pool%d-%4x',[fOwner.fRunningThreads,PtrInt(fOwner)]);
+    SetUnixThreadName(fThreadID,fNotifyThreadStartName);
+  end;
+  {$endif}
+  {$endif}
   if Assigned(fOwner.fOnThreadStart) and not Assigned(Sender.fStartNotified) then begin
     fOwner.fOnThreadStart(Sender);
     Sender.fStartNotified := self;

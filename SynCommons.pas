@@ -841,9 +841,6 @@ const
 
 type
   PBoolean = ^Boolean;
-  {$ifdef BSD}
-  TThreadID = Cardinal;
-  {$endif}
 
 {$else FPC}
 
@@ -9800,8 +9797,8 @@ type
     // - returns nil if no algorithm was identified
     class function Algo(AlgoID: byte): TAlgoCompress; overload;
     /// returns the algorithm name, from its classname
-    // - e.g. TAlgoSynLZ->'SynLZ' TAlgoLizard->'Lizard'
-    class function AlgoName: TGUIDShortString;
+    // - e.g. TAlgoSynLZ->'synlz' TAlgoLizard->'lizard' nil->'none'
+    function AlgoName: TGUIDShortString;
   end;
 
   /// implement our fast SynLZ compression as a TAlgoCompress class
@@ -12620,6 +12617,7 @@ procedure SetThreadName(ThreadID: TThreadID; const Format: RawUTF8;
   const Args: array of const);
 
 /// could be used to override SetThreadNameInternal()
+// - under Linux/FPC, calls pthread_setname_np API which truncates to 16 chars
 procedure SetThreadNameDefault(ThreadID: TThreadID; const Name: RawUTF8);
 
 var
@@ -17561,6 +17559,7 @@ type
     /// access to the delay, in milliseconds, of the periodic task processing
     property OnProcessMS: cardinal read fOnProcessMS write fOnProcessMS;
     /// processing statistics
+    // - may be nil if aStats was nil in the class constructor
     property Stats: TSynMonitor read fStats;
   end;
 
@@ -17723,6 +17722,7 @@ type
     fName: RawUTF8;
     fReader: TFastReader;
     fReaderTemp: PRawByteString;
+    fSaveToLastUncompressed: PtrInt;
     /// low-level virtual methods implementing the persistence reading
     procedure LoadFromReader; virtual;
     procedure SaveToWriter(aWriter: TFileBufferWriter); virtual;
@@ -18659,7 +18659,7 @@ end;
 function IsFixedWidthCodePage(aCodePage: cardinal): boolean;
 begin
   result := ((aCodePage>=1250) and (aCodePage<=1258)) or
-             (aCodePage=CODEPAGE_LATIN1);
+             (aCodePage=CODEPAGE_LATIN1) or (aCodePage=CP_RAWBYTESTRING);
 end;
 
 class function TSynAnsiConvert.Engine(aCodePage: cardinal): TSynAnsiConvert;
@@ -19001,7 +19001,8 @@ begin
       [ClassName,fCodePage]);
   // create internal look-up tables
   SetLength(fAnsiToWide,256);
-  if (aCodePage=CODEPAGE_US) or (aCodePage=CODEPAGE_LATIN1) then begin
+  if (aCodePage=CODEPAGE_US) or (aCodePage=CODEPAGE_LATIN1) or
+     (aCodePage=CP_RAWBYTESTRING) then begin
     for i := 0 to 255 do
       fAnsiToWide[i] := i;
     if aCodePage=CODEPAGE_US then // do not trust the Windows API :(
@@ -38257,9 +38258,7 @@ begin
       'host',ExeVersion.Host,'user',ExeVersion.User,'os',OSVersionText,
       'cpu',CpuInfoText,
       {$ifdef MSWINDOWS}{$ifndef CPU64}'wow64',IsWow64,{$endif}{$endif MSWINDOWS}
-      {$ifndef PUREPASCAL}{$ifdef CPUINTEL}
-      'cpufeatures', LowerCase(ToText(CpuFeatures, ' ')),
-      {$endif}{$endif}
+      {$ifdef CPUINTEL}'cpufeatures', LowerCase(ToText(CpuFeatures, ' ')),{$endif}
       'processcpu',cpu,'processmem',mem,
       'freemem',TSynMonitorMemory.FreeAsText,
       'freedisk',TSynMonitorDisk.FreeAsText]);
@@ -51018,6 +51017,7 @@ begin
     writer := TFileBufferWriter.Create(TRawByteStringStream,BufLen);
   try
     SaveToWriter(writer);
+    fSaveToLastUncompressed := writer.TotalWritten;
     aBuffer := writer.FlushAndCompress(nocompression,ForcedAlgo);
   finally
     writer.Free;
@@ -61888,15 +61888,21 @@ begin
   end;
 end;
 
-class function TAlgoCompress.AlgoName: TGUIDShortString;
+function TAlgoCompress.AlgoName: TGUIDShortString;
 var s: PShortString;
+    i: integer;
 begin
-  s := ClassNameShort(self);
-  if IdemPChar(@s^[1],'TALGO') then begin
-    result[0] := AnsiChar(ord(s^[0])-5);
-    MoveFast(s^[6],result[1],ord(result[0]));
-  end else
-    result := s^;
+  if self=nil then
+    result := 'stored' else begin
+    s := ClassNameShort(self);
+    if IdemPChar(@s^[1],'TALGO') then begin
+      result[0] := AnsiChar(ord(s^[0])-5);
+      inc(PtrInt(s),5);
+    end else
+      result[0] := s^[0];
+    for i := 1 to ord(result[0]) do
+      result[i] := NormToLower[s^[i]];
+  end;
 end;
 
 function TAlgoCompress.AlgoHash(Previous: cardinal; Data: pointer; DataLen: integer): cardinal;
@@ -63897,7 +63903,7 @@ function IsDebuggerPresent: BOOL; stdcall; external kernel32; // since XP
 
 procedure SetCurrentThreadName(const Format: RawUTF8; const Args: array of const);
 begin
-  SetThreadName(TThreadID(GetCurrentThreadId),Format,Args);
+  SetThreadName(GetCurrentThreadId,Format,Args);
 end;
 
 procedure SetThreadName(ThreadID: TThreadID; const Format: RawUTF8;
@@ -63910,7 +63916,11 @@ end;
 
 procedure SetThreadNameDefault(ThreadID: TThreadID; const Name: RawUTF8);
 {$ifdef FPC}
-begin // not implemented yet
+begin
+  {$ifdef LINUX}
+  SetUnixThreadName(ThreadID, Name); // call pthread_setname_np()
+  {$endif}
+end;
 {$else}
 var s: RawByteString;
     {$ifndef ISDELPHIXE2}
@@ -63945,8 +63955,8 @@ begin
   except {ignore} end;
   {$endif MSWINDOWS}
   {$endif ISDELPHIXE2}
-{$endif FPC}
 end;
+{$endif FPC}
 
 {$ifdef KYLIX3}
 type
@@ -64198,7 +64208,7 @@ begin
     result := fPendingProcessFlag;
     if result=flagIdle then begin // we just acquired the thread! congrats!
       fPendingProcessFlag := flagStarted; // atomic set "started" flag
-      fCallerThreadID := TThreadID(ThreadID);
+      fCallerThreadID := ThreadID;
     end;
   finally
     fPendingProcessLock.UnLock;
@@ -64249,7 +64259,7 @@ var start: Int64;
     ThreadID: TThreadID;
 begin
   result := false;
-  ThreadID := TThreadID(GetCurrentThreadId);
+  ThreadID := GetCurrentThreadId;
   if (self=nil) or (ThreadID=fCallerThreadID) then
     // avoid endless loop when waiting in same thread (e.g. UI + OnIdle)
     exit;
@@ -64366,8 +64376,7 @@ begin
   if not Assigned(aOnProcess) then
     raise ESynException.CreateUTF8('%.Create(aOnProcess=nil)',[self]);
   if aStats<>nil then
-    fStats := aStats.Create(aThreadName) else
-    fStats := TSynMonitor.Create(aThreadName);
+    fStats := aStats.Create(aThreadName);
   fOnProcess := aOnProcess;
   fOnProcessMS := aOnProcessMS;
   if fOnProcessMS=0 then
@@ -64393,15 +64402,18 @@ begin
     if fExecuteLoopPause then // pause -> try again later
       fProcessEvent.SetEvent else
       try
-        fStats.ProcessStartTask;
+        if fStats<>nil then
+          fStats.ProcessStartTask;
         try
           fOnProcess(self,wait);
         finally
-          fStats.ProcessEnd;
+          if fStats<>nil then
+            fStats.ProcessEnd;
         end;
       except
         on E: Exception do begin
-          fStats.ProcessErrorRaised(E);
+          if fStats<>nil then
+            fStats.ProcessErrorRaised(E);
           if Assigned(fOnException) then
             fOnException(E);
         end;

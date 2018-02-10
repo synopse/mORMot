@@ -88,107 +88,107 @@ program TestSQL3;
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
 
 uses
-  {$ifdef KYLIX3}
-  FastMM4,
-  ECCProcess in 'Samples/33 - ECC/ECCProcess.pas',
-  mORMotSelfTests;
+  {$ifdef KYLIX3} // strip down to the minimum files including /
+    FastMM4,
+    ECCProcess in 'Samples/33 - ECC/ECCProcess.pas',
+    mORMotSelfTests;
   {$else}
-  {$ifdef FullDebugMode}  // defined for the project e.g. under Win64
-  FastMM4Messages in '..\RTL7\FastMM4Messages.pas',
-  FastMM4 in '..\RTL7\FastMM4.pas',
-  {$else}
-  {$I SynDprUses.inc}    // will enable FastMM4 prior to Delphi 2006
-  {$endif FullDebugMode}
-  SysUtils,
-  //SynFastWideString,   // no speed benefit for mORMot, but OleDB/Jet works!
-  SynLZ in '..\SynLZ.pas',
-  SynLZO in '..\SynLZO.pas',
-  SynLizard in '..\SynLizard.pas',
-  SynCrypto in '..\SynCrypto.pas',
-  SynEcc in '..\SynEcc.pas',
-  SynCrtSock in '..\SynCrtSock.pas',
-  SynBidirSock in '..\SynBiDirSock.pas',
-  //SynOpenSSL,
-  SynCommons in '..\SynCommons.pas',
-  SynLog in '..\SynLog.pas',
-  SynTests in '..\SynTests.pas',
-{$ifndef DELPHI5OROLDER}
-  {$ifndef LVCL}
-  SynMongoDB in '..\SynMongoDB.pas',
-  {$ifndef NOVARIANTS}
-  SynMustache in '..\SynMustache.pas',
-  mORMotWrappers in 'mORMotWrappers.pas',
-  mORMotMVC in 'mORMotMVC.pas',
-  mORMotDDD in 'mORMotDDD.pas',
-  dddDomAuthInterfaces in 'DDD\dom\dddDomAuthInterfaces.pas',
-  dddDomUserTypes in 'DDD\dom\dddDomUserTypes.pas',
-  dddDomUserInterfaces in 'DDD\dom\dddDomUserInterfaces.pas',
-  dddDomUserCQRS in 'DDD\dom\dddDomUserCQRS.pas',
-  dddInfraAuthRest in 'DDD\infra\dddInfraAuthRest.pas',
-  dddInfraSettings in 'DDD\infra\dddInfraSettings.pas',
-  dddInfraApps in 'DDD\infra\dddInfraApps.pas',
-  dddInfraEmail in 'DDD\infra\dddInfraEmail.pas',
-  dddInfraEmailer in 'DDD\infra\dddInfraEmailer.pas',
-  dddInfraRepoUser in 'DDD\infra\dddInfraRepoUser.pas',
-  {$endif NOVARIANTS}
-  {$endif LVCL}
-  {$ifdef MSWINDOWS}
-  {$ifndef CPU64}
-  SynSMAPI in '..\SynSMAPI.pas',
-  SynSM in '..\SynSM.pas',
-  {$endif CPU64}
-  SynTable in '..\SynTable.pas',
-  SynBigTable in '..\SynBigTable.pas',
-  {$ifndef LVCL}
-  SynZipFiles in '..\SynZipFiles.pas',
-  {$endif}
-  {$endif}
-  SynSQLite3 in '..\SynSQLite3.pas',
-  SynSQLite3Static in '..\SynSQLite3Static.pas',
-  mORMot in 'mORMot.pas',
-  mORMotSQLite3 in 'mORMotSQLite3.pas',
-  mORMotHttpClient in 'mORMotHttpClient.pas',
-  mORMotHttpServer in 'mORMotHttpServer.pas',
-  {$ifndef FPC}
-  mORMotFastCgiServer in 'mORMotFastCgiServer.pas',
-  mORMotService in 'mORMotService.pas',
-  //mORMotBigTable,
-  {$endif FPC}
-  ECCProcess in 'Samples\33 - ECC\ECCProcess.pas',
-{$endif DELPHI5OROLDER}
-{$ifndef LVCL}
-{$ifdef FPC}
-{$ifdef WIN64}
-  SynZLibSSE in '..\SynZLibSSE.pas',
-{$endif}
-{$else}
-  SynPdf in '..\SynPdf.pas',
-  SynGdiPlus in '..\SynGdiPlus.pas',
-{$endif FPC}
-  SynDB in '..\SynDB.pas',
-  SynDBSQLite3 in '..\SynDBSQLite3.pas',
-  {$ifdef MSWINDOWS}
-  SynDBOracle in '..\SynDBOracle.pas',
-  SynOleDB in '..\SynOleDB.pas',
-  SynDBODBC in '..\SynDBODBC.pas',
-  {$ifdef USEZEOS}
-  SynDBZeos in '..\SynDBZeos.pas',
-  {$endif}
-  {$endif}
-{$ifndef DELPHI5OROLDER}
-  SynDBRemote in '..\SynDBRemote.pas',
-  mORMotDB in 'mORMotDB.pas',
-  mORMotMongoDB in 'mORMotMongoDB.pas',
-{$endif DELPHI5OROLDER}
-{$endif LVCL}
-  SynZip in '..\SynZip.pas',
-  SynProtoRTSPHTTP in '..\SynProtoRTSPHTTP.pas',
-  SynSelfTests in '..\SynSelfTests.pas',
-  mORMotSelfTests in 'mORMotSelfTests.pas';
-{$endif KYLIX3}
+    {$ifdef FullDebugMode}  // defined for the project e.g. under Win64
+      FastMM4Messages in '..\RTL7\FastMM4Messages.pas',
+      FastMM4 in '..\RTL7\FastMM4.pas',
+    {$else}
+      {$I SynDprUses.inc}    // will enable FastMM4 prior to Delphi 2006
+    {$endif FullDebugMode}
+    SysUtils,
+    //SynFastWideString,   // no speed benefit for mORMot, but OleDB/Jet works!
+    SynLZ in '..\SynLZ.pas',
+    SynLZO in '..\SynLZO.pas',
+    SynLizard in '..\SynLizard.pas',
+    SynCrypto in '..\SynCrypto.pas',
+    SynEcc in '..\SynEcc.pas',
+    SynCrtSock in '..\SynCrtSock.pas',
+    SynBidirSock in '..\SynBiDirSock.pas',
+    //SynOpenSSL,
+    SynCommons in '..\SynCommons.pas',
+    SynLog in '..\SynLog.pas',
+    SynTests in '..\SynTests.pas',
+    {$ifndef DELPHI5OROLDER}
+      {$ifndef LVCL}
+        SynMongoDB in '..\SynMongoDB.pas',
+        {$ifndef NOVARIANTS}
+          SynMustache in '..\SynMustache.pas',
+          mORMotWrappers in 'mORMotWrappers.pas',
+          mORMotMVC in 'mORMotMVC.pas',
+          mORMotDDD in 'mORMotDDD.pas',
+          dddDomAuthInterfaces in 'DDD\dom\dddDomAuthInterfaces.pas',
+          dddDomUserTypes in 'DDD\dom\dddDomUserTypes.pas',
+          dddDomUserInterfaces in 'DDD\dom\dddDomUserInterfaces.pas',
+          dddDomUserCQRS in 'DDD\dom\dddDomUserCQRS.pas',
+          dddInfraAuthRest in 'DDD\infra\dddInfraAuthRest.pas',
+          dddInfraSettings in 'DDD\infra\dddInfraSettings.pas',
+          dddInfraApps in 'DDD\infra\dddInfraApps.pas',
+          dddInfraEmail in 'DDD\infra\dddInfraEmail.pas',
+          dddInfraEmailer in 'DDD\infra\dddInfraEmailer.pas',
+          dddInfraRepoUser in 'DDD\infra\dddInfraRepoUser.pas',
+        {$endif NOVARIANTS}
+      {$endif LVCL}
+      {$ifdef MSWINDOWS}
+        {$ifndef CPU64}
+          SynSMAPI in '..\SynSMAPI.pas',
+          SynSM in '..\SynSM.pas',
+        {$endif CPU64}
+        SynTable in '..\SynTable.pas',
+        SynBigTable in '..\SynBigTable.pas',
+        {$ifndef LVCL}
+          SynZipFiles in '..\SynZipFiles.pas',
+        {$endif}
+      {$endif MSWINDOWS}
+      SynSQLite3 in '..\SynSQLite3.pas',
+      SynSQLite3Static in '..\SynSQLite3Static.pas',
+      mORMot in 'mORMot.pas',
+      mORMotSQLite3 in 'mORMotSQLite3.pas',
+      mORMotHttpClient in 'mORMotHttpClient.pas',
+      mORMotHttpServer in 'mORMotHttpServer.pas',
+      {$ifndef FPC}
+        mORMotFastCgiServer in 'mORMotFastCgiServer.pas',
+        //mORMotBigTable,
+      {$endif FPC}
+      mORMotService in 'mORMotService.pas',
+      ECCProcess in 'Samples\33 - ECC\ECCProcess.pas',
+    {$endif DELPHI5OROLDER}
+    {$ifndef LVCL}
+      {$ifdef FPC}
+        {$ifdef WIN64}
+          SynZLibSSE in '..\SynZLibSSE.pas',
+        {$endif}
+      {$else}
+        SynPdf in '..\SynPdf.pas',
+        SynGdiPlus in '..\SynGdiPlus.pas',
+      {$endif FPC}
+      SynDB in '..\SynDB.pas',
+      SynDBSQLite3 in '..\SynDBSQLite3.pas',
+      {$ifdef MSWINDOWS}
+        SynDBOracle in '..\SynDBOracle.pas',
+        SynOleDB in '..\SynOleDB.pas',
+        SynDBODBC in '..\SynDBODBC.pas',
+        {$ifdef USEZEOS}
+          SynDBZeos in '..\SynDBZeos.pas',
+        {$endif}
+      {$endif MSWINDOWS}
+      {$ifndef DELPHI5OROLDER}
+        SynDBRemote in '..\SynDBRemote.pas',
+        mORMotDB in 'mORMotDB.pas',
+        mORMotMongoDB in 'mORMotMongoDB.pas',
+      {$endif DELPHI5OROLDER}
+    {$endif LVCL}
+    SynZip in '..\SynZip.pas',
+    SynProtoRTSPHTTP in '..\SynProtoRTSPHTTP.pas',
+    SynSelfTests in '..\SynSelfTests.pas',
+    mORMotSelfTests in 'mORMotSelfTests.pas';
+  {$endif KYLIX3}
 
 {$ifdef MSWINDOWS}
-{$R ..\Vista.res} // includes manifest to identify Windows 10 OS
+  {$R ..\Vista.res} // includes manifest to identify Windows 10 OS
 {$endif}
 
 //
