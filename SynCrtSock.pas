@@ -1134,6 +1134,8 @@ type
     /// optional event handler for the virtual Request method
     fOnRequest: TOnHttpServerRequest;
     fOnBeforeBody: TOnHttpServerBeforeBody;
+    fOnBeforeRequestProcessed: TOnHttpServerRequest;
+    fOnAfterRequestProcessed: TOnHttpServerRequest;
     fOnAfterResponseSent: TOnHttpServerRequest;
     fMaximumAllowedContentLength: cardinal;
     /// list of all registered compression algorithms
@@ -1200,6 +1202,29 @@ type
     // - should return STATUS_SUCCESS=200 to continue the process, or an HTTP
     // error code to reject the request immediatly, and close the connection
     property OnBeforeBody: TOnHttpServerBeforeBody read fOnBeforeBody write SetOnBeforeBody;
+    /// event handler called after all part of HTTP request retrieved
+    // but before request are processed.
+    // The main purpose are:
+    //  1) return a "202 Accepted" to client and continue a long-term job
+    //   inside the OnProcess handler in the same thread
+    //  2) modify incoming information before pass it to main businnes logic,
+    //    header preprocessor, body encoding etc.
+    // In case handler return > 0 server will send a response immidiatly
+    // If return code = 202 - OnRequest will be called, otherwise - not.
+    // - warning: this handler must be thread-safe (can be called by several
+    // threads simultaneously)
+    property OnBeforeRequestProcessed: TOnHttpServerRequest
+      read fOnBeforeRequestProcessed write fOnBeforeRequestProcessed;
+    /// event handler called after request processed but BEFORE
+    // response are sended back to client.
+    // The main purpose is to apply some post-processors, what are actually
+    // not a part of businnes logic to the response
+    // If handler return value > 0 it will override a response code,
+    // returned from the OnProcess
+    // - warning: this handler must be thread-safe (can be called by several
+    // threads simultaneously)
+    property OnAfterRequestProcessed: TOnHttpServerRequest
+      read fOnAfterRequestProcessed write fOnAfterRequestProcessed;
     /// event handler called after each working Thread is just initiated
     // - called in the thread context at first place in THttpServerGeneric.Execute
     property OnHttpThreadStart: TNotifyThreadEvent
@@ -7834,6 +7859,8 @@ begin
   fReqQueue := From.fReqQueue;
   fOnRequest := From.fOnRequest;
   fOnBeforeBody := From.fOnBeforeBody;
+  fOnBeforeRequestProcessed := From.fOnBeforeRequestProcessed;
+  fOnAfterRequestProcessed := From.fOnAfterRequestProcessed;
   fCanNotifyCallback := From.fCanNotifyCallback;
   fCompress := From.fCompress;
   fCompressAcceptEncoding := From.fCompressAcceptEncoding;
@@ -7958,6 +7985,8 @@ var Req: PHTTP_REQUEST;
     InContentLength, InContentLengthChunk, InContentLengthRead: cardinal;
     InContentEncoding, InAcceptEncoding, Range: SockString;
     OutContentEncoding, OutStatus: SockString;
+    OutStatusCode, tmpStatusCode: Cardinal;
+    responseAlreadySended: Boolean;
     Context: THttpServerRequest;
     FileHandle: THandle;
     Resp: PHTTP_RESPONSE;
@@ -7990,6 +8019,125 @@ var Req: PHTTP_REQUEST;
     except
       on Exception do
         ; // ignore any HttpApi level errors here (client may crashed)
+    end;
+  end;
+
+  // return true if we must stop handle a current request
+  function SendResponse(OutStatusCode: cardinal): boolean;
+  begin
+    Result := false;
+    Resp^.SetStatus(OutStatusCode,OutStatus);
+    if Terminated then
+      exit;
+    // update log information
+    if Http.Version.MajorVersion>=2 then
+      with Req^,CurrentLog^ do begin
+        MethodNum := Verb;
+        UriStemLength := CookedUrl.AbsPathLength;
+        UriStem := CookedUrl.pAbsPath;
+        with Headers.KnownHeaders[reqUserAgent] do begin
+          UserAgentLength := RawValueLength;
+          UserAgent := pRawValue;
+        end;
+        with Headers.KnownHeaders[reqHost] do begin
+          HostLength := RawValueLength;
+          Host := pRawValue;
+        end;
+        with Headers.KnownHeaders[reqReferrer] do begin
+          ReferrerLength := RawValueLength;
+          Referrer := pRawValue;
+        end;
+        ProtocolStatus := Resp^.StatusCode;
+        ClientIp := pointer(RemoteIP);
+        ClientIpLength := length(RemoteIP);
+        Method := pointer(Context.fMethod);
+        MethodLength := length(Context.fMethod);
+        UserName := pointer(Context.fAuthenticatedUser);
+        UserNameLength := Length(Context.fAuthenticatedUser);
+      end;
+    // send response
+    Resp^.Version := Req^.Version;
+    Resp^.SetHeaders(pointer(Context.OutCustomHeaders),Heads);
+    if fCompressAcceptEncoding<>'' then
+      Resp^.AddCustomHeader(pointer(fCompressAcceptEncoding),Heads,false);
+    with Resp^.Headers.KnownHeaders[respServer] do begin
+      pRawValue := pointer(fServerName);
+      RawValueLength := length(fServerName);
+    end;
+    if Context.OutContentType=HTTP_RESP_STATICFILE then begin
+      // response is file -> OutContent is UTF-8 file name to be served
+      FileHandle := FileOpen(
+        {$ifdef UNICODE}UTF8ToUnicodeString{$else}Utf8ToAnsi{$endif}(Context.OutContent),
+        fmOpenRead or fmShareDenyNone);
+      if PtrInt(FileHandle)<0 then begin
+        SendError(STATUS_NOTFOUND,SysErrorMessage(GetLastError));
+        Result := True;
+      end;
+      try // http.sys will serve then close the file from kernel
+        DataChunkFile.DataChunkType := hctFromFileHandle;
+        DataChunkFile.FileHandle := FileHandle;
+        flags := 0;
+        DataChunkFile.ByteRange.StartingOffset.QuadPart := 0;
+        Int64(DataChunkFile.ByteRange.Length.QuadPart) := -1; // to eof
+        with Req^.Headers.KnownHeaders[reqRange] do begin
+          if (RawValueLength>6) and IdemPChar(pRawValue,'BYTES=') and
+             (pRawValue[6] in ['0'..'9']) then begin
+            SetString(Range,pRawValue+6,RawValueLength-6); // need #0 end
+            R := pointer(Range);
+            RangeStart := GetNextItemUInt64(R);
+            if R^='-' then begin
+              OutContentLength.LowPart := GetFileSize(FileHandle,@OutContentLength.HighPart);
+              DataChunkFile.ByteRange.Length.QuadPart := OutContentLength.QuadPart-RangeStart;
+              inc(R);
+              flags := HTTP_SEND_RESPONSE_FLAG_PROCESS_RANGES;
+              DataChunkFile.ByteRange.StartingOffset.QuadPart := RangeStart;
+              if R^ in ['0'..'9'] then begin
+                RangeLength := GetNextItemUInt64(R)-RangeStart+1;
+                if RangeLength<DataChunkFile.ByteRange.Length.QuadPart then
+                  // "bytes=0-499" -> start=0, len=500
+                  DataChunkFile.ByteRange.Length.QuadPart := RangeLength;
+              end; // "bytes=1000-" -> start=1000, to eof)
+              ContentRange := 'Content-Range: bytes ';
+              AppendI64(RangeStart,ContentRange);
+              AppendChar('-',ContentRange);
+              AppendI64(RangeStart+DataChunkFile.ByteRange.Length.QuadPart-1,ContentRange);
+              AppendChar('/',ContentRange);
+              AppendI64(OutContentLength.QuadPart,ContentRange);
+              AppendChar(#0,ContentRange);
+              Resp^.AddCustomHeader(@ContentRange[1],Heads,false);
+              Resp^.SetStatus(STATUS_PARTIALCONTENT,OutStatus);
+            end;
+          end;
+          with Resp^.Headers.KnownHeaders[respAcceptRanges] do begin
+             pRawValue := 'bytes';
+             RawValueLength := 5;
+          end;
+        end;
+        Resp^.EntityChunkCount := 1;
+        Resp^.pEntityChunks := @DataChunkFile;
+        Http.SendHttpResponse(fReqQueue,
+          Req^.RequestId,flags,Resp^,nil,bytesSent,nil,0,nil,fLogData);
+      finally
+        FileClose(FileHandle);
+      end;
+    end else begin
+      // response is in OutContent -> send it from memory
+      if Context.OutContentType=HTTP_RESP_NORESPONSE then
+        Context.OutContentType := ''; // true HTTP always expects a response
+      if fCompress<>nil then begin
+        with Resp^.Headers.KnownHeaders[reqContentEncoding] do
+        if RawValueLength=0 then begin
+          // no previous encoding -> try if any compression
+          OutContentEncoding := CompressDataAndGetHeaders(InCompressAccept,
+            fCompress,Context.OutContentType,Context.fOutContent);
+          pRawValue := pointer(OutContentEncoding);
+          RawValueLength := length(OutContentEncoding);
+        end;
+      end;
+      Resp^.SetContent(DataChunkInMemory,Context.OutContent,Context.OutContentType);
+      EHttpApiServer.RaiseOnError(hSendHttpResponse,Http.SendHttpResponse(
+        fReqQueue,Req^.RequestId,getSendResponseFlags(Context),
+        Resp^,nil,bytesSent,nil,0,nil,fLogData));
     end;
   end;
 
@@ -8113,119 +8261,28 @@ begin
           Context.OutContentType := '';
           Context.OutCustomHeaders := '';
           fillchar(Resp^,sizeof(Resp^),0);
-          Resp^.SetStatus(Request(Context),OutStatus);
+
+          responseAlreadySended := false;
+          if Assigned(fOnBeforeRequestProcessed) then begin
+            OutStatusCode := fOnBeforeRequestProcessed(Context);
+            if OutStatusCode > 0 then begin
+              responseAlreadySended := true;
+              if SendResponse(OutStatusCode) or (OutStatusCode <> 202) then
+                Continue;
+            end;
+          end;
+          OutStatusCode := Request(Context);
+          if Assigned(fOnAfterRequestProcessed) then begin
+            tmpStatusCode := fOnAfterRequestProcessed(Context);
+            if tmpStatusCode > 0 then
+              OutStatusCode := tmpStatusCode;
+          end;
           if Terminated then
             exit;
-          // update log information
-          if Http.Version.MajorVersion>=2 then
-            with Req^,CurrentLog^ do begin
-              MethodNum := Verb;
-              UriStemLength := CookedUrl.AbsPathLength;
-              UriStem := CookedUrl.pAbsPath;
-              with Headers.KnownHeaders[reqUserAgent] do begin
-                UserAgentLength := RawValueLength;
-                UserAgent := pRawValue;
-              end;
-              with Headers.KnownHeaders[reqHost] do begin
-                HostLength := RawValueLength;
-                Host := pRawValue;
-              end;
-              with Headers.KnownHeaders[reqReferrer] do begin
-                ReferrerLength := RawValueLength;
-                Referrer := pRawValue;
-              end;
-              ProtocolStatus := Resp^.StatusCode;
-              ClientIp := pointer(RemoteIP);
-              ClientIpLength := length(RemoteIP);
-              Method := pointer(Context.fMethod);
-              MethodLength := length(Context.fMethod);
-              UserName := pointer(Context.fAuthenticatedUser);
-              UserNameLength := Length(Context.fAuthenticatedUser);
-            end;
-          // send response
-          Resp^.Version := Req^.Version;
-          Resp^.SetHeaders(pointer(Context.OutCustomHeaders),Heads);
-          if fCompressAcceptEncoding<>'' then
-            Resp^.AddCustomHeader(pointer(fCompressAcceptEncoding),Heads,false);
-          with Resp^.Headers.KnownHeaders[respServer] do begin
-            pRawValue := pointer(fServerName);
-            RawValueLength := length(fServerName);
-          end;
-          if Context.OutContentType=HTTP_RESP_STATICFILE then begin
-            // response is file -> OutContent is UTF-8 file name to be served
-            FileHandle := FileOpen(
-              {$ifdef UNICODE}UTF8ToUnicodeString{$else}Utf8ToAnsi{$endif}(Context.OutContent),
-              fmOpenRead or fmShareDenyNone);
-            if PtrInt(FileHandle)<0 then begin
-              SendError(STATUS_NOTFOUND,SysErrorMessage(GetLastError));
-              continue;
-            end;
-            try // http.sys will serve then close the file from kernel
-              DataChunkFile.DataChunkType := hctFromFileHandle;
-              DataChunkFile.FileHandle := FileHandle;
-              flags := 0;
-              DataChunkFile.ByteRange.StartingOffset.QuadPart := 0;
-              Int64(DataChunkFile.ByteRange.Length.QuadPart) := -1; // to eof
-              with Req^.Headers.KnownHeaders[reqRange] do begin
-                if (RawValueLength>6) and IdemPChar(pRawValue,'BYTES=') and
-                   (pRawValue[6] in ['0'..'9']) then begin
-                  SetString(Range,pRawValue+6,RawValueLength-6); // need #0 end
-                  R := pointer(Range);
-                  RangeStart := GetNextItemUInt64(R);
-                  if R^='-' then begin
-                    OutContentLength.LowPart := GetFileSize(FileHandle,@OutContentLength.HighPart);
-                    DataChunkFile.ByteRange.Length.QuadPart := OutContentLength.QuadPart-RangeStart;
-                    inc(R);
-                    flags := HTTP_SEND_RESPONSE_FLAG_PROCESS_RANGES;
-                    DataChunkFile.ByteRange.StartingOffset.QuadPart := RangeStart;
-                    if R^ in ['0'..'9'] then begin
-                      RangeLength := GetNextItemUInt64(R)-RangeStart+1;
-                      if RangeLength<DataChunkFile.ByteRange.Length.QuadPart then
-                        // "bytes=0-499" -> start=0, len=500
-                        DataChunkFile.ByteRange.Length.QuadPart := RangeLength;
-                    end; // "bytes=1000-" -> start=1000, to eof)
-                    ContentRange := 'Content-Range: bytes ';
-                    AppendI64(RangeStart,ContentRange);
-                    AppendChar('-',ContentRange);
-                    AppendI64(RangeStart+DataChunkFile.ByteRange.Length.QuadPart-1,ContentRange);
-                    AppendChar('/',ContentRange);
-                    AppendI64(OutContentLength.QuadPart,ContentRange);
-                    AppendChar(#0,ContentRange);
-                    Resp^.AddCustomHeader(@ContentRange[1],Heads,false);
-                    Resp^.SetStatus(STATUS_PARTIALCONTENT,OutStatus);
-                  end;
-                end;
-                with Resp^.Headers.KnownHeaders[respAcceptRanges] do begin
-                   pRawValue := 'bytes';
-                   RawValueLength := 5;
-                end;
-              end;
-              Resp^.EntityChunkCount := 1;
-              Resp^.pEntityChunks := @DataChunkFile;
-              Http.SendHttpResponse(fReqQueue,
-                Req^.RequestId,flags,Resp^,nil,bytesSent,nil,0,nil,fLogData);
-            finally
-              FileClose(FileHandle);
-            end;
-          end else begin
-            // response is in OutContent -> send it from memory
-            if Context.OutContentType=HTTP_RESP_NORESPONSE then
-              Context.OutContentType := ''; // true HTTP always expects a response
-            if fCompress<>nil then begin
-              with Resp^.Headers.KnownHeaders[reqContentEncoding] do
-              if RawValueLength=0 then begin
-                // no previous encoding -> try if any compression
-                OutContentEncoding := CompressDataAndGetHeaders(InCompressAccept,
-                  fCompress,Context.OutContentType,Context.fOutContent);
-                pRawValue := pointer(OutContentEncoding);
-                RawValueLength := length(OutContentEncoding);
-              end;
-            end;
-            Resp^.SetContent(DataChunkInMemory,Context.OutContent,Context.OutContentType);
-            EHttpApiServer.RaiseOnError(hSendHttpResponse,Http.SendHttpResponse(
-              fReqQueue,Req^.RequestId,getSendResponseFlags(Context),
-              Resp^,nil,bytesSent,nil,0,nil,fLogData));
-          end;
+          if not responseAlreadySended then
+            if SendResponse(OutStatusCode) then
+              Continue;
+
           DoAfterSentResponse(Context);
         except
           on E: Exception do
