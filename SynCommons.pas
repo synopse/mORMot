@@ -8953,6 +8953,8 @@ type
     /// is set to TRUE in case of Expanded format
     property Expand: boolean read fExpand write fExpand;
     /// is set to TRUE if the ID field must be appended to the resulting JSON
+    // - this field is used only by TSQLRecord.GetJSONValues
+    // - this field is ignored by TSQLTable.GetJSONValues
     property WithID: boolean read fWithID;
     /// Read-Only access to the field bits set for each column to be stored
     property Fields: TSQLFieldIndexDynArray read fFields;
@@ -18043,7 +18045,12 @@ type
     // - returns e.g.
     // ! {"Created":"2016-04-19T15:27:58","Identifier":1,"Counter":1,
     // ! "Value":3137644716930138113,"Hex":"2B8B273F00008001"}
-    function AsVariant: variant;
+    function AsVariant: variant; {$ifdef HASINLINE}inline;{$endif}
+    /// convert this identifier to an explicit TDocVariant JSON object
+    // - returns e.g.
+    // ! {"Created":"2016-04-19T15:27:58","Identifier":1,"Counter":1,
+    // ! "Value":3137644716930138113,"Hex":"2B8B273F00008001"}
+    procedure ToVariant(out result: variant);
     {$endif NOVARIANTS}
     /// extract the UTC generation timestamp from the identifier as TDateTime
     // - time is expressed in Coordinated Universal Time (UTC), not local time
@@ -44837,7 +44844,7 @@ begin
     VType := varNull else begin
     Init(aOptions,dvObject);
     VCount := length(aNames);
-    VName := aNames;     // fast by-reference copy of VName[] and VValue[]
+    VName := aNames; // fast by-reference copy of VName[] and VValue[]
     VValue := aValues;
   end;
 end;
@@ -63695,9 +63702,14 @@ end;
 {$ifndef NOVARIANTS}
 function TSynUniqueIdentifierBits.AsVariant: variant;
 begin
-  result := _ObjFast(['Created',DateTimeToIso8601Text(CreateDateTime),
+  ToVariant(result);
+end;
+
+procedure TSynUniqueIdentifierBits.ToVariant(out result: variant);
+begin
+  TDocVariantData(result).InitObject(['Created',DateTimeToIso8601Text(CreateDateTime),
     'Identifier',ProcessID,'Counter',Counter,'Value',Value,
-    'Hex',Int64ToHex(Value)]);
+    'Hex',Int64ToHex(Value)],JSON_OPTIONS_FAST);
 end;
 {$endif NOVARIANTS}
 

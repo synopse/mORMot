@@ -5442,15 +5442,15 @@ var v: Variant;
     nt: TNullableUTF8Text;
 begin
   t := nil; // makes the compiler happy
-  ValueVarToVariant(nil,sftBoolean,vd,false,t);
+  ValueVarToVariant(nil,0,sftBoolean,vd,false,t);
   Check(not boolean(v));
-  ValueVarToVariant('0',sftBoolean,vd,false,t);
+  ValueVarToVariant('0',1,sftBoolean,vd,false,t);
   Check(not boolean(v));
-  ValueVarToVariant('false',sftBoolean,vd,false,t);
+  ValueVarToVariant('false',5,sftBoolean,vd,false,t);
   Check(not boolean(v));
-  ValueVarToVariant('1',sftBoolean,vd,false,t);
+  ValueVarToVariant('1',1,sftBoolean,vd,false,t);
   Check(boolean(v));
-  ValueVarToVariant('true',sftBoolean,vd,false,t);
+  ValueVarToVariant('true',4,sftBoolean,vd,false,t);
   Check(boolean(v));
   GetVariantFromJSON('0',False,v,nil);
   Check(vd.VType=varInteger);
