@@ -2079,6 +2079,12 @@ function JSONGetID(P: PUTF8Char; out ID: TID): Boolean;
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
 // or Base-64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
 function BlobToTSQLRawBlob(P: PUTF8Char): TSQLRawBlob; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fill a TSQLRawBlob from TEXT-encoded blob data
+// - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
+// or Base-64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
+procedure BlobToTSQLRawBlob(P: PUTF8Char; var result: TSQLRawBlob); overload;
 
 /// fill a TSQLRawBlob from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
@@ -5486,16 +5492,16 @@ type
     //  adding the specified field
     function SQLAddField(FieldIndex: integer): RawUTF8;
 
-    /// create a TJSONWriter, ready to be filled with TSQLRecord.GetJSONValues(W)
+    /// create a TJSONWriter, ready to be filled with TSQLRecord.GetJSONValues
     // - you can use TSQLRecordProperties.FieldBitsFromCSV() or
     // TSQLRecordProperties.FieldBitsFromRawUTF8() to compute aFields
-    function CreateJSONWriter(JSON: TStream; Expand: boolean; withID: boolean;
+    function CreateJSONWriter(JSON: TStream; Expand, withID: boolean;
       const aFields: TSQLFieldBits; KnownRowsCount: integer;
       aBufSize: integer=8192): TJSONSerializer; overload;
     /// create a TJSONWriter, ready to be filled with TSQLRecord.GetJSONValues(W)
     // - you can use TSQLRecordProperties.FieldBitsFromCSV() or
     // TSQLRecordProperties.FieldBitsFromRawUTF8() to compute aFields
-    function CreateJSONWriter(JSON: TStream; Expand: boolean; withID: boolean;
+    function CreateJSONWriter(JSON: TStream; Expand, withID: boolean;
       const aFields: TSQLFieldIndexDynArray; KnownRowsCount: integer;
       aBufSize: integer=8192): TJSONSerializer; overload;
     /// create a TJSONWriter, ready to be filled with TSQLRecord.GetJSONValues(W)
@@ -7669,19 +7675,19 @@ type
     // property instance will be serialized as a JSON object or array, not a
     // JSON string (which is the default, as expected by the database storage),
     // or if an "ID_str" string field should be added for JavaScript
-    procedure GetJSONValues(JSON: TStream; Expand: boolean; withID: boolean;
+    procedure GetJSONValues(JSON: TStream; Expand, withID: boolean;
       Occasion: TSQLOccasion; SQLRecordOptions: TJSONSerializerSQLRecordOptions=[]); overload;
     /// same as overloaded GetJSONValues(), but returning result into a RawUTF8
     // - if UsingStream is not set, it will use a temporary THeapMemoryStream instance
-    function GetJSONValues(Expand: boolean; withID: boolean; Occasion: TSQLOccasion;
+    function GetJSONValues(Expand, withID: boolean; Occasion: TSQLOccasion;
       UsingStream: TCustomMemoryStream=nil; SQLRecordOptions: TJSONSerializerSQLRecordOptions=[]): RawUTF8; overload;
     /// same as overloaded GetJSONValues(), but allowing to set the fields to
     // be retrieved, and returning result into a RawUTF8
-    function GetJSONValues(Expand: boolean; withID: boolean;
+    function GetJSONValues(Expand, withID: boolean;
       const Fields: TSQLFieldBits; SQLRecordOptions: TJSONSerializerSQLRecordOptions=[]): RawUTF8; overload;
     /// same as overloaded GetJSONValues(), but allowing to set the fields to
     // be retrieved, and returning result into a RawUTF8
-    function GetJSONValues(Expand: boolean; withID: boolean;
+    function GetJSONValues(Expand, withID: boolean;
       const FieldsCSV: RawUTF8; SQLRecordOptions: TJSONSerializerSQLRecordOptions=[]): RawUTF8; overload;
     /// will append the record fields as an expanded JSON object
     // - GetJsonValues() will expect a dedicated TJSONSerializer, whereas this
@@ -8429,23 +8435,22 @@ type
     {$endif NOVARIANTS}
 
     /// save the table values in JSON format
-    // - JSON data is added to TStream, with UTF-8 encoding
+    // - JSON data is added to TJSONWriter, with UTF-8 encoding, and not flushed
     // - if Expand is true, JSON data is an array of objects, for direct use
     // with any Ajax or .NET client:
     // & [ {"col1":val11,"col2":"val12"},{"col1":val21,... ]
-    // - if Expand is false, JSON data is serialized (used in TSQLTableJSON)
+    // - if W.Expand is false, JSON data is serialized (used in TSQLTableJSON)
     // & { "fieldCount":1,"values":["col1","col2",val11,"val12",val21,..] }
     // - RowFirst and RowLast can be used to ask for a specified row extent
     // of the returned data (by default, all rows are retrieved)
     // - IDBinarySize will force the ID field to be stored as hexadecimal text
+    procedure GetJSONValues(W: TJSONWriter; RowFirst: integer=0;
+      RowLast: integer=0; IDBinarySize: integer=0); overload;
+    /// same as the overloaded method, but appending an array to a TStream
     procedure GetJSONValues(JSON: TStream; Expand: boolean;
       RowFirst: integer=0; RowLast: integer=0; IDBinarySize: integer=0); overload;
     /// same as the overloaded method, but returning result into a RawUTF8
     function GetJSONValues(Expand: boolean; IDBinarySize: integer=0): RawUTF8; overload;
-    /// same as the overloaded method, but appending an array to a TTextWriter
-    // - will call W.FlushToStream, then append all content
-    procedure GetJSONValues(W: TTextWriter; Expand: boolean;
-      RowFirst: integer=0; RowLast: integer=0; IDBinarySize: integer=0); overload;
     /// save the table as CSV format, into a stream
     // - if Tab=TRUE, will use TAB instead of ',' between columns
     // - you can customize the ',' separator - use e.g. the global ListSeparator
@@ -20224,7 +20229,7 @@ function UTF8CompareISO8601(P1,P2: PUTF8Char): PtrInt;
 // create a temporary copy before parsing it in-place, to preserve the buffer
 // - sftUnknown and sftMany will set a varEmpty (Unassigned) value
 // - typeInfo may be used for sftBlobDynArray conversion to a TDocVariant array
-procedure ValueVarToVariant(Value: PUTF8Char; fieldType: TSQLFieldType;
+procedure ValueVarToVariant(Value: PUTF8Char; ValueLen: integer; fieldType: TSQLFieldType;
   var result: TVarData; createValueTempCopy: boolean; typeInfo: pointer;
   options: TDocVariantOptions=JSON_OPTIONS_FAST);
 
@@ -21368,7 +21373,7 @@ const
   TRUE_LOW  = ord('t')+ord('r')shl 8+ord('u')shl 16+ord('e')shl 24;
 
 {$ifndef NOVARIANTS}
-procedure ValueVarToVariant(Value: PUTF8Char; fieldType: TSQLFieldType;
+procedure ValueVarToVariant(Value: PUTF8Char; ValueLen: integer; fieldType: TSQLFieldType;
   var result: TVarData; createValueTempCopy: boolean; typeInfo: pointer;
   options: TDocVariantOptions);
 const
@@ -21387,8 +21392,20 @@ const
     varString,      varString,    varEmpty, varInt64,  varInt64,     varInt64,
  // sftRecordVersion, sftSessionUserID, sftDateTimeMS, sftUnixTime, sftUnixMSTime
     varInt64, varInt64, varDate, varInt64, varInt64);
+  procedure Complex;
+  var tmp: TSynTempBuffer;
+   begin
+    if (fieldType=sftBlobDynArray) and (typeInfo<>nil) and
+       (Value<>nil) and (Value^<>'[') and
+       Base64MagicCheckAndDecode(Value,tmp) then
+      Value := pointer(DynArrayBlobSaveJSON(typeInfo,tmp.buf)) else
+    if createValueTempCopy then
+      Value := tmp.Init(Value) else
+      tmp.buf := nil;
+    GetVariantFromJSON(Value,false,variant(result),@options);
+    tmp.Done;
+  end;
 var err: integer;
-    tmp: TSynTempBuffer;
 begin
   if result.VType and VTYPE_STATIC<>0 then
     VarClear(variant(result));
@@ -21401,7 +21418,7 @@ begin
     result.VDouble := GetExtended(Value,err);
     if err<>0 then begin
       result.VType := varString;
-      SetString(RawUTF8(result.VAny),Value,StrLen(Value));
+      SetString(RawUTF8(result.VAny),Value,ValueLen);
     end;
   end;
   sftDateTime, sftDateTimeMS:
@@ -21415,21 +21432,12 @@ begin
   sftTimeLog, sftModTime, sftCreateTime, sftUnixTime, sftUnixMSTime:
     SetInt64(Value,result.VInt64);
   sftAnsiText, sftUTF8Text:
-    SetString(RawUTF8(result.VAny),Value,StrLen(Value));
+    SetString(RawUTF8(result.VAny),Value,ValueLen);
   sftBlobCustom, sftBlob:
-    RawByteString(result.VAny) := BlobToTSQLRawBlob(Value);
+    BlobToTSQLRawBlob(Value,TSQLRawBlob(result.VAny));
   {$ifndef NOVARIANTS}sftVariant, sftNullable,{$endif}
-  sftBlobDynArray, sftObject, sftUTF8Custom: begin
-    if (fieldType=sftBlobDynArray) and (typeInfo<>nil) and
-       (Value<>nil) and (Value^<>'[') and
-       Base64MagicCheckAndDecode(Value,tmp) then
-      Value := pointer(DynArrayBlobSaveJSON(typeInfo,tmp.buf)) else
-    if createValueTempCopy then
-      Value := tmp.Init(Value) else
-      tmp.buf := nil;
-    GetVariantFromJSON(Value,false,variant(result),@options);
-    tmp.Done;
-  end;
+  sftBlobDynArray, sftObject, sftUTF8Custom:
+    Complex;
   end;
 end;
 
@@ -21450,7 +21458,7 @@ procedure TSQLPropInfo.GetVariant(Instance: TObject; var Dest: Variant);
 var temp: RawUTF8;
 begin
   GetValueVar(Instance,true,temp,nil);
-  ValueVarToVariant(pointer(temp),fSQLFieldTypeStored,TVarData(Dest),false,nil);
+  ValueVarToVariant(pointer(temp),Length(temp),fSQLFieldTypeStored,TVarData(Dest),false,nil);
 end;
 
 procedure TSQLPropInfo.SetVariant(Instance: TObject; const Source: Variant);
@@ -21685,7 +21693,7 @@ procedure TSQLPropInfoRTTI.GetVariant(Instance: TObject; var Dest: Variant);
 var temp: RawUTF8;
 begin
   GetValueVar(Instance,true,temp,nil);
-  ValueVarToVariant(pointer(temp),fSQLFieldTypeStored,TVarData(Dest),false,fPropInfo);
+  ValueVarToVariant(pointer(temp),length(temp),fSQLFieldTypeStored,TVarData(Dest),false,fPropInfo);
 end;
 {$endif NOVARIANTS}
 
@@ -25138,14 +25146,14 @@ begin
   if (self=nil) or (row<1) or (row>fRowCount) or
      (cardinal(field)>=cardinal(fFieldCount)) then
     exit; // out of range
-  if not Assigned(fFieldType) then
+  if fFieldType=nil then
     InitFieldTypes;
   V := fResults[row*fFieldCount+field];
   with fFieldType[field] do
     if expandHugeIDAsUniqueIdentifier and (field=fFieldIndexID) then begin
       SetInt64(V,PInt64(@id)^);
       if id.CreateTimeUnix>JAN2015_UNIX then
-        value := id.AsVariant else
+        id.ToVariant(value) else
         value := id.Value;
     end else begin
     if expandEnumsAsText and (ContentType=sftEnumerate) then begin
@@ -25163,7 +25171,7 @@ begin
         value := 0 else begin
         if ContentType=sftUnixTime then
           t.FromUnixTime(t.Value);
-        value := _ObjFast(['Time',t.Text(true),'Value',t.Value]);
+        TDocVariantData(value).InitObject(['Time',t.Text(true),'Value',t.Value],JSON_OPTIONS_FAST);
       end;
       exit;
     end;
@@ -25171,29 +25179,34 @@ begin
       SetInt64(V,t.Value);
       if t.Value=0 then
         value := 0 else
-        value := _ObjFast(['Time',UnixMSTimeToString(t.Value),'Value',t.Value]);
+        TDocVariantData(value).InitObject(['Time',UnixMSTimeToString(t.Value),'Value',t.Value],JSON_OPTIONS_FAST);
       exit;
     end;
     end;
-    ValueVarToVariant(V,ContentType,TVarData(value),true,ContentTypeInfo,options);
+    ValueVarToVariant(V,StrLen(V),ContentType,TVarData(value),true,ContentTypeInfo,options);
   end;
 end;
 
 procedure TSQLTable.ToDocVariant(Row: integer; out doc: variant;
   options: TDocVariantOptions; expandTimeLogAsText,expandEnumsAsText,
   expandHugeIDAsUniqueIdentifier: boolean);
-var Values: TVariantDynArray;
-    f: integer;
+var f: integer;
+    v: PVariantArray; // low-level trick for write access to read-only properties 
+    n: PRawUTF8Array;
+    docv: TDocVariantData absolute doc;
 begin
   if (self=nil) or (Row<1) or (Row>fRowCount) then
     exit; // out of range
-  SetLength(Values,fFieldCount);
+  docv.InitFast(fFieldCount,dvObject);
+  docv.SetCount(fFieldCount);
+  v := pointer(docv.Values);
   for f := 0 to fFieldCount-1 do
-    GetAsVariant(Row,f,Values[f],expandTimeLogAsText,expandEnumsAsText,
-      expandHugeIDAsUniqueIdentifier,options);
+    GetAsVariant(Row,f,v^[f],expandTimeLogAsText,expandEnumsAsText,expandHugeIDAsUniqueIdentifier,options);
   if length(fFieldNames)<>fFieldCount then
     InitFieldNames;
-  TDocVariantData(doc).InitObjectFromVariants(fFieldNames,Values,options);
+  n := pointer(docv.Names);
+  for f := 0 to fFieldCount-1 do
+    n^[f] := fFieldNames[f]; // no direct assign to protect fFieldNames[]
 end;
 
 procedure TSQLTable.ToDocVariant(out docs: TVariantDynArray; readonly: boolean);
@@ -25453,7 +25466,7 @@ end;
 function TSQLTable.FieldType(Field: integer): TSQLFieldType;
 begin
   if (self<>nil) and (cardinal(Field)<cardinal(FieldCount)) then begin
-    if not Assigned(fFieldType) then
+    if fFieldType=nil then
       InitFieldTypes;
     result := fFieldType[Field].ContentType;
   end else
@@ -25463,7 +25476,7 @@ end;
 function TSQLTable.FieldType(Field: integer; out FieldTypeInfo: PSQLTableFieldType): TSQLFieldType;
 begin
   if (self<>nil) and (cardinal(Field)<cardinal(FieldCount)) then begin
-    if not Assigned(fFieldType) then
+    if fFieldType=nil then
       InitFieldTypes;
     FieldTypeInfo := @fFieldType[Field];
     result := FieldTypeInfo^.ContentType;
@@ -25609,6 +25622,11 @@ begin
 end;
 
 function BlobToTSQLRawBlob(P: PUTF8Char): TSQLRawBlob;
+begin
+  BlobToTSQLRawBlob(P,result);
+end;
+
+procedure BlobToTSQLRawBlob(P: PUTF8Char; var result: TSQLRawBlob);
 var Len, LenHex: integer;
 begin
   result := '';
@@ -25846,92 +25864,102 @@ begin
   tmp.Done;
 end;
 
-procedure TSQLTable.GetJSONValues(JSON: TStream; Expand: boolean;
-  RowFirst, RowLast, IDBinarySize: integer);
-var W: TJSONWriter;
-    U: PPUTF8Char;
+procedure TSQLTable.GetJSONValues(W: TJSONWriter; RowFirst, RowLast, IDBinarySize: integer);
+var U: PPUTF8Char;
     f,r: integer;
     i64: Int64;
 label nostr,str;
 begin
+  if (self=nil) or (FieldCount<=0) or (fRowCount<=0) then begin
+    W.Add('[',']');
+    exit;
+  end;
+  // check range
+  if RowLast=0 then
+    RowLast := fRowCount else
+  if RowLast>fRowCount then
+    RowLast := fRowCount;
+  if RowFirst<=0 then
+    RowFirst := 1; // start reading after first Row (Row 0 = Field Names)
+  // get col names and types
+  if fFieldType=nil then
+    InitFieldTypes;
+  SetLength(W.ColNames,FieldCount);
+  for f := 0 to FieldCount-1 do begin
+    W.ColNames[f] := fResults[f]; // first Row is field Names
+    if not Assigned(OnExportValue) then
+      if (f=fFieldIndexID) and (IDBinarySize>0) then
+        W.ColNames[f] := 'id'; // ajax-friendly
+  end;
+  W.AddColumns(RowLast-RowFirst+1); // write or init field names (see JSON Expand)
+  if W.Expand then
+    W.Add('[');
+  // write rows data
+  U := @fResults[FieldCount*RowFirst];
+  for r := RowFirst to RowLast do begin
+    if W.Expand then
+      W.Add('{');
+    for f := 0 to FieldCount-1 do begin
+      if W.Expand then
+        W.AddString(W.ColNames[f]); // '"'+ColNames[]+'":'
+      if Assigned(OnExportValue) then
+        W.AddString(OnExportValue(self,r,f,false)) else
+      if (IDBinarySize>0) and (f=fFieldIndexID) then begin
+        SetInt64(U^,i64);
+        W.AddBinToHexDisplayQuoted(@i64,IDBinarySize);
+      end else
+      if U^=nil then
+        W.AddShort('null') else
+      case fFieldType[f].ContentDB of
+        ftInt64,ftDouble,ftCurrency:
+nostr:      W.AddNoJSONEscape(U^,StrLen(U^));
+        ftDate,ftUTF8,ftBlob: begin
+str:        W.Add('"');
+          W.AddJSONEscape(U^,StrLen(U^));
+          W.Add('"');
+        end;
+        else if IsStringJSON(U^) then // fast and safe enough
+          goto str else
+          goto nostr;
+      end;
+      W.Add(',');
+      inc(U); // points to next value
+    end;
+    W.CancelLastComma;
+    if W.Expand then begin
+      W.Add('}',',');
+      if r<>RowLast then
+        W.AddCR; // make expanded json more human readable
+    end else
+      W.Add(',');
+  end;
+  W.EndJSONObject(1,0,false); // "RowCount": set by W.AddColumns() above
+end;
+
+procedure TSQLTable.GetJSONValues(JSON: TStream; Expand: boolean;
+  RowFirst, RowLast, IDBinarySize: integer);
+var W: TJSONWriter;
+begin
   W := TJSONWriter.Create(JSON,Expand,false);
   try
-    if (self=nil) or (FieldCount<=0) or (fRowCount<=0) then begin
-      W.CancelAllVoid;
-      exit;
-    end;
-    // check range
-    if RowLast=0 then
-      RowLast := fRowCount else
-    if RowLast>fRowCount then
-      RowLast := fRowCount;
-    if RowFirst<=0 then
-      RowFirst := 1; // start reading after first Row (Row 0 = Field Names)
-    // get col names and types
-    if QueryTables<>nil then
-      InitFieldTypes;
-    SetLength(W.ColNames,FieldCount);
-    for f := 0 to FieldCount-1 do begin
-      W.ColNames[f] := fResults[f]; // first Row is field Names
-      if not Assigned(OnExportValue) then
-        if (f=fFieldIndexID) and (IDBinarySize>0) then
-          W.ColNames[f] := 'id'; // ajax-friendly
-    end;
-    W.AddColumns(RowLast-RowFirst+1); // write or init field names (see JSON Expand)
-    if Expand then
-      W.Add('[');
-    // write rows data
-    U := @fResults[FieldCount*RowFirst];
-    for r := RowFirst to RowLast do begin
-      if Expand then
-        W.Add('{');
-      for f := 0 to FieldCount-1 do begin
-        if Expand then
-          W.AddString(W.ColNames[f]); // '"'+ColNames[]+'":'
-        if Assigned(OnExportValue) then
-          W.AddString(OnExportValue(self,r,f,false)) else
-        if (IDBinarySize>0) and (f=fFieldIndexID) then begin
-          SetInt64(U^,i64);
-          W.AddBinToHexDisplayQuoted(@i64,IDBinarySize);
-        end else
-        if U^=nil then
-          W.AddShort('null') else
-        case fFieldType[f].ContentDB of
-          ftInt64,ftDouble,ftCurrency:
-nostr:      W.AddNoJSONEscape(U^,StrLen(U^));
-          ftDate,ftUTF8,ftBlob: begin
-str:        W.Add('"');
-            W.AddJSONEscape(U^,StrLen(U^));
-            W.Add('"');
-          end;
-          else if IsStringJSON(U^) then // fast and safe enough
-            goto str else
-            goto nostr;
-        end;
-        W.Add(',');
-        inc(U); // points to next value
-      end;
-      W.CancelLastComma;
-      if Expand then begin
-        W.Add('}',',');
-        if r<>RowLast then
-          W.AddCR; // make expanded json more human readable
-      end else
-        W.Add(',');
-    end;
-    W.EndJSONObject(1,0); // "RowCount": set by W.AddColumns(RowLast-RowFirst+1)
+    GetJSONValues(W,RowFirst,RowLast,IDBinarySize);
+    W.FlushFinal;
   finally
     W.Free;
   end;
 end;
 
-procedure TSQLTable.GetJSONValues(W: TTextWriter; Expand: boolean;
-  RowFirst, RowLast, IDBinarySize: integer);
+function TSQLTable.GetJSONValues(Expand: boolean; IDBinarySize: integer): RawUTF8;
+var W: TJSONWriter;
+    tmp: TTextWriterStackBuffer;
 begin
-  if (self=nil) or (FieldCount<=0) or (fRowCount<=0) then
-    W.Add('[',']') else begin
-    W.FlushToStream;
-    GetJSONValues(W.Stream,Expand,RowFirst,RowLast,IDBinarySize);
+  W := TJSONWriter.CreateOwnedStream(tmp);
+  try
+    W.Expand := Expand;
+    GetJSONValues(W,0,0,IDBinarySize); // create JSON data in MS
+    W.SetText(result);
+  finally
+    W.Free;
   end;
 end;
 
@@ -26009,7 +26037,7 @@ begin
       // retrieve normalized field names and types
       if length(fFieldNames)<>fFieldCount then
         InitFieldNames;
-      if not Assigned(fFieldType) then
+      if fFieldType=nil then
         InitFieldTypes;
       // check range
       if RowLast=0 then
@@ -26155,18 +26183,6 @@ begin
     result := Dest.DataString;
   finally
     Dest.Free;
-  end;
-end;
-
-function TSQLTable.GetJSONValues(Expand: boolean; IDBinarySize: integer): RawUTF8;
-var MS: TRawByteStringStream;
-begin
-  MS := TRawByteStringStream.Create;
-  try
-    GetJSONValues(MS,Expand,0,0,IDBinarySize); // create JSON data in MS
-    result := MS.DataString;
-  finally
-    MS.Free;
   end;
 end;
 
@@ -27125,7 +27141,7 @@ begin
     end;
     Tot := 1;
   end else begin
-    if not Assigned(fFieldType) then
+    if fFieldType=nil then
       InitFieldTypes;
     U := @fResults[FieldCount]; // start reading after first Row
     for R := 1 to fRowCount do // sum all lengths by field
@@ -27186,7 +27202,7 @@ var i: integer;
 begin
   result := 0;
   if (self<>nil) and (cardinal(Field)<cardinal(FieldCount)) then begin
-    if not Assigned(fFieldType) then
+    if fFieldType=nil then
       InitFieldTypes;
     with fFieldType[Field] do
     if ContentSize>=0 then
@@ -27220,8 +27236,8 @@ function TSQLTable.FieldTable(Field: integer): TSQLRecordClass;
 begin
   if (self=nil) or (cardinal(Field)>=cardinal(FieldCount)) or (fQueryTables=nil) then
     result := nil else begin
-    if not Assigned(fFieldType) then
-       InitFieldTypes;
+    if fFieldType=nil then
+      InitFieldTypes;
     Field := fFieldType[Field].TableIndex;
     if Field<0 then
       result := nil else
@@ -27460,11 +27476,13 @@ end;
 procedure TSQLTable.GetVariant(Row,Field: integer; var result: variant);
 var aType: TSQLFieldType;
     info: PSQLTableFieldType;
+    U: PUTF8Char;
 begin
   if Row=0 then // Field Name
     RawUTF8ToVariant(GetU(0,Field),result) else begin
     aType := FieldType(Field,info);
-    ValueVarToVariant(Get(Row,Field),aType,TVarData(result),true,info.ContentTypeInfo);
+    U := Get(Row,Field);
+    ValueVarToVariant(U,StrLen(U),aType,TVarData(result),true,info.ContentTypeInfo);
   end;
 end;
 
@@ -32081,7 +32099,7 @@ begin
   end;
 end;
 
-procedure TSQLRecord.GetJSONValues(JSON: TStream; Expand: boolean; withID: boolean;
+procedure TSQLRecord.GetJSONValues(JSON: TStream; Expand, withID: boolean;
   Occasion: TSQLOccasion; SQLRecordOptions: TJSONSerializerSQLRecordOptions);
 var serializer: TJSONSerializer;
 begin
@@ -32093,7 +32111,7 @@ begin
   GetJSONValuesAndFree(serializer);
 end;
 
-function TSQLRecord.GetJSONValues(Expand: boolean; withID: boolean;
+function TSQLRecord.GetJSONValues(Expand, withID: boolean;
   const Fields: TSQLFieldBits; SQLRecordOptions: TJSONSerializerSQLRecordOptions): RawUTF8;
 var J: TRawByteStringStream;
     serializer: TJSONSerializer;
@@ -32109,7 +32127,7 @@ begin
   end;
 end;
 
-function TSQLRecord.GetJSONValues(Expand: boolean; withID: boolean;
+function TSQLRecord.GetJSONValues(Expand, withID: boolean;
   const FieldsCSV: RawUTF8; SQLRecordOptions: TJSONSerializerSQLRecordOptions): RawUTF8;
 var bits: TSQLFieldBits;
 begin
@@ -32118,7 +32136,7 @@ begin
     result := '';
 end;
 
-function TSQLRecord.GetJSONValues(Expand: boolean; withID: boolean;
+function TSQLRecord.GetJSONValues(Expand, withID: boolean;
   Occasion: TSQLOccasion; UsingStream: TCustomMemoryStream;
   SQLRecordOptions: TJSONSerializerSQLRecordOptions): RawUTF8;
 var J: TRawByteStringStream;
