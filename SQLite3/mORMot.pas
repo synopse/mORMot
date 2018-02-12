@@ -16753,6 +16753,7 @@ type
     // - this array has the same length as the associated Model.Tables[]
     // - fStaticVirtualTable[] will contain in-memory or external tables declared
     // as SQLite3 virtual tables, therefore available from joined SQL statements
+    // - the very same TSQLRestStorage is handled in fStaticData
     fStaticVirtualTable: TSQLRestDynArray;
     /// in-memory storage of TAuthSession instances
     fSessions: TObjectListLocked;
@@ -17799,6 +17800,7 @@ type
     fStorageCriticalSectionCount: integer;
     fBasicSQLCount: RawUTF8;
     fBasicSQLHasRows: array[boolean] of RawUTF8;
+    fStorageVirtual: TSQLVirtualTable;
     /// any set bit in this field indicates UNIQUE field value
     fIsUnique: TSQLFieldBits;
     /// allow to force refresh for a given Static table
@@ -39059,6 +39061,13 @@ begin
   CloseServerMessage;
   {$endif}
   fRecordVersionSlaveCallbacks := nil; // should be done before fServices.Free
+  for i := 0 to high(fStaticVirtualTable) do
+  if fStaticVirtualTable[i]<>nil then begin
+    // free all virtual TSQLRestStorage objects
+    fStaticVirtualTable[i].Free;
+    if fStaticData<>nil then
+      fStaticData[i] := nil; // free once
+  end;
   for i := 0 to high(fStaticData) do
     // free all TSQLRestStorage objects and update file if necessary
     fStaticData[i].Free;
@@ -47149,6 +47158,10 @@ begin
   if fStorageCriticalSectionCount<>0 then
     raise EORMException.CreateUTF8('%.Destroy with CS=%',[self,fStorageCriticalSectionCount]);
   DeleteCriticalSection(fStorageCriticalSection);
+  if fStorageVirtual<>nil then begin // no GPF e.g. if DB release after server
+    fStorageVirtual.fStatic := nil;
+    fStorageVirtual.fStaticStorage := nil;
+  end;
 end;
 
 procedure TSQLRestStorage.BeginCurrentThread(Sender: TThread);
@@ -51825,22 +51838,23 @@ begin
       if length(aServer.fStaticVirtualTable)<>length(aServer.Model.Tables) then
         SetLength(aServer.fStaticVirtualTable,length(aServer.Model.Tables));
       aServer.fStaticVirtualTable[fStaticTableIndex] := fStatic;
-      if fStatic.InheritsFrom(TSQLRestStorage) then
-        fStaticStorage := TSQLRestStorage(fStatic);
+      fStaticStorage := TSQLRestStorage(fStatic);
+      fStaticStorage.fStorageVirtual := self;
     end;
   end;
 end;
 
 destructor TSQLVirtualTable.Destroy;
-var aTableIndex: cardinal;
+var t,n: cardinal;
 begin
   if fStatic<>nil then begin
     if (Module<>nil) and (Module.Server<>nil) then
       with Module.Server do begin // temporary release (e.g. backup)
-        aTableIndex := Model.GetTableIndex(TableName);
-        if aTableIndex<cardinal(length(fStaticVirtualTable)) then begin
-          fStaticVirtualTable[aTableIndex] := nil;
-          if IsZero(fStaticVirtualTable,length(fStaticVirtualTable)*SizeOf(pointer)) then
+        t := Model.GetTableIndex(TableName);
+        n := length(fStaticVirtualTable);
+        if t<n then begin
+          fStaticVirtualTable[t] := nil;
+          if IsZero(pointer(fStaticVirtualTable),n*SizeOf(pointer)) then
             fStaticVirtualTable := nil;
         end;
       end;

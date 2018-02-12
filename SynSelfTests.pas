@@ -14654,15 +14654,15 @@ begin
           VA.DynArray('FileVersion').Add(FV);
         end else
           str(n,VA.fUTF8);
-{$ifdef PUBLISHRECORD}
+        {$ifdef PUBLISHRECORD}
         VA.fRec.nPhrase := n;
         VA.fRec.nCol := n*2;
         VA.fRec.hits[2].docs_with_hits := n*3;
-{$endif PUBLISHRECORD}
+        {$endif PUBLISHRECORD}
         Check(Client.Add(VA,true)=n);
       end;
       Client.Commit;
-{$ifndef LVCL}
+      {$ifndef LVCL}
       if Client.TransactionBegin(TSQLRecordPeopleObject) then
       try
         V2.FillPrepare(Client,'LastName=:("Morse"):');
@@ -14687,16 +14687,16 @@ begin
       except
         Client.RollBack;
       end;
-{$endif}
-{$ifdef INCLUDE_FTS3}
+      {$endif LVCL}
+      {$ifdef INCLUDE_FTS3}
       TestFTS3(Client);
-{$endif}
+      {$endif}
       TestDynArray(Client);
-{$ifndef LVCL}
+      {$ifndef LVCL}
       TestObject(Client);
-{$endif}
+      {$endif}
       InternalTestMany(self,Client);
-      // RegisterVirtualTableModule(TSQLVirtualTableJSON) already done
+      // RegisterVirtualTableModule(TSQLVirtualTableJSON) done above
       TestVirtual(Client,false,'Virtual Table access via SQLite 1',TSQLRecordDali1);
       TestVirtual(Client,false,'Virtual Table access via SQLite 1',TSQLRecordDali2);
       TestVirtual(Client,true,'Direct Virtual Table access 1',TSQLRecordDali1);
@@ -14738,7 +14738,7 @@ begin
       BackupFN := Format('backupbackground%s.dbsynlz',[ClassName]);
       deleteFile(BackupFN);
       BackupTimer.Start;
-      Check(Client.DB.BackupBackground(BackupFN,1024,0,OnBackupProgress,true));
+      Check(Client.DB.BackupBackground(BackupFN,1024,0,OnBackupProgress,true)); 
       // test per-one and batch requests
       if ClassType=TTestMemoryBased then begin // time consuming, so do it once
         Server := TSQLRestServerTest.Create(TSQLModel.Create([TSQLRecordPeople]),false);
@@ -14943,9 +14943,9 @@ begin
     V2.Free;
     VA.Free;
     VP.Free;
-{$ifndef LVCL}
+    {$ifndef LVCL}
     VO.Free;
-{$endif}
+    {$endif}
     FreeAndNil(Demo);
   end;
   {$ifndef NOSQLITE3ENCRYPT}
