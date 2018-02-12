@@ -7653,30 +7653,33 @@ begin
   end;
 end;
 begin
-  {$ifdef FPC}
-  exit; // bypass the tests by now, until FPC variant supports is fixed
-  {$endif}
   // see http://docs.mongodb.org/manual/reference/object-id
   oid.FromText('507f191e810c19729de860ea');
   Check(oid.UnixCreateTime=bswap32($507f191e));
   u := oid.ToText;
   Check(u=BSONID);
   o := ObjectID('507f191e810c19729de860ea');
+  Check(TVarData(o).VType=BSONVariantType.VarType);
   u := string(o);
   Check(u=BSONID);
   d2 := Iso8601ToDateTime('2012-10-17T20:46:22');
   od := d2;
   Check(TVarData(od).VType=varDate);
+  {$ifdef FPC} // doesn't allow direct cast from varDate to double :(
+  CheckSame(TVarData(od).VDate,d2);
+  d := double(o);
+  {$else}
   CheckSame(od,d2);
   d := o;
+  {$endif}
   DateTimeToIso8601StringVar(d,'T',st);
   CheckSame(d,d2,1E-4,st);
   CheckSame(o,d2,1E-4,st);
   CheckSame(TBSONVariantData(o).VObjectID.CreateDateTime,d2,1E-4);
   o2 := o;
-  Check(o=o2);
+  Check(double(o)=double(o2));
   o := ObjectID;
-  Check(Abs(NowUTC-TDateTime(o))<0.1);
+  Check(Abs(NowUTC-double(o))<0.1);
   oid.FromText(string(o));
   Check(Abs(NowUTC-oid.CreateDateTime)<0.1);
   oid2.ComputeNew;
@@ -7685,7 +7688,11 @@ begin
   Check(oid.MachineID.b3=oid2.MachineID.b3);
   Check(oid.ProcessID=oid2.ProcessID);
   o2 := ObjectID;
+  {$ifdef FPC} // FPC bug: sysvartotdatetime doesn't handle custom variants :(
+  Check(double(o2)>=double(o),o);
+  {$else}
   Check(TDateTime(o2)>=TDateTime(o),o);
+  {$endif}
   oid2.ComputeNew;
   j := 100000;
   timer.Start;
@@ -7766,7 +7773,9 @@ begin
   o2 := BSONVariant('{%:[?,?,?]}',['BSON'],['awesome',5.05,1986]);
   Check(VariantSaveMongoJSON(o2,modMongoStrict)=BSONAWESOME);
   b := pointer(bsonDat);
+  {$ifndef FPC}
   Check(o2=BSONAWESOME,'BSONVariant casted to string');
+  {$endif}
   u := string(o2);
   Check(u='{BSON:["awesome",5.05,1986]}','TBSONVariant: mongoShell syntax');
   BSONParseLength(b);
@@ -7783,7 +7792,7 @@ begin
   Check(o.bson._Kind=ord(dvArray));
   Check(o.bson._count=3);
   Check(o.bson._(0)='awesome');
-  CheckSame(o.bson._(1),5.05);
+  CheckSame(double(o.bson._(1)),5.05);
   Check(o.bson._(2)=1986);
   Check(o.dummy=null);
   Check(o.Exists('bson'));
@@ -7901,7 +7910,7 @@ begin
   Check(u='{type:{$in:["food","snack"]}}');
   o := _JSON('{"hello": null}');
   Check(TVarData(o).VType=DocVariantVType);
-  check(o='{"hello":null}');
+  check(string(o)='{"hello":null}');
   o := _JSON('{"hello": world}');
   Check(TVarData(o).VType=varEmpty,'invalid JSON content');
   CheckRegEx(_Json('{name:"John",field:{ "$regex": "acme.*corp", $options: "i" }}'));
@@ -7912,7 +7921,7 @@ begin
   u := BSONToJSON(b,betDoc,0,modMongoStrict);
   Check(u='{"name":"John","field":'+REGEX+'}');
   o2 := BSONVariant(REGEX2);
-  Check(o2='{name:"John",field:/acme.*corp/i}','MongoShell in string cast');
+  Check(string(o2)='{name:"John",field:/acme.*corp/i}','MongoShell in string cast');
   Check(VariantSaveJson(o2)=u);
   b := pointer(BSON('{name:?,field:/%/i}',['acme.*corp'],['John']));;
   u2 := BSONToJSON(b,betDoc,0,modMongoStrict);
@@ -7977,11 +7986,19 @@ begin
   u := VariantSaveMongoJSON(o,modMongoStrict);
   check(u='{"num":{"$numberDecimal":"123.5600"}}');
   o2 := _JsonFast(u);
+  {$ifdef FPC} // TCustomVariantType.CompareOp not yet supported :(
+  check(string(o)=string(o2),'o=o2');
+  {$else}
   check(o=o2,'o=o2');
+  {$endif}
   u := VariantSaveMongoJSON(o,modMongoShell);
   check(u='{num:NumberDecimal("123.5600")}');
   o2 := _JsonFast(u);
+  {$ifdef FPC} // TCustomVariantType.CompareOp not yet supported :(
+  check(string(o)=string(o2),'o=o2');
+  {$else}
   check(o=o2,'o=o2');
+  {$endif}
   b := pointer(BSON(u,[],[]));
   u2 := BSONToJSON(b,betDoc,0,modMongoShell);
   Check(u=u2);
@@ -8021,9 +8038,7 @@ begin
   Check(variant(Doc)._JSON=JSON);
   Check(variant(Doc)._JSON__=JSON,'pseudo methods use IdemPChar');
   Check(VariantSaveMongoJSON(variant(Doc),modMongoStrict)=JSON);
-  {$ifndef FPC}
-  Check(variant(Doc)=JSON);
-  {$endif}
+  Check(VariantToUTF8(variant(Doc))=JSON);
   Check(Doc.U['name']='John');
   Check(Doc.I['birthyear']=ExpectedYear);
 end;
