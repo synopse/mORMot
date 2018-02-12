@@ -969,7 +969,8 @@ end;
 
 procedure TSQLRestServerDB.InitializeEngine;
 var i: integer;
-    aModule: TSQLVirtualTableClass;
+    module: TSQLVirtualTableClass;
+    registered: array of TSQLVirtualTableClass;
 begin
   for i := 0 to high(Model.TableProps) do
     case Model.TableProps[i].Kind of
@@ -978,9 +979,11 @@ begin
         pointer(TSQLRecordRTreeClass(Model.Tables[i]).RTreeSQLFunctionName),
         2,SQLITE_ANY,Model.Tables[i],InternalRTreeIn,nil,nil,nil));
     rCustomForcedID, rCustomAutoID: begin
-      aModule := Model.VirtualTableModule(Model.Tables[i]);
-      if aModule<>nil then // perform registration of the module
-        TSQLVirtualTableModuleServerDB.Create(aModule,self)
+      module := Model.VirtualTableModule(Model.Tables[i]);
+      if (module<>nil) and (PtrArrayFind(registered,module)<0) then begin
+        TSQLVirtualTableModuleServerDB.Create(module,self);
+        PtrArrayAdd(registered,module); // register it once for this DB
+      end;
     end;
     end;
 end;
@@ -2559,8 +2562,8 @@ begin
     end;
     fModule.xRename := vt_Rename;
   end;
-  sqlite3_check(aDB.DB,sqlite3.create_module_v2(aDB.DB,pointer(fModuleName),
-    fModule,self,sqlite3InternalFreeModule)); // raise ESQLite3Exception on error
+  sqlite3_check(aDB.DB,sqlite3.create_module_v2(aDB.DB,pointer(fModuleName),fModule,
+    self,sqlite3InternalFreeModule)); // raise ESQLite3Exception on error
   fDB := aDB; // mark successfull create_module() for sqlite3InternalFreeModule
 end;
 
