@@ -692,7 +692,9 @@ type
   /// The OCITypeCode type is interchangeable with the existing SQLT type which is a ub2
   OCITypeCode = ub2;
 
+  {$MINENUMSIZE 4}
   OCITypeGetOpt = (OCI_TYPEGET_HEADER, OCI_TYPEGET_ALL);
+  {$MINENUMSIZE 1}
 
 const
   { OCI Handle Types }
