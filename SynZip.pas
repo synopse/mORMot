@@ -177,7 +177,7 @@ unit SynZip;
       {.$define USEZLIBSSE} // SynZLibSSE static .o files for FPC + Win32 fails
     {$endif}
     {$ifdef Win64}
-      {.$define USEZLIBSSE} // SynZLibSSE static .o files for FPC + Win64
+      {$define USEZLIBSSE} // SynZLibSSE static .o files for FPC + Win64
     {$endif}
   {$else}
     {$define USEEXTZLIB}  // will use zlib.so under Linux/Posix
@@ -5010,8 +5010,8 @@ var strm: TZStream;
   end;
 begin
   {$ifdef USEZLIBSSE}
-  result := CompressStreamSSE42(src,srcLen,aStream,@tempbuf.buf128k,
-    sizeof(tempbuf.buf128k),CompressionLevel,ZLibFormat);
+  result := CompressStreamSSE42(src,srcLen,aStream,@temp.buf128k,
+    sizeof(temp.buf128k),CompressionLevel,ZLibFormat);
   if result<>Z_VERSION_ERROR then
     exit; // SSE4.2 CloudFlare's fork did the work
   {$endif}
