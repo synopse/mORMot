@@ -177,7 +177,7 @@ unit SynZip;
       {.$define USEZLIBSSE} // SynZLibSSE static .o files for FPC + Win32 fails
     {$endif}
     {$ifdef Win64}
-      {$define USEZLIBSSE} // SynZLibSSE static .o files for FPC + Win64
+      {.$define USEZLIBSSE} // SynZLibSSE static .o files for FPC + Win64
     {$endif}
   {$else}
     {$define USEEXTZLIB}  // will use zlib.so under Linux/Posix
@@ -585,8 +585,10 @@ procedure zlibFreeMem(AppData, Block: Pointer);  cdecl;
 {$ifdef USEEZLIB}
 function ZLIB_VERSION: PAnsiChar;
 {$else}
+{$ifndef USEPASZLIB} // in case of USEPASZLIB zlib version is defined in zbase
 const
   ZLIB_VERSION = '1.2.5';
+{$endif}
 {$endif}
 
 const
@@ -1609,7 +1611,7 @@ begin
   if Len=0 then
     exit;
   SetLength(result,Len);
-  if (UnCompressMem(@gz[10],pointer(result),gzLen-18,Len)<>Len) or
+  if (UnCompressMem(@gz[10],pointer(result),gzLen-10,Len)<>Len) or
      (SynZip.crc32(0,pointer(result),Len)<>pCardinal(@gz[gzLen-8])^) then
     result := ''; // invalid CRC
 end;
