@@ -585,10 +585,8 @@ procedure zlibFreeMem(AppData, Block: Pointer);  cdecl;
 {$ifdef USEEZLIB}
 function ZLIB_VERSION: PAnsiChar;
 {$else}
-{$ifndef USEPASZLIB} // in case of USEPASZLIB zlib version is defined in zbase
 const
   ZLIB_VERSION = '1.2.5';
-{$endif}
 {$endif}
 
 const
