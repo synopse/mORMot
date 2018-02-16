@@ -1609,7 +1609,7 @@ begin
   if Len=0 then
     exit;
   SetLength(result,Len);
-  if (UnCompressMem(@gz[10],pointer(result),gzLen-18,Len)<>Len) or
+  if (UnCompressMem(@gz[10],pointer(result),gzLen-10,Len)<>Len) or
      (SynZip.crc32(0,pointer(result),Len)<>pCardinal(@gz[gzLen-8])^) then
     result := ''; // invalid CRC
 end;
@@ -5010,8 +5010,8 @@ var strm: TZStream;
   end;
 begin
   {$ifdef USEZLIBSSE}
-  result := CompressStreamSSE42(src,srcLen,aStream,@tempbuf.buf128k,
-    sizeof(tempbuf.buf128k),CompressionLevel,ZLibFormat);
+  result := CompressStreamSSE42(src,srcLen,aStream,@temp.buf128k,
+    sizeof(temp.buf128k),CompressionLevel,ZLibFormat);
   if result<>Z_VERSION_ERROR then
     exit; // SSE4.2 CloudFlare's fork did the work
   {$endif}
