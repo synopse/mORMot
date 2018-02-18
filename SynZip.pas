@@ -4855,6 +4855,27 @@ function inflateInit2_(var strm: TZStream; windowBits: integer;
   version: PAnsiChar; stream_size: integer): integer; cdecl; external;
 function get_crc_table: pointer; cdecl; external;
 
+procedure memcpy(dest, src: Pointer; count: integer); cdecl;
+  public name{$ifdef CPU64}'memcpy'{$else}'_memcpy'{$endif};
+begin
+  Move(src^, dest^, count);
+end;
+procedure memset(dest: Pointer; val: Integer; count: integer); cdecl;
+  public name{$ifdef CPU64}'memset'{$else}'_memset'{$endif};
+begin
+  FillChar(dest^, count, val);
+end;
+function malloc(size: cardinal): Pointer; cdecl;
+  public name{$ifdef CPU64}'malloc'{$else}'_malloc'{$endif};
+begin
+  GetMem(Result, size);
+end;
+procedure free(P: Pointer); cdecl;
+  public name{$ifdef CPU64}'free'{$else}'_free'{$endif};
+begin
+  FreeMem(P);
+end;
+
 {$endif FPC}
 
 {$endif USEINLINEASM}
