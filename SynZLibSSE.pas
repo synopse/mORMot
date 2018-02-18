@@ -1,9 +1,22 @@
-/// CloudFlare's fork of ZLib for SSE3+SSE4.2 Intel/AMD CPUs
+/// DO NOT USE !!! CloudFlare's fork of ZLib for SSE3+SSE4.2 Intel/AMD CPUs
 // - only supports FPC+Win64 by now, due to Delphi linker issues
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynZLibSSE;
 
+// DEPRECATED UNIT !!!
+//  just use plain SynZip.pas unit, defining USEZLIBSSE conditional on FPC+Win64
+
+interface
+
+// About CloudFlare's fork of ZLib for SSE3+SSE4.2 Intel/AMD CPUs:
+//  https://github.com/cloudflare/zlib
+//  https://blog.cloudflare.com/cloudflare-fights-cancer
+
+
+implementation
+
+end. // put as reference all deprecated code below
 (*
 
     This file is part of Synopse framework.
@@ -45,10 +58,6 @@ unit SynZLibSSE;
   the terms of any one of the MPL, the GPL or the LGPL.
 
   ***** END LICENSE BLOCK *****
-
-  About CloudFlare's fork of ZLib for SSE3+SSE4.2 Intel/AMD CPUs:
-  https://github.com/cloudflare/zlib
-  https://blog.cloudflare.com/cloudflare-fights-cancer
 
   Version 1.18
   - first public release, corresponding to mORMot Framework 1.18
@@ -174,14 +183,14 @@ end;
 {$endif}
 
 {$ifdef WIN64}
-  {$L fpc-win64\trees.o}
-  {$L fpc-win64\adler32.o}
-  {$L fpc-win64\crc32.o}
-  {$L fpc-win64\deflate.o}
-  {$L fpc-win64\zutil.o}
-  {$L fpc-win64\inffast.o}
-  {$L fpc-win64\inftrees.o}
-  {$L fpc-win64\inflate.o}
+  {$L fpc-win64\sse\trees.o}
+  {$L fpc-win64\sse\adler32.o}
+  {$L fpc-win64\sse\crc32.o}
+  {$L fpc-win64\sse\deflate.o}
+  {$L fpc-win64\sse\zutil.o}
+  {$L fpc-win64\sse\inffast.o}
+  {$L fpc-win64\sse\inftrees.o}
+  {$L fpc-win64\sse\inflate.o}
 {$endif}
 
 {$endif FPC}

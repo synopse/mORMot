@@ -159,7 +159,7 @@ uses
     {$ifndef LVCL}
       {$ifdef FPC}
         {$ifdef WIN64}
-          SynZLibSSE in '..\SynZLibSSE.pas',
+        //SynZLibSSE in '..\SynZLibSSE.pas', conflicts with SynZip's .o files
         {$endif}
       {$else}
         SynPdf in '..\SynPdf.pas',
