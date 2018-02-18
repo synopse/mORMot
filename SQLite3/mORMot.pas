@@ -28574,8 +28574,8 @@ begin // don't raise exception on error parsing
   ParseAndConvert(JSONBuffer,JSONBufferLen);
 end;
 
-constructor TSQLTableJSON.CreateFromTables(const Tables: array of TSQLRecordClass; const aSQL,
-  aJSON: RawUTF8);
+constructor TSQLTableJSON.CreateFromTables(const Tables: array of TSQLRecordClass;
+  const aSQL, aJSON: RawUTF8);
 var len: integer;
 begin
   len := length(aJSON);
