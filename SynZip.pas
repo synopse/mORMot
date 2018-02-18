@@ -271,14 +271,16 @@ type
 {$ifdef HASCODEPAGE}
   /// define a raw storage string type, used for data buffer management
   ZipString = type RawByteString;
-  {$ifndef FPC}
-  PtrUInt = NativeUInt;
+  {$ifdef FPC}
+  ZipPtrUInt = PtrUInt;
+  {$else}
+  ZipPtrUInt = NativeUInt;
   {$endif}
 {$else}
   /// define a raw storage string type, used for data buffer management
   ZipString = type AnsiString;
   /// as available in FPC
-  PtrUInt = cardinal;
+  ZipPtrUint = cardinal;
 {$endif}
 
 /// ZLib INFLATE decompression from memory into a AnsiString (ZipString) variable
@@ -339,12 +341,12 @@ type
 
 {$ifdef USEZLIBSSE} // statically linked with new 64-bit TZStream
 type
-  TZLong = PtrUInt;
+  TZLong = ZipPtrUint;
   TZCRC = Int64;
 {$else}
   {$ifdef USECFZLIB} // dynamically linked with new 64-bit TZStream
   type
-    TZLong = PtrUInt;
+    TZLong = ZipPtrUint;
     TZCRC = Int64;
   const
     {$ifdef WIN64}
@@ -368,7 +370,7 @@ type
       {$endif MSWINDOWS}
       {$ifdef LINUX} // dynamically linked with new 64-bit TZStream
       type
-        TZLong = PtrUInt;
+        TZLong = ZipPtrUint;
         TZCRC = Int64;
       const
         libz='libz.so.1';
@@ -647,7 +649,7 @@ type
   // - can open a .zip archive file content from memory
   TZipRead = class
   private
-    file_, map: PtrUInt; // we use a memory mapped file to access the zip content
+    file_, map: ZipPtrUint; // we use a memory mapped file to access the zip content
     buf: PByteArray;
     FirstFileHeader: PFileHeader;
     ReadOffset: cardinal;
@@ -1130,7 +1132,7 @@ begin
     for i := 0 to Count-1 do
     with Entry[i], R.Entry[i] do begin
       fhr.Init;
-      fhr.localHeadOff := PtrUInt(infoLocal)-PtrUInt(R.Entry[0].infoLocal);
+      fhr.localHeadOff := ZipPtrUint(infoLocal)-ZipPtrUint(R.Entry[0].infoLocal);
       R.RetrieveFileInfo(i,fhr.fileInfo);
       SetString(intName,storedName,infoLocal^.nameLen);
     end;
@@ -1346,7 +1348,7 @@ type
 
 function TZipRead.RetrieveFileInfo(Index: integer; var Info: TFileInfo): boolean;
 var P: ^TDataDescriptor;
-    PDataStart: PtrUInt;
+    PDataStart: ZipPtrUint;
 begin
   if (self=nil) or (cardinal(Index)>=cardinal(Count)) then begin
     result := false;
@@ -1373,15 +1375,15 @@ begin
     P := Pointer(Entry[Index+1].infoLocal) else
     P := Pointer(FirstFileHeader);
   dec(P);
-  PDataStart := PtrUInt(Entry[Index].data);
+  PDataStart := ZipPtrUint(Entry[Index].data);
   repeat
     // same pattern as ReadLocalItemDescriptor() in 7-Zip's ZipIn.cpp
     // but here, search is done backwards (much faster than 7-Zip algorithm)
     if P^.signature<>$08074b50 then
-      if PtrUInt(P)>PDataStart then
+      if ZipPtrUint(P)>PDataStart then
         dec(PByte(P)) else
         break else
-      if P^.zipSize=PtrUInt(P)-PDataStart then begin
+      if P^.zipSize=ZipPtrUint(P)-PDataStart then begin
         if (P^.zipSize=0) or (P^.fullSize=0) or
            (P^.zipSize=dword(-1)) or (P^.fullSize=dword(-1)) then
           break; // we expect sizes to be there!
@@ -1391,7 +1393,7 @@ begin
         result := true;
         exit;
       end else
-      if PtrUInt(P)>PDataStart then
+      if ZipPtrUint(P)>PDataStart then
         dec(PByte(P)) else
         break;
   until false;
