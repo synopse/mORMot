@@ -237,20 +237,20 @@
   // -> could be disabled to force external .so/.dll linking
   {$ifdef MSWINDOWS}
   {$ifdef CPUX86}
-    {$define FPCSQLITE3STATIC} // we supply Win32 .o
+    {$define FPCSQLITE3STATIC} // use fpc-win32\sqlite3.o
   {$else}
-    {.$define FPCSQLITE3STATIC} // Win64 .o are buggy (even compiled with -O1)
+    {$define FPCSQLITE3STATIC} // use fpc-win64\sqlite3.o
   {$endif}
   {$endif}
   {$ifdef LINUX}
     {$ifdef CPUX86}
-      {$define FPCSQLITE3STATIC} // we supply Linux 32-bit x86 .o
+      {$define FPCSQLITE3STATIC} // use fpc-linux32\sqlite3.o
     {$endif}
     {$ifdef CPUX64}
-      {$define FPCSQLITE3STATIC} // we supply Linux 64-bit x86_64 .o
+      {$define FPCSQLITE3STATIC} // use fpc-linux64\sqlite3.o
     {$endif}
     {$ifdef CPUARM}
-      {$define FPCSQLITE3STATIC} // we supply Linux 32-bit ARM .o
+      {$define FPCSQLITE3STATIC} // use fpc-linuxarm\sqlite3.o
     {$endif}
   {$endif}
 

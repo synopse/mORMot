@@ -339,7 +339,7 @@ end;
 
 {$endif}
 
-{$else}
+{$else FPC}
 
   // Delphi has a more complex linking strategy, since $linklib doesn't exist :(
   {$ifdef MSWINDOWS}
@@ -366,30 +366,22 @@ end;
 // those functions will be called only under Delphi + Win32
 
 function malloc(size: cardinal): Pointer; cdecl; { always cdecl }
-  {$ifdef FPC}public name{$ifdef CPU64}'malloc'{$else}'_malloc'{$endif};{$endif}
-// the SQLite3 database engine will use the FastMM4/SynScaleMM fast heap manager
 begin
   GetMem(Result, size);
 end;
 
 procedure free(P: Pointer); cdecl; { always cdecl }
-  {$ifdef FPC}public name{$ifdef CPU64}'free'{$else}'_free'{$endif};{$endif}
-// the SQLite3 database engine will use the FastMM4 very fast heap manager
 begin
   FreeMem(P);
 end;
 
 function realloc(P: Pointer; Size: Integer): Pointer; cdecl; { always cdecl }
-  {$ifdef FPC}public name{$ifdef CPU64}'realloc'{$else}'_realloc'{$endif};{$endif}
-// the SQLite3 database engine will use the FastMM4/SynScaleMM very fast heap manager
 begin
   result := P;
   ReallocMem(result,Size);
 end;
 
 function rename(oldname, newname: PUTF8Char): integer; cdecl; { always cdecl }
-  {$ifdef FPC}public name{$ifdef CPU64}'rename'{$else}'_rename'{$endif};{$endif}
-// the SQLite3 database engine will use the FastMM4/SynScaleMM fast heap manager
 begin
   if RenameFile(UTF8DecodeToString(oldname,StrLen(oldname)),
                 UTF8DecodeToString(newname,StrLen(newname))) then
@@ -1467,7 +1459,11 @@ begin
   FormatUTF8('Static sqlite3.obj as included within % is outdated!'#13+
     'Linked version is % whereas the current/expected is '+EXPECTED_SQLITE3_VERSION+'.'#13#13+
     'Please download latest SQLite3 '+EXPECTED_SQLITE3_VERSION+' revision'#13+
+    {$ifdef FPC}
+    'from https://synopse.info/files/sqlite3fpc.7z',
+    {$else}
     'from https://synopse.info/files/sqlite3obj.7z',
+    {$endif}
     [ExeVersion.ProgramName,fVersionText],error);
   LogToTextFile(error); // annoyning enough on all platforms
   // SynSQLite3Log.Add.Log() would do nothing: we are in .exe initialization
