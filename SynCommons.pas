@@ -5978,24 +5978,30 @@ type
   protected
     fValue: PPointer;
     fCount: integer;
+    fOwnObjects: boolean;
   public
     /// initialize the wrapper with a one-dimension dynamic array of TObject
-    constructor Create(var aValue);
+    // - by default, objects will be owned by this class, but you may set
+    // aOwnObjects=false if you expect the dynamic array to remain available
+    constructor Create(var aValue; aOwnObjects: boolean=true);
     /// will release all associated TObject instances
     destructor Destroy; override;
     /// search one element within the TObject instances
     function Find(Instance: TObject): integer;
     /// add one element to the dynamic array of TObject instances
     // - once added, the Instance will be owned by this TObjectDynArray instance
+    // (unless aOwnObjects was false in Create)
     function Add(Instance: TObject): integer;
     /// delete one element from the TObject dynamic array
-    // - deleted TObject instance will be freed as expected
+    // - deleted TObject instance will be freed as expected (unless aOwnObjects
+    // was defined as false in Create)
     procedure Delete(Index: integer);
     /// sort the dynamic array content according to a specified comparer
     procedure Sort(Compare: TDynArraySortCompare);
     /// delete all TObject instances, and release the memory
     // - is not to be called for most use, thanks to reference-counting memory
     // handling, but can be handy for quick release
+    // - warning: won't release the instances if aOwnObjects was false in Create
     procedure Clear;
     /// ensure the internal list capacity is set to the current Count
     // - may be used to publish the associated dynamic array with the expected
@@ -50066,9 +50072,10 @@ end;
 
 { TObjectDynArrayWrapper }
 
-constructor TObjectDynArrayWrapper.Create(var aValue);
+constructor TObjectDynArrayWrapper.Create(var aValue; aOwnObjects: boolean);
 begin
   fValue := @aValue;
+  fOwnObjects := aOwnObjects;
 end;
 
 destructor TObjectDynArrayWrapper.Destroy;
@@ -50104,7 +50111,8 @@ procedure TObjectDynArrayWrapper.Delete(Index: integer);
 begin
   if cardinal(Index)>=cardinal(fCount) then
     exit; // avoid Out of range
-  TObjectDynArray(fValue^)[Index].Free;
+  if fOwnObjects then
+    TObjectDynArray(fValue^)[Index].Free;
   dec(fCount);
   if fCount>Index then
     MoveFast(TObjectDynArray(fValue^)[Index+1],TObjectDynArray(fValue^)[Index],
@@ -50115,12 +50123,13 @@ procedure TObjectDynArrayWrapper.Clear;
 var i: integer;
 begin
   if fValue^<>nil then begin
-    for i := fCount-1 downto 0 do
-    try
-      TObjectDynArray(fValue^)[i].Free;
-    except
-      on Exception do;
-    end;
+    if fOwnObjects then
+      for i := fCount-1 downto 0 do
+      try
+        TObjectDynArray(fValue^)[i].Free;
+      except
+        on Exception do;
+      end;
     TObjectDynArray(fValue^) := nil; // set capacity to 0
     fCount := 0;
   end else
