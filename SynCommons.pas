@@ -6110,13 +6110,14 @@ type
     // - inherited class should override AssignTo() protected method
     // to implement the proper assignment
     procedure Assign(Source: TSynPersistent); virtual;
-    {$ifndef FPC_OR_PUREPASCAL}
     /// optimized x86 asm initialization code
     // - warning: this optimized version won't initialize the vmtIntfTable
     // for this class hierarchy: as a result, you would NOT be able to
     // implement an interface with a TSynPersistent descendent (but you should
     // not need to, but inherit from TInterfacedObject)
+    // - warning: under FPC, it won't initialize management operators
     class function NewInstance: TObject; override;
+    {$ifndef FPC_OR_PUREPASCAL}
     /// optimized x86 asm finalization code
     // - warning: this version won't release either any allocated TMonitor
     // (as available since Delphi 2009) - do not use TMonitor with
@@ -50897,8 +50898,16 @@ begin
 end;
 
 
-{$ifndef FPC_OR_PUREPASCAL}
-
+{$ifdef FPC_OR_PUREPASCAL}
+class function TSynPersistent.NewInstance: TObject;
+var p: pointer;
+begin // bypass vmtIntfTable and vmt^.vInitTable (management operators)
+  GetMem(p, InstanceSize);
+  FillChar(p^, InstanceSize, 0);
+  PPointer(p)^ := pointer(self); // store VMT
+  result := p;
+end;
+{$else}
 class function TSynPersistent.NewInstance: TObject;
 asm
         push    eax  // class
@@ -50946,7 +50955,6 @@ asm
 @clr:   push    offset @loop // parent has never any vmtInitTable -> @loop
         jmp     RecordClear // eax=self edx=typeinfo
 end;
-
 {$endif FPC_OR_PUREPASCAL}
 
 

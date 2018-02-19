@@ -59838,15 +59838,12 @@ end;
 { TSynAutoCreateFields }
 
 {$ifdef FPC_OR_PUREPASCAL}
-
 constructor TSynAutoCreateFields.Create;
 begin
   AutoCreateFields(self);
   inherited Create; // always call the virtual constructor
 end;
-
 {$else}
-
 class function TSynAutoCreateFields.NewInstance: TObject;
 asm
         push    eax  // class
@@ -59864,7 +59861,6 @@ asm
         call    AutoCreateFields
         pop     eax
 end; // ignore vmtIntfTable for this class hierarchy (won't implement interfaces)
-
 {$endif}
 
 destructor TSynAutoCreateFields.Destroy;
