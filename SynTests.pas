@@ -558,7 +558,8 @@ end;
 function TSynTestCase.CheckSame(const Value1, Value2, Precision: double;
   const msg: string): Boolean;
 begin
-  result := CheckFailed(SameValue(Value1,Value2,Precision),msg);
+  result := SameValue(Value1,Value2,Precision);
+  Check(result,msg);
 end;
 
 procedure TSynTestCase.CheckMatchAny(const Value: RawUTF8;
