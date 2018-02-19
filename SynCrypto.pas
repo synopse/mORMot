@@ -2515,7 +2515,7 @@ type
       const Issuer, Subject, Audience: RawUTF8; NotBefore: TDateTime;
       ExpirationMinutes: cardinal): RawUTF8; virtual;
     procedure Parse(const Token: RawUTF8; var JWT: TJWTContent;
-      out headpayload: RawUTF8; out signature: RawByteString); virtual;
+      out headpayload: RawUTF8; out signature: RawByteString; excluded: TJWTClaims); virtual;
     function CheckAgainstActualTimestamp(var JWT: TJWTContent): boolean;
     // abstract methods which should be overriden by inherited classes
     function ComputeSignature(const headpayload: RawUTF8): RawUTF8; virtual; abstract;
@@ -2558,13 +2558,15 @@ type
       const Issuer: RawUTF8=''; const Subject: RawUTF8=''; const Audience: RawUTF8='';
       NotBefore: TDateTime=0; ExpirationMinutes: integer=0): RawUTF8;
     /// check a JWT value, and its signature
-    // - will validate all expected Claims, and the associated signature
+    // - will validate all expected Claims (minus ExcludedClaims optional
+    // parameter), and the associated signature
     // - verification state is returned in JWT.result (jwtValid for a valid JWT),
     // together with all parsed payload information
     // - supplied JWT is transmitted e.g. in HTTP header:
     // $ Authorization: Bearer <Token>
     // - this method is thread-safe
-    procedure Verify(const Token: RawUTF8; out JWT: TJWTContent); overload;
+    procedure Verify(const Token: RawUTF8; out JWT: TJWTContent;
+      ExcludedClaims: TJWTClaims=[]); overload;
     /// check a JWT value, and its signature
     // - will validate all expected Claims, and the associated signature
     // - verification state is returned as function result
@@ -13980,7 +13982,8 @@ begin
       TypeInfo(TJWTContentDynArray),false,value);
 end;
 
-procedure TJWTAbstract.Verify(const Token: RawUTF8; out JWT: TJWTContent);
+procedure TJWTAbstract.Verify(const Token: RawUTF8; out JWT: TJWTContent;
+  ExcludedClaims: TJWTClaims);
 var headpayload: RawUTF8;
     signature: RawByteString;
     fromcache: boolean;
@@ -13992,7 +13995,7 @@ begin
     fCache.DeleteDeprecated;
   end;
   if not fromcache then
-    Parse(Token,JWT,headpayload,signature);
+    Parse(Token,JWT,headpayload,signature,ExcludedClaims);
   if JWT.result in [jwtValid,jwtNotBeforeFailed] then
     if CheckAgainstActualTimestamp(JWT) and not fromcache then
       CheckSignature(headpayload,signature,JWT); // depending on the algorithm used
@@ -14034,13 +14037,14 @@ begin
 end;
 
 procedure TJWTAbstract.Parse(const Token: RawUTF8; var JWT: TJWTContent;
-  out headpayload: RawUTF8; out signature: RawByteString);
+  out headpayload: RawUTF8; out signature: RawByteString; excluded: TJWTClaims);
 var payloadend,j,toklen,c,cap,headerlen,len,a: integer;
     P: PUTF8Char;
     N,V: PUTF8Char;
     wasString: boolean;
     EndOfObject: AnsiChar;
     claim: TJWTClaim;
+    claims: TJWTClaims;
     id: TSynUniqueIdentifierBits;
     value: variant;
     payload: RawUTF8;
@@ -14091,6 +14095,7 @@ begin
   cap := JSONObjectPropCount(P);
   if cap<=0 then
     exit;
+  claims := fClaims - excluded;
   repeat
     N := GetJSONPropName(P);
     if N=nil then
@@ -14111,7 +14116,7 @@ begin
             exit;
           end;
           SetString(JWT.reg[claim],V,StrLen(V));
-          if claim in fClaims then
+          if claim in claims then
           case claim of
           jrcJwtID:
             if not(joNoJwtIDCheck in fOptions) then
@@ -14159,7 +14164,7 @@ begin
   until EndOfObject='}';
   if JWT.data.Count>0 then
     JWT.data.Capacity := JWT.data.Count;
-  if fClaims-JWT.claims<>[] then
+  if claims-JWT.claims<>[] then
     JWT.result := jwtMissingClaim else begin
     SetString(headpayload,tok,payloadend-1);
     JWT.result := jwtValid;
