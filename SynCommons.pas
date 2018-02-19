@@ -27809,14 +27809,16 @@ function Base64EncodeMain(rp, sp: PAnsiChar; len: cardinal): integer;
 {$ifdef PUREPASCAL}
 var i: integer;
     c: cardinal;
+    enc: TBase64Enc; // a local stack copy makes the loop slightly faster
 begin
+  enc := b64enc;
   result := len div 3;
   for i := 1 to result do begin
     c := ord(sp[0]) shl 16 + ord(sp[1]) shl 8 + ord(sp[2]);
-    rp[0] := b64enc[(c shr 18) and $3f];
-    rp[1] := b64enc[(c shr 12) and $3f];
-    rp[2] := b64enc[(c shr 6) and $3f];
-    rp[3] := b64enc[c and $3f];
+    rp[0] := enc[(c shr 18) and $3f];
+    rp[1] := enc[(c shr 12) and $3f];
+    rp[2] := enc[(c shr 6) and $3f];
+    rp[3] := enc[c and $3f];
     inc(rp,4);
     inc(sp,3);
   end;
@@ -28088,19 +28090,33 @@ end;
 { --------- Base64 URI encoding/decoding }
 
 {$ifdef PUREPASCAL}
-function Base64uriEncodeMain(rp, sp: PAnsiChar; len: cardinal): integer;
-var i: integer;
-    c: cardinal;
+procedure Base64uriEncode(rp, sp: PAnsiChar; len: cardinal);
+var i, main, c: cardinal;
+    enc: TBase64Enc; // a local stack copy makes the loop slightly faster
 begin
-  result := len div 3;
-  for i := 1 to result do begin
+  enc := b64URIenc;
+  main := len div 3;
+  for i := 1 to main do begin
     c := ord(sp[0]) shl 16 + ord(sp[1]) shl 8 + ord(sp[2]);
-    rp[0] := b64urienc[(c shr 18) and $3f];
-    rp[1] := b64urienc[(c shr 12) and $3f];
-    rp[2] := b64urienc[(c shr 6) and $3f];
-    rp[3] := b64urienc[c and $3f];
+    rp[0] := enc[(c shr 18) and $3f];
+    rp[1] := enc[(c shr 12) and $3f];
+    rp[2] := enc[(c shr 6) and $3f];
+    rp[3] := enc[c and $3f];
     inc(rp,4);
     inc(sp,3);
+  end;
+  case len-main*3 of
+    1: begin
+      c := ord(sp[0]) shl 4;
+      rp[0] := enc[(c shr 6) and $3f];
+      rp[1] := enc[c and $3f];
+    end;
+    2: begin
+      c := ord(sp[0]) shl 10 + ord(sp[1]) shl 2;
+      rp[0] := enc[(c shr 12) and $3f];
+      rp[1] := enc[(c shr 6) and $3f];
+      rp[2] := enc[c and $3f];
+    end;
   end;
 end;
 {$else PUREPASCAL}
@@ -28159,7 +28175,6 @@ asm // eax=rp edx=sp ecx=len - pipeline optimized version by AB
         pop     esi
         pop     ebx
 end;
-{$endif PUREPASCAL}
 
 procedure Base64uriEncodeTrailing(rp, sp: PAnsiChar; len: cardinal);
   {$ifdef HASINLINE}inline;{$endif}
@@ -28186,6 +28201,7 @@ begin
   main := Base64uriEncodeMain(rp,sp,len);
   Base64uriEncodeTrailing(rp+main*4,sp+main*3,len-main*3);
 end;
+{$endif PUREPASCAL}
 
 function BinToBase64uriLength(len: PtrUInt): PtrUInt;
 begin

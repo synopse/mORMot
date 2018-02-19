@@ -77,7 +77,9 @@ uses
   {$endif}
 {$endif}
   SynCommons,
-  Classes, SysUtils, SynZip;
+  Classes,
+  SysUtils,
+  SynZip;
 
 {
   Proprietary compression/encryption adding to standard zip files

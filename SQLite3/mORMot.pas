@@ -5808,6 +5808,9 @@ type
     /// retrieve the "Content-Type" value from InHead
     // - if GuessJSONIfNoneSet is TRUE, returns JSON if none was set in headers
     function InBodyType(GuessJSONIfNoneSet: boolean=True): RawUTF8;
+    /// check if the "Content-Type" value from InHead is JSON
+    // - if GuessJSONIfNoneSet is TRUE, assume JSON is used
+    function InBodyTypeIsJson(GuessJSONIfNoneSet: boolean=True): boolean;
     /// retrieve the "Content-Type" value from OutHead
     // - if GuessJSONIfNoneSet is TRUE, returns JSON if none was set in headers
     function OutBodyType(GuessJSONIfNoneSet: boolean=True): RawUTF8;
@@ -16753,6 +16756,7 @@ type
     // - this array has the same length as the associated Model.Tables[]
     // - fStaticVirtualTable[] will contain in-memory or external tables declared
     // as SQLite3 virtual tables, therefore available from joined SQL statements
+    // - the very same TSQLRestStorage is handled in fStaticData
     fStaticVirtualTable: TSQLRestDynArray;
     /// in-memory storage of TAuthSession instances
     fSessions: TObjectListLocked;
@@ -17799,6 +17803,7 @@ type
     fStorageCriticalSectionCount: integer;
     fBasicSQLCount: RawUTF8;
     fBasicSQLHasRows: array[boolean] of RawUTF8;
+    fStorageVirtual: TSQLVirtualTable;
     /// any set bit in this field indicates UNIQUE field value
     fIsUnique: TSQLFieldBits;
     /// allow to force refresh for a given Static table
@@ -28569,8 +28574,8 @@ begin // don't raise exception on error parsing
   ParseAndConvert(JSONBuffer,JSONBufferLen);
 end;
 
-constructor TSQLTableJSON.CreateFromTables(const Tables: array of TSQLRecordClass; const aSQL,
-  aJSON: RawUTF8);
+constructor TSQLTableJSON.CreateFromTables(const Tables: array of TSQLRecordClass;
+  const aSQL, aJSON: RawUTF8);
 var len: integer;
 begin
   len := length(aJSON);
@@ -37290,6 +37295,11 @@ begin
     result := JSON_CONTENT_TYPE_VAR;
 end;
 
+function TSQLRestURIParams.InBodyTypeIsJson(GuessJSONIfNoneSet: boolean): boolean;
+begin
+  result := IdemPChar(pointer(InBodyType(GuessJSONIfNoneSet)),JSON_CONTENT_TYPE_UPPER);
+end;
+
 function TSQLRestURIParams.OutBodyType(GuessJSONIfNoneSet: boolean): RawUTF8;
 begin
   result := FindIniNameValue(pointer(OutHead),HEADER_CONTENT_TYPE_UPPER);
@@ -39059,6 +39069,13 @@ begin
   CloseServerMessage;
   {$endif}
   fRecordVersionSlaveCallbacks := nil; // should be done before fServices.Free
+  for i := 0 to high(fStaticVirtualTable) do
+  if fStaticVirtualTable[i]<>nil then begin
+    // free all virtual TSQLRestStorage objects
+    fStaticVirtualTable[i].Free;
+    if fStaticData<>nil then
+      fStaticData[i] := nil; // free once
+  end;
   for i := 0 to high(fStaticData) do
     // free all TSQLRestStorage objects and update file if necessary
     fStaticData[i].Free;
@@ -41796,9 +41813,9 @@ begin // here Ctxt.Service and ServiceMethod(Index) are set
   if Call.InBody<>'' then
     // parameters sent as JSON array (the Delphi/AJAX way) or single blob
     if (ServiceMethod<>nil) and PServiceMethod(ServiceMethod)^.ArgsInputIsOctetStream and
-       ExistsIniNameValue(pointer(Call.InHead),HEADER_CONTENT_TYPE_UPPER,[BINARY_CONTENT_TYPE_UPPER]) then begin
+       not Call.InBodyTypeIsJson then begin
       JSON := BinToBase64(Call.InBody,'["','"]',false);
-      ServiceParameters := pointer(JSON);
+      ServiceParameters := pointer(JSON); // as expected by InternalExecuteSOAByInterface
     end else
       ServiceParameters := pointer(Call.InBody) else begin
     // URI-encoded parameters  (the HTML way)
@@ -47149,6 +47166,10 @@ begin
   if fStorageCriticalSectionCount<>0 then
     raise EORMException.CreateUTF8('%.Destroy with CS=%',[self,fStorageCriticalSectionCount]);
   DeleteCriticalSection(fStorageCriticalSection);
+  if fStorageVirtual<>nil then begin // no GPF e.g. if DB release after server
+    fStorageVirtual.fStatic := nil;
+    fStorageVirtual.fStaticStorage := nil;
+  end;
 end;
 
 procedure TSQLRestStorage.BeginCurrentThread(Sender: TThread);
@@ -51825,22 +51846,23 @@ begin
       if length(aServer.fStaticVirtualTable)<>length(aServer.Model.Tables) then
         SetLength(aServer.fStaticVirtualTable,length(aServer.Model.Tables));
       aServer.fStaticVirtualTable[fStaticTableIndex] := fStatic;
-      if fStatic.InheritsFrom(TSQLRestStorage) then
-        fStaticStorage := TSQLRestStorage(fStatic);
+      fStaticStorage := TSQLRestStorage(fStatic);
+      fStaticStorage.fStorageVirtual := self;
     end;
   end;
 end;
 
 destructor TSQLVirtualTable.Destroy;
-var aTableIndex: cardinal;
+var t,n: cardinal;
 begin
   if fStatic<>nil then begin
     if (Module<>nil) and (Module.Server<>nil) then
       with Module.Server do begin // temporary release (e.g. backup)
-        aTableIndex := Model.GetTableIndex(TableName);
-        if aTableIndex<cardinal(length(fStaticVirtualTable)) then begin
-          fStaticVirtualTable[aTableIndex] := nil;
-          if IsZero(fStaticVirtualTable,length(fStaticVirtualTable)*SizeOf(pointer)) then
+        t := Model.GetTableIndex(TableName);
+        n := length(fStaticVirtualTable);
+        if t<n then begin
+          fStaticVirtualTable[t] := nil;
+          if IsZero(pointer(fStaticVirtualTable),n*SizeOf(pointer)) then
             fStaticVirtualTable := nil;
         end;
       end;

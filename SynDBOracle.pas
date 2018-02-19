@@ -692,10 +692,6 @@ type
   /// The OCITypeCode type is interchangeable with the existing SQLT type which is a ub2
   OCITypeCode = ub2;
 
-  {$MINENUMSIZE 4}
-  OCITypeGetOpt = (OCI_TYPEGET_HEADER, OCI_TYPEGET_ALL);
-  {$MINENUMSIZE 1}
-
 const
   { OCI Handle Types }
   OCI_HTYPE_FIRST               = 1;
@@ -1305,6 +1301,10 @@ const
   // To indicate error has to be taken from error handle - reserved for sqlplus use
   OCI_TYPECODE_ERRHP           = 283;
 
+  { TYPEGET options }
+  OCI_TYPEGET_HEADER = 0;
+  OCI_TYPEGET_ALL = 1;
+
   { OBJECT FREE OPTION }
   /// OCIObjectFreeFlag - Object free flag
   // - If OCI_OBJECTCOPY_FORCE is specified when freeing an instance, the instance
@@ -1425,21 +1425,21 @@ type
       stmt: text; stmt_len: ub4; key: text; key_len: ub4;
       language:ub4; mode: ub4): sword; cdecl;
     StmtRelease: function(stmtp: POCIStmt; errhp: POCIError; key: text; key_len: ub4;
-      mode: ub4):sword; cdecl;
+      mode: ub4): sword; cdecl;
     TypeByName: function(env: POCIEnv; errhp: POCIError; svchp: POCISvcCtx;
       schema_name: text; s_length: ub4; type_name: text; t_length: ub4; version_name: text; v_length: ub4;
-      pin_duration: OCIDuration; get_option: OCITypeGetOpt; var tdo: POCIType):sword; cdecl;
+      pin_duration: OCIDuration; get_option: ub4; var tdo: POCIType): sword; cdecl;
     ObjectNew: function(env: POCIEnv; errhp: POCIError; svchp: POCISvcCtx; typecode: OCITypeCode;
-      tdo: POCIType; table: dvoid; duration: OCIDuration; value: boolean; var instance: dvoid):sword; cdecl;
-    ObjectFree: function(env: POCIEnv; errhp: POCIError; instance: dvoid; flag: ub2):sword; cdecl;
+      tdo: POCIType; table: dvoid; duration: OCIDuration; value: boolean; var instance: dvoid): sword; cdecl;
+    ObjectFree: function(env: POCIEnv; errhp: POCIError; instance: dvoid; flag: ub2): sword; cdecl;
     NumberFromInt: function(errhp: POCIError; inum: dvoid; inum_length: uword; inum_s_flag: uword;
-      var number: OCINumber):sword; cdecl;
+      var number: OCINumber): sword; cdecl;
     StringAssignText : function(env: POCIEnv; errhp: POCIError; rhs: OraText; rhs_len: ub4;
-      var lhs: POCIString):sword; cdecl;
+      var lhs: POCIString): sword; cdecl;
     CollAppend: function(env: POCIEnv; errhp: POCIError; elem: dvoid; elemind: dvoid;
-      coll: POCIColl):sword; cdecl;
+      coll: POCIColl): sword; cdecl;
     BindObject: function(bindp: POCIBind; errhp: POCIError; type_: POCIType; var pgvpp: dvoid;
-      pvszsp: pub4; indpp: pdvoid; indszp: pub4):sword; cdecl;
+      pvszsp: pub4; indpp: pdvoid; indszp: pub4): sword; cdecl;
     PasswordChange: function(svchp: POCISvcCtx; errhp: POCIError; const user_name: text; usernm_len: ub4;
       const opasswd: text; opasswd_len: ub4; const npasswd: text; npasswd_len: sb4; mode: ub4): sword; cdecl;
   public

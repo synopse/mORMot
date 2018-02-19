@@ -1277,8 +1277,11 @@ var
 function pidfile: TFileName;
 begin
   if _pidfile = '' then
-    _pidfile := format('/run/%s-%s.pid', [ExeVersion.ProgramName,
-      CardinalToHexLower(ExeVersion.Hash.c3)]); // InstanceFileName hash
+    if DirectoryExists('/run') then
+      _pidfile := format('/run/%s-%s.pid', [ExeVersion.ProgramName,
+        CardinalToHexLower(ExeVersion.Hash.c3)]) // InstanceFileName hash
+    else // use executable folder on Operating Systems without /run
+      _pidfile := ChangeFileExt(ExeVersion.ProgramFileName, '.pid');
   result := _pidfile;
 end;
 
@@ -1293,8 +1296,10 @@ begin
     exit;
   if {$ifdef FPC}fpkill{$else}kill{$endif}(pid, SIGTERM) <> 0 then
     exit;
-  if waitseconds <= 0 then
-    exit(true);
+  if waitseconds <= 0 then begin
+    result := true;
+    exit;
+  end;
   tix := GetTickCount64 + waitseconds * 1000;
   repeat // RunUntilSigTerminated() below should delete the .pid file
     sleep(100);

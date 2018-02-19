@@ -1588,6 +1588,7 @@ begin
   Assert(strspnpas(PAnsiChar('baabbaabbaabbabcd'),PAnsiChar('ab'))=15);
   Assert(strspnpas(PAnsiChar('baabbaabbaabbaabcd'),PAnsiChar('ab'))=16);
   Assert(strspnpas(PAnsiChar('baabbaabbaababaabcd'),PAnsiChar('ab'))=17);
+  {$ifdef CPUINTEL}
   if cfSSE42 in CpuFeatures then begin
     Check(strcspnsse42(PAnsiChar('ab'),PAnsiChar('a'#0))=0);
     Check(strcspnsse42(PAnsiChar('ab'),PAnsiChar('b'#0))=1);
@@ -1620,6 +1621,7 @@ begin
     Check(strspnsse42(PAnsiChar('baabbaabbaabbaabcd'),PAnsiChar('ab'))=16);
     Check(strspnsse42(PAnsiChar('baabbaabbaababaabcd'),PAnsiChar('ab'))=17);
   end;
+  {$endif CPUINTEL}
 end;
 
 procedure TTestLowLevelCommon.IniFiles;
@@ -8120,13 +8122,21 @@ begin
   end;
 end;
 const MAX=20000;
+  TEST_DATA_1 = '['+
+  '{"REC_ID":1,"CHANNEL":117,"PHONE":"5004392222,12345678","RELATION_ID":10,' +
+  '"TIMESTAMP_CALL":"2017-10-26T04:48:14"},{"REC_ID":2,"CHANNEL":null,"PHONE":' +
+  '"1234","RELATION_ID":11,"TIMESTAMP_CALL":"2017-10-26T04:48:14"},' +
+  '{"REC_ID":3,"CHANNEL":174,"PHONE":"9149556917","RELATION_ID":12,' +
+  '"TIMESTAMP_CALL":"2017-10-26T04:48:14"}]';
 var Doc,Doc2: TDocVariantData;
     vr: TTVarRecDynArray;
-    i: integer;
+    i,ndx: integer;
     V,V1,V2: variant;
     s,j: RawUTF8;
     vd: double;
     vs: single;
+    lTable: TSQLTableJSON;
+    lRefreshed: Boolean;
 begin
   Doc.Init;
   Check(Doc.Kind=dvUndefined);
@@ -8201,9 +8211,7 @@ begin
     Check(V._(i)=Doc.Values[i]);
   Check(V._(3)=4);
   Check(V._(4)='a5');
-  {$ifndef FPC}
-  Check(V='["one",2,3,4,"a5"]');
-  {$endif}
+  Check(V{$ifdef FPC}._JSON{$endif}='["one",2,3,4,"a5"]');
   discogs := StringFromFile(discogsFileName);
   CheckNestedDoc([]);
   CheckNestedDoc([dvoValueCopiedByReference]);
@@ -8214,9 +8222,7 @@ begin
   V2.name := 'James';   // modifies V2.name, but also V1.name
   Check(V1.name='James');
   Check(V2.name='James');
-  {$ifndef FPC}
-  Check(V1='{"name":"James","year":1972}');
-  {$endif}
+  Check(V1{$ifdef FPC}._JSON{$endif}='{"name":"James","year":1972}');
   _Unique(V1);          // change options of V1 to be by-value
   V2 := V1;             // creates a full copy of the V1 instance
   V2.name := 'John';    // modifies V2.name, but not V1.name
@@ -8226,14 +8232,10 @@ begin
   Check(V1._Count=2);
   _UniqueFast(V1);      // change options of V1 to be by-reference
   V2 := V1;
-  {$ifndef FPC}
-  Check(V1._(1)='{"name":"John","year":1972}');
-  {$endif}
+  Check(V1._(1){$ifdef FPC}._JSON{$endif}='{"name":"John","year":1972}');
   V1._(1).name := 'Jim';
-  {$ifndef FPC}
-  Check(V1='["root",{"name":"Jim","year":1972}]');
-  Check(V2='["root",{"name":"Jim","year":1972}]');
-  {$endif}
+  Check(V1{$ifdef FPC}._JSON{$endif}='["root",{"name":"Jim","year":1972}]');
+  Check(V2{$ifdef FPC}._JSON{$endif}='["root",{"name":"Jim","year":1972}]');
   _UniqueFast(V2); // now V1 modifications should not affect V2
   Doc.Clear;
   Doc.Init;
@@ -8255,25 +8257,15 @@ begin
   Check(TDocVariantData(V1)._[1].U['name']='Jim');
   Check(TDocVariantData(V1)._[1].I['year']=1972);
   V1.Add(3.1415);
-  {$ifndef FPC}
-  Check(V1='["root",{"name":"Jim","year":1972},3.1415]');
-  {$endif}
+  Check(V1{$ifdef FPC}._JSON{$endif}='["root",{"name":"Jim","year":1972},3.1415]');
   V1._(1).Delete('year');
-  {$ifndef FPC}
-  Check(V1='["root",{"name":"Jim"},3.1415]');
-  {$endif}
+  Check(V1{$ifdef FPC}._JSON{$endif}='["root",{"name":"Jim"},3.1415]');
   V1.Delete(1); //<--- here we get an error with FPC on win64 if optimization = -O1 !??? All ok with -O2
-  {$ifndef FPC}
-  Check(V1='["root",3.1415]');
-  {$endif}
+  Check(V1{$ifdef FPC}._JSON{$endif}='["root",3.1415]');
   TDocVariantData(V2).DeleteByProp('name','JIM',true);
-  {$ifndef FPC}
-  Check(V2='["root",{"name":"Jim","year":1972}]');
-  {$endif}
+  Check(V2{$ifdef FPC}._JSON{$endif}='["root",{"name":"Jim","year":1972}]');
   TDocVariantData(V2).DeleteByProp('name','JIM',false);
-  {$ifndef FPC}
-  Check(V2='["root"]');
-  {$endif}
+  Check(V2{$ifdef FPC}._JSON{$endif}='["root"]');
   s := '{"Url":"argentina","Seasons":[{"Name":"2011/2012","Url":"2011-2012",'+
     '"Competitions":[{"Name":"Ligue1","Url":"ligue-1"},{"Name":"Ligue2","Url":"ligue-2"}]},'+
     '{"Name":"2010/2011","Url":"2010-2011","Competitions":[{"Name":"Ligue1","Url":"ligue-1"},'+
@@ -8306,9 +8298,7 @@ begin
     ',"Url":"ligue-2"}],"2010/2011","2010-2011",[{"Name":"Ligue1","Url":"ligue-1"}'+
     ',{"Name":"Ligue2","Url":"ligue-2"}]]}');
   V := _Json('{result:{data:{"1000":"D1", "1001":"D2"}}}');
-  {$ifndef FPC}
-  Check(V.result='{"data":{"1000":"D1", "1001":"D2"}}');
-  {$endif}
+  Check(V.result{$ifdef FPC}._JSON{$endif}='{"data":{"1000":"D1","1001":"D2"}}');
   Check(V.result.data.Exists('1000'));
   Check(V.result.data.Exists('1001'));
   Check(not V.result.data.Exists('1002'));
@@ -8397,6 +8387,23 @@ begin
   check(s='{"ID":2,"Notation":"ABC","Price":10.1}');
   s := VariantSaveJSON(V);
   check(s='{"ID":1,"Notation":"ABC","Price":10.1,"CustomNotation":"XYZ"}');
+  // some tests to avoid regression about bugs reported by users on forum
+  lTable := TSQLTableJSON.Create('');
+  try
+    lTable.UpdateFrom(TEST_DATA_1,lRefreshed,nil);
+    ndx := lTable.FieldIndex('RELATION_ID');
+    lTable.SortFields(ndx);
+    doc.Clear;
+    i := lTable.SearchFieldSorted('10',{RELATION_ID}ndx);
+    lTable.ToDocVariant(i,variant(doc));
+    doc.Delete('REC_ID');
+    doc.Clear;
+    i := lTable.SearchFieldSorted('11',{RELATION_ID}ndx);
+    lTable.ToDocVariant(i,variant(doc));
+    check(doc.Value['PHONE']='1234');
+  finally
+    lTable.Free;
+  end;
 end;
 
 {$endif LVCL}
@@ -14649,15 +14656,15 @@ begin
           VA.DynArray('FileVersion').Add(FV);
         end else
           str(n,VA.fUTF8);
-{$ifdef PUBLISHRECORD}
+        {$ifdef PUBLISHRECORD}
         VA.fRec.nPhrase := n;
         VA.fRec.nCol := n*2;
         VA.fRec.hits[2].docs_with_hits := n*3;
-{$endif PUBLISHRECORD}
+        {$endif PUBLISHRECORD}
         Check(Client.Add(VA,true)=n);
       end;
       Client.Commit;
-{$ifndef LVCL}
+      {$ifndef LVCL}
       if Client.TransactionBegin(TSQLRecordPeopleObject) then
       try
         V2.FillPrepare(Client,'LastName=:("Morse"):');
@@ -14682,16 +14689,16 @@ begin
       except
         Client.RollBack;
       end;
-{$endif}
-{$ifdef INCLUDE_FTS3}
+      {$endif LVCL}
+      {$ifdef INCLUDE_FTS3}
       TestFTS3(Client);
-{$endif}
+      {$endif}
       TestDynArray(Client);
-{$ifndef LVCL}
+      {$ifndef LVCL}
       TestObject(Client);
-{$endif}
+      {$endif}
       InternalTestMany(self,Client);
-      // RegisterVirtualTableModule(TSQLVirtualTableJSON) already done
+      // RegisterVirtualTableModule(TSQLVirtualTableJSON) done above
       TestVirtual(Client,false,'Virtual Table access via SQLite 1',TSQLRecordDali1);
       TestVirtual(Client,false,'Virtual Table access via SQLite 1',TSQLRecordDali2);
       TestVirtual(Client,true,'Direct Virtual Table access 1',TSQLRecordDali1);
@@ -14733,7 +14740,7 @@ begin
       BackupFN := Format('backupbackground%s.dbsynlz',[ClassName]);
       deleteFile(BackupFN);
       BackupTimer.Start;
-      Check(Client.DB.BackupBackground(BackupFN,1024,0,OnBackupProgress,true));
+      Check(Client.DB.BackupBackground(BackupFN,1024,0,OnBackupProgress,true)); 
       // test per-one and batch requests
       if ClassType=TTestMemoryBased then begin // time consuming, so do it once
         Server := TSQLRestServerTest.Create(TSQLModel.Create([TSQLRecordPeople]),false);
@@ -14938,9 +14945,9 @@ begin
     V2.Free;
     VA.Free;
     VP.Free;
-{$ifndef LVCL}
+    {$ifndef LVCL}
     VO.Free;
-{$endif}
+    {$endif}
     FreeAndNil(Demo);
   end;
   {$ifndef NOSQLITE3ENCRYPT}
@@ -14960,6 +14967,36 @@ var J: TSQLTableJSON;
     {$endif}
     {$ifndef LVCL}
     row: variant;
+    {$endif}
+    {$ifndef NOVARIANTS}
+    lContactDataQueueDynArray: TDynArray;
+    lContactDataQueueArray: TRawUTF8DynArray;
+    lContactDataQueueJSON: TDocVariantData;
+    lData: RawUTF8;
+    lDocData: TDocVariantData;
+const
+  TEST_DATA = '['+
+  '{"REC_ID":29915,"CHANNEL":117,"PHONE":"5004392222,12345678","RINGS":0,' +
+    '"QUEUE_CALL":2,"PRIORITY":25,"TIMESTAMP_CALL":"2017-10-26T04:48:14",' +
+    '"RETRIES_CALL":2,"CONNECTION_TYPE":0,"DISCONNECTION_TYPE":0,"STATUS_CALL":9,'+
+    '"GC_STATUS_CALL":5404,"START_COMMUNICATION":"","HELLO":0,"EXTENSION":null,' +
+    '"NODE":1,"RESULT_CALL":0,"CONNECT_TIME":0,"SKILL":null,"AGENT_POSITION":0,' +
+    '"COMM_RESULT_CODE":null,"V01_TM":"Marcie","V02_TM":"Sayton",'+
+    '"V03_TM":"msaytonpe@umn.edu"},'+
+	'{"REC_ID":29916,"CHANNEL":132,"PHONE":"1763252375","RINGS":0,"QUEUE_CALL":2,' +
+    '"PRIORITY":25,"TIMESTAMP_CALL":"2017-10-26T04:48:14","RETRIES_CALL":2,' +
+    '"CONNECTION_TYPE":0,"DISCONNECTION_TYPE":0,"STATUS_CALL":9,'+
+    '"GC_STATUS_CALL":5404,"START_COMMUNICATION":"","HELLO":0,"EXTENSION":null,' +
+    '"NODE":1,"RESULT_CALL":0,"CONNECT_TIME":0,"SKILL":null,"AGENT_POSITION":0,' +
+    '"COMM_RESULT_CODE":null,"V01_TM":"Orsola","V02_TM":"Hainge",'+
+    '"V03_TM":"ohaingepf@reverbnation.com"},'+
+	'{"REC_ID":29917,"CHANNEL":174,"PHONE":"9149556917","RINGS":0,"QUEUE_CALL":2,' +
+    '"PRIORITY":25,"TIMESTAMP_CALL":"2017-10-26T04:48:14","RETRIES_CALL":2,' +
+    '"CONNECTION_TYPE":0,"DISCONNECTION_TYPE":0,"STATUS_CALL":9,'+
+    '"GC_STATUS_CALL":5404,"START_COMMUNICATION":"","HELLO":0,"EXTENSION":null,' +
+    '"NODE":1,"RESULT_CALL":0,"CONNECT_TIME":0,"SKILL":null,"AGENT_POSITION":0,' +
+    '"COMM_RESULT_CODE":null,"V01_TM":"Storm","V02_TM":"Jenton",'+
+    '"V03_TM":"sjentonpg@senate.gov"}]';
     {$endif}
 begin
   J := TSQLTableJSON.Create('',JS);
@@ -15110,6 +15147,30 @@ begin
     finally
       Free;
     end;
+  // some tests to avoid regression about bugs reported by users on forum
+  {$ifndef NOVARIANTS}
+  J := TSQLTableJSON.Create('',TEST_DATA);
+  try
+    check(J.fieldCount=24);
+    check(J.rowCount=3);
+    lData := j.GetJSONValues(true);
+    check(lData[1]='[');
+    check(JSONArrayCount(@lData[2])=J.rowCount);
+    check(Hash32(lData)=$B1C13092);
+    lData := j.GetJSONValues(false);
+    check(Hash32(lData)=$6AB30A2);
+  finally
+    J.Free;
+  end;
+  lContactDataQueueJSON.InitJSON(TEST_DATA);
+  lContactDataQueueDynArray.Init(TypeInfo(TRawUTF8DynArray), lContactDataQueueArray);
+  lContactDataQueueJSON.ToRawUTF8DynArray(lContactDataQueueArray);
+  lData := lContactDataQueueDynArray.SaveToJSON;
+  lDocData.InitJSON(lData, [dvoJSONObjectParseWithinString]);
+  check(lDocData.Count=3);
+  check(Hash32(lDocData.ToJSON)=$FCF948A5);
+  check(lDocData.Value[0].QUEUE_CALL=2);
+  {$endif}
 end;
 
 {$ifdef UNICODE}
@@ -15607,8 +15668,6 @@ begin
     Check(i3=i1+length(s));
     Check(c=cardinal(i2)+1);
     Check(o=[tfoUnique,tfoCaseInsensitive]);
-    {$ifndef FPC} // FPC dynamic arrays parameters are not consistent with Delphi
-                  // see by fpc\compiler\i386\cpupara.pas :(
     Ints[0] := i1;
     Ints[1] := i2;
     SetLength(Str2,3);
@@ -15637,9 +15696,7 @@ begin
     Check(RecRes.JSON=StringToUTF8(Rec1.FileExtension));
     CheckSame(n1,n2);
     Rec1.FileExtension := ''; // to avoid memory leak
-    {$endif}
   end;
-  {$ifndef FPC} // FPC dynamic arrays parameters are not consistent with Delphi
   n1 := 0;
   RecRes := I.ComplexCall(Ints,nil,Str2,Rec1,Rec2,n1,n2);
   Check(length(Str2)=5);
@@ -15648,7 +15705,6 @@ begin
   Check(Str2[2]='GHIJK');
   Check(Str2[3]='one,two,three');
   Check(Str2[4]='');
-  {$endif}
   s := StringToUTF8(StringOfChar(#1,100));
   check(I.DirectCall(s)=100);
 end;

@@ -346,11 +346,6 @@ type
     fStatementMaxParam: integer;
     fStatementLastException: RawUTF8;
     fStatementTruncateSQLLogLen: integer;
-    /// list of TSQLVirtualTableModuleServerDB registered external modules
-    // - is a TList and not a TObjectList since instances will be destroyed by
-    // the SQLite3 engine via sqlite3InternalFreeModule() private function
-    // - here to avoid GPF in TVirtualTable.Destroy
-    fRegisteredVirtualTableModules: TList;
     /// check if a VACUUM statement is possible
     // - VACUUM in fact DISCONNECT all virtual modules (sounds like a SQLite3
     // design problem), so calling it during process could break the engine
@@ -664,9 +659,6 @@ type
     /// register the Virtual Table to the database connection of a TSQLRestServerDB server
     // - in case of an error, an excepton will be raised
     constructor Create(aClass: TSQLVirtualTableClass; aServer: TSQLRestServer); override;
-    /// clean class instance memory
-    // - especially the link to TSQLRestServerDB
-    destructor Destroy; override;
   end;
 
 
@@ -976,8 +968,9 @@ end;
 {$endif}
 
 procedure TSQLRestServerDB.InitializeEngine;
-var i,m: integer;
-    aModule: TSQLVirtualTableClass;
+var i: integer;
+    module: TSQLVirtualTableClass;
+    registered: array of TSQLVirtualTableClass;
 begin
   for i := 0 to high(Model.TableProps) do
     case Model.TableProps[i].Kind of
@@ -986,19 +979,10 @@ begin
         pointer(TSQLRecordRTreeClass(Model.Tables[i]).RTreeSQLFunctionName),
         2,SQLITE_ANY,Model.Tables[i],InternalRTreeIn,nil,nil,nil));
     rCustomForcedID, rCustomAutoID: begin
-      aModule := Model.VirtualTableModule(Model.Tables[i]);
-      if aModule<>nil then begin
-        // perform registration of the module, if needed
-        if fRegisteredVirtualTableModules=nil then
-          fRegisteredVirtualTableModules := TList.Create else
-          with fRegisteredVirtualTableModules do
-          for m := 0 to Count-1 do
-          if TSQLVirtualTableModuleServerDB(List[m]).fTableClass=aModule then begin
-            aModule := nil; // already registered -> do nothing
-            break;
-          end;
-        if aModule<>nil then
-          fRegisteredVirtualTableModules.Add(TSQLVirtualTableModuleServerDB.Create(aModule,self));
+      module := Model.VirtualTableModule(Model.Tables[i]);
+      if (module<>nil) and (PtrArrayFind(registered,module)<0) then begin
+        TSQLVirtualTableModuleServerDB.Create(module,self);
+        PtrArrayAdd(registered,module); // register it once for this DB
       end;
     end;
     end;
@@ -1131,20 +1115,11 @@ begin
 end;
 
 destructor TSQLRestServerDB.Destroy;
-var i: integer;
-{$ifdef WITHLOG}
-    Log: ISynLog;
 begin
-  Log := fLogClass.Enter(self, 'Destroy');
-{$else}
-begin
-{$endif}
+  {$ifdef WITHLOG}
+  with fLogClass.Enter('Destroy %', [fModel.SafeRoot], self) do
+  {$endif}
   try
-    if fRegisteredVirtualTableModules<>nil then
-      with fRegisteredVirtualTableModules do
-      for i := 0 to Count-1 do
-        TSQLVirtualTableModuleServerDB(List[i]).fServer := nil;
-    FreeAndNil(fRegisteredVirtualTableModules);
     inherited Destroy;
   finally
     try
@@ -1264,7 +1239,7 @@ begin
   if (self<>nil) and (DB<>nil) and (aSQL<>'') and Assigned(StoredProc) then
   try
     {$ifdef WITHLOG}
-    fLogFamily.SynLog.Enter(self);
+    fLogFamily.SynLog.Enter(self, 'StoredProcExecute');
     {$endif}
     DB.LockAndFlushCache; // even if aSQL is SELECT, StoredProc may update data
     try
@@ -1714,8 +1689,6 @@ begin
       if Closed then begin
         // reopen the database if was previously closed
         DB.DBOpen;
-        // force register modules
-        FreeAndNil(fRegisteredVirtualTableModules);
         // register functions and modules
         InitializeEngine;
         // register virtual tables
@@ -1827,8 +1800,6 @@ begin
           {$endif}
           DB.DBOpen; // always reopen the database
         end;
-        // force register modules
-        FreeAndNil(fRegisteredVirtualTableModules);
         // register functions and modules
         InitializeEngine;
         // register virtual tables
@@ -2591,8 +2562,8 @@ begin
     end;
     fModule.xRename := vt_Rename;
   end;
-  sqlite3_check(aDB.DB,sqlite3.create_module_v2(aDB.DB,pointer(fModuleName),
-    fModule,self,sqlite3InternalFreeModule)); // raise ESQLite3Exception on error
+  sqlite3_check(aDB.DB,sqlite3.create_module_v2(aDB.DB,pointer(fModuleName),fModule,
+    self,sqlite3InternalFreeModule)); // raise ESQLite3Exception on error
   fDB := aDB; // mark successfull create_module() for sqlite3InternalFreeModule
 end;
 
@@ -2607,19 +2578,6 @@ begin
   inherited;
   Attach(TSQLRestServerDB(aServer).DB);
   // any exception in Attach() will let release the instance by the RTL
-end;
-
-destructor TSQLVirtualTableModuleServerDB.Destroy;
-var i: integer;
-begin
-  if fServer<>nil then
-    with fServer as TSQLRestServerDB do
-    if fRegisteredVirtualTableModules<>nil then begin
-      i := fRegisteredVirtualTableModules.IndexOf(self);
-      if i>=0 then
-        fRegisteredVirtualTableModules.Delete(i);
-    end;
-  inherited;
 end;
 
 

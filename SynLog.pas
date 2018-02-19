@@ -4042,7 +4042,10 @@ begin
     OutputDebugStringA(pointer(CurrentAnsiConvert.UTF8ToAnsi(Msg)));
     {$endif}
     {$ifdef LINUX}
-    //write(Msg);
+    {$I-}
+    writeln(Msg);
+    ioresult;
+    {$I+}
     {$endif}
   end;
   {$ifndef FPC_OR_PUREPASCAL}
