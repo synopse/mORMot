@@ -223,7 +223,7 @@
   {$define FPC_OR_UNICODE}
   {$define FPC_ENUMHASINNER}
   {$ifdef VER3_1_1} // if FPC_FULLVERSION>30100 ... ifend is not Delphi 5 compatible :(
-    {$define FPC_NEWRTTI} // RTTI has been enhanced in latest trunk 
+    {$define FPC_NEWRTTI} // RTTI has been enhanced in latest trunk
   {$endif}
   {$ifdef FPC_NEWRTTI}
     {$define ISDELPHI2010_OR_FPC_NEWRTTI}

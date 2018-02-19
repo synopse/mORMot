@@ -2851,7 +2851,6 @@ function StrLenPas(S: pointer): PtrInt;
 function StrLen(S: pointer): sizeint; external name 'FPC_PCHAR_LENGTH';
 var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte) = System.FillChar;
 {$else}
-
 /// our fast version of StrLen(), to be used with PUTF8Char/PAnsiChar
 // - this version will use fast SSE2/SSE4.2 instructions (if available), on both
 // Win32 and Win64 platforms: please note that in this case, it may read up to
@@ -2867,9 +2866,7 @@ var StrLen: function(S: pointer): PtrInt = StrLenPas;
 // - this version will use fast SSE2 instructions (if available), on both Win32
 // and Win64 platforms, or an optimized X86 revision on older CPUs
 var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte);
-
 {$endif FPC}
-
 
 /// our fast version of move()
 // - this version will use fast SSE2 instructions (if available), on both Win32
@@ -7116,11 +7113,11 @@ function RecordLoadJSON(var Rec; const JSON: RawUTF8; TypeInfo: pointer): boolea
 
 /// copy a record content from source to Dest
 // - this unit includes a fast optimized asm version for x86
-procedure RecordCopy(var Dest; const Source; TypeInfo: pointer);
+procedure RecordCopy(var Dest; const Source; TypeInfo: pointer); {$ifdef FPC}inline;{$endif}
 
 /// clear a record content
 // - this unit includes a fast optimized asm version for x86
-procedure RecordClear(var Dest; TypeInfo: pointer);
+procedure RecordClear(var Dest; TypeInfo: pointer); {$ifdef FPC}inline;{$endif}
 
 {$ifndef DELPHI5OROLDER}
 /// copy a dynamic array content from source to Dest
@@ -21814,7 +21811,7 @@ const
     tkVariant, tkArray, tkRecord, tkInterface, tkInt64, tkDynArray,
     tkUString, tkClassRef, tkPointer, tkProcVar);
 
-{$else}
+{$else FPC}
 
 type
   /// available type families for Delphi 6 and up, similar to typinfo.pas
@@ -21831,11 +21828,11 @@ const
 {$endif}
 
 type
+  PTypeKind = ^TTypeKind;
   TOrdType = (otSByte,otUByte,otSWord,otUWord,otSLong,otULong
     {$ifdef FPC_NEWRTTI},otSQWord,otUQWord{$endif});
   TFloatType = (ftSingle,ftDoub,ftExtended,ftComp,ftCurr);
   TTypeKinds = set of TTypeKind;
-  PTypeKind = ^TTypeKind;
 
   PStrRec = ^TStrRec;
   /// map the Delphi/FPC string header, as defined in System.pas
@@ -22151,355 +22148,6 @@ function ToText(k: TDynArrayKind): PShortString; overload;
 begin
   result := GetEnumName(TypeInfo(TDynArrayKind),ord(k));
 end;
-
-{$ifdef TYPEINFOSAVED} // this feature is not finished yet -> disable
-type
-  TTypeInfoSaved = type TRawByteStringDynArray;
-
-function TypeInfoFind(const rttitypes: TTypeInfoSaved;
-  const typename: RawUTF8): pointer;
-var i,len: integer;
-begin
-  len := length(typename);
-  if len<>0 then begin
-    for i := 0 to length(rttitypes)-1 do
-      with PTypeInfo(rttitypes[i])^ do
-      if (NameLen=len) and
-         IdemPropNameUSameLen(@NameFirst,pointer(typename),len) then begin
-        result := @kind;
-        exit;
-      end;
-  end;
-  result := nil;
-end;
-
-function TypeInfoFindIndex(const rttitypes: TTypeInfoSaved;
-  info: pointer): integer;
-var len: integer;
-begin
-  if info<>nil then begin
-    len := PTypeInfo(info)^.NameLen+2; // compare Kind+Name
-    for result := 0 to length(rttitypes)-1 do
-      if CompareMem(pointer(rttitypes[result]),info,len) then
-        exit;
-  end;
-  result := -1;
-end;
-
-var
-  KnownTypeInfo: array of PTypeInfo;
-
-/// add some TypeInfo() RTTI for TypeInfoSave/TypeInfoLoad function
-// - warning: calling this after TypeInfoLoad() would trigger GPF
-procedure TypeInfoSaveRegisterKnown(const Types: array of pointer);
-var i,n: integer;
-begin
-  n := length(KnownTypeInfo);
-  SetLength(KnownTypeInfo,n+length(Types));
-  for i := 0 to high(Types) do
-    KnownTypeInfo[n+i] := Types[i];
-end;
-
-function FindKnownTypeInfoIndex(typeinfo: pointer): integer;
-  function Search(KindNameLen: word; Name: PUTF8Char; NameLen: integer): integer;
-  begin // compare Kind+NameLen, then case-insensitive Name
-    for result := 0 to length(KnownTypeInfo)-1 do
-      with PTypeInfo(KnownTypeInfo[result])^ do
-      if (PWord(kind)^=KindNameLen) and
-         IdemPropNameUSameLen(@NameFirst,Name,NameLen) then
-        exit;
-    result := -1;
-  end;
-begin
-  if typeinfo=nil then
-    result := -1 else
-    with PTypeInfo(typeinfo)^ do
-      result := Search(PWord(@kind)^,@NameFirst,NameLen);
-end;
-
-/// binary external storage of low-level RTTI
-// - add the RTTI to rttitypes[] in a stand-alone way (i.e. with no pointer)
-// - return the index of the type in rttitypes[]
-function TypeInfoSave(var rttitypes: TTypeInfoSaved;
-  info: pointer): integer;
-var k: TTypeKind;
-    i,offs: integer;
-    n: PAnsiChar;
-    np: ^TPropInfo absolute n;
-    rtti: PTypeInfo;
-    tmp: TSynTempWriter;
-  procedure wrtype(nested: PTypeInfoStored);
-  var nfo: PTypeInfo;
-      known: integer;
-  begin
-    nfo := Deref(nested);
-    if nfo=nil then
-      tmp.wrw(0) else
-    if nfo=info then
-      tmp.wrw(result+2) else begin
-      known := FindKnownTypeInfoIndex(nfo);
-      if known<0 then
-        tmp.wrw(TypeInfoSave(rttitypes,nfo)+2) else begin
-        tmp.wrw(1); // would be recognized by name
-        with PTypeInfo(nfo)^ do
-          tmp.wr(kind,NameLen+2); // match FindKnownTypeInfoIndex()
-      end;
-    end;
-  end;
-begin
-  result := TypeInfoFindIndex(rttitypes,info);
-  if (result>=0) or (info=nil) then
-    exit;
-  result := length(rttitypes);
-  tmp.Init; // no need of tmp.Done since maxsize=0 will use the stack
-  rtti := info;
-  k := rtti^.Kind;
-  {$ifdef FPC} // storage binary layout is Delphi's
-  i := ord(FPCTODELPHI[k]);
-  tmp.wr(i,1);
-  {$else}
-  tmp.wr(k,SizeOf(k));
-  {$endif}
-  tmp.wr(rtti^.NameLen,rtti^.NameLen+1);
-  inc(PByte(rtti),rtti^.NameLen);
-  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  rtti := align(rtti,SizeOf(rtti));
-  {$endif}
-  with rtti^ do
-  case k of
-  tkChar, tkWChar, tkLString, tkWString, tkVariant, tkInt64
-  {$ifdef UNICODE}, tkUString{$endif}:
-    ; // no additional RTTI needed for those types
-  tkDynArray: begin
-    tmp.wrint(elSize);
-    wrtype(elType);
-    wrtype(elType2);
-  end;
-  tkEnumeration:
-  {$ifdef FPC_ENUMHASINNER}with inner do{$endif} begin
-    tmp.wr(EnumType,SizeOf(EnumType));
-    if MinValue<>0 then
-      raise ESynException.CreateUTF8('TypeInfoSave MinValue=%',[MinValue]);
-    tmp.wrw(MaxValue);
-    wrtype(EnumBaseType);
-    n := @NameList;
-    for i := MinValue to MaxValue do
-      inc(n,ord(n^)+1); // next short string (no align() needed on FPC)
-    i := n-@NameList;
-    tmp.wrw(i);
-    tmp.wr(NameList,i);
-  end;
-  tkSet: begin
-    tmp.wr(SetType,SizeOf(SetType));
-    wrtype(SetBaseType);
-  end;
-  tkInteger:
-    tmp.wr(IntegerType,SizeOf(IntegerType));
-  tkFloat:
-    tmp.wr(FloatType,SizeOf(FloatType));
-  tkClass: begin
-    wrtype(ParentInfo);
-    tmp.wrint(PropCount);
-    tmp.wr(UnitNameLen,UnitNameLen+1);
-    n := @UnitNameLen;
-    inc(n,UnitNameLen+1);
-    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-    n := align(n,SizeOf(n));
-    {$endif}
-    for i := 1 to PropCount do begin
-      wrtype(np^.PropType);
-      offs := np^.GetProc;
-      {$ifndef FPC}
-      if offs and {$ifdef CPU64}$ff00000000000000{$else}$ff000000{$endif}<>0 then
-        raise ESynException.CreateUTF8('TypeInfoSave no getter for %',
-          [PShortString(np^.NameLen)^]);
-      {$endif}
-      tmp.wrint(offs);
-      tmp.wrb(np^.StoredProc);
-      tmp.wrint(np^.Index);
-      tmp.wrint(np^.Default);
-      tmp.wrw(np^.NameIndex);
-      tmp.wr(np^.NameLen,np^.NameLen+1);
-      n := PAnsiChar(@np^.NameLen)+np^.NameLen+1;
-      {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-      n := align(n,SizeOf(n));
-      {$endif}
-    end;
-  end;
-  else
-    raise ESynException.CreateUTF8('TypeInfoSave(%) unsupported',[ToText(k)^]);
-  end;
-  SetLength(rttitypes,result+1);
-  rttitypes[result] := tmp.AsBinary;
-end;
-
-procedure TypeInfoLoad(var rttitypes: TTypeInfoSaved);
-var rtti: PTypeInfo;
-    tmp: TSynTempWriter;
-    i,t,j,pcount: integer;
-    offs: PtrUInt;
-    stored: boolean;
-    k: TTypeKind;
-    n: PAnsiChar;
-    types: array of array of packed record
-      offs: word;
-      typindex: word;
-    end;
-    p1: pointer;
-  function nint: integer;
-  begin
-    result := PInteger(n)^;
-    inc(n,4);
-  end;
-  function nw: integer;
-  begin
-    result := PWord(n)^;
-    inc(n,2);
-  end;
-  function nb: integer;
-  begin
-    result := PByte(n)^;
-    inc(n);
-  end;
-  procedure wrss;
-  var len: integer;
-  begin
-    len := PByte(n)^+1;
-    tmp.wr(n^,len); // copy whole shortstring at once
-    inc(n,len);
-    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-    n := align(n,SizeOf(n));
-    {$endif}
-  end;
-  function wrtype: pointer;
-  var index,off,ti: integer;
-  begin
-    result := tmp.pos;
-    index := nw;
-    if index=1 then begin
-      ti := FindKnownTypeInfoIndex(n);
-      if ti<0 then
-        raise ESynException.CreateUTF8('TypeInfoLoad index=1 %?',
-          [PShortString(@PTypeInfo(n)^.NameLen)^]);
-      inc(n,PTypeInfo(n)^.NameLen+2);
-      {$ifdef FPC} // follow PTypeInfoStored pattern
-      tmp.wrptr(pointer(KnownTypeInfo[ti]));
-      {$else}
-      // warning: any future TypeInfoSaveRegisterKnown() would trigger GPF
-      tmp.wrptr(@pointer(KnownTypeInfo[ti]));
-      {$endif}
-      exit;
-    end;
-    off := tmp.Position;
-    tmp.wrptr(nil);
-    if index=0 then
-      exit;
-    SetLength(types[i],t+1);
-    with types[i,t] do begin
-      offs := off;
-      typindex := index-2;
-    end;
-    inc(t);
-  end;
-begin
-  SetLength(types,Length(rttitypes));
-  for i := 0 to Length(rttitypes)-1 do begin
-    t := 0;
-    tmp.Init;
-    rtti := pointer(rttitypes[i]);
-    {$ifdef FPC}
-    k := DELPHITOFPC[TDelphiTypeKind(rtti^.Kind)];
-    if (k=tkEnumeration) and
-       IdemPropName(PShortString(rtti^.NameLen)^,'boolean') then
-      k := tkBool;
-    {$else}
-    k := rtti^.Kind;
-    {$endif}
-    tmp.wr(k,SizeOf(k));
-    n := @rtti^.NameLen; // n^ points to variable buffer -> use nb/nw/nint
-    wrss; // copy Name
-    case k of
-    tkChar, tkWChar, tkLString, tkWString, tkVariant, tkInt64
-    {$ifdef UNICODE}, tkUString{$endif}
-    {$ifdef FPC}, tkQword, tkBool{$endif}:
-      ; // no additional RTTI needed for those types
-    tkDynArray: begin // elSize,elType,elType2
-      {$ifdef FPC}
-      tmp.wrptrint(nint);
-      p1 := wrtype;
-      tmp.wrint(0);
-      Exchg(p1,wrtype,SizeOf(pointer)); // invert elType <-> elType2
-      {$else}
-      tmp.wrint(nint);
-      wrtype;
-      tmp.wrint(0);
-      wrtype;
-      {$endif}
-    end;
-    tkEnumeration: begin
-      tmp.wrb(nb);
-      tmp.wrint(0); // MinValue
-      tmp.wrint(nint);
-      wrtype;
-      j := nw;
-      tmp.wr(n^,j); // NameList
-    end;
-    tkInteger, tkFloat:
-      tmp.wrb(nb);
-    tkSet: begin
-      tmp.wrb(nb);
-      wrtype;
-    end;
-    tkClass: begin
-      p1 := tmp.wrfillchar(SizeOf(pointer),0);
-      wrtype;
-      pcount := nw;
-      tmp.wrw(pcount);
-      wrss; // copy UnitName
-      for j := 1 to pcount do begin
-        wrtype;             // PropType
-        offs := nint;       // GetProc=SetProc=fieldaddr
-        {$ifndef FPC}
-        offs := offs or {$ifdef CPU64}$ff00000000000000{$else}$ff000000{$endif};
-        {$endif}
-        tmp.wrptrint(offs);
-        tmp.wrptrint(offs);
-        stored := nb<>0;
-        if stored then
-          tmp.wrptrint(-1) else
-          tmp.wrptrint(0);
-        tmp.wrint(nint);    // Index
-        tmp.wrint(nint);    // Default
-        tmp.wrw(nw);        // NameIndex
-        {$ifdef FPC} // PropProcs: GetProc=SetProc=ptField
-        if stored then
-          tmp.wrb(ptconst shl 4) else
-          tmp.wrb(0);
-        {$endif}
-        wrss; // copy Name
-      end;
-      // FIX: compute TClass at p1^
-      PPointer(p1)^ := nil;
-    end;
-    else
-      raise ESynException.CreateUTF8('TypeInfoLoad(%) unsupported',[ToText(k)^]);
-    end;
-    rttitypes[i] := tmp.AsBinary; // replace with true RTTI
-  end;
-  // fix all internal pointers
-  for i := 0 to Length(rttitypes)-1 do begin
-    n := pointer(rttitypes[i]);
-    for t := 0 to length(types[i])-1 do
-    with types[i,t] do
-      {$ifdef FPC} // follow PTypeInfoStored pattern
-      PPointer(n+offs)^ := pointer(rttitypes[typindex]);
-      {$else}
-      PPointer(n+offs)^ := @pointer(rttitypes[typindex]);
-      {$endif}
-  end;
-end;
-
-{$endif TYPEINFOSAVED}
 
 procedure SetRawUTF8(var Dest: RawUTF8; text: pointer; len: integer);
 {$ifdef FPC}inline;
@@ -26474,7 +26122,6 @@ asm // eax=p1, edx=p2, ecx=P1P2Len
 end;
 {$endif}
 
-
 {$ifdef MSWINDOWS}
 procedure FileTimeToInt64(const FT: TFileTime; out I64: Int64);
   {$ifdef HASINLINE}inline;{$endif}
@@ -26627,7 +26274,7 @@ begin
   len := SizeOf(result);
   fpsysctl(pointer(@mib),2,@result,@len,nil,0);
 end;
-{$endif}
+{$endif BSD}
 
 procedure RetrieveSystemInfo;
 var modname, beg: PUTF8Char;
@@ -28763,7 +28410,6 @@ begin
   Int64ToHexShort(aInt64,temp);
   Ansi7ToString(@temp[1],ord(temp[0]),result);
 end;
-
 
 {$ifdef FPC_OR_PUREPASCAL} // Alf reported asm below fails with FPC/Linux32
 type TWordRec = packed record YDiv100, YMod100: cardinal; end;
@@ -33378,7 +33024,6 @@ begin
     end;
     inc(i);
   until false;
-//  Assert(P-pointer(result)=len);
 end;
 
 function RawUTF8ArrayToQuotedCSV(const Values: array of RawUTF8; const Sep: RawUTF8;
@@ -39497,31 +39142,20 @@ end;
 { ************ low-level RTTI types and conversion routines }
 
 {$ifdef FPC}
-procedure RecordClear(var Dest; TypeInfo: pointer);
-  [external name 'FPC_FINALIZE'];
 
 {$ifdef FPC_OLDRTTI}
 function RTTIManagedSize(typeInfo: Pointer): SizeInt; inline;
 begin
   case PTypeKind(typeInfo)^ of // match tkManagedTypes
-    tkLString,tkLStringOld,tkWString,tkUString,
-    tkInterface,tkDynarray:
+    tkLString,tkLStringOld,tkWString,tkUString, tkInterface,tkDynarray:
       result := SizeOf(Pointer);
     {$ifndef NOVARIANTS}
-    tkVariant:
-      result := SizeOf(TVarData);
+    tkVariant: result := SizeOf(TVarData);
     {$endif}
-    tkArray:
-      {$ifdef VER2_6}
-      with GetTypeInfo(typeInfo)^ do
-        result := arraySize*elCount;
-      {$else}
-      result := GetTypeInfo(typeInfo)^.arraySize;
-      {$endif}
-    tkObject,tkRecord:
-      result := GetTypeInfo(typeInfo)^.recSize;
-    else
-      raise ESynException.CreateUTF8('RTTIManagedSize unhandled % (%)',
+    tkArray: {$ifdef VER2_6}with GetTypeInfo(typeInfo)^ do result := arraySize*elCount;
+      {$else}result := GetTypeInfo(typeInfo)^.arraySize;{$endif}
+    tkObject,tkRecord: result := GetTypeInfo(typeInfo)^.recSize;
+    else raise ESynException.CreateUTF8('RTTIManagedSize unhandled % (%)',
         [ToText(PTypeKind(typeInfo)^)^,PByte(typeInfo)^]);
   end;
 end;
@@ -39537,34 +39171,22 @@ begin
   result := -1;
 end;
 
-procedure RecordAddRef(var Data; TypeInfo : pointer);
-  [external name 'FPC_ADDREF'];
-
 procedure RecordCopy(var Dest; const Source; TypeInfo: pointer);
 begin // external name 'FPC_COPY' does not work as we need
-  RecordClear(Dest,TypeInfo);
+  FPCFinalize(@Dest,TypeInfo);
   MoveFast(Source,Dest,RTTIManagedSize(TypeInfo));
-  RecordAddRef(Dest,TypeInfo);
-end;
-
-procedure CopyArray(dest, source, typeInfo: Pointer; cnt: PtrUInt);
-var i, size: SizeInt;
-begin
-  size := RTTIManagedSize(typeInfo);
-  if size>0 then
-    for i := 1 to cnt do begin
-      RecordClear(dest^,TypeInfo); // inlined RecordCopy()
-      MoveFast(source^,dest^,size);
-      RecordAddRef(dest^,TypeInfo);
-      inc(PByte(source),size);
-      inc(PByte(dest),size);
-    end;
+  FPCRecordAddRef(Dest,TypeInfo);
 end;
 {$else FPC_OLDRTTI}
 procedure RecordCopy(var Dest; const Source; TypeInfo: pointer);
-  [external name 'FPC_COPY'];
+begin
+  FPCRecordCopy(Dest,Source,TypeInfo);
+end;
 {$endif FPC_OLDRTTI}
-
+procedure RecordClear(var Dest; TypeInfo: pointer);
+begin
+  FPCFinalize(@Dest,TypeInfo);
+end;
 {$else FPC}
 
 procedure CopyArray(dest, source, typeInfo: Pointer; cnt: PtrUInt);
@@ -39577,6 +39199,71 @@ asm
 {$endif}
 end;
 
+procedure _DynArrayClear(var a: Pointer; typeInfo: Pointer);
+asm
+  {$ifdef CPU64}
+  .NOFRAME
+  {$endif}
+  jmp System.@DynArrayClear
+end;
+
+procedure _FinalizeArray(p: Pointer; typeInfo: Pointer; elemCount: PtrUInt);
+asm
+  {$ifdef CPU64}
+  .NOFRAME
+  {$endif}
+  jmp System.@FinalizeArray
+end;
+
+procedure _Finalize(Data: Pointer; TypeInfo: Pointer);
+asm
+{$ifdef CPU64}
+        .NOFRAME
+        mov     r8, 1 // rcx=p rdx=typeInfo r8=ElemCount
+        jmp     System.@FinalizeArray
+{$else} // much faster than FinalizeArray(Data,TypeInfo,1)
+        movzx   ecx, byte ptr[edx]  // eax=ptr edx=typeinfo ecx=datatype
+        sub     cl, tkLString
+        {$ifdef UNICODE}
+        cmp     cl, tkUString - tkLString + 1
+        {$else}
+        cmp     cl, tkDynArray - tkLString + 1
+        {$endif}
+        jnb     @@err
+        jmp     dword ptr[@@Tab + ecx * 4]
+        nop
+        nop // for @@Tab alignment
+@@Tab:  dd      System.@LStrClr
+{$IFDEF LINUX} // under Linux, WideString are refcounted as AnsiString
+        dd      System.@LStrClr
+{$else} dd      System.@WStrClr
+{$endif LINUX}
+{$ifdef LVCL}
+        dd      @@err
+{$else} dd      System.@VarClr
+{$endif LVCL}
+        dd      @@ARRAY
+        dd      RecordClear
+        dd      System.@IntfClear
+        dd      @@err
+        dd      System.@DynArrayClear
+        {$ifdef UNICODE}
+        dd      System.@UStrClr
+        {$endif}
+@@err:  mov     al, reInvalidPtr
+        {$ifdef DELPHI5OROLDER}
+        jmp     System.@RunError
+        {$else}
+        jmp     System.Error
+        {$endif}
+@@array:movzx   ecx, [edx].TTypeInfo.NameLen
+        add     ecx, edx
+        mov     edx, dword ptr[ecx].TTypeInfo.ManagedFields[0] // Fields[0].TypeInfo^
+        mov     ecx, [ecx].TTypeInfo.ManagedCount
+        mov     edx, [edx]
+        jmp     System.@FinalizeArray
+{$endif CPU64}
+end;
 {$endif FPC}
 
 function ArrayItemType(var info: PTypeInfo; out len: integer): PTypeInfo;
@@ -39673,26 +39360,6 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
     result := -1; // Unhandled field
   end;
 end;
-
-procedure _DynArrayClear(var a: Pointer; typeInfo: Pointer);
-{$ifdef FPC} [external name 'FPC_DYNARRAY_CLEAR']; {$else}
-asm
-  {$ifdef CPU64}
-  .NOFRAME
-  {$endif}
-  jmp System.@DynArrayClear
-end;
-{$endif}
-
-procedure _FinalizeArray(p: Pointer; typeInfo: Pointer; elemCount: PtrUInt);
-{$ifdef FPC} [external name 'FPC_FINALIZE_ARRAY']; {$else}
-asm
-  {$ifdef CPU64}
-  .NOFRAME
-  {$endif}
-  jmp System.@FinalizeArray
-end;
-{$endif}
 
 function ManagedTypeSaveLength(data: PAnsiChar; info: PTypeInfo;
   out len: integer): integer;
@@ -40106,60 +39773,6 @@ begin
     result := RecordLoad(Rec,Source,TypeInfo)<>nil;
 end;
 
-procedure _Finalize(Data: Pointer; TypeInfo: Pointer);
-{$ifdef FPC}
-  [external name 'FPC_FINALIZE'];
-{$else}
-asm
-{$ifdef CPU64}
-        .NOFRAME
-        mov     r8, 1 // rcx=p rdx=typeInfo r8=ElemCount
-        jmp     System.@FinalizeArray
-{$else} // much faster than FinalizeArray(Data,TypeInfo,1)
-        movzx   ecx, byte ptr[edx]  // eax=ptr edx=typeinfo ecx=datatype
-        sub     cl, tkLString
-        {$ifdef UNICODE}
-        cmp     cl, tkUString - tkLString + 1
-        {$else}
-        cmp     cl, tkDynArray - tkLString + 1
-        {$endif}
-        jnb     @@err
-        jmp     dword ptr[@@Tab + ecx * 4]
-        nop
-        nop // for @@Tab alignment
-@@Tab:  dd      System.@LStrClr
-{$IFDEF LINUX} // under Linux, WideString are refcounted as AnsiString
-        dd      System.@LStrClr
-{$else} dd      System.@WStrClr
-{$endif LINUX}
-{$ifdef LVCL}
-        dd      @@err
-{$else} dd      System.@VarClr
-{$endif LVCL}
-        dd      @@ARRAY
-        dd      RecordClear
-        dd      System.@IntfClear
-        dd      @@err
-        dd      System.@DynArrayClear
-        {$ifdef UNICODE}
-        dd      System.@UStrClr
-        {$endif}
-@@err:  mov     al, reInvalidPtr
-        {$ifdef DELPHI5OROLDER}
-        jmp     System.@RunError
-        {$else}
-        jmp     System.Error
-        {$endif}
-@@array:movzx   ecx, [edx].TTypeInfo.NameLen
-        add     ecx, edx
-        mov     edx, dword ptr[ecx].TTypeInfo.ManagedFields[0] // Fields[0].TypeInfo^
-        mov     ecx, [ecx].TTypeInfo.ManagedCount
-        mov     edx, [edx]
-        jmp     System.@FinalizeArray
-{$endif CPU64}
-end;
-{$endif FPC}
-
 function RecordLoad(var Rec; Source: PAnsiChar; TypeInfo: pointer;
   Len: PInteger): PAnsiChar;
 var info,fieldinfo: PTypeInfo;
@@ -40189,7 +39802,7 @@ begin
     {$else}
     for F := 1 to  info^.ManagedCount do begin
     {$endif}
-      _Finalize(R+field^.Offset,Deref(field^.TypeInfo));
+      {$ifdef FPC}FPCFinalize{$else}_Finalize{$endif}(R+field^.Offset,Deref(field^.TypeInfo));
       inc(field);
     end;
     exit;
@@ -40601,9 +40214,7 @@ end;
 
 {$endif CPUX86}
 {$endif DOPATCHTRTL}
-{$endif FPC}
 
-{$ifndef FPC}
 {$ifndef CPUARM}
 
 function SystemFillCharAddress: Pointer;
@@ -42407,10 +42018,7 @@ begin
     {$endif}
     end;
   tkInt64:
-    {$ifndef FPC}
-    if Info=TypeInfo(QWord) then
-      result := ptQWord else
-    {$endif}
+    {$ifndef FPC}if Info=TypeInfo(QWord) then result := ptQWord else{$endif}
       result := ptInt64;
   {$ifdef FPC}
   tkQWord: result := ptQWord;
@@ -47618,7 +47226,7 @@ begin
   dec(n);
   P := pointer(PtrUInt(fValue^)+PtrUInt(aIndex)*ElemSize);
   if ElemType<>nil then begin
-    _Finalize(P,ElemType);
+    {$ifdef FPC}FPCFinalize{$else}_Finalize{$endif}(P,ElemType);
     zerolast := true;
   end else
     if GetIsObjArray then begin
@@ -47951,13 +47559,10 @@ end;
 
 function TDynArray.ToKnownType(exactType: boolean): TDynArrayKind;
 var nested: PTypeInfo;
-    {$ifdef FPC}
-    {$ifdef FPC_NEWRTTI}
-    recInitData: PRecInitData;
-    {$else}
+    {$ifdef FPC}{$ifdef FPC_NEWRTTI}
+    recInitData: PRecInitData;{$else}
     f: integer;
-    {$endif}
-    {$endif}
+    {$endif}{$endif}
 label Bin, Rec;
 begin
   if fKnownType<>djNone then begin
@@ -49115,7 +48720,7 @@ begin // this method is faster than default System.DynArraySetLength() function
     {$endif}
     if GetIsObjArray then
       ObjArrayClear(fValue^);
-    _DynArrayClear(fValue^,ArrayType);
+    {$ifdef FPC}FPCDynArrayClear{$else}_DynArrayClear{$endif}(fValue^,ArrayType);
     exit;
   end;
   // retrieve old length
@@ -49136,7 +48741,8 @@ begin // this method is faster than default System.DynArraySetLength() function
   if (p=nil) or (p^.refCnt=1) then begin
     if NewLength<OldLength then
       if ElemType<>nil then
-        _FinalizeArray(pa+NeededSize,ElemType,OldLength-NewLength) else
+        {$ifdef FPC}FPCFinalizeArray{$else}_FinalizeArray{$endif}(
+          pa+NeededSize,ElemType,OldLength-NewLength) else
         if GetIsObjArray then begin // FreeAndNil() of resized objects list
           for i := NewLength to OldLength-1 do
             PObjectArray(fValue^)^[i].Free;
@@ -49289,7 +48895,7 @@ begin
   if @Elem=nil then
     exit; // avoid GPF
   if ElemType<>nil then
-    {$ifdef FPC}RecordClear(Elem,ElemType){$else}_FinalizeArray(@Elem,ElemType,1){$endif} else
+    {$ifdef FPC}FPCFinalize{$else}_Finalize{$endif}(@Elem,ElemType) else
     if GetIsObjArray then
       TObject(Elem).Free;
   FillcharFast(Elem,ElemSize,0); // always fill with zero binary content
@@ -49300,9 +48906,9 @@ begin
   if ElemType=nil then
     MoveFast(A,B,ElemSize) else begin
     {$ifdef FPC_OLDRTTI}
-    RecordClear(B,ElemType); // inlined CopyArray()
+    FPCFinalize(@B,ElemType); // inlined CopyArray()
     MoveFast(A,B,ElemSize);
-    RecordAddRef(B,ElemType);
+    FPCRecordAddRef(B,ElemType);
     {$else}
     CopyArray(@B,@A,ElemType,1);
     {$endif}
@@ -49365,7 +48971,7 @@ begin
       result := Find(data^);
   finally
     if ElemType<>nil then
-      _FinalizeArray(data,ElemType,1) else
+      {$ifdef FPC}FPCFinalize{$else}_Finalize{$endif}(data,ElemType);
   end;
 end;
 
@@ -51205,11 +50811,7 @@ begin
     FlushToStream;
   if PtrUInt(Value)<=high(SmallUInt32UTF8) then begin
     P := pointer(SmallUInt32UTF8[Value]);
-    {$ifdef FPC}
-    Len := length(SmallUInt32UTF8[Value]);
-    {$else}
-    Len := PInteger(P-4)^;
-    {$endif}
+    Len := {$ifdef FPC}length(SmallUInt32UTF8[Value]){$else}PInteger(P-4)^{$endif};
   end else begin
     P := StrInt32(@tmp[23],value);
     Len := @tmp[23]-P;
@@ -51335,11 +50937,7 @@ begin
     FlushToStream;
   if Value<=high(SmallUInt32UTF8) then begin
     P := pointer(SmallUInt32UTF8[Value]);
-    {$ifdef FPC}
-    Len := length(SmallUInt32UTF8[Value]);
-    {$else}
-    Len := PInteger(P-4)^;
-    {$endif}
+    Len := {$ifdef FPC}length(SmallUInt32UTF8[Value]){$else}PInteger(P-4)^{$endif};
   end else begin
     P := StrUInt32(@tmp[15],Value);
     Len := @tmp[15]-P;
@@ -51358,11 +50956,7 @@ begin
     FlushToStream;
   if (V.Hi=0) and (V.Lo<=high(SmallUInt32UTF8)) then begin
     P := pointer(SmallUInt32UTF8[V.Lo]);
-    {$ifdef FPC}
-    Len := length(SmallUInt32UTF8[V.Lo]);
-    {$else}
-    Len := PInteger(P-4)^;
-    {$endif}
+    Len := {$ifdef FPC}length(SmallUInt32UTF8[V.Lo]){$else}PInteger(P-4)^{$endif};
   end else begin
     P := StrUInt64(@tmp[23],Value);
     Len := @tmp[23]-P;
@@ -51427,11 +51021,7 @@ begin
   end else
   if Value<=high(SmallUInt32UTF8) then begin
     P := pointer(SmallUInt32UTF8[Value]);
-    {$ifdef FPC}
-    Len := length(SmallUInt32UTF8[Value]);
-    {$else}
-    Len := PInteger(P-4)^;
-    {$endif}
+    Len := {$ifdef FPC}length(SmallUInt32UTF8[Value]){$else}PInteger(P-4)^{$endif};
   end else begin
     P := StrUInt64(@tmp[23],Value);
     Len := @tmp[23]-P;
@@ -59527,7 +59117,6 @@ begin
   inherited;
 end;
 
-
 function FileSeek64(Handle: THandle; const Offset: Int64; Origin: DWORD): Int64;
 {$ifdef MSWINDOWS}
 var R64: packed record Lo, Hi: integer; end absolute Result;
@@ -63981,8 +63570,9 @@ begin
   {$ifdef LINUX}
   SetUnixThreadName(ThreadID, Name); // call pthread_setname_np()
   {$endif}
-end;
 {$else}
+begin
+{$ifndef NOSETTHREADNAME}
 var s: RawByteString;
     {$ifndef ISDELPHIXE2}
     {$ifdef MSWINDOWS}
@@ -63995,9 +63585,6 @@ var s: RawByteString;
     {$endif}
     {$endif}
 begin
-  {$ifdef NOSETTHREADNAME}
-  exit;
-  {$endif NOSETTHREADNAME}
   {$ifdef MSWINDOWS}
   if not IsDebuggerPresent then
     exit;
@@ -64016,8 +63603,9 @@ begin
   except {ignore} end;
   {$endif MSWINDOWS}
   {$endif ISDELPHIXE2}
-end;
+{$endif NOSETTHREADNAME}
 {$endif FPC}
+end;
 
 {$ifdef KYLIX3}
 type
