@@ -31889,11 +31889,14 @@ end;
 {$endif}
 
 function GetExtended(P: PUTF8Char; out err: integer): TSynExtended;
-// adapted from ValExt_JOH_PAS_8_a and ValExt_JOH_IA32_8_a by John O'Harrow
+// inspired by ValExt_JOH_PAS_8_a and ValExt_JOH_IA32_8_a by John O'Harrow
 {$ifdef GETEXTENDEDPASCAL}
-  const POW10: array[0..31] of TSynExtended = (
-    1E0,1E1,1E2,1E3,1E4,1E5,1E6,1E7,1E8,1E9,1E10,1E11,1E12,1E13,1E14,1E15,1E16,
-    1E17,1E18,1E19,1E20,1E21,1E22,1E23,1E24,1E25,1E26,1E27,1E28,1E29,1E30,1E31);
+  const POW10: array[-31..31] of TSynExtended = (
+    1E-31,1E-30,1E-29,1E-28,1E-27,1E-26,1E-25,1E-24,1E-23,1E-22,1E-21,1E-20,
+    1E-19,1E-18,1E-17,1E-16,1E-15,1E-14,1E-13,1E-12,1E-11,1E-10,1E-9,1E-8,1E-7,
+    1E-6,1E-5,1E-4,1E-3,1E-2,1E-1,1E0,1E1,1E2,1E3,1E4,1E5,1E6,1E7,1E8,1E9,1E10,
+    1E11,1E12,1E13,1E14,1E15,1E16,1E17,1E18,1E19,1E20,1E21,1E22,1E23,1E24,1E25,
+    1E26,1E27,1E28,1E29,1E30,1E31);
   function IntPower(Exponent: Integer): TSynExtended;
   var Y: Cardinal;
       LBase: Int64;
@@ -31912,80 +31915,94 @@ function GetExtended(P: PUTF8Char; out err: integer): TSynExtended;
     if Exponent<0 then
       result := 1.0/result;
   end;
-var Digits, ExpValue: Integer;
-    Ch: AnsiChar;
-    Neg, NegExp, Valid: Boolean;
+var Digits, ExpValue: PtrInt;
+    Ch: cardinal;
+    flags: set of (Neg, NegExp, Valid);
+    U: PByte; // Delphi Win64 doesn't like if P^ is used directly
+{$ifdef CPUX86}
+const ten: double = 10.0; // fast copy on x87 stack
 begin
   result := 0;
-  err := 0;
+{$else}
+    ten: TSynExtended; // stored in a local floating-point (e.g. xmm) register
+begin
+  ten := 10.0;
+  PInt64(@result)^ := 0;
+{$endif}
   if P=nil then begin
-    inc(err);
+    err := 1;
     exit;
   end;
-  Neg := False;
-  NegExp := False;
-  Valid := False;
-  while P[err]=' ' do
-    inc(err);
-  Ch := P[err];
-  if Ch in ['+','-'] then begin
-    inc(err);
-    Neg := (Ch='-');
+  byte(flags) := 0;
+  U := pointer(P);
+  while U^=32 do
+    inc(U);
+  Ch := U^;
+  if Ch=ord('+') then
+    inc(U) else
+  if Ch=ord('-') then begin
+    inc(U);
+    include(flags,Neg);
   end;
   while true do begin
-    Ch := P[err];
-    inc(err);
-    if not (Ch in ['0'..'9']) then
+    Ch := U^;
+    inc(U);
+    if (Ch<ord('0')) or (Ch>ord('9')) then
       break;
-    result := (result*10.0)+(Ord(Ch)-Ord('0'));
-    Valid := True;
+    dec(Ch,ord('0'));
+    result := (result*ten)+Ch;
+    include(flags,Valid);
   end;
   Digits := 0;
-  if Ch='.' then begin
+  if Ch=ord('.') then begin
     while true do begin
-      Ch := P[err];
-      inc(err);
-      if not (Ch in ['0'..'9']) then begin
-        if not valid then // starts with '.'
-          if Ch=#0 then
-            dec(err); // P='.'
+      Ch := U^;
+      inc(U);
+      if (Ch<ord('0')) or (Ch>ord('9')) then begin
+        if not (Valid in flags) then // starts with '.'
+          if Ch=0 then
+            dec(U); // U='.'
         break;
       end;
-      result := (result*10.0)+(Ord(Ch)-Ord('0'));
+      dec(Ch,ord('0'));
+      result := (result*ten)+Ch;
       dec(Digits);
-      Valid := true;
+      include(flags,Valid);
     end;
     end;
   ExpValue := 0;
-  if Ch in ['E','e'] then begin
-    Valid := false;
-    Ch := P[err];
-    if Ch in ['+','-'] then begin
-      inc(err);
-      NegExp := (Ch='-');
+  if (Ch=ord('E')) or (Ch=ord('e')) then begin
+    exclude(flags,Valid);
+    Ch := U^;
+    if Ch=ord('+') then
+      inc(U) else
+    if Ch=ord('-') then begin
+      inc(U);
+      include(flags,NegExp);
     end;
     while true do begin
-      Ch := P[err];
-      inc(err);
-      if not (Ch in ['0'..'9']) then
+      Ch := U^;
+      inc(U);
+      if (Ch<ord('0')) or (Ch>ord('9')) then
         break;
-      ExpValue := (ExpValue*10)+(Ord(Ch)-Ord('0'));
-      Valid := true;
+      dec(Ch,ord('0'));
+      ExpValue := (ExpValue*10)+PtrInt(Ch);
+      include(flags,Valid);
     end;
-   if NegExp then
+   if NegExp in flags then
      ExpValue := -ExpValue;
   end;
   inc(Digits,ExpValue);
   case Digits of
-  -high(POW10)..-1: result := result/POW10[-Digits];
-  1..high(POW10):   result := result*POW10[Digits];
   0: ;
+  low(POW10)..-1,1..high(POW10): result := result*POW10[Digits];
   else result := result*IntPower(Digits);
   end;
-  if Neg then
+  if Neg in flags then
     result := -result;
-  if Valid and (ch=#0) then
-    err := 0;
+  if (Valid in flags) and (Ch=0) then
+    err := 0 else
+    err := PUTF8Char(U)-P+1;
 end;
 {$else}
 const Ten: double = 10.0;

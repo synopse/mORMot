@@ -3309,7 +3309,10 @@ begin
   Check(err>0);
   d := GetExtended('40640.5028819444',err);
   Check(err=0);
-  CheckSame(d,40640.5028819444);
+  u := DoubleToString(d);
+  Check(u='40640.5028819444',u);
+  e := 40640.5028819444;
+  CheckSame(d,e,1e-11);
   {$endif}
   d := 22.99999999999997;
   a[0] := AnsiChar(ExtendedToString(a,d,DOUBLE_PRECISION));
@@ -5473,7 +5476,7 @@ begin
   Check(v=1234567890123456789);
   GetVariantFromJSON('12345678901234567890',False,v,nil,true);
   Check(vd.VType=varDouble);
-  CheckSame(v,12345678901234567890.0);
+  CheckSame(vd.VDouble,12345678901234567890.0,0);
   GetVariantFromJSON('12345678901234567890',False,v,nil,false);
   Check(vd.VType=varString);
   GetVariantFromJSON('-123.1',False,v,nil);
