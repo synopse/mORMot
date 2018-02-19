@@ -31916,7 +31916,7 @@ var Digits, ExpValue: Integer;
     Ch: AnsiChar;
     Neg, NegExp, Valid: Boolean;
 begin
-  result := 0.0;
+  result := 0;
   err := 0;
   if P=nil then begin
     inc(err);
@@ -31937,7 +31937,7 @@ begin
     inc(err);
     if not (Ch in ['0'..'9']) then
       break;
-    result := (result*10.0)+Ord(Ch)-Ord('0');
+    result := (result*10.0)+(Ord(Ch)-Ord('0'));
     Valid := True;
   end;
   Digits := 0;
@@ -31951,7 +31951,7 @@ begin
             dec(err); // P='.'
         break;
       end;
-      result := (result*10.0)+Ord(Ch)-Ord('0');
+      result := (result*10.0)+(Ord(Ch)-Ord('0'));
       dec(Digits);
       Valid := true;
     end;
@@ -31969,7 +31969,7 @@ begin
       inc(err);
       if not (Ch in ['0'..'9']) then
         break;
-      ExpValue := (ExpValue*10)+Ord(Ch)-Ord('0');
+      ExpValue := (ExpValue*10)+(Ord(Ch)-Ord('0'));
       Valid := true;
     end;
    if NegExp then
