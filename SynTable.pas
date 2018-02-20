@@ -111,6 +111,27 @@ type
     /// returns TRUE if the supplied content matches a grep-like pattern
     function Match(const aText: RawUTF8): boolean;
   end;
+  TMatchDynArray = array of TMatch;
+
+  /// TMatch descendant owning a copy of the Pattern string to avoid GPF issues
+  TMatchStore = record
+    /// access to the research criteria
+    // - defined as a nested record (and not an object) to circumvent Delphi bugs
+    Parent: TMatch;
+    /// Parent.Pattern will point to this instance
+    PatternInstance: RawUTF8;
+  end;
+  TMatchStoreDynArray = array of TMatchStore;
+
+  /// stores several TMatch instances, from a set of patterns
+  TMatchs = class(TSynPersistent)
+  protected
+    fMatch: TMatchStoreDynArray;
+  public
+    /// add once some grep-like patterns to the internal TMach list
+    // - aPatterns follows the IsMatch() syntax
+    procedure Subscribe(const aPatterns: TRawUTF8DynArray; CaseInsensitive: Boolean);
+  end;
 
 type
   TSynFilterOrValidate = class;
@@ -4267,6 +4288,40 @@ var match: TMatch;
 begin
   match.Prepare(Pattern, CaseInsensitive, false);
   result := match.Match(Text);
+end;
+
+
+{ TMatchs }
+
+procedure TMatchs.Subscribe(const aPatterns: TRawUTF8DynArray; CaseInsensitive: Boolean);
+var
+  i, j, m, n: integer;
+  found: Boolean;
+  pat: PRawUTF8;
+begin
+  m := length(aPatterns);
+  if m = 0 then
+    exit;
+  n := length(fMatch);
+  SetLength(fMatch, n + m);
+  pat := pointer(aPatterns);
+  for i := 1 to m do begin
+    found := false;
+    for j := 0 to n - 1 do
+      if StrComp(pointer(fMatch[j].PatternInstance), pointer(pat^)) = 0 then begin
+        found := true;
+        break;
+      end;
+    if not found then
+      with fMatch[n] do begin
+        PatternInstance := pat^; // avoid GPF if aPatterns[] is released
+        Parent.Prepare(PatternInstance, CaseInsensitive, true);
+        inc(n);
+      end;
+    inc(pat);
+  end;
+  if n <> length(fMatch) then
+    SetLength(fMatch, n);
 end;
 
 
