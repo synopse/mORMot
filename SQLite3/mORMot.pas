@@ -5123,6 +5123,9 @@ type
   /// generic parent class of all custom Exception types of this unit
   EORMException = class(ESynException);
 
+  /// exception raised in case of TSQLRestBatch problem
+  EORMBatchException = class(EORMException);
+
   /// exception raised in case of wrong Model definition
   EModelException = class(EORMException);
 
@@ -43523,10 +43526,6 @@ begin
     result := Rest.EngineUpdateFieldIncrement(TableModelIndex,ID,FieldName,Increment);
 end;
 
-
-type
-  EORMBatchException = class(EORMException);
-
 function TSQLRestServer.EngineBatchSend(Table: TSQLRecordClass;
   var Data: RawUTF8; var Results: TIDDynArray; ExpectedResultsCount: integer): integer;
 var EndOfObject: AnsiChar;
@@ -43756,37 +43755,39 @@ begin
           SetLength(Results,Count+256+Count shr 3);
       end;
       // process CRUD method operation
+      OK := false;
       Results[Count] := HTTP_NOTMODIFIED;
       case URIMethod of
       mDELETE: begin
-        OK := EngineDelete(RunTableIndex,ID);
-        if OK then begin
+        if EngineDelete(RunTableIndex,ID) then begin
           if fCache<>nil then
             fCache.NotifyDeletion(RunTableIndex,ID);
           if (RunningBatchRest<>nil) or
-             AfterDeleteForceCoherency(RunTableIndex,ID) then
+             AfterDeleteForceCoherency(RunTableIndex,ID) then begin
             Results[Count] := HTTP_SUCCESS; // 200 OK
+            OK := true;
+          end;
         end;
       end;
       mPOST: begin
         ID := EngineAdd(RunTableIndex,Value);
         Results[Count] := ID;
-        if (ID<>0) and (fCache<>nil) then
-          fCache.Notify(RunTableIndex,ID,Value,soInsert);
+        if ID<>0 then begin
+          if fCache<>nil then
+            fCache.Notify(RunTableIndex,ID,Value,soInsert);
+          OK := true;
+        end;
       end;
-      mPUT: begin
-        OK := EngineUpdate(RunTableIndex,ID,Value);
-        if OK then begin
+      mPUT:
+        if EngineUpdate(RunTableIndex,ID,Value) then begin
           Results[Count] := HTTP_SUCCESS; // 200 OK
+          OK := true;
           if fCache<>nil then // JSON Value may be uncomplete -> delete from cache
             if not (boPutNoCacheFlush in batchOptions) then
               fCache.NotifyDeletion(RunTableIndex,ID);
         end;
       end;
-      else raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Unknown "%" method',
-        [self,Method]);
-      end;
-      if (boRollbackOnError in batchOptions) and (Results[Count]<>HTTP_SUCCESS) then
+      if (boRollbackOnError in batchOptions) and not OK then
         raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Results[%]=% on % %',
           [self,Count,Results[Count],Method,RunTable]);
       inc(Count);

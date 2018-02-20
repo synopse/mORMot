@@ -109,6 +109,7 @@ type
     /// initialize the internal fields for a given grep-like search pattern
     procedure Prepare(const aPattern: RawUTF8; aCaseInsensitive, aReuse: boolean);
     /// returns TRUE if the supplied content matches a grep-like pattern
+    // - this method is not thread-safe
     function Match(const aText: RawUTF8): boolean;
   end;
   TMatchDynArray = array of TMatch;
