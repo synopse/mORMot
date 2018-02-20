@@ -44831,7 +44831,7 @@ begin
   try
     n := 0;
     for i := Count-1 downto 0 do // downwards to return the latest first
-      if FindRawUTF8(List[i].Names,length(List[i].Names),aServiceName,true)>=0 then
+      if FindPropName(List[i].Names,aServiceName)>=0 then
         if (fTimeOut=0) or (fTimeoutTix[i]<tix) then begin
           SetLength(result,n+1);
           result[n] := List[i].PublicURI;
@@ -44853,7 +44853,7 @@ begin
   Safe.Lock;
   try
     for i := Count-1 downto 0 do // downwards to return the latest first
-      if FindRawUTF8(List[i].Names,length(List[i].Names),aServiceName,true)>=0 then
+      if FindPropName(List[i].Names,aServiceName)>=0 then
         if (fTimeOut=0) or (fTimeoutTix[i]<tix) then
           AddRawUTF8(TRawUTF8DynArray(result),n,List[i].PublicURI.URI);
   finally
@@ -44883,7 +44883,7 @@ begin
       // search matching (and non deprecated) services as TSQLRestServerURI
       for i := Count-1 downto 0 do // downwards to return the latest first
         with List[i] do
-          if FindRawUTF8(Names,length(Names),aServiceName,true)>=0 then
+          if FindPropName(Names,aServiceName)>=0 then
             if (fTimeOut=0) or (fTimeoutTix[i]<tix) then begin
               aWriter.AddRecordJSON(PublicURI,TypeInfo(TSQLRestServerURI));
               aWriter.Add(',');
