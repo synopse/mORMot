@@ -41464,7 +41464,7 @@ begin
   ForAdding := aRTTIDefinition<>'';
   ndx := Search(aTypeInfo,Reg,ForAdding);
   if ForAdding then begin
-    result := TJSONRecordTextDefinition.FromCache(aTypeInfo,aRTTIDefinition);
+    result := TJSONRecordTextDefinition.FromCache(Reg.RecordTypeInfo,aRTTIDefinition);
     Reg.RecordTextDefinition := aRTTIDefinition;
     Reg.Reader := result.CustomReader;
     Reg.Writer := result.CustomWriter;
