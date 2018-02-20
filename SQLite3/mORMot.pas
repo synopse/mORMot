@@ -1920,9 +1920,13 @@ type
   // without the field names
   // - boPutNoCacheFlush won't force the associated Cache entry to be flushed:
   // it is up to the caller to ensure cache coherency
+  // - boRollbackOnError will raise an exception and Rollback any transaction
+  // if any step failed - default if to continue batch processs, but setting
+  // a value <> 200/HTTP_SUCCESS in Results[]
   TSQLRestBatchOption = (
     boInsertOrIgnore, boInsertOrReplace,
-    boExtendedJSON, boPostNoSimpleFields, boPutNoCacheFlush);
+    boExtendedJSON, boPostNoSimpleFields, boPutNoCacheFlush,
+    boRollbackOnError);
 
   /// a set of options for TSQLRest.BatchStart() process
   // - TJSONObjectDecoder will use it to compute the corresponding SQL
@@ -14784,7 +14788,8 @@ type
     // for all successfull BatchUpdate/BatchDelete, or 0 on error
     // - any error during server-side process MUST be checked against Results[]
     // (the main URI Status is 200 if about communication success, and won't
-    // imply that all statements in the BATCH sequence were successfull
+    // imply that all statements in the BATCH sequence were successfull),
+    // or boRollbackOnError should be set in TSQLRestBatchOptions
     // - note that the caller shall still free the supplied Batch instance
     function BatchSend(Batch: TSQLRestBatch; var Results: TIDDynArray): integer; overload; virtual;
     /// execute a BATCH sequence prepared in a TSQLRestBatch instance
@@ -43781,6 +43786,9 @@ begin
       else raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Unknown "%" method',
         [self,Method]);
       end;
+      if (boRollbackOnError in batchOptions) and (Results[Count]<>HTTP_SUCCESS) then
+        raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Results[%]=% on % %',
+          [self,Count,Results[Count],Method,RunTable]);
       inc(Count);
       inc(counts[URIMethod]);
     until EndOfObject=']';
