@@ -2918,6 +2918,11 @@ var
   // WinAnsi encoding
   NormToUpperAnsi7: TNormTable;
   NormToUpperAnsi7Byte: TNormTableByte absolute NormToUpperAnsi7;
+  /// case sensitive NormToUpper[]/NormToLower[]-like table
+  // - i.e. NormToNorm[c] = c
+  NormToNorm: TNormTable;
+  NormToNormByte: TNormTableByte absolute NormToNorm;
+
 
 /// get the signed 32-bit integer value stored in P^
 // - we use the PtrInt result type, even if expected to be 32-bit, to use
@@ -65087,7 +65092,8 @@ begin
   SettingsUS.DecimalSeparator := '.'; // value may have been overriden :(
 {$endif}
   for i := 0 to 255 do
-    NormToUpperAnsi7Byte[i] := i;
+    NormToNormByte[i] := i;
+  NormToUpperAnsi7Byte := NormToNormByte;
   for i := ord('a') to ord('z') do
     dec(NormToUpperAnsi7Byte[i],32);
 {$ifdef OWNNORMTOUPPER}
