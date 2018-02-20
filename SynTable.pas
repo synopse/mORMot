@@ -4296,7 +4296,7 @@ end;
 procedure TMatchs.Subscribe(const aPatterns: TRawUTF8DynArray; CaseInsensitive: Boolean);
 var
   i, j, m, n: integer;
-  found: Boolean;
+  found: ^TMatchStore;
   pat: PRawUTF8;
 begin
   m := length(aPatterns);
@@ -4306,13 +4306,14 @@ begin
   SetLength(fMatch, n + m);
   pat := pointer(aPatterns);
   for i := 1 to m do begin
-    found := false;
-    for j := 0 to n - 1 do
-      if StrComp(pointer(fMatch[j].PatternInstance), pointer(pat^)) = 0 then begin
-        found := true;
+    found := pointer(fMatch);
+    for j := 1 to n do
+      if StrComp(pointer(found^.PatternInstance), pointer(pat^)) = 0 then begin
+        found := nil;
         break;
-      end;
-    if not found then
+      end else
+      inc(found);
+    if found = nil then
       with fMatch[n] do begin
         PatternInstance := pat^; // avoid GPF if aPatterns[] is released
         Parent.Prepare(PatternInstance, CaseInsensitive, true);
