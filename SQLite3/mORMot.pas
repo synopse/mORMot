@@ -28062,15 +28062,15 @@ function TJSONObjectDecoder.EncodeAsSQL(Update: boolean): RawUTF8;
 var F: integer;
     W: TTextWriter;
     temp: TTextWriterStackBuffer;
-procedure AddValue;
-begin
-  if InlinedParams then
-    W.AddShort(':(');
-  W.AddString(FieldValues[F]);
-  if InlinedParams then
-    W.AddShort('):,') else
-    W.Add(',');
-end;
+  procedure AddValue;
+  begin
+    if InlinedParams then
+      W.AddShort(':(');
+    W.AddString(FieldValues[F]);
+    if InlinedParams then
+      W.AddShort('):,') else
+      W.Add(',');
+  end;
 begin
   result := '';
   if FieldCount=0 then

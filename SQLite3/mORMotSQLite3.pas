@@ -1891,7 +1891,7 @@ begin
   result := false; // means BATCH mode not supported
   if method=mPOST then begin // POST=ADD=INSERT -> MainEngineAdd() to fBatchValues[]
     if (fBatchMethod<>mNone) or (fBatchValuesCount<>0) or (fBatchIDCount<>0) then
-      raise EORMException.CreateUTF8('%.InternalBatchStop should have been called',[self]);
+      raise EORMBatchException.CreateUTF8('%.InternalBatchStop should have been called',[self]);
     fBatchMethod := method;
     fBatchOptions := BatchOptions;
     fBatchTableIndex := -1;
@@ -1917,11 +1917,11 @@ begin
   if (fBatchValuesCount=0) or (fBatchTableIndex<0) then
     exit; // nothing to add
   if fBatchMethod<>mPOST then
-    raise EORMException.CreateUTF8('%.InternalBatchStop: BatchMethod=%',
+    raise EORMBatchException.CreateUTF8('%.InternalBatchStop: BatchMethod=%',
       [self,ToText(fBatchMethod)^]);
   try
     if fBatchValuesCount<>fBatchIDCount then
-      raise EORMException.CreateUTF8('%.InternalBatchStop(*Count?)',[self]);
+      raise EORMBatchException.CreateUTF8('%.InternalBatchStop(*Count?)',[self]);
     UpdateEventNeeded := InternalUpdateEventNeeded(fBatchTableIndex);
     Props := fModel.Tables[fBatchTableIndex].RecordProps;
     if fBatchValuesCount=1 then begin // handle single record insert
@@ -1930,7 +1930,9 @@ begin
         InternalRecordVersionHandle(
           soInsert,fBatchTableIndex,Decode,Props.RecordVersionField);
       SQL := 'INSERT INTO '+Props.SQLTableName+Decode.EncodeAsSQL(False)+';';
-      if InternalExecute(SQL,true) and UpdateEventNeeded then
+      if not InternalExecute(SQL,true) then // just like ESQLite3Exception below
+        raise EORMBatchException.CreateUTF8('%.InternalBatchStop failed on %', [self, SQL]);
+      if UpdateEventNeeded then
         InternalUpdateEvent(seAdd,fBatchTableIndex,fBatchID[0],fBatchValues[0],nil);
       exit;
     end;
@@ -1954,7 +1956,7 @@ begin
           end else
             P := pointer(fBatchValues[ndx]);
           if P=nil then
-            raise EORMException.CreateUTF8(
+            raise EORMBatchException.CreateUTF8(
               '%.InternalBatchStop: fBatchValues[%]=""',[self,ndx]);
           while P^ in [#1..' ','{','['] do inc(P);
           Decode.Decode(P,nil,pNonQuoted,fBatchID[ndx]);
@@ -2021,7 +2023,7 @@ begin
             if prop=fieldCount then
               prop := 0;
           end;
-          repeat until fStatement^.Step<>SQLITE_ROW;
+          repeat until fStatement^.Step<>SQLITE_ROW; // ESQLite3Exception on error
           if UpdateEventNeeded then
             for r := valuesFirstRow to valuesFirstRow+rowCount-1 do
               InternalUpdateEvent(seAdd,fBatchTableIndex,fBatchID[r],fBatchValues[r],nil);
@@ -2042,7 +2044,7 @@ begin
       Fields := nil; // force new SQL statement and Values[]
     until DecodeSaved and (ndx=fBatchValuesCount);
     if valuesFirstRow<>fBatchValuesCount then
-      raise EORMException.CreateUTF8('%.InternalBatchStop(valuesFirstRow)',[self]);
+      raise EORMBatchException.CreateUTF8('%.InternalBatchStop(valuesFirstRow)',[self]);
   finally
     fBatchMethod := mNone;
     fBatchValuesCount := 0;

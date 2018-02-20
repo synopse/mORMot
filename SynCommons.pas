@@ -1500,8 +1500,7 @@ type
   end;
 
   /// implements a stack-based storage of some (UTF-8 or binary) text
-  // - could be used e.g. to make a temporary copy when JSON would be
-  // parsed in-place
+  // - could be used e.g. to make a temporary copy when JSON is parsed in-place
   // - call one of the Init() overloaded methods, then Done to release its memory
   // - will avoid temporary memory allocation via the heap for up to 4KB of text
   {$ifdef UNICODE}
