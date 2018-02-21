@@ -3096,7 +3096,7 @@ end;
 function StatusCodeToReason(Code: cardinal): SockString;
 var Hi,Lo: cardinal;
 begin
-  if Code=200 then begin
+  if Code=200 then begin // optimistic approach :)
     Hi := 2;
     Lo := 0;
   end else begin

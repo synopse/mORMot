@@ -20,7 +20,7 @@ unit SynTable;
   WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
   for the specific language governing rights and limitations under the License.
 
-  The Original Code is Synopse Big Table.
+  The Original Code is Synopse framework.
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
@@ -58,6 +58,9 @@ interface
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64
 
 uses
+  {$ifdef MSWINDOWS}
+    Windows,
+  {$endif}
   SysUtils,
   Classes,
 {$ifndef LVCL}
@@ -80,19 +83,59 @@ function IsValidEmail(P: PUTF8Char): boolean;
 function IsValidIP4Address(P: PUTF8Char): boolean;
 
 /// return TRUE if the supplied content matchs to a grep-like pattern
-// - ?	   	Matches any single characer
-// - *	   	Matches any contiguous characters
-// - [abc]  	Matches a or b or c at that position
+// - ?  Matches any single characer
+// - *	Matches any contiguous characters
+// - [abc]  Matches a or b or c at that position
 // - [^abc]	Matches anything but a or b or c at that position
 // - [!abc]	Matches anything but a or b or c at that position
-// - [a-e]  	Matches a through e at that position
+// - [a-e]  Matches a through e at that position
 // - [abcx-z]  Matches a or b or c or x or y or or z, as does [a-cx-z]
 // - 'ma?ch.*'	would match match.exe, mavch.dat, march.on, etc..
 // - 'this [e-n]s a [!zy]est' would match 'this is a test', but would not
 // match 'this as a test' nor 'this is a zest'
-// - initial C version by Kevin Boylan, first Delphi port by Sergey Seroukhov
-function IsMatch(const Pattern, Text: RawUTF8; CaseInsensitive: boolean=false): boolean;
+function IsMatch(const Pattern, Text: RawUTF8; CaseInsensitive: boolean=false): boolean; 
 
+type
+  /// low-level structure used by IsMatch()
+  // - you can use this object to prepare a given pattern, e.g. in a loop
+  // - implemented as a fast brute-force state-machine without any heap allocation 
+  TMatch = {$ifdef UNICODE}record{$else}object{$endif}
+  private
+    Pattern, Text: PUTF8Char;
+    P, T, PLen, TLen: PtrInt;
+    Upper: PNormTable;
+    State: (sNONE, sABORT, sEND, sLITERAL, sPATTERN, sRANGE, sVALID);
+    NoPattern: boolean;
+    procedure MatchAfterStar;
+    procedure MatchMain;
+  public
+    /// initialize the internal fields for a given grep-like search pattern
+    procedure Prepare(const aPattern: RawUTF8; aCaseInsensitive, aReuse: boolean);
+    /// returns TRUE if the supplied content matches a grep-like pattern
+    // - this method is not thread-safe
+    function Match(const aText: RawUTF8): boolean;
+  end;
+  TMatchDynArray = array of TMatch;
+
+  /// TMatch descendant owning a copy of the Pattern string to avoid GPF issues
+  TMatchStore = record
+    /// access to the research criteria
+    // - defined as a nested record (and not an object) to circumvent Delphi bugs
+    Parent: TMatch;
+    /// Parent.Pattern will point to this instance
+    PatternInstance: RawUTF8;
+  end;
+  TMatchStoreDynArray = array of TMatchStore;
+
+  /// stores several TMatch instances, from a set of patterns
+  TMatchs = class(TSynPersistent)
+  protected
+    fMatch: TMatchStoreDynArray;
+  public
+    /// add once some grep-like patterns to the internal TMach list
+    // - aPatterns follows the IsMatch() syntax
+    procedure Subscribe(const aPatterns: TRawUTF8DynArray; CaseInsensitive: Boolean);
+  end;
 
 type
   TSynFilterOrValidate = class;
@@ -221,8 +264,11 @@ type
   //   match 'this as a test' nor 'this is a zest'
   // - pattern check IS case sensitive (TSynValidatePatternI is not)
   // - this class is not as complete as PCRE regex for example,
-  //   but code overhead is very small
+  // but code overhead is very small, and speed good enough in practice
   TSynValidatePattern = class(TSynValidate)
+  protected
+    fMatch: TMatch;
+    procedure SetParameters(const Value: RawUTF8); override;
   public
     /// perform the pattern validation to the specified value
     // - pattern can be e.g. '[0-9][0-9]:[0-9][0-9]:[0-9][0-9]'
@@ -1295,6 +1341,188 @@ function CompareOperator(FieldType: TSynTableFieldType; SBF, SBFEnd: PUTF8Char;
 
 /// convert any AnsiString content into our SBF compact binary format storage
 procedure ToSBFStr(const Value: RawByteString; out Result: TSBFString);
+
+
+{ ************ low-level buffer processing functions************************* }
+
+type
+  /// implements a thread-safe Bloom Filter storage
+  // - a "Bloom Filter" is a space-efficient probabilistic data structure,
+  // that is used to test whether an element is a member of a set. False positive
+  // matches are possible, but false negatives are not. Elements can be added to
+  // the set, but not removed. Typical use cases are to avoid unecessary
+  // slow disk or network access if possible, when a lot of items are involved.
+  // - memory use is very low, when compared to storage of all values: fewer
+  // than 10 bits per element are required for a 1% false positive probability,
+  // independent of the size or number of elements in the set - for instance,
+  // storing 10,000,000 items presence with 1% of false positive ratio
+  // would consume only 11.5 MB of memory, using 7 hash functions
+  // - use Insert() methods to add an item to the internal bits array, and
+  // Reset() to clear all bits array, if needed
+  // - MayExist() function would check if the supplied item was probably set
+  // - SaveTo() and LoadFrom() methods allow transmission of the bits array,
+  // for a disk/database storage or transmission over a network
+  // - internally, several (hardware-accelerated) crc32c hash functions will be
+  // used, with some random seed values, to simulate several hashing functions
+  // - Insert/MayExist/Reset methods are thread-safe
+  TSynBloomFilter = class(TSynPersistentLocked)
+  private
+    fSize: cardinal;
+    fFalsePositivePercent: double;
+    fBits: cardinal;
+    fHashFunctions: cardinal;
+    fInserted: cardinal;
+    fStore: RawByteString;
+    function GetInserted: cardinal;
+  public
+    /// initialize the internal bits storage for a given number of items
+    // - by default, internal bits array size will be guess from a 1 % false
+    // positive rate - but you may specify another value, to reduce memory use
+    // - this constructor would compute and initialize Bits and HashFunctions
+    // corresponding to the expected false positive ratio
+    constructor Create(aSize: integer; aFalsePositivePercent: double = 1); reintroduce; overload;
+    /// initialize the internal bits storage from a SaveTo() binary buffer
+    // - this constructor will initialize the internal bits array calling LoadFrom()
+    constructor Create(const aSaved: RawByteString; aMagic: cardinal=$B1003F11); reintroduce; overload;
+    /// add an item in the internal bits array storage
+    // - this method is thread-safe
+    procedure Insert(const aValue: RawByteString); overload;
+    /// add an item in the internal bits array storage
+    // - this method is thread-safe
+    procedure Insert(aValue: pointer; aValueLen: integer); overload; virtual;
+    /// clear the internal bits array storage
+    // - you may call this method after some time, if some items may have
+    // been removed, to reduce false positives
+    // - this method is thread-safe
+    procedure Reset; virtual;
+    /// returns TRUE if the supplied items was probably set via Insert()
+    // - some false positive may occur, but not much than FalsePositivePercent
+    // - this method is thread-safe
+    function MayExist(const aValue: RawByteString): boolean; overload;
+    /// returns TRUE if the supplied items was probably set via Insert()
+    // - some false positive may occur, but not much than FalsePositivePercent
+    // - this method is thread-safe
+    function MayExist(aValue: pointer; aValueLen: integer): boolean; overload;
+    /// store the internal bits array into a binary buffer
+    // - may be used to transmit or store the state of a dataset, avoiding
+    // to recompute all Insert() at program startup, or to synchronize
+    // networks nodes information and reduce the number of remote requests
+    function SaveTo(aMagic: cardinal=$B1003F11): RawByteString; overload;
+    /// store the internal bits array into a binary buffer
+    // - may be used to transmit or store the state of a dataset, avoiding
+    // to recompute all Insert() at program startup, or to synchronize
+    // networks nodes information and reduce the number of remote requests
+    procedure SaveTo(aDest: TFileBufferWriter; aMagic: cardinal=$B1003F11); overload;
+    /// read the internal bits array from a binary buffer
+    // - as previously serialized by the SaveTo method
+    // - may be used to transmit or store the state of a dataset
+    function LoadFrom(const aSaved: RawByteString; aMagic: cardinal=$B1003F11): boolean; overload;
+    /// read the internal bits array from a binary buffer
+    // - as previously serialized by the SaveTo method
+    // - may be used to transmit or store the state of a dataset
+    function LoadFrom(P: PByte; PLen: integer; aMagic: cardinal=$B1003F11): boolean; overload; virtual;
+  published
+    /// maximum number of items which are expected to be inserted
+    property Size: cardinal read fSize;
+    /// expected percentage (1..100) of false positive results for MayExists()
+    property FalsePositivePercent: double read fFalsePositivePercent;
+    /// number of bits stored in the internal bits array
+    property Bits: cardinal read fBits;
+    /// how many hash functions would be applied for each Insert()
+    property HashFunctions: cardinal read fHashFunctions;
+    /// how many times the Insert() method has been called
+    property Inserted: cardinal read GetInserted;
+  end;
+
+  /// implements a thread-safe differential Bloom Filter storage
+  // - this inherited class is able to compute incremental serialization of
+  // its internal bits array, to reduce network use
+  // - an obfuscated revision counter is used to identify storage history
+  TSynBloomFilterDiff = class(TSynBloomFilter)
+  protected
+    fRevision: Int64;
+    fSnapShotAfterMinutes: cardinal;
+    fSnapshotAfterInsertCount: cardinal;
+    fSnapshotTimestamp: Int64;
+    fSnapshotInsertCount: cardinal;
+    fKnownRevision: Int64;
+    fKnownStore: RawByteString;
+  public
+    /// add an item in the internal bits array storage
+    // - this overloaded thread-safe method would compute fRevision
+    procedure Insert(aValue: pointer; aValueLen: integer); override;
+    /// clear the internal bits array storage
+    // - this overloaded thread-safe method would reset fRevision
+    procedure Reset; override;
+    /// store the internal bits array into an incremental binary buffer
+    // - here the difference from a previous SaveToDiff revision will be computed
+    // - if aKnownRevision is outdated (e.g. if equals 0), the whole bits array
+    // would be returned, and around 10 bits per item would be transmitted
+    // (for 1% false positive ratio)
+    // - incremental retrieval would then return around 10 bytes per newly added
+    // item since the last snapshot reference state (with 1% ratio, i.e. 7 hash
+    // functions)
+    function SaveToDiff(const aKnownRevision: Int64): RawByteString;
+    /// use the current internal bits array state as known revision
+    // - is done the first time SaveToDiff() is called, then after 1/32th of
+    // the filter size has been inserted (see SnapshotAfterInsertCount property),
+    // or after SnapShotAfterMinutes property timeout period
+    procedure DiffSnapshot;
+    /// retrieve the revision number from an incremental binary buffer
+    // - returns 0 if the supplied binary buffer does not match this bloom filter
+    function DiffKnownRevision(const aDiff: RawByteString): Int64;
+    /// read the internal bits array from an incremental binary buffer
+    // - as previously serialized by the SaveToDiff() method
+    // - may be used to transmit or store the state of a dataset
+    // - returns false if the supplied content is incorrect, e.g. if the known
+    // revision is deprecated
+    function LoadFromDiff(const aDiff: RawByteString): boolean;
+    /// the opaque revision number of this internal storage
+    // - is in fact the Unix timestamp shifted by 31 bits, and an incremental
+    // counter: this pattern will allow consistent IDs over several ServPanels
+    property Revision: Int64 read fRevision;
+    /// after how many Insert() the internal bits array storage should be
+    // promoted as known revision
+    // - equals Size div 32 by default
+    property SnapshotAfterInsertCount: cardinal read fSnapshotAfterInsertCount
+      write fSnapshotAfterInsertCount;
+    /// after how many time the internal bits array storage should be
+    // promoted as known revision
+    // - equals 30 minutes by default
+    property SnapShotAfterMinutes: cardinal read fSnapShotAfterMinutes
+      write fSnapShotAfterMinutes;
+  end;
+
+
+/// RLE compression of a memory buffer containing mostly zeros
+// - will store the number of consecutive zeros instead of plain zero bytes
+// - used for spare bit sets, e.g. TSynBloomFilter serialization
+// - will also compute the crc32c of the supplied content
+// - use ZeroDecompress() to expand the compressed result
+// - resulting content would be at most 14 bytes bigger than the input
+// - you may use this function before SynLZ compression
+procedure ZeroCompress(P: PAnsiChar; Len: integer; Dest: TFileBufferWriter);
+
+/// RLE uncompression of a memory buffer containing mostly zeros
+// - returns Dest='' if P^ is not a valid ZeroCompress() function result
+// - used for spare bit sets, e.g. TSynBloomFilter serialization
+// - will also check the crc32c of the supplied content
+procedure ZeroDecompress(P: PByte; Len: integer; {$ifdef FPC}var{$else}out{$endif} Dest: RawByteString);
+
+/// RLE compression of XORed memory buffers resulting in mostly zeros
+// - will perform ZeroCompress(Dest^ := New^ xor Old^) without any temporary
+// memory allocation
+// - is used  e.g. by TSynBloomFilterDiff.SaveToDiff() in incremental mode
+// - will also compute the crc32c of the supplied content
+procedure ZeroCompressXor(New,Old: PAnsiChar; Len: cardinal; Dest: TFileBufferWriter);
+
+/// RLE uncompression and ORing of a memory buffer containing mostly zeros
+// - will perform Dest^ := Dest^ or ZeroDecompress(P^) without any temporary
+// memory allocation
+// - is used  e.g. by TSynBloomFilterDiff.LoadFromDiff() in incremental mode
+// - returns false if P^ is not a valid ZeroCompress/ZeroCompressXor() result
+// - will also check the crc32c of the supplied content
+function ZeroDecompressOr(P,Dest: PAnsiChar; Len,DestLen: integer): boolean;
 
 
 implementation
@@ -3214,7 +3442,7 @@ end;
 {$endif}
 
 function CompareOperator(FieldType: TSynTableFieldType; SBF, SBFEnd: PUTF8Char;
-  Value: Int64; Oper: TCompareOperator): boolean; overload;
+  Value: Int64; Oper: TCompareOperator): boolean;
 var V: Int64;
     PB: PByte absolute SBF;
 begin
@@ -3263,7 +3491,7 @@ begin
 end;
 
 function CompareOperator(SBF, SBFEnd: PUTF8Char;
-  Value: double; Oper: TCompareOperator): boolean; overload;
+  Value: double; Oper: TCompareOperator): boolean;
 begin
   result := true;
   if SBF<>nil then
@@ -4085,170 +4313,202 @@ begin
 end;
 
 
-function IsMatch(const Pattern, Text: RawUTF8; CaseInsensitive: boolean): boolean;
 // code below adapted from ZMatchPattern.pas - http://www.zeoslib.sourceforge.net
 
-  type
-    TMatch = (mNONE, mABORT, mEND, mLITERAL, mPATTERN, mRANGE, mVALID);
-  const
-    SINGLE	= '?';
-    KLEENE_STAR = '*';
-    RANGE_OPEN	= '[';
-    RANGE = '-';
-    RANGE_CLOSE = ']';
-    CARET_NEGATE = '^';
-    EXCLAMATION_NEGATE	= '!';
-
-  function MatchAfterStar(Pattern, Text: RawUTF8): TMatch; forward;
-
-  function Matche(const Pattern, Text: RawUTF8): TMatch;
-  var RangeStart, RangeEnd, P, T, PLen, TLen: Integer;
-      Invert, MemberMatch: Boolean;
-  begin
-    P := 1;
-    T := 1;
-    PLen := Length(pattern);
-    TLen := Length(text);
-    result := mNONE;
-    while ((result = mNONE) and (P <= PLen)) do begin
-      if T > TLen then begin
-        if (Pattern[P] = KLEENE_STAR) and (P+1 > PLen) then
-          result := mVALID else
-          result := mABORT;
-        exit;
-      end else
-      case Pattern[P] of
-        KLEENE_STAR:
-          result := MatchAfterStar(Copy(Pattern,P,PLen),Copy(Text,T,TLen));
-        RANGE_OPEN: begin
+procedure TMatch.MatchMain;
+var RangeStart, RangeEnd: PtrInt;
+    c: AnsiChar;
+    flags: set of(Invert, MemberMatch);
+begin
+  while ((State = sNONE) and (P <= PLen)) do begin
+    c := Upper[Pattern[P]];
+    if T > TLen then begin
+      if (c = '*') and (P+1 > PLen) then
+        State := sVALID else
+        State := sABORT;
+      exit;
+    end else
+    case c of
+      '?': ;
+      '*':
+        MatchAfterStar;
+      '[': begin
+        inc(P);
+        byte(flags) := 0;
+        if Pattern[P] in ['!','^'] then begin
+          include(flags, Invert);
           inc(P);
-          Invert := False;
-          if (Pattern[P] = EXCLAMATION_NEGATE) or
-            (Pattern[P] = CARET_NEGATE) then begin
-            Invert := True;
-            inc(P);
-          end;
-          if (Pattern[P] = RANGE_CLOSE) then begin
-            result := mPATTERN;
-            exit;
-          end;
-          MemberMatch := False;
-          while Pattern[P] <> RANGE_CLOSE do begin
-            RangeStart := P;
-            RangeEnd := P;
-            inc(P);
-            if P > PLen then begin
-              result := mPATTERN;
-              exit;
-            end;
-            if Pattern[P] = RANGE then begin
-              inc(P);
-              RangeEnd := P;
-              if (P > PLen) or (Pattern[RangeEnd] = RANGE_CLOSE) then begin
-                result := mPATTERN;
-                exit;
-              end;
-              inc(P);
-            end;
-            if P > PLen then begin
-              result := mPATTERN;
-              exit;
-            end;
-            if RangeStart < RangeEnd then begin
-              if (Text[T] >= Pattern[RangeStart]) and
-                 (Text[T] <= Pattern[RangeEnd]) then begin
-                MemberMatch := True;
-                break;
-              end;
-            end
-            else begin
-              if (Text[T] >= Pattern[RangeEnd]) and
-                 (Text[T] <= Pattern[RangeStart]) then begin
-                MemberMatch := True;
-                break;
-              end;
-            end;
-          end;
-          if (Invert and MemberMatch) or not (Invert or MemberMatch) then begin
-            result := mRANGE;
-            exit;
-          end;
-          if MemberMatch then
-            while (P <= PLen) and (Pattern[P] <> RANGE_CLOSE) do
-              inc(P);
+        end;
+        if (Pattern[P] = ']') then begin
+          State := sPATTERN;
+          exit;
+        end;
+        c := Upper[Text[T]];
+        while Pattern[P] <> ']' do begin
+          RangeStart := P;
+          RangeEnd := P;
+          inc(P);
           if P > PLen then begin
-            result := mPATTERN;
+            State := sPATTERN;
             exit;
+          end;
+          if Pattern[P] = '-' then begin
+            inc(P);
+            RangeEnd := P;
+            if (P > PLen) or (Pattern[RangeEnd] = ']') then begin
+              State := sPATTERN;
+              exit;
+            end;
+            inc(P);
+          end;
+          if P > PLen then begin
+            State := sPATTERN;
+            exit;
+          end;
+          if RangeStart < RangeEnd then begin
+            if (c >= Pattern[RangeStart]) and (c <= Pattern[RangeEnd]) then begin
+              include(flags, MemberMatch);
+              break;
+            end;
+          end
+          else begin
+            if (c >= Pattern[RangeEnd]) and (c <= Pattern[RangeStart]) then begin
+              include(flags, MemberMatch);
+              break;
+            end;
           end;
         end;
-      else
-        if Pattern[P] <> SINGLE then
-          if Pattern[P] <> Text[T] then
-            result := mLITERAL;
+        if ((Invert in flags) and (MemberMatch in flags)) or
+           not ((Invert in flags) or (MemberMatch in flags)) then begin
+          State := sRANGE;
+          exit;
+        end;
+        if MemberMatch in flags then
+          while (P <= PLen) and (Pattern[P] <> ']') do
+            inc(P);
+        if P > PLen then begin
+          State := sPATTERN;
+          exit;
+        end;
       end;
-      inc(P);
-      inc(T);
+    else
+      if c <> Upper[Text[T]] then
+        State := sLITERAL;
     end;
-    if result = mNONE then
-      if T <= TLen then
-        result := mEND else
-        result := mVALID;
+    inc(P);
+    inc(T);
   end;
+  if State = sNONE then
+    if T <= TLen then
+      State := sEND else
+      State := sVALID;
+end;
 
-  function MatchAfterStar(Pattern, Text: RawUTF8): TMatch;
-  var P, T, PLen, TLen: Integer;
-  begin
-    result := mNONE;
-    P := 1;
-    T := 1;
-    PLen := Length(Pattern);
-    TLen := Length(Text);
-    if TLen = 1 then begin
-      result := mVALID;
-      exit;
-    end else
-    if (PLen = 0) or (TLen = 0) then begin
-      result := mABORT;
-      exit;
-    end;
-    while ((T <= TLen) and (P < PLen)) and ((Pattern[P] = SINGLE) or
-      (Pattern[P] = KLEENE_STAR)) do begin
-      if Pattern[P] = SINGLE then
-        inc(T);
-      inc(P);
-    end;
-    if T >= TLen then begin
-      result := mABORT;
-      exit;
-    end else
-    if P >= PLen then begin
-      result := mVALID;
-      exit;
-    end;
-    repeat
-      if (Pattern[P] = Text[T]) or (Pattern[P] = RANGE_OPEN) then begin
-        Pattern := Copy(Pattern, P, PLen);
-        Text := Copy(Text, T, TLen);
-        PLen := Length(Pattern);
-        TLen := Length(Text);
-        p := 1;
-        t := 1;
-        result  := Matche(Pattern, Text);
-        if result <> mVALID then
-          result := mNONE; // retry until end of Text, (check below) or result valid
-      end;
-      inc(T);
-      if (T > TLen) or (P > PLen) then begin
-        result := mABORT;
-        exit;
-      end;
-    until result <> mNONE;
+procedure TMatch.MatchAfterStar;
+begin
+  if (TLen = 1) or (P = PLen) then begin
+    State := sVALID;
+    exit;
+  end else
+  if (PLen = 0) or (TLen = 0) then begin
+    State := sABORT;
+    exit;
   end;
+  while ((T <= TLen) and (P < PLen)) and (Pattern[P] in ['?', '*']) do begin
+    if Pattern[P] = '?' then
+      inc(T);
+    inc(P);
+  end;
+  if T >= TLen then begin
+    State := sABORT;
+    exit;
+  end else
+  if P >= PLen then begin
+    State := sVALID;
+    exit;
+  end;
+  repeat
+    if (Upper[Pattern[P]] = Upper[Text[T]]) or (Pattern[P] = '[') then begin
+      MatchMain;
+      if State = sVALID then
+        break;
+      State := sNONE; // retry until end of Text, (check below) or State valid
+    end;
+    inc(T);
+    if (T > TLen) or (P > PLen) then begin
+      State := sABORT;
+      exit;
+    end;
+  until State <> sNONE;
+end;
 
-begin // IsMatch() main block
-  if CaseInsensitive then
-    result := (Matche(LowerCase(Pattern), LowerCase(Text)) = mVALID) else
-    result := (Matche(Pattern, Text) = mVALID);
+procedure TMatch.Prepare(const aPattern: RawUTF8; aCaseInsensitive, aReuse: boolean);
+const SPECIALS: PUTF8Char = '*?[';
+begin
+  Pattern := pointer(aPattern);
+  PLen := length(aPattern) - 1;
+  if aCaseInsensitive then
+    Upper := @NormToUpperAnsi7 else
+    Upper := @NormToNorm;
+  NoPattern := aReuse and (strcspn(Pattern,SPECIALS)>PLen);
+end;
+
+function TMatch.Match(const aText: RawUTF8): boolean;
+begin
+  if NoPattern then
+    if Upper=@NormToNorm then
+      result := StrComp(pointer(aText), Pattern) = 0 else
+      result := StrIComp(pointer(aText), Pattern) = 0 else begin
+    State := sNONE;
+    P := 0;
+    T := 0;
+    Text := pointer(aText);
+    TLen := length(aText) - 1;
+    MatchMain;
+    result := State = sVALID;
+  end;
+end;
+
+function IsMatch(const Pattern, Text: RawUTF8; CaseInsensitive: boolean): boolean;
+var match: TMatch;
+begin
+  match.Prepare(Pattern, CaseInsensitive, false);
+  result := match.Match(Text);
+end;
+
+
+{ TMatchs }
+
+procedure TMatchs.Subscribe(const aPatterns: TRawUTF8DynArray; CaseInsensitive: Boolean);
+var
+  i, j, m, n: integer;
+  found: ^TMatchStore;
+  pat: PRawUTF8;
+begin
+  m := length(aPatterns);
+  if m = 0 then
+    exit;
+  n := length(fMatch);
+  SetLength(fMatch, n + m);
+  pat := pointer(aPatterns);
+  for i := 1 to m do begin
+    found := pointer(fMatch);
+    for j := 1 to n do
+      if StrComp(pointer(found^.PatternInstance), pointer(pat^)) = 0 then begin
+        found := nil;
+        break;
+      end else
+      inc(found);
+    if found = nil then
+      with fMatch[n] do begin
+        PatternInstance := pat^; // avoid GPF if aPatterns[] is released
+        Parent.Prepare(PatternInstance, CaseInsensitive, true);
+        inc(n);
+      end;
+    inc(pat);
+  end;
+  if n <> length(fMatch) then
+    SetLength(fMatch, n);
 end;
 
 
@@ -4416,12 +4676,22 @@ end;
 
 { TSynValidatePattern }
 
+procedure TSynValidatePattern.SetParameters(const Value: RawUTF8);
+begin
+  inherited SetParameters(Value);
+  fMatch.Prepare(Value, ClassType=TSynValidatePatternI, true);
+end;
+
 function TSynValidatePattern.Process(aFieldIndex: integer; const value: RawUTF8;
   var ErrorMsg: string): boolean;
-begin
-  result := IsMatch(fParameters,value,ClassType=TSynValidatePatternI);
-  if not result then
+  procedure SetErrorMsg;
+  begin
     ErrorMsg := Format(sInvalidPattern,[UTF8ToString(value)]);
+  end;
+begin
+  result := fMatch.Match(value);
+  if not result then
+    SetErrorMsg;
 end;
 
 
@@ -4577,6 +4847,462 @@ begin
   inherited;
 end;
 
+
+{ ************ low-level buffer processing functions************************* }
+
+{ TSynBloomFilter }
+
+const
+  BLOOM_VERSION = 0;
+  BLOOM_MAXHASH = 32; // only 7 is needed for 1% false positive ratio
+
+constructor TSynBloomFilter.Create(aSize: integer; aFalsePositivePercent: double);
+const LN2 = 0.69314718056;
+begin
+  inherited Create;
+  if aSize < 0 then
+    fSize := 1000 else
+    fSize := aSize;
+  if aFalsePositivePercent<=0 then
+    fFalsePositivePercent := 1 else
+  if aFalsePositivePercent>100 then
+    fFalsePositivePercent := 100 else
+    fFalsePositivePercent := aFalsePositivePercent;
+  // see http://stackoverflow.com/a/22467497/458259
+  fBits := Round(-ln(fFalsePositivePercent/100)*aSize/(LN2*LN2));
+  fHashFunctions := Round(fBits/fSize*LN2);
+  if fHashFunctions=0 then
+    fHashFunctions := 1 else
+  if fHashFunctions>BLOOM_MAXHASH then
+    fHashFunctions := BLOOM_MAXHASH;
+  Reset;
+end;
+
+constructor TSynBloomFilter.Create(const aSaved: RawByteString; aMagic: cardinal);
+begin
+  inherited Create;
+  if not LoadFrom(aSaved,aMagic) then
+    raise ESynException.CreateUTF8('%.Create with invalid aSaved content',[self]);
+end;
+
+procedure TSynBloomFilter.Insert(const aValue: RawByteString);
+begin
+  Insert(pointer(aValue),length(aValue));
+end;
+
+procedure TSynBloomFilter.Insert(aValue: pointer; aValueLen: integer);
+var h: integer;
+    h1,h2: cardinal; // https://goo.gl/Pls5wi
+begin
+  if (self=nil) or (aValueLen<=0) or (fBits=0) then
+    exit;
+  h1 := crc32c(0,aValue,aValueLen);
+  if fHashFunctions=1 then
+    h2 := 0 else
+    h2 := crc32c(h1,aValue,aValueLen);
+  Safe.Lock;
+  try
+    for h := 0 to fHashFunctions-1 do begin
+      SetBit(pointer(fStore)^,h1 mod fBits);
+      inc(h1,h2);
+    end;
+    inc(fInserted);
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+function TSynBloomFilter.GetInserted: cardinal;
+begin
+  Safe.Lock;
+  try
+    result := fInserted; // Delphi 5 does not support LockedInt64[]
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+function TSynBloomFilter.MayExist(const aValue: RawByteString): boolean;
+begin
+  result := MayExist(pointer(aValue),length(aValue));
+end;
+
+function TSynBloomFilter.MayExist(aValue: pointer; aValueLen: integer): boolean;
+var h: integer;
+    h1,h2: cardinal; // https://goo.gl/Pls5wi
+begin
+  result := false;
+  if (self=nil) or (aValueLen<=0) or (fBits=0) then
+    exit;
+  h1 := crc32c(0,aValue,aValueLen);
+  if fHashFunctions=1 then
+    h2 := 0 else
+    h2 := crc32c(h1,aValue,aValueLen);
+  Safe.Lock;
+  try
+    for h := 0 to fHashFunctions-1 do
+      if GetBit(pointer(fStore)^,h1 mod fBits) then
+        inc(h1,h2) else
+        exit;
+  finally
+    Safe.UnLock;
+  end;
+  result := true;
+end;
+
+procedure TSynBloomFilter.Reset;
+begin
+  Safe.Lock;
+  try
+    if fStore='' then
+      SetLength(fStore,(fBits shr 3)+1);
+    FillcharFast(pointer(fStore)^,length(fStore),0);
+    fInserted := 0;
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+function TSynBloomFilter.SaveTo(aMagic: cardinal): RawByteString;
+var W: TFileBufferWriter;
+    BufLen: integer;
+    temp: array[word] of byte;
+begin
+  BufLen := length(fStore)+100;
+  if BufLen<=SizeOf(temp) then
+    W := TFileBufferWriter.Create(TRawByteStringStream,@temp,SizeOf(temp)) else
+    W := TFileBufferWriter.Create(TRawByteStringStream,BufLen);
+  try
+    SaveTo(W,aMagic);
+    W.Flush;
+    result := TRawByteStringStream(W.Stream).DataString;
+  finally
+    W.Free;
+  end;
+end;
+
+procedure TSynBloomFilter.SaveTo(aDest: TFileBufferWriter; aMagic: cardinal=$B1003F11);
+begin
+  aDest.Write4(aMagic);
+  aDest.Write1(BLOOM_VERSION);
+  Safe.Lock;
+  try
+    aDest.Write8(fFalsePositivePercent);
+    aDest.Write4(fSize);
+    aDest.Write4(fBits);
+    aDest.Write1(fHashFunctions);
+    aDest.Write4(fInserted);
+    ZeroCompress(pointer(fStore),Length(fStore),aDest);
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+function TSynBloomFilter.LoadFrom(const aSaved: RawByteString; aMagic: cardinal): boolean;
+begin
+  result := LoadFrom(pointer(aSaved),length(aSaved));
+end;
+
+function TSynBloomFilter.LoadFrom(P: PByte; PLen: integer; aMagic: cardinal): boolean;
+var start: PByte;
+    version: integer;
+begin
+  result := false;
+  start := P;
+  if (P=nil) or (PLen<32) or (PCardinal(P)^<>aMagic) then
+    exit;
+  inc(P,4);
+  version := P^; inc(P);
+  if version>BLOOM_VERSION then
+    exit;
+  Safe.Lock;
+  try
+    fFalsePositivePercent := PDouble(P)^; inc(P,8);
+    if (fFalsePositivePercent<=0) or (fFalsePositivePercent>100) then
+      exit;
+    fSize := PCardinal(P)^; inc(P,4);
+    fBits := PCardinal(P)^; inc(P,4);
+    if fBits<fSize then
+      exit;
+    fHashFunctions := P^; inc(P);
+    if fHashFunctions-1>=BLOOM_MAXHASH then
+      exit;
+    Reset;
+    fInserted := PCardinal(P)^; inc(P,4);
+    ZeroDecompress(P,PLen-(PAnsiChar(P)-PAnsiChar(start)),fStore);
+    result := length(fStore)=integer(fBits shr 3)+1;
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+
+{ TSynBloomFilterDiff }
+
+type
+  TBloomDiffHeader = packed record
+    kind: (bdDiff,bdFull,bdUpToDate);
+    size: cardinal;
+    inserted: cardinal;
+    revision: Int64;
+    crc: cardinal;
+  end;
+
+procedure TSynBloomFilterDiff.Insert(aValue: pointer; aValueLen: integer);
+begin
+  Safe.Lock;
+  try
+    inherited Insert(aValue,aValueLen);
+    inc(fRevision);
+    inc(fSnapshotInsertCount);
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+procedure TSynBloomFilterDiff.Reset;
+begin
+  Safe.Lock;
+  try
+    inherited Reset;
+    fSnapshotAfterInsertCount := fSize shr 5;
+    fSnapShotAfterMinutes := 30;
+    fSnapshotTimestamp := 0;
+    fSnapshotInsertCount := 0;
+    fRevision := UnixTimeUTC shl 31;
+    fKnownRevision := 0;
+    fKnownStore := '';
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+procedure TSynBloomFilterDiff.DiffSnapshot;
+begin
+  Safe.Lock;
+  try
+    fKnownRevision := fRevision;
+    fSnapshotInsertCount := 0;
+    SetString(fKnownStore,PAnsiChar(pointer(fStore)),length(fStore));
+    if fSnapShotAfterMinutes=0 then
+      fSnapshotTimestamp := 0 else
+      fSnapshotTimestamp := GetTickCount64+fSnapShotAfterMinutes*60000;
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+function TSynBloomFilterDiff.SaveToDiff(const aKnownRevision: Int64): RawByteString;
+var head: TBloomDiffHeader;
+    W: TFileBufferWriter;
+    temp: array[word] of byte;
+begin
+  Safe.Lock;
+  try
+    if aKnownRevision=fRevision then
+      head.kind := bdUpToDate else
+    if (fKnownRevision=0) or
+       (fSnapshotInsertCount>fSnapshotAfterInsertCount) or
+       ((fSnapshotInsertCount>0) and (fSnapshotTimestamp<>0) and
+        (GetTickCount64>fSnapshotTimestamp)) then begin
+      DiffSnapshot;
+      head.kind := bdFull;
+    end else
+    if (aKnownRevision<fKnownRevision) or (aKnownRevision>fRevision) then
+      head.kind := bdFull else
+      head.kind := bdDiff;
+    head.size := length(fStore);
+    head.inserted := fInserted;
+    head.revision := fRevision;
+    head.crc := crc32c(0,@head,SizeOf(head)-SizeOf(head.crc));
+    if head.kind=bdUpToDate then begin
+      SetString(result,PAnsiChar(@head),SizeOf(head));
+      exit;
+    end;
+    if head.size+100<=SizeOf(temp) then
+      W := TFileBufferWriter.Create(TRawByteStringStream,@temp,SizeOf(temp)) else
+      W := TFileBufferWriter.Create(TRawByteStringStream,head.size+100);
+    try
+      W.Write(@head,SizeOf(head));
+      case head.kind of
+      bdFull:
+        SaveTo(W);
+      bdDiff:
+        ZeroCompressXor(pointer(fStore),pointer(fKnownStore),head.size,W);
+      end;
+      W.Flush;
+      result := TRawByteStringStream(W.Stream).DataString;
+    finally
+      W.Free;
+    end;
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+function TSynBloomFilterDiff.DiffKnownRevision(const aDiff: RawByteString): Int64;
+var head: ^TBloomDiffHeader absolute aDiff;
+begin
+  if (length(aDiff)<SizeOf(head^)) or (head.kind>high(head.kind)) or
+     (head.size<>cardinal(length(fStore))) or
+     (head.crc<>crc32c(0,pointer(head),SizeOf(head^)-SizeOf(head.crc))) then
+    result := 0 else
+    result := head.Revision;
+end;
+
+function TSynBloomFilterDiff.LoadFromDiff(const aDiff: RawByteString): boolean;
+var head: ^TBloomDiffHeader absolute aDiff;
+    P: PByte;
+    PLen: integer;
+begin
+  result := false;
+  P := pointer(aDiff);
+  PLen := length(aDiff);
+  if (PLen<SizeOf(head^)) or (head.kind>high(head.kind)) or
+     (head.crc<>crc32c(0,pointer(head),SizeOf(head^)-SizeOf(head.crc))) then
+    exit;
+  if (fStore<>'') and (head.size<>cardinal(length(fStore))) then
+    exit;
+  inc(P,SizeOf(head^));
+  dec(PLen,SizeOf(head^));
+  Safe.Lock;
+  try
+    case head.kind of
+    bdFull:
+      result := LoadFrom(P,PLen);
+    bdDiff:
+      if fStore<>'' then
+        result := ZeroDecompressOr(pointer(P),Pointer(fStore),PLen,head.size);
+    bdUpToDate:
+      result := true;
+    end;
+    if result then begin
+      fRevision := head.revision;
+      fInserted := head.inserted;
+    end;
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+procedure ZeroCompress(P: PAnsiChar; Len: integer; Dest: TFileBufferWriter);
+var PEnd,beg,zero: PAnsiChar;
+    crc: cardinal;
+begin
+  Dest.WriteVarUInt32(Len);
+  PEnd := P+Len;
+  beg := P;
+  crc := 0;
+  while P<PEnd do begin
+    while (P^<>#0) and (P<PEnd) do inc(P);
+    zero := P;
+    while (P^=#0) and (P<PEnd) do inc(P);
+    if P-zero>3 then begin
+      Len := zero-beg;
+      crc := crc32c(crc,beg,Len);
+      Dest.WriteVarUInt32(Len);
+      Dest.Write(beg,Len);
+      Len := P-zero;
+      crc := crc32c(crc,@Len,SizeOf(Len));
+      Dest.WriteVarUInt32(Len-3);
+      beg := P;
+    end;
+  end;
+  Len := P-beg;
+  if Len>0 then begin
+    crc := crc32c(crc,beg,Len);
+    Dest.WriteVarUInt32(Len);
+    Dest.Write(beg,Len);
+  end;
+  Dest.Write4(crc);
+end;
+
+procedure ZeroCompressXor(New,Old: PAnsiChar; Len: cardinal; Dest: TFileBufferWriter);
+var beg,same,index,crc,L: cardinal;
+begin
+  Dest.WriteVarUInt32(Len);
+  beg := 0;
+  index := 0;
+  crc := 0;
+  while index<Len do begin
+    while (New[index]<>Old[index]) and (index<Len) do inc(index);
+    same := index;
+    while (New[index]=Old[index]) and (index<Len) do inc(index);
+    L := index-same;
+    if L>3 then begin
+      Dest.WriteVarUInt32(same-beg);
+      Dest.WriteXor(New+beg,Old+beg,same-beg,@crc);
+      crc := crc32c(crc,@L,SizeOf(L));
+      Dest.WriteVarUInt32(L-3);
+      beg := index;
+    end;
+  end;
+  L := index-beg;
+  if L>0 then begin
+    Dest.WriteVarUInt32(L);
+    Dest.WriteXor(New+beg,Old+beg,L,@crc);
+  end;
+  Dest.Write4(crc);
+end;
+
+procedure ZeroDecompress(P: PByte; Len: integer; {$ifdef FPC}var{$else}out{$endif} Dest: RawByteString);
+var PEnd,D,DEnd: PAnsiChar;
+    DestLen,crc: cardinal;
+begin
+  PEnd := PAnsiChar(P)+Len-4;
+  DestLen := FromVarUInt32(P);
+  SetString(Dest,nil,DestLen); // FPC uses var
+  D := pointer(Dest);
+  DEnd := D+DestLen;
+  crc := 0;
+  while PAnsiChar(P)<PEnd do begin
+    Len := FromVarUInt32(P);
+    if D+Len>DEnd then
+      break;
+    MoveFast(P^,D^,Len);
+    crc := crc32c(crc,D,Len);
+    inc(P,Len);
+    inc(D,Len);
+    if PAnsiChar(P)>=PEnd then
+      break;
+    Len := FromVarUInt32(P)+3;
+    if D+Len>DEnd then
+      break;
+    FillCharFast(D^,Len,0);
+    crc := crc32c(crc,@Len,SizeOf(Len));
+    inc(D,Len);
+  end;
+  if crc<>PCardinal(P)^ then
+    Dest := '';
+end;
+
+function ZeroDecompressOr(P,Dest: PAnsiChar; Len,DestLen: integer): boolean;
+var PEnd,DEnd: PAnsiChar;
+    crc: cardinal;
+begin
+  PEnd := P+Len-4;
+  if cardinal(DestLen)<>FromVarUInt32(PByte(P)) then begin
+    result := false;
+    exit;
+  end;
+  DEnd := Dest+DestLen;
+  crc := 0;
+  while (P<PEnd) and (Dest<DEnd) do begin
+    Len := FromVarUInt32(PByte(P));
+    if Dest+Len>DEnd then
+      break;
+    crc := crc32c(crc,P,Len);
+    OrMemory(pointer(Dest),pointer(P),Len);
+    inc(P,Len);
+    inc(Dest,Len);
+    if P>=PEnd then
+      break;
+    Len := FromVarUInt32(PByte(P))+3;
+    crc := crc32c(crc,@Len,SizeOf(Len));
+    inc(Dest,Len);
+  end;
+  result := crc=PCardinal(P)^;
+end;
 
 
 initialization

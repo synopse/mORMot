@@ -1920,9 +1920,13 @@ type
   // without the field names
   // - boPutNoCacheFlush won't force the associated Cache entry to be flushed:
   // it is up to the caller to ensure cache coherency
+  // - boRollbackOnError will raise an exception and Rollback any transaction
+  // if any step failed - default if to continue batch processs, but setting
+  // a value <> 200/HTTP_SUCCESS in Results[]
   TSQLRestBatchOption = (
     boInsertOrIgnore, boInsertOrReplace,
-    boExtendedJSON, boPostNoSimpleFields, boPutNoCacheFlush);
+    boExtendedJSON, boPostNoSimpleFields, boPutNoCacheFlush,
+    boRollbackOnError);
 
   /// a set of options for TSQLRest.BatchStart() process
   // - TJSONObjectDecoder will use it to compute the corresponding SQL
@@ -5118,6 +5122,9 @@ type
 
   /// generic parent class of all custom Exception types of this unit
   EORMException = class(ESynException);
+
+  /// exception raised in case of TSQLRestBatch problem
+  EORMBatchException = class(EORMException);
 
   /// exception raised in case of wrong Model definition
   EModelException = class(EORMException);
@@ -14784,7 +14791,8 @@ type
     // for all successfull BatchUpdate/BatchDelete, or 0 on error
     // - any error during server-side process MUST be checked against Results[]
     // (the main URI Status is 200 if about communication success, and won't
-    // imply that all statements in the BATCH sequence were successfull
+    // imply that all statements in the BATCH sequence were successfull),
+    // or boRollbackOnError should be set in TSQLRestBatchOptions
     // - note that the caller shall still free the supplied Batch instance
     function BatchSend(Batch: TSQLRestBatch; var Results: TIDDynArray): integer; overload; virtual;
     /// execute a BATCH sequence prepared in a TSQLRestBatch instance
@@ -28054,15 +28062,15 @@ function TJSONObjectDecoder.EncodeAsSQL(Update: boolean): RawUTF8;
 var F: integer;
     W: TTextWriter;
     temp: TTextWriterStackBuffer;
-procedure AddValue;
-begin
-  if InlinedParams then
-    W.AddShort(':(');
-  W.AddString(FieldValues[F]);
-  if InlinedParams then
-    W.AddShort('):,') else
-    W.Add(',');
-end;
+  procedure AddValue;
+  begin
+    if InlinedParams then
+      W.AddShort(':(');
+    W.AddString(FieldValues[F]);
+    if InlinedParams then
+      W.AddShort('):,') else
+      W.Add(',');
+  end;
 begin
   result := '';
   if FieldCount=0 then
@@ -43518,10 +43526,6 @@ begin
     result := Rest.EngineUpdateFieldIncrement(TableModelIndex,ID,FieldName,Increment);
 end;
 
-
-type
-  EORMBatchException = class(EORMException);
-
 function TSQLRestServer.EngineBatchSend(Table: TSQLRecordClass;
   var Data: RawUTF8; var Results: TIDDynArray; ExpectedResultsCount: integer): integer;
 var EndOfObject: AnsiChar;
@@ -43751,36 +43755,41 @@ begin
           SetLength(Results,Count+256+Count shr 3);
       end;
       // process CRUD method operation
+      OK := false;
       Results[Count] := HTTP_NOTMODIFIED;
       case URIMethod of
       mDELETE: begin
-        OK := EngineDelete(RunTableIndex,ID);
-        if OK then begin
+        if EngineDelete(RunTableIndex,ID) then begin
           if fCache<>nil then
             fCache.NotifyDeletion(RunTableIndex,ID);
           if (RunningBatchRest<>nil) or
-             AfterDeleteForceCoherency(RunTableIndex,ID) then
+             AfterDeleteForceCoherency(RunTableIndex,ID) then begin
             Results[Count] := HTTP_SUCCESS; // 200 OK
+            OK := true;
+          end;
         end;
       end;
       mPOST: begin
         ID := EngineAdd(RunTableIndex,Value);
         Results[Count] := ID;
-        if (ID<>0) and (fCache<>nil) then
-          fCache.Notify(RunTableIndex,ID,Value,soInsert);
+        if ID<>0 then begin
+          if fCache<>nil then
+            fCache.Notify(RunTableIndex,ID,Value,soInsert);
+          OK := true;
+        end;
       end;
-      mPUT: begin
-        OK := EngineUpdate(RunTableIndex,ID,Value);
-        if OK then begin
+      mPUT:
+        if EngineUpdate(RunTableIndex,ID,Value) then begin
           Results[Count] := HTTP_SUCCESS; // 200 OK
+          OK := true;
           if fCache<>nil then // JSON Value may be uncomplete -> delete from cache
             if not (boPutNoCacheFlush in batchOptions) then
               fCache.NotifyDeletion(RunTableIndex,ID);
         end;
       end;
-      else raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Unknown "%" method',
-        [self,Method]);
-      end;
+      if (boRollbackOnError in batchOptions) and not OK then
+        raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Results[%]=% on % %',
+          [self,Count,Results[Count],Method,RunTable]);
       inc(Count);
       inc(counts[URIMethod]);
     until EndOfObject=']';
@@ -44822,7 +44831,7 @@ begin
   try
     n := 0;
     for i := Count-1 downto 0 do // downwards to return the latest first
-      if FindRawUTF8(List[i].Names,length(List[i].Names),aServiceName,true)>=0 then
+      if FindPropName(List[i].Names,aServiceName)>=0 then
         if (fTimeOut=0) or (fTimeoutTix[i]<tix) then begin
           SetLength(result,n+1);
           result[n] := List[i].PublicURI;
@@ -44844,7 +44853,7 @@ begin
   Safe.Lock;
   try
     for i := Count-1 downto 0 do // downwards to return the latest first
-      if FindRawUTF8(List[i].Names,length(List[i].Names),aServiceName,true)>=0 then
+      if FindPropName(List[i].Names,aServiceName)>=0 then
         if (fTimeOut=0) or (fTimeoutTix[i]<tix) then
           AddRawUTF8(TRawUTF8DynArray(result),n,List[i].PublicURI.URI);
   finally
@@ -44874,7 +44883,7 @@ begin
       // search matching (and non deprecated) services as TSQLRestServerURI
       for i := Count-1 downto 0 do // downwards to return the latest first
         with List[i] do
-          if FindRawUTF8(Names,length(Names),aServiceName,true)>=0 then
+          if FindPropName(Names,aServiceName)>=0 then
             if (fTimeOut=0) or (fTimeoutTix[i]<tix) then begin
               aWriter.AddRecordJSON(PublicURI,TypeInfo(TSQLRestServerURI));
               aWriter.Add(',');
@@ -59838,15 +59847,12 @@ end;
 { TSynAutoCreateFields }
 
 {$ifdef FPC_OR_PUREPASCAL}
-
 constructor TSynAutoCreateFields.Create;
 begin
   AutoCreateFields(self);
   inherited Create; // always call the virtual constructor
 end;
-
 {$else}
-
 class function TSynAutoCreateFields.NewInstance: TObject;
 asm
         push    eax  // class
@@ -59864,7 +59870,6 @@ asm
         call    AutoCreateFields
         pop     eax
 end; // ignore vmtIntfTable for this class hierarchy (won't implement interfaces)
-
 {$endif}
 
 destructor TSynAutoCreateFields.Destroy;

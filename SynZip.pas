@@ -4815,6 +4815,7 @@ end;
     {$LINK fpc-win32\inftrees.o}
     {$LINK fpc-win32\adler32.o}
     {$LINK fpc-win32\crc32.o}
+    {$linklib fpc-win32\libmsvcrt.a}
   {$endif}
   {$ifdef WIN64}
     {$ifdef USEZLIBSSE}
@@ -4836,6 +4837,7 @@ end;
     {$L fpc-win64\crc32.o}
     {$L fpc-win64\zutil.o}
     {$endif USEZLIBSSE}
+    {$linklib fpc-win64\libmsvcrt.a}
   {$endif}
 
 function deflate(var strm: TZStream; flush: integer): integer; cdecl; external;
@@ -4854,27 +4856,6 @@ function deflateInit2_(var strm: TZStream;
 function inflateInit2_(var strm: TZStream; windowBits: integer;
   version: PAnsiChar; stream_size: integer): integer; cdecl; external;
 function get_crc_table: pointer; cdecl; external;
-
-procedure memcpy(dest, src: Pointer; count: integer); cdecl;
-  public name{$ifdef CPU64}'memcpy'{$else}'_memcpy'{$endif};
-begin
-  Move(src^, dest^, count);
-end;
-procedure memset(dest: Pointer; val: Integer; count: integer); cdecl;
-  public name{$ifdef CPU64}'memset'{$else}'_memset'{$endif};
-begin
-  FillChar(dest^, count, val);
-end;
-function malloc(size: cardinal): Pointer; cdecl;
-  public name{$ifdef CPU64}'malloc'{$else}'_malloc'{$endif};
-begin
-  GetMem(Result, size);
-end;
-procedure free(P: Pointer); cdecl;
-  public name{$ifdef CPU64}'free'{$else}'_free'{$endif};
-begin
-  FreeMem(P);
-end;
 
 {$endif FPC}
 

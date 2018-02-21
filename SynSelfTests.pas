@@ -347,6 +347,8 @@ type
     /// low level fast Integer or Floating-Point to/from string conversion
     // - especially the RawUTF8 or PUTF8Char relative versions
     procedure NumericalConversions;
+    /// test low-level integer/Int64 functions
+    procedure Integers;
     /// test crc32c in both software and hardware (SSE4.2) implementations
     procedure _crc32c;
     /// test RDRAND Intel x86/x64 opcode if available, or fast gsl_rng_taus2
@@ -2863,25 +2865,68 @@ end;
 procedure TTestLowLevelCommon._IsMatch;
 var i: integer;
     V: RawUTF8;
+    match: TMatch;
 begin
+  Check(IsMatch('','',true));
+  Check(not IsMatch('','toto',true));
+  Check(not IsMatch('Bidule.pas','',true));
+  Check(IsMatch('Bidule.pas','Bidule.pas',true));
+  Check(IsMatch('Bidule.pas','Bidule.pas',false));
+  Check(not IsMatch('Bidule.pas','bidule.pas',false));
   for i := 0 to 200 do begin
     V := Int32ToUtf8(i);
     Check(IsMatch(V,V,false)=IsMatch(V,V,true));
   end;
+  Check(IsMatch('test*','test',false));
+  Check(IsMatch('test*','test',true));
+  Check(IsMatch('test*','teste',false));
+  Check(IsMatch('test*','teste',true));
+  Check(IsMatch('test*','tester',false));
+  Check(IsMatch('test*','tester',true));
+  Check(IsMatch('a*','anything',true));
+  Check(IsMatch('a*','a',true));
+  Check(IsMatch('*','anything',true));
   Check(IsMatch('*.pas','Bidule.pas',true));
   Check(IsMatch('*.pas','Bidule.pas',false));
   Check(IsMatch('*.PAS','Bidule.pas',true));
   Check(not IsMatch('*.PAS','Bidule.pas',false));
+  Check(IsMatch('*.p?s','Bidule.pas',true));
+  Check(IsMatch('*.p*S','Bidule.pas',true));
+  Check(IsMatch('B*.PAS','bidule.pas',true));
+  Check(IsMatch('*.p?s','bidule.pas',false));
+  Check(IsMatch('*.p*s','bidule.pas',false));
+  Check(IsMatch('b*.pas','bidule.pas',false));
+  Check(not IsMatch('B*.das','Bidule.pas',true));
   Check(IsMatch('bidule.*','Bidule.pas',true));
   Check(IsMatch('ma?ch.*','match.exe',false));
   Check(IsMatch('ma?ch.*','mavch.dat',false));
   Check(IsMatch('ma?ch.*','march.on',false));
   Check(IsMatch('ma?ch.*','march.',false));
-  Check(IsMatch('this [e-n]s a [!zy]est','this is a test',false));
-  Check(IsMatch('this [e-n]s a [!zy]est','this is a rest',false));
-  Check(not IsMatch('this [e-n]s a [!zy]est','this is a zest',false));
-  Check(not IsMatch('this [e-n]s a [!zy]est','this as a test',false));
-  Check(not IsMatch('this [e-n]s a [!zy]est','this as a rest',false));
+  V := 'this [e-n]s a [!zy]est';
+  check(not IsMatch(V,V,false));
+  Check(IsMatch(V,'this is a test',false));
+  Check(IsMatch(V,'this is a rest',false));
+  Check(not IsMatch(V,'this is a zest',false));
+  Check(not IsMatch(V,'this as a test',false));
+  Check(not IsMatch(V,'this as a rest',false));
+  match.Prepare(V, false, true);
+  Check(not match.Match(V));
+  Check(match.Match('this is a test'));
+  Check(match.Match('this is a rest'));
+  Check(not match.Match('this is a zest'));
+  match.Prepare('test', false, true);
+  check(match.Match('test'));
+  check(not match.Match('tes'));
+  check(not match.Match('teste'));
+  check(not match.Match('tesT'));
+  match.Prepare('teST', true, true);
+  check(match.Match('test'));
+  check(match.Match('test'));
+  match.Prepare('test*', false, true);
+  check(match.Match('test'));
+  check(match.Match('teste'));
+  check(match.Match('tester'));
+  check(not match.Match('tes'));
   for i := 32 to 127 do begin
     SetLength(V,1);
     V[1] := AnsiChar(i);
@@ -3226,6 +3271,101 @@ begin
     KB(Timer.PerSec(totallen))]);
 end;
 
+procedure TTestLowLevelCommon.Integers;
+var i32: TIntegerDynArray;
+    i64: TInt64DynArray;
+    i,n: integer;
+begin
+  check(i32=nil);
+  DeduplicateInteger(i32);
+  check(i32=nil);
+  SetLength(i32,2);
+  i32[0] := 1;
+  QuickSortInteger(i32);
+  check(i32[0]=0);
+  check(i32[1]=1);
+  DeduplicateInteger(i32);
+  check(length(i32)=2);
+  check(i32[0]=0);
+  check(i32[1]=1);
+  i32[0] := 1;
+  DeduplicateInteger(i32);
+  check(length(i32)=1);
+  check(i32[0]=1);
+  SetLength(i32,6);
+  i32[4] := 1;
+  i32[5] := 2;
+  DeduplicateInteger(i32); // (1, 0, 0, 0, 1, 2)
+  check(length(i32)=3);
+  check(i32[0]=0);
+  check(i32[1]=1);
+  check(i32[2]=2);
+  SetLength(i32,6);
+  i32[4] := 3;
+  i32[5] := 3;
+  DeduplicateInteger(i32); // (0, 1, 2, 0, 3, 3)
+  check(length(i32)=4);
+  check(i32[0]=0);
+  check(i32[1]=1);
+  check(i32[2]=2);
+  check(i32[3]=3);
+  for n := 1 to 1000 do begin
+    SetLength(i32,n);
+    for i := 0 to n - 1 do
+      i32[i] := i and 15;
+    DeduplicateInteger(i32);
+    if n < 16 then
+      check(Length(i32) = n) else
+      check(Length(i32) = 16);
+    for i := 0 to high(i32) do
+      check(i32[i] = i);
+  end;
+  check(i64=nil);
+  DeduplicateInt64(i64);
+  check(i64=nil);
+  SetLength(i64,2);
+  i64[0] := 1;
+  QuickSortInt64(pointer(i64),0,1);
+  check(i64[0]=0);
+  check(i64[1]=1);
+  DeduplicateInt64(i64);
+  check(length(i64)=2);
+  check(i64[0]=0);
+  check(i64[1]=1);
+  i64[0] := 1;
+  DeduplicateInt64(i64);
+  check(length(i64)=1);
+  check(i64[0]=1);
+  SetLength(i64,6);
+  i64[4] := 1;
+  i64[5] := 2;
+  DeduplicateInt64(i64); // (1, 0, 0, 0, 1, 2)
+  check(length(i64)=3);
+  check(i64[0]=0);
+  check(i64[1]=1);
+  check(i64[2]=2);
+  SetLength(i64,6);
+  i64[4] := 3;
+  i64[5] := 3;
+  DeduplicateInt64(i64); // (0, 1, 2, 0, 3, 3)
+  check(length(i64)=4);
+  check(i64[0]=0);
+  check(i64[1]=1);
+  check(i64[2]=2);
+  check(i64[3]=3);
+  for n := 1 to 1000 do begin
+    SetLength(i64,n);
+    for i := 0 to n - 1 do
+      i64[i] := i and 15;
+    DeduplicateInt64(i64);
+    if n < 16 then
+      check(Length(i64) = n) else
+      check(Length(i64) = 16);
+    for i := 0 to high(i64) do
+      check(i64[i] = i);
+  end;
+end;
+
 procedure TTestLowLevelCommon.NumericalConversions;
 var i, j, b, err: integer;
     juint: cardinal absolute j;
@@ -3309,7 +3449,10 @@ begin
   Check(err>0);
   d := GetExtended('40640.5028819444',err);
   Check(err=0);
-  CheckSame(d,40640.5028819444);
+  u := DoubleToString(d);
+  Check(u='40640.5028819444',u);
+  e := 40640.5028819444;
+  CheckSame(d,e,1e-11);
   {$endif}
   d := 22.99999999999997;
   a[0] := AnsiChar(ExtendedToString(a,d,DOUBLE_PRECISION));
@@ -5473,7 +5616,7 @@ begin
   Check(v=1234567890123456789);
   GetVariantFromJSON('12345678901234567890',False,v,nil,true);
   Check(vd.VType=varDouble);
-  CheckSame(v,12345678901234567890.0);
+  CheckSame(vd.VDouble,12345678901234567890.0,0);
   GetVariantFromJSON('12345678901234567890',False,v,nil,false);
   Check(vd.VType=varString);
   GetVariantFromJSON('-123.1',False,v,nil);
