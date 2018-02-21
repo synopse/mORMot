@@ -5440,7 +5440,6 @@ begin
 end;
 
 function WriteCurOfs(curofs,curlen,curofssize: integer; sp: PAnsiChar): PAnsiChar;
-  {$ifdef HASINLINE}inline;{$endif}
 begin
   if curlen=0 then begin
     sp^ := #0;
@@ -5488,20 +5487,18 @@ end;
 const
   HTabBits = 18; // fits well with DeltaCompress(..,BufSize=2MB)
   HTabMask = (1 shl HTabBits)-1; // =$3ffff
-  HItemMask = $ffffff; // THItem=($ff,$ff,$ff)
+  HListMask = $ffffff; // HTab[]=($ff,$ff,$ff)
 
 type
-  PHItem = ^THItem;
-  THItem = array[0..2] of byte;
-  PHTab = ^THTab;
-  THTab = packed array[0..HTabMask] of THItem; // HTabBits=18 -> SizeOf=767KB
+  PHTab = ^THTab; // HTabBits=18 -> SizeOf=767KB
+  THTab = packed array[0..HTabMask] of array[0..2] of byte;
 
 function DeltaCompute(NewBuf, OldBuf, OutBuf, WorkBuf: PAnsiChar;
   NewBufSize, OldBufSize, MaxLevel: PtrInt; HList, HTab: PHTab): PAnsiChar;
-var i, curofs, curlen, curlevel, match, curofssize: PtrInt;
+var i, curofs, curlen, curlevel, match, curofssize, h, oldh: PtrInt;
     sp, pInBuf, pOut: PAnsiChar;
-    h, ofs, oldh: cardinal;
-    item: PHItem;
+    ofs: cardinal;
+    hl: PCardinal;
     spb: PByte absolute sp;
     hash: function(buf: pointer): cardinal;
 begin
@@ -5511,23 +5508,26 @@ begin
     hash := @crc32csse42 else
   {$endif}
     hash := @hash32prime;
-  FillCharFast(HTab^,SizeOf(HTab^),$ff); // HTab[]=HItemMask by default
+  FillCharFast(HTab^,SizeOf(HTab^),$ff); // HTab[]=HListMask by default
   pInBuf := OldBuf;
-  oldh := maxInt; // force calculate first hash
+  oldh := -1; // force calculate first hash
+  sp := pointer(HList);
   for i := 0 to OldBufSize-3 do begin
     h := hash(pInBuf) and HTabMask;
     inc(pInBuf);
     if h=oldh then
       continue;
-    item := @HTab^[h];
-    HList^[i] := item^;
-    item^ := PHItem(@i)^;
     oldh := h;
+    h := PtrInt(@HTab^[h]); // fast 24-bit process
+    PCardinal(sp)^ := PCardinal(h)^;
+    PCardinal(h)^ := cardinal(i) or (PCardinal(h)^ and $ff000000);
+    inc(sp,3);
   end;
   // 2. compression init
   if OldBufSize<=$ffff then
     curofssize := 2 else
     curofssize := 3;
+  curlen := -1;
   curofs := 0;
   pOut := OutBuf+7;
   sp := WorkBuf;
@@ -5544,10 +5544,9 @@ begin
   if NewBufSize>=8 then
   repeat
     // hash 4 next bytes from NewBuf, and find longest match in OldBuf
-    ofs := PCardinal(@HTab^[hash(NewBuf) and HTabMask])^ and HItemMask;
-    curlevel := MaxLevel;
-    curlen := -1;
-    if ofs<>HItemMask then // brute force search loop of best hash match
+    ofs := PCardinal(@HTab^[hash(NewBuf) and HTabMask])^ and HListMask;
+    if ofs<>HListMask then begin // brute force search loop of best hash match
+      curlevel := MaxLevel;
       repeat
         with PHash128Rec(OldBuf+ofs)^ do
         {$ifdef CPU64} // test 8 bytes
@@ -5562,8 +5561,9 @@ begin
           end;
         end;
         dec(curlevel);
-        ofs := PCardinal(@HList^[ofs])^ and HItemMask;
-      until (curlevel=0) or (ofs=HItemMask);
+        ofs := PCardinal(@HList^[ofs])^ and HListMask;
+      until (ofs=HListMask) or (curlevel=0);
+    end;
     // curlen = longest sequence length
     if curlen<0 then begin // no sequence found -> copy one byte
       dec(NewBufSize);
@@ -5579,6 +5579,7 @@ begin
     spb := ToVarUInt32(NewBuf-pInBuf,spb);
     inc(NewBuf,curlen); // continue to search after the sequence
     dec(NewBufSize,curlen);
+    curlen := -1;
     pInBuf := NewBuf;
     if NewBufSize>8 then // >=8 may overflow
       continue else
