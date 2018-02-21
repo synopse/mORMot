@@ -355,6 +355,8 @@ type
     procedure _Random32;
     /// test TSynBloomFilter class
     procedure BloomFilters;
+    /// test DeltaCompress/DeltaExtract functions
+    procedure _DeltaCompress;
     /// the new fast Currency to/from string conversion
     procedure Curr64;
     /// the camel-case / camel-uncase features, used for i18n from Delphi RTII
@@ -5232,6 +5234,43 @@ begin
   finally
     f.Free;
   end;
+end;
+
+procedure TTestLowLevelCommon._DeltaCompress;
+var o,n,d,s: RawByteString;
+    i: integer;
+begin
+  n := RandomTextParagraph(100);
+  d := DeltaCompress(n,o);
+  check(DeltaExtract(d,o,s)=dsSuccess,'delta0');
+  Check(s=n);
+  d := DeltaCompress(n,s);
+  check(d='=');
+  for i := 1 to 20 do begin
+    o := n;
+    s := RandomTextParagraph(100);
+    case i and 7 of
+      2: n := n+s;
+      7: n := s+n;
+      else insert(s,n,i*50);
+    end;
+    d := DeltaCompress(n,o);
+    check(d<>'=');
+    check(length(d)<length(s));
+    check(DeltaExtract(d,o,s)=dsSuccess,'delta+');
+    Check(s=n);
+  end;
+  o := n;
+  delete(n,100,100);
+  d := DeltaCompress(n,o);
+  check(DeltaExtract(d,o,s)=dsSuccess,'delta-');
+  Check(s=n);
+  o := n;
+  delete(n,1000,100);
+  insert(RandomIdentifier(50),n,200);
+  d := DeltaCompress(n,o);
+  check(DeltaExtract(d,o,s)=dsSuccess,'delta-+');
+  Check(s=n);
 end;
 
 procedure TTestLowLevelCommon.BloomFilters;
