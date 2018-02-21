@@ -28787,7 +28787,7 @@ var table: PNormTable;
 begin
   result := false;
   table := @NormToUpperAnsi7;
-  if P^<>'[' then
+  if (P<>nil) and (P^<>'[') then
     repeat
       if P^=' ' then begin
         repeat inc(P) until P^<>' '; // trim left ' '
