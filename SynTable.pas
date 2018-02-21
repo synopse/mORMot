@@ -58,6 +58,9 @@ interface
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64
 
 uses
+  {$ifdef MSWINDOWS}
+    Windows,
+  {$endif}
   SysUtils,
   Classes,
 {$ifndef LVCL}
@@ -3439,7 +3442,7 @@ end;
 {$endif}
 
 function CompareOperator(FieldType: TSynTableFieldType; SBF, SBFEnd: PUTF8Char;
-  Value: Int64; Oper: TCompareOperator): boolean; overload;
+  Value: Int64; Oper: TCompareOperator): boolean;
 var V: Int64;
     PB: PByte absolute SBF;
 begin
@@ -3488,7 +3491,7 @@ begin
 end;
 
 function CompareOperator(SBF, SBFEnd: PUTF8Char;
-  Value: double; Oper: TCompareOperator): boolean; overload;
+  Value: double; Oper: TCompareOperator): boolean;
 begin
   result := true;
   if SBF<>nil then
