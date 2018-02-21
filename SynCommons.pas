@@ -4801,6 +4801,9 @@ procedure DeleteInteger(var Values: TIntegerDynArray; var ValuesCount: Integer; 
 procedure ExcludeInteger(var Values, Excluded: TIntegerDynArray;
   ExcludedSortSize: Integer=32);
 
+/// sort and remove any 32-bit duplicated integer from Values[]
+procedure DeduplicateInteger(var Values: TIntegerDynArray);
+
 /// delete any 16-bit integer in Values[]
 procedure DeleteWord(var Values: TWordDynArray; Index: PtrInt);
 
@@ -4815,6 +4818,9 @@ procedure DeleteInt64(var Values: TInt64DynArray; var ValuesCount: Integer; Inde
 // if it contains more than ExcludedSortSize items (i.e. if the sort is worth it)
 procedure ExcludeInt64(var Values, Excluded: TInt64DynArray;
   ExcludedSortSize: Integer=32);
+
+/// sort and remove any 64-bit duplicated integer from Values[]
+procedure DeduplicateInt64(var Values: TInt64DynArray);
 
 /// find the maximum 32-bit integer in Values[]
 function MaxInteger(const Values: TIntegerDynArray; ValuesCount: integer;
@@ -29929,6 +29935,18 @@ begin
   Values[result] := Value;
 end;
 
+procedure DeleteWord(var Values: TWordDynArray; Index: PtrInt);
+var n: PtrInt;
+begin
+  n := Length(Values);
+  if PtrUInt(Index)>=PtrUInt(n) then
+    exit; // wrong Index
+  dec(n);
+  if n>Index then
+    MoveFast(Values[Index+1],Values[Index],(n-Index)*SizeOf(Word));
+  SetLength(Values,n);
+end;
+
 procedure DeleteInteger(var Values: TIntegerDynArray; Index: PtrInt);
 var n: PtrInt;
 begin
@@ -29941,16 +29959,16 @@ begin
   SetLength(Values,n);
 end;
 
-procedure DeleteWord(var Values: TWordDynArray; Index: PtrInt);
+procedure DeleteInteger(var Values: TIntegerDynArray; var ValuesCount: Integer; Index: PtrInt);
 var n: PtrInt;
 begin
-  n := Length(Values);
+  n := ValuesCount;
   if PtrUInt(Index)>=PtrUInt(n) then
     exit; // wrong Index
-  dec(n);
-  if n>Index then
-    MoveFast(Values[Index+1],Values[Index],(n-Index)*SizeOf(Word));
-  SetLength(Values,n);
+  dec(n,Index+1);
+  if n>0 then
+    MoveFast(Values[Index+1],Values[Index],n*SizeOf(Integer));
+  dec(ValuesCount);
 end;
 
 procedure DeleteInt64(var Values: TInt64DynArray; Index: PtrInt);
@@ -29975,6 +29993,34 @@ begin
   if n>0 then
     MoveFast(Values[Index+1],Values[Index],n*SizeOf(Int64));
   dec(ValuesCount);
+end;
+
+procedure ExcludeInteger(var Values, Excluded: TIntegerDynArray; ExcludedSortSize: integer);
+var i,v,x,n: integer;
+begin
+  if (Values=nil) or (Excluded=nil) then
+    exit; // nothing to exclude
+  v := length(Values);
+  n := 0;
+  x := Length(Excluded);
+  if (x>ExcludedSortSize) or (v>ExcludedSortSize) then begin // sort if worth it
+    dec(x);
+    QuickSortInteger(pointer(Excluded),0,x);
+    for i := 0 to v-1 do
+      if FastFindIntegerSorted(pointer(Excluded),x,Values[i])<0 then begin
+        if n<>i then
+          Values[n] := Values[i];
+        inc(n);
+      end;
+  end else
+    for i := 0 to v-1 do
+      if not IntegerScanExists(pointer(Excluded),x,Values[i]) then begin
+        if n<>i then
+          Values[n] := Values[i];
+        inc(n);
+      end;
+  if n<>v then
+    SetLength(Values,n);
 end;
 
 procedure ExcludeInt64(var Values, Excluded: TInt64DynArray; ExcludedSortSize: Integer);
@@ -30005,44 +30051,54 @@ begin
     SetLength(Values,n);
 end;
 
-procedure DeleteInteger(var Values: TIntegerDynArray; var ValuesCount: Integer; Index: PtrInt);
-var n: PtrInt;
+procedure DeduplicateInteger(var Values: TIntegerDynArray);
+var i,j,n,v: PtrInt;
 begin
-  n := ValuesCount;
-  if PtrUInt(Index)>=PtrUInt(n) then
-    exit; // wrong Index
-  dec(n,Index+1);
-  if n>0 then
-    MoveFast(Values[Index+1],Values[Index],n*SizeOf(Integer));
-  dec(ValuesCount);
+  v := high(Values);
+  if v<0 then
+    exit;
+  n := v;
+  QuickSortInteger(pointer(Values),0,v);
+  i := v;
+  while i>0 do begin
+    if Values[i]=Values[i-1] then begin
+      j := i;
+      repeat
+        dec(i);
+      until (i=0) or (Values[i]<>Values[i-1]);
+      if n<>j then
+        MoveFast(Values[j+1],Values[i+1],(n-j)*SizeOf(Integer));
+      dec(n,j-i);
+    end;
+    dec(i);
+  end;
+  if n<>v then
+    SetLength(Values,n+1);
 end;
 
-procedure ExcludeInteger(var Values, Excluded: TIntegerDynArray; ExcludedSortSize: integer);
-var i,v,x,n: integer;
+procedure DeduplicateInt64(var Values: TInt64DynArray);
+var i,j,n,v: PtrInt;
 begin
-  if (Values=nil) or (Excluded=nil) then
-    exit; // nothing to exclude
-  v := length(Values);
-  n := 0;
-  x := Length(Excluded);
-  if (x>ExcludedSortSize) or (v>ExcludedSortSize) then begin // sort if worth it
-    dec(x);
-    QuickSortInteger(pointer(Excluded),0,x);
-    for i := 0 to v-1 do
-      if FastFindIntegerSorted(pointer(Excluded),x,Values[i])<0 then begin
-        if n<>i then
-          Values[n] := Values[i];
-        inc(n);
-      end;
-  end else
-    for i := 0 to v-1 do
-      if not IntegerScanExists(pointer(Excluded),x,Values[i]) then begin
-        if n<>i then
-          Values[n] := Values[i];
-        inc(n);
-      end;
+  v := high(Values);
+  if v<0 then
+    exit;
+  n := v;
+  QuickSortInt64(pointer(Values),0,v);
+  i := v;
+  while i>0 do begin
+    if Values[i]=Values[i-1] then begin
+      j := i;
+      repeat
+        dec(i);
+      until (i=0) or (Values[i]<>Values[i-1]);
+      if n<>j then
+        MoveFast(Values[j+1],Values[i+1],(n-j)*SizeOf(Int64));
+      dec(n,j-i);
+    end;
+    dec(i);
+  end;
   if n<>v then
-    SetLength(Values,n);
+    SetLength(Values,n+1);
 end;
 
 function MaxInteger(const Values: TIntegerDynArray; ValuesCount, MaxStart: integer): Integer;
@@ -30420,18 +30476,18 @@ end;
 
 procedure QuickSortInteger(ID: PIntegerArray; L,R: PtrInt);
 var I, J, P: PtrInt;
-    pivot, Tmp: integer;
+    tmp: integer;
 begin
   if L<R then
   repeat
     I := L; J := R;
     P := (L + R) shr 1;
     repeat
-      pivot := ID^[P];
-      while ID[I]<pivot do inc(I);
-      while ID[J]>pivot do dec(J);
+      tmp := ID^[P];
+      while ID[I]<tmp do inc(I);
+      while ID[J]>tmp do dec(J);
       if I <= J then begin
-        Tmp := ID[J]; ID[J] := ID[I]; ID[I] := Tmp;
+        tmp := ID[J]; ID[J] := ID[I]; ID[I] := tmp;
         if P = I then P := J else if P = J then P := I;
         inc(I); dec(J);
       end;
@@ -30449,19 +30505,19 @@ end;
 
 procedure QuickSortInteger(ID,CoValues: PIntegerArray; L,R: PtrInt);
 var I, J, P: PtrInt;
-    pivot, Tmp: integer;
+    tmp: integer;
 begin
   if L<R then
   repeat
     I := L; J := R;
     P := (L + R) shr 1;
     repeat
-      pivot := ID^[P];
-      while ID[I]<pivot do inc(I);
-      while ID[J]>pivot do dec(J);
+      tmp := ID[P];
+      while ID[I]<tmp do inc(I);
+      while ID[J]>tmp do dec(J);
       if I <= J then begin
-        Tmp := ID[J]; ID[J] := ID[I]; ID[I] := Tmp;
-        Tmp := CoValues[J]; CoValues[J] := CoValues[I]; CoValues[I] := Tmp;
+        tmp := ID[J]; ID[J] := ID[I]; ID[I] := tmp;
+        tmp := CoValues[J]; CoValues[J] := CoValues[I]; CoValues[I] := tmp;
         if P = I then P := J else if P = J then P := I;
         inc(I); dec(J);
       end;
@@ -30474,18 +30530,18 @@ end;
 
 procedure QuickSortWord(ID: PWordArray; L, R: PtrInt);
 var I, J, P: PtrInt;
-    pivot, Tmp: word;
+    tmp: word;
 begin
   if L<R then
   repeat
     I := L; J := R;
     P := (L + R) shr 1;
     repeat
-      pivot := ID^[P];
-      while ID[I]<pivot do inc(I);
-      while ID[J]>pivot do dec(J);
+      tmp := ID[P];
+      while ID[I]<tmp do inc(I);
+      while ID[J]>tmp do dec(J);
       if I <= J then begin
-        Tmp := ID[J]; ID[J] := ID[I]; ID[I] := Tmp;
+        tmp := ID[J]; ID[J] := ID[I]; ID[I] := tmp;
         if P = I then P := J else if P = J then P := I;
         inc(I); dec(J);
       end;
@@ -30498,18 +30554,23 @@ end;
 
 procedure QuickSortInt64(ID: PInt64Array; L, R: PtrInt);
 var I, J, P: PtrInt;
-    pivot, Tmp: Int64;
+    tmp: Int64;
 begin
   if L<R then
   repeat
     I := L; J := R;
     P := (L + R) shr 1;
     repeat
-      pivot := ID^[P];
-      while ID[I]<pivot do inc(I);
-      while ID[J]>pivot do dec(J);
+      {$ifdef CPU64}
+      tmp := ID^[P];
+      while ID[I]<tmp do inc(I);
+      while ID[J]>tmp do dec(J);
+      {$else}
+      while ID[I]<ID[P] do inc(I);
+      while ID[J]>ID[P] do dec(J);
+      {$endif}
       if I <= J then begin
-        Tmp := ID[J]; ID[J] := ID[I]; ID[I] := Tmp;
+        tmp := ID[J]; ID[J] := ID[I]; ID[I] := tmp;
         if P = I then P := J else if P = J then P := I;
         inc(I); dec(J);
       end;
@@ -30522,23 +30583,23 @@ end;
 
 procedure QuickSortQWord(ID: PQWordArray; L, R: PtrInt);
 var I, J, P: PtrInt;
-    pivot, Tmp: QWord;
+    tmp: QWord;
 begin
   if L<R then
   repeat
     I := L; J := R;
     P := (L + R) shr 1;
     repeat
-      pivot := ID^[P];
       {$ifdef CPUX86} // circumvent QWord comparison slowness (and bug)
-      while SortDynArrayQWord(ID[I],pivot)<0 do inc(I);
-      while SortDynArrayQWord(ID[J],pivot)>0 do dec(J);
+      while SortDynArrayQWord(ID[I],ID[P])<0 do inc(I);
+      while SortDynArrayQWord(ID[J],ID[P])>0 do dec(J);
       {$else}
-      while ID[I]<pivot do inc(I);
-      while ID[J]>pivot do dec(J);
+      tmp := ID[P];
+      while ID[I]<tmp do inc(I);
+      while ID[J]>tmp do dec(J);
       {$endif}
       if I <= J then begin
-        Tmp := ID[J]; ID[J] := ID[I]; ID[I] := Tmp;
+        tmp := ID[J]; ID[J] := ID[I]; ID[I] := tmp;
         if P = I then P := J else if P = J then P := I;
         inc(I); dec(J);
       end;
@@ -30551,19 +30612,24 @@ end;
 
 procedure QuickSortInt64(ID,CoValues: PInt64Array; L, R: PtrInt);
 var I, J, P: PtrInt;
-    pivot, Tmp: Int64;
+    tmp: Int64;
 begin
   if L<R then
   repeat
     I := L; J := R;
     P := (L + R) shr 1;
     repeat
-      pivot := ID^[P];
-      while ID[I]<pivot do inc(I);
-      while ID[J]>pivot do dec(J);
+      {$ifdef CPU64}
+      tmp := ID^[P];
+      while ID[I]<tmp do inc(I);
+      while ID[J]>tmp do dec(J);
+      {$else}
+      while ID[I]<ID[P] do inc(I);
+      while ID[J]>ID[P] do dec(J);
+      {$endif}
       if I <= J then begin
-        Tmp := ID[J]; ID[J] := ID[I]; ID[I] := Tmp;
-        Tmp := CoValues[J]; CoValues[J] := CoValues[I]; CoValues[I] := Tmp;
+        tmp := ID[J]; ID[J] := ID[I]; ID[I] := tmp;
+        tmp := CoValues[J]; CoValues[J] := CoValues[I]; CoValues[I] := tmp;
         if P = I then P := J else if P = J then P := I;
         inc(I); dec(J);
       end;
@@ -37659,7 +37725,7 @@ type
     Values: PPointerArray;
     Compare: TUTF8Compare;
     CoValues: PIntegerArray;
-    Pivot: pointer;
+    pivot: pointer;
     procedure Sort(L,R: PtrInt);
   end;
 

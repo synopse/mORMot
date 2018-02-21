@@ -347,6 +347,8 @@ type
     /// low level fast Integer or Floating-Point to/from string conversion
     // - especially the RawUTF8 or PUTF8Char relative versions
     procedure NumericalConversions;
+    /// test low-level integer/Int64 functions
+    procedure Integers;
     /// test crc32c in both software and hardware (SSE4.2) implementations
     procedure _crc32c;
     /// test RDRAND Intel x86/x64 opcode if available, or fast gsl_rng_taus2
@@ -3267,6 +3269,101 @@ begin
       fnv32(0,pointer(s),length(s));
   fRunConsole := format('%s fnv32 %s %s/s',[fRunConsole,Timer.Stop,
     KB(Timer.PerSec(totallen))]);
+end;
+
+procedure TTestLowLevelCommon.Integers;
+var i32: TIntegerDynArray;
+    i64: TInt64DynArray;
+    i,n: integer;
+begin
+  check(i32=nil);
+  DeduplicateInteger(i32);
+  check(i32=nil);
+  SetLength(i32,2);
+  i32[0] := 1;
+  QuickSortInteger(i32);
+  check(i32[0]=0);
+  check(i32[1]=1);
+  DeduplicateInteger(i32);
+  check(length(i32)=2);
+  check(i32[0]=0);
+  check(i32[1]=1);
+  i32[0] := 1;
+  DeduplicateInteger(i32);
+  check(length(i32)=1);
+  check(i32[0]=1);
+  SetLength(i32,6);
+  i32[4] := 1;
+  i32[5] := 2;
+  DeduplicateInteger(i32); // (1, 0, 0, 0, 1, 2)
+  check(length(i32)=3);
+  check(i32[0]=0);
+  check(i32[1]=1);
+  check(i32[2]=2);
+  SetLength(i32,6);
+  i32[4] := 3;
+  i32[5] := 3;
+  DeduplicateInteger(i32); // (0, 1, 2, 0, 3, 3)
+  check(length(i32)=4);
+  check(i32[0]=0);
+  check(i32[1]=1);
+  check(i32[2]=2);
+  check(i32[3]=3);
+  for n := 1 to 1000 do begin
+    SetLength(i32,n);
+    for i := 0 to n - 1 do
+      i32[i] := i and 15;
+    DeduplicateInteger(i32);
+    if n < 16 then
+      check(Length(i32) = n) else
+      check(Length(i32) = 16);
+    for i := 0 to high(i32) do
+      check(i32[i] = i);
+  end;
+  check(i64=nil);
+  DeduplicateInt64(i64);
+  check(i64=nil);
+  SetLength(i64,2);
+  i64[0] := 1;
+  QuickSortInt64(pointer(i64),0,1);
+  check(i64[0]=0);
+  check(i64[1]=1);
+  DeduplicateInt64(i64);
+  check(length(i64)=2);
+  check(i64[0]=0);
+  check(i64[1]=1);
+  i64[0] := 1;
+  DeduplicateInt64(i64);
+  check(length(i64)=1);
+  check(i64[0]=1);
+  SetLength(i64,6);
+  i64[4] := 1;
+  i64[5] := 2;
+  DeduplicateInt64(i64); // (1, 0, 0, 0, 1, 2)
+  check(length(i64)=3);
+  check(i64[0]=0);
+  check(i64[1]=1);
+  check(i64[2]=2);
+  SetLength(i64,6);
+  i64[4] := 3;
+  i64[5] := 3;
+  DeduplicateInt64(i64); // (0, 1, 2, 0, 3, 3)
+  check(length(i64)=4);
+  check(i64[0]=0);
+  check(i64[1]=1);
+  check(i64[2]=2);
+  check(i64[3]=3);
+  for n := 1 to 1000 do begin
+    SetLength(i64,n);
+    for i := 0 to n - 1 do
+      i64[i] := i and 15;
+    DeduplicateInt64(i64);
+    if n < 16 then
+      check(Length(i64) = n) else
+      check(Length(i64) = 16);
+    for i := 0 to high(i64) do
+      check(i64[i] = i);
+  end;
 end;
 
 procedure TTestLowLevelCommon.NumericalConversions;
