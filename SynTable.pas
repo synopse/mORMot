@@ -63,12 +63,12 @@ uses
   {$endif}
   SysUtils,
   Classes,
-{$ifndef LVCL}
-  Contnrs,  // for TObjectList
-{$endif}
-{$ifndef NOVARIANTS}
-  Variants,
-{$endif}
+  {$ifndef LVCL}
+    Contnrs,  // for TObjectList
+  {$endif}
+  {$ifndef NOVARIANTS}
+    Variants,
+  {$endif}
   SynCommons;
 
 
@@ -93,12 +93,12 @@ function IsValidIP4Address(P: PUTF8Char): boolean;
 // - 'ma?ch.*'	would match match.exe, mavch.dat, march.on, etc..
 // - 'this [e-n]s a [!zy]est' would match 'this is a test', but would not
 // match 'this as a test' nor 'this is a zest'
-function IsMatch(const Pattern, Text: RawUTF8; CaseInsensitive: boolean=false): boolean; 
+function IsMatch(const Pattern, Text: RawUTF8; CaseInsensitive: boolean=false): boolean;
 
 type
   /// low-level structure used by IsMatch()
   // - you can use this object to prepare a given pattern, e.g. in a loop
-  // - implemented as a fast brute-force state-machine without any heap allocation 
+  // - implemented as a fast brute-force state-machine without any heap allocation
   TMatch = {$ifdef UNICODE}record{$else}object{$endif}
   private
     Pattern, Text: PUTF8Char;
@@ -1525,8 +1525,63 @@ procedure ZeroCompressXor(New,Old: PAnsiChar; Len: cardinal; Dest: TFileBufferWr
 function ZeroDecompressOr(P,Dest: PAnsiChar; Len,DestLen: integer): boolean;
 
 
-implementation
+const
+  /// normal pattern search depth for DeltaCompress()
+  // - gives good results on most content
+  DELTA_LEVEL_FAST = 100;
+  /// brutal pattern search depth for DeltaCompress()
+  // - may become very slow, with minor benefit, on huge content
+  DELTA_LEVEL_BEST = 500;
+  /// 2MB as internal chunks/window default size for DeltaCompress()
+  // - will use up to 9 MB of RAM during DeltaCompress() - none in DeltaExtract()
+  DELTA_BUF_DEFAULT = 2 shl 20;
 
+/// compute difference of two binary buffers
+// - returns '=' for equal buffers, or an optimized binary delta
+// - DeltaExtract() could be used later on to compute New from Old + Delta
+function DeltaCompress(const New, Old: RawByteString;
+  Level: integer=DELTA_LEVEL_FAST; BufSize: integer=DELTA_BUF_DEFAULT): RawByteString; overload;
+
+/// compute difference of two binary buffers
+// - returns '=' for equal buffers, or an optimized binary delta
+// - DeltaExtract() could be used later on to compute New from Old
+function DeltaCompress(New, Old: PAnsiChar; NewSize, OldSize: integer;
+  Level: integer=DELTA_LEVEL_FAST; BufSize: integer=DELTA_BUF_DEFAULT): RawByteString; overload;
+
+/// compute difference of two binary buffers
+// - returns '=' for equal buffers, or an optimized binary delta
+// - DeltaExtract() could be used later on to compute New from Old + Delta
+// - caller should call Freemem(Delta) once finished with the output buffer
+function DeltaCompress(New, Old: PAnsiChar; NewSize, OldSize: integer;
+  out Delta: PAnsiChar; Level: integer=DELTA_LEVEL_FAST; BufSize: integer=DELTA_BUF_DEFAULT): integer; overload;
+
+type
+  /// result of function DeltaExtract()
+  TDeltaError = (
+    dsSuccess, dsCrcCopy, dsCrcComp, dsCrcBegin, dsCrcEnd, dsCrcExtract, dsFlag, dsLen);
+
+/// returns how many bytes a DeltaCompress() result will expand to
+function DeltaExtractSize(const Delta: RawByteString): integer; overload;
+
+/// returns how many bytes a DeltaCompress() result will expand to
+function DeltaExtractSize(Delta: PAnsiChar): integer; overload;
+
+/// apply the delta binary as computed by DeltaCompress()
+// - decompression don't use any RAM, will perform crc32c check, and is very fast
+// - return dsSuccess if was uncompressed to aOutUpd as expected
+function DeltaExtract(const Delta,Old: RawByteString; out New: RawByteString): TDeltaError; overload;
+
+/// low-level apply the delta binary as computed by DeltaCompress()
+// - New should already be allocated with DeltaExtractSize(Delta) bytes
+// - as such, expect Delta, Old and New to be <> nil, and Delta <> '='
+// - return dsSuccess if was uncompressed to aOutUpd as expected
+function DeltaExtract(Delta,Old,New: PAnsiChar): TDeltaError; overload;
+
+
+function ToText(err: TDeltaError): PShortString; overload;
+
+
+implementation
 
 { ************ TSynTable generic types and classes ************************** }
 
@@ -1998,7 +2053,7 @@ begin
           with TSynTableFieldProperties(fField.List[result.FieldNumber]) do
           if (Offset<0) or not (tfoIndex in Options) then
             break else
-            Inc(result.FieldNumber);
+            inc(result.FieldNumber);
       end else
       // not indexed field: insert after previous fixed-sized fields
       if fFieldVariableIndex>=0 then
@@ -2013,7 +2068,7 @@ begin
         with TSynTableFieldProperties(fField.List[result.FieldNumber]) do
         if not (tfoIndex in Options) then
           break else
-          Inc(result.FieldNumber);
+          inc(result.FieldNumber);
       fField.Insert(result.FieldNumber,result);
     end else
       // not indexed field: just add at the end of the field list
@@ -2290,7 +2345,7 @@ begin
     Owner := self;
     FieldSize := FIELD_FIXEDSIZE[FieldType];
     if FieldSize>=0 then begin
-      assert(Offs>=0);
+      //assert(Offs>=0);
       Offset := Offs;
       inc(Offs,FieldSize);
       inc(fDefaultRecordLength,FieldSize);
@@ -2406,7 +2461,7 @@ begin // in practice, this data processing is very fast (thanks to WR speed)
       // add previous field content: will handle any field offset change in record
       aSize := Getlength(Data);
       WR.Write(Data,aSize);
-      Inc(PtrUInt(Data),aSize);
+      inc(PtrUInt(Data),aSize);
     end else
       // add default field content for a newly added field
       WR.Write(Pointer(fDefaultFieldData),fDefaultFieldLength);
@@ -2453,7 +2508,7 @@ begin
       FillcharFast(Dest^,fDefaultFieldLength,0);
       inc(Dest,fDefaultFieldLength);
     end;
-  Assert(PtrUInt(Dest)-PtrUInt(result)=PtrUInt(TotalLen));
+  //Assert(PtrUInt(Dest)-PtrUInt(result)=PtrUInt(TotalLen));
 end;
 
 function TSynTable.Validate(RecordBuffer: pointer; RecordIndex: integer): string;
@@ -2485,7 +2540,7 @@ begin
   OrderedIndexCount := RD.ReadVarUInt32Array(OrderedIndex);
   if OrderedIndexCount>0 then begin
     if tfoIndex in Options then begin
-      assert(OrderedIndexReverse=nil);
+      //assert(OrderedIndexReverse=nil);
       OrderedIndexReverseSet(-1); // compute whole OrderedIndexReverse[] array
     end else
       RD.ErrorInvalidContent;
@@ -2753,9 +2808,9 @@ begin
       with Owner do begin
         SortPivot := GetData(GetRecordData(OrderedIndex[P],DataTemp1),self);
         while SortCompare(GetData(GetRecordData(OrderedIndex[I],DataTemp2),self),
-          SortPivot)<0 do Inc(I);
+          SortPivot)<0 do inc(I);
         while SortCompare(GetData(GetRecordData(OrderedIndex[J],DataTemp2),self),
-          SortPivot)>0 do Dec(J);
+          SortPivot)>0 do dec(J);
       end;
       if I <= J then begin
         if I < J then begin
@@ -2768,7 +2823,7 @@ begin
           OrderedIndexReverse[TmpI] := J;
         end;
         if P = I then P := J else if P = J then P := I;
-        Inc(I); Dec(J);
+        inc(I); dec(J);
       end;
     until I > J;
     if L < J then
@@ -2908,7 +2963,7 @@ begin
     // retrieve position in OrderedIndex[] to be deleted/updated
     if OrderedIndexReverse=nil then
       OrderedIndexReverseSet(0) else // do OrderedIndexReverse[OrderedIndex[i]] := i
-      assert(aOldIndex<length(OrderedIndexReverse));
+      {assert(aOldIndex<length(OrderedIndexReverse))};
     //assert(IntegerScanIndex(Pointer(OrderedIndex),OrderedIndexCount,aOldIndex)=OrderedIndexReverse[aOldIndex]);
     aOldIndexIndex := OrderedIndexReverse[aOldIndex]; // use FAST reverse array
     if aOldIndexIndex<0 then
@@ -2978,7 +3033,7 @@ begin
   case FieldType of
     tftInt32: begin // special version for handling negative values
       PInteger(@tmp)^ := Value;
-      SetString(Result,tmp,sizeof(Integer));
+      SetString(Result,tmp,SizeOf(Integer));
     end;
     tftUInt8, tftUInt16, tftUInt24, tftInt64:
       SetString(Result,PAnsiChar(@Value),FieldSize);
@@ -3003,7 +3058,7 @@ begin
       SetString(Result,PAnsiChar(@Value),FieldSize);
     tftInt64: begin // special version for handling negative values
       PInt64(@tmp)^ := Value;
-      SetString(Result,tmp,sizeof(Int64));
+      SetString(Result,tmp,SizeOf(Int64));
     end;
     tftVarUInt32:
       if Value<0 then // expect an unsigned integer
@@ -3043,11 +3098,11 @@ begin // VarIsOrdinal/VarIsFloat/VarIsStr are buggy -> use field type
     end;
     tftCurrency: begin
       VC := Value;
-      SetString(result,PAnsiChar(@VC),sizeof(VC));
+      SetString(result,PAnsiChar(@VC),SizeOf(VC));
     end;
     tftDouble: begin
       VD := Value;
-      SetString(result,PAnsiChar(@VD),sizeof(VD));
+      SetString(result,PAnsiChar(@VD),SizeOf(VD));
     end;
     tftWinAnsi:
       ToSBFStr(WinAnsiConvert.UTF8ToAnsi(VariantToUTF8(Value)),result);
@@ -3072,7 +3127,7 @@ function TSynTableFieldProperties.SBFCurr(const Value: Currency): TSBFString;
 begin
   if FieldType<>tftCurrency then
     result := '' else
-    SetString(Result,PAnsiChar(@Value),sizeof(Value));
+    SetString(Result,PAnsiChar(@Value),SizeOf(Value));
 end;
 
 procedure ToSBFStr(const Value: RawByteString; out Result: TSBFString);
@@ -3081,7 +3136,7 @@ var tmp: array[0..15] of AnsiChar;
 begin
   if PtrUInt(Value)=0 then
     Result := #0 else begin
-    Len := {$ifdef FPC}length(Value){$else}PInteger(PtrUInt(Value)-sizeof(integer))^{$endif};
+    Len := {$ifdef FPC}length(Value){$else}PInteger(PtrUInt(Value)-SizeOf(integer))^{$endif};
     Head := PAnsiChar(ToVarUInt32(Len,@tmp))-tmp;
     SetLength(Result,Len+Head);
     MoveFast(tmp,PByteArray(Result)[0],Head);
@@ -3120,7 +3175,7 @@ function TSynTableFieldProperties.SBFFloat(const Value: Double): TSBFString;
 begin
   if FieldType<>tftDouble then
     result := '' else
-    SetString(Result,PAnsiChar(@Value),sizeof(Value));
+    SetString(Result,PAnsiChar(@Value),SizeOf(Value));
 end;
 
 function TSynTableFieldProperties.SBFFromRawUTF8(const aValue: RawUTF8): TSBFString;
@@ -3508,7 +3563,7 @@ begin
     // not found: go to next value
     if SBFEnd=nil then
       break; // only one value to be checked
-    Inc(SBF,sizeof(Value));
+    inc(SBF,SizeOf(Value));
   until SBF>=SBFEnd;
   result := false; // not found
 end;
@@ -3671,7 +3726,7 @@ function SetFields: boolean;
 var select: TSynTableStatementSelect;
 begin
   result := false;
-  FillcharFast(select,sizeof(select),0);
+  FillcharFast(select,SizeOf(select),0);
   select.Field := GetPropIndex; // 0 = ID, otherwise PropertyIndex+1
   if select.Field<0 then begin
     if P^<>'(' then // Field not found -> try function(field)
@@ -4059,7 +4114,7 @@ end;
 procedure TSynTableStatement.SelectFieldBits(var Fields: TSQLFieldBits; var withID: boolean);
 var i: integer;
 begin
-  FillcharFast(Fields,sizeof(Fields),0);
+  FillcharFast(Fields,SizeOf(Fields),0);
   withID := false;
   for i := 0 to Length(Select)-1 do
     if Select[i].Field=0 then
@@ -4125,7 +4180,7 @@ begin
   VTable := aTable;
   VID := aID;
   VValue := VTable.DefaultRecordData;
-  {$ifdef UNICODE}FillcharFast(Filler,sizeof(Filler),0);{$endif}
+  {$ifdef UNICODE}FillcharFast(Filler,SizeOf(Filler),0);{$endif}
 end;
 
 procedure TSynTableData.Init(aTable: TSynTable; aID: Integer;
@@ -4749,7 +4804,7 @@ begin
     InvalidTextLengthMin(MinLength,ErrorMsg) else
   if L>MaxLength then
     ErrorMsg := Format(sInvalidTextLengthMax,[MaxLength,Character01n(MaxLength)]) else begin
-    FillcharFast(Min,sizeof(Min),0);
+    FillcharFast(Min,SizeOf(Min),0);
     L := length(value);
     for i := 1 to L do
     case value[i] of
@@ -5305,11 +5360,546 @@ begin
 end;
 
 
+function Max(a,b: PtrInt): PtrInt; {$ifdef HASINLINE}inline;{$endif}
+begin
+  if a > b then
+    result := a else
+    result := b;
+end;
+
+function Min(a,b: PtrInt): PtrInt; {$ifdef HASINLINE}inline;{$endif}
+begin
+  if a < b then
+    result := a else
+    result := b;
+end;
+
+function Comp(a,b: PAnsiChar; len: PtrInt): PtrInt;
+{$ifdef HASINLINE} inline;
+var lenptr: PtrInt;
+begin
+  result := 0;
+  lenptr := len-SizeOf(PtrInt);
+  if lenptr>=0 then
+    repeat
+      if PPtrInt(a+result)^<>PPtrInt(b+result)^ then
+        break;
+      inc(result,SizeOf(PtrInt));
+    until result>lenptr;
+  if result<len then
+    repeat
+      if a[result]<>b[result] then
+        exit;
+      inc(result);
+    until result=len;
+end;
+{$else} // eax = a, edx = b, ecx = len
+asm // the 'rep cmpsb' version is slower on Intel Core CPU (not AMD)
+     or ecx,ecx
+     push ebx
+     push ecx
+     jz @ok
+@1:  mov bx,[eax]
+     lea eax,[eax+2]
+     cmp bl,[edx]
+     jne @ok
+     dec ecx
+     jz @ok
+     cmp bh,[edx+1]
+     lea edx,[edx+2]
+     jne @ok
+     dec ecx
+     jnz @1
+@ok: pop eax
+     sub eax,ecx
+     pop ebx
+end;
+{$endif}
+
+function CompReverse(a,b: pointer; len: PtrInt): PtrInt;
+begin
+  result := 0;
+  if len>0 then
+    repeat
+      if PByteArray(a)[-result]<>PByteArray(b)[-result] then
+        exit;
+      inc(result);
+    until result=len;
+end;
+
+procedure movechars(s,d: PAnsiChar; t: PtrUInt);
+  {$ifdef HASINLINE}inline;{$endif}
+// this code is sometimes used rather than MoveFast() for overlapping copy
+begin
+  dec(PtrUInt(s), PtrUInt(d));
+  inc(t, PtrUInt(d));
+  repeat
+    d^ := s[PtrUInt(d)];
+    inc(d);
+  until PtrUInt(d)=t;
+end;
+
+function WriteCurOfs(curofs,curlen,curofssize: integer; sp: PAnsiChar): PAnsiChar;
+begin
+  if curlen=0 then begin
+    sp^ := #0;
+    inc(sp);
+  end else begin
+    sp := Pointer(ToVarUInt32(curlen,PByte(sp)));
+    PInteger(sp)^ := curofs;
+    inc(sp,curofssize);
+  end;
+  result := sp;
+end;
+
+{$ifdef CPUINTEL} // crc32c SSE4.2 hardware accellerated dword hash
+function crc32csse42(buf: pointer): cardinal;
+{$ifdef CPUX86}
+asm
+        mov     edx, eax
+        xor     eax, eax
+        {$ifdef ISDELPHI2010}
+        crc32   eax, dword ptr[edx]
+        {$else}
+        db $F2, $0F, $38, $F1, $02
+        {$endif}
+end;
+{$else} {$ifdef FPC}nostackframe; assembler; asm {$else}
+asm // ecx=buf (Linux: edi=buf)
+        .noframe
+{$endif FPC}
+        xor     eax, eax
+        crc32   eax, dword ptr[buf]
+end;
+{$endif CPUX86}
+{$endif CPUINTEL}
+
+function hash32prime(buf: pointer): cardinal;
+begin // xxhash32-inspired - and won't pollute L1 cache with lookup tables
+  result := PCardinal(buf)^;
+  result := result xor (result shr 15);
+  result := result * 2246822519;
+  result := result xor (result shr 13);
+  result := result * 3266489917;
+  result := result xor (result shr 16);
+end;
+
+const
+  HTabBits = 18; // fits well with DeltaCompress(..,BufSize=2MB)
+  HTabMask = (1 shl HTabBits)-1; // =$3ffff
+  HListMask = $ffffff; // HTab[]=($ff,$ff,$ff)
+
+type
+  PHTab = ^THTab; // HTabBits=18 -> SizeOf=767KB
+  THTab = packed array[0..HTabMask] of array[0..2] of byte;
+
+function DeltaCompute(NewBuf, OldBuf, OutBuf, WorkBuf: PAnsiChar;
+  NewBufSize, OldBufSize, MaxLevel: PtrInt; HList, HTab: PHTab): PAnsiChar;
+var i, curofs, curlen, curlevel, match, curofssize, h, oldh: PtrInt;
+    sp, pInBuf, pOut: PAnsiChar;
+    ofs: cardinal;
+    spb: PByte absolute sp;
+    hash: function(buf: pointer): cardinal;
+begin
+  // 1. fill HTab[] with hashes for all old data
+  {$ifdef CPUINTEL}
+  if cfSSE42 in CpuFeatures then
+    hash := @crc32csse42 else
+  {$endif}
+    hash := @hash32prime;
+  FillCharFast(HTab^,SizeOf(HTab^),$ff); // HTab[]=HListMask by default
+  pInBuf := OldBuf;
+  oldh := -1; // force calculate first hash
+  sp := pointer(HList);
+  for i := 0 to OldBufSize-3 do begin
+    h := hash(pInBuf) and HTabMask;
+    inc(pInBuf);
+    if h=oldh then
+      continue;
+    oldh := h;
+    h := PtrInt(@HTab^[h]); // fast 24-bit data process
+    PCardinal(sp)^ := PCardinal(h)^;
+    PCardinal(h)^ := cardinal(i) or (PCardinal(h)^ and $ff000000);
+    inc(sp,3);
+  end;
+  // 2. compression init
+  if OldBufSize<=$ffff then
+    curofssize := 2 else
+    curofssize := 3;
+  curlen := -1;
+  curofs := 0;
+  pOut := OutBuf+7;
+  sp := WorkBuf;
+  // 3. handle identical leading bytes
+  match := Comp(OldBuf,NewBuf,Min(OldBufSize,NewBufSize));
+  if match>2 then begin
+    sp := WriteCurOfs(0,match,curofssize,sp);
+    sp^ := #0; inc(sp);
+    inc(NewBuf,match);
+    dec(NewBufSize,match);
+  end;
+  pInBuf := NewBuf;
+  // 4. main loop: identify longest sequences using hash, and store reference
+  if NewBufSize>=8 then
+  repeat
+    // hash 4 next bytes from NewBuf, and find longest match in OldBuf
+    ofs := PCardinal(@HTab^[hash(NewBuf) and HTabMask])^ and HListMask;
+    if ofs<>HListMask then begin // brute force search loop of best hash match
+      curlevel := MaxLevel;
+      repeat
+        with PHash128Rec(OldBuf+ofs)^ do
+        {$ifdef CPU64} // test 8 bytes
+        if PHash128Rec(NewBuf)^.Lo=Lo then begin
+        {$else}
+        if (PHash128Rec(NewBuf)^.c0=c0) and (PHash128Rec(NewBuf)^.c1=c1) then begin
+        {$endif}
+          match := Comp(@PHash128Rec(NewBuf)^.c2,@c2,Min(PtrUInt(OldBufSize)-ofs,NewBufSize)-8);
+          if match>curlen then begin // found a longer sequence
+            curlen := match;
+            curofs := ofs;
+          end;
+        end;
+        dec(curlevel);
+        ofs := PCardinal(@HList^[ofs])^ and HListMask;
+      until (ofs=HListMask) or (curlevel=0);
+    end;
+    // curlen = longest sequence length
+    if curlen<0 then begin // no sequence found -> copy one byte
+      dec(NewBufSize);
+      pOut^ := NewBuf^;
+      inc(NewBuf);
+      inc(pOut);
+      if NewBufSize>8 then // >=8 may overflow
+        continue else
+        break;
+    end;
+    inc(curlen,8);
+    sp := WriteCurOfs(curofs,curlen,curofssize,sp);
+    spb := ToVarUInt32(NewBuf-pInBuf,spb);
+    inc(NewBuf,curlen); // continue to search after the sequence
+    dec(NewBufSize,curlen);
+    curlen := -1;
+    pInBuf := NewBuf;
+    if NewBufSize>8 then // >=8 may overflow
+      continue else
+      break;
+  until false;
+  // 5. write remaining bytes
+  if NewBufSize>0 then begin
+    MoveFast(NewBuf^,pOut^,NewBufSize);
+    inc(pOut,NewBufSize);
+    inc(newBuf,NewBufSize);
+  end;
+  sp^ := #0; inc(sp);
+  spb := ToVarUInt32(NewBuf-pInBuf,spb);
+  // 6. write header
+  PInteger(OutBuf)^ := pOut-OutBuf-7;
+  h := sp-WorkBuf;
+  PInteger(OutBuf+3)^ := h;
+  OutBuf[6] := AnsiChar(curofssize);
+  // 7. copy commands
+  MoveFast(WorkBuf^,pOut^,h);
+  result := pOut+h;
+end;
+
+function ExtractBuf(GoodCRC: cardinal; p: PAnsiChar; var aUpd, Delta: PAnsiChar;
+  Old: PAnsiChar): TDeltaError;
+var pEnd, buf, upd, src: PAnsiChar;
+    bufsize, datasize, leading, srclen: PtrUInt;
+    curofssize: byte;
+begin
+  // 1. decompression init
+  upd := aUpd;
+  bufsize :=  PCardinal(p)^ and $00ffffff; inc(p,3);
+  datasize := PCardinal(p)^ and $00ffffff; inc(p,3);
+  curofssize := ord(p^); inc(p);
+  buf := p; inc(p,bufsize);
+  pEnd := p+datasize;
+  src := nil;
+  // 2. main loop
+  while p<pEnd do begin
+    // src/srclen = sequence to be copied
+    srclen := FromVarUInt32(PByte(P));
+    if srclen>0 then
+      if curofssize=2 then begin
+        src := Old+PWord(p)^;
+        inc(p,2);
+      end else begin
+        src := Old+PCardinal(p)^ and $00ffffff;
+        inc(p,3);
+      end;
+    // copy leading bytes
+    leading := FromVarUInt32(PByte(P));
+    if leading<>0 then begin
+      MoveFast(buf^,upd^,leading);
+      inc(buf,leading);
+      inc(upd,leading);
+    end;
+    // copy sequence
+    if srclen<>0 then begin
+      if PtrUInt(upd-src)<srclen then
+        movechars(src,upd,srclen) else
+        MoveFast(src^,upd^,srclen);
+      inc(upd,srclen);
+    end;
+  end;
+  // 3. result check
+  Delta := p;
+  if (p=pEnd) and (crc32c(0,aUpd,upd-aUpd)=GoodCRC) then // whole CRC is faster
+    result := dsSuccess else
+    result := dsCrcExtract;
+  aUpd := upd;
+end;
+
+procedure WriteByte(var P: PAnsiChar; V: Byte); {$ifdef HASINLINE}inline;{$endif}
+begin
+  PByte(P)^ := V;
+  inc(P);
+end;
+
+procedure WriteInt(var P: PAnsiChar; V: Cardinal); {$ifdef HASINLINE}inline;{$endif}
+begin
+  PCardinal(P)^ := V;
+  inc(P,4);
+end;
+
+const
+  FLAG_COPIED   = 0;
+  FLAG_COMPRESS = 1;
+  FLAG_BEGIN    = 2;
+  FLAG_END      = 3;
+
+function DeltaCompress(New, Old: PAnsiChar; NewSize, OldSize: integer;
+  out Delta: PAnsiChar; Level, BufSize: integer): integer;
+var HTab, HList: PHTab;
+    d, workbuf: PAnsiChar;
+    db: PByte absolute d;
+    BufRead, OldRead, Trailing, NewSizeSave: PtrInt;
+    bigfile: boolean;
+  procedure CreateCopied;
+  begin
+    Getmem(Delta,NewSizeSave+17);  // 17 = 4*Integer + 1*Byte
+    d := Delta;
+    db := ToVarUInt32(0,ToVarUInt32(NewSizeSave,db));
+    WriteByte(d,FLAG_COPIED); // block copied flag
+    db := ToVarUInt32(NewSizeSave,db);
+    WriteInt(d,crc32c(0,New,NewSizeSave));
+    MoveFast(New^,d^,NewSizeSave);
+    inc(d,NewSizeSave);
+    result := d-Delta;
+  end;
+begin
+  // 1. special cases
+  if (NewSize=OldSize) and CompareMem(Old,New,NewSize) then begin
+    Getmem(Delta,1);
+    Delta^ := '=';
+    result := 1;
+    exit;
+  end;
+  NewSizeSave := NewSize;
+  if OldSize=0 then begin // Delta from nothing -> direct copy of whole block
+    CreateCopied;
+    exit;
+  end;
+  // 2. compression init
+  bigfile := OldSize>BufSize;
+  if BufSize>NewSize then
+    BufSize := NewSize;
+  if BufSize>$ffffff then
+    BufSize := $ffffff; // we store offsets with 2..3 bytes -> max 16MB chunk
+  Trailing := 0;
+  Getmem(workbuf,BufSize); // compression temporary buffers
+  Getmem(HList,BufSize*SizeOf(HList[0]));
+  Getmem(HTab,SizeOf(HTab^));
+  Getmem(Delta,Max(NewSize,OldSize)+4096); // Delta size max evalulation
+  try
+    d := Delta;
+    db := ToVarUInt32(NewSize,db); // Destination Size
+    // 3. handle leading and trailing identical bytes (for biggest files)
+    if bigfile then begin
+      BufRead := Comp(New,Old,Min(NewSize,OldSize));   // test 1st same chars
+      if BufRead>9 then begin // it happens very often
+        db := ToVarUInt32(BufRead,db); // blockSize = Size BufIdem
+        WriteByte(d,FLAG_BEGIN);
+        WriteInt(d,crc32c(0,New,BufRead));
+        inc(New,BufRead);
+        dec(NewSize,BufRead);
+        inc(Old,BufRead);
+        dec(OldSize,BufRead);
+      end;                                             // test last same chars
+      BufRead := CompReverse(New+NewSize-1,Old+OldSize-1,Min(NewSize,OldSize));
+      if BufRead>5 then begin
+        if NewSize=BufRead then
+          dec(BufRead); // avoid block overflow
+        dec(OldSize,BufRead);
+        dec(NewSize,BufRead);
+        Trailing := BufRead;
+      end;
+    end;
+    // 4. main loop
+    repeat
+      BufRead := Min(BufSize,NewSize);
+      dec(NewSize,BufRead);
+      if (BufRead=0) and (Trailing>0) then begin
+        db := ToVarUInt32(Trailing,db);
+        WriteByte(d,FLAG_END); // block idem end flag -> BufRead := 0 not necessary
+        WriteInt(d,crc32c(0,New,Trailing));
+        break;
+      end;
+      OldRead := Min(BufSize,OldSize);
+      dec(OldSize,OldRead);
+      db := ToVarUInt32(OldRead,db);
+      If (BufRead<4) or (OldRead<4) or (BufRead div 4>OldRead) then begin
+        WriteByte(d,FLAG_COPIED); // block copied flag
+        db := ToVarUInt32(BufRead,db);
+        if BufRead=0 then
+          break;
+        WriteInt(d,crc32c(0,New,BufRead));
+        MoveFast(New^,d^,BufRead);
+        inc(New,BufRead);
+        inc(d,BufRead);
+      end else begin
+        WriteByte(d,FLAG_COMPRESS); // block compressed flag
+        WriteInt(d,crc32c(0,New,BufRead));
+        WriteInt(d,crc32c(0,Old,OldRead));
+        d := DeltaCompute(New,Old,d,workbuf,BufRead,OldRead,Level,HList,HTab);
+        inc(New,BufRead);
+        inc(Old,OldRead);
+      end;
+    until false;
+  // 5. release temp memory
+  finally
+    result := d-Delta;
+    Freemem(HTab);
+    Freemem(HList);
+    Freemem(workbuf);
+  end;
+  if result>=NewSizeSave+17 then begin
+    // Delta didn't compress well -> store it (with 17 bytes overhead)
+    Freemem(Delta);
+    CreateCopied;
+  end;
+end;
+
+function DeltaCompress(const New, Old: RawByteString;
+  Level, BufSize: integer): RawByteString;
+begin
+  result := DeltaCompress(pointer(New),pointer(Old),
+    length(New),length(Old),Level,BufSize);
+end;
+
+function DeltaCompress(New, Old: PAnsiChar; NewSize, OldSize: integer;
+  Level, BufSize: integer): RawByteString;
+var Delta: PAnsiChar;
+    DeltaLen: integer;
+begin
+  DeltaLen := DeltaCompress(New,Old,Newsize,OldSize,Delta,Level,BufSize);
+  SetString(result,Delta,DeltaLen);
+  Freemem(Delta);
+end;
+
+function DeltaExtract(Delta,Old,New: PAnsiChar): TDeltaError;
+var BufCRC: Cardinal;
+    Code: Byte;
+    Len, BufRead, OldRead: PtrInt;
+    db: PByte absolute Delta;
+    Upd: PAnsiChar;
+begin
+  Result := dsSuccess;
+  Len := FromVarUInt32(db);
+  Upd := New;
+  repeat
+    OldRead := FromVarUInt32(db);
+    Code := db^; inc(db);
+    Case Code of
+    FLAG_COPIED: begin // block copied flag - copy new from Delta
+      BufRead := FromVarUInt32(db);
+      If BufRead=0 then
+        break;
+      If crc32c(0,Delta+4,BufRead)<>PCardinal(Delta)^ then begin
+        result := dsCrcCopy;
+        exit;
+      end;
+      inc(Delta,4);
+      MoveFast(Delta^,New^,BufRead);
+      if BufRead>=Len then
+        exit; // if Old=nil -> only copy new
+      inc(Delta,BufRead);
+      inc(New,BufRead);
+    end;
+    FLAG_COMPRESS: begin // block compressed flag - extract Delta from Old
+      BufCRC := PCardinal(Delta)^; inc(Delta,4);
+      if crc32c(0,Old,OldRead)<>PCardinal(Delta)^ then begin
+        result := dsCrcComp;
+        exit;
+      end;
+      inc(Delta,4);
+      result := ExtractBuf(BufCRC,Delta,New,Delta,Old);
+      if result<>dsSuccess then
+        exit;
+    end;
+    FLAG_BEGIN: begin // block idem begin flag
+      if crc32c(0,Old,OldRead)<>PCardinal(Delta)^ then begin
+        result := dsCrcBegin;
+        exit;
+      end;
+      inc(Delta,4);
+      MoveFast(Old^,New^,OldRead);
+      inc(New,OldRead);
+    end;
+    FLAG_END: begin // block idem end flag
+      if crc32c(0,Old,OldRead)<>PCardinal(Delta)^ then
+        Result := dsCrcEnd;
+      MoveFast(Old^,New^,OldRead);
+      inc(New,OldRead);
+      break;
+    end;
+    else begin
+      result := dsFlag;
+      exit;
+    end;
+    end; // Case Code of
+    inc(Old,OldRead);
+  until false;
+  if New-Upd<>Len then
+    result := dsLen;
+end;
+
+function DeltaExtract(const Delta,Old: RawByteString; out New: RawByteString): TDeltaError;
+begin
+  if (Delta='') or (Delta='=') then begin
+    New := Old;
+    result := dsSuccess;
+  end else begin
+    SetLength(New,DeltaExtractSize(pointer(Delta)));
+    result := DeltaExtract(pointer(Delta),pointer(Old),pointer(New));
+  end;
+end;
+
+function DeltaExtractSize(const Delta: RawByteString): integer;
+begin
+  result := DeltaExtractSize(pointer(Delta));
+end;
+
+function DeltaExtractSize(Delta: PAnsiChar): integer;
+begin
+  if Delta=nil then
+    result := 0 else
+    result := FromVarUInt32(PByte(Delta));
+end;
+
+function ToText(err: TDeltaError): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TDeltaError),ord(err));
+end;
+
+
 initialization
   Assert(SizeOf(TSynTableFieldType)=1); // as expected by TSynTableFieldProperties
   Assert(SizeOf(TSynTableFieldOptions)=1);
   {$ifndef NOVARIANTS}
-  Assert(SizeOf(TSynTableData)=sizeof(TVarData));
+  Assert(SizeOf(TSynTableData)=SizeOf(TVarData));
   {$endif NOVARIANTS}
+  Assert(SizeOf(THTab)=$40000*3); // 786,432 bytes
 end.
 

@@ -11992,6 +11992,10 @@ function fnv32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 // - will use optimized asm for x86/x64, or a pascal version on other CPUs
 function xxHash32(crc: cardinal; P: PAnsiChar; len: integer): cardinal;
 
+type
+  TCrc32tab = array[0..{$ifdef PUREPASCAL}3{$else}7{$endif},byte] of cardinal;
+  PCrc32tab = ^TCrc32tab;
+  
 var
   /// tables used by crc32cfast() function
   // - created with a polynom diverse from zlib's crc32() algorithm, but
@@ -11999,7 +12003,7 @@ var
   // - tables content is created from code in initialization section below
   // - will also be used internally by SymmetricEncrypt, FillRandom and
   // TSynUniqueIdentifierGenerator as 1KB master/reference key tables
-  crc32ctab: array[0..{$ifdef PUREPASCAL}3{$else}7{$endif},byte] of cardinal;
+  crc32ctab: TCrc32tab;
 
 /// compute CRC32C checksum on the supplied buffer using x86/x64 code
 // - result is compatible with SSE 4.2 based hardware accelerated instruction
@@ -34395,19 +34399,21 @@ end;
 procedure crcblockNoSSE42(crc128, data128: PBlock128);
 {$ifdef PUREPASCAL}
 var c: cardinal;
+    tab: ^TCrc32tab;
 begin
+  tab := @crc32ctab;
   c := crc128^[0] xor data128^[0];
-  crc128^[0] := crc32ctab[3,ToByte(c)] xor crc32ctab[2,ToByte(c shr 8)]
-            xor crc32ctab[1,ToByte(c shr 16)] xor crc32ctab[0,c shr 24];
+  crc128^[0] := tab[3,ToByte(c)] xor tab[2,ToByte(c shr 8)]
+            xor tab[1,ToByte(c shr 16)] xor tab[0,c shr 24];
   c := crc128^[1] xor data128^[1];
-  crc128^[1] := crc32ctab[3,ToByte(c)] xor crc32ctab[2,ToByte(c shr 8)]
-            xor crc32ctab[1,ToByte(c shr 16)] xor crc32ctab[0,c shr 24];
+  crc128^[1] := tab[3,ToByte(c)] xor tab[2,ToByte(c shr 8)]
+            xor tab[1,ToByte(c shr 16)] xor tab[0,c shr 24];
   c := crc128^[2] xor data128^[2];
-  crc128^[2] := crc32ctab[3,ToByte(c)] xor crc32ctab[2,ToByte(c shr 8)]
-            xor crc32ctab[1,ToByte(c shr 16)] xor crc32ctab[0,c shr 24];
+  crc128^[2] := tab[3,ToByte(c)] xor tab[2,ToByte(c shr 8)]
+            xor tab[1,ToByte(c shr 16)] xor tab[0,c shr 24];
   c := crc128^[3] xor data128^[3];
-  crc128^[3] := crc32ctab[3,ToByte(c)] xor crc32ctab[2,ToByte(c shr 8)]
-            xor crc32ctab[1,ToByte(c shr 16)] xor crc32ctab[0,c shr 24];
+  crc128^[3] := tab[3,ToByte(c)] xor tab[2,ToByte(c shr 8)]
+            xor tab[1,ToByte(c shr 16)] xor tab[0,c shr 24];
 end;
 {$else}
 asm // Delphi is not efficient about compiling above pascal code
@@ -34539,27 +34545,29 @@ end;
 
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$ifdef PUREPASCAL}
+var tab: ^TCrc32tab;
 begin
+  tab := @crc32ctab;
   result := not crc;
   if (buf<>nil) and (len>0) then begin
     repeat
       if PtrUInt(buf) and 3=0 then // align to 4 bytes boundary
         break;
-      result := crc32ctab[0,ToByte(result xor ord(buf^))] xor (result shr 8);
+      result := tab[0,ToByte(result xor ord(buf^))] xor (result shr 8);
       dec(len);
       inc(buf);
     until len=0;
     while len>=4 do begin
       result := result xor PCardinal(buf)^;
       inc(buf,4);
-      result := crc32ctab[3,ToByte(result)] xor
-                crc32ctab[2,ToByte(result shr 8)] xor
-                crc32ctab[1,ToByte(result shr 16)] xor
-                crc32ctab[0,result shr 24];
+      result := tab[3,ToByte(result)] xor
+                tab[2,ToByte(result shr 8)] xor
+                tab[1,ToByte(result shr 16)] xor
+                tab[0,result shr 24];
       dec(len,4);
     end;
     while len>0 do begin
-      result := crc32ctab[0,ToByte(result xor ord(buf^))] xor (result shr 8);
+      result := tab[0,ToByte(result xor ord(buf^))] xor (result shr 8);
       dec(len);
       inc(buf);
     end;
@@ -34664,12 +34672,16 @@ end;
 
 function crc32cinlined(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$ifdef HASINLINE}
-begin // slightly slower but inline-friendly code
+var tab: ^TCrc32tab;
+begin
   result := not crc;
-  while len>0 do begin
-    result := crc32ctab[0,(result xor ord(buf^))and 255] xor (result shr 8);
-    dec(len);
-    inc(buf);
+  if len>0 then begin
+    tab := @crc32ctab;
+    repeat
+      result := tab[0,(result xor ord(buf^))and 255] xor (result shr 8);
+      inc(buf);
+      dec(len);
+    until len=0;
   end;
   result := not result;
 end;
@@ -35035,7 +35047,9 @@ end;
 procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
 var i,len: integer;
     d: PCardinal;
+    tab: ^TCrc32tab;
 begin
+  tab := @crc32ctab;
   {$ifdef FPC}
   UniqueString(data); // @data[1] won't call UniqueString() under FPC :(
   {$endif}
@@ -35043,12 +35057,12 @@ begin
   len := length(data);
   key := key xor cardinal(len);
   for i := 0 to (len shr 2)-1 do begin
-    key := key xor crc32ctab[0,(cardinal(i) xor key)and 1023];
+    key := key xor tab[0,(cardinal(i) xor key)and 1023];
     d^ := d^ xor key;
     inc(d);
   end;
   for i := 0 to (len and 3)-1 do
-    PByteArray(d)^[i] := PByteArray(d)^[i] xor key xor crc32ctab[0,17 shl i];
+    PByteArray(d)^[i] := PByteArray(d)^[i] xor key xor tab[0,17 shl i];
 end;
 
 function UnixTimeToDateTime(const UnixTime: TUnixTime): TDateTime;
