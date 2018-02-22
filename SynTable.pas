@@ -5498,7 +5498,6 @@ function DeltaCompute(NewBuf, OldBuf, OutBuf, WorkBuf: PAnsiChar;
 var i, curofs, curlen, curlevel, match, curofssize, h, oldh: PtrInt;
     sp, pInBuf, pOut: PAnsiChar;
     ofs: cardinal;
-    hl: PCardinal;
     spb: PByte absolute sp;
     hash: function(buf: pointer): cardinal;
 begin
@@ -5518,7 +5517,7 @@ begin
     if h=oldh then
       continue;
     oldh := h;
-    h := PtrInt(@HTab^[h]); // fast 24-bit process
+    h := PtrInt(@HTab^[h]); // fast 24-bit data process
     PCardinal(sp)^ := PCardinal(h)^;
     PCardinal(h)^ := cardinal(i) or (PCardinal(h)^ and $ff000000);
     inc(sp,3);
