@@ -898,6 +898,7 @@ destructor TSMEngine.Destroy;
 var
   unInitProc: TDllModuleUnInitProc;
   process: PJSRootedObject;
+  procExitCodeVal: jsval;
 begin
   try
     process := cx.NewRootedObject(GlobalObject.ptr.GetPropValue(cx,'process').asObject);
@@ -907,6 +908,9 @@ begin
         CallObjectFunction(process, 'emit', [cx.NewJSString('exit').ToJSVal])
       else
         raise Exception.Create('`process` initialized incorrectly (dont have `emit` method)');
+      procExitCodeVal := process.ptr.GetPropValue(cx, 'exitCode');
+      if procExitCodeVal.isInteger then
+        ExitCode := procExitCodeVal.asInteger;
     finally
       cx.FreeRootedObject(process);
     end;
