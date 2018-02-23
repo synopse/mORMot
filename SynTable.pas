@@ -4459,6 +4459,7 @@ begin
 end;
 
 procedure TMatch.MatchAfterStar;
+var retryT, retryP: PtrInt;
 begin
   if (TLen = 1) or (P = PLen) then begin
     State := sVALID;
@@ -4483,10 +4484,14 @@ begin
   end;
   repeat
     if (Upper[Pattern[P]] = Upper[Text[T]]) or (Pattern[P] = '[') then begin
+      retryT := T;
+      retryP := P;
       MatchMain;
       if State = sVALID then
         break;
       State := sNONE; // retry until end of Text, (check below) or State valid
+      T := retryT;
+      P := retryP;
     end;
     inc(T);
     if (T > TLen) or (P > PLen) then begin

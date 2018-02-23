@@ -2918,6 +2918,10 @@ begin
   Check(IsMatch('ab*.[ef]xyz', 'abcd.exyz',true));
   Check(IsMatch('ab*.[ef]xyz', 'ab.fxyz',true));
   Check(IsMatch('ab*.[ef]xyz', 'abcd.fxyz',true));
+  check(not IsMatch('ab[cd]e','abdde',false));
+  check(not IsMatch('ab[cd]ex','abddex',false));
+  check(not IsMatch('ab*.[cd]e','ab.dde',false));
+  check(not IsMatch('ab*.[cd]ex','ab.ddex',false));
   V := 'this [e-n]s a [!zy]est';
   check(not IsMatch(V,V,false));
   Check(IsMatch(V,'this is a test',false));
