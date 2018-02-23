@@ -4014,6 +4014,11 @@ function ExistsIniNameValue(P: PUTF8Char; const UpperName: RawUTF8;
 function FindIniNameValueInteger(P: PUTF8Char; UpperName: PAnsiChar): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// replace a value from a given set of name=value lines 
+// - expect UpperName as 'NAME='
+// - return false if no NAME= entry was found
+function UpdateIniNameValue(var Content: RawUTF8; const UpperName, NewValue: RawUTF8): boolean;
+
 /// read a File content into a String
 // - content can be binary or text
 // - returns '' if file was not found or any read error occured
@@ -28983,10 +28988,46 @@ begin
     result := FindIniEntry(Content,Section,Name);
 end;
 
+function UpdateIniNameValueInternal(var Content: RawUTF8;
+  const NewValue, NewValueCRLF: RawUTF8; var P: PUTF8Char;
+  UpperName: PAnsiChar; UpperNameLength: integer): boolean;
+var PBeg: PUTF8Char;
+    i: integer;
+begin
+  while (P<>nil) and (P^<>'[') do begin
+    while P^=' ' do inc(P);   // trim left ' '
+    PBeg := P;
+    P := GotoNextLine(P);
+    if IdemPChar(PBeg,UpperName) then begin
+     // update Name=Value entry
+     result := true;
+     inc(PBeg,UpperNameLength);
+     i := (PBeg-pointer(Content))+1;
+     if (i=length(NewValue)) and CompareMem(PBeg,pointer(NewValue),i) then
+       exit; // new Value is identical to the old one -> no change
+     if P=nil then // avoid last line (P-PBeg) calculation error
+       SetLength(Content,i-1) else
+       delete(Content,i,P-PBeg); // delete old Value
+     insert(NewValueCRLF,Content,i); // set new value
+     exit;
+    end;
+  end;
+  result := false;
+end;
+
+function UpdateIniNameValue(var Content: RawUTF8; const UpperName, NewValue: RawUTF8): boolean;
+var P: PUTF8Char;
+begin
+  P := pointer(Content);
+  if (P=nil) or (UpperName='') then
+    result := false else
+    result := UpdateIniNameValueInternal(Content,NewValue,NewValue+#13#10,P,
+      pointer(UpperName),length(UpperName));
+end;
+
 procedure UpdateIniEntry(var Content: RawUTF8; const Section,Name,Value: RawUTF8);
 const CRLF = #13#10;
 var P: PUTF8Char;
-    PBeg: PUTF8Char;
     SectionFound: boolean;
     i, UpperNameLength: PtrInt;
     V: RawUTF8;
@@ -29006,23 +29047,8 @@ begin
   PWord(UpperCopy255(UpperSection,Section))^ := ord(']');
   if FindSectionFirstLine(P,UpperSection) then begin
 Sec:SectionFound := true;
-    while (P<>nil) and (P^<>'[') do begin
-      while P^=' ' do inc(P);   // trim left ' '
-      PBeg := P;
-      P := GotoNextLine(P);
-      if IdemPChar(PBeg,UpperName) then begin
-        // update Name=Value entry
-        inc(PBeg,UpperNameLength);
-        i := (PBeg-pointer(Content))+1;
-        if (i=length(Value)) and CompareMem(PBeg,pointer(Value),i) then
-          exit; // new Value is identical to the old one -> no change
-        if P=nil then // avoid last line (P-PBeg) calculation error
-          SetLength(Content,i-1) else
-          delete(Content,i,P-PBeg); // delete old Value
-        insert(V,Content,i); // set new value
-        exit;
-      end;
-    end;
+    if UpdateIniNameValueInternal(Content,Value,V,P,@UpperName,UpperNameLength) then
+      exit;
     // we reached next [Section] without having found Name=
    end;
   // 2. section or Name= entry not found: add Name=Value
