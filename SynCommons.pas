@@ -2796,14 +2796,14 @@ var StrComp: function (Str1, Str2: pointer): PtrInt = StrCompFast;
 {$endif}
 
 /// pure pascal version of strspn(), to be used with PUTF8Char/PAnsiChar
-// - please note that this optimized version may read up to 3 bytes
-// beyond the string, so should be avoided e.g. over memory mapped files
+// - please note that this optimized version may read up to 3 bytes beyond 
+// accept but never after s end, so is safe e.g. over memory mapped files
 function strspnpas(s,accept: pointer): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// pure pascal version of strcspn(), to be used with PUTF8Char/PAnsiChar
-// - please note that this optimized version may read up to 3 bytes
-// beyond the string, so should be avoided e.g. over memory mapped files
+// - please note that this optimized version may read up to 3 bytes beyond 
+// reject but never after s end, so is safe e.g. over memory mapped files
 function strcspnpas(s,reject: pointer): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -2823,16 +2823,16 @@ function strcspnsse42(s,reject: pointer): integer;
 // - returns how many accept chars appear in the initial segment of s, e.g.
 // ! strspn('abcdef','debca')=5
 // - will use SSE4.2 instructions on supported CPUs
-// - please note that this function may read some bytes beyond the string,
-// so should be avoided e.g. over memory mapped files
+// - please note that this function may read some bytes beyond the s string, so
+// should be avoided e.g. over memory mapped files - use safe strspnpas instead
 var strspn: function (s,accept: pointer): integer = strspnpas;
 
 /// fastest available version of strcspn(), to be used with PUTF8Char/PAnsiChar
 // - returns how many reject chars do not appear in the initial segment of s, e.g.
 // ! strcspn('1234,6789',',')=4
 // - will use SSE4.2 instructions on supported CPUs
-// - please note that this function may read some bytes beyond the string,
-// so should be avoided e.g. over memory mapped files
+// - please note that this function may read some bytes beyond the s string, so
+// should be avoided e.g. over memory mapped files - use safe strcspnpas instead
 var strcspn: function (s,reject: pointer): integer = strcspnpas;
 
 /// use our fast version of StrIComp(), to be used with PUTF8Char/PAnsiChar
