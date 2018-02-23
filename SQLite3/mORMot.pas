@@ -5760,8 +5760,8 @@ type
   /// some flags set by the caller to notify low-level context
   TSQLRestURIParamsLowLevelFlags = set of TSQLRestURIParamsLowLevelFlag;
 
-  /// store all parameters for a TSQLRestServer.URI() method call
-  // - see TSQLRestClient to check how data is expected in our RESTful format
+  /// store all parameters for a Client or Server method call
+  // - as used by TSQLRestServer.URI or TSQLRestClientURI.InternalURI
   TSQLRestURIParams = {$ifndef ISDELPHI2010}object{$else}record{$endif}
     /// input parameter containing the caller URI
     Url: RawUTF8;
@@ -5830,8 +5830,18 @@ type
       {$ifdef HASINLINE}inline;{$endif}
   end;
 
-  /// used to map set of parameters for a TSQLRestServer.URI() method
+  /// used to map set of parameters for a Client or Server method call
   PSQLRestURIParams = ^TSQLRestURIParams;
+
+  /// callback event signature before/after a Client or Server method call
+  // - to allow low-level interception of the request bodies e.g. for low-level
+  // logging/audit, or on-the-fly encryption and/or signature of the content
+  // - used by TSQLRest.OnDecryptBody and TSQLRest.OnEncryptBody - so the very
+  // same callbacks may be used on both client and server sides
+  // - for server-only process (e.g. to check for authorization), see rather
+  // TSQLRestServer.OnBeforeURI and TSQLRestServer.OnAfterURI events
+  // - used e.g. by TSQLRest.SetCustomEncryption method
+  TNotifyRestBody = procedure(Sender: TSQLRest; var Body,Head,URL: RawUTF8) of object;
 
   /// points to the currently running service on the server side
   // - your code may use such a local pointer to retrieve the ServiceContext
@@ -5849,10 +5859,10 @@ type
   // - as transmitted e.g. by TSQLRestServerURIContext.AuthenticationFailed or
   // TSQLRestServer.OnAuthenticationFailed
   TNotifyAuthenticationFailedReason = (
-   afInvalidSignature,afRemoteServiceExecutionNotAllowed,
-   afUnknownUser,afInvalidPassword,
-   afSessionAlreadyStartedForThisUser,afSessionCreationAborted,
-   afSecureConnectionRequired, afJWTRequired);
+    afInvalidSignature,afRemoteServiceExecutionNotAllowed,
+    afUnknownUser,afInvalidPassword,
+    afSessionAlreadyStartedForThisUser,afSessionCreationAborted,
+    afSecureConnectionRequired, afJWTRequired);
 
   /// will identify the currently running service on the server side
   // - is the type of the global ServiceContext threadvar
@@ -13756,6 +13766,11 @@ type
     fRoutingClass: TSQLRestServerURIContextClass;
     fFrequencyTimestamp: Int64;
     fBackgroundTimer: TSQLRestBackgroundTimer;
+    fOnDecryptBody, fOnEncryptBody: TNotifyRestBody;
+    fCustomEncryptAES: TAESAbstract;
+    fCustomEncryptSign: TSynSigner;
+    fCustomEncryptCompress: TAlgoCompress;
+    fCustomEncryptContentPrefix, fCustomEncryptContentPrefixUpper: RawUTF8;
     fAcquireExecution: array[TSQLRestServerURIContextCommand] of TSQLRestAcquireExecution;
     {$ifdef WITHLOG}
     fLogClass: TSynLogClass;   // =SQLite3Log by default
@@ -13763,6 +13778,8 @@ type
     procedure SetLogClass(aClass: TSynLogClass); virtual;
     function GetLogClass: TSynLogClass;
     {$endif}
+    procedure InternalCustomEncrypt(Sender: TSQLRest; var Body,Head,Url: RawUTF8);
+    procedure InternalCustomDecrypt(Sender: TSQLRest; var Body,Head,Url: RawUTF8);
     function EnsureBackgroundTimerExists: TSQLRestBackgroundTimer;
     /// log the corresponding text (if logging is enabled)
     procedure InternalLog(const Text: RawUTF8; Level: TSynLogInfo); overload;
@@ -15007,7 +15024,24 @@ type
     // - useful if TSynLog.AutoFlushTimeOut is not set (or available on the OS)
     // - you can specify the update frequency, in seconds
     procedure LogBackgroundFlush(periodSec: integer=5);
-
+    /// initialize some custom AES encryption and/or digital signature, with
+    // optional compression
+    // - will intercept the calls by setting OnDecryptBody/OnEncryptBody events
+    // - will own the supplied aes instance or won't encrypt the content if nil
+    // - will digitally sign the content body and uri with the supplied
+    // TSynSigner, or won't compute any digital signature if sign=nil
+    // - if both aes and sign are nil, then call interception is disabled
+    // - you can optionally specify a compression algorithm (like AlgoSynLZ or
+    // AlgoDeflate/AlgoDeflateFast) to be applied before encryption
+    // - TSQLRestServer will require incoming requests to be of the corresponding
+    // [aesclass][signalgo]/[originaltype] HTTP content-type e.g.
+    // 'aesofb256sha256/application/json' - any plain request will be rejected
+    // - note that it will only encrypt and sign the HTTP requests bodies, so a
+    // plain GET won't be checked - as such, it is not a replacement of
+    // TSQLRestServerAuthentication nor TWebSocketProtocolBinary encryption,
+    // but a cheap alternative to HTTPS, when you need to protect HTTP flow
+    // from MiM attacks (e.g. in a IoT context) with simple and proven algorithms
+    procedure SetCustomEncryption(aes: TAESAbstract; sign: PSynSigner; comp: TAlgoCompress);
     /// how this class execute its internal commands
     // - by default, TSQLRestServer.URI() will lock for Write ORM according to
     // AcquireWriteMode (i.e. AcquireExecutionMode[execORMWrite]=amLocked) and
@@ -15100,6 +15134,12 @@ type
     property BackgroundTimer: TSQLRestBackgroundTimer read fBackgroundTimer;
     /// the Database Model associated with this REST Client or Server
     property Model: TSQLModel read fModel;
+    /// event called before TSQLRestServer.URI or after TSQLRestClientURI.URI
+    // - defined e.g. by SetCustomEncryption
+    property OnDecryptBody: TNotifyRestBody read fOnDecryptBody write fOnDecryptBody;
+    /// event called after TSQLRestServer.URI or before TSQLRestClientURI.URI
+    // - defined e.g. by SetCustomEncryption
+    property OnEncryptBody: TNotifyRestBody read fOnEncryptBody write fOnEncryptBody;
   published
     /// the current UTC Date and Time, as retrieved from the server
     // - this property will return the timestamp as TTimeLog / Int64
@@ -17001,12 +17041,16 @@ type
     // ! Ctxt.Error('Unauthorized method',HTTP_NOTALLOWED);
     // - since this event will be executed by every TSQLRestServer.URI call,
     // it should better not make any slow process (like writing to a remote DB)
+    // - see also TSQLRest.OnDecryptBody, which is common to the client side, so
+    // may be a better place for implementing shared process (e.g. encryption)
     OnBeforeURI: TNotifyBeforeURI;
     /// event trigerred when URI() finished to process a request
     // - the supplied Ctxt parameter will give access to the command which has
     // been executed, e.g. via Ctxt.Call.OutStatus or Ctxt.MicroSecondsElapsed
     // - since this event will be executed by every TSQLRestServer.URI call,
     // it should better not make any slow process (like writing to a remote DB)
+    // - see also TSQLRest.OnDecryptBody/OnEncryptBody, which is common to the
+    // client side, so may be better to implement shared process (e.g. encryption)
     OnAfterURI: TNotifyAfterURI;
     /// event trigerred when URI() failed to process a request
     // - if Ctxt.ExecuteCommand raised an execption, this callback will be
@@ -34882,6 +34926,7 @@ begin
   FreeAndNil(fBackgroundTimer);
   FreeAndNil(fServices);
   FreeAndNil(fCache);
+  FreeAndNil(fCustomEncryptAES);
   if (fModel<>nil) and (fModel.fRestOwner=self) then
     // make sure we are the Owner (TSQLRestStorage has fModel<>nil e.g.)
     FreeAndNil(fModel);
@@ -35174,6 +35219,122 @@ begin
   if (self<>nil) and (fLogClass<>nil) and not AutoLogFlushSet
     {$ifdef MSWINDOWS}and (fLogClass.Family.AutoFlushTimeOut=0){$endif} then
     AutoLogFlushSet := TimerEnable(fLogClass.Add.BackgroundExecute,periodSec)<>nil;
+end;
+
+procedure TSQLRest.InternalCustomDecrypt(Sender: TSQLRest; var Body,Head,Url: RawUTF8);
+var ct: RawUTF8;
+    payloadlen: integer;
+    signature: THash512Rec;
+    P: PAnsiChar;
+    sign: TSynSigner; // thread-safe copy
+begin
+  if (fCustomEncryptContentPrefix='') or (Body='') or (Url='') then
+    exit;
+  ct := FindIniNameValue(pointer(Head),HEADER_CONTENT_TYPE_UPPER);
+  if IdemPChar(pointer(ct),pointer(fCustomEncryptContentPrefixUpper)) then begin
+    if fCustomEncryptAES<>nil then begin
+      Body := fCustomEncryptAES.DecryptPKCS7(Body,true,false);
+      if Body='' then begin
+        InternalLog('CustomEncrypt %.DecryptPKCS7 reject',[fCustomEncryptAES.ClassType]);
+        exit;
+      end;
+    end;
+    if fCustomEncryptCompress<>nil then begin
+      Body := fCustomEncryptCompress.Decompress(Body);
+      if Body='' then begin
+        InternalLog('CustomEncrypt %.Decompress reject',[fCustomEncryptCompress.ClassType]);
+        exit;
+      end;
+    end;
+    payloadlen := length(Body)-fCustomEncryptSign.SignatureSize;
+    if (payloadlen>0) and (fCustomEncryptSign.SignatureSize<>0) then begin
+      sign := fCustomEncryptSign;
+      P := pointer(Url);
+      if P^='/' then
+        sign.Update(P+1,length(Url)-1) else
+        sign.Update(Url);
+      P := pointer(Body);
+      sign.Update(P,payloadlen);
+      sign.Final(signature);
+      if not CompareMem(@signature,P+payloadlen,sign.SignatureSize) then begin
+        Body := '';
+        InternalLog('CustomEncrypt % reject',[ToText(sign.Algo)^]);
+        exit;
+      end;
+      SetLength(Body,payloadlen);
+    end;
+    system.delete(ct,1,length(fCustomEncryptContentPrefix));
+    UpdateIniNameValue(Head,HEADER_CONTENT_TYPE_UPPER,ct);
+  end else begin
+    Body := '';
+    InternalLog('CustomEncrypt no % -> reject',[fCustomEncryptContentPrefix]);
+  end;
+end;
+
+procedure TSQLRest.InternalCustomEncrypt(Sender: TSQLRest; var Body,Head,Url: RawUTF8);
+var ct: RawUTF8;
+    payloadlen: integer;
+    P: PAnsiChar;
+    sign: TSynSigner; // thread-safe copy
+begin
+  if (fCustomEncryptContentPrefix='') or (Body='') then
+    exit;
+  if fCustomEncryptSign.SignatureSize<>0 then begin
+    payloadlen := length(Body);
+    sign := fCustomEncryptSign;
+    SetLength(Body,payloadlen+sign.SignatureSize);
+    P := pointer(Url);
+    if P^='/' then
+      sign.Update(P+1,length(Url)-1) else
+      sign.Update(Url);
+    P := pointer(Body);
+    sign.Update(P,payloadlen);
+    sign.Final(PHash512Rec(P+payloadlen)^);
+  end;
+  if fCustomEncryptCompress<>nil then
+    Body := fCustomEncryptCompress.Compress(Body);
+  if fCustomEncryptAES<>nil then
+    Body := fCustomEncryptAES.EncryptPKCS7(Body,true);
+  ct := FindIniNameValue(pointer(Head),HEADER_CONTENT_TYPE_UPPER);
+  if ct='' then begin // not specified -> append 'application/json'
+    if Head<>'' then
+      Head := Head+#13#10;
+    Head := Head+HEADER_CONTENT_TYPE+
+      fCustomEncryptContentPrefix+JSON_CONTENT_TYPE_VAR;
+  end else
+    UpdateIniNameValue(Head,HEADER_CONTENT_TYPE_UPPER,fCustomEncryptContentPrefix+ct)
+end;
+
+procedure TSQLRest.SetCustomEncryption(aes: TAESAbstract; sign: PSynSigner;
+  comp: TAlgoCompress);
+var tmp: PShortString; // temp variable to circumvent FPC bug
+begin
+  fCustomEncryptContentPrefix := ''; // disable encryption
+  fCustomEncryptCompress := nil;
+  FreeAndNil(fCustomEncryptAES);
+  OnDecryptBody := nil;
+  OnEncryptBody := nil;
+  fCustomEncryptAES := aes;
+  if aes=nil then
+    if sign=nil then
+      exit else
+      fCustomEncryptContentPrefix := '0' else begin
+    tmp := ClassNameShort(aes); // TAESECB_API -> 'AESECB'
+    fCustomEncryptContentPrefix := copy(tmp^,2,6)+UInt32ToUtf8(aes.KeySize);
+  end;
+  if (sign=nil) or (sign^.SignatureSize=0) then begin
+    FillCharFast(fCustomEncryptSign,SizeOf(fCustomEncryptSign),0);
+    fCustomEncryptContentPrefix := fCustomEncryptContentPrefix+'0/';
+  end else begin
+    fCustomEncryptSign := sign^;
+    tmp := ToText(sign^.Algo); // saSha3384 -> '3384'
+    fCustomEncryptContentPrefix := fCustomEncryptContentPrefix+copy(tmp^,3,10)+'/';
+  end;
+  fCustomEncryptContentPrefix := LowerCase(fCustomEncryptContentPrefix);
+  fCustomEncryptContentPrefixUpper := UpperCase(fCustomEncryptContentPrefix);
+  fCustomEncryptCompress := comp;
+  OnDecryptBody := InternalCustomDecrypt;
+  OnEncryptBody := InternalCustomEncrypt;
 end;
 
 procedure TSQLRest.AdministrationExecute(const DatabaseName,SQL: RawUTF8;
@@ -38244,6 +38405,8 @@ var retry: Integer;
     end else
     {$endif}
     begin
+      if Assigned(fOnEncryptBody) then
+        fOnEncryptBody(self,Call.InBody,Call.InHead,Call.Url);
       InternalURI(Call);
       if not(isDestroying in fInternalState) then
         if (Call.OutStatus=HTTP_NOTIMPLEMENTED) and (isOpened in fInternalState) then begin
@@ -38252,6 +38415,8 @@ var retry: Integer;
           InternalURI(Call); // try request again
         end else
           Include(fInternalState,isOpened);
+      if Assigned(fOnDecryptBody) then
+        fOnDecryptBody(self,Call.OutBody,Call.OutHead,Call.Url);
     end;
     result.Lo := Call.OutStatus;
     result.Hi := Call.OutInternalState;
@@ -42027,6 +42192,8 @@ begin
   {$endif}
   QueryPerformanceCounter(timeStart);
   fStats.AddCurrentRequestCount(1);
+  if Assigned(fOnDecryptBody) then
+    fOnDecryptBody(self,Call.InBody,Call.InHead,Call.Url);
   Call.OutInternalState := InternalState; // other threads may change it
   Call.OutStatus := HTTP_BADREQUEST; // default error code is 400 BAD REQUEST
   safeid := 0;
@@ -42160,6 +42327,8 @@ begin
         OnAfterURI(Ctxt);
       except
       end;
+    if Assigned(fOnEncryptBody) then
+      fOnEncryptBody(self,Call.OutBody,Call.OutHead,Call.Url);
     Ctxt.Free;
   end;
   if safeid<>0 then

@@ -745,6 +745,12 @@ type
     // - it runs 1000 remote SQL queries, and check the JSON data retrieved
     // - the time elapsed for this step is computed, and displayed on the report
     procedure HTTPClientEncrypted;
+    /// validates TSQLRest.SetCustomEncryption process with AES+SHA
+    procedure HTTPClientCustomEncryptionAesSha;
+    /// validates TSQLRest.SetCustomEncryption process with only AES
+    procedure HTTPClientCustomEncryptionAes;
+    /// validates TSQLRest.SetCustomEncryption process with only SHA
+    procedure HTTPClientCustomEncryptionSha;
 {
     /// validate the HTTP/1.1 client multi-query implementation with one
     // connection for all queries, and the THttpServer class instead
@@ -12840,6 +12846,37 @@ begin
   (Client as TSQLHttpClientGeneric).KeepAliveMS := 20000;
   (Client as TSQLHttpClientGeneric).Compression := [hcSynShaAes];
   ClientTest;
+end;
+
+procedure TTestClientServerAccess.HTTPClientCustomEncryptionAesSha;
+var rnd: THash256;
+    sign: TSynSigner;
+begin
+  TAESPRNG.Main.FillRandom(rnd);
+  sign.Init(saSha256,'secret1');
+  Client.SetCustomEncryption(TAESOFB.Create(rnd),@sign,AlgoSynLZ);
+  DataBase.SetCustomEncryption(TAESOFB.Create(rnd),@sign,AlgoSynLZ);
+  ClientTest;
+end;
+
+procedure TTestClientServerAccess.HTTPClientCustomEncryptionAes;
+var rnd: THash256;
+begin
+  TAESPRNG.Main.FillRandom(rnd);
+  Client.SetCustomEncryption(TAESOFB.Create(rnd),nil,AlgoSynLZ);
+  DataBase.SetCustomEncryption(TAESOFB.Create(rnd),nil,AlgoSynLZ);
+  ClientTest;
+end;
+
+procedure TTestClientServerAccess.HTTPClientCustomEncryptionSha;
+var sign: TSynSigner;
+begin
+  sign.Init(saSha256,'secret2');
+  Client.SetCustomEncryption(nil,@sign,AlgoSynLZ);
+  DataBase.SetCustomEncryption(nil,@sign,AlgoSynLZ);
+  ClientTest;
+  Client.SetCustomEncryption(nil,nil,nil); // disable custom encryption
+  DataBase.SetCustomEncryption(nil,nil,nil);
 end;
 
 procedure TTestClientServerAccess.HttpSeveralDBServers;

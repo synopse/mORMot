@@ -1956,6 +1956,8 @@ type
     /// the size, in bytes, of the digital signature of this algorithm
     property SignatureSize: integer read fSignatureSize;
   end;
+  /// reference to TSynSigner wrapper object
+  PSynSigner = ^TSynSigner;
 
   /// hash algorithms available for HashFile/HashFull functions and TSynHasher object
   THashAlgo = (hfMD5, hfSHA1, hfSHA256, hfSHA384, hfSHA512, hfSHA3_256, hfSHA3_512);
@@ -2798,6 +2800,7 @@ function ToText(claim: TJWTClaim): PShortString; overload;
 
 function ToText(chk: TAESIVReplayAttackCheck): PShortString; overload;
 function ToText(res: TProtocolResult): PShortString; overload;
+function ToText(algo: TSignAlgo): PShortString; overload;
 function ToText(algo: TSHA3Algo): PShortString; overload;
 
 
@@ -2811,6 +2814,11 @@ end;
 function ToText(chk: TAESIVReplayAttackCheck): PShortString;
 begin
   result := GetEnumName(TypeInfo(TAESIVReplayAttackCheck),ord(chk));
+end;
+
+function ToText(algo: TSignAlgo): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TSignAlgo),ord(algo));
 end;
 
 function ToText(algo: TSHA3Algo): PShortString;
