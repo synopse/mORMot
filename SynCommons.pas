@@ -4015,9 +4015,11 @@ function FindIniNameValueInteger(P: PUTF8Char; UpperName: PAnsiChar): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// replace a value from a given set of name=value lines 
-// - expect UpperName as 'NAME='
-// - return false if no NAME= entry was found
-function UpdateIniNameValue(var Content: RawUTF8; const UpperName, NewValue: RawUTF8): boolean;
+// - expect UpperName as 'UPPERNAME=', otherwise returns false
+// - if no UPPERNAME= entry was found, then Name+NewValue is added to Content
+// - a typical use may be:
+// ! UpdateIniNameValue(headers,HEADER_CONTENT_TYPE,HEADER_CONTENT_TYPE_UPPER,contenttype);
+function UpdateIniNameValue(var Content: RawUTF8; const Name, UpperName, NewValue: RawUTF8): boolean;
 
 /// read a File content into a String
 // - content can be binary or text
@@ -29015,14 +29017,21 @@ begin
   result := false;
 end;
 
-function UpdateIniNameValue(var Content: RawUTF8; const UpperName, NewValue: RawUTF8): boolean;
+function UpdateIniNameValue(var Content: RawUTF8; const Name, UpperName, NewValue: RawUTF8): boolean;
 var P: PUTF8Char;
 begin
-  P := pointer(Content);
-  if (P=nil) or (UpperName='') then
-    result := false else
+  if UpperName='' then
+    result := false else begin
+    P := pointer(Content);
     result := UpdateIniNameValueInternal(Content,NewValue,NewValue+#13#10,P,
       pointer(UpperName),length(UpperName));
+    if result or (Name='') then
+      exit;
+    if Content<>'' then
+      Content := Content+#13#10;
+    Content := Content+Name+NewValue;
+    result := true;
+  end;
 end;
 
 procedure UpdateIniEntry(var Content: RawUTF8; const Section,Name,Value: RawUTF8);

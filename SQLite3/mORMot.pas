@@ -35264,7 +35264,7 @@ begin
       SetLength(Body,payloadlen);
     end;
     system.delete(ct,1,length(fCustomEncryptContentPrefix));
-    UpdateIniNameValue(Head,HEADER_CONTENT_TYPE_UPPER,ct);
+    UpdateIniNameValue(Head,'',HEADER_CONTENT_TYPE_UPPER,ct);
   end else begin
     Body := '';
     InternalLog('CustomEncrypt no % -> reject',[fCustomEncryptContentPrefix]);
@@ -35277,7 +35277,7 @@ var ct: RawUTF8;
     P: PAnsiChar;
     sign: TSynSigner; // thread-safe copy
 begin
-  if (fCustomEncryptContentPrefix='') or (Body='') then
+  if (fCustomEncryptContentPrefix='') or (Body='') or (Url='') then
     exit;
   if fCustomEncryptSign.SignatureSize<>0 then begin
     payloadlen := length(Body);
@@ -35296,18 +35296,16 @@ begin
   if fCustomEncryptAES<>nil then
     Body := fCustomEncryptAES.EncryptPKCS7(Body,true);
   ct := FindIniNameValue(pointer(Head),HEADER_CONTENT_TYPE_UPPER);
-  if ct='' then begin // not specified -> append 'application/json'
-    if Head<>'' then
-      Head := Head+#13#10;
-    Head := Head+HEADER_CONTENT_TYPE+
-      fCustomEncryptContentPrefix+JSON_CONTENT_TYPE_VAR;
-  end else
-    UpdateIniNameValue(Head,HEADER_CONTENT_TYPE_UPPER,fCustomEncryptContentPrefix+ct)
+  if ct='' then // not specified -> append 'application/json'
+    ct := JSON_CONTENT_TYPE_VAR;
+  UpdateIniNameValue(Head,HEADER_CONTENT_TYPE,HEADER_CONTENT_TYPE_UPPER,
+    fCustomEncryptContentPrefix+ct)
 end;
 
 procedure TSQLRest.SetCustomEncryption(aes: TAESAbstract; sign: PSynSigner;
   comp: TAlgoCompress);
 var tmp: PShortString; // temp variable to circumvent FPC bug
+    s: RawUTF8;
 begin
   fCustomEncryptContentPrefix := ''; // disable encryption
   fCustomEncryptCompress := nil;
@@ -35320,15 +35318,17 @@ begin
       exit else
       fCustomEncryptContentPrefix := '0' else begin
     tmp := ClassNameShort(aes); // TAESECB_API -> 'AESECB'
-    fCustomEncryptContentPrefix := copy(tmp^,2,6)+UInt32ToUtf8(aes.KeySize);
+    SetString(s,PAnsiChar(@tmp^[2]),6);
+    fCustomEncryptContentPrefix := s+UInt32ToUtf8(aes.KeySize);
   end;
   if (sign=nil) or (sign^.SignatureSize=0) then begin
     FillCharFast(fCustomEncryptSign,SizeOf(fCustomEncryptSign),0);
     fCustomEncryptContentPrefix := fCustomEncryptContentPrefix+'0/';
   end else begin
     fCustomEncryptSign := sign^;
-    tmp := ToText(sign^.Algo); // saSha3384 -> '3384'
-    fCustomEncryptContentPrefix := fCustomEncryptContentPrefix+copy(tmp^,3,10)+'/';
+    tmp := ToText(sign^.Algo); // saSha3384 -> 'sha3384'
+    SetString(s,PAnsiChar(@tmp^[3]),ord(tmp^[0])-2);
+    fCustomEncryptContentPrefix := fCustomEncryptContentPrefix+s+'/';
   end;
   fCustomEncryptContentPrefix := LowerCase(fCustomEncryptContentPrefix);
   fCustomEncryptContentPrefixUpper := UpperCase(fCustomEncryptContentPrefix);
