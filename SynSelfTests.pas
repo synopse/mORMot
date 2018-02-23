@@ -2904,6 +2904,14 @@ begin
   Check(IsMatch('ma?ch.*','mavch.dat',false));
   Check(IsMatch('ma?ch.*','march.on',false));
   Check(IsMatch('ma?ch.*','march.',false));
+  Check(IsMatch('ab*.exyz', 'ab.exyz',true));
+  Check(IsMatch('ab[ef]xyz', 'abexyz',false));
+  Check(IsMatch('ab[ef]xyz', 'abexyz',true));
+  Check(IsMatch('ab*.[ef]xyz', 'abcd.exyz',true));
+  Check(IsMatch('ab*.[ef]xyz', 'ab.exyz',true));
+  Check(IsMatch('ab*.[ef]xyz', 'abcd.exyz',true));
+  Check(IsMatch('ab*.[ef]xyz', 'ab.fxyz',true));
+  Check(IsMatch('ab*.[ef]xyz', 'abcd.fxyz',true));
   V := 'this [e-n]s a [!zy]est';
   check(not IsMatch(V,V,false));
   Check(IsMatch(V,'this is a test',false));
@@ -2940,6 +2948,8 @@ begin
     V[3] := AnsiChar(i);
     Check(IsMatch('[A-Za-z0-9]?[A-Za-z0-9]',V)=(i in IsWord));
     Check(IsMatch('[A-Za-z0-9]*',V)=(i in IsWord));
+    Check(IsMatch('[a-z0-9]?[A-Z0-9]',V,true)=(i in IsWord));
+    Check(IsMatch('[A-Z0-9]*',V,true)=(i in IsWord));
   end;
 end;
 
