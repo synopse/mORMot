@@ -30056,51 +30056,73 @@ begin
 end;
 
 procedure DeduplicateInteger(var Values: TIntegerDynArray);
-var i,j,n,v: PtrInt;
+  function dedup(val: PIntegerArray; v: PtrInt): PtrInt;
+  var i: PtrInt;
+  begin // sub-function for better code generation
+    i := 0;
+    repeat // here v>0 so i<v
+      if val[i]=val[i+1] then begin
+        result := i;
+        inc(i);
+        if i<>v then begin
+          repeat
+            if val[i]<>val[i+1] then begin
+              val[result] := val[i];
+              inc(result);
+            end;
+            inc(i);
+          until i=v;
+          val[result] := val[i];
+        end;
+        exit;
+      end;
+      inc(i);
+    until i=v;
+    result := v;
+  end;
+var n,v: PtrInt;
 begin
   v := high(Values);
-  if v<0 then
+  if v<=0 then
     exit;
-  n := v;
   QuickSortInteger(pointer(Values),0,v);
-  i := v;
-  while i>0 do begin
-    if Values[i]=Values[i-1] then begin
-      j := i;
-      repeat
-        dec(i);
-      until (i=0) or (Values[i]<>Values[i-1]);
-      if n<>j then
-        MoveFast(Values[j+1],Values[i+1],(n-j)*SizeOf(Integer));
-      dec(n,j-i);
-    end;
-    dec(i);
-  end;
+  n := dedup(pointer(Values),v);
   if n<>v then
     SetLength(Values,n+1);
 end;
 
 procedure DeduplicateInt64(var Values: TInt64DynArray);
-var i,j,n,v: PtrInt;
+  function dedup(val: PInt64Array; v: PtrInt): PtrInt;
+  var i: PtrInt;
+  begin // sub-function for better code generation
+    i := 0;
+    repeat // here v>0 so i<v
+      if val[i]=val[i+1] then begin
+        result := i;
+        inc(i);
+        if i<>v then begin
+          repeat
+            if val[i]<>val[i+1] then begin
+              val[result] := val[i];
+              inc(result);
+            end;
+            inc(i);
+          until i=v;
+          val[result] := val[i];
+        end;
+        exit;
+      end;
+      inc(i);
+    until i=v;
+    result := v;
+  end;
+var n,v: PtrInt;
 begin
   v := high(Values);
-  if v<0 then
+  if v<=0 then
     exit;
-  n := v;
   QuickSortInt64(pointer(Values),0,v);
-  i := v;
-  while i>0 do begin
-    if Values[i]=Values[i-1] then begin
-      j := i;
-      repeat
-        dec(i);
-      until (i=0) or (Values[i]<>Values[i-1]);
-      if n<>j then
-        MoveFast(Values[j+1],Values[i+1],(n-j)*SizeOf(Int64));
-      dec(n,j-i);
-    end;
-    dec(i);
-  end;
+  n := dedup(pointer(Values),v);
   if n<>v then
     SetLength(Values,n+1);
 end;
