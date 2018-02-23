@@ -4421,17 +4421,16 @@ begin
             exit;
           end;
           if RangeStart < RangeEnd then begin
-            if (c >= Pattern[RangeStart]) and (c <= Pattern[RangeEnd]) then begin
+            if (c >= Upper[Pattern[RangeStart]]) and (c <= Upper[Pattern[RangeEnd]]) then begin
               include(flags, MemberMatch);
               break;
             end;
           end
-          else begin
-            if (c >= Pattern[RangeEnd]) and (c <= Pattern[RangeStart]) then begin
+          else
+            if (c >= Upper[Pattern[RangeEnd]]) and (c <= Upper[Pattern[RangeStart]]) then begin
               include(flags, MemberMatch);
               break;
             end;
-          end;
         end;
         if ((Invert in flags) and (MemberMatch in flags)) or
            not ((Invert in flags) or (MemberMatch in flags)) then begin
