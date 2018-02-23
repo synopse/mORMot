@@ -10952,8 +10952,8 @@ begin // see http://curl.haxx.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
   // libcurl has dedicated options for GET,HEAD verbs
   if (fIn.Method='') or (fIn.Method='GET') then begin
     curl.easy_setopt(fHandle,coHTTPGet,1);
+    curl.easy_setopt(fHandle,coCustomRequest,PAnsiChar('GET'));
     if (aData<>'') and (fIn.Method='GET') then begin // e.g. GET with body
-      curl.easy_setopt(fHandle,coCustomRequest,pointer(fIn.Method));
       curl.easy_setopt(fHandle,coNoBody,0);
       curl.easy_setopt(fHandle,coUpload,1);
       fIn.Data := aData;
