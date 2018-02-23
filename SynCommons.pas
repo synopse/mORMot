@@ -29067,7 +29067,7 @@ begin
         SetLength(result,Size+Read);
         MoveFast(tmp,PByteArray(result)^[Size],Read);
         inc(Size,Read);
-      until Read<SizeOf(tmp);
+      until false;
     end else begin
       Size := GetFileSize(F,nil);
       if Size>0 then begin
