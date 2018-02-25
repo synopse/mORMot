@@ -1496,6 +1496,7 @@ var action: TMVCAction;
     WR: TTextWriter;
     methodOutput: RawUTF8;
     renderContext: variant;
+    tmp: TTextWriterStackBuffer;
 begin
   action.ReturnedStatus := HTTP_SUCCESS;
   fMethodIndex := aMethodIndex;
@@ -1504,7 +1505,7 @@ begin
       repeat
         try
           isAction := fApplication.fFactory.Methods[fMethodIndex].ArgsResultIsServiceCustomAnswer;
-          WR := TJSONSerializer.CreateOwnedStream;
+          WR := TJSONSerializer.CreateOwnedStream(tmp);
           try
             WR.Add('{');
             exec := TServiceMethodExecute.Create(@fApplication.fFactory.Methods[fMethodIndex]);
