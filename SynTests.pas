@@ -94,6 +94,12 @@ type
   // - to be used with TSynTest descendants
   TSynTestEvent = procedure of object;
 
+  /// allows to tune TSynTest process
+  // - tcoLogEachCheck will log as sllCustom4 each non void Check() message
+  TSynTestOption = (tcoLogEachCheck);
+  /// set of options to tune TSynTest process
+  TSynTestOptions = set of TSynTestOption;
+
 {$M+} { we need the RTTI for the published methods of this object class }
   /// a generic class for both tests suit and cases
   // - purpose of this ancestor is to have RTTI for its published methods,
@@ -111,6 +117,7 @@ type
     end;
     fIdent: string;
     fInternalTestsCount: integer;
+    fOptions: TSynTestOptions;
     function GetTestName(Index: integer): string; {$ifdef HASINLINE}inline;{$endif}
     function GetTestMethod(Index: integer): TSynTestEvent; {$ifdef HASINLINE}inline;{$endif}
     function GetCount: Integer;
@@ -143,6 +150,8 @@ type
     // - any TestName/TestMethod[] index higher or equal to this value has been
     // added by a specific call to the Add() method
     property InternalTestsCount: integer read fInternalTestsCount;
+    /// allows to tune the test case process
+    property Options: TSynTestOptions read fOptions write fOptions;
   published
     { all published methods of the children will be run as individual tests
       - these methods must be declared as procedure with no parameter }
@@ -174,6 +183,7 @@ type
     // - WARNING: this method should be re-entrant - so using FreeAndNil() is
     // a good idea in this method :)
     procedure CleanUp; virtual;
+    procedure AddLog(condition: Boolean; const msg: string);
   public
     /// create the test case instance
     // - must supply a test suit owner
@@ -328,7 +338,8 @@ type
     // ! TSynLogTestLog := TSQLLog;
     // ! TMyTestsClass.RunAsConsole('My Automated Tests',LOG_VERBOSE);
     class procedure RunAsConsole(const CustomIdent: string='';
-      withLogs: TSynLogInfos=[sllLastError,sllError,sllException,sllExceptionOS]); virtual;
+      withLogs: TSynLogInfos=[sllLastError,sllError,sllException,sllExceptionOS];
+      options: TSynTestOptions=[]); virtual;
     /// create the test instance
     // - if an identifier is not supplied, the class name is used, after
     // T[Syn][Test] left trim and un-camel-case
@@ -517,16 +528,18 @@ end;
 
 { TSynTestCase }
 
-{.$define CHECKDOLOG}
+procedure TSynTestCase.AddLog(condition: Boolean; const msg: string);
+const LEV: array[boolean] of TSynLogInfo = (sllFail, sllCustom4);
+begin
+  TSynLogTestLog.Add.Log(LEV[condition],'% % [%]',[ClassType,TestName[MethodIndex],msg]);
+end;
 
 procedure TSynTestCase.Check(condition: Boolean; const msg: string);
 begin
   if self=nil then
     exit;
-  {$ifdef CHECKDOLOG}
-  if msg<>'' then
-    TSynLogTestLog.Add.Log(sllTrace,msg);
-  {$endif}
+  if (msg<>'') and (tcoLogEachCheck in fOptions) then
+    AddLog(condition,msg);
   InterlockedIncrement(fAssertions);
   if not condition then
     TestFailed(msg);
@@ -538,10 +551,8 @@ begin
     result := false;
     exit;
   end;
-  {$ifdef CHECKDOLOG}
-  if msg<>'' then
-    TSynLogTestLog.Add.Log(sllTrace,msg);
-  {$endif}
+  if (msg<>'') and (tcoLogEachCheck in fOptions) then
+    AddLog(condition,msg);
   InterlockedIncrement(fAssertions);
   if condition then
     result := false else begin
@@ -570,16 +581,16 @@ end;
 
 procedure TSynTestCase.CheckUTF8(condition: Boolean; const msg: RawUTF8;
   const args: array of const);
-  procedure PerformFail;
+  procedure SubProcToAvoidTryFinally;
   var utf8: RawUTF8;
   begin
     FormatUTF8(msg,args,utf8);
-    TestFailed(UTF8ToString(utf8));
+    Check(condition,UTF8ToString(utf8));
   end;
 begin
-  if condition then
+  if condition and not (tcoLogEachCheck in fOptions) then
     InterlockedIncrement(fAssertions) else
-    PerformFail;
+    SubProcToAvoidTryFinally;
 end;
 
 procedure TSynTestCase.CheckLogTimeStart;
@@ -601,6 +612,7 @@ constructor TSynTestCase.Create(Owner: TSynTests; const Ident: string);
 begin
   inherited Create(Ident);
   fOwner := Owner;
+  fOptions := Owner.Options;
 end;
 
 procedure TSynTestCase.CleanUp;
@@ -671,8 +683,9 @@ var n: integer;
     WR: TTextWriter;
     s: string[3];
     last: TKind;
+    tmp: TTextWriterStackBuffer;
 begin
-  WR := TTextWriter.CreateOwnedStream;
+  WR := TTextWriter.CreateOwnedStream(tmp);
   try
     last := paragraph;
     while WordCount>0 do begin
@@ -778,7 +791,7 @@ end;
 
 constructor TSynTests.Create(const Ident: string);
 begin
-  inherited;
+  inherited Create(Ident);
   fFailed := TStringList.Create;
   fTestCase := TObjectList.Create;
 end;
@@ -1041,7 +1054,7 @@ end;
 {$I+}
 
 class procedure TSynTests.RunAsConsole(const CustomIdent: string;
-  withLogs: TSynLogInfos);
+  withLogs: TSynLogInfos; options: TSynTestOptions);
 var tests: TSynTests;
 begin
   if self=TSynTests then
@@ -1059,6 +1072,7 @@ begin
   // testing is performed by some dedicated classes defined in the caller units
   tests := Create(CustomIdent);
   try
+    tests.Options := options;
     if ParamCount<>0 then begin
       tests.SaveToFile(paramstr(1)); // DestPath on command line -> export to file
       Writeln(tests.Ident,#13#10#13#10' Running tests... please wait');
