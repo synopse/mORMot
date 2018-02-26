@@ -35,6 +35,7 @@ var aModel: TSQLModel;
     aApplication: TBlogApplication;
     aHTTPServer: TSQLHttpServer;
 begin
+  //with TSQLLog.Family do Level := LOG_VERBOSE;
   aModel := CreateModel;
   try
     aServer := TSQLRestServerDB.Create(aModel,ChangeFileExt(ExeVersion.ProgramFileName,'.db'));

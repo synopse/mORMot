@@ -526,21 +526,20 @@
 {$V-} // disable Var-String Checking
 {$T-} // Typed @ operator
 {$Z1} // enumerators stored as byte by default
-{$IFNDEF FPC}
+{$ifndef FPC}
   {$P+} // Open string params
-{$ENDIF FPC}
+  {$ifdef VER150}
+    {$WARN SYMBOL_DEPRECATED OFF}
+    {$WARN UNSAFE_TYPE OFF}
+    {$WARN UNSAFE_CODE OFF}
+    {$WARN UNSAFE_CAST OFF}
+  {$ENDIF}
 
-{$ifdef VER150}
-  {$WARN SYMBOL_DEPRECATED OFF}
-  {$WARN UNSAFE_TYPE OFF}
-  {$WARN UNSAFE_CODE OFF}
-  {$WARN UNSAFE_CAST OFF}
-{$ENDIF}
-
-{$ifdef CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
-  {$WARN SYMBOL_PLATFORM OFF}
-  {$WARN UNIT_PLATFORM OFF}
-{$endif}
+  {$ifdef CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
+    {$WARN SYMBOL_PLATFORM OFF}
+    {$WARN UNIT_PLATFORM OFF}
+  {$endif}
+{$endif FPC}
 
 // see https://synopse.info/fossil/tktview?name=6593f0fbd1
 {$ifndef WITHUXTHEME}
