@@ -8635,7 +8635,7 @@ procedure THttpApiServer.SetMaximumAllowedContentLength(aMax: cardinal);
 var i: integer;
 begin
   inherited SetMaximumAllowedContentLength(aMax);
-  if fClones<>nil then // event is shared by all clones
+  if fClones<>nil then // parameter is shared by all clones
     for i := 0 to fClones.Count-1 do
       THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetMaximumAllowedContentLength(aMax);
 end;
