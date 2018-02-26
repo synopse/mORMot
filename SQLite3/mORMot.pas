@@ -38645,7 +38645,7 @@ begin
     while not (P^ in [#0,#13]) do inc(P);
     if P^=#0 then break else inc(P);
     if P^=#10 then inc(P);
-  until false;
+  until P^=#0;
 end;
 
 function TSQLRestClientURI.EngineDelete(TableModelIndex: integer; ID: TID): boolean;
