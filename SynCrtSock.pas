@@ -1150,7 +1150,7 @@ type
     procedure SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody); virtual;
     procedure SetOnBeforeRequest(const aEvent: TOnHttpServerRequest); virtual;
     procedure SetOnAfterRequest(const aEvent: TOnHttpServerRequest); virtual;
-    procedure SetOnAfterResponse(const aEvent: TOnHttpServerRequest);
+    procedure SetOnAfterResponse(const aEvent: TOnHttpServerRequest); virtual;
     procedure SetMaximumAllowedContentLength(aMax: cardinal); virtual;
     procedure SetRemoteIPHeader(const aHeader: SockString);
     function DoBeforeRequest(Ctxt: THttpServerRequest): cardinal;
@@ -1359,6 +1359,9 @@ type
     function GetLogging: boolean;
     procedure SetServerName(const aName: SockString); override;
     procedure SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody); override;
+    procedure SetOnBeforeRequest(const aEvent: TOnHttpServerRequest); override;
+    procedure SetOnAfterRequest(const aEvent: TOnHttpServerRequest); override;
+    procedure SetOnAfterResponse(const aEvent: TOnHttpServerRequest); override;
     procedure SetMaximumAllowedContentLength(aMax: cardinal); override;
     procedure SetLoggingServiceName(const aName: SockString);
     /// server main loop - don't change directly
@@ -8599,6 +8602,33 @@ begin
   if fClones<>nil then // event is shared by all clones
     for i := 0 to fClones.Count-1 do
       THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetOnBeforeBody(aEvent);
+end;
+
+procedure THttpApiServer.SetOnBeforeRequest(const aEvent: TOnHttpServerRequest);
+var i: integer;
+begin
+  inherited SetOnBeforeRequest(aEvent);
+  if fClones<>nil then // event is shared by all clones
+    for i := 0 to fClones.Count-1 do
+      THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetOnBeforeRequest(aEvent);
+end;
+
+procedure THttpApiServer.SetOnAfterRequest(const aEvent: TOnHttpServerRequest);
+var i: integer;
+begin
+  inherited SetOnAfterRequest(aEvent);
+  if fClones<>nil then // event is shared by all clones
+    for i := 0 to fClones.Count-1 do
+      THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetOnAfterRequest(aEvent);
+end;
+
+procedure THttpApiServer.SetOnAfterResponse(const aEvent: TOnHttpServerRequest);
+var i: integer;
+begin
+  inherited SetOnAfterRequest(aEvent);
+  if fClones<>nil then // event is shared by all clones
+    for i := 0 to fClones.Count-1 do
+      THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetOnAfterResponse(aEvent);
 end;
 
 procedure THttpApiServer.SetMaximumAllowedContentLength(aMax: cardinal);
