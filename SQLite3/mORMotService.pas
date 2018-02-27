@@ -1181,7 +1181,9 @@ function ServicesRun: boolean;
 var S: array of TServiceTableEntry;
     service: TService;
     i: integer;
+    {$ifndef NOEXCEPTIONINTERCEPT}
     dummy: TSynLog;
+    {$endif}
 begin
   if (Services=nil) or (Services.Count=0) then begin
     result := false;
@@ -1198,15 +1200,18 @@ begin
     S[i].lpServiceName := pointer(TService(Services.List[i]).ServiceName);
     S[i].lpServiceProc := ServiceProc;
   end;
+  {$ifndef NOEXCEPTIONINTERCEPT}
   dummy := GlobalCurrentHandleExceptionSynLog;
   GlobalCurrentHandleExceptionSynLog := nil; // don't log any EExternalException
   try
+  {$endif}
     result := StartServiceCtrlDispatcher(pointer(S));
+  {$ifndef NOEXCEPTIONINTERCEPT}
   finally
     GlobalCurrentHandleExceptionSynLog := dummy;
   end;
+  {$endif}
 end;
-
 
 { TServiceSingle }
 
