@@ -28864,11 +28864,6 @@ begin
   result := false;
 end;
 
-function FindWinAnsiIniNameValue(P: PUTF8Char; UpperName: PAnsiChar): RawUTF8;
-begin
-  result := WinAnsiToUtf8(RawByteString(FindIniNameValue(P,UpperName)));
-end;
-
 function GetSectionContent(SectionFirstLine: PUTF8Char): RawUTF8;
 var PBeg: PUTF8Char;
 begin
