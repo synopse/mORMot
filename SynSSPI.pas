@@ -453,7 +453,7 @@ var Sizes: TSecPkgContext_Sizes;
 begin
   // Sizes.cbSecurityTrailer is size of the trailer (signature + padding) block
   if QueryContextAttributesW(@aSecContext.CtxHandle, SECPKG_ATTR_SIZES, @Sizes) <> 0 then
-    ESynSSPI.CreateLastOSError(aSecContext);
+    raise ESynSSPI.CreateLastOSError(aSecContext);
 
   SrcLen := Length(aPlain);
   EncLen := SizeOf(Cardinal) + Sizes.cbSecurityTrailer + SrcLen;
@@ -469,7 +469,7 @@ begin
 
   Status := EncryptMessage(@aSecContext.CtxHandle, 0, @InDesc, 0);
   if Status < 0 then
-    ESynSSPI.CreateLastOSError(aSecContext);
+    raise ESynSSPI.CreateLastOSError(aSecContext);
 
   // Encrypted data buffer structure:
   //
@@ -498,14 +498,14 @@ begin
   BufPtr := PByte(aEncrypted);
   if EncLen < SizeOf(Cardinal) then  begin
     SetLastError(ERROR_INVALID_PARAMETER);
-    ESynSSPI.CreateLastOSError(aSecContext);
+    raise ESynSSPI.CreateLastOSError(aSecContext);
   end;
 
   SigLen := PCardinal(BufPtr)^;
   Inc(BufPtr, SizeOf(Cardinal));
   if EncLen < (SizeOf(Cardinal) + SigLen) then begin
     SetLastError(ERROR_INVALID_PARAMETER);
-    ESynSSPI.CreateLastOSError(aSecContext);
+    raise ESynSSPI.CreateLastOSError(aSecContext);
   end;
 
   SrcLen := EncLen - SizeOf(Cardinal) - SigLen;
@@ -521,7 +521,7 @@ begin
 
   Status := DecryptMessage(@aSecContext.CtxHandle, @InDesc, 0, QOP);
   if Status < 0 then
-    ESynSSPI.CreateLastOSError(aSecContext);
+    raise ESynSSPI.CreateLastOSError(aSecContext);
 end;
 
 
@@ -550,7 +550,7 @@ procedure TSynSSPIAbstract.EnsureStreamSizes;
 begin
   if fStreamSizes.cbHeader=0 then
     if QueryContextAttributesW(@fContext.CtxHandle,SECPKG_ATTR_STREAM_SIZES,@fStreamSizes) <> 0 then
-      ESynSSPI.CreateLastOSError(fContext);
+      raise ESynSSPI.CreateLastOSError(fContext);
 end;
 
 procedure TSynSSPIAbstract.DeleteContext;
