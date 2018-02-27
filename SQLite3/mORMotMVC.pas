@@ -102,6 +102,8 @@ type
     fViewTemplateFolder: TFileName;
     fFactoryErrorIndex: integer;
     function GetViewStaticFolder: TFileName;
+    /// return the static file contents
+    function GetStaticFile(const aFileName: TFileName): RawByteString; virtual;
     /// overriden implementations should return the rendered content
     procedure Render(methodIndex: Integer; const Context: variant; var View: TMVCView); virtual; abstract;
   public
@@ -161,6 +163,12 @@ type
     class procedure md5(const Value: variant; out result: variant);
     class procedure sha1(const Value: variant; out result: variant);
     class procedure sha256(const Value: variant; out result: variant);
+    /// search for template files in ViewTemplateFolder
+    function FindTemplates(const Mask: TFileName): TFileNameDynArray; virtual;
+    /// return the template file contents
+    function GetTemplate(const aFileName: TFileName): RawUTF8; virtual;
+    /// return the template file date and time
+    function GetTemplateAge(const aFileName: TFileName): TDateTime; virtual;
     /// overriden implementations should return the rendered content
     procedure Render(methodIndex: Integer; const Context: variant; var View: TMVCView); override;
   public
@@ -699,6 +707,11 @@ begin
     fLogClass := aLogClass;
 end;
 
+function TMVCViewsAbtract.GetStaticFile(const aFileName: TFileName): RawByteString;
+begin
+  result := StringFromFile(fViewTemplateFolder+aFileName);
+end;
+
 function TMVCViewsAbtract.GetViewStaticFolder: TFileName;
 begin
   result := ViewTemplateFolder+STATIC_URI;
@@ -761,11 +774,11 @@ end;
 
 constructor TMVCViewsMustache.Create(aInterface: PTypeInfo;
   const aParameters: TMVCViewsMustacheParameters; aLogClass: TSynLogClass);
-var m: integer;
+var m, i: integer;
     LowerExt: TFileName;
+    files: TFileNameDynArray;
     partialName: RawUTF8;
     info: variant;
-    SR: TSearchRec;
 begin
   inherited Create(aInterface,aLogClass);
   // get views
@@ -773,7 +786,8 @@ begin
   if aParameters.Folder='' then
     fViewTemplateFolder := ExeVersion.ProgramFilePath+'Views'+PathDelim else
     fViewTemplateFolder := IncludeTrailingPathDelimiter(aParameters.Folder);
-  if not DirectoryExists(fViewTemplateFolder) then
+  if (aParameters.ExtensionForNotExistingTemplate<>'') and
+     (not DirectoryExists(fViewTemplateFolder)) then
     CreateDir(fViewTemplateFolder);
   if aParameters.CSVExtensions='' then
     LowerExt := ',html,json,css,' else
@@ -784,50 +798,44 @@ begin
   with fViews[m] do begin
     Locker := TAutoLocker.Create;
     MethodName := UTF8ToString(fFactory.Methods[m].URI);
-    SearchPattern := fViewTemplateFolder+MethodName+'.*';
-    if FindFirst(SearchPattern,faAnyFile-faDirectory,SR)=0 then
-      try
-        repeat
-          FileExt := SysUtils.LowerCase(copy(ExtractFileExt(SR.Name),2,100));
-          if Pos(','+FileExt+',',LowerExt)>0 then
-            break; // found a template with the right extension
-        until FindNext(SR)<>0;
-        ShortFileName := SR.Name;
-        FileName := fViewTemplateFolder+ShortFileName;
-        ContentType := GetMimeContentType(nil,0,ShortFileName);
-      finally
-        FindClose(SR);
-      end else begin
-        fLogClass.Add.Log(
-          sllWarning,'%.Create: Missing View file in %',[self,SearchPattern]);
-        if aParameters.ExtensionForNotExistingTemplate<>'' then begin
-          ShortFileName := MethodName+aParameters.ExtensionForNotExistingTemplate;
-          FileName := fViewTemplateFolder+ShortFileName;
-          info := ContextFromMethod(fFactory.Methods[m]);
-          info.interfaceName := fFactory.InterfaceTypeInfo^.Name;
-          FileFromString(StringReplaceChars(StringReplaceChars(
-            TSynMustache.Parse(MUSTACHE_VOIDVIEW).Render(info),'<','{'),'>','}'),
-            FileName);
-        end;
+    SearchPattern := MethodName+'.*';
+    files := FindTemplates(SearchPattern);
+    if length(files)>0 then begin
+      for i := 0 to length(files)-1 do begin
+        ShortFileName := files[i];
+        FileExt := SysUtils.LowerCase(copy(ExtractFileExt(ShortFileName),2,100));
+        if Pos(','+FileExt+',',LowerExt)>0 then
+          break; // found a template with the right extension
       end;
+      FileName := fViewTemplateFolder+ShortFileName;
+      ContentType := GetMimeContentType(nil,0,ShortFileName);
+    end else begin
+      fLogClass.Add.Log(
+        sllWarning,'%.Create: Missing View file in %',[self,SearchPattern]);
+      if aParameters.ExtensionForNotExistingTemplate<>'' then begin
+        ShortFileName := MethodName+aParameters.ExtensionForNotExistingTemplate;
+        FileName := fViewTemplateFolder+ShortFileName;
+        info := ContextFromMethod(fFactory.Methods[m]);
+        info.interfaceName := fFactory.InterfaceTypeInfo^.Name;
+        FileFromString(StringReplaceChars(StringReplaceChars(
+          TSynMustache.Parse(MUSTACHE_VOIDVIEW).Render(info),'<','{'),'>','}'),
+          FileName);
+      end;
+    end;
   end;
   fViewHelpers := aParameters.Helpers;
   // get partials
   fViewPartials := TSynMustachePartials.Create;
-  if FindFirst(fViewTemplateFolder+'*.partial',faAnyFile,SR)=0 then
-  try
-    repeat
-      StringToUTF8(GetFileNameWithoutExt(SR.Name),partialName);
-      try
-        fViewPartials.Add(partialName,AnyTextFileToRawUTF8(fViewTemplateFolder+SR.Name,true));
-      except
-        on E: Exception do
-          fLogClass.Add.Log(
-            sllError,'%.Create: Invalid Partial file % - %',[self,SR.Name,E]);
-      end;
-    until FindNext(SR)<>0;
-  finally
-    FindClose(SR);
+  files := FindTemplates('*.partial');
+  for i := 0 to length(files)-1 do begin
+    StringToUTF8(GetFileNameWithoutExt(files[i]),partialName);
+    try
+      fViewPartials.Add(partialName,GetTemplate(files[i]));
+    except
+      on E: Exception do
+        fLogClass.Add.Log(
+          sllError,'%.Create: Invalid Partial file % - %',[self,files[i],E]);
+    end;
   end;
 end;
 
@@ -1111,18 +1119,18 @@ begin
         [self,MethodName,SearchPattern]);
     if (Mustache=nil) or ((fViewTemplateFileTimestampMonitor<>0) and
        (FileTimestampCheckTick<GetTickCount64)) then begin
-      age := FileAgeToDateTime(FileName);
+      age := GetTemplateAge(ShortFileName);
       if (Mustache=nil) or (age<>FileTimestamp) then begin
         Mustache := nil; // no Mustache.Free: TSynMustache instances are cached
         FileTimestamp := age;
-        Template := AnyTextFileToRawUTF8(FileName,true);
+        Template := GetTemplate(ShortFileName);
         if Template<>'' then
         try
           Mustache := TSynMustache.Parse(Template);
         except
           on E: Exception do
             raise EMVCException.CreateUTF8('%.Render(''%''): Invalid Template: % - %',
-              [self,FileName,E,E.Message]);
+              [self,ShortFileName,E,E.Message]);
         end else
           raise EMVCException.CreateUTF8('%.Render(''%''): Missing Template in ''%''',
             [self,ShortFileName,SearchPattern]);
@@ -1134,6 +1142,23 @@ begin
     aContentType := ContentType;
     result := Mustache;
   end;
+end;
+
+function TMVCViewsMustache.FindTemplates(const Mask: TFileName): TFileNameDynArray;
+  var files: TFindFilesDynArray;
+begin
+  files := FindFiles(fViewTemplateFolder, Mask, '', False, False);
+  result := FindFilesDynArrayToFileNames(files);
+end;
+
+function TMVCViewsMustache.GetTemplate(const aFileName: TFileName): RawUTF8;
+begin
+  result := AnyTextFileToRawUTF8(fViewTemplateFolder+aFileName,true);
+end;
+
+function TMVCViewsMustache.GetTemplateAge(const aFileName: TFileName): TDateTime;
+begin
+  result := FileAgeToDateTime(fViewTemplateFolder+aFileName);
 end;
 
 procedure TMVCViewsMustache.Render(methodIndex: Integer; const Context: variant;
