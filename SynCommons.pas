@@ -27566,8 +27566,10 @@ begin
     result := Base64AnyDecode(ConvertBase64ToBin,sp,pointer(data),len);
     if not result then
       data := '';
-  end else
+  end else begin
     result := false;
+    data := '';
+  end;
 end;
 
 function Base64ToBin(sp: PAnsiChar; len: PtrInt; var blob: TSynTempBuffer): boolean;
