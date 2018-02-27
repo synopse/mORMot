@@ -1792,7 +1792,7 @@ begin
       if PosEx('..',rawFormat)>0 then // avoid injection
         static := '' else begin
         staticFileName := UTF8ToString(StringReplaceChars(rawFormat,'/',PathDelim));
-        static := StringFromFile(fViews.ViewTemplateFolder+STATIC_URI+PathDelim+staticFileName);
+        static := fViews.GetStaticFile(STATIC_URI+PathDelim+staticFileName);
         if static<>'' then
           static := GetMimeContentType(nil,0,staticFileName)+#0+static;
       end;
