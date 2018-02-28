@@ -1787,16 +1787,21 @@ begin
      IdemPropNameU(rawMethodName,STATIC_URI) then begin
     // code below will use a local in-memory cache, but would do the same as:
     // Ctxt.ReturnFileFromFolder(fViews.ViewTemplateFolder+STATIC_URI);
-    static := fStaticCache.Value(rawFormat,#0);
-    if static=#0 then begin
-      if PosEx('..',rawFormat)>0 then // avoid injection
-        static := '' else begin
-        staticFileName := UTF8ToString(StringReplaceChars(rawFormat,'/',PathDelim));
-        static := fViews.GetStaticFile(STATIC_URI+PathDelim+staticFileName);
-        if static<>'' then
-          static := GetMimeContentType(nil,0,staticFileName)+#0+static;
+    fCacheLocker.Enter;
+    try
+      static := fStaticCache.Value(rawFormat,#0);
+      if static=#0 then begin
+        if PosEx('..',rawFormat)>0 then // avoid injection
+          static := '' else begin
+          staticFileName := UTF8ToString(StringReplaceChars(rawFormat,'/',PathDelim));
+          static := fViews.GetStaticFile(STATIC_URI+PathDelim+staticFileName);
+          if static<>'' then
+            static := GetMimeContentType(nil,0,staticFileName)+#0+static;
+        end;
+        fStaticCache.Add(rawFormat,static);
       end;
-      fStaticCache.Add(rawFormat,static);
+    finally
+      fCacheLocker.Leave;
     end;
     if static='' then
       Ctxt.Error('',HTTP_NOTFOUND) else begin
