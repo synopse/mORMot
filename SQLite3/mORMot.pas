@@ -35233,6 +35233,7 @@ begin
   ct := FindIniNameValue(pointer(Head),HEADER_CONTENT_TYPE_UPPER);
   if IdemPChar(pointer(ct),pointer(fCustomEncryptContentPrefixUpper)) then begin
     if fCustomEncryptAES<>nil then begin
+      // decrypt using PKCS7 + initial random/unique IV at the beginning
       Body := fCustomEncryptAES.DecryptPKCS7(Body,true,false);
       if Body='' then begin
         InternalLog('CustomEncrypt %.DecryptPKCS7 reject',[fCustomEncryptAES.ClassType]);
@@ -35240,6 +35241,7 @@ begin
       end;
     end;
     if fCustomEncryptCompress<>nil then begin
+      // optionally uncompresss Body+signature
       Body := fCustomEncryptCompress.Decompress(Body);
       if Body='' then begin
         InternalLog('CustomEncrypt %.Decompress reject',[fCustomEncryptCompress.ClassType]);
@@ -35248,6 +35250,7 @@ begin
     end;
     payloadlen := length(Body)-fCustomEncryptSign.SignatureSize;
     if (payloadlen>0) and (fCustomEncryptSign.SignatureSize<>0) then begin
+      // validate the binary signature of supplied Url+Body at the Body end 
       sign := fCustomEncryptSign;
       P := pointer(Url);
       if P^='/' then
@@ -35280,6 +35283,7 @@ begin
   if (fCustomEncryptContentPrefix='') or (Body='') or (Url='') then
     exit;
   if fCustomEncryptSign.SignatureSize<>0 then begin
+    // append the binary signature of supplied Url+Body to the Body
     payloadlen := length(Body);
     sign := fCustomEncryptSign;
     SetLength(Body,payloadlen+sign.SignatureSize);
@@ -35292,8 +35296,10 @@ begin
     sign.Final(PHash512Rec(P+payloadlen)^);
   end;
   if fCustomEncryptCompress<>nil then
+    // optionally compresss Body+signature
     Body := fCustomEncryptCompress.Compress(Body);
   if fCustomEncryptAES<>nil then
+    // encrypt using PKCS7 + initial random/unique IV at the beginning
     Body := fCustomEncryptAES.EncryptPKCS7(Body,true);
   ct := FindIniNameValue(pointer(Head),HEADER_CONTENT_TYPE_UPPER);
   if ct='' then // not specified -> append 'application/json'

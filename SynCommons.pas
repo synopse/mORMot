@@ -4812,6 +4812,9 @@ procedure ExcludeInteger(var Values, Excluded: TIntegerDynArray;
 /// sort and remove any 32-bit duplicated integer from Values[]
 procedure DeduplicateInteger(var Values: TIntegerDynArray);
 
+/// create a new 32-bit integer dynamic array with the values from another one
+procedure CopyInteger(const Source: TIntegerDynArray; out Dest: TIntegerDynArray);
+
 /// delete any 16-bit integer in Values[]
 procedure DeleteWord(var Values: TWordDynArray; Index: PtrInt);
 
@@ -4829,6 +4832,9 @@ procedure ExcludeInt64(var Values, Excluded: TInt64DynArray;
 
 /// sort and remove any 64-bit duplicated integer from Values[]
 procedure DeduplicateInt64(var Values: TInt64DynArray);
+
+/// create a new 64-bit integer dynamic array with the values from another one
+procedure CopyInt64(const Source: TInt64DynArray; out Dest: TInt64DynArray);
 
 /// find the maximum 32-bit integer in Values[]
 function MaxInteger(const Values: TIntegerDynArray; ValuesCount: integer;
@@ -27561,8 +27567,10 @@ begin
     result := Base64AnyDecode(ConvertBase64ToBin,sp,pointer(data),len);
     if not result then
       data := '';
-  end else
+  end else begin
     result := false;
+    data := '';
+  end;
 end;
 
 function Base64ToBin(sp: PAnsiChar; len: PtrInt; var blob: TSynTempBuffer): boolean;
@@ -28855,11 +28863,6 @@ begin
       P := GotoNextLine(P);
     end;
   result := false;
-end;
-
-function FindWinAnsiIniNameValue(P: PUTF8Char; UpperName: PAnsiChar): RawUTF8;
-begin
-  result := WinAnsiToUtf8(RawByteString(FindIniNameValue(P,UpperName)));
 end;
 
 function GetSectionContent(SectionFirstLine: PUTF8Char): RawUTF8;
@@ -30161,6 +30164,22 @@ begin
   n := dedup(pointer(Values),v);
   if n<>v then
     SetLength(Values,n+1);
+end;
+
+procedure CopyInteger(const Source: TIntegerDynArray; out Dest: TIntegerDynArray);
+var n: integer;
+begin
+  n := length(Source);
+  SetLength(Dest,n);
+  MoveFast(Source[0],Dest[0],n*SizeOf(Integer));
+end;
+
+procedure CopyInt64(const Source: TInt64DynArray; out Dest: TInt64DynArray);
+var n: integer;
+begin
+  n := length(Source);
+  SetLength(Dest,n);
+  MoveFast(Source[0],Dest[0],n*SizeOf(Int64));
 end;
 
 function MaxInteger(const Values: TIntegerDynArray; ValuesCount, MaxStart: integer): Integer;

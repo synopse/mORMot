@@ -548,6 +548,9 @@ type
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
       var request: TWebSocketFrame; const info: RawUTF8); override;
   public
+    /// initialize the chat protocol with an incoming frame callback 
+    constructor Create(const aName,aURI: RawUTF8;
+      const aOnIncomingFrame: TOnWebSocketProtocolChatIncomingFrame); overload;
     /// compute a new instance of the WebSockets protocol, with same parameters
     function Clone(const aClientURI: RawUTF8): TWebSocketProtocol; override;
     /// on the server side, allows to send a message over the wire to a
@@ -1135,6 +1138,8 @@ type
     // - note that those parameters won't be propagated to existing connections
     // - defined as a pointer so that you may be able to change the values
     function Settings: PWebSocketProcessSettings; {$ifdef HASINLINE}inline;{$endif}
+    /// low-level access to the WebSockets client layer
+    property Process: TWebSocketProcessClient read fProcess;
     /// this event handler will be executed for any incoming push notification
     property OnCallbackRequestProcess: TOnHttpServerRequest
       read fOnCallbackRequestProcess write fOnCallbackRequestProcess;
@@ -1515,6 +1520,13 @@ end;
 
 { TWebSocketProtocolChat }
 
+constructor TWebSocketProtocolChat.Create(const aName, aURI: RawUTF8;
+  const aOnIncomingFrame: TOnWebSocketProtocolChatIncomingFrame);
+begin
+  inherited Create(aName,aURI);
+  fOnIncomingFrame := aOnIncomingFrame;
+end;
+
 function TWebSocketProtocolChat.Clone(const aClientURI: RawUTF8): TWebSocketProtocol;
 begin
   result := TWebSocketProtocolChat.Create(fName,fURI);
@@ -1524,9 +1536,11 @@ end;
 procedure TWebSocketProtocolChat.ProcessIncomingFrame(Sender: TWebSocketProcess;
   var request: TWebSocketFrame; const info: RawUTF8);
 begin
-  if Assigned(OnInComingFrame) and Sender.InheritsFrom(TWebSocketProcessServer) then
+  if Assigned(OnInComingFrame) then
     try
-      OnIncomingFrame(TWebSocketProcessServer(Sender).fServerResp,request);
+      if Sender.InheritsFrom(TWebSocketProcessServer) then
+        OnIncomingFrame(TWebSocketProcessServer(Sender).fServerResp,request) else
+        OnIncomingFrame(nil,request);
     except
       // ignore any exception in the callback
     end;
