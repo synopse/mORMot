@@ -41,8 +41,9 @@ object frmSM45Demo: TfrmSM45Demo
       'const fs = require('#39'fs'#39');'
       'const path = require('#39'path'#39');'
       
-        'let content = fs.readFileSync(path.join(process.cwd(), '#39'ExtendDe' +
-        'buggerConsole.js'#39'));'
+        'const fileName = fs.realpathSync(path.join(process.cwd(), '#39'Exten' +
+        'dDebuggerConsole.js'#39'));'
+      'let content = fs.readFileSync(fileName);'
       'mainForm.toLog(content);'
       '/* '
       

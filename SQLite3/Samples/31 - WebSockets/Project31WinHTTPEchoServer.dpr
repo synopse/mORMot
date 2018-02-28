@@ -1,14 +1,17 @@
 program Project31WinHTTPEchoServer;
 
+{$IFDEF FPC}
+  {$MODE Delphi}
+{$ENDIF}
+
+{$APPTYPE CONSOLE}
+
 uses
   {$I SynDprUses.inc} // use FastMM4 on older Delphi, or set FPC threads
   SysUtils,
-  Windows,
   SynZip,
   SynCrtSock,
   SynCommons;
-
-{$APPTYPE CONSOLE}
 
 type
   TSimpleWebsocketServer = class
@@ -18,8 +21,8 @@ type
     function onHttpRequest(Ctxt: THttpServerRequest): cardinal;
     function onAccept(Ctxt: THttpServerRequest; var Conn: THttpApiWebSocketConnection): Boolean;
     procedure onConnect(const Conn: THttpApiWebSocketConnection );
-    procedure onMessage(const Conn: THttpApiWebSocketConnection; aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: Pointer; aBufferSize: ULONG);
-    procedure onDisconnect(const Conn: THttpApiWebSocketConnection ; aStatus: WEB_SOCKET_CLOSE_STATUS; aBuffer: Pointer; aBufferSize: ULONG);
+    procedure onMessage(const Conn: THttpApiWebSocketConnection; aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: Pointer; aBufferSize: Cardinal);
+    procedure onDisconnect(const Conn: THttpApiWebSocketConnection ; aStatus: WEB_SOCKET_CLOSE_STATUS; aBuffer: Pointer; aBufferSize: Cardinal);
   public
     constructor Create;
     destructor Destroy; override;
@@ -57,7 +60,7 @@ begin
 end;
 
 procedure TSimpleWebsocketServer.onDisconnect(const Conn: THttpApiWebSocketConnection;
-  aStatus: WEB_SOCKET_CLOSE_STATUS; aBuffer: Pointer; aBufferSize: ULONG);
+  aStatus: WEB_SOCKET_CLOSE_STATUS; aBuffer: Pointer; aBufferSize: Cardinal);
 var
   str: RawUTF8;
 begin
@@ -78,7 +81,7 @@ begin
 end;
 
 procedure TSimpleWebsocketServer.onMessage(const Conn: THttpApiWebSocketConnection;
-  aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: Pointer; aBufferSize: ULONG);
+  aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: Pointer; aBufferSize: Cardinal);
 var
   str: RawUTF8;
 begin
