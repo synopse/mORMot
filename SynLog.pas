@@ -2836,7 +2836,11 @@ begin
   if (Context.ELevel=sllException) and (Context.EInstance<>nil) and
      (Context.EClass<>EExternalException) then begin
     {$ifdef MSWINDOWS}
+    {$IFDEF FPC}
+    if Context.EClass.InheritsFrom(EOleSysError) then begin
+    {$ELSE}
     if ExceptionInheritsFrom(Context.EClass,'EOleSysError') then begin
+    {$ENDIF}
       WR.Add(' ');
       code := EOleSysError(Context.EInstance).ErrorCode;
       WR.AddPointer(code);
