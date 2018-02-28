@@ -2816,7 +2816,7 @@ begin // avoid linking of ComObj.pas just for EOleSysError
       result := true;
       exit;
     end else begin
-      E := PPointer(PtrInt(E)+vmtParent)^;
+      E := {$ifdef FPC}E.ClassParent{$else}PPointer(PtrInt(E)+vmtParent)^{$endif};
       if E<>nil then
         E := PPointer(E)^;
     end;
