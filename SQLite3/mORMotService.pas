@@ -1282,11 +1282,7 @@ var
 function pidfile: TFileName;
 begin
   if _pidfile = '' then
-    if DirectoryExists('/run') then
-      _pidfile := format('/run/%s-%s.pid', [ExeVersion.ProgramName,
-        CardinalToHexLower(ExeVersion.Hash.c3)]) // InstanceFileName hash
-    else // use executable folder on Operating Systems without /run
-      _pidfile := ChangeFileExt(ExeVersion.ProgramFileName, '.pid');
+    _pidfile := ChangeFileExt(ExeVersion.ProgramFileName, '.pid');
   result := _pidfile;
 end;
 
