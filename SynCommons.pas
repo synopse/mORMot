@@ -20313,7 +20313,7 @@ begin
       end;
       UTF16_HISURROGATE_MIN..UTF16_HISURROGATE_MAX:
         if (PtrInt(Source)>=SourceLen) or
-           (cardinal(Source^)-UTF16_LOSURROGATE_MIN>UTF16_LOSURROGATE_MAX-UTF16_LOSURROGATE_MIN) then begin
+           ((cardinal(Source^)<UTF16_LOSURROGATE_MIN) or (cardinal(Source^)>UTF16_LOSURROGATE_MAX)) then begin
 unmatch:  if (PtrInt(@Dest[3])>DestLen) or
              not (ccfReplacementCharacterForUnmatchedSurrogate in Flags) then
             break;
@@ -20327,7 +20327,7 @@ unmatch:  if (PtrInt(@Dest[3])>DestLen) or
         end;
       UTF16_LOSURROGATE_MIN..UTF16_LOSURROGATE_MAX:
         if (PtrInt(Source)>=SourceLen) or
-           (cardinal(Source^)-UTF16_HISURROGATE_MIN>UTF16_HISURROGATE_MAX-UTF16_HISURROGATE_MIN) then
+           ((cardinal(Source^)<UTF16_HISURROGATE_MIN) or (cardinal(Source^)>UTF16_HISURROGATE_MAX)) then
           goto unmatch else begin
           c := ((cardinal(Source^)-$D7C0)shl 10)+(c xor UTF16_LOSURROGATE_MIN);
           inc(Source);
