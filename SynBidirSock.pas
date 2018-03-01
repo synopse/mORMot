@@ -496,6 +496,7 @@ type
     function FrameData(const frame: TWebSocketFrame; const Head: RawUTF8;
       HeadFound: PRawUTF8=nil): pointer; virtual;
     function FrameType(const frame: TWebSocketFrame): RawUTF8; virtual;
+    function GetRemoteIP: SockString;
     function GetEncrypted: boolean;
     function GetSubprotocols: RawUTF8; virtual; // e.g. 'synopsebin, synopsebinary'
     function SetSubprotocol(const aProtocolName: RawUTF8): boolean; virtual;
@@ -515,6 +516,9 @@ type
     /// the optional URI on which this protocol would be enabled
     // - leave to '' if any URI should match
     property URI: RawUTF8 read fURI;
+    /// the associated 'Remote-IP' HTTP header value
+    // - returns '' if RemoteLocalhost=true
+    property RemoteIP: SockString read GetRemoteIP;
     /// the last error message, during frame processing
     property LastError: string read fLastError;
     /// returns TRUE if encryption is enabled during the transmission
@@ -1421,6 +1425,13 @@ end;
 function TWebSocketProtocol.SetSubprotocol(const aProtocolName: RawUTF8): boolean;
 begin
   result := IdemPropNameU(aProtocolName,fName);
+end;
+
+function TWebSocketProtocol.GetRemoteIP: SockString;
+begin
+  if (self = nil) or fRemoteLocalhost then
+    result := '' else
+    result := fRemoteIP;
 end;
 
 
@@ -2463,12 +2474,13 @@ begin
     try
       if (frame.opcode=focText) and
          (logTextFrameContent in fSettings.LogDetails) then
-        log.Log(aEvent,'% % focText %',[aMethodName,
+        log.Log(aEvent,'% % % focText %',[aMethodName,fProtocol.GetRemoteIP,
           Protocol.FrameType(frame),frame.PayLoad],self) else begin
         len := length(frame.PayLoad);
-        log.Log(aEvent,'% % % len=%%',[aMethodName,Protocol.FrameType(frame),
-          _TWebSocketFrameOpCode[frame.opcode]^,len,LogEscape(pointer(frame.PayLoad),
-          len,tmp,logBinaryFrameContent in fSettings.LogDetails)],self);
+        log.Log(aEvent,'% % % % len=%%',[aMethodName,fProtocol.GetRemoteIP,
+          Protocol.FrameType(frame),_TWebSocketFrameOpCode[frame.opcode]^,len,
+          LogEscape(pointer(frame.PayLoad),len,tmp,
+            logBinaryFrameContent in fSettings.LogDetails)],self);
       end;
     finally
       log.DisableRemoteLog(false);
