@@ -4333,7 +4333,8 @@ begin
   try
     if Instance<>nil then
       fWriter.AddInstancePointer(Instance,' ',fFamily.WithUnitName);
-    fWriter.Add(TextFmt,TextArgs,twOnSameLine);
+    fWriter.Add(TextFmt,TextArgs,twOnSameLine,
+      [woDontStoreDefault,woDontStoreEmptyString,woDontStore0,woFullExpand]);
     if LastError<>0 then
       AddErrorMessage(LastError);
   finally
