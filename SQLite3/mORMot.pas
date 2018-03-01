@@ -51592,7 +51592,7 @@ var Added: boolean;
       tkInt64{$ifdef FPC}, tkQWord{$endif}: begin
         V64 := P^.GetInt64Prop(Value);
         if not ((woDontStoreDefault in Options) and (V64=Int64(P^.Default))) and
-           not ((woDontStore0 in Options) and (V64=0)) then begin
+           not ((V64=0) and (woDontStore0 in Options)) then begin
           HR(P);
           if woTimeLogAsText in Options then
             case P^.PropType^.GetSQLFieldType of
@@ -51630,7 +51630,7 @@ var Added: boolean;
       tkEnumeration, tkInteger, tkSet: begin
         V := P^.GetOrdProp(Value);
         if not ((woDontStoreDefault in Options) and (V=P^.Default)) and
-           not ((woDontStore0 in Options) and (V=0)) then begin
+           not ((V=0) and (woDontStore0 in Options)) then begin
           HR(P);
           if {$ifdef FPC}(Kind=tkBool) or{$endif}
              ((Kind=tkEnumeration) and (P^.TypeInfo=TypeInfo(boolean))) then
@@ -51697,14 +51697,14 @@ var Added: boolean;
       tkFloat: begin
         if (P^.TypeInfo=TypeInfo(Currency)) and P^.GetterIsField then begin
           V64 := PInt64(P^.GetterAddr(Value))^;
-          if not ((woDontStore0 in Options) and (V64=0)) then begin
+          if not ((V64=0) and (woDontStore0 in Options)) then begin
             HR(P);
             AddCurr64(V64);
           end;
         end else
         if P^.TypeInfo=TypeInfo(TDateTime) then begin
           D64 := P^.GetDoubleProp(Value);
-          if not ((woDontStore0 in Options) and (D64=0)) then begin
+          if not ((D64=0) and (woDontStore0 in Options)) then begin
             HR(P);
             if woDateTimeWithMagic in Options then
               AddNoJSONEscape(@JSON_SQLDATE_MAGIC_QUOTE_VAR,4) else
@@ -51743,28 +51743,30 @@ var Added: boolean;
         end;
       end;
       tkDynArray: begin
-        HR(P);
         P^.GetDynArray(Value,dyn);
-        dynObjArray := P^.DynArrayIsObjArrayInstance;
-        if dynObjArray<>nil then begin
-          if dyn.Count=0 then begin
-            if woHumanReadableEnumSetAsComment in Options then
-              dynObjArray^.SetCustomComment(CustomComment);
-            Add('[',']');
-          end else begin // do not use AddDynArrayJSON to support HR
-            inc(fHumanReadableLevel);
-            Add('[');
-            for c := 0 to dyn.Count-1 do begin
-              WriteObject(PPointerArray(dyn.Value^)^[c],Options);
-              Add(',');
+        if not ((woDontStore0 in Options) and (dyn.Count>0)) then begin
+          HR(P);
+          dynObjArray := P^.DynArrayIsObjArrayInstance;
+          if dynObjArray<>nil then begin
+            if dyn.Count=0 then begin
+              if woHumanReadableEnumSetAsComment in Options then
+                dynObjArray^.SetCustomComment(CustomComment);
+              Add('[',']');
+            end else begin // do not use AddDynArrayJSON to support HR
+              inc(fHumanReadableLevel);
+              Add('[');
+              for c := 0 to dyn.Count-1 do begin
+                WriteObject(PPointerArray(dyn.Value^)^[c],Options);
+                Add(',');
+              end;
+              CancelLastComma;
+              dec(fHumanReadableLevel);
+              HR;
+              Add(']');
             end;
-            CancelLastComma;
-            dec(fHumanReadableLevel);
-            HR;
-            Add(']');
-          end;
-        end else
-          AddDynArrayJSON(dyn);
+          end else
+            AddDynArrayJSON(dyn);
+        end;
       end;
       {$ifdef PUBLISHRECORD}
       tkRecord{$ifdef FPC},tkObject{$endif}: begin
@@ -51773,10 +51775,12 @@ var Added: boolean;
       end;
       {$endif}
       {$ifndef NOVARIANTS}
-      tkVariant: begin // stored as JSON, e.g. '1.234' or '"text"'
-        HR(P);
+      tkVariant: begin
         P^.GetVariantProp(Value,VVariant);
-        AddVariant(VVariant,twJSONEscape);
+        if not ((TVarData(VVariant).VType<=varNull) and (woDontStore0 in Options)) then begin
+          HR(P);
+          AddVariant(VVariant,twJSONEscape); // stored as JSON, e.g. '1.234' or '"text"'
+        end;
       end;
       {$endif}
       tkClass: begin
