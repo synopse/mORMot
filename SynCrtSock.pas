@@ -500,7 +500,11 @@ type
     // - call SockSendFlush to send it through the network via SndLow()
     procedure SockSend(P: pointer; Len: integer); overload;
     /// flush all pending data to be sent
+    // - raise ECrtSocket on error
     procedure SockSendFlush;
+    /// flush all pending data to be sent
+    // - returning true on success
+    function TrySockSendFlush: boolean;
     /// fill the Buffer with Length bytes
     // - use TimeOut milliseconds wait for incoming data
     // - bypass the SockIn^ buffers
@@ -4499,6 +4503,16 @@ begin
     exit;
   SndLow(pointer(fSndBuf),fSndBufLen);
   fSndBufLen := 0;
+end;
+
+function TCrtSocket.TrySockSendFlush: boolean;
+begin
+  if fSndBufLen=0 then
+    result := true else begin
+    result := TrySndLow(pointer(fSndBuf),fSndBufLen);
+    if result then
+      fSndBufLen := 0;
+  end;
 end;
 
 procedure TCrtSocket.SndLow(P: pointer; Len: integer);

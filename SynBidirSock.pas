@@ -847,7 +847,7 @@ type
     procedure HiResDelay(const start: Int64);
     procedure Log(const frame: TWebSocketFrame; const aMethodName: RawUTF8;
       aEvent: TSynLogInfo=sllTrace; DisableRemoteLog: Boolean=false); virtual;
-    procedure SendPendingOutgoingFrames;
+    function SendPendingOutgoingFrames: boolean;
   public
     /// initialize the WebSockets process on a given connection
     // - the supplied TWebSocketProtocol will be owned by this instance
@@ -859,7 +859,8 @@ type
     // - will release the TWebSocketProtocol associated instance
     destructor Destroy; override;
     /// abstract low level incoming WebSockets framing protocol -> to be overriden
-    function GetFrame(out Frame: TWebSocketFrame; TimeOut: cardinal; IgnoreExceptions: boolean): boolean; virtual; abstract;
+    function GetFrame(out Frame: TWebSocketFrame; TimeOut: cardinal;
+      ErrorWithoutException: PInteger): boolean; virtual; abstract;
     /// abstract low level outgoing WebSockets framing protocol -> to be overriden
     // - use Outgoing.Push() to send frames asynchronously
     function SendFrame(var Frame: TWebSocketFrame): boolean; virtual; abstract;
@@ -919,7 +920,8 @@ type
     /// finalize the WebSockets process context
     destructor Destroy; override;
     /// low level incoming WebSockets framing protocol over TCrtSocket
-    function GetFrame(out Frame: TWebSocketFrame; TimeOut: cardinal; IgnoreExceptions: boolean): boolean; override;
+    function GetFrame(out Frame: TWebSocketFrame; TimeOut: cardinal;
+      ErrorWithoutException: PInteger): boolean; override;
     /// low level outgoing WebSockets framing protocol over TCrtSocket
     function SendFrame(var Frame: TWebSocketFrame): boolean; override;
     /// the associated communication socket
@@ -1615,7 +1617,8 @@ begin
       if (Ctxt.OutContentType=HTTP_RESP_NORESPONSE) or noAnswer then
         exit;
       OutputToFrame(Ctxt,status,head,answer);
-      Sender.SendFrame(answer);
+      if not Sender.SendFrame(answer) then
+        fLastError := UTF8ToString(FormatUTF8('SendFrame error %',[Sender]));
     finally
       Ctxt.Free;
     end;
@@ -2285,6 +2288,7 @@ destructor TWebSocketProcess.Destroy;
 var frame: TWebSocketFrame;
     timeout: Int64;
     log: ISynLog;
+    dummyerror: integer;
 begin
   log := WebSocketLog.Enter(self{$ifndef DELPHI5OROLDER},'Destroy'{$endif});
   if (fState<>wpsClose) and not fNoConnectionCloseAtDestroy then
@@ -2295,7 +2299,7 @@ begin
         SendPendingOutgoingFrames;
       frame.opcode := focConnectionClose;
       if SendFrame(frame) then // notify clean closure
-        GetFrame(frame,1000,true);  // expects an answer from the other side
+        GetFrame(frame,1000,@dummyerror);  // expects an answer from other side
     finally
       InterlockedDecrement(fProcessCount);
     end else
@@ -2447,11 +2451,13 @@ begin
   result := TWebSocketProtocolRest(fProtocol).FrameToOutput(answer,aRequest);
 end;
 
-procedure TWebSocketProcess.SendPendingOutgoingFrames;
+function TWebSocketProcess.SendPendingOutgoingFrames: boolean;
 begin
+  result := false;
   fOutgoing.Safe.Enter;
   try
-    if not fProtocol.SendFrames(self,fOutgoing.List,fOutgoing.Count) then
+    if fProtocol.SendFrames(self,fOutgoing.List,fOutgoing.Count) then
+      result := true else
       WebSocketLog.Add.Log(sllError,'SendPendingOutgoingFrames: SendFrames failed',self);
   finally
     fOutgoing.Safe.Leave;
@@ -2537,7 +2543,7 @@ begin
 end;
 
 function TWebCrtSocketProcess.GetFrame(out Frame: TWebSocketFrame;
-  TimeOut: cardinal; IgnoreExceptions: boolean): boolean;
+  TimeOut: cardinal; ErrorWithoutException: PInteger): boolean;
 var hdr: TFrameHeader;
     opcode: TWebSocketFrameOpCode;
     masked: boolean;
@@ -2580,15 +2586,19 @@ var hdr: TFrameHeader;
 var data: RawByteString;
     pending: integer;
 begin
+  if ErrorWithoutException<>nil then
+    ErrorWithoutException^ := 0;
   result := false;
   fSafeIn.Enter;
   try
     pending := fSocket.SockInPending(TimeOut,false);
     if pending<0 then
-      if IgnoreExceptions then
-        exit else
-        raise EWebSockets.CreateUTF8('SockInPending() Error % on %:%',
-          [fSocket.LastLowSocketError,fSocket.Server,fSocket.Port]);
+      if ErrorWithoutException<>nil then begin
+        ErrorWithoutException^ := fSocket.LastLowSocketError;
+        exit;
+      end else
+        raise EWebSockets.CreateUTF8('SockInPending() Error % on %:% - %',
+          [fSocket.LastLowSocketError,fSocket.Server,fSocket.Port,fProtocol.fRemoteIP]);
     if pending=1 then // 0=noneinbufferorsocket, 1=onlybuffer, 2=enough
       pending := fSocket.SockInPending(TimeOut,true); // aSocketForceCheck=true
     if pending<2 then
@@ -2600,8 +2610,12 @@ begin
     while hdr.first and FRAME_FIN=0 do begin // handle partial payloads
       GetHeader;
       if (opcode<>focContinuation) and (opcode<>Frame.opcode) then
-        if IgnoreExceptions then
-          exit else
+        if ErrorWithoutException<>nil then begin
+          WebSocketLog.Add.Log(sllDebug, 'GetFrame: received %, expected %',
+            [_TWebSocketFrameOpCode[opcode]^,_TWebSocketFrameOpCode[Frame.opcode]^],self);
+          ErrorWithoutException^ := maxInt;
+          exit;
+        end else
           raise EWebSockets.CreateUTF8('%.GetFrame: received %, expected %',
             [self,_TWebSocketFrameOpCode[opcode]^,_TWebSocketFrameOpCode[Frame.opcode]^]);
       GetData(data);
@@ -2650,17 +2664,19 @@ begin
         hdr.len8 := FRAME_LEN8BYTES or fMaskSentFrames;
         hdr.len64 := bswap32(len);
         hdr.len32 := 0;
-        fSocket.SndLow(@hdr,10+fMaskSentFrames shr 5);
         // huge payload sent outside TCrtSock buffers
-        fSocket.SndLow(pointer(Frame.payload),len);
-        SetLastPingTicks;
+        if not fSocket.TrySndLow(@hdr,10+fMaskSentFrames shr 5) or
+           not fSocket.TrySndLow(pointer(Frame.payload),len) then
+          result := false; 
+        SetLastPingTicks(not result);
         exit;
       end;
       if fMaskSentFrames<>0 then
         fSocket.SockSend(@hdr.mask,4);
       fSocket.SockSend(pointer(Frame.payload),len);
-      fSocket.SockSendFlush; // send at once up to 64 KB
-      SetLastPingTicks;
+      if not fSocket.TrySockSendFlush then // send at once up to 64 KB
+        result := false;
+      SetLastPingTicks(not result);
     except
       result := false;
     end;
@@ -2672,6 +2688,7 @@ end;
 procedure TWebCrtSocketProcess.ProcessLoop;
 var request: TWebSocketFrame;
     elapsed: cardinal;
+    sockerror: integer;
 begin
   if fProtocol=nil then
     exit;
@@ -2682,7 +2699,7 @@ begin
     try
       InterlockedIncrement(fProcessCount);
       try
-        if GetFrame(request,1,false) then begin
+        if GetFrame(request,1,@sockerror) then begin
           case request.opcode of
           focPing: begin
             request.opcode := focPong;
@@ -2702,10 +2719,19 @@ begin
           end;
         end else
         if fOwnerThread.Terminated then
-          break else begin
+          break else
+        if sockerror<>0 then begin
+          WebSocketLog.Add.Log(sllTrace,'GetFrame SockInPending error % on %',
+            [sockerror,fProtocol],self);
+          fState := wpsClose;
+          break; // will close the connection
+        end else begin
           elapsed := LastPingDelay;
           if (elapsed>0) and (fOutgoing.Count>0) then
-            SendPendingOutgoingFrames else
+            if not SendPendingOutgoingFrames then begin
+              fState := wpsClose;
+              break;
+            end else
           if (fSettings.HeartbeatDelay<>0) and
              (elapsed>fSettings.HeartbeatDelay) then begin
             request.opcode := focPing;
