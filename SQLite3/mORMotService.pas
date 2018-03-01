@@ -1282,7 +1282,7 @@ var
 function pidfile: TFileName;
 begin
   if _pidfile = '' then
-    _pidfile := ChangeFileExt(ExeVersion.ProgramFileName, '.pid');
+    _pidfile := format('%s.%s.pid', [ExeVersion.ProgramFilePath, ExeVersion.ProgramName]);
   result := _pidfile;
 end;
 
