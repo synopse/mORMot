@@ -8050,6 +8050,7 @@ type
   // is defined, and only the topmost class level properties would be serialized
   // - woInt64AsHex will force Int64/QWord to be written as hexadecimal string -
   // see j2oAllowInt64Hex reverse option fot Json2Object
+  // - woDontStore0 will avoid serializating number properties equal to 0 
   TTextWriterWriteObjectOption = (
     woHumanReadable, woDontStoreDefault, woFullExpand,
     woStoreClassName, woStorePointer, woStoreStoredFalse,
@@ -8057,7 +8058,7 @@ type
     woEnumSetsAsText, woDateTimeWithMagic, woDateTimeWithZSuffix, woTimeLogAsText,
     woIDAsIDstr, woSQLRawBlobAsBase64, woHideSynPersistentPassword,
     woObjectListWontStoreClassName, woDontStoreEmptyString,
-    woDontStoreInherited, woInt64AsHex);
+    woDontStoreInherited, woInt64AsHex, woDontStore0);
   /// options set for TTextWriter.WriteObject() method
   TTextWriterWriteObjectOptions = set of TTextWriterWriteObjectOption;
 
@@ -8367,7 +8368,7 @@ type
     // text (with chars < #128) with some values to be inserted inside
     {$endif}
     procedure Add(const Format: RawUTF8; const Values: array of const;
-      Escape: TTextWriterKind=twNone); overload;
+      Escape: TTextWriterKind=twNone; WriteObjectOptions: TTextWriterWriteObjectOptions=[woFullExpand]); overload;
     /// append some values at once
     // - text values (e.g. RawUTF8) will be escaped as JSON
     procedure Add(const Values: array of const); overload;
@@ -8600,7 +8601,8 @@ type
     // - "" won't be added for string values
     // - string values may be escaped, depending on the supplied parameter
     // - very fast (avoid most temporary storage)
-    procedure Add(const V: TVarRec; Escape: TTextWriterKind=twNone); overload;
+    procedure Add(const V: TVarRec; Escape: TTextWriterKind=twNone;
+      WriteObjectOptions: TTextWriterWriteObjectOptions=[woFullExpand]); overload;
     /// encode the supplied data as an UTF-8 valid JSON object content
     // - data must be supplied two by two, as Name,Value pairs, e.g.
     // ! aWriter.AddJSONEscape(['name','John','year',1972]);
@@ -51996,7 +51998,7 @@ begin // code below must match TDynArray.LoadFromJSON
 end;
 
 procedure TTextWriter.Add(const Format: RawUTF8; const Values: array of const;
-  Escape: TTextWriterKind=twNone);
+  Escape: TTextWriterKind; WriteObjectOptions: TTextWriterWriteObjectOptions);
 var ValuesIndex: integer;
     F: PUTF8Char;
 label write;
@@ -52038,7 +52040,7 @@ write:  if B>=BEnd then
     if ValuesIndex<=high(Values) then // missing value will display nothing
     case ord(F^) of
     ord('%'):
-      Add(Values[ValuesIndex],Escape);
+      Add(Values[ValuesIndex],Escape,WriteObjectOptions);
     {$ifdef OLDTEXTWRITERFORMAT}
     ord('$'): with Values[ValuesIndex] do
            if Vtype=vtInteger then Add2(VInteger);
@@ -52858,7 +52860,8 @@ begin
   Add('"');
 end;
 
-procedure TTextWriter.Add(const V: TVarRec; Escape: TTextWriterKind);
+procedure TTextWriter.Add(const V: TVarRec; Escape: TTextWriterKind;
+  WriteObjectOptions: TTextWriterWriteObjectOptions);
 begin
   with V do
   case Vtype of
@@ -52878,7 +52881,7 @@ begin
   vtInterface,
   vtPointer:      AddPointer(PtrUInt(VPointer));
   vtPChar:        Add(PUTF8Char(VPChar),Escape);
-  vtObject:       WriteObject(VObject,[woFullExpand]);
+  vtObject:       WriteObject(VObject,WriteObjectOptions);
   vtClass:        AddClassName(VClass);
   vtWideChar:     AddW(@VWideChar,1,Escape);
   vtPWideChar:

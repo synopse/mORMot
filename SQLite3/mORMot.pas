@@ -51567,7 +51567,9 @@ var Added: boolean;
     Added := true;
   end;
   procedure WriteProp(P: PPropInfo);
-  var V64: Int64;
+  var Ext: TSynExtended;
+      D64: double absolute Ext;
+      V64: Int64;
       Obj: TObject;
       V, c, codepage: integer;
       Kind: TTypeKind;
@@ -51589,7 +51591,8 @@ var Added: boolean;
     case Kind of
       tkInt64{$ifdef FPC}, tkQWord{$endif}: begin
         V64 := P^.GetInt64Prop(Value);
-        if not ((woDontStoreDefault in Options) and (V64=Int64(P^.Default))) then begin
+        if not ((woDontStoreDefault in Options) and (V64=Int64(P^.Default))) and
+           not ((woDontStore0 in Options) and (V64=0)) then begin
           HR(P);
           if woTimeLogAsText in Options then
             case P^.PropType^.GetSQLFieldType of
@@ -51626,7 +51629,8 @@ var Added: boolean;
       {$ifdef FPC} tkBool, {$endif}
       tkEnumeration, tkInteger, tkSet: begin
         V := P^.GetOrdProp(Value);
-        if (V<>P^.Default) or not (woDontStoreDefault in Options) then begin
+        if not ((woDontStoreDefault in Options) and (V=P^.Default)) and
+           not ((woDontStore0 in Options) and (V=0)) then begin
           HR(P);
           if {$ifdef FPC}(Kind=tkBool) or{$endif}
              ((Kind=tkEnumeration) and (P^.TypeInfo=TypeInfo(boolean))) then
@@ -51691,19 +51695,32 @@ var Added: boolean;
         end;
       end;
       tkFloat: begin
-        HR(P);
-        if (P^.TypeInfo=TypeInfo(Currency)) and P^.GetterIsField then
-          AddCurr64(PInt64(P^.GetterAddr(Value))^) else
-        if P^.TypeInfo=TypeInfo(TDateTime) then begin
-          if woDateTimeWithMagic in Options then
-            AddNoJSONEscape(@JSON_SQLDATE_MAGIC_QUOTE_VAR,4) else
-            Add('"');
-          AddDateTime(P^.GetDoubleProp(Value));
-          if woDateTimeWithZSuffix in Options then
-            Add('Z');
-          Add('"');
+        if (P^.TypeInfo=TypeInfo(Currency)) and P^.GetterIsField then begin
+          V64 := PInt64(P^.GetterAddr(Value))^;
+          if not ((woDontStore0 in Options) and (V64=0)) then begin
+            HR(P);
+            AddCurr64(V64);
+          end;
         end else
-          Add(P^.GetFloatProp(Value),DOUBLE_PRECISION);
+        if P^.TypeInfo=TypeInfo(TDateTime) then begin
+          D64 := P^.GetDoubleProp(Value);
+          if not ((woDontStore0 in Options) and (D64=0)) then begin
+            HR(P);
+            if woDateTimeWithMagic in Options then
+              AddNoJSONEscape(@JSON_SQLDATE_MAGIC_QUOTE_VAR,4) else
+              Add('"');
+            AddDateTime(D64);
+            if woDateTimeWithZSuffix in Options then
+              Add('Z');
+            Add('"');
+          end;
+        end else begin
+          Ext := P^.GetFloatProp(Value);
+          if not ((woDontStore0 in Options) and (Ext=0)) then begin
+            HR(P);
+            Add(Ext,DOUBLE_PRECISION);
+          end;
+        end;
       end;
       {$ifdef HASVARUSTRING}
       tkUString: begin // write converted to UTF-8
