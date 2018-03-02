@@ -2411,7 +2411,7 @@ begin
           break; // it is now safe to send a new 'request'
         if GetTickCount64<max then
           continue;
-        self.Log(request,'NotifyCallback AnswerToIgnore TIMEOUT -> abort connection',sllError);
+        self.Log(request,'NotifyCallback AnswerToIgnore TIMEOUT -> abort connection',sllInfo);
         result := STATUS_NOTIMPLEMENTED; // 501 will force recreate connection
         exit;
       until false;
@@ -2458,7 +2458,7 @@ begin
   try
     if fProtocol.SendFrames(self,fOutgoing.List,fOutgoing.Count) then
       result := true else
-      WebSocketLog.Add.Log(sllError,'SendPendingOutgoingFrames: SendFrames failed',self);
+      WebSocketLog.Add.Log(sllInfo,'SendPendingOutgoingFrames: SendFrames failed',self);
   finally
     fOutgoing.Safe.Leave;
   end;
@@ -2721,7 +2721,7 @@ begin
         if fOwnerThread.Terminated then
           break else
         if sockerror<>0 then begin
-          WebSocketLog.Add.Log(sllTrace,'GetFrame SockInPending error % on %',
+          WebSocketLog.Add.Log(sllInfo,'GetFrame SockInPending error % on %',
             [sockerror,fProtocol],self);
           fState := wpsClose;
           break; // will close the connection
