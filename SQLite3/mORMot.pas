@@ -10855,6 +10855,7 @@ type
     fSession: integer;
     fTime: TModTime;
     fMicroSec: integer;
+    fIP: RawUTF8;
     // define Input/Output as dvoSerializeAsExtendedJson
     class procedure InternalDefineModel(Props: TSQLRecordProperties); override;
   public
@@ -10886,6 +10887,8 @@ type
     property Time: TModTime read fTime write fTime;
     /// execution time of this method, in micro seconds
     property MicroSec: integer read fMicroSec write fMicroSec;
+    /// if not localhost/127.0.0.1, the remote IP address 
+    property IP: RawUTF8 read fIP write fIP;
   end;
 
   /// execution statistics used for DB-based asynchronous notifications
@@ -59260,8 +59263,11 @@ var Inst: TServiceFactoryServerInstance;
     end;
     if exec.CurrentStep<smsAfter then
       W.AddShort('},Output:{Failed:"Probably due to wrong input"');
-    W.Add('},Session:%,User:%,Time:%,MicroSec:%},',
+    W.Add('},Session:%,User:%,Time:%,MicroSec:%',
       [integer(Ctxt.Session),Ctxt.SessionUser,TimeLogNowUTC,timeEnd]);
+    if Ctxt.RemoteIPIsLocalHost then
+      W.Add('}',',') else
+      W.Add(',IP:"%"},',[Ctxt.fRemoteIP]);
     with Ctxt.ServiceExecution^ do
       LogRest.AsynchBatchRawAppend(LogClass,W);
   end;
