@@ -60453,10 +60453,12 @@ end;
 
 function TFastReader.NextSafe(out Data: Pointer; DataLen: PtrInt): boolean;
 begin
-  result := P+DataLen<=Last;
-  if not result then Exit;
-  Data := P;
-  inc(P,DataLen);
+  if P+DataLen>Last then
+    result := false else begin
+    Data := P;
+    inc(P,DataLen);
+    result := true;
+  end;
 end;
 
 procedure TFastReader.Copy(out Dest; DataLen: PtrInt);
