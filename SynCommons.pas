@@ -832,7 +832,7 @@ const
 
 {$ifndef MSWINDOWS}
   /// estimate the system code page is WinAnsi
-  GetACP = CODEPAGE_US;
+  GetACP: TSystemCodePage = CODEPAGE_US;
   /// internal Code Page for UTF-8 Unicode encoding
   CP_UTF8 = 65001;
 {$endif}
@@ -18240,6 +18240,9 @@ uses
     elfreader,  // ELF executables
     machoreader, // MACH-O executables
     {$endif FPCUSEVERSIONINFO}
+    {$ifdef ISFPC271}
+    unixcp,
+    {$endif}
   {$endif MSWINDOWS}
   SynFPCTypInfo, // small wrapper unit around FPC's TypInfo.pp
   TypInfo,
@@ -64743,6 +64746,11 @@ end;
 
 initialization
   // initialization of global variables
+  {$ifndef MSWINDOWS}
+  {$ifdef ISFPC271}
+  GetACP := GetSystemCodePage;
+  {$endif}
+  {$endif}
   GarbageCollectorFreeAndNilList := TList.Create;
   GarbageCollectorFreeAndNil(GarbageCollector,TObjectList.Create);
   InitializeCriticalSection(GlobalCriticalSection);
