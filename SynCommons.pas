@@ -10694,6 +10694,8 @@ type
     {$endif NOVARIANTS}
     /// returns the current position, and move ahead the specified bytes
     function Next(DataLen: PtrInt): pointer;   {$ifdef HASINLINE}inline;{$endif}
+    /// returns the current position, and move ahead the specified bytes
+    function NextSafe(out Data: Pointer; DataLen: PtrInt): boolean; {$ifdef HASINLINE}inline;{$endif}
     /// copy data from the current position, and move ahead the specified bytes
     procedure Copy(out Dest; DataLen: PtrInt); {$ifdef HASINLINE}inline;{$endif}
     /// copy data from the current position, and move ahead the specified bytes
@@ -10709,6 +10711,8 @@ type
     function ReadVarUInt32Array(var Values: TIntegerDynArray): PtrInt;
     /// returns TRUE if the current position is the end of the input stream
     function EOF: boolean; {$ifdef HASINLINE}inline;{$endif}
+    /// returns remaining length (difference between Last and P)
+    function RemainingLength: PtrUInt; {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// item as stored in a TRawByteStringGroup instance
@@ -60415,6 +60419,11 @@ begin
   result := P>=Last;
 end;
 
+function TFastReader.RemainingLength: PtrUInt;
+begin
+  result := PtrUInt(Last)-PtrUInt(P);
+end;
+
 function TFastReader.NextByte: byte;
 begin
   if P>=Last then
@@ -60439,6 +60448,14 @@ begin
   if P+DataLen>Last then
     ErrorOverflow;
   result := P;
+  inc(P,DataLen);
+end;
+
+function TFastReader.NextSafe(out Data: Pointer; DataLen: PtrInt): boolean;
+begin
+  result := P+DataLen<=Last;
+  if not result then Exit;
+  Data := P;
   inc(P,DataLen);
 end;
 
