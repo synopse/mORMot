@@ -37740,11 +37740,11 @@ end;
 {$endif MSWINDOWS}
 
 type
-  TServiceInternalMethod = (imFree, imContract, imSignature);
+  TServiceInternalMethod = (imFree, imContract, imSignature, imInstance);
 
 const
   SERVICE_PSEUDO_METHOD: array[TServiceInternalMethod] of RawUTF8 = (
-    '_free_','_contract_','_signature_');
+    '_free_','_contract_','_signature_','_instance_');
   SERVICE_PSEUDO_METHOD_COUNT = Length(SERVICE_PSEUDO_METHOD);
 
 procedure TSQLRestClientURI.InternalNotificationMethodExecute(
@@ -40813,9 +40813,19 @@ procedure TSQLRestServerURIContext.InternalExecuteSOAByInterface;
         Error('Not allowed to publish signature');
       exit;
     end;
+    ord(imInstance):
+      // "method":"_instance_" from TServiceFactoryClient.CreateFakeInstance
+      if not (Service.InstanceCreation in [sicClientDriven]) then begin
+        Error('_instance_ is not compatible with %',[ToText(Service.InstanceCreation)^]);
+        exit;
+      end else
+      if ServiceInstanceID<>0 then begin
+        Error('_instance_ with ServiceInstanceID=%',[ServiceInstanceID]);
+        exit;
+      end;
     else // TServiceFactoryServer.ExecuteMethod() will use ServiceMethod(Index)
       if ServiceMethod=nil then
-        raise EServiceException.CreateUTF8('%.InternalExecuteSOAByInterface '+
+        raise EServiceException.CreateUTF8('%.InternalExecuteSOAByInterface: '+
           'ServiceMethodIndex=% and ServiceMethod=nil',[self,ServiceMethodIndex]);
     end;
     if (Session>CONST_AUTHENTICATION_NOT_USED) and (ServiceExecution<>nil) and
@@ -59102,8 +59112,9 @@ begin
     end;
     if Inst.InstanceID=0 then begin
       // initialize a new sicClientDriven instance
-      if (cardinal(aMethodIndex-SERVICE_PSEUDO_METHOD_COUNT)>=fInterface.fMethodsCount) or
-         (InstanceCreation<>sicClientDriven) then
+      if (InstanceCreation<>sicClientDriven) or
+         ((cardinal(aMethodIndex-SERVICE_PSEUDO_METHOD_COUNT)>=fInterface.fMethodsCount) and
+          (aMethodIndex<>ord(imInstance))) then
         exit;
       inc(fInstanceCurrentID);
       Inst.InstanceID := fInstanceCurrentID;
@@ -59308,9 +59319,15 @@ begin
             exit;
           end;
       end;
-      if InternalInstanceRetrieve(Inst,Ctxt.ServiceMethodIndex,Ctxt.Session)=ord(imFree) then begin
+      case InternalInstanceRetrieve(Inst,Ctxt.ServiceMethodIndex,Ctxt.Session) of
+      ord(imFree): begin
         Ctxt.Success; // {"method":"_free_", "params":[], "id":1234}
         exit;
+      end;
+      ord(imInstance): begin // from TServiceFactoryClient.CreateFakeInstance
+        Ctxt.Returns(UInt32ToUtf8(Inst.InstanceID),HTTP_SUCCESS,TEXT_CONTENT_TYPE_HEADER);
+        exit;
+      end;
       end;
     end;
   end;
@@ -61529,11 +61546,16 @@ end;
 
 function TServiceFactoryClient.CreateFakeInstance: TInterfacedObject;
 var notify: TOnFakeInstanceDestroy;
+    id: RawUTF8;
 begin
   if fInstanceCreation=sicClientDriven then
     notify := NotifyInstanceDestroyed else
     notify := nil;
   result := TInterfacedObjectFakeClient.Create(self,Invoke,notify);
+  if (fInstanceCreation=sicClientDriven) and
+     InternalInvoke(SERVICE_PSEUDO_METHOD[imInstance],'',@id) then
+    // thread-safe initialization of the fClientDrivenID
+    TInterfacedObjectFakeClient(result).fClientDrivenID := GetCardinal(pointer(id));
 end;
 
 type
@@ -61799,7 +61821,7 @@ begin
       end;
       if aResult<>nil then
         SetString(aResult^,Values[0],StrLen(Values[0]));
-      if aClientDrivenID<>nil then // assume ID=0 if no "id":... value
+      if (aClientDrivenID<>nil) and (Values[1]<>nil) then // keep ID if no "id":... 
         aClientDrivenID^ := GetCardinal(Values[1]);
     end;
   end else begin
@@ -61833,10 +61855,12 @@ begin
     fClient := TSQLRestClientURI(aRest);
   inherited Create(aRest,aInterface,aInstanceCreation,aContractExpected);
   // initialize a shared instance (if needed)
-  if fInstanceCreation in [sicShared,sicPerSession,sicPerUser,sicPerGroup,sicPerThread] then begin
+  case fInstanceCreation of
+  sicShared,sicPerSession,sicPerUser,sicPerGroup,sicPerThread: begin
     // the instance shall remain active during the whole client session
     fSharedInstance := CreateFakeInstance;
     TInterfacedObjectFake(fSharedInstance)._AddRef; // force stay alive
+  end;
   end;
   // check if this interface is supported on the server
   if PosEx(SERVICE_CONTRACT_NONE_EXPECTED,ContractExpected)=0 then begin
