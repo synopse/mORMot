@@ -13775,7 +13775,7 @@ type
     fCustomEncryptAES: TAESAbstract;
     fCustomEncryptSign: TSynSigner;
     fCustomEncryptCompress: TAlgoCompress;
-    fCustomEncryptContentPrefix, fCustomEncryptContentPrefixUpper: RawUTF8;
+    fCustomEncryptContentPrefix, fCustomEncryptContentPrefixUpper, fCustomEncryptUrlIgnore: RawUTF8;
     fAcquireExecution: array[TSQLRestServerURIContextCommand] of TSQLRestAcquireExecution;
     {$ifdef WITHLOG}
     fLogClass: TSynLogClass;   // =SQLite3Log by default
@@ -15038,15 +15038,19 @@ type
     // - if both aes and sign are nil, then call interception is disabled
     // - you can optionally specify a compression algorithm (like AlgoSynLZ or
     // AlgoDeflate/AlgoDeflateFast) to be applied before encryption
+    // - any URI starting with uriignore characters won't be encrypted: it could
+    // be used to define a method-based service for handshake and aes/sign
+    // mutual agreement
     // - TSQLRestServer will require incoming requests to be of the corresponding
     // [aesclass][signalgo]/[originaltype] HTTP content-type e.g.
     // 'aesofb256sha256/application/json' - any plain request will be rejected
-    // - note that it will only encrypt and sign the HTTP requests bodies, so a
-    // plain GET won't be checked - as such, it is not a replacement of
+    // - note that it will only encrypt and sign the HTTP requests bodies, so URI
+    // or plain GET won't be checked - as such, it is not a replacement of
     // TSQLRestServerAuthentication nor TWebSocketProtocolBinary encryption,
     // but a cheap alternative to HTTPS, when you need to protect HTTP flow
     // from MiM attacks (e.g. in a IoT context) with simple and proven algorithms
-    procedure SetCustomEncryption(aes: TAESAbstract; sign: PSynSigner; comp: TAlgoCompress);
+    procedure SetCustomEncryption(aes: TAESAbstract; sign: PSynSigner; comp: TAlgoCompress;
+      const uriignore: RawUTF8='');
     /// how this class execute its internal commands
     // - by default, TSQLRestServer.URI() will lock for Write ORM according to
     // AcquireWriteMode (i.e. AcquireExecutionMode[execORMWrite]=amLocked) and
@@ -35233,7 +35237,8 @@ var ct: RawUTF8;
     P: PAnsiChar;
     sign: TSynSigner; // thread-safe copy
 begin
-  if (fCustomEncryptContentPrefix='') or (Body='') or (Url='') then
+  if (fCustomEncryptContentPrefix='') or (Body='') or
+     (Url='') or IdemPChar(pointer(Url),pointer(fCustomEncryptUrlIgnore)) then
     exit;
   ct := FindIniNameValue(pointer(Head),HEADER_CONTENT_TYPE_UPPER);
   if IdemPChar(pointer(ct),pointer(fCustomEncryptContentPrefixUpper)) then begin
@@ -35285,7 +35290,8 @@ var ct: RawUTF8;
     P: PAnsiChar;
     sign: TSynSigner; // thread-safe copy
 begin
-  if (fCustomEncryptContentPrefix='') or (Body='') or (Url='') then
+  if (fCustomEncryptContentPrefix='') or (Body='') or
+     (Url='') or IdemPChar(pointer(Url),pointer(fCustomEncryptUrlIgnore)) then
     exit;
   if fCustomEncryptSign.SignatureSize<>0 then begin
     // append the binary signature of supplied Url+Body to the Body
@@ -35314,15 +35320,16 @@ begin
 end;
 
 procedure TSQLRest.SetCustomEncryption(aes: TAESAbstract; sign: PSynSigner;
-  comp: TAlgoCompress);
+  comp: TAlgoCompress; const uriignore: RawUTF8);
 var tmp: PShortString; // temp variable to circumvent FPC bug
     s: RawUTF8;
 begin
   fCustomEncryptContentPrefix := ''; // disable encryption
   fCustomEncryptCompress := nil;
+  fCustomEncryptUrlIgnore := '';
   FreeAndNil(fCustomEncryptAES);
-  OnDecryptBody := nil;
-  OnEncryptBody := nil;
+  fOnDecryptBody := nil;
+  fOnEncryptBody := nil;
   fCustomEncryptAES := aes;
   if aes=nil then
     if sign=nil then
@@ -35344,8 +35351,9 @@ begin
   fCustomEncryptContentPrefix := LowerCase(fCustomEncryptContentPrefix);
   fCustomEncryptContentPrefixUpper := UpperCase(fCustomEncryptContentPrefix);
   fCustomEncryptCompress := comp;
-  OnDecryptBody := InternalCustomDecrypt;
-  OnEncryptBody := InternalCustomEncrypt;
+  fCustomEncryptUrlIgnore := UpperCase(uriignore);
+  fOnDecryptBody := InternalCustomDecrypt;
+  fOnEncryptBody := InternalCustomEncrypt;
 end;
 
 procedure TSQLRest.AdministrationExecute(const DatabaseName,SQL: RawUTF8;
@@ -42868,7 +42876,7 @@ begin // caller of RetrieveSession() made fSessions.Safe.Lock
     session := Ctxt.Session;
     for i := 1 to fSessions.Count do
       if sessions^.IDCardinal=session then begin
-      result := sessions^;
+        result := sessions^;
         result.fTimeOutTix := tix+result.TimeoutShr10;
         Ctxt.fSession := result; // for TSQLRestServer internal use
         // make local copy of TAuthSession information
@@ -42881,8 +42889,8 @@ begin // caller of RetrieveSession() made fSessions.Safe.Lock
         Ctxt.Call^.RestAccessRights := @Ctxt.fSessionAccessRights;
         exit;
       end else
-      inc(sessions);
-    end;
+        inc(sessions);
+  end;
   result := nil;
 end;
 
