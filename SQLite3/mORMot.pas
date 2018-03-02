@@ -809,8 +809,8 @@ unit mORMot;
       methods, for direct fast transmission to a HTTP client, handling
       "304 Not Modified" and proper mime type recognition
     - added TSQLRestServerURIContext.Input*OrVoid[] properties
-    - added TSQLRestServerURIContext.SessionRemoteIP, SessionConnectionID,
-      SessionUserName and ResourceFileName properties
+    - added TSQLRestServerURIContext.SessionConnectionID, SessionUserName and
+      ResourceFileName properties
     - added TSQLRestServerURIContext.InputAsMultiPart() method
     - added TSQLRestServerURIContext.Redirect() method for HTTP 301 commands
     - added TSQLRestServer.ServiceMethodRegister() low-level method
@@ -5772,8 +5772,7 @@ type
     // - you can use e.g. to retrieve the remote IP:
     // ! Call.Header(HEADER_REMOTEIP_UPPER)
     // ! or FindIniNameValue(pointer(Call.InHead),HEADER_REMOTEIP_UPPER)
-    // but consider rather using TSQLRestServerURIContext.InHeader['remoteip']
-    // or even TSQLRestServerURIContext.RemoteIP
+    // but consider rather using TSQLRestServerURIContext.RemoteIP
     InHead: RawUTF8;
     /// input parameter containing the caller message body
     // - e.g. some GET/POST/PUT JSON data can be specified here
@@ -5824,8 +5823,8 @@ type
     /// just a wrapper around FindIniNameValue(pointer(InHead),UpperName)
     // - use e.g. as
     // ! Call.Header(HEADER_REMOTEIP_UPPER) or Call.Header(HEADER_BEARER_UPPER)
-    // - consider rather using TSQLRestServerURIContext.InHeader['remoteip']
-    // or even TSQLRestServerURIContext.RemoteIP
+    // - consider rather using TSQLRestServerURIContext.InHeader[] or even
+    // dedicated TSQLRestServerURIContext.RemoteIP/AuthenticationBearerToken
     function Header(UpperName: PAnsiChar): RawUTF8;
       {$ifdef HASINLINE}inline;{$endif}
   end;
@@ -6133,6 +6132,8 @@ type
     procedure SetInCookie(CookieName, CookieValue: RawUTF8);
     function GetUserAgent: RawUTF8;
     function GetRemoteIP: RawUTF8;
+    function GetRemoteIPNotLocal: RawUTF8;
+    function GetRemoteIPIsLocalHost: boolean;
     function GetResourceFileName: TFileName;
     procedure SetOutSetCookie(aOutSetCookie: RawUTF8);
     procedure ServiceResultStart(WR: TTextWriter); virtual;
@@ -6309,9 +6310,6 @@ type
     /// the corresponding TAuthSession.User.LogonName value
     // - is undefined if Session is 0 or 1 (no authentication running)
     SessionUserName: RawUTF8;
-    /// the remote IP from which the TAuthSession was created, if any
-    // - is undefined if Session is 0 or 1 (no authentication running)
-    SessionRemoteIP: RawUTF8;
     /// the internal ID used to identify modelroot/_safe_ custom encryption
     SafeProtocolID: integer;
     /// the static instance corresponding to the associated Table (if any)
@@ -6456,6 +6454,10 @@ type
     property UserAgent: RawUTF8 read GetUserAgent;
     /// retrieve the "RemoteIP" value from the incoming HTTP headers
     property RemoteIP: RawUTF8 read GetRemoteIP;
+    /// true if the "RemoteIP" value from the incoming HTTP headers is '127.0.0.1'
+    property RemoteIPIsLocalHost: boolean read GetRemoteIPIsLocalHost;
+    /// "RemoteIP" value from the incoming HTTP headers but '' for '127.0.0.1'
+    property RemoteIPNotLocal: RawUTF8 read GetRemoteIPNotLocal;
     /// retrieve the "Authorization: Bearer <token>" value from incoming HTTP headers
     // - typically returns a JWT for statelesss self-contained authentication,
     // as expected by TJWTAbstract.Verify method
@@ -41539,9 +41541,6 @@ begin
     result := fInHeaderLastValue else begin
     PWord(UpperCopy255(up,HeaderName))^ := ord(':');
     result := Trim(FindIniNameValue(pointer(Call.InHead),up));
-    if (result='') and (SessionRemoteIP<>'') and IdemPropNameU(HeaderName,'remoteip') then
-      // some protocols (e.g. WebSockets) do not send headers at each call
-      result := SessionRemoteIP;
     if result<>'' then begin
       fInHeaderLastName := HeaderName;
       fInHeaderLastValue := result;
@@ -41628,6 +41627,7 @@ begin
 end;
 
 function HeaderOnce(call: PSQLRestURIParams; var store: RawUTF8; upper: PAnsiChar): RawUTF8;
+  {$ifdef HASINLINE}inline;{$endif}
 begin
   if (store='') and (call<>nil) then begin
     result := FindIniNameValue(pointer(call^.InHead),upper);
@@ -41650,6 +41650,18 @@ begin
   result := HeaderOnce(Call,fRemoteIP,HEADER_REMOTEIP_UPPER);
 end;
 
+function TSQLRestServerURIContext.GetRemoteIPNotLocal: RawUTF8;
+begin
+  result := HeaderOnce(Call,fRemoteIP,HEADER_REMOTEIP_UPPER);
+  if result='127.0.0.1' then
+    result := '';
+end;
+
+function TSQLRestServerURIContext.GetRemoteIPIsLocalHost: boolean;
+begin
+  result := (GetRemoteIP='') or (fRemoteIP='127.0.0.1');
+end;
+
 function TSQLRestServerURIContext.AuthenticationBearerToken: RawUTF8;
 begin
   result := HeaderOnce(Call,fAuthenticationBearerToken,HEADER_BEARER_UPPER);
@@ -41668,8 +41680,9 @@ begin
   result := JWTContent.result=jwtValid;
   if not result then
     Error('Invalid Bearer [%]',[ToText(JWTContent.result)^],HTTP_FORBIDDEN) else
-    if (Server.fIPWhiteJWT<>nil) and not Server.fIPWhiteJWT.Exists(RemoteIP) then begin
-      Error('Invalid IP [%]',[RemoteIP],HTTP_FORBIDDEN);
+    if (Server.fIPWhiteJWT<>nil) and not Server.fIPWhiteJWT.Exists(RemoteIP) and
+       (fRemoteIP<>'') and (fRemoteIP<>'127.0.0.1') then begin
+      Error('Invalid IP [%]',[fRemoteIP],HTTP_FORBIDDEN);
       result := false;
     end;
 end;
@@ -42224,7 +42237,7 @@ begin
     if Ctxt.Method=mNone then
       Ctxt.Error('Unknown VERB') else
     if (fIPBan<>nil) and fIPBan.Exists(Ctxt.RemoteIP) then
-      Ctxt.Error('Banned IP') else
+      Ctxt.Error('Banned IP %', [Ctxt.fRemoteIP]) else
     // 1. decode URI
     if not Ctxt.URIDecodeREST then
       Ctxt.Error('Invalid Root',HTTP_NOTFOUND) else
@@ -42311,7 +42324,7 @@ begin
     Ctxt.MicroSecondsElapsed := fStats.FromExternalQueryPerformanceCounters(timeEnd-timeStart);
     {$ifdef WITHLOG}
     InternalLog('% % % %/% %-> % with outlen=% in % us',
-      [Ctxt.SessionUserName,Ctxt.SessionRemoteIP,Call.Method,Model.Root,Ctxt.URI,
+      [Ctxt.SessionUserName,Ctxt.RemoteIPNotLocal,Call.Method,Model.Root,Ctxt.URI,
       COMMANDTEXT[Ctxt.Command],Call.OutStatus,length(Call.OutBody),Ctxt.MicroSecondsElapsed],sllServer);
     if (Call.OutBody<>'') and (sllServiceReturn in fLogFamily.Level) then
       if not(optNoLogOutput in Ctxt.ServiceExecutionOptions) then
@@ -42664,7 +42677,7 @@ begin
           inc(count,TServiceFactoryServer(Services.fList.Objects[i]).
             RenewSession(Ctxt.Session));
       InternalLog('Renew % authenticated session % from %: count=%',
-        [Model.Root,Ctxt.Session,Ctxt.SessionRemoteIP,count],sllUserAuth);
+        [Model.Root,Ctxt.Session,Ctxt.RemoteIPNotLocal,count],sllUserAuth);
       Ctxt.Returns(['count',count]);
     end;
   end;
@@ -42850,23 +42863,23 @@ begin // caller of RetrieveSession() made fSessions.Safe.Lock
     // retrieve session from its ID
     sessions := pointer(fSessions.List);
     session := Ctxt.Session;
-    for i := 1 to fSessions.Count do begin
+    for i := 1 to fSessions.Count do
+      if sessions^.IDCardinal=session then begin
       result := sessions^;
-      if result.IDCardinal=session then begin
         result.fTimeOutTix := tix+result.TimeoutShr10;
         Ctxt.fSession := result; // for TSQLRestServer internal use
         // make local copy of TAuthSession information
         Ctxt.SessionUser := result.User.fID;
         Ctxt.SessionGroup := result.User.GroupRights.fID;
         Ctxt.SessionUserName := result.User.LogonName;
-        Ctxt.SessionRemoteIP := result.RemoteIP;
+        if (result.RemoteIP<>'') and (Ctxt.fRemoteIP='') then
+          Ctxt.fRemoteIP := result.RemoteIP;
         Ctxt.fSessionAccessRights := result.fAccessRights;
         Ctxt.Call^.RestAccessRights := @Ctxt.fSessionAccessRights;
         exit;
-      end;
+      end else
       inc(sessions);
     end;
-  end;
   result := nil;
 end;
 
