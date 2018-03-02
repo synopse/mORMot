@@ -1251,9 +1251,9 @@ begin
     if Assigned(fRest) then
       fRest.Shutdown; // no incoming TSQLRestServer.URI allowed from now on
     FreeAndNil(fHttpServer);
+    FreeAndNil(fServicesLogRest);
   finally
     inherited InternalStop; // FreeAndNil(fRest)
-    FreeAndNil(fServicesLogRest);
   end;
 end;
 
