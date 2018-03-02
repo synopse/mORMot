@@ -595,6 +595,15 @@ type
     property Http: TSQLHttpServerDefinition read fHttp;
   end;
 
+  /// stand-alone property to publish a secondary logged service over HTTP
+  TDDDRestHttpLogSettings = class(TDDDRestHttpSettings)
+  protected
+    fServicesLog: TDDDServicesLogRestSettings;
+  published
+    /// how the SOA calls would be logged into their own SQlite3 database
+    property ServicesLog: TDDDServicesLogRestSettings read fServicesLog;
+  end;
+  
   /// storage class for a remote MongoDB server direct access settings
   TDDDMongoDBRestSettings = class(TDDDRestSettings)
   public
