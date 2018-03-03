@@ -4,7 +4,9 @@ program HelloSpiderMonkey52;
   https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey/How_to_embed_the_JavaScript_engine
 }
 uses
+  {$IFDEF UNIX}{$IFDEF UseCThreads}
   cthreads,
+  {$ENDIF}{$ENDIF}
   Classes,
   SysUtils,
   SpiderMonkey;
