@@ -5600,7 +5600,7 @@ procedure TSQLRecordTest.CheckWith(test: TSynTestCase; i: Integer; offset: integ
   checkblob: boolean);
 begin
   test.Check(i<>0);
-  test.Check(ID=i);
+  test.CheckUtf8(ID=i,'id=%=%',[ID,i]);
   test.Check(Int=i);
   test.Check(self.Test=Int32ToUtf8(i));
   test.Check(Ansi=WinAnsiString(self.Test));
@@ -5611,8 +5611,8 @@ begin
   if checkblob then
     test.Check(Data=self.Test);
 {$ifndef NOVARIANTS}
-  test.Check(DocVariantType.IsOfType(ValVariant));
-  test.Check(VariantSaveJson(ValVariant)='{"id":'+self.Test+'}');
+  test.Check(DocVariantType.IsOfType(ValVariant),'var1');
+  test.Check(VariantSaveJson(ValVariant)='{"id":'+self.Test+'}','var2');
 {$endif}
 end;
 
@@ -10749,6 +10749,11 @@ begin
       'FtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeF'+
       'ONFh7hgQ',jwt); // altered one char in signature
     check(jwt.result=jwtInvalidSignature);
+    tok := j.Compute(['uid','{1CCA336D-A78F-4EB6-B701-1DB8E749BD1F}'],'','subject');
+    j.Verify(tok,jwt);
+    Check(jwt.result=jwtValid);
+    check(jwt.reg[jrcSubject]='subject');
+    check(jwt.data.U['uid']='{1CCA336D-A78F-4EB6-B701-1DB8E749BD1F}');
   finally
     j.Free;
   end;

@@ -23718,6 +23718,8 @@ var tmp: TSynTempBuffer;
     V: Variant;
 begin
   if ValueLen>0 then begin
+    if wasString and (GotoNextNotSpace(Value)^ in ['{','[']) then
+      wasString := false; // allow to create a TDocVariant stored as DB text 
     tmp.Init(Value,ValueLen);
     try
       if fSQLFieldType=sftNullable then
@@ -41511,7 +41513,7 @@ var ValueUTF8: RawUTF8;
 begin
   result := InputUTF8OrError(ParamName,ValueUTF8,ErrorMessageForMissingParameter);
   if result then
-    GetVariantFromJSON(pointer(ValueUTF8),False,Value);
+    GetVariantFromJSON(pointer(ValueUTF8),false,Value);
 end;
 
 function TSQLRestServerURIContext.GetInputAsTDocVariant: variant;
