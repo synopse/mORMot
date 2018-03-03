@@ -10989,10 +10989,9 @@ begin
 //     write(protocols[api], ' '); inc(api); end; writeln(#13#10,curl.infoText);
   except
     on E: Exception do begin
-      if curl.Module<>0 then begin
+      if curl.Module<>0 then
         FreeLibrary(curl.Module);
-        curl.Module := 0;
-      end;
+      curl.Module := -1; // don't try to load any more
       {$ifdef LINUX}
       writeln(E.Message);
       {$else}
@@ -11038,6 +11037,8 @@ begin
   inherited;
   if curl.Module=0 then
     LibCurlInitialize;
+  if PtrInt(curl.Module)=-1 then
+    raise ECrtSocket.CreateFmt('No available %s',[LIBCURL_DLL]);
   fHandle := curl.easy_init;
   fRootURL := AnsiString(Format('http%s://%s:%d',[HTTPS[fHttps],fServer,fPort]));
 end;
@@ -12074,7 +12075,7 @@ initialization
     fillchar(WsaDataOnce,sizeof(WsaDataOnce),0);
 finalization
   {$ifdef USELIBCURL}
-  if curl.Module<>0 then begin
+  if PtrInt(curl.Module)>0 then begin
     curl.global_cleanup;
     FreeLibrary(curl.Module);
   end;
