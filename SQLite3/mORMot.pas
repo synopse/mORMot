@@ -39257,6 +39257,8 @@ begin
   CloseServerNamedPipe;
   CloseServerMessage;
   {$endif}
+  AsynchBatchStop(nil); // may use fStaticData[]
+  FreeAndNil(fBackgroundTimer);
   fRecordVersionSlaveCallbacks := nil; // should be done before fServices.Free
   for i := 0 to high(fStaticVirtualTable) do
   if fStaticVirtualTable[i]<>nil then begin
@@ -39274,7 +39276,7 @@ begin
   FreeAndNil(fAssociatedServices);
   ObjArrayClear(fSessionAuthentication);
   inherited Destroy; // calls fServices.Free which will update fStats
-  fJWTForUnauthenticatedRequest.Free;
+  FreeAndNil(fJWTForUnauthenticatedRequest);
   FreeAndNil(fStats);
 end;
 

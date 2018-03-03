@@ -2589,11 +2589,13 @@ type
     // - it won't check the signature, but the header's algorithm against the
     // class name (use TJWTAbstract class to allow any algorithm)
     // - it will decode the JWT payload and check for its expiration, and some
-    // mandatory fied values
+    // mandatory fied values - you can optionally retrieve the Expiration time,
+    // the ending Signature, and/or the Payload decoded as TDocVariant 
     // - may be used on client side to quickly validate a JWT received from
     // server, without knowing the exact algorithm or secret keys
     class function VerifyPayload(const Token, ExpectedSubject, ExpectedIssuer,
-      ExpectedAudience: RawUTF8; Expiration: PUnixTime=nil; Signature: PRawUTF8=nil): TJWTResult;
+      ExpectedAudience: RawUTF8; Expiration: PUnixTime=nil; Signature: PRawUTF8=nil;
+      Payload: PVariant=nil): TJWTResult;
   published
     /// the name of the algorithm used by this instance (e.g. 'HS256')
     property Algorithm: RawUTF8 read fAlgorithm;
@@ -14190,7 +14192,7 @@ begin
 end;
 
 class function TJWTAbstract.VerifyPayload(const Token, ExpectedSubject, ExpectedIssuer,
-  ExpectedAudience: RawUTF8; Expiration: PUnixTime; Signature: PRawUTF8): TJWTResult;
+  ExpectedAudience: RawUTF8; Expiration: PUnixTime; Signature: PRawUTF8; Payload: PVariant): TJWTResult;
 var P,B: PUTF8Char;
     V: TPUtf8CharDynArray;
     now, time: PtrUInt;
@@ -14215,6 +14217,8 @@ begin
   text := Base64URIToBin(PAnsiChar(B),P-B);
   if text='' then
     exit;
+  if Payload<>nil then
+    _Json(text,Payload^,JSON_OPTIONS_FAST);
   JSONDecode(pointer(text),['iss','aud','exp','nbf','sub'],V,true);
   result := jwtUnexpectedClaim;
   if (ExpectedSubject<>'') and not IdemPropNameU(ExpectedSubject,V[4],StrLen(V[4])) then
