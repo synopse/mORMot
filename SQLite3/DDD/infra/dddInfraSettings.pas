@@ -652,9 +652,7 @@ begin
     FileExistsAction := acAppend; // default rotation mode
     if Log.StackTraceViaAPI then
       StackTraceUse := stOnlyAPI;
-    {$ifdef MSWINDOWS}
     AutoFlushTimeOut := Log.AutoFlushTimeOut;
-    {$endif}
     if (Log.SyslogServer<>'') and (Log.SyslogServer[1]<>'?') and
        not Assigned(EchoCustom) and (fSyslog=nil) and (Log.SyslogLevels<>[]) and
        uri.From(Log.SyslogServer,'514') then

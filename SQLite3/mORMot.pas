@@ -15034,10 +15034,6 @@ type
     // the TSystemUse.Current class function
     // - do nothing if global TSystemUse.Current was already assigned
     function SystemUseTrack(periodSec: integer=10): TSystemUse;
-    /// use a background thread to flush the associated LogClass content 
-    // - useful if TSynLog.AutoFlushTimeOut is not set (or available on the OS)
-    // - you can specify the update frequency, in seconds
-    procedure LogBackgroundFlush(periodSec: integer=5);
     /// initialize some custom AES encryption and/or digital signature, with
     // optional compression
     // - will intercept the calls by setting OnDecryptBody/OnEncryptBody events
@@ -35229,16 +35225,6 @@ begin
       result.Timer := EnsureBackgroundTimerExists;
     TimerEnable(result.BackgroundExecute,periodSec); // disable if periodSec=0
   end;
-end;
-
-var
-  AutoLogFlushSet: boolean;
-
-procedure TSQLRest.LogBackgroundFlush(periodSec: integer);
-begin
-  if (self<>nil) and (fLogClass<>nil) and not AutoLogFlushSet
-    {$ifdef MSWINDOWS}and (fLogClass.Family.AutoFlushTimeOut=0){$endif} then
-    AutoLogFlushSet := TimerEnable(fLogClass.Add.BackgroundExecute,periodSec)<>nil;
 end;
 
 procedure TSQLRest.InternalCustomDecrypt(Sender: TSQLRest; var Body,Head,Url: RawUTF8);

@@ -1013,8 +1013,6 @@ type
     fRest: TSQLRestServer;
     // return TRUE if fRest<>nil (i.e. has been set by InternalStart)
     function InternalIsRunning: boolean; override;
-    // run fRest.LogBackgroundFlush on POSIX platforms 
-    procedure InternalStart; override;
     // end the daemon, i.e. FreeAndNil(fRest)
     procedure InternalStop; override;
   public
@@ -2784,18 +2782,8 @@ begin
   result := fRest<>nil;
 end;
 
-procedure TDDDAdministratedRestDaemon.InternalStart;
-begin
-  {$ifndef MSWINDOWS}
-  fRest.LogBackgroundFlush(10);
-  {$endif MSWINDOWS}
-end;
-
 procedure TDDDAdministratedRestDaemon.InternalStop;
 begin
-  {$ifndef MSWINDOWS}
-  fRest.LogBackgroundFlush(0);
-  {$endif MSWINDOWS}
   inherited InternalStop; // fInternalDatabases := []
   FreeAndNil(fRest);
 end;

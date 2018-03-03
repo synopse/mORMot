@@ -1240,7 +1240,6 @@ end;
 
 procedure TDDDRestHttpDaemon.InternalStart;
 begin
-  inherited InternalStart; // run fRest.LogBackgroundFlush if needed
   if Settings.Http.BindPort <> '' then
     fHttpServer := TSQLHttpServer.Create(fRest, Settings.Http);
 end;

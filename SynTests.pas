@@ -1103,10 +1103,8 @@ begin
   with TSynLogTestLog.Family do begin
     if integer(Level)=0 then // if no exception is set
       Level := [sllException,sllExceptionOS,sllFail];
-    {$ifdef MSWINDOWS}
     if AutoFlushTimeOut=0 then
       AutoFlushTimeOut := 2; // flush any pending text into .log file every 2 sec
-    {$endif}
     fLogFile := SynLog;
   end;
 end;

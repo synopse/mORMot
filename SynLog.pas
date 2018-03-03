@@ -459,8 +459,8 @@ type
     fLocalTimestamp: boolean;
     fWithUnitName: boolean;
     fNoFile: boolean;
-    {$ifdef MSWINDOWS}
     fAutoFlush: cardinal;
+    {$ifdef MSWINDOWS}
     fNoEnvironmentVariable: boolean;
     {$endif}
     {$ifndef NOEXCEPTIONINTERCEPT}
@@ -482,9 +482,7 @@ type
     fRotateFileSize: cardinal;
     fRotateFileAtHour: integer;
     function CreateSynLog: TSynLog;
-    {$ifdef MSWINDOWS}
     procedure SetAutoFlush(TimeOut: cardinal);
-    {$endif}
     procedure SetDestinationPath(const value: TFileName);
     procedure SetLevel(aLevel: TSynLogInfos);
     procedure SynLogFileListEcho(const aEvent: TOnTextWriterEcho; aEventAdd: boolean);
@@ -626,7 +624,6 @@ type
     // - unit name is available from RTTI if the class has published properties
     // - set to TRUE by default, for better debugging experience
     property WithUnitName: boolean read fWithUnitName write fWithUnitName;
-    {$ifdef MSWINDOWS}
     /// the time (in seconds) after which the log content must be written on
     // disk, whatever the current content size is
     // - by default, the log file will be written for every 4 KB of log (see
@@ -636,6 +633,7 @@ type
     // and will be responsible of flushing all pending log content every
     // period of time (e.g. every 10 seconds)
     property AutoFlushTimeOut: cardinal read fAutoFlush write SetAutoFlush;
+    {$ifdef MSWINDOWS}
     /// force no environment variables to be written to the log file
     // - may be usefull if they contain some sensitive information
     property NoEnvironmentVariable: boolean read fNoEnvironmentVariable write fNoEnvironmentVariable;
@@ -819,12 +817,6 @@ type
     /// flush all log content to file
     // - if ForceDiskWrite is TRUE, will wait until written on disk (slow)
     procedure Flush(ForceDiskWrite: boolean);
-    /// a TSynBackgroundThreadProcess compatible event to flush log content
-    // - matches TOnSynBackgroundTimerProcess callback signature
-    // - to be supplied e.g. to a TSynBackgroundTimer.Enable method so that it
-    // will run every few seconds and write any pending log content to disk
-    procedure BackgroundExecute(Sender: TSynBackgroundTimer;
-      Event: TWaitResult; const Msg: RawUTF8);
     /// flush all log content to file and close the file
     procedure CloseLogFile;
     /// flush all log content to file, close the file, and release the instance
@@ -3093,59 +3085,113 @@ begin
   end;
 end;
 
-{$ifdef MSWINDOWS}
-
 var
-  AutoFlushThread: THandle = 0;
   AutoFlushSecondElapsed: cardinal;
 
-procedure AutoFlushProc(P: pointer); stdcall;  // TThread not needed here
+{$ifdef MSWINDOWS}
+  {$define AUTOFLUSHRAWWIN}
+  // if defined, will use direct Windows API calls
+{$endif}
+
+{$ifdef AUTOFLUSHRAWWIN}
+var
+  AutoFlushThread: pointer;
+  
+procedure AutoFlushProc(P: pointer); stdcall;
+  function Terminated: boolean;
+  begin
+    result :=  AutoFlushThread=nil;
+  end;
+{$else}
+type
+  // cross-platform / cross-compiler TThread-based flush
+  TAutoFlushThread = class(TThread)
+  protected
+    fEvent: TEvent;
+    procedure Execute; override;
+  public
+    constructor Create; reintroduce;
+    destructor Destroy; override;
+  end;
+
+var
+  AutoFlushThread: TAutoFlushThread;
+
+constructor TAutoFlushThread.Create;
+begin
+  FreeOnTerminate := true;
+  fEvent := TEvent.Create(nil,false,false,'');
+  inherited Create(false);
+end;
+
+destructor TAutoFlushThread.Destroy;
+begin
+  Terminate;
+  fEvent.SetEvent; // notify Execute to finish now
+  inherited Destroy;
+  fEvent.Free;
+end;
+
+procedure TAutoFlushThread.Execute;
+{$endif}
 var i: integer;
 begin
   SetThreadNameDefault(GetCurrentThreadID,'SynLog AutoFlushProc');
-  repeat
-    for i := 1 to 10 do begin // check every second for pending data
-      SleepHiRes(100);
-      if AutoFlushThread=0 then begin // check if terminated
-        ExitThread(0);
-        exit; // avoid GPF
+  try
+    repeat
+      {$ifdef AUTOFLUSHRAWWIN} // check every second for pending data
+      for i := 1 to 10 do begin
+        SleepHiRes(100);
+        if Terminated then
+          exit; // avoid GPF
       end;
-    end;
-    if SynLogFileList=nil then
-      continue; // nothing to flush
-    inc(AutoFlushSecondElapsed);
-    SynLogFileList.Safe.Lock;
-    try
-      for i := 0 to SynLogFileList.Count-1 do
-      with TSynLog(SynLogFileList.List[i]) do
-        if AutoFlushThread=0 then
-          break else // avoid GPF
-        if (fFamily.fAutoFlush<>0) and (fWriter<>nil) and
-           (AutoFlushSecondElapsed mod fFamily.fAutoFlush=0) then
-          if fWriter.PendingBytes>1 then begin
-            if not IsMultiThread then
-              if not fWriterStream.InheritsFrom(TFileStream) then
-                IsMultiThread := true; // only TFileStream is thread-safe
-            Flush(false); // write pending data
-          end;
-     finally
-       SynLogFileList.Safe.UnLock;
-     end;
-  until false;
-  ExitThread(0);
-end;
-
-procedure TSynLogFamily.SetAutoFlush(TimeOut: cardinal);
-var ID: cardinal;
-begin
-  fAutoFlush := TimeOut;
-  if (AutoFlushThread=0) and (TimeOut<>0) {$ifndef FPC}and (DebugHook=0){$endif} then begin
-    AutoFlushThread := CreateThread(nil,0,@AutoFlushProc,nil,0,ID);
-    AutoFlushSecondElapsed := 0;
+      {$else}
+      FixedWaitFor(fEvent, 1000);
+      if Terminated then
+        exit;
+      {$endif}
+      if SynLogFileList=nil then
+        continue; // nothing to flush
+      inc(AutoFlushSecondElapsed);
+      SynLogFileList.Safe.Lock;
+      try
+        for i := 0 to SynLogFileList.Count-1 do
+        with TSynLog(SynLogFileList.List[i]) do
+          if Terminated then
+            break else // avoid GPF
+          if (fFamily.fAutoFlush<>0) and (fWriter<>nil) and (fWriter.PendingBytes>1) and
+             (AutoFlushSecondElapsed mod fFamily.fAutoFlush=0) then begin
+              {$ifdef AUTOFLUSHRAWWIN}
+              if not IsMultiThread then
+                if not fWriterStream.InheritsFrom(TFileStream) then
+                  IsMultiThread := true; // only TFileStream is thread-safe
+              {$endif}
+              Flush(false); // write pending data
+            end;
+       finally
+         SynLogFileList.Safe.UnLock;
+       end;
+    until Terminated;
+  finally
+    {$ifdef AUTOFLUSHRAWWIN}
+    ExitThread(0);
+    {$endif}
   end;
 end;
 
-{$endif}
+procedure TSynLogFamily.SetAutoFlush(TimeOut: cardinal);
+{$ifdef AUTOFLUSHRAWWIN}var ID: cardinal;{$endif}
+begin
+  fAutoFlush := TimeOut;
+  if (AutoFlushThread=nil) and (TimeOut<>0) {$ifndef FPC}and (DebugHook=0){$endif} then begin
+    AutoFlushSecondElapsed := 0;
+    {$ifdef AUTOFLUSHRAWWIN}
+    AutoFlushThread := pointer(CreateThread(nil,0,@AutoFlushProc,nil,0,ID));
+    {$else}
+    AutoFlushThread := TAutoFlushThread.Create;
+    {$endif}
+  end;
+end;
 
 destructor TSynLogFamily.Destroy;
 var SR: TSearchRec;
@@ -3157,10 +3203,12 @@ var SR: TSearchRec;
 begin
   fDestroying := true;
   EchoRemoteStop;
-  {$ifdef MSWINDOWS}
-  if AutoFlushThread<>0 then
-    AutoFlushThread := 0; // mark thread released to avoid GPF in AutoFlushProc
-  {$endif}
+  if AutoFlushThread<>nil then
+    {$ifdef AUTOFLUSHRAWWIN}
+    AutoFlushThread := nil; // Terminated=false to avoid GPF in AutoFlushProc
+    {$else}
+    FreeAndNil(AutoFlushThread);
+    {$endif}
   ExceptionIgnore.Free;
   try
     if Assigned(OnArchive) then
@@ -3203,9 +3251,9 @@ begin
       end;
     end;
   finally
-    {$ifdef MSWINDOWS}
-    if AutoFlushThread<>0 then
-      CloseHandle(AutoFlushThread); // release background thread once for all
+    {$ifdef AUTOFLUSHRAWWIN} // release background thread once for all
+    if AutoFlushThread<>nil then
+      CloseHandle(THandle(AutoFlushThread));
     {$endif}
     inherited;
   end;
@@ -3652,13 +3700,6 @@ begin
   finally
     LeaveCriticalSection(GlobalThreadLock);
   end;
-end;
-
-procedure TSynLog.BackgroundExecute(Sender: TSynBackgroundTimer; Event: TWaitResult;
-  const Msg: RawUTF8);
-begin
-  if (fWriter<>nil) and (fWriter.PendingBytes>10) then
-    Flush(false);
 end;
 
 function TSynLog.QueryInterface(
