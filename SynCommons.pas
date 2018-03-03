@@ -44011,7 +44011,7 @@ begin
   // first handle any strict-JSON syntax objects or arrays into custom variants
   // (e.g. when called directly from TSQLPropInfoRTTIVariant.SetValue)
   if (TryCustomVariants<>nil) and (JSON<>nil) then
-    if GotoNextNotSpace(JSON)^ in ['{','['] then begin
+    if (GotoNextNotSpace(JSON)^ in ['{','[']) and not wasString then begin
       GetJSONToAnyVariant(Value,JSON,nil,TryCustomVariants,AllowDouble);
       exit;
     end else
