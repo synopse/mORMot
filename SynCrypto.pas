@@ -2808,6 +2808,11 @@ function ToText(algo: TSHA3Algo): PShortString; overload;
 
 implementation
 
+{$ifndef NOVARIANTS}
+uses
+  Variants;
+{$endif}
+
 function ToText(res: TProtocolResult): PShortString;
 begin
   result := GetEnumName(TypeInfo(TProtocolResult),ord(res));
