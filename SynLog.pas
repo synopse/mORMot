@@ -3363,34 +3363,37 @@ begin
           if log.Writer.Stream.InheritsFrom(TFileStream) then begin
             stream := TFileStream(log.Writer.Stream);
             endpos := stream.Position;
-            if endpos>MAXPREVIOUSCONTENTSIZE then
-              len := MAXPREVIOUSCONTENTSIZE else
-              len := MaximumKB shl 10;
-            start := log.fStreamPositionAfterHeader;
-            if (len<>0) and (endpos-start>len) then begin
-              start := endpos-len;
-              stream.Position := start;
+            try
+              if endpos>MAXPREVIOUSCONTENTSIZE then
+                len := MAXPREVIOUSCONTENTSIZE else
+                len := MaximumKB shl 10;
+              start := log.fStreamPositionAfterHeader;
+              if (len<>0) and (endpos-start>len) then begin
+                start := endpos-len;
+                stream.Position := start;
+                repeat
+                  inc(start)
+                until (stream.Read(c,1)=0) or (c=#13);
+              end else
+                stream.Position := start;
+              len := endpos-start;
+              SetLength(result,len);
+              P := pointer(result);
+              total := 0;
               repeat
-                inc(start)
-              until (stream.Read(c,1)=0) or (c=#13);
-            end else
-              stream.Position := start;
-            len := endpos-start;
-            SetLength(result,len);
-            P := pointer(result);
-            total := 0;
-            repeat
-              read := stream.Read(P^,len);
-              if read<=0 then begin
-                if total<>len then
-                  SetLength(result,total); // truncate on read error
-                break;
-              end;
-              inc(P,read);
-              dec(len,read);
-              inc(total,read);
-            until len=0;
-            stream.Position := endpos;
+                read := stream.Read(P^,len);
+                if read<=0 then begin
+                  if total<>len then
+                    SetLength(result,total); // truncate on read error
+                  break;
+                end;
+                inc(P,read);
+                dec(len,read);
+                inc(total,read);
+              until len=0;
+            finally
+              stream.Position := endpos;
+            end;
           end;
         finally
           LeaveCriticalSection(GlobalThreadLock);
