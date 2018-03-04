@@ -25163,7 +25163,7 @@ Txt:  len := F-FDeb;
       PWord(F)^ := ord(':')+ord('(')shl 8;
       inc(F,2);
     end;
-    L := {$ifndef FPC}length(tmp[i]){$else}PInteger(PtrInt(tmp[i])-SizeOf(integer))^{$endif};
+    L := {$ifdef FPC}length(tmp[i]){$else}PInteger(PtrInt(tmp[i])-SizeOf(integer))^{$endif};
     MoveFast(pointer(tmp[i])^,F^,L);
     inc(F,L);
     if i in inlin then begin
@@ -50507,7 +50507,7 @@ class function TSynPersistent.NewInstance: TObject;
 var p: pointer;
 begin // bypass vmtIntfTable and vmt^.vInitTable (management operators)
   GetMem(p, InstanceSize);
-  FillChar(p^, InstanceSize, 0);
+  FillCharFast(p^, InstanceSize, 0);
   PPointer(p)^ := pointer(self); // store VMT
   result := p;
 end;
