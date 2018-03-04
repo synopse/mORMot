@@ -22347,7 +22347,7 @@ var tmp: array[byte] of AnsiChar;
     L: integer;
 begin
   L := ord(PS^[0]);
-  inc(PS);
+  inc(PByte(PS));
   while (L>0) and (PS^[0] in ['a'..'z']) do begin inc(PByte(PS)); dec(L); end;
   tmp[L] := #0; // as expected by GetCaptionFromPCharLen/UnCamelCase
   MoveFast(PS^,tmp,L);
@@ -24251,9 +24251,13 @@ var L: PtrInt;
 begin
   if BufferLen<=0 then
     exit;
+  {$ifdef FPC}
+  L := length(Text);
+  {$else}
   L := PtrInt(Text);
   if L<>0 then
-    L := PStrRec(Pointer(L-STRRECSIZE))^.length;
+    L := PInteger(L-SizeOf(integer))^;
+  {$endif};
   SetLength(Text,L+BufferLen);
   MoveFast(Buffer^,pointer(PtrInt(Text)+L)^,BufferLen);
 end;
@@ -24284,9 +24288,14 @@ end;
 function AppendRawUTF8ToBuffer(Buffer: PUTF8Char; const Text: RawUTF8): PUTF8Char;
 var L: PtrInt;
 begin
+  {$ifdef FPC}
+  L := length(Text);
+  if L<>0 then begin
+  {$else}
   L := PtrInt(Text);
   if L<>0 then begin
-    L := PStrRec(Pointer(L-STRRECSIZE))^.length;
+    L := PInteger(L-SizeOf(integer))^;
+  {$endif};
     MoveFast(Pointer(Text)^,Buffer^,L);
     inc(Buffer,L);
   end;
@@ -24502,7 +24511,7 @@ begin
           inc(P) else // allow double quotes inside string
           break; // end quote
       PS^ := P^;
-      inc(PS);
+      inc(PByte(PS));
       inc(P);
     until false;
   end;
@@ -25151,11 +25160,7 @@ Txt:  len := F-FDeb;
       PWord(F)^ := ord(':')+ord('(')shl 8;
       inc(F,2);
     end;
-    {$ifdef FPC}
-    L := PStrRec(Pointer(PtrInt(tmp[i])-STRRECSIZE))^.length;
-    {$else}
-    L := PInteger(PtrInt(tmp[i])-SizeOf(integer))^;
-    {$endif}
+    L := {$ifndef FPC}length(tmp[i]){$else}PInteger(PtrInt(tmp[i])-SizeOf(integer))^{$endif};
     MoveFast(pointer(tmp[i])^,F^,L);
     inc(F,L);
     if i in inlin then begin
@@ -32064,7 +32069,7 @@ end;
 function UpperCopyWin255(dest: PWinAnsiChar; const source: RawUTF8): PWinAnsiChar;
 var i, L: integer;
 begin
-  L := PStrRec(Pointer(PtrInt(source)-STRRECSIZE))^.length;
+  L := {$ifdef FPC}length(source){$else}PInteger(PtrInt(source)-SizeOf(integer))^{$endif};
   if L>0 then begin
     if L>250 then
       L := 250; // avoid buffer overflow
