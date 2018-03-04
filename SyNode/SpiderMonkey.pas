@@ -5553,7 +5553,9 @@ begin
     {$endif}
     varByte: setAsInteger(VByte);
     varInteger: setAsInteger(VInteger);
+    {$ifdef FPC}varQword,{$endif}
     varInt64: setAsInt64(VInt64);
+
     varSingle: setAsDouble(VSingle);
     varDouble: setAsDouble(VDouble);
     varCurrency: setAsDouble(VCurrency);

@@ -82,3 +82,6 @@ _FOSSIL_
 .svn/
 # SourceCodeRep artifact
 *.txt
+
+backup/
+.idea/

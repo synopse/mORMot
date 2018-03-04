@@ -4398,8 +4398,9 @@ type
   TPublishedMethodInfoDynArray = array of TPublishedMethodInfo;
 
 /// retrieve published methods information about any class instance
+// - will optionaly accept a Class, in this case Instance is ignored
 // - will work with FPC and Delphi RTTI
-function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInfoDynArray): integer;
+function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInfoDynArray; aClass: TClass = nil): integer;
 
 {$ifdef LINUX}
 const
@@ -37212,7 +37213,7 @@ begin
   end;
 end;
 
-function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInfoDynArray): integer;
+function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInfoDynArray; aClass: TClass): integer;
   procedure AddParentsFirst(C: TClass);
   type
     TMethodInfo = packed record
@@ -37252,7 +37253,9 @@ function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInf
   end;
 begin
   result := 0;
-  if Instance<>nil then
+  if aClass <> nil then
+    AddParentsFirst(aClass)
+  else if Instance<>nil then
     AddParentsFirst(PPointer(Instance)^); // use recursion for adding
 end;
 

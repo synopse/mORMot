@@ -108,7 +108,9 @@ end;
 procedure TfrmSM45Demo.doInteruptInOwnThread;
 begin
   PostMessage(Self.Handle, WM_DEBUG_INTERRUPT, 0, 0);
+  {$IFNDEF FPC}
   Application.ProcessMessages;
+  {$ENDIF}
 end;
 
 function TfrmSM45Demo.toLog(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean;
@@ -154,12 +156,18 @@ end;
 function TfrmSM45Demo.DoOnGetEngineName(const aEngine: TSMEngine): RawUTF8;
 begin
   if GetCurrentThreadId = MainThreadID then
-    result := 'Form Engine';
+    result := 'FormEngine';
 end;
 
 procedure TfrmSM45Demo.DoOnJSDebuggerInit(const aEngine: TSMEngine);
 begin
-  aEngine.EvaluateModule(RelToAbs(ExeVersion.ProgramFilePath, 'ExtendDebuggerConsole.js'));
+  aEngine.EvaluateModule(
+  {$IFDEF MSWINDOWS}
+    '..\..\..\..\DebuggerInit.js'
+  {$ELSE}
+    '../../../../DebuggerInit.js'
+  {$ENDIF}
+  );
 end;
 
 { TStringsProto }

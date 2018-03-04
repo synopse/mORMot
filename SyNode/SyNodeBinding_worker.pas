@@ -530,12 +530,11 @@ end;
 function worker_createThread(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
 var
   in_argv: PjsvalVector;
-  moduleStr, scriptOnMessage, scriptOnTerminate, scriptOnError: SynUnicode;
-  fThread: TJSWorkerThread;
+  moduleStr: SynUnicode;
   workerName: RawUTF8;
-  params, obj: PJSObject;
+  params: PJSObject;
   IsInvalidCall: Boolean;
-  name, module, onmessage, onterminate, onerror: jsval;
+  name, module: jsval;
   val: jsval;
   FEng: TSMEngine;
 const

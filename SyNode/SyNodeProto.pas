@@ -593,7 +593,7 @@ begin
   FjsObjName := StringToAnsi7(fRttiCls.ClassName);
 
   global := cx.CurrentGlobalOrNull;
-  global.ReservedSlot[slotIndex] := cx.NewJSString(FjsObjName).ToJSVal;
+  global.ReservedSlot[fSlotIndex] := cx.NewJSString(fRttiCls.ClassName).ToJSVal;
 
   FMethodsDA.Init(TypeInfo(TSMMethodDynArray), FMethods);
   InitObject(aParent);
@@ -634,7 +634,7 @@ begin
     new(ObjRec);
     ObjRec.init(otProto,self);
     obj.PrivateData := ObjRec;
-    global.ReservedSlot[slotIndex] := obj.ToJSValue;
+    global.ReservedSlot[fSlotIndex] := obj.ToJSValue;
   finally
     cx.EndRequest;
   end;
