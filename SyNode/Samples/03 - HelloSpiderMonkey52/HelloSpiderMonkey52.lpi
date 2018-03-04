@@ -43,7 +43,6 @@
     </Target>
     <SearchPaths>
       <IncludeFiles Value="$(ProjOutDir);../..;../../.."/>
-      <Libraries Value="../../mozjs"/>
       <OtherUnitFiles Value="../..;../../.."/>
       <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
