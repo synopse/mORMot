@@ -1106,11 +1106,9 @@ type
     fHost, fUser, fCPU, fOSDetailed, fFramework: RawUTF8;
     fExeDate: TDateTime;
     fIntelCPU: TIntelCpuFeatures;
-    {$ifdef MSWINDOWS}
     fOS: TWindowsVersion;
     fOSServicePack: integer;
     fWow64: boolean;
-    {$endif}
     fStartDateTime: TDateTime;
     fDayCurrent: Int64; // as PInt64('20160607')^
     fDayChangeIndex: TIntegerDynArray;
@@ -1245,14 +1243,14 @@ type
     /// the computer CPU in which the process was running on
     // - returns e.g. '1*0-15-1027'
     property CPU: RawUTF8 read fCPU;
-    {$ifdef MSWINDOWS}
     /// the computer Operating System in which the process was running on
+    // - equals wUnknown on Linux or BSD - use DetailedOS instead
     property OS: TWindowsVersion read fOS;
     /// the Operating System Service Pack number
+    // - not defined on Linux or BSD - use DetailedOS instead
     property ServicePack: integer read fOSServicePack;
     /// if the 32 bit process was running under WOW 64 virtual emulation
     property Wow64: boolean read fWow64;
-    {$endif MSWINDOWS}
     /// the computer Operating System in which the process was running on
     // - returns e.g. '2.3=5.1.2600' for Windows XP
     // - under Linux, it will return the full system version, e.g.
@@ -4911,9 +4909,7 @@ begin
       exit;
     Split(fCPU,':',fCpu,feat);
     SynCommons.HexToBin(pointer(feat),@fIntelCPU,SizeOf(fIntelCPU));
-    {$ifdef MSWINDOWS}
     fWow64 := aWow64='1';
-    {$endif}
     SetInt64(PBeg,fFreq);
     while (PBeg<PEnd) and (PBeg^>' ') do inc(PBeg);
     if IdemPChar(PBeg,' INSTANCE=') then // only available for a library log
@@ -4933,11 +4929,10 @@ begin
     if PWord(fLines[fHeaderLinesCount])^<>ord('0')+ord('0')shl 8 then // YYYYMMDD -> 20101225 e.g.
       fFreq := 0 else // =0 if date time, >0 if high-resolution time stamp
       fFreqPerDay := fFreq*SecsPerDay;
-    {$ifdef MSWINDOWS} // use only fOSDetailed under Linux
     P := pointer(fOSDetailed);
     fOS := TWindowsVersion(GetNextItemCardinal(P,'.'));
-    fOSServicePack := GetNextItemCardinal(P);
-    {$endif}
+    if fOS<>wUnknown then
+      fOSServicePack := GetNextItemCardinal(P);
     P := fLines[fHeaderLinesCount-2]; // TSQLLog 1.18.2765 ERTL FTS3 2016-07-17T22:38:03
     i := LineSize(fHeaderLinesCount-2)-19; // length('2016-07-17T22:38:03')=19
     if i>0 then begin

@@ -13728,7 +13728,28 @@ function GetFileVersion(const FileName: TFileName): cardinal;
 // - including Host, User, CPU, OS, freemem, freedisk...
 function SystemInfoJson: RawUTF8;
 
+type
+  /// the recognized Windows versions
+  // - defined even outside MSWINDOWS to allow process e.g. from monitoring tools
+  TWindowsVersion = (
+    wUnknown, w2000, wXP, wXP_64, wServer2003, wServer2003_R2,
+    wVista, wVista_64, wServer2008, wServer2008_64,
+    wSeven, wSeven_64, wServer2008_R2, wServer2008_R2_64,
+    wEight, wEight_64, wServer2012, wServer2012_64,
+    wEightOne, wEightOne_64, wServer2012R2, wServer2012R2_64,
+    wTen, wTen_64, wServer2016, wServer2016_64);
+
 const
+  /// the recognized Windows versions, as plain text
+  // - defined even outside MSWINDOWS to allow process e.g. from monitoring tools
+  WINDOWS_NAME: array[TWindowsVersion] of RawUTF8 = (
+    '', '2000', 'XP', 'XP 64bit', 'Server 2003', 'Server 2003 R2',
+    'Vista', 'Vista 64bit', 'Server 2008', 'Server 2008 64bit',
+    '7', '7 64bit', 'Server 2008 R2', 'Server 2008 R2 64bit',
+    '8', '8 64bit', 'Server 2012', 'Server 2012 64bit',
+    '8.1', '8.1 64bit', 'Server 2012 R2', 'Server 2012 R2 64bit',
+    '10', '10 64bit', 'Server 2016', 'Server 2016 64bit');
+
   /// the compiler family used
   COMP_TEXT = {$ifdef FPC}'fpc'{$else}'delphi'{$endif};
   /// the target Operating System used for compilation
@@ -13743,18 +13764,9 @@ const
     {$ifdef CPU32}'32'{$else}'64'{$endif}{$endif}{$endif};
 
 {$ifdef MSWINDOWS}
-
-type
-  /// the recognized Windows versions
-  TWindowsVersion = (
-    wUnknown, w2000, wXP, wXP_64, wServer2003, wServer2003_R2,
-    wVista, wVista_64, wServer2008, wServer2008_64,
-    wSeven, wSeven_64, wServer2008_R2, wServer2008_R2_64,
-    wEight, wEight_64, wServer2012, wServer2012_64,
-    wEightOne, wEightOne_64, wServer2012R2, wServer2012R2_64,
-    wTen, wTen_64, wServer2016, wServer2016_64);
   {$ifndef UNICODE}
-  /// not defined in older Delphi versions
+  type
+  /// low-level API structure, not defined in older Delphi versions
   TOSVersionInfoEx = record
     dwOSVersionInfoSize: DWORD;
     dwMajorVersion: DWORD;
@@ -13769,16 +13781,6 @@ type
     wReserved: BYTE;
   end;
   {$endif}
-
-const
-  /// the recognized Windows versions, as plain text
-  WINDOWS_NAME: array[TWindowsVersion] of RawUTF8 = (
-    '', '2000', 'XP', 'XP 64bit', 'Server 2003', 'Server 2003 R2',
-    'Vista', 'Vista 64bit', 'Server 2008', 'Server 2008 64bit',
-    '7', '7 64bit', 'Server 2008 R2', 'Server 2008 R2 64bit',
-    '8', '8 64bit', 'Server 2012', 'Server 2012 64bit',
-    '8.1', '8.1 64bit', 'Server 2012 R2', 'Server 2012 R2 64bit',
-    '10', '10 64bit', 'Server 2016', 'Server 2016 64bit');
 
 var
   /// is set to TRUE if the current process is a 32 bit image running under WOW64
