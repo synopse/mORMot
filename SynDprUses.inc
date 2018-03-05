@@ -1,6 +1,13 @@
 {$ifndef LVCL}
 {$ifdef FPC} // we may be on Kylix or upcoming Delphi for Linux
-  {$ifdef Unix} // we may also be on Darwin / OSX  
+  {$ifdef FPC_FASTMM4}
+  FastMM4Messages in '..\RTL7\FastMM4Messages.pas',
+  FastMM4 in '..\RTL7\FastMM4.pas',
+  {$endif}
+  {$ifdef FPC_CMEM}
+  cmem, // you may also set FPC_NO_DEFAULT_MEMORYMANAGER
+  {$endif}
+  {$ifdef Unix} // we may also be on Darwin / OSX
   cthreads, // if you use threads: always needed for servers
   {$ifdef Darwin}
   iosxwstr, // optional WideString manager for Mac, but won't hurt
