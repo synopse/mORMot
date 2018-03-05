@@ -2761,29 +2761,10 @@ function AppendRawUTF8ToBuffer(Buffer: PUTF8Char; const Text: RawUTF8): PUTF8Cha
 function AppendUInt32ToBuffer(Buffer: PUTF8Char; Value: cardinal): PUTF8Char;
 
 
-{$ifdef PUREPASCAL}
-/// inlined StrComp(), to be used with PUTF8Char/PAnsiChar
-function StrComp(Str1, Str2: pointer): PtrInt;
-  {$ifdef HASINLINE}inline;{$endif}
-
 /// buffer-safe version of StrComp(), to be used with PUTF8Char/PAnsiChar
 // - pure pascal StrComp() won't access the memory beyond the string, but this
 // function is defined for compatibility with SSE 4.2 expectations
 function StrCompFast(Str1, Str2: pointer): PtrInt;
-  {$ifdef HASINLINE}inline;{$endif}
-{$else}
-
-/// x86 asm version of StrComp(), to be used with PUTF8Char/PAnsiChar
-// - this version won't access the memory beyond the string, so may be
-// preferred to StrCompSSE42 or StrComp, when using e.g. memory mapped files
-function StrCompFast(Str1, Str2: pointer): PtrInt;
-
-/// SSE 4.2 version of StrComp(), to be used with PUTF8Char/PAnsiChar
-// - please note that this optimized version may read up to 15 bytes
-// beyond the string; this is rarely a problem but it may in principle
-// generate a protection violation (e.g. when used over memory mapped files) -
-// you can use the slightly slower but safe StrCompFast() function instead
-function StrCompSSE42(Str1, Str2: pointer): PtrInt;
 
 /// fastest available version of StrComp(), to be used with PUTF8Char/PAnsiChar
 // - will use SSE4.2 instructions on supported CPUs - and potentiall read up
@@ -2793,7 +2774,14 @@ function StrCompSSE42(Str1, Str2: pointer): PtrInt;
 // !  StrComp := @StrCompFast;
 var StrComp: function (Str1, Str2: pointer): PtrInt = StrCompFast;
 
-{$endif}
+{$ifndef PUREPASCAL}
+/// SSE 4.2 version of StrComp(), to be used with PUTF8Char/PAnsiChar
+// - please note that this optimized version may read up to 15 bytes
+// beyond the string; this is rarely a problem but it may in principle
+// generate a protection violation (e.g. when used over memory mapped files) -
+// you can use the slightly slower but safe StrCompFast() function instead
+function StrCompSSE42(Str1, Str2: pointer): PtrInt;
+{$endif PUREPASCAL}
 
 /// pure pascal version of strspn(), to be used with PUTF8Char/PAnsiChar
 // - please note that this optimized version may read up to 3 bytes beyond 
@@ -2845,18 +2833,13 @@ function StrIComp(Str1, Str2: pointer): PtrInt;
 // protected buffer
 function StrLenPas(S: pointer): PtrInt;
 
-{$ifdef FPC}
-/// FPC will use its internal optimized implementations
-function StrLen(S: pointer): sizeint; external name 'FPC_PCHAR_LENGTH';
-var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte) = System.FillChar;
-{$else}
 /// our fast version of StrLen(), to be used with PUTF8Char/PAnsiChar
 // - this version will use fast SSE2/SSE4.2 instructions (if available), on both
 // Win32 and Win64 platforms: please note that in this case, it may read up to
 // 15 bytes before or beyond the string; this is rarely a problem but it can in
 // principle generate a protection violation (e.g. when used over memory mapped files):
 // you can use the slightly slower StrLenPas() function instead with such input;
-// if you want to disable StrCompSSE42 for your whole project, add in the
+// if you want to disable StrLenSSE42 for your whole project, add in the
 // initialization section of one of your units:
 // !  StrLen := @StrLenPas;
 var StrLen: function(S: pointer): PtrInt = StrLenPas;
@@ -2865,7 +2848,6 @@ var StrLen: function(S: pointer): PtrInt = StrLenPas;
 // - this version will use fast SSE2 instructions (if available), on both Win32
 // and Win64 platforms, or an optimized X86 revision on older CPUs
 var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte);
-{$endif FPC}
 
 /// our fast version of move()
 // - this version will use fast SSE2 instructions (if available), on both Win32
@@ -25386,25 +25368,6 @@ begin
       exit;
 end;
 
-function StrComp(Str1, Str2: pointer): PtrInt;
-begin
-  if Str1<>Str2 then
-  if Str1<>nil then
-  if Str2<>nil then begin
-    if PByte(Str1)^=PByte(Str2)^ then
-      repeat
-        if PByte(Str1)^=0 then break;
-        inc(PByte(Str1));
-        inc(PByte(Str2));
-      until PByte(Str1)^<>PByte(Str2)^;
-    result := PByte(Str1)^-PByte(Str2)^;
-    exit;
-  end else
-  result := 1 else  // Str2=''
-  result := -1 else // Str1=''
-  result := 0;      // Str1=Str2
-end;
-
 function StrCompFast(Str1, Str2: pointer): PtrInt;
 begin
   if Str1<>Str2 then
@@ -34451,6 +34414,81 @@ asm // ecx=crc, rdx=buf, r8=len (Linux: edi,rsi,rdx)
         crc32   eax, byte ptr[rdx + 2]
 @0:     not     eax
 end;
+
+const
+  EQUAL_EACH = 8;   // see https://msdn.microsoft.com/en-us/library/bb531463
+  NEGATIVE_POLARITY = 16;
+
+{$ifdef HASAESNI}
+function StrLenSSE42(S: pointer): PtrInt;
+{$ifdef FPC}nostackframe; assembler; asm {$else}
+asm // rcx=S (Linux: rdi)
+        .noframe
+{$endif FPC}
+        {$ifdef win64}
+        mov     rdx, rcx
+        test    rcx, rcx
+        {$else}
+        mov     rdx, rdi
+        test    rdi, rdi
+        {$endif}
+        mov     rax, -16
+        jz      @null
+        pxor    xmm0, xmm0
+@L:     add     rax, 16   // add before comparison flag
+        pcmpistri xmm0, [rdx + rax], EQUAL_EACH // result in rcx
+        jnz     @L
+        add     rax, rcx
+        ret
+@null:  xor     rax, rax
+end;
+
+function StrCompSSE42(Str1, Str2: pointer): PtrInt;
+{$ifdef FPC}nostackframe; assembler; asm {$else}
+asm // rcx=Str1, rdx=Str2 (Linux: rdi,rsi)
+        .noframe
+{$endif FPC}
+      {$ifdef win64}
+      mov       rax, rcx
+      test      rcx, rdx
+      {$else}
+      mov       rax, rdi
+      mov       rdx, rsi
+      test      rdi, rsi
+      {$endif}
+      jz        @n
+@ok:  sub       rax, rdx
+      jz        @0
+      movdqu    xmm0, dqword [rdx]
+      pcmpistri xmm0, dqword [rdx + rax], EQUAL_EACH + NEGATIVE_POLARITY // result in rcx
+      ja        @1
+      jc        @2
+      xor       rax, rax
+      ret
+@1:   add       rdx, 16
+      movdqu    xmm0, dqword [rdx]
+      pcmpistri xmm0, dqword [rdx + rax], EQUAL_EACH + NEGATIVE_POLARITY
+      ja        @1
+      jc        @2
+@0:   xor       rax, rax // Str1=Str2
+      ret
+@n:   cmp       rax, rdx
+      je        @0
+      test      rax, rax  // Str1='' ?
+      jz        @max
+      test      rdx, rdx  // Str2='' ?
+      jnz       @ok
+      mov       rax, 1
+      ret
+@max: dec       rax
+      ret
+@2:   add       rax, rdx
+      movzx     rax, byte ptr [rax+rcx]
+      movzx     rdx, byte ptr [rdx+rcx]
+      sub       rax, rdx
+end;
+{$endif HASAESNI}
+
 {$endif CPU64}
 {$endif CPUINTEL}
 
@@ -40611,28 +40649,6 @@ asm // from GPL strlen64.asm by Agner Fog - www.agner.org/optimize
 @null:
 end;
 
-const
-  EQUAL_EACH = 8;   // see https://msdn.microsoft.com/en-us/library/bb531463
-  NEGATIVE_POLARITY = 16;
-
-{$ifdef HASAESNI}
-function StrLenSSE42(S: pointer): PtrInt;
-asm // rcx=S
-        .NOFRAME
-        test    rcx, rcx
-        mov     rdx, rcx
-        mov     rax, -16
-        jz      @null
-        pxor    xmm0, xmm0
-@L:     add     rax, 16   // add before comparison flag
-        pcmpistri xmm0, [rdx + rax], EQUAL_EACH
-        jnz     @L
-        add     rax, rcx
-        ret
-@null:  xor     rax, rax
-end;
-{$endif HASAESNI}
-
 {$else CPU64}
 
 {$ifndef PUREPASCAL}
@@ -41005,8 +41021,10 @@ begin
   {$else DELPHI5OROLDER}
   {$ifdef CPU64}
   {$ifdef HASAESNI}
-  if cfSSE42 in CpuFeatures then
-    StrLen := @StrLenSSE42 else
+  if cfSSE42 in CpuFeatures then begin
+    StrLen := @StrLenSSE42;
+    StrComp := @StrCompSSE42;
+  end else
   {$endif HASAESNI}
     StrLen := @StrLenSSE2;
   {$ifdef WITH_ERMS}{$ifdef MSWINDOWS} // disabled (slower for small blocks)
@@ -43776,7 +43794,7 @@ procedure GetJSONToAnyVariant(var Value: variant; var JSON: PUTF8Char;
 // internal method used by VariantLoadJSON(), GetVariantFromJSON() and
 // TDocVariantData.InitJSON()
 var wasString: boolean;
-  procedure ProcessSimple(Val: PUTF8Char); {$ifdef HASINLINE}inline;{$endif}
+  procedure ProcessSimple(Val: PUTF8Char); {$ifdef FPC}inline;{$endif}
   begin
     GetVariantFromJSON(Val,wasString,Value,nil,AllowDouble);
     if JSON=nil then
@@ -64699,7 +64717,12 @@ begin
     crcblock := @crcblockSSE42;
     strspn := @strspnSSE42;
     strcspn := @strcspnSSE42;
-    {$ifndef PUREPASCAL}
+    {$ifdef PUREPASCAL}
+    {$ifdef FPC} // done in InitRedirectCode for Delphi
+    StrLen := @StrLenSSE42;
+    StrComp := @StrCompSSE42;
+    {$endif}
+    {$else}
     StrComp := @StrCompSSE42;
     DYNARRAY_SORTFIRSTFIELD[false,djRawUTF8] := @SortDynArrayAnsiStringSSE42;
     DYNARRAY_SORTFIRSTFIELD[false,djWinAnsi] := @SortDynArrayAnsiStringSSE42;
@@ -64741,6 +64764,7 @@ initialization
   crc32c := @crc32cfast; // now to circumvent Internal Error C11715 for Delphi 5
   MoveFast := @System.Move;
   {$ifdef FPC}
+  StrLen := @System.StrLen;
   FillCharFast := @System.FillChar; // FPC cross-platform RTL is optimized enough
   {$else}
   {$ifdef CPUARM}
