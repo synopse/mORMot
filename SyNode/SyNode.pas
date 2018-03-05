@@ -55,19 +55,6 @@ unit SyNode;
 
   ***** END LICENSE BLOCK *****
 
-
-  ---------------------------------------------------------------------------
-   Download the mozjs-45 library at
-     x32: https://unitybase.info/downloads/mozjs-45.zip
-     x64: https://unitybase.info/downloads/mozjs-45-x64.zip
-
-   Download the mozjs-52 library at ( define SM52 on the global level)
-     x32: https://unitybase.info/downloads/mozjs-52x32dlls.zip
-     x64: https://unitybase.info/downloads/mozjs-52x64dlls.zip
-   Linux x64: http://unitybase.info/media/files/libmozjs-52.zip
-  ---------------------------------------------------------------------------
-
-
   Version 1.18
   - initial release. Use SpiderMonkey 45
   - x64 support added
