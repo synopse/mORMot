@@ -106,7 +106,7 @@ var
 procedure QueryPerformanceCounter(var Value: Int64); inline;
 
 /// compatibility function, wrapping Win32 API high resolution timer
-function QueryPerformanceFrequency(var Value: Int64): boolean;
+function QueryPerformanceFrequency(var Value: Int64): boolean; inline;
 
 /// compatibility function, wrapping Win32 API file position change
 function SetFilePointer(hFile: cInt; lDistanceToMove: TOff;
@@ -288,12 +288,6 @@ begin // returns time in nano second resolution
     Value := round(Value*mach_timecoeff);
 end;
 
-function QueryPerformanceFrequency(var Value: Int64):boolean;
-begin
-  Value := C_BILLION; // 1 second = 1e9 nanoseconds
-  result := true;
-end;
-
 function GetTickCount64: Int64;
 begin
   QueryPerformanceCounter(result);
@@ -357,18 +351,13 @@ begin
   value := r.tv_nsec+r.tv_sec*C_BILLION;
 end;
 
-function QueryPerformanceFrequency(var Value: Int64): boolean;
-var r : TTimeSpec;
-    FIsHighResolution : boolean;
-begin
-  FIsHighResolution := (clock_getres(CLOCK_MONOTONIC,@r) = 0);
-  FIsHighResolution := FIsHighResolution and (r.tv_nsec <> 0);
-  if (r.tv_nsec <> 0) then
-    value := C_BILLION div (r.tv_nsec+(r.tv_sec*C_BILLION));
-  result := FIsHighResolution;
-end;
-
 {$endif Darwin}
+
+function QueryPerformanceFrequency(var Value: Int64): boolean;
+begin
+  Value := C_BILLION; // 1 second = 1e9 nanoseconds
+  result := true;
+end;
 
 function SetFilePointer(hFile: cInt; lDistanceToMove: TOff;
   lpDistanceToMoveHigh: Pointer; dwMoveMethod: cint): TOff;
