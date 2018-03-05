@@ -49,12 +49,6 @@ unit SpiderMonkey;
 
   ***** END LICENSE BLOCK *****
 
-  ---------------------------------------------------------------------------
-   Download the mozjs-45 library at
-     x32: https://unitybase.info/downloads/mozjs-45.zip
-     x64: https://unitybase.info/downloads/mozjs-45-x64.zip
-  ---------------------------------------------------------------------------
-
   Version 1.18
   - initial release. Use SpiderMonkey 45
 }
