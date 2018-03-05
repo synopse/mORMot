@@ -21478,7 +21478,7 @@ const
   end;
 var err: integer;
 begin
-  if result.VType and VTYPE_STATIC<>0 then
+  {$ifndef FPC}if result.VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(variant(result));
   result.VType := SQL_ELEMENTTYPES[fieldType];
   result.VAny := nil; // avoid GPF

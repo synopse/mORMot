@@ -14140,7 +14140,8 @@ const
   // - used mainly in low-level code similar to the folllowing:
   // !  if TVarData(aVariant).VType and VTYPE_STATIC<>0 then
   // !    VarClear(aVariant);
-  // - equals private constant varDeepData in Variants.pas
+  // - equals private constant varDeepData in Delphi's Variants.pas and
+  // varComplexType in FPC's variants.pp - seldom used on FPC
   VTYPE_STATIC = $BFE8;
 
 /// same as Dest := TVarData(Source) for simple values
@@ -19588,7 +19589,7 @@ end;
 
 procedure TRawUTF8Interning.UniqueVariant(var aResult: variant; const aText: RawUTF8);
 begin
-  if TVarData(aResult).VType and VTYPE_STATIC<>0 then
+  {$ifndef FPC}if TVarData(aResult).VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(aResult);
   TVarData(aResult).VType := varString;
   TVarData(aResult).VAny := nil;
@@ -42976,7 +42977,7 @@ end;
 procedure RawByteStringToVariant(Data: PByte; DataLen: Integer; var Value: variant);
 begin
   with TVarData(Value) do begin
-    if VType and VTYPE_STATIC<>0 then
+    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
       VarClear(Value);
     if (Data=nil) or (DataLen<=0) then
       VType := varNull else begin
@@ -42990,7 +42991,7 @@ end;
 procedure RawByteStringToVariant(const Data: RawByteString; var Value: variant);
 begin
   with TVarData(Value) do begin
-    if VType and VTYPE_STATIC<>0 then
+    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
       VarClear(Value);
     if Data='' then
       VType := varNull else begin
@@ -43093,7 +43094,7 @@ procedure GetJSONToAnyVariant(var Value: variant; var JSON: PUTF8Char;
 
 procedure SetVariantByRef(const Source: Variant; var Dest: Variant);
 begin
-  if TVarData(Dest).VType and VTYPE_STATIC<>0 then
+  {$ifndef FPC}if TVarData(Dest).VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(Dest);
   if (TVarData(Source).VType=varVariant or varByRef) or
      (TVarData(Source).VType in // already byref or simple
@@ -43109,7 +43110,7 @@ procedure SetVariantByValue(const Source: Variant; var Dest: Variant);
 var s: TVarData absolute Source;
     d: TVarData absolute Dest;
 begin
-  if d.VType and VTYPE_STATIC<>0 then
+  {$ifndef FPC}if d.VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(Dest);
   case s.VType of
   varEmpty..varDate,varBoolean,varShortInt..varWord64: begin
@@ -43154,7 +43155,7 @@ procedure RawUTF8ToVariant(Txt: PUTF8Char; TxtLen: integer; var Value: variant);
 begin
   with TVarData(Value) do begin
     if VType<>varString then begin // in-place replacement of a RawUTF8 value
-      if VType and VTYPE_STATIC<>0 then
+      {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
         VarClear(Value);
       VType := varString;
       VAny := nil; // avoid GPF below when assigning a string variable to VAny
@@ -43167,7 +43168,7 @@ procedure RawUTF8ToVariant(const Txt: RawUTF8; var Value: variant);
 begin
   with TVarData(Value) do begin
     if VType<>varString then begin // in-place replacement of a RawUTF8 value
-      if VType and VTYPE_STATIC<>0 then
+      {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
         VarClear(Value);
       VType := varString;
       VAny := nil; // avoid GPF below when assigning a string variable to VAny
@@ -43190,7 +43191,7 @@ end;
 procedure RawUTF8ToVariant(const Txt: RawUTF8; var Value: TVarData;
   ExpectedValueType: word);
 begin
-  if Value.VType and VTYPE_STATIC<>0 then
+  {$ifndef FPC}if Value.VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(variant(Value));
   Value.VType := ExpectedValueType;
   Value.VAny := nil; // avoid GPF below
@@ -43348,7 +43349,7 @@ var JSON: PUTF8Char;
     tmp: TSynTempBuffer; // GetJSON*() does in-place unescape -> private copy
 begin
   with TVarData(Value) do begin
-    if VType and VTYPE_STATIC<>0 then
+    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
       VarClear(Value);
     VType := PWord(Source)^;
     inc(Source,SizeOf(VType));
@@ -43515,8 +43516,8 @@ end;
 
 procedure VarRecToVariant(const V: TVarRec; var result: variant);
 begin
-  if TVarData(result).VType and VTYPE_STATIC=0 then
-    TVarData(result).VType := varEmpty else
+  {$ifndef FPC}if TVarData(result).VType and VTYPE_STATIC=0 then
+    TVarData(result).VType := varEmpty else{$endif}
     VarClear(result);
   with TVarData(result) do
   case V.VType of
@@ -43720,7 +43721,7 @@ procedure TSynInvokeableVariantType.Copy(var Dest: TVarData;
 begin
   if Indirect then
     SimplisticCopy(Dest,Source,true) else begin
-    if Dest.VType and VTYPE_STATIC<>0 then
+    {$ifndef FPC}if Dest.VType and VTYPE_STATIC<>0 then{$endif}
       VarClear(variant(Dest)); // Dest may be a complex type
     Dest := Source;
   end;
@@ -43775,7 +43776,7 @@ procedure GetJSONToAnyVariant(var Value: variant; var JSON: PUTF8Char;
 // internal method used by VariantLoadJSON(), GetVariantFromJSON() and
 // TDocVariantData.InitJSON()
 var wasString: boolean;
-  procedure ProcessSimple(Val: PUTF8Char);
+  procedure ProcessSimple(Val: PUTF8Char); {$ifdef HASINLINE}inline;{$endif}
   begin
     GetVariantFromJSON(Val,wasString,Value,nil,AllowDouble);
     if JSON=nil then
@@ -43786,7 +43787,7 @@ var i: integer;
     ToBeParsed: PUTF8Char;
     wasParsedWithinString: boolean;
 begin
-  if TVarData(Value).VType and VTYPE_STATIC<>0 then
+  {$ifndef FPC}if TVarData(Value).VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(Value);
   if (Options<>nil) and (dvoAllowDoubleValue in Options^) then
     AllowDouble := true; // for ProcessSimple() above
@@ -44028,8 +44029,8 @@ begin
     AllowDouble := dvoAllowDoubleValue in TryCustomVariants^;
   // handle simple text or numerical values
   with TVarData(Value) do begin
-    if VType and VTYPE_STATIC=0 then
-      VType := varEmpty else
+    {$ifndef FPC}if VType and VTYPE_STATIC=0 then
+      VType := varEmpty else{$endif}
       VarClear(Value);
     if (JSON=nil) or not wasString then
       if GetVariantFromNotStringJSON(JSON,TVarData(Value),AllowDouble) then
@@ -46265,7 +46266,7 @@ begin
   if Indirect then
     SimplisticCopy(Dest,Source,true) else
     if dvoValueCopiedByReference in TDocVariantData(Source).Options then begin
-      if Dest.VType and VTYPE_STATIC<>0 then
+      {$ifndef FPC}if Dest.VType and VTYPE_STATIC<>0 then{$endif}
         VarClear(variant(Dest)); // Dest may be a complex type
       pointer(TDocVariantData(Dest).VName) := nil;      // avoid GPF
       pointer(TDocVariantData(Dest).VValue) := nil;
@@ -46280,7 +46281,7 @@ var S: TDocVariantData absolute Source;
     i: integer;
 begin
   //Assert(Source.VType=DocVariantVType);
-  if Dest.VType and VTYPE_STATIC<>0 then
+  {$ifndef FPC}if Dest.VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(variant(Dest)); // Dest may be a complex type
   D.VType := S.VType;
   D.VOptions := S.VOptions; // copies also Kind
@@ -46309,7 +46310,7 @@ begin
   if AVarType=VarType then begin
     VariantToUTF8(Variant(Source),Tmp,wasString);
     if wasString then begin
-      if Dest.VType and VTYPE_STATIC<>0 then
+      {$ifndef FPC}if Dest.VType and VTYPE_STATIC<>0 then{$endif}
         VarClear(variant(Dest));
       variant(Dest) := _JSONFast(Tmp); // convert from JSON text
       exit;
@@ -46369,9 +46370,7 @@ end;
 
 class function TDocVariant.New(Options: TDocVariantOptions): Variant;
 begin
-  {$ifndef FPC}
-  if TVarData(result).VType and VTYPE_STATIC<>0 then
-  {$endif}
+  {$ifndef FPC}if TVarData(result).VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(result);
   TDocVariantData(result).Init(Options);
 end;
@@ -46379,9 +46378,7 @@ end;
 class function TDocVariant.NewObject(const NameValuePairs: array of const;
   Options: TDocVariantOptions=[]): variant;
 begin
-  {$ifndef FPC}
-  if TVarData(result).VType and VTYPE_STATIC<>0 then
-  {$endif}
+  {$ifndef FPC}if TVarData(result).VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(result);
   TDocVariantData(result).InitObject(NameValuePairs,Options);
 end;
@@ -46389,9 +46386,7 @@ end;
 class function TDocVariant.NewArray(const Items: array of const;
   Options: TDocVariantOptions=[]): variant;
 begin
-  {$ifndef FPC}
-  if TVarData(result).VType and VTYPE_STATIC<>0 then
-  {$endif}
+  {$ifndef FPC}if TVarData(result).VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(result);
   TDocVariantData(result).InitArray(Items,Options);
 end;
@@ -46399,9 +46394,7 @@ end;
 class function TDocVariant.NewArray(const Items: TVariantDynArray;
   Options: TDocVariantOptions=[]): variant;
 begin
-  {$ifndef FPC}
-  if TVarData(result).VType and VTYPE_STATIC<>0 then
-  {$endif}
+  {$ifndef FPC}if TVarData(result).VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(result);
   TDocVariantData(result).InitArrayFromVariants(Items,Options);
 end;
@@ -46415,9 +46408,7 @@ end;
 class function TDocVariant.NewUnique(const SourceDocVariant: variant;
   Options: TDocVariantOptions=[dvoReturnNullForUnknownProperty]): variant;
 begin
-  {$ifndef FPC}
-  if TVarData(result).VType and VTYPE_STATIC<>0 then
-  {$endif}
+  {$ifndef FPC}if TVarData(result).VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(result);
   TDocVariantData(result).InitCopy(SourceDocVariant,Options);
 end;
@@ -46489,9 +46480,7 @@ end;
 function _Obj(const NameValuePairs: array of const;
   Options: TDocVariantOptions=[]): variant;
 begin
-  {$ifndef FPC}
-  if TVarData(result).VType and VTYPE_STATIC<>0 then
-  {$endif}
+  {$ifndef FPC}if TVarData(result).VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(result);
   TDocVariantData(result).InitObject(NameValuePairs,Options);
 end;
@@ -46499,9 +46488,7 @@ end;
 function _Arr(const Items: array of const;
   Options: TDocVariantOptions=[]): variant;
 begin
-  {$ifndef FPC}
-  if TVarData(result).VType and VTYPE_STATIC<>0 then
-  {$endif}
+  {$ifndef FPC}if TVarData(result).VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(result);
   TDocVariantData(result).InitArray(Items,Options);
 end;
@@ -46511,9 +46498,7 @@ var o: PDocVariantData;
 begin
   o := _Safe(Obj);
   if not(dvoIsObject in o^.VOptions) then begin // create new object
-    {$ifndef FPC}
-    if TVarData(Obj).VType and VTYPE_STATIC<>0 then
-    {$endif}
+    {$ifndef FPC}if TVarData(Obj).VType and VTYPE_STATIC<>0 then{$endif}
       VarClear(Obj);
     TDocVariantData(Obj).InitObject(NameValuePairs,JSON_OPTIONS_FAST);
   end else begin // append new names/values to existing object
@@ -46537,18 +46522,14 @@ end;
 
 function _ObjFast(const NameValuePairs: array of const): variant;
 begin
-  {$ifndef FPC}
-  if TVarData(result).VType and VTYPE_STATIC<>0 then
-  {$endif}
+  {$ifndef FPC}if TVarData(result).VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(result);
   TDocVariantData(result).InitObject(NameValuePairs,JSON_OPTIONS_FAST);
 end;
 
 function _ObjFast(aObject: TObject; aOptions: TTextWriterWriteObjectOptions): variant;
 begin
-  {$ifndef FPC}
-  if TVarData(result).VType and VTYPE_STATIC<>0 then
-  {$endif}
+  {$ifndef FPC}if TVarData(result).VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(result);
   if TDocVariantData(result).InitJSONInPlace(
       pointer(ObjectToJson(aObject,aOptions)),JSON_OPTIONS_FAST)=nil then
@@ -46557,9 +46538,7 @@ end;
 
 function _ArrFast(const Items: array of const): variant;
 begin
-  {$ifndef FPC}
-  if TVarData(result).VType and VTYPE_STATIC<>0 then
-  {$endif}
+  {$ifndef FPC}if TVarData(result).VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(result);
   TDocVariantData(result).InitArray(Items,JSON_OPTIONS_FAST);
 end;
@@ -46597,7 +46576,7 @@ end;
 function _Json(const JSON: RawUTF8; var Value: variant;
   Options: TDocVariantOptions): boolean;
 begin
-  if TVarData(Value).VType and VTYPE_STATIC<>0 then
+  {$ifndef FPC}if TVarData(Value).VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(Value);
   if not TDocVariantData(Value).InitJSON(JSON,Options) then begin
     VarClear(Value);
@@ -46628,9 +46607,7 @@ end;
 
 function _ByRef(const DocVariant: variant; Options: TDocVariantOptions): variant;
 begin
-  {$ifndef FPC}
-  if TVarData(result).VType and VTYPE_STATIC<>0 then
-  {$endif}
+  {$ifndef FPC}if TVarData(result).VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(result);
   TDocVariantData(result) := _Safe(DocVariant)^; // fast byref copy
   TDocVariantData(result).SetOptions(Options);
