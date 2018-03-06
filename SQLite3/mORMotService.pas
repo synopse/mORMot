@@ -1304,7 +1304,7 @@ begin
   tix := GetTickCount64 + waitseconds * 1000;
   repeat // RunUntilSigTerminated() below should delete the .pid file
     sleep(100);
-    if not FileExists(pidfile) then
+    if not FileExists(_pidfile) then
       result := true;
   until result or (GetTickCount64 > tix);
   if not result then
@@ -1315,6 +1315,8 @@ procedure RunUntilSigTerminated(daemon: TObject; dofork: boolean;
   const start, stop: TThreadMethod; log: TSynLog; const servicename: string);
 var
   pid, sid: {$ifdef FPC}TPID{$else}pid_t{$endif};
+const
+  TXT: array[boolean] of string[4] = ('run', 'fork');
 begin
   SigIntercept;
   try
@@ -1347,18 +1349,22 @@ begin
     end;
     try
       if log <> nil then
-        log.Log(sllNewRun, 'Start % %', [serviceName, ExeVersion.Version.DetailedOrVoid], daemon);
+        log.Log(sllNewRun, 'Start % /% %', [serviceName, TXT[dofork],
+          ExeVersion.Version.DetailedOrVoid], daemon);
       start;
       while SynDaemonTerminated = 0 do
         {$ifdef FPC}fpPause{$else}pause{$endif};
     finally
       if log <> nil then
-        log.Log(sllNewRun, 'Stop from Sig=%', [SynDaemonTerminated], daemon);
+        log.Log(sllNewRun, 'Stop /% from Sig=%', [TXT[dofork], SynDaemonTerminated], daemon);
       try
         stop;
       finally
-        if dofork then
+        if dofork then begin
           DeleteFile(pidfile);
+          if log <> nil then
+            log.Log(sllTrace, 'RunUntilSigTerminated: deleted file %', [_pidfile]);
+        end;
       end;
     end;
   except
@@ -1596,7 +1602,7 @@ begin
       if (cmd = cVerbose) and (log <> nil) then  // leave as in settings for -c
         log.Family.EchoToConsole := LOG_VERBOSE;
       try
-        log.Log(sllNewRun, 'Start % %', [fSettings.ServiceName,
+        log.Log(sllNewRun, 'Start % /% %', [fSettings.ServiceName,cmdText,
           ExeVersion.Version.DetailedOrVoid], self);
         Start;
         writeln('Press [Enter] to quit');
@@ -1605,7 +1611,7 @@ begin
         writeln('Shutting down server');
       finally
         ioresult;
-        log.Log(sllNewRun, 'Stop', self);
+        log.Log(sllNewRun, 'Stop /%', [cmdText], self);
         Stop;
       end;
     except
@@ -1686,6 +1692,7 @@ begin
     Syntax;
   {$endif MSWINDOWS}
   end;
+  TextColor(ccLightGray);
   ioresult;
 end;
 
