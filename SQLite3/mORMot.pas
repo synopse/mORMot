@@ -39270,7 +39270,7 @@ begin
   for i := 0 to high(fStaticData) do
     // free all TSQLRestStorage objects and update file if necessary
     fStaticData[i].Free;
-  for i := 0 to high(fPublishedMethod) do
+  for i := 0 to fPublishedMethods.Count-1 do
     fPublishedMethod[i].Stats.Free;
   FreeAndNil(fSessions);
   FreeAndNil(fAssociatedServices);
@@ -40696,8 +40696,15 @@ begin
   with Server.fPublishedMethod[MethodIndex] do begin
     if mlMethods in Server.StatLevels then begin
       QueryPerformanceCounter(timeStart);
-      if Stats=nil then
-        Stats := TSynMonitorInputOutput.Create(Name);
+      if Stats=nil then begin
+        Server.fStats.Lock; // use this global lock
+        try
+          if Stats=nil then
+            Stats := TSynMonitorInputOutput.Create(Name);
+        finally
+          Server.fStats.UnLock;
+        end;
+      end;
       Stats.Processing := true;
     end;
     Server.InternalLog('% %',[Name,Parameters],sllServiceCall);
@@ -40709,12 +40716,27 @@ begin
       if Server.StatUsage<>nil then
         Server.StatUsage.Modified(Stats,[]);
       if (mlSessions in Server.StatLevels) and (fSession<>nil) then begin
-        if fSession.fMethods=nil then
-          SetLength(fSession.fMethods,length(Server.fPublishedMethod));
+        if fSession.fMethods=nil then begin
+          Server.fStats.Lock;
+          try
+            if fSession.fMethods=nil then
+              SetLength(fSession.fMethods,length(Server.fPublishedMethod));
+          finally
+            Server.fStats.UnLock;
+          end;
+        end;
         sessionstat := fSession.fMethods[MethodIndex];
         if sessionstat=nil then begin
-          sessionstat := TSynMonitorInputOutput.Create(Name);
-          fSession.fMethods[MethodIndex] := sessionstat;
+          Server.fStats.Lock;
+          try
+            sessionstat := fSession.fMethods[MethodIndex];
+            if sessionstat=nil then begin
+              sessionstat := TSynMonitorInputOutput.Create(Name);
+              fSession.fMethods[MethodIndex] := sessionstat;
+            end;
+          finally
+            Server.fStats.UnLock;
+          end;
         end;
         StatsFromContext(sessionstat,timeEnd,true);
         // mlSessions stats are not yet tracked per Client
@@ -40723,8 +40745,7 @@ begin
   end;
   with Server.fStats do begin
     EnterCriticalSection(fLock);
-    inc(fServiceMethod);
-    Changed;
+    inc(fServiceMethod); // TSQLRestServerMonitor.Changed method is void
     LeaveCriticalSection(fLock);
   end;
 end;
@@ -58970,7 +58991,7 @@ begin
     LeaveCriticalSection(fInstanceLock);
   end;
   DeleteCriticalSection(fInstanceLock);
-  ObjArrayClear(fStats);
+  ObjArrayClear(fStats,true);
   inherited Destroy;
 end;
 
@@ -59340,15 +59361,26 @@ begin
     Error('ServiceExecution=nil',HTTP_SERVERERROR);
     exit;
   end;
-  if mlInterfaces in TSQLRestServer(Rest).StatLevels then begin
-    stats := fStats[Ctxt.ServiceMethodIndex-SERVICE_PSEUDO_METHOD_COUNT];
-    if stats=nil then begin
-      stats := StatsCreate;
-      fStats[Ctxt.ServiceMethodIndex-SERVICE_PSEUDO_METHOD_COUNT] := stats;
+  stats := nil;
+  if (mlInterfaces in TSQLRestServer(Rest).StatLevels) then begin
+    m := Ctxt.ServiceMethodIndex-SERVICE_PSEUDO_METHOD_COUNT;
+    if m>=0 then begin
+      stats := fStats[m];
+      if stats=nil then begin
+        EnterCriticalSection(fInstanceLock);
+        try
+          stats := fStats[m];
+          if stats=nil then begin
+            stats := StatsCreate;
+            fStats[m] := stats;
+          end;
+        finally
+          LeaveCriticalSection(fInstanceLock);
+        end;
+      end;
+      stats.Processing := true;
     end;
-    stats.Processing := true;
-  end else
-    stats := nil;
+  end;
   exec := nil;
   try
     if fImplementationClassKind=ickFake then
@@ -59428,8 +59460,15 @@ begin
         if Ctxt.Server.StatUsage<>nil then
           Ctxt.Server.StatUsage.Modified(stats,[]);
         if (mlSessions in TSQLRestServer(Rest).StatLevels) and (Ctxt.fSession<>nil) then begin
-          if Ctxt.fSession.fInterfaces=nil then
-            SetLength(Ctxt.fSession.fInterfaces,length(Rest.Services.fListInterfaceMethod));
+          if Ctxt.fSession.fInterfaces=nil then begin
+            EnterCriticalSection(fInstanceLock);
+            try
+              if Ctxt.fSession.fInterfaces=nil then
+                SetLength(Ctxt.fSession.fInterfaces,length(Rest.Services.fListInterfaceMethod));
+            finally
+              LeaveCriticalSection(fInstanceLock);
+            end;
+          end;
           m := Ctxt.fServiceListInterfaceMethodIndex;
           if m<0 then
             m := Rest.Services.fListInterfaceMethods.FindHashed(
@@ -59438,8 +59477,16 @@ begin
           with Ctxt.fSession do begin
             stats := fInterfaces[m];
             if stats=nil then begin
-              stats := StatsCreate;
-              fInterfaces[m] := stats;
+              EnterCriticalSection(fInstanceLock);
+              try
+                stats := fInterfaces[m];
+                if stats=nil then begin
+                  stats := StatsCreate;
+                  fInterfaces[m] := stats;
+                end;
+              finally
+                LeaveCriticalSection(fInstanceLock);
+              end;
             end;
             Ctxt.StatsFromContext(stats,timeEnd,true);
             // mlSessions stats are not yet tracked per Client
