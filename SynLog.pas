@@ -3124,8 +3124,6 @@ end;
 
 destructor TAutoFlushThread.Destroy;
 begin
-  Terminate;
-  fEvent.SetEvent; // notify Execute to finish now
   inherited Destroy;
   fEvent.Free;
 end;
@@ -3201,12 +3199,13 @@ var SR: TSearchRec;
 begin
   fDestroying := true;
   EchoRemoteStop;
-  if AutoFlushThread<>nil then
-    {$ifdef AUTOFLUSHRAWWIN}
-    AutoFlushThread := nil; // Terminated=false to avoid GPF in AutoFlushProc
-    {$else}
-    FreeAndNil(AutoFlushThread);
+  if AutoFlushThread<>nil then begin
+    {$ifndef AUTOFLUSHRAWWIN}
+    AutoFlushThread.Terminate;
+    AutoFlushThread.fEvent.SetEvent; // notify Execute to finish now
     {$endif}
+    AutoFlushThread := nil; // Terminated=true to avoid GPF in AutoFlushProc
+  end;
   ExceptionIgnore.Free;
   try
     if Assigned(OnArchive) then
