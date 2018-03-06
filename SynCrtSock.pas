@@ -1853,6 +1853,7 @@ type
     fThreadRespClass: THttpServerRespClass;
     fOnSendFile: TOnHttpServerSendFile;
     fNginxSendFileFrom: array of TFileName;
+    fExecuteFinished: boolean;
     function OnNginxAllowSend(Context: THttpServerRequest; const LocalFileName: TFileName): boolean;
     // this overridden version will return e.g. 'Winsock 2.514'
     function GetAPIVersion: string; override;
@@ -5534,17 +5535,23 @@ end;
 destructor THttpServer.Destroy;
 var starttix,endtix: Cardinal;
     i: integer;
+    resp: THttpServerResp;
 begin
   Terminate; // set Terminated := true for THttpServerResp.Execute
-  DirectShutdown(Sock.Sock); // will kill immediately Accept() in Execute
+  // force Accept() return and terminate - shutdown(Sock.Sock) is not enough
+  if (Sock.Sock>0) and not fExecuteFinished then
+    DirectShutdown(CallServer('localhost',Sock.Port,false,cslTCP,1));
   starttix := GetTickCount;
   endtix := starttix+20000;
   EnterCriticalSection(fProcessCS);
   if fInternalHttpServerRespList<>nil then begin
-    for i := 0 to fInternalHttpServerRespList.Count-1 do
-      THttpServerResp(fInternalHttpServerRespList.List[i]).Terminate;
+    for i := 0 to fInternalHttpServerRespList.Count-1 do begin
+      resp := fInternalHttpServerRespList.List[i];
+      resp.Terminate;
+      DirectShutdown(resp.fServerSock.Sock);
+    end;
     repeat // wait for all THttpServerResp.Execute to be finished
-      if fInternalHttpServerRespList.Count=0 then
+      if (fInternalHttpServerRespList.Count=0) and fExecuteFinished then
         break;
       LeaveCriticalSection(fProcessCS);
       SleepHiRes(100);
@@ -5555,11 +5562,6 @@ begin
   LeaveCriticalSection(fProcessCS);
   fThreadPoolPush := nil;
   FreeAndNil(fThreadPool); // release all associated threads and I/O completion
-  {$ifdef LINUX}
-  {$ifdef FPC}
-  KillThread(ThreadID);  // manualy do it here
-  {$endif}
-  {$endif}
   FreeAndNil(fSock);
   inherited Destroy;     // direct Thread abort, no wait till ended
   DeleteCriticalSection(fProcessCS);
@@ -5620,7 +5622,7 @@ begin
   try
     while not Terminated do begin
       ClientSock := Accept(Sock.Sock,ClientSin);
-      if ClientSock<0 then
+      if ClientSock<=0 then
         if Terminated then
           break else begin
           SleepHiRes(0);
@@ -5680,6 +5682,9 @@ begin
     on Exception do
       ; // any exception would break and release the thread
   end;
+  EnterCriticalSection(fProcessCS);
+  fExecuteFinished := true;
+  LeaveCriticalSection(fProcessCS);
 end;
 
 procedure THttpServer.OnConnect;
