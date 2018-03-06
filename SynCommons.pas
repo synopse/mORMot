@@ -53260,7 +53260,7 @@ begin
   end;
   fTempBufSize := aBufSize;
   B := fTempBuf-1; // Add() methods will append at B+1
-  BEnd := fTempBuf+fTempBufSize-2;
+  BEnd := fTempBuf+fTempBufSize-16; // -2 made reports with FPC heaptrc tooling
   if DefaultTextWriterTrimEnum then
     Include(fCustomOptions,twoTrimLeftEnumSets);
 end;
