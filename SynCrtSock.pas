@@ -10955,55 +10955,60 @@ const NAMES: array[0..12] of string = (
   'easy_duphandle','easy_reset','easy_strerror',
   'slist_append','slist_free_all');
 begin
-  if curl.Module=0 then
+  EnterCriticalSection(SynSockCS);
   try
-    curl.Module := LoadLibrary(LIBCURL_DLL);
-    {$ifdef Darwin}
     if curl.Module=0 then
-      curl.Module := LoadLibrary('libcurl.3.dylib');
-    if curl.Module=0 then
-      curl.Module := LoadLibrary('libcurl.4.dylib');
-    {$else}
-    {$ifdef LINUX}
-    if curl.Module=0 then
-      curl.Module := LoadLibrary('libcurl.so.3');
-    if curl.Module=0 then
-      curl.Module := LoadLibrary('libcurl.so.4');
-    // for latest Linux Mint and other similar distros
-    if curl.Module=0 then
-      curl.Module := LoadLibrary('libcurl-gnutls.so.3');
-    if curl.Module=0 then
-      curl.Module := LoadLibrary('libcurl-gnutls.so.4');
-    {$endif}
-    {$endif}
-    if curl.Module=0 then
-      raise ECrtSocket.CreateFmt('Unable to find %s'{$ifdef LINUX}
-        +': try e.g. sudo apt-get install libcurl3:i386'{$endif},[LIBCURL_DLL]);
-    P := @@curl.global_init;
-    for api := low(NAMES) to high(NAMES) do begin
-      P^ := GetProcAddress(curl.Module,{$ifndef FPC}PChar{$endif}('curl_'+NAMES[api]));
-      if P^=nil then
-        raise ECrtSocket.CreateFmt('Unable to find %s() in %s',[NAMES[api],LIBCURL_DLL]);
-      inc(P);
-    end;
-    curl.global_init([giSSL]);
-    curl.info := curl.version_info(cvFour)^;
-    curl.infoText := format('%s version %s',[LIBCURL_DLL,curl.info.version]);
-    if curl.info.ssl_version<>nil then
-      curl.infoText := format('%s using %s',[curl.infoText,curl.info.ssl_version]);
-//   api := 0; with curl.info do while protocols[api]<>nil do begin
-//     write(protocols[api], ' '); inc(api); end; writeln(#13#10,curl.infoText);
-  except
-    on E: Exception do begin
-      if curl.Module<>0 then
-        FreeLibrary(curl.Module);
-      curl.Module := -1; // don't try to load any more
-      {$ifdef LINUX}
-      writeln(E.Message);
+    try
+      curl.Module := LoadLibrary(LIBCURL_DLL);
+      {$ifdef Darwin}
+      if curl.Module=0 then
+        curl.Module := LoadLibrary('libcurl.3.dylib');
+      if curl.Module=0 then
+        curl.Module := LoadLibrary('libcurl.4.dylib');
       {$else}
-      raise;
+      {$ifdef LINUX}
+      if curl.Module=0 then
+        curl.Module := LoadLibrary('libcurl.so.3');
+      if curl.Module=0 then
+        curl.Module := LoadLibrary('libcurl.so.4');
+      // for latest Linux Mint and other similar distros
+      if curl.Module=0 then
+        curl.Module := LoadLibrary('libcurl-gnutls.so.3');
+      if curl.Module=0 then
+        curl.Module := LoadLibrary('libcurl-gnutls.so.4');
       {$endif}
+      {$endif}
+      if curl.Module=0 then
+        raise ECrtSocket.CreateFmt('Unable to find %s'{$ifdef LINUX}
+          +': try e.g. sudo apt-get install libcurl3:i386'{$endif},[LIBCURL_DLL]);
+      P := @@curl.global_init;
+      for api := low(NAMES) to high(NAMES) do begin
+        P^ := GetProcAddress(curl.Module,{$ifndef FPC}PChar{$endif}('curl_'+NAMES[api]));
+        if P^=nil then
+          raise ECrtSocket.CreateFmt('Unable to find %s() in %s',[NAMES[api],LIBCURL_DLL]);
+        inc(P);
+      end;
+      curl.global_init([giSSL]);
+      curl.info := curl.version_info(cvFour)^;
+      curl.infoText := format('%s version %s',[LIBCURL_DLL,curl.info.version]);
+      if curl.info.ssl_version<>nil then
+        curl.infoText := format('%s using %s',[curl.infoText,curl.info.ssl_version]);
+  //   api := 0; with curl.info do while protocols[api]<>nil do begin
+  //     write(protocols[api], ' '); inc(api); end; writeln(#13#10,curl.infoText);
+    except
+      on E: Exception do begin
+        if curl.Module<>0 then
+          FreeLibrary(curl.Module);
+        curl.Module := -1; // don't try to load any more
+        {$ifdef LINUX}
+        writeln(E.Message);
+        {$else}
+        raise;
+        {$endif}
+      end;
     end;
+  finally
+    LeaveCriticalSection(SynSockCS);
   end;
 end;
 

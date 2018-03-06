@@ -572,6 +572,8 @@ function epoll_wait(epfd: integer; events: PEPollEvent; maxevents, timeout: inte
 function epoll_close(epfd: integer): integer;
 {$endif Linux}
 
+var
+  SynSockCS: TRTLCriticalSection;
 
 implementation
 
@@ -1224,5 +1226,8 @@ end;
 initialization
   SET_IN6_IF_ADDR_ANY(@in6addr_any);
   SET_LOOPBACK_ADDR6(@in6addr_loopback);
+  InitializeCriticalSection(SynSockCS);
 
+finalization
+  DeleteCriticalSection(SynSockCS);
 end.
