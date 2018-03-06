@@ -106,8 +106,8 @@ type
     function NewDaemon: TDDDAdministratedDaemon; virtual;
     /// returns some text to be supplied to the console for /help - '' by default
     function CustomHelp: string; virtual;
-    procedure DoStart{$ifdef MSWINDOWS}(Sender: TService){$endif};
-    procedure DoStop{$ifdef MSWINDOWS}(Sender: TService){$endif};
+    procedure DoStart{$ifdef MSWINDOWS}(Sender: TService=nil){$endif};
+    procedure DoStop{$ifdef MSWINDOWS}(Sender: TService=nil){$endif};
   public
     /// initialize the service/daemon application thanks to some information
     // - actual settings would inherit from TDDDAdministratedDaemonSettingsFile,
@@ -797,7 +797,7 @@ end;
 
 function TDDDDaemon.NewDaemon: TDDDAdministratedDaemon;
 begin
-  if Assigned(fSettings) then 
+  if Assigned(fSettings) then begin
     if fSettings.Log.LowLevelWebSocketsFrames then begin
       {$ifdef WITHLOG}
       WebSocketLog := SQLite3Log;
@@ -805,9 +805,11 @@ begin
       HttpServerFullWebSocketsLog := true;
       HttpClientFullWebSocketsLog := true;
     end;
-  {$ifdef MSWINDOWS} // Windows 7+
-  SetAppUserModelID(fSettings.AppUserModelID);
-  {$endif}
+    SQLite3Log.Family.AutoFlushTimeOut := fSettings.Log.AutoFlushTimeOut; // after /fork
+    {$ifdef MSWINDOWS} // Windows 7+
+    SetAppUserModelID(fSettings.AppUserModelID);
+    {$endif}
+  end;
   result := nil;
 end;
 
@@ -1039,6 +1041,8 @@ begin
             cVerbose: // leave as in settings for -c (cConsole)
               SQLite3Log.Family.EchoToConsole := LOG_VERBOSE;
           end;
+          SQLite3Log.Add.Log(sllNewRun, 'Start % /% %', [fSettings.ServiceName,cmdText,
+            ExeVersion.Version.DetailedOrVoid], self);
           {$endif}
           daemon := NewDaemon;
           try
@@ -1054,6 +1058,7 @@ begin
             {$endif}
             daemon.Execute(cmd = cDaemon);
           finally
+            SQLite3Log.Add.Log(sllNewRun, 'Stop /%', [cmdText], self);
             fDaemon := nil; // will stop the daemon
           end;
         end;

@@ -69,10 +69,13 @@ uses
   mORMot,
   mORMotDDD,
   SynCrtSock,
-  SynSQLite3, mORMotSQLite3, // for internal SQlite3 database
-  SynDB, mORMotDB,           // for TDDDRestSettings on external SQL database
-  SynMongoDB, mORMotMongoDB, // for TDDDRestSettings on external NoSQL database
-  mORMotWrappers;            // for TDDDRestSettings to publish wrapper methods
+  SynSQLite3,
+  mORMotSQLite3,   // for internal SQlite3 database
+  SynDB,
+  mORMotDB,        // for TDDDRestSettings on external SQL database
+  SynMongoDB,
+  mORMotMongoDB,   // for TDDDRestSettings on external NoSQL database
+  mORMotWrappers;  // for TDDDRestSettings to publish wrapper methods
 
 
 { ----- Manage Service/Daemon settings }
@@ -122,7 +125,6 @@ type
     // - in order not to loose any log, a background thread can be created
     // and will be responsible of flushing all pending log content every
     // period of time (e.g. every 10 seconds)
-    // - this parameter is effective only under Windows by now
     property AutoFlushTimeOut: integer read fAutoFlush write fAutoFlush;
     /// by default (false), logging will use manual stack trace browsing
     // - if you experiment unexpected EAccessViolation, try to set this setting
@@ -652,7 +654,7 @@ begin
     FileExistsAction := acAppend; // default rotation mode
     if Log.StackTraceViaAPI then
       StackTraceUse := stOnlyAPI;
-    AutoFlushTimeOut := Log.AutoFlushTimeOut;
+    // AutoFlushTimeOut not set now, since won't work with /form
     if (Log.SyslogServer<>'') and (Log.SyslogServer[1]<>'?') and
        not Assigned(EchoCustom) and (fSyslog=nil) and (Log.SyslogLevels<>[]) and
        uri.From(Log.SyslogServer,'514') then
