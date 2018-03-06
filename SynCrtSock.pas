@@ -5536,6 +5536,7 @@ var starttix,endtix: Cardinal;
     i: integer;
 begin
   Terminate; // set Terminated := true for THttpServerResp.Execute
+  DirectShutdown(Sock.Sock); // will kill immediately Accept() in Execute
   starttix := GetTickCount;
   endtix := starttix+20000;
   EnterCriticalSection(fProcessCS);
