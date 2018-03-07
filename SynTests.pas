@@ -246,6 +246,8 @@ type
     class function RandomAnsi7(CharCount: Integer): RawByteString;
     /// create a temporary string random content, using A..Z,_,0..9 chars only
     class function RandomIdentifier(CharCount: Integer): RawByteString;
+    /// create a temporary string random content, using uri-compatible chars only
+    class function RandomURI(CharCount: Integer): RawByteString;
     /// create a temporary string, containing some fake text, with paragraphs
     class function RandomTextParagraph(WordCount: Integer;
       LastPunctuation: AnsiChar='.'; const RandomInclude: RawUTF8=''): RawUTF8;
@@ -650,18 +652,30 @@ begin
   tmp.Done;
 end;
 
-class function TSynTestCase.RandomIdentifier(CharCount: Integer): RawByteString;
-const CHARS: array[0..63] of AnsiChar =
-  'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_';
+procedure InitRandom64(chars64: PAnsiChar; count: integer; var result: RawByteString);
 var i: integer;
     R: PByteArray;
     tmp: TSynTempBuffer;
 begin
-  R := tmp.InitRandom(CharCount);
-  SetString(result,nil,CharCount);
-  for i := 0 to CharCount-1 do
-    PByteArray(result)[i] := ord(CHARS[integer(R[i]) and 63]);
+  R := tmp.InitRandom(count);
+  SetString(result,nil,count);
+  for i := 0 to count-1 do
+    PByteArray(result)[i] := ord(chars64[integer(R[i]) and 63]);
   tmp.Done;
+end;
+
+class function TSynTestCase.RandomIdentifier(CharCount: Integer): RawByteString;
+const IDENT_CHARS: array[0..63] of AnsiChar =
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_';
+begin
+  InitRandom64(@IDENT_CHARS, CharCount, result);
+end;
+
+class function TSynTestCase.RandomURI(CharCount: Integer): RawByteString;
+const URL_CHARS: array[0..63] of AnsiChar =
+  'abcdefghijklmnopqrstuvwxyz0123456789-abCdEfGH.JKlmnOP.RsTuVWxyz.';
+begin
+  InitRandom64(@URL_CHARS, CharCount, result);
 end;
 
 class function TSynTestCase.RandomUTF8(CharCount: Integer): RawUTF8;

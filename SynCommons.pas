@@ -21464,7 +21464,7 @@ begin
   result := BaudotToAscii(pointer(Baudot),length(Baudot));
 end;
 
-function BaudotToAscii(Baudot: PByteArray; len: integer): RawUTF8; overload;
+function BaudotToAscii(Baudot: PByteArray; len: integer): RawUTF8;
 var i,c,b,bits,shift: integer;
     tmp: TSynTempBuffer;
     dest: PAnsiChar;
