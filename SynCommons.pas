@@ -42668,7 +42668,7 @@ begin
   if Root.PropertyType=ptCustom then begin
     result := TJSONCustomParserCustom(Root).CustomReader(P,aValue,EndOfObject);
     aValid := result<>nil;
-    if EndOfObject<>#0 then begin
+    if (EndOfObject<>#0) and aValid then begin
        dec(result);
        result^ := EndOfObject; // emulates simple read
      end;
