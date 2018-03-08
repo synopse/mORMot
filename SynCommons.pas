@@ -12971,7 +12971,13 @@ function TimeLogFromFile(const FileName: TFileName): TTimeLog;
 // - just a wrapper around PTimeLogBits(@aTime)^.From()
 // - we defined such a function since TTimeLogBits(aTimeLog).From() won't change
 // the aTimeLog variable content
-function TimeLogFromDateTime(DateTime: TDateTime): TTimeLog;
+function TimeLogFromDateTime(const DateTime: TDateTime): TTimeLog;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// get TTimeLog value from a given Unix seconds since epoch timestamp
+// - handle TTimeLog bit-encoded Int64 format
+// - just a wrapper around PTimeLogBits(@aTime)^.FromUnixTime()
+function TimeLogFromUnixTime(const UnixTime: TUnixTime): TTimeLog;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// Date/Time conversion from a TTimeLog value
@@ -12979,7 +12985,13 @@ function TimeLogFromDateTime(DateTime: TDateTime): TTimeLog;
 // - just a wrapper around PTimeLogBits(@Timestamp)^.ToDateTime
 // - we defined such a function since TTimeLogBits(aTimeLog).ToDateTime gives an
 // internall compiler error on some Delphi IDE versions (e.g. Delphi 6)
-function TimeLogToDateTime(const Timestamp: TTimeLog): TDateTime; overload;
+function TimeLogToDateTime(const Timestamp: TTimeLog): TDateTime;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// Unix seconds since epoch timestamp conversion from a TTimeLog value
+// - handle TTimeLog bit-encoded Int64 format
+// - just a wrapper around PTimeLogBits(@Timestamp)^.ToUnixTime
+function TimeLogToUnixTime(const Timestamp: TTimeLog): TUnixTime;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a Iso8601 encoded string into a TTimeLog value
@@ -35552,6 +35564,11 @@ begin
   result := PTimeLogBits(@Timestamp)^.ToDateTime;
 end;
 
+function TimeLogToUnixTime(const Timestamp: TTimeLog): TUnixTime;
+begin
+  result := PTimeLogBits(@Timestamp)^.ToUnixTime;
+end;
+
 procedure DateToIso8601PChar(P: PUTF8Char; Expanded: boolean; Y,M,D: cardinal); overload;
 // use 'YYYYMMDD' format if not Expanded, 'YYYY-MM-DD' format if Expanded
 begin
@@ -36156,9 +36173,14 @@ begin
     PTimeLogBits(@result)^.From(Date);
 end;
 
-function TimeLogFromDateTime(DateTime: TDateTime): TTimeLog;
+function TimeLogFromDateTime(const DateTime: TDateTime): TTimeLog;
 begin
   PTimeLogBits(@result)^.From(DateTime);
+end;
+
+function TimeLogFromUnixTime(const UnixTime: TUnixTime): TTimeLog;
+begin
+  PTimeLogBits(@result)^.FromUnixTime(UnixTime);
 end;
 
 
