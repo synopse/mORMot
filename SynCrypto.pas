@@ -376,12 +376,12 @@ type
     /// encrypt an AES data block into another data block
     procedure Encrypt(const BI: TAESBlock; var BO: TAESBlock); overload;
     /// encrypt an AES data block
-    procedure Encrypt(var B: TAESBlock); overload;
+    procedure Encrypt(var B: TAESBlock); overload; {$ifdef FPC}inline;{$endif}
 
     /// Initialize AES contexts for uncypher
     function DecryptInit(const Key; KeySize: cardinal): boolean;
     /// decrypt an AES data block
-    procedure Decrypt(var B: TAESBlock); overload;
+    procedure Decrypt(var B: TAESBlock); overload; {$ifdef FPC}inline;{$endif}
     /// decrypt an AES data block into another data block
     procedure Decrypt(const BI: TAESBlock; var BO: TAESBlock); overload;
 
@@ -4205,11 +4205,7 @@ asm
 asm // input: rcx=TAESContext, rdx=source, r8=dest
   .noframe
 {$endif}
-  {$ifndef win64}
-  mov r8,rdx
-  mov rdx,rsi
-  mov rcx,rdi
-  {$endif win64}
+  {$ifdef win64}
   movdqu xmm7,[rdx]
   movdqu xmm0,[rcx+16*0]
   movdqu xmm1,[rcx+16*1]
@@ -4234,6 +4230,32 @@ asm // input: rcx=TAESContext, rdx=source, r8=dest
   aesenc xmm7,xmm10
   aesenclast xmm7,xmm11
   movdqu [r8],xmm7
+  {$else}
+  movdqu xmm7,[rsi]
+  movdqu xmm0,[rdi+16*0]
+  movdqu xmm1,[rdi+16*1]
+  movdqu xmm2,[rdi+16*2]
+  movdqu xmm3,[rdi+16*3]
+  movdqu xmm4,[rdi+16*4]
+  movdqu xmm5,[rdi+16*5]
+  movdqu xmm6,[rdi+16*6]
+  movdqu xmm8,[rdi+16*7]
+  movdqu xmm9,[rdi+16*8]
+  movdqu xmm10,[rdi+16*9]
+  movdqu xmm11,[rdi+16*10]
+  pxor xmm7,xmm0
+  aesenc xmm7,xmm1
+  aesenc xmm7,xmm2
+  aesenc xmm7,xmm3
+  aesenc xmm7,xmm4
+  aesenc xmm7,xmm5
+  aesenc xmm7,xmm6
+  aesenc xmm7,xmm8
+  aesenc xmm7,xmm9
+  aesenc xmm7,xmm10
+  aesenclast xmm7,xmm11
+  movdqu [rdx],xmm7
+  {$endif win64}
 end;
 procedure AesNiEncryptXmm7_192(const ctxt, source, dest);
 {$ifdef FPC}nostackframe; assembler;
@@ -4283,11 +4305,7 @@ asm
 asm // input: rcx=TAESContext, rdx=source, r8=dest
   .noframe
 {$endif}
-  {$ifndef win64}
-  mov r8,rdx
-  mov rdx,rsi
-  mov rcx,rdi
-  {$endif win64}
+  {$ifdef win64}
   movdqu xmm7,[rdx]
   movdqu xmm0,[rcx+16*0]
   movdqu xmm1,[rcx+16*1]
@@ -4320,6 +4338,40 @@ asm // input: rcx=TAESContext, rdx=source, r8=dest
   aesenc xmm7,xmm14
   aesenclast xmm7,xmm15
   movdqu [r8],xmm7
+  {$else}
+  movdqu xmm7,[rsi]
+  movdqu xmm0,[rdi+16*0]
+  movdqu xmm1,[rdi+16*1]
+  movdqu xmm2,[rdi+16*2]
+  movdqu xmm3,[rdi+16*3]
+  movdqu xmm4,[rdi+16*4]
+  movdqu xmm5,[rdi+16*5]
+  movdqu xmm6,[rdi+16*6]
+  movdqu xmm8,[rdi+16*7]
+  movdqu xmm9,[rdi+16*8]
+  movdqu xmm10,[rdi+16*9]
+  movdqu xmm11,[rdi+16*10]
+  movdqu xmm12,[rdi+16*11]
+  movdqu xmm13,[rdi+16*12]
+  movdqu xmm14,[rdi+16*13]
+  movdqu xmm15,[rdi+16*14]
+  pxor xmm7,xmm0
+  aesenc xmm7,xmm1
+  aesenc xmm7,xmm2
+  aesenc xmm7,xmm3
+  aesenc xmm7,xmm4
+  aesenc xmm7,xmm5
+  aesenc xmm7,xmm6
+  aesenc xmm7,xmm8
+  aesenc xmm7,xmm9
+  aesenc xmm7,xmm10
+  aesenc xmm7,xmm11
+  aesenc xmm7,xmm12
+  aesenc xmm7,xmm13
+  aesenc xmm7,xmm14
+  aesenclast xmm7,xmm15
+  movdqu [rdx],xmm7
+  {$endif win64}
 end;
 
 procedure AesNiDecrypt(const ctxt: TAESContext; const source: TAESBlock; var dest: TAESBlock);
@@ -4446,14 +4498,14 @@ procedure TAES.Encrypt(const BI: TAESBlock; var BO: TAESBlock);
  3. This notice may not be removed or altered from any source distribution. }
 var
   ctx: TAESContext absolute Context;
-  s0,s1,s2,s3: PtrUInt; // TAESBlock s* as separate variables
-  t0,t1,t2: cardinal;    // TAESBlock t* as separate variables
+  s0,s1,s2,s3: PtrUInt; // TAESBlock s# as separate variables
+  t0,t1,t2: cardinal;   // TAESBlock t# as separate variables
 {$ifdef AES_ROLLED}
   i: integer;
   pK: PWA4;
 {$else}
   t3: cardinal;
-  pK: PAWk;              // pointer to loop rount key
+  pK: PAWk;  // pointer to loop rount key
 {$endif}
   t: PCardinalArray;
 begin
@@ -5225,40 +5277,42 @@ end;
 {$endif USEAESNI}
 
 function TAES.DecryptInit(const Key; KeySize: cardinal): boolean;
-procedure MakeDecrKey(var ctx: TAESContext);
+procedure MakeDecrKey(var k: TAWk; rounds: integer);
 // Calculate decryption key from encryption key
 var i: integer;
     x: cardinal;
 {$ifndef AES_ROLLED}
     j: integer;
 {$endif}
+    t: PCardinalArray;
 begin
 {$ifndef AES_ROLLED} // inversion is needed only for fully unrolled version
   // invert the order of the round keys
   i := 0;
-  j := 4*ctx.Rounds;
+  j := 4*rounds;
   while i<j do begin
-    x:=TAWk(ctx.RK)[i  ];  TAWk(ctx.RK)[i  ]:=TAWk(ctx.RK)[j  ];  TAWk(ctx.RK)[j  ]:=x;
-    x:=TAWk(ctx.RK)[i+1];  TAWk(ctx.RK)[i+1]:=TAWk(ctx.RK)[j+1];  TAWk(ctx.RK)[j+1]:=x;
-    x:=TAWk(ctx.RK)[i+2];  TAWk(ctx.RK)[i+2]:=TAWk(ctx.RK)[j+2];  TAWk(ctx.RK)[j+2]:=x;
-    x:=TAWk(ctx.RK)[i+3];  TAWk(ctx.RK)[i+3]:=TAWk(ctx.RK)[j+3];  TAWk(ctx.RK)[j+3]:=x;
+    x:=k[i  ];  k[i  ]:=k[j  ];  k[j  ]:=x;
+    x:=k[i+1];  k[i+1]:=k[j+1];  k[j+1]:=x;
+    x:=k[i+2];  k[i+2]:=k[j+2];  k[j+2]:=x;
+    x:=k[i+3];  k[i+3]:=k[j+3];  k[j+3]:=x;
     inc(i,4);
     dec(j,4);
   end;
 {$endif}
-  for i := 1 to ctx.Rounds-1 do begin
-    x  := TAWk(ctx.RK)[i*4  ];
-    TAWk(ctx.RK)[i*4  ] := Td3[SBox[x shr 24]] xor Td2[SBox[x shr 16 and $ff]]
-      xor Td1[SBox[x shr 8 and $ff]] xor Td0[SBox[x and $ff]];
-    x  := TAWk(ctx.RK)[i*4+1];
-    TAWk(ctx.RK)[i*4+1] := Td3[SBox[x shr 24]] xor Td2[SBox[x shr 16 and $ff]]
-      xor Td1[SBox[x shr 8 and $ff]] xor Td0[SBox[x and $ff]];
-    x  := TAWk(ctx.RK)[i*4+2];
-    TAWk(ctx.RK)[i*4+2] := Td3[SBox[x shr 24]] xor Td2[SBox[x shr 16 and $ff]]
-      xor Td1[SBox[x shr 8 and $ff]] xor Td0[SBox[x and $ff]];
-    x  := TAWk(ctx.RK)[i*4+3];
-    TAWk(ctx.RK)[i*4+3] := Td3[SBox[x shr 24]] xor Td2[SBox[x shr 16 and $ff]]
-      xor Td1[SBox[x shr 8 and $ff]] xor Td0[SBox[x and $ff]];
+  t := @Td0;
+  for i := 1 to rounds-1 do begin
+    x  := k[i*4  ];
+    k[i*4  ] := t[$300+SBox[x shr 24]] xor t[$200+SBox[x shr 16 and $ff]] xor
+                t[$100+SBox[x shr 8 and $ff]] xor t[SBox[x and $ff]];
+    x  := k[i*4+1];
+    k[i*4+1] := t[$300+SBox[x shr 24]] xor t[$200+SBox[x shr 16 and $ff]] xor
+                t[$100+SBox[x shr 8 and $ff]] xor t[SBox[x and $ff]];
+    x  := k[i*4+2];
+    k[i*4+2] := t[$300+SBox[x shr 24]] xor t[$200+SBox[x shr 16 and $ff]] xor
+                t[$100+SBox[x shr 8 and $ff]] xor t[SBox[x and $ff]];
+    x  := k[i*4+3];
+    k[i*4+3] := t[$300+SBox[x shr 24]] xor t[$200+SBox[x shr 16 and $ff]] xor
+                t[$100+SBox[x shr 8 and $ff]] xor t[SBox[x and $ff]];
   end;
 end;
 var ctx: TAESContext absolute Context;
@@ -5277,7 +5331,7 @@ begin
   if Assigned(ctx.AESNI) then
     MakeDecrKeyAesNi(ctx.Rounds,@ctx.RK) else
   {$endif}
-    MakeDecrKey(ctx);
+    MakeDecrKey(TAWk(ctx.RK),ctx.Rounds);
 end;
 
 procedure TAES.Decrypt(var B: TAESBlock);
@@ -5290,15 +5344,16 @@ procedure TAES.Decrypt(const BI: TAESBlock; var BO: TAESBlock);
 {$ifdef AESPASCAL_OR_CPU64}
 var
   ctx: TAESContext absolute Context;
-  s0,s1,s2,s3: cardinal;    {TAESBlock s as separate variables}
-  t0,t1,t2: cardinal;    {TAESBlock t as separate variables}
+  s0,s1,s2,s3: PtrUInt;  // TAESBlock s# as separate variables
+  t0,t1,t2: cardinal;    // TAESBlock t# as separate variables
 {$ifdef AES_ROLLED}
   i: integer;
   pK: PWA4;
 {$else}
   t3: cardinal;
-  pK: PAWk;                 {pointer to loop rount key   }
+  pK: PAWk;  // pointer to loop rount key
 {$endif}
+  t: PCardinalArray;
 begin
 {$ifdef USEAESNI64}
   if Assigned(ctx.AesNi) then begin
@@ -5312,6 +5367,7 @@ begin
     exit;
   end;
 {$endif}
+  t := @Td0;
 {$ifdef AES_ROLLED}
   // Wolfgang Ehrhardt rolled version - faster on modern CPU than unrolled one below
   // Setup key pointer
@@ -5323,10 +5379,10 @@ begin
   s3 := TWA4(BI)[3] xor pK^[3];
   dec(pK);
   for I := 1 to ctx.Rounds-1 do begin
-      t0 := Td0[s0 and $ff] xor Td1[s3 shr 8 and $ff] xor Td2[s2 shr 16 and $ff] xor Td3[s1 shr 24];
-      t1 := Td0[s1 and $ff] xor Td1[s0 shr 8 and $ff] xor Td2[s3 shr 16 and $ff] xor Td3[s2 shr 24];
-      t2 := Td0[s2 and $ff] xor Td1[s1 shr 8 and $ff] xor Td2[s0 shr 16 and $ff] xor Td3[s3 shr 24];
-      s3 := Td0[s3 and $ff] xor Td1[s2 shr 8 and $ff] xor Td2[s1 shr 16 and $ff] xor Td3[s0 shr 24] xor PK[3];
+      t0 := t[s0 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s1 shr 24];
+      t1 := t[s1 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s2 shr 24];
+      t2 := t[s2 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s3 shr 24];
+      s3 := t[s3 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s0 shr 24] xor PK[3];
       s0 := t0 xor PK[0];
       s1 := t1 xor PK[1];
       s2 := t2 xor PK[2];
@@ -5358,72 +5414,72 @@ begin
   s3 := TWA4(BI)[3] xor pK^[3];
 
   // Round 1
-  t0 := Td0[s0 and $ff] xor Td1[s3 shr 8 and $ff] xor Td2[s2 shr 16 and $ff] xor Td3[s1 shr 24] xor pK^[4];
-  t1 := Td0[s1 and $ff] xor Td1[s0 shr 8 and $ff] xor Td2[s3 shr 16 and $ff] xor Td3[s2 shr 24] xor pK^[5];
-  t2 := Td0[s2 and $ff] xor Td1[s1 shr 8 and $ff] xor Td2[s0 shr 16 and $ff] xor Td3[s3 shr 24] xor pK^[6];
-  t3 := Td0[s3 and $ff] xor Td1[s2 shr 8 and $ff] xor Td2[s1 shr 16 and $ff] xor Td3[s0 shr 24] xor pK^[7];
+  t0 := t[s0 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s1 shr 24] xor pK^[4];
+  t1 := t[s1 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s2 shr 24] xor pK^[5];
+  t2 := t[s2 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s3 shr 24] xor pK^[6];
+  t3 := t[s3 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s0 shr 24] xor pK^[7];
   // Round 2
-  s0 := Td0[t0 and $ff] xor Td1[t3 shr 8 and $ff] xor Td2[t2 shr 16 and $ff] xor Td3[t1 shr 24] xor pK^[8];
-  s1 := Td0[t1 and $ff] xor Td1[t0 shr 8 and $ff] xor Td2[t3 shr 16 and $ff] xor Td3[t2 shr 24] xor pK^[9];
-  s2 := Td0[t2 and $ff] xor Td1[t1 shr 8 and $ff] xor Td2[t0 shr 16 and $ff] xor Td3[t3 shr 24] xor pK^[10];
-  s3 := Td0[t3 and $ff] xor Td1[t2 shr 8 and $ff] xor Td2[t1 shr 16 and $ff] xor Td3[t0 shr 24] xor pK^[11];
+  s0 := t[t0 and $ff] xor t[$100+t3 shr 8 and $ff] xor t[$200+t2 shr 16 and $ff] xor t[$300+t1 shr 24] xor pK^[8];
+  s1 := t[t1 and $ff] xor t[$100+t0 shr 8 and $ff] xor t[$200+t3 shr 16 and $ff] xor t[$300+t2 shr 24] xor pK^[9];
+  s2 := t[t2 and $ff] xor t[$100+t1 shr 8 and $ff] xor t[$200+t0 shr 16 and $ff] xor t[$300+t3 shr 24] xor pK^[10];
+  s3 := t[t3 and $ff] xor t[$100+t2 shr 8 and $ff] xor t[$200+t1 shr 16 and $ff] xor t[$300+t0 shr 24] xor pK^[11];
   // Round 3
-  t0 := Td0[s0 and $ff] xor Td1[s3 shr 8 and $ff] xor Td2[s2 shr 16 and $ff] xor Td3[s1 shr 24] xor pK^[12];
-  t1 := Td0[s1 and $ff] xor Td1[s0 shr 8 and $ff] xor Td2[s3 shr 16 and $ff] xor Td3[s2 shr 24] xor pK^[13];
-  t2 := Td0[s2 and $ff] xor Td1[s1 shr 8 and $ff] xor Td2[s0 shr 16 and $ff] xor Td3[s3 shr 24] xor pK^[14];
-  t3 := Td0[s3 and $ff] xor Td1[s2 shr 8 and $ff] xor Td2[s1 shr 16 and $ff] xor Td3[s0 shr 24] xor pK^[15];
+  t0 := t[s0 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s1 shr 24] xor pK^[12];
+  t1 := t[s1 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s2 shr 24] xor pK^[13];
+  t2 := t[s2 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s3 shr 24] xor pK^[14];
+  t3 := t[s3 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s0 shr 24] xor pK^[15];
   // Round 4
-  s0 := Td0[t0 and $ff] xor Td1[t3 shr 8 and $ff] xor Td2[t2 shr 16 and $ff] xor Td3[t1 shr 24] xor pK^[16];
-  s1 := Td0[t1 and $ff] xor Td1[t0 shr 8 and $ff] xor Td2[t3 shr 16 and $ff] xor Td3[t2 shr 24] xor pK^[17];
-  s2 := Td0[t2 and $ff] xor Td1[t1 shr 8 and $ff] xor Td2[t0 shr 16 and $ff] xor Td3[t3 shr 24] xor pK^[18];
-  s3 := Td0[t3 and $ff] xor Td1[t2 shr 8 and $ff] xor Td2[t1 shr 16 and $ff] xor Td3[t0 shr 24] xor pK^[19];
+  s0 := t[t0 and $ff] xor t[$100+t3 shr 8 and $ff] xor t[$200+t2 shr 16 and $ff] xor t[$300+t1 shr 24] xor pK^[16];
+  s1 := t[t1 and $ff] xor t[$100+t0 shr 8 and $ff] xor t[$200+t3 shr 16 and $ff] xor t[$300+t2 shr 24] xor pK^[17];
+  s2 := t[t2 and $ff] xor t[$100+t1 shr 8 and $ff] xor t[$200+t0 shr 16 and $ff] xor t[$300+t3 shr 24] xor pK^[18];
+  s3 := t[t3 and $ff] xor t[$100+t2 shr 8 and $ff] xor t[$200+t1 shr 16 and $ff] xor t[$300+t0 shr 24] xor pK^[19];
   // Round 5
-  t0 := Td0[s0 and $ff] xor Td1[s3 shr 8 and $ff] xor Td2[s2 shr 16 and $ff] xor Td3[s1 shr 24] xor pK^[20];
-  t1 := Td0[s1 and $ff] xor Td1[s0 shr 8 and $ff] xor Td2[s3 shr 16 and $ff] xor Td3[s2 shr 24] xor pK^[21];
-  t2 := Td0[s2 and $ff] xor Td1[s1 shr 8 and $ff] xor Td2[s0 shr 16 and $ff] xor Td3[s3 shr 24] xor pK^[22];
-  t3 := Td0[s3 and $ff] xor Td1[s2 shr 8 and $ff] xor Td2[s1 shr 16 and $ff] xor Td3[s0 shr 24] xor pK^[23];
+  t0 := t[s0 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s1 shr 24] xor pK^[20];
+  t1 := t[s1 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s2 shr 24] xor pK^[21];
+  t2 := t[s2 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s3 shr 24] xor pK^[22];
+  t3 := t[s3 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s0 shr 24] xor pK^[23];
   // Round 6
-  s0 := Td0[t0 and $ff] xor Td1[t3 shr 8 and $ff] xor Td2[t2 shr 16 and $ff] xor Td3[t1 shr 24] xor pK^[24];
-  s1 := Td0[t1 and $ff] xor Td1[t0 shr 8 and $ff] xor Td2[t3 shr 16 and $ff] xor Td3[t2 shr 24] xor pK^[25];
-  s2 := Td0[t2 and $ff] xor Td1[t1 shr 8 and $ff] xor Td2[t0 shr 16 and $ff] xor Td3[t3 shr 24] xor pK^[26];
-  s3 := Td0[t3 and $ff] xor Td1[t2 shr 8 and $ff] xor Td2[t1 shr 16 and $ff] xor Td3[t0 shr 24] xor pK^[27];
+  s0 := t[t0 and $ff] xor t[$100+t3 shr 8 and $ff] xor t[$200+t2 shr 16 and $ff] xor t[$300+t1 shr 24] xor pK^[24];
+  s1 := t[t1 and $ff] xor t[$100+t0 shr 8 and $ff] xor t[$200+t3 shr 16 and $ff] xor t[$300+t2 shr 24] xor pK^[25];
+  s2 := t[t2 and $ff] xor t[$100+t1 shr 8 and $ff] xor t[$200+t0 shr 16 and $ff] xor t[$300+t3 shr 24] xor pK^[26];
+  s3 := t[t3 and $ff] xor t[$100+t2 shr 8 and $ff] xor t[$200+t1 shr 16 and $ff] xor t[$300+t0 shr 24] xor pK^[27];
   // Round 7
-  t0 := Td0[s0 and $ff] xor Td1[s3 shr 8 and $ff] xor Td2[s2 shr 16 and $ff] xor Td3[s1 shr 24] xor pK^[28];
-  t1 := Td0[s1 and $ff] xor Td1[s0 shr 8 and $ff] xor Td2[s3 shr 16 and $ff] xor Td3[s2 shr 24] xor pK^[29];
-  t2 := Td0[s2 and $ff] xor Td1[s1 shr 8 and $ff] xor Td2[s0 shr 16 and $ff] xor Td3[s3 shr 24] xor pK^[30];
-  t3 := Td0[s3 and $ff] xor Td1[s2 shr 8 and $ff] xor Td2[s1 shr 16 and $ff] xor Td3[s0 shr 24] xor pK^[31];
+  t0 := t[s0 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s1 shr 24] xor pK^[28];
+  t1 := t[s1 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s2 shr 24] xor pK^[29];
+  t2 := t[s2 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s3 shr 24] xor pK^[30];
+  t3 := t[s3 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s0 shr 24] xor pK^[31];
   // Round 8
-  s0 := Td0[t0 and $ff] xor Td1[t3 shr 8 and $ff] xor Td2[t2 shr 16 and $ff] xor Td3[t1 shr 24] xor pK^[32];
-  s1 := Td0[t1 and $ff] xor Td1[t0 shr 8 and $ff] xor Td2[t3 shr 16 and $ff] xor Td3[t2 shr 24] xor pK^[33];
-  s2 := Td0[t2 and $ff] xor Td1[t1 shr 8 and $ff] xor Td2[t0 shr 16 and $ff] xor Td3[t3 shr 24] xor pK^[34];
-  s3 := Td0[t3 and $ff] xor Td1[t2 shr 8 and $ff] xor Td2[t1 shr 16 and $ff] xor Td3[t0 shr 24] xor pK^[35];
+  s0 := t[t0 and $ff] xor t[$100+t3 shr 8 and $ff] xor t[$200+t2 shr 16 and $ff] xor t[$300+t1 shr 24] xor pK^[32];
+  s1 := t[t1 and $ff] xor t[$100+t0 shr 8 and $ff] xor t[$200+t3 shr 16 and $ff] xor t[$300+t2 shr 24] xor pK^[33];
+  s2 := t[t2 and $ff] xor t[$100+t1 shr 8 and $ff] xor t[$200+t0 shr 16 and $ff] xor t[$300+t3 shr 24] xor pK^[34];
+  s3 := t[t3 and $ff] xor t[$100+t2 shr 8 and $ff] xor t[$200+t1 shr 16 and $ff] xor t[$300+t0 shr 24] xor pK^[35];
   // Round 9
-  t0 := Td0[s0 and $ff] xor Td1[s3 shr 8 and $ff] xor Td2[s2 shr 16 and $ff] xor Td3[s1 shr 24] xor pK^[36];
-  t1 := Td0[s1 and $ff] xor Td1[s0 shr 8 and $ff] xor Td2[s3 shr 16 and $ff] xor Td3[s2 shr 24] xor pK^[37];
-  t2 := Td0[s2 and $ff] xor Td1[s1 shr 8 and $ff] xor Td2[s0 shr 16 and $ff] xor Td3[s3 shr 24] xor pK^[38];
-  t3 := Td0[s3 and $ff] xor Td1[s2 shr 8 and $ff] xor Td2[s1 shr 16 and $ff] xor Td3[s0 shr 24] xor pK^[39];
+  t0 := t[s0 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s1 shr 24] xor pK^[36];
+  t1 := t[s1 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s2 shr 24] xor pK^[37];
+  t2 := t[s2 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s3 shr 24] xor pK^[38];
+  t3 := t[s3 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s0 shr 24] xor pK^[39];
   if ctx.rounds>10 then begin
     // Round 10
-    s0 := Td0[t0 and $ff] xor Td1[t3 shr 8 and $ff] xor Td2[t2 shr 16 and $ff] xor Td3[t1 shr 24] xor pK^[40];
-    s1 := Td0[t1 and $ff] xor Td1[t0 shr 8 and $ff] xor Td2[t3 shr 16 and $ff] xor Td3[t2 shr 24] xor pK^[41];
-    s2 := Td0[t2 and $ff] xor Td1[t1 shr 8 and $ff] xor Td2[t0 shr 16 and $ff] xor Td3[t3 shr 24] xor pK^[42];
-    s3 := Td0[t3 and $ff] xor Td1[t2 shr 8 and $ff] xor Td2[t1 shr 16 and $ff] xor Td3[t0 shr 24] xor pK^[43];
+    s0 := t[t0 and $ff] xor t[$100+t3 shr 8 and $ff] xor t[$200+t2 shr 16 and $ff] xor t[$300+t1 shr 24] xor pK^[40];
+    s1 := t[t1 and $ff] xor t[$100+t0 shr 8 and $ff] xor t[$200+t3 shr 16 and $ff] xor t[$300+t2 shr 24] xor pK^[41];
+    s2 := t[t2 and $ff] xor t[$100+t1 shr 8 and $ff] xor t[$200+t0 shr 16 and $ff] xor t[$300+t3 shr 24] xor pK^[42];
+    s3 := t[t3 and $ff] xor t[$100+t2 shr 8 and $ff] xor t[$200+t1 shr 16 and $ff] xor t[$300+t0 shr 24] xor pK^[43];
     // Round 11
-    t0 := Td0[s0 and $ff] xor Td1[s3 shr 8 and $ff] xor Td2[s2 shr 16 and $ff] xor Td3[s1 shr 24] xor pK^[44];
-    t1 := Td0[s1 and $ff] xor Td1[s0 shr 8 and $ff] xor Td2[s3 shr 16 and $ff] xor Td3[s2 shr 24] xor pK^[45];
-    t2 := Td0[s2 and $ff] xor Td1[s1 shr 8 and $ff] xor Td2[s0 shr 16 and $ff] xor Td3[s3 shr 24] xor pK^[46];
-    t3 := Td0[s3 and $ff] xor Td1[s2 shr 8 and $ff] xor Td2[s1 shr 16 and $ff] xor Td3[s0 shr 24] xor pK^[47];
+    t0 := t[s0 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s1 shr 24] xor pK^[44];
+    t1 := t[s1 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s2 shr 24] xor pK^[45];
+    t2 := t[s2 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s3 shr 24] xor pK^[46];
+    t3 := t[s3 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s0 shr 24] xor pK^[47];
     if ctx.rounds>12 then begin
       // Round 12
-      s0 := Td0[t0 and $ff] xor Td1[t3 shr 8 and $ff] xor Td2[t2 shr 16 and $ff] xor Td3[t1 shr 24] xor pK^[48];
-      s1 := Td0[t1 and $ff] xor Td1[t0 shr 8 and $ff] xor Td2[t3 shr 16 and $ff] xor Td3[t2 shr 24] xor pK^[49];
-      s2 := Td0[t2 and $ff] xor Td1[t1 shr 8 and $ff] xor Td2[t0 shr 16 and $ff] xor Td3[t3 shr 24] xor pK^[50];
-      s3 := Td0[t3 and $ff] xor Td1[t2 shr 8 and $ff] xor Td2[t1 shr 16 and $ff] xor Td3[t0 shr 24] xor pK^[51];
+      s0 := t[t0 and $ff] xor t[$100+t3 shr 8 and $ff] xor t[$200+t2 shr 16 and $ff] xor t[$300+t1 shr 24] xor pK^[48];
+      s1 := t[t1 and $ff] xor t[$100+t0 shr 8 and $ff] xor t[$200+t3 shr 16 and $ff] xor t[$300+t2 shr 24] xor pK^[49];
+      s2 := t[t2 and $ff] xor t[$100+t1 shr 8 and $ff] xor t[$200+t0 shr 16 and $ff] xor t[$300+t3 shr 24] xor pK^[50];
+      s3 := t[t3 and $ff] xor t[$100+t2 shr 8 and $ff] xor t[$200+t1 shr 16 and $ff] xor t[$300+t0 shr 24] xor pK^[51];
       // Round 13
-      t0 := Td0[s0 and $ff] xor Td1[s3 shr 8 and $ff] xor Td2[s2 shr 16 and $ff] xor Td3[s1 shr 24] xor pK^[52];
-      t1 := Td0[s1 and $ff] xor Td1[s0 shr 8 and $ff] xor Td2[s3 shr 16 and $ff] xor Td3[s2 shr 24] xor pK^[53];
-      t2 := Td0[s2 and $ff] xor Td1[s1 shr 8 and $ff] xor Td2[s0 shr 16 and $ff] xor Td3[s3 shr 24] xor pK^[54];
-      t3 := Td0[s3 and $ff] xor Td1[s2 shr 8 and $ff] xor Td2[s1 shr 16 and $ff] xor Td3[s0 shr 24] xor pK^[55];
+      t0 := t[s0 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s1 shr 24] xor pK^[52];
+      t1 := t[s1 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s2 shr 24] xor pK^[53];
+      t2 := t[s2 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s3 shr 24] xor pK^[54];
+      t3 := t[s3 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s0 shr 24] xor pK^[55];
     end;
   end;
   inc(PtrUInt(pK), (ctx.rounds shl 4));
