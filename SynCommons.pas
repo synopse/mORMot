@@ -1848,21 +1848,21 @@ function ShortStringToAnsi7String(const source: shortstring): RawByteString; ove
 procedure ShortStringToAnsi7String(const source: shortstring; var result: RawUTF8); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert an UTF-8 encoded text into a WideChar array
+/// convert an UTF-8 encoded text into a WideChar (UTF-16) buffer
 // - faster than System.UTF8ToUnicode
 // - sourceBytes can by 0, therefore length is computed from zero terminated source
-// - enough place must be available in dest
+// - enough place must be available in dest buffer (guess is sourceBytes*3+2)
 // - a WideChar(#0) is added at the end (if something is written) unless
 // NoTrailingZero is TRUE
 // - returns the BYTE count written in dest, excluding the ending WideChar(#0)
 function UTF8ToWideChar(dest: PWideChar; source: PUTF8Char; sourceBytes: PtrInt=0;
   NoTrailingZero: boolean=false): PtrInt; overload;
 
-/// convert an UTF-8 encoded text into a WideChar array
+/// convert an UTF-8 encoded text into a WideChar (UTF-16) buffer
 // - faster than System.UTF8ToUnicode
 // - this overloaded function expect a MaxDestChars parameter
 // - sourceBytes can not be 0 for this function
-// - enough place must be available in dest
+// - enough place must be available in dest buffer (guess is sourceBytes*3+2)
 // - a WideChar(#0) is added at the end (if something is written) unless
 // NoTrailingZero is TRUE
 // - returns the BYTE COUNT (not WideChar count) written in dest, excluding the
@@ -21054,9 +21054,9 @@ end;
 
 function UTF8ToWideString(const Text: RawUTF8): WideString;
 begin
-{$ifdef FPC}
+  {$ifdef FPC}
   result := '';
-{$endif}
+  {$endif}
   UTF8ToWideString(Text,result);
 end;
 
@@ -34697,15 +34697,16 @@ begin
       dec(len);
       inc(buf);
     until len=0;
-    while len>=4 do begin
+    if len>=4 then
+    repeat
       result := result xor PCardinal(buf)^;
       inc(buf,4);
+      dec(len,4);
       result := tab[3,ToByte(result)] xor
                 tab[2,ToByte(result shr 8)] xor
                 tab[1,ToByte(result shr 16)] xor
                 tab[0,result shr 24];
-      dec(len,4);
-    end;
+    until len<4;
     while len>0 do begin
       result := tab[0,ToByte(result xor ord(buf^))] xor (result shr 8);
       dec(len);
@@ -46935,11 +46936,7 @@ begin
 end;
 
 function SortDynArrayAnsiString(const A,B): integer;
-{$ifdef PUREPASCAL}
-begin
-  result := StrComp(pointer(A),pointer(B));
-end;
-{$else}
+{$ifdef CPUX86}
 asm // x86 version optimized for RawByteString/AnsiString/RawUTF8 types
         mov     eax, [eax]
         mov     edx, [edx]
@@ -46994,6 +46991,10 @@ asm // x86 version optimized for RawByteString/AnsiString/RawUTF8 types
 @0:     xor     eax, eax
         ret
 @1:     mov     eax, 1
+end;
+{$else}
+begin
+  result := StrComp(pointer(A),pointer(B));
 end;
 {$endif}
 
@@ -64609,11 +64610,9 @@ begin
   PIntegerArray(@CpuFeatures)^[2] := regs.ebx;
   PIntegerArray(@CpuFeatures)^[3] := regs.ecx;
   PByte(@PIntegerArray(@CpuFeatures)^[4])^ := regs.edx;
-  {$ifdef Darwin}
-  {$ifdef CPU64}
-  // SSE42 asm does not (yet) work on Darwin x64 (as reported by alf)
+  {$ifdef DISABLE_SSE42}
+  // may be needed on Darwin x64 (as reported by alf)
   Exclude(CpuFeatures, cfSSE42);
-  {$endif}
   {$endif}
   //Exclude(CpuFeatures, cfAESNI);
 end;

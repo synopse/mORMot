@@ -261,9 +261,9 @@
   {$ifdef BSD}
     // this includes Darwin and BSD family like FreeBSD
     {$define LINUX} // not true, but a POSIX/BSD system
-    {$define PUREPASCAL} // e.g. low-level stack layout differs
     {$ifdef DARWIN}
       {$define FPCSQLITE3STATIC} // we supply Darwin static libs
+      {$define FPC_PIC} // may have not be defined by the compiler options
     {$else}
       {$define BSDNOTDARWIN}
     {$endif}
@@ -271,6 +271,10 @@
     {$ifdef LINUX}
       {$define LINUXNOTBSD} // e.g. to disable epoll API
     {$endif}
+  {$endif}
+
+  {$ifdef FPC_PIC}
+    {$define PUREPASCAL} // most asm code is not PIC-safe with global constants
   {$endif}
 
   {$ifdef CPU64}

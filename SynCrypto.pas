@@ -322,21 +322,28 @@ uses
       {$ifdef MSWINDOWS}
         {$define SHA512_X86} // external sha512-x86.obj/.o
       {$endif}
+      {$ifdef FPC_PIC}
+        {$define AES_PASCAL} // x86 AES asm below is not PIC-safe
+      {$else}
+        {$define CPUX86_NOTPIC}
+      {$endif FPC_PIC}
       {$ifdef FPC}
-        {$ifdef LINUX}
-          {$define SHA512_X86} // external linux32/sha512-x86.o
-        {$endif}
         {$ifdef DARWIN}
-          {$define AES_PASCAL} // x86 AES asm below is not PIC-safe
+          {$define AES_PASCAL} // as reported by alf
         {$endif DARWIN}
+        {$ifdef LINUX}
+          {$ifndef AES_PASCAL}
+            {$define SHA512_X86} // external linux32/sha512-x86.o
+          {$endif AES_PASCAL}
+        {$endif}
       {$endif FPC}
       {$ifndef AES_PASCAL}
-        {$define USEAESNI}
+        {$define USEAESNI} // some functions are not PIC-safe
         {$define USEAESNI32}
       {$endif AES_PASCAL}
     {$endif}
   {$else}
-    {$define AES_PASCAL} // AES128 unrolled pascal(Delphi7)=57MB/s rolled asm=84MB/s :)
+    {$define AES_PASCAL}
     {$define SHA3_PASCAL}
   {$endif CPUINTEL}
 {$endif}
@@ -345,8 +352,8 @@ uses
   {$define AESPASCAL_OR_CPU64}
 {$endif}
 
-{$define AES_ROLLED}
-// if defined, use rolled version, which is slightly faster (at least on my CPU)
+{.$define AES_ROLLED}
+// if defined, use rolled version, which is slightly slower (at least on my CPU)
 
 {$ifdef USEPADLOCK}
 var
@@ -4537,7 +4544,7 @@ procedure aesencryptpas(const ctxt: TAESContext; bi, bo: PWA4);
  3. This notice may not be removed or altered from any source distribution.
  -> code has been refactored and tuned especially for FPC x86_64 target }
 var
-  t: PCardinalArray;
+  t: PCardinalArray;    // faster on a PIC system
   s0,s1,s2,s3: PtrUInt; // TAESBlock s# as separate variables
   t0,t1,t2: cardinal;   // TAESBlock t# as separate variables
 {$ifdef AES_ROLLED}
@@ -4561,22 +4568,22 @@ begin
     s2 := t2 xor pk[2];
     inc(pk);
   end;
-  bo[0] := ((sbox[s0        and $ff])        xor
-            (sbox[s1 shr  8 and $ff]) shl  8 xor
-            (sbox[s2 shr 16 and $ff]) shl 16 xor
-            (sbox[s3 shr 24])         shl 24    ) xor pk[0];
-  bo[1] := ((sbox[s1        and $ff])        xor
-            (sbox[s2 shr  8 and $ff]) shl  8 xor
-            (sbox[s3 shr 16 and $ff]) shl 16 xor
-            (sbox[s0 shr 24])         shl 24    ) xor pk[1];
-  bo[2] := ((sbox[s2        and $ff])        xor
-            (sbox[s3 shr  8 and $ff]) shl  8 xor
-            (sbox[s0 shr 16 and $ff]) shl 16 xor
-            (sbox[s1 shr 24])         shl 24    ) xor pk[2];
-  bo[3] := ((sbox[s3        and $ff])        xor
-            (sbox[s0 shr  8 and $ff]) shl  8 xor
-            (sbox[s1 shr 16 and $ff]) shl 16 xor
-            (sbox[s2 shr 24])         shl 24    ) xor pk[3];
+  bo[0] := ((SBox[s0        and $ff])        xor
+            (SBox[s1 shr  8 and $ff]) shl  8 xor
+            (SBox[s2 shr 16 and $ff]) shl 16 xor
+            (SBox[s3 shr 24])         shl 24    ) xor pk[0];
+  bo[1] := ((SBox[s1        and $ff])        xor
+            (SBox[s2 shr  8 and $ff]) shl  8 xor
+            (SBox[s3 shr 16 and $ff]) shl 16 xor
+            (SBox[s0 shr 24])         shl 24    ) xor pk[1];
+  bo[2] := ((SBox[s2        and $ff])        xor
+            (SBox[s3 shr  8 and $ff]) shl  8 xor
+            (SBox[s0 shr 16 and $ff]) shl 16 xor
+            (SBox[s1 shr 24])         shl 24    ) xor pk[2];
+  bo[3] := ((SBox[s3        and $ff])        xor
+            (SBox[s0 shr  8 and $ff]) shl  8 xor
+            (SBox[s1 shr 16 and $ff]) shl 16 xor
+            (SBox[s2 shr 24])         shl 24    ) xor pk[3];
 {$else}
   t3: cardinal;
   pK: PAWk;
@@ -4684,7 +4691,7 @@ begin
 end;
 {$endif}
 
-{$ifndef AESPASCAL_OR_CPU64}
+{$ifdef CPUX86_NOTPIC}
 procedure aesencrypt386(const ctxt: TAESContext; bi, bo: PWA4);
 asm // rolled optimized encryption asm version by A. Bouchez
   push ebx
@@ -4858,7 +4865,7 @@ asm // rolled optimized encryption asm version by A. Bouchez
   pop esi
   pop ebx
 end;
-{$endif CPUX86}
+{$endif CPUX86_NOTPIC}
 
 procedure TAES.Encrypt(const BI: TAESBlock; var BO: TAESBlock);
 begin
@@ -5166,10 +5173,10 @@ begin
   end;
   Nk := KeySize div 32;
   MoveFast(Key, ctx.RK, 4*Nk);
-  {$ifdef AESPASCAL_OR_CPU64}
-  ctx.DoBlock := @aesencryptpas;
-  {$else}
+  {$ifdef CPUX86_NOTPIC}
   ctx.DoBlock := @aesencrypt386;
+  {$else}
+  ctx.DoBlock := @aesencryptpas;
   {$endif}
   {$ifdef CPUINTEL}
   {$ifdef USEAESNI}
@@ -5200,7 +5207,7 @@ begin
 end;
 
 {$ifndef AESPASCAL_OR_CPU64}
-  {$define AES_ROLLED} // asm version is rolled
+  {$define AES_ROLLED} // asm requires rolled decryption keys
 {$endif}
 
 {$ifdef USEAESNI} // should be put outside the main method for FPC :(
@@ -5319,7 +5326,7 @@ var
   t3: cardinal;
   pk: PAWk;  // pointer to loop rount key
   {$endif}
-  t: PCardinalArray;
+  t: PCardinalArray;    // faster on a PIC system
 begin
   t := @Td0;
 {$ifdef AES_ROLLED}
@@ -5436,8 +5443,8 @@ begin
     end;
   end;
   inc(PtrUInt(pk), (ctxt.rounds shl 4));
-  // Uses InvSbox and shl, needs type cast cardinal() for
-  // 16 bit compilers: here InvSbox is byte, Td4 is cardinal
+  // Uses InvSBox and shl, needs type cast cardinal() for
+  // 16 bit compilers: here InvSBox is byte, Td4 is cardinal
   bo[0] := ((InvSBox[t0 and $ff]) xor
     (InvSBox[t3 shr  8 and $ff]) shl  8 xor
     (InvSBox[t2 shr 16 and $ff]) shl 16 xor
@@ -5616,7 +5623,7 @@ asm
 end;
 {$endif}
 
-{$ifndef AESPASCAL_OR_CPU64}
+{$ifdef CPUX86_NOTPIC}
 procedure aesdecrypt386(const ctxt: TAESContext; bi, bo: PWA4);
 asm
   push ebx
@@ -5697,7 +5704,6 @@ asm
   lea eax,[eax-16]
   dec byte ptr [esp+16]
   jnz @1
-
   mov ebp,eax
   movzx eax,bl
   movzx eax,byte ptr [eax+InvSBox]
@@ -5785,48 +5791,51 @@ asm
   pop esi
   pop ebx
 end;
-{$endif}
-{$endif}
+{$endif CPUX86_NOTPIC}
+{$endif CPUX86}
 
-function TAES.DecryptInit(const Key; KeySize: cardinal): boolean;
-procedure MakeDecrKey(var k: TAWk; rounds: integer);
+procedure MakeDecrKey(rounds: integer; k: PAWk);
 // Calculate decryption key from encryption key
-var i: integer;
-    x: cardinal;
+var x: cardinal;
     {$ifndef AES_ROLLED}
-    j: integer;
+    i,j: integer;
     {$endif}
-    t: PCardinalArray;
+    t: PCardinalArray;  // faster on a PIC system
+    s: PByteArray;
 begin
-{$ifndef AES_ROLLED} // inversion is needed only for fully unrolled version
-  // invert the order of the round keys
+  {$ifndef AES_ROLLED} // inversion is needed only for fully unrolled version
   i := 0;
   j := 4*rounds;
   while i<j do begin
-    x:=k[i  ];  k[i  ]:=k[j  ];  k[j  ]:=x;
-    x:=k[i+1];  k[i+1]:=k[j+1];  k[j+1]:=x;
-    x:=k[i+2];  k[i+2]:=k[j+2];  k[j+2]:=x;
-    x:=k[i+3];  k[i+3]:=k[j+3];  k[j+3]:=x;
+    x := k[i];    k[i] := k[j];      k[j] := x;
+    x := k[i+1];  k[i+1] := k[j+1];  k[j+1] := x;
+    x := k[i+2];  k[i+2] := k[j+2];  k[j+2] := x;
+    x := k[i+3];  k[i+3] := k[j+3];  k[j+3] := x;
     inc(i,4);
     dec(j,4);
   end;
-{$endif}
+  {$endif}
   t := @Td0;
-  for i := 1 to rounds-1 do begin
-    x  := k[i*4  ];
-    k[i*4  ] := t[$300+SBox[x shr 24]] xor t[$200+SBox[x shr 16 and $ff]] xor
-                t[$100+SBox[x shr 8 and $ff]] xor t[SBox[x and $ff]];
-    x  := k[i*4+1];
-    k[i*4+1] := t[$300+SBox[x shr 24]] xor t[$200+SBox[x shr 16 and $ff]] xor
-                t[$100+SBox[x shr 8 and $ff]] xor t[SBox[x and $ff]];
-    x  := k[i*4+2];
-    k[i*4+2] := t[$300+SBox[x shr 24]] xor t[$200+SBox[x shr 16 and $ff]] xor
-                t[$100+SBox[x shr 8 and $ff]] xor t[SBox[x and $ff]];
-    x  := k[i*4+3];
-    k[i*4+3] := t[$300+SBox[x shr 24]] xor t[$200+SBox[x shr 16 and $ff]] xor
-                t[$100+SBox[x shr 8 and $ff]] xor t[SBox[x and $ff]];
-  end;
+  s := @SBox;
+  repeat
+    inc(PByte(k),16);
+    dec(rounds);
+    x := k[0];
+    k[0] := t[$300+s[x shr 24]] xor t[$200+s[x shr 16 and $ff]] xor
+            t[$100+s[x shr 8 and $ff]] xor t[s[x and $ff]];
+    x := k[1];
+    k[1] := t[$300+s[x shr 24]] xor t[$200+s[x shr 16 and $ff]] xor
+            t[$100+s[x shr 8 and $ff]] xor t[s[x and $ff]];
+    x := k[2];
+    k[2] := t[$300+s[x shr 24]] xor t[$200+s[x shr 16 and $ff]] xor
+            t[$100+s[x shr 8 and $ff]] xor t[s[x and $ff]];
+    x := k[3];
+    k[3] := t[$300+s[x shr 24]] xor t[$200+s[x shr 16 and $ff]] xor
+            t[$100+s[x shr 8 and $ff]] xor t[s[x and $ff]];
+  until rounds=1;
 end;
+
+function TAES.DecryptInit(const Key; KeySize: cardinal): boolean;
 var ctx: TAESContext absolute Context;
 begin
   {$ifdef USEPADLOCK}
@@ -5840,10 +5849,10 @@ begin
   result := EncryptInit(Key, KeySize); // contains Initialized := true
   if not result then
     exit;
-  {$ifdef AESPASCAL_OR_CPU64}
-  ctx.DoBlock := @aesdecryptpas;
-  {$else}
+  {$ifdef CPUX86_NOTPIC}
   ctx.DoBlock := @aesdecrypt386;
+  {$else}
+  ctx.DoBlock := @aesdecryptpas;
   {$endif}
   {$ifdef USEAESNI}
   if cfAESNI in CpuFeatures then begin
@@ -5855,7 +5864,7 @@ begin
     end;
   end else
   {$endif}
-    MakeDecrKey(TAWk(ctx.RK),ctx.Rounds);
+    MakeDecrKey(ctx.Rounds,@ctx.RK);
 end;
 
 procedure TAES.Decrypt(var B: TAESBlock);
@@ -7850,7 +7859,7 @@ end;
   - new x64 assembler version by Synopse }
 
 procedure KeccakPermutationKernel(B, A, C: Pointer);
-{$ifdef CPU32} // Eric Grange's MMX version
+{$ifdef CPU32} // Eric Grange's MMX version (PIC-safe)
 asm
         add     edx, 128
         add     eax, 128

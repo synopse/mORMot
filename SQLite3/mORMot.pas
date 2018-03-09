@@ -26587,7 +26587,7 @@ begin
 end;
 
 procedure ExchgPtrUInt(P1,P2: PtrUInt; FieldCount: integer);
-{$ifdef PUREPASCAL}  // CPU64 will call this version e.g.
+{$ifndef CPUX86}  // CPU64 will call this version e.g.
 var B: PtrUInt;
     i: PtrUInt;
 begin
