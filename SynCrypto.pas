@@ -412,9 +412,6 @@ type
   {$endif}
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance, if needed
-
-  { TAES }
-
   TAES = {$ifndef UNICODE}object{$else}record{$endif}
   private
     Context: packed array[1..AESContextSize] of byte;
@@ -4099,11 +4096,12 @@ asm // input: eax=TAESContext, xmm7=data; output: eax=TAESContext, xmm7=data
   db $66,$0F,$38,$DD,$FB
   {$endif}
 end;
-procedure AesNiEncrypt128(const ctxt, source, dest);
+procedure aesniencrypt128(const ctxt, source, dest);
 asm // eax=ctxt edx=source ecx=dest
   movdqu xmm7,[edx]
   call AesNiEncryptXmm7_128
   movdqu [ecx],xmm7
+  pxor   xmm7,xmm7 // for safety
 end;
 procedure AesNiEncryptXmm7_192;
 asm // input: eax=TAESContext, xmm7=data; output: eax=TAESContext, xmm7=data
@@ -4152,11 +4150,12 @@ asm // input: eax=TAESContext, xmm7=data; output: eax=TAESContext, xmm7=data
   db $66,$0F,$38,$DD,$FD
   {$endif}
 end;
-procedure AesNiEncrypt192(const ctxt, source, dest);
+procedure aesniencrypt192(const ctxt, source, dest);
 asm // eax=ctxt edx=source ecx=dest
   movdqu xmm7,[edx]
   call AesNiEncryptXmm7_192
   movdqu [ecx],xmm7
+  pxor   xmm7,xmm7 // for safety
 end;
 procedure AesNiEncryptXmm7_256;
 asm // input: eax=TAESContext, xmm7=data; output: eax=TAESContext, xmm7=data
@@ -4214,15 +4213,16 @@ asm // input: eax=TAESContext, xmm7=data; output: eax=TAESContext, xmm7=data
   db $66,$0F,$38,$DD,$F9
   {$endif}
 end;
-procedure AesNiEncrypt256(const ctxt, source, dest);
+procedure aesniencrypt256(const ctxt, source, dest);
 asm // eax=ctxt edx=source ecx=dest
   movdqu xmm7,[edx]
   call AesNiEncryptXmm7_256
   movdqu [ecx],xmm7
+  pxor   xmm7,xmm7 // for safety
 end;
 {$endif CPU32}
 {$ifdef CPU64}
-procedure AesNiEncrypt128(const ctxt, source, dest);
+procedure aesniencrypt128(const ctxt, source, dest);
 {$ifdef FPC}nostackframe; assembler; asm{$else}
 asm // input: rcx=TAESContext, rdx=source, r8=dest
   .noframe
@@ -4278,8 +4278,9 @@ asm // input: rcx=TAESContext, rdx=source, r8=dest
   aesenclast xmm7,xmm11
   movdqu [rdx],xmm7
   {$endif win64}
+  pxor   xmm7,xmm7 // for safety
 end;
-procedure AesNiEncrypt192(const ctxt, source, dest);
+procedure aesniencrypt192(const ctxt, source, dest);
 {$ifdef FPC}nostackframe; assembler; asm{$else}
 asm // input: rcx=TAESContext, rdx=source, r8=dest
   .noframe
@@ -4317,8 +4318,9 @@ asm // input: rcx=TAESContext, rdx=source, r8=dest
   aesenc xmm7,xmm12
   aesenclast xmm7,xmm13
   movdqu [r8],xmm7
+  pxor   xmm7,xmm7 // for safety
 end;
-procedure AesNiEncrypt256(const ctxt, source, dest);
+procedure aesniencrypt256(const ctxt, source, dest);
 {$ifdef FPC}nostackframe; assembler; asm{$else}
 asm // input: rcx=TAESContext, rdx=source, r8=dest
   .noframe
@@ -4390,25 +4392,101 @@ asm // input: rcx=TAESContext, rdx=source, r8=dest
   aesenclast xmm7,xmm15
   movdqu [rdx],xmm7
   {$endif win64}
+  pxor   xmm7,xmm7 // for safety
 end;
 
-procedure aesdecryptaesni(const ctxt, source, dest);
+procedure aesnidecrypt128(const ctxt, source, dest);
 {$ifdef FPC}nostackframe; assembler; asm{$else}
-asm // input: rcx=TAESContext, rdx=source, r8=dest
+asm // input: rcx/rdi=TAESContext, rdx/rsi=source, r8/rdx=dest
   .noframe
 {$endif}
-  {$ifndef win64}
-  mov r8,rdx
-  mov rdx,rsi
-  mov rcx,rdi
-  {$endif win64}
+  {$ifdef win64}
   movdqu xmm7,[rdx]
-  mov dl,[rcx].TAESContext.Rounds
-  cmp dl,10
-  je @128
-  cmp dl,12
-  je @192
-@256:
+  {$else}
+  mov rcx,rdi
+  mov r8,rdx
+  movdqu xmm7,[rsi]
+  {$endif win64}
+  movdqu xmm0,[rcx+16*10]
+  movdqu xmm1,[rcx+16*9]
+  movdqu xmm2,[rcx+16*8]
+  movdqu xmm3,[rcx+16*7]
+  movdqu xmm4,[rcx+16*6]
+  movdqu xmm5,[rcx+16*5]
+  movdqu xmm6,[rcx+16*4]
+  movdqu xmm8,[rcx+16*3]
+  movdqu xmm9,[rcx+16*2]
+  movdqu xmm10,[rcx+16*1]
+  movdqu xmm11,[rcx+16*0]
+  pxor xmm7,xmm0
+  aesdec xmm7,xmm1
+  aesdec xmm7,xmm2
+  aesdec xmm7,xmm3
+  aesdec xmm7,xmm4
+  aesdec xmm7,xmm5
+  aesdec xmm7,xmm6
+  aesdec xmm7,xmm8
+  aesdec xmm7,xmm9
+  aesdec xmm7,xmm10
+  aesdeclast xmm7,xmm11
+  movdqu [r8],xmm7
+  pxor   xmm7,xmm7 // for safety
+end;
+
+procedure aesnidecrypt192(const ctxt, source, dest);
+{$ifdef FPC}nostackframe; assembler; asm{$else}
+asm // input: rcx/rdi=TAESContext, rdx/rsi=source, r8/rdx=dest
+  .noframe
+{$endif}
+  {$ifdef win64}
+  movdqu xmm7,[rdx]
+  {$else}
+  mov rcx,rdi
+  mov r8,rdx
+  movdqu xmm7,[rsi]
+  {$endif win64}
+  movdqu xmm0,[rcx+16*12]
+  movdqu xmm1,[rcx+16*11]
+  movdqu xmm2,[rcx+16*10]
+  movdqu xmm3,[rcx+16*9]
+  movdqu xmm4,[rcx+16*8]
+  movdqu xmm5,[rcx+16*7]
+  movdqu xmm6,[rcx+16*6]
+  movdqu xmm8,[rcx+16*5]
+  movdqu xmm9,[rcx+16*4]
+  movdqu xmm10,[rcx+16*3]
+  movdqu xmm11,[rcx+16*2]
+  movdqu xmm12,[rcx+16*1]
+  movdqu xmm13,[rcx+16*0]
+  pxor xmm7,xmm0
+  aesdec xmm7,xmm1
+  aesdec xmm7,xmm2
+  aesdec xmm7,xmm3
+  aesdec xmm7,xmm4
+  aesdec xmm7,xmm5
+  aesdec xmm7,xmm6
+  aesdec xmm7,xmm8
+  aesdec xmm7,xmm9
+  aesdec xmm7,xmm10
+  aesdec xmm7,xmm11
+  aesdec xmm7,xmm12
+  aesdeclast xmm7,xmm13
+  movdqu [r8],xmm7
+  pxor   xmm7,xmm7 // for safety
+end;
+
+procedure aesnidecrypt256(const ctxt, source, dest);
+{$ifdef FPC}nostackframe; assembler; asm{$else}
+asm // input: rcx/rdi=TAESContext, rdx/rsi=source, r8/rdx=dest
+  .noframe
+{$endif}
+  {$ifdef win64}
+  movdqu xmm7,[rdx]
+  {$else}
+  mov rcx,rdi
+  mov r8,rdx
+  movdqu xmm7,[rsi]
+  {$endif win64}
   movdqu xmm0,[rcx+16*14]
   movdqu xmm1,[rcx+16*13]
   movdqu xmm2,[rcx+16*12]
@@ -4440,60 +4518,7 @@ asm // input: rcx=TAESContext, rdx=source, r8=dest
   aesdec xmm7,xmm14
   aesdeclast xmm7,xmm15
   movdqu [r8],xmm7
-  ret
-@192:
-  movdqu xmm0,[rcx+16*12]
-  movdqu xmm1,[rcx+16*11]
-  movdqu xmm2,[rcx+16*10]
-  movdqu xmm3,[rcx+16*9]
-  movdqu xmm4,[rcx+16*8]
-  movdqu xmm5,[rcx+16*7]
-  movdqu xmm6,[rcx+16*6]
-  movdqu xmm8,[rcx+16*5]
-  movdqu xmm9,[rcx+16*4]
-  movdqu xmm10,[rcx+16*3]
-  movdqu xmm11,[rcx+16*2]
-  movdqu xmm12,[rcx+16*1]
-  movdqu xmm13,[rcx+16*0]
-  pxor xmm7,xmm0
-  aesdec xmm7,xmm1
-  aesdec xmm7,xmm2
-  aesdec xmm7,xmm3
-  aesdec xmm7,xmm4
-  aesdec xmm7,xmm5
-  aesdec xmm7,xmm6
-  aesdec xmm7,xmm8
-  aesdec xmm7,xmm9
-  aesdec xmm7,xmm10
-  aesdec xmm7,xmm11
-  aesdec xmm7,xmm12
-  aesdeclast xmm7,xmm13
-  movdqu [r8],xmm7
-  ret
-@128:
-  movdqu xmm0,[rcx+16*10]
-  movdqu xmm1,[rcx+16*9]
-  movdqu xmm2,[rcx+16*8]
-  movdqu xmm3,[rcx+16*7]
-  movdqu xmm4,[rcx+16*6]
-  movdqu xmm5,[rcx+16*5]
-  movdqu xmm6,[rcx+16*4]
-  movdqu xmm8,[rcx+16*3]
-  movdqu xmm9,[rcx+16*2]
-  movdqu xmm10,[rcx+16*1]
-  movdqu xmm11,[rcx+16*0]
-  pxor xmm7,xmm0
-  aesdec xmm7,xmm1
-  aesdec xmm7,xmm2
-  aesdec xmm7,xmm3
-  aesdec xmm7,xmm4
-  aesdec xmm7,xmm5
-  aesdec xmm7,xmm6
-  aesdec xmm7,xmm8
-  aesdec xmm7,xmm9
-  aesdec xmm7,xmm10
-  aesdeclast xmm7,xmm11
-  movdqu [r8],xmm7
+  pxor   xmm7,xmm7 // for safety
 end;
 {$endif CPU64}
 {$endif USEAESNI}
@@ -5150,9 +5175,9 @@ begin
   {$ifdef USEAESNI}
   if cfAESNI in CpuFeatures then begin
      case KeySize of
-     128: ctx.DoBlock := @AesNiEncrypt128;
-     192: ctx.DoBlock := @AesNiEncrypt192;
-     256: ctx.DoBlock := @AesNiEncrypt256;
+     128: ctx.DoBlock := @aesniencrypt128;
+     192: ctx.DoBlock := @aesniencrypt192;
+     256: ctx.DoBlock := @aesniencrypt256;
      end;
      {$ifdef USEAESNI32}
      case KeySize of
@@ -5434,15 +5459,105 @@ end;
 
 {$ifdef CPUX86}
 {$ifdef USEAESNI}
-procedure aesdecryptaesni(const ctxt, source, dest);
+procedure aesnidecrypt128(const ctxt, source, dest);
 asm
   movdqu xmm7,[edx]
-  mov dl,[eax].TAESContext.Rounds
-  cmp dl,10
-  je @128
-  cmp dl,12
-  je @192
-@256:
+  movdqu xmm0,[eax+16*10]
+  movdqu xmm1,[eax+16*9]
+  movdqu xmm2,[eax+16*8]
+  movdqu xmm3,[eax+16*7]
+  movdqu xmm4,[eax+16*6]
+  movdqu xmm5,[eax+16*5]
+  movdqu xmm6,[eax+16*4]
+  pxor xmm7,xmm0
+  {$ifdef HASAESNI}
+  aesdec xmm7,xmm1
+  aesdec xmm7,xmm2
+  aesdec xmm7,xmm3
+  aesdec xmm7,xmm4
+  {$else}
+  db $66,$0F,$38,$DE,$F9
+  db $66,$0F,$38,$DE,$FA
+  db $66,$0F,$38,$DE,$FB
+  db $66,$0F,$38,$DE,$FC
+  {$endif}
+  movdqu xmm0,[eax+16*3]
+  movdqu xmm1,[eax+16*2]
+  movdqu xmm2,[eax+16*1]
+  movdqu xmm3,[eax+16*0]
+  {$ifdef HASAESNI}
+  aesdec xmm7,xmm5
+  aesdec xmm7,xmm6
+  aesdec xmm7,xmm0
+  aesdec xmm7,xmm1
+  aesdec xmm7,xmm2
+  aesdeclast xmm7,xmm3
+  {$else}
+  db $66,$0F,$38,$DE,$FD
+  db $66,$0F,$38,$DE,$FE
+  db $66,$0F,$38,$DE,$F8
+  db $66,$0F,$38,$DE,$F9
+  db $66,$0F,$38,$DE,$FA
+  db $66,$0F,$38,$DF,$FB
+  {$endif}
+  movdqu [ecx],xmm7
+  pxor xmm7,xmm7
+end;
+
+procedure aesnidecrypt192(const ctxt, source, dest);
+asm
+  movdqu xmm7,[edx]
+  movdqu xmm0,[eax+16*12]
+  movdqu xmm1,[eax+16*11]
+  movdqu xmm2,[eax+16*10]
+  movdqu xmm3,[eax+16*9]
+  movdqu xmm4,[eax+16*8]
+  movdqu xmm5,[eax+16*7]
+  movdqu xmm6,[eax+16*6]
+  pxor xmm7,xmm0
+  {$ifdef HASAESNI}
+  aesdec xmm7,xmm1
+  aesdec xmm7,xmm2
+  aesdec xmm7,xmm3
+  aesdec xmm7,xmm4
+  aesdec xmm7,xmm5
+  aesdec xmm7,xmm6
+  {$else}
+  db $66,$0F,$38,$DE,$F9
+  db $66,$0F,$38,$DE,$FA
+  db $66,$0F,$38,$DE,$FB
+  db $66,$0F,$38,$DE,$FC
+  db $66,$0F,$38,$DE,$FD
+  db $66,$0F,$38,$DE,$FE
+  {$endif}
+  movdqu xmm0,[eax+16*5]
+  movdqu xmm1,[eax+16*4]
+  movdqu xmm2,[eax+16*3]
+  movdqu xmm3,[eax+16*2]
+  movdqu xmm4,[eax+16*1]
+  movdqu xmm5,[eax+16*0]
+  {$ifdef HASAESNI}
+  aesdec xmm7,xmm0
+  aesdec xmm7,xmm1
+  aesdec xmm7,xmm2
+  aesdec xmm7,xmm3
+  aesdec xmm7,xmm4
+  aesdeclast xmm7,xmm5
+  {$else}
+  db $66,$0F,$38,$DE,$F8
+  db $66,$0F,$38,$DE,$F9
+  db $66,$0F,$38,$DE,$FA
+  db $66,$0F,$38,$DE,$FB
+  db $66,$0F,$38,$DE,$FC
+  db $66,$0F,$38,$DF,$FD
+  {$endif}
+  movdqu [ecx],xmm7
+  pxor xmm7,xmm7
+end;
+
+procedure aesnidecrypt256(const ctxt, source, dest);
+asm
+  movdqu xmm7,[edx]
   movdqu xmm0,[eax+16*14]
   movdqu xmm1,[eax+16*13]
   movdqu xmm2,[eax+16*12]
@@ -5497,94 +5612,7 @@ asm
   db $66,$0F,$38,$DF,$F8
   {$endif}
   movdqu [ecx],xmm7
-  ret
-@192:
-  movdqu xmm0,[eax+16*12]
-  movdqu xmm1,[eax+16*11]
-  movdqu xmm2,[eax+16*10]
-  movdqu xmm3,[eax+16*9]
-  movdqu xmm4,[eax+16*8]
-  movdqu xmm5,[eax+16*7]
-  movdqu xmm6,[eax+16*6]
-  pxor xmm7,xmm0
-  {$ifdef HASAESNI}
-  aesdec xmm7,xmm1
-  aesdec xmm7,xmm2
-  aesdec xmm7,xmm3
-  aesdec xmm7,xmm4
-  aesdec xmm7,xmm5
-  aesdec xmm7,xmm6
-  {$else}
-  db $66,$0F,$38,$DE,$F9
-  db $66,$0F,$38,$DE,$FA
-  db $66,$0F,$38,$DE,$FB
-  db $66,$0F,$38,$DE,$FC
-  db $66,$0F,$38,$DE,$FD
-  db $66,$0F,$38,$DE,$FE
-  {$endif}
-  movdqu xmm0,[eax+16*5]
-  movdqu xmm1,[eax+16*4]
-  movdqu xmm2,[eax+16*3]
-  movdqu xmm3,[eax+16*2]
-  movdqu xmm4,[eax+16*1]
-  movdqu xmm5,[eax+16*0]
-  {$ifdef HASAESNI}
-  aesdec xmm7,xmm0
-  aesdec xmm7,xmm1
-  aesdec xmm7,xmm2
-  aesdec xmm7,xmm3
-  aesdec xmm7,xmm4
-  aesdeclast xmm7,xmm5
-  {$else}
-  db $66,$0F,$38,$DE,$F8
-  db $66,$0F,$38,$DE,$F9
-  db $66,$0F,$38,$DE,$FA
-  db $66,$0F,$38,$DE,$FB
-  db $66,$0F,$38,$DE,$FC
-  db $66,$0F,$38,$DF,$FD
-  {$endif}
-  movdqu [ecx],xmm7
-  ret
-@128:
-  movdqu xmm0,[eax+16*10]
-  movdqu xmm1,[eax+16*9]
-  movdqu xmm2,[eax+16*8]
-  movdqu xmm3,[eax+16*7]
-  movdqu xmm4,[eax+16*6]
-  movdqu xmm5,[eax+16*5]
-  movdqu xmm6,[eax+16*4]
-  pxor xmm7,xmm0
-  {$ifdef HASAESNI}
-  aesdec xmm7,xmm1
-  aesdec xmm7,xmm2
-  aesdec xmm7,xmm3
-  aesdec xmm7,xmm4
-  {$else}
-  db $66,$0F,$38,$DE,$F9
-  db $66,$0F,$38,$DE,$FA
-  db $66,$0F,$38,$DE,$FB
-  db $66,$0F,$38,$DE,$FC
-  {$endif}
-  movdqu xmm0,[eax+16*3]
-  movdqu xmm1,[eax+16*2]
-  movdqu xmm2,[eax+16*1]
-  movdqu xmm3,[eax+16*0]
-  {$ifdef HASAESNI}
-  aesdec xmm7,xmm5
-  aesdec xmm7,xmm6
-  aesdec xmm7,xmm0
-  aesdec xmm7,xmm1
-  aesdec xmm7,xmm2
-  aesdeclast xmm7,xmm3
-  {$else}
-  db $66,$0F,$38,$DE,$FD
-  db $66,$0F,$38,$DE,$FE
-  db $66,$0F,$38,$DE,$F8
-  db $66,$0F,$38,$DE,$F9
-  db $66,$0F,$38,$DE,$FA
-  db $66,$0F,$38,$DF,$FB
-  {$endif}
-  movdqu [ecx],xmm7
+  pxor xmm7,xmm7
 end;
 {$endif}
 
@@ -5820,7 +5848,11 @@ begin
   {$ifdef USEAESNI}
   if cfAESNI in CpuFeatures then begin
     MakeDecrKeyAesNi(ctx.Rounds,@ctx.RK);
-    ctx.DoBlock := @aesdecryptaesni;
+    case KeySize of
+    128: ctx.DoBlock := @aesnidecrypt128;
+    192: ctx.DoBlock := @aesnidecrypt192;
+    256: ctx.DoBlock := @aesnidecrypt256;
+    end;
   end else
   {$endif}
     MakeDecrKey(TAWk(ctx.RK),ctx.Rounds);
@@ -12062,7 +12094,8 @@ end;
 destructor TAESAbstractSyn.Destroy;
 begin
   inherited Destroy;
-  AES.Done; // mandatory for Padlock - also fill AES buffer with 0 for safety
+  AES.Done;      // mandatory for Padlock - also fill buffer with 0 for safety
+  FillZero(fCV); // may contain sensitive data on some modes
 end;
 
 function TAESAbstractSyn.Clone: TAESAbstract;
@@ -12257,6 +12290,7 @@ begin
     call   AesNiTrailer
 @0: pop    edi
     pop    esi
+    pxor   xmm7,xmm7 // for safety
   end else
   {$endif} begin
     inherited; // CV := IV + set fIn,fOut,fCount
@@ -12305,6 +12339,7 @@ begin
     call   AesNiTrailer
 @0: pop    edi
     pop    esi
+    pxor   xmm7,xmm7 // for safety
   end else
   {$endif} begin
     inherited; // CV := IV + set fIn,fOut,fCount
@@ -12407,6 +12442,7 @@ begin
 @z: pop    edi
     pop    esi
     pop    ebx
+    pxor   xmm7,xmm7 // for safety
   end else
   {$endif} begin
     inherited; // CV := IV + set fIn,fOut,fCount
@@ -12463,6 +12499,7 @@ begin
     pop    edi
     pop    esi
     pop    ebx
+    pxor   xmm7,xmm7 // for safety
   end else
   {$endif} begin
     inherited; // CV := IV + set fIn,fOut,fCount
@@ -12521,6 +12558,7 @@ begin
     pop    edi
     pop    esi
     pop    ebx
+    pxor   xmm7,xmm7 // for safety
   end else
   {$endif} begin
     inherited Encrypt(BufIn,BufOut,Count); // CV := IV + set fIn,fOut,fCount
@@ -12575,6 +12613,7 @@ begin
     pop    edi
     pop    esi
     pop    ebx
+    pxor   xmm7,xmm7 // for safety
   end else
   {$endif} begin
     inherited Encrypt(BufIn,BufOut,Count); // CV := IV + set fIn,fOut,fCount
@@ -12822,6 +12861,7 @@ begin
     call   AesNiTrailer
 @0: pop    edi
     pop    esi
+    pxor   xmm7,xmm7 // for safety
   end else
   {$endif} begin
     inherited; // CV := IV + set fIn,fOut,fCount
