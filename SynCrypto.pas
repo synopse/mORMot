@@ -845,7 +845,7 @@ type
   // - this class will use AES-NI hardware instructions, if available, e.g.
   // ! OFB256: 27.69ms in x86 optimized code, 9.94ms with AES-NI
   // - expect IV to be set before process, or IVAtBeginning=true
-  // - TAESOFB 128-bit has its own optimized asm version under x86_64 + AES_NI
+  // - TAESOFB 128/256 have an optimized asm version under x86_64 + AES_NI
   TAESOFB = class(TAESAbstractEncryptOnly)
   public
     /// perform the AES cypher in the OFB mode
@@ -12218,7 +12218,8 @@ asm // eax=TAESContext ecx=len xmm7=CV esi=BufIn edi=BufOut
     xor    al, [edx] // = XorMemory(pointer(fOut),pointer(fIn),@fCV,len);
     inc    edx
     stosb
-    loop   @s
+    dec    ecx
+    jnz    @s
 end;
 {$endif}
 
@@ -12619,7 +12620,7 @@ asm // rcx=TAESOFB,rdx=source,r8=dest,r9=blockcount Linux:rdi,rsi,rdx,rcx
     movdqu xmm9,[rcx+16*8]
     movdqu xmm10,[rcx+16*9]
     movdqu xmm11,[rcx+16*10]
-    @s: movdqu xmm15,dqword ptr [rdx]
+@s: movdqu xmm15,dqword ptr [rdx]
     pxor xmm7,xmm0
     aesenc xmm7,xmm1
     aesenc xmm7,xmm2
@@ -12653,7 +12654,54 @@ asm // rcx=TAESOFB,rdx=source,r8=dest,r9=blockcount Linux:rdi,rsi,rdx,rcx
     movdqu xmm9,[rdi+16*8]
     movdqu xmm10,[rdi+16*9]
     movdqu xmm11,[rdi+16*10]
-    @s: movdqu xmm15,dqword ptr [rsi]
+@s: movdqu xmm15,dqword ptr [rsi]
+    pxor   xmm7,xmm0
+    aesenc xmm7,xmm1
+    aesenc xmm7,xmm2
+    aesenc xmm7,xmm3
+    aesenc xmm7,xmm4
+    aesenc xmm7,xmm5
+    aesenc xmm7,xmm6
+    aesenc xmm7,xmm8
+    aesenc xmm7,xmm9
+    aesenc xmm7,xmm10
+    aesenclast xmm7,xmm11
+    pxor   xmm15,xmm7
+    movdqu dqword ptr [rdx],xmm15  // fOut := fIn xor fCV
+    add    rsi,16
+    add    rdx,16
+    dec    rcx
+    jnz    @s
+    {$endif}
+@z:
+end;
+
+procedure AesNiEncryptOFB_256(self: TAESOFB; source, dest: pointer; blockcount: PtrUInt);
+{$ifdef FPC}nostackframe; assembler; asm{$else}
+asm // rcx=TAESOFB,rdx=source,r8=dest,r9=blockcount Linux:rdi,rsi,rdx,rcx
+    .noframe
+{$endif}
+    {$ifdef win64}
+    test   r9,r9
+    jz     @z
+    movdqu xmm7,dqword ptr [rcx].TAESOFB.fIV  // xmm7 = fCV
+    lea    rcx,[rcx].TAESOFB.AES
+    movdqu xmm0,[rcx+16*0]
+    movdqu xmm1,[rcx+16*1]
+    movdqu xmm2,[rcx+16*2]
+    movdqu xmm3,[rcx+16*3]
+    movdqu xmm4,[rcx+16*4]
+    movdqu xmm5,[rcx+16*5]
+    movdqu xmm6,[rcx+16*6]
+    movdqu xmm8,[rcx+16*7]
+    movdqu xmm9,[rcx+16*8]
+    movdqu xmm10,[rcx+16*9]
+    movdqu xmm11,[rcx+16*10]
+    movdqu xmm12,[rcx+16*11]
+    movdqu xmm13,[rcx+16*12]
+    movdqu xmm14,[rcx+16*13]
+    add    rcx, 16*14
+@s: movdqu xmm15,[rcx]
     pxor xmm7,xmm0
     aesenc xmm7,xmm1
     aesenc xmm7,xmm2
@@ -12664,7 +12712,55 @@ asm // rcx=TAESOFB,rdx=source,r8=dest,r9=blockcount Linux:rdi,rsi,rdx,rcx
     aesenc xmm7,xmm8
     aesenc xmm7,xmm9
     aesenc xmm7,xmm10
-    aesenclast xmm7,xmm11         // AES.Encrypt(fCV,fCV)
+    aesenc xmm7,xmm11
+    aesenc xmm7,xmm12
+    aesenc xmm7,xmm13
+    aesenc xmm7,xmm14
+    aesenclast xmm7,xmm15
+    movdqu xmm15, [rdx]
+    pxor   xmm15,xmm7
+    movdqu dqword ptr [r8],xmm15  // fOut := fIn xor fCV
+    add    rdx,16
+    add    r8,16
+    dec    r9
+    jnz    @s
+    {$else}
+    test   rcx,rcx
+    jz     @z
+    movdqu xmm7,dqword ptr [rdi].TAESOFB.fIV  // xmm7 = fCV
+    lea    rdi,[rdi].TAESOFB.AES
+    movdqu xmm0,[rdi+16*0]
+    movdqu xmm1,[rdi+16*1]
+    movdqu xmm2,[rdi+16*2]
+    movdqu xmm3,[rdi+16*3]
+    movdqu xmm4,[rdi+16*4]
+    movdqu xmm5,[rdi+16*5]
+    movdqu xmm6,[rdi+16*6]
+    movdqu xmm8,[rdi+16*7]
+    movdqu xmm9,[rdi+16*8]
+    movdqu xmm10,[rdi+16*9]
+    movdqu xmm11,[rdi+16*10]
+    movdqu xmm12,[rdi+16*11]
+    movdqu xmm13,[rdi+16*12]
+    movdqu xmm14,[rdi+16*13]
+    add    rdi, 16*14
+@s: movdqu xmm15,[rdi]
+    pxor xmm7,xmm0
+    aesenc xmm7,xmm1
+    aesenc xmm7,xmm2
+    aesenc xmm7,xmm3
+    aesenc xmm7,xmm4
+    aesenc xmm7,xmm5
+    aesenc xmm7,xmm6
+    aesenc xmm7,xmm8
+    aesenc xmm7,xmm9
+    aesenc xmm7,xmm10
+    aesenc xmm7,xmm11
+    aesenc xmm7,xmm12
+    aesenc xmm7,xmm13
+    aesenc xmm7,xmm14
+    aesenclast xmm7,xmm15
+    movdqu xmm15,[rsi]
     pxor   xmm15,xmm7
     movdqu dqword ptr [rdx],xmm15  // fOut := fIn xor fCV
     add    rsi,16
@@ -12685,9 +12781,18 @@ procedure TAESOFB.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var i: integer;
 begin
   {$ifdef USEAESNI64}
-  with TAESContext(AES.Context) do
-  if (Count and AESBlockMod=0) and (cfAESNI in CpuFeatures) and (KeyBits=128) then
-    AesNiEncryptOFB_128(self,BufIn,BufOut,Count shr 4) else
+  if (Count and AESBlockMod=0) and (cfAESNI in CpuFeatures) then
+    with TAESContext(AES.Context) do
+    case KeyBits of
+    128: begin
+      AesNiEncryptOFB_128(self,BufIn,BufOut,Count shr 4);
+      exit;
+    end;
+    256: begin
+      AesNiEncryptOFB_256(self,BufIn,BufOut,Count shr 4);
+      exit;
+    end;
+    end;
   {$endif USEAESNI64}
   {$ifdef USEAESNI32}
   if Assigned(TAESContext(AES.Context).AesNi32) then
