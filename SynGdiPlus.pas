@@ -974,30 +974,23 @@ type
   TImageCodecInfoArray = array[byte] of TImageCodecInfo;
 
 
-function StrWCompAnsi(Str1: PWideChar; Str2: PAnsiChar): integer; assembler;
+function StrWCompAnsi(Str1: PWord; Str2: PByte): integer;
 asm // to avoid widestring usage + compatibility with Delphi 2009/2010/XE
-        MOV     ECX,EAX
-        XOR     EAX,EAX
-        CMP     ECX,EDX
-        JE      @Exit2  // same string or both nil
-        OR      ECX,ECX
-        MOV     AL,1
-        JZ      @Exit2  // Str1=''
-        OR      EDX,EDX
-        JE      @min
-@1:     MOV     AL,[ECX] // rough Ansi compare value of PWideChar
-        ADD     ECX,2
-        MOV     AH,[EDX]
-        INC     EDX
-        TEST    AL,AL
-        JE      @Exit
-        CMP     AL,AH
-        JE      @1
-@Exit:  XOR     EDX,EDX
-        XCHG    AH,DL
-        SUB     EAX,EDX
-@Exit2: RET
-@min:   OR      EAX,-1
+  if Str1<>Str2 then
+  if Str1<>nil then
+  if Str2<>nil then begin
+    if Str1^=Str2^ then
+      repeat
+        if Str1^=0 then break;
+        inc(Str1);
+        inc(Str2);
+      until Str1^<>Str2^;
+    result := Str1^-Str2^;
+    exit;
+  end else
+  result := 1 else  // Str2=''
+  result := -1 else // Str1=''
+  result := 0;      // Str1=Str2
 end;
 
 function TGDIPlus.GetEncoderClsid(format: PAnsiChar; out pClsid: TGUID): integer;
@@ -1015,7 +1008,7 @@ begin
   if GetImageEncoders(num, size, P)<>stOk then
     exit;
   for result := 0 to num-1 do
-    if StrWCompAnsi(P^[result].MimeType,format)=0 then begin
+    if StrWCompAnsi(pointer(P^[result].MimeType),pointer(format))=0 then begin
       pClsid := P^[result].Clsid;
       exit;
     end;
