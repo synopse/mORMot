@@ -4664,7 +4664,7 @@ begin
       t3 := t[s3 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s2 shr 24] xor pk[55];
     end;
   end;
-  inc(PtrUInt(pK), ctxt.rounds shl 4);
+  inc(PByte(pK), ctxt.rounds shl 4);
   bo[0] := ((SBox[t0        and $ff])        xor
             (SBox[t1 shr  8 and $ff]) shl  8 xor
             (SBox[t2 shr 16 and $ff]) shl 16 xor
@@ -4715,54 +4715,54 @@ asm // rolled optimized encryption asm version by A. Bouchez
   lea ecx,[ecx+16]
 @1: // pK=ecx s0=ebx s1=esi s2=eax s3=edx
   movzx edi,bl
-  mov edi,[4*edi+te0]
+  mov edi,dword ptr [4*edi+te0]
   movzx ebp,si
   shr ebp,$08
-  xor edi,[4*ebp+te1]
+  xor edi,dword ptr [4*ebp+te1]
   mov ebp,eax
   shr ebp,$10
   and ebp,$ff
-  xor edi,[4*ebp+te2]
+  xor edi,dword ptr [4*ebp+te2]
   mov ebp,edx
   shr ebp,$18
-  xor edi,[4*ebp+te3]
+  xor edi,dword ptr [4*ebp+te3]
   mov [esp+8],edi
   mov edi,esi
   and edi,255
-  mov edi,[4*edi+te0]
+  mov edi,dword ptr [4*edi+te0]
   movzx ebp,ax
   shr ebp,$08
-  xor edi,[4*ebp+te1]
+  xor edi,dword ptr [4*ebp+te1]
   mov ebp,edx
   shr ebp,$10
   and ebp,255
-  xor edi,[4*ebp+te2]
+  xor edi,dword ptr [4*ebp+te2]
   mov ebp,ebx
   shr ebp,$18
-  xor edi,[4*ebp+te3]
+  xor edi,dword ptr [4*ebp+te3]
   mov [esp+12],edi
   movzx edi,al
-  mov edi,[4*edi+te0]
+  mov edi,dword ptr [4*edi+te0]
   movzx ebp,dh
-  xor edi,[4*ebp+te1]
+  xor edi,dword ptr [4*ebp+te1]
   mov ebp,ebx
   shr ebp,$10
   and ebp,255
-  xor edi,[4*ebp+te2]
+  xor edi,dword ptr [4*ebp+te2]
   mov ebp,esi
   shr ebp,$18
-  xor edi,[4*ebp+te3]
+  xor edi,dword ptr [4*ebp+te3]
   mov [esp+16],edi
   and edx,255
-  mov edx,[4*edx+te0]
+  mov edx,dword ptr [4*edx+te0]
   shr ebx,$08
   and ebx,255
-  xor edx,[4*ebx+te1]
+  xor edx,dword ptr [4*ebx+te1]
   shr esi,$10
   and esi,255
-  xor edx,[4*esi+te2]
+  xor edx,dword ptr [4*esi+te2]
   shr eax,$18
-  xor edx,[4*eax+te3]
+  xor edx,dword ptr [4*eax+te3]
   mov ebx,[ecx]
   xor ebx,[esp+8]
   mov esi,[ecx+4]
@@ -5109,7 +5109,7 @@ function TAES.EncryptInit(const Key; KeySize: cardinal): boolean;
         pK^[5] := pK^[1] xor pK^[4];
         pK^[6] := pK^[2] xor pK^[5];
         pK^[7] := pK^[3] xor pK^[6];
-        inc(PtrUInt(pK),4*4);
+        inc(PByte(pK),4*4);
       end;
     192:
       for i := 0 to 7 do begin
@@ -5126,7 +5126,7 @@ function TAES.EncryptInit(const Key; KeySize: cardinal): boolean;
         if i=7 then exit;
         pK^[10] := pK^[4] xor pK^[ 9];
         pK^[11] := pK^[5] xor pK^[10];
-        inc(PtrUInt(pK),6*4);
+        inc(PByte(pK),6*4);
       end;
     else // 256:
       for i := 0 to 6 do begin
@@ -5151,7 +5151,7 @@ function TAES.EncryptInit(const Key; KeySize: cardinal): boolean;
         pK^[13] := pK^[5] xor pK^[12];
         pK^[14] := pK^[6] xor pK^[13];
         pK^[15] := pK^[7] xor pK^[14];
-        inc(PtrUInt(pK),8*4);
+        inc(PByte(pK),8*4);
       end;
     end;
   end;
@@ -5442,7 +5442,7 @@ begin
       t3 := t[s3 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s0 shr 24] xor pk[55];
     end;
   end;
-  inc(PtrUInt(pk), (ctxt.rounds shl 4));
+  inc(PByte(pk), (ctxt.rounds shl 4));
   // Uses InvSBox and shl, needs type cast cardinal() for
   // 16 bit compilers: here InvSBox is byte, Td4 is cardinal
   bo[0] := ((InvSBox[t0 and $ff]) xor
@@ -5648,52 +5648,52 @@ asm
   lea eax,[eax-16]
 @1: // pk=eax s0=ebx s1=esi s2=ecx s3=edx
   movzx edi,bl
-  mov edi,[4*edi+td0]
+  mov edi,dword ptr [4*edi+td0]
   movzx ebp,dh
-  xor edi,[4*ebp+td1]
+  xor edi,dword ptr [4*ebp+td1]
   mov ebp,ecx
   shr ebp,$10
   and ebp,255
-  xor edi,[4*ebp+td2]
+  xor edi,dword ptr [4*ebp+td2]
   mov ebp,esi
   shr ebp,$18
-  xor edi,[4*ebp+td3]
+  xor edi,dword ptr [4*ebp+td3]
   mov [esp+4],edi
   mov edi,esi
   and edi,255
-  mov edi,[4*edi+td0]
+  mov edi,dword ptr [4*edi+td0]
   movzx ebp,bh
-  xor edi,[4*ebp+td1]
+  xor edi,dword ptr [4*ebp+td1]
   mov ebp,edx
   shr ebp,$10
   and ebp,255
-  xor edi,[4*ebp+td2]
+  xor edi,dword ptr [4*ebp+td2]
   mov ebp,ecx
   shr ebp,$18
-  xor edi,[4*ebp+td3]
+  xor edi,dword ptr [4*ebp+td3]
   mov [esp+8],edi
   movzx edi,cl
-  mov edi,[4*edi+td0]
+  mov edi,dword ptr [4*edi+td0]
   movzx ebp,si
   shr ebp,$08
-  xor edi,[4*ebp+td1]
+  xor edi,dword ptr [4*ebp+td1]
   mov ebp,ebx
   shr ebp,$10
   and ebp,255
-  xor edi,[4*ebp+td2]
+  xor edi,dword ptr [4*ebp+td2]
   mov ebp,edx
   shr ebp,$18
-  xor edi,[4*ebp+td3]
+  xor edi,dword ptr [4*ebp+td3]
   mov [esp+12],edi
   and edx,255
-  mov edx,[4*edx+td0]
+  mov edx,dword ptr [4*edx+td0]
   movzx ecx,ch
-  xor edx,[4*ecx+td1]
+  xor edx,dword ptr [4*ecx+td1]
   shr esi,$10
   and esi,255
-  xor edx,[4*esi+td2]
+  xor edx,dword ptr [4*esi+td2]
   shr ebx,$18
-  xor edx,[4*ebx+td3]
+  xor edx,dword ptr [4*ebx+td3]
   xor edx,[eax+12]
   mov ebx,[eax]
   xor ebx,[esp+4]
@@ -7578,7 +7578,7 @@ begin
         {$endif}
           sha512_compresspas(Hash,Buffer);
       dec(Len,aLen);
-      inc(PtrUInt(Buffer),aLen);
+      inc(PByte(Buffer),aLen);
     end else begin
       MoveFast(Buffer^,Data[Index],Len);
       inc(Index,Len);
@@ -7685,7 +7685,7 @@ begin
         {$endif}
           sha512_compresspas(Hash,Buffer);
       dec(Len,aLen);
-      inc(PtrUInt(Buffer),aLen);
+      inc(PByte(Buffer),aLen);
     end else begin
       MoveFast(Buffer^,Data[Index],Len);
       inc(Index,Len);
@@ -9181,7 +9181,7 @@ begin
       end else
         Crypt.DoBlocks(buffer,buf,b shr AESBlockShift,Encrypt);
       Stream.Write(buf^,b);
-      inc(PtrUInt(buffer),b);
+      inc(PByte(buffer),b);
       dec(n,b);
     end;
     assert((KeySize>4)or(i=Len-Last));
@@ -9224,7 +9224,7 @@ begin
   if pIn=nil then
     InStream.Read(Tmp^,ByteCount) else begin
     MoveFast(pIn^,Tmp^,ByteCount);
-    inc(PtrUInt(pIn),ByteCount);
+    inc(PByte(pIn),ByteCount);
   end;
 end;
 procedure Write(Tmp: pointer; ByteCount: cardinal);
@@ -9232,7 +9232,7 @@ begin
   if pOut=nil then
     OutStream.Write(Tmp^,ByteCount) else begin
     MoveFast(Tmp^,pOut^,ByteCount);
-    inc(PtrUInt(pOut),ByteCount);
+    inc(PByte(pOut),ByteCount);
   end;
 end;
 procedure SetOutLen(Len: cardinal);
@@ -9465,7 +9465,7 @@ begin
       n := 5552;
     for i := 1 to n do begin
       inc(s1,PByte(p)^);
-      inc(PtrUInt(p));
+      inc(PByte(p));
       inc(s2,s1);
     end;
     s1 := s1 mod 65521;
@@ -9684,16 +9684,16 @@ begin
     p^[1] := p^[1] xor Cod;
     p^[2] := p^[2] xor Cod;
     p^[3] := p^[3] xor Cod;
-    inc(PtrUInt(p),16);
+    inc(PByte(p),16);
   end;
   Cod := (Cod shl 11) xor integer(Td0[cod shr 21]);
   for i := 1 to (Count and 15)shr 2 do begin // last 4 bytes blocs
     p^[0] := p^[0] xor Cod;
-    inc(PtrUInt(p),4);
+    inc(PByte(p),4);
   end;
   for i := 1 to Count and 3 do begin
     PByte(p)^ := PByte(p)^ xor byte(Cod);
-    inc(PtrUInt(p));
+    inc(PByte(p));
   end;
 end;
 
@@ -9728,7 +9728,7 @@ begin // 1 to 3 bytes may stay unencrypted: not relevant
      P^[1] := P^[1] xor Code;
      P^[2] := P^[2] xor Code;
      P^[3] := P^[3] xor Code;
-     inc(PtrUInt(P),16);
+     inc(PByte(P),16);
   end;
   for i := 0 to ((Count and 15)shr 2)-1 do // last 4 bytes blocs
     P^[i] := P^[i] xor Code;
@@ -11370,7 +11370,7 @@ begin
   // First chunk is an odd size
   MoveFast(p^,Pointer(PtrUInt(@in_)+64-t)^,t);
   MD5Transform(buf,in_);
-  inc(PtrUInt(p),t);
+  inc(PByte(p),t);
   dec(len,t);
   // Process data in 64-byte chunks
   for i := 1 to len shr 6 do begin
@@ -11652,7 +11652,7 @@ begin
       end else
         sha1Compress(Data.Hash,Buffer); // avoid temporary copy
       dec(Len,aLen);
-      inc(PtrUInt(buffer),aLen);
+      inc(PByte(buffer),aLen);
     end else begin
       MoveFast(buffer^,Data.Buffer[Data.Index],Len);
       inc(Data.Index,Len);

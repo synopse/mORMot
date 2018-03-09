@@ -22130,7 +22130,7 @@ begin
     result := GetFPCAlignPtr(aTypeInfo);
     {$else}
     result := aTypeInfo;
-    inc(PtrUInt(result),result^.NameLen);
+    inc(PByte(result),result^.NameLen);
     {$endif}
   end else
     result := nil;
@@ -22157,7 +22157,7 @@ begin
       {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
       result := GetFPCAlignPtr(result)
       {$else}
-      inc(PtrUInt(result),result^.NameLen)
+      inc(PByte(result),result^.NameLen)
       {$endif}
     else
       result := nil;
@@ -29702,7 +29702,7 @@ begin
       if (P^[0]=Value) or (P^[1]=Value) or
          (P^[2]=Value) or (P^[3]=Value) then
         exit else
-        inc(PtrUInt(P),SizeOf(P^[0])*4);
+        inc(PByte(P),SizeOf(P^[0])*4);
     for i := 0 to (Count and 3)-1 do // last 0..3 DWORD
       if P^[i]=Value then
         exit;
@@ -29768,7 +29768,7 @@ begin
       if (P^[0]=Value) or (P^[1]=Value) or
          (P^[2]=Value) or (P^[3]=Value) then
         exit else
-        inc(PtrUInt(P),SizeOf(P^[0])*4);
+        inc(PByte(P),SizeOf(P^[0])*4);
     for i := 0 to (Count and 3)-1 do // last 0..3 QWORD
       if P^[i]=Value then
         exit;
@@ -29789,7 +29789,7 @@ begin // very optimized code
         result := @P^[3];
         exit;
       end else
-        inc(PtrUInt(P),SizeOf(P^[0])*4) else begin
+        inc(PByte(P),SizeOf(P^[0])*4) else begin
         result := @P^[2];
         exit;
       end else begin
@@ -29895,7 +29895,7 @@ begin
         result := @P^[3];
         exit;
       end else
-        inc(PtrUInt(P),SizeOf(P^[0])*4) else begin
+        inc(PByte(P),SizeOf(P^[0])*4) else begin
         result := @P^[2];
         exit;
       end else begin
@@ -30376,7 +30376,7 @@ begin
       if P^[1]<>Value then
       if P^[2]<>Value then
       if P^[3]<>Value then begin
-        inc(PtrUInt(P),SizeOf(P^[0])*4);
+        inc(PByte(P),SizeOf(P^[0])*4);
         inc(result,4);
       end else begin
         inc(result,3);
@@ -30436,7 +30436,7 @@ begin
       if P^[1]<>Value then
       if P^[2]<>Value then
       if P^[3]<>Value then begin
-        inc(PtrUInt(P),SizeOf(P^[0])*4);
+        inc(PByte(P),SizeOf(P^[0])*4);
         inc(result,4);
       end else begin
         inc(result,3);
@@ -30480,7 +30480,7 @@ begin
       if P^[1]<>Value then
       if P^[2]<>Value then
       if P^[3]<>Value then begin
-        inc(PtrUInt(P),SizeOf(P^[0])*4);
+        inc(PByte(P),SizeOf(P^[0])*4);
         inc(result,4);
       end else begin
         inc(result,3);
@@ -30511,7 +30511,7 @@ begin
       if P^[1]<>Value then
       if P^[2]<>Value then
       if P^[3]<>Value then begin
-        inc(PtrUInt(P),SizeOf(P^[0])*4);
+        inc(PByte(P),SizeOf(P^[0])*4);
         inc(result,4);
       end else begin
         inc(result,3);
@@ -33808,12 +33808,12 @@ begin
       inc(s2,s1);
       inc(s1,PCardinalArray(Data)^[3]);
       inc(s2,s1);
-      inc(PtrUInt(Data),16);
+      inc(PByte(Data),16);
     end;
     for i := 1 to (Len shr 2)and 3 do begin // 4 bytes (DWORD) by loop
       inc(s1,PCardinalArray(Data)^[0]);
       inc(s2,s1);
-      inc(PtrUInt(Data),4);
+      inc(PByte(Data),4);
     end;
     case Len and 3 of // remaining 0..3 bytes
     1: inc(s1,PByte(Data)^);
@@ -37308,7 +37308,7 @@ function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInf
         {$ifdef FPC}
         inc(M);
         {$else}
-        inc(PtrUInt(M),M^.Len);
+        inc(PByte(M),M^.Len);
         {$endif}
         inc(result);
       end;
@@ -47651,7 +47651,7 @@ Bin:  case ElemSize of
         {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
 rec:    nested := GetFPCAlignPtr(nested);
         {$else}
-rec:    inc(PtrUInt(nested),nested^.NameLen);
+rec:    inc(PByte(nested),nested^.NameLen);
         {$endif}
         {$ifdef FPC_OLDRTTI}
         f := RTTIFirstManagedFieldIndex(nested);
@@ -48638,7 +48638,7 @@ begin
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
   aTypeInfo := GetFPCAlignPtr(aTypeInfo);
   {$else}
-  inc(PtrUInt(aTypeInfo),PTypeInfo(aTypeInfo)^.NameLen);
+  inc(PByte(aTypeInfo),PTypeInfo(aTypeInfo)^.NameLen);
   {$endif}
   fElemSize := PTypeInfo(aTypeInfo)^.elSize {$ifdef FPC}and $7FFFFFFF{$endif};
   fElemType := PTypeInfo(aTypeInfo)^.elType;
@@ -48787,7 +48787,7 @@ begin // this method is faster than default System.DynArraySetLength() function
     length := newLength;
     {$endif}
   end;
-  inc(PtrUInt(p),SizeOf(p^));
+  inc(PByte(p),SizeOf(p^));
   // reset new allocated elements content to zero
   if NewLength>OldLength then begin
     OldLength := OldLength*elemSize;
@@ -51952,7 +51952,7 @@ begin // code below must match TDynArray.LoadFromJSON
         nested.Init(aDynArray.ElemType,P^);
         AddDynArrayJSON(nested);
         Add(',');
-        inc(PtrUInt(P),aDynArray.ElemSize);
+        inc(PByte(P),aDynArray.ElemSize);
       end;
     end else begin
       tmp := aDynArray.SaveTo;
@@ -51967,7 +51967,7 @@ begin // code below must match TDynArray.LoadFromJSON
       for i := 0 to n do begin
         customWriter(self,P^);
         Add(',');
-        inc(PtrUInt(P),aDynArray.ElemSize);
+        inc(PByte(P),aDynArray.ElemSize);
       end;
       if hr then begin
         dec(fHumanReadableLevel);
@@ -59506,7 +59506,7 @@ begin
       PInteger(PBeg)^ := len-4;
       inc(fTotalWritten,len);
       inc(fPos,len);
-      inc(PtrUInt(PI),n*SizeOf(PtrInt));
+      inc(PByte(PI),n*SizeOf(PtrInt));
       dec(ValuesCount,n);
       if ValuesCount=0 then
         break;
@@ -59765,7 +59765,7 @@ begin
         PInteger(PBeg-4)^ := PAnsiChar(P)-PBeg; // format: Isize+cleverStorage
       end;
       end;
-      inc(PtrUInt(Values),n*4);
+      inc(PByte(Values),n*4);
       fPos := PtrUInt(P)-PtrUInt(fBuffer);
       inc(fTotalWritten,PtrUInt(fPos-pos));
       dec(ValuesCount,n);
@@ -59794,7 +59794,7 @@ begin
     fBuffer^[fPos] := 1;
     fPos := PtrUInt(ToVarUInt64(PI^[0],@fBuffer^[fPos+1]))-PtrUInt(fBuffer);
     diff := PI^[1]-PI^[0];
-    inc(PtrUInt(PI),8);
+    inc(PByte(PI),8);
     dec(ValuesCount);
     if ValuesCount=0 then begin
       inc(fTotalWritten,PtrUInt(fPos-pos));
@@ -59843,7 +59843,7 @@ begin
           end;
         end;
       PInteger(PBeg)^ := PAnsiChar(P)-PBeg-4; // format: Isize+varUInt32/64s
-      inc(PtrUInt(PI),n*8);
+      inc(PByte(PI),n*8);
       fPos := PtrUInt(P)-PtrUInt(fBuffer);
       inc(fTotalWritten,PtrUInt(fPos-Pos));
       dec(ValuesCount,n);
@@ -60247,7 +60247,7 @@ begin
       wkSorted: begin
         n := CleverReadInteger(pointer(P),pointer(PEnd),PI);
         dec(count,n);
-        inc(PtrUInt(PI),n*4);
+        inc(PByte(PI),n*4);
       end;
       wkOffsetU: begin
         while (count>0) and (PtrUInt(P)<PtrUInt(PEnd)) do begin
