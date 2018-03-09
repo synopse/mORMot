@@ -10999,7 +10999,7 @@ begin
       on E: Exception do begin
         if curl.Module<>0 then
           FreeLibrary(curl.Module);
-        curl.Module := -1; // don't try to load any more
+        curl.Module := {$ifdef KYLIX3}THandle{$endif}(-1); // don't try to load any more
         {$ifdef LINUX}
         writeln(E.Message);
         {$else}
