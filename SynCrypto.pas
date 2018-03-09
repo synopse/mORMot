@@ -251,7 +251,7 @@ interface
 
 {.$define USEPADLOCK}
 
-{.$define PUREPASCAL} // for debug
+{.$define AESPASCAL} // for debug
 
 {$ifdef Linux}
   {$undef USETHREADSFORBIGAESBLOCKS} // uses low-level WinAPI threading
@@ -299,6 +299,55 @@ uses
   SynLZ, // already included in SynCommons, and used by CompressShaAes()
   SynCommons;
 
+
+{$ifdef DELPHI5OROLDER}
+  {$define AES_PASCAL} // Delphi 5 internal asm is buggy :(
+  {$define SHA3_PASCAL}
+  {$define SHA512_X86} // external sha512-x86.obj
+{$else}
+  {$ifdef CPUINTEL} // AES-NI supported for x86 and x64 under Windows
+    {$ifdef CPU64}
+      {$ifdef HASAESNI}
+        {$define USEAESNI}
+        {$define USEAESNI64}
+      {$else}
+        {$define AES_PASCAL} // Delphi XE2/XE3 do not have the AES-NI opcodes :(
+      {$endif}
+      {$define AESPASCAL_OR_CPU64}
+      {$ifndef BSD}
+        {$define CRC32C_X64} // external crc32_iscsi_01 for win64/lin64
+        {$define SHA512_X64} // external sha512_sse4 for win64/lin64
+      {$endif}
+    {$else}
+      {$ifdef MSWINDOWS}
+        {$define SHA512_X86} // external sha512-x86.obj/.o
+      {$endif}
+      {$ifdef FPC}
+        {$ifdef LINUX}
+          {$define SHA512_X86} // external linux32/sha512-x86.o
+        {$endif}
+        {$ifdef DARWIN}
+          {$define AES_PASCAL} // x86 AES asm below is not PIC-safe
+        {$endif DARWIN}
+      {$endif FPC}
+      {$ifndef AES_PASCAL}
+        {$define USEAESNI}
+        {$define USEAESNI32}
+      {$endif AES_PASCAL}
+    {$endif}
+  {$else}
+    {$define AES_PASCAL} // AES128 unrolled pascal(Delphi7)=57MB/s rolled asm=84MB/s :)
+    {$define SHA3_PASCAL}
+  {$endif CPUINTEL}
+{$endif}
+
+{$ifdef AES_PASCAL}
+  {$define AESPASCAL_OR_CPU64}
+{$endif}
+
+{$define AES_ROLLED}
+// if defined, use rolled version, which is slightly faster (at least on my CPU)
+
 {$ifdef USEPADLOCK}
 var
   /// if dll/so and VIA padlock compatible CPU are present
@@ -307,7 +356,8 @@ var
 
 const
   /// hide all AES Context complex code
-  AESContextSize = 275+sizeof(pointer){$ifdef USEPADLOCK}*2{$endif};
+  AESContextSize = 276+sizeof(pointer){$ifdef USEPADLOCK}*2{$endif}
+    {$ifdef USEAESNI32}+sizeof(pointer){$endif};
   /// hide all SHA-1/SHA-2 complex code by storing the context as buffer
   SHAContextSize = 108;
   /// hide all SHA-3 complex code by storing the Keccak Sponge as buffer
@@ -362,6 +412,9 @@ type
   {$endif}
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance, if needed
+
+  { TAES }
+
   TAES = {$ifndef UNICODE}object{$else}record{$endif}
   private
     Context: packed array[1..AESContextSize] of byte;
@@ -375,15 +428,19 @@ type
     function EncryptInit(const Key; KeySize: cardinal): boolean;
     /// encrypt an AES data block into another data block
     procedure Encrypt(const BI: TAESBlock; var BO: TAESBlock); overload;
+      {$ifdef FPC}inline;{$endif}
     /// encrypt an AES data block
-    procedure Encrypt(var B: TAESBlock); overload; {$ifdef FPC}inline;{$endif}
+    procedure Encrypt(var B: TAESBlock); overload;
+      {$ifdef FPC}inline;{$endif}
 
     /// Initialize AES contexts for uncypher
     function DecryptInit(const Key; KeySize: cardinal): boolean;
     /// decrypt an AES data block
-    procedure Decrypt(var B: TAESBlock); overload; {$ifdef FPC}inline;{$endif}
+    procedure Decrypt(var B: TAESBlock); overload;
+      {$ifdef FPC}inline;{$endif}
     /// decrypt an AES data block into another data block
     procedure Decrypt(const BI: TAESBlock; var BO: TAESBlock); overload;
+      {$ifdef FPC}inline;{$endif}
 
     /// Finalize AES contexts for both cypher and uncypher
     // - would fill the TAES instance with zeros, for safety
@@ -399,16 +456,18 @@ type
     /// perform the AES cypher or uncypher to continuous memory blocks
     // - call either Encrypt() either Decrypt() method
     procedure DoBlocks(pIn, pOut: PAESBlock; Count: integer; doEncrypt: boolean); overload;
-{$ifdef USETHREADSFORBIGAESBLOCKS}
+    {$ifdef USETHREADSFORBIGAESBLOCKS}
     /// perform the AES cypher or uncypher to continuous memory blocks
     // - this special method will use Threads for bigs blocks (>512KB) if multi-CPU
     // - call either Encrypt() either Decrypt() method
     procedure DoBlocksThread(var bIn, bOut: PAESBlock; Count: integer; doEncrypt: boolean);
-{$endif}
+    {$endif}
     /// TRUE if the context was initialized via EncryptInit/DecryptInit
-    function Initialized: boolean;
+    function Initialized: boolean; {$ifdef FPC}inline;{$endif}
     /// return TRUE if the AES-NI instruction sets are available on this CPU
     function UsesAESNI: boolean; {$ifdef HASINLINE}inline;{$endif}
+    /// returns the key size in bits (128/192/256)
+    function KeyBits: integer; {$ifdef FPC}inline;{$endif}
   end;
 
   /// class-reference type (metaclass) of an AES cypher/uncypher
@@ -2590,7 +2649,7 @@ type
     // class name (use TJWTAbstract class to allow any algorithm)
     // - it will decode the JWT payload and check for its expiration, and some
     // mandatory fied values - you can optionally retrieve the Expiration time,
-    // the ending Signature, and/or the Payload decoded as TDocVariant 
+    // the ending Signature, and/or the Payload decoded as TDocVariant
     // - may be used on client side to quickly validate a JWT received from
     // server, without knowing the exact algorithm or secret keys
     class function VerifyPayload(const Token, ExpectedSubject, ExpectedIssuer,
@@ -2769,7 +2828,6 @@ type
   protected
     function GetAlgo: TSignAlgo; override;
   end;
-
 
 const
   /// the text field names of the registerd claims, as defined by RFC 7519
@@ -3015,11 +3073,11 @@ type
     {$ifdef USEPADLOCK}
     ViaCtx: pointer; // padlock_*() context
     {$endif}
-    AesNi: procedure{$ifdef CPU64}(const ctxt, source, dest){$endif};
-      // AesNi set if the CPU supports AES-NI new asm instructions
+    DoBlock: procedure(const ctxt, source, dest);
+    {$ifdef USEAESNI32}AesNi32: pointer;{$endif}
     Initialized: boolean;
     Rounds: byte;    // Number of rounds
-    KeyBits: byte;   // Number of bits in key
+    KeyBits: word;   // Number of bits in key (128/192/256)
   end;
 
 
@@ -3130,9 +3188,7 @@ end;
 {$ifdef CPU64}
 
 procedure bswap256(s,d: PIntegerArray);
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
+{$ifdef FPC}nostackframe; assembler; asm{$else}
 asm // rcx=s, rdx=d
   .noframe
 {$endif}
@@ -3149,9 +3205,7 @@ asm // rcx=s, rdx=d
 end;
 
 procedure bswap160(s,d: PIntegerArray);
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
+{$ifdef FPC}nostackframe; assembler; asm{$else}
 asm // rcx=s, rdx=d
   .noframe
 {$endif}
@@ -3950,54 +4004,6 @@ end;
 
 { TAES }
 
-{$define AES_ROLLED}
-// if defined, use rolled version, which is slightly faster (at least on my AMD CPU)
-
-{$ifdef DELPHI5OROLDER}
-  {$define AES_PASCAL} // Delphi 5 internal asm is buggy :(
-  {$define SHA3_PASCAL}
-  {$define SHA512_X86} // external sha512-x86.obj
-{$else}
-  {$ifdef CPUINTEL} // AES-NI supported for x86 and x64 under Windows
-    {$ifdef CPU64}
-      {$ifdef HASAESNI}
-        {$define USEAESNI}
-        {$define USEAESNI64}
-      {$else}
-        {$define AES_PASCAL} // Delphi XE2/XE3 do not have the AES-NI opcodes :(
-      {$endif}
-      {$define AESPASCAL_OR_CPU64}
-      {$ifndef BSD}
-        {$define CRC32C_X64} // external crc32_iscsi_01 for win64/lin64
-        {$define SHA512_X64} // external sha512_sse4 for win64/lin64
-      {$endif}
-    {$else}
-      {$ifdef MSWINDOWS}
-        {$define SHA512_X86} // external sha512-x86.obj/.o
-      {$endif}
-      {$ifdef FPC}
-        {$ifdef LINUX}
-          {$define SHA512_X86} // external linux32/sha512-x86.o
-        {$endif}
-        {$ifdef DARWIN}
-          {$define AES_PASCAL} // x86 AES asm below is not PIC-safe
-        {$endif DARWIN}
-        {$ifndef AES_PASCAL}
-           {$define USEAESNI}
-          {$define USEAESNI32}
-        {$endif AES_PASCAL}
-      {$endif FPC}
-    {$endif}
-  {$else}
-    {$define AES_PASCAL} // AES128 unrolled pascal(Delphi7)=57MB/s rolled asm=84MB/s :)
-    {$define SHA3_PASCAL}
-  {$endif CPUINTEL}
-{$endif}
-
-{$ifdef AES_PASCAL}
-  {$define AESPASCAL_OR_CPU64}
-{$endif}
-
 function AESSelfTest(onlytables: Boolean): boolean;
 var A: TAES;
     st: RawByteString;
@@ -4047,7 +4053,7 @@ end;
 
 procedure TAES.Encrypt(var B: TAESBlock);
 begin
-  Encrypt(B,B);
+  TAESContext(Context).DoBlock(TAESContext(Context),B,B);
 end;
 
 {$ifdef USEAESNI}
@@ -4092,6 +4098,12 @@ asm // input: eax=TAESContext, xmm7=data; output: eax=TAESContext, xmm7=data
   db $66,$0F,$38,$DC,$FA
   db $66,$0F,$38,$DD,$FB
   {$endif}
+end;
+procedure AesNiEncrypt128(const ctxt, source, dest);
+asm // eax=ctxt edx=source ecx=dest
+  movdqu xmm7,[edx]
+  call AesNiEncryptXmm7_128
+  movdqu [ecx],xmm7
 end;
 procedure AesNiEncryptXmm7_192;
 asm // input: eax=TAESContext, xmm7=data; output: eax=TAESContext, xmm7=data
@@ -4139,6 +4151,12 @@ asm // input: eax=TAESContext, xmm7=data; output: eax=TAESContext, xmm7=data
   db $66,$0F,$38,$DC,$FC
   db $66,$0F,$38,$DD,$FD
   {$endif}
+end;
+procedure AesNiEncrypt192(const ctxt, source, dest);
+asm // eax=ctxt edx=source ecx=dest
+  movdqu xmm7,[edx]
+  call AesNiEncryptXmm7_192
+  movdqu [ecx],xmm7
 end;
 procedure AesNiEncryptXmm7_256;
 asm // input: eax=TAESContext, xmm7=data; output: eax=TAESContext, xmm7=data
@@ -4196,12 +4214,16 @@ asm // input: eax=TAESContext, xmm7=data; output: eax=TAESContext, xmm7=data
   db $66,$0F,$38,$DD,$F9
   {$endif}
 end;
+procedure AesNiEncrypt256(const ctxt, source, dest);
+asm // eax=ctxt edx=source ecx=dest
+  movdqu xmm7,[edx]
+  call AesNiEncryptXmm7_256
+  movdqu [ecx],xmm7
+end;
 {$endif CPU32}
 {$ifdef CPU64}
-procedure AesNiEncryptXmm7_128(const ctxt, source, dest);
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
+procedure AesNiEncrypt128(const ctxt, source, dest);
+{$ifdef FPC}nostackframe; assembler; asm{$else}
 asm // input: rcx=TAESContext, rdx=source, r8=dest
   .noframe
 {$endif}
@@ -4257,10 +4279,8 @@ asm // input: rcx=TAESContext, rdx=source, r8=dest
   movdqu [rdx],xmm7
   {$endif win64}
 end;
-procedure AesNiEncryptXmm7_192(const ctxt, source, dest);
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
+procedure AesNiEncrypt192(const ctxt, source, dest);
+{$ifdef FPC}nostackframe; assembler; asm{$else}
 asm // input: rcx=TAESContext, rdx=source, r8=dest
   .noframe
 {$endif}
@@ -4298,10 +4318,8 @@ asm // input: rcx=TAESContext, rdx=source, r8=dest
   aesenclast xmm7,xmm13
   movdqu [r8],xmm7
 end;
-procedure AesNiEncryptXmm7_256(const ctxt, source, dest);
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
+procedure AesNiEncrypt256(const ctxt, source, dest);
+{$ifdef FPC}nostackframe; assembler; asm{$else}
 asm // input: rcx=TAESContext, rdx=source, r8=dest
   .noframe
 {$endif}
@@ -4374,10 +4392,8 @@ asm // input: rcx=TAESContext, rdx=source, r8=dest
   {$endif win64}
 end;
 
-procedure AesNiDecrypt(const ctxt: TAESContext; const source: TAESBlock; var dest: TAESBlock);
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
+procedure aesdecryptaesni(const ctxt, source, dest);
+{$ifdef FPC}nostackframe; assembler; asm{$else}
 asm // input: rcx=TAESContext, rdx=source, r8=dest
   .noframe
 {$endif}
@@ -4482,9 +4498,7 @@ end;
 {$endif CPU64}
 {$endif USEAESNI}
 
-procedure TAES.Encrypt(const BI: TAESBlock; var BO: TAESBlock);
-// encrypt one block: Context contains encryption key
-{$ifdef AESPASCAL_OR_CPU64}
+procedure aesencryptpas(const ctxt: TAESContext; bi, bo: PWA4);
 { AES_PASCAL version (c) Wolfgang Ehrhardt under zlib license:
  Permission is granted to anyone to use this software for any purpose,
  including commercial applications, and to alter it and redistribute it
@@ -4495,188 +4509,159 @@ procedure TAES.Encrypt(const BI: TAESBlock; var BO: TAESBlock);
     appreciated but is not required.
  2. Altered source versions must be plainly marked as such, and must not be
     misrepresented as being the original software.
- 3. This notice may not be removed or altered from any source distribution. }
+ 3. This notice may not be removed or altered from any source distribution.
+ -> code has been refactored and tuned especially for FPC x86_64 target }
 var
-  ctx: TAESContext absolute Context;
+  t: PCardinalArray;
   s0,s1,s2,s3: PtrUInt; // TAESBlock s# as separate variables
   t0,t1,t2: cardinal;   // TAESBlock t# as separate variables
 {$ifdef AES_ROLLED}
+  pk: PWA4;
   i: integer;
-  pK: PWA4;
-{$else}
-  t3: cardinal;
-  pK: PAWk;  // pointer to loop rount key
-{$endif}
-  t: PCardinalArray;
 begin
-{$ifdef USEAESNI64}
-  if Assigned(ctx.AesNi) then begin
-    ctx.AesNi(ctx,BI,BO);
-    exit;
-  end;
-{$endif USEAESNI64}
-{$ifdef USEPADLOCK}
-  if ctx.ViaCtx<>nil then begin
-    padlock_aes_encrypt(ctx.ViaCtx,@BI,@BO,16);
-    exit;
-  end;
-{$endif}
-  // Setup key pointer
-  pK := pointer(@ctx.RK);
-  // Initialize with input block
-  s0 := TWA4(BI)[0] xor pK^[0];
-  s1 := TWA4(BI)[1] xor pK^[1];
-  s2 := TWA4(BI)[2] xor pK^[2];
-  s3 := TWA4(BI)[3] xor pK^[3];
+  pk := @ctxt.RK;
+  s0 := bi[0] xor pk[0];
+  s1 := bi[1] xor pk[1];
+  s2 := bi[2] xor pk[2];
+  s3 := bi[3] xor pk[3];
+  inc(pk);
   t := @Te0;
-{$ifdef AES_ROLLED}
-  // Wolfgang Ehrhardt rolled version - slightly faster on modern CPU than unrolled
-  inc(PK);
-  for I := 1 to ctx.Rounds-1 do begin
+  for i := 1 to ctxt.rounds-1 do begin
     t0 := t[s0 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s3 shr 24];
     t1 := t[s1 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s0 shr 24];
     t2 := t[s2 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s1 shr 24];
-    s3 := t[s3 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s2 shr 24] xor PK[3];;
-    s0 := t0 xor PK[0];
-    s1 := t1 xor PK[1];
-    s2 := t2 xor PK[2];
-    Inc(pK);
+    s3 := t[s3 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s2 shr 24] xor pk[3];;
+    s0 := t0 xor pk[0];
+    s1 := t1 xor pk[1];
+    s2 := t2 xor pk[2];
+    inc(pk);
   end;
-  TWA4(BO)[0] := ((SBox[s0        and $ff])        xor
-                  (SBox[s1 shr  8 and $ff]) shl  8 xor
-                  (SBox[s2 shr 16 and $ff]) shl 16 xor
-                  (SBox[s3 shr 24])         shl 24    ) xor pK^[0];
-  TWA4(BO)[1] := ((SBox[s1        and $ff])        xor
-                  (SBox[s2 shr  8 and $ff]) shl  8 xor
-                  (SBox[s3 shr 16 and $ff]) shl 16 xor
-                  (SBox[s0 shr 24])         shl 24    ) xor pK^[1];
-  TWA4(BO)[2] := ((SBox[s2        and $ff])        xor
-                  (SBox[s3 shr  8 and $ff]) shl  8 xor
-                  (SBox[s0 shr 16 and $ff]) shl 16 xor
-                  (SBox[s1 shr 24])         shl 24    ) xor pK^[2];
-  TWA4(BO)[3] := ((SBox[s3        and $ff])        xor
-                  (SBox[s0 shr  8 and $ff]) shl  8 xor
-                  (SBox[s1 shr 16 and $ff]) shl 16 xor
-                  (SBox[s2 shr 24])         shl 24    ) xor pK^[3];
-{$else} // unrolled version (WE6) from Wolfgang Ehrhardt - not actually faster
+  bo[0] := ((sbox[s0        and $ff])        xor
+            (sbox[s1 shr  8 and $ff]) shl  8 xor
+            (sbox[s2 shr 16 and $ff]) shl 16 xor
+            (sbox[s3 shr 24])         shl 24    ) xor pk[0];
+  bo[1] := ((sbox[s1        and $ff])        xor
+            (sbox[s2 shr  8 and $ff]) shl  8 xor
+            (sbox[s3 shr 16 and $ff]) shl 16 xor
+            (sbox[s0 shr 24])         shl 24    ) xor pk[1];
+  bo[2] := ((sbox[s2        and $ff])        xor
+            (sbox[s3 shr  8 and $ff]) shl  8 xor
+            (sbox[s0 shr 16 and $ff]) shl 16 xor
+            (sbox[s1 shr 24])         shl 24    ) xor pk[2];
+  bo[3] := ((sbox[s3        and $ff])        xor
+            (sbox[s0 shr  8 and $ff]) shl  8 xor
+            (sbox[s1 shr 16 and $ff]) shl 16 xor
+            (sbox[s2 shr 24])         shl 24    ) xor pk[3];
+{$else}
+  t3: cardinal;
+  pK: PAWk;
+begin
+  pK := @ctxt.RK;
+  // Initialize with input block
+  s0 := bi[0] xor pk[0];
+  s1 := bi[1] xor pk[1];
+  s2 := bi[2] xor pk[2];
+  s3 := bi[3] xor pk[3];
+  t := @Te0;
   // Round 1
-  t0 := t[s0 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s3 shr 24] xor pK^[4];
-  t1 := t[s1 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s0 shr 24] xor pK^[5];
-  t2 := t[s2 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s1 shr 24] xor pK^[6];
-  t3 := t[s3 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s2 shr 24] xor pK^[7];
+  t0 := t[s0 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s3 shr 24] xor pk[4];
+  t1 := t[s1 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s0 shr 24] xor pk[5];
+  t2 := t[s2 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s1 shr 24] xor pk[6];
+  t3 := t[s3 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s2 shr 24] xor pk[7];
   // Round 2
-  s0 := t[t0 and $ff] xor t[$100+t1 shr 8 and $ff] xor t[$200+t2 shr 16 and $ff] xor t[$300+t3 shr 24] xor pK^[8];
-  s1 := t[t1 and $ff] xor t[$100+t2 shr 8 and $ff] xor t[$200+t3 shr 16 and $ff] xor t[$300+t0 shr 24] xor pK^[9];
-  s2 := t[t2 and $ff] xor t[$100+t3 shr 8 and $ff] xor t[$200+t0 shr 16 and $ff] xor t[$300+t1 shr 24] xor pK^[10];
-  s3 := t[t3 and $ff] xor t[$100+t0 shr 8 and $ff] xor t[$200+t1 shr 16 and $ff] xor t[$300+t2 shr 24] xor pK^[11];
+  s0 := t[t0 and $ff] xor t[$100+t1 shr 8 and $ff] xor t[$200+t2 shr 16 and $ff] xor t[$300+t3 shr 24] xor pk[8];
+  s1 := t[t1 and $ff] xor t[$100+t2 shr 8 and $ff] xor t[$200+t3 shr 16 and $ff] xor t[$300+t0 shr 24] xor pk[9];
+  s2 := t[t2 and $ff] xor t[$100+t3 shr 8 and $ff] xor t[$200+t0 shr 16 and $ff] xor t[$300+t1 shr 24] xor pk[10];
+  s3 := t[t3 and $ff] xor t[$100+t0 shr 8 and $ff] xor t[$200+t1 shr 16 and $ff] xor t[$300+t2 shr 24] xor pk[11];
   // Round 3
-  t0 := t[s0 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s3 shr 24] xor pK^[12];
-  t1 := t[s1 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s0 shr 24] xor pK^[13];
-  t2 := t[s2 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s1 shr 24] xor pK^[14];
-  t3 := t[s3 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s2 shr 24] xor pK^[15];
+  t0 := t[s0 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s3 shr 24] xor pk[12];
+  t1 := t[s1 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s0 shr 24] xor pk[13];
+  t2 := t[s2 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s1 shr 24] xor pk[14];
+  t3 := t[s3 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s2 shr 24] xor pk[15];
   // Round 4
-  s0 := t[t0 and $ff] xor t[$100+t1 shr 8 and $ff] xor t[$200+t2 shr 16 and $ff] xor t[$300+t3 shr 24] xor pK^[16];
-  s1 := t[t1 and $ff] xor t[$100+t2 shr 8 and $ff] xor t[$200+t3 shr 16 and $ff] xor t[$300+t0 shr 24] xor pK^[17];
-  s2 := t[t2 and $ff] xor t[$100+t3 shr 8 and $ff] xor t[$200+t0 shr 16 and $ff] xor t[$300+t1 shr 24] xor pK^[18];
-  s3 := t[t3 and $ff] xor t[$100+t0 shr 8 and $ff] xor t[$200+t1 shr 16 and $ff] xor t[$300+t2 shr 24] xor pK^[19];
+  s0 := t[t0 and $ff] xor t[$100+t1 shr 8 and $ff] xor t[$200+t2 shr 16 and $ff] xor t[$300+t3 shr 24] xor pk[16];
+  s1 := t[t1 and $ff] xor t[$100+t2 shr 8 and $ff] xor t[$200+t3 shr 16 and $ff] xor t[$300+t0 shr 24] xor pk[17];
+  s2 := t[t2 and $ff] xor t[$100+t3 shr 8 and $ff] xor t[$200+t0 shr 16 and $ff] xor t[$300+t1 shr 24] xor pk[18];
+  s3 := t[t3 and $ff] xor t[$100+t0 shr 8 and $ff] xor t[$200+t1 shr 16 and $ff] xor t[$300+t2 shr 24] xor pk[19];
   // Round 5
-  t0 := t[s0 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s3 shr 24] xor pK^[20];
-  t1 := t[s1 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s0 shr 24] xor pK^[21];
-  t2 := t[s2 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s1 shr 24] xor pK^[22];
-  t3 := t[s3 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s2 shr 24] xor pK^[23];
+  t0 := t[s0 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s3 shr 24] xor pk[20];
+  t1 := t[s1 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s0 shr 24] xor pk[21];
+  t2 := t[s2 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s1 shr 24] xor pk[22];
+  t3 := t[s3 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s2 shr 24] xor pk[23];
   // Round 6
-  s0 := t[t0 and $ff] xor t[$100+t1 shr 8 and $ff] xor t[$200+t2 shr 16 and $ff] xor t[$300+t3 shr 24] xor pK^[24];
-  s1 := t[t1 and $ff] xor t[$100+t2 shr 8 and $ff] xor t[$200+t3 shr 16 and $ff] xor t[$300+t0 shr 24] xor pK^[25];
-  s2 := t[t2 and $ff] xor t[$100+t3 shr 8 and $ff] xor t[$200+t0 shr 16 and $ff] xor t[$300+t1 shr 24] xor pK^[26];
-  s3 := t[t3 and $ff] xor t[$100+t0 shr 8 and $ff] xor t[$200+t1 shr 16 and $ff] xor t[$300+t2 shr 24] xor pK^[27];
+  s0 := t[t0 and $ff] xor t[$100+t1 shr 8 and $ff] xor t[$200+t2 shr 16 and $ff] xor t[$300+t3 shr 24] xor pk[24];
+  s1 := t[t1 and $ff] xor t[$100+t2 shr 8 and $ff] xor t[$200+t3 shr 16 and $ff] xor t[$300+t0 shr 24] xor pk[25];
+  s2 := t[t2 and $ff] xor t[$100+t3 shr 8 and $ff] xor t[$200+t0 shr 16 and $ff] xor t[$300+t1 shr 24] xor pk[26];
+  s3 := t[t3 and $ff] xor t[$100+t0 shr 8 and $ff] xor t[$200+t1 shr 16 and $ff] xor t[$300+t2 shr 24] xor pk[27];
   // Round 7
-  t0 := t[s0 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s3 shr 24] xor pK^[28];
-  t1 := t[s1 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s0 shr 24] xor pK^[29];
-  t2 := t[s2 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s1 shr 24] xor pK^[30];
-  t3 := t[s3 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s2 shr 24] xor pK^[31];
+  t0 := t[s0 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s3 shr 24] xor pk[28];
+  t1 := t[s1 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s0 shr 24] xor pk[29];
+  t2 := t[s2 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s1 shr 24] xor pk[30];
+  t3 := t[s3 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s2 shr 24] xor pk[31];
   // Round 8
-  s0 := t[t0 and $ff] xor t[$100+t1 shr 8 and $ff] xor t[$200+t2 shr 16 and $ff] xor t[$300+t3 shr 24] xor pK^[32];
-  s1 := t[t1 and $ff] xor t[$100+t2 shr 8 and $ff] xor t[$200+t3 shr 16 and $ff] xor t[$300+t0 shr 24] xor pK^[33];
-  s2 := t[t2 and $ff] xor t[$100+t3 shr 8 and $ff] xor t[$200+t0 shr 16 and $ff] xor t[$300+t1 shr 24] xor pK^[34];
-  s3 := t[t3 and $ff] xor t[$100+t0 shr 8 and $ff] xor t[$200+t1 shr 16 and $ff] xor t[$300+t2 shr 24] xor pK^[35];
+  s0 := t[t0 and $ff] xor t[$100+t1 shr 8 and $ff] xor t[$200+t2 shr 16 and $ff] xor t[$300+t3 shr 24] xor pk[32];
+  s1 := t[t1 and $ff] xor t[$100+t2 shr 8 and $ff] xor t[$200+t3 shr 16 and $ff] xor t[$300+t0 shr 24] xor pk[33];
+  s2 := t[t2 and $ff] xor t[$100+t3 shr 8 and $ff] xor t[$200+t0 shr 16 and $ff] xor t[$300+t1 shr 24] xor pk[34];
+  s3 := t[t3 and $ff] xor t[$100+t0 shr 8 and $ff] xor t[$200+t1 shr 16 and $ff] xor t[$300+t2 shr 24] xor pk[35];
   // Round 9
-  t0 := t[s0 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s3 shr 24] xor pK^[36];
-  t1 := t[s1 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s0 shr 24] xor pK^[37];
-  t2 := t[s2 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s1 shr 24] xor pK^[38];
-  t3 := t[s3 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s2 shr 24] xor pK^[39];
-  if ctx.rounds>10 then begin
+  t0 := t[s0 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s3 shr 24] xor pk[36];
+  t1 := t[s1 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s0 shr 24] xor pk[37];
+  t2 := t[s2 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s1 shr 24] xor pk[38];
+  t3 := t[s3 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s2 shr 24] xor pk[39];
+  if ctxt.rounds>10 then begin
     // Round 10
-    s0 := t[t0 and $ff] xor t[$100+t1 shr 8 and $ff] xor t[$200+t2 shr 16 and $ff] xor t[$300+t3 shr 24] xor pK^[40];
-    s1 := t[t1 and $ff] xor t[$100+t2 shr 8 and $ff] xor t[$200+t3 shr 16 and $ff] xor t[$300+t0 shr 24] xor pK^[41];
-    s2 := t[t2 and $ff] xor t[$100+t3 shr 8 and $ff] xor t[$200+t0 shr 16 and $ff] xor t[$300+t1 shr 24] xor pK^[42];
-    s3 := t[t3 and $ff] xor t[$100+t0 shr 8 and $ff] xor t[$200+t1 shr 16 and $ff] xor t[$300+t2 shr 24] xor pK^[43];
+    s0 := t[t0 and $ff] xor t[$100+t1 shr 8 and $ff] xor t[$200+t2 shr 16 and $ff] xor t[$300+t3 shr 24] xor pk[40];
+    s1 := t[t1 and $ff] xor t[$100+t2 shr 8 and $ff] xor t[$200+t3 shr 16 and $ff] xor t[$300+t0 shr 24] xor pk[41];
+    s2 := t[t2 and $ff] xor t[$100+t3 shr 8 and $ff] xor t[$200+t0 shr 16 and $ff] xor t[$300+t1 shr 24] xor pk[42];
+    s3 := t[t3 and $ff] xor t[$100+t0 shr 8 and $ff] xor t[$200+t1 shr 16 and $ff] xor t[$300+t2 shr 24] xor pk[43];
     // Round 11
-    t0 := t[s0 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s3 shr 24] xor pK^[44];
-    t1 := t[s1 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s0 shr 24] xor pK^[45];
-    t2 := t[s2 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s1 shr 24] xor pK^[46];
-    t3 := t[s3 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s2 shr 24] xor pK^[47];
-    if ctx.rounds>12 then begin
+    t0 := t[s0 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s3 shr 24] xor pk[44];
+    t1 := t[s1 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s0 shr 24] xor pk[45];
+    t2 := t[s2 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s1 shr 24] xor pk[46];
+    t3 := t[s3 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s2 shr 24] xor pk[47];
+    if ctxt.rounds>12 then begin
       // Round 12
-      s0 := t[t0 and $ff] xor t[$100+t1 shr 8 and $ff] xor t[$200+t2 shr 16 and $ff] xor t[$300+t3 shr 24] xor pK^[48];
-      s1 := t[t1 and $ff] xor t[$100+t2 shr 8 and $ff] xor t[$200+t3 shr 16 and $ff] xor t[$300+t0 shr 24] xor pK^[49];
-      s2 := t[t2 and $ff] xor t[$100+t3 shr 8 and $ff] xor t[$200+t0 shr 16 and $ff] xor t[$300+t1 shr 24] xor pK^[50];
-      s3 := t[t3 and $ff] xor t[$100+t0 shr 8 and $ff] xor t[$200+t1 shr 16 and $ff] xor t[$300+t2 shr 24] xor pK^[51];
+      s0 := t[t0 and $ff] xor t[$100+t1 shr 8 and $ff] xor t[$200+t2 shr 16 and $ff] xor t[$300+t3 shr 24] xor pk[48];
+      s1 := t[t1 and $ff] xor t[$100+t2 shr 8 and $ff] xor t[$200+t3 shr 16 and $ff] xor t[$300+t0 shr 24] xor pk[49];
+      s2 := t[t2 and $ff] xor t[$100+t3 shr 8 and $ff] xor t[$200+t0 shr 16 and $ff] xor t[$300+t1 shr 24] xor pk[50];
+      s3 := t[t3 and $ff] xor t[$100+t0 shr 8 and $ff] xor t[$200+t1 shr 16 and $ff] xor t[$300+t2 shr 24] xor pk[51];
       // Round 13
-      t0 := t[s0 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s3 shr 24] xor pK^[52];
-      t1 := t[s1 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s0 shr 24] xor pK^[53];
-      t2 := t[s2 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s1 shr 24] xor pK^[54];
-      t3 := t[s3 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s2 shr 24] xor pK^[55];
+      t0 := t[s0 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s3 shr 24] xor pk[52];
+      t1 := t[s1 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s0 shr 24] xor pk[53];
+      t2 := t[s2 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s1 shr 24] xor pk[54];
+      t3 := t[s3 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s2 shr 24] xor pk[55];
     end;
   end;
-  inc(PtrUInt(pK), (ctx.rounds shl 4));
-  TWA4(BO)[0] := ((SBox[t0        and $ff])        xor
-                  (SBox[t1 shr  8 and $ff]) shl  8 xor
-                  (SBox[t2 shr 16 and $ff]) shl 16 xor
-                  (SBox[t3 shr 24])         shl 24    ) xor pK^[0];
-  TWA4(BO)[1] := ((SBox[t1        and $ff])        xor
-                  (SBox[t2 shr  8 and $ff]) shl  8 xor
-                  (SBox[t3 shr 16 and $ff]) shl 16 xor
-                  (SBox[t0 shr 24])         shl 24    ) xor pK^[1];
-  TWA4(BO)[2] := ((SBox[t2        and $ff])        xor
-                  (SBox[t3 shr  8 and $ff]) shl  8 xor
-                  (SBox[t0 shr 16 and $ff]) shl 16 xor
-                  (SBox[t1 shr 24])         shl 24    ) xor pK^[2];
-  TWA4(BO)[3] := ((SBox[t3        and $ff])        xor
-                  (SBox[t0 shr  8 and $ff]) shl  8 xor
-                  (SBox[t1 shr 16 and $ff]) shl 16 xor
-                  (SBox[t2 shr 24])         shl 24    ) xor pK^[3];
-{$endif AES_ROLLED}
-end;
-{$else}
-asm // eax=TAES(self)=TAESContext edx=BI ecx=BO
-{$ifdef USEAESNI}
-  // AES-NI hardware accelerated version by A. Bouchez
-  cmp dword ptr [eax].TAESContext.AesNi,0
-  je @noAesNi
-  movdqu xmm7,[edx]
-  call dword ptr [eax].TAESContext.AesNi
-  movdqu [ecx],xmm7
-  ret
-@noAesNi:
-{$endif USEAESNI}
-  // rolled optimized encryption asm version by A. Bouchez
-{$ifdef USEPADLOCK}
-  cmp dword [eax].TAESContext.ViaCtx,0
-  jz @DoAsm
-  mov eax,[eax].TAESContext.ViaCtx
-  push 16
-  push ecx
-  push edx
-  push eax           // padlock_aes_encrypt(ctx.ViaCtx,@BI,@BO,16);
-{$ifdef USEPADLOCKDLL}
-  call dword ptr [padlock_aes_encrypt]
-{$else}
-  call padlock_aes_encrypt
+  inc(PtrUInt(pK), ctxt.rounds shl 4);
+  bo[0] := ((SBox[t0        and $ff])        xor
+            (SBox[t1 shr  8 and $ff]) shl  8 xor
+            (SBox[t2 shr 16 and $ff]) shl 16 xor
+            (SBox[t3 shr 24])         shl 24    ) xor pk[0];
+  bo[1] := ((SBox[t1        and $ff])        xor
+            (SBox[t2 shr  8 and $ff]) shl  8 xor
+            (SBox[t3 shr 16 and $ff]) shl 16 xor
+            (SBox[t0 shr 24])         shl 24    ) xor pk[1];
+  bo[2] := ((SBox[t2        and $ff])        xor
+            (SBox[t3 shr  8 and $ff]) shl  8 xor
+            (SBox[t0 shr 16 and $ff]) shl 16 xor
+            (SBox[t1 shr 24])         shl 24    ) xor pk[2];
+  bo[3] := ((SBox[t3        and $ff])        xor
+            (SBox[t0 shr  8 and $ff]) shl  8 xor
+            (SBox[t1 shr 16 and $ff]) shl 16 xor
+            (SBox[t2 shr 24])         shl 24    ) xor pk[3];
 {$endif}
-  add esp,16 // padlock_aes_encrypt is cdecl -> caller must restore stack
-  ret
-@DoAsm:
-{$endif USEPADLOCK}
+end;
+
+{$ifdef USEPADLOCK}
+procedure aesencryptpadlock(const ctxt: TAESContext; bi, bo: PWA4);
+begin
+  padlock_aes_encrypt(ctxt.ViaCtx,bi,bo,16);
+end;
+{$endif}
+
+{$ifndef AESPASCAL_OR_CPU64}
+procedure aesencrypt386(const ctxt: TAESContext; bi, bo: PWA4);
+asm // rolled optimized encryption asm version by A. Bouchez
   push ebx
   push esi
   push edi
@@ -4848,7 +4833,12 @@ asm // eax=TAES(self)=TAESContext edx=BI ecx=BO
   pop esi
   pop ebx
 end;
-{$endif AESPASCAL_OR_CPU64}
+{$endif CPUX86}
+
+procedure TAES.Encrypt(const BI: TAESBlock; var BO: TAESBlock);
+begin
+  TAESContext(Context).DoBlock(TAESContext(Context),BI,BO);
+end;
 
 {$ifdef USEAESNI} // should be put outside the main method for FPC :(
 procedure ShiftAesNi(KeySize: cardinal; pk: pointer);
@@ -4956,9 +4946,7 @@ asm // eax=KeySize edx=pk
 end;
 {$endif CPU32}
 {$ifdef CPU64}
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
+{$ifdef FPC}nostackframe; assembler; asm{$else}
 asm
   .noframe
 {$endif}
@@ -5071,78 +5059,80 @@ end;
 {$endif USEAESNI}
 
 function TAES.EncryptInit(const Key; KeySize: cardinal): boolean;
-procedure Shift(KeySize: cardinal; pk: PAWK);
-var i: integer;
-    temp: cardinal;
-begin
-  // 32 bit use shift and mask
-  case KeySize of
-  128:
-    for i := 0 to 9 do begin
-      temp := pK^[3];
-      // SubWord(RotWord(temp)) if "word" count mod 4 = 0
-      pK^[4] := ((SBox[(temp shr  8) and $ff])       ) xor
-                ((SBox[(temp shr 16) and $ff]) shl  8) xor
-                ((SBox[(temp shr 24)        ]) shl 16) xor
-                ((SBox[(temp       ) and $ff]) shl 24) xor
-                pK^[0] xor RCon[i];
-      pK^[5] := pK^[1] xor pK^[4];
-      pK^[6] := pK^[2] xor pK^[5];
-      pK^[7] := pK^[3] xor pK^[6];
-      inc(PtrUInt(pK),4*4);
-    end;
-  192:
-    for i := 0 to 7 do begin
-      temp := pK^[5];
-      // SubWord(RotWord(temp)) if "word" count mod 6 = 0
-      pK^[ 6] := ((SBox[(temp shr  8) and $ff])       ) xor
-                 ((SBox[(temp shr 16) and $ff]) shl  8) xor
-                 ((SBox[(temp shr 24)        ]) shl 16) xor
-                 ((SBox[(temp       ) and $ff]) shl 24) xor
-                 pK^[0] xor RCon[i];
-      pK^[ 7] := pK^[1] xor pK^[6];
-      pK^[ 8] := pK^[2] xor pK^[7];
-      pK^[ 9] := pK^[3] xor pK^[8];
-      if i=7 then exit;
-      pK^[10] := pK^[4] xor pK^[ 9];
-      pK^[11] := pK^[5] xor pK^[10];
-      inc(PtrUInt(pK),6*4);
-    end;
-  else // 256:
-    for i := 0 to 6 do begin
-      temp := pK^[7];
-      // SubWord(RotWord(temp)) if "word" count mod 8 = 0
-      pK^[ 8] := ((SBox[(temp shr  8) and $ff])       ) xor
-                 ((SBox[(temp shr 16) and $ff]) shl  8) xor
-                 ((SBox[(temp shr 24)        ]) shl 16) xor
-                 ((SBox[(temp       ) and $ff]) shl 24) xor
-                 pK^[0] xor RCon[i];
-      pK^[ 9] := pK^[1] xor pK^[ 8];
-      pK^[10] := pK^[2] xor pK^[ 9];
-      pK^[11] := pK^[3] xor pK^[10];
-      if i=6 then exit;
-      temp := pK^[11];
-      // SubWord(temp) if "word" count mod 8 = 4
-      pK^[12] := ((SBox[(temp       ) and $ff])       ) xor
-                 ((SBox[(temp shr  8) and $ff]) shl  8) xor
-                 ((SBox[(temp shr 16) and $ff]) shl 16) xor
-                 ((SBox[(temp shr 24)        ]) shl 24) xor
-                 pK^[4];
-      pK^[13] := pK^[5] xor pK^[12];
-      pK^[14] := pK^[6] xor pK^[13];
-      pK^[15] := pK^[7] xor pK^[14];
-      inc(PtrUInt(pK),8*4);
+  procedure Shift(KeySize: cardinal; pk: PAWK);
+  var i: integer;
+      temp: cardinal;
+  begin
+    // 32 bit use shift and mask
+    case KeySize of
+    128:
+      for i := 0 to 9 do begin
+        temp := pK^[3];
+        // SubWord(RotWord(temp)) if "word" count mod 4 = 0
+        pK^[4] := ((SBox[(temp shr  8) and $ff])       ) xor
+                  ((SBox[(temp shr 16) and $ff]) shl  8) xor
+                  ((SBox[(temp shr 24)        ]) shl 16) xor
+                  ((SBox[(temp       ) and $ff]) shl 24) xor
+                  pK^[0] xor RCon[i];
+        pK^[5] := pK^[1] xor pK^[4];
+        pK^[6] := pK^[2] xor pK^[5];
+        pK^[7] := pK^[3] xor pK^[6];
+        inc(PtrUInt(pK),4*4);
+      end;
+    192:
+      for i := 0 to 7 do begin
+        temp := pK^[5];
+        // SubWord(RotWord(temp)) if "word" count mod 6 = 0
+        pK^[ 6] := ((SBox[(temp shr  8) and $ff])       ) xor
+                   ((SBox[(temp shr 16) and $ff]) shl  8) xor
+                   ((SBox[(temp shr 24)        ]) shl 16) xor
+                   ((SBox[(temp       ) and $ff]) shl 24) xor
+                   pK^[0] xor RCon[i];
+        pK^[ 7] := pK^[1] xor pK^[6];
+        pK^[ 8] := pK^[2] xor pK^[7];
+        pK^[ 9] := pK^[3] xor pK^[8];
+        if i=7 then exit;
+        pK^[10] := pK^[4] xor pK^[ 9];
+        pK^[11] := pK^[5] xor pK^[10];
+        inc(PtrUInt(pK),6*4);
+      end;
+    else // 256:
+      for i := 0 to 6 do begin
+        temp := pK^[7];
+        // SubWord(RotWord(temp)) if "word" count mod 8 = 0
+        pK^[ 8] := ((SBox[(temp shr  8) and $ff])       ) xor
+                   ((SBox[(temp shr 16) and $ff]) shl  8) xor
+                   ((SBox[(temp shr 24)        ]) shl 16) xor
+                   ((SBox[(temp       ) and $ff]) shl 24) xor
+                   pK^[0] xor RCon[i];
+        pK^[ 9] := pK^[1] xor pK^[ 8];
+        pK^[10] := pK^[2] xor pK^[ 9];
+        pK^[11] := pK^[3] xor pK^[10];
+        if i=6 then exit;
+        temp := pK^[11];
+        // SubWord(temp) if "word" count mod 8 = 4
+        pK^[12] := ((SBox[(temp       ) and $ff])       ) xor
+                   ((SBox[(temp shr  8) and $ff]) shl  8) xor
+                   ((SBox[(temp shr 16) and $ff]) shl 16) xor
+                   ((SBox[(temp shr 24)        ]) shl 24) xor
+                   pK^[4];
+        pK^[13] := pK^[5] xor pK^[12];
+        pK^[14] := pK^[6] xor pK^[13];
+        pK^[15] := pK^[7] xor pK^[14];
+        inc(PtrUInt(pK),8*4);
+      end;
     end;
   end;
-end;
 var Nk: integer;
     ctx: TAESContext absolute Context;
 begin
   result := true;
   ctx.Initialized := true;
   {$ifdef USEPADLOCK}
-  if DoPadlockInit(Key,KeySize) then
+  if DoPadlockInit(Key,KeySize) then begin
+    ctx.DoBlock := @aesencryptpadlock;
     exit; // Init OK
+  end;
   {$endif}
   if (KeySize<>128) and (KeySize<>192) and (KeySize<>256) then begin
     result := false;
@@ -5151,22 +5141,34 @@ begin
   end;
   Nk := KeySize div 32;
   MoveFast(Key, ctx.RK, 4*Nk);
-  ctx.AesNi := nil;
+  {$ifdef AESPASCAL_OR_CPU64}
+  ctx.DoBlock := @aesencryptpas;
+  {$else}
+  ctx.DoBlock := @aesencrypt386;
+  {$endif}
   {$ifdef CPUINTEL}
   {$ifdef USEAESNI}
-  if cfAESNI in CpuFeatures then
+  if cfAESNI in CpuFeatures then begin
      case KeySize of
-     128: ctx.AesNi := AesNiEncryptXmm7_128;
-     192: ctx.AesNi := AesNiEncryptXmm7_192;
-     256: ctx.AesNi := AesNiEncryptXmm7_256;
+     128: ctx.DoBlock := @AesNiEncrypt128;
+     192: ctx.DoBlock := @AesNiEncrypt192;
+     256: ctx.DoBlock := @AesNiEncrypt256;
      end;
+     {$ifdef USEAESNI32}
+     case KeySize of
+     128: ctx.AesNi32 := @AesNiEncryptXmm7_128;
+     192: ctx.AesNi32 := @AesNiEncryptXmm7_192;
+     256: ctx.AesNi32 := @AesNiEncryptXmm7_256;
+     end;
+     {$endif}
+  end;
   {$endif}
   {$endif}
   ctx.Rounds  := 6+Nk;
   ctx.KeyBits := KeySize;
   // Calculate encryption round keys
   {$ifdef USEAESNI} // 192 is more complex and seldom used -> skip to pascal
-  if (KeySize<>192) and Assigned(ctx.AESNI) then
+  if (KeySize<>192) and (cfAESNI in CpuFeatures) then
     ShiftAesNi(KeySize,@ctx.RK) else
   {$endif}
     Shift(KeySize,pointer(@ctx.RK));
@@ -5228,9 +5230,7 @@ end;
 {$endif CPU32}
 {$ifdef CPU64}
 procedure MakeDecrKeyAesNi(Rounds: integer; RK: Pointer);
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
+{$ifdef FPC}nostackframe; assembler; asm{$else}
 asm // rcx=Rounds rdx=RK
   .noframe
 {$endif}
@@ -5276,240 +5276,166 @@ end;
 {$endif CPU64}
 {$endif USEAESNI}
 
-function TAES.DecryptInit(const Key; KeySize: cardinal): boolean;
-procedure MakeDecrKey(var k: TAWk; rounds: integer);
-// Calculate decryption key from encryption key
-var i: integer;
-    x: cardinal;
-{$ifndef AES_ROLLED}
-    j: integer;
+{$ifdef USEPADLOCK}
+procedure aesdecryptpadlock(const ctxt: TAESContext; bi, bo: PWA4);
+begin
+  padlock_aes_decrypt(ctxt.ViaCtx,bi,bo,16);
+end;
 {$endif}
-    t: PCardinalArray;
-begin
-{$ifndef AES_ROLLED} // inversion is needed only for fully unrolled version
-  // invert the order of the round keys
-  i := 0;
-  j := 4*rounds;
-  while i<j do begin
-    x:=k[i  ];  k[i  ]:=k[j  ];  k[j  ]:=x;
-    x:=k[i+1];  k[i+1]:=k[j+1];  k[j+1]:=x;
-    x:=k[i+2];  k[i+2]:=k[j+2];  k[j+2]:=x;
-    x:=k[i+3];  k[i+3]:=k[j+3];  k[j+3]:=x;
-    inc(i,4);
-    dec(j,4);
-  end;
-{$endif}
-  t := @Td0;
-  for i := 1 to rounds-1 do begin
-    x  := k[i*4  ];
-    k[i*4  ] := t[$300+SBox[x shr 24]] xor t[$200+SBox[x shr 16 and $ff]] xor
-                t[$100+SBox[x shr 8 and $ff]] xor t[SBox[x and $ff]];
-    x  := k[i*4+1];
-    k[i*4+1] := t[$300+SBox[x shr 24]] xor t[$200+SBox[x shr 16 and $ff]] xor
-                t[$100+SBox[x shr 8 and $ff]] xor t[SBox[x and $ff]];
-    x  := k[i*4+2];
-    k[i*4+2] := t[$300+SBox[x shr 24]] xor t[$200+SBox[x shr 16 and $ff]] xor
-                t[$100+SBox[x shr 8 and $ff]] xor t[SBox[x and $ff]];
-    x  := k[i*4+3];
-    k[i*4+3] := t[$300+SBox[x shr 24]] xor t[$200+SBox[x shr 16 and $ff]] xor
-                t[$100+SBox[x shr 8 and $ff]] xor t[SBox[x and $ff]];
-  end;
-end;
-var ctx: TAESContext absolute Context;
-begin
-  {$ifdef USEPADLOCK}
-  if DoPadlockInit(Key,KeySize) then begin
-    result := true;
-    ctx.Initialized := true;
-    exit; // Init OK
-  end;
-  {$endif}
-  result := EncryptInit(Key, KeySize); // contains Initialized := true
-  if not result then
-    exit;
-  {$ifdef USEAESNI}
-  if Assigned(ctx.AESNI) then
-    MakeDecrKeyAesNi(ctx.Rounds,@ctx.RK) else
-  {$endif}
-    MakeDecrKey(TAWk(ctx.RK),ctx.Rounds);
-end;
 
-procedure TAES.Decrypt(var B: TAESBlock);
-begin
-  Decrypt(B,B);
-end;
-
-procedure TAES.Decrypt(const BI: TAESBlock; var BO: TAESBlock);
-// decrypt one block (in ECB mode)
-{$ifdef AESPASCAL_OR_CPU64}
+procedure aesdecryptpas(const ctxt: TAESContext; bi, bo: PWA4);
 var
-  ctx: TAESContext absolute Context;
   s0,s1,s2,s3: PtrUInt;  // TAESBlock s# as separate variables
   t0,t1,t2: cardinal;    // TAESBlock t# as separate variables
-{$ifdef AES_ROLLED}
+  {$ifdef AES_ROLLED}
   i: integer;
-  pK: PWA4;
-{$else}
+  pk: PWA4;
+  {$else}
   t3: cardinal;
-  pK: PAWk;  // pointer to loop rount key
-{$endif}
+  pk: PAWk;  // pointer to loop rount key
+  {$endif}
   t: PCardinalArray;
 begin
-{$ifdef USEAESNI64}
-  if Assigned(ctx.AesNi) then begin
-    AesNiDecrypt(ctx,BI,BO);
-    exit;
-  end;
-{$endif USEAESNI64}
-{$ifdef USEPADLOCK}
-  if ctx.ViaCtx<>nil then begin
-    padlock_aes_decrypt(ctx.ViaCtx,@BI,@BO,16);
-    exit;
-  end;
-{$endif}
   t := @Td0;
 {$ifdef AES_ROLLED}
   // Wolfgang Ehrhardt rolled version - faster on modern CPU than unrolled one below
   // Setup key pointer
-  pK := PWA4(@ctx.RK[ctx.Rounds]);
+  pk := PWA4(@ctxt.RK[ctxt.Rounds]);
   // Initialize with input block
-  s0 := TWA4(BI)[0] xor pK^[0];
-  s1 := TWA4(BI)[1] xor pK^[1];
-  s2 := TWA4(BI)[2] xor pK^[2];
-  s3 := TWA4(BI)[3] xor pK^[3];
-  dec(pK);
-  for I := 1 to ctx.Rounds-1 do begin
+  s0 := bi[0] xor pk[0];
+  s1 := bi[1] xor pk[1];
+  s2 := bi[2] xor pk[2];
+  s3 := bi[3] xor pk[3];
+  dec(pk);
+  for I := 1 to ctxt.Rounds-1 do begin
       t0 := t[s0 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s1 shr 24];
       t1 := t[s1 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s2 shr 24];
       t2 := t[s2 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s3 shr 24];
-      s3 := t[s3 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s0 shr 24] xor PK[3];
-      s0 := t0 xor PK[0];
-      s1 := t1 xor PK[1];
-      s2 := t2 xor PK[2];
-      dec(pK);
+      s3 := t[s3 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s0 shr 24] xor pk[3];
+      s0 := t0 xor pk[0];
+      s1 := t1 xor pk[1];
+      s2 := t2 xor pk[2];
+      dec(pk);
     end;
-  TWA4(BO)[0] := ((InvSBox[s0        and $ff])        xor
-                  (InvSBox[s3 shr  8 and $ff]) shl  8 xor
-                  (InvSBox[s2 shr 16 and $ff]) shl 16 xor
-                  (InvSBox[s1 shr 24])         shl 24    ) xor pK^[0];
-  TWA4(BO)[1] := ((InvSBox[s1        and $ff])        xor
-                  (InvSBox[s0 shr  8 and $ff]) shl  8 xor
-                  (InvSBox[s3 shr 16 and $ff]) shl 16 xor
-                  (InvSBox[s2 shr 24])         shl 24    ) xor pK^[1];
-  TWA4(BO)[2] := ((InvSBox[s2        and $ff])        xor
-                  (InvSBox[s1 shr  8 and $ff]) shl  8 xor
-                  (InvSBox[s0 shr 16 and $ff]) shl 16 xor
-                  (InvSBox[s3 shr 24])         shl 24    ) xor pK^[2];
-  TWA4(BO)[3] := ((InvSBox[s3        and $ff])        xor
-                  (InvSBox[s2 shr  8 and $ff]) shl  8 xor
-                  (InvSBox[s1 shr 16 and $ff]) shl 16 xor
-                  (InvSBox[s0 shr 24])         shl 24    ) xor pK^[3];
+  bo[0] := ((InvSBox[s0        and $ff])        xor
+            (InvSBox[s3 shr  8 and $ff]) shl  8 xor
+            (InvSBox[s2 shr 16 and $ff]) shl 16 xor
+            (InvSBox[s1 shr 24])         shl 24    ) xor pk[0];
+  bo[1] := ((InvSBox[s1        and $ff])        xor
+            (InvSBox[s0 shr  8 and $ff]) shl  8 xor
+            (InvSBox[s3 shr 16 and $ff]) shl 16 xor
+            (InvSBox[s2 shr 24])         shl 24    ) xor pk[1];
+  bo[2] := ((InvSBox[s2        and $ff])        xor
+            (InvSBox[s1 shr  8 and $ff]) shl  8 xor
+            (InvSBox[s0 shr 16 and $ff]) shl 16 xor
+            (InvSBox[s3 shr 24])         shl 24    ) xor pk[2];
+  bo[3] := ((InvSBox[s3        and $ff])        xor
+            (InvSBox[s2 shr  8 and $ff]) shl  8 xor
+            (InvSBox[s1 shr 16 and $ff]) shl 16 xor
+            (InvSBox[s0 shr 24])         shl 24    ) xor pk[3];
 {$else} // unrolled version (WE6) from Wolfgang Ehrhardt - slower
   // Setup key pointer
-  pK := PAWk(@ctx.RK);
+  pk := PAWk(@ctxt.RK);
   // Initialize with input block
-  s0 := TWA4(BI)[0] xor pK^[0];
-  s1 := TWA4(BI)[1] xor pK^[1];
-  s2 := TWA4(BI)[2] xor pK^[2];
-  s3 := TWA4(BI)[3] xor pK^[3];
-
+  s0 := bi[0] xor pk[0];
+  s1 := bi[1] xor pk[1];
+  s2 := bi[2] xor pk[2];
+  s3 := bi[3] xor pk[3];
   // Round 1
-  t0 := t[s0 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s1 shr 24] xor pK^[4];
-  t1 := t[s1 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s2 shr 24] xor pK^[5];
-  t2 := t[s2 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s3 shr 24] xor pK^[6];
-  t3 := t[s3 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s0 shr 24] xor pK^[7];
+  t0 := t[s0 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s1 shr 24] xor pk[4];
+  t1 := t[s1 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s2 shr 24] xor pk[5];
+  t2 := t[s2 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s3 shr 24] xor pk[6];
+  t3 := t[s3 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s0 shr 24] xor pk[7];
   // Round 2
-  s0 := t[t0 and $ff] xor t[$100+t3 shr 8 and $ff] xor t[$200+t2 shr 16 and $ff] xor t[$300+t1 shr 24] xor pK^[8];
-  s1 := t[t1 and $ff] xor t[$100+t0 shr 8 and $ff] xor t[$200+t3 shr 16 and $ff] xor t[$300+t2 shr 24] xor pK^[9];
-  s2 := t[t2 and $ff] xor t[$100+t1 shr 8 and $ff] xor t[$200+t0 shr 16 and $ff] xor t[$300+t3 shr 24] xor pK^[10];
-  s3 := t[t3 and $ff] xor t[$100+t2 shr 8 and $ff] xor t[$200+t1 shr 16 and $ff] xor t[$300+t0 shr 24] xor pK^[11];
+  s0 := t[t0 and $ff] xor t[$100+t3 shr 8 and $ff] xor t[$200+t2 shr 16 and $ff] xor t[$300+t1 shr 24] xor pk[8];
+  s1 := t[t1 and $ff] xor t[$100+t0 shr 8 and $ff] xor t[$200+t3 shr 16 and $ff] xor t[$300+t2 shr 24] xor pk[9];
+  s2 := t[t2 and $ff] xor t[$100+t1 shr 8 and $ff] xor t[$200+t0 shr 16 and $ff] xor t[$300+t3 shr 24] xor pk[10];
+  s3 := t[t3 and $ff] xor t[$100+t2 shr 8 and $ff] xor t[$200+t1 shr 16 and $ff] xor t[$300+t0 shr 24] xor pk[11];
   // Round 3
-  t0 := t[s0 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s1 shr 24] xor pK^[12];
-  t1 := t[s1 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s2 shr 24] xor pK^[13];
-  t2 := t[s2 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s3 shr 24] xor pK^[14];
-  t3 := t[s3 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s0 shr 24] xor pK^[15];
+  t0 := t[s0 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s1 shr 24] xor pk[12];
+  t1 := t[s1 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s2 shr 24] xor pk[13];
+  t2 := t[s2 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s3 shr 24] xor pk[14];
+  t3 := t[s3 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s0 shr 24] xor pk[15];
   // Round 4
-  s0 := t[t0 and $ff] xor t[$100+t3 shr 8 and $ff] xor t[$200+t2 shr 16 and $ff] xor t[$300+t1 shr 24] xor pK^[16];
-  s1 := t[t1 and $ff] xor t[$100+t0 shr 8 and $ff] xor t[$200+t3 shr 16 and $ff] xor t[$300+t2 shr 24] xor pK^[17];
-  s2 := t[t2 and $ff] xor t[$100+t1 shr 8 and $ff] xor t[$200+t0 shr 16 and $ff] xor t[$300+t3 shr 24] xor pK^[18];
-  s3 := t[t3 and $ff] xor t[$100+t2 shr 8 and $ff] xor t[$200+t1 shr 16 and $ff] xor t[$300+t0 shr 24] xor pK^[19];
+  s0 := t[t0 and $ff] xor t[$100+t3 shr 8 and $ff] xor t[$200+t2 shr 16 and $ff] xor t[$300+t1 shr 24] xor pk[16];
+  s1 := t[t1 and $ff] xor t[$100+t0 shr 8 and $ff] xor t[$200+t3 shr 16 and $ff] xor t[$300+t2 shr 24] xor pk[17];
+  s2 := t[t2 and $ff] xor t[$100+t1 shr 8 and $ff] xor t[$200+t0 shr 16 and $ff] xor t[$300+t3 shr 24] xor pk[18];
+  s3 := t[t3 and $ff] xor t[$100+t2 shr 8 and $ff] xor t[$200+t1 shr 16 and $ff] xor t[$300+t0 shr 24] xor pk[19];
   // Round 5
-  t0 := t[s0 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s1 shr 24] xor pK^[20];
-  t1 := t[s1 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s2 shr 24] xor pK^[21];
-  t2 := t[s2 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s3 shr 24] xor pK^[22];
-  t3 := t[s3 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s0 shr 24] xor pK^[23];
+  t0 := t[s0 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s1 shr 24] xor pk[20];
+  t1 := t[s1 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s2 shr 24] xor pk[21];
+  t2 := t[s2 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s3 shr 24] xor pk[22];
+  t3 := t[s3 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s0 shr 24] xor pk[23];
   // Round 6
-  s0 := t[t0 and $ff] xor t[$100+t3 shr 8 and $ff] xor t[$200+t2 shr 16 and $ff] xor t[$300+t1 shr 24] xor pK^[24];
-  s1 := t[t1 and $ff] xor t[$100+t0 shr 8 and $ff] xor t[$200+t3 shr 16 and $ff] xor t[$300+t2 shr 24] xor pK^[25];
-  s2 := t[t2 and $ff] xor t[$100+t1 shr 8 and $ff] xor t[$200+t0 shr 16 and $ff] xor t[$300+t3 shr 24] xor pK^[26];
-  s3 := t[t3 and $ff] xor t[$100+t2 shr 8 and $ff] xor t[$200+t1 shr 16 and $ff] xor t[$300+t0 shr 24] xor pK^[27];
+  s0 := t[t0 and $ff] xor t[$100+t3 shr 8 and $ff] xor t[$200+t2 shr 16 and $ff] xor t[$300+t1 shr 24] xor pk[24];
+  s1 := t[t1 and $ff] xor t[$100+t0 shr 8 and $ff] xor t[$200+t3 shr 16 and $ff] xor t[$300+t2 shr 24] xor pk[25];
+  s2 := t[t2 and $ff] xor t[$100+t1 shr 8 and $ff] xor t[$200+t0 shr 16 and $ff] xor t[$300+t3 shr 24] xor pk[26];
+  s3 := t[t3 and $ff] xor t[$100+t2 shr 8 and $ff] xor t[$200+t1 shr 16 and $ff] xor t[$300+t0 shr 24] xor pk[27];
   // Round 7
-  t0 := t[s0 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s1 shr 24] xor pK^[28];
-  t1 := t[s1 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s2 shr 24] xor pK^[29];
-  t2 := t[s2 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s3 shr 24] xor pK^[30];
-  t3 := t[s3 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s0 shr 24] xor pK^[31];
+  t0 := t[s0 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s1 shr 24] xor pk[28];
+  t1 := t[s1 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s2 shr 24] xor pk[29];
+  t2 := t[s2 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s3 shr 24] xor pk[30];
+  t3 := t[s3 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s0 shr 24] xor pk[31];
   // Round 8
-  s0 := t[t0 and $ff] xor t[$100+t3 shr 8 and $ff] xor t[$200+t2 shr 16 and $ff] xor t[$300+t1 shr 24] xor pK^[32];
-  s1 := t[t1 and $ff] xor t[$100+t0 shr 8 and $ff] xor t[$200+t3 shr 16 and $ff] xor t[$300+t2 shr 24] xor pK^[33];
-  s2 := t[t2 and $ff] xor t[$100+t1 shr 8 and $ff] xor t[$200+t0 shr 16 and $ff] xor t[$300+t3 shr 24] xor pK^[34];
-  s3 := t[t3 and $ff] xor t[$100+t2 shr 8 and $ff] xor t[$200+t1 shr 16 and $ff] xor t[$300+t0 shr 24] xor pK^[35];
+  s0 := t[t0 and $ff] xor t[$100+t3 shr 8 and $ff] xor t[$200+t2 shr 16 and $ff] xor t[$300+t1 shr 24] xor pk[32];
+  s1 := t[t1 and $ff] xor t[$100+t0 shr 8 and $ff] xor t[$200+t3 shr 16 and $ff] xor t[$300+t2 shr 24] xor pk[33];
+  s2 := t[t2 and $ff] xor t[$100+t1 shr 8 and $ff] xor t[$200+t0 shr 16 and $ff] xor t[$300+t3 shr 24] xor pk[34];
+  s3 := t[t3 and $ff] xor t[$100+t2 shr 8 and $ff] xor t[$200+t1 shr 16 and $ff] xor t[$300+t0 shr 24] xor pk[35];
   // Round 9
-  t0 := t[s0 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s1 shr 24] xor pK^[36];
-  t1 := t[s1 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s2 shr 24] xor pK^[37];
-  t2 := t[s2 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s3 shr 24] xor pK^[38];
-  t3 := t[s3 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s0 shr 24] xor pK^[39];
-  if ctx.rounds>10 then begin
+  t0 := t[s0 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s1 shr 24] xor pk[36];
+  t1 := t[s1 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s2 shr 24] xor pk[37];
+  t2 := t[s2 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s3 shr 24] xor pk[38];
+  t3 := t[s3 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s0 shr 24] xor pk[39];
+  if ctxt.rounds>10 then begin
     // Round 10
-    s0 := t[t0 and $ff] xor t[$100+t3 shr 8 and $ff] xor t[$200+t2 shr 16 and $ff] xor t[$300+t1 shr 24] xor pK^[40];
-    s1 := t[t1 and $ff] xor t[$100+t0 shr 8 and $ff] xor t[$200+t3 shr 16 and $ff] xor t[$300+t2 shr 24] xor pK^[41];
-    s2 := t[t2 and $ff] xor t[$100+t1 shr 8 and $ff] xor t[$200+t0 shr 16 and $ff] xor t[$300+t3 shr 24] xor pK^[42];
-    s3 := t[t3 and $ff] xor t[$100+t2 shr 8 and $ff] xor t[$200+t1 shr 16 and $ff] xor t[$300+t0 shr 24] xor pK^[43];
+    s0 := t[t0 and $ff] xor t[$100+t3 shr 8 and $ff] xor t[$200+t2 shr 16 and $ff] xor t[$300+t1 shr 24] xor pk[40];
+    s1 := t[t1 and $ff] xor t[$100+t0 shr 8 and $ff] xor t[$200+t3 shr 16 and $ff] xor t[$300+t2 shr 24] xor pk[41];
+    s2 := t[t2 and $ff] xor t[$100+t1 shr 8 and $ff] xor t[$200+t0 shr 16 and $ff] xor t[$300+t3 shr 24] xor pk[42];
+    s3 := t[t3 and $ff] xor t[$100+t2 shr 8 and $ff] xor t[$200+t1 shr 16 and $ff] xor t[$300+t0 shr 24] xor pk[43];
     // Round 11
-    t0 := t[s0 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s1 shr 24] xor pK^[44];
-    t1 := t[s1 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s2 shr 24] xor pK^[45];
-    t2 := t[s2 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s3 shr 24] xor pK^[46];
-    t3 := t[s3 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s0 shr 24] xor pK^[47];
-    if ctx.rounds>12 then begin
+    t0 := t[s0 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s1 shr 24] xor pk[44];
+    t1 := t[s1 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s2 shr 24] xor pk[45];
+    t2 := t[s2 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s3 shr 24] xor pk[46];
+    t3 := t[s3 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s0 shr 24] xor pk[47];
+    if ctxt.rounds>12 then begin
       // Round 12
-      s0 := t[t0 and $ff] xor t[$100+t3 shr 8 and $ff] xor t[$200+t2 shr 16 and $ff] xor t[$300+t1 shr 24] xor pK^[48];
-      s1 := t[t1 and $ff] xor t[$100+t0 shr 8 and $ff] xor t[$200+t3 shr 16 and $ff] xor t[$300+t2 shr 24] xor pK^[49];
-      s2 := t[t2 and $ff] xor t[$100+t1 shr 8 and $ff] xor t[$200+t0 shr 16 and $ff] xor t[$300+t3 shr 24] xor pK^[50];
-      s3 := t[t3 and $ff] xor t[$100+t2 shr 8 and $ff] xor t[$200+t1 shr 16 and $ff] xor t[$300+t0 shr 24] xor pK^[51];
+      s0 := t[t0 and $ff] xor t[$100+t3 shr 8 and $ff] xor t[$200+t2 shr 16 and $ff] xor t[$300+t1 shr 24] xor pk[48];
+      s1 := t[t1 and $ff] xor t[$100+t0 shr 8 and $ff] xor t[$200+t3 shr 16 and $ff] xor t[$300+t2 shr 24] xor pk[49];
+      s2 := t[t2 and $ff] xor t[$100+t1 shr 8 and $ff] xor t[$200+t0 shr 16 and $ff] xor t[$300+t3 shr 24] xor pk[50];
+      s3 := t[t3 and $ff] xor t[$100+t2 shr 8 and $ff] xor t[$200+t1 shr 16 and $ff] xor t[$300+t0 shr 24] xor pk[51];
       // Round 13
-      t0 := t[s0 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s1 shr 24] xor pK^[52];
-      t1 := t[s1 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s2 shr 24] xor pK^[53];
-      t2 := t[s2 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s3 shr 24] xor pK^[54];
-      t3 := t[s3 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s0 shr 24] xor pK^[55];
+      t0 := t[s0 and $ff] xor t[$100+s3 shr 8 and $ff] xor t[$200+s2 shr 16 and $ff] xor t[$300+s1 shr 24] xor pk[52];
+      t1 := t[s1 and $ff] xor t[$100+s0 shr 8 and $ff] xor t[$200+s3 shr 16 and $ff] xor t[$300+s2 shr 24] xor pk[53];
+      t2 := t[s2 and $ff] xor t[$100+s1 shr 8 and $ff] xor t[$200+s0 shr 16 and $ff] xor t[$300+s3 shr 24] xor pk[54];
+      t3 := t[s3 and $ff] xor t[$100+s2 shr 8 and $ff] xor t[$200+s1 shr 16 and $ff] xor t[$300+s0 shr 24] xor pk[55];
     end;
   end;
-  inc(PtrUInt(pK), (ctx.rounds shl 4));
-
+  inc(PtrUInt(pk), (ctxt.rounds shl 4));
   // Uses InvSbox and shl, needs type cast cardinal() for
   // 16 bit compilers: here InvSbox is byte, Td4 is cardinal
-  TWA4(BO)[0] := ((InvSBox[t0 and $ff]) xor
+  bo[0] := ((InvSBox[t0 and $ff]) xor
     (InvSBox[t3 shr  8 and $ff]) shl  8 xor
     (InvSBox[t2 shr 16 and $ff]) shl 16 xor
-    (InvSBox[t1 shr 24]) shl 24) xor pK^[0];
-  TWA4(BO)[1] := ((InvSBox[t1 and $ff]) xor
+    (InvSBox[t1 shr 24]) shl 24) xor pk[0];
+  bo[1] := ((InvSBox[t1 and $ff]) xor
     (InvSBox[t0 shr  8 and $ff]) shl  8 xor
     (InvSBox[t3 shr 16 and $ff]) shl 16 xor
-    (InvSBox[t2 shr 24]) shl 24) xor pK^[1];
-  TWA4(BO)[2] := ((InvSBox[t2 and $ff]) xor
+    (InvSBox[t2 shr 24]) shl 24) xor pk[1];
+  bo[2] := ((InvSBox[t2 and $ff]) xor
     (InvSBox[t1 shr  8 and $ff]) shl  8 xor
     (InvSBox[t0 shr 16 and $ff]) shl 16 xor
-    (InvSBox[t3 shr 24]) shl 24) xor pK^[2];
-  TWA4(BO)[3] := ((InvSBox[t3 and $ff]) xor
+    (InvSBox[t3 shr 24]) shl 24) xor pk[2];
+  bo[3] := ((InvSBox[t3 and $ff]) xor
     (InvSBox[t2 shr  8 and $ff]) shl  8 xor
     (InvSBox[t1 shr 16 and $ff]) shl 16 xor
-    (InvSBox[t0 shr 24]) shl 24) xor pK^[3];
+    (InvSBox[t0 shr 24]) shl 24) xor pk[3];
 {$endif AES_ROLLED}
 end;
-{$else}
-asm // eax=TAES(self)=TAESContext edx=BI ecx=BO
+
+{$ifdef CPUX86}
 {$ifdef USEAESNI}
-  // AES-NI hardware accelerated version by A. Bouchez
-  cmp dword ptr [eax].TAESContext.AesNi,0
-  je @noAesNi
+procedure aesdecryptaesni(const ctxt, source, dest);
+asm
   movdqu xmm7,[edx]
   mov dl,[eax].TAESContext.Rounds
   cmp dl,10
@@ -5659,27 +5585,12 @@ asm // eax=TAES(self)=TAESContext edx=BI ecx=BO
   db $66,$0F,$38,$DF,$FB
   {$endif}
   movdqu [ecx],xmm7
-  ret
-@noAesNi:
-{$endif USEAESNI}
-// rolled optimized decryption asm version by A. Bouchez
-{$ifdef USEPADLOCK}
-  cmp dword [eax].TAESContext.ViaCtx,0
-  jz @DoAsm
-  mov eax,[eax].TAESContext.ViaCtx
-  push 16
-  push ecx
-  push edx
-  push eax           // padlock_aes_decrypt(ctx.ViaCtx,@BI,@BO,16);
-{$ifdef USEPADLOCKDLL}
-  call dword ptr [padlock_aes_decrypt]
-{$else}
-  call padlock_aes_decrypt
+end;
 {$endif}
-  add esp,16 // padlock_aes_decrypt is cdecl -> caller must restore stack
-  ret
-@DoAsm:
-{$endif USEPADLOCK}
+
+{$ifndef AESPASCAL_OR_CPU64}
+procedure aesdecrypt386(const ctxt: TAESContext; bi, bo: PWA4);
+asm
   push ebx
   push esi
   push edi
@@ -5846,10 +5757,87 @@ asm // eax=TAES(self)=TAESContext edx=BI ecx=BO
   pop esi
   pop ebx
 end;
-{$endif AESPASCAL_OR_CPU64}
+{$endif}
+{$endif}
 
-procedure TAES.DoBlocks(pIn, pOut: PAESBlock;
-  out oIn, oOut: PAESBLock; Count: integer; doEncrypt: Boolean);
+function TAES.DecryptInit(const Key; KeySize: cardinal): boolean;
+procedure MakeDecrKey(var k: TAWk; rounds: integer);
+// Calculate decryption key from encryption key
+var i: integer;
+    x: cardinal;
+    {$ifndef AES_ROLLED}
+    j: integer;
+    {$endif}
+    t: PCardinalArray;
+begin
+{$ifndef AES_ROLLED} // inversion is needed only for fully unrolled version
+  // invert the order of the round keys
+  i := 0;
+  j := 4*rounds;
+  while i<j do begin
+    x:=k[i  ];  k[i  ]:=k[j  ];  k[j  ]:=x;
+    x:=k[i+1];  k[i+1]:=k[j+1];  k[j+1]:=x;
+    x:=k[i+2];  k[i+2]:=k[j+2];  k[j+2]:=x;
+    x:=k[i+3];  k[i+3]:=k[j+3];  k[j+3]:=x;
+    inc(i,4);
+    dec(j,4);
+  end;
+{$endif}
+  t := @Td0;
+  for i := 1 to rounds-1 do begin
+    x  := k[i*4  ];
+    k[i*4  ] := t[$300+SBox[x shr 24]] xor t[$200+SBox[x shr 16 and $ff]] xor
+                t[$100+SBox[x shr 8 and $ff]] xor t[SBox[x and $ff]];
+    x  := k[i*4+1];
+    k[i*4+1] := t[$300+SBox[x shr 24]] xor t[$200+SBox[x shr 16 and $ff]] xor
+                t[$100+SBox[x shr 8 and $ff]] xor t[SBox[x and $ff]];
+    x  := k[i*4+2];
+    k[i*4+2] := t[$300+SBox[x shr 24]] xor t[$200+SBox[x shr 16 and $ff]] xor
+                t[$100+SBox[x shr 8 and $ff]] xor t[SBox[x and $ff]];
+    x  := k[i*4+3];
+    k[i*4+3] := t[$300+SBox[x shr 24]] xor t[$200+SBox[x shr 16 and $ff]] xor
+                t[$100+SBox[x shr 8 and $ff]] xor t[SBox[x and $ff]];
+  end;
+end;
+var ctx: TAESContext absolute Context;
+begin
+  {$ifdef USEPADLOCK}
+  if DoPadlockInit(Key,KeySize) then begin
+    result := true;
+    ctx.Initialized := true;
+    ctx.DoBlock := @aesdecryptpadlock;
+    exit; // Init OK
+  end;
+  {$endif}
+  result := EncryptInit(Key, KeySize); // contains Initialized := true
+  if not result then
+    exit;
+  {$ifdef AESPASCAL_OR_CPU64}
+  ctx.DoBlock := @aesdecryptpas;
+  {$else}
+  ctx.DoBlock := @aesdecrypt386;
+  {$endif}
+  {$ifdef USEAESNI}
+  if cfAESNI in CpuFeatures then begin
+    MakeDecrKeyAesNi(ctx.Rounds,@ctx.RK);
+    ctx.DoBlock := @aesdecryptaesni;
+  end else
+  {$endif}
+    MakeDecrKey(TAWk(ctx.RK),ctx.Rounds);
+end;
+
+procedure TAES.Decrypt(var B: TAESBlock);
+begin
+  TAESContext(Context).DoBlock(TAESContext(Context),B,B);
+end;
+
+procedure TAES.Decrypt(const BI: TAESBlock; var BO: TAESBlock);
+begin
+  TAESContext(Context).DoBlock(TAESContext(Context),BI,BO);
+end;
+
+procedure TAES.DoBlocks(pIn, pOut: PAESBlock; out oIn, oOut: PAESBLock;
+  Count: integer; doEncrypt: boolean);
 var i: integer;
     ctx: TAESContext absolute Context;
 begin
@@ -5867,14 +5855,8 @@ begin
     exit;
   end;
 {$endif}
-  if doEncrypt then
   for i := 1 to Count do begin
-    Encrypt(pIn^,pOut^);
-    inc(pIn);
-    inc(pOut);
-  end else
-  for i := 1 to Count do begin
-    Decrypt(pIn^,pOut^);
+    ctx.DoBlock(ctx,pIn^,pOut^);
     inc(pIn);
     inc(pOut);
   end;
@@ -5908,15 +5890,17 @@ begin
   {$endif}
 end;
 
+function TAES.KeyBits: integer;
+begin
+  result := TAESContext(Context).KeyBits;
+end;
+
 procedure TAES.Done;
 var ctx: TAESContext absolute Context;
 begin
   {$ifdef USEPADLOCK}
-  if Initialized and padlock_available and (ctx.ViaCtx<>nil) then begin
+  if Initialized and padlock_available and (ctx.ViaCtx<>nil) then
     padlock_aes_close(ctx.ViaCtx);
-    ctx.Initialized := false;
-    ctx.ViaCtx := nil;
-  end;
   {$endif USEPADLOCK}
   FillcharFast(ctx,sizeof(ctx),0); // always erase key in memory after use
 end;
@@ -6066,9 +6050,7 @@ asm // W=eax Buf=edx
 end;
 {$endif CPUX86}
 {$ifdef CPUX64}
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
+{$ifdef FPC}nostackframe; assembler; asm{$else}
 asm // W=rcx Buf=rdx
   .noframe
 {$endif}
@@ -6154,9 +6136,7 @@ const
   STACK_SIZE = 32{$ifndef LINUX}+7*16{$endif};
 
 procedure sha256_sse4(var input_data; var digest; num_blks: PtrUInt);
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
+{$ifdef FPC}nostackframe; assembler; asm{$else}
 asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         .NOFRAME
 {$endif FPC}
@@ -8179,9 +8159,8 @@ asm
         movq    [edx + 56], mm7
         movq    [edx + 64], mm0
 {$else}
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}  { Synopse's x64 asm, optimized for both in/out-order pipelined CPUs }
+{$ifdef FPC}nostackframe; assembler; asm{$else}
+// Synopse's x64 asm, optimized for both in/out-order pipelined CPUs
 asm // input: rcx=B, rdx=A, r8=C (Linux: rdi,rsi,rdx)
         .noframe
 {$endif}{$ifndef win64}
@@ -9739,9 +9718,7 @@ procedure MD5Transform(var buf: TMD5Buf; const in_: TMD5In);
  MD5_Transform-x64 is based on Peter Sawatzki's code.
  Taken from https://github.com/maximmasiutin/MD5_Transform-x64
 }
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
+{$ifdef FPC}nostackframe; assembler; asm{$else}
 asm // W=rcx Buf=rdx
         .noframe
 {$endif}
@@ -11698,9 +11675,7 @@ begin
   end;
   with aesivctr[DoEncrypt] do begin
     EnterCriticalSection(fLock);
-    if DoEncrypt then
-      fAES.Encrypt(TAESBlock(BI),TAESBlock(BO)) else
-      fAES.Decrypt(TAESBlock(BI),TAESBlock(BO));
+    TAESContext(fAES.Context).DoBlock(fAES.Context,BI,BO);
     LeaveCriticalSection(fLock);
   end;
 end;
@@ -12134,11 +12109,7 @@ procedure TAESAbstractSyn.TrailerBytes;
 begin
   if fAESInit<>initEncrypt then
     EncryptInit;
-  {$ifdef USEAESNI64}
-  if Assigned(TAESContext(AES.Context).AesNi) then
-    TAESContext(AES.Context).AesNi(AES.Context,fCV,fCV) else
-  {$endif USEAESNI64}
-    AES.Encrypt(fCV,fCV);
+  TAESContext(AES.Context).DoBlock(AES.Context,fCV,fCV);
   XorMemory(pointer(fOut),pointer(fIn),@fCV,fCount);
 end;
 
@@ -12152,7 +12123,7 @@ begin
   if fAESInit<>initDecrypt then
     DecryptInit;
   for i := 1 to Count shr 4 do begin
-    AES.Decrypt(fIn^,fOut^);
+    TAESContext(AES.Context).DoBlock(AES.Context,fIn^,fOut^);
     inc(fIn);
     inc(fOut);
   end;
@@ -12168,11 +12139,7 @@ begin
   if fAESInit<>initEncrypt then
     EncryptInit;
   for i := 1 to Count shr 4 do begin
-    {$ifdef USEAESNI64}
-    if Assigned(TAESContext(AES.Context).AesNi) then
-      TAESContext(AES.Context).AesNi(AES.Context,fIn^,fOut^) else
-    {$endif USEAESNI64}
-      AES.Encrypt(fIn^,fOut^);
+    TAESContext(AES.Context).DoBlock(AES.Context,fIn^,fOut^);
     inc(fIn);
     inc(fOut);
   end;
@@ -12194,7 +12161,7 @@ begin
       DecryptInit;
     for i := 1 to Count shr 4 do begin
       tmp := fIn^;
-      AES.Decrypt(fIn^,fOut^);
+      TAESContext(AES.Context).DoBlock(AES.Context,fIn^,fOut^);
       XorBlock16(pointer(fOut),pointer(@fCV));
       fCV := tmp;
       inc(fIn);
@@ -12214,11 +12181,7 @@ begin
     EncryptInit;
   for i := 1 to Count shr 4 do begin
     XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
-    {$ifdef USEAESNI64}
-    if Assigned(TAESContext(AES.Context).AesNi) then
-      TAESContext(AES.Context).AesNi(AES.Context,fOut^,fOut^) else
-    {$endif USEAESNI64}
-      AES.Encrypt(fOut^,fOut^);
+    TAESContext(AES.Context).DoBlock(AES.Context,fOut^,fOut^);
     fCV := fOut^;
     inc(fIn);
     inc(fOut);
@@ -12247,7 +12210,7 @@ end;
 {$ifdef USEAESNI32}
 procedure AesNiTrailer; // = TAESAbstractSyn.EncryptTrailer from AES-NI asm
 asm // eax=TAESContext ecx=len xmm7=CV esi=BufIn edi=BufOut
-    call   dword ptr [eax].TAESContext.AesNi // = AES.Encrypt(fCV,fCV)
+    call   dword ptr [eax].TAESContext.AesNi32 // = AES.Encrypt(fCV,fCV)
     lea    edx, [eax].TAESContext.buf // used as temporary buffer
     movdqu [edx], xmm7
     cld
@@ -12264,7 +12227,7 @@ var i: integer;
     tmp: TAESBlock;
 begin
   {$ifdef USEAESNI32}
-  if Assigned(TAESContext(AES.Context).AesNi) then
+  if Assigned(TAESContext(AES.Context).AesNi32) then
   asm
     push   esi
     push   edi
@@ -12277,7 +12240,7 @@ begin
     push   ecx
     shr    ecx,4
     jz     @z
-@s: call   dword ptr [eax].TAESContext.AesNi // AES.Encrypt(fCV,fCV)
+@s: call   dword ptr [eax].TAESContext.AesNi32 // AES.Encrypt(fCV,fCV)
     movdqu xmm0,dqword ptr [esi]
     movdqa xmm1,xmm0
     pxor   xmm0,xmm7
@@ -12298,11 +12261,7 @@ begin
     inherited; // CV := IV + set fIn,fOut,fCount
     for i := 1 to Count shr 4 do begin
       tmp := fIn^;
-      {$ifdef USEAESNI64}
-      if Assigned(TAESContext(AES.Context).AesNi) then
-        TAESContext(AES.Context).AesNi(AES.Context,fCV,fCV) else
-      {$endif USEAESNI64}
-        AES.Encrypt(fCV,fCV);
+      TAESContext(AES.Context).DoBlock(AES.Context,fCV,fCV);
       XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
       fCV := tmp;
       inc(fIn);
@@ -12318,7 +12277,7 @@ procedure TAESCFB.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var i: integer;
 begin
   {$ifdef USEAESNI32}
-  if Assigned(TAESContext(AES.Context).AesNi) then
+  if Assigned(TAESContext(AES.Context).AesNi32) then
   asm
     push   esi
     push   edi
@@ -12331,7 +12290,7 @@ begin
     push   ecx
     shr    ecx,4
     jz     @z
-@s: call   dword ptr [eax].TAESContext.AesNi // AES.Encrypt(fCV,fCV)
+@s: call   dword ptr [eax].TAESContext.AesNi32 // AES.Encrypt(fCV,fCV)
     movdqu xmm0,dqword ptr [esi]
     pxor   xmm7,xmm0
     movdqu dqword ptr [edi],xmm7  // fOut := fIn xor fCV
@@ -12349,11 +12308,7 @@ begin
   {$endif} begin
     inherited; // CV := IV + set fIn,fOut,fCount
     for i := 1 to Count shr 4 do begin
-      {$ifdef USEAESNI64}
-      if Assigned(TAESContext(AES.Context).AesNi) then
-        TAESContext(AES.Context).AesNi(AES.Context,fCV,fCV) else
-      {$endif USEAESNI64}
-        AES.Encrypt(fCV,fCV);
+      TAESContext(AES.Context).DoBlock(AES.Context,fCV,fCV);
       XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
       fCV := fOut^;
       inc(fIn);
@@ -12422,7 +12377,7 @@ begin
     exit;
   fMAC := fMACKey; // reuse the same key until next MACSetNonce()
   {$ifdef USEAESNI32}
-  if Assigned(TAESContext(AES.Context).AesNi) and (Count and AESBlockMod=0) then
+  if Assigned(TAESContext(AES.Context).AesNi32) and (Count and AESBlockMod=0) then
   asm
     push   ebx
     push   esi
@@ -12435,7 +12390,7 @@ begin
     mov    edx,esi
     call   crcblock // using SSE4.2 or fast tables
     lea    eax,[ebx].TAESCFBCRC.AES
-    call   dword ptr [eax].TAESContext.AesNi // AES.Encrypt(fCV,fCV)
+    call   dword ptr [eax].TAESContext.AesNi32 // AES.Encrypt(fCV,fCV)
     movdqu xmm0,dqword ptr [esi]
     movdqa xmm1,xmm0
     pxor   xmm0,xmm7
@@ -12457,11 +12412,7 @@ begin
     for i := 1 to Count shr 4 do begin
       tmp := fIn^;
       crcblock(@fMAC.encrypted,pointer(fIn)); // fIn may be = fOut
-      {$ifdef USEAESNI64}
-      if Assigned(TAESContext(AES.Context).AesNi) then
-        TAESContext(AES.Context).AesNi(AES.Context,fCV,fCV) else
-      {$endif USEAESNI64}
-        AES.Encrypt(fCV,fCV);
+      TAESContext(AES.Context).DoBlock(AES.Context,fCV,fCV);
       XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
       fCV := tmp;
       crcblock(@fMAC.plain,pointer(fOut));
@@ -12484,7 +12435,7 @@ begin
     exit;
   fMAC := fMACKey; // reuse the same key until next MACSetNonce()
   {$ifdef USEAESNI32}
-  if Assigned(TAESContext(AES.Context).AesNi) and (Count and AESBlockMod=0) then
+  if Assigned(TAESContext(AES.Context).AesNi32) and (Count and AESBlockMod=0) then
   asm
     push   ebx
     push   esi
@@ -12497,7 +12448,7 @@ begin
     mov    edx,esi
     call   crcblock
     lea    eax,[ebx].TAESCFBCRC.AES
-    call   dword ptr [eax].TAESContext.AesNi // AES.Encrypt(fCV,fCV)
+    call   dword ptr [eax].TAESContext.AesNi32 // AES.Encrypt(fCV,fCV)
     movdqu xmm0,dqword ptr [esi]
     pxor   xmm7,xmm0
     movdqu dqword ptr [edi],xmm7  // fOut := fIn xor fCV  +  fCV := fOut^
@@ -12515,11 +12466,7 @@ begin
   {$endif} begin
     inherited; // CV := IV + set fIn,fOut,fCount
     for i := 1 to Count shr 4 do begin
-      {$ifdef USEAESNI64}
-      if Assigned(TAESContext(AES.Context).AesNi) then
-        TAESContext(AES.Context).AesNi(AES.Context,fCV,fCV) else
-      {$endif USEAESNI64}
-        AES.Encrypt(fCV,fCV);
+      TAESContext(AES.Context).DoBlock(AES.Context,fCV,fCV);
       crcblock(@fMAC.plain,pointer(fIn)); // fOut may be = fIn
       XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
       fCV := fOut^;
@@ -12546,7 +12493,7 @@ begin
     exit;
   fMAC := fMACKey; // reuse the same key until next MACSetNonce()
   {$ifdef USEAESNI32}
-  if Assigned(TAESContext(AES.Context).AesNi) and (Count and AESBlockMod=0) then
+  if Assigned(TAESContext(AES.Context).AesNi32) and (Count and AESBlockMod=0) then
   asm
     push   ebx
     push   esi
@@ -12559,7 +12506,7 @@ begin
     mov    edx,esi
     call   crcblock
     lea    eax,[ebx].TAESOFBCRC.AES
-    call   dword ptr [eax].TAESContext.AesNi // AES.Encrypt(fCV,fCV)
+    call   dword ptr [eax].TAESContext.AesNi32 // AES.Encrypt(fCV,fCV)
     movdqu xmm0,dqword ptr [esi]
     pxor   xmm0,xmm7
     movdqu dqword ptr [edi],xmm0  // fOut := fIn xor fCV
@@ -12577,11 +12524,7 @@ begin
   {$endif} begin
     inherited Encrypt(BufIn,BufOut,Count); // CV := IV + set fIn,fOut,fCount
     for i := 1 to Count shr 4 do begin
-      {$ifdef USEAESNI64}
-      if Assigned(TAESContext(AES.Context).AesNi) then
-        TAESContext(AES.Context).AesNi(AES.Context,fCV,fCV) else
-      {$endif USEAESNI64}
-        AES.Encrypt(fCV,fCV);
+      TAESContext(AES.Context).DoBlock(AES.Context,fCV,fCV);
       crcblock(@fMAC.encrypted,pointer(fIn)); // fOut may be = fIn
       XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
       crcblock(@fMAC.plain,pointer(fOut));
@@ -12604,7 +12547,7 @@ begin
     exit;
   fMAC := fMACKey; // reuse the same key until next MACSetNonce()
   {$ifdef USEAESNI32}
-  if Assigned(TAESContext(AES.Context).AesNi) and (Count and AESBlockMod=0) then
+  if Assigned(TAESContext(AES.Context).AesNi32) and (Count and AESBlockMod=0) then
   asm
     push   ebx
     push   esi
@@ -12617,7 +12560,7 @@ begin
     mov    edx,esi
     call   crcblock
     lea    eax,[ebx].TAESOFBCRC.AES
-    call   dword ptr [eax].TAESContext.AesNi // AES.Encrypt(fCV,fCV)
+    call   dword ptr [eax].TAESContext.AesNi32 // AES.Encrypt(fCV,fCV)
     movdqu xmm0,dqword ptr [esi]
     pxor   xmm0,xmm7
     movdqu dqword ptr [edi],xmm0  // fOut := fIn xor fCV
@@ -12635,11 +12578,7 @@ begin
   {$endif} begin
     inherited Encrypt(BufIn,BufOut,Count); // CV := IV + set fIn,fOut,fCount
     for i := 1 to Count shr 4 do begin
-      {$ifdef USEAESNI64}
-      if Assigned(TAESContext(AES.Context).AesNi) then
-        TAESContext(AES.Context).AesNi(AES.Context,fCV,fCV) else
-      {$endif USEAESNI64}
-        AES.Encrypt(fCV,fCV);
+      TAESContext(AES.Context).DoBlock(AES.Context,fCV,fCV);
       crcblock(@fMAC.plain,pointer(fIn)); // fOut may be = fIn
       XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
       crcblock(@fMAC.encrypted,pointer(fOut));
@@ -12660,18 +12599,11 @@ end;
 
 {$ifdef USEAESNI64}
 procedure AesNiEncryptOFB_128(self: TAESOFB; source, dest: pointer; blockcount: PtrUInt);
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
+{$ifdef FPC}nostackframe; assembler; asm{$else}
 asm // rcx=TAESOFB,rdx=source,r8=dest,r9=blockcount Linux:rdi,rsi,rdx,rcx
     .noframe
 {$endif}
-    {$ifndef win64}
-    mov    r9,rcx
-    mov    r8,rdx
-    mov    rdx,rsi
-    mov    rcx,rdi
-    {$endif}
+    {$ifdef win64}
     test   r9,r9
     jz     @z
     movdqu xmm7,dqword ptr [rcx].TAESOFB.fIV  // xmm7 = fCV
@@ -12687,7 +12619,7 @@ asm // rcx=TAESOFB,rdx=source,r8=dest,r9=blockcount Linux:rdi,rsi,rdx,rcx
     movdqu xmm9,[rcx+16*8]
     movdqu xmm10,[rcx+16*9]
     movdqu xmm11,[rcx+16*10]
-@s: movdqu xmm15,dqword ptr [rdx]
+    @s: movdqu xmm15,dqword ptr [rdx]
     pxor xmm7,xmm0
     aesenc xmm7,xmm1
     aesenc xmm7,xmm2
@@ -12705,6 +12637,41 @@ asm // rcx=TAESOFB,rdx=source,r8=dest,r9=blockcount Linux:rdi,rsi,rdx,rcx
     add    r8,16
     dec    r9
     jnz    @s
+    {$else}
+    test   rcx,rcx
+    jz     @z
+    movdqu xmm7,dqword ptr [rdi].TAESOFB.fIV  // xmm7 = fCV
+    lea    rdi,[rdi].TAESOFB.AES
+    movdqu xmm0,[rdi+16*0]
+    movdqu xmm1,[rdi+16*1]
+    movdqu xmm2,[rdi+16*2]
+    movdqu xmm3,[rdi+16*3]
+    movdqu xmm4,[rdi+16*4]
+    movdqu xmm5,[rdi+16*5]
+    movdqu xmm6,[rdi+16*6]
+    movdqu xmm8,[rdi+16*7]
+    movdqu xmm9,[rdi+16*8]
+    movdqu xmm10,[rdi+16*9]
+    movdqu xmm11,[rdi+16*10]
+    @s: movdqu xmm15,dqword ptr [rsi]
+    pxor xmm7,xmm0
+    aesenc xmm7,xmm1
+    aesenc xmm7,xmm2
+    aesenc xmm7,xmm3
+    aesenc xmm7,xmm4
+    aesenc xmm7,xmm5
+    aesenc xmm7,xmm6
+    aesenc xmm7,xmm8
+    aesenc xmm7,xmm9
+    aesenc xmm7,xmm10
+    aesenclast xmm7,xmm11         // AES.Encrypt(fCV,fCV)
+    pxor   xmm15,xmm7
+    movdqu dqword ptr [rdx],xmm15  // fOut := fIn xor fCV
+    add    rsi,16
+    add    rdx,16
+    dec    rcx
+    jnz    @s
+    {$endif}
 @z:
 end;
 {$endif USEAESNI64}
@@ -12719,11 +12686,11 @@ var i: integer;
 begin
   {$ifdef USEAESNI64}
   with TAESContext(AES.Context) do
-  if (Count and AESBlockMod=0) and Assigned(AesNi) and (KeyBits=128) then
+  if (Count and AESBlockMod=0) and (cfAESNI in CpuFeatures) and (KeyBits=128) then
     AesNiEncryptOFB_128(self,BufIn,BufOut,Count shr 4) else
   {$endif USEAESNI64}
   {$ifdef USEAESNI32}
-  if Assigned(TAESContext(AES.Context).AesNi) then
+  if Assigned(TAESContext(AES.Context).AesNi32) then
   asm
     push   esi
     push   edi
@@ -12736,7 +12703,7 @@ begin
     push   ecx
     shr    ecx,4
     jz     @z
-@s: call   dword ptr [eax].TAESContext.AesNi // AES.Encrypt(fCV,fCV)
+@s: call   dword ptr [eax].TAESContext.AesNi32 // AES.Encrypt(fCV,fCV)
     movdqu xmm0,dqword ptr [esi]
     pxor   xmm0,xmm7
     movdqu dqword ptr [edi],xmm0  // fOut := fIn xor fCV
@@ -12754,11 +12721,7 @@ begin
   {$endif} begin
     inherited; // CV := IV + set fIn,fOut,fCount
     for i := 1 to Count shr 4 do begin
-      {$ifdef USEAESNI64}
-      if Assigned(TAESContext(AES.Context).AesNi) then
-        TAESContext(AES.Context).AesNi(AES.Context,fCV,fCV) else
-      {$endif USEAESNI64}
-        AES.Encrypt(fCV,fCV);
+      TAESContext(AES.Context).DoBlock(AES.Context,fCV,fCV);
       XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
       inc(fIn);
       inc(fOut);
@@ -12783,11 +12746,7 @@ var i,j: integer;
 begin
   inherited; // CV := IV + set fIn,fOut,fCount
   for i := 1 to Count shr 4 do begin
-    {$ifdef USEAESNI64}
-    if Assigned(TAESContext(AES.Context).AesNi) then
-      TAESContext(AES.Context).AesNi(AES.Context,fCV,tmp) else
-    {$endif USEAESNI64}
-      AES.Encrypt(fCV,tmp);
+    TAESContext(AES.Context).DoBlock(AES.Context,fCV,tmp);
     inc(fCV[7]); // counter is in the lower 64 bits, nonce in the upper 64 bits
     if fCV[7]=0 then begin // manual big-endian increment
       j := 6;
@@ -12804,11 +12763,7 @@ begin
   end;
   Count := Count and AESBlockMod;
   if Count<>0 then begin
-    {$ifdef USEAESNI64}
-    if Assigned(TAESContext(AES.Context).AesNi) then
-      TAESContext(AES.Context).AesNi(AES.Context,fCV,tmp) else
-    {$endif USEAESNI64}
-      AES.Encrypt(fCV,tmp);
+    TAESContext(AES.Context).DoBlock(AES.Context,fCV,tmp);
     XorMemory(pointer(fOut),pointer(fIn),@tmp,Count);
   end;
 end;
@@ -13192,11 +13147,7 @@ begin
   if fBytesSinceSeed>fSeedAfterBytes then
     Seed;
   EnterCriticalSection(fLock);
-  {$ifdef USEAESNI64}
-   if Assigned(TAESContext(fAES.Context).AesNi) then
-    TAESContext(fAES.Context).AesNi(fAES.Context,fCTR.b,Block) else
-  {$endif USEAESNI64}
-    fAES.Encrypt(fCTR.b,Block);
+  TAESContext(fAES.Context).DoBlock(fAES.Context,fCTR.b,Block);
   IncrementCTR;
   inc(fBytesSinceSeed,SizeOf(Block));
   inc(fTotalBytes,SizeOf(Block));
@@ -13219,11 +13170,7 @@ begin
     Seed;
   EnterCriticalSection(fLock);
   for i := 1 to Len shr 4 do begin
-    {$ifdef USEAESNI64}
-    if Assigned(TAESContext(fAES.Context).AesNi) then
-      TAESContext(fAES.Context).AesNi(fAES.Context,fCTR.b,buf^) else
-    {$endif USEAESNI64}
-      fAES.Encrypt(fCTR.b,buf^);
+    TAESContext(fAES.Context).DoBlock(fAES.Context,fCTR.b,buf^);
     IncrementCTR;
     inc(buf);
   end;
@@ -13231,11 +13178,7 @@ begin
   inc(fTotalBytes,Len);
   Len := Len and AESBlockMod;
   if Len>0 then begin
-    {$ifdef USEAESNI64}
-    if Assigned(TAESContext(fAES.Context).AesNi) then
-      TAESContext(fAES.Context).AesNi(fAES.Context,fCTR.b,rnd) else
-    {$endif USEAESNI64}
-      fAES.Encrypt(fCTR.b,rnd);
+    TAESContext(fAES.Context).DoBlock(fAES.Context,fCTR.b,rnd);
     IncrementCTR;
     MoveFast(rnd,buf^,Len);
   end;
@@ -14519,10 +14462,18 @@ end;
 function crc32_iscsi_01(buf: PAnsiChar; len: PtrUInt; crc: cardinal): cardinal; {$ifdef FPC}cdecl;{$endif} external;
 
 function crc32c_sse42_aesni(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
-{$ifdef MSWINDOWS} {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // rcx=crc, rdx=buf, r8=len
+{$ifdef FPC}nostackframe; assembler; asm{$else}
+asm // rcx=crc, rdx=buf, r8=len (linux: rdi, rsi, rdx)
+        .noframe
+{$endif}{$ifdef win64}
         mov     rax, rcx
         mov     rcx, r8
+        {$else}
+        mov     rax, rdi
+        mov     r8, rdx
+        mov     rcx, rdx
+        mov     rdx, rsi
+        {$endif}
         not     eax
         test    rdx, rdx
         jz      @0
@@ -14532,9 +14483,8 @@ asm // rcx=crc, rdx=buf, r8=len
         ja      @intel // only call Intel code if worth it
         shr     r8, 3
         jz      @2
-        // alignment non needed for small blocks < 64 bytes
 @1:     {$ifdef FPC}
-        crc32 rax, qword [rdx] // hash 8 bytes per opcode
+        crc32   rax, qword [rdx] // hash 8 bytes per opcode
         {$else}
         db $F2,$48,$0F,$38,$F1,$02 // circumvent Delphi inline asm compiler bug
         {$endif}
@@ -14558,18 +14508,18 @@ asm // rcx=crc, rdx=buf, r8=len
         crc32   eax, byte ptr[rdx + 2]
 @0:     not     eax
         ret
-@intel: mov     rcx, rdx
+@intel: {$ifdef win64}
+        mov     rcx, rdx
         mov     rdx, r8
         mov     r8, rax
+        {$else}
+        mov     rdi, rdx
+        mov     rsi, r8
+        mov     rdx, rax
+        {$endif}
         call    crc32_iscsi_01
         not     eax
 @none:
-{$else}
-begin
-  if buf=nil then
-    result := crc else
-    result := not crc32_iscsi_01(buf,len,not crc);
-{$endif}
 end;
 
 {$endif CRC32C_X64}

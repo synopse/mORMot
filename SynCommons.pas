@@ -64609,13 +64609,13 @@ begin
   PIntegerArray(@CpuFeatures)^[2] := regs.ebx;
   PIntegerArray(@CpuFeatures)^[3] := regs.ecx;
   PByte(@PIntegerArray(@CpuFeatures)^[4])^ := regs.edx;
-//  assert(SizeOf(CpuFeatures)=4*4+1);
   {$ifdef Darwin}
   {$ifdef CPU64}
   // SSE42 asm does not (yet) work on Darwin x64 (as reported by alf)
   Exclude(CpuFeatures, cfSSE42);
   {$endif}
   {$endif}
+  //Exclude(CpuFeatures, cfAESNI);
 end;
 {$endif CPUINTEL}
 
@@ -64739,12 +64739,13 @@ begin
     crcblock := @crcblockSSE42;
     strspn := @strspnSSE42;
     strcspn := @strcspnSSE42;
-    {$ifdef PUREPASCAL}
+    {$ifdef CPU64}
     {$ifdef FPC} // done in InitRedirectCode for Delphi
     StrLen := @StrLenSSE42;
     StrComp := @StrCompSSE42;
     {$endif}
-    {$else}
+    {$endif}
+    {$ifndef PUREPASCAL}
     StrComp := @StrCompSSE42;
     DYNARRAY_SORTFIRSTFIELD[false,djRawUTF8] := @SortDynArrayAnsiStringSSE42;
     DYNARRAY_SORTFIRSTFIELD[false,djWinAnsi] := @SortDynArrayAnsiStringSSE42;
