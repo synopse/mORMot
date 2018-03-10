@@ -144,6 +144,7 @@ unit SynDBOracle;
 }
 
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$hints off} {$NOTES OFF}// prevent 100500 hints about local const is not used
 
 interface
 
@@ -516,7 +517,7 @@ implementation
 
 function TOracleDate.ToDateTime: TDateTime;
 begin
-  if (PInteger(@self)^=0) and (PInteger(PtrInt(@self)+3)^=0) then
+  if (PInteger(@self)^=0) and (PInteger(PByte(@self)+3)^=0) then
     // Cent=Year=Month=Day=Hour=Main=Sec=0 -> returns 0
     result := 0 else begin
     if Cent<=100 then // avoid TDateTime values < 0 (generates wrong DecodeTime)
@@ -530,7 +531,7 @@ end;
 procedure TOracleDate.ToIso8601(var aIso8601: RawByteString);
 var tmp: array[0..23] of AnsiChar;
 begin
-  if (PInteger(@self)^=0) and (PInteger(PtrInt(@self)+3)^=0) then
+  if (PInteger(@self)^=0) and (PInteger(PByte(@self)+3)^=0) then
     // Cent=Year=Month=Day=Hour=Main=Sec=0 -> stored as ""
     aIso8601 := '' else begin
     DateToIso8601PChar(tmp,true,(Cent-100)*100+Year-100,Month,Day);
@@ -546,7 +547,7 @@ function TOracleDate.ToIso8601(Dest: PUTF8Char): integer;
 var Y: cardinal;
 begin
   Dest^ := '"';
-  if (PInteger(@self)^=0) and (PInteger(PtrInt(@self)+3)^=0) then
+  if (PInteger(@self)^=0) and (PInteger(PByte(@self)+3)^=0) then
     // Cent=Year=Month=Day=Hour=Main=Sec=0 -> stored as ""
     result := 2 else begin
     Y := (Cent-100)*100+Year-100;
@@ -566,7 +567,7 @@ end;
 procedure TOracleDate.From(const aValue: TDateTime);
 var Y,M,D, HH,MM,SS,MS: word;
 begin
-  PInteger(PtrInt(@self)+3)^ := 0; // set Day=Hour=Min=Sec to 0
+  PInteger(PByte(@self)+3)^ := 0; // set Day=Hour=Min=Sec to 0
   if aValue<=0 then begin
     PInteger(@self)^ := 0;
     exit; // supplied TDateTime value = 0 -> store as null date
@@ -595,7 +596,7 @@ var Value: QWord;
     Y: cardinal;
     NoTime: boolean;
 begin
-  PInteger(PtrInt(@self)+3)^ := 0; // set Day=Hour=Min=Sec to 0
+  PInteger(PByte(@self)+3)^ := 0; // set Day=Hour=Min=Sec to 0
   Value := Iso8601ToTimeLogPUTF8Char(aIso8601,Length,@NoTime);
   if Value=0 then begin
     PInteger(@self)^ := 0;
@@ -1376,7 +1377,7 @@ type
     SessionEnd: function(svchp: POCISvcCtx; errhp: POCIError;
       usrhp: POCISession; mode: ub4): sword; cdecl;
     ErrorGet: function(hndlp: Pointer; recordno: ub4; sqlstate: text;
-      var errcodep: sb4; bufp: text; bufsiz: ub4; atype: ub4): sword; cdecl;
+      out errcodep: sb4; bufp: text; bufsiz: ub4; atype: ub4): sword; cdecl;
     StmtPrepare: function(stmtp: POCIStmt; errhp: POCIError; stmt: text;
       stmt_len: ub4; language:ub4; mode: ub4): sword; cdecl;
     StmtExecute: function(svchp: POCISvcCtx; stmtp: POCIStmt;
@@ -1396,7 +1397,7 @@ type
       flags: ub4): sword; cdecl;
     TransCommit: function(svchp: POCISvcCtx; errhp: POCIError;
       flags: ub4) :sword; cdecl;
-    DescriptorAlloc: function(parenth: POCIEnv; var descpp: pointer;
+    DescriptorAlloc: function(parenth: POCIEnv; out descpp: pointer;
       htype: ub4; xtramem_sz: integer; usrmempp: Pointer): sword; cdecl;
     DescriptorFree: function(descp: Pointer; htype: ub4): sword; cdecl;
     DateTimeConstruct: function(hndl: POCIEnv; err: POCIError;
@@ -1412,7 +1413,7 @@ type
     LobGetLength: function(svchp: POCISvcCtx; errhp: POCIError;
       locp: POCILobLocator; var lenp: ub4): sword; cdecl;
     LobGetChunkSize: function(svchp: POCISvcCtx; errhp: POCIError;
-      locp: POCILobLocator; var chunk_size: ub4): sword; cdecl;
+      locp: POCILobLocator; out chunk_size: ub4): sword; cdecl;
     LobOpen: function(svchp: POCISvcCtx; errhp: POCIError;
       locp: POCILobLocator; mode: ub1): sword; cdecl;
     LobRead: function(svchp: POCISvcCtx; errhp: POCIError;
@@ -1433,7 +1434,7 @@ type
       tdo: POCIType; table: dvoid; duration: OCIDuration; value: boolean; var instance: dvoid): sword; cdecl;
     ObjectFree: function(env: POCIEnv; errhp: POCIError; instance: dvoid; flag: ub2): sword; cdecl;
     NumberFromInt: function(errhp: POCIError; inum: dvoid; inum_length: uword; inum_s_flag: uword;
-      var number: OCINumber): sword; cdecl;
+      out number: OCINumber): sword; cdecl;
     StringAssignText : function(env: POCIEnv; errhp: POCIError; rhs: OraText; rhs_len: ub4;
       var lhs: POCIString): sword; cdecl;
     CollAppend: function(env: POCIEnv; errhp: POCIError; elem: dvoid; elemind: dvoid;
