@@ -4849,19 +4849,24 @@ type
   // - some custom verbs are available in addition to standard REST commands
   // - most of iana verbs are available
   // see http://www.iana.org/assignments/http-methods/http-methods.xhtml
-  // - for basic CRUD operations, we considered Create=mPOST, Read=mGET,
-  // Update=mPUT and Delete=mDELETE
-  TSQLURIMethod = (mNone, mGET, mPOST, mPUT, mDELETE, mHEAD,
-                   mBEGIN, mEND, mABORT, mLOCK, mUNLOCK, mSTATE,
-                   mOPTIONS, mPROPFIND, mPROPPATCH, mTRACE, mCOPY,
-                   mMKCOL, mMOVE, mPURGE, mREPORT, mMKACTIVITY,
-                   mMKCALENDAR,mCHECKOUT, mMERGE, mNOTIFY, mPATCH,
-                   mSEARCH, mCONNECT);
+  // - for basic CRUD operations, we consider Create=mPOST, Read=mGET,
+  // Update=mPUT and Delete=mDELETE - even if it is not fully RESTful
+  TSQLURIMethod = (
+    mNone, mGET, mPOST, mPUT, mDELETE, mHEAD, mBEGIN, mEND, mABORT, mLOCK, mUNLOCK,
+    mSTATE, mOPTIONS, mPROPFIND, mPROPPATCH, mTRACE, mCOPY, mMKCOL, mMOVE, mPURGE,
+    mREPORT, mMKACTIVITY, mMKCALENDAR,mCHECKOUT, mMERGE, mNOTIFY, mPATCH, mSEARCH,
+    mCONNECT);
   /// set of available HTTP methods transmitted between client and server
   TSQLURIMethods = set of TSQLURIMethod;
 
 /// convert a string HTTP verb into its TSQLURIMethod enumerate
 function StringToMethod(const method: RawUTF8): TSQLURIMethod;
+
+const
+  /// the options used by TSynJsonFileSettings.SaveIfNeeded
+  SETTINGS_WRITEOPTIONS: TTextWriterWriteObjectOptions =
+    [woHumanReadable, woStoreStoredFalse, woHumanReadableFullSetsAsStar,
+     woHumanReadableEnumSetAsComment, woInt64AsHex];
 
 {$ifdef MSWINDOWS}
 {$ifdef ISDELPHIXE} // fix Delphi XE imcompatilibility
@@ -60251,9 +60256,7 @@ var
 begin
   if (self = nil) or (fFileName = '') then
     exit;
-  saved := ObjectToJSON(Self, [woHumanReadable, woStoreStoredFalse,
-    woHumanReadableFullSetsAsStar, woHumanReadableEnumSetAsComment,
-    woInt64AsHex]);
+  saved := ObjectToJSON(self, SETTINGS_WRITEOPTIONS);
   if saved = fInitialJsonContent then
     exit;
   FileFromString(saved, fFileName);
