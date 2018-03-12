@@ -705,6 +705,7 @@ var SQLToBeLogged: RawUTF8;
     Timer: TPrecisionTimer;
     DB: TSQLDataBase;
 begin
+  fCurrentRow := 0; // mark cursor on the first row
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
   if fBindShouldStoreValue then begin
     SQLToBeLogged := SQLWithInlinedParams;
