@@ -163,8 +163,9 @@ type
 
 
 /// use this procedure to change the password for an existing SQLite3 database file
-// - use this procedure instead of the "classic" sqlite3.rekey() API call
-// - conversion is done in-place, therefore this procedure can handle very big files
+// - convenient and faster alternative to the sqlite3.rekey() API call
+// - conversion is done in-place at file level, with no SQL nor BTree pages
+// involved, therefore it can process very big files with best possible speed
 // - the OldPassWord must be correct, otherwise the resulting file will be corrupted
 // - any password can be '' to mark no encryption as input or output
 // - the password may be a JSON-serialized TSynSignerParams object, or will use
@@ -771,7 +772,8 @@ begin
   iv.c3 := page*3266489917;
   len := len shr AESBlockShift;
   if page=1 then // ensure header bytes 16..23 are stored unencrypted
-    if PInt64(data)^=SQLITE_FILE_HEADER128.lo then
+    if (PInt64(data)^=SQLITE_FILE_HEADER128.lo) and
+       (data[21]=#64) and (data[22]=#32) and (data[23]=#32) then
       if encrypt then begin
         plain := PInt64(data+16)^;
         aes^.DoBlocksOFB(iv.b,data+16,data+16,len-1);
@@ -780,9 +782,11 @@ begin
       end else begin
         PInt64(data+16)^ := PInt64(data+8)^;
         aes^.DoBlocksOFB(iv.b,data+16,data+16,len-1);
-        PHash128(data)^ := SQLITE_FILE_HEADER128.b; // see IsSQLite3FileEncrypted
+        if (data[21]=#64) and (data[22]=#32) and (data[23]=#32) then
+          PHash128(data)^ := SQLITE_FILE_HEADER128.b else
+          FillZero(PHash128(data)^); // report incorrect password 
       end else
-      FillCharFast(data^,len,0) else // ensure incorrect file format is detected
+      FillZero(PHash128(data)^) else 
     aes^.DoBlocksOFB(iv.b,data,data,len);
 end;
 
@@ -810,8 +814,10 @@ end;
 function ChangeSQLEncryptTablePassWord(const FileName: TFileName;
   const OldPassWord, NewPassword: RawUTF8): boolean;
 var F: THandle;
-    page,pagesize,R: integer;
-    buf: array[word] of byte; // temp buffer for read/write (64KB is enough)
+    bufsize,page,pagesize,pagecount,n,p,read: integer;
+    head: THash256Rec;
+    buf: PAnsiChar; 
+    temp: RawByteString;
     size: Int64Rec;
     posi: Int64;
     old, new: TAES;
@@ -827,28 +833,45 @@ begin
     if NewPassword<>'' then
       CodecGenerateKey(new,pointer(NewPassword),length(NewPassWord));
     size.Lo := GetFileSize(F,@size.Hi);
-    R := FileRead(F,buf,32);
-    if R<=0 then
+    read := FileRead(F,head,SizeOf(head));
+    if read<>SizeOf(head) then
       exit;
-    pagesize := integer(buf[16]) shl 8+buf[17];
-    if (pagesize<1024) or (pagesize and AESBlockMod<>0) or (pagesize>SizeOf(buf)) or
-       (PInt64(@buf)^<>SQLITE_FILE_HEADER128.Lo) or
-       ((PHash128Rec(@buf)^.Hi=SQLITE_FILE_HEADER128.Hi)<>(OldPassWord='')) or
-       (PInt64(@size)^ mod pagesize<>0) then
+    if PInt64(@size)^>4 shl 20 then // use up to 4MB of R/W buffer
+      bufsize := 4 shl 20 else
+      bufsize := size.Lo;
+    pagesize := integer(head.b[16]) shl 8+head.b[17];
+    if (pagesize<1024) or (pagesize and AESBlockMod<>0) or (pagesize>bufsize) or
+       (PInt64(@size)^ mod pagesize<>0) or(head.d0<>SQLITE_FILE_HEADER128.Lo) or
+       ((head.d1=SQLITE_FILE_HEADER128.Hi)<>(OldPassWord='')) then
       exit;
     FileSeek64(F,0,soFromBeginning);
+    SetLength(temp,bufsize);
     posi := 0;
-    for page := 1 to PInt64(@size)^ div pagesize do begin
-      R := FileRead(F,buf,pagesize);
-      if R<>pagesize then
+    pagecount := PInt64(@size)^ div pagesize;
+    page := 1;
+    while page<=pagecount do begin
+      n := bufsize div pagesize;
+      read := pagecount-page+1;
+      if read < n then
+        n := read;
+      buf := pointer(temp);
+      read := FileRead(F,buf^,pagesize*n);
+      if read<>pagesize*n then
         exit; // stop on any read error
-      if OldPassword<>'' then
-        CodeEncryptDecrypt(page,@buf,pagesize,@old,false);
-      if NewPassword<>'' then
-        CodeEncryptDecrypt(page,@buf,pagesize,@new,true);
+      for p := 0 to n-1 do begin
+        if OldPassword<>'' then begin
+          CodeEncryptDecrypt(page+p,buf,pagesize,@old,false);
+          if (p=0) and (page=1) and (PInteger(buf)^=0) then
+            exit; // OldPassword is obviously incorrect
+        end;
+        if NewPassword<>'' then
+          CodeEncryptDecrypt(page+p,buf,pagesize,@new,true);
+        inc(buf,pagesize);
+      end;
       FileSeek64(F,posi,soFromBeginning);
-      FileWrite(F,buf,pagesize); // update in-place
-      inc(posi,pagesize);
+      FileWrite(F,pointer(temp)^,pagesize*n); // update in-place
+      inc(posi,pagesize*n);
+      inc(page,n);
     end;
     result := true;
   finally
