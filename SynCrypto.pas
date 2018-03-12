@@ -2923,6 +2923,36 @@ begin
 end;
 
 
+{$ifdef CPU64}
+procedure XorBlock16(A,B: PInt64Array);
+begin
+  A[0] := A[0] xor B[0];
+  A[1] := A[1] xor B[1];
+end;
+
+procedure XorBlock16(A,B,C: PInt64Array);
+begin
+  B[0] := A[0] xor C[0];
+  B[1] := A[1] xor C[1];
+end;
+{$else}
+procedure XorBlock16(A,B: PCardinalArray);
+begin
+  A[0] := A[0] xor B[0];
+  A[1] := A[1] xor B[1];
+  A[2] := A[2] xor B[2];
+  A[3] := A[3] xor B[3];
+end;
+
+procedure XorBlock16(A,B,C: PCardinalArray);
+begin
+  B[0] := A[0] xor C[0];
+  B[1] := A[1] xor C[1];
+  B[2] := A[2] xor C[2];
+  B[3] := A[3] xor C[3];
+end;
+{$endif}
+
 {$ifdef USEPADLOCK}
 
 const
@@ -11785,36 +11815,6 @@ end;
 
 
 { TAESAbstract }
-
-{$ifdef CPU64}
-procedure XorBlock16(A,B: PInt64Array);
-begin
-  A[0] := A[0] xor B[0];
-  A[1] := A[1] xor B[1];
-end;
-
-procedure XorBlock16(A,B,C: PInt64Array);
-begin
-  B[0] := A[0] xor C[0];
-  B[1] := A[1] xor C[1];
-end;
-{$else}
-procedure XorBlock16(A,B: PCardinalArray);
-begin
-  A[0] := A[0] xor B[0];
-  A[1] := A[1] xor B[1];
-  A[2] := A[2] xor B[2];
-  A[3] := A[3] xor B[3];
-end;
-
-procedure XorBlock16(A,B,C: PCardinalArray);
-begin
-  B[0] := A[0] xor C[0];
-  B[1] := A[1] xor C[1];
-  B[2] := A[2] xor C[2];
-  B[3] := A[3] xor C[3];
-end;
-{$endif}
 
 const
   sAESException = 'AES engine initialization failure';
