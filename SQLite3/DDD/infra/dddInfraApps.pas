@@ -908,7 +908,7 @@ var
             else
               exit;
             end;
-            FillZero(RawByteString(plain));
+            FillZero(plain);
             if new <> pass then begin
               RawUTF8ToVariant(new, v^); // replace
               modified := true;

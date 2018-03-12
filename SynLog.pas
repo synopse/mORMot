@@ -4088,7 +4088,7 @@ begin
     {$endif}
     {$ifdef LINUX}
     {$I-}
-    writeln(Msg);
+    write(Msg, '  ');
     ioresult;
     {$I+}
     {$endif}
