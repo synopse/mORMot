@@ -4114,7 +4114,7 @@ end;
 
 procedure TAES.Encrypt(var B: TAESBlock);
 begin
-  TAESContext(Context).DoBlock(TAESContext(Context),B,B);
+  TAESContext(Context).DoBlock(Context,B,B);
 end;
 
 {$ifdef USEAESNI}
@@ -4602,9 +4602,9 @@ procedure aesencryptpas(const ctxt: TAESContext; bi, bo: PWA4);
  -> code has been refactored and tuned especially for FPC x86_64 target }
 var
   t: PCardinalArray;    // faster on a PIC system
+{$ifdef AES_ROLLED}
   s0,s1,s2,s3: PtrUInt; // TAESBlock s# as separate variables
   t0,t1,t2: cardinal;   // TAESBlock t# as separate variables
-{$ifdef AES_ROLLED}
   pk: PWA4;
   i: integer;
 begin
@@ -4642,7 +4642,7 @@ begin
             (SBox[s1 shr 16 and $ff]) shl 16 xor
             (SBox[s2 shr 24])         shl 24    ) xor pk[3];
 {$else}
-  t3: cardinal;
+  s0,s1,s2,s3,t0,t1,t2,t3: cardinal; // TAESBlock s#/t# as separate variables
   pK: PAWk;
 begin
   pK := @ctxt.RK;
@@ -4926,7 +4926,7 @@ end;
 
 procedure TAES.Encrypt(const BI: TAESBlock; var BO: TAESBlock);
 begin
-  TAESContext(Context).DoBlock(TAESContext(Context),BI,BO);
+  TAESContext(Context).DoBlock(Context,BI,BO);
 end;
 
 {$ifdef USEAESNI} // should be put outside the main method for FPC :(
@@ -5374,13 +5374,13 @@ end;
 
 procedure aesdecryptpas(const ctxt: TAESContext; bi, bo: PWA4);
 var
+  {$ifdef AES_ROLLED}
   s0,s1,s2,s3: PtrUInt;  // TAESBlock s# as separate variables
   t0,t1,t2: cardinal;    // TAESBlock t# as separate variables
-  {$ifdef AES_ROLLED}
   i: integer;
   pk: PWA4;
   {$else}
-  t3: cardinal;
+  s0,s1,s2,s3,t0,t1,t2,t3: cardinal; // TAESBlock s#/t# as separate variables
   pk: PAWk;  // pointer to loop rount key
   {$endif}
   t: PCardinalArray;    // faster on a PIC system
@@ -5926,12 +5926,12 @@ end;
 
 procedure TAES.Decrypt(var B: TAESBlock);
 begin
-  TAESContext(Context).DoBlock(TAESContext(Context),B,B);
+  TAESContext(Context).DoBlock(Context,B,B);
 end;
 
 procedure TAES.Decrypt(const BI: TAESBlock; var BO: TAESBlock);
 begin
-  TAESContext(Context).DoBlock(TAESContext(Context),BI,BO);
+  TAESContext(Context).DoBlock(Context,BI,BO);
 end;
 
 procedure TAES.DoBlocks(pIn, pOut: PAESBlock; out oIn, oOut: PAESBLock;

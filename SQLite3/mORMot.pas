@@ -4599,6 +4599,8 @@ type
     fInitialJsonContent: RawUTF8;
     fFileName: TFileName;
   public
+    /// read existing settings from a JSON content
+    function LoadFromJson(var aJson: RawUTF8): boolean;
     /// read existing settings from a JSON file
     function LoadFromFile(const aFileName: TFileName): boolean; virtual;
     /// persist the settings as a JSON file, named from LoadFromFile() parameter
@@ -60231,11 +60233,16 @@ end;
 
 { TSynJsonFileSettings }
 
+function TSynJsonFileSettings.LoadFromJson(var aJson: RawUTF8): boolean;
+begin
+  result := JSONSettingsToObject(aJson, self);
+end;
+
 function TSynJsonFileSettings.LoadFromFile(const aFileName: TFileName): boolean;
 begin
   fFileName := aFileName;
   fInitialJsonContent := StringFromFile(aFileName);
-  result := JSONSettingsToObject(fInitialJsonContent, self);
+  result := LoadFromJson(fInitialJsonContent);
 end;
 
 procedure TSynJsonFileSettings.SaveIfNeeded;
