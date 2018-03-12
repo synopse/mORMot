@@ -340,27 +340,27 @@ function Lizard_decompress_safe_usingDict(src, dst: pointer; srcSize, maxDstSize
 {$ifdef CPUX64}
   {$ifdef FPC} // .o files don't work under Win64 for Delphi :(
     {$ifdef MSWINDOWS}
-    {$L fpc-win64\lizard_compress.o}
-    {$L fpc-win64\lizard_decompress.o}
-    {$L fpc-win64\lizard_frame.o}
-    {$L fpc-win64\huf_compress.o}
-    {$L fpc-win64\huf_decompress.o}
-    {$L fpc-win64\fse_compress.o}
-    {$L fpc-win64\fse_decompress.o}
-    {$L fpc-win64\entropy_common.o}
-    {$L fpc-win64\xxhash.o}
-    {$linklib fpc-win64\libgcc.a}
-    {$linklib fpc-win64\libmsvcrt.a}
+    {$L static\x86_64-win64\lizard_compress.o}
+    {$L static\x86_64-win64\lizard_decompress.o}
+    {$L static\x86_64-win64\lizard_frame.o}
+    {$L static\x86_64-win64\huf_compress.o}
+    {$L static\x86_64-win64\huf_decompress.o}
+    {$L static\x86_64-win64\fse_compress.o}
+    {$L static\x86_64-win64\fse_decompress.o}
+    {$L static\x86_64-win64\entropy_common.o}
+    {$L static\x86_64-win64\xxhash.o}
+    {$linklib static\x86_64-win64\libgcc.a}
+    {$linklib static\x86_64-win64\libmsvcrt.a}
     {$else MSWINDOWS}
-    {$L fpc-linux64/lizard_compress.o}
-    {$L fpc-linux64/lizard_decompress.o}
-    {$L fpc-linux64/lizard_frame.o}
-    {$L fpc-linux64/huf_compress.o}
-    {$L fpc-linux64/huf_decompress.o}
-    {$L fpc-linux64/fse_compress.o}
-    {$L fpc-linux64/fse_decompress.o}
-    {$L fpc-linux64/entropy_common.o}
-    {$L fpc-linux64/xxhash.o}
+    {$L static/x86_64-linux/lizard_compress.o}
+    {$L static/x86_64-linux/lizard_decompress.o}
+    {$L static/x86_64-linux/lizard_frame.o}
+    {$L static/x86_64-linux/huf_compress.o}
+    {$L static/x86_64-linux/huf_decompress.o}
+    {$L static/x86_64-linux/fse_compress.o}
+    {$L static/x86_64-linux/fse_decompress.o}
+    {$L static/x86_64-linux/entropy_common.o}
+    {$L static/x86_64-linux/xxhash.o}
     {$endif MSWINDOWS}
   {$endif FPC}
 {$endif CPUX64}
@@ -368,28 +368,28 @@ function Lizard_decompress_safe_usingDict(src, dst: pointer; srcSize, maxDstSize
 {$ifdef CPUX86}
   {$ifdef FPC}
     {$ifdef MSWINDOWS}
-    {$L fpc-win32\lizard_compress.o}
-    {$L fpc-win32\lizard_decompress.o}
-    {$L fpc-win32\lizard_frame.o}
-    {$L fpc-win32\huf_compress.o}
-    {$L fpc-win32\huf_decompress.o}
-    {$L fpc-win32\fse_compress.o}
-    {$L fpc-win32\fse_decompress.o}
-    {$L fpc-win32\entropy_common.o}
-    {$L fpc-win32\xxhash.o}
-    {$linklib fpc-win32\libgcc.a}
-    {$linklib fpc-win32\libmsvcrt.a}
+    {$L static\i386-win32\lizard_compress.o}
+    {$L static\i386-win32\lizard_decompress.o}
+    {$L static\i386-win32\lizard_frame.o}
+    {$L static\i386-win32\huf_compress.o}
+    {$L static\i386-win32\huf_decompress.o}
+    {$L static\i386-win32\fse_compress.o}
+    {$L static\i386-win32\fse_decompress.o}
+    {$L static\i386-win32\entropy_common.o}
+    {$L static\i386-win32\xxhash.o}
+    {$linklib static\i386-win32\libgcc.a}
+    {$linklib static\i386-win32\libmsvcrt.a}
     {$else MSWINDOWS}
-    {$L fpc-linux32/lizard_compress.o}
-    {$L fpc-linux32/lizard_decompress.o}
-    {$L fpc-linux32/lizard_frame.o}
-    {$L fpc-linux32/huf_compress.o}
-    {$L fpc-linux32/huf_decompress.o}
-    {$L fpc-linux32/fse_compress.o}
-    {$L fpc-linux32/fse_decompress.o}
-    {$L fpc-linux32/entropy_common.o}
-    {$L fpc-linux32/xxhash.o}
-    {$linklib fpc-linux32\libgcc.a}
+    {$L static/i386-linux/lizard_compress.o}
+    {$L static/i386-linux/lizard_decompress.o}
+    {$L static/i386-linux/lizard_frame.o}
+    {$L static/i386-linux/huf_compress.o}
+    {$L static/i386-linux/huf_decompress.o}
+    {$L static/i386-linux/fse_compress.o}
+    {$L static/i386-linux/fse_decompress.o}
+    {$L static/i386-linux/entropy_common.o}
+    {$L static/i386-linux/xxhash.o}
+    {$linklib static/i386-linux\libgcc.a}
     {$endif MSWINDOWS}
   {$endif FPC}
 {$endif CPUX86}

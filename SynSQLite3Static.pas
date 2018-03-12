@@ -56,12 +56,14 @@ unit SynSQLite3Static;
   sqlite3 := TSQLite3LibraryStatic.Create; is called at unit initialization.
 
   Will work on Windows 32-bit or 64-bit (with Delphi or FPC, with expected
-  .obj / .o) or Linux 32 bit (with FPC, with the corresponding .o)
-  under other platforms, this unit will just do nothing (but compile).
+  .obj / .o) or Linux 32-bit 64-bit on Intel and ARM (with FPC, with the
+  corresponding .o) under other platforms, this unit will just do nothing
+  (but compile).
 
   To compile our patched SQlite3.c version, available in this source folder:
   - Run c.bat to compile the sqlite3*.obj for Win32/Delphi
   - Run c-fpcmingw.bat to compile sqlite3.o for Win32/FPC
+  - Run c-fpcmingw64.bat to compile sqlite3.o and sqlite3-64.dll for Win64 (Delphi/FPC)
   - Run c-fpcgcclin.sh to compile sqlite3.o for Linux32/FPC
 
   Uses TSQLite3LibraryDynamic to access external library (e.g. sqlite3.dll/.so)
@@ -78,7 +80,8 @@ unit SynSQLite3Static;
   - updated SQLite3 engine to latest version 3.22.0
   - now all sqlite3_*() API calls are accessible via sqlite3.*()
   - our custom file encryption is now called via sqlite3.key() - i.e. official
-    SQLite Encryption Extension (SEE) sqlite3_key() API
+    SQLite Encryption Extension (SEE) sqlite3_key() API - and works for database
+    files of any size without touching the main sqlite.c amalgamation file
   - Memory-Mapped I/O support - see http://www.sqlite.org/mmap.html
   - under Win64, expects an external sqlite3-64.dll file to be available, which
     may be downloaded from https://synopse.info/files/SQLite3-64.7z
@@ -90,7 +93,7 @@ unit SynSQLite3Static;
 
 }
 
-{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER SQLITE3_FASTCALL
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 interface
 
@@ -251,53 +254,53 @@ extern int unixWrite(
 
   {$ifdef MSWINDOWS}
     {$ifdef CPU64}
-      {$L fpc-win64\sqlite3-64.o}
-      {$linklib fpc-win64\libkernel32.a}
-      {$linklib fpc-win64\libgcc.a}
-      {$linklib fpc-win64\libmsvcrt.a}
-      const LOGFUNCLINKNAME = 'log';
+      {$L static\x86_64-win64\sqlite3.o}
+      {$linklib static\x86_64-win64\libkernel32.a}
+      {$linklib static\x86_64-win64\libgcc.a}
+      {$linklib static\x86_64-win64\libmsvcrt.a}
+      const _PREFIX = '';
     {$else}
-      {$L fpc-win32\sqlite3.o}
-      {$linklib fpc-win32\libkernel32.a}
-      {$linklib fpc-win32\libgcc.a}
-      {$linklib fpc-win32\libmsvcrt.a}
-      const LOGFUNCLINKNAME = '_log';
+      {$L static\i386-win32\sqlite3.o}
+      {$linklib static\i386-win32\libkernel32.a}
+      {$linklib static\i386-win32\libgcc.a}
+      {$linklib static\i386-win32\libmsvcrt.a}
+      const _PREFIX = '_';
     {$endif CPU64}
   {$else}
     {$ifdef Darwin}
       {$ifdef CPU64}
-        {$linklib .\..\fpc-darwin64\libsqlite3.a}
+        {$linklib .\..\static\x86_64-darwin\libsqlite3.a}
       {$else}
-        {$linklib .\..\fpc-darwin32\libsqlite3.a}
+        {$linklib .\..\static\i386-darwin\libsqlite3.a}
       {$endif}
-      const LOGFUNCLINKNAME = 'log';
+      const _PREFIX = '';
     {$else Darwin}
       {$ifndef FPC_CROSSCOMPILING}
         {$linklib gcc.a}
       {$endif}
       {$ifdef CPUARM}
-        {$L fpc-linuxarm\sqlite3.o}
+        {$L static\arm-linux\sqlite3.o}
         {$ifdef FPC_CROSSCOMPILING}
-          {$linklib fpc-linuxarm\gcc.a}
+          {$linklib static\arm-linux\gcc.a}
           {$L libgcc_s.so.1}
         {$else}
           {$linklib gcc_s.so.1}
         {$endif}
-        const LOGFUNCLINKNAME = 'log';
+        const _PREFIX = '';
       {$endif}
       {$ifdef CPUINTEL}
         {$ifdef CPU64}
-          {$L fpc-linux64\sqlite3-64.o}
+          {$L static/x86_64-linux\sqlite3.o}
           {$ifdef FPC_CROSSCOMPILING}
-            {$linklib fpc-linux64\gcc.a}
+            {$linklib static/x86_64-linux\gcc.a}
           {$endif}
-          const LOGFUNCLINKNAME = 'log';
+          const _PREFIX = '';
         {$else}
-          {$L fpc-linux32\sqlite3.o}
+          {$L static/i386-linux\sqlite3.o}
           {$ifdef FPC_CROSSCOMPILING}
-            {$linklib fpc-linux32\gcc.a}
+            {$linklib static/i386-linux\gcc.a}
           {$endif}
-          const LOGFUNCLINKNAME = 'log';
+          const _PREFIX = '';
         {$endif CPU64}
       {$endif CPUINTEL}
     {$endif Darwin}

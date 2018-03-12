@@ -7440,9 +7440,9 @@ end;
 {$ifdef SHA512_X86} // optimized asm using SSE3 instructions for x86 32-bit
 {$ifdef FPC}
   {$ifdef MSWINDOWS}
-    {$L fpc-win32\sha512-x86.o}
+    {$L static\i386-win32\sha512-x86.o}
   {$else}
-    {$L fpc-linux32/sha512-x86.o}
+    {$L static/i386-linux/sha512-x86.o}
   {$endif}
 {$else}
   {$L sha512-x86.obj}
@@ -7476,7 +7476,7 @@ procedure sha512_compress(state: PQWord; block: PByteArray); cdecl; external;
   {$ifdef MSWINDOWS}
     {$L sha512-x64sse4.obj}
   {$else}
-    {$L fpc-linux64/sha512-x64sse4.o}
+    {$L static/x86_64-linux/sha512-x64sse4.o}
   {$endif}
 {$else}
   {$L sha512-x64sse4.obj}
@@ -14606,7 +14606,7 @@ end;
   {$ifdef MSWINDOWS}
     {$L crc32c64.obj}
   {$else}
-    {$L fpc-linux64/crc32c64.o}
+    {$L static/x86_64-linux/crc32c64.o}
   {$endif}
 {$else}
   {$L crc32c64.obj}

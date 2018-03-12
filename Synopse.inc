@@ -66,7 +66,6 @@
   - added DOPATCHTRTL conditional (not set by default, for compatibility)
 
   Version 1.18
-  - added SQLITE3_FASTCALL conditional (shared by SQLite3 related units)
   - added NEWRTTINOTUSED conditional (unset by default, for compatibility) - see
     https://synopse.info/forum/viewtopic.php?id=1394
   - enhanced FPC compatibility
@@ -165,20 +164,6 @@
   {$define UNDIRECTDYNARRAY}
 {$endif}
 
-{$define INCLUDE_FTS3}
-// define this if you want to include the FTS3/FTS4 feature into the library
-// - FTS3 is an SQLite module implementing full-text search
-// - will include also FTS4 extension module since 3.7.4
-// - see http://www.sqlite.org/fts3.html for documentation
-// - is defined by default, but can be unset by defining EXCLUDE_FTS3 conditional
-//   to save about 50 KB of code size (is it worth it nowdays?)
-// - should be defined for SynSQLite3, SynSQLite3Static and mORMotSQLite3 units,
-//   so a global condition in this Synopse.inc does make sense
-
-{$ifdef EXCLUDE_FTS3}
-  {$undef INCLUDE_FTS3}
-{$endif}
-
 { Free Pascal adaptation notes:
   - we use the Delphi compatibility mode
   - from system.pp use these constants (Win32/64 values listed):
@@ -237,21 +222,22 @@
   // -> could be disabled to force external .so/.dll linking
   {$ifdef MSWINDOWS}
   {$ifdef CPUX86}
-    {$define FPCSQLITE3STATIC} // use fpc-win32\sqlite3.o
+    {$define FPCSQLITE3STATIC} // use static\i386-win32\sqlite3.o
   {$else}
-    {$define FPCSQLITE3STATIC} // use fpc-win64\sqlite3.o
+    {$define FPCSQLITE3STATIC} // use static\x86_64-win64\sqlite3.o
   {$endif}
   {$endif}
   {$ifdef LINUX}
     {$ifdef CPUX86}
-      {$define FPCSQLITE3STATIC} // use fpc-linux32\sqlite3.o
+      {$define FPCSQLITE3STATIC} // use static/i386-linux\sqlite3.o
     {$endif}
     {$ifdef CPUX64}
-      {$define FPCSQLITE3STATIC} // use fpc-linux64\sqlite3.o
+      {$define FPCSQLITE3STATIC} // use static/x86_64-linux\sqlite3.o
     {$endif}
     {$ifdef CPUARM}
-      {$define FPCSQLITE3STATIC} // use fpc-linuxarm\sqlite3.o
+      {$define FPCSQLITE3STATIC} // use static/arm-linux\sqlite3.o
     {$endif}
+    // note: problems with current static/aarch64-linux\sqlite3.o
   {$endif}
 
   {$ifdef ANDROID}
@@ -559,27 +545,17 @@
   {$define EXTENDEDTOSTRING_USESTR} // FloatToText() much slower in x64 mode
 {$endif}
 
-// global conditional to use SQLite3 with fastcall calling convention
-// used by SynSQLite3, SynSQLite3Static, SynSQlite3RegEx and mORMotSQLite3 units
-{$ifdef CPU64}
-  // only one calling convention in the Win64 world
-  {$ifndef FPC}
-  {$define SQLITE3_FASTCALL}
+{$ifdef CPUINTEL}
+  {$ifdef CPUX86} // safest to reset x87 exceptions
+    {$ifndef PUREPASCAL}
+      {$ifndef DELPHI5OROLDER}
+        {$define RESETFPUEXCEPTION}
+      {$endif}
+    {$endif}
   {$endif}
 {$else}
-  {.$define SQLITE3_FASTCALL}
-  // undefined by default: BCC32 -pr fastcall (=Delphi resgister) is broken
-  // because of issues with BCC32 itself, or some obfuscated calls in source?
-  // -> allow to use external SQlite3 libraries in addition to static version
-{$endif}
-
-{$ifdef CPUX86} // safest to reset x87 exceptions
-{$ifndef PUREPASCAL}
-{$ifndef DELPHI5OROLDER}
-  {$define RESETFPUEXCEPTION}
-{$endif}
-{$endif}
-{$endif}
+  {$undef HASAESNI} // AES-NI is an Intel-specific feature
+{$endif CPUINTEL}
 
 {$ifdef FPC}
   {$ifndef FPCSQLITE3STATIC} // see above about this FPC-specific conditional
@@ -593,7 +569,7 @@
 {$endif}
 
 {$ifdef NOSQLITE3STATIC}
-  // our proprietary crypto expects a patched SQlite3.c statically linked
+  // our proprietary crypto expects a statically linked custom sqlite3.c 
   {$define NOSQLITE3ENCRYPT}
 {$endif}
 

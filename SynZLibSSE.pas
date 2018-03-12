@@ -170,27 +170,27 @@ end;
 {$ifdef FPC}
 
 {$ifdef WIN32}
-  {.$linklib fpc-win32\libkernel32.a}
-  {.$linklib fpc-win32\libgcc.a}
-  {$L fpc-win32\trees.o}
-  {$L fpc-win32\adler32.o}
-  {$L fpc-win32\crc32.o}
-  {$L fpc-win32\deflate.o}
-  {$L fpc-win32\zutil.o}
-  {$L fpc-win32\inffast.o}
-  {$L fpc-win32\inftrees.o}
-  {$L fpc-win32\inflate.o}
+  {.$linklib static\i386-win32\libkernel32.a}
+  {.$linklib static\i386-win32\libgcc.a}
+  {$L static\i386-win32\trees.o}
+  {$L static\i386-win32\adler32.o}
+  {$L static\i386-win32\crc32.o}
+  {$L static\i386-win32\deflate.o}
+  {$L static\i386-win32\zutil.o}
+  {$L static\i386-win32\inffast.o}
+  {$L static\i386-win32\inftrees.o}
+  {$L static\i386-win32\inflate.o}
 {$endif}
 
 {$ifdef WIN64}
-  {$L fpc-win64\sse\trees.o}
-  {$L fpc-win64\sse\adler32.o}
-  {$L fpc-win64\sse\crc32.o}
-  {$L fpc-win64\sse\deflate.o}
-  {$L fpc-win64\sse\zutil.o}
-  {$L fpc-win64\sse\inffast.o}
-  {$L fpc-win64\sse\inftrees.o}
-  {$L fpc-win64\sse\inflate.o}
+  {$L static\x86_64-win64\sse\trees.o}
+  {$L static\x86_64-win64\sse\adler32.o}
+  {$L static\x86_64-win64\sse\crc32.o}
+  {$L static\x86_64-win64\sse\deflate.o}
+  {$L static\x86_64-win64\sse\zutil.o}
+  {$L static\x86_64-win64\sse\inffast.o}
+  {$L static\x86_64-win64\sse\inftrees.o}
+  {$L static\x86_64-win64\sse\inflate.o}
 {$endif}
 
 {$endif FPC}

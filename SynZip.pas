@@ -161,7 +161,7 @@ unit SynZip;
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64
 
 {.$define USEZLIBSSE}
-// if defined (only FPC+Win64), will link fpc-win64\sse\*.o static libraries
+// if defined (only FPC+Win64), will link static\x86_64-win64sse\*.o static libraries
 // from https://github.com/cloudflare/zlib (warning: SSE3/SSE4.2 CPUs only)
 
 {.$define USECFZLIB} // https://github.com/cloudflare/zlib as external dll
@@ -4807,37 +4807,37 @@ end;
 
 {$ifdef FPC} // we supply our own static zlib files in coff format for Windows
   {$ifdef WIN32}
-    {$LINK fpc-win32\deflate.o}
-    {$LINK fpc-win32\trees.o}
-    {$LINK fpc-win32\zutil.o}
-    {$LINK fpc-win32\inffast.o}
-    {$LINK fpc-win32\inflate.o}
-    {$LINK fpc-win32\inftrees.o}
-    {$LINK fpc-win32\adler32.o}
-    {$LINK fpc-win32\crc32.o}
-    {$linklib fpc-win32\libmsvcrt.a}
+    {$LINK static\i386-win32\deflate.o}
+    {$LINK static\i386-win32\trees.o}
+    {$LINK static\i386-win32\zutil.o}
+    {$LINK static\i386-win32\inffast.o}
+    {$LINK static\i386-win32\inflate.o}
+    {$LINK static\i386-win32\inftrees.o}
+    {$LINK static\i386-win32\adler32.o}
+    {$LINK static\i386-win32\crc32.o}
+    {$linklib static\i386-win32\libmsvcrt.a}
   {$endif}
   {$ifdef WIN64}
     {$ifdef USEZLIBSSE}
-    {$L fpc-win64\sse\inffast.o}
-    {$L fpc-win64\sse\inftrees.o}
-    {$L fpc-win64\sse\inflate.o}
-    {$L fpc-win64\sse\deflate.o}
-    {$L fpc-win64\sse\trees.o}
-    {$L fpc-win64\sse\adler32.o}
-    {$L fpc-win64\sse\crc32.o}
-    {$L fpc-win64\sse\zutil.o}
+    {$L static\x86_64-win64\sse\inffast.o}
+    {$L static\x86_64-win64\sse\inftrees.o}
+    {$L static\x86_64-win64\sse\inflate.o}
+    {$L static\x86_64-win64\sse\deflate.o}
+    {$L static\x86_64-win64\sse\trees.o}
+    {$L static\x86_64-win64\sse\adler32.o}
+    {$L static\x86_64-win64\sse\crc32.o}
+    {$L static\x86_64-win64\sse\zutil.o}
     {$else USEZLIBSSE}
-    {$L fpc-win64\inffast.o}
-    {$L fpc-win64\inftrees.o}
-    {$L fpc-win64\inflate.o}
-    {$L fpc-win64\deflate.o}
-    {$L fpc-win64\trees.o}
-    {$L fpc-win64\adler32.o}
-    {$L fpc-win64\crc32.o}
-    {$L fpc-win64\zutil.o}
+    {$L static\x86_64-win64\inffast.o}
+    {$L static\x86_64-win64\inftrees.o}
+    {$L static\x86_64-win64\inflate.o}
+    {$L static\x86_64-win64\deflate.o}
+    {$L static\x86_64-win64\trees.o}
+    {$L static\x86_64-win64\adler32.o}
+    {$L static\x86_64-win64\crc32.o}
+    {$L static\x86_64-win64\zutil.o}
     {$endif USEZLIBSSE}
-    {$linklib fpc-win64\libmsvcrt.a}
+    {$linklib static\x86_64-win64\libmsvcrt.a}
   {$endif}
 
 function deflate(var strm: TZStream; flush: integer): integer; cdecl; external;

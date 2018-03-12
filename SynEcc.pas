@@ -1860,23 +1860,23 @@ end;
   {$ifdef FPC}
     {$ifdef MSWINDOWS}
       {$ifdef ECC_O1}
-        {$L fpc-win32\eccwin32O1.o}
+        {$L static\i386-win32\eccwin32O1.o}
       {$endif}
       {$ifdef ECC_O2}
-        {$L fpc-win32\eccwin32O2.o}
+        {$L static\i386-win32\eccwin32O2.o}
       {$endif}
       {$ifdef ECC_O3}
-        {$L fpc-win32\eccwin32O3.o}
+        {$L static\i386-win32\eccwin32O3.o}
       {$endif}
     {$else}
       {$ifdef ECC_O1}
-        {$L fpc-linux32/ecclin32O1.o}
+        {$L static/i386-linux/ecclin32O1.o}
       {$endif}
       {$ifdef ECC_O2}
-        {$L fpc-linux32/ecclin32O2.o}
+        {$L static/i386-linux/ecclin32O2.o}
       {$endif}
       {$ifdef ECC_O3}
-        {$L fpc-linux32/ecclin32O3.o}
+        {$L static/i386-linux/ecclin32O3.o}
       {$endif}
     {$endif MSWINDOWS}
   {$else}
@@ -1906,13 +1906,13 @@ end;
   {$else}
   {$ifdef FPC}
     {$ifdef ECC_O1}
-      {$L fpc-linux64/ecclin64O1.o}
+      {$L static/x86_64-linux/ecclin64O1.o}
     {$endif}
     {$ifdef ECC_O2}
-      {$L fpc-linux64/ecclin64O2.o}
+      {$L static/x86_64-linux/ecclin64O2.o}
     {$endif}
     {$ifdef ECC_O3}
-      {$L fpc-linux64/ecclin64O3.o}
+      {$L static/x86_64-linux/ecclin64O3.o}
     {$endif}
   {$endif FPC}
   {$endif MSWINDOWS}
