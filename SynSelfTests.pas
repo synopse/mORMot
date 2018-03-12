@@ -107,7 +107,7 @@ unit SynSelfTests;
 
 interface
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 SQLITE3_FASTCALL
+{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64
 
 {$ifdef ISDELPHIXE}
   // since Delphi XE, we have unit System.RegularExpressionsAPI available
@@ -644,7 +644,6 @@ type
     // - use all RESTful commands (GET/UDPATE/POST/DELETE...)
     // - test the 'many to many' features (i.e. TSQLRecordMany) and dynamic
     // arrays published properties handling
-    // - also test FTS implementation if INCLUDE_FTS3 conditional is defined
     // - test dynamic tables
     procedure _TSQLRestClientDB;
     {$ifdef TEST_REGEXP}
@@ -852,7 +851,7 @@ type
     procedure AutoAdaptSQL;
     /// check the per-db encryption
     // - the testpass.db3-wal file is not encrypted, but the main
-    // testpass.db3 file will (after the first 1024 bytes)
+    // testpass.db3 file will
     procedure CryptedDatabase;
     /// test external DB implementation via faster REST calls
     // - will mostly call directly the TSQLRestStorageExternal instance,
@@ -11942,7 +11941,7 @@ begin
 end;
 
 procedure InternalSQLFunctionCharIndex(Context: TSQLite3FunctionContext;
-  argc: integer; var argv: TSQLite3ValueArray); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  argc: integer; var argv: TSQLite3ValueArray); cdecl;
 var StartPos: integer;
 begin
   case argc of
@@ -12128,8 +12127,21 @@ begin
   if password<>'' then begin // check file encryption password change
     Check(Demo.MemoryMappedMB=0,'mmap pragma disallowed');
     FreeAndNil(Demo); // if any exception occurs in Create(), Demo.Free is OK
-    ChangeSQLEncryptTablePassWord(TempFileName,'password1','');
-    ChangeSQLEncryptTablePassWord(TempFileName,'','NewPass');
+    check(IsSQLite3File(TempFileName));
+    check(IsSQLite3FileEncrypted(TempFileName));
+    check(not IsOldSQLEncryptTable(TempFileName));
+    check(not ChangeSQLEncryptTablePassWord(TempFileName,'password1','password1'));
+    check(IsSQLite3File(TempFileName));
+    check(IsSQLite3FileEncrypted(TempFileName));
+    check(not IsOldSQLEncryptTable(TempFileName));
+    check(ChangeSQLEncryptTablePassWord(TempFileName,'password1',''));
+    check(IsSQLite3File(TempFileName));
+    check(not IsOldSQLEncryptTable(TempFileName));
+    check(not IsSQLite3FileEncrypted(TempFileName));
+    check(ChangeSQLEncryptTablePassWord(TempFileName,'','NewPass'));
+    check(IsSQLite3File(TempFileName));
+    check(IsSQLite3FileEncrypted(TempFileName));
+    check(not IsOldSQLEncryptTable(TempFileName));
     Demo := TSQLDataBase.Create(TempFileName,'NewPass'); // reuse the temporary file
     Demo.Synchronous := smOff;
     Demo.LockingMode := lmExclusive;
@@ -13066,7 +13078,6 @@ type
     property People: TSQLRecordPeopleExt read fPeople write fPeople;
   end;
 
-{$ifdef INCLUDE_FTS3}
   TSQLFTSTest = class(TSQLRecordFTS3)
   private
     fSubject: RawUTF8;
@@ -13075,7 +13086,7 @@ type
     property Subject: RawUTF8 read fSubject write fSubject;
     property Body: RawUTF8 read fBody write fBody;
   end;
-{$endif}
+
   TSQLASource = class;
   TSQLADest = class;
   TSQLADests = class(TSQLRecordMany)
@@ -13875,7 +13886,7 @@ begin
           Client2.Free;
         end;
         Check(IsSQLite3File('testpass.db3'));
-        Check(IsSQLite3FileEncrypted('testpass.db3')=(password<>''));
+        Check(IsSQLite3FileEncrypted('testpass.db3')=(password<>''),'encrypt1');
         // try to read then update the crypted file
         Client2 := TSQLRestClientDB.Create(Model,nil,'testpass.db3',TSQLRestServerDB,false,password);
         try
@@ -13900,12 +13911,12 @@ begin
           Client2.Free;
         end;
         Check(IsSQLite3File('testpass.db3'));
-        Check(IsSQLite3FileEncrypted('testpass.db3')=(password<>''));
+        Check(IsSQLite3FileEncrypted('testpass.db3')=(password<>''),'encrypt2');
         {$ifndef NOSQLITE3ENCRYPT}
         // now read it after uncypher
-        ChangeSQLEncryptTablePassWord('testpass.db3',password,'');
+        check(ChangeSQLEncryptTablePassWord('testpass.db3',password,''));
         Check(IsSQLite3File('testpass.db3'));
-        Check(not IsSQLite3FileEncrypted('testpass.db3'));
+        Check(not IsSQLite3FileEncrypted('testpass.db3'),'encrypt3');
         Client2 := TSQLRestClientDB.Create(Model,nil,'testpass.db3',TSQLRestServerDB,false,'');
         try
           R2 := TSQLRecordPeople.CreateAndFillPrepare(Client2,'');
@@ -14506,8 +14517,7 @@ begin
      end;
   end;
 end;
-{$endif}
-{$ifdef INCLUDE_FTS3}
+{$endif LVCL}
 procedure TestFTS3(aClient: TSQLRestClient);
 var FTS: TSQLFTSTest;
     StartID, i: integer;
@@ -14565,7 +14575,6 @@ begin
     FTS.Free;
   end;
 end;
-{$endif}
 procedure TestVirtual(aClient: TSQLRestClient; DirectSQL: boolean; const Msg: string;
   aClass: TSQLRecordClass);
 var n, i, ndx, added: integer;
@@ -14690,9 +14699,7 @@ var i: integer;
 begin
   try
     Check(ClientDist.SetUser('User','synopse'));
-    {$ifdef INCLUDE_FTS3}
     TestFTS3(ClientDist);
-    {$endif}
     TestDynArray(ClientDist);
     {$ifndef LVCL}
     TestObject(ClientDist);
@@ -14779,7 +14786,7 @@ begin
   Demo.RegisterSQLFunction(TypeInfo(TIntegerDynArray),@SortDynArrayInteger,
     'MyIntegerDynArrayContains');
   ModelC := TSQLModel.Create(
-    [TSQLRecordPeople, {$ifdef INCLUDE_FTS3} TSQLFTSTest, {$endif}
+    [TSQLRecordPeople, TSQLFTSTest,
      TSQLASource, TSQLADest, TSQLADests, TSQLRecordPeopleArray
      {$ifndef LVCL}, TSQLRecordPeopleObject{$endif},
      TSQLRecordDali1,TSQLRecordDali2, TSQLRecordCustomProps],'root');
@@ -14928,9 +14935,7 @@ begin
         Client.RollBack;
       end;
       {$endif LVCL}
-      {$ifdef INCLUDE_FTS3}
       TestFTS3(Client);
-      {$endif}
       TestDynArray(Client);
       {$ifndef LVCL}
       TestObject(Client);
@@ -15190,7 +15195,7 @@ begin
   end;
   {$ifndef NOSQLITE3ENCRYPT}
   if EncryptedFile then begin
-    ChangeSQLEncryptTablePassWord(TempFileName,'NewPass',''); // uncrypt file
+    check(ChangeSQLEncryptTablePassWord(TempFileName,'NewPass','')); // uncrypt file
     Check(IsSQLite3File(TempFileName));
   end;
   {$endif}

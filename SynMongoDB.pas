@@ -63,7 +63,7 @@ unit SynMongoDB;
 
 interface
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 SQLITE3_FASTCALL
+{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64
 
 uses
   {$ifdef MSWINDOWS}

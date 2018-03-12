@@ -187,8 +187,7 @@ unit mORMotSQLite3;
 
     Version 1.16
     - updated SQLite3 engine to version 3.7.12.1
-    - unit now includes FTS3/FTS4 by default (i.e. INCLUDE_FTS3 conditional is
-      set in both SQLite3.pas and SynSQLite3.pas units)
+    - unit now includes FTS3/FTS4 by default
     - fixed TSQLRestServerDB.UpdateField(ByID=true) implementation
     - fixed VACUUM failure if there are one or more active SQL statements
     - new overloaded TSQLRestServerDB.UpdateField method
@@ -251,7 +250,7 @@ unit mORMotSQLite3;
 
 interface
 
-{$I Synopse.inc} // define HASINLINE CPU32 CPU64 WITHLOG SQLITE3_FASTCALL
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 WITHLOG
 
 uses
   {$ifdef MSWINDOWS}
@@ -278,15 +277,6 @@ uses
   SynLog,
   SynSQLite3,
   mORMot;
-
-{$define INCLUDE_FTS3}
-{ define this if you want to include the FTS3/FTS4 feature into the library
-  - FTS3 is an SQLite module implementing full-text search
-  - will include also FTS4 extension module since 3.7.4
-  - see http://www.sqlite.org/fts3.html for documentation
-  - is defined by default, but can be unset to save about 50 KB of code size
-  - should be defined for SynSQLite3, SynSQLite3Static and mORMotSQLite3 units }
-
 
 {.$define WITHUNSAFEBACKUP}
 { define this if you really need the old blocking TSQLRestServerDB backup methods
@@ -920,7 +910,7 @@ begin
 end;
 
 procedure InternalRTreeIn(Context: TSQLite3FunctionContext;
-  argc: integer; var argv: TSQLite3ValueArray); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  argc: integer; var argv: TSQLite3ValueArray); cdecl;
 var aRTree: TSQLRecordRTreeClass;
     BlobA, BlobB: pointer;
 begin
@@ -2185,7 +2175,7 @@ end;
 
 function vt_Create(DB: TSQLite3DB; pAux: Pointer;
   argc: Integer; const argv: PPUTF8CharArray;
-  var ppVTab: PSQLite3VTab; var pzErr: PUTF8Char): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  var ppVTab: PSQLite3VTab; var pzErr: PUTF8Char): Integer; cdecl;
 var Module: TSQLVirtualTableModuleSQLite3 absolute pAux;
     Table: TSQLVirtualTable;
     Structure: RawUTF8;
@@ -2226,14 +2216,14 @@ begin
     ppVTab^.pInstance := Table;
 end;
 
-function vt_Disconnect(pVTab: PSQLite3VTab): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+function vt_Disconnect(pVTab: PSQLite3VTab): Integer; cdecl;
 begin
   TSQLVirtualTable(pvTab^.pInstance).Free;
   sqlite3.free_(pVTab);
   result := SQLITE_OK;
 end;
 
-function vt_Destroy(pVTab: PSQLite3VTab): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+function vt_Destroy(pVTab: PSQLite3VTab): Integer; cdecl;
 begin
   if TSQLVirtualTable(pvTab^.pInstance).Drop then
     result := SQLITE_OK else begin
@@ -2244,7 +2234,7 @@ begin
 end;
 
 function vt_BestIndex(var pVTab: TSQLite3VTab; var pInfo: TSQLite3IndexInfo): Integer;
-  {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  cdecl;
 const COST: array[TSQLVirtualTablePreparedCost] of double = (1E10,1E8,10,1);
       // costFullScan, costScanWhere, costSecondaryIndex, costPrimaryIndex
 var Prepared: PSQLVirtualTablePrepared;
@@ -2335,7 +2325,7 @@ end;
 
 function vt_Filter(var pVtabCursor: TSQLite3VTabCursor; idxNum: Integer; const idxStr: PAnsiChar;
    argc: Integer; var argv: TSQLite3ValueArray): Integer;
-  {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  cdecl;
 var Prepared: PSQLVirtualTablePrepared absolute idxStr; // idxNum is not used
     i: integer;
 begin
@@ -2352,7 +2342,7 @@ begin
 end;
 
 function vt_Open(var pVTab: TSQLite3VTab; var ppCursor: PSQLite3VTabCursor): Integer;
-  {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  cdecl;
 var Table: TSQLVirtualTable;
 begin
   ppCursor := sqlite3.malloc(sizeof(TSQLite3VTabCursor));
@@ -2372,7 +2362,7 @@ begin
 end;
 
 function vt_Close(pVtabCursor: PSQLite3VTabCursor): Integer;
-  {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  cdecl;
 begin
   TSQLVirtualTableCursor(pVtabCursor^.pInstance).Free;
   sqlite3.free_(pVtabCursor);
@@ -2380,7 +2370,7 @@ begin
 end;
 
 function vt_next(var pVtabCursor: TSQLite3VTabCursor): Integer;
-  {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  cdecl;
 begin
   if TSQLVirtualTableCursor(pVtabCursor.pInstance).Next then
     result := SQLITE_OK else
@@ -2388,7 +2378,7 @@ begin
 end;
 
 function vt_Eof(var pVtabCursor: TSQLite3VTabCursor): Integer;
-  {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  cdecl;
 begin
   if TSQLVirtualTableCursor(pVtabCursor.pInstance).HasData then
     result := 0 else
@@ -2396,7 +2386,7 @@ begin
 end;
 
 function vt_Column(var pVtabCursor: TSQLite3VTabCursor; sContext: TSQLite3FunctionContext;
-  N: Integer): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  N: Integer): Integer; cdecl;
 var Res: TSQLVar;
 begin
   Res.VType := ftUnknown;
@@ -2409,7 +2399,7 @@ begin
 end;
 
 function vt_Rowid(var pVtabCursor: TSQLite3VTabCursor; var pRowid: Int64): Integer;
-  {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  cdecl;
 var Res: TSQLVar;
 begin
   result := SQLITE_ERROR;
@@ -2432,7 +2422,7 @@ end;
 
 function vt_Update(var pVTab: TSQLite3VTab;
   nArg: Integer; var ppArg: TSQLite3ValueArray;
-  var pRowid: Int64): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  var pRowid: Int64): Integer; cdecl;
 var Values: TSQLVarDynArray;
     Table: TSQLVirtualTable;
     RowID0, RowID1: Int64;
@@ -2477,43 +2467,42 @@ begin
   end;
 end;
 
-function vt_Begin(var pVTab: TSQLite3VTab): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+function vt_Begin(var pVTab: TSQLite3VTab): Integer; cdecl;
 begin
   result := InternalTrans(pVTab,vttBegin,0);
 end;
 
-function vt_Commit(var pVTab: TSQLite3VTab): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+function vt_Commit(var pVTab: TSQLite3VTab): Integer; cdecl;
 begin
   result := InternalTrans(pVTab,vttCommit,0);
 end;
 
-function vt_RollBack(var pVTab: TSQLite3VTab): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+function vt_RollBack(var pVTab: TSQLite3VTab): Integer; cdecl;
 begin
   result := InternalTrans(pVTab,vttRollBack,0);
 end;
 
-function vt_Sync(var pVTab: TSQLite3VTab): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+function vt_Sync(var pVTab: TSQLite3VTab): Integer; cdecl;
 begin
   result := InternalTrans(pVTab,vttSync,0);
 end;
 
-function vt_SavePoint(var pVTab: TSQLite3VTab; iSavepoint: integer): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+function vt_SavePoint(var pVTab: TSQLite3VTab; iSavepoint: integer): Integer; cdecl;
 begin
   result := InternalTrans(pVTab,vttSavePoint,iSavePoint);
 end;
 
-function vt_Release(var pVTab: TSQLite3VTab; iSavepoint: integer): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+function vt_Release(var pVTab: TSQLite3VTab; iSavepoint: integer): Integer; cdecl;
 begin
   result := InternalTrans(pVTab,vttRelease,iSavePoint);
 end;
 
-function vt_RollBackTo(var pVTab: TSQLite3VTab; iSavepoint: integer): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+function vt_RollBackTo(var pVTab: TSQLite3VTab; iSavepoint: integer): Integer; cdecl;
 begin
   result := InternalTrans(pVTab,vttRollBackTo,iSavePoint);
 end;
 
-function vt_Rename(var pVTab: TSQLite3VTab; const zNew: PAnsiChar): Integer;
-  {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+function vt_Rename(var pVTab: TSQLite3VTab; const zNew: PAnsiChar): Integer; cdecl;
 begin
   if TSQLVirtualTable(pvTab.pInstance).Rename(RawUTF8(zNew)) then
     result := SQLITE_OK else begin
@@ -2522,7 +2511,7 @@ begin
   end;
 end;
 
-procedure sqlite3InternalFreeModule(p: pointer); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+procedure sqlite3InternalFreeModule(p: pointer); cdecl;
 begin
   if (p<>nil) and (TSQLVirtualTableModuleSQLite3(p).fDB<>nil) then
     TSQLVirtualTableModuleSQLite3(p).Free;

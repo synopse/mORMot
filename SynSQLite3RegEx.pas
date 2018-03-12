@@ -103,7 +103,7 @@ const
 
 
 procedure InternalRegExp(Context: TSQLite3FunctionContext;
-  argc: integer; var argv: TSQLite3ValueArray); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  argc: integer; var argv: TSQLite3ValueArray); cdecl;
 var regexp, text: PUTF8Char;
     errMsg: PAnsiChar;
     errPos: integer;
@@ -171,7 +171,7 @@ begin
   sqlite3.result_int64(Context,ord(result));
 end;
 
-procedure InternalRegExpDestroy(cache: PPCREcaches); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+procedure InternalRegExpDestroy(cache: PPCREcaches); cdecl;
 var i: integer;
 begin
   if cache<>nil then begin

@@ -12267,7 +12267,7 @@ procedure crc512c(buf: PAnsiChar; len: cardinal; out crc: THash512);
 // - may be used to cleanup stack-allocated content
 // ! ... finally FillZero(secret); end;
 procedure FillZero(var secret: RawByteString); overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef FPC}inline;{$endif}
 
 /// fill all bytes of this UTF-8 string with zeros, i.e. 'toto' -> #0#0#0#0
 // - will write the memory buffer directly, so if this string instance is shared
@@ -12275,7 +12275,7 @@ procedure FillZero(var secret: RawByteString); overload;
 // - may be used to cleanup stack-allocated content
 // ! ... finally FillZero(secret); end;
 procedure FillZero(var secret: RawUTF8); overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef FPC}inline;{$endif}
 
 /// fast computation of two 64-bit unsigned integers into a 128-bit value
 procedure mul64x64(const left, right: QWord; out product: THash128Rec);

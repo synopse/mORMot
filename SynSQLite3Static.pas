@@ -144,15 +144,8 @@ uses
   Classes,
   SysUtils,
   SynCommons,
-  SynSQLite3;
-
-
-{$ifdef INCLUDE_FTS3}
-  {$define INCLUDE_TRACE}
-  { define this is you want to include the TRACE feature into the library
-   - our C source code custom header will define SQLITE_OMIT_TRACE if FTS3/FST4
-   is not defined }
-{$endif}
+  SynSQLite3,
+  SynCrypto;
 
 type
   /// access class to the static .obj SQLite3 engine
@@ -169,86 +162,42 @@ type
   end;
 
 
-{$ifndef NOSQLITE3ENCRYPT}
 /// use this procedure to change the password for an existing SQLite3 database file
 // - use this procedure instead of the "classic" sqlite3.rekey() API call
 // - conversion is done in-place, therefore this procedure can handle very big files
 // - the OldPassWord must be correct, otherwise the resulting file will be corrupted
-// - any password can be '' to mark no encryption
-// - you may use instead SynCrypto unit for more secure SHA-256 and AES-256 algos
-// - please note that this encryption is compatible only with SQlite3 files
-// using the default page size of 1024
+// - any password can be '' to mark no encryption as input or output
+// - the password may be a JSON-serialized TSynSignerParams object, or will use
+// AES-OFB-128 after SHAKE_128 with rounds=1000 and a fixed salt on plain password text
+// - please note that this encryption is compatible only with SQlite3 files made
+// with SynSQLiteStatic.pas unit (not external/official/wxsqlite3 dll)
 // - implementation is NOT compatible with the official SQLite Encryption Extension
-// (SEE) file format: it provides only simple XOR encryption (no RC4/AES)
-// - the first page (first 1024 bytes) is not encrypted, since its content
-// (mostly zero) can be used to easily guess the beginning of the key
+// (SEE) file format, not the wxsqlite3 extension, but is (much) faster thanks
+// to our SynCrypto AES-NI enabled unit
 // - if the key is not correct, a ESQLite3Exception will be raised with
 // 'database disk image is malformed' (SQLITE_CORRUPT) at database opening
-procedure ChangeSQLEncryptTablePassWord(const FileName: TFileName;
-  const OldPassWord, NewPassword: RawUTF8);
-{$endif}
+// - see also IsSQLite3File/IsSQLite3FileEncrypted functions
+// - warning: this encryption is NOT compatible with our previous (<1.18.4413)
+// cyphered format, which was much less safe (simple XOR on fixed tables), and
+// was not working on any database size, making unclean patches to the official
+// sqlite3.c amalgamation file, so is deprecated and unsupported any longer -
+// see OldSQLEncryptTablePassWordToPlain() to convert your existing databases 
+function ChangeSQLEncryptTablePassWord(const FileName: TFileName;
+  const OldPassWord, NewPassword: RawUTF8): boolean;
+
+/// this function may be used to create a plain database file from an existing
+// one encrypted with our old/deprecated/unsupported format (<1.18.4413)
+// - then call ChangeSQLEncryptTablePassWord() to convert to the new safer format
+procedure OldSQLEncryptTablePassWordToPlain(const FileName: TFileName;
+  const OldPassWord: RawUTF8);
+
+/// could be used to detect a database in old/deprecated/unsupported format (<1.18.4413)
+// - to call OldSQLEncryptTablePassWordToPlain + ChangeSQLEncryptTablePassWord
+// and switch to the new format
+function IsOldSQLEncryptTable(const FileName: TFileName): boolean;
 
 
 implementation
-
-const
-  /// encryption XOR mask table size (in bytes)
-  // - must be a power of 2
-  // - bigger encryption table makes stronger encryption, but use more memory
-  // - it's faster when the mask table can stay in the CPU L1 cache
-  // - default size is therefore 16KB
-  SQLEncryptTableSize = $4000;
-
-(*
-  Code below will link all database engine, from amalgamation source file:
-
- - to compile with free Borland C++ compiler 5.5.1 from the command line:
-     \dev\bcc\bin\bcc32 -6 -O2 -c -d -u- sqlite3.c
-    FastCall use must be set with defining SQLITE3_FASTCALL above, and
-     int __cdecl fts3CompareElemByTerm(const void *lhs, const void *rhs)
-     \dev\bcc\bin\bcc32 -6 -O2 -c -d -pr -u- sqlite3.c
- - to compile for FPC using the MinGW compiler: run c-fpcmingw.bat
-    gcc -O2 -c -DSQLITE_ENABLE_FTS3 sqlite3.c
-    and copy libgcc.a and libkernel32.a from your MinGW folders
- - to compile for FPC using gcc under Linux: run c-fpcgcclin.sh
-    gcc -O2 -c -lpthread -ldl -DSQLITE_ENABLE_FTS3 sqlite3.c
-    and copy the libgcc.a and sqlite3.o (and libc.a if needed) into the linuxlibrary folder and off you go
-    For CentOS 7.0, take a look at https://synopse.info/forum/viewtopic.php?pid=13193#p13193
-
-and, in the sqlite3.c source file, the following functions are made external
-in order to allow our proprietary but simple and efficient encryption system:
-
-extern int winRead(
-  sqlite3.file *id,          /* File to read from */
-  void *pBuf,                /* Write content into this buffer */
-  int amt,                   /* Number of bytes to read */
-  sqlite3_int64 offset       /* Begin reading at this offset */
-);
-
-extern int winWrite(
-  sqlite3_file *id,         /* File to write into */
-  const void *pBuf,         /* The bytes to be written */
-  int amt,                  /* Number of bytes to write */
-  sqlite3_int64 offset      /* Offset into the file to begin writing at */
-);
-
-Under Linux (thanks Alf for the patch!), change the following lines of sqlite3.c:
-
-extern int unixRead(
-  sqlite3_file *id,
-  void *pBuf,
-  int amt,
-  sqlite3_int64 offset
-);
-
-extern int unixWrite(
-  sqlite3_file *id,
-  const void *pBuf,
-  int amt,
-  sqlite3_int64 offset
-);
-
-*)
 
 {$ifdef FPC}  // FPC expects .o linking, and only one version including FTS3
 
@@ -306,7 +255,7 @@ extern int unixWrite(
     {$endif Darwin}
   {$endif MSWINDOWS}
 
-function log(x: double): double; cdecl; public name LOGFUNCLINKNAME; export;
+function log(x: double): double; cdecl; public name _PREFIX+'log'; export;
 begin
   result := ln(x);
 end;
@@ -347,13 +296,9 @@ end;
   // Delphi has a more complex linking strategy, since $linklib doesn't exist :(
   {$ifdef MSWINDOWS}
     {$ifdef CPU64}
-      {$L fpc-win64\sqlite3-64.o} // compiled with gcc for FPC ... try
+      {$L static\x86_64-win64\sqlite3.o} // compiled with gcc for FPC ...
     {$else}
-      {$ifdef INCLUDE_FTS3}
-      {$L sqlite3fts3.obj}   // link SQlite3 with FTS3/FTS4/FTS5 + TRACE
-      {$else}
       {$L sqlite3.obj}       // link SQlite3 database engine
-      {$endif INCLUDE_FTS3}
     {$endif}
   {$else}
   {$ifdef KYLIX3} // in practice, failed to compile SQLite3 with gcc 2 :(
@@ -483,7 +428,6 @@ end;
 {$endif MSWINDOWS}
 
 function memset(P: Pointer; B: Integer; count: Integer): pointer; cdecl; { always cdecl }
-  {$ifdef FPC}public name{$ifdef CPU64}'memset'{$else}'_memset'{$endif};{$endif}
 // a fast full pascal version of the standard C library function
 begin
   FillCharFast(P^, count, B);
@@ -789,54 +733,194 @@ end;
 
 {$endif FPC}
 
-procedure CreateSQLEncryptTableBytes(const PassWord: RawUTF8; Table: PByteArray);
-// very fast table (private key) computation from a given password
-// - use a simple prime-based random generator, strong enough for common use
-// - execution speed and code size was the goal here: can be easily broken
-// - SynCrypto proposes SHA-256 and AES-256 for more secure encryption
-var i, j, k, L: integer;
+// some external functions as expected by codecext.c and our sqlite3.c wrapper
+
+procedure CodecGenerateKey(var aes: TAES; userPassword: pointer; passwordLength: integer);
+var s: TSynSigner;
+    k: THash512Rec;
 begin
-  L := length(Password)-1;
-  j := 0;
-  k := integer(L*ord(Password[1]))+134775813; // initial value, prime number derivated
-  for i := 0 to SQLEncryptTableSize-1 do begin
-    Table^[i] := (ord(PassWord[j+1])) xor byte(k);
-    k := Integer(k*3+i); // fast prime-based pseudo random generator
-    if j=L then
-      j := 0 else
-      inc(j);
+  s.PBKDF2(userPassword,passwordLength,k,'J6CuDftfPr22FnYn');
+  s.AssignTo(k,aes,true);
+end;
+
+function CodecGetReadKey(codec: pointer): PAES; cdecl; external;
+function CodecGetWriteKey(codec: pointer): PAES; cdecl; external;
+
+procedure CodecGenerateReadKey(codec: pointer; userPassword: PAnsiChar; passwordLength: integer); cdecl;
+  {$ifdef FPC}public name _PREFIX+'CodecGenerateReadKey';{$endif} export;
+begin
+  CodecGenerateKey(CodecGetReadKey(codec)^,userPassword,passwordLength);
+end;
+
+procedure CodecGenerateWriteKey(codec: pointer; userPassword: PAnsiChar; passwordLength: integer); cdecl;
+  {$ifdef FPC}public name _PREFIX+'CodecGenerateWriteKey';{$endif} export;
+begin
+  CodecGenerateKey(CodecGetWriteKey(codec)^,userPassword,passwordLength);
+end;
+
+procedure CodeEncryptDecrypt(page: cardinal; data: PAnsiChar; len: integer;
+  aes: PAES; encrypt: boolean);
+var plain: Int64;    // bytes 16..23 should always be unencrypted
+    iv: THash128Rec; // should be genuine, not necessary random / secured
+begin
+  if (len and AESBlockMod<>0) or (len<=0) or (integer(page)<=0) then
+   raise ESQLite3Exception.CreateUTF8('CodeEncryptDecrypt(%) has len=%', [page,len]);
+  iv.c0 := page xor 668265263;
+  iv.c1 := page*2654435761;
+  iv.c2 := page*2246822519;
+  iv.c3 := page*3266489917;
+  len := len shr AESBlockShift;
+  if page=1 then // ensure header bytes 16..23 are stored unencrypted
+    if PInt64(data)^=SQLITE_FILE_HEADER128.lo then
+      if encrypt then begin
+        plain := PInt64(data+16)^;
+        aes^.DoBlocksOFB(iv.b,data+16,data+16,len-1);
+        PInt64(data+8)^ := PInt64(data+16)^; // 8..15 are encrypted bytes 16..23
+        PInt64(data+16)^ := plain;
+      end else begin
+        PInt64(data+16)^ := PInt64(data+8)^;
+        aes^.DoBlocksOFB(iv.b,data+16,data+16,len-1);
+        PHash128(data)^ := SQLITE_FILE_HEADER128.b; // see IsSQLite3FileEncrypted
+      end else
+      FillCharFast(data^,len,0) else // ensure incorrect file format is detected
+    aes^.DoBlocksOFB(iv.b,data,data,len);
+end;
+
+procedure CodecEncrypt(codec: pointer; page: integer; data: PAnsiChar; len, useWriteKey: integer); cdecl;
+  {$ifdef FPC}public name _PREFIX+'CodecEncrypt';{$endif} export;
+begin
+  if useWriteKey=1 then
+     CodeEncryptDecrypt(page,data,len,CodecGetWriteKey(codec),true) else
+     CodeEncryptDecrypt(page,data,len,CodecGetReadKey(codec),true);
+end;
+
+procedure CodecDecrypt(codec: pointer; page: integer; data: PAnsiChar; len: integer); cdecl;
+  {$ifdef FPC}public name _PREFIX+'CodecDecrypt';{$endif} export;
+begin
+  CodeEncryptDecrypt(page,data,len,CodecGetReadKey(codec),false);  
+end;
+
+procedure CodecTerm(codec: pointer); cdecl;
+  {$ifdef FPC}public name _PREFIX+'CodecTerm';{$endif} export;
+begin
+  CodecGetReadKey(codec)^.Done;
+  CodecGetWriteKey(codec)^.Done;
+end;
+
+function ChangeSQLEncryptTablePassWord(const FileName: TFileName;
+  const OldPassWord, NewPassword: RawUTF8): boolean;
+var F: THandle;
+    page,pagesize,R: integer;
+    buf: array[word] of byte; // temp buffer for read/write (64KB is enough)
+    size: Int64Rec;
+    posi: Int64;
+    old, new: TAES;
+begin
+  result := false;
+  if OldPassword=NewPassword then
+    exit;
+  F := FileOpen(FileName,fmOpenReadWrite);
+  if F<>INVALID_HANDLE_VALUE then
+  try
+    if OldPassword<>'' then
+      CodecGenerateKey(old,pointer(OldPassword),length(OldPassWord));
+    if NewPassword<>'' then
+      CodecGenerateKey(new,pointer(NewPassword),length(NewPassWord));
+    size.Lo := GetFileSize(F,@size.Hi);
+    R := FileRead(F,buf,32);
+    if R<=0 then
+      exit;
+    pagesize := integer(buf[16]) shl 8+buf[17];
+    if (pagesize<1024) or (pagesize and AESBlockMod<>0) or (pagesize>SizeOf(buf)) or
+       (PInt64(@buf)^<>SQLITE_FILE_HEADER128.Lo) or
+       ((PHash128Rec(@buf)^.Hi=SQLITE_FILE_HEADER128.Hi)<>(OldPassWord='')) or
+       (PInt64(@size)^ mod pagesize<>0) then
+      exit;
+    FileSeek64(F,0,soFromBeginning);
+    posi := 0;
+    for page := 1 to PInt64(@size)^ div pagesize do begin
+      R := FileRead(F,buf,pagesize);
+      if R<>pagesize then
+        exit; // stop on any read error
+      if OldPassword<>'' then
+        CodeEncryptDecrypt(page,@buf,pagesize,@old,false);
+      if NewPassword<>'' then
+        CodeEncryptDecrypt(page,@buf,pagesize,@new,true);
+      FileSeek64(F,posi,soFromBeginning);
+      FileWrite(F,buf,pagesize); // update in-place
+      inc(posi,pagesize);
+    end;
+    result := true;
+  finally
+    FileClose(F);
+    if OldPassword<>'' then
+      old.Done;
+    if NewPassword<>'' then
+      new.Done;
   end;
 end;
 
-procedure XorOffset(P: PByte; Index, Count: cardinal; SQLEncryptTable: PByteArray);
-var Len: cardinal;
-begin // fast and simple Cypher using Index (= offset in file)
-  if Count>0 then
-  repeat
-    Index := Index and (SQLEncryptTableSize-1);
-    Len := SQLEncryptTableSize-Index;
-    if Len>Count then
-      Len := Count;
-    XorMemory(pointer(P),@SQLEncryptTable^[Index],Len);
-    inc(P,Len);
-    inc(Index,Len);
-    dec(Count,Len);
-  until Count=0;
+function IsOldSQLEncryptTable(const FileName: TFileName): boolean;
+var F: THandle;
+    Header: array[0..2047] of byte;
+begin
+  result := false;
+  F := FileOpen(FileName,fmOpenRead or fmShareDenyNone);
+  if F=INVALID_HANDLE_VALUE then
+    exit;
+  if (FileRead(F,Header,SizeOf(Header))=SizeOf(Header)) and
+      // see https://www.sqlite.org/fileformat.html (4 in big endian = 1024 bytes)
+     (PWord(@Header[16])^=4) and
+     IsEqual(PHash128(@Header)^,SQLITE_FILE_HEADER128.b) then
+    if not(Header[1024] in [5,10,13]) then
+      // B-tree leaf Type to be either 5 (interior) 10 (index) or 13 (table)
+      result := true;
+  FileClose(F);
 end;
 
-
-{$ifndef NOSQLITE3ENCRYPT}
-
-procedure ChangeSQLEncryptTablePassWord(const FileName: TFileName;
-  const OldPassWord, NewPassword: RawUTF8);
+procedure OldSQLEncryptTablePassWordToPlain(const FileName: TFileName;
+  const OldPassWord: RawUTF8);
+  const
+    SQLEncryptTableSize = $4000;
+  procedure CreateSQLEncryptTableBytes(const PassWord: RawUTF8; Table: PByteArray);
+  // very fast table (private key) computation from a given password
+  // - use a simple prime-based random generator, strong enough for common use
+  // - execution speed and code size was the goal here: can be easily broken
+  // - SynCrypto proposes SHA-256 and AES-256 for more secure encryption
+  var i, j, k, L: integer;
+  begin
+    L := length(Password)-1;
+    j := 0;
+    k := integer(L*ord(Password[1]))+134775813; // initial value, prime number derivated
+    for i := 0 to SQLEncryptTableSize-1 do begin
+      Table^[i] := (ord(PassWord[j+1])) xor byte(k);
+      k := Integer(k*3+i); // fast prime-based pseudo random generator
+      if j=L then
+        j := 0 else
+        inc(j);
+    end;
+  end;
+  procedure XorOffset(P: PByte; Index, Count: cardinal; SQLEncryptTable: PByteArray);
+  var Len: cardinal;
+  begin // fast and simple Cypher using Index (= offset in file)
+    if Count>0 then
+    repeat
+      Index := Index and (SQLEncryptTableSize-1);
+      Len := SQLEncryptTableSize-Index;
+      if Len>Count then
+        Len := Count;
+      XorMemory(pointer(P),@SQLEncryptTable^[Index],Len);
+      inc(P,Len);
+      inc(Index,Len);
+      dec(Count,Len);
+    until Count=0;
+  end;
 var F: THandle;
     R: integer;
     Buf: array[word] of byte; // temp buffer for read/write (64KB is enough)
     Size, Posi: Int64Rec;
-    OldP, NewP: array[0..SQLEncryptTableSize-1] of byte; // 2x16KB tables
+    OldP: array[0..SQLEncryptTableSize-1] of byte; // 2x16KB tables
 begin
-  if OldPassword=NewPassword then
-    exit;
   F := FileOpen(FileName,fmOpenReadWrite);
   if F=INVALID_HANDLE_VALUE then
     exit;
@@ -847,8 +931,6 @@ begin
   end;
   if OldPassword<>'' then
     CreateSQLEncryptTableBytes(OldPassWord,@OldP);
-  if NewPassword<>'' then
-    CreateSQLEncryptTableBytes(NewPassWord,@NewP);
   Int64(Posi) := 1024; // don't change first page, which is uncrypted
   FileSeek(F,1024,soFromBeginning);
   while Int64(Posi)<Int64(Size) do begin
@@ -857,8 +939,6 @@ begin
       break; // stop on any read error
     if OldPassword<>'' then
       XorOffset(@Buf,Posi.Lo,R,@OldP); // uncrypt with old key
-    if NewPassword<>'' then
-      XorOffset(@Buf,Posi.Lo,R,@NewP); // crypt with new key
     FileSeek64(F,Int64(Posi),soFromBeginning);
     FileWrite(F,Buf,R); // update buffer
     inc(Int64(Posi),cardinal(R));
@@ -866,482 +946,118 @@ begin
   FileClose(F);
 end;
 
-{$endif}
-
-// we override default WinRead() and WinWrite() functions below, in order
-// to add our proprietary (but efficient) encryption engine
-// - should be modified to match other Operating Systems than Windows
-// - code is private to SynSQLite3Static, since it shall follow the same
-// exact SQlite3.c revision compiled within the linked .obj
-
-type
-{$ifndef DELPHI5OROLDER} // Delphi 5 is already aligning records by 4 bytes
-{$ifdef FPC}
-{$PACKRECORDS C}
-{$else}
-{$A4} // bcc32 default alignment is 4 bytes
-{$endif}
-{$endif}
-  {$ifdef MSWINDOWS}
-  TSQLFile = record // see struct winFile in sqlite3.c
-    pMethods: pointer;     // sqlite3.io_methods_ptr
-    pVfs: pointer;         // The VFS used to open this file (new in version 3.7)
-    h: THandle;            // Handle for accessing the file
-    locktype: byte;        // Type of lock currently held on this file */
-    sharedLockByte: word;  // Randomly chosen byte used as a shared lock */
-    ctrlFlags: byte;       // Flags.  See WINFILE_* below */
-    lastErrno: cardinal;   // The Windows errno from the last I/O error
-    // asm code generated from c is [esi+20] for lastErrNo -> OK
-    pShm: pointer; // not there if SQLITE_OMIT_WAL is defined
-    zPath: PAnsiChar;
-    szChunk, nFetchOut: integer;
-    hMap: THandle;
-    pMapRegion: PAnsiChar;
-    mmapSize, mmapSizeActual, mmapSizeMax: Int64Rec;
-  end;
-  {$else}
-  TSQLFile = record            // see struct unixFile in sqlite3.c
-    pMethods: pointer;         // sqlite3.io_methods_ptr
-    pVfs: pointer;             // VFS used to open this file (new in version 3.7)
-    pINode: pointer;           // Info about locks on this inode
-    h: THandle;                // Handle for accessing the file
-    eFileLock: cuchar;         // The type of lock held on this fd
-    ctrlFlags: cushort;        // Behavioral bits.  UNIXFILE_* flags
-    lastErrno: cint;           // The unix errno from the last I/O error
-    lockingContext: PAnsiChar; // Locking style specific state
-    UnixUnusedFd: pointer;     // unused
-    zPath: PAnsiChar;          // Name of the file
-    pShm: pointer; // not there if SQLITE_OMIT_WAL is defined
-    szChunk: cint;
-    nFetchOut: cint;
-    mmapSize, mmapSizeActual, mmapSizeMax: Int64Rec;
-    pMapRegion: PAnsiChar;
-  end;
-  {$endif}
-  PSQLFile = ^TSQLFile;
-
-  // those structures are used to retrieve the Windows/Linux file handle
-  TSQLPager = record            // see struct Pager in sqlite3.c
-    pVfs: pointer;
-    exclusiveMode, journalMode, useJournal, noSync, fullSync,
-    extraSync, // new in 3.12.0
-    syncFlags, // modified in 3.21.0
-    walsyncFlags, tempFile, noLock, readOnly, memDb,
-    eState, eLock, changeCountDone, setMaster, doNotSpill, subjInMemory,
-    bUseFetch, hasHeldSharedLock: Byte;
-    dbSize, dbOrigSize, dbFileSize, dbHintSize, errCode, nRec, cksumInit,
-    nSubRec: cardinal;
-    pInJournal: pointer;
-    fd: PSQLFile;   // File descriptor for database
-    jfd: PSQLFile;  // File descriptor for main journal
-    sjfd: PSQLFile; // File descriptor for sub-journal
-  end;
-  TSQLBtShared = record
-    pPager: ^TSQLPager;
-  end;
-  TSQLBTree = record
-    db: TSQLite3DB;
-    pBt: ^TSQLBtShared;
-  end;
-  PSQLBTree = ^TSQLBTree;
-  TSQLDBOneStruct = record
-    zName: PAnsiChar;
-    Btree: PSQLBTree;
-  end;
-  // will map TSQLite3DB
-  PSQLDBStruct = ^TSQLDBStruct;
-  TSQLDBStruct = record
-    pVfs, pVdbe, pDfltColl, mutex: pointer;
-    DB0: ^TSQLDBOneStruct;
-    nDb: integer;  // Number of backends currently in use
-  end;
-{$A+}
-  // used to store all currently per-database encryption tables
-  TSQLCypher = record
-    Handle: THandle;
-    CypherBuf: RawByteString;
-  end;
-  TSQLCypherDynArray = array of TSQLCypher;
-
-var
-  Cyphers: TSQLCypherDynArray;
-  CypherCount: integer;
-  Cypher: TDynArray;
-
-function sqlite3_key(DB: TSQLite3DB; key: pointer; keyLen: Integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-var Cyph: TSQLCypher;
-    pass, buf: RawByteString;
-begin
-  result := SQLITE_OK;
-  if (DB=0) or (key=nil) or (keyLen<=0) then
-    exit;
-  SetString(pass,PAnsiChar(key),keyLen);
-  SetLength(buf,SQLEncryptTableSize);
-  CreateSQLEncryptTableBytes(pass,pointer(buf));
-  Cyph.Handle := PSQLDBStruct(DB)^.DB0^.Btree^.pBt^.pPager^.fd^.h;
-  if Cyphers=nil then
-    Cypher.InitSpecific(TypeInfo(TSQLCypherDynArray),Cyphers,djCardinal,@CypherCount);
-  if Cypher.Find(Cyph.Handle)>=0 then
-    raise ESQLite3Exception.Create('Invalid call to sqlite3_key() with no previous sqlite3_close()');
-  Cyph.CypherBuf := buf;
-  Cypher.Add(Cyph);
-end;
-
-function sqlite3_rekey(DB: TSQLite3DB; key: pointer; keyLen: Integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-begin
-  raise ESQLite3Exception.Create('sqlite3_rekey() not implemented yet');
-end;
-
-function sqlite3_close(DB: TSQLite3DB): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-
-function sqlite3_closeInternal(DB: TSQLite3DB): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-var i: integer;
-begin
-  if Cyphers<>nil then
-    i := Cypher.Find(PSQLDBStruct(DB)^.DB0^.Btree^.pBt^.pPager^.fd^.h) else
-    i := -1;
-  result := sqlite3_close(DB);
-  if i>=0 then
-    Cypher.Delete(i); // do it after file closing
-end;
-
-const
-  SQLITE_IOERR_READ       = $010A;
-  SQLITE_IOERR_SHORT_READ = $020A;
-  SQLITE_IOERR_WRITE      = $030A;
-
-{$ifdef MSWINDOWS}
-function WinWrite(FP: pointer; buf: PByte; buflen: cardinal; off: Int64): integer;
-{$else}
-function unixWrite(FP: pointer; buf: PByte; buflen: cint; off: Int64): integer;
-{$endif}
-  {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-  {$ifdef FPC}
-    public name
-    {$ifdef MSWINDOWS}
-      {$ifdef CPU64}
-      'winWrite';
-      {$else}
-      '_winWrite';
-      {$endif}
-    {$else}
-    {$ifdef Darwin}
-    '_unixWrite'; export;
-    {$else}
-    'unixWrite'; export;
-    {$endif}
-    {$endif}
-  {$endif}
-// Write data from a buffer into a file.  Return SQLITE_OK on success
-// or some other error code on failure
-var n, i, written: integer;
-    EncryptTable: PByteArray;
-    off64: Int64Rec absolute off;
-    F: PSQLFile absolute FP;
-    nCopy: cardinal;
-    h: THandle;
-    b: PByte;
-    {$ifdef MSWINDOWS}
-    ol: TOverlapped;
-    ol64: Int64;
-    {$endif}
-begin
-  if off<Int64(F.mmapSize) then // handle memory mapping (SQLite3>=3.7.17)
-    if CypherCount=0 then
-      if off+buflen<=Int64(F.mmapSize) then begin
-        MoveFast(buf^,F.pMapRegion[off64.Lo],bufLen);
-        result := SQLITE_OK;
-        exit;
-      end else begin
-        nCopy := F.mmapSize.Lo-off64.Lo;
-        MoveFast(buf^,F.pMapRegion[off64.Lo],nCopy);
-        inc(buf,nCopy);
-        dec(buflen,nCopy);
-        inc(off,nCopy);
-      end else
-      raise ESynException.CreateUTF8(
-        'sqlite3_key(%) expects PRAGMA mmap_size=0 write(off=% mmapSize=% buflen=%)',
-        [F.zPath,off,Int64(F.mmapSize),bufLen]);
-  //SynSQLite3Log.Add.Log(sllCustom2,'WinWrite % off=% len=%',[F.h,off,buflen]);
-  off64.Hi := off64.Hi and $7fffffff; // offset must be positive (u64)
-  {$ifdef MSWINDOWS}
-  FillCharFast(ol,sizeof(ol),0);
-  ol64 := off;
-  {$else}
-  if FileSeek64(F.h,off,soFromBeginning)=-1 then begin
-    result := GetLastError;
-    if result<>NO_ERROR then begin
-      F.lastErrno := result;
-      result := SQLITE_FULL;
-      exit;
-    end;
-  end;
-  {$endif}
-  EncryptTable := nil; // mark no encryption
-  if CypherCount>0 then
-    if (off64.Lo>=1024) or (off64.Hi<>0) then begin // crypt after first page
-      h := F.h;
-      for i := 0 to CypherCount-1 do // (a bit) faster than Cypher.Find(F.h)
-        if Cyphers[i].Handle=h then begin
-          EncryptTable := Pointer(Cyphers[i].CypherBuf);
-          XorOffset(buf,off64.Lo,buflen,EncryptTable);
-          break;
-        end;
-    end;
-  b := buf;
-  n := buflen;
-  while n>0 do begin
-    {$ifdef MSWINDOWS}
-    ol.Offset := Int64Rec(ol64).Lo;
-    ol.OffsetHigh := Int64Rec(ol64).Hi;
-    if WriteFile(F.h,b^,n,cardinal(written),@ol) then
-      inc(ol64,written) else
-      written := -1;
-    {$else}
-    written := FileWrite(F.h,b^,n);
-    {$endif}
-    if written=0 then
-      break;
-    if written=-1 then begin
-      F.lastErrno := GetLastError;
-      {$ifdef MSWINDOWS}
-      if not (F.lastErrno in [ERROR_HANDLE_DISK_FULL,ERROR_DISK_FULL]) then
-        result := SQLITE_IOERR_WRITE else
-      {$endif}
-        result := SQLITE_FULL;
-      if EncryptTable<>nil then // restore buf content
-        XorOffset(buf,off64.Lo,buflen,EncryptTable);
-      exit;
-    end;
-    dec(n,written);
-    inc(b,written);
-  end;
-  result := SQLITE_OK;
-  if EncryptTable<>nil then // restore buf content
-    XorOffset(buf,off64.Lo,buflen,EncryptTable);
-end;
-
-
-{$ifdef MSWINDOWS}
-function WinRead(FP: pointer; buf: PByte; buflen: Cardinal; off: Int64): integer;
-{$else}
-function unixRead(FP: pointer; buf: PByte; buflen: cint; off: Int64): integer;
-{$endif}
-  {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-  {$ifdef FPC}
-    public name
-    {$ifdef MSWINDOWS}
-      {$ifdef CPU64}
-      'winRead';
-      {$else}
-      '_winRead';
-      {$endif}
-    {$else}
-    {$ifdef Darwin}
-    '_unixRead'; export;
-    {$else}
-    'unixRead'; export;
-    {$endif}
-    {$endif}
-  {$endif}
-// Read data from a file into a buffer.  Return SQLITE_OK on success
-// or some other error code on failure
-var off64: Int64Rec absolute off;
-    F: PSQLFile absolute FP;
-    nCopy: cardinal;
-    b: PByte;
-    h: THandle;
-    i,n,read: integer;
-    {$ifdef MSWINDOWS}
-    ol: TOverlapped;
-    {$endif}
-begin
-  if off<Int64(F.mmapSize) then // handle memory mapping (SQLite3>=3.7.17)
-    if CypherCount=0 then
-      if off+buflen<=Int64(F.mmapSize) then begin
-        MoveFast(F.pMapRegion[off64.Lo],buf^,bufLen);
-        result := SQLITE_OK;
-        exit;
-      end else begin
-        nCopy := F.mmapSize.Lo-off64.Lo;
-        MoveFast(F.pMapRegion[off64.Lo],buf^,nCopy);
-        inc(buf,nCopy);
-        dec(buflen,nCopy);
-        inc(off,nCopy);
-      end else
-      raise ESynException.CreateUTF8(
-        'sqlite3_key(%) expects PRAGMA mmap_size=0 read(off=% mmapSize=% buflen=%)',
-        [F.zPath,off,Int64(F.mmapSize),bufLen]);
-  //SynSQLite3Log.Add.Log(sllCustom2,'WinRead % off=% len=%',[F.h,off,buflen]);
-  {$ifdef MSWINDOWS} // read chunk in one single API call
-  FillCharFast(ol,sizeof(ol),0);
-  ol.Offset := off64.Lo;
-  ol.OffsetHigh := off64.Hi and $7fffffff;
-  b := buf;
-  n := buflen;
-  if not ReadFile(F.h,b^,n,cardinal(read),@ol) then begin
-    i := GetLastError;
-    if i<>ERROR_HANDLE_EOF then begin
-      F.lastErrno := i;
-      result := SQLITE_IOERR_READ;
-      exit;
-    end;
-  end;
-  inc(b,read);
-  dec(n,read);
-  {$else} // use standard cross-platform FPC/Delphi RTL calls
-  off64.Hi := off64.Hi and $7fffffff; // offset must be positive (u64)
-  if FileSeek64(F.h,off,soFromBeginning)=-1 then begin
-    result := GetLastError;
-    if result<>NO_ERROR then begin
-      F.lastErrno := result;
-      result := SQLITE_FULL;
-      exit;
-    end;
-  end;
-  b := buf;
-  n := buflen;
-  repeat
-    read := FileRead(F.h,b^,n);
-    if read=0 then
-      break;
-    if read=-1 then begin
-      F.lastErrno := GetLastError;
-      result := SQLITE_IOERR_READ;
-      exit;
-    end;
-    inc(b,read);
-    dec(n,read);
-  until n=0;
-  {$endif}
-  if CypherCount>0 then
-    if (off64.Lo>=1024) or (off64.Hi<>0) then begin // uncrypt after first page
-      h := F.h;
-      for i := 0 to CypherCount-1 do // (a bit) faster than Cypher.Find(F.h)
-        if Cyphers[i].Handle=h then begin
-          XorOffset(buf,off64.Lo,buflen,pointer(Cyphers[i].CypherBuf));
-          break;
-        end;
-    end;
-  if n>0 then begin // remaining bytes are set to 0
-    FillcharFast(b^,n,0);
-    result := SQLITE_IOERR_SHORT_READ;
-  end else
-    result := SQLITE_OK;
-end;
-
-
-function sqlite3_initialize: integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_shutdown: integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_open(filename: PUTF8Char; var DB: TSQLite3DB): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_open_v2(filename: PUTF8Char; var DB: TSQLite3DB; flags: Integer; vfs: PUTF8Char): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
+function sqlite3_initialize: integer; cdecl; external;
+function sqlite3_shutdown: integer; cdecl; external;
+function sqlite3_open(filename: PUTF8Char; var DB: TSQLite3DB): integer; cdecl; external;
+function sqlite3_open_v2(filename: PUTF8Char; var DB: TSQLite3DB; flags: Integer; vfs: PUTF8Char): integer; cdecl; external;
+function sqlite3_close(DB: TSQLite3DB): integer; cdecl; external;
+function sqlite3_key(DB: TSQLite3DB; key: pointer; keyLen: Integer): integer; cdecl; external;
+function sqlite3_rekey(DB: TSQLite3DB; key: pointer; keyLen: Integer): integer; cdecl; external;
 function sqlite3_create_function(DB: TSQLite3DB; FunctionName: PUTF8Char;
   nArg, eTextRep: integer; pApp: pointer; xFunc, xStep: TSQLFunctionFunc;
   xFinal: TSQLFunctionFinal): Integer;
-  {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
+  cdecl; external;
 function sqlite3_create_function_v2(DB: TSQLite3DB; FunctionName: PUTF8Char;
   nArg, eTextRep: integer; pApp: pointer; xFunc, xStep: TSQLFunctionFunc;
   xFinal: TSQLFunctionFinal; xDestroy: TSQLDestroyPtr): Integer;
-  {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
+  cdecl; external;
 function sqlite3_create_collation(DB: TSQLite3DB; CollationName: PUTF8Char;
-  StringEncoding: integer; CollateParam: pointer; cmp: TSQLCollateFunc): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_libversion: PUTF8Char; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_errmsg(DB: TSQLite3DB): PAnsiChar; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_extended_errcode(DB: TSQLite3DB): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_last_insert_rowid(DB: TSQLite3DB): Int64; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_busy_timeout(DB: TSQLite3DB; Milliseconds: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
+  StringEncoding: integer; CollateParam: pointer; cmp: TSQLCollateFunc): integer; cdecl; external;
+function sqlite3_libversion: PUTF8Char; cdecl; external;
+function sqlite3_errmsg(DB: TSQLite3DB): PAnsiChar; cdecl; external;
+function sqlite3_extended_errcode(DB: TSQLite3DB): integer; cdecl; external;
+function sqlite3_last_insert_rowid(DB: TSQLite3DB): Int64; cdecl; external;
+function sqlite3_busy_timeout(DB: TSQLite3DB; Milliseconds: integer): integer; cdecl; external;
 function sqlite3_busy_handler(DB: TSQLite3DB;
-  CallbackPtr: TSQLBusyHandler; user: Pointer): integer;  {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
+  CallbackPtr: TSQLBusyHandler; user: Pointer): integer;  cdecl; external;
 function sqlite3_prepare_v2(DB: TSQLite3DB; SQL: PUTF8Char; SQL_bytes: integer;
-  var S: TSQLite3Statement; var SQLtail: PUTF8Char): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_finalize(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_next_stmt(DB: TSQLite3DB; S: TSQLite3Statement): TSQLite3Statement; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_reset(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_stmt_readonly(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_step(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_column_count(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_column_type(S: TSQLite3Statement; Col: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_column_decltype(S: TSQLite3Statement; Col: integer): PAnsiChar; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_column_name(S: TSQLite3Statement; Col: integer): PUTF8Char; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_column_bytes(S: TSQLite3Statement; Col: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_column_value(S: TSQLite3Statement; Col: integer): TSQLite3Value; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_column_double(S: TSQLite3Statement; Col: integer): double; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_column_int(S: TSQLite3Statement; Col: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_column_int64(S: TSQLite3Statement; Col: integer): int64; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_column_text(S: TSQLite3Statement; Col: integer): PUTF8Char; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_column_text16(S: TSQLite3Statement; Col: integer): PWideChar; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_column_blob(S: TSQLite3Statement; Col: integer): PAnsiChar; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_value_type(Value: TSQLite3Value): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_value_numeric_type(Value: TSQLite3Value): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_value_bytes(Value: TSQLite3Value): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_value_double(Value: TSQLite3Value): double; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_value_int64(Value: TSQLite3Value): Int64; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_value_text(Value: TSQLite3Value): PUTF8Char; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_value_blob(Value: TSQLite3Value): pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-procedure sqlite3_result_null(Context: TSQLite3FunctionContext); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-procedure sqlite3_result_int64(Context: TSQLite3FunctionContext; Value: Int64); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-procedure sqlite3_result_double(Context: TSQLite3FunctionContext; Value: double); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
+  var S: TSQLite3Statement; var SQLtail: PUTF8Char): integer; cdecl; external;
+function sqlite3_finalize(S: TSQLite3Statement): integer; cdecl; external;
+function sqlite3_next_stmt(DB: TSQLite3DB; S: TSQLite3Statement): TSQLite3Statement; cdecl; external;
+function sqlite3_reset(S: TSQLite3Statement): integer; cdecl; external;
+function sqlite3_stmt_readonly(S: TSQLite3Statement): integer; cdecl; external;
+function sqlite3_step(S: TSQLite3Statement): integer; cdecl; external;
+function sqlite3_column_count(S: TSQLite3Statement): integer; cdecl; external;
+function sqlite3_column_type(S: TSQLite3Statement; Col: integer): integer; cdecl; external;
+function sqlite3_column_decltype(S: TSQLite3Statement; Col: integer): PAnsiChar; cdecl; external;
+function sqlite3_column_name(S: TSQLite3Statement; Col: integer): PUTF8Char; cdecl; external;
+function sqlite3_column_bytes(S: TSQLite3Statement; Col: integer): integer; cdecl; external;
+function sqlite3_column_value(S: TSQLite3Statement; Col: integer): TSQLite3Value; cdecl; external;
+function sqlite3_column_double(S: TSQLite3Statement; Col: integer): double; cdecl; external;
+function sqlite3_column_int(S: TSQLite3Statement; Col: integer): integer; cdecl; external;
+function sqlite3_column_int64(S: TSQLite3Statement; Col: integer): int64; cdecl; external;
+function sqlite3_column_text(S: TSQLite3Statement; Col: integer): PUTF8Char; cdecl; external;
+function sqlite3_column_text16(S: TSQLite3Statement; Col: integer): PWideChar; cdecl; external;
+function sqlite3_column_blob(S: TSQLite3Statement; Col: integer): PAnsiChar; cdecl; external;
+function sqlite3_value_type(Value: TSQLite3Value): integer; cdecl; external;
+function sqlite3_value_numeric_type(Value: TSQLite3Value): integer; cdecl; external;
+function sqlite3_value_bytes(Value: TSQLite3Value): integer; cdecl; external;
+function sqlite3_value_double(Value: TSQLite3Value): double; cdecl; external;
+function sqlite3_value_int64(Value: TSQLite3Value): Int64; cdecl; external;
+function sqlite3_value_text(Value: TSQLite3Value): PUTF8Char; cdecl; external;
+function sqlite3_value_blob(Value: TSQLite3Value): pointer; cdecl; external;
+procedure sqlite3_result_null(Context: TSQLite3FunctionContext); cdecl; external;
+procedure sqlite3_result_int64(Context: TSQLite3FunctionContext; Value: Int64); cdecl; external;
+procedure sqlite3_result_double(Context: TSQLite3FunctionContext; Value: double); cdecl; external;
 procedure sqlite3_result_blob(Context: TSQLite3FunctionContext; Value: Pointer;
-  Value_bytes: Integer=0; DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
+  Value_bytes: Integer=0; DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT); cdecl; external;
 procedure sqlite3_result_text(Context: TSQLite3FunctionContext; Value: PUTF8Char;
-  Value_bytes: Integer=-1; DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-procedure sqlite3_result_value(Context: TSQLite3FunctionContext; Value: TSQLite3Value); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-procedure sqlite3_result_error(Context: TSQLite3FunctionContext; Msg: PUTF8Char; MsgLen: integer=-1); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_user_data(Context: TSQLite3FunctionContext): pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_context_db_handle(Context: TSQLite3FunctionContext): TSQLite3DB; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
+  Value_bytes: Integer=-1; DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT); cdecl; external;
+procedure sqlite3_result_value(Context: TSQLite3FunctionContext; Value: TSQLite3Value); cdecl; external;
+procedure sqlite3_result_error(Context: TSQLite3FunctionContext; Msg: PUTF8Char; MsgLen: integer=-1); cdecl; external;
+function sqlite3_user_data(Context: TSQLite3FunctionContext): pointer; cdecl; external;
+function sqlite3_context_db_handle(Context: TSQLite3FunctionContext): TSQLite3DB; cdecl; external;
 function sqlite3_aggregate_context(Context: TSQLite3FunctionContext;
-   nBytes: integer): pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
+   nBytes: integer): pointer; cdecl; external;
 function sqlite3_bind_text(S: TSQLite3Statement; Param: integer;
   Text: PUTF8Char; Text_bytes: integer=-1; DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT): integer;
-  {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
+  cdecl; external;
 function sqlite3_bind_blob(S: TSQLite3Statement; Param: integer; Buf: pointer; Buf_bytes: integer;
-  DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_bind_zeroblob(S: TSQLite3Statement; Param: integer; Size: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_bind_double(S: TSQLite3Statement; Param: integer; Value: double): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_bind_int(S: TSQLite3Statement; Param: integer; Value: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_bind_int64(S: TSQLite3Statement; Param: integer; Value: Int64): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_bind_null(S: TSQLite3Statement; Param: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_clear_bindings(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_bind_parameter_count(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
+  DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT): integer; cdecl; external;
+function sqlite3_bind_zeroblob(S: TSQLite3Statement; Param: integer; Size: integer): integer; cdecl; external;
+function sqlite3_bind_double(S: TSQLite3Statement; Param: integer; Value: double): integer; cdecl; external;
+function sqlite3_bind_int(S: TSQLite3Statement; Param: integer; Value: integer): integer; cdecl; external;
+function sqlite3_bind_int64(S: TSQLite3Statement; Param: integer; Value: Int64): integer; cdecl; external;
+function sqlite3_bind_null(S: TSQLite3Statement; Param: integer): integer; cdecl; external;
+function sqlite3_clear_bindings(S: TSQLite3Statement): integer; cdecl; external;
+function sqlite3_bind_parameter_count(S: TSQLite3Statement): integer; cdecl; external;
 function sqlite3_blob_open(DB: TSQLite3DB; DBName, TableName, ColumnName: PUTF8Char;
-  RowID: Int64; Flags: Integer; var Blob: TSQLite3Blob): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_blob_close(Blob: TSQLite3Blob): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_blob_read(Blob: TSQLite3Blob; const Data; Count, Offset: Integer): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_blob_write(Blob: TSQLite3Blob; const Data; Count, Offset: Integer): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_blob_bytes(Blob: TSQLite3Blob): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
+  RowID: Int64; Flags: Integer; var Blob: TSQLite3Blob): Integer; cdecl; external;
+function sqlite3_blob_close(Blob: TSQLite3Blob): Integer; cdecl; external;
+function sqlite3_blob_read(Blob: TSQLite3Blob; const Data; Count, Offset: Integer): Integer; cdecl; external;
+function sqlite3_blob_write(Blob: TSQLite3Blob; const Data; Count, Offset: Integer): Integer; cdecl; external;
+function sqlite3_blob_bytes(Blob: TSQLite3Blob): Integer; cdecl; external;
 function sqlite3_create_module_v2(DB: TSQLite3DB; const zName: PAnsiChar;
-  var p: TSQLite3Module; pClientData: Pointer; xDestroy: TSQLDestroyPtr): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_declare_vtab(DB: TSQLite3DB; const zSQL: PAnsiChar): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
+  var p: TSQLite3Module; pClientData: Pointer; xDestroy: TSQLDestroyPtr): Integer; cdecl; external;
+function sqlite3_declare_vtab(DB: TSQLite3DB; const zSQL: PAnsiChar): Integer; cdecl; external;
 function sqlite3_set_authorizer(DB: TSQLite3DB; xAuth: TSQLAuthorizerCallback;
-  pUserData: Pointer): Integer;   {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
+  pUserData: Pointer): Integer;   cdecl; external;
 function sqlite3_update_hook(DB: TSQLite3DB; xCallback: TSQLUpdateCallback;
-  pArg: pointer): pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
+  pArg: pointer): pointer; cdecl; external;
 function sqlite3_commit_hook(DB: TSQLite3DB; xCallback: TSQLCommitCallback;
-  pArg: Pointer): Pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
+  pArg: Pointer): Pointer; cdecl; external;
 function sqlite3_rollback_hook(DB: TSQLite3DB;  xCallback: TSQLCommitCallback;
-  pArg: Pointer): Pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_changes(DB: TSQLite3DB): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_total_changes(DB: TSQLite3DB): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_malloc(n: Integer): Pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_realloc(pOld: Pointer; n: Integer): Pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-procedure sqlite3_free(p: Pointer); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_memory_used: Int64; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_memory_highwater(resetFlag: Integer): Int64; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_limit(DB: TSQLite3DB; id,newValue: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
+  pArg: Pointer): Pointer; cdecl; external;
+function sqlite3_changes(DB: TSQLite3DB): Integer; cdecl; external;
+function sqlite3_total_changes(DB: TSQLite3DB): Integer; cdecl; external;
+function sqlite3_malloc(n: Integer): Pointer; cdecl; external;
+function sqlite3_realloc(pOld: Pointer; n: Integer): Pointer; cdecl; external;
+procedure sqlite3_free(p: Pointer); cdecl; external;
+function sqlite3_memory_used: Int64; cdecl; external;
+function sqlite3_memory_highwater(resetFlag: Integer): Int64; cdecl; external;
+function sqlite3_limit(DB: TSQLite3DB; id,newValue: integer): integer; cdecl; external;
 function sqlite3_backup_init(DestDB: TSQLite3DB; DestDatabaseName: PUTF8Char;
-  SourceDB: TSQLite3DB; SourceDatabaseName: PUTF8Char): TSQLite3Backup; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_backup_step(Backup: TSQLite3Backup; nPages: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_backup_finish(Backup: TSQLite3Backup): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_backup_remaining(Backup: TSQLite3Backup): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_backup_pagecount(Backup: TSQLite3Backup): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
+  SourceDB: TSQLite3DB; SourceDatabaseName: PUTF8Char): TSQLite3Backup; cdecl; external;
+function sqlite3_backup_step(Backup: TSQLite3Backup; nPages: integer): integer; cdecl; external;
+function sqlite3_backup_finish(Backup: TSQLite3Backup): integer; cdecl; external;
+function sqlite3_backup_remaining(Backup: TSQLite3Backup): integer; cdecl; external;
+function sqlite3_backup_pagecount(Backup: TSQLite3Backup): integer; cdecl; external;
 {$ifndef DELPHI5OROLDER}
 function sqlite3_config(operation: integer): integer; cdecl varargs; external;
 function sqlite3_db_config(DB: TSQLite3DB; operation: integer): integer; cdecl varargs; external;
 {$endif}
-{$ifdef INCLUDE_TRACE}
 function sqlite3_trace_v2(DB: TSQLite3DB; Mask: integer; Callback: TSQLTraceCallback;
-  UserData: Pointer): Pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-{$endif INCLUDE_TRACE}
+  UserData: Pointer): Pointer; cdecl; external;
 
 
 { TSQLite3LibraryStatic }
@@ -1359,7 +1075,7 @@ begin
   open_v2              := @sqlite3_open_v2;
   key                  := @sqlite3_key;
   rekey                := @sqlite3_rekey;
-  close                := @sqlite3_closeInternal;
+  close                := @sqlite3_close;
   libversion           := @sqlite3_libversion;
   errmsg               := @sqlite3_errmsg;
   extended_errcode     := @sqlite3_extended_errcode;
@@ -1431,9 +1147,7 @@ begin
   free_                := @sqlite3_free;
   memory_used          := @sqlite3_memory_used;
   memory_highwater     := @sqlite3_memory_highwater;
-{$ifdef INCLUDE_TRACE}
   trace_v2             := @sqlite3_trace_v2;
-{$endif}
   limit                := @sqlite3_limit;
   backup_init          := @sqlite3_backup_init;
   backup_step          := @sqlite3_backup_step;

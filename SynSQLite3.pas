@@ -100,8 +100,7 @@ unit SynSQLite3;
 
   Version 1.16
   - updated SQLite3 engine to version 3.7.12.1
-  - unit now includes FTS3/FTS4 by default (i.e. INCLUDE_FTS3 conditional is
-    set in both SQLite3.pas and SynSQLite3.pas units)
+  - unit now includes FTS3/FTS4 by default
   - added sqlite3_changes() and sqlite3_total_changes() function prototypes
   - new TSQLDataBase.LastChangeCount method (wrapper around sqlite3_changes)
   - new IsSQLite3FileEncrypted() function
@@ -190,7 +189,7 @@ unit SynSQLite3;
 
 }
 
-{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER SQLITE3_FASTCALL
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 interface
 
@@ -519,14 +518,14 @@ type
   // - set to @sqlite3InternalFree if a Value must be released via Freemem()
   // - set to @sqlite3InternalFreeObject if a Value must be released via
   // TObject(p).Free
-  TSQLDestroyPtr = procedure(p: pointer); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  TSQLDestroyPtr = procedure(p: pointer); cdecl;
 
   /// SQLite3 collation (i.e. sort and comparaison) function prototype
   // - this function MUST use s1Len and s2Len parameters during the comparaison:
   // s1 and s2 are not zero-terminated
   // - used by sqlite3.create_collation low-level function
   TSQLCollateFunc = function(CollateParam: pointer; s1Len: integer; s1: pointer;
-    s2Len: integer; s2: pointer) : integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    s2Len: integer; s2: pointer) : integer; cdecl;
 
   /// SQLite3 user function or aggregate callback prototype
   // - argc is the number of supplied parameters, which are available in argv[]
@@ -534,10 +533,10 @@ type
   // - use sqlite3.value_*(argv[*]) functions to retrieve a parameter value
   // - then set the result using sqlite3.result_*(Context,*) functions
   TSQLFunctionFunc = procedure(Context: TSQLite3FunctionContext;
-    argc: integer; var argv: TSQLite3ValueArray); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    argc: integer; var argv: TSQLite3ValueArray); cdecl;
 
   /// SQLite3 user final aggregate callback prototype
-  TSQLFunctionFinal = procedure(Context: TSQLite3FunctionContext); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  TSQLFunctionFinal = procedure(Context: TSQLite3FunctionContext); cdecl;
 
   /// SQLite3 callback prototype to handle SQLITE_BUSY errors
   // - The first argument to the busy handler is a copy of the user pointer which
@@ -549,7 +548,7 @@ type
   // - If the callback returns non-zero, then another attempt is made to open
   // the database for reading and the cycle repeats.
   TSQLBusyHandler = function(user: pointer; count: integer): integer;
-     {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+     cdecl;
 
   PFTSMatchInfo = ^TFTSMatchInfo;
   /// map the matchinfo function returned BLOB value
@@ -807,7 +806,7 @@ type
     // columns and datatypes in the virtual table
     xCreate: function(DB: TSQLite3DB; pAux: Pointer;
       argc: Integer; const argv: PPUTF8CharArray;
-      var ppVTab: PSQLite3VTab; var pzErr: PUTF8Char): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      var ppVTab: PSQLite3VTab; var pzErr: PUTF8Char): Integer; cdecl;
     /// xConnect is called to establish a new connection to an existing virtual table,
     // whereas xCreate is called to create a new virtual table from scratch
     // - It has the same parameters and constructs a new PSQLite3VTab structure
@@ -817,7 +816,7 @@ type
     // backing store. The xConnect method just connects to an existing backing store.
     xConnect: function(DB: TSQLite3DB; pAux: Pointer;
       argc: Integer; const argv: PPUTF8CharArray;
-      var ppVTab: PSQLite3VTab; var pzErr: PUTF8Char): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      var ppVTab: PSQLite3VTab; var pzErr: PUTF8Char): Integer; cdecl;
     /// Used to determine the best way to access the virtual table
     // - The pInfo parameter is used for input and output parameters
     // - The SQLite core calls the xBestIndex() method when it is compiling a query
@@ -838,19 +837,19 @@ type
     // where it will be deallocated, such as in the idxStr field with
     // needToFreeIdxStr set to 1.
     xBestIndex: function(var pVTab: TSQLite3VTab; var pInfo: TSQLite3IndexInfo): Integer;
-      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      cdecl;
     /// Releases a connection to a virtual table
     // - Only the pVTab object is destroyed. The virtual table is not destroyed and
     // any backing store associated with the virtual table persists. This method
     // undoes the work of xConnect.
-    xDisconnect: function(pVTab: PSQLite3VTab): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    xDisconnect: function(pVTab: PSQLite3VTab): Integer; cdecl;
     /// Releases a connection to a virtual table, just like the xDisconnect method,
     // and it also destroys the underlying table implementation.
     // - This method undoes the work of xCreate
     // - The xDisconnect method is called whenever a database connection that uses
     // a virtual table is closed. The xDestroy method is only called when a
     // DROP TABLE statement is executed against the virtual table.
-    xDestroy: function(pVTab: PSQLite3VTab): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    xDestroy: function(pVTab: PSQLite3VTab): Integer; cdecl;
     /// Creates a new cursor used for accessing (read and/or writing) a virtual table
     // - A successful invocation of this method will allocate the memory for the
     // TPSQLite3VTabCursor (or a subclass), initialize the new object, and
@@ -865,13 +864,13 @@ type
     // will invoke the xFilter method on the cursor prior to any attempt to
     // position or read from the cursor.
     xOpen: function(var pVTab: TSQLite3VTab; var ppCursor: PSQLite3VTabCursor): Integer;
-      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      cdecl;
     /// Closes a cursor previously opened by xOpen
     // - The SQLite core will always call xClose once for each cursor opened using xOpen.
     // - This method must release all resources allocated by the corresponding xOpen call.
     // - The routine will not be called again even if it returns an error. The
     // SQLite core will not use the pVtabCursor again after it has been closed.
-    xClose: function(pVtabCursor: PSQLite3VTabCursor): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    xClose: function(pVtabCursor: PSQLite3VTabCursor): Integer; cdecl;
     /// Begins a search of a virtual table
     // - The first argument is a cursor opened by xOpen.
     // - The next two arguments define a particular search index previously chosen
@@ -890,7 +889,7 @@ type
     // - This method must return SQLITE_OK if successful, or an sqlite error code
     // if an error occurs.
     xFilter: function(var pVtabCursor: TSQLite3VTabCursor; idxNum: Integer; const idxStr: PAnsiChar;
-      argc: Integer; var argv: TSQLite3ValueArray): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      argc: Integer; var argv: TSQLite3ValueArray): Integer; cdecl;
     /// Advances a virtual table cursor to the next row of a result set initiated by xFilter
     // - If the cursor is already pointing at the last row when this routine is called,
     // then the cursor no longer points to valid data and a subsequent call to the
@@ -899,11 +898,11 @@ type
     // subsequent calls to xEof must return false (zero).
     // - This method must return SQLITE_OK if successful, or an sqlite error code
     // if an error occurs.
-    xNext: function(var pVtabCursor: TSQLite3VTabCursor): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    xNext: function(var pVtabCursor: TSQLite3VTabCursor): Integer; cdecl;
     /// Checks if cursor reached end of rows
     // - Must return false (zero) if the specified cursor currently points to a
     // valid row of data, or true (non-zero) otherwise
-    xEof: function(var pVtabCursor: TSQLite3VTabCursor): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    xEof: function(var pVtabCursor: TSQLite3VTabCursor): Integer; cdecl;
     /// The SQLite core invokes this method in order to find the value for the
     // N-th column of the current row
     // - N is zero-based so the first column is numbered 0.
@@ -915,11 +914,11 @@ type
     // - To raise an error, the xColumn method should use one of the result_text()
     // methods to set the error message text, then return an appropriate error code.
     xColumn: function(var pVtabCursor: TSQLite3VTabCursor; sContext: TSQLite3FunctionContext;
-      N: Integer): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      N: Integer): Integer; cdecl;
     /// Should fill pRowid with the rowid of row that the virtual table cursor
     // pVtabCursor is currently pointing at
     xRowid: function(var pVtabCursor: TSQLite3VTabCursor; var pRowid: Int64): Integer;
-      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      cdecl;
     /// Makes a change to a virtual table content (insert/delete/update)
     // - The nArg parameter specifies the number of entries in the ppArg[] array
     // - The value of nArg will be 1 for a pure delete operation or N+2 for an
@@ -979,7 +978,7 @@ type
     // changes, the xUpdate() method must return an error code.
     xUpdate: function(var pVTab: TSQLite3VTab;
       nArg: Integer; var ppArg: TSQLite3ValueArray;
-      var pRowid: Int64): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      var pRowid: Int64): Integer; cdecl;
     /// Begins a transaction on a virtual table
     // - This method is always followed by one call to either the xCommit or
     // xRollback method.
@@ -989,18 +988,18 @@ type
     // xSavepoint, xRelease and xRollBackTo methods.
     // - Multiple calls to other methods can and likely will occur in between the
     // xBegin and the corresponding xCommit or xRollback.
-    xBegin: function(var pVTab: TSQLite3VTab): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    xBegin: function(var pVTab: TSQLite3VTab): Integer; cdecl;
     /// Signals the start of a two-phase commit on a virtual table
     // - This method is only invoked after call to the xBegin method and prior
     // to an xCommit or xRollback.
     // - In order to implement two-phase commit, the xSync method on all virtual
     // tables is invoked prior to invoking the xCommit method on any virtual table.
     // - If any of the xSync methods fail, the entire transaction is rolled back.
-    xSync: function(var pVTab: TSQLite3VTab): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    xSync: function(var pVTab: TSQLite3VTab): Integer; cdecl;
     /// Causes a virtual table transaction to commit
-    xCommit: function(var pVTab: TSQLite3VTab): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    xCommit: function(var pVTab: TSQLite3VTab): Integer; cdecl;
     /// Causes a virtual table transaction to rollback
-    xRollback: function(var pVTab: TSQLite3VTab): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    xRollback: function(var pVTab: TSQLite3VTab): Integer; cdecl;
     /// Called during sqlite3.prepare() to give the virtual table implementation
     // an opportunity to overload SQL functions
     // - When a function uses a column from a virtual table as its first argument,
@@ -1017,20 +1016,20 @@ type
     // - The function pointer returned by this routine must be valid for the
     // lifetime of the pVTab object given in the first parameter.
     xFindFunction: function(var pVTab: TSQLite3VTab; nArg: Integer; const zName: PAnsiChar;
-      var pxFunc: TSQLFunctionFunc; var ppArg: Pointer): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      var pxFunc: TSQLFunctionFunc; var ppArg: Pointer): Integer; cdecl;
     /// Provides notification that the virtual table implementation that the
     // virtual table will be given a new name
     // - If this method returns SQLITE_OK then SQLite renames the table.
     // - If this method returns an error code then the renaming is prevented.
     xRename: function(var pVTab: TSQLite3VTab; const zNew: PAnsiChar): Integer;
-       {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+       cdecl;
     /// Starts a new transaction with the virtual table
     // - SAVEPOINTs are a method of creating transactions, similar to BEGIN and
     // COMMIT, except that the SAVEPOINT and RELEASE commands are named and
     // may be nested. See @http://www.sqlite.org/lang_savepoint.html
     // - iSavepoint parameter indicates the unique name of the SAVEPOINT
     xSavepoint: function(var pVTab: TSQLite3VTab; iSavepoint: integer): Integer;
-       {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+       cdecl;
     /// Merges a transaction into its parent transaction, so that the specified
     // transaction and its parent become the same transaction
     // - Causes all savepoints back to and including the most recent savepoint
@@ -1041,12 +1040,12 @@ type
     // rollback in an outer transaction.
     // - iSavepoint parameter indicates the unique name of the SAVEPOINT
     xRelease: function(var pVTab: TSQLite3VTab; iSavepoint: integer): Integer;
-       {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+       cdecl;
     /// Reverts the state of the virtual table content back to what it was just
     // after the corresponding SAVEPOINT
     // - iSavepoint parameter indicates the unique name of the SAVEPOINT
     xRollbackTo: function(var pVTab: TSQLite3VTab; iSavepoint: integer): Integer;
-       {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+       cdecl;
   end;
 
   /// Compile-Time Authorization Callback prototype
@@ -1106,7 +1105,7 @@ type
   // trigger or view that is responsible for the access attempt or nil if this
   // access attempt is directly from top-level SQL code.
   TSQLAuthorizerCallback = function(pUserData: Pointer; code: Integer;
-    const zTab, zCol, zDb, zAuthContext: PAnsiChar): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    const zTab, zCol, zDb, zAuthContext: PAnsiChar): Integer; cdecl;
 
   /// Callback function invoked when a row is updated, inserted or deleted,
   // after sqlite3.update_hook() registration
@@ -1125,7 +1124,7 @@ type
   // sqlite3.prepare_v2() and sqlite3.step() both modify their database
   // connections for the meaning of "modify" in this paragraph.
   TSQLUpdateCallback = procedure(pUpdateArg: Pointer; op: Integer;
-    const zDb, zTbl: PUTF8Char; iRowID: Int64); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    const zDb, zTbl: PUTF8Char; iRowID: Int64); cdecl;
 
   /// Commit And Rollback Notification Callback function after
   // sqlite3.commit_hook() or sqlite3.rollback_hook() registration
@@ -1145,7 +1144,7 @@ type
   // constraint causes an implicit rollback to occur. The rollback callback
   // is not invoked if a transaction is automatically rolled back because the
   // database connection is closed.
-  TSQLCommitCallback = function(pArg: Pointer): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  TSQLCommitCallback = function(pArg: Pointer): Integer; cdecl;
 
 
   /// events monitored by sqlite3.trace_v2() tracing logic
@@ -1177,39 +1176,39 @@ type
   // - P and X arguments are pointers whose meanings depend on Trace content:
   // see TSQLTraceMask for the various use cases
   TSQLTraceCallback = procedure(Trace: TSQLTraceMask; UserData,P,X: pointer);
-    {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    cdecl;
 
   /// Callback function registered by sqlite3.profile()
   // - this procedure will be invoked as each SQL statement finishes
   // - warning: sqlite3.profile() function is considered experimental and is
   // subject to change in future versions of SQLite
   TSQLProfileCallback = procedure(ProfileArg: Pointer; Profile: PUTF8Char;
-    ProfileNanoSeconds: Int64); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    ProfileNanoSeconds: Int64); cdecl;
 
   /// defines the interface between SQLite and low-level memory allocation routines
   // - as used by sqlite3.config(SQLITE_CONFIG_MALLOC,pMemMethods);
   TSQLite3MemMethods = record
     /// Memory allocation function
     xMalloc: function(size: integer): pointer;
-      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      cdecl;
     /// Free a prior allocation
      xFree: procedure(ptr: pointer);
-      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      cdecl;
     /// Resize an allocation
     xRealloc: function(ptr: pointer; size: integer): pointer;
-      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      cdecl;
     /// Return the size of an allocation
     xSize: function(ptr: pointer): integer;
-      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      cdecl;
     /// Round up request size to allocation size
     xRoundup: function(size: integer): integer;
-      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      cdecl;
     /// Initialize the memory allocator
     xInit: function(appData: pointer): integer;
-      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      cdecl;
     /// Deinitialize the memory allocator
     xShutdown: procedure(appData: pointer);
-      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      cdecl;
     /// Argument to xInit() and xShutdown()
     pAppData: pointer;
   end;
@@ -1232,11 +1231,11 @@ type
     /// initialize the SQLite3 database code
     // - automaticaly called by the initialization block of this unit
     // - so sqlite3.c is compiled with SQLITE_OMIT_AUTOINIT defined
-    initialize: function: integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    initialize: function: integer; cdecl;
 
     /// shutdown the SQLite3 database core
     // - automaticaly called by the finalization block of this unit
-    shutdown: function: integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    shutdown: function: integer; cdecl;
 
     /// Open a SQLite3 database filename, creating a DB handle
     // - filename must be UTF-8 encoded (filenames containing international
@@ -1248,7 +1247,7 @@ type
     // - Whatever or not an error occurs when it is opened, resources associated with
     // the database connection handle should be released by passing it to
     // sqlite3.close() when it is no longer required
-    open: function(filename: PUTF8Char; var DB: TSQLite3DB): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    open: function(filename: PUTF8Char; var DB: TSQLite3DB): integer; cdecl;
 
     /// Open a SQLite3 database filename, creating a DB handle
     // - sqlite3.open_v2() interface works like sqlite3.open() except that it
@@ -1266,20 +1265,22 @@ type
     // If the fourth parameter is a nil pointer then the default sqlite3_vfs
     // object is used
     open_v2: function(filename: PUTF8Char; var DB: TSQLite3DB; flags: integer;
-      zVfszVfs: PUTF8Char): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      zVfszVfs: PUTF8Char): integer; cdecl;
 
     ///  specify the encryption key on a newly opened database connection
     // - Assigned(key)=false if encryption is not available for this .dll
     // - SynSQLite3Static will use its own internal encryption format
-    key: function(DB: TSQLite3DB; key: pointer; keyLen: Integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    // - key/keylen may be a JSON-serialized TSynSignerParams object, or will use
+    // AES-OFB-128 after SHAKE_128 with rounds=1000 and a fixed salt on plain password text
+    key: function(DB: TSQLite3DB; key: pointer; keyLen: Integer): integer; cdecl;
 
     /// change the encryption key on a database connection that is already opened
     // -  can also decrypt a previously encrypted database (so that it is accessible
     // from any version of SQLite) by specifying a nil key
-    // - Assigned(key)=false if encryption is not available for this .dll
-    // - SynSQLite3Static will throw an exception if you try to use this API:
-    // you shall call ChangeSQLEncryptTablePassWord() procedure instead
-    rekey: function(DB: TSQLite3DB; key: pointer; keyLen: Integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    // - Assigned(rekey)=false if encryption is not available, i.e. if
+    // NOSQLITE3STATIC is defined 
+    // - also see ChangeSQLEncryptTablePassWord() procedure 
+    rekey: function(DB: TSQLite3DB; key: pointer; keyLen: Integer): integer; cdecl;
 
     /// Destructor for the sqlite3 object, which handle is DB
     //  - Applications should finalize all prepared statements and close all BLOB handles
@@ -1288,13 +1289,13 @@ type
     // - if invoked while a transaction is open, the transaction is automatically rolled back
     //  - SynSQLite3Static will use its own internal function for handling properly
     // its own encryption format
-    close: function(DB: TSQLite3DB): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    close: function(DB: TSQLite3DB): integer; cdecl;
 
     /// Return the version of the SQLite database engine, in ascii format
     // - currently returns '3.22.0', when used with our SynSQLite3Static unit
     // - if an external SQLite3 library is used, version may vary
     // - you may use the VersionText property (or Version for full details) instead
-    libversion: function: PUTF8Char; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    libversion: function: PUTF8Char; cdecl;
 
     /// Returns English-language text that describes an error,
     // using UTF-8 encoding (which, with English text, is the same as Ansi).
@@ -1302,12 +1303,12 @@ type
     // The application does not need to worry about freeing the result.
     // However, the error string might be overwritten or deallocated by
     // subsequent calls to other SQLite interface functions.
-    errmsg: function(DB: TSQLite3DB): PUTF8Char; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    errmsg: function(DB: TSQLite3DB): PUTF8Char; cdecl;
 
     /// returns the numeric result code or extended result code for the most
     // recent failed sqlite3 API call associated with a database connection
     extended_errcode: function(DB: TSQLite3DB): integer;
-      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      cdecl;
 
     /// add SQL functions or aggregates or to redefine the behavior of existing
     // SQL functions or aggregates
@@ -1347,7 +1348,7 @@ type
     create_function: function(DB: TSQLite3DB; FunctionName: PUTF8Char;
       nArg, eTextRep: integer; pApp: pointer; xFunc, xStep: TSQLFunctionFunc;
       xFinal: TSQLFunctionFinal): Integer;
-      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      cdecl;
 
     /// add SQL functions or aggregates or to redefine the behavior of existing
     // SQL functions or aggregates, including destruction
@@ -1361,7 +1362,7 @@ type
     create_function_v2: function(DB: TSQLite3DB; FunctionName: PUTF8Char;
       nArg, eTextRep: integer; pApp: pointer; xFunc, xStep: TSQLFunctionFunc;
       xFinal: TSQLFunctionFinal; xDestroy: TSQLDestroyPtr): Integer;
-      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      cdecl;
 
     /// Define New Collating Sequences
     // - add new collation sequences to the database connection specified
@@ -1370,10 +1371,10 @@ type
     // - StringEncoding is either SQLITE_UTF8 either SQLITE_UTF16
     // - TSQLDataBase.Create add WIN32CASE, WIN32NOCASE and ISO8601 collations
     create_collation: function(DB: TSQLite3DB; CollationName: PUTF8Char;
-      StringEncoding: integer; CollateParam: pointer; cmp: TSQLCollateFunc): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      StringEncoding: integer; CollateParam: pointer; cmp: TSQLCollateFunc): integer; cdecl;
 
     /// Returns the rowid of the most recent successful INSERT into the database
-    last_insert_rowid: function(DB: TSQLite3DB): Int64; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    last_insert_rowid: function(DB: TSQLite3DB): Int64; cdecl;
 
     /// Set A Busy Timeout
     // - This routine sets a busy handler that sleeps for a specified amount of time
@@ -1387,7 +1388,7 @@ type
     // any given moment. If another busy handler was defined (using
     // sqlite3.busy_handler()) prior to calling this routine, that other busy handler
     // is cleared.
-    busy_timeout: function(DB: TSQLite3DB; Milliseconds: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    busy_timeout: function(DB: TSQLite3DB; Milliseconds: integer): integer; cdecl;
 
     /// Register A Callback To Handle SQLITE_BUSY Errors
     // - This routine sets a callback function that might be invoked whenever an
@@ -1397,7 +1398,7 @@ type
     // nil, then the callback might be invoked with two arguments.
     // - The default busy callback is nil.
     busy_handler: function(DB: TSQLite3DB;
-      CallbackPtr: TSQLBusyHandler; user: Pointer): integer;  {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      CallbackPtr: TSQLBusyHandler; user: Pointer): integer;  cdecl;
 
     /// Compile a SQL query into byte-code
     // - SQL must contains an UTF8-encoded null-terminated string query
@@ -1413,7 +1414,7 @@ type
     // - this routine only compiles the first statement in SQL, so SQLtail is left pointing
     // to what remains uncompiled
     prepare_v2: function(DB: TSQLite3DB; SQL: PUTF8Char; SQL_bytes: integer;
-      var S: TSQLite3Statement; var SQLtail: PUTF8Char): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      var S: TSQLite3Statement; var SQLtail: PUTF8Char): integer; cdecl;
 
     /// Delete a previously prepared statement
     // - return SQLITE_OK on success or an error code - see SQLITE_* and sqlite3.errmsg()
@@ -1422,7 +1423,7 @@ type
     //  is called, that is like encountering an error or an interrupt. Incomplete updates
     //  may be rolled back and transactions canceled, depending on the circumstances,
     //  and the error code returned will be SQLITE_ABORT
-    finalize: function(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    finalize: function(S: TSQLite3Statement): integer; cdecl;
 
     /// Find the next prepared statement
     // - this interface returns a handle to the next prepared statement after S,
@@ -1430,7 +1431,7 @@ type
     // - if S is 0 then this interface returns a pointer to the first prepared
     // statement associated with the database connection DB.
     // - if no prepared statement satisfies the conditions of this routine, it returns 0
-    next_stmt: function(DB: TSQLite3DB; S: TSQLite3Statement): TSQLite3Statement; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    next_stmt: function(DB: TSQLite3DB; S: TSQLite3Statement): TSQLite3Statement; cdecl;
 
     /// Reset a prepared statement object back to its initial state, ready to be re-Prepared
     // - if the most recent call to sqlite3.step(S) returned SQLITE_ROW or SQLITE_DONE,
@@ -1439,7 +1440,7 @@ type
     // - return an appropriate error code if the most recent call to sqlite3.step(S) failed
     // - any SQL statement variables that had values bound to them using the sqlite3.bind_*()
     // API retain their values. Use sqlite3.clear_bindings() to reset the bindings.
-    reset: function(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    reset: function(S: TSQLite3Statement): integer; cdecl;
 
     ///  returns true (non-zero) if and only if the prepared statement X
     // makes no direct changes to the content of the database file
@@ -1450,7 +1451,7 @@ type
     // statements also cause sqlite3.stmt_readonly() to return true since, while
     // those statements change the configuration of a database connection, they
     // do not make changes to the content of the database files on disk.
-    stmt_readonly: function(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    stmt_readonly: function(S: TSQLite3Statement): integer; cdecl;
 
     /// Evaluate An SQL Statement, returning a result status:
     // - SQLITE_BUSY means that the database engine was unable to acquire the database
@@ -1473,10 +1474,10 @@ type
     // has been recompiled and run again, but the schame changed in a way that makes
     // the statement no longer valid, as a fatal error.
     // - another specific error code is returned on fatal error
-    step: function(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    step: function(S: TSQLite3Statement): integer; cdecl;
 
     /// get the number of columns in the result set for the statement
-    column_count: function(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    column_count: function(S: TSQLite3Statement): integer; cdecl;
 
     /// datatype code for the initial data type of a result column
     // - returned value is one of SQLITE_INTEGER, SQLITE_FLOAT, SQLITE_TEXT,
@@ -1485,14 +1486,14 @@ type
     // - Col is the column number, indexed from 0 to sqlite3.column_count(S)-1
     // - must be called before any sqlite3.column_*() statement, which may result in
     // an implicit type conversion: in this case, value is undefined
-    column_type: function(S: TSQLite3Statement; Col: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    column_type: function(S: TSQLite3Statement; Col: integer): integer; cdecl;
 
     /// returns a zero-terminated UTF-8 string containing the declared datatype
     // of a result column
-    column_decltype: function(S: TSQLite3Statement; Col: integer): PAnsiChar; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    column_decltype: function(S: TSQLite3Statement; Col: integer): PAnsiChar; cdecl;
 
     /// returns the name of a result column as a zero-terminated UTF-8 string
-    column_name: function(S: TSQLite3Statement; Col: integer): PUTF8Char; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    column_name: function(S: TSQLite3Statement; Col: integer): PUTF8Char; cdecl;
 
     /// number of bytes for a BLOB or UTF-8 string result
     // - S is the SQL statement, after sqlite3.step(S) returned SQLITE_ROW
@@ -1500,33 +1501,33 @@ type
     // - an implicit conversion into UTF-8 text is made for a numeric value or
     // UTF-16 column: you must call sqlite3.column_text() or sqlite3.column_blob()
     // before calling sqlite3.column_bytes() to perform the conversion itself
-    column_bytes: function(S: TSQLite3Statement; Col: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    column_bytes: function(S: TSQLite3Statement; Col: integer): integer; cdecl;
 
     /// get the value handle of the Col column in the current row of prepared statement S
     // - this handle represent a sqlite3.value object
     // - this handle can then be accessed with any sqlite3.value_*() function below
-    column_value: function(S: TSQLite3Statement; Col: integer): TSQLite3Value; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    column_value: function(S: TSQLite3Statement; Col: integer): TSQLite3Value; cdecl;
 
     /// converts the Col column in the current row prepared statement S
     // into a floating point value and returns a copy of that value
     // - NULL is converted into 0.0
     // - INTEGER is converted into corresponding floating point value
     // - TEXT or BLOB is converted from all correct ASCII numbers with 0.0 as default
-    column_double: function(S: TSQLite3Statement; Col: integer): double; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    column_double: function(S: TSQLite3Statement; Col: integer): double; cdecl;
 
     /// converts the Col column in the current row prepared statement S
     // into a 32 bit integer value and returns a copy of that value
     // - NULL is converted into 0
     // - FLOAT is truncated into corresponding integer value
     // - TEXT or BLOB is converted from all correct ASCII numbers with 0 as default
-    column_int: function(S: TSQLite3Statement; Col: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    column_int: function(S: TSQLite3Statement; Col: integer): integer; cdecl;
 
     /// converts the Col column in the current row prepared statement S
     // into a 64 bit integer value and returns a copy of that value
     // - NULL is converted into 0
     // - FLOAT is truncated into corresponding integer value
     // - TEXT or BLOB is converted from all correct ASCII numbers with 0 as default
-    column_int64: function(S: TSQLite3Statement; Col: integer): int64; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    column_int64: function(S: TSQLite3Statement; Col: integer): int64; cdecl;
 
     /// converts the Col column in the current row prepared statement S
     // into a zero-terminated UTF-8 string and returns a pointer to that string
@@ -1534,7 +1535,7 @@ type
     // - INTEGER or FLOAT are converted into ASCII rendering of the numerical value
     // - TEXT is returned directly (with UTF-16 -> UTF-8 encoding if necessary)
     // - BLOB add a zero terminator if needed
-    column_text: function(S: TSQLite3Statement; Col: integer): PUTF8Char; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    column_text: function(S: TSQLite3Statement; Col: integer): PUTF8Char; cdecl;
 
     /// converts the Col column in the current row prepared statement S
     // into a zero-terminated UTF-16 string and returns a pointer to that string
@@ -1542,14 +1543,14 @@ type
     // - INTEGER or FLOAT are converted into ASCII rendering of the numerical value
     // - TEXT is returned directly (with UTF-8 -> UTF-16 encoding if necessary)
     // - BLOB add a zero terminator if needed
-    column_text16: function(S: TSQLite3Statement; Col: integer): PWideChar; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    column_text16: function(S: TSQLite3Statement; Col: integer): PWideChar; cdecl;
 
     /// converts the Col column in the current row of prepared statement S
     // into a BLOB and then returns a pointer to the converted value
     // - NULL is converted into nil
     // - INTEGER or FLOAT are converted into ASCII rendering of the numerical value
     // - TEXT and BLOB are returned directly
-    column_blob: function(S: TSQLite3Statement; Col: integer): PAnsiChar; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    column_blob: function(S: TSQLite3Statement; Col: integer): PAnsiChar; cdecl;
 
 
     /// datatype code for a sqlite3.value object, specified by its handle
@@ -1557,7 +1558,7 @@ type
     // SQLITE_BLOB or SQLITE_NULL
     // - must be called before any sqlite3.value_*() statement, which may result in
     // an implicit type conversion: in this case, value is undefined
-    value_type: function(Value: TSQLite3Value): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    value_type: function(Value: TSQLite3Value): integer; cdecl;
 
     /// attempts to apply numeric affinity to the value
     // - This means that an attempt is made to convert the value to an integer or
@@ -1567,40 +1568,40 @@ type
     // conversion is returned.
     // - returned value is one of SQLITE_INTEGER, SQLITE_FLOAT, SQLITE_TEXT,
     // SQLITE_BLOB or SQLITE_NULL
-    value_numeric_type: function(Value: TSQLite3Value): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    value_numeric_type: function(Value: TSQLite3Value): integer; cdecl;
 
     /// number of bytes for a sqlite3.value object, specified by its handle
     // - used after a call to sqlite3.value_text() or sqlite3.value_blob()
     //  to determine buffer size (in bytes)
-    value_bytes: function(Value: TSQLite3Value): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    value_bytes: function(Value: TSQLite3Value): integer; cdecl;
 
     /// converts a sqlite3.value object, specified by its handle,
     // into a floating point value and returns a copy of that value
-    value_double: function(Value: TSQLite3Value): double; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    value_double: function(Value: TSQLite3Value): double; cdecl;
 
     /// converts a sqlite3.value object, specified by its handle,
     // into an integer value and returns a copy of that value
-    value_int64: function(Value: TSQLite3Value): Int64; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    value_int64: function(Value: TSQLite3Value): Int64; cdecl;
 
     /// converts a sqlite3.value object, specified by its handle,
     // into an UTF-8 encoded string, and returns a copy of that value
-    value_text: function(Value: TSQLite3Value): PUTF8Char; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    value_text: function(Value: TSQLite3Value): PUTF8Char; cdecl;
 
     /// converts a sqlite3.value object, specified by its handle,
     // into a blob memory, and returns a copy of that value
-    value_blob: function(Value: TSQLite3Value): pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    value_blob: function(Value: TSQLite3Value): pointer; cdecl;
 
 
     /// sets the return value of the application-defined function to be NULL
-    result_null: procedure(Context: TSQLite3FunctionContext); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    result_null: procedure(Context: TSQLite3FunctionContext); cdecl;
 
     /// sets the return value of the application-defined function to be the 64-bit
     // signed integer value given in the 2nd argument
-    result_int64: procedure(Context: TSQLite3FunctionContext; Value: Int64); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    result_int64: procedure(Context: TSQLite3FunctionContext; Value: Int64); cdecl;
 
     /// sets the result from an application-defined function to be a floating point
     // value specified by its 2nd argument
-    result_double: procedure(Context: TSQLite3FunctionContext; Value: double); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    result_double: procedure(Context: TSQLite3FunctionContext; Value: double); cdecl;
 
     /// sets the result from an application-defined function to be the BLOB
     // - content is pointed to by the Value and which is Value_bytes bytes long
@@ -1610,7 +1611,7 @@ type
     // - set DestroyPtr to @sqlite3InternalFree if Value must be released via Freemem()
     // or to @sqlite3InternalFreeObject if Value must be released via a Free method
     result_blob: procedure(Context: TSQLite3FunctionContext; Value: Pointer;
-      Value_bytes: Integer=0; DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      Value_bytes: Integer=0; DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT); cdecl;
 
     /// sets the return value of the application-defined function to be a text string
     // which is represented as UTF-8
@@ -1625,32 +1626,32 @@ type
     // - set DestroyPtr to @sqlite3InternalFree if Value must be released via Freemem()
     // or to @sqlite3InternalFreeObject if Value must be released via a Free method
     result_text: procedure(Context: TSQLite3FunctionContext; Value: PUTF8Char;
-      Value_bytes: Integer=-1; DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      Value_bytes: Integer=-1; DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT); cdecl;
 
     /// sets the result of the application-defined function to be a copy the unprotected
     // sqlite3.value object specified by the 2nd parameter
     // - The sqlite3.result_value() interface makes a copy of the sqlite3.value so
     // that the sqlite3.value specified in the parameter may change or be deallocated
     // after sqlite3.result_value() returns without harm
-    result_value: procedure(Context: TSQLite3FunctionContext; Value: TSQLite3Value); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    result_value: procedure(Context: TSQLite3FunctionContext; Value: TSQLite3Value); cdecl;
 
     /// cause the implemented SQL function to throw an exception
     // - SQLite interprets the error message string from sqlite3.result_error() as UTF-8
     // - if MsgLen is negative, Msg must be #0 ended, or MsgLen must tell the numnber of
     // characters in the Msg UTF-8 buffer
-    result_error: procedure(Context: TSQLite3FunctionContext; Msg: PUTF8Char; MsgLen: integer=-1); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    result_error: procedure(Context: TSQLite3FunctionContext; Msg: PUTF8Char; MsgLen: integer=-1); cdecl;
 
     /// returns a copy of the pointer that was the pUserData parameter (the 5th
     // parameter) of the sqlite3.create_function() routine that originally
     // registered the application defined function
     // - This routine must be called from the same thread in which the
     // application-defined function is running
-    user_data: function(Context: TSQLite3FunctionContext): pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    user_data: function(Context: TSQLite3FunctionContext): pointer; cdecl;
 
     /// returns a copy of the pointer to the database connection (the 1st parameter)
     // of the sqlite3.create_function() routine that originally registered the
     // application defined function
-    context_db_handle: function(Context: TSQLite3FunctionContext): TSQLite3DB; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    context_db_handle: function(Context: TSQLite3FunctionContext): TSQLite3DB; cdecl;
 
     /// Implementations of aggregate SQL functions use this routine to allocate
     // memory for storing their state.
@@ -1673,7 +1674,7 @@ type
     // - SQLite automatically frees the memory allocated by sqlite3.aggregate_context()
     // when the aggregate query concludes.
     aggregate_context: function(Context: TSQLite3FunctionContext;
-       nBytes: integer): pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+       nBytes: integer): pointer; cdecl;
 
     /// Bind a Text Value to a parameter of a prepared statement
     // - return SQLITE_OK on success or an error code - see SQLITE_* and sqlite3.errmsg()
@@ -1689,7 +1690,7 @@ type
     // - set DestroyPtr to @sqlite3InternalFree if Value must be released via Freemem()
     bind_text: function(S: TSQLite3Statement; Param: integer;
       Text: PUTF8Char; Text_bytes: integer=-1; DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT): integer;
-      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      cdecl;
       // note that the official SQLite3 documentation could lead into misunderstanding:
       // Text_bytes must EXCLUDE the null terminator, otherwise a #0 is appended to
       // all column values
@@ -1705,7 +1706,7 @@ type
     // copy of the data (this is the prefered way in our Framework)
     // - set DestroyPtr to @sqlite3InternalFree if Value must be released via Freemem()
     bind_blob: function(S: TSQLite3Statement; Param: integer; Buf: pointer; Buf_bytes: integer;
-      DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT): integer; cdecl;
 
     /// bind a ZeroBlob buffer to a parameter
     // - uses a fixed amount of memory (just an integer to hold its size) while
@@ -1713,62 +1714,62 @@ type
     // for BLOBs whose content is later written using incremental BLOB I/O routines.
     // - a negative value for the Size parameter results in a zero-length BLOB
     // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
-    bind_zeroblob: function(S: TSQLite3Statement; Param: integer; Size: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    bind_zeroblob: function(S: TSQLite3Statement; Param: integer; Size: integer): integer; cdecl;
 
     /// Bind a floating point Value to a parameter of a prepared statement
     // - return SQLITE_OK on success or an error code - see SQLITE_* and sqlite3.errmsg()
     // - S is a statement prepared by a previous call to sqlite3.prepare_v2()
     // - Param is the index of the SQL parameter to be set (leftmost=1)
     // - Value is the floating point number to bind
-    bind_double: function(S: TSQLite3Statement; Param: integer; Value: double): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    bind_double: function(S: TSQLite3Statement; Param: integer; Value: double): integer; cdecl;
 
     /// Bind a 32 bits Integer Value to a parameter of a prepared statement
     // - return SQLITE_OK on success or an error code - see SQLITE_* and sqlite3.errmsg()
     // - S is a statement prepared by a previous call to sqlite3.prepare_v2()
     // - Param is the index of the SQL parameter to be set (leftmost=1)
     // - Value is the 32 bits Integer to bind
-    bind_int: function(S: TSQLite3Statement; Param: integer; Value: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    bind_int: function(S: TSQLite3Statement; Param: integer; Value: integer): integer; cdecl;
 
     /// Bind a 64 bits Integer Value to a parameter of a prepared statement
     // - return SQLITE_OK on success or an error code - see SQLITE_* and sqlite3.errmsg()
     // - S is a statement prepared by a previous call to sqlite3.prepare_v2()
     // - Param is the index of the SQL parameter to be set (leftmost=1)
     // - Value is the 64 bits Integer to bind
-    bind_int64: function(S: TSQLite3Statement; Param: integer; Value: Int64): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    bind_int64: function(S: TSQLite3Statement; Param: integer; Value: Int64): integer; cdecl;
 
     /// Bind a NULL Value to a parameter of a prepared statement
     // - return SQLITE_OK on success or an error code - see SQLITE_* and sqlite3.errmsg()
     // - S is a statement prepared by a previous call to sqlite3.prepare_v2()
     // - Param is the index of the SQL parameter to be set (leftmost=1)
-    bind_null: function(S: TSQLite3Statement; Param: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    bind_null: function(S: TSQLite3Statement; Param: integer): integer; cdecl;
 
     /// Reset All Bindings On A Prepared Statement
-    clear_bindings: function(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    clear_bindings: function(S: TSQLite3Statement): integer; cdecl;
 
     /// Number Of SQL Parameters for a prepared statement
     // - returns the index of the largest (rightmost) parameter. For all forms
     // except ?NNN, this will correspond to the number of unique parameters.
     // - If parameters of the ?NNN type are used, there may be gaps in the list.
-    bind_parameter_count: function(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    bind_parameter_count: function(S: TSQLite3Statement): integer; cdecl;
 
     /// Open a BLOB For Incremental I/O
     // - returns a BLOB handle for row RowID, column ColumnName, table TableName
     // in database DBName; in other words, the same BLOB that would be selected by:
     // ! SELECT ColumnName FROM DBName.TableName WHERE rowid = RowID;
     blob_open: function(DB: TSQLite3DB; DBName, TableName, ColumnName: PUTF8Char;
-      RowID: Int64; Flags: Integer; var Blob: TSQLite3Blob): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      RowID: Int64; Flags: Integer; var Blob: TSQLite3Blob): Integer; cdecl;
 
     /// Close A BLOB Handle
-    blob_close: function(Blob: TSQLite3Blob): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    blob_close: function(Blob: TSQLite3Blob): Integer; cdecl;
 
     /// Read Data From a BLOB Incrementally
-    blob_read: function(Blob: TSQLite3Blob; const Data; Count, Offset: Integer): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    blob_read: function(Blob: TSQLite3Blob; const Data; Count, Offset: Integer): Integer; cdecl;
 
     /// Write Data To a BLOB Incrementally
-    blob_write: function(Blob: TSQLite3Blob; const Data; Count, Offset: Integer): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    blob_write: function(Blob: TSQLite3Blob; const Data; Count, Offset: Integer): Integer; cdecl;
 
     /// Return The Size Of An Open BLOB
-    blob_bytes: function(Blob: TSQLite3Blob): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    blob_bytes: function(Blob: TSQLite3Blob): Integer; cdecl;
 
     /// Used to register a new virtual table module name
     // - The module name is registered on the database connection specified by the
@@ -1785,7 +1786,7 @@ type
     // destructor will also be invoked if call to sqlite3.create_module_v2() fails.
     create_module_v2: function(DB: TSQLite3DB; const zName: PAnsiChar;
       var p: TSQLite3Module; pClientData: Pointer; xDestroy: TSQLDestroyPtr): Integer;
-      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      cdecl;
 
     /// Declare the Schema of a virtual table
     // - The xCreate() and xConnect() methods of a virtual table module call this
@@ -1802,7 +1803,7 @@ type
     // implicit column-list used by an INSERT statement that lacks an explicit
     // column-list.
     declare_vtab: function(DB: TSQLite3DB; const zSQL: PAnsiChar): Integer;
-      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      cdecl;
 
     /// Registers an authorizer callback to a specified DB connection
     // - Only a single authorizer can be in place on a database connection at a time
@@ -1810,7 +1811,7 @@ type
     // - Disable the authorizer by installing a nil callback
     // - The authorizer is disabled by default
     set_authorizer: function(DB: TSQLite3DB; xAuth: TSQLAuthorizerCallback;
-      pUserData: Pointer): Integer;   {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      pUserData: Pointer): Integer;   cdecl;
 
     /// Register Data Change Notification Callbacks
     // - The sqlite3.update_hook() interface registers a callback function with
@@ -1832,7 +1833,7 @@ type
     // sqlite3.commit_hook() and sqlite3.rollback_hook() functions) if you want to
     // ensure that the notified update was not canceled by a later Rollback.
     update_hook: function(DB: TSQLite3DB; xCallback: TSQLUpdateCallback;
-      pArg: pointer): pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      pArg: pointer): pointer; cdecl;
 
     /// Register Commit Notification Callbacks
     // - The sqlite3.commit_hook() interface registers a callback function to be
@@ -1844,7 +1845,7 @@ type
     // previous call of the same function on the same database connection DB, or nil
     // for the first call for each function on DB.
     commit_hook: function(DB: TSQLite3DB; xCallback: TSQLCommitCallback;
-      pArg: Pointer): Pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      pArg: Pointer): Pointer; cdecl;
 
     // Register Rollback Notification Callbacks
     // - The sqlite3.rollback_hook() interface registers a callback function to be
@@ -1856,7 +1857,7 @@ type
     // previous call of the same function on the same database connection D, or nil
     // for the first call for each function on D.
     rollback_hook: function(DB: TSQLite3DB;  xCallback: TSQLCommitCallback;
-      pArg: Pointer): Pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      pArg: Pointer): Pointer; cdecl;
 
     /// Count The Number Of Rows Modified
     // - This function returns the number of database rows that were changed or
@@ -1869,7 +1870,7 @@ type
     // - If a separate thread makes changes on the same database connection while
     // sqlite3.changes() is running then the value returned is unpredictable and not
     // meaningful.
-    changes: function(DB: TSQLite3DB): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    changes: function(DB: TSQLite3DB): Integer; cdecl;
 
     /// Total Number Of Rows Modified
     // - This function returns the number of row changes caused by INSERT, UPDATE or
@@ -1886,27 +1887,27 @@ type
     // - If a separate thread makes changes on the same database connection while
     // sqlite3.total_changes() is running then the value returned is unpredictable
     // and not meaningful.
-    total_changes: function(DB: TSQLite3DB): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    total_changes: function(DB: TSQLite3DB): Integer; cdecl;
 
     /// Returns a pointer to a block of memory at least N bytes in length
     // - should call native malloc() function, i.e. GetMem() in this unit
-    malloc: function(n: Integer): Pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    malloc: function(n: Integer): Pointer; cdecl;
 
     /// Attempts to resize a prior memory allocation
     // - should call native realloc() function, i.e. ReallocMem() in this unit
-    realloc: function(pOld: Pointer; n: Integer): Pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    realloc: function(pOld: Pointer; n: Integer): Pointer; cdecl;
 
     /// Releases memory previously returned by sqlite3.malloc() or sqlite3.realloc()
     // - should call native free() function, i.e. FreeMem() in this unit
     // - renamed free_ in order not to override TObject.Free method
-    free_: procedure(p: Pointer); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    free_: procedure(p: Pointer); cdecl;
 
     /// Returns the number of bytes of memory currently outstanding (malloced but not freed)
-    memory_used: function: Int64; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    memory_used: function: Int64; cdecl;
 
     /// Returns the maximum value of sqlite3.memory_used() since the high-water mark
     // was last reset
-    memory_highwater: function(resetFlag: Integer): Int64; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    memory_highwater: function(resetFlag: Integer): Int64; cdecl;
 
     /// Register callback function that can be used for tracing the execution of
     // SQL statements
@@ -1916,7 +1917,7 @@ type
     // then tracing is disabled
     // - parameters of the Callback functions depend of the TSQLTraceMask involved
     trace_v2: function(DB: TSQLite3DB; Mask: TSQLTraceMask; Callback: TSQLTraceCallback;
-      UserData: Pointer): Pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      UserData: Pointer): Pointer; cdecl;
 
     /// Allows the size of various constructs to be limited on a connection
     // by connection basis
@@ -1931,7 +1932,7 @@ type
     // value of a limit without changing it, simply invoke this interface with
     // the third parameter set to -1.
     limit: function(DB: TSQLite3DB; id,newValue: integer): integer;
-      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      cdecl;
 
     /// Initialize a backup process of a given SQLite3 database instance
     // - The DestDB and DestDatabaseName arguments are the database connection
@@ -1952,7 +1953,7 @@ type
     // backup_finish() functions to perform the specified backup operation.
     backup_init: function(DestDB: TSQLite3DB; DestDatabaseName: PUTF8Char;
       SourceDB: TSQLite3DB; SourceDatabaseName: PUTF8Char): TSQLite3Backup;
-      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      cdecl;
 
     /// perform a backup step to transfer the data between the two databases
     // - backup_step() will copy up to nPages pages between the source and
@@ -1995,7 +1996,7 @@ type
     // mORMotSQLite3 units), then the backup database is automatically updated at
     // the same time, so you won't loose any data.
     backup_step: function(Backup: TSQLite3Backup; nPages: integer): integer;
-      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      cdecl;
     /// finalize a Backup process on a given database
     // - When backup_step() has returned SQLITE_DONE, or when the application
     // wishes to abandon the backup operation, the application should destroy the
@@ -2013,7 +2014,7 @@ type
     // - A return of SQLITE_BUSY or SQLITE_LOCKED from backup_step() is not a
     // permanent error and does not affect the return value of backup_finish().
     backup_finish: function(Backup: TSQLite3Backup): integer;
-      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      cdecl;
 
     /// returns the number of pages still to be backed up for a given Backup
     // - The values returned by this function is only updated by backup_step().
@@ -2021,7 +2022,7 @@ type
     // value is not updated to account for any extra pages that need to be
     // updated or the size of the source database file changing.
     backup_remaining: function(Backup: TSQLite3Backup): integer;
-      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      cdecl;
 
     /// returns the the total number of pages in the source database file
     // for a given Backup process
@@ -2030,7 +2031,7 @@ type
     // value is not updated to account for any extra pages that need to be
     // updated or the size of the source database file changing.
     backup_pagecount: function(Backup: TSQLite3Backup): integer;
-      {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+      cdecl;
 
     /// used to make global configuration changes to current database
     config: function(operation: integer): integer;
@@ -2085,11 +2086,11 @@ type
 
 /// an internal function which calls Freemem(p)
 // - can be used to free some PUTF8Char pointer allocated by Delphi Getmem()
-procedure sqlite3InternalFree(p: pointer); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+procedure sqlite3InternalFree(p: pointer); cdecl;
 
 /// an internal function which calls TObject(p).Free
 // - can be used to free some Delphi class instance
-procedure sqlite3InternalFreeObject(p: pointer); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+procedure sqlite3InternalFreeObject(p: pointer); cdecl;
 
 /// an internal function which calls RawByteString(p) := ''
 // - can be used to free some Delphi class instance
@@ -2097,7 +2098,7 @@ procedure sqlite3InternalFreeObject(p: pointer); {$ifndef SQLITE3_FASTCALL}cdecl
 // !  tmp := nil;
 // !  RawUTF8(tmp) := Text; // fast COW assignment
 // !  sqlite3.result_text(Context,tmp,length(Text)+1,sqlite3InternalFreeRawByteString);
-procedure sqlite3InternalFreeRawByteString(p: pointer); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+procedure sqlite3InternalFreeRawByteString(p: pointer); cdecl;
 
 /// wrapper around sqlite3.result_error() to be called if wrong number of arguments
 procedure ErrorWrongNumberOfArgs(Context: TSQLite3FunctionContext);
@@ -2809,7 +2810,9 @@ type
     /// open a SQLite3 database file
     // - open an existing database file or create a new one if no file exists
     // - if specified, the password will be used to cypher this file on disk
-    // (the main SQLite3 database file is encrypted, not the wal file during run)
+    // (the main SQLite3 database file is encrypted, not the wal file during run);
+    // the password may be a JSON-serialized TSynSignerParams object, or will use
+    // AES-OFB-128 after SHAKE_128 with rounds=1000 and a fixed salt on plain password text
     // - you can specify some optional flags for sqlite3.open_v2() as
     // SQLITE_OPEN_READONLY or SQLITE_OPEN_READWRITE instead of supplied default
     // value (which corresponds to the sqlite3.open() behavior)
@@ -3029,6 +3032,8 @@ type
     /// read-only access to the SQLite3 database handle
     property DB: TSQLite3DB read fDB;
     /// read-only access to the SQlite3 password used for encryption
+    // - may be a JSON-serialized TSynSignerParams object, or will use AES-OFB-128
+    // after SHAKE_128 with rounds=1000 and a fixed salt on plain password text
     property Password: RawUTF8 read fPassword;
     /// read-only access to the SQLite3 database filename opened without its path
     property FileNameWithoutPath: TFileName read fFileNameWithoutPath;
@@ -3251,13 +3256,11 @@ var
 
 
 /// check from the file beginning if sounds like a valid SQLite3 file
-// - since encryption starts only with the 2nd page, this function will
-// return true if a database file is encrypted or not
-function IsSQLite3File(const FileName: TFileName): boolean;
+// - returns true if a database file is encrypted or not
+// - optional retrieve the file page size from header
+function IsSQLite3File(const FileName: TFileName; PageSize: PInteger=nil): boolean;
 
 /// check if sounds like an encrypted SQLite3 file
-// - this will check the 2nd file page beginning to be a valid B-TREE page
-// - in some cases, may return false negatives (depending on the password used)
 function IsSQLite3FileEncrypted(const FileName: TFileName): boolean;
 
 /// comparison function using TSQLStatementCache.Timer.TimeInMicroSec
@@ -3270,39 +3273,48 @@ const
   // - note that the SynDBExplorer tool is able to recognize such files, and
   // open them directly - or use the DBSynLZ.dpr command-line sample tool
   SQLITE3_MAGIC = $ABA5A5AB;
+  /// the "magic" 16 bytes header stored at the begining of every SQlite3 file
+  SQLITE_FILE_HEADER: array[0..15] of AnsiChar = 'SQLite format 3';
+var
+  SQLITE_FILE_HEADER128: THash128Rec absolute SQLITE_FILE_HEADER;
 
 
 implementation
 
 { ************ direct access to sqlite3.c / sqlite3.obj consts and functions }
 
-function IsSQLite3File(const FileName: TFileName): boolean;
+function IsSQLite3File(const FileName: TFileName; PageSize: PInteger): boolean;
 var F: THandle;
-    Header: array[0..15] of AnsiChar;
+    Header: THash256Rec;
 begin
   F := FileOpen(FileName,fmOpenRead or fmShareDenyNone);
   if F=INVALID_HANDLE_VALUE then
     result := false else begin
     result := (FileRead(F,Header,sizeof(Header))=SizeOf(Header)) and
-      (Header='SQLite format 3');
+              (Header.d0=SQLITE_FILE_HEADER128.Lo) and
+              // don't check header 8..15 (may equal encrypted bytes 16..23)
+              (Header.b[21]=64) and (Header.b[22]=32) and (Header.b[23]=32);
+    if result and (PageSize<>nil) then
+      // header bytes 16..23 are always stored unencrypted
+      PageSize^ := Integer(Header.b[16]) shl 8+Header.b[17];
     FileClose(F);
   end;
 end;
 
 function IsSQLite3FileEncrypted(const FileName: TFileName): boolean;
-const PAGESIZE_OFFSET=16;
 var F: THandle;
-    Header: array[0..2047] of AnsiChar;
-begin
+    Header: THash256Rec;
+begin // see CodecEncrypt/CodecDecrypt in SynSQLite3Static
   result := false;
   F := FileOpen(FileName,fmOpenRead or fmShareDenyNone);
   if F=INVALID_HANDLE_VALUE then
     exit;
   if (FileRead(F,Header,SizeOf(Header))=SizeOf(Header)) and
-     (PWord(@Header[PAGESIZE_OFFSET])^=4) and (Header='SQLite format 3') then
-    // see https://www.sqlite.org/fileformat.html (4 in big endian = 1024 bytes)
-    if not(Header[1024] in [#5,#10,#13]) then
-      // B-tree leaf Type to be either 5 (interior) 10 (index) or 13 (table)
+     (Header.d0=SQLITE_FILE_HEADER128.Lo) and
+     // header bytes 8..15 are encrypted bytes 16..23
+     (Header.d1<>SQLITE_FILE_HEADER128.Hi) and
+     // header bytes 16..23 are stored unencrypted
+     (Header.b[21]=64) and (Header.b[22]=32) and (Header.b[23]=32) then
       result := true;
   FileClose(F);
 end;
@@ -3371,7 +3383,7 @@ end;
   but the pointers s1 or s2 map to the string of the previous call }
 
 function Utf16SQLCompCase(CollateParam: pointer; s1Len: integer; S1: pointer;
-    s2Len: integer; S2: pointer) : integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    s2Len: integer; S2: pointer) : integer; cdecl;
 begin
   if s1Len<=0 then
     if s2Len<=0 then
@@ -3384,7 +3396,7 @@ begin
 end;
 
 function Utf16SQLCompNoCase(CollateParam: pointer; s1Len: integer; s1: pointer;
-    s2Len: integer; s2: pointer) : integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    s2Len: integer; s2: pointer) : integer; cdecl;
 begin
   if s1Len<=0 then
     if s2Len<=0 then
@@ -3397,7 +3409,7 @@ begin
 end;
 
 function Utf8SQLCompNoCase(CollateParam: pointer; s1Len: integer; s1: pointer;
-    s2Len: integer; s2: pointer) : integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    s2Len: integer; s2: pointer) : integer; cdecl;
 begin
   if s1Len<=0 then
     if s2Len<=0 then
@@ -3409,7 +3421,7 @@ begin
 end;
 
 function Utf8SQLDateTime(CollateParam: pointer; s1Len: integer; s1: pointer;
-    s2Len: integer; s2: pointer) : integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    s2Len: integer; s2: pointer) : integer; cdecl;
 var V1,V2: TDateTime; // will handle up to .sss milliseconds resolution
 begin
   if s1Len<=0 then // see WladiD note above
@@ -3527,28 +3539,28 @@ begin
 end;
 
 procedure InternalSoundex(Context: TSQLite3FunctionContext;
-  argc: integer; var argv: TSQLite3ValueArray); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  argc: integer; var argv: TSQLite3ValueArray); cdecl;
 begin
   if CheckNumberOfArgs(Context,1,argc) then
     sqlite3.result_int64(Context, SoundExUTF8(sqlite3.value_text(argv[0]))) else
 end;
 
 procedure InternalSoundexFr(Context: TSQLite3FunctionContext;
-  argc: integer; var argv: TSQLite3ValueArray); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  argc: integer; var argv: TSQLite3ValueArray); cdecl;
 begin
   if CheckNumberOfArgs(Context,1,argc) then
     sqlite3.result_int64(Context, SoundExUTF8(sqlite3.value_text(argv[0]),nil,sndxFrench));
 end;
 
 procedure InternalSoundexEs(Context: TSQLite3FunctionContext;
-  argc: integer; var argv: TSQLite3ValueArray); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  argc: integer; var argv: TSQLite3ValueArray); cdecl;
 begin
   if CheckNumberOfArgs(Context,1,argc) then
     sqlite3.result_int64(Context, SoundExUTF8(sqlite3.value_text(argv[0]),nil,sndxSpanish));
 end;
 
 procedure InternalMod(Context: TSQLite3FunctionContext;
-  argc: integer; var argv: TSQLite3ValueArray); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  argc: integer; var argv: TSQLite3ValueArray); cdecl;
 var A1, A2: Int64;
 begin // implements the MOD() function, just like Oracle and others
   if argc<>2 then begin
@@ -3563,7 +3575,7 @@ begin // implements the MOD() function, just like Oracle and others
 end;
 
 procedure InternalTimeLog(Context: TSQLite3FunctionContext;
-  argc: integer; var argv: TSQLite3ValueArray); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  argc: integer; var argv: TSQLite3ValueArray); cdecl;
 var TimeLog: TTimeLogBits;
 begin
   if argc<>1 then begin
@@ -3575,7 +3587,7 @@ begin
 end;
 
 procedure InternalRank(Context: TSQLite3FunctionContext;
-  argc: integer; var argv: TSQLite3ValueArray); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  argc: integer; var argv: TSQLite3ValueArray); cdecl;
 // supplies the same "RANK" internal function as proposed in
 // http://www.sqlite.org/fts3.html#appendix_a
 var MI: PFTSMatchInfo;
@@ -3603,17 +3615,17 @@ begin
   ErrorWrongNumberOfArgs(Context);
 end;
 
-procedure sqlite3InternalFree(p: pointer); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+procedure sqlite3InternalFree(p: pointer); cdecl;
 begin
   Freemem(p);
 end;
 
-procedure sqlite3InternalFreeObject(p: pointer); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+procedure sqlite3InternalFreeObject(p: pointer); cdecl;
 begin
   TObject(p).Free;
 end;
 
-procedure sqlite3InternalFreeRawByteString(p: pointer); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+procedure sqlite3InternalFreeRawByteString(p: pointer); cdecl;
 begin
   RawByteString(p) := '';
 end;
@@ -3628,7 +3640,7 @@ type
   end;
 
 procedure InternalConcatStep(Context: TSQLite3FunctionContext;
-  argc: integer; var argv: TSQLite3ValueArray); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  argc: integer; var argv: TSQLite3ValueArray); cdecl;
 var sep, txt: PUTF8Char;
     seplen, txtlen: PtrInt;
 begin
@@ -3652,7 +3664,7 @@ begin
     ErrorWrongNumberOfArgs(Context);
 end;
 
-procedure InternalConcatFinal(Context: TSQLite3FunctionContext); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+procedure InternalConcatFinal(Context: TSQLite3FunctionContext); cdecl;
 begin
   with PConcatRec(sqlite3.aggregate_context(Context,sizeof(TConcatRec)))^ do
     // sqlite3InternalFree will call Freemem(PConcatRec()^.result)
@@ -3660,7 +3672,7 @@ begin
 end;
 
 procedure InternalIntegerDynArray(Context: TSQLite3FunctionContext;
-  argc: integer; var argv: TSQLite3ValueArray); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  argc: integer; var argv: TSQLite3ValueArray); cdecl;
 var Blob: pointer;
     PI: PIntegerArray;
     Count: integer;
@@ -3677,7 +3689,7 @@ begin // SQL function: IntegerDynArrayContains(BlobField,10) returning a boolean
 end;
 
 procedure InternalSimpleInt64DynArray(Context: TSQLite3FunctionContext;
-  argc: integer; var argv: TSQLite3ValueArray); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  argc: integer; var argv: TSQLite3ValueArray); cdecl;
 var Blob: pointer;
     Count, ElemSize, i: integer;
     V: Int64;
@@ -3703,7 +3715,7 @@ begin // Byte/Word/Cardinal/Int64/CurrencyDynArrayContains(BlobField,I64)
 end;
 
 procedure InternalRawUTF8DynArray(Context: TSQLite3FunctionContext;
-  argc: integer; var argv: TSQLite3ValueArray); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  argc: integer; var argv: TSQLite3ValueArray); cdecl;
 var Blob: pointer;
     Value: PUTF8Char;
 begin // SQL function: RawUTF8DynArrayContainsCase/NoCase(BlobField,'Text') returning a boolean
@@ -3778,7 +3790,7 @@ end;
 {$endif}
 
 procedure InternalJsonGet(Context: TSQLite3FunctionContext;
-  argc: integer; var argv: TSQLite3ValueArray); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  argc: integer; var argv: TSQLite3ValueArray); cdecl;
   function returnObject(w: PUTF8Char): boolean;
   begin
     if w<>nil then
@@ -3824,7 +3836,7 @@ begin // JsonGet(VariantField,'PropName') returns the value of a JSON object
 end;
 
 procedure InternalJsonHas(Context: TSQLite3FunctionContext;
-  argc: integer; var argv: TSQLite3ValueArray); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  argc: integer; var argv: TSQLite3ValueArray); cdecl;
 begin // JsonHas(VariantField,'PropName') returns TRUE if matches a JSON object property
       // JsonHas(VariantField,'Obj1.Obj2.PropName') to search by path
       // JsonHas(VariantField,0) returns TRUE if the JSON array has at least one item
@@ -3846,7 +3858,7 @@ end;
 
 {$ifndef NOVARIANTS}
 procedure InternalJsonSet(Context: TSQLite3FunctionContext;
-  argc: integer; var argv: TSQLite3ValueArray); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  argc: integer; var argv: TSQLite3ValueArray); cdecl;
 var doc: TDocVariantData;
     json: PUTF8Char;
     tmp: RawUTF8;
@@ -3910,9 +3922,6 @@ begin
 end;
 
 destructor TSQLDataBase.Destroy;
-{$ifndef INCLUDE_FTS3}
-var S: TSQLite3Statement;
-{$endif}
 {$ifdef WITHLOG}
 var FPCLog: ISynLog;
 begin
@@ -3924,7 +3933,7 @@ begin
   try
     Rollback; // any unfinished transaction is rollbacked
   finally
-    {$ifndef INCLUDE_FTS3}
+    (*
     { Applications should finalize all prepared statements and close all BLOB handles
       associated with the sqlite3 object prior to attempting to close the object }
     repeat
@@ -3941,9 +3950,10 @@ begin
       so some GPF will occur :(
     -> we don't release any statement in case of FTS3 usage, and rely on our
       framework, which protects all SQL statements with try..finally clauses }
-    {$endif INCLUDE_FTS3}
+    *)
     DBClose;
   end;
+  FillZero(fPassword);
   DeleteCriticalSection(fLock);
   fCache.Free;
   fSQLFunctions.Free;
@@ -4506,11 +4516,8 @@ begin
     sqlite3.key(fDB,pointer(fPassword),length(fPassword));
   // tune up execution speed
   if not fIsMemory then begin
-    if fOpenV2Flags and SQLITE_OPEN_CREATE<>0 then begin
-      if fPassword='' then
-        PageSize := 4096 else
-        PageSize := 1024; // our encryption scheme expects a page size of 1024
-    end;
+    if fOpenV2Flags and SQLITE_OPEN_CREATE<>0 then
+     PageSize := 4096;
     if fFileDefaultCacheSize <> 0 then
       CacheSize := fFileDefaultCacheSize; // 10000 by default (i.e. 40 MB)
   end;
@@ -5449,7 +5456,7 @@ end;
 { TSQLDataBaseSQLFunctionDynArray }
 
 procedure InternalSQLFunctionDynArrayBlob(Context: TSQLite3FunctionContext;
-  argc: integer; var argv: TSQLite3ValueArray); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+  argc: integer; var argv: TSQLite3ValueArray); cdecl;
 var DynArray, Elem: pointer;
     Func: TSQLDataBaseSQLFunctionDynArray;
 begin
@@ -5685,18 +5692,18 @@ begin
 end;
 
 // due to a FPC's bug, all those functions should be declared outside the method
-function xMalloc(size: integer): pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+function xMalloc(size: integer): pointer; cdecl;
 begin
   GetMem(result,size+4);
   PInteger(result)^ := size;
   inc(PInteger(result));
 end;
-procedure xFree(ptr: pointer); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+procedure xFree(ptr: pointer); cdecl;
 begin
   dec(PInteger(ptr));
   FreeMem(ptr);
 end;
-function xRealloc(ptr: pointer; size: integer): pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+function xRealloc(ptr: pointer; size: integer): pointer; cdecl;
 begin
   dec(PInteger(ptr));
   ReallocMem(ptr,size+4);
@@ -5704,7 +5711,7 @@ begin
   inc(PInteger(ptr));
   result := ptr;
 end;
-function xSize(ptr: pointer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+function xSize(ptr: pointer): integer; cdecl;
 begin
   if ptr=nil then
     result := 0 else begin
@@ -5712,15 +5719,15 @@ begin
     result := PInteger(ptr)^;
   end;
 end;
-function xRoundup(size: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+function xRoundup(size: integer): integer; cdecl;
 begin
   result := size;
 end;
-function xInit(appData: pointer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+function xInit(appData: pointer): integer; cdecl;
 begin
   result := SQLITE_OK;
 end;
-procedure xShutdown(appData: pointer); {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+procedure xShutdown(appData: pointer); cdecl;
 begin
 end;
 
