@@ -1984,6 +1984,15 @@ type
     saSha1, saSha256, saSha384, saSha512,
     saSha3224, saSha3256, saSha3384, saSha3512, saSha3S128, saSha3S256);
 
+  /// JSON-serialization ready object as used by TSynSigner.PBKDF2 overloaded methods
+  // - default value for unspecified parameters will be SHAKE_128 with
+  // rounds=1000 and a fixed salt
+  TSynSignerParams = packed record
+    algo: TSignAlgo;
+    secret,salt: RawUTF8;
+    rounds: integer;
+  end;
+
   /// a generic wrapper object to handle digital HMAC-SHA-2/SHA-3 signatures
   // - used e.g. to implement TJWTSynSignerAbstract
   TSynSigner = {$ifndef UNICODE}object{$else}record{$endif}
@@ -2017,10 +2026,25 @@ type
       aSecretPBKDF2Rounds: integer; aBuffer: Pointer; aLen: integer): RawUTF8; overload;
     /// convenient wrapper to perform PBKDF2 safe iterative key derivation
     procedure PBKDF2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUTF8;
-      aSecretPBKDF2Rounds: integer; out aDerivatedKey: THash512Rec);
+      aSecretPBKDF2Rounds: integer; out aDerivatedKey: THash512Rec); overload;
+    /// convenient wrapper to perform PBKDF2 safe iterative key derivation
+    procedure PBKDF2(const aParams: TSynSignerParams; out aDerivatedKey: THash512Rec); overload;
+    /// convenient wrapper to perform PBKDF2 safe iterative key derivation
+    // - accept as input a TSynSignerParams serialized as JSON object
+    procedure PBKDF2(aParamsJSON: PUTF8Char; aParamsJSONLen: integer;
+      out aDerivatedKey: THash512Rec; const aDefaultSalt: RawUTF8='I6sWioAidNnhXO9BK';
+      aDefaultAlgo: TSignAlgo=saSha3S128); overload;
+    /// convenient wrapper to perform PBKDF2 safe iterative key derivation
+    // - accept as input a TSynSignerParams serialized as JSON object
+    procedure PBKDF2(const aParamsJSON: RawUTF8; out aDerivatedKey: THash512Rec;
+      const aDefaultSalt: RawUTF8='I6sWioAidNnhXO9BK'; aDefaultAlgo: TSignAlgo=saSha3S128); overload;
+    /// prepare a TAES object with the key derivated via a PBKDF2() call
+    // - aDerivatedKey is defined as "var", since it will be zeroed after use
+    procedure AssignTo(var aDerivatedKey: THash512Rec; out aAES: TAES; aEncrypt: boolean);
     /// the algorithm used for digitial signature
     property Algo: TSignAlgo read fAlgo;
     /// the size, in bytes, of the digital signature of this algorithm
+    // - potential values are 20, 28, 32, 48 and 64
     property SignatureSize: integer read fSignatureSize;
   end;
   /// reference to TSynSigner wrapper object
@@ -2059,7 +2083,6 @@ function HashFile(const aFileName: TFileName; aAlgo: THashAlgo): RawUTF8;
 
 /// one-step hash computation of a buffer as lowercase hexadecimal string
 function HashFull(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUTF8;
-
 
 /// compute the HMAC message authentication code using crc256c as hash function
 // - HMAC over a non cryptographic hash function like crc256c is known to be
@@ -9111,6 +9134,83 @@ begin
   FillCharFast(ctxt,SizeOf(ctxt),0);
 end;
 
+procedure TSynSigner.PBKDF2(const aParams: TSynSignerParams;
+  out aDerivatedKey: THash512Rec);
+begin
+  PBKDF2(aParams.algo,aParams.secret,aParams.salt,aParams.rounds,aDerivatedKey);
+end;
+
+procedure TSynSigner.PBKDF2(aParamsJSON: PUTF8Char; aParamsJSONLen: integer;
+  out aDerivatedKey: THash512Rec; const aDefaultSalt: RawUTF8; aDefaultAlgo: TSignAlgo);
+var tmp: TSynTempBuffer;
+    k: TSynSignerParams;
+  procedure SetDefault;
+  begin
+    k.algo := aDefaultAlgo;
+    k.secret := '';
+    k.salt := aDefaultSalt;
+    k.rounds := 1000;
+  end;
+begin
+  SetDefault;
+  if (aParamsJSON=nil) or (aParamsJSONLen<=0) then
+    k.secret := aDefaultSalt else
+    if aParamsJSON[1]<>'{' then
+      SetString(k.secret,PAnsiChar(aParamsJSON),aParamsJSONLen) else begin
+    tmp.Init(aParamsJSON,aParamsJSONLen);
+    try
+      if (RecordLoadJSON(k,tmp.buf,TypeInfo(TSynSignerParams))=nil) or
+         (k.secret='') or (k.salt='') then begin
+        SetDefault;
+        SetString(k.secret,PAnsiChar(aParamsJSON),aParamsJSONLen);
+      end;
+    finally
+      FillCharFast(tmp.buf^,tmp.len,0);
+      tmp.Done;
+    end;
+  end;
+  PBKDF2(k.algo,k.secret,k.salt,k.rounds,aDerivatedKey);
+  FillZero(k.secret);
+end;
+
+procedure TSynSigner.PBKDF2(const aParamsJSON: RawUTF8; out aDerivatedKey: THash512Rec;
+    const aDefaultSalt: RawUTF8; aDefaultAlgo: TSignAlgo);
+begin
+  PBKDF2(pointer(aParamsJSON),length(aParamsJSON),aDerivatedKey,aDefaultSalt,aDefaultAlgo);
+end;
+
+procedure TSynSigner.AssignTo(var aDerivatedKey: THash512Rec; out aAES: TAES; aEncrypt: boolean);
+var ks: integer;
+begin
+  case Algo of
+  saSha3S128: ks := 128; // truncate to Keccak sponge precision
+  saSha3S256: ks := 256;
+  else
+    case SignatureSize of
+    20: begin
+      ks := 128;
+      aDerivatedKey.i0 := aDerivatedKey.i0 xor aDerivatedKey.i4;
+    end;
+    28: ks := 192;
+    32: ks := 256;
+    48: begin
+      ks := 256;
+      aDerivatedKey.d0 := aDerivatedKey.d0 xor aDerivatedKey.d4;
+      aDerivatedKey.d1 := aDerivatedKey.d1 xor aDerivatedKey.d5;
+    end;
+    64: begin
+      ks := 256;
+      aDerivatedKey.d0 := aDerivatedKey.d0 xor aDerivatedKey.d4;
+      aDerivatedKey.d1 := aDerivatedKey.d1 xor aDerivatedKey.d5;
+      aDerivatedKey.d2 := aDerivatedKey.d0 xor aDerivatedKey.d6;
+      aDerivatedKey.d3 := aDerivatedKey.d1 xor aDerivatedKey.d7;
+    end;
+    else exit;
+    end;
+  end;
+  aAES.DoInit(aDerivatedKey,ks,aEncrypt);
+  FillZero(aDerivatedKey.b);
+end;
 
 procedure AES(const Key; KeySize: cardinal; buffer: pointer; Len: Integer; Encrypt: boolean);
 begin
@@ -14704,12 +14804,16 @@ initialization
   if (cfSSE42 in CpuFeatures) and (cfAesNi in CpuFeatures) then
     crc32c := @crc32c_sse42_aesni;
 {$endif}
+  TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TSignAlgo));
+  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TSynSignerParams),
+    'algo:TSignAlgo secret,salt:RawUTF8 rounds:integer');
   {$ifndef NOVARIANTS}
   GetEnumNames(TypeInfo(TJWTResult),@_TJWTResult);
   GetEnumNames(TypeInfo(TJWTClaim),@_TJWTClaim);
   {$endif NOVARIANTS}
   assert(sizeof(TMD5Buf)=sizeof(TMD5Digest));
   assert(sizeof(TAESContext)=AESContextSize);
+  assert(AESContextSize<=300); // see synsqlite3.c KEYLENGTH
   assert(sizeof(TSHAContext)=SHAContextSize);
   assert(sizeof(TSHA3Context)=SHA3ContextSize);
   assert(1 shl AESBlockShift=sizeof(TAESBlock));
