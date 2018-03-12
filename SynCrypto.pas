@@ -466,6 +466,10 @@ type
     // - call either Encrypt() either Decrypt() method
     procedure DoBlocksThread(var bIn, bOut: PAESBlock; Count: integer; doEncrypt: boolean);
     {$endif}
+    /// performs AES-OFB encryption and decryption on whole blocks
+    // - may be used instead of TAESOFB when a raw TAES is used
+    // - this method is thread-safe (except if padlock is used) 
+    procedure DoBlocksOFB(const iv: TAESBlock; src, dst: pointer; blockcount: PtrUInt);
     /// TRUE if the context was initialized via EncryptInit/DecryptInit
     function Initialized: boolean; {$ifdef FPC}inline;{$endif}
     /// return TRUE if the AES-NI instruction sets are available on this CPU
@@ -5915,6 +5919,19 @@ end;
 procedure TAES.DoBlocks(pIn, pOut: PAESBlock; Count: integer; doEncrypt: boolean);
 begin
   DoBlocks(pIn,pOut,pIn,pOut,Count,doEncrypt);
+end;
+
+procedure TAES.DoBlocksOFB(const iv: TAESBlock; src, dst: pointer; blockcount: PtrUInt);
+var cv: TAESBlock;
+begin
+  cv := iv;
+  while blockcount > 0 do begin
+    dec(blockcount);
+    TAESContext(Context).DoBlock(Context,cv,cv);
+    XorBlock16(src,dst,pointer(@cv));
+    inc(PByte(src),SizeOf(TAESBlock));
+    inc(PByte(dst),SizeOf(TAESBlock));
+  end;
 end;
 
 function TAES.Initialized: boolean;
