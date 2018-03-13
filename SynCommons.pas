@@ -15611,6 +15611,9 @@ type
     // (in this case, it is dvUndefined)
     // - this overloaded method accepts an additional filter to each reduced item
     function ReduceAsArray(const aPropName: RawUTF8; OnReduce: TOnReducePerValue): variant; overload;
+    /// rename some properties of a TDocVariant object
+    // - returns the number of property names modified
+    function Rename(const aFromPropName, aToPropName: TRawUTF8DynArray): integer;
     /// map {"obj.prop1"..,"obj.prop2":..} into {"obj":{"prop1":..,"prop2":...}}
     // - the supplied aObjectPropName should match the incoming dotted value
     // of all properties (e.g. 'obj' for "obj.prop1")
@@ -45217,6 +45220,21 @@ begin
   end;
 end;
 
+function TDocVariantData.Rename(const aFromPropName, aToPropName: TRawUTF8DynArray): integer;
+var n, p, ndx: integer;
+begin
+  result := 0;
+  n := length(aFromPropName);
+  if length(aToPropName)=n then
+    for p := 0 to n-1 do begin
+      ndx := GetValueIndex(aFromPropName[p]);
+      if ndx>=0 then begin
+        VName[ndx] := aToPropName[p];
+        inc(result);
+      end;
+    end;
+end;
+
 function TDocVariantData.FlattenAsNestedObject(const aObjectPropName: RawUTF8): boolean;
 var ndx,len: integer;
     Up: array[byte] of AnsiChar;
@@ -45323,18 +45341,16 @@ begin
         raise EDocVariant.CreateUTF8('Out of range [%] property in an array',[aName]);
       exit;
     end;
-    // optimized O(n) lookup for object names -> huge count may take some time
+    // O(n) lookup for object names -> huge count may take some time
     n := pointer(VName);
     if aCaseSensitive then begin
       for result := 0 to VCount-1 do
-        if (length(n^)=aNameLen) and
-           CompareMem(pointer(n^),aName,aNameLen) then
+        if (length(n^)=aNameLen) and CompareMem(pointer(n^),aName,aNameLen) then
           exit else
           inc(n);
     end else
       for result := 0 to VCount-1 do
-        if (length(n^)=aNameLen) and
-           IdemPropNameUSameLen(pointer(n^),aName,aNameLen) then
+        if (length(n^)=aNameLen) and IdemPropNameUSameLen(pointer(n^),aName,aNameLen) then
           exit else
           inc(n);
   end;
