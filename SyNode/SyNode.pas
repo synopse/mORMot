@@ -82,7 +82,7 @@ uses
   Windows,
   ShLwApi, // for older Delphi versions download this file from JEDI library
   {$else}
-  FileUtil, LazFileUtils, dynlibs,
+  LazFileUtils, dynlibs,
   {$endif}
   {$ifdef ISDELPHIXE2}System.SysUtils,{$else}SysUtils,{$endif}
   Classes,
