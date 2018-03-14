@@ -1707,29 +1707,6 @@ const
     (Num: 1252; Charset: 46;  Text: 'WE8ISO8859P15'),
     (Num: 1252; Charset: 31;  Text: 'WE8ISO8859P1'));
 
-function EnvVariableToCodePage: cardinal;
-{$ifdef MSWINDOWS}
-var i: integer;
-    nlslang: array[byte] of AnsiChar;
-begin
-  i := GetEnvironmentVariableA('NLS_LANG',nlslang,sizeof(nlslang));
-  if i=0 then
-    result := GetACP else begin
-    nlslang[i] := #0;
-    for i := 0 to high(CODEPAGES) do
-      if ContainsUTF8(nlslang,CODEPAGES[i].Text) then begin
-        result := CODEPAGES[i].Num;
-        exit;
-      end;
-    result := GetACP;
-  end;
-end;
-{$else}
-begin
-  result := GetACP;
-end;
-{$endif}
-
 function SimilarCharSet(aCharset1, aCharset2: cardinal): Boolean;
 var i1,i2: integer;
 begin
@@ -1773,20 +1750,14 @@ function TSQLDBOracleLib.CodePageToCharSetID(env: pointer;
   aCodePage: cardinal): cardinal;
 var ocp: PUTF8Char;
     i: integer;
-    {$ifdef MSWINDOWS}
-    nlslang: array[byte] of AnsiChar;
-    {$endif}
+    nlslang: AnsiString;
 begin
   case aCodePage of
   0: begin
-    {$ifdef MSWINDOWS}
-    i := GetEnvironmentVariableA('NLS_LANG',nlslang,sizeof(nlslang));
-    if i>0 then begin
-      nlslang[i] := #0;
-      result := NlsCharSetNameToID(env,nlslang);
-    end else
-    {$endif}
-      result := CodePageToCharSetID(env,GetACP);
+      nlslang := AnsiString(GetEnvironmentVariable('NLS_LANG'));
+      if nlslang<>'' then
+        result := NlsCharSetNameToID(env,pointer(nlslang)) else
+        result := CodePageToCharSetID(env,GetACP);
   end;
   CP_UTF8:
     result := OCI_UTF8;
