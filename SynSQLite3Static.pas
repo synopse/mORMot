@@ -814,11 +814,11 @@ end;
 function ChangeSQLEncryptTablePassWord(const FileName: TFileName;
   const OldPassWord, NewPassword: RawUTF8): boolean;
 var F: THandle;
-    bufsize,page,pagesize,pagecount,n,p,read: integer;
+    bufsize,page,pagesize,pagecount,n,p,read: cardinal;
     head: THash256Rec;
     buf: PAnsiChar; 
     temp: RawByteString;
-    size: Int64Rec;
+    size: TQWordRec;
     posi: Int64;
     old, new: TAES;
 begin
@@ -832,22 +832,22 @@ begin
       CodecGenerateKey(old,pointer(OldPassword),length(OldPassWord));
     if NewPassword<>'' then
       CodecGenerateKey(new,pointer(NewPassword),length(NewPassWord));
-    size.Lo := GetFileSize(F,@size.Hi);
+    size.L := GetFileSize(F,@size.H);
     read := FileRead(F,head,SizeOf(head));
     if read<>SizeOf(head) then
       exit;
-    if PInt64(@size)^>4 shl 20 then // use up to 4MB of R/W buffer
+    if size.V>4 shl 20 then // use up to 4MB of R/W buffer
       bufsize := 4 shl 20 else
-      bufsize := size.Lo;
-    pagesize := integer(head.b[16]) shl 8+head.b[17];
+      bufsize := size.L;
+    pagesize := cardinal(head.b[16]) shl 8+head.b[17];
+    pagecount := size.V div pagesize;
     if (pagesize<1024) or (pagesize and AESBlockMod<>0) or (pagesize>bufsize) or
-       (PInt64(@size)^ mod pagesize<>0) or(head.d0<>SQLITE_FILE_HEADER128.Lo) or
+       (QWord(pagecount)*pagesize<>size.V) or (head.d0<>SQLITE_FILE_HEADER128.Lo) or
        ((head.d1=SQLITE_FILE_HEADER128.Hi)<>(OldPassWord='')) then
       exit;
     FileSeek64(F,0,soFromBeginning);
     SetLength(temp,bufsize);
     posi := 0;
-    pagecount := PInt64(@size)^ div pagesize;
     page := 1;
     while page<=pagecount do begin
       n := bufsize div pagesize;
@@ -941,30 +941,30 @@ procedure OldSQLEncryptTablePassWordToPlain(const FileName: TFileName;
 var F: THandle;
     R: integer;
     Buf: array[word] of byte; // temp buffer for read/write (64KB is enough)
-    Size, Posi: Int64Rec;
+    Size, Posi: TQWordRec;
     OldP: array[0..SQLEncryptTableSize-1] of byte; // 2x16KB tables
 begin
   F := FileOpen(FileName,fmOpenReadWrite);
   if F=INVALID_HANDLE_VALUE then
     exit;
-  Size.Lo := GetFileSize(F,@Size.Hi);
-  if (Size.Lo<=1024) and (Size.Hi=0) then begin
+  Size.L := GetFileSize(F,@Size.H);
+  if (Size.L<=1024) and (Size.H=0) then begin
     FileClose(F); // file is to small to be modified
     exit;
   end;
   if OldPassword<>'' then
     CreateSQLEncryptTableBytes(OldPassWord,@OldP);
-  Int64(Posi) := 1024; // don't change first page, which is uncrypted
+  Posi.V := 1024; // don't change first page, which is uncrypted
   FileSeek(F,1024,soFromBeginning);
-  while Int64(Posi)<Int64(Size) do begin
+  while Posi.V<Size.V do begin
     R := FileRead(F,Buf,sizeof(Buf)); // read buffer
     if R<0 then
       break; // stop on any read error
     if OldPassword<>'' then
-      XorOffset(@Buf,Posi.Lo,R,@OldP); // uncrypt with old key
-    FileSeek64(F,Int64(Posi),soFromBeginning);
+      XorOffset(@Buf,Posi.L,R,@OldP); // uncrypt with old key
+    FileSeek64(F,Posi.V,soFromBeginning);
     FileWrite(F,Buf,R); // update buffer
-    inc(Int64(Posi),cardinal(R));
+    inc(Posi.V,cardinal(R));
   end;
   FileClose(F);
 end;
