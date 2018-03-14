@@ -2052,6 +2052,8 @@ type
 
   /// hash algorithms available for HashFile/HashFull functions and TSynHasher object
   THashAlgo = (hfMD5, hfSHA1, hfSHA256, hfSHA384, hfSHA512, hfSHA3_256, hfSHA3_512);
+  /// set of algorithms available for HashFile/HashFull functions and TSynHasher object
+  THashAlgos = set of THashAlgo;
 
   /// convenient multi-algorithm hashing wrapper
   // - as used e.g. by HashFile/HashFull functions
@@ -2079,7 +2081,12 @@ type
 
 /// compute the hexadecimal hash of any (big) file
 // - using a temporary buffer of 1MB for the sequential reading
-function HashFile(const aFileName: TFileName; aAlgo: THashAlgo): RawUTF8;
+function HashFile(const aFileName: TFileName; aAlgo: THashAlgo): RawUTF8; overload;
+
+/// compute the hexadecimal hashe(s) of one file, as external .md5/.sha256/.. files
+// - reading the file once in memory, then apply all algorithms on it and
+// generate the text hash files in the very same folder 
+procedure HashFile(const aFileName: TFileName; aAlgos: THashAlgos); overload;
 
 /// one-step hash computation of a buffer as lowercase hexadecimal string
 function HashFull(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUTF8;
@@ -2892,6 +2899,7 @@ function ToText(claim: TJWTClaim): PShortString; overload;
 function ToText(chk: TAESIVReplayAttackCheck): PShortString; overload;
 function ToText(res: TProtocolResult): PShortString; overload;
 function ToText(algo: TSignAlgo): PShortString; overload;
+function ToText(algo: THashAlgo): PShortString; overload;
 function ToText(algo: TSHA3Algo): PShortString; overload;
 
 
@@ -2915,6 +2923,11 @@ end;
 function ToText(algo: TSignAlgo): PShortString;
 begin
   result := GetEnumName(TypeInfo(TSignAlgo),ord(algo));
+end;
+
+function ToText(algo: THashAlgo): PShortString;
+begin
+  result := GetEnumName(TypeInfo(THashAlgo),ord(algo));
 end;
 
 function ToText(algo: TSHA3Algo): PShortString;
@@ -9045,6 +9058,24 @@ begin
       FileClose(F);
     end;
 end;
+
+procedure HashFile(const aFileName: TFileName; aAlgos: THashAlgos);
+var data: RawByteString;
+    efn: TFileName;
+    a: THashAlgo;
+begin
+  if aAlgos=[] then
+    exit;
+  efn := ExtractFileName(aFileName);
+  data := StringFromFile(aFileName);
+  if data<>'' then
+    for a := low(a) to high(a) do
+      if a in aAlgos then
+        FileFromString(
+          FormatUTF8('% *%'#13#10,[HashFull(a,pointer(data),length(data)),aFileName]),
+          format('%s.%s',[efn,LowerCase(TrimLeftLowerCaseShort(ToText(a)))]));
+end;
+
 
 { TSynSigner }
 
