@@ -750,6 +750,7 @@ Feel free to give your feedback at @http://synopse.info/forum asking new questio
 {\b I am tempted by using an ORM, but {\i mORMot} forces you to inherit from a root {\f1\fs20 @*TSQLRecord@} type, whereas I'd like to use any kind of object.}\line We will discuss this in details @168@. Adding attributes to an existing class is tempting, but will pollute your code at the end, mixing persistence and business logic: see {\i @*Persistence Ignorance@} and {\i @*Aggregates@} @124@. The framework proposes a second level of {\i Object} mapping, allowing to persist any kind of {\i @*PODO@} ({\i Plain Old Delphi Object}), by defining @*CQRS@ services - see @167@.
 {\b Why are you not using the latest features of the compiler, like generics or class attributes?}\line Our ORM does not rely on {\i generics}, but on the power of the object pascal type system: specifying a {\f1\fs20 class} or {\f1\fs20 interface} type as parameter is safe and efficient - and generics tends to blow the executable size, lower down performance (the current RTL is not very optimized, and sometimes bugged), and hide implementation details. Some methods are available for newer version of the compiler, introducing access via generics; but it was not mandatory to depend on them. We also identified, as several Java or C# gurus, that {\f1\fs20 class} attributes may sound like a good idea, but tend to {\i pollute} the code, and introduce unexpected coupling. Last but not least, those features are incompatible with older version of Delphi we would like to support, and may reduce compatibility with @*FPC@.
 {\b I also notice in your SAD doc, data types are different from Delphi. You have {\f1\fs20 RawUTF8}, etc, which make me puzzled, what are they?}\line You can for sure use standard {\i Delphi} {\f1\fs20 string} types, but some more optimized types were defined: since the whole framework is @*UTF-8@ based, we defined a dedicated type, which works with all versions of {\i Delphi}, before and after {\i Delphi} 2009. By the way, just search for {\f1\fs20 RawUTF8} in the {\i keyword index} of this document, or see @32@.
+{\b During my tests, my client receives non standard @*JSON@ with unquoted fields.}\line Internally, the framework uses JSON in {\i MongoDB} @*extended syntax@, i.e. fields are not quoted - this gives better performance and reduces memory and bandwidth with a {\i mORMot} client. To receive {\f1\fs20 "field":value} instead of {\f1\fs20 field:value}, just add a proper {\f1\fs20 @**User-Agent@} HTTP header to the client request (as any browser does), and the server will emit standard JSON.
 {\b When I work with floating points and JSON, sometimes numerical values with more than 4 decimals are converted into JSON strings.}\line By default, {\f1\fs20 double} values are disabled in the JSON serialization, to avoid any hidden precision lost during conversion: see @194@ how to enable it.
 {\b I got an access violation with SynDB ISQLDBRows.}\line You need to explicitly release the {\f1\fs20 ISQLDBRows} instance, by setting it to {\f1\fs20 nil}, {\i before} freeing the owner's connection - see @195@.
 {\b @*Deadlock@ occurs with interface callbacks.}\line When working with asynchronous notifications over {\i WebSockets}, you need to ensure you won't fire directly a callback from a main method execution - see @196@ for several solutions.
@@ -6375,13 +6376,13 @@ You can note that {\f1\fs20 FindJSON()} has two properties, which are the {\f1\f
 !  writeln(json);
 Which outputs:
 $[{"_id":5,"Name":"Name 6","Number":5}]
-We used here an overloaded {\f1\fs20 FindJSON()} method, which accept the {\i MongoDB} extended syntax (here, the field name is unquoted), and parameters as variables.
+We used here an overloaded {\f1\fs20 FindJSON()} method, which accept the {\i MongoDB} @*extended syntax@ (here, the field name is unquoted), and parameters as variables.
 We can specify a projection:
 !  json := Coll.FindJSON('{_id:?}',[5],'{Name:1}');
 !  writeln(json);
 Which will only return the "Name" and "_id" fields (since {\f1\fs20 _id} is, by {\i MongoDB} convention, always returned:
 $[{"_id":5,"Name":"Name 6"}]
-To return only the "Name" field, you can specify {\f1\fs20 '{_id:0,Name:1}'} as extended JSON for the {\i projection} parameter.
+To return only the "Name" field, you can specify {\f1\fs20 '{_id:0,Name:1}'} as JSON in @*extended syntax@ for the {\i projection} parameter.
 $[{"Name":"Name 6"}]
 There are other methods able to retrieve data, also directly as BSON binary data. They will be used for best speed e.g. in conjunction with our ORM, but for most end-user code, using {\f1\fs20 TDocVariant} is safer and easier to maintain.
 :   Updating or deleting documents
@@ -8763,9 +8764,10 @@ A corresponding client method may be:
 !  Result := aClient.CallBackGetResult('DataAsHex',[],RecordClass,fID);
 !end;
 If @*authentication@ - see @18@ - is used, the current session, user and group IDs are available in {\f1\fs20 Session / SessionUser / SessionGroup} fields. If authentication is not available, those fields are meaningless: in fact, {\f1\fs20 Ctxt.Context.Session} will contain either 0 ({\f1\fs20 CONST_AUTHENTICATION_SESSION_NOT_STARTED}) if any @*session@ is not yet started, or 1 ({\f1\fs20 CONST_AUTHENTICATION_NOT_USED}) if authentication mode is not active. Server-side implementation can use the {\f1\fs20 TSQLRestServer.SessionGetUser} method to retrieve the corresponding user details (note that when using this method, the returned {\f1\fs20 @*TSQLAuthUser@} instance is a local thread-safe copy which shall be freed when done).
-In {\f1\fs20 Ctxt.Call^} member, you can access low-level communication content, i.e. all incoming and outgoing values, including headers and message body. Depending on the transmission protocol used, you can retrieve e.g. HTTP header information. For instance, here is how you can access the caller remote IP address and client application user agent:
+In {\f1\fs20 Ctxt.Call^} member, you can access low-level communication content, i.e. all incoming and outgoing values, including headers and message body. Depending on the transmission protocol used, you can retrieve e.g. HTTP header information. For instance, here is how you may access the client remote IP address and application {\f1\fs20 @*User-Agent@}, at lowest level:
 ! aRemoteIP := FindIniNameValue(pointer(Ctxt.Call.InHead),'REMOTEIP: ');
 ! aUserAgent := FindIniNameValue(pointer(Ctxt.Call.InHead),'USER-AGENT: ');
+Of course, for those fields, it is much preferred to use the {\f1\fs20 Ctxt.RemoteIP} or {\f1\fs20 Ctxt.UserAgent} properties, which use an efficient cache.
 \page
 :96 Browser speed-up for unmodified requests
 When used over a slow network (e.g. over the Internet), you can set the optional {\f1\fs20 Handle304NotModified} parameter of both {\f1\fs20 Ctxt.Returns()} and {\f1\fs20 Ctxt.Results()} methods to return the response body only if it has changed since last time.
@@ -12603,7 +12605,7 @@ If you want to supply the context data as JSON, then render it, you may write:
 !    'Hello {{value.name}}'#13#10'You have just won {{value.value}} dollars!');
 !  html := mustache.RenderJSON('{value:{name:"Chris",value:10000}}');
 !  // now html='Hello Chris'#13#10'You have just won 10000 dollars!'
-Note that here, the JSON is supplied with an @*extended syntax@ (i.e. field names are unquoted), and that {\f1\fs20 TSynMustache} is able to identify a dotted-named variable within the execution context.
+Note that here, the JSON is supplied with {\i MongoDB}-like @*extended syntax@ (i.e. field names are unquoted), and that {\f1\fs20 TSynMustache} is able to identify a dotted-named variable within the execution context.
 As an alternative, you could use the following syntax to create the data context as JSON, with a set of parameters, therefore easier to work with in real code storing data in variables (for instance, any {\f1\fs20 string} variable is quoted as expected by JSON, and converted into @*UTF-8@):
 !  mustache := TSynMustache.Parse(
 !    'Hello {{name}}'#13#10'You have just won {{value}} dollars!');
