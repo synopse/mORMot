@@ -830,10 +830,11 @@ const
   CODEPAGE_LATIN1 = 819;
 
 {$ifndef MSWINDOWS}
-  /// estimate the system code page is WinAnsi
-  GetACP = CODEPAGE_US;
   /// internal Code Page for UTF-8 Unicode encoding
   CP_UTF8 = 65001;
+var
+  /// contains the curent system code page (default WinAnsi)
+  GetACP: integer = CODEPAGE_US;
 {$endif}
 
 {$ifdef FPC} { make cross-compiler and cross-CPU types available to Delphi }
@@ -18248,6 +18249,9 @@ uses
     elfreader,  // ELF executables
     machoreader, // MACH-O executables
     {$endif FPCUSEVERSIONINFO}
+    {$ifdef ISFPC271}
+    unixcp,
+    {$endif}
   {$endif MSWINDOWS}
   SynFPCTypInfo, // small wrapper unit around FPC's TypInfo.pp
   TypInfo,
@@ -64678,9 +64682,12 @@ begin
   PCardinal(pointer(JSON_SQLDATE_MAGIC_TEXT))^ := JSON_SQLDATE_MAGIC;
   {$ifdef FPC}
   {$ifdef ISFPC27}
+  {$ifndef MSWINDOWS}
+  GetACP := GetSystemCodePage;
+  {$endif MSWINDOWS}
   SetMultiByteConversionCodePage(CP_UTF8);
   SetMultiByteRTLFileSystemCodePage(CP_UTF8);
-  {$endif}
+  {$endif ISFPC27}
   {$endif FPC}
   {$ifdef KYLIX3}
   // if default locale is set to *.UTF-8, which is the case in most modern
@@ -64700,7 +64707,7 @@ begin
   NormToUpperAnsi7Byte := NormToNormByte;
   for i := ord('a') to ord('z') do
     dec(NormToUpperAnsi7Byte[i],32);
-{$ifdef OWNNORMTOUPPER}
+  {$ifdef OWNNORMTOUPPER}
   // initialize custom NormToUpper[] and NormToLower[] arrays
   MoveFast(NormToUpperAnsi7,NormToUpper,138);
   MoveFast(n2u,NormToUpperByte[138],SizeOf(n2u));
@@ -64710,7 +64717,7 @@ begin
       inc(d,32);
     NormToLowerByte[i] := d;
   end;
-{$endif OWNNORMTOUPPER}
+  {$endif OWNNORMTOUPPER}
   // code below is 55 bytes long, therefore shorter than a const array
   FillcharFast(ConvertHexToBin[0],SizeOf(ConvertHexToBin),255); // all to 255
   v := 0;
