@@ -2345,7 +2345,7 @@ const
   /// some open-minded options for JSONToObject() parsing
   // - won't block JSON unserialization due to some minor class type definitions
   // - used e.g. by TObjArraySerializer.CustomReader and
-  // TServiceMethodExecute.ExecuteJson methods
+  // TInterfacedObjectFake.FakeCall/TServiceMethodExecute.ExecuteJson methods
   JSONTOOBJECT_TOLERANTOPTIONS = [j2oHandleCustomVariants,j2oIgnoreUnknownEnum,
     j2oIgnoreUnknownProperty,j2oIgnoreStringType,j2oAllowInt64Hex];
 
@@ -54493,8 +54493,8 @@ begin
         smvObject: begin
           if PInteger(R)^=NULL_LOW then
             inc(R,4) else begin // null from TInterfacedStub -> stay untouched
-            parser.From := R;
-            parser.Options := [];
+            parser.From := R; // inlined JSONToObject()
+            parser.Options := JSONTOOBJECT_TOLERANTOPTIONS;
             parser.TObjectListItemClass := nil;
             parser.Value := PObject(V)^;
             parser.Parse;
