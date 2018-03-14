@@ -5500,6 +5500,7 @@ type
     /// customize the TDocVariant options for all variant published properties
     // - will change the TSQLPropInfoRTTIVariant.DocVariantOptions value
     // - use e.g. as SetVariantFieldDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED)
+    // - see also TSQLRecordNoCaseExtended root class
     procedure SetVariantFieldsDocVariantOptions(const Options: TDocVariantOptions);
     {$endif}
     /// return the UTF-8 encoded SQL statement source to alter the table for
@@ -8159,6 +8160,13 @@ type
     class procedure InternalDefineModel(Props: TSQLRecordProperties); override;
   end;
 
+  /// database records with NOCASE collation and JSON_OPTIONS_FAST_EXTENDED variants
+  TSQLRecordNoCaseExtended = class(TSQLRecordNoCase)
+  protected
+    /// will call Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
+    class procedure InternalDefineModel(Props: TSQLRecordProperties); override;
+  end;
+
   /// allow on-the-fly translation of a TSQLTable grid value
   // - should return valid JSON value of the given cell (i.e. quoted strings,
   // or valid JSON object/array) unless HumanFriendly is defined
@@ -9802,6 +9810,7 @@ type
     /// customize the TDocVariant options for all variant published properties
     // - will change the TSQLPropInfoRTTIVariant.DocVariantOptions value
     // - use e.g. as SetVariantFieldDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED)
+    // - see also TSQLRecordNoCaseExtended root class
     procedure SetVariantFieldsDocVariantOptions(const Options: TDocVariantOptions);
     {$endif}
     /// force a given table to use a TSynUniqueIdentifierGenerator for its IDs
@@ -10853,7 +10862,7 @@ type
   // - TServiceMethodExecute could store all its calls in such a table
   // - enabled on server side via either TServiceFactoryServer.SetServiceLog or
   // TServiceContainerServer.SetServiceLog method
-  TSQLRecordServiceLog = class(TSQLRecordNoCase)
+  TSQLRecordServiceLog = class(TSQLRecordNoCaseExtended)
   protected
     fMethod: RawUTF8;
     fInput: variant;
@@ -10863,8 +10872,6 @@ type
     fTime: TModTime;
     fMicroSec: integer;
     fIP: RawUTF8;
-    // define Input/Output as dvoSerializeAsExtendedJson
-    class procedure InternalDefineModel(Props: TSQLRecordProperties); override;
   public
     /// overriden method creating an index on the Method/MicroSec columns
     class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
@@ -33418,6 +33425,14 @@ end;
 class procedure TSQLRecordNoCase.InternalDefineModel(Props: TSQLRecordProperties);
 begin
   Props.SetCustomCollationForAll(sftUTF8Text,'NOCASE');
+end;
+
+{ TSQLRecordNoCaseExtended }
+
+class procedure TSQLRecordNoCaseExtended.InternalDefineModel(Props: TSQLRecordProperties);
+begin
+  inherited InternalDefineModel(Props); // set NOCASE collation
+  Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
 end;
 
 
@@ -61308,12 +61323,6 @@ begin
   inherited;
   if FieldName='' then
     Server.CreateSQLMultiIndex(Self,['Method','MicroSec'],false);
-end;
-
-class procedure TSQLRecordServiceLog.InternalDefineModel(Props: TSQLRecordProperties);
-begin
-  inherited InternalDefineModel(Props); // set NOCASE collation
-  Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
 end;
 
 

@@ -57083,10 +57083,8 @@ begin
     {$elseif defined(VER330)}'Delphi 10.3 Carnival'
     {$ifend}
   {$endif CONDITIONALEXPRESSIONS}
-{$endif}
-{$ifdef CPU64}
-  +' 64 bit'
-{$endif}
+{$endif FPC}
+{$ifdef CPU64} +' 64 bit' {$else} +' 32 bit' {$endif}
 end;
 
 
