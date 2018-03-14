@@ -2783,13 +2783,13 @@ function StrCompSSE42(Str1, Str2: pointer): PtrInt;
 {$endif PUREPASCAL}
 
 /// pure pascal version of strspn(), to be used with PUTF8Char/PAnsiChar
-// - please note that this optimized version may read up to 3 bytes beyond 
+// - please note that this optimized version may read up to 3 bytes beyond
 // accept but never after s end, so is safe e.g. over memory mapped files
 function strspnpas(s,accept: pointer): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// pure pascal version of strcspn(), to be used with PUTF8Char/PAnsiChar
-// - please note that this optimized version may read up to 3 bytes beyond 
+// - please note that this optimized version may read up to 3 bytes beyond
 // reject but never after s end, so is safe e.g. over memory mapped files
 function strcspnpas(s,reject: pointer): integer;
   {$ifdef HASINLINE}inline;{$endif}
@@ -3995,7 +3995,7 @@ function ExistsIniNameValue(P: PUTF8Char; const UpperName: RawUTF8;
 function FindIniNameValueInteger(P: PUTF8Char; UpperName: PAnsiChar): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// replace a value from a given set of name=value lines 
+/// replace a value from a given set of name=value lines
 // - expect UpperName as 'UPPERNAME=', otherwise returns false
 // - if no UPPERNAME= entry was found, then Name+NewValue is added to Content
 // - a typical use may be:
@@ -8032,7 +8032,7 @@ type
   // is defined, and only the topmost class level properties would be serialized
   // - woInt64AsHex will force Int64/QWord to be written as hexadecimal string -
   // see j2oAllowInt64Hex reverse option fot Json2Object
-  // - woDontStore0 will avoid serializating number properties equal to 0 
+  // - woDontStore0 will avoid serializating number properties equal to 0
   TTextWriterWriteObjectOption = (
     woHumanReadable, woDontStoreDefault, woFullExpand,
     woStoreClassName, woStorePointer, woStoreStoredFalse,
@@ -11995,7 +11995,7 @@ function xxHash32(crc: cardinal; P: PAnsiChar; len: integer): cardinal;
 type
   TCrc32tab = array[0..{$ifdef PUREPASCAL}3{$else}7{$endif},byte] of cardinal;
   PCrc32tab = ^TCrc32tab;
-  
+
 var
   /// tables used by crc32cfast() function
   // - created with a polynom diverse from zlib's crc32() algorithm, but

@@ -5784,7 +5784,7 @@ var ctxt: THttpServerRequest;
       // direct send to socket (no CRLF at the end of data)
       ClientSock.SndLow(pointer(ctxt.OutContent),length(ctxt.OutContent));
   end;
-    
+
 begin
   if (ClientSock=nil) or (ClientSock.Headers=nil) then
     // we didn't get the request = socket read error

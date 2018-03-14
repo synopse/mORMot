@@ -10894,7 +10894,7 @@ type
     property Time: TModTime read fTime write fTime;
     /// execution time of this method, in micro seconds
     property MicroSec: integer read fMicroSec write fMicroSec;
-    /// if not localhost/127.0.0.1, the remote IP address 
+    /// if not localhost/127.0.0.1, the remote IP address
     property IP: RawUTF8 read fIP write fIP;
   end;
 
@@ -19506,7 +19506,7 @@ type
     property SessionUser: TSQLAuthUser read fSessionUser;
     /// access to the low-level HTTP header used for authentication
     // - e.g. after TSQLRestServerAuthenticationHttpBasic.SetUser
-    // - you can force here you own header, a JWT as authentication bearer 
+    // - you can force here you own header, a JWT as authentication bearer
     property SessionHttpHeader: RawUTF8 read fSessionHttpHeader write fSessionHttpHeader;
 {$ifndef LVCL}
     /// set a callback event to be executed in loop during remote blocking
@@ -23731,7 +23731,7 @@ var tmp: TSynTempBuffer;
 begin
   if ValueLen>0 then begin
     if wasString and (GotoNextNotSpace(Value)^ in ['{','[']) then
-      wasString := false; // allow to create a TDocVariant stored as DB text 
+      wasString := false; // allow to create a TDocVariant stored as DB text
     tmp.Init(Value,ValueLen);
     try
       if fSQLFieldType=sftNullable then
@@ -25271,7 +25271,7 @@ procedure TSQLTable.ToDocVariant(Row: integer; out doc: variant;
   options: TDocVariantOptions; expandTimeLogAsText,expandEnumsAsText,
   expandHugeIDAsUniqueIdentifier: boolean);
 var f: integer;
-    v: PVariantArray; // low-level trick for write access to read-only properties 
+    v: PVariantArray; // low-level trick for write access to read-only properties
     n: PRawUTF8Array;
     docv: TDocVariantData absolute doc;
 begin
@@ -35264,7 +35264,7 @@ begin
     end;
     payloadlen := length(Body)-fCustomEncryptSign.SignatureSize;
     if (payloadlen>0) and (fCustomEncryptSign.SignatureSize<>0) then begin
-      // validate the binary signature of supplied Url+Body at the Body end 
+      // validate the binary signature of supplied Url+Body at the Body end
       sign := fCustomEncryptSign;
       P := pointer(Url);
       if P^='/' then
@@ -54530,7 +54530,7 @@ begin
           smvString:        UTF8DecodeToString(Val,ValLen,PString(V)^);
           smvRawByteString: Base64ToBin(PAnsiChar(Val),ValLen,PRawByteString(V)^);
           smvWideString:    UTF8ToWideString(Val,ValLen,PWideString(V)^);
-          smvBinary: 
+          smvBinary:
             if ValLen=SizeInStorage*2 then
               HexDisplayToBin(PAnsiChar(Val),PByte(V),SizeInStorage);
           else RaiseError('ValueType=%',[ord(ValueType)]);
@@ -55186,7 +55186,7 @@ begin
         if ObjArraySerializers.Find(ArgTypeInfo)<>nil then
           Include(ValueKindAsm,vIsObjArray);
         DynArrayWrapper.Init(ArgTypeInfo,dummy);
-        DynArrayWrapper.IsObjArray := vIsObjArray in ValueKindAsm; 
+        DynArrayWrapper.IsObjArray := vIsObjArray in ValueKindAsm;
         DynArrayWrapper.HasCustomJSONParser;
       end;
       {$ifdef HAS_FPREG}
@@ -61877,7 +61877,7 @@ begin
       end;
       if aResult<>nil then
         SetString(aResult^,Values[0],StrLen(Values[0]));
-      if (aClientDrivenID<>nil) and (Values[1]<>nil) then // keep ID if no "id":... 
+      if (aClientDrivenID<>nil) and (Values[1]<>nil) then // keep ID if no "id":...
         aClientDrivenID^ := GetCardinal(Values[1]);
     end;
   end else begin
