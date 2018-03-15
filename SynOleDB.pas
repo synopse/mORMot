@@ -295,6 +295,10 @@ type
   DBPARAMFLAGS = DWORD;
   DBTYPE = Word;
   DBRESULTFLAG = UINT;
+
+  DBLENGTH = PtrUInt;
+  DB_UPARAMS = PtrUInt;
+
   PBoid = ^TBoid;
 {$ifdef CPU64}
   {$A8} // un-packed records
@@ -431,7 +435,7 @@ type
     iOrdinal: UINT;
     pwszName: PWideChar;
     pTypeInfo: ITypeInfo;
-    ulParamSize: UINT;
+    ulParamSize: DBLENGTH;
     wType: DBTYPE;
     bPrecision: Byte;
     bScale: Byte;
@@ -442,11 +446,8 @@ type
   TUintArray = array[0..MAXBOUND] of UINT;
   TUintDynArray = array of UINT;
 
-  DBLENGTH = PtrUInt;
-  DB_UPARAMS = PtrUInt;
-
   PDBParamBindInfo = ^TDBParamBindInfo;
-  DBPARAMBINDINFO = packed record
+  DBPARAMBINDINFO = record
     pwszDataSourceType: PWideChar;
     pwszName: PWideChar;
     ulParamSize: DBLENGTH;
@@ -923,6 +924,7 @@ type
   // but manual storage for better performance
   // - whole memory block of a TOleDBStatementParamDynArray will be used as the
   // source Data for the OleDB parameters - so we should align data carefully
+
   TOleDBStatementParam = packed record
     /// storage used for BLOB (ftBlob) values
     // - will be refered as DBTYPE_BYREF when sent as OleDB parameters, to
