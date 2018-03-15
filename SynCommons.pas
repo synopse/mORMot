@@ -12044,7 +12044,7 @@ type
     case integer of
     0: (V: DWord);
     1: (L,H: word);
-    2: (B: array[0..7] of byte);
+    2: (B: array[0..3] of byte);
   end;
   /// points to the binary of an unsigned 32-bit value
   PDWordRec = ^TDWordRec;
