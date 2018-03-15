@@ -39164,7 +39164,7 @@ begin // 0=0,1=1,2=-1,3=2,4=-2...
       result := 0 else
     if c and 1=0 then
       // 0->0, 2->-1, 4->-2..
-      result := -(c shr 1) else
+      result := -Int64(c shr 1) else
       // 1->1, 3->2..
       result := (c shr 1)+1;
   end;
@@ -39192,7 +39192,7 @@ begin // 0=0,1=1,2=-1,3=2,4=-2...
       // 1->1, 3->2..
       result := result shr 1+1 else
       // 0->0, 2->-1, 4->-2..
-      result := -(result shr 1);
+      result := -Int64(result shr 1);
   end else
     if c=0 then
       result := 0 else
@@ -39200,7 +39200,7 @@ begin // 0=0,1=1,2=-1,3=2,4=-2...
       // 1->1, 3->2..
       result := (c shr 1)+1 else
       // 0->0, 2->-1, 4->-2..
-      result := -(c shr 1);
+      result := -Int64(c shr 1);
 end;
 
 function GotoNextVarInt(Source: PByte): pointer;
@@ -60228,11 +60228,12 @@ end;
 function TFileBufferReader.ReadVarInt64: Int64;
 begin
   result := ReadVarUInt64;
-  if result and 1<>0 then
-    // 1->1, 3->2..
-    result := result shr 1+1 else
-    // 0->0, 2->-1, 4->-2..
-    result := -(result shr 1);
+  if result<>0 then
+    if result and 1<>0 then
+      // 1->1, 3->2..
+      result := result shr 1+1 else
+      // 0->0, 2->-1, 4->-2..
+      result := -(result shr 1);
 end;
 
 function CleverReadInteger(p, pEnd: PAnsiChar; V: PInteger): PtrUInt;
