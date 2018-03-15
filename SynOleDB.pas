@@ -297,9 +297,9 @@ type
   DBRESULTFLAG = UINT;
   PBoid = ^TBoid;
 {$ifdef CPU64}
-  {$A+} // un-packed records
+  {$A8} // un-packed records
 {$else}
-  {$A-} // packed records
+  {$A1} // packed records
 {$endif}
   TBoid = record
     rgb_: array[0..15] of Byte;
@@ -442,11 +442,14 @@ type
   TUintArray = array[0..MAXBOUND] of UINT;
   TUintDynArray = array of UINT;
 
+  DBLENGTH = PtrUInt;
+  DB_UPARAMS = PtrUInt;
+
   PDBParamBindInfo = ^TDBParamBindInfo;
   DBPARAMBINDINFO = packed record
     pwszDataSourceType: PWideChar;
     pwszName: PWideChar;
-    ulParamSize: UINT;
+    ulParamSize: DBLENGTH;
     dwFlags: DBPARAMFLAGS;
     bPrecision: Byte;
     bScale: Byte;
@@ -458,7 +461,7 @@ type
   TDBParamBindInfoDynArray = array of TDBParamBindInfo;
 
 {$ifndef CPU64}
-  {$A+} // packed records
+  {$A1} // packed records
 {$endif}
 
   /// initialize and uninitialize OleDB data source objects and enumerators
@@ -536,7 +539,7 @@ type
       ppNamesBuffer: PPOleStr): HResult; stdcall;
     function MapParameterNames(cParamNames: UINT; rgParamNames: POleStrList;
       rgParamOrdinals: PUintArray): HResult; stdcall;
-    function SetParameterInfo(cParams: UINT; rgParamOrdinals: PUintArray;
+    function SetParameterInfo(cParams: DB_UPARAMS; rgParamOrdinals: PPtrUIntArray ;
       rgParamBindInfo: PDBParamBindInfoArray): HResult; stdcall;
   end;
 
@@ -1827,8 +1830,8 @@ var i: integer;
     res: HResult;
     fParamBindInfo: TDBParamBindInfoDynArray;
     BI: PDBParamBindInfo;
-    fParamOrdinals: TUintDynArray;
-    PO: PUINT;
+    fParamOrdinals: TPtrUIntDynArray;
+    PO: PPtrUInt;
     dbObjTVP: TDBObject;
     ssPropParamIDList: TDBPROP;
     ssPropsetParamIDList: TDBPROPSET;
