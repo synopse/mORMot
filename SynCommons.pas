@@ -8116,6 +8116,9 @@ type
   // - twoEndOfLineCRLF would reflect the TTextWriter.EndOfLineCRLF property
   // - twoBufferIsExternal would be set if the temporary buffer is not handled
   // by the instance, but specified at constructor, maybe from the stack
+  // - twoIgnoreDefaultInRecord will force custom record serialization to avoid
+  // writing the fields with default values, i.e. enable soWriteIgnoreDefault
+  // when TJSONCustomParserRTTI.WriteOneLevel is called
   TTextWriterOption = (
     twoStreamIsOwned,
     twoFlushToStreamNoAutoResize,
@@ -8126,7 +8129,8 @@ type
     twoForceJSONExtended,
     twoForceJSONStandard,
     twoEndOfLineCRLF,
-    twoBufferIsExternal);
+    twoBufferIsExternal,
+    twoIgnoreDefaultInRecord);
   /// options set for a TTextWriter instance
   // - allows to override e.g. AddRecordJSON() and AddDynArrayJSON() behavior;
   // or set global process customization for a TTextWriter
@@ -42771,9 +42775,13 @@ end;
 
 procedure TJSONRecordAbstract.CustomWriter(const aWriter: TTextWriter; const aValue);
 var P: PByte;
+    o: TJSONCustomParserSerializationOptions;
 begin
   P := @aValue;
-  Root.WriteOneLevel(aWriter,P,Options);
+  o := Options;
+  if twoIgnoreDefaultInRecord in aWriter.CustomOptions then
+    include(o,soWriteIgnoreDefault);
+  Root.WriteOneLevel(aWriter,P,o);
 end;
 
 destructor TJSONRecordAbstract.Destroy;
