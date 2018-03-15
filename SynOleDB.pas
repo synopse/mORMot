@@ -298,6 +298,7 @@ type
 
   DBLENGTH = PtrUInt;
   DB_UPARAMS = PtrUInt;
+  DBORDINAL = PtrUInt;
 
   PBoid = ^TBoid;
 {$ifdef CPU64}
@@ -347,7 +348,7 @@ type
   end;
   PDBBinding = ^TDBBinding;
   TDBBinding = record
-    iOrdinal: PtrUInt;
+    iOrdinal: DBORDINAL;
     obValue: PtrUInt;
     obLength: PtrUInt;
     obStatus: PtrUInt;
@@ -388,7 +389,7 @@ type
   TDBColumnInfo = record
     pwszName: PWideChar;
     pTypeInfo: ITypeInfo;
-    iOrdinal: PtrUInt;
+    iOrdinal: DBORDINAL;
     dwFlags: DBCOLUMNFLAGS;
     ulColumnSize: PtrUInt;
     wType: DBTYPE;
@@ -420,7 +421,7 @@ type
     SupportedRestrictions: Integer;
   end;
   TSSPARAMPROPS = record
-    iOrdinal: ULONG;
+    iOrdinal: DBORDINAL;
     cPropertySets: ULONG;
     rgPropertySets: PDBPropSet;
   end;
@@ -430,9 +431,9 @@ type
   TSSPARAMPROPSDynArray = array of TSSPARAMPROPS;
 
   PDBParamInfo = ^TDBParamInfo;
-  DBPARAMINFO = packed record
+  DBPARAMINFO = record
     dwFlags: UINT;
-    iOrdinal: UINT;
+    iOrdinal: DBORDINAL;
     pwszName: PWideChar;
     pTypeInfo: ITypeInfo;
     ulParamSize: DBLENGTH;
@@ -538,9 +539,9 @@ type
     ['{0C733A64-2A1C-11CE-ADE5-00AA0044773D}']
     function GetParameterInfo(var pcParams: UINT; out prgParamInfo: PDBPARAMINFO;
       ppNamesBuffer: PPOleStr): HResult; stdcall;
-    function MapParameterNames(cParamNames: UINT; rgParamNames: POleStrList;
-      rgParamOrdinals: PUintArray): HResult; stdcall;
-    function SetParameterInfo(cParams: DB_UPARAMS; rgParamOrdinals: PPtrUIntArray ;
+    function MapParameterNames(cParamNames: DB_UPARAMS; rgParamNames: POleStrList;
+      rgParamOrdinals: PPtrUIntArray): HResult; stdcall;
+    function SetParameterInfo(cParams: DB_UPARAMS; rgParamOrdinals: PPtrUIntArray;
       rgParamBindInfo: PDBParamBindInfoArray): HResult; stdcall;
   end;
 
@@ -924,8 +925,12 @@ type
   // but manual storage for better performance
   // - whole memory block of a TOleDBStatementParamDynArray will be used as the
   // source Data for the OleDB parameters - so we should align data carefully
-
-  TOleDBStatementParam = packed record
+  {$ifdef CPU64}
+    {$A8} // un-packed records
+  {$else}
+    {$A1} // packed records
+  {$endif}
+  TOleDBStatementParam = record
     /// storage used for BLOB (ftBlob) values
     // - will be refered as DBTYPE_BYREF when sent as OleDB parameters, to
     // avoid unnecessary memory copy
@@ -959,6 +964,9 @@ type
     VFill: array[sizeof(TSQLDBFieldType)+sizeof(TSQLDBParamInOutType)+sizeof(integer)..
       SizeOf(Int64)-1] of byte;
   end;
+  {$ifdef CPU64}
+    {$A1} // packed records
+  {$endif}
   POleDBStatementParam = ^TOleDBStatementParam;
 
   /// used to store properties about TOleDBStatement Parameters
@@ -1243,11 +1251,12 @@ type
   end;
 
   TIDListRec = record
-    IDLen: ULONG;
+    IDLen: PtrUInt;
     IDST: DBSTATUS;
     IDVal: int64;
     StrVal: PWideChar;
   end;
+
   PIDListRec = ^TIDListRec;
 
   TIDListRowset = class(TBaseAggregatingRowset)
@@ -1790,6 +1799,11 @@ const
     '', 'DBTYPE_I4', 'DBTYPE_I8', 'DBTYPE_R8', 'DBTYPE_CY', 'DBTYPE_DATE',
     'DBTYPE_WVARCHAR', 'DBTYPE_BINARY');
 // ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency, ftDate, ftUTF8, ftBlob
+   TABLE_PARAM_DATASOURCE: WideString = 'table';
+   //See BindArray
+   IDList_type: WideString = 'IDList';
+   StrList_TYPE: WideString = 'StrList';
+
 
 
 procedure TOleDBStatement.Prepare(const aSQL: RawUTF8;
@@ -1875,13 +1889,13 @@ begin
         dbObjTVP.iid := IID_IRowset;
         FillChar(ssPropParamIDList,SizeOf(ssPropParamIDList),0);
         ssPropParamIDList.dwPropertyID := SSPROP_PARAM_TYPE_TYPENAME;
-        ssPropParamIDList.vValue := 'IDList';//This type must be declared in DB
+        ssPropParamIDList.vValue := IDList_TYPE;
         ssPropsetParamIDList.cProperties := 1;
         ssPropsetParamIDList.guidPropertySet := DBPROPSET_SQLSERVERPARAMETER;
         ssPropsetParamIDList.rgProperties := @ssPropParamIDList;
         FillChar(ssPropParamStrList,SizeOf(ssPropParamStrList),0);
         ssPropParamStrList.dwPropertyID := SSPROP_PARAM_TYPE_TYPENAME;
-        ssPropParamStrList.vValue := 'StrList';//This type must be declared in DB
+        ssPropParamStrList.vValue := StrList_TYPE;
         ssPropsetParamStrList.cProperties := 1;
         ssPropsetParamStrList.guidPropertySet := DBPROPSET_SQLSERVERPARAMETER;
         ssPropsetParamStrList.rgProperties := @ssPropParamStrList;
@@ -1896,12 +1910,12 @@ begin
           B^.obStatus := PAnsiChar(@P^.VStatus)-pointer(fParams);
           BI^.dwFlags := PARAMTYPE2OLEDB[P^.VInOut]; // parameter direction
           BI^.pwszName := nil; //unnamed parameters
-          BI^.pwszDataSourceType :=  Pointer(FIELDTYPE2OLEDBTYPE_NAME[P^.VType]) ;
+          BI^.pwszDataSourceType :=  Pointer(FIELDTYPE2OLEDBTYPE_NAME[P^.VType]);
           BI^.ulParamSize := 0;
           PO^ := i;
           // check array binding
           if Length(P.VArray)>0 then begin
-            BI^.pwszDataSourceType := 'table';
+            BI^.pwszDataSourceType := Pointer(TABLE_PARAM_DATASOURCE);
             B^.wType := DBTYPE_TABLE;
             B^.cbMaxLen := sizeof(IUnknown);
             B^.pObject := @dbObjTVP;
@@ -3194,11 +3208,11 @@ begin
   dbidID.eKind := DBKIND_GUID_NAME;
   dbidID.uGuid.guid := CLSID_ROWSET_TVP;
   case fType of
-    ftInt64: dbidID.uName.pwszName := 'IDList';
-    ftUTF8:  dbidID.uName.pwszName := 'StrList';
+    ftInt64: dbidID.uName.pwszName := pointer(IDList_type);
+    ftUTF8:  dbidID.uName.pwszName := pointer(StrList_type);
   end;
   OleCheck(pIOpenRowset.OpenRowset(self, @dbidID, nil, IID_IUnknown, 0, nil, @fUnkInnerSQLNCLIRowset));
-  OleCheck(SetupAccessors(self as IAccessor));
+  SetupAccessors(self as IAccessor);
   Result := S_OK;
 end;
 
