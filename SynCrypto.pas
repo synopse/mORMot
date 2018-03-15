@@ -4806,57 +4806,57 @@ asm // input: rcx=TAESContext, rdx=source, r8=dest
         {$endif}
 @round: movzx   rcx, r8b
         mov     ecx, dword ptr [rax+rcx*4]
+        movzx   rbx, r10b
+        mov     ebx, dword ptr [rax+rbx*4]
+        movzx   r14, r9b
+        mov     r14d, dword ptr [rax+r14*4]
         movzx   r11, r9w
         shr     r11, 8
         xor     ecx, dword ptr [rax+r11*4+400H]
+        movzx   r12, dx
+        shr     r12, 8
+        xor     ebx, dword ptr [rax+r12*4+400H]
         mov     r11, r10
         shr     r11, 16
         and     r11, 0FFH
         xor     ecx, dword ptr [rax+r11*4+800H]
-        mov     r11, rdx
-        shr     r11, 24
-        xor     ecx, dword ptr [rax+r11*4+0C00H]
-        movzx   r11, r9b
-        mov     r11d, dword ptr [rax+r11*4]
-        movzx   rbx, r10w
-        shr     rbx, 8
-        xor     r11d, dword ptr [rax+rbx*4+400H]
-        mov     rbx, rdx
-        shr     rbx, 16
-        and     rbx, 0FFH
-        xor     r11d, dword ptr [rax+rbx*4+800H]
-        mov     rbx, r8
-        shr     rbx, 24
-        xor     r11d, dword ptr [rax+rbx*4+0C00H]
-        movzx   rbx, r10b
-        mov     ebx, dword ptr [rax+rbx*4]
-        movzx   r14, dx
-        shr     r14, 8
-        xor     ebx, dword ptr [rax+r14*4+400H]
         mov     r12, r8
         shr     r12, 16
         and     r12, 0FFH
         xor     ebx, dword ptr [rax+r12*4+800H]
+        mov     r11, rdx
+        shr     r11, 24
+        xor     ecx, dword ptr [rax+r11*4+0C00H]
         mov     r12, r9
         shr     r12, 24
-        shr     r9, 16
         xor     ebx, dword ptr [rax+r12*4+0C00H]
-        and     rdx, 0FFH
-        mov     edx, dword ptr [rax+rdx*4]
+        movzx   r11, r10w
+        shr     r11, 8
+        xor     r14d, dword ptr [rax+r11*4+400H]
+        mov     r12, rdx
+        shr     r12, 16
+        and     r12, 0FFH
+        xor     r14d, dword ptr [rax+r12*4+800H]
+        movzx   r11, dl
+        mov     edx, dword ptr [rax+r11*4]
+        mov     r12, r8
+        shr     r12, 24
+        xor     r14d, dword ptr [rax+r12*4+0C00H]
         shr     r8, 8
-        movzx   r12, r8b
-        xor     edx, dword ptr [rax+r12*4+400H]
+        and     r8, 0FFH
+        xor     edx, dword ptr [rax+r8*4+400H]
+        mov     r8, rcx
+        shr     r9, 16
         and     r9, 0FFH
         xor     edx, dword ptr [rax+r9*4+800H]
+        mov     r9, r14
         shr     r10, 24
         xor     edx, dword ptr [rax+r10*4+0C00H]
-        xor     edx, dword ptr [rdi+0CH]
-        mov     r8d, ecx
+        mov     r10, rbx
         xor     r8d, dword ptr [rdi]
-        mov     r9d, r11d
         xor     r9d, dword ptr [rdi+4H]
-        mov     r10d, ebx
         xor     r10d, dword ptr [rdi+8H]
+        xor     edx, dword ptr [rdi+0CH]
         add     rdi, 16
         dec     r13
         jnz     @round
