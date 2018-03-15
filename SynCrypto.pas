@@ -4771,7 +4771,7 @@ end;
 {$ifdef CPUX64}
 procedure aesencryptx64(const ctxt: TAESContext; bi, bo: PWA4);
 {$ifdef FPC}nostackframe; assembler; asm{$else}
-asm // input: rcx=TAESContext, rdx=source, r8=dest
+asm // input: rcx/rdi=TAESContext, rdx/rsi=source, r8/rdx=dest
         .noframe
 {$endif} // rolled optimized encryption asm version by A. Bouchez
         push    r15
@@ -4779,166 +4779,159 @@ asm // input: rcx=TAESContext, rdx=source, r8=dest
         push    r13
         push    r12
         push    rbx
-        push    rdi // even if not needed, keep stack 16 bytes aligned
+        push    rdi
+        push    rsi
+        push    rbp
         {$ifdef win64}
         mov     r15, r8
-        mov     rdi, rcx
+        mov     r12, rcx
         {$else}
         mov     r15, rdx
         mov     rdx, rsi
+        mov     r12, rdi
         {$endif win64}
-        movzx   r13, byte ptr [rdi].TAESContext.Rounds
-        mov     r8d, dword ptr [rdx]
-        mov     r9d, dword ptr [rdx+4H]
-        mov     r10d, dword ptr [rdx+8H]
+        movzx   r13, byte ptr [r12].TAESContext.Rounds
+        mov     eax, dword ptr [rdx]
+        mov     ebx, dword ptr [rdx+4H]
+        mov     ecx, dword ptr [rdx+8H]
         mov     edx, dword ptr [rdx+0CH]
-        xor     r8d, dword ptr [rdi]
-        xor     r9d, dword ptr [rdi+4H]
-        xor     r10d, dword ptr [rdi+8H]
-        xor     edx, dword ptr [rdi+0CH]
-        dec     r13
-        add     rdi, 16
-        lea     rax, [rip+Te0]
+        xor     eax, dword ptr [r12]
+        xor     ebx, dword ptr [r12+4H]
+        xor     ecx, dword ptr [r12+8H]
+        xor     edx, dword ptr [r12+0CH]
+        sub     r13, 1
+        add     r12, 16
+        lea     r14, [rip+Te0]
         {$ifdef FPC}
         align   16
         {$else}
         nop; nop; nop; nop; nop; nop
         {$endif}
-@round: movzx   rcx, r8b
-        mov     ecx, dword ptr [rax+rcx*4]
-        movzx   rbx, r10b
-        mov     ebx, dword ptr [rax+rbx*4]
-        movzx   r14, r9b
-        mov     r14d, dword ptr [rax+r14*4]
-        movzx   r11, r9w
-        shr     r11, 8
-        xor     ecx, dword ptr [rax+r11*4+400H]
-        movzx   r12, dx
-        shr     r12, 8
-        xor     ebx, dword ptr [rax+r12*4+400H]
-        mov     r11, r10
-        shr     r11, 16
-        and     r11, 0FFH
-        xor     ecx, dword ptr [rax+r11*4+800H]
-        mov     r12, r8
-        shr     r12, 16
-        and     r12, 0FFH
-        xor     ebx, dword ptr [rax+r12*4+800H]
-        mov     r11, rdx
-        shr     r11, 24
-        xor     ecx, dword ptr [rax+r11*4+0C00H]
-        mov     r12, r9
-        shr     r12, 24
-        xor     ebx, dword ptr [rax+r12*4+0C00H]
-        movzx   r11, r10w
-        shr     r11, 8
-        xor     r14d, dword ptr [rax+r11*4+400H]
-        mov     r12, rdx
-        shr     r12, 16
-        and     r12, 0FFH
-        xor     r14d, dword ptr [rax+r12*4+800H]
-        movzx   r11, dl
-        mov     edx, dword ptr [rax+r11*4]
-        mov     r12, r8
-        shr     r12, 24
-        xor     r14d, dword ptr [rax+r12*4+0C00H]
-        shr     r8, 8
-        and     r8, 0FFH
-        xor     edx, dword ptr [rax+r8*4+400H]
-        mov     r8, rcx
-        shr     r9, 16
-        and     r9, 0FFH
-        xor     edx, dword ptr [rax+r9*4+800H]
-        mov     r9, r14
-        shr     r10, 24
-        xor     edx, dword ptr [rax+r10*4+0C00H]
-        mov     r10, rbx
-        xor     r8d, dword ptr [rdi]
-        xor     r9d, dword ptr [rdi+4H]
-        xor     r10d, dword ptr [rdi+8H]
-        xor     edx, dword ptr [rdi+0CH]
-        add     rdi, 16
-        dec     r13
+@round: mov     esi, eax
+        mov     edi, edx
+        movzx   r8d, al
+        movzx   r9d, cl
+        movzx   r10d, bl
+        mov     r8d, dword ptr [r14+r8*4]
+        mov     r9d, dword ptr [r14+r9*4]
+        mov     r10d, dword ptr [r14+r10*4]
+        shr     esi, 16
+        shr     edi, 16
+        movzx   ebp, bh
+        xor     r8d, dword ptr [r14+rbp*4+400H]
+        movzx   ebp, dh
+        xor     r9d, dword ptr [r14+rbp*4+400H]
+        movzx   ebp, ch
+        xor     r10d, dword ptr [r14+rbp*4+400H]
+        shr     ebx, 16
+        shr     ecx, 16
+        movzx   ebp, dl
+        mov     edx, dword ptr [r14+rbp*4]
+        movzx   ebp, cl
+        xor     r8d, dword ptr [r14+rbp*4+800H]
+        movzx   ebp, sil
+        xor     r9d, dword ptr [r14+rbp*4+800H]
+        movzx   r11, dil
+        movzx   eax, ah
+        shr     edi, 8
+        movzx   ebp, bh
+        shr     esi, 8
+        xor     r10d, dword ptr [r14+r11*4+800H]
+        xor     edx, dword ptr [r14+rax*4+400H]
+        xor     r8d, dword ptr [r14+rdi*4+0C00H]
+        xor     r9d, dword ptr [r14+rbp*4+0C00H]
+        xor     r10d, dword ptr [r14+rsi*4+0C00H]
+        movzx   ebp, bl
+        xor     edx, dword ptr [r14+rbp*4+800H]
+        mov     rbx, r10
+        mov     rax, r8
+        movzx   ebp, ch
+        xor     edx, dword ptr [r14+rbp*4+0C00H]
+        mov     rcx, r9
+        xor     eax, dword ptr [r12]
+        xor     ebx, dword ptr [r12+4H]
+        xor     ecx, dword ptr [r12+8H]
+        xor     edx, dword ptr [r12+0CH]
+        add     r12, 16
+        sub     r13, 1
         jnz     @round
-        lea     rbx, [rip+SBox]
-        movzx   rcx, r8b
-        movzx   rax, byte ptr [rbx+rcx]
-        movzx   r11, r9w
-        shr     r11, 8
-        movzx   rcx, byte ptr [rbx+r11]
-        shl     ecx, 8
-        xor     eax, ecx
-        mov     r11, r10
+        lea     r9, [rip+SBox]
+        movzx   r8, al
+        movzx   r14, byte ptr [r9+r8]
+        movzx   edi, bh
+        movzx   r8, byte ptr [r9+rdi]
+        shl     r8d, 8
+        xor     r14d, r8d
+        mov     r11, rcx
         shr     r11, 16
         and     r11, 0FFH
-        movzx   rcx, byte ptr [rbx+r11]
-        shl     ecx, 16
-        xor     eax, ecx
+        movzx   r8, byte ptr [r9+r11]
+        shl     r8d, 16
+        xor     r14d, r8d
         mov     r11, rdx
         shr     r11, 24
-        movzx   rcx, byte ptr [rbx+r11]
-        shl     ecx, 24
-        xor     eax, ecx
-        xor     eax, dword ptr [rdi]
-        mov     dword ptr [r15], eax
-        movzx   rcx, r9b
-        movzx   rax, byte ptr [rbx+rcx]
-        movzx   r11, r10w
-        shr     r11, 8
-        movzx   rcx, byte ptr [rbx+r11]
-        shl     ecx, 8
-        xor     eax, ecx
+        movzx   r8, byte ptr [r9+r11]
+        shl     r8d, 24
+        xor     r14d, r8d
+        xor     r14d, dword ptr [r12]
+        mov     dword ptr [r15], r14d
+        movzx   r8, bl
+        movzx   r14, byte ptr [r9+r8]
+        movzx   edi, ch
+        movzx   r8, byte ptr [r9+rdi]
+        shl     r8d, 8
+        xor     r14d, r8d
         mov     r11, rdx
         shr     r11, 16
         and     r11, 0FFH
-        movzx   rcx, byte ptr [rbx+r11]
-        shl     ecx, 16
-        xor     eax, ecx
-        mov     r11, r8
+        movzx   r8, byte ptr [r9+r11]
+        shl     r8d, 16
+        xor     r14d, r8d
+        mov     r11, rax
         shr     r11, 24
-        movzx   rcx, byte ptr [rbx+r11]
-        shl     ecx, 24
-        xor     eax, ecx
-        xor     eax, dword ptr [rdi+4H]
-        mov     dword ptr [r15+4H], eax
-        movzx   rcx, r10b
-        movzx   rax, byte ptr [rbx+rcx]
-        movzx   r11, dx
-        shr     r11, 8
-        movzx   rcx, byte ptr [rbx+r11]
-        shl     ecx, 8
-        xor     eax, ecx
-        mov     r11, r8
+        movzx   r8, byte ptr [r9+r11]
+        shl     r8d, 24
+        xor     r14d, r8d
+        xor     r14d, dword ptr [r12+4H]
+        mov     dword ptr [r15+4H], r14d
+        movzx   r8, cl
+        movzx   r14, byte ptr [r9+r8]
+        movzx   edi, dh
+        movzx   r8, byte ptr [r9+rdi]
+        shl     r8d, 8
+        xor     r14d, r8d
+        mov     r11, rax
         shr     r11, 16
         and     r11, 0FFH
-        movzx   rcx, byte ptr [rbx+r11]
-        shl     ecx, 16
-        xor     eax, ecx
-        mov     r11, r9
+        movzx   r8, byte ptr [r9+r11]
+        shl     r8d, 16
+        xor     r14d, r8d
+        mov     r11, rbx
         shr     r11, 24
-        movzx   rcx, byte ptr [rbx+r11]
-        shl     ecx, 24
-        xor     eax, ecx
-        xor     eax, dword ptr [rdi+8H]
-        mov     dword ptr [r15+8H], eax
+        movzx   r8, byte ptr [r9+r11]
+        shl     r8d, 24
+        xor     r14d, r8d
+        xor     r14d, dword ptr [r12+8H]
+        mov     dword ptr [r15+8H], r14d
         and     rdx, 0FFH
-        movzx   rax, byte ptr [rbx+rdx]
-        shr     r8, 8
-        and     r8, 0FFH
-        movzx   rcx, byte ptr [rbx+r8]
-        shl     ecx, 8
-        xor     eax, ecx
-        shr     r9, 16
-        and     r9, 0FFH
-        movzx   rcx, byte ptr [rbx+r9]
-        shl     ecx, 16
-        xor     eax, ecx
-        shr     r10, 24
-        movzx   rcx, byte ptr [rbx+r10]
-        shl     ecx, 24
-        xor     eax, ecx
-        xor     eax, dword ptr [rdi+0CH]
-        mov     dword ptr [r15+0CH], eax
+        movzx   r14, byte ptr [r9+rdx]
+        movzx   eax, ah
+        movzx   r8, byte ptr [r9+rax]
+        shl     r8d, 8
+        xor     r14d, r8d
+        shr     rbx, 16
+        and     rbx, 0FFH
+        movzx   r8, byte ptr [r9+rbx]
+        shl     r8d, 16
+        xor     r14d, r8d
+        shr     rcx, 24
+        movzx   r8, byte ptr [r9+rcx]
+        shl     r8d, 24
+        xor     r14d, r8d
+        xor     r14d, dword ptr [r12+0CH]
+        mov     dword ptr [r15+0CH], r14d
+        pop     rbp
+        pop     rsi
         pop     rdi
         pop     rbx
         pop     r12
