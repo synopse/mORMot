@@ -4862,11 +4862,16 @@ type
 /// convert a string HTTP verb into its TSQLURIMethod enumerate
 function StringToMethod(const method: RawUTF8): TSQLURIMethod;
 
-const
+var
   /// the options used by TSynJsonFileSettings.SaveIfNeeded
   SETTINGS_WRITEOPTIONS: TTextWriterWriteObjectOptions =
     [woHumanReadable, woStoreStoredFalse, woHumanReadableFullSetsAsStar,
      woHumanReadableEnumSetAsComment, woInt64AsHex];
+
+  /// the options used by TServiceFactoryServer.OnLogRestExecuteMethod
+  SERVICELOG_WRITEOPTIONS: TTextWriterWriteObjectOptions =
+    [woDontStoreDefault,woDontStoreEmptyString, woDontStore0,
+     woHideSynPersistentPassword];
 
 {$ifdef MSWINDOWS}
 {$ifdef ISDELPHIXE} // fix Delphi XE imcompatilibility
@@ -10674,9 +10679,12 @@ type
     // are identified by their type identifier - so contract does not extend
     // up to the content of such high-level structures
     procedure SerializeToContract(WR: TTextWriter);
+    /// check if the supplied argument value is the default (e.g. 0, '' or null)
+    function IsDefault(V: pointer): boolean;
     /// append the JSON value corresponding to this argument
     // - includes a pending ','
-    procedure AddJSON(WR: TTextWriter; V: pointer);
+    procedure AddJSON(WR: TTextWriter; V: pointer;
+      ObjectOptions: TTextWriterWriteObjectOptions=[woDontStoreDefault]);
     /// append the value corresponding to this argument as within a JSON string
     // - will escape any JSON string character, and include a pending ','
     procedure AddJSONEscaped(WR: TTextWriter; V: pointer);
@@ -59247,12 +59255,13 @@ begin
         W.AddShort('optNoLog:true') else
         for a := ArgsInFirst to ArgsInLast do
         with Args[a] do
-        if (ValueDirection<>smdOut) and (ValueType<>smvInterface) then begin
+        if (ValueDirection<>smdOut) and (ValueType<>smvInterface) and
+           not IsDefault(Sender.Values[a]) then begin
           W.AddShort(ParamName^); // in JSON_OPTIONS_FAST_EXTENDED format
           W.Add(':');
           if vIsSPI in ValueKindAsm then
             W.AddShort('"****",') else
-            AddJSON(W,Sender.Values[a]);
+            AddJSON(W,Sender.Values[a],SERVICELOG_WRITEOPTIONS);
         end;
       W.CancelLastComma;
     end;
@@ -59269,12 +59278,13 @@ begin
         W.AddShort('optNoLog:true') else
         for a := ArgsOutFirst to ArgsOutLast do
         with Args[a] do
-        if (ValueDirection in [smdVar,smdOut,smdResult]) then begin
+        if (ValueDirection in [smdVar,smdOut,smdResult]) and
+           not IsDefault(Sender.Values[a]) then begin
           W.AddShort(ParamName^);
           W.Add(':');
           if vIsSPI in ValueKindAsm then
             W.AddShort('"****",') else
-            AddJSON(W,Sender.Values[a]);
+            AddJSON(W,Sender.Values[a],SERVICELOG_WRITEOPTIONS);
         end;
       W.CancelLastComma;
     end;
@@ -59808,7 +59818,29 @@ begin
 {$endif SOA_DEBUG}
 end;
 
-procedure TServiceMethodArgument.AddJSON(WR: TTextWriter; V: pointer);
+function TServiceMethodArgument.IsDefault(V: pointer): boolean;
+begin
+  result := false;
+  case ValueType of
+  smvBoolean..smvCurrency:
+  case SizeInStorage of
+    1: result := PByte(V)^=0;
+    2: result := PWord(V)^=0;
+    4: result := PInteger(V)^=0;
+    8: result := PInt64(V)^=0;
+  end;
+  smvRawUTF8..smvWideString, smvObject..smvInterface:
+    result := PPointer(V)^=nil;
+  smvBinary, smvRecord:
+    result := IsZero(V,SizeInStorage);
+  {$ifndef NOVARIANTS}
+  smvVariant: result := PVarData(V)^.vtype<=varNull;
+  {$endif}
+  end;
+end;
+
+procedure TServiceMethodArgument.AddJSON(WR: TTextWriter; V: pointer;
+  ObjectOptions: TTextWriterWriteObjectOptions);
 var wrapper: TDynArray;
 begin
   if vIsString in ValueKindAsm then
@@ -59837,7 +59869,7 @@ begin
   smvWideString: WR.AddJSONEscapeW(PPointer(V)^);
   smvBinary:     if not IsZero(V,SizeInStorage) then
                    WR.AddBinToHexDisplayLower(V,SizeInStorage);
-  smvObject:     WR.WriteObject(PPointer(V)^);
+  smvObject:     WR.WriteObject(PPointer(V)^,ObjectOptions);
   smvInterface:  WR.AddShort('null'); // or written by InterfaceWrite()
   smvRecord:     WR.AddRecordJSON(V^,ArgTypeInfo);
   smvDynArray: begin // slightly faster than WR.AddDynArrayJSON(ArgTypeInfo,V^);
@@ -61047,7 +61079,8 @@ function TServiceMethodExecute.TempTextWriter: TJSONSerializer;
 begin
   if fTempTextWriter=nil then begin
     fTempTextWriter := TJSONSerializer.CreateOwnedStream;
-    include(fTempTextWriter.fCustomOptions,twoForceJSONExtended); // shorter
+    fTempTextWriter.fCustomOptions := fTempTextWriter.fCustomOptions +
+      [twoForceJSONExtended,twoIgnoreDefaultInRecord]; // shorter
   end;
   result := fTempTextWriter;
 end;
