@@ -6966,6 +6966,9 @@ procedure RandomGUID(out result: TGUID); overload;
 function RandomGUID: TGUID; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// fill a GUID with 0
+procedure FillZero(var result: TGUID); overload; {$ifdef HASINLINE}inline;{$endif}
+
 type
   /// stack-allocated ASCII string, used by GUIDToShort() function
   TGUIDShortString = string[38];
@@ -12036,12 +12039,23 @@ function crc64c(buf: PAnsiChar; len: cardinal): Int64;
 function crc63c(buf: PAnsiChar; len: cardinal): Int64;
 
 type
-  /// binary access to an unsigned 64-bit value
+  /// binary access to an unsigned 32-bit value (4 bytes in memory)
+  TDWordRec = record
+    case integer of
+    0: (V: DWord);
+    1: (L,H: word);
+    2: (B: array[0..7] of byte);
+  end;
+  /// points to the binary of an unsigned 32-bit value
+  PDWordRec = ^TDWordRec;
+
+  /// binary access to an unsigned 64-bit value (8 bytes in memory)
   TQWordRec = record
     case integer of
     0: (V: Qword);
     1: (L,H: cardinal);
-    2: (B: array[0..7] of byte);
+    2: (W: array[0..3] of word);
+    3: (B: array[0..7] of byte);
   end;
   /// points to the binary of an unsigned 64-bit value
   PQWordRec = ^TQWordRec;
@@ -12277,6 +12291,13 @@ procedure FillZero(var secret: RawByteString); overload;
 // ! ... finally FillZero(secret); end;
 procedure FillZero(var secret: RawUTF8); overload;
   {$ifdef FPC}inline;{$endif}
+
+  /// fill all bytes of a memory buffer with zero
+  // - is expected to be used with a constant count from SizeOf() so that
+  // inlining make it more efficient than FillCharFast(..,...,0):
+  // ! FillZero(variable,SizeOf(variable));
+procedure FillZero(var dest; count: integer); overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fast computation of two 64-bit unsigned integers into a 128-bit value
 procedure mul64x64(const left, right: QWord; out product: THash128Rec);
@@ -23660,6 +23681,22 @@ begin
       exit;
   result := true;
 end;
+{$endif HASINLINE}
+
+procedure FillZero(var dest; count: integer);
+{$ifndef HASINLINE}
+asm
+  xor ecx, ecx
+  jmp dword ptr [FillCharFast]
+end;
+{$else}
+var i: PtrInt;
+begin
+  for i := 0 to (count shr POINTERSHR)-1 do
+    PPtrIntArray(@dest)[i] := 0;
+  for i := count-(count and POINTERAND) to count-1 do
+    PByteArray(@dest)[i] := 0;
+end;
 {$endif}
 
 {$ifdef PUREPASCAL}
@@ -33714,7 +33751,7 @@ begin
     PInt64Array(@Fields)^[2] := 0;
     PInt64Array(@Fields)^[3] := 0;
   end else
-    FillcharFast(Fields,SizeOf(Fields),0);
+    FillZero(Fields,SizeOf(Fields));
 end;
 
 {$WARNINGS ON}
@@ -36840,11 +36877,16 @@ begin
   FillRandom(@result,SizeOf(TGUID) shr 2);
 end;
 
+procedure FillZero(var result: TGUID);
+begin
+  FillZero(PHash128(@result)^);
+end;
+
 function RawUTF8ToGUID(const text: RawByteString): TGUID;
 begin
   if (length(text)<>38) or (text[1]<>'{') or (text[38]<>'}') or
      (TextToGUID(@text[2],@result)=nil) then
-    FillcharFast(result,SizeOf(result),0);
+   FillZero(PHash128(@result)^);
 end;
 
 function StringToGUID(const text: string): TGUID;
@@ -36863,7 +36905,7 @@ begin
     {$endif}
       exit; // conversion OK
   end;
-  FillcharFast(result,SizeOf(result),0);
+  FillZero(PHash128(@result)^);
 end;
 
 function StrCurr64(P: PAnsiChar; const Value: Int64): PAnsiChar;
@@ -38095,7 +38137,7 @@ begin
   result := 0;
   if GetClassInfo(HInstance, pointer(aWindowName), TempClass) then
     exit; // class name already registered -> fail
-  FillcharFast(TempClass,SizeOf(TempClass),0);
+  FillCharFast(TempClass,SizeOf(TempClass),0);
   TempClass.hInstance := HInstance;
   TempClass.lpfnWndProc := @DefWindowProc;
   TempClass.lpszClassName :=  pointer(aWindowName);
@@ -50574,7 +50616,7 @@ asm
         mov     eax, [eax].vmtInstanceSize
         push    eax  // size
         call    System.@GetMem
-        pop     edx   // size
+        pop     edx  // size
         push    eax  // self
         mov     cl, 0
         call    dword ptr[FillcharFast]
@@ -55681,17 +55723,19 @@ begin
     result := (Count*QWord(1000*1000)) div iTime;
 end;
 
+{$HINTS OFF} // for FillZero() complain about loop executed zero times
 procedure TPrecisionTimer.Init;
 begin
-  FillcharFast(self,SizeOf(self),0);
+  FillZero(self,SizeOf(self));
 end;
 
 procedure TPrecisionTimer.Start;
 begin
-  FillcharFast(self,SizeOf(self),0);
+  FillZero(self,SizeOf(self));
   QueryPerformanceCounter(iStart);
   iLast := iStart;
 end;
+{$HINTS ON}
 
 function TPrecisionTimer.Started: boolean;
 begin
