@@ -629,14 +629,8 @@ begin
   with WSData do begin
     wVersion := wVersionRequired;
     wHighVersion := $202;
-    {$ifdef FPC}
-    szDescription := 'Synopse CrossPlatform Socket Layer';
-    szSystemStatus := 'Running on Unix/Linux by FreePascal';
-    {$endif}
-    {$ifdef KYLIX3}
-    {$endif}
-    szDescription := 'Synopse CrossPlatform Socket Layer';
-    szSystemStatus := 'Running on Unix/Linux by Kylix';
+    szDescription := 'Synopse Sockets';
+    szSystemStatus := 'Linux';
     iMaxSockets := 32768;
     iMaxUdpDg := 8192;
   end;
