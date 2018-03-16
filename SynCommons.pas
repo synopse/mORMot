@@ -12893,6 +12893,8 @@ type
     /// returns true if all fields are zero
     function IsZero: boolean;
       {$ifdef HASINLINE}inline;{$endif}
+    /// returns true if all fields do match
+    function IsEqual(const another: TSynSystemTime): boolean;
     /// used by TSynTimeZone
     function EncodeForTimeChange(const aYear: word): TDateTime;
     /// fill fields with the current UTC time
@@ -36270,6 +36272,12 @@ begin
   result := (PInt64Array(@self)[0]=0) and (PInt64Array(@self)[1]=0);
 end;
 
+function TSynSystemTime.IsEqual(const another: TSynSystemTime): boolean;
+begin
+result := (PInt64Array(@self)[0]=PInt64Array(@another)[0]) and
+          (PInt64Array(@self)[1]=PInt64Array(@another)[1]);
+end;
+
 procedure TSynSystemTime.FromNowUTC;
 begin
   {$ifdef MSWINDOWS}
@@ -55626,31 +55634,38 @@ end;
 { ************ Unit-Testing classes and functions }
 
 function KB(bytes: Int64): RawUTF8;
+const _B: array[0..4] of string[3] = ('B','KB','MB','GB','TB');
+      _R: array[0..4] of Int64 = (0,(1 shl 10)-1,(1 shl 20)-1,(1 shl 30)-1,
+        (Int64(1) shl 40)-1);
 var hi,rem: cardinal;
+    b: byte;
 begin
-  if bytes>=1 shl 20 then begin
-    if bytes>=Int64(1) shl 40 then begin
-      bytes := bytes shr 20;
-      result := ' TB';
-    end else
-    if bytes>=1 shl 30 then begin
-      bytes := bytes shr 10;
-      result := ' GB';
-    end else
-      result := ' MB';
-    rem := (PtrUInt(bytes) and pred(1 shl 20))div (102*1024);
-    hi := bytes shr 20;
-    if rem=10 then begin
-      rem := 0;
-      inc(hi);
-    end;
-    if rem<>0 then
-      result := FormatUTF8('%.%%',[hi,rem,result]) else
-      result := FormatUTF8('%%',[hi,result]);
-  end else
-  if bytes>1023*9 then
-    result := UInt32ToUtf8(PtrUInt(bytes) shr 10)+' KB' else
-    result := UInt32ToUtf8(PtrUInt(bytes))+' B';
+  if bytes<1 shl 10 then begin
+    FormatUTF8('% %',[PtrUInt(bytes),_B[0]],result);
+    exit;
+  end;
+  if bytes<1 shl 20 then begin
+    b := 1;
+    rem := bytes;
+  end else begin
+    if bytes<1 shl 30 then
+      b := 2 else
+    if bytes<Int64(1) shl 40 then
+      b := 3 else
+      b := 4;
+    rem := bytes shr ((b-1)*10);
+  end;
+  rem := rem and 1023;
+  if rem<>0 then
+    rem := rem div 102;
+  hi := bytes shr (b*10);
+  if rem=10 then begin
+    rem := 0;
+    inc(hi); // round up as expected by an human being
+  end;
+  if rem<>0 then
+    FormatUTF8('%.% %',[hi,rem,_B[b]],result) else
+    FormatUTF8('% %',[hi,_B[b]],result);
 end;
 
 function IntToThousandString(Value: integer; const ThousandSep: RawUTF8): RawUTF8;

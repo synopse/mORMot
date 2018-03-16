@@ -3430,8 +3430,15 @@ begin
   check(UInt4DigitsToUTF8(12)='0012');
   check(UInt4DigitsToUTF8(123)='0123');
   check(UInt4DigitsToUTF8(1234)='1234');
-  Check(KB(1024)='1024 B');
+  Check(KB(-123)='-123 B');
+  Check(KB(0)='0 B');
+  Check(KB(123)='123 B');
+  Check(KB(1023)='1023 B');
+  Check(KB(1024)='1 KB');
+  Check(KB(1025)='1 KB');
+  Check(KB(16383)='16 KB');
   Check(KB(16384)='16 KB');
+  Check(KB(16385)='16 KB');
   Check(KB(3*1024*1024-800*1024)='2.2 MB');
   Check(KB(3*1024*1024)='3 MB');
   Check(KB(3*1024*1024+512*1024)='3.5 MB');
@@ -17427,23 +17434,24 @@ begin
 end;
 
 procedure TTestMultiThreadProcess.Locked;
-begin
+begin // 1=7310/s  2=8689/s  5=7693/s  10=3893/s  30=1295/s  50=777/s
+  // (numbers below are taken from a Xeon Phi 2 @ 1.5GHz with 288 cores)
   Test(TSQLRestClientDB,HTTP_DEFAULT_MODE,amLocked);
 end;
 
 procedure TTestMultiThreadProcess.Unlocked;
-begin
+begin // 1=7342/s  2=9400/s  5=7693/s  10=3894/s  30=1295/s  50=777/s
   Test(TSQLRestClientDB,HTTP_DEFAULT_MODE,amUnlocked);
 end;
 
 procedure TTestMultiThreadProcess.BackgroundThread;
-begin
+begin // 1=6173/s  2=7299/s  5=7244/s  10=3912/s  30=1301/s  50=777/s
   Test(TSQLRestClientDB,HTTP_DEFAULT_MODE,amBackgroundThread);
 end;
 
 {$ifndef LVCL}
 procedure TTestMultiThreadProcess.MainThread;
-begin
+begin // 1=5000/s  2=5911/s  5=4260/s  10=2663/s  30=1126/s  50=707/s
   Test(TSQLRestClientDB,HTTP_DEFAULT_MODE,amMainThread);
 end;
 {$endif}
@@ -17456,25 +17464,24 @@ end;
 {$endif}
 
 procedure TTestMultiThreadProcess.SocketAPI;
-begin
+begin //  1=2470/s  2=3866/s  5=3608/s  10=3556/s  30=1303/s  50=780/s
   Test(TSQLHttpClientWinSock,useHttpSocket);
 end;
 
 procedure TTestMultiThreadProcess.Websockets;
-begin
+begin // 1=2433/s  2=3389/s  5=3208/s  10=3354/s  30=1303/s  50=778/s
   Test(TSQLHttpClientWebsockets,useBidirSocket);
 end;
 
 {$ifdef USELIBCURL}
 procedure TTestMultiThreadProcess._libcurl;
-begin
-  exit; // circumvent testing issues until we actually need it
+begin //  1=48/s  2=95/s  5=234/s  10=433/s  30=729/s  50=594/s
   Test(TSQLHttpClientCurl,useHttpSocket);
 end;
 {$endif}
 
 procedure TTestMultiThreadProcess._TSQLRestClientDB;
-begin
+begin //  1=7347/s  2=8100/s  5=7654/s  10=3898/s  30=1295/s  50=777/s
   Test(TSQLRestClientDB);
 end;
 
@@ -17491,7 +17498,7 @@ end;
 {$endif}
 
 procedure TTestMultiThreadProcess._TSQLRestServerDB;
-begin
+begin //  1=9332/s  2=9300/s  5=7826/s  10=3891/s  30=1295/s  50=777/s
   Test(TSQLRestServerDB);
 end;
 
