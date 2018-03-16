@@ -12885,6 +12885,22 @@ type
   TDateTimeMSDynArray = array of TDateTimeMS;
   PDateTimeMSDynArray = ^TDateTimeMSDynArray;
 
+  /// a cross-platform and cross-compiler TSystemTime structure
+  // - also used to store a Date/Time in TSynTimeZone internal structures
+  TSynSystemTime = {$ifdef ISDELPHI2006ANDUP}record{$else}object{$endif}
+    Year, Month, Day, DayOfWeek,
+    Hour, Minute, Second, MilliSecond: word;
+    /// returns true if all fields are zero
+    function IsZero: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// used by TSynTimeZone
+    function EncodeForTimeChange(const aYear: word): TDateTime;
+    /// fill fields with the current UTC time
+    procedure FromNowUTC;
+    /// fill fields with the current Local time
+    procedure FromNowLocal;
+  end;
+
   /// fast bit-encoded date and time value
   // - faster than Iso-8601 text and TDateTime, e.g. can be used as published
   // property field in mORMot's TSQLRecord (see also TModTime and TCreateTime)
@@ -12925,7 +12941,7 @@ type
     // - bits 26..38 = Year    (0..4095)
     Value: Int64;
     /// extract the date and time content in Value into individual values
-    procedure Expand(out Date: TSystemTime);
+    procedure Expand(out Date: TSynSystemTime);
     /// convert to Iso-8601 encoded text
     function Text(Expanded: boolean; FirstTimeChar: AnsiChar = 'T'): RawUTF8; overload;
     /// convert to Iso-8601 encoded text
@@ -12958,7 +12974,7 @@ type
     /// fill Value from Iso-8601 encoded text
     procedure From(const S: RawUTF8); overload;
     /// fill Value from specified Date/Time individual fields
-    procedure From(const Time: TSystemTime); overload;
+    procedure From(const Time: TSynSystemTime); overload;
     /// fill Value from second-based c-encoded time (from Unix epoch 1/1/1970)
     procedure FromUnixTime(const UnixTime: TUnixTime);
     /// fill Value from millisecond-based c-encoded time (from Unix epoch 1/1/1970)
@@ -12983,7 +12999,6 @@ type
     /// get the second (0..59) of the TTimeLog value
     function Second: integer; {$ifdef HASINLINE}inline;{$endif}
   end;
-
 
 /// get TTimeLog value from current local system date and time
 // - handle TTimeLog bit-encoded Int64 format
@@ -13376,29 +13391,14 @@ function NowUTC: TDateTime;
 
 type
   {$A-}
-  /// used to store a Date/Time in TSynTimeZone internal structures
-  // - map Windows.TSystemTime, since it is how it is stored in the Registry
-  TTimeZoneValue = {$ifdef ISDELPHI2006ANDUP}record{$else}object{$endif}
-    wYear: Word;
-    wMonth: Word;
-    wDayOfWeek: Word;
-    wDay: Word;
-    wHour: Word;
-    wMinute: Word;
-    wSecond: Word;
-    wMilliseconds: Word;
-    function IsZero: boolean;
-      {$ifdef HASINLINE}inline;{$endif}
-    function EncodeForTimeChange(const year: word): TDateTime;
-  end;
   /// used to store Time Zone bias in TSynTimeZone
   // - map how low-level information is stored in the Windows Registry
   TTimeZoneInfo = record
     Bias: integer;
     bias_std: integer;
     bias_dlt: integer;
-    change_time_std: TTimeZoneValue;
-    change_time_dlt: TTimeZoneValue;
+    change_time_std: TSynSystemTime;
+    change_time_dlt: TSynSystemTime;
   end;
   PTimeZoneInfo = ^TTimeZoneInfo;
 
@@ -35888,17 +35888,8 @@ begin
   Value := Iso8601ToTimeLogPUTF8Char(P,L);
 end;
 
-procedure TTimeLogBits.Expand(out Date: TSystemTime);
+procedure TTimeLogBits.Expand(out Date: TSynSystemTime);
 begin
-{$ifdef MSWINDOWS}
-  Date.wYear := (Value shr (6+6+5+5+4)) and 4095;
-  Date.wMonth := 1+(Int64Rec(Value).Lo shr (6+6+5+5)) and 15;
-  Date.wDay := 1+(Int64Rec(Value).Lo shr (6+6+5)) and 31;
-  Date.wDayOfWeek := 0;
-  Date.wHour := (Int64Rec(Value).Lo shr (6+6)) and 31;
-  Date.wMinute := (Int64Rec(Value).Lo shr 6) and 63;
-  Date.wSecond := Int64Rec(Value).Lo and 63;
-{$else}
   Date.Year := (Value shr (6+6+5+5+4)) and 4095;
   Date.Month := 1+(Int64Rec(Value).Lo shr (6+6+5+5)) and 15;
   Date.Day := 1+(Int64Rec(Value).Lo shr (6+6+5)) and 31;
@@ -35906,7 +35897,6 @@ begin
   Date.Hour := (Int64Rec(Value).Lo shr (6+6)) and 31;
   Date.Minute := (Int64Rec(Value).Lo shr 6) and 63;
   Date.Second := Int64Rec(Value).Lo and 63;
-{$endif}
 end;
 
 procedure TTimeLogBits.From(const S: RawUTF8);
@@ -35952,18 +35942,12 @@ begin
   From(UnixMSTimeToDateTime(UnixMSTime));
 end;
 
-procedure TTimeLogBits.From(const Time: TSystemTime);
+procedure TTimeLogBits.From(const Time: TSynSystemTime);
 var V: cardinal;
 begin
-  {$ifdef MSWINDOWS}
-  V := Time.wHour+Time.wDay shl 5+Time.wMonth shl 10+
-    Time.wYear shl 14-(1 shl 5+1 shl 10);
-  Value := Time.wSecond+Time.wMinute shl 6+Int64(V) shl 12;
-  {$else}
   V := Time.Hour+Time.Day shl 5+Time.Month shl 10+
     Time.Year shl 14-(1 shl 5+1 shl 10);
   Value := Time.Second+Time.Minute shl 6+Int64(V) shl 12;
-  {$endif}
 end;
 
 var
@@ -35972,27 +35956,23 @@ var
 
 procedure TTimeLogBits.FromUTCTime;
 var Ticks: cardinal;
-    Now: TSystemTime;
+    Now: TSynSystemTime;
 begin
   Ticks := GetTickCount64 shr 7; // 128 ms resolution
   if Ticks=UTCTimeTicks then begin
     Value := UTCTimeCache;
     exit;
   end;
-  {$ifdef MSWINDOWS}
-  GetSystemTime(Now); // this API is fast enough for our purpose
-  {$else}
-  GetNowUTCSystem(Now);
-  {$endif}
+  Now.FromNowUTC;
   From(Now);
   UTCTimeCache := Value;
   UTCTimeTicks := Ticks;
 end;
 
 procedure TTimeLogBits.FromNow;
-var Now: TSystemTime;
+var Now: TSynSystemTime;
 begin
-  GetLocalTime(Now); // this API is fast enough for our purpose
+  Now.FromNowLocal;
   From(Now);
 end;
 
@@ -36251,7 +36231,7 @@ begin
 end;
 
 
-{ TTimeZoneValue }
+{ TSynSystemTime }
 
 function TryEncodeDayOfWeekInMonth(AYear, AMonth, ANthDayOfWeek, ADayOfWeek: integer;
   out AValue: TDateTime): Boolean;
@@ -36264,30 +36244,44 @@ begin // adapted from DateUtils
   result := TryEncodeDate(AYear,AMonth,LDay,AValue);
 end;
 
-function TTimeZoneValue.EncodeForTimeChange(const year: word): TDateTime;
-var dow,day: word;
+function TSynSystemTime.EncodeForTimeChange(const aYear: word): TDateTime;
+var dow,d: word;
 begin
-  if wDayOfWeek=0 then
+  if DayOfWeek=0 then
     dow := 7 else // Delphi Sunday = 7
-    dow := wDayOfWeek;
+    dow := DayOfWeek;
   // Encoding the day of change
-  day := wDay;
-  while not TryEncodeDayOfWeekInMonth(year,wMonth,day,dow,Result) do begin
-    // if wDay = 5 then try it and if needed decrement to find the last
+  d := Day;
+  while not TryEncodeDayOfWeekInMonth(aYear,Month,d,dow,Result) do begin
+    // if Day = 5 then try it and if needed decrement to find the last
     // occurence of the day in this month
-    if day=0 then begin
-      TryEncodeDayOfWeekInMonth(year,wMonth,1,7,Result);
+    if d=0 then begin
+      TryEncodeDayOfWeekInMonth(aYear,Month,1,7,Result);
       break;
     end;
-    dec(day);
+    dec(d);
   end;
   // finally add the time when change is due
-  result := result+EncodeTime(wHour,wMinute,wSecond,wMilliseconds);
+  result := result+EncodeTime(Hour,Minute,Second,MilliSecond);
 end;
 
-function TTimeZoneValue.IsZero: boolean;
+function TSynSystemTime.IsZero: boolean;
 begin
   result := (PInt64Array(@self)[0]=0) and (PInt64Array(@self)[1]=0);
+end;
+
+procedure TSynSystemTime.FromNowUTC;
+begin
+  {$ifdef MSWINDOWS}
+  GetSystemTime(TSystemTime(self)); // this API is fast enough for our purpose
+  {$else}
+  GetNowUTCSystem(TSystemTime(self));
+  {$endif}
+end;
+
+procedure TSynSystemTime.FromNowLocal;
+begin
+  GetLocalTime(TSystemTime(self));
 end;
 
 
