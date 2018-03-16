@@ -2353,18 +2353,20 @@ type
   TTempUTF8 = record
     Text: PUTF8Char;
     Len: integer;
+    TempRawUTF8: pointer;
     Temp: array[0..23] of AnsiChar;
   end;
 
 /// convert an open array (const Args: array of const) argument to an UTF-8
 // encoded text, using a specified temporary buffer
-// - this function would allocate a RawUTF8 in tmpStr only if needed,
-// but use the supplied Res.Temp[] buffer for numbers to text conversion
+// - this function would allocate a RawUTF8 in TempRawUTF8 only if needed,
+// but use the supplied Res.Temp[] buffer for numbers to text conversion -
+// caller should ensure to make RawUTF8(TempRawUTF8) := '' on the entry
 // - it would return the number of UTF-8 bytes, i.e. Res.Len
 // - note that cardinal values should be type-casted to Int64() (otherwise
 // the signed integer mapped value will be transmitted, therefore wrongly)
 // - any supplied TObject instance will be written as their class name
-function VarRecToTempUTF8(const V: TVarRec; var tmpStr: RawUTF8; var Res: TTempUTF8): integer;
+function VarRecToTempUTF8(const V: TVarRec; var Res: TTempUTF8): integer;
 
 /// convert an open array (const Args: array of const) argument to an UTF-8
 // encoded text, returning FALSE if the argument was not a string value
@@ -12894,7 +12896,7 @@ type
     function IsZero: boolean;
       {$ifdef HASINLINE}inline;{$endif}
     /// returns true if all fields do match
-    function IsEqual(const another: TSynSystemTime): boolean;
+    function IsEqual(const another{$ifndef DELPHI5OROLDER}: TSynSystemTime{$endif}): boolean;
     /// used by TSynTimeZone
     function EncodeForTimeChange(const aYear: word): TDateTime;
     /// fill fields with the current UTC time
@@ -18094,7 +18096,13 @@ function KB(bytes: Int64): RawUTF8;
 /// convert a micro seconds elapsed time into a human readable value
 // - append 'us', 'ms' or 's' symbol
 // - for 'us' and 'ms', add two fractional digits
-function MicroSecToString(Micro: QWord): RawUTF8;
+function MicroSecToString(Micro: QWord): RawUTF8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// convert a micro seconds elapsed time into a human readable value
+// - append 'us', 'ms' or 's' symbol
+// - for 'us' and 'ms', add two fractional digits
+procedure MicroSecToString(Micro: QWord; var result: RawUTF8); overload;
 
 /// convert an integer value into its textual representation with thousands marked
 // - ThousandSep is the character used to separate thousands in numbers with
@@ -20751,12 +20759,13 @@ begin
   result := true;
 end;
 
-function VarRecToTempUTF8(const V: TVarRec; var tmpStr: RawUTF8; var Res: TTempUTF8): integer;
+function VarRecToTempUTF8(const V: TVarRec; var Res: TTempUTF8): integer;
 {$ifndef NOVARIANTS}
 var isString: boolean;
 {$endif}
 label smlu32;
 begin
+  Res.TempRawUTF8 := nil; // avoid GPF
   case V.VType of
     vtString: begin
       Res.Text := @V.VString^[1];
@@ -20772,10 +20781,10 @@ begin
     end;
     {$ifdef HASVARUSTRING}
     vtUnicodeString:
-      RawUnicodeToUtf8(V.VPWideChar,length(UnicodeString(V.VUnicodeString)),tmpStr);
+      RawUnicodeToUtf8(V.VPWideChar,length(UnicodeString(V.VUnicodeString)),RawUTF8(Res.TempRawUTF8));
     {$endif}
     vtWideString:
-      RawUnicodeToUtf8(V.VPWideChar,length(WideString(V.VWideString)),tmpStr);
+      RawUnicodeToUtf8(V.VPWideChar,length(WideString(V.VWideString)),RawUTF8(Res.TempRawUTF8));
     vtPChar: begin
       Res.Text := V.VPointer;
       Res.Len := StrLen(V.VPointer);
@@ -20784,7 +20793,7 @@ begin
     end;
     vtChar: begin
       {$ifdef FPC} // alf: to circumvent FPC issues
-      RawUnicodeToUtf8(@V.VChar,1,tmpStr);
+      RawUnicodeToUtf8(@V.VChar,1,RawUTF8(Res.TempRawUTF8));
       {$else}
       Res.Text := @V.VChar;
       Res.Len := 1;
@@ -20793,9 +20802,9 @@ begin
       {$endif}
     end;
     vtPWideChar:
-      RawUnicodeToUtf8(V.VPWideChar,StrLenW(V.VPWideChar),tmpStr);
+      RawUnicodeToUtf8(V.VPWideChar,StrLenW(V.VPWideChar),RawUTF8(Res.TempRawUTF8));
     vtWideChar:
-      RawUnicodeToUtf8(@V.VWideChar,1,tmpStr);
+      RawUnicodeToUtf8(@V.VWideChar,1,RawUTF8(Res.TempRawUTF8));
     vtBoolean: begin
       if V.VBoolean then // normalize
         Res.Text := pointer(SmallUInt32UTF8[1]) else
@@ -20846,7 +20855,7 @@ smlu32: Res.Text := pointer(SmallUInt32UTF8[V.VInt64^]);
       exit;
     end;
     vtExtended:
-      ExtendedToStr(V.VExtended^,DOUBLE_PRECISION,tmpStr);
+      ExtendedToStr(V.VExtended^,DOUBLE_PRECISION,RawUTF8(Res.TempRawUTF8));
     vtPointer,vtInterface: begin
       Res.Text := @Res.Temp;
       Res.Len := SizeOf(pointer)*2;
@@ -20874,7 +20883,7 @@ smlu32: Res.Text := pointer(SmallUInt32UTF8[V.VInt64^]);
     end;
     {$ifndef NOVARIANTS}
     vtVariant:
-      VariantToUTF8(V.VVariant^,tmpStr,isString);
+      VariantToUTF8(V.VVariant^,RawUTF8(Res.TempRawUTF8),isString);
     {$endif}
     else begin
       Res.Len := 0;
@@ -20882,8 +20891,8 @@ smlu32: Res.Text := pointer(SmallUInt32UTF8[V.VInt64^]);
       exit;
     end;
   end;
-  Res.Text := pointer(tmpStr);
-  Res.Len := length(tmpStr);
+  Res.Text := Res.TempRawUTF8;
+  Res.Len := length(RawUTF8(Res.TempRawUTF8));
   result := Res.Len;
 end;
 
@@ -25048,10 +25057,10 @@ end;
 procedure FormatUTF8(const Format: RawUTF8; const Args: array of const;
   var result: RawUTF8);
 // only supported token is %, with any const arguments
-var i, blocksN, L, argN: PtrInt;
-    tmpStr: TRawUTF8DynArray;
+var L,argN: integer;
     F,FDeb: PUTF8Char;
     blocks: array[0..63] of TTempUTF8;
+    b,d: ^TTempUTF8;
 begin
   if (Format='') or (high(Args)<0) then begin
     result := Format; // no formatting to process
@@ -25064,36 +25073,33 @@ begin
   result := '';
   if length(Args)*2>=high(blocks) then
     raise ESynException.Create('FormatUTF8: too many args (max=32)!');
-  SetLength(tmpStr,length(Args));
-  blocksN := 0;
   argN := 0;
   L := 0;
+  b := @blocks;
   F := pointer(Format);
   while F^<>#0 do begin
     if F^<>'%' then begin
       FDeb := F;
       while (F^<>'%') and (F^<>#0) do inc(F);
-      with blocks[blocksN] do begin
-        Text := FDeb;
-        Len := F-FDeb;
-        inc(L,Len);
-        inc(blocksN);
-      end;
+      b^.Text := FDeb;
+      b^.Len := F-FDeb;
+      b^.TempRawUTF8 := nil;
+      inc(L,b^.Len);
+      inc(b);
     end;
     if F^=#0 then break;
     inc(F); // jump '%'
     if argN<=high(Args) then begin
-      inc(L,VarRecToTempUTF8(Args[argN],tmpStr[argN],blocks[blocksN]));
-      inc(blocksN);
+      inc(L,VarRecToTempUTF8(Args[argN],b^));
+      inc(b);
       inc(argN);
     end else
     if F^<>#0 then begin // no more available Args -> add all remaining text
-      with blocks[blocksN] do begin
-        Text := F;
-        Len := length(Format)-(F-pointer(Format));
-        inc(L,Len);
-        inc(blocksN);
-      end;
+      b^.Text := F;
+      b^.Len := length(Format)-(F-pointer(Format));
+      b^.TempRawUTF8 := nil;
+      inc(L,b^.Len);
+      inc(b);
       break;
     end;
   end;
@@ -25101,10 +25107,14 @@ begin
     exit;
   SetLength(result,L);
   F := pointer(result);
-  for i := 0 to blocksN-1 do begin
-    MoveFast(blocks[i].Text^,F^,blocks[i].Len);
-    inc(F,blocks[i].Len);
-  end;
+  d := @blocks;
+  repeat
+    MoveFast(d^.Text^,F^,d^.Len);
+    inc(F,d^.Len);
+    if d^.TempRawUTF8<>nil then
+      RawUTF8(d^.TempRawUTF8) := '';
+    inc(d);
+  until d=b;
 end;
 
 function FormatUTF8(const Format: RawUTF8; const Args, Params: array of const; JSONFormat: boolean): RawUTF8; overload;
@@ -28309,21 +28319,29 @@ begin
   Ansi7ToString(@temp[1],ord(temp[0]),result);
 end;
 
-{$ifdef FPC_OR_PUREPASCAL} // Alf reported asm below fails with FPC/Linux32
-type TWordRec = packed record YDiv100, YMod100: cardinal; end;
+type TDiv100Rec = packed record D, M: cardinal; end;
 
-function Div100(Y: cardinal): TWordRec; {$ifdef HASINLINE}inline;{$endif}
+procedure Div100(Y: cardinal; var result: TDiv100Rec);
+{$ifdef HASINLINENOTX86} inline;
 begin
-  result.YDiv100 := Y div 100; // FPC will use fast reciprocal
-  result.YMod100 := Y-(result.YDiv100*100); // avoid div twice
+  result.D := Y div 100; // FPC will use fast reciprocal
+  result.M := Y-(result.D*100); // avoid div twice
 end;
 {$else}
-type TWordRec = packed record YDiv100, YMod100: byte; end;
-
-function Div100(Y: word): TWordRec;
 asm
-        mov     cl, 100
-        div     cl // ah=remainder=Y mod 100, al=quotient=Year div 100
+      push    ebx
+      mov     ecx, eax
+      mov     ebx, edx
+      mov     edx, ecx
+      mov     eax, 1374389535
+      mul     edx
+      shr     edx, 5
+      mov     dword ptr [ebx], edx
+      mov     eax, 100
+      mul     edx
+      sub     ecx, eax
+      mov     dword ptr [ebx+4H], ecx
+      pop     ebx
 end;
 {$endif}
 
@@ -35493,6 +35511,7 @@ end;
 procedure Iso8601ToDateTimePUTF8CharVar(P: PUTF8Char; L: integer; var result: TDateTime);
 var B: cardinal;
     Y,M,D, H,MI,SS,MS: cardinal;
+    d100: TDiv100Rec;
 // expect 'YYYYMMDDThhmmss[.sss]' format but handle also 'YYYY-MM-DDThh:mm:ss[.sss]'
 begin
   unaligned(result) := 0;
@@ -35536,9 +35555,9 @@ begin
     end;
     if Y>9999 then
       exit; // avoid integer overflow e.g. if '0000' is an invalid date
-    with Div100(Y) do
-      unaligned(result) := (146097*YDiv100) shr 2 + (1461*YMod100) shr 2 +
-            (153*M+2) div 5+D-693900;
+    Div100(Y,d100);
+    unaligned(result) := (146097*d100.d) shr 2 + (1461*d100.m) shr 2 +
+          (153*M+2) div 5+D-693900;
     if L<15 then
       exit; // not enough space to retrieve the time
   end;
@@ -35638,7 +35657,7 @@ begin
   result := PTimeLogBits(@Timestamp)^.ToUnixTime;
 end;
 
-procedure DateToIso8601PChar(P: PUTF8Char; Expanded: boolean; Y,M,D: cardinal); overload;
+procedure DateToIso8601PChar(P: PUTF8Char; Expanded: boolean; Y,M,D: cardinal);
 // use 'YYYYMMDD' format if not Expanded, 'YYYY-MM-DD' format if Expanded
 begin
 {$ifdef PUREPASCAL}
@@ -35662,7 +35681,7 @@ begin
 end;
 
 procedure TimeToIso8601PChar(P: PUTF8Char; Expanded: boolean; H,M,S,MS: cardinal;
-  FirstChar: AnsiChar; WithMS: boolean); overload;
+  FirstChar: AnsiChar; WithMS: boolean);
 // use Thhmmss[.sss] format
 begin
   if FirstChar<>#0 then begin
@@ -35989,6 +36008,7 @@ begin
 end;
 
 function TryEncodeDate(Year, Month, Day: Word; out Date: TDateTime): Boolean;
+var d100: TDiv100Rec;
 begin // faster version by AB
   Result := False;
   if (Month<1) or (Month>12) then exit;
@@ -36003,8 +36023,8 @@ begin // faster version by AB
       dec(Year);
     end
       else exit; // Month <= 0
-    with Div100(Year) do
-      Date := (146097*YDiv100) shr 2+(1461*YMod100) shr 2+
+    Div100(Year,d100);
+    Date := (146097*d100.D) shr 2+(1461*d100.M) shr 2+
             (153*Month+2) div 5+Day-693900;
     result := true;
   end;
@@ -36272,10 +36292,10 @@ begin
   result := (PInt64Array(@self)[0]=0) and (PInt64Array(@self)[1]=0);
 end;
 
-function TSynSystemTime.IsEqual(const another: TSynSystemTime): boolean;
+function TSynSystemTime.IsEqual(const another{$ifndef DELPHI5OROLDER}: TSynSystemTime{$endif}): boolean;
 begin
-result := (PInt64Array(@self)[0]=PInt64Array(@another)[0]) and
-          (PInt64Array(@self)[1]=PInt64Array(@another)[1]);
+  result := (PInt64Array(@self)[0]=PInt64Array(@another)[0]) and
+            (PInt64Array(@self)[1]=PInt64Array(@another)[1]);
 end;
 
 procedure TSynSystemTime.FromNowUTC;
@@ -36563,9 +36583,7 @@ var F: THandle;
     Old: TFileName;
     Date: array[1..22] of AnsiChar;
     i: integer;
-    {$ifdef MSWINDOWS}
-    Now: TSystemTime; {$else}
-    D: TDateTime;     {$endif}
+    now: TSynSystemTime;
 begin
   if aFileName='' then
     exit;
@@ -36587,15 +36605,9 @@ begin
       exit;
   end;
   PWord(@Date)^ := 13+10 shl 8; // first go to next line
-  {$ifdef MSWINDOWS}
-  GetLocalTime(Now); // windows dedicated function
-  DateToIso8601PChar(@Date[3],true,Now.wYear,Now.wMonth,Now.wDay);
-  TimeToIso8601PChar(@Date[13],true,Now.wHour,Now.wMinute,Now.wSecond,0,' ');
-  {$else}
-  D := Now; // cross platform version
-  DateToIso8601PChar(D,@Date[3],true);
-  TimeToIso8601PChar(D,@Date[13],true);
-  {$endif}
+  now.FromNowLocal;
+  DateToIso8601PChar(@Date[3],true,Now.Year,Now.Month,Now.Day);
+  TimeToIso8601PChar(@Date[13],true,Now.Hour,Now.Minute,Now.Second,0,' ');
   Date[22] := ' ';
   FileWrite(F,Date,SizeOf(Date));
   for i := 1 to length(aLine) do
@@ -55635,8 +55647,6 @@ end;
 
 function KB(bytes: Int64): RawUTF8;
 const _B: array[0..4] of string[3] = ('B','KB','MB','GB','TB');
-      _R: array[0..4] of Int64 = (0,(1 shl 10)-1,(1 shl 20)-1,(1 shl 30)-1,
-        (Int64(1) shl 40)-1);
 var hi,rem: cardinal;
     b: byte;
 begin
@@ -55682,25 +55692,36 @@ begin
 end;
 
 function MicroSecToString(Micro: QWord): RawUTF8;
-  function TwoDigitToString(value: cardinal): RawUTF8;
-  var L: integer;
-  begin
-    UInt32ToUtf8(value,result);
-    L := length(result);
-    if L=1 then
-      result := '0.0'+result else // '3' -> '0.03'
-    if L=2 then
-      result := '0.'+result else // '35' -> '0.35'
-      insert('.',result,L-1); // '103' -> '1.03'
-  end;
 begin
-  if Micro<=0 then
+  MicroSecToString(Micro,result);
+end;
+
+procedure MicroSecToString(Micro: QWord; var result: RawUTF8);
+  procedure TwoDigitToString(value: cardinal; const u: RawUTF8; var result: RawUTF8);
+  var d100: TDiv100Rec;
+  begin
+    if value<10 then
+      FormatUTF8('0.0%%', [AnsiChar(value+48),u],result) else
+    if value<100 then
+      FormatUTF8('0.%%', [UInt2DigitsToShort(value),u],result) else begin
+      Div100(value,d100);
+      if d100.m=0 then
+        FormatUTF8('%%', [d100.d,u],result) else
+        FormatUTF8('%.%%', [d100.d,UInt2DigitsToShort(d100.m),u],result);
+    end;
+  end;  
+begin
+  if Int64(Micro)<=0 then
     result := '0us' else
   if Micro<1000 then
     result := SmallUInt32UTF8[Micro]+'us' else
-  if Micro<1000*1000 then
-    result := TwoDigitToString(Int64Rec(Micro).Lo div 10)+'ms' else
-    result := TwoDigitToString(Micro div (10*1000))+'s';
+  if Micro<1000000 then
+    TwoDigitToString({$ifdef CPU32}Int64Rec(Micro).Lo{$else}Micro{$endif} div 10,'ms',result) else
+  if Micro<60000000 then
+    TwoDigitToString({$ifdef CPU32}Int64Rec(Micro).Lo{$else}Micro{$endif} div 10000,'s',result) else
+  if Micro<3600000000 then
+    TwoDigitToString({$ifdef CPU32}Int64Rec(Micro).Lo{$else}Micro{$endif} div 600000,'m',result) else
+    TwoDigitToString(Micro div 36000000,'h',result);
 end;
 
 function IsInitializedCriticalSection(const CS: TRTLCriticalSection): Boolean;
@@ -55730,7 +55751,7 @@ function TPrecisionTimer.ByCount(Count: QWord): RawUTF8;
 begin
   if Count=0 then
     result := SmallUInt32UTF8[0] else // avoid div per 0 exception
-    result := MicroSecToString(iTime div Count);
+    MicroSecToString(iTime div Count,result);
 end;
 
 function TPrecisionTimer.PerSec(const Count: QWord): QWord;
@@ -55815,12 +55836,12 @@ end;
 
 function TPrecisionTimer.Time: RawUTF8;
 begin
-  result := MicroSecToString(iTime);
+  MicroSecToString(iTime,result);
 end;
 
 function TPrecisionTimer.LastTime: RawUTF8;
 begin
-  result := MicroSecToString(iLastTime);
+  MicroSecToString(iLastTime,result);
 end;
 
 
@@ -55898,7 +55919,7 @@ end;
 
 function TSynMonitorTime.GetAsText: RawUTF8;
 begin
-  result := MicroSecToString(fMicroSeconds);
+  MicroSecToString(fMicroSeconds,result);
 end;
 
 function TSynMonitorTime.PerSecond(const Count: QWord): QWord;
@@ -55913,7 +55934,7 @@ end;
 
 function TSynMonitorOneTime.GetAsText: RawUTF8;
 begin
-  result := MicroSecToString(fMicroSeconds);
+  MicroSecToString(fMicroSeconds,result);
 end;
 
 function TSynMonitorOneTime.PerSecond(const Count: QWord): QWord;
