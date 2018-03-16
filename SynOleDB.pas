@@ -304,7 +304,7 @@ type
 {$ifdef CPU64}
   {$A8} // un-packed records
 {$else}
-  {$A1} // packed records
+  {$A-} // packed records
 {$endif}
   TBoid = record
     rgb_: array[0..15] of Byte;
@@ -463,7 +463,7 @@ type
   TDBParamBindInfoDynArray = array of TDBParamBindInfo;
 
 {$ifndef CPU64}
-  {$A1} // packed records
+  {$A-} // packed records
 {$endif}
 
   /// initialize and uninitialize OleDB data source objects and enumerators
@@ -928,7 +928,7 @@ type
   {$ifdef CPU64}
     {$A8} // un-packed records
   {$else}
-    {$A1} // packed records
+    {$A-} // packed records
   {$endif}
   TOleDBStatementParam = record
     /// storage used for BLOB (ftBlob) values
@@ -965,7 +965,7 @@ type
       SizeOf(Int64)-1] of byte;
   end;
   {$ifdef CPU64}
-    {$A1} // packed records
+    {$A-} // packed records
   {$endif}
   POleDBStatementParam = ^TOleDBStatementParam;
 
