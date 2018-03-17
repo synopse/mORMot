@@ -35,7 +35,7 @@ object frmSM45Demo: TfrmSM45Demo
       ''
       'const fs = require(''fs'');'
       'const path = require(''path'');'
-      'let content = fs.readFileSync(path.join(process.cwd(), ''ExtendDebuggerConsole.js''));'
+      'let content = fs.readFileSync(path.join(process.cwd(), ''ExtendDebuggerConsole.js''), 'utf8');'
       'mainForm.toLog(content);'
       '/* '
       ' * You can evaluate script below if you compiled math-module sample'

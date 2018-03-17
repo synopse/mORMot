@@ -46,7 +46,7 @@ const MUST_BE_A_BUFFER = 'argument should be a Buffer';
 begin
   if not bufObj.ptr.IsTypedArrayObject then
     raise ESMTypeException.Create(MUST_BE_A_BUFFER);
-  bufData := Pointer(UIntPtr(bufObj.ptr.GetUint8ArrayData){ + bufObj.ptr.GetTypedArrayByteOffset});
+  bufData := Pointer(bufObj.ptr.GetUint8ArrayData);{ + bufObj.ptr.GetTypedArrayByteOffset}
   bufLen := bufObj.ptr.GetTypedArrayByteLength;
 end;
 
@@ -121,7 +121,7 @@ begin
     else
       start := 0;
 
-    bufData := Pointer(UIntPtr(bufData) + start);
+    bufData := PAnsiChar(bufData) + start; //Pointer(UIntPtr(bufData) + start);
 
     if in_argv[1].isNumber then
       end_ := in_argv[1].asInt64

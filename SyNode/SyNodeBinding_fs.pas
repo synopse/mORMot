@@ -29,6 +29,10 @@ uses
 {$ELSE}
   Unix, BaseUnix, DateUtils,
 {$ENDIF}
+{$IFDEF FPC}
+  LazFileUtils,
+{$ENDIF}
+  SyNodeReadWrite,
   Classes,
   SynLog;
 
@@ -561,6 +565,136 @@ begin
   end;
 end;
 
+/// Create UInt8Array & load file into it
+function fs_loadFileToBuffer(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
+var
+  in_argv: PjsvalVector;
+  filePath: string;
+  size: Int64;
+  arr_data: Puint8Vector;
+  fFileStream: TFileStream;
+  arr: PJSObject;
+  val: jsval;
+begin
+  try
+    if (argc <> 1) then
+      raise ESMException.Create('usage loadFileToBuffer(pathToFile: String): ArrayBuffer');
+    in_argv := vp.argv;
+    filePath := in_argv[0].asJSString.ToSynUnicode(cx);
+    {$IFNDEF FPC}
+    if IsRelativePath(filePath) then
+    {$ELSE}
+    if not FilenameIsAbsolute(filePath) then
+    {$ENDIF}
+      raise ESMException.Create('no relative path allowed in loadFile');
+    if not FileExists(filePath) then
+    begin
+      vp.rval := JSVAL_NULL;
+    end
+    else
+    begin
+      size := FileSize(filePath);
+      if Int64Rec(size).Hi > 0 then
+        raise ESMException.Create('file to large');
+
+      arr := cx.NewArrayBuffer(Int64Rec(size).Lo);
+      arr_data := arr.GetArrayBufferData;
+      fFileStream := TFileStream.Create(filePath, fmOpenRead or fmShareDenyNone);
+      try
+        fFileStream.Read(arr_data[0], size);
+      finally
+        fFileStream.Free;
+      end;
+      val.asObject := arr;
+      vp.rval := val;
+    end;
+    Result := True;
+  except
+    on E: Exception do
+    begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
+      JSError(cx, E);
+    end;
+  end;
+end;
+
+/// write Object to file using specifien encoding.
+//  internaly use SyNodeReadWrite.write
+function fs_writeFile(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
+var
+  in_argv: PjsvalVector;
+  filePath: string;
+  stream: TFileStream;
+  writer: SynCommons.TTextWriter;
+begin
+  try
+    if (argc < 2) then
+      raise ESMException.Create('usage writeFile(filePath: String, fileContent: String|Object|ArrayBuffer [,encoding]');
+    in_argv := vp.argv;
+    filePath := in_argv[0].asJSString.ToSynUnicode(cx);
+    stream := TFileStream.Create(filePath, fmCreate);
+    writer := SynCommons.TTextWriter.Create(stream, 65536);
+    try
+      vp.rval := SyNodeReadWrite.SMWrite_impl(cx, argc - 1, @in_argv[1], writer);
+      result := True;
+    finally
+      writer.FlushFinal;
+      writer.Free;
+      stream.Free;
+    end;
+  except
+    on E: Exception do
+    begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
+      JSError(cx, E);
+    end;
+  end;
+end;
+
+/// append Object to file using specifien encoding.
+//  internaly use SyNodeReadWrite.write
+function fs_appendFile(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
+var
+  in_argv: PjsvalVector;
+  filePath: string;
+  FFile: THandle;
+  stream: TFileStream;
+  writer: SynCommons.TTextWriter;
+begin
+  try
+    if (argc < 2) then
+      raise ESMException.Create('usage appendFile(filePath: String, fileContent: String|Object|ArrayBuffer [,encoding]');
+    in_argv := vp.argv;
+    filePath := in_argv[0].asJSString.ToSynUnicode(cx);
+    if not FileExists(filePath) then begin
+      FFile := FileCreate(filePath);
+      if PtrInt(FFile) > 0 then
+        FileClose(FFile);
+    end;
+
+    stream := TFileStream.Create(filePath, fmOpenReadWrite);
+    stream.Seek(0, soFromEnd);
+    writer := TTextWriter.Create(stream, 65536);
+    try
+      vp.rval := SyNodeReadWrite.SMWrite_impl(cx, argc - 1, @in_argv[1], writer);
+      result := True;
+    finally
+      writer.FlushFinal;
+      writer.Free;
+      stream.Free;
+    end;
+  except
+    on E: Exception do
+    begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
+      JSError(cx, E);
+    end;
+  end;
+end;
+
 function SyNodeBindingProc_fs(const Engine: TSMEngine;
   const bindingNamespaceName: SynUnicode): jsval;
 const
@@ -582,6 +716,9 @@ begin
     obj.ptr.DefineFunction(cx, 'readDir', fs_readDir, 2, attrs);
     obj.ptr.DefineFunction(cx, 'realpath', fs_realPath, 1, attrs);
     obj.ptr.DefineFunction(cx, 'rename', fs_rename, 2, attrs);
+    obj.ptr.DefineFunction(cx, 'loadFileToBuffer', fs_loadFileToBuffer, 1, attrs);
+    obj.ptr.DefineFunction(cx, 'writeFile', fs_writeFile, 3, attrs);
+    obj.ptr.DefineFunction(cx, 'appendFile', fs_appendFile, 3, attrs);
 
     Result := obj.ptr.ToJSValue;
   finally

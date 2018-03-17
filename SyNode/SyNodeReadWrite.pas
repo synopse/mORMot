@@ -79,7 +79,7 @@ begin
 
   case cx.TypeOfValue(vals[0]) of
     JSTYPE_STRING: begin
-      if (encoding = '') or (encoding = 'utf-8') then // default is utf-8
+      if (encoding = '') or (encoding = 'utf-8') or (encoding = 'utf8') then // default is utf-8
         vals[0].asJSString.ToUTF8(cx, dest)
       else if (encoding = 'ucs2') then begin
         tmp2 := vals[0].asJSString.ToSynUnicode(cx);
@@ -116,7 +116,7 @@ begin
         end else
           raise ESMException.Create('invalid encoding');
       end else begin
-        if (encoding = '') or (encoding = 'utf-8') then // default is utf-8
+        if (encoding = '') or (encoding = 'utf-8') or (encoding = 'utf8') then // default is utf-8
           vals[0].AddJSON(cx, dest)
         else
           raise ESMException.Create('invalid encoding');
