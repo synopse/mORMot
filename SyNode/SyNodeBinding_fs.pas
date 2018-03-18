@@ -695,6 +695,95 @@ begin
   end;
 end;
 
+/// delete file AFileName: TFileName - full file path
+function fs_deleteFile(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
+var
+  in_argv: PjsvalVector;
+  filePath: string;
+  val: jsval;
+begin
+  try
+    if (argc <> 1) then
+      raise ESMException.Create('Invalid number of args for function nsm_deleteFile. Requied 1  - filePath');
+    in_argv := vp.argv;
+    filePath := in_argv[0].asJSString.ToSynUnicode(cx);
+    if SysUtils.DeleteFile(filePath) then
+      val.asBoolean := True
+    else if fileExists(filePath) then
+      raise Exception.Create('can''t delete file')
+    else
+      val.asBoolean := True;
+    vp.rval := val;
+    Result := True;
+  except
+    on E: Exception do
+    begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
+      JSError(cx, E);
+    end;
+  end;
+end;
+
+/// the same as SysUtils.ForceDirectories
+function fs_forceDirectories(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
+var
+  in_argv: PjsvalVector;
+  dir: TFileName;
+  val: jsval;
+const
+  f_usage = 'usage: forceDirectories(dirPath: String): Boolean';
+  f_invalidPath = 'empty or relative path is not allowed';
+begin
+  try
+    in_argv := vp.argv;
+    if (argc <> 1) or not in_argv[0].isString then
+      raise ESMException.Create(f_usage);
+    dir := in_argv[0].asJSString.ToSynUnicode(cx);
+    if (dir = '') or {$IFNDEF FPC}IsRelativePath(dir){$ELSE}not FilenameIsAbsolute(dir){$ENDIF} then
+      raise ESMException.Create(f_invalidPath);
+    val.asBoolean := ForceDirectories(dir);
+    vp.rval := val;
+    Result := True;
+  except
+    on E: Exception do
+    begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
+      JSError(cx, E);
+    end;
+  end;
+end;
+
+function fs_removeDir(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
+var
+  in_argv: PjsvalVector;
+  dir: TFileName;
+  val: jsval;
+const
+  f_usage = 'usage: removeDir(dirPath: String): Boolean';
+  f_invalidPath = 'empty or relative path is not allowed';
+begin
+  try
+    in_argv := vp.argv;
+    if (argc <> 1) or not in_argv[0].isString then
+      raise ESMException.Create(f_usage);
+    dir := in_argv[0].asJSString.ToSynUnicode(cx);
+    if (dir = '') or {$IFNDEF FPC}IsRelativePath(dir){$ELSE}not FilenameIsAbsolute(dir){$ENDIF} then
+      raise ESMException.Create(f_invalidPath);
+    val.asBoolean := RemoveDir(dir);
+    vp.rval := val;
+    Result := True;
+  except
+    on E: Exception do
+    begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
+      JSError(cx, E);
+    end;
+  end;
+end;
+
 function SyNodeBindingProc_fs(const Engine: TSMEngine;
   const bindingNamespaceName: SynUnicode): jsval;
 const
@@ -719,7 +808,9 @@ begin
     obj.ptr.DefineFunction(cx, 'loadFileToBuffer', fs_loadFileToBuffer, 1, attrs);
     obj.ptr.DefineFunction(cx, 'writeFile', fs_writeFile, 3, attrs);
     obj.ptr.DefineFunction(cx, 'appendFile', fs_appendFile, 3, attrs);
-
+    obj.ptr.DefineFunction(cx, 'forceDirectories', fs_forceDirectories, 1, attrs);
+    obj.ptr.DefineFunction(cx, 'removeDir', fs_removeDir, 1, attrs);
+    obj.ptr.DefineFunction(cx, 'deleteFile', fs_deleteFile, 1, attrs);
     Result := obj.ptr.ToJSValue;
   finally
     cx.FreeRootedObject(obj);
