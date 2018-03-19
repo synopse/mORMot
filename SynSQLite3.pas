@@ -4438,7 +4438,7 @@ begin
   if (self=nil) or (fDB=0) then
     exit;
   {$ifdef WITHLOG}
-  FPCLog := fLog.Enter;
+  FPCLog := fLog.Enter(self{$ifndef DELPHI5OROLDER},'DBClose'{$endif});
   FPCLog.Log(sllDB,'closing "%" %',[FileName, KB(GetFileSize)],self);
   {$endif}
   if (sqlite3=nil) or not Assigned(sqlite3.close) then
@@ -5585,7 +5585,7 @@ begin
   fn := fDestDB.FileName;
   {$ifdef WITHLOG}
   SetCurrentThreadName('% "%" "%"',[self,fSourceDB.FileName,fn]);
-  log := SynSQLite3Log.Enter('Execute',[],self);
+  log := SynSQLite3Log.Enter(self{$ifndef DELPHI5OROLDER},'Execute'{$endif});
   {$endif}
   try
     try
@@ -5669,7 +5669,7 @@ begin
   end;
 end;
 
-// due to a FPC's bug, all those functions should be declared outside the method
+// due to FPC's limitation, all those functions should be declared outside the method
 function xMalloc(size: integer): pointer; cdecl;
 begin
   GetMem(result,size+4);

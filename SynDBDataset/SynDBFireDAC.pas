@@ -431,8 +431,8 @@ begin
   if fDatabase=nil then
     raise ESQLDBFireDAC.CreateUTF8('%.Connect(%): Database=nil',
       [self,fProperties.ServerName]);
-  Log := SynDBLog.Enter(Self,pointer(FormatUTF8('Connect to DriverID=% Database=%',
-    [FIREDAC_PROVIDER[fProperties.DBMS],fProperties.DatabaseName])),true);
+  Log := SynDBLog.Enter('Connect to DriverID=% Database=%',
+    [FIREDAC_PROVIDER[fProperties.DBMS],fProperties.DatabaseName],self);
   try
     fDatabase.Open;
     inherited Connect; // notify any re-connection 

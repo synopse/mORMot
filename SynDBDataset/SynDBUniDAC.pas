@@ -445,8 +445,8 @@ begin
   if fDatabase=nil then
     raise ESQLDBUniDAC.CreateUTF8('%.Connect(%): Database=nil',
       [self,fProperties.ServerName]);
-  Log := SynDBLog.Enter(Self,pointer(FormatUTF8('Connect to ProviderName=% Database=% on Server=%',
-    [fDatabase.ProviderName,fDatabase.Database,fDatabase.Server])),true);
+  Log := SynDBLog.Enter('Connect to ProviderName=% Database=% on Server=%',
+    [fDatabase.ProviderName,fDatabase.Database,fDatabase.Server],self);
   try
     case fProperties.DBMS of
     dFirebird:
