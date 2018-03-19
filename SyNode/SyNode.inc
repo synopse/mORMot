@@ -53,7 +53,7 @@
 {$DEFINE JS_THREADSAFE}
 // we MUST compile mozjs with JS_THREADSAFE directive
 
-{$DEFINE SM_DEBUG}
+{.$DEFINE SM_DEBUG}
 // for debuging SynSM
 
 {$DEFINE CONSIDER_TIME_IN_Z}

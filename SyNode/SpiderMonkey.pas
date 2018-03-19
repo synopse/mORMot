@@ -2097,6 +2097,8 @@ type
     constructor CreateWithTrace(const AFileName: RawUTF8; AJSErrorNum, ALineNum: integer;
        AMessage: string; const AStackTrace: SynUnicode);
     /// Format a JS exception as text
+    // If SM_DEBUG is defined will write full JS stack, including SyNode core_modules calls
+    //  if not - core_modules is cutched from stack trace for simplicity
     procedure WriteFormatted(WR: TTextWriter);
 
     {$ifndef NOEXCEPTIONINTERCEPT}
@@ -4958,12 +4960,35 @@ begin
 end;
 
 procedure ESMException.WriteFormatted(WR: TTextWriter);
+{$IFNDEF SM_DEBUG}
+var
+  P, Pb: PWord;
+{$ENDIF}
 begin
   WR.AddJSONEscape(pointer(FileName), Length(fileName));
     WR.Add(':'); WR.Add(Line);
-  WR.AddShort('\r\rError: ');
+  WR.AddShort('\n\nError: ');
     WR.AddJSONEscapeString(Message); WR.AddShort('\n');
-  WR.AddJSONEscapeString(Stack);
+  {$IFDEF SM_DEBUG}
+    WR.AddJSONEscapeString(Stack);
+  {$ELSE}
+    // any stack line what don't start with `@` is internal (core_modules) calls
+    // remove it to simplify domain logic debugging
+    if length(Stack) > 0 then begin
+      P := PWord(pointer(Stack));
+      while P^ <> 0 do begin
+        if (P^ = Ord('@')) then begin
+          Pb := P;
+          while (P^ <> 10) and (P^ <> 0) do Inc(P);
+          if (P^ = 10) then Inc(P);
+          WR.AddJSONEscapeW(Pb, (PtrUInt(P)-PtrUInt(Pb)) div 2);
+        end else
+          while (P^ <> 10) and (P^ <> 0) do
+            Inc(P);
+          if (P^ = 10) then Inc(P);
+      end;
+    end;
+  {$ENDIF}
 end;
 
 {$ifndef NOEXCEPTIONINTERCEPT}
