@@ -143,15 +143,11 @@ begin
     in_argv := vp.argv;
     if (argc < 1) or not in_argv[0].isString then
       raise ESMException.Create(USAGE);
-    try
-      fn := in_argv[0].asJSString.ToString(cx);
-    except
-      raise
-    end;
+    fn := in_argv[0].asJSString.ToString(cx);
     obj := cx.NewRootedObject(cx.NewObject(nil));
     try
       {$IFNDEF MSWINDOWS}
-      if fpstat(fn, info) = 0 then begin
+      if fpstat(PChar(fn), info) = 0 then begin
         val.asDate[cx] := UnixToDateTime(info.st_atime);
         obj.ptr.DefineProperty(cx, 'atime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
         val.asDate[cx] := UnixToDateTime(info.st_mtime);
@@ -163,8 +159,8 @@ begin
         vp.rval := obj.ptr.ToJSValue;
       end else begin
         {$ifdef SM_DEBUG}
-        SynSMLog.Add.Log(sllDebug, StringToUTF8(Format('fstat(%s) failed with error %s',
-          [fn, SysErrorMessage(errno)])));
+        SynSMLog.Add.Log(sllDebug, 'fstat(%) failed with error %',
+          [fn, SysErrorMessage(errno)]);
         {$endif}
         vp.rval := JSVAL_NULL;
       end;
@@ -676,7 +672,7 @@ begin
 
     stream := TFileStream.Create(filePath, fmOpenReadWrite);
     stream.Seek(0, soFromEnd);
-    writer := TTextWriter.Create(stream, 65536);
+    writer := SynCommons.TTextWriter.Create(stream, 65536);
     try
       vp.rval := SyNodeReadWrite.SMWrite_impl(cx, argc - 1, @in_argv[1], writer);
       result := True;
