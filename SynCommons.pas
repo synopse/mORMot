@@ -19508,11 +19508,12 @@ begin
     for i := 1 to Safe.Padding[0].VInteger do begin
       {$ifdef FPC}
       if StringRefCount(PAnsiString(s)^)<=aMaxRefCount then begin
+        Finalize(PRawUTF8(s)^);
       {$else}
       if PInteger(s^-8)^<=aMaxRefCount then begin
+        PRawUTF8(s)^ := '';
       {$endif}
         inc(result);
-        PRawUTF8(s)^ := '';
       end else begin
         if s<>d then begin
           d^ := s^;
@@ -21105,7 +21106,7 @@ end;
 function UTF8ToWideString(const Text: RawUTF8): WideString;
 begin
   {$ifdef FPC}
-  result := '';
+  Finalize(result);
   {$endif}
   UTF8ToWideString(Text,result);
 end;
@@ -23097,7 +23098,7 @@ begin
   for i := 1 to p^.length do begin
     case V^.VType of
     varEmpty..varDate,varError,varBoolean,varShortInt..varWord64: ;
-    varString: RawUTF8(V^.VAny) := '';
+    varString: {$ifdef FPC}Finalize(RawUTF8(V^.VAny)){$else}RawUTF8(V^.VAny) := ''{$endif};
     varOleStr: WideString(V^.VAny) := '';
     {$ifdef HASVARUSTRING}
     varUString: UnicodeString(V^.VAny) := '';
@@ -25070,9 +25071,9 @@ begin
     VarRecToUTF8(Args[0],result); // optimize raw conversion
     exit;
   end;
-  result := '';
   if length(Args)*2>=high(blocks) then
     raise ESynException.Create('FormatUTF8: too many args (max=32)!');
+  Finalize(result);
   argN := 0;
   L := 0;
   b := @blocks;
@@ -25112,7 +25113,7 @@ begin
     MoveFast(d^.Text^,F^,d^.Len);
     inc(F,d^.Len);
     if d^.TempRawUTF8<>nil then
-      RawUTF8(d^.TempRawUTF8) := '';
+       Finalize(RawUTF8(d^.TempRawUTF8));
     inc(d);
   until d=b;
 end;
@@ -29186,7 +29187,8 @@ end;
 function FileFromString(const Content: RawByteString; const FileName: TFileName;
   FlushOnDisk: boolean; FileDate: TDateTime): boolean;
 var F: THandle;
-    L: integer;
+    P: PByte;
+    L,written: integer;
 begin
   result := false;
   if FileName='' then
@@ -29194,21 +29196,29 @@ begin
   F := FileCreate(FileName);
   if PtrInt(F)<0 then
     exit;
-  if pointer(Content)<>nil then
-    L := FileWrite(F,pointer(Content)^,length(Content)) else
-    L := 0;
-  result := (L=length(Content));
+  L := length(Content);
+  P := pointer(Content);
+  while L>0 do begin
+    written := FileWrite(F,P^,L);
+    if written<0 then begin
+      FileClose(F);
+      exit;
+    end;
+    dec(L,written);
+    inc(P,written);
+  end;
   if FlushOnDisk then
     FlushFileBuffers(F);
-{$ifdef MSWINDOWS}
+  {$ifdef MSWINDOWS}
   if FileDate<>0 then
     FileSetDate(F,DateTimeToFileDate(FileDate));
   FileClose(F);
-{$else}
+  {$else}
   FileClose(F);
   if FileDate<>0 then
     FileSetDate(FileName,DateTimeToFileDate(FileDate));
-{$endif}
+  {$endif}
+  result := true;
 end;
 
 type
@@ -32320,7 +32330,7 @@ function GetNextLine(source: PUTF8Char; out next: PUTF8Char): RawUTF8;
 var beg: PAnsiChar;
 begin
   if source=nil then begin
-    result := '';
+    {$ifdef FPC}Finalize(result){$else}result := ''{$endif};
     next := source;
     exit;
   end;
@@ -32724,10 +32734,9 @@ var ValueLen, SepLen: cardinal;
     i: cardinal;
     P: PAnsiChar;
 begin // CSVOfValue('?',3)='?,?,?'
-  if Count=0 then begin
-    result := '';
+  result := '';
+  if Count=0 then
     exit;
-  end;
   ValueLen := length(Value);
   SepLen := Length(Sep);
   Setlength(result,ValueLen*Count+SepLen*pred(Count));
@@ -33784,7 +33793,7 @@ procedure FillZero(var Values: TRawUTF8DynArray);
 var i: integer;
 begin
   for i := 0 to length(Values)-1 do
-    Values[i] := '';
+    {$ifdef FPC}Finalize(Values[i]){$else}Values[i] := ''{$endif};
 end;
 
 procedure FillZero(var Values: TIntegerDynArray);
@@ -42291,7 +42300,7 @@ begin
     case NestedProperty[j].PropertyType of
     ptRawByteString,
     ptRawJSON,
-    ptRawUTF8:    PRawByteString(Data)^ := '';
+    ptRawUTF8: {$ifdef FPC}Finalize(PRawByteString(Data)^){$else}PRawByteString(Data)^ := ''{$endif};
     ptString:     PString(Data)^ := '';
     ptSynUnicode: PSynUnicode(Data)^ := '';
     ptWideString: PWideString(Data)^ := '';
@@ -55651,7 +55660,7 @@ var hi,rem: cardinal;
     b: byte;
 begin
   if bytes<1 shl 10 then begin
-    FormatUTF8('% %',[PtrUInt(bytes),_B[0]],result);
+    FormatUTF8('% %',[PtrInt(bytes),_B[0]],result);
     exit;
   end;
   if bytes<1 shl 20 then begin
@@ -60978,7 +60987,7 @@ begin
     v := pointer(Values);
     for i := 1 to Count do begin
       MoveFast(pointer(v^.Value)^,PByteArray(result)[v^.Position],length(v^.Value));
-      v^.Value := '';
+      {$ifdef FPC}Finalize(v^.Value){$else}v^.Value := ''{$endif};
       inc(v);
     end;
     Values[0].Value := result; // use result for absolute compaction ;)
