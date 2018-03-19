@@ -4201,13 +4201,8 @@ begin
     try
       R.Prepare(fDB,'PRAGMA table_info('+TableName+');'); // ESQLite3Exception
       n := 0;
-      repeat
-        if R.Step<>SQLITE_ROW then break;
-        if n=length(Names) then
-          SetLength(Names,n+MAX_SQLFIELDS);
-        Names[n] := sqlite3.column_text(R.Request,1); // cid,name,type,notnull,dflt_value,pk
-        inc(n);
-      until false;
+      while R.Step=SQLITE_ROW do // cid,name,type,notnull,dflt_value,pk
+        AddRawUTF8(Names,n,sqlite3.column_text(R.Request,1));
       SetLength(Names,n);
     finally
       R.Close;
@@ -4889,23 +4884,16 @@ begin
 end;
 
 function TSQLRequest.Execute(aDB: TSQLite3DB; const aSQL: RawUTF8; var ID: TInt64DynArray): integer;
-var LID, Res: integer;
+var Res: integer;
 begin
   result := 0;
-  LID := length(ID);
   try
     Prepare(aDB,aSQL); // will raise an ESQLite3Exception on error
     if FieldCount>0 then
     repeat
       res := Step;
-      if res=SQLITE_ROW then begin
-        if result>=LID then begin
-          inc(LID,256);
-          SetLength(ID,LID);
-        end;
-        ID[result] := sqlite3.column_int64(Request,0); // get first column value
-        inc(result);
-      end;
+      if res=SQLITE_ROW then
+        AddInt64(ID,result,sqlite3.column_int64(Request,0)); // first column value
     until res=SQLITE_DONE;
   finally
     Close; // always release statement
@@ -4939,27 +4927,17 @@ begin
 end;
 
 function TSQLRequest.Execute(aDB: TSQLite3DB; const aSQL: RawUTF8; var Values: TRawUTF8DynArray): integer;
-var LValues, Res: integer;
+var Res: integer;
 begin
   result := 0;
-  LValues := length(Values);
   try
     Prepare(aDB,aSQL); // will raise an ESQLite3Exception on error
     if FieldCount>0 then
     repeat
       res := Step;
-      if res=SQLITE_ROW then begin
-        if result>=LValues then begin
-          if LValues<256 then
-            inc(LValues,16) else
-            inc(LValues,256);
-          SetLength(Values,LValues);
-        end;
-        Values[result] := sqlite3.column_text(Request,0); // get first column value
-        inc(result);
-      end;
+      if res=SQLITE_ROW then
+        AddRawUTF8(Values,result,sqlite3.column_text(Request,0)); // first column value
     until res=SQLITE_DONE;
-    SetLength(Values,LValues);
   finally
     Close; // always release statement
   end;
