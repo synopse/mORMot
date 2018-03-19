@@ -556,6 +556,9 @@ type
     constructor CreateTemp(aKeySize: cardinal);
     /// Initialize AES context for cypher, from SHA-256 hash
     // - here the Key is supplied as a string, and will be hashed using SHA-256
+    // via the SHA256Weak proprietary algorithm - to be used only for backward
+    // compatibility of existing code
+    // - consider using more secure (and more standard) CreateFromPBKDF2 instead
     constructor CreateFromSha256(const aKey: RawUTF8);
     /// Initialize AES context for cypher, from PBKDF2_HMAC_SHA256 derivation
     // - here the Key is supplied as a string, and will be hashed using
@@ -1889,6 +1892,10 @@ function SHA256Digest(const Data: RawByteString): TSHA256Digest; overload;
 // - this procedure has a weak password protection: small incoming data
 // is append to some salt, in order to have at least a 256 bytes long hash:
 // such a feature improve security for small passwords, e.g.
+// - note that this algorithm is proprietary, and less secure (and standard)
+// than the PBKDF2 algorithm, so is there only for backward compatibility of
+// existing code: use PBKDF2_HMAC_SHA256 or similar functions for password
+// derivation
 procedure SHA256Weak(const s: RawByteString; out Digest: TSHA256Digest);
 
 type
