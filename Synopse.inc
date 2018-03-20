@@ -178,8 +178,8 @@
       PtrInt is a signed integer type of same size as a pointer / register
         -> must be used for pointer arithmetic
         -> may be used in loops
-      all 32 bits x86 asm code can be replaced by a pascal only version, with
-      if the conditional define PUREPASCAL is set (defined below e.g. for CPUX64)
+      all 32 bits x86 asm code is replaced by a pascal only version, if the
+      conditional PUREPASCAL is defined (e.g. for CPUX64)
 }
 
 {$ifdef FPC}

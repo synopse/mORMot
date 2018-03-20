@@ -3393,6 +3393,10 @@ var i, j, b, err: integer;
     k,l: Int64;
     s,s2: RawUTF8;
     d,e: double;
+    {$ifndef DELPHI5OROLDER}
+    c: currency;
+    ident: TRawUTF8DynArray;
+    {$endif}
     a: shortstring;
     u: string;
     varint: array[0..31] of byte;
@@ -3423,26 +3427,26 @@ begin
   Check(IntToThousandString(-10000)='-10,000');
   Check(IntToThousandString(-100000)='-100,000');
   Check(IntToThousandString(-1000000)='-1,000,000');
-  check(UInt3DigitsToUTF8(1)='001');
-  check(UInt3DigitsToUTF8(12)='012');
-  check(UInt3DigitsToUTF8(123)='123');
-  check(UInt4DigitsToUTF8(1)='0001');
-  check(UInt4DigitsToUTF8(12)='0012');
-  check(UInt4DigitsToUTF8(123)='0123');
-  check(UInt4DigitsToUTF8(1234)='1234');
-  check(MicroSecToString(0)='0us');
-  check(MicroSecToString(QWord(-10))='0us');
-  check(MicroSecToString(10)='10us');
-  check(MicroSecToString(999)='999us');
-  check(MicroSecToString(1000)='1ms');
-  check(MicroSecToString(1001)='1ms');
-  check(MicroSecToString(1010)='1.01ms');
-  check(MicroSecToString(1100)='1.10ms');
-  check(MicroSecToString(999999)='999.99ms');
-  check(MicroSecToString(1000000)='1s');
-  check(MicroSecToString(1000001)='1s');
-  check(MicroSecToString(2030001)='2.03s');
-  check(MicroSecToString(200000070001)='55.55h');
+  Check(UInt3DigitsToUTF8(1)='001');
+  Check(UInt3DigitsToUTF8(12)='012');
+  Check(UInt3DigitsToUTF8(123)='123');
+  Check(UInt4DigitsToUTF8(1)='0001');
+  Check(UInt4DigitsToUTF8(12)='0012');
+  Check(UInt4DigitsToUTF8(123)='0123');
+  Check(UInt4DigitsToUTF8(1234)='1234');
+  Check(MicroSecToString(0)='0us');
+  Check(MicroSecToString(QWord(-10))='0us');
+  Check(MicroSecToString(10)='10us');
+  Check(MicroSecToString(999)='999us');
+  Check(MicroSecToString(1000)='1ms');
+  Check(MicroSecToString(1001)='1ms');
+  Check(MicroSecToString(1010)='1.01ms');
+  Check(MicroSecToString(1100)='1.10ms');
+  Check(MicroSecToString(999999)='999.99ms');
+  Check(MicroSecToString(1000000)='1s');
+  Check(MicroSecToString(1000001)='1s');
+  Check(MicroSecToString(2030001)='2.03s');
+  Check(MicroSecToString(200000070001)='55.55h');
   Check(KB(-123)='-123 B');
   Check(KB(0)='0 B');
   Check(KB(123)='123 B');
@@ -3516,38 +3520,72 @@ begin
   d := 999.9999999999933;
   a[0] := AnsiChar(ExtendedToString(a,d,DOUBLE_PRECISION));
   Check(a='999.999999999993');
-{$ifdef EXTENDEDTOSTRING_USESTR}
+  {$ifdef EXTENDEDTOSTRING_USESTR}
   Check(DoubleToString(-3.3495117168e-10)='-0.00000000033495');
   Check(DoubleToString(-3.3495617168e-10)='-0.00000000033496');
   Check(DoubleToString(-3.9999617168e-14)='-0.00000000000004');
   Check(DoubleToString(3.9999617168e-14)='0.00000000000004');
   Check(DoubleToString(-3.9999617168e-15)='0');
   Check(DoubleToString(3.9999617168e-15)='0');
-{$else}
+  {$else}
   Check(DoubleToString(-3.3495117168e-10)='-3.3495117168E-10');
   Check(DoubleToString(-3.3495617168e-10)='-3.3495617168E-10');
   Check(DoubleToString(-3.9999617168e-14)='-3.9999617168E-14');
   Check(DoubleToString(3.9999617168e-14)='3.9999617168E-14');
   Check(DoubleToString(-3.9999617168e-15)='-3.9999617168E-15');
   Check(DoubleToString(3.9999617168e-15)='3.9999617168E-15');
-{$endif}
+  {$endif}
   Check(Int32ToUtf8(1599638299)='1599638299');
   Check(UInt32ToUtf8(1599638299)='1599638299');
   Check(Int32ToUtf8(-1599638299)='-1599638299');
   Check(Int64ToUTF8(-1271083787498396012)='-1271083787498396012');
   s := Int64ToUTF8(242161819595454762);
   Check(s='242161819595454762');
-{$ifndef LVCL}
+  {$ifndef DELPHI5OROLDER}
+  Check(ScanUTF8('1 2 3','  %',[@i,@j,@d])=0);
+  Check(ScanUTF8('','%d%d%f',[@i,@j,@d])=0);
+  Check(ScanUTF8('1 2 3','%d%d%f',[@i,@j,@d])=3);
+  Check(i=1);
+  Check(j=2);
+  Check(d=3);
+  Check(ScanUTF8('15 25 35','%d%D',[@i,@k,@d])=2);
+  Check(i=15);
+  Check(k=25);
+  Check(d=3);
+  Check(ScanUTF8('1 21 35','%d%d%f',[@i,@j])=2);
+  Check(i=1);
+  Check(j=21);
+  Check(d=3);
+  Check(ScanUTF8(' 10  20  abc  ','%d%d%s',[@i,@j,@a])=3);
+  Check(i=10);
+  Check(j=20);
+  Check(a='abc');
+  Check(ScanUTF8('1 00000002 3.01234 ','%dtoto %x%Ftiti',[@i,@j,@c])=3);
+  Check(i=1);
+  Check(j=2);
+  Check(c=3.0123);
+  Check(ScanUTF8('10 0000000a 77.77 7','%dtoto %x%Ftiti%Uboat',[@i,@j,@c,@crc],@ident)=4);
+  Check(i=10);
+  Check(j=10);
+  Check(c=77.77);
+  Check(crc=7);
+  Check(Length(ident)=4);
+  Check(ident[0]='dtoto');
+  Check(ident[1]='x');
+  Check(ident[2]='Ftiti');
+  Check(ident[3]='Uboat');
+  {$endif}
+  {$ifndef LVCL}
   {$ifdef ISDELPHIXE}FormatSettings.{$endif}{$ifdef FPC}FormatSettings.{$endif}
-  DecimalSeparator := '.';
-{$endif}
-  check(xxHash32(0,'A',1)=275094093);
-  check(xxHash32(0,'ABACK',5)=314231639);
-  check(xxHash32(0,'ABBREVIATIONS',13)=3058487595);
-  check(xxHash32(0,'LORD',4)=3395586315);
-  check(xxHash32(0,'MICROINSTRUCTION''S',18)=1576115228);
+    DecimalSeparator := '.';
+  {$endif}
+  Check(xxHash32(0,'A',1)=275094093);
+  Check(xxHash32(0,'ABACK',5)=314231639);
+  Check(xxHash32(0,'ABBREVIATIONS',13)=3058487595);
+  Check(xxHash32(0,'LORD',4)=3395586315);
+  Check(xxHash32(0,'MICROINSTRUCTION''S',18)=1576115228);
   for i := -10000 to 10000 do
-    check(GetInteger(Pointer(Int32ToUtf8(i)))=i);
+    Check(GetInteger(Pointer(Int32ToUtf8(i)))=i);
   for i := 0 to 10000 do begin
     j := i shr 6; // circumvent weird FPC code generation bug in -O2 mode
     s := RandomString(j);

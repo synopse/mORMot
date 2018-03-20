@@ -10108,7 +10108,7 @@ procedure MD5Transform(var buf: TMD5Buf; const in_: TMD5In);
 {$ifdef CPUX64}
 {
  MD5_Transform-x64
- MD5 transform routine oprimized for x64 processors
+ MD5 transform routine optimized for x64 processors
  Copyright 2018 Ritlabs, SRL
  The 64-bit version is written by Maxim Masiutin <max@ritlabs.com>
 

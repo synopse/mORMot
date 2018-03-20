@@ -2319,6 +2319,7 @@ function StringToWinAnsi(const Text: string): WinAnsiString;
 // the integer mapped value will be transmitted, therefore wrongly)
 // - any supplied TObject instance will be written as their class name
 function FormatUTF8(const Format: RawUTF8; const Args: array of const): RawUTF8; overload;
+  {$ifdef FPC}inline;{$endif}
 
 /// fast Format() function replacement, optimized for RawUTF8
 // - overloaded function, which avoid a temporary RawUTF8 string on stack
@@ -2338,6 +2339,21 @@ procedure FormatUTF8(const Format: RawUTF8; const Args: array of const;
 // - any supplied TObject instance will be written as their class name
 function FormatUTF8(const Format: RawUTF8; const Args, Params: array of const;
   JSONFormat: boolean=false): RawUTF8; overload;
+
+/// read and store text into values[] according to fmt specifiers
+// - %d as PInteger, %D as PInt64, %u as PCardinal, %U as PQWord, %f as PDouble,
+// %F as PCurrency, %x as 8 hexa chars to PInteger, %X as 16 hexa chars to PInt64,
+// %s as PShortString (UTF-8 encoded)
+// - optionally, specifiers and any whitespace separated identifiers may be
+// extracted and stored into the ident[] array, e.g. '%dFirstInt %s %DOneInt64'
+// will store ['dFirstInt','s','DOneInt64'] into ident
+function ScanUTF8(const text, fmt: RawUTF8; const values: array of pointer;
+  ident: PRawUTF8DynArray=nil): integer; overload;
+  {$ifdef FPC}inline;{$endif}
+
+/// read text from P/PLen and store it into values[] according to fmt specifiers
+function ScanUTF8(P: PUTF8Char; PLen: integer; const fmt: RawUTF8;
+  const values: array of pointer; ident: PRawUTF8DynArray): integer; overload;
 
 /// convert an open array (const Args: array of const) argument to an UTF-8
 // encoded text
@@ -3652,6 +3668,10 @@ function GotoEndOfJSONString(P: PUTF8Char): PUTF8Char;
 function GotoNextNotSpace(P: PUTF8Char): PUTF8Char;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// get the next character in [#1..' ']
+function GotoNextSpace(P: PUTF8Char): PUTF8Char;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// check if the next character not in [#1..' '] matchs a given value
 // - first ignore any non space character
 // - then returns TRUE if P^=ch, setting P to the character after ch
@@ -3753,6 +3773,7 @@ procedure GetNextItemShortString(var P: PUTF8Char; out Dest: ShortString; Sep: A
 
 /// decode next CSV hexadecimal string from P, nil if no more or not matching BinBytes
 // - Bin is filled with 0 if the supplied CSV content is invalid
+// - if Sep is #0, it will read the hexadecimal chars until a whitespace is reached
 function GetNextItemHexDisplayToBin(var P: PUTF8Char; Bin: PByte; BinBytes: integer;
   Sep: AnsiChar= ','): boolean;
 
@@ -3763,18 +3784,23 @@ type
   TChar64 = array[0..63] of AnsiChar;
 
 /// return next CSV string from P as a #0-ended buffer, false if no more
+// - if Sep is #0, will return all characters until next whitespace char
 function GetNextTChar64(var P: PUTF8Char; Sep: AnsiChar; out Buf: TChar64): boolean;
 
 /// return next CSV string as unsigned integer from P, 0 if no more
+// - if Sep is #0, it won't be searched for
 function GetNextItemCardinal(var P: PUTF8Char; Sep: AnsiChar= ','): PtrUInt;
 
 /// return next CSV string as signed integer from P, 0 if no more
+// - if Sep is #0, it won't be searched for
 function GetNextItemInteger(var P: PUTF8Char; Sep: AnsiChar= ','): PtrInt;
 
 /// return next CSV string as 64 bit signed integer from P, 0 if no more
+// - if Sep is #0, it won't be searched for
 function GetNextItemInt64(var P: PUTF8Char; Sep: AnsiChar= ','): Int64;
 
 /// return next CSV string as 64 bit unsigned integer from P, 0 if no more
+// - if Sep is #0, it won't be searched for
 function GetNextItemQWord(var P: PUTF8Char; Sep: AnsiChar= ','): QWord;
 
 /// return next CSV string as unsigned integer from P, 0 if no more
@@ -3787,7 +3813,17 @@ function GetNextItemCardinalStrict(var P: PUTF8Char): PtrUInt;
 function GetNextItemCardinalW(var P: PWideChar; Sep: WideChar= ','): PtrUInt;
 
 /// return next CSV string as double from P, 0.0 if no more
+// - if Sep is #0, will return all characters until next whitespace char
 function GetNextItemDouble(var P: PUTF8Char; Sep: AnsiChar= ','): double;
+
+/// return next CSV string as currency from P, 0.0 if no more
+// - if Sep is #0, will return all characters until next whitespace char
+function GetNextItemCurrency(var P: PUTF8Char; Sep: AnsiChar= ','): currency; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// return next CSV string as currency from P, 0.0 if no more
+// - if Sep is #0, will return all characters until next whitespace char
+procedure GetNextItemCurrency(var P: PUTF8Char; out result: currency; Sep: AnsiChar= ','); overload;
 
 /// return n-th indexed CSV string in P, starting at Index=0 for first one
 function GetCSVItem(P: PUTF8Char; Index: PtrUInt; Sep: AnsiChar = ','): RawUTF8;
@@ -24520,6 +24556,15 @@ begin
   result := P;
 end;
 
+function GotoNextSpace(P: PUTF8Char): PUTF8Char;
+begin
+  if P^>' ' then
+    repeat
+      inc(P)
+    until P^<=' ';
+  result := P;
+end;
+
 function NextNotSpaceCharIs(var P: PUTF8Char; ch: AnsiChar): boolean;
 begin
   if P^ in [#1..' '] then
@@ -25239,6 +25284,89 @@ Txt:  len := F-FDeb;
     finalize(tmp);
   end;
   {$endif}
+end;
+
+function ScanUTF8(P: PUTF8Char; PLen: integer; const fmt: RawUTF8;
+  const values: array of pointer; ident: PRawUTF8DynArray): integer; overload;
+var
+  v,w: PtrInt;
+  F,FEnd,PEnd: PUTF8Char;
+begin
+  result := 0;
+  if (fmt='') or (P=nil) or (PLen<=0) or (high(values)<0) then
+    exit;
+  if ident<>nil then
+    SetLength(ident^,length(values));
+  F := pointer(fmt);
+  FEnd := F+length(fmt);
+  PEnd := P+PLen;
+  for v := 0 to high(values) do begin
+    repeat
+      if P^ in [#1..' '] then // ignore any whitespace char in text
+        repeat
+          inc(P);
+          if P=PEnd then
+            exit;
+        until not (P^ in [#1..' ']);
+      if F^ in [#1..' '] then // ignore any whitespace char in fmt
+        repeat
+          inc(F);
+          if F=FEnd then
+            exit;
+        until not (F^ in [#1..' ']);
+      if F^='%' then begin // format specifier
+        inc(F);
+        if F=FEnd then
+          exit;
+        case F^ of
+        'd': PInteger(values[v])^ := GetNextItemInteger(P,#0);
+        'D': PInt64(values[v])^ := GetNextItemInt64(P,#0);
+        'u': PCardinal(values[v])^ := GetNextItemCardinal(P,#0);
+        'U': PQword(values[v])^ := GetNextItemQword(P,#0);
+        'f': PDouble(values[v])^ := GetNextItemDouble(P,#0);
+        'F': GetNextItemCurrency(P,PCurrency(values[v])^,#0);
+        'x': if not GetNextItemHexDisplayToBin(P,values[v],4,#0) then
+               exit;
+        'X': if not GetNextItemHexDisplayToBin(P,values[v],8,#0) then
+               exit;
+        's': begin
+          w := 0;
+          while (P[w]>' ') and (P+w<=PEnd) do inc(w);
+          SetString(PShortString(values[v])^,P,w);
+          inc(P,w);
+          while (P^ in [#1..' ']) and (P<=PEnd) do inc(P);
+        end
+        else begin
+          inc(F);
+          break;
+        end;
+        end;
+        inc(result);
+        if not(F[1] in [#0..' ','%']) or (ident<>nil) then begin
+          w := 0;
+          repeat inc(w) until (F[w] in [#0..' ','%']) or (F+w=FEnd);
+          if ident<>nil then
+            SetString(ident^[v],PAnsiChar(F),w);
+          inc(F,w); 
+        end else
+          inc(F);
+        if (F>=FEnd) or (P>=PEnd) then
+          exit;
+        break;
+      end else begin
+        while (P^<>F^) and (P<=PEnd) do inc(P);
+        inc(F);
+        if (F>=FEnd) or (P>=PEnd) then
+          exit;
+      end;
+    until false;
+  end;
+end;
+
+function ScanUTF8(const text, fmt: RawUTF8; const values: array of pointer;
+  ident: PRawUTF8DynArray): integer; overload;
+begin
+  result := ScanUTF8(pointer(text),length(text),fmt,values,ident);
 end;
 
 function RawByteStringArrayConcat(const Values: array of RawByteString): RawByteString;
@@ -32658,19 +32786,22 @@ var S: PUTF8Char;
     len: integer;
 begin
   result := false;
-  FillCharFast(Bin,BinBytes,0);
+  FillCharFast(Bin^,BinBytes,0);
   if P=nil then
     exit;
   if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
   S := P;
-  while (S^<>#0) and (S^<>Sep) do
-    inc(S);
+  if Sep=#0 then
+    while S^>' ' do
+      inc(S) else
+    while (S^<>#0) and (S^<>Sep) do
+      inc(S);
   len := S-P;
   while (P[len-1] in [#1..' ']) and (len>0) do dec(len); // trim right spaces
   if len<>BinBytes*2 then
     exit;
   if not HexDisplayToBin(PAnsiChar(P),Bin,BinBytes) then
-    FillCharFast(Bin,BinBytes,0) else begin
+    FillCharFast(Bin^,BinBytes,0) else begin
     if S^<>#0 then
       P := S+1 else
       P := nil;
@@ -32698,8 +32829,9 @@ begin
       inc(P);
     until false;
   end;
-  while (P^<>#0) and (P^<>Sep) do // go to end of CSV item (ignore any decimal)
-    inc(P);
+  if Sep<>#0 then
+    while (P^<>#0) and (P^<>Sep) do // go to end of CSV item (ignore any decimal)
+      inc(P);
   if P^=#0 then
     P := nil else
     inc(P);
@@ -32847,19 +32979,26 @@ begin
 end;
 
 function GetNextTChar64(var P: PUTF8Char; Sep: AnsiChar; out Buf: TChar64): boolean;
-var i: integer;
+var i: PtrInt;
 begin
   result := false;
   if P=nil then
     exit;
   i := 0;
-  while (P[i]<>#0) and (P[i]<>Sep) do begin
-    Buf[i] := P[i];
-    inc(i);
-    if i>=SizeOf(Buf) then
-      exit; // avoid buffer overflow
-  end;
-  Buf[i] := #0;
+  if Sep=#0 then // store up to next whitespace
+    while P[i]>' ' do begin
+      Buf[i] := P[i];
+      inc(i);
+      if i>=SizeOf(Buf) then
+        exit; // avoid buffer overflow
+    end else
+    while (P[i]<>#0) and (P[i]<>Sep) do begin
+      Buf[i] := P[i];
+      inc(i);
+      if i>=SizeOf(Buf) then
+        exit; // avoid buffer overflow
+    end;
+  Buf[i] := #0; // make asciiz
   inc(P,i); // P[i]=Sep or #0
   if P^=#0 then
     P := nil else
@@ -32867,7 +33006,7 @@ begin
   result := true;
 end;
 
-function GetNextItemInt64(var P: PUTF8Char; Sep: AnsiChar= ','): Int64;
+function GetNextItemInt64(var P: PUTF8Char; Sep: AnsiChar): Int64;
 {$ifdef CPU64}
 begin
   result := GetNextItemInteger(P,Sep); // PtrInt=Int64
@@ -32881,7 +33020,7 @@ begin
 end;
 {$endif}
 
-function GetNextItemQWord(var P: PUTF8Char; Sep: AnsiChar= ','): QWord;
+function GetNextItemQWord(var P: PUTF8Char; Sep: AnsiChar): QWord;
 {$ifdef CPU64}
 begin
   result := GetNextItemCardinal(P,Sep); // PtrUInt=QWord
@@ -32895,7 +33034,7 @@ begin
 end;
 {$endif}
 
-function GetNextItemDouble(var P: PUTF8Char; Sep: AnsiChar= ','): double;
+function GetNextItemDouble(var P: PUTF8Char; Sep: AnsiChar): double;
 var tmp: TChar64;
     err: integer;
 begin
@@ -32904,6 +33043,19 @@ begin
     if err<>0 then
       result := 0;
   end else
+    result := 0;
+end;
+
+function GetNextItemCurrency(var P: PUTF8Char; Sep: AnsiChar): currency;
+begin
+  GetNextItemCurrency(P,result,Sep);
+end;
+
+procedure GetNextItemCurrency(var P: PUTF8Char; out result: currency; Sep: AnsiChar);
+var tmp: TChar64;
+begin
+  if GetNextTChar64(P,Sep,tmp) then
+    PInt64(@result)^ := StrToCurr64(tmp) else
     result := 0;
 end;
 
