@@ -1118,6 +1118,9 @@ type
   PShortStringArray = array[0..MaxInt div SizeOf(pointer)-1] of PShortString;
   PPShortStringArray = ^PShortStringArray;
 
+   /// a dynamic array of shortstring values
+  TShortStringDynArray = array of ShortString;
+
   /// a dynamic array of TDateTime values
   TDateTimeDynArray = array of TDateTime;
   PDateTimeDynArray = ^TDateTimeDynArray;
@@ -5137,6 +5140,23 @@ const
   djObject = djPointer;
 
 type
+  /// the available JSON format, for TTextWriter.AddJSONReformat() and its
+  // JSONBufferReformat() and JSONReformat() wrappers
+  // - jsonCompact is the default machine-friendly single-line layout
+  // - jsonHumanReadable will add line feeds and indentation, for a more
+  // human-friendly result
+  // - jsonUnquotedPropName will emit the jsonHumanReadable layout, but
+  // with all property names being quoted only if necessary: this format
+  // could be used e.g. for configuration files - this format, similar to the
+  // one used in the MongoDB extended syntax, is not JSON compatible: do not
+  // use it e.g. with AJAX clients, but is would be handled as expected by all
+  // our units as valid JSON input, without previous correction
+  // - jsonUnquotedPropNameCompact will emit single-line layout with unquoted
+  // property names
+  TTextWriterJSONFormat = (
+    jsonCompact, jsonHumanReadable,
+    jsonUnquotedPropName, jsonUnquotedPropNameCompact);
+
   /// a wrapper around a dynamic array with one dimension
   // - provide TList-like methods using fast RTTI information
   // - can be used to fast save/retrieve all memory content to a TStream
@@ -5497,12 +5517,14 @@ type
     /// serialize the dynamic array content as JSON
     // - is just a wrapper around TTextWriter.AddDynArrayJSON()
     // - this method will therefore recognize T*ObjArray types
-    function SaveToJSON(EnumSetsAsText: boolean=false): RawUTF8; overload;
+    function SaveToJSON(EnumSetsAsText: boolean=false;
+      reformat: TTextWriterJSONFormat=jsonCompact): RawUTF8; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// serialize the dynamic array content as JSON
     // - is just a wrapper around TTextWriter.AddDynArrayJSON()
     // - this method will therefore recognize T*ObjArray types
-    procedure SaveToJSON(out Result: RawUTF8; EnumSetsAsText: boolean=false); overload;
+    procedure SaveToJSON(out Result: RawUTF8; EnumSetsAsText: boolean=false;
+      reformat: TTextWriterJSONFormat=jsonCompact); overload;
     /// load the dynamic array content from an UTF-8 encoded JSON buffer
     // - expect the format as saved by TTextWriter.AddDynArrayJSON method, i.e.
     // handling TBooleanDynArray, TIntegerDynArray, TInt64DynArray, TCardinalDynArray,
@@ -6885,6 +6907,10 @@ function GetSetName(aTypeInfo: pointer; const value): RawUTF8;
 procedure GetSetNameShort(aTypeInfo: pointer; const value; out result: ShortString;
   trimlowercase: boolean=false);
 
+/// fast append some UTF-8 text into a shortstring
+procedure AppendShortComma(text: PAnsiChar; len: integer; var result: shortstring;
+  trimlowercase: boolean);
+
 /// fast search of an exact case-insensitive match of a RTTI's PShortString array
 function FindShortStringListExact(List: PShortString; MaxValue: integer;
   aValue: PUTF8Char; aValueLen: integer): integer;
@@ -8104,23 +8130,6 @@ type
   /// class of our simple writer to a Stream, specialized for the TEXT format
   TTextWriterClass = class of TTextWriter;
 
-  /// the available JSON format, for TTextWriter.AddJSONReformat() and its
-  // JSONBufferReformat() and JSONReformat() wrappers
-  // - jsonCompact is the default machine-friendly single-line layout
-  // - jsonHumanReadable will add line feeds and indentation, for a more
-  // human-friendly result
-  // - jsonUnquotedPropName will emit the jsonHumanReadable layout, but
-  // with all property names being quoted only if necessary: this format
-  // could be used e.g. for configuration files - this format, similar to the
-  // one used in the MongoDB extended syntax, is not JSON compatible: do not
-  // use it e.g. with AJAX clients, but is would be handled as expected by all
-  // our units as valid JSON input, without previous correction
-  // - jsonUnquotedPropNameCompact will emit single-line layout with unquoted
-  // property names
-  TTextWriterJSONFormat = (
-    jsonCompact, jsonHumanReadable,
-    jsonUnquotedPropName, jsonUnquotedPropNameCompact);
-
   /// the potential places were TTextWriter.HtmlEscape should process
   // proper HTML string escaping
   // $  < > & "  ->   &lt; &gt; &amp; &quote;
@@ -8270,7 +8279,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// retrieve the data as a string
     // - will avoid creation of a temporary RawUTF8 variable as for Text function
-    procedure SetText(var result: RawUTF8);
+    procedure SetText(var result: RawUTF8; reformat: TTextWriterJSONFormat = jsonCompact);
     /// set the internal stream content with the supplied UTF-8 text
     procedure ForceContent(const text: RawUTF8);
     /// write pending data to the Stream, with automatic buffer resizal
@@ -47800,12 +47809,13 @@ begin
 end;
 
 
-function TDynArray.SaveToJSON(EnumSetsAsText: boolean): RawUTF8;
+function TDynArray.SaveToJSON(EnumSetsAsText: boolean; reformat: TTextWriterJSONFormat): RawUTF8;
 begin
-  SaveToJSON(result,EnumSetsAsText);
+  SaveToJSON(result,EnumSetsAsText,reformat);
 end;
 
-procedure TDynArray.SaveToJSON(out Result: RawUTF8; EnumSetsAsText: boolean);
+procedure TDynArray.SaveToJSON(out Result: RawUTF8; EnumSetsAsText: boolean;
+  reformat: TTextWriterJSONFormat);
 var temp: TTextWriterStackBuffer;
 begin
   with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
@@ -47813,7 +47823,7 @@ begin
     if EnumSetsAsText then
       CustomOptions := CustomOptions+[twoEnumSetsAsTextInRecord];
     AddDynArrayJSON(self);
-    SetText(result);
+    SetText(result,reformat);
   finally
     Free;
   end;
@@ -50780,7 +50790,6 @@ begin
     AssignError(nil);
 end;
 
-
 {$ifdef FPC_OR_PUREPASCAL}
 class function TSynPersistent.NewInstance: TObject;
 var p: pointer;
@@ -53687,7 +53696,7 @@ begin
   FlushToStream;
 end;
 
-procedure TTextWriter.SetText(var result: RawUTF8);
+procedure TTextWriter.SetText(var result: RawUTF8; reformat: TTextWriterJSONFormat);
 var Len: cardinal;
 begin
   FlushFinal;
@@ -53701,6 +53710,7 @@ begin
       SetCodePage(fDataString,CP_UTF8,false);
       {$endif}
       result := fDataString;
+      fDataString := '';
     end else
       SetRawUTF8(result,PAnsiChar(pointer(DataString))+fInitialStreamPosition,Len) else
   if fStream.InheritsFrom(TCustomMemoryStream) then
@@ -53709,6 +53719,11 @@ begin
     FastNewRawUTF8(result,Len);
     fStream.Seek(fInitialStreamPosition,soBeginning);
     fStream.Read(pointer(result)^,Len);
+  end;
+  if reformat <> jsonCompact then begin // reformat using the very same instance
+    CancelAll;
+    AddJSONReformat(pointer(result),reformat,nil);
+    SetText(result);
   end;
 end;
 
