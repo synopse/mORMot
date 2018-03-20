@@ -74,4 +74,13 @@ And now run build itself:
 make
 ```
 
-Upon successfull build go to dist/bin subdirectory and take libmozjs-52.so library. It is recommended to copy this file to `/usr/lib` directory
+Upon successfull build go to dist/bin subdirectory and take libmozjs-52.so library.
+To avoid conflicts with a packaged version of this library the name have to be changed, but issuing mv command to rename the file is not enough.
+Patchelf utility not less than version 0.9 should be used to change internal SONAME field:
+
+```
+patchelf --set-soname libsynmozjs52.so libmozjs-52.so
+mv libmozjs-52.so libsynmozjs52.so
+```
+
+It is recommended to copy resulting libsynmozjs52.so file to `/usr/lib` directory
