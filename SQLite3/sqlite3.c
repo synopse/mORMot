@@ -7,41 +7,45 @@
 
 /*
 ** Define all symbols expected by SynSQLite3Static.pas
+**
+** See also https://www.sqlite.org/compile.html#recommended_compile_time_options
 */
 
 #define SQLITE_DEFAULT_MEMSTATUS 0
-//  don't need any debug here
+// don't need any debug here, and don't even define sqlite3_status()
 #define SQLITE_THREADSAFE 1
 // assuming multi-thread safety is made by caller - in our framework, there is
 // only one thread using the database connection at the same time, but there could
 // be multiple database connection at the same time (previous was 0 could be unsafe)
 // - this option is also needed by codecext.c
-//#define SQLITE_OMIT_SHARED_CACHE 1
+#define SQLITE_OMIT_SHARED_CACHE 1
 // no need of shared cache in a threadsafe calling model
 #define SQLITE_OMIT_AUTOINIT 1
 //  sqlite3_initialize() is done in unit initialization -> no AUTOINIT
 #define SQLITE_OMIT_DEPRECATED 1
 //  spare some code size
-#define SQLITE_ENABLE_FTS3
-#define SQLITE_ENABLE_FTS3_PARENTHESIS
-#define SQLITE_ENABLE_FTS4
-#define SQLITE_ENABLE_FTS5
+#define SQLITE_LIKE_DOESNT_MATCH_BLOBS 1
+// historical function, never used
+#define SQLITE_ENABLE_FTS3 1
+#define SQLITE_ENABLE_FTS3_PARENTHESIS 1
+#define SQLITE_ENABLE_FTS4 1
+#define SQLITE_ENABLE_FTS5 1
 // enable all FTS engines
-#define SQLITE_ENABLE_RBU
+#define SQLITE_ENABLE_RBU 1
 // "Resumable Bulk Update" (or OTA) is not used/published yet
-#define SQLITE_ENABLE_JSON1
+#define SQLITE_ENABLE_JSON1 1
 // add JSON extension
 #define SQLITE_MAX_EXPR_DEPTH 0
-// no SQL depth limit, since we trust the input
+// no SQL depth limit, since we trust the input and expect the best performance
 #define SQLITE_OMIT_LOAD_EXTENSION 1
-// we don't need extension in an embedded engine
+// we don't need/allow extension in an embedded engine
 #define SQLITE_OMIT_COMPILEOPTION_DIAGS 1
 // we don't need Compilation Options Diagnostics in our embedded engine
 #define SQLITE_OMIT_PROGRESS_CALLBACK 1
 // we don't need sqlite3_progress_handler() API function
 #define SQLITE_ENABLE_RTREE 1
 // the RTREE extension is now (from v.1.8/3.7) compiled into the engine
-#define SQLITE_HAS_CODEC
+#define SQLITE_HAS_CODEC 1
 // see code below
 
 /*
