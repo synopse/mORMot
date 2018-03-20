@@ -13,9 +13,9 @@
 
 Precompiled binary can be downloaded here:
 
-  - x32: https://unitybase.info/downloads/synmozjs52x32dlls.zip
-  - x64: https://unitybase.info/downloads/synmozjs52x64dlls.zip
-  - Linux x64: http://unitybase.info/media/files/libsynmozjs52.zip
+  - Win x32: https://unitybase.info/media/files/synmozjs52x32dlls.zip
+  - Win x64: https://unitybase.info/media/files/synmozjs52x64dlls.zip
+  - Linux x64: https://unitybase.info/media/files/libsynmozjs52.zip
 
 Or compiled from sources as described [in  instructions inside mozjs folder](/mozjs)
 
