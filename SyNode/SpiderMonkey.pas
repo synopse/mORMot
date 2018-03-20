@@ -2194,7 +2194,7 @@ function SimpleVariantToJSval(cx: PJSContext; val: Variant): jsval;
 
 const
 {$IFDEF SM52}
-  SpiderMonkeyLib = 'mozjs-52'{$IFDEF MSWINDOWS} + '.dll'{$ENDIF};
+  SpiderMonkeyLib = 'synmozjs52'{$IFDEF MSWINDOWS} + '.dll'{$ENDIF};
 {$ELSE}
   SpiderMonkeyLib = 'mozjs-45'{$IFDEF MSWINDOWS} + '.dll'{$ENDIF};
 {$ENDIF}
