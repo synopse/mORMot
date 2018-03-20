@@ -3544,9 +3544,17 @@ begin
   {$ifndef DELPHI5OROLDER}
   Check(ScanUTF8('1 2 3','  %',[@i,@j,@d])=0);
   Check(ScanUTF8('','%d%d%f',[@i,@j,@d])=0);
-  Check(ScanUTF8('1 2 3','%d%d%f',[@i,@j,@d])=3);
+  Check(ScanUTF8('1 2 7','%d%d%f',[@i,@j,@d])=3);
   Check(i=1);
   Check(j=2);
+  Check(d=7);
+  Check(ScanUTF8('2/3/8.1','%d/%d/%f',[@i,@j,@d])=3);
+  Check(i=2);
+  Check(j=3);
+  CheckSame(d,8.1);
+  Check(ScanUTF8('5 / 6/3','%d/%d / %f',[@i,@j,@d])=3);
+  Check(i=5);
+  Check(j=6);
   Check(d=3);
   Check(ScanUTF8('15 25 35','%d%D',[@i,@k,@d])=2);
   Check(i=15);

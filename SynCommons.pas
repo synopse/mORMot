@@ -3787,8 +3787,9 @@ type
   TChar64 = array[0..63] of AnsiChar;
 
 /// return next CSV string from P as a #0-ended buffer, false if no more
-// - if Sep is #0, will return all characters until next whitespace char
-function GetNextTChar64(var P: PUTF8Char; Sep: AnsiChar; out Buf: TChar64): boolean;
+// - if Sep is #0, will copy all characters until next whitespace char
+// - returns the number of bytes stored into Buf[]
+function GetNextTChar64(var P: PUTF8Char; Sep: AnsiChar; out Buf: TChar64): PtrInt;
 
 /// return next CSV string as unsigned integer from P, 0 if no more
 // - if Sep is #0, it won't be searched for
@@ -25350,9 +25351,9 @@ begin
       else raise ESynException.CreateUTF8('ScanUTF8: unknown ''%'' specifier [%]',[F^,fmt]);
       end;
       inc(result);
-      if not(F[1] in [#0..' ','%']) or (ident<>nil) then begin
+      if (ord(F[1]) in IsIdentifier) or (ident<>nil) then begin
         w := 0;
-        repeat inc(w) until (F[w] in [#0..' ','%']) or (F+w=FEnd);
+        repeat inc(w) until not(ord(F[w]) in IsIdentifier) or (F+w=FEnd);
         if ident<>nil then
           SetString(ident^[v],PAnsiChar(F),w);
         inc(F,w);
@@ -25364,6 +25365,7 @@ begin
     end else begin
       while (P^<>F^) and (P<=PEnd) do inc(P);
       inc(F);
+      inc(P);
       if (F>=FEnd) or (P>=PEnd) then
         exit;
     end;
@@ -32809,14 +32811,16 @@ begin
     exit;
   if not HexDisplayToBin(PAnsiChar(P),Bin,BinBytes) then
     FillCharFast(Bin^,BinBytes,0) else begin
-    if S^<>#0 then
-      P := S+1 else
-      P := nil;
+    if S^=#0 then
+      P := nil else
+      if Sep<>#0 then
+        P := S+1 else
+        P := S;
     result := true;
   end;
 end;
 
-function GetNextItemCardinal(var P: PUTF8Char; Sep: AnsiChar= ','): PtrUInt;
+function GetNextItemCardinal(var P: PUTF8Char; Sep: AnsiChar): PtrUInt;
 var c: PtrUInt;
 begin
   if P=nil then begin
@@ -32841,7 +32845,8 @@ begin
       inc(P);
   if P^=#0 then
     P := nil else
-    inc(P);
+    if Sep<>#0 then
+      inc(P);
 end;
 
 function GetNextItemCardinalStrict(var P: PUTF8Char): PtrUInt;
@@ -32985,32 +32990,30 @@ begin
     result := -result;
 end;
 
-function GetNextTChar64(var P: PUTF8Char; Sep: AnsiChar; out Buf: TChar64): boolean;
-var i: PtrInt;
+function GetNextTChar64(var P: PUTF8Char; Sep: AnsiChar; out Buf: TChar64): PtrInt;
 begin
-  result := false;
+  result := 0;
   if P=nil then
     exit;
-  i := 0;
   if Sep=#0 then // store up to next whitespace
-    while P[i]>' ' do begin
-      Buf[i] := P[i];
-      inc(i);
-      if i>=SizeOf(Buf) then
+    while P[result]>' ' do begin
+      Buf[result] := P[result];
+      inc(result);
+      if result>=SizeOf(Buf) then
         exit; // avoid buffer overflow
     end else
-    while (P[i]<>#0) and (P[i]<>Sep) do begin
-      Buf[i] := P[i];
-      inc(i);
-      if i>=SizeOf(Buf) then
+    while (P[result]<>#0) and (P[result]<>Sep) do begin
+      Buf[result] := P[result];
+      inc(result);
+      if result>=SizeOf(Buf) then
         exit; // avoid buffer overflow
     end;
-  Buf[i] := #0; // make asciiz
-  inc(P,i); // P[i]=Sep or #0
+  Buf[result] := #0; // make asciiz
+  inc(P,result); // P[result]=Sep or #0
   if P^=#0 then
     P := nil else
-    inc(P);
-  result := true;
+    if Sep<>#0 then
+      inc(P);
 end;
 
 function GetNextItemInt64(var P: PUTF8Char; Sep: AnsiChar): Int64;
@@ -33021,7 +33024,7 @@ end;
 {$else}
 var tmp: TChar64;
 begin
-  if GetNextTChar64(P,Sep,tmp) then
+  if GetNextTChar64(P,Sep,tmp)>0 then
     SetInt64(tmp,result) else
     result := 0;
 end;
@@ -33035,7 +33038,7 @@ end;
 {$else}
 var tmp: TChar64;
 begin
-  if GetNextTChar64(P,Sep,tmp) then
+  if GetNextTChar64(P,Sep,tmp)>0 then
     SetQWord(tmp,result) else
     result := 0;
 end;
@@ -33045,7 +33048,7 @@ function GetNextItemDouble(var P: PUTF8Char; Sep: AnsiChar): double;
 var tmp: TChar64;
     err: integer;
 begin
-  if GetNextTChar64(P,Sep,tmp) then begin
+  if GetNextTChar64(P,Sep,tmp)>0 then begin
     result := GetExtended(tmp,err);
     if err<>0 then
       result := 0;
@@ -33061,7 +33064,7 @@ end;
 procedure GetNextItemCurrency(var P: PUTF8Char; out result: currency; Sep: AnsiChar);
 var tmp: TChar64;
 begin
-  if GetNextTChar64(P,Sep,tmp) then
+  if GetNextTChar64(P,Sep,tmp)>0 then
     PInt64(@result)^ := StrToCurr64(tmp) else
     result := 0;
 end;
