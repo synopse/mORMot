@@ -133,8 +133,16 @@ type
     fMatch: TMatchStoreDynArray;
   public
     /// add once some grep-like patterns to the internal TMach list
-    // - aPatterns follows the IsMatch() syntax
-    procedure Subscribe(const aPatterns: TRawUTF8DynArray; CaseInsensitive: Boolean);
+    // - aPatterns[] follows the IsMatch() syntax
+    procedure Subscribe(const aPatterns: TRawUTF8DynArray; CaseInsensitive: Boolean); overload;
+    /// add once some grep-like patterns to the internal TMach list
+    // - each CSV item in aPatterns follows the IsMatch() syntax
+    procedure Subscribe(const aPatternsCSV: RawUTF8; CaseInsensitive: Boolean); overload;
+    /// search patterns in the supplied text
+    // - returns -1 if no filter has been subscribed
+    // - returns -2 if there is no match on any previous pattern subscription
+    // - returns fMatch[] index, i.e. >= 0 number on first matching pattern 
+    function Match(const aText: RawUTF8): integer;
   end;
 
 type
@@ -4538,6 +4546,30 @@ end;
 
 { TMatchs }
 
+function TMatchs.Match(const aText: RawUTF8): integer;
+var
+  i: integer;
+begin
+  if (self = nil) or (fMatch = nil) then
+    result := -1 // no filter by name -> add all processes
+  else begin
+    result := -2;
+    for i := 0 to length(fMatch) - 1 do
+      if fMatch[i].Parent.Match(aText) then begin
+        result := i;
+        break;
+      end;
+  end;
+end;
+
+procedure TMatchs.Subscribe(const aPatternsCSV: RawUTF8; CaseInsensitive: Boolean);
+var
+  patterns: TRawUTF8DynArray;
+begin
+  CSVToRawUTF8DynArray(pointer(aPatternsCSV), patterns);
+  Subscribe(patterns, CaseInsensitive);
+end;
+
 procedure TMatchs.Subscribe(const aPatterns: TRawUTF8DynArray; CaseInsensitive: Boolean);
 var
   i, j, m, n: integer;
@@ -4558,7 +4590,7 @@ begin
         break;
       end else
       inc(found);
-    if found = nil then
+    if found <> nil then
       with fMatch[n] do begin
         PatternInstance := pat^; // avoid GPF if aPatterns[] is released
         Parent.Prepare(PatternInstance, CaseInsensitive, true);
