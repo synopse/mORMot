@@ -5127,6 +5127,8 @@ type
   /// internal set to specify some standard Delphi arrays
   TDynArrayKinds = set of TDynArrayKind;
 
+function ToText(k: TDynArrayKind): PShortString; overload;
+
 const
   /// TDynArrayKind alias for a pointer field hashing / comparison
   djPointer = {$ifdef CPU64}djInt64{$else}djCardinal{$endif};
@@ -19889,12 +19891,12 @@ begin
   result := true;
 end;
 
-function IsAnsiCompatible(const Text: RawByteString): boolean; overload;
+function IsAnsiCompatible(const Text: RawByteString): boolean;
 begin
   result := IsAnsiCompatible(PAnsiChar(pointer(Text)),length(Text));
 end;
 
-function IsAnsiCompatible(PW: PWideChar): boolean; overload;
+function IsAnsiCompatible(PW: PWideChar): boolean;
 begin
   result := false;
   if PW<>nil then
@@ -19907,7 +19909,7 @@ begin
   result := true;
 end;
 
-function IsAnsiCompatible(PW: PWideChar; Len: integer): boolean; overload;
+function IsAnsiCompatible(PW: PWideChar; Len: integer): boolean;
 var i: integer;
 begin
   result := false;
@@ -20321,7 +20323,7 @@ begin
   until false;
 end;
 
-function Utf8DecodeToRawUnicode(P: PUTF8Char; L: integer): RawUnicode; overload;
+function Utf8DecodeToRawUnicode(P: PUTF8Char; L: integer): RawUnicode;
 var short: array[0..256*6] of WideChar;
     U: PWideChar;
 begin
@@ -20339,7 +20341,7 @@ begin
   end;
 end;
 
-function Utf8DecodeToRawUnicode(const S: RawUTF8): RawUnicode; overload;
+function Utf8DecodeToRawUnicode(const S: RawUTF8): RawUnicode;
 begin
   if S='' then
     result := '' else
@@ -20354,7 +20356,7 @@ begin
     DestLen^ := L;
 end;
 
-function Utf8DecodeToRawUnicodeUI(const S: RawUTF8; var Dest: RawUnicode): integer; overload;
+function Utf8DecodeToRawUnicodeUI(const S: RawUTF8; var Dest: RawUnicode): integer;
 begin
   Dest := ''; // somewhat faster if Dest is freed before any SetLength()
   if S='' then begin
@@ -20367,7 +20369,7 @@ begin
 end;
 
 function RawUnicodeToUtf8(Dest: PUTF8Char; DestLen: PtrInt; Source: PWideChar;
-  SourceLen: PtrInt; Flags: TCharConversionFlags): PtrInt; overload;
+  SourceLen: PtrInt; Flags: TCharConversionFlags): PtrInt;
 var c: Cardinal;
     Tail: PWideChar;
     i,j: integer;
@@ -20464,7 +20466,7 @@ begin
   RawUnicodeToUTF8(WideChar,WideCharCount,result, Flags);
 end;
 
-function RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer; out UTF8Length: integer): RawUTF8; overload;
+function RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer; out UTF8Length: integer): RawUTF8;
 var LW: integer;
 begin
   result := ''; // somewhat faster if result is freed before any SetLength()
@@ -20493,7 +20495,7 @@ begin
   SetString(result,PWideChar(pointer(Unicode)),length(Unicode) shr 1);
 end;
 
-function RawUnicodeToSynUnicode(WideChar: PWideChar; WideCharCount: integer): SynUnicode; overload;
+function RawUnicodeToSynUnicode(WideChar: PWideChar; WideCharCount: integer): SynUnicode;
 begin
   SetString(result,WideChar,WideCharCount);
 end;
@@ -20503,7 +20505,7 @@ begin
   WinAnsiConvert.UnicodeBufferToAnsi(dest,source,WideCharCount);
 end;
 
-function RawUnicodeToWinAnsi(WideChar: PWideChar; WideCharCount: integer): WinAnsiString; overload;
+function RawUnicodeToWinAnsi(WideChar: PWideChar; WideCharCount: integer): WinAnsiString;
 begin
   result := WinAnsiConvert.UnicodeBufferToAnsi(WideChar,WideCharCount);
 end;
@@ -21056,24 +21058,24 @@ end;
 
 
 {$ifdef UNICODE}
-function RawUnicodeToString(P: PWideChar; L: integer): string; overload;
+function RawUnicodeToString(P: PWideChar; L: integer): string;
 begin
   SetString(result,P,L);
 end;
 {$else}
-function RawUnicodeToString(P: PWideChar; L: integer): string; overload;
+function RawUnicodeToString(P: PWideChar; L: integer): string;
 begin
   result := CurrentAnsiConvert.UnicodeBufferToAnsi(P,L);
 end;
 {$endif}
 
 {$ifdef UNICODE}
-procedure RawUnicodeToString(P: PWideChar; L: integer; var result: string); overload;
+procedure RawUnicodeToString(P: PWideChar; L: integer; var result: string);
 begin
   SetString(result,P,L);
 end;
 {$else}
-procedure RawUnicodeToString(P: PWideChar; L: integer; var result: string); overload;
+procedure RawUnicodeToString(P: PWideChar; L: integer; var result: string);
 begin
   result := CurrentAnsiConvert.UnicodeBufferToAnsi(P,L);
 end;
@@ -21152,7 +21154,7 @@ begin
   UTF8ToWideString(pointer(Text),Length(Text),result);
 end;
 
-procedure UTF8ToWideString(Text: PUTF8Char; Len: integer; var result: WideString); overload;
+procedure UTF8ToWideString(Text: PUTF8Char; Len: integer; var result: WideString);
 var short: array[0..256*6] of WideChar;
     U: PWideChar;
 begin
@@ -21176,12 +21178,12 @@ begin
   UTF8ToSynUnicode(pointer(Text),length(Text),result);
 end;
 
-procedure UTF8ToSynUnicode(const Text: RawUTF8; var result: SynUnicode); overload;
+procedure UTF8ToSynUnicode(const Text: RawUTF8; var result: SynUnicode);
 begin
   UTF8ToSynUnicode(pointer(Text),length(Text),result);
 end;
 
-procedure UTF8ToSynUnicode(Text: PUTF8Char; Len: integer; var result: SynUnicode); overload;
+procedure UTF8ToSynUnicode(Text: PUTF8Char; Len: integer; var result: SynUnicode);
 var short: array[byte] of WideChar;
     U: PWideChar;
 begin
@@ -21511,7 +21513,7 @@ begin
   result := AsciiToBaudot(pointer(Text),length(Text));
 end;
 
-function AsciiToBaudot(P: PAnsiChar; len: integer): RawByteString; overload;
+function AsciiToBaudot(P: PAnsiChar; len: integer): RawByteString;
 var i,c,d,bits: integer;
     shift: boolean;
     dest: PByte;
@@ -22084,7 +22086,7 @@ begin
   result := GetEnumName(TypeInfo(TTypeKind),ord(k));
 end;
 
-function ToText(k: TDynArrayKind): PShortString; overload;
+function ToText(k: TDynArrayKind): PShortString;
 begin
   result := GetEnumName(TypeInfo(TDynArrayKind),ord(k));
 end;
@@ -22910,7 +22912,7 @@ begin
 end;
 
 procedure VariantToUTF8(const V: Variant; var result: RawUTF8;
-  var wasString: boolean); overload;
+  var wasString: boolean);
 var tmp: TVarData;
 begin
   wasString := false;
@@ -22999,7 +23001,7 @@ begin
   VariantToUTF8(V,result,wasString);
 end;
 
-function ToUTF8(const V: Variant): RawUTF8; overload;
+function ToUTF8(const V: Variant): RawUTF8;
 var wasString: boolean;
 begin
   VariantToUTF8(V,result,wasString);
@@ -24074,7 +24076,7 @@ begin
   end;
 end;
 
-function Split(const Str, SepStr: RawUTF8; var LeftStr: RawUTF8; ToUpperCase: boolean=false): RawUTF8; overload;
+function Split(const Str, SepStr: RawUTF8; var LeftStr: RawUTF8; ToUpperCase: boolean=false): RawUTF8;
 begin
   Split(Str,SepStr,LeftStr,result,ToUpperCase);
 end;
@@ -25163,7 +25165,7 @@ begin
   until d=b;
 end;
 
-function FormatUTF8(const Format: RawUTF8; const Args, Params: array of const; JSONFormat: boolean): RawUTF8; overload;
+function FormatUTF8(const Format: RawUTF8; const Args, Params: array of const; JSONFormat: boolean): RawUTF8;
 var i, tmpN, L, A, P, len: PtrInt;
     isParam: AnsiChar;
     tmp: TRawUTF8DynArray;
@@ -25287,7 +25289,7 @@ Txt:  len := F-FDeb;
 end;
 
 function ScanUTF8(P: PUTF8Char; PLen: integer; const fmt: RawUTF8;
-  const values: array of pointer; ident: PRawUTF8DynArray): integer; overload;
+  const values: array of pointer; ident: PRawUTF8DynArray): integer;
 var
   v,w: PtrInt;
   F,FEnd,PEnd: PUTF8Char;
@@ -25300,71 +25302,67 @@ begin
   F := pointer(fmt);
   FEnd := F+length(fmt);
   PEnd := P+PLen;
-  for v := 0 to high(values) do begin
-    repeat
-      if P^ in [#1..' '] then // ignore any whitespace char in text
-        repeat
-          inc(P);
-          if P=PEnd then
-            exit;
-        until not (P^ in [#1..' ']);
-      if F^ in [#1..' '] then // ignore any whitespace char in fmt
-        repeat
-          inc(F);
-          if F=FEnd then
-            exit;
-        until not (F^ in [#1..' ']);
-      if F^='%' then begin // format specifier
+  for v := 0 to high(values) do
+  repeat
+    if P^ in [#1..' '] then // ignore any whitespace char in text
+      repeat
+        inc(P);
+        if P=PEnd then
+          exit;
+      until not (P^ in [#1..' ']);
+    if F^ in [#1..' '] then // ignore any whitespace char in fmt
+      repeat
         inc(F);
         if F=FEnd then
           exit;
-        case F^ of
-        'd': PInteger(values[v])^ := GetNextItemInteger(P,#0);
-        'D': PInt64(values[v])^ := GetNextItemInt64(P,#0);
-        'u': PCardinal(values[v])^ := GetNextItemCardinal(P,#0);
-        'U': PQword(values[v])^ := GetNextItemQword(P,#0);
-        'f': PDouble(values[v])^ := GetNextItemDouble(P,#0);
-        'F': GetNextItemCurrency(P,PCurrency(values[v])^,#0);
-        'x': if not GetNextItemHexDisplayToBin(P,values[v],4,#0) then
-               exit;
-        'X': if not GetNextItemHexDisplayToBin(P,values[v],8,#0) then
-               exit;
-        's': begin
-          w := 0;
-          while (P[w]>' ') and (P+w<=PEnd) do inc(w);
-          SetString(PShortString(values[v])^,P,w);
-          inc(P,w);
-          while (P^ in [#1..' ']) and (P<=PEnd) do inc(P);
-        end
-        else begin
-          inc(F);
-          break;
-        end;
-        end;
-        inc(result);
-        if not(F[1] in [#0..' ','%']) or (ident<>nil) then begin
-          w := 0;
-          repeat inc(w) until (F[w] in [#0..' ','%']) or (F+w=FEnd);
-          if ident<>nil then
-            SetString(ident^[v],PAnsiChar(F),w);
-          inc(F,w); 
-        end else
-          inc(F);
-        if (F>=FEnd) or (P>=PEnd) then
-          exit;
-        break;
-      end else begin
-        while (P^<>F^) and (P<=PEnd) do inc(P);
-        inc(F);
-        if (F>=FEnd) or (P>=PEnd) then
-          exit;
+      until not (F^ in [#1..' ']);
+    if F^='%' then begin // format specifier
+      inc(F);
+      if F=FEnd then
+        exit;
+      case F^ of
+      'd': PInteger(values[v])^ := GetNextItemInteger(P,#0);
+      'D': PInt64(values[v])^ := GetNextItemInt64(P,#0);
+      'u': PCardinal(values[v])^ := GetNextItemCardinal(P,#0);
+      'U': PQword(values[v])^ := GetNextItemQword(P,#0);
+      'f': PDouble(values[v])^ := GetNextItemDouble(P,#0);
+      'F': GetNextItemCurrency(P,PCurrency(values[v])^,#0);
+      'x': if not GetNextItemHexDisplayToBin(P,values[v],4,#0) then
+             exit;
+      'X': if not GetNextItemHexDisplayToBin(P,values[v],8,#0) then
+             exit;
+      's': begin
+        w := 0;
+        while (P[w]>' ') and (P+w<=PEnd) do inc(w);
+        SetString(PShortString(values[v])^,P,w);
+        inc(P,w);
+        while (P^ in [#1..' ']) and (P<=PEnd) do inc(P);
       end;
-    until false;
-  end;
+      else raise ESynException.CreateUTF8('ScanUTF8: unknown ''%'' specifier [%]',[F^,fmt]);
+      end;
+      inc(result);
+      if not(F[1] in [#0..' ','%']) or (ident<>nil) then begin
+        w := 0;
+        repeat inc(w) until (F[w] in [#0..' ','%']) or (F+w=FEnd);
+        if ident<>nil then
+          SetString(ident^[v],PAnsiChar(F),w);
+        inc(F,w);
+      end else
+        inc(F);
+      if (F>=FEnd) or (P>=PEnd) then
+        exit;
+      break;
+    end else begin
+      while (P^<>F^) and (P<=PEnd) do inc(P);
+      inc(F);
+      if (F>=FEnd) or (P>=PEnd) then
+        exit;
+    end;
+  until false;
 end;
 
 function ScanUTF8(const text, fmt: RawUTF8; const values: array of pointer;
-  ident: PRawUTF8DynArray): integer; overload;
+  ident: PRawUTF8DynArray): integer;
 begin
   result := ScanUTF8(pointer(text),length(text),fmt,values,ident);
 end;
@@ -27622,7 +27620,7 @@ begin
   Base64Encode(pointer(result),Bin,BinBytes);
 end;
 
-function BinToBase64(const data, Prefix, Suffix: RawByteString; WithMagic: boolean): RawUTF8; overload;
+function BinToBase64(const data, Prefix, Suffix: RawByteString; WithMagic: boolean): RawUTF8;
 var lendata,lenprefix,lensuffix,len: integer;
     res: PByteArray absolute result;
 begin
@@ -27657,7 +27655,7 @@ begin
   Base64Encode(PAnsiChar(pointer(result))+3,pointer(data),len);
 end;
 
-function BinToBase64WithMagic(Data: pointer; DataLen: integer): RawUTF8; overload;
+function BinToBase64WithMagic(Data: pointer; DataLen: integer): RawUTF8;
 begin
   result := '';
   if DataLen<=0 then
@@ -28244,7 +28242,7 @@ begin
   end;
 end;
 
-function BinToHex(const Bin: RawByteString): RawUTF8; overload;
+function BinToHex(const Bin: RawByteString): RawUTF8;
 var L: integer;
 begin
   L := length(Bin);
@@ -28258,7 +28256,7 @@ begin
   SynCommons.BinToHex(Bin,pointer(Result),BinBytes);
 end;
 
-function HexToBin(const Hex: RawUTF8): RawByteString; overload;
+function HexToBin(const Hex: RawUTF8): RawByteString;
 var L: integer;
 begin
   L := length(Hex);
@@ -29069,7 +29067,7 @@ begin
     SetString(result,PBeg,SectionFirstLine-PBeg);
 end;
 
-function GetSectionContent(const Content, SectionName: RawUTF8): RawUTF8; overload;
+function GetSectionContent(const Content, SectionName: RawUTF8): RawUTF8;
 var P: PUTF8Char;
     UpperSection: array[byte] of AnsiChar;
 begin
@@ -29113,7 +29111,7 @@ begin
 end;
 
 procedure ReplaceSection(SectionFirstLine: PUTF8Char;
-  var Content: RawUTF8; const NewSectionContent: RawUTF8); overload;
+  var Content: RawUTF8; const NewSectionContent: RawUTF8);
 var PEnd: PUTF8Char;
     IndexBegin: PtrInt;
 begin
@@ -30151,7 +30149,7 @@ begin
 end;
 
 function AddInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
-  Value: integer; NoDuplicates: boolean): boolean; overload;
+  Value: integer; NoDuplicates: boolean): boolean;
 begin
   if NoDuplicates and IntegerScanExists(pointer(Values),ValuesCount,Value) then begin
     result := false;
@@ -32649,7 +32647,7 @@ begin
   GetNextItem(P,Sep,result);
 end;
 
-procedure GetNextItem(var P: PUTF8Char; Sep: AnsiChar; var result: RawUTF8); overload;
+procedure GetNextItem(var P: PUTF8Char; Sep: AnsiChar; var result: RawUTF8);
 var S: PUTF8Char;
 begin
   if P=nil then
@@ -33862,7 +33860,7 @@ end;
 
 {$WARNINGS OFF} // yes, we know there will be dead code below: we rely on it ;)
 
-function IsZero(const Fields: TSQLFieldBits): boolean; overload;
+function IsZero(const Fields: TSQLFieldBits): boolean;
 var f: TPtrIntArray absolute Fields;
 begin
   {$ifdef CPU64}
@@ -33953,7 +33951,7 @@ begin
   FillCharFast(Values[0],length(Values)*SizeOf(integer),0);
 end;
 
-procedure FillZero(var Values: TInt64DynArray); overload;
+procedure FillZero(var Values: TInt64DynArray);
 begin
   FillCharFast(Values[0],length(Values)*SizeOf(Int64),0);
 end;
@@ -37051,7 +37049,7 @@ begin
   FillRandom(@result,SizeOf(TGUID) shr 2);
 end;
 
-procedure RandomGUID(out result: TGUID); overload;
+procedure RandomGUID(out result: TGUID);
 begin
   FillRandom(@result,SizeOf(TGUID) shr 2);
 end;
@@ -37371,7 +37369,7 @@ asm // eax=V
 end;
 {$endif}
 
-function UnCamelCase(const S: RawUTF8): RawUTF8; overload;
+function UnCamelCase(const S: RawUTF8): RawUTF8;
 begin
   result := '';
   if S='' then
@@ -37380,7 +37378,7 @@ begin
   SetLength(result,UnCamelCase(pointer(result),pointer(S)));
 end;
 
-function UnCamelCase(D, P: PUTF8Char): integer; overload;
+function UnCamelCase(D, P: PUTF8Char): integer;
 var Space, SpaceBeg, DBeg: PUTF8Char;
     CapitalCount: integer;
     Number: boolean;
@@ -37826,7 +37824,7 @@ begin // see https://en.wikipedia.org/wiki/JPEG#Syntax_and_structure
   end;
 end;
 
-function GetJpegSize(const jpeg: TFileName; out Height, Width: integer): boolean; overload;
+function GetJpegSize(const jpeg: TFileName; out Height, Width: integer): boolean;
 var map: TMemoryMap;
 begin
   if map.Map(jpeg) then
@@ -38016,7 +38014,7 @@ begin
 end;
 
 function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char;
-  Compare: TUTF8Compare): PtrInt; overload;
+  Compare: TUTF8Compare): PtrInt;
 var L,i,cmp: PtrInt;
 begin // fast O(log(n)) binary search
   if not Assigned(Compare) or (R<0) then
@@ -38040,7 +38038,7 @@ begin // fast O(log(n)) binary search
 end;
 
 function FastFindPUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char;
-  Compare: TUTF8Compare): PtrInt; overload;
+  Compare: TUTF8Compare): PtrInt;
 var L, cmp: PtrInt;
 begin // fast O(log(n)) binary search
   L := 0;
@@ -50219,7 +50217,7 @@ begin
   a := nil;
 end;
 
-procedure ObjArrayClear(var aObjArray; aCount: integer); overload;
+procedure ObjArrayClear(var aObjArray; aCount: integer);
 var a: TObjectDynArray absolute aObjArray;
     n: integer;
 begin
@@ -53926,7 +53924,7 @@ begin
 end;
 
 {$ifndef NOVARIANTS}
-function JSONEncode(const Format: RawUTF8; const Args,Params: array of const): RawUTF8; overload;
+function JSONEncode(const Format: RawUTF8; const Args,Params: array of const): RawUTF8;
 var temp: TTextWriterStackBuffer;
 begin
   with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
@@ -61687,7 +61685,7 @@ begin
   end;
 end;
 
-function StreamUnSynLZ(const Source: TFileName; Magic: cardinal): TMemoryStream; overload;
+function StreamUnSynLZ(const Source: TFileName; Magic: cardinal): TMemoryStream;
 var S: TStream;
 begin
   try
