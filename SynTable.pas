@@ -3932,9 +3932,9 @@ begin
        P := GotoNextNotSpace(P+2);
        if P^<>'(' then
          exit; // incorrect SQL statement
-       B := P; // get the IN() clause as JSON - without :(...): by now
+       B := P; // get the IN() clause as JSON
        inc(P);
-       while P^<>')' do
+       while (P^<>')') or (P[1]=':') do // handle :(...): within the clause
          if P^=#0 then
            exit else
            inc(P);
