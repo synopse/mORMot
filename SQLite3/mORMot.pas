@@ -15445,7 +15445,7 @@ type
   // content has already been set as expected by the client
   TNotifyErrorURI = function(Ctxt: TSQLRestServerURIContext; E: Exception): boolean of object;
   {$ifndef NOVARIANTS}
-  /// callback allowing to customize the information returned by root/pcmman/info
+  /// callback allowing to customize the information returned by root/timestamp/info
   TOnInternalInfo = procedure(Sender: TSQLRestServer; var info: TDocVariantData) of object;
   {$endif}
 
@@ -16629,6 +16629,10 @@ type
     property ProcessID: TSynUniqueIdentifierProcess read fProcessID;
   end;
 
+  /// the flags used for TSQLRestServer.AddStats
+  TSQLRestServerAddStat = (withTables, withMethods, withInterfaces, withSessions);
+  /// some flags used for TSQLRestServer.AddStats
+  TSQLRestServerAddStats = set of TSQLRestServerAddStat;
 
   /// a specialized UTF-8 string type, used for TSQLRestServerURI storage
   // - URI format is 'address:port/root', but port or root are optional
@@ -16904,6 +16908,7 @@ type
     function GetCurrentSessionUserID: TID; override;
     // called by Stat() and Info() method-based services
     procedure InternalStat(Ctxt: TSQLRestServerURIContext; W: TTextWriter); virtual;
+    procedure AddStat(Flags: TSQLRestServerAddStats; W: TTextWriter);
     {$ifndef NOVARIANTS}
     procedure InternalInfo(var info: TDocVariantData); virtual;
     {$endif}
@@ -17103,7 +17108,7 @@ type
     // content has already been set as expected by the client
     OnErrorURI: TNotifyErrorURI;
     {$ifndef NOVARIANTS}
-    /// event to customize the information returned by root/pcmman/info
+    /// event to customize the information returned by root/timestamp/info
     // - called by TSQLRestServer.InternalInfo method
     // - you can add some application-level information for monitoring
     OnInternalInfo: TOnInternalInfo;
@@ -17683,12 +17688,12 @@ type
     // !   aRestLogServer,TSQLRecordServiceLog);
     function ServiceContainer: TServiceContainer; override;
 
-    /// compute the full statistics about this server, as JSON
-    // - is a wrapper around the Stats() method-based service, setting withall=1
-    function FullStatsAsJson: RawUTF8; virtual;
-    /// compute the full statistics about this server, as a TDocVariant document
-    // - is a wrapper around the Stats() method-based service, setting withall=1
-    function FullStatsAsDocVariant: variant;
+    /// compute the statistics about this server, as JSON
+    // - is a wrapper around the Stats() method-based service
+    function StatsAsJson(Flags: TSQLRestServerAddStats=[withTables..withSessions]): RawUTF8; virtual;
+    /// compute the statistics about this server, as a TDocVariant document
+    // - is a wrapper around the Stats() method-based service
+    function StatsAsDocVariant(Flags: TSQLRestServerAddStats=[withTables..withSessions]): variant;
 
     /// read-only access to the list of registered server-side authentication
     // methods, used for session creation
@@ -42473,23 +42478,22 @@ begin
   end;
 end;
 
-function TSQLRestServer.FullStatsAsJson: RawUTF8;
-var Ctxt: TSQLRestServerURIContext;
-    call: TSQLRestURIParams;
+function TSQLRestServer.StatsAsJson(Flags: TSQLRestServerAddStats): RawUTF8;
+var W: TTextWriter;
+    temp: TTextWriterStackBuffer;
 begin // emulates root/stat?withall=1 method call
-  Ctxt := TSQLRestRoutingREST.Create(Self,call);
+  W := TJSONSerializer.CreateOwnedStream(temp);
   try
-    Ctxt.Parameters := 'withall=1';
-    Stat(Ctxt);
-    result := Call.OutBody;
+    AddStat(Flags,W);
+    W.SetText(result);
   finally
-    Ctxt.Free;
+    W.Free;
   end;
 end;
 
-function TSQLRestServer.FullStatsAsDocVariant: variant;
+function TSQLRestServer.StatsAsDocVariant(Flags: TSQLRestServerAddStats): variant;
 begin
-  _Json(FullStatsAsJson,result,JSON_OPTIONS_FAST);
+  _Json(StatsAsJson(Flags),result,JSON_OPTIONS_FAST);
 end;
 
 {$ifndef NOVARIANTS}
@@ -42498,30 +42502,54 @@ var cpu,mem,free: RawUTF8;
     now: TTimeLogBits;
     m: TSynMonitorMemory;
 begin // called by root/Timestamp/info REST method
+  now.Value := ServerTimestamp;
+  cpu := TSystemUse.Current(false).HistoryText(0,15,@mem);
   m := TSynMonitorMemory.Create;
   try
-    now.Value := ServerTimestamp;
-    cpu := TSystemUse.Current(false).HistoryText(0,15,@mem);
     FormatUTF8('% / %',[m.PhysicalMemoryFree.Text,m.PhysicalMemoryTotal.Text],free);
     info.AddNameValuesToObject(['nowutc',now.Text(true,' ') , 'timestamp',now.Value,
       'exe',ExeVersion.ProgramName, 'version',ExeVersion.Version.DetailedOrVoid,
-      'started',Stats.StartDate, 'clients',Stats.ClientsCurrent,
-      'methods',Stats.ServiceMethod, 'interfaces',Stats.ServiceInterface,
-      'total',Stats.TaskCount, 'time',Stats.TotalTime.Text, 'host',ExeVersion.Host,
-      'cpu',cpu, 'mem',mem, 'memused',KB(m.AllocatedUsed.Bytes), 'memfree',free,
-      'exception',GetLastExceptions(10)]);
-    if Assigned(OnInternalInfo) then
-      OnInternalInfo(self,info);
+      'host',ExeVersion.Host, 'cpu',cpu, 'mem',mem, 'memused',KB(m.AllocatedUsed.Bytes),
+      'memfree',free, 'exception',GetLastExceptions(10)]);
   finally
     m.Free;
   end;
+  Stats.Lock;
+  try
+    info.AddNameValuesToObject([
+      'started',Stats.StartDate, 'clients',Stats.ClientsCurrent,
+      'methods',Stats.ServiceMethod, 'interfaces',Stats.ServiceInterface,
+      'total',Stats.TaskCount, 'time',Stats.TotalTime.Text]);
+  finally
+    Stats.Unlock;
+  end;
+  if Assigned(OnInternalInfo) then
+    OnInternalInfo(self,info);
 end;
 {$endif}
 
 procedure TSQLRestServer.InternalStat(Ctxt: TSQLRestServerURIContext; W: TTextWriter);
+var flags: TSQLRestServerAddStats;
+begin
+  if Ctxt.InputExists['withall'] then
+    flags := [low(TSQLRestServerAddStat)..high(TSQLRestServerAddStat)] else begin
+    flags := [];
+    if Ctxt.InputExists['withtables'] then
+      include(flags, withtables);
+    if Ctxt.InputExists['withmethods'] then
+      include(flags, withmethods);
+    if Ctxt.InputExists['withinterfaces'] then
+      include(flags, withinterfaces);
+    if Ctxt.InputExists['withsessions'] then
+      include(flags, withsessions);
+  end;
+  AddStat(flags,W);
+end;
+
+procedure TSQLRestServer.AddStat(Flags: TSQLRestServerAddStats; W: TTextWriter);
 const READWRITE: array[boolean] of string[9] = ('{"read":','{"write":');
 var s,i: integer;
-    withall,rw: boolean;
+    rw: boolean;
 begin
   Stats.ComputeDetailsTo(W);
   W.CancelLastChar('}');
@@ -42536,8 +42564,7 @@ begin
     fBackgroundTimer.Stats.ComputeDetailsTo(W);
     W.Add(',');
   end;
-  withall := Ctxt.InputExists['withall'];
-  if withall or Ctxt.InputExists['withtables'] then begin
+  if withtables in flags then begin
     W.CancelLastComma;
     W.AddShort(',"tables":[');
     Stats.Lock; // thread-safe Stats.fPerTable[] access
@@ -42561,7 +42588,7 @@ begin
     W.CancelLastComma;
     W.Add(']',',');
   end;
-  if withall or Ctxt.InputExists['withmethods'] then begin
+  if withmethods in flags then begin
     W.CancelLastComma;
     W.AddShort(',"methods":[');
     for i := 0 to high(fPublishedMethod) do
@@ -42574,7 +42601,7 @@ begin
     W.CancelLastComma;
     W.Add(']',',');
   end;
-  if withall or Ctxt.InputExists['withinterfaces'] then begin
+  if withinterfaces in flags then begin
     W.CancelLastComma;
     W.AddShort(',"interfaces":[');
     for s := 0 to fServices.Count-1 do
@@ -42588,8 +42615,7 @@ begin
     W.CancelLastComma;
     W.Add(']',',');
   end;
-  if (withall or Ctxt.InputExists['withsessions']) and
-     (fSessions<>nil) then begin
+  if (withsessions in flags) and (fSessions<>nil) then begin
     W.CancelLastComma;
     W.AddShort(',"sessions":[');
     fSessions.Safe.Lock;
@@ -42711,7 +42737,7 @@ begin
         if obj<>nil then
           result.Content := ObjectToJSON(obj);
       end;
-      2: result.Content := FullStatsAsJson;
+      2: result.Content := StatsAsJson;
       3: result.Content := Services.AsJson;
       4: result.Content := SessionsAsJson;
       5,6: begin

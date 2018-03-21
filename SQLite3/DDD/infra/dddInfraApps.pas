@@ -1220,7 +1220,7 @@ end;
 function TDDDRestDaemon.InternalRetrieveState(var Status: variant): boolean;
 begin
   if fRest <> nil then begin
-    Status := _ObjFast(['Rest', fRest.FullStatsAsDocVariant,
+    Status := _ObjFast(['Rest', fRest.StatsAsDocVariant,
       'SystemMemory', TSynMonitorMemory.ToVariant]);
     result := true;
   end
@@ -1544,7 +1544,7 @@ begin
     CancelLastChar('}');
     if fRest.InheritsFrom(TSQLRestServer) then begin
       AddShort(',"Rest":');
-      AddNoJSONEscapeUTF8(TSQLRestServer(fRest).FullStatsAsJson);
+      AddNoJSONEscapeUTF8(TSQLRestServer(fRest).StatsAsJson);
     end;
     Add(',"Version":"%","DateTime":"%"}',
       [ExeVersion.Version.Detailed, NowUTCToString(True, 'T')]);

@@ -8280,7 +8280,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// retrieve the data as a string
     // - will avoid creation of a temporary RawUTF8 variable as for Text function
-    procedure SetText(var result: RawUTF8; reformat: TTextWriterJSONFormat = jsonCompact);
+    procedure SetText(var result: RawUTF8; reformat: TTextWriterJSONFormat=jsonCompact);
     /// set the internal stream content with the supplied UTF-8 text
     procedure ForceContent(const text: RawUTF8);
     /// write pending data to the Stream, with automatic buffer resizal
@@ -46083,7 +46083,6 @@ function TDocVariantData.ToJSON(const Prefix, Suffix: RawUTF8;
   Format: TTextWriterJSONFormat): RawUTF8;
 var W: TTextWriter;
     temp: TTextWriterStackBuffer;
-    tmp: RawUTF8;
 begin
   if (VType<>DocVariantVType) and (VType>varNull) then begin
     result := ''; // null -> 'null'
@@ -46094,14 +46093,10 @@ begin
     W.AddString(Prefix);
     DocVariantType.ToJSON(W,variant(self),twJSONEscape);
     W.AddString(Suffix);
-    W.SetText(result);
+    W.SetText(result, Format);
   finally
     W.Free;
   end;
-  if Format=jsonCompact then
-    exit;
-  JSONBufferReformat(pointer(result),tmp,Format);
-  result := tmp;
 end;
 
 function TDocVariantData.ToNonExpandedJSON: RawUTF8;
