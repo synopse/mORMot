@@ -8791,7 +8791,7 @@ type
     // - use the specified TSQLRecord class or create instances
     // of the first associated record class (from internal QueryTables[])
     // - always returns an instance, even if the TSQLTable is nil or void
-    function ToObjectList<T: TSQLRecord>: TObjectList<T>; overload;
+    function ToObjectList<T: TSQLRecord>(RecordType: TSQLRecordClass=nil): TObjectList<T>; overload;
     {$endif}
     /// fill an existing T*ObjArray variable with TSQLRecord instances
     // corresponding to this TSQLTable result set
@@ -14323,6 +14323,10 @@ type
     function RetrieveList(Table: TSQLRecordClass; const FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8=''): TObjectList; overload;
+    //no description  
+    function RetrieveList(Table: TSQLRecordClass; const FormatSQLWhere: PUTF8Char;
+      const BoundsSQLWhere: array of const;
+      const aCustomFieldsCSV: RawUTF8=''): TObjectList<TSQLRecord>; overload;      
     /// get a list of members from a SQL statement as RawJSON
     // - implements REST GET collection
     // - for better server speed, the WHERE clause should use bound parameters
@@ -26979,7 +26983,7 @@ begin
 end;
 
 {$ifdef ISDELPHI2010} // Delphi 2009 generics are buggy
-function TSQLTable.ToObjectList<T>: TObjectList<T>;
+function TSQLTable.ToObjectList<T>(RecordType: TSQLRecordClass=nil): TObjectList<T>;
 var R,Item: TSQLRecord;
     Row: PPUtf8Char;
     i: integer;
@@ -26987,7 +26991,7 @@ begin
   result := TObjectList<T>.Create; // TObjectList<T> will free each T instance
   if (self=nil) or (fRowCount=0) then
     exit;
-  R := TSQLRecordClass(T).Create;
+  R := RecordType.Create;
   try
     R.FillPrepare(self);
     Row := @fResults[FieldCount];     // Row^ points to first row of data
@@ -26998,7 +27002,7 @@ begin
       PPointerArray(result.List)[i] := Item;
     {$else}
     for i := 0 to fRowCount-1 do begin
-      Item := TSQLRecordClass(T).Create;
+      Item := RecordType.Create;
       Result.Add(Item);
     {$endif}
       R.fFill.Fill(pointer(Row),Item);
@@ -35774,6 +35778,24 @@ begin
   try
     result := TObjectList.Create;
     T.ToObjectList(result,Table);
+  finally
+    T.Free;
+  end;
+end;
+
+function TSQLRest.RetrieveList(Table: TSQLRecordClass; const FormatSQLWhere: PUTF8Char;
+  const BoundsSQLWhere: array of const;
+  const aCustomFieldsCSV: RawUTF8=''): TObjectList<TSQLRecord>; 
+var SQL: RawUTF8;
+    T: TSQLTable;
+begin
+  result := nil;
+  if (self=nil) or (Table=nil) then
+    exit;
+  T := MultiFieldValues(Table,aCustomFieldsCSV,FormatSQLWhere,BoundsSQLWhere);
+  if T<>nil then
+  try
+    result := T.ToObjectList<TSQLRecord>(Table);
   finally
     T.Free;
   end;
