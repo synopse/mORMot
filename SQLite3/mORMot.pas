@@ -2139,22 +2139,22 @@ function SQLWhereIsEndClause(const Where: RawUTF8): boolean;
 // - if Values has a single value, returns 'PropName="Values0"' or inlined
 // 'PropName=:("Values0"):' if ValuesInlined is true
 // - if Values has more than one value, returns 'PropName in ("Values0","Values1",...)'
-// or 'PropName in (:("Values0"):,:("Values1"):,...)' if ValuesInlined is true
+// or 'PropName in (:("Values0"):,:("Values1"):,...)' if length(Values)<ValuesInlinedMax
 // - PropName can be used as a prefix to the 'in ()' clause, in conjunction
 // with optional Suffix value
 function SelectInClause(const PropName: RawUTF8; const Values: array of RawUTF8;
-  const Suffix: RawUTF8=''; ValuesInlined: boolean=false): RawUTF8; overload;
+  const Suffix: RawUTF8=''; ValuesInlinedMax: integer=0): RawUTF8; overload;
 
 /// compute 'PropName in (...)' where clause for a SQL statement
 // - if Values has no value, returns ''
 // - if Values has a single value, returns 'PropName=Values0' or inlined
 // 'PropName=:(Values0):' if ValuesInlined is true
 // - if Values has more than one value, returns 'PropName in (Values0,Values1,...)'
-// or 'PropName in (:(Values0):,:(Values1):,...)' if ValuesInlined is true
+// or 'PropName in (:(Values0):,:(Values1):,...)' if length(Values)<ValuesInlinedMax
 // - PropName can be used as a prefix to the 'in ()' clause, in conjunction
 // with optional Suffix value
 function SelectInClause(const PropName: RawUTF8; const Values: array of Int64;
-  const Suffix: RawUTF8=''; ValuesInlined: boolean=false): RawUTF8; overload;
+  const Suffix: RawUTF8=''; ValuesInlinedMax: integer=0): RawUTF8; overload;
 
 /// naive search of '... FROM TableName ...' pattern in the supplied SQL
 function GetTableNameFromSQLSelect(const SQL: RawUTF8;
@@ -31346,28 +31346,29 @@ begin
 end;
 
 function SelectInClause(const PropName: RawUTF8; const Values: array of RawUTF8;
-  const Suffix: RawUTF8; ValuesInlined: boolean): RawUTF8;
-var i: integer;
+  const Suffix: RawUTF8; ValuesInlinedMax: integer): RawUTF8;
+var n, i: integer;
     temp: TTextWriterStackBuffer;
 begin
-  if high(Values)>=0 then
+  n := length(Values);
+  if n>0 then
     with TTextWriter.CreateOwnedStream(temp) do
     try
       AddString(PropName);
-      if high(Values)=0 then begin
-        if ValuesInlined then
+      if n=1 then begin
+        if ValuesInlinedMax>1 then
           AddShort('=:(') else
           Add('=');
         AddQuotedStr(pointer(Values[0]),'''');
-        if ValuesInlined then
+        if ValuesInlinedMax>1 then
           AddShort('):');
       end else begin
         AddShort(' in (');
-        for i := 0 to high(Values) do begin
-          if ValuesInlined then
+        for i := 0 to n-1 do begin
+          if ValuesInlinedMax>n then
             Add(':','(');
           AddQuotedStr(pointer(Values[i]),'''');
-          if ValuesInlined then
+          if ValuesInlinedMax>n then
             AddShort('):,') else
             Add(',');
         end;
@@ -31383,28 +31384,29 @@ begin
 end;
 
 function SelectInClause(const PropName: RawUTF8; const Values: array of Int64;
-  const Suffix: RawUTF8; ValuesInlined: boolean): RawUTF8;
-var i: integer;
+  const Suffix: RawUTF8; ValuesInlinedMax: integer): RawUTF8;
+var n, i: integer;
     temp: TTextWriterStackBuffer;
 begin
-  if high(Values)>=0 then
+  n := length(Values);
+  if n>0 then
     with TTextWriter.CreateOwnedStream(temp) do
     try
       AddString(PropName);
-      if high(Values)=0 then begin
-        if ValuesInlined then
+      if n=1 then begin
+        if ValuesInlinedMax>1 then
           AddShort('=:(') else
           Add('=');
         Add(Values[0]);
-        if ValuesInlined then
+        if ValuesInlinedMax>1 then
           AddShort('):');
       end else begin
         AddShort(' in (');
-        for i := 0 to high(Values) do begin
-          if ValuesInlined then
+        for i := 0 to n-1 do begin
+          if ValuesInlinedMax>n then
             Add(':','(');
           Add(Values[i]);
-          if ValuesInlined then
+          if ValuesInlinedMax>n then
             AddShort('):,') else
             Add(',');
         end;
@@ -31918,13 +31920,15 @@ begin
     FormatUTF8(FormatSQLWhere,ParamsSQLWhere,BoundsSQLWhere),aCustomFieldsCSV);
 end;
 
+const
+  INLINED_MAX = 10;
+
 function TSQLRecord.FillPrepare(aClient: TSQLRest; const aIDs: array of Int64;
   const aCustomFieldsCSV: RawUTF8=''): boolean;
 begin
   if high(aIDs)<0 then
     result := false else
-    result := FillPrepare(aClient,
-      Int64DynArrayToCSV(aIDs,length(aIDs),'ID in (',')'),aCustomFieldsCSV);
+    result := FillPrepare(aClient,SelectInClause('id',aIDs,'',INLINED_MAX),aCustomFieldsCSV);
 end;
 
 function TSQLRecord.FillRow(aRow: integer; aDest: TSQLRecord): boolean;
@@ -36229,24 +36233,27 @@ end;
 function TSQLRest.UpdateField(Table: TSQLRecordClass;
   const WhereFieldName: RawUTF8; const WhereFieldValue: Variant;
   const FieldName: RawUTF8; const FieldValue: Variant): boolean;
-var TableIndex: integer;
+var tableIndex: integer;
     SetValue,WhereValue: RawUTF8;
 begin
   VariantToInlineValue(WhereFieldValue,WhereValue);
   VariantToInlineValue(FieldValue,SetValue);
-  TableIndex := Model.GetTableIndexExisting(Table);
+  tableIndex := Model.GetTableIndexExisting(Table);
   result := EngineUpdateField(TableIndex,FieldName,SetValue,WhereFieldName,WhereValue);
 end;
 
-function TSQLRest.UpdateField(Table: TSQLRecordClass;
-  const IDs: array of Int64; const FieldName: RawUTF8; const FieldValue: variant): boolean;
-var csv: RawUTF8;
-    SetValue: RawUTF8;
+function TSQLRest.UpdateField(Table: TSQLRecordClass; const IDs: array of Int64;
+  const FieldName: RawUTF8; const FieldValue: variant): boolean;
+var SetValue: RawUTF8;
+    tableindex,i: integer;
 begin
+  tableIndex := Model.GetTableIndexExisting(Table);
   VariantToInlineValue(FieldValue,SetValue);
-  csv := Int64DynArrayToCSV(IDs,length(IDs));
-  result := ExecuteFmt('update % set %=:(%): where rowid in (%)',
-    [Table.SQLTableName,FieldName,SetValue,csv]);
+  result := ExecuteFmt('update % set %=:(%): where %', [Table.SQLTableName,
+    FieldName,SetValue,SelectInClause('rowid',IDs,'',INLINED_MAX)]);
+  if fCache<>nil then
+    for i := 0 to high(IDs) do
+      fCache.NotifyDeletion(tableIndex,IDs[i]);
 end;
 
 {$endif NOVARIANTS}
