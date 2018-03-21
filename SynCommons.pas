@@ -39132,46 +39132,67 @@ begin
     result := Value+5;
 end;
 
-{$ifdef PUREPASCAL}
 function ToVarUInt32(Value: PtrUInt; Dest: PByte): PByte;
+{$ifdef CPUX86}
+asm
+        cmp     eax, $7f
+        jbe     @0
+        cmp     eax, $00004000
+        jbe     @1
+        cmp     eax, $00200000
+        jbe     @2
+        cmp     eax, $10000000
+        jbe     @3
+        mov     ecx, eax
+        shr     eax, 7
+        and     cl, $7f
+        or      cl, $80
+        mov     [edx], cl
+        inc     edx
+@3:     mov     ecx, eax
+        shr     eax, 7
+        and     cl, $7f
+        or      cl, $80
+        mov     [edx], cl
+        inc     edx
+@2:     mov     ecx, eax
+        shr     eax, 7
+        and     cl, $7f
+        or      cl, $80
+        mov     [edx], cl
+        inc     edx
+@1:     mov     ecx, eax
+        shr     eax, 7
+        and     cl, $7f
+        or      cl, $80
+        mov     [edx], cl
+        inc     edx
+@0:     mov     [edx], al
+        lea     eax, [edx + 1]
+end;
+{$else}
+label _1,_2,_3; // ugly but fast
 begin
-  if Value>$7f then
-  repeat
+  if Value>$7f then begin
+    if Value<$80 shl 7  then goto _1 else
+    if Value<$80 shl 14 then goto _2 else
+    if Value<$80 shl 21 then goto _3;
     Dest^ := (Value and $7F) or $80;
     Value := Value shr 7;
     inc(Dest);
-  until Value<=$7f;
+_3: Dest^ := (Value and $7F) or $80;
+    Value := Value shr 7;
+    inc(Dest);
+_2: Dest^ := (Value and $7F) or $80;
+    Value := Value shr 7;
+    inc(Dest);
+_1: Dest^ := (Value and $7F) or $80;
+    Value := Value shr 7;
+    inc(Dest);
+  end;
   Dest^ := Value;
   inc(Dest);
   result := Dest;
-end;
-{$else}
-function ToVarUInt32(Value: PtrUInt; Dest: PByte): PByte;
-asm // eax=Value edx=Dest
-        cmp     eax, $7F
-        ja      @n
-        mov     [edx], al
-        lea     eax, [edx + 1]
-        ret
-@n:     mov     ecx, eax
-@s:     and     cl, $7F // handle two bytes per loop
-        shr     eax, 7
-        or      cl, $80
-        mov     [edx], cl
-        inc     edx
-        mov     ecx, eax
-        cmp     eax, $7f
-        jbe     @z
-        and     cl, $7f
-        shr     eax, 7
-        or      cl, $80
-        mov     [edx], cl
-        mov     ecx, eax
-        inc     edx
-        cmp     eax, $7f
-        ja      @s
-@z:     mov     [edx], al
-        lea     eax, [edx + 1]
 end;
 {$endif}
 
