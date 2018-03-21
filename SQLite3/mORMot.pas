@@ -13596,6 +13596,9 @@ type
     // - this method is dedicated for a record deletion
     // - TSQLRecordClass to be specified as its index in Rest.Model.Tables[]
     procedure NotifyDeletion(aTableIndex, aID: TID); overload;
+    /// TSQLRest instance shall call this method when records are deleted
+    // - TSQLRecordClass to be specified as its index in Rest.Model.Tables[]
+    procedure NotifyDeletions(aTableIndex: TID; const aIDs: array of Int64); overload;
   end;
 
   /// optimized thread-safe storage of a list of IP v4 adresses
@@ -14597,7 +14600,8 @@ type
     // - return true on success
     // - call internaly the EngineUpdateField() abstract method
     // - note that this method won't update the TModTime properties: you should
-    // rather use a classic Retrieve()/FillPrepare() followed by Update()
+    // rather use a classic Retrieve()/FillPrepare() followed by Update(); but
+    // it will notify the internal Cache
     function UpdateField(Table: TSQLRecordClass; ID: TID;
       const FieldName: RawUTF8; const FieldValue: array of const): boolean; overload; virtual;
     /// update one field in one or several members, depending on a WHERE clause
@@ -14610,7 +14614,8 @@ type
     // - return true on success
     // - call internaly the EngineUpdateField() abstract method
     // - note that this method won't update the TModTime properties: you should
-    // rather use a classic Retrieve()/FillPrepare() followed by Update()
+    // rather use a classic Retrieve()/FillPrepare() followed by Update(); but
+    // it will notify the internal Cache
     function UpdateField(Table: TSQLRecordClass;
       const WhereFieldName: RawUTF8; const WhereFieldValue: array of const;
       const FieldName: RawUTF8; const FieldValue: array of const): boolean; overload; virtual;
@@ -14622,7 +14627,8 @@ type
     // - return true on success
     // - call internaly the EngineUpdateField() abstract method
     // - note that this method won't update the TModTime properties: you should
-    // rather use a classic Retrieve()/FillPrepare() followed by Update()
+    // rather use a classic Retrieve()/FillPrepare() followed by Update(); but
+    // it will notify the internal Cache
     function UpdateField(Table: TSQLRecordClass; ID: TID;
       const FieldName: RawUTF8; const FieldValue: variant): boolean; overload; virtual;
     /// update one field in one or several members, depending on a WHERE clause,
@@ -14633,8 +14639,9 @@ type
     // - for security reasons, void WHERE clause will be rejected
     // - return true on success
     // - call internaly the EngineUpdateField() abstract method
-    // - note that this method won't update the TModTime properties: you should
-    // rather use a classic Retrieve()/FillPrepare() followed by Update()
+    // - note that this method won't update the TModTime properties, nor the
+    // internal table Cache: you should rather use a classic Retrieve()/FillPrepare()
+    // followed by an Update() of the whole record
     function UpdateField(Table: TSQLRecordClass;
       const WhereFieldName: RawUTF8; const WhereFieldValue: variant;
       const FieldName: RawUTF8; const FieldValue: variant): boolean; overload; virtual;
@@ -14642,7 +14649,8 @@ type
     // - return true on success
     // - note that this method won't update the TModTime properties: you should
     // rather use a classic Retrieve()/FillPrepare() followed by Update(), but
-    // it will be much slower, even over a BATCH
+    // it will be much slower, even over a BATCH; anyway, it will update the
+    // internal Cache
     // - will be executed as a regular SQL statement:
     // $ UPDATE table SET fieldname=fieldvalue WHERE RowID IN (...)
     // - warning: this method will call directly EngineExecute(), and will
@@ -36082,15 +36090,15 @@ begin
 end;
 
 function TSQLRest.Delete(Table: TSQLRecordClass; ID: TID): boolean;
-var TableIndex: integer;
+var tableIndex: integer;
 begin
-  TableIndex := Model.GetTableIndexExisting(Table);
+  tableIndex := Model.GetTableIndexExisting(Table);
   if not RecordCanBeUpdated(Table,ID,seDelete) then
     result := false else begin
-    fCache.NotifyDeletion(TableIndex,ID);
+    fCache.NotifyDeletion(tableIndex,ID);
     fAcquireExecution[execORMWrite].fSafe.Lock;
     try // may be within a batch in another thread
-      result := EngineDelete(TableIndex,ID);
+      result := EngineDelete(tableIndex,ID);
     finally
       fAcquireExecution[execORMWrite].fSafe.Unlock;
     end;
@@ -36099,16 +36107,16 @@ end;
 
 function TSQLRest.InternalDeleteNotifyAndGetIDs(Table: TSQLRecordClass;
   const SQLWhere: RawUTF8; var IDs: TIDDynArray): boolean;
-var i: integer;
+var tableIndex, i: integer;
 begin
+  tableIndex := Model.GetTableIndexExisting(Table);
   result := false;
   if OneFieldValues(Table,'RowID',SQLWhere,TInt64DynArray(IDs)) and
      (IDs<>nil) then begin
     for i := 0 to high(IDs) do
       if not RecordCanBeUpdated(Table,IDs[i],seDelete) then
         exit;
-    for i := 0 to high(IDs) do
-      fCache.NotifyDeletion(Table,IDs[i]);
+    fCache.NotifyDeletions(tableIndex,TInt64DynArray(IDs));
   end;
   result := true;
 end;
@@ -36203,14 +36211,18 @@ end;
 
 function TSQLRest.UpdateField(Table: TSQLRecordClass; ID: TID;
   const FieldName: RawUTF8; const FieldValue: array of const): boolean;
+var tableIndex: integer;
 begin
+  tableIndex := Model.GetTableIndexExisting(Table);
   result := UpdateField(Table,'RowID',[ID],FieldName,FieldValue);
+  if result then
+    fCache.NotifyDeletion(tableIndex,ID);
 end;
 
 function TSQLRest.UpdateField(Table: TSQLRecordClass;
   const WhereFieldName: RawUTF8; const WhereFieldValue: array of const;
   const FieldName: RawUTF8; const FieldValue: array of const): boolean;
-var TableIndex: integer;
+var tableIndex: integer;
     SetValue,WhereValue: RawUTF8;
 begin
   result := false;
@@ -36218,16 +36230,21 @@ begin
     exit;
   VarRecToInlineValue(WhereFieldValue[0],WhereValue);
   VarRecToInlineValue(FieldValue[0],SetValue);
-  TableIndex := Model.GetTableIndexExisting(Table);
-  result := EngineUpdateField(TableIndex,FieldName,SetValue,WhereFieldName,WhereValue);
+  tableIndex := Model.GetTableIndexExisting(Table);
+  result := EngineUpdateField(tableIndex,FieldName,SetValue,WhereFieldName,WhereValue);
+  // warning: this may not update the internal cache
 end;
 
 {$ifndef NOVARIANTS}
 
 function TSQLRest.UpdateField(Table: TSQLRecordClass; ID: TID;
   const FieldName: RawUTF8; const FieldValue: Variant): boolean;
+var tableIndex: integer;
 begin
+  tableIndex := Model.GetTableIndexExisting(Table);
   result := UpdateField(Table,'RowID',ID,FieldName,FieldValue);
+  if result then
+    fCache.NotifyDeletion(tableIndex,ID);
 end;
 
 function TSQLRest.UpdateField(Table: TSQLRecordClass;
@@ -36240,20 +36257,20 @@ begin
   VariantToInlineValue(FieldValue,SetValue);
   tableIndex := Model.GetTableIndexExisting(Table);
   result := EngineUpdateField(TableIndex,FieldName,SetValue,WhereFieldName,WhereValue);
+  // warning: this may not update the internal cache
 end;
 
 function TSQLRest.UpdateField(Table: TSQLRecordClass; const IDs: array of Int64;
   const FieldName: RawUTF8; const FieldValue: variant): boolean;
 var SetValue: RawUTF8;
-    tableindex,i: integer;
+    tableindex: integer;
 begin
   tableIndex := Model.GetTableIndexExisting(Table);
   VariantToInlineValue(FieldValue,SetValue);
   result := ExecuteFmt('update % set %=:(%): where %', [Table.SQLTableName,
-    FieldName,SetValue,SelectInClause('rowid',IDs,'',INLINED_MAX)]);
-  if fCache<>nil then
-    for i := 0 to high(IDs) do
-      fCache.NotifyDeletion(tableIndex,IDs[i]);
+    FieldName,SetValue,SelectInClause('RowID',IDs,'',INLINED_MAX)]);
+  if result then
+    fCache.NotifyDeletions(tableIndex,IDs);
 end;
 
 {$endif NOVARIANTS}
@@ -37277,6 +37294,23 @@ begin
       Mutex.Lock;
       try
         FlushCacheEntry(Value.Find(aID));
+      finally
+        Mutex.UnLock;
+      end;
+    end;
+end;
+
+procedure TSQLRestCache.NotifyDeletions(aTableIndex: TID; const aIDs: array of Int64);
+var i: integer;
+begin
+  if (self<>nil) and (high(aIDs)>=0) and
+     (Cardinal(aTableIndex)<Cardinal(Length(fCache))) then
+    with fCache[aTableIndex] do
+    if CacheEnable then begin
+      Mutex.Lock;
+      try
+        for i := 0 to high(aIDs) do
+          FlushCacheEntry(Value.Find(aIDs[i]));
       finally
         Mutex.UnLock;
       end;
