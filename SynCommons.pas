@@ -884,7 +884,7 @@ type
   // if you are sure that Delphi 6-2007 compiler handles your code as expected,
   // but mORMot code will expect to use QWord for its internal process
   // (e.g. ORM/SOA serialization)
-  {$ifdef FPC_OR_UNICODE}
+  {$ifdef UNICODE}
   QWord = UInt64;
   {$else}
   QWord = type Int64;
@@ -39282,19 +39282,19 @@ end;
 
 function ToVarUInt64(Value: QWord; Dest: PByte): PByte;
 begin
-{$ifdef CPU64}
-  if Value>$7f then
-{$else}
+  {$ifdef CPU32}
   if Int64Rec(Value).Hi=0 then begin
-    result := ToVarUInt32(Int64Rec(Value).Lo,Dest);
+    result := ToVarUInt32(Value,Dest);
     exit;
   end;
-{$endif}
-  repeat
-    Dest^ := (byte(Value) and $7F) or $80;
-    Value := Value shr 7;
-    inc(Dest);
-  until Value<=$7f;
+  {$else}
+  if Value>$7f then
+  {$endif}
+    repeat
+      Dest^ := (Value and $7F) or $80;
+      Value := Value shr 7;
+      inc(Dest);
+    until Value<=$7f;
   Dest^ := Value;
   inc(Dest);
   result := Dest;
@@ -39323,7 +39323,6 @@ end;
 
 function ToVarInt64(Value: Int64; Dest: PByte): PByte;
 begin // 0=0,1=1,2=-1,3=2,4=-2...
-{$ifdef CPU64}
   if Value<0 then
     // -1->2, -2->4..
     Value := (-Value) shl 1 else
@@ -39331,20 +39330,19 @@ begin // 0=0,1=1,2=-1,3=2,4=-2...
     // 1->1, 2->3..
     Value := (Value shl 1)-1;
     // 0->0
-  result := ToVarUInt64(Value,Dest);
-{$else}
-  if Value<0 then
-    // -1->2, -2->4..
-    result := ToVarUInt64((-Value) shl 1,Dest) else
-  if Value>0 then
-    // 1->1, 2->3..
-    result := ToVarUInt64((Value shl 1)-1,Dest) else begin
-    // 0->0
-    Dest^ := 0;
+  {$ifdef CPU32} // inlined ToVarUInt64
+  if Int64Rec(Value).Hi=0 then
+    result := ToVarUInt32(Value,Dest) else begin
+  {$else} begin if QWord(Value)>$7f then {$endif}
+    repeat
+      Dest^ := (Value and $7F) or $80;
+      Value := Value shr 7;
+      inc(Dest);
+    until Value<=$7f;
+    Dest^ := Value;
     inc(Dest);
     result := Dest;
   end;
-{$endif}
 end;
 
 function FromVarInt64(var Source: PByte): Int64;
