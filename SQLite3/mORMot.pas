@@ -2314,7 +2314,8 @@ function ObjectEquals(Value1,Value2: TObject; ignoreGetterFields: boolean=false)
 type
   /// available options for JSONToObject() parsing process
   // - by default, function will fail if a JSON field name is not part of the
-  // object published properties, unless j2oIgnoreUnknownProperty is defined
+  // object published properties, unless j2oIgnoreUnknownProperty is defined -
+  // this option will also ignore read-only properties (i.e. with only a getter)
   // - by default, function will check that the supplied JSON value will
   // be a JSON string when the property is a string, unless j2oIgnoreStringType
   // is defined and JSON numbers are accepted and stored as text
@@ -3086,6 +3087,9 @@ type
     /// return TRUE if the the property has a write setter or direct field
     function WriteIsDefined: boolean;
       {$ifdef HASINLINE}inline;{$endif}
+    /// return TRUE if the the property has a read or write setter or direct field
+    // - may be used e.g. to avoid EPropertyError when calling FPC typinfo
+    function WriteIsPossible: boolean;
     /// returns the low-level field read address, if GetterIsField is TRUE
     function GetterAddr(Instance: pointer): pointer;
       {$ifdef HASINLINENOTX86}inline;{$endif}
@@ -29611,7 +29615,21 @@ end;
 
 function TPropInfo.WriteIsDefined: boolean;
 begin
+  {$ifdef FPC} // see typinfo.IsWriteableProp
+  result := (SetProc<>0) and ((PropProcs shr 2) and 3 in [ptField..ptVirtual]);
+  {$else}
   result := SetProc<>0;
+  {$endif}
+end;
+
+function TPropInfo.WriteIsPossible: boolean;
+begin // = GetterIsField or WriteIsDefined
+  {$ifdef FPC}
+  result := (PropProcs and 3=ptField) or
+    ((SetProc<>0) and ((PropProcs shr 2) and 3 in [ptField..ptVirtual]));
+  {$else}
+  result := (PropWrap(GetProc).Kind=$FF) or (SetProc<>0);
+  {$endif}
 end;
 
 function TPropInfo.GetterAddr(Instance: pointer): pointer;
@@ -49408,7 +49426,8 @@ begin
     GetVariantFromJSON(PropValue,wasString,temp,@opt,false);
   end else
     GetVariantFromJSON(PropValue,wasString,temp,nil,false);
-  P^.SetVariantProp(Value,temp);
+  if not(j2oIgnoreUnknownProperty in Options) or P^.WriteIsPossible then
+    P^.SetVariantProp(Value,temp);
 end;
 {$endif}
 
@@ -49430,14 +49449,16 @@ begin
         if not (j2oAllowInt64Hex in Options) or
            not HexDisplayToBin(PAnsiChar(PropValue),@V64,SizeOf(V64)) then
           exit;
-      P^.SetInt64Prop(Value,V64);
+      if not(j2oIgnoreUnknownProperty in Options) or P^.WriteIsPossible then
+        P^.SetInt64Prop(Value,V64);
     end else begin
       if {$ifdef FPC}Kind=tkQWord{$else}P^.TypeInfo=TypeInfo(QWord){$endif} then
         V64 := GetQWord(PropValue,err) else
         V64 := GetInt64(PropValue,err);
       if err<>0 then
         exit;
-      P^.SetInt64Prop(Value,V64);
+      if not(j2oIgnoreUnknownProperty in Options) or P^.WriteIsPossible then
+        P^.SetInt64Prop(Value,V64);
     end;
   tkClass: begin
     if wasString or (P^.PropType^.ClassSQLFieldType<>sftID) then
@@ -49445,7 +49466,8 @@ begin
     V := GetInteger(PropValue,err);
     if err<>0 then
       exit; // invalid value
-    P^.SetOrdProp(Value,V);
+    if not(j2oIgnoreUnknownProperty in Options) or P^.WriteIsPossible then
+      P^.SetOrdProp(Value,V);
   end;
   tkEnumeration: begin
     if wasString then begin // in case enum stored as string
@@ -49461,7 +49483,8 @@ begin
           V := 0 else
           exit; // invalid value
     end;
-    P^.SetOrdProp(Value,V);
+    if not(j2oIgnoreUnknownProperty in Options) or P^.WriteIsPossible then
+      P^.SetOrdProp(Value,V);
   end;
   {$ifdef FPC} tkBool, {$endif}
   tkInteger, tkSet:
@@ -49471,13 +49494,15 @@ begin
       V := GetInteger(PropValue,err);
       if err<>0 then
         exit; // invalid value
-      P^.SetOrdProp(Value,V);
+      if not(j2oIgnoreUnknownProperty in Options) or P^.WriteIsPossible then
+        P^.SetOrdProp(Value,V);
     end;
   {$ifdef FPC}tkAString,{$endif}{$ifdef HASVARUSTRING}tkUString,{$endif}
   tkLString,tkWString: // handle all string types from temporary RawUTF8
     if wasString or (j2oIgnoreStringType in Options) then begin
       SetString(tmp,PAnsiChar(PropValue),PropValueLen);
-      P^.SetLongStrValue(Value,tmp);
+      if not(j2oIgnoreUnknownProperty in Options) or P^.WriteIsPossible then
+        P^.SetLongStrValue(Value,tmp);
     end else
       exit;
   {$ifdef PUBLISHRECORD}
@@ -49493,7 +49518,8 @@ begin
       if wasString then begin
         if PInteger(PropValue)^ and $ffffff=JSON_SQLDATE_MAGIC then
           inc(PropValue,3); // ignore U+FFF1 pattern
-        P^.SetFloatProp(Value,Iso8601ToDateTimePUTF8Char(PropValue,PropValueLen));
+        if not(j2oIgnoreUnknownProperty in Options) or P^.WriteIsPossible then
+          P^.SetFloatProp(Value,Iso8601ToDateTimePUTF8Char(PropValue,PropValueLen));
       end else
         exit else
     if wasString then
@@ -49503,7 +49529,8 @@ begin
       E := GetExtended(pointer(PropValue),err);
       if err<>0 then
         exit else // invalid JSON content
-        P^.SetFloatProp(Value,E);
+        if not(j2oIgnoreUnknownProperty in Options) or P^.WriteIsPossible then
+          P^.SetFloatProp(Value,E);
     end;
     else
       exit; // unhandled type
@@ -49645,13 +49672,15 @@ begin
         if From=nil then
           exit;
         SetString(U,Beg,From-Beg);
-        P^.SetLongStrProp(Value,U);
+        if not(j2oIgnoreUnknownProperty in Options) or P^.WriteIsPossible then
+          P^.SetLongStrProp(Value,U);
       end else
       if (Kind=tkSet) and (From^='[') then begin // set as string array
         V := GetSetNameValue(P^.TypeInfo,From,EndOfObject);
         if From=nil then
           exit; // invalid '["setone","settwo"]' content
-        P^.SetOrdProp(Value,V);
+        if not(j2oIgnoreUnknownProperty in Options) or P^.WriteIsPossible then
+          P^.SetOrdProp(Value,V);
         if EndOfObject='}' then
           break else
           continue;
