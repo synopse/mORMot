@@ -34716,17 +34716,16 @@ begin
         mov     eax, dword ptr[ecx + 12]
         db      $F2, $0F, $38, $F1, $42, $0C
         mov     dword ptr[ecx + 12], eax
+        add     edx, 16
         dec     count
-        lea     edx, [edx + 16]
         jnz     @s
   end else
-  {$else}
+  {$endif CPUX86}
   while count>0 do begin
     crcblock(crc128,data128);
     inc(data128);
     dec(count);
   end;
-  {$endif CPUX86}
 end;
 
 procedure crcblockNoSSE42(crc128, data128: PBlock128);
