@@ -3872,7 +3872,7 @@ begin // JsonSet(VariantField,'PropName','abc') to set a value
     json := sqlite3.value_text(argv[0]);
     SetString(tmp,PAnsiChar(json),SynCommons.StrLen(json));
     doc.InitJSONInPlace(pointer(tmp),JSON_OPTIONS_FAST);
-    v := doc.GetPVariantByPath(sqlite3.value_text(argv[1]),false);
+    v := doc.GetPVariantByPath(sqlite3.value_text(argv[1]));
     if v<>nil then begin
       json := sqlite3.value_text(argv[2]);
       SetString(tmp,PAnsiChar(json),SynCommons.StrLen(json));

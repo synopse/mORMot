@@ -137,7 +137,7 @@ type
     constructor Create(const aPatterns: TRawUTF8DynArray; CaseInsensitive: Boolean); reintroduce; overload;  
     /// add once some grep-like patterns to the internal TMach list
     // - aPatterns[] follows the IsMatch() syntax
-    procedure Subscribe(const aPatterns: TRawUTF8DynArray; CaseInsensitive: Boolean); overload;
+    procedure Subscribe(const aPatterns: TRawUTF8DynArray; CaseInsensitive: Boolean); overload; virtual; 
     /// add once some grep-like patterns to the internal TMach list
     // - each CSV item in aPatterns follows the IsMatch() syntax
     procedure Subscribe(const aPatternsCSV: RawUTF8; CaseInsensitive: Boolean); overload;

@@ -3872,7 +3872,12 @@ type
 
 /// true if both TRawUTF8DynArray are the same
 // - comparison is case-sensitive
-function RawUTF8DynArrayEquals(const A,B: TRawUTF8DynArray): boolean;
+function RawUTF8DynArrayEquals(const A,B: TRawUTF8DynArray): boolean; overload;
+
+/// true if both TRawUTF8DynArray are the same for a given number of items
+// - A and B are expected to have at least Count items
+// - comparison is case-sensitive
+function RawUTF8DynArrayEquals(const A,B: TRawUTF8DynArray; Count: integer): boolean; overload;
 
 /// convert the string dynamic array into a dynamic array of UTF-8 strings
 procedure StringDynArrayToRawUTF8DynArray(const Source: TStringDynArray;
@@ -15421,10 +15426,8 @@ type
     /// retrieve a reference to a value, given its path
     // - path is defined as a dotted name-space, e.g. 'doc.glossary.title'
     // - if the supplied aPath does not match any object, it will return nil
-    // unless addIfNotExisting=true and it would add the new object
-    // - if aPath is found (or added), it will return a pointer to the
-    // corresponding value
-    function GetPVariantByPath(const aPath: RawUTF8; addIfNotExisting: boolean=false): PVariant;
+    // - if aPath is found, returns a pointer to the corresponding value
+    function GetPVariantByPath(const aPath: RawUTF8): PVariant;
     /// retrieve a dvObject in the dvArray, from a property value
     // - {aPropName:aPropValue} will be searched within the stored array,
     // and the corresponding item will be copied into Dest, on match
@@ -28681,34 +28684,15 @@ begin
   result := true;
 end;
 
-
-{ TPropNameList }
-
-procedure TPropNameList.Init;
+function RawUTF8DynArrayEquals(const A,B: TRawUTF8DynArray; Count: integer): boolean;
+var i: integer;
 begin
-  Count := 0;
-end;
-
-function TPropNameList.FindPropName(const Value: RawUTF8): Integer;
-begin
-  for result := 0 to Count-1 do
-    if IdemPropNameU(Values[result],Value) then
+  result := false;
+  for i := 0 to Count - 1 do
+    if A[i]<>B[i] then
       exit;
-  result := -1;
+  result := true;
 end;
-
-function TPropNameList.AddPropName(const Value: RawUTF8): Boolean;
-begin
-  if FindPropName(Value)<0 then begin
-    if Count=length(Values) then
-      SetLength(Values,Count+16);
-    Values[Count] := Value;
-    inc(Count);
-    result := true;
-  end else
-    result := false;
-end;
-
 
 procedure StringDynArrayToRawUTF8DynArray(const Source: TStringDynArray;
   var Result: TRawUTF8DynArray);
@@ -29894,6 +29878,31 @@ function FindObjectEntryWithoutExt(const Content, Name: RawUTF8): RawUTF8;
 begin
   result := RawUTF8(GetFileNameWithoutExt(
     ExtractFileName(TFileName(FindObjectEntry(Content,Name)))));
+end;
+
+procedure TPropNameList.Init;
+begin
+  Count := 0;
+end;
+
+function TPropNameList.FindPropName(const Value: RawUTF8): Integer;
+begin
+  for result := 0 to Count-1 do
+    if IdemPropNameU(Values[result],Value) then
+      exit;
+  result := -1;
+end;
+
+function TPropNameList.AddPropName(const Value: RawUTF8): Boolean;
+begin
+  if FindPropName(Value)<0 then begin
+    if Count=length(Values) then
+      SetLength(Values,Count+16);
+    Values[Count] := Value;
+    inc(Count);
+    result := true;
+  end else
+    result := false;
 end;
 
 function IntegerScanExists(P: PCardinalArray; Count: PtrInt; Value: cardinal): boolean;
@@ -34666,15 +34675,14 @@ asm // rcx=S (Linux: rdi)
         mov     r8,  rcx             // copy pointer
         test    rcx, rcx
         {$else}
-        mov     rcx, rdi
         mov     rax, rdi
-        mov     r8,  rdi
+        mov     ecx, edi
         test    rdi, rdi
         {$endif}
         jz      @null                // returns 0 if S=nil
         // rax = s,ecx = 32 bits of s
         pxor    xmm0, xmm0           // set to zero
-        and     ecx, 0FH             // lower 4 bits indicate misalignment
+        and     ecx, 15              // lower 4 bits indicate misalignment
         and     rax, -16             // align pointer by 16
         movdqa  xmm1, [rax]          // read from nearest preceding boundary
         pcmpeqb xmm1, xmm0           // compare 16 bytes with zero
@@ -34694,7 +34702,11 @@ asm // rcx=S (Linux: rdi)
         // strings are short, and newer processors have higher priority)
         jz      @L1                  // loop if not found
 @L2:    // Zero-byte found. Compute string length
+        {$ifdef win64}
         sub     rax, r8              // subtract start address
+        {$else}
+        sub     rax, rdi
+        {$endif}
         add     rax, rdx             // add byte index
 @null:
 end;
@@ -45781,35 +45793,24 @@ begin
   result := true;
 end;
 
-function TDocVariantData.GetPVariantByPath(const aPath: RawUTF8;
-  addIfNotExisting: boolean=false): PVariant;
-var p{,ppar}: integer;
+function TDocVariantData.GetPVariantByPath(const aPath: RawUTF8): PVariant;
+var p: integer;
     path: TRawUTF8DynArray;
     par: PVariant;
 begin
   result := nil;
-  if (VType<>DocVariantVType) or (aPath='') then
+  if (VType<>DocVariantVType) or (aPath='') or
+     not(dvoIsObject in VOptions) or (Count=0) then
     exit;
   CSVToRawUTF8DynArray(pointer(aPath),path,'.');
   par := @self;
-//  ppar := -1;
-  if (dvoIsObject in VOptions) and (Count>0) then
-    for p := 0 to length(path)-1 do begin
-      if _Safe(par^).GetAsPVariant(path[p],result) then
-        par := result else begin
-        result := nil;
-        //ppar := p;
-        break;
-      end;
+  for p := 0 to length(path)-1 do
+    if _Safe(par^).GetAsPVariant(path[p],result) then
+      par := result else begin
+      result := nil;
+      exit;
     end;
-  if par=result then // found
-    exit;
-  if not addIfNotExisting then begin
-    result := nil;
-    exit;
-  end;
-  { TODO: add if not existing }
-  result := nil;
+  // if we reached here, we have par=result=found item
 end;
 
 function TDocVariantData.GetValueByPath(const aDocVariantPath: array of RawUTF8): variant;
