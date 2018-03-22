@@ -134,6 +134,9 @@ type
   public
     /// add once some grep-like patterns to the internal TMach list
     // - aPatterns[] follows the IsMatch() syntax
+    constructor Create(const aPatterns: TRawUTF8DynArray; CaseInsensitive: Boolean); reintroduce; overload;  
+    /// add once some grep-like patterns to the internal TMach list
+    // - aPatterns[] follows the IsMatch() syntax
     procedure Subscribe(const aPatterns: TRawUTF8DynArray; CaseInsensitive: Boolean); overload;
     /// add once some grep-like patterns to the internal TMach list
     // - each CSV item in aPatterns follows the IsMatch() syntax
@@ -4545,6 +4548,12 @@ end;
 
 
 { TMatchs }
+
+constructor TMatchs.Create(const aPatterns: TRawUTF8DynArray; CaseInsensitive: Boolean);
+begin
+  inherited Create;
+  Subscribe(aPatterns, CaseInsensitive);
+end;
 
 function TMatchs.Match(const aText: RawUTF8): integer;
 var
