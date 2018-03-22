@@ -961,30 +961,6 @@ type
 {$endif}
 
 type
-  /// a pointer to a PtrUInt array
-  TPtrUIntArray = array[0..MaxInt div SizeOf(PtrUInt)-1] of PtrUInt;
-  PPtrUIntArray = ^TPtrUIntArray;
-
-  /// a dynamic array of PtrUInt values
-  TPtrUIntDynArray = array of PtrUInt;
-
-{$ifndef NOVARIANTS}
-  /// a variant values array
-  TVariantArray = array[0..MaxInt div SizeOf(Variant)-1] of Variant;
-  /// a pointer to a variant array
-  PVariantArray = ^TVariantArray;
-
-  /// a TVarData values array
-  // - is not called TVarDataArray to avoid confusion with the corresponding
-  // type already defined in Variants.pas, and used for custom late-binding
-  TVarDataStaticArray = array[0..MaxInt div SizeOf(TVarData)-1] of TVarData;
-  /// a pointer to a TVarData array
-  PVarDataStaticArray = ^TVarDataStaticArray;
-
-  /// a dynamic array of variant values
-  TVariantDynArray = array of variant;
-{$endif}
-
   /// RawUnicode is an Unicode String stored in an AnsiString
   // - faster than WideString, which are allocated in Global heap (for COM)
   // - an AnsiChar(#0) is added at the end, for having a true WideChar(#0) at ending
@@ -1081,63 +1057,27 @@ type
   TPUtf8CharArray = array[0..MaxInt div SizeOf(PUTF8Char)-1] of PUTF8Char;
   PPUtf8CharArray = ^TPUtf8CharArray;
 
-  /// a pointer to a PAnsiChar array
-  TPAnsiCharArray = array[0..MaxInt div SizeOf(PAnsiChar)-1] of PAnsiChar;
-  PPAnsiCharArray = ^TPAnsiCharArray;
-
   /// a dynamic array of PUTF8Char pointers
   TPUTF8CharDynArray = array of PUTF8Char;
-
-  /// a pointer to a RawUTF8 array
-  TRawUTF8Array = array[0..MaxInt div SizeOf(RawUTF8)-1] of RawUTF8;
-  PRawUTF8Array = ^TRawUTF8Array;
 
   /// a dynamic array of UTF-8 encoded strings
   TRawUTF8DynArray = array of RawUTF8;
   PRawUTF8DynArray = ^TRawUTF8DynArray;
-
-  /// a dynamic array of dynamic array of UTF-8 encoded strings
   TRawUTF8DynArrayDynArray = array of TRawUTF8DynArray;
-
-  /// a dynamic array of WinAnsi encoded strings
-  TWinAnsiDynArray = array of WinAnsiString;
-  PWinAnsiDynArray = ^TWinAnsiDynArray;
-
-  /// a dynamic array of RawByteString
-  TRawByteStringDynArray = array of RawByteString;
 
   /// a dynamic array of TVarRec, i.e. could match an "array of const" parameter
   TTVarRecDynArray = array of TVarRec;
 
-  /// a dynamic array of generic VCL strings
-  TStringDynArray = array of string;
-  PStringDynArray = ^TStringDynArray;
-
-  /// a dynamic array of pointers to shortstring values
-  PShortStringDynArray = array of PShortString;
-  PShortStringArray = array[0..MaxInt div SizeOf(pointer)-1] of PShortString;
-  PPShortStringArray = ^PShortStringArray;
-
-   /// a dynamic array of shortstring values
-  TShortStringDynArray = array of ShortString;
-
-  /// a dynamic array of TDateTime values
-  TDateTimeDynArray = array of TDateTime;
-  PDateTimeDynArray = ^TDateTimeDynArray;
-
-  {$ifndef DELPHI5OROLDER}
-  /// a dynamic array of interface values
-  TInterfaceDynArray = array of IInterface;
-  PInterfaceDynArray = ^TInterfaceDynArray;
+  {$ifndef NOVARIANTS}
+  /// a TVarData values array
+  // - is not called TVarDataArray to avoid confusion with the corresponding
+  // type already defined in Variants.pas, and used for custom late-binding
+  TVarDataStaticArray = array[0..MaxInt div SizeOf(TVarData)-1] of TVarData;
+  PVarDataStaticArray = ^TVarDataStaticArray;
+  TVariantArray = array[0..MaxInt div SizeOf(Variant)-1] of Variant;
+  PVariantArray = ^TVariantArray;
+  TVariantDynArray = array of variant;
   {$endif}
-
-  /// a dynamic array of WideString values
-  TWideStringDynArray = array of WideString;
-  PWideStringDynArray = ^TWideStringDynArray;
-
-  /// a dynamic array of SynUnicode values
-  TSynUnicodeDynArray = array of SynUnicode;
-  PSynUnicodeDynArray = ^TSynUnicodeDynArray;
 
   PIntegerDynArray = ^TIntegerDynArray;
   TIntegerDynArray = array of integer;
@@ -1149,6 +1089,7 @@ type
   TInt64DynArray = array of Int64;
   PQwordDynArray = ^TQwordDynArray;
   TQwordDynArray = array of Qword;
+  TPtrUIntDynArray = array of PtrUInt;
   PDoubleDynArray = ^TDoubleDynArray;
   TDoubleDynArray = array of double;
   PCurrencyDynArray = ^TCurrencyDynArray;
@@ -1174,62 +1115,71 @@ type
   TBooleanDynArray = array of boolean;
   PBooleanDynArray = ^TBooleanDynArray;
   TClassDynArray = array of TClass;
+  TWinAnsiDynArray = array of WinAnsiString;
+  PWinAnsiDynArray = ^TWinAnsiDynArray;
+  TRawByteStringDynArray = array of RawByteString;
+  TStringDynArray = array of string;
+  PStringDynArray = ^TStringDynArray;
+  PShortStringDynArray = array of PShortString;
+  PPShortStringArray = ^PShortStringArray;
+  TShortStringDynArray = array of ShortString;
+  TDateTimeDynArray = array of TDateTime;
+  PDateTimeDynArray = ^TDateTimeDynArray;
+  TWideStringDynArray = array of WideString;
+  PWideStringDynArray = ^TWideStringDynArray;
+  TSynUnicodeDynArray = array of SynUnicode;
+  PSynUnicodeDynArray = ^TSynUnicodeDynArray;
+  TGUIDDynArray = array of TGUID;
 
+  PObject = ^TObject;
+  PClass = ^TClass;
   PByteArray = ^TByteArray;
   TByteArray = array[0..MaxInt-1] of Byte; // redefine here with {$R-}
-
   PBooleanArray = ^TBooleanArray;
   TBooleanArray = array[0..MaxInt-1] of Boolean;
-
   TWordArray  = array[0..MaxInt div SizeOf(word)-1] of word;
   PWordArray = ^TWordArray;
-
   TIntegerArray = array[0..MaxInt div SizeOf(integer)-1] of integer;
   PIntegerArray = ^TIntegerArray;
   PIntegerArrayDynArray = array of PIntegerArray;
   TPIntegerArray = array[0..MaxInt div SizeOf(PIntegerArray)-1] of PInteger;
   PPIntegerArray = ^TPIntegerArray;
-
   TCardinalArray = array[0..MaxInt div SizeOf(cardinal)-1] of cardinal;
   PCardinalArray = ^TCardinalArray;
-
   TInt64Array = array[0..MaxInt div SizeOf(Int64)-1] of Int64;
   PInt64Array = ^TInt64Array;
-
   TQWordArray = array[0..MaxInt div SizeOf(QWord)-1] of QWord;
   PQWordArray = ^TQWordArray;
-
+  TPtrUIntArray = array[0..MaxInt div SizeOf(PtrUInt)-1] of PtrUInt;
+  PPtrUIntArray = ^TPtrUIntArray;
   TSmallIntArray = array[0..MaxInt div SizeOf(SmallInt)-1] of SmallInt;
   PSmallIntArray = ^TSmallIntArray;
-
   TSingleArray = array[0..MaxInt div SizeOf(Single)-1] of Single;
   PSingleArray = ^TSingleArray;
-
   TDoubleArray = array[0..MaxInt div SizeOf(Double)-1] of Double;
   PDoubleArray = ^TDoubleArray;
-
   TDateTimeArray = array[0..MaxInt div SizeOf(TDateTime)-1] of TDateTime;
   PDateTimeArray = ^TDateTimeArray;
-
+  TPAnsiCharArray = array[0..MaxInt div SizeOf(PAnsiChar)-1] of PAnsiChar;
+  PPAnsiCharArray = ^TPAnsiCharArray;
+  TRawUTF8Array = array[0..MaxInt div SizeOf(RawUTF8)-1] of RawUTF8;
+  PRawUTF8Array = ^TRawUTF8Array;
   TRawByteStringArray = array[0..MaxInt div SizeOf(RawByteString)-1] of RawByteString;
   PRawByteStringArray = ^TRawByteStringArray;
-
+  PShortStringArray = array[0..MaxInt div SizeOf(pointer)-1] of PShortString;
   PointerArray = array [0..MaxInt div SizeOf(Pointer)-1] of Pointer;
   PPointerArray = ^PointerArray;
-
   TObjectArray = array [0..MaxInt div SizeOf(TObject)-1] of TObject;
   PObjectArray = ^TObjectArray;
-
   TPtrIntArray = array[0..MaxInt div SizeOf(PtrInt)-1] of PtrInt;
   PPtrIntArray = ^TPtrIntArray;
-
-  TGUIDDynArray = array of TGUID;
-
   PInt64Rec = ^Int64Rec;
   PPShortString = ^PShortString;
 
   {$ifndef DELPHI5OROLDER}
   PIInterface = ^IInterface;
+  TInterfaceDynArray = array of IInterface;
+  PInterfaceDynArray = ^TInterfaceDynArray;
   {$endif}
 
   {$ifndef LVCL}
@@ -1242,9 +1192,6 @@ type
 
   /// class-reference type (metaclass) of a TInterfacedObject
   TInterfacedObjectClass = class of TInterfacedObject;
-
-  PObject = ^TObject;
-  PClass = ^TClass;
 
 
 { ************ fast UTF-8 / Unicode / Ansi types and conversion routines **** }
@@ -12479,25 +12426,25 @@ procedure UnSetBit64(var Bits: Int64; aIndex: PtrInt);
 /// logical OR of two memory buffers
 // - will perform on all buffer bytes:
 // ! Dest[i] := Dest[i] or Source[i];
-procedure OrMemory(Dest,Source: PByteArray; size: integer);
+procedure OrMemory(Dest,Source: PByteArray; size: PtrInt);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// logical XOR of two memory buffers
 // - will perform on all buffer bytes:
 // ! Dest[i] := Dest[i] xor Source[i];
-procedure XorMemory(Dest,Source: PByteArray; size: integer); overload;
+procedure XorMemory(Dest,Source: PByteArray; size: PtrInt); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// logical XOR of two memory buffers into a third
 // - will perform on all buffer bytes:
 // ! Dest[i] := Source1[i] xor Source2[i];
-procedure XorMemory(Dest,Source1,Source2: PByteArray; size: integer); overload;
+procedure XorMemory(Dest,Source1,Source2: PByteArray; size: PtrInt); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// logical AND of two memory buffers
 // - will perform on all buffer bytes:
 // ! Dest[i] := Dest[i] and Source[i];
-procedure AndMemory(Dest,Source: PByteArray; size: integer);
+procedure AndMemory(Dest,Source: PByteArray; size: PtrInt);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// returns TRUE if all bytes equal zero
@@ -18145,7 +18092,7 @@ function KB(bytes: Int64): RawUTF8;
 // - append 'us', 'ms' or 's' symbol
 // - for 'us' and 'ms', add two fractional digits
 function MicroSecToString(Micro: QWord): RawUTF8; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
 
 /// convert a micro seconds elapsed time into a human readable value
 // - append 'us', 'ms' or 's' symbol
@@ -34163,7 +34110,7 @@ asm
 end;
 {$endif}
 
-procedure OrMemory(Dest,Source: PByteArray; size: integer);
+procedure OrMemory(Dest,Source: PByteArray; size: PtrInt);
 begin
   while size>=SizeOf(PtrInt) do begin
     dec(size,SizeOf(PtrInt));
@@ -34177,7 +34124,7 @@ begin
   end;
 end;
 
-procedure XorMemory(Dest,Source: PByteArray; size: integer);
+procedure XorMemory(Dest,Source: PByteArray; size: PtrInt);
 begin
   while size>=SizeOf(PtrInt) do begin
     dec(size,SizeOf(PtrInt));
@@ -34191,7 +34138,7 @@ begin
   end;
 end;
 
-procedure XorMemory(Dest,Source1,Source2: PByteArray; size: integer);
+procedure XorMemory(Dest,Source1,Source2: PByteArray; size: PtrInt);
 begin
   while size>=SizeOf(PtrInt) do begin
     dec(size,SizeOf(PtrInt));
@@ -34206,7 +34153,7 @@ begin
   end;
 end;
 
-procedure AndMemory(Dest,Source: PByteArray; size: integer);
+procedure AndMemory(Dest,Source: PByteArray; size: PtrInt);
 begin
   while size>=SizeOf(PtrInt) do begin
     dec(size,SizeOf(PtrInt));
@@ -65138,11 +65085,6 @@ initialization
   Assert(SizeOf(TFileTime)=SizeOf(Int64)); // see e.g. FileTimeToInt64
   {$endif}
   {$endif}
-{  TypeInfoSaveRegisterKnown([
-    TypeInfo(boolean),TypeInfo(byte),TypeInfo(word),TypeInfo(cardinal),TypeInfo(Int64),
-    TypeInfo(single),TypeInfo(double),TypeInfo(currency),TypeInfo(extended),TypeInfo(TDateTime),
-    TypeInfo(RawByteString),TypeInfo(RawJSON),TypeInfo(RawUTF8),TypeInfo(string),
-    TypeInfo(SynUnicode),TypeInfo(WideString)]); }
 
 finalization
   GarbageCollectorFree;

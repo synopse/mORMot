@@ -10938,8 +10938,8 @@ begin
   end;
   for b := low(b) to high(b) do
     AddConsole(format('%d %s in %s i.e. %d/s or %s/s',
-      [n, TXT[b], MicroSecToString(time[b]), (n*Int64(1000*1000)) div time[b],
-       KB((size*Int64(1000*1000)) div time[b])]));
+      [n, TXT[b], MicroSecToString(time[b]), (Int64(n)*1000000) div time[b],
+       KB((Int64(size)*1000000) div time[b])]));
   for b := low(AES) to high(AES) do
     AES[b].Free;
 end;
