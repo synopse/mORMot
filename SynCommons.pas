@@ -802,11 +802,12 @@ const
   /// a text including the version and the main active conditional options
   // - usefull for low-level debugging purpose
   SYNOPSE_FRAMEWORK_FULLVERSION  = SYNOPSE_FRAMEWORK_VERSION
-    {$ifdef LVCL}+'_LVCL'{$else}
-    {$ifdef ENHANCEDRTL}+' ERTL'{$endif}{$endif}
-    {$ifdef DOPATCHTRTL}+' PRTL'{$endif}
-    ;
-
+    {$ifndef FPC}
+      {$ifdef LVCL}+' LVCL'{$else}
+      {$ifdef ENHANCEDRTL}+' ERTL'{$endif}{$endif}
+      {$ifdef DOPATCHTRTL}+' PRTL'{$endif}
+      {$ifdef FullDebugMode}+' FDM'{$endif}
+    {$endif FPC};
 
 
 { ************ common types used for compatibility between compilers and CPU }
@@ -25555,8 +25556,8 @@ end;
 
 function StrLenPas(S: pointer): PtrInt;
 asm // slower than x86/SSE* StrLen(), but won't read any byte beyond the string
-        test    eax, eax
         mov     edx, eax
+        test    eax, eax
         jz      @0
         xor     eax, eax
 @s:     cmp     byte ptr[eax + edx + 0], 0
@@ -25585,9 +25586,9 @@ asm // no branch taken in case of not equal first char
         jz      @maynil
 @1:     mov     cl, [eax]
         mov     ch, [edx]
+        inc     eax
+        inc     edx
         test    cl, cl
-        lea     eax, [eax + 1]
-        lea     edx, [edx + 1]
         jz      @exit
         cmp     cl, ch
         je      @1
@@ -25976,6 +25977,40 @@ asm // eax=s, edx=accept
         and     eax, edx   // accumulate matches
         jmp     @2
 end;
+{$ifndef DELPHI5OROLDER}
+function StrLenSSE2(S: pointer): PtrInt;
+asm // from GPL strlen32.asm by Agner Fog - www.agner.org/optimize
+        mov     ecx, eax            // copy pointer
+        test    eax, eax
+        jz      @null               // returns 0 if S=nil
+        push    eax                 // save start address
+        pxor    xmm0, xmm0          // set to zero
+        and     ecx, 15             // lower 4 bits indicate misalignment
+        and     eax, -16            // align pointer by 16
+        movdqa  xmm1, [eax]         // read from nearest preceding boundary
+        pcmpeqb xmm1, xmm0          // compare 16 bytes with zero
+        pmovmskb edx, xmm1          // get one bit for each byte result
+        shr     edx, cl             // shift out false bits
+        shl     edx, cl             // shift back again
+        bsf     edx, edx            // find first 1-bit
+        jnz     @A200               // found
+        // Main loop, search 16 bytes at a time
+@A100:  add     eax, 10H            // increment pointer by 16
+        movdqa  xmm1, [eax]         // read 16 bytes aligned
+        pcmpeqb xmm1, xmm0          // compare 16 bytes with zero
+        pmovmskb edx, xmm1          // get one bit for each byte result
+        bsf     edx, edx            // find first 1-bit
+        // (moving the bsf out of the loop and using test here would be faster
+        // for long strings on old processors, but we are assuming that most
+        // strings are short, and newer processors have higher priority)
+        jz      @A100               // loop if not found
+@A200:  // Zero-byte found. Compute string length
+        pop     ecx                 // restore start address
+        sub     eax, ecx            // subtract start address
+        add     eax, edx            // add byte index
+@null:
+end;
+{$endif DELPHI5OROLDER}
 {$endif CPUX86}
 {$endif CPUINTEL}
 
@@ -34620,6 +34655,50 @@ asm // ecx=crc, rdx=buf, r8=len (Linux: edi,rsi,rdx)
 @0:     not     eax
 end;
 
+function StrLenSSE2(S: pointer): PtrInt;
+{$ifdef FPC}nostackframe; assembler; asm {$else}
+asm // rcx=S (Linux: rdi)
+        .noframe
+{$endif FPC}
+        // from GPL strlen64.asm by Agner Fog - www.agner.org/optimize
+        {$ifdef win64}
+        mov     rax, rcx             // get pointer to string from rcx
+        mov     r8,  rcx             // copy pointer
+        test    rcx, rcx
+        {$else}
+        mov     rcx, rdi
+        mov     rax, rdi
+        mov     r8,  rdi
+        test    rdi, rdi
+        {$endif}
+        jz      @null                // returns 0 if S=nil
+        // rax = s,ecx = 32 bits of s
+        pxor    xmm0, xmm0           // set to zero
+        and     ecx, 0FH             // lower 4 bits indicate misalignment
+        and     rax, -16             // align pointer by 16
+        movdqa  xmm1, [rax]          // read from nearest preceding boundary
+        pcmpeqb xmm1, xmm0           // compare 16 bytes with zero
+        pmovmskb edx, xmm1           // get one bit for each byte result
+        shr     edx, cl              // shift out false bits
+        shl     edx, cl              // shift back again
+        bsf     edx, edx             // find first 1-bit
+        jnz     @L2                  // found
+        // Main loop, search 16 bytes at a time
+@L1:    add     rax, 10H             // increment pointer by 16
+        movdqa  xmm1, [rax]          // read 16 bytes aligned
+        pcmpeqb xmm1, xmm0           // compare 16 bytes with zero
+        pmovmskb edx, xmm1           // get one bit for each byte result
+        bsf     edx, edx             // find first 1-bit
+        // (moving the bsf out of the loop and using test here would be faster
+        // for long strings on old processors, but we are assuming that most
+        // strings are short, and newer processors have higher priority)
+        jz      @L1                  // loop if not found
+@L2:    // Zero-byte found. Compute string length
+        sub     rax, r8              // subtract start address
+        add     rax, rdx             // add byte index
+@null:
+end;
+
 const
   EQUAL_EACH = 8;   // see https://msdn.microsoft.com/en-us/library/bb531463
   NEGATIVE_POLARITY = 16;
@@ -40859,40 +40938,6 @@ asm // rcx=Dest, rdx=Count, r8b=Value
 end;
 {$endif WITH_ERMS}
 
-function StrLenSSE2(S: pointer): PtrInt;
-asm // from GPL strlen64.asm by Agner Fog - www.agner.org/optimize
-        .noframe
-        test    rcx, rcx
-        mov     rax, rcx             // get pointer to string from rcx
-        mov     r8, rcx              // copy pointer
-        jz      @null                // returns 0 if S=nil
-        // rax = s,ecx = 32 bits of s
-        pxor    xmm0, xmm0           // set to zero
-        and     ecx, 0FH             // lower 4 bits indicate misalignment
-        and     rax, -16             // align pointer by 16
-        movdqa  xmm1, [rax]          // read from nearest preceding boundary
-        pcmpeqb xmm1, xmm0           // compare 16 bytes with zero
-        pmovmskb edx, xmm1           // get one bit for each byte result
-        shr     edx, cl              // shift out false bits
-        shl     edx, cl              // shift back again
-        bsf     edx, edx             // find first 1-bit
-        jnz     @L2                  // found
-        // Main loop, search 16 bytes at a time
-@L1:    add     rax, 10H             // increment pointer by 16
-        movdqa  xmm1, [rax]          // read 16 bytes aligned
-        pcmpeqb xmm1, xmm0           // compare 16 bytes with zero
-        pmovmskb edx, xmm1           // get one bit for each byte result
-        bsf     edx, edx             // find first 1-bit
-        // (moving the bsf out of the loop and using test here would be faster
-        // for long strings on old processors, but we are assuming that most
-        // strings are short, and newer processors have higher priority)
-        jz      @L1                  // loop if not found
-@L2:    // Zero-byte found. Compute string length
-        sub     rax, r8              // subtract start address
-        add     rax, rdx             // add byte index
-@null:
-end;
-
 {$else CPU64}
 
 {$ifndef PUREPASCAL}
@@ -41187,39 +41232,6 @@ asm // Dest=eax Count=edx Value=cl
         mov     [eax], cx
         ret {do not remove - this is for alignment}
 @done:
-end;
-
-function StrLenSSE2(S: pointer): PtrInt;
-asm // from GPL strlen32.asm by Agner Fog - www.agner.org/optimize
-        test    eax, eax
-        mov     ecx, eax            // copy pointer
-        jz      @null               // returns 0 if S=nil
-        push    eax                 // save start address
-        pxor    xmm0, xmm0          // set to zero
-        and     ecx, 15             // lower 4 bits indicate misalignment
-        and     eax, -16            // align pointer by 16
-        movdqa  xmm1, [eax]         // read from nearest preceding boundary
-        pcmpeqb xmm1, xmm0          // compare 16 bytes with zero
-        pmovmskb edx, xmm1          // get one bit for each byte result
-        shr     edx, cl             // shift out false bits
-        shl     edx, cl             // shift back again
-        bsf     edx, edx            // find first 1-bit
-        jnz     @A200               // found
-        // Main loop, search 16 bytes at a time
-@A100:  add     eax, 10H            // increment pointer by 16
-        movdqa  xmm1, [eax]         // read 16 bytes aligned
-        pcmpeqb xmm1, xmm0          // compare 16 bytes with zero
-        pmovmskb edx, xmm1          // get one bit for each byte result
-        bsf     edx, edx            // find first 1-bit
-        // (moving the bsf out of the loop and using test here would be faster
-        // for long strings on old processors, but we are assuming that most
-        // strings are short, and newer processors have higher priority)
-        jz      @A100               // loop if not found
-@A200:  // Zero-byte found. Compute string length
-        pop     ecx                 // restore start address
-        sub     eax, ecx            // subtract start address
-        add     eax, edx            // add byte index
-@null:
 end;
 
 function StrLenSSE42(S: pointer): PtrInt;
@@ -55846,7 +55858,7 @@ procedure MicroSecToString(Micro: QWord; var result: RawUTF8);
         FormatUTF8('%%', [d100.d,u],result) else
         FormatUTF8('%.%%', [d100.d,UInt2DigitsToShort(d100.m),u],result);
     end;
-  end;  
+  end;
 begin
   if Int64(Micro)<=0 then
     result := '0us' else
@@ -64992,6 +65004,12 @@ begin
   UpperCopy255Buf := @UpperCopy255BufPas;
   DefaultHasher := @xxHash32; // faster than crc32cfast for small content
   {$ifdef CPUINTEL}
+  {$ifdef FPC} // done in InitRedirectCode for Delphi
+  {$ifdef CPUX86}
+  if cfSSE2 in CpuFeatures then
+  {$endif}
+    StrLen := @StrLenSSE2;
+  {$endif FPC}
   if cfSSE42 in CpuFeatures then begin
     crc32c := @crc32csse42;
     crcblock := @crcblockSSE42;
@@ -65045,7 +65063,6 @@ initialization
   crc32c := @crc32cfast; // now to circumvent Internal Error C11715 for Delphi 5
   MoveFast := @System.Move;
   {$ifdef FPC}
-  StrLen := @System.StrLen;
   FillCharFast := @System.FillChar; // FPC cross-platform RTL is optimized enough
   {$else}
   {$ifdef CPUARM}
