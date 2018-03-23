@@ -4661,6 +4661,17 @@ procedure QuickSortQWord(ID: PQWordArray; L, R: PtrInt); overload;
 /// sort a 64 bit Integer array, low values first
 procedure QuickSortInt64(ID,CoValues: PInt64Array; L, R: PtrInt); overload;
 
+type
+  /// event handler called by NotifySortedIntegerChanges()
+  // - Sender is an opaque const value, maybe a TObject or any pointer
+  TOnNotifySortedIntegerChange = procedure(const Sender; Value: integer) of object;
+
+/// compares two 32-bit signed sorted integer arrays, and call event handlers
+// to notify the corresponding modifications in an O(n) time
+// - items in both old[] and new[] arrays are required to be sorted
+procedure NotifySortedIntegerChanges(old, new: PIntegerArray; oldn, newn: PtrInt;
+  const added, deleted: TOnNotifySortedIntegerChange; const sender);
+
 /// copy an integer array, then sort it, low values first
 procedure CopyAndSortInteger(Values: PIntegerArray; ValuesCount: integer;
   var Dest: TIntegerDynArray);
@@ -30969,6 +30980,30 @@ begin
   {$else}
   result := FastFindIntegerSorted(PIntegerArray(P),R,integer(Value));
   {$endif}
+end;
+
+procedure NotifySortedIntegerChanges(old, new: PIntegerArray; oldn, newn: PtrInt;
+  const added, deleted: TOnNotifySortedIntegerChange; const sender);
+var o, n: PtrInt;
+begin
+  o := 0;
+  n := 0;
+  repeat
+    while (n<newn) and (o<oldn) and (old[o]=new[n]) do begin
+      inc(o);
+      inc(n);
+    end;
+    while (o<oldn) and ((n>=newn) or (old[o]<new[n])) do begin
+      if Assigned(deleted) then
+        deleted(sender,old[o]);
+      inc(o);
+    end;
+    while (n<newn) and ((o>=oldn) or (new[n]<old[o])) do begin
+      if Assigned(added) then
+        added(sender,new[n]);
+      inc(n);
+    end;
+  until (o>=oldn) and (n>=newn);
 end;
 
 procedure CopyAndSortInteger(Values: PIntegerArray; ValuesCount: integer;

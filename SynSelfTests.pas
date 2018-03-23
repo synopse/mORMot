@@ -305,8 +305,11 @@ type
     da: IObjectDynArray; // force the interface to be defined BEFORE the array
     a: array of TSQLRecordPeople;
     {$endif}
+    fAdd,fDel: RawUTF8;
     fQuickSelectValues: TIntegerDynArray;
     function QuickSelectGT(IndexA,IndexB: PtrInt): boolean;
+    procedure intadd(const Sender; Value: integer);
+    procedure intdel(const Sender; Value: integer);
   published
     /// the faster CopyRecord function, enhancing the system.pas unit
     procedure SystemCopyRecord;
@@ -3293,7 +3296,28 @@ begin
     KB(Timer.PerSec(totallen))]);
 end;
 
+procedure TTestLowLevelCommon.intadd(const Sender; Value: integer);
+begin
+  AddToCSV(UInt32ToUtf8(Value),fAdd);
+end;
+
+procedure TTestLowLevelCommon.intdel(const Sender; Value: integer);
+begin
+  AddToCSV(UInt32ToUtf8(Value),fDel);
+end;
+
 procedure TTestLowLevelCommon.Integers;
+  procedure changes(const old,new,added,deleted: RawUTF8);
+  var o,n: TIntegerDynArray;
+  begin
+    CSVToIntegerDynArray(Pointer(old),o);
+    CSVToIntegerDynArray(Pointer(new),n);
+    fAdd := '';
+    fDel := '';
+    NotifySortedIntegerChanges(pointer(o),pointer(n),length(o),length(n),intadd,intdel,self);
+    Check(fAdd = added, 'added');
+    Check(fDel = deleted, 'deleted');
+  end;
 var i32: TIntegerDynArray;
     i64: TInt64DynArray;
     i,n: integer;
@@ -3342,6 +3366,22 @@ begin
     for i := 0 to high(i32) do
       check(i32[i] = i);
   end;
+  changes('','','','');
+  changes('1','1','','');
+  changes('','1','1','');
+  changes('1','','','1');
+  changes('1,2','1,3','3','2');
+  changes('2','1,3','1,3','2');
+  changes('','1,3','1,3','');
+  changes('1,2,3,4','1,2,3,4','','');
+  changes('1,2,3,4','1,2,3,4,5','5','');
+  changes('1,2,3,4','1,3,4','','2');
+  changes('1,2,3,4','3,4','','1,2');
+  changes('1,2,3,4','1,4','','2,3');
+  changes('1,2,3,4','','','1,2,3,4');
+  changes('1,2,3,4','5,6','5,6','1,2,3,4');
+  changes('1,2,4','1,3,5,6','3,5,6','2,4');
+  changes('1,2,4','3,5,6','3,5,6','1,2,4');
   check(i64=nil);
   DeduplicateInt64(i64);
   check(i64=nil);
