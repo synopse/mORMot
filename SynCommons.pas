@@ -2844,6 +2844,7 @@ type
   TNormTable = packed array[AnsiChar] of AnsiChar;
   PNormTable = ^TNormTable;
   TNormTableByte = packed array[byte] of byte;
+  PNormTableByte = ^TNormTableByte;
 
 var
   /// the NormToUpper[] array is defined in our Enhanced RTL: define it now
@@ -27314,20 +27315,22 @@ end;
 function HexDisplayToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: integer): boolean;
 var B,C: byte;
     i: integer;
+    tab: PNormTableByte; // faster on PIC and x86_64
 begin
   result := false; // return false if any invalid char
   if (Hex=nil) or (Bin=nil) then
     exit;
+  tab := @ConvertHexToBin;
   inc(Bin,BinBytes-1);
   for i := 1 to BinBytes do begin
-    B := ConvertHexToBin[Ord(Hex^)];
+    B := tab[Ord(Hex^)];
     inc(Hex);
     if B>15 then exit;
-    C := ConvertHexToBin[Ord(Hex^)];
-    Inc(Hex);
+    C := tab[Ord(Hex^)];
+    inc(Hex);
     if C>15 then exit;
     Bin^ := B shl 4+C;
-    Dec(Bin);
+    dec(Bin);
   end;
   result := true; // correct content in Hex
 end;
@@ -27355,27 +27358,29 @@ end;
 function HexToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: Integer): boolean;
 var I: Integer;
     B,C: byte;
+    tab: PNormTableByte; // faster on PIC and x86_64
 begin
   result := false; // return false if any invalid char
   if Hex=nil then
     exit;
+  tab := @ConvertHexToBin;
   if Bin<>nil then
     for I := 1 to BinBytes do begin
-      B := ConvertHexToBin[Ord(Hex^)];
+      B := tab[Ord(Hex^)];
       inc(Hex);
       if B>15 then exit;
-      C := ConvertHexToBin[Ord(Hex^)];
-      Inc(Hex);
+      C := tab[Ord(Hex^)];
+      inc(Hex);
       if C>15 then exit;
       Bin^ := B shl 4+C;
-      Inc(Bin);
+      inc(Bin);
     end else
     for I := 1 to BinBytes do begin // Bin=nil -> validate Hex^ input
-      B := ConvertHexToBin[Ord(Hex^)];
+      B := tab[Ord(Hex^)];
       inc(Hex);
       if B>15 then exit;
-      C := ConvertHexToBin[Ord(Hex^)];
-      Inc(Hex);
+      C := tab[Ord(Hex^)];
+      inc(Hex);
       if C>15 then exit;
     end;
   result := true; // conversion OK
@@ -32836,7 +32841,7 @@ begin
   FillCharFast(Bin^,BinBytes,0);
   if P=nil then
     exit;
-  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+  if P^ = ' ' then repeat inc(P) until P^ <> ' ';
   S := P;
   if Sep=#0 then
     while S^>' ' do
@@ -32865,6 +32870,7 @@ begin
     result := 0;
     exit;
   end;
+  if P^ = ' ' then repeat inc(P) until P^ <> ' ';
   c := byte(P^)-48;
   if c>9 then
     result := 0 else begin
@@ -35800,6 +35806,7 @@ procedure Iso8601ToDateTimePUTF8CharVar(P: PUTF8Char; L: integer; var result: TD
 var B: cardinal;
     Y,M,D, H,MI,SS,MS: cardinal;
     d100: TDiv100Rec;
+    tab: PNormTableByte; // faster on PIC and x86_64
 // expect 'YYYYMMDDThhmmss[.sss]' format but handle also 'YYYY-MM-DDThh:mm:ss[.sss]'
 begin
   unaligned(result) := 0;
@@ -35813,13 +35820,14 @@ begin
     dec(P,8);
     inc(L,8);
   end else begin
-    B := ConvertHexToBin[ord(P[0])]; // first digit
+    tab := @ConvertHexToBin;
+    B := tab[ord(P[0])]; // first digit
     if B>9 then exit else Y := B; // fast check '0'..'9'
-    B := ConvertHexToBin[ord(P[1])];
+    B := tab[ord(P[1])];
     if B>9 then exit else Y := Y*10+B;
-    B := ConvertHexToBin[ord(P[2])];
+    B := tab[ord(P[2])];
     if B>9 then exit else Y := Y*10+B;
-    B := ConvertHexToBin[ord(P[3])];
+    B := tab[ord(P[3])];
     if B>9 then exit else Y := Y*10+B;
     if P[4] in ['-','/'] then begin inc(P); dec(L); end; // allow YYYY-MM-DD
     D := 1;
@@ -55954,6 +55962,12 @@ procedure MicroSecToString(Micro: QWord; var result: RawUTF8);
         FormatUTF8('%.%%', [d100.d,UInt2DigitsToShort(d100.m),u],result);
     end;
   end;
+  procedure TimeToString(value: cardinal; const u: RawUTF8; var result: RawUTF8);
+  var d: cardinal;
+  begin
+    d := value div 60;
+    FormatUTF8('%%%', [d,u,UInt2DigitsToShort(value-(d*60))],result);
+  end;
 begin
   if Int64(Micro)<=0 then
     result := '0us' else
@@ -55964,8 +55978,8 @@ begin
   if Micro<60000000 then
     TwoDigitToString({$ifdef CPU32}Int64Rec(Micro).Lo{$else}Micro{$endif} div 10000,'s',result) else
   if Micro<3600000000 then
-    TwoDigitToString({$ifdef CPU32}Int64Rec(Micro).Lo{$else}Micro{$endif} div 600000,'m',result) else
-    TwoDigitToString(Micro div 36000000,'h',result);
+    TimeToString({$ifdef CPU32}Int64Rec(Micro).Lo{$else}Micro{$endif} div 1000000,'m',result) else
+    TimeToString(Micro div 60000000,'h',result);
 end;
 
 function IsInitializedCriticalSection(const CS: TRTLCriticalSection): Boolean;
@@ -56060,7 +56074,7 @@ end;
 function TPrecisionTimer.Stop: RawUTF8;
 begin
   ComputeTime;
-  result := Time;
+  MicroSecToString(iTime,result);
 end;
 
 procedure TPrecisionTimer.Pause;
