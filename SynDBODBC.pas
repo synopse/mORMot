@@ -1632,7 +1632,7 @@ begin
 end;
 var p: integer;
     status: SqlReturn;
-    InputOutputType, CValueType: SqlSmallint;
+    InputOutputType, CValueType, DecimalDigits: SqlSmallint;
     ColumnSize: SqlULen;
     ParameterValue: SqlPointer;
     timestamp: SQL_TIMESTAMP_STRUCT;
@@ -1660,6 +1660,7 @@ begin
         ParameterValue := nil;
         CValueType := ODBC_TYPE_TOC[VType];
         InputOutputType := ODBC_IOTYPE_TO_PARAM[VInOut];
+        DecimalDigits := 0;
         case VType of
         ftNull:
           StrLen_or_Ind[p] := SQL_NULL_DATA;
@@ -1683,6 +1684,10 @@ begin
         ftDate: begin
           CValueType := timestamp.From(PDateTime(@VInt64)^,ColumnSize);
           SetString(VData,PAnsiChar(@timestamp),ColumnSize);
+          // A workaround for "[ODBC Driver 13 for SQL Server]Datetime field overflow. Fractional second precision exceeds the scale specified in the parameter binding"
+          // Implemented according to http://rightondevelopment.blogspot.com/2009/10/sql-server-native-client-100-datetime.html
+          if fDBMS=dMSSQL then // Starting from MSSQL 2008 client DecimalDigits must not be 0
+            DecimalDigits := 3; // Possibly can be set to either 3 (datetime) or 7 (datetime2)
         end;
         ftUTF8:
           if DriverDoesNotHandleUnicode then begin
@@ -1708,7 +1713,7 @@ retry:      VData := CurrentAnsiConvert.UTF8ToAnsi(VData);
         end else
           ColumnSize := SizeOf(Int64);
         status := ODBC.BindParameter(fStatement, p+1, InputOutputType, CValueType,
-         CType2SQL(CValueType), 0, 0, ParameterValue, ColumnSize, StrLen_or_Ind[p]);
+         CType2SQL(CValueType), 0, DecimalDigits, ParameterValue, ColumnSize, StrLen_or_Ind[p]);
         if (status=SQL_ERROR) and not DriverDoesNotHandleUnicode and
            (ODBC.GetDiagField(fStatement)='HY004') then begin
           TODBCConnection(fConnection).fODBCProperties.fDriverDoesNotHandleUnicode := true;
