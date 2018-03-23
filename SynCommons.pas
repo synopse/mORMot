@@ -12898,7 +12898,7 @@ type
   /// a cross-platform and cross-compiler TSystemTime structure
   // - also used to store a Date/Time in TSynTimeZone internal structures
   TSynSystemTime = {$ifdef ISDELPHI2006ANDUP}record{$else}object{$endif}
-    Year, Month, Day, DayOfWeek,
+    Year, Month, DayOfWeek, Day,
     Hour, Minute, Second, MilliSecond: word;
     /// returns true if all fields are zero
     function IsZero: boolean;
