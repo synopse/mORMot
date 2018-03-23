@@ -12366,6 +12366,13 @@ var
   // - this variable will use the fastest mean available, e.g. SSE 4.2
   // - you should use this function instead of crc32cfast() or crc32csse42()
   crc32c: THasher;
+  /// compute CRC32C checksum on one 32-bit unsigned integer
+  // - can be used instead of crc32c() for inlined process during data acquisition
+  // - doesn't make "crc := not crc" before and after the computation: caller has
+  // to start with "crc := cardinal(not 0)" and make "crc := not crc" at the end,
+  // to compute the very same hash value than regular crc32c()
+  // - this variable will use the fastest mean available, e.g. SSE 4.2
+  crc32cBy4: function(crc, value: cardinal): cardinal;
 
 /// compute the hexadecimal representation of the crc32 checkum of a given text
 // - wrapper around CardinalToHex(crc32c(...))
@@ -34899,6 +34906,28 @@ asm // Delphi is not efficient about compiling above pascal code
 end;
 {$endif}
 {$ifdef CPUINTEL}
+function crc32cBy4SSE42(crc, value: cardinal): cardinal;
+{$ifdef CPU64} {$ifdef FPC}nostackframe; assembler; asm {$else}
+asm // rcx=crc, rdx=value(Linux: rdi,rsi)
+        .noframe
+{$endif FPC}
+        {$ifdef Linux}
+        mov     eax, edi
+        crc32   eax, esi
+        {$else}
+        mov     eax, ecx
+        crc32   eax, edx
+        {$endif}
+end;
+{$else}
+asm // eax=crc, edx=value
+        {$ifdef FPC_OR_UNICODE}
+        crc32   eax, edx
+        {$else}
+        db      $F2, $0F, $38, $F1, $C2
+        {$endif}
+end;
+{$endif}
 procedure crcblockSSE42(crc128, data128: PBlock128);
 {$ifdef CPU64} {$ifdef FPC}nostackframe; assembler; asm {$else}
 asm // rcx=crc128, rdx=data128 (Linux: rdi,rsi)
@@ -34935,7 +34964,7 @@ end;
 {$else}
 asm // eax=crc128, edx=data128
         mov     ecx, eax
-        {$ifdef ISDELPHI2010}
+        {$ifdef FPC_OR_UNICODE}
         mov     eax, dword ptr[ecx]
         crc32   eax, dword ptr[edx]
         mov     dword ptr[ecx], eax
@@ -34961,10 +34990,21 @@ asm // eax=crc128, edx=data128
         mov     eax, dword ptr[ecx + 12]
         db      $F2, $0F, $38, $F1, $42, $0C
         mov     dword ptr[ecx + 12], eax
-        {$endif}
+        {$endif FPC_OR_UNICODE}
 end;
 {$endif CPU64}
 {$endif CPUINTEL}
+
+function crc32cBy4fast(crc, value: cardinal): cardinal;
+var tab: ^TCrc32tab;
+begin
+  tab := @crc32ctab;
+  result := crc xor value;
+  result := tab[3,ToByte(result)] xor
+            tab[2,ToByte(result shr 8)] xor
+            tab[1,ToByte(result shr 16)] xor
+            tab[0,result shr 24];
+end;
 
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$ifdef PUREPASCAL}
@@ -35159,7 +35199,7 @@ asm // eax=crc, edx=buf, ecx=len
         jz      @0
 @3:     test    edx, 3
         jz      @8 // align to 4 bytes boundary
-        {$ifdef ISDELPHI2010}
+        {$ifdef FPC_OR_UNICODE}
         crc32   eax, byte ptr[edx]
         {$else}
         db      $F2, $0F, $38, $F0, $02
@@ -35172,7 +35212,7 @@ asm // eax=crc, edx=buf, ecx=len
 @8:     push    ecx
         shr     ecx, 3
         jz      @2
-@1:     {$ifdef ISDELPHI2010}
+@1:     {$ifdef FPC_OR_UNICODE}
         crc32   eax, dword ptr[edx]
         crc32   eax, dword ptr[edx + 4]
         {$else}
@@ -35187,7 +35227,7 @@ asm // eax=crc, edx=buf, ecx=len
         jz      @0
         cmp     ecx, 4
         jb      @4
-        {$ifdef ISDELPHI2010}
+        {$ifdef FPC_OR_UNICODE}
         crc32   eax, dword ptr[edx]
         {$else}
         db      $F2, $0F, $38, $F1, $02
@@ -35195,7 +35235,7 @@ asm // eax=crc, edx=buf, ecx=len
         sub     ecx, 4
         lea     edx, [edx + 4]
         jz      @0
-@4:     {$ifdef ISDELPHI2010}
+@4:     {$ifdef FPC_OR_UNICODE}
         crc32   eax, byte ptr[edx]
         dec     ecx
         jz      @0
@@ -65013,6 +65053,7 @@ begin
   {$endif FPC}
   if cfSSE42 in CpuFeatures then begin
     crc32c := @crc32csse42;
+    crc32cby4 := @crc32cby4sse42;
     crcblock := @crcblockSSE42;
     strspn := @strspnSSE42;
     strcspn := @strcspnSSE42;
@@ -65062,6 +65103,7 @@ initialization
   TestIntelCpuFeatures;
   {$endif}
   crc32c := @crc32cfast; // now to circumvent Internal Error C11715 for Delphi 5
+  crc32cBy4 := @crc32cBy4fast;
   MoveFast := @System.Move;
   {$ifdef FPC}
   FillCharFast := @System.FillChar; // FPC cross-platform RTL is optimized enough

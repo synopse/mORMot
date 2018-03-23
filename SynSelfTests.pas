@@ -3187,6 +3187,7 @@ begin
   Check(hash(0,@a,2)=$BD5FE6AF);
   Check(hash(0,@a,3)=$7F40BC73);
   Check(hash(0,@a,4)=$13790E51);
+  Check(crc32cBy4(cardinal(not 0),PCardinal(@a)^)=cardinal(not $13790E51),'crc32cBy4');
   Check(hash(0,@a,5)=$659AD21);
   Check(hash(0,@a,6)=$85BF5A8C);
   Check(hash(0,@a,7)=$8B0FB6FA);
