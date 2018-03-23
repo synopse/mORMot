@@ -12896,6 +12896,7 @@ type
   PDateTimeMSDynArray = ^TDateTimeMSDynArray;
 
   /// a cross-platform and cross-compiler TSystemTime structure
+  // - FPC's TSystemTime in datih.inc does NOT match Windows TSystemTime fields!
   // - also used to store a Date/Time in TSynTimeZone internal structures
   TSynSystemTime = {$ifdef ISDELPHI2006ANDUP}record{$else}object{$endif}
     Year, Month, DayOfWeek, Day,
@@ -12911,7 +12912,11 @@ type
     procedure FromNowUTC;
     /// fill fields with the current Local time
     procedure FromNowLocal;
+    // FPC's TSystemTime in datih.inc does NOT match Windows TSystemTime fields!
+    procedure FromSystemTime(const aTime: TSystemTime);
+      {$ifdef HASINLINE}inline;{$endif}
   end;
+  PSynSystemTime = ^TSynSystemTime;
 
   /// fast bit-encoded date and time value
   // - faster than Iso-8601 text and TDateTime, e.g. can be used as published
@@ -36546,20 +36551,38 @@ begin
             (PInt64Array(@self)[1]=PInt64Array(@another)[1]);
 end;
 
-procedure TSynSystemTime.FromNowUTC;
+procedure TSynSystemTime.FromSystemTime(const aTime: TSystemTime);
 begin
-  {$ifdef MSWINDOWS}
-  GetSystemTime(TSystemTime(self)); // this API is fast enough for our purpose
-  {$else}
-  GetNowUTCSystem(TSystemTime(self));
+  self := PSynSystemTime(@aTime)^;
+  {$ifndef MSWINDOWS} // those TSystemTime fields are inverted in datih.inc :(
+  Day := aTime.Day;
+  DayOfWeek := aTime.DayOfWeek;
   {$endif}
 end;
 
+{$ifdef MSWINDOWS} // TSynSystemTime follows Windows.pas TSystemTime fields
+procedure TSynSystemTime.FromNowUTC;
+begin
+  GetSystemTime(TSystemTime(self)); // this API is fast enough for our purpose
+end;
 procedure TSynSystemTime.FromNowLocal;
 begin
   GetLocalTime(TSystemTime(self));
 end;
-
+{$else}
+procedure TSynSystemTime.FromNowUTC;
+var fpc: TSystemTime;
+begin
+  GetNowUTCSystem(fpc);
+  FromSystemTime(fpc);
+end;
+procedure TSynSystemTime.FromNowLocal;
+var fpc: TSystemTime;
+begin
+  GetLocalTime(fpc);
+  FromSystemTime(fpc);
+end;
+{$endif MSWINDOWS}
 
 { TTimeZoneData }
 
@@ -51469,38 +51492,34 @@ end;
 
 var // can be safely made global since timing is multi-thread safe
   GlobalLogTime: array[boolean] of record // GlobalLogTime[LocalTime]
-    time: TSystemTime;
-    clock: cardinal; // avoid slower API call
+    time: TSynSystemTime;
+    clock: PtrInt; // avoid slower API call
   end;
 
 procedure TTextWriter.AddCurrentLogTime(LocalTime, Use16msCache: boolean);
-var Ticks: cardinal;
+var tix: PtrInt;
 begin
   if BEnd-B<=17 then
     FlushToStream;
   with GlobalLogTime[LocalTime] do begin
     if Use16msCache then begin
-      Ticks := GetTickCount64; // this call is very fast (just one integer mul)
-      if clock<>Ticks then begin // typically in range of 10-16 ms
-        clock := Ticks;
+      tix := GetTickCount64; // this call is very fast (just one integer mul)
+      if clock<>tix then begin // typically in range of 10-16 ms
+        clock := tix;
         if LocalTime then
-          GetLocalTime(time) else
-          {$ifdef MSWINDOWS}
-          GetSystemTime(time);
-          {$else}
-          GetNowUTCSystem(time);
-          {$endif}
+          time.FromNowLocal else
+          time.FromNowUTC;
       end;
     end;
     inc(B);
-    YearToPChar(time.{$ifdef MSWINDOWS}wYear{$else}Year{$endif},B);
-    PWord(B+4)^ := TwoDigitLookupW[time.{$ifdef MSWINDOWS}wMonth{$else}Month{$endif}];
-    PWord(B+6)^ := TwoDigitLookupW[time.{$ifdef MSWINDOWS}wDay{$else}Day{$endif}];
+    YearToPChar(time.Year,B);
+    PWord(B+4)^ := TwoDigitLookupW[time.Month];
+    PWord(B+6)^ := TwoDigitLookupW[time.Day];
     B[8] := ' ';
-    PWord(B+9)^ := TwoDigitLookupW[time.{$ifdef MSWINDOWS}wHour{$else}Hour{$endif}];
-    PWord(B+11)^ := TwoDigitLookupW[time.{$ifdef MSWINDOWS}wMinute{$else}Minute{$endif}];
-    PWord(B+13)^ := TwoDigitLookupW[time.{$ifdef MSWINDOWS}wSecond{$else}Second{$endif}];
-    PWord(B+15)^ := TwoDigitLookupW[time.{$ifdef MSWINDOWS}wMilliseconds{$else}Millisecond{$endif} shr 4];
+    PWord(B+9)^ := TwoDigitLookupW[time.Hour];
+    PWord(B+11)^ := TwoDigitLookupW[time.Minute];
+    PWord(B+13)^ := TwoDigitLookupW[time.Second];
+    PWord(B+15)^ := TwoDigitLookupW[time.Millisecond shr 4];
     B[17] := ' ';
     inc(B,16);
   end;
