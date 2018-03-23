@@ -30767,8 +30767,8 @@ begin
     P := (L + R) shr 1;
     repeat
       tmp := ID^[P];
-      while ID[I]<tmp do inc(I);
-      while ID[J]>tmp do dec(J);
+      if ID[I]<tmp then repeat inc(I) until ID[I]>=tmp;
+      if ID[J]>tmp then repeat dec(J) until ID[J]<=tmp;
       if I <= J then begin
         tmp := ID[J]; ID[J] := ID[I]; ID[I] := tmp;
         if P = I then P := J else if P = J then P := I;
@@ -30796,8 +30796,8 @@ begin
     P := (L + R) shr 1;
     repeat
       tmp := ID[P];
-      while ID[I]<tmp do inc(I);
-      while ID[J]>tmp do dec(J);
+      if ID[I]<tmp then repeat inc(I) until ID[I]>=tmp;
+      if ID[J]>tmp then repeat dec(J) until ID[J]<=tmp;
       if I <= J then begin
         tmp := ID[J]; ID[J] := ID[I]; ID[I] := tmp;
         tmp := CoValues[J]; CoValues[J] := CoValues[I]; CoValues[I] := tmp;
@@ -30821,8 +30821,8 @@ begin
     P := (L + R) shr 1;
     repeat
       tmp := ID[P];
-      while ID[I]<tmp do inc(I);
-      while ID[J]>tmp do dec(J);
+      if ID[I]<tmp then repeat inc(I) until ID[I]>=tmp;
+      if ID[J]>tmp then repeat dec(J) until ID[J]<=tmp;
       if I <= J then begin
         tmp := ID[J]; ID[J] := ID[I]; ID[I] := tmp;
         if P = I then P := J else if P = J then P := I;
@@ -30846,8 +30846,8 @@ begin
     repeat
       {$ifdef CPU64}
       tmp := ID^[P];
-      while ID[I]<tmp do inc(I);
-      while ID[J]>tmp do dec(J);
+      if ID[I]<tmp then repeat inc(I) until ID[I]>=tmp;
+      if ID[J]>tmp then repeat dec(J) until ID[J]<=tmp;
       {$else}
       while ID[I]<ID[P] do inc(I);
       while ID[J]>ID[P] do dec(J);
@@ -30878,8 +30878,8 @@ begin
       while SortDynArrayQWord(ID[J],ID[P])>0 do dec(J);
       {$else}
       tmp := ID[P];
-      while ID[I]<tmp do inc(I);
-      while ID[J]>tmp do dec(J);
+      if ID[I]<tmp then repeat inc(I) until ID[I]>=tmp;
+      if ID[J]>tmp then repeat dec(J) until ID[J]<=tmp;
       {$endif}
       if I <= J then begin
         tmp := ID[J]; ID[J] := ID[I]; ID[I] := tmp;
@@ -30904,8 +30904,8 @@ begin
     repeat
       {$ifdef CPU64}
       tmp := ID^[P];
-      while ID[I]<tmp do inc(I);
-      while ID[J]>tmp do dec(J);
+      if ID[I]<tmp then repeat inc(I) until ID[I]>=tmp;
+      if ID[J]>tmp then repeat dec(J) until ID[J]<=tmp;
       {$else}
       while ID[I]<ID[P] do inc(I);
       while ID[J]>ID[P] do dec(J);
