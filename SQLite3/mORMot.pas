@@ -40968,7 +40968,7 @@ begin // expects Service, ServiceParameters, ServiceMethod(Index) to be set
     {$ifdef WITHLOG}
     if sllServiceCall in Log.GenericFamily.Level then
       if optNoLogInput in ServiceExecutionOptions then
-        Log.Log(sllServiceCall,'%{optNoLogInput}',
+        Log.Log(sllServiceCall,'%{}',
           [PServiceMethod(ServiceMethod)^.InterfaceDotMethodName],Server) else
         Log.Log(sllServiceCall,'%%',[Service.InterfaceFactory.GetFullMethodName(
           ServiceMethodIndex),ServiceParameters],Server);
@@ -59347,8 +59347,7 @@ begin
       W.AddShort('"POST",{Method:"');
       W.AddString(InterfaceDotMethodName);
       W.AddShort('",Input:{'); // as TSQLPropInfoRTTIVariant.GetJSONValues
-      if optNoLogInput in Sender.fOptions then
-        W.AddShort('optNoLog:true') else
+      if not (optNoLogInput in Sender.fOptions) then begin
         for a := ArgsInFirst to ArgsInLast do
         with Args[a] do
         if (ValueDirection<>smdOut) and (ValueType<>smvInterface) and
@@ -59359,7 +59358,8 @@ begin
             W.AddShort('"****",') else
             AddJSON(W,Sender.Values[a],SERVICELOG_WRITEOPTIONS);
         end;
-      W.CancelLastComma;
+        W.CancelLastComma;
+      end;
     end;
     smsAfter: begin
       W.AddShort('},Output:{');
@@ -59367,11 +59367,12 @@ begin
         with PServiceCustomAnswer(Sender.Values[ArgsResultIndex])^ do begin
           W.AddShort('len:');
           W.Add(length(Content));
-          W.AddShort(',status:');
-          W.Add(Status);
+          if (Status<>0) and (Status<>HTTP_SUCCESS) then begin
+            W.AddShort(',status:');
+            W.Add(Status);
+          end;
         end else
-      if optNoLogOutput in Sender.fOptions then
-        W.AddShort('optNoLog:true') else
+      if not (optNoLogOutput in Sender.fOptions) then begin
         for a := ArgsOutFirst to ArgsOutLast do
         with Args[a] do
         if (ValueDirection in [smdVar,smdOut,smdResult]) and
@@ -59382,7 +59383,8 @@ begin
             W.AddShort('"****",') else
             AddJSON(W,Sender.Values[a],SERVICELOG_WRITEOPTIONS);
         end;
-      W.CancelLastComma;
+        W.CancelLastComma;
+      end;
     end;
     smsError: begin
       W.AddShort('},Output:{');
@@ -61935,9 +61937,8 @@ begin
     service := nil else
     service := @fInterface.Methods[m];
   {$ifdef WITHLOG}
-  if (service<>nil) and ((optNoLogInput in fExecution[m].Options) or
+  if (service=nil) or not((optNoLogInput in fExecution[m].Options) or
      ([smdConst,smdVar]*service^.HasSPIParams<>[])) then
-    p := 'optNoLogInput' else
     p := aParams;
   log := fRest.LogClass.Enter('InternalInvoke I%.%(%) %',
     [fInterfaceURI,aMethod,p,clientDrivenID],self);
