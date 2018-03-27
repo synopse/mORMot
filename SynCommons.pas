@@ -27296,12 +27296,12 @@ end;
 function HexDisplayToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: integer): boolean;
 var B,C: byte;
     i: integer;
-    tab: PNormTableByte; // faster on PIC and x86_64
+    tab: {$ifdef CPUX86}TNormTableByte absolute ConvertHexToBin{$else}PNormTableByte{$endif};
 begin
   result := false; // return false if any invalid char
   if (Hex=nil) or (Bin=nil) then
     exit;
-  tab := @ConvertHexToBin;
+  {$ifndef CPUX86}tab := @ConvertHexToBin;{$endif} // faster on PIC an x86_64
   inc(Bin,BinBytes-1);
   for i := 1 to BinBytes do begin
     B := tab[Ord(Hex^)];
@@ -27339,12 +27339,12 @@ end;
 function HexToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: Integer): boolean;
 var I: Integer;
     B,C: byte;
-    tab: PNormTableByte; // faster on PIC and x86_64
+    tab: {$ifdef CPUX86}TNormTableByte absolute ConvertHexToBin{$else}PNormTableByte{$endif};
 begin
   result := false; // return false if any invalid char
   if Hex=nil then
     exit;
-  tab := @ConvertHexToBin;
+  {$ifndef CPUX86}tab := @ConvertHexToBin;{$endif} // faster on PIC an x86_64
   if Bin<>nil then
     for I := 1 to BinBytes do begin
       B := tab[Ord(Hex^)];
@@ -28225,23 +28225,27 @@ begin
   SetString(result,PAnsiChar(pointer(S)),i);
 end;
 
+type
+  TAnsiCharToWord = array[AnsiChar] of word;
 var
   /// fast lookup table for converting hexadecimal numbers from 0 to 15
   // into their ASCII equivalence
   // - is local for better code generation
   TwoDigitsHex: array[byte] of array[1..2] of AnsiChar;
-  TwoDigitsHexW: array[AnsiChar] of word absolute TwoDigitsHex;
+  TwoDigitsHexW: TAnsiCharToWord absolute TwoDigitsHex;
   TwoDigitsHexWB: array[byte] of word absolute TwoDigitsHex;
   /// lowercase hexadecimal lookup table
   TwoDigitsHexLower: array[byte] of array[1..2] of AnsiChar;
-  TwoDigitsHexWLower: array[AnsiChar] of word absolute TwoDigitsHexLower;
+  TwoDigitsHexWLower: TAnsiCharToWord absolute TwoDigitsHexLower;
   TwoDigitsHexWBLower: array[byte] of word absolute TwoDigitsHexLower;
 
 procedure BinToHex(Bin, Hex: PAnsiChar; BinBytes: integer);
 var j: cardinal;
+    {$ifdef PUREPASCAL}tab: ^TAnsiCharToWord;{$endif}
 begin
+  {$ifdef PUREPASCAL}tab := @TwoDigitsHexW;{$endif}
   for j := 1 to BinBytes do begin
-    PWord(Hex)^ := TwoDigitsHexW[Bin^];
+    PWord(Hex)^ := {$ifndef PUREPASCAL}TwoDigitsHexW{$else}tab{$endif}[Bin^];
     inc(Hex,2);
     inc(Bin);
   end;
@@ -28314,9 +28318,11 @@ end;
 
 procedure BinToHexDisplay(Bin, Hex: PAnsiChar; BinBytes: integer);
 var j: integer;
+    {$ifdef PUREPASCAL}tab: ^TAnsiCharToWord;{$endif}
 begin
+  {$ifdef PUREPASCAL}tab := @TwoDigitsHexW;{$endif}
   for j := BinBytes-1 downto 0 do begin
-    PWord(Hex+j*2)^ := TwoDigitsHexW[Bin^];
+    PWord(Hex+j*2)^ := {$ifndef PUREPASCAL}TwoDigitsHexW{$else}tab{$endif}[Bin^];
     inc(Bin);
   end;
 end;
@@ -28329,9 +28335,11 @@ end;
 
 procedure BinToHexLower(Bin, Hex: PAnsiChar; BinBytes: integer);
 var j: cardinal;
+    {$ifdef PUREPASCAL}tab: ^TAnsiCharToWord;{$endif}
 begin
+  {$ifdef PUREPASCAL}tab := @TwoDigitsHexWLower;{$endif}
   for j := 1 to BinBytes do begin
-    PWord(Hex)^ := TwoDigitsHexWLower[Bin^];
+    PWord(Hex)^ := {$ifndef PUREPASCAL}TwoDigitsHexWLower{$else}tab{$endif}[Bin^];
     inc(Hex,2);
     inc(Bin);
   end;
@@ -28355,9 +28363,11 @@ end;
 
 procedure BinToHexDisplayLower(Bin, Hex: PAnsiChar; BinBytes: integer);
 var j: integer;
+    {$ifdef PUREPASCAL}tab: ^TAnsiCharToWord;{$endif}
 begin
+  {$ifdef PUREPASCAL}tab := @TwoDigitsHexWLower;{$endif}
   for j := BinBytes-1 downto 0 do begin
-    PWord(Hex+j*2)^ := TwoDigitsHexWLower[Bin^];
+    PWord(Hex+j*2)^ := {$ifndef PUREPASCAL}TwoDigitsHexWLower{$else}tab{$endif}[Bin^];
     inc(Bin);
   end;
 end;
@@ -32135,16 +32145,16 @@ end;
 
 function IdemPCharArray(p: PUTF8Char; const upArray: array of PAnsiChar): integer;
 var w: word;
-    table: ^TNormTableByte;
+    tab: {$ifndef PUREPASCAL}TNormTableByte absolute NormToUpperAnsi7{$else}PNormTableByte{$endif};
     up: ^PAnsiChar;
 begin
   if p<>nil then begin
-    table := @NormToUpperAnsi7;
-    w := table^[ord(p[0])]+table^[ord(p[1])]shl 8;
+    {$ifdef PUREPASCAL}tab := @NormToUpperAnsi7;{$endif} // faster on PIC an x86_64
+    w := tab[ord(p[0])]+tab[ord(p[1])]shl 8;
     up := @upArray[0];
     for result := 0 to high(upArray) do
       {$ifdef PUREPASCAL}
-      if (PWord(up^)^=w) and IdemPChar2(p+2,up^+2,pointer(table)) then
+      if (PWord(up^)^=w) and IdemPChar2(p+2,up^+2,pointer(tab)) then
       {$else}
       if (PWord(up^)^=w) and IdemPChar(p+2,up^+2) then
       {$endif}
@@ -32293,14 +32303,16 @@ end;
 
 function UpperCopyWin255(dest: PWinAnsiChar; const source: RawUTF8): PWinAnsiChar;
 var i, L: integer;
+    tab: {$ifdef CPUX86}TNormTableByte absolute NormToUpperByte{$else}PNormTableByte{$endif};
 begin
   L := {$ifdef FPC}length(source){$else}PInteger(PtrInt(source)-SizeOf(integer))^{$endif};
   if L>0 then begin
     if L>250 then
       L := 250; // avoid buffer overflow
     result := dest+L;
+    {$ifndef CPUX86}tab := @NormToUpperByte;{$endif} // faster on PIC an x86_64
     for i := 0 to L-1 do
-      dest[i] := AnsiChar(NormToUpperByte[PByteArray(source)[i]]);
+      dest[i] := AnsiChar(tab[PByteArray(source)[i]]);
   end else
     result := dest;
 end;
@@ -35787,7 +35799,7 @@ procedure Iso8601ToDateTimePUTF8CharVar(P: PUTF8Char; L: integer; var result: TD
 var B: cardinal;
     Y,M,D, H,MI,SS,MS: cardinal;
     d100: TDiv100Rec;
-    tab: PNormTableByte; // faster on PIC and x86_64
+    tab: {$ifdef CPUX86}TNormTableByte absolute ConvertHexToBin{$else}PNormTableByte{$endif};
 // expect 'YYYYMMDDThhmmss[.sss]' format but handle also 'YYYY-MM-DDThh:mm:ss[.sss]'
 begin
   unaligned(result) := 0;
@@ -35801,7 +35813,7 @@ begin
     dec(P,8);
     inc(L,8);
   end else begin
-    tab := @ConvertHexToBin;
+    {$ifndef CPUX86}tab := @ConvertHexToBin;{$endif} // faster on PIC an x86_64
     B := tab[ord(P[0])]; // first digit
     if B>9 then exit else Y := B; // fast check '0'..'9'
     B := tab[ord(P[1])];
@@ -61459,10 +61471,12 @@ end;
 
 function StrCompIL(P1,P2: PUTF8Char; L, Default: Integer): PtrInt;
 var i: PtrInt;
+    tab: {$ifdef CPUX86}TNormTable absolute NormToUpperAnsi7{$else}PNormTable{$endif};
 begin
   i := 0;
+  {$ifndef CPUX86}tab := @NormToUpperAnsi7;{$endif} // faster on PIC an x86_64
   repeat
-    if NormToUpperAnsi7[P1[i]]=NormToUpperAnsi7[P2[i]] then begin
+    if tab[P1[i]]=tab[P2[i]] then begin
       inc(i);
       if i<L then continue else break;
     end;
