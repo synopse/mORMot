@@ -10647,6 +10647,12 @@ type
     function VarInt32: PtrInt;    {$ifdef HASINLINE}inline;{$endif}
     /// read the next 32-bit unsigned value from the buffer
     function VarUInt32: PtrUInt;  {$ifdef HASINLINE}inline;{$endif}
+    /// try to read the next 32-bit signed value from the buffer
+    // - don't change the current position
+    function PeekVarInt32(out value: PtrInt): boolean;
+    /// try to read the next 32-bit unsigned value from the buffer
+    // - don't change the current position
+    function PeekVarUInt32(out value: PtrUInt): boolean;
     /// read the next 16-bit unsigned value from the buffer
     function VarUInt16: PtrUInt;  {$ifdef HASINLINE}inline;{$endif}
     /// read the next 32-bit unsigned value from the buffer
@@ -10666,11 +10672,13 @@ type
     // - returns true on read success
     function VarUTF8Safe(out Value: RawUTF8): boolean;
     /// read the next RawByteString value from the buffer
-    function VarString: RawByteString;         {$ifdef HASINLINE}inline;{$endif}
+    function VarString: RawByteString; {$ifdef HASINLINE}inline;{$endif}
     /// read the next pointer and length value from the buffer
     procedure VarBlob(out result: TValueResult); overload; {$ifdef HASINLINE}inline;{$endif}
     /// read the next pointer and length value from the buffer
     function VarBlob: TValueResult; overload;  {$ifdef HASINLINE}inline;{$endif}
+    /// read the next ShortString value from the buffer
+    function VarShortString: shortstring; {$ifdef HASINLINE}inline;{$endif}
     {$ifndef NOVARIANTS}
     /// read the next variant from the buffer
     // - is a wrapper around VariantLoad(), so may suffer from buffer overflow
@@ -61015,6 +61023,35 @@ err:ErrorOverflow;
   result := result and $FFFFFFF or c;
 end;
 
+function TFastReader.PeekVarInt32(out value: PtrInt): boolean;
+begin
+  result := PeekVarUInt32(PtrUInt(value));
+  if result then
+    if value and 1<>0 then
+      // 1->1, 3->2..
+      value := value shr 1+1 else
+      // 0->0, 2->-1, 4->-2..
+      value := -(value shr 1);
+end;
+
+function TFastReader.PeekVarUInt32(out value: PtrUInt): boolean;
+var s: PAnsiChar;
+begin
+  result := false;
+  s := P;
+  repeat
+    if s>=Last then
+      exit;  // reached end of input
+    if s^<=#$7f then
+      break; // reached end of VarUInt32
+    inc(s);
+  until false;
+  s := P;
+  value := VarUInt32; // fast value decode
+  P := s; // rewind
+  result := true;
+end;
+
 function TFastReader.VarUInt32Safe(out Value: cardinal): boolean;
 var c, n: cardinal;
 begin
@@ -61078,6 +61115,12 @@ begin
 end;
 
 function TFastReader.VarUTF8: RawUTF8;
+begin
+  with VarBlob do
+    SetString(result,Ptr,Len);
+end;
+
+function TFastReader.VarShortString: shortstring;
 begin
   with VarBlob do
     SetString(result,Ptr,Len);
