@@ -3487,7 +3487,7 @@ begin
   Check(MicroSecToString(1000000)='1s');
   Check(MicroSecToString(1000001)='1s');
   Check(MicroSecToString(2030001)='2.03s');
-  Check(MicroSecToString(200000070001)='55.55h');
+  Check(MicroSecToString(200000070001)='55h33');
   Check(KB(-123)='-123 B');
   Check(KB(0)='0 B');
   Check(KB(123)='123 B');
