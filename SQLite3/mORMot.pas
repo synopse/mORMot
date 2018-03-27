@@ -54705,7 +54705,8 @@ constructor TInterfacedObjectFakeClient.Create(aClient: TServiceFactoryClient;
 var opt: TInterfacedObjectFromFactoryOptions;
 begin
   fClient := aClient;
-  if (fClient.fClient<>nil) and (fClient.fClient.fSessionID<>0) then
+  if (fClient.fClient<>nil) and (fClient.fClient.fSessionID<>0) and
+     (fClient.fClient.fSessionUser<>nil) then
     opt := [ifoJsonAsExtended] else
     opt := [];
   inherited Create(aClient.fInterface,opt,aInvoke,aNotifyDestroy);
