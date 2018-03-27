@@ -27294,7 +27294,7 @@ Next:
 end;
 
 function HexDisplayToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: integer): boolean;
-var B,C: byte;
+var B,C: PtrUInt;
     i: integer;
     tab: {$ifdef CPUX86}TNormTableByte absolute ConvertHexToBin{$else}PNormTableByte{$endif};
 begin
@@ -27307,10 +27307,11 @@ begin
     B := tab[Ord(Hex^)];
     inc(Hex);
     if B>15 then exit;
+    B := B shl 4;
     C := tab[Ord(Hex^)];
     inc(Hex);
     if C>15 then exit;
-    Bin^ := B shl 4+C;
+    Bin^ := B+C;
     dec(Bin);
   end;
   result := true; // correct content in Hex
@@ -27338,7 +27339,7 @@ end;
 
 function HexToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: Integer): boolean;
 var I: Integer;
-    B,C: byte;
+    B,C: PtrUInt;
     tab: {$ifdef CPUX86}TNormTableByte absolute ConvertHexToBin{$else}PNormTableByte{$endif};
 begin
   result := false; // return false if any invalid char
@@ -27350,10 +27351,11 @@ begin
       B := tab[Ord(Hex^)];
       inc(Hex);
       if B>15 then exit;
+      B := B shl 4;
       C := tab[Ord(Hex^)];
       inc(Hex);
       if C>15 then exit;
-      Bin^ := B shl 4+C;
+      Bin^ := B+C;
       inc(Bin);
     end else
     for I := 1 to BinBytes do begin // Bin=nil -> validate Hex^ input
@@ -27379,7 +27381,7 @@ begin
 end;
 
 function HexToChar(Hex: PAnsiChar; Bin: PUTF8Char): boolean;
-var B,C: byte;
+var B,C: PtrUInt;
 begin
   if Hex<>nil then begin
     B := ConvertHexToBin[Ord(Hex[0])];
@@ -27397,7 +27399,7 @@ begin
 end;
 
 function HexToWideChar(Hex: PAnsiChar): cardinal;
-var B: cardinal;
+var B: PtrUInt;
 begin
   result := ConvertHexToBin[Ord(Hex[0])];
   if result<=15 then begin
@@ -35736,7 +35738,7 @@ type
 {$endif}
 
 function Char2ToByte(P: PUTF8Char; out Value: Cardinal): Boolean;
-var B: cardinal;
+var B: PtrUInt;
 begin
   B := ConvertHexToBin[ord(P[0])];
   if B<=9 then begin
@@ -35752,7 +35754,7 @@ begin
 end;
 
 function Char3ToWord(P: PUTF8Char; out Value: Cardinal): Boolean;
-var B: cardinal;
+var B: PtrUInt;
 begin
   B := ConvertHexToBin[ord(P[0])];
   if B<=9 then begin
@@ -35772,7 +35774,7 @@ begin
 end;
 
 function Char4ToWord(P: PUTF8Char; out Value: Cardinal): Boolean;
-var B: cardinal;
+var B: PtrUInt;
 begin
   B := ConvertHexToBin[ord(P[0])];
   if B<=9 then begin
@@ -36999,7 +37001,7 @@ begin // encode as '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
 end;
 
 function HexaToByte(P: PUTF8Char; var Dest: byte): boolean; {$ifdef HASINLINE}inline;{$endif}
-var B,C: byte;
+var B,C: PtrUInt;
 begin
   B := ConvertHexToBin[Ord(P[0])];
   if B<=15 then begin
