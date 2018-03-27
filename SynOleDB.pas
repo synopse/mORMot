@@ -1914,7 +1914,7 @@ begin
           BI^.ulParamSize := 0;
           PO^ := i;
           // check array binding
-          if Length(P.VArray)>0 then begin
+          if P.VArray<>nil then begin
             BI^.pwszDataSourceType := Pointer(TABLE_PARAM_DATASOURCE);
             B^.wType := DBTYPE_TABLE;
             B^.cbMaxLen := sizeof(IUnknown);

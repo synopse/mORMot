@@ -1672,15 +1672,15 @@ var p, k: integer;
     InputOutputType, CValueType, ParameterType, DecimalDigits: SqlSmallint;
     ColumnSize: SqlULen;
     ParameterValue: SqlPointer;
-    BufferSize: SqlLen;
+    ItemSize, BufferSize: SqlLen;
+    ItemPW: PWideChar;
     timestamp: SQL_TIMESTAMP_STRUCT;
     DriverDoesNotHandleUnicode: boolean;
     StrLen_or_Ind: array of PtrInt;
     ArrayData: array of record
       StrLen_or_Ind: array of PtrInt;
-      WData: WideString;
+      WData: RawUnicode;
     end;
-    WideData: WideString;
 label retry;
 begin
   if fStatement=nil then
@@ -1708,8 +1708,8 @@ begin
         InputOutputType := ODBC_IOTYPE_TO_PARAM[VInOut];
         ColumnSize := 0;
         DecimalDigits := 0;
-        if (fDBMS=dMSSQL) and (Length(VArray)>0) then begin
-          // Bind an array as one object - metadata only at the moment
+        if (fDBMS=dMSSQL) and (VArray<>nil) then begin
+          // bind an array as one object - metadata only at the moment
           if (VInOut<>paramIn) then
             raise EODBCException.CreateUTF8(
               '%.ExecutePrepared: Unsupported array parameter direction #%',[self,p+1]);
@@ -1719,11 +1719,11 @@ begin
           // Type name must be specified as a Unicode value, even in applications that are built as ANSI applications
           case VType of
             ftInt64: ParameterValue := pointer(IDList_type);
-            ftUTF8: ParameterValue := pointer(StrList_type);
+            ftUTF8:  ParameterValue := pointer(StrList_type);
             else raise EODBCException.CreateUTF8(
               '%.ExecutePrepared: Unsupported array parameter type #%',[self,p+1]);
           end;
-          BufferSize := Length(WideString(ParameterValue)) * sizeof(WideChar);
+          BufferSize := Length(WideString(ParameterValue))*SizeOf(WideChar);
           StrLen_or_Ind[p] := Length(VArray);
         end else begin
           // Bind one simple parameter value
@@ -1789,39 +1789,41 @@ begin
           goto retry; // circumvent restriction of non-Unicode ODBC drivers
         end;
         ODBC.Check(nil,self,status,SQL_HANDLE_STMT,fStatement);
-        // Populate array data
-        if (fDBMS=dMSSQL) and (Length(VArray)>0) then begin
-          //First set focus on param
+        // populate array data
+        if (fDBMS=dMSSQL) and (VArray<>nil) then begin
+          // first set focus on param
           status := ODBC.SetStmtAttrA(fStatement, SQL_SOPT_SS_PARAM_FOCUS, SQLPOINTER(p+1), SQL_IS_INTEGER);
           if not (status in [SQL_SUCCESS,SQL_NO_DATA]) then
             ODBC.HandleError(nil,self,status,SQL_HANDLE_STMT,fStatement,false,sllNone);
-          // Bind the only column
-          SetLength(ArrayData[p].StrLen_or_Ind, Length(VArray));
+          // bind the only column
+          SetLength(ArrayData[p].StrLen_or_Ind,Length(VArray));
           CValueType := SQL_C_WCHAR;
           ParameterType := SQL_WVARCHAR;
-          // All data should be passed in a single buffer of fixed size records
-          // So it is needed to find out the size of a record - this will be the maximum string length
+          // all data should be passed in a single buffer of fixed size records
+          // so find out the size of a record, i.e. maximum string length
           BufferSize := 0;
-          for k := Low(VArray) to High(VArray) do
-            if Length(VArray[k])>BufferSize then
-              BufferSize := Length(VArray[k]);
-          Inc(BufferSize); // Add space for #0
-          SetLength(ArrayData[p].WData, BufferSize * Length(VArray));
-          for k := 0 to High(VArray) do begin
+          for k := 0 to high(VArray) do begin
             if VType=ftUTF8 then
-              WideData := UTF8ToWideString(
-                SynCommons.UnQuoteSQLString(PUTF8Char(VArray[k])))
-            else
-              WideData := UTF8ToWideString(VArray[k]);
-            StrLCopy(PWideChar(@ArrayData[p].WData[k*BufferSize + 1]), PWideChar(WideData), Pred(BufferSize));
-            ArrayData[p].StrLen_or_Ind[k] := Length(WideData) * sizeof(WideChar);
+              VArray[k] := SynCommons.UnQuoteSQLString(VArray[k]);
+            ItemSize := Utf8ToUnicodeLength(pointer(VArray[k]));
+            if ItemSize>BufferSize then
+              BufferSize := ItemSize;
           end;
-          status := ODBC.BindParameter(fStatement, 1, SQL_PARAM_INPUT,
-            CValueType, ParameterType, 0, 0, pointer(ArrayData[p].WData), BufferSize * sizeof(WideChar), ArrayData[p].StrLen_or_Ind[0]);
+          inc(BufferSize); // add space for #0
+          SetLength(ArrayData[p].WData,BufferSize*Length(VArray)*SizeOf(WideChar));
+          ItemPW := pointer(ArrayData[p].WData);
+          for k := 0 to high(VArray) do begin
+            ArrayData[p].StrLen_or_Ind[k] := Utf8ToUnicode(ItemPW,BufferSize,
+              pointer(VArray[k]),length(VArray[k]))*SizeOf(WideChar);
+           inc(ItemPW,BufferSize);
+          end;
+          status := ODBC.BindParameter(fStatement,1,SQL_PARAM_INPUT,CValueType,
+            ParameterType,0,0,pointer(ArrayData[p].WData),BufferSize*SizeOf(WideChar),
+            ArrayData[p].StrLen_or_Ind[0]);
           if not (status in [SQL_SUCCESS,SQL_NO_DATA]) then
             ODBC.HandleError(nil,self,status,SQL_HANDLE_STMT,fStatement,false,sllNone);
           // Reset param focus
-          status := ODBC.SetStmtAttrA(fStatement, SQL_SOPT_SS_PARAM_FOCUS, SQLPOINTER(0), SQL_IS_INTEGER);
+          status := ODBC.SetStmtAttrA(fStatement,SQL_SOPT_SS_PARAM_FOCUS,SQLPOINTER(0),SQL_IS_INTEGER);
           if not (status in [SQL_SUCCESS,SQL_NO_DATA]) then
             ODBC.HandleError(nil,self,status,SQL_HANDLE_STMT,fStatement,false,sllNone);
         end;
@@ -1959,7 +1961,7 @@ var Status: array[0..7] of AnsiChar;
     StringLength: SqlSmallint;
 begin
   if ODBC.GetDiagFieldA(SQL_HANDLE_STMT,StatementHandle,1,SQL_DIAG_SQLSTATE,
-     @Status,sizeof(Status),StringLength)=0 then
+     @Status,SizeOf(Status),StringLength)=0 then
     SetString(result,PAnsiChar(@Status),StringLength) else
     result := '';
 end;
@@ -1970,7 +1972,7 @@ var Len: SqlSmallint;
     Info: array[byte] of WideChar;
 begin
   Len := 0;
-  Check(nil,nil,GetInfoW(ConnectionHandle,InfoType,@Info,sizeof(Info)shr 1,@Len),
+  Check(nil,nil,GetInfoW(ConnectionHandle,InfoType,@Info,SizeOf(Info)shr 1,@Len),
     SQL_HANDLE_DBC,ConnectionHandle);
   Dest := RawUnicodeToUtf8(Info,Len shr 1);
 end;
@@ -2076,7 +2078,7 @@ begin
       end;
       FA.Init(TypeInfo(TSQLDBColumnDefineDynArray),Fields,@n);
       FA.Compare := SortDynArrayAnsiStringI; // FA.Find() case insensitive
-      fillchar(F,sizeof(F),0);
+      fillchar(F,SizeOf(F),0);
       if fCurrentRow>0 then // Step done above
       repeat
         F.ColumnName := Trim(ColumnUTF8(3)); // Column*() should be done in order
@@ -2278,7 +2280,7 @@ begin
         Stmt.Step;
       end;
       PA.Init(TypeInfo(TSQLDBColumnDefineDynArray),Parameters,@n);
-      fillchar(P,sizeof(P),0);
+      fillchar(P,SizeOf(P),0);
       if Stmt.fCurrentRow>0 then // Step done above
       repeat
         P.ColumnName := Trim(Stmt.ColumnUTF8(3)); // Column*() should be in order
@@ -2344,7 +2346,7 @@ begin
     ColumnSize := SizeOf(SqlUSmallint)*3;
   end else begin
     result := SQL_C_TYPE_TIMESTAMP;
-    ColumnSize := sizeof(SQL_TIMESTAMP_STRUCT);
+    ColumnSize := SizeOf(SQL_TIMESTAMP_STRUCT);
   end;
 end;
 
