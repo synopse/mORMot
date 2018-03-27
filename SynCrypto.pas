@@ -398,7 +398,7 @@ type
 
   /// stores an array of THash128 to check for their unicity
   // - used e.g. to implement TAESAbstract.IVHistoryDepth property
-  THash128History = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}THash128History = record{$else}THash128History = object{$endif}
   private
     Previous: array of THash128Rec;
     Index: integer;
@@ -426,7 +426,7 @@ type
   {$endif}
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance, if needed
-  TAES = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}TAES = record{$else}TAES = object{$endif}
   private
     Context: packed array[1..AESContextSize] of byte;
     {$ifdef USEPADLOCK}
@@ -1275,7 +1275,7 @@ type
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance, e.g. for THMAC_SHA1
   // - see TSynHasher if you expect to support more than one algorithm at runtime
-  TSHA1 = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}TSHA1 = record{$else}TSHA1 = object{$endif}
   private
     Context: packed array[1..SHAContextSize] of byte;
   public
@@ -1308,7 +1308,7 @@ type
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance, e.g. for THMAC_SHA256
   // - see TSynHasher if you expect to support more than one algorithm at runtime
-  TSHA256 = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}TSHA256 = record{$else}TSHA256 = object{$endif}
   private
     Context: packed array[1..SHAContextSize] of byte;
   public
@@ -1341,7 +1341,7 @@ type
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance, e.g. for THMAC_SHA384
   // - see TSynHasher if you expect to support more than one algorithm at runtime
-  TSHA384 = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}TSHA384 = record{$else}TSHA384 = object{$endif}
   private
     Hash: TSHA512Hash;
     MLen: QWord;
@@ -1385,7 +1385,7 @@ type
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance, e.g. for THMAC_SHA512
   // - see TSynHasher if you expect to support more than one algorithm at runtime
-  TSHA512 = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}TSHA512 = record{$else}TSHA512 = object{$endif}
   private
     Hash: TSHA512Hash;
     MLen: QWord;
@@ -1428,7 +1428,7 @@ type
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance, e.g. after InitCypher
   // - see TSynHasher if you expect to support more than one algorithm at runtime
-  TSHA3 = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}TSHA3 = record{$else}TSHA3 = object{$endif}
   private
     Context: packed array[1..SHA3ContextSize] of byte;
   public
@@ -1548,7 +1548,7 @@ type
   // when you need a 128-bit cryptographic hash, but can afford some collisions
   // - this implementation has optimized x86 and x64 assembly, for processing
   // around 500MB/s, and a pure-pascal fallback code on other platforms
-  TMD5 = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}TMD5 = record{$else}TMD5 = object{$endif}
   private
     in_: TMD5In;
     bytes: array[0..1] of cardinal;
@@ -1579,7 +1579,7 @@ type
   // thread-safe reuse of one initialized instance
   // - you can also restore and backup any previous state of the RC4 encryption
   // by copying the whole TRC4 variable into another (stack-allocated) variable
-  TRC4 = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}TRC4 = record{$else}TRC4 = object{$endif}
   private
     {$ifdef CPUINTEL}
     state: array[byte] of PtrInt; // PtrInt=270MB/s  byte=240MB/s on x86
@@ -1617,7 +1617,7 @@ type
 {$A-} { packed memory structure }
   /// internal header for storing our AES data with salt and CRC
   // - memory size matches an TAESBlock on purpose, for direct encryption
-  TAESFullHeader = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}TAESFullHeader = record{$else}TAESFullHeader = object{$endif}
   public
     /// Len before compression (if any)
     OriginalLen,
@@ -1637,7 +1637,7 @@ type
   // - calls internaly TAES objet methods, and handle memory and streams for best speed
   // - a TAESFullHeader is encrypted at the begining, allowing fast Key validation,
   // but the resulting stream is not compatible with raw TAES object
-  TAESFull = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}TAESFull = record{$else}TAESFull = object{$endif}
   public
     /// header, stored at the beginning of struct -> 16-byte aligned
     Head: TAESFullHeader;
@@ -1728,7 +1728,7 @@ type
   // - you may use HMAC_SHA1() overloaded functions for one-step process
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance via Compute(), e.g. for fast PBKDF2
-  THMAC_SHA1 = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}THMAC_SHA1 = record{$else}THMAC_SHA1 = object{$endif}
   private
     sha: TSHA1;
     step7data: TByte64;
@@ -1775,7 +1775,7 @@ type
   // - you may use HMAC_SHA384() overloaded functions for one-step process
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance via Compute(), e.g. for fast PBKDF2
-  THMAC_SHA384 = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}THMAC_SHA384 = record{$else}THMAC_SHA384 = object{$endif}
   private
     sha: TSHA384;
     step7data: array[0..31] of cardinal;
@@ -1822,7 +1822,7 @@ type
   // - you may use HMAC_SHA512() overloaded functions for one-step process
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance via Compute(), e.g. for fast PBKDF2
-  THMAC_SHA512 = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}THMAC_SHA512 = record{$else}THMAC_SHA512 = object{$endif}
   private
     sha: TSHA512;
     step7data: array[0..31] of cardinal;
@@ -1903,7 +1903,7 @@ type
   // - you may use HMAC_SHA256() overloaded functions for one-step process
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance via Compute(), e.g. for fast PBKDF2
-  THMAC_SHA256 = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}THMAC_SHA256 = record{$else}THMAC_SHA256 = object{$endif}
   private
     sha: TSha256;
     step7data: TByte64;
@@ -2009,7 +2009,7 @@ type
 
   /// a generic wrapper object to handle digital HMAC-SHA-2/SHA-3 signatures
   // - used e.g. to implement TJWTSynSignerAbstract
-  TSynSigner = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}TSynSigner = record{$else}TSynSigner = object{$endif}
   private
     ctxt: packed array[1..SHA3ContextSize] of byte; // enough space for all
     fSignatureSize: integer;
@@ -2073,7 +2073,7 @@ type
   // - as used e.g. by HashFile/HashFull functions
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance
-  TSynHasher = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}TSynHasher = record{$else}TSynHasher = object{$endif}
   private
     fAlgo: THashAlgo;
     ctxt: array[1..SHA3ContextSize] of byte; // enough space for all algorithms
@@ -2131,7 +2131,7 @@ type
   // - you may use HMAC_CRC32C() overloaded functions for one-step process
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance via Compute()
-  THMAC_CRC32C = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}THMAC_CRC32C = record{$else}THMAC_CRC32C = object{$endif}
   private
     seed: cardinal;
     step7data: TByte64;
@@ -8002,7 +8002,7 @@ const
     QWord($8000000000008080), QWord($0000000080000001), QWord($8000000080008008));
 
 type
-  TSHA3Context = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}TSHA3Context = record{$else}TSHA3Context = object{$endif}
   public
     State: packed array[0..cKeccakPermutationSizeInBytes-1] of byte;
     DataQueue: packed array[0..cKeccakMaximumRateInBytes-1] of byte;
@@ -13266,7 +13266,7 @@ type
   HCRYPTKEY = pointer;
   HCRYPTHASH = pointer;
 
-  TCryptLibrary = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}TCryptLibrary = record{$else}TCryptLibrary = object{$endif}
   public
     AcquireContextA: function(var phProv: HCRYPTPROV; pszContainer: PAnsiChar;
       pszProvider: PAnsiChar; dwProvType: DWORD; dwFlags: DWORD): BOOL; stdcall;

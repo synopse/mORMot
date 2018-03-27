@@ -174,7 +174,7 @@ type
   {$A-}
   /// memory structure used to store a date and time in native Oracle format
   // - follow the SQLT_DAT column type layout
-  TOracleDate = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}TOracleDate = record{$else}TOracleDate = object{$endif}
     Cent, Year, Month, Day, Hour, Min, Sec: byte;
     /// convert an Oracle date and time into Delphi TDateTime
     // - this method will ignore any date before 30 Dec 1899 (i.e. any

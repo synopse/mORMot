@@ -1943,7 +1943,7 @@ type
   // - this is the main process for marshalling JSON into SQL statements
   // - used e.g. by GetJSONObjectAsSQL() function or ExecuteFromJSON and
   // InternalBatchStop methods
-  TJSONObjectDecoder = {$ifndef ISDELPHI2010}object{$else}record{$endif}
+  {$ifdef UNICODE}TJSONObjectDecoder = record{$else}TJSONObjectDecoder = object{$endif}
     /// contains the decoded field names
     FieldNames: array[0..MAX_SQLFIELDS-1] of RawUTF8;
     /// contains the decoded field values
@@ -2545,11 +2545,7 @@ type
   //  as in the TypInfo.GetPropInfos() PPropList usage
   // - for TSQLRecord, you should better use the RecordProps.Fields[] array,
   // which is faster and contains the properties published in parent classes
-  {$ifndef ISDELPHI2010}
-  TClassProp = object
-  {$else}
-  TClassProp = record
-  {$endif}
+  {$ifdef UNICODE}TClassProp = record{$else}TClassProp = object{$endif}
     /// number of published properties in this object
     PropCount: Word;
     /// point to a TPropInfo packed array
@@ -2568,11 +2564,7 @@ type
 
   PClassType = ^TClassType;
   /// a wrapper to class type information, as defined by the Delphi RTTI
-  {$ifndef ISDELPHI2010}
-  TClassType = object
-  {$else}
-  TClassType = record
-  {$endif}
+  {$ifdef UNICODE}TClassType = record{$else}TClassType = object{$endif}
     /// the class type
     ClassType: TClass;
     /// the parent class type information
@@ -2600,11 +2592,7 @@ type
   // - we use this to store the enumeration values as integer, but easily provide
   // a text equivalent, translated if necessary, from the enumeration type
   // definition itself
-  {$ifndef ISDELPHI2010}
-  TEnumType = object
-  {$else}
-  TEnumType = record
-  {$endif}
+  {$ifdef UNICODE}TEnumType = record{$else}TEnumType = object{$endif}
     /// specify ordinal storage size and sign
     // - is prefered to MaxValue to identify the number of stored bytes
     OrdType: TOrdType;
@@ -2777,11 +2765,7 @@ type
   // & type NewType = OldType;
   // - user types defined as new types have this type information:
   // & type NewType = type OldType;
-  {$ifndef ISDELPHI2010}
-  TTypeInfo = object
-  {$else}
-  TTypeInfo = record
-  {$endif}
+  {$ifdef UNICODE}TTypeInfo = record{$else}TTypeInfo = object{$endif}
     /// the value type family
     Kind: TTypeKind;
     /// the declared name of the type ('String','Word','RawUnicode'...)
@@ -2884,13 +2868,7 @@ type
   // - WideString, shortstring, UnicodeString (i.e. Delphi 2009+ generic string),
   // indexed properties are not handled yet (use faster RawUnicodeString instead
   // of WideString and UnicodeString) - in fact, the generic string type is handled
-  {$ifndef ISDELPHI2010}
-  TPropInfo = object
-  protected
-  {$else}
-  TPropInfo = packed record
-  private
-  {$endif}
+  {$ifdef UNICODE}TPropInfo = record{$else}TPropInfo = object{$endif}
     {$ifdef USETYPEINFO}
     function RetrieveFieldSize: integer;
     {$endif}
@@ -3159,11 +3137,7 @@ type
 
 {$A-} { Delphi and FPC compiler use packed storage for this internal type }
   /// a wrapper around method returned result definition
-  {$ifndef ISDELPHI2010}
-  TReturnInfo = object
-  {$else}
-  TReturnInfo = record
-  {$endif}
+  {$ifdef UNICODE}TReturnInfo = record{$else}TReturnInfo = object{$endif}
     /// RTTI version
     // - 2 up to Delphi 2010, 3 for Delphi XE and up
     Version: byte;
@@ -3183,11 +3157,7 @@ type
 
 {$A-} { Delphi and FPC compiler use packed storage for this internal type }
   /// a wrapper around an individual method parameter definition
-  {$ifndef ISDELPHI2010}
-  TParamInfo = object
-  {$else}
-  TParamInfo = record
-  {$endif}
+  {$ifdef UNICODE}TParamInfo = record{$else}TParamInfo = object{$endif}
     /// the kind of parameter
     Flags: TParamFlags;
     /// the parameter type information
@@ -3211,11 +3181,7 @@ type
 
 {$A-} { Delphi and FPC compiler use packed storage for this internal type }
   /// a wrapper around a method definition
-  {$ifndef ISDELPHI2010}
-  TMethodInfo = object
-  {$else}
-  TMethodInfo = record
-  {$endif}
+  {$ifdef UNICODE}TMethodInfo = record{$else}TMethodInfo = object{$endif}
     {$ifdef FPC}
     /// method name
     Name: PShortString;
@@ -5779,7 +5745,7 @@ type
 
   /// store all parameters for a Client or Server method call
   // - as used by TSQLRestServer.URI or TSQLRestClientURI.InternalURI
-  TSQLRestURIParams = {$ifndef ISDELPHI2010}object{$else}record{$endif}
+  {$ifdef UNICODE}TSQLRestURIParams = record{$else}TSQLRestURIParams = object{$endif}
     /// input parameter containing the caller URI
     Url: RawUTF8;
     /// input parameter containing the caller method
@@ -6036,11 +6002,7 @@ type
   /// set the User Access Rights, for each Table
   // - one property for every and each URI method (GET/POST/PUT/DELETE)
   // - one bit for every and each Table in Model.Tables[]
-  {$ifndef ISDELPHI2010}
-  TSQLAccessRights = object
-  {$else}
-  TSQLAccessRights = record
-  {$endif}
+  {$ifdef UNICODE}TSQLAccessRights = record{$else}TSQLAccessRights = object{$endif}
     /// set of allowed actions on the server side
     AllowRemoteExecute: TSQLAllowRemoteExecute;
     /// GET method (retrieve record) table access bits
@@ -9111,7 +9073,7 @@ type
   /// used to store the locked record list, in a specified table
   // - the maximum count of the locked list if fixed to 512 by default,
   // which seems correct for common usage
-  TSQLLocks = {$ifndef ISDELPHI2010}object{$else}record{$endif}
+  {$ifdef UNICODE}TSQLLocks = record{$else}TSQLLocks = object{$endif}
     /// the number of locked records stored in this object
     Count: integer;
     /// contains the locked record ID
@@ -9397,11 +9359,7 @@ type
   // - in end user code, mostly MapField/MapFields/Options methods
   // should be used, if needed as a fluent chained interface - other lower
   // level methods will be used by the framework internals
-  {$ifndef ISDELPHI2010}
-  TSQLRecordPropertiesMapping = object
-  {$else}
-  TSQLRecordPropertiesMapping = record
-  {$endif}
+  {$ifdef UNICODE}TSQLRecordPropertiesMapping = record{$else}TSQLRecordPropertiesMapping = object{$endif}
   private
     /// storage of main read-only properties
     fProps: TSQLRecordProperties;
@@ -9965,7 +9923,7 @@ type
   // depends on it to store the Table type
   // - since 6 bits are used for the table index, the corresponding table
   // MUST appear in the first 64 items of the associated TSQLModel.Tables[]
-  RecordRef = {$ifndef ISDELPHI2010}object{$else}record{$endif}
+  {$ifdef UNICODE}RecordRef = record{$else}RecordRef = object{$endif}
   public
     /// the value itself
     // - (value and 63) is the TableIndex in the current database Model
@@ -10627,7 +10585,7 @@ type
   TServiceMethodValueAsm = set of (vIsString, vPassedByReference, vIsObjArray, vIsSPI);
 
   /// describe a service provider method argument
-  TServiceMethodArgument = {$ifndef ISDELPHI2010}object{$else}record{$endif}
+  {$ifdef UNICODE}TServiceMethodArgument = record{$else}TServiceMethodArgument = object{$endif}
   public
     /// the argument name, as declared in Delphi
     ParamName: PShortString;
@@ -10740,7 +10698,7 @@ type
   TServiceMethodParamsDocVariantKind = (pdvArray, pdvObject, pdvObjectFixed);
 
   /// describe an interface-based service provider method
-  TServiceMethod = {$ifndef ISDELPHI2010}object{$else}record{$endif}
+  {$ifdef UNICODE}TServiceMethod = record{$else}TServiceMethod = object{$endif}
   public
     /// the method URI, i.e. the method name
     // - as declared in Delphi code, e.g. 'Add' for ICalculator.Add
@@ -11834,7 +11792,7 @@ type
   end;
 
   /// define the rules for a given method as used internaly by TInterfaceStub
-  TInterfaceStubRules = {$ifndef ISDELPHI2010}object{$else}record{$endif}
+  {$ifdef UNICODE}TInterfaceStubRules = record{$else}TInterfaceStubRules = object{$endif}
     /// the mocking / stubing rules associated to this method
     Rules: array of TInterfaceStubRule;
     /// index in Rules[] of the default rule, i.e. the one with Params=''
@@ -11881,7 +11839,7 @@ type
   TInterfaceStubLogLayouts = set of TInterfaceStubLogLayout;
 
   /// used to keep track of one stubbed method call
-  TInterfaceStubLog = {$ifndef ISDELPHI2010}object{$else}record{$endif}
+  {$ifdef UNICODE}TInterfaceStubLog = record{$else}TInterfaceStubLog = object{$endif}
     /// call timestamp, in milliseconds
     // - is filled with GetTickCount64() API returned value
     Timestamp64: Int64;
@@ -12462,7 +12420,7 @@ type
   /// server-side service provider uses this to store one internal instance
   // - used by TServiceFactoryServer in sicClientDriven, sicPerSession,
   // sicPerUser or sicPerGroup mode
-  TServiceFactoryServerInstance = {$ifndef ISDELPHI2010}object{$else}record{$endif}
+  {$ifdef UNICODE}TServiceFactoryServerInstance = record{$else}TServiceFactoryServerInstance = object{$endif}
   public
     /// the internal Instance ID, as remotely sent in "id":1
     // - is set to 0 when an entry in the array is free
@@ -13439,7 +13397,7 @@ type
   TSQLRestCacheEntryValueDynArray = array of TSQLRestCacheEntryValue;
 
   /// for TSQLRestCache, stores a table settings and values
-  TSQLRestCacheEntry = {$ifndef ISDELPHI2010}object{$else}record{$endif}
+  {$ifdef UNICODE}TSQLRestCacheEntry = record{$else}TSQLRestCacheEntry = object{$endif}
   public
     /// TRUE if this table should use caching
     // - i.e. if was not set, or worth it for this table (e.g. in-memory table)
@@ -16651,11 +16609,7 @@ type
   /// used to access a TSQLRestServer from its TSQLRestServerURIString URI
   // - URI format is 'address:port/root', and may be transmitted as
   // TSQLRestServerURIString text instances
-  {$ifndef ISDELPHI2010}
-  TSQLRestServerURI = object
-  {$else}
-  TSQLRestServerURI = record
-  {$endif}
+  {$ifdef UNICODE}TSQLRestServerURI = record{$else}TSQLRestServerURI = object{$endif}
   private
     function GetURI: TSQLRestServerURIString;
     procedure SetURI(const Value: TSQLRestServerURIString);
@@ -19850,7 +19804,7 @@ type
 
   /// the WHERE and ORDER BY statements as set by TSQLVirtualTable.Prepare
   // - Where[] and OrderBy[] are fixed sized arrays, for fast and easy code
-  TSQLVirtualTablePrepared = {$ifndef ISDELPHI2010}object{$else}record{$endif}
+  {$ifdef UNICODE}TSQLVirtualTablePrepared = record{$else}TSQLVirtualTablePrepared = object{$endif}
   public
     /// number of WHERE statement parameters in Where[] array
     WhereCount: integer;
@@ -26556,7 +26510,7 @@ type
   // - code generated is very optimized: stack and memory usage, CPU registers
   // prefered, multiplication avoided to calculate memory position from index,
   // hand tuned assembler...
-  TUTF8QuickSort = {$ifndef ISDELPHI2010}object{$else}record{$endif}
+  {$ifdef UNICODE}TUTF8QuickSort = record{$else}TUTF8QuickSort = object{$endif}
   public
     // sort parameters
     Results: PPUtf8CharArray;
@@ -26818,7 +26772,7 @@ begin
 end;
 
 type
-  TUTF8QuickSortMulti = {$ifndef ISDELPHI2010}object{$else}record{$endif}
+  {$ifdef UNICODE}TUTF8QuickSortMulti = record{$else}TUTF8QuickSortMulti = object{$endif}
   public
     Results: PPUtf8CharArray;
     IDColumn: PPUtf8CharArray;

@@ -1454,11 +1454,7 @@ type
   // - could be used e.g. to make a temporary copy when JSON is parsed in-place
   // - call one of the Init() overloaded methods, then Done to release its memory
   // - will avoid temporary memory allocation via the heap for up to 4KB of text
-  {$ifdef UNICODE}
-  TSynTempBuffer = record
-  {$else}
-  TSynTempBuffer = object
-  {$endif}
+  {$ifdef UNICODE}TSynTempBuffer = record{$else}TSynTempBuffer = object{$endif}
   public
     /// the text/binary length, in bytes, excluding the trailing #0
     len: integer;
@@ -1490,11 +1486,7 @@ type
 
   /// implements a stack-based writable storage of binary content
   // - memory allocation is performed via a TSynTempBuffer
-  {$ifdef UNICODE}
-  TSynTempWriter = record
-  {$else}
-  TSynTempWriter = object
-  {$endif}
+  {$ifdef UNICODE}TSynTempWriter = record{$else}TSynTempWriter = object{$endif}
   private
     tmp: TSynTempBuffer;
   public
@@ -3858,7 +3850,7 @@ procedure AddRawUTF8(var Values: TRawUTF8DynArray; var ValuesCount: integer;
 
 type
   /// simple stack-allocated type for handling a type names list
-  TPropNameList = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}TPropNameList = record{$else}TPropNameList = object{$endif}
     Values: TRawUTF8DynArray;
     Count: Integer;
     /// initialize the list
@@ -4106,7 +4098,7 @@ function TemporaryFileName: TFileName;
 type
   {$A-}
   /// file found result item, as returned by FindFiles()
-  TFindFiles = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}TFindFiles = record{$else}TFindFiles = object{$endif}
     /// the matching file name, including its folder name
     Name: TFileName;
     /// the matching file attributes
@@ -4222,7 +4214,7 @@ type
   //  in a huge text buffer
   // - this version also handles french and spanish pronunciations on request,
   //  which differs from default Soundex, i.e. English
-  TSynSoundEx = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}TSynSoundEx = record{$else}TSynSoundEx = object{$endif}
   private
     Search, FirstChar: cardinal;
     fValues: PSoundExValues;
@@ -4917,7 +4909,7 @@ type
   // - is defined either as an object either as a record, due to a bug
   // in Delphi 2009/2010 compiler (at least): this structure is not initialized
   // if defined as an object on the stack, but will be as a record :(
-  TSortedWordArray = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}TSortedWordArray = record{$else}TSortedWordArray = object{$endif}
   public
     Values: TWordDynArray;
     Count: integer;
@@ -6167,11 +6159,7 @@ type
   // @http://www.delphitools.info/2011/11/30/fixing-tcriticalsection
   // - internal padding is used to safely store up to 7 values protected
   // from concurrent access with a mutex
-  {$ifdef UNICODE}
-  TSynLocker = record
-  {$else}
-  TSynLocker = object
-  {$endif}
+  {$ifdef UNICODE}TSynLocker = record{$else}TSynLocker = object{$endif}
   private
     fSection: TRTLCriticalSection;
     {$ifndef NOVARIANTS}
@@ -6551,7 +6539,7 @@ type
   // - is defined either as an object either as a record, due to a bug
   // in Delphi 2009/2010 compiler (at least): this structure is not initialized
   // if defined as an object on the stack, but will be as a record :(
-  TSynNameValue = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}TSynNameValue = record{$else}TSynNameValue = object{$endif}
     fDynArray: TDynArrayHashed;
     fOnAdd: TSynNameValueNotify;
     function GetBlobData: RawByteString;
@@ -10158,7 +10146,7 @@ var
 type
   /// handle memory mapping of a file content
   /// used to store and retrieve Words in a sorted array
-  TMemoryMap = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}TMemoryMap = record{$else}TMemoryMap = object{$endif}
   private
     fBuf: PAnsiChar;
     fBufSize: cardinal;
@@ -10530,13 +10518,8 @@ type
   // - is defined either as an object either as a record, due to a bug
   // in Delphi 2009/2010 compiler (at least): this structure is not initialized
   // if defined as an object on the stack, but will be as a record :(
-  {$ifdef UNICODE}
-  TFileBufferReader = record
+  {$ifdef UNICODE}TFileBufferReader = record{$else}TFileBufferReader = object{$endif}
   private
-  {$else}
-  TFileBufferReader = object
-  protected
-  {$endif}
     fCurrentPos: PtrUInt;
     fMap: TMemoryMap;
     /// get Isize + buffer from current memory map or fBufTemp into (P,PEnd)
@@ -10734,13 +10717,8 @@ type
   // - an optimized compaction algorithm will occur to ensure that every
   // 64 items will eventually consume at last 1MB of memory: this reduces memory
   // fragmentation with almost no performance impact
-  {$ifdef UNICODE}
-  TRawByteStringGroup = record
+  {$ifdef UNICODE}TRawByteStringGroup = record{$else}TRawByteStringGroup = object{$endif}
   private
-  {$else}
-  TRawByteStringGroup = object
-  protected
-  {$endif}
     procedure Compact(len: integer);
   public
     /// actual list storing the data
@@ -12959,7 +12937,7 @@ type
   // temporary conversion in such case
   // - TTimeLogBits.Value has a 38-bit precision, so features exact representation
   // as JavaScript numbers (stored in a 52-bit mantissa)
-  TTimeLogBits = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}TTimeLogBits = record{$else}TTimeLogBits = object{$endif}
     /// the bit-encoded value itself, which follows an abstract "year" of 16
     // months of 32 days of 32 hours of 64 minutes of 64 seconds
     // - bits 0..5   = Seconds (0..59)
@@ -15006,13 +14984,8 @@ type
   // be a good idea to use DocVariantData(aVariant)^ or _Safe(aVariant)^ instead
   // of TDocVariantData(aVariant), if you are not sure how aVariant was allocated
   // (may be not _Obj/_Json, but retrieved as varByRef e.g. from late binding)
-  {$ifdef UNICODE}
-  TDocVariantData = record
+  {$ifdef UNICODE}TDocVariantData = record{$else}TDocVariantData = object{$endif}
   private
-  {$else}
-  TDocVariantData = object
-  protected
-  {$endif}
     VType: TVarType;
     VOptions: TDocVariantOptions;
     (* this structure uses all TVarData available space: no filler needed!
@@ -16401,7 +16374,7 @@ type
   // - WARNING: this record MUST be aligned to 32 bit, otherwise iFreq=0 -
   // so you can use TLocalPrecisionTimer/ILocalPrecisionTimer if you want
   // to alllocate a local timer instance on the stack
-  TPrecisionTimer = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}TPrecisionTimer = record{$else}TPrecisionTimer = object{$endif}
   private
     iStart,iStop,iResume,iLast: Int64;
     iFreq: Int64;
@@ -17098,6 +17071,19 @@ type
 
   {$ifdef DELPHI5OROLDER} // IAutoLocker -> internal error C3517 under Delphi 5 :(
   TAutoLocker = class
+  protected
+    fSafe: TSynLocker;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    procedure Enter; virtual;
+    procedure Leave; virtual;
+    function ProtectMethod: IUnknown;
+    /// gives an access to the internal low-level TSynLocker instance used
+    function Safe: PSynLocker;
+    property Locker: TSynLocker read fSafe;
+  end;
+  IAutoLocker = TAutoLocker;
   {$else}
   /// an interface used by TAutoLocker to protect multi-thread execution
   IAutoLocker = interface
@@ -17157,12 +17143,11 @@ type
   // - you may use the inherited TAutoLockerDebug class, as defined in SynLog.pas,
   // to debug unexpected race conditions due to such critical sections
   TAutoLocker = class(TInterfacedObjectWithCustomCreate,IAutoLocker)
-  {$endif DELPHI5OROLDER}
   protected
     fSafe: TSynLocker;
   public
     /// initialize the mutex
-    constructor Create; {$ifndef DELPHI5OROLDER} override; {$endif}
+    constructor Create; override;
     /// finalize the mutex
     destructor Destroy; override;
     /// will enter the mutex until the IUnknown reference is released
@@ -17213,7 +17198,7 @@ type
     // - faster than IAutoLocker.Safe function
     property Locker: TSynLocker read fSafe;
   end;
-  {$ifdef DELPHI5OROLDER}IAutoLocker = TAutoLocker;{$endif}
+  {$endif DELPHI5OROLDER}
 
   /// the current state of a TBlockingProcess instance
   TBlockingEvent = (evNone,evWaiting,evTimeOut,evRaised);
@@ -17966,11 +17951,7 @@ type
   // - bits 0..14 map a 15-bit increasing counter (collision-free)
   // - bits 15..30 map a 16-bit process identifier
   // - bits 31..63 map a 33-bit UTC time, encoded as seconds since Unix epoch
-  {$ifndef UNICODE}
-  TSynUniqueIdentifierBits = object
-  {$else}
-  TSynUniqueIdentifierBits = record
-  {$endif}
+  {$ifdef UNICODE}TSynUniqueIdentifierBits = record{$else}TSynUniqueIdentifierBits = object{$endif}
   public
     /// the actual 64-bit storage value
     // - in practice, only first 63 bits are used
@@ -37105,7 +37086,7 @@ end;
 {$endif}
 
 type
-  TLecuyer = {$ifndef ISDELPHI2010}object{$else}record{$endif}
+  {$ifdef UNICODE}TLecuyer = record{$else}TLecuyer = object{$endif}
     rs1, rs2, rs3: cardinal;
     seedcount: cardinal;
     procedure Seed(entropy: PByteArray; entropylen: integer);
@@ -38288,7 +38269,7 @@ end;
 
 type
   /// used internaly for faster quick sort
-  TQuickSortRawUTF8 = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}TQuickSortRawUTF8 = record{$else}TQuickSortRawUTF8 = object{$endif}
     Values: PPointerArray;
     Compare: TUTF8Compare;
     CoValues: PIntegerArray;
@@ -48605,7 +48586,7 @@ end;
 
 type
   // internal structure used to make QuickSort faster & with less stack usage
-  TDynArrayQuickSort = {$ifndef UNICODE}object{$else}record{$endif}
+  {$ifdef UNICODE}TDynArrayQuickSort = record{$else}TDynArrayQuickSort = object{$endif}
     Compare: TDynArraySortCompare;
     Pivot: pointer;
     Index: PCardinalArray;
