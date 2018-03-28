@@ -408,10 +408,11 @@ type
     /// how many THash128 values are currently stored
     Count: integer;
     /// initialize the storage for a given history depth
-    procedure Init(size: integer);
+    procedure Init(size, maxsize: integer);
     /// O(n) fast search of a hash value in the stored entries
     // - returns true if the hash was found, or false if it did not appear
     function Exists(const hash: THash128): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// add a hash value to the stored entries, checking for duplicates
     // - returns true if the hash was added, or false if it did already appear
     function Add(const hash: THash128): boolean;
@@ -12120,7 +12121,7 @@ end;
 
 procedure TAESAbstract.SetIVHistory(aDepth: integer);
 begin
-  fIVHistoryDec.Init(aDepth);
+  fIVHistoryDec.Init(aDepth,aDepth);
 end;
 
 function TAESAbstract.EncryptPKCS7(const Input: RawByteString;
@@ -14094,47 +14095,37 @@ end;
 
 { THash128History }
 
-procedure THash128History.Init(size: integer);
+procedure THash128History.Init(size, maxsize: integer);
 begin
-  Depth := size;
+  Depth := maxsize;
   SetLength(Previous,size);
   Count := 0;
   Index := 0;
 end;
 
-function HashFound(P: PHash128Rec; Count: integer; const h: THash128Rec): boolean;
-var first: PtrInt;
-    i: integer;
-begin // fast O(n) brute force search
-  if P<>nil then begin
-    result := true;
-    first := h.Lo;
-    for i := 1 to Count do
-      {$ifdef CPU64}
-      if (P^.Lo=first) and (P^.Hi=h.Hi) then
-      {$else}
-      if (P^.i0=first) and (P^.i1=h.i1) and (P^.i2=h.i2) and (P^.i3=h.i3) then
-      {$endif}
-        exit else
-        inc(P);
-  end;
-  result := false;
-end;
-
 function THash128History.Exists(const hash: THash128): boolean;
 begin
-  result := HashFound(pointer(Previous),Count,THash128Rec(hash));
+  if Count = 0 then
+    result := false else
+    result := HashFound(pointer(Previous),Count,THash128Rec(hash));
 end;
 
 function THash128History.Add(const hash: THash128): boolean;
+var n: integer;
 begin
   result := not HashFound(pointer(Previous),Count,THash128Rec(hash));
   if not result then
     exit;
   Previous[Index].b := hash;
   inc(Index);
-  if Index>=Depth then
-    Index := 0;
+  if Index>=length(Previous) then
+    if Index=Depth then
+      Index := 0 else begin
+      n := Index+Index shr 3;
+      if n>=Depth then
+        n := Depth;
+      SetLength(Previous,n);
+    end;
   if Count<Depth then
     inc(Count);
 end;

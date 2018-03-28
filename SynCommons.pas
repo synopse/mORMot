@@ -12218,6 +12218,9 @@ function IsEqual(const A,B: THash128): boolean; overload;
 // ! ... finally FillZero(digest); end;
 procedure FillZero(out dig: THash128); overload;
 
+/// fast O(n) search of a 128-bit item in an array of such values
+function HashFound(P: PHash128Rec; Count: integer; const h: THash128Rec): boolean;
+
 /// compute a 256-bit checksum on the supplied buffer using crc32c
 // - will use SSE 4.2 hardware accelerated instruction, if available
 // - will combine two crc32c() calls into a single THash256 result
@@ -35356,6 +35359,27 @@ procedure FillZero(out dig: THash128);
 begin
   PInt64Array(@dig)^[0] := 0;
   PInt64Array(@dig)^[1] := 0;
+end;
+
+function HashFound(P: PHash128Rec; Count: integer; const h: THash128Rec): boolean;
+var first{$ifdef CPU64}, second{$endif}: PtrInt;
+    i: integer;
+begin // fast O(n) brute force search
+  if P<>nil then begin
+    result := true;
+    first := h.Lo;
+    {$ifdef CPU64}
+    second := h.hi;
+    for i := 1 to Count do
+      if (P^.Lo=first) and (P^.Hi=second) then
+    {$else}
+    for i := 1 to Count do
+      if (P^.i0=first) and (P^.i1=h.i1) and (P^.i2=h.i2) and (P^.i3=h.i3) then
+    {$endif}
+        exit else
+        inc(P);
+  end;
+  result := false;
 end;
 
 procedure crc256c(buf: PAnsiChar; len: cardinal; out crc: THash256);
@@ -61336,6 +61360,12 @@ begin
     result := @Values[LastFind]; // this cache is very efficient in practice
     if (aPosition>=result^.Position) and (aPosition<result^.Position+length(result^.Value)) then
       exit;
+    i := Count-1;
+    if LastFind<>i then begin
+      result := @Values[i];
+      if aPosition=result^.Position then
+        exit; // if the last added item is searched
+    end;
     result := @Values[1]; // seldom O(n) brute force search (in CPU L1 cache)
     for i := 0 to Count-2 do
       if result^.Position>aPosition then begin
