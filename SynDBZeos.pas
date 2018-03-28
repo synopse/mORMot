@@ -698,7 +698,7 @@ const
   /// ZDBC provider names corresponding to SynDB recognized SQL engines
   ZEOS_PROVIDER: array[TSQLDBDefinition] of RawUTF8 = (
     '','','oracle:','mssql:','','mysql:','sqlite:',
-    'firebird-2.5:','','postgresql-9:','','');
+    'firebird:','','postgresql:','','');
 begin
   result := URI(ZEOS_PROVIDER[aServer],aServerName,
     aLibraryLocation,aLibraryLocationAppendExePath);
