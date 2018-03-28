@@ -1813,8 +1813,8 @@ begin
           SetLength(ArrayData[p].WData,BufferSize*Length(VArray)*SizeOf(WideChar));
           ItemPW := pointer(ArrayData[p].WData);
           for k := 0 to high(VArray) do begin
-            ArrayData[p].StrLen_or_Ind[k] := Utf8ToUnicode(ItemPW,BufferSize,
-              pointer(VArray[k]),length(VArray[k]))*SizeOf(WideChar);
+            ArrayData[p].StrLen_or_Ind[k] := UTF8ToWideChar(ItemPW,pointer(VArray[k]),
+              BufferSize,length(VArray[k]));
            inc(ItemPW,BufferSize);
           end;
           status := ODBC.BindParameter(fStatement,1,SQL_PARAM_INPUT,CValueType,
