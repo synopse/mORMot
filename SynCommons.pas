@@ -9872,7 +9872,7 @@ type
     iaFind, iaFindAndDelete, iaFindAndUpdate, iaFindAndAddIfNotExisting, iaAdd);
 
   /// event called by TSynDictionary.ForEach methods to iterate over stored items
-  // - if the implementation method returns TRUE, will continue the loopp
+  // - if the implementation method returns TRUE, will continue the loop
   // - if the implementation method returns FALSE, will stop values browsing
   // - aOpaque is a custom value specified at ForEach() method call
   TSynDictionaryEvent = function(const aKey; var aValue; aIndex,aCount: integer;
@@ -20798,7 +20798,7 @@ begin
     {$endif}
     vtWideString:
       RawUnicodeToUtf8(V.VPWideChar,length(WideString(V.VWideString)),RawUTF8(Res.TempRawUTF8));
-    vtPChar: begin
+    vtPChar: begin // expect UTF-8 content
       Res.Text := V.VPointer;
       Res.Len := StrLen(V.VPointer);
       result := Res.Len;
@@ -25088,13 +25088,13 @@ begin
     result := Format; // no formatting to process
     exit;
   end;
-  if Format='%' then begin
+  if PWord(Format)^=ord('%') then begin
     VarRecToUTF8(Args[0],result); // optimize raw conversion
     exit;
   end;
   if length(Args)*2>=high(blocks) then
     raise ESynException.Create('FormatUTF8: too many args (max=32)!');
-  Finalize(result);
+  {$ifdef FPC}Finalize(result){$else}result := ''{$endif};
   argN := 0;
   L := 0;
   b := @blocks;
@@ -25134,7 +25134,7 @@ begin
     MoveFast(d^.Text^,F^,d^.Len);
     inc(F,d^.Len);
     if d^.TempRawUTF8<>nil then
-       Finalize(RawUTF8(d^.TempRawUTF8));
+      {$ifdef FPC}Finalize(RawUTF8(d^.TempRawUTF8)){$else}RawUTF8(d^.TempRawUTF8) := ''{$endif};
     inc(d);
   until d=b;
 end;
