@@ -1261,7 +1261,7 @@ type
     // - Dest^ buffer must be reserved with at least SourceChars*3 bytes
     // - this default implementation will rely on the Operating System for
     // all non ASCII-7 chars
-    function UnicodeBufferToAnsi(Dest: PAnsiChar; Source: PWideChar; SourceChars: Cardinal): PAnsiChar; overload; virtual;
+    function UnicodeBufferToAnsi(Dest: PAnsiChar; DestChars: Cardinal; Source: PWideChar; SourceChars: Cardinal): PAnsiChar; overload; virtual;
     /// direct conversion of an Unicode buffer into an Ansi Text
     function UnicodeBufferToAnsi(Source: PWideChar; SourceChars: Cardinal): RawByteString; overload;
     /// convert any Unicode-encoded String into Ansi Text
@@ -1336,7 +1336,7 @@ type
     /// direct conversion of an Unicode buffer into a PAnsiChar buffer
     // - Dest^ buffer must be reserved with at least SourceChars*3 bytes
     // - this overridden version will use internal lookup tables for fast process
-    function UnicodeBufferToAnsi(Dest: PAnsiChar; Source: PWideChar; SourceChars: Cardinal): PAnsiChar; override;
+    function UnicodeBufferToAnsi(Dest: PAnsiChar; DestChars: Cardinal; Source: PWideChar; SourceChars: Cardinal): PAnsiChar; override;
     /// direct conversion of an UTF-8 encoded buffer into a PAnsiChar buffer
     // - Dest^ buffer must be reserved with at least SourceChars bytes
     // - no trailing #0 is appended to the buffer
@@ -1398,7 +1398,7 @@ type
     function AnsiToRawUnicode(Source: PAnsiChar; SourceChars: Cardinal): RawUnicode; override;
     /// direct conversion of an Unicode buffer into a PAnsiChar UTF-8 buffer
     // - Dest^ buffer must be reserved with at least SourceChars*3 bytes
-    function UnicodeBufferToAnsi(Dest: PAnsiChar; Source: PWideChar; SourceChars: Cardinal): PAnsiChar; override;
+    function UnicodeBufferToAnsi(Dest: PAnsiChar; DestChars: Cardinal; Source: PWideChar; SourceChars: Cardinal): PAnsiChar; override;
     /// direct conversion of an UTF-8 encoded buffer into a PAnsiChar UTF-8 buffer
     // - Dest^ buffer must be reserved with at least SourceChars bytes
     // - no trailing #0 is appended to the buffer
@@ -1442,7 +1442,7 @@ type
     function AnsiToRawUnicode(Source: PAnsiChar; SourceChars: Cardinal): RawUnicode; override;
     /// direct conversion of an Unicode buffer into a PAnsiChar UTF-16 buffer
     // - Dest^ buffer must be reserved with at least SourceChars*3 bytes
-    function UnicodeBufferToAnsi(Dest: PAnsiChar; Source: PWideChar; SourceChars: Cardinal): PAnsiChar; override;
+    function UnicodeBufferToAnsi(Dest: PAnsiChar; DestChars: Cardinal; Source: PWideChar; SourceChars: Cardinal): PAnsiChar; override;
     /// direct conversion of an UTF-8 encoded buffer into a PAnsiChar UTF-16 buffer
     // - Dest^ buffer must be reserved with at least SourceChars bytes
     // - no trailing #0 is appended to the buffer
@@ -18615,7 +18615,7 @@ begin
   SynAnsiConvertList.Add(result);
 end;
 
-function TSynAnsiConvert.UnicodeBufferToAnsi(Dest: PAnsiChar;
+function TSynAnsiConvert.UnicodeBufferToAnsi(Dest: PAnsiChar; DestChars: Cardinal;
   Source: PWideChar; SourceChars: Cardinal): PAnsiChar;
 var c: cardinal;
 {$ifndef MSWINDOWS}
@@ -18694,9 +18694,9 @@ var tmp: array[0..256*6] of WideChar;
     U: PWideChar;
 begin
   if SourceChars<SizeOf(tmp)div 3 then
-    result := UnicodeBufferToAnsi(Dest,tmp,UTF8ToWideChar(tmp,Source,SourceChars) shr 1) else begin
+    result := UnicodeBufferToAnsi(Dest,SizeOf(tmp)div 3,tmp,UTF8ToWideChar(tmp,Source,SourceChars) shr 1) else begin
     Getmem(U,SourceChars*3+2);
-    result := UnicodeBufferToAnsi(Dest,U,UTF8ToWideChar(U,Source,SourceChars) shr 1);
+    result := UnicodeBufferToAnsi(Dest,SourceChars*3,U,UTF8ToWideChar(U,Source,SourceChars) shr 1);
     Freemem(U);
   end;
 end;
@@ -18753,7 +18753,7 @@ begin
   if (Source=nil) or (SourceChars=0) then
     result := '' else begin
     tmp.Init((SourceChars+1) shl fAnsiCharShift);
-    SetString(result,PAnsiChar(tmp.buf),UnicodeBufferToAnsi(tmp.buf,Source,SourceChars)-tmp.buf);
+    SetString(result,PAnsiChar(tmp.buf),UnicodeBufferToAnsi(tmp.buf,SourceChars shl fAnsiCharShift,Source,SourceChars)-tmp.buf);
     tmp.Done;
     {$ifdef HASCODEPAGE}
     SetCodePage(result,fCodePage,false);
@@ -19050,7 +19050,7 @@ begin
   result := true;
 end;
 
-function TSynAnsiFixedWidth.UnicodeBufferToAnsi(Dest: PAnsiChar;
+function TSynAnsiFixedWidth.UnicodeBufferToAnsi(Dest: PAnsiChar; DestChars: Cardinal;
   Source: PWideChar; SourceChars: Cardinal): PAnsiChar;
 var c: cardinal;
 begin
@@ -19186,11 +19186,11 @@ begin
   inherited Create(aCodePage);
 end;
 
-function TSynAnsiUTF8.UnicodeBufferToAnsi(Dest: PAnsiChar;
+function TSynAnsiUTF8.UnicodeBufferToAnsi(Dest: PAnsiChar; DestChars: Cardinal;
   Source: PWideChar; SourceChars: Cardinal): PAnsiChar;
 begin
-  result := Dest+RawUnicodeToUTF8(PUTF8Char(Dest),SourceChars,Source,SourceChars,
-    [ccfNoTrailingZero]);
+  result := Dest+RawUnicodeToUTF8(PUTF8Char(Dest),DestChars,
+    Source,SourceChars,[ccfNoTrailingZero]);
 end;
 
 function TSynAnsiUTF8.UTF8BufferToAnsi(Dest: PAnsiChar; Source: PUTF8Char;
@@ -19267,7 +19267,7 @@ begin
   inherited Create(aCodePage);
 end;
 
-function TSynAnsiUTF16.UnicodeBufferToAnsi(Dest: PAnsiChar;
+function TSynAnsiUTF16.UnicodeBufferToAnsi(Dest: PAnsiChar; DestChars: Cardinal;
   Source: PWideChar; SourceChars: Cardinal): PAnsiChar;
 begin
   SourceChars := SourceChars shl 1; // from WideChar count to byte count
@@ -20476,7 +20476,7 @@ end;
 
 procedure RawUnicodeToWinPChar(dest: PAnsiChar; source: PWideChar; WideCharCount: Integer);
 begin
-  WinAnsiConvert.UnicodeBufferToAnsi(dest,source,WideCharCount);
+  WinAnsiConvert.UnicodeBufferToAnsi(dest,WideCharCount,source,WideCharCount);
 end;
 
 function RawUnicodeToWinAnsi(WideChar: PWideChar; WideCharCount: integer): WinAnsiString;
@@ -20499,7 +20499,7 @@ var L: integer;
 begin
   L := StrLenW(source);
   SetLength(Dest,L);
-  WinAnsiConvert.UnicodeBufferToAnsi(pointer(Dest),source,L);
+  WinAnsiConvert.UnicodeBufferToAnsi(pointer(Dest),L,source,L);
 end;
 
 function UnicodeBufferToString(source: PWideChar): string;
