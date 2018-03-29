@@ -1082,6 +1082,7 @@ type
 
   PIntegerDynArray = ^TIntegerDynArray;
   TIntegerDynArray = array of integer;
+  TIntegerDynArrayDynArray = array of TIntegerDynArray;
   PCardinalDynArray = ^TCardinalDynArray;
   TCardinalDynArray = array of cardinal;
   PSingleDynArray = ^TSingleDynArray;
@@ -11506,6 +11507,9 @@ procedure BinToHexDisplayLower(Bin, Hex: PAnsiChar; BinBytes: integer); overload
 /// fast conversion from binary data into lowercase hexa chars
 function BinToHexDisplayLower(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
 
+/// fast conversion from binary data into lowercase hexa chars
+function BinToHexDisplayLowerShort(Bin: PAnsiChar; BinBytes: integer): shortstring; overload;
+
 /// fast conversion from binary data into hexa lowercase chars, ready to be
 // used as a convenient TFileName prefix
 function BinToHexDisplayFile(Bin: PAnsiChar; BinBytes: integer): TFileName;
@@ -12220,6 +12224,10 @@ procedure FillZero(out dig: THash128); overload;
 
 /// fast O(n) search of a 128-bit item in an array of such values
 function HashFound(P: PHash128Rec; Count: integer; const h: THash128Rec): boolean;
+
+/// convert a 128-bit buffer (storing an IP6 address) into its full notation
+// - returns e.g. '2001:0db8:0a0b:12f0:0000:0000:0000:0001'
+function IP6Text(const ip6: THash128): shortstring;
 
 /// compute a 256-bit checksum on the supplied buffer using crc32c
 // - will use SSE 4.2 hardware accelerated instruction, if available
@@ -28391,6 +28399,14 @@ begin
   BinToHexDisplayLower(Bin,pointer(result),BinBytes);
 end;
 
+function BinToHexDisplayLowerShort(Bin: PAnsiChar; BinBytes: integer): shortstring;
+begin
+  if BinBytes > 127 then
+    BinBytes := 127;
+  result[0] := AnsiChar(BinBytes * 2);
+  BinToHexDisplayLower(Bin,@result[1],BinBytes);
+end;
+
 function BinToHexDisplayFile(Bin: PAnsiChar; BinBytes: integer): TFileName;
 {$ifdef UNICODE}
 var temp: TSynTempBuffer;
@@ -35380,6 +35396,22 @@ begin // fast O(n) brute force search
         inc(P);
   end;
   result := false;
+end;
+
+function IP6Text(const ip6: THash128): shortstring;
+var i: integer;
+    p: PByte;
+begin
+  if IsZero(ip6) then
+    result := '' else begin
+    result[0] := AnsiChar(39);
+    p := @result[1];
+    for i := 0 to 7 do begin
+      PWord(p)^ := TwoDigitsHexWB[ip6[i*2]];   inc(p,2);
+      PWord(p)^ := TwoDigitsHexWB[ip6[i*2+1]]; inc(p,2);
+      p^ := ord(':'); inc(p);
+    end;
+  end;
 end;
 
 procedure crc256c(buf: PAnsiChar; len: cardinal; out crc: THash256);
