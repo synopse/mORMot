@@ -19210,9 +19210,9 @@ var tmp: TSynTempBuffer;
 begin
   if (Source=nil) or (SourceChars=0) then
     result := '' else begin
-    tmp.Init((SourceChars+1) shl fAnsiCharShift);
+    tmp.Init(SourceChars*3+1);
     SetString(result,PAnsiChar(tmp.buf),UnicodeBufferToAnsi(
-      tmp.buf,(SourceChars) shl fAnsiCharShift,Source,SourceChars)-tmp.buf);
+      tmp.buf,SourceChars*3,Source,SourceChars)-tmp.buf);
     tmp.Done;
     {$ifdef HASCODEPAGE}
     SetCodePage(result,fCodePage,false);
