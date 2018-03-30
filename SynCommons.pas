@@ -1261,9 +1261,9 @@ type
     // - Dest^ buffer must be reserved with at least SourceChars*3 bytes
     // - this default implementation will rely on the Operating System for
     // all non ASCII-7 chars
-    function UnicodeBufferToAnsi(Dest: PAnsiChar; DestChars: Cardinal; Source: PWideChar; SourceChars: Cardinal): PAnsiChar; overload; virtual;
+    function UnicodeBufferToAnsi(Dest: PAnsiChar; Source: PWideChar; SourceChars: Cardinal): PAnsiChar; overload; virtual;
     /// direct conversion of an Unicode buffer into an Ansi Text
-    function UnicodeBufferToAnsi(Source: PWideChar; SourceChars: Cardinal): RawByteString; overload;
+    function UnicodeBufferToAnsi(Source: PWideChar; SourceChars: Cardinal): RawByteString; overload; virtual;
     /// convert any Unicode-encoded String into Ansi Text
     // - internaly calls UnicodeBufferToAnsi virtual method
     function RawUnicodeToAnsi(const Source: RawUnicode): RawByteString;
@@ -1336,7 +1336,7 @@ type
     /// direct conversion of an Unicode buffer into a PAnsiChar buffer
     // - Dest^ buffer must be reserved with at least SourceChars*3 bytes
     // - this overridden version will use internal lookup tables for fast process
-    function UnicodeBufferToAnsi(Dest: PAnsiChar; DestChars: Cardinal; Source: PWideChar; SourceChars: Cardinal): PAnsiChar; override;
+    function UnicodeBufferToAnsi(Dest: PAnsiChar; Source: PWideChar; SourceChars: Cardinal): PAnsiChar; override;
     /// direct conversion of an UTF-8 encoded buffer into a PAnsiChar buffer
     // - Dest^ buffer must be reserved with at least SourceChars bytes
     // - no trailing #0 is appended to the buffer
@@ -1375,6 +1375,9 @@ type
   // - match the TSynAnsiConvert signature, for code page CP_UTF8
   // - this class is mostly a non-operation for conversion to/from UTF-8
   TSynAnsiUTF8 = class(TSynAnsiConvert)
+  private
+    function UnicodeBufferToAnsi(Dest: PAnsiChar; DestChars: Cardinal;
+      Source: PWideChar; SourceChars: Cardinal): PAnsiChar;
   protected
     procedure InternalAppendUTF8(Source: PAnsiChar; SourceChars: Cardinal;
       DestTextWriter: TObject; Escape: TTextWriterKind); override;
@@ -1398,7 +1401,9 @@ type
     function AnsiToRawUnicode(Source: PAnsiChar; SourceChars: Cardinal): RawUnicode; override;
     /// direct conversion of an Unicode buffer into a PAnsiChar UTF-8 buffer
     // - Dest^ buffer must be reserved with at least SourceChars*3 bytes
-    function UnicodeBufferToAnsi(Dest: PAnsiChar; DestChars: Cardinal; Source: PWideChar; SourceChars: Cardinal): PAnsiChar; override;
+    function UnicodeBufferToAnsi(Dest: PAnsiChar; Source: PWideChar; SourceChars: Cardinal): PAnsiChar; override;
+    /// direct conversion of an Unicode buffer into an Ansi Text
+    function UnicodeBufferToAnsi(Source: PWideChar; SourceChars: Cardinal): RawByteString; override;
     /// direct conversion of an UTF-8 encoded buffer into a PAnsiChar UTF-8 buffer
     // - Dest^ buffer must be reserved with at least SourceChars bytes
     // - no trailing #0 is appended to the buffer
@@ -1442,7 +1447,7 @@ type
     function AnsiToRawUnicode(Source: PAnsiChar; SourceChars: Cardinal): RawUnicode; override;
     /// direct conversion of an Unicode buffer into a PAnsiChar UTF-16 buffer
     // - Dest^ buffer must be reserved with at least SourceChars*3 bytes
-    function UnicodeBufferToAnsi(Dest: PAnsiChar; DestChars: Cardinal; Source: PWideChar; SourceChars: Cardinal): PAnsiChar; override;
+    function UnicodeBufferToAnsi(Dest: PAnsiChar; Source: PWideChar; SourceChars: Cardinal): PAnsiChar; override;
     /// direct conversion of an UTF-8 encoded buffer into a PAnsiChar UTF-16 buffer
     // - Dest^ buffer must be reserved with at least SourceChars bytes
     // - no trailing #0 is appended to the buffer
@@ -18615,7 +18620,7 @@ begin
   SynAnsiConvertList.Add(result);
 end;
 
-function TSynAnsiConvert.UnicodeBufferToAnsi(Dest: PAnsiChar; DestChars: Cardinal;
+function TSynAnsiConvert.UnicodeBufferToAnsi(Dest: PAnsiChar;
   Source: PWideChar; SourceChars: Cardinal): PAnsiChar;
 var c: cardinal;
 {$ifndef MSWINDOWS}
@@ -18694,9 +18699,9 @@ var tmp: array[0..256*6] of WideChar;
     U: PWideChar;
 begin
   if SourceChars<SizeOf(tmp)div 3 then
-    result := UnicodeBufferToAnsi(Dest,SizeOf(tmp)div 3,tmp,UTF8ToWideChar(tmp,Source,SourceChars) shr 1) else begin
+    result := UnicodeBufferToAnsi(Dest,tmp,UTF8ToWideChar(tmp,Source,SourceChars) shr 1) else begin
     Getmem(U,SourceChars*3+2);
-    result := UnicodeBufferToAnsi(Dest,SourceChars*3,U,UTF8ToWideChar(U,Source,SourceChars) shr 1);
+    result := UnicodeBufferToAnsi(Dest,U,UTF8ToWideChar(U,Source,SourceChars) shr 1);
     Freemem(U);
   end;
 end;
@@ -18753,7 +18758,7 @@ begin
   if (Source=nil) or (SourceChars=0) then
     result := '' else begin
     tmp.Init((SourceChars+1) shl fAnsiCharShift);
-    SetString(result,PAnsiChar(tmp.buf),UnicodeBufferToAnsi(tmp.buf,SourceChars shl fAnsiCharShift,Source,SourceChars)-tmp.buf);
+    SetString(result,PAnsiChar(tmp.buf),UnicodeBufferToAnsi(tmp.buf,Source,SourceChars)-tmp.buf);
     tmp.Done;
     {$ifdef HASCODEPAGE}
     SetCodePage(result,fCodePage,false);
@@ -19050,7 +19055,7 @@ begin
   result := true;
 end;
 
-function TSynAnsiFixedWidth.UnicodeBufferToAnsi(Dest: PAnsiChar; DestChars: Cardinal;
+function TSynAnsiFixedWidth.UnicodeBufferToAnsi(Dest: PAnsiChar;
   Source: PWideChar; SourceChars: Cardinal): PAnsiChar;
 var c: cardinal;
 begin
@@ -19189,8 +19194,30 @@ end;
 function TSynAnsiUTF8.UnicodeBufferToAnsi(Dest: PAnsiChar; DestChars: Cardinal;
   Source: PWideChar; SourceChars: Cardinal): PAnsiChar;
 begin
-  result := Dest+RawUnicodeToUTF8(PUTF8Char(Dest),DestChars,
-    Source,SourceChars,[ccfNoTrailingZero]);
+  result := Dest+RawUnicodeToUTF8(PUTF8Char(Dest),DestChars,Source,SourceChars,
+    [ccfNoTrailingZero]);
+end;
+
+function TSynAnsiUTF8.UnicodeBufferToAnsi(Dest: PAnsiChar;
+  Source: PWideChar; SourceChars: Cardinal): PAnsiChar;
+begin
+  result := UnicodeBufferToAnsi(Dest,SourceChars,Source,SourceChars);
+end;
+
+function TSynAnsiUTF8.UnicodeBufferToAnsi(Source: PWideChar;
+  SourceChars: Cardinal): RawByteString;
+var tmp: TSynTempBuffer;
+begin
+  if (Source=nil) or (SourceChars=0) then
+    result := '' else begin
+    tmp.Init((SourceChars+1) shl fAnsiCharShift);
+    SetString(result,PAnsiChar(tmp.buf),UnicodeBufferToAnsi(
+      tmp.buf,(SourceChars) shl fAnsiCharShift,Source,SourceChars)-tmp.buf);
+    tmp.Done;
+    {$ifdef HASCODEPAGE}
+    SetCodePage(result,fCodePage,false);
+    {$endif}
+  end;
 end;
 
 function TSynAnsiUTF8.UTF8BufferToAnsi(Dest: PAnsiChar; Source: PUTF8Char;
@@ -19267,7 +19294,7 @@ begin
   inherited Create(aCodePage);
 end;
 
-function TSynAnsiUTF16.UnicodeBufferToAnsi(Dest: PAnsiChar; DestChars: Cardinal;
+function TSynAnsiUTF16.UnicodeBufferToAnsi(Dest: PAnsiChar;
   Source: PWideChar; SourceChars: Cardinal): PAnsiChar;
 begin
   SourceChars := SourceChars shl 1; // from WideChar count to byte count
@@ -20476,7 +20503,7 @@ end;
 
 procedure RawUnicodeToWinPChar(dest: PAnsiChar; source: PWideChar; WideCharCount: Integer);
 begin
-  WinAnsiConvert.UnicodeBufferToAnsi(dest,WideCharCount,source,WideCharCount);
+  WinAnsiConvert.UnicodeBufferToAnsi(dest,source,WideCharCount);
 end;
 
 function RawUnicodeToWinAnsi(WideChar: PWideChar; WideCharCount: integer): WinAnsiString;
@@ -20499,7 +20526,7 @@ var L: integer;
 begin
   L := StrLenW(source);
   SetLength(Dest,L);
-  WinAnsiConvert.UnicodeBufferToAnsi(pointer(Dest),L,source,L);
+  WinAnsiConvert.UnicodeBufferToAnsi(pointer(Dest),source,L);
 end;
 
 function UnicodeBufferToString(source: PWideChar): string;
