@@ -20427,7 +20427,7 @@ function ObjArraySearch(const aSQLRecordObjArray; aID: TID): TSQLRecord;
 procedure ObjArrayRecordIDs(const aSQLRecordObjArray; out result: TInt64DynArray);
 
 /// wrapper to create a new T*ObjArray with copied instances of a source T*ObjArray
-// - use internally to copy aSourceObjArray[] instances
+// - use internally CopyObject() over aSourceObjArray[] instances
 // - will clear aDestObjArray before items copy, if aDestObjArrayClear = TRUE
 procedure ObjArrayCopy(const aSourceObjArray; var aDestObjArray;
   aDestObjArrayClear: boolean=true);
@@ -62401,20 +62401,30 @@ begin
     result[i] := a[i].IDValue;
 end;
 
-procedure ObjArrayCopy(const aSourceObjArray; var aDestObjArray;
-  aDestObjArrayClear: boolean);
+procedure ObjArrayCopy(const aSourceObjArray; var aDestObjArray; aDestObjArrayClear: boolean);
 var s: TObjectDynArray absolute aSourceObjArray;
     d: TObjectDynArray absolute aDestObjArray;
-    dlen,i: integer;
+    slen,dlen,i: integer;
+    dinst: TClassInstance;
+    o: TObject;
 begin
-  if aDestObjArrayClear then
-    ObjArrayClear(aDestObjArray);
+  if aDestObjArrayClear and (d<>nil) then
+    ObjArrayClear(d);
+  slen := length(s);
+  if slen=0 then
+    exit;
   dlen := length(d);
-  SetLength(d,dlen+length(s));
-  for i := 0 to length(s)-1 do
-    d[dlen+i] := CopyObject(s[i]);
+  SetLength(d,dlen+slen);
+  DInst.ItemClass := nil;
+  for i := 0 to slen-1 do
+    if s[i]<>nil then begin // inlined CopyObject()
+      if DInst.ItemClass<>PClass(s[i])^ then
+        DInst.Init(PClass(s[i])^); // very unlikely to change
+      o := DInst.CreateNew;
+      CopyObject(s[i],o);
+      d[dlen+i] := o;
+    end;
 end;
-
 
 procedure InterfaceArrayDeleteAfterException(var aInterfaceArray;
   const aItemIndex: integer; aLog: TSynLogFamily; const aLogMsg: RawUTF8;
