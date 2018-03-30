@@ -61449,26 +61449,31 @@ found:  dec(P);
 end;
 
 function TRawByteStringGroup.FindAsText(aPosition, aLength: integer): RawByteString;
-var P: PAnsiChar;
+var P: PRawByteStringGroupValue;
 begin
-  P := Find(aPosition,aLength);
+  result := '';
+  P := Find(aPosition);
   if P=nil then
-    result := '' else
-    SetString(result,P,aLength);
+    exit;
+  dec(aPosition,P^.Position);
+  if (aPosition=0) and (length(P^.Value)=aLength) then
+    result := P^.Value else // direct return if not yet compacted
+    if aLength-aPosition<=length(P^.Value) then
+      SetString(result,PAnsiChar(@PByteArray(P^.Value)[aPosition]),aLength);
 end;
 
 {$ifndef NOVARIANTS}
 procedure TRawByteStringGroup.FindAsVariant(aPosition, aLength: integer; out aDest: variant);
-var P: pointer;
+var tmp: RawByteString;
 begin
-  P := Find(aPosition,aLength);
-  if P<>nil then
-    RawUTF8ToVariant(P,aLength,aDest);
+  tmp := FindAsText(aPosition,aLength);
+  if tmp<>'' then
+    RawUTF8ToVariant(tmp,aDest);
 end;
-{$endif}
+{$endif NOVARIANTS}
 
-procedure TRawByteStringGroup.FindWrite(aPosition, aLength: integer; W: TTextWriter;
-  Escape: TTextWriterKind);
+procedure TRawByteStringGroup.FindWrite(aPosition, aLength: integer;
+  W: TTextWriter; Escape: TTextWriterKind);
 var P: pointer;
 begin
   P := Find(aPosition,aLength);
