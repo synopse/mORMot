@@ -2602,7 +2602,7 @@ begin
               JsonToObject(fInternalSettings,pointer(doc.ToJSON),valid);
             end;
           end else
-          if IdemPropName(name,'save') then begin
+          if IdemPropNameU(name,'save') then begin
             if fInternalSettings.GetInterface(IDDDSettingsStorable,store) then begin
               store.StoreIfUpdated;
               result.Content := FormatUTF8('"% saved"',[fInternalSettings.ClassType]);

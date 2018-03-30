@@ -5739,7 +5739,7 @@ type
   public
     InternalDynArray: TDynArray;
     function Count: Integer;            inline;
-    function fValue: PPointer;          inline;
+    function Value: PPointer;           inline;
     function ElemSize: PtrUInt;         inline;
     function ElemType: Pointer;         inline;
     function KnownType: TDynArrayKind;  inline;
@@ -12227,7 +12227,7 @@ function HashFound(P: PHash128Rec; Count: integer; const h: THash128Rec): boolea
 
 /// convert a 128-bit buffer (storing an IP6 address) into its full notation
 // - returns e.g. '2001:0db8:0a0b:12f0:0000:0000:0000:0001'
-function IP6Text(const ip6: THash128): shortstring;
+function IP6Text(ip6: PHash128): shortstring;
 
 /// compute a 256-bit checksum on the supplied buffer using crc32c
 // - will use SSE 4.2 hardware accelerated instruction, if available
@@ -28248,6 +28248,7 @@ end;
 
 type
   TAnsiCharToWord = array[AnsiChar] of word;
+  TByteToWord = array[byte] of word;
 var
   /// fast lookup table for converting hexadecimal numbers from 0 to 15
   // into their ASCII equivalence
@@ -35398,17 +35399,20 @@ begin // fast O(n) brute force search
   result := false;
 end;
 
-function IP6Text(const ip6: THash128): shortstring;
+function IP6Text(ip6: PHash128): shortstring;
 var i: integer;
     p: PByte;
+    {$ifdef PUREPASCAL}tab: ^TByteToWord;{$endif}
 begin
-  if IsZero(ip6) then
+  if IsZero(ip6^) then
     result := '' else begin
     result[0] := AnsiChar(39);
     p := @result[1];
+    {$ifdef PUREPASCAL}tab := @TwoDigitsHexWBLower;{$endif}
     for i := 0 to 7 do begin
-      PWord(p)^ := TwoDigitsHexWB[ip6[i*2]];   inc(p,2);
-      PWord(p)^ := TwoDigitsHexWB[ip6[i*2+1]]; inc(p,2);
+      PWord(p)^ := {$ifdef PUREPASCAL}tab{$else}TwoDigitsHexWBLower{$endif}[ip6^[0]]; inc(p,2);
+      PWord(p)^ := {$ifdef PUREPASCAL}tab{$else}TwoDigitsHexWBLower{$endif}[ip6^[1]]; inc(p,2);
+      inc(PWord(ip6));
       p^ := ord(':'); inc(p);
     end;
   end;
@@ -49444,9 +49448,9 @@ begin
   InternalDynArray.SetCapacity(aCapacity);
 end;
 
-function TDynArrayHashed.fValue: PPointer;
+function TDynArrayHashed.Value: PPointer;
 begin
-  result := InternalDynArray.fValue;
+  result := InternalDynArray.Value;
 end;
 
 function TDynArrayHashed.ElemSize: PtrUInt;
@@ -49521,7 +49525,7 @@ var P: PAnsiChar;
     n: integer;
 begin
   if Assigned(fEventCompare) then begin
-    P := fValue^; // Count<fHashCountTrigger -> O(n) is faster than O(1)
+    P := Value^; // Count<fHashCountTrigger -> O(n) is faster than O(1)
     n := Count;
     for result := 0 to n-1 do
       if fEventCompare(P^,Elem)=0 then
@@ -49628,7 +49632,7 @@ begin
       inc(j);
     until added;
   end;
-  result := PAnsiChar(fValue^)+cardinal(ndx)*ElemSize;
+  result := PAnsiChar(Value^)+cardinal(ndx)*ElemSize;
   PRawUTF8(result)^ := aName; // store unique name at 1st elem position
 end;
 
@@ -49639,7 +49643,7 @@ var ndx: integer;
 begin
   ndx := FindHashedForAdding(aName,added);
   if added then begin
-    result := PAnsiChar(fValue^)+cardinal(ndx)*ElemSize;
+    result := PAnsiChar(Value^)+cardinal(ndx)*ElemSize;
     PRawUTF8(result)^ := aName; // store unique name at 1st elem position
   end else
     if ExceptionMsg='' then
@@ -49658,7 +49662,7 @@ begin
     end else
       result := -1;
   if result>=0 then
-    ElemCopy((PAnsiChar(fValue^)+cardinal(result)*ElemSize)^,ElemToFill);
+    ElemCopy((PAnsiChar(Value^)+cardinal(result)*ElemSize)^,ElemToFill);
 end;
 
 function TDynArrayHashed.FindHashedAndUpdate(const Elem; AddIfNotExisting: boolean): integer;
@@ -49675,7 +49679,7 @@ begin
           goto h;
         end else
         result := -1 else
-      ElemCopy(Elem,(PAnsiChar(fValue^)+cardinal(result)*ElemSize)^); // update
+      ElemCopy(Elem,(PAnsiChar(Value^)+cardinal(result)*ElemSize)^); // update
     exit;
   end;
 h:if Assigned(fHashElement) then begin
@@ -49687,11 +49691,11 @@ h:if Assigned(fHashElement) then begin
       if AddIfNotExisting then begin
         // not existing -> add as new element
         HashAdd(Elem,aHashCode,result); // ReHash only if necessary
-        ElemCopy(Elem,(PAnsiChar(fValue^)+cardinal(result)*ElemSize)^);
+        ElemCopy(Elem,(PAnsiChar(Value^)+cardinal(result)*ElemSize)^);
       end else
         result := -1 else begin
       // copy from Elem into dynamic array found entry = Update
-      ElemCopy(Elem,(PAnsiChar(fValue^)+cardinal(result)*ElemSize)^);
+      ElemCopy(Elem,(PAnsiChar(Value^)+cardinal(result)*ElemSize)^);
       ReHash; // whole hash table should be re-created for next search
     end;
   end else
@@ -49935,7 +49939,7 @@ var first,last: integer;
 begin
   if fHashs=nil then begin // Count=0 or Count<fHashCountTrigger
     if Assigned(fHashElement) then begin
-      P := fValue^;
+      P := Value^;
       for result := 0 to Count-1 do begin
         h := fHashElement(P^,fHasher);
         if h=HASH_VOID then
@@ -49995,7 +49999,7 @@ begin
   repeat
     with fHashs[result] do
     if Hash=aHashCode then begin
-      P := PAnsiChar(fValue^)+Index*ElemSize;
+      P := PAnsiChar(Value^)+Index*ElemSize;
       if not Assigned(fEventCompare) then
         if @{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare<>nil then begin
           if {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare(P^,Elem)=0 then begin
@@ -50052,7 +50056,7 @@ begin
     result := 0 else begin
     // it's faster to rehash than to loop in fHashs[].Index values
     // and it will also work with Count<fHashCountTrigger
-    P := PAnsiChar(fValue^)+cardinal(aIndex)*ElemSize;
+    P := PAnsiChar(Value^)+cardinal(aIndex)*ElemSize;
     if Assigned(fEventHash) then
       result := fEventHash(P^) else
       result := fHashElement(P^,fHasher);
@@ -50102,7 +50106,7 @@ begin
   end;
   SetLength(fHashs,fHashsCount); // fill all fHashs[]=HASH_VOID=0
   // fill fHashs[] from all existing items
-  P := fValue^;
+  P := Value^;
   for i := 0 to n-1 do begin
     if Assigned(fEventHash) then
       aHashCode := fEventHash(P^) else
@@ -59097,9 +59101,9 @@ begin
     n := fSafe.Padding[DIC_KEYCOUNT].VInteger;
     if (n=0) or not Assigned(OnEach) then
       exit;
-    k := fKeys.fValue^;
+    k := fKeys.Value^;
     ks := fKeys.ElemSize;
-    v := fValues.fValue^;
+    v := fValues.Value^;
     vs := fValues.ElemSize;
     for i := 0 to n-1 do begin
       inc(result);
@@ -59126,9 +59130,9 @@ begin
        (not Assigned(KeyCompare) and not Assigned(ValueCompare)) then
       exit;
     n := fSafe.Padding[DIC_KEYCOUNT].VInteger;
-    k := fKeys.fValue^;
+    k := fKeys.Value^;
     ks := fKeys.ElemSize;
-    v := fValues.fValue^;
+    v := fValues.Value^;
     vs := fValues.ElemSize;
     for i := 0 to n-1 do begin
       if (Assigned(KeyCompare) and (KeyCompare(k^,aKey)=0)) or
@@ -63070,7 +63074,7 @@ end;
 
 function TSynNameValue.Initialized: boolean;
 begin
-  result := fDynArray.fValue=@List;
+  result := fDynArray.Value=@List;
 end;
 
 function TSynNameValue.GetBlobData: RawByteString;
