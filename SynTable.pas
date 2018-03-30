@@ -114,15 +114,18 @@ type
     /// returns TRUE if the supplied content matches a grep-like pattern
     // - this method is not thread-safe
     function Match(const aText: RawUTF8): boolean;
+    /// returns TRUE if the supplied content matches a grep-like pattern
+    // - this method IS thread-safe, and won't lock
+    function MatchThreadSafe(const aText: RawUTF8): boolean;
   end;
   TMatchDynArray = array of TMatch;
 
   /// TMatch descendant owning a copy of the Pattern string to avoid GPF issues
   TMatchStore = record
     /// access to the research criteria
-    // - defined as a nested record (and not an object) to circumvent Delphi bugs
+    // - defined as a nested record (and not an object) to circumvent Delphi bug
     Parent: TMatch;
-    /// Parent.Pattern will point to this instance
+    /// Parent.Pattern PUTF8Char will point to this instance
     PatternInstance: RawUTF8;
   end;
   TMatchStoreDynArray = array of TMatchStore;
@@ -144,7 +147,8 @@ type
     /// search patterns in the supplied text
     // - returns -1 if no filter has been subscribed
     // - returns -2 if there is no match on any previous pattern subscription
-    // - returns fMatch[] index, i.e. >= 0 number on first matching pattern 
+    // - returns fMatch[] index, i.e. >= 0 number on first matching pattern
+    // - this method is thread-safe
     function Match(const aText: RawUTF8): integer;
   end;
 
@@ -4539,6 +4543,13 @@ begin
   end;
 end;
 
+function TMatch.MatchThreadSafe(const aText: RawUTF8): boolean;
+var local: TMatch; // thread-safe with no lock!
+begin
+  local := self;
+  result := local.Match(aText);
+end;
+
 function IsMatch(const Pattern, Text: RawUTF8; CaseInsensitive: boolean): boolean;
 var match: TMatch;
 begin
@@ -4560,11 +4571,11 @@ var
   i: integer;
 begin
   if (self = nil) or (fMatch = nil) then
-    result := -1 // no filter by name -> add all processes
+    result := -1 // no filter by name -> allow e.g. to process everything
   else begin
     result := -2;
     for i := 0 to length(fMatch) - 1 do
-      if fMatch[i].Parent.Match(aText) then begin
+      if fMatch[i].Parent.MatchThreadSafe(aText) then begin
         result := i;
         break;
       end;
