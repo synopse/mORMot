@@ -31,7 +31,7 @@ var
   bufData: pointer;
   decodedStr: RawByteString;
 begin
-  if (argc = 0) or ((argc=0) and vals[0].isVoid) then
+  if (argc = 0) or ((argc=1) and vals[0].isVoid) then
     encoding := 'utf-8'
   else
     encoding := LowerCase(vals[0].asJSString.ToUTF8(cx));
