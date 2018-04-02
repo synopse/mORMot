@@ -338,11 +338,7 @@ begin
     in_argv := vp.argv;
     if (argc < 1) or not in_argv[0].isString then
       raise ESMException.Create(USAGE);
-    try
-      fn := in_argv[0].asJSString.ToString(cx);
-    except
-      raise
-    end;
+    fn := in_argv[0].asJSString.ToString(cx);
     {$IFDEF MSWINDOWS}
     Code := GetFileAttributes(PChar(fn));
     if Code <> -1 then
@@ -565,7 +561,7 @@ end;
 function fs_loadFileToBuffer(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
 var
   in_argv: PjsvalVector;
-  filePath: string;
+  filePath: TFileName;
   size: Int64;
   arr_data: Puint8Vector;
   fFileStream: TFileStream;
@@ -576,7 +572,7 @@ begin
     if (argc <> 1) then
       raise ESMException.Create('usage loadFileToBuffer(pathToFile: String): ArrayBuffer');
     in_argv := vp.argv;
-    filePath := in_argv[0].asJSString.ToSynUnicode(cx);
+    filePath := in_argv[0].asJSString.ToString(cx);
     {$IFNDEF FPC}
     if IsRelativePath(filePath) then
     {$ELSE}
@@ -620,7 +616,7 @@ end;
 function fs_writeFile(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
 var
   in_argv: PjsvalVector;
-  filePath: string;
+  filePath: TFileName;
   stream: TFileStream;
   writer: SynCommons.TTextWriter;
 begin
@@ -628,7 +624,7 @@ begin
     if (argc < 2) then
       raise ESMException.Create('usage writeFile(filePath: String, fileContent: String|Object|ArrayBuffer [,encoding]');
     in_argv := vp.argv;
-    filePath := in_argv[0].asJSString.ToSynUnicode(cx);
+    filePath := in_argv[0].asJSString.ToString(cx);
     stream := TFileStream.Create(filePath, fmCreate);
     writer := SynCommons.TTextWriter.Create(stream, 65536);
     try
@@ -654,7 +650,7 @@ end;
 function fs_appendFile(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
 var
   in_argv: PjsvalVector;
-  filePath: string;
+  filePath: TFileName;
   FFile: THandle;
   stream: TFileStream;
   writer: SynCommons.TTextWriter;
@@ -663,7 +659,7 @@ begin
     if (argc < 2) then
       raise ESMException.Create('usage appendFile(filePath: String, fileContent: String|Object|ArrayBuffer [,encoding]');
     in_argv := vp.argv;
-    filePath := in_argv[0].asJSString.ToSynUnicode(cx);
+    filePath := in_argv[0].asJSString.ToString(cx);
     if not FileExists(filePath) then begin
       FFile := FileCreate(filePath);
       if PtrInt(FFile) > 0 then
@@ -695,14 +691,14 @@ end;
 function fs_deleteFile(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
 var
   in_argv: PjsvalVector;
-  filePath: string;
+  filePath: TFileName;
   val: jsval;
 begin
   try
     if (argc <> 1) then
       raise ESMException.Create('Invalid number of args for function nsm_deleteFile. Requied 1  - filePath');
     in_argv := vp.argv;
-    filePath := in_argv[0].asJSString.ToSynUnicode(cx);
+    filePath := in_argv[0].asJSString.ToString(cx);
     if SysUtils.DeleteFile(filePath) then
       val.asBoolean := True
     else if fileExists(filePath) then
@@ -735,7 +731,7 @@ begin
     in_argv := vp.argv;
     if (argc <> 1) or not in_argv[0].isString then
       raise ESMException.Create(f_usage);
-    dir := in_argv[0].asJSString.ToSynUnicode(cx);
+    dir := in_argv[0].asJSString.ToString(cx);
     if (dir = '') or {$IFNDEF FPC}IsRelativePath(dir){$ELSE}not FilenameIsAbsolute(dir){$ENDIF} then
       raise ESMException.Create(f_invalidPath);
     val.asBoolean := ForceDirectories(dir);
@@ -764,7 +760,7 @@ begin
     in_argv := vp.argv;
     if (argc <> 1) or not in_argv[0].isString then
       raise ESMException.Create(f_usage);
-    dir := in_argv[0].asJSString.ToSynUnicode(cx);
+    dir := in_argv[0].asJSString.ToString(cx);
     if (dir = '') or {$IFNDEF FPC}IsRelativePath(dir){$ELSE}not FilenameIsAbsolute(dir){$ENDIF} then
       raise ESMException.Create(f_invalidPath);
     val.asBoolean := RemoveDir(dir);
