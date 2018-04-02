@@ -776,6 +776,63 @@ begin
   end;
 end;
 
+function fs_openFile(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
+var
+  in_argv: PjsvalVector;
+  fn: TFileName;
+  flags: cInt;
+  mode: TMode;
+  val: jsval;
+const
+  f_usage = 'usage: openFile(fileName: String; flags: Integer; mode: Integer): Integer';
+begin
+  try
+    in_argv := vp.argv;
+    if (argc <> 3) or
+      not (in_argv[0].isString and in_argv[1].isInteger and in_argv[2].isInteger) then
+      raise ESMException.Create(f_usage);
+    fn := in_argv[0].asJSString.ToString(cx);
+    flags := in_argv[1].asInteger;
+    mode := in_argv[2].asInteger;
+    val.asInteger := FpOpen(fn, flags, mode);
+    vp.rval := val;
+    Result := True;
+  except
+    on E: Exception do
+    begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
+      JSError(cx, E);
+    end;
+  end;
+end;
+
+function fs_closeFile(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
+var
+  in_argv: PjsvalVector;
+  fd: cInt;
+  val: jsval;
+const
+  f_usage = 'usage: closeFile(descriptor: Integer): Integer';
+begin
+  try
+    in_argv := vp.argv;
+    if (argc <> 1) or not in_argv[0].isInteger then
+      raise ESMException.Create(f_usage);
+    fd := in_argv[0].asInteger;
+    val.asInteger := FpClose(fd);
+    vp.rval := val;
+    Result := True;
+  except
+    on E: Exception do
+    begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
+      JSError(cx, E);
+    end;
+  end;
+end;
+
 function SyNodeBindingProc_fs(const Engine: TSMEngine;
   const bindingNamespaceName: SynUnicode): jsval;
 const
@@ -803,6 +860,8 @@ begin
     obj.ptr.DefineFunction(cx, 'forceDirectories', fs_forceDirectories, 1, attrs);
     obj.ptr.DefineFunction(cx, 'removeDir', fs_removeDir, 1, attrs);
     obj.ptr.DefineFunction(cx, 'deleteFile', fs_deleteFile, 1, attrs);
+    obj.ptr.DefineFunction(cx, 'openFile', fs_openFile, 3, attrs);
+    obj.ptr.DefineFunction(cx, 'closeFile', fs_closeFile, 1, attrs);
     Result := obj.ptr.ToJSValue;
   finally
     cx.FreeRootedObject(obj);
