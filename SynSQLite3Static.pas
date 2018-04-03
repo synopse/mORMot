@@ -1,4 +1,4 @@
-/// SQLite3 3.22.0 Database engine - statically linked for Windows/Linux 32 bit
+/// SQLite3 3.23.0 Database engine - statically linked for Windows/Linux 32 bit
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynSQLite3Static;
@@ -48,7 +48,7 @@ unit SynSQLite3Static;
 
 
 
-    Statically linked SQLite3 3.22.0 engine
+    Statically linked SQLite3 3.23.0 engine
    *****************************************
 
   To be declared in your project uses clause:  will fill SynSQlite3.sqlite3
@@ -77,7 +77,7 @@ unit SynSQLite3Static;
 
   Version 1.18
   - initial revision, extracted from SynSQLite3.pas unit
-  - updated SQLite3 engine to latest version 3.22.0
+  - updated SQLite3 engine to latest version 3.23.0
   - now all sqlite3_*() API calls are accessible via sqlite3.*()
   - our custom file encryption is now called via sqlite3.key() - i.e. official
     SQLite Encryption Extension (SEE) sqlite3_key() API - and works for database
@@ -1075,6 +1075,10 @@ function sqlite3_backup_step(Backup: TSQLite3Backup; nPages: integer): integer; 
 function sqlite3_backup_finish(Backup: TSQLite3Backup): integer; cdecl; external;
 function sqlite3_backup_remaining(Backup: TSQLite3Backup): integer; cdecl; external;
 function sqlite3_backup_pagecount(Backup: TSQLite3Backup): integer; cdecl; external;
+function sqlite3_serialize(DB: TSQLite3DB; Schema: PUTF8Char; Size: PInt64;
+  Flags: integer): pointer; cdecl; external;
+function sqlite3_deserialize(DB: TSQLite3DB; Schema: PUTF8Char; Data: pointer;
+  DBSize, BufSize: Int64; Flags: integer): pointer; cdecl; external;
 {$ifndef DELPHI5OROLDER}
 function sqlite3_config(operation: integer): integer; cdecl varargs; external;
 function sqlite3_db_config(DB: TSQLite3DB; operation: integer): integer; cdecl varargs; external;
@@ -1087,7 +1091,7 @@ function sqlite3_trace_v2(DB: TSQLite3DB; Mask: integer; Callback: TSQLTraceCall
 
 const
   // error message if linked sqlite3.obj does not match this
-  EXPECTED_SQLITE3_VERSION = '3.22.0';
+  EXPECTED_SQLITE3_VERSION = '3.23.0';
 
 constructor TSQLite3LibraryStatic.Create;
 var error: RawUTF8;
@@ -1177,6 +1181,8 @@ begin
   backup_finish        := @sqlite3_backup_finish;
   backup_remaining     := @sqlite3_backup_remaining;
   backup_pagecount     := @sqlite3_backup_pagecount;
+  serialize            := @sqlite3_serialize;
+  deserialize          := @sqlite3_deserialize;
   {$ifndef DELPHI5OROLDER}
   config               := @sqlite3_config;
   db_config            := @sqlite3_db_config;

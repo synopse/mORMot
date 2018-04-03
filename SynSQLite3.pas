@@ -48,7 +48,7 @@ unit SynSQLite3;
   ***** END LICENSE BLOCK *****
 
 
-       SQLite3 3.22.0 database engine
+       SQLite3 3.23.0 database engine
       ********************************
 
      Brand new SQLite3 library to be used with Delphi
@@ -135,7 +135,7 @@ unit SynSQLite3;
   - moved all static .obj code into new SynSQLite3Static unit
   - allow either static .obj use via SynSQLite3Static or external .dll linking
     using TSQLite3LibraryDynamic to bind all APIs to the global sqlite3 variable
-  - updated SQLite3 engine to latest version 3.22.0
+  - updated SQLite3 engine to latest version 3.23.0
   - fixed: internal result cache is now case-sensitive for its SQL key values
   - raise an ESQLite3Exception if DBOpen method is called twice
   - added TSQLite3ErrorCode enumeration and sqlite3_resultToErrorCode()
@@ -1292,7 +1292,7 @@ type
     close: function(DB: TSQLite3DB): integer; cdecl;
 
     /// Return the version of the SQLite database engine, in ascii format
-    // - currently returns '3.22.0', when used with our SynSQLite3Static unit
+    // - currently returns '3.23.0', when used with our SynSQLite3Static unit
     // - if an external SQLite3 library is used, version may vary
     // - you may use the VersionText property (or Version for full details) instead
     libversion: function: PUTF8Char; cdecl;
@@ -1347,8 +1347,7 @@ type
     // that most closely matches the way in which the SQL function is used.
     create_function: function(DB: TSQLite3DB; FunctionName: PUTF8Char;
       nArg, eTextRep: integer; pApp: pointer; xFunc, xStep: TSQLFunctionFunc;
-      xFinal: TSQLFunctionFinal): Integer;
-      cdecl;
+      xFinal: TSQLFunctionFinal): Integer; cdecl;
 
     /// add SQL functions or aggregates or to redefine the behavior of existing
     // SQL functions or aggregates, including destruction
@@ -1361,8 +1360,7 @@ type
     // - this function is not available in older revisions - e.g. 3.6.*
     create_function_v2: function(DB: TSQLite3DB; FunctionName: PUTF8Char;
       nArg, eTextRep: integer; pApp: pointer; xFunc, xStep: TSQLFunctionFunc;
-      xFinal: TSQLFunctionFinal; xDestroy: TSQLDestroyPtr): Integer;
-      cdecl;
+      xFinal: TSQLFunctionFinal; xDestroy: TSQLDestroyPtr): Integer; cdecl;
 
     /// Define New Collating Sequences
     // - add new collation sequences to the database connection specified
@@ -1952,8 +1950,7 @@ type
     // object. The TSQLite3Backup object may be used with the backup_step() and
     // backup_finish() functions to perform the specified backup operation.
     backup_init: function(DestDB: TSQLite3DB; DestDatabaseName: PUTF8Char;
-      SourceDB: TSQLite3DB; SourceDatabaseName: PUTF8Char): TSQLite3Backup;
-      cdecl;
+      SourceDB: TSQLite3DB; SourceDatabaseName: PUTF8Char): TSQLite3Backup; cdecl;
 
     /// perform a backup step to transfer the data between the two databases
     // - backup_step() will copy up to nPages pages between the source and
@@ -1995,8 +1992,7 @@ type
     // as is used by the backup operation (which is the case in the SynSQLite3 and
     // mORMotSQLite3 units), then the backup database is automatically updated at
     // the same time, so you won't loose any data.
-    backup_step: function(Backup: TSQLite3Backup; nPages: integer): integer;
-      cdecl;
+    backup_step: function(Backup: TSQLite3Backup; nPages: integer): integer; cdecl;
     /// finalize a Backup process on a given database
     // - When backup_step() has returned SQLITE_DONE, or when the application
     // wishes to abandon the backup operation, the application should destroy the
@@ -2013,16 +2009,14 @@ type
     // corresponding error code.
     // - A return of SQLITE_BUSY or SQLITE_LOCKED from backup_step() is not a
     // permanent error and does not affect the return value of backup_finish().
-    backup_finish: function(Backup: TSQLite3Backup): integer;
-      cdecl;
+    backup_finish: function(Backup: TSQLite3Backup): integer; cdecl;
 
     /// returns the number of pages still to be backed up for a given Backup
     // - The values returned by this function is only updated by backup_step().
     // If the source database is modified during a backup operation, then the
     // value is not updated to account for any extra pages that need to be
     // updated or the size of the source database file changing.
-    backup_remaining: function(Backup: TSQLite3Backup): integer;
-      cdecl;
+    backup_remaining: function(Backup: TSQLite3Backup): integer; cdecl;
 
     /// returns the the total number of pages in the source database file
     // for a given Backup process
@@ -2030,9 +2024,29 @@ type
     // If the source database is modified during a backup operation, then the
     // value is not updated to account for any extra pages that need to be
     // updated or the size of the source database file changing.
-    backup_pagecount: function(Backup: TSQLite3Backup): integer;
-      cdecl;
+    backup_pagecount: function(Backup: TSQLite3Backup): integer; cdecl;
 
+    /// serialize a database
+    // - returns a pointer to memory that is a serialization of the Schema
+    // database on database connection DB
+    // - if Size is not nil, then the size of the database in bytes is written into Size^
+    // - for an ordinary on-disk database file, the serialization is just a copy
+    // of the disk file; for an in-memory database or a "TEMP" database, the
+    // serialization is the same sequence of bytes which would be written to disk
+    // if that database where backed up to disk.
+    // - caller is responsible for freeing the returned value (using free_)
+    // to avoid a memory leak
+    serialize: function(DB: TSQLite3DB; Schema: PUTF8Char; Size: PInt64;
+      Flags: integer): pointer; cdecl;
+
+    /// deserialize a database
+    // - causes the database connection DB to disconnect from database Schema
+    // and then reopen Schema as an in-memory database based on the serialization
+    // contained in Data; the serialized database Data is DBSize bytes in size
+    // - BufSize is the size of the buffer Data, which might be larger than DBSize
+    deserialize: function(DB: TSQLite3DB; Schema: PUTF8Char; Data: pointer;
+      DBSize, BufSize: Int64; Flags: integer): pointer; cdecl;
+      
     /// used to make global configuration changes to current database
     config: function(operation: integer): integer;
       {$ifndef DELPHI5OROLDER} cdecl varargs; {$endif}
@@ -5746,7 +5760,7 @@ end;
 { TSQLite3LibraryDynamic }
 
 const
-  SQLITE3_ENTRIES: array[0..86] of TFileName =
+  SQLITE3_ENTRIES: array[0..88] of TFileName =
   ('initialize','shutdown','open','open_v2','key','rekey','close',
    'libversion','errmsg','extended_errcode',
    'create_function','create_function_v2',
@@ -5765,7 +5779,7 @@ const
    'commit_hook','rollback_hook','changes','total_changes','malloc', 'realloc',
    'free','memory_used','memory_highwater','trace_v2','limit',
    'backup_init','backup_step','backup_finish','backup_remaining',
-   'backup_pagecount','config','db_config');
+   'backup_pagecount','config','db_config','serialize','deserialize');
 
 constructor TSQLite3LibraryDynamic.Create(const LibraryName: TFileName);
 var P: PPointerArray;

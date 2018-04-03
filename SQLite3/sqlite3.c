@@ -45,6 +45,8 @@
 // we don't need sqlite3_progress_handler() API function
 #define SQLITE_ENABLE_RTREE 1
 // the RTREE extension is now (from v.1.8/3.7) compiled into the engine
+#define SQLITE_ENABLE_DESERIALIZE
+// enables  sqlite3_serialize() and sqlite3_deserialize()
 #define SQLITE_HAS_CODEC 1
 // see code below
 
