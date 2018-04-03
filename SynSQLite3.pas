@@ -1687,8 +1687,8 @@ type
     // copy of the data (this is the prefered way in our Framework)
     // - set DestroyPtr to @sqlite3InternalFree if Value must be released via Freemem()
     bind_text: function(S: TSQLite3Statement; Param: integer;
-      Text: PUTF8Char; Text_bytes: integer=-1; DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT): integer;
-      cdecl;
+      Text: PUTF8Char; Text_bytes: integer=-1;
+      DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT): integer; cdecl;
       // note that the official SQLite3 documentation could lead into misunderstanding:
       // Text_bytes must EXCLUDE the null terminator, otherwise a #0 is appended to
       // all column values
@@ -1783,8 +1783,7 @@ type
     // not nil) when SQLite no longer needs the pClientData pointer. The
     // destructor will also be invoked if call to sqlite3.create_module_v2() fails.
     create_module_v2: function(DB: TSQLite3DB; const zName: PAnsiChar;
-      var p: TSQLite3Module; pClientData: Pointer; xDestroy: TSQLDestroyPtr): Integer;
-      cdecl;
+      var p: TSQLite3Module; pClientData: Pointer; xDestroy: TSQLDestroyPtr): Integer; cdecl;
 
     /// Declare the Schema of a virtual table
     // - The xCreate() and xConnect() methods of a virtual table module call this
@@ -1800,8 +1799,7 @@ type
     // the result set of a SELECT, and 3. Hidden columns are not included in the
     // implicit column-list used by an INSERT statement that lacks an explicit
     // column-list.
-    declare_vtab: function(DB: TSQLite3DB; const zSQL: PAnsiChar): Integer;
-      cdecl;
+    declare_vtab: function(DB: TSQLite3DB; const zSQL: PAnsiChar): Integer; cdecl;
 
     /// Registers an authorizer callback to a specified DB connection
     // - Only a single authorizer can be in place on a database connection at a time
@@ -1809,7 +1807,7 @@ type
     // - Disable the authorizer by installing a nil callback
     // - The authorizer is disabled by default
     set_authorizer: function(DB: TSQLite3DB; xAuth: TSQLAuthorizerCallback;
-      pUserData: Pointer): Integer;   cdecl;
+      pUserData: Pointer): Integer; cdecl;
 
     /// Register Data Change Notification Callbacks
     // - The sqlite3.update_hook() interface registers a callback function with
@@ -1929,8 +1927,7 @@ type
     // interface returns the prior value of the limit. Hence, to find the current
     // value of a limit without changing it, simply invoke this interface with
     // the third parameter set to -1.
-    limit: function(DB: TSQLite3DB; id,newValue: integer): integer;
-      cdecl;
+    limit: function(DB: TSQLite3DB; id,newValue: integer): integer; cdecl;
 
     /// Initialize a backup process of a given SQLite3 database instance
     // - The DestDB and DestDatabaseName arguments are the database connection

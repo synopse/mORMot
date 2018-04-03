@@ -16862,6 +16862,9 @@ type
     class function FreeAsText: RawUTF8;
     /// how many physical memory is currently installed, as text (e.g. '32GB');
     class function PhysicalAsText: RawUTF8;
+    /// returns a JSON object with the current system memory information
+    // - numbers would be given in KB (Bytes shl 10)
+    class function ToJSON: RawUTF8;
     {$ifndef NOVARIANTS}
     /// fill a TDocVariant with the current system memory information
     // - numbers would be given in KB (Bytes shl 10)
@@ -26228,12 +26231,35 @@ begin
     Windows.Sleep(ms);
 end;
 
+type
+  TProcessMemoryCounters = record
+    cb: DWORD;
+    PageFaultCount: DWORD;
+    PeakWorkingSetSize: PtrUInt;
+    WorkingSetSize: PtrUInt;
+    QuotaPeakPagedPoolUsage: PtrUInt;
+    QuotaPagedPoolUsage: PtrUInt;
+    QuotaPeakNonPagedPoolUsage: PtrUInt;
+    QuotaNonPagedPoolUsage: PtrUInt;
+    PagefileUsage: PtrUInt;
+    PeakPagefileUsage: PtrUInt;
+  end;
+const
+  PROCESS_QUERY_LIMITED_INFORMATION = $1000;
+
+var
+  GetSystemTimes: function(var lpIdleTime, lpKernelTime, lpUserTime: TFileTime): BOOL; stdcall;
+  GetProcessTimes: function(hProcess: THandle;
+    var lpCreationTime, lpExitTime, lpKernelTime, lpUserTime: TFileTime): BOOL; stdcall;
+  GetProcessMemoryInfo: function(Process: THandle;
+    var ppsmemCounters: TProcessMemoryCounters; cb: DWORD): BOOL; stdcall;
+
 procedure RetrieveSystemInfo;
 var
   IsWow64Process: function(Handle: THandle; var Res: BOOL): BOOL; stdcall;
   GetNativeSystemInfo: procedure(var SystemInfo: TSystemInfo); stdcall;
   Res: BOOL;
-  Kernel: THandle;
+  Kernel, PSAPI: THandle;
   P: pointer;
   Vers: TWindowsVersion;
   cpu: string;
@@ -26312,6 +26338,9 @@ begin
   if cpu='' then
     cpu := GetEnvironmentVariable('PROCESSOR_IDENTIFIER');
   FormatUTF8('% x % ('+CPU_ARCH_TEXT+')',[SystemInfo.dwNumberOfProcessors,cpu],CpuInfoText);
+  @GetSystemTimes := GetProcAddress(Kernel,'GetSystemTimes');
+  @GetProcessTimes := GetProcAddress(Kernel,'GetProcessTimes');
+  @GetProcessMemoryInfo := GetProcAddress(LoadLibrary('PSAPI.dll'),'GetProcessMemoryInfo');
 end;
 
 {$else}
@@ -56738,7 +56767,8 @@ class function TSynMonitorMemory.FreeAsText: RawUTF8;
 begin
   with TSynMonitorMemory.Create do
   try
-    FormatUTF8('% / %',[PhysicalMemoryFree.Text,PhysicalMemoryTotal.Text],result);
+    RetrieveMemoryInfo;
+    FormatUTF8('% / %',[fPhysicalMemoryFree.Text,fPhysicalMemoryTotal.Text],result);
   finally
     Free;
   end;
@@ -56759,22 +56789,28 @@ begin
   result := PhysicalAsTextCache;
 end;
 
-{$ifndef NOVARIANTS}
-class function TSynMonitorMemory.ToVariant: variant;
+class function TSynMonitorMemory.ToJSON: RawUTF8;
 begin
   with TSynMonitorMemory.Create do
   try
-    result := _JsonFastFmt('{Allocated:{reserved:%,used:%},Physical:{total:%,free:%},'+
-      'Virtual:{total:%,free:%},Paged:{total:%,free:%}}',
-      [AllocatedReserved.Bytes shr 10,AllocatedUsed.Bytes shr 10,
-       PhysicalMemoryTotal.Bytes shr 10,PhysicalMemoryFree.Bytes shr 10,
+    RetrieveMemoryInfo;
+    FormatUTF8('{Allocated:{reserved:%,used:%},Physical:{total:%,free:%},'+
+      {$ifdef MSWINDOWS}'Virtual:{total:%,free:%},'+{$endif}'Paged:{total:%,free:%}}',
+      [fAllocatedReserved.Bytes shr 10,fAllocatedUsed.Bytes shr 10,
+       fPhysicalMemoryTotal.Bytes shr 10,fPhysicalMemoryFree.Bytes shr 10,
        {$ifdef MSWINDOWS}
-       VirtualMemoryTotal.Bytes shr 10,VirtualMemoryFree.Bytes shr 10,
+       fVirtualMemoryTotal.Bytes shr 10,fVirtualMemoryFree.Bytes shr 10,
        {$endif}
-       PagingFileTotal.Bytes shr 10,PagingFileFree.Bytes shr 10],[]);
+       fPagingFileTotal.Bytes shr 10,fPagingFileFree.Bytes shr 10],result);
   finally
     Free;
   end;
+end;
+
+{$ifndef NOVARIANTS}
+class function TSynMonitorMemory.ToVariant: variant;
+begin
+  result := _JsonFast(ToJSON);
 end;
 {$endif}
 
@@ -56862,18 +56898,28 @@ var Heap: TMemoryManagerState;
     tot,res: QWord;
 {$endif}
 {$ifdef MSWINDOWS}
-var MemoryStatus: TMemoryStatusEx;
+var global: TMemoryStatusEx;
+    mem: TProcessMemoryCounters;
 begin
-  FillcharFast(MemoryStatus,SizeOf(MemoryStatus),0);
-  MemoryStatus.dwLength := SizeOf(MemoryStatus);
-  GlobalMemoryStatusEx(MemoryStatus);
-  FMemoryLoadPercent := MemoryStatus.dwMemoryLoad;
-  FPhysicalMemoryTotal.fBytes := MemoryStatus.ullTotalPhys;
-  FPhysicalMemoryFree.fBytes := MemoryStatus.ullAvailPhys;
-  FPagingFileTotal.fBytes := MemoryStatus.ullTotalPageFile;
-  FPagingFileFree.fBytes := MemoryStatus.ullAvailPageFile;
-  FVirtualMemoryTotal.fBytes := MemoryStatus.ullTotalVirtual;
-  FVirtualMemoryFree.fBytes := MemoryStatus.ullAvailVirtual;
+  FillZero(global,SizeOf(global));
+  global.dwLength := SizeOf(global);
+  GlobalMemoryStatusEx(global);
+  FMemoryLoadPercent := global.dwMemoryLoad;
+  FPhysicalMemoryTotal.fBytes := global.ullTotalPhys;
+  FPhysicalMemoryFree.fBytes := global.ullAvailPhys;
+  FPagingFileTotal.fBytes := global.ullTotalPageFile;
+  FPagingFileFree.fBytes := global.ullAvailPageFile;
+  FVirtualMemoryTotal.fBytes := global.ullTotalVirtual;
+  FVirtualMemoryFree.fBytes := global.ullAvailVirtual;
+  {$ifdef FPC} // GetHeapStatus is only about current thread -> use WinAPI
+  if Assigned(GetProcessMemoryInfo) then begin
+    FillcharFast(mem,SizeOf(mem),0);
+    mem.cb := SizeOf(mem);
+    GetProcessMemoryInfo(GetCurrentProcess,mem,SizeOf(mem));
+    FAllocatedReserved.fBytes := mem.PeakWorkingSetSize;
+    FAllocatedUsed.fBytes := mem.WorkingSetSize;
+  end;
+  {$endif FPC}
 {$else}
 {$ifdef BSD}
 begin
@@ -56882,27 +56928,25 @@ begin
   FPhysicalMemoryFree.fBytes := FPhysicalMemoryTotal.fBytes-fpsysctlhw(HW_USERMEM);
 {$else}
 var si: TSysInfo; // Linuxism
+    pagesize: cardinal;
+    P: PUTF8Char;
 begin
-  {$ifdef FPC}
-  SysInfo(@si);
-  {$else}
-  SysInfo(si);
-  {$endif}
+  SysInfo({$ifdef FPC}@{$endif}si);
   if si.totalram<>0 then // avoid div per 0 exception
-    FMemoryLoadPercent := ((si.totalram-si.freeram)*100)div si.totalram;
-  FPhysicalMemoryTotal.fBytes := si.totalram;
-  FPhysicalMemoryFree.fBytes := si.freeram;
-  FPagingFileTotal.fBytes := si.totalswap;
-  FPagingFileFree.fBytes := si.freeswap;
+    FMemoryLoadPercent := ((si.totalram-si.freeram)*si.mem_unit*100)div si.totalram;
+  FPhysicalMemoryTotal.fBytes := si.totalram*si.mem_unit;
+  FPhysicalMemoryFree.fBytes := si.freeram*si.mem_unit;
+  FPagingFileTotal.fBytes := si.totalswap*si.mem_unit;
+  FPagingFileFree.fBytes := si.freeswap*si.mem_unit;
   // virtual memory information is not available under Linux
+  P := pointer(StringFromFile('/proc/self/statm', true));
+  pagesize := getpagesize;
+  FAllocatedReserved.fBytes := GetNextItemCardinal(P, ' ')*pagesize; // VmSize
+  FAllocatedUsed.fBytes := GetNextItemCardinal(P, ' ')*pagesize;     // VmRSS
+  // GetHeapStatus is only about current thread -> use /proc/[pid]/statm
 {$endif BSD}
 {$endif MSWINDOWS}
-{$ifdef FPC}
-  with GetHeapStatus do begin
-    FAllocatedUsed.fBytes := TotalAllocated;
-    FAllocatedReserved.fBytes := TotalAllocated+TotalFree;
-  end;
-{$else}
+{$ifndef FPC}
 {$ifdef LVCL}
   tot := 0;
   res := 0;
@@ -64352,30 +64396,6 @@ end;
 { TSystemUse }
 
 {$ifdef MSWINDOWS}
-type
-  TProcessMemoryCounters = record
-    cb: DWORD;
-    PageFaultCount: DWORD;
-    PeakWorkingSetSize: PtrUInt;
-    WorkingSetSize: PtrUInt;
-    QuotaPeakPagedPoolUsage: PtrUInt;
-    QuotaPagedPoolUsage: PtrUInt;
-    QuotaPeakNonPagedPoolUsage: PtrUInt;
-    QuotaNonPagedPoolUsage: PtrUInt;
-    PagefileUsage: PtrUInt;
-    PeakPagefileUsage: PtrUInt;
-  end;
-const
-  PROCESS_QUERY_LIMITED_INFORMATION = $1000;
-
-var
-  hsapi: HMODULE;
-  GetSystemTimes: function(var lpIdleTime, lpKernelTime, lpUserTime: TFileTime): BOOL; stdcall;
-  GetProcessTimes: function(hProcess: THandle;
-    var lpCreationTime, lpExitTime, lpKernelTime, lpUserTime: TFileTime): BOOL; stdcall;
-  GetProcessMemoryInfo: function(Process: THandle;
-    var ppsmemCounters: TProcessMemoryCounters; cb: DWORD): BOOL; stdcall;
-
 procedure TSystemUse.BackgroundExecute(Sender: TSynBackgroundTimer;
   Event: TWaitResult; const Msg: RawUTF8);
 var ftidl,ftkrn,ftusr,ftp,fte: TFileTime;
@@ -64468,16 +64488,9 @@ begin
   fSafe := TAutoLocker.Create;
   fProcesses.Init(TypeInfo(TSystemUseProcessDynArray),fProcess);
   {$ifdef MSWINDOWS}
-  if not Assigned(GetSystemTimes) then begin
-    h := GetModuleHandle(kernel32);
-    @GetSystemTimes := GetProcAddress(h,'GetSystemTimes');
-    @GetProcessTimes := GetProcAddress(h,'GetProcessTimes');
-    hsapi := LoadLibrary('PSAPI.dll');
-    @GetProcessMemoryInfo := GetProcAddress(hsapi,'GetProcessMemoryInfo');
-    if not Assigned(GetSystemTimes) or not Assigned(GetProcessTimes) or
-       not Assigned(GetProcessMemoryInfo) then
-      exit; // no system monitoring API under oldest Windows
-  end;
+  if not Assigned(GetSystemTimes) or not Assigned(GetProcessTimes) or
+     not Assigned(GetProcessMemoryInfo) then
+    exit; // no system monitoring API under oldest Windows
   if OSVersion<wVista then
     fOpenProcessFlags := PROCESS_QUERY_INFORMATION else
     fOpenProcessFlags := PROCESS_QUERY_LIMITED_INFORMATION;
