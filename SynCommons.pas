@@ -56794,13 +56794,11 @@ begin
   with TSynMonitorMemory.Create do
   try
     RetrieveMemoryInfo;
-    FormatUTF8('{Allocated:{reserved:%,used:%},Physical:{total:%,free:%},'+
+    FormatUTF8('{Allocated:{reserved:%,used:%},Physical:{total:%,free:%,percent:%},'+
       {$ifdef MSWINDOWS}'Virtual:{total:%,free:%},'+{$endif}'Paged:{total:%,free:%}}',
       [fAllocatedReserved.Bytes shr 10,fAllocatedUsed.Bytes shr 10,
-       fPhysicalMemoryTotal.Bytes shr 10,fPhysicalMemoryFree.Bytes shr 10,
-       {$ifdef MSWINDOWS}
-       fVirtualMemoryTotal.Bytes shr 10,fVirtualMemoryFree.Bytes shr 10,
-       {$endif}
+       fPhysicalMemoryTotal.Bytes shr 10,fPhysicalMemoryFree.Bytes shr 10, fMemoryLoadPercent,
+       {$ifdef MSWINDOWS}fVirtualMemoryTotal.Bytes shr 10,fVirtualMemoryFree.Bytes shr 10,{$endif}
        fPagingFileTotal.Bytes shr 10,fPagingFileFree.Bytes shr 10],result);
   finally
     Free;
@@ -56926,6 +56924,8 @@ begin
   FPhysicalMemoryTotal.fBytes := fpsysctlhw(
     {$ifdef DARWIN}HW_MEMSIZE{$else}HW_PHYSMEM{$endif});
   FPhysicalMemoryFree.fBytes := FPhysicalMemoryTotal.fBytes-fpsysctlhw(HW_USERMEM);
+  if FPhysicalMemoryTotal.fBytes<>0 then // avoid div per 0 exception
+    FMemoryLoadPercent := ((FPhysicalMemoryTotal.fBytes-FPhysicalMemoryFree.fBytes)*100)div FPhysicalMemoryTotal.fBytes;
 {$else}
 var si: TSysInfo; // Linuxism
     pagesize: cardinal;
@@ -56933,16 +56933,16 @@ var si: TSysInfo; // Linuxism
 begin
   SysInfo({$ifdef FPC}@{$endif}si);
   if si.totalram<>0 then // avoid div per 0 exception
-    FMemoryLoadPercent := ((si.totalram-si.freeram)*si.mem_unit*100)div si.totalram;
+    FMemoryLoadPercent := ((si.totalram-si.freeram)*100)div si.totalram;
   FPhysicalMemoryTotal.fBytes := si.totalram*si.mem_unit;
   FPhysicalMemoryFree.fBytes := si.freeram*si.mem_unit;
   FPagingFileTotal.fBytes := si.totalswap*si.mem_unit;
   FPagingFileFree.fBytes := si.freeswap*si.mem_unit;
   // virtual memory information is not available under Linux
-  P := pointer(StringFromFile('/proc/self/statm', true));
+  P := pointer(StringFromFile('/proc/self/statm',true));
   pagesize := getpagesize;
-  FAllocatedReserved.fBytes := GetNextItemCardinal(P, ' ')*pagesize; // VmSize
-  FAllocatedUsed.fBytes := GetNextItemCardinal(P, ' ')*pagesize;     // VmRSS
+  FAllocatedReserved.fBytes := GetNextItemCardinal(P,' ')*pagesize; // VmSize
+  FAllocatedUsed.fBytes := GetNextItemCardinal(P,' ')*pagesize;     // VmRSS
   // GetHeapStatus is only about current thread -> use /proc/[pid]/statm
 {$endif BSD}
 {$endif MSWINDOWS}
