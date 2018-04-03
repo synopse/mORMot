@@ -101,10 +101,10 @@ var
   // contains CLOCK_MONOTONIC_COARSE since kernel 2.6.32
   CLOCK_MONOTONIC_TICKCOUNT: integer = CLOCK_MONOTONIC;
 
+{$endif BSD}
+
 /// used by TSynMonitorMemory.RetrieveMemoryInfo to compute the sizes in byte
 function getpagesize: Integer; cdecl; external 'c';
-
-{$endif BSD}
 
 /// compatibility function, wrapping Win32 API high resolution timer
 procedure QueryPerformanceCounter(var Value: Int64); inline;

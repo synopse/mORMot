@@ -13847,6 +13847,7 @@ var
   // to retrieve the real top-most system information
   // - note that the lpMinimumApplicationAddress field is replaced by a
   // more optimistic/realistic value ($100000 instead of default $10000)
+  // - under BSD/Linux, only contain dwPageSize and dwNumberOfProcessors fields
   SystemInfo: TSystemInfo;
   /// the current Operating System information, as retrieved for the current process
   OSVersionInfo: TOSVersionInfoEx;
@@ -13902,8 +13903,13 @@ procedure SleepHiRes(ms: cardinal);
 {$else MSWINDOWS}
 
 var
+  /// emulate only some used fields of Windows' TSystemInfo
   SystemInfo: record
-    dwNumberOfProcessors: integer;
+    // retrieved from libc's getpagesize()
+    dwPageSize: cardinal;
+    // retrieved from HW_NCPU (BSD) or /proc/cpuinfo (Linux)
+    dwNumberOfProcessors: cardinal;
+    // as returned by fpuname()
     uts: UtsName;
   end;
   OSVersionText, CpuInfoText: RawUTF8;
@@ -26369,6 +26375,7 @@ var modname, beg: PUTF8Char;
     {$endif BSD}
 begin
   modname := nil;
+  SystemInfo.dwPageSize := getpagesize; // use libc for this value
   {$ifdef BSD}
   fpuname(SystemInfo.uts);
   SystemInfo.dwNumberOfProcessors := fpsysctlhw(HW_NCPU);
@@ -56928,7 +56935,6 @@ begin
     FMemoryLoadPercent := ((FPhysicalMemoryTotal.fBytes-FPhysicalMemoryFree.fBytes)*100)div FPhysicalMemoryTotal.fBytes;
 {$else}
 var si: TSysInfo; // Linuxism
-    pagesize: cardinal;
     P: PUTF8Char;
 begin
   SysInfo({$ifdef FPC}@{$endif}si);
@@ -56940,9 +56946,8 @@ begin
   FPagingFileFree.fBytes := si.freeswap*si.mem_unit;
   // virtual memory information is not available under Linux
   P := pointer(StringFromFile('/proc/self/statm',true));
-  pagesize := getpagesize;
-  FAllocatedReserved.fBytes := GetNextItemCardinal(P,' ')*pagesize; // VmSize
-  FAllocatedUsed.fBytes := GetNextItemCardinal(P,' ')*pagesize;     // VmRSS
+  FAllocatedReserved.fBytes := GetNextItemCardinal(P,' ')*SystemInfo.dwPageSize; // VmSize
+  FAllocatedUsed.fBytes := GetNextItemCardinal(P,' ')*SystemInfo.dwPageSize;     // VmRSS
   // GetHeapStatus is only about current thread -> use /proc/[pid]/statm
 {$endif BSD}
 {$endif MSWINDOWS}
