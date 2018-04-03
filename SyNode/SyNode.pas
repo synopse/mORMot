@@ -143,7 +143,7 @@ type
 
     fEngineContentVersion: Cardinal;
     fThreadID: TThreadID;
-    fLastErrorMsg: SynUnicode;
+    fLastErrorMsg: string;
     fLastErrorNum: integer;
     fLastErrorFileName: RawUTF8;
     fLastErrorLine: integer;
@@ -266,7 +266,7 @@ type
     property EngineContentVersion: Cardinal read FEngineContentVersion;
 
     /// last error message triggered during JavaScript execution
-    property LastErrorMsg: SynUnicode read FLastErrorMsg;
+    property LastErrorMsg: string read FLastErrorMsg;
     /// last error source code line number triggered during JavaScript execution
     property LastErrorLine: integer read FLastErrorLine;
     /// last error file name triggered during JavaScript execution
@@ -1024,7 +1024,7 @@ begin
 
         excObj.ptr.GetProperty(cx, 'message', exc);
         if (not exc.isVoid) and (exc.isString) then
-          FLastErrorMsg := exc.asJSString.ToSynUnicode(fCx);
+          FLastErrorMsg := exc.asJSString.ToString(fCx);
 
         excObj.ptr.GetProperty(cx, 'stack', exc);
         if (not exc.isVoid) and (exc.isString) then
@@ -1032,15 +1032,20 @@ begin
 
         if (rep <> nil) then
           FLastErrorNum := rep^.errorNumber
-        else
-          FLastErrorNum := 0;
+        else begin
+          excObj.ptr.GetProperty(cx, 'errorNumber', exc);
+          if (not exc.isVoid) and (exc.isInteger) then
+            FLastErrorNum := exc.asInteger
+          else
+            FLastErrorNum := 0;
+        end;
       finally
         cx.FreeRootedObject(excObj);
       end;
     end else if exc.isString then begin
       FErrorExist := True;
       FLastErrorFileName := '<betterToThrowErrorInsteadOfPlainValue>';
-      FLastErrorMsg := exc.asJSString.ToSynUnicode(fCx);
+      FLastErrorMsg := exc.asJSString.ToString(fCx);
       FLastErrorStackTrace := '';
       FLastErrorNum := 0;
     end else begin
