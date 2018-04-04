@@ -29,21 +29,22 @@ uses
 {$ELSE}
   Unix, BaseUnix, DateUtils,
 {$ENDIF}
+  Classes,
 {$IFDEF FPC}
   LazFileUtils,
 {$ENDIF}
+  SynLog,
   SyNodeReadWrite,
-  Classes,
-  SynLog;
+  SyNodeBinding_buffer;
 
 {$IFDEF MSWINDOWS}
 function _open(fn: pointer; flags, mode: LongInt): LongInt; cdecl;
   external 'msvcrt';
 function _close(Handle: LongInt): LongInt; cdecl;
   external 'msvcrt';
-function _read(Handle: LongInt; var Buffer; Count: size_t): size_t; cdecl;
+function _read(Handle: LongInt; var Buffer; Count: Int64): Int64; cdecl;
   external 'msvcrt';
-function _write(Handle: LongInt; const Buffer; Count: size_t): size_t; cdecl;
+function _write(Handle: LongInt; const Buffer; Count: Int64): Int64; cdecl;
   external 'msvcrt';
 
 function FpOpen(const fn: RawByteString; flags, mode: LongInt): LongInt; inline;
@@ -51,9 +52,19 @@ begin
   Result := _open(PChar(fn), flags, mode);
 end;
 
-function FpClose(h: LongInt): LongInt; inline;
+function FpClose(fd: LongInt): LongInt; inline;
 begin
-  Result := _close(h);
+  Result := _close(fd);
+end;
+
+function FpRead(fd: LongInt; var buf; nBytes: Int64): Int64; inline;
+begin
+  Result := _read(fd, buf, nBytes);
+end;
+
+function FpWrite(fd: LongInt; const buf; nBytes: Int64): Int64; inline;
+begin
+  Result := _write(fd, buf, nBytes);
 end;
 {$ENDIF}
 
@@ -836,7 +847,7 @@ var
   fd: LongInt;
   val: jsval;
 const
-  f_usage = 'usage: closeFile(descriptor: Integer): Integer';
+  f_usage = 'usage: closeFile(handle: Integer): Integer';
 begin
   try
     in_argv := vp.argv;
@@ -844,6 +855,126 @@ begin
       raise ESMException.Create(f_usage);
     fd := in_argv[0].asInteger;
     val.asInteger := FpClose(fd);
+    vp.rval := val;
+    Result := True;
+  except
+    on E: Exception do
+    begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
+      JSError(cx, E);
+    end;
+  end;
+end;
+
+function fs_readFile(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
+var
+  in_argv: PjsvalVector;
+  target: PJSRootedObject;
+  fd: LongInt;
+  buf: PUtf8Char;
+  offset, len: Integer;
+  size: size_t;
+  res: Int64;
+  val: jsval;
+const
+  f_usage = 'usage: readFile(handle: Integer; buffer: Buffer; [offset: Integer = 0]; len: Integer; [position: Integer]): Integer';
+begin
+  try
+    in_argv := vp.argv;
+    if (argc < 2) or not in_argv[1].isObject then
+      raise ESMException.Create(f_usage);
+    if not in_argv[0].isInteger or (in_argv[0].asInteger < 0) then
+      raise ESMException.Create('fd must be a file descriptor');
+    fd := in_argv[0].asInteger;
+    target := cx.NewRootedObject(in_argv[1].asObject);
+    try
+      getBufDataAndLength(cx, target, buf, size);
+    finally
+      cx.FreeRootedObject(target);
+    end;
+    if (argc > 2) then
+       offset := in_argv[2].asInteger
+    else
+      offset := 0;
+    if (offset < 0) or (offset >= size) then
+      raise ESMException.Create('Offset is out of bounds');
+    if (argc > 3) then
+       len := in_argv[3].asInteger
+    else
+      len := 0;
+    if (len > 0) then begin
+      if (Int64(len) + offset > size) then
+        raise ESMException.Create('Length extends beyond buffer');
+      if (argc > 4) and not (in_argv[4].ValType(cx) in [JSTYPE_VOID, JSTYPE_NULL]) then
+        raise ENotImplemented.Create('Not null position is currently not supported');
+      Inc(buf, offset);
+      res := FpRead(fd, buf^, len);
+      if res < 0 then
+        RaiseLastOSError;
+      val.asInteger := res;
+    end else
+      val.asInteger := 0;
+    vp.rval := val;
+    Result := True;
+  except
+    on E: Exception do
+    begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
+      JSError(cx, E);
+    end;
+  end;
+end;
+
+function fs_writeFileBuffer(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
+var
+  in_argv: PjsvalVector;
+  target: PJSRootedObject;
+  fd: LongInt;
+  buf: PUtf8Char;
+  offset, len: Integer;
+  size: size_t;
+  res: Int64;
+  val: jsval;
+const
+  f_usage = 'usage: writeFileBuffer(handle: Integer; buffer: Buffer; [offset: Integer = 0]; len: Integer; [position: Integer]): Integer';
+begin
+  try
+    in_argv := vp.argv;
+    if (argc < 4) or not in_argv[1].isObject then
+      raise ESMException.Create(f_usage);
+    if not in_argv[0].isInteger or (in_argv[0].asInteger < 0) then
+      raise ESMException.Create('fd must be a file descriptor');
+    fd := in_argv[0].asInteger;
+    target := cx.NewRootedObject(in_argv[1].asObject);
+    try
+      getBufDataAndLength(cx, target, buf, size);
+    finally
+      cx.FreeRootedObject(target);
+    end;
+    if (argc > 2) then
+       offset := in_argv[2].asInteger
+    else
+      offset := 0;
+    if (offset < 0) or (offset >= size) then
+      raise ESMException.Create('Offset is out of bounds');
+    if (argc > 3) then
+       len := in_argv[3].asInteger
+    else
+      len := 0;
+    if (len > 0) then begin
+      if (Int64(len) + offset > size) then
+        raise ESMException.Create('Length extends beyond buffer');
+      if (argc > 4) and not (in_argv[4].ValType(cx) in [JSTYPE_VOID, JSTYPE_NULL]) then
+        raise ENotImplemented.Create('Not null position is currently not supported');
+      Inc(buf, offset);
+      res := FpWrite(fd, buf^, len);
+      if res < 0 then
+        RaiseLastOSError;
+      val.asInteger := res;
+    end else
+      val.asInteger := 0;
     vp.rval := val;
     Result := True;
   except
@@ -885,6 +1016,8 @@ begin
     obj.ptr.DefineFunction(cx, 'deleteFile', fs_deleteFile, 1, attrs);
     obj.ptr.DefineFunction(cx, 'openFile', fs_openFile, 3, attrs);
     obj.ptr.DefineFunction(cx, 'closeFile', fs_closeFile, 1, attrs);
+    obj.ptr.DefineFunction(cx, 'readFile', fs_readFile, 2, attrs);
+    obj.ptr.DefineFunction(cx, 'writeFileBuffer', fs_writeFileBuffer, 4, attrs);
     Result := obj.ptr.ToJSValue;
   finally
     cx.FreeRootedObject(obj);

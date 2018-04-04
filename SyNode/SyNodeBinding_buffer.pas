@@ -7,11 +7,18 @@ interface
 {$I Synopse.inc}
 {$I SyNode.inc}
 {$UNDEF HASINLINE}
+
+uses
+  SpiderMonkey;
+
 type
   TEncoding = (ASCII, UTF8, BASE64, UCS2, BINARY, HEX, BUFFER);
   TEndianness = (kLittleEndian, kBigEndian);
 // BINARY is a deprecated alias of LATIN1.
 const  LATIN1 = BINARY;
+
+procedure getBufDataAndLength(cx: PJSContext; bufObj: PJSRootedObject; out bufData: pointer; out  bufLen: size_t);{$ifdef HASINLINE}inline;{$endif}
+
 implementation
 uses
   SysUtils,
@@ -19,8 +26,7 @@ uses
   Windows,
 {$ENDIF}
   SynCommons,
-  SyNode,
-  SpiderMonkey;
+  SyNode;
 
 //const
 //  BUFFER_PROTO_SLOT = JSCLASS_GLOBAL_SLOT_COUNT + 1;
