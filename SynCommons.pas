@@ -26276,7 +26276,7 @@ var
   IsWow64Process: function(Handle: THandle; var Res: BOOL): BOOL; stdcall;
   GetNativeSystemInfo: procedure(var SystemInfo: TSystemInfo); stdcall;
   Res: BOOL;
-  Kernel, PSAPI: THandle;
+  Kernel: THandle;
   P: pointer;
   Vers: TWindowsVersion;
   cpu: string;
@@ -56915,9 +56915,9 @@ var Heap: TMemoryManagerState;
 {$endif}
 {$ifdef MSWINDOWS}
 var global: TMemoryStatusEx;
-    mem: TProcessMemoryCounters;
+    {$ifdef FPC}mem: TProcessMemoryCounters;{$endif}
 begin
-  FillZero(global,SizeOf(global));
+  FillCharFast(global,SizeOf(global),0);
   global.dwLength := SizeOf(global);
   GlobalMemoryStatusEx(global);
   FMemoryLoadPercent := global.dwMemoryLoad;
@@ -64494,9 +64494,6 @@ end;
 constructor TSystemUse.Create(const aProcessID: array of integer;
   aHistoryDepth: integer);
 var i: integer;
-    {$ifdef MSWINDOWS}
-    h: HMODULE;
-    {$endif}
 begin
   inherited Create;
   fSafe := TAutoLocker.Create;
