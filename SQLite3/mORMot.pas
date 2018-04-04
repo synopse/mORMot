@@ -51880,7 +51880,7 @@ var Added: boolean;
       end;
       tkDynArray: begin
         P^.GetDynArray(Value,dyn);
-        if not ((woDontStore0 in Options) and (dyn.Count>0)) then begin
+        if not ((woDontStore0 in Options) and (dyn.Count=0)) then begin
           HR(P);
           dynObjArray := P^.DynArrayIsObjArrayInstance;
           if dynObjArray<>nil then begin
