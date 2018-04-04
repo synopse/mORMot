@@ -11026,20 +11026,6 @@ begin
   end;
 end;
 
-function CurlReadData(buffer: PAnsiChar; size,nitems: integer;
-  opaque: pointer): integer; cdecl;
-var instance: TCurlHTTP absolute opaque;
-    dataLen: integer;
-begin
-  dataLen := length(instance.fIn.Data)-instance.fIn.DataOffset;
-  result := size*nitems;
-  if result>dataLen then
-    result := dataLen;
-  move(PAnsiChar(pointer(instance.fIn.Data))[instance.fIn.DataOffset],buffer^,result);
-  inc(instance.fIn.DataOffset,result);
-end;
-
-
 { TCurlHTTP }
 
 procedure TCurlHTTP.InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD);
@@ -11096,6 +11082,8 @@ begin
       end;
     end;
   curl.easy_setopt(fHandle,coUserAgent,pointer(fUserAgent));
+  curl.easy_setopt(fHandle,coWriteFunction,@CurlWriteRawByteString);
+  curl.easy_setopt(fHandle,coHeaderFunction,@CurlWriteRawByteString);
   fIn.Method := UpperCase(method);
   fIn.Headers := nil;
   Finalize(fOut);
@@ -11114,41 +11102,16 @@ end;
 
 procedure TCurlHTTP.InternalSendRequest(const aData: SockString);
 begin // see http://curl.haxx.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
-  // libcurl has dedicated options for GET,HEAD verbs
-  if (fIn.Method='') or (fIn.Method='GET') then begin
-    curl.easy_setopt(fHandle,coHTTPGet,1);
-    curl.easy_setopt(fHandle,coCustomRequest,PAnsiChar('GET'));
-    if (aData<>'') and (fIn.Method='GET') then begin // e.g. GET with body
-      curl.easy_setopt(fHandle,coNoBody,0);
-      curl.easy_setopt(fHandle,coUpload,1);
-      fIn.Data := aData;
-      fIn.DataOffset := 0;
-      curl.easy_setopt(fHandle,coInFile,pointer(self));
-      curl.easy_setopt(fHandle,coReadFunction,@CurlReadData);
-      curl.easy_setopt(fHandle,coInFileSize,length(aData));
-    end;
-  end else
-  if fIn.Method='HEAD' then
-    curl.easy_setopt(fHandle,coNoBody,1) else begin
-    // handle other HTTP verbs
+  if fIn.Method='HEAD' then // the only verb what do not expect body in answer is HEAD
+    curl.easy_setopt(fHandle,coNoBody,1) else
+    curl.easy_setopt(fHandle,coNoBody,0);
+  if (fIn.Method='') then
+    curl.easy_setopt(fHandle,coCustomRequest,PAnsiChar('GET')) else
     curl.easy_setopt(fHandle,coCustomRequest,pointer(fIn.Method));
-    if aData='' then begin // e.g. DELETE or LOCK
-      curl.easy_setopt(fHandle,coNoBody,1);
-      curl.easy_setopt(fHandle,coUpload,0);
-    end else begin // e.g. POST or PUT
-      curl.easy_setopt(fHandle,coNoBody,0);
-      curl.easy_setopt(fHandle,coUpload,1);
-      fIn.Data := aData;
-      fIn.DataOffset := 0;
-      curl.easy_setopt(fHandle,coInFile,pointer(self));
-      curl.easy_setopt(fHandle,coReadFunction,@CurlReadData);
-      curl.easy_setopt(fHandle,coInFileSize,length(aData));
-    end;
-    InternalAddHeader('Expect:'); // disable 'Expect: 100 Continue'
-  end;
-  curl.easy_setopt(fHandle,coWriteFunction,@CurlWriteRawByteString);
+  curl.easy_setopt(fHandle,coPostFields,pointer(aData));
+  curl.easy_setopt(fHandle,coPostFieldSize,length(aData));
+  curl.easy_setopt(fHandle,coHTTPHeader,fIn.Headers);
   curl.easy_setopt(fHandle,coFile,@fOut.Data);
-  curl.easy_setopt(fHandle,coHeaderFunction,@CurlWriteRawByteString);
   curl.easy_setopt(fHandle,coWriteHeader,@fOut.Header);
 end;
 
@@ -11160,7 +11123,6 @@ var res: TCurlResult;
     i: integer;
     rc: longint; // needed on Linux x86-64
 begin
-  curl.easy_setopt(fHandle,coHTTPHeader,fIn.Headers);
   res := curl.easy_perform(fHandle);
   if res<>crOK then begin
     result := STATUS_NOTFOUND;
