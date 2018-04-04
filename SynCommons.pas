@@ -4072,7 +4072,7 @@ function SearchRecToDateTime(const F: TSearchRec): TDateTime;
 
 /// delete the content of a specified directory
 // - only one level of file is deleted within the folder: no recursive deletion
-// is processed by this function
+// is processed by this function (for safety)
 // - if DeleteOnlyFilesNotDirectory is TRUE, it won't remove the folder itself,
 // but just the files found in it
 function DirectoryDelete(const Directory: TFileName; const Mask: TFileName='*.*';
@@ -7236,6 +7236,7 @@ function SortDynArrayWord(const A,B): integer;
 
 /// compare two "array of integer" elements
 function SortDynArrayInteger(const A,B): integer;
+  {$ifndef CPUX86}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// compare two "array of cardinal" elements
 function SortDynArrayCardinal(const A,B): integer;
@@ -10721,8 +10722,7 @@ type
   /// items as stored in a TRawByteStringGroup instance
   TRawByteStringGroupValueDynArray = array of TRawByteStringGroupValue;
 
-  /// store several RawByteString as a gathering
-  // - clever concatenation of RawByteString items
+  /// store several RawByteString content with automatic concatenation
   // - an optimized compaction algorithm will occur to ensure that every
   // 64 items will eventually consume at last 1MB of memory: this reduces memory
   // fragmentation with almost no performance impact
@@ -10773,7 +10773,11 @@ type
     function Find(aPosition, aLength: integer): pointer; overload;
     /// returns the text at a given position in Values[]
     // - text should be in a single Values[] entry
-    function FindAsText(aPosition, aLength: integer): RawByteString;
+    procedure FindAsText(aPosition, aLength: integer; out aText: RawByteString); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// returns the text at a given position in Values[]
+    // - text should be in a single Values[] entry
+    function FindAsText(aPosition, aLength: integer): RawByteString; overload;
       {$ifdef HASINLINE}inline;{$endif}
     {$ifndef NOVARIANTS}
     /// returns the text at a given position in Values[]
@@ -61445,12 +61449,6 @@ begin
     result := @Values[LastFind]; // this cache is very efficient in practice
     if (aPosition>=result^.Position) and (aPosition<result^.Position+length(result^.Value)) then
       exit;
-    i := Count-1;
-    if LastFind<>i then begin
-      result := @Values[i];
-      if aPosition=result^.Position then
-        exit; // if the last added item is searched
-    end;
     result := @Values[1]; // seldom O(n) brute force search (in CPU L1 cache)
     for i := 0 to Count-2 do
       if result^.Position>aPosition then begin
@@ -61497,18 +61495,22 @@ found:  dec(P);
     result := nil;
 end;
 
-function TRawByteStringGroup.FindAsText(aPosition, aLength: integer): RawByteString;
+procedure TRawByteStringGroup.FindAsText(aPosition, aLength: integer; out aText: RawByteString);
 var P: PRawByteStringGroupValue;
 begin
-  result := '';
   P := Find(aPosition);
   if P=nil then
     exit;
   dec(aPosition,P^.Position);
   if (aPosition=0) and (length(P^.Value)=aLength) then
-    result := P^.Value else // direct return if not yet compacted
+    aText := P^.Value else // direct return if not yet compacted
     if aLength-aPosition<=length(P^.Value) then
-      SetString(result,PAnsiChar(@PByteArray(P^.Value)[aPosition]),aLength);
+      SetString(aText,PAnsiChar(@PByteArray(P^.Value)[aPosition]),aLength);
+end;
+
+function TRawByteStringGroup.FindAsText(aPosition, aLength: integer): RawByteString;
+begin
+  FindAsText(aPosition,aLength,result);
 end;
 
 {$ifndef NOVARIANTS}
