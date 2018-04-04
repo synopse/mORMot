@@ -36,6 +36,27 @@ uses
   Classes,
   SynLog;
 
+{$IFDEF MSWINDOWS}
+function _open(fn: pointer; flags, mode: LongInt): LongInt; cdecl;
+  external 'msvcrt';
+function _close(Handle: LongInt): LongInt; cdecl;
+  external 'msvcrt';
+function _read(Handle: LongInt; var Buffer; Count: size_t): size_t; cdecl;
+  external 'msvcrt';
+function _write(Handle: LongInt; const Buffer; Count: size_t): size_t; cdecl;
+  external 'msvcrt';
+
+function FpOpen(const fn: RawByteString; flags, mode: LongInt): LongInt; inline;
+begin
+  Result := _open(PChar(fn), flags, mode);
+end;
+
+function FpClose(h: LongInt): LongInt; inline;
+begin
+  Result := _close(h);
+end;
+{$ENDIF}
+
 /// decode text file to string using BOM
 //  if BOM not fount - use current system code page to convert ANSI content to unicode
 //  if file not found - return empty string
@@ -780,8 +801,7 @@ function fs_openFile(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cd
 var
   in_argv: PjsvalVector;
   fn: TFileName;
-  flags: cInt;
-  mode: TMode;
+  flags, mode, handle: LongInt;
   val: jsval;
 const
   f_usage = 'usage: openFile(fileName: String; flags: Integer; mode: Integer): Integer';
@@ -794,7 +814,10 @@ begin
     fn := in_argv[0].asJSString.ToString(cx);
     flags := in_argv[1].asInteger;
     mode := in_argv[2].asInteger;
-    val.asInteger := FpOpen(fn, flags, mode);
+    handle := FpOpen(fn, flags, mode);
+    if handle<0 then
+      RaiseLastOSError;
+    val.asInteger := handle;
     vp.rval := val;
     Result := True;
   except
@@ -810,7 +833,7 @@ end;
 function fs_closeFile(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
 var
   in_argv: PjsvalVector;
-  fd: cInt;
+  fd: LongInt;
   val: jsval;
 const
   f_usage = 'usage: closeFile(descriptor: Integer): Integer';
