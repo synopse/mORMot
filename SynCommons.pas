@@ -61442,11 +61442,11 @@ begin
 end;
 
 procedure TRawByteStringGroup.AddFromReader(var aReader: TFastReader);
-var n: integer;
+var complexsize: integer;
 begin
-  n := aReader.VarUInt32;
-  if n>0 then
-    Add(aReader.Next(n),n);
+  complexsize := aReader.VarUInt32;
+  if complexsize>0 then // directly create a RawByteString from aReader buffer
+    Add(aReader.Next(complexsize),complexsize);
 end;
 
 function TRawByteStringGroup.Find(aPosition: integer): PRawByteStringGroupValue;

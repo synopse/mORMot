@@ -49708,7 +49708,9 @@ var humanread: boolean;
     json: RawUTF8;
 begin
   humanread := woHumanReadable in Options;
-  Exclude(Options,woHumanReadable);
+  if humanread and (woHumanReadableEnumSetAsComment in Options) then
+    humanread := false else  // JsonReformat() erases comments
+    Exclude(Options,woHumanReadable);
   json := ObjectToJSON(Value,Options);
   if humanread then
     // woHumanReadable not working with custom JSON serializers, e.g. T*ObjArray
