@@ -20798,7 +20798,8 @@ end;
 
 function VarRecToTempUTF8(const V: TVarRec; var Res: TTempUTF8): integer;
 {$ifndef NOVARIANTS}
-var isString: boolean;
+var v64: Int64;
+    isString: boolean;
 {$endif}
 label smlu32;
 begin
@@ -20920,7 +20921,13 @@ smlu32: Res.Text := pointer(SmallUInt32UTF8[V.VInt64^]);
     end;
     {$ifndef NOVARIANTS}
     vtVariant:
-      VariantToUTF8(V.VVariant^,RawUTF8(Res.TempRawUTF8),isString);
+      if VariantToInt64(V.VVariant^,v64) then begin
+        Res.Text := PUTF8Char(StrInt64(@Res.Temp[23],v64));
+        Res.Len := @Res.Temp[23]-Res.Text;
+        result := Res.Len;
+        exit;
+      end else
+        VariantToUTF8(V.VVariant^,RawUTF8(Res.TempRawUTF8),isString);
     {$endif}
     else begin
       Res.Len := 0;
