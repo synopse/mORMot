@@ -599,7 +599,7 @@ begin
     {$ELSE}
     if not FilenameIsAbsolute(filePath) then
     {$ENDIF}
-      raise ESMException.Create('no relative path allowed in loadFile');
+      raise ESMException.Create('relative path not allowed in loadFile');
     if not FileExists(filePath) then
     begin
       vp.rval := JSVAL_NULL;
@@ -608,7 +608,7 @@ begin
     begin
       size := FileSize(filePath);
       if Int64Rec(size).Hi > 0 then
-        raise ESMException.Create('file to large');
+        raise ESMException.Create('file too large');
 
       arr := cx.NewArrayBuffer(Int64Rec(size).Lo);
       arr_data := arr.GetArrayBufferData;
