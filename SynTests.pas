@@ -533,7 +533,8 @@ end;
 procedure TSynTestCase.AddLog(condition: Boolean; const msg: string);
 const LEV: array[boolean] of TSynLogInfo = (sllFail, sllCustom4);
 begin
-  TSynLogTestLog.Add.Log(LEV[condition],'% % [%]',[ClassType,TestName[MethodIndex],msg]);
+  TSynLogTestLog.Add.Log(LEV[condition],'% % [%]',
+    [ClassType,TestName[Owner.fCurrentMethodIndex],msg]);
 end;
 
 procedure TSynTestCase.Check(condition: Boolean; const msg: string);
