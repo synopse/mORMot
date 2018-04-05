@@ -15454,6 +15454,11 @@ type
     // - if the supplied aPath does not match any object, it will return nil
     // - if aPath is found, returns a pointer to the corresponding value
     function GetPVariantByPath(const aPath: RawUTF8): PVariant;
+    /// retrieve a reference to a TDocVariant, given its path
+    // - path is defined as a dotted name-space, e.g. 'doc.glossary.title'
+    // - if the supplied aPath does not match any object, it will return false
+    // - if aPath stores a valid TDocVariant, returns true and a pointer to it
+    function GetDocVariantByPath(const aPath: RawUTF8; out aValue: PDocVariantData): boolean;
     /// retrieve a dvObject in the dvArray, from a property value
     // - {aPropName:aPropValue} will be searched within the stored array,
     // and the corresponding item will be copied into Dest, on match
@@ -44788,6 +44793,53 @@ end;
 
 { TDocVariantData }
 
+function DocVariantData(const DocVariant: variant): PDocVariantData;
+begin
+  with TVarData(DocVariant) do
+    if VType=word(DocVariantVType) then
+      result := @DocVariant else
+    if VType=varByRef or varVariant then
+      result := DocVariantData(PVariant(VPointer)^) else
+    raise EDocVariant.CreateUTF8('DocVariantType.Data(%<>TDocVariant)',[VType]);
+end;
+
+function _Safe(const DocVariant: variant): PDocVariantData;
+{$ifdef FPC_OR_PUREPASCAL}
+var docv: word;
+begin
+  result := @DocVariant;
+  docv := DocVariantVType;
+  if result.VType<>docv then
+    if (result.VType=varByRef or varVariant) and
+       (PVarData(PVarData(result)^.VPointer).VType=docv) then
+      result := pointer(PVarData(result)^.VPointer) else
+      result := @DocVariantDataFake;
+end;
+{$else}
+asm
+      mov   ecx,DocVariantVType
+      movzx edx,word ptr [eax].TVarData.VType
+      cmp   edx,ecx
+      jne   @by
+      ret
+@ptr: mov   eax,[eax].TVarData.VPointer
+      movzx edx,word ptr [eax].TVarData.VType
+      cmp   edx,ecx
+      je    @ok
+@by:  cmp   edx,varByRef or varVariant
+      je    @ptr
+      lea   eax,[DocVariantDataFake]
+@ok:
+end;
+{$endif}
+
+function _Safe(const DocVariant: variant; ExpectedKind: TDocVariantKind): PDocVariantData;
+begin
+  result := _Safe(DocVariant);
+  if result^.Kind<>ExpectedKind then
+    raise EDocVariant.CreateUTF8('_Safe(%)<>%',[ToText(result^.Kind)^,ToText(ExpectedKind)^]);
+end;
+
 function TDocVariantData.GetKind: TDocVariantKind;
 begin
   if dvoIsArray in VOptions then
@@ -46010,23 +46062,37 @@ begin
 end;
 
 function TDocVariantData.GetPVariantByPath(const aPath: RawUTF8): PVariant;
-var p: integer;
-    path: TRawUTF8DynArray;
+var p: PUTF8Char;
+    item: RawUTF8;
     par: PVariant;
 begin
   result := nil;
   if (VType<>DocVariantVType) or (aPath='') or
      not(dvoIsObject in VOptions) or (Count=0) then
     exit;
-  CSVToRawUTF8DynArray(pointer(aPath),path,'.');
   par := @self;
-  for p := 0 to length(path)-1 do
-    if _Safe(par^).GetAsPVariant(path[p],result) then
+  P := pointer(aPath);
+  repeat
+    GetNextItem(P,'.',item);
+    if _Safe(par^).GetAsPVariant(item,result) then
       par := result else begin
       result := nil;
       exit;
     end;
+  until P=nil;
   // if we reached here, we have par=result=found item
+end;
+
+function TDocVariantData.GetDocVariantByPath(const aPath: RawUTF8;
+  out aValue: PDocVariantData): boolean;
+var v: PVariant;
+begin
+  v := GetPVariantByPath(aPath);
+  if v<>nil then begin
+    aValue := _Safe(v^);
+    result := aValue^.VType>varNull;
+  end else
+    result := false;
 end;
 
 function TDocVariantData.GetValueByPath(const aDocVariantPath: array of RawUTF8): variant;
@@ -46088,7 +46154,7 @@ begin
   if ndx<0 then
     exit;
   Dest := _Safe(VValue[ndx]);
-  result := Dest^.VType<=varNull;
+  result := Dest^.VType>varNull;
 end;
 
 function TDocVariantData.GetJsonByStartName(const aStartName: RawUTF8): RawUTF8;
@@ -46199,7 +46265,7 @@ begin
     RetrieveValueOrRaiseException(ndx,Dest,DestByRef);
 end;
 
-function TDocVariantData.GetValueOrItem(const aNameOrIndex: Variant): Variant;
+function TDocVariantData.GetValueOrItem(const aNameOrIndex: variant): variant;
 var wasString: boolean;
     Name: RawUTF8;
 begin
@@ -46378,8 +46444,8 @@ begin
     end;
 end;
 
-function TDocVariantData.ToTextPairs(const NameValueSep: RawUTF8='=';
-  const ItemSep: RawUTF8=#13#10; escape: TTextWriterKind=twJSONEscape): RawUTF8;
+function TDocVariantData.ToTextPairs(const NameValueSep: RawUTF8;
+  const ItemSep: RawUTF8; Escape: TTextWriterKind): RawUTF8;
 begin
   ToTextPairsVar(result,NameValueSep,ItemSep,escape);
 end;
@@ -46931,53 +46997,6 @@ end;
 function ToText(kind: TDocVariantKind): PShortString;
 begin
   result := GetEnumName(TypeInfo(TDocVariantKind),ord(kind));
-end;
-
-function DocVariantData(const DocVariant: variant): PDocVariantData;
-begin
-  with TVarData(DocVariant) do
-    if VType=word(DocVariantVType) then
-      result := @DocVariant else
-    if VType=varByRef or varVariant then
-      result := DocVariantData(PVariant(VPointer)^) else
-    raise EDocVariant.CreateUTF8('DocVariantType.Data(%<>TDocVariant)',[VType]);
-end;
-
-function _Safe(const DocVariant: variant): PDocVariantData;
-{$ifdef FPC_OR_PUREPASCAL}
-var docv: word;
-begin
-  result := @DocVariant;
-  docv := DocVariantVType;
-  if result.VType<>docv then
-    if (result.VType=varByRef or varVariant) and
-       (PVarData(PVarData(result)^.VPointer).VType=docv) then
-      result := pointer(PVarData(result)^.VPointer) else
-      result := @DocVariantDataFake;
-end;
-{$else}
-asm
-      mov   ecx,DocVariantVType
-      movzx edx,word ptr [eax].TVarData.VType
-      cmp   edx,ecx
-      jne   @by
-      ret
-@ptr: mov   eax,[eax].TVarData.VPointer
-      movzx edx,word ptr [eax].TVarData.VType
-      cmp   edx,ecx
-      je    @ok
-@by:  cmp   edx,varByRef or varVariant
-      je    @ptr
-      lea   eax,[DocVariantDataFake]
-@ok:
-end;
-{$endif}
-
-function _Safe(const DocVariant: variant; ExpectedKind: TDocVariantKind): PDocVariantData;
-begin
-  result := _Safe(DocVariant);
-  if result^.Kind<>ExpectedKind then
-    raise EDocVariant.CreateUTF8('_Safe(%)<>%',[ToText(result^.Kind)^,ToText(ExpectedKind)^]);
 end;
 
 function _Obj(const NameValuePairs: array of const;
