@@ -987,6 +987,56 @@ begin
   end;
 end;
 
+function fs_writeFileString(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
+var
+  in_argv: PjsvalVector;
+  _str: PJSString;
+  str: Pointer;
+  encoding: TEncoding;
+  fd: LongInt;
+  buf: RawByteString;
+  len, size: size_t;
+  isLatin1: Boolean;
+  res: Int64;
+  val: jsval;
+const
+  f_usage = 'usage: writeFileString(handle: Integer; buffer: String; [position: Integer]; encoding: String): Integer';
+begin
+  try
+    in_argv := vp.argv;
+    if (argc < 4) or not in_argv[1].isString or not in_argv[3].isString then
+      raise ESMException.Create(f_usage);
+    if not in_argv[0].isInteger or (in_argv[0].asInteger < 0) then
+      raise ESMException.Create('fd must be a file descriptor');
+    if in_argv[2].ValType(cx) in [JSTYPE_VOID, JSTYPE_NULL] then
+      raise ENotImplemented.Create('Not null position is currently not supported');
+    fd := in_argv[0].asInteger;
+    _str := in_argv[1].asJSString;
+    encoding := ParseEncoding(in_argv[3].asJSString.ToUTF8(cx), UTF8);
+    getStrDataAndLength(cx, _str, encoding, str, len, size, isLatin1);
+    if (size > 0) then begin
+      SetLength(buf, size);
+      size := StringBytesWrite(PChar(buf), size, str, len, isLatin1, encoding);
+      if (size = 0) then
+        raise ESMException.Create('Invalid string');
+      res := FpWrite(fd, PChar(buf)^, size);
+      if res < 0 then
+        RaiseLastOSError;
+      val.asInteger := res;
+    end else
+      val.asInteger := 0;
+    vp.rval := val;
+    Result := True;
+  except
+    on E: Exception do
+    begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
+      JSError(cx, E);
+    end;
+  end;
+end;
+
 function SyNodeBindingProc_fs(const Engine: TSMEngine;
   const bindingNamespaceName: SynUnicode): jsval;
 const
@@ -1018,6 +1068,7 @@ begin
     obj.ptr.DefineFunction(cx, 'closeFile', fs_closeFile, 1, attrs);
     obj.ptr.DefineFunction(cx, 'readFile', fs_readFile, 2, attrs);
     obj.ptr.DefineFunction(cx, 'writeFileBuffer', fs_writeFileBuffer, 4, attrs);
+    obj.ptr.DefineFunction(cx, 'writeFileString', fs_writeFileString, 4, attrs);
     Result := obj.ptr.ToJSValue;
   finally
     cx.FreeRootedObject(obj);

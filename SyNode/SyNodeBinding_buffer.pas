@@ -9,6 +9,7 @@ interface
 {$UNDEF HASINLINE}
 
 uses
+  SynCommons,
   SpiderMonkey;
 
 type
@@ -18,6 +19,11 @@ type
 const  LATIN1 = BINARY;
 
 procedure getBufDataAndLength(cx: PJSContext; bufObj: PJSRootedObject; out bufData: pointer; out  bufLen: size_t);{$ifdef HASINLINE}inline;{$endif}
+procedure getStrDataAndLength(cx: PJSContext; const _str: PJSString; const encoding: TEncoding;
+  out str: Pointer; out strLen: size_t; out size: size_t; out isLatin1: Boolean); {$ifdef HASINLINE}inline;{$endif}
+function ParseEncoding(const encoding: RawUTF8; default_encoding: TEncoding): TEncoding; {$ifdef HASINLINE}inline;{$endif}
+function StringBytesWrite(bufData: Pointer; max_length: size_t; str: Pointer;
+  strLen: size_t; isLatin1: Boolean; encoding: TEncoding): size_t; {$ifdef HASINLINE}inline;{$endif}
 
 implementation
 uses
@@ -25,12 +31,10 @@ uses
 {$IFDEF MSWINDOWS}
   Windows,
 {$ENDIF}
-  SynCommons,
   SyNode;
 
 //const
 //  BUFFER_PROTO_SLOT = JSCLASS_GLOBAL_SLOT_COUNT + 1;
-
 
 const
   _Endianness: record
@@ -54,6 +58,37 @@ begin
     raise ESMTypeException.Create(MUST_BE_A_BUFFER);
   bufData := Pointer(bufObj.ptr.GetUint8ArrayData);{ + bufObj.ptr.GetTypedArrayByteOffset}
   bufLen := bufObj.ptr.GetTypedArrayByteLength;
+end;
+
+procedure getStrDataAndLength(cx: PJSContext; const _str: PJSString; const encoding: TEncoding;
+  out str: Pointer; out strLen: size_t; out size: size_t; out isLatin1: Boolean);
+var
+  strUtf8: RawUTF8;
+const
+  UNKNOWN_ENCODING = 'unknown encoding';
+begin
+  if encoding = UTF8 then begin
+    strUtf8 := _str.ToUTF8(cx);
+    str := Pointer(strUtf8);
+    strLen := Length(strUtf8);
+    isLatin1 := True;
+  end else begin
+    isLatin1 := _str.HasLatin1Chars;
+    if isLatin1 then
+      str := _str.GetLatin1StringCharsAndLength(cx, strLen)
+    else
+      str := _str.GetTwoByteStringCharsAndLength(cx, strLen);
+  end;
+
+  case encoding of
+    ASCII, LATIN1: size := strLen;
+    BUFFER, UTF8: size := Length(_str.ToUTF8(cx));//todo fix it
+    UCS2: size := strLen shl 1;
+    BASE64: size := Base64ToBinLength(str, strLen);
+    HEX: size := strLen shr 1;
+    else
+      raise ESMException.Create(UNKNOWN_ENCODING);
+  end;
 end;
 
 function ParseEncoding(const encoding: RawUTF8; default_encoding: TEncoding): TEncoding; {$ifdef HASINLINE}inline;{$endif}
@@ -214,7 +249,8 @@ begin
   result := (value < 128) or (value >= 192);
 end;
 
-function StringBytesWrite(bufData: Pointer; max_length: size_t; str: Pointer; strLen: size_t; isLatin1: Boolean; encoding:TEncoding): size_t; {$ifdef HASINLINE}inline;{$endif}
+function StringBytesWrite(bufData: Pointer; max_length: size_t; str: Pointer;
+  strLen: size_t; isLatin1: Boolean; encoding: TEncoding): size_t; {$ifdef HASINLINE}inline;{$endif}
 const
   NOT_BASE64 = 'Not Base64';
 var
@@ -619,7 +655,6 @@ var
   isLatin1: Boolean;
   str: Pointer;
   strLen: size_t;
-  strUtf8: RawUTF8;
 
   buf: PJSRootedObject;
   bufData: Pointer;
@@ -629,7 +664,6 @@ var
   val: jsval;
 const
   sInvalidCall = 'usage: createFromString(string, encoding: String);';
-  UNKNOWN_ENCODING = 'unknown encoding';
 begin
   try
     Result := True;
@@ -640,30 +674,7 @@ begin
     encoding := ParseEncoding(in_argv[1].asJSString.ToUTF8(cx), UTF8);
     _str := in_argv[0].asJSString;
 
-    if encoding = UTF8 then begin
-      strUtf8 := _str.ToUTF8(cx);
-      str := Pointer(strUtf8);
-      strLen := Length(strUtf8);
-      isLatin1 := True;
-      encoding := UTF8;
-    end else begin
-      isLatin1 := _str.HasLatin1Chars;
-      if isLatin1 then
-        str := _str.GetLatin1StringCharsAndLength(cx, strLen)
-      else begin
-        str := _str.GetTwoByteStringCharsAndLength(cx, strLen);
-      end;
-    end;
-
-    case encoding of
-      ASCII, LATIN1: size := strLen;
-      BUFFER, UTF8: size := Length(_str.ToUTF8(cx));//todo fix it
-      UCS2: size := strLen shl 1;
-      BASE64: size := Base64ToBinLength(str, strLen);
-      HEX: size := strLen shr 1;
-      else
-        raise ESMException.Create(UNKNOWN_ENCODING);
-    end;
+    getStrDataAndLength(cx, _str, encoding, str, strLen, size, isLatin1);
 
     proto := cx.NewRootedObject(vp.thisObject[cx].ReservedSlot[0].asObject.Ctor[cx]);
     try
