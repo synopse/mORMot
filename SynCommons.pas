@@ -4325,6 +4325,11 @@ function UnCamelCase(const S: RawUTF8): RawUTF8; overload;
 // - '__' chars are transformed into ': '
 function UnCamelCase(D, P: PUTF8Char): integer; overload;
 
+/// convert a string into an human-friendly CamelCase identifier
+// - replacing spaces or punctuations by an uppercase character
+// - it is not the reverse function to UnCamelCase()
+procedure CamelCase(P: PAnsiChar; len: integer; var s: RawUTF8);
+
 /// UnCamelCase and translate a char buffer
 // - P is expected to be #0 ended
 // - return "string" type, i.e. UnicodeString for Delphi 2009+
@@ -37710,6 +37715,44 @@ Next: if Space=SpaceBeg then
     dec(Space);
   end;
   result := D-DBeg;
+end;
+
+procedure CamelCase(P: PAnsiChar; len: integer; var s: RawUTF8);
+var i: integer;
+    d: PAnsiChar;
+    tmp: array[byte] of AnsiChar;
+begin
+  if len > SizeOf(tmp) then
+    len := SizeOf(tmp);
+  for i := 0 to len - 1 do
+    if not (ord(P[i]) in IsWord) then begin
+      MoveFast(P^,tmp,i);
+      inc(P,i);
+      d := @tmp[i];
+      dec(len,i);
+      while len > 0 do begin
+        while (len > 0) and not (ord(P^) in IsWord) do begin
+          inc(P);
+          dec(len);
+        end;
+        if len = 0 then
+          break;
+        d^ := NormToUpperAnsi7[P^];
+        inc(d);
+        repeat
+          inc(P);
+          dec(len);
+          if not (ord(P^) in IsWord) then
+            break;
+          d^ := P^;
+          inc(d);
+        until len = 0;
+      end;
+      P := @tmp;
+      len := d-tmp;
+      break;
+    end;
+  SetString(s,P,len);
 end;
 
 procedure GetCaptionFromPCharLen(P: PUTF8Char; out result: string);
