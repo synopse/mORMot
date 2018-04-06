@@ -1376,7 +1376,7 @@ type
   // - this class is mostly a non-operation for conversion to/from UTF-8
   TSynAnsiUTF8 = class(TSynAnsiConvert)
   private
-    function UnicodeBufferToAnsi(Dest: PAnsiChar; DestChars: Cardinal;
+    function UnicodeBufferToUTF8(Dest: PAnsiChar; DestChars: Cardinal;
       Source: PWideChar; SourceChars: Cardinal): PAnsiChar;
   protected
     procedure InternalAppendUTF8(Source: PAnsiChar; SourceChars: Cardinal;
@@ -19191,7 +19191,7 @@ begin
   inherited Create(aCodePage);
 end;
 
-function TSynAnsiUTF8.UnicodeBufferToAnsi(Dest: PAnsiChar; DestChars: Cardinal;
+function TSynAnsiUTF8.UnicodeBufferToUTF8(Dest: PAnsiChar; DestChars: Cardinal;
   Source: PWideChar; SourceChars: Cardinal): PAnsiChar;
 begin
   result := Dest+RawUnicodeToUTF8(PUTF8Char(Dest),DestChars,Source,SourceChars,
@@ -19201,7 +19201,7 @@ end;
 function TSynAnsiUTF8.UnicodeBufferToAnsi(Dest: PAnsiChar;
   Source: PWideChar; SourceChars: Cardinal): PAnsiChar;
 begin
-  result := UnicodeBufferToAnsi(Dest,SourceChars,Source,SourceChars);
+  result := UnicodeBufferToUTF8(Dest,SourceChars,Source,SourceChars);
 end;
 
 function TSynAnsiUTF8.UnicodeBufferToAnsi(Source: PWideChar;
@@ -19211,8 +19211,8 @@ begin
   if (Source=nil) or (SourceChars=0) then
     result := '' else begin
     tmp.Init(SourceChars*3+1);
-    SetString(result,PAnsiChar(tmp.buf),UnicodeBufferToAnsi(
-      tmp.buf,SourceChars*3,Source,SourceChars)-tmp.buf);
+    SetString(result,PAnsiChar(tmp.buf),
+      UnicodeBufferToUTF8(tmp.buf,SourceChars*3,Source,SourceChars)-tmp.buf);
     tmp.Done;
     {$ifdef HASCODEPAGE}
     SetCodePage(result,fCodePage,false);
