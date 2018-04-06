@@ -1467,6 +1467,8 @@ type
     /// where the text/binary is available (and any Source has been copied)
     // - equals nil if len=0
     buf: pointer;
+    /// initialize a new temporary buffer with default size of 4KB
+    procedure Init; overload;
     /// initialize a temporary copy of the content supplied as RawByteString
     // - will also allocate and copy the ending #0 (even for binary)
     procedure Init(const Source: RawByteString); overload;
@@ -19351,6 +19353,11 @@ end;
 
 
 { TSynTempBuffer }
+
+procedure TSynTempBuffer.Init;
+begin
+  Init(SizeOf(tmp)-1) // -1 for trailing #0
+end;
 
 procedure TSynTempBuffer.Init(const Source: RawByteString);
 begin
