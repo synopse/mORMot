@@ -4074,6 +4074,8 @@ begin
   U := SynUnicodeToUtf8(SU);
   if not CheckFailed(length(U)=4) then
     Check(PCardinal(U)^=$92b3a8f0);
+  U := TSynAnsiConvert.Engine(CP_UTF8).UnicodeBufferToAnsi(pointer(SU), length(SU));
+  Check(length(U)=4);
   SetLength(res,10);
   PB := pointer(res);
   PB := ToVarString(U,PB);
