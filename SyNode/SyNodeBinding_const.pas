@@ -66,6 +66,16 @@ const
   O_NONBLOCK    = 0;
   O_SYMLINK     = 0;
   O_SYNC        = $08000000; // FILE_FLAG_WRITE_THROUGH
+
+  { File types }
+  S_IFMT   = $F000; // type of file mask
+  S_IFIFO  = $1000; // named pipe (fifo)
+  S_IFCHR  = $2000; // character special
+  S_IFDIR  = $4000; // directory
+  S_IFBLK  = $3000; // block special
+  S_IFREG  = $8000; // regular
+  S_IFLNK  = 0;     // symbolic link
+  S_IFSOCK = 0;     // socket
 {$ENDIF}
 
 function SyNodeBindingProc_consts(const aEngine: TSMEngine; const bindingNamespaceName: SynUnicode): jsval;
@@ -80,6 +90,7 @@ begin
   obj := cx.NewRootedObject(cx.NewObject(nil));
   obj_fs := cx.NewRootedObject(cx.NewObject(nil));
   try
+    // constansts.fs
     jsv.asInteger := F_OK; obj_fs.ptr.DefineProperty(cx, 'F_OK', jsv, attrs);
     jsv.asInteger := R_OK; obj_fs.ptr.DefineProperty(cx, 'R_OK', jsv, attrs);
     jsv.asInteger := W_OK; obj_fs.ptr.DefineProperty(cx, 'W_OK', jsv, attrs);
@@ -108,76 +119,29 @@ begin
     jsv.asInteger := O_SYMLINK; obj_fs.ptr.DefineProperty(cx, 'O_SYMLINK', jsv, attrs);
     jsv.asInteger := O_SYNC; obj_fs.ptr.DefineProperty(cx, 'O_SYNC', jsv, attrs);
 
-// TODO define all other consts
-//
-//  NODE_DEFINE_CONSTANT(target, S_IFMT);
-//  NODE_DEFINE_CONSTANT(target, S_IFREG);
-//  NODE_DEFINE_CONSTANT(target, S_IFDIR);
-//  NODE_DEFINE_CONSTANT(target, S_IFCHR);
-//#ifdef S_IFBLK
-//  NODE_DEFINE_CONSTANT(target, S_IFBLK);
-//#endif
-//
-//#ifdef S_IFIFO
-//  NODE_DEFINE_CONSTANT(target, S_IFIFO);
-//#endif
-//
-//#ifdef S_IFLNK
-//  NODE_DEFINE_CONSTANT(target, S_IFLNK);
-//#endif
-//
-//#ifdef S_IFSOCK
-//  NODE_DEFINE_CONSTANT(target, S_IFSOCK);
-//#endif
-//
-//#ifdef S_IRWXU
-//  NODE_DEFINE_CONSTANT(target, S_IRWXU);
-//#endif
-//
-//#ifdef S_IRUSR
-//  NODE_DEFINE_CONSTANT(target, S_IRUSR);
-//#endif
-//
-//#ifdef S_IWUSR
-//  NODE_DEFINE_CONSTANT(target, S_IWUSR);
-//#endif
-//
-//#ifdef S_IXUSR
-//  NODE_DEFINE_CONSTANT(target, S_IXUSR);
-//#endif
-//
-//#ifdef S_IRWXG
-//  NODE_DEFINE_CONSTANT(target, S_IRWXG);
-//#endif
-//
-//#ifdef S_IRGRP
-//  NODE_DEFINE_CONSTANT(target, S_IRGRP);
-//#endif
-//
-//#ifdef S_IWGRP
-//  NODE_DEFINE_CONSTANT(target, S_IWGRP);
-//#endif
-//
-//#ifdef S_IXGRP
-//  NODE_DEFINE_CONSTANT(target, S_IXGRP);
-//#endif
-//
-//#ifdef S_IRWXO
-//  NODE_DEFINE_CONSTANT(target, S_IRWXO);
-//#endif
-//
-//#ifdef S_IROTH
-//  NODE_DEFINE_CONSTANT(target, S_IROTH);
-//#endif
-//
-//#ifdef S_IWOTH
-//  NODE_DEFINE_CONSTANT(target, S_IWOTH);
-//#endif
-//
-//#ifdef S_IXOTH
-//  NODE_DEFINE_CONSTANT(target, S_IXOTH);
-//#endif
-//
+    // constants
+    jsv.asInteger := S_IFMT; obj.ptr.DefineProperty(cx, 'S_IFMT', jsv, attrs);
+    jsv.asInteger := S_IFIFO; obj.ptr.DefineProperty(cx, 'S_IFIFO', jsv, attrs);
+    jsv.asInteger := S_IFCHR; obj.ptr.DefineProperty(cx, 'S_IFCHR', jsv, attrs);
+    jsv.asInteger := S_IFDIR; obj.ptr.DefineProperty(cx, 'S_IFDIR', jsv, attrs);
+    jsv.asInteger := S_IFBLK; obj.ptr.DefineProperty(cx, 'S_IFBLK', jsv, attrs);
+    jsv.asInteger := S_IFREG; obj.ptr.DefineProperty(cx, 'S_IFREG', jsv, attrs);
+    jsv.asInteger := S_IFLNK; obj.ptr.DefineProperty(cx, 'S_IFLNK', jsv, attrs);
+    jsv.asInteger := S_IFSOCK; obj.ptr.DefineProperty(cx, 'S_IFSOCK', jsv, attrs);
+{
+    jsv.asInteger := S_IRWXU; obj_??.ptr.DefineProperty(cx, 'S_IRWXU', jsv, attrs);
+    jsv.asInteger := S_IRUSR; obj_??.ptr.DefineProperty(cx, 'S_IRUSR', jsv, attrs);
+    jsv.asInteger := S_IWUSR; obj_??.ptr.DefineProperty(cx, 'S_IWUSR', jsv, attrs);
+    jsv.asInteger := S_IXUSR; obj_??.ptr.DefineProperty(cx, 'S_IXUSR', jsv, attrs);
+    jsv.asInteger := S_IRWXG; obj_??.ptr.DefineProperty(cx, 'S_IRWXG', jsv, attrs);
+    jsv.asInteger := S_IRGRP; obj_??.ptr.DefineProperty(cx, 'S_IRGRP', jsv, attrs);
+    jsv.asInteger := S_IWGRP; obj_??.ptr.DefineProperty(cx, 'S_IWGRP', jsv, attrs);
+    jsv.asInteger := S_IXGRP; obj_??.ptr.DefineProperty(cx, 'S_IXGRP', jsv, attrs);
+    jsv.asInteger := S_IRWXO; obj_??.ptr.DefineProperty(cx, 'S_IRWXO', jsv, attrs);
+    jsv.asInteger := S_IROTH; obj_??.ptr.DefineProperty(cx, 'S_IROTH', jsv, attrs);
+    jsv.asInteger := S_IWOTH; obj_??.ptr.DefineProperty(cx, 'S_IWOTH', jsv, attrs);
+    jsv.asInteger := S_IXOTH; obj_??.ptr.DefineProperty(cx, 'S_IXOTH', jsv, attrs);
+}
     obj.ptr.DefineProperty(cx, 'fs', obj_fs.ptr.ToJSValue, attrs);
     Result := obj.ptr.ToJSValue;
   finally

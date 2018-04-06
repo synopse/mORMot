@@ -27,8 +27,9 @@ uses
 {$IFDEF MSWINDOWS}
   Windows,
 {$ELSE}
-  Unix, BaseUnix, DateUtils,
+  Unix, BaseUnix,
 {$ENDIF}
+  DateUtils,
   Classes,
 {$IFDEF FPC}
   LazFileUtils,
@@ -38,18 +39,48 @@ uses
   SyNodeBinding_buffer;
 
 {$IFDEF MSWINDOWS}
-function _open(fn: pointer; flags, mode: LongInt): LongInt; cdecl;
+type
+  stat = packed record
+    st_dev,                 // Equivalent to drive number 0=A 1=B ...
+    st_ino,                 // Always zero ?
+    st_nlink  : qword;      // Number of links.
+
+    st_mode,                // See constants
+    st_uid,                 // User: Maybe significant on NT ?
+    st_gid,                 // Group: Ditto
+    __pad1    : cardinal;
+    st_rdev   : qword;      // Seems useless (not even filled in)
+    st_size,                // File size in bytes
+    st_blksize,
+    st_blocks : int64;
+
+    st_atime,               // Accessed date (always 00:00 hrs local on FAT)
+    st_atime_nsec,
+    st_mtime,               // Modified time
+    st_mtime_nsec,
+    st_ctime,               // Creation time
+    st_ctime_nsec : qword;
+    __unused2  : array[0..2] of qword;
+  end;
+
+function _access(fn: Pointer; mode: LongInt): LongInt; cdecl;
   external 'msvcrt';
 function _close(Handle: LongInt): LongInt; cdecl;
   external 'msvcrt';
+function _fstat(Handle: LongInt; out Buffer): LongInt; cdecl;
+  external 'msvcrt';
+function _open(fn: Pointer; flags, mode: LongInt): LongInt; cdecl;
+  external 'msvcrt';
 function _read(Handle: LongInt; var Buffer; Count: Int64): Int64; cdecl;
+  external 'msvcrt';
+function _stat(fn: Pointer; out Buffer): LongInt; cdecl;
   external 'msvcrt';
 function _write(Handle: LongInt; const Buffer; Count: Int64): Int64; cdecl;
   external 'msvcrt';
 
-function FpOpen(const fn: RawByteString; flags, mode: LongInt): LongInt; inline;
+function FpAccess(const fn: RawByteString; mode: LongInt): LongInt; inline;
 begin
-  Result := _open(PChar(fn), flags, mode);
+  Result := _access(PChar(fn), mode);
 end;
 
 function FpClose(fd: LongInt): LongInt; inline;
@@ -57,9 +88,24 @@ begin
   Result := _close(fd);
 end;
 
+function FpFStat(fd: LongInt; out buf): LongInt; inline;
+begin
+  Result := _fstat(fd, buf);
+end;
+
+function FpOpen(const fn: RawByteString; flags, mode: LongInt): LongInt; inline;
+begin
+  Result := _open(PChar(fn), flags, mode);
+end;
+
 function FpRead(fd: LongInt; var buf; nBytes: Int64): Int64; inline;
 begin
   Result := _read(fd, buf, nBytes);
+end;
+
+function FpStat(const fn: RawByteString; out buf): LongInt; inline;
+begin
+  Result := _stat(PChar(fn), buf);
 end;
 
 function FpWrite(fd: LongInt; const buf; nBytes: Int64): Int64; inline;
@@ -146,40 +192,27 @@ end;
 // or null is file does not exist
 function fs_fileStat(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
 const
-  USAGE = 'usage: fileStat(filePath: string;)';
+  USAGE = 'usage: fileStat(path: string|fd: integer)';
 var
   in_argv: PjsvalVector;
+  res: LongInt;
   fn: TFileName;
   obj: PJSRootedObject;
   val: jsval;
-{$IFNDEF MSWINDOWS}
   info: stat;
-{$ELSE}
-  {$ifdef ISDELPHIXE2}
-  infoRec: TDateTimeInfoRec;
-  {$else}
-  fad: TWin32FileAttributeData;
-
-  function fileTimeToDateTime(ft: TFileTime): TDateTime;
-  var ST,LT: TSystemTime;
-  begin
-    if FileTimeToSystemTime(ft,ST) and
-     SystemTimeToTzSpecificLocalTime(nil,ST,LT) then
-    result := SystemTimeToDateTime(LT) else
-    result := 0;
-  end;
-  {$endif}
-{$ENDIF}
 begin
   try
     in_argv := vp.argv;
-    if (argc < 1) or not in_argv[0].isString then
+    if (argc < 1) or not (in_argv[0].isString or in_argv[0].isInteger) then
       raise ESMException.Create(USAGE);
-    fn := in_argv[0].asJSString.ToString(cx);
     obj := cx.NewRootedObject(cx.NewObject(nil));
     try
-      {$IFNDEF MSWINDOWS}
-      if fpstat(PChar(fn), info) = 0 then begin
+      if in_argv[0].isString then begin
+        fn := in_argv[0].asJSString.ToString(cx);
+        res := FpStat(fn, info);
+      end else
+        res := FpFStat(in_argv[0].asInteger, info);
+      if res = 0 then begin
         val.asDate[cx] := UnixToDateTime(info.st_atime);
         obj.ptr.DefineProperty(cx, 'atime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
         val.asDate[cx] := UnixToDateTime(info.st_mtime);
@@ -189,48 +222,8 @@ begin
         val.asInt64 := info.st_size;
         obj.ptr.DefineProperty(cx, 'size', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
         vp.rval := obj.ptr.ToJSValue;
-      end else begin
-        {$ifdef SM_DEBUG}
-        SynSMLog.Add.Log(sllDebug, 'fstat(%) failed with error %',
-          [fn, SysErrorMessage(errno)]);
-        {$endif}
-        vp.rval := JSVAL_NULL;
-      end;
-      {$ELSE}
-      {$ifdef ISDELPHIXE2}
-      if FileGetDateTimeInfo(fn, infoRec, true) then begin
-        val.asDate[cx] := infoRec.LastAccessTime;
-        obj.ptr.DefineProperty(cx, 'atime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
-        val.asDate[cx] := infoRec.TimeStamp;
-        obj.ptr.DefineProperty(cx, 'mtime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
-        val.asDate[cx] := infoRec.CreationTime;
-        obj.ptr.DefineProperty(cx, 'ctime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
-          if TWin32FindData(infoRec).nFileSizeHigh > 0 then
-            val := JSVAL_NAN
-          else
-            val.asInt64 := TWin32FindData(infoRec).nFileSizeLow;
-        obj.ptr.DefineProperty(cx, 'size', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
-        vp.rval := obj.ptr.ToJSValue;
       end else
-        vp.rval := JSVAL_NULL;
-      {$else ISDELPHIXE2}
-      if GetFileAttributesEx(PChar(fn), GetFileExInfoStandard, @fad) then begin
-        val.asDate[cx] := fileTimeToDateTime(fad.ftLastAccessTime);
-        obj.ptr.DefineProperty(cx, 'atime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
-        val.asDate[cx] := fileTimeToDateTime(fad.ftLastWriteTime);
-        obj.ptr.DefineProperty(cx, 'mtime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
-        val.asDate[cx] := fileTimeToDateTime(fad.ftCreationTime);
-        obj.ptr.DefineProperty(cx, 'ctime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
-        if fad.nFileSizeHigh > 0 then
-          val := JSVAL_NAN
-        else
-          val.asInt64 := fad.nFileSizeLow;
-        obj.ptr.DefineProperty(cx, 'size', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
-        vp.rval := obj.ptr.ToJSValue;
-      end else
-        vp.rval := JSVAL_NULL;
-      {$endif ISDELPHIXE2}
-      {$ENDIF MSWINDOWS}
+        RaiseLastOSError;
     finally
       cx.FreeRootedObject(obj);
     end;
@@ -588,7 +581,7 @@ begin
     end;
   end;
 end;
-
+(*
 /// Create UInt8Array & load file into it
 function fs_loadFileToBuffer(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
 var
@@ -642,7 +635,7 @@ begin
     end;
   end;
 end;
-
+*)
 /// write Object to file using specifien encoding.
 //  internaly use SyNodeReadWrite.write
 function fs_writeFile(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
@@ -1058,7 +1051,7 @@ begin
     obj.ptr.DefineFunction(cx, 'readDir', fs_readDir, 2, attrs);
     obj.ptr.DefineFunction(cx, 'realpath', fs_realPath, 1, attrs);
     obj.ptr.DefineFunction(cx, 'rename', fs_rename, 2, attrs);
-    obj.ptr.DefineFunction(cx, 'loadFileToBuffer', fs_loadFileToBuffer, 1, attrs);
+    //obj.ptr.DefineFunction(cx, 'loadFileToBuffer', fs_loadFileToBuffer, 1, attrs);
     obj.ptr.DefineFunction(cx, 'writeFile', fs_writeFile, 3, attrs);
     obj.ptr.DefineFunction(cx, 'appendFile', fs_appendFile, 3, attrs);
     obj.ptr.DefineFunction(cx, 'forceDirectories', fs_forceDirectories, 1, attrs);
@@ -1079,3 +1072,4 @@ initialization
   TSMEngineManager.RegisterBinding('fs', SyNodeBindingProc_fs);
 
 end.
+
