@@ -9796,6 +9796,13 @@ type
     // uncompress to the tmp variable, and return pointer(tmp) and length(tmp)
     function Decompress(Comp: PAnsiChar; CompLen: integer; out PlainLen: integer;
       var tmp: RawByteString; SafeDecompression: boolean=false): pointer; overload;
+    /// uncompress a RawByteString memory buffer without crc32c hashing
+    // - you should not use this method, unless you know exactly what you are doing!
+    // - returns a pointer to the raw data and fill Len variable
+    // - avoid any memory allocation in case of a stored content - otherwise, would
+    // uncompress to the tmp variable, and return pointer(tmp) and length(tmp)
+    function DecompressFast(Comp: PAnsiChar; CompLen: integer; out PlainLen: integer;
+      var tmp: RawByteString): pointer;
     /// decode the header of a memory buffer compressed via the Compress() method
     // - validates the crc32c of the compressed data, then return the uncompressed
     // size in bytes on success
@@ -62383,10 +62390,29 @@ begin
     exit;
   if Comp[4]=COMPRESS_STORED then
     result := Comp+9 else begin
-    SetString(tmp,nil,PlainLen);
+    if PlainLen > length(tmp) then
+      SetString(tmp,nil,PlainLen);
     if DecompressBody(Comp,pointer(tmp),CompLen,PlainLen,SafeDecompression) then
       result := pointer(tmp);
   end;
+end;
+
+function TAlgoCompress.DecompressFast(Comp: PAnsiChar; CompLen: integer;
+  out PlainLen: integer; var tmp: RawByteString): pointer;
+begin
+  if Comp[4]=COMPRESS_STORED then begin
+    PlainLen := CompLen-9;
+    result := Comp+9;
+  end else
+  if (Comp[4]=AnsiChar(AlgoID)) and (self<>nil) then begin
+    PlainLen := AlgoDecompressDestLen(Comp+9);
+    if PlainLen > length(tmp) then
+      SetString(tmp,nil,PlainLen);
+    if AlgoDecompress(Comp+9,CompLen-9,pointer(tmp))=PlainLen then
+      result := pointer(tmp) else
+      result := nil;
+  end else
+    result := nil;
 end;
 
 function TAlgoCompress.DecompressPartial(Comp, Partial: PAnsiChar;
