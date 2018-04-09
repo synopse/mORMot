@@ -58997,6 +58997,8 @@ begin
         fTimeOuts.Delete(i);
         inc(result);
       end;
+    if result>0 then
+      fKeys.Rehash; // mandatory after fKeys.Delete(i)
   finally
     fSafe.UnLock;
   end;
