@@ -57043,14 +57043,20 @@ begin
 {$else}
 var si: TSysInfo; // Linuxism
     P: PUTF8Char;
+    {$ifdef FPC}mu: cardinal{$else}const mu=1{$endif};
 begin
-  SysInfo({$ifdef FPC}@{$endif}si);
+  {$ifdef FPC}
+  SysInfo(@si);
+  mu := si.mem_unit;
+  {$else}
+  SysInfo(si); // missing field in Kylix' Libc
+  {$endif}
   if si.totalram<>0 then // avoid div per 0 exception
     FMemoryLoadPercent := ((si.totalram-si.freeram)*100)div si.totalram;
-  FPhysicalMemoryTotal.fBytes := si.totalram*si.mem_unit;
-  FPhysicalMemoryFree.fBytes := si.freeram*si.mem_unit;
-  FPagingFileTotal.fBytes := si.totalswap*si.mem_unit;
-  FPagingFileFree.fBytes := si.freeswap*si.mem_unit;
+  FPhysicalMemoryTotal.fBytes := si.totalram*mu;
+  FPhysicalMemoryFree.fBytes := si.freeram*mu;
+  FPagingFileTotal.fBytes := si.totalswap*mu;
+  FPagingFileFree.fBytes := si.freeswap*mu;
   // virtual memory information is not available under Linux
   P := pointer(StringFromFile('/proc/self/statm',true));
   FAllocatedReserved.fBytes := GetNextItemCardinal(P,' ')*SystemInfo.dwPageSize; // VmSize
