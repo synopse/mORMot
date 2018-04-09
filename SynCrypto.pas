@@ -2707,7 +2707,7 @@ type
     // server, without knowing the exact algorithm or secret keys
     class function VerifyPayload(const Token, ExpectedSubject, ExpectedIssuer,
       ExpectedAudience: RawUTF8; Expiration: PUnixTime=nil; Signature: PRawUTF8=nil;
-      Payload: PVariant=nil): TJWTResult;
+      Payload: PVariant=nil; IgnoreTime: boolean=false): TJWTResult;
   published
     /// the name of the algorithm used by this instance (e.g. 'HS256')
     property Algorithm: RawUTF8 read fAlgorithm;
@@ -14679,7 +14679,8 @@ begin
 end;
 
 class function TJWTAbstract.VerifyPayload(const Token, ExpectedSubject, ExpectedIssuer,
-  ExpectedAudience: RawUTF8; Expiration: PUnixTime; Signature: PRawUTF8; Payload: PVariant): TJWTResult;
+  ExpectedAudience: RawUTF8; Expiration: PUnixTime; Signature: PRawUTF8; Payload: PVariant;
+  IgnoreTime: boolean): TJWTResult;
 var P,B: PUTF8Char;
     V: TPUtf8CharDynArray;
     now, time: PtrUInt;
@@ -14722,12 +14723,12 @@ begin
     if V[2]<>nil then begin
       time := GetCardinal(V[2]);
       result := jwtExpired;
-      if now>time then
+      if not IgnoreTime and (now>time) then
         exit;
       if Expiration<>nil then
         Expiration^ := time;
     end;
-    if V[3]<>nil then begin
+    if not IgnoreTime and (V[3]<>nil) then begin
       time := GetCardinal(V[3]);
       result := jwtNotBeforeFailed;
       if (time=0) or (now<time) then
