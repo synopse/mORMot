@@ -477,10 +477,8 @@ type
     procedure InMemoryCompression;
     /// .gzip archive handling
     procedure GZIPFormat;
-    {$ifndef LINUX}
     /// .zip archive handling
     procedure ZIPFormat;
-    {$endif}
     /// SynLZO internal format
     procedure _SynLZO;
     /// SynLZ internal format
@@ -9749,8 +9747,6 @@ begin
 end;
 
 
-{$ifndef LINUX} // TZipRead not defined yet (use low-level file mapping WinAPI)
-
 procedure TTestCompression.ZipFormat;
 var FN,FN2: TFileName;
     ExeName: string;
@@ -9818,6 +9814,7 @@ begin
     Free;
   end;
 end;
+{$ifdef MSWINDOWS}
 procedure TestPasZipRead(const FN: TFileName; Count: integer);
 var pasZR: PasZip.TZipRead;
 begin
@@ -9831,7 +9828,8 @@ begin
   end;
 end;
 var pasZW: PasZip.TZipWrite;
-    i: integer;
+{$endif}
+var i: integer;
 begin
   ExeName := ExtractFileName(ExeVersion.ProgramFileName);
   FN := ChangeFileExt(ExeVersion.ProgramFileName,'.zip');
@@ -9853,6 +9851,7 @@ begin
     Free;
   end;
   Test(TZipRead.Create(FN),5);
+  {$ifdef MSWINDOWS}
   TestPasZipRead(FN,5);
   FN2 := ChangeFileExt(FN,'2.zip');
   pasZW := PasZip.TZipWrite.Create(FN2);
@@ -9870,13 +9869,14 @@ begin
   end;
   TestPasZipRead(FN2,4);
   DeleteFile(FN2);
+  {$endif}
   DeleteFile(FN);
   FN2 := ExeVersion.ProgramFilePath+'ddd.zip';
   with TZipWrite.Create(FN2) do
   try
     FN := ExeVersion.ProgramFilePath+'ddd';
     if not DirectoryExists(FN) then
-      FN := ExeVersion.ProgramFilePath+'..\ddd';
+      FN := ExeVersion.ProgramFilePath+'..'+PathDelim+'ddd';
     if DirectoryExists(FN) then begin
       AddFolder(FN,'*.pas');
       Check(Count>10);
@@ -9888,8 +9888,6 @@ begin
   end;
   DeleteFile(FN2);
 end;
-
-{$endif LINUX}
 
 procedure TTestCompression._SynLZO;
 var s,t: AnsiString;

@@ -642,17 +642,21 @@ type
     zipName: TFileName;
   end;
 
-{$ifdef MSWINDOWS}
   /// read-only access to a .zip archive file
   // - can open directly a specified .zip file (will be memory mapped for fast access)
   // - can open a .zip archive file content from a resource (embedded in the executable)
   // - can open a .zip archive file content from memory
   TZipRead = class
   private
-    file_, map: ZipPtrUint; // we use a memory mapped file to access the zip content
     buf: PByteArray;
     FirstFileHeader: PFileHeader;
     ReadOffset: cardinal;
+    {$ifdef MSWINDOWS}
+    file_, map: ZipPtrUint;
+    {$else}
+    file_: THandle;
+    mapSize: cardinal;
+    {$endif}
     procedure UnMap;
     function UnZipStream(aIndex: integer; const aInfo: TFileInfo; aDest: TStream): boolean;
   public
@@ -670,7 +674,7 @@ type
     constructor Create(aFile: THandle; ZipStartOffset: cardinal=0;
       Size: cardinal=0); overload;
     /// open a .zip archive file directly from memory
-    constructor Create(BufZip: pByteArray; Size: cardinal); overload;
+    constructor Create(BufZip: PByteArray; Size: cardinal); overload;
     /// release associated memory
     destructor  Destroy; override;
 
@@ -701,7 +705,6 @@ type
     // - returns FALSE if the information was not successfully retrieved
     function RetrieveFileInfo(Index: integer; var Info: TFileInfo): boolean;
   end;
-{$endif MSWINDOWS}
 
   /// abstract write-only access for creating a .zip archive
   TZipWriteAbstract = class
@@ -762,9 +765,7 @@ type
     // - this method is very fast, and will increase the .zip file in-place
     // (the old content is not copied, new data is appended at the file end)
     // - "dummy" parameter exists only to disambiguate constructors for C++
-    {$ifdef MSWINDOWS}
     constructor CreateFrom(const aFileName: TFileName; dummy: integer=0);
-    {$endif}
     /// compress (using the deflate method) a file, and add it to the zip file
     procedure AddDeflated(const aFileName: TFileName; RemovePath: boolean=true;
       CompressLevel: integer=6; ZipName: TFileName=''); overload;
@@ -1113,7 +1114,6 @@ begin
     Handle := FileCreate(aFileName);
 end;
 
-{$ifdef MSWINDOWS}
 constructor TZipWrite.CreateFrom(const aFileName: TFileName; dummy: integer);
 var R: TZipRead;
     i: Integer;
@@ -1136,12 +1136,15 @@ begin
       R.RetrieveFileInfo(i,fhr.fileInfo);
       SetString(intName,storedName,infoLocal^.nameLen);
     end;
+    {$ifdef MSWINDOWS}
     SetFilePointer(Handle,R.ReadOffset,nil,FILE_BEGIN);
+    {$else}
+    FileSeek(Handle,R.ReadOffset,soFromBeginning);
+    {$endif}
   finally
     R.Free;
   end;
 end;
-{$endif MSWINDOWS}
 
 destructor TZipWrite.Destroy;
 begin
@@ -1172,18 +1175,23 @@ end;
 
 { TZipRead }
 
-{$ifdef MSWINDOWS}
-
 procedure TZipRead.UnMap;
 begin
   Count := 0;
+  {$ifdef MSWINDOWS}
   if map<>0 then begin
     UnmapViewOfFile(Buf);
     CloseHandle(map);
     map := 0;
   end;
+  {$else}
+  if (mapSize<>0) and (buf<>nil) then begin
+    {$ifdef KYLIX3}munmap{$else}fpmunmap{$endif}(buf,mapSize);
+    mapSize := 0;
+  end;
+  {$endif MSWINDOWS}
   if file_>0 then begin
-    CloseHandle(file_);
+    FileClose(file_);
     file_ := 0;
   end;
 end;
@@ -1195,7 +1203,7 @@ begin
 end;
 {$endif}
 
-constructor TZipRead.Create(BufZip: pByteArray; Size: cardinal);
+constructor TZipRead.Create(BufZip: PByteArray; Size: cardinal);
 var lhr: PLastHeader;
     H: PFileHeader;
     lfhr: PLocalFileHeader;
@@ -1252,9 +1260,12 @@ begin
         zipName := UTF8Decode(tmp) else
       {$endif}
       begin
-        // decode OEM/DOS file name into native string/TFileName type
+        {$ifdef MSWINDOWS} // decode OEM/DOS file name into native encoding
         SetLength(zipName,infoLocal^.nameLen);
         OemToChar(Pointer(tmp),Pointer(zipName)); // OemToCharW/OemToCharA
+        {$else}
+        zipName := UTF8Decode(tmp); // let's assume it is UTF-8 under Linux
+        {$endif}
       end;
       inc(PByte(H),sizeof(H^)+infoLocal^.NameLen+H^.fileInfo.extraLen+H^.commentLen);
       if not(infoLocal^.zZipMethod in [Z_STORED,Z_DEFLATED]) then
@@ -1290,12 +1301,23 @@ begin
     exit;
   if Size=0 then
     Size := GetFileSize(aFile, nil);
+  {$ifdef MSWINDOWS}
   map := CreateFileMapping(aFile, nil, PAGE_READONLY, 0, 0, nil);
   if map=0 then begin
     Unmap;
     raise ESynZipException.Create('Missing File');
   end;
-  Buf := MapViewOfFile(map, FILE_MAP_READ, 0, 0, 0);
+  buf := MapViewOfFile(map, FILE_MAP_READ, 0, 0, 0);
+  {$else}
+  mapSize := Size;
+  buf := {$ifdef KYLIX3}mmap{$else}fpmmap{$endif}(nil,Size,PROT_READ,MAP_SHARED,aFile,0);
+  if buf=MAP_FAILED then
+    buf := nil;
+  {$endif}
+  if buf=nil then begin
+    Unmap;
+    raise ESynZipException.Create('FileMap failed');
+  end;
   ExeOffset := -1;
   for i := ZipStartOffset to Size-5 do // search for first local header
     if PCardinal(@buf[i])^+1=FIRSTHEADER_SIGNATURE_INC then begin
@@ -1319,7 +1341,11 @@ end;
 
 constructor TZipRead.Create(const aFileName: TFileName; ZipStartOffset, Size: cardinal);
 begin
+  {$ifdef MSWINDOWS}
   file_ := CreateFile(pointer(aFileName), GENERIC_READ, FILE_SHARE_READ, nil, OPEN_EXISTING, 0, 0);
+  {$else}
+  file_ := FileOpen(aFileName,fmOpenRead or fmShareDenyNone);
+  {$endif}
   Create(file_,ZipStartOffset, Size);
 end;
 
@@ -1427,10 +1453,10 @@ end;
 /// DirectoryExists returns a boolean value that indicates whether the
 //  specified directory exists (and is actually a directory)
 function DirectoryExists(const Directory: string): boolean;
-var Code: Integer;
+var res: Integer;
 begin
-  Code := GetFileAttributes(PChar(Directory));
-  result := (Code <> -1) and (FILE_ATTRIBUTE_DIRECTORY and Code <> 0);
+  res := GetFileAttributes(PChar(Directory));
+  result := (res<>-1) and (FILE_ATTRIBUTE_DIRECTORY and res<> 0);
 end;
 {$endif}
 
@@ -1446,7 +1472,7 @@ begin
     Parent := ExtractFilePath(system.copy(Path,1,length(Path)-1));
     if (Parent<>'') and not DirectoryExists(Parent) then
       if not EnsurePath(Parent) then exit;
-    if CreateDirectory(pointer(path),nil) then
+    if CreateDir(path) then
       result := true;
   end;
 end;
@@ -1497,14 +1523,16 @@ begin
   FS := TFileStream.Create(Path,fmCreate);
   try
     result := UnZipStream(aIndex,info,FS);
+    {$ifdef MSWINDOWS}
+    {$ifdef CONDITIONALEXPRESSIONS}
+      {$WARN SYMBOL_PLATFORM OFF} // zip expects a Windows timestamp
+    {$endif}
     if result and (info.zlastMod<>0) then
-{$ifdef CONDITIONALEXPRESSIONS}
-  {$WARN SYMBOL_PLATFORM OFF} // zip expects a Windows timestamp
-{$endif}
       FileSetDate(FS.Handle,info.zlastMod);
-{$ifdef CONDITIONALEXPRESSIONS}
-  {$WARN SYMBOL_PLATFORM ON}
-{$endif}
+    {$ifdef CONDITIONALEXPRESSIONS}
+      {$WARN SYMBOL_PLATFORM ON}
+    {$endif}
+    {$endif MSWINDOWS}
   finally
     FS.Free;
   end;
@@ -1542,8 +1570,6 @@ begin
     result := '' else
     result := UnZip(aIndex);
 end;
-
-{$endif MSWINDOWS}
 
 const
   GZHEAD : array [0..2] of cardinal = ($88B1F,0,0);
