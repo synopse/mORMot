@@ -554,6 +554,11 @@ procedure RunUntilSigTerminated(daemon: TObject; dofork: boolean;
 // the file didn't disappear, which may mean that the daemon is broken)
 function RunUntilSigTerminatedForkKill(waitseconds: integer = 30): boolean;
 
+/// local .pid file name as created by RunUntilSigTerminated(dofork=true)
+function RunUntilSigTerminatedPidFile: TFileName;
+
+/// like SysUtils.ExecuteProcess, but allowing not to wait for the process to finish
+function RunProcess(const path, arg1: RawUTF8; waitfor: boolean): integer;
 
 {$endif MSWINDOWS}
 
@@ -583,6 +588,8 @@ type
     /// returns user-friendly description of the service, including version
     // information and company copyright (if available)
     function ServiceDescription: string;
+    /// read-only access to the TSynLog class, if SetLog() has been called
+    property LogClass: TSynLogClass read fLogClass;
   published
     /// the service name, as used internally by Windows or the TSynDaemon class
     // - default is the executable name
@@ -1279,7 +1286,7 @@ end;
 var
   _pidfile: TFileName;
 
-function pidfile: TFileName;
+function RunUntilSigTerminatedPidFile: TFileName;
 begin
   if _pidfile = '' then
     _pidfile := format('%s.%s.pid', [ExeVersion.ProgramFilePath, ExeVersion.ProgramName]);
@@ -1292,7 +1299,7 @@ var
   tix: Int64;
 begin
   result := false;
-  pid := GetInteger(pointer(StringFromFile(pidfile)));
+  pid := GetInteger(pointer(StringFromFile(RunUntilSigTerminatedPidFile)));
   if pid <= 0 then
     exit;
   if {$ifdef FPC}fpkill{$else}kill{$endif}(pid, SIGTERM) <> 0 then
@@ -1321,7 +1328,7 @@ begin
   SigIntercept;
   try
     if dofork then begin
-      if FileExists(pidfile) then
+      if FileExists(RunUntilSigTerminatedPidFile) then
         exit; // already forked
       pid := {$ifdef FPC}fpFork{$else}fork{$endif};
       if pid < 0 then
@@ -1345,7 +1352,7 @@ begin
       {$ifdef FPC}Close{$else}__close{$endif}(stderr);
       // create local /run/[ExeVersion.ProgramName].pid file
       pid := {$ifdef FPC}fpgetpid{$else}getpid{$endif};
-      FileFromString(Int64ToUtf8(pid), pidfile);
+      FileFromString(Int64ToUtf8(pid), RunUntilSigTerminatedPidFile);
     end;
     try
       if log <> nil then
@@ -1361,7 +1368,7 @@ begin
         stop;
       finally
         if dofork then begin
-          DeleteFile(pidfile);
+          DeleteFile(RunUntilSigTerminatedPidFile);
           if log <> nil then
             log.Log(sllTrace, 'RunUntilSigTerminated: deleted file %', [_pidfile]);
         end;
@@ -1374,6 +1381,62 @@ begin
       ExitCode := 1; // indicates error
     end;
   end;
+end;
+
+{$ifndef FPC} // Kylix doesn't have a proper WaitProcess
+function WaitProcess(pid: pid_t): pid_t;
+var r: pid_t;
+    s: integer;
+begin
+  repeat
+    r := WaitPid(pid, @s, 0);
+    if (r = -1) and (errno = EINTR) then
+      r := 0;
+  until r <> 0;
+  if r < 0 then // WaitPid() failed
+    result := -1 else
+    if WIFEXITED(s) then // returns the exit status code
+      result := WEXITSTATUS(s) else
+      result := -abs(s); // ensure returns a negative value for other errors
+end;
+{$endif}
+
+function RunProcess(const path, arg1: RawUTF8; waitfor: boolean): integer;
+var
+  pid: {$ifdef FPC}TPID{$else}pid_t{$endif};
+  a: array[0..2] of PAnsiChar;
+begin
+  {$ifdef FPC}
+  {$if (defined(BSD) or defined(SUNOS)) and defined(FPC_USE_LIBC)}
+  pid := FpvFork;
+  {$else}
+  pid := FpFork;
+  {$ifend}
+  {$else}
+  pid := fork; // Kylix
+  {$endif FPC}
+  if pid < 0 then begin
+    result := -1; // fork failed
+    exit;
+  end;
+  if pid = 0 then begin // we are in child process -> switch to new executable
+    a[0] := pointer(path);
+    a[1] := pointer(arg1); // expect a single (may be quoted) argument
+    a[2] := nil;
+    {$ifdef FPC}
+    FpExecV(a[0], @a);
+    FpExit(127);
+    {$else}
+    execv(a[0], @a);
+    _exit(127);
+    {$endif}
+  end;
+  if waitfor then begin
+    result := WaitProcess(pid);
+    if result = 127 then
+      result := -result; // execv() failed in child process
+  end else
+    result := 0; // fork success (we didn't wait for the child process to fail)
 end;
 
 {$endif MSWINDOWS}
