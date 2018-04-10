@@ -9837,6 +9837,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// get the TAlgoCompress instance corresponding to the supplied AlgoID
     // - returns nil if no algorithm was identified
+    // - stored content is identified as TAlgoSynLZ
     class function Algo(AlgoID: byte): TAlgoCompress; overload;
     /// returns the algorithm name, from its classname
     // - e.g. TAlgoSynLZ->'synlz' TAlgoLizard->'lizard' nil->'none'
@@ -62160,6 +62161,7 @@ end;
 
 const
   COMPRESS_STORED = #0;
+  COMPRESS_SYNLZ = 1;
 
 var
   SynCompressAlgos: TObjectList;
@@ -62199,11 +62201,11 @@ class function TAlgoCompress.Algo(AlgoID: byte): TAlgoCompress;
 var i: integer;
     ptr: ^TAlgoCompress;
 begin
-  if AlgoID=byte(COMPRESS_STORED) then // "stored" is identifed as SynLZ
+  if AlgoID<=COMPRESS_SYNLZ then // "stored" is identifed as SynLZ
     result := AlgoSynLZ else begin
     if SynCompressAlgos<>nil then begin
-      ptr := @SynCompressAlgos.List[0];
-      for i := 1 to SynCompressAlgos.Count  do
+      ptr := @SynCompressAlgos.List[1]; // ignore List[0] = AlgoSynLZ
+      for i := 2 to SynCompressAlgos.Count  do
         if ptr^.AlgoID=AlgoID then begin
           result := ptr^;
           exit;
@@ -62488,7 +62490,7 @@ end;
 
 function TAlgoSynLZ.AlgoID: byte;
 begin
-  result := 1;
+  result := COMPRESS_SYNLZ; // =1
 end;
 
 function TAlgoSynLZ.AlgoCompress(Plain: pointer; PlainLen: integer;
