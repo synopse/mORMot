@@ -28593,17 +28593,17 @@ end;
 {$else}
 asm
       push    ebx
-      mov     ecx, eax
-      mov     ebx, edx
-      mov     edx, ecx
+      mov     ecx, eax // ecx=Y
+      mov     ebx, edx // ebx=result
+      mov     edx, eax
       mov     eax, 1374389535
       mul     edx
-      shr     edx, 5
-      mov     dword ptr [ebx], edx
+      shr     edx, 5   // edx=Y div 100
+      mov     dword ptr [ebx].TDiv100Rec.D, edx
       mov     eax, 100
       mul     edx
-      sub     ecx, eax
-      mov     dword ptr [ebx+4H], ecx
+      sub     ecx, eax // ecx=Y-(edx*100)
+      mov     dword ptr [ebx].TDiv100Rec.M, ecx
       pop     ebx
 end;
 {$endif}
