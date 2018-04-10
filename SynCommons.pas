@@ -6219,7 +6219,7 @@ type
     // ! finally
     // !   Safe.Unlock;
     // ! end;
-    procedure Lock;               {$ifdef HASINLINE}inline;{$endif}
+    procedure Lock; {$ifdef HASINLINE}inline;{$endif}
     /// will try to acquire the mutex
     // - use as such to avoid race condition (from a Safe: TSynLocker property):
     // ! if Safe.TryLock then
@@ -6228,9 +6228,9 @@ type
     // ! finally
     // !   Safe.Unlock;
     // ! end;
-    function TryLock: boolean;    {$ifdef HASINLINE}inline;{$endif}
+    function TryLock: boolean; {$ifdef HASINLINE}inline;{$endif}
     /// release the instance for exclusive access
-    procedure UnLock;             {$ifdef HASINLINE}inline;{$endif}
+    procedure UnLock; {$ifdef HASINLINE}inline;{$endif}
     /// will enter the mutex until the IUnknown reference is released
     // - could be used as such under Delphi:
     // !begin
@@ -62244,8 +62244,7 @@ begin
 end;
 
 procedure TAlgoCompress.Compress(Plain: PAnsiChar; PlainLen: integer;
-  out Result: RawByteString;
-  CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean);
+  out Result: RawByteString; CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean);
 var len: integer;
     R: PAnsiChar;
     crc: cardinal;
@@ -62271,7 +62270,7 @@ begin
       R := @tmp;
     PCardinal(R)^ := crc;
     len := AlgoCompress(Plain,PlainLen,R+9);
-    if len>PlainLen then begin // store if compression not worth it
+    if len>=PlainLen then begin // store if compression not worth it
       R[4] := COMPRESS_STORED;
       PCardinal(R+5)^ := crc;
       MoveFast(Plain^,R[9],PlainLen);
@@ -62341,10 +62340,11 @@ begin
     R := pointer(result);
     PCardinal(R)^ := crc;
     len := AlgoCompress(Plain,PlainLen,R+9);
-    if len>PlainLen then begin // store if compression not worth it
+    if len>=PlainLen then begin // store if compression not worth it
       R[4] := COMPRESS_STORED;
       PCardinal(R+5)^ := crc;
       MoveFast(Plain^,R[9],PlainLen);
+      len := PlainLen;
     end else begin
       R[4] := AnsiChar(AlgoID);
       PCardinal(R+5)^ := AlgoHash(0,R+9,len);
@@ -62408,6 +62408,8 @@ end;
 function TAlgoCompress.DecompressFast(Comp: PAnsiChar; CompLen: integer;
   out PlainLen: integer; var tmp: RawByteString): pointer;
 begin
+  if (self=nil) or (CompLen<=9) or (Comp=nil) then
+    result := nil else
   if Comp[4]=COMPRESS_STORED then begin
     PlainLen := CompLen-9;
     result := Comp+9;
