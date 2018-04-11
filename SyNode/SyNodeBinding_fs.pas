@@ -641,16 +641,14 @@ end;
 function fs_writeFile(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
 var
   in_argv: PjsvalVector;
-  filePath: TFileName;
-  stream: TFileStream;
+  stream: THandleStream;
   writer: SynCommons.TTextWriter;
 begin
   try
     if (argc < 2) then
-      raise ESMException.Create('usage writeFile(filePath: String, fileContent: String|Object|ArrayBuffer [,encoding]');
+      raise ESMException.Create('usage writeFile(fd: Integer, fileContent: String|Object|ArrayBuffer [,encoding]');
     in_argv := vp.argv;
-    filePath := in_argv[0].asJSString.ToString(cx);
-    stream := TFileStream.Create(filePath, fmCreate);
+    stream := THandleStream.Create(in_argv[0].asInteger);
     writer := SynCommons.TTextWriter.Create(stream, 65536);
     try
       vp.rval := SyNodeReadWrite.SMWrite_impl(cx, argc - 1, @in_argv[1], writer);
@@ -669,7 +667,7 @@ begin
     end;
   end;
 end;
-
+(*
 /// append Object to file using specifien encoding.
 //  internaly use SyNodeReadWrite.write
 function fs_appendFile(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
@@ -711,7 +709,7 @@ begin
     end;
   end;
 end;
-
+*)
 /// delete file AFileName: TFileName - full file path
 function fs_deleteFile(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
 var
@@ -1053,7 +1051,7 @@ begin
     obj.ptr.DefineFunction(cx, 'rename', fs_rename, 2, attrs);
     //obj.ptr.DefineFunction(cx, 'loadFileToBuffer', fs_loadFileToBuffer, 1, attrs);
     obj.ptr.DefineFunction(cx, 'writeFile', fs_writeFile, 3, attrs);
-    obj.ptr.DefineFunction(cx, 'appendFile', fs_appendFile, 3, attrs);
+    //obj.ptr.DefineFunction(cx, 'appendFile', fs_appendFile, 3, attrs);
     obj.ptr.DefineFunction(cx, 'forceDirectories', fs_forceDirectories, 1, attrs);
     obj.ptr.DefineFunction(cx, 'removeDir', fs_removeDir, 1, attrs);
     obj.ptr.DefineFunction(cx, 'deleteFile', fs_deleteFile, 1, attrs);
