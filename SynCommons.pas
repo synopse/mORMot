@@ -62193,7 +62193,7 @@ end;
 class function TAlgoCompress.Algo(Comp: PAnsiChar; CompLen: integer): TAlgoCompress;
 begin
   if (Comp<>nil) and (CompLen>9) then
-    if ord(Comp[4])<=COMPRESS_SYNLZ then // "stored" is identifed as SynLZ
+    if ord(Comp[4])<=1{inlinedCOMPRESS_SYNLZ} then // "stored" maps SynLZ
       result := AlgoSynLZ else
       result := Algo(ord(Comp[4])) else
     result := nil;
