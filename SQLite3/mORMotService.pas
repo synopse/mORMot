@@ -614,6 +614,7 @@ type
   protected
     fWorkFolderName: TFileName;
     fSettings: TSynDaemonSettings;
+    function CustomCommandLineSyntax: string; virtual;
     {$ifdef MSWINDOWS}
     procedure DoStart(Sender: TService);
     procedure DoStop(Sender: TService);
@@ -1318,6 +1319,19 @@ begin
     {$ifdef FPC}fpkill{$else}kill{$endif}(pid, SIGKILL); // finesse
 end;
 
+procedure CleanAfterFork;
+begin
+  {$ifdef FPC}fpUMask{$else}umask{$endif}(0); // reset file mask
+  chdir('/'); // avoid locking current directory
+  Close(input);
+  AssignFile(input, '/dev/null');
+  ReWrite(input);
+  Close(output);
+  AssignFile(output, '/dev/null');
+  ReWrite(output);
+  {$ifdef FPC}Close{$else}__close{$endif}(stderr);
+end;
+
 procedure RunUntilSigTerminated(daemon: TObject; dofork: boolean;
   const start, stop: TThreadMethod; log: TSynLog; const servicename: string);
 var
@@ -1333,23 +1347,13 @@ begin
       pid := {$ifdef FPC}fpFork{$else}fork{$endif};
       if pid < 0 then
         raise ESynException.CreateUTF8('%.CommandLine Fork failed', [daemon]);
-      if pid > 0 then begin // main program - just terminate
-        //{$ifdef FPC}fpExit{$else}__exit{$endif}(0);
+      if pid > 0 then // main program - just terminate
         exit;
-      end;
       // clean forked instance
       sid := {$ifdef FPC}fpSetSID{$else}setsid{$endif};
       if sid < 0 then // new session (process group) created?
         raise ESynException.CreateUTF8('%.CommandLine SetSID failed', [daemon]);
-      {$ifdef FPC}fpUMask{$else}umask{$endif}(0); // reset file mask
-      chdir('/'); // avoid locking current directory
-      Close(input);
-      AssignFile(input, '/dev/null');
-      ReWrite(input);
-      Close(output);
-      AssignFile(output, '/dev/null');
-      ReWrite(output);
-      {$ifdef FPC}Close{$else}__close{$endif}(stderr);
+      CleanAfterFork;
       // create local /run/[ExeVersion.ProgramName].pid file
       pid := {$ifdef FPC}fpgetpid{$else}getpid{$endif};
       FileFromString(Int64ToUtf8(pid), RunUntilSigTerminatedPidFile);
@@ -1420,6 +1424,8 @@ begin
     exit;
   end;
   if pid = 0 then begin // we are in child process -> switch to new executable
+    if not waitfor then
+      CleanAfterFork; // don't share the same console
     a[0] := pointer(path);
     a[1] := pointer(arg1); // expect a single (may be quoted) argument
     a[2] := nil;
@@ -1436,7 +1442,7 @@ begin
     if result = 127 then
       result := -result; // execv() failed in child process
   end else
-    result := 0; // fork success (we didn't wait for the child process to fail)
+    result := 0; // fork success (don't wait for the child process to fail)
 end;
 
 {$endif MSWINDOWS}
@@ -1542,6 +1548,11 @@ begin
 end;
 {$endif MSWINDOWS}
 
+function TSynDaemon.CustomCommandLineSyntax: string;
+begin
+  result := '';
+end;
+
 {$I-}
 
 type
@@ -1594,9 +1605,9 @@ var
       ' /console -c /verbose /help -h /version');
     spaces := StringOfChar(' ', length(ExeVersion.ProgramName) + 4);
     {$ifdef MSWINDOWS}
-    writeln(spaces, '/install /uninstall /start /stop /state');
+    writeln(spaces, '/install /uninstall /start /stop /state', CustomCommandLineSyntax);
     {$else}
-    writeln(spaces, '/run -r /fork -f /kill -k');
+    writeln(spaces, '/run -r /fork -f /kill -k', CustomCommandLineSyntax);
     {$endif}
   end;
 
