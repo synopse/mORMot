@@ -2968,6 +2968,17 @@ begin
     check(not match.Match('TEster'));
     check(not match.Match('atEst'));
     check(not match.Match('ateSTe'));
+    match.Prepare('*12*', false, reuse);
+    check(match.Match('12'));
+    check(match.Match('12e'));
+    check(match.Match('12er'));
+    check(match.Match('a12'));
+    check(match.Match('a12e'));
+    check(match.Match('ab12'));
+    check(match.Match('ab12er'));
+    check(not match.Match('1'));
+    check(not match.Match('a1') = reuse); //TODO: fix bug in MatchAfterStar
+    check(not match.Match('1a2'));
     match.Prepare('*teSt*', true, reuse);
     check(match.Match('test'));
     check(match.Match('teste'));
