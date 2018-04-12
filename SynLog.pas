@@ -305,7 +305,7 @@ type
     // - TSynLog will handle enumerations and dynamic array; TSQLLog will be
     // able to write TObject/TSQLRecord and sets content as JSON
     procedure Log(Level: TSynLogInfo; const aName: RawUTF8;
-      aTypeInfo: pointer; var aValue; Instance: TObject=nil); overload;
+      aTypeInfo: pointer; const aValue; Instance: TObject=nil); overload;
     /// call this method to add the caller address to the log at the specified level
     // - if the debugging info is available from TSynMapFile, will log the
     // unit name, associated symbol and source code line
@@ -784,7 +784,7 @@ type
     procedure LogInternal(Level: TSynLogInfo; const Text: RawUTF8;
       Instance: TObject; TextTruncateAtLength: integer); overload;
     procedure LogInternal(Level: TSynLogInfo; const aName: RawUTF8;
-     aTypeInfo: pointer; var aValue; Instance: TObject=nil); overload;
+     aTypeInfo: pointer; const aValue; Instance: TObject); overload;
     // any call to this method MUST call LogTrailerUnLock
     function LogHeaderLock(Level: TSynLogInfo; AlreadyLocked: boolean): boolean;
     procedure LogTrailerUnLock(Level: TSynLogInfo); {$ifdef HASINLINENOTX86}inline;{$endif}
@@ -977,7 +977,7 @@ type
     // - TSQLLog from mORMot.pas unit will be able to write
     // TObject/TSQLRecord and sets content as JSON
     procedure Log(Level: TSynLogInfo; const aName: RawUTF8;
-      aTypeInfo: pointer; var aValue; Instance: TObject=nil); overload;
+      aTypeInfo: pointer; const aValue; Instance: TObject=nil); overload;
     /// call this method to add the caller address to the log at the specified level
     // - if the debugging info is available from TSynMapFile, will log the
     // unit name, associated symbol and source code line
@@ -4027,7 +4027,7 @@ begin
 end;
 
 procedure TSynLog.Log(Level: TSynLogInfo; const aName: RawUTF8;
-  aTypeInfo: pointer; var aValue; Instance: TObject=nil);
+  aTypeInfo: pointer; const aValue; Instance: TObject=nil);
 begin
   if (self<>nil) and (Level in fFamily.fLevel) then
     LogInternal(Level,aName,aTypeInfo,aValue,Instance);
@@ -4426,7 +4426,7 @@ begin
 end;
 
 procedure TSynLog.LogInternal(Level: TSynLogInfo; const aName: RawUTF8;
-   aTypeInfo: pointer; var aValue; Instance: TObject=nil);
+   aTypeInfo: pointer; const aValue; Instance: TObject);
 begin
   if LogHeaderLock(Level,false) then
   try
