@@ -770,8 +770,10 @@ begin
   if Timer=nil then
     Temp := Owner.TestTimer else
     Temp := Timer^;
-  msg := format('%d %s in %s i.e. %d/s, aver. %s',
-    [ItemCount,ItemName,Temp.Stop,Temp.PerSec(ItemCount),Temp.ByCount(ItemCount)]);
+  if ItemCount <= 1 then
+    msg := format('%s in %s', [ItemName,Temp.Stop]) else
+    msg := format('%d %s in %s i.e. %d/s, aver. %s',
+      [ItemCount,ItemName,Temp.Stop,Temp.PerSec(ItemCount),Temp.ByCount(ItemCount)]);
   if SizeInBytes>0 then
     msg := format('%s, %s/s',[msg,KB(Temp.PerSec(SizeInBytes))]);
   AddConsole(msg);

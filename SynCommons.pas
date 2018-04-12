@@ -10741,9 +10741,9 @@ type
   TRawByteStringGroupValueDynArray = array of TRawByteStringGroupValue;
 
   /// store several RawByteString content with automatic concatenation
-  // - an optimized compaction algorithm will occur to ensure that every
-  // 64 items will eventually consume at last 1MB of memory: this reduces memory
-  // fragmentation with almost no performance impact
+  // - an optimized compaction algorithm will occur to ensure that every 512
+  // items will be compacted to at least 1MB: this reduces memory fragmentation
+  // with almost no performance impact
   {$ifdef UNICODE}TRawByteStringGroup = record{$else}TRawByteStringGroup = object{$endif}
   private
     procedure Compact(len: integer);
@@ -61392,7 +61392,7 @@ end;
 { TRawByteStringGroup }
 
 const
-  COMPACT_COUNT = 64; // auto-compaction if 64 last items < 1MB
+  COMPACT_COUNT = 512; // auto-compaction if 512 last items < 1MB
   COMPACT_LEN = 1 shl 20;
 
 procedure TRawByteStringGroup.Compact(len: integer);
@@ -61423,8 +61423,8 @@ begin
     if Count=NextCompact then begin
       len := Position-Values[Count-COMPACT_COUNT].Position;
       if len<COMPACT_LEN then
-        Compact(len);
-      inc(NextCompact); // always slide the compaction window
+        Compact(len) else
+        inc(NextCompact); // slide the compaction window once we reached 1MB
     end;
   if Count=Length(Values) then
     SetLength(Values,Count+COMPACT_COUNT+Count shr 3);
