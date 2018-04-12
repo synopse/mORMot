@@ -102,10 +102,10 @@ type
   TMatch = {$ifdef UNICODE}record{$else}object{$endif}
   private
     Pattern, Text: PUTF8Char;
-    P, T, PLen, TLen: PtrInt;
+    P, T, PMax, TMax: PtrInt;
     Upper: PNormTable;
     State: (sNONE, sABORT, sEND, sLITERAL, sPATTERN, sRANGE, sVALID);
-    NoPattern: boolean;
+    Direct: (dNone, dNoPattern, dContains);
     procedure MatchAfterStar;
     procedure MatchMain;
   public
@@ -4390,10 +4390,10 @@ var RangeStart, RangeEnd: PtrInt;
     c: AnsiChar;
     flags: set of(Invert, MemberMatch);
 begin
-  while ((State = sNONE) and (P <= PLen)) do begin
+  while ((State = sNONE) and (P <= PMax)) do begin
     c := Upper[Pattern[P]];
-    if T > TLen then begin
-      if (c = '*') and (P+1 > PLen) then
+    if T > TMax then begin
+      if (c = '*') and (P + 1 > PMax) then
         State := sVALID else
         State := sABORT;
       exit;
@@ -4418,20 +4418,20 @@ begin
           RangeStart := P;
           RangeEnd := P;
           inc(P);
-          if P > PLen then begin
+          if P > PMax then begin
             State := sPATTERN;
             exit;
           end;
           if Pattern[P] = '-' then begin
             inc(P);
             RangeEnd := P;
-            if (P > PLen) or (Pattern[RangeEnd] = ']') then begin
+            if (P > PMax) or (Pattern[RangeEnd] = ']') then begin
               State := sPATTERN;
               exit;
             end;
             inc(P);
           end;
-          if P > PLen then begin
+          if P > PMax then begin
             State := sPATTERN;
             exit;
           end;
@@ -4453,9 +4453,9 @@ begin
           exit;
         end;
         if MemberMatch in flags then
-          while (P <= PLen) and (Pattern[P] <> ']') do
+          while (P <= PMax) and (Pattern[P] <> ']') do
             inc(P);
-        if P > PLen then begin
+        if P > PMax then begin
           State := sPATTERN;
           exit;
         end;
@@ -4468,7 +4468,7 @@ begin
     inc(T);
   end;
   if State = sNONE then
-    if T <= TLen then
+    if T <= TMax then
       State := sEND else
       State := sVALID;
 end;
@@ -4476,24 +4476,24 @@ end;
 procedure TMatch.MatchAfterStar;
 var retryT, retryP: PtrInt;
 begin
-  if (TLen = 1) or (P = PLen) then begin
+  if (TMax = 1) or (P = PMax) then begin
     State := sVALID;
     exit;
   end else
-  if (PLen = 0) or (TLen = 0) then begin
+  if (PMax = 0) or (TMax = 0) then begin
     State := sABORT;
     exit;
   end;
-  while ((T <= TLen) and (P < PLen)) and (Pattern[P] in ['?', '*']) do begin
+  while ((T <= TMax) and (P < PMax)) and (Pattern[P] in ['?', '*']) do begin
     if Pattern[P] = '?' then
       inc(T);
     inc(P);
   end;
-  if T >= TLen then begin
+  if T >= TMax then begin
     State := sABORT;
     exit;
   end else
-  if P >= PLen then begin
+  if P >= PMax then begin
     State := sVALID;
     exit;
   end;
@@ -4509,7 +4509,7 @@ begin
       P := retryP;
     end;
     inc(T);
-    if (T > TLen) or (P > PLen) then begin
+    if (T > TMax) or (P > PMax) then begin
       State := sABORT;
       exit;
     end;
@@ -4517,30 +4517,110 @@ begin
 end;
 
 procedure TMatch.Prepare(const aPattern: RawUTF8; aCaseInsensitive, aReuse: boolean);
+var i: integer;
 const SPECIALS: PUTF8Char = '*?[';
 begin
   Pattern := pointer(aPattern);
-  PLen := length(aPattern) - 1;
+  PMax := length(aPattern) - 1; // search in Pattern[0..PMax]
   if aCaseInsensitive then
     Upper := @NormToUpperAnsi7 else
     Upper := @NormToNorm;
-  NoPattern := aReuse and (strcspn(Pattern,SPECIALS)>PLen);
+  if aReuse then
+    if strcspn(Pattern,SPECIALS)>PMax then
+      Direct := dNoPattern
+    else if (PMax > 1) and (Pattern[0] = '*') and (Pattern[PMax] = '*') then begin
+      Direct := dContains;
+      for i := 1 to PMax - 1 do
+        if Pattern[i] in ['*', '?', '['] then begin
+          Direct := dNone;
+          exit;
+        end;
+      inc(Pattern); // trim trailing and ending *
+      dec(PMax, 2);
+    end
+    else
+      Direct := dNone
+  else
+    Direct := dNone;
+end;
+
+function SimpleContains(t, tend, p: PUTF8Char; pmax: PtrInt; up: PNormTable): boolean; overload;
+var first: AnsiChar;
+    i: PtrInt;
+label next;
+begin // brute force (case-insensitive) search p[0..pmax] in t..tend-1
+  first := up[p^];
+  repeat
+    if up[t^] <> first then begin
+next: inc(t);
+      if t < tend then
+        continue else
+        break;
+    end;
+    for i := 1 to pmax do
+      if up[t[i]] <> up[p[i]] then
+       goto next;
+    result := true;
+    exit;
+  until false;
+  result := false;
+end;
+
+function SimpleContains(t, tend, p: PUTF8Char; pmax: PtrInt): boolean; overload;
+var first: AnsiChar;
+    i: PtrInt;
+label next;
+begin
+  first := p^;
+  repeat
+    if t^ <> first then begin
+next: inc(t);
+      if t < tend then
+        continue else
+        break;
+    end;
+    for i := 1 to pmax do
+      if t[i] <> p[i] then
+       goto next;
+    result := true;
+    exit;
+  until false;
+  result := false;
 end;
 
 function TMatch.Match(const aText: RawUTF8): boolean;
 begin
-  if NoPattern then
-    if Upper=@NormToNorm then
-      result := StrComp(pointer(aText), Pattern) = 0 else
-      result := StrIComp(pointer(aText), Pattern) = 0 else begin
-    State := sNONE;
-    P := 0;
-    T := 0;
-    Text := pointer(aText);
-    TLen := length(aText) - 1;
-    MatchMain;
-    result := State = sVALID;
-  end;
+  if aText = '' then
+    result := PMax < 0
+  else
+    case Direct of
+      dNone: begin
+        State := sNONE;
+        P := 0;
+        T := 0;
+        Text := pointer(aText);
+        TMax := length(aText) - 1;
+        MatchMain;
+        result := State = sVALID;
+      end;
+      dNoPattern:
+        if Upper=@NormToNorm then
+          result := StrComp(pointer(aText), Pattern) = 0
+        else
+          result := StrIComp(pointer(aText), Pattern) = 0;
+      dContains:
+        if PMax = 0 then
+          result := true
+        else begin
+          Text := PUTF8Char(pointer(aText)) + length(aText);
+          if Upper=@NormToNorm then
+            result := SimpleContains(pointer(aText), Text, Pattern, PMax)
+          else
+            result := SimpleContains(pointer(aText), Text, Pattern, PMax, Upper);
+        end
+      else
+        result := false;
+    end;
 end;
 
 function TMatch.MatchThreadSafe(const aText: RawUTF8): boolean;

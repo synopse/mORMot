@@ -62203,7 +62203,7 @@ class function TAlgoCompress.Algo(AlgoID: byte): TAlgoCompress;
 var i: integer;
     ptr: ^TAlgoCompress;
 begin
-  if AlgoID<=COMPRESS_SYNLZ then // "stored" is identifed as SynLZ
+  if AlgoID<=COMPRESS_SYNLZ then // COMPRESS_STORED is handled as SynLZ
     result := AlgoSynLZ else begin
     if SynCompressAlgos<>nil then begin
       ptr := @SynCompressAlgos.List[1]; // ignore List[0] = AlgoSynLZ
