@@ -82,7 +82,7 @@ function IsValidEmail(P: PUTF8Char): boolean;
 /// return TRUE if the supplied content is a valid IP v4 address
 function IsValidIP4Address(P: PUTF8Char): boolean;
 
-/// return TRUE if the supplied content matchs to a grep-like pattern
+/// return TRUE if the supplied content matchs a glob pattern
 // - ?  Matches any single characer
 // - *	Matches any contiguous characters
 // - [abc]  Matches a or b or c at that position
@@ -93,12 +93,15 @@ function IsValidIP4Address(P: PUTF8Char): boolean;
 // - 'ma?ch.*'	would match match.exe, mavch.dat, march.on, etc..
 // - 'this [e-n]s a [!zy]est' would match 'this is a test', but would not
 // match 'this as a test' nor 'this is a zest'
+// - consider using TMatch or TMatchs if you expect to reuse the pattern
 function IsMatch(const Pattern, Text: RawUTF8; CaseInsensitive: boolean=false): boolean;
 
 type
-  /// low-level structure used by IsMatch()
+  /// low-level structure used by IsMatch() for actual blog search
   // - you can use this object to prepare a given pattern, e.g. in a loop
   // - implemented as a fast brute-force state-machine without any heap allocation
+  // - some common patterns ('exactmatch', 'startwith*', '*contained*') are
+  // handled with dedicated code, optionally with case-insensitive search
   TMatch = {$ifdef UNICODE}record{$else}object{$endif}
   private
     Pattern, Text: PUTF8Char;
@@ -106,7 +109,8 @@ type
     Upper: PNormTable;
     State: (sNONE, sABORT, sEND, sLITERAL, sPATTERN, sRANGE, sVALID);
     Direct: (dNone, dNoPattern, dNoPatternU,
-      dContainsValid, dContainsU, dContains1, dContains4, dContains8);
+      dContainsValid, dContainsU, dContains1, dContains4, dContains8,
+      dStartWith, dStartWithU);
     procedure MatchAfterStar;
     procedure MatchMain;
   public
@@ -134,7 +138,7 @@ type
   end;
   TMatchStoreDynArray = array of TMatchStore;
 
-  /// stores several TMatch instances, from a set of patterns
+  /// stores several TMatch instances, from a set of glob patterns
   TMatchs = class(TSynPersistent)
   protected
     fMatch: TMatchStoreDynArray;
@@ -4535,26 +4539,39 @@ begin
         Direct := dNoPatternU
       else
         Direct := dNoPattern
-    else if (PMax > 1) and (Pattern[0] = '*') and (Pattern[PMax] = '*') then begin
+    else if (PMax > 0) and (Pattern[PMax] = '*') then begin
       for i := 1 to PMax - 1 do
         if Pattern[i] in ['*', '?', '['] then begin
           Direct := dNone;
           exit;
         end;
-      inc(Pattern); // trim trailing and ending *
-      dec(PMax, 2);
-      if PMax = 0 then
-        Direct := dContainsValid
-      else if aCaseInsensitive then
-        Direct := dContainsU
-      {$ifdef CPU64}
-      else if PMax >= 7 then
-        Direct := dContains8
-      {$endif}
-      else if PMax >= 3 then
-        Direct := dContains4
-      else
-        Direct := dContains1;
+      case Pattern[0] of
+        '*': begin
+          inc(Pattern);
+          dec(PMax, 2); // trim trailing and ending *
+          if PMax <= 0 then
+            Direct := dContainsValid
+          else if aCaseInsensitive then
+            Direct := dContainsU
+          {$ifdef CPU64}
+          else if PMax >= 7 then
+            Direct := dContains8
+          {$endif}
+          else if PMax >= 3 then
+            Direct := dContains4
+          else
+            Direct := dContains1;
+        end;
+        '?', '[':
+          Direct := dNone;
+        else begin
+          dec(PMax); // trim trailing *
+          if aCaseInsensitive then
+            Direct := dStartWithU
+          else
+            Direct := dStartWith;
+        end;
+      end;
     end
     else
       Direct := dNone
@@ -4697,6 +4714,10 @@ begin
       result := (PMax + 1 = aTextlen) and CompareMem(aText, Pattern, aTextLen);
     dNoPatternU:
       result := (PMax + 1 = aTextlen) and CompareMemU(aText, Pattern, aTextLen, Upper);
+    dStartWith:
+      result := (PMax < aTextlen) and CompareMem(aText, Pattern, PMax + 1);
+    dStartWithU:
+      result := (PMax < aTextlen) and CompareMemU(aText, Pattern, PMax + 1, Upper);
     dContainsValid:
       result := true;
     dContainsU:
