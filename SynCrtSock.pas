@@ -11909,9 +11909,9 @@ begin
             if fRead.Terminated then
               exit;
             res := AsynchRecv(slot.socket,@temp,sizeof(temp));
-            if res<0 then       // error - probably "may block"
+            if (res<0) and (WSAGetLastError() = WSAEWOULDBLOCK) then // error "may block", try later
               break;
-            if res=0 then begin // socket closed -> abort
+            if res<=0 then begin // socket closed or unrecoverable error -> abort
               CloseConnection;
               exit;
             end;
