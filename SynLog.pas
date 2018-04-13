@@ -305,7 +305,7 @@ type
     // - TSynLog will handle enumerations and dynamic array; TSQLLog will be
     // able to write TObject/TSQLRecord and sets content as JSON
     procedure Log(Level: TSynLogInfo; const aName: RawUTF8;
-      aTypeInfo: pointer; const aValue; Instance: TObject=nil); overload;
+      aTypeInfo: pointer; const aValue; Instance: TObject); overload;
     /// call this method to add the caller address to the log at the specified level
     // - if the debugging info is available from TSynMapFile, will log the
     // unit name, associated symbol and source code line
@@ -977,7 +977,7 @@ type
     // - TSQLLog from mORMot.pas unit will be able to write
     // TObject/TSQLRecord and sets content as JSON
     procedure Log(Level: TSynLogInfo; const aName: RawUTF8;
-      aTypeInfo: pointer; const aValue; Instance: TObject=nil); overload;
+      aTypeInfo: pointer; const aValue; Instance: TObject); overload;
     /// call this method to add the caller address to the log at the specified level
     // - if the debugging info is available from TSynMapFile, will log the
     // unit name, associated symbol and source code line
@@ -4027,7 +4027,7 @@ begin
 end;
 
 procedure TSynLog.Log(Level: TSynLogInfo; const aName: RawUTF8;
-  aTypeInfo: pointer; const aValue; Instance: TObject=nil);
+  aTypeInfo: pointer; const aValue; Instance: TObject);
 begin
   if (self<>nil) and (Level in fFamily.fLevel) then
     LogInternal(Level,aName,aTypeInfo,aValue,Instance);
