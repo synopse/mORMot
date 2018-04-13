@@ -213,14 +213,39 @@ begin
       end else
         res := FpFStat(in_argv[0].asInteger, info);
       if res = 0 then begin
-        val.asDate[cx] := UnixToDateTime(info.st_atime);
-        obj.ptr.DefineProperty(cx, 'atime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
-        val.asDate[cx] := UnixToDateTime(info.st_mtime);
-        obj.ptr.DefineProperty(cx, 'mtime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
-        val.asDate[cx] := UnixToDateTime(info.st_ctime);
-        obj.ptr.DefineProperty(cx, 'ctime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+        val.asInt64 := info.st_dev;
+        obj.ptr.DefineProperty(cx, 'dev', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+        val.asInt64 := info.st_ino;
+        obj.ptr.DefineProperty(cx, 'ino', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+        val.asInt64 := info.st_nlink;
+        obj.ptr.DefineProperty(cx, 'nlink', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+
+        val.asInteger := info.st_mode;
+        obj.ptr.DefineProperty(cx, 'mode', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+        val.asInteger := info.st_uid;
+        obj.ptr.DefineProperty(cx, 'uid', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+        val.asInteger := info.st_gid;
+        obj.ptr.DefineProperty(cx, 'gid', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+
+        val.asInt64 := info.st_rdev;
+        obj.ptr.DefineProperty(cx, 'rdev', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
         val.asInt64 := info.st_size;
         obj.ptr.DefineProperty(cx, 'size', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+        val.asInt64 := info.st_blksize;
+        obj.ptr.DefineProperty(cx, 'blksize', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+        val.asInt64 := info.st_blocks;
+        obj.ptr.DefineProperty(cx, 'blocks', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+
+        val.asDate[cx] := UnixToDateTime(info.st_atime);
+        obj.ptr.DefineProperty(cx, 'atime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+        //st_atime_nsec : qword
+        val.asDate[cx] := UnixToDateTime(info.st_mtime);
+        obj.ptr.DefineProperty(cx, 'mtime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+        //st_mtime_nsec : qword
+        val.asDate[cx] := UnixToDateTime(info.st_ctime);
+        obj.ptr.DefineProperty(cx, 'ctime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+        //st_ctime_nsec : qword
+
         vp.rval := obj.ptr.ToJSValue;
       end else
         RaiseLastOSError;
