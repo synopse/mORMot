@@ -2133,6 +2133,7 @@ procedure JSError(cx: PJSContext; aException: Exception);
 procedure JSErrorUC(cx: PJSContext; aMessage: WideString);
 procedure JSRangeErrorUC(cx: PJSContext; aMessage: WideString);
 procedure JSTypeErrorUC(cx: PJSContext; aMessage: WideString);
+procedure JSOSErrorUC(cx: PJSContext; aMessage: WideString; ErrorCode: Integer);
 
 // must be called ONCE per process before any interaction with JavaScript
 function InitJS: Boolean;
@@ -3362,6 +3363,9 @@ begin
     end else if aException is ESMTypeException then begin
       ws := StringToSynUnicode(aException.Message);
       JSTypeErrorUC(cx, ws);
+    end else if aException is EOSError then begin
+      ws := StringToSynUnicode(aException.Message);
+      JSOSErrorUC(cx, ws, EOSError(aException).ErrorCode);
     end else begin
       ws := StringToSynUnicode(aException.Message);
       JSErrorUC(cx, ws);
@@ -3420,6 +3424,180 @@ procedure JSTypeErrorUC(cx: PJSContext; aMessage: WideString);
 begin
   if not JS_IsExceptionPending(cx) then
     JS_ReportErrorNumberUC(cx, TypeRangeErrorUC, nil, SMExceptionNumber ,Pointer(aMessage));
+end;
+
+procedure JSOSErrorUC(cx: PJSContext; aMessage: WideString; ErrorCode: Integer);
+
+  function OSErrorAsString(const ErrorCode: Integer): RawUTF8;
+  const
+    os_errlist: array [1..124] of RawUTF8 = (
+        'EPERM',
+        'ENOENT',
+        'ESRCH',
+        'EINTR',
+        'EIO',
+        'ENXIO',
+        'E2BIG',
+        'ENOEXEC',
+        'EBADF',
+        'ECHILD',
+        'EAGAIN',
+        'ENOMEM',
+        'EACCES',
+        'EFAULT',
+        'ENOTBLK',
+        'EBUSY',
+        'EEXIST',
+        'EXDEV',
+        'ENODEV',
+        'ENOTDIR',
+        'EISDIR',
+        'EINVAL',
+        'ENFILE',
+        'EMFILE',
+        'ENOTTY',
+        'ETXTBSY',
+        'EFBIG',
+        'ENOSPC',
+        'ESPIPE',
+        'EROFS',
+        'EMLINK',
+        'EPIPE',
+        'EDOM',
+        'ERANGE',
+        'EDEADLK',
+        'ENAMETOOLONG',
+        'ENOLCK',
+        'ENOSYS',
+        'ENOTEMPTY',
+        'ELOOP',
+        'EWOULDBLOCK',
+        'ENOMSG',
+        'EIDRM',
+        'ECHRNG',
+        'EL2NSYNC',
+        'EL3HLT',
+        'EL3RST',
+        'ELNRNG',
+        'EUNATCH',
+        'ENOCSI',
+        'EL2HLT',
+        'EBADE',
+        'EBADR',
+        'EXFULL',
+        'ENOANO',
+        'EBADRQC',
+        'EBADSLT',
+        'EDEADLOCK',
+        'EBFONT',
+        'ENOSTR',
+        'ENODATA',
+        'ETIME',
+        'ENOSR',
+        'ENONET',
+        'ENOPKG',
+        'EREMOTE',
+        'ENOLINK',
+        'EADV',
+        'ESRMNT',
+        'ECOMM',
+        'EPROTO',
+        'EMULTIHOP',
+        'EDOTDOT',
+        'EBADMSG',
+        'EOVERFLOW',
+        'ENOTUNIQ',
+        'EBADFD',
+        'EREMCHG',
+        'ELIBACC',
+        'ELIBBAD',
+        'ELIBSCN',
+        'ELIBMAX',
+        'ELIBEXEC',
+        'EILSEQ',
+        'ERESTART',
+        'ESTRPIPE',
+        'EUSERS',
+        'ENOTSOCK',
+        'EDESTADDRREQ',
+        'EMSGSIZE',
+        'EPROTOTYPE',
+        'ENOPROTOOPT',
+        'EPROTONOSUPPORT',
+        'ESOCKTNOSUPPORT',
+        'EOPNOTSUPP',
+        'EPFNOSUPPORT',
+        'EAFNOSUPPORT',
+        'EADDRINUSE',
+        'EADDRNOTAVAIL',
+        'ENETDOWN',
+        'ENETUNREACH',
+        'ENETRESET',
+        'ECONNABORTED',
+        'ECONNRESET',
+        'ENOBUFS',
+        'EISCONN',
+        'ENOTCONN',
+        'ESHUTDOWN',
+        'ETOOMANYREFS',
+        'ETIMEDOUT',
+        'ECONNREFUSED',
+        'EHOSTDOWN',
+        'EHOSTUNREACH',
+        'EALREADY',
+        'EINPROGRESS',
+        'ESTALE',
+        'EUCLEAN',
+        'ENOTNAM',
+        'ENAVAIL',
+        'EISNAM',
+        'EREMOTEIO',
+        'EDQUOT',
+        'ENOMEDIUM',
+        'EMEDIUMTYPE'
+        );
+  begin
+    if (ErrorCode >= Low(os_errlist)) and (ErrorCode <= High(os_errlist)) then
+      Result := os_errlist[ErrorCode]
+    else
+      Result := '';
+  end;
+
+var
+  vp: jsval;
+  ex: PJSObject;
+  val: jsval;
+begin
+  if not JS_IsExceptionPending(cx) then begin
+    JS_ReportErrorNumberUC(cx, ReportErrorUC, nil, SMExceptionNumber ,Pointer(aMessage));
+    if JS_GetPendingException(cx, vp) then begin // https://nodejs.org/api/errors.html#errors_class_system_error
+      ex := vp.asObject;
+      // error.code: string
+      // The error.code property is a string representing the error code, which is typically E followed by a sequence of capital letters.
+      val.asJSString := cx.NewJSString(OSErrorAsString(ErrorCode));
+      ex.DefineProperty(cx, 'code', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+      // error.errno : string | number
+      // The error.errno property is a number or a string. The number is a negative value which corresponds to the error code defined in libuv Error handling. See uv-errno.h header file (deps/uv/include/uv-errno.h in the Node.js source tree) for details. In case of a string, it is the same as error.code.
+      val.asInteger := ErrorCode;
+      ex.DefineProperty(cx, 'errno', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+      // error.syscall string
+      // The error.syscall property is a string describing the syscall that failed.
+      val.asJSString := cx.NewJSString('');
+      ex.DefineProperty(cx, 'syscall', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+      // error.path : string
+      // When present (e.g. in fs or child_process), the error.path property is a string containing a relevant invalid pathname.
+      val.asJSString := cx.NewJSString('');
+      ex.DefineProperty(cx, 'path', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+      // error.address : string
+      // When present (e.g. in net or dgram), the error.address property is a string describing the address to which the connection failed.
+      val.asJSString := cx.NewJSString('');
+      ex.DefineProperty(cx, 'address', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+      // error.port : number
+      // When present (e.g. in net or dgram), the error.port property is a number representing the connection's port that is not available.
+      val.asInteger := -1;
+      ex.DefineProperty(cx, 'port', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+    end;
+  end;
 end;
 
 function InitJS: Boolean;
