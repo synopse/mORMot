@@ -119,15 +119,14 @@ begin
     jsv.asInteger := O_SYMLINK; obj_fs.ptr.DefineProperty(cx, 'O_SYMLINK', jsv, attrs);
     jsv.asInteger := O_SYNC; obj_fs.ptr.DefineProperty(cx, 'O_SYNC', jsv, attrs);
 
-    // constants
-    jsv.asInteger := S_IFMT; obj.ptr.DefineProperty(cx, 'S_IFMT', jsv, attrs);
-    jsv.asInteger := S_IFIFO; obj.ptr.DefineProperty(cx, 'S_IFIFO', jsv, attrs);
-    jsv.asInteger := S_IFCHR; obj.ptr.DefineProperty(cx, 'S_IFCHR', jsv, attrs);
-    jsv.asInteger := S_IFDIR; obj.ptr.DefineProperty(cx, 'S_IFDIR', jsv, attrs);
-    jsv.asInteger := S_IFBLK; obj.ptr.DefineProperty(cx, 'S_IFBLK', jsv, attrs);
-    jsv.asInteger := S_IFREG; obj.ptr.DefineProperty(cx, 'S_IFREG', jsv, attrs);
-    jsv.asInteger := S_IFLNK; obj.ptr.DefineProperty(cx, 'S_IFLNK', jsv, attrs);
-    jsv.asInteger := S_IFSOCK; obj.ptr.DefineProperty(cx, 'S_IFSOCK', jsv, attrs);
+    jsv.asInteger := S_IFMT; obj_fs.ptr.DefineProperty(cx, 'S_IFMT', jsv, attrs);
+    jsv.asInteger := S_IFIFO; obj_fs.ptr.DefineProperty(cx, 'S_IFIFO', jsv, attrs);
+    jsv.asInteger := S_IFCHR; obj_fs.ptr.DefineProperty(cx, 'S_IFCHR', jsv, attrs);
+    jsv.asInteger := S_IFDIR; obj_fs.ptr.DefineProperty(cx, 'S_IFDIR', jsv, attrs);
+    jsv.asInteger := S_IFBLK; obj_fs.ptr.DefineProperty(cx, 'S_IFBLK', jsv, attrs);
+    jsv.asInteger := S_IFREG; obj_fs.ptr.DefineProperty(cx, 'S_IFREG', jsv, attrs);
+    jsv.asInteger := S_IFLNK; obj_fs.ptr.DefineProperty(cx, 'S_IFLNK', jsv, attrs);
+    jsv.asInteger := S_IFSOCK; obj_fs.ptr.DefineProperty(cx, 'S_IFSOCK', jsv, attrs);
 {
     jsv.asInteger := S_IRWXU; obj_??.ptr.DefineProperty(cx, 'S_IRWXU', jsv, attrs);
     jsv.asInteger := S_IRUSR; obj_??.ptr.DefineProperty(cx, 'S_IRUSR', jsv, attrs);
