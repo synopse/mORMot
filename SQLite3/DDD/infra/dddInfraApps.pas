@@ -242,11 +242,14 @@ type
   TDDDRestClientDefinition = class(TSynPersistentWithPassword)
   protected
     fRoot: RawUTF8;
+    fConnectRetrySeconds: integer;
   published
     /// the URI Root to be used for the REST Model
     property Root: RawUTF8 read fRoot write fRoot;
     /// the encrypted password to be used to connect with WebSockets
     property WebSocketsPassword: RawUTF8 read fPassWord write fPassWord;
+    /// how many seconds the client may try to connect after open socket failure
+    property ConnectRetrySeconds: integer read fConnectRetrySeconds write fConnectRetrySeconds;
   end;
 
   /// storage class for initializing an ORM/SOA REST Client class
@@ -264,7 +267,7 @@ type
     // Client.WebSocketsPassword and ORM.Password
     procedure SetDefaults(const Root, Port, WebSocketPassword, UserPassword: RawUTF8;
       const User: RawUTF8 = 'User'; const Server: RawUTF8 = 'localhost';
-      ForceSetCredentials: boolean = false);
+      ForceSetCredentials: boolean = false; ConnectRetrySeconds: integer = 0);
     /// is able to instantiate a Client REST instance for the stored definition
     // - Definition.Kind is expected to specify a TSQLRestClient class to be
     // instantiated, not a TSQLRestServer instance
@@ -1952,7 +1955,8 @@ begin
 end;
 
 procedure TDDDRestClientSettings.SetDefaults(const Root, Port, WebSocketPassword,
-  UserPassword, User, Server: RawUTF8; ForceSetCredentials: boolean);
+  UserPassword, User, Server: RawUTF8; ForceSetCredentials: boolean;
+  ConnectRetrySeconds: integer);
 begin
   if fClient.Root = '' then
     fClient.Root := Root;
@@ -1970,6 +1974,7 @@ begin
           fORM.ServerName := Server;
     if fClient.WebSocketsPassword = '' then
       fClient.WebSocketsPassword := WebSocketPassword;
+    fClient.ConnectRetrySeconds := ConnectRetrySeconds;
     if UserPassword <> '' then begin
       fORM.User := User;
       fORM.PasswordPlain := UserPassword;
@@ -2278,6 +2283,7 @@ begin
       [self, fApplicationName, aSettings.ORM.ServerName]);
   log := SQLite3Log.Enter('Create(%): connect to %', [fApplicationName, aSettings.ORM.ServerName], self);
   t := aSettings.Timeout;
+  fConnectRetrySeconds := aSettings.Client.ConnectRetrySeconds;
   inherited Create(u.Server, u.Port, CreateModel(aSettings), t, t, t);
   Model.Owner := self; // just allocated by CreateModel()
   if aSettings.Client.WebSocketsPassword <> '' then

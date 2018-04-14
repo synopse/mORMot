@@ -2942,6 +2942,7 @@ function GetQWord(P: PUTF8Char; var err: integer): QWord;
 // - set the err content to the index of any faulty character, 0 if conversion
 // was successful (same as the standard val function)
 function GetExtended(P: PUTF8Char; out err: integer): TSynExtended; overload;
+  {$ifdef FPC}inline;{$endif} // under Delphi XE4 64-bit compiler, it fails...
 
 /// get the extended floating point value stored in P^
 // - this overloaded version returns 0 as a result if the content of P is invalid
