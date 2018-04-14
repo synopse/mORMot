@@ -10766,6 +10766,10 @@ type
     {$ifndef DELPHI5OROLDER}
     /// add another TRawByteStringGroup to Values[]
     procedure Add(const aAnother: TRawByteStringGroup); overload;
+    /// low-level method to abort the latest Add() call
+    // - warning: will work only once, if an Add() has actually been just called:
+    // otherwise, the behavior is unexpected, and may wrongly truncate data
+    procedure RemoveLastAdd;
     /// compare two TRawByteStringGroup instance stored text
     function Equals(const aAnother: TRawByteStringGroup): boolean;
     {$endif DELPHI5OROLDER}
@@ -61465,6 +61469,16 @@ begin
     inc(d);
   end;
   inc(Count,aAnother.Count);
+end;
+
+procedure TRawByteStringGroup.RemoveLastAdd;
+begin
+  if Count>0 then begin
+    dec(Count);
+    LastFind := Count;
+    dec(Position,Length(Values[Count].Value));
+    Values[Count].Value := ''; // release memory
+  end;
 end;
 
 function TRawByteStringGroup.Equals(const aAnother: TRawByteStringGroup): boolean;
