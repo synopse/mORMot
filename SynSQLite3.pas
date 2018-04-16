@@ -1757,6 +1757,11 @@ type
     blob_open: function(DB: TSQLite3DB; DBName, TableName, ColumnName: PUTF8Char;
       RowID: Int64; Flags: Integer; var Blob: TSQLite3Blob): Integer; cdecl;
 
+    /// Move a BLOB Handle to a New Row
+    // - will point to a different row of the same database table
+    // - this is faster than closing the existing handle and opening a new one
+    blob_reopen: function(Blob: TSQLite3Blob; RowID: Int64): Integer; cdecl;
+
     /// Close A BLOB Handle
     blob_close: function(Blob: TSQLite3Blob): Integer; cdecl;
 
@@ -3175,8 +3180,7 @@ type
   protected
     fBlob: TSQLite3Blob;
     fDB: TSQLite3DB;
-    fSize,
-    fPosition: longint;
+    fSize, fPosition: integer;
     fWritable: boolean;
   public
     /// Opens a BLOB located in row RowID, column ColumnName, table TableName
@@ -3193,6 +3197,10 @@ type
     function Write(const Buffer; Count: Longint): Longint; override;
     /// change the current read position
     function Seek(Offset: Longint; Origin: Word): Longint; override;
+    /// reuse this class instance with another row of the same table
+    // - will update the stream size, and also rewind position to the beginning
+    // - it is actually faster than creating a new TSQLBlobStream instance
+    procedure ChangeRow(RowID: Int64);
     /// read-only access to the BLOB object handle
     property Handle: TSQLite3Blob read fBlob;
   end;
@@ -5386,7 +5394,7 @@ begin
   inherited;
 end;
 
-function TSQLBlobStream.Read(var Buffer; Count: Integer): Longint;
+function TSQLBlobStream.Read(var Buffer; Count: Longint): Longint;
 begin
   result := fSize-fPosition; // bytes available left
   if Count<result then // read only inside the Blob size
@@ -5397,7 +5405,7 @@ begin
   end;
 end;
 
-function TSQLBlobStream.Seek(Offset: Integer; Origin: word): Longint;
+function TSQLBlobStream.Seek(Offset: Longint; Origin: Word): Longint;
 begin
   case Origin of
     soFromBeginning: fPosition := Offset;
@@ -5409,7 +5417,16 @@ begin
   Result := fPosition;
 end;
 
-function TSQLBlobStream.Write(const Buffer; Count: Integer): Longint;
+procedure TSQLBlobStream.ChangeRow(RowID: Int64);
+begin
+  if not Assigned(sqlite3.blob_reopen) then
+    raise ESQLite3Exception.Create('blob_reopen API not available');
+  sqlite3_check(fDB,sqlite3.blob_reopen(fBlob,RowID),'blob_reopen');
+  fPosition := 0;
+  fSize := sqlite3.blob_bytes(fBlob);
+end;
+
+function TSQLBlobStream.Write(const Buffer; Count: Longint): Longint;
 begin
   result := fSize-fPosition; // bytes available left
   if Count<result then
@@ -5757,7 +5774,7 @@ end;
 { TSQLite3LibraryDynamic }
 
 const
-  SQLITE3_ENTRIES: array[0..88] of TFileName =
+  SQLITE3_ENTRIES: array[0..89] of TFileName =
   ('initialize','shutdown','open','open_v2','key','rekey','close',
    'libversion','errmsg','extended_errcode',
    'create_function','create_function_v2',
@@ -5771,7 +5788,7 @@ const
    'result_value','result_error','user_data','context_db_handle',
    'aggregate_context','bind_text','bind_blob','bind_zeroblob','bind_double',
    'bind_int','bind_int64','bind_null','clear_bindings','bind_parameter_count',
-   'blob_open','blob_close','blob_read','blob_write','blob_bytes',
+   'blob_open','blob_reopen','blob_close','blob_read','blob_write','blob_bytes',
    'create_module_v2','declare_vtab','set_authorizer','update_hook',
    'commit_hook','rollback_hook','changes','total_changes','malloc', 'realloc',
    'free','memory_used','memory_highwater','trace_v2','limit',
