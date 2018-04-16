@@ -2133,7 +2133,9 @@ procedure JSError(cx: PJSContext; aException: Exception);
 procedure JSErrorUC(cx: PJSContext; aMessage: WideString);
 procedure JSRangeErrorUC(cx: PJSContext; aMessage: WideString);
 procedure JSTypeErrorUC(cx: PJSContext; aMessage: WideString);
-procedure JSOSErrorUC(cx: PJSContext; aMessage: WideString; ErrorCode: Integer);
+procedure JSOSErrorUC(cx: PJSContext; aMessage: WideString; ErrorCode: Integer;
+   SysCall: RawUTF8 = ''; Path: RawUTF8 = ''; Address: RawUTF8 = '';
+   Port: Integer = -1);
 
 // must be called ONCE per process before any interaction with JavaScript
 function InitJS: Boolean;
@@ -3344,6 +3346,7 @@ var
 implementation
 
 uses
+  sysconst,
   Variants;
 
 const
@@ -3426,7 +3429,8 @@ begin
     JS_ReportErrorNumberUC(cx, TypeRangeErrorUC, nil, SMExceptionNumber ,Pointer(aMessage));
 end;
 
-procedure JSOSErrorUC(cx: PJSContext; aMessage: WideString; ErrorCode: Integer);
+procedure JSOSErrorUC(cx: PJSContext; aMessage: WideString; ErrorCode: Integer;
+   SysCall, Path, Address: RawUTF8; Port: Integer);
 
   function OSErrorAsString(const ErrorCode: Integer): RawUTF8;
   const
@@ -3569,7 +3573,14 @@ var
   val: jsval;
 begin
   if not JS_IsExceptionPending(cx) then begin
-    JS_ReportErrorNumberUC(cx, ReportErrorUC, nil, SMExceptionNumber ,Pointer(aMessage));
+    if (aMessage = '') then begin
+      if ErrorCode<>0 then
+        aMessage := StringToSynUnicode(
+          Format(SOSError, [ErrorCode, SysErrorMessage(ErrorCode)]))
+      else
+        aMessage := StringToSynUnicode(SUnkOSError);
+    end;
+    JS_ReportErrorNumberUC(cx, ReportErrorUC, nil, SMExceptionNumber, Pointer(aMessage));
     if JS_GetPendingException(cx, vp) then begin // https://nodejs.org/api/errors.html#errors_class_system_error
       ex := vp.asObject;
       // error.code: string
@@ -3582,19 +3593,19 @@ begin
       ex.DefineProperty(cx, 'errno', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
       // error.syscall string
       // The error.syscall property is a string describing the syscall that failed.
-      val.asJSString := cx.NewJSString('');
+      val.asJSString := cx.NewJSString(SysCall);
       ex.DefineProperty(cx, 'syscall', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
       // error.path : string
       // When present (e.g. in fs or child_process), the error.path property is a string containing a relevant invalid pathname.
-      val.asJSString := cx.NewJSString('');
+      val.asJSString := cx.NewJSString(Path);
       ex.DefineProperty(cx, 'path', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
       // error.address : string
       // When present (e.g. in net or dgram), the error.address property is a string describing the address to which the connection failed.
-      val.asJSString := cx.NewJSString('');
+      val.asJSString := cx.NewJSString(Address);
       ex.DefineProperty(cx, 'address', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
       // error.port : number
       // When present (e.g. in net or dgram), the error.port property is a number representing the connection's port that is not available.
-      val.asInteger := -1;
+      val.asInteger := Port;
       ex.DefineProperty(cx, 'port', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
     end;
   end;

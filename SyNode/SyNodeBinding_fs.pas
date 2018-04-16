@@ -247,8 +247,12 @@ begin
         //st_ctime_nsec : qword
 
         vp.rval := obj.ptr.ToJSValue;
-      end else
-        RaiseLastOSError;
+      end else begin
+        Result := False;
+        vp.rval := JSVAL_VOID;
+        JSOSErrorUC(cx, '', res, 'stat', RawUTF8(fn));
+        Exit;
+      end;
     finally
       cx.FreeRootedObject(obj);
     end;
