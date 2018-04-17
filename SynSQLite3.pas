@@ -2729,7 +2729,7 @@ type
     fDB: TSQLite3DB;
     fFileName: TFileName;
     fFileNameWithoutPath: TFileName;
-    fPageSize: cardinal;
+    fPageSize, fFileDefaultPageSize: cardinal;
     fFileDefaultCacheSize: integer;
     fIsMemory: boolean;
     fPassword: RawUTF8;
@@ -2844,7 +2844,7 @@ type
     // - initialize a TRTLCriticalSection to ensure that all access to the database is atomic
     // - raise an ESQLite3Exception on any error
     constructor Create(const aFileName: TFileName; const aPassword: RawUTF8='';
-      aOpenV2Flags: integer=0; aDefaultCacheSize: integer=10000);
+      aOpenV2Flags: integer=0; aDefaultCacheSize: integer=10000; aDefaultPageSize: integer=4096);
     /// close a database and free its memory and context
     //- if TransactionBegin was called but not commited, a RollBack is performed
     destructor Destroy; override;
@@ -3906,7 +3906,7 @@ end;
 {$endif}
 
 constructor TSQLDataBase.Create(const aFileName: TFileName; const aPassword: RawUTF8;
-  aOpenV2Flags, aDefaultCacheSize: integer);
+  aOpenV2Flags, aDefaultCacheSize,aDefaultPageSize: integer);
 var result: integer;
 begin
   if sqlite3=nil then
@@ -3922,6 +3922,7 @@ begin
   if aOpenV2Flags=0 then
     fOpenV2Flags := SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE else
     fOpenV2Flags := aOpenV2Flags;
+  fFileDefaultPageSize := aDefaultPageSize;
   fFileDefaultCacheSize := aDefaultCacheSize;
   if (fOpenV2Flags<>(SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE)) and
      not Assigned(sqlite3.open_v2) then
@@ -4530,8 +4531,8 @@ begin
     sqlite3.key(fDB,pointer(fPassword),length(fPassword));
   // tune up execution speed
   if not fIsMemory then begin
-    if fOpenV2Flags and SQLITE_OPEN_CREATE<>0 then
-     PageSize := 4096;
+    if (fOpenV2Flags and SQLITE_OPEN_CREATE<>0) and (fFileDefaultPageSize<>0) then
+      PageSize := fFileDefaultPageSize;
     if fFileDefaultCacheSize <> 0 then
       CacheSize := fFileDefaultCacheSize; // 10000 by default (i.e. 40 MB)
   end;
