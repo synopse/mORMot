@@ -3347,7 +3347,8 @@ implementation
 
 uses
   sysconst,
-  Variants;
+  Variants,
+  puv_error;
 
 const
   JSVAL_INT_MAX = int32($7fffffff);
@@ -3431,142 +3432,6 @@ end;
 
 procedure JSOSErrorUC(cx: PJSContext; aMessage: WideString; ErrorCode: Integer;
    SysCall, Path, Address: RawUTF8; Port: Integer);
-
-  function OSErrorAsString(const ErrorCode: Integer): RawUTF8;
-  const
-    os_errlist: array [1..124] of RawUTF8 = (
-        'EPERM',
-        'ENOENT',
-        'ESRCH',
-        'EINTR',
-        'EIO',
-        'ENXIO',
-        'E2BIG',
-        'ENOEXEC',
-        'EBADF',
-        'ECHILD',
-        'EAGAIN',
-        'ENOMEM',
-        'EACCES',
-        'EFAULT',
-        'ENOTBLK',
-        'EBUSY',
-        'EEXIST',
-        'EXDEV',
-        'ENODEV',
-        'ENOTDIR',
-        'EISDIR',
-        'EINVAL',
-        'ENFILE',
-        'EMFILE',
-        'ENOTTY',
-        'ETXTBSY',
-        'EFBIG',
-        'ENOSPC',
-        'ESPIPE',
-        'EROFS',
-        'EMLINK',
-        'EPIPE',
-        'EDOM',
-        'ERANGE',
-        'EDEADLK',
-        'ENAMETOOLONG',
-        'ENOLCK',
-        'ENOSYS',
-        'ENOTEMPTY',
-        'ELOOP',
-        'EWOULDBLOCK',
-        'ENOMSG',
-        'EIDRM',
-        'ECHRNG',
-        'EL2NSYNC',
-        'EL3HLT',
-        'EL3RST',
-        'ELNRNG',
-        'EUNATCH',
-        'ENOCSI',
-        'EL2HLT',
-        'EBADE',
-        'EBADR',
-        'EXFULL',
-        'ENOANO',
-        'EBADRQC',
-        'EBADSLT',
-        'EDEADLOCK',
-        'EBFONT',
-        'ENOSTR',
-        'ENODATA',
-        'ETIME',
-        'ENOSR',
-        'ENONET',
-        'ENOPKG',
-        'EREMOTE',
-        'ENOLINK',
-        'EADV',
-        'ESRMNT',
-        'ECOMM',
-        'EPROTO',
-        'EMULTIHOP',
-        'EDOTDOT',
-        'EBADMSG',
-        'EOVERFLOW',
-        'ENOTUNIQ',
-        'EBADFD',
-        'EREMCHG',
-        'ELIBACC',
-        'ELIBBAD',
-        'ELIBSCN',
-        'ELIBMAX',
-        'ELIBEXEC',
-        'EILSEQ',
-        'ERESTART',
-        'ESTRPIPE',
-        'EUSERS',
-        'ENOTSOCK',
-        'EDESTADDRREQ',
-        'EMSGSIZE',
-        'EPROTOTYPE',
-        'ENOPROTOOPT',
-        'EPROTONOSUPPORT',
-        'ESOCKTNOSUPPORT',
-        'EOPNOTSUPP',
-        'EPFNOSUPPORT',
-        'EAFNOSUPPORT',
-        'EADDRINUSE',
-        'EADDRNOTAVAIL',
-        'ENETDOWN',
-        'ENETUNREACH',
-        'ENETRESET',
-        'ECONNABORTED',
-        'ECONNRESET',
-        'ENOBUFS',
-        'EISCONN',
-        'ENOTCONN',
-        'ESHUTDOWN',
-        'ETOOMANYREFS',
-        'ETIMEDOUT',
-        'ECONNREFUSED',
-        'EHOSTDOWN',
-        'EHOSTUNREACH',
-        'EALREADY',
-        'EINPROGRESS',
-        'ESTALE',
-        'EUCLEAN',
-        'ENOTNAM',
-        'ENAVAIL',
-        'EISNAM',
-        'EREMOTEIO',
-        'EDQUOT',
-        'ENOMEDIUM',
-        'EMEDIUMTYPE'
-        );
-  begin
-    if (ErrorCode >= Low(os_errlist)) and (ErrorCode <= High(os_errlist)) then
-      Result := os_errlist[ErrorCode]
-    else
-      Result := '';
-  end;
-
 var
   vp: jsval;
   ex: PJSObject;
@@ -3585,7 +3450,7 @@ begin
       ex := vp.asObject;
       // error.code: string
       // The error.code property is a string representing the error code, which is typically E followed by a sequence of capital letters.
-      val.asJSString := cx.NewJSString(OSErrorAsString(ErrorCode));
+      val.asJSString := cx.NewJSString(puv_errno_str(ErrorCode));
       ex.DefineProperty(cx, 'code', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
       // error.errno : string | number
       // The error.errno property is a number or a string. The number is a negative value which corresponds to the error code defined in libuv Error handling. See uv-errno.h header file (deps/uv/include/uv-errno.h in the Node.js source tree) for details. In case of a string, it is the same as error.code.

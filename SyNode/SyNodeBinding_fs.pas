@@ -34,83 +34,20 @@ uses
 {$IFDEF FPC}
   LazFileUtils,
 {$ENDIF}
+  puv_fs,
   SynLog,
   SyNodeReadWrite,
   SyNodeBinding_buffer;
 
 {$IFDEF MSWINDOWS}
-type
-  stat = packed record
-    st_dev,                 // Equivalent to drive number 0=A 1=B ...
-    st_ino,                 // Always zero ?
-    st_nlink  : qword;      // Number of links.
-
-    st_mode,                // See constants
-    st_uid,                 // User: Maybe significant on NT ?
-    st_gid,                 // Group: Ditto
-    __pad1    : cardinal;
-    st_rdev   : qword;      // Seems useless (not even filled in)
-    st_size,                // File size in bytes
-    st_blksize,
-    st_blocks : int64;
-
-    st_atime,               // Accessed date (always 00:00 hrs local on FAT)
-    st_atime_nsec,
-    st_mtime,               // Modified time
-    st_mtime_nsec,
-    st_ctime,               // Creation time
-    st_ctime_nsec : qword;
-    __unused2  : array[0..2] of qword;
-  end;
-
-function _access(fn: Pointer; mode: LongInt): LongInt; cdecl;
-  external 'msvcrt';
-function _close(Handle: LongInt): LongInt; cdecl;
-  external 'msvcrt';
-function _fstat(Handle: LongInt; out Buffer): LongInt; cdecl;
+function _get_osfhandle(fd: LongInt): THandle; cdecl;
   external 'msvcrt';
 function _open(fn: Pointer; flags, mode: LongInt): LongInt; cdecl;
   external 'msvcrt';
-function _read(Handle: LongInt; var Buffer; Count: Int64): Int64; cdecl;
-  external 'msvcrt';
-function _stat(fn: Pointer; out Buffer): LongInt; cdecl;
-  external 'msvcrt';
-function _write(Handle: LongInt; const Buffer; Count: Int64): Int64; cdecl;
-  external 'msvcrt';
-
-function FpAccess(const fn: RawByteString; mode: LongInt): LongInt; inline;
-begin
-  Result := _access(PChar(fn), mode);
-end;
-
-function FpClose(fd: LongInt): LongInt; inline;
-begin
-  Result := _close(fd);
-end;
-
-function FpFStat(fd: LongInt; out buf): LongInt; inline;
-begin
-  Result := _fstat(fd, buf);
-end;
 
 function FpOpen(const fn: RawByteString; flags, mode: LongInt): LongInt; inline;
 begin
   Result := _open(PChar(fn), flags, mode);
-end;
-
-function FpRead(fd: LongInt; var buf; nBytes: Int64): Int64; inline;
-begin
-  Result := _read(fd, buf, nBytes);
-end;
-
-function FpStat(const fn: RawByteString; out buf): LongInt; inline;
-begin
-  Result := _stat(PChar(fn), buf);
-end;
-
-function FpWrite(fd: LongInt; const buf; nBytes: Int64): Int64; inline;
-begin
-  Result := _write(fd, buf, nBytes);
 end;
 {$ENDIF}
 
@@ -192,14 +129,14 @@ end;
 // or null is file does not exist
 function fs_fileStat(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
 const
-  USAGE = 'usage: fileStat(path: string|fd: integer)';
+  USAGE = 'usage: fileStat(path: String|fd: Integer[; followSymLinks: Boolean = False])';
 var
   in_argv: PjsvalVector;
   res: LongInt;
   fn: TFileName;
   obj: PJSRootedObject;
   val: jsval;
-  info: stat;
+  info: Tpuv_stat_info;
 begin
   try
     in_argv := vp.argv;
@@ -209,40 +146,43 @@ begin
     try
       if in_argv[0].isString then begin
         fn := in_argv[0].asJSString.ToString(cx);
-        res := FpStat(fn, info);
+        if (argc = 1) or not in_argv[1].isBoolean or not in_argv[1].asBoolean then
+          res := puv_fs_stat(fn, info)
+        else
+          res := puv_fs_lstat(fn, info);
       end else
-        res := FpFStat(in_argv[0].asInteger, info);
+        res := puv_fs_fstat(in_argv[0].asInteger, info);
       if res = 0 then begin
-        val.asInt64 := info.st_dev;
+        val.asInt64 := info.dev;
         obj.ptr.DefineProperty(cx, 'dev', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
-        val.asInt64 := info.st_ino;
+        val.asInt64 := info.ino;
         obj.ptr.DefineProperty(cx, 'ino', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
-        val.asInt64 := info.st_nlink;
+        val.asInt64 := info.nlink;
         obj.ptr.DefineProperty(cx, 'nlink', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
 
-        val.asInteger := info.st_mode;
+        val.asInteger := info.mode;
         obj.ptr.DefineProperty(cx, 'mode', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
-        val.asInteger := info.st_uid;
+        val.asInteger := info.uid;
         obj.ptr.DefineProperty(cx, 'uid', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
-        val.asInteger := info.st_gid;
+        val.asInteger := info.gid;
         obj.ptr.DefineProperty(cx, 'gid', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
 
-        val.asInt64 := info.st_rdev;
+        val.asInt64 := info.rdev;
         obj.ptr.DefineProperty(cx, 'rdev', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
-        val.asInt64 := info.st_size;
+        val.asInt64 := info.size;
         obj.ptr.DefineProperty(cx, 'size', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
-        val.asInt64 := info.st_blksize;
+        val.asInt64 := info.blksize;
         obj.ptr.DefineProperty(cx, 'blksize', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
-        val.asInt64 := info.st_blocks;
+        val.asInt64 := info.blocks;
         obj.ptr.DefineProperty(cx, 'blocks', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
 
-        val.asDate[cx] := UnixToDateTime(info.st_atime);
+        val.asDate[cx] := info.atime;
         obj.ptr.DefineProperty(cx, 'atime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
         //st_atime_nsec : qword
-        val.asDate[cx] := UnixToDateTime(info.st_mtime);
+        val.asDate[cx] := info.mtime;
         obj.ptr.DefineProperty(cx, 'mtime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
         //st_mtime_nsec : qword
-        val.asDate[cx] := UnixToDateTime(info.st_ctime);
+        val.asDate[cx] := info.ctime;
         obj.ptr.DefineProperty(cx, 'ctime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
         //st_ctime_nsec : qword
 
@@ -250,7 +190,7 @@ begin
       end else begin
         Result := False;
         vp.rval := JSVAL_VOID;
-        JSOSErrorUC(cx, '', res, 'stat', RawUTF8(fn));
+        JSOSErrorUC(cx, '', GetLastOSError, 'stat', RawUTF8(fn));
         Exit;
       end;
     finally
@@ -670,6 +610,7 @@ end;
 function fs_writeFile(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
 var
   in_argv: PjsvalVector;
+  handle: THandle;
   stream: THandleStream;
   writer: SynCommons.TTextWriter;
 begin
@@ -677,7 +618,12 @@ begin
     if (argc < 2) then
       raise ESMException.Create('usage writeFile(fd: Integer, fileContent: String|Object|ArrayBuffer [,encoding]');
     in_argv := vp.argv;
-    stream := THandleStream.Create(in_argv[0].asInteger);
+    {$IFDEF MSWINDOWS}
+    handle := _get_osfhandle(in_argv[0].asInteger);
+    {$ELSE}
+    handle := in_argv[0].asInteger;
+    {$ENDIF}
+    stream := THandleStream.Create(handle);
     writer := SynCommons.TTextWriter.Create(stream, 65536);
     try
       vp.rval := SyNodeReadWrite.SMWrite_impl(cx, argc - 1, @in_argv[1], writer);
@@ -874,7 +820,7 @@ begin
     if (argc <> 1) or not in_argv[0].isInteger then
       raise ESMException.Create(f_usage);
     fd := in_argv[0].asInteger;
-    val.asInteger := FpClose(fd);
+    val.asInteger := puv_fs_close(fd);
     vp.rval := val;
     Result := True;
   except
@@ -929,7 +875,7 @@ begin
       if (argc > 4) and not (in_argv[4].ValType(cx) in [JSTYPE_VOID, JSTYPE_NULL]) then
         raise ENotImplemented.Create('Not null position is currently not supported');
       Inc(buf, offset);
-      res := FpRead(fd, buf^, len);
+      res := puv_fs_read(fd, buf^, len);
       if res < 0 then
         RaiseLastOSError;
       val.asInteger := res;
@@ -989,7 +935,7 @@ begin
       if (argc > 4) and not (in_argv[4].ValType(cx) in [JSTYPE_VOID, JSTYPE_NULL]) then
         raise ENotImplemented.Create('Not null position is currently not supported');
       Inc(buf, offset);
-      res := FpWrite(fd, buf^, len);
+      res := puv_fs_write(fd, buf^, len);
       if res < 0 then
         RaiseLastOSError;
       val.asInteger := res;
@@ -1039,7 +985,7 @@ begin
       size := StringBytesWrite(PChar(buf), size, str, len, isLatin1, encoding);
       if (size = 0) then
         raise ESMException.Create('Invalid string');
-      res := FpWrite(fd, PChar(buf)^, size);
+      res := puv_fs_write(fd, PChar(buf)^, size);
       if res < 0 then
         RaiseLastOSError;
       val.asInteger := res;
