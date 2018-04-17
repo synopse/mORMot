@@ -965,6 +965,7 @@ var
   isLatin1: Boolean;
   res: Int64;
   val: jsval;
+  strUtf8: RawUTF8;
 const
   f_usage = 'usage: writeFileString(handle: Integer; buffer: String; [position: Integer]; encoding: String): Integer';
 begin
@@ -979,7 +980,7 @@ begin
     fd := in_argv[0].asInteger;
     _str := in_argv[1].asJSString;
     encoding := ParseEncoding(in_argv[3].asJSString.ToUTF8(cx), UTF8);
-    getStrDataAndLength(cx, _str, encoding, str, len, size, isLatin1);
+    getStrDataAndLength(cx, _str, encoding, strUtf8, str, len, size, isLatin1);
     if (size > 0) then begin
       SetLength(buf, size);
       size := StringBytesWrite(PChar(buf), size, str, len, isLatin1, encoding);

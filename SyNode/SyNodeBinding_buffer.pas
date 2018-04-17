@@ -20,6 +20,7 @@ const  LATIN1 = BINARY;
 
 procedure getBufDataAndLength(cx: PJSContext; bufObj: PJSRootedObject; out bufData: pointer; out  bufLen: size_t);{$ifdef HASINLINE}inline;{$endif}
 procedure getStrDataAndLength(cx: PJSContext; const _str: PJSString; const encoding: TEncoding;
+  out strUtf8: RawUTF8; // This is a workaroud to avoid string destruction before use while strUtf8 is used at all
   out str: Pointer; out strLen: size_t; out size: size_t; out isLatin1: Boolean); {$ifdef HASINLINE}inline;{$endif}
 function ParseEncoding(const encoding: RawUTF8; default_encoding: TEncoding): TEncoding; {$ifdef HASINLINE}inline;{$endif}
 function StringBytesWrite(bufData: Pointer; max_length: size_t; str: Pointer;
@@ -61,9 +62,7 @@ begin
 end;
 
 procedure getStrDataAndLength(cx: PJSContext; const _str: PJSString; const encoding: TEncoding;
-  out str: Pointer; out strLen: size_t; out size: size_t; out isLatin1: Boolean);
-var
-  strUtf8: RawUTF8;
+  out strUtf8: RawUTF8; out str: Pointer; out strLen: size_t; out size: size_t; out isLatin1: Boolean);
 const
   UNKNOWN_ENCODING = 'unknown encoding';
 begin
@@ -662,6 +661,7 @@ var
   actual: size_t;
   proto: PJSRootedObject;
   val: jsval;
+  strUtf8: RawUTF8;
 const
   sInvalidCall = 'usage: createFromString(string, encoding: String);';
 begin
@@ -674,7 +674,7 @@ begin
     encoding := ParseEncoding(in_argv[1].asJSString.ToUTF8(cx), UTF8);
     _str := in_argv[0].asJSString;
 
-    getStrDataAndLength(cx, _str, encoding, str, strLen, size, isLatin1);
+    getStrDataAndLength(cx, _str, encoding, strUtf8, str, strLen, size, isLatin1);
 
     proto := cx.NewRootedObject(vp.thisObject[cx].ReservedSlot[0].asObject.Ctor[cx]);
     try
