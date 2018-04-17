@@ -17753,7 +17753,7 @@ type
     // - actually call the SaveToWriter() protected virtual method for persistence
     // - you can specify ForcedAlgo if you want to override the default AlgoSynLZ
     procedure SaveTo(out aBuffer: RawByteString; nocompression: boolean=false;
-      BufLen: integer=65536; ForcedAlgo: TAlgoCompress=nil); virtual; overload;
+      BufLen: integer=65536; ForcedAlgo: TAlgoCompress=nil); overload; virtual; 
     /// persist the content as a SynLZ-compressed binary blob
     // - just an overloaded wrapper
     function SaveTo(nocompression: boolean=false; BufLen: integer=65536;
