@@ -17753,7 +17753,12 @@ type
     // - actually call the SaveToWriter() protected virtual method for persistence
     // - you can specify ForcedAlgo if you want to override the default AlgoSynLZ
     procedure SaveTo(out aBuffer: RawByteString; nocompression: boolean=false;
-      BufLen: integer=65536; ForcedAlgo: TAlgoCompress=nil); virtual;
+      BufLen: integer=65536; ForcedAlgo: TAlgoCompress=nil); virtual; overload;
+    /// persist the content as a SynLZ-compressed binary blob
+    // - just an overloaded wrapper
+    function SaveTo(nocompression: boolean=false; BufLen: integer=65536;
+      ForcedAlgo: TAlgoCompress=nil): RawByteString; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// persist the content as a SynLZ-compressed binary file
     // - to be retrieved later on via LoadFromFile method
     // - returns the number of bytes of the resulting file
@@ -51214,7 +51219,8 @@ end;
 
 procedure TSynPersistentStore.LoadFrom(const aBuffer: RawByteString);
 begin
-  LoadFrom(pointer(aBuffer),length(aBuffer));
+  if aBuffer <> '' then
+    LoadFrom(pointer(aBuffer),length(aBuffer));
 end;
 
 procedure TSynPersistentStore.LoadFrom(aBuffer: pointer; aBufferLen: integer);
@@ -51262,6 +51268,12 @@ begin
   finally
     writer.Free;
   end;
+end;
+
+function TSynPersistentStore.SaveTo(nocompression: boolean; BufLen: integer;
+  ForcedAlgo: TAlgoCompress): RawByteString;
+begin
+  SaveTo(result,nocompression,BufLen,ForcedAlgo);
 end;
 
 function TSynPersistentStore.SaveToFile(const aFileName: TFileName;
@@ -59203,15 +59215,16 @@ begin
 end;
 
 function TSynDictionary.FindAndCopy(const aKey; out aValue): boolean;
-var ndx: integer;
+var ndx, tim: integer;
 begin
   fSafe.Lock;
   try
     ndx := fKeys.FindHashed(aKey);
     if ndx>=0 then begin
       fValues.ElemCopyAt(ndx,aValue);
-      if fSafe.Padding[DIC_TIMESEC].VInteger>0 then
-        fTimeout[ndx] := GetTimeOut;
+      tim := fSafe.Padding[DIC_TIMESEC].VInteger;
+      if tim>0 then // inlined fTimeout[ndx] := GetTimeout
+        fTimeout[ndx] := GetTickCount64 shr 10+tim;
       result := true;
     end else
       result := false;
