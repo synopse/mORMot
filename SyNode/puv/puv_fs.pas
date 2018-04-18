@@ -93,7 +93,7 @@ type
     birthtime: TDateTime;
   end;
 
-function puv_fs_open(path: TFileName): Integer;
+function puv_fs_open(path: TFileName; flags: Cardinal; mode: Cardinal): Integer;
 function puv_fs_close(fd: Integer): Integer;
 function puv_fs_read(fd: Integer; out buf; size: Integer): Integer;
 function puv_fs_write(fd: Integer; const buf; size: Integer): Integer;
@@ -131,20 +131,172 @@ uses
   JwaWindows,
   puv_error;
 
+function msvcrt_get_errno: LongInt; stdcall;
+  external 'msvcrt' name '_get_errno';
 function msvcrt_close(fd: LongInt): LongInt; stdcall;
   external 'msvcrt' name '_close';
+function msvcrt_open_osfhandle(handle: THandle; flags: Cardinal): LongInt; stdcall;
+  external 'msvcrt' name '_open_osfhandle';
+function msvcrt_get_osfhandle(fd: LongInt): THandle; stdcall;
+  external 'msvcrt' name '_get_osfhandle';
+function msvcrt_umask(mask: LongInt): LongInt; stdcall;
+  external 'msvcrt' name '_umask';
 
-procedure BitsSet(var value: QWord; Bits: QWord); inline;
+procedure BitsSet(var value: QWord; Bits: QWord); inline; overload;
 begin
   value := value or Bits;
 end;
 
-function _get_osfhandle(fd: LongInt): THandle; cdecl;
-  external 'msvcrt';
-
-function puv_fs_open(path: TFilename): Integer;
+procedure BitsSet(var value: DWord; Bits: DWord); inline; overload;
 begin
+  value := value or Bits;
+end;
 
+procedure BitsClear(var value: QWord; Bits: QWord); inline; overload;
+begin
+  value := value and not Bits;
+end;
+
+procedure BitsClear(var value: DWord; Bits: DWord); inline; overload;
+begin
+  value := value and not Bits;
+end;
+
+function puv_fs_open(path: TFileName; flags: Cardinal; mode: Cardinal): Integer;
+var
+  access: DWORD;
+  share: DWORD;
+  disposition: DWORD;
+  attributes: DWORD;
+  f: THandle;
+  fd, current_umask: Integer;
+label einval;
+begin
+  attributes := 0;
+
+  // Obtain the active umask. umask() never fails and returns the previous
+  // umask.
+  current_umask := msvcrt_umask(0);
+  msvcrt_umask(current_umask);
+
+  // convert flags and mode to CreateFile parameters
+  case (flags and (O_RDONLY or O_WRONLY or O_RDWR)) of
+    O_RDONLY: access := FILE_GENERIC_READ;
+    O_WRONLY: access := FILE_GENERIC_WRITE;
+    O_RDWR:   access := FILE_GENERIC_READ or FILE_GENERIC_WRITE;
+    else
+      goto einval;
+  end;
+
+  if (flags and O_APPEND <> 0) then begin
+    BitsClear(access, FILE_WRITE_DATA);
+    BitsSet(access, FILE_APPEND_DATA);
+  end;
+
+  {*
+   * Here is where we deviate significantly from what CRT's _open()
+   * does. We indiscriminately use all the sharing modes, to match
+   * UNIX semantics. In particular, this ensures that the file can
+   * be deleted even whilst it's open, fixing issue #1449.
+   * We still support exclusive sharing mode, since it is necessary
+   * for opening raw block devices, otherwise Windows will prevent
+   * any attempt to write past the master boot record.
+   *}
+  if (flags and O_EXLOCK <> 0) then
+    share := 0
+  else
+    share := FILE_SHARE_READ or FILE_SHARE_WRITE or FILE_SHARE_DELETE;
+
+  case (flags and (O_CREAT or O_EXCL or O_TRUNC)) of
+    0,
+    O_EXCL:
+      disposition := OPEN_EXISTING;
+    O_CREAT:
+      disposition := OPEN_ALWAYS;
+    O_CREAT or O_EXCL,
+    O_CREAT or O_TRUNC or O_EXCL:
+      disposition := CREATE_NEW;
+    O_TRUNC,
+    O_TRUNC or O_EXCL:
+      disposition := TRUNCATE_EXISTING;
+    O_CREAT or O_TRUNC:
+      disposition := CREATE_ALWAYS;
+    else
+      goto einval;
+  end;
+
+  BitsSet(attributes, FILE_ATTRIBUTE_NORMAL);
+  if (flags and O_CREAT <> 0) then
+    if ((mode and not current_umask) and S_IWRITE) = 0 then
+      BitsSet(attributes, FILE_ATTRIBUTE_READONLY);
+
+  if (flags and O_TEMPORARY <> 0) then begin
+    BitsSet(attributes, FILE_FLAG_DELETE_ON_CLOSE or FILE_ATTRIBUTE_TEMPORARY);
+    BitsSet(access, DELETE);
+  end;
+
+  if (flags and O_SHORT_LIVED) <> 0 then
+    BitsSet(attributes, FILE_ATTRIBUTE_TEMPORARY);
+
+  case (flags and (O_SEQUENTIAL or O_RANDOM)) of
+    0: ;
+    O_SEQUENTIAL:
+      BitsSet(attributes, FILE_FLAG_SEQUENTIAL_SCAN);
+    O_RANDOM:
+      BitsSet(attributes, FILE_FLAG_RANDOM_ACCESS);
+    else
+      goto einval;
+  end;
+
+  if (flags and O_DIRECT) <> 0 then
+    BitsSet(attributes, FILE_FLAG_NO_BUFFERING);
+
+  case (flags and (O_DSYNC or O_SYNC)) of
+    0: ;
+    O_DSYNC,
+    O_SYNC:
+      BitsSet(attributes, FILE_FLAG_WRITE_THROUGH);
+    else
+      goto einval;
+  end;
+
+  // Setting this flag makes it possible to open a directory.
+  BitsSet(attributes, FILE_FLAG_BACKUP_SEMANTICS);
+
+  f := CreateFile(PChar(path),
+                  access,
+                  share,
+                  nil,
+                  disposition,
+                  attributes,
+                  0);
+  if (f = INVALID_HANDLE_VALUE) then begin
+    //error := GetLastError;
+    //if (error = ERROR_FILE_EXISTS) and ((flags and O_CREAT) <> 0) and
+    //    ((flags and O_EXCL) = 0) then
+    //  // Special case: when ERROR_FILE_EXISTS happens and UV_FS_O_CREAT was
+    //  // specified, it means the path referred to a directory.
+    //  SET_REQ_UV_ERROR(req, UV_EISDIR, error)
+    Exit;
+  end;
+
+  fd := msvcrt_open_osfhandle(f, flags);
+  if (fd < 0) then begin
+    {* The only known failure mode for _open_osfhandle() is EMFILE, in which
+     * case GetLastError() will return zero. However we'll try to handle other
+     * errors as well, should they ever occur.
+     *}
+    if (msvcrt_get_errno = PUV_EMFILE) then
+      SetLastError(ERROR_TOO_MANY_OPEN_FILES);
+    CloseHandle(f);
+    Exit;
+  end;
+
+  Result := fd;
+  Exit;
+
+einval:
+  SetLastError(ERROR_INVALID_PARAMETER);
 end;
 
 function puv_fs_close(fd: Integer): Integer;
@@ -158,7 +310,7 @@ var
   read: DWORD;
 begin
   Result := -1;
-  handle := _get_osfhandle(fd);
+  handle := msvcrt_get_osfhandle(fd);
   if (handle <> INVALID_HANDLE_VALUE) and Windows.ReadFile(handle, buf, size, read, nil) then
     Result := read;
 end;
@@ -169,7 +321,7 @@ var
   written: DWORD;
 begin
   Result := -1;
-  handle := _get_osfhandle(fd);
+  handle := msvcrt_get_osfhandle(fd);
   if (handle <> INVALID_HANDLE_VALUE) and Windows.WriteFile(handle, buf, size, written, nil) then
     Result := written;
 end;
@@ -390,7 +542,7 @@ function puv_fs_fstat(fd: Integer; out info: Tpuv_stat_info): Integer;
 var
   handle: THandle;
 begin
-  handle := _get_osfhandle(fd);
+  handle := msvcrt_get_osfhandle(fd);
 
   if (handle = INVALID_HANDLE_VALUE) then begin
     SetLastError(ERROR_INVALID_HANDLE);
@@ -506,7 +658,12 @@ end;
 {$ELSE}
 uses
   BaseUnix,
-  Unix;
+  Unix,
+  Linux,
+  puv_core;
+
+var
+  no_cloexec_support: Integer = 0;
 
 procedure StatToInfo(const src: TStat; out dst: Tpuv_stat_info);
 begin
@@ -591,9 +748,33 @@ begin
 #endif*)
 end;
 
-function puv_fs_open(path: TFileName): Integer;
+function puv_fs_open(path: TFileName; flags: Cardinal; mode: Cardinal): Integer;
 begin
+  // Try O_CLOEXEC before entering locks
+  if (no_cloexec_support = 0) then begin
+    Result := FpOpen(path, flags or O_CLOEXEC, mode);
+    if (Result >= 0) or (errno <> ESysEINVAL) then
+      Exit;
+    InterLockedIncrement(no_cloexec_support);
+  end;
 
+  //if (req->cb != NULL)
+  //  uv_rwlock_rdlock(&req->loop->cloexec_lock);
+
+  Result := FpOpen(path, flags, mode);
+
+  {* In case of failure `uv__cloexec` will leave error in `errno`,
+   * so it is enough to just set `r` to `-1`.
+   *}
+  if (Result >= 0) and (puv_cloexec(Result, True) <> 0) then begin
+    Result := puv_fs_close(Result);
+    if (Result <> 0) then
+      Abort;
+    Result := -1;
+  end;
+
+  //if (req->cb != NULL)
+  //  uv_rwlock_rdunlock(&req->loop->cloexec_lock);
 end;
 
 function puv_fs_close(fd: Integer): Integer;

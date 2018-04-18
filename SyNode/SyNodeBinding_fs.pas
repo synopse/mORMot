@@ -42,13 +42,6 @@ uses
 {$IFDEF MSWINDOWS}
 function _get_osfhandle(fd: LongInt): THandle; cdecl;
   external 'msvcrt';
-function _open(fn: Pointer; flags, mode: LongInt): LongInt; cdecl;
-  external 'msvcrt';
-
-function FpOpen(const fn: RawByteString; flags, mode: LongInt): LongInt; inline;
-begin
-  Result := _open(PChar(fn), flags, mode);
-end;
 {$ENDIF}
 
 /// decode text file to string using BOM
@@ -791,12 +784,15 @@ begin
     fn := in_argv[0].asJSString.ToString(cx);
     flags := in_argv[1].asInteger;
     mode := in_argv[2].asInteger;
-    handle := FpOpen(fn, flags, mode);
-    if handle<0 then
-      RaiseLastOSError;
-    val.asInteger := handle;
-    vp.rval := val;
-    Result := True;
+    handle := puv_fs_open(fn, flags, mode);
+    Result := handle >= 0;
+    if Result then begin
+      val.asInteger := handle;
+      vp.rval := val;
+    end else begin
+      vp.rval := JSVAL_VOID;
+      JSOSErrorUC(cx, '', GetLastOSError, 'open', RawUTF8(fn));
+    end;
   except
     on E: Exception do
     begin
@@ -876,8 +872,12 @@ begin
         raise ENotImplemented.Create('Not null position is currently not supported');
       Inc(buf, offset);
       res := puv_fs_read(fd, buf^, len);
-      if res < 0 then
-        RaiseLastOSError;
+      if res < 0 then begin
+        Result := False;
+        vp.rval := JSVAL_VOID;
+        JSOSErrorUC(cx, '', GetLastOSError, 'read');
+        Exit;
+      end;
       val.asInteger := res;
     end else
       val.asInteger := 0;
@@ -936,8 +936,12 @@ begin
         raise ENotImplemented.Create('Not null position is currently not supported');
       Inc(buf, offset);
       res := puv_fs_write(fd, buf^, len);
-      if res < 0 then
-        RaiseLastOSError;
+      if res < 0 then begin
+        Result := False;
+        vp.rval := JSVAL_VOID;
+        JSOSErrorUC(cx, '', GetLastOSError, 'write');
+        Exit;
+      end;
       val.asInteger := res;
     end else
       val.asInteger := 0;
@@ -987,8 +991,12 @@ begin
       if (size = 0) then
         raise ESMException.Create('Invalid string');
       res := puv_fs_write(fd, PChar(buf)^, size);
-      if res < 0 then
-        RaiseLastOSError;
+      if res < 0 then begin
+        Result := False;
+        vp.rval := JSVAL_VOID;
+        JSOSErrorUC(cx, '', GetLastOSError, 'write');
+        Exit;
+      end;
       val.asInteger := res;
     end else
       val.asInteger := 0;
