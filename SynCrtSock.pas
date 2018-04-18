@@ -2913,6 +2913,8 @@ type
     readbuf: SockString;
     /// the current write data buffer of this slot
     writebuf: SockString;
+    /// the last error reported by WSAGetLastError before the connection ends
+    lastWSAError: Integer;
     /// acquire an exclusive access to this connection
     // - returns true if slot has been acquired
     // - returns false if it is used by another thread
@@ -11757,6 +11759,7 @@ begin
     slot := SlotFromConnection(connection);
     if (slot<>nil) and (slot.socket<>0) then
       try
+        slot.lastWSAError := WSAGetLastError;
         fRead.Unsubscribe(slot.socket,TPollSocketTag(connection));
         fWrite.Unsubscribe(slot.socket,TPollSocketTag(connection));
         result := true;
