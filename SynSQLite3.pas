@@ -2925,6 +2925,8 @@ type
     procedure GetTableNames(var Names: TRawUTF8DynArray);
     /// get all field names for a specified Table
     procedure GetFieldNames(var Names: TRawUTF8DynArray; const TableName: RawUTF8);
+    /// check if the given table do exist
+    function HasTable(const Name: RawUTF8): boolean;
     /// add a SQL custom function to the SQLite3 database engine
     // - the supplied aFunction instance will be used globally and freed
     // by TSQLDataBase.Destroy destructor
@@ -4208,6 +4210,13 @@ end;
 procedure TSQLDataBase.GetTableNames(var Names: TRawUTF8DynArray);
 begin // SQL statement taken from official SQLite3 FAQ
   SetLength(Names,Execute(SQL_GET_TABLE_NAMES,Names));
+end;
+
+function TSQLDataBase.HasTable(const Name: RawUTF8): boolean;
+var names: TRawUTF8DynArray;
+begin
+  GetTableNames(names);
+  result := FindPropName(names, Name)>=0;
 end;
 
 procedure TSQLDataBase.GetFieldNames(var Names: TRawUTF8DynArray; const TableName: RawUTF8);
