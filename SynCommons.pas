@@ -13828,6 +13828,8 @@ function GetFileVersion(const FileName: TFileName): cardinal;
 function SystemInfoJson: RawUTF8;
 
 type
+  /// the recognized operating systems
+  TOperatingSystem = (osUnknown, osWindows, osLinux, osOSX, osBSD, osPOSIX);
   /// the recognized Windows versions
   // - defined even outside MSWINDOWS to allow process e.g. from monitoring tools
   TWindowsVersion = (
@@ -13837,6 +13839,13 @@ type
     wEight, wEight_64, wServer2012, wServer2012_64,
     wEightOne, wEightOne_64, wServer2012R2, wServer2012R2_64,
     wTen, wTen_64, wServer2016, wServer2016_64);
+  /// the running Operating System, encoded as a 32-bit integer
+  TOperatingSystemVersion = packed record
+    case os: TOperatingSystem of
+    osUnknown: (b: array[0..2] of byte);
+    osWindows: (win: TWindowsVersion);
+    osLinux, osOSX, osBSD, osPOSIX: (utsrelease: array[0..2] of byte);
+  end;
 
 const
   /// the recognized Windows versions, as plain text
@@ -13851,6 +13860,9 @@ const
 
   /// the compiler family used
   COMP_TEXT = {$ifdef FPC}'fpc'{$else}'delphi'{$endif};
+  OS_KIND = {$ifdef MSWINDOWS}osWindows{$else}{$ifdef DARWIN}osOSX{$else}
+  {$ifdef BSD}osBSD{$else}{$ifdef LINUX}osLinux{$else}osPOSIX
+  {$endif}{$endif}{$endif}{$endif};
   /// the target Operating System used for compilation
   OS_TEXT = {$ifdef MSWINDOWS}'win'{$else}{$ifdef DARWIN}'osx'{$else}
   {$ifdef BSD}'bsd'{$else}{$ifdef LINUX}'linux'{$else}'posix'
@@ -13861,6 +13873,17 @@ const
     {$ifdef CPUPOWERPC}'ppc'+{$else}
     {$ifdef CPUSPARC}'sparc'+{$endif}{$endif}{$endif}
     {$ifdef CPU32}'32'{$else}'64'{$endif}{$endif}{$endif};
+
+var
+  /// the current Operating System version, as retrieved for the current process
+  // - contains e.g. 'Windows Seven 64 SP1 (6.1.7601)' or
+  // 'Linux 3.13.0 110 generic#157 Ubuntu SMP Mon Feb 20 11:55:25 UTC 2017'
+  OSVersionText: RawUTF8;
+  /// some textual information about the current CPU
+  CpuInfoText: RawUTF8;
+  /// the running Operating System information, encoded as a 32-bit integer
+  OSVersion32: TOperatingSystemVersion;
+  OSVersionInt32: integer absolute OSVersion32;
 
 {$ifdef MSWINDOWS}
   {$ifndef UNICODE}
@@ -13898,13 +13921,6 @@ var
   OSVersionInfo: TOSVersionInfoEx;
   /// the current Operating System version, as retrieved for the current process
   OSVersion: TWindowsVersion;
-  /// the current Operating System version, as retrieved for the current process
-  // - contains e.g. 'Windows Seven 64 SP1 (6.1.7601)' or
-  // 'Linux 3.13.0 110 generic#157 Ubuntu SMP Mon Feb 20 11:55:25 UTC 2017'
-  OSVersionText: RawUTF8;
-  /// some textual information about the current CPU
-  CpuInfoText: RawUTF8;
-
 
 /// this function can be used to create a GDI compatible window, able to
 // receive Windows Messages for fast local communication
@@ -13957,7 +13973,6 @@ var
     // as returned by fpuname()
     uts: UtsName;
   end;
-  OSVersionText, CpuInfoText: RawUTF8;
 
 {$ifdef KYLIX3}
 
@@ -26412,6 +26427,7 @@ begin
         dwMajorVersion,dwMinorVersion,dwBuildNumber],OSVersionText) else
       FormatUTF8('Windows % SP% (%.%.%)',[WINDOWS_NAME[Vers],wServicePackMajor,
         dwMajorVersion,dwMinorVersion,dwBuildNumber],OSVersionText);
+  OSVersionInt32 := (integer(Vers) shl 8)+ord(osWindows);
   {$ifndef LVCL}
   with TRegistry.Create do
   try
@@ -26459,6 +26475,7 @@ var modname, beg: PUTF8Char;
     {$endif BSD}
 begin
   modname := nil;
+  OSVersionInt32 := {$ifdef FPC}integer(KernelRevision shl 8)+{$endif}ord(OS_KIND);
   SystemInfo.dwPageSize := getpagesize; // use libc for this value
   {$ifdef BSD}
   fpuname(SystemInfo.uts);
@@ -65560,6 +65577,7 @@ initialization
   Assert(SizeOf(THash128Rec)=SizeOf(THash128));
   Assert(SizeOf(THash256Rec)=SizeOf(THash256));
   Assert(SizeOf(TBlock128)=SizeOf(THash128));
+  Assert(SizeOf(TOperatingSystemVersion)=SizeOf(integer));
   {$ifdef MSWINDOWS}
   {$ifndef CPU64}
   Assert(SizeOf(TFileTime)=SizeOf(Int64)); // see e.g. FileTimeToInt64
