@@ -9902,6 +9902,9 @@ type
   TSynDictionaryEvent = function(const aKey; var aValue; aIndex,aCount: integer;
     aOpaque: pointer): boolean of object;
 
+  /// event called by TSynDictionary.DeleteDeprecated
+  TSynDictionaryCanDeleteEvent = function(const aKey, aValue; aIndex: integer): boolean of object;
+
   /// thread-safe dictionary to store some values from associated keys
   // - will maintain a dynamic array of values, associated with a hashed dynamic
   // array for the keys, so that setting or retrieving values would be O(1)
@@ -9916,6 +9919,7 @@ type
     fTimeOut: TCardinalDynArray;
     fTimeOuts: TDynArray;
     fCompressAlgo: TAlgoCompress;
+    fOnCanDelete: TSynDictionaryCanDeleteEvent;
     function InArray(const aKey,aArrayValue; aAction: TSynDictionaryInArray): boolean;
     procedure SetTimeouts;
     function GetTimeOut: cardinal;
@@ -10081,6 +10085,10 @@ type
     /// load the content from SynLZ-compressed raw binary data
     // - as previously saved by SaveToBinary method
     function LoadFromBinary(const binary: RawByteString): boolean;
+    /// can be assigned to OnCanDeleteDeprecated to check TSynPersistentLock(aValue).Safe.IsLocked
+    class function OnCanDeleteSynPersistentLock(const aKey, aValue; aIndex: integer): boolean;
+    /// can be assigned to OnCanDeleteDeprecated to check TSynPersistentLocked(aValue).Safe.IsLocked
+    class function OnCanDeleteSynPersistentLocked(const aKey, aValue; aIndex: integer): boolean;
     /// returns how many items are currently stored in this dictionary
     // - this method is thread-safe
     function Count: integer;
@@ -10097,6 +10105,10 @@ type
     property Capacity: integer read GetCapacity write SetCapacity;
     /// the compression algorithm used for binary serialization
     property CompressAlgo: TAlgoCompress read fCompressAlgo write fCompressAlgo;
+    /// callback to by-pass DeleteDeprecated deletion by returning false
+    // - can be assigned e.g. to OnCanDeleteSynPersistentLock if Value is a
+    // TSynPersistentLock instance, to avoid any potential access violdation
+    property OnCanDeleteDeprecated: TSynDictionaryCanDeleteEvent read fOnCanDelete write fOnCanDelete;
   end;
 
   /// thread-safe FIFO (First-In-First-Out) in-order queue of records
@@ -59041,7 +59053,8 @@ begin
   try
     fSafe.Padding[DIC_TIMETIX].VInteger := now;
     for i := fSafe.Padding[DIC_TIMECOUNT].VInteger-1 downto 0 do
-      if (now>fTimeOut[i]) and (fTimeOut[i]<>0) then begin
+      if (now>fTimeOut[i]) and (fTimeOut[i]<>0) and (not Assigned(fOnCanDelete) or
+          fOnCanDelete(fKeys.ElemPtr(i)^,fValues.ElemPtr(i)^,i)) then begin
         fKeys.Delete(i);
         fValues.Delete(i);
         fTimeOuts.Delete(i);
@@ -59154,7 +59167,8 @@ begin
   end;
 end;
 
-function TSynDictionary.InArray(const aKey, aArrayValue; aAction: TSynDictionaryInArray): Boolean;
+function TSynDictionary.InArray(const aKey, aArrayValue;
+  aAction: TSynDictionaryInArray): boolean;
 var nested: TDynArray;
     ndx: integer;
 begin
@@ -59458,6 +59472,18 @@ begin
   finally
     fSafe.UnLock;
   end;
+end;
+
+class function TSynDictionary.OnCanDeleteSynPersistentLock(const aKey, aValue;
+  aIndex: integer): boolean;
+begin
+  result := not TSynPersistentLock(aValue).Safe^.IsLocked;
+end;
+
+class function TSynDictionary.OnCanDeleteSynPersistentLocked(const aKey, aValue;
+  aIndex: integer): boolean;
+begin
+  result := not TSynPersistentLocked(aValue).Safe.IsLocked;
 end;
 
 function TSynDictionary.SaveToBinary: RawByteString;
