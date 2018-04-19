@@ -59224,7 +59224,7 @@ begin
 end;
 
 function TSynDictionary.FindAndCopy(const aKey; out aValue): boolean;
-var ndx, tim: integer;
+var ndx: integer;
 begin
   fSafe.Lock;
   try
