@@ -9968,16 +9968,19 @@ type
     // - returns the index of the matching item, -1 if aKey was not found
     // - if you want to access the value, you should use fSafe.Lock/Unlock:
     // consider using Exists or FindAndCopy thread-safe methods instead
-    function Find(const aKey): integer;
+    // - aUpdateTimeOut will update the associated timeout value of the entry
+    function Find(const aKey; aUpdateTimeOut: boolean=false): integer;
     /// search of a primary key within the internal hashed dictionary
     // - returns a pointer to the matching item, nil if aKey was not found
     // - if you want to access the value, you should use fSafe.Lock/Unlock:
     // consider using Exists or FindAndCopy thread-safe methods instead
-    function FindValue(const aKey): pointer;
+    // - aUpdateTimeOut will update the associated timeout value of the entry
+    function FindValue(const aKey; aUpdateTimeOut: boolean=false): pointer;
     /// search of a primary key within the internal hashed dictionary
     // - returns a pointer to the matching or already existing item
     // - if you want to access the value, you should use fSafe.Lock/Unlock:
     // consider using Exists or FindAndCopy thread-safe methods instead
+    // - will update the associated timeout value of the entry, if applying
     function FindValueOrAdd(const aKey; var added: boolean): pointer;
     /// search of a stored value by its primary key, and return a local copy
     // - so this method is thread-safe
@@ -58962,7 +58965,7 @@ function TSynDictionary.GetTimeOut: cardinal;
 begin
   result := fSafe.Padding[DIC_TIMESEC].VInteger;
   if result<>0 then
-    result := GetTickCount64 shr 10+result;
+    result := cardinal(GetTickCount64 shr 10)+result;
 end;
 
 function TSynDictionary.GetCapacity: integer;
@@ -59178,17 +59181,23 @@ begin
   result := InArray(aKey,aArrayValue,iaFindAndAddIfNotExisting);
 end;
 
-function TSynDictionary.Find(const aKey): integer;
+function TSynDictionary.Find(const aKey; aUpdateTimeOut: boolean): integer;
+var tim: cardinal;
 begin // caller is expected to call fSafe.Lock/Unlock
-  result := fKeys.FindHashed(aKey);
+  if self=nil then
+    result := -1 else
+    result := fKeys.FindHashed(aKey);
+  if aUpdateTimeOut and (result>=0) then begin
+    tim := fSafe.Padding[DIC_TIMESEC].VInteger;
+    if tim>0 then // inlined fTimeout[result] := GetTimeout
+      fTimeout[result] := cardinal(GetTickCount64 shr 10)+tim;
+  end;
 end;
 
-function TSynDictionary.FindValue(const aKey): pointer;
+function TSynDictionary.FindValue(const aKey; aUpdateTimeOut: boolean): pointer;
 var ndx: PtrInt;
 begin
-  if self=nil then
-    ndx := -1 else
-    ndx := fKeys.FindHashed(aKey);
+  ndx := Find(aKey,aUpdateTimeOut);
   if ndx<0 then
     result := nil else
     result := pointer(PtrUInt(fValues.fValue^)+PtrUInt(ndx)*fValues.ElemSize);
@@ -59200,7 +59209,7 @@ var ndx: integer;
 begin
   tim := fSafe.Padding[DIC_TIMESEC].VInteger; // inlined tim := GetTimeout
   if tim<>0 then
-    tim := GetTickCount64 shr 10+tim;
+    tim := cardinal(GetTickCount64 shr 10)+tim;
   ndx := fKeys.FindHashedForAdding(aKey,added);
   if added then begin
     with fKeys{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif} do
@@ -59219,12 +59228,9 @@ var ndx, tim: integer;
 begin
   fSafe.Lock;
   try
-    ndx := fKeys.FindHashed(aKey);
+    ndx := Find(aKey, {aUpdateTimeOut=}true);
     if ndx>=0 then begin
       fValues.ElemCopyAt(ndx,aValue);
-      tim := fSafe.Padding[DIC_TIMESEC].VInteger;
-      if tim>0 then // inlined fTimeout[ndx] := GetTimeout
-        fTimeout[ndx] := GetTickCount64 shr 10+tim;
       result := true;
     end else
       result := false;
