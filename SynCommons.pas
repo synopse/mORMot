@@ -59071,8 +59071,9 @@ begin
   try
     fSafe.Padding[DIC_TIMETIX].VInteger := now;
     for i := fSafe.Padding[DIC_TIMECOUNT].VInteger-1 downto 0 do
-      if (now>fTimeOut[i]) and (fTimeOut[i]<>0) and (not Assigned(fOnCanDelete) or
-          fOnCanDelete(fKeys.ElemPtr(i)^,fValues.ElemPtr(i)^,i)) then begin
+      if (now>fTimeOut[i]) and (fTimeOut[i]<>0) and
+         (not Assigned(fOnCanDelete) or fOnCanDelete(fKeys.{$ifdef UNDIRECTDYNARRAY}
+         InternalDynArray.{$endif}ElemPtr(i)^,fValues.ElemPtr(i)^,i)) then begin
         fKeys.Delete(i);
         fValues.Delete(i);
         fTimeOuts.Delete(i);
