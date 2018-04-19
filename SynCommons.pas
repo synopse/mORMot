@@ -6174,6 +6174,7 @@ type
   {$ifdef UNICODE}TSynLocker = record{$else}TSynLocker = object{$endif}
   private
     fSection: TRTLCriticalSection;
+    fLocked: boolean;
     {$ifndef NOVARIANTS}
     function GetVariant(Index: integer): Variant;
     procedure SetVariant(Index: integer; const Value: Variant);
@@ -6255,6 +6256,8 @@ type
     // !  end; // local hidden IUnknown will release the lock for the method
     // !end;
     function ProtectMethod: IUnknown;
+    /// returns true if the mutex is currently locked by another thread
+    property IsLocked: boolean read fLocked;
     {$ifndef NOVARIANTS}
     /// safe locked access to a Variant value
     // - you may store up to 7 variables, using an 0..6 index, shared with
@@ -50809,6 +50812,7 @@ procedure TSynLocker.Init;
 begin
   InitializeCriticalSection(fSection);
   PaddingMaxUsedIndex := -1;
+  fLocked := false;
 end;
 
 procedure TSynLocker.Done;
@@ -50823,16 +50827,19 @@ end;
 procedure TSynLocker.Lock;
 begin
   EnterCriticalSection(fSection);
+  fLocked := true;
 end;
 
 procedure TSynLocker.UnLock;
 begin
+  fLocked := false;
   LeaveCriticalSection(fSection);
 end;
 
 function TSynLocker.TryLock: boolean;
 begin
-  result := TryEnterCriticalSection(fSection){$ifdef LINUX}{$ifdef FPC}<>0{$endif}{$endif};
+  result := not fLocked and
+    (TryEnterCriticalSection(fSection){$ifdef LINUX}{$ifdef FPC}<>0{$endif}{$endif});
 end;
 
 function TSynLocker.ProtectMethod: IUnknown;
@@ -50847,8 +50854,10 @@ begin
   if (Index>=0) and (Index<=PaddingMaxUsedIndex) then // PaddingMaxUsedIndex may be -1
     try
       EnterCriticalSection(fSection);
+      fLocked := true;
       result := variant(Padding[Index]);
     finally
+      fLocked := false;
       LeaveCriticalSection(fSection);
     end else
     VarClear(result);
@@ -50859,10 +50868,12 @@ begin
   if cardinal(Index)<=high(Padding) then
     try
       EnterCriticalSection(fSection);
+      fLocked := true;
       if Index>PaddingMaxUsedIndex then
         PaddingMaxUsedIndex := Index;
       variant(Padding[Index]) := Value;
     finally
+      fLocked := false;
       LeaveCriticalSection(fSection);
     end;
 end;
@@ -50872,9 +50883,11 @@ begin
   if (Index>=0) and (Index<=PaddingMaxUsedIndex) then
     try
       EnterCriticalSection(fSection);
+      fLocked := true;
       if not VariantToInt64(variant(Padding[index]),result) then
         result := 0;
     finally
+      fLocked := false;
       LeaveCriticalSection(fSection);
     end else
     result := 0;
@@ -50890,9 +50903,11 @@ begin
   if (Index>=0) and (Index<=PaddingMaxUsedIndex) then
     try
       EnterCriticalSection(fSection);
+      fLocked := true;
       if not VariantToBoolean(variant(Padding[index]),result) then
         result := false;
     finally
+      fLocked := false;
       LeaveCriticalSection(fSection);
     end else
     result := false;
@@ -50924,11 +50939,13 @@ begin
   if (Index>=0) and (Index<=PaddingMaxUsedIndex) then
     try
       EnterCriticalSection(fSection);
+      fLocked := true;
       with Padding[index] do
         if VType=varUnknown then
           result := VUnknown else
           result := nil;
     finally
+      fLocked := false;
       LeaveCriticalSection(fSection);
     end else
     result := nil;
@@ -50939,6 +50956,7 @@ begin
   if cardinal(Index)<=high(Padding) then
     try
       EnterCriticalSection(fSection);
+      fLocked := true;
       if Index>PaddingMaxUsedIndex then
         PaddingMaxUsedIndex := Index;
       with Padding[index] do begin
@@ -50949,6 +50967,7 @@ begin
         VUnknown := Value;
       end;
     finally
+      fLocked := false;
       LeaveCriticalSection(fSection);
     end;
 end;
@@ -50959,10 +50978,12 @@ begin
   if (Index>=0) and (Index<=PaddingMaxUsedIndex) then
     try
       EnterCriticalSection(fSection);
+      fLocked := true;
       VariantToUTF8(variant(Padding[Index]),result,wasString);
       if not wasString then
         result := '';
     finally
+      fLocked := false;
       LeaveCriticalSection(fSection);
     end else
     result := '';
@@ -50973,10 +50994,12 @@ begin
   if cardinal(Index)<=high(Padding) then
     try
       EnterCriticalSection(fSection);
+      fLocked := true;
       if Index>PaddingMaxUsedIndex then
         PaddingMaxUsedIndex := Index;
       RawUTF8ToVariant(Value,Padding[Index],varString);
     finally
+      fLocked := false;
       LeaveCriticalSection(fSection);
     end;
 end;
@@ -50986,12 +51009,14 @@ begin
   if cardinal(Index)<=high(Padding) then
     try
       EnterCriticalSection(fSection);
+      fLocked := true;
       result := 0;
       if Index<=PaddingMaxUsedIndex then
         VariantToInt64(variant(Padding[index]),result) else
         PaddingMaxUsedIndex := Index;
       variant(Padding[Index]) := Int64(result+Increment);
     finally
+      fLocked := false;
       LeaveCriticalSection(fSection);
     end else
     result := 0;
@@ -51002,6 +51027,7 @@ begin
   if cardinal(Index)<=high(Padding) then
     try
       EnterCriticalSection(fSection);
+      fLocked := true;
       with Padding[index] do begin
         if Index<=PaddingMaxUsedIndex then
           result := PVariant(@VType)^ else begin
@@ -51011,6 +51037,7 @@ begin
         PVariant(@VType)^ := Value;
       end;
     finally
+      fLocked := false;
       LeaveCriticalSection(fSection);
     end else
     VarClear(result);
@@ -51021,6 +51048,7 @@ begin
   if cardinal(Index)<=high(Padding) then
     try
       EnterCriticalSection(fSection);
+      fLocked := true;
       with Padding[index] do begin
         if Index<=PaddingMaxUsedIndex then
           if VType=varUnknown then
@@ -51035,6 +51063,7 @@ begin
         VUnknown := Value;
       end;
     finally
+      fLocked := false;
       LeaveCriticalSection(fSection);
     end else
     result := nil;
