@@ -13860,10 +13860,11 @@ const
 
   /// the compiler family used
   COMP_TEXT = {$ifdef FPC}'fpc'{$else}'delphi'{$endif};
+  /// the target Operating System used for compilation, as TOperatingSystem
   OS_KIND = {$ifdef MSWINDOWS}osWindows{$else}{$ifdef DARWIN}osOSX{$else}
   {$ifdef BSD}osBSD{$else}{$ifdef LINUX}osLinux{$else}osPOSIX
   {$endif}{$endif}{$endif}{$endif};
-  /// the target Operating System used for compilation
+  /// the target Operating System used for compilation, as text
   OS_TEXT = {$ifdef MSWINDOWS}'win'{$else}{$ifdef DARWIN}'osx'{$else}
   {$ifdef BSD}'bsd'{$else}{$ifdef LINUX}'linux'{$else}'posix'
   {$endif}{$endif}{$endif}{$endif};
