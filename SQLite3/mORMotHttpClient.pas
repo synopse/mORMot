@@ -189,6 +189,7 @@ type
     fHttps: boolean;
     fProxyName, fProxyByPass: AnsiString;
     fSendTimeout, fReceiveTimeout, fConnectTimeout: DWORD;
+    fConnectRetrySeconds: integer; // used by InternalCheckOpen
     fExtendedOptions: THttpRequestExtendedOptions;
     procedure SetCompression(Value: TSQLHttpCompressions);
     procedure SetKeepAliveMS(Value: cardinal);
@@ -253,6 +254,11 @@ type
     // using TSQLHttpClientWebSockets, leaving hcDeflate for AJAX or non mORMot
     // clients, and hcSynLZ if you expect to use http.sys with a mORMot client
     property Compression: TSQLHttpCompressions read fCompression write SetCompression;
+    /// how many seconds the client may try to connect after open socket failure
+    // - is disabled to 0 by default, but you may set some seconds here e.g. to
+    // let the server start properly, and let the client handle exceptions to
+    // wait 250ms and retry until the specified timeout is reached
+    property ConnectRetrySeconds: integer read fConnectRetrySeconds write fConnectRetrySeconds;
   end;
 
   TSQLHttpClientGenericClass = class of TSQLHttpClientGeneric;
@@ -680,17 +686,31 @@ end;
 { TSQLHttpClientWinSock }
 
 function TSQLHttpClientWinSock.InternalCheckOpen: boolean;
+var timeout: Int64;
 begin
   result := fSocket<>nil;
   if result or (isDestroying in fInternalState) then
     exit;
   fSafe.Enter;
   try
-    if fSocket=nil then
-    try
+    if fSocket=nil then begin
       if fSocketClass=nil then
         fSocketClass := THttpClientSocket;
-      fSocket := fSocketClass.Open(fServer,fPort,cslTCP,fConnectTimeout);
+      timeout := GetTickCount64+fConnectRetrySeconds shl 10;
+      repeat
+        try
+          fSocket := fSocketClass.Open(fServer,fPort,cslTCP,fConnectTimeout);
+        except
+          on E: Exception do begin
+            FreeAndNil(fSocket);
+            if GetTickCount64>=timeout then
+              exit;
+            fLogClass.Add.Log(sllTrace, 'InternalCheckOpen: % -> wait and retry %s',
+              [E.ClassType, fConnectRetrySeconds], self);
+            sleep(250);
+          end;
+        end;
+      until fSocket<>nil;
       if fModel<>nil then
         fSocket.ProcessName := FormatUTF8('%/%',[fPort,fModel.Root]);
       if fSendTimeout>0 then
@@ -710,10 +730,8 @@ begin
       if hcDeflate in Compression then
         // standard (slower) AJAX/HTTP gzip compression
         fSocket.RegisterCompress(CompressGZip);
-      result := true;
-    except
-      FreeAndNil(fSocket);
     end;
+    result := true;
   finally
     fSafe.Leave;
   end;
@@ -919,19 +937,33 @@ begin
 end;
 
 function TSQLHttpClientRequest.InternalCheckOpen: boolean;
+var timeout: Int64;
 begin
   result := fRequest<>nil;
   if result or (isDestroying in fInternalState) then
     exit;
   fSafe.Enter;
   try
-    if fRequest=nil then
-    try
+    if fRequest=nil then begin
       InternalSetClass;
       if fRequestClass=nil then
         raise ECommunicationException.CreateUTF8('fRequestClass=nil for %',[self]);
-      fRequest := fRequestClass.Create(fServer,fPort,fHttps,
-        fProxyName,fProxyByPass,fConnectTimeout,fSendTimeout,fReceiveTimeout);
+      timeout := GetTickCount64+fConnectRetrySeconds shl 10;
+      repeat
+        try
+          fRequest := fRequestClass.Create(fServer,fPort,fHttps,
+            fProxyName,fProxyByPass,fConnectTimeout,fSendTimeout,fReceiveTimeout);
+        except
+          on E: Exception do begin
+            FreeAndNil(fRequest);
+            if GetTickCount64>=timeout then
+              exit;
+            fLogClass.Add.Log(sllTrace, 'InternalCheckOpen: % -> wait and retry %s',
+              [E.ClassType, fConnectRetrySeconds], self);
+            sleep(250);
+          end;
+        end;
+      until fRequest<>nil;
       fRequest.ExtendedOptions := fExtendedOptions;
       // note that first registered algo will be the prefered one
       if hcSynShaAes in Compression then
@@ -943,10 +975,8 @@ begin
       if hcDeflate in Compression then
         // standard (slower) AJAX/HTTP zip/deflate compression
         fRequest.RegisterCompress(CompressGZip);
-      result := true;
-    except
-      FreeAndNil(fRequest);
     end;
+    result := true;
   finally
     fSafe.Leave;
   end;

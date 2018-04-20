@@ -107,7 +107,7 @@ begin
       if (call <> nil) then begin
         if argc = call.argc then begin
           IsCorrect := true;
-          for j := 0 to call.argc do begin
+          for j := 0 to call.argc - 1 do begin
             IsCorrect := isParamCorrect(call.argt[j], vals[j]);
             if not IsCorrect then Break;
           end;

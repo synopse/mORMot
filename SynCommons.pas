@@ -2942,6 +2942,7 @@ function GetQWord(P: PUTF8Char; var err: integer): QWord;
 // - set the err content to the index of any faulty character, 0 if conversion
 // was successful (same as the standard val function)
 function GetExtended(P: PUTF8Char; out err: integer): TSynExtended; overload;
+  {$ifdef FPC}inline;{$endif} // under Delphi XE4 64-bit compiler, it fails...
 
 /// get the extended floating point value stored in P^
 // - this overloaded version returns 0 as a result if the content of P is invalid
@@ -6173,6 +6174,7 @@ type
   {$ifdef UNICODE}TSynLocker = record{$else}TSynLocker = object{$endif}
   private
     fSection: TRTLCriticalSection;
+    fLocked: boolean;
     {$ifndef NOVARIANTS}
     function GetVariant(Index: integer): Variant;
     procedure SetVariant(Index: integer; const Value: Variant);
@@ -6254,6 +6256,8 @@ type
     // !  end; // local hidden IUnknown will release the lock for the method
     // !end;
     function ProtectMethod: IUnknown;
+    /// returns true if the mutex is currently locked by another thread
+    property IsLocked: boolean read fLocked;
     {$ifndef NOVARIANTS}
     /// safe locked access to a Variant value
     // - you may store up to 7 variables, using an 0..6 index, shared with
@@ -9898,6 +9902,9 @@ type
   TSynDictionaryEvent = function(const aKey; var aValue; aIndex,aCount: integer;
     aOpaque: pointer): boolean of object;
 
+  /// event called by TSynDictionary.DeleteDeprecated
+  TSynDictionaryCanDeleteEvent = function(const aKey, aValue; aIndex: integer): boolean of object;
+
   /// thread-safe dictionary to store some values from associated keys
   // - will maintain a dynamic array of values, associated with a hashed dynamic
   // array for the keys, so that setting or retrieving values would be O(1)
@@ -9912,6 +9919,7 @@ type
     fTimeOut: TCardinalDynArray;
     fTimeOuts: TDynArray;
     fCompressAlgo: TAlgoCompress;
+    fOnCanDelete: TSynDictionaryCanDeleteEvent;
     function InArray(const aKey,aArrayValue; aAction: TSynDictionaryInArray): boolean;
     procedure SetTimeouts;
     function GetTimeOut: cardinal;
@@ -9967,16 +9975,19 @@ type
     // - returns the index of the matching item, -1 if aKey was not found
     // - if you want to access the value, you should use fSafe.Lock/Unlock:
     // consider using Exists or FindAndCopy thread-safe methods instead
-    function Find(const aKey): integer;
+    // - aUpdateTimeOut will update the associated timeout value of the entry
+    function Find(const aKey; aUpdateTimeOut: boolean=false): integer;
     /// search of a primary key within the internal hashed dictionary
     // - returns a pointer to the matching item, nil if aKey was not found
     // - if you want to access the value, you should use fSafe.Lock/Unlock:
     // consider using Exists or FindAndCopy thread-safe methods instead
-    function FindValue(const aKey): pointer;
+    // - aUpdateTimeOut will update the associated timeout value of the entry
+    function FindValue(const aKey; aUpdateTimeOut: boolean=false): pointer;
     /// search of a primary key within the internal hashed dictionary
     // - returns a pointer to the matching or already existing item
     // - if you want to access the value, you should use fSafe.Lock/Unlock:
     // consider using Exists or FindAndCopy thread-safe methods instead
+    // - will update the associated timeout value of the entry, if applying
     function FindValueOrAdd(const aKey; var added: boolean): pointer;
     /// search of a stored value by its primary key, and return a local copy
     // - so this method is thread-safe
@@ -10074,6 +10085,10 @@ type
     /// load the content from SynLZ-compressed raw binary data
     // - as previously saved by SaveToBinary method
     function LoadFromBinary(const binary: RawByteString): boolean;
+    /// can be assigned to OnCanDeleteDeprecated to check TSynPersistentLock(aValue).Safe.IsLocked
+    class function OnCanDeleteSynPersistentLock(const aKey, aValue; aIndex: integer): boolean;
+    /// can be assigned to OnCanDeleteDeprecated to check TSynPersistentLocked(aValue).Safe.IsLocked
+    class function OnCanDeleteSynPersistentLocked(const aKey, aValue; aIndex: integer): boolean;
     /// returns how many items are currently stored in this dictionary
     // - this method is thread-safe
     function Count: integer;
@@ -10090,6 +10105,10 @@ type
     property Capacity: integer read GetCapacity write SetCapacity;
     /// the compression algorithm used for binary serialization
     property CompressAlgo: TAlgoCompress read fCompressAlgo write fCompressAlgo;
+    /// callback to by-pass DeleteDeprecated deletion by returning false
+    // - can be assigned e.g. to OnCanDeleteSynPersistentLock if Value is a
+    // TSynPersistentLock instance, to avoid any potential access violdation
+    property OnCanDeleteDeprecated: TSynDictionaryCanDeleteEvent read fOnCanDelete write fOnCanDelete;
   end;
 
   /// thread-safe FIFO (First-In-First-Out) in-order queue of records
@@ -10741,9 +10760,9 @@ type
   TRawByteStringGroupValueDynArray = array of TRawByteStringGroupValue;
 
   /// store several RawByteString content with automatic concatenation
-  // - an optimized compaction algorithm will occur to ensure that every
-  // 64 items will eventually consume at last 1MB of memory: this reduces memory
-  // fragmentation with almost no performance impact
+  // - an optimized compaction algorithm will occur to ensure that every 512
+  // items will be compacted to at least 1MB: this reduces memory fragmentation
+  // with almost no performance impact
   {$ifdef UNICODE}TRawByteStringGroup = record{$else}TRawByteStringGroup = object{$endif}
   private
     procedure Compact(len: integer);
@@ -10765,6 +10784,10 @@ type
     {$ifndef DELPHI5OROLDER}
     /// add another TRawByteStringGroup to Values[]
     procedure Add(const aAnother: TRawByteStringGroup); overload;
+    /// low-level method to abort the latest Add() call
+    // - warning: will work only once, if an Add() has actually been just called:
+    // otherwise, the behavior is unexpected, and may wrongly truncate data
+    procedure RemoveLastAdd;
     /// compare two TRawByteStringGroup instance stored text
     function Equals(const aAnother: TRawByteStringGroup): boolean;
     {$endif DELPHI5OROLDER}
@@ -13805,6 +13828,8 @@ function GetFileVersion(const FileName: TFileName): cardinal;
 function SystemInfoJson: RawUTF8;
 
 type
+  /// the recognized operating systems
+  TOperatingSystem = (osUnknown, osWindows, osLinux, osOSX, osBSD, osPOSIX);
   /// the recognized Windows versions
   // - defined even outside MSWINDOWS to allow process e.g. from monitoring tools
   TWindowsVersion = (
@@ -13814,6 +13839,13 @@ type
     wEight, wEight_64, wServer2012, wServer2012_64,
     wEightOne, wEightOne_64, wServer2012R2, wServer2012R2_64,
     wTen, wTen_64, wServer2016, wServer2016_64);
+  /// the running Operating System, encoded as a 32-bit integer
+  TOperatingSystemVersion = packed record
+    case os: TOperatingSystem of
+    osUnknown: (b: array[0..2] of byte);
+    osWindows: (win: TWindowsVersion);
+    osLinux, osOSX, osBSD, osPOSIX: (utsrelease: array[0..2] of byte);
+  end;
 
 const
   /// the recognized Windows versions, as plain text
@@ -13828,7 +13860,11 @@ const
 
   /// the compiler family used
   COMP_TEXT = {$ifdef FPC}'fpc'{$else}'delphi'{$endif};
-  /// the target Operating System used for compilation
+  /// the target Operating System used for compilation, as TOperatingSystem
+  OS_KIND = {$ifdef MSWINDOWS}osWindows{$else}{$ifdef DARWIN}osOSX{$else}
+  {$ifdef BSD}osBSD{$else}{$ifdef LINUX}osLinux{$else}osPOSIX
+  {$endif}{$endif}{$endif}{$endif};
+  /// the target Operating System used for compilation, as text
   OS_TEXT = {$ifdef MSWINDOWS}'win'{$else}{$ifdef DARWIN}'osx'{$else}
   {$ifdef BSD}'bsd'{$else}{$ifdef LINUX}'linux'{$else}'posix'
   {$endif}{$endif}{$endif}{$endif};
@@ -13838,6 +13874,17 @@ const
     {$ifdef CPUPOWERPC}'ppc'+{$else}
     {$ifdef CPUSPARC}'sparc'+{$endif}{$endif}{$endif}
     {$ifdef CPU32}'32'{$else}'64'{$endif}{$endif}{$endif};
+
+var
+  /// the current Operating System version, as retrieved for the current process
+  // - contains e.g. 'Windows Seven 64 SP1 (6.1.7601)' or
+  // 'Linux 3.13.0 110 generic#157 Ubuntu SMP Mon Feb 20 11:55:25 UTC 2017'
+  OSVersionText: RawUTF8;
+  /// some textual information about the current CPU
+  CpuInfoText: RawUTF8;
+  /// the running Operating System information, encoded as a 32-bit integer
+  OSVersion32: TOperatingSystemVersion;
+  OSVersionInt32: integer absolute OSVersion32;
 
 {$ifdef MSWINDOWS}
   {$ifndef UNICODE}
@@ -13875,13 +13922,6 @@ var
   OSVersionInfo: TOSVersionInfoEx;
   /// the current Operating System version, as retrieved for the current process
   OSVersion: TWindowsVersion;
-  /// the current Operating System version, as retrieved for the current process
-  // - contains e.g. 'Windows Seven 64 SP1 (6.1.7601)' or
-  // 'Linux 3.13.0 110 generic#157 Ubuntu SMP Mon Feb 20 11:55:25 UTC 2017'
-  OSVersionText: RawUTF8;
-  /// some textual information about the current CPU
-  CpuInfoText: RawUTF8;
-
 
 /// this function can be used to create a GDI compatible window, able to
 // receive Windows Messages for fast local communication
@@ -13934,7 +13974,6 @@ var
     // as returned by fpuname()
     uts: UtsName;
   end;
-  OSVersionText, CpuInfoText: RawUTF8;
 
 {$ifdef KYLIX3}
 
@@ -17748,7 +17787,12 @@ type
     // - actually call the SaveToWriter() protected virtual method for persistence
     // - you can specify ForcedAlgo if you want to override the default AlgoSynLZ
     procedure SaveTo(out aBuffer: RawByteString; nocompression: boolean=false;
-      BufLen: integer=65536; ForcedAlgo: TAlgoCompress=nil); virtual;
+      BufLen: integer=65536; ForcedAlgo: TAlgoCompress=nil); overload; virtual; 
+    /// persist the content as a SynLZ-compressed binary blob
+    // - just an overloaded wrapper
+    function SaveTo(nocompression: boolean=false; BufLen: integer=65536;
+      ForcedAlgo: TAlgoCompress=nil): RawByteString; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// persist the content as a SynLZ-compressed binary file
     // - to be retrieved later on via LoadFromFile method
     // - returns the number of bytes of the resulting file
@@ -26384,6 +26428,7 @@ begin
         dwMajorVersion,dwMinorVersion,dwBuildNumber],OSVersionText) else
       FormatUTF8('Windows % SP% (%.%.%)',[WINDOWS_NAME[Vers],wServicePackMajor,
         dwMajorVersion,dwMinorVersion,dwBuildNumber],OSVersionText);
+  OSVersionInt32 := (integer(Vers) shl 8)+ord(osWindows);
   {$ifndef LVCL}
   with TRegistry.Create do
   try
@@ -26431,6 +26476,7 @@ var modname, beg: PUTF8Char;
     {$endif BSD}
 begin
   modname := nil;
+  OSVersionInt32 := {$ifdef FPC}integer(KernelRevision shl 8)+{$endif}ord(OS_KIND);
   SystemInfo.dwPageSize := getpagesize; // use libc for this value
   {$ifdef BSD}
   fpuname(SystemInfo.uts);
@@ -50796,6 +50842,7 @@ procedure TSynLocker.Init;
 begin
   InitializeCriticalSection(fSection);
   PaddingMaxUsedIndex := -1;
+  fLocked := false;
 end;
 
 procedure TSynLocker.Done;
@@ -50810,16 +50857,19 @@ end;
 procedure TSynLocker.Lock;
 begin
   EnterCriticalSection(fSection);
+  fLocked := true;
 end;
 
 procedure TSynLocker.UnLock;
 begin
+  fLocked := false;
   LeaveCriticalSection(fSection);
 end;
 
 function TSynLocker.TryLock: boolean;
 begin
-  result := TryEnterCriticalSection(fSection){$ifdef LINUX}{$ifdef FPC}<>0{$endif}{$endif};
+  result := not fLocked and
+    (TryEnterCriticalSection(fSection){$ifdef LINUX}{$ifdef FPC}<>0{$endif}{$endif});
 end;
 
 function TSynLocker.ProtectMethod: IUnknown;
@@ -50834,8 +50884,10 @@ begin
   if (Index>=0) and (Index<=PaddingMaxUsedIndex) then // PaddingMaxUsedIndex may be -1
     try
       EnterCriticalSection(fSection);
+      fLocked := true;
       result := variant(Padding[Index]);
     finally
+      fLocked := false;
       LeaveCriticalSection(fSection);
     end else
     VarClear(result);
@@ -50846,10 +50898,12 @@ begin
   if cardinal(Index)<=high(Padding) then
     try
       EnterCriticalSection(fSection);
+      fLocked := true;
       if Index>PaddingMaxUsedIndex then
         PaddingMaxUsedIndex := Index;
       variant(Padding[Index]) := Value;
     finally
+      fLocked := false;
       LeaveCriticalSection(fSection);
     end;
 end;
@@ -50859,9 +50913,11 @@ begin
   if (Index>=0) and (Index<=PaddingMaxUsedIndex) then
     try
       EnterCriticalSection(fSection);
+      fLocked := true;
       if not VariantToInt64(variant(Padding[index]),result) then
         result := 0;
     finally
+      fLocked := false;
       LeaveCriticalSection(fSection);
     end else
     result := 0;
@@ -50877,9 +50933,11 @@ begin
   if (Index>=0) and (Index<=PaddingMaxUsedIndex) then
     try
       EnterCriticalSection(fSection);
+      fLocked := true;
       if not VariantToBoolean(variant(Padding[index]),result) then
         result := false;
     finally
+      fLocked := false;
       LeaveCriticalSection(fSection);
     end else
     result := false;
@@ -50911,11 +50969,13 @@ begin
   if (Index>=0) and (Index<=PaddingMaxUsedIndex) then
     try
       EnterCriticalSection(fSection);
+      fLocked := true;
       with Padding[index] do
         if VType=varUnknown then
           result := VUnknown else
           result := nil;
     finally
+      fLocked := false;
       LeaveCriticalSection(fSection);
     end else
     result := nil;
@@ -50926,6 +50986,7 @@ begin
   if cardinal(Index)<=high(Padding) then
     try
       EnterCriticalSection(fSection);
+      fLocked := true;
       if Index>PaddingMaxUsedIndex then
         PaddingMaxUsedIndex := Index;
       with Padding[index] do begin
@@ -50936,6 +50997,7 @@ begin
         VUnknown := Value;
       end;
     finally
+      fLocked := false;
       LeaveCriticalSection(fSection);
     end;
 end;
@@ -50946,10 +51008,12 @@ begin
   if (Index>=0) and (Index<=PaddingMaxUsedIndex) then
     try
       EnterCriticalSection(fSection);
+      fLocked := true;
       VariantToUTF8(variant(Padding[Index]),result,wasString);
       if not wasString then
         result := '';
     finally
+      fLocked := false;
       LeaveCriticalSection(fSection);
     end else
     result := '';
@@ -50960,10 +51024,12 @@ begin
   if cardinal(Index)<=high(Padding) then
     try
       EnterCriticalSection(fSection);
+      fLocked := true;
       if Index>PaddingMaxUsedIndex then
         PaddingMaxUsedIndex := Index;
       RawUTF8ToVariant(Value,Padding[Index],varString);
     finally
+      fLocked := false;
       LeaveCriticalSection(fSection);
     end;
 end;
@@ -50973,12 +51039,14 @@ begin
   if cardinal(Index)<=high(Padding) then
     try
       EnterCriticalSection(fSection);
+      fLocked := true;
       result := 0;
       if Index<=PaddingMaxUsedIndex then
         VariantToInt64(variant(Padding[index]),result) else
         PaddingMaxUsedIndex := Index;
       variant(Padding[Index]) := Int64(result+Increment);
     finally
+      fLocked := false;
       LeaveCriticalSection(fSection);
     end else
     result := 0;
@@ -50989,6 +51057,7 @@ begin
   if cardinal(Index)<=high(Padding) then
     try
       EnterCriticalSection(fSection);
+      fLocked := true;
       with Padding[index] do begin
         if Index<=PaddingMaxUsedIndex then
           result := PVariant(@VType)^ else begin
@@ -50998,6 +51067,7 @@ begin
         PVariant(@VType)^ := Value;
       end;
     finally
+      fLocked := false;
       LeaveCriticalSection(fSection);
     end else
     VarClear(result);
@@ -51008,6 +51078,7 @@ begin
   if cardinal(Index)<=high(Padding) then
     try
       EnterCriticalSection(fSection);
+      fLocked := true;
       with Padding[index] do begin
         if Index<=PaddingMaxUsedIndex then
           if VType=varUnknown then
@@ -51022,6 +51093,7 @@ begin
         VUnknown := Value;
       end;
     finally
+      fLocked := false;
       LeaveCriticalSection(fSection);
     end else
     result := nil;
@@ -51209,7 +51281,8 @@ end;
 
 procedure TSynPersistentStore.LoadFrom(const aBuffer: RawByteString);
 begin
-  LoadFrom(pointer(aBuffer),length(aBuffer));
+  if aBuffer <> '' then
+    LoadFrom(pointer(aBuffer),length(aBuffer));
 end;
 
 procedure TSynPersistentStore.LoadFrom(aBuffer: pointer; aBufferLen: integer);
@@ -51257,6 +51330,12 @@ begin
   finally
     writer.Free;
   end;
+end;
+
+function TSynPersistentStore.SaveTo(nocompression: boolean; BufLen: integer;
+  ForcedAlgo: TAlgoCompress): RawByteString;
+begin
+  SaveTo(result,nocompression,BufLen,ForcedAlgo);
 end;
 
 function TSynPersistentStore.SaveToFile(const aFileName: TFileName;
@@ -58945,7 +59024,7 @@ function TSynDictionary.GetTimeOut: cardinal;
 begin
   result := fSafe.Padding[DIC_TIMESEC].VInteger;
   if result<>0 then
-    result := GetTickCount64 shr 10+result;
+    result := cardinal(GetTickCount64 shr 10)+result;
 end;
 
 function TSynDictionary.GetCapacity: integer;
@@ -58992,7 +59071,9 @@ begin
   try
     fSafe.Padding[DIC_TIMETIX].VInteger := now;
     for i := fSafe.Padding[DIC_TIMECOUNT].VInteger-1 downto 0 do
-      if (now>fTimeOut[i]) and (fTimeOut[i]<>0) then begin
+      if (now>fTimeOut[i]) and (fTimeOut[i]<>0) and
+         (not Assigned(fOnCanDelete) or fOnCanDelete(fKeys.{$ifdef UNDIRECTDYNARRAY}
+         InternalDynArray.{$endif}ElemPtr(i)^,fValues.ElemPtr(i)^,i)) then begin
         fKeys.Delete(i);
         fValues.Delete(i);
         fTimeOuts.Delete(i);
@@ -59105,7 +59186,8 @@ begin
   end;
 end;
 
-function TSynDictionary.InArray(const aKey, aArrayValue; aAction: TSynDictionaryInArray): Boolean;
+function TSynDictionary.InArray(const aKey, aArrayValue;
+  aAction: TSynDictionaryInArray): boolean;
 var nested: TDynArray;
     ndx: integer;
 begin
@@ -59161,17 +59243,23 @@ begin
   result := InArray(aKey,aArrayValue,iaFindAndAddIfNotExisting);
 end;
 
-function TSynDictionary.Find(const aKey): integer;
+function TSynDictionary.Find(const aKey; aUpdateTimeOut: boolean): integer;
+var tim: cardinal;
 begin // caller is expected to call fSafe.Lock/Unlock
-  result := fKeys.FindHashed(aKey);
+  if self=nil then
+    result := -1 else
+    result := fKeys.FindHashed(aKey);
+  if aUpdateTimeOut and (result>=0) then begin
+    tim := fSafe.Padding[DIC_TIMESEC].VInteger;
+    if tim>0 then // inlined fTimeout[result] := GetTimeout
+      fTimeout[result] := cardinal(GetTickCount64 shr 10)+tim;
+  end;
 end;
 
-function TSynDictionary.FindValue(const aKey): pointer;
+function TSynDictionary.FindValue(const aKey; aUpdateTimeOut: boolean): pointer;
 var ndx: PtrInt;
 begin
-  if self=nil then
-    ndx := -1 else
-    ndx := fKeys.FindHashed(aKey);
+  ndx := Find(aKey,aUpdateTimeOut);
   if ndx<0 then
     result := nil else
     result := pointer(PtrUInt(fValues.fValue^)+PtrUInt(ndx)*fValues.ElemSize);
@@ -59183,7 +59271,7 @@ var ndx: integer;
 begin
   tim := fSafe.Padding[DIC_TIMESEC].VInteger; // inlined tim := GetTimeout
   if tim<>0 then
-    tim := GetTickCount64 shr 10+tim;
+    tim := cardinal(GetTickCount64 shr 10)+tim;
   ndx := fKeys.FindHashedForAdding(aKey,added);
   if added then begin
     with fKeys{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif} do
@@ -59202,11 +59290,9 @@ var ndx: integer;
 begin
   fSafe.Lock;
   try
-    ndx := fKeys.FindHashed(aKey);
+    ndx := Find(aKey, {aUpdateTimeOut=}true);
     if ndx>=0 then begin
       fValues.ElemCopyAt(ndx,aValue);
-      if fSafe.Padding[DIC_TIMESEC].VInteger>0 then
-        fTimeout[ndx] := GetTimeOut;
       result := true;
     end else
       result := false;
@@ -59405,6 +59491,18 @@ begin
   finally
     fSafe.UnLock;
   end;
+end;
+
+class function TSynDictionary.OnCanDeleteSynPersistentLock(const aKey, aValue;
+  aIndex: integer): boolean;
+begin
+  result := not TSynPersistentLock(aValue).Safe^.IsLocked;
+end;
+
+class function TSynDictionary.OnCanDeleteSynPersistentLocked(const aKey, aValue;
+  aIndex: integer): boolean;
+begin
+  result := not TSynPersistentLocked(aValue).Safe.IsLocked;
 end;
 
 function TSynDictionary.SaveToBinary: RawByteString;
@@ -61392,7 +61490,7 @@ end;
 { TRawByteStringGroup }
 
 const
-  COMPACT_COUNT = 64; // auto-compaction if 64 last items < 1MB
+  COMPACT_COUNT = 512; // auto-compaction if 512 last items < 1MB
   COMPACT_LEN = 1 shl 20;
 
 procedure TRawByteStringGroup.Compact(len: integer);
@@ -61423,8 +61521,8 @@ begin
     if Count=NextCompact then begin
       len := Position-Values[Count-COMPACT_COUNT].Position;
       if len<COMPACT_LEN then
-        Compact(len);
-      inc(NextCompact); // always slide the compaction window
+        Compact(len) else
+        inc(NextCompact); // slide the compaction window once we reached 1MB
     end;
   if Count=Length(Values) then
     SetLength(Values,Count+COMPACT_COUNT+Count shr 3);
@@ -61464,6 +61562,16 @@ begin
     inc(d);
   end;
   inc(Count,aAnother.Count);
+end;
+
+procedure TRawByteStringGroup.RemoveLastAdd;
+begin
+  if Count>0 then begin
+    dec(Count);
+    LastFind := Count;
+    dec(Position,Length(Values[Count].Value));
+    Values[Count].Value := ''; // release memory
+  end;
 end;
 
 function TRawByteStringGroup.Equals(const aAnother: TRawByteStringGroup): boolean;
@@ -65471,6 +65579,7 @@ initialization
   Assert(SizeOf(THash128Rec)=SizeOf(THash128));
   Assert(SizeOf(THash256Rec)=SizeOf(THash256));
   Assert(SizeOf(TBlock128)=SizeOf(THash128));
+  Assert(SizeOf(TOperatingSystemVersion)=SizeOf(integer));
   {$ifdef MSWINDOWS}
   {$ifndef CPU64}
   Assert(SizeOf(TFileTime)=SizeOf(Int64)); // see e.g. FileTimeToInt64

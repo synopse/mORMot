@@ -510,7 +510,7 @@ type
     // - it will then call the other overloaded constructor to initialize the server
     constructor Create(aModel: TSQLModel; const aDBFileName: TFileName;
       aHandleUserAuthentication: boolean=false; const aPassword: RawUTF8='';
-      aDefaultCacheSize: integer=10000); reintroduce; overload;
+      aDefaultCacheSize: integer=10000; aDefaultPageSize: integer=4096); reintroduce; overload;
     /// initialize a REST server with a database, and a temporary Database Model
     // - a Model will be created with supplied tables, and owned by the server
     // - if you instantiate a TSQLRestServerFullMemory or TSQLRestServerDB
@@ -519,7 +519,7 @@ type
     constructor CreateWithOwnModel(const aTables: array of TSQLRecordClass;
       const aDBFileName: TFileName; aHandleUserAuthentication: boolean=false;
       const aRoot: RawUTF8='root'; const aPassword: RawUTF8='';
-      aDefaultCacheSize: integer=10000); overload;
+      aDefaultCacheSize: integer=10000; aDefaultPageSize: integer=4096); overload;
     /// initialize a REST server with an in-memory SQLite3 database
     // - could be used for test purposes
     constructor Create(aModel: TSQLModel; aHandleUserAuthentication: boolean=false); overload; override;
@@ -979,19 +979,20 @@ begin
 end;
 
 constructor TSQLRestServerDB.Create(aModel: TSQLModel; const aDBFileName: TFileName;
-  aHandleUserAuthentication: boolean; const aPassword: RawUTF8; aDefaultCacheSize: integer);
+  aHandleUserAuthentication: boolean; const aPassword: RawUTF8;
+  aDefaultCacheSize, aDefaultPageSize: integer);
 begin
-  fOwnedDB := TSQLDataBase.Create(aDBFileName,aPassword,0,aDefaultCacheSize);
+  fOwnedDB := TSQLDataBase.Create(aDBFileName,aPassword,0,aDefaultCacheSize,aDefaultPageSize);
   // fOwnedDB.Free done in Destroy
   Create(aModel,fOwnedDB,aHandleUserAuthentication);
 end;
 
 constructor TSQLRestServerDB.CreateWithOwnModel(const aTables: array of TSQLRecordClass;
   const aDBFileName: TFileName; aHandleUserAuthentication: boolean;
-  const aRoot, aPassword: RawUTF8; aDefaultCacheSize: integer);
+  const aRoot, aPassword: RawUTF8; aDefaultCacheSize, aDefaultPageSize: integer);
 begin
   Create(TSQLModel.Create(aTables,aRoot),aDBFileName,aHandleUserAuthentication,
-    aPassword,aDefaultCacheSize);
+    aPassword,aDefaultCacheSize,aDefaultPageSize);
   fModel.Owner := self;
 end;
 

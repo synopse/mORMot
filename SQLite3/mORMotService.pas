@@ -743,7 +743,7 @@ begin
   if (self=nil) or (FSCHandle=0) or (FHandle=0) then
     result := ssNotInstalled else
     result := CurrentStateToServiceState(Status.dwCurrentState);
-  ServiceLog.Add.Log(sllTrace,FName,TypeInfo(TServiceState),result);
+  ServiceLog.Add.Log(sllTrace,FName,TypeInfo(TServiceState),result,self);
 end;
 
 function TServiceController.GetStatus: TServiceStatus;

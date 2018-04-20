@@ -50368,7 +50368,7 @@ begin
   fSourceID^ := aSourceID;
   fDestID^ := aDestID;
   if aUseBatch<>nil then
-    result := aUseBatch.Add(self,true)<>0 else
+    result := aUseBatch.Add(self,true)>=0 else
     result := aClient.Add(self,true)<>0;
 end;
 

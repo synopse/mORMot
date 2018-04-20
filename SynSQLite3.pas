@@ -1757,6 +1757,11 @@ type
     blob_open: function(DB: TSQLite3DB; DBName, TableName, ColumnName: PUTF8Char;
       RowID: Int64; Flags: Integer; var Blob: TSQLite3Blob): Integer; cdecl;
 
+    /// Move a BLOB Handle to a New Row
+    // - will point to a different row of the same database table
+    // - this is faster than closing the existing handle and opening a new one
+    blob_reopen: function(Blob: TSQLite3Blob; RowID: Int64): Integer; cdecl;
+
     /// Close A BLOB Handle
     blob_close: function(Blob: TSQLite3Blob): Integer; cdecl;
 
@@ -2724,7 +2729,7 @@ type
     fDB: TSQLite3DB;
     fFileName: TFileName;
     fFileNameWithoutPath: TFileName;
-    fPageSize: cardinal;
+    fPageSize, fFileDefaultPageSize: cardinal;
     fFileDefaultCacheSize: integer;
     fIsMemory: boolean;
     fPassword: RawUTF8;
@@ -2839,7 +2844,7 @@ type
     // - initialize a TRTLCriticalSection to ensure that all access to the database is atomic
     // - raise an ESQLite3Exception on any error
     constructor Create(const aFileName: TFileName; const aPassword: RawUTF8='';
-      aOpenV2Flags: integer=0; aDefaultCacheSize: integer=10000);
+      aOpenV2Flags: integer=0; aDefaultCacheSize: integer=10000; aDefaultPageSize: integer=4096);
     /// close a database and free its memory and context
     //- if TransactionBegin was called but not commited, a RollBack is performed
     destructor Destroy; override;
@@ -2920,6 +2925,8 @@ type
     procedure GetTableNames(var Names: TRawUTF8DynArray);
     /// get all field names for a specified Table
     procedure GetFieldNames(var Names: TRawUTF8DynArray; const TableName: RawUTF8);
+    /// check if the given table do exist
+    function HasTable(const Name: RawUTF8): boolean;
     /// add a SQL custom function to the SQLite3 database engine
     // - the supplied aFunction instance will be used globally and freed
     // by TSQLDataBase.Destroy destructor
@@ -3175,8 +3182,7 @@ type
   protected
     fBlob: TSQLite3Blob;
     fDB: TSQLite3DB;
-    fSize,
-    fPosition: longint;
+    fSize, fPosition: integer;
     fWritable: boolean;
   public
     /// Opens a BLOB located in row RowID, column ColumnName, table TableName
@@ -3193,6 +3199,10 @@ type
     function Write(const Buffer; Count: Longint): Longint; override;
     /// change the current read position
     function Seek(Offset: Longint; Origin: Word): Longint; override;
+    /// reuse this class instance with another row of the same table
+    // - will update the stream size, and also rewind position to the beginning
+    // - it is actually faster than creating a new TSQLBlobStream instance
+    procedure ChangeRow(RowID: Int64);
     /// read-only access to the BLOB object handle
     property Handle: TSQLite3Blob read fBlob;
   end;
@@ -3898,7 +3908,7 @@ end;
 {$endif}
 
 constructor TSQLDataBase.Create(const aFileName: TFileName; const aPassword: RawUTF8;
-  aOpenV2Flags, aDefaultCacheSize: integer);
+  aOpenV2Flags, aDefaultCacheSize,aDefaultPageSize: integer);
 var result: integer;
 begin
   if sqlite3=nil then
@@ -3914,6 +3924,7 @@ begin
   if aOpenV2Flags=0 then
     fOpenV2Flags := SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE else
     fOpenV2Flags := aOpenV2Flags;
+  fFileDefaultPageSize := aDefaultPageSize;
   fFileDefaultCacheSize := aDefaultCacheSize;
   if (fOpenV2Flags<>(SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE)) and
      not Assigned(sqlite3.open_v2) then
@@ -4199,6 +4210,13 @@ end;
 procedure TSQLDataBase.GetTableNames(var Names: TRawUTF8DynArray);
 begin // SQL statement taken from official SQLite3 FAQ
   SetLength(Names,Execute(SQL_GET_TABLE_NAMES,Names));
+end;
+
+function TSQLDataBase.HasTable(const Name: RawUTF8): boolean;
+var names: TRawUTF8DynArray;
+begin
+  GetTableNames(names);
+  result := FindPropName(names, Name)>=0;
 end;
 
 procedure TSQLDataBase.GetFieldNames(var Names: TRawUTF8DynArray; const TableName: RawUTF8);
@@ -4522,8 +4540,8 @@ begin
     sqlite3.key(fDB,pointer(fPassword),length(fPassword));
   // tune up execution speed
   if not fIsMemory then begin
-    if fOpenV2Flags and SQLITE_OPEN_CREATE<>0 then
-     PageSize := 4096;
+    if (fOpenV2Flags and SQLITE_OPEN_CREATE<>0) and (fFileDefaultPageSize<>0) then
+      PageSize := fFileDefaultPageSize;
     if fFileDefaultCacheSize <> 0 then
       CacheSize := fFileDefaultCacheSize; // 10000 by default (i.e. 40 MB)
   end;
@@ -5386,7 +5404,7 @@ begin
   inherited;
 end;
 
-function TSQLBlobStream.Read(var Buffer; Count: Integer): Longint;
+function TSQLBlobStream.Read(var Buffer; Count: Longint): Longint;
 begin
   result := fSize-fPosition; // bytes available left
   if Count<result then // read only inside the Blob size
@@ -5397,7 +5415,7 @@ begin
   end;
 end;
 
-function TSQLBlobStream.Seek(Offset: Integer; Origin: word): Longint;
+function TSQLBlobStream.Seek(Offset: Longint; Origin: Word): Longint;
 begin
   case Origin of
     soFromBeginning: fPosition := Offset;
@@ -5409,7 +5427,16 @@ begin
   Result := fPosition;
 end;
 
-function TSQLBlobStream.Write(const Buffer; Count: Integer): Longint;
+procedure TSQLBlobStream.ChangeRow(RowID: Int64);
+begin
+  if not Assigned(sqlite3.blob_reopen) then
+    raise ESQLite3Exception.Create('blob_reopen API not available');
+  sqlite3_check(fDB,sqlite3.blob_reopen(fBlob,RowID),'blob_reopen');
+  fPosition := 0;
+  fSize := sqlite3.blob_bytes(fBlob);
+end;
+
+function TSQLBlobStream.Write(const Buffer; Count: Longint): Longint;
 begin
   result := fSize-fPosition; // bytes available left
   if Count<result then
@@ -5757,7 +5784,7 @@ end;
 { TSQLite3LibraryDynamic }
 
 const
-  SQLITE3_ENTRIES: array[0..88] of TFileName =
+  SQLITE3_ENTRIES: array[0..89] of TFileName =
   ('initialize','shutdown','open','open_v2','key','rekey','close',
    'libversion','errmsg','extended_errcode',
    'create_function','create_function_v2',
@@ -5771,7 +5798,7 @@ const
    'result_value','result_error','user_data','context_db_handle',
    'aggregate_context','bind_text','bind_blob','bind_zeroblob','bind_double',
    'bind_int','bind_int64','bind_null','clear_bindings','bind_parameter_count',
-   'blob_open','blob_close','blob_read','blob_write','blob_bytes',
+   'blob_open','blob_reopen','blob_close','blob_read','blob_write','blob_bytes',
    'create_module_v2','declare_vtab','set_authorizer','update_hook',
    'commit_hook','rollback_hook','changes','total_changes','malloc', 'realloc',
    'free','memory_used','memory_highwater','trace_v2','limit',
