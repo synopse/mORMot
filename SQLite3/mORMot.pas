@@ -62465,7 +62465,9 @@ initialization
   {$ifndef USENORMTOUPPER}
   pointer(@SQLFieldTypeComp[sftUTF8Text]) := @AnsiIComp;
   {$endif}
+  {$ifdef MSWINDOWS} // don't change the main process name under Linux
   SetThreadNameDefault(GetCurrentThreadID,'Main Thread');
+  {$endif}
   SetThreadNameInternal := SetThreadNameWithLog;
   StatusCodeToErrorMessage := StatusCodeToErrorMsgBasic;
   GarbageCollectorFreeAndNil(JSONCustomParsers,TSynDictionary.Create(

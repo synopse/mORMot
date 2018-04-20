@@ -63928,7 +63928,8 @@ procedure SetThreadNameDefault(ThreadID: TThreadID; const Name: RawUTF8);
 {$ifdef FPC}
 begin
   {$ifdef LINUX}
-  SetUnixThreadName(ThreadID, Name); // call pthread_setname_np()
+  if ThreadID<>MainThreadID then // don't change the main process name
+    SetUnixThreadName(ThreadID, Name); // call pthread_setname_np()
   {$endif}
 {$else}
 begin
