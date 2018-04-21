@@ -10355,6 +10355,9 @@ type
   end;
 
   /// a TStream created from a file content, using fast memory mapping
+
+  { TSynMemoryStreamMapped }
+
   TSynMemoryStreamMapped = class(TSynMemoryStream)
   protected
     fMap: TMemoryMap;
@@ -10371,6 +10374,8 @@ type
     // map view if created (by default, will map whole file)
     constructor Create(aFile: THandle;
       aCustomSize: cardinal=0; aCustomOffset: Int64=0); overload;
+    /// prevent conflict with TSynMemoryStream.Create(const aText: RawByteString)
+    constructor Create(const aFileName: RawByteString); overload;
     /// release any internal mapped file instance
     destructor Destroy; override;
     /// the file name, if created from such Create(aFileName) constructor
@@ -59827,6 +59832,11 @@ begin
   if not fMap.Map(aFile,aCustomSize,aCustomOffset) then
     raise ESynException.CreateUTF8('%.Create(%) mapping error',[self,fFileName]);
   inherited Create(fMap.fBuf,fMap.fBufSize);
+end;
+
+constructor TSynMemoryStreamMapped.Create(const aFileName: RawByteString);
+begin
+  Create(aFileName, 0, 0);
 end;
 
 destructor TSynMemoryStreamMapped.Destroy;
