@@ -1600,7 +1600,7 @@ type
     fCloseStatus: WEB_SOCKET_CLOSE_STATUS;
     fIndex: integer;
     function ProcessActions(ActionQueue: Cardinal): boolean;
-    procedure ReadData(const WebsocketBufferData);
+    function ReadData(const WebsocketBufferData): integer;
     procedure WriteData(const WebsocketBufferData);
     procedure BeforeRead;
     procedure DoOnMessage(aBufferType: WEB_SOCKET_BUFFER_TYPE;
@@ -9242,17 +9242,22 @@ begin
     fProtocol.OnDisconnect(self,fCloseStatus,Pointer(fBuffer),length(fBuffer));
 end;
 
-procedure THttpApiWebSocketConnection.ReadData(const WebsocketBufferData);
+function THttpApiWebSocketConnection.ReadData(const WebsocketBufferData): integer;
 var Err: HRESULT;
     fBytesRead: cardinal;
     aBuf: WEB_SOCKET_BUFFER_DATA absolute WebsocketBufferData;
 begin
+  Result := 0;
   if fWSHandle = nil then
     exit;
   Err := Http.ReceiveRequestEntityBody(fProtocol.fServer.FReqQueue, fOpaqueHTTPRequestId, 0,
     aBuf.pbBuffer, aBuf.ulBufferLength, fBytesRead, @self.fOverlapped);
   case Err of
-    ERROR_HANDLE_EOF: Disconnect;
+    // On page reload Safari do not send a WEB_SOCKET_INDICATE_RECEIVE_COMPLETE_ACTION
+    // with BufferType = WEB_SOCKET_CLOSE_BUFFER_TYPE, instead it send a dummy packet
+    // (WEB_SOCKET_RECEIVE_FROM_NETWORK_ACTION) and terminate socket
+    // see forum discussion https://synopse.info/forum/viewtopic.php?pid=27125
+    ERROR_HANDLE_EOF: Result := -1;
     ERROR_IO_PENDING: ; //
     NO_ERROR: ;//
   else
@@ -9344,6 +9349,16 @@ var ulDataBufferCount: ULONG;
     i: integer;
     Err: HRESULT;
     Buffer: TWebSocketBufferDataArr;
+  procedure closeConnection();
+  begin
+    EnterCriticalSection(fProtocol.fSafe);
+    try
+      fProtocol.RemoveConnection(fIndex);
+    finally
+      LeaveCriticalSection(fProtocol.fSafe);
+    end;
+    EWebSocketApi.RaiseOnError(hCompleteAction, WebSocketAPI.CompleteAction(fWSHandle, ActionContext, 0));
+  end;
 begin
   result := true;
   repeat
@@ -9366,7 +9381,12 @@ begin
       WEB_SOCKET_INDICATE_SEND_COMPLETE_ACTION: ;
       WEB_SOCKET_RECEIVE_FROM_NETWORK_ACTION: begin
         for i := 0 to ulDataBufferCount - 1 do
-          ReadData(Buffer[i]);
+          if (ReadData(Buffer[i])=-1) then begin
+            fState := wsClosedByClient;
+            fBuffer := '';
+            fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
+            closeConnection();
+          end;
         fLastActionContext := ActionContext;
         result := False;
         exit;
@@ -9374,18 +9394,12 @@ begin
       WEB_SOCKET_INDICATE_RECEIVE_COMPLETE_ACTION: begin
         fLastReceiveTickCount := GetTickCount;
         if BufferType = WEB_SOCKET_CLOSE_BUFFER_TYPE then begin
-          EnterCriticalSection(fProtocol.fSafe);
-          try
-            fProtocol.RemoveConnection(fIndex);
-          finally
-            LeaveCriticalSection(fProtocol.fSafe);
-          end;
           if fState = wsOpen then
             fState := wsClosedByClient else
             fState := wsClosedByServer;
           SetString(fBuffer, PChar(Buffer[0].pbBuffer), Buffer[0].ulBufferLength);
           fCloseStatus := Buffer[0].Reserved1;
-          EWebSocketApi.RaiseOnError(hCompleteAction, WebSocketAPI.CompleteAction(fWSHandle, ActionContext, 0));
+          closeConnection();
           result := False;
           exit;
         end else if BufferType = WEB_SOCKET_PING_PONG_BUFFER_TYPE then begin

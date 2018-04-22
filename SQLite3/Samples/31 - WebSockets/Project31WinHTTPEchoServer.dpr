@@ -107,8 +107,8 @@ var
   MsgBuffer: RawUTF8;
   CloseReasonBuffer: RawUTF8;
 begin
-  MsgBuffer := 'Manual Message!';
-  CloseReasonBuffer := 'Manual Close!';
+  MsgBuffer := '';
+  CloseReasonBuffer := 'Connection closed by server';
   try
     _Server := TSimpleWebsocketServer.Create;
     try
