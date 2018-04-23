@@ -1,8 +1,6 @@
 program Project31WinHTTPEchoServer;
 
-{$IFDEF FPC}
-  {$MODE Delphi}
-{$ENDIF}
+{$I Synopse.inc}
 
 {$APPTYPE CONSOLE}
 
