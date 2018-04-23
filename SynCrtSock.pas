@@ -34,6 +34,7 @@ unit SynCrtSock;
   - EMartin
   - Eric Grange
   - EvaF
+  - f-vicente
   - Maciej Izak (hnb)
   - Marius Maximus
   - Pavel (mpv)

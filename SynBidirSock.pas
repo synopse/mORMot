@@ -30,6 +30,7 @@ unit SynBidirSock;
 
   Contributor(s):
   - Alfred (alf)
+  - f-vicente
 
 
   Alternatively, the contents of this file may be used under the terms of
