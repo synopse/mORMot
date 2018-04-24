@@ -3234,8 +3234,7 @@ type
     fPropertyIndex: integer;
     fFromRTTI: boolean;
     function GetNameDisplay: string; virtual;
-    /// those two protected methods allow custom storage of binary content
-    // as text
+    /// those two protected methods allow custom storage of binary content as text
     // - default implementation is to use hexa (ToSQL=true) or Base64 encodings
     procedure BinaryToText(var Value: RawUTF8; ToSQL: boolean; wasSQLString: PBoolean); virtual;
     procedure TextToBinary(Value: PUTF8Char; var result: RawByteString); virtual;
@@ -21397,11 +21396,13 @@ begin
       aValue.VDouble := GetExtended(pointer(temp));
     ftDate:
       aValue.VDateTime := Iso8601ToDateTime(temp);
-    ftBlob: begin
-      temp := BlobToTSQLRawBlob(temp);
-      aValue.VBlob := pointer(temp);
-      aValue.VBlobLen := length(temp);
-    end;
+    ftBlob:
+      if temp='' then
+        aValue.VType := ftNull else begin
+        temp := BlobToTSQLRawBlob(temp);
+        aValue.VBlob := pointer(temp);
+        aValue.VBlobLen := length(temp);
+      end;
     ftUTF8:
       aValue.VText := pointer(temp);
     else
@@ -23251,17 +23252,19 @@ var da: TDynArray;
     temp: TTextWriterStackBuffer;
 begin
   GetDynArray(Instance,da);
-  if fObjArray<>nil then
-    with TJSONSerializer.CreateOwnedStream(temp) do
-    try
-      if ExtendedJson then
-        include(fCustomOptions,twoForceJSONExtended); // smaller content
-      AddDynArrayJSON(da);
-      SetText(RawUTF8(data));
-    finally
-      Free;
-    end else
-    data := da.SaveTo;
+  if da.Count=0 then
+    data := '' else
+    if fObjArray<>nil then
+      with TJSONSerializer.CreateOwnedStream(temp) do
+      try
+        if ExtendedJson then
+          include(fCustomOptions,twoForceJSONExtended); // smaller content
+        AddDynArrayJSON(da);
+        SetText(RawUTF8(data));
+      finally
+        Free;
+      end else
+      data := da.SaveTo;
 end;
 
 procedure TSQLPropInfoRTTIDynArray.CopySameClassProp(Source: TObject;
@@ -23414,14 +23417,16 @@ procedure TSQLPropInfoRTTIDynArray.GetFieldSQLVar(Instance: TObject;
 begin
   Serialize(Instance,temp,false);
   aValue.Options := [];
-  if fObjArray<>nil then begin
-    aValue.VType := ftUTF8; // JSON
-    aValue.VText := pointer(temp);
-  end else begin
-    aValue.VType := ftBlob; // binary
-    aValue.VBlob := pointer(temp);
-    aValue.VBlobLen := length(temp);
-  end;
+  if temp='' then
+    aValue.VType := ftNull else
+    if fObjArray<>nil then begin
+      aValue.VType := ftUTF8; // JSON
+      aValue.VText := pointer(temp);
+    end else begin
+      aValue.VType := ftBlob; // binary
+      aValue.VBlob := pointer(temp);
+      aValue.VBlobLen := length(temp);
+    end;
 end;
 
 function TSQLPropInfoRTTIDynArray.GetDynArrayElemType: PTypeInfo;
