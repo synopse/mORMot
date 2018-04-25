@@ -25891,8 +25891,10 @@ var len: PInteger;
     U: PPUTF8Char;
 begin
   result := 0;
-  if (self=nil) or (cardinal(Field)>cardinal(FieldCount)) or (fRowCount=0) then
+  if (self=nil) or (cardinal(Field)>cardinal(FieldCount)) or (fRowCount=0) then begin
+    LenStore.buf := nil; // avoid GPF in LenStore.Done
     exit;
+  end;
   U := @fResults[FieldCount+Field]; // start reading after first Row (= Field Names)
   len := LenStore.Init(fRowCount*SizeOf(len^));
   for i := 1 to fRowCount do begin

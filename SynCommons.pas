@@ -39386,6 +39386,7 @@ var low, high, middle, median, ll, hh: PtrInt;
     ndx: PIntegerArray;
 begin
   if n<=1 then begin
+    TempBuffer.buf := nil; // avoid GPF in TempBuffer.Done
     result := 0;
     exit;
   end;
@@ -48897,7 +48898,7 @@ begin
 end;
 
 procedure TDynArrayQuickSort.QuickSort(L, R: PtrInt);
-var I, J: integer;
+var I, J: PtrInt;
     tmp: pointer;
 begin
   if L<R then
@@ -48938,7 +48939,8 @@ begin
 end;
 
 procedure TDynArrayQuickSort.QuickSortIndexed(L, R: PtrInt);
-var I, J, tmp: integer;
+var I, J: PtrInt;
+    tmp: integer;
 begin
   if L<R then
   repeat
@@ -49014,7 +49016,8 @@ begin
     Quicksort.ElemSize := ElemSize;
     Quicksort.Index := PCardinalArray(aIndex.InitIncreasing(n));
     Quicksort.QuickSortIndexed(0,n-1);
-  end;
+  end else
+    aIndex.buf := nil; // avoid GPF in aIndex.Done
 end;
 
 procedure TDynArray.CreateOrderedIndexAfterAdd(var aIndex: TIntegerDynArray;

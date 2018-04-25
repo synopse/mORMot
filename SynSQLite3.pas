@@ -5568,7 +5568,7 @@ function StatementCacheTotalTimeCompare(const A,B): integer;
 var i64: Int64;
 begin
   i64 := TSQLStatementCache(A).Timer.InternalTimer.TimeInMicroSec-
-    TSQLStatementCache(B).Timer.InternalTimer.TimeInMicroSec;
+         TSQLStatementCache(B).Timer.InternalTimer.TimeInMicroSec;
   if i64<0 then
     result := -1 else
   if i64>0 then
