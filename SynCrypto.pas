@@ -839,7 +839,7 @@ type
   TAESAbstractEncryptOnly = class(TAESAbstractSyn)
   public
     /// Initialize AES context for cypher
-    // - will pre-generate the encryption key
+    // - will pre-generate the encryption key (aKeySize in bits, i.e. 128,192,256)
     constructor Create(const aKey; aKeySize: cardinal); override;
     /// compute a class instance similar to this one, for performing the
     // reverse encryption/decryption process
@@ -1420,7 +1420,7 @@ type
   PSHA3 = ^TSHA3;
   /// handle SHA-3 (Keccak) hashing
   // - Keccak was the winner of the NIST hashing competition for a new hashing
-  // algorithm to provide an alternative to SHA-256. In became SHA-3 and was
+  // algorithm to provide an alternative to SHA-256. It became SHA-3 and was
   // named by NIST a FIPS 180-4, then FIPS 202 hashing standard in 2015
   // - by design, SHA-3 doesn't need to be encapsulated into a HMAC algorithm,
   // since it already includes proper padding, so keys could be concatenated
@@ -12447,8 +12447,10 @@ end;
 function TAESAbstractSyn.Clone: TAESAbstract;
 begin
   {$ifdef USEPADLOCK}
-  if TAESContext(AES).initialized and (TAESContext(AES).ViaCtx<>nil) then
+  if TAESContext(AES).initialized and (TAESContext(AES).ViaCtx<>nil) then begin
     result := inherited Clone;
+    exit;
+  end;
   {$endif}
   result := NewInstance as TAESAbstractSyn;
   MoveFast(pointer(self)^,pointer(result)^,InstanceSize);
