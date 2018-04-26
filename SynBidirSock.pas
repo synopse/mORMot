@@ -30,6 +30,7 @@ unit SynBidirSock;
 
   Contributor(s):
   - Alfred (alf)
+  - f-vicente
 
 
   Alternatively, the contents of this file may be used under the terms of
@@ -3585,7 +3586,6 @@ end;
 function TAsynchConnections.ConnectionRemove(aHandle: TAsynchConnectionHandle): boolean;
 var i: integer;
     conn: TAsynchConnection;
-    locked : boolean;
 begin
   result := false;
   if (self=nil) or Terminated or (aHandle<=0) then
@@ -3593,19 +3593,11 @@ begin
   conn := ConnectionFindLocked(aHandle,@i);
   if conn<>nil then
     try
-      locked := (conn.fSlot.TryLock(100));
-      if not locked then begin
-        fLog.Add.Log(sllDebug,'ConnectionRemove: fSlot.TryLock=false for %',[conn],self);
-        result := false;
-        Exit;
-      end;
       if not fClients.Stop(conn) then
         fLog.Add.Log(sllDebug,'ConnectionRemove: Stop=false for %',[conn],self);
       result := ConnectionDelete(conn,i);
     finally
       fConnectionLock.UnLock;
-      if locked then
-        conn.fSlot.UnLock;
     end;
   if not result then
     fLog.Add.Log(sllTrace,'ConnectionRemove(%)=false',[aHandle],self);

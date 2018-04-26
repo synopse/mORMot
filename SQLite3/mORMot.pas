@@ -3234,8 +3234,7 @@ type
     fPropertyIndex: integer;
     fFromRTTI: boolean;
     function GetNameDisplay: string; virtual;
-    /// those two protected methods allow custom storage of binary content
-    // as text
+    /// those two protected methods allow custom storage of binary content as text
     // - default implementation is to use hexa (ToSQL=true) or Base64 encodings
     procedure BinaryToText(var Value: RawUTF8; ToSQL: boolean; wasSQLString: PBoolean); virtual;
     procedure TextToBinary(Value: PUTF8Char; var result: RawByteString); virtual;
@@ -21397,11 +21396,13 @@ begin
       aValue.VDouble := GetExtended(pointer(temp));
     ftDate:
       aValue.VDateTime := Iso8601ToDateTime(temp);
-    ftBlob: begin
-      temp := BlobToTSQLRawBlob(temp);
-      aValue.VBlob := pointer(temp);
-      aValue.VBlobLen := length(temp);
-    end;
+    ftBlob:
+      if temp='' then
+        aValue.VType := ftNull else begin
+        temp := BlobToTSQLRawBlob(temp);
+        aValue.VBlob := pointer(temp);
+        aValue.VBlobLen := length(temp);
+      end;
     ftUTF8:
       aValue.VText := pointer(temp);
     else
@@ -23251,17 +23252,19 @@ var da: TDynArray;
     temp: TTextWriterStackBuffer;
 begin
   GetDynArray(Instance,da);
-  if fObjArray<>nil then
-    with TJSONSerializer.CreateOwnedStream(temp) do
-    try
-      if ExtendedJson then
-        include(fCustomOptions,twoForceJSONExtended); // smaller content
-      AddDynArrayJSON(da);
-      SetText(RawUTF8(data));
-    finally
-      Free;
-    end else
-    data := da.SaveTo;
+  if da.Count=0 then
+    data := '' else
+    if fObjArray<>nil then
+      with TJSONSerializer.CreateOwnedStream(temp) do
+      try
+        if ExtendedJson then
+          include(fCustomOptions,twoForceJSONExtended); // smaller content
+        AddDynArrayJSON(da);
+        SetText(RawUTF8(data));
+      finally
+        Free;
+      end else
+      data := da.SaveTo;
 end;
 
 procedure TSQLPropInfoRTTIDynArray.CopySameClassProp(Source: TObject;
@@ -23414,14 +23417,16 @@ procedure TSQLPropInfoRTTIDynArray.GetFieldSQLVar(Instance: TObject;
 begin
   Serialize(Instance,temp,false);
   aValue.Options := [];
-  if fObjArray<>nil then begin
-    aValue.VType := ftUTF8; // JSON
-    aValue.VText := pointer(temp);
-  end else begin
-    aValue.VType := ftBlob; // binary
-    aValue.VBlob := pointer(temp);
-    aValue.VBlobLen := length(temp);
-  end;
+  if temp='' then
+    aValue.VType := ftNull else
+    if fObjArray<>nil then begin
+      aValue.VType := ftUTF8; // JSON
+      aValue.VText := pointer(temp);
+    end else begin
+      aValue.VType := ftBlob; // binary
+      aValue.VBlob := pointer(temp);
+      aValue.VBlobLen := length(temp);
+    end;
 end;
 
 function TSQLPropInfoRTTIDynArray.GetDynArrayElemType: PTypeInfo;
@@ -25886,8 +25891,10 @@ var len: PInteger;
     U: PPUTF8Char;
 begin
   result := 0;
-  if (self=nil) or (cardinal(Field)>cardinal(FieldCount)) or (fRowCount=0) then
+  if (self=nil) or (cardinal(Field)>cardinal(FieldCount)) or (fRowCount=0) then begin
+    LenStore.buf := nil; // avoid GPF in LenStore.Done
     exit;
+  end;
   U := @fResults[FieldCount+Field]; // start reading after first Row (= Field Names)
   len := LenStore.Init(fRowCount*SizeOf(len^));
   for i := 1 to fRowCount do begin
@@ -40552,8 +40559,9 @@ begin
           aSession := Server.fSessionAuthentication[i].RetrieveSession(self);
           if aSession<>nil then begin
             {$ifdef WITHLOG}
-            Log.Log(sllUserAuth,'%/% %',[aSession.User.LogonName,aSession.ID,
-              aSession.RemoteIP],self);
+            if (aSession.RemoteIP<>'') and (aSession.RemoteIP<>'127.0.0.1') then
+              Log.Log(sllUserAuth,'%/% %',[aSession.User.LogonName,aSession.ID,
+                aSession.RemoteIP],self);
             {$endif}
             result := true;
             exit;
@@ -40755,7 +40763,8 @@ begin
       end;
       Stats.Processing := true;
     end;
-    Server.InternalLog('% %',[Name,Parameters],sllServiceCall);
+    if Parameters<>'' then
+      Server.InternalLog('% %',[Name,Parameters],sllServiceCall);
     CallBack(self);
     if Stats<>nil then begin
       QueryPerformanceCounter(timeEnd);
@@ -40919,8 +40928,9 @@ begin // expects Service, ServiceParameters, ServiceMethod(Index) to be set
       if [smdVar,smdOut,smdResult]*HasSPIParams<>[] then
         include(ServiceExecutionOptions,optNoLogOutput);
     end;
-    {$ifdef WITHLOG}
-    if sllServiceCall in Log.GenericFamily.Level then
+    {$ifdef WITHLOG} // load method call and parameter values (if worth it)
+    if (sllServiceCall in Log.GenericFamily.Level) and (ServiceParameters<>nil) and
+       (PWord(ServiceParameters)^<>ord('[')+ord(']') shl 8) then
       if optNoLogInput in ServiceExecutionOptions then
         Log.Log(sllServiceCall,'%{}',
           [PServiceMethod(ServiceMethod)^.InterfaceDotMethodName],Server) else
@@ -62465,7 +62475,9 @@ initialization
   {$ifndef USENORMTOUPPER}
   pointer(@SQLFieldTypeComp[sftUTF8Text]) := @AnsiIComp;
   {$endif}
+  {$ifdef MSWINDOWS} // don't change the main process name under Linux
   SetThreadNameDefault(GetCurrentThreadID,'Main Thread');
+  {$endif}
   SetThreadNameInternal := SetThreadNameWithLog;
   StatusCodeToErrorMessage := StatusCodeToErrorMsgBasic;
   GarbageCollectorFreeAndNil(JSONCustomParsers,TSynDictionary.Create(

@@ -1321,9 +1321,11 @@ type
     // exclusive of the zero-terminator. Note that the name length limit is in
     // UTF-8 bytes, not characters nor UTF-16 bytes. Any attempt to create a
     // function with a longer name will result in SQLITE_MISUSE being returned.
-    // - The third parameter (nArg) is the number of arguments that the SQL function
-    // or aggregate takes. If the third parameter is less than -1 or greater than
-    // 127 then the behavior is undefined.
+    // - The third parameter (nArg) is the number of arguments that the SQL
+    // function or aggregate takes. If this parameter is -1, then the SQL
+    // function or aggregate may take any number of arguments between 0 and the
+    // SQLITE_LIMIT_FUNCTION_ARG current limit. If the third parameter is less
+    // than -1 or greater than 127 then the behavior is undefined.
     // - The fourth parameter, eTextRep, specifies what text encoding this SQL
     // function prefers for its parameters. Every SQL function implementation must
     // be able to work with UTF-8, UTF-16le, or UTF-16be. But some implementations
@@ -5566,7 +5568,7 @@ function StatementCacheTotalTimeCompare(const A,B): integer;
 var i64: Int64;
 begin
   i64 := TSQLStatementCache(A).Timer.InternalTimer.TimeInMicroSec-
-    TSQLStatementCache(B).Timer.InternalTimer.TimeInMicroSec;
+         TSQLStatementCache(B).Timer.InternalTimer.TimeInMicroSec;
   if i64<0 then
     result := -1 else
   if i64>0 then

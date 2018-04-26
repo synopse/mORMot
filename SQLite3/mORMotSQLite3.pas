@@ -466,6 +466,8 @@ type
     /// used e.g. by IAdministratedDaemon to implement "pseudo-SQL" commands
     procedure AdministrationExecute(const DatabaseName,SQL: RawUTF8;
       var result: TServiceCustomAnswer); override;
+    /// retrieves the per-statement detailed timing, as a TDocVariantData
+    procedure ComputeDBStats(out result: variant);
 
     /// initialize the associated DB connection
     // - called by Create and on Backup/Restore just after DB.DBOpen
@@ -1294,6 +1296,24 @@ begin
     end;
     W.CancelLastComma;
     W.Add(']','}');
+  end;
+end;
+
+procedure TSQLRestServerDB.ComputeDBStats(out result: variant);
+var i: integer;
+    ndx: TIntegerDynArray;
+    doc: TDocVariantData absolute result;
+begin
+  doc.Init(JSON_OPTIONS_FAST_EXTENDED,dvObject);
+  DB.Lock;
+  try
+    fStatementCache.SortCacheByTotalTime(ndx);
+    with fStatementCache do
+    for i := 0 to Count-1 do
+      with Cache[ndx[i]] do
+        doc.AddValue(StatementSQL,Timer.ComputeDetails);
+  finally
+    DB.UnLock;
   end;
 end;
 

@@ -514,7 +514,7 @@ var
   // may better use a common TSynLog class for the whole application or module
   SynSMLog: TSynLogClass=TSynLog;
 
-  LONG_SCRIPT_EXECUTION: SynUnicode = 'Script runs for too long. Terminating';
+  LONG_SCRIPT_EXECUTION: string = 'Script runs for too long. Terminating';
 
   /// check is AFileName is relative path, and if true - transform it to absolute from ABaseDir
   //  if ACheckResultInsideBase = true the perform check of result path is under ABaseDir. If not - return '';
