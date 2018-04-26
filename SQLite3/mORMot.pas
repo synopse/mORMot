@@ -49182,6 +49182,7 @@ begin
   parser.Value := TObject(ObjectInstance);
   parser.Parse;
   Valid := parser.Valid;
+  TObject(ObjectInstance) := parser.Value; // 'null' -> FreeAndNil()
   result := parser.Dest;
 end;
 
@@ -49206,17 +49207,11 @@ end;
 function ObjectLoadJSON(var ObjectInstance; const JSON: RawUTF8;
   TObjectListItemClass: TClass; Options: TJSONToObjectOptions): boolean;
 var tmp: TSynTempBuffer;
-    parser: TJSONToObject;
 begin
   tmp.Init(JSON);
   if tmp.len<>0 then
     try
-      parser.From := tmp.buf;
-      parser.TObjectListItemClass := TObjectListItemClass;
-      parser.Options := Options;
-      parser.Value := TObject(ObjectInstance);
-      parser.Parse;
-      result := parser.Valid;
+      JSONToObject(ObjectInstance,tmp.buf,result,TObjectListItemClass,Options);
     finally
       tmp.Done;
     end else
@@ -61047,7 +61042,7 @@ begin
         else begin
           // pass by value
           if (RegisterIdent=0) AND (FPRegisterIdent=0) AND (SizeInStack>0) then
-          MoveFast(Value^,Stack[InStackOffset],SizeInStack) else begin
+            MoveFast(Value^,Stack[InStackOffset],SizeInStack) else begin
             if (RegisterIdent>0) then begin
               call.ParamRegs[RegisterIdent] := PPtrInt(Value)^;
               {$ifdef CPUARM}
@@ -61318,9 +61313,12 @@ begin
             break; // premature end of ..] (ParObjValuesUsed=false)
         case ValueType of
         smvObject: begin
-          Par := JSONToObject(fObjects[IndexVar],Par,valid,nil,JSONTOOBJECT_TOLERANTOPTIONS);
-          if not valid then
-            exit;
+          if PInteger(Par)^=NULL_LOW then
+            inc(Par,4) else begin
+            Par := JSONToObject(fObjects[IndexVar],Par,valid,nil,JSONTOOBJECT_TOLERANTOPTIONS);
+            if not valid then
+              exit;
+          end;
           IgnoreComma(Par);
         end;
         smvInterface:
