@@ -36246,13 +36246,17 @@ end;
 
 function TSQLRest.UpdateField(Table: TSQLRecordClass; const IDs: array of Int64;
   const FieldName: RawUTF8; const FieldValue: variant): boolean;
-var SetValue: RawUTF8;
+var SetValue,Where: RawUTF8;
     tableindex: integer;
 begin
   tableIndex := Model.GetTableIndexExisting(Table);
   VariantToInlineValue(FieldValue,SetValue);
-  result := ExecuteFmt('update % set %=:(%): where %', [Table.SQLTableName,
-    FieldName,SetValue,SelectInClause('RowID',IDs,'',INLINED_MAX)]);
+  Where := SelectInClause('RowID',IDs,'',INLINED_MAX);
+  if length(IDs)<=INLINED_MAX then
+    result := ExecuteFmt('update % set %=:(%): where %', [Table.SQLTableName,
+      FieldName,SetValue,Where]) else // don't cache such a statement
+    result := ExecuteFmt('update % set %=% where %', [Table.SQLTableName,
+      FieldName,SetValue,Where]);
   if result then
     fCache.NotifyDeletions(tableIndex,IDs);
 end;
