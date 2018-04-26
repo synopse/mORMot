@@ -9722,6 +9722,8 @@ type
     function GetEventByName(const aText: RawUTF8; out aEvent: TMethod): boolean;
   end;
 
+  /// define the implemetation used by TAlgoCompress.Decompress() 
+  TAlgoCompressLoad = (aclNormal, aclSafeSlow, aclNoCrcFast);
 
   /// abstract low-level parent class for generic compression/decompression algorithms
   // - will encapsulate the compression algorithm with crc32c hashing
@@ -9774,13 +9776,11 @@ type
     function CompressToBytes(Plain: PAnsiChar; PlainLen: integer; CompressionSizeTrigger: integer=100;
       CheckMagicForCompressed: boolean=false): TByteDynArray; overload;
     /// uncompress a RawByteString memory buffer with crc32c hashing
-    function Decompress(const Comp: RawByteString; SafeDecompression: boolean=false): RawByteString; overload;
+    function Decompress(const Comp: RawByteString; Load: TAlgoCompressLoad=aclNormal): RawByteString; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// uncompress a memory buffer with crc32c hashing
-    // - SafeDecompression=true will use slower AlgoDecompressPartial() which
-    // will avoid any buffer overflow
     procedure Decompress(Comp: PAnsiChar; CompLen: integer; out Result: RawByteString;
-      SafeDecompression: boolean=false); overload;
+      Load: TAlgoCompressLoad=aclNormal); overload;
     /// uncompress a RawByteString memory buffer with crc32c hashing
     function Decompress(const Comp: TByteDynArray): RawByteString; overload;
       {$ifdef HASINLINE}inline;{$endif}
@@ -9791,34 +9791,25 @@ type
     // - avoid any memory allocation in case of a stored content - otherwise, would
     // uncompress to the tmp variable, and return pointer(tmp) and length(tmp)
     function Decompress(const Comp: RawByteString; out PlainLen: integer;
-      var tmp: RawByteString; SafeDecompression: boolean=false): pointer; overload;
+      var tmp: RawByteString; Load: TAlgoCompressLoad=aclNormal): pointer; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// uncompress a RawByteString memory buffer with crc32c hashing
     // - returns nil if crc32 hash failed, i.e. if the supplied Data is not correct
-    // - returns a pointer to the raw data and fill Len variable, after crc32c hash
+    // - returns a pointer to an uncompressed data buffer of PlainLen bytes
     // - avoid any memory allocation in case of a stored content - otherwise, would
     // uncompress to the tmp variable, and return pointer(tmp) and length(tmp)
     function Decompress(Comp: PAnsiChar; CompLen: integer; out PlainLen: integer;
-      var tmp: RawByteString; SafeDecompression: boolean=false): pointer; overload;
-    /// uncompress a RawByteString memory buffer without crc32c hashing
-    // - you should not use this method, unless you know exactly what you are doing!
-    // - returns a pointer to the raw data and fill Len variable
-    // - avoid any memory allocation in case of a stored content - otherwise, would
-    // uncompress to the tmp variable, and return pointer(tmp) and length(tmp)
-    function DecompressFast(Comp: PAnsiChar; CompLen: integer; out PlainLen: integer;
-      var tmp: RawByteString): pointer;
+      var tmp: RawByteString; Load: TAlgoCompressLoad=aclNormal): pointer; overload;
     /// decode the header of a memory buffer compressed via the Compress() method
-    // - validates the crc32c of the compressed data, then return the uncompressed
-    // size in bytes on success
-    // - returns 0 if the crc32c does not match
+    // - validates the crc32c of the compressed data (unless Load=aclNoCrcFast),
+    // then return the uncompressed size in bytes, or 0 if the crc32c does not match
     // - should call DecompressBody() later on to actually retrieve the content
-    function DecompressHeader(Comp: PAnsiChar; CompLen: integer): integer;
+    function DecompressHeader(Comp: PAnsiChar; CompLen: integer;
+      Load: TAlgoCompressLoad=aclNormal): integer;
     /// decode the content of a memory buffer compressed via the Compress() method
     // - PlainLen has been returned by a previous call to DecompressHeader()
-    // - SafeDecompression=true will use slower AlgoDecompressPartial() which
-    // will avoid any buffer overflow
     function DecompressBody(Comp,Plain: PAnsiChar; CompLen,PlainLen: integer;
-      SafeDecompression: boolean=false): boolean;
+      Load: TAlgoCompressLoad=aclNormal): boolean;
     /// partial decoding of a memory buffer compressed via the Compress() method
     // - returns 0 on error, or how many bytes have been written to Partial
     // - will call virtual AlgoDecompressPartial() which is slower, but expected
@@ -9922,11 +9913,12 @@ type
     fOnCanDelete: TSynDictionaryCanDeleteEvent;
     function InArray(const aKey,aArrayValue; aAction: TSynDictionaryInArray): boolean;
     procedure SetTimeouts;
-    function GetTimeOut: cardinal;
+    function ComputeNextTimeOut: cardinal;
     function KeyFullHash(const Elem): cardinal;
     function KeyFullCompare(const A,B): integer;
     function GetCapacity: integer;
     procedure SetCapacity(const Value: integer);
+    function GetTimeOutSeconds: cardinal;
   public
     /// initialize the dictionary storage, specifyng dynamic array keys/values
     // - aKeyTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
@@ -10022,8 +10014,8 @@ type
     // - expect the stored value to be a dynamic array itself
     // - would search for aKey as primary key, then use TDynArray.Find
     // to delete any aArrayValue match in the associated dynamic array
-    // - returns FALSE if Values is not a tkDynArray, or if aKey or aArrayValue were
-    // not found
+    // - returns FALSE if Values is not a tkDynArray, or if aKey or aArrayValue
+    // were not found
     // - this method is thread-safe, since it will lock the instance
     function FindInArray(const aKey, aArrayValue): boolean;
     /// add aArrayValue item within a dynamic-array value associated via aKey
@@ -10092,9 +10084,6 @@ type
     /// returns how many items are currently stored in this dictionary
     // - this method is thread-safe
     function Count: integer;
-    /// after how many seconds entries are deprecated
-    // - to be processed on request by DeleteDeprecated
-    function TimeoutSeconds: cardinal;
     /// direct access to the primary key identifiers
     // - if you want to access the keys, you should use fSafe.Lock/Unlock
     property Keys: TDynArrayHashed read fKeys;
@@ -10103,6 +10092,11 @@ type
     property Values: TDynArray read fValues;
     /// defines how many items are currently stored in Keys/Values internal arrays
     property Capacity: integer read GetCapacity write SetCapacity;
+    /// direct low-level access to the internal access tick (GetTickCount64 shr 10)
+    // - may be nil if TimeOutSeconds=0
+    property TimeOut: TCardinalDynArray read fTimeOut;
+    /// returns the aTimeOutSeconds parameter value, as specified to Create()
+    property TimeOutSeconds: cardinal read GetTimeOutSeconds;
     /// the compression algorithm used for binary serialization
     property CompressAlgo: TAlgoCompress read fCompressAlgo write fCompressAlgo;
     /// callback to by-pass DeleteDeprecated deletion by returning false
@@ -17762,26 +17756,32 @@ type
     constructor Create(const aName: RawUTF8); reintroduce; overload; virtual;
     /// initialize a storage from a SaveTo persisted buffer
     // - raise a EFastReader exception on decoding error
-    constructor CreateFrom(const aBuffer: RawByteString);
+    constructor CreateFrom(const aBuffer: RawByteString;
+      aLoad: TAlgoCompressLoad = aclNormal);
     /// initialize a storage from a SaveTo persisted buffer
     // - raise a EFastReader exception on decoding error
-    constructor CreateFromBuffer(aBuffer: pointer; aBufferLen: integer);
+    constructor CreateFromBuffer(aBuffer: pointer; aBufferLen: integer;
+      aLoad: TAlgoCompressLoad = aclNormal);
     /// initialize a storage from a SaveTo persisted buffer
     // - raise a EFastReader exception on decoding error
-    constructor CreateFromFile(const aFileName: TFileName);
+    constructor CreateFromFile(const aFileName: TFileName;
+      aLoad: TAlgoCompressLoad = aclNormal);
     /// fill the storage from a SaveTo persisted buffer
     // - actually call the LoadFromReader() virtual method for persistence
     // - raise a EFastReader exception on decoding error
-    procedure LoadFrom(const aBuffer: RawByteString); overload;
+    procedure LoadFrom(const aBuffer: RawByteString;
+      aLoad: TAlgoCompressLoad = aclNormal); overload;
     /// initialize the storage from a SaveTo persisted buffer
     // - actually call the LoadFromReader() virtual method for persistence
     // - raise a EFastReader exception on decoding error
-    procedure LoadFrom(aBuffer: pointer; aBufferLen: integer); overload; virtual;
+    procedure LoadFrom(aBuffer: pointer; aBufferLen: integer;
+       aLoad: TAlgoCompressLoad = aclNormal); overload; virtual;
     /// initialize the storage from a SaveToFile content
     // - actually call the LoadFromReader() virtual method for persistence
     // - returns false if the file is not found, true if the file was loaded
     // without any problem, or raise a EFastReader exception on decoding error
-    function LoadFromFile(const aFileName: TFileName): boolean;
+    function LoadFromFile(const aFileName: TFileName;
+      aLoad: TAlgoCompressLoad = aclNormal): boolean;
     /// persist the content as a SynLZ-compressed binary blob
     // - to be retrieved later on via LoadFrom method
     // - actually call the SaveToWriter() protected virtual method for persistence
@@ -18299,6 +18299,9 @@ const
   /// CompressionSizeTrigger parameter SYNLZTRIG[true] will disable then
   // SynLZCompress() compression
   SYNLZTRIG: array[boolean] of integer = (100, maxInt);
+  /// used e.g. as when ALGO_SAFE[SafeDecompression] for TAlgoCompress.Decompress
+  ALGO_SAFE: array[boolean] of TAlgoCompressLoad = (aclNormal, aclSafeSlow);
+
 
 /// deprecated function - please call AlgoSynLZ.Compress() method
 function SynLZCompress(const Data: RawByteString; CompressionSizeTrigger: integer=100;
@@ -51255,21 +51258,24 @@ begin
   fName := aName;
 end;
 
-constructor TSynPersistentStore.CreateFrom(const aBuffer: RawByteString);
+constructor TSynPersistentStore.CreateFrom(const aBuffer: RawByteString;
+  aLoad: TAlgoCompressLoad);
 begin
-  CreateFromBuffer(pointer(aBuffer),length(aBuffer));
+  CreateFromBuffer(pointer(aBuffer),length(aBuffer),aLoad);
 end;
 
-constructor TSynPersistentStore.CreateFromBuffer(aBuffer: pointer; aBufferLen: integer);
+constructor TSynPersistentStore.CreateFromBuffer(
+  aBuffer: pointer; aBufferLen: integer; aLoad: TAlgoCompressLoad);
 begin
   Create('');
-  LoadFrom(aBuffer,aBufferLen);
+  LoadFrom(aBuffer,aBufferLen,aLoad);
 end;
 
-constructor TSynPersistentStore.CreateFromFile(const aFileName: TFileName);
+constructor TSynPersistentStore.CreateFromFile(const aFileName: TFileName;
+  aLoad: TAlgoCompressLoad);
 begin
   Create('');
-  LoadFromFile(aFileName);
+  LoadFromFile(aFileName,aLoad);
 end;
 
 procedure TSynPersistentStore.LoadFromReader;
@@ -51282,14 +51288,18 @@ begin
   aWriter.Write(fName);
 end;
 
-procedure TSynPersistentStore.LoadFrom(const aBuffer: RawByteString);
+procedure TSynPersistentStore.LoadFrom(const aBuffer: RawByteString;
+  aLoad: TAlgoCompressLoad);
 begin
   if aBuffer <> '' then
-    LoadFrom(pointer(aBuffer),length(aBuffer));
+    LoadFrom(pointer(aBuffer),length(aBuffer),aLoad);
 end;
 
-procedure TSynPersistentStore.LoadFrom(aBuffer: pointer; aBufferLen: integer);
+procedure TSynPersistentStore.LoadFrom(aBuffer: pointer; aBufferLen: integer;
+  aLoad: TAlgoCompressLoad);
 var localtemp: RawByteString;
+    p: pointer;
+    len: integer;
     temp: PRawByteString;
     algo: TAlgoCompress;
 begin
@@ -51302,20 +51312,21 @@ begin
   temp := fReaderTemp;
   if temp=nil then
     temp := @localtemp;
-  algo.Decompress(aBuffer,aBufferLen,temp^);
-  if temp^ = '' then
+  p := algo.Decompress(aBuffer,aBufferLen,len,temp^,aLoad);
+  if p=nil then
     fReader.ErrorData('%.LoadFrom %.Decompress failed',[self,algo]);
-  fReader.Init(temp^);
+  fReader.Init(p,len);
   LoadFromReader;
 end;
 
-function TSynPersistentStore.LoadFromFile(const aFileName: TFileName): boolean;
+function TSynPersistentStore.LoadFromFile(const aFileName: TFileName;
+  aLoad: TAlgoCompressLoad): boolean;
 var temp: RawByteString;
 begin
   temp := StringFromFile(aFileName);
   result := temp<>'';
   if result then
-    LoadFrom(temp);
+    LoadFrom(temp,aLoad);
 end;
 
 procedure TSynPersistentStore.SaveTo(out aBuffer: RawByteString; nocompression: boolean;
@@ -59017,13 +59028,13 @@ begin
   fValues.Init(aValueTypeInfo,fSafe.Padding[DIC_VALUE].VAny,
     @fSafe.Padding[DIC_VALUECOUNT].VInteger);
   fTimeouts.Init(TypeInfo(TIntegerDynArray),fTimeOut,@fSafe.Padding[DIC_TIMECOUNT].VInteger);
-  fSafe.Padding[DIC_TIMESEC].VInteger := aTimeoutSeconds;
   if aCompressAlgo=nil then
-    fCompressAlgo := AlgoSynLZ else
-    fCompressAlgo := aCompressAlgo;
+    aCompressAlgo := AlgoSynLZ;
+  fCompressAlgo := aCompressAlgo;
+  fSafe.Padding[DIC_TIMESEC].VInteger := aTimeoutSeconds;
 end;
 
-function TSynDictionary.GetTimeOut: cardinal;
+function TSynDictionary.ComputeNextTimeOut: cardinal;
 begin
   result := fSafe.Padding[DIC_TIMESEC].VInteger;
   if result<>0 then
@@ -59047,6 +59058,11 @@ begin
   fSafe.UnLock;
 end;
 
+function TSynDictionary.GetTimeOutSeconds: cardinal;
+begin
+  result := fSafe.Padding[DIC_TIMESEC].VInteger;
+end;
+
 procedure TSynDictionary.SetTimeouts;
 var i: integer;
     timeout: cardinal;
@@ -59054,7 +59070,7 @@ begin
   if fSafe.Padding[DIC_TIMESEC].VInteger=0 then
     exit;
   fTimeOuts.SetCount(fSafe.Padding[DIC_KEYCOUNT].VInteger);
-  timeout := GetTimeout;
+  timeout := ComputeNextTimeOut;
   for i := 0 to fSafe.Padding[DIC_TIMECOUNT].VInteger-1 do
     fTimeOut[i] := timeout;
 end;
@@ -59124,7 +59140,7 @@ begin
         ElemCopyFrom(aKey,result); // fKey[result] := aKey;
       if fValues.Add(aValue)<>result then
         raise ESynException.CreateUTF8('%.Add fValues.Add',[self]);
-      tim := GetTimeOut;
+      tim := ComputeNextTimeOut;
       if tim>0 then
         fTimeOuts.Add(tim);
     end else
@@ -59140,7 +59156,7 @@ var added: boolean;
 begin
   fSafe.Lock;
   try
-    tim := GetTimeout;
+    tim := ComputeNextTimeOut;
     result := fKeys.FindHashedForAdding(aKey,added);
     if added then begin
       with fKeys{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif} do
@@ -59410,11 +59426,6 @@ begin
   {$else}
   result := fSafe.LockedInt64[DIC_KEYCOUNT];
   {$endif}
-end;
-
-function TSynDictionary.TimeoutSeconds: cardinal;
-begin
-  result := fSafe.Padding[DIC_TIMESEC].VInteger;
 end;
 
 procedure TSynDictionary.SaveToJSON(W: TTextWriter; EnumSetsAsText: boolean);
@@ -62400,8 +62411,9 @@ begin
   end;
 end;
 
-function TAlgoCompress.Compress(Plain, Comp: PAnsiChar; PlainLen, CompLen,
-  CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean): integer;
+function TAlgoCompress.Compress(Plain, Comp: PAnsiChar; PlainLen,
+  CompLen: integer; CompressionSizeTrigger: integer;
+  CheckMagicForCompressed: boolean): integer;
 var len: integer;
 begin
   result := 0;
@@ -62434,8 +62446,9 @@ begin
     result := AlgoCompressDestLen(PLainLen)+9;
 end;
 
-function TAlgoCompress.CompressToBytes(Plain: PAnsiChar; PlainLen,
-  CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean): TByteDynArray;
+function TAlgoCompress.CompressToBytes(Plain: PAnsiChar; PlainLen: integer;
+  CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean
+  ): TByteDynArray;
 var len: integer;
     R: PAnsiChar;
     crc: cardinal;
@@ -62481,31 +62494,31 @@ begin
 end;
 
 procedure TAlgoCompress.Decompress(Comp: PAnsiChar; CompLen: integer;
-  out Result: RawByteString; SafeDecompression: boolean);
+  out Result: RawByteString; Load: TAlgoCompressLoad);
 var len: integer;
 begin
   len := DecompressHeader(Comp,CompLen);
   if len=0 then
     exit;
   SetString(result,nil,len);
-  if not DecompressBody(Comp,pointer(result),CompLen,len,SafeDecompression) then
+  if not DecompressBody(Comp,pointer(result),CompLen,len,Load) then
     result := '';
 end;
 
 function TAlgoCompress.Decompress(const Comp: RawByteString;
-  SafeDecompression: boolean): RawByteString;
+  Load: TAlgoCompressLoad): RawByteString;
 begin
-  Decompress(pointer(Comp),length(Comp),result,SafeDecompression);
+  Decompress(pointer(Comp),length(Comp),result,Load);
 end;
 
 function TAlgoCompress.Decompress(const Comp: RawByteString;
-  out PlainLen: integer; var tmp: RawByteString; SafeDecompression: boolean): pointer;
+  out PlainLen: integer; var tmp: RawByteString; Load: TAlgoCompressLoad): pointer;
 begin
-  result := Decompress(pointer(Comp),length(Comp),PlainLen,tmp,SafeDecompression);
+  result := Decompress(pointer(Comp),length(Comp),PlainLen,tmp,Load);
 end;
 
 function TAlgoCompress.Decompress(Comp: PAnsiChar; CompLen: integer;
-  out PlainLen: integer; var tmp: RawByteString; SafeDecompression: boolean): pointer;
+  out PlainLen: integer; var tmp: RawByteString; Load: TAlgoCompressLoad): pointer;
 begin
   result := nil;
   PlainLen := DecompressHeader(Comp,CompLen);
@@ -62515,29 +62528,9 @@ begin
     result := Comp+9 else begin
     if PlainLen > length(tmp) then
       SetString(tmp,nil,PlainLen);
-    if DecompressBody(Comp,pointer(tmp),CompLen,PlainLen,SafeDecompression) then
+    if DecompressBody(Comp,pointer(tmp),CompLen,PlainLen,Load) then
       result := pointer(tmp);
   end;
-end;
-
-function TAlgoCompress.DecompressFast(Comp: PAnsiChar; CompLen: integer;
-  out PlainLen: integer; var tmp: RawByteString): pointer;
-begin
-  if (self=nil) or (CompLen<=9) or (Comp=nil) then
-    result := nil else
-  if Comp[4]=COMPRESS_STORED then begin
-    PlainLen := CompLen-9;
-    result := Comp+9;
-  end else
-  if (Comp[4]=AnsiChar(AlgoID)) and (self<>nil) then begin
-    PlainLen := AlgoDecompressDestLen(Comp+9);
-    if PlainLen > length(tmp) then
-      SetString(tmp,nil,PlainLen);
-    if AlgoDecompress(Comp+9,CompLen-9,pointer(tmp))=PlainLen then
-      result := pointer(tmp) else
-      result := nil;
-  end else
-    result := nil;
 end;
 
 function TAlgoCompress.DecompressPartial(Comp, Partial: PAnsiChar;
@@ -62564,11 +62557,12 @@ begin
   result := PartialLen;
 end;
 
-function TAlgoCompress.DecompressHeader(Comp: PAnsiChar; CompLen: integer): integer;
+function TAlgoCompress.DecompressHeader(Comp: PAnsiChar; CompLen: integer;
+  Load: TAlgoCompressLoad): integer;
 begin
   result := 0;
   if (self=nil) or (CompLen<=9) or (Comp=nil) or
-     (AlgoHash(0,Comp+9,CompLen-9)<>PCardinal(Comp+5)^) then
+     ((Load<>aclNoCrcFast) and (AlgoHash(0,Comp+9,CompLen-9)<>PCardinal(Comp+5)^)) then
     exit;
   if Comp[4]=COMPRESS_STORED then begin
     if PCardinal(Comp)^=PCardinal(Comp+5)^ then
@@ -62579,7 +62573,7 @@ begin
 end;
 
 function TAlgoCompress.DecompressBody(Comp, Plain: PAnsiChar;
-  CompLen, PlainLen: integer; SafeDecompression: boolean): boolean;
+  CompLen, PlainLen: integer; Load: TAlgoCompressLoad): boolean;
 begin
   result := false;
   if (self=nil) or (PlainLen<=0) then
@@ -62587,14 +62581,19 @@ begin
   if Comp[4]=COMPRESS_STORED then
     MoveFast(Comp[9],Plain[0],PlainLen) else
   if Comp[4]=AnsiChar(AlgoID) then
-    if SafeDecompression then begin
+    case Load of
+    aclNormal:
+      if (AlgoDecompress(Comp+9,CompLen-9,Plain)<>PlainLen) or
+         (AlgoHash(0,Plain,PlainLen)<>PCardinal(Comp)^) then
+        exit;
+    aclSafeSlow:
       if (AlgoDecompressPartial(Comp+9,CompLen-9,Plain,PlainLen)<>PlainLen) or
          (AlgoHash(0,Plain,PlainLen)<>PCardinal(Comp)^) then
         exit;
-    end else
-    if (AlgoDecompress(Comp+9,CompLen-9,Plain)<>PlainLen) or
-       (AlgoHash(0,Plain,PlainLen)<>PCardinal(Comp)^) then
-      exit;
+    aclNoCrcFast:
+      if (AlgoDecompress(Comp+9,CompLen-9,Plain)<>PlainLen) then
+        exit;
+    end;
   result := true;
 end;
 
@@ -62668,7 +62667,7 @@ end;
 function SynLZDecompressBody(P,Body: PAnsiChar; PLen,BodyLen: integer;
   SafeDecompression: boolean): boolean;
 begin
-  result := AlgoSynLZ.DecompressBody(P,Body,PLen,BodyLen,SafeDecompression);
+  result := AlgoSynLZ.DecompressBody(P,Body,PLen,BodyLen,ALGO_SAFE[SafeDecompression]);
 end;
 
 function SynLZDecompressPartial(P,Partial: PAnsiChar; PLen,PartialLen: integer): integer;

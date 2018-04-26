@@ -10044,7 +10044,7 @@ procedure TTestCompression._TAlgoCompress;
       timer.ComputeTime;
       inc(timecomp, timer.LastTimeInMicroSec);
       timer.Start;
-      s2 := algo.Decompress(t,false);
+      s2 := algo.Decompress(t,aclNoCrcFast);
       timer.ComputeTime;
       inc(timedecomp, timer.LastTimeInMicroSec);
       Check(s2=s, algo.ClassName);
@@ -10060,7 +10060,7 @@ procedure TTestCompression._TAlgoCompress;
        ((comp*Int64(1000*1000)) div timecomp)shr 20,
        ((comp*Int64(1000*1000)) div timedecomp)shr 20,
        ((plain*Int64(1000*1000)) div timedecomp)shr 20]));
-    s2 := algo.Decompress(algo.Compress(s),false);
+    s2 := algo.Decompress(algo.Compress(s),aclNoCrcFast);
     Check(s2=s, algo.ClassName);
     if (log<>'') and (s2<>s) then FileFromString(s2,'bigTestPartial'+algo.ClassName+'.log');
   end;
