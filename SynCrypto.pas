@@ -397,7 +397,8 @@ type
   TAESKey = THash256;
 
   /// stores an array of THash128 to check for their unicity
-  // - used e.g. to implement TAESAbstract.IVHistoryDepth property
+  // - used e.g. to implement TAESAbstract.IVHistoryDepth property, but may be
+  // also used to efficiently store a list of 128-bit IPv6 addresses
   {$ifdef UNICODE}THash128History = record{$else}THash128History = object{$endif}
   private
     Previous: array of THash128Rec;

@@ -23175,19 +23175,21 @@ begin
   case VType of
   varEmpty, varNull:
     Output.VType := ftNull;
-  varCurrency: begin
-    Output.VType := ftCurrency;
-    Output.VInt64 := VInt64;
-  end;
-  varString: begin // assume RawUTF8
-    Output.VType := ftUTF8;
-    Output.VText := VPointer;
+  varByte: begin
+    Output.VType := ftInt64;
+    Output.VInt64 := VByte;
   end;
   varInteger: begin
     Output.VType := ftInt64;
     Output.VInt64 := VInteger;
   end;
-  varInt64: begin
+  {$ifndef DELPHI5OROLDER}
+  varLongWord: begin
+    Output.VType := ftInt64;
+    Output.VInt64 := VLongWord;
+  end;
+  {$endif}
+  varWord64, varInt64: begin
     Output.VType := ftInt64;
     Output.VInt64 := VInt64;
   end;
@@ -23198,6 +23200,14 @@ begin
   varDouble: begin // varDate would be converted into ISO8601 by VariantToUTF8()
     Output.VType := ftDouble;
     Output.VDouble := VDouble;
+  end;
+  varCurrency: begin
+    Output.VType := ftCurrency;
+    Output.VInt64 := VInt64;
+  end;
+  varString: begin // assume RawUTF8
+    Output.VType := ftUTF8;
+    Output.VText := VPointer;
   end;
   else // handle less current cases
     if VariantToInt64(Input,Output.VInt64) then
