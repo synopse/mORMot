@@ -254,10 +254,10 @@ type
     EVP_sha512: function: PEVP_MD; cdecl;
     EVP_PKEY_size: function(key: PEVP_PKEY): integer; cdecl;
     EVP_DigestSignInit: function(aCtx: PEVP_MD_CTX; aPCtx: PEVP_PKEY_CTX; aType: PEVP_MD; aEngine: ENGINE; aKey: PEVP_PKEY): integer; cdecl;
-    EVP_DigestUpdate: function(ctx: PEVP_MD_CTX; d: pointer; cnt: cardinal): integer; cdecl;
-    EVP_DigestSignFinal: function(ctx: PEVP_MD_CTX; d: PByte; var cnt: cardinal): integer; cdecl;
+    EVP_DigestUpdate: function(ctx: PEVP_MD_CTX; d: pointer; cnt: size_t): integer; cdecl;
+    EVP_DigestSignFinal: function(ctx: PEVP_MD_CTX; d: PByte; var cnt: size_t): integer; cdecl;
     EVP_DigestVerifyInit: function(aCtx: PEVP_MD_CTX; aPCtx: PEVP_PKEY_CTX; aType: PEVP_MD; aEngine: ENGINE; aKey: pEVP_PKEY): integer; cdecl;
-    EVP_DigestVerifyFinal: function(ctx: pEVP_MD_CTX; d: PByte; cnt: cardinal): integer; cdecl;
+    EVP_DigestVerifyFinal: function(ctx: pEVP_MD_CTX; d: PByte; cnt: size_t): integer; cdecl;
     CRYPTO_malloc: function(aLength: longint; f: PAnsiChar; aLine: integer): pointer; cdecl;
     CRYPTO_free: procedure(str: pointer); cdecl;
     SSLeay_version: function(t: integer): PAnsiChar; cdecl;
@@ -301,7 +301,7 @@ type
     SSL_get0_alpn_selected: procedure(s: PSSL; out data: PAnsiChar; out len: integer); cdecl;
     SSL_clear: function(s: PSSL): integer; cdecl;
     // aliases
-    EVP_DigestVerifyUpdate: function(ctx: PEVP_MD_CTX; d: pointer; cnt: cardinal): integer; cdecl;
+    EVP_DigestVerifyUpdate: function(ctx: PEVP_MD_CTX; d: pointer; cnt: size_t): integer; cdecl;
     sk_ASN1_OBJECT_num: function(stack: PSTACK): integer; cdecl;  // = sk_num
     sk_GENERAL_NAME_num: function(stack: PSTACK): integer; cdecl; // = sk_num
     sk_GENERAL_NAME_pop: function(stack: PSTACK): pointer; cdecl; // = sk_pop
@@ -755,7 +755,7 @@ var
   priv: PBIO;
   pkey: PEVP_PKEY;
   ctx: PEVP_MD_CTX;
-  size: cardinal;
+  size: size_t;
 begin
   result := '';
   if (privkey = nil) or (privkeylen = 0) then begin
