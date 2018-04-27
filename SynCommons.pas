@@ -35883,7 +35883,9 @@ begin
   GetSystemTimeAsFileTime(ft); // very fast, with 100 ns unit
   {$ifdef CPU64}
   FileTimeToInt64(ft,nano100);
-  result := (nano100-DateFileTimeDelta)/(10000000.0*SecsPerDay);
+  // in two explicit steps to circumvent weird precision error on FPC
+  result := nano100-DateFileTimeDelta;
+  result := result/(10000000.0*SecsPerDay);
   {$else} // use PInt64 to avoid URW699 with Delphi 6 / Kylix
   dec(PInt64(@ft)^,DateFileTimeDelta);
   result := PInt64(@ft)^/(10000000.0*SecsPerDay);
