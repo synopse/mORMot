@@ -4610,6 +4610,7 @@ function Int64ScanIndex(P: PInt64Array; Count: PtrInt; const Value: Int64): PtrI
 // - returns index of P^[index]=Value
 // - returns -1 if Value was not found
 function QWordScanIndex(P: PQWordArray; Count: PtrInt; const Value: QWord): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fast search of an unsigned integer in an integer array
 // - returns true if P^=Value within Count entries
@@ -4627,6 +4628,7 @@ function Int64ScanExists(P: PInt64Array; Count: PtrInt; const Value: Int64): boo
 // - return index of P^[index]=Value
 // - return -1 if Value was not found
 function PtrUIntScanIndex(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fast search of a pointer-sized unsigned integer position
 // in an pointer-sized integer array
@@ -4634,7 +4636,7 @@ function PtrUIntScanIndex(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): PtrI
 // - returns true if P^=Value within Count entries
 // - returns false if Value was not found
 function PtrUIntScanExists(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): boolean;
-  {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fast search of an unsigned Word value position in a Word array
 // - Count is the number of Word entries in P^
@@ -4789,6 +4791,9 @@ function AddInt64(var Values: TInt64DynArray; var ValuesCount: integer; Value: I
 /// add a 64-bit integer value at the end of a dynamic array of integers
 function AddInt64(var Values: TInt64DynArray; Value: Int64): integer; overload;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// if not already existing, add a 64-bit integer value to a dynamic array
+function AddInt64Once(var Values: TInt64DynArray; Value: Int64): integer;
 
 /// delete any 32-bit integer in Values[]
 procedure DeleteInteger(var Values: TIntegerDynArray; Index: PtrInt); overload;
@@ -9894,6 +9899,7 @@ type
     aOpaque: pointer): boolean of object;
 
   /// event called by TSynDictionary.DeleteDeprecated
+  // - called just before deletion: return false to by-pass this item
   TSynDictionaryCanDeleteEvent = function(const aKey, aValue; aIndex: integer): boolean of object;
 
   /// thread-safe dictionary to store some values from associated keys
@@ -30380,6 +30386,13 @@ begin
   Values[result] := Value;
 end;
 
+function AddInt64Once(var Values: TInt64DynArray; Value: Int64): integer;
+begin
+  result := Int64ScanIndex(pointer(Values), length(Values), Value);
+  if result<0 then
+    result := AddInt64(Values, Value);
+end;
+
 procedure DeleteWord(var Values: TWordDynArray; Index: PtrInt);
 var n: PtrInt;
 begin
@@ -30823,66 +30836,6 @@ asm
 end;
 {$endif}
 
-function PtrUIntScanExists(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): boolean;
-{$ifdef PUREPASCAL}
-begin
-  {$ifdef CPU64}
-  result := Int64ScanExists(pointer(P),Count,Value);
-  {$else}
-  result := IntegerScanExists(pointer(P),Count,Value);
-  {$endif}
-end;
-{$else}
-asm
-  jmp IntegerScanExists;
-end;
-{$endif}
-
-function PtrUIntScanIndex(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): PtrInt;
-{$ifdef PUREPASCAL}
-var i: PtrInt; // optimized code for speed
-begin
-  if P<>nil then begin
-    result := 0;
-    for i := 1 to Count shr 2 do // 4 PtrUInt by loop - aligned read
-      if P^[0]<>Value then
-      if P^[1]<>Value then
-      if P^[2]<>Value then
-      if P^[3]<>Value then begin
-        inc(PByte(P),SizeOf(P^[0])*4);
-        inc(result,4);
-      end else begin
-        inc(result,3);
-        exit;
-      end else begin
-        inc(result,2);
-        exit;
-      end else begin
-        inc(result,1);
-        exit;
-      end else
-        exit;
-    for i := 0 to (Count and 3)-1 do // last 0..3 PtrUInt
-      if P^[i]=Value then
-        exit else
-        inc(result);
-  end;
-  result := -1;
-end;
-{$else}
-asm // identical to IntegerScanIndex() asm stub
-        push    eax
-        call    IntegerScan
-        test    eax, eax
-        pop     edx
-        jnz     @e
-        dec     eax // returns -1
-        ret
-@e:     sub     eax, edx
-        shr     eax, 2
-end;
-{$endif}
-
 function Int64ScanIndex(P: PInt64Array; Count: PtrInt; const Value: Int64): PtrInt;
 var i: PtrInt; // optimized code for speed
 begin
@@ -30906,7 +30859,7 @@ begin
         exit;
       end else
         exit;
-    for i := 0 to (Count and 3)-1 do // last 0..3 PtrUInt
+    for i := 0 to (Count and 3)-1 do // last 0..3 Int64
       if P^[i]=Value then
         exit else
         inc(result);
@@ -30915,35 +30868,47 @@ begin
 end;
 
 function QWordScanIndex(P: PQWordArray; Count: PtrInt; const Value: QWord): PtrInt;
-var i: PtrInt; // optimized code for speed
 begin
-  if P<>nil then begin
-    result := 0;
-    for i := 1 to Count shr 2 do // 4 PtrUInt by loop - aligned read
-      if P^[0]<>Value then
-      if P^[1]<>Value then
-      if P^[2]<>Value then
-      if P^[3]<>Value then begin
-        inc(PByte(P),SizeOf(P^[0])*4);
-        inc(result,4);
-      end else begin
-        inc(result,3);
-        exit;
-      end else begin
-        inc(result,2);
-        exit;
-      end else begin
-        inc(result,1);
-        exit;
-      end else
-        exit;
-    for i := 0 to (Count and 3)-1 do // last 0..3 PtrUInt
-      if P^[i]=Value then
-        exit else
-        inc(result);
-  end;
-  result := -1;
+  result := Int64ScanIndex(pointer(P),Count,Value); // this is the very same code
 end;
+
+function PtrUIntScanExists(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): boolean;
+{$ifdef HASINLINE}
+begin
+  {$ifdef CPU64}
+  result := Int64ScanExists(pointer(P),Count,Value);
+  {$else}
+  result := IntegerScanExists(pointer(P),Count,Value);
+  {$endif}
+end;
+{$else}
+asm
+  jmp IntegerScanExists;
+end;
+{$endif}
+
+function PtrUIntScanIndex(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): PtrInt;
+{$ifdef HASINLINE}
+begin
+  {$ifdef CPU64}
+  result := Int64ScanIndex(pointer(P),Count,Value);
+  {$else}
+  result := IntegerScanIndex(pointer(P),Count,Value);
+  {$endif}
+end;
+{$else}
+asm // identical to IntegerScanIndex() asm stub
+        push    eax
+        call    IntegerScan
+        test    eax, eax
+        pop     edx
+        jnz     @e
+        dec     eax // returns -1
+        ret
+@e:     sub     eax, edx
+        shr     eax, 2
+end;
+{$endif}
 
 function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): integer;
 begin
