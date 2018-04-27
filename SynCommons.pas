@@ -64912,6 +64912,10 @@ var data: TSystemUseDataDynArray;
 begin
   result := '';
   data := HistoryData(aProcessID,aDepth);
+  {$ifdef LINUX}
+  if data = nil then
+    result := StringFromFile('/proc/loadavg',{HasNoSize=}true) else
+  {$endif LINUX}
   for i := 0 to high(data) do
   with data[i] do begin
     result := FormatUTF8('%% ',[result,TruncTo2Digits(Kernel+User)]);
