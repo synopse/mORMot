@@ -4377,6 +4377,9 @@ begin
   finally
     tz.Free;
   end;
+  dt := NowUTC;
+  sleep(200);
+  Check(not SameValue(dt,NowUTC), 'NowUTC should not truncate time');
   {$ifdef MSWINDOWS}
   tz := TSynTimeZone.CreateDefault;
   try
