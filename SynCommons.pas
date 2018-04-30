@@ -59437,7 +59437,7 @@ var k,v: RawUTF8;
 begin
   fSafe.Lock;
   try
-    fKeys.SaveToJSON(k,EnumSetsAsText);
+    fKeys.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}SaveToJSON(k,EnumSetsAsText);
     fValues.SaveToJSON(v,EnumSetsAsText);
   finally
     fSafe.UnLock;
