@@ -4808,7 +4808,10 @@ procedure ExcludeInteger(var Values, Excluded: TIntegerDynArray;
   ExcludedSortSize: Integer=32);
 
 /// sort and remove any 32-bit duplicated integer from Values[]
-procedure DeduplicateInteger(var Values: TIntegerDynArray);
+procedure DeduplicateInteger(var Values: TIntegerDynArray); overload;
+
+/// sort and remove any 32-bit duplicated integer from Values[]
+procedure DeduplicateInteger(var Values: TIntegerDynArray; Count: integer); overload;
 
 /// create a new 32-bit integer dynamic array with the values from another one
 procedure CopyInteger(const Source: TIntegerDynArray; out Dest: TIntegerDynArray);
@@ -4829,7 +4832,10 @@ procedure ExcludeInt64(var Values, Excluded: TInt64DynArray;
   ExcludedSortSize: Integer=32);
 
 /// sort and remove any 64-bit duplicated integer from Values[]
-procedure DeduplicateInt64(var Values: TInt64DynArray);
+procedure DeduplicateInt64(var Values: TInt64DynArray); overload;
+
+/// sort and remove any 64-bit duplicated integer from Values[]
+procedure DeduplicateInt64(var Values: TInt64DynArray; Count: integer); overload;
 
 /// create a new 64-bit integer dynamic array with the values from another one
 procedure CopyInt64(const Source: TInt64DynArray; out Dest: TInt64DynArray);
@@ -10066,6 +10072,8 @@ type
     procedure SaveToJSON(W: TTextWriter; EnumSetsAsText: boolean=false); overload;
     /// serialize the content as a "key":value JSON object
     function SaveToJSON(EnumSetsAsText: boolean=false): RawUTF8; overload;
+    /// serialize the Values[] as a JSON array
+    function SaveValuesToJSON(EnumSetsAsText: boolean=false): RawUTF8;
     /// unserialize the content from "key":value JSON object
     // - if the JSON input may not be correct (i.e. if not coming from SaveToJSON),
     // you may set EnsureNoKeyCollision=TRUE for a slow but safe keys validation
@@ -10699,9 +10707,9 @@ type
     // - returns true on read success
     function VarUInt32Safe(out Value: cardinal): boolean;
     /// read the next 64-bit signed value from the buffer
-    function VarInt64: Int64;     {$ifdef HASINLINE}inline;{$endif}
+    function VarInt64: Int64;  {$ifdef HASINLINE}inline;{$endif}
     /// read the next 64-bit unsigned value from the buffer
-    function VarUInt64: QWord;    {$ifdef CPU64}{$ifdef HASINLINE}inline;{$endif}{$endif}
+    function VarUInt64: QWord; {$ifdef CPU64}{$ifdef HASINLINE}inline;{$endif}{$endif}
     /// read the next RawUTF8 value from the buffer
     function VarUTF8: RawUTF8; overload;
     /// read the next RawUTF8 value from the buffer
@@ -16097,6 +16105,12 @@ function _ArrFast(const Items: array of const): variant; overload;
 // - in addition to the JSON RFC specification strict mode, this method will
 // handle some BSON-like extensions, e.g. unquoted field names or ObjectID()
 function _JsonFast(const JSON: RawUTF8): variant;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// initialize a variant instance to store some extended document-based content
+// - this global function is an handy alias to:
+// ! _Json(JSON,JSON_OPTIONS_FAST_EXTENDED);
+function _JsonFastExt(const JSON: RawUTF8): variant;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// initialize a variant instance to store some document-based content
@@ -30510,6 +30524,11 @@ begin
 end;
 
 procedure DeduplicateInteger(var Values: TIntegerDynArray);
+begin
+  DeduplicateInteger(Values, length(Values));
+end;
+
+procedure DeduplicateInteger(var Values: TIntegerDynArray; Count: integer);
   function dedup(val: PIntegerArray; v: PtrInt): PtrInt;
   var i: PtrInt;
   begin // sub-function for better code generation
@@ -30534,18 +30553,22 @@ procedure DeduplicateInteger(var Values: TIntegerDynArray);
     until i=v;
     result := v;
   end;
-var n,v: PtrInt;
 begin
-  v := high(Values);
-  if v<=0 then
-    exit;
-  QuickSortInteger(pointer(Values),0,v);
-  n := dedup(pointer(Values),v);
-  if n<>v then
-    SetLength(Values,n+1);
+  dec(Count);
+  if Count>0 then begin
+    QuickSortInteger(pointer(Values),0,Count);
+    Count := dedup(pointer(Values),Count);
+  end;
+  if high(Values)<>Count then
+    SetLength(Values,Count+1);
 end;
 
 procedure DeduplicateInt64(var Values: TInt64DynArray);
+begin
+  DeduplicateInt64(Values, length(Values));
+end;
+
+procedure DeduplicateInt64(var Values: TInt64DynArray; Count: integer);
   function dedup(val: PInt64Array; v: PtrInt): PtrInt;
   var i: PtrInt;
   begin // sub-function for better code generation
@@ -30570,15 +30593,14 @@ procedure DeduplicateInt64(var Values: TInt64DynArray);
     until i=v;
     result := v;
   end;
-var n,v: PtrInt;
 begin
-  v := high(Values);
-  if v<=0 then
-    exit;
-  QuickSortInt64(pointer(Values),0,v);
-  n := dedup(pointer(Values),v);
-  if n<>v then
-    SetLength(Values,n+1);
+  dec(Count);
+  if Count>0 then begin
+    QuickSortInt64(pointer(Values),0,Count);
+    Count := dedup(pointer(Values),Count);
+  end;
+  if high(Values)<>Count then
+    SetLength(Values,Count+1);
 end;
 
 procedure CopyInteger(const Source: TIntegerDynArray; out Dest: TIntegerDynArray);
@@ -47180,6 +47202,11 @@ begin
   _Json(JSON,result,JSON_OPTIONS_FAST);
 end;
 
+function _JsonFastExt(const JSON: RawUTF8): variant;
+begin
+  _Json(JSON,result,JSON_OPTIONS_FAST_EXTENDED);
+end;
+
 function _JsonFmt(const Format: RawUTF8; const Args,Params: array of const;
   Options: TDocVariantOptions): variant;
 begin
@@ -59410,8 +59437,8 @@ var k,v: RawUTF8;
 begin
   fSafe.Lock;
   try
-    k := fKeys.SaveToJSON(EnumSetsAsText);
-    v := fValues.SaveToJSON(EnumSetsAsText);
+    fKeys.SaveToJSON(k,EnumSetsAsText);
+    fValues.SaveToJSON(v,EnumSetsAsText);
   finally
     fSafe.UnLock;
   end;
@@ -59428,6 +59455,16 @@ begin
     W.SetText(result);
   finally
     W.Free;
+  end;
+end;
+
+function TSynDictionary.SaveValuesToJSON(EnumSetsAsText: boolean): RawUTF8;
+begin
+  fSafe.Lock;
+  try
+    fValues.SaveToJSON(result,EnumSetsAsText);
+  finally
+    fSafe.UnLock;
   end;
 end;
 
@@ -64912,7 +64949,7 @@ var data: TSystemUseDataDynArray;
 begin
   result := '';
   data := HistoryData(aProcessID,aDepth);
-  {$ifdef LINUX}
+  {$ifdef LINUXNOTBSD} // https://www.retro11.de/ouxr/211bsd/usr/src/lib/libc/gen/getloadavg.c.html
   if data = nil then
     result := StringFromFile('/proc/loadavg',{HasNoSize=}true) else
   {$endif LINUX}
