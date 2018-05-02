@@ -87,13 +87,20 @@ program TestSQL3;
 
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
 
+{.$define ForceFastMM4}
+// for debug/tests purposes
+
+{$ifdef FullDebugMode}  // defined for the project e.g. under Win64
+  {$define ForceFastMM4}
+{$endif}
+
 uses
   {$ifdef KYLIX3} // strip down to the minimum files including /
     FastMM4,
     ECCProcess in 'Samples/33 - ECC/ECCProcess.pas',
     mORMotSelfTests;
   {$else}
-    {$ifdef FullDebugMode}  // defined for the project e.g. under Win64
+    {$ifdef ForceFastMM4}  // defined for the project e.g. under Win64
       FastMM4Messages in '..\RTL7\FastMM4Messages.pas',
       FastMM4 in '..\RTL7\FastMM4.pas',
     {$else}
