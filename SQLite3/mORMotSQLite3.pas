@@ -966,7 +966,7 @@ var i: integer;
 begin
   for i := 0 to high(Model.TableProps) do
     case Model.TableProps[i].Kind of
-    rRTree: // register all *_in() SQL functions
+    rRTree, rRTreeInteger: // register all *_in() SQL functions
       sqlite3_check(DB.DB,sqlite3.create_function_v2(DB.DB,
         pointer(TSQLRecordRTreeClass(Model.Tables[i]).RTreeSQLFunctionName),
         2,SQLITE_ANY,Model.Tables[i],InternalRTreeIn,nil,nil,nil));

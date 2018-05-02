@@ -5272,13 +5272,14 @@ type
 
   /// the kind of SQlite3 (virtual) table
   // - TSQLRecordFTS3/4/5 will be associated with vFTS3/vFTS4/vFTS5 values,
-  // TSQLRecordRTree with vRTree, any native SQlite3 table as vSQLite3, and
-  // a TSQLRecordVirtualTable*ID with rCustomForcedID/rCustomAutoID
+  // TSQLRecordRTree/TSQLRecordRTreeInteger with rRTree/rRTreeInteger, any native
+  // SQlite3 table as vSQLite3, and a TSQLRecordVirtualTable*ID as
+  // rCustomForcedID/rCustomAutoID
   // - a plain TSQLRecord class can be defined as rCustomForcedID (e.g. for
   // TSQLRecordMany) after registration for an external DB via a call to
   // VirtualTableExternalRegister() from mORMotDB unit
   TSQLRecordVirtualKind = (
-    rSQLite3, rFTS3, rFTS4, rFTS5, rRTree, rCustomForcedID, rCustomAutoID);
+    rSQLite3, rFTS3, rFTS4, rFTS5, rRTree, rRTreeInteger, rCustomForcedID, rCustomAutoID);
 
   /// kind of (static) database server implementation available
   // - sMainEngine will identify the default main SQlite3 engine
@@ -9953,11 +9954,9 @@ type
     function Text(Rest: TSQLRest): RawUTF8; overload;
   end;
 
-  /// this kind of record array can be used for direct coordinates storage
-  TSQLRecordTreeCoords = array[0..RTREE_MAX_DIMENSION-1] of packed record
-    min, max: double; end;
 
-  /// a base record, corresponding to an R-Tree table
+  /// an abstract base class, corresponding to an R-Tree table of values
+  // - do not use this class, but either TSQLRecordRTree or TSQLRecordRTreeInteger
   // - an R-Tree is a special index that is designed for doing range queries.
   // R-Trees are most commonly used in geospatial systems where each entry is a
   // rectangle with minimum and maximum X and Y coordinates. Given a query
@@ -9973,44 +9972,100 @@ type
   // - any record which inherits from this class must have only sftFloat
   // (double) fields, grouped by pairs, each as minimum- and maximum-value,
   // up to 5 dimensions (i.e. 11 columns, including the ID property)
-  // - the ID: TID property must be set before adding a TSQLRecordRTree to
-  // the database, e.g. to link a R-Tree representation to a regular
-  // TSQLRecord table
+  // - internally, the SQlite3 R-Tree extension will be implemented as a virtual
+  // table, storing coordinates/values as 32-bit floating point (single - as
+  // TSQLRecordRTree kind of ORM classes) or 32-bit integers (as TSQLRecordRTreeInteger),
+  // but will make all R-Tree computation using 64-bit floating point (double)
+  // - as with any virtual table, the ID: TID property must be set before adding
+  // a TSQLRecordRTree to the database, e.g. to link a R-Tree representation to
+  // a regular TSQLRecord table
   // - queries against the ID or the coordinate ranges are almost immediate: so
   // you can e.g. extract some coordinates box from the regular TSQLRecord
   // table, then use a TSQLRecordRTree joined query to make the process faster;
   // this is exactly what the TSQLRestClient.RTreeMatch method offers
-  TSQLRecordRTree = class(TSQLRecordVirtual)
+  TSQLRecordRTreeAbstract = class(TSQLRecordVirtual)
   public
-    { override this class function to implement a custom box coordinates
-      from a given BLOB content
-      - by default, the BLOB array will contain a simple array of double
-      - but you can override this method to handle a custom BLOB field content,
-        intended to hold some kind of binary representation of the precise
-        boundaries of the object, and convert it into box coordinates as
-        understood by the ContainedIn() class function
-      - the number of pairs in OutCoord will be taken from the current number
-        of published double properties
-      - used e.g. by the TSQLRestClient.RTreeMatch method }
-    class procedure BlobToCoord(const InBlob; var OutCoord: TSQLRecordTreeCoords); virtual;
-    { override this class function to implement a custom SQL *_in() function
-      - by default, the BLOB array will be decoded via the BlobToCoord class
-        procedure, and will create a SQL function from the class name
-      - for instance, the following class will define a 2 dimensional
-        MapBox_in() function
-      ! TSQLRecordMapBox = class(TSQLRecordRTree)
-      ! protected
-      !   fMinX, fMaxX, fMinY, fMaxY: double;
-      ! published
-      !   property MinX: double read fMinX write fMinX;
-      !   property MaxX: double read fMaxX write fMaxX;
-      !   property MinY: double read fMinY write fMinY;
-      !   property MaxY: double read fMaxY write fMaxY;
-      ! end;
-      - used e.g. by the TSQLRestClient.RTreeMatch method   }
-    class function ContainedIn(const BlobA,BlobB): boolean; virtual;
+    /// override this class function to implement a custom SQL *_in() function
+    // - by default, the BLOB array will be decoded via the BlobToCoord class
+    // procedure, and will create a SQL function from the class name
+    //  - used e.g. by the TSQLRestClient.RTreeMatch method
+    class function ContainedIn(const BlobA,BlobB): boolean; virtual; abstract;
     /// will return 'MapBox_in' e.g. for TSQLRecordMapBox
-    class function RTreeSQLFunctionName: RawUTF8;
+    class function RTreeSQLFunctionName: RawUTF8; virtual;
+  end;
+
+  /// this kind of record array can be used for direct floating-point
+  // coordinates storage as in TSQLRecordRTree.BlobToCoord
+  TSQLRecordTreeCoords = array[0..RTREE_MAX_DIMENSION-1] of packed record
+    min, max: double; end;
+
+  /// a base record, corresponding to an R-Tree table of floating-point values
+  // - for instance, the following class will define a 2 dimensional RTree
+  // of floating point coordinates, and an associated MapBox_in() function:
+  // ! TSQLRecordMapBox = class(TSQLRecordRTree)
+  // ! protected
+  // !   fMinX, fMaxX, fMinY, fMaxY: double;
+  // ! published
+  // !   property MinX: double read fMinX write fMinX;
+  // !   property MaxX: double read fMaxX write fMaxX;
+  // !   property MinY: double read fMinY write fMinY;
+  // !   property MaxY: double read fMaxY write fMaxY;
+  // ! end;
+  TSQLRecordRTree = class(TSQLRecordRTreeAbstract)
+  public
+    /// override this class function to implement a custom SQL *_in() function
+    // - by default, the BLOB array will be decoded via the BlobToCoord() class
+    // procedure, and will create a SQL function from the class name
+    //  - used e.g. by the TSQLRestClient.RTreeMatch method
+    class function ContainedIn(const BlobA,BlobB): boolean; override;
+    /// override this class function to implement a custom box coordinates
+    // from a given BLOB content
+    // - by default, the BLOB array will contain a simple array of double
+    // - but you can override this method to handle a custom BLOB field content,
+    // intended to hold some kind of binary representation of the precise
+    // boundaries of the object, and convert it into box coordinates as
+    // understood by the ContainedIn() class function
+    // - the number of pairs in OutCoord will be taken from the current number
+    // of published double properties
+    // - used e.g. by the TSQLRest.RTreeMatch method
+    class procedure BlobToCoord(const InBlob; var OutCoord: TSQLRecordTreeCoords); virtual;
+  end;
+
+  /// this kind of record array can be used for direct 32-bit integer
+  // coordinates storage as in TSQLRecordRTreeInteger.BlobToCoord
+  TSQLRecordTreeCoordsInteger = array[0..RTREE_MAX_DIMENSION-1] of packed record
+    min, max: integer; end;
+
+  /// a base record, corresponding to an R-Tree table of 32-bit integer values
+  // - for instance, the following class will define a 2 dimensional RTree
+  // of 32-bit integer coordinates, and an associated MapBox_in() function:
+  // ! TSQLRecordMapBox = class(TSQLRecordRTree)
+  // ! protected
+  // !   fMinX, fMaxX, fMinY, fMaxY: integer;
+  // ! published
+  // !   property MinX: integer read fMinX write fMinX;
+  // !   property MaxX: integer read fMaxX write fMaxX;
+  // !   property MinY: integer read fMinY write fMinY;
+  // !   property MaxY: integer read fMaxY write fMaxY;
+  // ! end;
+  TSQLRecordRTreeInteger = class(TSQLRecordRTreeAbstract)
+  public
+    /// override this class function to implement a custom SQL *_in() function
+    // - by default, the BLOB array will be decoded via the BlobToCoord() class
+    // procedure, and will create a SQL function from the class name
+    //  - used e.g. by the TSQLRest.RTreeMatch method
+    class function ContainedIn(const BlobA,BlobB): boolean; override;
+    /// override this class function to implement a custom box coordinates
+    // from a given BLOB content
+    // - by default, the BLOB array will contain a simple array of integer
+    // - but you can override this method to handle a custom BLOB field content,
+    // intended to hold some kind of binary representation of the precise
+    // boundaries of the object, and convert it into box coordinates as
+    // understood by the ContainedIn() class function
+    // - the number of pairs in OutCoord will be taken from the current number
+    // of published integer properties
+    // - used e.g. by the TSQLRest.RTreeMatch method
+    class procedure BlobToCoord(const InBlob; var OutCoord: TSQLRecordTreeCoordsInteger); virtual;
   end;
 
   /// a base record, corresponding to a FTS3 table, i.e. implementing full-text
@@ -10139,7 +10194,8 @@ type
   TSQLRecordFTS3Class = class of TSQLRecordFTS3;
 
   /// class-reference type (metaclass) of a RTREE virtual table
-  TSQLRecordRTreeClass = class of TSQLRecordRTree;
+  // - either a TSQLRecordRTree or a TSQLRecordRTreeInteger
+  TSQLRecordRTreeClass = class of TSQLRecordRTreeAbstract;
 
   /// the kind of fields to be available in a Table resulting of
   // a TSQLRecordMany.DestGetJoinedTable() method call
@@ -14423,6 +14479,21 @@ type
       const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
       const OutputFieldName: RawUTF8; W: TJSONSerializer;
       const CustomFieldsCSV: RawUTF8='');
+    /// dedicated method used to retrieve matching IDs using a fast R-Tree index
+    // - a TSQLRecordRTree is associated to a TSQLRecord with a specified BLOB
+    // field, and will call TSQLRecordRTree BlobToCoord and ContainedIn virtual
+    // class methods to execute an optimized SQL query
+    // - will return all matching DataTable IDs in DataID[]
+    // - will generate e.g. the following statement
+    // $ SELECT MapData.ID From MapData, MapBox WHERE MapData.ID=MapBox.ID
+    // $  AND minX>=:(-81.0): AND maxX<=:(-79.6): AND minY>=:(35.0): AND :(maxY<=36.2):
+    // $  AND MapBox_in(MapData.BlobField,:('\uFFF0base64encoded-81,-79.6,35,36.2'):);
+    // when the following Delphi code is executed:
+    // ! aClient.RTreeMatch(TSQLRecordMapData,'BlobField',TSQLRecordMapBox,
+    // !   aMapData.BlobField,ResultID);
+    function RTreeMatch(DataTable: TSQLRecordClass;
+      const DataTableBlobFieldName: RawUTF8; RTreeTable: TSQLRecordRTreeClass;
+      const DataTableBlobField: RawByteString; var DataID: TIDDynArray): boolean;
     /// Execute directly a SQL statement, expecting a list of results
     // - return a result table on success, nil on failure
     // - will call EngineList() abstract method to retrieve its JSON content
@@ -18800,21 +18871,6 @@ type
     // - will call the List virtual method internaly
     function ListFmt(const Tables: array of TSQLRecordClass;
       const SQLSelect, SQLWhereFormat: RawUTF8; const Args, Bounds: array of const): TSQLTableJSON; overload;
-    /// dedicated method used to retrieve matching IDs using a fast R-Tree index
-    // - a TSQLRecordRTree is associated to a TSQLRecord with a specified BLOB
-    // field, and will call TSQLRecordRTree BlobToCoord and ContainedIn virtual
-    // class methods to execute an optimized SQL query
-    // - will return all matching DataTable IDs in DataID[]
-    // - will generate e.g. the following statement
-    // $ SELECT MapData.ID From MapData, MapBox WHERE MapData.ID=MapBox.ID
-    // $  AND minX>=:(-81.0): AND maxX<=:(-79.6): AND minY>=:(35.0): AND :(maxY<=36.2):
-    // $  AND MapBox_in(MapData.BlobField,:('\uFFF0base64encoded-81,-79.6,35,36.2'):);
-    // when the following Delphi code is executed:
-    // ! aClient.RTreeMatch(TSQLRecordMapData,'BlobField',TSQLRecordMapBox,
-    // !   aMapData.BlobField,ResultID);
-    function RTreeMatch(DataTable: TSQLRecordClass;
-      const DataTableBlobFieldName: RawUTF8; RTreeTable: TSQLRecordRTreeClass;
-      const DataTableBlobField: RawByteString; var DataID: TIDDynArray): boolean;
     /// begin a transaction (calls REST BEGIN Member)
     // - by default, Client transaction will use here a pseudo session
     // - in aClient-Server environment with multiple Clients connected at the
@@ -20323,7 +20379,7 @@ const
   IS_CUSTOM_VIRTUAL = [rCustomForcedID, rCustomAutoID];
 
   /// if the TSQLRecordVirtual table kind expects the ID to be set on INSERT
-  INSERT_WITH_ID = [rFTS3, rFTS4, rFTS5, rRTree, rCustomForcedID];
+  INSERT_WITH_ID = [rFTS3, rFTS4, rFTS5, rRTree, rRTreeInteger, rCustomForcedID];
 
   /// Supervisor Table access right, i.e. alllmighty over all fields
   ALL_ACCESS_RIGHTS = [0..MAX_SQLTABLES-1];
@@ -32274,6 +32330,7 @@ var i: integer;
     M: TSQLVirtualTableClass;
     Props: TSQLModelRecordProperties;
     fields: TSQLPropInfoList;
+    expected: TSQLFieldType;
 begin
   if aModel=nil then
     raise EModelException.CreateUTF8('Invalid %.GetSQLCreate(nil) call',[self]);
@@ -32286,6 +32343,7 @@ begin
     rFTS4:  result := result+'fts4(';
     rFTS5:  result := result+'fts5(';
     rRTree: result := result+'rtree(RowID,';
+    rRTreeInteger: result := result+'rtree_i32(RowID,';
     rCustomForcedID, rCustomAutoID: begin
       M := aModel.VirtualTableModule(self);
       if M=nil then
@@ -32309,8 +32367,7 @@ begin
       for i := 0 to fields.Count-1 do
         with fields.List[i] do
         if SQLFieldTypeStored<>sftUTF8Text then
-          raise EModelException.CreateUTF8('%.%: FTS3/FTS4 field must be RawUTF8',
-            [self,Name]) else
+          raise EModelException.CreateUTF8('%.%: FTS field must be RawUTF8',[self,Name]) else
           result := result+Name+',';
       tokenizer := 'simple';
       c := self;
@@ -32326,15 +32383,19 @@ begin
       until c=TSQLRecord;
       result := FormatUTF8('% tokenize=%)',[result,LowerCaseU(tokenizer)]);
     end;
-    rRTree: begin
+    rRTree, rRTreeInteger: begin
       if (fields.Count<2) or (fields.Count>RTREE_MAX_DIMENSION*2) or
          (fields.Count and 2<>0) then
         raise EModelException.CreateUTF8('% has % fields: RTREE expects 2,4,6..%',
           [self,fields.Count,RTREE_MAX_DIMENSION*2]);
+      if Props.Kind=rRTree then
+        expected := sftFloat else
+        expected := sftInteger;
       for i := 0 to fields.Count-1 do
         with fields.List[i] do
-        if SQLFieldTypeStored<>sftFloat then
-          raise EModelException.CreateUTF8('%.%: RTREE field must be double',[self,Name]) else
+        if SQLFieldTypeStored<>expected then
+          raise EModelException.CreateUTF8('%.%: RTREE field must be %',
+            [self,Name,ToText(expected)^]) else
           result := result+Name+',';
       result[length(result)] := ')';
     end;
@@ -33708,8 +33769,8 @@ end;
 procedure TSQLModelRecordProperties.SetKind(Value: TSQLRecordVirtualKind);
 function IntSQLTableSimpleFields(withID, withTableName: boolean): RawUTF8;
 const IDComma: array[TSQLRecordVirtualKind] of rawUTF8 =
-  ('ID,','RowID,','RowID,','RowID,','RowID,','RowID,','RowID,');
-// rSQLite3, rFTS3, rFTS4, rFTS5, rRTree, rCustomForcedID, rCustomAutoID
+  ('ID,','RowID,','RowID,','RowID,','RowID,','RowID,','RowID,','RowID,');
+// rSQLite3, rFTS3, rFTS4, rFTS5, rRTree, rRTreeInteger, rCustomForcedID, rCustomAutoID
 var TableName: RawUTF8;
     i: integer;
 begin
@@ -33832,6 +33893,8 @@ begin
     Kind := rCustomForcedID else
   if Table.InheritsFrom(TSQLRecordRTree) then
     Kind := rRTree else
+  if Table.InheritsFrom(TSQLRecordRTreeInteger) then
+    Kind := rRTreeInteger else
   if Table.InheritsFrom(TSQLRecordVirtual) then
     Kind := rCustomAutoID else
     Kind := rSQLite3;
@@ -35818,6 +35881,56 @@ begin
     Rec.AppendFillAsJsonArray(OutputFieldName,W,Rec.fFill.TableMapFields);
   finally
     Rec.Free;
+  end;
+end;
+
+function TSQLRest.RTreeMatch(DataTable: TSQLRecordClass;
+  const DataTableBlobFieldName: RawUTF8; RTreeTable: TSQLRecordRTreeClass;
+  const DataTableBlobField: RawByteString; var DataID: TIDDynArray): boolean;
+var Blob: PPropInfo;
+    Res: TSQLTableJSON;
+    BDouble: TSQLRecordTreeCoords;
+    BInteger: TSQLRecordTreeCoordsInteger absolute BDouble;
+    Where, SQL: RawUTF8;
+    Data, RTree: TSQLRecordProperties;
+    i: integer;
+begin
+  result := false;
+  if (self=nil) or (DataTable=nil) or (RTreeTable=nil) or (DataTableBlobField='') then
+    exit;
+  RTree := RTreeTable.RecordProps;
+  Data := DataTable.RecordProps;
+  Blob :=  Data.BlobFieldPropFromRawUTF8(DataTableBlobFieldName);
+  if Blob=nil then
+    exit;
+  if RTreeTable.InheritsFrom(TSQLRecordRTree) then begin
+    TSQLRecordRTree(RTreeTable).BlobToCoord(pointer(DataTableBlobField)^,BDouble);
+    for i := 0 to (RTree.Fields.Count shr 1)-1 do
+      Where := FormatUTF8('%%>=:(%): and %<=:(%): and ',
+        [Where,RTree.Fields.List[i*2].Name,BDouble[i].Min,
+         RTree.Fields.List[i*2+1].Name,BDouble[i].Max]);
+  end else
+  if RTreeTable.InheritsFrom(TSQLRecordRTreeInteger) then begin
+    TSQLRecordRTreeInteger(RTreeTable).BlobToCoord(pointer(DataTableBlobField)^,BInteger);
+    for i := 0 to (RTree.Fields.Count shr 1)-1 do
+      Where := FormatUTF8('%%>=:(%): and %<=:(%): and ',
+        [Where,RTree.Fields.List[i*2].Name,BInteger[i].Min,
+         RTree.Fields.List[i*2+1].Name,BInteger[i].Max]);
+  end else
+    exit;
+  FormatUTF8('select %.RowID from %,% where %.RowID=%.RowID and %%(%,:(%):);',
+      [RTree.SQLTableName,Data.SQLTableName,RTree.SQLTableName,Data.SQLTableName,
+       Where,RTreeTable.RTreeSQLFunctionName,Data.SQLTableName,
+       BinToBase64WithMagic(DataTableBlobField)],sql);
+  Res := ExecuteList([DataTable,RTreeTable],sql);
+  if Res<>nil then
+  try
+    if (Res.FieldCount<>1) or (Res.fRowCount<=0) then
+      exit;
+    Res.GetRowValues(0,TInt64DynArray(DataID));
+    result := true;
+  finally
+    Res.Free;
   end;
 end;
 
@@ -48195,45 +48308,6 @@ begin
   result := List(Tables,SQLSelect,FormatUTF8(SQLWhereFormat,Args,Bounds));
 end;
 
-function TSQLRestClient.RTreeMatch(DataTable: TSQLRecordClass;
-  const DataTableBlobFieldName: RawUTF8; RTreeTable: TSQLRecordRTreeClass;
-  const DataTableBlobField: RawByteString; var DataID: TIDDynArray): boolean;
-var Blob: PPropInfo;
-    Res: TSQLTableJSON;
-    B: TSQLRecordTreeCoords;
-    Where: RawUTF8;
-    Data, RTree: TSQLRecordProperties;
-    i: integer;
-begin
-  result := false;
-  if (self=nil) or (DataTable=nil) or (RTreeTable=nil) or (DataTableBlobField='') then
-    exit;
-  RTree := RTreeTable.RecordProps;
-  Data := DataTable.RecordProps;
-  Blob :=  Data.BlobFieldPropFromRawUTF8(DataTableBlobFieldName);
-  if Blob=nil then
-    exit;
-  for i := 0 to (RTree.Fields.Count shr 1)-1 do
-    Where := FormatUTF8('%% >= :(%): AND % <= :(%): AND ',
-      [Where,RTree.Fields.List[i*2].Name,B[i].Min,RTree.Fields.List[i*2+1].Name,
-       B[i].Max]);
-  RTreeTable.BlobToCoord(DataTableBlobField[1],B);
-  Res := ListFmt([DataTable,RTreeTable],Data.SQLTableName+'.RowID',
-    'WHERE %.RowID=%.RowID AND %%(%,:(%):);',
-      [Data.SQLTableName,RTree.SQLTableName,Where,
-       RTreeTable.RTreeSQLFunctionName,Data.SQLTableName,
-       BinToBase64WithMagic(DataTableBlobField)]);
-  if Res<>nil then
-  try
-    if (Res.FieldCount<>1) or (Res.fRowCount<=0) then
-      exit;
-    Res.GetRowValues(0,TInt64DynArray(DataID));
-    result := true;
-  finally
-    Res.Free;
-  end;
-end;
-
 function TSQLRestClient.ServiceContainer: TServiceContainer;
 begin
   if fServices=nil then
@@ -50325,6 +50399,13 @@ begin
 end;
 
 
+{ TSQLRecordRTreeAbstract }
+
+class function TSQLRecordRTreeAbstract.RTreeSQLFunctionName: RawUTF8;
+begin
+  result := RecordProps.SQLTableName+'_in';
+end;
+
 { TSQLRecordRTree }
 
 class procedure TSQLRecordRTree.BlobToCoord(const InBlob;
@@ -50334,7 +50415,7 @@ begin // direct memory copy with no memory check
 end;
 
 class function TSQLRecordRTree.ContainedIn(const BlobA,BlobB): boolean;
-var A,B: TSQLRecordTreeCoords;
+var A, B: TSQLRecordTreeCoords;
     i: integer;
 begin
   BlobToCoord(BlobA,A);
@@ -50346,9 +50427,25 @@ begin
   result := true; // box match
 end;
 
-class function TSQLRecordRTree.RTreeSQLFunctionName: RawUTF8;
+{ TSQLRecordRTreeInteger }
+
+class procedure TSQLRecordRTreeInteger.BlobToCoord(const InBlob;
+  var OutCoord: TSQLRecordTreeCoordsInteger);
+begin // direct memory copy with no memory check
+  MoveFast(InBlob,OutCoord,(RecordProps.Fields.Count shr 1)*SizeOf(integer));
+end;
+
+class function TSQLRecordRTreeInteger.ContainedIn(const BlobA,BlobB): boolean;
+var A,B: TSQLRecordTreeCoordsInteger;
+    i: integer;
 begin
-  result := RecordProps.SQLTableName+'_in';
+  BlobToCoord(BlobA,A);
+  BlobToCoord(BlobB,B);
+  result := false;
+  for i := 0 to (RecordProps.Fields.Count shr 1)-1 do
+    if (A[i].max<B[i].min) or (A[i].min>B[i].max) then
+      exit; // no match
+  result := true; // box match
 end;
 
 
