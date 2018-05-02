@@ -1304,6 +1304,8 @@ var i: integer;
     ndx: TIntegerDynArray;
     doc: TDocVariantData absolute result;
 begin
+  if self=nil then
+    exit;
   doc.Init(JSON_OPTIONS_FAST_EXTENDED,dvObject);
   DB.Lock;
   try

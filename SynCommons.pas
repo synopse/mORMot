@@ -4871,23 +4871,23 @@ function CSVToInt64DynArray(CSV: PUTF8Char; Sep: AnsiChar= ','): TInt64DynArray;
 /// return the corresponding CSV text from a dynamic array of 32-bit integer
 // - you can set some custom Prefix and Suffix text
 function IntegerDynArrayToCSV(const Values: array of integer; ValuesCount: integer;
-  const Prefix: RawUTF8=''; const Suffix: RawUTF8=''): RawUTF8; overload;
+  const Prefix: RawUTF8=''; const Suffix: RawUTF8=''; InlinedValue: boolean=false): RawUTF8; overload;
 
 /// return the corresponding CSV text from a dynamic array of 64-bit integers
 // - you can set some custom Prefix and Suffix text
 function Int64DynArrayToCSV(const Values: array of Int64; ValuesCount: integer;
-  const Prefix: RawUTF8=''; const Suffix: RawUTF8=''): RawUTF8; overload;
+  const Prefix: RawUTF8=''; const Suffix: RawUTF8=''; InlinedValue: boolean=false): RawUTF8; overload;
 
 /// return the corresponding CSV text from a dynamic array of 32-bit integer
 // - you can set some custom Prefix and Suffix text
 function IntegerDynArrayToCSV(const Values: TIntegerDynArray;
-  const Prefix: RawUTF8=''; const Suffix: RawUTF8=''): RawUTF8; overload;
+  const Prefix: RawUTF8=''; const Suffix: RawUTF8=''; InlinedValue: boolean=false): RawUTF8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// return the corresponding CSV text from a dynamic array of 64-bit integers
 // - you can set some custom Prefix and Suffix text
 function Int64DynArrayToCSV(const Values: TInt64DynArray;
-  const Prefix: RawUTF8=''; const Suffix: RawUTF8=''): RawUTF8; overload;
+  const Prefix: RawUTF8=''; const Suffix: RawUTF8=''; InlinedValue: boolean=false): RawUTF8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// quick helper to initialize a dynamic array of integer from some constants
@@ -30701,7 +30701,7 @@ begin
 end;
 
 function IntegerDynArrayToCSV(const Values: array of integer; ValuesCount: integer;
-  const Prefix, Suffix: RawUTF8): RawUTF8;
+  const Prefix, Suffix: RawUTF8; InlinedValue: boolean): RawUTF8;
 type
   TInts16 = packed array[word] of string[15]; // shortstring are faster (no heap allocation)
 var i, L, Len: PtrInt;
@@ -30713,12 +30713,15 @@ begin
   result := '';
   if ValuesCount=0 then
     exit;
-  tmpbuf.Init(ValuesCount*SizeOf(ints[0])); // faster than a dynamic array
+  if InlinedValue then
+    Len := 4*ValuesCount else
+    Len := 0;
+  tmpbuf.Init(ValuesCount*SizeOf(ints[0])+Len); // faster than a dynamic array
   try
     ints := tmpbuf.buf;
      // compute whole result length at once
     dec(ValuesCount);
-    Len := length(Prefix)+length(Suffix);
+    inc(Len,length(Prefix)+length(Suffix));
     tmp[15] := ',';
     for i := 0 to ValuesCount do begin
       P := StrInt32(@tmp[15],Values[i]);
@@ -30736,8 +30739,16 @@ begin
       inc(P,length(Prefix));
     end;
     for i := 0 to ValuesCount do begin
+      if InlinedValue then begin
+        PWord(P)^ := ord(':')+ord('(')shl 8;
+        inc(P,2);
+      end;
       MoveFast(ints[i][1],P^,ord(ints[i][0]));
       inc(P,ord(ints[i][0]));
+      if InlinedValue then begin
+        PWord(P)^ := ord(')')+ord(':')shl 8;
+        inc(P,2);
+      end;
     end;
     if Suffix<>'' then
       MoveFast(pointer(Suffix)^,P^,length(Suffix));
@@ -30747,7 +30758,7 @@ begin
 end;
 
 function Int64DynArrayToCSV(const Values: array of Int64; ValuesCount: integer;
-  const Prefix, Suffix: RawUTF8): RawUTF8;
+  const Prefix, Suffix: RawUTF8; InlinedValue: boolean): RawUTF8;
 type
   TInt = packed record
     Len: byte;
@@ -30761,11 +30772,14 @@ begin
   result := '';
   if ValuesCount=0 then
     exit;
-  int := tmp.Init(ValuesCount*SizeOf(TInt)); // faster than a dynamic array
+  if InlinedValue then
+    Len := 4*ValuesCount else
+    Len := 0;
+  int := tmp.Init(ValuesCount*SizeOf(TInt)+Len); // faster than a dynamic array
   try
      // compute whole result length at once
     dec(ValuesCount);
-    Len := length(Prefix)+length(Suffix);
+    inc(Len,length(Prefix)+length(Suffix));
     for i := 0 to ValuesCount do begin
       P := StrInt64(PAnsiChar(int)+21,Values[i]);
       L := PAnsiChar(int)+21-P;
@@ -30784,9 +30798,17 @@ begin
     end;
     int := tmp.buf;
     repeat
+      if InlinedValue then begin
+        PWord(P)^ := ord(':')+ord('(')shl 8;
+        inc(P,2);
+      end;
       L := int^.Len;
       MoveFast(PAnsiChar(int)[21-L],P^,L);
       inc(P,L);
+      if InlinedValue then begin
+        PWord(P)^ := ord(')')+ord(':')shl 8;
+        inc(P,2);
+      end;
       if ValuesCount=0 then
         break;
       inc(int);
@@ -30802,15 +30824,15 @@ begin
 end;
 
 function IntegerDynArrayToCSV(const Values: TIntegerDynArray;
-  const Prefix, Suffix: RawUTF8): RawUTF8;
+  const Prefix, Suffix: RawUTF8; InlinedValue: boolean): RawUTF8;
 begin
-  result := IntegerDynArrayToCSV(Values,length(Values),Prefix,Suffix);
+  result := IntegerDynArrayToCSV(Values,length(Values),Prefix,Suffix,InlinedValue);
 end;
 
 function Int64DynArrayToCSV(const Values: TInt64DynArray;
-  const Prefix: RawUTF8; const Suffix: RawUTF8): RawUTF8;
+  const Prefix: RawUTF8; const Suffix: RawUTF8; InlinedValue: boolean): RawUTF8;
 begin
-  result := Int64DynArrayToCSV(Values,length(Values),Prefix,Suffix);
+  result := Int64DynArrayToCSV(Values,length(Values),Prefix,Suffix,InlinedValue);
 end;
 
 function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): PtrInt;
