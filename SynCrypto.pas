@@ -743,6 +743,8 @@ type
     class function SimpleEncryptFile(const InputFile, Outputfile: TFileName; const Key;
       KeySize: integer; Encrypt: boolean; IVAtBeginning: boolean=false;
       RaiseESynCryptoOnError: boolean=true): boolean; overload;
+    //// returns e.g. 'aes128cfb' or '' if nil
+    function AlgoName: TShort16;
 
     /// associated Key Size, in bits (i.e. 128,192,256)
     property KeySize: cardinal read fKeySize;
@@ -1980,7 +1982,7 @@ function SHA3(Algo: TSHA3Algo; Buffer: pointer; Len: integer;
 /// safe key derivation using iterated SHA-3 hashing
 // - you can use SHA3_224, SHA3_256, SHA3_384, SHA3_512 algorithm to fill
 // the result buffer with the default sized derivated key of 224,256,384 or 512
-// bytes (leaving resultbytes = 0)
+// bits (leaving resultbytes = 0)
 // - or you may select SHAKE_128 or SHAKE_256, and specify any custom key size
 // in resultbytes (used e.g. by PBKDF2_SHA3_Crypt)
 procedure PBKDF2_SHA3(algo: TSHA3Algo; const password,salt: RawByteString;
@@ -12118,6 +12120,23 @@ destructor TAESAbstract.Destroy;
 begin
   inherited Destroy;
   FillZero(fKey);
+end;
+
+function TAESAbstract.AlgoName: TShort16;
+const TXT: array[2..4] of array[0..7] of AnsiChar = (#9'aes128',#9'aes192',#9'aes256');
+var s: PShortString;
+begin
+  if (self=nil) or (KeySize=0) then
+    result[0] := #0 else begin
+    PInt64(@result)^ := PInt64(@TXT[KeySize shr 6])^;
+    s := ClassNameShort(self);
+    if s^[0]<#7 then
+      result[0] := #6 else begin
+      result[7] := NormToLower[s^[5]]; // TAESCBC -> 'aes128cbc'
+      result[8] := NormToLower[s^[6]];
+      result[9] := NormToLower[s^[7]];
+    end;
+  end;
 end;
 
 procedure TAESAbstract.SetIVHistory(aDepth: integer);
