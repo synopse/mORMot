@@ -9986,6 +9986,10 @@ type
   TSQLRecordRTreeAbstract = class(TSQLRecordVirtual)
   public
     /// override this class function to implement a custom SQL *_in() function
+    // - in practice, an R-Tree index does not normally provide the exact answer
+    // but merely reduces the set of potential answers from millions to dozens:
+    // this method will be called from the *_in() SQL function to actually
+    // return exact matches
     // - by default, the BLOB array will be decoded via the BlobToCoord class
     // procedure, and will create a SQL function from the class name
     //  - used e.g. by the TSQLRestClient.RTreeMatch method
@@ -35907,8 +35911,15 @@ begin
     TSQLRecordRTree(RTreeTable).BlobToCoord(pointer(DataTableBlobField)^,BDouble);
     for i := 0 to (RTree.Fields.Count shr 1)-1 do
       Where := FormatUTF8('%%>=:(%): and %<=:(%): and ',
-        [Where,RTree.Fields.List[i*2].Name,BDouble[i].Min,
-         RTree.Fields.List[i*2+1].Name,BDouble[i].Max]);
+        [Where,RTree.Fields.List[i*2].Name,BDouble[i].Min*(1-0.00000012),
+         RTree.Fields.List[i*2+1].Name,BDouble[i].Max*(1+0.00000012)]);
+    { from http://sqlite.org/rtree.html:
+      For a "contained-within" style query, rounding the bounding boxes outward
+      might cause some entries to be excluded from the result set if the edge of
+      the entry bounding box corresponds to the edge of the query bounding box.
+      To guard against this, applications should expand their contained-within
+      query boxes slightly (by 0.000012%) by rounding down the lower coordinates
+      and rounding up the top coordinates, in each dimension. }
   end else
   if RTreeTable.InheritsFrom(TSQLRecordRTreeInteger) then begin
     TSQLRecordRTreeInteger(RTreeTable).BlobToCoord(pointer(DataTableBlobField)^,BInteger);
