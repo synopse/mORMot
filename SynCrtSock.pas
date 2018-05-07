@@ -5573,27 +5573,27 @@ end;
 
 function THttpServer.OnNginxAllowSend(Context: THttpServerRequest;
   const LocalFileName: TFileName): boolean;
-var n,i,f: integer;
+var match,i,f: integer;
     folder: ^TFileName;
 begin
-  n := 0;
+  match := 0;
   folder := pointer(fNginxSendFileFrom);
   if LocalFileName<>'' then
     for f := 1 to length(fNginxSendFileFrom) do begin
-      n := length(folder^);
-      for i := 1 to n do // case sensitive left search
+      match := length(folder^);
+      for i := 1 to match do // case sensitive left search
         if LocalFileName[i]<>folder^[i] then begin
-          n := 0;
+          match := 0;
           break;
         end;
-      if n<>0 then
+      if match<>0 then
         break; // found matching folder
       inc(folder);
     end;
-  result := n<>0;
+  result := match<>0;
   if not result then
     exit; // no match -> manual send
-  delete(Context.fOutContent,1,n); // remove e.g. '/var/www'
+  delete(Context.fOutContent,1,match); // remove e.g. '/var/www'
   Context.OutCustomHeaders := Trim(Context.OutCustomHeaders+#13#10+
     'X-Accel-Redirect: '+Context.OutContent);
   Context.OutContent := '';

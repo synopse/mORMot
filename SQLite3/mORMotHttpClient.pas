@@ -340,6 +340,9 @@ type
     /// returns true if the connection is a running WebSockets
     // - may be false even if fSocket<>nil, e.g. when gracefully disconnected
     function WebSocketsConnected: boolean;
+    /// will set the HTTP header as expected by THttpClientWebSockets.Request to
+    // perform the Callback() query in wscNonBlockWithoutAnswer mode
+    procedure CallbackNonBlockingSetHeader(out Header: RawUTF8); override;
     /// this event will be executed just after the HTTP client has been
     // upgraded to the expected WebSockets protocol
     // - supplied Sender parameter will be this TSQLHttpClientWebsockets instance
@@ -813,7 +816,7 @@ begin
   if WebSockets=nil then
     raise EServiceException.CreateUTF8('Missing %.WebSocketsUpgrade() call',[self]);
   FormatUTF8('{"%":%}',[Factory.InterfaceTypeInfo^.Name,FakeCallbackID],body);
-  head := 'Sec-WebSocket-REST: NonBlocking';
+  CallbackNonBlockingSetHeader(head); // frames gathering + no wait
   result := CallBack(mPOST,'CacheFlush/_callback_',body,resp,nil,0,@head) in
     [HTTP_SUCCESS,HTTP_NOCONTENT];
 end;
@@ -842,6 +845,11 @@ begin
     (THttpClientWebSockets(fSocket).WebSockets.State<=wpsRun);
 end;
 
+procedure TSQLHttpClientWebsockets.CallbackNonBlockingSetHeader(out Header: RawUTF8);
+begin
+  Header := 'Sec-WebSocket-REST: NonBlocking'; // frames gathering + no wait
+end;
+
 function TSQLHttpClientWebsockets.WebSockets: THttpClientWebSockets;
 begin
   if fSocket=nil then
@@ -857,7 +865,7 @@ begin
 end;
 
 function TSQLHttpClientWebsockets.WebSocketsUpgrade(
-  const aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX,
+  const aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX: boolean;
   aWebSocketsCompression: boolean): RawUTF8;
 var sockets: THttpClientWebSockets;
 {$ifdef WITHLOG}
@@ -890,7 +898,7 @@ begin
 end;
 
 function TSQLHttpClientWebsockets.WebSocketsConnect(
-  const aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX,
+  const aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX: boolean;
   aWebSocketsCompression: boolean): RawUTF8;
 begin
   if WebSockets = nil then
