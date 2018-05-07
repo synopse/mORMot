@@ -67,6 +67,7 @@ Contributors
   Wloochacz
   Wolfgang Ehrhardt
   Yoanq
+  Ysair
   Zed
 
 [See below if you upgrade from 1.17 revision]
