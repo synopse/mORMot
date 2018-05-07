@@ -24238,7 +24238,8 @@ begin
       SetLength(aFlattenedProps,prev);
     end else
       if (pilIgnoreIfGetter in fOptions) and not P^.GetterIsField then
-        continue else
+        // Skip.
+      else
         Add(TSQLPropInfoRTTI.CreateFrom(P,Count,fOptions,aFlattenedProps));
     P := P^.Next;
   end;
