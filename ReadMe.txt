@@ -58,6 +58,7 @@ Contributors
   Sllimr7139
   SSoftPro
   Stefan (itSDS)
+  Transmogrifix
   Uian2000
   Vaclav
   Vadim Orel

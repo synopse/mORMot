@@ -45,6 +45,7 @@ unit mORMot;
     Ondrej
     Pavel (mpv)
     Sabbiolina
+    Transmogrifix
     Vadim Orel
 
   Alternatively, the contents of this file may be used under the terms of
@@ -24237,10 +24238,8 @@ begin
       InternalAddParentsFirst(P^.PropType^.ClassType^.ClassType,aFlattenedProps);
       SetLength(aFlattenedProps,prev);
     end else
-      if (pilIgnoreIfGetter in fOptions) and not P^.GetterIsField then
-        // Skip.
-      else
-        Add(TSQLPropInfoRTTI.CreateFrom(P,Count,fOptions,aFlattenedProps));
+    if not(pilIgnoreIfGetter in fOptions) or P^.GetterIsField then
+      Add(TSQLPropInfoRTTI.CreateFrom(P,Count,fOptions,aFlattenedProps));
     P := P^.Next;
   end;
 end;
