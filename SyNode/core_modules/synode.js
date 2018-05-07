@@ -7,6 +7,21 @@ let {coreModulesPath, runInThisContext} = process.binding('modules'),
     {loadFile} = process.binding('fs'),
     Module;
 
+/**
+ * Stub for documenting build-in modules and classes.
+ *
+ * All `buildin` submodules can be required directly without adding namespace:
+ *
+ *      const assert = require('assert')
+ *
+ * All members are accessible in global:
+ *
+ *      console.log(process.cwd())
+ * 
+ * In case submodule is not documented here - see documentation on [node.js](https://nodejs.org/dist/latest-v8.x/docs/api/) site
+ *
+ * @module buildin
+ */
 
 /**
 * @namespace process
