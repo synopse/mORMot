@@ -423,7 +423,7 @@ procedure GetPropsInfo(TypeInfo: TRTTITypeInfo; var PropNames: TStringDynArray;
   var PropRTTI: TRTTIPropInfoDynArray);
 
 /// retrieve the value of a published property as variant
-function GetInstanceProp(Instance: TObject; PropInfo: TRTTIPropInfo): variant;
+function GetInstanceProp(Instance: TObject; PropInfo: TRTTIPropInfo; StoreClassName: boolean = False): variant;
 
 /// set the value of a published property from a variant
 procedure SetInstanceProp(Instance: TObject; PropInfo: TRTTIPropInfo;
@@ -1341,7 +1341,7 @@ begin
     (NativeUInt(PropInfo^.GetProc){$ifndef FPC} and $00FFFFFF{$endif}));
 end;
 
-function GetInstanceProp(Instance: TObject; PropInfo: TRTTIPropInfo): variant;
+function GetInstanceProp(Instance: TObject; PropInfo: TRTTIPropInfo; StoreClassName: boolean): variant;
 var obj: TObject;
 begin
   VarClear(result);
@@ -1375,7 +1375,7 @@ begin
     obj := TObject(NativeInt(GetOrdProp(Instance,PropInfo)));
     if obj=nil then
       result := null else
-      TJSONVariantData(result).Init(ObjectToJSON(obj));
+      TJSONVariantData(result).Init(ObjectToJSON(obj, StoreClassName));
   end;
   tkDynArray:
     if IsBlob(PropInfo) then
@@ -1576,7 +1576,7 @@ begin
       for i := 0 to PropCount-1 do begin
         PropInfo := PropList^[i];
         result := result+StringToJSON(ShortStringToString(@PropInfo^.Name))+':'+
-          ValueToJSON(GetInstanceProp(Instance,PropInfo))+',';
+          ValueToJSON(GetInstanceProp(Instance,PropInfo,StoreClassName))+',';
       end;
       result[length(result)] := '}';
     finally
