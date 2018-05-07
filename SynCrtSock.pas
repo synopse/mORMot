@@ -279,6 +279,7 @@ const
   // from SynCommons supplyings the file name)
   // - should match HTML_CONTENT_STATICFILE constant defined in mORMot.pas unit
   HTTP_RESP_STATICFILE = '!STATICFILE';
+
   /// used to notify e.g. the THttpServerRequest not to wait for any response
   // from the client
   // - is not to be used in normal HTTP process, but may be used e.g. by

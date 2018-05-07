@@ -6186,6 +6186,8 @@ type
     URI: RawUTF8;
     /// same as Call^.URI, but without the &session_signature=... ending
     URIWithoutSignature: RawUTF8;
+    /// points inside Call^.URI, after the 'root/' prefix
+    URIAfterRoot: PUTF8Char;
     /// the optional Blob field name as specified in URI
     // - e.g. retrieved from "ModelRoot/TableName/TableID/BlobFieldName"
     URIBlobFieldName: RawUTF8;
@@ -40626,6 +40628,7 @@ begin // expects 'ModelRoot[/TableName[/TableID][/URIBlobFieldName]][?param=...]
   if ParametersPos=0 then
     URI := copy(Call^.url,i,maxInt) else
     URI := copy(Call^.url,i,ParametersPos-i);
+  URIAfterRoot := PUTF8Char(pointer(Call^.url))+i-1;
   // compute Table, TableID and URIBlobFieldName
   slash := PosEx(RawUTF8('/'),URI);
   if slash>0 then begin
