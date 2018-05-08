@@ -62019,7 +62019,7 @@ function TServiceFactoryClient.InternalInvoke(const aMethod: RawUTF8;
   const aParams: RawUTF8; aResult: PRawUTF8; aErrorMsg: PRawUTF8;
   aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer;
   aClient: TSQLRestClientURI): boolean;
-var baseuri,uri,sent,resp,head,clientDrivenID: RawUTF8;
+var baseuri,uri,sent,resp,clientDrivenID,head,error: RawUTF8;
     Values: TPUtf8CharDynArray;
     status,m: integer;
     service: PServiceMethod;
@@ -62028,6 +62028,18 @@ var baseuri,uri,sent,resp,head,clientDrivenID: RawUTF8;
     log: ISynLog; // for Enter auto-leave to work with FPC
     p: RawUTF8;
     {$endif}
+  procedure DoClientCall;
+  begin
+    uri := baseuri;
+    fRest.ServicesRouting.ClientSideInvoke(uri,ctxt,aMethod,aParams,clientDrivenID,sent,head);
+    if service<>nil then begin // ParamsAsJSONObject won't apply to _signature_ e.g.
+      if fParamsAsJSONObject and (clientDrivenID='') then
+        sent := service^.ArgsArrayToObject(Pointer(sent),true);
+      if fNonBlockWithoutAnswer and (head='') and (Service^.ArgsOutputValuesCount=0) then
+        aClient.CallbackNonBlockingSetHeader(head);
+    end;
+    status := aClient.URI(uri,'POST',@resp,@head,@sent).Lo;
+  end;
 begin
   result := false;
   if Self=nil then
@@ -62049,34 +62061,24 @@ begin
   log := fRest.LogClass.Enter('InternalInvoke I%.%(%) %',
     [fInterfaceURI,aMethod,p,clientDrivenID],self);
   {$endif}
-  // compute URI according to current routing scheme
+  // call remote server according to current routing scheme
   if fForcedURI<>'' then
     baseuri := fForcedURI else
     if fRest.Services.ExpectMangledURI then
       baseuri := aClient.Model.Root+'/'+fInterfaceMangledURI else
       baseuri := aClient.Model.Root+'/'+fInterfaceURI;
-  uri := baseuri;
   ctxt := [];
   if (service<>nil) and not ParamsAsJSONObject and service^.ArgsInputIsOctetStream then
     include(ctxt,csiAsOctetStream);
-  fRest.ServicesRouting.ClientSideInvoke(uri,ctxt,aMethod,aParams,clientDrivenID,sent,head);
-  if service<>nil then begin // ParamsAsJSONObject won't apply to _signature_ e.g.
-    if fParamsAsJSONObject and (clientDrivenID='') then
-      sent := service^.ArgsArrayToObject(Pointer(sent),true);
-    if fNonBlockWithoutAnswer and (head='') and (Service^.ArgsOutputValuesCount=0) then
-      aClient.CallbackNonBlockingSetHeader(head);
-  end;
-  // call remote server
-  status := aClient.URI(uri,'POST',@resp,@head,@sent).Lo;
+  DoClientCall;
   if (status=HTTP_UNAUTHORIZED) and (clientDrivenID<>'') and
      (fInstanceCreation=sicClientDriven) and (aClientDrivenID<>nil) then begin
     {$ifdef WITHLOG}
     log.Log(sllClient,'% -> try to recreate ClientDrivenID',[resp],self);
     {$endif}
+    clientDrivenID := '';
     aClientDrivenID^ := 0;
-    uri := baseuri;
-    fRest.ServicesRouting.ClientSideInvoke(uri,ctxt,aMethod,aParams,'',sent,head);
-    status := aClient.URI(uri,'POST',@resp,@head,@sent).Lo;
+    DoClientCall;
   end;
   // decode result
   if aServiceCustomAnswer=nil then begin
@@ -62085,11 +62087,11 @@ begin
       if aErrorMsg<>nil then begin
         if resp='' then begin
           StatusCodeToErrorMessage(status,resp);
-          head := GetErrorMessage(status);
-          if head<>'' then
-            head := ' - '+head;
+          error := GetErrorMessage(status);
+          if error<>'' then
+            error := ' - '+error;
           aErrorMsg^ := FormatUTF8('URI % % returned status ''%'' (%%)',
-            [uri,sent,resp,status,head]);
+            [uri,sent,resp,status,error]);
         end else
           aErrorMsg^ := resp;
       end;
