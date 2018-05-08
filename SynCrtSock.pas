@@ -9899,19 +9899,19 @@ begin
   result := '';
   with URI do
   if From(url) then
-  try
-    with self.Create(Server,Port,Https,'','') do
     try
-      IgnoreSSLCertificateErrors := aIgnoreSSLCertificateErrors;
-      Request(Address,method,0,header,data,'',oh,result);
-      if outHeaders<>nil then
-        outHeaders^ := oh;
-    finally
-      Free;
+      with self.Create(Server,Port,Https,'','') do
+      try
+        IgnoreSSLCertificateErrors := aIgnoreSSLCertificateErrors;
+        Request(Address,method,0,header,data,'',oh,result);
+        if outHeaders<>nil then
+          outHeaders^ := oh;
+      finally
+        Free;
+      end;
+    except
+      result := '';
     end;
-  except
-    result := '';
-  end;
 end;
 
 class function THttpRequest.Get(const aURI,aHeader: SockString;

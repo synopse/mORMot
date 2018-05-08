@@ -40155,6 +40155,10 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
     len := SizeOf(pointer);
     result := DynArray.SaveToLength;
   end;
+  tkInterface: begin
+    len := SizeOf(PtrUInt);
+    result := SizeOf(PtrUInt);
+  end;
   else
     result := 0; // invalid/unhandled record content
   end;
@@ -40215,6 +40219,11 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
     DynArray.Init(info,data^);
     result := DynArray.SaveTo(dest);
     len := SizeOf(PtrUInt); // size of tkDynArray in record
+  end;
+  tkInterface: begin
+    PIInterface(dest)^ := PIInterface(data)^; // with proper refcount
+    result := dest+SizeOf(PtrUInt);
+    len := SizeOf(PtrUInt);
   end;
   else
     result := nil; // invalid/unhandled record content
@@ -40284,6 +40293,11 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
     DynArray.Init(info,data^);
     source := DynArray.LoadFrom(source);
     result := SizeOf(PtrUInt); // size of tkDynArray in record
+  end;
+  tkInterface: begin
+    PIInterface(data)^ := PIInterface(source)^; // with proper refcount
+    inc(source,SizeOf(PtrUInt));
+    result := SizeOf(PtrUInt);
   end;
   else begin
     source := nil;
@@ -64663,8 +64677,7 @@ begin
   end;
 end;
 
-function TSynBackgroundTimer.Disable(
-  aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+function TSynBackgroundTimer.Disable(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
 var found: integer;
 begin
   result := false;
