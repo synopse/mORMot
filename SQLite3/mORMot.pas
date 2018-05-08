@@ -2026,6 +2026,9 @@ procedure SetID(P: PUTF8Char; var result: TID); overload;
 procedure SetID(const U: RawByteString; var result: TID); overload;
   {$ifdef HASINLINENOTX86}inline;{$endif}
 
+/// TDynArraySortCompare compatible function, sorting by TSQLRecord.ID
+function TSQLRecordDynArrayCompare(const Item1,Item2): integer;
+
 /// decode JSON fields object into an UTF-8 encoded SQL-ready statement
 // - this function decodes in the P^ buffer memory itself (no memory allocation
 // or copy), for faster process - so take care that it is an unique string
@@ -20735,6 +20738,11 @@ asm
 {$endif HASINLINENOTX86}
 {$endif CPU64}
 end;
+
+function TSQLRecordDynArrayCompare(const Item1,Item2): integer;
+ begin // we assume Item1<>nil and Item2<>nil
+   result := SortDynArrayInt64(TSQLRecord(Item1).fID,TSQLRecord(Item2).fID);
+ end;
 
 {$ifdef HASDIRECTTYPEINFO}
 type
@@ -45528,15 +45536,9 @@ begin
   ReloadFromFile;
 end;
 
-function TSQLRecordCompare(Item1,Item2: Pointer): integer;
-var tmp: Int64;
+function TSQLRecordCompareList(Item1,Item2: Pointer): integer;
 begin // we assume Item1<>nil and Item2<>nil in fValue[]
-  tmp := TSQLRecord(Item1).fID-TSQLRecord(Item2).fID;
-  if tmp<0 then
-    result := -1 else
-  if tmp>0 then
-    result := 1 else
-    result := 0;
+  result := SortDynArrayInt64(TSQLRecord(Item1).fID,TSQLRecord(Item2).fID);
 end;
 
 function TSQLRestStorageInMemory.AddOne(Rec: TSQLRecord; ForceID: boolean;
@@ -45585,7 +45587,7 @@ begin
   end;
   ndx := fValue.Add(Rec);
   if needSort then
-    fValue.Sort(TSQLRecordCompare) else // fUniqueFields[] already checked
+    fValue.Sort(TSQLRecordCompareList) else // fUniqueFields[] already checked
     if (fUniqueFields<>nil) and not NoUniqueFieldCheckOnAdd then
       for i := 0 to fUniqueFields.Count-1 do // perform hash of List[Count-1]
       if not TListFieldHash(fUniqueFields.List[i]).EnsureJustAddedNotDuplicated then begin
