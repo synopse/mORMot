@@ -4840,7 +4840,7 @@ var
 
   /// the options used by TServiceFactoryServer.OnLogRestExecuteMethod
   SERVICELOG_WRITEOPTIONS: TTextWriterWriteObjectOptions =
-    [woDontStoreDefault,woDontStoreEmptyString, woDontStore0,
+    [woDontStoreDefault, woDontStoreEmptyString, woDontStore0,
      woHideSynPersistentPassword];
 
 {$ifdef MSWINDOWS}
@@ -5887,7 +5887,7 @@ type
     optVariantCopiedByReference, optInterceptInputOutput,
     {$endif}
     optNoLogInput, optNoLogOutput,
-    optErrorOnMissingParam, optForceStandardJSON,
+    optErrorOnMissingParam, optForceStandardJSON, optDontStoreVoidJSON,
     optIgnoreException);
   /// how TServiceFactoryServer.SetOptions() will set the options value
   TServiceMethodOptionsAction = (moaReplace, moaInclude, moaExclude);
@@ -5922,7 +5922,9 @@ type
   // is defined to reject the call
   // - by default, it wil check for the client user agent, and use extended
   // JSON if none is found (e.g. from WebSockets), or if it contains 'mORMot':
-  // you can set optForceStandardJSON to ensure standard JSON is alwyas returned
+  // you can set optForceStandardJSON to ensure standard JSON is always returned
+  // - optDontStoreVoidJSON will reduce the JSON object verbosity by not writing
+  // void (e.g. 0 or '') properties
   // - any exceptions will be propagated during execution, unless
   // optIgnoreException is set and the exception is trapped (not to be used
   // unless you know what you are doing)
@@ -12966,7 +12968,7 @@ type
     property DelayedInstance: boolean read fDelayedInstance write fDelayedInstance;
     /// if methods expecting no result (i.e. plain procedure without var/out
     // parameters) should not block the client waiting for answer
-    // - may be handy e.g. when implementing an event-driven asynchronous service
+    // - may be handy e.g. when consuming an event-driven asynchronous service
     // - will call CallbackNonBlockingSetHeader, currently implemented only in
     // TSQLHttpClientWebsockets, with frame gathering
     property NonBlockWithoutAnswer: boolean read fNonBlockWithoutAnswer write fNonBlockWithoutAnswer;
@@ -23275,12 +23277,14 @@ type
   PTObjArraySerializer = ^TObjArraySerializer;
 
 procedure TObjArraySerializer.CustomWriter(const aWriter: TTextWriter; const aValue);
-var options: TTextWriterWriteObjectOptions;
+var opt: TTextWriterWriteObjectOptions;
 begin
   if twoEnumSetsAsTextInRecord in aWriter.CustomOptions then
-    options := [woDontStoreDefault,woSQLRawBlobAsBase64,woEnumSetsAsText] else
-    options := [woDontStoreDefault,woSQLRawBlobAsBase64];
-  aWriter.WriteObject(TObject(aValue), options);
+    opt := [woDontStoreDefault,woSQLRawBlobAsBase64,woEnumSetsAsText] else
+    opt := [woDontStoreDefault,woSQLRawBlobAsBase64];
+  if twoIgnoreDefaultInRecord in aWriter.CustomOptions then
+    opt := opt+[woDontStoreEmptyString,woDontStore0];
+  aWriter.WriteObject(TObject(aValue),opt);
 end;
 
 function TObjArraySerializer.CustomReader(P: PUTF8Char; var aValue;
@@ -59493,6 +59497,7 @@ var Inst: TServiceFactoryServerInstance;
     entry: PInterfaceEntry;
     instancePtr: pointer; // weak IInvokable reference
     dolock, execres: boolean;
+    opt: TServiceMethodOptions;
     exec: TServiceMethodExecute;
     timeStart,timeEnd: Int64;
     stats: TSynMonitorInputOutput;
@@ -59616,25 +59621,28 @@ begin
       end;
       instancePtr := PAnsiChar(Inst.Instance)+entry^.IOffset;
     end;
-    if optExecInPerInterfaceThread in Ctxt.ServiceExecution^.Options then
+    opt := Ctxt.ServiceExecution^.Options;
+    if optExecInPerInterfaceThread in opt then
       if fBackgroundThread=nil then
         fBackgroundThread := Rest.NewBackgroundThreadMethod(
           '% %',[self,fInterface.fInterfaceName]);
     WR := TJSONSerializer.CreateOwnedStream(temp);
     try
       Ctxt.fThreadServer^.Factory := self;
-      if not(optForceStandardJSON in Ctxt.ServiceExecution^.Options) and
+      if not(optForceStandardJSON in opt) and
          ((Ctxt.Call.InHead='') or (Ctxt.ClientKind=ckFramework)) then
         include(WR.fCustomOptions,twoForceJSONExtended) else
         include(WR.fCustomOptions,twoForceJSONStandard); // AJAX
+      if optDontStoreVoidJSON in opt then
+        include(WR.fCustomOptions,twoIgnoreDefaultInRecord);
       // root/calculator {"method":"add","params":[1,2]} -> {"result":[3],"id":0}
       Ctxt.ServiceResultStart(WR);
-      dolock := optExecLockedPerInterface in Ctxt.ServiceExecution^.Options;
+      dolock := optExecLockedPerInterface in opt;
       if dolock then
         EnterCriticalSection(fInstanceLock);
       exec := TServiceMethodExecute.Create(Ctxt.ServiceMethod);
       try
-        exec.fOptions := Ctxt.ServiceExecution^.Options;
+        exec.fOptions := opt;
         {$ifndef LVCL}
         exec.fBackgroundExecutionThread := fBackgroundThread;
         {$endif}
@@ -61376,6 +61384,7 @@ var a,a1: integer;
     Val, Name: PUTF8Char;
     ValLen, NameLen: integer;
     EndOfObject: AnsiChar;
+    opt: TTextWriterWriteObjectOptions;
     ParObjValuesUsed: boolean;
     ParObjValues: array[0..MAX_METHOD_ARGS-1] of PUTF8Char;
 begin
@@ -61517,6 +61526,9 @@ begin
           exit;
         end;
       // write the '{"result":[...' array or object
+      if optDontStoreVoidJSON in Options then
+        opt := [woDontStoreDefault,woDontStoreEmptyString,woDontStore0] else
+        opt := [woDontStoreDefault];
       for a := ArgsOutFirst to ArgsOutLast do
       with Args[a] do
       if ValueDirection in [smdVar,smdOut,smdResult] then begin
@@ -61527,7 +61539,7 @@ begin
           Res.AddDynArrayJSON(fDynArrays[IndexVar].Wrapper);
           Res.Add(',');
         end;
-        else AddJSON(Res,fValues[a]);
+        else AddJSON(Res,fValues[a],opt);
         end;
       end;
       Res.CancelLastComma;
