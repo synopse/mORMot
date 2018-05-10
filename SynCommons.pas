@@ -6986,7 +6986,18 @@ function Random32: cardinal; overload;
 // - thread-safe function: each thread will maintain its own gsl_rng_taus2 table
 function Random32(max: cardinal): cardinal; overload;
 
-/// seed the gsl_rng_taus2 Random32 generator
+/// fast compute of some 32-bit random value, using the gsl_rng_taus2 generator
+// - plain Random32 may call RDRAND opcode on Intel CPUs, wherease this function
+// will use well documented (and proven) Pierre L'Ecuyer software generator
+// - may be used if you don't want/trust RDRAND, and a cross-platform generator
+// - use rather TAESPRNG.Main.FillRandom() for cryptographic-level randomness
+// - thread-safe function: each thread will maintain its own gsl_rng_taus2 table
+function Random32gsl: cardinal; overload;
+
+/// fast compute of bounded 32-bit random value, using the gsl_rng_taus2 generator
+function Random32gsl(max: cardinal): cardinal; overload;
+
+/// seed the gsl_rng_taus2 Random32/Random32gsl generator
 // - do nothing if RDRAND Intel x86/x64 opcode is available
 // - by default, gsl_rng_taus2 generator is re-seeded every 256KB, much more
 // often than the Pierre L'Ecuyer's algorithm period of 2^88
@@ -7002,7 +7013,7 @@ procedure Random32Seed(entropy: pointer=nil; entropylen: integer=0);
 // gsl_rng_taus2 generator or hardware RDRAND Intel x86/x64 opcode if available
 // - consider using instead the cryptographic secure TAESPRNG.Main.FillRandom()
 // method from the SynCrypto unit
-procedure FillRandom(Dest: PCardinalArray; CardinalCount: integer);
+procedure FillRandom(Dest: PCardinalArray; CardinalCount: integer; forcegsl: boolean=false);
 
 /// compute a random GUID value
 procedure RandomGUID(out result: TGUID); overload;
@@ -37398,14 +37409,24 @@ begin
   result := (QWord(Random32)*max)shr 32;
 end;
 
-procedure FillRandom(Dest: PCardinalArray; CardinalCount: integer);
+function Random32gsl: cardinal;
+begin
+  result := _Lecuyer.Next;
+end;
+
+function Random32gsl(max: cardinal): cardinal;
+begin
+  result := (QWord(_Lecuyer.Next)*max)shr 32;
+end;
+
+procedure FillRandom(Dest: PCardinalArray; CardinalCount: integer; forcegsl: boolean);
 var i: integer;
     c: cardinal;
     timenow: Int64;
     lecuyer: ^TLecuyer;
 begin
   {$ifdef CPUINTEL}
-  if cfRAND in CpuFeatures then
+  if (cfRAND in CpuFeatures) and not forcegsl then
     lecuyer := nil else
   {$endif}
     lecuyer := @_Lecuyer;
@@ -60007,7 +60028,7 @@ procedure TFileBufferWriter.Write(Data: pointer; DataLen: integer);
 begin
   if (DataLen<=0) or (Data=nil) then
     exit;
-  inc(fTotalWritten,PtrUInt(DataLen));
+  inc(fTotalWritten,DataLen);
   if fPos+DataLen>fBufLen then begin
     if fPos>0 then begin
       fStream.Write(fBuffer^,fPos);
