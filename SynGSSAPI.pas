@@ -34,7 +34,7 @@ type
 /// - KRB5_KTNAME environment variable should be set and point to valid readable keytab file
 /// - the keytab file should contain SvcName in the form HTTP/<host_FQDN>[:port]@REALM
 function GSSAcceptSecurityContext(InputToken: RawByteString;
-  SvcName: AnsiString; out GSSContext: Pointer; out ClientName: AnsiString;
+  SPN: AnsiString; var GSSContext: Pointer; out ClientName: AnsiString;
   out OutputToken: RawByteString): Boolean;
 /// Releases previously accepted security context
 procedure GSSReleaseContext(var GSSContext: Pointer);
@@ -246,15 +246,15 @@ begin
     raise EGSSError.Create(AMajorStatus, AMinorStatus, APrefix);
 end;
 
-function GSSAcquireCredentials(SvcName: AnsiString): Pointer;
+function GSSAcquireCredentials(SPN: AnsiString): Pointer;
 var
   MajSt, MinSt: Cardinal;
   SvcNameBuf: gss_buffer_desc;
   GSSNameHandle: Pointer;
 begin
   GSSNameHandle := nil;
-  SvcNameBuf.length := Length(SvcName) + 1;
-  SvcNameBuf.value := PAnsiChar(SvcName);
+  SvcNameBuf.length := Length(SPN) + 1;
+  SvcNameBuf.value := PAnsiChar(SPN);
   MajSt := gss_import_name(MinSt, @SvcNameBuf, GSS_KRB5_NT_PRINCIPAL_NAME{GSS_C_NT_USER_NAME}, GSSNameHandle);
   GSSCheck(MajSt, MinSt, 'gss_import_name() failed');
   try
@@ -267,7 +267,7 @@ begin
 end;
 
 function GSSAcceptSecurityContext(InputToken: RawByteString;
-  SvcName: AnsiString; out GSSContext: Pointer; out ClientName: String;
+  SPN: AnsiString; var GSSContext: Pointer; out ClientName: String;
   out OutputToken: RawByteString): Boolean;
 var
   MajSt, MinSt, Flags, Secs: Cardinal;
@@ -275,8 +275,8 @@ var
   SelfCreds, ClientNameHandle: Pointer;
   NameType: gss_OID;
 begin
-  if SvcName <> '' then
-    SelfCreds := GSSAcquireCredentials(SvcName)
+  if SPN <> '' then
+    SelfCreds := GSSAcquireCredentials(SPN)
   else
     SelfCreds := nil;
   try
