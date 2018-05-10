@@ -55,6 +55,8 @@
    CustomOptions := ' -Cg-';"/>
     <Linking>
       <Options>
+        <PassLinkerOptions Value="True"/>
+        <LinkerOptions Value="-L\usr\lib\x86_64-linux-gnu\mit-krb5"/>
         <Win32>
           <GraphicApplication Value="True"/>
         </Win32>
