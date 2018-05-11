@@ -607,7 +607,7 @@ var utf8: RawUTF8;
 begin
   FormatUTF8(msg,args,utf8);
   Check(condition,UTF8ToString(utf8));
-  TSynLogTestLog.Add.Log(level,utf8+' '+fCheckLogTime.Stop);
+  TSynLogTestLog.Add.Log(level,'% %',[utf8,fCheckLogTime.Stop],self);
   fCheckLogTime.Start;
 end;
 
