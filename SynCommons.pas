@@ -25262,8 +25262,8 @@ end;
 
 type
   TFormatUTF8 = object // only supported token is %, with any const arguments
-    L,argN: integer;
     b: PTempUTF8;
+    L,argN: integer;
     blocks: array[0..63] of TTempUTF8;
     procedure Parse(const Format: RawUTF8; const Args: array of const);
     procedure Write(Dest: PUTF8Char);
@@ -25301,8 +25301,8 @@ begin
         break;
     end else
     if F^=#0 then
-      break else begin // no more available Args -> add all remaining text
-      b^.Text := F;
+      break else begin
+      b^.Text := F; // no more available Args -> add all remaining text
       b^.Len := length(Format)-(F-pointer(Format));
       b^.TempRawUTF8 := nil;
       inc(L,b^.Len);

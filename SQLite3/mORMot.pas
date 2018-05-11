@@ -19457,7 +19457,8 @@ type
     // ! TSQLRestServer.ServiceDefine(...).ResultAsJSONObjectWithoutResult := true
     // - this method expects the interface to have been registered previously:
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
-    function ServiceDefineSharedAPI(const aInterface: TGUID): TServiceFactoryClient;
+    function ServiceDefineSharedAPI(const aInterface: TGUID;
+      const aContractExpected: RawUTF8=SERVICE_CONTRACT_NONE_EXPECTED): TServiceFactoryClient;
     /// allow to notify a server the services this client may be actually capable
     // - when this client will connect to a remote server to access its services,
     // it will register its own services, supplying its TSQLRestServer instance,
@@ -38817,9 +38818,10 @@ begin
     TInterfaceFactory.GUID2TypeInfo(aInterface),Obj,aContractExpected);
 end;
 
-function TSQLRestClientURI.ServiceDefineSharedAPI(const aInterface: TGUID): TServiceFactoryClient;
+function TSQLRestClientURI.ServiceDefineSharedAPI(const aInterface: TGUID;
+  const aContractExpected: RawUTF8): TServiceFactoryClient;
 begin
-  result := ServiceDefine(aInterface,sicShared,SERVICE_CONTRACT_NONE_EXPECTED);
+  result := ServiceDefine(aInterface,sicShared,aContractExpected);
   result.ParamsAsJSONObject := true; // no contract -> explicit parameters
   result.ResultAsJSONObjectWithoutResult := true;
 end;
