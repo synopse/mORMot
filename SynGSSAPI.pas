@@ -2,15 +2,8 @@ unit SynGSSAPI;
 
 {
   Server side Kerberos authentication support using GSSAPI
-  Path to either MIT or Heimdal implementation libraries should be
-  specified in linker options:
-    -L/usr/lib/x86_64-linux-gnu/mit-krb5 - for MIT on Ubuntu x64
-    -L/usr/lib/x86_64-linux-gnu/heimdal - for Heimdal on Ubuntu x64
+  Both MIT and Heimdal implementation libraries are supported
 }
-
-{$IFNDEF GSSAPI_HEIMDAL}
-{$DEFINE GSSAPI_MIT}
-{$ENDIF}
 
 interface
 
@@ -29,19 +22,21 @@ type
     property MinorStatus: Cardinal read FMinorStatus;
   end;
 
+/// Call this function to check whether gssapi library found or not
+function GSSLibraryFound: Boolean;
 /// Accepts security context provided by client
-/// For this method to work the following conditions should be met:
-/// - KRB5_KTNAME environment variable should be set and point to valid readable keytab file
-/// - the keytab file should contain SvcName in the form HTTP/<host_FQDN>[:port]@REALM
-function GSSAcceptSecurityContext(InputToken: RawByteString;
-  SPN: AnsiString; var GSSContext: Pointer; out ClientName: AnsiString;
+// For this method to work the following conditions should be met:
+// - KRB5_KTNAME environment variable should be set and point to valid readable keytab file
+// - the keytab file should contain SvcName in the form HTTP/<host_FQDN>[:port]@REALM
+function GSSAcceptSecurityContext(const InputToken: RawByteString;
+  const SPN: AnsiString; var GSSContext: Pointer; out ClientName: AnsiString;
   out OutputToken: RawByteString): Boolean;
 /// Releases previously accepted security context
 procedure GSSReleaseContext(var GSSContext: Pointer);
 /// Lists supported security mechanisms in form
-/// sasl:name:description
-/// Not all mechanisms provide human readable name and description
-procedure EnlistMechsSupported(MechList: TStringList);
+// sasl:name:description
+// Not all mechanisms provide human readable name and description
+procedure GSSEnlistMechsSupported(MechList: TStringList);
 
 const // This is here to be more compatible with SynSSPIAuth
   /// HTTP header to be set for SSPI authentication
@@ -52,13 +47,8 @@ const // This is here to be more compatible with SynSSPIAuth
 implementation
 
 const
-  GSSLib =
-    {$IFDEF GSSAPI_MIT}
-    'gssapi_krb5';
-    {$ENDIF}
-    {$IFDEF GSSAPI_HEIMDAL}
-    'gssapi';
-    {$ENDIF}
+  GSSLib_MIT = 'libgssapi_krb5.so.2';
+  GSSLib_Heimdal = 'libgssapi.so.3';
 
   GSS_C_NO_NAME = nil;
 
@@ -91,7 +81,6 @@ const
   GSS_C_ACCEPT    = 2;
 
 type
-  {.$A8}
   gss_name_t = Pointer;
 
   gss_OID_desc = record
@@ -125,93 +114,81 @@ type
   end;
   gss_channel_bindings_t = ^gss_channel_bindings_struct;
 
-var
-  {$IFDEF GSSAPI_MIT}
-  GSS_C_NT_USER_NAME: gss_OID external GSSLib;
-  GSS_KRB5_NT_PRINCIPAL_NAME: gss_OID external GSSLib;
-  {$ENDIF}
-  {$IFDEF GSSAPI_HEIMDAL}
-  __gss_c_nt_user_name_oid_desc: gss_OID_desc external GSSLib;
-  GSS_C_NT_USER_NAME: gss_OID = @__gss_c_nt_user_name_oid_desc;
-  __gss_krb5_nt_principal_name_oid_desc: gss_OID_desc external GSSLib;
-  GSS_KRB5_NT_PRINCIPAL_NAME: gss_OID = @__gss_krb5_nt_principal_name_oid_desc;
-  {$ENDIF}
+  PGSSAPIFunctions = ^TGSSAPIFunctions;
+  TGSSAPIFunctions = record
+    gsslib: TLibHandle;
+    gss_indicate_mechs: function (
+      out minor_status: Cardinal;
+      out mech_set: gss_OID_set): Cardinal;
+    gss_release_oid_set: function (
+      out minor_status: Cardinal;
+      out mech_set: gss_OID_set): Cardinal;
+    gss_inquire_saslname_for_mech: function (
+      out minor_status: Cardinal;
+      const desired_mech: gss_OID;
+      out sasl_mech_name: gss_buffer_desc;
+      out mech_name: gss_buffer_desc;
+      out mech_description: gss_buffer_desc): Cardinal;
+    gss_display_status: function (
+      out minor_status: Cardinal;
+      status: Cardinal;
+      status_type: Integer;
+      mech_type: gss_OID;
+      out message_context: Cardinal;
+      out status_string: gss_buffer_desc): Cardinal;
+    gss_release_buffer: function (
+      out minor_status: Cardinal;
+      var buffer: gss_buffer_desc): Cardinal;
+    gss_import_name: function (
+      out minor_status: Cardinal;
+      input_name_buffer: gss_buffer_t;
+      input_name_type: gss_OID; // (used to be const)
+      out output_name: Pointer): Cardinal;
+    gss_acquire_cred: function (
+      out minor_status: Cardinal;
+      desired_name: Pointer;
+      time_req: Cardinal;
+      desired_mechs: gss_OID_set;
+      cred_usage: Integer;
+      out output_cred_handle: Pointer;
+      actual_mechs: gss_OID_set_ptr;
+      time_rec: PCardinal): Cardinal;
+    gss_release_cred: function (
+      out minor_status: Cardinal;
+      var cred_handle: Pointer): Cardinal;
+    gss_accept_sec_context: function (
+      out minor_status: Cardinal;
+      out context_handle: Pointer;
+      acceptor_cred_handle: Pointer;
+      var input_token_buffer: gss_buffer_desc;
+      input_chan_bindings: gss_channel_bindings_t;
+      out src_name: Pointer;
+      out mech_type: gss_OID;
+      out output_token: gss_buffer_desc;
+      {out} ret_flags: PCardinal;
+      {out} time_rec: PCardinal;
+      {out} delegated_cred_handle: PPointer): Cardinal;
+    gss_display_name: function (
+      out minor_status: Cardinal;
+      input_name: Pointer;
+      out output_name_buffer: gss_buffer_desc;
+      output_name_type: gss_OID_ptr): Cardinal;
+    gss_release_name: function (
+      out minor_status: Cardinal;
+      var name: Pointer): Cardinal;
+    gss_delete_sec_context: function (
+      out minor_status: Cardinal;
+      gss_context: PPointer;
+      buffer: gss_buffer_t): Cardinal;
+  end;
 
-function gss_indicate_mechs(
-  out minor_status: Cardinal;
-  out mech_set: gss_OID_set): Cardinal;
-  external GSSLib;
-function gss_release_oid_set(
-  out minor_status: Cardinal;
-  out mech_set: gss_OID_set): Cardinal;
-  external GSSLib;
-function gss_inquire_saslname_for_mech(
-  out minor_status: Cardinal;
-  const desired_mech: gss_OID;
-  out sasl_mech_name: gss_buffer_desc;
-  out mech_name: gss_buffer_desc;
-  out mech_description: gss_buffer_desc): Cardinal;
-external GSSLib;
-function gss_display_status(
-  out minor_status: Cardinal;
-  status: Cardinal;
-  status_type: Integer;
-  mech_type: gss_OID;
-  out message_context: Cardinal;
-  out status_string: gss_buffer_desc): Cardinal;
-  external GSSLib;
-function gss_release_buffer(
-  out minor_status: Cardinal;
-  var buffer: gss_buffer_desc): Cardinal;
-  external GSSLib;
-function gss_import_name(
-  out minor_status: Cardinal;
-  input_name_buffer: gss_buffer_t;
-  input_name_type: gss_OID; // (used to be const)
-  out output_name: Pointer): Cardinal;
-  external GSSLib;
-function gss_acquire_cred(
-  out minor_status: Cardinal;
-  desired_name: Pointer;
-  time_req: Cardinal;
-  desired_mechs: gss_OID_set;
-  cred_usage: Integer;
-  out output_cred_handle: Pointer;
-  actual_mechs: gss_OID_set_ptr;
-  time_rec: PCardinal): Cardinal;
-  external GSSLib;
-function gss_release_cred(
-  out minor_status: Cardinal;
-  var cred_handle: Pointer): Cardinal;
-  external GSSLib;
-function gss_accept_sec_context(
-  out minor_status: Cardinal;
-  out context_handle: Pointer;
-  acceptor_cred_handle: Pointer;
-  var input_token_buffer: gss_buffer_desc;
-  input_chan_bindings: gss_channel_bindings_t;
-  out src_name: Pointer;
-  out mech_type: gss_OID;
-  out output_token: gss_buffer_desc;
-  {out} ret_flags: PCardinal;
-  {out} time_rec: PCardinal;
-  {out} delegated_cred_handle: PPointer): Cardinal;
-  external GSSLib;
-function gss_display_name(
-  out minor_status: Cardinal;
-  input_name: Pointer;
-  out output_name_buffer: gss_buffer_desc;
-  output_name_type: gss_OID_ptr): Cardinal;
-  external GSSLib;
-function gss_release_name(
-  out minor_status: Cardinal;
-  var name: Pointer): Cardinal;
-  external GSSLib;
-function gss_delete_sec_context(
-  out minor_status: Cardinal;
-  gss_context: PPointer;
-  buffer: gss_buffer_t): Cardinal;
-  external GSSLib;
+var
+  GSS_C_NT_USER_NAME: gss_OID;
+  GSS_KRB5_NT_PRINCIPAL_NAME: gss_OID;
+
+  GSSAPI: PGSSAPIFunctions = nil;
+
+  GSSAPINotFound: Boolean = False;
 
 {*
  * The macros that test status codes for error conditions.  Note that the
@@ -246,7 +223,7 @@ begin
     raise EGSSError.Create(AMajorStatus, AMinorStatus, APrefix);
 end;
 
-function GSSAcquireCredentials(SPN: AnsiString): Pointer;
+function GSSAcquireCredentials(const SPN: AnsiString): Pointer;
 var
   MajSt, MinSt: Cardinal;
   SvcNameBuf: gss_buffer_desc;
@@ -255,19 +232,73 @@ begin
   GSSNameHandle := nil;
   SvcNameBuf.length := Length(SPN) + 1;
   SvcNameBuf.value := PAnsiChar(SPN);
-  MajSt := gss_import_name(MinSt, @SvcNameBuf, GSS_KRB5_NT_PRINCIPAL_NAME{GSS_C_NT_USER_NAME}, GSSNameHandle);
+  MajSt := GSSAPI^.gss_import_name(MinSt, @SvcNameBuf, GSS_KRB5_NT_PRINCIPAL_NAME{GSS_C_NT_USER_NAME}, GSSNameHandle);
   GSSCheck(MajSt, MinSt, 'gss_import_name() failed');
   try
     GSSCheck(
-      gss_acquire_cred(MinSt, GSSNameHandle, GSS_C_INDEFINITE, nil, GSS_C_ACCEPT, Result, nil, nil),
+      GSSAPI^.gss_acquire_cred(MinSt, GSSNameHandle, GSS_C_INDEFINITE, nil, GSS_C_ACCEPT, Result, nil, nil),
       MinSt, 'gss_acquire_cred() failed');
   finally
-    gss_release_name(MinSt, GSSNameHandle);
+    GSSAPI^.gss_release_name(MinSt, GSSNameHandle);
   end;
 end;
 
-function GSSAcceptSecurityContext(InputToken: RawByteString;
-  SPN: AnsiString; var GSSContext: Pointer; out ClientName: String;
+procedure TryLoadGSSAPI;
+var
+  handle: TLibHandle;
+  UseHeimdal: Boolean;
+begin
+  if not GSSAPINotFound then begin
+    handle := SafeLoadLibrary(GSSLib_MIT);
+    UseHeimdal := handle=0;
+    if UseHeimdal then
+      handle := SafeLoadLibrary(GSSLib_Heimdal);
+    GSSAPINotFound := handle=0;
+    if not GSSAPINotFound then begin
+      New(GSSAPI);
+      with GSSAPI^ do begin
+        gsslib := handle;
+        Pointer(@gss_indicate_mechs) := GetProcAddress(handle, 'gss_indicate_mechs');
+        Pointer(@gss_release_oid_set) := GetProcAddress(handle, 'gss_release_oid_set');
+        Pointer(@gss_inquire_saslname_for_mech) := GetProcAddress(handle, 'gss_inquire_saslname_for_mech');
+        Pointer(@gss_display_status) := GetProcAddress(handle, 'gss_display_status');
+        Pointer(@gss_release_buffer) := GetProcAddress(handle, 'gss_release_buffer');
+        Pointer(@gss_import_name) := GetProcAddress(handle, 'gss_import_name');
+        Pointer(@gss_acquire_cred) := GetProcAddress(handle, 'gss_acquire_cred');
+        Pointer(@gss_release_cred) := GetProcAddress(handle, 'gss_release_cred');
+        Pointer(@gss_accept_sec_context) := GetProcAddress(handle, 'gss_accept_sec_context');
+        Pointer(@gss_display_name) := GetProcAddress(handle, 'gss_display_name');
+        Pointer(@gss_release_name) := GetProcAddress(handle, 'gss_release_name');
+        Pointer(@gss_delete_sec_context) := GetProcAddress(handle, 'gss_delete_sec_context');
+        if UseHeimdal then begin
+          Pointer(GSS_C_NT_USER_NAME) := GetProcAddress(handle, '__gss_c_nt_user_name_oid_desc');
+          Pointer(GSS_KRB5_NT_PRINCIPAL_NAME) := GetProcAddress(handle, '__gss_krb5_nt_principal_name_oid_desc');
+        end else begin
+          Pointer(GSS_C_NT_USER_NAME) := PPointer(GetProcAddress(handle, 'GSS_C_NT_USER_NAME'))^;
+          Pointer(GSS_KRB5_NT_PRINCIPAL_NAME) := PPointer(GetProcAddress(handle, 'GSS_KRB5_NT_PRINCIPAL_NAME'))^;
+        end;
+      end;
+    end;
+  end;
+end;
+
+procedure RequireGSSAPI;
+begin
+  if not GSSLibraryFound then
+    raise ENotSupportedException.Create('No GSSAPI library found - please install either MIT or Heimdal GSSAPI implementation');
+end;
+
+// Public API
+
+function GSSLibraryFound: Boolean;
+begin
+  if (GSSAPI=nil) and not GSSAPINotFound then
+    TryLoadGSSAPI;
+  Result := GSSAPI<>nil;
+end;
+
+function GSSAcceptSecurityContext(const InputToken: RawByteString;
+  const SPN: AnsiString; var GSSContext: Pointer; out ClientName: String;
   out OutputToken: RawByteString): Boolean;
 var
   MajSt, MinSt, Flags, Secs: Cardinal;
@@ -275,6 +306,7 @@ var
   SelfCreds, ClientNameHandle: Pointer;
   NameType: gss_OID;
 begin
+  RequireGSSAPI;
   if SPN <> '' then
     SelfCreds := GSSAcquireCredentials(SPN)
   else
@@ -284,25 +316,25 @@ begin
     InBuf.value := PChar(InputToken);
     GSSContext := nil; // It is important to clean GSSContext before call
     OutBuf.length := 0; // This indicates no panding output exists
-    MajSt := gss_accept_sec_context(
+    MajSt := gssapi^.gss_accept_sec_context(
       MinSt, GSSContext, SelfCreds, InBuf, nil,
       ClientNameHandle, NameType, OutBuf, @Flags, @Secs, nil);
     GSSCheck(MajSt, MinSt, 'Failed accepting security context');
     Result := (MajSt and GSS_S_CONTINUE_NEEDED) = 0;
     SetString(OutputToken, OutBuf.value, OutBuf.length);
-    gss_release_buffer(MinSt, OutBuf);
+    GSSAPI^.gss_release_buffer(MinSt, OutBuf);
     if ClientNameHandle <> nil then
       try
         GSSCheck(
-          gss_display_name(MinSt, ClientNameHandle, NameBuf, @NameType),
+          GSSAPI^.gss_display_name(MinSt, ClientNameHandle, NameBuf, @NameType),
           MinSt, 'Error retrieving client name');
         SetString(ClientName, NameBuf.value, NameBuf.length);
-        gss_release_buffer(MinSt, NameBuf);
+        GSSAPI^.gss_release_buffer(MinSt, NameBuf);
       finally
-        gss_release_name(MinSt, ClientNameHandle);
+        GSSAPI^.gss_release_name(MinSt, ClientNameHandle);
       end;
   finally
-    gss_release_cred(MinSt, SelfCreds);
+    GSSAPI^.gss_release_cred(MinSt, SelfCreds);
   end;
 end;
 
@@ -310,7 +342,32 @@ procedure GSSReleaseContext(var GSSContext: Pointer);
 var
   MinSt: Cardinal;
 begin
-  gss_delete_sec_context(MinSt, @GSSContext, nil);
+  RequireGSSAPI;
+  GSSAPI^.gss_delete_sec_context(MinSt, @GSSContext, nil);
+end;
+
+procedure GSSEnlistMechsSupported(MechList: TStringList);
+var
+  i, MajSt, MinSt: Cardinal;
+  Mechs: gss_OID_set;
+  Buf_sasl, Buf_name, Buf_desc: gss_buffer_desc;
+  Sasl, Name, Desc: String;
+begin
+  RequireGSSAPI;
+  if MechList <> nil then begin
+    MajSt := GSSAPI^.gss_indicate_mechs(MinSt, Mechs);
+    for i := 0 to Pred(Mechs^.count) do begin
+      MajSt := GSSAPI^.gss_inquire_saslname_for_mech(MinSt, @Mechs^.elements[i], Buf_sasl, Buf_name, Buf_desc);
+      SetString(Sasl, Buf_sasl.value, Buf_sasl.length);
+      SetString(Name, Buf_name.value, Buf_name.length);
+      SetString(Desc, Buf_desc.value, Buf_desc.length);
+      MechList.Add(Format('%s:%s:%s', [Sasl, Name, Desc]));
+      GSSAPI^.gss_release_buffer(MinSt, Buf_sasl);
+      GSSAPI^.gss_release_buffer(MinSt, Buf_name);
+      GSSAPI^.gss_release_buffer(MinSt, Buf_desc);
+    end;
+    MajSt := GSSAPI^.gss_release_oid_set(MinSt, Mechs);
+  end;
 end;
 
 { EGSSError }
@@ -325,10 +382,10 @@ constructor EGSSError.Create(AMajorStatus, AMinorStatus: Cardinal; const APrefix
     MajSt, MinSt: Cardinal;
   begin
     repeat
-      MajSt := gss_display_status(
+      MajSt := GSSAPI^.gss_display_status(
         MinSt, AErrorStatus, StatusType, nil, MsgCtx, MsgBuf);
       SetString(Str, MsgBuf.value, MsgBuf.length);
-      gss_release_buffer(MinSt, MsgBuf);
+      GSSAPI^.gss_release_buffer(MinSt, MsgBuf);
       if Msg <> '' then
         Msg := Msg + ': ' + Str
       else
@@ -348,28 +405,10 @@ begin
   FMinorStatus := AMinorStatus;
 end;
 
-procedure EnlistMechsSupported(MechList: TStringList);
-var
-  i, MajSt, MinSt: Cardinal;
-  Mechs: gss_OID_set;
-  Buf_sasl, Buf_name, Buf_desc: gss_buffer_desc;
-  Sasl, Name, Desc: String;
-begin
-  if MechList <> nil then begin
-    MajSt := gss_indicate_mechs(MinSt, Mechs);
-    for i := 0 to Pred(Mechs.count) do begin
-      MajSt := gss_inquire_saslname_for_mech(MinSt, @Mechs.elements[i], Buf_sasl, Buf_name, Buf_desc);
-      SetString(Sasl, Buf_sasl.value, Buf_sasl.length);
-      SetString(Name, Buf_name.value, Buf_name.length);
-      SetString(Desc, Buf_desc.value, Buf_desc.length);
-      MechList.Add(Format('%s:%s:%s', [Sasl, Name, Desc]));
-      gss_release_buffer(MinSt, Buf_sasl);
-      gss_release_buffer(MinSt, Buf_name);
-      gss_release_buffer(MinSt, Buf_desc);
-    end;
-    MajSt := gss_release_oid_set(MinSt, Mechs);
+finalization
+  if GSSAPI<>nil then begin
+    FreeLibrary(GSSAPI^.gsslib);
+    FreeAndNil(GSSAPI);
   end;
-end;
-
 end.
 

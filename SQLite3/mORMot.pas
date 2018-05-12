@@ -53841,6 +53841,10 @@ begin
   result := AuthSessionRelease(Ctxt);
   if result or not Ctxt.InputExists['UserName'] or not Ctxt.InputExists['Data'] then
     exit;
+  {$ifdef GSSAPIAUTH}
+  if not GSSLibraryFound then
+    exit;
+  {$endif}
   // use ConnectionID to find authentication session
   ConnectionID := Ctxt.Call^.LowLevelConnectionID;
   // GET ModelRoot/auth?UserName=&data=... -> windows SSPI auth
@@ -53906,7 +53910,7 @@ begin
   {$endif}
   {$ifdef GSSAPIAUTH}
   SecCtx := nil;
-  if not GSSAcceptSecurityContext(Base64ToBin(InDataEnc), ''{ SPN should be someware in configuration }, SecCtx, AnsiString(UserName), OutData) then
+  if not GSSAcceptSecurityContext(Base64ToBin(InDataEnc), ''{ TODO: SPN should be someware in configuration }, SecCtx, AnsiString(UserName), OutData) then
     raise ESecurityException.Create('Only one authentication iteration allowed');
   {$ifdef WITHLOG}
   if sllUserAuth in fServer.fLogFamily.Level then
