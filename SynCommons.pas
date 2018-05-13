@@ -56330,29 +56330,35 @@ end;
 { ************ Unit-Testing classes and functions }
 
 procedure KB(bytes: Int64; out result: shortstring);
-const _B: array[0..4] of string[3] = ('B','KB','MB','GB','TB');
-var hi,rem: cardinal;
-    b: byte;
+const _B: array[0..3] of string[3] = ('KB','MB','GB','TB');
+var hi,rem,b: cardinal;
 begin
   if bytes<1 shl 10 then begin
-    FormatShort('% %',[PtrInt(bytes),_B[0]],result);
+    FormatShort('% B',[integer(bytes)],result);
     exit;
   end;
   if bytes<1 shl 20 then begin
-    b := 1;
+    b := 0;
     rem := bytes;
+    hi := bytes shr 10;
+  end else
+  if bytes<1 shl 30 then begin
+    b := 1;
+    rem := bytes shr 10;
+    hi := bytes shr 20;
+  end else
+  if bytes<Int64(1) shl 40 then begin
+    b := 2;
+    rem := bytes shr 20;
+    hi := bytes shr 30;
   end else begin
-    if bytes<1 shl 30 then
-      b := 2 else
-    if bytes<Int64(1) shl 40 then
-      b := 3 else
-      b := 4;
-    rem := bytes shr ((b-1)*10);
+    b := 3;
+    rem := bytes shr 30;
+    hi := bytes shr 40;
   end;
   rem := rem and 1023;
   if rem<>0 then
     rem := rem div 102;
-  hi := bytes shr (b*10);
   if rem=10 then begin
     rem := 0;
     inc(hi); // round up as expected by an human being
