@@ -850,7 +850,7 @@ begin
     raise ESQLDBZEOS.CreateUTF8('%.Prepare() shall be called once',[self]);
   inherited Prepare(aSQL,ExpectResults); // connect if necessary
   fStatement := (fConnection as TSQLDBZEOSConnection).fDatabase.
-    PrepareStatementWithParams(UTF8ToString(fSQL),
+    PrepareStatementWithParams({$ifdef UNICODE}UTF8ToString(fSQL){$else}fSQL{$endif}, // see controls_cp=CP_UTF8
     (fConnection.Properties as TSQLDBZEOSConnectionProperties).fStatementParams);
 end;
 
