@@ -258,18 +258,18 @@ begin
       New(GSSAPI);
       with GSSAPI^ do begin
         gsslib := handle;
-        Pointer(@gss_indicate_mechs) := GetProcAddress(handle, 'gss_indicate_mechs');
-        Pointer(@gss_release_oid_set) := GetProcAddress(handle, 'gss_release_oid_set');
-        Pointer(@gss_inquire_saslname_for_mech) := GetProcAddress(handle, 'gss_inquire_saslname_for_mech');
-        Pointer(@gss_display_status) := GetProcAddress(handle, 'gss_display_status');
-        Pointer(@gss_release_buffer) := GetProcAddress(handle, 'gss_release_buffer');
-        Pointer(@gss_import_name) := GetProcAddress(handle, 'gss_import_name');
-        Pointer(@gss_acquire_cred) := GetProcAddress(handle, 'gss_acquire_cred');
-        Pointer(@gss_release_cred) := GetProcAddress(handle, 'gss_release_cred');
-        Pointer(@gss_accept_sec_context) := GetProcAddress(handle, 'gss_accept_sec_context');
-        Pointer(@gss_display_name) := GetProcAddress(handle, 'gss_display_name');
-        Pointer(@gss_release_name) := GetProcAddress(handle, 'gss_release_name');
-        Pointer(@gss_delete_sec_context) := GetProcAddress(handle, 'gss_delete_sec_context');
+        PPointer(@gss_indicate_mechs)^ := GetProcAddress(handle, 'gss_indicate_mechs');
+        PPointer(@gss_release_oid_set)^ := GetProcAddress(handle, 'gss_release_oid_set');
+        PPointer(@gss_inquire_saslname_for_mech)^ := GetProcAddress(handle, 'gss_inquire_saslname_for_mech');
+        PPointer(@gss_display_status)^ := GetProcAddress(handle, 'gss_display_status');
+        PPointer(@gss_release_buffer)^ := GetProcAddress(handle, 'gss_release_buffer');
+        PPointer(@gss_import_name)^ := GetProcAddress(handle, 'gss_import_name');
+        PPointer(@gss_acquire_cred)^ := GetProcAddress(handle, 'gss_acquire_cred');
+        PPointer(@gss_release_cred)^ := GetProcAddress(handle, 'gss_release_cred');
+        PPointer(@gss_accept_sec_context)^ := GetProcAddress(handle, 'gss_accept_sec_context');
+        PPointer(@gss_display_name)^ := GetProcAddress(handle, 'gss_display_name');
+        PPointer(@gss_release_name)^ := GetProcAddress(handle, 'gss_release_name');
+        PPointer(@gss_delete_sec_context)^ := GetProcAddress(handle, 'gss_delete_sec_context');
         if UseHeimdal then begin
           Pointer(GSS_C_NT_USER_NAME) := GetProcAddress(handle, '__gss_c_nt_user_name_oid_desc');
           Pointer(GSS_KRB5_NT_PRINCIPAL_NAME) := GetProcAddress(handle, '__gss_krb5_nt_principal_name_oid_desc');
