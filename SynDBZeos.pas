@@ -1037,13 +1037,14 @@ begin
   {$ENDIF}
   // 1. bind parameters in fParams[] to fQuery.Params
   {$ifdef ZEOS72UP}
+  arrayBinding := nil;
   if fParamsArrayCount>0 then
     with (fConnection.Properties as TSQLDBZEOSConnectionProperties) do
     if fSupportsArrayBindings then
       arrayBinding := TZeosArrayBinding.Create(self) else
-      raise ESQLDBZEOS.CreateUTF8(
-        '%.BindArray() not supported by % provider',[self,DBMSName]) else
-    arrayBinding := nil;
+      if not fExpectResults then
+        raise ESQLDBZEOS.CreateUTF8(
+          '%.BindArray() not supported by % provider',[self,DBMSName]);
   try
     if arrayBinding=nil then
   {$else}
