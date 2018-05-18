@@ -970,89 +970,49 @@ end;
 /// Convert array of RawUTF8 to PostgreSQL ARRAY
 // ['one', 't"wo'] -> '{"one","t\"wo"}'
 // ['1', '2', '3'] -> '{1,2,3}'
-function UTF8Array2PostgreArray(const Values: array of RawUTF8): RawUTF8;
-var i, j, k, len, seplen, startlen, finlen, dQuoteRepllen, L: Integer;
-    P: PAnsiChar;
-    isStr: boolean;
-const
-  start: RawUTF8= '{';
-  fin: RawUTF8= '}';
-  Sep: RawUTF8= ',';
-  dQuoteRepl: RawUTF8= '\"';
+procedure UTF8Array2PostgreArray(const Values: array of RawUTF8; out postgreArray: RawByteString);
+var i, j, k, n, L: Integer;
+    P: PUTF8Char;
 begin
-  result := '';
-  if high(Values)<0 then exit;
-  seplen := length(Sep);
-  startlen := length(start);
-  finlen := length(fin);
-  dQuoteRepllen := length(dQuoteRepl);
-  len := seplen*high(Values);
+  if high(Values)<0 then begin
+    postgreArray := '';
+    exit;
+  end;
+  L := 2; // '{}'
+  inc(L, high(Values)); // , after each element
   for i := 0 to high(Values) do begin
-    inc(len,length(Values[i]));
+    inc(L,length(Values[i]));
     for j := 2 to length(Values[i])-1 do
-    case Values[i][j] of
-      '"': inc(len);
-    end;
+      if Values[i][j] = '"' then inc(L); // \ before "
   end;
-  inc(len,startlen+finlen);//add { and }
-  SetLength(result,len);
-  P := pointer(result);
-
-  if startlen>0 then begin
-    MoveFast(pointer(start)^,P^,startlen);
-    inc(P,startlen);
-  end;
-
-  i := 0;
-  repeat
-    L := length(Values[i]);
-    if L>0 then begin
-      isStr := (Values[i][1] = '''') and ((Values[i][l] = ''''));
-      if isStr then begin
-        P^ := '"';
-        inc(p);
-        k := 2;
-        while k<l-1 do begin
-          j := 0;
-          while k+j<l do begin
-            case Values[i][k+j] of
-              '"': break;
-              else inc(j);
-            end;
-          end;
-          MoveFast(pointer(@Values[i][k])^,P^,j);
-          inc(P,j);
-          inc(k,j);
-          case Values[i][k] of
-            '"': begin
-              MoveFast(pointer(dQuoteRepl)^,P^,dQuoteRepllen);
-              inc(P,dQuoteRepllen);
-              inc(k);
-            end;
-          end;
+  SetLength(postgreArray,L);
+  P := pointer(postgreArray);
+  P[0] := '{'; i := 1;
+  for n := 0 to high(Values) do begin
+    if length(Values[n]) = 0 then continue;
+    if Values[n][1] = '''' then begin
+      P[i] := '"'; inc(i);
+      for k := 2 to length(Values[n])-1 do begin // skip first and last "
+        if Values[n][k] = '"' then begin
+          p[i] := '\';
+          inc(i);
         end;
-        P^ := '"';
-        inc(p);
-      end else begin
-        MoveFast(pointer(Values[i])^,P^,L);
-        inc(P,L);
+        p[i] := Values[n][k];
+        inc(i);
       end;
-    end;
-
-    if i=high(Values) then
-      Break;
-    if seplen>0 then begin
-      MoveFast(pointer(Sep)^,P^,seplen);
-      inc(P,seplen);
-    end;
-    inc(i);
-  until false;
-
-  if finlen>0 then begin
-    MoveFast(pointer(fin)^,P^,finlen);
-    inc(P,finlen);
+      P[i] := '"'; inc(i);
+    end else
+      for k := 1 to length(Values[n]) do begin
+        p[i] := Values[n][k];
+        inc(i);
+      end;
+    p[i] := ','; inc(i);
   end;
-  Assert(P-pointer(result)=len);
+  if (i > 1) then begin
+    p[i-1] := '}';
+    SetLength(postgreArray, i);
+  end else
+    p[i] := '}';
 end;
 
 procedure TSQLDBZEOSStatement.ExecutePrepared;
@@ -1077,13 +1037,14 @@ begin
   {$ENDIF}
   // 1. bind parameters in fParams[] to fQuery.Params
   {$ifdef ZEOS72UP}
+  arrayBinding := nil;
   if fParamsArrayCount>0 then
     with (fConnection.Properties as TSQLDBZEOSConnectionProperties) do
     if fSupportsArrayBindings then
       arrayBinding := TZeosArrayBinding.Create(self) else
-      raise ESQLDBZEOS.CreateUTF8(
-        '%.BindArray() not supported by % provider',[self,DBMSName]) else
-    arrayBinding := nil;
+      if not fExpectResults then
+        raise ESQLDBZEOS.CreateUTF8(
+          '%.BindArray() not supported by % provider',[self,DBMSName]);
   try
     if arrayBinding=nil then
   {$else}
@@ -1093,10 +1054,9 @@ begin
     for i := 0 to fParamCount-1 do
     with fParams[i] do begin
       if (Length(VArray)>0) and (fConnection.Properties.DBMS = dPostgreSQL) then begin
-        case VType of
-        ftInt64, ftUTF8: VData := UTF8Array2PostgreArray(VArray);
-        else raise ESQLDBZEOS.CreateUTF8('%.ExecutePrepared: Invalid array type on bound parameter #%', [Self,i]);
-        end;
+        if VType in [ftInt64, ftUTF8] then
+          UTF8Array2PostgreArray(VArray, VData) else
+          raise ESQLDBZEOS.CreateUTF8('%.ExecutePrepared: Invalid array type on bound parameter #%', [Self,i]);
         VType := ftUTF8;
       end;
       case VType of
