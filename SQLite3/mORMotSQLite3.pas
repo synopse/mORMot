@@ -466,6 +466,8 @@ type
     /// used e.g. by IAdministratedDaemon to implement "pseudo-SQL" commands
     procedure AdministrationExecute(const DatabaseName,SQL: RawUTF8;
       var result: TServiceCustomAnswer); override;
+    /// retrieves the per-statement detailed timing, as a TDocVariantData
+    procedure ComputeDBStats(out result: variant);
 
     /// initialize the associated DB connection
     // - called by Create and on Backup/Restore just after DB.DBOpen
@@ -510,7 +512,7 @@ type
     // - it will then call the other overloaded constructor to initialize the server
     constructor Create(aModel: TSQLModel; const aDBFileName: TFileName;
       aHandleUserAuthentication: boolean=false; const aPassword: RawUTF8='';
-      aDefaultCacheSize: integer=10000); reintroduce; overload;
+      aDefaultCacheSize: integer=10000; aDefaultPageSize: integer=4096); reintroduce; overload;
     /// initialize a REST server with a database, and a temporary Database Model
     // - a Model will be created with supplied tables, and owned by the server
     // - if you instantiate a TSQLRestServerFullMemory or TSQLRestServerDB
@@ -519,7 +521,7 @@ type
     constructor CreateWithOwnModel(const aTables: array of TSQLRecordClass;
       const aDBFileName: TFileName; aHandleUserAuthentication: boolean=false;
       const aRoot: RawUTF8='root'; const aPassword: RawUTF8='';
-      aDefaultCacheSize: integer=10000); overload;
+      aDefaultCacheSize: integer=10000; aDefaultPageSize: integer=4096); overload;
     /// initialize a REST server with an in-memory SQLite3 database
     // - could be used for test purposes
     constructor Create(aModel: TSQLModel; aHandleUserAuthentication: boolean=false); overload; override;
@@ -964,7 +966,7 @@ var i: integer;
 begin
   for i := 0 to high(Model.TableProps) do
     case Model.TableProps[i].Kind of
-    rRTree: // register all *_in() SQL functions
+    rRTree, rRTreeInteger: // register all *_in() SQL functions
       sqlite3_check(DB.DB,sqlite3.create_function_v2(DB.DB,
         pointer(TSQLRecordRTreeClass(Model.Tables[i]).RTreeSQLFunctionName),
         2,SQLITE_ANY,Model.Tables[i],InternalRTreeIn,nil,nil,nil));
@@ -979,19 +981,20 @@ begin
 end;
 
 constructor TSQLRestServerDB.Create(aModel: TSQLModel; const aDBFileName: TFileName;
-  aHandleUserAuthentication: boolean; const aPassword: RawUTF8; aDefaultCacheSize: integer);
+  aHandleUserAuthentication: boolean; const aPassword: RawUTF8;
+  aDefaultCacheSize, aDefaultPageSize: integer);
 begin
-  fOwnedDB := TSQLDataBase.Create(aDBFileName,aPassword,0,aDefaultCacheSize);
+  fOwnedDB := TSQLDataBase.Create(aDBFileName,aPassword,0,aDefaultCacheSize,aDefaultPageSize);
   // fOwnedDB.Free done in Destroy
   Create(aModel,fOwnedDB,aHandleUserAuthentication);
 end;
 
 constructor TSQLRestServerDB.CreateWithOwnModel(const aTables: array of TSQLRecordClass;
   const aDBFileName: TFileName; aHandleUserAuthentication: boolean;
-  const aRoot, aPassword: RawUTF8; aDefaultCacheSize: integer);
+  const aRoot, aPassword: RawUTF8; aDefaultCacheSize, aDefaultPageSize: integer);
 begin
   Create(TSQLModel.Create(aTables,aRoot),aDBFileName,aHandleUserAuthentication,
-    aPassword,aDefaultCacheSize);
+    aPassword,aDefaultCacheSize,aDefaultPageSize);
   fModel.Owner := self;
 end;
 
@@ -1293,6 +1296,26 @@ begin
     end;
     W.CancelLastComma;
     W.Add(']','}');
+  end;
+end;
+
+procedure TSQLRestServerDB.ComputeDBStats(out result: variant);
+var i: integer;
+    ndx: TIntegerDynArray;
+    doc: TDocVariantData absolute result;
+begin
+  if self=nil then
+    exit;
+  doc.Init(JSON_OPTIONS_FAST_EXTENDED,dvObject);
+  DB.Lock;
+  try
+    fStatementCache.SortCacheByTotalTime(ndx);
+    with fStatementCache do
+    for i := 0 to Count-1 do
+      with Cache[ndx[i]] do
+        doc.AddValue(StatementSQL,Timer.ComputeDetails);
+  finally
+    DB.UnLock;
   end;
 end;
 

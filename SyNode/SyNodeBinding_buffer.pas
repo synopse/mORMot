@@ -212,6 +212,73 @@ begin
   end;
 end;
 
+function cpSlice(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
+var
+  bufData: pointer;
+  length: size_t;
+  in_argv: PjsvalVector;
+  start: size_t;
+  end_: size_t;
+  bufLen: size_t;
+  this: PJSRootedObject;
+  destCP: integer;
+const
+  USAGE = 'cpSlice(start, length, cp: integer)';
+begin
+  try
+    Result := True;
+    this := cx.NewRootedObject(vp.thisObject[cx]);
+    try
+      getBufDataAndLength(cx, this, bufData, bufLen);
+    finally
+      cx.FreeRootedObject(this);
+    end;
+    if bufLen = 0 then begin
+{$IFDEF SM52}
+      vp.rval := cx.EmptyString.ToJSVal;
+{$ELSE}
+      vp.rval := cx.rt.EmptyString.ToJSVal;
+{$ENDIF}
+      Exit;
+    end;
+
+    if argc < 3 then
+      raise ESMException.Create(USAGE);
+
+    in_argv := vp.argv;
+    if in_argv[0].isNumber then
+      start := in_argv[0].asInt64
+    else
+      start := 0;
+
+    bufData := PAnsiChar(bufData) + start;
+
+    if in_argv[1].isNumber then
+      end_ := in_argv[1].asInt64
+    else
+      end_ := bufLen;
+
+    if end_ < start then
+      end_ := start;
+    if end_ > bufLen then
+      raise ESMRangeException.Create(OUT_OF_RANGE);
+    length := end_ - start;
+
+    if in_argv[2].isNumber then
+      destCP := in_argv[2].asInteger
+    else
+      destCP := CP_UTF8;
+    vp.rval := cx.NewJSString(bufData, length, destCP).ToJSVal;
+  except
+    on E: Exception do
+    begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
+      JSError(cx, E);
+    end;
+  end;
+end;
+
 function asciiSlice(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
 begin
   Result := StringSlice(cx, argc, vp, ASCII);
@@ -622,6 +689,7 @@ begin
       proto.ptr.DefineFunction(cx, 'hexSlice', hexSlice, 2, props);
       proto.ptr.DefineFunction(cx, 'ucs2Slice', ucs2Slice, 2, props);
       proto.ptr.DefineFunction(cx, 'utf8Slice', utf8Slice, 2, props);
+      proto.ptr.DefineFunction(cx, 'cpSlice', cpSlice, 2, props);
 
       proto.ptr.DefineFunction(cx, 'asciiWrite', asciiWrite, 3, props);
       proto.ptr.DefineFunction(cx, 'base64Write', base64Write, 3, props);

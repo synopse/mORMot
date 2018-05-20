@@ -27,7 +27,8 @@ function ECCCommandRekey(const AuthPrivKey: TFileName;
 /// end-user command to sign a file using a private key file
 // - as used in the ECC.dpr command-line sample project
 function ECCCommandSignFile(const FileToSign, AuthPrivKey: TFileName;
-  const AuthPassword: RawUTF8; AuthPasswordRounds: integer): TFileName;
+  const AuthPassword: RawUTF8; AuthPasswordRounds: integer;
+  const MetaNameValuePairs: array of const): TFileName;
 
 /// end-user command to verify a file signature
 // - as used in the ECC.dpr command-line sample project
@@ -189,12 +190,13 @@ begin
 end;
 
 function ECCCommandSignFile(const FileToSign, AuthPrivKey: TFileName;
-  const AuthPassword: RawUTF8; AuthPasswordRounds: integer): TFileName;
+  const AuthPassword: RawUTF8; AuthPasswordRounds: integer;
+  const MetaNameValuePairs: array of const): TFileName;
 var auth: TECCCertificateSecret;
 begin
   auth := TECCCertificateSecret.CreateFromSecureFile(AuthPrivKey,AuthPassword,AuthPasswordRounds);
   try
-    result := auth.SignFile(FileToSign,[]);
+    result := auth.SignFile(FileToSign,MetaNameValuePairs);
   finally
     auth.Free;
   end;
@@ -545,7 +547,7 @@ begin
         'Enter the PassPhrase of this .private file.');
       authrounds := sw.AsInt('Rounds',DEFAULT_ECCROUNDS,
         'Enter the PassPhrase iteration rounds of this .private file.');
-      newfile := EccCommandSignFile(origfile,auth,authpass,authrounds);
+      newfile := EccCommandSignFile(origfile,auth,authpass,authrounds,[]);
     end;
     ecVerify: begin
       repeat

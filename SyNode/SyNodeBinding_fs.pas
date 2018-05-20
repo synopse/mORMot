@@ -392,7 +392,7 @@ begin
       searchAttr := faAnyFile;
       if not includeFolders then
         searchAttr := searchAttr - faDirectory;
-      if FindFirst(Dir + '*.*', searchAttr, F) = 0 then begin
+      if FindFirst(Dir + '*', searchAttr, F) = 0 then begin
         cNum := 0;
         repeat
           if (F.Name <> '.') and (F.Name <> '..') then begin

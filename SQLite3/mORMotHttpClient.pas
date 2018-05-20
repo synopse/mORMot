@@ -189,6 +189,7 @@ type
     fHttps: boolean;
     fProxyName, fProxyByPass: AnsiString;
     fSendTimeout, fReceiveTimeout, fConnectTimeout: DWORD;
+    fConnectRetrySeconds: integer; // used by InternalCheckOpen
     fExtendedOptions: THttpRequestExtendedOptions;
     procedure SetCompression(Value: TSQLHttpCompressions);
     procedure SetKeepAliveMS(Value: cardinal);
@@ -253,6 +254,11 @@ type
     // using TSQLHttpClientWebSockets, leaving hcDeflate for AJAX or non mORMot
     // clients, and hcSynLZ if you expect to use http.sys with a mORMot client
     property Compression: TSQLHttpCompressions read fCompression write SetCompression;
+    /// how many seconds the client may try to connect after open socket failure
+    // - is disabled to 0 by default, but you may set some seconds here e.g. to
+    // let the server start properly, and let the client handle exceptions to
+    // wait 250ms and retry until the specified timeout is reached
+    property ConnectRetrySeconds: integer read fConnectRetrySeconds write fConnectRetrySeconds;
   end;
 
   TSQLHttpClientGenericClass = class of TSQLHttpClientGeneric;
@@ -334,6 +340,9 @@ type
     /// returns true if the connection is a running WebSockets
     // - may be false even if fSocket<>nil, e.g. when gracefully disconnected
     function WebSocketsConnected: boolean;
+    /// will set the HTTP header as expected by THttpClientWebSockets.Request to
+    // perform the Callback() query in wscNonBlockWithoutAnswer mode
+    procedure CallbackNonBlockingSetHeader(out Header: RawUTF8); override;
     /// this event will be executed just after the HTTP client has been
     // upgraded to the expected WebSockets protocol
     // - supplied Sender parameter will be this TSQLHttpClientWebsockets instance
@@ -680,17 +689,31 @@ end;
 { TSQLHttpClientWinSock }
 
 function TSQLHttpClientWinSock.InternalCheckOpen: boolean;
+var timeout: Int64;
 begin
   result := fSocket<>nil;
   if result or (isDestroying in fInternalState) then
     exit;
   fSafe.Enter;
   try
-    if fSocket=nil then
-    try
+    if fSocket=nil then begin
       if fSocketClass=nil then
         fSocketClass := THttpClientSocket;
-      fSocket := fSocketClass.Open(fServer,fPort,cslTCP,fConnectTimeout);
+      timeout := GetTickCount64+fConnectRetrySeconds shl 10;
+      repeat
+        try
+          fSocket := fSocketClass.Open(fServer,fPort,cslTCP,fConnectTimeout);
+        except
+          on E: Exception do begin
+            FreeAndNil(fSocket);
+            if GetTickCount64>=timeout then
+              exit;
+            fLogClass.Add.Log(sllTrace, 'InternalCheckOpen: % -> wait and retry %s',
+              [E.ClassType, fConnectRetrySeconds], self);
+            sleep(250);
+          end;
+        end;
+      until fSocket<>nil;
       if fModel<>nil then
         fSocket.ProcessName := FormatUTF8('%/%',[fPort,fModel.Root]);
       if fSendTimeout>0 then
@@ -710,10 +733,8 @@ begin
       if hcDeflate in Compression then
         // standard (slower) AJAX/HTTP gzip compression
         fSocket.RegisterCompress(CompressGZip);
-      result := true;
-    except
-      FreeAndNil(fSocket);
     end;
+    result := true;
   finally
     fSafe.Leave;
   end;
@@ -795,7 +816,7 @@ begin
   if WebSockets=nil then
     raise EServiceException.CreateUTF8('Missing %.WebSocketsUpgrade() call',[self]);
   FormatUTF8('{"%":%}',[Factory.InterfaceTypeInfo^.Name,FakeCallbackID],body);
-  head := 'Sec-WebSocket-REST: NonBlocking';
+  CallbackNonBlockingSetHeader(head); // frames gathering + no wait
   result := CallBack(mPOST,'CacheFlush/_callback_',body,resp,nil,0,@head) in
     [HTTP_SUCCESS,HTTP_NOCONTENT];
 end;
@@ -824,6 +845,11 @@ begin
     (THttpClientWebSockets(fSocket).WebSockets.State<=wpsRun);
 end;
 
+procedure TSQLHttpClientWebsockets.CallbackNonBlockingSetHeader(out Header: RawUTF8);
+begin
+  Header := 'Sec-WebSocket-REST: NonBlocking'; // frames gathering + no wait
+end;
+
 function TSQLHttpClientWebsockets.WebSockets: THttpClientWebSockets;
 begin
   if fSocket=nil then
@@ -839,7 +865,7 @@ begin
 end;
 
 function TSQLHttpClientWebsockets.WebSocketsUpgrade(
-  const aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX,
+  const aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX: boolean;
   aWebSocketsCompression: boolean): RawUTF8;
 var sockets: THttpClientWebSockets;
 {$ifdef WITHLOG}
@@ -872,7 +898,7 @@ begin
 end;
 
 function TSQLHttpClientWebsockets.WebSocketsConnect(
-  const aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX,
+  const aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX: boolean;
   aWebSocketsCompression: boolean): RawUTF8;
 begin
   if WebSockets = nil then
@@ -919,19 +945,33 @@ begin
 end;
 
 function TSQLHttpClientRequest.InternalCheckOpen: boolean;
+var timeout: Int64;
 begin
   result := fRequest<>nil;
   if result or (isDestroying in fInternalState) then
     exit;
   fSafe.Enter;
   try
-    if fRequest=nil then
-    try
+    if fRequest=nil then begin
       InternalSetClass;
       if fRequestClass=nil then
         raise ECommunicationException.CreateUTF8('fRequestClass=nil for %',[self]);
-      fRequest := fRequestClass.Create(fServer,fPort,fHttps,
-        fProxyName,fProxyByPass,fConnectTimeout,fSendTimeout,fReceiveTimeout);
+      timeout := GetTickCount64+fConnectRetrySeconds shl 10;
+      repeat
+        try
+          fRequest := fRequestClass.Create(fServer,fPort,fHttps,
+            fProxyName,fProxyByPass,fConnectTimeout,fSendTimeout,fReceiveTimeout);
+        except
+          on E: Exception do begin
+            FreeAndNil(fRequest);
+            if GetTickCount64>=timeout then
+              exit;
+            fLogClass.Add.Log(sllTrace, 'InternalCheckOpen: % -> wait and retry %s',
+              [E.ClassType, fConnectRetrySeconds], self);
+            sleep(250);
+          end;
+        end;
+      until fRequest<>nil;
       fRequest.ExtendedOptions := fExtendedOptions;
       // note that first registered algo will be the prefered one
       if hcSynShaAes in Compression then
@@ -943,10 +983,8 @@ begin
       if hcDeflate in Compression then
         // standard (slower) AJAX/HTTP zip/deflate compression
         fRequest.RegisterCompress(CompressGZip);
-      result := true;
-    except
-      FreeAndNil(fRequest);
     end;
+    result := true;
   finally
     fSafe.Leave;
   end;

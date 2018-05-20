@@ -437,7 +437,7 @@ var uts: UtsName;
         result := result*10+c;
       inc(P);
     until false;
-    if P^='.' then
+    if P^ in ['.','-',' '] then
       inc(P);
   end;
 begin

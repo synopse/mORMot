@@ -58,6 +58,7 @@ Contributors
   Sllimr7139
   SSoftPro
   Stefan (itSDS)
+  Transmogrifix
   Uian2000
   Vaclav
   Vadim Orel
@@ -66,6 +67,7 @@ Contributors
   Wloochacz
   Wolfgang Ehrhardt
   Yoanq
+  Ysair
   Zed
 
 [See below if you upgrade from 1.17 revision]

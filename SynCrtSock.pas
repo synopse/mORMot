@@ -34,6 +34,7 @@ unit SynCrtSock;
   - EMartin
   - Eric Grange
   - EvaF
+  - f-vicente
   - Maciej Izak (hnb)
   - Marius Maximus
   - Pavel (mpv)
@@ -278,6 +279,7 @@ const
   // from SynCommons supplyings the file name)
   // - should match HTML_CONTENT_STATICFILE constant defined in mORMot.pas unit
   HTTP_RESP_STATICFILE = '!STATICFILE';
+
   /// used to notify e.g. the THttpServerRequest not to wait for any response
   // from the client
   // - is not to be used in normal HTTP process, but may be used e.g. by
@@ -1600,7 +1602,7 @@ type
     fCloseStatus: WEB_SOCKET_CLOSE_STATUS;
     fIndex: integer;
     function ProcessActions(ActionQueue: Cardinal): boolean;
-    procedure ReadData(const WebsocketBufferData);
+    function ReadData(const WebsocketBufferData): integer;
     procedure WriteData(const WebsocketBufferData);
     procedure BeforeRead;
     procedure DoOnMessage(aBufferType: WEB_SOCKET_BUFFER_TYPE;
@@ -2913,6 +2915,8 @@ type
     readbuf: SockString;
     /// the current write data buffer of this slot
     writebuf: SockString;
+    /// the last error reported by WSAGetLastError before the connection ends
+    lastWSAError: Integer;
     /// acquire an exclusive access to this connection
     // - returns true if slot has been acquired
     // - returns false if it is used by another thread
@@ -5569,27 +5573,27 @@ end;
 
 function THttpServer.OnNginxAllowSend(Context: THttpServerRequest;
   const LocalFileName: TFileName): boolean;
-var n,i,f: integer;
+var match,i,f: integer;
     folder: ^TFileName;
 begin
-  n := 0;
+  match := 0;
   folder := pointer(fNginxSendFileFrom);
   if LocalFileName<>'' then
     for f := 1 to length(fNginxSendFileFrom) do begin
-      n := length(folder^);
-      for i := 1 to n do // case sensitive left search
+      match := length(folder^);
+      for i := 1 to match do // case sensitive left search
         if LocalFileName[i]<>folder^[i] then begin
-          n := 0;
+          match := 0;
           break;
         end;
-      if n<>0 then
+      if match<>0 then
         break; // found matching folder
       inc(folder);
     end;
-  result := n<>0;
+  result := match<>0;
   if not result then
     exit; // no match -> manual send
-  delete(Context.fOutContent,1,n); // remove e.g. '/var/www'
+  delete(Context.fOutContent,1,match); // remove e.g. '/var/www'
   Context.OutCustomHeaders := Trim(Context.OutCustomHeaders+#13#10+
     'X-Accel-Redirect: '+Context.OutContent);
   Context.OutContent := '';
@@ -9242,17 +9246,22 @@ begin
     fProtocol.OnDisconnect(self,fCloseStatus,Pointer(fBuffer),length(fBuffer));
 end;
 
-procedure THttpApiWebSocketConnection.ReadData(const WebsocketBufferData);
+function THttpApiWebSocketConnection.ReadData(const WebsocketBufferData): integer;
 var Err: HRESULT;
     fBytesRead: cardinal;
     aBuf: WEB_SOCKET_BUFFER_DATA absolute WebsocketBufferData;
 begin
+  Result := 0;
   if fWSHandle = nil then
     exit;
   Err := Http.ReceiveRequestEntityBody(fProtocol.fServer.FReqQueue, fOpaqueHTTPRequestId, 0,
     aBuf.pbBuffer, aBuf.ulBufferLength, fBytesRead, @self.fOverlapped);
   case Err of
-    ERROR_HANDLE_EOF: Disconnect;
+    // On page reload Safari do not send a WEB_SOCKET_INDICATE_RECEIVE_COMPLETE_ACTION
+    // with BufferType = WEB_SOCKET_CLOSE_BUFFER_TYPE, instead it send a dummy packet
+    // (WEB_SOCKET_RECEIVE_FROM_NETWORK_ACTION) and terminate socket
+    // see forum discussion https://synopse.info/forum/viewtopic.php?pid=27125
+    ERROR_HANDLE_EOF: Result := -1;
     ERROR_IO_PENDING: ; //
     NO_ERROR: ;//
   else
@@ -9344,6 +9353,16 @@ var ulDataBufferCount: ULONG;
     i: integer;
     Err: HRESULT;
     Buffer: TWebSocketBufferDataArr;
+  procedure closeConnection();
+  begin
+    EnterCriticalSection(fProtocol.fSafe);
+    try
+      fProtocol.RemoveConnection(fIndex);
+    finally
+      LeaveCriticalSection(fProtocol.fSafe);
+    end;
+    EWebSocketApi.RaiseOnError(hCompleteAction, WebSocketAPI.CompleteAction(fWSHandle, ActionContext, 0));
+  end;
 begin
   result := true;
   repeat
@@ -9366,7 +9385,12 @@ begin
       WEB_SOCKET_INDICATE_SEND_COMPLETE_ACTION: ;
       WEB_SOCKET_RECEIVE_FROM_NETWORK_ACTION: begin
         for i := 0 to ulDataBufferCount - 1 do
-          ReadData(Buffer[i]);
+          if (ReadData(Buffer[i])=-1) then begin
+            fState := wsClosedByClient;
+            fBuffer := '';
+            fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
+            closeConnection();
+          end;
         fLastActionContext := ActionContext;
         result := False;
         exit;
@@ -9374,18 +9398,12 @@ begin
       WEB_SOCKET_INDICATE_RECEIVE_COMPLETE_ACTION: begin
         fLastReceiveTickCount := GetTickCount;
         if BufferType = WEB_SOCKET_CLOSE_BUFFER_TYPE then begin
-          EnterCriticalSection(fProtocol.fSafe);
-          try
-            fProtocol.RemoveConnection(fIndex);
-          finally
-            LeaveCriticalSection(fProtocol.fSafe);
-          end;
           if fState = wsOpen then
             fState := wsClosedByClient else
             fState := wsClosedByServer;
           SetString(fBuffer, PChar(Buffer[0].pbBuffer), Buffer[0].ulBufferLength);
           fCloseStatus := Buffer[0].Reserved1;
-          EWebSocketApi.RaiseOnError(hCompleteAction, WebSocketAPI.CompleteAction(fWSHandle, ActionContext, 0));
+          closeConnection();
           result := False;
           exit;
         end else if BufferType = WEB_SOCKET_PING_PONG_BUFFER_TYPE then begin
@@ -9881,19 +9899,19 @@ begin
   result := '';
   with URI do
   if From(url) then
-  try
-    with self.Create(Server,Port,Https,'','') do
     try
-      IgnoreSSLCertificateErrors := aIgnoreSSLCertificateErrors;
-      Request(Address,method,0,header,data,'',oh,result);
-      if outHeaders<>nil then
-        outHeaders^ := oh;
-    finally
-      Free;
+      with self.Create(Server,Port,Https,'','') do
+      try
+        IgnoreSSLCertificateErrors := aIgnoreSSLCertificateErrors;
+        Request(Address,method,0,header,data,'',oh,result);
+        if outHeaders<>nil then
+          outHeaders^ := oh;
+      finally
+        Free;
+      end;
+    except
+      result := '';
     end;
-  except
-    result := '';
-  end;
 end;
 
 class function THttpRequest.Get(const aURI,aHeader: SockString;
@@ -11026,20 +11044,6 @@ begin
   end;
 end;
 
-function CurlReadData(buffer: PAnsiChar; size,nitems: integer;
-  opaque: pointer): integer; cdecl;
-var instance: TCurlHTTP absolute opaque;
-    dataLen: integer;
-begin
-  dataLen := length(instance.fIn.Data)-instance.fIn.DataOffset;
-  result := size*nitems;
-  if result>dataLen then
-    result := dataLen;
-  move(PAnsiChar(pointer(instance.fIn.Data))[instance.fIn.DataOffset],buffer^,result);
-  inc(instance.fIn.DataOffset,result);
-end;
-
-
 { TCurlHTTP }
 
 procedure TCurlHTTP.InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD);
@@ -11096,6 +11100,8 @@ begin
       end;
     end;
   curl.easy_setopt(fHandle,coUserAgent,pointer(fUserAgent));
+  curl.easy_setopt(fHandle,coWriteFunction,@CurlWriteRawByteString);
+  curl.easy_setopt(fHandle,coHeaderFunction,@CurlWriteRawByteString);
   fIn.Method := UpperCase(method);
   fIn.Headers := nil;
   Finalize(fOut);
@@ -11114,41 +11120,16 @@ end;
 
 procedure TCurlHTTP.InternalSendRequest(const aData: SockString);
 begin // see http://curl.haxx.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
-  // libcurl has dedicated options for GET,HEAD verbs
-  if (fIn.Method='') or (fIn.Method='GET') then begin
-    curl.easy_setopt(fHandle,coHTTPGet,1);
-    curl.easy_setopt(fHandle,coCustomRequest,PAnsiChar('GET'));
-    if (aData<>'') and (fIn.Method='GET') then begin // e.g. GET with body
-      curl.easy_setopt(fHandle,coNoBody,0);
-      curl.easy_setopt(fHandle,coUpload,1);
-      fIn.Data := aData;
-      fIn.DataOffset := 0;
-      curl.easy_setopt(fHandle,coInFile,pointer(self));
-      curl.easy_setopt(fHandle,coReadFunction,@CurlReadData);
-      curl.easy_setopt(fHandle,coInFileSize,length(aData));
-    end;
-  end else
-  if fIn.Method='HEAD' then
-    curl.easy_setopt(fHandle,coNoBody,1) else begin
-    // handle other HTTP verbs
+  if fIn.Method='HEAD' then // the only verb what do not expect body in answer is HEAD
+    curl.easy_setopt(fHandle,coNoBody,1) else
+    curl.easy_setopt(fHandle,coNoBody,0);
+  if (fIn.Method='') then
+    curl.easy_setopt(fHandle,coCustomRequest,PAnsiChar('GET')) else
     curl.easy_setopt(fHandle,coCustomRequest,pointer(fIn.Method));
-    if aData='' then begin // e.g. DELETE or LOCK
-      curl.easy_setopt(fHandle,coNoBody,1);
-      curl.easy_setopt(fHandle,coUpload,0);
-    end else begin // e.g. POST or PUT
-      curl.easy_setopt(fHandle,coNoBody,0);
-      curl.easy_setopt(fHandle,coUpload,1);
-      fIn.Data := aData;
-      fIn.DataOffset := 0;
-      curl.easy_setopt(fHandle,coInFile,pointer(self));
-      curl.easy_setopt(fHandle,coReadFunction,@CurlReadData);
-      curl.easy_setopt(fHandle,coInFileSize,length(aData));
-    end;
-    InternalAddHeader('Expect:'); // disable 'Expect: 100 Continue'
-  end;
-  curl.easy_setopt(fHandle,coWriteFunction,@CurlWriteRawByteString);
+  curl.easy_setopt(fHandle,coPostFields,pointer(aData));
+  curl.easy_setopt(fHandle,coPostFieldSize,length(aData));
+  curl.easy_setopt(fHandle,coHTTPHeader,fIn.Headers);
   curl.easy_setopt(fHandle,coFile,@fOut.Data);
-  curl.easy_setopt(fHandle,coHeaderFunction,@CurlWriteRawByteString);
   curl.easy_setopt(fHandle,coWriteHeader,@fOut.Header);
 end;
 
@@ -11160,7 +11141,6 @@ var res: TCurlResult;
     i: integer;
     rc: longint; // needed on Linux x86-64
 begin
-  curl.easy_setopt(fHandle,coHTTPHeader,fIn.Headers);
   res := curl.easy_perform(fHandle);
   if res<>crOK then begin
     result := STATUS_NOTFOUND;
@@ -11795,6 +11775,7 @@ begin
     slot := SlotFromConnection(connection);
     if (slot<>nil) and (slot.socket<>0) then
       try
+        slot.lastWSAError := WSAGetLastError;
         fRead.Unsubscribe(slot.socket,TPollSocketTag(connection));
         fWrite.Unsubscribe(slot.socket,TPollSocketTag(connection));
         result := true;
@@ -11947,9 +11928,9 @@ begin
             if fRead.Terminated then
               exit;
             res := AsynchRecv(slot.socket,@temp,sizeof(temp));
-            if res<0 then       // error - probably "may block"
+            if (res<0) and (WSAGetLastError() = WSAEWOULDBLOCK) then // error "may block", try later
               break;
-            if res=0 then begin // socket closed -> abort
+            if res<=0 then begin // socket closed or unrecoverable error -> abort
               CloseConnection;
               exit;
             end;

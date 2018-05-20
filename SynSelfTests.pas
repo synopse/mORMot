@@ -477,10 +477,8 @@ type
     procedure InMemoryCompression;
     /// .gzip archive handling
     procedure GZIPFormat;
-    {$ifndef LINUX}
     /// .zip archive handling
     procedure ZIPFormat;
-    {$endif}
     /// SynLZO internal format
     procedure _SynLZO;
     /// SynLZ internal format
@@ -2876,6 +2874,7 @@ procedure TTestLowLevelCommon._IsMatch;
 var i: integer;
     V: RawUTF8;
     match: TMatch;
+    reuse: boolean;
 begin
   Check(IsMatch('','',true));
   Check(not IsMatch('','toto',true));
@@ -2931,24 +2930,78 @@ begin
   Check(not IsMatch(V,'this is a zest',false));
   Check(not IsMatch(V,'this as a test',false));
   Check(not IsMatch(V,'this as a rest',false));
-  match.Prepare(V, false, true);
-  Check(not match.Match(V));
-  Check(match.Match('this is a test'));
-  Check(match.Match('this is a rest'));
-  Check(not match.Match('this is a zest'));
-  match.Prepare('test', false, true);
-  check(match.Match('test'));
-  check(not match.Match('tes'));
-  check(not match.Match('teste'));
-  check(not match.Match('tesT'));
-  match.Prepare('teST', true, true);
-  check(match.Match('test'));
-  check(match.Match('test'));
-  match.Prepare('test*', false, true);
-  check(match.Match('test'));
-  check(match.Match('teste'));
-  check(match.Match('tester'));
-  check(not match.Match('tes'));
+  for reuse := false to true do begin  // ensure very same behavior
+    match.Prepare(V, false, reuse);
+    Check(not match.Match(V));
+    Check(match.Match('this is a test'));
+    Check(match.Match('this is a rest'));
+    Check(not match.Match('this is a zest'));
+    match.Prepare('test', false, reuse);
+    check(match.Match('test'));
+    check(not match.Match('tes'));
+    check(not match.Match('tests'));
+    check(not match.Match('tesT'));
+    match.Prepare('teST', true, reuse);
+    check(match.Match('test'));
+    check(match.Match('test'));
+    match.Prepare('test*', false, reuse);
+    check(match.Match('test'));
+    check(match.Match('tests'));
+    check(match.Match('tester'));
+    check(not match.Match('atest'));
+    check(not match.Match('tes'));
+    check(not match.Match('tEst'));
+    check(not match.Match('tesT'));
+    check(not match.Match('t'));
+    match.Prepare('**', false, reuse);
+    check(match.Match('') = reuse);
+    check(match.Match('test'));
+    match.Prepare('*test*', false, reuse);
+    check(match.Match('test'));
+    check(match.Match('tests'));
+    check(match.Match('tester'));
+    check(match.Match('atest'));
+    check(match.Match('ateste'));
+    check(match.Match('abtest'));
+    check(match.Match('abtester'));
+    check(not match.Match('tes'));
+    check(not match.Match('ates'));
+    check(not match.Match('tesates'));
+    check(not match.Match('tesT'));
+    check(not match.Match('Teste'));
+    check(not match.Match('TEster'));
+    check(not match.Match('atEst'));
+    check(not match.Match('ateSTe'));
+    match.Prepare('*12*', false, reuse);
+    check(match.Match('12'));
+    check(match.Match('12e'));
+    check(match.Match('12er'));
+    check(match.Match('a12'));
+    check(match.Match('a12e'));
+    check(match.Match('ab12'));
+    check(match.Match('ab12er'));
+    check(not match.Match('1'));
+    check(not match.Match('a1') = reuse); //TODO: fix bug in MatchAfterStar
+    check(not match.Match('1a2'));
+    match.Prepare('*teSt*', true, reuse);
+    check(match.Match('test'));
+    check(match.Match('teste'));
+    check(match.Match('tester'));
+    check(match.Match('atest'));
+    check(match.Match('ateste'));
+    check(match.Match('abtest'));
+    check(match.Match('abtester'));
+    check(match.Match('tesT'));
+    check(match.Match('Teste'));
+    check(match.Match('TEster'));
+    check(match.Match('atEst'));
+    check(match.Match('ateSTe'));
+    check(match.Match('abteST'));
+    check(match.Match('abtEster'));
+    check(not match.Match('tes'));
+    check(not match.Match('ates'));
+    check(not match.Match('tesates'));
+  end;
   for i := 32 to 127 do begin
     SetLength(V,1);
     V[1] := AnsiChar(i);
@@ -4074,6 +4127,8 @@ begin
   U := SynUnicodeToUtf8(SU);
   if not CheckFailed(length(U)=4) then
     Check(PCardinal(U)^=$92b3a8f0);
+  U := TSynAnsiConvert.Engine(CP_UTF8).UnicodeBufferToAnsi(pointer(SU), length(SU));
+  Check(length(U)=4);
   SetLength(res,10);
   PB := pointer(res);
   PB := ToVarString(U,PB);
@@ -4322,6 +4377,9 @@ begin
   finally
     tz.Free;
   end;
+  dt := NowUTC;
+  sleep(200);
+  Check(not SameValue(dt,NowUTC), 'NowUTC should not truncate time');
   {$ifdef MSWINDOWS}
   tz := TSynTimeZone.CreateDefault;
   try
@@ -9747,8 +9805,6 @@ begin
 end;
 
 
-{$ifndef LINUX} // TZipRead not defined yet (use low-level file mapping WinAPI)
-
 procedure TTestCompression.ZipFormat;
 var FN,FN2: TFileName;
     ExeName: string;
@@ -9816,6 +9872,7 @@ begin
     Free;
   end;
 end;
+{$ifdef MSWINDOWS}
 procedure TestPasZipRead(const FN: TFileName; Count: integer);
 var pasZR: PasZip.TZipRead;
 begin
@@ -9829,7 +9886,8 @@ begin
   end;
 end;
 var pasZW: PasZip.TZipWrite;
-    i: integer;
+{$endif}
+var i: integer;
 begin
   ExeName := ExtractFileName(ExeVersion.ProgramFileName);
   FN := ChangeFileExt(ExeVersion.ProgramFileName,'.zip');
@@ -9851,6 +9909,7 @@ begin
     Free;
   end;
   Test(TZipRead.Create(FN),5);
+  {$ifdef MSWINDOWS}
   TestPasZipRead(FN,5);
   FN2 := ChangeFileExt(FN,'2.zip');
   pasZW := PasZip.TZipWrite.Create(FN2);
@@ -9868,13 +9927,14 @@ begin
   end;
   TestPasZipRead(FN2,4);
   DeleteFile(FN2);
+  {$endif}
   DeleteFile(FN);
   FN2 := ExeVersion.ProgramFilePath+'ddd.zip';
   with TZipWrite.Create(FN2) do
   try
     FN := ExeVersion.ProgramFilePath+'ddd';
     if not DirectoryExists(FN) then
-      FN := ExeVersion.ProgramFilePath+'..\ddd';
+      FN := ExeVersion.ProgramFilePath+'..'+PathDelim+'ddd';
     if DirectoryExists(FN) then begin
       AddFolder(FN,'*.pas');
       Check(Count>10);
@@ -9886,8 +9946,6 @@ begin
   end;
   DeleteFile(FN2);
 end;
-
-{$endif LINUX}
 
 procedure TTestCompression._SynLZO;
 var s,t: AnsiString;
@@ -9989,7 +10047,7 @@ procedure TTestCompression._TAlgoCompress;
       timer.ComputeTime;
       inc(timecomp, timer.LastTimeInMicroSec);
       timer.Start;
-      s2 := algo.Decompress(t,false);
+      s2 := algo.Decompress(t,aclNoCrcFast);
       timer.ComputeTime;
       inc(timedecomp, timer.LastTimeInMicroSec);
       Check(s2=s, algo.ClassName);
@@ -10005,7 +10063,7 @@ procedure TTestCompression._TAlgoCompress;
        ((comp*Int64(1000*1000)) div timecomp)shr 20,
        ((comp*Int64(1000*1000)) div timedecomp)shr 20,
        ((plain*Int64(1000*1000)) div timedecomp)shr 20]));
-    s2 := algo.Decompress(algo.Compress(s),false);
+    s2 := algo.Decompress(algo.Compress(s),aclNoCrcFast);
     Check(s2=s, algo.ClassName);
     if (log<>'') and (s2<>s) then FileFromString(s2,'bigTestPartial'+algo.ClassName+'.log');
   end;
@@ -12574,12 +12632,33 @@ type
      property MinY: double read fMinY write fMinY;
      property MaxY: double read fMaxY write fMaxY;
    end;
+   TSQLRecordMapBoxI = class(TSQLRecordRTreeInteger)
+   protected
+     fMinX, fMaxX, fMinY, fMaxY: integer;
+   published
+     property MinX: integer read fMinX write fMinX;
+     property MaxX: integer read fMaxX write fMaxX;
+     property MinY: integer read fMinY write fMinY;
+     property MaxY: integer read fMaxY write fMaxY;
+   end;
+   TSQLRecordMapBoxPlain = class(TSQLRecord)
+   protected
+     fMinX, fMaxX, fMinY, fMaxY: double;
+   published
+     property MinX: double read fMinX write fMinX;
+     property MaxX: double read fMaxX write fMaxX;
+     property MinY: double read fMinY write fMinY;
+     property MaxY: double read fMaxY write fMaxY;
+   end;
 
 procedure TTestMemoryBased._RTree;
 var Model: TSQLModel;
     Client: TSQLRestClientDB;
     Box: TSQLRecordMapBox;
+    BoxI: TSQLRecordMapBoxI;
+    //BoxPlain: TSQLRecordMapBoxPlain;
     i: integer;
+    timer: TPrecisionTimer;
 procedure CheckBox(i: integer);
 begin
   Check(Box.fID=i*2);
@@ -12588,12 +12667,67 @@ begin
   CheckSame(Box.MinY,i*2.0);
   CheckSame(Box.MaxY,i*2.0+0.5);
 end;
+procedure CheckBoxI(i: integer);
+begin
+  Check(BoxI.fID=i*2);
+  Check(BoxI.MinX=i);
+  Check(BoxI.MaxX=i+2);
+  Check(BoxI.MinY=i*2);
+  Check(BoxI.MaxY=i*2+2);
+end;
+{procedure CheckBoxPlain(i: integer);
+begin
+  Check(BoxPlain.fID=i*2);
+  CheckSame(BoxPlain.MinX,i*1.0);
+  CheckSame(BoxPlain.MaxX,i*1.0+0.5);
+  CheckSame(BoxPlain.MinY,i*2.0);
+  CheckSame(BoxPlain.MaxY,i*2.0+0.5);
+end;}
 const COUNT=10000;
 begin
-  Model := TSQLModel.Create([TSQLRecordMapBox]);
+  Model := TSQLModel.Create([TSQLRecordMapBox,TSQLRecordMapBoxI,TSQLRecordMapBoxPlain]);
   Client := TSQLRestClientDB.Create(Model,nil,SQLITE_MEMORY_DATABASE_NAME,TSQLRestServerDB,false,'');
   try
     (Client.Server as TSQLRestServer).CreateMissingTables;
+    {timer.Start;
+    BoxPlain := TSQLRecordMapBoxPlain.Create;
+    try
+      Client.TransactionBegin(TSQLRecordMapBoxPlain);
+      for i := 1 to COUNT do begin
+        BoxPlain.fID := i*2; // force ID
+        BoxPlain.MinX := i*1.0;
+        BoxPlain.MaxX := i*1.0+0.5;
+        BoxPlain.MinY := i*2.0;
+        BoxPlain.MaxY := i*2.0+0.5;
+        Check(Client.Add(BoxPlain,true,true)=i*2);
+      end;
+      Client.Commit;
+      writeln('added in ',timer.Stop); timer.Start;
+      with Client.Server as TSQLRestServer do begin
+        CreateSQLIndex(TSQLRecordMapBoxPlain,'MinX',false);
+        CreateSQLIndex(TSQLRecordMapBoxPlain,'MaxX',false);
+        CreateSQLIndex(TSQLRecordMapBoxPlain,'MinY',false);
+        CreateSQLIndex(TSQLRecordMapBoxPlain,'MaxY',false);
+      end;
+      writeln('indexes created in ',timer.Stop); timer.Start;
+      for i := 1 to COUNT do begin
+        Check(Client.Retrieve(i*2,BoxPlain));
+        CheckBoxPlain(i);
+      end;
+      writeln('retrieved by id in ',timer.Stop); timer.Start;
+      for i := 1 to COUNT do begin
+        BoxPlain.FillPrepare(Client,'MinX<=? and ?<=MaxX and MinY<=? and ?<=MaxY',
+          [i*1.0+0.25,i*1.0+0.25,i*2.0+0.25,i*2.0+0.25]);
+        Check(BoxPlain.FillOne);
+        CheckBoxPlain(i);
+        Check(not BoxPlain.FillOne);
+      end;
+      writeln('retrieved by coords in ',timer.Stop); timer.Start;
+    finally
+      BoxPlain.Free;
+    end;
+    NotifyTestSpeed('Without RTree',COUNT,0,@timer);}
+    timer.Start;
     Box := TSQLRecordMapBox.Create;
     try
       Client.TransactionBegin(TSQLRecordMapBox);
@@ -12617,14 +12751,86 @@ begin
         CheckBox(i);
         Check(not Box.FillOne);
       end;
+      Box.FillPrepare(Client,'MinX<=? and ?<=MaxX and MinY<=? and ?<=MaxY',
+        [1.0,1.0,2.0,2.0]);
+      Check(Box.FillOne);
+      CheckBox(1);
+      Box.FillPrepare(Client,'MinX<=? and ?<=MaxX and MinY<=? and ?<=MaxY',
+        [1.5,1.5,2.5,2.5]);
+      Check(Box.FillOne);
+      CheckBox(1);
     finally
       Box.Free;
     end;
+    NotifyTestSpeed('With RTree',COUNT,0,@timer);
+    timer.Start;
+    BoxI := TSQLRecordMapBoxI.Create;
+    try
+      Client.TransactionBegin(TSQLRecordMapBoxI);
+      for i := 1 to COUNT do begin
+        BoxI.fID := i*2; // force ID
+        BoxI.MinX := i;
+        BoxI.MaxX := i+2;
+        BoxI.MinY := i*2;
+        BoxI.MaxY := i*2+2;
+        Check(Client.Add(BoxI,true,true)=i*2);
+      end;
+      Client.Commit;
+      for i := 1 to COUNT do begin
+        Check(Client.Retrieve(i*2,BoxI));
+        CheckBoxI(i);
+      end;
+      for i := 1 to COUNT do begin
+        BoxI.FillPrepare(Client,'MinX<=? and ?<=MaxX and MinY<=? and ?<=MaxY',
+          [i+1,i+1,i*2+1,i*2+1]);
+        Check(BoxI.FillOne);
+        CheckBoxI(i);
+        Check(not BoxI.FillOne);
+      end;
+      BoxI.FillPrepare(Client,'MinX<=? and ?<=MaxX and MinY<=? and ?<=MaxY',
+        [1,1,2,2]);
+      Check(BoxI.FillOne);
+      CheckBoxI(1);
+      BoxI.FillPrepare(Client,'MinX<=? and ?<=MaxX and MinY<=? and ?<=MaxY',
+        [3,3,4,4]);
+      Check(BoxI.FillOne);
+      CheckBoxI(1);
+    finally
+      BoxI.Free;
+    end;
+    NotifyTestSpeed('With RTreeInteger',COUNT,0,@timer);
   finally
     Client.Free;
     Model.Free;
   end;
 end;
+{
+  Delphi Win32:
+   10000 With RTree in 806.64ms i.e. 12396/s, aver. 80us
+   10000 With RTreeInteger in 750.94ms i.e. 13316/s, aver. 75us
+
+   10000 Without RTree in 16.82s i.e. 594/s, aver. 1.68ms (no index)
+   10000 Without RTree in 22.96s i.e. 435/s, aver. 2.29ms (with indexes created last)
+    added in 136.90ms
+    indexes created in 25.02ms
+    retrieved by id in 119.87ms
+    retrieved by coords in 22.71s
+   10000 Without RTree in 23.13s i.e. 432/s, aver. 2.31ms (with indexes created first)
+
+  Delphi Win64:
+    10000 With RTree in 737ms i.e. 13568/s, aver. 73us
+    10000 With RTreeInteger in 621.83ms i.e. 16081/s, aver. 62us
+  FPC Win32:
+    10000 With RTree in 852.12ms i.e. 11735/s, aver. 85us
+    10000 With RTreeInteger in 764.59ms i.e. 13078/s, aver. 76us
+  FPC Win64:
+    10000 With RTree in 718.39ms i.e. 13919/s, aver. 71us
+    10000 With RTreeInteger in 667.80ms i.e. 14974/s, aver. 66us
+  FPC Linux64 (within Windows Linux Layer):
+    10000 With RTree in 1.08s i.e. 9218/s, aver. 108us
+    10000 With RTreeInteger in 1s i.e. 9966/s, aver. 100us
+}
+
 
 const SHARD_MAX = 10000;
       SHARD_RANGE = 1000;

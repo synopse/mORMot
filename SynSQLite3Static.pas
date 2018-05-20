@@ -1046,6 +1046,7 @@ function sqlite3_clear_bindings(S: TSQLite3Statement): integer; cdecl; external;
 function sqlite3_bind_parameter_count(S: TSQLite3Statement): integer; cdecl; external;
 function sqlite3_blob_open(DB: TSQLite3DB; DBName, TableName, ColumnName: PUTF8Char;
   RowID: Int64; Flags: Integer; var Blob: TSQLite3Blob): Integer; cdecl; external;
+function sqlite3_blob_reopen(DB: TSQLite3DB; RowID: Int64): Integer; cdecl; external;
 function sqlite3_blob_close(Blob: TSQLite3Blob): Integer; cdecl; external;
 function sqlite3_blob_read(Blob: TSQLite3Blob; const Data; Count, Offset: Integer): Integer; cdecl; external;
 function sqlite3_blob_write(Blob: TSQLite3Blob; const Data; Count, Offset: Integer): Integer; cdecl; external;
@@ -1157,6 +1158,7 @@ begin
   clear_bindings       := @sqlite3_clear_bindings;
   bind_parameter_count := @sqlite3_bind_parameter_count;
   blob_open            := @sqlite3_blob_open;
+  blob_reopen          := @sqlite3_blob_reopen;
   blob_close           := @sqlite3_blob_close;
   blob_read            := @sqlite3_blob_read;
   blob_write           := @sqlite3_blob_write;

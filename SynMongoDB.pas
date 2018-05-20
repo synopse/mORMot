@@ -4066,6 +4066,9 @@ begin
       VariantLoadJSON(result,json);
 end;
 
+const
+  BSON_JSON_NEWDATE: string[8] = 'ew Date('; // circumvent Delphi XE4 Win64 bug
+
 {$HINTS OFF} // avoid hints with CompareMemFixed() inlining
 function TBSONVariant.TryJSONToVariant(var JSON: PUTF8Char;
   var Value: variant; EndOfObject: PUTF8Char): boolean;
@@ -4229,7 +4232,7 @@ begin // here JSON does not start with " or 1..9 (obvious simple types)
          Return(betMaxKey,JSON+5,#0);
   'O': if StrCompIL(JSON+1,@BSON_JSON_OBJECTID[false,modMongoShell][2],8)=0 then
          TryObjectID(JSON+9,')');
-  'N': if StrCompIL(JSON+1,'ew Date(',8)=0 then
+  'N': if StrCompIL(JSON+1,@BSON_JSON_NEWDATE[1],8)=0 then
           TryDate(JSON+9,')') else
        if StrCompIL(JSON+1,@BSON_JSON_DECIMAL[false,modMongoShell][2],13)=0 then
           TryDecimal(JSON+14,')');

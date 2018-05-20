@@ -3,6 +3,7 @@
 
 /**
  * @module os
+ * @memberOf module:buildin
  */
 
 var util = require('util');

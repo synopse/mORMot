@@ -30,6 +30,7 @@ unit SynBidirSock;
 
   Contributor(s):
   - Alfred (alf)
+  - f-vicente
 
 
   Alternatively, the contents of this file may be used under the terms of
@@ -3273,9 +3274,6 @@ begin
   fThreadState := sRun;
   if not Terminated and (fProcess<>nil) then
     fProcess.ProcessLoop;
-  if (fProcess<>nil) and (fProcess.fState=wpsClose) then
-    fThreadState := sClosed else
-    fThreadState := sFinished;
   WebSocketLog.Add.Log(sllDebug,'Execute finished: ThreadState=%',[ToText(fThreadState)^],self);
   try
     if (fProcess<>nil) and (fProcess.Socket<>nil) and
@@ -3286,6 +3284,9 @@ begin
   except
     // ignore any exception in the callback
   end;
+  if (fProcess<>nil) and (fProcess.fState=wpsClose) then
+    fThreadState := sClosed else
+    fThreadState := sFinished;
 end;
 
 
