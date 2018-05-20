@@ -2275,6 +2275,12 @@ function FormatUTF8(const Format: RawUTF8; const Args: array of const): RawUTF8;
 procedure FormatUTF8(const Format: RawUTF8; const Args: array of const;
   var result: RawUTF8); overload;
 
+/// fast Format() function replacement, for UTF-8 content stored in shortstring
+// - shortstring allows fast stack allocation, so is perfect for small content
+// - set result='' if the resulting size exceed 255 bytes
+procedure FormatShort(const Format: RawUTF8; const Args: array of const;
+  var result: shortstring);
+
 /// fast Format() function replacement, handling % and ? parameters
 // - will include Args[] for every % in Format
 // - will inline Params[] for every ? in Format, handling special "inlined"
@@ -2316,11 +2322,12 @@ type
   /// a memory structure which avoid a temporary RawUTF8 allocation
   // - used by VarRecToTempUTF8() and FormatUTF8()
   TTempUTF8 = record
+    Len: PtrInt;
     Text: PUTF8Char;
-    Len: integer;
     TempRawUTF8: pointer;
     Temp: array[0..23] of AnsiChar;
   end;
+  PTempUTF8 = ^TTempUTF8;
 
 /// convert an open array (const Args: array of const) argument to an UTF-8
 // encoded text, using a specified temporary buffer
@@ -6986,8 +6993,20 @@ function Random32: cardinal; overload;
 // - thread-safe function: each thread will maintain its own gsl_rng_taus2 table
 function Random32(max: cardinal): cardinal; overload;
 
-/// seed the gsl_rng_taus2 Random32 generator
-// - do nothing if RDRAND Intel x86/x64 opcode is available
+/// fast compute of some 32-bit random value, using the gsl_rng_taus2 generator
+// - plain Random32 may call RDRAND opcode on Intel CPUs, wherease this function
+// will use well documented (and proven) Pierre L'Ecuyer software generator
+// - may be used if you don't want/trust RDRAND, or expect a well defined
+// cross-platform generator
+// - use rather TAESPRNG.Main.FillRandom() for cryptographic-level randomness
+// - thread-safe function: each thread will maintain its own gsl_rng_taus2 table
+function Random32gsl: cardinal; overload;
+
+/// fast compute of bounded 32-bit random value, using the gsl_rng_taus2 generator
+function Random32gsl(max: cardinal): cardinal; overload;
+
+/// seed the gsl_rng_taus2 Random32/Random32gsl generator
+// - this seeding won't affect RDRAND Intel x86/x64 opcode generation
 // - by default, gsl_rng_taus2 generator is re-seeded every 256KB, much more
 // often than the Pierre L'Ecuyer's algorithm period of 2^88
 // - you can specify some additional entropy buffer; note that calling this
@@ -7000,9 +7019,10 @@ procedure Random32Seed(entropy: pointer=nil; entropylen: integer=0);
 // - the destination buffer is expected to be allocated as 32 bit items
 // - use internally crc32c() with some rough entropy source, and Random32
 // gsl_rng_taus2 generator or hardware RDRAND Intel x86/x64 opcode if available
+// (and forcegsl is kept to its default false value)
 // - consider using instead the cryptographic secure TAESPRNG.Main.FillRandom()
 // method from the SynCrypto unit
-procedure FillRandom(Dest: PCardinalArray; CardinalCount: integer);
+procedure FillRandom(Dest: PCardinalArray; CardinalCount: integer; forcegsl: boolean=false);
 
 /// compute a random GUID value
 procedure RandomGUID(out result: TGUID); overload;
@@ -16503,7 +16523,7 @@ type
     /// stop the timer, returning the time elapsed as text with time resolution
     // (us,ms,s)
     // - is just a wrapper around ComputeTime + Time
-    function Stop: RawUTF8;
+    function Stop: shortstring;
     /// stop the timer, ready to continue its time measurement via Resume
     procedure Pause;
     /// resume a paused timer
@@ -16541,18 +16561,18 @@ type
     /// compute the per second count
     function PerSec(const Count: QWord): QWord;
     /// compute the time elapsed by count, with appened time resolution (us,ms,s)
-    function ByCount(Count: QWord): RawUTF8;
+    function ByCount(Count: QWord): shortstring;
     /// textual representation of time after counter stopped
     // - with appened time resolution (us,ms,s)
     // - not to be used in normal code, but e.g. for custom performance analysis
-    function Time: RawUTF8;
+    function Time: shortstring;
     /// time elapsed in micro seconds after counter stopped
     // - not to be used in normal code, but e.g. for custom performance analysis
     property TimeInMicroSec: TSynMonitorTotalMicroSec read iTime write iTime;
     /// textual representation of last process timing after counter stopped
     // - with appened time resolution (us,ms,s)
     // - not to be used in normal code, but e.g. for custom performance analysis
-    function LastTime: RawUTF8;
+    function LastTime: shortstring;
     /// timing in micro seconds of the last process
     // - not to be used in normal code, but e.g. for custom performance analysis
     property LastTimeInMicroSec: TSynMonitorOneMicroSec read iLastTime write iLastTime;
@@ -16614,7 +16634,7 @@ type
   TSynMonitorTime = class
   protected
     fMicroSeconds: TSynMonitorTotalMicroSec;
-    function GetAsText: RawUTF8;
+    function GetAsText: shortstring;
   public
     /// compute a number per second, of the current value
     function PerSecond(const Count: QWord): QWord;
@@ -16623,7 +16643,7 @@ type
     /// micro seconds time elapsed, as raw number
     property MicroSec: TSynMonitorTotalMicroSec read fMicroSeconds write fMicroSeconds;
     /// micro seconds time elapsed, as '... us-ns-ms-s' text
-    property Text: RawUTF8 read GetAsText;
+    property Text: shortstring read GetAsText;
   end;
 
   /// able to serialize any immediate timing as raw micro-seconds number or text
@@ -16631,7 +16651,7 @@ type
   TSynMonitorOneTime = class
   protected
     fMicroSeconds: TSynMonitorOneMicroSec;
-    function GetAsText: RawUTF8;
+    function GetAsText: shortstring;
   public
     /// compute a number per second, of the current value
     function PerSecond(const Count: QWord): QWord;
@@ -16640,7 +16660,7 @@ type
     /// micro seconds time elapsed, as raw number
     property MicroSec: TSynMonitorOneMicroSec read fMicroSeconds write fMicroSeconds;
     /// micro seconds time elapsed, as '... us-ns-ms-s' text
-    property Text: RawUTF8 read GetAsText;
+    property Text: shortstring read GetAsText;
   end;
 
   /// able to serialize any cumulative size as bytes number
@@ -16648,12 +16668,12 @@ type
   TSynMonitorSize = class
   protected
     fBytes: TSynMonitorTotalBytes;
-    function GetAsText: RawUTF8;
+    function GetAsText: shortstring;
   published
     /// number of bytes, as raw number
     property Bytes: TSynMonitorTotalBytes read fBytes write fBytes;
     /// number of bytes, as '... B-KB-MB-GB' text
-    property Text: RawUTF8 read GetAsText;
+    property Text: shortstring read GetAsText;
   end;
 
   /// able to serialize any immediate size as bytes number
@@ -16662,12 +16682,12 @@ type
   TSynMonitorOneSize = class
   protected
     fBytes: TSynMonitorOneBytes;
-    function GetAsText: RawUTF8;
+    function GetAsText: shortstring;
   published
     /// number of bytes, as raw number
     property Bytes: TSynMonitorOneBytes read fBytes write fBytes;
     /// number of bytes, as '... B-KB-MB-GB' text
-    property Text: RawUTF8 read GetAsText;
+    property Text: shortstring read GetAsText;
   end;
 
   /// able to serialize any bandwith as bytes count per second
@@ -16676,12 +16696,12 @@ type
   TSynMonitorThroughput = class
   protected
     fBytesPerSec: QWord;
-    function GetAsText: RawUTF8;
+    function GetAsText: shortstring;
   published
     /// number of bytes per second, as raw number
     property BytesPerSec: QWord read fBytesPerSec write fBytesPerSec;
     /// number of bytes per second, as '... B-KB-MB-GB/s' text
-    property Text: RawUTF8 read GetAsText;
+    property Text: shortstring read GetAsText;
   end;
 
   /// a generic value object able to handle any task / process statistic
@@ -18214,18 +18234,29 @@ type
 /// convert a size to a human readable value
 // - append TB, GB, MB, KB or B symbol
 // - for TB, GB, MB and KB, add one fractional digit
-function KB(bytes: Int64): RawUTF8;
+procedure KB(bytes: Int64; out result: shortstring); overload;
+
+/// convert a size to a human readable value
+// - append TB, GB, MB, KB or B symbol
+// - for TB, GB, MB and KB, add one fractional digit
+function KB(bytes: Int64): shortstring; overload;
+  {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
+
+  /// convert a size to a human readable value
+  // - append TB, GB, MB, KB or B symbol
+  // - for TB, GB, MB and KB, add one fractional digit
+procedure KBU(bytes: Int64; var result: RawUTF8); overload;
 
 /// convert a micro seconds elapsed time into a human readable value
 // - append 'us', 'ms' or 's' symbol
 // - for 'us' and 'ms', add two fractional digits
-function MicroSecToString(Micro: QWord): RawUTF8; overload;
+function MicroSecToString(Micro: QWord): shortstring; overload;
   {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
 
 /// convert a micro seconds elapsed time into a human readable value
 // - append 'us', 'ms' or 's' symbol
 // - for 'us' and 'ms', add two fractional digits
-procedure MicroSecToString(Micro: QWord; var result: RawUTF8); overload;
+procedure MicroSecToString(Micro: QWord; out result: shortstring); overload;
 
 /// convert an integer value into its textual representation with thousands marked
 // - ThousandSep is the character used to separate thousands in numbers with
@@ -25229,67 +25260,121 @@ begin
   FormatUTF8(Format,Args,result);
 end;
 
-procedure FormatUTF8(const Format: RawUTF8; const Args: array of const;
-  var result: RawUTF8);
-// only supported token is %, with any const arguments
-var L,argN: integer;
-    F,FDeb: PUTF8Char;
+type
+  TFormatUTF8 = object // only supported token is %, with any const arguments
+    b: PTempUTF8;
+    L,argN: integer;
     blocks: array[0..63] of TTempUTF8;
-    b,d: ^TTempUTF8;
+    procedure Parse(const Format: RawUTF8; const Args: array of const);
+    procedure Write(Dest: PUTF8Char);
+    function WriteMax(Dest: PUTF8Char; Max: PtrUInt): PUTF8Char;
+  end;
+
+procedure TFormatUTF8.Parse(const Format: RawUTF8; const Args: array of const);
+var F,FDeb: PUTF8Char;
 begin
-  if (Format='') or (high(Args)<0) then begin
-    result := Format; // no formatting to process
-    exit;
-  end;
-  if PWord(Format)^=ord('%') then begin
-    VarRecToUTF8(Args[0],result); // optimize raw conversion
-    exit;
-  end;
   if length(Args)*2>=high(blocks) then
     raise ESynException.Create('FormatUTF8: too many args (max=32)!');
-  {$ifdef FPC}Finalize(result){$else}result := ''{$endif};
-  argN := 0;
   L := 0;
+  argN := 0;
   b := @blocks;
   F := pointer(Format);
-  while F^<>#0 do begin
+  repeat
     if F^<>'%' then begin
       FDeb := F;
-      while (F^<>'%') and (F^<>#0) do inc(F);
+      while (F^<>'%') and (F^<>#0) do
+        inc(F);
       b^.Text := FDeb;
       b^.Len := F-FDeb;
       b^.TempRawUTF8 := nil;
       inc(L,b^.Len);
       inc(b);
     end;
-    if F^=#0 then break;
+    if F^=#0 then
+      break;
     inc(F); // jump '%'
     if argN<=high(Args) then begin
       inc(L,VarRecToTempUTF8(Args[argN],b^));
       inc(b);
       inc(argN);
+      if F^=#0 then
+        break;
     end else
-    if F^<>#0 then begin // no more available Args -> add all remaining text
-      b^.Text := F;
+    if F^=#0 then
+      break else begin
+      b^.Text := F; // no more available Args -> add all remaining text
       b^.Len := length(Format)-(F-pointer(Format));
       b^.TempRawUTF8 := nil;
       inc(L,b^.Len);
       inc(b);
       break;
     end;
-  end;
-  if L=0 then
-    exit;
-  SetLength(result,L);
-  F := pointer(result);
+  until false;
+end;
+
+procedure TFormatUTF8.Write(Dest: PUTF8Char);
+var d: PTempUTF8;
+begin
   d := @blocks;
   repeat
-    MoveFast(d^.Text^,F^,d^.Len);
-    inc(F,d^.Len);
+    MoveFast(d^.Text^,Dest^,d^.Len);
+    inc(Dest,d^.Len);
     if d^.TempRawUTF8<>nil then
       {$ifdef FPC}Finalize(RawUTF8(d^.TempRawUTF8)){$else}RawUTF8(d^.TempRawUTF8) := ''{$endif};
     inc(d);
   until d=b;
+end;
+
+function TFormatUTF8.WriteMax(Dest: PUTF8Char; Max: PtrUInt): PUTF8Char;
+var d: PTempUTF8;
+begin
+  inc(Max,PtrUInt(Dest));
+  d := @blocks;
+  repeat
+    if PtrUInt(Dest)+PtrUInt(d^.Len)>Max then begin // avoid buffer overflow
+      MoveFast(d^.Text^,Dest^,Max-PtrUInt(Dest));
+      repeat
+        if d^.TempRawUTF8<>nil then
+          {$ifdef FPC}Finalize(RawUTF8(d^.TempRawUTF8)){$else}RawUTF8(d^.TempRawUTF8) := ''{$endif};
+        inc(d);
+      until d=b; // avoid memory leak
+      result := PUTF8Char(Max);
+      exit;
+    end;
+    MoveFast(d^.Text^,Dest^,d^.Len);
+    inc(Dest,d^.Len);
+    if d^.TempRawUTF8<>nil then
+      {$ifdef FPC}Finalize(RawUTF8(d^.TempRawUTF8)){$else}RawUTF8(d^.TempRawUTF8) := ''{$endif};
+    inc(d);
+  until d=b;
+  result := Dest;
+end;
+
+procedure FormatUTF8(const Format: RawUTF8; const Args: array of const;
+  var result: RawUTF8);
+var process: TFormatUTF8;
+begin
+  if (Format='') or (high(Args)<0) then // no formatting needed
+    result := Format else
+  if PWord(Format)^=ord('%') then // optimize raw conversion
+    VarRecToUTF8(Args[0],result) else begin
+    process.Parse(Format,Args);
+    if process.L<>0 then begin
+      SetLength(result,process.L);
+      process.Write(pointer(result));
+    end;
+  end;
+end;
+
+procedure FormatShort(const Format: RawUTF8; const Args: array of const;
+  var result: shortstring);
+var process: TFormatUTF8;
+begin
+  if (Format='') or (high(Args)<0) then // no formatting needed
+    SetString(result,PAnsiChar(Format),length(Format)) else begin
+    process.Parse(Format,Args);
+    result[0] := AnsiChar(process.WriteMax(@result[1],255)-@result[1]);
+  end;
 end;
 
 function FormatUTF8(const Format: RawUTF8; const Args, Params: array of const; JSONFormat: boolean): RawUTF8;
@@ -37378,10 +37463,7 @@ end;
 
 procedure Random32Seed(entropy: pointer; entropylen: integer);
 begin
-  {$ifdef CPUINTEL}
-  if not (cfRAND in CpuFeatures) then
-  {$endif}
-    _Lecuyer.Seed(entropy,entropylen);
+  _Lecuyer.Seed(entropy,entropylen);
 end;
 
 function Random32: cardinal;
@@ -37398,14 +37480,24 @@ begin
   result := (QWord(Random32)*max)shr 32;
 end;
 
-procedure FillRandom(Dest: PCardinalArray; CardinalCount: integer);
+function Random32gsl: cardinal;
+begin
+  result := _Lecuyer.Next;
+end;
+
+function Random32gsl(max: cardinal): cardinal;
+begin
+  result := (QWord(_Lecuyer.Next)*max)shr 32;
+end;
+
+procedure FillRandom(Dest: PCardinalArray; CardinalCount: integer; forcegsl: boolean);
 var i: integer;
     c: cardinal;
     timenow: Int64;
     lecuyer: ^TLecuyer;
 begin
   {$ifdef CPUINTEL}
-  if cfRAND in CpuFeatures then
+  if (cfRAND in CpuFeatures) and not forcegsl then
     lecuyer := nil else
   {$endif}
     lecuyer := @_Lecuyer;
@@ -56237,37 +56329,55 @@ end;
 
 { ************ Unit-Testing classes and functions }
 
-function KB(bytes: Int64): RawUTF8;
-const _B: array[0..4] of string[3] = ('B','KB','MB','GB','TB');
-var hi,rem: cardinal;
-    b: byte;
+procedure KB(bytes: Int64; out result: shortstring);
+const _B: array[0..3] of string[3] = ('KB','MB','GB','TB');
+var hi,rem,b: cardinal;
 begin
   if bytes<1 shl 10 then begin
-    FormatUTF8('% %',[PtrInt(bytes),_B[0]],result);
+    FormatShort('% B',[integer(bytes)],result);
     exit;
   end;
   if bytes<1 shl 20 then begin
-    b := 1;
+    b := 0;
     rem := bytes;
+    hi := bytes shr 10;
+  end else
+  if bytes<1 shl 30 then begin
+    b := 1;
+    rem := bytes shr 10;
+    hi := bytes shr 20;
+  end else
+  if bytes<Int64(1) shl 40 then begin
+    b := 2;
+    rem := bytes shr 20;
+    hi := bytes shr 30;
   end else begin
-    if bytes<1 shl 30 then
-      b := 2 else
-    if bytes<Int64(1) shl 40 then
-      b := 3 else
-      b := 4;
-    rem := bytes shr ((b-1)*10);
+    b := 3;
+    rem := bytes shr 30;
+    hi := bytes shr 40;
   end;
   rem := rem and 1023;
   if rem<>0 then
     rem := rem div 102;
-  hi := bytes shr (b*10);
   if rem=10 then begin
     rem := 0;
     inc(hi); // round up as expected by an human being
   end;
   if rem<>0 then
-    FormatUTF8('%.% %',[hi,rem,_B[b]],result) else
-    FormatUTF8('% %',[hi,_B[b]],result);
+    FormatShort('%.% %',[hi,rem,_B[b]],result) else
+    FormatShort('% %',[hi,_B[b]],result);
+end;
+
+function KB(bytes: Int64): shortstring;
+begin
+  KB(bytes,result);
+end;
+
+procedure KBU(bytes: Int64; var result: RawUTF8);
+var tmp: shortstring;
+begin
+  KB(bytes,tmp);
+  SetString(result,PAnsiChar(@tmp[1]),ord(tmp[0]));
 end;
 
 function IntToThousandString(Value: integer; const ThousandSep: RawUTF8): RawUTF8;
@@ -56283,36 +56393,36 @@ begin
     insert(ThousandSep,Result,Len-i*3);
 end;
 
-function MicroSecToString(Micro: QWord): RawUTF8;
+function MicroSecToString(Micro: QWord): shortstring;
 begin
   MicroSecToString(Micro,result);
 end;
 
-procedure MicroSecToString(Micro: QWord; var result: RawUTF8);
-  procedure TwoDigitToString(value: cardinal; const u: RawUTF8; var result: RawUTF8);
+procedure MicroSecToString(Micro: QWord; out result: shortstring);
+  procedure TwoDigitToString(value: cardinal; const u: shortstring; var result: shortstring);
   var d100: TDiv100Rec;
   begin
     if value<10 then
-      FormatUTF8('0.0%%', [AnsiChar(value+48),u],result) else
+      FormatShort('0.0%%',[AnsiChar(value+48),u],result) else
     if value<100 then
-      FormatUTF8('0.%%', [UInt2DigitsToShort(value),u],result) else begin
+      FormatShort('0.%%',[UInt2DigitsToShort(value),u],result) else begin
       Div100(value,d100);
       if d100.m=0 then
-        FormatUTF8('%%', [d100.d,u],result) else
-        FormatUTF8('%.%%', [d100.d,UInt2DigitsToShort(d100.m),u],result);
+        FormatShort('%%',[d100.d,u],result) else
+        FormatShort('%.%%',[d100.d,UInt2DigitsToShort(d100.m),u],result);
     end;
   end;
-  procedure TimeToString(value: cardinal; const u: RawUTF8; var result: RawUTF8);
+  procedure TimeToString(value: cardinal; const u: shortstring; var result: shortstring);
   var d: cardinal;
   begin
     d := value div 60;
-    FormatUTF8('%%%', [d,u,UInt2DigitsToShort(value-(d*60))],result);
+    FormatShort('%%%',[d,u,UInt2DigitsToShort(value-(d*60))],result);
   end;
 begin
   if Int64(Micro)<=0 then
     result := '0us' else
   if Micro<1000 then
-    result := SmallUInt32UTF8[Micro]+'us' else
+    FormatShort('%us',[Micro],result) else
   if Micro<1000000 then
     TwoDigitToString({$ifdef CPU32}Int64Rec(Micro).Lo{$else}Micro{$endif} div 10,'ms',result) else
   if Micro<60000000 then
@@ -56345,7 +56455,7 @@ end;
 
 { TPrecisionTimer }
 
-function TPrecisionTimer.ByCount(Count: QWord): RawUTF8;
+function TPrecisionTimer.ByCount(Count: QWord): shortstring;
 begin
   if Count=0 then
     result := SmallUInt32UTF8[0] else // avoid div per 0 exception
@@ -56411,7 +56521,7 @@ begin // very close to ComputeTime
   result := iLastTime;
 end;
 
-function TPrecisionTimer.Stop: RawUTF8;
+function TPrecisionTimer.Stop: shortstring;
 begin
   ComputeTime;
   MicroSecToString(iTime,result);
@@ -56432,12 +56542,12 @@ begin
   iResume := 0;
 end;
 
-function TPrecisionTimer.Time: RawUTF8;
+function TPrecisionTimer.Time: shortstring;
 begin
   MicroSecToString(iTime,result);
 end;
 
-function TPrecisionTimer.LastTime: RawUTF8;
+function TPrecisionTimer.LastTime: shortstring;
 begin
   MicroSecToString(iLastTime,result);
 end;
@@ -56515,7 +56625,7 @@ end;
 
 { TSynMonitorTime }
 
-function TSynMonitorTime.GetAsText: RawUTF8;
+function TSynMonitorTime.GetAsText: shortstring;
 begin
   MicroSecToString(fMicroSeconds,result);
 end;
@@ -56530,7 +56640,7 @@ end;
 
 { TSynMonitorOneTime }
 
-function TSynMonitorOneTime.GetAsText: RawUTF8;
+function TSynMonitorOneTime.GetAsText: shortstring;
 begin
   MicroSecToString(fMicroSeconds,result);
 end;
@@ -56545,23 +56655,23 @@ end;
 
 { TSynMonitorSize }
 
-function TSynMonitorSize.GetAsText: RawUTF8;
+function TSynMonitorSize.GetAsText: shortstring;
 begin
-  result := KB(fBytes);
+  KB(fBytes,result);
 end;
 
 { TSynMonitorOneSize }
 
-function TSynMonitorOneSize.GetAsText: RawUTF8;
+function TSynMonitorOneSize.GetAsText: shortstring;
 begin
-  result := KB(fBytes);
+  KB(fBytes,result);
 end;
 
 { TSynMonitorThroughput }
 
-function TSynMonitorThroughput.GetAsText: RawUTF8;
+function TSynMonitorThroughput.GetAsText: shortstring;
 begin
-  result := KB(fBytesPerSec)+'/s';
+  FormatShort('%/s',[KB(fBytesPerSec)],result);
 end;
 
 
@@ -60007,7 +60117,7 @@ procedure TFileBufferWriter.Write(Data: pointer; DataLen: integer);
 begin
   if (DataLen<=0) or (Data=nil) then
     exit;
-  inc(fTotalWritten,PtrUInt(DataLen));
+  inc(fTotalWritten,DataLen);
   if fPos+DataLen>fBufLen then begin
     if fPos>0 then begin
       fStream.Write(fBuffer^,fPos);

@@ -1232,8 +1232,36 @@ unit mORMot;
   // - In this case, in table TSQLAuthUser should be an entry for the
   // windows user, with the LoginName in form 'DomainName\UserName'
 
+{$else}
+
+  {$define GSSAPIAUTH}
+  // if defined, the Kerberos authentication (using gssapi library) will be used
+  // along with the usual one
+  // - In this case, in table TSQLAuthUser should be an entry for the
+  // domain user, with the LoginName in form 'UserName@DomainName'
+  // Authentication with gssapi library is currently supported only on server 
+  // and only for browser clients
+  // Linux server should joind a domain before using this
+  // KRB5_KTNAME environment variable shoud point to valid readable keytab file
+  // with correct server credentials
+  // For more information on how to prepare server read an article on how to
+  // configure MS SQL Server on Linux to use Windows authentication
+  // https://www.mssqltips.com/sqlservertip/5075/configure-sql-server-on-linux-to-use-windows-authentication
+  // To comple projet with GSSAPIAUTH enabled it is required to provide path to
+  // gssapi library for linker (-L/usr/lib/x86_64-linux-gnu/mit-krb5)
+  // Other limitations:
+  //  - only one iteration supported
+  //  - SPN not passed to gssapi - default creadentials used
+  //  - no NTLM support - this is a deprecated and vulnerable protocol
+
 {$endif}
 
+{$ifdef SSPIAUTH}
+{$define DOMAINAUTH}
+{$endif}
+{$ifdef GSSAPIAUTH}
+{$define DOMAINAUTH}
+{$endif}
 
 interface
 
@@ -1271,6 +1299,9 @@ uses
 {$ifdef SSPIAUTH}
   SynSSPI,
   SynSSPIAuth,
+{$endif}
+{$ifdef GSSAPIAUTH}
+  SynGSSAPI,
 {$endif}
   SynCommons,
   SynTable, // for SynTable, TSynFilter and TSynValidate
@@ -16134,13 +16165,14 @@ type
     function Auth(Ctxt: TSQLRestServerURIContext): boolean; override;
   end;
 
-  {$ifdef SSPIAUTH}
+  {$ifdef DOMAINAUTH}
 
   /// authentication of the current logged user using Windows Security Support
-  // Provider Interface (SSPI)
+  // Provider Interface (SSPI) or GSSAPI library on Linux
   // - is able to authenticate the currently logged user on the client side,
-  // using either NTLM or Kerberos - it will allow to safely authenticate
-  // on a mORMot server without prompting the user to enter its password
+  // using either NTLM (Windows only) or Kerberos - it will allow to safely
+  // authenticate on a mORMot server without prompting the user to enter its
+  // password
   // - if ClientSetUser() receives aUserName as '', aPassword should be either
   // '' if you expect NTLM authentication to take place, or contain the SPN
   // registration (e.g. 'mymormotservice/myserver.mydomain.tld') for Kerberos
@@ -16150,6 +16182,7 @@ type
   // as plain password value
   TSQLRestServerAuthenticationSSPI = class(TSQLRestServerAuthenticationSignedURI)
   protected
+    {$ifdef SSPIAUTH}
     /// Windows built-in authentication
     // - holds information between calls to ServerSSPIAuth
     fSSPIAuthContexts: TSecContextDynArray;
@@ -16167,11 +16200,14 @@ type
     // plain password
     class function ClientComputeSessionKey(Sender: TSQLRestClientURI;
       User: TSQLAuthUser): RawUTF8; override;
+    {$endif SSPIAUTH}
   public
     /// initialize the authentication method to a specified server
     constructor Create(aServer: TSQLRestServer); override;
+    {$ifdef SSPIAUTH}
     /// finalize internal memory structures
     destructor Destroy; override;
+    {$endif}
     /// will try to handle the Auth RESTful method with Windows SSPI API
     // - to be called in a two pass algorithm, used to cypher the password
     // - the client-side logged user will be identified as valid, according
@@ -16179,7 +16215,7 @@ type
     function Auth(Ctxt: TSQLRestServerURIContext): boolean; override;
   end;
 
-  {$endif SSPIAUTH}
+  {$endif DOMAINAUTH}
 
   /// supported REST authentication schemes
   // - used by the overloaded TSQLHttpServer.Create(TSQLHttpServerDefinition)
@@ -19457,7 +19493,8 @@ type
     // ! TSQLRestServer.ServiceDefine(...).ResultAsJSONObjectWithoutResult := true
     // - this method expects the interface to have been registered previously:
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
-    function ServiceDefineSharedAPI(const aInterface: TGUID): TServiceFactoryClient;
+    function ServiceDefineSharedAPI(const aInterface: TGUID;
+      const aContractExpected: RawUTF8=SERVICE_CONTRACT_NONE_EXPECTED): TServiceFactoryClient;
     /// allow to notify a server the services this client may be actually capable
     // - when this client will connect to a remote server to access its services,
     // it will register its own services, supplying its TSQLRestServer instance,
@@ -28574,7 +28611,7 @@ begin
   if IsNotExpandedBuffer(P,Buffer+BufferLen,fFieldCount,fRowCount) then begin
     // A. Not Expanded format
 (* {"fieldCount":9,"values":["ID","Int","Test","Unicode","Ansi","ValFloat","ValWord",
-    "ValDate","Next",0,0,"abcde+¬ef+á+¬","abcde+¬ef+á+¬","abcde+¬ef+á+¬",
+    "ValDate","Next",0,0,"abcde+?ef+?+?","abcde+?ef+?+?","abcde+?ef+?+?",
     3.14159265300000E+0000,1203,"2009-03-10T21:19:36",0,..],"rowCount":20} *)
     // 1. check RowCount and DataLen
     if fRowCount<0 then begin // IsNotExpanded() notified wrong input
@@ -28603,8 +28640,8 @@ begin
     end;
   end else begin
     // B. Expanded format
-(* [{"ID":0,"Int":0,"Test":"abcde+¬ef+á+¬","Unicode":"abcde+¬ef+á+¬","Ansi":
-    "abcde+¬ef+á+¬","ValFloat": 3.14159265300000E+0000,"ValWord":1203,
+(* [{"ID":0,"Int":0,"Test":"abcde+?ef+?+?","Unicode":"abcde+?ef+?+?","Ansi":
+    "abcde+?ef+?+?","ValFloat": 3.14159265300000E+0000,"ValWord":1203,
     "ValDate":"2009-03-10T21:19:36","Next":0},{..}] *)
     // 1. get fields count from first row
     while P^<>'[' do if P^=#0 then exit else inc(P); // need an array of objects
@@ -31899,10 +31936,10 @@ end;
 procedure TSQLRecord.FillFrom(P: PUTF8Char; FieldBits: PSQLFieldBits);
 (* two possible formats = first not expanded, 2nd is expanded (most useful)
  {"fieldCount":9,"values":["ID","Int","Test","Unicode","Ansi","ValFloat","ValWord",
-  "ValDate","Next",0,0,"abcde+¬ef+á+¬","abcde+¬ef+á+¬","abcde+¬ef+á+¬",
+  "ValDate","Next",0,0,"abcde+?ef+?+?","abcde+?ef+?+?","abcde+?ef+?+?",
   3.14159265300000E+0000,1203,"2009-03-10T21:19:36",0]}
- {"ID":0,"Int":0,"Test":"abcde+¬ef+á+¬","Unicode":"abcde+¬ef+á+¬","Ansi":
- "abcde+¬ef+á+¬","ValFloat": 3.14159265300000E+0000,"ValWord":1203,
+ {"ID":0,"Int":0,"Test":"abcde+?ef+?+?","Unicode":"abcde+?ef+?+?","Ansi":
+ "abcde+?ef+?+?","ValFloat": 3.14159265300000E+0000,"ValWord":1203,
  "ValDate":"2009-03-10T21:19:36","Next":0} *)
 var F: array[0..MAX_SQLFIELDS-1] of PUTF8Char; // store field/property names
     wasString: boolean;
@@ -38817,9 +38854,10 @@ begin
     TInterfaceFactory.GUID2TypeInfo(aInterface),Obj,aContractExpected);
 end;
 
-function TSQLRestClientURI.ServiceDefineSharedAPI(const aInterface: TGUID): TServiceFactoryClient;
+function TSQLRestClientURI.ServiceDefineSharedAPI(const aInterface: TGUID;
+  const aContractExpected: RawUTF8): TServiceFactoryClient;
 begin
-  result := ServiceDefine(aInterface,sicShared,SERVICE_CONTRACT_NONE_EXPECTED);
+  result := ServiceDefine(aInterface,sicShared,aContractExpected);
   result.ParamsAsJSONObject := true; // no contract -> explicit parameters
   result.ResultAsJSONObjectWithoutResult := true;
 end;
@@ -39372,7 +39410,7 @@ begin
   fSessionClass := TAuthSession;
   if aHandleUserAuthentication then // default mORMot authentication schemes
     AuthenticationRegister([TSQLRestServerAuthenticationDefault
-      {$ifdef SSPIAUTH},TSQLRestServerAuthenticationSSPI{$endif}]);
+      {$ifdef DOMAINAUTH},TSQLRestServerAuthenticationSSPI{$endif}]);
   fTrackChangesHistoryTableIndexCount := length(Model.Tables);
   SetLength(fTrackChangesHistory,fTrackChangesHistoryTableIndexCount);
   if fTrackChangesHistoryTableIndexCount>64 then
@@ -53776,7 +53814,7 @@ begin
 end;
 
 
-{$ifdef SSPIAUTH}
+{$ifdef DOMAINAUTH}
 
 { TSQLRestServerAuthenticationSSPI }
 
@@ -53791,8 +53829,13 @@ var i: integer;
     UserName, InDataEnc: RawUTF8;
     ticks,ConnectionID: Int64;
     BrowserAuth: Boolean;
+    {$ifdef SSPIAUTH}
     CtxArr: TDynArray;
     SecCtxIdx: Integer;
+    {$endif}
+    {$ifdef GSSAPIAUTH}
+    SecCtx: Pointer;
+    {$endif}
     OutData: RawByteString;
     User: TSQLAuthUser;
     Session: TAuthSession;
@@ -53800,6 +53843,10 @@ begin
   result := AuthSessionRelease(Ctxt);
   if result or not Ctxt.InputExists['UserName'] or not Ctxt.InputExists['Data'] then
     exit;
+  {$ifdef GSSAPIAUTH}
+  if not GSSLibraryFound then
+    exit;
+  {$endif}
   // use ConnectionID to find authentication session
   ConnectionID := Ctxt.Call^.LowLevelConnectionID;
   // GET ModelRoot/auth?UserName=&data=... -> windows SSPI auth
@@ -53816,6 +53863,10 @@ begin
     end;
     BrowserAuth := True;
   end else
+  {$ifdef GSSAPIAUTH}
+    raise ENotImplemented.Create('GSSAPI support for non-browser clients is not currently implemented');
+  {$endif}
+  {$ifdef SSPIAUTH}
     BrowserAuth := False;
   CtxArr.InitSpecific(TypeInfo(TSecContextDynArray),fSSPIAuthContexts,djInt64);
   // check for outdated auth context
@@ -53826,7 +53877,9 @@ begin
       CtxArr.Delete(i);
     end;
   // if no auth context specified, create a new one
+  {$endif}
   result := true;
+  {$ifdef SSPIAUTH}
   SecCtxIdx := CtxArr.Find(ConnectionID);
   if SecCtxIdx<0 then begin
     // 1st call: create SecCtxId
@@ -53856,6 +53909,17 @@ begin
     fServer.fLogFamily.SynLog.Log(sllUserAuth,'% Authentication success for %',
       [SecPackageName(fSSPIAuthContexts[SecCtxIdx]),UserName],self);
   {$endif}
+  {$endif}
+  {$ifdef GSSAPIAUTH}
+  SecCtx := nil;
+  if not GSSAcceptSecurityContext(Base64ToBin(InDataEnc), ''{ TODO: SPN should be someware in configuration }, SecCtx, AnsiString(UserName), OutData) then
+    raise ESecurityException.Create('Only one authentication iteration allowed');
+  {$ifdef WITHLOG}
+  if sllUserAuth in fServer.fLogFamily.Level then
+    fServer.fLogFamily.SynLog.Log(sllUserAuth,'% Authentication success for %',
+      ['GSSAPI',UserName],self);
+  {$endif}
+  {$endif}
   // now client is authenticated -> create a session for aUserName
   // and send back OutData
   try
@@ -53868,22 +53932,28 @@ begin
       fServer.SessionCreate(User,Ctxt,Session); // call Ctxt.AuthenticationFailed on error
       if Session<>nil then
         with Session.User do
-          if BrowserAuth then
+          {$ifdef SSPIAUTH}if BrowserAuth then{$endif}
             SessionCreateReturns(Ctxt,Session,Session.fPrivateSalt,'',
-              (SECPKGNAMEHTTPWWWAUTHENTICATE+' ')+BinToBase64(OutData)) else
+              (SECPKGNAMEHTTPWWWAUTHENTICATE+' ')+BinToBase64(OutData)){$ifdef SSPIAUTH} else
             SessionCreateReturns(Ctxt,Session,
               BinToBase64(SecEncrypt(fSSPIAuthContexts[SecCtxIdx],Session.fPrivateSalt)),
-              BinToBase64(OutData),'');
+              BinToBase64(OutData),''){$endif};
     finally
       User.Free;
     end else
       Ctxt.AuthenticationFailed(afUnknownUser);
   finally
+    {$ifdef SSPIAUTH}
     FreeSecContext(fSSPIAuthContexts[SecCtxIdx]);
     CtxArr.Delete(SecCtxIdx);
+    {$endif}
+    {$ifdef GSSAPIAUTH}
+    GSSReleaseContext(SecCtx);
+    {$endif}
   end;
 end;
 
+{$ifdef SSPIAUTH}
 class function TSQLRestServerAuthenticationSSPI.ClientComputeSessionKey(
   Sender: TSQLRestClientURI; User: TSQLAuthUser): RawUTF8;
 var SecCtx: TSecContext;
@@ -53914,12 +53984,14 @@ begin
   // SessionKey + PasswordHashHexa to sign the URI, as usual
   User.PasswordHashHexa := ''; // should not appear on URI signature
 end;
+{$endif}
 
 constructor TSQLRestServerAuthenticationSSPI.Create(aServer: TSQLRestServer);
 begin
   inherited Create(aServer);
 end;
 
+{$ifdef SSPIAUTH}
 destructor TSQLRestServerAuthenticationSSPI.Destroy;
 var i: integer;
 begin
@@ -53927,9 +53999,9 @@ begin
     FreeSecContext(fSSPIAuthContexts[i]);
   inherited;
 end;
+{$endif}
 
-
-{$endif SSPIAUTH}
+{$endif DOMAINAUTH}
 
 
 { TSynAuthenticationRest }
