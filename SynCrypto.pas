@@ -14683,7 +14683,7 @@ begin
   until EndOfObject='}';
   if JWT.data.Count>0 then
     JWT.data.Capacity := JWT.data.Count;
-  if claims-JWT.claims<>[] then
+  if JWT.claims-claims<>[] then
     JWT.result := jwtMissingClaim else begin
     SetString(headpayload,tok,payloadend-1);
     JWT.result := jwtValid;

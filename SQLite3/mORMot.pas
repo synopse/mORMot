@@ -1239,28 +1239,33 @@ unit mORMot;
   // along with the usual one
   // - In this case, in table TSQLAuthUser should be an entry for the
   // domain user, with the LoginName in form 'UserName@DomainName'
-  // Authentication with gssapi library is currently supported only on server 
+  // - Authentication with gssapi library is currently supported only on server 
   // and only for browser clients
-  // Linux server should joind a domain before using this
-  // KRB5_KTNAME environment variable shoud point to valid readable keytab file
+  // - Linux server should joind a domain before using this
+  // - KRB5_KTNAME environment variable shoud point to valid readable keytab file
   // with correct server credentials
-  // For more information on how to prepare server read an article on how to
+  // - For more information on how to prepare server read an article on how to
   // configure MS SQL Server on Linux to use Windows authentication
   // https://www.mssqltips.com/sqlservertip/5075/configure-sql-server-on-linux-to-use-windows-authentication
-  // To comple projet with GSSAPIAUTH enabled it is required to provide path to
-  // gssapi library for linker (-L/usr/lib/x86_64-linux-gnu/mit-krb5)
+  // - Setting NOGSSAPIAUTH conditional will disable this feature
   // Other limitations:
   //  - only one iteration supported
   //  - SPN not passed to gssapi - default creadentials used
   //  - no NTLM support - this is a deprecated and vulnerable protocol
-
-{$endif}
+  {$endif}
 
 {$ifdef SSPIAUTH}
-{$define DOMAINAUTH}
+  {$undef GSSAPIAUTH} // exclusive
+  {$define DOMAINAUTH}
 {$endif}
 {$ifdef GSSAPIAUTH}
-{$define DOMAINAUTH}
+  {$undef SSPIAUTH} // exclusive
+  {$ifdef NOGSSAPIAUTH}
+    {$undef GSSAPIAUTH} // force disable 
+    {$undef DOMAINAUTH}   
+  {$else}
+    {$define DOMAINAUTH}
+  {$endif}
 {$endif}
 
 interface
@@ -53912,7 +53917,8 @@ begin
   {$endif}
   {$ifdef GSSAPIAUTH}
   SecCtx := nil;
-  if not GSSAcceptSecurityContext(Base64ToBin(InDataEnc), ''{ TODO: SPN should be someware in configuration }, SecCtx, AnsiString(UserName), OutData) then
+  if not GSSAcceptSecurityContext(Base64ToBin(InDataEnc), ''{ TODO: retrieve SPN from config }, 
+     SecCtx, AnsiString(UserName), OutData) then
     raise ESecurityException.Create('Only one authentication iteration allowed');
   {$ifdef WITHLOG}
   if sllUserAuth in fServer.fLogFamily.Level then

@@ -974,24 +974,25 @@ procedure UTF8Array2PostgreArray(const Values: array of RawUTF8; out postgreArra
 var i, j, k, n, L: Integer;
     P: PUTF8Char;
 begin
-  if high(Values)<0 then begin
-    postgreArray := '';
+  if high(Values)<0 then 
     exit;
-  end;
   L := 2; // '{}'
-  inc(L, high(Values)); // , after each element
+  inc(L,high(Values)); // , after each element
   for i := 0 to high(Values) do begin
     inc(L,length(Values[i]));
     for j := 2 to length(Values[i])-1 do
-      if Values[i][j] = '"' then inc(L); // \ before "
+      if Values[i][j] = '"' then 
+        inc(L); // \ before "
   end;
   SetLength(postgreArray,L);
   P := pointer(postgreArray);
-  P[0] := '{'; i := 1;
+  P[0] := '{'; 
+  i := 1;
   for n := 0 to high(Values) do begin
     if length(Values[n]) = 0 then continue;
     if Values[n][1] = '''' then begin
-      P[i] := '"'; inc(i);
+      P[i] := '"'; 
+      inc(i);
       for k := 2 to length(Values[n])-1 do begin // skip first and last "
         if Values[n][k] = '"' then begin
           p[i] := '\';
@@ -1000,17 +1001,19 @@ begin
         p[i] := Values[n][k];
         inc(i);
       end;
-      P[i] := '"'; inc(i);
+      P[i] := '"'; 
+      inc(i);
     end else
       for k := 1 to length(Values[n]) do begin
         p[i] := Values[n][k];
         inc(i);
       end;
-    p[i] := ','; inc(i);
+    p[i] := ','; 
+    inc(i);
   end;
   if (i > 1) then begin
     p[i-1] := '}';
-    SetLength(postgreArray, i);
+    SetLength(postgreArray,i);
   end else
     p[i] := '}';
 end;
