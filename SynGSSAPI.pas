@@ -1,9 +1,59 @@
+/// Server side Kerberos authentication support using GSSAPI
+// - both MIT and Heimdal implementation libraries are supported
 unit SynGSSAPI;
 
 {
-  Server side Kerberos authentication support using GSSAPI
-  Both MIT and Heimdal implementation libraries are supported
+    This file is part of Synopse mORMot framework.
+
+    Synopse mORMot framework. Copyright (C) 2018 Arnaud Bouchez
+      Synopse Informatique - https://synopse.info
+
+  *** BEGIN LICENSE BLOCK *****
+  Version: MPL 1.1/GPL 2.0/LGPL 2.1
+
+  The contents of this file are subject to the Mozilla Public License Version
+  1.1 (the "License"); you may not use this file except in compliance with
+  the License. You may obtain a copy of the License at
+  http://www.mozilla.org/MPL
+
+  Software distributed under the License is distributed on an "AS IS" basis,
+  WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+  for the specific language governing rights and limitations under the License.
+
+  The Original Code is Synopse mORMot framework.
+
+  The Initial Developer of the Original Code is pavelmash/ssoftpro.
+
+  Portions created by the Initial Developer are Copyright (C) 2018
+  the Initial Developer. All Rights Reserved.
+
+  Contributor(s):
+   Arnaud Bouchez
+
+  Alternatively, the contents of this file may be used under the terms of
+  either the GNU General Public License Version 2 or later (the "GPL"), or
+  the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+  in which case the provisions of the GPL or the LGPL are applicable instead
+  of those above. If you wish to allow use of your version of this file only
+  under the terms of either the GPL or the LGPL, and not to allow others to
+  use your version of this file under the terms of the MPL, indicate your
+  decision by deleting the provisions above and replace them with the notice
+  and other provisions required by the GPL or the LGPL. If you do not delete
+  the provisions above, a recipient may use your version of this file under
+  the terms of any one of the MPL, the GPL or the LGPL.
+
+  ***** END LICENSE BLOCK *****
+
+
+
+  Version 1.18
+  - initial release, as an alternative to SynSSPIAuth.pas for Linux servers
+  - currently only tested and supported with FPC (not Kylix)
+  - has no external unit dependency, so can be used e.g. by SynCrtSock
+
 }
+
+{$I Synopse.inc} // define HASINLINE and other compatibility switches
 
 interface
 
@@ -12,53 +62,72 @@ uses
   Classes;
 
 type
+  {$ifdef HASCODEPAGE}
+  TGSSAPIBuffer = RawByteString;
+  {$else}
+  TGSSAPIBuffer = AnsiString;
+  {$endif}
+
+  /// Exception raised during gssapi library process
   EGSSError = class(Exception)
   private
     FMajorStatus: Cardinal;
     FMinorStatus: Cardinal;
   public
+    /// initialize an gssapi library exception
     constructor Create(AMajorStatus, AMinorStatus: Cardinal; const APrefix: String);
+    /// associated GSS_C_GSS_CODE state value
     property MajorStatus: Cardinal read FMajorStatus;
+    /// associated GSS_C_MECH_CODE state value
     property MinorStatus: Cardinal read FMinorStatus;
   end;
 
-/// Call this function to check whether gssapi library found or not
+/// call this function to check whether gssapi library found or not
 function GSSLibraryFound: Boolean;
-/// Accepts security context provided by client
-// For this method to work the following conditions should be met:
-// - KRB5_KTNAME environment variable should be set and point to valid readable keytab file
-// - the keytab file should contain SvcName in the form HTTP/<host_FQDN>[:port]@REALM
+
+/// accepts security context provided by client
+// - for this method to work the following conditions should be met:
+// KRB5_KTNAME environment variable should be set and point to valid readable keytab file;
+// and the keytab file should contain SvcName in the form HTTP/<host_FQDN>[:port]@REALM
 function GSSAcceptSecurityContext(const InputToken: RawByteString;
   const SPN: AnsiString; var GSSContext: Pointer; out ClientName: AnsiString;
-  out OutputToken: RawByteString): Boolean;
-/// Releases previously accepted security context
+  out OutputToken: TGSSAPIBuffer): Boolean;
+
+/// releases previously accepted security context
 procedure GSSReleaseContext(var GSSContext: Pointer);
-/// Lists supported security mechanisms in form
+
+/// lists supported security mechanisms in form
 // sasl:name:description
-// Not all mechanisms provide human readable name and description
+// - Not all mechanisms provide human readable name and description
 procedure GSSEnlistMechsSupported(MechList: TStringList);
 
-const // This is here to be more compatible with SynSSPIAuth
-  /// HTTP header to be set for SSPI authentication
+const
+  /// HTTP header to be set for GSSAPI authentication
+  // - here to be more compatible with SynSSPIAuth
   SECPKGNAMEHTTPWWWAUTHENTICATE = 'WWW-Authenticate: Negotiate';
-  /// HTTP header pattern received for SSPI authentication
+  /// HTTP header pattern received for GSSAPI authentication
+  // - here to be more compatible with SynSSPIAuth
   SECPKGNAMEHTTPAUTHORIZATION = 'AUTHORIZATION: NEGOTIATE ';
+
+
+var
+  /// library name of the MIT implementation of GSSAPI
+  GSSLib_MIT: string = 'libgssapi_krb5.so.2';
+  /// library name of the Heimdal implementation of GSSAPI
+  GSSLib_Heimdal: string = 'libgssapi.so.3';
 
 implementation
 
 const
-  GSSLib_MIT = 'libgssapi_krb5.so.2';
-  GSSLib_Heimdal = 'libgssapi.so.3';
-
   GSS_C_NO_NAME = nil;
 
   // Some "helper" definitions to make the status code macros obvious.
   GSS_C_CALLING_ERROR_OFFSET = 24;
   GSS_C_ROUTINE_ERROR_OFFSET = 16;
   GSS_C_SUPPLEMENTARY_OFFSET =  0;
-  GSS_C_CALLING_ERROR_MASK = &0000377;
-  GSS_C_ROUTINE_ERROR_MASK = &0000377;
-  GSS_C_SUPPLEMENTARY_MASK = &0177777;
+  GSS_C_CALLING_ERROR_MASK = $ff;
+  GSS_C_ROUTINE_ERROR_MASK = $ff;
+  GSS_C_SUPPLEMENTARY_MASK = $ffff;
 
   // Supplementary info bits:
   GSS_S_CONTINUE_NEEDED = 1 shl (GSS_C_SUPPLEMENTARY_OFFSET + 0);
@@ -297,9 +366,9 @@ begin
   Result := GSSAPI<>nil;
 end;
 
-function GSSAcceptSecurityContext(const InputToken: RawByteString;
+function GSSAcceptSecurityContext(const InputToken: TGSSAPIBuffer;
   const SPN: AnsiString; var GSSContext: Pointer; out ClientName: String;
-  out OutputToken: RawByteString): Boolean;
+  out OutputToken: TGSSAPIBuffer): Boolean;
 var
   MajSt, MinSt, Flags, Secs: Cardinal;
   InBuf, OutBuf, NameBuf: gss_buffer_desc;
@@ -369,6 +438,7 @@ begin
     MajSt := GSSAPI^.gss_release_oid_set(MinSt, Mechs);
   end;
 end;
+
 
 { EGSSError }
 

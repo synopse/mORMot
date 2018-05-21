@@ -1252,7 +1252,12 @@ unit mORMot;
   //  - only one iteration supported
   //  - SPN not passed to gssapi - default creadentials used
   //  - no NTLM support - this is a deprecated and vulnerable protocol
-  {$endif}
+{$endif}
+
+
+{$ifdef KYLIX3}
+  {$define NOGSSAPIAUTH} // SynGSSAPI.pas unit is not Kylix-compatible
+{$endif}
 
 {$ifdef SSPIAUTH}
   {$undef GSSAPIAUTH} // exclusive
