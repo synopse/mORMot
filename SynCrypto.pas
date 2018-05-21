@@ -2911,6 +2911,7 @@ const
 function ToText(res: TJWTResult): PShortString; overload;
 function ToCaption(res: TJWTResult): string; overload;
 function ToText(claim: TJWTClaim): PShortString; overload;
+function ToText(claims: TJWTClaims): ShortString; overload;
 
 {$endif NOVARIANTS}
 
@@ -14563,7 +14564,7 @@ var payloadend,j,toklen,c,cap,headerlen,len,a: integer;
     wasString: boolean;
     EndOfObject: AnsiChar;
     claim: TJWTClaim;
-    claims: TJWTClaims;
+    requiredclaims: TJWTClaims;
     id: TSynUniqueIdentifierBits;
     value: variant;
     payload: RawUTF8;
@@ -14614,7 +14615,7 @@ begin
   cap := JSONObjectPropCount(P);
   if cap<=0 then
     exit;
-  claims := fClaims - excluded;
+  requiredclaims := fClaims - excluded;
   repeat
     N := GetJSONPropName(P);
     if N=nil then
@@ -14635,7 +14636,7 @@ begin
             exit;
           end;
           SetString(JWT.reg[claim],V,StrLen(V));
-          if claim in claims then
+          if claim in requiredclaims then
           case claim of
           jrcJwtID:
             if not(joNoJwtIDCheck in fOptions) then
@@ -14683,7 +14684,7 @@ begin
   until EndOfObject='}';
   if JWT.data.Count>0 then
     JWT.data.Capacity := JWT.data.Count;
-  if JWT.claims-claims<>[] then
+  if requiredclaims-JWT.claims<>[] then
     JWT.result := jwtMissingClaim else begin
     SetString(headpayload,tok,payloadend-1);
     JWT.result := jwtValid;
@@ -14921,6 +14922,10 @@ begin
   result := _TJWTClaim[claim];
 end;
 
+function ToText(claims: TJWTClaims): ShortString;
+begin
+  GetSetNameShort(TypeInfo(TJWTClaims),claims,result);
+end;
 
 {$endif NOVARIANTS}
 
