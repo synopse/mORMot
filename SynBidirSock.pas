@@ -839,6 +839,7 @@ type
     fMaskSentFrames: byte;
     fSettings: TWebSocketProcessSettings;
     fProcessCount: integer;
+    fProcessEnded: boolean;
     fNoConnectionCloseAtDestroy: boolean;
     fSafeIn, fSafeOut: TAutoLocker; // not IAutoLocker for Delphi5
     /// methods run e.g. by TWebSocketServerRest.WebSocketProcessLoop
@@ -884,11 +885,14 @@ type
     // jumboframe gathering (if supported by the protocol)
     property Outgoing: TWebSocketFrameList read fOutgoing;
     /// the associated low-level processing thread
-    property  OwnerThread: TSynThread read fOwnerThread;
+    property OwnerThread: TSynThread read fOwnerThread;
     /// the associated low-level WebSocket connection opaque identifier
     property OwnerConnection: Int64 read fOwnerConnection;
     /// how many frames are currently processed by this connection
     property ProcessCount: integer read fProcessCount;
+    /// may be set to TRUE before Destroy to force raw socket disconnection
+    property NoConnectionCloseAtDestroy: boolean
+        read fNoConnectionCloseAtDestroy write fNoConnectionCloseAtDestroy;
   published
     /// the Sec-WebSocket-Protocol application protocol currently involved
     // - TWebSocketProtocolJSON or TWebSocketProtocolBinary in the mORMot context
@@ -2305,13 +2309,13 @@ begin
       InterlockedDecrement(fProcessCount);
     end else
       fState := wpsDestroy;
-  if fProcessCount>0 then begin
+  if (fProcessCount>0) or not fProcessEnded then begin
     if log<>nil then
-      log.Log(sllDebug,'fProcessCount=%',[fProcessCount],self);
+      log.Log(sllDebug,'Destroy: wait for shutdown (fProcessCount=%)',[fProcessCount],self);
     timeOut := GetTickCount64+5000;
     repeat
       SleepHiRes(2);
-    until (fProcessCount=0) or (GetTickCount64>timeOut);
+    until ((fProcessCount=0) and fProcessEnded) or (GetTickCount64>timeOut);
   end;
   fProtocol.Free;
   fOutgoing.Free;
@@ -2336,13 +2340,14 @@ end;
 procedure TWebSocketProcess.ProcessStop;
 var frame: TWebSocketFrame; // notify e.g. TOnWebSocketProtocolChatIncomingFrame
 begin
-  frame.opcode := focConnectionClose;
-  fProtocol.ProcessIncomingFrame(self,frame,'');
-  if Assigned(fSettings.OnClientDisconnected) then
   try
-    fSettings.OnClientDisconnected(Self);
+    frame.opcode := focConnectionClose;
+    fProtocol.ProcessIncomingFrame(self,frame,'');
+    if Assigned(fSettings.OnClientDisconnected) then
+      fSettings.OnClientDisconnected(Self);
   except
   end;
+  fProcessEnded := true;
 end;
 
 procedure TWebSocketProcess.HiResDelay(const start: Int64);
@@ -2694,67 +2699,70 @@ begin
   if fProtocol=nil then
     exit;
   ProcessStart; // any exception will close the socket
-  SetLastPingTicks;
-  fState := wpsRun;
-  while (fState<>wpsDestroy) and not fOwnerThread.Terminated do
-    try
-      InterlockedIncrement(fProcessCount);
+  try
+    SetLastPingTicks;
+    fState := wpsRun;
+    while (fState<>wpsDestroy) and not fOwnerThread.Terminated do
       try
-        if GetFrame(request,1,@sockerror) then begin
-          case request.opcode of
-          focPing: begin
-            request.opcode := focPong;
-            SendFrame(request);
-          end;
-          focPong:
-            continue;
-          focText,focBinary:
-            fProtocol.ProcessIncomingFrame(self,request,'');
-          focConnectionClose: begin
-            if fState=wpsRun then begin
-              fState := wpsClose;
+        InterlockedIncrement(fProcessCount);
+        try
+          if GetFrame(request,1,@sockerror) then begin
+            case request.opcode of
+            focPing: begin
+              request.opcode := focPong;
               SendFrame(request);
             end;
-            break; // will close the connection
-          end;
-          end;
-        end else
-        if fOwnerThread.Terminated then
-          break else
-        if sockerror<>0 then begin
-          WebSocketLog.Add.Log(sllInfo,'GetFrame SockInPending error % on %',
-            [sockerror,fProtocol],self);
-          fState := wpsClose;
-          break; // will close the connection
-        end else begin
-          elapsed := LastPingDelay;
-          if (elapsed>0) and (fOutgoing.Count>0) then
-            if not SendPendingOutgoingFrames then begin
-              fState := wpsClose;
-              break;
-            end else
-          if (fSettings.HeartbeatDelay<>0) and
-             (elapsed>fSettings.HeartbeatDelay) then begin
-            request.opcode := focPing;
-            if not SendFrame(request) then
-              if (fSettings.DisconnectAfterInvalidHeartbeatCount<>0) and
-                 (fInvalidPingSendCount>=fSettings.DisconnectAfterInvalidHeartbeatCount) then begin
+            focPong:
+              continue;
+            focText,focBinary:
+              fProtocol.ProcessIncomingFrame(self,request,'');
+            focConnectionClose: begin
+              if fState=wpsRun then begin
                 fState := wpsClose;
-                break; // will close the connection
+                SendFrame(request);
+              end;
+              break; // will close the connection
+            end;
+            end;
+          end else
+          if fOwnerThread.Terminated then
+            break else
+          if sockerror<>0 then begin
+            WebSocketLog.Add.Log(sllInfo,'GetFrame SockInPending error % on %',
+              [sockerror,fProtocol],self);
+            fState := wpsClose;
+            break; // will close the connection
+          end else begin
+            elapsed := LastPingDelay;
+            if (elapsed>0) and (fOutgoing.Count>0) then
+              if not SendPendingOutgoingFrames then begin
+                fState := wpsClose;
+                break;
               end else
-                SetLastPingTicks(true); // mark invalid, and avoid immediate retry
+            if (fSettings.HeartbeatDelay<>0) and
+               (elapsed>fSettings.HeartbeatDelay) then begin
+              request.opcode := focPing;
+              if not SendFrame(request) then
+                if (fSettings.DisconnectAfterInvalidHeartbeatCount<>0) and
+                   (fInvalidPingSendCount>=fSettings.DisconnectAfterInvalidHeartbeatCount) then begin
+                  fState := wpsClose;
+                  break; // will close the connection
+                end else
+                  SetLastPingTicks(true); // mark invalid, and avoid immediate retry
+            end;
           end;
+        finally
+          request.payload := '';
+          InterlockedDecrement(fProcessCount);
         end;
-      finally
-        request.payload := '';
-        InterlockedDecrement(fProcessCount);
+        HiResDelay(fLastSocketTicks);
+      except
+        fState := wpsClose;
+        break; // don't be optimistic: abort and close connection
       end;
-      HiResDelay(fLastSocketTicks);
-    except
-      fState := wpsClose;
-      break; // don't be optimistic: abort and close connection
-    end;
-  ProcessStop;
+  finally
+    ProcessStop;
+  end;
 end;
 
 procedure TWebCrtSocketProcess.SetLastPingTicks(invalidPing: boolean);
