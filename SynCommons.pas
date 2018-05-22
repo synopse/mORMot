@@ -17787,7 +17787,7 @@ type
     fName: RawUTF8;
     fReader: TFastReader;
     fReaderTemp: PRawByteString;
-    fSaveToLastUncompressed: PtrInt;
+    fLoadFromLastUncompressed, fSaveToLastUncompressed: integer;
     /// low-level virtual methods implementing the persistence reading
     procedure LoadFromReader; virtual;
     procedure SaveToWriter(aWriter: TFileBufferWriter); virtual;
@@ -17842,6 +17842,10 @@ type
     /// one optional text associated with this storage
     // - you can define it as published to serialize its value
     property Name: RawUTF8 read fName;
+    /// after a LoadFrom(), contains the uncompressed data size read
+    property LoadFromLastUncompressed: integer read fLoadFromLastUncompressed;
+    /// after a SaveTo(), contains the uncompressed data size written
+    property SaveToLastUncompressed: integer read fSaveToLastUncompressed;
   end;
 
 type
@@ -51431,7 +51435,6 @@ procedure TSynPersistentStore.LoadFrom(aBuffer: pointer; aBufferLen: integer;
   aLoad: TAlgoCompressLoad);
 var localtemp: RawByteString;
     p: pointer;
-    len: integer;
     temp: PRawByteString;
     algo: TAlgoCompress;
 begin
@@ -51444,10 +51447,10 @@ begin
   temp := fReaderTemp;
   if temp=nil then
     temp := @localtemp;
-  p := algo.Decompress(aBuffer,aBufferLen,len,temp^,aLoad);
+  p := algo.Decompress(aBuffer,aBufferLen,fLoadFromLastUncompressed,temp^,aLoad);
   if p=nil then
     fReader.ErrorData('%.LoadFrom %.Decompress failed',[self,algo]);
-  fReader.Init(p,len);
+  fReader.Init(p,fLoadFromLastUncompressed);
   LoadFromReader;
 end;
 
