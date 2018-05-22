@@ -16899,6 +16899,8 @@ type
   // rsoHttpHeaderCheckDisable is defined (to gain a few cycles?)
   // - by default, TSQLAuthUser.Data blob is retrieved from the database,
   // unless rsoGetUserRetrieveNoBlobData is defined
+  // - rsoNoInternalState could be state to avoid transmitting the
+  // 'Server-InternalState' header, e.g. if the clients wouldn't need it
   TSQLRestServerOption = (
     rsoNoAJAXJSON,
     rsoGetAsJsonNotAsString,
@@ -16913,7 +16915,8 @@ type
     rsoAuthenticationURIDisable,
     rsoTimestampInfoURIDisable,
     rsoHttpHeaderCheckDisable,
-    rsoGetUserRetrieveNoBlobData);
+    rsoGetUserRetrieveNoBlobData,
+    rsoNoInternalState);
   /// allow to customize the TSQLRestServer process via its Options property
   TSQLRestServerOptions = set of TSQLRestServerOption;
 
@@ -42517,7 +42520,6 @@ begin
   fStats.AddCurrentRequestCount(1);
   if Assigned(fOnDecryptBody) then
     fOnDecryptBody(self,Call.InBody,Call.InHead,Call.Url);
-  Call.OutInternalState := InternalState; // other threads may change it
   Call.OutStatus := HTTP_BADREQUEST; // default error code is 400 BAD REQUEST
   safeid := 0;
   if (fSafeProtocol<>nil) and IdemPropNameU(Call.Method,'POST') then begin
@@ -42609,7 +42611,9 @@ begin
         Ctxt.Error(Ctxt.CustomErrorMsg,Call.OutStatus);
     end;
     StatsAddSizeForCall(fStats,Call);
-    if (Ctxt.Static<>nil) and Ctxt.Static.InheritsFrom(TSQLRestStorage) and
+    if (rsoNoInternalState in fOptions) and (Ctxt.Method<>mSTATE) then
+      Call.OutInternalState := 0 // reduce headers verbosity
+    else if (Ctxt.Static<>nil) and Ctxt.Static.InheritsFrom(TSQLRestStorage) and
        TSQLRestStorage(Ctxt.Static).fOutInternalStateForcedRefresh then
       // force always refresh for Static table which demands it
       Call.OutInternalState := cardinal(-1) else
@@ -42620,7 +42624,7 @@ begin
       if rsoCookieIncludeRootPath in fOptions then
         Call.OutHead := Call.OutHead+'; Path=/'; // case-sensitive Path=/ModelRoot
     end;
-    if not (rsoHttpHeaderCheckDisable in Options) and
+    if not (rsoHttpHeaderCheckDisable in fOptions) and
        IsInvalidHttpHeader(pointer(Call.OutHead), length(Call.OutHead)) then
       Ctxt.Error('Unsafe HTTP header rejected', HTTP_SERVERERROR);
   finally

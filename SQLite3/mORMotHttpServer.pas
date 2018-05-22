@@ -1036,8 +1036,10 @@ begin
         Call.OutHead := StringReplaceAll(
           Call.OutHead,'; Path=/'+serv.Model.Root,'; Path=/')
     end;
-    Ctxt.OutCustomHeaders := Trim(call.OutHead)+
-      #13#10'Server-InternalState: '+Int32ToUtf8(call.OutInternalState);
+    Ctxt.OutCustomHeaders := Trim(call.OutHead);
+    if call.OutInternalState<>0 then
+      Ctxt.OutCustomHeaders := FormatUTF8('%'#13#10'Server-InternalState: %',
+        [Ctxt.OutCustomHeaders,call.OutInternalState]);
     // handle optional CORS origin
     if ExistsIniName(pointer(call.InHead),'ORIGIN:') then
       Ctxt.OutCustomHeaders := Trim(Ctxt.OutCustomHeaders+fAccessControlAllowOriginHeader) else

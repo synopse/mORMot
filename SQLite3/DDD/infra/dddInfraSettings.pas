@@ -290,13 +290,16 @@ type
   // - riCreateMissingTables will call RestInstance.CreateMissingTables
   // - riRaiseExceptionIfNoRest will raise an EDDDInfraException if
   // TDDDRestSettings.NewRestInstance would return nil
+  // - riWithInternalState will enable 'Server-InternalState:' header transmission
+  // i.e. disable rsoNoInternalState for TSQLRestServer.Options
   TDDDNewRestInstanceOptions = set of (
     riOwnModel, riCreateVoidModelIfNone,
     riHandleAuthentication,
     riDefaultLocalSQlite3IfNone, riDefaultInMemorySQLite3IfNone,
     riDefaultFullMemoryIfNone, riDefaultLocalBinaryFullMemoryIfNone,
     riCreateMissingTables,
-    riRaiseExceptionIfNoRest);
+    riRaiseExceptionIfNoRest,
+    riWithInternalState);
 
   /// storage class for initializing an ORM REST class
   // - this class will contain some generic properties to initialize a TSQLRest
@@ -874,6 +877,8 @@ begin
         AddToServerWrapperMethod(TSQLRestServer(result),[WrapperTemplateFolderFixed],
           WrapperSourceFolderFixed);
       RestServerDBSetOptions(TSQLRestServer(result), Options);
+      if not (riWithInternalState in aOptions) then
+        TSQLRestServer(result).Options := TSQLRestServer(result).Options+[rsoNoInternalState];
       if riCreateMissingTables in aOptions then
         TSQLRestServer(result).CreateMissingTables;
     except
@@ -896,19 +901,21 @@ end;
 class procedure TDDDRestSettings.RestServerDBSetOptions(DB: TSQLRestServer;
   Options: TDDDRestSettingsOptions);
 begin
-  if (DB <> nil) and DB.InheritsFrom(TSQLRestServerDB) then
-  with TSQLRestServerDB(DB).DB do begin // tune internal SQlite3 engine
-    if optEraseDBFileAtStartup in Options then
-      DeleteFile(FileName);
-    if optSQlite3FileSafeNonExclusive in Options then
-      LockingMode := lmNormal else
-      LockingMode := lmExclusive;
-    if optSQlite3FileSafeSlowMode in Options then
-      Synchronous := smNormal else
-      Synchronous := smOff;
-    if optSQlite3File4MBCacheSize in Options then
-      CacheSize := (4 shl 20) div PageSize;
-  end;
+  if DB = nil then
+    exit;
+  if DB.InheritsFrom(TSQLRestServerDB) then
+    with TSQLRestServerDB(DB).DB do begin // tune internal SQlite3 engine
+      if optEraseDBFileAtStartup in Options then
+        DeleteFile(FileName);
+      if optSQlite3FileSafeNonExclusive in Options then
+        LockingMode := lmNormal else
+        LockingMode := lmExclusive;
+      if optSQlite3FileSafeSlowMode in Options then
+        Synchronous := smNormal else
+        Synchronous := smOff;
+      if optSQlite3File4MBCacheSize in Options then
+        CacheSize := (4 shl 20) div PageSize;
+    end;
 end;
 
 function TDDDRestSettings.NewRestServerDB(const aDBFileName: TFileName;
@@ -918,6 +925,7 @@ begin
   result := TSQLRestServerDB.CreateWithOwnModel(aModelTables, DefaultDataFolder +
     UTF8ToString(DefaultDataFileName) + aDBFileName, false, aModelRoot, '', aCacheSize);
   RestServerDBSetOptions(result, Options); // tune internal SQlite3 engine
+  result.Options := result.Options+[rsoNoInternalState];
   result.CreateMissingTables;
 end;
 
