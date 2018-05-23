@@ -18246,10 +18246,10 @@ procedure KB(bytes: Int64; out result: shortstring); overload;
 function KB(bytes: Int64): shortstring; overload;
   {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
 
-  /// convert a size to a human readable value
-  // - append TB, GB, MB, KB or B symbol
-  // - for TB, GB, MB and KB, add one fractional digit
-procedure KBU(bytes: Int64; var result: RawUTF8); overload;
+/// convert a size to a human readable value
+// - append TB, GB, MB, KB or B symbol
+// - for TB, GB, MB and KB, add one fractional digit
+procedure KBU(bytes: Int64; var result: RawUTF8);
 
 /// convert a micro seconds elapsed time into a human readable value
 // - append 'us', 'ms' or 's' symbol
@@ -25874,7 +25874,6 @@ asm // warning: may read up to 15 bytes beyond the string itself
       test      eax, edx
       jz        @n
 @ok:  sub       eax, edx
-      jz        @0
       {$ifdef HASAESNI}
       movdqu    xmm0, dqword [edx]
       pcmpistri xmm0, dqword [edx + eax], EQUAL_EACH + NEGATIVE_POLARITY // result in ecx
@@ -35079,7 +35078,6 @@ asm // rcx=Str1, rdx=Str2 (Linux: rdi,rsi)
       {$endif}
       jz        @n
 @ok:  sub       rax, rdx
-      jz        @0
       movdqu    xmm0, dqword [rdx]
       pcmpistri xmm0, dqword [rdx + rax], EQUAL_EACH + NEGATIVE_POLARITY // result in rcx
       ja        @1
