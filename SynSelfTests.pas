@@ -2953,6 +2953,15 @@ begin
     check(not match.Match('tEst'));
     check(not match.Match('tesT'));
     check(not match.Match('t'));
+    match.Prepare('*test', false, reuse);
+    check(match.Match('test'));
+    check(match.Match('stest'));
+    check(match.Match('attest'));
+    check(not match.Match('testa'));
+    check(not match.Match('tes'));
+    check(not match.Match('tEst'));
+    check(not match.Match('tesT'));
+    check(not match.Match('t'));
     match.Prepare('**', false, reuse);
     check(match.Match('') = reuse);
     check(match.Match('test'));

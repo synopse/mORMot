@@ -97,11 +97,12 @@ function IsValidIP4Address(P: PUTF8Char): boolean;
 function IsMatch(const Pattern, Text: RawUTF8; CaseInsensitive: boolean=false): boolean;
 
 type
-  /// low-level structure used by IsMatch() for actual blog search
+  /// low-level structure used by IsMatch() for actual glog search
   // - you can use this object to prepare a given pattern, e.g. in a loop
   // - implemented as a fast brute-force state-machine without any heap allocation
-  // - some common patterns ('exactmatch', 'startwith*', '*contained*') are
-  // handled with dedicated code, optionally with case-insensitive search
+  // - some common patterns ('exactmatch', 'startwith*', '*endwith', '*contained*')
+  // are handled with dedicated code, optionally with case-insensitive search
+  // - consider using TMatchs if you expect to search for several patterns
   TMatch = {$ifdef UNICODE}record{$else}object{$endif}
   private
     Pattern, Text: PUTF8Char;
@@ -110,7 +111,7 @@ type
     State: (sNONE, sABORT, sEND, sLITERAL, sPATTERN, sRANGE, sVALID);
     Direct: (dNone, dNoPattern, dNoPatternU,
       dContainsValid, dContainsU, dContains1, dContains4, dContains8,
-      dStartWith, dStartWithU);
+      dStartWith, dStartWithU, dEndWith, dEndWithU);
     procedure MatchAfterStar;
     procedure MatchMain;
   public
@@ -4533,50 +4534,56 @@ begin
   if aCaseInsensitive then
     Upper := @NormToUpperAnsi7 else
     Upper := @NormToNorm;
+  Direct := dNone;
   if aReuse then
-    if strcspn(Pattern,SPECIALS)>PMax then
+    if strcspn(Pattern, SPECIALS) > PMax then
       if aCaseInsensitive then
         Direct := dNoPatternU
       else
         Direct := dNoPattern
-    else if (PMax > 0) and (Pattern[PMax] = '*') then begin
-      for i := 1 to PMax - 1 do
-        if Pattern[i] in ['*', '?', '['] then begin
-          Direct := dNone;
-          exit;
+    else if PMax > 0 then
+      if Pattern[PMax] = '*' then begin
+        for i := 1 to PMax - 1 do
+          if Pattern[i] in ['*', '?', '['] then
+            exit; // dNone
+        case Pattern[0] of
+          '*': begin
+            inc(Pattern);
+            dec(PMax, 2); // trim trailing and ending *
+            if PMax <= 0 then
+              Direct := dContainsValid
+            else if aCaseInsensitive then
+              Direct := dContainsU
+            {$ifdef CPU64}
+            else if PMax >= 7 then
+              Direct := dContains8
+            {$endif}
+            else if PMax >= 3 then
+              Direct := dContains4
+            else
+              Direct := dContains1;
+          end;
+          '?', '[':
+            exit; // dNone
+          else begin
+            dec(PMax); // trim trailing *
+            if aCaseInsensitive then
+              Direct := dStartWithU
+            else
+              Direct := dStartWith;
+          end;
         end;
-      case Pattern[0] of
-        '*': begin
-          inc(Pattern);
-          dec(PMax, 2); // trim trailing and ending *
-          if PMax <= 0 then
-            Direct := dContainsValid
-          else if aCaseInsensitive then
-            Direct := dContainsU
-          {$ifdef CPU64}
-          else if PMax >= 7 then
-            Direct := dContains8
-          {$endif}
-          else if PMax >= 3 then
-            Direct := dContains4
-          else
-            Direct := dContains1;
-        end;
-        '?', '[':
-          Direct := dNone;
-        else begin
-          dec(PMax); // trim trailing *
-          if aCaseInsensitive then
-            Direct := dStartWithU
-          else
-            Direct := dStartWith;
-        end;
+      end
+      else if Pattern[0] = '*' then begin
+        for i := 1 to PMax do
+          if Pattern[i] in ['*', '?', '['] then
+            exit; // dNone
+        inc(Pattern); // jump leading *
+        if aCaseInsensitive then
+          Direct := dEndWithU
+        else
+          Direct := dEndWith;
       end;
-    end
-    else
-      Direct := dNone
-  else
-    Direct := dNone;
 end;
 
 function SimpleContainsU(t, tend, p: PUTF8Char; pmax: PtrInt; up: PNormTable): boolean;
@@ -4718,6 +4725,14 @@ begin
       result := (PMax < aTextlen) and CompareMem(aText, Pattern, PMax + 1);
     dStartWithU:
       result := (PMax < aTextlen) and CompareMemU(aText, Pattern, PMax + 1, Upper);
+    dEndWith: begin
+      dec(aTextLen, PMax);
+      result := (aTextlen >= 0) and CompareMem(aText + aTextLen, Pattern, PMax);
+    end;
+    dEndWithU: begin
+      dec(aTextLen, PMax);
+      result := (aTextlen >= 0) and CompareMemU(aText + aTextLen, Pattern, PMax, Upper);
+    end;
     dContainsValid:
       result := true;
     dContainsU:
