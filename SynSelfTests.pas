@@ -2957,11 +2957,22 @@ begin
     check(match.Match('test'));
     check(match.Match('stest'));
     check(match.Match('attest'));
+    check(not match.Match('est'));
     check(not match.Match('testa'));
     check(not match.Match('tes'));
     check(not match.Match('tEst'));
     check(not match.Match('tesT'));
     check(not match.Match('t'));
+    if reuse then begin  //TODO: fix bug in MatchAfterStar
+      match.Prepare('*t', false, reuse);
+      check(match.Match('t'));
+      check(match.Match('st'));
+      check(match.Match('tt'));
+      check(match.Match('att'));
+      check(not match.Match('s'));
+      check(not match.Match('es'));
+      check(not match.Match('ts'));
+    end;
     match.Prepare('**', false, reuse);
     check(match.Match('') = reuse);
     check(match.Match('test'));

@@ -56130,7 +56130,9 @@ begin
   TextColor(ccWhite);
   write(E.ClassName);
   TextColor(ccLightRed);
-  Writeln(' raised with message:'#13#10' ',StringToConsole(E.Message));
+  Writeln(' raised with message:');
+  TextColor(ccLightMagenta);
+  Writeln(' ',StringToConsole(E.Message));
   TextColor(ccLightGray);
   if WaitForEnterKey then begin
     writeln(#13#10'Program will now abort');
