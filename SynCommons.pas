@@ -5638,7 +5638,7 @@ type
     procedure ElemLoadClear(var ElemTemp: RawByteString);
 
     /// retrieve or set the number of elements of the dynamic array
-    // - same as length(DynArray) or SetLenght(DynArray)
+    // - same as length(DynArray) or SetLength(DynArray)
     // - this property will recognize T*ObjArray types, so will free any stored
     // instance if the array is sized down
     property Count: integer read GetCount write SetCount;
@@ -10478,11 +10478,11 @@ type
     /// append the same byte a given number of occurences at the current position
     procedure WriteN(Data: Byte; Count: integer);
     /// append some UTF-8 encoded text at the current position
-    // - will write the string length, then the string content, as expected
+    // - will write the string length (as VarUInt32), then the string content, as expected
     // by the FromVarString() function
-    procedure Write(const Text: RawByteString); overload;
+    procedure Write(const Text: RawByteString); overload; {$ifdef HASINLINE}inline;{$endif}
     /// append some UTF-8 encoded text at the current position
-    // - will write the string length, then the string content
+    // - will write the string length (as VarUInt32), then the string content
     procedure WriteShort(const Text: ShortString);
     /// append some content at the current position
     // - will write the binary data, without any length prefix
@@ -60206,16 +60206,22 @@ procedure TFileBufferWriter.Write(const Text: RawByteString);
 var L: integer;
 begin
   L := length(Text);
-  WriteVarUInt32(L);
   if L=0 then
-    exit;
-  Write(pointer(Text),L);
+    Write1(0) else begin
+    WriteVarUInt32(L);
+    Write(pointer(Text),L);
+  end;
 end;
 
 procedure TFileBufferWriter.WriteShort(const Text: ShortString);
+var L: integer;
 begin
-  Write1(ord(Text[0]));
-  Write(@Text[1],ord(Text[0]));
+  L := ord(Text[0]);
+  if L<$80 then
+    Write(@Text[0],L+1) else begin
+    WriteVarUInt32(L);
+    Write(@Text[1],L);
+  end;
 end;
 
 procedure TFileBufferWriter.WriteBinary(const Data: RawByteString);
