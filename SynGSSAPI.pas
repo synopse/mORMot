@@ -59,7 +59,8 @@ interface
 
 uses
   SysUtils,
-  Classes;
+  Classes
+  {$ifdef LINUX},dynlibs{$endif};
 
 type
   {$ifdef HASCODEPAGE}
