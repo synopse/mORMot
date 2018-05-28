@@ -62527,7 +62527,7 @@ function EnterWeakZeroClass(aObject: TObject; CreateIfNonExisting: boolean): TSe
 begin
   result := PPointer(PPtrInt(aObject)^+vmtAutoTable)^;
   if (result<>nil) and (TClass(PPointer(result)^)=TSQLRecordProperties) then
-    result := TSetWeakZeroClass(TSQLRecordProperties(result).fWeakZeroClass);
+    result := TSetWeakZeroClass(TSQLRecordProperties(pointer(result)).fWeakZeroClass);
   if result<>nil then
     EnterCriticalSection(result.fLock) else
     if CreateIfNonExisting then
