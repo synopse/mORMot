@@ -461,10 +461,7 @@ begin
             CC := TCheckBox.Create(Scroll);
             CC.Parent := Scroll; // initialize font
             CC.Font.Style := [fsBold];
-// >>> me 150518 aValue = 'true' not '1'
             CC.Checked := GetBoolean(pointer(aValue));
-//old:      CC.Checked := boolean(GetInteger(pointer(aValue)));
-//<<<
             CC.Caption := aCaption;
           end;
           sftUTF8Text, sftAnsiText: begin
