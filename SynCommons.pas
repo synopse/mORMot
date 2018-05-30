@@ -10713,15 +10713,15 @@ type
     /// read the next 32-bit signed value from the buffer
     function VarInt32: PtrInt;    {$ifdef HASINLINE}inline;{$endif}
     /// read the next 32-bit unsigned value from the buffer
-    function VarUInt32: PtrUInt;  {$ifdef HASINLINE}inline;{$endif}
+    function VarUInt32: PtrUInt;
     /// try to read the next 32-bit signed value from the buffer
     // - don't change the current position
-    function PeekVarInt32(out value: PtrInt): boolean;
+    function PeekVarInt32(out value: PtrInt): boolean; {$ifdef HASINLINE}inline;{$endif}
     /// try to read the next 32-bit unsigned value from the buffer
     // - don't change the current position
     function PeekVarUInt32(out value: PtrUInt): boolean;
     /// read the next 16-bit unsigned value from the buffer
-    function VarUInt16: PtrUInt;  {$ifdef HASINLINE}inline;{$endif}
+    function VarUInt16: PtrUInt;
     /// read the next 32-bit unsigned value from the buffer
     // - this version won't call ErrorOverflow, but return false on error
     // - returns true on read success
@@ -10729,7 +10729,7 @@ type
     /// read the next 64-bit signed value from the buffer
     function VarInt64: Int64;  {$ifdef HASINLINE}inline;{$endif}
     /// read the next 64-bit unsigned value from the buffer
-    function VarUInt64: QWord; {$ifdef CPU64}{$ifdef HASINLINE}inline;{$endif}{$endif}
+    function VarUInt64: QWord;
     /// read the next RawUTF8 value from the buffer
     function VarUTF8: RawUTF8; overload;
     /// read the next RawUTF8 value from the buffer
