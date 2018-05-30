@@ -42701,8 +42701,9 @@ begin // called by root/Timestamp/info REST method
     FormatUTF8('% / %',[m.PhysicalMemoryFree.Text,m.PhysicalMemoryTotal.Text],free);
     info.AddNameValuesToObject(['nowutc',now.Text(true,' ') , 'timestamp',now.Value,
       'exe',ExeVersion.ProgramName, 'version',ExeVersion.Version.DetailedOrVoid,
-      'host',ExeVersion.Host, 'cpu',cpu, 'mem',mem, 'memused',KB(m.AllocatedUsed.Bytes),
-      'memfree',free, 'exception',GetLastExceptions(10)]);
+      'host',ExeVersion.Host, 'cpu',cpu, {$ifdef MSWINDOWS}'mem',mem,{$endif}
+      'memused',KB(m.AllocatedUsed.Bytes), 'memfree',free,
+      'diskfree',TSynMonitorDisk.FreeAsText, 'exception',GetLastExceptions(10)]);
   finally
     m.Free;
   end;
