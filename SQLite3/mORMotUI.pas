@@ -1194,8 +1194,15 @@ begin
       // very fast response (calculated once)
       sftBoolean:
         // display boolean as checkbox
-        DrawCheckBox(TDrawGrid(Owner).Handle, Handle, Rect,
-          PWord(Table.Get(ARow,ACol))^<>ord('0')); // fast StrComp(,'0')
+// >>> me 300518 New Fields in old Tables are nil
+        if Assigned(Table.Get(ARow,ACol)) then
+// <<<		
+          DrawCheckBox(TDrawGrid(Owner).Handle, Handle, Rect,
+            PWord(Table.Get(ARow,ACol))^<>ord('0')) // fast StrComp(,'0')
+// >>>		  
+        else
+          DrawCheckBox(TDrawGrid(Owner).Handle, Handle, Rect, False);
+// <<<		  
       sftInteger, sftFloat, sftCurrency,
       sftEnumerate, sftTimeLog, sftRecord,
       sftDateTime, sftDateTimeMS, sftUnixTime, sftUnixMSTime:
