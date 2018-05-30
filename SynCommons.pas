@@ -17788,6 +17788,7 @@ type
     fReader: TFastReader;
     fReaderTemp: PRawByteString;
     fLoadFromLastUncompressed, fSaveToLastUncompressed: integer;
+    fLoadFromLastAlgo: TAlgoCompress;
     /// low-level virtual methods implementing the persistence reading
     procedure LoadFromReader; virtual;
     procedure SaveToWriter(aWriter: TFileBufferWriter); virtual;
@@ -51434,20 +51435,19 @@ procedure TSynPersistentStore.LoadFrom(aBuffer: pointer; aBufferLen: integer;
 var localtemp: RawByteString;
     p: pointer;
     temp: PRawByteString;
-    algo: TAlgoCompress;
 begin
   if (aBuffer=nil) or (aBufferLen<=0) then
     exit; // nothing to load
-  algo := TAlgoCompress.Algo(aBuffer,aBufferLen);
-  if algo = nil then
+  fLoadFromLastAlgo := TAlgoCompress.Algo(aBuffer,aBufferLen);
+  if fLoadFromLastAlgo = nil then
     fReader.ErrorData('%.LoadFrom unknown TAlgoCompress AlgoID=%',
       [self,PByteArray(aBuffer)[4]]);
   temp := fReaderTemp;
   if temp=nil then
     temp := @localtemp;
-  p := algo.Decompress(aBuffer,aBufferLen,fLoadFromLastUncompressed,temp^,aLoad);
+  p := fLoadFromLastAlgo.Decompress(aBuffer,aBufferLen,fLoadFromLastUncompressed,temp^,aLoad);
   if p=nil then
-    fReader.ErrorData('%.LoadFrom %.Decompress failed',[self,algo]);
+    fReader.ErrorData('%.LoadFrom %.Decompress failed',[self,fLoadFromLastAlgo]);
   fReader.Init(p,fLoadFromLastUncompressed);
   LoadFromReader;
 end;
