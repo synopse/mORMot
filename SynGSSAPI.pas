@@ -479,7 +479,8 @@ end;
 finalization
   if GSSAPI<>nil then begin
     FreeLibrary(GSSAPI^.gsslib);
-    FreeAndNil(GSSAPI);
+    Dispose(GSSAPI);
+    GSSAPI := nil;
   end;
 end.
 
