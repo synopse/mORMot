@@ -39,6 +39,7 @@ Contributors
   Maciej Izak (hnb)
   Mario Moretti
   Marius Maximus (mariuszekpl)
+  Martin Eckes
   Martin Suer
   Mazinsw
   MChaos
