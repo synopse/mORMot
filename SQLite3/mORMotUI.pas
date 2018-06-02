@@ -128,7 +128,12 @@ interface
 {$I Synopse.inc}
 
 uses
+  {$ifdef MSWindows}
   Windows,
+  {$endif}
+  {$ifdef FPC}
+  LCLType, LCLProc, LCLIntf, LMessages,
+  {$endif}
   Types, DateUtils,
   SynCommons, mORMot,
   SysUtils, Classes, Messages, Variants,
@@ -154,7 +159,11 @@ type
     /// called after a Hide call
     procedure VisibleChanging; override;
     /// used to hide the popup hint after a delay
+    {$ifdef FPC}
+    procedure WMTimer(var Message: TLMTimer); message LM_TIMER;
+    {$else}
     procedure WMTimer(var Msg: TWMTimer); message WM_TIMER;
+    {$endif}
     /// overridden method, Unicode ready
     procedure Paint; override;
   public
@@ -604,6 +613,9 @@ procedure HideAppFormTaskBarButton;
 // - use theming under XP, Vista and Seven
 procedure DrawCheckBox(hWnd: THandle; Handle: HDC; const Rect: TRect; Checked: boolean);
 
+
+{$ifdef MSWindows}
+
 /// test if the ClearType is enabled for font display
 // - ClearType is a software technology that improves the readability of text
 // on liquid crystal display (LCD) monitors
@@ -641,7 +653,7 @@ procedure AddApplicationToFirewall(const EntryName, ApplicationPathAndExe: strin
 // - caller process must have the administrator rights (this is the case
 // for a setup program)
 procedure AddPortToFirewall(const EntryName: string; PortNumber: cardinal);
-
+{$endif}
 
 /// fill TStringGrid.Cells[] with the supplied data
 // - will be slower than the TSQLTableToGrid method, but will work on
@@ -658,8 +670,9 @@ implementation
 
 uses
   {$ifdef ISDELPHIXE3}System.UITypes,{$endif}
-  ShellApi, ComObj, Activex, Shlobj, VarUtils;
+  {$ifdef MSWindows}ShellApi, ComObj, Activex,Shlobj, {$endif} VarUtils;
 
+{$ifdef MSWindows}
 procedure CreateShellLink (const Filename, Description, ShortcutTo, Parameters,
   WorkingDir, IconFilename: String; const IconIndex: Integer;
   const RunMinimized: Boolean);
@@ -871,7 +884,7 @@ begin
   end;
   SetScrollInfo(Handle, SB_VERT, ScrollInfo, true);
 end;
-
+{$endif}
 
 { THintWindowDelayed }
 
@@ -932,7 +945,7 @@ var U: RawUnicode; // faster than a WideString
 begin // unicode version
   Result := Rect(0, 0, MaxWidth, 0);
   U := Utf8DecodeToRawUnicode(AHint);
-  DrawTextW(Canvas.Handle, pointer(U), length(U) shr 1, Result, DT_CALCRECT or DT_LEFT or
+  {$ifdef MSWindows}DrawTextW{$else}DrawText{$endif}(Canvas.Handle, pointer(U), length(U) shr 1, Result, DT_CALCRECT or DT_LEFT or
     DT_WORDBREAK or DT_NOPREFIX {$ifndef FPC}or DrawTextBiDiModeFlagsReadingOnly{$endif});
   Inc(Result.Right, 6);
   Inc(Result.Bottom, 2);
@@ -947,7 +960,7 @@ begin // unicode version
   Inc(R.Top, 2);
   Canvas.Font.Color := fFontColor;
   U := Utf8DecodeToRawUnicodeUI(fUTF8Text);
-  DrawTextW(Canvas.Handle, pointer(U), -1, R, DT_LEFT or DT_NOPREFIX or
+  {$ifdef MSWindows}DrawTextW{$else}DrawText{$endif}(Canvas.Handle, pointer(U), -1, R, DT_LEFT or DT_NOPREFIX or
     DT_WORDBREAK {$ifndef FPC}or DrawTextBiDiModeFlagsReadingOnly{$endif});
 end;
 
@@ -966,7 +979,11 @@ begin
   end;
 end;
 
+{$ifdef FPC}
+procedure THintWindowDelayed.WMTimer(var Message: TLMTimer);
+{$else}
 procedure THintWindowDelayed.WMTimer(var Msg: TWMTimer);
+{$endif}
 begin
   Hide;
   fRow := -1;
@@ -1084,6 +1101,18 @@ begin
     DrawFrameControl(Handle,DrawRect,DFC_BUTTON,Win32State[Checked]);
 end;
 
+{$ifndef MSWindows}
+function ExtTextOutW(DC: HDC; X, Y: Integer; Options: LongInt; Rect: PRect;
+  Str: PWideChar; Count: LongInt; Dx: ObjPas.PInteger): Boolean;
+var
+  TempStr: UTF8String;
+  L:integer;
+begin
+  TempStr := RawUnicodeToUtf8(Str,Count,L);
+  Result := ExtTextOut(DC, X, Y, Options, Rect, PChar(TempStr),L, Dx);
+end;
+{$endif}
+
 procedure TSQLTableToGrid.DrawCell(Sender: TObject; ACol, ARow: Integer;
   Rect: TRect; State: TGridDrawState);
 var Options, x,y, L, i, XInc: integer;
@@ -1092,6 +1121,9 @@ var Options, x,y, L, i, XInc: integer;
     WithMark: boolean;
     Aligned: TSQLTableToGridAlign;
     tmp: array[0..255] of WideChar; // 255 chars is wide enough inside a cell
+    {$ifndef MSWindows}
+    aTextStyle: TTextStyle;
+    {$endif}
 begin
   // default cell draw
   if NotDefined then
@@ -1102,6 +1134,9 @@ begin
     (cardinal(ACol)>=cardinal(Table.FieldCount)) then // avoid any possible GPF
     exit;
   with TDrawGrid(Owner).Canvas do begin
+    {$ifndef MSWindows}
+    aTextStyle:=TextStyle;
+    {$endif}
     Options := ETO_CLIPPED {$ifndef FPC}or TextFlags{$endif};
     if Brush.Style <> bsClear then
       Options := Options or ETO_OPAQUE;
@@ -1122,17 +1157,30 @@ begin
       if Aligned=alCenter then begin
         UnSetBit64(fFieldNameTruncated,ACol);
         XInc := L shr 1;
+        {$ifdef MSWindows}
         SetTextAlign(Handle,TA_CENTER);
+        {$else}
+        aTextStyle.Alignment:=taCenter;
+        {$endif}
       end else begin
         SetBit64(fFieldNameTruncated,ACol);
         XInc := 2;
       end;
       if WithMark then
         inc(XInc,CheckBoxWidth+4);
+      {$ifndef MSWindows}
+      TextStyle := aTextStyle;
+      TextRect(Rect,Rect.Left+XInc,Rect.Top+2,StringValue);
+      {$else}
       ExtTextOut(Handle, Rect.Left+XInc,Rect.Top+2, Options, @Rect, pointer(StringValue),
         length(StringValue), nil); // direct translated text centered draw
+      {$endif}
       if Aligned=alCenter then
+        {$ifdef MSWindows}
         SetTextAlign(Handle,TA_LEFT);
+        {$else}
+        aTextStyle.Alignment:=taLeftJustify;
+        {$endif}
       Font.Style := [];
       if fCurrentFieldOrder=ACol then begin
         // sorted field: draw sort indicator
@@ -1173,11 +1221,19 @@ begin
       Aligned := self.Aligned[ACol];
       case Aligned of
       alCenter: begin
+        {$ifdef MSWindows}
         SetTextAlign(Handle,TA_CENTER);
+        {$else}
+        aTextStyle.Alignment:=taCenter;
+        {$endif}
         XInc := L shr 1;
       end;
       alRight: begin
+        {$ifdef MSWindows}
         SetTextAlign(Handle,TA_RIGHT);
+        {$else}
+        aTextStyle.Alignment:=taRightJustify;
+        {$endif}
         XInc := L-4;
       end else
         XInc := 4;
@@ -1188,8 +1244,13 @@ begin
         L := length(StringValue);
         if L>255 then
           L := 255; // avoid blank cell drawing for huge content
+        {$ifndef MSWindows}
+        TextStyle := aTextStyle;
+        TextRect(Rect,Rect.Left+XInc,Rect.Top+2,StringValue);
+        {$else}
         ExtTextOut(Handle, Rect.Left+XInc, Rect.Top+2, Options, @Rect,
           pointer(StringValue), L, nil); // translated text
+        {$endif}
       end else
       case Table.ExpandAsString(ARow,ACol,Client,StringValue,GetCustomFormat(ACol)) of
       // very fast response (calculated once)
@@ -1203,22 +1264,42 @@ begin
       sftInteger, sftFloat, sftCurrency,
       sftEnumerate, sftTimeLog, sftRecord,
       sftDateTime, sftDateTimeMS, sftUnixTime, sftUnixMSTime:
+        begin
+          {$ifndef MSWindows}
+          TextStyle := aTextStyle;
+          TextRect(Rect,Rect.Left+XInc,Rect.Top+2,StringValue);
+          {$else}
         ExtTextOut(Handle, Rect.Left+XInc, Rect.Top+2, Options, @Rect, pointer(StringValue),
           length(StringValue), nil); // translated short text
+          {$endif}
+        end;
       //sftID,sftTID:
       // proposal: display ID as TSQLRecord content? better compute it in SELECT
       else begin
         // normal field value: unicode text (even with Delphi 2-2007 VCL), left aligned
+        {$ifndef MSWindows}
+        StringValue:=Table.GetU(ARow,ACol);
+        for i := 0 to Length(StringValue)-1 do // replace #13,#10 chars in the grid with spaces
+          if StringValue[i]<' ' then
+            StringValue[i] := ' ';
+        TextStyle := aTextStyle;
+        TextRect(Rect,Rect.Left+XInc,Rect.Top+2,StringValue);
+        {$else}
         L := Table.GetWP(ARow,ACol,tmp,high(tmp));
         for i := 0 to L-1 do // replace #13,#10 chars in the grid with spaces
           if tmp[i]<' ' then
             tmp[i] := ' ';
         // direct unicode text draw
         ExtTextOutW(Handle, Rect.Left+XInc, Rect.Top+2, Options, @Rect, tmp, L, nil);
+        {$endif}
       end;
       end;
       if Aligned<>alLeft then
+        {$ifdef MSWindows}
         SetTextAlign(Handle,TA_LEFT);
+        {$else}
+        aTextStyle.Alignment:=taLeftJustify;
+        {$endif}
     end;
     if WithMark then begin // draw left side checkbox with Marked[] value
       inc(Rect.Left,2);
