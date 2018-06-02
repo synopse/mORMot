@@ -179,7 +179,12 @@ unit SynZip;
       {.$define USEEXTZLIB}  // use zlib-64.dll as in \fpc-win64 sub-folder
     {$endif}
   {$else}
-    {$define USEEXTZLIB}  // will use zlib.so under Linux/Posix
+    // will use zlib.so under Linux/Posix
+    {$ifdef Android}
+       {$define USEPASZLIB}
+    {$else}
+       {$define USEEXTZLIB}
+    {$endif}
   {$endif}
 {$else}
   {$undef USEZLIBSSE}  // Delphi linker is buggy as hell
