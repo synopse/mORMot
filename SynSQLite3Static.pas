@@ -299,12 +299,12 @@ end;
 
 {$ifdef Android}
 
-function bswapsi2(num,den:uint32):uint32; cdecl; [public, alias: '__bswapsi2'];
+function bswapsi2(num:uint32):uint32; cdecl; [public, alias: '__bswapsi2'];
 asm
  rev	r0, r0		// reverse bytes in parameter and put into result register
  bx	lr
 end;
-function bswapdi2(num,den:uint64):uint64; cdecl; [public, alias: '__bswapdi2'];
+function bswapdi2(num:uint64):uint64; cdecl; [public, alias: '__bswapdi2'];
 asm
  rev r2, r0  // r2 = rev(r0)
  rev r0, r1  // r0 = rev(r1)
