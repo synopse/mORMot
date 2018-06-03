@@ -217,6 +217,10 @@
     {$define FPC_OLDRTTI}
   {$endif}
 
+  {$ifdef ANDROID}
+    {$define LINUX} // a Linux-based system
+  {$endif}
+
   // define FPCSQLITE3STATIC to enable static-linked SQLite3 engine for FPC
   // -> expect *.o files download from https://synopse.info/files/sqlite3fpc.7z
   // -> could be disabled to force external .so/.dll linking
@@ -238,10 +242,6 @@
       {$define FPCSQLITE3STATIC} // use static/arm-linux\sqlite3.o
     {$endif}
     // note: problems with current static/aarch64-linux\sqlite3.o
-  {$endif}
-
-  {$ifdef ANDROID}
-    {$define LINUX} // a Linux-based system
   {$endif}
 
   {$ifdef BSD}
