@@ -180,8 +180,8 @@ unit SynZip;
     {$endif}
   {$else}
     // will use zlib.so under Linux/Posix
-    {$ifdef Android}
-       {$define USEPASZLIB}
+    {$ifdef ANDROID}
+       {$define USEPASZLIB} // Alf: problem with external zlib.so under Android
     {$else}
        {$define USEEXTZLIB}
     {$endif}

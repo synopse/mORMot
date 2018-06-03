@@ -18322,6 +18322,8 @@ type
     // - returns -1 on failure (not UNIQUE field value e.g.)
     // - on success, the Rec instance is added to the Values[] list: caller
     // doesn't need to Free it, since it will be owned by the storage
+    // - in practice, SentData is used only for OnUpdateEvent/OnBlobUpdateEvent
+    // and the history feature
     // - warning: this method should be protected via StorageLock/StorageUnlock
     function AddOne(Rec: TSQLRecord; ForceID: boolean; const SentData: RawUTF8): TID; override;
     /// manual Retrieval of a TSQLRecord field values
@@ -21940,7 +21942,7 @@ function TSQLPropInfoRTTIInt32.GetHash(Instance: TObject; CaseInsensitive: boole
 var v: integer;
 begin
   v := fPropInfo.GetOrdProp(Instance);
-  result := crc32c(0,@v,4); // better hash distribution using crc32c
+  result := crc32cBy4(0,v); // better hash distribution using crc32c
 end;
 
 procedure TSQLPropInfoRTTIInt32.GetJSONValues(Instance: TObject; W: TJSONSerializer);

@@ -229,9 +229,9 @@ implementation
         {$linklib gcc.a}
       {$endif}
       {$ifdef CPUARM}
-        {$ifdef Android}
-        {$L static\arm-android\sqlite3.o}
-        {$L libgcc.a}
+        {$ifdef ANDROID}
+          {$L static\arm-android\sqlite3.o}
+          {$L libgcc.a}
         {$else}
           {$L static\arm-linux\sqlite3.o}
           {$ifdef FPC_CROSSCOMPILING}
@@ -239,8 +239,8 @@ implementation
             {$L libgcc_s.so.1}
           {$else}
             {$linklib gcc_s.so.1}
-          {$endif}
-        {$endif}
+          {$endif FPC_CROSSCOMPILING}
+        {$endif ANDROID}
         const _PREFIX = '';
       {$endif}
       {$ifdef CPUINTEL}
@@ -276,7 +276,7 @@ end;
 {$endif CPUX86}
 {$endif MSWINDOWS}
 
-{$ifdef Darwin}
+{$ifdef DARWIN}
 
 function moddi3(num,den:int64):int64; cdecl; [public, alias: '___moddi3'];
 begin
@@ -295,24 +295,24 @@ begin
  result := num div den;
 end;
 
-{$endif}
+{$endif DARWIN}
 
-{$ifdef Android}
+{$ifdef ANDROID}
 
 function bswapsi2(num:uint32):uint32; cdecl; [public, alias: '__bswapsi2'];
 asm
- rev	r0, r0		// reverse bytes in parameter and put into result register
- bx	lr
+  rev r0, r0	// reverse bytes in parameter and put into result register
+  bx  lr
 end;
 function bswapdi2(num:uint64):uint64; cdecl; [public, alias: '__bswapdi2'];
 asm
- rev r2, r0  // r2 = rev(r0)
- rev r0, r1  // r0 = rev(r1)
- mov r1, r2  // r1 = r2 = rev(r0)
- bx  lr
+  rev r2, r0  // r2 = rev(r0)
+  rev r0, r1  // r0 = rev(r1)
+  mov r1, r2  // r1 = r2 = rev(r0)
+  bx  lr
 end;
 
-{$endif}
+{$endif ANDROID}
 
 {$else FPC}
 
