@@ -229,12 +229,17 @@ implementation
         {$linklib gcc.a}
       {$endif}
       {$ifdef CPUARM}
-        {$L static\arm-linux\sqlite3.o}
-        {$ifdef FPC_CROSSCOMPILING}
-          {$linklib static\arm-linux\gcc.a}
-          {$L libgcc_s.so.1}
+        {$ifdef Android}
+        {$L static\arm-android\sqlite3.o}
+        {$L libgcc.a}
         {$else}
-          {$linklib gcc_s.so.1}
+          {$L static\arm-linux\sqlite3.o}
+          {$ifdef FPC_CROSSCOMPILING}
+            {$linklib static\arm-linux\gcc.a}
+            {$L libgcc_s.so.1}
+          {$else}
+            {$linklib gcc_s.so.1}
+          {$endif}
         {$endif}
         const _PREFIX = '';
       {$endif}
@@ -288,6 +293,23 @@ end;
 function udivdi3(num,den:uint64):uint64; cdecl; [public, alias: '___udivdi3'];
 begin
  result := num div den;
+end;
+
+{$endif}
+
+{$ifdef Android}
+
+function bswapsi2(num:uint32):uint32; cdecl; [public, alias: '__bswapsi2'];
+asm
+ rev	r0, r0		// reverse bytes in parameter and put into result register
+ bx	lr
+end;
+function bswapdi2(num:uint64):uint64; cdecl; [public, alias: '__bswapdi2'];
+asm
+ rev r2, r0  // r2 = rev(r0)
+ rev r0, r1  // r0 = rev(r1)
+ mov r1, r2  // r1 = r2 = rev(r0)
+ bx  lr
 end;
 
 {$endif}
