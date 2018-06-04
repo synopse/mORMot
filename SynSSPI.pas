@@ -174,6 +174,8 @@ const
   SECBUFFER_VERSION = 0;
   SECBUFFER_DATA = 1;
   SECBUFFER_TOKEN = 2;
+  SECBUFFER_PADDING = 9;
+  SECBUFFER_STREAM = 10;
   SECPKG_CRED_INBOUND  = $00000001;
   SECPKG_CRED_OUTBOUND = $00000002;
   SECPKG_ATTR_SIZES = 0;
@@ -445,9 +447,11 @@ end;
 function SecEncrypt(var aSecContext: TSecContext; const aPlain: TSSPIBuffer): TSSPIBuffer;
 var Sizes: TSecPkgContext_Sizes;
     SrcLen, EncLen: Cardinal;
-    EncBuffer: TSSPIBuffer; // TODO: use result as temporary buffer
-    InBuf: array[0..1] of TSecBuffer;
+    Token: array [0..127] of Byte; // Usually 76 bytes
+    Padding: array [0..63] of Byte; // Usually 1 byte
+    InBuf: array[0..2] of TSecBuffer;
     InDesc: TSecBufferDesc;
+    EncBuffer: TSSPIBuffer;
     Status: Integer;
     BufPtr: PByte;
 begin
@@ -455,73 +459,63 @@ begin
   if QueryContextAttributesW(@aSecContext.CtxHandle, SECPKG_ATTR_SIZES, @Sizes) <> 0 then
     raise ESynSSPI.CreateLastOSError(aSecContext);
 
-  SrcLen := Length(aPlain);
-  EncLen := SizeOf(Cardinal) + Sizes.cbSecurityTrailer + SrcLen;
-  SetLength(Result, EncLen);
-  InBuf[0].Init(SECBUFFER_TOKEN, pointer(LONG_PTR(Result) + SizeOf(Cardinal)),
-    Sizes.cbSecurityTrailer);
+  // Encrypted data buffer structure:
+  //
+  // SSPI/Kerberos Interoperability with GSSAPI
+  // https://msdn.microsoft.com/library/windows/desktop/aa380496.aspx
+  //
+  // GSS-API wrapper for Microsoft's Kerberos SSPI in Windows 2000
+  // http://www.kerberos.org/software/samples/gsskrb5/gsskrb5/krb5/krb5msg.c
+  //
+  //   cbSecurityTrailer bytes   SrcLen bytes     cbBlockSize bytes or less
+  //   (76 bytes)                                 (0 bytes, not used)
+  // +-------------------------+----------------+--------------------------+
+  // | Trailer                 | Data           | Padding                  |
+  // +-------------------------+----------------+--------------------------+
+
+  Assert(Sizes.cbSecurityTrailer <= High(Token)+1);
+  InBuf[0].Init(SECBUFFER_TOKEN, @Token[0], Sizes.cbSecurityTrailer);
 
   // Encoding done in-place, so we copy the data
-  SetString(EncBuffer, PAnsiChar(pointer(aPlain)), SrcLen);
-  InBuf[1].Init(SECBUFFER_DATA, pointer(EncBuffer), SrcLen);
+  SrcLen := Length(aPlain);
+  SetString(EncBuffer, PAnsiChar(Pointer(aPlain)), SrcLen);
+  InBuf[1].Init(SECBUFFER_DATA, Pointer(EncBuffer), SrcLen);
 
-  InDesc.Init(SECBUFFER_VERSION, @InBuf, 2);
+  Assert(Sizes.cbBlockSize <= High(Padding)+1);
+  InBuf[2].Init(SECBUFFER_PADDING, @Padding[0], Sizes.cbBlockSize);
+
+  InDesc.Init(SECBUFFER_VERSION, @InBuf, 3);
 
   Status := EncryptMessage(@aSecContext.CtxHandle, 0, @InDesc, 0);
   if Status < 0 then
     raise ESynSSPI.CreateLastOSError(aSecContext);
 
-  // Encrypted data buffer structure:
-  //
-  //   4 bytes  SigLen bytes     Remaining bytes
-  // +--------+----------------+-----------------+
-  // | SigLen | Trailer        | Data            |
-  // +--------+----------------+-----------------+
-
+  EncLen := InBuf[0].cbBuffer + InBuf[1].cbBuffer + InBuf[2].cbBuffer;
+  SetLength(Result, EncLen);
   BufPtr := PByte(Result);
-  PCardinal(BufPtr)^ := InBuf[0].cbBuffer;
-  Inc(BufPtr, SizeOf(Cardinal));
+  Move(PByte(InBuf[0].pvBuffer)^, BufPtr^, InBuf[0].cbBuffer);
   Inc(BufPtr, InBuf[0].cbBuffer);
-  Move(PByte(InBuf[1].pvBuffer)^, BufPtr^, SrcLen);
-  SetLength(Result, SizeOf(Cardinal) + InBuf[0].cbBuffer + SrcLen);
+  Move(PByte(InBuf[1].pvBuffer)^, BufPtr^, InBuf[1].cbBuffer);
+  Inc(BufPtr, InBuf[1].cbBuffer);
+  Move(PByte(InBuf[2].pvBuffer)^, BufPtr^, InBuf[2].cbBuffer);
 end;
 
 function SecDecrypt(var aSecContext: TSecContext; const aEncrypted: TSSPIBuffer): TSSPIBuffer;
-var EncLen, SigLen, SrcLen: Cardinal;
-    BufPtr: PByte;
-    InBuf: array [0..1] of TSecBuffer;
+var InBuf: array [0..1] of TSecBuffer;
     InDesc: TSecBufferDesc;
     Status: Integer;
     QOP: Cardinal;
 begin
-  EncLen := Length(aEncrypted);
-  BufPtr := PByte(aEncrypted);
-  if EncLen < SizeOf(Cardinal) then  begin
-    SetLastError(ERROR_INVALID_PARAMETER);
-    raise ESynSSPI.CreateLastOSError(aSecContext);
-  end;
-
-  SigLen := PCardinal(BufPtr)^;
-  Inc(BufPtr, SizeOf(Cardinal));
-  if EncLen < (SizeOf(Cardinal) + SigLen) then begin
-    SetLastError(ERROR_INVALID_PARAMETER);
-    raise ESynSSPI.CreateLastOSError(aSecContext);
-  end;
-
-  SrcLen := EncLen - SizeOf(Cardinal) - SigLen;
-  SetLength(Result, SrcLen);
-
-  InBuf[0].Init(SECBUFFER_TOKEN, BufPtr, SigLen);
-  Inc(BufPtr, SigLen);
-
-  Move(BufPtr^, PByte(Result)^, SrcLen);
-  InBuf[1].Init(SECBUFFER_DATA, pointer(result), SrcLen);
-
+  InBuf[0].Init(SECBUFFER_STREAM, PByte(aEncrypted), Length(aEncrypted));
+  InBuf[1].Init(SECBUFFER_DATA, nil, 0);
   InDesc.Init(SECBUFFER_VERSION, @InBuf, 2);
 
   Status := DecryptMessage(@aSecContext.CtxHandle, @InDesc, 0, QOP);
   if Status < 0 then
     raise ESynSSPI.CreateLastOSError(aSecContext);
+
+  SetString(Result, PAnsiChar(InBuf[1].pvBuffer), InBuf[1].cbBuffer);
+  FreeContextBuffer(InBuf[1].pvBuffer);
 end;
 
 
