@@ -44582,7 +44582,7 @@ begin
   if EndOfObject<>nil then
     EndOfObject^ := ' ';
   if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
-  if (Options=nil) or (JSON^ in ['1'..'9']) then begin // obvious simple type
+  if (Options=nil) or (JSON^ in ['-','1'..'9']) then begin // obvious simple type
     ProcessSimple(GetJSONField(JSON,JSON,@wasString,EndOfObject));
     exit;
   end;
@@ -44634,7 +44634,7 @@ begin
       '0'..'9':
         inc(json);
       '.':
-        if (json[1] in ['0'..'9']) and (json[2] in [#0,'0'..'9']) then
+        if (json[1] in ['0'..'9']) and (json[2] in [#0,'e','E','0'..'9']) then
           if (json[2]=#0) or (json[3]=#0) or
              ((json[3] in ['0'..'9']) and
               (json[4]=#0) or
@@ -44672,7 +44672,7 @@ begin
       '0'..'9':
         inc(json);
       '.':
-        if (json[1] in ['0'..'9']) and (json[2] in [#0,'0'..'9']) then
+        if (json[1] in ['0'..'9']) and (json[2] in [#0,'e','E','0'..'9']) then
           if (json[2]=#0) or (json[3]=#0) or
              ((json[3] in ['0'..'9']) and (json[4]=#0) or
              ((json[4] in ['0'..'9']) and (json[5]=#0))) then begin

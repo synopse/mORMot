@@ -8098,6 +8098,9 @@ begin
       Check(not oids[i].Equal(oids[j]),'24 bit collision');
   end;
   //Check(GetCurrentProcessId<>oid.ProcessID,'Expected overflow');
+  o := _JSON('{"double_params":[-12.12345678,-9.9E-15,-9.88E-15,-9E-15]}',
+     [dvoReturnNullForUnknownProperty, dvoAllowDoubleValue]);
+  check(TDocVariantData(o).A['double_params'].Value[1]=-9.9E-15);
   // see http://bsonspec.org/#/specification
   o := _JSON('{"hello": "world"}');
   bsonDat := BSON(TDocVariantData(o));
