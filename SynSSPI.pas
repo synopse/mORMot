@@ -447,7 +447,7 @@ end;
 function SecEncrypt(var aSecContext: TSecContext; const aPlain: TSSPIBuffer): TSSPIBuffer;
 var Sizes: TSecPkgContext_Sizes;
     SrcLen, EncLen: Cardinal;
-    Token: array [0..127] of Byte; // Usually 76 bytes
+    Token: array [0..127] of Byte; // Usually 60 bytes
     Padding: array [0..63] of Byte; // Usually 1 byte
     InBuf: array[0..2] of TSecBuffer;
     InDesc: TSecBufferDesc;
@@ -468,7 +468,7 @@ begin
   // http://www.kerberos.org/software/samples/gsskrb5/gsskrb5/krb5/krb5msg.c
   //
   //   cbSecurityTrailer bytes   SrcLen bytes     cbBlockSize bytes or less
-  //   (76 bytes)                                 (0 bytes, not used)
+  //   (60 bytes)                                 (0 bytes, not used)
   // +-------------------------+----------------+--------------------------+
   // | Trailer                 | Data           | Padding                  |
   // +-------------------------+----------------+--------------------------+
@@ -501,12 +501,32 @@ begin
 end;
 
 function SecDecrypt(var aSecContext: TSecContext; const aEncrypted: TSSPIBuffer): TSSPIBuffer;
-var InBuf: array [0..1] of TSecBuffer;
+var EncLen, SigLen: Cardinal;
+    BufPtr: PByte;
+    InBuf: array [0..1] of TSecBuffer;
     InDesc: TSecBufferDesc;
     Status: Integer;
     QOP: Cardinal;
 begin
-  InBuf[0].Init(SECBUFFER_STREAM, PByte(aEncrypted), Length(aEncrypted));
+  EncLen := Length(aEncrypted);
+  BufPtr := PByte(aEncrypted);
+  if EncLen < SizeOf(Cardinal) then  begin
+    SetLastError(ERROR_INVALID_PARAMETER);
+    raise ESynSSPI.CreateLastOSError(aSecContext);
+  end;
+
+  // Hack for compatibility with previous versions.
+  // Should be removed in future.
+  // Old version buffer format - first 4 bytes is Trailer length, skip it.
+  // 16 bytes for NTLM and 60 bytes for Kerberos
+  SigLen := PCardinal(BufPtr)^;
+  if (SigLen = 16) or (SigLen = 60) then
+  begin
+    Inc(BufPtr, SizeOf(Cardinal));
+    Dec(EncLen, SizeOf(Cardinal));
+  end;
+
+  InBuf[0].Init(SECBUFFER_STREAM, BufPtr, EncLen);
   InBuf[1].Init(SECBUFFER_DATA, nil, 0);
   InDesc.Init(SECBUFFER_VERSION, @InBuf, 2);
 
