@@ -65,7 +65,7 @@ uses
 // 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
 // - aOutData contains data that must be sent to server
 // - if function returns True, client must send aOutData to server
-// and call function again width data, returned from servsr
+// and call function again with data, returned from server
 function ClientSSPIAuth(var aSecContext: TSecContext;
     const aInData: RawByteString; const aSecKerberosSPN: RawUTF8;
     out aOutData: RawByteString): Boolean;
@@ -80,7 +80,7 @@ function ClientSSPIAuth(var aSecContext: TSecContext;
 // - aPassword is the user clear text password
 // - aOutData contains data that must be sent to server
 // - if function returns True, client must send aOutData to server
-// and call function again width data, returned from server
+// and call function again with data, returned from server
 // - you must use ClientForceSPN to specify server SPN before call
 function ClientSSPIAuthWithPassword(var aSecContext: TSecContext;
     const aInData: RawByteString; const aUserName: RawUTF8;
@@ -88,10 +88,10 @@ function ClientSSPIAuthWithPassword(var aSecContext: TSecContext;
 
 /// Server-side authentication procedure
 // - aSecContext holds information between function calls
-// - aInData contains data recieved from client
+// - aInData contains data received from client
 // - aOutData contains data that must be sent to client
 // - if function returns True, server must send aOutData to client
-// and call function again width data, returned from client
+// and call function again with data, returned from client
 function ServerSSPIAuth(var aSecContext: TSecContext;
     const aInData: RawByteString; out aOutData: RawByteString): Boolean;
 
@@ -101,7 +101,7 @@ function ServerSSPIAuth(var aSecContext: TSecContext;
 procedure ServerSSPIAuthUser(var aSecContext: TSecContext; out aUserName: RawUTF8);
 
 /// Returns name of the security package that has been used with the negotiation process
-// - aSecContext must be received from previos success call to ServerSSPIAuth
+// - aSecContext must be received from previous success call to ServerSSPIAuth
 // or ClientSSPIAuth
 function SecPackageName(var aSecContext: TSecContext): RawUTF8;
 
@@ -183,7 +183,7 @@ begin
     aSecContext.CreatedTick64 := GetTickCount64();
     MajStatus := gss_acquire_cred(MinStatus, nil, GSS_C_INDEFINITE, nil,
       GSS_C_INITIATE, aSecContext.CredHandle, nil, nil);
-    GSSCheck(MajStatus, MinStatus, 'Failed to aquire current user credentials');
+    GSSCheck(MajStatus, MinStatus, 'Failed to acquire credentials for current user');
   end;
   if aSecKerberosSPN<>'' then
     SecKerberosSPN := aSecKerberosSPN else
@@ -204,12 +204,12 @@ begin
     InBuf.length := Length(aUserName);
     InBuf.value := Pointer(aUserName);
     MajStatus := gss_import_name(MinStatus, @InBuf, GSS_C_NT_USER_NAME, UserName);
-    GSSCheck(MajStatus, MinStatus, 'Failed to import server UserName');
+    GSSCheck(MajStatus, MinStatus, 'Failed to import UserName');
     InBuf.length := Length(aPassword);
     InBuf.value := Pointer(aPassword);
     MajStatus := gss_acquire_cred_with_password(MinStatus, UserName, @InBuf,
       GSS_C_INDEFINITE, nil, GSS_C_INITIATE, aSecContext.CredHandle, nil, nil);
-    GSSCheck(MajStatus, MinStatus, 'Failed to aquire current user credentials');
+    GSSCheck(MajStatus, MinStatus, 'Failed to acquire credentials for specified user');
   end;
   Result := ClientSSPIAuthWorker(aSecContext, aInData, ForceSecKerberosSPN, aOutData);
 end;
@@ -226,10 +226,10 @@ begin
   if aSecContext.CredHandle = nil then begin
     aSecContext.CreatedTick64 := GetTickCount64();
     if IdemPChar(Pointer(aInData), 'NTLMSSP') then
-      raise ESynGSSAPI.CreateFmt('NTLM authentification not supported by GSSAPI library',[]);
+      raise ESynGSSAPI.CreateFmt('NTLM authentication not supported by GSSAPI library',[]);
     MajStatus := gss_acquire_cred(MinStatus, nil, GSS_C_INDEFINITE, nil,
       GSS_C_ACCEPT, aSecContext.CredHandle, nil, nil);
-    GSSCheck(MajStatus, MinStatus, 'Failed to aquire server credentials');
+    GSSCheck(MajStatus, MinStatus, 'Failed to aquire credentials for service');
   end;
 
   InBuf.length := Length(aInData);
