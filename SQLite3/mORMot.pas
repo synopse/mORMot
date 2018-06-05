@@ -42704,7 +42704,8 @@ begin // called by root/Timestamp/info REST method
       'exe',ExeVersion.ProgramName, 'version',ExeVersion.Version.DetailedOrVoid,
       'host',ExeVersion.Host, 'cpu',cpu, {$ifdef MSWINDOWS}'mem',mem,{$endif}
       'memused',KB(m.AllocatedUsed.Bytes), 'memfree',free,
-      'diskfree',TSynMonitorDisk.FreeAsText, 'exception',GetLastExceptions(10)]);  finally
+      'diskfree',TSynMonitorDisk.FreeAsText, 'exception',GetLastExceptions(10)]);
+  finally
     m.Free;
   end;
   Stats.Lock;
