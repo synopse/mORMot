@@ -11827,6 +11827,12 @@ function BinToBase64uri(const s: RawByteString): RawUTF8; overload;
 // unsignificant characters, and replace '+' or '/' by '_' or '-'
 function BinToBase64uri(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
 
+/// fast conversion from a binary buffer into Base64-like URI-compatible encoded shortstring
+// - in comparison to Base64 standard encoding, will trim any right-sided '='
+// unsignificant characters, and replace '+' or '/' by '_' or '-'
+// - returns '' if BinBytes void or too big for the resulting shortstring
+function BinToBase64uriShort(Bin: PAnsiChar; BinBytes: integer): shortstring;
+
 /// conversion from any Base64 encoded value into URI-compatible encoded text
 // - warning: will modify the supplied base64 string in-place
 // - in comparison to Base64 standard encoding, will trim any right-sided '='
@@ -28200,10 +28206,23 @@ end;
 function BinToBase64uri(Bin: PAnsiChar; BinBytes: integer): RawUTF8;
 begin
   result := '';
-  if BinBytes=0 then
+  if BinBytes<=0 then
     exit;
   SetLength(result,BinToBase64uriLength(BinBytes));
   Base64uriEncode(pointer(result),Bin,BinBytes);
+end;
+
+function BinToBase64uriShort(Bin: PAnsiChar; BinBytes: integer): shortstring;
+var len: integer;
+begin
+  result := '';
+  if BinBytes<=0 then
+    exit;
+  len := BinToBase64uriLength(BinBytes);
+  if len>255 then
+    exit;
+  byte(result[0]) := len;
+  Base64uriEncode(@result[1],Bin,BinBytes);
 end;
 
 function Base64uriToBinLength(len: PtrInt): PtrInt;
