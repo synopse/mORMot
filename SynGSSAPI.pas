@@ -121,9 +121,9 @@ const
   gss_mech_spnego_desc: gss_OID_desc = (length: Length(gss_mech_spnego); elements: @gss_mech_spnego);
   GSS_C_MECH_SPNEGO: gss_OID = @gss_mech_spnego_desc;
 
-  gss_nt_principal_name: array [0..9] of Byte = (42, 134, 72, 134, 247, 18, 1, 2, 2, 1);
-  gss_nt_principal_name_desc: gss_OID_desc = (length: Length(gss_nt_principal_name); elements: @gss_nt_principal_name);
-  GSS_C_NT_PRINCIPAL: gss_OID = @gss_nt_principal_name_desc;
+  gss_nt_krb5_name: array [0..9] of Byte = (42, 134, 72, 134, 247, 18, 1, 2, 2, 1);
+  gss_nt_krb5_name_desc: gss_OID_desc = (length: Length(gss_nt_krb5_name); elements: @gss_nt_krb5_name);
+  GSS_KRB5_NT_PRINCIPAL_NAME: gss_OID = @gss_nt_krb5_name_desc;
 
   gss_nt_user_name: array [0..9] of Byte = (42, 134, 72, 134, 247, 18, 1, 2, 1, 1);
   gss_nt_user_name_desc: gss_OID_desc = (length: Length(gss_nt_user_name); elements: @gss_nt_user_name);
