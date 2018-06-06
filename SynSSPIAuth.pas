@@ -125,6 +125,12 @@ procedure ServerSSPIAuthUser(var aSecContext: TSecContext; out aUserName: RawUTF
 // or ClientSSPIAuth
 function SecPackageName(var aSecContext: TSecContext): RawUTF8;
 
+/// Force using aSecKerberosSPN for server identification.
+// - aSecKerberosSPN is the Service Principal Name,
+// registered in domain, e.g.
+// 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
+procedure ClientForceSPN(const aSecKerberosSPN: RawUTF8);
+
 /// Force NTLM authentication instead of Negotiate for browser authenticaton.
 // Use case: SPNs not configured properly in domain
 // - see for details https://synopse.info/forum/viewtopic.php?id=931&p=3
@@ -144,6 +150,9 @@ var
 
 
 implementation
+
+var
+  ForceSecKerberosSPN: WideString;
 
 function ClientSSPIAuthWorker(var aSecContext: TSecContext;
     const aInData: RawByteString; pszTargetName: PWideChar;
@@ -218,8 +227,11 @@ function ClientSSPIAuth(var aSecContext: TSecContext;
 var TargetName: PWideChar;
 begin
   if aSecKerberosSPN <> '' then
-    TargetName := PWideChar(UTF8ToSynUnicode(aSecKerberosSPN)) else
-    TargetName := nil;
+    TargetName := PWideChar(UTF8ToSynUnicode(aSecKerberosSPN)) else begin
+      if ForceSecKerberosSPN <> '' then
+        TargetName := PWideChar(ForceSecKerberosSPN) else
+        TargetName := nil;
+    end;
   Result := ClientSSPIAuthWorker(aSecContext, aInData, TargetName, nil, aOutData);
 end;
 
@@ -229,6 +241,7 @@ function ClientSSPIAuthWithPassword(var aSecContext: TSecContext;
 var UserPos: Integer;
     Domain, User, Password: SynUnicode;
     AuthIdentity: TSecWinntAuthIdentityW;
+    TargetName: PWideChar;
 begin
   UserPos := PosEx('\', aUserName);
   if UserPos=0 then begin
@@ -248,7 +261,11 @@ begin
   AuthIdentity.PasswordLength := Length(Password);
   AuthIdentity.Flags := SEC_WINNT_AUTH_IDENTITY_UNICODE;
 
-  Result := ClientSSPIAuthWorker(aSecContext, aInData, nil, @AuthIdentity, aOutData);
+  if ForceSecKerberosSPN <> '' then
+    TargetName := PWideChar(ForceSecKerberosSPN) else
+    TargetName := nil;
+
+  Result := ClientSSPIAuthWorker(aSecContext, aInData, TargetName, @AuthIdentity, aOutData);
 end;
 
 function ServerSSPIAuth(var aSecContext: TSecContext;
@@ -352,6 +369,11 @@ begin
   if QueryContextAttributesW(@aSecContext.CtxHandle, SECPKG_ATTR_NEGOTIATION_INFO, @NegotiationInfo) <> 0 then
     raise ESynSSPI.CreateLastOSError(aSecContext);
   Result := RawUnicodeToUtf8(NegotiationInfo.PackageInfo^.Name, StrLenW(NegotiationInfo.PackageInfo^.Name));
+end;
+
+procedure ClientForceSPN(const aSecKerberosSPN: RawUTF8);
+begin
+  ForceSecKerberosSPN := UTF8ToSynUnicode(aSecKerberosSPN);
 end;
 
 procedure ServerForceNTLM(IsNTLM: boolean);
