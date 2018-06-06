@@ -105,22 +105,21 @@ procedure ServerSSPIAuthUser(var aSecContext: TSecContext; out aUserName: RawUTF
 // or ClientSSPIAuth
 function SecPackageName(var aSecContext: TSecContext): RawUTF8;
 
-/// Force using aSecKerberosSPN for server identification.
-// - aSecKerberosSPN is the Service Principal Name,
-// registered in domain, e.g.
+/// Force using aSecKerberosSPN for server identification
+// - aSecKerberosSPN is the Service Principal Name, registered in domain, e.g.
 // 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
 procedure ClientForceSPN(const aSecKerberosSPN: RawUTF8);
 
 /// Force loading server credentials from specified keytab file
-// By default, clients may authenticate to any service principal
+// - by default, clients may authenticate to any service principal
 // in the default keytab (/etc/krb5.keytab or the value of the KRB5_KTNAME
 // environment variable)
 procedure ServerForceKeytab(const aKeytab: RawUTF8);
 
 /// Force returning untouched user name from ServerSSPIAuthUser
-// By default, to use same value for TSQLAuthUser.LogonName on all platforms,
-// authenticated user name changed from 'username@MYDOMAIN.TLD'
-// to 'MYDOMAIN\username'
+// - to use same value for TSQLAuthUser.LogonName on all platforms user name
+// changed from 'username@MYDOMAIN.TLD' to 'MYDOMAIN\username'
+// - you can disable user name conversion by calling ServerForceNativeUserName(true)
 procedure ServerForceNativeUserName(const aNative: Boolean);
 
 const
