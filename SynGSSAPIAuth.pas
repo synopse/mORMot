@@ -117,6 +117,12 @@ procedure ClientForceSPN(const aSecKerberosSPN: RawUTF8);
 // environment variable)
 procedure ServerForceKeytab(const aKeytab: RawUTF8);
 
+/// Force returning untouched user name from ServerSSPIAuthUser
+// By default, to use same value for TSQLAuthUser.LogonName on all platforms,
+// authenticated user name changed from 'username@MYDOMAIN.TLD'
+// to 'MYDOMAIN\username'
+procedure ServerForceNativeUserName(const aNative: Boolean);
+
 const
   /// HTTP header to be set for authentication
   SECPKGNAMEHTTPWWWAUTHENTICATE = 'WWW-Authenticate: Negotiate';
@@ -127,6 +133,7 @@ implementation
 
 var
   ForceSecKerberosSPN: RawUTF8;
+  ForceNativeUserName: Boolean;
 
 function ClientSSPIAuthWorker(var aSecContext: TSecContext;
     const aInData: RawByteString; const aSecKerberosSPN: RawUTF8;
@@ -248,6 +255,25 @@ begin
   gss_release_buffer(MinStatus, OutBuf);
 end;
 
+procedure ConvertUserName(P: PUTF8Char; Len: PtrUInt; out aUserName: RawUTF8);
+var DomainStart, DomainEnd: PUTF8Char;
+begin
+  // Assume GSSAPI buffer is null-terminated
+  Assert(P[Len] = #0);
+  // Change user name from 'username@MYDOMAIN.TLD' to 'MYDOMAIN\username'
+  DomainStart := PosChar(P, '@');
+  DomainEnd := PosChar(DomainStart, '.');
+  if DomainStart<>nil then begin
+    DomainStart^ := #0;
+    Inc(DomainStart);
+    if DomainEnd<>nil then
+      DomainEnd^ := #0;
+    aUserName := FormatUTF8('%\%', [DomainStart, P]);
+  end else
+    // Unknown user name format, leave as is
+    SetString(aUserName, P, Len);
+end;
+
 procedure ServerSSPIAuthUser(var aSecContext: TSecContext; out aUserName: RawUTF8);
 var MajStatus, MinStatus: Cardinal;
     SrcName: gss_name_t;
@@ -263,7 +289,11 @@ begin
     OutBuf.value := nil;
     MajStatus := gss_display_name(MinStatus, SrcName, @OutBuf, @NameType);
     GSSCheck(MajStatus, MinStatus, 'Failed to obtain name for authenticated user');
-    SetString(aUserName, PAnsiChar(OutBuf.value), OutBuf.length);
+    if gss_compare_oid(NameType, GSS_C_NT_PRINCIPAL) then begin
+      if ForceNativeUserName then
+        SetString(aUserName, PAnsiChar(OutBuf.value), OutBuf.length) else
+        ConvertUserName(PUTF8Char(OutBuf.value), OutBuf.length, aUserName);
+    end;
     gss_release_buffer(MinStatus, OutBuf);
   finally
     gss_release_name(MinStatus, SrcName);
@@ -297,6 +327,11 @@ begin
   if Assigned(krb5_gss_register_acceptor_identity) then begin
     krb5_gss_register_acceptor_identity(Pointer(aKeytab));
   end;
+end;
+
+procedure ServerForceNativeUserName(const aNative: Boolean);
+begin
+  ForceNativeUserName := aNative;
 end;
 
 end.
