@@ -148,7 +148,7 @@ begin
   if aSecKerberosSPN <> '' then begin
     InBuf.length := Length(aSecKerberosSPN);
     InBuf.value := Pointer(aSecKerberosSPN);
-    MajStatus := gss_import_name(MinStatus, @InBuf, GSS_C_NT_PRINCIPAL, TargetName);
+    MajStatus := gss_import_name(MinStatus, @InBuf, GSS_KRB5_NT_PRINCIPAL_NAME, TargetName);
     GSSCheck(MajStatus, MinStatus, 'Failed to import server SPN');
   end;
 
@@ -209,7 +209,7 @@ begin
     aSecContext.CreatedTick64 := GetTickCount64();
     InBuf.length := Length(aUserName);
     InBuf.value := Pointer(aUserName);
-    MajStatus := gss_import_name(MinStatus, @InBuf, GSS_C_NT_USER_NAME, UserName);
+    MajStatus := gss_import_name(MinStatus, @InBuf, GSS_KRB5_NT_PRINCIPAL_NAME, UserName);
     GSSCheck(MajStatus, MinStatus, 'Failed to import UserName');
     InBuf.length := Length(aPassword);
     InBuf.value := Pointer(aPassword);
@@ -288,7 +288,7 @@ begin
     OutBuf.value := nil;
     MajStatus := gss_display_name(MinStatus, SrcName, @OutBuf, @NameType);
     GSSCheck(MajStatus, MinStatus, 'Failed to obtain name for authenticated user');
-    if gss_compare_oid(NameType, GSS_C_NT_PRINCIPAL) then begin
+    if gss_compare_oid(NameType, GSS_KRB5_NT_PRINCIPAL_NAME) then begin
       if ForceNativeUserName then
         SetString(aUserName, PAnsiChar(OutBuf.value), OutBuf.length) else
         ConvertUserName(PUTF8Char(OutBuf.value), OutBuf.length, aUserName);
