@@ -483,6 +483,7 @@ constructor ESynGSSAPI.Create(AMajorStatus, AMinorStatus: Cardinal; const APrefi
     MsgBuf: gss_buffer_desc;
     MajSt, MinSt: Cardinal;
   begin
+    MsgCtx := 0;
     repeat
       MajSt := gss_display_status(
         MinSt, AErrorStatus, StatusType, nil, MsgCtx, MsgBuf);
