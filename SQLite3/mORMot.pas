@@ -4292,13 +4292,6 @@ const
     Size: SizeOf(TGUID);
     Count: 0);
 
-{$ifndef HASDIRECTTYPEINFO}
-{$ifdef HASINLINENOTX86}
-// declared in interface section to circumvent weird XE4/XE5 compiler issues
-function Deref(Info: PPTypeInfo): PTypeInfo; inline;
-{$endif HASINLINENOTX86}
-{$endif HASDIRECTTYPEINFO}
-
 /// returns the interface name of a registered GUID, or its hexadecimal value
 function ToText(const aGUID: TGUID): TGUIDShortString; overload;
 
@@ -20802,7 +20795,7 @@ type
   Deref = PTypeInfo;
 {$else}
 function Deref(Info: PPTypeInfo): PTypeInfo;
-{$ifdef HASINLINENOTX86}
+{$ifdef HASINLINENOTX86} inline;
 begin
   if Info=nil then
     result := pointer(Info) else
@@ -30576,7 +30569,11 @@ begin
       if CT^.ParentInfo<>nil then begin
         if CT^.PropCount>0 then
           result := sftObject; // identify any class with published properties
-        with Deref(CT^.ParentInfo)^ do
+        {$ifdef HASDIRECTTYPEINFO}
+        with PTypeInfo(CT^.ParentInfo)^ do
+        {$else} // circumvent weird Delphi inlining compiler random bug
+        with CT^.ParentInfo^^ do
+        {$endif}
           CT := AlignTypeData(@Name[ord(Name[0])+1]); // get parent ClassType
         C := CT^.ClassType;
         if C<>TObject then
@@ -30795,7 +30792,7 @@ var base: PPTypeInfo;
 begin
   result := PEnumType(GetFPCTypeData(@self));
   if Kind=tkBool then
-    exit; // circumvent weird RTTI issue
+    exit; // circumvent diverse RTTI encoding
   base := result^.BaseType;
   if (base<>nil) and (base<>@self) then // no redirection if already the base type
     result := PEnumType(GetFPCTypeData(pointer(DeRef(base))));
@@ -30917,7 +30914,7 @@ begin
     {$else}
     with PInterfaceTypeData(@Name[ord(Name[0])+1])^ do
     {$endif}
-      result := mORMot.PTypeInfo(Deref(IntfParent));
+      result := pointer(Deref(IntfParent));
 end;
 
 procedure TTypeInfo.InterfaceAncestors(out Ancestors: PTypeInfoDynArray;
@@ -30981,21 +30978,16 @@ end;
 
 { TClassType }
 
-{$ifdef FPC}
 function TClassType.ClassProp: PClassProp;
 begin
   if pointer(@self)<>nil then
+    {$ifdef FPC}
     result := AlignToPtr(@UnitName[ord(UnitName[0])+1]) else
-    result := nil; // avoid GPF
-end;
-{$else}
-function TClassType.ClassProp: PClassProp;
-begin
-  if pointer(@self)<>nil then
+    {$else}
     result := pointer(@UnitName[ord(UnitName[0])+1]) else
+    {$endif}
     result := nil; // avoid GPF
 end;
-{$endif}
 
 function TClassType.RTTISize: integer;
 var C: PClassProp;
@@ -31012,10 +31004,8 @@ begin
   result := PtrUInt(P)-PtrUInt(@self);
 end;
 
-{$ifdef HASDIRECTTYPEINFO}
-// asm could also be adjusted for this, but this is the easy way ... ;-)
-// for the upcoming fpc 3.0.2 / fixes
 function TClassType.InheritsFrom(AClass: TClass): boolean;
+{$ifdef FPC_OR_PUREPASCAL}
 var P: PTypeInfo;
 begin
   result := true;
@@ -31030,23 +31020,6 @@ begin
   result := false;
 end;
 {$else}
-{$ifdef PUREPASCAL}
-function TClassType.InheritsFrom(AClass: TClass): boolean;
-var P: PTypeInfo;
-begin
-  result := true;
-  if ClassType=AClass then
-    exit;
-  P := DeRef(ParentInfo);
-  while P<>nil do
-    with P^.ClassType^ do
-    if ClassType=AClass then
-      exit else
-      P := DeRef(ParentInfo);
-  result := false;
-end;
-{$else}
-function TClassType.InheritsFrom(AClass: TClass): boolean;
 asm // eax=PClassType edx=AClass
         cmp     [eax].TClassType.ClassType, edx
         jz      @3
@@ -31061,7 +31034,6 @@ asm // eax=PClassType edx=AClass
 @3:     mov     eax, 1
 @0:
 end;
-{$endif}
 {$endif}
 
 
@@ -56166,7 +56138,7 @@ begin
       '%.% method: duplicated name for %',[fInterfaceTypeInfo^.Name,aURI,self]))^ do begin
       HierarchyLevel := fAddMethodsLevel;
       {$ifdef FPC}
-      aResultType := Deref(mORMot.PPTypeInfo(PME^.ResultType));
+      aResultType := Deref(pointer(PME^.ResultType));
       Kind := mORMot.TMethodKind(PME^.Kind);
       if TCallingConvention(PME^.CC)<>DEFCC then
         RaiseError('method uses wrong calling convention',[]);
@@ -56213,7 +56185,7 @@ begin
           ArgsNotResultLast := argsindex;
         if ValueDirection<>smdConst then
             ArgsOutNotResultLast := argsindex;
-        ArgTypeInfo := mORMot.PTypeInfo(Deref(mORMot.PPTypeInfo(VMP^.ParamType)));
+        ArgTypeInfo := pointer(Deref(pointer(VMP^.ParamType)));
         ArgTypeName := @ArgTypeInfo^.Name;
         if paramcounter>0 then
         case TypeInfoToMethodValueType(ArgTypeInfo) of
