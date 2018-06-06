@@ -262,6 +262,8 @@ var
   krb5_gss_register_acceptor_identity: function (
     path: PAnsiChar): Cardinal; cdecl;
 
+function gss_compare_oid(oid1, oid2: gss_OID): Boolean;
+
 var
   /// library name of the MIT implementation of GSSAPI
   GSSLib_MIT: string = 'libgssapi_krb5.so.2';
@@ -436,6 +438,16 @@ begin
     raise ENotSupportedException.Create('No GSSAPI library found - please install either MIT or Heimdal GSSAPI implementation');
 end;
 
+function gss_compare_oid(oid1, oid2: gss_OID): Boolean;
+begin
+  if (oid1<>nil) and (oid2<>nil) then begin
+    Result := (oid1^.length = oid2^.length)
+      and CompareMem(oid1^.elements, oid2^.elements, oid1^.length);
+  end
+  else
+    Result := False;
+end;
+
 procedure GSSEnlistMechsSupported(MechList: TStringList);
 var
   i, MajSt, MinSt: Cardinal;
@@ -548,4 +560,3 @@ finalization
     GSSAPILibrary := 0;
   end;
 end.
-
