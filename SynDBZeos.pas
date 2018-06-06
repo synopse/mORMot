@@ -582,6 +582,13 @@ begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
     fStatementParams.Add('cachedlob=false'); //default = False
     {$endif}
   end;
+  // ZEOS_PREVENT_CONN will prevent unexpected connection creation inside ConnectionProperties.Create
+  // TODO - rethink code below to prevent create connection inside this fucntion
+  // Reasons: on the moment Properties are created (usually during server startup)
+  // 1) actual database may not exists (multitenancy server what create DB's in runtime)
+  // 2) in case of several connection props inside one process some of them may be used
+  // occasiously or not used at all, so creating connection during server startup of overhead
+  {$ifndef ZEOS_PREVENT_CONN}
   {$ifdef ZEOS72UP} // new since 7.2up
   with (MainConnection as TSQLDBZEOSConnection).Database do
   // ZDBC: MultipleValuesInsertFirebird is buggy, MultipleValuesInsert slower
@@ -591,6 +598,7 @@ begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
       OnBatchInsert := nil;
       fSupportsArrayBindings := true;
     end;
+  {$endif}
   {$endif}
 end;
 
