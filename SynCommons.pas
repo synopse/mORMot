@@ -25219,7 +25219,7 @@ begin
       delete(S,1,1);
     result := ord(S[0]);
   end else
-  result := ExtendedToStringNoExp(S,Value,Precision);
+    result := ExtendedToStringNoExp(S,Value,Precision);
 end;
 {$else}
 {$ifdef UNICODE}
@@ -39686,11 +39686,11 @@ asm
         cmp     eax, $7f
         jbe     @0
         cmp     eax, $00004000
-        jbe     @1
+        jb      @1
         cmp     eax, $00200000
-        jbe     @2
+        jb      @2
         cmp     eax, $10000000
-        jbe     @3
+        jb      @3
         mov     ecx, eax
         shr     eax, 7
         and     cl, $7f
@@ -39723,8 +39723,8 @@ label _1,_2,_3; // ugly but fast
 begin
   if Value>$7f then begin
     if Value<$80 shl 7  then goto _1 else
-    if Value<$80 shl 14 then goto _2 else
-    if Value<$80 shl 21 then goto _3;
+      if Value<$80 shl 14 then goto _2 else
+        if Value<$80 shl 21 then goto _3;
     Dest^ := (Value and $7F) or $80;
     Value := Value shr 7;
     inc(Dest);
