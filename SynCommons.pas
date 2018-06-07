@@ -17787,7 +17787,7 @@ type
 
   /// abstract high-level handling of SynLZ-compressed persisted storage
   // - LoadFromReader/SaveToWriter abstract methods should be overriden
-  // with proper persistence implementation
+  // with proper persistence binary implementation
   TSynPersistentStore = class(TSynPersistentLock)
   protected
     fName: RawUTF8;
@@ -17853,6 +17853,16 @@ type
     property LoadFromLastUncompressed: integer read fLoadFromLastUncompressed;
     /// after a SaveTo(), contains the uncompressed data size written
     property SaveToLastUncompressed: integer read fSaveToLastUncompressed;
+  end;
+
+  /// implement binary persistence and JSON serialization (not deserialization)
+  TSynPersistentStoreJson = class(TSynPersistentStore)
+  protected
+    // append "name" -> inherited should add properties to the JSON object
+    procedure AddJSON(W: TTextWriter); virtual;
+  public
+    /// serialize this instance as a JSON object
+    function SaveToJSON(reformat: TTextWriterJSONFormat = jsonCompact): RawUTF8;
   end;
 
 type
@@ -51541,6 +51551,29 @@ begin
     result := 0;
 end;
 
+
+{ TSynPersistentStoreJson }
+
+procedure TSynPersistentStoreJson.AddJSON(W: TTextWriter);
+begin
+  W.AddPropJSONString('name', fName);
+end;
+
+function TSynPersistentStoreJson.SaveToJSON(reformat: TTextWriterJSONFormat): RawUTF8;
+var
+  W: TTextWriter;
+begin
+  W := TTextWriter.CreateOwnedStream(65536);
+  try
+    W.Add('{');
+    AddJSON(W);
+    W.CancelLastComma;
+    W.Add('}');
+    W.SetText(result, reformat);
+  finally
+    W.Free;
+  end;
+end;
 
 
 { TObjectListSorted }
