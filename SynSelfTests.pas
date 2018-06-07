@@ -3796,6 +3796,11 @@ begin
     s := s+'z';
     l := GetInt64(pointer(s),err);
     Check(err<>0);
+    case i of // validate some explicit ToVarUInt32/64 boundaries
+      9997: j := $00004000;
+      9998: j := $00200000;
+      9999: j := $10000000;
+    end;
     str(j,a);
     Check(SysUtils.IntToStr(j)=string(a));
     Check(format('%d',[j])=string(a));
@@ -3831,6 +3836,12 @@ begin
     Check(PC<>nil);
     PB := @varint;
     Check(FromVarInt32(PB)=i-1);
+    Check(PB=PC);
+    PC := ToVarUInt64(juint,@varint);
+    Check(PC<>nil);
+    Check(PAnsiChar(PC)-@varint=integer(ToVarUInt32Length(juint)));
+    PB := @varint;
+    Check(PtrUInt(FromVarUint64(PB))=juint);
     Check(PB=PC);
     PC := ToVarInt64(k,@varint);
     Check(PC<>nil);
