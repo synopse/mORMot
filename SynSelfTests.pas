@@ -3639,8 +3639,14 @@ begin
   Check(DoubleToString(-3.3495617168e-10)='-0.00000000033496');
   Check(DoubleToString(-3.9999617168e-14)='-0.00000000000004');
   Check(DoubleToString(3.9999617168e-14)='0.00000000000004');
-  Check(DoubleToString(-3.9999617168e-15)='0');
-  Check(DoubleToString(3.9999617168e-15)='0');
+  u := DoubleToString(-3.9999617168e-15);
+  val(u,d,err);
+  Check(err=0);
+  CheckSame(d,-3.9999617168e-15);
+  u := DoubleToString(3.9999617168e-15);
+  val(u,d,err);
+  Check(err=0);
+  CheckSame(d,3.9999617168e-15);
   {$else}
   Check(DoubleToString(-3.3495117168e-10)='-3.3495117168E-10');
   Check(DoubleToString(-3.3495617168e-10)='-3.3495617168E-10');
@@ -8017,7 +8023,7 @@ var o,od,o2,value: variant;
     b: PByte;
     elem, item: TBSONElement;
     iter: TBSONIterator;
-    name,u,u2,u3: RawUTF8;
+    name,u,u2,u3,json: RawUTF8;
     arr: TRawUTF8DynArray;
     st: string;
     timer: TPrecisionTimer;
@@ -8100,7 +8106,11 @@ begin
   //Check(GetCurrentProcessId<>oid.ProcessID,'Expected overflow');
   o := _JSON('{"double_params":[-12.12345678,-9.9E-15,-9.88E-15,-9E-15]}',
      [dvoReturnNullForUnknownProperty, dvoAllowDoubleValue]);
-  check(TDocVariantData(o).A['double_params'].Value[1]=-9.9E-15);
+  json := TDocVariantData(o).ToJSON;
+  {$ifndef EXTENDEDTOSTRING_USESTR}
+  check(json='{"double_params":[-12.12345678,-9.9E-15,-9.88E-15,-9E-15]}');
+  {$endif}
+  CheckSame(double(TDocVariantData(o).A['double_params'].Value[1]),-9.9E-15);
   // see http://bsonspec.org/#/specification
   o := _JSON('{"hello": "world"}');
   bsonDat := BSON(TDocVariantData(o));

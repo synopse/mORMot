@@ -25143,7 +25143,7 @@ begin
     dec(prec);
   for i := 2 to result do // test if scientific format -> return as this
     case S[i] of
-    'E': exit;  // pos('E',S)>0; which Delphi 2009+ don't like
+    'E': exit;  // pos('E',S)>0; which Delphi 2009+ doesn't like
     '.': if i>=precision then begin // return huge decimal number as is
       result := i-1;
       exit;
@@ -25191,7 +25191,34 @@ end;
 function ExtendedToString(var S: ShortString; Value: TSynExtended;
   Precision: integer): integer;
 {$ifdef EXTENDEDTOSTRING_USESTR}
+var scientificneeded: boolean;
+    valueabs: TSynExtended;
 begin
+  if Value=0 then begin
+    s[1] := '0';
+    result := 1;
+    exit;
+  end;
+  scientificneeded := false;
+  valueabs := abs(Value);
+  if Precision<=SINGLE_PRECISION then begin
+    if (valueabs>1E9) or (valueabs<1E-9) then
+      scientificneeded := true;
+  end else
+  {$ifndef CPU64}
+  if Precision>DOUBLE_PRECISION then begin
+    if (valueabs>1E17) or (valueabs<1E-17) then
+      scientificneeded := true;
+  end else
+  {$endif}
+    if (valueabs>1E14) or (valueabs<1E-14) then
+      scientificneeded := true;
+  if scientificneeded then begin
+    str(Value,S);
+    if S[1]=' ' then
+      delete(S,1,1);
+    result := ord(S[0]);
+  end else
   result := ExtendedToStringNoExp(S,Value,Precision);
 end;
 {$else}
