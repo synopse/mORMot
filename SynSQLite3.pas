@@ -1189,26 +1189,19 @@ type
   // - as used by sqlite3.config(SQLITE_CONFIG_MALLOC,pMemMethods);
   TSQLite3MemMethods = record
     /// Memory allocation function
-    xMalloc: function(size: integer): pointer;
-      cdecl;
+    xMalloc: function(size: integer): pointer; cdecl;
     /// Free a prior allocation
-     xFree: procedure(ptr: pointer);
-      cdecl;
+    xFree: procedure(ptr: pointer); cdecl;
     /// Resize an allocation
-    xRealloc: function(ptr: pointer; size: integer): pointer;
-      cdecl;
+    xRealloc: function(ptr: pointer; size: integer): pointer; cdecl;
     /// Return the size of an allocation
-    xSize: function(ptr: pointer): integer;
-      cdecl;
+    xSize: function(ptr: pointer): integer; cdecl;
     /// Round up request size to allocation size
-    xRoundup: function(size: integer): integer;
-      cdecl;
+    xRoundup: function(size: integer): integer; cdecl;
     /// Initialize the memory allocator
-    xInit: function(appData: pointer): integer;
-      cdecl;
+    xInit: function(appData: pointer): integer; cdecl;
     /// Deinitialize the memory allocator
-    xShutdown: procedure(appData: pointer);
-      cdecl;
+    xShutdown: procedure(appData: pointer); cdecl;
     /// Argument to xInit() and xShutdown()
     pAppData: pointer;
   end;
@@ -2053,11 +2046,11 @@ type
       
     /// used to make global configuration changes to current database
     config: function(operation: integer): integer;
-      {$ifndef DELPHI5OROLDER} cdecl varargs; {$endif}
+      {$ifndef DELPHI5OROLDER}cdecl varargs;{$endif}
 
     /// used to make global configuration changes to current database connection
     db_config: function(DestDB: TSQLite3DB; operation: integer): integer;
-      {$ifndef DELPHI5OROLDER} cdecl varargs; {$endif}
+      {$ifndef DELPHI5OROLDER}cdecl varargs;{$endif}
 
     /// initialize the internal version numbers
     constructor Create; virtual;
@@ -2065,7 +2058,7 @@ type
     // - this will reduce memory fragmentation, and enhance speed, especially
     // under multi-process activity
     // - this method should be called before sqlite3.initialize()
-    procedure ForceToUseSharedMemoryManager;
+    procedure ForceToUseSharedMemoryManager; virtual;
     /// returns the current version number as a plain integer
     // - equals e.g. 3008003001 for '3.8.3.1'
     property VersionNumber: cardinal read fVersionNumber;
@@ -2097,6 +2090,9 @@ type
     constructor Create(const LibraryName: TFileName=SQLITE_LIBRARY_DEFAULT_NAME); reintroduce;
     /// unload the external library
     destructor Destroy; override;
+    /// will change the SQLite3 configuration to use Delphi/FPC memory manager
+    // - overriden method which does nothing on some platforms found unstable
+    procedure ForceToUseSharedMemoryManager; override;
   published
     property LibraryName: TFileName read fLibraryName;
   end;
@@ -5765,7 +5761,11 @@ begin
   mem.xInit := @xInit;
   mem.xShutdown := @xShutdown;
   mem.pAppData := nil;
-  res := config(SQLITE_CONFIG_MALLOC,@mem);
+  try
+    res := config(SQLITE_CONFIG_MALLOC,@mem);
+  except
+    res := SQLITE_INTERNAL;
+  end;
   if res<>SQLITE_OK then
     {$ifdef WITHLOG}
     SynSQLite3Log.Add.Log(sllError,'SQLITE_CONFIG_MALLOC failed as %',[res]) else
@@ -5860,6 +5860,13 @@ begin
   inherited;
 end;
 
+
+procedure TSQLite3LibraryDynamic.ForceToUseSharedMemoryManager;
+begin
+  {$ifndef CPU64DELPHI} // buggy as usual
+  inherited ForceToUseSharedMemoryManager;
+  {$endif}
+end;
 
 initialization
 
