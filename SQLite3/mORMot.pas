@@ -11625,7 +11625,9 @@ type
   /// how TInterfacedObjectFromFactory will perform its execution
   // - by default, fInvoke() will receive standard JSON content, unless
   // ifoJsonAsExtended is set, and extended JSON is used
-  TInterfacedObjectFromFactoryOption = (ifoJsonAsExtended);
+  // - ifoDontStoreVoidJSON will ensure objects and records won't include
+  // default void fields in JSON serialization 
+  TInterfacedObjectFromFactoryOption = (ifoJsonAsExtended, ifoDontStoreVoidJSON);
   /// defines how TInterfacedObjectFromFactory will perform its execution
   TInterfacedObjectFromFactoryOptions = set of TInterfacedObjectFromFactoryOption;
 
@@ -42569,7 +42571,7 @@ begin
           if not Assigned(OnErrorURI) or OnErrorURI(Ctxt,E) then
             if E.ClassType=EInterfaceFactoryException then
               Ctxt.Error(E,'',[],HTTP_NOTACCEPTABLE) else
-            Ctxt.Error(E,'',[],HTTP_SERVERERROR);
+              Ctxt.Error(E,'',[],HTTP_SERVERERROR);
       end;
     end;
     // 4. returns expected result to the client and update Server statistics
@@ -54512,6 +54514,7 @@ type
   TInterfacedObjectFake = class(TInterfacedObjectFromFactory)
   protected
     fVTable: PPointerArray;
+    fServiceFactory: TServiceFactory;
     function FakeCall(var aCall: TFakeCallStack): Int64;
     {$ifdef FPC}
     {$ifdef CPUARM}
@@ -54538,7 +54541,7 @@ type
       const aParamInfo: TServiceMethodArgument; aParamValue: Pointer); virtual;
   public
     /// create an instance, using the specified interface
-    constructor Create(aFactory: TInterfaceFactory;
+    constructor Create(aFactory: TInterfaceFactory; aServiceFactory: TServiceFactory;
       aOptions: TInterfacedObjectFromFactoryOptions;
       aInvoke: TOnFakeInstanceInvoke; aNotifyDestroy: TOnFakeInstanceDestroy);
     /// retrieve one local instance of this interface
@@ -54581,12 +54584,13 @@ type
       const Format: RawUTF8; const Args: array of const); overload;
   end;
 
-constructor TInterfacedObjectFake.Create(aFactory: TInterfaceFactory;
+constructor TInterfacedObjectFake.Create(aFactory: TInterfaceFactory; aServiceFactory: TServiceFactory;
   aOptions: TInterfacedObjectFromFactoryOptions; aInvoke: TOnFakeInstanceInvoke;
   aNotifyDestroy: TOnFakeInstanceDestroy);
 begin
   inherited Create(aFactory,aOptions,aInvoke,aNotifyDestroy);
   fVTable := aFactory.GetMethodsVirtualTable;
+  fServiceFactory := aServiceFactory;
 end;
 
 function TInterfacedObjectFake.SelfFromInterface: TInterfacedObjectFake;
@@ -54643,144 +54647,153 @@ begin
 end;
 
 function TInterfacedObjectFake.FakeCall(var aCall: TFakeCallStack): Int64;
-var method: ^TServiceMethod;
-procedure RaiseError(const Format: RawUTF8; const Args: array of const);
-var msg: RawUTF8;
-begin
-  msg := FormatUTF8(Format,Args);
-  raise EInterfaceFactoryException.CreateUTF8('%.FakeCall(%.%) failed: %',
-    [self,fFactory.fInterfaceTypeInfo^.Name,method^.URI,msg]);
-end;
-var resultType: TServiceMethodValueType; // type of value stored into result
-procedure InternalProcess;
-var Params: TJSONSerializer;
-    Error, ResArray, ParamsJSON: RawUTF8;
-    arg, ValLen: integer;
-    V: PPointer;
-    R, Val: PUTF8Char;
-    wasString, resultAsJSONObject: boolean;
-    ServiceCustomAnswerPoint: PServiceCustomAnswer;
-    parser: TJSONToObject; // inlined JSONToObject()
-    DynArrays: array[0..MAX_METHOD_ARGS-1] of TDynArray;
-    Value: array[0..MAX_METHOD_ARGS-1] of pointer;
-    I64s: array[0..MAX_METHOD_ARGS-1] of Int64;
-    temp: TTextWriterStackBuffer;
-begin
-  Params := TJSONSerializer.CreateOwnedStream(temp);
-  try
-    // create the parameters
-    if ifoJsonAsExtended in fOptions then
-      include(Params.fCustomOptions,twoForceJSONExtended) else
-      include(Params.fCustomOptions,twoForceJSONStandard); // e.g. for AJAX
-    FillcharFast(I64s,method^.ArgsUsedCount[smvv64]*SizeOf(Int64),0);
-    for arg := 1 to high(method^.Args) do
-    with method^.Args[arg] do
-    if ValueType>smvSelf then begin
-      {$ifdef HAS_FPREG} // x64, arm, aarch64
-      if FPRegisterIdent>0 then
-        V := Pointer((PtrUInt(@aCall.FPRegs[FPREG_FIRST])+SizeOf(Double)*PtrUInt(FPRegisterIdent-1))) else
-      if RegisterIdent>0 then
-        V := Pointer((PtrUInt(@aCall.ParamRegs[PARAMREG_FIRST])+SizeOf(pointer)*PtrUInt(RegisterIdent-1))) else
-      {$endif}
-        V := nil;
-      {$ifndef CPUAARCH64} // on aarch64, reference result can be in PARAMREG_FIRST
-      if RegisterIdent=PARAMREG_FIRST then
-         RaiseError('unexpected self',[]);
-      {$endif}
-      {$ifdef CPUX86}
-      case RegisterIdent of
-      REGEAX: RaiseError('unexpected self',[]);
-      REGEDX: V := @aCall.EDX;
-      REGECX: V := @aCall.ECX;
-      else
-      {$endif}
-      if V=nil then
-        if (SizeInStack>0) and (InStackOffset<>STACKOFFSET_NONE) then
-          V := @aCall.Stack[InStackOffset] else
-          V := @I64s[IndexVar]; // for results in CPU
-      {$ifdef CPUX86}
-      end;
-      {$endif}
-      if vPassedByReference in ValueKindAsm then
-        V := PPointer(V)^;
-      if ValueType=smvDynArray then
-        DynArrays[IndexVar].InitFrom(DynArrayWrapper,V^);
-      Value[arg] := V;
-      if ValueDirection in [smdConst,smdVar] then
-        case ValueType of
-        smvInterface:
-          InterfaceWrite(Params,method^,method^.Args[arg],V^);
-        smvDynArray: begin
-          Params.AddDynArrayJSON(DynArrays[IndexVar]);
-          Params.Add(',');
-        end;
-        else AddJSON(Params,V);
-        end;
-    end;
-    Params.CancelLastComma;
-    Params.SetText(ParamsJSON); // without [ ]
-  finally
-    Params.Free;
+var method: PServiceMethod;
+    resultType: TServiceMethodValueType; // type of value stored into result
+  procedure RaiseError(const Format: RawUTF8; const Args: array of const);
+  var msg: RawUTF8;
+  begin
+    msg := FormatUTF8(Format,Args);
+    raise EInterfaceFactoryException.CreateUTF8('%.FakeCall(%.%) failed: %',
+      [self,fFactory.fInterfaceTypeInfo^.Name,method^.URI,msg]);
   end;
-  // call remote server or stub implementation
-  if method^.ArgsResultIsServiceCustomAnswer then
-    ServiceCustomAnswerPoint := Value[method^.ArgsResultIndex] else
-    ServiceCustomAnswerPoint := nil;
-  if not fInvoke(method^,ParamsJSON,
-     @ResArray,@Error,@fClientDrivenID,ServiceCustomAnswerPoint) then
-    RaiseError('''%''',[Error]);
-  // retrieve method result and var/out parameters content
-  if ServiceCustomAnswerPoint=nil then
-  if ResArray<>'' then begin
-    R := pointer(ResArray);
-    if R^ in [#1..' '] then repeat inc(R) until not(R^ in [#1..' ']);
-    resultAsJSONObject := false; // [value,...] JSON array format
-    if R^='{' then   // {"paramname":value,...} JSON object format
-      resultAsJSONObject := true else
-    if R^<>'[' then
-      RaiseError('JSON array/object result expected',[]);
-    inc(R);
-    arg := method^.ArgsOutFirst;
-    if arg>0 then
-    repeat
-      if resultAsJSONObject then begin
-        Val := GetJSONPropName(R,@ValLen);
-        if Val=nil then
-          break; // end of JSON object
-        if (arg>0) and not IdemPropName(method^.Args[arg].ParamName^,Val,ValLen) then begin
-          arg := method^.ArgIndex(Val,ValLen,false); // only if were not in-order
-          if arg<0 then
-            RaiseError('unexpected parameter "%"',[Val]);
+  procedure InternalProcess;
+  var Params: TJSONSerializer;
+      Error, ResArray, ParamsJSON: RawUTF8;
+      arg, ValLen: integer;
+      V: PPointer;
+      R, Val: PUTF8Char;
+      resultAsJSONObject: boolean;
+      opt: TTextWriterWriteObjectOptions;
+      ServiceCustomAnswerPoint: PServiceCustomAnswer;
+      DynArrays: array[0..MAX_METHOD_ARGS-1] of TDynArray;
+      Value: array[0..MAX_METHOD_ARGS-1] of pointer;
+      I64s: array[0..MAX_METHOD_ARGS-1] of Int64;
+      temp: TTextWriterStackBuffer;
+  begin
+    Params := TJSONSerializer.CreateOwnedStream(temp);
+    try
+      // create the parameters
+      if ifoJsonAsExtended in fOptions then
+        include(Params.fCustomOptions,twoForceJSONExtended) else
+        include(Params.fCustomOptions,twoForceJSONStandard); // e.g. for AJAX
+      if (ifoDontStoreVoidJSON in fOptions) {GPF or ((fServiceFactory<>nil) and
+         (optDontStoreVoidJSON in fServiceFactory.fExecution[
+           integer(aCall.MethodIndex)-SERVICE_PSEUDO_METHOD_COUNT].Options))} then begin
+        opt := [woDontStoreDefault,woDontStoreEmptyString,woDontStore0];
+        include(Params.fCustomOptions,twoIgnoreDefaultInRecord);
+      end else
+        opt := [woDontStoreDefault];
+      FillcharFast(I64s,method^.ArgsUsedCount[smvv64]*SizeOf(Int64),0);
+      for arg := 1 to high(method^.Args) do
+      with method^.Args[arg] do
+      if ValueType>smvSelf then begin
+        {$ifdef HAS_FPREG} // x64, arm, aarch64
+        if FPRegisterIdent>0 then
+          V := Pointer((PtrUInt(@aCall.FPRegs[FPREG_FIRST])+SizeOf(Double)*PtrUInt(FPRegisterIdent-1))) else
+        if RegisterIdent>0 then
+          V := Pointer((PtrUInt(@aCall.ParamRegs[PARAMREG_FIRST])+SizeOf(pointer)*PtrUInt(RegisterIdent-1))) else
+        {$endif}
+          V := nil;
+        {$ifndef CPUAARCH64} // on aarch64, reference result can be in PARAMREG_FIRST
+        if RegisterIdent=PARAMREG_FIRST then
+           RaiseError('unexpected self',[]);
+        {$endif}
+        {$ifdef CPUX86}
+        case RegisterIdent of
+        REGEAX: RaiseError('unexpected self',[]);
+        REGEDX: V := @aCall.EDX;
+        REGECX: V := @aCall.ECX;
+        else
+        {$endif}
+        if V=nil then
+          if (SizeInStack>0) and (InStackOffset<>STACKOFFSET_NONE) then
+            V := @aCall.Stack[InStackOffset] else
+            V := @I64s[IndexVar]; // for results in CPU
+        {$ifdef CPUX86}
         end;
+        {$endif}
+        if vPassedByReference in ValueKindAsm then
+          V := PPointer(V)^;
+        if ValueType=smvDynArray then
+          DynArrays[IndexVar].InitFrom(DynArrayWrapper,V^);
+        Value[arg] := V;
+        if ValueDirection in [smdConst,smdVar] then
+          case ValueType of
+          smvInterface:
+            InterfaceWrite(Params,method^,method^.Args[arg],V^);
+          smvDynArray: begin
+            if vIsObjArray in ValueKindAsm then
+              Params.AddObjArrayJSON(V^,opt) else
+              Params.AddDynArrayJSON(DynArrays[IndexVar]);
+            Params.Add(',');
+          end;
+          else AddJSON(Params,V,opt);
+          end;
       end;
-      with method^.Args[arg] do begin
-        //assert(ValueDirection in [smdVar,smdOut,smdResult]);
-        V := Value[arg];
+      Params.CancelLastComma;
+      Params.SetText(ParamsJSON); // without [ ]
+    finally
+      Params.Free;
+    end;
+    // call remote server or stub implementation
+    if method^.ArgsResultIsServiceCustomAnswer then
+      ServiceCustomAnswerPoint := Value[method^.ArgsResultIndex] else
+      ServiceCustomAnswerPoint := nil;
+    if not fInvoke(method^,ParamsJSON,
+       @ResArray,@Error,@fClientDrivenID,ServiceCustomAnswerPoint) then
+      RaiseError('''%''',[Error]);
+    // retrieve method result and var/out parameters content
+    if ServiceCustomAnswerPoint=nil then
+    if ResArray<>'' then begin
+      R := pointer(ResArray);
+      if R^ in [#1..' '] then repeat inc(R) until not(R^ in [#1..' ']);
+      resultAsJSONObject := false; // [value,...] JSON array format
+      if R^='{' then   // {"paramname":value,...} JSON object format
+        resultAsJSONObject := true else
+      if R^<>'[' then
+        RaiseError('JSON array/object result expected',[]);
+      inc(R);
+      arg := method^.ArgsOutFirst;
+      if arg>0 then
+      repeat
+        if resultAsJSONObject then begin
+          Val := GetJSONPropName(R,@ValLen);
+          if Val=nil then
+            break; // end of JSON object
+          if (arg>0) and not IdemPropName(method^.Args[arg].ParamName^,Val,ValLen) then begin
+            arg := method^.ArgIndex(Val,ValLen,false); // only if were not in-order
+            if arg<0 then
+              RaiseError('unexpected parameter "%"',[Val]);
+          end;
+        end;
+        with method^.Args[arg] do begin
+          //assert(ValueDirection in [smdVar,smdOut,smdResult]);
+          V := Value[arg];
           FromJSON(method^.InterfaceDotMethodName,R,V,nil
             {$ifndef NOVARIANTS},fFactory.DocVariantOptions{$endif});
-        if ValueDirection=smdResult then begin
-          resultType := ValueType;
-          if ValueType in [smvBoolean..smvCurrency] then
-            // ordinal/real result values to CPU/FPU registers
-            MoveFast(V^,Result,SizeInStorage);
+          if ValueDirection=smdResult then begin
+            resultType := ValueType;
+            if ValueType in [smvBoolean..smvCurrency] then
+              // ordinal/real result values to CPU/FPU registers
+              MoveFast(V^,Result,SizeInStorage);
+          end;
         end;
-      end;
-      if R=nil then
-        break;
-      if R^ in [#1..' '] then repeat inc(R) until not(R^ in [#1..' ']);
-      if resultAsJSONObject then begin
-        if (R^=#0) or (R^='}') then
-          break else // end of JSON object
-          if not method^.ArgNext(arg,false) then
-            arg := 0; // no next result argument -> force manual search
-      end else
-      if not method^.ArgNext(arg,false) then
-        break; // end of JSON array
-    until false;
-  end else
-    if method^.ArgsOutputValuesCount>0 then
-      RaiseError('method returned value, but ResArray=''''',[]);
-end;
+        if R=nil then
+          break;
+        if R^ in [#1..' '] then repeat inc(R) until not(R^ in [#1..' ']);
+        if resultAsJSONObject then begin
+          if (R^=#0) or (R^='}') then
+            break else // end of JSON object
+            if not method^.ArgNext(arg,false) then
+              arg := 0; // no next result argument -> force manual search
+        end else
+        if not method^.ArgNext(arg,false) then
+          break; // end of JSON array
+      until false;
+    end else
+      if method^.ArgsOutputValuesCount>0 then
+        RaiseError('method returned value, but ResArray=''''',[]);
+  end;
 begin
   (*
      WELCOME ABOARD: you just landed in TInterfacedObjectFake.FakeCall() !
@@ -54843,9 +54856,9 @@ begin
   fClient := aClient;
   if (fClient.fClient<>nil) and (fClient.fClient.fSessionID<>0) and
      (fClient.fClient.fSessionUser<>nil) then
-    opt := [ifoJsonAsExtended] else
+    opt := [ifoJsonAsExtended,ifoDontStoreVoidJSON] else
     opt := [];
-  inherited Create(aClient.fInterface,opt,aInvoke,aNotifyDestroy);
+  inherited Create(aClient.fInterface,aClient,opt,aInvoke,aNotifyDestroy);
 end;
 
 procedure TInterfacedObjectFakeClient.InterfaceWrite(W: TJSONSerializer;
@@ -54868,13 +54881,13 @@ constructor TInterfacedObjectFakeServer.Create(aRequest: TSQLRestServerURIContex
 var opt: TInterfacedObjectFromFactoryOptions;
 begin
   if aRequest.ClientKind=ckFramework then
-    opt := [ifoJsonAsExtended] else
+    opt := [ifoJsonAsExtended,ifoDontStoreVoidJSON] else
     opt := [];
   fServer := aRequest.Server;
   fService := aRequest.Service;
   fLowLevelConnectionID := aRequest.Call^.LowLevelConnectionID;
   fClientDrivenID := aFakeID;
-  inherited Create(aFactory,opt,CallbackInvoke,nil);
+  inherited Create(aFactory,nil,opt,CallbackInvoke,nil);
   Get(fFakeInterface);
 end;
 
@@ -56323,7 +56336,7 @@ begin
   fName := fTimer.fThreadName;
   fDest := aDestinationInterface;
   fOnResult := aOnResult;
-  inherited Create(aFactory,[ifoJsonAsExtended],FakeInvoke,nil);
+  inherited Create(aFactory,nil,[ifoJsonAsExtended,ifoDontStoreVoidJSON],FakeInvoke,nil);
   Get(aCallbackInterface);
 end;
 
@@ -56847,7 +56860,7 @@ begin
   fCallBackUnRegisterNeeded := aCallBackUnRegisterNeeded;
   fList := TInterfacedObjectMultiList.Create;
   fList.fFakeCallback := self;
-  inherited Create(aFactory,[ifoJsonAsExtended],FakeInvoke,nil);
+  inherited Create(aFactory,nil,[ifoJsonAsExtended,ifoDontStoreVoidJSON],FakeInvoke,nil);
   Get(aCallbackInterface);
 end;
 
@@ -57228,7 +57241,8 @@ end;
 procedure TInterfaceStub.InternalGetInstance(out aStubbedInterface);
 var fake: TInterfacedObjectFake;
 begin
-  fake := TInterfacedObjectFake.Create(fInterface,[ifoJsonAsExtended],Invoke,InstanceDestroyed);
+  fake := TInterfacedObjectFake.Create(fInterface,nil,[ifoJsonAsExtended,ifoDontStoreVoidJSON],
+    Invoke,InstanceDestroyed);
   pointer(aStubbedInterface) := @fake.fVTable;
   fake._AddRef;
   fLastInterfacedObjectFake := fake;
@@ -59660,7 +59674,7 @@ begin
         if not execres then begin
           if err<>'' then
             Ctxt.Error('%',[err],HTTP_NOTACCEPTABLE) else
-          Error('execution failed (probably due to bad input parameters)',HTTP_NOTACCEPTABLE);
+            Error('execution failed (probably due to bad input parameters)',HTTP_NOTACCEPTABLE);
           exit; // wrong request
         end;
         Ctxt.Call.OutHead := exec.ServiceCustomAnswerHead;
@@ -60173,10 +60187,11 @@ begin
   smvObject:     WR.WriteObject(PPointer(V)^,ObjectOptions);
   smvInterface:  WR.AddShort('null'); // or written by InterfaceWrite()
   smvRecord:     WR.AddRecordJSON(V^,ArgTypeInfo);
-  smvDynArray: begin // slightly faster than WR.AddDynArrayJSON(ArgTypeInfo,V^);
-    wrapper.InitFrom(DynArrayWrapper,V^);
-    WR.AddDynArrayJSON(wrapper);
-  end;
+  smvDynArray: if vIsObjArray in ValueKindAsm then
+                 WR.AddObjArrayJSON(V^,ObjectOptions) else begin
+                 wrapper.InitFrom(DynArrayWrapper,V^);
+                 WR.AddDynArrayJSON(wrapper);
+               end;
   {$ifndef NOVARIANTS}
   smvVariant: WR.AddVariant(PVariant(V)^,twJSONEscape);
   {$endif}
@@ -61228,7 +61243,7 @@ begin
         [InterfaceDotMethodName,ParamName^,ArgTypeName^,ord(ValueType)]);
       end;
       inc(Value);
-      end;
+    end;
     if optInterceptInputOutput in Options then begin
       Input.InitFast(ArgsInputValuesCount,dvObject);
       Output.InitFast(ArgsOutputValuesCount,dvObject);
@@ -61604,7 +61619,7 @@ begin
         smvDynArray: begin
           if vIsObjArray in ValueKindAsm then
             Res.AddObjArrayJSON(fValues[a]^,opt) else
-          Res.AddDynArrayJSON(fDynArrays[IndexVar].Wrapper);
+            Res.AddDynArrayJSON(fDynArrays[IndexVar].Wrapper);
           Res.Add(',');
         end;
         else AddJSON(Res,fValues[a],opt);
