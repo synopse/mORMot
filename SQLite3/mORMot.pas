@@ -5961,7 +5961,7 @@ type
   // JSON if none is found (e.g. from WebSockets), or if it contains 'mORMot':
   // you can set optForceStandardJSON to ensure standard JSON is always returned
   // - optDontStoreVoidJSON will reduce the JSON object verbosity by not writing
-  // void (e.g. 0 or '') properties
+  // void (e.g. 0 or '') properties when serializing objects and records
   // - any exceptions will be propagated during execution, unless
   // optIgnoreException is set and the exception is trapped (not to be used
   // unless you know what you are doing)
@@ -10744,6 +10744,9 @@ type
     procedure SerializeToContract(WR: TTextWriter);
     /// check if the supplied argument value is the default (e.g. 0, '' or null)
     function IsDefault(V: pointer): boolean;
+    /// unserialize a JSON value into this argument
+    function FromJSON(const MethodName: RawUTF8; var R: PUTF8Char; V: pointer;
+      Error: PShortString{$ifndef NOVARIANTS}; DVO: TDocVariantOptions{$endif}): boolean;
     /// append the JSON value corresponding to this argument
     // - includes a pending ','
     procedure AddJSON(WR: TTextWriter; V: pointer;
@@ -11067,7 +11070,7 @@ type
     // corresponding ExecutedInstancesFailed[] property will be filled with
     // the JSON serialized exception
     function ExecuteJson(const Instances: array of pointer; Par: PUTF8Char;
-      Res: TTextWriter; ResAsJSONObject: boolean=false): boolean;
+      Res: TTextWriter; Error: PShortString=nil; ResAsJSONObject: boolean=false): boolean;
     /// execute the corresponding method of one weak IInvokable reference
     // - exepect no output argument, i.e. no returned data, unless output is set
     // - this version will identify TInterfacedObjectFake implementations,
@@ -42564,7 +42567,8 @@ begin
       except
         on E: Exception do
           if not Assigned(OnErrorURI) or OnErrorURI(Ctxt,E) then
-            // return 500 internal server error
+            if E.ClassType=EInterfaceFactoryException then
+              Ctxt.Error(E,'',[],HTTP_NOTACCEPTABLE) else
             Ctxt.Error(E,'',[],HTTP_SERVERERROR);
       end;
     end;
@@ -54752,81 +54756,8 @@ begin
       with method^.Args[arg] do begin
         //assert(ValueDirection in [smdVar,smdOut,smdResult]);
         V := Value[arg];
-        case ValueType of
-        smvObject: begin
-          if PInteger(R)^=NULL_LOW then
-            inc(R,4) else begin // null from TInterfacedStub -> stay untouched
-            parser.From := R; // inlined JSONToObject()
-            parser.Options := JSONTOOBJECT_TOLERANTOPTIONS;
-            parser.TObjectListItemClass := nil;
-            parser.Value := PObject(V)^;
-            parser.Parse;
-            if parser.Valid then
-              R := parser.Dest else
-              RaiseError('returned object',[]);
-          end;
-          IgnoreComma(R);
-        end;
-        smvInterface:
-          RaiseError('unexpected var/out interface',[]);
-        smvRawJSON:
-          if (R<>nil) and (R^=']') then
-            PRawUTF8(V)^ := '' else begin
-            GetJSONItemAsRawJSON(R,PRawJSON(V)^);
-            if R=nil then
-              RaiseError('returned RawJSON',[]);
-          end;
-        smvDynArray: begin
-          if vIsObjArray in ValueKindAsm then
-            ObjArrayClear(V^);
-          R := DynArrays[IndexVar].LoadFromJSON(R);
-          if R=nil then
-            RaiseError('returned array',[]);
-          IgnoreComma(R);
-        end;
-        smvBoolean..smvBinary: begin
-          Val := GetJSONField(R,R,@wasString,nil,@ValLen);
-          if (Val=nil) or (wasString<>(vIsString in ValueKindAsm)) then
-            if resultAsJSONObject then
-              RaiseError('missing or invalid value',[]) else
-              RaiseError('missing or invalid value: '+
-              'parameters shall follow method var/out/result order',[]);
-          if (ValueType=smvBoolean) and (PInteger(Val)^=TRUE_LOW) then
-            Val := '1'; // handle also BOOL with SizeInStorage=2
-          case ValueType of
-          smvBoolean, smvEnum, smvSet, smvCardinal:
-            case SizeInStorage of
-            1: PByte(V)^     := GetCardinal(Val);
-            2: PWord(V)^     := GetCardinal(Val);
-            4: PCardinal(V)^ := GetCardinal(Val);
-            end;
-          smvInteger:       PInteger(V)^ := GetInteger(Val);
-          smvInt64:         SetInt64(Val,PInt64(V)^);
-          smvDouble,smvDateTime: PDouble(V)^ := GetExtended(Val);
-          smvCurrency:      PInt64(V)^   := StrToCurr64(Val);
-          smvRawUTF8:       SetString(PRawUTF8(V)^,PAnsiChar(Val),ValLen);
-          smvString:        UTF8DecodeToString(Val,ValLen,PString(V)^);
-          smvRawByteString: Base64ToBin(PAnsiChar(Val),ValLen,PRawByteString(V)^);
-          smvWideString:    UTF8ToWideString(Val,ValLen,PWideString(V)^);
-          smvBinary:
-            if ValLen=SizeInStorage*2 then
-              HexDisplayToBin(PAnsiChar(Val),PByte(V),SizeInStorage);
-          else RaiseError('ValueType=%',[ord(ValueType)]);
-          end;
-        end;
-        smvRecord: begin
-          R := RecordLoadJSON(V^,R,ArgTypeInfo);
-          if R=nil then
-            RaiseError('returned record',[]);
-        end;
-        {$ifndef NOVARIANTS}
-        smvVariant: begin
-          R := VariantLoadJSON(PVariant(V)^,R,nil,@fFactory.DocVariantOptions);
-          if R=nil then
-            RaiseError('returned variant',[]);
-        end;
-        {$endif}
-        end;
+          FromJSON(method^.InterfaceDotMethodName,R,V,nil
+            {$ifndef NOVARIANTS},fFactory.DocVariantOptions{$endif});
         if ValueDirection=smdResult then begin
           resultType := ValueType;
           if ValueType in [smvBoolean..smvCurrency] then
@@ -58388,43 +58319,6 @@ end;
 
 { TServiceFactory }
 
-function TServiceFactory.GetInterfaceTypeInfo: PTypeInfo;
-begin
-  if (Self<>nil) and (fInterface<>nil) then
-    result := fInterface.fInterfaceTypeInfo else
-    result := nil;
-end;
-
-function TServiceFactory.GetInterfaceIID: TGUID;
-begin
-  result := fInterface.fInterfaceIID;
-end;
-
-procedure TServiceFactory.ExecutionAction(const aMethod: array of RawUTF8;
-  aOptions: TServiceMethodOptions; aAction: TServiceMethodOptionsAction);
-  procedure SetAction(i: integer);
-  begin
-    case aAction of
-    moaReplace:
-      fExecution[i].Options := aOptions;
-    moaInclude:
-      fExecution[i].Options := fExecution[i].Options + aOptions;
-    moaExclude:
-      fExecution[i].Options := fExecution[i].Options - aOptions;
-    end;
-  end;
-var i,m: integer;
-begin
-  if high(aMethod)<0 then
-    for i := 0 to fInterface.fMethodsCount-1 do
-      SetAction(i) else
-    for m := 0 to high(aMethod) do
-      SetAction(fInterface.CheckMethodIndex(aMethod[m]));
-  fAnyOptions := [];
-  for i := 0 to fInterface.fMethodsCount-1 do
-    fAnyOptions := fAnyOptions+fExecution[i].Options;
-end;
-
 constructor TServiceFactory.Create(aRest: TSQLRest;
   aInterface: PTypeInfo; aInstanceCreation: TServiceInstanceImplementation;
   const aContractExpected: RawUTF8);
@@ -58477,6 +58371,43 @@ begin
       fContractExpected := '"'+aContractExpected+'"' else
       fContractExpected := aContractExpected else
     fContractExpected := fContractHash; // for security
+end;
+
+function TServiceFactory.GetInterfaceTypeInfo: PTypeInfo;
+begin
+  if (Self<>nil) and (fInterface<>nil) then
+    result := fInterface.fInterfaceTypeInfo else
+    result := nil;
+end;
+
+function TServiceFactory.GetInterfaceIID: TGUID;
+begin
+  result := fInterface.fInterfaceIID;
+end;
+
+procedure TServiceFactory.ExecutionAction(const aMethod: array of RawUTF8;
+  aOptions: TServiceMethodOptions; aAction: TServiceMethodOptionsAction);
+  procedure SetAction(var exec: TServiceFactoryExecution);
+  begin
+    case aAction of
+    moaReplace:
+      exec.Options := aOptions;
+    moaInclude:
+      exec.Options := exec.Options + aOptions;
+    moaExclude:
+      exec.Options := exec.Options - aOptions;
+    end;
+  end;
+var i,m: integer;
+begin
+  if high(aMethod)<0 then
+    for i := 0 to fInterface.fMethodsCount-1 do
+      SetAction(fExecution[i]) else
+    for m := 0 to high(aMethod) do
+      SetAction(fExecution[fInterface.CheckMethodIndex(aMethod[m])]);
+  fAnyOptions := [];
+  for i := 0 to fInterface.fMethodsCount-1 do
+    fAnyOptions := fAnyOptions+fExecution[i].Options;
 end;
 
 
@@ -59567,6 +59498,7 @@ var Inst: TServiceFactoryServerInstance;
     timeStart,timeEnd: Int64;
     stats: TSynMonitorInputOutput;
     m: integer;
+    err: shortstring;
     temp: TTextWriterStackBuffer;
 
   function GetFullMethodName: RawUTF8;
@@ -59672,6 +59604,7 @@ begin
       stats.Processing := true;
     end;
   end;
+  err := '';
   exec := nil;
   try
     if fImplementationClassKind=ickFake then
@@ -59722,8 +59655,11 @@ begin
              (optExecInPerInterfaceThread in exec.fOptions)) and {$endif}
            (exec.fMethod^.ArgsOutputValuesCount=0) then // bypass JSON marshalling
           execres := exec.ExecuteJsonFake(Inst.Instance,Ctxt.ServiceParameters) else
-          execres := exec.ExecuteJson([instancePtr],Ctxt.ServiceParameters,WR,Ctxt.ForceServiceResultAsJSONObject);
+          execres := exec.ExecuteJson([instancePtr],Ctxt.ServiceParameters,WR,
+            @err,Ctxt.ForceServiceResultAsJSONObject);
         if not execres then begin
+          if err<>'' then
+            Ctxt.Error('%',[err],HTTP_NOTACCEPTABLE) else
           Error('execution failed (probably due to bad input parameters)',HTTP_NOTACCEPTABLE);
           exit; // wrong request
         end;
@@ -60101,9 +60037,112 @@ begin
   end;
 end;
 
+function TServiceMethodArgument.FromJSON(const MethodName: RawUTF8; var R: PUTF8Char;
+  V: pointer; Error: PShortString{$ifndef NOVARIANTS}; DVO: TDocVariantOptions{$endif}): boolean;
+  procedure RaiseError(const msg: RawUTF8);
+  var tmp: RawUTF8;
+  begin
+    FormatUTF8('I% failed on %:% [%]',[MethodName,ParamName^,ArgTypeName^,msg],tmp);
+    if Error=nil then
+      raise EInterfaceFactoryException.CreateUTF8('%',[tmp]);
+    result := false;
+    SetString(Error^,PAnsiChar(pointer(tmp)),length(tmp));
+  end;
+var parser: TJSONToObject; // inlined JSONToObject()
+    Val: PUTF8Char;
+    ValLen: integer;
+    wasString: boolean;
+    wrapper: TDynArray;
+begin
+  result := true;
+  case ValueType of
+  smvObject: begin
+    if PInteger(R)^=NULL_LOW then
+      inc(R,4) else begin // null from TInterfacedStub -> stay untouched
+      parser.From := R; // inlined JSONToObject()
+      parser.Options := JSONTOOBJECT_TOLERANTOPTIONS;
+      parser.TObjectListItemClass := nil;
+      parser.Value := PObject(V)^;
+      parser.Parse;
+      if parser.Valid then
+        R := parser.Dest else
+        RaiseError('returned object');
+    end;
+    IgnoreComma(R);
+  end;
+  smvInterface:
+    RaiseError('unexpected var/out interface');
+  smvRawJSON:
+    if (R<>nil) and (R^=']') then
+      PRawUTF8(V)^ := '' else begin
+      GetJSONItemAsRawJSON(R,PRawJSON(V)^);
+      if R=nil then
+        RaiseError('returned RawJSON');
+    end;
+  smvBoolean..smvBinary: begin
+    Val := GetJSONField(R,R,@wasString,nil,@ValLen);
+    if (Val=nil) or (wasString<>(vIsString in ValueKindAsm)) then begin
+      RaiseError('missing or invalid value');
+      exit;
+    end;
+    if (ValueType=smvBoolean) and (PInteger(Val)^=TRUE_LOW) then
+      Val := '1'; // handle also BOOL with SizeInStorage=2
+    case ValueType of
+    smvBoolean, smvEnum, smvSet, smvCardinal:
+      case SizeInStorage of
+      1: PByte(V)^     := GetCardinal(Val);
+      2: PWord(V)^     := GetCardinal(Val);
+      4: PCardinal(V)^ := GetCardinal(Val);
+      end;
+    smvInteger:
+      PInteger(V)^ := GetInteger(Val);
+    smvInt64:
+      SetInt64(Val,PInt64(V)^);
+    smvDouble,smvDateTime:
+      PDouble(V)^ := GetExtended(Val);
+    smvCurrency:
+      PInt64(V)^ := StrToCurr64(Val);
+    smvRawUTF8:
+      SetString(PRawUTF8(V)^,PAnsiChar(Val),ValLen);
+    smvString:
+      UTF8DecodeToString(Val,ValLen,PString(V)^);
+    smvRawByteString:
+      Base64ToBin(PAnsiChar(Val),ValLen,PRawByteString(V)^);
+    smvWideString:
+      UTF8ToWideString(Val,ValLen,PWideString(V)^);
+    smvBinary:
+      if ValLen=SizeInStorage*2 then
+        HexDisplayToBin(PAnsiChar(Val),PByte(V),SizeInStorage);
+    else RaiseError('ValueType?');
+    end;
+  end;
+  smvRecord: begin
+    R := RecordLoadJSON(V^,R,ArgTypeInfo);
+    if R=nil then
+      RaiseError('returned record');
+  end;
+  {$ifndef NOVARIANTS}
+  smvVariant: begin
+    R := VariantLoadJSON(PVariant(V)^,R,nil,@DVO);
+    if R=nil then
+      RaiseError('returned variant');
+  end;
+  {$endif}
+  smvDynArray: begin
+    if vIsObjArray in ValueKindAsm then
+      ObjArrayClear(V^);
+    wrapper.InitFrom(DynArrayWrapper,V^);
+    R := wrapper.LoadFromJSON(R);
+    if R=nil then
+      RaiseError('returned array');
+    IgnoreComma(R);
+  end;
+  end;
+end;
+
 procedure TServiceMethodArgument.AddJSON(WR: TTextWriter; V: pointer;
   ObjectOptions: TTextWriterWriteObjectOptions);
-var wrapper: TDynArray;
+var wrapper: TDynArray; // faster than WR.AddDynArrayJSON(ArgTypeInfo,V^)
 begin
   if vIsString in ValueKindAsm then
     WR.Add('"');
@@ -61143,6 +61182,7 @@ end;
 
 procedure TServiceMethodExecute.BeforeExecute;
 var a: integer;
+    Value: PPointer;
 begin
   with fMethod^ do begin
     if ArgsUsedCount[smvvRawUTF8]>0 then
@@ -61159,14 +61199,35 @@ begin
       if ArgsUsedCount[smvvInterface]>0 then
         FillcharFast(fInterfaces,ArgsUsedCount[smvvInterface]*SizeOf(pointer),0);
     end;
-    for a := ArgsManagedFirst to ArgsManagedLast do
-    with Args[a] do
-      case ValueType of
-      smvObject:
-        fObjects[IndexVar] := ArgTypeInfo^.ClassCreate;
-      smvRecord:
+    Value := @fValues[1];
+    for a := 1 to high(Args) do
+    with Args[a] do begin
+      case ValueVar of
+      smvv64:
+        Value^ := @fInt64s[IndexVar];
+      smvvRawUTF8:
+        Value^ := @fRawUTF8s[IndexVar];
+      smvvString:
+        Value^ := @fStrings[IndexVar];
+      smvvWideString:
+        Value^ := @fWideStrings[IndexVar];
+      smvvObject: begin
+        Value^ := @fObjects[IndexVar];
+        PPointer(Value^)^ := ArgTypeInfo^.ClassCreate;
+      end;
+      smvvInterface:
+        Value^ := @fInterfaces[IndexVar];
+      smvvRecord: begin
+        Value^ := pointer(fRecords[IndexVar]);
         if fAlreadyExecuted then
-          FillcharFast(fRecords[IndexVar],ArgTypeInfo^.RecordType^.Size,0);
+          FillcharFast(Value^^,ArgTypeInfo^.RecordType^.Size,0);
+      end;
+      smvvDynArray:
+        Value^ := @fDynArrays[IndexVar].Value;
+      else raise EInterfaceFactoryException.CreateUTF8('I%.%:% ValueType=%',
+        [InterfaceDotMethodName,ParamName^,ArgTypeName^,ord(ValueType)]);
+      end;
+      inc(Value);
       end;
     if optInterceptInputOutput in Options then begin
       Input.InitFast(ArgsInputValuesCount,dvObject);
@@ -61211,20 +61272,7 @@ begin
     {$endif CPUX86}
     for a := 1 to high(Args) do
     with Args[a] do begin
-      case ValueVar of
-      smvvSelf:       continue; // call.Regs[REG_FIRST] := Instance[i] below
-      smvv64:         Value := @fInt64s[IndexVar];
-      smvvRawUTF8:    Value := @fRawUTF8s[IndexVar];
-      smvvString:     Value := @fStrings[IndexVar];
-      smvvWideString: Value := @fWideStrings[IndexVar];
-      smvvObject:     Value := @fObjects[IndexVar];
-      smvvInterface:  Value := @fInterfaces[IndexVar];
-      smvvRecord:     Value := pointer(fRecords[IndexVar]);
-      smvvDynArray:   Value := @fDynArrays[IndexVar].Value;
-      else raise EInterfaceFactoryException.CreateUTF8(
-        'Invalid % argument type = %',[ParamName^,ord(ValueType)]);
-      end;
-      fValues[a] := Value;
+      Value := fValues[a];
       if (ValueDirection<>smdConst) or
          (ValueType in [smvRecord{$ifndef NOVARIANTS},smvVariant{$endif}]) then begin
           // pass by reference
@@ -61385,7 +61433,7 @@ function TServiceMethodExecute.ExecuteJsonCallback(Instance: pointer;
   const params: RawUTF8; output: PRawUTF8): boolean;
 var tmp: TSynTempBuffer;
     fake: TInterfacedObjectFake;
-    WR: TTextwriter;
+    WR: TTextWriter;
     n: integer;
 begin
   result := false;
@@ -61443,11 +61491,10 @@ begin
 end;
 
 function TServiceMethodExecute.ExecuteJson(const Instances: array of pointer;
-  Par: PUTF8Char; Res: TTextWriter; ResAsJSONObject: boolean): boolean;
+  Par: PUTF8Char; Res: TTextWriter; Error: PShortString; ResAsJSONObject: boolean): boolean;
 var a,a1: integer;
-    wasString, valid: boolean;
     Val, Name: PUTF8Char;
-    ValLen, NameLen: integer;
+    NameLen: integer;
     EndOfObject: AnsiChar;
     opt: TTextWriterWriteObjectOptions;
     ParObjValuesUsed: boolean;
@@ -61511,68 +61558,22 @@ begin
           if Par=nil then
             break; // premature end of ..] (ParObjValuesUsed=false)
         case ValueType of
-        smvObject: begin
-          if PInteger(Par)^=NULL_LOW then
-            inc(Par,4) else begin
-            Par := JSONToObject(fObjects[IndexVar],Par,valid,nil,JSONTOOBJECT_TOLERANTOPTIONS);
-            if not valid then
-              exit;
-          end;
-          IgnoreComma(Par);
-        end;
         smvInterface:
           if Assigned(OnCallback) then
             OnCallback(Par,ArgTypeInfo,fInterfaces[IndexVar]) else
-            raise EInterfaceFactoryException.CreateUTF8(
-              'Unhandled %(%: %) parameter',[URI,ParamName^,ArgTypeName^]);
-        smvRawJSON:
-          GetJSONItemAsRawJSON(Par,RawJSON(fRawUTF8s[IndexVar]));
+            raise EInterfaceFactoryException.CreateUTF8('OnCallback=nil for %(%: %)',
+              [InterfaceDotMethodName,ParamName^,ArgTypeName^]);
         smvDynArray: begin
           Par := fDynArrays[IndexVar].Wrapper.LoadFromJSON(Par);
+          if Par=nil then
+            exit;
           IgnoreComma(Par);
         end;
-        smvRecord:
-          Par := RecordLoadJSON(pointer(fRecords[IndexVar])^,Par,ArgTypeInfo);
-        {$ifndef NOVARIANTS}
-        smvVariant:
-          Par := VariantLoadJSON(PVariant(pointer(fRecords[IndexVar]))^,Par,nil,
-            @JSON_OPTIONS[optVariantCopiedByReference in Options]);
-        {$endif}
-        smvBoolean..smvBinary: begin
-          Val := GetJSONField(Par,Par,@wasString,@EndOfObject,@ValLen);
-          if (Val=nil) and (Par=nil) and (EndOfObject<>'}') then
-            exit;  // 'null': Val=nil and Par<>nil
-          if (Val<>nil) and (wasString and not (vIsString in ValueKindAsm)) then
+        else
+          if not FromJSON(InterfaceDotMethodName,Par,fValues[a],Error
+            {$ifndef NOVARIANTS},JSON_OPTIONS[optVariantCopiedByReference in Options]{$endif}) then
             exit;
-          case ValueType of
-          smvBoolean:
-            fInt64s[IndexVar] := byte((Val<>nil) and
-              ((PWord(Val)^=ord('1'))or(PInteger(Val)^=TRUE_LOW)));
-          smvEnum..smvInt64:
-            SetInt64(Val,fInt64s[IndexVar]);
-          smvDouble,smvDateTime:
-            PDouble(@fInt64s[IndexVar])^ := GetExtended(Val);
-          smvCurrency:
-            fInt64s[IndexVar] := StrToCurr64(Val);
-          smvRawUTF8:
-            SetString(fRawUTF8s[IndexVar],Val,ValLen);
-          smvString:
-            UTF8DecodeToString(Val,ValLen,fStrings[IndexVar]);
-          smvRawByteString:
-            Base64ToBin(PAnsiChar(Val),ValLen,RawByteString(fRawUTF8s[IndexVar]));
-          smvWideString:
-            UTF8ToWideString(Val,ValLen,fWideStrings[IndexVar]);
-          smvBinary:
-            if ValLen=SizeInStorage*2 then
-              HexDisplayToBin(PAnsiChar(Val),@fInt64s[IndexVar],SizeInStorage);
-          else exit; // should not happen
-          end;
-          continue; // here Par=nil or Val=nil is correct
         end;
-        else continue;
-        end;
-        if Par=nil then
-          exit;
       end;
     // execute the method, using prepared values in f*[]
     RawExecute(@Instances[0],high(Instances));
@@ -61601,6 +61602,8 @@ begin
           Res.AddPropName(ParamName^);
         case ValueType of
         smvDynArray: begin
+          if vIsObjArray in ValueKindAsm then
+            Res.AddObjArrayJSON(fValues[a]^,opt) else
           Res.AddDynArrayJSON(fDynArrays[IndexVar].Wrapper);
           Res.Add(',');
         end;

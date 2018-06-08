@@ -8723,7 +8723,7 @@ type
     /// append a T*ObjArray dynamic array as a JSON array
     // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
     procedure AddObjArrayJSON(const aObjArray;
-      Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]);
+      aOptions: TTextWriterWriteObjectOptions=[woDontStoreDefault]);
     /// append a record content as UTF-8 encoded JSON or custom serialization
     // - default serialization will use Base64 encoded binary stream, or
     // a custom serialization, in case of a previous registration via
@@ -10851,6 +10851,7 @@ type
     {$ifndef NOVARIANTS}
     /// returns the text at a given position in Values[]
     // - text should be in a single Values[] entry
+    // - explicitly returns null if the supplied text was not found
     procedure FindAsVariant(aPosition, aLength: integer; out aDest: variant);
       {$ifdef HASINLINE}inline;{$endif}
     {$endif}
@@ -10962,7 +10963,7 @@ procedure JSONDecode(var JSON: RawJSON;
 /// wrapper to serialize a T*ObjArray dynamic array as JSON
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
 function ObjArrayToJSON(const aObjArray;
-  Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]): RawUTF8;
+  aOptions: TTextWriterWriteObjectOptions=[woDontStoreDefault]): RawUTF8;
 
 /// decode the supplied UTF-8 JSON content for the supplied names
 // - data will be set in Values, according to the Names supplied e.g.
@@ -50790,19 +50791,20 @@ begin
   a := nil;
 end;
 
-function ObjArrayToJSON(const aObjArray; Options: TTextWriterWriteObjectOptions): RawUTF8;
+function ObjArrayToJSON(const aObjArray; aOptions: TTextWriterWriteObjectOptions): RawUTF8;
 var temp: TTextWriterStackBuffer;
 begin
   with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
   try
-    if woEnumSetsAsText in Options then
+    if woEnumSetsAsText in aOptions then
       CustomOptions := CustomOptions+[twoEnumSetsAsTextInRecord];
-    AddObjArrayJSON(aObjArray,Options);
+    AddObjArrayJSON(aObjArray,aOptions);
     SetText(result);
   finally
     Free;
   end;
 end;
+
 
 procedure ObjArrayObjArrayClear(var aObjArray);
 var i: integer;
@@ -52500,13 +52502,13 @@ begin
   Add('"');
 end;
 
-procedure TTextWriter.AddObjArrayJSON(const aObjArray; Options: TTextWriterWriteObjectOptions);
+procedure TTextWriter.AddObjArrayJSON(const aObjArray; aOptions: TTextWriterWriteObjectOptions);
 var i: integer;
     a: TObjectDynArray absolute aObjArray;
 begin
   Add('[');
   for i := 0 to length(a)-1 do begin
-    WriteObject(a[i],Options);
+    WriteObject(a[i],aOptions);
     Add(',');
   end;
   CancelLastComma;
@@ -62000,7 +62002,7 @@ procedure TRawByteStringGroup.FindAsVariant(aPosition, aLength: integer; out aDe
 var tmp: RawByteString;
 begin
   tmp := FindAsText(aPosition,aLength);
-  if tmp<>'' then
+  if tmp <> '' then
     RawUTF8ToVariant(tmp,aDest);
 end;
 {$endif NOVARIANTS}

@@ -1521,6 +1521,7 @@ var action: TMVCAction;
     WR: TTextWriter;
     methodOutput: RawUTF8;
     renderContext: variant;
+    err: shortstring;
     tmp: TTextWriterStackBuffer;
 begin
   action.ReturnedStatus := HTTP_SUCCESS;
@@ -1537,10 +1538,13 @@ begin
             try
               exec.Options := [optVariantCopiedByReference];
               exec.ServiceCustomAnswerStatus := action.ReturnedStatus;
-              if not exec.ExecuteJson([fApplication.fFactoryEntry],pointer(fInput),WR,true) then
+              err := '';
+              if not exec.ExecuteJson([fApplication.fFactoryEntry],pointer(fInput),WR,@err,true) then
+                if err<>'' then
+                  raise EMVCException.CreateUTF8('%.CommandRunMethod: %',[self,err]) else
                 with fApplication.fFactory do
-                raise EMVCException.CreateUTF8('%.CommandRunMethod: %.%() execution error',
-                  [Self,InterfaceTypeInfo^.Name,Methods[fMethodIndex].URI]);
+                  raise EMVCException.CreateUTF8('%.CommandRunMethod: %.%() execution error',
+                    [self,InterfaceTypeInfo^.Name,Methods[fMethodIndex].URI]);
               action.RedirectToMethodName := exec.ServiceCustomAnswerHead;
               action.ReturnedStatus := exec.ServiceCustomAnswerStatus;
             finally
