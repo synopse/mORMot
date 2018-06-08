@@ -197,6 +197,13 @@ procedure OldSQLEncryptTablePassWordToPlain(const FileName: TFileName;
 // and switch to the new format
 function IsOldSQLEncryptTable(const FileName: TFileName): boolean;
 
+var
+  /// global flag to use initial AES encryption scheme
+  // - IV derivation was hardened in revision 1.18.4607 - set TRUE to this
+  // global constant to use the former implementation (theoritically slightly
+  // less resistant to brute force attacks) and convert existing databases
+  ForceSQLite3LegacyAES: boolean;
+
 
 implementation
 
@@ -763,7 +770,7 @@ var s: TSynSigner;
     k: THash512Rec;
 begin
   s.PBKDF2(userPassword,passwordLength,k,'J6CuDftfPr22FnYn');
-  s.AssignTo(k,aes,true);
+  s.AssignTo(k,aes,{encrypt=}true);
 end;
 
 function CodecGetReadKey(codec: pointer): PAES; cdecl; external;
@@ -784,7 +791,7 @@ end;
 procedure CodeEncryptDecrypt(page: cardinal; data: PAnsiChar; len: integer;
   aes: PAES; encrypt: boolean);
 var plain: Int64;    // bytes 16..23 should always be unencrypted
-    iv: THash128Rec; // should be genuine, not necessary random / secured
+    iv: THash128Rec; // is genuine and AES-protected (since not random)
 begin
   if (len and AESBlockMod<>0) or (len<=0) or (integer(page)<=0) then
    raise ESQLite3Exception.CreateUTF8('CodeEncryptDecrypt(%) has len=%', [page,len]);
@@ -792,6 +799,8 @@ begin
   iv.c1 := page*2654435761;
   iv.c2 := page*2246822519;
   iv.c3 := page*3266489917;
+  if not ForceSQLite3LegacyAES then
+    aes^.Encrypt(iv.b); // avoid potential brute force attack
   len := len shr AESBlockShift;
   if page=1 then // ensure header bytes 16..23 are stored unencrypted
     if (PInt64(data)^=SQLITE_FILE_HEADER128.lo) and

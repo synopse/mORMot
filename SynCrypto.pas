@@ -436,7 +436,7 @@ type
     {$endif}
   public
     /// Initialize AES contexts for cypher
-    // - first method to call before using this class
+    // - first method to call before using this object for encryption
     // - KeySize is in bits, i.e. 128,192,256
     function EncryptInit(const Key; KeySize: cardinal): boolean;
     /// encrypt an AES data block into another data block
@@ -447,6 +447,8 @@ type
       {$ifdef FPC}inline;{$endif}
 
     /// Initialize AES contexts for uncypher
+    // - first method to call before using this object for decryption
+    // - KeySize is in bits, i.e. 128,192,256
     function DecryptInit(const Key; KeySize: cardinal): boolean;
     /// decrypt an AES data block
     procedure Decrypt(var B: TAESBlock); overload;
