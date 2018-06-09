@@ -4046,6 +4046,13 @@ begin
   Check(arr[0]='one');
   Check(arr[1]='two');
   Check(arr[2]='three');
+  Finalize(arr);
+  res := '-1,25,0';
+  CSVToRawUTF8DynArray(pointer(res),arr);
+  check(Length(arr)=3);
+  Check(arr[0]='-1');
+  Check(arr[1]='25');
+  Check(arr[2]='0');
   Check(AddPrefixToCSV('One,Two,Three','Pre')='PreOne,PreTwo,PreThree');
   Check(CSVOfValue('?',3)='?,?,?');
 {$ifndef DELPHI5OROLDER}

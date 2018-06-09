@@ -40372,11 +40372,13 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
     result := DynArray.SaveTo(dest);
     len := SizeOf(PtrUInt); // size of tkDynArray in record
   end;
+  {$ifndef DELPHI5OROLDER}
   tkInterface: begin
     PIInterface(dest)^ := PIInterface(data)^; // with proper refcount
     result := dest+SizeOf(PtrUInt);
     len := SizeOf(PtrUInt);
   end;
+  {$endif}
   else
     result := nil; // invalid/unhandled record content
   end;
@@ -40446,11 +40448,13 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
     source := DynArray.LoadFrom(source);
     result := SizeOf(PtrUInt); // size of tkDynArray in record
   end;
+  {$ifndef DELPHI5OROLDER}
   tkInterface: begin
     PIInterface(data)^ := PIInterface(source)^; // with proper refcount
     inc(source,SizeOf(PtrUInt));
     result := SizeOf(PtrUInt);
   end;
+  {$endif}
   else begin
     source := nil;
     result := 0;
