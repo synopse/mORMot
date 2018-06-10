@@ -61511,7 +61511,7 @@ var a,a1: integer;
     Val, Name: PUTF8Char;
     NameLen: integer;
     EndOfObject: AnsiChar;
-    opt: TTextWriterWriteObjectOptions;
+    opt: array[{smdVar=}boolean] of TTextWriterWriteObjectOptions;
     ParObjValuesUsed: boolean;
     ParObjValues: array[0..MAX_METHOD_ARGS-1] of PUTF8Char;
 begin
@@ -61608,8 +61608,9 @@ begin
         end;
       // write the '{"result":[...' array or object
       if optDontStoreVoidJSON in Options then
-        opt := [woDontStoreDefault,woDontStoreEmptyString,woDontStore0] else
-        opt := [woDontStoreDefault];
+        opt[false] := [woDontStoreDefault,woDontStoreEmptyString,woDontStore0] else
+        opt[false] := [woDontStoreDefault];
+      opt[{smdVar=}true] := []; // let var params override void/default values
       for a := ArgsOutFirst to ArgsOutLast do
       with Args[a] do
       if ValueDirection in [smdVar,smdOut,smdResult] then begin
@@ -61618,11 +61619,11 @@ begin
         case ValueType of
         smvDynArray: begin
           if vIsObjArray in ValueKindAsm then
-            Res.AddObjArrayJSON(fValues[a]^,opt) else
+            Res.AddObjArrayJSON(fValues[a]^,opt[ValueDirection=smdVar]) else
             Res.AddDynArrayJSON(fDynArrays[IndexVar].Wrapper);
           Res.Add(',');
         end;
-        else AddJSON(Res,fValues[a],opt);
+        else AddJSON(Res,fValues[a],opt[ValueDirection=smdVar]);
         end;
       end;
       Res.CancelLastComma;
