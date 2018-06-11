@@ -2926,6 +2926,7 @@ type
     procedure GetLongStrProp(Instance: TObject; var Value: RawByteString);
     procedure SetLongStrProp(Instance: TObject; const Value: RawByteString);
     procedure CopyLongStrProp(Source,Dest: TObject);
+    procedure GetShortStrProp(Instance: TObject; var Value: RawByteString);
     procedure GetWideStrProp(Instance: TObject; var Value: WideString);
     procedure SetWideStrProp(Instance: TObject; const Value: WideString);
     {$ifdef HASVARUSTRING}
@@ -29873,6 +29874,17 @@ begin
     {$endif}
 end;
 
+procedure TPropInfo.GetShortStrProp(Instance: TObject; var Value: RawByteString);
+begin
+  if GetterIsField then
+    Value := ShortStringToAnsi7String(PShortString(GetterAddr(Instance))^) else
+    {$ifdef UNICODE}
+    Value := TypInfo.GetAnsiStrProp(Instance,@self);
+    {$else}
+    Value := TypInfo.GetStrProp(Instance,@self); // FPC returns an AnsiString
+    {$endif}
+end; // no SetShortStrProp() by now
+
 procedure TPropInfo.SetLongStrProp(Instance: TObject; const Value: RawByteString);
 begin
   if SetterIsField then
@@ -30174,6 +30186,30 @@ begin // caller must check that PropType^.Kind = tkLString
         TIndexedProp(Call)(Index,Value);
   end;
 end;
+
+procedure TPropInfo.GetShortStrProp(Instance: TObject; var Value: RawByteString);
+procedure CallMethod(Instance: TObject; var Value: RawByteString);
+type
+  TSStringGetProc = function: shortstring of object;
+  TSStringIndexedGetProc = function(Index: Integer): shortstring of object;
+var Call: TMethod;
+begin
+  if PropWrap(GetProc).Kind=$FE then
+    // virtual method  - Getter is a signed 2 byte integer VMT offset
+    Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(GetProc))^ else
+    // static method - Getter is the actual address
+    Call.Code := Pointer(GetProc);
+  Call.Data := Instance;
+  if Index=NO_INDEX then  // no index
+    Value := ShortStringToAnsi7String(TSStringGetProc(Call)) else
+    Value := ShortStringToAnsi7String(TSStringIndexedGetProc(Call)(Index));
+end;
+begin // caller must check that PropType^.Kind = tkString/tkSString
+  if PropWrap(GetProc).Kind=$FF then
+    // field - Getter is the field offset in the instance data
+    Value := ShortStringToAnsi7String(PShortString(PtrInt(Instance)+GetProc and $00FFFFFF)^) else
+    CallMethod(Instance,Value);
+end; // no SetShortStrProp() by now
 
 procedure TPropInfo.GetWideStrProp(Instance: TObject; var Value: WideString);
 type
@@ -51972,9 +52008,18 @@ var Added: boolean;
               Add(V); // typecast enums and sets as plain integer by default
         end;
       end;
+      {$ifdef FPC}tkSString{$else}tkString{$endif}: begin
+        P^.GetShortStrProp(Value,tmp);
+        if (tmp<>'') or not (woDontStoreEmptyString in Options) then begin
+          HR(P);
+          Add('"');
+          AddJSONEscape(pointer(tmp));
+          Add('"');
+        end;
+      end; // no shortstring deserialization by now
       {$ifdef FPC}tkAString,{$endif} tkLString:
       if P^.TypeInfo=TypeInfo(RawJSON) then begin
-        P^.GetLongStrProp(Value,tmp);
+        P^.GetLongStrProp(Value,tmp); // assume shortstring field is UTF-8 encoded
         if tmp<>'' then begin
           HR(P);
           AddString(tmp);

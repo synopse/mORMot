@@ -4536,7 +4536,7 @@ begin
   result := aMatch.State = sVALID;
 end;
 
-// much faster alternative (without recursion) for only * ? (but no [...])
+// much faster alternative (without recursion) for only * ? (but not [...])
 
 function SearchNoRange(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
 var
