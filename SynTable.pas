@@ -97,6 +97,7 @@ function IsValidIP4Address(P: PUTF8Char): boolean;
 function IsMatch(const Pattern, Text: RawUTF8; CaseInsensitive: boolean=false): boolean;
 
 type
+  PMatch = ^TMatch;
   /// low-level structure used by IsMatch() for actual glog search
   // - you can use this object to prepare a given pattern, e.g. in a loop
   // - implemented as a fast brute-force state-machine without any heap allocation
@@ -109,9 +110,7 @@ type
     P, T, PMax, TMax: PtrInt;
     Upper: PNormTable;
     State: (sNONE, sABORT, sEND, sLITERAL, sPATTERN, sRANGE, sVALID);
-    Direct: (dNone, dNoPattern, dNoPatternU,
-      dContainsValid, dContainsU, dContains1, dContains4, dContains8,
-      dStartWith, dStartWithU, dEndWith, dEndWithU);
+    Search: function(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
     procedure MatchAfterStar;
     procedure MatchMain;
   public
@@ -120,9 +119,11 @@ type
     /// returns TRUE if the supplied content matches a grep-like pattern
     // - this method is not thread-safe
     function Match(const aText: RawUTF8): boolean; overload;
+      {$ifdef FPC}inline;{$endif}
     /// returns TRUE if the supplied content matches a grep-like pattern
     // - this method is not thread-safe
     function Match(aText: PUTF8Char; aTextLen: PtrInt): boolean; overload;
+      {$ifdef FPC}inline;{$endif}
     /// returns TRUE if the supplied content matches a grep-like pattern
     // - this method IS thread-safe, and won't lock
     function MatchThreadSafe(const aText: RawUTF8): boolean;
@@ -4391,7 +4392,6 @@ begin
   result := (State = STATE_SUBDOMAIN) and (subdomains >= 2);
 end;
 
-
 // code below adapted from ZMatchPattern.pas - http://www.zeoslib.sourceforge.net
 
 procedure TMatch.MatchMain;
@@ -4525,65 +4525,112 @@ begin
   until State <> sNONE;
 end;
 
-procedure TMatch.Prepare(const aPattern: RawUTF8; aCaseInsensitive, aReuse: boolean);
-var i: integer;
-const SPECIALS: PUTF8Char = '*?[';
+function SearchAny(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
 begin
-  Pattern := pointer(aPattern);
-  PMax := length(aPattern) - 1; // search in Pattern[0..PMax]
-  if aCaseInsensitive then
-    Upper := @NormToUpperAnsi7 else
-    Upper := @NormToNorm;
-  Direct := dNone;
-  if aReuse then
-    if strcspn(Pattern, SPECIALS) > PMax then
-      if aCaseInsensitive then
-        Direct := dNoPatternU
-      else
-        Direct := dNoPattern
-    else if PMax > 0 then
-      if Pattern[PMax] = '*' then begin
-        for i := 1 to PMax - 1 do
-          if Pattern[i] in ['*', '?', '['] then
-            exit; // dNone
-        case Pattern[0] of
-          '*': begin
-            inc(Pattern);
-            dec(PMax, 2); // trim trailing and ending *
-            if PMax <= 0 then
-              Direct := dContainsValid
-            else if aCaseInsensitive then
-              Direct := dContainsU
-            {$ifdef CPU64}
-            else if PMax >= 7 then
-              Direct := dContains8
-            {$endif}
-            else if PMax >= 3 then
-              Direct := dContains4
-            else
-              Direct := dContains1;
+  aMatch.State := sNONE;
+  aMatch.P := 0;
+  aMatch.T := 0;
+  aMatch.Text := aText;
+  aMatch.TMax := aTextLen - 1;
+  aMatch.MatchMain;
+  result := aMatch.State = sVALID;
+end;
+
+// much faster alternative (without recursion) for only * ? (but no [...])
+
+function SearchNoRange(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+var
+  c: AnsiChar;
+  pat, txt: PtrInt; // use local registers
+begin
+  aMatch.T := 0; // aMatch.P/T are used for retry positions after *
+  aMatch.Text := aText;
+  aMatch.TMax := aTextLen - 1;
+  pat := 0;
+  txt := 0;
+  repeat
+    if pat <= aMatch.PMax then begin
+      c := aMatch.Pattern[pat];
+      case c of
+        '?':
+          if txt <= aMatch.TMax then begin
+            inc(pat);
+            inc(txt);
+            continue;
           end;
-          '?', '[':
-            exit; // dNone
-          else begin
-            dec(PMax); // trim trailing *
-            if aCaseInsensitive then
-              Direct := dStartWithU
-            else
-              Direct := dStartWith;
-          end;
+        '*': begin
+          aMatch.P := pat;
+          aMatch.T := txt + 1;
+          inc(pat);
+          continue;
         end;
-      end
-      else if Pattern[0] = '*' then begin
-        for i := 1 to PMax do
-          if Pattern[i] in ['*', '?', '['] then
-            exit; // dNone
-        inc(Pattern); // jump leading *
-        if aCaseInsensitive then
-          Direct := dEndWithU
-        else
-          Direct := dEndWith;
+        else if (txt <= aMatch.TMax) and (c = aMatch.Text[txt]) then begin
+          inc(pat);
+          inc(txt);
+          continue;
+        end;
       end;
+    end
+    else if txt > aMatch.TMax then
+      break;
+    txt := aMatch.T;
+    if (txt > 0) and (txt <= aMatch.TMax + 1) then begin
+      inc(aMatch.T);
+      pat := aMatch.P+1;
+      continue;
+    end;
+    result := false;
+    exit;
+  until false;
+  result := true;
+end;
+
+function SearchNoRangeU(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+var
+  c: AnsiChar;
+  pat, txt: PtrInt;
+begin
+  aMatch.T := 0;
+  aMatch.Text := aText;
+  aMatch.TMax := aTextLen - 1;
+  pat := 0;
+  txt := 0;
+  repeat
+    if pat <= aMatch.PMax then begin
+      c := aMatch.Pattern[pat];
+      case c of
+        '?':
+          if txt <= aMatch.TMax then begin
+            inc(pat);
+            inc(txt);
+            continue;
+          end;
+        '*': begin
+          aMatch.P := pat;
+          aMatch.T := txt + 1;
+          inc(pat);
+          continue;
+        end;
+        else if (txt <= aMatch.TMax) and
+           (aMatch.Upper[c] = aMatch.Upper[aMatch.Text[txt]]) then begin
+          inc(pat);
+          inc(txt);
+          continue;
+        end;
+      end;
+    end
+    else if txt > aMatch.TMax then
+      break;
+    txt := aMatch.T;
+    if (txt > 0) and (txt <= aMatch.TMax + 1) then begin
+      inc(aMatch.T);
+      pat := aMatch.P+1;
+      continue;
+    end;
+    result := false;
+    exit;
+  until false;
+  result := true;
 end;
 
 function SimpleContainsU(t, tend, p: PUTF8Char; pmax: PtrInt; up: PNormTable): boolean;
@@ -4689,6 +4736,7 @@ next: inc(t);
 end;
 
 function CompareMemU(P1, P2: PUTF8Char; len: PtrInt; U: PNormTable): Boolean;
+  {$ifdef FPC}inline;{$endif}
 begin // here we know that len>0
   result := false;
   repeat
@@ -4699,62 +4747,158 @@ begin // here we know that len>0
   result := true;
 end;
 
+function SearchNoPattern(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+begin
+  result := (aMatch.PMax + 1 = aTextlen) and CompareMem(aText, aMatch.Pattern, aTextLen);
+end;
+
+function SearchNoPatternU(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+begin
+  result := (aMatch.PMax + 1 = aTextlen) and CompareMemU(aText, aMatch.Pattern, aTextLen, aMatch.Upper);
+end;
+
+function SearchContainsValid(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+begin
+  result := true;
+end;
+
+function SearchContainsU(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+begin
+  result := SimpleContainsU(aText, aText + aTextLen, aMatch.Pattern, aMatch.PMax, aMatch.Upper);
+end;
+
+function SearchContains1(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+begin
+  result := SimpleContains1(aText, aText + aTextLen, aMatch.Pattern, aMatch.PMax);
+end;
+
+function SearchContains4(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+begin
+  result := SimpleContains4(aText, aText + aTextLen - 3, aMatch.Pattern, aMatch.PMax);
+end;
+
+{$ifdef CPU64}
+function SearchContains8(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+begin // optimized e.g. to search an IP address as '*12.34.56.78*' in logs
+  result := SimpleContains8(aText, aText + aTextLen - 7, aMatch.Pattern, aMatch.PMax);
+end;
+{$endif}
+
+function SearchStartWith(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+begin
+  result := (aMatch.PMax < aTextlen) and CompareMem(aText, aMatch.Pattern, aMatch.PMax + 1);
+end;
+
+function SearchStartWithU(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+begin
+  result := (aMatch.PMax < aTextlen) and CompareMemU(aText, aMatch.Pattern, aMatch.PMax + 1, aMatch.Upper);
+end;
+
+function SearchEndWith(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+begin
+  dec(aTextLen, aMatch.PMax);
+  result := (aTextlen >= 0) and CompareMem(aText + aTextLen, aMatch.Pattern, aMatch.PMax);
+end;
+
+function SearchEndWithU(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+begin
+  dec(aTextLen, aMatch.PMax);
+  result := (aTextlen >= 0) and CompareMemU(aText + aTextLen, aMatch.Pattern, aMatch.PMax, aMatch.Upper);
+end;
+
+procedure TMatch.Prepare(const aPattern: RawUTF8; aCaseInsensitive, aReuse: boolean);
+const SPECIALS: PUTF8Char = '*?[';
+begin
+  Pattern := pointer(aPattern);
+  PMax := length(aPattern) - 1; // search in Pattern[0..PMax]
+  if aCaseInsensitive then
+    Upper := @NormToUpperAnsi7 else
+    Upper := @NormToNorm;
+  Search := nil;
+  if aReuse then
+    if strcspn(Pattern, SPECIALS) > PMax then
+      if aCaseInsensitive then
+        Search := SearchNoPatternU
+      else
+        Search := SearchNoPattern
+    else if PMax > 0 then begin
+      if Pattern[PMax] = '*' then begin
+        if strcspn(Pattern + 1, SPECIALS) = PMax - 1 then
+          case Pattern[0] of
+            '*': begin
+              inc(Pattern);
+              dec(PMax, 2); // trim trailing and ending *
+              if PMax <= 0 then
+                Search := SearchContainsValid
+              else if aCaseInsensitive then
+                Search := SearchContainsU
+              {$ifdef CPU64}
+              else if PMax >= 7 then
+                Search := SearchContains8
+              {$endif}
+              else if PMax >= 3 then
+                Search := SearchContains4
+              else
+                Search := SearchContains1;
+            end;
+            '?':
+              if aCaseInsensitive then
+                Search := SearchNoRangeU
+              else
+                Search := SearchNoRange;
+            '[':
+              Search := SearchAny;
+            else begin
+              dec(PMax); // trim trailing *
+              if aCaseInsensitive then
+                Search := SearchStartWithU
+              else
+                Search := SearchStartWith;
+            end;
+          end;
+      end
+      else if (Pattern[0] = '*') and (strcspn(Pattern + 1, SPECIALS) > PMax) then begin
+        inc(Pattern); // jump leading *
+        if aCaseInsensitive then
+          Search := SearchEndWithU
+        else
+          Search := SearchEndWith;
+      end;
+    end;
+  if not Assigned(Search) then
+    if PosChar(Pattern, '[') = nil then
+      if aCaseInsensitive then
+        Search := SearchNoRangeU
+      else
+        Search := SearchNoRange
+    else
+      Search := SearchAny;
+end;
+
 function TMatch.Match(const aText: RawUTF8): boolean;
 begin
-  result := Match(pointer(aText), length(aText));
+  if aText <> '' then
+    result := Search(@self, pointer(aText), length(aText))
+  else
+    result := PMax < 0;
 end;
 
 function TMatch.Match(aText: PUTF8Char; aTextLen: PtrInt): boolean;
 begin
   if (aText <> nil) and (aTextLen > 0) then
-  case Direct of
-    dNone: begin
-      State := sNONE;
-      P := 0;
-      T := 0;
-      Text := aText;
-      TMax := length(aText) - 1;
-      MatchMain;
-      result := State = sVALID;
-    end;
-    dNoPattern:
-      result := (PMax + 1 = aTextlen) and CompareMem(aText, Pattern, aTextLen);
-    dNoPatternU:
-      result := (PMax + 1 = aTextlen) and CompareMemU(aText, Pattern, aTextLen, Upper);
-    dStartWith:
-      result := (PMax < aTextlen) and CompareMem(aText, Pattern, PMax + 1);
-    dStartWithU:
-      result := (PMax < aTextlen) and CompareMemU(aText, Pattern, PMax + 1, Upper);
-    dEndWith: begin
-      dec(aTextLen, PMax);
-      result := (aTextlen >= 0) and CompareMem(aText + aTextLen, Pattern, PMax);
-    end;
-    dEndWithU: begin
-      dec(aTextLen, PMax);
-      result := (aTextlen >= 0) and CompareMemU(aText + aTextLen, Pattern, PMax, Upper);
-    end;
-    dContainsValid:
-      result := true;
-    dContainsU:
-      result := SimpleContainsU(aText, aText + aTextLen, Pattern, PMax, Upper);
-    dContains1:
-      result := SimpleContains1(aText, aText + aTextLen, Pattern, PMax);
-    {$ifdef CPU64}
-    dContains8: // optimized e.g. to search an IP address as '*12.34.56.78*' in logs
-      result := SimpleContains8(aText, aText + aTextLen - 7, Pattern, PMax);
-    {$endif}
-    else
-      result := SimpleContains4(aText, aText + aTextLen - 3, Pattern, PMax);
-  end
+    result := Search(@self, aText, aTextLen)
   else
-    result := PMax < 0
+    result := PMax < 0;
 end;
 
 function TMatch.MatchThreadSafe(const aText: RawUTF8): boolean;
 var local: TMatch; // thread-safe with no lock!
 begin
   local := self;
-  result := local.Match(pointer(aText), length(aText));
+  if aText <> '' then
+    result := local.Search(@local, pointer(aText), length(aText))
+  else
+    result := local.PMax < 0;
 end;
 
 function IsMatch(const Pattern, Text: RawUTF8; CaseInsensitive: boolean): boolean;

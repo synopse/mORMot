@@ -2880,8 +2880,13 @@ begin
   Check(not IsMatch('','toto',true));
   Check(not IsMatch('Bidule.pas','',true));
   Check(IsMatch('Bidule.pas','Bidule.pas',true));
+  Check(IsMatch('Bidule.pas','BIDULE.pas',true));
+  Check(IsMatch('Bidule.pas','Bidule.paS',true));
   Check(IsMatch('Bidule.pas','Bidule.pas',false));
   Check(not IsMatch('Bidule.pas','bidule.pas',false));
+  Check(not IsMatch('bidule.pas','bidulE.pas',false));
+  Check(not IsMatch('bidule.pas','bidule.paS',false));
+  Check(not IsMatch('bidule.pas','bidule.pa',false));
   for i := 0 to 200 do begin
     V := Int32ToUtf8(i);
     Check(IsMatch(V,V,false)=IsMatch(V,V,true));
@@ -2963,16 +2968,14 @@ begin
     check(not match.Match('tEst'));
     check(not match.Match('tesT'));
     check(not match.Match('t'));
-    if reuse then begin  //TODO: fix bug in MatchAfterStar
-      match.Prepare('*t', false, reuse);
-      check(match.Match('t'));
-      check(match.Match('st'));
-      check(match.Match('tt'));
-      check(match.Match('att'));
-      check(not match.Match('s'));
-      check(not match.Match('es'));
-      check(not match.Match('ts'));
-    end;
+    match.Prepare('*t', false, reuse);
+    check(match.Match('t'));
+    check(match.Match('st'));
+    check(match.Match('tt'));
+    check(match.Match('att'));
+    check(not match.Match('s'));
+    check(not match.Match('es'));
+    check(not match.Match('ts'));
     match.Prepare('**', false, reuse);
     check(match.Match('') = reuse);
     check(match.Match('test'));
@@ -3001,7 +3004,7 @@ begin
     check(match.Match('ab12'));
     check(match.Match('ab12er'));
     check(not match.Match('1'));
-    check(not match.Match('a1') = reuse); //TODO: fix bug in MatchAfterStar
+    check(not match.Match('a1'));
     check(not match.Match('1a2'));
     match.Prepare('*teSt*', true, reuse);
     check(match.Match('test'));
@@ -3021,6 +3024,53 @@ begin
     check(not match.Match('tes'));
     check(not match.Match('ates'));
     check(not match.Match('tesates'));
+    match.Prepare('*te?t*', true, reuse);
+    check(match.Match('test'));
+    check(match.Match('tezt'));
+    check(match.Match('teste'));
+    check(match.Match('tezte'));
+    check(match.Match('tester'));
+    check(match.Match('atest'));
+    check(match.Match('ateste'));
+    check(not match.Match('tes'));
+    check(not match.Match('tet'));
+    check(not match.Match('ates'));
+    check(not match.Match('tesates'));
+    match.Prepare('?est*', true, reuse);
+    check(match.Match('test'));
+    check(match.Match('test'));
+    check(match.Match('teste'));
+    check(match.Match('tester'));
+    check(not match.Match('tezte'));
+    check(not match.Match('atest'));
+    check(not match.Match('est'));
+    check(not match.Match('este'));
+    check(not match.Match('tes'));
+    check(not match.Match('tet'));
+    check(not match.Match('ates'));
+    check(not match.Match('tesates'));
+    match.Prepare('a*bx*cy*d', false, reuse);
+    check(match.Match('abxcyd'));
+    check(match.Match('a1bxcyd'));
+    check(match.Match('a12bxcyd'));
+    check(match.Match('a123bxcyd'));
+    check(match.Match('abx1cyd'));
+    check(match.Match('abx12cyd'));
+    check(match.Match('abxcy1d'));
+    check(match.Match('abxcy12d'));
+    check(match.Match('abxcy123d'));
+    check(not match.Match('abcyd'));
+    check(not match.Match('abxcyde'));
+    match.Prepare('************************************************'+
+         '************************************************'+
+         '**************************************************.*', false, reuse);
+    check(match.MatchThreadSafe('abxcyd.'));
+    check(match.MatchThreadSafe('abxc.yd'));
+    check(match.MatchThreadSafe('abxcy.d'));
+    check(match.MatchThreadSafe('.'));
+    check(match.MatchThreadSafe('.a'));
+    check(match.MatchThreadSafe('.abxcyd'));
+    check(not match.MatchThreadSafe('abxcyd'));
   end;
   for i := 32 to 127 do begin
     SetLength(V,1);
