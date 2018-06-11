@@ -144,6 +144,7 @@ type
   TMatchs = class(TSynPersistent)
   protected
     fMatch: TMatchStoreDynArray;
+    fMatchCount: integer;
   public
     /// add once some grep-like patterns to the internal TMach list
     // - aPatterns[] follows the IsMatch() syntax
@@ -4536,7 +4537,7 @@ begin
   result := aMatch.State = sVALID;
 end;
 
-// much faster alternative (without recursion) for only * ? (but not [...])
+// faster alternative (without recursion) for only * ? (but not [...])
 
 function SearchNoRange(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
 var
@@ -4865,7 +4866,7 @@ begin
           Search := SearchEndWith;
       end;
     end;
-  if not Assigned(Search) then
+ if not Assigned(Search) then
     if PosChar(Pattern, '[') = nil then
       if aCaseInsensitive then
         Search := SearchNoRangeU
@@ -4919,17 +4920,30 @@ end;
 
 function TMatchs.Match(const aText: RawUTF8): integer;
 var
-  i: integer;
+  i, len: integer;
+  one: ^TMatchStore;
+  local: TMatch; // thread-safe with no lock!
 begin
   if (self = nil) or (fMatch = nil) then
     result := -1 // no filter by name -> allow e.g. to process everything
   else begin
-    result := -2;
-    for i := 0 to length(fMatch) - 1 do
-      if fMatch[i].Parent.MatchThreadSafe(aText) then begin
+    len := length(aText);
+    one := pointer(fMatch);
+    for i := 1 to fMatchCount do begin
+      if len <> 0 then begin
+        local := one^.Parent;
+        if local.Search(@local, pointer(aText), len) then begin
+          result := i;
+          exit;
+        end;
+      end
+      else if one^.Parent.PMax < 0 then begin
         result := i;
-        break;
+        exit;
       end;
+      inc(one);
+    end;
+    result := -2;
   end;
 end;
 
@@ -4950,7 +4964,7 @@ begin
   m := length(aPatterns);
   if m = 0 then
     exit;
-  n := length(fMatch);
+  n := fMatchCount;
   SetLength(fMatch, n + m);
   pat := pointer(aPatterns);
   for i := 1 to m do begin
@@ -4959,8 +4973,9 @@ begin
       if StrComp(pointer(found^.PatternInstance), pointer(pat^)) = 0 then begin
         found := nil;
         break;
-      end else
-      inc(found);
+      end
+      else
+        inc(found);
     if found <> nil then
       with fMatch[n] do begin
         PatternInstance := pat^; // avoid GPF if aPatterns[] is released
@@ -4969,6 +4984,7 @@ begin
       end;
     inc(pat);
   end;
+  fMatchCount := n;
   if n <> length(fMatch) then
     SetLength(fMatch, n);
 end;
