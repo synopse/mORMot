@@ -1996,13 +1996,21 @@ function WinAnsiToUnicodeString(const WinAnsi: WinAnsiString): UnicodeString; in
 {$endif HASVARUSTRING}
 
 /// convert any generic VCL Text into an UTF-8 encoded String
-// - it's prefered to use TLanguageFile.StringToUTF8() method in mORMoti18n,
-// which will handle full i18n of your application
+// - in the VCL context, it's prefered to use TLanguageFile.StringToUTF8()
+//  method from mORMoti18n, which will handle full i18n of your application
 // - it will work as is with Delphi 2009+ (direct unicode conversion)
 // - under older version of Delphi (no unicode), it will use the
 // current RTL codepage, as with WideString conversion (but without slow
 // WideString usage)
 function StringToUTF8(const Text: string): RawUTF8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// convert any generic VCL Text buffer into an UTF-8 encoded String
+// - it will work as is with Delphi 2009+ (direct unicode conversion)
+// - under older version of Delphi (no unicode), it will use the
+// current RTL codepage, as with WideString conversion (but without slow
+// WideString usage)
+procedure StringToUTF8(Text: PChar; TextLen: integer; var result: RawUTF8); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert any generic VCL Text into an UTF-8 encoded String
@@ -2152,7 +2160,14 @@ function VariantToIntegerDef(const V: Variant; DefaultValue: integer): integer; 
 // - under older version of Delphi (no unicode), it will use the
 // current RTL codepage, as with WideString conversion (but without slow
 // WideString usage)
-function StringBufferToUtf8(Dest: PUTF8Char; Source: PChar; SourceChars: PtrInt): PUTF8Char;
+function StringBufferToUtf8(Dest: PUTF8Char; Source: PChar; SourceChars: PtrInt): PUTF8Char; overload;
+
+/// convert any generic VCL 0-terminated Text buffer into an UTF-8 string
+// - it will work as is with Delphi 2009+ (direct unicode conversion)
+// - under older version of Delphi (no unicode), it will use the
+// current RTL codepage, as with WideString conversion (but without slow
+// WideString usage)
+procedure StringBufferToUtf8(Source: PChar; out result: RawUTF8); overload;
 
 /// convert any generic VCL Text into a Raw Unicode encoded String
 // - it's prefered to use TLanguageFile.StringToUTF8() method in mORMoti18n,
@@ -20749,8 +20764,8 @@ end;
 
 {$endif HASVARUSTRING}
 
-{$ifdef UNICODE}
 function Ansi7ToString(const Text: RawByteString): string;
+{$ifdef UNICODE}
 var i: integer;
 begin
   SetString(result,nil,length(Text));
@@ -20758,26 +20773,22 @@ begin
     PWordArray(result)[i] := PByteArray(Text)[i]; // no conversion for 7 bit Ansi
 end;
 {$else}
-function Ansi7ToString(const Text: RawByteString): string;
 begin
   result := Text; // if we are SURE this text is 7 bit Ansi -> direct assign
 end;
 {$endif}
 
-{$ifdef UNICODE}
 function Ansi7ToString(Text: PWinAnsiChar; Len: integer): string;
 begin
+  {$ifdef UNICODE}
   Ansi7ToString(Text,Len,result);
-end;
-{$else}
-function Ansi7ToString(Text: PWinAnsiChar; Len: integer): string;
-begin
+  {$else}
   SetString(result,PAnsiChar(Text),Len);
+  {$endif}
 end;
-{$endif}
 
-{$ifdef UNICODE}
 procedure Ansi7ToString(Text: PWinAnsiChar; Len: integer; var result: string);
+{$ifdef UNICODE}
 var i: integer;
 begin
   SetString(result,nil,Len);
@@ -20785,14 +20796,13 @@ begin
     PWordArray(result)[i] := PByteArray(Text)[i]; // no conversion for 7 bit Ansi
 end;
 {$else}
-procedure Ansi7ToString(Text: PWinAnsiChar; Len: integer; var result: string);
 begin
   SetString(result,PAnsiChar(Text),Len);
 end;
 {$endif}
 
-{$ifdef UNICODE}
 function StringToAnsi7(const Text: string): RawByteString;
+{$ifdef UNICODE}
 var i: integer;
 begin
   SetString(result,nil,length(Text));
@@ -20800,71 +20810,73 @@ begin
     PByteArray(result)[i] := PWordArray(Text)[i]; // no conversion for 7 bit Ansi
 end;
 {$else}
-function StringToAnsi7(const Text: string): RawByteString;
 begin
   result := Text; // if we are SURE this text is 7 bit Ansi -> direct assign
 end;
 {$endif}
 
-{$ifdef UNICODE}
 function StringToWinAnsi(const Text: string): WinAnsiString;
 begin
+  {$ifdef UNICODE}
   result := RawUnicodeToWinAnsi(Pointer(Text),length(Text));
-end;
-{$else}
-function StringToWinAnsi(const Text: string): WinAnsiString;
-begin
+  {$else}
   result := WinAnsiConvert.AnsiToAnsi(CurrentAnsiConvert,Text);
+  {$endif}
 end;
-{$endif}
 
-{$ifdef UNICODE}
 function StringBufferToUtf8(Dest: PUTF8Char; Source: PChar; SourceChars: PtrInt): PUTF8Char;
 begin
+  {$ifdef UNICODE}
   result := Dest+RawUnicodeToUtf8(Dest,SourceChars*3,PWideChar(Source),SourceChars,[]);
-end;
-{$else}
-function StringBufferToUtf8(Dest: PUTF8Char; Source: PChar; SourceChars: PtrInt): PUTF8Char;
-begin
+  {$else}
   result := CurrentAnsiConvert.AnsiBufferToUTF8(Dest,Source,SourceChars);
+  {$endif}
 end;
-{$endif}
 
-{$ifdef UNICODE}
+procedure StringBufferToUtf8(Source: PChar; out result: RawUTF8); overload;
+begin
+  {$ifdef UNICODE}
+  RawUnicodeToUtf8(Source,StrLenW(Source),result);
+  {$else}
+  result := CurrentAnsiConvert.AnsiBufferToRawUTF8(Source,StrLen(Source));
+  {$endif}
+end;
+
 function StringToUTF8(const Text: string): RawUTF8;
 begin
+  {$ifdef UNICODE}
   RawUnicodeToUtf8(pointer(Text),length(Text),result);
-end;
-{$else}
-function StringToUTF8(const Text: string): RawUTF8;
-begin
+  {$else}
   result := CurrentAnsiConvert.AnsiToUTF8(Text);
+  {$endif}
 end;
-{$endif}
 
-{$ifdef UNICODE}
+procedure StringToUTF8(Text: PChar; TextLen: integer; var result: RawUTF8);
+begin
+  {$ifdef UNICODE}
+  RawUnicodeToUtf8(Text,TextLen,result);
+  {$else}
+  result := CurrentAnsiConvert.AnsiBufferToRawUTF8(Text, TextLen);
+  {$endif}
+end;
+
 procedure StringToUTF8(const Text: string; var result: RawUTF8);
 begin
+  {$ifdef UNICODE}
   RawUnicodeToUtf8(pointer(Text),length(Text),result);
-end;
-{$else}
-procedure StringToUTF8(const Text: string; var result: RawUTF8);
-begin
+  {$else}
   result := CurrentAnsiConvert.AnsiToUTF8(Text);
+  {$endif}
 end;
-{$endif}
 
-{$ifdef UNICODE}
 function ToUTF8(const Text: string): RawUTF8;
 begin
+  {$ifdef UNICODE}
   RawUnicodeToUtf8(pointer(Text),length(Text),result);
-end;
-{$else}
-function ToUTF8(const Text: string): RawUTF8;
-begin
+  {$else}
   result := CurrentAnsiConvert.AnsiToUTF8(Text);
+  {$endif}
 end;
-{$endif}
 
 function ToUTF8(const Ansi7Text: ShortString): RawUTF8;
 begin
