@@ -9494,7 +9494,7 @@ type
     procedure SetValue(const Name, Value: RawUTF8);
     function GetTextCRLF: RawUTF8;
     procedure SetTextCRLF(const Value: RawUTF8);
-    procedure SetTextPtr(P: PUTF8Char; const Delimiter: RawUTF8);
+    procedure SetTextPtr(P,PEnd: PUTF8Char; const Delimiter: RawUTF8);
     function GetListPtr: PPUtf8CharArray;
     function GetObjectPtr: PPointerArray; {$ifdef HASINLINE}inline;{$endif}
     procedure SetCaseSensitive(Value: boolean); virtual;
@@ -14017,6 +14017,11 @@ var
 // - it should have a millisecond resolution, and handle ms=0 as a switch to
 // another pending thread, i.e. under Windows will call SwitchToThread API
 procedure SleepHiRes(ms: cardinal);
+
+/// low-level wrapper to get the 64-bit value from a TFileTime
+// - as recommended by MSDN to avoid dword alignment issue
+procedure FileTimeToInt64(const FT: TFileTime; out I64: Int64);
+  {$ifdef HASINLINE}inline;{$endif}
 
 {$else MSWINDOWS}
 
@@ -26487,9 +26492,8 @@ end;
 
 {$ifdef MSWINDOWS}
 procedure FileTimeToInt64(const FT: TFileTime; out I64: Int64);
-  {$ifdef HASINLINE}inline;{$endif}
 begin
-  {$ifdef CPU64} // as recommended by MSDN to avoid dword alignment issue
+  {$ifdef CPU64}
   PInt64Rec(@I64)^.Lo := FT.dwLowDateTime;
   PInt64Rec(@I64)^.Hi := FT.dwHighDateTime;
   {$else}
@@ -58629,27 +58633,30 @@ end;
 
 procedure TRawUTF8List.SetText(const aText, Delimiter: RawUTF8);
 begin
-  SetTextPtr(pointer(aText),Delimiter);
+  SetTextPtr(pointer(aText),PUTF8Char(pointer(aText))+length(aText),Delimiter);
 end;
 
 procedure TRawUTF8List.LoadFromFile(const FileName: TFileName);
 var Map: TMemoryMap;
-    P: pointer;
+    P: PUTF8Char;
 begin
   if Map.Map(FileName) then
   try
     if Map.Size<>0 then begin
-      if TextFileKind(Map)=isUTF8 then // ignore UTF-8 BOM
-        P := Map.Buffer+3 else
-        P := Map.Buffer;
-      SetTextPtr(P,#13#10);
+      if TextFileKind(Map)=isUTF8 then begin // ignore UTF-8 BOM
+        P := pointer(Map.Buffer+3);
+        SetTextPtr(P,P+Map.Size-3,#13#10);
+      end else begin
+        P := pointer(Map.Buffer);
+        SetTextPtr(P,P+Map.Size,#13#10);
+      end;
     end;
   finally
     Map.UnMap;
   end;
 end;
 
-procedure TRawUTF8List.SetTextPtr(P: PUTF8Char; const Delimiter: RawUTF8);
+procedure TRawUTF8List.SetTextPtr(P,PEnd: PUTF8Char; const Delimiter: RawUTF8);
 var DelimLen: PtrInt;
     DelimFirst: AnsiChar;
     PBeg, DelimNext: PUTF8Char;
@@ -58658,29 +58665,29 @@ begin
   DelimLen := length(Delimiter);
   BeginUpdate;
   Clear;
-  if (P<>nil) and (DelimLen>0) then begin
+  if (P<>nil) and (DelimLen>0) and (P<PEnd) then begin
     DelimFirst := Delimiter[1];
     DelimNext := PUTF8Char(pointer(Delimiter))+1;
     repeat
       PBeg := P;
-      while P^<>#0 do begin
-        if (P^=DelimFirst) and CompareMem(P+1,DelimNext,DelimLen-1) then
+      while P<PEnd do begin
+        if (P^=DelimFirst) and CompareMemFixed(P+1,DelimNext,DelimLen-1) then
           break;
         inc(P);
       end;
       SetString(Line,PBeg,P-PBeg);
       AddObject(Line,nil);
-      if P^=#0 then
+      if P>=PEnd then
         break;
       inc(P,DelimLen);
-    until P^=#0;
+    until P>=PEnd;
   end;
   EndUpdate;
 end;
 
 procedure TRawUTF8List.SetTextCRLF(const Value: RawUTF8);
 begin
-  SetTextPtr(pointer(Value),#13#10);
+  SetText(Value,#13#10);
 end;
 
 procedure TRawUTF8List.SetValue(const Name, Value: RawUTF8);
@@ -65021,7 +65028,7 @@ begin
   fDiffIdle := sidl-fSysPrevIdle;
   fDiffKernel := skrn-fSysPrevKernel;
   fDiffUser := susr-fSysPrevUser;
-  fDiffTotal := fDiffKernel+fDiffUser; // kernel time also includes idle
+  fDiffTotal := fDiffKernel+fDiffUser; // kernel time also includes idle time
   dec(fDiffKernel, fDiffIdle);
   fSysPrevIdle := sidl;
   fSysPrevKernel := skrn;
