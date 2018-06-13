@@ -5703,7 +5703,7 @@ type
   /// allows to iterate over a TDynArray.SaveTo binary buffer
   // - may be used as alternative to TDynArray.LoadFrom, if you don't want
   // to allocate all items at once, but retrieve items one by one
-  TDynArrayLoadFrom = {$ifdef UNICODE}record{$else}object{$endif}
+  {$ifdef UNICODE}TDynArrayLoadFrom = record{$else}TDynArrayLoadFrom = object{$endif}
   private
     DynArray: TDynArray; // used to access RTTI
     Hash: PCardinalArray;
@@ -13002,7 +13002,7 @@ type
   /// a cross-platform and cross-compiler TSystemTime structure
   // - FPC's TSystemTime in datih.inc does NOT match Windows TSystemTime fields!
   // - also used to store a Date/Time in TSynTimeZone internal structures
-  TSynSystemTime = {$ifdef ISDELPHI2006ANDUP}record{$else}object{$endif}
+  {$ifdef ISDELPHI2006ANDUP}TSynSystemTime = record{$else}TSynSystemTime = object{$endif}
     Year, Month, DayOfWeek, Day,
     Hour, Minute, Second, MilliSecond: word;
     /// returns true if all fields are zero
@@ -13527,7 +13527,7 @@ type
   TTimeZoneID = type RawUTF8;
 
   /// used to store Time Zone information for a single area in TSynTimeZone
-  TTimeZoneData = {$ifdef ISDELPHI2006ANDUP}record{$else}object{$endif}
+  {$ifdef ISDELPHI2006ANDUP}TTimeZoneData = record{$else}TTimeZoneData = object{$endif}
     id: TTimeZoneID;
     display: RawUTF8;
     tzi: TTimeZoneInfo;
@@ -13953,7 +13953,7 @@ var
     wProductType: BYTE;
     wReserved: BYTE;
   end;
-  {$endif}
+  {$endif UNICODE}
 
 var
   /// is set to TRUE if the current process is a 32 bit image running under WOW64
@@ -13972,6 +13972,12 @@ var
   OSVersionInfo: TOSVersionInfoEx;
   /// the current Operating System version, as retrieved for the current process
   OSVersion: TWindowsVersion;
+
+/// a wrapper around EnumProcesses() PsAPI call
+function EnumAllProcesses(out Count: Cardinal): TCardinalDynArray;
+
+/// a wrapper around QueryFullProcessImageNameW/GetModuleFileNameEx PsAPI call
+function EnumProcessName(PID: Cardinal): RawUTF8;
 
 /// this function can be used to create a GDI compatible window, able to
 // receive Windows Messages for fast local communication
@@ -17900,13 +17906,30 @@ type
   // - as returned by TSystemUse.History
   TSystemUseDataDynArray = array of TSystemUseData;
 
+  /// low-level structure used to compute process memory and CPU usage
+  {$ifdef UNICODE}TProcessInfo = record{$else}TProcessInfo = object{$endif}
+  private
+    fSysPrevIdle, fSysPrevKernel, fSysPrevUser,
+    fDiffIdle, fDiffKernel, fDiffUser, fDiffTotal: Int64;
+  public
+    /// initialize the system/process resource tracking
+    function Init: boolean;
+    /// to be called before PerSystem() or PerProcess() iteration
+    function Start: boolean;
+    /// percent of current Idle/Kernel/User CPU usage for all processes
+    function PerSystem(out Idle,Kernel,User: currency): boolean;
+    /// retrieve CPU and RAM usage for a given process
+    function PerProcess(PID: cardinal; Now: PDateTime; out Data: TSystemUseData;
+      var PrevKernel, PrevUser: Int64): boolean;
+  end;
+
   /// event handler which may be executed by TSystemUse.BackgroundExecute
   // - called just after the measurement of each process CPU and RAM consumption
   // - run from the background thread, so should not directly make VCL calls,
   // unless BackgroundExecute is run from a VCL timer
   TOnSystemUseMeasured = procedure(ProcessID: integer; const Data: TSystemUseData) of object;
 
-  /// internal storage of CPU and RAM usage for none process
+  /// internal storage of CPU and RAM usage for one process
   TSystemUseProcess = record
     ID: integer;
     Data: TSystemUseDataDynArray;
@@ -17926,9 +17949,7 @@ type
     fProcess: TSystemUseProcessDynArray;
     fProcesses: TDynArray;
     fDataIndex: integer;
-    fSysPrevKernel: Int64;
-    fSysPrevUser: Int64;
-    fOpenProcessFlags: integer;
+    fProcessInfo: TProcessInfo;
     fSafe: TAutoLocker;
     fHistoryDepth: integer;
     fOnMeasured: TOnSystemUseMeasured;
@@ -17981,6 +18002,8 @@ type
     // - aProcessID=0 will return information from the current process
     // - returns 0 if the Process ID was not registered via Create/Subscribe
     function KB(aProcessID: integer=0): cardinal; overload;
+    /// percent of current Idle/Kernel/User CPU usage for all processes
+    function PercentSystem(out Idle,Kernel,User: currency): boolean;
     /// returns the detailed CPU and RAM usage percent of the supplied process
     // - aProcessID=0 will return information from the current process
     // - returns -1 if the Process ID was not registered via Create/Subscribe
@@ -26532,18 +26555,29 @@ const
   PROCESS_QUERY_LIMITED_INFORMATION = $1000;
 
 var
+  // PROCESS_QUERY_INFORMATION or PROCESS_QUERY_LIMITED_INFORMATION
+  OpenProcessAccess: DWORD;
+  // late-binding of Windows version specific API entries
   GetSystemTimes: function(var lpIdleTime, lpKernelTime, lpUserTime: TFileTime): BOOL; stdcall;
   GetProcessTimes: function(hProcess: THandle;
     var lpCreationTime, lpExitTime, lpKernelTime, lpUserTime: TFileTime): BOOL; stdcall;
   GetProcessMemoryInfo: function(Process: THandle;
     var ppsmemCounters: TProcessMemoryCounters; cb: DWORD): BOOL; stdcall;
+  EnumProcessModules: function (hProcess: THandle; var lphModule: HMODULE; cb: DWORD;
+    var lpcbNeeded: DWORD): BOOL; stdcall;
+  GetModuleFileNameExW: function(hProcess: THandle; hModule: HMODULE;
+    lpBaseName: PWideChar; nSize: DWORD): DWORD; stdcall;
+  EnumProcesses: function(lpidProcess: PDWORD; cb: DWORD; var cbNeeded: DWORD): BOOL; stdcall;
+  // Vista+/WS2008+ (use GetModuleFileNameEx on XP)
+  QueryFullProcessImageNameW: function(hProcess: THandle; dwFlags: DWORD;
+    lpExeName: PWideChar; lpdwSize: PDWORD): BOOL; stdcall;
 
 procedure RetrieveSystemInfo;
 var
   IsWow64Process: function(Handle: THandle; var Res: BOOL): BOOL; stdcall;
   GetNativeSystemInfo: procedure(var SystemInfo: TSystemInfo); stdcall;
   Res: BOOL;
-  Kernel: THandle;
+  Kernel, Psapi: THandle;
   P: pointer;
   Vers: TWindowsVersion;
   cpu: string;
@@ -26598,7 +26632,9 @@ begin
       inc(Vers,2); // e.g. wEight -> wServer2012
     if SystemInfo.wProcessorArchitecture=PROCESSOR_ARCHITECTURE_AMD64 then
       inc(Vers);   // e.g. wEight -> wEight64
-  end;
+    OpenProcessAccess := PROCESS_QUERY_LIMITED_INFORMATION;
+  end else
+    OpenProcessAccess := PROCESS_QUERY_INFORMATION or PROCESS_VM_READ;
   OSVersion := Vers;
   with OSVersionInfo do
     if wServicePackMajor=0 then
@@ -26622,10 +26658,18 @@ begin
   {$endif}
   if cpu='' then
     cpu := GetEnvironmentVariable('PROCESSOR_IDENTIFIER');
+  cpu := SysUtils.Trim(cpu);
   FormatUTF8('% x % ('+CPU_ARCH_TEXT+')',[SystemInfo.dwNumberOfProcessors,cpu],CpuInfoText);
   @GetSystemTimes := GetProcAddress(Kernel,'GetSystemTimes');
   @GetProcessTimes := GetProcAddress(Kernel,'GetProcessTimes');
-  @GetProcessMemoryInfo := GetProcAddress(LoadLibrary('PSAPI.dll'),'GetProcessMemoryInfo');
+  @QueryFullProcessImageNameW := GetProcAddress(Kernel,'QueryFullProcessImageNameW');
+  Psapi := LoadLibrary('Psapi.dll');
+  if Psapi>=32 then begin
+    @EnumProcesses := GetProcAddress(Psapi,'EnumProcesses');
+    @GetModuleFileNameExW := GetProcAddress(Psapi,'GetModuleFileNameExW');
+    @EnumProcessModules := GetProcAddress(Psapi, 'EnumProcessModules');
+    @GetProcessMemoryInfo := GetProcAddress(Psapi,'GetProcessMemoryInfo');
+  end;
 end;
 
 {$else}
@@ -38869,6 +38913,47 @@ begin
   end;
 end;
 {$endif DELPHI6OROLDER}
+
+function EnumAllProcesses(out Count: Cardinal): TCardinalDynArray;
+var n: cardinal;
+begin
+  n := 2048;
+  repeat
+    SetLength(result, n);
+    if EnumProcesses(pointer(result), n * 4, Count) then
+      Count := Count shr 2 else
+      Count := 0;
+    if Count < n then begin
+      if Count = 0 then
+        result := nil;
+      exit;
+    end;
+    inc(n, 1024); // (very unlikely) too small buffer
+  until n>8192;
+end;
+
+function EnumProcessName(PID: Cardinal): RawUTF8;
+var h: THandle;
+    len: DWORD;
+    name: array[0..4095] of WideChar;
+begin
+  result := '';
+  if PID = 0 then
+    exit;
+  h := OpenProcess(OpenProcessAccess, false, PID);
+  if h <> 0 then
+    try
+      if Assigned(QueryFullProcessImageNameW) then begin
+        len := high(name);
+        if QueryFullProcessImageNameW(h, 0, name, @len) then
+          RawUnicodeToUtf8(name, len, result);
+      end else
+        if GetModuleFileNameExW(h,0,name,high(name))<>0 then
+          RawUnicodeToUtf8(name, StrLenW(name), result);
+    finally
+      CloseHandle(h);
+    end;
+end;
 
 function WndProcMethod(Hwnd: HWND; Msg,wParam,lParam: integer): integer; stdcall;
 var obj: TObject;
@@ -64912,84 +64997,140 @@ begin
 end;
 
 
-{ TSystemUse }
+{ TProcessInfo }
 
 {$ifdef MSWINDOWS}
+
+function TProcessInfo.Init: boolean;
+begin
+  FillZero(self,SizeOf(self));
+  result := Assigned(GetSystemTimes) and Assigned(GetProcessTimes) and
+    Assigned(GetProcessMemoryInfo); // no monitoring API under oldest Windows
+end;
+
+function TProcessInfo.Start: boolean;
+var ftidl,ftkrn,ftusr: TFileTime;
+    sidl,skrn,susr: Int64;
+begin
+  result := Assigned(GetSystemTimes) and GetSystemTimes(ftidl,ftkrn,ftusr);
+  if not result then
+    exit;
+  FileTimeToInt64(ftidl,sidl);
+  FileTimeToInt64(ftkrn,skrn);
+  FileTimeToInt64(ftusr,susr);
+  fDiffIdle := sidl-fSysPrevIdle;
+  fDiffKernel := skrn-fSysPrevKernel;
+  fDiffUser := susr-fSysPrevUser;
+  fDiffTotal := fDiffKernel+fDiffUser; // kernel time also includes idle
+  dec(fDiffKernel, fDiffIdle);
+  fSysPrevIdle := sidl;
+  fSysPrevKernel := skrn;
+  fSysPrevUser := susr;
+end;
+
+function TProcessInfo.PerProcess(PID: cardinal; Now: PDateTime;
+  out Data: TSystemUseData; var PrevKernel, PrevUser: Int64): boolean;
+var
+  h: THandle;
+  ftkrn,ftusr,ftp,fte: TFileTime;
+  pkrn,pusr: Int64;
+  mem: TProcessMemoryCounters;
+begin
+  result := false;
+  FillZero(Data,SizeOf(Data));
+  h := OpenProcess(OpenProcessAccess,false,PID);
+  if h<>0 then
+    try
+      if GetProcessTimes(h,ftp,fte,ftkrn,ftusr) then begin
+        if Now<>nil then
+          Data.Timestamp := Now^;
+        FileTimeToInt64(ftkrn,pkrn);
+        FileTimeToInt64(ftusr,pusr);
+        if (PrevKernel<>0) and (fDiffTotal>0) then begin
+          Data.Kernel := ((pkrn-PrevKernel)*100)/fDiffTotal;
+          Data.User := ((pusr-PrevUser)*100)/fDiffTotal;
+        end;
+        PrevKernel := pkrn;
+        PrevUser := pusr;
+        FillZero(mem,SizeOf(mem));
+        mem.cb := SizeOf(mem);
+        if GetProcessMemoryInfo(h,mem,SizeOf(mem)) then begin
+          Data.WorkKB := mem.WorkingSetSize shr 10;
+          Data.VirtualKB := mem.PagefileUsage shr 10;
+        end;
+        result := true;
+      end;
+    finally
+      CloseHandle(h);
+    end;
+end;
+
+{$else} // not implemented yet (use /proc ?)
+
+function TProcessInfo.Init: boolean;
+begin
+  FillZero(self,SizeOf(self));
+  result := false;
+end;
+
+function TProcessInfo.Start: boolean;
+begin
+  result := false;
+end;
+
+function TProcessInfo.PerProcess(PID: cardinal; Now: PDateTime;
+  out Data: TSystemUseData; var PrevKernel, PrevUser: Int64): boolean;
+begin
+  result := false;
+end;
+
+{$endif MSWINDOWS}
+
+function TProcessInfo.PerSystem(out Idle,Kernel,User: currency): boolean;
+begin
+  if fDiffTotal<=0 then begin
+    Idle := 0;
+    Kernel := 0;
+    User := 0;
+    result := false;
+  end else begin
+    Kernel := SimpleRoundTo2Digits((fDiffKernel*100)/fDiffTotal);
+    User := SimpleRoundTo2Digits((fDiffUser*100)/fDiffTotal);
+    Idle := 100-Kernel-User; // ensure sum is always 100%
+    result := true;
+  end;
+end;
+
+
+{ TSystemUse }
+
 procedure TSystemUse.BackgroundExecute(Sender: TSynBackgroundTimer;
   Event: TWaitResult; const Msg: RawUTF8);
-var ftidl,ftkrn,ftusr,ftp,fte: TFileTime;
-    skrn,susr, pkrn,pusr, difftot, diffkrn,diffusr: Int64;
-    i: integer;
-    hnd: THandle;
-    mem: TProcessMemoryCounters;
+var i: integer;
     now: TDateTime;
 begin
-  if (fProcess=nil) or (fHistoryDepth=0) or not GetSystemTimes(ftidl,ftkrn,ftusr) then
+  if (fProcess=nil) or (fHistoryDepth=0) or not fProcessInfo.Start then
     exit;
   fTimer := Sender;
   now := NowUTC;
-  FileTimeToInt64(ftkrn,skrn);
-  FileTimeToInt64(ftusr,susr);
   fSafe.Enter;
   try
     inc(fDataIndex);
     if fDataIndex>=fHistoryDepth then
       fDataIndex := 0;
-    difftot := (skrn-fSysPrevKernel)+(susr-fSysPrevUser);
-    fSysPrevKernel := skrn;
-    fSysPrevUser := susr;
     for i := high(fProcess) downto 0 do // backwards for fProcesses.Delete(i)
-    with fProcess[i] do begin
-      hnd := OpenProcess(fOpenProcessFlags,false,ID);
-      if hnd<>0 then
-      try
-        if GetProcessTimes(hnd,ftp,fte,ftkrn,ftusr) then begin
-          FileTimeToInt64(ftkrn,pkrn);
-          FileTimeToInt64(ftusr,pusr);
-          if PrevKernel<>0 then begin
-            diffkrn := pkrn-PrevKernel;
-            diffusr := pusr-PrevUser;
-            FillcharFast(mem,SizeOf(mem),0);
-            mem.cb := SizeOf(mem);
-            GetProcessMemoryInfo(hnd,mem,SizeOf(mem));
-            with Data[fDataIndex] do begin
-              Timestamp := now;
-              if difftot>0 then begin
-                Kernel := diffkrn*100/difftot;
-                User := diffusr*100/difftot;
-              end else begin
-                Kernel := 0;
-                User := 0;
-              end;
-              WorkKB := mem.WorkingSetSize shr 10;
-              VirtualKB := mem.PagefileUsage shr 10;
-            end;
-            if Assigned(fOnMeasured) then
-              fOnMeasured(ID,Data[fDataIndex]);
-          end;
-          PrevKernel := pkrn;
-          PrevUser := pusr;
-        end;
-      finally
-        CloseHandle(hnd);
+      with fProcess[i] do
+      if fProcessInfo.PerProcess(ID,@now,Data[fDataIndex],PrevKernel,PrevUser) then begin
+        if Assigned(fOnMeasured) then
+          fOnMeasured(ID,Data[fDataIndex]);
       end else
-        if UnsubscribeProcessOnAccessError then
-          // if GetLastError=ERROR_INVALID_PARAMETER then
-          fProcesses.Delete(i);
-    end;
+      if UnsubscribeProcessOnAccessError then
+        // if GetLastError=ERROR_INVALID_PARAMETER then
+        fProcesses.Delete(i);
   finally
     fSafe.Leave;
   end;
 end;
-
-{$else}
-
-procedure TSystemUse.BackgroundExecute(Sender: TSynBackgroundTimer;
-  Event: TWaitResult; const Msg: RawUTF8);
-begin // not implemented yet (use /proc ?)
-end;
-
-{$endif MSWINDOWS}
 
 procedure TSystemUse.OnTimerExecute(Sender: TObject);
 begin
@@ -65007,9 +65148,6 @@ begin
   if not Assigned(GetSystemTimes) or not Assigned(GetProcessTimes) or
      not Assigned(GetProcessMemoryInfo) then
     exit; // no system monitoring API under oldest Windows
-  if OSVersion<wVista then
-    fOpenProcessFlags := PROCESS_QUERY_INFORMATION else
-    fOpenProcessFlags := PROCESS_QUERY_LIMITED_INFORMATION;
   {$else}
   exit; // not implemented yet
   {$endif}
@@ -65139,6 +65277,11 @@ end;
 function TSystemUse.PercentUser(aProcessID: integer): single;
 begin
   result := Data(aProcessID).User;
+end;
+
+function TSystemUse.PercentSystem(out Idle,Kernel,User: currency): boolean;
+begin
+  result := fProcessInfo.PerSystem(Idle,Kernel,User);
 end;
 
 function TSystemUse.HistoryData(aProcessID,aDepth: integer): TSystemUseDataDynArray;
