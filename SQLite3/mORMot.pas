@@ -25947,7 +25947,7 @@ begin
     result := false;
     exit;
   end;
-  while P^ in [#1..' '] do inc(P);
+  while (P^<=' ') and (P^<>#0) do inc(P);
   if (P[0] in ['x','X']) and (P[1]='''') then begin
     Len := (StrLen(P)-3) shr 1;
     result := (P[Len-1]='''') and SynCommons.HexToBin(@P[2],nil,Len);
@@ -26075,7 +26075,7 @@ end;
 
 procedure TSQLTable.GetJSONValues(W: TJSONWriter; RowFirst, RowLast, IDBinarySize: integer);
 var U: PPUTF8Char;
-    f,r: integer;
+    f,r: PtrInt;
     i64: Int64;
 label nostr,str;
 begin
@@ -28363,27 +28363,27 @@ begin
   result := Decoder.EncodeAsSQL(Update);
 end;
 
-function Expect(var P: PUTF8Char; const Value: RawUTF8): boolean;
+function Expect(var P: PUTF8Char; Value: PUTF8Char; ValueLen: PtrInt): boolean;
   {$ifdef HASINLINE}inline;{$endif}
-var L: integer;
-begin
+var i: PtrInt;
+begin // ValueLen is at least 8 bytes long
+  result := false;
   if P=nil then
-    result := false else begin
-    while P^ in [#1..' '] do inc(P);
-    if Value='' then
-      result := false else begin
-      L := length(Value);
-      result := CompareMemFixed(P,pointer(Value),L);
-      if result then
-        inc(P,L);
-    end;
+    exit;
+  while (P^<=' ') and (P^<>#0) do inc(P);
+  if PPtrInt(P)^=PPtrInt(Value)^ then begin
+    for i := SizeOf(PtrInt) to ValueLen - 1 do
+      if P[i]<>Value[i] then
+        exit;
+    inc(P,ValueLen);
+    result := true;
   end;
 end;
 
 function GetJSONIntegerVar(var P: PUTF8Char): PtrInt;
 var c: PtrUInt;
 begin
-  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+  while (P^<=' ') and (P^<>#0) do inc(P);
   c := byte(P^)-48;
   if c>9 then
     result := 0 else begin
@@ -28402,7 +28402,7 @@ end;
 function GetJSONInt64Var(var P: PUTF8Char): Int64;
 var c: PtrUInt;
 begin
-  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+  while (P^<=' ') and (P^<>#0) do inc(P);
   c := byte(P^)-48;
   if c>9 then
     result := 0 else begin
@@ -28419,9 +28419,9 @@ begin
 end;
 
 const
-  FIELDCOUNT_PATTERN: RawUTF8 = '{"fieldCount":';
-  ROWCOUNT_PATTERN: RawUTF8 = ',"rowCount":';
-  VALUES_PATTERN: RawUTF8 = ',"values":[';
+  FIELDCOUNT_PATTERN: PUTF8Char = '{"fieldCount":'; // 14 chars
+  ROWCOUNT_PATTERN: PUTF8Char =   ',"rowCount":';   // 12 chars
+  VALUES_PATTERN: PUTF8Char =     ',"values":[';    // 11 chars
 
 function UnJSONFirstField(var P: PUTF8Char): RawUTF8;
 // expand=true: [ {"col1":val11} ] -> val11
@@ -28429,7 +28429,7 @@ function UnJSONFirstField(var P: PUTF8Char): RawUTF8;
 begin
   result := '';
   if P=nil then exit;
-  if Expect(P,FIELDCOUNT_PATTERN) then begin
+  if Expect(P,FIELDCOUNT_PATTERN,14) then begin
     // not expanded format
     if GetJSONIntegerVar(P)<>1 then
       exit; // wrong field count
@@ -28446,7 +28446,7 @@ end;
 
 function IsNotAjaxJSON(P: PUTF8Char): Boolean;
 begin
-  result := Expect(P,FIELDCOUNT_PATTERN);
+  result := Expect(P,FIELDCOUNT_PATTERN,14);
 end;
 
 function NotExpandedBufferRowCountPos(P,PEnd: PUTF8Char): PUTF8Char;
@@ -28485,19 +28485,19 @@ function IsNotExpandedBuffer(var P: PUTF8Char; PEnd: PUTF8Char;
   end;
 var RowCountPos: PUTF8Char;
 begin
-  if not Expect(P,FIELDCOUNT_PATTERN) then begin
+  if not Expect(P,FIELDCOUNT_PATTERN,14) then begin
     result := false;
     exit;
   end;
   FieldCount := GetJSONIntegerVar(P);
-  if Expect(P,ROWCOUNT_PATTERN) then
+  if Expect(P,ROWCOUNT_PATTERN,12) then
     RowCount := GetJSONIntegerVar(P) else begin
     RowCountPos := NotExpandedBufferRowCountPos(P,PEnd);
     if RowCountPos=nil then
       RowCount := -1 else // mark "rowCount":.. not available
       RowCount := GetCardinal(RowCountPos);
   end;
-  result := (FieldCount<>0) and Expect(P,VALUES_PATTERN);
+  result := (FieldCount<>0) and Expect(P,VALUES_PATTERN,11);
   if result and (RowCount<0) then
     GetRowCountNotExpanded(P); // returns RowCount=-1 if P^ is invalid
 end;
@@ -28560,7 +28560,7 @@ begin
   result := '';
   if P=nil then
     exit;
-  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+  while (P^<=' ') and (P^<>#0) do inc(P);
   if P^<>'{' then
     exit;
   Beg := P;
@@ -29029,7 +29029,7 @@ function UTF8ContentType(P: PUTF8Char): TSQLFieldType;
 var c,len: integer;
 begin
   if P<>nil then begin
-    if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+    while (P^<=' ') and (P^<>#0) do inc(P);
     if (PInteger(P)^=NULL_LOW) and (P[4]=#0) then
        result := sftUnknown else
       // don't check for 'false' or 'true' here, since their UTF-8 value is 0/1
@@ -31982,14 +31982,14 @@ begin
     exit;
   while P^<>'{' do
     if P^=#0 then exit else inc(P);
-  if Expect(P,FIELDCOUNT_PATTERN) then begin
+  if Expect(P,FIELDCOUNT_PATTERN,14) then begin
     // not expanded format
     n := GetJSONIntegerVar(P)-1;
     if cardinal(n)>high(F) then
       exit;
-    if Expect(P,ROWCOUNT_PATTERN) then
+    if Expect(P,ROWCOUNT_PATTERN,12) then
       GetJSONIntegerVar(P); // just ignore "rowCount":.. here
-    if not Expect(P,VALUES_PATTERN) then
+    if not Expect(P,VALUES_PATTERN,11) then
       exit;
     for i := 0 to n do
       F[i] := GetJSONField(P,P);
@@ -51449,10 +51449,10 @@ begin
   result := '';
   if P=nil then
     exit;
-  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+  while (P^<=' ') and (P^<>#0) do inc(P);
   if P^<>'[' then
     exit;
-  repeat inc(P) until not(P^ in [#1..' ']);
+  repeat inc(P) until (P^>' ') or (P^=#0);
   W := TJSONSerializer.CreateOwnedStream(temp);
   try
     W.Add('{');
@@ -51468,7 +51468,7 @@ begin
         exit;
       W.AddNoJSONEscape(Start,P-Start);
       W.Add(',');
-      repeat inc(P) until not(P^ in [#1..' ']);
+      repeat inc(P) until (P^>' ') or (P^=#0);
     end;
     W.CancelLastComma;
     W.Add('}');
@@ -51478,7 +51478,7 @@ begin
   end;
   EndOfObject := P^;
   if P^<>#0 then
-    repeat inc(P) until not(P^ in [#1..' ']);
+    repeat inc(P) until (P^>' ') or (P^=#0);
 end;
 
 procedure TSQLRecordProperties.SaveBinaryHeader(W: TFileBufferWriter);
@@ -54686,7 +54686,7 @@ end;
 procedure IgnoreComma(var P: PUTF8Char);
 begin
   if P<>nil then begin
-    if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+    while (P^<=' ') and (P^<>#0) do inc(P);
     if P^=',' then inc(P);
   end;
 end;
