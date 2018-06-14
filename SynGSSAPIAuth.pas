@@ -116,23 +116,29 @@ procedure ClientForceSPN(const aSecKerberosSPN: RawUTF8);
 // environment variable)
 procedure ServerForceKeytab(const aKeytab: RawUTF8);
 
-/// Force returning untouched user name from ServerSSPIAuthUser
-// - to use same value for TSQLAuthUser.LogonName on all platforms user name
-// changed from 'username@MYDOMAIN.TLD' to 'MYDOMAIN\username'
-// - you can disable user name conversion by calling ServerForceNativeUserName(true)
-procedure ServerForceNativeUserName(const aNative: Boolean);
-
 const
   /// HTTP header to be set for authentication
   SECPKGNAMEHTTPWWWAUTHENTICATE = 'WWW-Authenticate: Negotiate';
   /// HTTP header pattern received for authentication
   SECPKGNAMEHTTPAUTHORIZATION = 'AUTHORIZATION: NEGOTIATE ';
 
+var
+  /// Dictionary for converting fully qualified domain names to NT4-style NetBIOS names
+  // - to use same value for TSQLAuthUser.LogonName on all platforms user name
+  // changed from 'username@MYDOMAIN.TLD' to 'MYDOMAIN\username'
+  // - when converting fully qualified domain name to NT4-style NetBIOS name
+  // ServerDomainMap first checked. If domain name not found, then it's truncated on first dot,
+  // e.g. 'user1@CORP.ABC.COM' changed to 'CORP\user1'
+  // - you can change domain name conversion by registering names at server startup, e.g.
+  // ServerDomainMap.Add('CORP.ABC.COM', 'ABCCORP') change conversion for previuos
+  // example to 'ABCCORP\user1'
+  // - use only if automatic conversion (truncate on first dot) do it wrong
+  ServerDomainMap: TSynNameValue;
+
 implementation
 
 var
   ForceSecKerberosSPN: RawUTF8;
-  ForceNativeUserName: Boolean;
 
 function ClientSSPIAuthWorker(var aSecContext: TSecContext;
     const aInData: RawByteString; const aSecKerberosSPN: RawUTF8;
@@ -256,18 +262,25 @@ end;
 
 procedure ConvertUserName(P: PUTF8Char; Len: PtrUInt; out aUserName: RawUTF8);
 var DomainStart, DomainEnd: PUTF8Char;
+    Index: Integer;
+    Domain: RawUTF8;
 begin
   // Assume GSSAPI buffer is null-terminated
   Assert(P[Len] = #0);
   // Change user name from 'username@MYDOMAIN.TLD' to 'MYDOMAIN\username'
   DomainStart := PosChar(P, '@');
-  DomainEnd := PosChar(DomainStart, '.');
   if DomainStart<>nil then begin
     DomainStart^ := #0;
     Inc(DomainStart);
-    if DomainEnd<>nil then
-      DomainEnd^ := #0;
-    aUserName := FormatUTF8('%\%', [DomainStart, P]);
+    Index := ServerDomainMap.Find(DomainStart);
+    if Index<0 then begin
+      DomainEnd := PosChar(DomainStart, '.');
+      if DomainEnd<>nil then
+        DomainEnd^ := #0;
+      Domain := DomainStart;
+    end else
+      Domain := ServerDomainMap.List[Index].Value;
+    aUserName := FormatUTF8('%\%', [Domain, P]);
   end else
     // Unknown user name format, leave as is
     SetString(aUserName, P, Len);
@@ -289,9 +302,7 @@ begin
     MajStatus := gss_display_name(MinStatus, SrcName, @OutBuf, @NameType);
     GSSCheck(MajStatus, MinStatus, 'Failed to obtain name for authenticated user');
     if gss_compare_oid(NameType, GSS_KRB5_NT_PRINCIPAL_NAME) then begin
-      if ForceNativeUserName then
-        SetString(aUserName, PAnsiChar(OutBuf.value), OutBuf.length) else
-        ConvertUserName(PUTF8Char(OutBuf.value), OutBuf.length, aUserName);
+      ConvertUserName(PUTF8Char(OutBuf.value), OutBuf.length, aUserName);
     end;
     gss_release_buffer(MinStatus, OutBuf);
   finally
@@ -328,9 +339,6 @@ begin
   end;
 end;
 
-procedure ServerForceNativeUserName(const aNative: Boolean);
-begin
-  ForceNativeUserName := aNative;
-end;
-
+initialization
+  ServerDomainMap.Init(False);
 end.
