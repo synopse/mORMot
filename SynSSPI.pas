@@ -114,6 +114,11 @@ type
   end;
   PSecBufferDesc = ^TSecBufferDesc;
 
+  /// store the name associated with the context
+  SecPkgContext_NamesW = record
+    sUserName: PWideChar;
+  end;
+  
   /// store information about a SSPI package
   TSecPkgInfoW = record
     fCapabilities: Cardinal;
@@ -179,6 +184,7 @@ const
   SECPKG_CRED_INBOUND  = $00000001;
   SECPKG_CRED_OUTBOUND = $00000002;
   SECPKG_ATTR_SIZES = 0;
+  SECPKG_ATTR_NAMES = 1;
   SECPKG_ATTR_STREAM_SIZES = 4;
   SECPKG_ATTR_NEGOTIATION_INFO = 12;
   SECURITY_NETWORK_DREP = 0;
@@ -572,6 +578,5 @@ begin
   FreeSecurityContext(fContext.CtxHandle);
   FreeCredentialsContext(fContext.CredHandle);
 end;
-
 
 end.
