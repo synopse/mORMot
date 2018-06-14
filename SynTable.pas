@@ -4540,6 +4540,7 @@ end;
 // faster alternative (without recursion) for only * ? (but not [...])
 
 function SearchNoRange(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+{$ifdef CPUX86}
 var
   c: AnsiChar;
   pat, txt: PtrInt; // use local registers
@@ -4585,6 +4586,54 @@ begin
   until false;
   result := true;
 end;
+{$else} // optimized for x86_64/ARM with more registers
+var
+  c: AnsiChar;
+  pat, patend, txtend, txtretry, patretry: PUTF8Char;
+begin
+  pat := pointer(aMatch.Pattern);
+  patend := pat + aMatch.PMax;
+  txtend := aText + aTextLen - 1;
+  txtretry := nil;
+  repeat
+    if pat <= patend then begin
+      c := pat^;
+      if c <> '*' then
+        if c <> '?' then begin
+          if (aText <= txtend) and (c = aText^) then begin
+            inc(pat);
+            inc(aText);
+            continue;
+          end;
+        end
+        else begin // '?'
+          if aText <= txtend then begin
+            inc(pat);
+            inc(aText);
+            continue;
+          end;
+        end
+        else begin // '*'
+          inc(pat);
+          txtretry := aText + 1;
+          patretry := pat;
+          continue;
+        end;
+    end
+    else if aText > txtend then
+      break;
+    if (PtrInt(txtretry)> 0) and (txtretry <= txtend + 1) then begin
+      aText := txtretry;
+      inc(txtretry);
+      pat := patretry;
+      continue;
+    end;
+    result := false;
+    exit;
+  until false;
+  result := true;
+end;
+{$endif}
 
 function SearchNoRangeU(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
 var
@@ -4929,7 +4978,7 @@ begin
   else begin
     len := length(aText);
     one := pointer(fMatch);
-    for i := 1 to fMatchCount do begin
+    for i := 0 to fMatchCount - 1 do begin
       if len <> 0 then begin
         local := one^.Parent;
         if local.Search(@local, pointer(aText), len) then begin
