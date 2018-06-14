@@ -329,38 +329,12 @@ begin
 end;
 
 procedure ServerSSPIAuthUser(var aSecContext: TSecContext; out aUserName: RawUTF8);
-var UserToken: THandle;
-    UserInfo: PSIDAndAttributes;
-    Size: Cardinal;
-    NameBuf: array[byte] of Char;
-    NameLen: Cardinal;
-    DomainBuf: array[byte] of Char;
-    DomainLen: Cardinal;
-    NameType: {$ifdef FPC}SID_NAME_USE{$else}Cardinal{$endif};
+var Names: SecPkgContext_NamesW;
 begin
-  if QuerySecurityContextToken(@aSecContext.CtxHandle, UserToken) <> 0 then
+  if QueryContextAttributesW(@aSecContext.CtxHandle, SECPKG_ATTR_NAMES, @Names) <> 0 then
     raise ESynSSPI.CreateLastOSError(aSecContext);
-  try
-    Size := 0;
-    GetTokenInformation(UserToken, TokenUser, nil, 0, Size);
-    UserInfo := AllocMem(Size);
-    try
-      if not GetTokenInformation(Cardinal(UserToken), Windows.TokenUser, UserInfo, Size, Size) then
-        raise ESynSSPI.CreateLastOSError(aSecContext);
-      FillCharFast(NameBuf[0], SizeOf(NameBuf), 0);
-      NameLen := SizeOf(NameBuf);
-      FillCharFast(DomainBuf[0], SizeOf(DomainBuf), 0);
-      DomainLen := SizeOf(DomainBuf);
-      if not LookupAccountSid(nil, UserInfo^.Sid, NameBuf, NameLen, DomainBuf, DomainLen, NameType) then
-        raise ESynSSPI.CreateLastOSError(aSecContext);
-      if NameType = SidTypeUser then
-        FormatUTF8('%\%', [DomainBuf, NameBuf], aUserName);
-    finally
-      FreeMem(UserInfo);
-    end;
-  finally
-    CloseHandle(UserToken);
-  end;
+  aUserName := RawUnicodeToUtf8(Names.sUserName, StrLenW(Names.sUserName));
+  FreeContextBuffer(Names.sUserName);
 end;
 
 function SecPackageName(var aSecContext: TSecContext): RawUTF8;
@@ -369,6 +343,7 @@ begin
   if QueryContextAttributesW(@aSecContext.CtxHandle, SECPKG_ATTR_NEGOTIATION_INFO, @NegotiationInfo) <> 0 then
     raise ESynSSPI.CreateLastOSError(aSecContext);
   Result := RawUnicodeToUtf8(NegotiationInfo.PackageInfo^.Name, StrLenW(NegotiationInfo.PackageInfo^.Name));
+  FreeContextBuffer(NegotiationInfo.PackageInfo);
 end;
 
 procedure ClientForceSPN(const aSecKerberosSPN: RawUTF8);
