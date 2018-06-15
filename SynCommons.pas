@@ -13947,6 +13947,8 @@ var
   OSVersionText: RawUTF8;
   /// some textual information about the current CPU
   CpuInfoText: RawUTF8;
+  /// some textual information about the current computer hardware, from BIOS
+  BiosInfoText: RawUTF8;
   /// the running Operating System information, encoded as a 32-bit integer
   OSVersion32: TOperatingSystemVersion;
   OSVersionInt32: integer absolute OSVersion32;
@@ -26612,7 +26614,7 @@ var
   Kernel, Psapi: THandle;
   P: pointer;
   Vers: TWindowsVersion;
-  cpu: string;
+  cpu, manuf, prod, prodver: string;
 begin
   Kernel := GetModuleHandle(kernel32);
   GetTickCount64 := GetProcAddress(Kernel,'GetTickCount64');
@@ -26684,6 +26686,18 @@ begin
       if cpu='' then
         cpu := ReadString('Identifier');
     end;
+    if OpenKeyReadOnly('\Hardware\Description\System\BIOS') then begin
+      manuf := SysUtils.Trim(ReadString('SystemManufacturer'));
+      if manuf<>'' then
+        manuf := manuf+' ';
+      prod := SysUtils.Trim(ReadString('SystemProductName'));
+      prodver := SysUtils.Trim(ReadString('SystemVersion'));
+      if prodver='' then
+        prodver := SysUtils.Trim(ReadString('BIOSVersion'));
+      if prodver<>'' then
+        FormatUTF8('%% %',[manuf,prod,prodver],BiosInfoText) else
+        FormatUTF8('%%',[manuf,prod],BiosInfoText);
+    end;
   finally
     Free;
   end;
@@ -26707,7 +26721,7 @@ end;
 {$else}
 
 {$ifdef BSD}
-function fpsysctlhw(hwid: cint): Int64;
+function fpsysctlhwint(hwid: cint): Int64;
 var mib: array[0..1] of cint;
     len: cint;
 begin
@@ -26717,16 +26731,28 @@ begin
   len := SizeOf(result);
   fpsysctl(pointer(@mib),2,@result,@len,nil,0);
 end;
+function fpsysctlhwstr(hwid: cint; var temp: shortstring): PUTF8Char;
+var mib: array[0..1] of cint;
+    len: cint;
+begin
+  mib[0] := CTL_HW;
+  mib[1] := hwid;
+  FillChar(temp,SizeOf(temp),0);
+  len := SizeOf(temp);
+  fpsysctl(pointer(@mib),2,@result,@len,nil,0);
+  if temp[0]<>#0 then
+    result := @temp else
+    result := nil;
+end;
 {$endif BSD}
 
 procedure RetrieveSystemInfo;
 var modname, beg: PUTF8Char;
     {$ifdef BSD}
-    mib: array[0..1] of cint;
-    model: array[byte] of AnsiChar;
-    len: cint;
+    temp: shortstring;
     {$else}
     cpuinfo: PUTF8Char;
+    prod,prodver: RawUTF8;
     {$endif BSD}
 begin
   modname := nil;
@@ -26734,20 +26760,22 @@ begin
   SystemInfo.dwPageSize := getpagesize; // use libc for this value
   {$ifdef BSD}
   fpuname(SystemInfo.uts);
-  SystemInfo.dwNumberOfProcessors := fpsysctlhw(HW_NCPU);
-  mib[0] := CTL_HW;
-  mib[1] := HW_MODEL;
-  FillChar(model,SizeOf(model),0);
-  len := SizeOf(model);
-  fpsysctl(pointer(@mib),2,@model,@len,nil,0);
-  if model[0]<>#0 then
-    modname := @model;
+  SystemInfo.dwNumberOfProcessors := fpsysctlhwint(HW_NCPU);
+  BiosInfoText := fpsysctlhwstr(HW_MACHINE,temp);
+  modname := fpsysctlhwstr(HW_MODEL,temp);
   {$else}
   {$ifdef KYLIX3}
   uname(SystemInfo.uts);
   {$else}
   fpuname(SystemInfo.uts);
   {$endif KYLIX3}
+  prod := Trim(StringFromFile('/sys/class/dmi/id/product_name',true));
+  if prod<>'' then begin
+    prodver := Trim(StringFromFile('/sys/class/dmi/id/product_version',true));
+    if prodver<>'' then
+      FormatUTF8('% %',[prod,prodver],BiosInfoText) else
+      BiosInfoText := prod;
+  end;
   SystemInfo.dwNumberOfProcessors := 0;
   cpuinfo := pointer(StringFromFile('/proc/cpuinfo',true));
   while cpuinfo<>nil do begin
@@ -38907,7 +38935,7 @@ begin
   with SystemInfo do
     result := JSONEncode([
       'host',ExeVersion.Host,'user',ExeVersion.User,'os',OSVersionText,
-      'cpu',CpuInfoText,
+      'cpu',CpuInfoText,'bios',BiosInfoText,
       {$ifdef MSWINDOWS}{$ifndef CPU64}'wow64',IsWow64,{$endif}{$endif MSWINDOWS}
       {$ifdef CPUINTEL}'cpufeatures', LowerCase(ToText(CpuFeatures, ' ')),{$endif}
       'processcpu',cpu,'processmem',mem,
@@ -57516,9 +57544,9 @@ begin
 {$else}
 {$ifdef BSD}
 begin
-  FPhysicalMemoryTotal.fBytes := fpsysctlhw(
+  FPhysicalMemoryTotal.fBytes := fpsysctlhwint(
     {$ifdef DARWIN}HW_MEMSIZE{$else}HW_PHYSMEM{$endif});
-  FPhysicalMemoryFree.fBytes := FPhysicalMemoryTotal.fBytes-fpsysctlhw(HW_USERMEM);
+  FPhysicalMemoryFree.fBytes := FPhysicalMemoryTotal.fBytes-fpsysctlhwint(HW_USERMEM);
   if FPhysicalMemoryTotal.fBytes<>0 then // avoid div per 0 exception
     FMemoryLoadPercent := ((FPhysicalMemoryTotal.fBytes-FPhysicalMemoryFree.fBytes)*100)div FPhysicalMemoryTotal.fBytes;
 {$else}
