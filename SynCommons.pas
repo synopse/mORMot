@@ -10712,17 +10712,21 @@ type
 
   /// safe decoding of a TFileBufferWriter content
   // - similar to TFileBufferReader, but faster and only for in-memory buffer
+  // - is also safer, since will check for reaching end of buffer
   // - raise a EFastReader exception on decoding error (e.g. if a buffer
-  // overflow may occur)
+  // overflow may occur) or call OnErrorOverflow/OnErrorData event handlers
   TFastReader = object
     /// the current position in the memory
     P: PAnsiChar;
     /// the last position in the buffer
     Last: PAnsiChar;
-    /// initialize the reader
+    /// use this event to customize the ErrorOverflow process
+    OnErrorOverflow: procedure of object;
+    /// use this event to customize the ErrorData process
+    OnErrorData: procedure(const fmt: RawUTF8; const args: array of const) of object;
+    /// initialize the reader from a memory block
     procedure Init(Buffer: pointer; Len: integer); overload;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// initialize the reader
+    /// initialize the reader from a RawByteString content
     procedure Init(const Buffer: RawByteString); overload;
     /// raise a EFastReader with an "overflow" error message
     procedure ErrorOverflow;
@@ -61575,22 +61579,27 @@ procedure TFastReader.Init(Buffer: pointer; Len: integer);
 begin
   P := Buffer;
   Last := P+Len;
+  OnErrorOverflow := nil;
+  OnErrorData := nil;
 end;
 
 procedure TFastReader.Init(const Buffer: RawByteString);
 begin
-  P := pointer(Buffer);
-  Last := P+length(Buffer);
+  Init(pointer(Buffer),length(Buffer));
 end;
 
 procedure TFastReader.ErrorOverflow;
 begin
-  raise EFastReader.Create('Potential Buffer Overflow');
+  if Assigned(OnErrorOverflow) then
+    OnErrorOverflow else
+    raise EFastReader.Create('Reached End of Input');
 end;
 
 procedure TFastReader.ErrorData(const fmt: RawUTF8; const args: array of const);
 begin
-  raise EFastReader.CreateUTF8('Incorrect Data: '+fmt,args);
+  if Assigned(OnErrorData) then
+    OnErrorData(fmt,args) else
+    raise EFastReader.CreateUTF8('Incorrect Data: '+fmt,args);
 end;
 
 function TFastReader.EOF: boolean;
