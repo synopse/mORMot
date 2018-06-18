@@ -249,6 +249,11 @@ type
   end;
   {$M-}
 
+  /// an exception which wouldn't be logged and intercepted by this unit
+  // - only this exact class will be recognized by TSynLog: inheriting it
+  // will trigger the interception, as any other regular exception
+  ESynLogSilent = class(ESynException);
+
   {$M+} { we need the RTTI for the published methods of the logging classes }
 
   TSynLog = class;
@@ -522,6 +527,7 @@ type
     /// you can add some exceptions to be ignored to this list
     // - for instance, EConvertError may be added to the list, as such:
     // ! TSQLLog.Family.ExceptionIgnore.Add(EConvertError);
+    // - you may also trigger ESynLogSilent exceptions for silent process
     property ExceptionIgnore: TList read fExceptionIgnore;
     /// event called to archive the .log content after a defined delay
     // - Destroy will parse DestinationPath folder for *.log files matching
@@ -2511,7 +2517,8 @@ begin
     SynLog := GetHandleExceptionSynLog;
   if (SynLog=nil) or not (Ctxt.ELevel in SynLog.fFamily.Level) then
     exit;
-  if SynLog.fFamily.ExceptionIgnore.IndexOf(Ctxt.EClass)>=0 then
+  if (Ctxt.EClass=ESynLogSilent) or
+     (SynLog.fFamily.ExceptionIgnore.IndexOf(Ctxt.EClass)>=0) then
     exit;
   if SynLog.LogHeaderLock(Ctxt.ELevel,false) then
   try
