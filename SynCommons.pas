@@ -5167,6 +5167,8 @@ type
     jsonCompact, jsonHumanReadable,
     jsonUnquotedPropName, jsonUnquotedPropNameCompact);
 
+  TDynArrayObjArray = (oaUnknown, oaFalse, oaTrue);
+
   /// a wrapper around a dynamic array with one dimension
   // - provide TList-like methods using fast RTTI information
   // - can be used to fast save/retrieve all memory content to a TStream
@@ -5198,7 +5200,7 @@ type
     fParser: integer; // index to GlobalJSONCustomParsers.fParsers[]
     fSorted: boolean;
     fKnownType: TDynArrayKind;
-    fIsObjArray: (oaUnknown, oaTrue, oaFalse);
+    fIsObjArray: TDynArrayObjArray;
     function GetCount: integer; {$ifdef HASINLINE}inline;{$endif}
     procedure SetCount(aCount: integer);
     function GetCapacity: integer;
@@ -5208,6 +5210,7 @@ type
       aCompare: TDynArraySortCompare): PtrInt;
     function GetArrayTypeName: RawUTF8;
     function GetIsObjArray: boolean; {$ifdef HASINLINE}inline;{$endif}
+    function ComputeIsObjArray: boolean;
     procedure SetIsObjArray(aValue: boolean); {$ifdef HASINLINE}inline;{$endif}
     /// will set fKnownType and fKnownOffset/fKnownSize fields
     function ToKnownType(exactType: boolean=false): TDynArrayKind;
@@ -5272,14 +5275,14 @@ type
     // - note that because of dynamic array internal memory managment, adding
     // may reallocate the list every time a record is added, unless an external
     // count variable has been specified in Init(...,@Count) method
-    function Add(const Elem): integer;
+    function Add(const Elem): PtrInt;
     /// add an element to the dynamic array
     // - this version add a void element to the array, and returns its index
     function New: integer;
     /// add an element to the dynamic array at the position specified by Index
     // - warning: Elem must be of the same exact type than the dynamic array,
     // and must be a reference to a variable (you can't write Insert(10,i+10) e.g.)
-    procedure Insert(Index: Integer; const Elem);
+    procedure Insert(Index: PtrInt; const Elem);
     /// get and remove the last element stored in the dynamic array
     // - Add + Pop/Peek will implement a LIFO (Last-In-First-Out) stack
     // - warning: Elem must be of the same exact type than the dynamic array
@@ -5304,7 +5307,7 @@ type
     /// delete one item inside the dynamic array
     // - the deleted element is finalized if necessary
     // - this method will recognize T*ObjArray types and free all instances
-    procedure Delete(aIndex: Integer);
+    procedure Delete(aIndex: PtrInt);
     /// search for an element value inside the dynamic array
     // - return the index found (0..Count-1), or -1 if Elem was not found
     // - will search for all properties content of the eLement: TList.IndexOf()
@@ -5609,18 +5612,18 @@ type
     // better use direct access to its wrapped variable, and not using this
     // slower and more error prone method (such pointer access lacks of strong
     // typing abilities), which was designed for TDynArray internal use
-    function ElemPtr(index: integer): pointer;
+    function ElemPtr(index: PtrInt): pointer;
+      {$ifdef HASINLINE}inline;{$endif}
     /// will copy one element content from its index into another variable
     // - do nothing if index is out of range
-    procedure ElemCopyAt(index: integer; var Dest);
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure ElemCopyAt(index: PtrInt; var Dest);
     /// will move one element content from its index into another variable
     // - will erase the internal item ater copy
     // - do nothing if index is out of range
-    procedure ElemMoveTo(index: integer; var Dest);
+    procedure ElemMoveTo(index: PtrInt; var Dest);
     /// will copy one variable content into an indexed element
     // - do nothing if index is out of range
-    procedure ElemCopyFrom(const Source; index: integer);
+    procedure ElemCopyFrom(const Source; index: PtrInt);
       {$ifdef HASINLINE}inline;{$endif}
     /// compare the content of two elements, returning TRUE if both values equal
     // - this method compares first using any supplied Compare property,
@@ -5784,7 +5787,7 @@ type
   TDynArrayHashed = record
   // pseudo inheritance for most used methods
   private
-    procedure SetCount(aCount: Integer);        inline;
+    procedure SetCount(aCount: integer);        inline;
     procedure SetCapacity(aCapacity: Integer);  inline;
     function GetCapacity: Integer;              inline;
   public
@@ -5798,7 +5801,7 @@ type
     procedure ElemCopy(const A; var B); inline;
     // warning: you shall call ReHash() after manual Add/Delete
     function Add(const Elem): integer;  inline;
-    procedure Delete(aIndex: Integer);  inline;
+    procedure Delete(aIndex: PtrInt);  inline;
     function SaveTo: RawByteString; overload; inline;
     function SaveTo(Dest: PAnsiChar): PAnsiChar; overload; inline;
     function SaveToJSON(EnumSetsAsText: boolean=false): RawUTF8; inline;
@@ -5834,7 +5837,7 @@ type
     // - if not found, returns -(indexofvoidfHashs[]+1)
     // - you should NOT use this method, but rather high-level FindHashed*()
     function HashFindAndCompare(aHashCode: cardinal; const Elem): integer;
-    function GetHashFromIndex(aIndex: Integer): Cardinal;
+    function GetHashFromIndex(aIndex: PtrInt): Cardinal;
     procedure HashInvalidate;
     procedure RaiseFatalCollision(const caller: RawUTF8; aHashCode: cardinal);
   public
@@ -5957,7 +5960,7 @@ type
     // - returns -1 if not found, or the index in the dynamic array if found
     function Scan(const Elem): integer;
     /// retrieve the hash value of a given item, from its index
-    property Hash[aIndex: Integer]: Cardinal read GetHashFromIndex;
+    property Hash[aIndex: PtrInt]: Cardinal read GetHashFromIndex;
     /// alternative event-oriented Compare function to be used for Sort and Find
     // - will be used instead of Compare, to allow object-oriented callbacks
     property EventCompare: TEventDynArraySortCompare read fEventCompare write fEventCompare;
@@ -10028,13 +10031,13 @@ type
     // - if you want to access the value, you should use fSafe.Lock/Unlock:
     // consider using Exists or FindAndCopy thread-safe methods instead
     // - aUpdateTimeOut will update the associated timeout value of the entry
-    function FindValue(const aKey; aUpdateTimeOut: boolean=false): pointer;
+    function FindValue(const aKey; aUpdateTimeOut: boolean=false; aIndex: PInteger=nil): pointer;
     /// search of a primary key within the internal hashed dictionary
     // - returns a pointer to the matching or already existing item
     // - if you want to access the value, you should use fSafe.Lock/Unlock:
     // consider using Exists or FindAndCopy thread-safe methods instead
     // - will update the associated timeout value of the entry, if applying
-    function FindValueOrAdd(const aKey; var added: boolean): pointer;
+    function FindValueOrAdd(const aKey; var added: boolean; aIndex: PInteger=nil): pointer;
     /// search of a stored value by its primary key, and return a local copy
     // - so this method is thread-safe
     // - returns TRUE if aKey was found, FALSE if no match exists
@@ -10171,7 +10174,7 @@ type
     fCount, fFirst, fLast: integer;
     procedure InternalGrow;
   public
-    /// initialize the queue storage, specifyng dynamic array values
+    /// initialize the queue storage
     // - aTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
     // would store the values within this TSynQueue instance
     constructor Create(aTypeInfo: pointer); reintroduce; virtual;
@@ -11507,11 +11510,23 @@ function StrCurr64(P: PAnsiChar; const Value: Int64): PAnsiChar;
 // temporary floating-point conversion
 function TruncTo2Digits(Value: Currency): Currency;
 
+/// truncate a Currency value, stored as Int64, to only 2 digits
+// - implementation will use fast Int64 math to avoid any precision loss due to
+// temporary floating-point conversion
+procedure TruncTo2DigitsCurr64(var Value: Int64);
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// simple, no banker rounding of a Currency value to only 2 digits
 // - #.##51 will round to #.##+0.01 and #.##50 will be truncated to #.##
 // - implementation will use fast Int64 math to avoid any precision loss due to
 // temporary floating-point conversion
 function SimpleRoundTo2Digits(Value: Currency): Currency;
+
+/// simple, no banker rounding of a Currency value, stored as Int64, to only 2 digits
+// - #.##51 will round to #.##+0.01 and #.##50 will be truncated to #.##
+// - implementation will use fast Int64 math to avoid any precision loss due to
+// temporary floating-point conversion
+procedure SimpleRoundTo2DigitsCurr64(var Value: Int64);
 
 var
   /// a conversion table from hexa chars into binary data
@@ -37930,26 +37945,33 @@ end;
 
 function TruncTo2Digits(Value: Currency): Currency;
 var V64: Int64 absolute Value; // to avoid any floating-point precision issues
-    Spare: integer;
 begin
-  Spare := V64 mod 100;
-  if Spare<>0 then
-    dec(V64,Spare);
+  dec(V64,V64 mod 100);
   result := Value;
+end;
+
+procedure TruncTo2DigitsCurr64(var Value: Int64);
+begin
+  dec(Value,Value mod 100);
 end;
 
 function SimpleRoundTo2Digits(Value: Currency): Currency;
 var V64: Int64 absolute Value; // to avoid any floating-point precision issues
-    Spare: integer;
 begin
-  Spare := V64 mod 100;
+  SimpleRoundTo2DigitsCurr64(V64);
+  result := Value;
+end;
+
+procedure SimpleRoundTo2DigitsCurr64(var Value: Int64);
+var Spare: PtrInt;
+begin
+  Spare := Value mod 100;
   if Spare<>0 then
     if Spare>50 then
-      inc(V64,100-Spare) else
+      inc(Value,100-Spare) else
     if Spare<-50 then
-      dec(V64,100+Spare) else
-      dec(V64,Spare);
-  result := Value;
+      dec(Value,100+Spare) else
+      dec(Value,Spare);
 end;
 
 function TrimLeftLowerCase(const V: RawUTF8): PUTF8Char;
@@ -48124,9 +48146,34 @@ end;
 
 { TDynArray }
 
-function TDynArray.Add(const Elem): integer;
+function TDynArray.GetCount: integer;
+var v: PtrUInt;
 begin
-  result := Count;
+  v := PtrUInt(fCountP);
+  if v<>0 then begin
+    result := PInteger(v)^;
+    exit;
+  end else begin
+    v := PtrUInt(fValue);
+    if v<>0 then begin
+      v := PPtrUInt(v)^;
+      if v<>0 then begin
+        {$ifdef FPC}
+        result := PDynArrayRec(v-SizeOf(TDynArrayRec))^.high+1;
+        {$else}
+        result := PInteger(v-SizeOf(PtrInt))^;
+        {$endif}
+        exit;
+      end;
+    end;
+    result := 0; // avoid GPF if void
+    exit;
+  end;
+end;
+
+function TDynArray.Add(const Elem): PtrInt;
+begin
+  result := GetCount;
   if fValue=nil then
     exit; // avoid GPF if void
   SetCount(result+1);
@@ -48135,16 +48182,16 @@ end;
 
 function TDynArray.New: integer;
 begin
-  result := Count;
+  result := GetCount;
   if fValue=nil then
     exit; // avoid GPF if void
   SetCount(result+1);
 end;
 
 function TDynArray.Peek(var Dest): boolean;
-var index: integer;
+var index: PtrInt;
 begin
-  index := Count-1;
+  index := GetCount-1;
   result := index>=0;
   if result then
     ElemCopy(pointer(PtrUInt(fValue^)+PtrUInt(index)*ElemSize)^,Dest);
@@ -48153,25 +48200,25 @@ end;
 function TDynArray.Pop(var Dest): boolean;
 var index: integer;
 begin
-  index := Count-1;
+  index := GetCount-1;
   result := index>=0;
   if result then begin
     ElemMoveTo(index,Dest);
-    Count := index;
+    SetCount(index);
   end;
 end;
 
-procedure TDynArray.Insert(Index: Integer; const Elem);
-var n: integer;
+procedure TDynArray.Insert(Index: PtrInt; const Elem);
+var n: PtrInt;
     P: PByteArray;
 begin
   if fValue=nil then
     exit; // avoid GPF if void
-  n := Count;
+  n := GetCount;
   SetCount(n+1);
-  if cardinal(Index)<cardinal(n) then begin
+  if PtrUInt(Index)<PtrUInt(n) then begin
     P := pointer(PtrUInt(fValue^)+PtrUInt(Index)*ElemSize);
-    MoveFast(P[0],P[ElemSize],cardinal(n-Index)*ElemSize);
+    MoveFast(P[0],P[ElemSize],PtrUInt(n-Index)*ElemSize);
     if ElemType<>nil then
       FillcharFast(P^,ElemSize,0); // avoid GPF in ElemCopy() below
   end else
@@ -48195,15 +48242,24 @@ begin
   end;
 end;
 
-procedure TDynArray.Delete(aIndex: Integer);
-var n, len: integer;
+function TDynArray.GetIsObjArray: boolean;
+var o: TDynArrayObjArray; // oaUnknown, oaFalse, oaTrue
+begin
+  o := fIsObjArray; // oaUnknown, oaFalse, oaTrue
+  if o=oaUnknown then
+    result := ComputeIsObjArray else
+    result := o<>oaFalse;
+end;
+
+procedure TDynArray.Delete(aIndex: PtrInt);
+var n, len: PtrInt;
     P: PAnsiChar;
     zerolast: boolean;
 begin
   if fValue=nil then
     exit; // avoid GPF if void
-  n := Count;
-  if cardinal(aIndex)>=cardinal(n) then
+  n := GetCount;
+  if PtrUInt(aIndex)>=PtrUInt(n) then
     exit; // out of range
   dec(n);
   P := pointer(PtrUInt(fValue^)+PtrUInt(aIndex)*ElemSize);
@@ -48211,13 +48267,13 @@ begin
     {$ifdef FPC}FPCFinalize{$else}_Finalize{$endif}(P,ElemType);
     zerolast := true;
   end else
-    if GetIsObjArray then begin
+    if (fIsObjArray=oaTrue) or ((fIsObjArray=oaUnknown) and ComputeIsObjArray) then begin
       FreeAndNil(PObject(P)^);
       zerolast := true;
     end else
     zerolast := false;
   if n>aIndex then begin
-    len := cardinal(n-aIndex)*ElemSize;
+    len := PtrUInt(n-aIndex)*ElemSize;
     MoveFast(P[ElemSize],P[0],len);
     if zerolast then // avoid GPF
       FillcharFast(P[len],ElemSize,0);
@@ -48225,68 +48281,56 @@ begin
   SetCount(n);
 end;
 
-function TDynArray.ElemPtr(index: integer): pointer;
-begin
-  result := nil;
-  if (fValue=nil) or (fValue^=nil) then
+function TDynArray.ElemPtr(index: PtrInt): pointer;
+label ok, no;
+var c: PtrUInt;
+begin // very efficient code on FPC and modern Delphi
+  result := pointer(fValue);
+  if result=nil then
     exit;
-  if fCountP<>nil then begin // inlined cardinal(aIndex)>=cardinal(GetCount)
-    if cardinal(index)>=PCardinal(fCountP)^ then
-      exit;
+  result := PPointer(result)^;
+  if result=nil then
+    exit;
+  c := PtrUInt(fCountP);
+  if c<>0 then begin
+    if PtrUInt(index)<PCardinal(c)^ then
+ok:   inc(PByte(result),PtrUInt(index)*ElemSize) else
+no:   result := nil
   end else
     {$ifdef FPC}
-    if cardinal(index)>cardinal(PDynArrayRec(PtrUInt(fValue^)-SizeOf(TDynArrayRec))^.high) then
+    if PtrUInt(index)>PtrUInt(PDynArrayRec(PtrUInt(result)-SizeOf(TDynArrayRec))^.high) then
     {$else}
-    if cardinal(index)>=PCardinal(PtrUInt(fValue^)-SizeOf(PtrInt))^ then
+    if cardinal(index)>=PCardinal(PtrUInt(result)-SizeOf(PtrInt))^ then
     {$endif}
-      exit;
-  result := pointer(PtrUInt(fValue^)+PtrUInt(index)*ElemSize);
+      goto no else
+      goto ok;
 end;
 
-procedure TDynArray.ElemCopyAt(index: integer; var Dest);
+procedure TDynArray.ElemCopyAt(index: PtrInt; var Dest);
+var p: pointer;
 begin
-  if cardinal(index)<cardinal(GetCount) then
-    ElemCopy(pointer(PtrUInt(fValue^)+PtrUInt(index)*ElemSize)^,Dest);
+  p := ElemPtr(index);
+  if p<>nil then
+    ElemCopy(p^,Dest);
 end;
 
-procedure TDynArray.ElemMoveTo(index: integer; var Dest);
-var P: pointer;
+procedure TDynArray.ElemMoveTo(index: PtrInt; var Dest);
+var p: pointer;
 begin
-  P := ElemPtr(index);
-  if (P=nil) or (@Dest=nil) then
+  p := ElemPtr(index);
+  if (p=nil) or (@Dest=nil) then
     exit;
   ElemClear(Dest);
-  MoveFast(P^,Dest,ElemSize);
-  FillCharFast(P^,ElemSize,0); // ElemType=nil for ObjArray
+  MoveFast(p^,Dest,ElemSize);
+  FillCharFast(p^,ElemSize,0); // ElemType=nil for ObjArray
 end;
 
-procedure TDynArray.ElemCopyFrom(const Source; index: integer);
+procedure TDynArray.ElemCopyFrom(const Source; index: PtrInt);
+var p: pointer;
 begin
-  if cardinal(index)<cardinal(GetCount) then
-    ElemCopy(Source,pointer(PtrUInt(fValue^)+PtrUInt(index)*ElemSize)^);
-end;
-
-function TDynArray.GetCount: integer;
-begin
-  if fValue<>nil then
-    if fCountP=nil then
-      if PtrUInt(fValue^)<>0 then begin
-        {$ifdef FPC}
-        result := PDynArrayRec(PtrUInt(fValue^)-SizeOf(TDynArrayRec))^.high+1;
-        {$else}
-        result := PInteger(PtrUInt(fValue^)-SizeOf(PtrInt))^;
-        {$endif}
-        exit;
-      end else begin
-        result := 0;
-        exit;
-      end else begin
-      result := fCountP^;
-      exit;
-    end else begin
-    result := 0; // avoid GPF if void
-    exit;
-  end;
+  p := ElemPtr(index);
+  if p<>nil then
+    ElemCopy(Source,p^);
 end;
 
 procedure TDynArray.Reverse;
@@ -48295,7 +48339,7 @@ var siz, n, tmp: integer;
     c: AnsiChar;
     i64: Int64;
 begin
-  n := Count-1;
+  n := GetCount-1;
   if n>0 then begin
     siz := ElemSize;
     P1 := fValue^;
@@ -48411,7 +48455,7 @@ begin
     {$endif}
   inc(Dest);
   // then store dynamic array count
-  n := Count;
+  n := GetCount;
   Dest := PAnsiChar(ToVarUInt32(n,pointer(Dest)));
   if n=0 then begin
     result := Dest;
@@ -48458,7 +48502,7 @@ begin
     result := 0;
     exit; // avoid GPF if void
   end;
-  n := Count;
+  n := GetCount;
   result := ToVarUInt32Length(ElemSize)+ToVarUInt32Length(n)+1;
   if n=0 then
     exit;
@@ -49024,7 +49068,7 @@ var n, L: PtrInt;
     cmp: integer;
     P: PAnsiChar;
 begin
-  n := Count;
+  n := GetCount;
   if (@aCompare<>nil) and (n>0) then begin
     dec(n);
     P := fValue^;
@@ -49099,7 +49143,7 @@ var n, L: PtrInt;
     cmp: integer;
     P: PAnsiChar;
 begin
-  n := Count;
+  n := GetCount;
   if (@fCompare<>nil) and (n>0) then begin
     dec(n);
     P := fValue^;
@@ -49148,7 +49192,7 @@ begin
   P := fValue^;
   while (FirstIndex>0) and (fCompare(P[cardinal(FirstIndex-1)*ElemSize],Elem)=0) do
     dec(FirstIndex);
-  last := Count-1;
+  last := GetCount-1;
   LastIndex := found;
   while (LastIndex<last) and (fCompare(P[cardinal(LastIndex+1)*ElemSize],Elem)=0) do
     inc(LastIndex);
@@ -49159,7 +49203,7 @@ var n, i, cmp: integer;
     P: PAnsiChar;
 begin
   result := False;
-  n := Count;
+  n := GetCount;
   if @fCompare<>nil then
     if n=0 then // a void array is always sorted
       Index := 0 else
@@ -49350,7 +49394,7 @@ begin
     Quicksort.Compare := @fCompare else
     Quicksort.Compare := aCompare;
   if (@QuickSort.Compare<>nil) and (fValue<>nil) and (fValue^<>nil) then begin
-    n := Count;
+    n := GetCount;
     if length(aIndex)<n then begin
       SetLength(aIndex,n);
       FillIncreasing(pointer(aIndex),0,n);
@@ -49371,7 +49415,7 @@ begin
     Quicksort.Compare := @fCompare else
     Quicksort.Compare := aCompare;
   if (@QuickSort.Compare<>nil) and (fValue<>nil) and (fValue^<>nil) then begin
-    n := Count;
+    n := GetCount;
     Quicksort.Value := fValue^;
     Quicksort.ElemSize := ElemSize;
     Quicksort.Index := PCardinalArray(aIndex.InitIncreasing(n));
@@ -49384,7 +49428,7 @@ procedure TDynArray.CreateOrderedIndexAfterAdd(var aIndex: TIntegerDynArray;
   aCompare: TDynArraySortCompare);
 var ndx: integer;
 begin
-  ndx := Count-1;
+  ndx := GetCount-1;
   if ndx<0 then
     exit;
   if aIndex<>nil then begin // whole FillIncreasing(aIndex[]) for first time
@@ -49420,7 +49464,8 @@ begin
   fCountP := nil;
 end;
 
-procedure TDynArray.AddDynArray(const aSource: TDynArray; aStartIndex,aCount: integer);
+procedure TDynArray.AddDynArray(const aSource: TDynArray; aStartIndex: integer;
+  aCount: integer);
 var SourceCount: integer;
 begin
   if (aSource.fValue<>nil) and (ArrayType=aSource.ArrayType) then begin
@@ -49447,7 +49492,7 @@ begin
   result := false;
   if ArrayType<>B.ArrayType then
     exit; // array types should match exactly
-  n := Count;
+  n := GetCount;
   if n<>B.Count then
     exit;
   if GetIsObjArray then begin
@@ -49541,7 +49586,7 @@ begin
     result := -1;
     exit; // avoid GPF if void
   end;
-  max := Count-1;
+  max := GetCount-1;
   P := fValue^;
   if @Elem<>nil then
   if ElemType=nil then
@@ -49671,14 +49716,13 @@ begin
   result := fValue=nil;
 end;
 
-function TDynArray.GetIsObjArray: boolean;
+function TDynArray.ComputeIsObjArray: boolean;
 begin
-  if fIsObjArray=oaUnknown then
-    if (fElemSize=SizeOf(pointer)) and (fElemType=nil) and
-       Assigned(DynArrayIsObjArray) and (DynArrayIsObjArray(fTypeInfo)<>nil) then
-      fIsObjArray := oaTrue else
-      fIsObjArray := oaFalse;
-  result := fIsObjArray=oaTrue;
+  result := (fElemSize=SizeOf(pointer)) and (fElemType=nil) and
+     Assigned(DynArrayIsObjArray) and (DynArrayIsObjArray(fTypeInfo)<>nil);
+  if result then
+    fIsObjArray := oaTrue else
+    fIsObjArray := oaFalse;
 end;
 
 procedure TDynArray.SetIsObjArray(aValue: boolean);
@@ -49703,7 +49747,7 @@ begin // this method is faster than default System.DynArraySetLength() function
       exit;
     end;
     {$endif}
-    if GetIsObjArray then
+    if IsObjArray then
       ObjArrayClear(fValue^);
     {$ifdef FPC}FPCDynArrayClear{$else}_DynArrayClear{$endif}(fValue^,ArrayType);
     exit;
@@ -49767,36 +49811,41 @@ end;
 
 procedure TDynArray.SetCount(aCount: integer);
 const MINIMUM_SIZE = 64;
-var capa, delta: integer;
+var c, v, capa, delta: PtrInt;
 begin
+  v := PtrInt(fValue);
+  c := PtrInt(fCountP);
   fSorted := false;
-  if fValue=nil then
+  if v=0 then
     exit; // avoid GPF if void
-  if fCountP<>nil then begin // handle external capacity with separated Count
-    delta := aCount-fCountP^;
+  if c<>0 then begin // handle external capacity with separated Count
+    delta := aCount-PInteger(c)^;
     if delta=0 then
       exit;
-    fCountP^ := aCount; // store new length
-    if PtrUInt(fValue^)=0 then begin
+    PInteger(c)^ := aCount; // store new length
+    v := PPtrInt(v)^;
+    if v=0 then begin
       // no capa yet
       if (delta>0) and (aCount<MINIMUM_SIZE) then
         aCount := MINIMUM_SIZE; // reserve some minimal (64) items for Add()
     end else begin
       {$ifdef FPC}
-      capa := PDynArrayRec(PtrUInt(fValue^)-SizeOf(TDynArrayRec))^.high+1;
+      capa := PDynArrayRec(v-SizeOf(TDynArrayRec))^.high+1;
       {$else}
-      capa := PInteger(PtrInt(fValue^)-SizeOf(PtrInt))^;
+      capa := PInteger(v-SizeOf(PtrInt))^;
       {$endif}
       if delta>0 then begin
         // size-up -> grow by chunks
-        if capa>=fCountP^ then
+        c := PInteger(c)^;
+        if capa>=c then
           exit; // no need to grow
         inc(capa,capa shr 2); // growth factor = 1.5
-        if capa<fCountP^ then
-          aCount := fCountP^ else
+        if capa<c then
+          aCount := c else
           aCount := capa;
-      end else
-      if (aCount>0) and not GetIsObjArray then // SetCount(0) from TDynArray.Clear
+      end else  // SetCount(0) from TDynArray.Clear
+      if (aCount>0) and ((fIsObjArray=oaFalse) or
+         ((fIsObjArray=oaUnknown) and not ComputeIsObjArray)) then
         // size-down -> only if worth it (for faster Delete)
         if (capa<=MINIMUM_SIZE) or (capa-aCount<capa shr 3) then
           exit;
@@ -49838,7 +49887,7 @@ var n: Cardinal;
 begin
   if fValue=nil then
     exit; // avoid GPF if void
-  n := Count;
+  n := GetCount;
   if aFirstIndex>=n then
     aCount := 0 else
   if aCount>=n-aFirstIndex then
@@ -49853,7 +49902,8 @@ begin
   end;
 end;
 
-procedure TDynArray.AddArray(const DynArrayVar; aStartIndex,aCount: integer);
+procedure TDynArray.AddArray(const DynArrayVar; aStartIndex: integer;
+  aCount: integer);
 var DynArrayCount, n: integer;
     PS,PD: pointer;
 begin
@@ -49866,7 +49916,7 @@ begin
     aCount := DynArrayCount-aStartIndex;
   if aCount<=0 then
     exit;
-  n := Count;
+  n := GetCount;
   SetCount(n+aCount);
   PS := pointer(PtrUInt(DynArrayVar)+cardinal(aStartIndex)*ElemSize);
   PD := pointer(PtrUInt(fValue^)+cardinal(n)*ElemSize);
@@ -49881,7 +49931,7 @@ begin
     exit; // avoid GPF
   if ElemType<>nil then
     {$ifdef FPC}FPCFinalize{$else}_Finalize{$endif}(@Elem,ElemType) else
-    if GetIsObjArray then
+    if (fIsObjArray=oaTrue) or ((fIsObjArray=oaUnknown) and ComputeIsObjArray) then
       TObject(Elem).Free;
   FillcharFast(Elem,ElemSize,0); // always fill with zero binary content
 end;
@@ -49983,12 +50033,12 @@ const
 
 function TDynArrayHashed.Count: Integer;
 begin
-  result := InternalDynArray.Count;
+  result := InternalDynArray.GetCount;
 end;
 
-procedure TDynArrayHashed.SetCount(aCount: Integer);
+procedure TDynArrayHashed.SetCount(aCount: integer);
 begin
-  InternalDynArray.Count := aCount;
+  InternalDynArray.SetCount(aCount);
 end;
 
 function TDynArrayHashed.GetCapacity: Integer;
@@ -50036,7 +50086,7 @@ begin
   result := InternalDynArray.Add(Elem);
 end;
 
-procedure TDynArrayHashed.Delete(aIndex: Integer);
+procedure TDynArrayHashed.Delete(aIndex: PtrInt);
 begin
   InternalDynArray.Delete(aIndex);
 end;
@@ -50079,7 +50129,7 @@ var P: PAnsiChar;
 begin
   if Assigned(fEventCompare) then begin
     P := Value^; // Count<fHashCountTrigger -> O(n) is faster than O(1)
-    n := Count;
+    n := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}GetCount;
     for result := 0 to n-1 do
       if fEventCompare(P^,Elem)=0 then
         exit else
@@ -50114,7 +50164,7 @@ end;
 procedure TDynArrayHashed.HashAdd(const Elem; aHashCode: Cardinal; var result: integer);
 var n,cap: integer;
 begin
-  n := Count;
+  n := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}GetCount;
   SetCount(n+1); // reserve space for a void element in array
   cap := Capacity;
   if cap*2-cap shr 3>=fHashsCount then
@@ -50139,7 +50189,7 @@ function TDynArrayHashed.FindHashedForAdding(const Elem; out wasAdded: boolean;
   aHashCode: cardinal): integer;
 var n: integer;
 begin
-  n := Count;
+  n := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}GetCount;
   if n<fHashCountTrigger then begin
     if Assigned(fEventCompare) then
       result := Scan(Elem) else
@@ -50601,7 +50651,7 @@ begin
     PShortString(@PTypeInfo(ArrayType).NameLen)^,ToText(fKnownType)^]);
 end;
 
-function TDynArrayHashed.GetHashFromIndex(aIndex: Integer): Cardinal;
+function TDynArrayHashed.GetHashFromIndex(aIndex: PtrInt): Cardinal;
 var P: pointer;
 begin
   if (cardinal(aIndex)>=cardinal(Count)) or
@@ -50609,7 +50659,7 @@ begin
     result := 0 else begin
     // it's faster to rehash than to loop in fHashs[].Index values
     // and it will also work with Count<fHashCountTrigger
-    P := PAnsiChar(Value^)+cardinal(aIndex)*ElemSize;
+    P := PAnsiChar(Value^)+PtrUInt(aIndex)*ElemSize;
     if Assigned(fEventHash) then
       result := fEventHash(P^) else
       result := fHashElement(P^,fHasher);
@@ -50645,7 +50695,7 @@ begin
   result := false;
   fHashs := nil;
   fHashsCount := 0;
-  n := Count;
+  n := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}GetCount;
   if not forAdd and ((n=0) or (n<fHashCountTrigger)) then
     exit; // hash only if needed, and avoid GPF after TDynArray.Clear (Count=0)
   if not Assigned(fEventHash) and not Assigned(fHashElement) then
@@ -59697,16 +59747,19 @@ begin // caller is expected to call fSafe.Lock/Unlock
   end;
 end;
 
-function TSynDictionary.FindValue(const aKey; aUpdateTimeOut: boolean): pointer;
+function TSynDictionary.FindValue(const aKey; aUpdateTimeOut: boolean; aIndex: PInteger): pointer;
 var ndx: PtrInt;
 begin
   ndx := Find(aKey,aUpdateTimeOut);
+  if aIndex<>nil then
+    aIndex^ := ndx;
   if ndx<0 then
     result := nil else
     result := pointer(PtrUInt(fValues.fValue^)+PtrUInt(ndx)*fValues.ElemSize);
 end;
 
-function TSynDictionary.FindValueOrAdd(const aKey; var added: boolean): pointer;
+function TSynDictionary.FindValueOrAdd(const aKey; var added: boolean;
+  aIndex: PInteger): pointer;
 var ndx: integer;
     tim: cardinal;
 begin
@@ -59723,6 +59776,8 @@ begin
   end else
     if tim>0 then
       fTimeOut[ndx] := tim;
+  if aIndex<>nil then
+    aIndex^ := ndx;
   result := fValues.ElemPtr(ndx);
 end;
 

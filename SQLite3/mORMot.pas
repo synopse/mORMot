@@ -23324,17 +23324,21 @@ end;
 
 {$endif HASVARUSTRING}
 
-
-{ TObjArraySerializer}
-
 type
   TObjArraySerializer = class(TPointerClassHashed)
   public
     Instance: TClassInstance;
+    constructor Create(aInfo: pointer; aItem: TClass); reintroduce;
     procedure CustomWriter(const aWriter: TTextWriter; const aValue);
     function CustomReader(P: PUTF8Char; var aValue; out aValid: Boolean): PUTF8Char;
   end;
   PTObjArraySerializer = ^TObjArraySerializer;
+
+constructor TObjArraySerializer.Create(aInfo: pointer; aItem: TClass);
+begin
+  inherited Create(aInfo);
+  Instance.Init(aItem);
+end;
 
 procedure TObjArraySerializer.CustomWriter(const aWriter: TTextWriter; const aValue);
 var opt: TTextWriterWriteObjectOptions;
@@ -49226,8 +49230,7 @@ begin
   serializer := pointer(ObjArraySerializers.TryAdd(aDynArray));
   if serializer=nil then
     exit; // avoid duplicate
-  serializer^ := TObjArraySerializer.Create(aDynArray);
-  serializer^.Instance.Init(aItem);
+  serializer^ := TObjArraySerializer.Create(aDynArray,aItem);
   TTextWriter.RegisterCustomJSONSerializer(
     aDynArray,serializer^.CustomReader,serializer^.CustomWriter);
 end;
@@ -51918,6 +51921,7 @@ var Added: boolean;
       V64: Int64;
       Obj: TObject;
       V, c, codepage: integer;
+      po: PObject;
       Kind: TTypeKind;
       PS: PShortString;
       dyn: TDynArray;
@@ -52110,9 +52114,11 @@ var Added: boolean;
             end else begin // do not use AddDynArrayJSON to support HR
               inc(fHumanReadableLevel);
               Add('[');
-              for c := 0 to dyn.Count-1 do begin
-                WriteObject(PPointerArray(dyn.Value^)^[c],Options);
+              po := dyn.Value^;
+              for c := 1 to dyn.Count do begin
+                WriteObject(po^,Options);
                 Add(',');
+                inc(po);
               end;
               CancelLastComma;
               dec(fHumanReadableLevel);

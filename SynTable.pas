@@ -4593,6 +4593,7 @@ var
 begin
   pat := pointer(aMatch.Pattern);
   patend := pat + aMatch.PMax;
+  patretry := nil;
   txtend := aText + aTextLen - 1;
   txtretry := nil;
   repeat
