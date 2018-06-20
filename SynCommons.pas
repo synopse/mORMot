@@ -22135,6 +22135,15 @@ type
     Offset: sizeint;
   end;
 
+  {$ifdef FPC_NEWRTTI}
+  {$push}
+  {$minenumsize 4}
+  {$packset 4}
+  TRecordInfoInitFlag = (riifNonTrivialChild, riifParentHasNonTrivialChild);
+  TRecordInfoInitFlags = set of TRecordInfoInitFlag;
+  {$pop}
+  {$endif}
+
   PRecInitData = ^TRecInitData;
   TRecInitData =
   {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
@@ -22143,7 +22152,8 @@ type
   record
     Terminator: Pointer;
     Size: Integer;
-    {$ifdef FPC_HAS_MANAGEMENT_OPERATORS}
+    {$ifdef FPC_NEWRTTI}
+    Flags: TRecordInfoInitFlags;
     ManagementOp: Pointer;
     {$endif}
     ManagedFieldCount: Integer;
@@ -22179,7 +22189,7 @@ type
   {$endif}
 
   /// map the Delphi/FPC RTTI content
-  {$ifdef FPC_HAS_MANAGEMENT_OPERATORS}
+  {$ifdef FPC_NEWRTTI}
   PPRecordInitTable = ^PRecordInitTable;
   PRecordInitTable = ^TRecordInitTable;
   TRecordInitTable =
@@ -22192,7 +22202,7 @@ type
       recManagementOperators: Pointer;
       ManagedCount: longint;
     end;
-  {$endif FPC_HAS_MANAGEMENT_OPERATORS}
+  {$endif FPC_NEWRTTI}
 
   TTypeInfo =
     {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
@@ -58233,7 +58243,6 @@ begin
   {$ifdef VER3_0_1}+' 3.0.1'{$endif}
   {$ifdef VER3_0_2}+' 3.0.2'{$endif}
   {$ifdef VER3_1_1}+' 3.1.1'{$endif}
-    {$ifdef FPC_HAS_MANAGEMENT_OPERATORS}+' MOP'{$endif}
 {$else}
   {$ifdef VER130} 'Delphi 5'{$endif}
   {$ifdef CONDITIONALEXPRESSIONS}  // Delphi 6 or newer

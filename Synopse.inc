@@ -333,9 +333,9 @@
     {$define FPC_ENUMHASINNER}
   {$endif}
 
-  {$ifdef FPC_HAS_MANAGEMENT_OPERATORS}
+  {$ifdef FPC_NEWRTTI}
     {$define ISDELPHI2006ANDUP}
-  {$endif FPC_HAS_MANAGEMENT_OPERATORS}
+  {$endif FPC_NEWRTTI}
 
   {$ifdef ISFPC30}
     {$ifndef MSWINDOWS}
