@@ -3994,12 +3994,15 @@ begin
     exit; // no SQL statement
   if P^='*' then begin // all simple (not TSQLRawBlob/TSQLRecordMany) fields
     inc(P);
-    SetLength(fSelect,GetBitsCount(SimpleFieldsBits,MAX_SQLFIELDS)+1);
+    len := GetBitsCount(SimpleFieldsBits,MAX_SQLFIELDS)+1;
+    SetLength(fSelect,len);
     selectCount := 1; // Select[0].Field := 0 -> ID
     for ndx := 0 to MAX_SQLFIELDS-1 do
       if ndx in SimpleFieldsBits then begin
         fSelect[selectCount].Field := ndx+1;
         inc(selectCount);
+        if selectCount=len then
+          break;
       end;
     GetNextFieldProp(P,Prop);
   end else

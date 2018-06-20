@@ -5612,8 +5612,7 @@ type
     // better use direct access to its wrapped variable, and not using this
     // slower and more error prone method (such pointer access lacks of strong
     // typing abilities), which was designed for TDynArray internal use
-    function ElemPtr(index: PtrInt): pointer;
-      {$ifdef HASINLINE}inline;{$endif}
+    function ElemPtr(index: PtrInt): pointer; {$ifdef HASINLINE}inline;{$endif}
     /// will copy one element content from its index into another variable
     // - do nothing if index is out of range
     procedure ElemCopyAt(index: PtrInt; var Dest);
@@ -10143,6 +10142,9 @@ type
     /// returns how many items are currently stored in this dictionary
     // - this method is thread-safe
     function Count: integer;
+    /// fast returns how many items are currently stored in this dictionary
+    // - this method is NOT thread-safe so should be protected by fSafe.Lock/UnLock
+    function RawCount: integer; {$ifdef HASINLINE}inline;{$endif}
     /// direct access to the primary key identifiers
     // - if you want to access the keys, you should use fSafe.Lock/Unlock
     property Keys: TDynArrayHashed read fKeys;
@@ -12529,15 +12531,15 @@ var
 
 /// retrieve a particular bit status from a bit array
 function GetBit(const Bits; aIndex: PtrInt): boolean;
-  {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
+  {$ifndef CPUINTEL}inline;{$endif}
 
 /// set a particular bit into a bit array
 procedure SetBit(var Bits; aIndex: PtrInt);
-  {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
+  {$ifndef CPUINTEL}inline;{$endif}
 
 /// unset/clear a particular bit into a bit array
 procedure UnSetBit(var Bits; aIndex: PtrInt);
-  {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
+  {$ifndef CPUINTEL}inline;{$endif}
 
 /// compute the number of bits set in a bit array
 // - Count is the bit count, not byte size
@@ -12558,9 +12560,20 @@ function GetAllBits(Bits: Cardinal; BitCount: Integer): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 type
-  /// used by GetBit64/SetBit64/UnSetBit64 for fast access to Int64 bits
+  /// fast access to 8-bit integer bits
   // - the compiler will generate bt/btr/bts opcodes
+  TBits8 = set of 0..7;
+  PBits8 = ^TBits8;
+  TBits8Array = array[0..maxInt-1] of TBits8;
+  /// fast access to 32-bit integer bits
+  // - the compiler will generate bt/btr/bts opcodes
+  TBits32 = set of 0..31;
+  PBits32 = ^TBits32;
+  /// fast access to Int64 bits
+  // - the compiler will generate bt/btr/bts opcodes
+  // - as used by GetBit64/SetBit64/UnSetBit64
   TBits64 = set of 0..63;
+  PBits64 = ^TBits64;
 
 /// retrieve a particular bit status from a Int64 bit array (max aIndex is 63)
 function GetBit64(const Bits: Int64; aIndex: PtrInt): boolean;
@@ -34581,21 +34594,16 @@ begin
 end;
 
 function GetBit(const Bits; aIndex: PtrInt): boolean;
-{$ifdef PUREPASCAL}
-begin
-{$ifdef CPU64}
-  result := PInt64Array(@Bits)^[aIndex shr 6] and (Int64(1) shl (aIndex and 63)) <> 0;
-{$else}
-  result := PIntegerArray(@Bits)^[aIndex shr 5] and (1 shl (aIndex and 31)) <> 0;
-{$endif}
-end;
-{$else}
-asm
-        bt      [eax], edx // use very fast i386 bit statement
+{$ifndef CPUINTEL}{$ifdef CPU64}{$ifdef FPC}nostackframe;assembler;asm{$else}asm .noframe{$endif}{$else}asm{$endif}
+        bt      [Bits], aIndex
         sbb     eax, eax
         and     eax, 1
 end;
-{$endif}
+{$else}
+begin
+  result := TIntegerArray(Bits)[aIndex shr 5] and (1 shl (aIndex and 31)) <> 0;
+end;
+{$endif CPUINTEL}
 
 function GetAllBits(Bits: Cardinal; BitCount: Integer): boolean;
 begin
@@ -34605,33 +34613,26 @@ begin
 end;
 
 procedure SetBit(var Bits; aIndex: PtrInt);
-{$ifdef PUREPASCAL}
+{$ifndef CPUINTEL}{$ifdef CPU64}{$ifdef FPC}nostackframe;assembler;asm{$else}asm .noframe{$endif}{$else}asm{$endif}
+        bts     [Bits], aIndex
+end;
+{$else}
 begin
-{$ifdef CPU64}
-  PInt64Array(@Bits)^[aIndex shr 6] := PInt64Array(@Bits)^[aIndex shr 6]
-    or (Int64(1) shl (aIndex and 63));
-{$else}
-  PIntegerArray(@Bits)^[aIndex shr 5] := PIntegerArray(@Bits)^[aIndex shr 5]
+  TIntegerArray(Bits)[aIndex shr 5] := TIntegerArray(Bits)[aIndex shr 5]
     or (1 shl (aIndex and 31));
-{$endif}
 end;
-{$else}
-asm
-        bts     [eax], edx // use very fast i386 bit statement
-end;
-{$endif}
+{$endif CPUINTEL}
 
 procedure UnSetBit(var Bits; aIndex: PtrInt);
-{$ifdef PUREPASCAL}
+{$ifdef CPUINTEL}{$ifdef CPU64}{$ifdef FPC}nostackframe;assembler;asm{$else}asm .noframe{$endif}{$else}asm{$endif}
+        btr     [Bits], aIndex
+end;
+{$else}
 begin
   PIntegerArray(@Bits)^[aIndex shr 5] := PIntegerArray(@Bits)^[aIndex shr 5]
     and not (1 shl (aIndex and 31));
 end;
-{$else}
-asm
-        btr     [eax], edx // use very fast i386 bit statement
-end;
-{$endif}
+{$endif CPUINTEL}
 
 function GetBit64(const Bits: Int64; aIndex: PtrInt): boolean;
 begin
@@ -34640,36 +34641,42 @@ end;
 
 procedure SetBit64(var Bits: Int64; aIndex: PtrInt);
 begin
-  include(TBits64(Bits),aIndex);
+  include(PBits64(@Bits)^,aIndex);
 end;
 
 procedure UnSetBit64(var Bits: Int64; aIndex: PtrInt);
 begin
-  exclude(TBits64(Bits),aIndex);
+  exclude(PBits64(@Bits)^,aIndex);
 end;
 
 function GetBitsCount(const Bits; Count: PtrInt): integer;
-{$ifdef PUREPASCAL}
+const POPCNTDATA: array[0..15+4] of integer = (0,1,1,2,1,2,2,3,1,2,2,3,2,3,3,4,0,1,3,7);
+var P: PByte;
+    v: PtrUInt;
+{$ifdef CPUX86}tab: TIntegerArray absolute POPCNTDATA;
+begin // not enough registers on this CPU
+{$else}tab: PIntegerArray;
 begin
+  tab := @POPCNTDATA;
+{$endif CPUX86}
+  P := @Bits;
   result := 0;
-  while Count>0 do begin
-    dec(Count);
-    if GetBit(Bits,Count) then
-      inc(result);
+  while Count>=8 do begin
+    dec(Count,8);
+    v := P^;
+    inc(result,tab[v and $f]);
+    inc(result,tab[v shr 4]);
+    inc(P);
   end;
+  v := P^;
+  if Count>=4 then begin
+    dec(Count,4);
+    inc(result,tab[v and $f]);
+    v := v shr 4;
+  end;
+  if Count>0 then
+    inc(result,tab[v and tab[Count+16]]);
 end;
-{$else}
-asm
-        xor     ecx, ecx
-@1:     test    edx, edx
-        jz      @n
-        dec     edx
-        bt      [eax], edx
-        adc     ecx, 0
-        jmp     @1
-@n:     mov     eax, ecx
-end;
-{$endif}
 
 procedure OrMemory(Dest,Source: PByteArray; size: PtrInt);
 begin
@@ -59842,9 +59849,9 @@ function TSynDictionary.ForEach(const OnEach: TSynDictionaryEvent; Opaque: point
 var k,v: PAnsiChar;
     i,n,ks,vs: integer;
 begin
+  result := 0;
   fSafe.Lock;
   try
-    result := 0;
     n := fSafe.Padding[DIC_KEYCOUNT].VInteger;
     if (n=0) or not Assigned(OnEach) then
       exit;
@@ -59899,10 +59906,15 @@ end;
 function TSynDictionary.Count: integer;
 begin
   {$ifdef NOVARIANTS}
-  result := fSafe.Padding[DIC_KEYCOUNT].VInteger;
+  result := RawCount;
   {$else}
   result := fSafe.LockedInt64[DIC_KEYCOUNT];
   {$endif}
+end;
+
+function TSynDictionary.RawCount: integer;
+begin
+  result := fSafe.Padding[DIC_KEYCOUNT].VInteger;
 end;
 
 procedure TSynDictionary.SaveToJSON(W: TTextWriter; EnumSetsAsText: boolean);
