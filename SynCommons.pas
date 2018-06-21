@@ -22135,15 +22135,27 @@ type
     Offset: sizeint;
   end;
 
+  {$ifdef FPC_NEWRTTI}
+  {$push}
+  {$minenumsize 4}
+  {$packset 4}
+  TRecordInfoInitFlag = (riifNonTrivialChild, riifParentHasNonTrivialChild);
+  TRecordInfoInitFlags = set of TRecordInfoInitFlag;
+  {$pop}
+  {$endif}
+
   PRecInitData = ^TRecInitData;
   TRecInitData =
   {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
   packed
   {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
   record
+    {$ifdef FPC_NEWRTTI}
     Terminator: Pointer;
+    {$ENDIF}
     Size: Integer;
-    {$ifdef FPC_HAS_MANAGEMENT_OPERATORS}
+    {$ifdef FPC_NEWRTTI}
+    Flags: TRecordInfoInitFlags;
     ManagementOp: Pointer;
     {$endif}
     ManagedFieldCount: Integer;
@@ -22177,22 +22189,6 @@ type
   end;
   PEnhancedFieldInfo = ^TEnhancedFieldInfo;
   {$endif}
-
-  /// map the Delphi/FPC RTTI content
-  {$ifdef FPC_HAS_MANAGEMENT_OPERATORS}
-  PPRecordInitTable = ^PRecordInitTable;
-  PRecordInitTable = ^TRecordInitTable;
-  TRecordInitTable =
-    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
-    packed
-    {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
-    record
-      recSize: longint;
-      Terminator: Pointer;
-      recManagementOperators: Pointer;
-      ManagedCount: longint;
-    end;
-  {$endif FPC_HAS_MANAGEMENT_OPERATORS}
 
   TTypeInfo =
     {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
@@ -40304,7 +40300,7 @@ end;
 {$else FPC_OLDRTTI}
 procedure RecordCopy(var Dest; const Source; TypeInfo: pointer);
 begin
-  FPCRecordCopy(Dest,Source,TypeInfo);
+  FPCRecordCopy(Source,Dest,TypeInfo);
 end;
 {$endif FPC_OLDRTTI}
 procedure RecordClear(var Dest; TypeInfo: pointer);
@@ -58233,7 +58229,6 @@ begin
   {$ifdef VER3_0_1}+' 3.0.1'{$endif}
   {$ifdef VER3_0_2}+' 3.0.2'{$endif}
   {$ifdef VER3_1_1}+' 3.1.1'{$endif}
-    {$ifdef FPC_HAS_MANAGEMENT_OPERATORS}+' MOP'{$endif}
 {$else}
   {$ifdef VER130} 'Delphi 5'{$endif}
   {$ifdef CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
