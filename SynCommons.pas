@@ -8355,6 +8355,7 @@ type
     procedure AddCurr64(const Value: Int64); overload;
     /// append a Currency from its Int64 in-memory representation
     procedure AddCurr64(const Value: currency); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// append a TTimeLog value, expanded as Iso-8601 encoded text
     procedure AddTimeLog(Value: PInt64);
     /// append a TUnixTime value, expanded as Iso-8601 encoded text
@@ -11505,7 +11506,6 @@ function Curr64ToPChar(const Value: Int64; Dest: PUTF8Char): PtrInt;
 //   (e.g. 1->'0.0001' 500->'0.0500' 25000->'2.5000' 30000->'3.0000')
 // - is called by Curr64ToPChar() and Curr64ToStr() functions
 function StrCurr64(P: PAnsiChar; const Value: Int64): PAnsiChar;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// truncate a Currency value to only 2 digits
 // - implementation will use fast Int64 math to avoid any precision loss due to
@@ -12061,7 +12061,7 @@ type
      soSoundsLikeSpanish);
 
 /// add the 4 digits of integer Y to P^ as '0000'..'9999'
-procedure YearToPChar(Y: cardinal; P: PUTF8Char);
+procedure YearToPChar(Y: PtrUInt; P: PUTF8Char);
   {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
 /// creates a 3 digits string from a 0..999 value as '000'..'999'
@@ -21631,7 +21631,9 @@ end;
 {$else}
 {$ifdef PUREPASCAL}
 var c100: PtrUInt;
+    tab: PWordArray;
 begin // this code is faster than the Borland's original str() or IntToStr()
+  tab := @TwoDigitLookupW;
   repeat
     if val<10 then begin
       dec(P);
@@ -21640,13 +21642,13 @@ begin // this code is faster than the Borland's original str() or IntToStr()
     end else
     if val<100 then begin
       dec(P,2);
-      PWord(P)^ := TwoDigitLookupW[val];
+      PWord(P)^ := tab[val];
       break;
     end;
     dec(P,2);
     c100 := val div 100;
     dec(val,c100*100);
-    PWord(P)^ := TwoDigitLookupW[val];
+    PWord(P)^ := tab[val];
     val := c100;
     if c100=0 then break;
   until false;
@@ -21699,9 +21701,11 @@ begin // StrUInt32 aldready implemented PtrUInt=UInt64
 end;
 {$else}
 var c,c100: QWord;
+    tab: {$ifdef CPUX86}TNormTableByte absolute ConvertHexToBin{$else}PNormTableByte{$endif};
 begin
   if Int64Rec(val).Hi=0 then
     P := StrUInt32(P,Int64Rec(val).Lo) else begin
+    {$ifndef CPUX86}tab := @ConvertHexToBin;{$endif}
     c := val;
     repeat
       {$ifdef PUREPASCAL}
@@ -21731,7 +21735,7 @@ begin
       end;
       {$endif}
       dec(P,2);
-      PWord(P)^ := TwoDigitLookupW[c];
+      PWord(P)^ := tab[c];
       c := c100;
       if Int64Rec(c).Hi=0 then begin
         if Int64Rec(c).Lo<>0 then
@@ -28991,14 +28995,16 @@ asm
 end;
 {$endif}
 
-procedure YearToPChar(Y: cardinal; P: PUTF8Char);
+procedure YearToPChar(Y: PtrUInt; P: PUTF8Char);
 {$ifdef PUREPASCAL}
-var d100: cardinal;
+var d100: PtrUInt;
+    tab: PWordArray;
 begin
-  if Y<=9999 then begin
+  if Y<9999 then begin
+    tab := @TwoDigitLookupW;
     d100 := Y div 100;
-    PWordArray(P)[0] := TwoDigitLookupW[d100];
-    PWordArray(P)[1] := TwoDigitLookupW[Y-(d100*100)];
+    PWordArray(P)[0] := tab[d100];
+    PWordArray(P)[1] := tab[Y-(d100*100)];
   end else
     PCardinal(P)^ := $39393939; // '9999'
 end;
@@ -37769,9 +37775,8 @@ begin
 end;
 
 function StrCurr64(P: PAnsiChar; const Value: Int64): PAnsiChar;
-var c, c10: Int64;
-    c64: Int64Rec absolute c;
-    Lo: cardinal;
+var c: QWord;
+    {$ifndef CPU64}c64: Int64Rec absolute c; c10: QWord;{$endif}
 begin
   if Value=0 then begin
     result := P-1;
@@ -37781,52 +37786,30 @@ begin
   if Value<0 then
     c := -Value else
     c := Value;
-  if (c64.Hi=0) and (c64.Lo<10000) then begin
-    Lo := c64.Lo; // only decimals
-    result := P;
-  end else begin
-    Lo := 10000;
-    result := P-1; // reserve space to insert '.'
-  end;
-  repeat
-    if c64.Hi=0 then begin
-      result := StrUInt32(result,c64.Lo);
-      break;
-    end;
-    c10 := c div 100;   // one div by two digits
-    dec(c,c10*100);     // fast c := c mod 100
-    dec(result,2);
-    PWord(result)^ := TwoDigitLookupW[c];
-    c := c10;
-    if c10=0 then break;
-  until false;
-  if Lo<10000 then begin
-    // only decimals -> append left '0.' to '0.000'
-    case Lo of
-    1..9: begin // append left '0.000'
-      dec(result);
-      result^ := '0';
-      dec(result,2);
-      PWord(result)^ := ord('0')+ord('0')shl 8;
-    end;
-    10..99: begin // append left '0.00'
-      dec(result,2);
-      PWord(result)^ := ord('0')+ord('0')shl 8;
-    end;
-    100..999: begin // append left '0.0'
-      dec(result);
-      result^ := '0';
-    end;
-    end;
-    dec(result,2);
+  if {$ifdef CPU64}c<10000{$else}(c64.Hi=0) and (c64.Lo<10000){$endif} then begin
+    result := P-6; // only decimals -> append '0.xxxx'
     PWord(result)^ := ord('0')+ord('.')shl 8;
+    YearToPChar(c,PUTF8Char(P)-4);
   end else begin
-    // insert '.' just before last 4 decimals
-    P[-1] := P[-2];
-    P[-2] := P[-3];
-    P[-3] := P[-4];
-    P[-4] := P[-5];
-    P[-5] := '.';
+    {$ifdef CPU64}
+    result := StrUInt32(P-1,c);
+    {$else}
+    result := P-1; // reserve space to insert '.'
+    repeat
+      if c64.Hi=0 then begin
+        result := StrUInt32(result,c64.Lo);
+        break;
+      end;
+      c10 := c div 100;   // one div by two digits
+      dec(c,c10*100);     // fast c := c mod 100
+      dec(result,2);
+      PWord(result)^ := TwoDigitLookupW[c];
+      c := c10;
+      if c10=0 then break;
+    until false;
+    {$endif}
+    PCardinal(P-4)^ := PCardinal(P-5)^;
+    P[-5] := '.'; // insert '.' just before last 4 decimals
   end;
   if Value<0 then begin
     dec(result);
@@ -51880,7 +51863,7 @@ end;
 procedure TTextWriter.AddCurr64(const Value: Int64);
 var tmp: array[0..31] of AnsiChar;
     P: PAnsiChar;
-    Len: integer;
+    Len: PtrUInt;
 begin
   if BEnd-B<=31 then
     FlushToStream;
@@ -52230,6 +52213,7 @@ var // can be safely made global since timing is multi-thread safe
 
 procedure TTextWriter.AddCurrentLogTime(LocalTime, Use16msCache: boolean);
 var tix: PtrInt;
+    tab: {$ifdef CPUX86}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
 begin
   if BEnd-B<=17 then
     FlushToStream;
@@ -52245,13 +52229,14 @@ begin
     end;
     inc(B);
     YearToPChar(time.Year,B);
-    PWord(B+4)^ := TwoDigitLookupW[time.Month];
-    PWord(B+6)^ := TwoDigitLookupW[time.Day];
+    {$ifndef CPUX86}tab := @TwoDigitLookupW;{$endif}
+    PWord(B+4)^ := tab[time.Month];
+    PWord(B+6)^ := tab[time.Day];
     B[8] := ' ';
-    PWord(B+9)^ := TwoDigitLookupW[time.Hour];
-    PWord(B+11)^ := TwoDigitLookupW[time.Minute];
-    PWord(B+13)^ := TwoDigitLookupW[time.Second];
-    PWord(B+15)^ := TwoDigitLookupW[time.Millisecond shr 4];
+    PWord(B+9)^ := tab[time.Hour];
+    PWord(B+11)^ := tab[time.Minute];
+    PWord(B+13)^ := tab[time.Second];
+    PWord(B+15)^ := tab[time.Millisecond shr 4];
     B[17] := ' ';
     inc(B,16);
   end;

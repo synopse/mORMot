@@ -1515,10 +1515,13 @@ begin
   Check(StrToCurr64(pointer(Curr64ToStr(12)))=12);
   Check(StrToCurr64(pointer(Curr64ToStr(123)))=123);
   Check(StrToCurr64(pointer(Curr64ToStr(1234)))=1234);
+  Check(StrToCurr64(pointer(Curr64ToStr(12345)))=12345);
+  Check(StrToCurr64(pointer(Curr64ToStr(123456)))=123456);
   Check(StrToCurr64(pointer(Curr64ToStr(12340000)))=12340000);
   Check(StrToCurr64(pointer(Curr64ToStr(12345000)))=12345000);
   Check(StrToCurr64(pointer(Curr64ToStr(12345600)))=12345600);
   Check(StrToCurr64(pointer(Curr64ToStr(12345670)))=12345670);
+  Check(StrToCurr64(pointer(Curr64ToStr(12345678)))=12345678);
   tmp[0] := AnsiChar(Curr64ToPChar(1,@tmp[1])); Check(tmp='0.0001');
   tmp[0] := AnsiChar(Curr64ToPChar(12,@tmp[1])); Check(tmp='0.0012');
   tmp[0] := AnsiChar(Curr64ToPChar(123,@tmp[1])); Check(tmp='0.0123');
@@ -1526,7 +1529,7 @@ begin
   for i := 0 to 5000 do begin
     if i<500 then
       V1 := i*3 else
-      V1 := Random;
+      V1 := Random*(Int64(MaxInt)*10);
     if Random(10)<4 then
       V1 := -V1;
     v := Curr64ToStr(PInt64(@V1)^);
