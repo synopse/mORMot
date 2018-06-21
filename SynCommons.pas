@@ -8458,7 +8458,7 @@ type
     // - e.g. append '20110325 19241502 '
     // - you may set LocalTime=TRUE to write the local date and time instead
     // - this method is very fast, and avoid most calculation or API calls
-    procedure AddCurrentLogTime(LocalTime: boolean=false; Use16msCache: boolean=true);
+    procedure AddCurrentLogTime(LocalTime: boolean=false);
     /// append a time period, specified in micro seconds
     procedure AddMicroSec(MS: cardinal);
     /// append an Integer Value as a 4 digits String with comma
@@ -21701,11 +21701,11 @@ begin // StrUInt32 aldready implemented PtrUInt=UInt64
 end;
 {$else}
 var c,c100: QWord;
-    tab: {$ifdef CPUX86}TNormTableByte absolute ConvertHexToBin{$else}PNormTableByte{$endif};
+    tab: {$ifdef CPUX86}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
 begin
   if Int64Rec(val).Hi=0 then
     P := StrUInt32(P,Int64Rec(val).Lo) else begin
-    {$ifndef CPUX86}tab := @ConvertHexToBin;{$endif}
+    {$ifndef CPUX86}tab := @TwoDigitLookupW;{$endif}
     c := val;
     repeat
       {$ifdef PUREPASCAL}
@@ -29000,20 +29000,15 @@ procedure YearToPChar(Y: PtrUInt; P: PUTF8Char);
 var d100: PtrUInt;
     tab: PWordArray;
 begin
-  if Y<9999 then begin
-    tab := @TwoDigitLookupW;
-    d100 := Y div 100;
-    PWordArray(P)[0] := tab[d100];
-    PWordArray(P)[1] := tab[Y-(d100*100)];
-  end else
-    PCardinal(P)^ := $39393939; // '9999'
+  tab := @TwoDigitLookupW;
+  d100 := Y div 100;
+  PWordArray(P)[0] := tab[d100];
+  PWordArray(P)[1] := tab[Y-(d100*100)];
 end;
 {$else}
 asm // eax=Y, edx=P
         push    edx
         mov     ecx, eax
-        cmp     eax, 9999
-        ja      @big
         mov     edx, 1374389535 // use power of two reciprocal to avoid division
         mul     edx
         shr     edx, 5          // now edx=Y div 100
@@ -29024,9 +29019,6 @@ asm // eax=Y, edx=P
         shl     edx, 16
         or      eax, edx
         mov     [ecx], eax
-        ret
-@big:   pop     eax
-        mov     dword ptr [edx], $39393939 // '9999'
 end;
 {$endif}
 
@@ -29040,17 +29032,23 @@ end;
 function UInt4DigitsToUTF8(Value: Cardinal): RawUTF8;
 begin
   SetString(result,nil,4);
+  if Value>9999 then
+    Value := 9999;
   YearToPChar(Value,pointer(result));
 end;
 
 function UInt4DigitsToShort(Value: Cardinal): TShort4;
 begin
   result[0] := #4;
+  if Value>9999 then
+    Value := 9999;
   YearToPChar(Value,@result[1]);
 end;
 
 function UInt3DigitsToShort(Value: Cardinal): TShort4;
 begin
+  if Value>999 then
+    Value := 999;
   YearToPChar(Value,@result[0]);
   result[0] := #3; // override first digit
 end;
@@ -36483,12 +36481,7 @@ end;
 procedure DateToIso8601PChar(P: PUTF8Char; Expanded: boolean; Y,M,D: cardinal);
 // use 'YYYYMMDD' format if not Expanded, 'YYYY-MM-DD' format if Expanded
 begin
-{$ifdef PUREPASCAL}
-  PWord(P  )^ := TwoDigitLookupW[Y div 100];
-  PWord(P+2)^ := TwoDigitLookupW[Y mod 100];
-{$else}
   YearToPChar(Y,P);
-{$endif}
   inc(P,4);
   if Expanded then begin
     P^ := '-';
@@ -37776,7 +37769,7 @@ end;
 
 function StrCurr64(P: PAnsiChar; const Value: Int64): PAnsiChar;
 var c: QWord;
-    {$ifndef CPU64}c64: Int64Rec absolute c; c10: QWord;{$endif}
+    {$ifndef CPU64}c64: Int64Rec absolute c;{$endif}
 begin
   if Value=0 then begin
     result := P-1;
@@ -37791,23 +37784,7 @@ begin
     PWord(result)^ := ord('0')+ord('.')shl 8;
     YearToPChar(c,PUTF8Char(P)-4);
   end else begin
-    {$ifdef CPU64}
-    result := StrUInt32(P-1,c);
-    {$else}
-    result := P-1; // reserve space to insert '.'
-    repeat
-      if c64.Hi=0 then begin
-        result := StrUInt32(result,c64.Lo);
-        break;
-      end;
-      c10 := c div 100;   // one div by two digits
-      dec(c,c10*100);     // fast c := c mod 100
-      dec(result,2);
-      PWord(result)^ := TwoDigitLookupW[c];
-      c := c10;
-      if c10=0 then break;
-    until false;
-    {$endif}
+    result := StrUInt64(P-1,c);
     PCardinal(P-4)^ := PCardinal(P-5)^;
     P[-5] := '.'; // insert '.' just before last 4 decimals
   end;
@@ -52211,34 +52188,39 @@ var // can be safely made global since timing is multi-thread safe
     clock: PtrInt; // avoid slower API call
   end;
 
-procedure TTextWriter.AddCurrentLogTime(LocalTime, Use16msCache: boolean);
+procedure TTextWriter.AddCurrentLogTime(LocalTime: boolean);
 var tix: PtrInt;
+    y,d100: PtrUInt;
+    P: PUTF8Char;
     tab: {$ifdef CPUX86}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
 begin
   if BEnd-B<=17 then
     FlushToStream;
   with GlobalLogTime[LocalTime] do begin
-    if Use16msCache then begin
-      tix := GetTickCount64; // this call is very fast (just one integer mul)
-      if clock<>tix then begin // typically in range of 10-16 ms
-        clock := tix;
-        if LocalTime then
-          time.FromNowLocal else
-          time.FromNowUTC;
-      end;
+    tix := GetTickCount64; // this call is very fast (just one integer mul)
+    if clock<>tix then begin // typically in range of 10-16 ms
+      clock := tix;
+      if LocalTime then
+        time.FromNowLocal else
+        time.FromNowUTC;
     end;
     inc(B);
-    YearToPChar(time.Year,B);
     {$ifndef CPUX86}tab := @TwoDigitLookupW;{$endif}
-    PWord(B+4)^ := tab[time.Month];
-    PWord(B+6)^ := tab[time.Day];
-    B[8] := ' ';
-    PWord(B+9)^ := tab[time.Hour];
-    PWord(B+11)^ := tab[time.Minute];
-    PWord(B+13)^ := tab[time.Second];
-    PWord(B+15)^ := tab[time.Millisecond shr 4];
-    B[17] := ' ';
-    inc(B,16);
+    y := time.Year;
+    d100 := y div 100;
+    P := B;
+    PWord(P)^ := tab[d100];
+    PWord(P+2)^ := tab[y-(d100*100)];
+    PWord(P+4)^ := tab[time.Month];
+    PWord(P+6)^ := tab[time.Day];
+    P[8] := ' ';
+    PWord(P+9)^ := tab[time.Hour];
+    PWord(P+11)^ := tab[time.Minute];
+    PWord(P+13)^ := tab[time.Second];
+    y := time.Millisecond;
+    PWord(P+15)^ := tab[y shr 4];
+    P[17] := ' ';
+    B := P+16;
   end;
 end;
 
