@@ -18574,9 +18574,7 @@ uses
     unixcp,
     {$endif}
   {$endif MSWINDOWS}
-  SynFPCTypInfo, // small wrapper unit around FPC's TypInfo.pp
-  TypInfo,
-  StrUtils;
+  SynFPCTypInfo; // small wrapper unit around FPC's TypInfo.pp
 {$endif FPC}
 
 
@@ -22124,44 +22122,8 @@ type
   PTypeInfoStored = ^PTypeInfo;
   {$endif}
 
-  {$ifdef FPC_NEWRTTI}
-  PInitManagedField = ^TInitManagedField;
-  TInitManagedField =
-  {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
-  packed
-  {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
-  record
-    TypeInfo: PTypeInfoStored;
-    Offset: sizeint;
-  end;
-
-  {$ifdef FPC_NEWRTTI}
-  {$push}
-  {$minenumsize 4}
-  {$packset 4}
-  TRecordInfoInitFlag = (riifNonTrivialChild, riifParentHasNonTrivialChild);
-  TRecordInfoInitFlags = set of TRecordInfoInitFlag;
-  {$pop}
-  {$endif}
-
-  PRecInitData = ^TRecInitData;
-  TRecInitData =
-  {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
-  packed
-  {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
-  record
-    {$ifdef FPC_NEWRTTI}
-    Terminator: Pointer;
-    {$ENDIF}
-    Size: Integer;
-    {$ifdef FPC_NEWRTTI}
-    Flags: TRecordInfoInitFlags;
-    ManagementOp: Pointer;
-    {$endif}
-    ManagedFieldCount: Integer;
-    ManagedFields: array[0..0] of TInitManagedField;
-  end;
-  {$endif}
+  // note: FPC TRecInitData (and TInitManagedField) are taken from typinfo.pp
+  // since this information is evolving/breaking a lot in the current FPC trunk
 
   /// map the Delphi/FPC record field RTTI
   TFieldInfo =
@@ -22242,7 +22204,7 @@ type
       recSize: longint;
       {$ifdef FPC_NEWRTTI}
       TotalFieldCount: longint;
-      // note: for FPC 3.1.x and never ManagedCount is deprecated
+      // note: for FPC 3.1.x and newer ManagedCount is deprecated
       {$else}
       ManagedCount: longint;
       // note: FPC for 3.0.x and previous generates RTTI for unmanaged fields (as in TEnhancedFieldInfo)
@@ -22309,6 +22271,7 @@ type
       UnitNameLen: byte;
     );
   end;
+
   TPropInfo = packed record
     PropType: PTypeInfoStored;
     GetProc: PtrInt;
@@ -22329,7 +22292,7 @@ type
   Deref = PTypeInfo;
 {$else}
 function Deref(Info: PTypeInfoStored): PTypeInfo;
-{$ifdef HASINLINENOTX86} inline;
+{$ifdef HASINLINE} inline;
 begin
   if Info=nil then
     result := pointer(Info) else
@@ -22343,7 +22306,7 @@ asm // Delphi is so bad at compiling above code...
         ret
 @z:     db      $f3 // rep ret
 end;
-{$endif HASINLINENOTX86}
+{$endif HASINLINE}
 {$endif HASDIRECTTYPEINFO}
 
 const
@@ -22482,7 +22445,7 @@ begin
 end;
 
 function GetTypeInfo(aTypeInfo: pointer; aExpectedKind: TTypeKind): PTypeInfo; overload;
-{$ifdef HASINLINENOTX86} inline;
+{$ifdef HASINLINE} inline;
 begin
   if (aTypeInfo<>nil) and (PTypeKind(aTypeInfo)^=aExpectedKind) then begin
     {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
@@ -22505,10 +22468,10 @@ asm
         ret
 @n:     xor     eax, eax
 end;
-{$endif}
+{$endif HASINLINE}
 
 function GetTypeInfo(aTypeInfo: pointer; const aExpectedKind: TTypeKinds): PTypeInfo; overload;
-{$ifdef HASINLINENOTX86} inline;
+{$ifdef HASINLINE} inline;
 begin
   result := aTypeInfo;
   if result<>nil then
@@ -22533,10 +22496,10 @@ asm // eax=aTypeInfo edx=aExpectedKind
         ret
 @n:     xor     eax, eax
 end;
-{$endif}
+{$endif HASINLINE}
 
 function GetTypeInfo(aTypeInfo: pointer): PTypeInfo; overload;
-{$ifdef HASINLINENOTX86} inline;
+{$ifdef HASINLINE} inline;
 begin
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
   result := GetFPCAlignPtr(aTypeInfo);
@@ -22549,7 +22512,7 @@ asm
         movzx   ecx, byte ptr[eax + TTypeInfo.NameLen]
         add     eax, ecx
 end;
-{$endif}
+{$endif HASINLINE}
 
 function DynArrayTypeInfoToRecordInfo(aDynArrayTypeInfo: pointer;
   aDataSize: PInteger=nil): pointer;
@@ -22610,31 +22573,29 @@ begin
     result := info^.recSize;
 end;
 
-function GetEnumInfo(aTypeInfo: pointer; out MaxValue: Integer;
-  out Names: PShortString): boolean;
-{$ifdef HASINLINENOTX86} inline;
+function GetEnumInfo(aTypeInfo: pointer; out MaxValue: Integer): PShortString;
+{$ifdef HASINLINE} inline;
 var info: PTypeInfo;
+    base: PTypeInfoStored;
 begin
-  info := GetTypeInfo(aTypeInfo,tkEnumeration);
-  if info<>nil then begin
+  if (aTypeInfo<>nil) and (PTypeKind(aTypeInfo)^=tkEnumeration) then begin
+    info := GetTypeInfo(aTypeInfo);
+    base := info^.{$ifdef FPC_ENUMHASINNER}inner.{$endif}EnumBaseType;
     {$ifdef FPC} // no redirection if aTypeInfo is already the base type
-    if (info^.{$ifdef FPC_ENUMHASINNER}inner.{$endif}EnumBaseType<>nil) and
-       (info^.{$ifdef FPC_ENUMHASINNER}inner.{$endif}EnumBaseType<>aTypeInfo) then
+    if (base<>nil) and (base<>aTypeInfo) then
     {$endif}
-      info := GetTypeInfo(Deref(info^.{$ifdef FPC_ENUMHASINNER}inner.{$endif}EnumBaseType));
+      info := GetTypeInfo(base{$ifndef HASDIRECTTYPEINFO}^{$endif});
     MaxValue := info^.{$ifdef FPC_ENUMHASINNER}inner.{$endif}MaxValue;
-    Names := @info.NameList;
-    result := true;
+    result := @info.NameList;
   end else
-    result := false;
+    result := nil;
 end;
 {$else}
-asm // eax=aTypeInfo edx=@MaxValue ecx=@Names
+asm // eax=aTypeInfo edx=@MaxValue
         test    eax, eax
         jz      @n
         cmp     byte ptr[eax], tkEnumeration
         jnz     @n
-        push    ecx
         movzx   ecx, byte ptr[eax + TTypeInfo.NameLen]
         mov     eax, [eax + ecx + TTypeInfo.EnumBaseType]
         mov     eax, [eax]
@@ -22642,22 +22603,21 @@ asm // eax=aTypeInfo edx=@MaxValue ecx=@Names
         add     eax, ecx
         mov     ecx, [eax + TTypeInfo.MaxValue]
         mov     [edx], ecx
-        pop     ecx
         lea     eax, [eax + TTypeInfo.NameList]
-        mov     [ecx], eax
-        mov     al, 1
         ret
 @n:     xor     eax, eax
 end;
-{$endif}
+{$endif HASINLINE}
 
 function GetSetInfo(aTypeInfo: pointer; out MaxValue: Integer;
   out Names: PShortString): boolean;
 var info: PTypeInfo;
 begin
   info := GetTypeInfo(aTypeInfo,tkSet);
-  if info<>nil then
-    result := GetEnumInfo(Deref(info^.SetBaseType),MaxValue,Names) else
+  if info<>nil then begin
+    Names := GetEnumInfo(Deref(info^.SetBaseType),MaxValue);
+    result := Names<>nil;
+  end else
     result := false;
 end;
 
@@ -22679,7 +22639,8 @@ procedure GetEnumNames(aTypeInfo: pointer; aDest: PPShortString);
 var MaxValue, i: integer;
     res: PShortString;
 begin
-  if GetEnumInfo(aTypeInfo,MaxValue,res) then
+  res := GetEnumInfo(aTypeInfo,MaxValue);
+  if res<>nil then
     for i := 0 to MaxValue do begin
       aDest^ := res;
       inc(PByte(res),ord(res^[0])+1); // next short string
@@ -22691,7 +22652,8 @@ procedure GetEnumTrimmedNames(aTypeInfo: pointer; aDest: PRawUTF8);
 var MaxValue, i: integer;
     res: PShortString;
 begin
-  if GetEnumInfo(aTypeInfo,MaxValue,res) then
+  res := GetEnumInfo(aTypeInfo,MaxValue);
+  if res<>nil then
     for i := 0 to MaxValue do begin
       aDest^ := TrimLeftLowerCaseShort(res);
       inc(PByte(res),ord(res^[0])+1); // next short string
@@ -22715,7 +22677,8 @@ procedure GetEnumCaptions(aTypeInfo: pointer; aDest: PString);
 var MaxValue, i: integer;
     res: PShortString;
 begin
-  if GetEnumInfo(aTypeInfo,MaxValue,res) then
+  res := GetEnumInfo(aTypeInfo,MaxValue);
+  if res<>nil then
     for i := 0 to MaxValue do begin
       GetCaptionFromTrimmed(res,aDest^);
       inc(PByte(res),ord(res^[0])+1); // next short string
@@ -22727,12 +22690,20 @@ function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
 {$ifdef HASINLINENOTX86}
 var MaxValue: integer;
 begin
-  if GetEnumInfo(aTypeInfo,MaxValue,result) and
-     (cardinal(aIndex)<=cardinal(MaxValue)) then
-    while aIndex>0 do begin
-      dec(aIndex);
-      inc(PByte(result),ord(result^[0])+1); // next short string
-    end else
+  result := GetEnumInfo(aTypeInfo,MaxValue);
+  if (result<>nil) and (cardinal(aIndex)<=cardinal(MaxValue)) then begin
+    if aIndex>0 then
+      repeat
+        inc(PByte(result),ord(result^[0])+1); // next short string
+        dec(aIndex);
+        if aIndex=0 then
+          break;
+        inc(PByte(result),ord(result^[0])+1);
+        dec(aIndex);
+        if aIndex=0 then
+          break;
+      until false;
+  end else
     result := @NULL_SHORTSTRING;
 end;
 {$else}
@@ -22818,7 +22789,8 @@ function GetEnumNameValue(aTypeInfo: pointer; aValue: PUTF8Char; aValueLen: inte
 var List: PShortString;
     MaxValue: integer;
 begin
-  if (aValueLen<>0) and GetEnumInfo(aTypeInfo,MaxValue,List) then begin
+  List := GetEnumInfo(aTypeInfo,MaxValue);
+  if (aValueLen<>0) and (List<>nil) then begin
     result := FindShortStringListExact(List,MaxValue,aValue,aValueLen);
     if (result<0) and AlsoTrimLowerCase then
       result := FindShortStringListTrimLowerCase(List,MaxValue,aValue,aValueLen);
@@ -22830,7 +22802,8 @@ function GetEnumNameValueTrimmed(aTypeInfo: pointer; aValue: PUTF8Char; aValueLe
 var List: PShortString;
     MaxValue: integer;
 begin
-  if (aValueLen<>0) and GetEnumInfo(aTypeInfo,MaxValue,List) then
+  List := GetEnumInfo(aTypeInfo,MaxValue);
+  if (aValueLen<>0) and (List<>nil) then
     result := FindShortStringListTrimLowerCase(List,MaxValue,aValue,aValueLen) else
     result := -1;
 end;
@@ -32318,7 +32291,7 @@ begin
     err := 1;
     exit;
   end;
-  byte(flags) := 0;
+  flags := [];
   U := pointer(P);
   while U^=32 do
     inc(U);
@@ -38986,7 +38959,8 @@ var f: TIntelCpuFeature;
     MaxValue: integer;
 begin
   result := '';
-  if GetEnumInfo(TypeInfo(TIntelCpuFeature),MaxValue,List) then
+  List := GetEnumInfo(TypeInfo(TIntelCpuFeature),MaxValue);
+  if List<>nil then
     for f := low(f) to high(f) do begin
       if (f in aIntelCPUFeatures) and (List^[3]<>'_') then begin
         if result<>'' then
@@ -40264,7 +40238,21 @@ end;
 {$ifdef FPC}
 
 {$ifdef FPC_OLDRTTI}
-function RTTIManagedSize(typeInfo: Pointer): SizeInt; inline;
+function OldRTTIFirstManagedField(info: PTypeInfo): PFieldInfo;
+var fieldtype: PTypeInfo;
+    i: integer;
+begin
+  result := @info^.ManagedFields[0];
+  for i := 1 to info^.ManagedCount do begin
+    fieldtype := DeRef(result^.TypeInfo);
+    if (fieldtype<>nil) and (fieldtype^.Kind in tkManagedTypes) then
+      exit;
+    inc(result);
+  end;
+  result := nil;
+end;
+
+function OldRTTIManagedSize(typeInfo: Pointer): SizeInt; inline;
 begin
   case PTypeKind(typeInfo)^ of // match tkManagedTypes
     tkLString,tkLStringOld,tkWString,tkUString, tkInterface,tkDynarray:
@@ -40272,41 +40260,32 @@ begin
     {$ifndef NOVARIANTS}
     tkVariant: result := SizeOf(TVarData);
     {$endif}
-    tkArray: {$ifdef VER2_6}with GetTypeInfo(typeInfo)^ do result := arraySize*elCount;
-      {$else}result := GetTypeInfo(typeInfo)^.arraySize;{$endif}
+    tkArray: with GetTypeInfo(typeInfo)^ do
+      result := arraySize{$ifdef VER2_6}*elCount{$endif};
     tkObject,tkRecord: result := GetTypeInfo(typeInfo)^.recSize;
-    else raise ESynException.CreateUTF8('RTTIManagedSize unhandled % (%)',
+    else raise ESynException.CreateUTF8('OldRTTIManagedSize unhandled % (%)',
         [ToText(PTypeKind(typeInfo)^)^,PByte(typeInfo)^]);
   end;
-end;
-
-function RTTIFirstManagedFieldIndex(info: PTypeInfo): integer;
-var fieldtype: PTypeInfo;
-begin
-  for result := 0 to info^.ManagedCount-1 do begin
-    fieldtype := DeRef(info^.ManagedFields[result].TypeInfo);
-    if (fieldtype<>nil) and (fieldtype^.Kind in tkManagedTypes) then
-      exit;
-  end;
-  result := -1;
 end;
 
 procedure RecordCopy(var Dest; const Source; TypeInfo: pointer);
 begin // external name 'FPC_COPY' does not work as we need
   FPCFinalize(@Dest,TypeInfo);
-  MoveFast(Source,Dest,RTTIManagedSize(TypeInfo));
+  MoveFast(Source,Dest,OldRTTIManagedSize(TypeInfo));
   FPCRecordAddRef(Dest,TypeInfo);
 end;
-{$else FPC_OLDRTTI}
+{$else}
 procedure RecordCopy(var Dest; const Source; TypeInfo: pointer);
 begin
   FPCRecordCopy(Source,Dest,TypeInfo);
 end;
 {$endif FPC_OLDRTTI}
+
 procedure RecordClear(var Dest; TypeInfo: pointer);
 begin
   FPCFinalize(@Dest,TypeInfo);
 end;
+
 {$else FPC}
 
 procedure CopyArray(dest, source, typeInfo: Pointer; cnt: PtrUInt);
@@ -40399,11 +40378,7 @@ begin
     len := 0;
     info := nil; // supports single dimension static array only
   end else begin
-    {$ifdef VER2_6} // full size = arraySize*elCount, not arraySize
-    len := info^.arraySize*info^.elCount;
-    {$else}
-    len := info^.arraySize;
-    {$endif}
+    len := info^.arraySize{$ifdef VER2_6}*info^.elCount{$endif};
     {$ifdef HASDIRECTTYPEINFO} // inlined result := DeRef(info^.arrayType)
     result := info^.arrayType;
     {$else}
@@ -40688,12 +40663,24 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
   end;
 end;
 
+function GetManagedFields(info: PTypeInfo; out firstfield: PFieldInfo): integer;
+  {$ifdef HASINLINE}inline;{$endif}
+{$ifdef FPC_NEWRTTI}
+var recInitData: PRecInitData; // low-level structure from typinfo.pp
+begin
+  recInitData := GetFPCRecInitData(AlignTypeData(PByte(info)+2));
+  firstfield := pointer(PtrUInt(recInitData)+SizeOf(recInitData^)); // =ManagedFields[0]
+  result := recInitData^.ManagedFieldCount;
+{$else}
+begin
+  firstfield := @info^.ManagedFields[0];
+  result := info^.ManagedCount;
+{$endif}
+end;
+
 function RecordEquals(const RecA, RecB; TypeInfo: pointer;
   PRecSize: PInteger): boolean;
 var info,fieldinfo: PTypeInfo;
-    {$ifdef FPC_NEWRTTI}
-    recInitData: PRecInitData;
-    {$endif}
     F, offset: PtrInt;
     field: PFieldInfo;
     A, B: PAnsiChar;
@@ -40711,14 +40698,7 @@ begin
     exit;
   end;
   offset := 0;
-  {$ifdef FPC_NEWRTTI}
-  recInitData := GetFPCRecInitData(AlignTypeData(PByte(info)+2));
-  field := @recInitData^.ManagedFields[0];
-  for F := 1 to recInitData^.ManagedFieldCount do begin
-  {$else}
-  field := @info^.ManagedFields[0];
-  for F := 1 to info^.ManagedCount do begin
-  {$endif}
+  for F := 1 to GetManagedFields(info,field) do begin
     fieldinfo := DeRef(field^.TypeInfo);
     {$ifdef FPC_OLDRTTI} // FPC did include RTTI for unmanaged fields
     if not (fieldinfo^.Kind in tkManagedTypes) then begin
@@ -40750,9 +40730,6 @@ end;
 
 function RecordSaveLength(const Rec; TypeInfo: pointer; Len: PInteger): integer;
 var info,fieldinfo: PTypeInfo;
-    {$ifdef FPC_NEWRTTI}
-    recInitData: PRecInitData;
-    {$endif}
     F, recsize,saved: integer;
     field: PFieldInfo;
     R: PAnsiChar;
@@ -40763,20 +40740,10 @@ begin
     result := 0; // should have been checked before
     exit;
   end;
-  {$ifdef FPC_NEWRTTI}
-  recInitData := GetFPCRecInitData(AlignTypeData(PByte(info)+2));
-  field := @recInitData^.ManagedFields[0];
-  {$else}
-  field := @info^.ManagedFields[0];
-  {$endif}
   result := info^.recSize;
   if Len<>nil then
     Len^ := result;
-  {$ifdef FPC_NEWRTTI}
-  for F := 1 to recInitData^.ManagedFieldCount do begin
-  {$else}
-  for F := 1 to info^.ManagedCount do begin
-  {$endif}
+  for F := 1 to GetManagedFields(info,field) do begin
     fieldinfo := DeRef(field^.TypeInfo);
     {$ifdef FPC_OLDRTTI} // FPC did include RTTI for unmanaged fields! :)
     if not (fieldinfo^.Kind in tkManagedTypes) then begin
@@ -40797,9 +40764,6 @@ end;
 function RecordSave(const Rec; Dest: PAnsiChar; TypeInfo: pointer;
   out Len: integer): PAnsiChar;
 var info,fieldinfo: PTypeInfo;
-    {$ifdef FPC_NEWRTTI}
-    recInitData: PRecInitData;
-    {$endif}
     F, offset: integer;
     field: PFieldInfo;
     R: PAnsiChar;
@@ -40812,14 +40776,7 @@ begin
   end;
   Len := info^.recSize;
   offset := 0;
-  {$ifdef FPC_NEWRTTI}
-  recInitData := GetFPCRecInitData(AlignTypeData(PByte(info)+2));
-  field := @recInitData^.ManagedFields[0];
-  for F := 1 to recInitData^.ManagedFieldCount do begin
-  {$else}
-  field := @info^.ManagedFields[0];
-  for F := 1 to info^.ManagedCount do begin
-  {$endif}
+  for F := 1 to GetManagedFields(info,field) do begin
     {$ifdef HASDIRECTTYPEINFO} // inlined DeRef()
     fieldinfo := field^.TypeInfo;
     {$else}
@@ -40914,10 +40871,7 @@ end;
 function RecordLoad(var Rec; Source: PAnsiChar; TypeInfo: pointer;
   Len: PInteger): PAnsiChar;
 var info,fieldinfo: PTypeInfo;
-    {$ifdef FPC_NEWRTTI}
-    recInitData: PRecInitData;
-    {$endif}
-    F, offset: integer;
+    n, F, offset: integer;
     field: PFieldInfo;
     R: PAnsiChar;
 begin
@@ -40928,29 +40882,16 @@ begin
     exit;
   if Len<>nil then
     Len^ := info^.recSize;
-  {$ifdef FPC_NEWRTTI}
-  recInitData := GetFPCRecInitData(AlignTypeData(PByte(info)+2));
-  field := @recInitData^.ManagedFields[0];
-  {$else}
-  field := @info^.ManagedFields[0];
-  {$endif}
+  n := GetManagedFields(info,field);
   if Source=nil then begin  // inline RecordClear() function
-    {$ifdef FPC_NEWRTTI}
-    for F := 1 to recInitData^.ManagedFieldCount do begin
-    {$else}
-    for F := 1 to  info^.ManagedCount do begin
-    {$endif}
+    for F := 1 to n do begin
       {$ifdef FPC}FPCFinalize{$else}_Finalize{$endif}(R+field^.Offset,Deref(field^.TypeInfo));
       inc(field);
     end;
     exit;
   end;
   offset := 0;
-  {$ifdef FPC_NEWRTTI}
-  for F := 1 to recInitData^.ManagedFieldCount do begin
-  {$else}
-  for F := 1 to info^.ManagedCount do begin
-  {$endif}
+  for F := 1 to n do begin
     {$ifdef HASDIRECTTYPEINFO} // inlined DeRef()
     fieldinfo := field^.TypeInfo;
     {$else}
@@ -42527,17 +42468,14 @@ end;
 
 function ManagedTypeSaveRTTIHash(info: PTypeInfo; var crc: cardinal): integer;
 var itemtype: PTypeInfo;
-    i, fieldcount, unmanagedsize: integer;
+    i, unmanagedsize: integer;
     field: PFieldInfo;
-    {$ifdef FPC_NEWRTTI}
-    recInitData: PRecInitData;
-    {$endif}
     dynarray: TDynArray;
 begin // info is expected to come from a DeRef() if retrieved from RTTI
   result := 0;
   if info=nil then
     exit;
-  {$ifdef FPC} // storage binary layout is Delphi's
+  {$ifdef FPC} // storage binary layout as Delphi's ordinal value
   crc := crc32c(crc,@FPCTODELPHI[info^.Kind],1);
   {$else}
   crc := crc32c(crc,@info^.Kind,1); // hash RTTI kind, but not name
@@ -42554,16 +42492,8 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
     if not GlobalJSONCustomParsers.RecordRTTITextHash(info,crc,result) then begin
       itemtype := GetTypeInfo(info,tkRecordTypeOrSet);
       if itemtype<>nil then begin
-        {$ifdef FPC_NEWRTTI}
-        recInitData := GetFPCRecInitData(AlignTypeData(PByte(itemtype)+2));
-        field := @recInitData^.ManagedFields[0];
-        fieldcount := recInitData^.ManagedFieldCount;
-        {$else}
-        field := @itemtype^.ManagedFields[0];
-        fieldcount := itemtype^.ManagedCount;
-        {$endif}
         unmanagedsize := itemtype^.recsize;
-        for i := 1 to fieldcount do begin
+        for i := 1 to GetManagedFields(itemtype,field) do begin
           info := DeRef(field^.TypeInfo);
           {$ifdef FPC_OLDRTTI} // FPC did include RTTI for unmanaged fields
           if info^.Kind in tkManagedTypes then // as with Delphi
@@ -48629,10 +48559,7 @@ end;
 
 function TDynArray.ToKnownType(exactType: boolean): TDynArrayKind;
 var nested: PTypeInfo;
-    {$ifdef FPC}{$ifdef FPC_NEWRTTI}
-    recInitData: PRecInitData;{$else}
-    f: integer;
-    {$endif}{$endif}
+    field: PFieldInfo;
 label Bin, Rec;
 begin
   if fKnownType<>djNone then begin
@@ -48708,24 +48635,14 @@ rec:    nested := GetFPCAlignPtr(nested);
 rec:    inc(PByte(nested),nested^.NameLen);
         {$endif}
         {$ifdef FPC_OLDRTTI}
-        f := RTTIFirstManagedFieldIndex(nested);
-        if f<0 then
-          goto Bin;
-        with nested^.ManagedFields[f] do
+        field := OldRTTIFirstManagedField(nested);
+        if field=nil then
         {$else FPC_OLDRTTI}
-        {$ifdef FPC_NEWRTTI}
-        recInitData := GetFPCRecInitData(AlignTypeData(PByte(nested)+2));
-        if recInitData^.ManagedFieldCount=0 then // only binary content -> full content
-          goto Bin;
-        with recInitData^.ManagedFields[0] do
-        {$else FPC_NEWRTTI}
-        if nested^.ManagedCount=0 then // only binary content -> full content
-          goto Bin;
-        with nested^.ManagedFields[0] do
-        {$endif FPC_NEWRTTI}
+        if GetManagedFields(nested,field)=0 then // only binary content
         {$endif FPC_OLDRTTI}
-        case Offset of
-        0: case DeRef(TypeInfo)^.Kind of
+          goto Bin;
+        case field^.Offset of
+        0: case DeRef(field^.TypeInfo)^.Kind of
            tkLString{$ifdef FPC},tkLStringOld{$endif}: fKnownType := djRawUTF8;
            tkWString: fKnownType := djWideString;
            {$ifdef UNICODE}
@@ -48736,7 +48653,7 @@ rec:    inc(PByte(nested),nested^.NameLen);
            {$endif FPC_HAS_FEATURE_UNICODESTRINGS}
            {$endif}
            tkRecord{$ifdef FPC},tkObject{$endif}: begin
-             nested := DeRef(TypeInfo);
+             nested := DeRef(field^.TypeInfo);
              goto Rec;
            end;
            {$ifndef NOVARIANTS}
@@ -48748,7 +48665,7 @@ rec:    inc(PByte(nested),nested^.NameLen);
         2: fKnownType := djWord;
         4: fKnownType := djInteger;
         8: fKnownType := djInt64;
-        else fKnownSize := Offset;
+        else fKnownSize := field^.Offset;
         end;
       end;
     end;
