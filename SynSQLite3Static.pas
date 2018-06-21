@@ -230,7 +230,7 @@ implementation
       {$else}
         {$linklib .\..\static\i386-darwin\libsqlite3.a}
       {$endif}
-      const _PREFIX = '';
+      const _PREFIX = '_';
     {$else Darwin}
       {$ifndef FPC_CROSSCOMPILING}
         {$linklib gcc.a}

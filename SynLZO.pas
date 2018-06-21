@@ -1845,7 +1845,7 @@ begin
     SetString(result,nil,len);
     P := pointer(result);
     PCardinal(P)^ := Hash32(pointer(Data),DataLen);
-    len := lzopas_compress(pointer(Data),DataLen,P+8);
+    len := lzopas_compress(pointer(Data),DataLen,pointer(P+8));
     PCardinal(P+4)^ := Hash32(pointer(P+8),len);
     SetString(Data,P,len+8);
   end else begin
@@ -1853,9 +1853,9 @@ begin
     P := pointer(Data);
     if (DataLen<=8) or (Hash32(pointer(P+8),DataLen-8)<>PCardinal(P+4)^) then
       exit;
-    len := lzopas_decompressdestlen(P+8);
+    len := lzopas_decompressdestlen(pointer(P+8));
     SetLength(result,len);
-    if (len<>0) and ((lzopas_decompress(P+8,DataLen-8,pointer(result))<>len) or
+    if (len<>0) and ((lzopas_decompress(pointer(P+8),DataLen-8,pointer(result))<>len) or
        (Hash32(pointer(result),len)<>PCardinal(P)^)) then begin
       result := '';
       exit;
