@@ -22864,13 +22864,13 @@ end;
 function GetSetName(aTypeInfo: pointer; const value): RawUTF8;
 var PS: PShortString;
     i,max: integer;
-    bits: TBitScan;
+    {$ifdef HASINLINE}bits: TBitScan;{$endif}
 begin
   result := '';
   if GetSetInfo(aTypeInfo,max,PS) then begin
-    bits.Init(@value);
+    {$ifdef HASINLINE}bits.Init(@value);{$endif}
     for i := 0 to max do begin
-      if bits.Next then
+      if {$ifdef HASINLINE}bits.Next{$else}GetBit(value,i){$endif} then
         result := FormatUTF8('%%,',[result,PS^]);
       inc(PByte(PS),ord(PS^[0])+1); // next short string
     end;
@@ -22900,13 +22900,13 @@ procedure GetSetNameShort(aTypeInfo: pointer; const value; out result: ShortStri
   trimlowercase: boolean);
 var PS: PShortString;
     i,max: integer;
-    bits: TBitScan;
+    {$ifdef HASINLINE}bits: TBitScan;{$endif}
 begin
   result := '';
   if GetSetInfo(aTypeInfo,max,PS) then begin
-    bits.Init(@value);
+    {$ifdef HASINLINE}bits.Init(@value);{$endif}
     for i := 0 to max do begin
-      if bits.Next then
+      if {$ifdef HASINLINE}bits.Next{$else}GetBit(value,i){$endif} then
         AppendShortComma(@PS^[1],ord(PS^[0]),result,trimlowercase);
       inc(PByte(PS),ord(PS^[0])+1); // next short string
     end;
