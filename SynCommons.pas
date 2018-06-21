@@ -22150,7 +22150,9 @@ type
   packed
   {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
   record
+    {$ifdef FPC_NEWRTTI}
     Terminator: Pointer;
+    {$ENDIF}
     Size: Integer;
     {$ifdef FPC_NEWRTTI}
     Flags: TRecordInfoInitFlags;
@@ -22187,22 +22189,6 @@ type
   end;
   PEnhancedFieldInfo = ^TEnhancedFieldInfo;
   {$endif}
-
-  /// map the Delphi/FPC RTTI content
-  {$ifdef FPC_NEWRTTI}
-  PPRecordInitTable = ^PRecordInitTable;
-  PRecordInitTable = ^TRecordInitTable;
-  TRecordInitTable =
-    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
-    packed
-    {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
-    record
-      recSize: longint;
-      Terminator: Pointer;
-      recManagementOperators: Pointer;
-      ManagedCount: longint;
-    end;
-  {$endif FPC_NEWRTTI}
 
   TTypeInfo =
     {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
