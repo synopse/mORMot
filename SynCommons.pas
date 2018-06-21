@@ -40300,7 +40300,7 @@ end;
 {$else FPC_OLDRTTI}
 procedure RecordCopy(var Dest; const Source; TypeInfo: pointer);
 begin
-  FPCRecordCopy(Dest,Source,TypeInfo);
+  FPCRecordCopy(Source,Dest,TypeInfo);
 end;
 {$endif FPC_OLDRTTI}
 procedure RecordClear(var Dest; TypeInfo: pointer);

@@ -84,7 +84,7 @@ function GetFPCRecInitData(TypeData: Pointer): Pointer; inline;
 procedure FPCDynArrayClear(var a: Pointer; typeInfo: Pointer);
 procedure FPCFinalizeArray(p: Pointer; typeInfo: Pointer; elemCount: PtrUInt);
 procedure FPCFinalize(Data: Pointer; TypeInfo: Pointer);
-procedure FPCRecordCopy(var Dest; const Source; TypeInfo: pointer);
+procedure FPCRecordCopy(const Source; var Dest; TypeInfo: pointer);
 procedure FPCRecordAddRef(var Data; TypeInfo : pointer);
 
 
@@ -96,7 +96,7 @@ procedure FPCFinalizeArray(p: Pointer; typeInfo: Pointer; elemCount: PtrUInt);
   [external name 'FPC_FINALIZE_ARRAY'];
 procedure FPCFinalize(Data: Pointer; TypeInfo: Pointer);
   [external name 'FPC_FINALIZE'];
-procedure FPCRecordCopy(var Dest; const Source; TypeInfo: pointer);
+procedure FPCRecordCopy(const Source; var Dest; TypeInfo: pointer);
   [external name 'FPC_COPY'];
 procedure FPCRecordAddRef(var Data; TypeInfo : pointer);
   [external name 'FPC_ADDREF'];
