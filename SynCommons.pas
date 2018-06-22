@@ -4899,12 +4899,7 @@ function CSVToInt64DynArray(CSV: PUTF8Char; Sep: AnsiChar= ','): TInt64DynArray;
 
 /// return the corresponding CSV text from a dynamic array of 32-bit integer
 // - you can set some custom Prefix and Suffix text
-function IntegerDynArrayToCSV(const Values: array of integer; ValuesCount: integer;
-  const Prefix: RawUTF8=''; const Suffix: RawUTF8=''; InlinedValue: boolean=false): RawUTF8; overload;
-
-/// return the corresponding CSV text from a dynamic array of 64-bit integers
-// - you can set some custom Prefix and Suffix text
-function Int64DynArrayToCSV(const Values: array of Int64; ValuesCount: integer;
+function IntegerDynArrayToCSV(Values: PIntegerArray; ValuesCount: integer;
   const Prefix: RawUTF8=''; const Suffix: RawUTF8=''; InlinedValue: boolean=false): RawUTF8; overload;
 
 /// return the corresponding CSV text from a dynamic array of 32-bit integer
@@ -4912,6 +4907,11 @@ function Int64DynArrayToCSV(const Values: array of Int64; ValuesCount: integer;
 function IntegerDynArrayToCSV(const Values: TIntegerDynArray;
   const Prefix: RawUTF8=''; const Suffix: RawUTF8=''; InlinedValue: boolean=false): RawUTF8; overload;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// return the corresponding CSV text from a dynamic array of 64-bit integers
+// - you can set some custom Prefix and Suffix text
+function Int64DynArrayToCSV(Values: PInt64Array; ValuesCount: integer;
+  const Prefix: RawUTF8=''; const Suffix: RawUTF8=''; InlinedValue: boolean=false): RawUTF8; overload;
 
 /// return the corresponding CSV text from a dynamic array of 64-bit integers
 // - you can set some custom Prefix and Suffix text
@@ -11546,7 +11546,6 @@ var
   // - is defined globally, since may be used from an inlined function
   SmallUInt32UTF8: array[0..999] of RawUTF8;
 
-
 /// fast conversion from hexa chars into binary data
 // - BinBytes contain the bytes count to be converted: Hex^ must contain
 //  at least BinBytes*2 chars to be converted, and Bin^ enough space
@@ -14114,7 +14113,7 @@ function FileOpen(const FileName: string; Mode: LongWord): Integer;
 /// compatibility function, to be implemented according to the running OS
 // - expect more or less the same result as the homonymous Win32 API function
 // - will call the corresponding function in SynKylix.pas or SynFPCLinux.pas
-function GetTickCount64: Int64;
+function GetTickCount64: Int64;   {$ifdef HASINLINE}inline;{$endif}
 
 {$endif MSWINDOWS}
 
@@ -21118,25 +21117,23 @@ begin
       result := 1;
       exit;
     end;
-    vtInteger:
-      if cardinal(V.VInteger)<=high(SmallUInt32UTF8) then begin
-        Res.Text := pointer(SmallUInt32UTF8[V.VInteger]);
+    vtInteger: begin
+      result := V.VInteger;
+      if cardinal(result)<=high(SmallUInt32UTF8) then begin
+smlu32: Res.Text := pointer(SmallUInt32UTF8[result]);
         Res.Len := length(RawByteString(pointer(Res.Text)));
-        result := Res.Len;
-        exit;
       end else begin
-        Res.Text := PUTF8Char(StrInt32(@Res.Temp[23],V.VInteger));
+        Res.Text := PUTF8Char(StrInt32(@Res.Temp[23],result));
         Res.Len := @Res.Temp[23]-Res.Text;
-        result := Res.Len;
-        exit;
       end;
+      result := Res.Len;
+      exit;
+    end;
     vtInt64:
       if (PCardinalArray(V.VInt64)^[0]<=high(SmallUInt32UTF8)) and
          (PCardinalArray(V.VInt64)^[1]=0) then begin
-smlu32: Res.Text := pointer(SmallUInt32UTF8[V.VInt64^]);
-        Res.Len := length(RawByteString(pointer(Res.Text)));
-        result := Res.Len;
-        exit;
+        result := V.VInt64^;
+        goto smlu32;
       end else begin
         Res.Text := PUTF8Char(StrInt64(@Res.Temp[23],V.VInt64^));
         Res.Len := @Res.Temp[23]-Res.Text;
@@ -21145,13 +21142,15 @@ smlu32: Res.Text := pointer(SmallUInt32UTF8[V.VInt64^]);
       end;
     {$ifdef FPC}
     vtQWord:
-    if (PCardinalArray(V.VQWord)^[0]<=high(SmallUInt32UTF8)) and
-       (PCardinalArray(V.VQWord)^[1]=0) then goto smlu32 else begin
-      Res.Text := PUTF8Char(StrUInt64(@Res.Temp[23],V.VQWord^));
-      Res.Len := @Res.Temp[23]-Res.Text;
-      result := Res.Len;
-      exit;
-    end;
+      if V.VQWord^<=high(SmallUInt32UTF8) then begin
+         result := V.VQWord^;
+         goto smlu32;
+       end else begin
+        Res.Text := PUTF8Char(StrUInt64(@Res.Temp[23],V.VQWord^));
+        Res.Len := @Res.Temp[23]-Res.Text;
+        result := Res.Len;
+        exit;
+      end;
     {$endif}
     vtCurrency: begin
       Res.Text := @Res.Temp;
@@ -31007,7 +31006,7 @@ begin
   end;
 end;
 
-function IntegerDynArrayToCSV(const Values: array of integer; ValuesCount: integer;
+function IntegerDynArrayToCSV(Values: PIntegerArray; ValuesCount: integer;
   const Prefix, Suffix: RawUTF8; InlinedValue: boolean): RawUTF8;
 type
   TInts16 = packed array[word] of string[15]; // shortstring are faster (no heap allocation)
@@ -31064,7 +31063,7 @@ begin
   end;
 end;
 
-function Int64DynArrayToCSV(const Values: array of Int64; ValuesCount: integer;
+function Int64DynArrayToCSV(Values: PInt64Array; ValuesCount: integer;
   const Prefix, Suffix: RawUTF8; InlinedValue: boolean): RawUTF8;
 type
   TInt = packed record
@@ -31133,13 +31132,13 @@ end;
 function IntegerDynArrayToCSV(const Values: TIntegerDynArray;
   const Prefix, Suffix: RawUTF8; InlinedValue: boolean): RawUTF8;
 begin
-  result := IntegerDynArrayToCSV(Values,length(Values),Prefix,Suffix,InlinedValue);
+  result := IntegerDynArrayToCSV(pointer(Values),length(Values),Prefix,Suffix,InlinedValue);
 end;
 
 function Int64DynArrayToCSV(const Values: TInt64DynArray;
   const Prefix: RawUTF8; const Suffix: RawUTF8; InlinedValue: boolean): RawUTF8;
 begin
-  result := Int64DynArrayToCSV(Values,length(Values),Prefix,Suffix,InlinedValue);
+  result := Int64DynArrayToCSV(pointer(Values),length(Values),Prefix,Suffix,InlinedValue);
 end;
 
 function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): PtrInt;
@@ -43415,13 +43414,9 @@ begin // defined as a function and not an array[boolean] of RawUTF8 for FPC
 end;
 
 function Plural(const itemname: shortstring; itemcount: cardinal): shortstring;
-var P: PAnsiChar;
-    len: integer;
+var len: integer;
 begin
-  P := StrUInt32(@result[255],itemcount);
-  len := @result[255]-P;
-  MoveFast(P^,result[1],len);
-  inc(len);
+  len := (AppendUInt32ToBuffer(@result[1],itemcount)-PUTF8Char(@result[1]))+1;
   result[len] := ' ';
   if ord(itemname[0])<240 then begin // avoid buffer overflow
     MoveFast(itemname[1],result[len+1],ord(itemname[0]));
@@ -52197,8 +52192,8 @@ begin
   if BEnd-B<=17 then
     FlushToStream;
   with GlobalLogTime[LocalTime] do begin
-    tix := GetTickCount64; // this call is very fast (just one integer mul)
-    if clock<>tix then begin // typically in range of 10-16 ms
+    tix := GetTickCount64 {$ifndef MSWINDOWS}shr 3{$endif};
+    if clock<>tix then begin // Windows: typically in range of 10-16 ms
       clock := tix;
       if LocalTime then
         time.FromNowLocal else

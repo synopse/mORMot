@@ -1100,7 +1100,7 @@ begin
        IdemPChar(pointer(SQLWhere),'ORDER BY ') then
       // LIMIT is not handled by SQLite3 when built from amalgamation
       // see http://www.sqlite.org/compile.html#enable_update_delete_limit
-      aSQLWhere := Int64DynArrayToCSV(TInt64DynArray(IDs),length(IDs),'RowID IN (',')') else
+      aSQLWhere := Int64DynArrayToCSV(pointer(IDs),length(IDs),'RowID IN (',')') else
       aSQLWhere := SQLWhere;
     result := ExecuteFmt('DELETE FROM %%',
       [fModel.TableProps[TableModelIndex].Props.SQLTableName,SQLFromWhere(aSQLWhere)]);
@@ -1566,7 +1566,7 @@ begin
         result := ExecuteFmt('UPDATE % SET %=:(%):,%=:(%): WHERE RowID=:(%):',
           [Props.SQLTableName,SetFieldName,SetValue,
            Props.RecordVersionField.Name,RecordVersionCompute,ID[0]]) else begin
-      IDs := Int64DynArrayToCSV(TInt64DynArray(ID),length(ID));
+      IDs := Int64DynArrayToCSV(pointer(ID),length(ID));
       if Props.RecordVersionField=nil then
         result := ExecuteFmt('UPDATE % SET %=% WHERE RowID IN (%)',
           [Props.SQLTableName,SetFieldName,SetValue,IDs]) else begin

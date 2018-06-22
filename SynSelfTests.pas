@@ -16062,7 +16062,7 @@ begin
   Str2[i] := UTF8ToWideString(RawUTF8ArrayToCSV(Strs1));
   inc(Rec2.ID);
   dec(Rec2.Timestamp512);
-  Rec2.JSON := IntegerDynArrayToCSV(Ints,length(Ints));
+  Rec2.JSON := IntegerDynArrayToCSV(pointer(Ints),length(Ints));
   Float2 := Float1;
 end;
 
@@ -16350,7 +16350,7 @@ begin
     Check(Rec1.FileExtension=ExeVersion.ProgramFileName);
     Check(Rec2.ID=i1+1);
     Check(Rec2.Timestamp512=c-1);
-    Check(Rec2.JSON=IntegerDynArrayToCSV(Ints,length(Ints)));
+    Check(Rec2.JSON=IntegerDynArrayToCSV(pointer(Ints),length(Ints)));
     Check(RecRes.ID=i1);
     Check(RecRes.Timestamp512=c);
     Check(RecRes.JSON=StringToUTF8(Rec1.FileExtension));

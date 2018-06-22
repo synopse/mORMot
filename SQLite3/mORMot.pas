@@ -43054,7 +43054,7 @@ begin
   Ctxt.Call.OutStatus := HTTP_SUCCESS;
   for i := 0 to length(Results)-1 do
     if Results[i]<>HTTP_SUCCESS then begin
-      Ctxt.Call.OutBody := Int64DynArrayToCSV(Results,length(Results),'[',']');
+      Ctxt.Call.OutBody := Int64DynArrayToCSV(pointer(Results),length(Results),'[',']');
       exit;
     end;
   Ctxt.Call.OutBody := '["OK"]';  // to save bandwith if no adding
@@ -43779,7 +43779,7 @@ begin
     if HistIDCount=0 then
       exit; // nothing to compress
     QuickSortInt64(Pointer(HistID),0,HistIDCount-1);
-    WhereClause := Int64DynArrayToCSV(HistID,HistIDCount,'RowID in (',')');
+    WhereClause := Int64DynArrayToCSV(Pointer(HistID),HistIDCount,'RowID in (',')');
     { following SQL is much slower with external tables, and won't work
       with TSQLRestStorageInMemory -> manual process instead
     WhereClause := FormatUTF8('ModifiedRecord in (select ModifiedRecord from '+
@@ -47417,7 +47417,7 @@ begin
     result := true;
     for i := 0 to high(id) do
       if id[i]<>nil then begin
-        sql := Int64DynArrayToCSV(id[i],idn[i],'ID in (',')');
+        sql := Int64DynArrayToCSV(pointer(id[i]),idn[i],'ID in (',')');
         if not fShards[i].EngineDeleteWhere(fShardTableIndex[i],sql,TIDDynArray(id[i])) then
           result := false;
       end;
