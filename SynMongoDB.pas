@@ -6565,23 +6565,27 @@ asm // use fast reciprocal division for Delphi (FPC knows this optimization)
 end;
 {$endif}
 
-function TDecimal128.ToText(out Buffer: TDecimal128Str): integer;
-var dest: PUTF8Char;
-    exp, sciexp, signdig, radixpos: integer;
-    combi, biasedexp, signmsb, leastdig, fastdiv: cardinal;
-    digbuffer: array[0..35] of byte;
-    dig: PByte;
-    _128: THash128Rec;
-    j, k: integer;
-  procedure append(digits: integer);
-  var i: integer;
-  begin
-    for i := 0 to digits-1 do begin
+procedure append(var dest: PUTF8Char; var dig: PByte; digits: PtrInt); {$ifdef HASINLINE}inline;{$endif}
+begin
+  if digits>0 then
+    repeat
       dest^ := AnsiChar(dig^+ord('0'));
       inc(dig);
       inc(dest);
-    end;
-  end;
+      dec(digits);
+      if digits=0 then
+        break;
+    until false;
+end;
+
+function TDecimal128.ToText(out Buffer: TDecimal128Str): integer;
+var dest: PUTF8Char;
+    dig: PByte;
+    exp, sciexp, signdig, radixpos, j, k: PtrInt;
+    combi, biasedexp, signmsb: PtrUInt;
+    leastdig, fastdiv: cardinal;
+    digbuffer: array[0..35] of byte;
+    _128: THash128Rec;
 begin
   dest := @Buffer;
   if Int64(Bits.hi)<0 then begin
@@ -6656,7 +6660,7 @@ begin
     if signdig<>0 then begin
       dest^ := '.';
       inc(dest);
-      append(signdig);
+      append(dest,dig,signdig);
     end;
     if sciexp>0 then
       PWord(dest)^ := ord('E')+ord('+')shl 8 else begin
@@ -6666,11 +6670,11 @@ begin
     dest := AppendUInt32ToBuffer(dest+2,sciexp)
   end else begin
     if exp>=0 then // regular format with no decimal place
-      append(signdig)
+      append(dest,dig,signdig)
     else begin
       radixpos := signdig+exp;
       if radixpos>0 then // non-zero digits before radix
-        append(radixpos)
+        append(dest,dig,radixpos)
       else begin
         dest^ := '0'; // leading zero before radix point
         inc(dest);
@@ -6682,7 +6686,7 @@ begin
         inc(dest);
         inc(radixpos);
       end;
-      append(signdig-radixpos);
+      append(dest,dig,signdig-radixpos);
     end;
   end;
   result := dest-@Buffer;
@@ -6752,9 +6756,9 @@ var P,PEnd: PUTF8Char;
     flags: set of (negative, signed, radix, nonzero);
     digits: array[0..BSON_DECIMAL128_MAX_DIGITS-1] of byte;
     firstnon0, digread, digstored, digcount, radixpos,
-    digfirst, diglast, exp, signdig, i: integer;
+    digfirst, diglast, exp, signdig, i: PtrInt;
     signhi, signlo: QWord;
-    biasedexp: cardinal;
+    biasedexp: PtrUInt;
     sign: THash128Rec;
 begin
   for result := dsvNan to dsvNegInf do

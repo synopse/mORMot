@@ -12447,7 +12447,6 @@ procedure FillZero(var dest; count: integer); overload;
 
 /// fast computation of two 64-bit unsigned integers into a 128-bit value
 procedure mul64x64(const left, right: QWord; out product: THash128Rec);
-  {$ifdef CPU64}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 type
   /// the potential features, retrieved from an Intel CPU
@@ -36036,16 +36035,20 @@ begin
       FillcharFast(pointer(secret)^,length,0);
 end;
 
-{$ifdef CPU32DELPHI}
-procedure mul64(a,b: cardinal; out product64: QWord);
-asm // Delphi is not efficient for x86 target with QWord -> optimize
-      imul  edx
-      mov   [ecx], eax
-      mov   [ecx + 4], edx
-end;
-{$endif}
-
 procedure mul64x64(const left, right: QWord; out product: THash128Rec);
+{$ifdef CPUX64} {$ifdef FPC}nostackframe; assembler; asm {$else}
+asm     // rcx/rdi=left, rdx/rsi=right r8/rdx=product
+        .noframe
+{$endif}{$ifdef WIN64}
+        mov     rax, rcx
+        mul     rdx // uses built-in 64-bit -> 128-bit multiplication
+{$else} mov     r8, rdx
+        mov     rax, rdi
+        mul     rsi
+{$endif}mov     qword ptr [r8], rax
+        mov     qword ptr [r8+8], rdx
+end;
+{$else}
 {$ifdef CPUX86}
 asm // adapted from FPC compiler output, which is much better than Delphi's here
         mov     ecx, eax
@@ -36074,30 +36077,19 @@ asm // adapted from FPC compiler output, which is much better than Delphi's here
         mov     dword ptr [ecx+8H], eax
         mov     dword ptr [ecx+0CH], edx
 end;
-{$else}
+{$else} // CPU-neutral implementation
 var l: TQWordRec absolute left;
     r: TQWordRec absolute right;
     t1,t2,t3: TQWordRec;
 begin
-  {$ifdef CPU32DELPHI}
-  mul64(l.L,r.L,t1.V);
-  mul64(l.H,r.L,t2.V);
-  inc(t2.V,t1.H);
-  mul64(l.L,r.H,t3.V);
-  inc(t3.V,t2.L);
-  mul64(l.H,r.H,product.H);
-  inc(product.H,t2.H+t3.H);
-  product.c0 := t1.L;
-  product.c1 := t3.V;
-  {$else}
   t1.V := QWord(l.L)*r.L;
   t2.V := QWord(l.H)*r.L+t1.H;
   t3.V := QWord(l.L)*r.H+t2.L;
   product.H := QWord(l.H)*r.H+t2.H+t3.H;
   product.L := t3.V shl 32 or t1.L;
-  {$endif}
 end;
-{$endif}
+{$endif CPUX86}
+{$endif CPUX64}
 
 procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
 var i,len: integer;
