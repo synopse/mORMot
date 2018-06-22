@@ -2379,7 +2379,7 @@ procedure _mult(out Output: TVLI2; const Left, Right: TVLI);
 var i, k, l_min: integer;
     Product, r01: UInt128;
     carry, prev: UInt64;
-    l, r: PUInt64;
+    l, r: ^UInt64;
 begin
   r01.m_low := 0;
   r01.m_high := 0;
