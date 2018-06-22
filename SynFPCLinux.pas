@@ -123,7 +123,7 @@ function GetFileSize(hFile: cInt; lpFileSizeHigh: PDWORD): DWORD;
 procedure SetEndOfFile(hFile: cInt); inline;
 
 /// compatibility function, wrapping Win32 API file flush to disk
-procedure FlushFileBuffers(hFile: cInt);
+procedure FlushFileBuffers(hFile: cInt); inline;
 
 /// compatibility function, wrapping Win32 API last error code
 function GetLastError: longint; inline;
@@ -133,17 +133,17 @@ procedure SetLastError(error: longint); inline;
 
 /// compatibility function, wrapping Win32 API text comparison
 function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pwidechar;
-  cchCount1: longint; lpString2: Pwidechar; cchCount2: longint): longint; inline;
+  cchCount1: longint; lpString2: Pwidechar; cchCount2: longint): longint;
 
 /// returns the current UTC time
 function GetNowUTC: TDateTime;
 
 /// returns the current UTC time, as Unix Epoch seconds
-function GetUnixUTC: Int64;
+function GetUnixUTC: Int64; inline;
 
 /// returns the current UTC time, as Unix Epoch milliseconds
 // - will call clock_gettime(CLOCK_REALTIME_COARSE) if available
-function GetUnixMSUTC: Int64;
+function GetUnixMSUTC: Int64; inline;
 
 /// returns the current UTC time as TSystemTime
 procedure GetNowUTCSystem(var result: TSystemTime);
@@ -161,7 +161,7 @@ procedure SetUnixThreadName(ThreadID: TThreadID; const Name: RawByteString);
 
 /// compatibility function, to be implemented according to the running OS
 // - expect more or less the same result as the homonymous Win32 API function
-function GetTickCount64: Int64;
+function GetTickCount64: Int64; inline;
 
 /// compatibility function, to be implemented according to the running OS
 // - expect more or less the same result as the homonymous Win32 API function
@@ -399,8 +399,8 @@ end;
 
 function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pwidechar;
   cchCount1: longint; lpString2: Pwidechar; cchCount2: longint): longint;
-var W1,W2: UnicodeString; // faster than WideString under Windows
-begin
+var W1,W2: WideString;
+begin // not inlined to avoid stack unicodestring allocation
   W1 := lpString1;
   W2 := lpString2;
   if dwCmpFlags and NORM_IGNORECASE<>0 then
