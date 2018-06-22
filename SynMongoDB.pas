@@ -6539,9 +6539,9 @@ begin
   result := (Bits.lo=other.Bits.lo) and (Bits.hi=other.Bits.hi);
 end;
 
-function div128bits9digits(var value: THash128Rec): cardinal;
+function div128bits9digits(var value: THash128Rec): PtrUInt;
 var r64: QWord;
-    i: integer;
+    i: PtrInt;
 begin
   r64 := 0;
   for i := 0 to high(value.c) do begin

@@ -13073,9 +13073,9 @@ type
     function IsEqual(const another{$ifndef DELPHI5OROLDER}: TSynSystemTime{$endif}): boolean;
     /// used by TSynTimeZone
     function EncodeForTimeChange(const aYear: word): TDateTime;
-    /// fill fields with the current UTC time
+    /// fill fields with the current UTC time, using a 8-16ms thread-safe cache
     procedure FromNowUTC;
-    /// fill fields with the current Local time
+    /// fill fields with the current Local time, using a 8-16ms thread-safe cache
     procedure FromNowLocal;
   end;
   PSynSystemTime = ^TSynSystemTime;
@@ -13153,7 +13153,7 @@ type
     /// fill Value from Iso-8601 encoded text
     procedure From(const S: RawUTF8); overload;
     /// fill Value from specified Date/Time individual fields
-    procedure From(const Time: TSynSystemTime); overload;
+    procedure From(Time: PSynSystemTime); overload;
     /// fill Value from second-based c-encoded time (from Unix epoch 1/1/1970)
     procedure FromUnixTime(const UnixTime: TUnixTime);
     /// fill Value from millisecond-based c-encoded time (from Unix epoch 1/1/1970)
@@ -14141,6 +14141,21 @@ function FileStreamSequentialRead(const FileName: string): TFileStream;
 // !  until Terminated;
 // !...
 function Elapsed(var PreviousTix: Int64; Interval: Integer): Boolean;
+
+/// thread-safe move of a 32-bit value using a simple Read-Copy-Update pattern
+procedure RCU32(var src,dst);
+
+/// thread-safe move of a 64-bit value using a simple Read-Copy-Update pattern
+procedure RCU64(var src,dst);
+
+/// thread-safe move of a 128-bit value using a simple Read-Copy-Update pattern
+procedure RCU128(var src,dst);
+
+/// thread-safe move of a pointer value using a simple Read-Copy-Update pattern
+procedure RCUPtr(var src,dst);
+
+/// thread-safe move of a memory buffer using a simple Read-Copy-Update pattern
+procedure RCU(var src,dst; len: integer);
 
 {$ifndef FPC} { FPC defines those functions as built-in }
 
@@ -36775,61 +36790,116 @@ begin
   From(UnixMSTimeToDateTime(UnixMSTime));
 end;
 
-procedure TTimeLogBits.From(const Time: TSynSystemTime);
-var V: cardinal;
+procedure TTimeLogBits.From(Time: PSynSystemTime);
+var V: PtrUInt;
 begin
-  V := Time.Hour+Time.Day shl 5+Time.Month shl 10+
-    Time.Year shl 14-(1 shl 5+1 shl 10);
-  Value := Time.Second+Time.Minute shl 6+Int64(V) shl 12;
+  V := PtrUInt(Time.Year) shl 14+PtrUInt(Time.Month) shl 10+PtrUInt(Time.Day) shl 5+
+    PtrUInt(Time.Hour)-(1 shl 5+1 shl 10);
+  Value := PtrUInt(Time.Minute) shl 6+PtrUInt(Time.Second)+QWord(V) shl 12;
 end;
 
-var // can be safely made global since timing is multi-thread safe
-  GlobalTime: array[boolean] of record // GlobalTime[LocalTime]
+var // GlobalTime[LocalTime] cache protected using RCU128()
+  GlobalTime: array[boolean] of record
     time: TSystemTime;
     clock: PtrInt; // avoid slower API call with 8-16ms loss of precision
   end;
 
+{$ifndef FPC}{$ifdef CPUINTEL} // intrinsic in FPC
+procedure ReadBarrier;
+asm
+  {$ifdef CPUX86}
+  lock add dword ptr [esp], 0
+  {$else}
+  lfence // lfence requires an SSE CPU, which is OK on x86-64
+  {$endif}
+end;
+{$endif}{$endif}
+
+procedure RCU32(var src,dst);
+begin
+  repeat
+    Integer(dst) := Integer(src);
+    ReadBarrier;
+  until Integer(dst)=Integer(src);
+end;
+
+procedure RCU64(var src,dst);
+begin
+  repeat
+    Int64(dst) := Int64(src);
+    ReadBarrier;
+  until Int64(dst)=Int64(src);
+end;
+
+procedure RCUPtr(var src,dst);
+begin
+  repeat
+    PtrInt(dst) := PtrInt(src);
+    ReadBarrier;
+  until PtrInt(dst)=PtrInt(src);
+end;
+
+procedure RCU128(var src,dst);
+var s: THash128Rec absolute src;
+    d: THash128Rec absolute dst;
+begin
+  repeat
+    d := s;
+    ReadBarrier;
+  until (d.L=s.L) and (d.H=s.H);
+end;
+
+procedure RCU(var src,dst; len: integer);
+begin
+  repeat
+    MoveFast(src,dst,len);
+    ReadBarrier;
+  until CompareMem(@src,@dst,len);
+end;
+
 procedure FromGlobalTime(LocalTime: boolean; out NewTime: TSynSystemTime);
 var tix: PtrInt;
+    newtimesys: TSystemTime absolute NewTime;
 begin
-  tix := GetTickCount64 {$ifndef MSWINDOWS}shr 3{$endif}; // Linux: 8ms refresh
   with GlobalTime[LocalTime] do begin
+    tix := GetTickCount64 {$ifndef MSWINDOWS}shr 3{$endif}; // Linux: 8ms refresh
     if clock<>tix then begin // Windows: typically in range of 10-16 ms
       clock := tix;
       if LocalTime then
-        GetLocalTime(time) else
-        {$ifdef MSWINDOWS}GetSystemTime{$else}GetNowUTCSystem{$endif}(time);
-    end;
-    NewTime := PSynSystemTime(@time)^;
-    {$ifndef MSWINDOWS} // those TSystemTime fields are inverted in datih.inc :(
-    NewTime.Day := time.Day;
-    NewTime.DayOfWeek := time.DayOfWeek;
-    {$endif}
+        GetLocalTime(newtimesys) else
+        {$ifdef MSWINDOWS}GetSystemTime{$else}GetNowUTCSystem{$endif}(newtimesys);
+      RCU128(newtimesys,time);
+    end else
+      RCU128(time,NewTime);
   end;
+  {$ifndef MSWINDOWS} // those TSystemTime fields are inverted in datih.inc :(
+  tix := newtimesys.DayOfWeek;
+  NewTime.Day := newtimesys.Day;
+  NewTime.DayOfWeek := tix;
+  {$endif}
 end;
 
 procedure TTimeLogBits.FromUTCTime;
 var now: TSynSystemTime;
 begin
   FromGlobalTime(false,now);
-  From(now);
+  From(@now);
 end;
 
 procedure TTimeLogBits.FromNow;
 var now: TSynSystemTime;
 begin
   FromGlobalTime(true,now);
-  From(now);
+  From(@now);
 end;
 
 function TTimeLogBits.ToTime: TDateTime;
+var lo: PtrUInt;
 begin
-  if Value and (1 shl (6+6+5)-1)=0 then
+  lo := {$ifdef CPU64}Value{$else}Int64Rec(Value).Lo{$endif};
+  if lo and (1 shl (6+6+5)-1)=0 then
     result := 0 else
-    result := EncodeTime(
-       (Int64Rec(Value).Lo shr (6+6)) and 31,
-       (Int64Rec(Value).Lo shr 6) and 63,
-        Int64Rec(Value).Lo and 63, 0);
+    result := EncodeTime((lo shr(6+6))and 31, (lo shr 6)and 63, lo and 63, 0);
 end;
 
 function TryEncodeDate(Year, Month, Day: Word; out Date: TDateTime): Boolean;
@@ -36856,28 +36926,34 @@ begin // faster version by AB
 end;
 
 function TTimeLogBits.ToDate: TDateTime;
-var Y: cardinal;
+var Y, lo: PtrUInt;
 begin
+  {$ifdef CPU64}
+  lo := Value;
+  Y := (lo shr (6+6+5+5+4)) and 4095;
+  {$else}
   Y := (Value shr (6+6+5+5+4)) and 4095;
-  if (Y=0) or not TryEncodeDate(Y,
-       1+(Int64Rec(Value).Lo shr (6+6+5+5)) and 15,
-       1+(Int64Rec(Value).Lo shr (6+6+5)) and 31,result) then
+  lo := Int64Rec(Value).Lo;
+  {$endif}
+  if (Y=0) or not TryEncodeDate(Y,1+(lo shr(6+6+5+5))and 15,1+(lo shr(6+6+5))and 31,result) then
     result := 0;
 end;
 
 function TTimeLogBits.ToDateTime: TDateTime;
-var Y: cardinal;
+var Y, lo: PtrUInt;
     Time: TDateTime;
 begin
+  {$ifdef CPU64}
+  lo := Value;
+  Y := (lo shr (6+6+5+5+4)) and 4095;
+  {$else}
   Y := (Value shr (6+6+5+5+4)) and 4095;
-  if (Y=0) or not TryEncodeDate(Y,
-       1+(Int64Rec(Value).Lo shr (6+6+5+5)) and 15,
-       1+(Int64Rec(Value).Lo shr (6+6+5)) and 31,result) then
+  lo := Int64Rec(Value).Lo;
+  {$endif}
+  if (Y=0) or not TryEncodeDate(Y,1+(lo shr(6+6+5+5))and 15,1+(lo shr(6+6+5))and 31,result) then
     result := 0;
-  if (Value and (1 shl (6+6+5)-1)<>0) and TryEncodeTime(
-      (Int64Rec(Value).Lo shr (6+6)) and 31,
-      (Int64Rec(Value).Lo shr 6) and 63,
-      Int64Rec(Value).Lo and 63, 0, Time) then
+  if (lo and (1 shl(6+6+5)-1)<>0) and TryEncodeTime((lo shr(6+6)) and 31,
+      (lo shr 6)and 63, lo and 63, 0, Time) then
     result := result+Time;
 end;
 
@@ -36922,25 +36998,26 @@ begin
 end;
 
 function TTimeLogBits.Text(Dest: PUTF8Char; Expanded: boolean; FirstTimeChar: AnsiChar): integer;
+var lo: PtrUInt;
 begin
-  if Value=0 then
-    result := 0 else
-  if Value and (1 shl (6+6+5)-1)=0 then begin
+  if Value=0 then begin
+    result := 0;
+    exit;
+  end;
+  lo := {$ifdef CPU64}Value{$else}Int64Rec(Value).Lo{$endif};
+  if lo and (1 shl (6+6+5)-1)=0 then begin
     // no Time: just convert date
-    DateToIso8601PChar(Dest,Expanded,
-      (Value shr (6+6+5+5+4)) and 4095,
-      1+(Int64Rec(Value).Lo shr (6+6+5+5)) and 15,
-      1+(Int64Rec(Value).Lo shr (6+6+5)) and 31);
+    DateToIso8601PChar(Dest, Expanded,
+      ({$ifdef CPU64}lo{$else}Value{$endif} shr (6+6+5+5+4)) and 4095,
+      1+(lo shr (6+6+5+5)) and 15, 1+(lo shr (6+6+5)) and 31);
     if Expanded then
       result := 10 else
       result := 8;
   end else
-  if Value shr (6+6+5)=0 then begin
+  if {$ifdef CPU64}lo{$else}Value{$endif} shr (6+6+5)=0 then begin
     // no Date: just convert time
-    TimeToIso8601PChar(Dest,Expanded,
-      (Int64Rec(Value).Lo shr (6+6)) and 31,
-      (Int64Rec(Value).Lo shr 6) and 63,
-       Int64Rec(Value).Lo and 63, 0, FirstTimeChar);
+    TimeToIso8601PChar(Dest, Expanded, (lo shr (6+6)) and 31,
+      (lo shr 6) and 63, lo and 63, 0, FirstTimeChar);
     if Expanded then
       result := 9 else
       result := 7;
@@ -36948,17 +37025,14 @@ begin
       dec(result);
   end else begin
     // convert time and date
-    DateToIso8601PChar(Dest,Expanded,
-      (Value shr (6+6+5+5+4)) and 4095,
-      1+(Int64Rec(Value).Lo shr (6+6+5+5)) and 15,
-      1+(Int64Rec(Value).Lo shr (6+6+5)) and 31);
+    DateToIso8601PChar(Dest, Expanded,
+      ({$ifdef CPU64}lo{$else}Value{$endif} shr (6+6+5+5+4)) and 4095,
+      1+(lo shr (6+6+5+5)) and 15, 1+(lo shr (6+6+5)) and 31);
     if Expanded then
       inc(Dest,10) else
       inc(Dest,8);
-    TimeToIso8601PChar(Dest,Expanded,
-      (Int64Rec(Value).Lo shr (6+6)) and 31,
-      (Int64Rec(Value).Lo shr 6) and 63,
-       Int64Rec(Value).Lo and 63, 0, FirstTimeChar);
+    TimeToIso8601PChar(Dest, Expanded, (lo shr (6+6)) and 31,
+      (lo shr 6) and 63, lo and 63, 0, FirstTimeChar);
     if Expanded then
       result := 15+4 else
       result := 15;
@@ -66046,6 +66120,8 @@ initialization
   Assert(SizeOf(THash128Rec)=SizeOf(THash128));
   Assert(SizeOf(THash256Rec)=SizeOf(THash256));
   Assert(SizeOf(TBlock128)=SizeOf(THash128));
+  assert(SizeOf(TSynSystemTime)=SizeOf(TSystemTime));
+  assert(SizeOf(TSynSystemTime)=SizeOf(THash128));
   Assert(SizeOf(TOperatingSystemVersion)=SizeOf(integer));
   {$ifdef MSWINDOWS}
   {$ifndef CPU64}
