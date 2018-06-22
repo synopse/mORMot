@@ -470,7 +470,7 @@ type
     M: THeapMemoryStream;
     crc0,crc1: cardinal;
   public
-    /// release used instances and memory
+    procedure Setup; override;
     procedure CleanUp; override;
   published
     /// direct deflate/inflate functions
@@ -9761,6 +9761,11 @@ end;
 
 { TTestCompression }
 
+procedure TTestCompression.Setup;
+begin
+  Data := StringFromFile(ExeVersion.ProgramFileName);
+end;
+
 procedure TTestCompression.CleanUp;
 begin
   FreeAndNil(M);
@@ -9904,7 +9909,6 @@ begin
   tmp := RawByteString(Ident);
   for comp := 0 to 9 do
     Check(UnCompressString(CompressString(tmp,False,comp))=tmp);
-  Data := StringFromFile(ExeVersion.ProgramFileName);
   Check(UnCompressString(CompressString(Data,False,6))=Data);
 end;
 
@@ -10068,8 +10072,22 @@ begin
   Check(s=Data);
 end;
 
+function Spaces(n: integer): RawUTF8;
+begin
+  SetString(result,nil,n);
+  FillCharFast(pointer(result)^,n,32);
+end;
+
+function By4(pattern,n: integer): RawUTF8;
+var i: integer;
+begin
+  SetString(result,nil,n*4);
+  for i := 0 to n-1 do
+    PIntegerArray(result)[i] := pattern;
+end;
+
 procedure TTestCompression._SynLZ;
-var s,t: RawByteString;
+var s,t,rle: RawByteString;
     i,j, complen2: integer;
     comp2,dec1: array of byte;
     {$ifdef CPUINTEL}
@@ -10078,12 +10096,20 @@ var s,t: RawByteString;
     {$endif}
 begin
   for i := 1 to 200 do begin
-    t := StringOfChar(AnsiChar(i),i);
-    s := StringOfChar(AnsiChar(i),i);
-    Check(SynLZDecompress(SynLZCompress(s))=t);
+    s := SynLZCompress(StringOfChar(AnsiChar(i),i));
+    t := SynLZDecompress(s);
+    Check(t=StringOfChar(AnsiChar(i),i));
   end;
+  rle := 'hello'+Spaces(10000)+'hello'+Spaces(1000)+'world';
+  s := SynLZCompress(rle);
+  t := SynLZDecompress(s);
+  Check(t=rle);
+  rle := 'hello'+by4($3031333,10000)+'hello'+by4($3031333,1000)+'world';
+  s := SynLZCompress(rle);
+  t := SynLZDecompress(s);
+  Check(t=rle);
   for i := 0 to 1000 do begin
-    t := RandomString(i*8);
+    t := RandomTextParagraph(i, '.', StringOfChar(AnsiChar(' '),20));
     SetString(s,PAnsiChar(pointer(t)),length(t)); // =UniqueString
     Check(CompressSynLZ(s,true)='synlz');
     Check(CompressSynLZ(s,false)='synlz');
@@ -10119,6 +10145,7 @@ begin
   end;
   s := Data;
   Check(CompressSynLZ(s,true)='synlz');
+  Check(Length(s)<Length(Data),'exelen');
   Check(CompressSynLZ(s,false)='synlz');
   Check(s=Data);
 end;
