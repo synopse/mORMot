@@ -2030,7 +2030,7 @@ type
     // - for an ordinary on-disk database file, the serialization is just a copy
     // of the disk file; for an in-memory database or a "TEMP" database, the
     // serialization is the same sequence of bytes which would be written to disk
-    // if that database where backed up to disk.
+    // if that database where backed up to disk
     // - caller is responsible for freeing the returned value (using free_)
     // to avoid a memory leak
     serialize: function(DB: TSQLite3DB; Schema: PUTF8Char; Size: PInt64;
@@ -2044,6 +2044,25 @@ type
     deserialize: function(DB: TSQLite3DB; Schema: PUTF8Char; Data: pointer;
       DBSize, BufSize: Int64; Flags: integer): pointer; cdecl;
       
+    /// sets and/or queries the soft limit on the amount of heap memory
+    // that may be allocated by SQLite
+    // - SQLite strives to keep heap memory utilization below the soft heap limit
+    // by reducing the number of pages held in the page cache as heap memory usages
+    // approaches the limit. The soft heap limit is "soft" because even though
+    // SQLite strives to stay below the limit, it will exceed the limit rather
+    // than generate an SQLITE_NOMEM error. In other words, the soft heap limit
+    // is advisory only
+    // - The return value from soft_heap_limit64() is the size of the soft heap
+    // limit prior to the call, or negative in the case of an error. If the
+    // argument N is negative then no change is made to the soft heap limit.
+    // Hence, the current size of the soft heap limit can be determined by
+    // invoking soft_heap_limit64() with a negative argument
+    // - This function is useful when you have many SQLite databases open at
+    // the same time, as the cache-size setting is per-database (connection),
+    // while this limit is global for the process, so this allows to limit the
+    // total cache size
+    soft_heap_limit64: function(N: Int64): Int64; cdecl;
+
     /// used to make global configuration changes to current database
     config: function(operation: integer): integer;
       {$ifndef DELPHI5OROLDER}cdecl varargs;{$endif}
@@ -2090,9 +2109,6 @@ type
     constructor Create(const LibraryName: TFileName=SQLITE_LIBRARY_DEFAULT_NAME); reintroduce;
     /// unload the external library
     destructor Destroy; override;
-    /// will change the SQLite3 configuration to use Delphi/FPC memory manager
-    // - overriden method which does nothing on some platforms found unstable
-    procedure ForceToUseSharedMemoryManager; override;
   published
     property LibraryName: TFileName read fLibraryName;
   end;
@@ -3910,9 +3926,9 @@ constructor TSQLDataBase.Create(const aFileName: TFileName; const aPassword: Raw
 var result: integer;
 begin
   if sqlite3=nil then
-    raise ESQLite3Exception.Create('No SQLite3 libray available: you shall '+
-      'either add SynSQLite3Static to your project uses clause, '+
-      'or run sqlite3 := TSQLite3LibraryDynamic.Create(..)');
+    raise ESQLite3Exception.CreateUTF8('%.Create: No SQLite3 libray available'+
+      ' - you shall either add SynSQLite3Static to your project uses clause, '+
+      'or run sqlite3 := TSQLite3LibraryDynamic.Create(..)',[self]);
   {$ifdef WITHLOG}
   fLog := SynSQLite3Log; // leave fLog=nil if no Logging wanted
   fLogResultMaximumSize := 512;
@@ -4598,7 +4614,7 @@ begin
   if i<0 then
     i := (-i) shr 10 else
     i := PageSize*CacheSize;
-  FPCLog.Log(sllDB,'"%" database file of % opened with PageSize=% and CacheSize=% (%)',
+  FPCLog.Log(sllDB,'"%" database file (%) opened with PageSize=% CacheSize=% (%)',
     [FileName,KB(GetFileSize),PageSize,CacheSize,KB(i)],self);
   {$endif}
 end;
@@ -5786,7 +5802,7 @@ end;
 { TSQLite3LibraryDynamic }
 
 const
-  SQLITE3_ENTRIES: array[0..89] of TFileName =
+  SQLITE3_ENTRIES: array[0..90] of TFileName =
   ('initialize','shutdown','open','open_v2','key','rekey','close',
    'libversion','errmsg','extended_errcode',
    'create_function','create_function_v2',
@@ -5805,7 +5821,8 @@ const
    'commit_hook','rollback_hook','changes','total_changes','malloc', 'realloc',
    'free','memory_used','memory_highwater','trace_v2','limit',
    'backup_init','backup_step','backup_finish','backup_remaining',
-   'backup_pagecount','config','db_config','serialize','deserialize');
+   'backup_pagecount','serialize','deserialize','soft_heap_limit64',
+   'config','db_config');
 
 constructor TSQLite3LibraryDynamic.Create(const LibraryName: TFileName);
 var P: PPointerArray;
@@ -5824,8 +5841,8 @@ begin
     if fHandle=0 then
     {$endif}
   {$endif MSWINDOWS}
-    raise ESQLite3Exception.CreateFmt('Unable to load %s - %s',
-      [LibraryName,SysErrorMessage(GetLastError)]);
+    raise ESQLite3Exception.CreateUTF8('%.Create: Unable to load % - %',
+      [self,LibraryName,SysErrorMessage(GetLastError)]);
   P := @@initialize;
   for i := 0 to High(SQLITE3_ENTRIES) do
     P^[i] := {$ifdef BSDNOTDARWIN}dlsym{$else}GetProcAddress{$endif}(
@@ -5840,7 +5857,8 @@ begin
     FreeLibrary(fHandle);
     fHandle := 0;
     {$endif}
-    raise ESQLite3Exception.CreateFmt('TOO OLD %s - need 3.7 at least!',[LibraryName]);
+    raise ESQLite3Exception.CreateUTF8('%.Create: TOO OLD % % - need 3.7 at least!',
+      [LibraryName,Version]);
   end; // some APIs like config() key() or trace() may not be available
   inherited Create; // set fVersionNumber/fVersionText
   {$ifdef WITHLOG}
@@ -5860,13 +5878,6 @@ begin
   inherited;
 end;
 
-
-procedure TSQLite3LibraryDynamic.ForceToUseSharedMemoryManager;
-begin
-  {$ifndef CPU64DELPHI} // buggy as usual
-  inherited ForceToUseSharedMemoryManager;
-  {$endif}
-end;
 
 initialization
 
