@@ -6052,10 +6052,19 @@ function TMongoCollection.AggregateCallFromJson(const pipelineJSON: RawUTF8;
 begin // see http://docs.mongodb.org/manual/reference/command/aggregate
   if fDatabase.Client.ServerBuildInfoNumber<2020000 then
     raise EMongoException.Create('Aggregation needs MongoDB 2.2 or later');
-  // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}]})
-  Database.RunCommand(BSONVariant('{aggregate:"%",pipeline:[%]}',[Name,pipelineJSON],[]),reply);
-  // { "result" : [ { "_id" : null, "max" : 1250 } ], "ok" : 1 }
-  res := reply.result;
+  if fDatabase.Client.ServerBuildInfoNumber>=3060000 then begin
+    // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}],cursor:{}})
+    Database.RunCommand(BSONVariant('{aggregate:"%",pipeline:[%],cursor:{}}',[Name,pipelineJSON],[]),reply);
+    // {"cursor":{"firstBatch":[{"_id":null,"max":1510}],"id":0,"ns":"db.test"},"ok":1}
+    res := reply.cursor;
+    if not VarIsNull(res) then
+      res := res.firstBatch;
+  end else begin
+    // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}]})
+    Database.RunCommand(BSONVariant('{aggregate:"%",pipeline:[%]}',[Name,pipelineJSON],[]),reply);
+    // { "result" : [ { "_id" : null, "max" : 1250 } ], "ok" : 1 }
+    res := reply.result;
+  end;
   result := not VarIsNull(res);
 end;
 
@@ -6075,10 +6084,19 @@ function TMongoCollection.AggregateCallFromVariant(const pipelineArray: variant;
 begin // see http://docs.mongodb.org/manual/reference/command/aggregate
   if fDatabase.Client.ServerBuildInfoNumber<2020000 then
     raise EMongoException.Create('Aggregation needs MongoDB 2.2 or later');
-  // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}]})
-  Database.RunCommand(BSONVariant(['aggregate',name,'pipeline',pipelineArray]),reply);
-  // { "result" : [ { "_id" : null, "max" : 1250 } ], "ok" : 1 }
-  res := reply.result;
+  if fDatabase.Client.ServerBuildInfoNumber>=3060000 then begin
+    // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}],cursor:{}})
+    Database.RunCommand(BSONVariant(['aggregate',name,'pipeline',pipelineArray,'cursor','{}']),reply);
+    // {"cursor":{"firstBatch":[{"_id":null,"max":1510}],"id":0,"ns":"db.test"},"ok":1}
+    res := reply.cursor;
+    if not VarIsNull(res) then
+      res := res.firstBatch;
+  end else begin
+    // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}]})
+    Database.RunCommand(BSONVariant(['aggregate',name,'pipeline',pipelineArray]),reply);
+    // { "result" : [ { "_id" : null, "max" : 1250 } ], "ok" : 1 }
+    res := reply.result;
+  end;
   result := not VarIsNull(res);
 end;
 
