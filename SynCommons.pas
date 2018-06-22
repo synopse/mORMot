@@ -8458,7 +8458,7 @@ type
     // - e.g. append '20110325 19241502 '
     // - you may set LocalTime=TRUE to write the local date and time instead
     // - this method is very fast, and avoid most calculation or API calls
-    procedure AddCurrentLogTime(LocalTime: boolean=false);
+    procedure AddCurrentLogTime(LocalTime: boolean);
     /// append a time period, specified in micro seconds
     procedure AddMicroSec(MS: cardinal);
     /// append an Integer Value as a 4 digits String with comma
@@ -13077,9 +13077,6 @@ type
     procedure FromNowUTC;
     /// fill fields with the current Local time
     procedure FromNowLocal;
-    // FPC's TSystemTime in datih.inc does NOT match Windows TSystemTime fields!
-    procedure FromSystemTime(const aTime: TSystemTime);
-      {$ifdef HASINLINE}inline;{$endif}
   end;
   PSynSystemTime = ^TSynSystemTime;
 
@@ -36786,30 +36783,43 @@ begin
   Value := Time.Second+Time.Minute shl 6+Int64(V) shl 12;
 end;
 
-var
-  UTCTimeCache: TTimeLog;
-  UTCTimeTicks: cardinal;
+var // can be safely made global since timing is multi-thread safe
+  GlobalTime: array[boolean] of record // GlobalTime[LocalTime]
+    time: TSystemTime;
+    clock: PtrInt; // avoid slower API call with 8-16ms loss of precision
+  end;
+
+procedure FromGlobalTime(LocalTime: boolean; out NewTime: TSynSystemTime);
+var tix: PtrInt;
+begin
+  tix := GetTickCount64 {$ifndef MSWINDOWS}shr 3{$endif}; // Linux: 8ms refresh
+  with GlobalTime[LocalTime] do begin
+    if clock<>tix then begin // Windows: typically in range of 10-16 ms
+      clock := tix;
+      if LocalTime then
+        GetLocalTime(time) else
+        {$ifdef MSWINDOWS}GetSystemTime{$else}GetNowUTCSystem{$endif}(time);
+    end;
+    NewTime := PSynSystemTime(@time)^;
+    {$ifndef MSWINDOWS} // those TSystemTime fields are inverted in datih.inc :(
+    NewTime.Day := time.Day;
+    NewTime.DayOfWeek := time.DayOfWeek;
+    {$endif}
+  end;
+end;
 
 procedure TTimeLogBits.FromUTCTime;
-var Ticks: cardinal;
-    Now: TSynSystemTime;
+var now: TSynSystemTime;
 begin
-  Ticks := GetTickCount64 shr 7; // 128 ms resolution
-  if Ticks=UTCTimeTicks then begin
-    Value := UTCTimeCache;
-    exit;
-  end;
-  Now.FromNowUTC;
-  From(Now);
-  UTCTimeCache := Value;
-  UTCTimeTicks := Ticks;
+  FromGlobalTime(false,now);
+  From(now);
 end;
 
 procedure TTimeLogBits.FromNow;
-var Now: TSynSystemTime;
+var now: TSynSystemTime;
 begin
-  Now.FromNowLocal;
-  From(Now);
+  FromGlobalTime(true,now);
+  From(now);
 end;
 
 function TTimeLogBits.ToTime: TDateTime;
@@ -37113,38 +37123,16 @@ begin
             (PInt64Array(@self)[1]=PInt64Array(@another)[1]);
 end;
 
-procedure TSynSystemTime.FromSystemTime(const aTime: TSystemTime);
+procedure TSynSystemTime.FromNowUTC;
 begin
-  self := PSynSystemTime(@aTime)^;
-  {$ifndef MSWINDOWS} // those TSystemTime fields are inverted in datih.inc :(
-  Day := aTime.Day;
-  DayOfWeek := aTime.DayOfWeek;
-  {$endif}
+  FromGlobalTime(false,self);
 end;
 
-{$ifdef MSWINDOWS} // TSynSystemTime follows Windows.pas TSystemTime fields
-procedure TSynSystemTime.FromNowUTC;
-begin
-  GetSystemTime(TSystemTime(self)); // this API is fast enough for our purpose
-end;
 procedure TSynSystemTime.FromNowLocal;
 begin
-  GetLocalTime(TSystemTime(self));
+  FromGlobalTime(true,self);
 end;
-{$else}
-procedure TSynSystemTime.FromNowUTC;
-var fpc: TSystemTime;
-begin
-  GetNowUTCSystem(fpc);
-  FromSystemTime(fpc);
-end;
-procedure TSynSystemTime.FromNowLocal;
-var fpc: TSystemTime;
-begin
-  GetLocalTime(fpc);
-  FromSystemTime(fpc);
-end;
-{$endif MSWINDOWS}
+
 
 { TTimeZoneData }
 
@@ -52177,46 +52165,31 @@ begin
   B^ := ',';
 end;
 
-var // can be safely made global since timing is multi-thread safe
-  GlobalLogTime: array[boolean] of record // GlobalLogTime[LocalTime]
-    time: TSynSystemTime;
-    clock: PtrInt; // avoid slower API call
-  end;
-
 procedure TTextWriter.AddCurrentLogTime(LocalTime: boolean);
-var tix: PtrInt;
-    y,d100: PtrUInt;
+var y,d100: PtrUInt;
     P: PUTF8Char;
     tab: {$ifdef CPUX86}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
+    time: TSynSystemTime;
 begin
   if BEnd-B<=17 then
     FlushToStream;
-  with GlobalLogTime[LocalTime] do begin
-    tix := GetTickCount64 {$ifndef MSWINDOWS}shr 3{$endif};
-    if clock<>tix then begin // Windows: typically in range of 10-16 ms
-      clock := tix;
-      if LocalTime then
-        time.FromNowLocal else
-        time.FromNowUTC;
-    end;
-    inc(B);
-    {$ifndef CPUX86}tab := @TwoDigitLookupW;{$endif}
-    y := time.Year;
-    d100 := y div 100;
-    P := B;
-    PWord(P)^ := tab[d100];
-    PWord(P+2)^ := tab[y-(d100*100)];
-    PWord(P+4)^ := tab[time.Month];
-    PWord(P+6)^ := tab[time.Day];
-    P[8] := ' ';
-    PWord(P+9)^ := tab[time.Hour];
-    PWord(P+11)^ := tab[time.Minute];
-    PWord(P+13)^ := tab[time.Second];
-    y := time.Millisecond;
-    PWord(P+15)^ := tab[y shr 4];
-    P[17] := ' ';
-    B := P+16;
-  end;
+  FromGlobalTime(LocalTime,time);
+  {$ifndef CPUX86}tab := @TwoDigitLookupW;{$endif}
+  y := time.Year;
+  d100 := y div 100;
+  P := B+1;
+  PWord(P)^ := tab[d100];
+  PWord(P+2)^ := tab[y-(d100*100)];
+  PWord(P+4)^ := tab[time.Month];
+  PWord(P+6)^ := tab[time.Day];
+  P[8] := ' ';
+  PWord(P+9)^ := tab[time.Hour];
+  PWord(P+11)^ := tab[time.Minute];
+  PWord(P+13)^ := tab[time.Second];
+  y := time.Millisecond;
+  PWord(P+15)^ := tab[y shr 4];
+  P[17] := ' ';
+  B := P+16;
 end;
 
 procedure TTextWriter.AddMicroSec(MS: cardinal);

@@ -5827,6 +5827,7 @@ const
 constructor TSQLite3LibraryDynamic.Create(const LibraryName: TFileName);
 var P: PPointerArray;
     i: integer;
+    vers: PUTF8Char;
 begin
   fLibraryName := LibraryName;
   {$ifdef MSWINDOWS}
@@ -5850,6 +5851,9 @@ begin
   if not Assigned(initialize) or not Assigned(libversion) or
      not Assigned(open) or not Assigned(close) or not Assigned(create_function) or
      not Assigned(prepare_v2) or not Assigned(create_module_v2) then begin
+    if Assigned(libversion) then
+      vers := libversion else
+      vers := nil;
     {$ifdef BSDNOTDARWIN}
     dlclose(fHandle);
     fHandle := TLibHandle(nil);
@@ -5858,7 +5862,7 @@ begin
     fHandle := 0;
     {$endif}
     raise ESQLite3Exception.CreateUTF8('%.Create: TOO OLD % % - need 3.7 at least!',
-      [LibraryName,Version]);
+      [self,LibraryName,vers]);
   end; // some APIs like config() key() or trace() may not be available
   inherited Create; // set fVersionNumber/fVersionText
   {$ifdef WITHLOG}
