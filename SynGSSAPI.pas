@@ -30,6 +30,7 @@ unit SynGSSAPI;
 
   Contributor(s):
    Arnaud Bouchez
+   ssoftpro
    Chaa
 
   Alternatively, the contents of this file may be used under the terms of
