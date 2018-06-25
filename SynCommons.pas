@@ -18618,6 +18618,18 @@ const
   UTF8_EXTRA_SURROGATE = 3;
   UTF8_FIRSTBYTE: array[2..6] of byte = ($c0,$e0,$f0,$f8,$fc);
 
+{$ifdef FPC}
+function _LStrLen(const s: RawByteString): SizeInt; inline;
+begin // here caller ensured s<>''
+  result := PSizeInt(PAnsiChar(pointer(s))-SizeOf(SizeInt))^;
+end;
+
+function _LStrLenP(s: pointer): SizeInt; inline;
+begin // here caller ensured s<>''
+  result := PSizeInt(PAnsiChar(s)-SizeOf(SizeInt))^;
+end;
+{$endif FPC}
+
 
 { TSynAnsiConvert }
 
@@ -19987,7 +19999,6 @@ end;
 
 {$endif NOVARIANTS}
 
-
 function WideCharToUtf8(Dest: PUTF8Char; aWideChar: PtrUInt): integer;
 begin
   if aWideChar<=$7F then begin
@@ -21132,7 +21143,7 @@ begin
       result := V.VInteger;
       if cardinal(result)<=high(SmallUInt32UTF8) then begin
 smlu32: Res.Text := pointer(SmallUInt32UTF8[result]);
-        Res.Len := length(RawByteString(pointer(Res.Text)));
+        Res.Len := {$ifdef FPC}_LStrLenP(Res.Text){$else}PInteger(Res.Text-4)^{$endif};
       end else begin
         Res.Text := PUTF8Char(StrInt32(@Res.Temp[23],result));
         Res.Len := @Res.Temp[23]-Res.Text;
@@ -22443,7 +22454,7 @@ procedure TDynArrayRec.SetLength(len: sizeint);
 begin
   high := len-1;
 end;
-{$endif}
+{$endif FPC}
 
 function DynArrayLength(Value: Pointer): integer;
   {$ifdef HASINLINE}inline;{$endif}
@@ -24130,8 +24141,8 @@ begin
     goto Exit;
   end;
   {$ifdef FPC}
-  len := PStrRec(Pointer(PtrInt(p)-STRRECSIZE))^.length;
-  lenSub := PStrRec(Pointer(PtrInt(pSub)-STRRECSIZE))^.length-1;
+  len := _LStrLenP(p);
+  lenSub := _LStrLenP(pSub)-1;
   {$else}
   len := PInteger(p-4)^;
   lenSub := PInteger(pSub-4)^-1;
@@ -24656,13 +24667,7 @@ var L: PtrInt;
 begin
   if BufferLen<=0 then
     exit;
-  {$ifdef FPC}
   L := length(Text);
-  {$else}
-  L := PtrInt(Text);
-  if L<>0 then
-    L := PInteger(L-SizeOf(integer))^;
-  {$endif};
   SetLength(Text,L+BufferLen);
   MoveFast(Buffer^,pointer(PtrInt(Text)+L)^,BufferLen);
 end;
@@ -24693,14 +24698,8 @@ end;
 function AppendRawUTF8ToBuffer(Buffer: PUTF8Char; const Text: RawUTF8): PUTF8Char;
 var L: PtrInt;
 begin
-  {$ifdef FPC}
   L := length(Text);
   if L<>0 then begin
-  {$else}
-  L := PtrInt(Text);
-  if L<>0 then begin
-    L := PInteger(L-SizeOf(integer))^;
-  {$endif};
     MoveFast(Pointer(Text)^,Buffer^,L);
     inc(Buffer,L);
   end;
@@ -25659,7 +25658,7 @@ Txt:  len := F-FDeb;
       PWord(F)^ := ord(':')+ord('(')shl 8;
       inc(F,2);
     end;
-    L := {$ifdef FPC}length(tmp[i]){$else}PInteger(PtrInt(tmp[i])-SizeOf(integer))^{$endif};
+    L := {$ifdef FPC}_LStrLen(tmp[i]){$else}PInteger(PtrInt(tmp[i])-SizeOf(integer))^{$endif};
     MoveFast(pointer(tmp[i])^,F^,L);
     inc(F,L);
     if i in inlin then begin
@@ -32720,7 +32719,7 @@ function UpperCopy255(dest: PAnsiChar; const source: RawUTF8): PAnsiChar;
 begin
   if source<>'' then
     result := UpperCopy255Buf(dest,pointer(source),
-      {$ifdef HASINLINE}length(source){$else}PInteger(PtrInt(source)-4)^{$endif}) else
+      {$ifdef FPC}_LStrLen(source){$else}PInteger(PtrInt(source)-4)^{$endif}) else
     result := dest;
 end;
 
@@ -32812,7 +32811,7 @@ function UpperCopyWin255(dest: PWinAnsiChar; const source: RawUTF8): PWinAnsiCha
 var i, L: integer;
     tab: {$ifdef CPUX86}TNormTableByte absolute NormToUpperByte{$else}PNormTableByte{$endif};
 begin
-  L := {$ifdef FPC}length(source){$else}PInteger(PtrInt(source)-SizeOf(integer))^{$endif};
+  L := {$ifdef FPC}_LStrLen(source){$else}PInteger(PtrInt(source)-SizeOf(integer))^{$endif};
   if L>0 then begin
     if L>250 then
       L := 250; // avoid buffer overflow
@@ -50295,8 +50294,7 @@ end;
 function HashAnsiString(const Elem; Hasher: THasher): cardinal;
 begin
   if PtrUInt(Elem)<>0 then
-    result := Hasher(0,Pointer(PtrUInt(Elem)),
-      {$ifdef FPC}PStrRec(Pointer(PtrUInt(Elem)-STRRECSIZE))^.length
+    result := Hasher(0,Pointer(PtrUInt(Elem)),{$ifdef FPC}_LStrLenP(pointer(Elem))
       {$else}PInteger(PtrUInt(Elem)-SizeOf(integer))^{$endif}) else
     result := HASH_ONVOIDCOLISION;
 end;
@@ -50307,7 +50305,7 @@ begin
   if PtrUInt(Elem)=0 then
     result := HASH_ONVOIDCOLISION else
     result := Hasher(0,tmp,UpperCopy255Buf(tmp,pointer(Elem),
-      {$ifdef FPC}PStrRec(Pointer(PtrUInt(Elem)-STRRECSIZE))^.length
+      {$ifdef FPC}_LStrLenP(pointer(Elem))
       {$else}PInteger(PtrUInt(Elem)-SizeOf(integer))^{$endif})-tmp);
 end;
 
@@ -51877,7 +51875,7 @@ begin
     FlushToStream;
   if PtrUInt(Value)<=high(SmallUInt32UTF8) then begin
     P := pointer(SmallUInt32UTF8[Value]);
-    Len := {$ifdef FPC}length(SmallUInt32UTF8[Value]){$else}PInteger(P-4)^{$endif};
+    Len := {$ifdef FPC}_LStrLenP(P){$else}PInteger(P-4)^{$endif};
   end else begin
     P := StrInt32(@tmp[23],value);
     Len := @tmp[23]-P;
@@ -52003,7 +52001,7 @@ begin
     FlushToStream;
   if Value<=high(SmallUInt32UTF8) then begin
     P := pointer(SmallUInt32UTF8[Value]);
-    Len := {$ifdef FPC}length(SmallUInt32UTF8[Value]){$else}PInteger(P-4)^{$endif};
+    Len := {$ifdef FPC}_LStrLenP(P){$else}PInteger(P-4)^{$endif};
   end else begin
     P := StrUInt32(@tmp[15],Value);
     Len := @tmp[15]-P;
@@ -52022,7 +52020,7 @@ begin
     FlushToStream;
   if (V.Hi=0) and (V.Lo<=high(SmallUInt32UTF8)) then begin
     P := pointer(SmallUInt32UTF8[V.Lo]);
-    Len := {$ifdef FPC}length(SmallUInt32UTF8[V.Lo]){$else}PInteger(P-4)^{$endif};
+    Len := {$ifdef FPC}_LStrLenP(P){$else}PInteger(P-4)^{$endif};
   end else begin
     P := StrUInt64(@tmp[23],Value);
     Len := @tmp[23]-P;
@@ -52087,7 +52085,7 @@ begin
   end else
   if Value<=high(SmallUInt32UTF8) then begin
     P := pointer(SmallUInt32UTF8[Value]);
-    Len := {$ifdef FPC}length(SmallUInt32UTF8[Value]){$else}PInteger(P-4)^{$endif};
+    Len := {$ifdef FPC}_LStrLenP(P){$else}PInteger(P-4)^{$endif};
   end else begin
     P := StrUInt64(@tmp[23],Value);
     Len := @tmp[23]-P;
@@ -54234,11 +54232,7 @@ var L: integer;
 begin
   if PtrInt(Text)=0 then
     exit;
-  {$ifdef FPC}
-  L := PStrRec(Pointer(PtrInt(Text)-STRRECSIZE))^.length;
-  {$else}
-  L := PInteger(PtrInt(Text)-SizeOf(integer))^;
-  {$endif}
+  L := {$ifdef FPC}_LStrLen(Text){$else}PInteger(PtrInt(Text)-SizeOf(integer))^{$endif};
   if L<fTempBufSize then begin
     if BEnd-B<=L then
       FlushToStream;
@@ -54256,11 +54250,7 @@ begin
   if start<0 then
     start := 0 else
     dec(start);
-  {$ifdef FPC}
-  L := PStrRec(Pointer(PtrInt(Text)-STRRECSIZE))^.length;
-  {$else}
-  L := PInteger(PtrInt(Text)-SizeOf(integer))^;
-  {$endif}
+  L := {$ifdef FPC}_LStrLen(Text){$else}PInteger(PtrInt(Text)-SizeOf(integer))^{$endif};
   dec(L,start);
   if L>0 then begin
     if len<L then
@@ -56741,7 +56731,7 @@ end;
 function TPrecisionTimer.ByCount(Count: QWord): shortstring;
 begin
   if Count=0 then
-    result := SmallUInt32UTF8[0] else // avoid div per 0 exception
+    result := '0' else // avoid div per 0 exception
     MicroSecToString(iTime div Count,result);
 end;
 
@@ -60636,9 +60626,8 @@ begin
   fixedsize := length(Values[0]);
   if fixedsize>0 then
     for i := 1 to ValuesCount-1 do
-      if (PI^[i]=0) or
-         ({$ifdef FPC}PStrRec(Pointer(PI^[i]-STRRECSIZE))^.length
-          {$else}PCardinal(PI^[i]-SizeOf(integer))^{$endif}<>fixedsize) then begin
+      if (PI^[i]=0) or ({$ifdef FPC}_LStrLenP(pointer(PI^[i])){$else}
+         PCardinal(PI^[i]-SizeOf(integer))^{$endif}<>fixedsize) then begin
         fixedsize := 0;
         break;
       end;
@@ -60660,8 +60649,7 @@ begin
             break; // avoid buffer overflow
           end;
         end else begin
-          len := {$ifdef FPC}PStrRec(Pointer(PI^[i]-STRRECSIZE))^.length
-                 {$else}PInteger(PI^[i]-SizeOf(integer))^{$endif};
+          len := {$ifdef FPC}_LStrLenP(pointer(PI^[i])){$else}PInteger(PI^[i]-SizeOf(integer))^{$endif};
           if PtrUInt(PEnd)-PtrUInt(P)<=len then begin
             n := i;
             break; // avoid buffer overflow

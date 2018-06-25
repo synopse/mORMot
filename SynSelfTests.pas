@@ -10109,7 +10109,8 @@ begin
   t := SynLZDecompress(s);
   Check(t=rle);
   for i := 0 to 1000 do begin
-    t := RandomTextParagraph(i, '.', StringOfChar(AnsiChar(' '),20));
+    s := StringOfChar(AnsiChar(' '),20);
+    t := RandomTextParagraph(i, '.', s);
     SetString(s,PAnsiChar(pointer(t)),length(t)); // =UniqueString
     Check(CompressSynLZ(s,true)='synlz');
     Check(CompressSynLZ(s,false)='synlz');
