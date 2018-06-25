@@ -19663,9 +19663,8 @@ end;
 
 procedure TSynTempBuffer.Done;
 begin
-  if buf<>@tmp then
-    if buf<>nil then
-      FreeMem(buf);
+  if (buf<>@tmp) and (buf<>nil) then
+    FreeMem(buf);
 end;
 
 procedure TSynTempBuffer.Done(EndBuf: pointer; var Dest: RawUTF8);
@@ -19673,9 +19672,8 @@ begin
   if EndBuf=nil then
     Dest := '' else
     SetString(Dest,PAnsiChar(buf),PAnsiChar(EndBuf)-PAnsiChar(buf));
-  if buf<>@tmp then
-    if buf<>nil then
-      FreeMem(buf);
+  if (buf<>@tmp) and (buf<>nil) then
+    FreeMem(buf);
 end;
 
 
@@ -26442,17 +26440,19 @@ end;
 
 function IdemPropNameU(const P1,P2: RawUTF8): boolean;
 {$ifdef PUREPASCAL}
-var i,L: PtrInt;
+var i,j,L: PtrInt;
 begin
   result := false;
   L := length(P1);
   if L<>length(P2) then
     exit;
-  for i := 0 to (L shr 2)-1 do
-    if (PCardinalArray(P1)^[i] xor PCardinalArray(P2)^[i]) and $dfdfdfdf<>0 then
-      exit;
-  for i := L-(L and 3) to L-1 do
-    if (PByteArray(P1)^[i] xor PByteArray(P2)^[i]) and $df<>0 then
+  j := 0;
+  for i := 1 to L shr 2 do
+    if (PCardinalArray(P1)[j] xor PCardinalArray(P2)[j]) and $dfdfdfdf<>0 then
+      exit else
+      inc(j);
+  for i := j*4 to L-1 do
+    if (PByteArray(P1)[i] xor PByteArray(P2)[i]) and $df<>0 then
       exit;
   result := true;
 end;
@@ -26525,14 +26525,16 @@ end;
 
 function IdemPropNameUSameLen(P1,P2: PUTF8Char; P1P2Len: PtrInt): boolean;
 {$ifdef PUREPASCAL}
-var i: PtrInt;
+var i,j: PtrInt;
 begin
   result := false;
-  for i := 0 to (P1P2Len shr 2)-1 do
-    if (PCardinalArray(P1)^[i] xor PCardinalArray(P2)^[i]) and $dfdfdfdf<>0 then
-      exit;
-  for i := P1P2Len-(P1P2Len and 3) to P1P2Len-1 do
-    if (PByteArray(P1)^[i] xor PByteArray(P2)^[i]) and $df<>0 then
+  j := 0;
+  for i := 1 to P1P2Len shr 2 do
+    if (PCardinalArray(P1)[j] xor PCardinalArray(P2)[j]) and $dfdfdfdf<>0 then
+      exit else
+      inc(j);
+  for i := j*4 to P1P2Len-1 do
+    if (ord(P1[i]) xor ord(P2[i])) and $df<>0 then
       exit;
   result := true;
 end;

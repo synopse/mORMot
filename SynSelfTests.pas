@@ -4536,6 +4536,8 @@ begin
   Check(IdemPropNameU('a','A'));
   Check(not IdemPropNameU('a','z'));
   Check(IdemPropNameU('ab','AB'));
+  Check(not IdemPropNameU('abc','ABz'));
+  Check(not IdemPropNameU('zbc','abc'));
   Check(IdemPropNameU('abc','ABc'));
   Check(IdemPropNameU('abcD','ABcd'));
   Check(not IdemPropNameU('abcD','ABcF'));
