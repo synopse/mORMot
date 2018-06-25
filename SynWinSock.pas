@@ -1455,12 +1455,12 @@ end;
 function InitSocketInterface(const Stack: TFileName = ''): Boolean;
 begin
   result := False;
-  SockEnhancedApi := False;
-  SockSChannelApi := False;
   EnterCriticalSection(SynSockCS);
   try
     if SynSockCount = 0 then begin
-      SockWship6Api := False;
+      SockEnhancedApi := false;
+      SockSChannelApi := false;
+      SockWship6Api := false;
       if Stack = '' then
         LibHandle := LoadLibrary(DLLStackName)
       else

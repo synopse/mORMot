@@ -217,6 +217,10 @@
     {$define FPC_OLDRTTI}
   {$endif}
 
+  {$ifdef ANDROID}
+    {$define LINUX} // a Linux-based system
+  {$endif}
+
   // define FPCSQLITE3STATIC to enable static-linked SQLite3 engine for FPC
   // -> expect *.o files download from https://synopse.info/files/sqlite3fpc.7z
   // -> could be disabled to force external .so/.dll linking
@@ -240,10 +244,6 @@
     // note: problems with current static/aarch64-linux\sqlite3.o
   {$endif}
 
-  {$ifdef ANDROID}
-    {$define LINUX} // a Linux-based system
-  {$endif}
-
   {$ifdef BSD}
     // this includes Darwin and BSD family like FreeBSD
     {$define LINUX} // not true, but a POSIX/BSD system
@@ -264,12 +264,14 @@
   {$endif}
 
   {$ifdef CPU64}
+    {$define FPC_64}
     {$define PUREPASCAL} // e.g. x64, AARCH64
     {$ifdef CPUX64}
       {$define CPUINTEL}
       {$ASMMODE INTEL} // as Delphi expects
     {$endif CPUX64}
   {$else}
+    {$define FPC_32}
     {$ifdef CPUARM}
       {$define PUREPASCAL} // ARM32
     {$endif CPUARM}
@@ -331,9 +333,9 @@
     {$define FPC_ENUMHASINNER}
   {$endif}
 
-  {$ifdef FPC_HAS_MANAGEMENT_OPERATORS}
+  {$ifdef FPC_NEWRTTI}
     {$define ISDELPHI2006ANDUP}
-  {$endif FPC_HAS_MANAGEMENT_OPERATORS}
+  {$endif FPC_NEWRTTI}
 
   {$ifdef ISFPC30}
     {$ifndef MSWINDOWS}

@@ -179,7 +179,12 @@ unit SynZip;
       {.$define USEEXTZLIB}  // use zlib-64.dll as in \fpc-win64 sub-folder
     {$endif}
   {$else}
-    {$define USEEXTZLIB}  // will use zlib.so under Linux/Posix
+    // will use zlib.so under Linux/Posix
+    {$ifdef ANDROID}
+       {$define USEPASZLIB} // Alf: problem with external zlib.so under Android
+    {$else}
+       {$define USEEXTZLIB}
+    {$endif}
   {$endif}
 {$else}
   {$undef USEZLIBSSE}  // Delphi linker is buggy as hell
@@ -368,12 +373,13 @@ type
         libz='zlib-64.dll'; // as available in \fpc-win64 sub-folder
         {$endif}
       {$endif MSWINDOWS}
-      {$ifdef LINUX} // dynamically linked with new 64-bit TZStream
+      {$ifdef UNIX} // dynamically linked with new 64-bit TZStream
       type
         TZLong = ZipPtrUint;
         TZCRC = Int64;
       const
-        libz='libz.so.1';
+        libz='z';
+        {$linklib libz}
       {$endif}
     {$else} // statically linked with old 32-bit TZStream
     type

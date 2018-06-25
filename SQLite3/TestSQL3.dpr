@@ -198,31 +198,7 @@ uses
   {$R ..\Vista.res} // includes manifest to identify Windows 10 OS
 {$endif}
 
-//
-{
-procedure test;
-var s: RaWUTF8;
-    sock: THttpClientSocket;
-    i, status: integer;
 begin
-  sock := THttpClientSocket.Open('synopse.info','',cslTCP,10000,true);
-  try
-    for i := 1 to 10 do begin
-      status := sock.Get('forum/index.php',10000);
-      assert(status = 200, Format('status=%d i=%d', [status, i]));
-      s := sock.Content;
-      assert(s<>'');
-    end;
-    FileFromString(s, ExeVersion.ProgramFilePath + 'test.html');
-  finally
-    sock.Free;
-  end;
-end;
-
-begin
-  test;
-  exit;
-//}begin
   {$ifdef ISDELPHI2007ANDUP}
   {$ifdef DEBUG}
   ReportMemoryLeaksOnShutdown := True;

@@ -1284,27 +1284,34 @@ begin
 {$endif}
 end;
 
-var
-  _pidfile: TFileName;
-
 function RunUntilSigTerminatedPidFile: TFileName;
 begin
-  if _pidfile = '' then
-    _pidfile := format('%s.%s.pid', [ExeVersion.ProgramFilePath, ExeVersion.ProgramName]);
-  result := _pidfile;
+  result := format('%s.%s.pid', [ExeVersion.ProgramFilePath, ExeVersion.ProgramName]);
 end;
 
 function RunUntilSigTerminatedForkKill(waitseconds: integer): boolean;
 var
   pid: PtrInt;
+  pidfilename: TFileName;
   tix: Int64;
 begin
   result := false;
-  pid := GetInteger(pointer(StringFromFile(RunUntilSigTerminatedPidFile)));
+  pidfilename := RunUntilSigTerminatedPidFile;
+  pid := GetInteger(pointer(StringFromFile(pidfilename)));
   if pid <= 0 then
     exit;
-  if {$ifdef FPC}fpkill{$else}kill{$endif}(pid, SIGTERM) <> 0 then
-    exit;
+  {$ifdef FPC}
+  if fpkill(pid, SIGTERM) <> 0 then
+    if fpgeterrno<>ESysESRCH then
+  {$else} // Kylix
+  if kill(pid, SIGTERM) <> 0 then
+    if errno<>ESRCH then
+  {$endif}
+      exit else // no such process -> try to delete the .pid file
+      if DeleteFile(pidfilename) then begin
+        result := true; // process crashed or hard reboot -> nothing to kill
+        exit;
+      end;
   if waitseconds <= 0 then begin
     result := true;
     exit;
@@ -1312,7 +1319,7 @@ begin
   tix := GetTickCount64 + waitseconds * 1000;
   repeat // RunUntilSigTerminated() below should delete the .pid file
     sleep(100);
-    if not FileExists(_pidfile) then
+    if not FileExists(pidfilename) then
       result := true;
   until result or (GetTickCount64 > tix);
   if not result then
@@ -1336,53 +1343,50 @@ procedure RunUntilSigTerminated(daemon: TObject; dofork: boolean;
   const start, stop: TThreadMethod; log: TSynLog; const servicename: string);
 var
   pid, sid: {$ifdef FPC}TPID{$else}pid_t{$endif};
+  pidfilename, pidfilelockname: TFileName;
 const
   TXT: array[boolean] of string[4] = ('run', 'fork');
 begin
   SigIntercept;
+  if dofork then begin
+    pidfilename := RunUntilSigTerminatedPidFile;
+    pid := GetInteger(pointer(StringFromFile(pidfilename)));
+    if pid > 0 then
+      if ({$ifdef FPC}fpkill{$else}kill{$endif}(pid, 0) = 0) or not DeleteFile(pidfilename) then
+        raise EServiceException.CreateUTF8('%.CommandLine Fork failed: % is already forked as pid=%',
+          [daemon, ExeVersion.ProgramName, pid]);
+    pid := {$ifdef FPC}fpFork{$else}fork{$endif};
+    if pid < 0 then
+      raise EServiceException.CreateUTF8('%.CommandLine Fork failed', [daemon]);
+    if pid > 0 then  // main program - just terminate
+      exit;
+    // clean forked instance
+    sid := {$ifdef FPC}fpSetSID{$else}setsid{$endif};
+    if sid < 0 then // new session (process group) created?
+      raise EServiceException.CreateUTF8('%.CommandLine SetSID failed', [daemon]);
+    CleanAfterFork;
+    // create local .[ExeVersion.ProgramName].pid file
+    pid := {$ifdef FPC}fpgetpid{$else}getpid{$endif};
+    FileFromString(Int64ToUtf8(pid), pidfilename);
+  end;
   try
-    if dofork then begin
-      if FileExists(RunUntilSigTerminatedPidFile) then
-        exit; // already forked
-      pid := {$ifdef FPC}fpFork{$else}fork{$endif};
-      if pid < 0 then
-        raise ESynException.CreateUTF8('%.CommandLine Fork failed', [daemon]);
-      if pid > 0 then // main program - just terminate
-        exit;
-      // clean forked instance
-      sid := {$ifdef FPC}fpSetSID{$else}setsid{$endif};
-      if sid < 0 then // new session (process group) created?
-        raise ESynException.CreateUTF8('%.CommandLine SetSID failed', [daemon]);
-      CleanAfterFork;
-      // create local /run/[ExeVersion.ProgramName].pid file
-      pid := {$ifdef FPC}fpgetpid{$else}getpid{$endif};
-      FileFromString(Int64ToUtf8(pid), RunUntilSigTerminatedPidFile);
-    end;
+    if log <> nil then
+      log.Log(sllNewRun, 'Start % /% %', [serviceName, TXT[dofork],
+        ExeVersion.Version.DetailedOrVoid], daemon);
+    start;
+    while SynDaemonTerminated = 0 do
+      {$ifdef FPC}fpPause{$else}pause{$endif};
+  finally
+    if log <> nil then
+      log.Log(sllNewRun, 'Stop /% from Sig=%', [TXT[dofork], SynDaemonTerminated], daemon);
     try
-      if log <> nil then
-        log.Log(sllNewRun, 'Start % /% %', [serviceName, TXT[dofork],
-          ExeVersion.Version.DetailedOrVoid], daemon);
-      start;
-      while SynDaemonTerminated = 0 do
-        {$ifdef FPC}fpPause{$else}pause{$endif};
+      stop;
     finally
-      if log <> nil then
-        log.Log(sllNewRun, 'Stop /% from Sig=%', [TXT[dofork], SynDaemonTerminated], daemon);
-      try
-        stop;
-      finally
-        if dofork then begin
-          DeleteFile(RunUntilSigTerminatedPidFile);
-          if log <> nil then
-            log.Log(sllTrace, 'RunUntilSigTerminated: deleted file %', [_pidfile]);
-        end;
+      if dofork and (pidfilename <> '') then begin
+        DeleteFile(pidfilename);
+        if log <> nil then
+          log.Log(sllTrace, 'RunUntilSigTerminated: deleted file %', [pidfilename]);
       end;
-    end;
-  except
-    on E: Exception do begin
-      if not dofork then
-        ConsoleShowFatalException(E, true);
-      ExitCode := 1; // indicates error
     end;
   end;
 end;
@@ -1656,115 +1660,113 @@ begin
     if cmd = cNone then
       byte(cmd) := ord(cVersion) + IdemPCharArray(@param[2], ['VERS', 'VERB', 'START', 'STOP', 'STAT']);
     end;
-  case cmd of
-  cHelp:
-    Syntax;
-  cVersion: begin
-    WriteCopyright;
-    writeln(' ', fSettings.ServiceName,
-      #13#10' Size: ', FileSize(ExeVersion.ProgramFileName), ' bytes' +
-      #13#10' Build date: ', ExeVersion.Version.BuildDateTimeString);
-    if ExeVersion.Version.Version32 <> 0 then
-      writeln(' Version: ', ExeVersion.Version.Detailed);
-  end;
-  cConsole, cVerbose:
-    try
+  try
+    case cmd of
+    cHelp:
+      Syntax;
+    cVersion: begin
       WriteCopyright;
-      writeln('Launched in ', cmdText, ' mode'#10);
-      TextColor(ccLightGray);
-      log := fSettings.fLogClass.Add;
-      if (cmd = cVerbose) and (log <> nil) then  // leave as in settings for -c
-        log.Family.EchoToConsole := LOG_VERBOSE;
-      try
-        log.Log(sllNewRun, 'Start % /% %', [fSettings.ServiceName,cmdText,
-          ExeVersion.Version.DetailedOrVoid], self);
-        Start;
-        writeln('Press [Enter] to quit');
-        ioresult;
-        readln;
-        writeln('Shutting down server');
-      finally
-        ioresult;
-        log.Log(sllNewRun, 'Stop /%', [cmdText], self);
-        Stop;
-      end;
-    except
-      on E: Exception do begin
-        ConsoleShowFatalException(E, true);
-        ExitCode := 1; // indicates error
-      end;
+      writeln(' ', fSettings.ServiceName,
+        #13#10' Size: ', FileSize(ExeVersion.ProgramFileName), ' bytes' +
+        #13#10' Build date: ', ExeVersion.Version.BuildDateTimeString);
+      if ExeVersion.Version.Version32 <> 0 then
+        writeln(' Version: ', ExeVersion.Version.Detailed);
     end;
-  {$ifdef MSWINDOWS} // implement the daemon as a Windows Service
-  else if fSettings.ServiceName = '' then
-    if cmd = cNone then
-      Syntax
-    else begin
-      TextColor(ccLightRed);
-      writeln('No ServiceName specified - please fix the settings');
-    end
-  else
-  case cmd of
-    cNone:
-      if param = '' then begin // executed as a background service
-        service := TServiceSingle.Create(
-          fSettings.ServiceName, fSettings.ServiceDisplayName);
+    cConsole, cVerbose: begin
+        WriteCopyright;
+        writeln('Launched in ', cmdText, ' mode'#10);
+        TextColor(ccLightGray);
+        log := fSettings.fLogClass.Add;
+        if (cmd = cVerbose) and (log <> nil) then  // leave as in settings for -c
+          log.Family.EchoToConsole := LOG_VERBOSE;
         try
-          service.OnStart := DoStart;
-          service.OnStop := DoStop;
-          service.OnShutdown := DoStop; // sometimes, is called without Stop
-          if ServicesRun then // blocking until service shutdown
-            Show(true)
-          else if GetLastError = 1063 then
-            Syntax
-          else
-            Show(false);
+          log.Log(sllNewRun, 'Start % /% %', [fSettings.ServiceName,cmdText,
+            ExeVersion.Version.DetailedOrVoid], self);
+          Start;
+          writeln('Press [Enter] to quit');
+          ioresult;
+          readln;
+          writeln('Shutting down server');
         finally
-          service.Free;
+          ioresult;
+          log.Log(sllNewRun, 'Stop /%', [cmdText], self);
+          Stop;
         end;
+    end;
+    {$ifdef MSWINDOWS} // implement the daemon as a Windows Service
+    else if fSettings.ServiceName = '' then
+      if cmd = cNone then
+        Syntax
+      else begin
+        TextColor(ccLightRed);
+        writeln('No ServiceName specified - please fix the settings');
       end
+    else
+    case cmd of
+      cNone:
+        if param = '' then begin // executed as a background service
+          service := TServiceSingle.Create(
+            fSettings.ServiceName, fSettings.ServiceDisplayName);
+          try
+            service.OnStart := DoStart;
+            service.OnStop := DoStop;
+            service.OnShutdown := DoStop; // sometimes, is called without Stop
+            if ServicesRun then // blocking until service shutdown
+              Show(true)
+            else if GetLastError = 1063 then
+              Syntax
+            else
+              Show(false);
+          finally
+            service.Free;
+          end;
+        end
+        else
+          Syntax;
+      cInstall:
+        with fSettings do
+          Show(TServiceController.Install(ServiceName, ServiceDisplayName,
+            ServiceDescription, aAutoStart) <> ssNotInstalled);
+      cStart, cStop, cUninstall, cState: begin
+        ctrl := TServiceController.CreateOpenService('', '', fSettings.ServiceName);
+        try
+          case cmd of
+          cStart:
+            Show(ctrl.Start([]));
+          cStop:
+            Show(ctrl.Stop);
+          cUninstall:
+            begin
+              ctrl.Stop;
+              Show(ctrl.Delete);
+            end;
+          cState:
+            writeln(fSettings.ServiceName, ' State=', ServiceStateText(ctrl.State));
+          end;
+        finally
+          ctrl.Free;
+        end;
+      end;
       else
         Syntax;
-    cInstall:
-      with fSettings do
-        Show(TServiceController.Install(ServiceName, ServiceDisplayName,
-          ServiceDescription, aAutoStart) <> ssNotInstalled);
-    cStart, cStop, cUninstall, cState: begin
-      ctrl := TServiceController.CreateOpenService('', '', fSettings.ServiceName);
-      try
-        case cmd of
-        cStart:
-          Show(ctrl.Start([]));
-        cStop:
-          Show(ctrl.Stop);
-        cUninstall:
-          begin
-            ctrl.Stop;
-            Show(ctrl.Delete);
-          end;
-        cState:
-          writeln(fSettings.ServiceName, ' State=', ServiceStateText(ctrl.State));
-        end;
-      finally
-        ctrl.Free;
-      end;
     end;
+    {$else}
+    cRun, cFork:
+      RunUntilSigTerminated(self,(cmd=cFork),Start,Stop,fSettings.fLogClass.Add,fSettings.ServiceName);
+    cKill:
+      if RunUntilSigTerminatedForkKill then
+        writeln('Forked process ', ExeVersion.ProgramName, ' killed successfully')
+      else
+        raise EServiceException.Create('No forked process found to be killed');
     else
       Syntax;
-  end;
-  {$else}
-  cRun, cFork:
-    RunUntilSigTerminated(self,(cmd=cFork),Start,Stop,fSettings.fLogClass.Add,fSettings.ServiceName);
-  cKill:
-    if RunUntilSigTerminatedForkKill then
-      writeln('Forked process killed successfully')
-    else begin
-      TextColor(ccLightRed);
-      writeln('No forked process found to be killed');
+    {$endif MSWINDOWS}
+    end;
+  except
+    on E: Exception do begin
+      ConsoleShowFatalException(E, true);
       ExitCode := 1; // indicates error
-    end
-  else
-    Syntax;
-  {$endif MSWINDOWS}
+    end;
   end;
   TextColor(ccLightGray);
   ioresult;

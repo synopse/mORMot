@@ -470,7 +470,7 @@ type
     M: THeapMemoryStream;
     crc0,crc1: cardinal;
   public
-    /// release used instances and memory
+    procedure Setup; override;
     procedure CleanUp; override;
   published
     /// direct deflate/inflate functions
@@ -1515,10 +1515,13 @@ begin
   Check(StrToCurr64(pointer(Curr64ToStr(12)))=12);
   Check(StrToCurr64(pointer(Curr64ToStr(123)))=123);
   Check(StrToCurr64(pointer(Curr64ToStr(1234)))=1234);
+  Check(StrToCurr64(pointer(Curr64ToStr(12345)))=12345);
+  Check(StrToCurr64(pointer(Curr64ToStr(123456)))=123456);
   Check(StrToCurr64(pointer(Curr64ToStr(12340000)))=12340000);
   Check(StrToCurr64(pointer(Curr64ToStr(12345000)))=12345000);
   Check(StrToCurr64(pointer(Curr64ToStr(12345600)))=12345600);
   Check(StrToCurr64(pointer(Curr64ToStr(12345670)))=12345670);
+  Check(StrToCurr64(pointer(Curr64ToStr(12345678)))=12345678);
   tmp[0] := AnsiChar(Curr64ToPChar(1,@tmp[1])); Check(tmp='0.0001');
   tmp[0] := AnsiChar(Curr64ToPChar(12,@tmp[1])); Check(tmp='0.0012');
   tmp[0] := AnsiChar(Curr64ToPChar(123,@tmp[1])); Check(tmp='0.0123');
@@ -1526,7 +1529,7 @@ begin
   for i := 0 to 5000 do begin
     if i<500 then
       V1 := i*3 else
-      V1 := Random;
+      V1 := Random*(Int64(MaxInt)*10);
     if Random(10)<4 then
       V1 := -V1;
     v := Curr64ToStr(PInt64(@V1)^);
@@ -2880,8 +2883,13 @@ begin
   Check(not IsMatch('','toto',true));
   Check(not IsMatch('Bidule.pas','',true));
   Check(IsMatch('Bidule.pas','Bidule.pas',true));
+  Check(IsMatch('Bidule.pas','BIDULE.pas',true));
+  Check(IsMatch('Bidule.pas','Bidule.paS',true));
   Check(IsMatch('Bidule.pas','Bidule.pas',false));
   Check(not IsMatch('Bidule.pas','bidule.pas',false));
+  Check(not IsMatch('bidule.pas','bidulE.pas',false));
+  Check(not IsMatch('bidule.pas','bidule.paS',false));
+  Check(not IsMatch('bidule.pas','bidule.pa',false));
   for i := 0 to 200 do begin
     V := Int32ToUtf8(i);
     Check(IsMatch(V,V,false)=IsMatch(V,V,true));
@@ -2953,6 +2961,24 @@ begin
     check(not match.Match('tEst'));
     check(not match.Match('tesT'));
     check(not match.Match('t'));
+    match.Prepare('*test', false, reuse);
+    check(match.Match('test'));
+    check(match.Match('stest'));
+    check(match.Match('attest'));
+    check(not match.Match('est'));
+    check(not match.Match('testa'));
+    check(not match.Match('tes'));
+    check(not match.Match('tEst'));
+    check(not match.Match('tesT'));
+    check(not match.Match('t'));
+    match.Prepare('*t', false, reuse);
+    check(match.Match('t'));
+    check(match.Match('st'));
+    check(match.Match('tt'));
+    check(match.Match('att'));
+    check(not match.Match('s'));
+    check(not match.Match('es'));
+    check(not match.Match('ts'));
     match.Prepare('**', false, reuse);
     check(match.Match('') = reuse);
     check(match.Match('test'));
@@ -2981,7 +3007,7 @@ begin
     check(match.Match('ab12'));
     check(match.Match('ab12er'));
     check(not match.Match('1'));
-    check(not match.Match('a1') = reuse); //TODO: fix bug in MatchAfterStar
+    check(not match.Match('a1'));
     check(not match.Match('1a2'));
     match.Prepare('*teSt*', true, reuse);
     check(match.Match('test'));
@@ -3001,6 +3027,53 @@ begin
     check(not match.Match('tes'));
     check(not match.Match('ates'));
     check(not match.Match('tesates'));
+    match.Prepare('*te?t*', true, reuse);
+    check(match.Match('test'));
+    check(match.Match('tezt'));
+    check(match.Match('teste'));
+    check(match.Match('tezte'));
+    check(match.Match('tester'));
+    check(match.Match('atest'));
+    check(match.Match('ateste'));
+    check(not match.Match('tes'));
+    check(not match.Match('tet'));
+    check(not match.Match('ates'));
+    check(not match.Match('tesates'));
+    match.Prepare('?est*', true, reuse);
+    check(match.Match('test'));
+    check(match.Match('test'));
+    check(match.Match('teste'));
+    check(match.Match('tester'));
+    check(not match.Match('tezte'));
+    check(not match.Match('atest'));
+    check(not match.Match('est'));
+    check(not match.Match('este'));
+    check(not match.Match('tes'));
+    check(not match.Match('tet'));
+    check(not match.Match('ates'));
+    check(not match.Match('tesates'));
+    match.Prepare('a*bx*cy*d', false, reuse);
+    check(match.Match('abxcyd'));
+    check(match.Match('a1bxcyd'));
+    check(match.Match('a12bxcyd'));
+    check(match.Match('a123bxcyd'));
+    check(match.Match('abx1cyd'));
+    check(match.Match('abx12cyd'));
+    check(match.Match('abxcy1d'));
+    check(match.Match('abxcy12d'));
+    check(match.Match('abxcy123d'));
+    check(not match.Match('abcyd'));
+    check(not match.Match('abxcyde'));
+    match.Prepare('************************************************'+
+         '************************************************'+
+         '**************************************************.*', false, reuse);
+    check(match.MatchThreadSafe('abxcyd.'));
+    check(match.MatchThreadSafe('abxc.yd'));
+    check(match.MatchThreadSafe('abxcy.d'));
+    check(match.MatchThreadSafe('.'));
+    check(match.MatchThreadSafe('.a'));
+    check(match.MatchThreadSafe('.abxcyd'));
+    check(not match.MatchThreadSafe('abxcyd'));
   end;
   for i := 32 to 127 do begin
     SetLength(V,1);
@@ -3619,8 +3692,14 @@ begin
   Check(DoubleToString(-3.3495617168e-10)='-0.00000000033496');
   Check(DoubleToString(-3.9999617168e-14)='-0.00000000000004');
   Check(DoubleToString(3.9999617168e-14)='0.00000000000004');
-  Check(DoubleToString(-3.9999617168e-15)='0');
-  Check(DoubleToString(3.9999617168e-15)='0');
+  u := DoubleToString(-3.9999617168e-15);
+  val(u,d,err);
+  Check(err=0);
+  CheckSame(d,-3.9999617168e-15);
+  u := DoubleToString(3.9999617168e-15);
+  val(u,d,err);
+  Check(err=0);
+  CheckSame(d,3.9999617168e-15);
   {$else}
   Check(DoubleToString(-3.3495117168e-10)='-3.3495117168E-10');
   Check(DoubleToString(-3.3495617168e-10)='-3.3495617168E-10');
@@ -3770,6 +3849,11 @@ begin
     s := s+'z';
     l := GetInt64(pointer(s),err);
     Check(err<>0);
+    case i of // validate some explicit ToVarUInt32/64 boundaries
+      9997: j := $00004000;
+      9998: j := $00200000;
+      9999: j := $10000000;
+    end;
     str(j,a);
     Check(SysUtils.IntToStr(j)=string(a));
     Check(format('%d',[j])=string(a));
@@ -3805,6 +3889,12 @@ begin
     Check(PC<>nil);
     PB := @varint;
     Check(FromVarInt32(PB)=i-1);
+    Check(PB=PC);
+    PC := ToVarUInt64(juint,@varint);
+    Check(PC<>nil);
+    Check(PAnsiChar(PC)-@varint=integer(ToVarUInt32Length(juint)));
+    PB := @varint;
+    Check(PtrUInt(FromVarUint64(PB))=juint);
     Check(PB=PC);
     PC := ToVarInt64(k,@varint);
     Check(PC<>nil);
@@ -4009,6 +4099,13 @@ begin
   Check(arr[0]='one');
   Check(arr[1]='two');
   Check(arr[2]='three');
+  Finalize(arr);
+  res := '-1,25,0';
+  CSVToRawUTF8DynArray(pointer(res),arr);
+  check(Length(arr)=3);
+  Check(arr[0]='-1');
+  Check(arr[1]='25');
+  Check(arr[2]='0');
   Check(AddPrefixToCSV('One,Two,Three','Pre')='PreOne,PreTwo,PreThree');
   Check(CSVOfValue('?',3)='?,?,?');
 {$ifndef DELPHI5OROLDER}
@@ -7997,7 +8094,7 @@ var o,od,o2,value: variant;
     b: PByte;
     elem, item: TBSONElement;
     iter: TBSONIterator;
-    name,u,u2,u3: RawUTF8;
+    name,u,u2,u3,json: RawUTF8;
     arr: TRawUTF8DynArray;
     st: string;
     timer: TPrecisionTimer;
@@ -8078,6 +8175,13 @@ begin
       Check(not oids[i].Equal(oids[j]),'24 bit collision');
   end;
   //Check(GetCurrentProcessId<>oid.ProcessID,'Expected overflow');
+  o := _JSON('{"double_params":[-12.12345678,-9.9E-15,-9.88E-15,-9E-15]}',
+     [dvoReturnNullForUnknownProperty, dvoAllowDoubleValue]);
+  json := TDocVariantData(o).ToJSON;
+  {$ifndef EXTENDEDTOSTRING_USESTR}
+  check(json='{"double_params":[-12.12345678,-9.9E-15,-9.88E-15,-9E-15]}');
+  {$endif}
+  CheckSame(double(TDocVariantData(o).A['double_params'].Value[1]),-9.9E-15);
   // see http://bsonspec.org/#/specification
   o := _JSON('{"hello": "world"}');
   bsonDat := BSON(TDocVariantData(o));
@@ -9657,6 +9761,11 @@ end;
 
 { TTestCompression }
 
+procedure TTestCompression.Setup;
+begin
+  Data := StringFromFile(ExeVersion.ProgramFileName);
+end;
+
 procedure TTestCompression.CleanUp;
 begin
   FreeAndNil(M);
@@ -9800,7 +9909,6 @@ begin
   tmp := RawByteString(Ident);
   for comp := 0 to 9 do
     Check(UnCompressString(CompressString(tmp,False,comp))=tmp);
-  Data := StringFromFile(ExeVersion.ProgramFileName);
   Check(UnCompressString(CompressString(Data,False,6))=Data);
 end;
 
@@ -9964,8 +10072,22 @@ begin
   Check(s=Data);
 end;
 
+function Spaces(n: integer): RawUTF8;
+begin
+  SetString(result,nil,n);
+  FillCharFast(pointer(result)^,n,32);
+end;
+
+function By4(pattern,n: integer): RawUTF8;
+var i: integer;
+begin
+  SetString(result,nil,n*4);
+  for i := 0 to n-1 do
+    PIntegerArray(result)[i] := pattern;
+end;
+
 procedure TTestCompression._SynLZ;
-var s,t: RawByteString;
+var s,t,rle: RawByteString;
     i,j, complen2: integer;
     comp2,dec1: array of byte;
     {$ifdef CPUINTEL}
@@ -9974,12 +10096,21 @@ var s,t: RawByteString;
     {$endif}
 begin
   for i := 1 to 200 do begin
-    t := StringOfChar(AnsiChar(i),i);
-    s := StringOfChar(AnsiChar(i),i);
-    Check(SynLZDecompress(SynLZCompress(s))=t);
+    s := SynLZCompress(StringOfChar(AnsiChar(i),i));
+    t := SynLZDecompress(s);
+    Check(t=StringOfChar(AnsiChar(i),i));
   end;
+  rle := 'hello'+Spaces(10000)+'hello'+Spaces(1000)+'world';
+  s := SynLZCompress(rle);
+  t := SynLZDecompress(s);
+  Check(t=rle);
+  rle := 'hello'+by4($3031333,10000)+'hello'+by4($3031333,1000)+'world';
+  s := SynLZCompress(rle);
+  t := SynLZDecompress(s);
+  Check(t=rle);
   for i := 0 to 1000 do begin
-    t := RandomString(i*8);
+    s := StringOfChar(AnsiChar(' '),20);
+    t := RandomTextParagraph(i, '.', s);
     SetString(s,PAnsiChar(pointer(t)),length(t)); // =UniqueString
     Check(CompressSynLZ(s,true)='synlz');
     Check(CompressSynLZ(s,false)='synlz');
@@ -10015,6 +10146,7 @@ begin
   end;
   s := Data;
   Check(CompressSynLZ(s,true)='synlz');
+  Check(Length(s)<Length(Data),'exelen');
   Check(CompressSynLZ(s,false)='synlz');
   Check(s=Data);
 end;
@@ -15958,7 +16090,7 @@ begin
   Str2[i] := UTF8ToWideString(RawUTF8ArrayToCSV(Strs1));
   inc(Rec2.ID);
   dec(Rec2.Timestamp512);
-  Rec2.JSON := IntegerDynArrayToCSV(Ints,length(Ints));
+  Rec2.JSON := IntegerDynArrayToCSV(pointer(Ints),length(Ints));
   Float2 := Float1;
 end;
 
@@ -16246,7 +16378,7 @@ begin
     Check(Rec1.FileExtension=ExeVersion.ProgramFileName);
     Check(Rec2.ID=i1+1);
     Check(Rec2.Timestamp512=c-1);
-    Check(Rec2.JSON=IntegerDynArrayToCSV(Ints,length(Ints)));
+    Check(Rec2.JSON=IntegerDynArrayToCSV(pointer(Ints),length(Ints)));
     Check(RecRes.ID=i1);
     Check(RecRes.Timestamp512=c);
     Check(RecRes.JSON=StringToUTF8(Rec1.FileExtension));

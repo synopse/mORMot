@@ -179,6 +179,8 @@ type
     /// any text assigned to this field will be displayed on console
     fRunConsole: string;
     fCheckLogTime: TPrecisionTimer;
+    /// override this method to prepare any published method execution
+    procedure Setup; virtual;
     /// override this method to process some clean-up before Destroy call
     // - WARNING: this method should be re-entrant - so using FreeAndNil() is
     // a good idea in this method :)
@@ -618,6 +620,11 @@ begin
   fOptions := Owner.Options;
 end;
 
+procedure TSynTestCase.Setup;
+begin
+  // do nothing by default
+end;
+
 procedure TSynTestCase.CleanUp;
 begin
   // do nothing by default
@@ -992,6 +999,7 @@ begin
       C.fAssertions := 0; // reset assertions count
       C.fAssertionsFailed := 0;
       TotalTimer.Start;
+      C.Setup;
       for t := 0 to C.Count-1 do
       try
         C.fAssertionsBeforeRun := C.fAssertions;

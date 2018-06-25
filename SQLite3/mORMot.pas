@@ -1231,6 +1231,7 @@ unit mORMot;
   // the Windows authentication will be performed
   // - In this case, in table TSQLAuthUser should be an entry for the
   // windows user, with the LoginName in form 'DomainName\UserName'
+  // - Setting NOSSPIAUTH conditional will disable this feature
 
 {$else}
 
@@ -1238,29 +1239,40 @@ unit mORMot;
   // if defined, the Kerberos authentication (using gssapi library) will be used
   // along with the usual one
   // - In this case, in table TSQLAuthUser should be an entry for the
-  // domain user, with the LoginName in form 'UserName@DomainName'
-  // Authentication with gssapi library is currently supported only on server 
-  // and only for browser clients
-  // Linux server should joind a domain before using this
-  // KRB5_KTNAME environment variable shoud point to valid readable keytab file
-  // with correct server credentials
-  // For more information on how to prepare server read an article on how to
+  // domain user, with the LoginName in form 'username@DOMAIN.TLD'
+  // - Linux server should joind a domain before using this
+  // - KRB5_KTNAME environment variable or ServerForceKeytab shoud point
+  // to valid readable keytab file with correct server credentials
+  // - For more information on how to prepare server read an article on how to
   // configure MS SQL Server on Linux to use Windows authentication
   // https://www.mssqltips.com/sqlservertip/5075/configure-sql-server-on-linux-to-use-windows-authentication
-  // To comple projet with GSSAPIAUTH enabled it is required to provide path to
-  // gssapi library for linker (-L/usr/lib/x86_64-linux-gnu/mit-krb5)
-  // Other limitations:
-  //  - only one iteration supported
-  //  - SPN not passed to gssapi - default creadentials used
+  // - Setting NOGSSAPIAUTH conditional will disable this feature
+  // Limitations:
   //  - no NTLM support - this is a deprecated and vulnerable protocol
+{$endif}
 
+
+{$ifdef KYLIX3}
+  {$define NOGSSAPIAUTH} // SynGSSAPI.pas unit is not Kylix-compatible
 {$endif}
 
 {$ifdef SSPIAUTH}
-{$define DOMAINAUTH}
+  {$undef GSSAPIAUTH} // exclusive
+  {$ifdef NOSSPIAUTH}
+    {$undef SSPIAUTH} // force disable
+    {$undef DOMAINAUTH}
+  {$else}
+    {$define DOMAINAUTH}
+  {$endif}
 {$endif}
 {$ifdef GSSAPIAUTH}
-{$define DOMAINAUTH}
+  {$undef SSPIAUTH} // exclusive
+  {$ifdef NOGSSAPIAUTH}
+    {$undef GSSAPIAUTH} // force disable 
+    {$undef DOMAINAUTH}   
+  {$else}
+    {$define DOMAINAUTH}
+  {$endif}
 {$endif}
 
 interface
@@ -1302,6 +1314,7 @@ uses
 {$endif}
 {$ifdef GSSAPIAUTH}
   SynGSSAPI,
+  SynGSSAPIAuth,
 {$endif}
   SynCommons,
   SynTable, // for SynTable, TSynFilter and TSynValidate
@@ -2916,6 +2929,7 @@ type
     procedure GetLongStrProp(Instance: TObject; var Value: RawByteString);
     procedure SetLongStrProp(Instance: TObject; const Value: RawByteString);
     procedure CopyLongStrProp(Source,Dest: TObject);
+    procedure GetShortStrProp(Instance: TObject; var Value: RawByteString);
     procedure GetWideStrProp(Instance: TObject; var Value: WideString);
     procedure SetWideStrProp(Instance: TObject; const Value: WideString);
     {$ifdef HASVARUSTRING}
@@ -4281,13 +4295,6 @@ const
     Name: 'TGUID';
     Size: SizeOf(TGUID);
     Count: 0);
-
-{$ifndef HASDIRECTTYPEINFO}
-{$ifdef HASINLINENOTX86}
-// declared in interface section to circumvent weird XE4/XE5 compiler issues
-function Deref(Info: PPTypeInfo): PTypeInfo; inline;
-{$endif HASINLINENOTX86}
-{$endif HASDIRECTTYPEINFO}
 
 /// returns the interface name of a registered GUID, or its hexadecimal value
 function ToText(const aGUID: TGUID): TGUIDShortString; overload;
@@ -5958,7 +5965,7 @@ type
   // JSON if none is found (e.g. from WebSockets), or if it contains 'mORMot':
   // you can set optForceStandardJSON to ensure standard JSON is always returned
   // - optDontStoreVoidJSON will reduce the JSON object verbosity by not writing
-  // void (e.g. 0 or '') properties
+  // void (e.g. 0 or '') properties when serializing objects and records
   // - any exceptions will be propagated during execution, unless
   // optIgnoreException is set and the exception is trapped (not to be used
   // unless you know what you are doing)
@@ -10741,6 +10748,9 @@ type
     procedure SerializeToContract(WR: TTextWriter);
     /// check if the supplied argument value is the default (e.g. 0, '' or null)
     function IsDefault(V: pointer): boolean;
+    /// unserialize a JSON value into this argument
+    function FromJSON(const MethodName: RawUTF8; var R: PUTF8Char; V: pointer;
+      Error: PShortString{$ifndef NOVARIANTS}; DVO: TDocVariantOptions{$endif}): boolean;
     /// append the JSON value corresponding to this argument
     // - includes a pending ','
     procedure AddJSON(WR: TTextWriter; V: pointer;
@@ -11064,7 +11074,7 @@ type
     // corresponding ExecutedInstancesFailed[] property will be filled with
     // the JSON serialized exception
     function ExecuteJson(const Instances: array of pointer; Par: PUTF8Char;
-      Res: TTextWriter; ResAsJSONObject: boolean=false): boolean;
+      Res: TTextWriter; Error: PShortString=nil; ResAsJSONObject: boolean=false): boolean;
     /// execute the corresponding method of one weak IInvokable reference
     // - exepect no output argument, i.e. no returned data, unless output is set
     // - this version will identify TInterfacedObjectFake implementations,
@@ -11619,7 +11629,9 @@ type
   /// how TInterfacedObjectFromFactory will perform its execution
   // - by default, fInvoke() will receive standard JSON content, unless
   // ifoJsonAsExtended is set, and extended JSON is used
-  TInterfacedObjectFromFactoryOption = (ifoJsonAsExtended);
+  // - ifoDontStoreVoidJSON will ensure objects and records won't include
+  // default void fields in JSON serialization 
+  TInterfacedObjectFromFactoryOption = (ifoJsonAsExtended, ifoDontStoreVoidJSON);
   /// defines how TInterfacedObjectFromFactory will perform its execution
   TInterfacedObjectFromFactoryOptions = set of TInterfacedObjectFromFactoryOption;
 
@@ -16182,7 +16194,6 @@ type
   // as plain password value
   TSQLRestServerAuthenticationSSPI = class(TSQLRestServerAuthenticationSignedURI)
   protected
-    {$ifdef SSPIAUTH}
     /// Windows built-in authentication
     // - holds information between calls to ServerSSPIAuth
     fSSPIAuthContexts: TSecContextDynArray;
@@ -16200,14 +16211,11 @@ type
     // plain password
     class function ClientComputeSessionKey(Sender: TSQLRestClientURI;
       User: TSQLAuthUser): RawUTF8; override;
-    {$endif SSPIAUTH}
   public
     /// initialize the authentication method to a specified server
     constructor Create(aServer: TSQLRestServer); override;
-    {$ifdef SSPIAUTH}
     /// finalize internal memory structures
     destructor Destroy; override;
-    {$endif}
     /// will try to handle the Auth RESTful method with Windows SSPI API
     // - to be called in a two pass algorithm, used to cypher the password
     // - the client-side logged user will be identified as valid, according
@@ -16231,7 +16239,7 @@ type
   protected
     FBindPort: RawByteString;
     FAuthentication: TSQLHttpServerRestAuthentication;
-    FEnableCORS: boolean;
+    FEnableCORS: RawUTF8;
     FThreadCount: byte;
     FHttps: boolean;
     FHttpSysQueueName: SynUnicode;
@@ -16244,11 +16252,12 @@ type
     property Authentication: TSQLHttpServerRestAuthentication
       read FAuthentication write FAuthentication;
     /// allow Cross-origin resource sharing (CORS) access
-    // - set this property to TRUE if you want to be able to access the
-    // REST methods from an HTML5 application hosted in another location
-    // - i.e. will set the following HTTP header:
+    // - set this property to '*' if you want to be able to access the
+    // REST methods from an HTML5 application hosted in another location,
+    // or define a CSV white list of TMatch-compatible origins
+    // - will set e.g. the following HTTP header:
     // ! Access-Control-Allow-Origin: *
-    property EnableCORS: boolean read FEnableCORS write FEnableCORS;
+    property EnableCORS: RawUTF8 read FEnableCORS write FEnableCORS;
     /// how many threads the thread pool associated with this HTTP server
     // should create
     // - if set to 0, will use default value 32
@@ -16889,6 +16898,8 @@ type
   // rsoHttpHeaderCheckDisable is defined (to gain a few cycles?)
   // - by default, TSQLAuthUser.Data blob is retrieved from the database,
   // unless rsoGetUserRetrieveNoBlobData is defined
+  // - rsoNoInternalState could be state to avoid transmitting the
+  // 'Server-InternalState' header, e.g. if the clients wouldn't need it
   TSQLRestServerOption = (
     rsoNoAJAXJSON,
     rsoGetAsJsonNotAsString,
@@ -16903,7 +16914,8 @@ type
     rsoAuthenticationURIDisable,
     rsoTimestampInfoURIDisable,
     rsoHttpHeaderCheckDisable,
-    rsoGetUserRetrieveNoBlobData);
+    rsoGetUserRetrieveNoBlobData,
+    rsoNoInternalState);
   /// allow to customize the TSQLRestServer process via its Options property
   TSQLRestServerOptions = set of TSQLRestServerOption;
 
@@ -18308,6 +18320,8 @@ type
     // - returns -1 on failure (not UNIQUE field value e.g.)
     // - on success, the Rec instance is added to the Values[] list: caller
     // doesn't need to Free it, since it will be owned by the storage
+    // - in practice, SentData is used only for OnUpdateEvent/OnBlobUpdateEvent
+    // and the history feature
     // - warning: this method should be protected via StorageLock/StorageUnlock
     function AddOne(Rec: TSQLRecord; ForceID: boolean; const SentData: RawUTF8): TID; override;
     /// manual Retrieval of a TSQLRecord field values
@@ -20786,7 +20800,7 @@ type
   Deref = PTypeInfo;
 {$else}
 function Deref(Info: PPTypeInfo): PTypeInfo;
-{$ifdef HASINLINENOTX86}
+{$ifdef HASINLINENOTX86} inline;
 begin
   if Info=nil then
     result := pointer(Info) else
@@ -21926,7 +21940,7 @@ function TSQLPropInfoRTTIInt32.GetHash(Instance: TObject; CaseInsensitive: boole
 var v: integer;
 begin
   v := fPropInfo.GetOrdProp(Instance);
-  result := crc32c(0,@v,4); // better hash distribution using crc32c
+  result := crc32cBy4(0,v); // better hash distribution using crc32c
 end;
 
 procedure TSQLPropInfoRTTIInt32.GetJSONValues(Instance: TObject; W: TJSONSerializer);
@@ -23309,17 +23323,21 @@ end;
 
 {$endif HASVARUSTRING}
 
-
-{ TObjArraySerializer}
-
 type
   TObjArraySerializer = class(TPointerClassHashed)
   public
     Instance: TClassInstance;
+    constructor Create(aInfo: pointer; aItem: TClass); reintroduce;
     procedure CustomWriter(const aWriter: TTextWriter; const aValue);
     function CustomReader(P: PUTF8Char; var aValue; out aValid: Boolean): PUTF8Char;
   end;
   PTObjArraySerializer = ^TObjArraySerializer;
+
+constructor TObjArraySerializer.Create(aInfo: pointer; aItem: TClass);
+begin
+  inherited Create(aInfo);
+  Instance.Init(aItem);
+end;
 
 procedure TObjArraySerializer.CustomWriter(const aWriter: TTextWriter; const aValue);
 var opt: TTextWriterWriteObjectOptions;
@@ -25932,7 +25950,7 @@ begin
     result := false;
     exit;
   end;
-  while P^ in [#1..' '] do inc(P);
+  while (P^<=' ') and (P^<>#0) do inc(P);
   if (P[0] in ['x','X']) and (P[1]='''') then begin
     Len := (StrLen(P)-3) shr 1;
     result := (P[Len-1]='''') and SynCommons.HexToBin(@P[2],nil,Len);
@@ -26060,7 +26078,7 @@ end;
 
 procedure TSQLTable.GetJSONValues(W: TJSONWriter; RowFirst, RowLast, IDBinarySize: integer);
 var U: PPUTF8Char;
-    f,r: integer;
+    f,r: PtrInt;
     i64: Int64;
 label nostr,str;
 begin
@@ -28348,27 +28366,27 @@ begin
   result := Decoder.EncodeAsSQL(Update);
 end;
 
-function Expect(var P: PUTF8Char; const Value: RawUTF8): boolean;
+function Expect(var P: PUTF8Char; Value: PUTF8Char; ValueLen: PtrInt): boolean;
   {$ifdef HASINLINE}inline;{$endif}
-var L: integer;
-begin
+var i: PtrInt;
+begin // ValueLen is at least 8 bytes long
+  result := false;
   if P=nil then
-    result := false else begin
-    while P^ in [#1..' '] do inc(P);
-    if Value='' then
-      result := false else begin
-      L := length(Value);
-      result := CompareMemFixed(P,pointer(Value),L);
-      if result then
-        inc(P,L);
-    end;
+    exit;
+  while (P^<=' ') and (P^<>#0) do inc(P);
+  if PPtrInt(P)^=PPtrInt(Value)^ then begin
+    for i := SizeOf(PtrInt) to ValueLen - 1 do
+      if P[i]<>Value[i] then
+        exit;
+    inc(P,ValueLen);
+    result := true;
   end;
 end;
 
 function GetJSONIntegerVar(var P: PUTF8Char): PtrInt;
 var c: PtrUInt;
 begin
-  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+  while (P^<=' ') and (P^<>#0) do inc(P);
   c := byte(P^)-48;
   if c>9 then
     result := 0 else begin
@@ -28387,7 +28405,7 @@ end;
 function GetJSONInt64Var(var P: PUTF8Char): Int64;
 var c: PtrUInt;
 begin
-  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+  while (P^<=' ') and (P^<>#0) do inc(P);
   c := byte(P^)-48;
   if c>9 then
     result := 0 else begin
@@ -28404,9 +28422,9 @@ begin
 end;
 
 const
-  FIELDCOUNT_PATTERN: RawUTF8 = '{"fieldCount":';
-  ROWCOUNT_PATTERN: RawUTF8 = ',"rowCount":';
-  VALUES_PATTERN: RawUTF8 = ',"values":[';
+  FIELDCOUNT_PATTERN: PUTF8Char = '{"fieldCount":'; // 14 chars
+  ROWCOUNT_PATTERN: PUTF8Char =   ',"rowCount":';   // 12 chars
+  VALUES_PATTERN: PUTF8Char =     ',"values":[';    // 11 chars
 
 function UnJSONFirstField(var P: PUTF8Char): RawUTF8;
 // expand=true: [ {"col1":val11} ] -> val11
@@ -28414,7 +28432,7 @@ function UnJSONFirstField(var P: PUTF8Char): RawUTF8;
 begin
   result := '';
   if P=nil then exit;
-  if Expect(P,FIELDCOUNT_PATTERN) then begin
+  if Expect(P,FIELDCOUNT_PATTERN,14) then begin
     // not expanded format
     if GetJSONIntegerVar(P)<>1 then
       exit; // wrong field count
@@ -28431,7 +28449,7 @@ end;
 
 function IsNotAjaxJSON(P: PUTF8Char): Boolean;
 begin
-  result := Expect(P,FIELDCOUNT_PATTERN);
+  result := Expect(P,FIELDCOUNT_PATTERN,14);
 end;
 
 function NotExpandedBufferRowCountPos(P,PEnd: PUTF8Char): PUTF8Char;
@@ -28470,19 +28488,19 @@ function IsNotExpandedBuffer(var P: PUTF8Char; PEnd: PUTF8Char;
   end;
 var RowCountPos: PUTF8Char;
 begin
-  if not Expect(P,FIELDCOUNT_PATTERN) then begin
+  if not Expect(P,FIELDCOUNT_PATTERN,14) then begin
     result := false;
     exit;
   end;
   FieldCount := GetJSONIntegerVar(P);
-  if Expect(P,ROWCOUNT_PATTERN) then
+  if Expect(P,ROWCOUNT_PATTERN,12) then
     RowCount := GetJSONIntegerVar(P) else begin
     RowCountPos := NotExpandedBufferRowCountPos(P,PEnd);
     if RowCountPos=nil then
       RowCount := -1 else // mark "rowCount":.. not available
       RowCount := GetCardinal(RowCountPos);
   end;
-  result := (FieldCount<>0) and Expect(P,VALUES_PATTERN);
+  result := (FieldCount<>0) and Expect(P,VALUES_PATTERN,11);
   if result and (RowCount<0) then
     GetRowCountNotExpanded(P); // returns RowCount=-1 if P^ is invalid
 end;
@@ -28545,7 +28563,7 @@ begin
   result := '';
   if P=nil then
     exit;
-  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+  while (P^<=' ') and (P^<>#0) do inc(P);
   if P^<>'{' then
     exit;
   Beg := P;
@@ -29014,7 +29032,7 @@ function UTF8ContentType(P: PUTF8Char): TSQLFieldType;
 var c,len: integer;
 begin
   if P<>nil then begin
-    if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+    while (P^<=' ') and (P^<>#0) do inc(P);
     if (PInteger(P)^=NULL_LOW) and (P[4]=#0) then
        result := sftUnknown else
       // don't check for 'false' or 'true' here, since their UTF-8 value is 0/1
@@ -29859,6 +29877,17 @@ begin
     {$endif}
 end;
 
+procedure TPropInfo.GetShortStrProp(Instance: TObject; var Value: RawByteString);
+begin
+  if GetterIsField then
+    Value := ShortStringToAnsi7String(PShortString(GetterAddr(Instance))^) else
+    {$ifdef UNICODE}
+    Value := TypInfo.GetAnsiStrProp(Instance,@self);
+    {$else}
+    Value := TypInfo.GetStrProp(Instance,@self); // FPC returns an AnsiString
+    {$endif}
+end; // no SetShortStrProp() by now
+
 procedure TPropInfo.SetLongStrProp(Instance: TObject; const Value: RawByteString);
 begin
   if SetterIsField then
@@ -30160,6 +30189,30 @@ begin // caller must check that PropType^.Kind = tkLString
         TIndexedProp(Call)(Index,Value);
   end;
 end;
+
+procedure TPropInfo.GetShortStrProp(Instance: TObject; var Value: RawByteString);
+procedure CallMethod(Instance: TObject; var Value: RawByteString);
+type
+  TSStringGetProc = function: shortstring of object;
+  TSStringIndexedGetProc = function(Index: Integer): shortstring of object;
+var Call: TMethod;
+begin
+  if PropWrap(GetProc).Kind=$FE then
+    // virtual method  - Getter is a signed 2 byte integer VMT offset
+    Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(GetProc))^ else
+    // static method - Getter is the actual address
+    Call.Code := Pointer(GetProc);
+  Call.Data := Instance;
+  if Index=NO_INDEX then  // no index
+    Value := ShortStringToAnsi7String(TSStringGetProc(Call)) else
+    Value := ShortStringToAnsi7String(TSStringIndexedGetProc(Call)(Index));
+end;
+begin // caller must check that PropType^.Kind = tkString/tkSString
+  if PropWrap(GetProc).Kind=$FF then
+    // field - Getter is the field offset in the instance data
+    Value := ShortStringToAnsi7String(PShortString(PtrInt(Instance)+GetProc and $00FFFFFF)^) else
+    CallMethod(Instance,Value);
+end; // no SetShortStrProp() by now
 
 procedure TPropInfo.GetWideStrProp(Instance: TObject; var Value: WideString);
 type
@@ -30560,7 +30613,11 @@ begin
       if CT^.ParentInfo<>nil then begin
         if CT^.PropCount>0 then
           result := sftObject; // identify any class with published properties
-        with Deref(CT^.ParentInfo)^ do
+        {$ifdef HASDIRECTTYPEINFO}
+        with PTypeInfo(CT^.ParentInfo)^ do
+        {$else} // circumvent weird Delphi inlining compiler random bug
+        with CT^.ParentInfo^^ do
+        {$endif}
           CT := AlignTypeData(@Name[ord(Name[0])+1]); // get parent ClassType
         C := CT^.ClassType;
         if C<>TObject then
@@ -30779,7 +30836,7 @@ var base: PPTypeInfo;
 begin
   result := PEnumType(GetFPCTypeData(@self));
   if Kind=tkBool then
-    exit; // circumvent weird RTTI issue
+    exit; // circumvent diverse RTTI encoding
   base := result^.BaseType;
   if (base<>nil) and (base<>@self) then // no redirection if already the base type
     result := PEnumType(GetFPCTypeData(pointer(DeRef(base))));
@@ -30901,7 +30958,7 @@ begin
     {$else}
     with PInterfaceTypeData(@Name[ord(Name[0])+1])^ do
     {$endif}
-      result := mORMot.PTypeInfo(Deref(IntfParent));
+      result := pointer(Deref(IntfParent));
 end;
 
 procedure TTypeInfo.InterfaceAncestors(out Ancestors: PTypeInfoDynArray;
@@ -30965,21 +31022,16 @@ end;
 
 { TClassType }
 
-{$ifdef FPC}
 function TClassType.ClassProp: PClassProp;
 begin
   if pointer(@self)<>nil then
+    {$ifdef FPC}
     result := AlignToPtr(@UnitName[ord(UnitName[0])+1]) else
-    result := nil; // avoid GPF
-end;
-{$else}
-function TClassType.ClassProp: PClassProp;
-begin
-  if pointer(@self)<>nil then
+    {$else}
     result := pointer(@UnitName[ord(UnitName[0])+1]) else
+    {$endif}
     result := nil; // avoid GPF
 end;
-{$endif}
 
 function TClassType.RTTISize: integer;
 var C: PClassProp;
@@ -30996,10 +31048,8 @@ begin
   result := PtrUInt(P)-PtrUInt(@self);
 end;
 
-{$ifdef HASDIRECTTYPEINFO}
-// asm could also be adjusted for this, but this is the easy way ... ;-)
-// for the upcoming fpc 3.0.2 / fixes
 function TClassType.InheritsFrom(AClass: TClass): boolean;
+{$ifdef FPC_OR_PUREPASCAL}
 var P: PTypeInfo;
 begin
   result := true;
@@ -31014,23 +31064,6 @@ begin
   result := false;
 end;
 {$else}
-{$ifdef PUREPASCAL}
-function TClassType.InheritsFrom(AClass: TClass): boolean;
-var P: PTypeInfo;
-begin
-  result := true;
-  if ClassType=AClass then
-    exit;
-  P := DeRef(ParentInfo);
-  while P<>nil do
-    with P^.ClassType^ do
-    if ClassType=AClass then
-      exit else
-      P := DeRef(ParentInfo);
-  result := false;
-end;
-{$else}
-function TClassType.InheritsFrom(AClass: TClass): boolean;
 asm // eax=PClassType edx=AClass
         cmp     [eax].TClassType.ClassType, edx
         jz      @3
@@ -31045,7 +31078,6 @@ asm // eax=PClassType edx=AClass
 @3:     mov     eax, 1
 @0:
 end;
-{$endif}
 {$endif}
 
 
@@ -31953,14 +31985,14 @@ begin
     exit;
   while P^<>'{' do
     if P^=#0 then exit else inc(P);
-  if Expect(P,FIELDCOUNT_PATTERN) then begin
+  if Expect(P,FIELDCOUNT_PATTERN,14) then begin
     // not expanded format
     n := GetJSONIntegerVar(P)-1;
     if cardinal(n)>high(F) then
       exit;
-    if Expect(P,ROWCOUNT_PATTERN) then
+    if Expect(P,ROWCOUNT_PATTERN,12) then
       GetJSONIntegerVar(P); // just ignore "rowCount":.. here
-    if not Expect(P,VALUES_PATTERN) then
+    if not Expect(P,VALUES_PATTERN,11) then
       exit;
     for i := 0 to n do
       F[i] := GetJSONField(P,P);
@@ -38450,7 +38482,7 @@ begin
   end;
 end;
 
-{$ifdef SSPIAUTH}
+{$ifdef DOMAINAUTH}
 const
   SSPI_DEFINITION_USERNAME = '***SSPI***';
 {$endif}
@@ -38463,7 +38495,7 @@ begin
   if fModel<>nil then
     fOnIdle := fModel.OnClientIdle; // allow UI interactivity during SetUser()
   if aDefinition.User<>'' then begin
-    {$ifdef SSPIAUTH}
+    {$ifdef DOMAINAUTH}
     if aDefinition.User=SSPI_DEFINITION_USERNAME then
       SetUser('',aDefinition.PasswordPlain) else
     {$endif}
@@ -38477,7 +38509,7 @@ begin
     exit;
   inherited DefinitionTo(Definition); // save Kind
   if (fSessionAuthentication<>nil) and (fSessionUser<>nil) then begin
-    {$ifdef SSPIAUTH}
+    {$ifdef DOMAINAUTH}
     if fSessionAuthentication.InheritsFrom(TSQLRestServerAuthenticationSSPI) then
       Definition.User := SSPI_DEFINITION_USERNAME else
     {$endif}
@@ -38566,9 +38598,9 @@ begin
     result := false;
     exit;
   end;
-  {$ifdef SSPIAUTH} // try Windows authentication with the current logged user
+  {$ifdef DOMAINAUTH} // try Windows/GSSAPI authentication with the current logged user
   result := true;
-  if ((trim(aUserName)='') or (PosEx('\',aUserName)>0)) and
+  if ((trim(aUserName)='') or (PosEx({$ifdef GSSAPIAUTH}'@'{$else}'\'{$endif},aUserName)>0)) and
     TSQLRestServerAuthenticationSSPI.ClientSetUser(self,aUserName,aPassword,passKerberosSPN) then
       exit;
   {$endif}
@@ -42507,7 +42539,6 @@ begin
   fStats.AddCurrentRequestCount(1);
   if Assigned(fOnDecryptBody) then
     fOnDecryptBody(self,Call.InBody,Call.InHead,Call.Url);
-  Call.OutInternalState := InternalState; // other threads may change it
   Call.OutStatus := HTTP_BADREQUEST; // default error code is 400 BAD REQUEST
   safeid := 0;
   if (fSafeProtocol<>nil) and IdemPropNameU(Call.Method,'POST') then begin
@@ -42577,8 +42608,9 @@ begin
       except
         on E: Exception do
           if not Assigned(OnErrorURI) or OnErrorURI(Ctxt,E) then
-            // return 500 internal server error
-            Ctxt.Error(E,'',[],HTTP_SERVERERROR);
+            if E.ClassType=EInterfaceFactoryException then
+              Ctxt.Error(E,'',[],HTTP_NOTACCEPTABLE) else
+              Ctxt.Error(E,'',[],HTTP_SERVERERROR);
       end;
     end;
     // 4. returns expected result to the client and update Server statistics
@@ -42599,7 +42631,9 @@ begin
         Ctxt.Error(Ctxt.CustomErrorMsg,Call.OutStatus);
     end;
     StatsAddSizeForCall(fStats,Call);
-    if (Ctxt.Static<>nil) and Ctxt.Static.InheritsFrom(TSQLRestStorage) and
+    if (rsoNoInternalState in fOptions) and (Ctxt.Method<>mSTATE) then
+      Call.OutInternalState := 0 // reduce headers verbosity
+    else if (Ctxt.Static<>nil) and Ctxt.Static.InheritsFrom(TSQLRestStorage) and
        TSQLRestStorage(Ctxt.Static).fOutInternalStateForcedRefresh then
       // force always refresh for Static table which demands it
       Call.OutInternalState := cardinal(-1) else
@@ -42610,7 +42644,7 @@ begin
       if rsoCookieIncludeRootPath in fOptions then
         Call.OutHead := Call.OutHead+'; Path=/'; // case-sensitive Path=/ModelRoot
     end;
-    if not (rsoHttpHeaderCheckDisable in Options) and
+    if not (rsoHttpHeaderCheckDisable in fOptions) and
        IsInvalidHttpHeader(pointer(Call.OutHead), length(Call.OutHead)) then
       Ctxt.Error('Unsafe HTTP header rejected', HTTP_SERVERERROR);
   finally
@@ -42686,8 +42720,9 @@ begin // called by root/Timestamp/info REST method
     FormatUTF8('% / %',[m.PhysicalMemoryFree.Text,m.PhysicalMemoryTotal.Text],free);
     info.AddNameValuesToObject(['nowutc',now.Text(true,' ') , 'timestamp',now.Value,
       'exe',ExeVersion.ProgramName, 'version',ExeVersion.Version.DetailedOrVoid,
-      'host',ExeVersion.Host, 'cpu',cpu, 'mem',mem, 'memused',KB(m.AllocatedUsed.Bytes),
-      'memfree',free, 'exception',GetLastExceptions(10)]);
+      'host',ExeVersion.Host, 'cpu',cpu, {$ifdef MSWINDOWS}'mem',mem,{$endif}
+      'memused',KB(m.AllocatedUsed.Bytes), 'memfree',free,
+      'diskfree',TSynMonitorDisk.FreeAsText, 'exception',GetLastExceptions(10)]);
   finally
     m.Free;
   end;
@@ -43018,7 +43053,7 @@ begin
   Ctxt.Call.OutStatus := HTTP_SUCCESS;
   for i := 0 to length(Results)-1 do
     if Results[i]<>HTTP_SUCCESS then begin
-      Ctxt.Call.OutBody := Int64DynArrayToCSV(Results,length(Results),'[',']');
+      Ctxt.Call.OutBody := Int64DynArrayToCSV(pointer(Results),length(Results),'[',']');
       exit;
     end;
   Ctxt.Call.OutBody := '["OK"]';  // to save bandwith if no adding
@@ -43743,7 +43778,7 @@ begin
     if HistIDCount=0 then
       exit; // nothing to compress
     QuickSortInt64(Pointer(HistID),0,HistIDCount-1);
-    WhereClause := Int64DynArrayToCSV(HistID,HistIDCount,'RowID in (',')');
+    WhereClause := Int64DynArrayToCSV(Pointer(HistID),HistIDCount,'RowID in (',')');
     { following SQL is much slower with external tables, and won't work
       with TSQLRestStorageInMemory -> manual process instead
     WhereClause := FormatUTF8('ModifiedRecord in (select ModifiedRecord from '+
@@ -47381,7 +47416,7 @@ begin
     result := true;
     for i := 0 to high(id) do
       if id[i]<>nil then begin
-        sql := Int64DynArrayToCSV(id[i],idn[i],'ID in (',')');
+        sql := Int64DynArrayToCSV(pointer(id[i]),idn[i],'ID in (',')');
         if not fShards[i].EngineDeleteWhere(fShardTableIndex[i],sql,TIDDynArray(id[i])) then
           result := false;
       end;
@@ -49194,8 +49229,7 @@ begin
   serializer := pointer(ObjArraySerializers.TryAdd(aDynArray));
   if serializer=nil then
     exit; // avoid duplicate
-  serializer^ := TObjArraySerializer.Create(aDynArray);
-  serializer^.Instance.Init(aItem);
+  serializer^ := TObjArraySerializer.Create(aDynArray,aItem);
   TTextWriter.RegisterCustomJSONSerializer(
     aDynArray,serializer^.CustomReader,serializer^.CustomWriter);
 end;
@@ -51417,10 +51451,10 @@ begin
   result := '';
   if P=nil then
     exit;
-  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+  while (P^<=' ') and (P^<>#0) do inc(P);
   if P^<>'[' then
     exit;
-  repeat inc(P) until not(P^ in [#1..' ']);
+  repeat inc(P) until (P^>' ') or (P^=#0);
   W := TJSONSerializer.CreateOwnedStream(temp);
   try
     W.Add('{');
@@ -51436,7 +51470,7 @@ begin
         exit;
       W.AddNoJSONEscape(Start,P-Start);
       W.Add(',');
-      repeat inc(P) until not(P^ in [#1..' ']);
+      repeat inc(P) until (P^>' ') or (P^=#0);
     end;
     W.CancelLastComma;
     W.Add('}');
@@ -51446,7 +51480,7 @@ begin
   end;
   EndOfObject := P^;
   if P^<>#0 then
-    repeat inc(P) until not(P^ in [#1..' ']);
+    repeat inc(P) until (P^>' ') or (P^=#0);
 end;
 
 procedure TSQLRecordProperties.SaveBinaryHeader(W: TFileBufferWriter);
@@ -51886,6 +51920,7 @@ var Added: boolean;
       V64: Int64;
       Obj: TObject;
       V, c, codepage: integer;
+      po: PObject;
       Kind: TTypeKind;
       PS: PShortString;
       dyn: TDynArray;
@@ -51976,9 +52011,18 @@ var Added: boolean;
               Add(V); // typecast enums and sets as plain integer by default
         end;
       end;
+      {$ifdef FPC}tkSString{$else}tkString{$endif}: begin
+        P^.GetShortStrProp(Value,tmp);
+        if (tmp<>'') or not (woDontStoreEmptyString in Options) then begin
+          HR(P);
+          Add('"');
+          AddJSONEscape(pointer(tmp));
+          Add('"');
+        end;
+      end; // no shortstring deserialization by now
       {$ifdef FPC}tkAString,{$endif} tkLString:
       if P^.TypeInfo=TypeInfo(RawJSON) then begin
-        P^.GetLongStrProp(Value,tmp);
+        P^.GetLongStrProp(Value,tmp); // assume shortstring field is UTF-8 encoded
         if tmp<>'' then begin
           HR(P);
           AddString(tmp);
@@ -52069,9 +52113,11 @@ var Added: boolean;
             end else begin // do not use AddDynArrayJSON to support HR
               inc(fHumanReadableLevel);
               Add('[');
-              for c := 0 to dyn.Count-1 do begin
-                WriteObject(PPointerArray(dyn.Value^)^[c],Options);
+              po := dyn.Value^;
+              for c := 1 to dyn.Count do begin
+                WriteObject(po^,Options);
                 Add(',');
+                inc(po);
               end;
               CancelLastComma;
               dec(fHumanReadableLevel);
@@ -53829,13 +53875,8 @@ var i: integer;
     UserName, InDataEnc: RawUTF8;
     ticks,ConnectionID: Int64;
     BrowserAuth: Boolean;
-    {$ifdef SSPIAUTH}
     CtxArr: TDynArray;
     SecCtxIdx: Integer;
-    {$endif}
-    {$ifdef GSSAPIAUTH}
-    SecCtx: Pointer;
-    {$endif}
     OutData: RawByteString;
     User: TSQLAuthUser;
     Session: TAuthSession;
@@ -53843,10 +53884,6 @@ begin
   result := AuthSessionRelease(Ctxt);
   if result or not Ctxt.InputExists['UserName'] or not Ctxt.InputExists['Data'] then
     exit;
-  {$ifdef GSSAPIAUTH}
-  if not GSSLibraryFound then
-    exit;
-  {$endif}
   // use ConnectionID to find authentication session
   ConnectionID := Ctxt.Call^.LowLevelConnectionID;
   // GET ModelRoot/auth?UserName=&data=... -> windows SSPI auth
@@ -53863,10 +53900,6 @@ begin
     end;
     BrowserAuth := True;
   end else
-  {$ifdef GSSAPIAUTH}
-    raise ENotImplemented.Create('GSSAPI support for non-browser clients is not currently implemented');
-  {$endif}
-  {$ifdef SSPIAUTH}
     BrowserAuth := False;
   CtxArr.InitSpecific(TypeInfo(TSecContextDynArray),fSSPIAuthContexts,djInt64);
   // check for outdated auth context
@@ -53877,9 +53910,7 @@ begin
       CtxArr.Delete(i);
     end;
   // if no auth context specified, create a new one
-  {$endif}
   result := true;
-  {$ifdef SSPIAUTH}
   SecCtxIdx := CtxArr.Find(ConnectionID);
   if SecCtxIdx<0 then begin
     // 1st call: create SecCtxId
@@ -53909,17 +53940,6 @@ begin
     fServer.fLogFamily.SynLog.Log(sllUserAuth,'% Authentication success for %',
       [SecPackageName(fSSPIAuthContexts[SecCtxIdx]),UserName],self);
   {$endif}
-  {$endif}
-  {$ifdef GSSAPIAUTH}
-  SecCtx := nil;
-  if not GSSAcceptSecurityContext(Base64ToBin(InDataEnc), ''{ TODO: SPN should be someware in configuration }, SecCtx, AnsiString(UserName), OutData) then
-    raise ESecurityException.Create('Only one authentication iteration allowed');
-  {$ifdef WITHLOG}
-  if sllUserAuth in fServer.fLogFamily.Level then
-    fServer.fLogFamily.SynLog.Log(sllUserAuth,'% Authentication success for %',
-      ['GSSAPI',UserName],self);
-  {$endif}
-  {$endif}
   // now client is authenticated -> create a session for aUserName
   // and send back OutData
   try
@@ -53932,39 +53952,35 @@ begin
       fServer.SessionCreate(User,Ctxt,Session); // call Ctxt.AuthenticationFailed on error
       if Session<>nil then
         with Session.User do
-          {$ifdef SSPIAUTH}if BrowserAuth then{$endif}
+          if BrowserAuth then
             SessionCreateReturns(Ctxt,Session,Session.fPrivateSalt,'',
-              (SECPKGNAMEHTTPWWWAUTHENTICATE+' ')+BinToBase64(OutData)){$ifdef SSPIAUTH} else
+              (SECPKGNAMEHTTPWWWAUTHENTICATE+' ')+BinToBase64(OutData)) else
             SessionCreateReturns(Ctxt,Session,
               BinToBase64(SecEncrypt(fSSPIAuthContexts[SecCtxIdx],Session.fPrivateSalt)),
-              BinToBase64(OutData),''){$endif};
+              BinToBase64(OutData),'');
     finally
       User.Free;
     end else
       Ctxt.AuthenticationFailed(afUnknownUser);
   finally
-    {$ifdef SSPIAUTH}
     FreeSecContext(fSSPIAuthContexts[SecCtxIdx]);
     CtxArr.Delete(SecCtxIdx);
-    {$endif}
-    {$ifdef GSSAPIAUTH}
-    GSSReleaseContext(SecCtx);
-    {$endif}
   end;
 end;
 
-{$ifdef SSPIAUTH}
 class function TSQLRestServerAuthenticationSSPI.ClientComputeSessionKey(
   Sender: TSQLRestClientURI; User: TSQLAuthUser): RawUTF8;
 var SecCtx: TSecContext;
+    WithPassword: Boolean;
     OutData: RawByteString;
 begin
   result := '';
   InvalidateSecContext(SecCtx,0);
+  WithPassword := User.LogonName<>'';
   Sender.fSessionData := '';
   try
     repeat
-      if User.LogonName<>'' then
+      if WithPassword then
         ClientSSPIAuthWithPassword(SecCtx,Sender.fSessionData,
           User.LogonName,User.PasswordHashHexa,OutData) else
         ClientSSPIAuth(SecCtx,Sender.fSessionData,User.PasswordHashHexa,OutData);
@@ -53984,14 +54000,12 @@ begin
   // SessionKey + PasswordHashHexa to sign the URI, as usual
   User.PasswordHashHexa := ''; // should not appear on URI signature
 end;
-{$endif}
 
 constructor TSQLRestServerAuthenticationSSPI.Create(aServer: TSQLRestServer);
 begin
   inherited Create(aServer);
 end;
 
-{$ifdef SSPIAUTH}
 destructor TSQLRestServerAuthenticationSSPI.Destroy;
 var i: integer;
 begin
@@ -53999,7 +54013,6 @@ begin
     FreeSecContext(fSSPIAuthContexts[i]);
   inherited;
 end;
-{$endif}
 
 {$endif DOMAINAUTH}
 
@@ -54517,6 +54530,7 @@ type
   TInterfacedObjectFake = class(TInterfacedObjectFromFactory)
   protected
     fVTable: PPointerArray;
+    fServiceFactory: TServiceFactory;
     function FakeCall(var aCall: TFakeCallStack): Int64;
     {$ifdef FPC}
     {$ifdef CPUARM}
@@ -54543,7 +54557,7 @@ type
       const aParamInfo: TServiceMethodArgument; aParamValue: Pointer); virtual;
   public
     /// create an instance, using the specified interface
-    constructor Create(aFactory: TInterfaceFactory;
+    constructor Create(aFactory: TInterfaceFactory; aServiceFactory: TServiceFactory;
       aOptions: TInterfacedObjectFromFactoryOptions;
       aInvoke: TOnFakeInstanceInvoke; aNotifyDestroy: TOnFakeInstanceDestroy);
     /// retrieve one local instance of this interface
@@ -54586,12 +54600,13 @@ type
       const Format: RawUTF8; const Args: array of const); overload;
   end;
 
-constructor TInterfacedObjectFake.Create(aFactory: TInterfaceFactory;
+constructor TInterfacedObjectFake.Create(aFactory: TInterfaceFactory; aServiceFactory: TServiceFactory;
   aOptions: TInterfacedObjectFromFactoryOptions; aInvoke: TOnFakeInstanceInvoke;
   aNotifyDestroy: TOnFakeInstanceDestroy);
 begin
   inherited Create(aFactory,aOptions,aInvoke,aNotifyDestroy);
   fVTable := aFactory.GetMethodsVirtualTable;
+  fServiceFactory := aServiceFactory;
 end;
 
 function TInterfacedObjectFake.SelfFromInterface: TInterfacedObjectFake;
@@ -54642,223 +54657,159 @@ end;
 procedure IgnoreComma(var P: PUTF8Char);
 begin
   if P<>nil then begin
-    if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+    while (P^<=' ') and (P^<>#0) do inc(P);
     if P^=',' then inc(P);
   end;
 end;
 
 function TInterfacedObjectFake.FakeCall(var aCall: TFakeCallStack): Int64;
-var method: ^TServiceMethod;
-procedure RaiseError(const Format: RawUTF8; const Args: array of const);
-var msg: RawUTF8;
-begin
-  msg := FormatUTF8(Format,Args);
-  raise EInterfaceFactoryException.CreateUTF8('%.FakeCall(%.%) failed: %',
-    [self,fFactory.fInterfaceTypeInfo^.Name,method^.URI,msg]);
-end;
-var resultType: TServiceMethodValueType; // type of value stored into result
-procedure InternalProcess;
-var Params: TJSONSerializer;
-    Error, ResArray, ParamsJSON: RawUTF8;
-    arg, ValLen: integer;
-    V: PPointer;
-    R, Val: PUTF8Char;
-    wasString, resultAsJSONObject: boolean;
-    ServiceCustomAnswerPoint: PServiceCustomAnswer;
-    parser: TJSONToObject; // inlined JSONToObject()
-    DynArrays: array[0..MAX_METHOD_ARGS-1] of TDynArray;
-    Value: array[0..MAX_METHOD_ARGS-1] of pointer;
-    I64s: array[0..MAX_METHOD_ARGS-1] of Int64;
-    temp: TTextWriterStackBuffer;
-begin
-  Params := TJSONSerializer.CreateOwnedStream(temp);
-  try
-    // create the parameters
-    if ifoJsonAsExtended in fOptions then
-      include(Params.fCustomOptions,twoForceJSONExtended) else
-      include(Params.fCustomOptions,twoForceJSONStandard); // e.g. for AJAX
-    FillcharFast(I64s,method^.ArgsUsedCount[smvv64]*SizeOf(Int64),0);
-    for arg := 1 to high(method^.Args) do
-    with method^.Args[arg] do
-    if ValueType>smvSelf then begin
-      {$ifdef HAS_FPREG} // x64, arm, aarch64
-      if FPRegisterIdent>0 then
-        V := Pointer((PtrUInt(@aCall.FPRegs[FPREG_FIRST])+SizeOf(Double)*PtrUInt(FPRegisterIdent-1))) else
-      if RegisterIdent>0 then
-        V := Pointer((PtrUInt(@aCall.ParamRegs[PARAMREG_FIRST])+SizeOf(pointer)*PtrUInt(RegisterIdent-1))) else
-      {$endif}
-        V := nil;
-      {$ifndef CPUAARCH64} // on aarch64, reference result can be in PARAMREG_FIRST
-      if RegisterIdent=PARAMREG_FIRST then
-         RaiseError('unexpected self',[]);
-      {$endif}
-      {$ifdef CPUX86}
-      case RegisterIdent of
-      REGEAX: RaiseError('unexpected self',[]);
-      REGEDX: V := @aCall.EDX;
-      REGECX: V := @aCall.ECX;
-      else
-      {$endif}
-      if V=nil then
-        if (SizeInStack>0) and (InStackOffset<>STACKOFFSET_NONE) then
-          V := @aCall.Stack[InStackOffset] else
-          V := @I64s[IndexVar]; // for results in CPU
-      {$ifdef CPUX86}
-      end;
-      {$endif}
-      if vPassedByReference in ValueKindAsm then
-        V := PPointer(V)^;
-      if ValueType=smvDynArray then
-        DynArrays[IndexVar].InitFrom(DynArrayWrapper,V^);
-      Value[arg] := V;
-      if ValueDirection in [smdConst,smdVar] then
-        case ValueType of
-        smvInterface:
-          InterfaceWrite(Params,method^,method^.Args[arg],V^);
-        smvDynArray: begin
-          Params.AddDynArrayJSON(DynArrays[IndexVar]);
-          Params.Add(',');
-        end;
-        else AddJSON(Params,V);
-        end;
-    end;
-    Params.CancelLastComma;
-    Params.SetText(ParamsJSON); // without [ ]
-  finally
-    Params.Free;
+var method: PServiceMethod;
+    resultType: TServiceMethodValueType; // type of value stored into result
+  procedure RaiseError(const Format: RawUTF8; const Args: array of const);
+  var msg: RawUTF8;
+  begin
+    msg := FormatUTF8(Format,Args);
+    raise EInterfaceFactoryException.CreateUTF8('%.FakeCall(%.%) failed: %',
+      [self,fFactory.fInterfaceTypeInfo^.Name,method^.URI,msg]);
   end;
-  // call remote server or stub implementation
-  if method^.ArgsResultIsServiceCustomAnswer then
-    ServiceCustomAnswerPoint := Value[method^.ArgsResultIndex] else
-    ServiceCustomAnswerPoint := nil;
-  if not fInvoke(method^,ParamsJSON,
-     @ResArray,@Error,@fClientDrivenID,ServiceCustomAnswerPoint) then
-    RaiseError('''%''',[Error]);
-  // retrieve method result and var/out parameters content
-  if ServiceCustomAnswerPoint=nil then
-  if ResArray<>'' then begin
-    R := pointer(ResArray);
-    if R^ in [#1..' '] then repeat inc(R) until not(R^ in [#1..' ']);
-    resultAsJSONObject := false; // [value,...] JSON array format
-    if R^='{' then   // {"paramname":value,...} JSON object format
-      resultAsJSONObject := true else
-    if R^<>'[' then
-      RaiseError('JSON array/object result expected',[]);
-    inc(R);
-    arg := method^.ArgsOutFirst;
-    if arg>0 then
-    repeat
-      if resultAsJSONObject then begin
-        Val := GetJSONPropName(R,@ValLen);
-        if Val=nil then
-          break; // end of JSON object
-        if (arg>0) and not IdemPropName(method^.Args[arg].ParamName^,Val,ValLen) then begin
-          arg := method^.ArgIndex(Val,ValLen,false); // only if were not in-order
-          if arg<0 then
-            RaiseError('unexpected parameter "%"',[Val]);
-        end;
-      end;
-      with method^.Args[arg] do begin
-        //assert(ValueDirection in [smdVar,smdOut,smdResult]);
-        V := Value[arg];
-        case ValueType of
-        smvObject: begin
-          if PInteger(R)^=NULL_LOW then
-            inc(R,4) else begin // null from TInterfacedStub -> stay untouched
-            parser.From := R; // inlined JSONToObject()
-            parser.Options := JSONTOOBJECT_TOLERANTOPTIONS;
-            parser.TObjectListItemClass := nil;
-            parser.Value := PObject(V)^;
-            parser.Parse;
-            if parser.Valid then
-              R := parser.Dest else
-              RaiseError('returned object',[]);
-          end;
-          IgnoreComma(R);
-        end;
-        smvInterface:
-          RaiseError('unexpected var/out interface',[]);
-        smvRawJSON:
-          if (R<>nil) and (R^=']') then
-            PRawUTF8(V)^ := '' else begin
-            GetJSONItemAsRawJSON(R,PRawJSON(V)^);
-            if R=nil then
-              RaiseError('returned RawJSON',[]);
-          end;
-        smvDynArray: begin
-          if vIsObjArray in ValueKindAsm then
-            ObjArrayClear(V^);
-          R := DynArrays[IndexVar].LoadFromJSON(R);
-          if R=nil then
-            RaiseError('returned array',[]);
-          IgnoreComma(R);
-        end;
-        smvBoolean..smvBinary: begin
-          Val := GetJSONField(R,R,@wasString,nil,@ValLen);
-          if (Val=nil) or (wasString<>(vIsString in ValueKindAsm)) then
-            if resultAsJSONObject then
-              RaiseError('missing or invalid value',[]) else
-              RaiseError('missing or invalid value: '+
-              'parameters shall follow method var/out/result order',[]);
-          if (ValueType=smvBoolean) and (PInteger(Val)^=TRUE_LOW) then
-            Val := '1'; // handle also BOOL with SizeInStorage=2
-          case ValueType of
-          smvBoolean, smvEnum, smvSet, smvCardinal:
-            case SizeInStorage of
-            1: PByte(V)^     := GetCardinal(Val);
-            2: PWord(V)^     := GetCardinal(Val);
-            4: PCardinal(V)^ := GetCardinal(Val);
-            end;
-          smvInteger:       PInteger(V)^ := GetInteger(Val);
-          smvInt64:         SetInt64(Val,PInt64(V)^);
-          smvDouble,smvDateTime: PDouble(V)^ := GetExtended(Val);
-          smvCurrency:      PInt64(V)^   := StrToCurr64(Val);
-          smvRawUTF8:       SetString(PRawUTF8(V)^,PAnsiChar(Val),ValLen);
-          smvString:        UTF8DecodeToString(Val,ValLen,PString(V)^);
-          smvRawByteString: Base64ToBin(PAnsiChar(Val),ValLen,PRawByteString(V)^);
-          smvWideString:    UTF8ToWideString(Val,ValLen,PWideString(V)^);
-          smvBinary:
-            if ValLen=SizeInStorage*2 then
-              HexDisplayToBin(PAnsiChar(Val),PByte(V),SizeInStorage);
-          else RaiseError('ValueType=%',[ord(ValueType)]);
-          end;
-        end;
-        smvRecord: begin
-          R := RecordLoadJSON(V^,R,ArgTypeInfo);
-          if R=nil then
-            RaiseError('returned record',[]);
-        end;
-        {$ifndef NOVARIANTS}
-        smvVariant: begin
-          R := VariantLoadJSON(PVariant(V)^,R,nil,@fFactory.DocVariantOptions);
-          if R=nil then
-            RaiseError('returned variant',[]);
+  procedure InternalProcess;
+  var Params: TJSONSerializer;
+      Error, ResArray, ParamsJSON: RawUTF8;
+      arg, ValLen: integer;
+      V: PPointer;
+      R, Val: PUTF8Char;
+      resultAsJSONObject: boolean;
+      opt: TTextWriterWriteObjectOptions;
+      ServiceCustomAnswerPoint: PServiceCustomAnswer;
+      DynArrays: array[0..MAX_METHOD_ARGS-1] of TDynArray;
+      Value: array[0..MAX_METHOD_ARGS-1] of pointer;
+      I64s: array[0..MAX_METHOD_ARGS-1] of Int64;
+      temp: TTextWriterStackBuffer;
+  begin
+    Params := TJSONSerializer.CreateOwnedStream(temp);
+    try
+      // create the parameters
+      if ifoJsonAsExtended in fOptions then
+        include(Params.fCustomOptions,twoForceJSONExtended) else
+        include(Params.fCustomOptions,twoForceJSONStandard); // e.g. for AJAX
+      if (ifoDontStoreVoidJSON in fOptions) {GPF or ((fServiceFactory<>nil) and
+         (optDontStoreVoidJSON in fServiceFactory.fExecution[
+           integer(aCall.MethodIndex)-SERVICE_PSEUDO_METHOD_COUNT].Options))} then begin
+        opt := [woDontStoreDefault,woDontStoreEmptyString,woDontStore0];
+        include(Params.fCustomOptions,twoIgnoreDefaultInRecord);
+      end else
+        opt := [woDontStoreDefault];
+      FillcharFast(I64s,method^.ArgsUsedCount[smvv64]*SizeOf(Int64),0);
+      for arg := 1 to high(method^.Args) do
+      with method^.Args[arg] do
+      if ValueType>smvSelf then begin
+        {$ifdef HAS_FPREG} // x64, arm, aarch64
+        if FPRegisterIdent>0 then
+          V := Pointer((PtrUInt(@aCall.FPRegs[FPREG_FIRST])+SizeOf(Double)*PtrUInt(FPRegisterIdent-1))) else
+        if RegisterIdent>0 then
+          V := Pointer((PtrUInt(@aCall.ParamRegs[PARAMREG_FIRST])+SizeOf(pointer)*PtrUInt(RegisterIdent-1))) else
+        {$endif}
+          V := nil;
+        {$ifndef CPUAARCH64} // on aarch64, reference result can be in PARAMREG_FIRST
+        if RegisterIdent=PARAMREG_FIRST then
+           RaiseError('unexpected self',[]);
+        {$endif}
+        {$ifdef CPUX86}
+        case RegisterIdent of
+        REGEAX: RaiseError('unexpected self',[]);
+        REGEDX: V := @aCall.EDX;
+        REGECX: V := @aCall.ECX;
+        else
+        {$endif}
+        if V=nil then
+          if (SizeInStack>0) and (InStackOffset<>STACKOFFSET_NONE) then
+            V := @aCall.Stack[InStackOffset] else
+            V := @I64s[IndexVar]; // for results in CPU
+        {$ifdef CPUX86}
         end;
         {$endif}
-        end;
-        if ValueDirection=smdResult then begin
-          resultType := ValueType;
-          if ValueType in [smvBoolean..smvCurrency] then
-            // ordinal/real result values to CPU/FPU registers
-            MoveFast(V^,Result,SizeInStorage);
-        end;
+        if vPassedByReference in ValueKindAsm then
+          V := PPointer(V)^;
+        if ValueType=smvDynArray then
+          DynArrays[IndexVar].InitFrom(DynArrayWrapper,V^);
+        Value[arg] := V;
+        if ValueDirection in [smdConst,smdVar] then
+          case ValueType of
+          smvInterface:
+            InterfaceWrite(Params,method^,method^.Args[arg],V^);
+          smvDynArray: begin
+            if vIsObjArray in ValueKindAsm then
+              Params.AddObjArrayJSON(V^,opt) else
+              Params.AddDynArrayJSON(DynArrays[IndexVar]);
+            Params.Add(',');
+          end;
+          else AddJSON(Params,V,opt);
+          end;
       end;
-      if R=nil then
-        break;
+      Params.CancelLastComma;
+      Params.SetText(ParamsJSON); // without [ ]
+    finally
+      Params.Free;
+    end;
+    // call remote server or stub implementation
+    if method^.ArgsResultIsServiceCustomAnswer then
+      ServiceCustomAnswerPoint := Value[method^.ArgsResultIndex] else
+      ServiceCustomAnswerPoint := nil;
+    if not fInvoke(method^,ParamsJSON,
+       @ResArray,@Error,@fClientDrivenID,ServiceCustomAnswerPoint) then
+      RaiseError('''%''',[Error]);
+    // retrieve method result and var/out parameters content
+    if ServiceCustomAnswerPoint=nil then
+    if ResArray<>'' then begin
+      R := pointer(ResArray);
       if R^ in [#1..' '] then repeat inc(R) until not(R^ in [#1..' ']);
-      if resultAsJSONObject then begin
-        if (R^=#0) or (R^='}') then
-          break else // end of JSON object
-          if not method^.ArgNext(arg,false) then
-            arg := 0; // no next result argument -> force manual search
-      end else
-      if not method^.ArgNext(arg,false) then
-        break; // end of JSON array
-    until false;
-  end else
-    if method^.ArgsOutputValuesCount>0 then
-      RaiseError('method returned value, but ResArray=''''',[]);
-end;
+      resultAsJSONObject := false; // [value,...] JSON array format
+      if R^='{' then   // {"paramname":value,...} JSON object format
+        resultAsJSONObject := true else
+      if R^<>'[' then
+        RaiseError('JSON array/object result expected',[]);
+      inc(R);
+      arg := method^.ArgsOutFirst;
+      if arg>0 then
+      repeat
+        if resultAsJSONObject then begin
+          Val := GetJSONPropName(R,@ValLen);
+          if Val=nil then
+            break; // end of JSON object
+          if (arg>0) and not IdemPropName(method^.Args[arg].ParamName^,Val,ValLen) then begin
+            arg := method^.ArgIndex(Val,ValLen,false); // only if were not in-order
+            if arg<0 then
+              RaiseError('unexpected parameter "%"',[Val]);
+          end;
+        end;
+        with method^.Args[arg] do begin
+          //assert(ValueDirection in [smdVar,smdOut,smdResult]);
+          V := Value[arg];
+          FromJSON(method^.InterfaceDotMethodName,R,V,nil
+            {$ifndef NOVARIANTS},fFactory.DocVariantOptions{$endif});
+          if ValueDirection=smdResult then begin
+            resultType := ValueType;
+            if ValueType in [smvBoolean..smvCurrency] then
+              // ordinal/real result values to CPU/FPU registers
+              MoveFast(V^,Result,SizeInStorage);
+          end;
+        end;
+        if R=nil then
+          break;
+        if R^ in [#1..' '] then repeat inc(R) until not(R^ in [#1..' ']);
+        if resultAsJSONObject then begin
+          if (R^=#0) or (R^='}') then
+            break else // end of JSON object
+            if not method^.ArgNext(arg,false) then
+              arg := 0; // no next result argument -> force manual search
+        end else
+        if not method^.ArgNext(arg,false) then
+          break; // end of JSON array
+      until false;
+    end else
+      if method^.ArgsOutputValuesCount>0 then
+        RaiseError('method returned value, but ResArray=''''',[]);
+  end;
 begin
   (*
      WELCOME ABOARD: you just landed in TInterfacedObjectFake.FakeCall() !
@@ -54921,9 +54872,9 @@ begin
   fClient := aClient;
   if (fClient.fClient<>nil) and (fClient.fClient.fSessionID<>0) and
      (fClient.fClient.fSessionUser<>nil) then
-    opt := [ifoJsonAsExtended] else
+    opt := [ifoJsonAsExtended,ifoDontStoreVoidJSON] else
     opt := [];
-  inherited Create(aClient.fInterface,opt,aInvoke,aNotifyDestroy);
+  inherited Create(aClient.fInterface,aClient,opt,aInvoke,aNotifyDestroy);
 end;
 
 procedure TInterfacedObjectFakeClient.InterfaceWrite(W: TJSONSerializer;
@@ -54946,13 +54897,13 @@ constructor TInterfacedObjectFakeServer.Create(aRequest: TSQLRestServerURIContex
 var opt: TInterfacedObjectFromFactoryOptions;
 begin
   if aRequest.ClientKind=ckFramework then
-    opt := [ifoJsonAsExtended] else
+    opt := [ifoJsonAsExtended,ifoDontStoreVoidJSON] else
     opt := [];
   fServer := aRequest.Server;
   fService := aRequest.Service;
   fLowLevelConnectionID := aRequest.Call^.LowLevelConnectionID;
   fClientDrivenID := aFakeID;
-  inherited Create(aFactory,opt,CallbackInvoke,nil);
+  inherited Create(aFactory,nil,opt,CallbackInvoke,nil);
   Get(fFakeInterface);
 end;
 
@@ -56147,7 +56098,7 @@ begin
       '%.% method: duplicated name for %',[fInterfaceTypeInfo^.Name,aURI,self]))^ do begin
       HierarchyLevel := fAddMethodsLevel;
       {$ifdef FPC}
-      aResultType := Deref(mORMot.PPTypeInfo(PME^.ResultType));
+      aResultType := Deref(pointer(PME^.ResultType));
       Kind := mORMot.TMethodKind(PME^.Kind);
       if TCallingConvention(PME^.CC)<>DEFCC then
         RaiseError('method uses wrong calling convention',[]);
@@ -56194,7 +56145,7 @@ begin
           ArgsNotResultLast := argsindex;
         if ValueDirection<>smdConst then
             ArgsOutNotResultLast := argsindex;
-        ArgTypeInfo := mORMot.PTypeInfo(Deref(mORMot.PPTypeInfo(VMP^.ParamType)));
+        ArgTypeInfo := pointer(Deref(pointer(VMP^.ParamType)));
         ArgTypeName := @ArgTypeInfo^.Name;
         if paramcounter>0 then
         case TypeInfoToMethodValueType(ArgTypeInfo) of
@@ -56401,7 +56352,7 @@ begin
   fName := fTimer.fThreadName;
   fDest := aDestinationInterface;
   fOnResult := aOnResult;
-  inherited Create(aFactory,[ifoJsonAsExtended],FakeInvoke,nil);
+  inherited Create(aFactory,nil,[ifoJsonAsExtended,ifoDontStoreVoidJSON],FakeInvoke,nil);
   Get(aCallbackInterface);
 end;
 
@@ -56925,7 +56876,7 @@ begin
   fCallBackUnRegisterNeeded := aCallBackUnRegisterNeeded;
   fList := TInterfacedObjectMultiList.Create;
   fList.fFakeCallback := self;
-  inherited Create(aFactory,[ifoJsonAsExtended],FakeInvoke,nil);
+  inherited Create(aFactory,nil,[ifoJsonAsExtended,ifoDontStoreVoidJSON],FakeInvoke,nil);
   Get(aCallbackInterface);
 end;
 
@@ -57306,7 +57257,8 @@ end;
 procedure TInterfaceStub.InternalGetInstance(out aStubbedInterface);
 var fake: TInterfacedObjectFake;
 begin
-  fake := TInterfacedObjectFake.Create(fInterface,[ifoJsonAsExtended],Invoke,InstanceDestroyed);
+  fake := TInterfacedObjectFake.Create(fInterface,nil,[ifoJsonAsExtended,ifoDontStoreVoidJSON],
+    Invoke,InstanceDestroyed);
   pointer(aStubbedInterface) := @fake.fVTable;
   fake._AddRef;
   fLastInterfacedObjectFake := fake;
@@ -58397,43 +58349,6 @@ end;
 
 { TServiceFactory }
 
-function TServiceFactory.GetInterfaceTypeInfo: PTypeInfo;
-begin
-  if (Self<>nil) and (fInterface<>nil) then
-    result := fInterface.fInterfaceTypeInfo else
-    result := nil;
-end;
-
-function TServiceFactory.GetInterfaceIID: TGUID;
-begin
-  result := fInterface.fInterfaceIID;
-end;
-
-procedure TServiceFactory.ExecutionAction(const aMethod: array of RawUTF8;
-  aOptions: TServiceMethodOptions; aAction: TServiceMethodOptionsAction);
-  procedure SetAction(i: integer);
-  begin
-    case aAction of
-    moaReplace:
-      fExecution[i].Options := aOptions;
-    moaInclude:
-      fExecution[i].Options := fExecution[i].Options + aOptions;
-    moaExclude:
-      fExecution[i].Options := fExecution[i].Options - aOptions;
-    end;
-  end;
-var i,m: integer;
-begin
-  if high(aMethod)<0 then
-    for i := 0 to fInterface.fMethodsCount-1 do
-      SetAction(i) else
-    for m := 0 to high(aMethod) do
-      SetAction(fInterface.CheckMethodIndex(aMethod[m]));
-  fAnyOptions := [];
-  for i := 0 to fInterface.fMethodsCount-1 do
-    fAnyOptions := fAnyOptions+fExecution[i].Options;
-end;
-
 constructor TServiceFactory.Create(aRest: TSQLRest;
   aInterface: PTypeInfo; aInstanceCreation: TServiceInstanceImplementation;
   const aContractExpected: RawUTF8);
@@ -58486,6 +58401,43 @@ begin
       fContractExpected := '"'+aContractExpected+'"' else
       fContractExpected := aContractExpected else
     fContractExpected := fContractHash; // for security
+end;
+
+function TServiceFactory.GetInterfaceTypeInfo: PTypeInfo;
+begin
+  if (Self<>nil) and (fInterface<>nil) then
+    result := fInterface.fInterfaceTypeInfo else
+    result := nil;
+end;
+
+function TServiceFactory.GetInterfaceIID: TGUID;
+begin
+  result := fInterface.fInterfaceIID;
+end;
+
+procedure TServiceFactory.ExecutionAction(const aMethod: array of RawUTF8;
+  aOptions: TServiceMethodOptions; aAction: TServiceMethodOptionsAction);
+  procedure SetAction(var exec: TServiceFactoryExecution);
+  begin
+    case aAction of
+    moaReplace:
+      exec.Options := aOptions;
+    moaInclude:
+      exec.Options := exec.Options + aOptions;
+    moaExclude:
+      exec.Options := exec.Options - aOptions;
+    end;
+  end;
+var i,m: integer;
+begin
+  if high(aMethod)<0 then
+    for i := 0 to fInterface.fMethodsCount-1 do
+      SetAction(fExecution[i]) else
+    for m := 0 to high(aMethod) do
+      SetAction(fExecution[fInterface.CheckMethodIndex(aMethod[m])]);
+  fAnyOptions := [];
+  for i := 0 to fInterface.fMethodsCount-1 do
+    fAnyOptions := fAnyOptions+fExecution[i].Options;
 end;
 
 
@@ -59576,6 +59528,7 @@ var Inst: TServiceFactoryServerInstance;
     timeStart,timeEnd: Int64;
     stats: TSynMonitorInputOutput;
     m: integer;
+    err: shortstring;
     temp: TTextWriterStackBuffer;
 
   function GetFullMethodName: RawUTF8;
@@ -59681,6 +59634,7 @@ begin
       stats.Processing := true;
     end;
   end;
+  err := '';
   exec := nil;
   try
     if fImplementationClassKind=ickFake then
@@ -59731,9 +59685,12 @@ begin
              (optExecInPerInterfaceThread in exec.fOptions)) and {$endif}
            (exec.fMethod^.ArgsOutputValuesCount=0) then // bypass JSON marshalling
           execres := exec.ExecuteJsonFake(Inst.Instance,Ctxt.ServiceParameters) else
-          execres := exec.ExecuteJson([instancePtr],Ctxt.ServiceParameters,WR,Ctxt.ForceServiceResultAsJSONObject);
+          execres := exec.ExecuteJson([instancePtr],Ctxt.ServiceParameters,WR,
+            @err,Ctxt.ForceServiceResultAsJSONObject);
         if not execres then begin
-          Error('execution failed (probably due to bad input parameters)',HTTP_NOTACCEPTABLE);
+          if err<>'' then
+            Ctxt.Error('%',[err],HTTP_NOTACCEPTABLE) else
+            Error('execution failed (probably due to bad input parameters)',HTTP_NOTACCEPTABLE);
           exit; // wrong request
         end;
         Ctxt.Call.OutHead := exec.ServiceCustomAnswerHead;
@@ -60110,9 +60067,112 @@ begin
   end;
 end;
 
+function TServiceMethodArgument.FromJSON(const MethodName: RawUTF8; var R: PUTF8Char;
+  V: pointer; Error: PShortString{$ifndef NOVARIANTS}; DVO: TDocVariantOptions{$endif}): boolean;
+  procedure RaiseError(const msg: RawUTF8);
+  var tmp: RawUTF8;
+  begin
+    FormatUTF8('I% failed on %:% [%]',[MethodName,ParamName^,ArgTypeName^,msg],tmp);
+    if Error=nil then
+      raise EInterfaceFactoryException.CreateUTF8('%',[tmp]);
+    result := false;
+    SetString(Error^,PAnsiChar(pointer(tmp)),length(tmp));
+  end;
+var parser: TJSONToObject; // inlined JSONToObject()
+    Val: PUTF8Char;
+    ValLen: integer;
+    wasString: boolean;
+    wrapper: TDynArray;
+begin
+  result := true;
+  case ValueType of
+  smvObject: begin
+    if PInteger(R)^=NULL_LOW then
+      inc(R,4) else begin // null from TInterfacedStub -> stay untouched
+      parser.From := R; // inlined JSONToObject()
+      parser.Options := JSONTOOBJECT_TOLERANTOPTIONS;
+      parser.TObjectListItemClass := nil;
+      parser.Value := PObject(V)^;
+      parser.Parse;
+      if parser.Valid then
+        R := parser.Dest else
+        RaiseError('returned object');
+    end;
+    IgnoreComma(R);
+  end;
+  smvInterface:
+    RaiseError('unexpected var/out interface');
+  smvRawJSON:
+    if (R<>nil) and (R^=']') then
+      PRawUTF8(V)^ := '' else begin
+      GetJSONItemAsRawJSON(R,PRawJSON(V)^);
+      if R=nil then
+        RaiseError('returned RawJSON');
+    end;
+  smvBoolean..smvBinary: begin
+    Val := GetJSONField(R,R,@wasString,nil,@ValLen);
+    if (Val=nil) or (wasString<>(vIsString in ValueKindAsm)) then begin
+      RaiseError('missing or invalid value');
+      exit;
+    end;
+    if (ValueType=smvBoolean) and (PInteger(Val)^=TRUE_LOW) then
+      Val := '1'; // handle also BOOL with SizeInStorage=2
+    case ValueType of
+    smvBoolean, smvEnum, smvSet, smvCardinal:
+      case SizeInStorage of
+      1: PByte(V)^     := GetCardinal(Val);
+      2: PWord(V)^     := GetCardinal(Val);
+      4: PCardinal(V)^ := GetCardinal(Val);
+      end;
+    smvInteger:
+      PInteger(V)^ := GetInteger(Val);
+    smvInt64:
+      SetInt64(Val,PInt64(V)^);
+    smvDouble,smvDateTime:
+      PDouble(V)^ := GetExtended(Val);
+    smvCurrency:
+      PInt64(V)^ := StrToCurr64(Val);
+    smvRawUTF8:
+      SetString(PRawUTF8(V)^,PAnsiChar(Val),ValLen);
+    smvString:
+      UTF8DecodeToString(Val,ValLen,PString(V)^);
+    smvRawByteString:
+      Base64ToBin(PAnsiChar(Val),ValLen,PRawByteString(V)^);
+    smvWideString:
+      UTF8ToWideString(Val,ValLen,PWideString(V)^);
+    smvBinary:
+      if ValLen=SizeInStorage*2 then
+        HexDisplayToBin(PAnsiChar(Val),PByte(V),SizeInStorage);
+    else RaiseError('ValueType?');
+    end;
+  end;
+  smvRecord: begin
+    R := RecordLoadJSON(V^,R,ArgTypeInfo);
+    if R=nil then
+      RaiseError('returned record');
+  end;
+  {$ifndef NOVARIANTS}
+  smvVariant: begin
+    R := VariantLoadJSON(PVariant(V)^,R,nil,@DVO);
+    if R=nil then
+      RaiseError('returned variant');
+  end;
+  {$endif}
+  smvDynArray: begin
+    if vIsObjArray in ValueKindAsm then
+      ObjArrayClear(V^);
+    wrapper.InitFrom(DynArrayWrapper,V^);
+    R := wrapper.LoadFromJSON(R);
+    if R=nil then
+      RaiseError('returned array');
+    IgnoreComma(R);
+  end;
+  end;
+end;
+
 procedure TServiceMethodArgument.AddJSON(WR: TTextWriter; V: pointer;
   ObjectOptions: TTextWriterWriteObjectOptions);
-var wrapper: TDynArray;
+var wrapper: TDynArray; // faster than WR.AddDynArrayJSON(ArgTypeInfo,V^)
 begin
   if vIsString in ValueKindAsm then
     WR.Add('"');
@@ -60143,10 +60203,11 @@ begin
   smvObject:     WR.WriteObject(PPointer(V)^,ObjectOptions);
   smvInterface:  WR.AddShort('null'); // or written by InterfaceWrite()
   smvRecord:     WR.AddRecordJSON(V^,ArgTypeInfo);
-  smvDynArray: begin // slightly faster than WR.AddDynArrayJSON(ArgTypeInfo,V^);
-    wrapper.InitFrom(DynArrayWrapper,V^);
-    WR.AddDynArrayJSON(wrapper);
-  end;
+  smvDynArray: if vIsObjArray in ValueKindAsm then
+                 WR.AddObjArrayJSON(V^,ObjectOptions) else begin
+                 wrapper.InitFrom(DynArrayWrapper,V^);
+                 WR.AddDynArrayJSON(wrapper);
+               end;
   {$ifndef NOVARIANTS}
   smvVariant: WR.AddVariant(PVariant(V)^,twJSONEscape);
   {$endif}
@@ -61152,6 +61213,7 @@ end;
 
 procedure TServiceMethodExecute.BeforeExecute;
 var a: integer;
+    Value: PPointer;
 begin
   with fMethod^ do begin
     if ArgsUsedCount[smvvRawUTF8]>0 then
@@ -61168,15 +61230,36 @@ begin
       if ArgsUsedCount[smvvInterface]>0 then
         FillcharFast(fInterfaces,ArgsUsedCount[smvvInterface]*SizeOf(pointer),0);
     end;
-    for a := ArgsManagedFirst to ArgsManagedLast do
-    with Args[a] do
-      case ValueType of
-      smvObject:
-        fObjects[IndexVar] := ArgTypeInfo^.ClassCreate;
-      smvRecord:
-        if fAlreadyExecuted then
-          FillcharFast(fRecords[IndexVar],ArgTypeInfo^.RecordType^.Size,0);
+    Value := @fValues[1];
+    for a := 1 to high(Args) do
+    with Args[a] do begin
+      case ValueVar of
+      smvv64:
+        Value^ := @fInt64s[IndexVar];
+      smvvRawUTF8:
+        Value^ := @fRawUTF8s[IndexVar];
+      smvvString:
+        Value^ := @fStrings[IndexVar];
+      smvvWideString:
+        Value^ := @fWideStrings[IndexVar];
+      smvvObject: begin
+        Value^ := @fObjects[IndexVar];
+        PPointer(Value^)^ := ArgTypeInfo^.ClassCreate;
       end;
+      smvvInterface:
+        Value^ := @fInterfaces[IndexVar];
+      smvvRecord: begin
+        Value^ := pointer(fRecords[IndexVar]);
+        if fAlreadyExecuted then
+          FillcharFast(Value^^,ArgTypeInfo^.RecordType^.Size,0);
+      end;
+      smvvDynArray:
+        Value^ := @fDynArrays[IndexVar].Value;
+      else raise EInterfaceFactoryException.CreateUTF8('I%.%:% ValueType=%',
+        [InterfaceDotMethodName,ParamName^,ArgTypeName^,ord(ValueType)]);
+      end;
+      inc(Value);
+    end;
     if optInterceptInputOutput in Options then begin
       Input.InitFast(ArgsInputValuesCount,dvObject);
       Output.InitFast(ArgsOutputValuesCount,dvObject);
@@ -61220,20 +61303,7 @@ begin
     {$endif CPUX86}
     for a := 1 to high(Args) do
     with Args[a] do begin
-      case ValueVar of
-      smvvSelf:       continue; // call.Regs[REG_FIRST] := Instance[i] below
-      smvv64:         Value := @fInt64s[IndexVar];
-      smvvRawUTF8:    Value := @fRawUTF8s[IndexVar];
-      smvvString:     Value := @fStrings[IndexVar];
-      smvvWideString: Value := @fWideStrings[IndexVar];
-      smvvObject:     Value := @fObjects[IndexVar];
-      smvvInterface:  Value := @fInterfaces[IndexVar];
-      smvvRecord:     Value := pointer(fRecords[IndexVar]);
-      smvvDynArray:   Value := @fDynArrays[IndexVar].Value;
-      else raise EInterfaceFactoryException.CreateUTF8(
-        'Invalid % argument type = %',[ParamName^,ord(ValueType)]);
-      end;
-      fValues[a] := Value;
+      Value := fValues[a];
       if (ValueDirection<>smdConst) or
          (ValueType in [smvRecord{$ifndef NOVARIANTS},smvVariant{$endif}]) then begin
           // pass by reference
@@ -61394,7 +61464,7 @@ function TServiceMethodExecute.ExecuteJsonCallback(Instance: pointer;
   const params: RawUTF8; output: PRawUTF8): boolean;
 var tmp: TSynTempBuffer;
     fake: TInterfacedObjectFake;
-    WR: TTextwriter;
+    WR: TTextWriter;
     n: integer;
 begin
   result := false;
@@ -61452,13 +61522,12 @@ begin
 end;
 
 function TServiceMethodExecute.ExecuteJson(const Instances: array of pointer;
-  Par: PUTF8Char; Res: TTextWriter; ResAsJSONObject: boolean): boolean;
+  Par: PUTF8Char; Res: TTextWriter; Error: PShortString; ResAsJSONObject: boolean): boolean;
 var a,a1: integer;
-    wasString, valid: boolean;
     Val, Name: PUTF8Char;
-    ValLen, NameLen: integer;
+    NameLen: integer;
     EndOfObject: AnsiChar;
-    opt: TTextWriterWriteObjectOptions;
+    opt: array[{smdVar=}boolean] of TTextWriterWriteObjectOptions;
     ParObjValuesUsed: boolean;
     ParObjValues: array[0..MAX_METHOD_ARGS-1] of PUTF8Char;
 begin
@@ -61520,68 +61589,22 @@ begin
           if Par=nil then
             break; // premature end of ..] (ParObjValuesUsed=false)
         case ValueType of
-        smvObject: begin
-          if PInteger(Par)^=NULL_LOW then
-            inc(Par,4) else begin
-            Par := JSONToObject(fObjects[IndexVar],Par,valid,nil,JSONTOOBJECT_TOLERANTOPTIONS);
-            if not valid then
-              exit;
-          end;
-          IgnoreComma(Par);
-        end;
         smvInterface:
           if Assigned(OnCallback) then
             OnCallback(Par,ArgTypeInfo,fInterfaces[IndexVar]) else
-            raise EInterfaceFactoryException.CreateUTF8(
-              'Unhandled %(%: %) parameter',[URI,ParamName^,ArgTypeName^]);
-        smvRawJSON:
-          GetJSONItemAsRawJSON(Par,RawJSON(fRawUTF8s[IndexVar]));
+            raise EInterfaceFactoryException.CreateUTF8('OnCallback=nil for %(%: %)',
+              [InterfaceDotMethodName,ParamName^,ArgTypeName^]);
         smvDynArray: begin
           Par := fDynArrays[IndexVar].Wrapper.LoadFromJSON(Par);
+          if Par=nil then
+            exit;
           IgnoreComma(Par);
         end;
-        smvRecord:
-          Par := RecordLoadJSON(pointer(fRecords[IndexVar])^,Par,ArgTypeInfo);
-        {$ifndef NOVARIANTS}
-        smvVariant:
-          Par := VariantLoadJSON(PVariant(pointer(fRecords[IndexVar]))^,Par,nil,
-            @JSON_OPTIONS[optVariantCopiedByReference in Options]);
-        {$endif}
-        smvBoolean..smvBinary: begin
-          Val := GetJSONField(Par,Par,@wasString,@EndOfObject,@ValLen);
-          if (Val=nil) and (Par=nil) and (EndOfObject<>'}') then
-            exit;  // 'null': Val=nil and Par<>nil
-          if (Val<>nil) and (wasString and not (vIsString in ValueKindAsm)) then
+        else
+          if not FromJSON(InterfaceDotMethodName,Par,fValues[a],Error
+            {$ifndef NOVARIANTS},JSON_OPTIONS[optVariantCopiedByReference in Options]{$endif}) then
             exit;
-          case ValueType of
-          smvBoolean:
-            fInt64s[IndexVar] := byte((Val<>nil) and
-              ((PWord(Val)^=ord('1'))or(PInteger(Val)^=TRUE_LOW)));
-          smvEnum..smvInt64:
-            SetInt64(Val,fInt64s[IndexVar]);
-          smvDouble,smvDateTime:
-            PDouble(@fInt64s[IndexVar])^ := GetExtended(Val);
-          smvCurrency:
-            fInt64s[IndexVar] := StrToCurr64(Val);
-          smvRawUTF8:
-            SetString(fRawUTF8s[IndexVar],Val,ValLen);
-          smvString:
-            UTF8DecodeToString(Val,ValLen,fStrings[IndexVar]);
-          smvRawByteString:
-            Base64ToBin(PAnsiChar(Val),ValLen,RawByteString(fRawUTF8s[IndexVar]));
-          smvWideString:
-            UTF8ToWideString(Val,ValLen,fWideStrings[IndexVar]);
-          smvBinary:
-            if ValLen=SizeInStorage*2 then
-              HexDisplayToBin(PAnsiChar(Val),@fInt64s[IndexVar],SizeInStorage);
-          else exit; // should not happen
-          end;
-          continue; // here Par=nil or Val=nil is correct
         end;
-        else continue;
-        end;
-        if Par=nil then
-          exit;
       end;
     // execute the method, using prepared values in f*[]
     RawExecute(@Instances[0],high(Instances));
@@ -61601,8 +61624,9 @@ begin
         end;
       // write the '{"result":[...' array or object
       if optDontStoreVoidJSON in Options then
-        opt := [woDontStoreDefault,woDontStoreEmptyString,woDontStore0] else
-        opt := [woDontStoreDefault];
+        opt[false] := [woDontStoreDefault,woDontStoreEmptyString,woDontStore0] else
+        opt[false] := [woDontStoreDefault];
+      opt[{smdVar=}true] := []; // let var params override void/default values
       for a := ArgsOutFirst to ArgsOutLast do
       with Args[a] do
       if ValueDirection in [smdVar,smdOut,smdResult] then begin
@@ -61610,10 +61634,12 @@ begin
           Res.AddPropName(ParamName^);
         case ValueType of
         smvDynArray: begin
-          Res.AddDynArrayJSON(fDynArrays[IndexVar].Wrapper);
+          if vIsObjArray in ValueKindAsm then
+            Res.AddObjArrayJSON(fValues[a]^,opt[ValueDirection=smdVar]) else
+            Res.AddDynArrayJSON(fDynArrays[IndexVar].Wrapper);
           Res.Add(',');
         end;
-        else AddJSON(Res,fValues[a],opt);
+        else AddJSON(Res,fValues[a],opt[ValueDirection=smdVar]);
         end;
       end;
       Res.CancelLastComma;
@@ -62511,7 +62537,7 @@ function EnterWeakZeroClass(aObject: TObject; CreateIfNonExisting: boolean): TSe
 begin
   result := PPointer(PPtrInt(aObject)^+vmtAutoTable)^;
   if (result<>nil) and (TClass(PPointer(result)^)=TSQLRecordProperties) then
-    result := TSetWeakZeroClass(TSQLRecordProperties(result).fWeakZeroClass);
+    result := TSetWeakZeroClass(TSQLRecordProperties(pointer(result)).fWeakZeroClass);
   if result<>nil then
     EnterCriticalSection(result.fLock) else
     if CreateIfNonExisting then
@@ -62717,6 +62743,9 @@ initialization
   {$ifdef MSWINDOWS}
   TSQLRestClientURINamedPipe.RegisterClassNameForDefinition;
   TSQLRestClientURIMessage.RegisterClassNameForDefinition;
+  {$endif}
+  {$ifdef GSSAPIAUTH}
+  LoadGSSAPI;
   {$endif}
 
 finalization
