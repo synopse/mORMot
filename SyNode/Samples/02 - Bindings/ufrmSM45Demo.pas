@@ -161,13 +161,13 @@ end;
 
 procedure TfrmSM45Demo.DoOnJSDebuggerInit(const aEngine: TSMEngine);
 begin
-  aEngine.EvaluateModule(
-  {$IFDEF MSWINDOWS}
-    '..\..\..\..\DebuggerInit.js'
-  {$ELSE}
-    '../../../../DebuggerInit.js'
-  {$ENDIF}
-  );
+//  aEngine.EvaluateModule(
+//  {$IFDEF MSWINDOWS}
+//    '..\..\..\..\DebuggerInit.js'
+//  {$ELSE}
+//    '../../../../DebuggerInit.js'
+//  {$ENDIF}
+//  );
 end;
 
 { TStringsProto }

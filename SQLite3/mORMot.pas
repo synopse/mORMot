@@ -1231,6 +1231,7 @@ unit mORMot;
   // the Windows authentication will be performed
   // - In this case, in table TSQLAuthUser should be an entry for the
   // windows user, with the LoginName in form 'DomainName\UserName'
+  // - Setting NOSSPIAUTH conditional will disable this feature
 
 {$else}
 
@@ -1238,19 +1239,15 @@ unit mORMot;
   // if defined, the Kerberos authentication (using gssapi library) will be used
   // along with the usual one
   // - In this case, in table TSQLAuthUser should be an entry for the
-  // domain user, with the LoginName in form 'UserName@DomainName'
-  // - Authentication with gssapi library is currently supported only on server 
-  // and only for browser clients
+  // domain user, with the LoginName in form 'username@DOMAIN.TLD'
   // - Linux server should joind a domain before using this
-  // - KRB5_KTNAME environment variable shoud point to valid readable keytab file
-  // with correct server credentials
+  // - KRB5_KTNAME environment variable or ServerForceKeytab shoud point
+  // to valid readable keytab file with correct server credentials
   // - For more information on how to prepare server read an article on how to
   // configure MS SQL Server on Linux to use Windows authentication
   // https://www.mssqltips.com/sqlservertip/5075/configure-sql-server-on-linux-to-use-windows-authentication
   // - Setting NOGSSAPIAUTH conditional will disable this feature
-  // Other limitations:
-  //  - only one iteration supported
-  //  - SPN not passed to gssapi - default creadentials used
+  // Limitations:
   //  - no NTLM support - this is a deprecated and vulnerable protocol
 {$endif}
 
@@ -1261,7 +1258,12 @@ unit mORMot;
 
 {$ifdef SSPIAUTH}
   {$undef GSSAPIAUTH} // exclusive
-  {$define DOMAINAUTH}
+  {$ifdef NOSSPIAUTH}
+    {$undef SSPIAUTH} // force disable
+    {$undef DOMAINAUTH}
+  {$else}
+    {$define DOMAINAUTH}
+  {$endif}
 {$endif}
 {$ifdef GSSAPIAUTH}
   {$undef SSPIAUTH} // exclusive
@@ -1312,6 +1314,7 @@ uses
 {$endif}
 {$ifdef GSSAPIAUTH}
   SynGSSAPI,
+  SynGSSAPIAuth,
 {$endif}
   SynCommons,
   SynTable, // for SynTable, TSynFilter and TSynValidate
@@ -16191,7 +16194,6 @@ type
   // as plain password value
   TSQLRestServerAuthenticationSSPI = class(TSQLRestServerAuthenticationSignedURI)
   protected
-    {$ifdef SSPIAUTH}
     /// Windows built-in authentication
     // - holds information between calls to ServerSSPIAuth
     fSSPIAuthContexts: TSecContextDynArray;
@@ -16209,14 +16211,11 @@ type
     // plain password
     class function ClientComputeSessionKey(Sender: TSQLRestClientURI;
       User: TSQLAuthUser): RawUTF8; override;
-    {$endif SSPIAUTH}
   public
     /// initialize the authentication method to a specified server
     constructor Create(aServer: TSQLRestServer); override;
-    {$ifdef SSPIAUTH}
     /// finalize internal memory structures
     destructor Destroy; override;
-    {$endif}
     /// will try to handle the Auth RESTful method with Windows SSPI API
     // - to be called in a two pass algorithm, used to cypher the password
     // - the client-side logged user will be identified as valid, according
@@ -38483,7 +38482,7 @@ begin
   end;
 end;
 
-{$ifdef SSPIAUTH}
+{$ifdef DOMAINAUTH}
 const
   SSPI_DEFINITION_USERNAME = '***SSPI***';
 {$endif}
@@ -38496,7 +38495,7 @@ begin
   if fModel<>nil then
     fOnIdle := fModel.OnClientIdle; // allow UI interactivity during SetUser()
   if aDefinition.User<>'' then begin
-    {$ifdef SSPIAUTH}
+    {$ifdef DOMAINAUTH}
     if aDefinition.User=SSPI_DEFINITION_USERNAME then
       SetUser('',aDefinition.PasswordPlain) else
     {$endif}
@@ -38510,7 +38509,7 @@ begin
     exit;
   inherited DefinitionTo(Definition); // save Kind
   if (fSessionAuthentication<>nil) and (fSessionUser<>nil) then begin
-    {$ifdef SSPIAUTH}
+    {$ifdef DOMAINAUTH}
     if fSessionAuthentication.InheritsFrom(TSQLRestServerAuthenticationSSPI) then
       Definition.User := SSPI_DEFINITION_USERNAME else
     {$endif}
@@ -38599,9 +38598,9 @@ begin
     result := false;
     exit;
   end;
-  {$ifdef SSPIAUTH} // try Windows authentication with the current logged user
+  {$ifdef DOMAINAUTH} // try Windows/GSSAPI authentication with the current logged user
   result := true;
-  if ((trim(aUserName)='') or (PosEx('\',aUserName)>0)) and
+  if ((trim(aUserName)='') or (PosEx({$ifdef GSSAPIAUTH}'@'{$else}'\'{$endif},aUserName)>0)) and
     TSQLRestServerAuthenticationSSPI.ClientSetUser(self,aUserName,aPassword,passKerberosSPN) then
       exit;
   {$endif}
@@ -53876,13 +53875,8 @@ var i: integer;
     UserName, InDataEnc: RawUTF8;
     ticks,ConnectionID: Int64;
     BrowserAuth: Boolean;
-    {$ifdef SSPIAUTH}
     CtxArr: TDynArray;
     SecCtxIdx: Integer;
-    {$endif}
-    {$ifdef GSSAPIAUTH}
-    SecCtx: Pointer;
-    {$endif}
     OutData: RawByteString;
     User: TSQLAuthUser;
     Session: TAuthSession;
@@ -53890,10 +53884,6 @@ begin
   result := AuthSessionRelease(Ctxt);
   if result or not Ctxt.InputExists['UserName'] or not Ctxt.InputExists['Data'] then
     exit;
-  {$ifdef GSSAPIAUTH}
-  if not GSSLibraryFound then
-    exit;
-  {$endif}
   // use ConnectionID to find authentication session
   ConnectionID := Ctxt.Call^.LowLevelConnectionID;
   // GET ModelRoot/auth?UserName=&data=... -> windows SSPI auth
@@ -53910,10 +53900,6 @@ begin
     end;
     BrowserAuth := True;
   end else
-  {$ifdef GSSAPIAUTH}
-    raise ENotImplemented.Create('GSSAPI support for non-browser clients is not currently implemented');
-  {$endif}
-  {$ifdef SSPIAUTH}
     BrowserAuth := False;
   CtxArr.InitSpecific(TypeInfo(TSecContextDynArray),fSSPIAuthContexts,djInt64);
   // check for outdated auth context
@@ -53924,9 +53910,7 @@ begin
       CtxArr.Delete(i);
     end;
   // if no auth context specified, create a new one
-  {$endif}
   result := true;
-  {$ifdef SSPIAUTH}
   SecCtxIdx := CtxArr.Find(ConnectionID);
   if SecCtxIdx<0 then begin
     // 1st call: create SecCtxId
@@ -53956,18 +53940,6 @@ begin
     fServer.fLogFamily.SynLog.Log(sllUserAuth,'% Authentication success for %',
       [SecPackageName(fSSPIAuthContexts[SecCtxIdx]),UserName],self);
   {$endif}
-  {$endif}
-  {$ifdef GSSAPIAUTH}
-  SecCtx := nil;
-  if not GSSAcceptSecurityContext(Base64ToBin(InDataEnc), ''{ TODO: retrieve SPN from config }, 
-     SecCtx, AnsiString(UserName), OutData) then
-    raise ESecurityException.Create('Only one authentication iteration allowed');
-  {$ifdef WITHLOG}
-  if sllUserAuth in fServer.fLogFamily.Level then
-    fServer.fLogFamily.SynLog.Log(sllUserAuth,'% Authentication success for %',
-      ['GSSAPI',UserName],self);
-  {$endif}
-  {$endif}
   // now client is authenticated -> create a session for aUserName
   // and send back OutData
   try
@@ -53980,39 +53952,35 @@ begin
       fServer.SessionCreate(User,Ctxt,Session); // call Ctxt.AuthenticationFailed on error
       if Session<>nil then
         with Session.User do
-          {$ifdef SSPIAUTH}if BrowserAuth then{$endif}
+          if BrowserAuth then
             SessionCreateReturns(Ctxt,Session,Session.fPrivateSalt,'',
-              (SECPKGNAMEHTTPWWWAUTHENTICATE+' ')+BinToBase64(OutData)){$ifdef SSPIAUTH} else
+              (SECPKGNAMEHTTPWWWAUTHENTICATE+' ')+BinToBase64(OutData)) else
             SessionCreateReturns(Ctxt,Session,
               BinToBase64(SecEncrypt(fSSPIAuthContexts[SecCtxIdx],Session.fPrivateSalt)),
-              BinToBase64(OutData),''){$endif};
+              BinToBase64(OutData),'');
     finally
       User.Free;
     end else
       Ctxt.AuthenticationFailed(afUnknownUser);
   finally
-    {$ifdef SSPIAUTH}
     FreeSecContext(fSSPIAuthContexts[SecCtxIdx]);
     CtxArr.Delete(SecCtxIdx);
-    {$endif}
-    {$ifdef GSSAPIAUTH}
-    GSSReleaseContext(SecCtx);
-    {$endif}
   end;
 end;
 
-{$ifdef SSPIAUTH}
 class function TSQLRestServerAuthenticationSSPI.ClientComputeSessionKey(
   Sender: TSQLRestClientURI; User: TSQLAuthUser): RawUTF8;
 var SecCtx: TSecContext;
+    WithPassword: Boolean;
     OutData: RawByteString;
 begin
   result := '';
   InvalidateSecContext(SecCtx,0);
+  WithPassword := User.LogonName<>'';
   Sender.fSessionData := '';
   try
     repeat
-      if User.LogonName<>'' then
+      if WithPassword then
         ClientSSPIAuthWithPassword(SecCtx,Sender.fSessionData,
           User.LogonName,User.PasswordHashHexa,OutData) else
         ClientSSPIAuth(SecCtx,Sender.fSessionData,User.PasswordHashHexa,OutData);
@@ -54032,14 +54000,12 @@ begin
   // SessionKey + PasswordHashHexa to sign the URI, as usual
   User.PasswordHashHexa := ''; // should not appear on URI signature
 end;
-{$endif}
 
 constructor TSQLRestServerAuthenticationSSPI.Create(aServer: TSQLRestServer);
 begin
   inherited Create(aServer);
 end;
 
-{$ifdef SSPIAUTH}
 destructor TSQLRestServerAuthenticationSSPI.Destroy;
 var i: integer;
 begin
@@ -54047,7 +54013,6 @@ begin
     FreeSecContext(fSSPIAuthContexts[i]);
   inherited;
 end;
-{$endif}
 
 {$endif DOMAINAUTH}
 
@@ -62778,6 +62743,9 @@ initialization
   {$ifdef MSWINDOWS}
   TSQLRestClientURINamedPipe.RegisterClassNameForDefinition;
   TSQLRestClientURIMessage.RegisterClassNameForDefinition;
+  {$endif}
+  {$ifdef GSSAPIAUTH}
+  LoadGSSAPI;
   {$endif}
 
 finalization
