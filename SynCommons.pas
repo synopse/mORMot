@@ -3203,7 +3203,7 @@ function IdemPropNameU(const P1: RawUTF8; P2: PUTF8Char; P2Len: PtrInt): boolean
 // IdemPropNameU(const P1,P2: RawUTF8), which would be slightly faster by
 // using the length stored before the actual text buffer of each RawUTF8
 function IdemPropNameUSameLen(P1,P2: PUTF8Char; P1P2Len: PtrInt): boolean;
-  {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
+  {$ifndef ANDROID}{$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}{$endif}
 
 /// case unsensitive test of P1 and P2 content
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
@@ -26440,21 +26440,12 @@ end;
 
 function IdemPropNameU(const P1,P2: RawUTF8): boolean;
 {$ifdef PUREPASCAL}
-var i,j,L: PtrInt;
+var L: PtrInt;
 begin
-  result := false;
   L := length(P1);
-  if L<>length(P2) then
-    exit;
-  j := 0;
-  for i := 1 to L shr 2 do
-    if (PCardinalArray(P1)[j] xor PCardinalArray(P2)[j]) and $dfdfdfdf<>0 then
-      exit else
-      inc(j);
-  for i := j*4 to L-1 do
-    if (PByteArray(P1)[i] xor PByteArray(P2)[i]) and $df<>0 then
-      exit;
-  result := true;
+  if length(P2)=L then
+    result := IdemPropNameUSameLen(pointer(P1),pointer(P2),L) else
+    result := false;
 end;
 {$else}
 asm // eax=p1, edx=p2
