@@ -40,6 +40,7 @@ unit SynCommons;
    - Maciej Izak (hnb)
    - Marius Maximus (mariuszekpl)
    - mazinsw
+   - Michalis Kamburelis
    - mingda
    - RalfS
    - Sanyin
@@ -35099,7 +35100,13 @@ begin
   end else
     result := crc + PRIME32_5;
   inc(result, len);
-  while P <= PEnd - 4 do begin
+  { Use "P + 4 <= PEnd" instead of "P <= PEnd - 4" to avoid crashes in case P = nil.
+    When P = nil,
+    then "PtrUInt(PEnd - 4)" is 4294967292,
+    so the condition "P <= PEnd - 4" would be satisfied,
+    and the code would try to access PCardinal(nil)^ causing a SEGFAULT.
+    Patch by Michalis Kamburelis }
+  while P + 4 <= PEnd do begin
     inc(result, PCardinal(P)^ * PRIME32_3);
     result := RolDWord(result, 17) * PRIME32_4;
     inc(P, 4);
