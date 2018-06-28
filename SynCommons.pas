@@ -40,7 +40,6 @@ unit SynCommons;
    - Maciej Izak (hnb)
    - Marius Maximus (mariuszekpl)
    - mazinsw
-   - Michalis Kamburelis
    - mingda
    - RalfS
    - Sanyin
@@ -12528,21 +12527,6 @@ var
   // or fallback to xxHash32() which performs better than crc32cfast()
   InterningHasher: THasher;
 
-type
-  /// efficient scan of all bits of a memory buffer
-  // - may be an alternative to GetBit() in a loop
-  TBitScan = object
-  private
-    v, n: PtrUInt;
-    P: PPtrUInt;
-  public
-    /// initialize the scanner to the beginning of a memory buffer
-    procedure Init(aBuffer: pointer); {$ifdef HASINLINE}inline;{$endif}
-    /// retrieve the next bit as false (0) or true (1)
-    // - warning: the caller should properly check for buffer overflow
-    function Next: boolean; {$ifdef HASINLINE}inline;{$endif}
-  end;
-
 /// retrieve a particular bit status from a bit array
 function GetBit(const Bits; aIndex: PtrInt): boolean;
   {$ifndef CPUINTEL}inline;{$endif}
@@ -22839,35 +22823,14 @@ begin
     AlsoTrimLowerCase);
 end;
 
-{ TBitScan }
-
-procedure TBitScan.Init(aBuffer: pointer);
-begin
-  P := aBuffer;
-  n := 0;
-end;
-
-function TBitScan.Next: boolean;
-begin
-  if n and {$ifdef CPU32}31{$else}63{$endif}=0 then begin
-    v := P^;
-    inc(P);
-  end;
-  result := v and 1<>0;
-  v := v shr 1;
-  inc(n);
-end;
-
 function GetSetName(aTypeInfo: pointer; const value): RawUTF8;
 var PS: PShortString;
     i,max: integer;
-    {$ifdef HASINLINE}bits: TBitScan;{$endif}
 begin
   result := '';
   if GetSetInfo(aTypeInfo,max,PS) then begin
-    {$ifdef HASINLINE}bits.Init(@value);{$endif}
     for i := 0 to max do begin
-      if {$ifdef HASINLINE}bits.Next{$else}GetBit(value,i){$endif} then
+      if GetBit(value,i) then
         result := FormatUTF8('%%,',[result,PS^]);
       inc(PByte(PS),ord(PS^[0])+1); // next short string
     end;
@@ -22897,13 +22860,11 @@ procedure GetSetNameShort(aTypeInfo: pointer; const value; out result: ShortStri
   trimlowercase: boolean);
 var PS: PShortString;
     i,max: integer;
-    {$ifdef HASINLINE}bits: TBitScan;{$endif}
 begin
   result := '';
   if GetSetInfo(aTypeInfo,max,PS) then begin
-    {$ifdef HASINLINE}bits.Init(@value);{$endif}
     for i := 0 to max do begin
-      if {$ifdef HASINLINE}bits.Next{$else}GetBit(value,i){$endif} then
+      if GetBit(value,i) then
         AppendShortComma(@PS^[1],ord(PS^[0]),result,trimlowercase);
       inc(PByte(PS),ord(PS^[0])+1); // next short string
     end;
@@ -35100,12 +35061,6 @@ begin
   end else
     result := crc + PRIME32_5;
   inc(result, len);
-  { Use "P + 4 <= PEnd" instead of "P <= PEnd - 4" to avoid crashes in case P = nil.
-    When P = nil,
-    then "PtrUInt(PEnd - 4)" is 4294967292,
-    so the condition "P <= PEnd - 4" would be satisfied,
-    and the code would try to access PCardinal(nil)^ causing a SEGFAULT.
-    Patch by Michalis Kamburelis }
   while P + 4 <= PEnd do begin
     inc(result, PCardinal(P)^ * PRIME32_3);
     result := RolDWord(result, 17) * PRIME32_4;
@@ -52694,7 +52649,6 @@ var max, i: Integer;
     PS: PShortString;
     customWriter: TDynArrayJSONCustomWriter;
     DynArray: TDynArray;
-    bits: TBitScan;
   procedure AddPS; overload;
   begin
     Add('"');
@@ -52726,10 +52680,9 @@ begin
     tkSet:
       if GetSetInfo(aTypeInfo,max,PS) then
         if twoEnumSetsAsBooleanInRecord in fCustomOptions then begin
-          bits.Init(@aValue);
           Add('{');
           for i := 0 to max do begin
-            AddPS(bits.Next);
+            AddPS(GetBit(aValue,i));
             Add(',');
             inc(PByte(PS),ord(PS^[0])+1); // next short string
           end;
@@ -52741,9 +52694,8 @@ begin
           if (twoFullSetsAsStar in fCustomOptions) and
              GetAllBits(cardinal(aValue),max+1) then
             AddShort('"*"') else begin
-            bits.Init(@aValue);
             for i := 0 to max do begin
-              if bits.Next then begin
+              if GetBit(aValue,i) then begin
                 AddPS;
                 Add(',');
               end;
