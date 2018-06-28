@@ -2039,6 +2039,8 @@ type
     procedure InternalCloseRequest; virtual; abstract;
     procedure InternalAddHeader(const hdr: SockString); virtual; abstract;
   public
+    /// returns TRUE if the class is actually supported on this system
+    class function IsAvailable: boolean; virtual; abstract;
     /// connect to http://aServer:aPort or https://aServer:aPort
     // - optional aProxyName may contain the name of the proxy server to use,
     // and aProxyByPass an optional semicolon delimited list of host names or
@@ -2205,6 +2207,8 @@ type
     function InternalRetrieveAnswer(
       var Header, Encoding, AcceptEncoding, Data: SockString): integer; override;
   public
+    /// returns TRUE if the class is actually supported on this system
+    class function IsAvailable: boolean; override;
     /// download would call this method to notify progress
     property OnProgress: TWinHttpProgress read fOnProgress write fOnProgress;
     /// download would call this method instead of filling Data: SockString value
@@ -2377,6 +2381,8 @@ type
     procedure InternalCloseRequest; override;
     procedure InternalAddHeader(const hdr: SockString); override;
   public
+    /// returns TRUE if the class is actually supported on this system
+    class function IsAvailable: boolean; override;
     /// release the connection
     destructor Destroy; override;
     /// set the client SSL certification details
@@ -10053,6 +10059,11 @@ begin // HTTP_QUERY* and WINHTTP_QUERY* do match -> common to TWinINet + TWinHTT
   end;
 end;
 
+class function TWinHttpAPI.IsAvailable: boolean;
+begin
+  result := true; // both WinINet and WinHTTP are statically linked
+end;
+
 
 { EWinINet }
 
@@ -10997,8 +11008,9 @@ begin
       {$endif}
       {$endif}
       if curl.Module=0 then
-        raise ECrtSocket.CreateFmt('Unable to find %s'{$ifdef LINUX}
-          +': try e.g. sudo apt-get install libcurl3:i386'{$endif},[LIBCURL_DLL]);
+        raise ECrtSocket.CreateFmt('Unable to find %s'{$ifdef LINUX}+
+          ': try e.g. sudo apt-get install libcurl3'{$ifdef CPUX86}+':i386'{$endif}
+          {$endif LINUX},[LIBCURL_DLL]);
       P := @@curl.global_init;
       for api := low(NAMES) to high(NAMES) do begin
         P^ := GetProcAddress(curl.Module,{$ifndef FPC}PChar{$endif}('curl_'+NAMES[api]));
@@ -11018,11 +11030,7 @@ begin
         if curl.Module<>0 then
           FreeLibrary(curl.Module);
         curl.Module := {$ifdef KYLIX3}THandle{$endif}(-1); // don't try to load any more
-        {$ifdef LINUX}
-        writeln(E.Message);
-        {$else}
         raise;
-        {$endif}
       end;
     end;
   finally
@@ -11050,9 +11058,7 @@ procedure TCurlHTTP.InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout
 const HTTPS: array[boolean] of string = ('','s');
 begin
   inherited;
-  if curl.Module=0 then
-    LibCurlInitialize;
-  if PtrInt(curl.Module)=-1 then
+  if not IsAvailable then
     raise ECrtSocket.CreateFmt('No available %s',[LIBCURL_DLL]);
   fHandle := curl.easy_init;
   fRootURL := AnsiString(Format('http%s://%s:%d',[HTTPS[fHttps],fServer,fPort]));
@@ -11115,6 +11121,17 @@ begin
     H := pointer(GetNextLine(P));
     if H<>nil then // nil would reset the whole list
       fIn.Headers := curl.slist_append(fIn.Headers,H);
+  end;
+end;
+
+class function TCurlHTTP.IsAvailable: boolean;
+begin
+  try
+    if curl.Module=0 then
+      LibCurlInitialize;
+    result := PtrInt(curl.Module)>0;
+  except
+    result := false;
   end;
 end;
 
