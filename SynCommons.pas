@@ -1476,6 +1476,10 @@ type
     procedure Init(Source: pointer; SourceLen: integer); overload;
     /// initialize a new temporary buffer of a given number of bytes
     function Init(SourceLen: integer): pointer; overload;
+    /// initialize the buffer returning the internal buffer size (4095 bytes)
+    // - then buf could be used e.g. for an API call, calling Init(SourceLen) if
+    // the API returned an error about an insufficient buffer space
+    function Init: integer; overload; {$ifdef HASINLINE}inline;{$endif}
     /// initialize a new temporary buffer of a given number of random bytes
     // - will fill the buffer via FillRandom() calls
     function InitRandom(RandomLen: integer): pointer;
@@ -19631,6 +19635,13 @@ begin
       buf := @tmp else
       GetMem(buf,len+1); // +1 to include trailing #0
   result := buf;
+end;
+
+function TSynTempBuffer.Init: integer;
+begin
+  buf := @tmp;
+  result := SizeOf(tmp)-1;
+  len := result;
 end;
 
 function TSynTempBuffer.InitRandom(RandomLen: integer): pointer;
