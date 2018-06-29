@@ -1477,8 +1477,10 @@ type
     /// initialize a new temporary buffer of a given number of bytes
     function Init(SourceLen: integer): pointer; overload;
     /// initialize the buffer returning the internal buffer size (4095 bytes)
-    // - then buf could be used e.g. for an API call, calling Init(SourceLen) if
-    // the API returned an error about an insufficient buffer space
+    // - could be used e.g. for an API call, first trying with plain temp.Init
+    // and using temp.buf and temp.len safely in the call, only calling
+    // temp.Init(expectedsize) if the API returned an error about an insufficient
+    // buffer space
     function Init: integer; overload; {$ifdef HASINLINE}inline;{$endif}
     /// initialize a new temporary buffer of a given number of random bytes
     // - will fill the buffer via FillRandom() calls
@@ -8925,7 +8927,14 @@ type
     // - you can truncate the original data size (e.g. if all bits of an integer
     // are not used) by specifying the aFieldSize optional parameter
     class procedure RegisterCustomJSONSerializerFromTextBinaryType(aTypeInfo: pointer;
-      aDataSize: integer; aFieldSize: integer=0);
+      aDataSize: integer; aFieldSize: integer=0); overload;
+    /// define custom binary serialization for several simple types
+    // - data will be serialized as BinToHexDisplayLower() JSON hexadecimal string
+    // - the TypeInfo() and associated size information will here be defined as triplets:
+    // ([TypeInfo(TType1),SizeOf(TType1),TYPE1_BYTES,TypeInfo(TType2),SizeOf(TType2),TYPE2_BYTES])
+    // - a wrapper around the overloaded RegisterCustomJSONSerializerFromTextBinaryType()
+    class procedure RegisterCustomJSONSerializerFromTextBinaryType(
+      const aTypeInfoDataFieldSize: array of const); overload;
     /// define a custom serialization for several simple types
     // - will call the overloaded RegisterCustomJSONSerializerFromTextSimpleType
     // method for each supplied type information
@@ -21043,7 +21052,7 @@ function VarRecToInt64(const V: TVarRec; out value: Int64): boolean;
 begin
   case V.VType of
     vtInteger: value := V.VInteger;
-    vtInt64 {$ifdef FPC}, vtQWord{$endif}:   value := V.VInt64^;
+    vtInt64 {$ifdef FPC}, vtQWord{$endif}: value := V.VInt64^;
     vtBoolean: if V.VBoolean then value := 1 else value := 0; // normalize
     {$ifndef NOVARIANTS}
     vtVariant: value := V.VVariant^;
@@ -52527,6 +52536,21 @@ class procedure TTextWriter.RegisterCustomJSONSerializerFromTextBinaryType(
   aTypeInfo: pointer; aDataSize, aFieldSize: integer);
 begin
   JSONSerializerFromTextSimpleTypeAdd('',aTypeInfo,aDataSize,aFieldSize);
+end;
+
+class procedure TTextWriter.RegisterCustomJSONSerializerFromTextBinaryType(
+  const aTypeInfoDataFieldSize: array of const);
+var n,i: integer;
+    s1,s2: Int64;
+begin
+  n := length(aTypeInfoDataFieldSize);
+  if n mod 3=0 then
+    for i := 0 to (n div 3)-1 do
+    if (aTypeInfoDataFieldSize[i*3].VType<>vtPointer) or
+       not VarRecToInt64(aTypeInfoDataFieldSize[i*3+1],s1) or
+       not VarRecToInt64(aTypeInfoDataFieldSize[i*3+2],s2) then
+      raise ESynException.CreateUTF8('RegisterCustomJSONSerializerFromTextBinaryType[%]',[i]) else
+      JSONSerializerFromTextSimpleTypeAdd('',aTypeInfoDataFieldSize[i*3].VPointer,s1,s2);
 end;
 
 procedure TTextWriter.AddRecordJSON(const Rec; TypeInfo: pointer);
