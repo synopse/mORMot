@@ -2395,6 +2395,7 @@ type
 {$endif USELIBCURL}
 
 /// returns the best THttpRequest class, depending on the system it runs on
+// - e.g. TWinHTTP or TCurlHTTP
 function MainHttpClass: THttpRequestClass;
 
 /// create a TCrtSocket, returning nil on error

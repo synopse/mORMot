@@ -21196,7 +21196,7 @@ smlu32: Res.Text := pointer(SmallUInt32UTF8[result]);
     end;
     vtClass: begin
       if V.VClass<>nil then begin
-        Res.Text := PUTF8Char(PPointer(PtrInt(V.VClass)+vmtClassName)^)+1;
+        Res.Text := PPUTF8Char(PtrInt(V.VClass)+vmtClassName)^+1;
         Res.Len := ord(Res.Text[-1]);
       end else
         Res.Len := 0;
@@ -21205,7 +21205,7 @@ smlu32: Res.Text := pointer(SmallUInt32UTF8[result]);
     end;
     vtObject: begin
       if V.VObject<>nil then begin
-        Res.Text := PUTF8Char(PPointer(PPtrInt(V.VObject)^+vmtClassName)^)+1;
+        Res.Text := PPUTF8Char(PPtrInt(V.VObject)^+vmtClassName)^+1;
         Res.Len := ord(Res.Text[-1]);
       end else
         Res.Len := 0;
@@ -60621,7 +60621,7 @@ begin
   fixedsize := length(Values[0]);
   if fixedsize>0 then
     for i := 1 to ValuesCount-1 do
-      if (PI^[i]=0) or ({$ifdef FPC}_LStrLenP(pointer(PI^[i])){$else}
+      if (PI^[i]=0) or ({$ifdef FPC}PtrUInt(_LStrLenP(pointer(PI^[i]))){$else}
          PCardinal(PI^[i]-SizeOf(integer))^{$endif}<>fixedsize) then begin
         fixedsize := 0;
         break;

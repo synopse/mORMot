@@ -858,7 +858,7 @@ type
 procedure TDDDDaemon.ExecuteCommandLine(ForceRun: boolean);
 var
   name, param: RawUTF8;
-  passwords: RawByteString;
+  passwords, exe: RawByteString;
   cmd: TExecuteCommandLineCmd;
   daemon: TDDDAdministratedDaemon;
   {$ifdef MSWINDOWS}
@@ -1027,9 +1027,12 @@ begin
         Syntax;
       cVersion:
         begin
+          exe := StringFromFile(ExeVersion.ProgramFileName);
           writeln(' ', ExeVersion.ProgramFileName,
-            #13#10' Size: ', FileSize(ExeVersion.ProgramFileName), ' bytes' +
-            #13#10' Build date: ', ExeVersion.Version.BuildDateTimeString);
+            #13#10' Size: ', length(exe), ' bytes (', KB(length(exe)), ')' +
+            #13#10' Build date: ', ExeVersion.Version.BuildDateTimeString,
+            #13#10' MD5: ', MD5(exe),
+            #13#10' SHA256: ', SHA256(exe));
           if ExeVersion.Version.Version32 <> 0 then
             writeln(' Version: ', ExeVersion.Version.Detailed);
           TextColor(ccCyan);
