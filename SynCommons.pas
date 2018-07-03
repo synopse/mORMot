@@ -5809,7 +5809,9 @@ type
     procedure Delete(aIndex: PtrInt);  inline;
     function SaveTo: RawByteString; overload; inline;
     function SaveTo(Dest: PAnsiChar): PAnsiChar; overload; inline;
-    function SaveToJSON(EnumSetsAsText: boolean=false): RawUTF8; inline;
+    function SaveToJSON(EnumSetsAsText: boolean=false;
+      reformat: TTextWriterJSONFormat=jsonCompact): RawUTF8; inline;
+    procedure Sort(aCompare: TDynArraySortCompare=nil); inline;
     function LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char=nil): PUTF8Char; inline;
     function SaveToLength: integer; inline;
     function LoadFrom(Source: PAnsiChar): PAnsiChar;  inline;
@@ -50049,9 +50051,15 @@ begin
   result := InternalDynArray.SaveTo(Dest);
 end;
 
-function TDynArrayHashed.SaveToJSON(EnumSetsAsText: boolean=false): RawUTF8;
+function TDynArrayHashed.SaveToJSON(EnumSetsAsText: boolean;
+  reformat: TTextWriterJSONFormat): RawUTF8;
 begin
-  result := InternalDynArray.SaveToJSON(EnumSetsAsText);
+  result := InternalDynArray.SaveToJSON(EnumSetsAsText,reformat);
+end;
+
+procedure TDynArrayHashed.Sort(aCompare: TDynArraySortCompare);
+begin
+  InternalDynArray.Sort(aCompare);
 end;
 
 function TDynArrayHashed.LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char=nil): PUTF8Char;
