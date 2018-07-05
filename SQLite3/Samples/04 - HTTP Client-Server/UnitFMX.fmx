@@ -1,0 +1,126 @@
+object Form1: TForm1
+  Left = 0
+  Top = 0
+  Caption = 'Form1'
+  ClientHeight = 480
+  ClientWidth = 572
+  FormFactor.Width = 320
+  FormFactor.Height = 480
+  FormFactor.Devices = [Desktop]
+  OnCreate = FormCreate
+  OnDestroy = FormDestroy
+  DesignerMasterStyle = 0
+  object StringGrid1: TStringGrid
+    Align = Bottom
+    CanFocus = True
+    ClipChildren = True
+    Position.Y = 168.000000000000000000
+    Size.Width = 572.000000000000000000
+    Size.Height = 312.000000000000000000
+    Size.PlatformDefault = False
+    TabOrder = 0
+    Viewport.Width = 552.000000000000000000
+    Viewport.Height = 287.000000000000000000
+  end
+  object btnFillGrid: TButton
+    Position.X = 480.000000000000000000
+    Position.Y = 136.000000000000000000
+    TabOrder = 1
+    Text = 'FillGrid'
+    OnClick = btnFillGridClick
+  end
+  object Label1: TLabel
+    StyledSettings = [Family, Style, FontColor]
+    Position.X = 8.000000000000000000
+    Position.Y = 8.000000000000000000
+    Text = 'Your name:'
+    TabOrder = 5
+  end
+  object NameEdit: TEdit
+    Touch.InteractiveGestures = [LongTap, DoubleTap]
+    TabOrder = 6
+    Position.X = 8.000000000000000000
+    Position.Y = 24.000000000000000000
+    Size.Width = 201.000000000000000000
+    Size.Height = 22.000000000000000000
+    Size.PlatformDefault = False
+  end
+  object FindButton: TButton
+    Position.X = 216.000000000000000000
+    Position.Y = 24.000000000000000000
+    Size.Width = 145.000000000000000000
+    Size.Height = 22.000000000000000000
+    Size.PlatformDefault = False
+    TabOrder = 9
+    Text = 'Find a previous message'
+    OnClick = FindButtonClick
+  end
+  object Label2: TLabel
+    StyledSettings = [Family, Style, FontColor]
+    Position.X = 8.000000000000000000
+    Position.Y = 56.000000000000000000
+    Text = 'Your message:'
+    TabOrder = 4
+  end
+  object QuestionMemo: TMemo
+    Touch.InteractiveGestures = [Pan, LongTap, DoubleTap]
+    DataDetectorTypes = []
+    Position.X = 8.000000000000000000
+    Position.Y = 72.000000000000000000
+    Size.Width = 353.000000000000000000
+    Size.Height = 50.000000000000000000
+    Size.PlatformDefault = False
+    TabOrder = 10
+    Viewport.Width = 349.000000000000000000
+    Viewport.Height = 46.000000000000000000
+  end
+  object AddButton: TButton
+    Position.X = 8.000000000000000000
+    Position.Y = 136.000000000000000000
+    Size.Width = 145.000000000000000000
+    Size.Height = 22.000000000000000000
+    Size.PlatformDefault = False
+    TabOrder = 8
+    Text = 'Add the message'
+    OnClick = AddButtonClick
+  end
+  object QuitButton: TButton
+    Position.X = 248.000000000000000000
+    Position.Y = 136.000000000000000000
+    Size.Width = 113.000000000000000000
+    Size.Height = 22.000000000000000000
+    Size.PlatformDefault = False
+    TabOrder = 7
+    Text = 'Quit'
+  end
+  object AdapterBindSource1: TAdapterBindSource
+    AutoActivate = True
+    ScopeMappings = <>
+    Left = 472
+    Top = 24
+  end
+  object BindingsList1: TBindingsList
+    Methods = <>
+    OutputConverters = <>
+    Left = 472
+    Top = 72
+    object LinkGridToDataSourceAdapterBindSource1: TLinkGridToDataSource
+      Category = 'Quick Bindings'
+      DataSource = AdapterBindSource1
+      GridControl = StringGrid1
+      Columns = <
+        item
+          MemberName = 'ID'
+        end
+        item
+          MemberName = 'Time'
+        end
+        item
+          MemberName = 'Name'
+        end
+        item
+          MemberName = 'Question'
+        end>
+    end
+  end
+end

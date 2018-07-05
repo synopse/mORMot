@@ -1,0 +1,15 @@
+﻿[StringGrid1]
+Coordinates=310,70,70,123
+
+[AdapterBindSource1]
+Coordinates=150,70,116,123
+
+[]
+Coordinates=10,71,45,51
+
+[BindingsList1]
+Coordinates=0,0,82,33
+
+[btnFillGrid]
+Coordinates=136,10,53,51
+
