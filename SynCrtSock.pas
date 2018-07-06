@@ -2398,6 +2398,11 @@ type
 // - e.g. TWinHTTP or TCurlHTTP
 function MainHttpClass: THttpRequestClass;
 
+/// low-level forcing of another THttpRequest class
+// - could be used if we found out that the current MainHttpClass failed (which
+// could easily happen with TCurlHTTP if the library is missing or deprecated)
+procedure ReplaceMainHttpClass(aClass: THttpRequestClass);
+
 /// create a TCrtSocket, returning nil on error
 // (useful to easily catch socket error exception ECrtSocket)
 function Open(const aServer, aPort: SockString; aTLS: boolean=false): TCrtSocket;
@@ -2591,6 +2596,9 @@ function SockBase64Decode(const s: SockString): SockString;
 
 /// escaping of HTML codes like < > & "
 function HtmlEncode(const s: SockString): SockString;
+
+/// decode a HTTP chunk length
+function HttpChunkToHex32(p: PAnsiChar): integer;
 
 {$ifdef MSWINDOWS}
 
@@ -3133,13 +3141,13 @@ begin
   ReasonCache[Hi,Lo] := result;
 end;
 
-function Hex2Dec(c: AnsiChar): byte;
+function Hex2Dec(c: AnsiChar): integer; {$ifdef HASINLINE}inline;{$endif}
 begin
   case c of
   'A'..'Z': result := Ord(c) - (Ord('A') - 10);
   'a'..'z': result := Ord(c) - (Ord('a') - 10);
   '0'..'9': result := Ord(c) - Ord('0');
-  else result := 255;
+  else result := -1;
   end;
 end;
 
@@ -3569,26 +3577,23 @@ begin
   end;
 end;
 
-function PCharToHex32(p: PAnsiChar): cardinal;
-var v0,v1: byte;
+function HttpChunkToHex32(p: PAnsiChar): integer;
+var v0,v1: integer;
 begin
   result := 0;
   if p<>nil then begin
     while p^=' ' do inc(p);
     repeat
       v0 := Hex2Dec(p[0]);
-      if v0=255 then break; // not in '0'..'9','a'..'f'
+      if v0<0 then break; // not in '0'..'9','a'..'f'
       v1 := Hex2Dec(p[1]);
       inc(p);
-      if v1=255 then begin
-        result := (result shl 4)+v0; // only one char left
+      if v1<0 then begin
+        result := (result shl 4) or v0; // only one char left
         break;
       end;
-      v0 := v0 shl 4;
-      result := result shl 8;
-      inc(v0,v1);
+      result := (result shl 8) or (v0 shl 4) or v1;
       inc(p);
-      inc(result,v0);
     until false;
   end;
 end;
@@ -5116,7 +5121,7 @@ begin
       exit;
     end;
     GetHeader; // read all other headers
-    if not IdemPChar(pointer(method),'HEAD') then
+    if (result<>STATUS_NOCONTENT) and not IdemPChar(pointer(method),'HEAD') then
       GetBody; // get content if necessary (not HEAD method)
   except
     on Exception do
@@ -6034,10 +6039,10 @@ begin
         Error := ioresult;
         if Error<>0 then
           raise ECrtSocket.Create('GetBody1',Error);
-        Len := PCharToHex32(LinePChar); // get chunk length in hexa
+        Len := HttpChunkToHex32(LinePChar); // get chunk length in hexa
       end else begin
         SockRecvLn(Line);
-        Len := PCharToHex32(pointer(Line)); // get chunk length in hexa
+        Len := HttpChunkToHex32(pointer(Line)); // get chunk length in hexa
       end;
       if Len=0 then begin // ignore next line (normaly void)
         SockRecvLn;
@@ -6105,7 +6110,7 @@ begin
     case IdemPCharArray(P,['CONTENT-','TRANSFER-ENCODING: CHUNKED','CONNECTION: ',
       'ACCEPT-ENCODING:']) of
     0: case IdemPCharArray(P+8,['LENGTH:','TYPE:','ENCODING:']) of
-       0: ContentLength := GetCardinal(pointer(PAnsiChar(pointer(s))+16));
+       0: ContentLength := GetCardinal(P+16);
        1: ContentType := trim(copy(s,14,128));
        2: if fCompress<>nil then begin
             i := 18;
@@ -11058,7 +11063,6 @@ end;
 procedure TCurlHTTP.InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD);
 const HTTPS: array[boolean] of string = ('','s');
 begin
-  inherited;
   if not IsAvailable then
     raise ECrtSocket.CreateFmt('No available %s',[LIBCURL_DLL]);
   fHandle := curl.easy_init;
@@ -12050,6 +12054,11 @@ begin
     {$endif}
   end;
   result := _MainHttpClass;
+end;
+
+procedure ReplaceMainHttpClass(aClass: THttpRequestClass);
+begin
+  _MainHttpClass := aClass;
 end;
 
 initialization
