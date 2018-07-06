@@ -5621,15 +5621,14 @@ type
     function ElemPtr(index: PtrInt): pointer; {$ifdef HASINLINE}inline;{$endif}
     /// will copy one element content from its index into another variable
     // - do nothing if index is out of range
-    procedure ElemCopyAt(index: PtrInt; var Dest);
+    procedure ElemCopyAt(index: PtrInt; var Dest); {$ifdef HASINLINE}inline;{$endif}
     /// will move one element content from its index into another variable
     // - will erase the internal item ater copy
     // - do nothing if index is out of range
     procedure ElemMoveTo(index: PtrInt; var Dest);
     /// will copy one variable content into an indexed element
     // - do nothing if index is out of range
-    procedure ElemCopyFrom(const Source; index: PtrInt);
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure ElemCopyFrom(const Source; index: PtrInt); {$ifdef HASINLINE}inline;{$endif}
     /// compare the content of two elements, returning TRUE if both values equal
     // - this method compares first using any supplied Compare property,
     // then by content using the RTTI element description of the whole record
@@ -5637,7 +5636,7 @@ type
     /// will reset the element content
     procedure ElemClear(var Elem);
     /// will copy one element content
-    procedure ElemCopy(const A; var B);
+    procedure ElemCopy(const A; var B); {$ifdef FPC}inline;{$endif}
     /// will copy the first field value of an array element
     // - will use the array KnownType to guess the copy routine to use
     // - returns false if the type information is not enough for a safe copy
@@ -50102,9 +50101,11 @@ begin
     if Assigned(fEventCompare) then
       result := Scan(Elem) else
       result := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}Find(Elem);
-    if (result>=0) and (fHashCountTrigger>0) then begin
+    if (result>=0) and (fHashCountTrigger>0) and
+       ({$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCountP<>nil) and
+       ({$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCountP^>4) then begin
       inc(fHashFindCount);
-      if fHashFindCount>=fHashCountTrigger then begin
+      if fHashFindCount>=fHashCountTrigger*2 then begin
         fHashCountTrigger := 0; // FindHashed() should use O(1) hash
         ReHash;
       end;
