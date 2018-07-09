@@ -13526,6 +13526,12 @@ function UnixTimeUTC: TUnixTime;
 function UnixTimeToString(const UnixTime: TUnixTime; Expanded: boolean=true;
   FirstTimeChar: AnsiChar='T'): RawUTF8;
 
+/// convert some second-based c-encoded time (from Unix epoch 1/1/1970) to
+// a small text layout, perfect e.g. for naming a local file
+// - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits, expecting
+// a date > 1999 (a current date would be fine)
+function UnixTimeToFileShort(const UnixTime: TUnixTime): shortstring;
+
 /// convert some second-based c-encoded time to the ISO 8601 text layout, either
 // as time or date elapsed period
 // - this function won't add the Unix epoch 1/1/1970 offset to the timestamp
@@ -36164,6 +36170,21 @@ function UnixTimeToString(const UnixTime: TUnixTime; Expanded: boolean;
 begin // inlined UnixTimeToDateTime
   result := DateTimeToIso8601(UnixTime/SecsPerDay+UnixDateDelta,Expanded,
     FirstTimeChar,false);
+end;
+
+function UnixTimeToFileShort(const UnixTime: TUnixTime): shortstring;
+var dt: TDateTime;
+    HH,MM,SS, MS,Y,M,D: word;
+begin // use 'YYMMDDHHMMSS' format
+  dt := UnixTime/SecsPerDay+UnixDateDelta;
+  DecodeDate(dt, Y, M, D);
+  if Y > 1999 then
+    dec(Y, 2000) else
+    Y := 0;
+  DecodeTime(dt, HH, MM, SS, MS);
+  FormatShort('%%%%%%', [UInt2DigitsToShort(Y), UInt2DigitsToShort(M),
+    UInt2DigitsToShort(D), UInt2DigitsToShort(HH), UInt2DigitsToShort(MM),
+    UInt2DigitsToShort(SS)], result);
 end;
 
 function UnixTimePeriodToString(const UnixTime: TUnixTime; FirstTimeChar: AnsiChar): RawUTF8;
