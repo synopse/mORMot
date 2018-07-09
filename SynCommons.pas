@@ -36172,6 +36172,24 @@ begin // inlined UnixTimeToDateTime
     FirstTimeChar,false);
 end;
 
+{$ifdef FPC} // faster than current RTL version
+procedure DecodeTime(dt: TDateTime; out HH, MM, SS, MS: word);
+var t, t2: cardinal;
+begin
+  t := round(abs(dt) * MSecsPerDay) mod MSecsPerDay;
+  t2 := t div 3600000;
+  HH := t2;
+  dec(t, t2 * 3600000);
+  t2 := t div 60000;
+  MM := t2;
+  dec(t, t2 * 60000);
+  t2 := t div 1000;
+  SS := t2;
+  dec(t, t2 * 1000);
+  MS := t mod 1000;
+end;
+{$endif}
+
 function UnixTimeToFileShort(const UnixTime: TUnixTime): shortstring;
 var dt: TDateTime;
     HH,MM,SS, MS,Y,M,D: word;

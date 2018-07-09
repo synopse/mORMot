@@ -207,33 +207,37 @@ const // Date Translation - see http://en.wikipedia.org/wiki/Julian_day
   D1          = 146097;
   D2          = 1721119;
 
-procedure JulianToGregorian(JulianDN: integer; out Year,Month,Day: Word);
-var YYear,XYear,Temp,TempMonth: integer;
+procedure JulianToGregorian(JulianDN: PtrUInt; out result: TSystemTime);
+var YYear,XYear,Temp,TempMonth: PtrUInt;
 begin
   Temp := ((JulianDN-D2) shl 2)-1;
   JulianDN := Temp div D1;
-  XYear := (Temp mod D1) or 3;
-  YYear := (XYear div D0);
-  Temp := ((((XYear mod D0)+4) shr 2)*5)-3;
-  Day := ((Temp mod 153)+5) div 5;
+  XYear := (Temp-(JulianDN*D1)) or 3;
+  YYear := XYear div D0;
+  Temp := (((XYear-(YYear*D0)+4) shr 2)*5)-3;
   TempMonth := Temp div 153;
+  result.Day := ((Temp-(TempMonth*153))+5) div 5;
   if TempMonth>=10 then begin
     inc(YYear);
     dec(TempMonth,12);
   end;
   inc(TempMonth,3);
-  Month := TempMonth;
-  Year := YYear+(JulianDN*100);
+  result.Month := TempMonth;
+  result.Year := YYear+(JulianDN*100);
 end;
 
-procedure EpochToLocal(epoch: cardinal; out year,month,day,hour,minute,second: Word);
+procedure EpochToLocal(epoch: PtrUInt; out result: TSystemTime);
+var t: PtrUInt;
 begin
-  JulianToGregorian((epoch div SecsPerDay)+C1970,year,month,day);
-  epoch := abs(epoch mod SecsPerDay);
-  Hour := epoch div SecsPerHour;
-  epoch := epoch mod SecsPerHour;
-  Minute := epoch div SecsPerMin;
-  Second := epoch mod SecsPerMin;
+  t := epoch div SecsPerDay;
+  JulianToGregorian(t+C1970,result);
+  dec(epoch,t*SecsPerDay);
+  t := epoch div SecsPerHour;
+  result.Hour := t;
+  dec(epoch,t*SecsPerHour);
+  t := epoch div SecsPerMin;
+  result.Minute := t;
+  result.Second := epoch-t*SecsPerMin;
 end;
 
 function GetNowUTC: TDateTime;
@@ -247,8 +251,7 @@ procedure GetNowUTCSystem(var result: TSystemTime);
 var tz: timeval;
 begin
   fpgettimeofday(@tz,nil);
-  EpochToLocal(tz.tv_sec,
-    result.year,result.month,result.day,result.hour,result.Minute,result.Second);
+  EpochToLocal(tz.tv_sec,result);
   result.MilliSecond := tz.tv_usec div 1000;
 end;
 
