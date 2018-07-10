@@ -24498,27 +24498,27 @@ begin // FPC is efficient at compiling this code
   if Str<>nil then begin
     repeat
       c := PCardinal(str)^;
-      if byte(c)=0 then
+      if ToByte(c)=0 then
         exit else
-      if byte(c)=byte(Chr) then
+      if ToByte(c)=ToByte(Chr) then
         break;
       c := c shr 8;
       inc(Str);
-      if byte(c)=0 then
+      if ToByte(c)=0 then
         exit else
-      if byte(c)=byte(Chr) then
+      if ToByte(c)=ToByte(Chr) then
         break;
       c := c shr 8;
       inc(Str);
-      if byte(c)=0 then
+      if ToByte(c)=0 then
         exit else
-      if byte(c)=byte(Chr) then
+      if ToByte(c)=ToByte(Chr) then
         break;
       c := c shr 8;
       inc(Str);
-      if byte(c)=0 then
+      if ToByte(c)=0 then
         exit else
-      if byte(c)=byte(Chr) then
+      if ToByte(c)=ToByte(Chr) then
         break;
       inc(Str);
     until false;
