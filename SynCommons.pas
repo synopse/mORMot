@@ -29431,49 +29431,58 @@ end;
 {$endif}
 
 function FindIniNameValue(P: PUTF8Char; UpperName: PAnsiChar): RawUTF8;
-var PBeg: PUTF8Char;
-    i: integer;
-    table: PNormTable;
+var u, PBeg: PUTF8Char;
+    by4: cardinal;
+    table: {$ifdef CPUX86}TNormTable absolute NormToUpperAnsi7{$else}PNormTable{$endif};
 begin // expect UpperName as 'NAME='
-  table := @NormToUpperAnsi7;
-  PBeg := nil;
-  if (P<>nil) and (P^<>'[') and (UpperName<>nil) then
-  repeat
-    if P^=' ' then repeat inc(P) until P^<>' ';   // trim left ' '
-    if table^[P[0]]=UpperName[0] then
-      PBeg := P;
+  if (P<>nil) and (P^<>'[') and (UpperName<>nil) then begin
+    {$ifndef CPUX86}table := @NormToUpperAnsi7;{$endif}
+    PBeg := nil;
+    u := P;
     repeat
-      if P[0]>#13 then
-        if P[1]>#13 then
-          if P[2]>#13 then
-            if P[3]>#13 then begin
-              inc(P,4);
-              continue;
-            end else
-            inc(P,3) else
-          inc(P,2) else
-        inc(P);
-      if P^ in [#0,#10,#13] then
-        break else
-        inc(P);
-    until false;
-    if PBeg<>nil then begin
-      i := 1;
+      while u^=' ' do inc(u); // trim left ' '
+      if u^=#0 then
+        break;
+      if table[u^]=UpperName[0] then
+        PBeg := u;
       repeat
-        if UpperName[i]<>#0 then
-          if NormToUpperAnsi7[PBeg[i]]<>UpperName[i] then
-            break else
-            inc(i) else begin
-          inc(PBeg,i);
-          SetString(result,PBeg,P-PBeg);
-          exit;
-        end;
+        by4 := PCardinal(u)^;
+        if ToByte(by4)>13 then
+          if ToByte(by4 shr 8)>13 then
+            if ToByte(by4 shr 16)>13 then
+              if by4 shr 24>13 then begin
+                inc(u,4);
+                continue;
+              end else
+              inc(u,3) else
+            inc(u,2) else
+          inc(u);
+        if u^ in [#0,#10,#13] then
+          break else
+          inc(u);
       until false;
-      PBeg := nil;
-    end;
-    if P^=#13 then inc(P);
-    if P^=#10 then inc(P);
-  until P^ in [#0,'['];
+      if PBeg<>nil then begin
+        inc(PBeg);
+        P := u;
+        u := pointer(UpperName+1);
+        repeat
+          if u^<>#0 then
+            if table[PBeg^]<>u^ then
+              break else begin
+              inc(u);
+              inc(PBeg);
+            end else begin
+            SetString(result,PBeg,P-PBeg);
+            exit;
+          end;
+        until false;
+        PBeg := nil;
+        u := P;
+      end;
+      if u^=#13 then inc(u);
+      if u^=#10 then inc(u);
+    until u^ in [#0,'['];
+  end;
   result := '';
 end;
 
