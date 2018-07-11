@@ -1682,8 +1682,10 @@ begin
         writeln('Launched in ', cmdText, ' mode'#10);
         TextColor(ccLightGray);
         log := fSettings.fLogClass.Add;
-        if (cmd = cVerbose) and (log <> nil) then  // leave as in settings for -c
+        if (cmd = cVerbose) and (log <> nil) then begin
+          log.Family.Level := LOG_VERBOSE;
           log.Family.EchoToConsole := LOG_VERBOSE;
+        end;
         try
           log.Log(sllNewRun, 'Start % /% %', [fSettings.ServiceName,cmdText,
             ExeVersion.Version.DetailedOrVoid], self);
