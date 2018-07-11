@@ -1199,6 +1199,10 @@ type
 { ************ fast UTF-8 / Unicode / Ansi types and conversion routines **** }
 
 type
+  {$ifndef ISDELPHI2007ANDUP}
+  TBytes = array of byte;
+  {$endif}
+
   /// kind of adding in a TTextWriter
   TTextWriterKind = (twNone, twJSONEscape, twOnSameLine);
 
@@ -2412,11 +2416,6 @@ function bswap64(const a: QWord): QWord;
 // - n is required to be > 0
 // - warning: on x86, a should be <> b
 procedure bswap64array(a,b: PQWordArray; n: integer);
-
-{$ifndef ISDELPHI2007ANDUP}
-type
-  TBytes = array of byte;
-{$endif}
 
 /// fast concatenation of several AnsiStrings
 function RawByteStringArrayConcat(const Values: array of RawByteString): RawByteString;
@@ -23552,16 +23551,18 @@ procedure bswap64array(a,b: PQWordArray; n: integer);
 {$ifdef CPUX86}
 asm
     push  ebx
+    push  esi
 @1: mov   ebx, dword ptr[eax]
+    mov   esi, dword ptr[eax + 4]
     bswap ebx
+    bswap esi
     mov   dword ptr[edx + 4], ebx
-    mov   ebx, dword ptr[eax + 4]
-    bswap ebx
-    mov   dword ptr[edx], ebx
+    mov   dword ptr[edx], esi
     add   eax, 8
     add   edx, 8
     dec   ecx
     jnz   @1
+    pop   esi
     pop   ebx
 end;
 {$else}
@@ -24500,25 +24501,25 @@ begin // FPC is efficient at compiling this code
       c := PCardinal(str)^;
       if ToByte(c)=0 then
         exit else
-      if ToByte(c)=ToByte(Chr) then
+      if ToByte(c)=byte(Chr) then
         break;
       c := c shr 8;
       inc(Str);
       if ToByte(c)=0 then
         exit else
-      if ToByte(c)=ToByte(Chr) then
+      if ToByte(c)=byte(Chr) then
         break;
       c := c shr 8;
       inc(Str);
       if ToByte(c)=0 then
         exit else
-      if ToByte(c)=ToByte(Chr) then
+      if ToByte(c)=byte(Chr) then
         break;
       c := c shr 8;
       inc(Str);
       if ToByte(c)=0 then
         exit else
-      if ToByte(c)=ToByte(Chr) then
+      if ToByte(c)=byte(Chr) then
         break;
       inc(Str);
     until false;
