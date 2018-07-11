@@ -450,6 +450,8 @@ type
     // - first method to call before using this object for decryption
     // - KeySize is in bits, i.e. 128,192,256
     function DecryptInit(const Key; KeySize: cardinal): boolean;
+    /// Initialize AES contexts for uncypher, from another TAES.EncryptInit
+    function DecryptInitFrom(const Encryption: TAES; const Key; KeySize: cardinal): boolean;
     /// decrypt an AES data block
     procedure Decrypt(var B: TAESBlock); overload;
       {$ifdef FPC}inline;{$endif}
@@ -6116,7 +6118,7 @@ begin
   until rounds=1;
 end;
 
-function TAES.DecryptInit(const Key; KeySize: cardinal): boolean;
+function TAES.DecryptInitFrom(const Encryption: TAES; const Key; KeySize: cardinal): boolean;
 var ctx: TAESContext absolute Context;
 begin
   {$ifdef USEPADLOCK}
@@ -6127,7 +6129,11 @@ begin
     exit; // Init OK
   end;
   {$endif}
-  result := EncryptInit(Key, KeySize); // contains Initialized := true
+  ctx.Initialized := false;
+  if not Encryption.Initialized then // e.g. called from DecryptInit()
+    EncryptInit(Key, KeySize) else // contains Initialized := true
+    self := Encryption;
+  result := ctx.Initialized;
   if not result then
     exit;
   {$ifdef CPUX86_NOTPIC}
@@ -6146,6 +6152,11 @@ begin
   end else
   {$endif}
     MakeDecrKey(ctx.Rounds,@ctx.RK);
+end;
+
+function TAES.DecryptInit(const Key; KeySize: cardinal): boolean;
+begin
+  result := DecryptInitFrom(self, Key, KeySize);
 end;
 
 procedure TAES.Decrypt(var B: TAESBlock);
