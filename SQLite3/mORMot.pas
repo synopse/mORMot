@@ -8168,6 +8168,9 @@ type
     { published properties in inherited classes will be interpreted as SQL fields }
   end;
 
+  TSQLRecordArray = array[0..MaxInt div SizeOf(TSQLRecord)-1] of TSQLRecord;
+  PSQLRecordArray = ^TSQLRecordArray;
+
   /// root class for defining and mapping database records with NOCASE collation
   // - by default, any sftUTF8Text field (RawUTF8, UnicodeString, WideString
   // properties) will use our Unicode SYSTEMNOCASE SQLite3 collation, which calls
@@ -11967,14 +11970,14 @@ type
     /// the method called
     // - a pointer to the existing information in shared TInterfaceFactory
     Method: PServiceMethod;
-    /// the parameters at execution call
+    /// the parameters at execution call, as JSON CSV (i.e. array without [ ])
     Params: RawUTF8;
     /// any non default result returned after execution
     // - if not set (i.e. if equals ''), Method^.DefaultResult has been returned
     // - if WasError is TRUE, always contain the error message
     CustomResults: RawUTF8;
     /// the result returned after execution
-    // - this method will return Method^.DefaultResult
+    // - this method will return Method^.DefaultResult if CustomResults=''
     function Results: RawUTF8;
     /// append the log in textual format
     // - typical output is as such:
@@ -45931,6 +45934,7 @@ var i, ndx, i32: integer;
     err, currentRow: integer;
     P: TSQLPropInfo;
     nfo: PPropInfo;
+    rec: PSQLRecordArray;
     Hash: TListFieldHash;
     offs: PtrUInt;
     item: PPointer;
@@ -45944,7 +45948,7 @@ var i, ndx, i32: integer;
         exit;
     end;
     if Assigned(OnFind) then
-      OnFind(Dest,TSQLRecord(item^),(PtrUInt(item)-PtrUInt(fValue.List)) shr POINTERSHR);
+      OnFind(Dest,TSQLRecord(item^),(PtrUInt(item)-PtrUInt(rec)) shr POINTERSHR);
     inc(result);
   end;
 
@@ -45952,6 +45956,7 @@ begin
   result := 0;
   if fValue.Count=0 then
     exit;
+  rec := pointer(fValue.List);
   if FoundLimit<=0 then
     FoundLimit := maxInt;
   if WhereField=SYNTABLESTATEMENTWHEREID then begin
@@ -45961,7 +45966,7 @@ begin
         ndx := IDToIndex(i64); // use fast O(log(n)) binary search
         if ndx>=0 then begin
           if Assigned(OnFind) then
-            OnFind(Dest,TSQLRecord(fValue.List[ndx]),ndx);
+            OnFind(Dest,rec[ndx],ndx);
           inc(result);
         end;
       end;
@@ -45982,7 +45987,7 @@ begin
       ndx := Hash.Find(fSearchRec);
       if ndx>=0 then begin
         if Assigned(OnFind) then
-          OnFind(Dest,fValue.List[ndx],ndx);
+          OnFind(Dest,rec[ndx],ndx);
         inc(result);
       end;
     end;
@@ -45990,7 +45995,7 @@ begin
   end;
   // full scan optimized search for a specified value
   currentRow := 0;
-  item := pointer(fValue.List);
+  item := pointer(rec);
   if P.InheritsFrom(TSQLPropInfoRTTIInt32) then begin
     // optimized search for 8/16/32-bit Integer values
     i32 := GetInteger(pointer(WhereValue),err);
@@ -46060,7 +46065,7 @@ begin
 end;
 
 function TSQLRestStorageInMemory.FindMax(WhereField: integer; out max: Int64): boolean;
-var list: PPointerArray;
+var rec: PSQLRecordArray;
     P: TSQLPropInfo;
     nfo: PPropInfo;
     i: integer;
@@ -46070,9 +46075,9 @@ begin
   max := low(Int64);
   if fValue.Count=0 then
     exit;
-  list := pointer(fValue.List);
+  rec := pointer(fValue.List);
   if WhereField=SYNTABLESTATEMENTWHEREID then begin
-    max := TSQLRecord(list[fValue.Count-1]).IDValue; // should be ordered
+    max := rec[fValue.Count-1].IDValue; // should be ordered
     result := true;
     exit;
   end;
@@ -46083,7 +46088,7 @@ begin
   if P.InheritsFrom(TSQLPropInfoRTTIInt32) then begin
     nfo := TSQLPropInfoRTTI(P).PropInfo;
     for i := 0 to fValue.Count-1 do begin
-      v := nfo.GetOrdProp(list[i]);
+      v := nfo.GetOrdProp(rec[i]);
       if v>max then
         max := v;
     end;
@@ -46092,7 +46097,7 @@ begin
   else if P.InheritsFrom(TSQLPropInfoRTTIInt64) then begin
     nfo := TSQLPropInfoRTTI(P).PropInfo;
     for i := 0 to fValue.Count-1 do begin
-      v := nfo.GetInt64Prop(list[i]);
+      v := nfo.GetInt64Prop(rec[i]);
       if v>max then
         max := v;
     end;
@@ -46103,13 +46108,15 @@ end;
 procedure TSQLRestStorageInMemory.ForEach(WillModifyContent: boolean;
   OnEachProcess: TFindWhereEqualEvent; Dest: pointer);
 var i: integer;
+    rec: PSQLRecordArray;
 begin
   if (self=nil) or (fValue.Count=0) or not Assigned(OnEachProcess) then
     exit;
   StorageLock(WillModifyContent,'ForEach');
   try
+    rec := pointer(fValue.List);
     for i := 0 to fValue.Count-1 do
-      OnEachProcess(Dest,fValue.List[i],i);
+      OnEachProcess(Dest,rec[i],i);
   finally
     StorageUnLock;
   end;
@@ -46118,6 +46125,7 @@ end;
 function TSQLRestStorageInMemory.GetJSONValues(Stream: TStream;
   Expand: boolean; Stmt: TSynTableStatement): PtrInt;
 var ndx,KnownRowsCount: integer;
+    rec: PSQLRecordArray;
     {$ifndef NOVARIANTS}
     j: integer;
     id: Int64;
@@ -46142,13 +46150,14 @@ begin // exact same format as TSQLTable.GetJSONValues()
   W := fStoredClassRecordProps.CreateJSONWriter(Stream,Expand,withID,bits,KnownRowsCount);
   if W<>nil then
   try
+    rec := pointer(fValue.List);
     if Expand then
       W.Add('[');
     if Stmt.Where=nil then begin // no WHERE statement -> all rows
       for ndx := 0 to KnownRowsCount-1 do begin
         if Expand then
           W.AddCR; // for better readability
-        TSQLRecord(fValue.List[ndx]).GetJSONValues(W);
+        rec[ndx].GetJSONValues(W);
         W.Add(',');
       end;
       result := KnownRowsCount;
@@ -46167,7 +46176,7 @@ begin // exact same format as TSQLTable.GetJSONValues()
             if VariantToInt64(Values[ndx],id) then begin
               j := IDToIndex(id);
               if j>=0 then begin
-                TSQLRecord(fValue.List[j]).GetJSONValues(W);
+                rec[j].GetJSONValues(W);
                 W.Add(',');
                 inc(result);
                 if (Stmt.Limit>0) and (result>=Stmt.Limit) then
@@ -46182,8 +46191,8 @@ begin // exact same format as TSQLTable.GetJSONValues()
         if Prop.InheritsFrom(TSQLPropInfoRTTIRawBlob) then begin
           IsNull := Stmt.Where[0].Operator=opIsNull;
           for ndx := 0 to fValue.Count-1 do
-          if TSQLPropInfoRTTIRawBlob(Prop).IsNull(fValue.List[ndx])=IsNull then begin
-            TSQLRecord(fValue.List[ndx]).GetJSONValues(W);
+          if TSQLPropInfoRTTIRawBlob(Prop).IsNull(rec[ndx])=IsNull then begin
+            rec[ndx].GetJSONValues(W);
             W.Add(',');
             inc(result);
             if (Stmt.Limit>0) and (result>=Stmt.Limit) then
@@ -46214,16 +46223,18 @@ end;
 function TSQLRestStorageInMemory.IDToIndex(ID: TID): integer;
 var L, R: integer;
     cmp: TID;
+    rec: PSQLRecordArray;
 begin
   if self<>nil then
   with fValue do begin
+    rec := pointer(List);
     R := Count-1;
     if fIDSorted and (R>=8) then begin
       // IDs are sorted -> use fast O(log(n)) binary search algorithm
       L := 0;
       repeat
         result := (L + R) shr 1;
-        cmp := TSQLRecord(List[result]).fID-ID;
+        cmp := rec[result].fID-ID;
         if cmp=0 then
           exit;
         if cmp<0 then
@@ -46233,7 +46244,7 @@ begin
     end else
       // IDs are not sorted (not possible in practice) -> O(n) lookup
       for result := 0 to R do
-        if TSQLRecord(List[result]).fID=ID then
+        if rec[result].fID=ID then
           exit;
   end;
   result := -1;
@@ -46241,13 +46252,14 @@ end;
 
 procedure TSQLRestStorageInMemory.GetAllIDs(out ID: TIDDynArray);
 var i: integer;
+    rec: PSQLRecordArray;
 begin
   StorageLock(false,'GetAllIDs');
-  with fValue do
   try
-    SetLength(ID, Count);
+    SetLength(ID, fValue.Count);
+    rec := pointer(fValue.List);
     for i := 0 to Count-1 do
-      ID[i] := TSQLRecord(List[i]).fID;
+      ID[i] := rec[i].fID;
   finally
     StorageUnlock;
   end;
@@ -46405,12 +46417,14 @@ end;
 
 procedure TSQLRestStorageInMemory.SaveToJSON(Stream: TStream; Expand: Boolean);
 var i: integer;
+    rec: PSQLRecordArray;
     W: TJSONSerializer;
 begin
   if self=nil then
     exit;
   StorageLock(false,'SaveToJSON');
   try
+    rec := pointer(fValue.List);
     W := fStoredClassRecordProps.CreateJSONWriter(
       Stream,Expand,true,ALL_FIELDS,fValue.Count,65536);
     try
@@ -46419,7 +46433,7 @@ begin
       for i := 0 to fValue.Count-1 do begin
         if Expand then
           W.AddCR; // for better readability
-        TSQLRecord(fValue.List[i]).GetJSONValues(W);
+        rec[i].GetJSONValues(W);
         W.Add(',');
       end;
       W.EndJSONObject(fValue.Count,fValue.Count);
@@ -46468,6 +46482,7 @@ function TSQLRestStorageInMemory.LoadFromBinary(Stream: TStream): boolean;
 var R: TFileBufferReader;
     MS: TMemoryStream;
     i,n,f: integer;
+    rec: PSQLRecordArray;
     ID32: TIntegerDynArray;
     P: PAnsiChar;
     aRecord: TSQLRecord;
@@ -46496,6 +46511,7 @@ begin
     fValue.Clear;
     n := R.ReadVarUInt32Array(ID32);
     fValue.Count := abs(n); // faster than fValue.Add() to allocate all at once
+    rec := pointer(fValue.List);
     if n<0 then begin // was wkFakeMarker -> TID were stored as VarUInt64
       lastID := 0;
       for i := 0 to -n-1 do begin
@@ -46503,20 +46519,20 @@ begin
         newID := lastID+{$ifdef FPC_OR_UNICODE}TID{$endif}(R.ReadVarUInt64);
         aRecord.fID := newID;
         lastID := newID;
-        fValue.List[i] := aRecord;
+        rec[i] := aRecord;
       end;
     end else
       for i := 0 to n-1 do begin
         aRecord := fStoredClass.Create;
         aRecord.fID := ID32[i];
-        fValue.List[i] := aRecord;
+        rec[i] := aRecord;
       end;
     // read content, grouped by field (for better compression)
     P := R.CurrentMemory;
     for f := 0 to Fields.Count-1 do
-      with Fields.List[f], fValue do
-        for i := 0 to Count-1 do begin
-          P := SetBinary(List[i],P);
+      with Fields.List[f] do
+        for i := 0 to fValue.Count-1 do begin
+          P := SetBinary(rec[i],P);
           if P=nil then begin
             fValue.Clear; // on error, reset whole
             exit;
@@ -46562,6 +46578,7 @@ end;
 function TSQLRestStorageInMemory.SaveToBinary(Stream: TStream): integer;
 var W: TFileBufferWriter;
     MS: THeapMemoryStream;
+    rec: PSQLRecordArray;
     i, f: integer;
     hasInt64ID: boolean;
     p: PID;
@@ -46582,23 +46599,23 @@ begin
       W.Write1(0); // ClassName='TSQLRecordProperties' in old buggy format
       SaveBinaryHeader(W);
       // write IDs
+      rec := pointer(fValue.List);
       hasInt64ID := false;
-      with fValue do
-        for i := 0 to Count-1 do begin
-          p := @TSQLRecord(List[i]).fID;
-          if p^>high(cardinal) then begin
-            hasInt64ID := true;
-            break;
-          end else
-            PCardinalArray(ID32.buf)[i] := PInteger(p)^;
-        end;
+      for i := 0 to fValue.Count-1 do begin
+        p := @rec[i].fID;
+        if p^>high(cardinal) then begin
+          hasInt64ID := true;
+          break;
+        end else
+          PCardinalArray(ID32.buf)[i] := PInteger(p)^;
+      end;
       if hasInt64ID then begin
         W.WriteVarUInt32(fValue.Count);
         W.Write1(ord(wkFakeMarker)); // fake marker
         lastID := 0;
         with fValue do
         for i := 0 to Count-1 do begin // a bit less efficient than wkSorted
-          newID := TSQLRecord(List[i]).fID;
+          newID := rec[i].fID;
           if newID<=lastID then
             raise EORMException.CreateUTF8('%.SaveToBinary(%): IDs not sorted',
               [self,fStoredClass]);
@@ -46609,9 +46626,9 @@ begin
         W.WriteVarUInt32Values(ID32.buf,Count,wkSorted); // efficient ID storage
       // write content, grouped by field (for better compression)
       for f := 0 to Fields.Count-1 do
-        with Fields.List[f], fValue do
-          for i := 0 to Count-1 do
-            GetBinary(TSQLRecord(List[i]),W);
+        with Fields.List[f] do
+          for i := 0 to fValue.Count-1 do
+            GetBinary(rec[i],W);
     finally
       StorageUnLock;
       ID32.Done;
@@ -46641,17 +46658,17 @@ end;
 function TSQLRestStorageInMemory.GetOne(aID: TID): TSQLRecord;
 var i: integer;
 begin
-  StorageLock(false,'GetOne');
-  try
-    i := IDToIndex(aID);
-    if i<0 then
-      result := nil else begin
-      result := fStoredClass.Create;
-      CopyObject(TObject(fValue.List[i]),result);
-      result.fID := aID;
+  if aID = 0 then
+    result := nil else begin
+    StorageLock(false,'GetOne');
+    try
+      i := IDToIndex(aID);
+      if i<0 then
+        result := nil else
+        result := TSQLRecord(fValue.List[i]).CreateCopy;
+    finally
+      StorageUnLock;
     end;
-  finally
-    StorageUnLock;
   end;
 end;
 
@@ -46659,6 +46676,7 @@ function TSQLRestStorageInMemory.EngineUpdateFieldIncrement(TableModelIndex: int
   ID: TID; const FieldName: RawUTF8; Increment: Int64): boolean;
 var i,err: integer;
     P: TSQLPropInfo;
+    rec: TSQLRecord;
     V: RawUTF8;
     wasString: boolean;
     int: Int64;
@@ -46674,12 +46692,13 @@ begin
     i := IDToIndex(ID);
     if i<0 then
       exit;
-    P.GetValueVar(fValue.List[i],false,V,@wasstring);
+    rec := PSQLRecordArray(fValue.List)[i];
+    P.GetValueVar(rec,false,V,@wasstring);
     int := GetInt64(pointer(V),err);
     if wasString or (err<>0) then
       exit;
     Int64ToUtf8(int+Increment,V);
-    P.SetValueVar(fValue.List[i],V,false);
+    P.SetValueVar(rec,V,false);
     result := true;
   finally
     StorageUnLock;
@@ -46706,8 +46725,8 @@ begin
     i := IDToIndex(ID);
     if (i<0) or not RecordCanBeUpdated(fStoredClass,ID,seUpdate) then
       exit;
+    Orig := TSQLRecord(fValue.List[i]);
     if fUniqueFields<>nil then begin
-      Orig := TSQLRecord(fValue.List[i]);
       Rec := Orig.CreateCopy; // copy since can be a partial update
       Rec.FillFrom(SentData); // overwrite updated properties
       if not UniqueFieldsUpdateOK(Rec,i) then begin
@@ -46715,10 +46734,9 @@ begin
         exit;
       end;
       Orig.Free; // avoid memory leak
-      TSQLRecord(fValue.List[i]) := Rec; // update item in list
-    end else
-      // direct in-place partial update
-      TSQLRecord(fValue.List[i]).FillFrom(SentData);
+      TSQLRecord(fValue.List[i]) := Rec; // replace item in list
+    end else // direct in-place partial update
+      Orig.FillFrom(SentData);
     fModified := true;
     result := true;
     if Owner<>nil then
@@ -46857,6 +46875,7 @@ end;
 
 function TSQLRestStorageInMemory.UpdateBlobFields(Value: TSQLRecord): boolean;
 var i,f: integer;
+    rec: TSQLRecord;
 begin
   result := false;
   if (Value<>nil) and (Value.fID>0) and (PSQLRecordClass(Value)^=fStoredClass) then
@@ -46867,8 +46886,9 @@ begin
       i := IDToIndex(Value.fID);
       if (i<0) or not RecordCanBeUpdated(Table,Value.fID,seUpdate) then
         exit;
+      rec := fValue.List[i];
       for f := 0 to high(BlobFields) do
-        BlobFields[f].CopyValue(Value,fValue.List[i]);
+        BlobFields[f].CopyValue(Value,rec);
       if Owner<>nil then
         Owner.InternalUpdateEvent(seUpdateBlob,fStoredClassProps.TableIndex,Value.fID,'',
           @fStoredClassRecordProps.FieldBits[sftBlob]);
@@ -57330,26 +57350,20 @@ end;
 
 procedure TInterfaceStub.IntCheckCount(aMethodIndex, aComputed: cardinal;
   aOperator: TSQLQueryOperator; aCount: cardinal);
-const
-  OPERATORS: array[qoEqualTo..qoGreaterThanOrEqualTo] of RawUTF8 = (
-    '=','<>','<','<=','>','>=');
-function SQLQueryCompare(aOperator: TSQLQueryOperator; A,B: cardinal): boolean;
+var ok: boolean;
 begin
   case aOperator of
-  qoEqualTo:              result := A=B;
-  qoNotEqualTo:           result := A<>B;
-  qoLessThan:             result := A<B;
-  qoLessThanOrEqualTo:    result := A<=B;
-  qoGreaterThan:          result := A>B;
-  qoGreaterThanOrEqualTo: result := A>=B;
+  qoEqualTo:              ok := aComputed=aCount;
+  qoNotEqualTo:           ok := aComputed<>aCount;
+  qoLessThan:             ok := aComputed<aCount;
+  qoLessThanOrEqualTo:    ok := aComputed<=aCount;
+  qoGreaterThan:          ok := aComputed>aCount;
+  qoGreaterThanOrEqualTo: ok := aComputed>=aCount;
   else raise EInterfaceStub.CreateUTF8('%.IntCheckCount(): Unexpected % operator',
     [self,Ord(aOperator)]);
   end;
-end;
-begin
-  InternalCheck(SQLQueryCompare(aOperator,aComputed,aCount),True,
-   'ExpectsCount(''%'',%,%) failed: count=%',[fInterface.Methods[aMethodIndex].URI,
-    ToText(aOperator)^,aCount,aComputed]);
+  InternalCheck(ok,True,'ExpectsCount(''%'',%,%) failed: count=%',
+    [fInterface.Methods[aMethodIndex].URI,ToText(aOperator)^,aCount,aComputed]);
 end;
 
 procedure TInterfaceStub.InstanceDestroyed(aClientDrivenID: cardinal);
@@ -57704,7 +57718,7 @@ begin
         end;
       end;
       if result then begin
-        if aResult<>nil then // make unique due to JSONDecode()
+        if aResult<>nil then // make unique due to JSONDecode() by caller
           if log.CustomResults='' then
             SetString(aResult^,PAnsiChar(pointer(aMethod.DefaultResult)),
               length(aMethod.DefaultResult)) else
