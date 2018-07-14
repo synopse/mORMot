@@ -36195,8 +36195,7 @@ begin
   dec(t, t2 * 60000);
   t2 := t div 1000;
   SS := t2;
-  dec(t, t2 * 1000);
-  MS := t mod 1000;
+  MS := t - t2 * 1000;
 end;
 {$endif}
 

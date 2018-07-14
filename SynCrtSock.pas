@@ -2444,6 +2444,9 @@ function HttpPost(const server, port: SockString; const url, Data, DataType: Soc
 /// compute the 'Authorization: Bearer ####' HTTP header of a given token value
 function AuthorizationBearer(const AuthToken: SockString): SockString;
 
+/// compute the '1.2.3.4' text representation of a raw IP4 binary
+procedure IP4Text(const ip4addr; var result: SockString);
+
 const
   /// the layout of TSMTPConnection.FromText method
   SMTP_DEFAULT = 'user:password@smtpserver:port';
@@ -2657,12 +2660,12 @@ procedure DirectShutdown(sock: TSocket);
 // - used e.g. by TPollAsynchSockets.Start
 function AsynchSocket(sock: TSocket): boolean;
 
-/// low-level direct write to the socket recv() function
-// - by-pass overriden blocking recv() e.g. in SynFPCSock, so will work
+/// low-level direct call of the socket recv() function
+// - by-pass overriden blocking recv() e.g. in SynFPCSock, so will work if
 // the socket is in non-blocking mode, as with AsynchSocket/TPollAsynchSockets
 function AsynchRecv(sock: TSocket; buf: pointer; buflen: integer): integer;
 
-/// low-level direct write to the socket send() function
+/// low-level direct call of the socket send() function
 // - by-pass overriden blocking send() e.g. in SynFPCSock, so will work if
 // the socket is in non-blocking mode, as with AsynchSocket/TPollAsynchSockets
 function AsynchSend(sock: TSocket; buf: pointer; buflen: integer): integer;
