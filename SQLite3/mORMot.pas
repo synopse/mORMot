@@ -4306,6 +4306,12 @@ function ClassFieldProp(ClassType: TClass; const PropName: shortstring): PPropIn
 // - this special version also search into parent properties (default is only current)
 function ClassFieldPropWithParents(aClassType: TClass; const PropName: shortstring): PPropInfo;
 
+/// retrieve an integer/Int64 Field propery value from a Property Name
+// - this version also search into parent properties
+// - returns TRUE and set PropValue if a matching property was found
+function ClassFieldInt64(Instance: TObject; const PropName: ShortString;
+  out PropValue: Int64): boolean;
+
 /// retrieve a class Field property instance from a Property Name
 // - this version also search into parent properties
 // - returns TRUE and set PropInstance if a matching property was found
@@ -21213,6 +21219,20 @@ begin
   if P=nil then
     exit;
   TObject(PropInstance) := P^.GetObjProp(Instance);
+  result := true;
+end;
+
+function ClassFieldInt64(Instance: TObject; const PropName: ShortString;
+  out PropValue: Int64): boolean;
+var P: PPropInfo;
+begin
+  result := false;
+  if Instance=nil then
+    exit;
+  P := ClassFieldPropWithParents(Instance.ClassType,PropName);
+  if P=nil then
+    exit;
+  PropValue := P^.GetInt64Value(Instance);
   result := true;
 end;
 
