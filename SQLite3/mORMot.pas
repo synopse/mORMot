@@ -18412,14 +18412,14 @@ type
     // - returns the number of found entries
     // - is just a wrapper around FindWhereEqual() with StorageLock protection
     function SearchEvent(const FieldName, FieldValue: RawUTF8;
-      OnFind: TFindWhereEqualEvent; Dest: pointer; FoundLimit,FoundOffset: integer): integer;
+      OnFind: TFindWhereEqualEvent; Dest: pointer; FoundLimit,FoundOffset: PtrInt): integer;
     /// optimized search of WhereValue in WhereField (0=RowID,1..=RTTI)
     // - will use fast O(1) hash for fUniqueFields[] fields
     // - will use SYSTEMNOCASE case-insensitive search for text values, unless
     // CaseInsensitive is set to FALSE
     // - warning: this method should be protected via StorageLock/StorageUnlock
     function FindWhereEqual(WhereField: integer; const WhereValue: RawUTF8;
-      OnFind: TFindWhereEqualEvent; Dest: pointer; FoundLimit,FoundOffset: integer;
+      OnFind: TFindWhereEqualEvent; Dest: pointer; FoundLimit,FoundOffset: PtrInt;
       CaseInsensitive: boolean=true): PtrInt; overload;
     /// optimized search of WhereValue in a field, specified by name
     // - will use fast O(1) hash for fUniqueFields[] fields
@@ -45704,7 +45704,7 @@ begin
 end;
 
 function TSQLRestStorageInMemory.UniqueFieldsUpdateOK(aRec: TSQLRecord; aUpdateIndex: integer): boolean;
-var i,ndx: integer;
+var i,ndx: PtrInt;
 begin
   if fUniqueFields<>nil then begin
     result := false;
@@ -45719,16 +45719,18 @@ begin
 end;
 
 function TSQLRestStorageInMemory.UniqueFieldHash(aFieldIndex: integer): TListFieldHash;
-var i: integer;
+var i: PtrInt;
+    p: PPointerArray;
 begin
   if (fUniqueFields<>nil) and
-     (cardinal(aFieldIndex)<cardinal(fStoredClassRecordProps.Fields.Count)) then
-    with fUniqueFields do
-      for i := 0 to Count-1 do begin
-        result := List[i];
-        if result.FieldIndex=aFieldIndex then
-          exit;
+     (cardinal(aFieldIndex)<cardinal(fStoredClassRecordProps.Fields.Count)) then begin
+    p := Pointer(fUniqueFields.List);
+    for i := 0 to fUniqueFields.Count-1 do
+      if TListFieldHash(p[i]).FieldIndex=aFieldIndex then begin
+        result := p[i];
+        exit;
       end;
+  end;
   result := nil;
 end;
 
@@ -45932,19 +45934,19 @@ end;
 
 function TSQLRestStorageInMemory.FindWhereEqual(WhereField: integer;
   const WhereValue: RawUTF8; OnFind: TFindWhereEqualEvent; Dest: pointer;
-  FoundLimit,FoundOffset: integer; CaseInsensitive: boolean): PtrInt;
-var i32, i, err, currentRow: integer;
+  FoundLimit,FoundOffset: PtrInt; CaseInsensitive: boolean): PtrInt;
+var i, last, currentRow, found: PtrInt;
+    i32, err: integer;
     i64: Int64;
     P: TSQLPropInfo;
     nfo: PPropInfo;
-    rec: PSQLRecordArray;
+    rec: PPtrUIntArray;
     Hash: TListFieldHash;
-    ndx: PtrInt;
     offs: PtrUInt;
-    item: PPointer;
 
-  procedure FoundOne;
+  function FoundOneAndReachedLimit: boolean;
   begin
+    result := false;
     if FoundOffset>0 then begin // omit first FoundOffset rows
       inc(currentRow);
       if currentRow>FoundOffset then
@@ -45952,8 +45954,10 @@ var i32, i, err, currentRow: integer;
         exit;
     end;
     if Assigned(OnFind) then
-      OnFind(Dest,TSQLRecord(item^),(PtrUInt(item)-PtrUInt(rec)) shr POINTERSHR);
-    inc(result);
+      OnFind(Dest,TSQLRecord(rec[i]),i);
+    inc(found);
+    if found>=FoundLimit then
+      result := true;
   end;
 
 begin
@@ -45967,10 +45971,10 @@ begin
     if FoundOffset<=0 then begin // omit first FoundOffset rows
       i64 := GetInt64(pointer(WhereValue),err);
       if (err=0) and (i64>0) then begin
-        ndx := IDToIndex(i64); // use fast O(log(n)) binary search
-        if ndx>=0 then begin
+        i := IDToIndex(i64); // use fast O(log(n)) binary search
+        if i>=0 then begin
           if Assigned(OnFind) then
-            OnFind(Dest,rec[ndx],ndx);
+            OnFind(Dest,TSQLRecord(rec[i]),i);
           inc(result);
         end;
       end;
@@ -45988,18 +45992,19 @@ begin
   if Hash<>nil then begin
     if FoundOffset<=0 then begin // omit first FoundOffset rows, for ID unique field
       P.SetValueVar(fSearchRec,WhereValue,false);
-      ndx := Hash.Find(fSearchRec);
-      if ndx>=0 then begin
+      i := Hash.Find(fSearchRec);
+      if i>=0 then begin
         if Assigned(OnFind) then
-          OnFind(Dest,rec[ndx],ndx);
+          OnFind(Dest,TSQLRecord(rec[i]),i);
         inc(result);
       end;
     end;
     exit;
   end;
   // full scan optimized search for a specified value
+  found := 0;
   currentRow := 0;
-  item := pointer(rec);
+  last := fValue.Count-1;
   if P.InheritsFrom(TSQLPropInfoRTTIInt32) then begin
     // optimized search for 8/16/32-bit Integer values
     i32 := GetInteger(pointer(WhereValue),err);
@@ -46010,24 +46015,14 @@ begin
     if (offs<>0) and {$ifndef CPU64}(nfo^.PropType^.Kind=tkClass) or{$endif}
        ((nfo^.PropType^.Kind=tkInteger)and(nfo^.PropType^.OrdType=otSLong)) then begin
       // optimized version for fast retrieval of signed 32-bit Integer field value
-      for i := 1 to fValue.Count do begin
-        if PInteger(PPtrUInt(item)^+offs)^=i32 then begin
-          FoundOne;
-          if result>=FoundLimit then
-            exit;
-        end;
-        inc(item);
-      end;
+      for i := 0 to last do
+        if (PInteger(rec[i]+offs)^=i32) and FoundOneAndReachedLimit then
+          break;
     end else
     // 8-bit or 16-bit value, or there is a getter procedure -> use GetOrdProp()
-    for i := 1 to fValue.Count do begin
-      if nfo^.GetOrdProp(item^)=i32 then begin
-        FoundOne;
-        if result>=FoundLimit then
-          exit;
-      end;
-      inc(item);
-    end;
+    for i := 0 to last do
+      if (nfo^.GetOrdProp(TSQLRecord(rec[i]))=i32) and FoundOneAndReachedLimit then
+        break;
   end else
   if P.InheritsFrom(TSQLPropInfoRTTIInt64) then begin
     // stored as one 64-bit Integer value -> optimized search
@@ -46037,35 +46032,22 @@ begin
     nfo := TSQLPropInfoRTTI(P).PropInfo;
     offs := TSQLPropInfoRTTI(P).fGetterIsFieldPropOffset;
     if offs<>0 then begin
-      for i := 1 to fValue.Count do begin
-        if PInt64(PPtrUInt(item)^+offs)^=i64 then begin
-          FoundOne;
-          if result>=FoundLimit then
-            exit;
-        end;
-        inc(item);
-      end;
+      for i := 0 to last do
+        if (PInt64(rec[i]+offs)^=i64) and FoundOneAndReachedLimit then
+          break;
     end else
-    for i := 1 to fValue.Count do begin
-      if nfo^.GetInt64Prop(item^)=i64 then begin
-        FoundOne;
-        if result>=FoundLimit then
-          exit;
-      end;
-      inc(item);
-    end;
+    for i := 0 to last do
+      if (nfo^.GetInt64Prop(TSQLRecord(rec[i]))=i64) and FoundOneAndReachedLimit then
+        break;
   end else begin
     // generic search of any value, using fast CompareValue() overridden method
     P.SetValueVar(fSearchRec,WhereValue,false);
-    for i := 1 to fValue.Count do begin
-      if P.CompareValue(item^,fSearchRec,CaseInsensitive)=0 then begin
-        FoundOne;
-        if result>=FoundLimit then
-          exit;
-      end;
-      inc(item);
-    end;
+    for i := 0 to last do
+      if (P.CompareValue(TSQLRecord(rec[i]),fSearchRec,CaseInsensitive)=0) and
+         FoundOneAndReachedLimit then
+        break;
   end;
+  result := found;
 end;
 
 function TSQLRestStorageInMemory.FindMax(WhereField: integer; out max: Int64): boolean;
@@ -47097,7 +47079,7 @@ begin
 end;
 
 function TSQLRestStorageInMemory.SearchEvent(const FieldName, FieldValue: RawUTF8;
-  OnFind: TFindWhereEqualEvent; Dest: pointer; FoundLimit,FoundOffset: integer): integer;
+  OnFind: TFindWhereEqualEvent; Dest: pointer; FoundLimit,FoundOffset: PtrInt): integer;
 begin
   result := 0;
   if (self=nil) or (fValue.Count=0) or (FieldName='') then
