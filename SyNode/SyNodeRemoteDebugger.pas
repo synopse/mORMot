@@ -539,7 +539,7 @@ end;
 procedure TSMRemoteDebuggerCommunicationThread.Send(const packet: RawUTF8);
 begin
   sockWrite(packet);
-  SynSMLog.Add.Log(sllCustom3, 'JSDBG packet sent: %', packet);
+  SynSMLog.Add.Log(sllCustom4, packet);
 end;
 
 function TSMRemoteDebuggerCommunicationThread.sockRead(out packet: RawUTF8): boolean;
@@ -562,10 +562,6 @@ begin
   Move(ch^, packet[1], head);
   bytesToRead := len - head;
   Result := fCommunicationSock.TrySockRecv(@packet[head + 1], bytesToRead);
-  if Result then
-    SynSMLog.Add.Log(sllCustom3, 'JSDBG packet received: %', packet)
-  else
-    SynSMLog.Add.Log(sllCustom3, 'JSDBG packet failed to receive');
 end;
 
 procedure TSMRemoteDebuggerCommunicationThread.sockWrite(const packet: RawUTF8);
