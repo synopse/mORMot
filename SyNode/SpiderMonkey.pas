@@ -486,19 +486,7 @@ type
   PJSStringFinalizer = ^JSStringFinalizer;
 
 // jsid
-  JSIdType = (
-    JSID_TYPE_STRING = $0,
-    JSID_TYPE_INT    = $1,
-    JSID_TYPE_VOID   = $2,
-    JSID_TYPE_SYMBOL = $4
-  );
-
-  jsid = record
-    asBits: size_t;
-    function isString: Boolean;
-    function asJSString: PJSString;
-  end;
-
+  jsid = size_t;
   TjsidVector = array[0..(MaxInt div sizeof(jsid))-2] of jsid;
   PjsidVector = ^TjsidVector;
 
@@ -3444,6 +3432,7 @@ begin
   JS_ShutDown;
 end;
 
+
 { JSString }
 
 procedure JSString.ToJSONString(cx: PJSContext; W: TTextWriter);
@@ -5038,24 +5027,6 @@ end;
 function JSArgRec.getThisObject(cx: PJSContext): PJSObject;
 begin
   Result := this[cx].asObject;
-end;
-
-{ jsid }
-
-const
-  JSID_TYPE_MASK = $7;
-
-function jsid.isString: Boolean;
-begin
-  Result := JSIdType(asBits and JSID_TYPE_MASK) = JSID_TYPE_STRING;
-end;
-
-function jsid.asJSString: PJSString;
-begin
-{$ifdef WITHASSERT}
-  Assert(isString);
-{$endif}
-  Result := PJSString(asBits);
 end;
 
 { JSIdArray }

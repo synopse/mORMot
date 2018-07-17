@@ -438,7 +438,6 @@ var
   data: RawUTF8;
   i: integer;
   debuggerIndex: integer;
-  debugger: TSMDebugger;
   Writer: TTextWriter;
   engine: TSMEngine;
 begin
@@ -450,33 +449,32 @@ begin
         fParent.fDebuggers.Safe.Lock;
         try
           for I := 0 to fParent.fDebuggers.Count - 1 do begin
-            debugger := TSMDebugger(fParent.fDebuggers[i]);
-            engine := fParent.fManager.EngineForThread(debugger.fSmThreadID);
+            engine := fParent.fManager.EngineForThread(TSMDebugger(fParent.fDebuggers[i]).fSmThreadID);
             if engine <> nil then begin
               // Actor represent debug thread here, setting proper name with coxtext thread id
               // Writer.AddShort('{"actor":"server1.conn1.addon');
               // Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fIndex);
               Writer.AddShort('{"actor":"');
-              Writer.AddShort(debugger.fDebuggerName);
+              Writer.AddShort(TSMDebugger(fParent.fDebuggers[i]).fDebuggerName);
               Writer.AddShort('.conn1.thread_');
               { TODO : check that in multithread mode this field equal thread id with js context that we debug, otherwire replace with proper assigment }
-              Writer.Add(debugger.fSmThreadID);
+              Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fSmThreadID);
               // id should be addon id, value from DoOnGetEngineName event
               // Writer.AddShort('","id":"server1.conn1.addon');
               // Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fIndex);
               Writer.AddShort('","id":"');
-              Writer.AddString(debugger.fNameForDebug);
+              Writer.AddString(TSMDebugger(fParent.fDebuggers[i]).fNameForDebug);
               Writer.AddShort('","name":"');
-              Writer.AddString(debugger.fNameForDebug);
+              Writer.AddString(TSMDebugger(fParent.fDebuggers[i]).fNameForDebug);
               // url most likly should be addon folder in format: file:///drive:/path/
               // Writer.AddShort('","url":"server1.conn1.addon');
               // Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fIndex);
               { TODO : replace with path generation, should be context home dir in format file:///drive:/path/ }
-              Writer.AddShort('","url":"file:///' + StringReplaceAll(debugger.fWebAppRootPath, '\', '/'));
+              Writer.AddShort('","url":"file:///' + StringReplaceAll(TSMDebugger(fParent.fDebuggers[i]).fWebAppRootPath, '\', '/'));
               Writer.AddShort('","debuggable":');
-              Writer.Add(debugger.fCommunicationThread = nil);
+              Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fCommunicationThread = nil);
               Writer.AddShort(',"consoleActor":"console');
-              Writer.Add(debugger.fIndex);
+              Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fIndex);
               Writer.AddShort('"},');
             end;
           end;
@@ -576,7 +574,7 @@ begin
   fCommunicationSock.SockSend(@tmp[1], length(tmp));
   fCommunicationSock.SockSend(@sep[1], length(sep));
   fCommunicationSock.SockSend(@packet[1], length(packet));
-  fCommunicationSock.SockSendFlush('');
+  fCommunicationSock.SockSendFlush;
 end;
 
 procedure TSMRemoteDebuggerCommunicationThread.startListening(socket: TCrtSocket);
