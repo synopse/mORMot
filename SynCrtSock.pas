@@ -501,12 +501,14 @@ type
     /// append P^ data into SndBuf (used by SockSend(), e.g.)
     // - call SockSendFlush to send it through the network via SndLow()
     procedure SockSend(P: pointer; Len: integer); overload;
-    /// flush all pending data to be sent
+    /// flush all pending data to be sent, optionally with some body content
     // - raise ECrtSocket on error
-    procedure SockSendFlush;
+    procedure SockSendFlush(const aBody: SockString);
     /// flush all pending data to be sent
     // - returning true on success
     function TrySockSendFlush: boolean;
+    /// how many bytes could be added by SockSend() in the internal buffer
+    function SockSendRemainingSize: integer;
     /// fill the Buffer with Length bytes
     // - use TimeOut milliseconds wait for incoming data
     // - bypass the SockIn^ buffers
@@ -4517,12 +4519,21 @@ begin
   SockSend(@CRLF,2);
 end;
 
-procedure TCrtSocket.SockSendFlush;
+procedure TCrtSocket.SockSendFlush(const aBody: SockString);
+var body,avail: integer;
 begin
-  if fSndBufLen=0 then
-    exit;
-  SndLow(pointer(fSndBuf),fSndBufLen);
-  fSndBufLen := 0;
+  body := Length(aBody);
+  if body>0 then begin
+    avail := SockSendRemainingSize; // around 1800 bytes
+    if avail>=body then begin
+      SockSend(pointer(aBody),body); // append to buffer as single TCP packet
+      body := 0;
+    end;
+  end;
+  if not TrySockSendFlush then
+    raise ECrtSocket.CreateFmt('SockSendFlush(%s) len=%d',[fServer,fSndBufLen],-1);
+  if body>0 then
+    SndLow(pointer(aBody),body); // direct sending of biggest packets
 end;
 
 function TCrtSocket.TrySockSendFlush: boolean;
@@ -4535,10 +4546,15 @@ begin
   end;
 end;
 
+function TCrtSocket.SockSendRemainingSize: integer;
+begin
+  result := length(fSndBuf)-fSndBufLen;
+end;
+
 procedure TCrtSocket.SndLow(P: pointer; Len: integer);
 begin
   if not TrySndLow(P,Len) then
-    raise ECrtSocket.Create('SndLow');
+    raise ECrtSocket.CreateFmt('SndLow(%s) len=%d',[fServer,Len],-1);
 end;
 
 function TCrtSocket.TrySndLow(P: pointer; Len: integer): boolean;
@@ -4857,35 +4873,35 @@ begin
 end;
 
 procedure TCrtSocket.SockRecvLn(out Line: SockString; CROnly: boolean=false);
-procedure RecvLn(var Line: SockString);
-var P: PAnsiChar;
-    LP, L: PtrInt;
-    tmp: array[0..1023] of AnsiChar; // avoid ReallocMem() every char
-begin
-  P := @tmp;
-  Line := '';
-  repeat
-    SockRecv(P,1); // this is very slow under Windows -> use SockIn^ instead
-    if P^<>#13 then // at least NCSA 1.3 does send a #10 only -> ignore #13
-      if P^=#10 then begin
-        if Line='' then // get line
-          SetString(Line,tmp,P-tmp) else begin
-          LP := P-tmp; // append to already read chars
-          L := length(Line);
-          Setlength(Line,L+LP);
-          move(tmp,(PAnsiChar(pointer(Line))+L)^,LP);
-        end;
-        exit;
-      end else
-      if P=@tmp[1023] then begin // tmp[] buffer full?
-        L := length(Line); // -> append to already read chars
-        Setlength(Line,L+1024);
-        move(tmp,(PAnsiChar(pointer(Line))+L)^,1024);
-        P := tmp;
-      end else
-        inc(P);
-  until false;
-end;
+  procedure RecvLn(var Line: SockString);
+  var P: PAnsiChar;
+      LP, L: PtrInt;
+      tmp: array[0..1023] of AnsiChar; // avoid ReallocMem() every char
+  begin
+    P := @tmp;
+    Line := '';
+    repeat
+      SockRecv(P,1); // this is very slow under Windows -> use SockIn^ instead
+      if P^<>#13 then // at least NCSA 1.3 does send a #10 only -> ignore #13
+        if P^=#10 then begin
+          if Line='' then // get line
+            SetString(Line,tmp,P-tmp) else begin
+            LP := P-tmp; // append to already read chars
+            L := length(Line);
+            Setlength(Line,L+LP);
+            move(tmp,(PAnsiChar(pointer(Line))+L)^,LP);
+          end;
+          exit;
+        end else
+        if P=@tmp[1023] then begin // tmp[] buffer full?
+          L := length(Line); // -> append to already read chars
+          Setlength(Line,L+1024);
+          move(tmp,(PAnsiChar(pointer(Line))+L)^,1024);
+          P := tmp;
+        end else
+          inc(P);
+    until false;
+  end;
 var c: AnsiChar;
    Error: integer;
 begin
@@ -5092,9 +5108,7 @@ begin
     if fCompressAcceptEncoding<>'' then
       SockSend(fCompressAcceptEncoding);
     SockSend; // send CRLF
-    SockSendFlush; // flush all pending data (i.e. headers) to network
-    if aData<>'' then // for POST and PUT methods: content to be sent
-      SndLow(pointer(aData),length(aData)); // no CRLF at the end of data
+    SockSendFlush(aData); // flush all pending data to network
     // get headers
     SockRecvLn(Command); // will raise ECrtSocket on any error
     if TCPPrefix<>'' then
@@ -5797,11 +5811,8 @@ var ctxt: THttpServerRequest;
       ClientSock.SockSend('Connection: Keep-Alive'#13#10); // #13#10 -> end headers
     end else
       ClientSock.SockSend; // headers must end with a void line
-    ClientSock.SockSendFlush; // flush all pending data (i.e. headers) to network
     // 3. sent HTTP body content (if any)
-    if ctxt.OutContent<>'' then
-      // direct send to socket (no CRLF at the end of data)
-      ClientSock.SndLow(pointer(ctxt.OutContent),length(ctxt.OutContent));
+    ClientSock.SockSendFlush(ctxt.OutContent); // flush all data to network
   end;
 
 begin
@@ -6315,7 +6326,7 @@ begin
       if (ContentLength>0) and (fServer.MaximumAllowedContentLength>0) and
          (cardinal(ContentLength)>fServer.MaximumAllowedContentLength) then begin
         SockSend('HTTP/1.0 413 Payload Too Large'#13#10#13#10'Rejected');
-        SockSendFlush;
+        SockSendFlush('');
         exit;
       end;
       if Assigned(fServer.OnBeforeBody) then begin
@@ -6324,7 +6335,7 @@ begin
         if status<>STATUS_SUCCESS then begin
           reason := StatusCodeToReason(status);
           SockSend(['HTTP/1.0 ',status,' ',reason,#13#10#13#10,reason,' ', status]);
-          SockSendFlush;
+          SockSendFlush('');
           exit;
         end;
       end;
