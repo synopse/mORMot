@@ -27377,21 +27377,22 @@ end;
 
 function UTF8IComp(u1, u2: PUTF8Char): PtrInt;
 var c2: PtrInt;
-    b: byte;
+    table: {$ifdef CPUX86}TNormTableByte absolute NormToUpperByte{$else}PNormTableByte{$endif};
 begin // fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits values
+  {$ifndef CPUX86}table := @NormToUpperByte;{$endif}
   if u1<>u2 then
   if u1<>nil then
   if u2<>nil then
   repeat
     result := ord(u1^);
+    c2 := ord(u2^);
     if result and $80=0 then
       if result<>0 then begin
-        result := NormToUpperByte[result];
+        result := table[result];
         inc(u1);
-        b := ord(u2^);
-        if b and $80=0 then begin
-          if b=0 then exit; // u1>u2 -> return u1^
-          dec(result,NormToUpperByte[b]);
+        if c2 and $80=0 then begin
+          if c2=0 then exit; // u1>u2 -> return u1^
+          dec(result,table[c2]);
           inc(u2);
           if result<>0 then exit;
           continue;
@@ -27403,18 +27404,17 @@ begin // fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits val
       end else begin
         result := GetHighUTF8UCS4Inlined(u1);
         if result and $ffffff00=0 then
-          result := NormToUpperByte[result]; // 8 bits to upper, 32 bits as is
+          result := table[result]; // 8 bits to upper, 32 bits as is
       end;
-    c2 := ord(u2^);
     if c2 and $80=0 then begin
       inc(u2);
       if c2=0 then exit; // u1>u2 -> return u1^
-      dec(result,NormToUpperByte[c2]);
+      dec(result,table[c2]);
       if result<>0 then exit;
     end else begin
       c2 := GetHighUTF8UCS4Inlined(u2);
       if c2 and $ffffff00=0 then
-        dec(result,NormToUpperByte[c2]) else // 8 bits to upper
+        dec(result,table[c2]) else // 8 bits to upper
         dec(result,c2); // 32 bits widechar returns diff
       if result<>0 then exit;
     end;
@@ -27427,19 +27427,22 @@ end;
 function UTF8ILComp(u1, u2: PUTF8Char; L1,L2: cardinal): PtrInt;
 var c2: PtrInt;
     extra,i: integer;
+    table: {$ifdef CPUX86}TNormTableByte absolute NormToUpperByte{$else}PNormTableByte{$endif};
 label neg,pos;
 begin // fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits values
+  {$ifndef CPUX86}table := @NormToUpperByte;{$endif}
   if u1<>u2 then
   if (u1<>nil) and (L1<>0) then
   if (u2<>nil) and (L2<>0) then
   repeat
-    result := pByte(u1)^;
+    result := ord(u1^);
+    c2 := ord(u2^);
     inc(u1);
     dec(L1);
     if result and $80=0 then begin
-      result := NormToUpperByte[result];
-      if pByte(u2)^ and $80=0 then begin
-        dec(result,NormToUpperByte[pByte(u2)^]);
+      result := table[result];
+      if c2 and $80=0 then begin
+        dec(result,table[c2]);
         dec(L2);
         inc(u2);
         if result<>0 then
@@ -27462,14 +27465,13 @@ begin // fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits val
       dec(result,UTF8_EXTRA[extra].offset);
       inc(u1,extra);
       if result and $ffffff00=0 then
-        result := NormToUpperByte[result]; // 8 bits to upper, 32 bits as is
+        result := table[result]; // 8 bits to upper, 32 bits as is
     end;
     // here result=NormToUpper[u1^]
-    c2 := pByte(u2)^;
     inc(u2);
     dec(L2);
     if c2 and $80=0 then begin
-      dec(result,NormToUpperByte[c2]);
+      dec(result,table[c2]);
       if result<>0 then exit;
     end else begin
       extra := UTF8_EXTRABYTES[c2];
@@ -27481,7 +27483,7 @@ begin // fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits val
       dec(c2,UTF8_EXTRA[extra].offset);
       inc(u2,extra);
       if c2 and $ffffff00=0 then
-        dec(result,NormToUpperByte[c2]) else // 8 bits to upper
+        dec(result,table[c2]) else // 8 bits to upper
         dec(result,c2); // returns 32 bits diff
       if result<>0 then exit;
     end;

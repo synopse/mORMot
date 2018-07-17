@@ -22928,7 +22928,7 @@ end;
 function TSQLPropInfoRTTIRawUTF8.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): PtrInt;
 
-  procedure Generic;
+  procedure NeedLocalTempCopy;
   var tmp1,tmp2: RawByteString;
   begin
     fPropInfo.GetLongStrProp(Item1,tmp1);
@@ -22938,20 +22938,26 @@ function TSQLPropInfoRTTIRawUTF8.CompareValue(Item1, Item2: TObject;
       result := StrComp(pointer(tmp1),pointer(tmp2));
   end;
 
+var
+  offs: PtrUInt;
+  p1,p2: pointer;
 begin
   if Item1=Item2 then
     result := 0 else
   if Item1=nil then
     result := -1 else
   if Item2=nil then
-    result := 1 else
-    if fGetterIsFieldPropOffset<>0 then // avoid any temporary variable
+    result := 1 else begin
+    offs := fGetterIsFieldPropOffset;
+    if offs<>0 then begin // avoid any temporary variable
+      p1 := PPointer(PtrUInt(Item1)+offs)^;
+      p2 := PPointer(PtrUInt(Item2)+offs)^;
       if CaseInsensitive then
-        result := UTF8IComp(PPointer(PtrUInt(Item1)+fGetterIsFieldPropOffset)^,
-          PPointer(PtrUInt(Item2)+fGetterIsFieldPropOffset)^) else
-        result := StrComp(PPointer(PtrUInt(Item1)+fGetterIsFieldPropOffset)^,
-          PPointer(PtrUInt(Item2)+fGetterIsFieldPropOffset)^) else
-    Generic;
+        result := UTF8IComp(p1,p2) else
+        result := StrComp(p1,p2);
+    end else
+      NeedLocalTempCopy;
+  end;
 end;
 
 procedure TSQLPropInfoRTTIRawUTF8.SetValue(Instance: TObject; Value: PUTF8Char;
