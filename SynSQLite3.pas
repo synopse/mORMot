@@ -1300,8 +1300,7 @@ type
 
     /// returns the numeric result code or extended result code for the most
     // recent failed sqlite3 API call associated with a database connection
-    extended_errcode: function(DB: TSQLite3DB): integer;
-      cdecl;
+    extended_errcode: function(DB: TSQLite3DB): integer; cdecl;
 
     /// add SQL functions or aggregates or to redefine the behavior of existing
     // SQL functions or aggregates
@@ -1327,8 +1326,8 @@ type
     // that involves the least amount of data conversion. If there is only a single
     // implementation which does not care what text encoding is used, then the
     // fourth argument should be SQLITE_ANY.
-    // - The fifth parameter, pApp, is an arbitrary pointer. The implementation of the
-    // function can gain access to this pointer using sqlite3.user_data().
+    // - The fifth parameter, pApp, is an arbitrary pointer. The implementation
+    // of the function can gain access to this pointer using sqlite3.user_data().
     // - The seventh, eighth and ninth parameters, xFunc, xStep and xFinal, are
     // pointers to C-language functions that implement the SQL function or aggregate.
     // A scalar SQL function requires an implementation of the xFunc callback only;
@@ -2322,7 +2321,7 @@ type
   // needed, in case of a heavy loaded mORMot server
   TSQLLockingMode = (lmNormal, lmExclusive);
 
-  /// availabel Run-Time limit categories
+  /// available Run-Time limit categories
   // - as expected by sqlite3.limit() function and TSQLDatabase.Limit property
   // - lcLength The maximum size of any string or BLOB or table row, in bytes.
   // - lcSQLLength The maximum length of an SQL statement, in bytes.
