@@ -1589,7 +1589,7 @@ begin
   S := A.Value^;
   for i := 0 to n-1 do begin
     L := FromVarUInt32(P); // inlined R.Read(S^.Name)
-    SetString(S^.Name,PAnsiChar(P),L);
+    FastSetString(S^.Name,P,L);
     inc(P,L);
     inc(PtrUInt(S),A.ElemSize); // may be TSynMapSymbol or TSynMapUnit
   end;
@@ -1648,7 +1648,7 @@ constructor TSynMapFile.Create(const aExeName: TFileName=''; MabCreate: boolean=
             if P+10>PEnd then exit else inc(P);
           Beg := pointer(P+2);
           while (P<PEnd) and (P^>' ') do inc(P);
-          SetString(U.Symbol.Name,Beg,P-Beg);
+          FastSetString(U.Symbol.Name,Beg,P-Beg);
           inc(U.Symbol.Stop,U.Symbol.Start-1);
           if (U.Symbol.Name<>'') and
              ((U.Symbol.Start<>0) or (U.Symbol.Stop<>0)) then
@@ -1697,7 +1697,7 @@ constructor TSynMapFile.Create(const aExeName: TFileName=''; MabCreate: boolean=
             P := pointer(Beg); // no '.' found
           {$endif ISDELPHI2005ANDUP}
           while (P<PEnd) and (P^>' ') do inc(P);
-          SetString(Sym.Name,Beg,P-Beg);
+          FastSetString(Sym.Name,Beg,P-Beg);
           if (Sym.Name<>'') and not (Sym.Name[1] in ['$','?']) then
             fSymbols.Add(Sym);
         end;
@@ -1713,7 +1713,7 @@ constructor TSynMapFile.Create(const aExeName: TFileName=''; MabCreate: boolean=
     begin
       Beg := pointer(P);
       while P^<>'(' do if P=PEnd then exit else inc(P);
-      SetString(aName,Beg,P-Beg);
+      FastSetString(aName,Beg,P-Beg);
       if aName='' then
         exit;
       i := fUnits.FindHashedForAdding(aName,added);
@@ -1723,7 +1723,7 @@ constructor TSynMapFile.Create(const aExeName: TFileName=''; MabCreate: boolean=
       if U^.FileName='' then begin
         inc(P); Beg := pointer(P);
         while P^<>')' do if P=PEnd then exit else inc(P);
-        SetString(U^.FileName,Beg,P-Beg);
+        FastSetString(U^.FileName,Beg,P-Beg);
       end;
       NextLine;
       NextLine;
@@ -4799,7 +4799,7 @@ procedure TSynLogFile.LoadFromMap(AverageLineLength: integer=32);
     P := StrPosI(PBeg,PEnd-LUP,pointer(UP));
     if P=nil then
       result := false else begin
-      SetString(S,PAnsiChar(PBeg),P-PBeg);
+      FastSetString(S,PBeg,P-PBeg);
       PBeg := P+LUP;
       result := pointer(S)<>nil;
     end;
@@ -4904,9 +4904,9 @@ begin
     dec(PEnd);
     P := PEnd;
     repeat if P<=PBeg then exit else dec(P) until P^=' ';
-    SetString(fExeVersion,PAnsiChar(P+1),PEnd-P-1);
+    FastSetString(fExeVersion,P+1,PEnd-P-1);
     repeat dec(P); if P<=PBeg then exit; until P^<>' ';
-    SetString(fExeName,PAnsiChar(PBeg),P-PBeg+1);
+    FastSetString(fExeName,PBeg,P-PBeg+1);
     PBeg := PUTF8Char(fLines[1])+5;
     PEnd := PUTF8Char(fLines[1])+LineSize(1);
     if not GetOne(' USER=',fHost) or not GetOne(' CPU=',fUser) or
@@ -4919,7 +4919,7 @@ begin
     SetInt64(PBeg,fFreq);
     while (PBeg<PEnd) and (PBeg^>' ') do inc(PBeg);
     if IdemPChar(PBeg,' INSTANCE=') then // only available for a library log
-      SetString(fInstanceName,PBeg+10,PEnd-PBeg-10);
+      FastSetString(fInstanceName,PBeg+10,PEnd-PBeg-10);
     fHeaderLinesCount := 4;
     while fHeaderLinesCount<fCount do begin
       if PAnsiChar(fLines[fHeaderLinesCount-1])^<' ' then
@@ -4930,8 +4930,7 @@ begin
        LineSizeSmallerThan(fHeaderLinesCount,16) then
       exit;
     if fHeaderLinesCount<>4 then
-      SetString(fHeaders,PAnsiChar(fLines[2]),
-        PtrInt(fLines[fHeaderLinesCount-2])-PtrInt(fLines[2]));
+      FastSetString(fHeaders,fLines[2],PtrInt(fLines[fHeaderLinesCount-2])-PtrInt(fLines[2]));
     if PWord(fLines[fHeaderLinesCount])^<>ord('0')+ord('0')shl 8 then // YYYYMMDD -> 20101225 e.g.
       fFreq := 0 else // =0 if date time, >0 if high-resolution time stamp
       fFreqPerDay := fFreq*SecsPerDay;
@@ -4942,7 +4941,7 @@ begin
     P := fLines[fHeaderLinesCount-2]; // TSQLLog 1.18.2765 ERTL FTS3 2016-07-17T22:38:03
     i := LineSize(fHeaderLinesCount-2)-19; // length('2016-07-17T22:38:03')=19
     if i>0 then begin
-      SetString(fFramework,PAnsiChar(P),i-1);
+      FastSetString(fFramework,PAnsiChar(P),i-1);
       Iso8601ToDateTimePUTF8CharVar(P+i,19,fStartDateTime);
     end;
     if fStartDateTime=0 then
@@ -5239,7 +5238,7 @@ begin
             found := SetThreadName[i];
             break;
           end;
-        SetString(result,PAnsiChar(found),GetLineSize(found,fMapEnd));
+        FastSetString(result,found,GetLineSize(found,fMapEnd));
         delete(result,1,PosEx('=',result,40));
       end;
     if result='' then
@@ -5276,7 +5275,7 @@ begin
     L := GetLineSize(fLines[index],fMapEnd);
     if L<=fLineTextOffset then
       result := '' else
-      SetString(result,PAnsiChar(fLines[index])+fLineTextOffset,L-fLineTextOffset);
+      FastSetString(result,PAnsiChar(fLines[index])+fLineTextOffset,L-fLineTextOffset);
   end;
 end;
 

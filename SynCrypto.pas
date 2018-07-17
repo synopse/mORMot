@@ -9457,13 +9457,13 @@ begin
   if (aParamsJSON=nil) or (aParamsJSONLen<=0) then
     k.secret := aDefaultSalt else
     if aParamsJSON[1]<>'{' then
-      SetString(k.secret,PAnsiChar(aParamsJSON),aParamsJSONLen) else begin
+      FastSetString(k.secret,aParamsJSON,aParamsJSONLen) else begin
     tmp.Init(aParamsJSON,aParamsJSONLen);
     try
       if (RecordLoadJSON(k,tmp.buf,TypeInfo(TSynSignerParams))=nil) or
          (k.secret='') or (k.salt='') then begin
         SetDefault;
-        SetString(k.secret,PAnsiChar(aParamsJSON),aParamsJSONLen);
+        FastSetString(k.secret,aParamsJSON,aParamsJSONLen);
       end;
     finally
       FillCharFast(tmp.buf^,tmp.len,0);
@@ -11833,7 +11833,7 @@ end;
 
 function AESBlockToString(const block: TAESBlock): RawUTF8;
 begin
-  SetString(result,nil,32);
+  FastSetString(result,nil,32);
   SynCommons.BinToHex(@block,pointer(result),16);
 end;
 
@@ -13776,7 +13776,7 @@ end;
 function TAESPRNG.FillRandomHex(Len: integer): RawUTF8;
 var bin: pointer;
 begin
-  SetString(result,nil,Len*2);
+  FastSetString(result,nil,Len*2);
   if Len=0 then
     exit;
   bin := @PByteArray(result)[Len]; // temporary store random bytes at the end
@@ -14697,7 +14697,7 @@ begin
             JWT.result := jwtUnexpectedClaim;
             exit;
           end;
-          SetString(JWT.reg[claim],V,StrLen(V));
+          FastSetString(JWT.reg[claim],V,StrLen(V));
           if claim in requiredclaims then
           case claim of
           jrcJwtID:
@@ -14748,7 +14748,7 @@ begin
     JWT.data.Capacity := JWT.data.Count;
   if requiredclaims-JWT.claims<>[] then
     JWT.result := jwtMissingClaim else begin
-    SetString(headpayload,tok,payloadend-1);
+    FastSetString(headpayload,tok,payloadend-1);
     JWT.result := jwtValid;
   end;
 end;
@@ -14822,7 +14822,7 @@ begin
   end;
   inc(P);
   if Signature<>nil then
-    SetRawUTF8(Signature^,P,StrLen(P));
+    FastSetString(Signature^,P,StrLen(P));
   result := jwtValid;
 end;
 

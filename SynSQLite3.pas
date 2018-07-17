@@ -3905,16 +3905,16 @@ begin // JsonSet(VariantField,'PropName','abc') to set a value
   if sqlite3.value_type(argv[0])<>SQLITE_TEXT then
     sqlite3.result_null(Context) else begin
     json := sqlite3.value_text(argv[0]);
-    SetString(tmp,PAnsiChar(json),SynCommons.StrLen(json));
+    FastSetString(tmp,json,SynCommons.StrLen(json));
     doc.InitJSONInPlace(pointer(tmp),JSON_OPTIONS_FAST);
     v := doc.GetPVariantByPath(sqlite3.value_text(argv[1]));
     if v<>nil then begin
       json := sqlite3.value_text(argv[2]);
-      SetString(tmp,PAnsiChar(json),SynCommons.StrLen(json));
+      FastSetString(tmp,json,SynCommons.StrLen(json));
       VariantLoadJSON(v^,pointer(tmp),nil,@JSON_OPTIONS[true]);
       RawUTF8ToSQlite3Context(doc.ToJSON,Context,false);
     end else begin
-      SetString(tmp,PAnsiChar(json),SynCommons.StrLen(json));
+      FastSetString(tmp,json,SynCommons.StrLen(json));
       RawUTF8ToSQlite3Context(tmp,Context,false);
     end;
   end;
@@ -5141,7 +5141,7 @@ begin
   if cardinal(Col)>=cardinal(FieldCount) then
     raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE,'FieldName');
   P := sqlite3.column_name(Request,Col);
-  SetString(result,P,SynCommons.StrLen(P));
+  FastSetString(result,P,SynCommons.StrLen(P));
 end;
 
 function TSQLRequest.FieldIndex(const aColumnName: RawUTF8): integer;
@@ -5174,7 +5174,7 @@ begin
   if cardinal(Col)>=cardinal(FieldCount) then
     raise ESQLite3Exception.Create(RequestDB,SQLITE_RANGE,'FieldDeclaredType');
   P := pointer(sqlite3.column_decltype(Request,Col));
-  SetString(result,P,SynCommons.StrLen(P));
+  FastSetString(result,P,SynCommons.StrLen(P));
 end;
 
 function TSQLRequest.FieldDeclaredTypeS(Col: Integer): String;
@@ -5192,7 +5192,7 @@ begin
   if cardinal(Col)>=cardinal(FieldCount) then
     raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE,'FieldUTF8');
   P := pointer(sqlite3.column_text(Request,Col));
-  SetString(result,P,SynCommons.StrLen(P));
+  FastSetString(result,P,SynCommons.StrLen(P));
 end;
 
 function TSQLRequest.FieldS(Col: integer): string;

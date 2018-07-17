@@ -21640,7 +21640,7 @@ begin
     result.VDouble := GetExtended(Value,err);
     if err<>0 then begin
       result.VType := varString;
-      SetString(RawUTF8(result.VAny),Value,ValueLen);
+      FastSetString(result.VAny,Value,ValueLen);
     end;
   end;
   sftDateTime, sftDateTimeMS:
@@ -21654,7 +21654,7 @@ begin
   sftTimeLog, sftModTime, sftCreateTime, sftUnixTime, sftUnixMSTime:
     SetInt64(Value,result.VInt64);
   sftAnsiText, sftUTF8Text:
-    SetString(RawUTF8(result.VAny),Value,ValueLen);
+    FastSetString(result.VAny,Value,ValueLen);
   sftBlobCustom, sftBlob:
     BlobToTSQLRawBlob(Value,TSQLRawBlob(result.VAny));
   {$ifndef NOVARIANTS}sftVariant, sftNullable,{$endif}
@@ -22959,7 +22959,7 @@ procedure TSQLPropInfoRTTIRawUTF8.SetValue(Instance: TObject; Value: PUTF8Char;
 var tmp: RawUTF8;
 begin
   if Value<>nil then
-    SetString(tmp,PAnsiChar(Value),StrLen(Value));
+    FastSetString(tmp,Value,StrLen(Value));
   fPropInfo.SetLongStrProp(Instance,tmp);
 end;
 
@@ -24103,7 +24103,7 @@ end;
 procedure TSQLPropInfoRecordFixedSize.GetValueVar(Instance: TObject;
   ToSQL: boolean; var result: RawUTF8; wasSQLString: PBoolean);
 begin
-  SetRawUTF8(result,GetFieldAddr(Instance),fRecordSize);
+  FastSetString(result,GetFieldAddr(Instance),fRecordSize);
   BinaryToText(result,ToSQL,wasSQLString);
 end;
 
@@ -24559,7 +24559,7 @@ function AuthURI(const URI, URIAuthenticationBearer: RawUTF8): RawUTF8;
 begin
   if URIAuthenticationBearer='' then
     result := URI else
-    if PosEx('?',URI)=0 then
+    if PosChar(pointer(URI),'?')=nil then
       result := URI+'?authenticationbearer='+URIAuthenticationBearer else
       result := URI+'&authenticationbearer='+URIAuthenticationBearer
 end;
@@ -25536,7 +25536,7 @@ begin
   if length(fQueryTables)=1 then
     SearchInQueryTables(pointer(PropName),0)
   else begin
-    i := PosEx('.',PropName)-1;
+    i := PosEx(RawUTF8('.'),PropName)-1;
     if i<0 then // no 'ClassName.PropertyName' format: find first exact property name
       for t := 0 to high(fQueryTables) do begin
         SearchInQueryTables(pointer(PropName),t);
@@ -25734,7 +25734,7 @@ begin
      (cardinal(Field)>=cardinal(FieldCount)) then // cardinal() -> test <0
     result := '' else begin
     P := fResults[Row*FieldCount+Field];
-    SetString(Result,PAnsiChar(P),StrLen(P));
+    FastSetString(Result,P,StrLen(P));
   end;
 end;
 
@@ -26024,7 +26024,7 @@ begin
   SetLength(Values,fRowCount);
   U := @fResults[FieldCount+Field]; // start reading after first Row (= Field Names)
   for i := 0 to fRowCount-1 do begin
-    SetString(Values[i],PAnsiChar(U^),StrLen(U^));
+    FastSetString(Values[i],U^,StrLen(U^));
     inc(U,FieldCount); // go to next row
   end;
   result := fRowCount;
@@ -26081,7 +26081,7 @@ begin
   end;
   SepLen := length(Sep);
   inc(L,length(Head)+SepLen*(fRowCount-1)+length(Trail));
-  SetString(result,nil,L);
+  FastSetString(result,nil,L);
   P := AppendRawUTF8ToBuffer(pointer(result),Head);
   U := @fResults[FieldCount+Field]; // start reading after first Row (= Field Names)
   len := tmp.buf;
@@ -27296,14 +27296,14 @@ function TSQLTable.FieldAsRawUTF8(FieldIndex: Integer): RawUTF8;
 var buf: PUTF8Char;
 begin
   buf := FieldBuffer(FieldIndex);
-  SetString(result,PAnsiChar(buf),StrLen(buf));
+  FastSetString(result,buf,StrLen(buf));
 end;
 
 function TSQLTable.FieldAsRawUTF8(const FieldName: RawUTF8): RawUTF8;
 var buf: PUTF8Char;
 begin
   buf := FieldBuffer(FieldName);
-  SetString(result,PAnsiChar(buf),StrLen(buf));
+  FastSetString(result,buf,StrLen(buf));
 end;
 
 {$ifndef NOVARIANTS}
@@ -28006,7 +28006,7 @@ begin
   if EndOfObject<>nil then
     EndOfObject^ := P^;
   PDest := P+1;
-  SetString(result,PAnsiChar(Beg),P-Beg);
+  FastSetString(result,Beg,P-Beg);
 end;
 
 procedure GetJSONArrayOrObjectAsQuotedStr(P: PUTF8Char; out PDest: PUTF8Char;
@@ -28095,7 +28095,7 @@ var EndOfObject: AnsiChar;
             // regular string content
             if Params=pNonQuoted then
               // returned directly as RawUTF8
-              SetString(FieldValues[ndx],PAnsiChar(res),resLen) else
+              FastSetString(FieldValues[ndx],res,resLen) else
               { escape SQL strings, cf. the official SQLite3 documentation:
                 "A string is formed by enclosing the string in single quotes (').
                  A single quote within the string can be encoded by putting two
@@ -28114,7 +28114,7 @@ var EndOfObject: AnsiChar;
             FieldValues[ndx] := SmallUInt32UTF8[1];
             FieldTypeApproximation[ndx] := ftaBoolean;
           end else begin
-            SetString(FieldValues[ndx],PAnsiChar(res),resLen);
+            FastSetString(FieldValues[ndx],res,resLen);
             FieldTypeApproximation[ndx] := ftaNumber;
           end;
       end;
@@ -28158,7 +28158,7 @@ begin
           FN := 'ID';
           FNlen := 2;
         end;
-      SetString(FieldNames[FieldCount],PAnsiChar(FN),FNlen);
+      FastSetString(FieldNames[FieldCount],FN,FNlen);
       GetSQLValue(FieldCount); // update EndOfObject
       if FieldIsRowID then
         SetID(FieldValues[FieldCount],DecodedRowID);
@@ -28602,10 +28602,10 @@ begin
         if PC=nil then
           exit;
         PC^ := '{';
-        SetString(result,PAnsiChar(PC),P-PC-1);
+        FastSetString(result,PC,P-PC-1);
         exit;
       end;
-    SetString(result,PAnsiChar(Beg),P-Beg-1);
+    FastSetString(result,Beg,P-Beg-1);
   end;
 end;
 
@@ -28619,7 +28619,7 @@ begin
   result := (fPrivateCopyHash=0) or (Hash=0) or (Hash<>fPrivateCopyHash);
   if not result then
     exit;
-  SetString(fPrivateCopy,PAnsiChar(aJSON),aLen);
+  FastSetString(fPrivateCopy,aJSON,aLen);
   fPrivateCopyHash := Hash;
 end;
 
@@ -28793,7 +28793,7 @@ constructor TSQLTableJSON.Create(const aSQL, aJSON: RawUTF8);
 var len: integer;
 begin
   len := length(aJSON);
-  SetString(fPrivateCopy,PAnsiChar(pointer(aJSON)),len);
+  FastSetString(fPrivateCopy,pointer(aJSON),len);
   Create(aSQL,pointer(fPrivateCopy),len);
 end;
 
@@ -28809,7 +28809,7 @@ constructor TSQLTableJSON.CreateFromTables(const Tables: array of TSQLRecordClas
 var len: integer;
 begin
   len := length(aJSON);
-  SetString(fPrivateCopy,PAnsiChar(pointer(aJSON)),len);
+  FastSetString(fPrivateCopy,pointer(aJSON),len);
   CreateFromTables(Tables,aSQL,pointer(fPrivateCopy),len);
 end;
 
@@ -28825,7 +28825,7 @@ constructor TSQLTableJSON.CreateWithColumnTypes(const ColumnTypes: array of TSQL
 var len: integer;
 begin
   len := length(aJSON);
-  SetString(fPrivateCopy,PAnsiChar(pointer(aJSON)),len);
+  FastSetString(fPrivateCopy,pointer(aJSON),len);
   CreateWithColumnTypes(ColumnTypes,aSQL,pointer(fPrivateCopy),len);
 end;
 
@@ -32414,7 +32414,7 @@ begin
   if UsingStream<>nil then begin
     UsingStream.Seek(0,soFromBeginning);
     GetJSONValues(UsingStream,Expand,withID,Occasion,SQLRecordOptions);
-    SetString(result,PAnsiChar(UsingStream.Memory),UsingStream.Seek(0,soFromCurrent));
+    FastSetString(result,UsingStream.Memory,UsingStream.Seek(0,soFromCurrent));
   end else begin
     J := TRawByteStringStream.Create;
     try
@@ -32946,7 +32946,7 @@ var aSQLFields, aSQLFrom, aSQLWhere, aSQLJoin: RawUTF8;
   begin
     B := P;
     while ord(P^) in IsIdentifier do inc(P); // go to end of field name
-    SetString(result,B,P-B);
+    FastSetString(result,B,P-B);
     if (result='') or IdemPropNameU(result,'AND') or IdemPropNameU(result,'OR') or
        IdemPropNameU(result,'LIKE') or IdemPropNameU(result,'NOT') or
        IdemPropNameU(result,'NULL') then
@@ -33081,7 +33081,7 @@ begin
         inc(J);
       end;
       if J<>JBeg then begin // append ' ',')'..
-        SetString(aSQLFrom,PAnsiChar(JBeg),J-JBeg);
+        FastSetString(aSQLFrom,JBeg,J-JBeg);
         aSQLWhere := aSQLWhere+aSQLFrom;
         JBeg := J;
       end;
@@ -34252,7 +34252,7 @@ begin
       k := i+j;
       while SQL[k] in [#1..' '] do inc(k);
       if not EnsureUniqueTableInFrom or (SQL[k]<>',') then begin
-        SetString(result,PAnsiChar(PtrInt(SQL)+i-1),j);
+        FastSetString(result,PAnsiChar(PtrInt(SQL)+i-1),j);
         exit;
       end;
     end;
@@ -34279,7 +34279,7 @@ begin
       k := i+j;
       while SQL[k] in [#1..' '] do inc(k);
       SetLength(result,n+1);
-      SetString(result[n],PAnsiChar(PtrInt(SQL)+i-1),j);
+      FastSetString(result[n],PAnsiChar(PtrInt(SQL)+i-1),j);
       inc(n);
       if SQL[k]<>',' then
         break;
@@ -35542,7 +35542,7 @@ begin
       exit else
       fCustomEncryptContentPrefix := '0' else begin
     tmp := ClassNameShort(aes); // TAESECB_API -> 'AESECB'
-    SetString(s,PAnsiChar(@tmp^[2]),6);
+    FastSetString(s,@tmp^[2],6);
     fCustomEncryptContentPrefix := s+UInt32ToUtf8(aes.KeySize);
   end;
   if (sign=nil) or (sign^.SignatureSize=0) then begin
@@ -35551,7 +35551,7 @@ begin
   end else begin
     fCustomEncryptSign := sign^;
     tmp := ToText(sign^.Algo); // saSha3384 -> 'sha3384'
-    SetString(s,PAnsiChar(@tmp^[3]),ord(tmp^[0])-2);
+    FastSetString(s,@tmp^[3],ord(tmp^[0])-2);
     fCustomEncryptContentPrefix := fCustomEncryptContentPrefix+s+'/';
   end;
   fCustomEncryptContentPrefix := LowerCase(fCustomEncryptContentPrefix);
@@ -35845,8 +35845,7 @@ begin
     with Table.RecordProps do
     if FieldNames='*' then
       result := SQLFromSelect(SQLTableName,SQLTableRetrieveAllFields,WhereClause,'') else
-    if (PosEx(RawUTF8(','),FieldNames,1)=0) and
-       (PosEx(RawUTF8('('),FieldNames,1)=0) and
+    if (PosChar(pointer(FieldNames),',')=nil) and (PosChar(pointer(FieldNames),'(')=nil) and
        not IsFieldName(FieldNames) then
       result := '' else // prevent SQL error
       result := SQLFromSelect(SQLTableName,FieldNames,WhereClause,'');
@@ -35908,7 +35907,7 @@ begin
       // get field values from the first (and unique) row
       for i := 0 to T.FieldCount-1 do begin
         P := T.fResults[T.FieldCount+i];
-        SetString(FieldValue[i],P,StrLen(P));
+        FastSetString(FieldValue[i],P,StrLen(P));
       end;
       result := true;
     finally
@@ -39219,7 +39218,7 @@ var files: TFindFilesDynArray;
     fn: TFileName;
     fs: Int64;
 begin
-  if (Param<>'*') and (PosEx(':',Param)=0) and (PosEx(PathDelim,Param)=0) then begin
+  if (Param<>'*') and (PosEx(RawUTF8(':'),Param)=0) and (PosEx(PathDelim,Param)=0) then begin
     fn := IncludeTrailingPathDelimiter(Folder)+UTF8ToString(Param);
     fs := FileSize(fn);
     if (fs>0) and (fs<256 shl 20) then begin // download up to 256 MB
@@ -39366,7 +39365,7 @@ begin
   Inc(P);
   System.Move(pointer(call.OutBody)^,P^,Length(call.OutBody));
   {$else}
-  SetString(ResStr,PAnsiChar(@Res),SizeOf(Res));
+  FastSetString(ResStr,@Res,SizeOf(Res));
   ResStr := ResStr+call.OutHead+#1+call.OutBody;
   {$endif FPC}
   Data.dwData := fServerWindow;
@@ -39435,7 +39434,7 @@ var i: integer;
 begin
   if aInstance=nil then
     exit;
-  if PosEx('/',aPrefix)>0 then
+  if PosEx(RawUTF8('/'),aPrefix)>0 then
     raise EServiceException.CreateUTF8('%.ServiceMethodRegisterPublishedMethods'+
       '("%"): prefix should not contain "/"',[self,aPrefix]);
   for i := 0 to GetPublishedMethods(aInstance,methods)-1 do
@@ -40761,7 +40760,7 @@ begin // expects 'ModelRoot[/TableName[/TableID][/URIBlobFieldName]][?param=...]
       TableID := -1; // URI like "ModelRoot/TableName/MethodName"
     URIBlobFieldName := Par;
     if Table<>nil then begin
-      j := PosEx('/',URIBlobFieldName);
+      j := PosEx(RawUTF8('/'),URIBlobFieldName);
       if j>0 then begin // handle "ModelRoot/TableName/URIBlobFieldName/ID"
         TableID := GetCardinalDef(pointer(PtrInt(URIBlobFieldName)+j),cardinal(-1));
         SetLength(URIBlobFieldName,j-1);
@@ -41966,7 +41965,7 @@ begin
   aOutSetCookie := Trim(aOutSetCookie);
   if not IsValidUTF8WithoutControlChars(aOutSetCookie) then
     raise EBusinessLayerException.CreateUTF8('Unsafe %.SetOutSetCookie',[self]);
-  if PosEx('=',aOutSetCookie)<2 then
+  if PosEx(RawUTF8('='),aOutSetCookie)<2 then
     raise EBusinessLayerException.CreateUTF8(
       '"name=value" expected for %.SetOutSetCookie("%")',[self,aOutSetCookie]);
   if StrPosI('; PATH=',pointer(aOutSetCookie))=nil then
@@ -42451,7 +42450,7 @@ begin // here Ctxt.Service is set (not ServiceMethodIndex yet)
     JSONDecode(tmp.buf,['method','params','id'],Values,True);
     if Values[0]=nil then // Method name required
       exit;
-    SetString(method,Values[0],StrLen(Values[0]));
+    FastSetString(method,Values[0],StrLen(Values[0]));
     ServiceParameters := Values[1];
     ServiceInstanceID := GetCardinal(Values[2]); // retrieve "id":ClientDrivenID
     ServiceMethodIndex := Service.fInterface.FindMethodIndex(method);
@@ -47395,7 +47394,7 @@ begin
         raise EORMException.CreateUTF8('%.EngineAdd(%) fShardNextID',[self,fStoredClass]);
     end;
     result := fShardLastID;
-    i := PosEx('{',SentData);
+    i := PosEx(RawUTF8('{'),SentData);
     if i=0 then
       data := FormatUTF8('{ID:%}',[result]) else begin
       data := SentData;
@@ -48540,10 +48539,10 @@ begin
     result := '' else begin
     fLogTableWriter.FlushToStream;
     Data := fLogTableStorage.Memory;
-    SetString(result,Data+StartPosition,fLogTableStorage.Position-StartPosition);
+    FastSetString(result,Data+StartPosition,fLogTableStorage.Position-StartPosition);
     // format as valid not expanded JSON table content:
     if StartPosition<>0 then begin
-      SetString(JSONStart,Data,fLogTableWriter.StartDataPosition);
+      FastSetString(JSONStart,Data,fLogTableWriter.StartDataPosition);
       result := JSONStart+result;
     end;
     result := result+']}';
@@ -49580,7 +49579,7 @@ begin
         PropValue := GetJSONField(From,From,@wasString,@EndOfObject,@PropValueLen);
         if (PropValue=nil) or not wasString then
           exit;
-        SetString(U,PAnsiChar(PropValue),PropValueLen);
+        FastSetString(U,PropValue,PropValueLen);
         utf.Add(U);
         case EndOfObject of
           ']': break;
@@ -49683,7 +49682,7 @@ begin
   {$ifdef FPC}tkAString,{$endif}{$ifdef HASVARUSTRING}tkUString,{$endif}
   tkLString,tkWString: // handle all string types from temporary RawUTF8
     if wasString or (j2oIgnoreStringType in Options) then begin
-      SetString(tmp,PAnsiChar(PropValue),PropValueLen);
+      FastSetString(tmp,PropValue,PropValueLen);
       if not(j2oIgnoreUnknownProperty in Options) or P^.WriteIsPossible then
         P^.SetLongStrValue(Value,tmp);
     end else
@@ -49854,7 +49853,7 @@ begin
         From := GotoNextJSONObjectOrArray(From);
         if From=nil then
           exit;
-        SetString(U,Beg,From-Beg);
+        FastSetString(U,Beg,From-Beg);
         if not(j2oIgnoreUnknownProperty in Options) or P^.WriteIsPossible then
           P^.SetLongStrProp(Value,U);
       end else
@@ -50292,7 +50291,7 @@ begin
   end;
   // 1. send request
   // #1 is a field delimiter below, since Get*Item() functions return nil for #0
-  SetString(Msg,PAnsiChar(@MAGIC_SYN),4);
+  FastSetString(Msg,@MAGIC_SYN,4);
   Msg := Msg+Call.Url+#1+Call.Method+#1+Call.InHead+#1+Call.InBody;
   Data.dwData := fClientWindow;
   Data.cbData := length(Msg)*SizeOf(Msg[1]);
@@ -50358,7 +50357,7 @@ begin
     exit;
   Msg.Result := HTTP_SUCCESS; // Send something back
   if fCurrentResponse=#0 then // expect some response?
-    SetString(fCurrentResponse,PAnsiChar(PCopyDataStruct(Msg.CopyDataStruct)^.lpData),
+    FastSetString(fCurrentResponse,PCopyDataStruct(Msg.CopyDataStruct)^.lpData,
       PCopyDataStruct(Msg.CopyDataStruct)^.cbData);
 end;
 
@@ -52592,7 +52591,7 @@ procedure TSQLVirtualTableCursor.SetColumn(var aResult: TSQLVar;
 begin
   aResult.Options := [];
   aResult.VType := ftUTF8;
-  SetString(fColumnTemp,PAnsiChar(aValue),aValueLength); // temporary copy
+  FastSetString(fColumnTemp,aValue,aValueLength); // temporary copy
   aResult.VText := pointer(fColumnTemp);
 end;
 
@@ -53379,10 +53378,10 @@ begin
     Sender.fSessionData := ''; // reset temporary 'data' field
     result := '';
   end else begin
-    SetString(result,values[0],StrLen(values[0]));
+    FastSetString(result,values[0],StrLen(values[0]));
     Base64ToBin(PAnsiChar(values[1]),StrLen(values[1]),Sender.fSessionData);
-    SetString(Sender.fSessionServer,values[2],StrLen(values[2]));
-    SetString(Sender.fSessionVersion,values[3],StrLen(values[3]));
+    FastSetString(Sender.fSessionServer,values[2],StrLen(values[2]));
+    FastSetString(Sender.fSessionVersion,values[3],StrLen(values[3]));
     SetID(values[4],User.fID);
     User.LogonName := values[5]; // set/fix using values from server
     User.DisplayName := values[6];
@@ -53448,7 +53447,7 @@ class procedure TSQLRestServerAuthenticationURI.ClientSessionSign(
   Sender: TSQLRestClientURI; var Call: TSQLRestURIParams);
 begin
   if (Sender<>nil) and (Sender.fSessionID<>0) and (Sender.fSessionUser<>nil) then
-    if PosEx(RawUTF8('?'),Call.url,1)=0 then
+    if PosChar(pointer(Call.url),'?')=nil then
       Call.url := Call.url+'?session_signature='+Sender.fSessionIDHexa8 else
       Call.url := Call.url+'&session_signature='+Sender.fSessionIDHexa8;
 end;
@@ -53638,7 +53637,7 @@ begin
   if (Sender=nil) or (Sender.fSessionID=0) or (Sender.fSessionUser=nil) then
     exit;
   blankURI := Call.Url;
-  if PosEx(RawUTF8('?'),Call.Url,1)=0 then
+  if PosChar(pointer(Call.url),'?')=nil then
     Call.url := Call.Url+'?session_signature=' else
     Call.url := Call.Url+'&session_signature=';
   with Sender do begin
@@ -54250,7 +54249,7 @@ begin
         include(bits,i);
   while MethodNamesCSV<>nil do begin
     GetNextItem(MethodNamesCSV,',',method);
-    if PosEx('.',method)=0 then begin
+    if PosChar(pointer(method),'.')=nil then begin
       for i := 0 to n-1 do
       with fListInterfaceMethod[i] do // O(n) search is fast enough here
         if (InterfaceMethodIndex>=SERVICE_PSEUDO_METHOD_COUNT) and
@@ -55657,7 +55656,7 @@ end;
 function TInterfaceFactory.FindFullMethodIndex(const aFullMethodName: RawUTF8;
   alsoSearchExactMethodName: boolean): integer;
 begin
-  if PosEx('.',aFullMethodName)>=0 then
+  if PosChar(pointer(aFullMethodName),'.')<>nil then
     for result := 0 to fMethodsCount-1 do
       if IdemPropNameU(fMethods[result].InterfaceDotMethodName,aFullMethodName) then
         exit;
@@ -56132,7 +56131,7 @@ begin
     Inc(methodindex);
     aURI := PME^.Name;
     {$else}
-    SetString(aURI,PAnsiChar(@PS^[1]),ord(PS^[0]));
+    FastSetString(aURI,@PS^[1],ord(PS^[0]));
     {$endif}
     with PServiceMethod(fMethod.AddUniqueName(aURI,
       '%.% method: duplicated name for %',[fInterfaceTypeInfo^.Name,aURI,self]))^ do begin
@@ -56410,7 +56409,7 @@ begin
   call.Instance := pointer(fDest);
   call.Params := aParams;
   if Assigned(fOnResult) then begin
-    SetString(call.OnOutputParamsCopy,PAnsiChar(pointer(aParams)),length(aParams));
+    FastSetString(call.OnOutputParamsCopy,pointer(aParams),length(aParams));
     call.OnOutput := fOnResult;
   end else
     call.OnOutput := nil;
@@ -57720,10 +57719,8 @@ begin
       if result then begin
         if aResult<>nil then // make unique due to JSONDecode() by caller
           if log.CustomResults='' then
-            SetString(aResult^,PAnsiChar(pointer(aMethod.DefaultResult)),
-              length(aMethod.DefaultResult)) else
-            SetString(aResult^,PAnsiChar(pointer(log.CustomResults)),
-              length(log.CustomResults));
+            FastSetString(aResult^,pointer(aMethod.DefaultResult),length(aMethod.DefaultResult)) else
+            FastSetString(aResult^,pointer(log.CustomResults),length(log.CustomResults));
       end else
       if aErrorMsg<>nil then
         aErrorMsg^ := log.CustomResults;
@@ -60167,7 +60164,7 @@ begin
     smvCurrency:
       PInt64(V)^ := StrToCurr64(Val);
     smvRawUTF8:
-      SetString(PRawUTF8(V)^,PAnsiChar(Val),ValLen);
+      FastSetString(PRawUTF8(V)^,Val,ValLen);
     smvString:
       UTF8DecodeToString(Val,ValLen,PString(V)^);
     smvRawByteString:
@@ -61550,7 +61547,7 @@ begin
     len := StrLen(params);
     if params[len-1]=']' then
       dec(len);
-    SetString(tmp,PAnsiChar(params),len);
+    FastSetString(tmp,params,len);
   end;
   result := TInterfacedObjectFake(Instance).fInvoke(fMethod^,tmp,nil,nil,nil,nil);
 end;
@@ -62260,7 +62257,7 @@ begin
         exit; // leave result=false
       end;
       if aResult<>nil then
-        SetString(aResult^,Values[0],StrLen(Values[0]));
+        FastSetString(aResult^,Values[0],StrLen(Values[0]));
       if (aClientDrivenID<>nil) and (Values[1]<>nil) then // keep ID if no "id":...
         aClientDrivenID^ := GetCardinal(Values[1]);
     end;
