@@ -438,6 +438,7 @@ var
   data: RawUTF8;
   i: integer;
   debuggerIndex: integer;
+  debugger: TSMDebugger;
   Writer: TTextWriter;
   engine: TSMEngine;
 begin
@@ -449,32 +450,33 @@ begin
         fParent.fDebuggers.Safe.Lock;
         try
           for I := 0 to fParent.fDebuggers.Count - 1 do begin
-            engine := fParent.fManager.EngineForThread(TSMDebugger(fParent.fDebuggers[i]).fSmThreadID);
+            debugger := TSMDebugger(fParent.fDebuggers[i]);
+            engine := fParent.fManager.EngineForThread(debugger.fSmThreadID);
             if engine <> nil then begin
               // Actor represent debug thread here, setting proper name with coxtext thread id
               // Writer.AddShort('{"actor":"server1.conn1.addon');
               // Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fIndex);
               Writer.AddShort('{"actor":"');
-              Writer.AddShort(TSMDebugger(fParent.fDebuggers[i]).fDebuggerName);
+              Writer.AddShort(debugger.fDebuggerName);
               Writer.AddShort('.conn1.thread_');
               { TODO : check that in multithread mode this field equal thread id with js context that we debug, otherwire replace with proper assigment }
-              Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fSmThreadID);
+              Writer.Add(debugger.fSmThreadID);
               // id should be addon id, value from DoOnGetEngineName event
               // Writer.AddShort('","id":"server1.conn1.addon');
               // Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fIndex);
               Writer.AddShort('","id":"');
-              Writer.AddString(TSMDebugger(fParent.fDebuggers[i]).fNameForDebug);
+              Writer.AddString(debugger.fNameForDebug);
               Writer.AddShort('","name":"');
-              Writer.AddString(TSMDebugger(fParent.fDebuggers[i]).fNameForDebug);
+              Writer.AddString(debugger.fNameForDebug);
               // url most likly should be addon folder in format: file:///drive:/path/
               // Writer.AddShort('","url":"server1.conn1.addon');
               // Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fIndex);
               { TODO : replace with path generation, should be context home dir in format file:///drive:/path/ }
-              Writer.AddShort('","url":"file:///' + StringReplaceAll(TSMDebugger(fParent.fDebuggers[i]).fWebAppRootPath, '\', '/'));
+              Writer.AddShort('","url":"file:///' + StringReplaceAll(debugger.fWebAppRootPath, '\', '/'));
               Writer.AddShort('","debuggable":');
-              Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fCommunicationThread = nil);
+              Writer.Add(debugger.fCommunicationThread = nil);
               Writer.AddShort(',"consoleActor":"console');
-              Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fIndex);
+              Writer.Add(debugger.fIndex);
               Writer.AddShort('"},');
             end;
           end;
@@ -537,7 +539,7 @@ end;
 procedure TSMRemoteDebuggerCommunicationThread.Send(const packet: RawUTF8);
 begin
   sockWrite(packet);
-  SynSMLog.Add.Log(sllCustom4, packet);
+  SynSMLog.Add.Log(sllCustom3, 'JSDBG packet sent: %', packet);
 end;
 
 function TSMRemoteDebuggerCommunicationThread.sockRead(out packet: RawUTF8): boolean;
@@ -560,6 +562,10 @@ begin
   Move(ch^, packet[1], head);
   bytesToRead := len - head;
   Result := fCommunicationSock.TrySockRecv(@packet[head + 1], bytesToRead);
+  if Result then
+    SynSMLog.Add.Log(sllCustom3, 'JSDBG packet received: %', packet)
+  else
+    SynSMLog.Add.Log(sllCustom3, 'JSDBG packet failed to receive');
 end;
 
 procedure TSMRemoteDebuggerCommunicationThread.sockWrite(const packet: RawUTF8);
