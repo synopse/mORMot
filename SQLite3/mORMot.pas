@@ -3449,8 +3449,8 @@ type
     fPropInfo: PPropInfo;
     fPropType: PTypeInfo;
     fFlattenedProps: PPropInfoDynArray;
-    fGetterIsFieldPropOffset: cardinal;
-    fInPlaceCopySameClassPropOffset: cardinal;
+    fGetterIsFieldPropOffset: PtrUInt;
+    fInPlaceCopySameClassPropOffset: PtrUInt;
     function GetSQLFieldRTTITypeName: RawUTF8; override;
   public
     /// this meta-constructor will create an instance of the exact descendant
@@ -18237,8 +18237,7 @@ type
     // - WhereField index follows FindWhereEqual / TSynTableStatement.WhereField
     // - returns the number of data row added (excluding field names)
     // - this method is very fast and optimized (for search and JSON serializing)
-    function GetJSONValues(Stream: TStream; Expand: boolean;
-      Stmt: TSynTableStatement): PtrInt;
+    function GetJSONValues(Stream: TStream; Expand: boolean; Stmt: TSynTableStatement): PtrInt;
     /// TSQLRestServer.URI use it for Static.EngineList to by-pass virtual table
     // - overridden method to handle basic queries as handled by EngineList()
     function AdaptSQLForEngineList(var SQL: RawUTF8): boolean; override;
@@ -18320,7 +18319,7 @@ type
     // - return -1 if this ID was not found
     // - use fast O(log(n)) binary search algorithm (since Items[].ID are increasing)
     // - warning: this method should be protected via StorageLock/StorageUnlock
-    function IDToIndex(ID: TID): integer;
+    function IDToIndex(ID: TID): PtrInt;
     /// retrieve all IDs stored at once
     // - will make a thread-safe copy, for unlocked use
     procedure GetAllIDs(out ID: TIDDynArray);
@@ -22928,7 +22927,7 @@ end;
 function TSQLPropInfoRTTIRawUTF8.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): PtrInt;
 
-  procedure NeedLocalTempCopy;
+  function CompareWithLocalTempCopy: PtrInt;
   var tmp1,tmp2: RawByteString;
   begin
     fPropInfo.GetLongStrProp(Item1,tmp1);
@@ -22956,7 +22955,7 @@ begin
         result := UTF8IComp(p1,p2) else
         result := StrComp(p1,p2);
     end else
-      NeedLocalTempCopy;
+      result := CompareWithLocalTempCopy;
   end;
 end;
 
@@ -23842,7 +23841,7 @@ end;
 function TSQLPropInfoRTTIVariant.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): PtrInt;
 
-  procedure Generic;
+  function CompareWithLocalTempCopy: PtrInt;
   var V1,V2: variant;
   begin
     fPropInfo.GetVariantProp(Item1,V1);
@@ -23860,7 +23859,7 @@ begin
     if fGetterIsFieldPropOffset<>0 then // avoid any temporary variable
       result := SortDynArrayVariantComp(PVarData(PtrUInt(Item1)+fGetterIsFieldPropOffset)^,
           PVarData(PtrUInt(Item2)+fGetterIsFieldPropOffset)^,CaseInsensitive) else
-      Generic;
+      result := CompareWithLocalTempCopy;
 end;
 
 function TSQLPropInfoRTTIVariant.SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar;
@@ -45934,13 +45933,13 @@ end;
 function TSQLRestStorageInMemory.FindWhereEqual(WhereField: integer;
   const WhereValue: RawUTF8; OnFind: TFindWhereEqualEvent; Dest: pointer;
   FoundLimit,FoundOffset: integer; CaseInsensitive: boolean): PtrInt;
-var i, ndx, i32: integer;
+var i32, i, err, currentRow: integer;
     i64: Int64;
-    err, currentRow: integer;
     P: TSQLPropInfo;
     nfo: PPropInfo;
     rec: PSQLRecordArray;
     Hash: TListFieldHash;
+    ndx: PtrInt;
     offs: PtrUInt;
     item: PPointer;
 
@@ -46129,10 +46128,10 @@ end;
 
 function TSQLRestStorageInMemory.GetJSONValues(Stream: TStream;
   Expand: boolean; Stmt: TSynTableStatement): PtrInt;
-var ndx,KnownRowsCount: integer;
+var ndx,KnownRowsCount: PtrInt;
     rec: PSQLRecordArray;
     {$ifndef NOVARIANTS}
-    j: integer;
+    j: PtrInt;
     id: Int64;
     {$endif}
     W: TJSONSerializer;
@@ -46225,15 +46224,14 @@ err:  W.CancelAll;
   end;
 end;
 
-function TSQLRestStorageInMemory.IDToIndex(ID: TID): integer;
-var L, R: integer;
+function TSQLRestStorageInMemory.IDToIndex(ID: TID): PtrInt;
+var L, R: PtrInt;
     cmp: TID;
     rec: PSQLRecordArray;
 begin
-  if self<>nil then
-  with fValue do begin
-    rec := pointer(List);
-    R := Count-1;
+  if self<>nil then begin
+    rec := pointer(fValue.List);
+    R := fValue.Count-1;
     if fIDSorted and (R>=8) then begin
       // IDs are sorted -> use fast O(log(n)) binary search algorithm
       L := 0;
@@ -46256,7 +46254,7 @@ begin
 end;
 
 procedure TSQLRestStorageInMemory.GetAllIDs(out ID: TIDDynArray);
-var i: integer;
+var i: PtrInt;
     rec: PSQLRecordArray;
 begin
   StorageLock(false,'GetAllIDs');
@@ -46740,7 +46738,7 @@ begin
       end;
       Orig.Free; // avoid memory leak
       TSQLRecord(fValue.List[i]) := Rec; // replace item in list
-    end else // direct in-place partial update
+    end else // direct in-place (partial) update
       Orig.FillFrom(SentData);
     fModified := true;
     result := true;

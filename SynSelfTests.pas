@@ -3190,7 +3190,7 @@ begin
   timer.Start;
   for i := 0 to MAX do begin
     v := i and 511;
-    SetString(vs[i],PAnsiChar(pointer(SmallUInt32UTF8[v])),length(SmallUInt32UTF8[v]));
+    FastSetString(vs[i],pointer(SmallUInt32UTF8[v]),length(SmallUInt32UTF8[v]));
   end;
   NotifyTestSpeed(Format('direct %s',[KB(DIRSIZE)]),MAX,DIRSIZE,@timer);
   for i := 0 to MAX do

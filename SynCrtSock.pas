@@ -503,7 +503,7 @@ type
     procedure SockSend(P: pointer; Len: integer); overload;
     /// flush all pending data to be sent, optionally with some body content
     // - raise ECrtSocket on error
-    procedure SockSendFlush(const aBody: SockString);
+    procedure SockSendFlush(const aBody: SockString='');
     /// flush all pending data to be sent
     // - returning true on success
     function TrySockSendFlush: boolean;

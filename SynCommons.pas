@@ -19238,8 +19238,8 @@ begin
 end;
 
 function TSynAnsiFixedWidth.IsValidAnsiU(UTF8Text: PUTF8Char): boolean;
-var c: cardinal;
-    i, extra: integer;
+var c: PtrUInt;
+    i, extra: PtrInt;
 begin
   result := false;
   if UTF8Text<>nil then
@@ -19247,7 +19247,7 @@ begin
       c := byte(UTF8Text^);
       inc(UTF8Text);
       if c=0 then break else
-      if c and $80=0 then
+      if c<=127 then
         continue else begin
         extra := UTF8_EXTRABYTES[c];
         if UTF8_EXTRA[extra].minimum>$ffff then
@@ -19266,8 +19266,8 @@ begin
 end;
 
 function TSynAnsiFixedWidth.IsValidAnsiU8Bit(UTF8Text: PUTF8Char): boolean;
-var c: Cardinal;
-    i, extra: integer;
+var c: PtrUInt;
+    i, extra: PtrInt;
 begin
   result := false;
   if UTF8Text<>nil then
@@ -19275,7 +19275,7 @@ begin
       c := byte(UTF8Text^);
       inc(UTF8Text);
       if c=0 then break else
-      if c and $80=0 then
+      if c<=127 then
         continue else begin
         extra := UTF8_EXTRABYTES[c];
         if UTF8_EXTRA[extra].minimum>$ffff then
@@ -19350,7 +19350,7 @@ By4:  c := PCardinal(Source)^;
     repeat
 By1:  c := byte(Source^);
       inc(Source);
-      if ord(c) and $80=0 then begin
+      if ord(c)<=127 then begin
         Dest^ := AnsiChar(c);
         inc(Dest);
         if (PtrUInt(Source) and 3=0) and (Source<=endSourceBy4) then goto By4;
@@ -20195,7 +20195,7 @@ begin
   repeat
     c := byte(source^); inc(source);
     if c=0 then break else
-    if c and $80=0 then begin
+    if c<=127 then begin
       inc(len); dest[len] := AnsiChar(c);
       if len<253 then continue else break;
     end else begin
@@ -20262,7 +20262,7 @@ begin
   repeat
     c := byte(source^);
     inc(source);
-    if c and $80=0 then begin
+    if c<=127 then begin
       PWord(dest)^ := c; // much faster than dest^ := WideChar(c) for FPC
       inc(dest);
       if (source<endsource) and (dest<endDest) then
@@ -20339,7 +20339,7 @@ By4:  c := PCardinal(Source)^;
   if Source<endSource then
     repeat
 By1:  c := byte(Source^); inc(Source);
-      if c and $80=0 then begin
+      if c<=127 then begin
         PWord(dest)^ := c; // much faster than dest^ := WideChar(c) for FPC
         inc(dest);
         if (PtrUInt(Source) and 3=0) and (Source<=EndSourceBy4) then goto By4;
@@ -20448,7 +20448,7 @@ end;
 
 
 function Utf8ToUnicodeLength(source: PUTF8Char): PtrUInt;
-var c: byte;
+var c: PtrUInt;
     extra,i: integer;
 begin
   result := 0;
@@ -20457,7 +20457,7 @@ begin
     c := byte(source^);
     inc(source);
     if c=0 then break else
-    if c and $80=0 then
+    if c<=127 then
       inc(result) else begin
       extra := UTF8_EXTRABYTES[c];
       if extra=0 then exit else // invalid leading byte
@@ -20473,7 +20473,7 @@ begin
 end;
 
 function Utf8TruncateToUnicodeLength(var text: RawUTF8; maxUTF16: integer): boolean;
-var c: byte;
+var c: PtrUInt;
     extra,i: integer;
     source: PUTF8Char;
 begin
@@ -20488,7 +20488,7 @@ begin
       c := byte(source^);
       inc(source);
       if c=0 then break else
-      if c and $80=0 then
+      if c<=127 then
         dec(maxUTF16) else begin
         extra := UTF8_EXTRABYTES[c];
         if extra=0 then break else // invalid leading byte
@@ -20538,7 +20538,7 @@ begin
 end;
 
 function Utf8FirstLineToUnicodeLength(source: PUTF8Char): PtrInt;
-var c: byte;
+var c: PtrUInt;
     extra: Integer;
 begin
   result := 0;
@@ -20547,7 +20547,7 @@ begin
     c := byte(source^);
     inc(source);
     if c in [0,10,13] then break else // #0, #10 or #13 stop the count
-    if c and $80=0 then
+    if c<=127 then
       inc(result) else begin
       extra := UTF8_EXTRABYTES[c];
       if extra=0 then exit else // invalid leading byte
@@ -22292,7 +22292,7 @@ var r: PAnsiChar; // s may = p -> stand-alone variable
     sr: PStrRec; // stand-alone to use register
 begin
   if len>0 then begin
-    GetMem(r,len+STRRECSIZE+2);
+    GetMem(r,len+(STRRECSIZE+2));
     sr := pointer(r);
     sr^.codePage := codepage;
     sr^.elemSize := 1;
@@ -22315,7 +22315,7 @@ var r: PAnsiChar; // s may = p -> stand-alone variable
     sr: PStrRec; // stand-alone to use register
 begin
   if len>0 then begin
-    GetMem(r,len+STRRECSIZE+2);
+    GetMem(r,len+(STRRECSIZE+2));
     sr := pointer(r);
     sr^.codePage := CP_UTF8;
     sr^.elemSize := 1;
@@ -26992,7 +26992,7 @@ begin
   result := ord(U^);
   if result=0 then
     exit;
-  if result and $80=0 then begin
+  if result<=127 then begin
     inc(U);
     {$ifdef USENORMTOUPPER}
     result := NormToUpperByte[result];
@@ -27325,7 +27325,7 @@ begin
     inc(P);
     if c=0 then
       break;
-    if c and $80=0 then begin
+    if c<=127 then begin
       D[result] := AnsiChar(Table[c]);
       inc(result);
     end else begin
@@ -27386,19 +27386,19 @@ begin // fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits val
   repeat
     result := ord(u1^);
     c2 := ord(u2^);
-    if result and $80=0 then
+    if result<=127 then
       if result<>0 then begin
-        result := table[result];
         inc(u1);
-        if c2 and $80=0 then begin
+        result := table[result];
+        if c2<=127 then begin
           if c2=0 then exit; // u1>u2 -> return u1^
-          dec(result,table[c2]);
           inc(u2);
+          dec(result,table[c2]);
           if result<>0 then exit;
           continue;
         end;
       end else begin // u1^=#0 -> end of u1 reached
-        if u2^<>#0 then    // end of u2 reached -> u1=u2 -> return 0
+        if c2<>0 then    // end of u2 reached -> u1=u2 -> return 0
           result := -1;    // u1<u2
         exit;
       end else begin
@@ -27406,14 +27406,15 @@ begin // fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits val
         if result and $ffffff00=0 then
           result := table[result]; // 8 bits to upper, 32 bits as is
       end;
-    if c2 and $80=0 then begin
-      inc(u2);
+    if c2<=127 then begin
       if c2=0 then exit; // u1>u2 -> return u1^
+      inc(u2);
       dec(result,table[c2]);
       if result<>0 then exit;
+      continue;
     end else begin
       c2 := GetHighUTF8UCS4Inlined(u2);
-      if c2 and $ffffff00=0 then
+      if c2<=255 then
         dec(result,table[c2]) else // 8 bits to upper
         dec(result,c2); // 32 bits widechar returns diff
       if result<>0 then exit;
@@ -27439,9 +27440,9 @@ begin // fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits val
     c2 := ord(u2^);
     inc(u1);
     dec(L1);
-    if result and $80=0 then begin
+    if result<=127 then begin
       result := table[result];
-      if c2 and $80=0 then begin
+      if c2<=127 then begin
         dec(result,table[c2]);
         dec(L2);
         inc(u2);
@@ -27470,7 +27471,7 @@ begin // fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits val
     // here result=NormToUpper[u1^]
     inc(u2);
     dec(L2);
-    if c2 and $80=0 then begin
+    if c2<=127 then begin
       dec(result,table[c2]);
       if result<>0 then exit;
     end else begin
@@ -27597,7 +27598,7 @@ end;
 function FindUTF8(U: PUTF8Char; UpperValue: PAnsiChar): boolean;
 var ValueStart: PAnsiChar;
 {$ifdef USENORMTOUPPER}
-    c: cardinal;
+    c: PtrUInt;
     FirstChar: AnsiChar;
 label Next;
 {$else}
@@ -27616,7 +27617,7 @@ begin
       c := byte(U^);
       inc(U);
       if c=0 then exit else
-      if c and $80=0 then begin
+      if c<=127 then begin
         if c in IsWord then
           if PAnsiChar(@NormToUpper)[c]<>FirstChar then
             goto Next else
@@ -27646,7 +27647,7 @@ begin
       end;
       c := byte(U^); inc(U); // next chars
       if c=0 then exit else
-      if c and $80=0 then begin
+      if c<=127 then begin
         if PAnsiChar(@NormToUpper)[c]<>UpperValue^ then break;
       end else
       if c and $20=0 then begin
@@ -27670,7 +27671,7 @@ Next:
     // find beginning of word
     repeat
       if byte(U^)=0 then exit else
-      if byte(U^) and $80=0 then
+      if byte(U^)<=127 then
         if byte(U^) in IsWord then
           break else
           inc(U) else
@@ -32436,7 +32437,7 @@ function NextUTF8UCS4(var P: PUTF8Char): cardinal;
 begin
   if P<>nil then begin
     result := byte(P[0]);
-    if result and $80=0 then
+    if result<=127 then
       inc(P) else begin
       if result and $20=0  then begin
         result := result shl 6+byte(P[1])-$3080; // fast direct process $0..$7ff
@@ -32745,9 +32746,9 @@ begin
 end;
 
 function UTF8UpperCopy(Dest, Source: PUTF8Char; SourceChars: Cardinal): PUTF8Char;
-var c: cardinal;
+var c: PtrUInt;
     endSource, endSourceBy4, S: PUTF8Char;
-    extra,i: integer;
+    extra,i: PtrInt;
 label By1, By4, set1; // ugly but faster
 begin
   if (Source<>nil) and (Dest<>nil) then begin
@@ -32771,7 +32772,7 @@ begin
     repeat
   By1:c := byte(Source^);
       inc(Source);
-      if ord(c) and $80=0 then begin
+      if c<=127 then begin
         Dest^ := AnsiChar(NormToUpperByte[c]);
 Set1:   inc(Dest);
         if (PtrUInt(Source) and 3=0) and (Source<EndSourceBy4) then goto By4 else
