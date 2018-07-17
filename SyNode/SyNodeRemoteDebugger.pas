@@ -576,7 +576,7 @@ begin
   fCommunicationSock.SockSend(@tmp[1], length(tmp));
   fCommunicationSock.SockSend(@sep[1], length(sep));
   fCommunicationSock.SockSend(@packet[1], length(packet));
-  fCommunicationSock.SockSendFlush;
+  fCommunicationSock.SockSendFlush('');
 end;
 
 procedure TSMRemoteDebuggerCommunicationThread.startListening(socket: TCrtSocket);
