@@ -4306,6 +4306,12 @@ function ClassFieldProp(ClassType: TClass; const PropName: shortstring): PPropIn
 // - this special version also search into parent properties (default is only current)
 function ClassFieldPropWithParents(aClassType: TClass; const PropName: shortstring): PPropInfo;
 
+/// retrieve an integer/Int64 Field propery value from a Property Name
+// - this version also search into parent properties
+// - returns TRUE and set PropValue if a matching property was found
+function ClassFieldInt64(Instance: TObject; const PropName: ShortString;
+  out PropValue: Int64): boolean;
+
 /// retrieve a class Field property instance from a Property Name
 // - this version also search into parent properties
 // - returns TRUE and set PropInstance if a matching property was found
@@ -8162,6 +8168,9 @@ type
     { published properties in inherited classes will be interpreted as SQL fields }
   end;
 
+  TSQLRecordArray = array[0..MaxInt div SizeOf(TSQLRecord)-1] of TSQLRecord;
+  PSQLRecordArray = ^TSQLRecordArray;
+
   /// root class for defining and mapping database records with NOCASE collation
   // - by default, any sftUTF8Text field (RawUTF8, UnicodeString, WideString
   // properties) will use our Unicode SYSTEMNOCASE SQLite3 collation, which calls
@@ -11961,14 +11970,14 @@ type
     /// the method called
     // - a pointer to the existing information in shared TInterfaceFactory
     Method: PServiceMethod;
-    /// the parameters at execution call
+    /// the parameters at execution call, as JSON CSV (i.e. array without [ ])
     Params: RawUTF8;
     /// any non default result returned after execution
     // - if not set (i.e. if equals ''), Method^.DefaultResult has been returned
     // - if WasError is TRUE, always contain the error message
     CustomResults: RawUTF8;
     /// the result returned after execution
-    // - this method will return Method^.DefaultResult
+    // - this method will return Method^.DefaultResult if CustomResults=''
     function Results: RawUTF8;
     /// append the log in textual format
     // - typical output is as such:
@@ -21216,6 +21225,20 @@ begin
   result := true;
 end;
 
+function ClassFieldInt64(Instance: TObject; const PropName: ShortString;
+  out PropValue: Int64): boolean;
+var P: PPropInfo;
+begin
+  result := false;
+  if Instance=nil then
+    exit;
+  P := ClassFieldPropWithParents(Instance.ClassType,PropName);
+  if P=nil then
+    exit;
+  PropValue := P^.GetInt64Value(Instance);
+  result := true;
+end;
+
 function ClassFieldInstances(Instance: TObject; PropClassType: TClass): TObjectDynArray;
 var nested: PPropInfoDynArray;
     i: integer;
@@ -21617,7 +21640,7 @@ begin
     result.VDouble := GetExtended(Value,err);
     if err<>0 then begin
       result.VType := varString;
-      SetString(RawUTF8(result.VAny),Value,ValueLen);
+      FastSetString(result.VAny,Value,ValueLen);
     end;
   end;
   sftDateTime, sftDateTimeMS:
@@ -21631,7 +21654,7 @@ begin
   sftTimeLog, sftModTime, sftCreateTime, sftUnixTime, sftUnixMSTime:
     SetInt64(Value,result.VInt64);
   sftAnsiText, sftUTF8Text:
-    SetString(RawUTF8(result.VAny),Value,ValueLen);
+    FastSetString(result.VAny,Value,ValueLen);
   sftBlobCustom, sftBlob:
     BlobToTSQLRawBlob(Value,TSQLRawBlob(result.VAny));
   {$ifndef NOVARIANTS}sftVariant, sftNullable,{$endif}
@@ -22905,7 +22928,7 @@ end;
 function TSQLPropInfoRTTIRawUTF8.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): PtrInt;
 
-  procedure Generic;
+  procedure NeedLocalTempCopy;
   var tmp1,tmp2: RawByteString;
   begin
     fPropInfo.GetLongStrProp(Item1,tmp1);
@@ -22915,20 +22938,26 @@ function TSQLPropInfoRTTIRawUTF8.CompareValue(Item1, Item2: TObject;
       result := StrComp(pointer(tmp1),pointer(tmp2));
   end;
 
+var
+  offs: PtrUInt;
+  p1,p2: pointer;
 begin
   if Item1=Item2 then
     result := 0 else
   if Item1=nil then
     result := -1 else
   if Item2=nil then
-    result := 1 else
-    if fGetterIsFieldPropOffset<>0 then // avoid any temporary variable
+    result := 1 else begin
+    offs := fGetterIsFieldPropOffset;
+    if offs<>0 then begin // avoid any temporary variable
+      p1 := PPointer(PtrUInt(Item1)+offs)^;
+      p2 := PPointer(PtrUInt(Item2)+offs)^;
       if CaseInsensitive then
-        result := UTF8IComp(PPointer(PtrUInt(Item1)+fGetterIsFieldPropOffset)^,
-          PPointer(PtrUInt(Item2)+fGetterIsFieldPropOffset)^) else
-        result := StrComp(PPointer(PtrUInt(Item1)+fGetterIsFieldPropOffset)^,
-          PPointer(PtrUInt(Item2)+fGetterIsFieldPropOffset)^) else
-    Generic;
+        result := UTF8IComp(p1,p2) else
+        result := StrComp(p1,p2);
+    end else
+      NeedLocalTempCopy;
+  end;
 end;
 
 procedure TSQLPropInfoRTTIRawUTF8.SetValue(Instance: TObject; Value: PUTF8Char;
@@ -22936,7 +22965,7 @@ procedure TSQLPropInfoRTTIRawUTF8.SetValue(Instance: TObject; Value: PUTF8Char;
 var tmp: RawUTF8;
 begin
   if Value<>nil then
-    SetString(tmp,PAnsiChar(Value),StrLen(Value));
+    FastSetString(tmp,Value,StrLen(Value));
   fPropInfo.SetLongStrProp(Instance,tmp);
 end;
 
@@ -24080,7 +24109,7 @@ end;
 procedure TSQLPropInfoRecordFixedSize.GetValueVar(Instance: TObject;
   ToSQL: boolean; var result: RawUTF8; wasSQLString: PBoolean);
 begin
-  SetRawUTF8(result,GetFieldAddr(Instance),fRecordSize);
+  FastSetString(result,GetFieldAddr(Instance),fRecordSize);
   BinaryToText(result,ToSQL,wasSQLString);
 end;
 
@@ -24536,7 +24565,7 @@ function AuthURI(const URI, URIAuthenticationBearer: RawUTF8): RawUTF8;
 begin
   if URIAuthenticationBearer='' then
     result := URI else
-    if PosEx('?',URI)=0 then
+    if PosChar(pointer(URI),'?')=nil then
       result := URI+'?authenticationbearer='+URIAuthenticationBearer else
       result := URI+'&authenticationbearer='+URIAuthenticationBearer
 end;
@@ -25513,7 +25542,7 @@ begin
   if length(fQueryTables)=1 then
     SearchInQueryTables(pointer(PropName),0)
   else begin
-    i := PosEx('.',PropName)-1;
+    i := PosEx(RawUTF8('.'),PropName)-1;
     if i<0 then // no 'ClassName.PropertyName' format: find first exact property name
       for t := 0 to high(fQueryTables) do begin
         SearchInQueryTables(pointer(PropName),t);
@@ -25711,7 +25740,7 @@ begin
      (cardinal(Field)>=cardinal(FieldCount)) then // cardinal() -> test <0
     result := '' else begin
     P := fResults[Row*FieldCount+Field];
-    SetString(Result,PAnsiChar(P),StrLen(P));
+    FastSetString(Result,P,StrLen(P));
   end;
 end;
 
@@ -26001,7 +26030,7 @@ begin
   SetLength(Values,fRowCount);
   U := @fResults[FieldCount+Field]; // start reading after first Row (= Field Names)
   for i := 0 to fRowCount-1 do begin
-    SetString(Values[i],PAnsiChar(U^),StrLen(U^));
+    FastSetString(Values[i],U^,StrLen(U^));
     inc(U,FieldCount); // go to next row
   end;
   result := fRowCount;
@@ -26058,7 +26087,7 @@ begin
   end;
   SepLen := length(Sep);
   inc(L,length(Head)+SepLen*(fRowCount-1)+length(Trail));
-  SetString(result,nil,L);
+  FastSetString(result,nil,L);
   P := AppendRawUTF8ToBuffer(pointer(result),Head);
   U := @fResults[FieldCount+Field]; // start reading after first Row (= Field Names)
   len := tmp.buf;
@@ -27273,14 +27302,14 @@ function TSQLTable.FieldAsRawUTF8(FieldIndex: Integer): RawUTF8;
 var buf: PUTF8Char;
 begin
   buf := FieldBuffer(FieldIndex);
-  SetString(result,PAnsiChar(buf),StrLen(buf));
+  FastSetString(result,buf,StrLen(buf));
 end;
 
 function TSQLTable.FieldAsRawUTF8(const FieldName: RawUTF8): RawUTF8;
 var buf: PUTF8Char;
 begin
   buf := FieldBuffer(FieldName);
-  SetString(result,PAnsiChar(buf),StrLen(buf));
+  FastSetString(result,buf,StrLen(buf));
 end;
 
 {$ifndef NOVARIANTS}
@@ -27983,7 +28012,7 @@ begin
   if EndOfObject<>nil then
     EndOfObject^ := P^;
   PDest := P+1;
-  SetString(result,PAnsiChar(Beg),P-Beg);
+  FastSetString(result,Beg,P-Beg);
 end;
 
 procedure GetJSONArrayOrObjectAsQuotedStr(P: PUTF8Char; out PDest: PUTF8Char;
@@ -28072,7 +28101,7 @@ var EndOfObject: AnsiChar;
             // regular string content
             if Params=pNonQuoted then
               // returned directly as RawUTF8
-              SetString(FieldValues[ndx],PAnsiChar(res),resLen) else
+              FastSetString(FieldValues[ndx],res,resLen) else
               { escape SQL strings, cf. the official SQLite3 documentation:
                 "A string is formed by enclosing the string in single quotes (').
                  A single quote within the string can be encoded by putting two
@@ -28091,7 +28120,7 @@ var EndOfObject: AnsiChar;
             FieldValues[ndx] := SmallUInt32UTF8[1];
             FieldTypeApproximation[ndx] := ftaBoolean;
           end else begin
-            SetString(FieldValues[ndx],PAnsiChar(res),resLen);
+            FastSetString(FieldValues[ndx],res,resLen);
             FieldTypeApproximation[ndx] := ftaNumber;
           end;
       end;
@@ -28135,7 +28164,7 @@ begin
           FN := 'ID';
           FNlen := 2;
         end;
-      SetString(FieldNames[FieldCount],PAnsiChar(FN),FNlen);
+      FastSetString(FieldNames[FieldCount],FN,FNlen);
       GetSQLValue(FieldCount); // update EndOfObject
       if FieldIsRowID then
         SetID(FieldValues[FieldCount],DecodedRowID);
@@ -28579,10 +28608,10 @@ begin
         if PC=nil then
           exit;
         PC^ := '{';
-        SetString(result,PAnsiChar(PC),P-PC-1);
+        FastSetString(result,PC,P-PC-1);
         exit;
       end;
-    SetString(result,PAnsiChar(Beg),P-Beg-1);
+    FastSetString(result,Beg,P-Beg-1);
   end;
 end;
 
@@ -28596,7 +28625,7 @@ begin
   result := (fPrivateCopyHash=0) or (Hash=0) or (Hash<>fPrivateCopyHash);
   if not result then
     exit;
-  SetString(fPrivateCopy,PAnsiChar(aJSON),aLen);
+  FastSetString(fPrivateCopy,aJSON,aLen);
   fPrivateCopyHash := Hash;
 end;
 
@@ -28770,7 +28799,7 @@ constructor TSQLTableJSON.Create(const aSQL, aJSON: RawUTF8);
 var len: integer;
 begin
   len := length(aJSON);
-  SetString(fPrivateCopy,PAnsiChar(pointer(aJSON)),len);
+  FastSetString(fPrivateCopy,pointer(aJSON),len);
   Create(aSQL,pointer(fPrivateCopy),len);
 end;
 
@@ -28786,7 +28815,7 @@ constructor TSQLTableJSON.CreateFromTables(const Tables: array of TSQLRecordClas
 var len: integer;
 begin
   len := length(aJSON);
-  SetString(fPrivateCopy,PAnsiChar(pointer(aJSON)),len);
+  FastSetString(fPrivateCopy,pointer(aJSON),len);
   CreateFromTables(Tables,aSQL,pointer(fPrivateCopy),len);
 end;
 
@@ -28802,7 +28831,7 @@ constructor TSQLTableJSON.CreateWithColumnTypes(const ColumnTypes: array of TSQL
 var len: integer;
 begin
   len := length(aJSON);
-  SetString(fPrivateCopy,PAnsiChar(pointer(aJSON)),len);
+  FastSetString(fPrivateCopy,pointer(aJSON),len);
   CreateWithColumnTypes(ColumnTypes,aSQL,pointer(fPrivateCopy),len);
 end;
 
@@ -32391,7 +32420,7 @@ begin
   if UsingStream<>nil then begin
     UsingStream.Seek(0,soFromBeginning);
     GetJSONValues(UsingStream,Expand,withID,Occasion,SQLRecordOptions);
-    SetString(result,PAnsiChar(UsingStream.Memory),UsingStream.Seek(0,soFromCurrent));
+    FastSetString(result,UsingStream.Memory,UsingStream.Seek(0,soFromCurrent));
   end else begin
     J := TRawByteStringStream.Create;
     try
@@ -32923,7 +32952,7 @@ var aSQLFields, aSQLFrom, aSQLWhere, aSQLJoin: RawUTF8;
   begin
     B := P;
     while ord(P^) in IsIdentifier do inc(P); // go to end of field name
-    SetString(result,B,P-B);
+    FastSetString(result,B,P-B);
     if (result='') or IdemPropNameU(result,'AND') or IdemPropNameU(result,'OR') or
        IdemPropNameU(result,'LIKE') or IdemPropNameU(result,'NOT') or
        IdemPropNameU(result,'NULL') then
@@ -33058,7 +33087,7 @@ begin
         inc(J);
       end;
       if J<>JBeg then begin // append ' ',')'..
-        SetString(aSQLFrom,PAnsiChar(JBeg),J-JBeg);
+        FastSetString(aSQLFrom,JBeg,J-JBeg);
         aSQLWhere := aSQLWhere+aSQLFrom;
         JBeg := J;
       end;
@@ -34229,7 +34258,7 @@ begin
       k := i+j;
       while SQL[k] in [#1..' '] do inc(k);
       if not EnsureUniqueTableInFrom or (SQL[k]<>',') then begin
-        SetString(result,PAnsiChar(PtrInt(SQL)+i-1),j);
+        FastSetString(result,PAnsiChar(PtrInt(SQL)+i-1),j);
         exit;
       end;
     end;
@@ -34256,7 +34285,7 @@ begin
       k := i+j;
       while SQL[k] in [#1..' '] do inc(k);
       SetLength(result,n+1);
-      SetString(result[n],PAnsiChar(PtrInt(SQL)+i-1),j);
+      FastSetString(result[n],PAnsiChar(PtrInt(SQL)+i-1),j);
       inc(n);
       if SQL[k]<>',' then
         break;
@@ -35519,7 +35548,7 @@ begin
       exit else
       fCustomEncryptContentPrefix := '0' else begin
     tmp := ClassNameShort(aes); // TAESECB_API -> 'AESECB'
-    SetString(s,PAnsiChar(@tmp^[2]),6);
+    FastSetString(s,@tmp^[2],6);
     fCustomEncryptContentPrefix := s+UInt32ToUtf8(aes.KeySize);
   end;
   if (sign=nil) or (sign^.SignatureSize=0) then begin
@@ -35528,7 +35557,7 @@ begin
   end else begin
     fCustomEncryptSign := sign^;
     tmp := ToText(sign^.Algo); // saSha3384 -> 'sha3384'
-    SetString(s,PAnsiChar(@tmp^[3]),ord(tmp^[0])-2);
+    FastSetString(s,@tmp^[3],ord(tmp^[0])-2);
     fCustomEncryptContentPrefix := fCustomEncryptContentPrefix+s+'/';
   end;
   fCustomEncryptContentPrefix := LowerCase(fCustomEncryptContentPrefix);
@@ -35822,8 +35851,7 @@ begin
     with Table.RecordProps do
     if FieldNames='*' then
       result := SQLFromSelect(SQLTableName,SQLTableRetrieveAllFields,WhereClause,'') else
-    if (PosEx(RawUTF8(','),FieldNames,1)=0) and
-       (PosEx(RawUTF8('('),FieldNames,1)=0) and
+    if (PosChar(pointer(FieldNames),',')=nil) and (PosChar(pointer(FieldNames),'(')=nil) and
        not IsFieldName(FieldNames) then
       result := '' else // prevent SQL error
       result := SQLFromSelect(SQLTableName,FieldNames,WhereClause,'');
@@ -35885,7 +35913,7 @@ begin
       // get field values from the first (and unique) row
       for i := 0 to T.FieldCount-1 do begin
         P := T.fResults[T.FieldCount+i];
-        SetString(FieldValue[i],P,StrLen(P));
+        FastSetString(FieldValue[i],P,StrLen(P));
       end;
       result := true;
     finally
@@ -39196,7 +39224,7 @@ var files: TFindFilesDynArray;
     fn: TFileName;
     fs: Int64;
 begin
-  if (Param<>'*') and (PosEx(':',Param)=0) and (PosEx(PathDelim,Param)=0) then begin
+  if (Param<>'*') and (PosEx(RawUTF8(':'),Param)=0) and (PosEx(PathDelim,Param)=0) then begin
     fn := IncludeTrailingPathDelimiter(Folder)+UTF8ToString(Param);
     fs := FileSize(fn);
     if (fs>0) and (fs<256 shl 20) then begin // download up to 256 MB
@@ -39343,7 +39371,7 @@ begin
   Inc(P);
   System.Move(pointer(call.OutBody)^,P^,Length(call.OutBody));
   {$else}
-  SetString(ResStr,PAnsiChar(@Res),SizeOf(Res));
+  FastSetString(ResStr,@Res,SizeOf(Res));
   ResStr := ResStr+call.OutHead+#1+call.OutBody;
   {$endif FPC}
   Data.dwData := fServerWindow;
@@ -39412,7 +39440,7 @@ var i: integer;
 begin
   if aInstance=nil then
     exit;
-  if PosEx('/',aPrefix)>0 then
+  if PosEx(RawUTF8('/'),aPrefix)>0 then
     raise EServiceException.CreateUTF8('%.ServiceMethodRegisterPublishedMethods'+
       '("%"): prefix should not contain "/"',[self,aPrefix]);
   for i := 0 to GetPublishedMethods(aInstance,methods)-1 do
@@ -40738,7 +40766,7 @@ begin // expects 'ModelRoot[/TableName[/TableID][/URIBlobFieldName]][?param=...]
       TableID := -1; // URI like "ModelRoot/TableName/MethodName"
     URIBlobFieldName := Par;
     if Table<>nil then begin
-      j := PosEx('/',URIBlobFieldName);
+      j := PosEx(RawUTF8('/'),URIBlobFieldName);
       if j>0 then begin // handle "ModelRoot/TableName/URIBlobFieldName/ID"
         TableID := GetCardinalDef(pointer(PtrInt(URIBlobFieldName)+j),cardinal(-1));
         SetLength(URIBlobFieldName,j-1);
@@ -41943,7 +41971,7 @@ begin
   aOutSetCookie := Trim(aOutSetCookie);
   if not IsValidUTF8WithoutControlChars(aOutSetCookie) then
     raise EBusinessLayerException.CreateUTF8('Unsafe %.SetOutSetCookie',[self]);
-  if PosEx('=',aOutSetCookie)<2 then
+  if PosEx(RawUTF8('='),aOutSetCookie)<2 then
     raise EBusinessLayerException.CreateUTF8(
       '"name=value" expected for %.SetOutSetCookie("%")',[self,aOutSetCookie]);
   if StrPosI('; PATH=',pointer(aOutSetCookie))=nil then
@@ -42428,7 +42456,7 @@ begin // here Ctxt.Service is set (not ServiceMethodIndex yet)
     JSONDecode(tmp.buf,['method','params','id'],Values,True);
     if Values[0]=nil then // Method name required
       exit;
-    SetString(method,Values[0],StrLen(Values[0]));
+    FastSetString(method,Values[0],StrLen(Values[0]));
     ServiceParameters := Values[1];
     ServiceInstanceID := GetCardinal(Values[2]); // retrieve "id":ClientDrivenID
     ServiceMethodIndex := Service.fInterface.FindMethodIndex(method);
@@ -45911,6 +45939,7 @@ var i, ndx, i32: integer;
     err, currentRow: integer;
     P: TSQLPropInfo;
     nfo: PPropInfo;
+    rec: PSQLRecordArray;
     Hash: TListFieldHash;
     offs: PtrUInt;
     item: PPointer;
@@ -45924,7 +45953,7 @@ var i, ndx, i32: integer;
         exit;
     end;
     if Assigned(OnFind) then
-      OnFind(Dest,TSQLRecord(item^),(PtrUInt(item)-PtrUInt(fValue.List)) shr POINTERSHR);
+      OnFind(Dest,TSQLRecord(item^),(PtrUInt(item)-PtrUInt(rec)) shr POINTERSHR);
     inc(result);
   end;
 
@@ -45932,6 +45961,7 @@ begin
   result := 0;
   if fValue.Count=0 then
     exit;
+  rec := pointer(fValue.List);
   if FoundLimit<=0 then
     FoundLimit := maxInt;
   if WhereField=SYNTABLESTATEMENTWHEREID then begin
@@ -45941,7 +45971,7 @@ begin
         ndx := IDToIndex(i64); // use fast O(log(n)) binary search
         if ndx>=0 then begin
           if Assigned(OnFind) then
-            OnFind(Dest,TSQLRecord(fValue.List[ndx]),ndx);
+            OnFind(Dest,rec[ndx],ndx);
           inc(result);
         end;
       end;
@@ -45962,7 +45992,7 @@ begin
       ndx := Hash.Find(fSearchRec);
       if ndx>=0 then begin
         if Assigned(OnFind) then
-          OnFind(Dest,fValue.List[ndx],ndx);
+          OnFind(Dest,rec[ndx],ndx);
         inc(result);
       end;
     end;
@@ -45970,7 +46000,7 @@ begin
   end;
   // full scan optimized search for a specified value
   currentRow := 0;
-  item := pointer(fValue.List);
+  item := pointer(rec);
   if P.InheritsFrom(TSQLPropInfoRTTIInt32) then begin
     // optimized search for 8/16/32-bit Integer values
     i32 := GetInteger(pointer(WhereValue),err);
@@ -46040,7 +46070,7 @@ begin
 end;
 
 function TSQLRestStorageInMemory.FindMax(WhereField: integer; out max: Int64): boolean;
-var list: PPointerArray;
+var rec: PSQLRecordArray;
     P: TSQLPropInfo;
     nfo: PPropInfo;
     i: integer;
@@ -46050,9 +46080,9 @@ begin
   max := low(Int64);
   if fValue.Count=0 then
     exit;
-  list := pointer(fValue.List);
+  rec := pointer(fValue.List);
   if WhereField=SYNTABLESTATEMENTWHEREID then begin
-    max := TSQLRecord(list[fValue.Count-1]).IDValue; // should be ordered
+    max := rec[fValue.Count-1].IDValue; // should be ordered
     result := true;
     exit;
   end;
@@ -46063,7 +46093,7 @@ begin
   if P.InheritsFrom(TSQLPropInfoRTTIInt32) then begin
     nfo := TSQLPropInfoRTTI(P).PropInfo;
     for i := 0 to fValue.Count-1 do begin
-      v := nfo.GetOrdProp(list[i]);
+      v := nfo.GetOrdProp(rec[i]);
       if v>max then
         max := v;
     end;
@@ -46072,7 +46102,7 @@ begin
   else if P.InheritsFrom(TSQLPropInfoRTTIInt64) then begin
     nfo := TSQLPropInfoRTTI(P).PropInfo;
     for i := 0 to fValue.Count-1 do begin
-      v := nfo.GetInt64Prop(list[i]);
+      v := nfo.GetInt64Prop(rec[i]);
       if v>max then
         max := v;
     end;
@@ -46083,13 +46113,15 @@ end;
 procedure TSQLRestStorageInMemory.ForEach(WillModifyContent: boolean;
   OnEachProcess: TFindWhereEqualEvent; Dest: pointer);
 var i: integer;
+    rec: PSQLRecordArray;
 begin
   if (self=nil) or (fValue.Count=0) or not Assigned(OnEachProcess) then
     exit;
   StorageLock(WillModifyContent,'ForEach');
   try
+    rec := pointer(fValue.List);
     for i := 0 to fValue.Count-1 do
-      OnEachProcess(Dest,fValue.List[i],i);
+      OnEachProcess(Dest,rec[i],i);
   finally
     StorageUnLock;
   end;
@@ -46098,6 +46130,7 @@ end;
 function TSQLRestStorageInMemory.GetJSONValues(Stream: TStream;
   Expand: boolean; Stmt: TSynTableStatement): PtrInt;
 var ndx,KnownRowsCount: integer;
+    rec: PSQLRecordArray;
     {$ifndef NOVARIANTS}
     j: integer;
     id: Int64;
@@ -46122,13 +46155,14 @@ begin // exact same format as TSQLTable.GetJSONValues()
   W := fStoredClassRecordProps.CreateJSONWriter(Stream,Expand,withID,bits,KnownRowsCount);
   if W<>nil then
   try
+    rec := pointer(fValue.List);
     if Expand then
       W.Add('[');
     if Stmt.Where=nil then begin // no WHERE statement -> all rows
       for ndx := 0 to KnownRowsCount-1 do begin
         if Expand then
           W.AddCR; // for better readability
-        TSQLRecord(fValue.List[ndx]).GetJSONValues(W);
+        rec[ndx].GetJSONValues(W);
         W.Add(',');
       end;
       result := KnownRowsCount;
@@ -46147,7 +46181,7 @@ begin // exact same format as TSQLTable.GetJSONValues()
             if VariantToInt64(Values[ndx],id) then begin
               j := IDToIndex(id);
               if j>=0 then begin
-                TSQLRecord(fValue.List[j]).GetJSONValues(W);
+                rec[j].GetJSONValues(W);
                 W.Add(',');
                 inc(result);
                 if (Stmt.Limit>0) and (result>=Stmt.Limit) then
@@ -46162,8 +46196,8 @@ begin // exact same format as TSQLTable.GetJSONValues()
         if Prop.InheritsFrom(TSQLPropInfoRTTIRawBlob) then begin
           IsNull := Stmt.Where[0].Operator=opIsNull;
           for ndx := 0 to fValue.Count-1 do
-          if TSQLPropInfoRTTIRawBlob(Prop).IsNull(fValue.List[ndx])=IsNull then begin
-            TSQLRecord(fValue.List[ndx]).GetJSONValues(W);
+          if TSQLPropInfoRTTIRawBlob(Prop).IsNull(rec[ndx])=IsNull then begin
+            rec[ndx].GetJSONValues(W);
             W.Add(',');
             inc(result);
             if (Stmt.Limit>0) and (result>=Stmt.Limit) then
@@ -46194,16 +46228,18 @@ end;
 function TSQLRestStorageInMemory.IDToIndex(ID: TID): integer;
 var L, R: integer;
     cmp: TID;
+    rec: PSQLRecordArray;
 begin
   if self<>nil then
   with fValue do begin
+    rec := pointer(List);
     R := Count-1;
     if fIDSorted and (R>=8) then begin
       // IDs are sorted -> use fast O(log(n)) binary search algorithm
       L := 0;
       repeat
         result := (L + R) shr 1;
-        cmp := TSQLRecord(List[result]).fID-ID;
+        cmp := rec[result].fID-ID;
         if cmp=0 then
           exit;
         if cmp<0 then
@@ -46213,7 +46249,7 @@ begin
     end else
       // IDs are not sorted (not possible in practice) -> O(n) lookup
       for result := 0 to R do
-        if TSQLRecord(List[result]).fID=ID then
+        if rec[result].fID=ID then
           exit;
   end;
   result := -1;
@@ -46221,13 +46257,14 @@ end;
 
 procedure TSQLRestStorageInMemory.GetAllIDs(out ID: TIDDynArray);
 var i: integer;
+    rec: PSQLRecordArray;
 begin
   StorageLock(false,'GetAllIDs');
-  with fValue do
   try
-    SetLength(ID, Count);
+    SetLength(ID, fValue.Count);
+    rec := pointer(fValue.List);
     for i := 0 to Count-1 do
-      ID[i] := TSQLRecord(List[i]).fID;
+      ID[i] := rec[i].fID;
   finally
     StorageUnlock;
   end;
@@ -46385,12 +46422,14 @@ end;
 
 procedure TSQLRestStorageInMemory.SaveToJSON(Stream: TStream; Expand: Boolean);
 var i: integer;
+    rec: PSQLRecordArray;
     W: TJSONSerializer;
 begin
   if self=nil then
     exit;
   StorageLock(false,'SaveToJSON');
   try
+    rec := pointer(fValue.List);
     W := fStoredClassRecordProps.CreateJSONWriter(
       Stream,Expand,true,ALL_FIELDS,fValue.Count,65536);
     try
@@ -46399,7 +46438,7 @@ begin
       for i := 0 to fValue.Count-1 do begin
         if Expand then
           W.AddCR; // for better readability
-        TSQLRecord(fValue.List[i]).GetJSONValues(W);
+        rec[i].GetJSONValues(W);
         W.Add(',');
       end;
       W.EndJSONObject(fValue.Count,fValue.Count);
@@ -46448,6 +46487,7 @@ function TSQLRestStorageInMemory.LoadFromBinary(Stream: TStream): boolean;
 var R: TFileBufferReader;
     MS: TMemoryStream;
     i,n,f: integer;
+    rec: PSQLRecordArray;
     ID32: TIntegerDynArray;
     P: PAnsiChar;
     aRecord: TSQLRecord;
@@ -46476,6 +46516,7 @@ begin
     fValue.Clear;
     n := R.ReadVarUInt32Array(ID32);
     fValue.Count := abs(n); // faster than fValue.Add() to allocate all at once
+    rec := pointer(fValue.List);
     if n<0 then begin // was wkFakeMarker -> TID were stored as VarUInt64
       lastID := 0;
       for i := 0 to -n-1 do begin
@@ -46483,20 +46524,20 @@ begin
         newID := lastID+{$ifdef FPC_OR_UNICODE}TID{$endif}(R.ReadVarUInt64);
         aRecord.fID := newID;
         lastID := newID;
-        fValue.List[i] := aRecord;
+        rec[i] := aRecord;
       end;
     end else
       for i := 0 to n-1 do begin
         aRecord := fStoredClass.Create;
         aRecord.fID := ID32[i];
-        fValue.List[i] := aRecord;
+        rec[i] := aRecord;
       end;
     // read content, grouped by field (for better compression)
     P := R.CurrentMemory;
     for f := 0 to Fields.Count-1 do
-      with Fields.List[f], fValue do
-        for i := 0 to Count-1 do begin
-          P := SetBinary(List[i],P);
+      with Fields.List[f] do
+        for i := 0 to fValue.Count-1 do begin
+          P := SetBinary(rec[i],P);
           if P=nil then begin
             fValue.Clear; // on error, reset whole
             exit;
@@ -46542,6 +46583,7 @@ end;
 function TSQLRestStorageInMemory.SaveToBinary(Stream: TStream): integer;
 var W: TFileBufferWriter;
     MS: THeapMemoryStream;
+    rec: PSQLRecordArray;
     i, f: integer;
     hasInt64ID: boolean;
     p: PID;
@@ -46562,23 +46604,23 @@ begin
       W.Write1(0); // ClassName='TSQLRecordProperties' in old buggy format
       SaveBinaryHeader(W);
       // write IDs
+      rec := pointer(fValue.List);
       hasInt64ID := false;
-      with fValue do
-        for i := 0 to Count-1 do begin
-          p := @TSQLRecord(List[i]).fID;
-          if p^>high(cardinal) then begin
-            hasInt64ID := true;
-            break;
-          end else
-            PCardinalArray(ID32.buf)[i] := PInteger(p)^;
-        end;
+      for i := 0 to fValue.Count-1 do begin
+        p := @rec[i].fID;
+        if p^>high(cardinal) then begin
+          hasInt64ID := true;
+          break;
+        end else
+          PCardinalArray(ID32.buf)[i] := PInteger(p)^;
+      end;
       if hasInt64ID then begin
         W.WriteVarUInt32(fValue.Count);
         W.Write1(ord(wkFakeMarker)); // fake marker
         lastID := 0;
         with fValue do
         for i := 0 to Count-1 do begin // a bit less efficient than wkSorted
-          newID := TSQLRecord(List[i]).fID;
+          newID := rec[i].fID;
           if newID<=lastID then
             raise EORMException.CreateUTF8('%.SaveToBinary(%): IDs not sorted',
               [self,fStoredClass]);
@@ -46589,9 +46631,9 @@ begin
         W.WriteVarUInt32Values(ID32.buf,Count,wkSorted); // efficient ID storage
       // write content, grouped by field (for better compression)
       for f := 0 to Fields.Count-1 do
-        with Fields.List[f], fValue do
-          for i := 0 to Count-1 do
-            GetBinary(TSQLRecord(List[i]),W);
+        with Fields.List[f] do
+          for i := 0 to fValue.Count-1 do
+            GetBinary(rec[i],W);
     finally
       StorageUnLock;
       ID32.Done;
@@ -46621,17 +46663,17 @@ end;
 function TSQLRestStorageInMemory.GetOne(aID: TID): TSQLRecord;
 var i: integer;
 begin
-  StorageLock(false,'GetOne');
-  try
-    i := IDToIndex(aID);
-    if i<0 then
-      result := nil else begin
-      result := fStoredClass.Create;
-      CopyObject(TObject(fValue.List[i]),result);
-      result.fID := aID;
+  if aID = 0 then
+    result := nil else begin
+    StorageLock(false,'GetOne');
+    try
+      i := IDToIndex(aID);
+      if i<0 then
+        result := nil else
+        result := TSQLRecord(fValue.List[i]).CreateCopy;
+    finally
+      StorageUnLock;
     end;
-  finally
-    StorageUnLock;
   end;
 end;
 
@@ -46639,6 +46681,7 @@ function TSQLRestStorageInMemory.EngineUpdateFieldIncrement(TableModelIndex: int
   ID: TID; const FieldName: RawUTF8; Increment: Int64): boolean;
 var i,err: integer;
     P: TSQLPropInfo;
+    rec: TSQLRecord;
     V: RawUTF8;
     wasString: boolean;
     int: Int64;
@@ -46654,12 +46697,13 @@ begin
     i := IDToIndex(ID);
     if i<0 then
       exit;
-    P.GetValueVar(fValue.List[i],false,V,@wasstring);
+    rec := PSQLRecordArray(fValue.List)[i];
+    P.GetValueVar(rec,false,V,@wasstring);
     int := GetInt64(pointer(V),err);
     if wasString or (err<>0) then
       exit;
     Int64ToUtf8(int+Increment,V);
-    P.SetValueVar(fValue.List[i],V,false);
+    P.SetValueVar(rec,V,false);
     result := true;
   finally
     StorageUnLock;
@@ -46686,8 +46730,8 @@ begin
     i := IDToIndex(ID);
     if (i<0) or not RecordCanBeUpdated(fStoredClass,ID,seUpdate) then
       exit;
+    Orig := TSQLRecord(fValue.List[i]);
     if fUniqueFields<>nil then begin
-      Orig := TSQLRecord(fValue.List[i]);
       Rec := Orig.CreateCopy; // copy since can be a partial update
       Rec.FillFrom(SentData); // overwrite updated properties
       if not UniqueFieldsUpdateOK(Rec,i) then begin
@@ -46695,10 +46739,9 @@ begin
         exit;
       end;
       Orig.Free; // avoid memory leak
-      TSQLRecord(fValue.List[i]) := Rec; // update item in list
-    end else
-      // direct in-place partial update
-      TSQLRecord(fValue.List[i]).FillFrom(SentData);
+      TSQLRecord(fValue.List[i]) := Rec; // replace item in list
+    end else // direct in-place partial update
+      Orig.FillFrom(SentData);
     fModified := true;
     result := true;
     if Owner<>nil then
@@ -46837,6 +46880,7 @@ end;
 
 function TSQLRestStorageInMemory.UpdateBlobFields(Value: TSQLRecord): boolean;
 var i,f: integer;
+    rec: TSQLRecord;
 begin
   result := false;
   if (Value<>nil) and (Value.fID>0) and (PSQLRecordClass(Value)^=fStoredClass) then
@@ -46847,8 +46891,9 @@ begin
       i := IDToIndex(Value.fID);
       if (i<0) or not RecordCanBeUpdated(Table,Value.fID,seUpdate) then
         exit;
+      rec := fValue.List[i];
       for f := 0 to high(BlobFields) do
-        BlobFields[f].CopyValue(Value,fValue.List[i]);
+        BlobFields[f].CopyValue(Value,rec);
       if Owner<>nil then
         Owner.InternalUpdateEvent(seUpdateBlob,fStoredClassProps.TableIndex,Value.fID,'',
           @fStoredClassRecordProps.FieldBits[sftBlob]);
@@ -47355,7 +47400,7 @@ begin
         raise EORMException.CreateUTF8('%.EngineAdd(%) fShardNextID',[self,fStoredClass]);
     end;
     result := fShardLastID;
-    i := PosEx('{',SentData);
+    i := PosEx(RawUTF8('{'),SentData);
     if i=0 then
       data := FormatUTF8('{ID:%}',[result]) else begin
       data := SentData;
@@ -48500,10 +48545,10 @@ begin
     result := '' else begin
     fLogTableWriter.FlushToStream;
     Data := fLogTableStorage.Memory;
-    SetString(result,Data+StartPosition,fLogTableStorage.Position-StartPosition);
+    FastSetString(result,Data+StartPosition,fLogTableStorage.Position-StartPosition);
     // format as valid not expanded JSON table content:
     if StartPosition<>0 then begin
-      SetString(JSONStart,Data,fLogTableWriter.StartDataPosition);
+      FastSetString(JSONStart,Data,fLogTableWriter.StartDataPosition);
       result := JSONStart+result;
     end;
     result := result+']}';
@@ -49540,7 +49585,7 @@ begin
         PropValue := GetJSONField(From,From,@wasString,@EndOfObject,@PropValueLen);
         if (PropValue=nil) or not wasString then
           exit;
-        SetString(U,PAnsiChar(PropValue),PropValueLen);
+        FastSetString(U,PropValue,PropValueLen);
         utf.Add(U);
         case EndOfObject of
           ']': break;
@@ -49643,7 +49688,7 @@ begin
   {$ifdef FPC}tkAString,{$endif}{$ifdef HASVARUSTRING}tkUString,{$endif}
   tkLString,tkWString: // handle all string types from temporary RawUTF8
     if wasString or (j2oIgnoreStringType in Options) then begin
-      SetString(tmp,PAnsiChar(PropValue),PropValueLen);
+      FastSetString(tmp,PropValue,PropValueLen);
       if not(j2oIgnoreUnknownProperty in Options) or P^.WriteIsPossible then
         P^.SetLongStrValue(Value,tmp);
     end else
@@ -49814,7 +49859,7 @@ begin
         From := GotoNextJSONObjectOrArray(From);
         if From=nil then
           exit;
-        SetString(U,Beg,From-Beg);
+        FastSetString(U,Beg,From-Beg);
         if not(j2oIgnoreUnknownProperty in Options) or P^.WriteIsPossible then
           P^.SetLongStrProp(Value,U);
       end else
@@ -50252,7 +50297,7 @@ begin
   end;
   // 1. send request
   // #1 is a field delimiter below, since Get*Item() functions return nil for #0
-  SetString(Msg,PAnsiChar(@MAGIC_SYN),4);
+  FastSetString(Msg,@MAGIC_SYN,4);
   Msg := Msg+Call.Url+#1+Call.Method+#1+Call.InHead+#1+Call.InBody;
   Data.dwData := fClientWindow;
   Data.cbData := length(Msg)*SizeOf(Msg[1]);
@@ -50318,7 +50363,7 @@ begin
     exit;
   Msg.Result := HTTP_SUCCESS; // Send something back
   if fCurrentResponse=#0 then // expect some response?
-    SetString(fCurrentResponse,PAnsiChar(PCopyDataStruct(Msg.CopyDataStruct)^.lpData),
+    FastSetString(fCurrentResponse,PCopyDataStruct(Msg.CopyDataStruct)^.lpData,
       PCopyDataStruct(Msg.CopyDataStruct)^.cbData);
 end;
 
@@ -52552,7 +52597,7 @@ procedure TSQLVirtualTableCursor.SetColumn(var aResult: TSQLVar;
 begin
   aResult.Options := [];
   aResult.VType := ftUTF8;
-  SetString(fColumnTemp,PAnsiChar(aValue),aValueLength); // temporary copy
+  FastSetString(fColumnTemp,aValue,aValueLength); // temporary copy
   aResult.VText := pointer(fColumnTemp);
 end;
 
@@ -53339,10 +53384,10 @@ begin
     Sender.fSessionData := ''; // reset temporary 'data' field
     result := '';
   end else begin
-    SetString(result,values[0],StrLen(values[0]));
+    FastSetString(result,values[0],StrLen(values[0]));
     Base64ToBin(PAnsiChar(values[1]),StrLen(values[1]),Sender.fSessionData);
-    SetString(Sender.fSessionServer,values[2],StrLen(values[2]));
-    SetString(Sender.fSessionVersion,values[3],StrLen(values[3]));
+    FastSetString(Sender.fSessionServer,values[2],StrLen(values[2]));
+    FastSetString(Sender.fSessionVersion,values[3],StrLen(values[3]));
     SetID(values[4],User.fID);
     User.LogonName := values[5]; // set/fix using values from server
     User.DisplayName := values[6];
@@ -53408,7 +53453,7 @@ class procedure TSQLRestServerAuthenticationURI.ClientSessionSign(
   Sender: TSQLRestClientURI; var Call: TSQLRestURIParams);
 begin
   if (Sender<>nil) and (Sender.fSessionID<>0) and (Sender.fSessionUser<>nil) then
-    if PosEx(RawUTF8('?'),Call.url,1)=0 then
+    if PosChar(pointer(Call.url),'?')=nil then
       Call.url := Call.url+'?session_signature='+Sender.fSessionIDHexa8 else
       Call.url := Call.url+'&session_signature='+Sender.fSessionIDHexa8;
 end;
@@ -53598,7 +53643,7 @@ begin
   if (Sender=nil) or (Sender.fSessionID=0) or (Sender.fSessionUser=nil) then
     exit;
   blankURI := Call.Url;
-  if PosEx(RawUTF8('?'),Call.Url,1)=0 then
+  if PosChar(pointer(Call.url),'?')=nil then
     Call.url := Call.Url+'?session_signature=' else
     Call.url := Call.Url+'&session_signature=';
   with Sender do begin
@@ -54210,7 +54255,7 @@ begin
         include(bits,i);
   while MethodNamesCSV<>nil do begin
     GetNextItem(MethodNamesCSV,',',method);
-    if PosEx('.',method)=0 then begin
+    if PosChar(pointer(method),'.')=nil then begin
       for i := 0 to n-1 do
       with fListInterfaceMethod[i] do // O(n) search is fast enough here
         if (InterfaceMethodIndex>=SERVICE_PSEUDO_METHOD_COUNT) and
@@ -55617,7 +55662,7 @@ end;
 function TInterfaceFactory.FindFullMethodIndex(const aFullMethodName: RawUTF8;
   alsoSearchExactMethodName: boolean): integer;
 begin
-  if PosEx('.',aFullMethodName)>=0 then
+  if PosChar(pointer(aFullMethodName),'.')<>nil then
     for result := 0 to fMethodsCount-1 do
       if IdemPropNameU(fMethods[result].InterfaceDotMethodName,aFullMethodName) then
         exit;
@@ -56092,7 +56137,7 @@ begin
     Inc(methodindex);
     aURI := PME^.Name;
     {$else}
-    SetString(aURI,PAnsiChar(@PS^[1]),ord(PS^[0]));
+    FastSetString(aURI,@PS^[1],ord(PS^[0]));
     {$endif}
     with PServiceMethod(fMethod.AddUniqueName(aURI,
       '%.% method: duplicated name for %',[fInterfaceTypeInfo^.Name,aURI,self]))^ do begin
@@ -56370,7 +56415,7 @@ begin
   call.Instance := pointer(fDest);
   call.Params := aParams;
   if Assigned(fOnResult) then begin
-    SetString(call.OnOutputParamsCopy,PAnsiChar(pointer(aParams)),length(aParams));
+    FastSetString(call.OnOutputParamsCopy,pointer(aParams),length(aParams));
     call.OnOutput := fOnResult;
   end else
     call.OnOutput := nil;
@@ -57310,26 +57355,20 @@ end;
 
 procedure TInterfaceStub.IntCheckCount(aMethodIndex, aComputed: cardinal;
   aOperator: TSQLQueryOperator; aCount: cardinal);
-const
-  OPERATORS: array[qoEqualTo..qoGreaterThanOrEqualTo] of RawUTF8 = (
-    '=','<>','<','<=','>','>=');
-function SQLQueryCompare(aOperator: TSQLQueryOperator; A,B: cardinal): boolean;
+var ok: boolean;
 begin
   case aOperator of
-  qoEqualTo:              result := A=B;
-  qoNotEqualTo:           result := A<>B;
-  qoLessThan:             result := A<B;
-  qoLessThanOrEqualTo:    result := A<=B;
-  qoGreaterThan:          result := A>B;
-  qoGreaterThanOrEqualTo: result := A>=B;
+  qoEqualTo:              ok := aComputed=aCount;
+  qoNotEqualTo:           ok := aComputed<>aCount;
+  qoLessThan:             ok := aComputed<aCount;
+  qoLessThanOrEqualTo:    ok := aComputed<=aCount;
+  qoGreaterThan:          ok := aComputed>aCount;
+  qoGreaterThanOrEqualTo: ok := aComputed>=aCount;
   else raise EInterfaceStub.CreateUTF8('%.IntCheckCount(): Unexpected % operator',
     [self,Ord(aOperator)]);
   end;
-end;
-begin
-  InternalCheck(SQLQueryCompare(aOperator,aComputed,aCount),True,
-   'ExpectsCount(''%'',%,%) failed: count=%',[fInterface.Methods[aMethodIndex].URI,
-    ToText(aOperator)^,aCount,aComputed]);
+  InternalCheck(ok,True,'ExpectsCount(''%'',%,%) failed: count=%',
+    [fInterface.Methods[aMethodIndex].URI,ToText(aOperator)^,aCount,aComputed]);
 end;
 
 procedure TInterfaceStub.InstanceDestroyed(aClientDrivenID: cardinal);
@@ -57684,12 +57723,10 @@ begin
         end;
       end;
       if result then begin
-        if aResult<>nil then // make unique due to JSONDecode()
+        if aResult<>nil then // make unique due to JSONDecode() by caller
           if log.CustomResults='' then
-            SetString(aResult^,PAnsiChar(pointer(aMethod.DefaultResult)),
-              length(aMethod.DefaultResult)) else
-            SetString(aResult^,PAnsiChar(pointer(log.CustomResults)),
-              length(log.CustomResults));
+            FastSetString(aResult^,pointer(aMethod.DefaultResult),length(aMethod.DefaultResult)) else
+            FastSetString(aResult^,pointer(log.CustomResults),length(log.CustomResults));
       end else
       if aErrorMsg<>nil then
         aErrorMsg^ := log.CustomResults;
@@ -60133,7 +60170,7 @@ begin
     smvCurrency:
       PInt64(V)^ := StrToCurr64(Val);
     smvRawUTF8:
-      SetString(PRawUTF8(V)^,PAnsiChar(Val),ValLen);
+      FastSetString(PRawUTF8(V)^,Val,ValLen);
     smvString:
       UTF8DecodeToString(Val,ValLen,PString(V)^);
     smvRawByteString:
@@ -61516,7 +61553,7 @@ begin
     len := StrLen(params);
     if params[len-1]=']' then
       dec(len);
-    SetString(tmp,PAnsiChar(params),len);
+    FastSetString(tmp,params,len);
   end;
   result := TInterfacedObjectFake(Instance).fInvoke(fMethod^,tmp,nil,nil,nil,nil);
 end;
@@ -62226,7 +62263,7 @@ begin
         exit; // leave result=false
       end;
       if aResult<>nil then
-        SetString(aResult^,Values[0],StrLen(Values[0]));
+        FastSetString(aResult^,Values[0],StrLen(Values[0]));
       if (aClientDrivenID<>nil) and (Values[1]<>nil) then // keep ID if no "id":...
         aClientDrivenID^ := GetCardinal(Values[1]);
     end;

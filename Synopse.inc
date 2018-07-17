@@ -268,6 +268,7 @@
     {$define PUREPASCAL} // e.g. x64, AARCH64
     {$ifdef CPUX64}
       {$define CPUINTEL}
+      {$define FPC_CPUINTEL}
       {$ASMMODE INTEL} // as Delphi expects
     {$endif CPUX64}
   {$else}
@@ -277,6 +278,7 @@
     {$endif CPUARM}
     {$ifdef CPUX86}
       {$define CPUINTEL}
+      {$define FPC_CPUINTEL}
       {$ASMMODE INTEL} // as Delphi expects
     {$endif CPUX86}
   {$endif CPU64}

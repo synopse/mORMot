@@ -2845,7 +2845,7 @@ begin
   if extout<>'' then
     ClientSock.SockSend(['Sec-WebSocket-Extensions: ',extout]);
   ClientSock.SockSend;
-  ClientSock.SockSendFlush;
+  ClientSock.SockSendFlush('');
   result := STATUS_SUCCESS; // connection upgraded: never back to HTTP/1.1
 end;
 
@@ -2895,7 +2895,7 @@ begin
     if err<>STATUS_SUCCESS then begin
       ClientSock.SockSend(['HTTP/1.0 ',err,' WebSocket Upgrade Error'#13#10+
         'Connection: Close'#13#10]);
-      ClientSock.SockSendFlush;
+      ClientSock.SockSendFlush('');
       ClientSock.KeepAliveClient := false;
     end;
   end else
@@ -3186,8 +3186,8 @@ begin
         'Sec-WebSocket-Version: 13']);
       if aProtocol.ProcessHandshake(nil,extout,nil) and (extout<>'') then
         SockSend(['Sec-WebSocket-Extensions: ',extout]);
-      SockSend;
-      SockSendFlush;
+      SockSend; // CRLF
+      SockSendFlush('');
       SockRecvLn(cmd);
       GetHeader;
       prot := HeaderValue('Sec-WebSocket-Protocol');

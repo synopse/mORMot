@@ -1199,6 +1199,10 @@ type
 { ************ fast UTF-8 / Unicode / Ansi types and conversion routines **** }
 
 type
+  {$ifndef ISDELPHI2007ANDUP}
+  TBytes = array of byte;
+  {$endif}
+
   /// kind of adding in a TTextWriter
   TTextWriterKind = (twNone, twJSONEscape, twOnSameLine);
 
@@ -1293,7 +1297,6 @@ type
     function AnsiToAnsi(From: TSynAnsiConvert; const Source: RawByteString): RawByteString; overload;
     /// convert any Ansi buffer (providing a From converted) into Ansi Text
     function AnsiToAnsi(From: TSynAnsiConvert; Source: PAnsiChar; SourceChars: cardinal): RawByteString; overload;
-      {$ifdef HASINLINE}inline;{$endif}
     /// corresponding code page
     property CodePage: Cardinal read fCodePage;
   end;
@@ -1477,8 +1480,10 @@ type
     /// initialize a new temporary buffer of a given number of bytes
     function Init(SourceLen: integer): pointer; overload;
     /// initialize the buffer returning the internal buffer size (4095 bytes)
-    // - then buf could be used e.g. for an API call, calling Init(SourceLen) if
-    // the API returned an error about an insufficient buffer space
+    // - could be used e.g. for an API call, first trying with plain temp.Init
+    // and using temp.buf and temp.len safely in the call, only calling
+    // temp.Init(expectedsize) if the API returned an error about an insufficient
+    // buffer space
     function Init: integer; overload; {$ifdef HASINLINE}inline;{$endif}
     /// initialize a new temporary buffer of a given number of random bytes
     // - will fill the buffer via FillRandom() calls
@@ -1635,17 +1640,13 @@ var
   /// can be used to avoid a memory allocation for res := 'null'
   NULL_STR_VAR: RawUTF8;
 
-/// faster equivalence to SetString() function for a RawUTF8
-// - will reallocate the content in-place if the string refcount is 1
-// - to be used instead of SetString() for "var" RawUTF8 parameters
-// - for RawUTF8 function result, SetString is still faster:
-// ! SynCommons.UInt32ToUtf8(Value: cardinal): RawUTF8; SetRawUTF8 245.64ms
-// ! SynCommons.UInt32ToUtf8(Value: cardinal): RawUTF8; SetString  136.39ms
-procedure SetRawUTF8(var Dest: RawUTF8; text: pointer; len: integer);
+/// equivalence to SetString(s,nil,len) function
+// - faster especially under FPC
+procedure FastSetString(var s; p: pointer; len: PtrInt);
 
-/// faster equivalence to SetString(s,nil,len) function for a RawUTF8
-// - won't allocate the content if the string refcount is 1 and len matches
-procedure FastNewRawUTF8(var s: RawUTF8; len: integer);
+/// equivalence to SetString(s,nil,len) function with a specific code page
+// - faster especially under FPC
+procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
 
 /// equivalence to @UTF8[1] expression to ensure a RawUTF8 variable is unique
 // - will ensure that the string refcount is 1, and return a pointer to the text
@@ -1782,7 +1783,6 @@ function Utf8ToWinAnsi(P: PUTF8Char): WinAnsiString; overload;
 
 /// direct conversion of a UTF-8 encoded zero terminated buffer into a RawUTF8 String
 procedure Utf8ToRawUTF8(P: PUTF8Char; var result: RawUTF8);
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// direct conversion of a UTF-8 encoded buffer into a WinAnsi PAnsiChar buffer
 function UTF8ToWinPChar(dest: PAnsiChar; source: PUTF8Char; count: integer): integer;
@@ -2292,7 +2292,7 @@ function FormatUTF8(const Format: RawUTF8; const Args: array of const): RawUTF8;
 /// fast Format() function replacement, optimized for RawUTF8
 // - overloaded function, which avoid a temporary RawUTF8 string on stack
 procedure FormatUTF8(const Format: RawUTF8; const Args: array of const;
-  var result: RawUTF8); overload;
+  out result: RawUTF8); overload;
 
 /// fast Format() function replacement, for UTF-8 content stored in shortstring
 // - shortstring allows fast stack allocation, so is perfect for small content
@@ -2410,11 +2410,6 @@ function bswap64(const a: QWord): QWord;
 // - n is required to be > 0
 // - warning: on x86, a should be <> b
 procedure bswap64array(a,b: PQWordArray; n: integer);
-
-{$ifndef ISDELPHI2007ANDUP}
-type
-  TBytes = array of byte;
-{$endif}
 
 /// fast concatenation of several AnsiStrings
 function RawByteStringArrayConcat(const Values: array of RawByteString): RawByteString;
@@ -3537,24 +3532,23 @@ function FindIniNameValueW(P: PWideChar; UpperName: PUTF8Char): string;
 // therefore very fast (no temporary TMemIniFile is created)
 // - if Section equals '', find the Name= value before any [Section]
 function FindIniEntryW(const Content: string; const Section, Name: RawUTF8): string;
+{$endif UNICODE}
 
 {$ifdef PUREPASCAL}
-
-{$ifndef UNICODE}
-/// our fast RawUTF8 version of Pos(), for Unicode only compiler
-// - this Pos() is seldom used, but this RawUTF8 specific version is needed
-// by Delphi 2009+, to avoid two unnecessary conversions into UnicodeString
-function Pos(const substr, str: RawUTF8): Integer; overload; inline;
-{$endif UNICODE}
-
+{$ifdef HASINLINE}
+function PosEx(const SubStr, S: RawUTF8; Offset: PtrUInt=1): PtrInt; inline;
+{$ifndef FPC}
+function PosExPas(pSub, p: PUTF8Char; Offset: PtrUInt): PtrInt;
+{$endif}
+{$else}
+var PosEx: function(const SubStr, S: RawUTF8; Offset: PtrUInt=1): PtrInt;
+{$endif}
 {$else}
 
-{$endif PUREPASCAL}
-
-{$endif UNICODE}
-
 /// faster RawUTF8 Equivalent of standard StrUtils.PosEx
-function PosEx(const SubStr, S: RawUTF8; Offset: PtrUInt=1): Integer;
+function PosEx(const SubStr, S: RawUTF8; Offset: PtrUInt=1): integer;
+
+{$endif PUREPASCAL}
 
 /// split a RawUTF8 string into two strings, according to SepStr separator
 // - if SepStr is not found, LeftStr=Str and RightStr=''
@@ -5619,15 +5613,14 @@ type
     function ElemPtr(index: PtrInt): pointer; {$ifdef HASINLINE}inline;{$endif}
     /// will copy one element content from its index into another variable
     // - do nothing if index is out of range
-    procedure ElemCopyAt(index: PtrInt; var Dest);
+    procedure ElemCopyAt(index: PtrInt; var Dest); {$ifdef HASINLINE}inline;{$endif}
     /// will move one element content from its index into another variable
     // - will erase the internal item ater copy
     // - do nothing if index is out of range
     procedure ElemMoveTo(index: PtrInt; var Dest);
     /// will copy one variable content into an indexed element
     // - do nothing if index is out of range
-    procedure ElemCopyFrom(const Source; index: PtrInt);
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure ElemCopyFrom(const Source; index: PtrInt); {$ifdef HASINLINE}inline;{$endif}
     /// compare the content of two elements, returning TRUE if both values equal
     // - this method compares first using any supplied Compare property,
     // then by content using the RTTI element description of the whole record
@@ -5635,7 +5628,7 @@ type
     /// will reset the element content
     procedure ElemClear(var Elem);
     /// will copy one element content
-    procedure ElemCopy(const A; var B);
+    procedure ElemCopy(const A; var B); {$ifdef FPC}inline;{$endif}
     /// will copy the first field value of an array element
     // - will use the array KnownType to guess the copy routine to use
     // - returns false if the type information is not enough for a safe copy
@@ -5807,7 +5800,9 @@ type
     procedure Delete(aIndex: PtrInt);  inline;
     function SaveTo: RawByteString; overload; inline;
     function SaveTo(Dest: PAnsiChar): PAnsiChar; overload; inline;
-    function SaveToJSON(EnumSetsAsText: boolean=false): RawUTF8; inline;
+    function SaveToJSON(EnumSetsAsText: boolean=false;
+      reformat: TTextWriterJSONFormat=jsonCompact): RawUTF8; inline;
+    procedure Sort(aCompare: TDynArraySortCompare=nil); inline;
     function LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char=nil): PUTF8Char; inline;
     function SaveToLength: integer; inline;
     function LoadFrom(Source: PAnsiChar): PAnsiChar;  inline;
@@ -8925,7 +8920,14 @@ type
     // - you can truncate the original data size (e.g. if all bits of an integer
     // are not used) by specifying the aFieldSize optional parameter
     class procedure RegisterCustomJSONSerializerFromTextBinaryType(aTypeInfo: pointer;
-      aDataSize: integer; aFieldSize: integer=0);
+      aDataSize: integer; aFieldSize: integer=0); overload;
+    /// define custom binary serialization for several simple types
+    // - data will be serialized as BinToHexDisplayLower() JSON hexadecimal string
+    // - the TypeInfo() and associated size information will here be defined as triplets:
+    // ([TypeInfo(TType1),SizeOf(TType1),TYPE1_BYTES,TypeInfo(TType2),SizeOf(TType2),TYPE2_BYTES])
+    // - a wrapper around the overloaded RegisterCustomJSONSerializerFromTextBinaryType()
+    class procedure RegisterCustomJSONSerializerFromTextBinaryType(
+      const aTypeInfoDataFieldSize: array of const); overload;
     /// define a custom serialization for several simple types
     // - will call the overloaded RegisterCustomJSONSerializerFromTextSimpleType
     // method for each supplied type information
@@ -12446,7 +12448,7 @@ procedure FillZero(var secret: RawUTF8); overload;
   // - is expected to be used with a constant count from SizeOf() so that
   // inlining make it more efficient than FillCharFast(..,...,0):
   // ! FillZero(variable,SizeOf(variable));
-procedure FillZero(var dest; count: integer); overload;
+procedure FillZero(var dest; count: PtrInt); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast computation of two 64-bit unsigned integers into a 128-bit value
@@ -13515,6 +13517,12 @@ function UnixTimeUTC: TUnixTime;
 // - use 'YYYY-MM-DDThh:mm:ss' format if Expanded
 function UnixTimeToString(const UnixTime: TUnixTime; Expanded: boolean=true;
   FirstTimeChar: AnsiChar='T'): RawUTF8;
+
+/// convert some second-based c-encoded time (from Unix epoch 1/1/1970) to
+// a small text layout, perfect e.g. for naming a local file
+// - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits, expecting
+// a date > 1999 (a current date would be fine)
+function UnixTimeToFileShort(const UnixTime: TUnixTime): shortstring;
 
 /// convert some second-based c-encoded time to the ISO 8601 text layout, either
 // as time or date elapsed period
@@ -18762,47 +18770,6 @@ begin
   result := AnsiToRawUnicode(pointer(AnsiText),length(AnsiText));
 end;
 
-procedure FastNewRawUTF8(var s: RawUTF8; len: integer);
-{$ifdef FPC} inline;
-begin
-  SetString(s,nil,len);
-end;
-{$else}
-{$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif}
-begin
-  if len<>0 then
-    if (PtrUInt(s)=0) or                   // s=''
-       (PInteger(PtrUInt(s)-8)^<>1) or     // s.refcount<>1
-       (PInteger(PtrUInt(s)-4)^<>len) then // s.length<>len
-      SetString(s,nil,len) else
-      exit else
-    if s='' then
-      exit else
-      s := '';
-end;
-{$else}
-asm // eax=s edx=len
-        test    edx, edx
-        jz      System.@LStrClr
-        mov     ecx, [eax]
-        test    ecx, ecx
-        jz      @set
-        cmp     dword ptr[ecx - 8], 1
-        jne     @set
-        cmp     dword ptr[ecx - 4], edx
-        je      @out
-@set:   mov     ecx, edx
-        xor     edx, edx
-{$ifdef UNICODE}
-        push    CP_UTF8 // UTF-8 code page for Delphi 2009+
-        call    System.@LStrFromPCharLen // we need a call, not a jmp here
-{$else} jmp     System.@LStrFromPCharLen
-{$endif}
-@out:
-end;
-{$endif PUREPASCAL}
-{$endif FPC}
-
 function TSynAnsiConvert.AnsiToRawUnicode(Source: PAnsiChar; SourceChars: Cardinal): RawUnicode;
 var U: PWideChar;
 begin
@@ -18990,18 +18957,16 @@ begin
   UTF8BufferToAnsi(Source,SourceChars,result);
 end;
 
-procedure TSynAnsiConvert.UTF8BufferToAnsi(Source: PUTF8Char;
-  SourceChars: Cardinal; var result: RawByteString);
+procedure TSynAnsiConvert.UTF8BufferToAnsi(Source: PUTF8Char; SourceChars: Cardinal;
+  var result: RawByteString);
 var tmp: TSynTempBuffer;
 begin
   if (Source=nil) or (SourceChars=0) then
     result := '' else begin
     tmp.Init((SourceChars+1) shl fAnsiCharShift);
-    SetString(result,PAnsiChar(tmp.buf),Utf8BufferToAnsi(tmp.buf,Source,SourceChars)-tmp.buf);
+    FastSetStringCP(result,tmp.buf,
+      Utf8BufferToAnsi(tmp.buf,Source,SourceChars)-tmp.buf,fCodePage);
     tmp.Done;
-    {$ifdef HASCODEPAGE}
-    SetCodePage(result,fCodePage,false);
-    {$endif}
   end;
 end;
 
@@ -19036,11 +19001,9 @@ begin
   if (Source=nil) or (SourceChars=0) then
     result := '' else begin
     tmp.Init((SourceChars+1) shl fAnsiCharShift);
-    SetString(result,PAnsiChar(tmp.buf),UnicodeBufferToAnsi(tmp.buf,Source,SourceChars)-tmp.buf);
+    FastSetStringCP(result,tmp.buf,
+      UnicodeBufferToAnsi(tmp.buf,Source,SourceChars)-tmp.buf,fCodePage);
     tmp.Done;
-    {$ifdef HASCODEPAGE}
-    SetCodePage(result,fCodePage,false);
-    {$endif}
   end;
 end;
 
@@ -19061,7 +19024,7 @@ var tmpU: array[byte] of WideChar;
     U: PWideChar;
 begin
   if From=self then
-    SetString(result,Source,SourceChars) else
+    FastSetStringCP(result,Source,SourceChars,fCodePage) else
   if (Source=nil) or (SourceChars=0) then
     result := '' else
   if SourceChars<SizeOf(tmpU) shr 1 then
@@ -19071,9 +19034,6 @@ begin
     result := UnicodeBufferToAnsi(U,From.AnsiBufferToUnicode(U,Source,SourceChars)-U);
     FreeMem(U);
   end;
-  {$ifdef HASCODEPAGE}
-  SetCodePage(result,fCodePage,false);
-  {$endif}
 end;
 
 
@@ -19489,12 +19449,9 @@ begin
   if (Source=nil) or (SourceChars=0) then
     result := '' else begin
     tmp.Init(SourceChars*3+1);
-    SetString(result,PAnsiChar(tmp.buf),
-      UnicodeBufferToUTF8(tmp.buf,SourceChars*3,Source,SourceChars)-tmp.buf);
+    FastSetStringCP(result,tmp.buf,UnicodeBufferToUTF8(tmp.buf,
+      SourceChars*3,Source,SourceChars)-tmp.buf,fCodePage);
     tmp.Done;
-    {$ifdef HASCODEPAGE}
-    SetCodePage(result,fCodePage,false);
-    {$endif}
   end;
 end;
 
@@ -19508,10 +19465,7 @@ end;
 procedure TSynAnsiUTF8.UTF8BufferToAnsi(Source: PUTF8Char; SourceChars: Cardinal;
   var result: RawByteString);
 begin
-  SetString(result,Source,SourceChars);
-  {$ifdef HASCODEPAGE}
-  SetCodePage(result,CP_UTF8,false);
-  {$endif}
+  FastSetString(result,Source,SourceChars);
 end;
 
 function TSynAnsiUTF8.UTF8ToAnsi(const UTF8: RawUTF8): RawByteString;
@@ -19532,7 +19486,7 @@ end;
 
 function TSynAnsiUTF8.AnsiBufferToRawUTF8(Source: PAnsiChar; SourceChars: Cardinal): RawUTF8;
 begin
-  SetString(Result,Source,SourceChars);
+  FastSetString(Result,Source,SourceChars);
 end;
 
 
@@ -19559,8 +19513,7 @@ begin
     PWideChar(Source),SourceChars,NOTRAILING[NoTrailingZero]);
 end;
 
-function TSynAnsiUTF16.AnsiToRawUnicode(Source: PAnsiChar;
-  SourceChars: Cardinal): RawUnicode;
+function TSynAnsiUTF16.AnsiToRawUnicode(Source: PAnsiChar; SourceChars: Cardinal): RawUnicode;
 begin
   SetString(result,Source,SourceChars); // byte count
 end;
@@ -19667,7 +19620,7 @@ procedure TSynTempBuffer.Done(EndBuf: pointer; var Dest: RawUTF8);
 begin
   if EndBuf=nil then
     Dest := '' else
-    SetString(Dest,PAnsiChar(buf),PAnsiChar(EndBuf)-PAnsiChar(buf));
+    FastSetString(Dest,buf,PAnsiChar(EndBuf)-PAnsiChar(buf));
   if (buf<>@tmp) and (buf<>nil) then
     FreeMem(buf);
 end;
@@ -19689,7 +19642,7 @@ end;
 
 function TSynTempWriter.AsBinary: RawByteString;
 begin
-  SetString(result,PAnsiChar(tmp.buf),pos-tmp.buf);
+  FastSetStringCP(result,PAnsiChar(tmp.buf),pos-tmp.buf,CP_RAWBYTESTRING);
 end;
 
 function TSynTempWriter.Position: integer;
@@ -19940,14 +19893,14 @@ end;
 
 function TRawUTF8Interning.Unique(aText: PUTF8Char; aTextLen: integer): RawUTF8;
 begin
-  SetString(result,PAnsiChar(aText),aTextLen);
+  FastSetString(result,aText,aTextLen);
   UniqueText(result);
 end;
 
 procedure TRawUTF8Interning.Unique(var aResult: RawUTF8; aText: PUTF8Char;
   aTextLen: integer);
 begin
-  SetString(aResult,PAnsiChar(aText),aTextLen);
+  FastSetString(aResult,aText,aTextLen);
   UniqueText(aResult);
 end;
 
@@ -19975,7 +19928,7 @@ procedure TRawUTF8Interning.UniqueVariant(var aResult: variant;
 var tmp: RawUTF8;
 begin
   if not GetNumericVariantFromJSON(aText,TVarData(aResult),aAllowVarDouble) then begin
-    SetString(tmp,PAnsiChar(aText),aTextLen);
+    FastSetString(tmp,aText,aTextLen);
     UniqueVariant(aResult,tmp);
   end;
 end;
@@ -20280,7 +20233,7 @@ end;
 
 procedure Utf8ToRawUTF8(P: PUTF8Char; var result: RawUTF8);
 begin // fast and Delphi 2009+ ready
-  SetRawUTF8(result,P,StrLen(P));
+  FastSetString(result,P,StrLen(P));
 end;
 
 function UTF8ToWideChar(dest: PWideChar; source: PUTF8Char;
@@ -20738,7 +20691,7 @@ begin
   if (WideChar=nil) or (WideCharCount=0) then
     result := '' else begin
     tmp.Init(WideCharCount*3);
-    SetRawUTF8(Result,tmp.buf,RawUnicodeToUtf8(tmp.buf,tmp.len+1,WideChar,WideCharCount,Flags));
+    FastSetString(Result,tmp.buf,RawUnicodeToUtf8(tmp.buf,tmp.len+1,WideChar,WideCharCount,Flags));
     tmp.Done;
   end;
 end;
@@ -20773,7 +20726,7 @@ begin
   RawUnicodeToUtf8(pointer(Unicode),length(Unicode),result);
 end;
 
-function RawUnicodeToSynUnicode(const Unicode: RawUnicode): Synunicode;
+function RawUnicodeToSynUnicode(const Unicode: RawUnicode): SynUnicode;
 begin
   SetString(result,PWideChar(pointer(Unicode)),length(Unicode) shr 1);
 end;
@@ -20985,12 +20938,12 @@ end;
 
 function ToUTF8(const Ansi7Text: ShortString): RawUTF8;
 begin
-  SetString(result,PAnsiChar(@Ansi7Text[1]),ord(Ansi7Text[0]));
+  FastSetString(result,@Ansi7Text[1],ord(Ansi7Text[0]));
 end;
 
 function ToUTF8(const guid: TGUID): RawUTF8;
 begin
-  FastNewRawUTF8(result,36);
+  FastSetString(result,nil,36);
   GUIDToText(pointer(result),@guid);
 end;
 
@@ -21001,7 +20954,7 @@ begin
   if cardinal(Value)<=high(SmallUInt32UTF8) then
     result := SmallUInt32UTF8[Value] else begin
     P := StrInt32(@tmp[15],Value);
-    SetRawUTF8(result,P,@tmp[15]-P);
+    FastSetString(result,P,@tmp[15]-P);
   end;
 end;
 
@@ -21014,7 +20967,7 @@ begin
     // Int64Rec gives compiler internal error C4963
     result := SmallUInt32UTF8[Value] else begin
     P := StrInt64(@tmp[23],Value);
-    SetRawUTF8(result,P,@tmp[23]-P);
+    FastSetString(result,P,@tmp[23]-P);
   end;
 end;
 
@@ -21026,7 +20979,7 @@ begin
      (PCardinalArray(@Value)^[1]=0) then
     result := SmallUInt32UTF8[Value] else begin
     P := StrUInt64(@tmp[23],Value);
-    SetRawUTF8(result,P,@tmp[23]-P);
+    FastSetString(result,P,@tmp[23]-P);
   end;
 end;
 
@@ -21043,7 +20996,7 @@ function VarRecToInt64(const V: TVarRec; out value: Int64): boolean;
 begin
   case V.VType of
     vtInteger: value := V.VInteger;
-    vtInt64 {$ifdef FPC}, vtQWord{$endif}:   value := V.VInt64^;
+    vtInt64 {$ifdef FPC}, vtQWord{$endif}: value := V.VInt64^;
     vtBoolean: if V.VBoolean then value := 1 else value := 0; // normalize
     {$ifndef NOVARIANTS}
     vtVariant: value := V.VVariant^;
@@ -21185,7 +21138,7 @@ smlu32: Res.Text := pointer(SmallUInt32UTF8[result]);
     end;
     vtClass: begin
       if V.VClass<>nil then begin
-        Res.Text := PUTF8Char(PPointer(PtrInt(V.VClass)+vmtClassName)^)+1;
+        Res.Text := PPUTF8Char(PtrInt(V.VClass)+vmtClassName)^+1;
         Res.Len := ord(Res.Text[-1]);
       end else
         Res.Len := 0;
@@ -21194,7 +21147,7 @@ smlu32: Res.Text := pointer(SmallUInt32UTF8[result]);
     end;
     vtObject: begin
       if V.VObject<>nil then begin
-        Res.Text := PUTF8Char(PPointer(PPtrInt(V.VObject)^+vmtClassName)^)+1;
+        Res.Text := PPUTF8Char(PPtrInt(V.VObject)^+vmtClassName)^+1;
         Res.Len := ord(Res.Text[-1]);
       end else
         Res.Len := 0;
@@ -21230,7 +21183,7 @@ begin
   with V do
   case V.VType of
     vtString:
-      SetRawUTF8(result,@VString^[1],ord(VString^[0]));
+      FastSetString(result,@VString^[1],ord(VString^[0]));
     vtAnsiString:
       result := RawUTF8(VAnsiString); // expect UTF-8 content
     {$ifdef HASVARUSTRING}
@@ -21240,9 +21193,9 @@ begin
     vtWideString:
       RawUnicodeToUtf8(VWideString,length(WideString(VWideString)),result);
     vtPChar:
-      SetRawUTF8(result,VPChar,StrLen(VPChar));
+      FastSetString(result,VPChar,StrLen(VPChar));
     vtChar:
-      SetRawUTF8(result,PAnsiChar(@VChar),1);
+      FastSetString(result,PAnsiChar(@VChar),1);
     vtPWideChar:
       RawUnicodeToUtf8(VPWideChar,StrLenW(VPWideChar),result);
     vtWideChar:
@@ -21907,7 +21860,7 @@ begin
   for i := 1 to len do
     if text[i] in controls then begin
       n := i-1;
-      SetString(result,nil,len);
+      FastSetString(result,nil,len);
       P := pointer(result);
       MoveFast(pointer(text)^,P^,n);
       for j := i+1 to len do
@@ -22333,6 +22286,63 @@ const
   // - used to calc the beginning of memory allocation of a string
   STRRECSIZE = SizeOf(TStrRec);
 
+{$ifdef HASCODEPAGE}
+procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
+var r: PAnsiChar; // s may = p -> stand-alone variable
+    sr: PStrRec; // stand-alone to use register
+begin
+  if len>0 then begin
+    GetMem(r,len+STRRECSIZE+2);
+    sr := pointer(r);
+    sr^.codePage := codepage;
+    sr^.elemSize := 1;
+    sr^.refCnt := 1;
+    sr^.length := len;
+    inc(sr);
+    PWord(PAnsiChar(sr)+len)^ := 0;
+    r := pointer(sr);
+    if p<>nil then
+      MoveFast(p^,sr^,len);
+    {$ifdef FPC}Finalize(RawByteString(s)){$else}RawByteString(s) := ''{$endif};
+    pointer(s) := r;
+  end
+  else
+    {$ifdef FPC}Finalize(RawByteString(s)){$else}RawByteString(s) := ''{$endif};
+end;
+
+procedure FastSetString(var s; p: pointer; len: PtrInt);
+var r: PAnsiChar; // s may = p -> stand-alone variable
+    sr: PStrRec; // stand-alone to use register
+begin
+  if len>0 then begin
+    GetMem(r,len+STRRECSIZE+2);
+    sr := pointer(r);
+    sr^.codePage := CP_UTF8;
+    sr^.elemSize := 1;
+    sr^.refCnt := 1;
+    sr^.length := len;
+    inc(sr);
+    PWord(PAnsiChar(sr)+len)^ := 0;
+    r := pointer(sr);
+    if p<>nil then
+      MoveFast(p^,sr^,len);
+    {$ifdef FPC}Finalize(RawByteString(s)){$else}RawByteString(s) := ''{$endif};
+    pointer(s) := r;
+  end
+  else
+    {$ifdef FPC}Finalize(RawByteString(s)){$else}RawByteString(s) := ''{$endif};
+end;
+{$else}
+procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
+begin
+  SetString(RawByteString(s),PAnsiChar(p),len);
+end;
+procedure FastSetString(var s; p: pointer; len: PtrInt);
+begin
+  SetString(RawByteString(s),PAnsiChar(p),len);
+end;
+{$endif}
+
 function ToText(k: TTypeKind): PShortString; overload;
 begin
   result := GetEnumName(TypeInfo(TTypeKind),ord(k));
@@ -22342,81 +22352,6 @@ function ToText(k: TDynArrayKind): PShortString;
 begin
   result := GetEnumName(TypeInfo(TDynArrayKind),ord(k));
 end;
-
-procedure SetRawUTF8(var Dest: RawUTF8; text: pointer; len: integer);
-{$ifdef FPC}inline;
-begin
-  if (len>128) or (len=0) or (text<>pointer(Dest)) then
-    SetString(Dest,PAnsiChar(text),len) else
-    SetLength(Dest,len);
-end;
-{$else}
-{$ifdef PUREPASCAL}
-var P: PStrRec;
-begin
-  if (len>128) or (len=0) or (PtrInt(Dest)=0) or     // Dest=''
-    (PStrRec(PtrInt(Dest)-STRRECSIZE)^.refCnt<>1) then
-    SetString(Dest,PAnsiChar(text),len) else begin
-    if PStrRec(Pointer(PtrInt(Dest)-STRRECSIZE))^.length<>len then begin
-      P := Pointer(PtrInt(Dest)-STRRECSIZE);
-      ReallocMem(P,len+(STRRECSIZE+1));
-      P^.length := len;
-      pointer(Dest) := pointer(PAnsiChar(P)+STRRECSIZE);
-      PByteArray(Dest)[len] := 0;
-    end;
-    MoveFast(pointer(text)^,pointer(Dest)^,len);
-  end;
-end;
-{$else}
-asm // eax=@Dest text=edx len=ecx
-        cmp     ecx, 128 // avoid huge move() in ReallocMem()
-{$ifdef UNICODE}
-        ja      @3
-{$else} ja      System.@LStrFromPCharLen
-{$endif}
-        test    ecx, ecx // len=0
-{$ifdef UNICODE}
-        jz      @3
-{$else} jz      System.@LStrFromPCharLen
-{$endif}
-        push    ebx
-        mov     ebx, [eax]
-        test    ebx, ebx
-        jnz     @2
-@0:     pop     ebx
-{$ifdef UNICODE}
-@3:     push    CP_UTF8 // UTF-8 code page for Delphi 2009+
-        call    System.@LStrFromPCharLen // we need a call, not a jmp here
-        rep     ret
-{$else} jmp     System.@LStrFromPCharLen
-{$endif}
-@2:     cmp     dword ptr[ebx - 8], 1
-        jne     @0
-        cmp     dword ptr[ebx - 4], ecx
-        je      @1
-        sub     ebx, STRRECSIZE
-        push    edx
-        push    eax
-        push    ecx
-        push    ebx
-        mov     eax, esp // ReallocMem() over ebx pointer on stack
-        lea     edx, ecx + STRRECSIZE + 1
-        call    System.@ReallocMem
-        pop     ebx
-        pop     ecx
-        add     ebx, STRRECSIZE
-        pop     eax
-        pop     edx
-        mov     [eax], ebx
-        mov     dword ptr[ebx - 4], ecx
-        mov     byte ptr[ebx + ecx], 0
-@1:     mov     eax, edx
-        mov     edx, ebx
-        call    dword ptr[MoveFast]
-        pop     ebx
-end;
-{$endif}
-{$endif}
 
 function UniqueRawUTF8(var UTF8: RawUTF8): pointer;
 begin
@@ -22551,7 +22486,7 @@ procedure TypeInfoToName(aTypeInfo: pointer; var result: RawUTF8;
   const default: RawUTF8);
 begin
   if aTypeInfo<>nil then
-    SetRawUTF8(result,PAnsiChar(@PTypeInfo(aTypeInfo)^.NameLen)+1,
+    FastSetString(result,PAnsiChar(@PTypeInfo(aTypeInfo)^.NameLen)+1,
       PTypeInfo(aTypeInfo)^.NameLen) else
     result := default;
 end;
@@ -22568,11 +22503,11 @@ procedure TypeInfoToQualifiedName(aTypeInfo: pointer; var result: RawUTF8;
 var unitname: RawUTF8;
 begin
   if aTypeInfo<>nil then begin
-    SetRawUTF8(result,PAnsiChar(@PTypeInfo(aTypeInfo)^.NameLen)+1,
+    FastSetString(result,PAnsiChar(@PTypeInfo(aTypeInfo)^.NameLen)+1,
       PTypeInfo(aTypeInfo)^.NameLen);
     if PTypeInfo(aTypeInfo)^.Kind=tkClass then begin
       with GetTypeInfo(aTypeInfo)^ do
-        SetRawUTF8(unitname,PAnsiChar(@UnitNameLen)+1,UnitNameLen);
+        FastSetString(unitname,PAnsiChar(@UnitNameLen)+1,UnitNameLen);
       result := unitname+'.'+result;
     end;
   end else result := default;
@@ -23536,16 +23471,18 @@ procedure bswap64array(a,b: PQWordArray; n: integer);
 {$ifdef CPUX86}
 asm
     push  ebx
+    push  esi
 @1: mov   ebx, dword ptr[eax]
+    mov   esi, dword ptr[eax + 4]
     bswap ebx
+    bswap esi
     mov   dword ptr[edx + 4], ebx
-    mov   ebx, dword ptr[eax + 4]
-    bswap ebx
-    mov   dword ptr[edx], ebx
+    mov   dword ptr[edx], esi
     add   eax, 8
     add   edx, 8
     dec   ecx
     jnz   @1
+    pop   esi
     pop   ebx
 end;
 {$else}
@@ -24021,7 +23958,7 @@ begin
   result := true;
 end;
 
-procedure FillZero(var dest; count: integer);
+procedure FillZero(var dest; count: PtrInt);
 {$ifndef HASINLINE}
 asm
   xor ecx, ecx
@@ -24098,17 +24035,15 @@ zero:
 end;
 
 // from Aleksandr Sharahov's PosEx_Sha_Pas_2()
-function PosEx(const SubStr, S: RawUTF8; Offset: PtrUInt = 1): Integer;
+function PosExPas(pSub, p: PUTF8Char; Offset: PtrUInt): PtrInt;
 var len, lenSub: PtrInt;
     ch: AnsiChar;
-    p, pSub, pStart, pStop: PUTF8Char;
+    pStart, pStop: PUTF8Char;
 label Loop0, Loop4, TestT, Test0, Test1, Test2, Test3, Test4,
       AfterTestT, AfterTest0, Ret, Exit;
 begin
-  pSub := pointer(SubStr);
-  p := pointer(S);
   if (p=nil) or (pSub=nil) or (Offset<1) then begin
-    Result := 0;
+    result := 0;
     goto Exit;
   end;
   {$ifdef FPC}
@@ -24119,7 +24054,7 @@ begin
   lenSub := PInteger(pSub-4)^-1;
   {$endif}
   if (len<lenSub+PtrInt(Offset)) or (lenSub<0) then begin
-    Result := 0;
+    result := 0;
     goto Exit;
   end;
   pStop := p+len;
@@ -24146,7 +24081,7 @@ AfterTestT:
   if p<pStop then goto Loop4;
   p := p-4;
   if p<pStop then goto Loop0;
-  Result := 0;
+  result := 0;
   goto Exit;
 Test3: p := p-2;
 Test1: p := p-2;
@@ -24159,7 +24094,7 @@ TestT: len := lenSub;
   until len>=0;
   p := p+2;
   if p<=pStop then goto Ret;
-  Result := 0;
+  result := 0;
   goto Exit;
 Test4: p := p-2;
 Test2: p := p-2;
@@ -24172,9 +24107,17 @@ Test0: len := lenSub;
   until len>=0;
   inc(p);
 Ret:
-  Result := p-pStart;
+  result := p-pStart;
 Exit:
 end;
+
+{$ifdef HASINLINE} // to use directly the SubStr/S arguments registers 
+function PosEx(const SubStr, S: RawUTF8; Offset: PtrUInt): PtrInt;
+begin
+  result := PosExPas(pointer(SubStr),pointer(S),Offset);
+end;
+{$endif}
+
 {$else}
 function CompareMem(P1, P2: Pointer; Length: PtrInt): Boolean;
 asm     // eax=P1 edx=P2 ecx=Length
@@ -24242,7 +24185,7 @@ asm     // eax=P1 edx=P2 ecx=Length
 @setsml:setz    al
 end;
 
-function PosEx(const SubStr, S: RawUTF8; Offset: PtrUInt = 1): Integer;
+function PosEx(const SubStr, S: RawUTF8; Offset: PtrUInt): integer;
 asm     // eax=SubStr, edx=S, ecx=Offset
         push    ebx
         push    esi
@@ -24266,6 +24209,7 @@ asm     // eax=SubStr, edx=S, ecx=Offset
         lea     edi, [ebx - 2]     // edi = length(SubStr)-2
         mov     esi, eax           // esi = SubStr
         movzx   ebx, byte ptr[eax] // bl = search character
+        nop; nop
 @l:     cmp     bl, [edx]          // compare 2 characters per @l
         je      @c1fnd
 @notc1: cmp     bl, [edx + 1]
@@ -24411,7 +24355,7 @@ function StringReplaceAll(const S, OldPattern, NewPattern: RawUTF8): RawUTF8;
         break;
       AddInteger(pos,posCount,found);
     until false;
-    SetString(result,nil,Length(S)+(newlen-oldlen)*posCount);
+    FastSetString(result,nil,Length(S)+(newlen-oldlen)*posCount);
     last := 1;
     src := pointer(s);
     dst := pointer(result);
@@ -24482,27 +24426,27 @@ begin // FPC is efficient at compiling this code
   if Str<>nil then begin
     repeat
       c := PCardinal(str)^;
-      if byte(c)=0 then
+      if ToByte(c)=0 then
         exit else
-      if byte(c)=byte(Chr) then
+      if ToByte(c)=byte(Chr) then
         break;
       c := c shr 8;
       inc(Str);
-      if byte(c)=0 then
+      if ToByte(c)=0 then
         exit else
-      if byte(c)=byte(Chr) then
+      if ToByte(c)=byte(Chr) then
         break;
       c := c shr 8;
       inc(Str);
-      if byte(c)=0 then
+      if ToByte(c)=0 then
         exit else
-      if byte(c)=byte(Chr) then
+      if ToByte(c)=byte(Chr) then
         break;
       c := c shr 8;
       inc(Str);
-      if byte(c)=0 then
+      if ToByte(c)=0 then
         exit else
-      if byte(c)=byte(Chr) then
+      if ToByte(c)=byte(Chr) then
         break;
       inc(Str);
     until false;
@@ -24570,7 +24514,7 @@ begin
     n := length(Source);
     for i := 0 to n-1 do
       if PAnsiChar(pointer(Source))[i]=OldChar then begin
-        SetString(result,PAnsiChar(pointer(Source)),n);
+        FastSetString(result,PAnsiChar(pointer(Source)),n);
         for j := i to n-1 do
           if PAnsiChar(pointer(result))[j]=OldChar then
             PAnsiChar(pointer(result))[j] := NewChar;
@@ -24734,7 +24678,7 @@ begin
       break;
     until false;
   end;
-  FastNewRawUTF8(result,L+n+2);
+  FastSetString(result,nil,L+n+2);
   P := pointer(Result);
   P^ := Quote;
   inc(P);
@@ -24887,7 +24831,7 @@ begin
   // create unquoted string
   if n=0 then
     // no quote within
-    SetRawUTF8(Value,PAnsiChar(PBeg),P-PBeg) else begin
+    FastSetString(Value,PBeg,P-PBeg) else begin
     // unescape internal quotes
     SetLength(Value,P-PBeg-n);
     P := PBeg;
@@ -24930,7 +24874,7 @@ begin
            from := StrPosI(' FROM ',P);
            if from=nil then
              SelectClause^ := '' else
-             SetString(SelectClause^,PAnsiChar(P),from-P);
+             FastSetString(SelectClause^,P,from-P);
          end;
          result := true;
        end else
@@ -25080,7 +25024,7 @@ begin
       if P^='-' then inc(P);
       while P^ in ['0'..'9'] do inc(P);
     end;
-    SetRawUTF8(ParamValue,PBeg,P-PBeg);
+    FastSetString(ParamValue,PBeg,P-PBeg);
   end;
   'n':
   if PInteger(P)^=NULL_LOW then begin
@@ -25114,7 +25058,7 @@ begin
     result := SQL;
     exit;
   end;
-  SetString(result,PAnsiChar(pointer(SQL)),length(SQL));
+  FastSetString(result,pointer(SQL),length(SQL));
   // compute GenericSQL from SQL, converting :(...): into ?
   Gen := PUTF8Char(pointer(result))+ppBeg-1; // Gen^ just before :(
   P := PUTF8Char(pointer(SQL))+ppBeg+1; // P^ just after :(
@@ -25158,7 +25102,7 @@ begin
   if cardinal(Value)<=high(SmallUInt32UTF8) then
     result := SmallUInt32UTF8[Value] else begin
     P := StrInt32(@tmp[15],Value);
-    SetString(result,P,@tmp[15]-P);
+    FastSetString(result,P,@tmp[15]-P);
   end;
 end;
 
@@ -25171,7 +25115,7 @@ begin
     // Int64Rec gives compiler internal error C4963
     result := SmallUInt32UTF8[Value] else begin
     P := StrInt64(@tmp[23],Value);
-    SetRawUTF8(result,P,@tmp[23]-P);
+    FastSetString(result,P,@tmp[23]-P);
   end;
 end;
 
@@ -25198,7 +25142,7 @@ var tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
 begin
   P := StrInt64(@tmp[23],Value);
-  SetString(result,P,@tmp[23]-P);
+  FastSetString(result,P,@tmp[23]-P);
 end;
 {$endif}
 
@@ -25207,7 +25151,7 @@ var tmp: array[0..15] of AnsiChar;
     P: PAnsiChar;
 begin
   P := StrInt32(@tmp[15],Value);
-  SetString(result,P,@tmp[15]-P);
+  FastSetString(result,P,@tmp[15]-P);
 end;
 
 function UInt32ToUTF8(Value: Cardinal): RawUTF8;
@@ -25217,7 +25161,7 @@ begin
   if Value<=high(SmallUInt32UTF8) then
     result := SmallUInt32UTF8[Value] else begin
     P := StrUInt32(@tmp[15],Value);
-    SetString(result,P,@tmp[15]-P);
+    FastSetString(result,P,@tmp[15]-P);
   end;
 end;
 
@@ -25228,7 +25172,7 @@ begin
   if Value<=high(SmallUInt32UTF8) then
     result := SmallUInt32UTF8[Value] else begin
     P := StrUInt32(@tmp[15],Value);
-    SetRawUTF8(result,P,@tmp[15]-P);
+    FastSetString(result,P,@tmp[15]-P);
   end;
 end;
 
@@ -25379,7 +25323,7 @@ var tmp: ShortString;
 begin
   if Value=0 then
     result := SmallUInt32UTF8[0] else
-    SetRawUTF8(result,@tmp[1],ExtendedToString(tmp,Value,Precision));
+    FastSetString(result,@tmp[1],ExtendedToString(tmp,Value,Precision));
 end;
 
 procedure ExtendedToStr(Value: TSynExtended; Precision: integer;
@@ -25388,7 +25332,7 @@ var tmp: ShortString;
 begin
   if Value=0 then
     result := SmallUInt32UTF8[0] else
-    SetRawUTF8(result,@tmp[1],ExtendedToString(tmp,Value,Precision));
+    FastSetString(result,@tmp[1],ExtendedToString(tmp,Value,Precision));
 end;
 
 function DoubleToStr(Value: Double): RawUTF8;
@@ -25396,7 +25340,7 @@ var tmp: ShortString;
 begin
   if Value=0 then
     result := SmallUInt32UTF8[0] else
-    SetRawUTF8(result,@tmp[1],ExtendedToString(tmp,Value,DOUBLE_PRECISION));
+    FastSetString(result,@tmp[1],ExtendedToString(tmp,Value,DOUBLE_PRECISION));
 end;
 
 function FormatUTF8(const Format: RawUTF8; const Args: array of const): RawUTF8;
@@ -25495,7 +25439,7 @@ begin
 end;
 
 procedure FormatUTF8(const Format: RawUTF8; const Args: array of const;
-  var result: RawUTF8);
+  out result: RawUTF8);
 var process: TFormatUTF8;
 begin
   if (Format='') or (high(Args)<0) then // no formatting needed
@@ -25515,7 +25459,7 @@ procedure FormatShort(const Format: RawUTF8; const Args: array of const;
 var process: TFormatUTF8;
 begin
   if (Format='') or (high(Args)<0) then // no formatting needed
-    SetString(result,PAnsiChar(Format),length(Format)) else begin
+    FastSetString(result,pointer(Format),length(Format)) else begin
     process.Parse(Format,Args);
     result[0] := AnsiChar(process.WriteMax(@result[1],255)-@result[1]);
   end;
@@ -25539,7 +25483,7 @@ begin
   end;
   if (high(Args)<0) and (high(Params)<0) then begin
     // no formatting to process, but may be a const -> make unique
-    SetString(result,PAnsiChar(pointer(Format)),length(Format));
+    FastSetString(result,pointer(Format),length(Format));
     exit; // e.g. _JsonFmt() will parse it in-place
   end;
   if high(Params)<0 then begin
@@ -25569,7 +25513,7 @@ Txt:  len := F-FDeb;
         inc(L,len);
         if tmpN=length(tmp) then
           SetLength(tmp,tmpN+8);
-        SetString(tmp[tmpN],FDeb,len); // add inbetween text
+        FastSetString(tmp[tmpN],FDeb,len); // add inbetween text
         inc(tmpN);
       end;
     end;
@@ -25701,7 +25645,7 @@ begin
         w := 0;
         repeat inc(w) until not(ord(F[w]) in IsIdentifier) or (F+w=FEnd);
         if ident<>nil then
-          SetString(ident^[v],PAnsiChar(F),w);
+          FastSetString(ident^[v],F,w);
         inc(F,w);
       end else
         inc(F);
@@ -27415,7 +27359,7 @@ function UpperCaseU(const S: RawUTF8): RawUTF8;
 var LS,LD: integer;
 begin
   LS := length(S);
-  SetString(result,PAnsiChar(pointer(S)),LS);
+  FastSetString(result,pointer(S),LS);
   LD := ConvertCaseUTF8(pointer(result),NormToUpperByte);
   if LS<>LD then
     SetLength(result,LD);
@@ -27425,7 +27369,7 @@ function LowerCaseU(const S: RawUTF8): RawUTF8;
 var LS,LD: integer;
 begin
   LS := length(S);
-  SetString(result,PAnsiChar(pointer(S)),LS);
+  FastSetString(result,pointer(S),LS);
   LD := ConvertCaseUTF8(pointer(result),NormToLowerByte);
   if LS<>LD then
     SetLength(result,LD);
@@ -27433,21 +27377,22 @@ end;
 
 function UTF8IComp(u1, u2: PUTF8Char): PtrInt;
 var c2: PtrInt;
-    b: byte;
+    table: {$ifdef CPUX86}TNormTableByte absolute NormToUpperByte{$else}PNormTableByte{$endif};
 begin // fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits values
+  {$ifndef CPUX86}table := @NormToUpperByte;{$endif}
   if u1<>u2 then
   if u1<>nil then
   if u2<>nil then
   repeat
     result := ord(u1^);
+    c2 := ord(u2^);
     if result and $80=0 then
       if result<>0 then begin
-        result := NormToUpperByte[result];
+        result := table[result];
         inc(u1);
-        b := ord(u2^);
-        if b and $80=0 then begin
-          if b=0 then exit; // u1>u2 -> return u1^
-          dec(result,NormToUpperByte[b]);
+        if c2 and $80=0 then begin
+          if c2=0 then exit; // u1>u2 -> return u1^
+          dec(result,table[c2]);
           inc(u2);
           if result<>0 then exit;
           continue;
@@ -27459,18 +27404,17 @@ begin // fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits val
       end else begin
         result := GetHighUTF8UCS4Inlined(u1);
         if result and $ffffff00=0 then
-          result := NormToUpperByte[result]; // 8 bits to upper, 32 bits as is
+          result := table[result]; // 8 bits to upper, 32 bits as is
       end;
-    c2 := ord(u2^);
     if c2 and $80=0 then begin
       inc(u2);
       if c2=0 then exit; // u1>u2 -> return u1^
-      dec(result,NormToUpperByte[c2]);
+      dec(result,table[c2]);
       if result<>0 then exit;
     end else begin
       c2 := GetHighUTF8UCS4Inlined(u2);
       if c2 and $ffffff00=0 then
-        dec(result,NormToUpperByte[c2]) else // 8 bits to upper
+        dec(result,table[c2]) else // 8 bits to upper
         dec(result,c2); // 32 bits widechar returns diff
       if result<>0 then exit;
     end;
@@ -27483,19 +27427,22 @@ end;
 function UTF8ILComp(u1, u2: PUTF8Char; L1,L2: cardinal): PtrInt;
 var c2: PtrInt;
     extra,i: integer;
+    table: {$ifdef CPUX86}TNormTableByte absolute NormToUpperByte{$else}PNormTableByte{$endif};
 label neg,pos;
 begin // fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits values
+  {$ifndef CPUX86}table := @NormToUpperByte;{$endif}
   if u1<>u2 then
   if (u1<>nil) and (L1<>0) then
   if (u2<>nil) and (L2<>0) then
   repeat
-    result := pByte(u1)^;
+    result := ord(u1^);
+    c2 := ord(u2^);
     inc(u1);
     dec(L1);
     if result and $80=0 then begin
-      result := NormToUpperByte[result];
-      if pByte(u2)^ and $80=0 then begin
-        dec(result,NormToUpperByte[pByte(u2)^]);
+      result := table[result];
+      if c2 and $80=0 then begin
+        dec(result,table[c2]);
         dec(L2);
         inc(u2);
         if result<>0 then
@@ -27518,14 +27465,13 @@ begin // fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits val
       dec(result,UTF8_EXTRA[extra].offset);
       inc(u1,extra);
       if result and $ffffff00=0 then
-        result := NormToUpperByte[result]; // 8 bits to upper, 32 bits as is
+        result := table[result]; // 8 bits to upper, 32 bits as is
     end;
     // here result=NormToUpper[u1^]
-    c2 := pByte(u2)^;
     inc(u2);
     dec(L2);
     if c2 and $80=0 then begin
-      dec(result,NormToUpperByte[c2]);
+      dec(result,table[c2]);
       if result<>0 then exit;
     end else begin
       extra := UTF8_EXTRABYTES[c2];
@@ -27537,7 +27483,7 @@ begin // fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits val
       dec(c2,UTF8_EXTRA[extra].offset);
       inc(u2,extra);
       if c2 and $ffffff00=0 then
-        dec(result,NormToUpperByte[c2]) else // 8 bits to upper
+        dec(result,table[c2]) else // 8 bits to upper
         dec(result,c2); // returns 32 bits diff
       if result<>0 then exit;
     end;
@@ -28616,7 +28562,7 @@ function UpperCase(const S: RawUTF8): RawUTF8;
 var L, i: PtrInt;
 begin
   L := length(S);
-  SetString(Result,PAnsiChar(pointer(S)),L);
+  FastSetString(Result,pointer(S),L);
   for i := 0 to L-1 do
     if PByteArray(result)[i] in [ord('a')..ord('z')] then
       dec(PByteArray(result)[i],32);
@@ -28625,7 +28571,7 @@ end;
 procedure UpperCaseCopy(Text: PUTF8Char; Len: integer; var result: RawUTF8);
 var i: integer;
 begin
-  SetRawUTF8(result,PAnsiChar(Text),Len);
+  FastSetString(result,Text,Len);
   for i := 0 to Len-1 do
     if PByteArray(result)[i] in [ord('a')..ord('z')] then
       dec(PByteArray(result)[i],32);
@@ -28635,7 +28581,7 @@ procedure UpperCaseCopy(const Source: RawUTF8; var Dest: RawUTF8);
 var L, i: PtrInt;
 begin
   L := length(Source);
-  SetRawUTF8(Dest,PAnsiChar(pointer(Source)),L);
+  FastSetString(Dest,pointer(Source),L);
   for i := 0 to L-1 do
     if PByteArray(Dest)[i] in [ord('a')..ord('z')] then
       dec(PByteArray(Dest)[i],32);
@@ -28655,7 +28601,7 @@ function LowerCase(const S: RawUTF8): RawUTF8;
 var L, i: PtrInt;
 begin
   L := length(S);
-  SetString(result,PAnsiChar(pointer(S)),L);
+  FastSetString(result,pointer(S),L);
   for i := 0 to L-1 do
     if PByteArray(result)[i] in [ord('A')..ord('Z')] then
       inc(PByteArray(result)[i],32);
@@ -28664,7 +28610,7 @@ end;
 procedure LowerCaseCopy(Text: PUTF8Char; Len: integer; var result: RawUTF8);
 var i: integer;
 begin
-  SetRawUTF8(result,PAnsiChar(Text),Len);
+  FastSetString(result,Text,Len);
   for i := 0 to Len-1 do
     if PByteArray(result)[i] in [ord('A')..ord('Z')] then
       inc(PByteArray(result)[i],32);
@@ -28696,7 +28642,7 @@ begin
   i := Length(S);
   while (i > 0) and (S[i] <= ' ') do
     Dec(i);
-  SetString(result,PAnsiChar(pointer(S)),i);
+  FastSetString(result,pointer(S),i);
 end;
 
 type
@@ -28730,13 +28676,13 @@ function BinToHex(const Bin: RawByteString): RawUTF8;
 var L: integer;
 begin
   L := length(Bin);
-  FastNewRawUTF8(result,L*2);
+  FastSetString(result,nil,L*2);
   SynCommons.BinToHex(pointer(Bin),pointer(Result),L);
 end;
 
 function BinToHex(Bin: PAnsiChar; BinBytes: integer): RawUTF8;
 begin
-  FastNewRawUTF8(result,BinBytes*2);
+  FastSetString(result,nil,BinBytes*2);
   SynCommons.BinToHex(Bin,pointer(Result),BinBytes);
 end;
 
@@ -28804,7 +28750,7 @@ end;
 
 function BinToHexDisplay(Bin: PAnsiChar; BinBytes: integer): RawUTF8;
 begin
-  FastNewRawUTF8(result,BinBytes*2);
+  FastSetString(result,nil,BinBytes*2);
   BinToHexDisplay(Bin,pointer(result),BinBytes);
 end;
 
@@ -28827,7 +28773,7 @@ end;
 
 procedure BinToHexLower(Bin: PAnsiChar; BinBytes: integer; var result: RawUTF8);
 begin
-  FastNewRawUTF8(result,BinBytes*2);
+  FastSetString(result,nil,BinBytes*2);
   BinToHexLower(Bin,pointer(result),BinBytes);
 end;
 
@@ -28849,7 +28795,7 @@ end;
 
 function BinToHexDisplayLower(Bin: PAnsiChar; BinBytes: integer): RawUTF8;
 begin
-  FastNewRawUTF8(result,BinBytes*2);
+  FastSetString(result,nil,BinBytes*2);
   BinToHexDisplayLower(Bin,pointer(result),BinBytes);
 end;
 
@@ -28879,37 +28825,37 @@ end;
 
 procedure PointerToHex(aPointer: Pointer; var result: RawUTF8);
 begin
-  FastNewRawUTF8(result,SizeOf(Pointer)*2);
+  FastSetString(result,nil,SizeOf(Pointer)*2);
   BinToHexDisplay(@aPointer,pointer(result),SizeOf(Pointer));
 end;
 
 function PointerToHex(aPointer: Pointer): RawUTF8;
 begin
-  FastNewRawUTF8(result,SizeOf(aPointer)*2);
+  FastSetString(result,nil,SizeOf(aPointer)*2);
   BinToHexDisplay(@aPointer,pointer(result),SizeOf(aPointer));
 end;
 
 function CardinalToHex(aCardinal: Cardinal): RawUTF8;
 begin
-  FastNewRawUTF8(result,SizeOf(aCardinal)*2);
+  FastSetString(result,nil,SizeOf(aCardinal)*2);
   BinToHexDisplay(@aCardinal,pointer(result),SizeOf(aCardinal));
 end;
 
 function CardinalToHexLower(aCardinal: Cardinal): RawUTF8;
 begin
-  FastNewRawUTF8(result,SizeOf(aCardinal)*2);
+  FastSetString(result,nil,SizeOf(aCardinal)*2);
   BinToHexDisplayLower(@aCardinal,pointer(result),SizeOf(aCardinal));
 end;
 
 function Int64ToHex(aInt64: Int64): RawUTF8;
 begin
-  FastNewRawUTF8(result,SizeOf(Int64)*2);
+  FastSetString(result,nil,SizeOf(Int64)*2);
   BinToHexDisplay(@aInt64,pointer(result),SizeOf(Int64));
 end;
 
 procedure Int64ToHex(aInt64: Int64; var result: RawUTF8);
 begin
-  FastNewRawUTF8(result,SizeOf(Int64)*2);
+  FastSetString(result,nil,SizeOf(Int64)*2);
   BinToHexDisplay(@aInt64,pointer(result),SizeOf(Int64));
 end;
 
@@ -28999,14 +28945,14 @@ end;
 
 function UInt3DigitsToUTF8(Value: Cardinal): RawUTF8;
 begin
-  SetString(result,nil,3);
+  FastSetString(result,nil,3);
   PWordArray(result)[0] := TwoDigitLookupW[Value div 10];
   PByteArray(result)[2] := (Value mod 10)+48;
 end;
 
 function UInt4DigitsToUTF8(Value: Cardinal): RawUTF8;
 begin
-  SetString(result,nil,4);
+  FastSetString(result,nil,4);
   if Value>9999 then
     Value := 9999;
   YearToPChar(Value,pointer(result));
@@ -29415,49 +29361,58 @@ end;
 {$endif}
 
 function FindIniNameValue(P: PUTF8Char; UpperName: PAnsiChar): RawUTF8;
-var PBeg: PUTF8Char;
-    i: integer;
-    table: PNormTable;
+var u, PBeg: PUTF8Char;
+    by4: cardinal;
+    table: {$ifdef CPUX86}TNormTable absolute NormToUpperAnsi7{$else}PNormTable{$endif};
 begin // expect UpperName as 'NAME='
-  table := @NormToUpperAnsi7;
-  PBeg := nil;
-  if (P<>nil) and (P^<>'[') and (UpperName<>nil) then
-  repeat
-    if P^=' ' then repeat inc(P) until P^<>' ';   // trim left ' '
-    if table^[P[0]]=UpperName[0] then
-      PBeg := P;
+  if (P<>nil) and (P^<>'[') and (UpperName<>nil) then begin
+    {$ifndef CPUX86}table := @NormToUpperAnsi7;{$endif}
+    PBeg := nil;
+    u := P;
     repeat
-      if P[0]>#13 then
-        if P[1]>#13 then
-          if P[2]>#13 then
-            if P[3]>#13 then begin
-              inc(P,4);
-              continue;
-            end else
-            inc(P,3) else
-          inc(P,2) else
-        inc(P);
-      if P^ in [#0,#10,#13] then
-        break else
-        inc(P);
-    until false;
-    if PBeg<>nil then begin
-      i := 1;
+      while u^=' ' do inc(u); // trim left ' '
+      if u^=#0 then
+        break;
+      if table[u^]=UpperName[0] then
+        PBeg := u;
       repeat
-        if UpperName[i]<>#0 then
-          if NormToUpperAnsi7[PBeg[i]]<>UpperName[i] then
-            break else
-            inc(i) else begin
-          inc(PBeg,i);
-          SetString(result,PBeg,P-PBeg);
-          exit;
-        end;
+        by4 := PCardinal(u)^;
+        if ToByte(by4)>13 then
+          if ToByte(by4 shr 8)>13 then
+            if ToByte(by4 shr 16)>13 then
+              if by4 shr 24>13 then begin
+                inc(u,4);
+                continue;
+              end else
+              inc(u,3) else
+            inc(u,2) else
+          inc(u);
+        if u^ in [#0,#10,#13] then
+          break else
+          inc(u);
       until false;
-      PBeg := nil;
-    end;
-    if P^=#13 then inc(P);
-    if P^=#10 then inc(P);
-  until P^ in [#0,'['];
+      if PBeg<>nil then begin
+        inc(PBeg);
+        P := u;
+        u := pointer(UpperName+1);
+        repeat
+          if u^<>#0 then
+            if table[PBeg^]<>u^ then
+              break else begin
+              inc(u);
+              inc(PBeg);
+            end else begin
+            FastSetString(result,PBeg,P-PBeg);
+            exit;
+          end;
+        until false;
+        PBeg := nil;
+        u := P;
+      end;
+      if u^=#13 then inc(u);
+      if u^=#10 then inc(u);
+    until u^ in [#0,'['];
+  end;
   result := '';
 end;
 
@@ -29543,7 +29498,7 @@ begin
     SectionFirstLine := GotoNextLine(SectionFirstLine);
   if SectionFirstLine=nil then
     result := PBeg else
-    SetString(result,PBeg,SectionFirstLine-PBeg);
+    FastSetString(result,PBeg,SectionFirstLine-PBeg);
 end;
 
 function GetSectionContent(const Content, SectionName: RawUTF8): RawUTF8;
@@ -29870,10 +29825,10 @@ begin
     isUnicode:
       RawUnicodeToUtf8(PWideChar(PtrInt(Map.Buffer)+2),(Map.Size-2) shr 1,Result);
     isUTF8:
-      SetString(result,PAnsiChar(pointer(PtrInt(Map.Buffer)+3)),Map.Size-3);
+      FastSetString(result,pointer(PtrInt(Map.Buffer)+3),Map.Size-3);
     isAnsi:
       if AssumeUTF8IfNoBOM then
-        SetString(result,PAnsiChar(Map.Buffer),Map.Size) else
+        FastSetString(result,Map.Buffer,Map.Size) else
         result := CurrentAnsiConvert.AnsiBufferToRawUTF8(Map.Buffer, Map.Size);
     end;
   finally
@@ -32972,14 +32927,14 @@ end;
 {$endif}
 
 function GetNextLine(source: PUTF8Char; out next: PUTF8Char): RawUTF8;
-var beg: PAnsiChar;
+var beg: PUTF8Char;
 begin
   if source=nil then begin
     {$ifdef FPC}Finalize(result){$else}result := ''{$endif};
     next := source;
     exit;
   end;
-  beg := pointer(source);
+  beg := source;
   repeat
     if source[0]>#13 then
       if source[1]>#13 then
@@ -33000,7 +32955,7 @@ begin
         continue;
       end;
     end;
-    SetString(result,beg,source-beg);
+    FastSetString(result,beg,source-beg);
     exit;
   until false;
 end;
@@ -33174,7 +33129,7 @@ begin
     S := P;
     while (S^<>#0) and (S^<>Sep) do
       inc(S);
-    SetString(result,P,S-P);
+    FastSetString(result,P,S-P);
     if S^<>#0 then
       P := S+1 else
       P := nil;
@@ -33192,7 +33147,7 @@ begin
       inc(S);
     E := S;
     while (E>P) and (E[-1] in [#1..' ']) do dec(E);
-    SetString(result,P,E-P);
+    FastSetString(result,P,E-P);
     if S^<>#0 then
       P := S+1 else
       P := nil;
@@ -33210,7 +33165,7 @@ begin
     E := S;
     if (E>P) and (E[-1]=#13) then
       dec(E);
-    SetString(result,P,E-P);
+    FastSetString(result,P,E-P);
     if S^<>#0 then
       P := S+1 else
       P := nil;
@@ -33998,11 +33953,10 @@ var P,Dest: PUTF8Char;
     L: integer;
     tmp: array[byte] of AnsiChar;
 begin
+result := '';
   L := StrLen(U);
-  if L=0 then begin
-    result := '';
+  if L=0 then
     exit;
-  end;
   if L>SizeOf(tmp) then begin
     SetLength(result,L);
     Dest := pointer(result);
@@ -34023,7 +33977,7 @@ begin
     inc(P);
   until false;
   if Dest=@tmp then
-    SetString(result,PAnsiChar(@tmp),P-Dest) else
+    FastSetString(result,@tmp,P-Dest) else
     SetLength(result,P-Dest);
 end;
 
@@ -36156,6 +36110,38 @@ begin // inlined UnixTimeToDateTime
     FirstTimeChar,false);
 end;
 
+{$ifdef FPC} // faster than current RTL version
+procedure DecodeTime(dt: TDateTime; out HH, MM, SS, MS: word);
+var t, t2: cardinal;
+begin
+  t := round(abs(dt) * MSecsPerDay) mod MSecsPerDay;
+  t2 := t div 3600000;
+  HH := t2;
+  dec(t, t2 * 3600000);
+  t2 := t div 60000;
+  MM := t2;
+  dec(t, t2 * 60000);
+  t2 := t div 1000;
+  SS := t2;
+  MS := t - t2 * 1000;
+end;
+{$endif}
+
+function UnixTimeToFileShort(const UnixTime: TUnixTime): shortstring;
+var dt: TDateTime;
+    HH,MM,SS, MS,Y,M,D: word;
+begin // use 'YYMMDDHHMMSS' format
+  dt := UnixTime/SecsPerDay+UnixDateDelta;
+  DecodeDate(dt, Y, M, D);
+  if Y > 1999 then
+    dec(Y, 2000) else
+    Y := 0;
+  DecodeTime(dt, HH, MM, SS, MS);
+  FormatShort('%%%%%%', [UInt2DigitsToShort(Y), UInt2DigitsToShort(M),
+    UInt2DigitsToShort(D), UInt2DigitsToShort(HH), UInt2DigitsToShort(MM),
+    UInt2DigitsToShort(SS)], result);
+end;
+
 function UnixTimePeriodToString(const UnixTime: TUnixTime; FirstTimeChar: AnsiChar): RawUTF8;
 begin
   if UnixTime<SecsPerDay then
@@ -36526,20 +36512,20 @@ begin // D=0 is handled in DateTimeToIso8601Text()
   if Expanded then
     TimeToIso8601PChar(D,@tmp[10],true,FirstChar,WithMS) else
     TimeToIso8601PChar(D,@tmp[8],false,FirstChar,WithMS);
-  SetString(result,PAnsiChar(@tmp),ISO8601_LEN[Expanded,FirstChar=#0]+4*integer(WithMS));
+  FastSetString(result,@tmp,ISO8601_LEN[Expanded,FirstChar=#0]+4*integer(WithMS));
 end;
 
 function DateToIso8601(Date: TDateTime; Expanded: boolean): RawUTF8;
 // use YYYYMMDD / YYYY-MM-DD date format
 begin
-  FastNewRawUTF8(result,8+2*integer(Expanded));
+  FastSetString(result,nil,8+2*integer(Expanded));
   DateToIso8601PChar(Date,pointer(result),Expanded);
 end;
 
 function DateToIso8601(Y,M,D: cardinal; Expanded: boolean): RawUTF8;
 // use 'YYYYMMDD' format if not Expanded, 'YYYY-MM-DD' format if Expanded
 begin
-  FastNewRawUTF8(result,8+2*integer(Expanded));
+  FastSetString(result,nil,8+2*integer(Expanded));
   DateToIso8601PChar(pointer(result),Expanded,Y,M,D);
 end;
 
@@ -36547,7 +36533,7 @@ function TimeToIso8601(Time: TDateTime; Expanded: boolean; FirstChar: AnsiChar;
   WithMS: boolean): RawUTF8;
 // use Thhmmss[.sss] / Thh:mm:ss[.sss] format
 begin
-  FastNewRawUTF8(result,7+2*integer(Expanded)+4*integer(WithMS));
+  FastSetString(result,nil,7+2*integer(Expanded)+4*integer(WithMS));
   TimeToIso8601PChar(Time,pointer(result),Expanded,FirstChar,WithMS);
 end;
 
@@ -37003,7 +36989,7 @@ var tmp: array[0..31] of AnsiChar;
 begin
   if Value=0 then
     result := '' else
-    SetString(result,PAnsiChar(@tmp),Text(tmp,Expanded,FirstTimeChar));
+    FastSetString(result,@tmp,Text(tmp,Expanded,FirstTimeChar));
 end;
 
 function TTimeLogBits.i18nText: string;
@@ -37589,7 +37575,7 @@ end;
 function GUIDToRawUTF8(const guid: TGUID): RawUTF8;
 var P: PUTF8Char;
 begin
-  FastNewRawUTF8(result,38);
+  FastSetString(result,nil,38);
   P := pointer(result);
   P^ := '{';
   GUIDToText(P+1,@guid)^ := '}';
@@ -37828,7 +37814,7 @@ begin
       if Decim and $ffff0000=ord('0')shl 16+ord('0')shl 24 then
         dec(L,2); // 2 decimals
     end;
-    SetRawUTF8(result,P,L);
+    FastSetString(result,P,L);
   end;
 end;
 
@@ -38006,8 +37992,8 @@ begin
     dec(L);
   end;
   if L=0 then
-    result := V^ else
-    SetString(result,P,L);
+    FastSetString(result,@V^[1],length(V^)) else
+    FastSetString(result,P,L);
 end;
 {$else}
 asm // eax=V
@@ -38145,7 +38131,7 @@ begin
       len := d-tmp;
       break;
     end;
-  SetString(s,P,len);
+  FastSetString(s,P,len);
 end;
 
 procedure GetCaptionFromPCharLen(P: PUTF8Char; out result: string);
@@ -38190,7 +38176,7 @@ begin
     end;
   if (Trimleft=0) and (DelphiName^[1]='T') then
     Trimleft := 1;
-  SetString(result,PAnsiChar(@DelphiName^[TrimLeft+1]),ord(DelphiName^[0])-TrimLeft);
+  FastSetString(result,@DelphiName^[TrimLeft+1],ord(DelphiName^[0])-TrimLeft);
 end;
 
 function ClassNameShort(C: TClass): PShortString;
@@ -38211,7 +38197,7 @@ begin
   if C=nil then
     result := '' else begin
     P := PPointer(PtrInt(PtrUInt(C))+vmtClassName)^;
-    SetString(result,PAnsiChar(@P^[1]),ord(P^[0]));
+    FastSetString(result,@P^[1],ord(P^[0]));
   end;
 end;
 
@@ -38221,7 +38207,7 @@ begin
   if C=nil then
     result := '' else begin
     P := PPointer(PtrInt(PtrUInt(C))+vmtClassName)^;
-    SetString(result,PAnsiChar(@P^[1]),ord(P^[0]));
+    FastSetString(result,@P^[1],ord(P^[0]));
   end;
 end;
 
@@ -39153,7 +39139,7 @@ var M,D: word;
     begin
       VerQueryValueA(Pt,PAnsiChar('\StringFileInfo\'+LanguageInfo+'\'+From),StrValPt,sz);
       if sz>0 then
-        SetRawUTF8(Result,StrValPt,sz)
+        FastSetString(Result,StrValPt,sz)
     end;
 {$else}
 {$ifdef FPCUSEVERSIONINFO}
@@ -40178,7 +40164,7 @@ function FromVarString(var Source: PByte): RawUTF8;
 var Len: PtrUInt;
 begin
   Len := FromVarUInt32(Source);
-  SetString(Result,PAnsiChar(Source),Len);
+  FastSetStringCP(Result,Source,Len,CP_UTF8);
   inc(Source,Len);
 end;
 
@@ -40195,12 +40181,7 @@ procedure FromVarString(var Source: PByte; var Value: RawByteString; CodePage: i
 var Len: PtrUInt;
 begin
   Len := FromVarUInt32(Source);
-  if Len=0 then
-    exit;
-  SetString(Value,PAnsiChar(Source),Len);
-  {$ifdef HASCODEPAGE}
-  SetCodePage(Value,CodePage,false);
-  {$endif}
+  FastSetStringCP(Value,Source,Len,CodePage);
   inc(Source,Len);
 end;
 
@@ -40572,13 +40553,8 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
   case info^.Kind of
   tkLString: begin // most used type of string
     itemsize := FromVarUInt32(PByte(source));
-    SetString(PRawByteString(data)^,source,itemsize);
-    {$ifdef HASCODEPAGE}
-    if itemsize<>0 then
-      SetCodePage(PRawByteString(data)^,PWord(
-        {$ifdef FPC}GetFPCTypeData(pointer(info))
-        {$else}PtrUInt(info)+info^.NameLen+2{$endif})^,false);
-    {$endif}
+    FastSetStringCP(data^,source,itemsize,PWord({$ifdef FPC}
+      GetFPCTypeData(pointer(info)){$else}PtrUInt(info)+info^.NameLen+2{$endif})^);
     inc(source,itemsize);
     result := SizeOf(PtrUInt); // size of tkLString
   end;
@@ -40594,7 +40570,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
         SetString(PWideString(data)^,PWideChar(source),itemsize shr 1);
       {$ifdef HASVARUSTRING}
       tkUString:
-        SetString(PString(data)^,PWideChar(source),itemsize shr 1);
+        SetString(PUnicodeString(data)^,PWideChar(source),itemsize shr 1);
       {$endif}
     end;
     inc(source,itemsize);
@@ -42149,9 +42125,9 @@ begin
       exit; // we need a type name!
     len := length(name^); // try to guess from T*DynArray or T*s names
     if (len>12) and (IdemPropName('DynArray',@name^[len-7],8)) then
-      SetString(Reg.RecordTypeName,PAnsiChar(@name^[1]),len-8) else
+      FastSetString(Reg.RecordTypeName,@name^[1],len-8) else
     if (len>3) and (name^[len]='s') then
-      SetString(Reg.RecordTypeName,PAnsiChar(@name^[1]),len-1) else
+      FastSetString(Reg.RecordTypeName,@name^[1],len-1) else
       exit;
   end;
   RegRoot := TJSONCustomParserRTTI.CreateFromTypeName('',Reg.RecordTypeName);
@@ -43322,7 +43298,7 @@ Error:      Prop.FinalizeNestedArray(PPtrUInt(Data)^);
       ptQWord:     SetQWord(PropValue,PQWord(Data)^);
       ptInteger:   PInteger(Data)^ := GetInteger(PropValue);
       ptSingle:    PSingle(Data)^ := GetExtended(PropValue);
-      ptRawUTF8:   SetString(PRawUTF8(Data)^,PropValue,PropValueLen);
+      ptRawUTF8:   FastSetString(PRawUTF8(Data)^,PropValue,PropValueLen);
       ptString:    UTF8DecodeToString(PropValue,PropValueLen,PString(Data)^);
       ptSynUnicode:UTF8ToSynUnicode(PropValue,PropValueLen,PSynUnicode(Data)^);
       ptDateTime, ptDateTimeMS:  Iso8601ToDateTimePUTF8CharVar(
@@ -43757,7 +43733,7 @@ begin
             ArrayTyp := TJSONCustomParserRTTI.TypeNameToSimpleRTTIType(
               @PByteArray(TypIdent)[1],len-1,ArrayTypIdent); // TByteDynArray -> byte
             if ArrayTyp=ptCustom then begin // TMyTypeDynArray/TMyTypes -> TMyType
-              SetString(ArrayTypIdent,PAnsiChar(pointer(TypIdent)),len);
+              FastSetString(ArrayTypIdent,pointer(TypIdent),len);
               if GlobalCustomJSONSerializerFromTextSimpleType.Find(ArrayTypIdent)>=0 then
                 Typ := ptArray;
             end else
@@ -43878,7 +43854,7 @@ begin // only tkRecord is needed here
       ItemFieldSize := FieldSize-ItemFields[i].Offset else
       ItemFieldSize := ItemFields[i+1].Offset-ItemFields[i].Offset;
     ItemField := Deref(ItemFields[i]^.TypeInfo);
-    SetRawUTF8(ItemFieldName,PAnsiChar(@ItemFields[i]^.NameLen)+1,ItemFields[i]^.NameLen);
+    FastSetString(ItemFieldName,PAnsiChar(@ItemFields[i]^.NameLen)+1,ItemFields[i]^.NameLen);
     Item := AddItemFromRTTI(ItemFieldName,ItemField,ItemFieldSize);
     Props.fNestedProperty[i] := Item;
     case Item.PropertyType of
@@ -44120,7 +44096,7 @@ begin
       VType := varString;
       VAny := nil; // avoid GPF below when assigning a string variable to VAny
     end;
-    SetRawUTF8(RawUTF8(VString),Txt,TxtLen);
+    FastSetString(VString,Txt,TxtLen);
   end;
 end;
 
@@ -44336,7 +44312,7 @@ begin
       tmp.Len := FromVarUInt32(PByte(Source));
       case VType of
       varString:
-        SetString(RawUTF8(VString),Source,tmp.Len); // explicit RawUTF8
+        FastSetString(VString,Source,tmp.Len); // explicit RawUTF8
       varOleStr:
         SetString(WideString(VAny),PWideChar(Source),tmp.Len shr 1);
       {$ifdef HASVARUSTRING}
@@ -44998,7 +44974,7 @@ begin
     // found no numerical value -> return a string in the expected format
     VType := varString;
     VString := nil; // avoid GPF below when assigning a string variable to VAny
-    SetString(RawUTF8(VString),PAnsiChar(JSON),StrLen(JSON));
+    FastSetString(VString,JSON,StrLen(JSON));
   end;
 end;
 
@@ -45580,7 +45556,7 @@ begin
         Name := GetJSONPropName(JSON,@NameLen);
         if Name=nil then
           exit;
-        SetString(VName[VCount],PAnsiChar(Name),NameLen);
+        FastSetString(VName[VCount],Name,NameLen);
         if intnames<>nil then
           intnames.UniqueText(VName[VCount]);
         GetJSONToAnyVariant(VValue[VCount],JSON,@EndOfObject,@VOptions,false);
@@ -45819,7 +45795,7 @@ end;
 function TDocVariantData.AddValue(aName: PUTF8Char; aNameLen: integer; const aValue: variant): integer;
 var tmp: RawUTF8;
 begin
-  SetString(tmp,PAnsiChar(aName),aNameLen);
+  FastSetString(tmp,aName,aNameLen);
   result := AddValue(tmp,aValue);
 end;
 
@@ -47126,7 +47102,7 @@ begin
       DocVariantType.InternValues.UniqueVariant(Data.VValue[ndx]);
     exit;
   end;
-  SetString(aName,Name,StrLen(PUTF8Char(Name)));
+  FastSetString(aName,Name,StrLen(PUTF8Char(Name)));
   ndx := Data.GetValueIndex(aName);
   if ndx<0 then
     ndx := Data.InternalAdd(aName);
@@ -48781,10 +48757,10 @@ begin // code below must match TTextWriter.AddDynArrayJSON()
           Iso8601ToDateTimePUTF8CharVar(Val,ValLen,PDateTimeArray(fValue^)^[i]);
         djDouble:   PDoubleArray(fValue^)^[i] := GetExtended(Val);
         djCurrency: PInt64Array(fValue^)^[i] := StrToCurr64(Val);
-        djRawUTF8:  SetString(PRawUTF8Array(fValue^)^[i],Val,ValLen);
+        djRawUTF8:  FastSetString(PRawUTF8Array(fValue^)^[i],Val,ValLen);
         djRawByteString:
           if not Base64MagicCheckAndDecode(Val,ValLen,PRawByteStringArray(fValue^)^[i]) then
-            SetString(PRawUTF8Array(fValue^)^[i],Val,ValLen);
+            FastSetString(PRawUTF8Array(fValue^)^[i],Val,ValLen);
         djWinAnsi:  WinAnsiConvert.UTF8BufferToAnsi(Val,ValLen,PRawByteStringArray(fValue^)^[i]);
         djString:   UTF8DecodeToString(Val,ValLen,string(PPointerArray(fValue^)^[i]));
         djWideString: UTF8ToWideString(Val,ValLen,WideString(PPointerArray(fValue^)^[i]));
@@ -50040,9 +50016,15 @@ begin
   result := InternalDynArray.SaveTo(Dest);
 end;
 
-function TDynArrayHashed.SaveToJSON(EnumSetsAsText: boolean=false): RawUTF8;
+function TDynArrayHashed.SaveToJSON(EnumSetsAsText: boolean;
+  reformat: TTextWriterJSONFormat): RawUTF8;
 begin
-  result := InternalDynArray.SaveToJSON(EnumSetsAsText);
+  result := InternalDynArray.SaveToJSON(EnumSetsAsText,reformat);
+end;
+
+procedure TDynArrayHashed.Sort(aCompare: TDynArraySortCompare);
+begin
+  InternalDynArray.Sort(aCompare);
 end;
 
 function TDynArrayHashed.LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char=nil): PUTF8Char;
@@ -50085,9 +50067,11 @@ begin
     if Assigned(fEventCompare) then
       result := Scan(Elem) else
       result := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}Find(Elem);
-    if (result>=0) and (fHashCountTrigger>0) then begin
+    if (result>=0) and (fHashCountTrigger>0) and
+       ({$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCountP<>nil) and
+       ({$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCountP^>4) then begin
       inc(fHashFindCount);
-      if fHashFindCount>=fHashCountTrigger then begin
+      if fHashFindCount>=fHashCountTrigger*2 then begin
         fHashCountTrigger := 0; // FindHashed() should use O(1) hash
         ReHash;
       end;
@@ -52529,6 +52513,21 @@ begin
   JSONSerializerFromTextSimpleTypeAdd('',aTypeInfo,aDataSize,aFieldSize);
 end;
 
+class procedure TTextWriter.RegisterCustomJSONSerializerFromTextBinaryType(
+  const aTypeInfoDataFieldSize: array of const);
+var n,i: integer;
+    s1,s2: Int64;
+begin
+  n := length(aTypeInfoDataFieldSize);
+  if n mod 3=0 then
+    for i := 0 to (n div 3)-1 do
+    if (aTypeInfoDataFieldSize[i*3].VType<>vtPointer) or
+       not VarRecToInt64(aTypeInfoDataFieldSize[i*3+1],s1) or
+       not VarRecToInt64(aTypeInfoDataFieldSize[i*3+2],s2) then
+      raise ESynException.CreateUTF8('RegisterCustomJSONSerializerFromTextBinaryType[%]',[i]) else
+      JSONSerializerFromTextSimpleTypeAdd('',aTypeInfoDataFieldSize[i*3].VPointer,s1,s2);
+end;
+
 procedure TTextWriter.AddRecordJSON(const Rec; TypeInfo: pointer);
 var customWriter: TDynArrayJSONCustomWriter;
 begin
@@ -53447,7 +53446,7 @@ end;
 
 function Int18ToChars3(Value: cardinal): RawUTF8;
 begin
-  SetString(result,nil,3);
+  FastSetString(result,nil,3);
   PCardinal(result)^ := ((Value shr 12) and $3f)+
                         ((Value shr 6) and $3f)shl 8+
                         (Value and $3f)shl 16+$202020;
@@ -53455,7 +53454,7 @@ end;
 
 procedure Int18ToChars3(Value: cardinal; var result: RawUTF8);
 begin
-  SetString(result,nil,3);
+  FastSetString(result,nil,3);
   PCardinal(result)^ := ((Value shr 12) and $3f)+
                         ((Value shr 6) and $3f)shl 8+
                         (Value and $3f)shl 16+$202020;
@@ -54449,11 +54448,11 @@ begin
       result := fDataString;
       fDataString := '';
     end else
-      SetRawUTF8(result,PAnsiChar(pointer(DataString))+fInitialStreamPosition,Len) else
+      FastSetString(result,PAnsiChar(pointer(DataString))+fInitialStreamPosition,Len) else
   if fStream.InheritsFrom(TCustomMemoryStream) then
     with TCustomMemoryStream(fStream) do
-      SetRawUTF8(result,PAnsiChar(Memory)+fInitialStreamPosition,Len) else begin
-    FastNewRawUTF8(result,Len);
+      FastSetString(result,PAnsiChar(Memory)+fInitialStreamPosition,Len) else begin
+    FastSetString(result,nil,Len);
     fStream.Seek(fInitialStreamPosition,soBeginning);
     fStream.Read(pointer(result)^,Len);
   end;
@@ -54857,7 +54856,7 @@ begin
     if not(EndOfObject in [',','}']) then
       exit; // invalid item separator
     if IdemPropNameU(aName,Name,NameLen) then begin
-      SetString(result,PAnsiChar(Value),ValueLen);
+      FastSetString(result,Value,ValueLen);
       exit;
     end;
   until (P=nil) or (EndOfObject='}');
@@ -55424,7 +55423,7 @@ begin
   P := GotoEndJSONItem(B);
   if P=nil then
     exit;
-  SetString(result,PAnsiChar(B),P-B);
+  FastSetString(result,B,P-B);
   while (P^<=' ') and (P^<>#0) do inc(P);
   if EndOfObject<>nil then
     EndOfObject^ := P^;
@@ -55440,7 +55439,7 @@ begin
   V := GetJSONFieldOrObjectOrArray(P,wasstring,EndOfObject,true,true,@VLen);
   if V=nil then // parsing error
     result := false else begin
-    SetString(output,PAnsiChar(V),VLen);
+    FastSetString(output,V,VLen);
     result := true;
   end;
 end;
@@ -55784,7 +55783,7 @@ begin
           name[ord(name[0])+1] := #0; // make ASCIIZ
           if IdemPChar(@name[1],PropNameUpper) then begin
             if PropNameFound<>nil then
-              SetString(PropNameFound^,PAnsiChar(@name[1]),ord(name[0]));
+              FastSetString(PropNameFound^,@name[1],ord(name[0]));
             result := P;
             exit;
           end;
@@ -56613,7 +56612,7 @@ procedure KBU(bytes: Int64; var result: RawUTF8);
 var tmp: shortstring;
 begin
   KB(bytes,tmp);
-  SetString(result,PAnsiChar(@tmp[1]),ord(tmp[0]));
+  FastSetString(result,@tmp[1],ord(tmp[0]));
 end;
 
 function IntToThousandString(Value: integer; const ThousandSep: RawUTF8): RawUTF8;
@@ -58721,7 +58720,7 @@ begin
           break;
         inc(P);
       end;
-      SetString(Line,PBeg,P-PBeg);
+      FastSetString(Line,PBeg,P-PBeg);
       AddObject(Line,nil);
       if P>=PEnd then
         break;
@@ -60589,7 +60588,7 @@ begin
   fixedsize := length(Values[0]);
   if fixedsize>0 then
     for i := 1 to ValuesCount-1 do
-      if (PI^[i]=0) or ({$ifdef FPC}_LStrLenP(pointer(PI^[i])){$else}
+      if (PI^[i]=0) or ({$ifdef FPC}PtrUInt(_LStrLenP(pointer(PI^[i]))){$else}
          PCardinal(PI^[i]-SizeOf(integer))^{$endif}<>fixedsize) then begin
         fixedsize := 0;
         break;
@@ -61501,7 +61500,7 @@ begin
     while (count>0) and (PtrUInt(P)<PtrUInt(PEnd)) do begin
       len := FromVarUInt32(P);
       if len>0 then begin
-        SetString(PI^,PAnsiChar(P),len);
+        FastSetString(PI^,P,len);
         inc(P,len);
       end else
         if PI^<>'' then
@@ -61511,7 +61510,7 @@ begin
     end else
     // fixed size strings case
     while (count>0) and (PtrUInt(P)<PtrUInt(PEnd)) do begin
-      SetString(PI^,PAnsiChar(P),fixedsize);
+      FastSetString(PI^,P,fixedsize);
       inc(P,fixedsize);
       dec(count);
       inc(PI);
@@ -61865,13 +61864,13 @@ end;
 procedure TFastReader.VarUTF8(out result: RawUTF8);
 begin
   with VarBlob do
-    SetString(result,Ptr,Len);
+    FastSetString(result,Ptr,Len);
 end;
 
 function TFastReader.VarUTF8: RawUTF8;
 begin
   with VarBlob do
-    SetString(result,Ptr,Len);
+    FastSetString(result,Ptr,Len);
 end;
 
 function TFastReader.VarShortString: shortstring;
@@ -61884,7 +61883,7 @@ function TFastReader.VarUTF8Safe(out Value: RawUTF8): boolean;
 var len: cardinal;
 begin
   if VarUInt32Safe(len) and (P+len<=Last) then begin
-    SetString(Value,P,len);
+    FastSetString(Value,P,len);
     inc(P,len);
     result := true;
   end else
@@ -62353,7 +62352,7 @@ begin
   while P^ in [#1..' ',';'] do inc(P);
   B := P;
   while ord(P^) in IsIdentifier do inc(P); // go to end of field name
-  SetRawUTF8(Prop,B,P-B);
+  FastSetString(Prop,B,P-B);
   while P^ in [#1..' ',';'] do inc(P);
   result := Prop<>'';
 end;
@@ -63265,7 +63264,7 @@ function TMemoryMapText.GetLine(aIndex: integer): RawUTF8;
 begin
   if (self=nil) or (cardinal(aIndex)>=cardinal(fCount)) then
     result := '' else
-    SetString(result,PAnsiChar(fLines[aIndex]),GetLineSize(fLines[aIndex],fMapEnd));
+    FastSetString(result,fLines[aIndex],GetLineSize(fLines[aIndex],fMapEnd));
 end;
 
 function TMemoryMapText.GetString(aIndex: integer): string;
@@ -63676,8 +63675,8 @@ begin
     V := GetJSONFieldOrObjectOrArray(JSON,nil,@EndOfObject,true,true,@Vlen);
     if V=nil then
       exit;
-    SetString(nam,N,Nlen);
-    SetString(val,V,Vlen);
+    FastSetString(nam,N,Nlen);
+    FastSetString(val,V,Vlen);
     Add(nam,val);
   until EndOfObject='}';
   result := true;
@@ -65964,7 +65963,7 @@ begin
   end;
   for i := 0 to high(SmallUInt32UTF8) do begin
     P := StrUInt32(@tmp[15],i);
-    SetString(SmallUInt32UTF8[i],P,@tmp[15]-P);
+    FastSetString(SmallUInt32UTF8[i],P,@tmp[15]-P);
   end;
   UpperCopy255Buf := @UpperCopy255BufPas;
   DefaultHasher := @xxHash32; // faster than crc32cfast for small content
@@ -66025,6 +66024,11 @@ initialization
   InitializeCriticalSection(GlobalCriticalSection);
   {$ifdef CPUINTEL}
   TestIntelCpuFeatures;
+  {$endif}
+  {$ifdef PUREPASCAL}
+  {$ifndef HASINLINE}
+  PosEx := @PosExPas;
+  {$endif}
   {$endif}
   crc32c := @crc32cfast; // now to circumvent Internal Error C11715 for Delphi 5
   crc32cBy4 := @crc32cBy4fast;
