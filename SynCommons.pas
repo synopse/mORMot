@@ -1783,6 +1783,7 @@ function Utf8ToWinAnsi(P: PUTF8Char): WinAnsiString; overload;
 
 /// direct conversion of a UTF-8 encoded zero terminated buffer into a RawUTF8 String
 procedure Utf8ToRawUTF8(P: PUTF8Char; var result: RawUTF8);
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// direct conversion of a UTF-8 encoded buffer into a WinAnsi PAnsiChar buffer
 function UTF8ToWinPChar(dest: PAnsiChar; source: PUTF8Char; count: integer): integer;
@@ -4810,6 +4811,9 @@ procedure AddInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
 // of the time (since it stores the Values[] array capacity)
 function AddInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
   Value: integer; NoDuplicates: boolean): boolean; overload;
+
+/// add a 16-bit integer value at the end of a dynamic array of integers
+function AddWord(var Values: TWordDynArray; var ValuesCount: integer; Value: Word): integer;
 
 /// add a 64-bit integer value at the end of a dynamic array of integers
 function AddInt64(var Values: TInt64DynArray; var ValuesCount: integer; Value: Int64): integer; overload;
@@ -30620,6 +30624,15 @@ begin
   Values[ValuesCount] := Value;
   inc(ValuesCount);
   result := true
+end;
+
+function AddWord(var Values: TWordDynArray; var ValuesCount: integer; Value: Word): integer;
+begin
+  result := ValuesCount;
+  if result=length(Values) then
+    SetLength(Values,result+32+result shr 3);
+  Values[result] := Value;
+  inc(ValuesCount);
 end;
 
 function AddInt64(var Values: TInt64DynArray; var ValuesCount: integer; Value: Int64): integer;
