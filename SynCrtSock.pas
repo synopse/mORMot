@@ -5602,7 +5602,7 @@ end;
 
 function THttpServer.OnNginxAllowSend(Context: THttpServerRequest;
   const LocalFileName: TFileName): boolean;
-var match,i,f: integer;
+var match,i,f: PtrInt;
     folder: ^TFileName;
 begin
   match := 0;
@@ -5629,7 +5629,7 @@ begin
 end;
 
 procedure THttpServer.NginxSendFileFrom(const FileNameLeftTrim: TFileName);
-var n: integer;
+var n: PtrInt;
 begin
   n := length(fNginxSendFileFrom);
   SetLength(fNginxSendFileFrom,n+1);

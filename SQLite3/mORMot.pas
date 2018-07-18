@@ -26690,16 +26690,13 @@ type
     Results: PPUtf8CharArray;
     IDColumn: PPUtf8CharArray;
     Params: TSQLTableSortParams;
-    CurrentRow: integer;
+    CurrentRow: PtrInt;
     // avoid multiplications to calculate data memory position from index
     FieldCountNextPtr, FieldFirstPtr, FieldIDPtr: PtrInt;
     // temp vars (avoid stack usage):
     PID: Int64;
     PP, CI, CJ: PPUTF8Char;
     I, J: PtrInt;
-    {$ifdef PUREPASCAL}
-    Tmp: PUTF8Char;
-    {$endif}
     /// recursively perform the sort
     procedure QuickSort(L, R: Integer);
     /// compare value at index I with pivot value
@@ -26753,10 +26750,9 @@ begin
   end;
 end;
 
-procedure ExchgPtrUInt(P1,P2: PtrUInt; FieldCount: integer);
+procedure ExchgPtrUInt(P1,P2: PtrUInt; FieldCount: PtrUInt);
 {$ifndef CPUX86}  // CPU64 will call this version e.g.
-var B: PtrUInt;
-    i: PtrUInt;
+var B,i: PtrUInt;
 begin
   for i := 1 to FieldCount do begin
     B := PPtrUInt(P1)^;
@@ -26800,6 +26796,7 @@ end;
 procedure TUTF8QuickSort.QuickSort(L, R: Integer);
 // code below is very fast and optimized
 var P: PtrInt;
+    {$ifdef PUREPASCAL}Tmp: PUTF8Char;{$endif}
 begin
   if @Params.Comp<>nil then
   repeat
@@ -27126,8 +27123,9 @@ end;
 {$ifdef ISDELPHI2010} // Delphi 2009 generics are buggy
 function TSQLTable.ToObjectList<T>: TObjectList<T>;
 var R,Item: TSQLRecord;
-    Row: PPUtf8Char;
+    row: PPUtf8Char;
     i: integer;
+    {$ifdef ISDELPHIXE3}rec: PSQLRecordArray;{$endif}
 begin
   result := TObjectList<T>.Create; // TObjectList<T> will free each T instance
   if (self=nil) or (fRowCount=0) then
@@ -27135,20 +27133,21 @@ begin
   R := TSQLRecordClass(T).Create;
   try
     R.FillPrepare(self);
-    Row := @fResults[FieldCount];     // Row^ points to first row of data
+    row := @fResults[FieldCount]; // row^ points to first row of data
     {$ifdef ISDELPHIXE3}
-    result.Count := fRowCount;         // faster than manual Add()
+    result.Count := fRowCount;    // faster than manual Add()
+    rec := pointer(result.List);
     for i := 0 to fRowCount-1 do begin
       Item := TSQLRecordClass(T).Create;
-      PPointerArray(result.List)[i] := Item;
+      rec[i] := Item;
     {$else}
-    for i := 0 to fRowCount-1 do begin
+    for i := 1 to fRowCount do begin
       Item := TSQLRecordClass(T).Create;
       Result.Add(Item);
     {$endif}
-      R.fFill.Fill(pointer(Row),Item);
-      Item.fInternalState := Self.InternalState;   // Filling InternalState property
-      Inc(Row,FieldCount); // next data row
+      R.fFill.Fill(pointer(row),Item);
+      Item.fInternalState := fInternalState; // set InternalState property
+      Inc(row,FieldCount); // next data row
     end;
   finally
     R.Free;
@@ -27158,7 +27157,8 @@ end;
 
 procedure TSQLTable.ToObjectList(DestList: TObjectList; RecordType: TSQLRecordClass=nil);
 var R: TSQLRecord;
-    Row: PPUtf8Char;
+    row: PPUtf8Char;
+    rec: PSQLRecordArray;
     i: integer;
 begin
   if DestList=nil then
@@ -27175,12 +27175,13 @@ begin
   try
     R.FillPrepare(self);
     DestList.Count := fRowCount;       // faster than manual Add()
-    Row := @fResults[FieldCount];      // Row^ points to first row of data
+    rec := pointer(DestList.List);
+    row := @fResults[FieldCount];      // row^ points to first row of data
     for i := 0 to fRowCount-1 do begin // TObjectList will free each instance
-      DestList.List[i] := RecordType.Create;
-      R.fFill.Fill(pointer(Row),TSQLRecord(DestList.List[i]));
-      TSQLRecord(DestList.List[i]).fInternalState := Self.InternalState;   // Filling InternalState property
-      Inc(Row,FieldCount); // next data row
+      rec[i] := RecordType.Create;
+      R.fFill.Fill(pointer(row),rec[i]);
+      rec[i].fInternalState := fInternalState; // set InternalState property
+      inc(row,FieldCount); // next data row
     end;
   finally
     R.Free;
@@ -45946,7 +45947,7 @@ var i, last, currentRow, found: PtrInt;
 
   function FoundOneAndReachedLimit: boolean;
   begin
-    result := false;
+    result := false; // continue search
     if FoundOffset>0 then begin // omit first FoundOffset rows
       inc(currentRow);
       if currentRow>FoundOffset then
@@ -45957,7 +45958,7 @@ var i, last, currentRow, found: PtrInt;
       OnFind(Dest,TSQLRecord(rec[i]),i);
     inc(found);
     if found>=FoundLimit then
-      result := true;
+      result := true; // stop the loop
   end;
 
 begin
@@ -46054,7 +46055,7 @@ function TSQLRestStorageInMemory.FindMax(WhereField: integer; out max: Int64): b
 var rec: PSQLRecordArray;
     P: TSQLPropInfo;
     nfo: PPropInfo;
-    i: integer;
+    i: PtrInt;
     v: Int64;
 begin
   result := false;
