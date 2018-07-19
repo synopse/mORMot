@@ -10250,11 +10250,10 @@ var
 
 type
   /// handle memory mapping of a file content
-  /// used to store and retrieve Words in a sorted array
   {$ifdef UNICODE}TMemoryMap = record{$else}TMemoryMap = object{$endif}
   private
     fBuf: PAnsiChar;
-    fBufSize: cardinal;
+    fBufSize: PtrUInt;
     fFile: THandle;
     {$ifdef MSWINDOWS}
     fMap: THandle;
@@ -10265,19 +10264,19 @@ type
     /// map the corresponding file handle
     // - if aCustomSize and aCustomOffset are specified, the corresponding
     // map view if created (by default, will map whole file)
-    function Map(aFile: THandle; aCustomSize: cardinal=0; aCustomOffset: Int64=0): boolean; overload;
+    function Map(aFile: THandle; aCustomSize: PtrUInt=0; aCustomOffset: Int64=0): boolean; overload;
     /// map the file specified by its name
     // - file will be closed when UnMap will be called
     function Map(const aFileName: TFileName): boolean; overload;
     /// set a fixed buffer for the content
     // - emulated a memory-mapping from an existing buffer
-    procedure Map(aBuffer: pointer; aBufferSize: cardinal); overload;
+    procedure Map(aBuffer: pointer; aBufferSize: PtrUInt); overload;
     /// unmap the file
     procedure UnMap;
     /// retrieve the memory buffer mapped to the file content
     property Buffer: PAnsiChar read fBuf;
     /// retrieve the buffer size
-    property Size: cardinal read fBufSize;
+    property Size: PtrUInt read fBufSize;
   end;
 
   {$M+}
@@ -10415,7 +10414,7 @@ type
     // - warning: there is no local copy of the supplied content: the
     // Data/DataLen buffer must be available during all the TSynMemoryStream usage:
     // don't release the source Data before calling TSynMemoryStream.Free
-    constructor Create(Data: pointer; DataLen: integer); overload;
+    constructor Create(Data: pointer; DataLen: PtrInt); overload;
     /// this TStream is read-only: calling this method will raise an exception
     function Write(const Buffer; Count: Longint): Longint; override;
   end;
@@ -10431,12 +10430,12 @@ type
     // - if aCustomSize and aCustomOffset are specified, the corresponding
     // map view if created (by default, will map whole file)
     constructor Create(const aFileName: TFileName;
-      aCustomSize: cardinal=0; aCustomOffset: Int64=0); overload;
+      aCustomSize: PtrUInt=0; aCustomOffset: Int64=0); overload;
     /// create a TStream from a file content using fast memory mapping
     // - if aCustomSize and aCustomOffset are specified, the corresponding
     // map view if created (by default, will map whole file)
     constructor Create(aFile: THandle;
-      aCustomSize: cardinal=0; aCustomOffset: Int64=0); overload;
+      aCustomSize: PtrUInt=0; aCustomOffset: Int64=0); overload;
     /// release any internal mapped file instance
     destructor Destroy; override;
     /// the file name, if created from such Create(aFileName) constructor
@@ -10636,7 +10635,7 @@ type
     procedure Open(aFile: THandle);
     /// initialize the buffer from an already existing memory block
     // - may be e.g. a resource or a TMemoryStream
-    procedure OpenFrom(aBuffer: pointer; aBufferSize: cardinal); overload;
+    procedure OpenFrom(aBuffer: pointer; aBufferSize: PtrUInt); overload;
     /// initialize the buffer from an already existing memory block
     procedure OpenFrom(const aBuffer: RawByteString); overload;
     /// initialize the buffer from an already existing Stream
@@ -22303,7 +22302,7 @@ begin
     sr^.refCnt := 1;
     sr^.length := len;
     inc(sr);
-    PWord(PAnsiChar(sr)+len)^ := 0;
+    PWord(PAnsiChar(sr)+len)^ := 0; // ensure ends with two #0
     r := pointer(sr);
     if p<>nil then
       MoveFast(p^,sr^,len);
@@ -60117,7 +60116,7 @@ end;
 
 { TMemoryMap }
 
-function TMemoryMap.Map(aFile: THandle; aCustomSize: cardinal; aCustomOffset: Int64): boolean;
+function TMemoryMap.Map(aFile: THandle; aCustomSize: PtrUInt; aCustomOffset: Int64): boolean;
 var Available: Int64;
 begin
   fBuf := nil;
@@ -60133,16 +60132,16 @@ begin
     exit;
   end;
   result := false;
-  if (fFileSize<=0) or (fFileSize>maxInt) then
+  if (fFileSize<=0) {$ifdef CPU32}or (fFileSize>maxInt){$endif} then
     /// maxInt = $7FFFFFFF = 1.999 GB (2GB would induce PtrInt errors)
     exit;
   if aCustomSize=0 then
-    fBufSize := Int64Rec(fFileSize).Lo else begin
+    fBufSize := fFileSize else begin
     Available := fFileSize-aCustomOffset;
     if Available<0 then
       exit;
     if aCustomSize>Available then
-      fBufSize := Int64Rec(Available).Lo;
+      fBufSize := Available;
       fBufSize := aCustomSize;
   end;
   {$ifdef MSWINDOWS}
@@ -60171,7 +60170,7 @@ begin
     result := true;
 end;
 
-procedure TMemoryMap.Map(aBuffer: pointer; aBufferSize: cardinal);
+procedure TMemoryMap.Map(aBuffer: pointer; aBufferSize: PtrUInt);
 begin
   fBuf := aBuffer;
   fFileSize := aBufferSize;
@@ -60229,7 +60228,7 @@ begin
   SetPointer(pointer(aText),length(aText));
 end;
 
-constructor TSynMemoryStream.Create(Data: pointer; DataLen: integer);
+constructor TSynMemoryStream.Create(Data: pointer; DataLen: PtrInt);
 begin
   inherited Create;
   SetPointer(Data,DataLen);
@@ -60247,7 +60246,7 @@ end;
 { TSynMemoryStreamMapped }
 
 constructor TSynMemoryStreamMapped.Create(const aFileName: TFileName;
-  aCustomSize: cardinal; aCustomOffset: Int64);
+  aCustomSize: PtrUInt; aCustomOffset: Int64);
 begin
   fFileName := aFileName;
   // Memory-mapped file access does not go through the cache manager so
@@ -60257,7 +60256,7 @@ begin
 end;
 
 constructor TSynMemoryStreamMapped.Create(aFile: THandle;
-  aCustomSize: cardinal; aCustomOffset: Int64);
+  aCustomSize: PtrUInt; aCustomOffset: Int64);
 begin
   if not fMap.Map(aFile,aCustomSize,aCustomOffset) then
     raise ESynException.CreateUTF8('%.Create(%) mapping error',[self,fFileName]);
@@ -61051,7 +61050,7 @@ begin
   raise ESynException.Create('TFileBufferReader: invalid content');
 end;
 
-procedure TFileBufferReader.OpenFrom(aBuffer: pointer; aBufferSize: cardinal);
+procedure TFileBufferReader.OpenFrom(aBuffer: pointer; aBufferSize: PtrUInt);
 begin
   fCurrentPos := 0;
   fMap.Map(aBuffer,aBufferSize);
