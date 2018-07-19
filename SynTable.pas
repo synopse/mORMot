@@ -684,6 +684,7 @@ type
     fGroupByField: TSQLFieldIndexDynArray;
     fWhereHasParenthesis: boolean;
     fOrderByDesc: boolean;
+    fOrderByDescField: TSQLFieldIndexDynArray;
     fLimit: integer;
     fOffset: integer;
     fWriter: TJSONWriter;
@@ -725,6 +726,8 @@ type
     property OrderByField: TSQLFieldIndexDynArray read fOrderByField;
     /// false for default ASC order, true for DESC attribute
     property OrderByDesc: boolean read fOrderByDesc;
+    /// remember desc fieldindex,
+    property OrderByDescField: TSQLFieldIndexDynArray read fOrderByDescField;
     /// the number specified by the optional LIMIT ... clause
     // - set to 0 by default (meaning no LIMIT clause)
     property Limit: integer read fLimit;
@@ -4097,20 +4100,38 @@ lim2: if IdemPropNameU(Prop,'LIMIT') then
         GetNextFieldProp(P,Prop);
         if IdemPropNameU(Prop,'BY') then begin
           repeat
+            B:= P;
             ndx := GetPropIndex; // 0 = ID, otherwise PropertyIndex+1
             if ndx<0 then
-              exit; // incorrect SQL statement
+              if IdemPropNameU(Prop,'LIMIT') then
+              begin
+                P:= B;
+                Break;
+              end
+              else
+                exit; // incorrect SQL statement
+            
             AddFieldIndex(fOrderByField,ndx);
             if P^<>',' then begin // check ORDER BY ... ASC/DESC
-              B := P;
+              B:= P;
               if GetNextFieldProp(P,Prop) then
-                if IdemPropNameU(Prop,'DESC') then
-                  fOrderByDesc := true else
-                if not IdemPropNameU(Prop,'ASC') then
-                  P := B;
-              break;
+                if IdemPropNameU(Prop,'DESC') then begin
+                  fOrderByDesc:= True;
+                  AddFieldIndex(fOrderByDescField,ndx);    // eg: order by fn1 desc, fn2, fn3 desc, fn4 asc limit 10, fOrderByDescField will contains: [fn1, fn3]
+                end
+                else if IdemPropNameU(Prop,'ASC') then begin
+
+                end
+                else if IdemPropNameU(Prop,'LIMIT') then begin   // after ordering-term there maybe LIMIT, see https://sqlite.org/lang_select.html
+                  P:= B;
+                  Break;
+                end
             end;
-            P := GotoNextNotSpace(P+1);
+            
+            if P^=',' then
+              P := GotoNextNotSpace(P+1)
+            else
+              P := GotoNextNotSpace(P);
           until P^ in [#0,';'];
         end else
         exit; // incorrect SQL statement

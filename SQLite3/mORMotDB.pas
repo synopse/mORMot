@@ -893,7 +893,7 @@ var Stmt: TSynTableStatement;
     W: TTextWriter;
     limit: TSQLDBDefinitionLimitClause;
     limitSQL,name: RawUTF8;
-    f,n: integer;
+    f,g, n: integer;
     extFieldName: function(FieldIndex: Integer): RawUTF8 of object;
 begin
   result := false;
@@ -1019,11 +1019,19 @@ begin
         W.AddShort(' order by ');
         for f := 0 to high(Stmt.OrderByField) do begin
           W.AddString(extFieldName(Stmt.OrderByField[f]-1));
+
+          n:= 0;
+          for g := 0 to high(Stmt.OrderByDescField) do begin
+            if Stmt.OrderByField[f] = Stmt.OrderByDescField[g] then begin
+              n:= 1;
+            end;
+          end;
+          if n=1 then
+          W.AddShort(' desc ');
+
           W.Add(',');
         end;
         W.CancelLastComma;
-        if Stmt.OrderByDesc then
-          W.AddShort(' desc');
       end;
       if limit.Position=posAfter then
         W.AddString(limitSQL);
