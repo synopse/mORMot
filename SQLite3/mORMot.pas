@@ -5763,6 +5763,8 @@ type
     // - the [boolean] is for [ReturnFirstIfNoUnique] version
     // - contains -1 if no field matches
     MainField: array[boolean] of integer;
+    /// count of coordinate fields of a TSQLRTree, before auxiliary columns
+    RTreeCoordBoundaryFields: integer;
   published
     /// the TSQLRecord class
     property Table: TSQLRecordClass read fTable;
@@ -10024,9 +10026,15 @@ type
   // time during a given time interval, or all events that started during a
   // particular time interval, or all events that both started and ended within
   // a given time interval. And so forth. See http:// www.sqlite.org/rtree.html
-  // - any record which inherits from this class must have only sftFloat
-  // (double) fields, grouped by pairs, each as minimum- and maximum-value,
-  // up to 5 dimensions (i.e. 11 columns, including the ID property)
+  // - any record which inherits from this class as TSQLRecordRTree must have
+  // only sftFloat (double) fields (or integer fields for TSQLRecordRTreeInteger)
+  // grouped by pairs, each as minimum- and maximum-value, up to 5 dimensions
+  // (i.e. 11 columns, including the ID property)
+  // - since SQLite version 3.24.0 (2018-06-04), R-Tree tables can have
+  // auxiliary columns that store arbitrary data: such fields should appear after
+  // the boundary columns, and have their property name starting with '_' - note
+  // that you should better use the SynSQLite3Static unit, since an external
+  // SQLite3 .dll/.so library as supplied by the system may be outdated
   // - internally, the SQlite3 R-Tree extension will be implemented as a virtual
   // table, storing coordinates/values as 32-bit floating point (single - as
   // TSQLRecordRTree kind of ORM classes) or 32-bit integers (as TSQLRecordRTreeInteger),
@@ -10037,7 +10045,8 @@ type
   // - queries against the ID or the coordinate ranges are almost immediate: so
   // you can e.g. extract some coordinates box from the regular TSQLRecord
   // table, then use a TSQLRecordRTree joined query to make the process faster;
-  // this is exactly what the TSQLRestClient.RTreeMatch method offers
+  // this is exactly what the TSQLRestClient.RTreeMatch method offers - of
+  // course Auxiliary Columns could avoid to make the JOIN and call RTreeMatch
   TSQLRecordRTreeAbstract = class(TSQLRecordVirtual)
   public
     /// override this class function to implement a custom SQL *_in() function
@@ -10070,6 +10079,8 @@ type
   // !   property MinY: double read fMinY write fMinY;
   // !   property MaxY: double read fMaxY write fMaxY;
   // ! end;
+  // - since SQLite version 3.24.0, TSQLRecordRTree can have auxiliary columns
+  // that store arbitrary data, having their property name starting with '_'
   TSQLRecordRTree = class(TSQLRecordRTreeAbstract)
   public
     /// override this class function to implement a custom SQL *_in() function
@@ -10107,6 +10118,8 @@ type
   // !   property MinY: integer read fMinY write fMinY;
   // !   property MaxY: integer read fMaxY write fMaxY;
   // ! end;
+  // - since SQLite version 3.24.0, TSQLRecordRTreeInteger can have auxiliary
+  // columns that store arbitrary data, having their property name starting with '_'
   TSQLRecordRTreeInteger = class(TSQLRecordRTreeAbstract)
   public
     /// override this class function to implement a custom SQL *_in() function
@@ -14554,6 +14567,7 @@ type
     // - a TSQLRecordRTree is associated to a TSQLRecord with a specified BLOB
     // field, and will call TSQLRecordRTree BlobToCoord and ContainedIn virtual
     // class methods to execute an optimized SQL query
+    // - as alternative, with SQLite3 >= 3.24.0, you may use Auxiliary Columns
     // - will return all matching DataTable IDs in DataID[]
     // - will generate e.g. the following statement
     // $ SELECT MapData.ID From MapData, MapBox WHERE MapData.ID=MapBox.ID
@@ -20711,6 +20725,7 @@ function CurrentServiceContextServer: TSQLRestServer;
 function CurrentServerNonce(Previous: boolean=false): RawUTF8;
 
 function ToText(ft: TSQLFieldType): PShortString; overload;
+function ToText(vk: TSQLRecordVirtualKind): PShortString; overload;
 function ToText(tk: TTypeKind): PShortString; overload;
 function ToText(e: TSQLEvent): PShortString; overload;
 function ToText(he: TSQLHistoryEvent): PShortString; overload;
@@ -32081,17 +32096,19 @@ end;
 
 function TSQLRecord.FillPrepare(aClient: TSQLRest; const FormatSQLWhere: RawUTF8;
   const BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8=''): boolean;
+var sqlwhere: RawUTF8;
 begin
-  result := FillPrepare(aClient,FormatUTF8(FormatSQLWhere,[],BoundsSQLWhere),
-    aCustomFieldsCSV);
+  sqlwhere := FormatUTF8(FormatSQLWhere,[],BoundsSQLWhere);
+  result := FillPrepare(aClient,sqlwhere,aCustomFieldsCSV);
 end;
 
 function TSQLRecord.FillPrepare(aClient: TSQLRest;
   const FormatSQLWhere: RawUTF8; const ParamsSQLWhere, BoundsSQLWhere: array of const;
   const aCustomFieldsCSV: RawUTF8): boolean;
+var sqlwhere: RawUTF8;
 begin
-  result := FillPrepare(aClient,
-    FormatUTF8(FormatSQLWhere,ParamsSQLWhere,BoundsSQLWhere),aCustomFieldsCSV);
+  sqlwhere := FormatUTF8(FormatSQLWhere,ParamsSQLWhere,BoundsSQLWhere);
+  result := FillPrepare(aClient,sqlwhere,aCustomFieldsCSV);
 end;
 
 const
@@ -32456,7 +32473,6 @@ var i: integer;
     M: TSQLVirtualTableClass;
     Props: TSQLModelRecordProperties;
     fields: TSQLPropInfoList;
-    expected: TSQLFieldType;
 begin
   if aModel=nil then
     raise EModelException.CreateUTF8('Invalid %.GetSQLCreate(nil) call',[self]);
@@ -32478,23 +32494,17 @@ begin
         raise EModelException.CreateUTF8(
           'Virtual % class % should have published properties',[M.ModuleName,self]);
       result := result+M.ModuleName+'(';
-      result := result+GetVirtualTableSQLCreate(Props.Props);
     end;
+    else raise EModelException.CreateUTF8('%.GetSQLCreate(%)?',[self,ToText(Props.Kind)^]);
     end;
     fields := Props.Props.Fields;
     case Props.Kind of
     rFTS3, rFTS4, rFTS5: begin
       if (Props.fFTSWithoutContentFields<>'') and (Props.fFTSWithoutContentTableIndex>=0) then
-        result := result+'content="'+aModel.Tables[Props.fFTSWithoutContentTableIndex].
-          SQLTableName+'",';
-      if fields.Count=0 then
-        raise EModelException.CreateUTF8(
-          'Virtual FTS class % should have published properties',[self]);
+        result := FormatUTF8('%content="%",',[result,
+          aModel.Tables[Props.fFTSWithoutContentTableIndex].SQLTableName]);
       for i := 0 to fields.Count-1 do
-        with fields.List[i] do
-        if SQLFieldTypeStored<>sftUTF8Text then
-          raise EModelException.CreateUTF8('%.%: FTS field must be RawUTF8',[self,Name]) else
-          result := result+Name+',';
+        result := result+fields.List[i].Name+',';
       tokenizer := 'simple';
       c := self;
       repeat
@@ -32510,21 +32520,15 @@ begin
       result := FormatUTF8('% tokenize=%)',[result,LowerCaseU(tokenizer)]);
     end;
     rRTree, rRTreeInteger: begin
-      if (fields.Count<2) or (fields.Count>RTREE_MAX_DIMENSION*2) or
-         (fields.Count and 2<>0) then
-        raise EModelException.CreateUTF8('% has % fields: RTREE expects 2,4,6..%',
-          [self,fields.Count,RTREE_MAX_DIMENSION*2]);
-      if Props.Kind=rRTree then
-        expected := sftFloat else
-        expected := sftInteger;
       for i := 0 to fields.Count-1 do
         with fields.List[i] do
-        if SQLFieldTypeStored<>expected then
-          raise EModelException.CreateUTF8('%.%: RTREE field must be %',
-            [self,Name,ToText(expected)^]) else
+        if Name[1]='_' then // auxiliary columns for SQlite3 >= 3.24.0
+          result := FormatUTF8('%+% %,',[result,@Name[2],Props.Props.SQLFieldTypeToSQL(i)]) else
           result := result+Name+',';
       result[length(result)] := ')';
     end;
+    rCustomForcedID, rCustomAutoID:
+      result := result+GetVirtualTableSQLCreate(Props.Props);
     end;
   end else begin
     // inherits from TSQLRecord: create a "normal" SQLite3 table
@@ -33074,7 +33078,7 @@ begin
   // process aFormatSQLJoin,aParamsSQLJoin and aBoundsSQLJoin parameters
   if aFormatSQLJoin<>'' then begin
     aSQLWhere := '';
-    aSQLJoin := FormatUTF8(aFormatSQLJoin, aParamsSQLJoin);
+    FormatUTF8(aFormatSQLJoin,aParamsSQLJoin,aSQLJoin);
     JBeg := pointer(aSQLJoin);
     repeat
       J := JBeg;
@@ -33893,29 +33897,61 @@ begin
 end;
 
 procedure TSQLModelRecordProperties.SetKind(Value: TSQLRecordVirtualKind);
-function IntSQLTableSimpleFields(withID, withTableName: boolean): RawUTF8;
-const IDComma: array[TSQLRecordVirtualKind] of rawUTF8 =
-  ('ID,','RowID,','RowID,','RowID,','RowID,','RowID,','RowID,','RowID,');
-// rSQLite3, rFTS3, rFTS4, rFTS5, rRTree, rRTreeInteger, rCustomForcedID, rCustomAutoID
-var TableName: RawUTF8;
-    i: integer;
-begin
-  if withTableName then
-    TableName := Props.SQLTableName+'.'; // calc TableName once
-  if withID then
+  function IntSQLTableSimpleFields(withID, withTableName: boolean): RawUTF8;
+  const IDComma: array[TSQLRecordVirtualKind] of rawUTF8 =
+    ('ID,','RowID,','RowID,','RowID,','RowID,','RowID,','RowID,','RowID,');
+  // rSQLite3, rFTS3, rFTS4, rFTS5, rRTree, rRTreeInteger, rCustomForcedID, rCustomAutoID
+  var TableName: RawUTF8;
+      i: integer;
+  begin
     if withTableName then
-      result := TableName+IDComma[Kind] else
-      result := IDComma[Kind] else
-    result := '';
-  for i := 0 to high(Props.SimpleFields) do begin
-    if withTableName then
-      result := result+TableName;
-    result := result+Props.SimpleFields[i].Name+','; // valid simple fields
+      TableName := Props.SQLTableName+'.'; // calc TableName once
+    if withID then
+      if withTableName then
+        result := TableName+IDComma[Kind] else
+        result := IDComma[Kind] else
+      result := '';
+    for i := 0 to high(Props.SimpleFields) do begin
+      if withTableName then
+        result := result+TableName;
+      result := result+Props.SimpleFields[i].Name+','; // valid simple fields
+    end;
+    if result<>'' then
+      SetLength(result,length(result)-1); // trim last ','
   end;
-  if result<>'' then
-    SetLength(result,length(result)-1); // trim last ','
-end;
+var f: integer;
+    expected: TSQLFieldType;
 begin
+  case Value of // validates virtual table fields expectations
+  rFTS3, rFTS4, rFTS5: begin
+    if Props.Fields.Count=0 then
+      raise EModelException.CreateUTF8(
+        'Virtual FTS class % should have published properties',[Props.Table]);
+    for f := 0 to Props.Fields.Count-1 do
+      with Props.Fields.List[f] do
+        if SQLFieldTypeStored<>sftUTF8Text then
+          raise EModelException.CreateUTF8('%.%: FTS field must be RawUTF8',[Props.Table,Name])
+  end;
+  rRTree, rRTreeInteger: begin
+    Props.RTreeCoordBoundaryFields := 0;
+    if Value=rRTree then
+      expected := sftFloat else
+      expected := sftInteger;
+    for f := 0 to Props.Fields.Count-1 do
+      with Props.Fields.List[f] do
+      if Name[1]='_' then // https://sqlite.org/rtree.html#auxiliary_columns
+        expected := sftUnknown // will expect further columns to be auxiliary
+      else if SQLFieldTypeStored<>expected then
+        raise EModelException.CreateUTF8('%.%: RTREE field must be %',
+          [Props.Table,Name,ToText(expected)^]) else
+        inc(Props.RTreeCoordBoundaryFields);
+    if (Props.RTreeCoordBoundaryFields<2) or
+       (Props.RTreeCoordBoundaryFields>RTREE_MAX_DIMENSION*2) or
+       (Props.RTreeCoordBoundaryFields and 2<>0) then
+      raise EModelException.CreateUTF8('% has % fields: RTREE expects 2,4,6..% boundary columns',
+        [Props.Table,Props.RTreeCoordBoundaryFields,RTREE_MAX_DIMENSION*2]);
+  end;
+  end;
   fKind := Value;
   // SQL.TableSimpleFields[withID: boolean; withTableName: boolean]
   SQL.TableSimpleFields[false,false] := IntSQLTableSimpleFields(false,false);
@@ -33983,6 +34019,7 @@ var j,f: integer;
     Table, TableID: TSQLRecordClass;
     aTableName,aFieldName: RawUTF8;
     Props: TSQLModelRecordProperties;
+    fields: TSQLPropInfoList;
     W: TTextWriter;
 
   procedure RegisterTableForRecordReference(aFieldType: TSQLPropInfo;
@@ -34033,22 +34070,22 @@ begin
   aTableName := Props.Props.SQLTableName;
   fSortedTablesName[aIndex] := aTableName;
   fSortedTablesNameIndex[aIndex] := aIndex;
-  with Props.Props.Fields do
-  for f := 0 to Count-1 do
-    case List[f].SQLFieldType of
+  fields := Props.Props.Fields;
+  for f := 0 to fields.Count-1 do
+    case fields.List[f].SQLFieldType of
     sftRecord:
-      RegisterTableForRecordReference(List[f],Table); // Table not used
+      RegisterTableForRecordReference(fields.List[f],Table); // Table not used
     sftID:
       RegisterTableForRecordReference(
-        List[f],(List[f] as TSQLPropInfoRTTIInstance).ObjectClass);
+        fields.List[f],(fields.List[f] as TSQLPropInfoRTTIInstance).ObjectClass);
     sftTID: begin
-      TableID := (List[f] as TSQLPropInfoRTTITID).RecordClass;
+      TableID := (fields.List[f] as TSQLPropInfoRTTITID).RecordClass;
       if TableID=nil then // T*ID name didn't match any TSQLRecord type
-        List[f].fSQLFieldType := sftInteger else
-        RegisterTableForRecordReference(List[f],TableID);
+        fields.List[f].fSQLFieldType := sftInteger else
+        RegisterTableForRecordReference(fields.List[f],TableID);
     end;
     sftMany:
-      GetTableIndexSafe(pointer((List[f] as TSQLPropInfoRTTIMany).ObjectClass),true);
+      GetTableIndexSafe(pointer((fields.List[f] as TSQLPropInfoRTTIMany).ObjectClass),true);
     end;
   if Props.Props.JoinedFieldsTable<>nil then begin
     W := TTextWriter.CreateOwnedStream;
@@ -35869,9 +35906,10 @@ end;
 
 function TSQLRest.MultiFieldValues(Table: TSQLRecordClass; const FieldNames: RawUTF8;
   const WhereClauseFormat: RawUTF8; const BoundsSQLWhere: array of const): TSQLTableJSON;
+var where: RawUTF8;
 begin
-  result := MultiFieldValues(Table,FieldNames,FormatUTF8(
-    WhereClauseFormat,[],BoundsSQLWhere));
+  where := FormatUTF8(WhereClauseFormat,[],BoundsSQLWhere);
+  result := MultiFieldValues(Table,FieldNames,where);
 end;
 
 function TSQLRest.MultiFieldValues(Table: TSQLRecordClass;
@@ -35962,9 +36000,10 @@ end;
 function TSQLRest.RetrieveListJSON(Table: TSQLRecordClass; const FormatSQLWhere: RawUTF8;
   const BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8;
   aForceAJAX: boolean): RawJSON;
+var where: RawUTF8;
 begin
-  result := RetrieveListJSON(Table,
-    FormatUTF8(FormatSQLWhere,[],BoundsSQLWhere),aCustomFieldsCSV,aForceAJAX)
+  where := FormatUTF8(FormatSQLWhere,[],BoundsSQLWhere);
+  result := RetrieveListJSON(Table,where,aCustomFieldsCSV,aForceAJAX)
 end;
 
 function TSQLRest.RetrieveListJSON(Table: TSQLRecordClass; const SQLWhere: RawUTF8;
@@ -36030,7 +36069,7 @@ begin
     exit;
   if RTreeTable.InheritsFrom(TSQLRecordRTree) then begin
     TSQLRecordRTree(RTreeTable).BlobToCoord(pointer(DataTableBlobField)^,BDouble);
-    for i := 0 to (RTree.Fields.Count shr 1)-1 do
+    for i := 0 to (RTree.RTreeCoordBoundaryFields shr 1)-1 do
       Where := FormatUTF8('%%>=:(%): and %<=:(%): and ',
         [Where,RTree.Fields.List[i*2].Name,BDouble[i].Min*(1-0.00000012),
          RTree.Fields.List[i*2+1].Name,BDouble[i].Max*(1+0.00000012)]);
@@ -36044,7 +36083,7 @@ begin
   end else
   if RTreeTable.InheritsFrom(TSQLRecordRTreeInteger) then begin
     TSQLRecordRTreeInteger(RTreeTable).BlobToCoord(pointer(DataTableBlobField)^,BInteger);
-    for i := 0 to (RTree.Fields.Count shr 1)-1 do
+    for i := 0 to (RTree.RTreeCoordBoundaryFields shr 1)-1 do
       Where := FormatUTF8('%%>=:(%): and %<=:(%): and ',
         [Where,RTree.Fields.List[i*2].Name,BInteger[i].Min,
          RTree.Fields.List[i*2+1].Name,BInteger[i].Max]);
@@ -41455,8 +41494,8 @@ begin
               if SQLTotalRowsCount=0 then // avoid sending fields array
                 Call.OutBody := '[]' else
                 Call.OutBody := trim(Call.OutBody);
-              Call.OutBody := '{"values":'+Call.OutBody+
-                FormatUTF8(Server.URIPagingParameters.SendTotalRowsCountFmt,[SQLTotalRowsCount])+'}';
+              Call.OutBody := '{"values":'+Call.OutBody+FormatUTF8(Server.
+                URIPagingParameters.SendTotalRowsCountFmt,[SQLTotalRowsCount])+'}';
             end;
         end else
           Call.OutStatus := HTTP_NOTFOUND;
@@ -44421,6 +44460,11 @@ begin
   result := GetEnumName(TypeInfo(TSQLFieldType),ord(ft));
 end;
 
+function ToText(vk: TSQLRecordVirtualKind): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TSQLRecordVirtualKind),ord(vk));
+end;
+
 function ToText(tk: TTypeKind): PShortString;
 begin
   result := GetEnumName(TypeInfo(TTypeKind),ord(tk));
@@ -47383,7 +47427,7 @@ begin
     result := fShardLastID;
     i := PosEx(RawUTF8('{'),SentData);
     if i=0 then
-      data := FormatUTF8('{ID:%}',[result]) else begin
+      FormatUTF8('{ID:%}',[result],data) else begin
       data := SentData;
       insert(FormatUTF8('ID:%,',[result]),data,i+1);
     end;
@@ -50543,7 +50587,7 @@ end;
 class procedure TSQLRecordRTree.BlobToCoord(const InBlob;
   var OutCoord: TSQLRecordTreeCoords);
 begin // direct memory copy with no memory check
-  MoveFast(InBlob,OutCoord,(RecordProps.Fields.Count shr 1)*SizeOf(double));
+  MoveFast(InBlob,OutCoord,(RecordProps.RTreeCoordBoundaryFields shr 1)*SizeOf(double));
 end;
 
 class function TSQLRecordRTree.ContainedIn(const BlobA,BlobB): boolean;
@@ -50553,7 +50597,7 @@ begin
   BlobToCoord(BlobA,A);
   BlobToCoord(BlobB,B);
   result := false;
-  for i := 0 to (RecordProps.Fields.Count shr 1)-1 do
+  for i := 0 to (RecordProps.RTreeCoordBoundaryFields shr 1)-1 do
     if (A[i].max<B[i].min) or (A[i].min>B[i].max) then
       exit; // no match
   result := true; // box match
@@ -50564,7 +50608,7 @@ end;
 class procedure TSQLRecordRTreeInteger.BlobToCoord(const InBlob;
   var OutCoord: TSQLRecordTreeCoordsInteger);
 begin // direct memory copy with no memory check
-  MoveFast(InBlob,OutCoord,(RecordProps.Fields.Count shr 1)*SizeOf(integer));
+  MoveFast(InBlob,OutCoord,(RecordProps.RTreeCoordBoundaryFields shr 1)*SizeOf(integer));
 end;
 
 class function TSQLRecordRTreeInteger.ContainedIn(const BlobA,BlobB): boolean;
@@ -50574,7 +50618,7 @@ begin
   BlobToCoord(BlobA,A);
   BlobToCoord(BlobB,B);
   result := false;
-  for i := 0 to (RecordProps.Fields.Count shr 1)-1 do
+  for i := 0 to (RecordProps.RTreeCoordBoundaryFields shr 1)-1 do
     if (A[i].max<B[i].min) or (A[i].min>B[i].max) then
       exit; // no match
   result := true; // box match
@@ -50709,7 +50753,7 @@ begin
       // statement is not globaly inlined -> no caching of prepared statement
       SQL := 'SELECT % FROM %,% WHERE %.Source=% AND %.Dest=%.RowID AND %';
   result := aClient.ExecuteList([PSQLRecordClass(Self)^,
-     TSQLRecordClass(SelfProps.Props.fRecordManyDestProp.ObjectClass)],
+      TSQLRecordClass(SelfProps.Props.fRecordManyDestProp.ObjectClass)],
     FormatUTF8(SQL,
       [Select, DestProps.Props.SQLTableName,SelfProps.Props.SQLTableName,
        SelfProps.Props.SQLTableName,aSourceID, SelfProps.Props.SQLTableName,
@@ -52527,8 +52571,8 @@ end;
 class function TSQLVirtualTable.StructureFromClass(aClass: TSQLRecordClass;
   const aTableName: RawUTF8): RawUTF8;
 begin
-  result := FormatUTF8('CREATE TABLE % (%',[aTableName,
-    GetVirtualTableSQLCreate(aClass.RecordProps)]);
+  FormatUTF8('CREATE TABLE % (%',[aTableName,
+    GetVirtualTableSQLCreate(aClass.RecordProps)],result);
 end;
 
 function TSQLVirtualTable.Structure: RawUTF8;
@@ -53088,10 +53132,9 @@ end;
 
 function TSQLAccessRights.ToString: RawUTF8;
 begin
-  result := FormatUTF8('%,%,%,%,%',
-    [Byte(AllowRemoteExecute),
+  FormatUTF8('%,%,%,%,%', [Byte(AllowRemoteExecute),
      GetBitCSV(GET,MAX_SQLTABLES), GetBitCSV(POST,MAX_SQLTABLES),
-     GetBitCSV(PUT,MAX_SQLTABLES), GetBitCSV(DELETE,MAX_SQLTABLES)]);
+     GetBitCSV(PUT,MAX_SQLTABLES), GetBitCSV(DELETE,MAX_SQLTABLES)],result);
 end;
 
 function TSQLAccessRights.CanExecuteORMWrite(Method: TSQLURIMethod;
@@ -54969,8 +55012,8 @@ begin // here aClientDrivenID^ = FakeCall ID
         (coRaiseExceptionIfReleasedByClient in
          (fServer.Services as TServiceContainerServer).CallbackOptions)) then begin
       if aErrorMsg<>nil then
-        aErrorMsg^ := FormatUTF8('%.CallbackInvoke(I%): instance has been '+
-          'released on client side',[self,aMethod.InterfaceDotMethodName]);
+        FormatUTF8('%.CallbackInvoke(I%): instance has been released on client side',
+          [self,aMethod.InterfaceDotMethodName],aErrorMsg^);
       result := false; // will raise an exception
     end else
       result := true; // do not raise an exception here: just log warning
@@ -57653,8 +57696,8 @@ begin
           inc(Rules[rule].RulePassCount);
         if imoReturnErrorIfNoRuleDefined in Options then begin
           result := false;
-          log.CustomResults := FormatUTF8('No stubbing rule defined for %.%',
-            [fInterface.fInterfaceName,aMethod.URI]);
+          FormatUTF8('No stubbing rule defined for %.%',
+            [fInterface.fInterfaceName,aMethod.URI],log.CustomResults);
         end else
           result := true;
       end else
@@ -58409,9 +58452,9 @@ begin
   end;
   SetLength(fExecution,fInterface.fMethodsCount);
   // compute interface signature (aka "contract"), serialized as a JSON object
-  fContract := FormatUTF8('{"contract":"%","implementation":"%","methods":%}',
-      [InterfaceURI,LowerCase(TrimLeftLowerCaseShort(ToText(InstanceCreation))),
-       fInterface.fContract]);
+  FormatUTF8('{"contract":"%","implementation":"%","methods":%}',
+    [InterfaceURI,LowerCase(TrimLeftLowerCaseShort(ToText(InstanceCreation))),
+     fInterface.fContract],fContract);
   fContractHash := '"'+CardinalToHex(Hash32(fContract))+
     CardinalToHex(CRC32string(fContract))+'"'; // 2 hashes to avoid collision
   if aContractExpected<>'' then // override default contract
