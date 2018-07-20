@@ -12107,6 +12107,12 @@ function UInt3DigitsToShort(Value: Cardinal): TShort4;
 function UInt2DigitsToShort(Value: byte): TShort4;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// creates a 2 digits short string from a 0..99 value
+// - won't test Value>99 as UInt2DigitsToShort()
+function UInt2DigitsToShortFast(Value: byte): TShort4;
+  {$ifdef HASINLINE}inline;{$endif}
+
+
 /// compute CRC16-CCITT checkum on the supplied buffer
 // - i.e. 16-bit CRC-CCITT, with polynomial x^16 + x^12 + x^5 + 1 ($1021) and
 // $ffff as initial value
@@ -28986,6 +28992,12 @@ begin
   PWord(@result[1])^ := TwoDigitLookupW[Value];
 end;
 
+function UInt2DigitsToShortFast(Value: byte): TShort4;
+begin
+  result[0] := #2;
+  PWord(@result[1])^ := TwoDigitLookupW[Value];
+end;
+
 const
   DOUBLE_RESOLUTION = 1E-12; // also for TSynExtended (FPC uses 1E-4!)
 
@@ -36142,17 +36154,23 @@ end;
 
 function UnixTimeToFileShort(const UnixTime: TUnixTime): shortstring;
 var dt: TDateTime;
-    HH,MM,SS, MS,Y,M,D: word;
+    HH,MM,SS,MS,Y,M,D: word;
+    tab: {$ifdef CPUX86}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
 begin // use 'YYMMDDHHMMSS' format
   dt := UnixTime/SecsPerDay+UnixDateDelta;
-  DecodeDate(dt, Y, M, D);
+  DecodeDate(dt,Y,M,D);
   if Y > 1999 then
-    dec(Y, 2000) else
+    dec(Y,2000) else
     Y := 0;
-  DecodeTime(dt, HH, MM, SS, MS);
-  FormatShort('%%%%%%', [UInt2DigitsToShort(Y), UInt2DigitsToShort(M),
-    UInt2DigitsToShort(D), UInt2DigitsToShort(HH), UInt2DigitsToShort(MM),
-    UInt2DigitsToShort(SS)], result);
+  DecodeTime(dt,HH,MM,SS,MS);
+  {$ifndef CPUX86}tab := @TwoDigitLookupW;{$endif}
+  result[0] := #12;
+  PWord(@result[1])^ := tab[Y];
+  PWord(@result[3])^ := tab[M];
+  PWord(@result[5])^ := tab[D];
+  PWord(@result[7])^ := tab[HH];
+  PWord(@result[9])^ := tab[MM];
+  PWord(@result[11])^ := tab[SS];
 end;
 
 function UnixTimePeriodToString(const UnixTime: TUnixTime; FirstTimeChar: AnsiChar): RawUTF8;
@@ -37054,9 +37072,9 @@ end;
 function DateTimeMSToString(HH,MM,SS,MS,Y,M,D: cardinal; Expanded: boolean;
   FirstTimeChar: AnsiChar; const TZD: RawUTF8): RawUTF8;
 begin //  'YYYY-MM-DD hh:mm:ss.sssZ' or 'YYYYMMDD hhmmss.sssZ' format
-  FormatUTF8(DTMS_FMT[Expanded], [UInt4DigitsToShort(Y),UInt2DigitsToShort(M),
-    UInt2DigitsToShort(D),FirstTimeChar,UInt2DigitsToShort(HH),UInt2DigitsToShort(MM),
-    UInt2DigitsToShort(SS),UInt3DigitsToShort(MS),TZD], result);
+  FormatUTF8(DTMS_FMT[Expanded], [UInt4DigitsToShort(Y),UInt2DigitsToShortFast(M),
+    UInt2DigitsToShortFast(D),FirstTimeChar,UInt2DigitsToShortFast(HH),
+    UInt2DigitsToShortFast(MM),UInt2DigitsToShortFast(SS),UInt3DigitsToShort(MS),TZD], result);
 end;
 
 const
@@ -37075,9 +37093,9 @@ begin
   DecodeDate(UTCDateTime,Y,M,D);
   DecodeTime(UTCDateTime,HH,MM,SS,MS);
   FormatUTF8('%, % % % %:%:% GMT', [HTML_WEEK_DAYS[DayOfWeek(UTCDateTime)],
-    UInt2DigitsToShort(D),HTML_MONTH_NAMES[M],UInt4DigitsToShort(Y),
-    UInt2DigitsToShort(HH),UInt2DigitsToShort(MM),
-    UInt2DigitsToShort(SS)], result);
+    UInt2DigitsToShortFast(D),HTML_MONTH_NAMES[M],UInt4DigitsToShort(Y),
+    UInt2DigitsToShortFast(HH),UInt2DigitsToShortFast(MM),
+    UInt2DigitsToShortFast(SS)], result);
 end;
 
 function TimeToString: RawUTF8;
@@ -37625,21 +37643,18 @@ begin
 end;
 {$endif}
 
-{$ifdef CPUINTEL}
-/// get 32-bit value from NIST SP 800-90A compliant RDRAND Intel x86/x64 opcode
+{$ifdef CPUINTEL} /// NIST SP 800-90A compliant RDRAND Intel x86/x64 opcode
 function RdRand32: cardinal;
-{$ifdef CPU64} {$ifdef FPC}nostackframe; assembler; asm {$else}
+{$ifdef CPU64}{$ifdef FPC}nostackframe; assembler; asm{$else}
 asm
-  .noframe
-{$endif FPC} {$endif CPU64}
-{$ifdef CPU32}
+  .noframe {$endif FPC} {$else}
 asm
 {$endif}
   // rdrand eax: same opcodes for x86 and x64
   db $0f,$c7,$f0
   // returns in eax, ignore carry flag (eax=0 won't hurt)
 end;
-{$endif}
+{$endif CPUINTEL}
 
 type
   {$ifdef UNICODE}TLecuyer = record{$else}TLecuyer = object{$endif}
@@ -51950,9 +51965,9 @@ begin
     exit;
   DecodeDate(Value,Y,M,D);
   DecodeTime(Value,HH,MM,SS,MS);
-  Add(DTMS_FMT[Expanded], [UInt4DigitsToShort(Y),UInt2DigitsToShort(M),
-    UInt2DigitsToShort(D),FirstTimeChar,UInt2DigitsToShort(HH),UInt2DigitsToShort(MM),
-    UInt2DigitsToShort(SS),UInt3DigitsToShort(MS),TZD]);
+  Add(DTMS_FMT[Expanded], [UInt4DigitsToShort(Y),UInt2DigitsToShortFast(M),
+    UInt2DigitsToShortFast(D),FirstTimeChar,UInt2DigitsToShortFast(HH),
+    UInt2DigitsToShortFast(MM),UInt2DigitsToShortFast(SS),UInt3DigitsToShort(MS),TZD]);
 end;
 
 procedure TTextWriter.AddU(Value: cardinal);
@@ -56653,18 +56668,18 @@ procedure MicroSecToString(Micro: QWord; out result: shortstring);
     if value<10 then
       FormatShort('0.0%%',[AnsiChar(value+48),u],result) else
     if value<100 then
-      FormatShort('0.%%',[UInt2DigitsToShort(value),u],result) else begin
+      FormatShort('0.%%',[UInt2DigitsToShortFast(value),u],result) else begin
       Div100(value,d100);
       if d100.m=0 then
         FormatShort('%%',[d100.d,u],result) else
-        FormatShort('%.%%',[d100.d,UInt2DigitsToShort(d100.m),u],result);
+        FormatShort('%.%%',[d100.d,UInt2DigitsToShortFast(d100.m),u],result);
     end;
   end;
   procedure TimeToString(value: cardinal; const u: shortstring; var result: shortstring);
   var d: cardinal;
   begin
     d := value div 60;
-    FormatShort('%%%',[d,u,UInt2DigitsToShort(value-(d*60))],result);
+    FormatShort('%%%',[d,u,UInt2DigitsToShortFast(value-(d*60))],result);
   end;
 begin
   if Int64(Micro)<=0 then
