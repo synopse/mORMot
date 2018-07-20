@@ -1029,7 +1029,7 @@ begin
         begin
           exe := StringFromFile(ExeVersion.ProgramFileName);
           writeln(' ', ExeVersion.ProgramFileName,
-            #13#10' Size: ', length(exe), ' bytes (', KB(length(exe)), ')' +
+            #13#10' Size: ', length(exe), ' bytes (', KB(exe), ')' +
             #13#10' Build date: ', ExeVersion.Version.BuildDateTimeString,
             #13#10' MD5: ', MD5(exe),
             #13#10' SHA256: ', SHA256(exe));

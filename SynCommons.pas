@@ -18390,6 +18390,12 @@ procedure KB(bytes: Int64; out result: shortstring); overload;
 function KB(bytes: Int64): shortstring; overload;
   {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
 
+/// convert a string size to a human readable value
+// - append TB, GB, MB, KB or B symbol
+// - for TB, GB, MB and KB, add one fractional digit
+function KB(const buffer: RawByteString): shortstring; overload;
+  {$ifdef FPC_OR_UNICODE}inline;{$endif}
+
 /// convert a size to a human readable value
 // - append TB, GB, MB, KB or B symbol
 // - for TB, GB, MB and KB, add one fractional digit
@@ -56719,6 +56725,11 @@ end;
 function KB(bytes: Int64): shortstring;
 begin
   KB(bytes,result);
+end;
+
+function KB(const buffer: RawByteString): shortstring;
+begin
+  KB(length(buffer), result);
 end;
 
 procedure KBU(bytes: Int64; var result: RawUTF8);

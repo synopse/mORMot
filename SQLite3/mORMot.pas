@@ -44407,7 +44407,7 @@ begin
     finally
       fAcquireExecution[execORMWrite].fSafe.UnLock;
       InternalLog('EngineBatchSend json=% add=% update=% delete=% %%',
-        [KB(length(Data)),counts[mPOST],counts[mPUT],counts[mDELETE],MethodTable,Table]);
+        [KB(Data),counts[mPOST],counts[mPUT],counts[mDELETE],MethodTable,Table]);
     end;
   end;
   except
