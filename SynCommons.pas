@@ -5026,6 +5026,11 @@ function FromVarUInt32(var Source: PByte): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a 32-bit variable-length integer buffer into a cardinal
+// - this version could be called if number is likely to be > $7f, so it
+// inlining the first byte won't make any benefit
+function FromVarUInt32Big(var Source: PByte): cardinal;
+
+/// convert a 32-bit variable-length integer buffer into a cardinal
 // - this version must be called if Source^ has already been checked to be > $7f
 // ! result := Source^;
 // ! inc(Source);
@@ -5040,7 +5045,7 @@ function FromVarUInt32High(var Source: PByte): cardinal;
 /// convert a 32-bit variable-length integer buffer into an integer
 // - decode negative values from cardinal two-complement, i.e.
 // 0=0,1=1,2=-1,3=2,4=-2...
-function FromVarInt32(var Source: PByte): integer; {$ifdef HASINLINE}inline;{$endif}
+function FromVarInt32(var Source: PByte): integer;
 
 /// convert a UInt64 into a 64-bit variable-length integer buffer
 function ToVarUInt64(Value: QWord; Dest: PByte): PByte;
@@ -10752,17 +10757,15 @@ type
     /// consumes the next byte from the buffer, if matches a given value
     function NextByteEquals(Value: byte): boolean; {$ifdef HASINLINE}inline;{$endif}
     /// read the next 32-bit signed value from the buffer
-    function VarInt32: PtrInt;    {$ifdef HASINLINE}inline;{$endif}
+    function VarInt32: integer;    {$ifdef HASINLINE}inline;{$endif}
     /// read the next 32-bit unsigned value from the buffer
-    function VarUInt32: PtrUInt;
+    function VarUInt32: cardinal;
     /// try to read the next 32-bit signed value from the buffer
     // - don't change the current position
     function PeekVarInt32(out value: PtrInt): boolean; {$ifdef HASINLINE}inline;{$endif}
     /// try to read the next 32-bit unsigned value from the buffer
     // - don't change the current position
     function PeekVarUInt32(out value: PtrUInt): boolean;
-    /// read the next 16-bit unsigned value from the buffer
-    function VarUInt16: PtrUInt;
     /// read the next 32-bit unsigned value from the buffer
     // - this version won't call ErrorOverflow, but return false on error
     // - returns true on read success
@@ -39847,16 +39850,6 @@ asm
 end;
 {$endif}
 
-function FromVarInt32(var Source: PByte): integer;
-begin // 0=0,1=1,2=-1,3=2,4=-2...
-  result := integer(FromVarUInt32(Source));
-  if result and 1<>0 then
-    // 1->1, 3->2..
-    result := result shr 1+1 else
-    // 0->0, 2->-1, 4->-2..
-    result := -(result shr 1);
-end;
-
 function ToVarUInt32Length(Value: PtrUInt): PtrUInt;
 begin
   if Value<=$7f then
@@ -39955,66 +39948,126 @@ begin
   if result>$7f then
     result := (result and $7F) or FromVarUInt32Up128(Source);
 end;
-{$else}
-function FromVarUInt32(var Source: PByte): cardinal;
-var c: PtrUInt;
-begin
-  result := Source^;
-  inc(Source);
-  if result<=$7f then
-    exit;
-  c := Source^ shl 7;
-  inc(Source);
-  result := result and $7F or c;
-  if c<=$7f shl 7 then
-    exit; // Values between 128 and 16256
-  c := Source^ shl 14;
-  inc(Source);
-  result := result and $3FFF or c;
-  if c<=$7f shl 14 then
-    exit; // Values between 16257 and 2080768
-  c := Source^ shl 21;
-  inc(Source);
-  result := result and $1FFFFF or c;
-  if c<=$7f shl 21 then
-    exit; // Values between 2080769 and 266338304
-  c := Source^ shl 28;
-  inc(Source);
-  result := result and $FFFFFFF or c;
-end;
-{$endif}
 
-function FromVarUInt32High(var Source: PByte): cardinal;
-var c: PtrUInt;
+function FromVarUInt32Big(var Source: PByte): cardinal;
+{$else}
+function FromVarUInt32Big(var Source: PByte): cardinal;
+asm
+     jmp    FromVarUInt32
+end;
+
+function FromVarUInt32(var Source: PByte): cardinal;
+{$endif}
+var c: cardinal;
+    p: PByte;
 begin
-  result := Source^;
-  inc(Source);
-  c := Source^ shl 7;
-  inc(Source);
-  result := result and $7F or c;
-  if c<=$7f shl 7 then
-    exit; // Values between 128 and 16256
-  c := Source^ shl 14;
-  inc(Source);
-  result := result and $3FFF or c;
-  if c<=$7f shl 14 then
-    exit; // Values between 16257 and 2080768
-  c := Source^ shl 21;
-  inc(Source);
-  result := result and $1FFFFF or c;
-  if c<=$7f shl 21 then
-    exit; // Values between 2080769 and 266338304
-  c := Source^ shl 28;
-  inc(Source);
-  result := result and $FFFFFFF or c;
+  p := Source;
+  result := p^;
+  inc(p);
+  if result>$7f then begin
+    c := p^;
+    c := c shl 7;
+    result := result and $7F or c;
+    inc(p);
+    if c>$7f shl 7 then begin // Values between 128 and 16256
+      c := p^;
+      c := c shl 14;
+      inc(p);
+      result := result and $3FFF or c;
+      if c>$7f shl 14 then begin // Values between 16257 and 2080768
+        c := p^;
+        c := c shl 21;
+        inc(p);
+        result := result and $1FFFFF or c;
+        if c>$7f shl 21 then begin // Values between 2080769 and 266338304
+          c := p^;
+          c := c shl 28;
+          inc(p);
+          result := result and $FFFFFFF or c;
+        end;
+      end;
+    end;
+  end;
+  Source := p;
 end;
 
 function FromVarUInt32up128(var Source: PByte): cardinal;
-var c: PtrUInt;
+var c: cardinal;
+    p: PByte;
 begin
-  result := Source^ shl 7;
+  p := Source;
+  result := p^ shl 7;
+  inc(p);
+  if result>$7f shl 7 then begin // Values between 128 and 16256
+    c := p^;
+    c := c shl 14;
+    inc(p);
+    result := result and $3FFF or c;
+    if c>$7f shl 14 then begin // Values between 16257 and 2080768
+      c := p^;
+      c := c shl 21;
+      inc(p);
+      result := result and $1FFFFF or c;
+      if c>$7f shl 21 then begin // Values between 2080769 and 266338304
+        c := p^;
+        c := c shl 28;
+        inc(p);
+        result := result and $FFFFFFF or c;
+      end;
+    end;
+  end;
+  Source := p;
+end;
+
+function FromVarInt32(var Source: PByte): integer;
+var c: cardinal;
+    p: PByte;
+begin // faster as stand-alone function with inlined FromVarUInt32
+  p := Source;
+  result := p^;
+  inc(p);
+  if result>$7f then begin
+    c := p^;
+    c := c shl 7;
+    result := result and $7F or integer(c);
+    inc(p);
+    if c>$7f shl 7 then begin // Values between 128 and 16256
+      c := p^;
+      c := c shl 14;
+      inc(p);
+      result := result and $3FFF or integer(c);
+      if c>$7f shl 14 then begin // Values between 16257 and 2080768
+        c := p^;
+        c := c shl 21;
+        inc(p);
+        result := result and $1FFFFF or integer(c);
+        if c>$7f shl 21 then begin // Values between 2080769 and 266338304
+          c := p^;
+          c := c shl 28;
+          inc(p);
+          result := result and $FFFFFFF or integer(c);
+        end;
+      end;
+    end;
+  end;
+  Source := p; 
+  // 0=0,1=1,2=-1,3=2,4=-2...
+  if result and 1<>0 then
+    // 1->1, 3->2..
+    result := result shr 1+1 else
+    // 0->0, 2->-1, 4->-2..
+    result := -(result shr 1);
+end;
+
+function FromVarUInt32High(var Source: PByte): cardinal;
+var c: cardinal;
+begin
+  result := Source^;
   inc(Source);
-  if result<=$7f shl 7 then
+  c := Source^ shl 7;
+  inc(Source);
+  result := result and $7F or c;
+  if c<=$7f shl 7 then
     exit; // Values between 128 and 16256
   c := Source^ shl 14;
   inc(Source);
@@ -40053,23 +40106,32 @@ end;
 
 function FromVarUInt64(var Source: PByte): QWord;
 var c,n: PtrUInt;
+    p: PByte;
 begin
-  if Source^>$7f then begin
+  p := Source;
+  {$ifdef CPU64}
+  result := p^;
+  if result>$7f then begin
+    result := result and $7F;
+  {$else}
+  if p^>$7f then begin
+    result := PtrUInt(p^) and $7F;
+  {$endif}
     n := 0;
-    result := PtrUInt(Source^) and $7F;
-    inc(Source);
+    inc(p);
     repeat
-      c := Source^;
+      c := p^;
       inc(n,7);
       if c<=$7f then
         break;
       result := result or (QWord(c and $7f) shl n);
-      inc(Source);
+      inc(p);
     until false;
     result := result or (QWord(c) shl n);
-  end else
-    result := Source^;
-  inc(Source);
+  end{$ifndef CPU64} else
+    result := p^{$endif};
+  inc(p);
+  Source := p;
 end;
 
 function ToVarInt64(Value: Int64; Dest: PByte): PByte;
@@ -40099,6 +40161,28 @@ end;
 function FromVarInt64(var Source: PByte): Int64;
 var c,n: PtrUInt;
 begin // 0=0,1=1,2=-1,3=2,4=-2...
+  {$ifdef CPU64}
+  result := Source^;
+  if result>$7f then begin
+    result := result and $7F;
+    n := 0;
+    inc(Source);
+    repeat
+      c := Source^;
+      inc(n,7);
+      if c<=$7f then
+        break;
+      result := result or (Int64(c and $7f) shl n);
+      inc(Source);
+    until false;
+    result := result or (Int64(c) shl n);
+  end;
+  if result and 1<>0 then
+    // 1->1, 3->2..
+    result := result shr 1+1 else
+    // 0->0, 2->-1, 4->-2..
+    result := -(result shr 1);
+  {$else}
   c := Source^;
   if c>$7f then begin
     result := c and $7F;
@@ -40113,7 +40197,7 @@ begin // 0=0,1=1,2=-1,3=2,4=-2...
       inc(Source);
     until false;
     result := result or (Int64(c) shl n);
-    if {$ifdef CPU64}result{$else}Int64Rec(result).Lo{$endif} and 1<>0 then
+    if Int64Rec(result).Lo and 1<>0 then
       // 1->1, 3->2..
       result := result shr 1+1 else
       // 0->0, 2->-1, 4->-2..
@@ -40127,6 +40211,7 @@ begin // 0=0,1=1,2=-1,3=2,4=-2...
       // 1->1, 3->2..
       result := (c shr 1)+1;
   end;
+  {$endif}
   inc(Source);
 end;
 
@@ -61720,7 +61805,7 @@ begin
 end;
 {$endif NOVARIANTS}
 
-function TFastReader.VarInt32: PtrInt;
+function TFastReader.VarInt32: integer;
 begin
   result := VarUInt32;
   if result and 1<>0 then
@@ -61740,34 +61825,9 @@ begin
     result := -(result shr 1);
 end;
 
-function TFastReader.VarUInt16: PtrUInt;
-var c: PtrUInt;
-label err;
-begin
-  result := ord(P^);
-  if P>=Last then
-    goto err;
-  inc(P);
-  if result<=$7f then
-    exit;
-  if P>=Last then
-    goto err;
-  c := ord(P^) shl 7;
-  inc(P);
-  result := result and $7F or c;
-  if c<=$7f shl 7 then
-    exit; // Values between 128 and 16256
-  if P>=Last then
-    goto err;
-  c := ord(P^) shl 14;
-  inc(P);
-  result := result and $3FFF or c;
-  if c>$7f shl 14 then // Values between 16257 and 2080768
-err:ErrorOverflow;
-end;
-
-function TFastReader.VarUInt32: PtrUInt;
-var c: PtrUInt;
+function TFastReader.VarUInt32: cardinal;
+var c: cardinal;
+{$ifdef CPUX86} // not enough CPU registers
 label err;
 begin
   result := ord(P^);
@@ -61802,6 +61862,47 @@ err:ErrorOverflow;
   c := ord(P^) shl 28;
   inc(P);
   result := result and $FFFFFFF or c;
+{$else}
+    s,l: PByte;
+label err,fin;
+begin
+  s := pointer(P);
+  l := pointer(Last);
+  result := s^;
+  if PAnsiChar(s)>=PAnsiChar(l) then
+    goto err;
+  inc(s);
+  if result<=$7f then
+    goto fin;
+  if PAnsiChar(s)>=PAnsiChar(l) then
+    goto err;
+  c := s^ shl 7;
+  inc(s);
+  result := result and $7F or c;
+  if c<=$7f shl 7 then
+    goto fin; // Values between 128 and 16256
+  if PAnsiChar(s)>=PAnsiChar(l) then
+    goto err;
+  c := s^ shl 14;
+  inc(s);
+  result := result and $3FFF or c;
+  if c<=$7f shl 14 then
+    goto fin; // Values between 16257 and 2080768
+  if PAnsiChar(s)>=PAnsiChar(l) then
+    goto err;
+  c := s^ shl 21;
+  inc(s);
+  result := result and $1FFFFF or c;
+  if c<=$7f shl 21 then
+    goto fin; // Values between 2080769 and 266338304
+  if PAnsiChar(s)>=PAnsiChar(l) then
+err:ErrorOverflow;
+  c := s^ shl 28;
+  inc(s);
+  result := result and $FFFFFFF or c;
+fin:
+  P := pointer(s);
+{$endif}
 end;
 
 function TFastReader.PeekVarInt32(out value: PtrInt): boolean;
@@ -61834,16 +61935,16 @@ begin
 end;
 
 function TFastReader.VarUInt32Safe(out Value: cardinal): boolean;
-var c, n: cardinal;
+var c, n, v: cardinal;
 begin
   result := false;
   if P>=Last then
     exit;
-  Value := ord(P^);
+  v := ord(P^);
   inc(P);
-  if Value>$7f then begin
+  if v>$7f then begin
     n := 0;
-    Value := Value and $7F;
+    v := v and $7F;
     repeat
       if P>=Last then
         exit;
@@ -61851,16 +61952,17 @@ begin
       inc(P);
       inc(n,7);
       if c<=$7f then break;
-      Value := Value or ((c and $7f) shl n);
+      v := v or ((c and $7f) shl n);
     until false;
-    Value := Value or (c shl n);
+    v := v or (c shl n);
   end;
+  Value := v;
   result := true; // success
 end;
 
 function TFastReader.VarUInt64: QWord;
-var c, n: PtrUInt;
 label err;
+var c, n: PtrUInt;
 begin
   if P>=Last then
 err: ErrorOverflow;
