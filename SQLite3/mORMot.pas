@@ -35024,8 +35024,7 @@ begin
   Values[n] := Value;
 end;
 
-function TSQLRestBatch.Delete(Table: TSQLRecordClass;
-  ID: TID): integer;
+function TSQLRestBatch.Delete(Table: TSQLRecordClass; ID: TID): integer;
 begin
   if (self=nil) or (fBatch=nil) or (Table=nil) or
      (ID<=0) or not fRest.RecordCanBeUpdated(Table,ID,seDelete) then begin

@@ -273,7 +273,8 @@ type
      optSQlite3FileSafeSlowMode,
      optSQlite3FileSafeNonExclusive,
      optNoSystemUse,
-     optSQlite3File4MBCacheSize);
+     optSQlite3File4MBCacheSize,
+     optForceAjaxJson);
 
   /// define options to be used for TDDDRestSettings
   TDDDRestSettingsOptions = set of TDDDRestSettingsOption;
@@ -916,6 +917,7 @@ begin
       if optSQlite3File4MBCacheSize in Options then
         CacheSize := (4 shl 20) div PageSize;
     end;
+  DB.NoAJAXJSON := not (optForceAjaxJson in Options);
 end;
 
 function TDDDRestSettings.NewRestServerDB(const aDBFileName: TFileName;
