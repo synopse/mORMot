@@ -2301,6 +2301,15 @@ procedure FormatUTF8(const Format: RawUTF8; const Args: array of const;
 procedure FormatShort(const Format: RawUTF8; const Args: array of const;
   var result: shortstring);
 
+type
+  /// used e.g. by PointerToHexShort/CardinalToHexShort/Int64ToHexShort
+  // - such result type would avoid a string allocation on heap
+  TShort16 = string[16];
+
+/// fast Format() function replacement, for UTF-8 content stored in TShort16
+procedure FormatShort16(const Format: RawUTF8; const Args: array of const;
+  var result: TShort16);
+
 /// fast Format() function replacement, handling % and ? parameters
 // - will include Args[] for every % in Format
 // - will inline Params[] for every ? in Format, handling special "inlined"
@@ -11679,11 +11688,6 @@ function LogEscape(source: PAnsiChar; sourcelen: integer; var temp: TLogEscape;
   enabled: boolean=true): PAnsiChar;
   {$ifdef HASINLINE}inline;{$endif}
 
-type
-  /// used e.g. by PointerToHexShort/CardinalToHexShort/Int64ToHexShort
-  // - such result type would avoid a string allocation on heap
-  TShort16 = string[16];
-
 /// fast conversion from a pointer data into hexa chars, ready to be displayed
 // - use internally BinToHexDisplay()
 function PointerToHex(aPointer: Pointer): RawUTF8; overload;
@@ -13534,7 +13538,7 @@ function UnixTimeToString(const UnixTime: TUnixTime; Expanded: boolean=true;
 // a small text layout, perfect e.g. for naming a local file
 // - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits, expecting
 // a date > 1999 (a current date would be fine)
-function UnixTimeToFileShort(const UnixTime: TUnixTime): shortstring;
+function UnixTimeToFileShort(const UnixTime: TUnixTime): TShort16;
 
 /// convert some second-based c-encoded time to the ISO 8601 text layout, either
 // as time or date elapsed period
@@ -16639,7 +16643,7 @@ type
     /// stop the timer, returning the time elapsed as text with time resolution
     // (us,ms,s)
     // - is just a wrapper around ComputeTime + Time
-    function Stop: shortstring;
+    function Stop: TShort16;
     /// stop the timer, ready to continue its time measurement via Resume
     procedure Pause;
     /// resume a paused timer
@@ -16677,18 +16681,18 @@ type
     /// compute the per second count
     function PerSec(const Count: QWord): QWord;
     /// compute the time elapsed by count, with appened time resolution (us,ms,s)
-    function ByCount(Count: QWord): shortstring;
+    function ByCount(Count: QWord): TShort16;
     /// textual representation of time after counter stopped
     // - with appened time resolution (us,ms,s)
     // - not to be used in normal code, but e.g. for custom performance analysis
-    function Time: shortstring;
+    function Time: TShort16;
     /// time elapsed in micro seconds after counter stopped
     // - not to be used in normal code, but e.g. for custom performance analysis
     property TimeInMicroSec: TSynMonitorTotalMicroSec read iTime write iTime;
     /// textual representation of last process timing after counter stopped
     // - with appened time resolution (us,ms,s)
     // - not to be used in normal code, but e.g. for custom performance analysis
-    function LastTime: shortstring;
+    function LastTime: TShort16;
     /// timing in micro seconds of the last process
     // - not to be used in normal code, but e.g. for custom performance analysis
     property LastTimeInMicroSec: TSynMonitorOneMicroSec read iLastTime write iLastTime;
@@ -16703,7 +16707,7 @@ type
     /// start the high resolution timer
     procedure Start;
     /// stop the timer, returning the time elapsed, with appened time resolution (us,ms,s)
-    function Stop: RawUTF8;
+    function Stop: TShort16;
     /// stop the timer, ready to continue its time measure
     procedure Pause;
     /// resume a paused timer
@@ -16732,7 +16736,7 @@ type
     /// start the high resolution timer
     procedure Start;
     /// stop the timer, returning the time elapsed, with appened time resolution (us,ms,s)
-    function Stop: RawUTF8;
+    function Stop: TShort16;
     /// stop the timer, ready to continue its time measure
     procedure Pause;
     /// resume a paused timer
@@ -16750,7 +16754,7 @@ type
   TSynMonitorTime = class
   protected
     fMicroSeconds: TSynMonitorTotalMicroSec;
-    function GetAsText: shortstring;
+    function GetAsText: TShort16;
   public
     /// compute a number per second, of the current value
     function PerSecond(const Count: QWord): QWord;
@@ -16759,7 +16763,7 @@ type
     /// micro seconds time elapsed, as raw number
     property MicroSec: TSynMonitorTotalMicroSec read fMicroSeconds write fMicroSeconds;
     /// micro seconds time elapsed, as '... us-ns-ms-s' text
-    property Text: shortstring read GetAsText;
+    property Text: TShort16 read GetAsText;
   end;
 
   /// able to serialize any immediate timing as raw micro-seconds number or text
@@ -16767,7 +16771,7 @@ type
   TSynMonitorOneTime = class
   protected
     fMicroSeconds: TSynMonitorOneMicroSec;
-    function GetAsText: shortstring;
+    function GetAsText: TShort16;
   public
     /// compute a number per second, of the current value
     function PerSecond(const Count: QWord): QWord;
@@ -16776,7 +16780,7 @@ type
     /// micro seconds time elapsed, as raw number
     property MicroSec: TSynMonitorOneMicroSec read fMicroSeconds write fMicroSeconds;
     /// micro seconds time elapsed, as '... us-ns-ms-s' text
-    property Text: shortstring read GetAsText;
+    property Text: TShort16 read GetAsText;
   end;
 
   /// able to serialize any cumulative size as bytes number
@@ -16784,12 +16788,12 @@ type
   TSynMonitorSize = class
   protected
     fBytes: TSynMonitorTotalBytes;
-    function GetAsText: shortstring;
+    function GetAsText: TShort16;
   published
     /// number of bytes, as raw number
     property Bytes: TSynMonitorTotalBytes read fBytes write fBytes;
     /// number of bytes, as '... B-KB-MB-GB' text
-    property Text: shortstring read GetAsText;
+    property Text: TShort16 read GetAsText;
   end;
 
   /// able to serialize any immediate size as bytes number
@@ -16798,12 +16802,12 @@ type
   TSynMonitorOneSize = class
   protected
     fBytes: TSynMonitorOneBytes;
-    function GetAsText: shortstring;
+    function GetAsText: TShort16;
   published
     /// number of bytes, as raw number
     property Bytes: TSynMonitorOneBytes read fBytes write fBytes;
     /// number of bytes, as '... B-KB-MB-GB' text
-    property Text: shortstring read GetAsText;
+    property Text: TShort16 read GetAsText;
   end;
 
   /// able to serialize any bandwith as bytes count per second
@@ -16812,12 +16816,12 @@ type
   TSynMonitorThroughput = class
   protected
     fBytesPerSec: QWord;
-    function GetAsText: shortstring;
+    function GetAsText: TShort16;
   published
     /// number of bytes per second, as raw number
     property BytesPerSec: QWord read fBytesPerSec write fBytesPerSec;
     /// number of bytes per second, as '... B-KB-MB-GB/s' text
-    property Text: shortstring read GetAsText;
+    property Text: TShort16 read GetAsText;
   end;
 
   /// a generic value object able to handle any task / process statistic
@@ -18382,18 +18386,18 @@ type
 /// convert a size to a human readable value
 // - append TB, GB, MB, KB or B symbol
 // - for TB, GB, MB and KB, add one fractional digit
-procedure KB(bytes: Int64; out result: shortstring); overload;
+procedure KB(bytes: Int64; out result: TShort16); overload;
 
 /// convert a size to a human readable value
 // - append TB, GB, MB, KB or B symbol
 // - for TB, GB, MB and KB, add one fractional digit
-function KB(bytes: Int64): shortstring; overload;
+function KB(bytes: Int64): TShort16; overload;
   {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
 
 /// convert a string size to a human readable value
 // - append TB, GB, MB, KB or B symbol
 // - for TB, GB, MB and KB, add one fractional digit
-function KB(const buffer: RawByteString): shortstring; overload;
+function KB(const buffer: RawByteString): TShort16; overload;
   {$ifdef FPC_OR_UNICODE}inline;{$endif}
 
 /// convert a size to a human readable value
@@ -18404,13 +18408,13 @@ procedure KBU(bytes: Int64; var result: RawUTF8);
 /// convert a micro seconds elapsed time into a human readable value
 // - append 'us', 'ms' or 's' symbol
 // - for 'us' and 'ms', add two fractional digits
-function MicroSecToString(Micro: QWord): shortstring; overload;
+function MicroSecToString(Micro: QWord): TShort16; overload;
   {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
 
 /// convert a micro seconds elapsed time into a human readable value
 // - append 'us', 'ms' or 's' symbol
 // - for 'us' and 'ms', add two fractional digits
-procedure MicroSecToString(Micro: QWord; out result: shortstring); overload;
+procedure MicroSecToString(Micro: QWord; out result: TShort16); overload;
 
 /// convert an integer value into its textual representation with thousands marked
 // - ThousandSep is the character used to separate thousands in numbers with
@@ -25477,9 +25481,20 @@ procedure FormatShort(const Format: RawUTF8; const Args: array of const;
 var process: TFormatUTF8;
 begin
   if (Format='') or (high(Args)<0) then // no formatting needed
-    FastSetString(result,pointer(Format),length(Format)) else begin
+    SetString(result,PAnsiChar(pointer(Format)),length(Format)) else begin
     process.Parse(Format,Args);
     result[0] := AnsiChar(process.WriteMax(@result[1],255)-@result[1]);
+  end;
+end;
+
+procedure FormatShort16(const Format: RawUTF8; const Args: array of const;
+  var result: TShort16);
+var process: TFormatUTF8;
+begin
+  if (Format='') or (high(Args)<0) then // no formatting needed
+    SetString(result,PAnsiChar(pointer(Format)),length(Format)) else begin
+    process.Parse(Format,Args);
+    result[0] := AnsiChar(process.WriteMax(@result[1],16)-@result[1]);
   end;
 end;
 
@@ -36161,7 +36176,7 @@ begin
 end;
 {$endif}
 
-function UnixTimeToFileShort(const UnixTime: TUnixTime): shortstring;
+function UnixTimeToFileShort(const UnixTime: TUnixTime): TShort16;
 var dt: TDateTime;
     HH,MM,SS,MS,Y,M,D: word;
     tab: {$ifdef CPUX86}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
@@ -56683,12 +56698,12 @@ end;
 
 { ************ Unit-Testing classes and functions }
 
-procedure KB(bytes: Int64; out result: shortstring);
+procedure KB(bytes: Int64; out result: TShort16);
 const _B: array[0..3] of string[3] = ('KB','MB','GB','TB');
 var hi,rem,b: cardinal;
 begin
   if bytes<1 shl 10 then begin
-    FormatShort('% B',[integer(bytes)],result);
+    FormatShort16('% B',[integer(bytes)],result);
     exit;
   end;
   if bytes<1 shl 20 then begin
@@ -56718,22 +56733,22 @@ begin
     inc(hi); // round up as expected by an human being
   end;
   if rem<>0 then
-    FormatShort('%.% %',[hi,rem,_B[b]],result) else
-    FormatShort('% %',[hi,_B[b]],result);
+    FormatShort16('%.% %',[hi,rem,_B[b]],result) else
+    FormatShort16('% %',[hi,_B[b]],result);
 end;
 
-function KB(bytes: Int64): shortstring;
+function KB(bytes: Int64): TShort16;
 begin
   KB(bytes,result);
 end;
 
-function KB(const buffer: RawByteString): shortstring;
+function KB(const buffer: RawByteString): TShort16;
 begin
   KB(length(buffer), result);
 end;
 
 procedure KBU(bytes: Int64; var result: RawUTF8);
-var tmp: shortstring;
+var tmp: TShort16;
 begin
   KB(bytes,tmp);
   FastSetString(result,@tmp[1],ord(tmp[0]));
@@ -56752,36 +56767,36 @@ begin
     insert(ThousandSep,Result,Len-i*3);
 end;
 
-function MicroSecToString(Micro: QWord): shortstring;
+function MicroSecToString(Micro: QWord): TShort16;
 begin
   MicroSecToString(Micro,result);
 end;
 
-procedure MicroSecToString(Micro: QWord; out result: shortstring);
-  procedure TwoDigitToString(value: cardinal; const u: shortstring; var result: shortstring);
+procedure MicroSecToString(Micro: QWord; out result: TShort16);
+  procedure TwoDigitToString(value: cardinal; const u: shortstring; var result: TShort16);
   var d100: TDiv100Rec;
   begin
     if value<10 then
-      FormatShort('0.0%%',[AnsiChar(value+48),u],result) else
+      FormatShort16('0.0%%',[AnsiChar(value+48),u],result) else
     if value<100 then
-      FormatShort('0.%%',[UInt2DigitsToShortFast(value),u],result) else begin
+      FormatShort16('0.%%',[UInt2DigitsToShortFast(value),u],result) else begin
       Div100(value,d100);
       if d100.m=0 then
-        FormatShort('%%',[d100.d,u],result) else
-        FormatShort('%.%%',[d100.d,UInt2DigitsToShortFast(d100.m),u],result);
+        FormatShort16('%%',[d100.d,u],result) else
+        FormatShort16('%.%%',[d100.d,UInt2DigitsToShortFast(d100.m),u],result);
     end;
   end;
-  procedure TimeToString(value: cardinal; const u: shortstring; var result: shortstring);
+  procedure TimeToString(value: cardinal; const u: shortstring; var result: TShort16);
   var d: cardinal;
   begin
     d := value div 60;
-    FormatShort('%%%',[d,u,UInt2DigitsToShortFast(value-(d*60))],result);
+    FormatShort16('%%%',[d,u,UInt2DigitsToShortFast(value-(d*60))],result);
   end;
 begin
   if Int64(Micro)<=0 then
     result := '0us' else
   if Micro<1000 then
-    FormatShort('%us',[Micro],result) else
+    FormatShort16('%us',[Micro],result) else
   if Micro<1000000 then
     TwoDigitToString({$ifdef CPU32}Int64Rec(Micro).Lo{$else}Micro{$endif} div 10,'ms',result) else
   if Micro<60000000 then
@@ -56814,7 +56829,7 @@ end;
 
 { TPrecisionTimer }
 
-function TPrecisionTimer.ByCount(Count: QWord): shortstring;
+function TPrecisionTimer.ByCount(Count: QWord): TShort16;
 begin
   if Count=0 then
     result := '0' else // avoid div per 0 exception
@@ -56880,7 +56895,7 @@ begin // very close to ComputeTime
   result := iLastTime;
 end;
 
-function TPrecisionTimer.Stop: shortstring;
+function TPrecisionTimer.Stop: TShort16;
 begin
   ComputeTime;
   MicroSecToString(iTime,result);
@@ -56901,12 +56916,12 @@ begin
   iResume := 0;
 end;
 
-function TPrecisionTimer.Time: shortstring;
+function TPrecisionTimer.Time: TShort16;
 begin
   MicroSecToString(iTime,result);
 end;
 
-function TPrecisionTimer.LastTime: shortstring;
+function TPrecisionTimer.LastTime: TShort16;
 begin
   MicroSecToString(iLastTime,result);
 end;
@@ -56971,7 +56986,7 @@ begin
   fTimer.Start;
 end;
 
-function TLocalPrecisionTimer.Stop: RawUTF8;
+function TLocalPrecisionTimer.Stop: TShort16;
 begin
   result := fTimer.Stop;
 end;
@@ -56984,7 +56999,7 @@ end;
 
 { TSynMonitorTime }
 
-function TSynMonitorTime.GetAsText: shortstring;
+function TSynMonitorTime.GetAsText: TShort16;
 begin
   MicroSecToString(fMicroSeconds,result);
 end;
@@ -56999,7 +57014,7 @@ end;
 
 { TSynMonitorOneTime }
 
-function TSynMonitorOneTime.GetAsText: shortstring;
+function TSynMonitorOneTime.GetAsText: TShort16;
 begin
   MicroSecToString(fMicroSeconds,result);
 end;
@@ -57014,23 +57029,23 @@ end;
 
 { TSynMonitorSize }
 
-function TSynMonitorSize.GetAsText: shortstring;
+function TSynMonitorSize.GetAsText: TShort16;
 begin
   KB(fBytes,result);
 end;
 
 { TSynMonitorOneSize }
 
-function TSynMonitorOneSize.GetAsText: shortstring;
+function TSynMonitorOneSize.GetAsText: TShort16;
 begin
   KB(fBytes,result);
 end;
 
 { TSynMonitorThroughput }
 
-function TSynMonitorThroughput.GetAsText: shortstring;
+function TSynMonitorThroughput.GetAsText: TShort16;
 begin
-  FormatShort('%/s',[KB(fBytesPerSec)],result);
+  FormatShort16('%/s',[KB(fBytesPerSec)],result);
 end;
 
 
