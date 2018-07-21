@@ -63095,7 +63095,7 @@ procedure TAlgoCompress.Decompress(Comp: PAnsiChar; CompLen: integer;
   out Result: RawByteString; Load: TAlgoCompressLoad);
 var len: integer;
 begin
-  len := DecompressHeader(Comp,CompLen);
+  len := DecompressHeader(Comp,CompLen,Load);
   if len=0 then
     exit;
   SetString(result,nil,len);
@@ -63119,7 +63119,7 @@ function TAlgoCompress.Decompress(Comp: PAnsiChar; CompLen: integer;
   out PlainLen: integer; var tmp: RawByteString; Load: TAlgoCompressLoad): pointer;
 begin
   result := nil;
-  PlainLen := DecompressHeader(Comp,CompLen);
+  PlainLen := DecompressHeader(Comp,CompLen,Load);
   if PlainLen=0 then
     exit;
   if Comp[4]=COMPRESS_STORED then
