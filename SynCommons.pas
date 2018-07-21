@@ -40136,20 +40136,22 @@ begin
 end;
 
 function ToVarUInt64(Value: QWord; Dest: PByte): PByte;
+var c: cardinal;
 begin
-  {$ifdef CPU32}
-  if Int64Rec(Value).Hi=0 then begin
+  if {$ifdef CPU32}Int64Rec(Value).Hi=0{$else}Value shr 32=0{$endif} then begin
     result := ToVarUInt32(Value,Dest);
     exit;
   end;
-  {$else}
-  if Value>$7f then
-  {$endif}
-    repeat
-      Dest^ := (Value and $7F) or $80;
-      Value := Value shr 7;
-      inc(Dest);
-    until Value<=$7f;
+  c := Value;
+  PCardinal(Dest)^ := (c and $7F) or (((c shr 7)and $7F)shl 8) or
+    (((c shr 14)and $7F)shl 16) or (((c shr 21)and $7F)shl 24) or $80808080; 
+  Value := Value shr 28;
+  inc(Dest,4);
+  repeat
+    Dest^ := (Value and $7F) or $80;
+    Value := Value shr 7;
+    inc(Dest);
+  until Value<=$7f;
   Dest^ := Value;
   inc(Dest);
   result := Dest;
@@ -40187,26 +40189,20 @@ end;
 
 function ToVarInt64(Value: Int64; Dest: PByte): PByte;
 begin // 0=0,1=1,2=-1,3=2,4=-2...
-  if Value<0 then
-    // -1->2, -2->4..
+  {$ifdef CPU32}
+  if Value<=0 then
+    // 0->0, -1->2, -2->4..
+    result := ToVarUInt64((-Value) shl 1,Dest) else
+    // 1->1, 2->3..
+    result := ToVarUInt64((Value shl 1)-1,Dest);
+  {$else}
+  if Value<=0 then
+    // 0->0, -1->2, -2->4..
     Value := (-Value) shl 1 else
-  if Value>0 then
     // 1->1, 2->3..
     Value := (Value shl 1)-1;
-    // 0->0
-  {$ifdef CPU32} // inlined ToVarUInt64
-  if Int64Rec(Value).Hi=0 then
-    result := ToVarUInt32(Value,Dest) else begin
-  {$else} begin if QWord(Value)>$7f then {$endif}
-    repeat
-      Dest^ := (Value and $7F) or $80;
-      Value := Value shr 7;
-      inc(Dest);
-    until Value<=$7f;
-    Dest^ := Value;
-    inc(Dest);
-    result := Dest;
-  end;
+  result := ToVarUInt64(Value,Dest);
+  {$endif}
 end;
 
 function FromVarInt64(var Source: PByte): Int64;
