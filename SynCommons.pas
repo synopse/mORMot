@@ -4835,6 +4835,9 @@ function AddInt64(var Values: TInt64DynArray; Value: Int64): integer; overload;
 /// if not already existing, add a 64-bit integer value to a dynamic array
 function AddInt64Once(var Values: TInt64DynArray; Value: Int64): integer;
 
+/// if not already existing, add a 64-bit integer value to a sorted dynamic array
+procedure AddInt64Sorted(var Values: TInt64DynArray; Value: Int64);
+
 /// delete any 32-bit integer in Values[]
 procedure DeleteInteger(var Values: TIntegerDynArray; Index: PtrInt); overload;
 
@@ -4892,7 +4895,7 @@ procedure Reverse(const Values: TIntegerDynArray; ValuesCount: integer;
   Reversed: PIntegerArray);
 
 /// fill some values with i,i+1,i+2...i+Count-1
-procedure FillIncreasing(Values: PIntegerArray; StartValue, Count: integer);
+procedure FillIncreasing(Values: PIntegerArray; StartValue: integer; Count: PtrUInt);
 
 /// copy some Int64 values into an unsigned integer array
 procedure Int64ToUInt32(Values64: PInt64Array; Values32: PCardinalArray; Count: integer);
@@ -5031,6 +5034,7 @@ function ToVarUInt32LengthWithData(Value: PtrUInt): PtrUInt;
 function ToVarInt32(Value: PtrInt; Dest: PByte): PByte;
 
 /// convert a 32-bit variable-length integer buffer into a cardinal
+// - fast inlined process for any number < 128
 function FromVarUInt32(var Source: PByte): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -30684,6 +30688,18 @@ begin
   result := length(Values);
   SetLength(Values,result+1);
   Values[result] := Value;
+end;
+
+procedure AddInt64Sorted(var Values: TInt64DynArray; Value: Int64);
+var last: integer;
+begin
+  last := high(Values);
+  if FastFindInt64Sorted(pointer(Values),last,Value)<0 then begin
+    inc(last);
+    SetLength(Values,last+1);
+    Values[last] := Value;
+    QuickSortInt64(pointer(Values),0,last);
+  end;
 end;
 
 function AddInt64Once(var Values: TInt64DynArray; Value: Int64): integer;
