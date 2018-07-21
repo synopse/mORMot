@@ -11656,8 +11656,11 @@ procedure BinToHexDisplayLower(Bin, Hex: PAnsiChar; BinBytes: integer); overload
 /// fast conversion from binary data into lowercase hexa chars
 function BinToHexDisplayLower(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
 
-/// fast conversion from binary data into lowercase hexa chars
-function BinToHexDisplayLowerShort(Bin: PAnsiChar; BinBytes: integer): shortstring; overload;
+/// fast conversion from up to 127 bytes of binary data into lowercase hexa chars
+function BinToHexDisplayLowerShort(Bin: PAnsiChar; BinBytes: integer): shortstring;
+
+/// fast conversion from up to 64-bit of binary data into lowercase hexa chars
+function BinToHexDisplayLowerShort16(Bin: Int64; BinBytes: integer): TShort16;
 
 /// fast conversion from binary data into hexa lowercase chars, ready to be
 // used as a convenient TFileName prefix
@@ -28839,10 +28842,18 @@ end;
 
 function BinToHexDisplayLowerShort(Bin: PAnsiChar; BinBytes: integer): shortstring;
 begin
-  if BinBytes > 127 then
+  if BinBytes>127 then
     BinBytes := 127;
   result[0] := AnsiChar(BinBytes * 2);
   BinToHexDisplayLower(Bin,@result[1],BinBytes);
+end;
+
+function BinToHexDisplayLowerShort16(Bin: Int64; BinBytes: integer): TShort16;
+begin
+  if BinBytes>8 then
+    BinBytes := 8;
+  result[0] := AnsiChar(BinBytes * 2);
+  BinToHexDisplayLower(@Bin,@result[1],BinBytes);
 end;
 
 function BinToHexDisplayFile(Bin: PAnsiChar; BinBytes: integer): TFileName;
@@ -30704,9 +30715,9 @@ end;
 
 function AddInt64Once(var Values: TInt64DynArray; Value: Int64): integer;
 begin
-  result := Int64ScanIndex(pointer(Values), length(Values), Value);
+  result := Int64ScanIndex(pointer(Values),length(Values),Value);
   if result<0 then
-    result := AddInt64(Values, Value);
+    result := AddInt64(Values,Value);
 end;
 
 procedure DeleteWord(var Values: TWordDynArray; Index: PtrInt);
@@ -30961,14 +30972,17 @@ begin
   //for i := 0 to Count-1 do Assert(Reverse[Orig[i]]=i);
 end;
 
-procedure FillIncreasing(Values: PIntegerArray; StartValue, Count: integer);
-var i: integer;
+procedure FillIncreasing(Values: PIntegerArray; StartValue: integer; Count: PtrUInt);
+var i: PtrUInt;
 begin
-  if StartValue=0 then
-    for i := 0 to Count-1 do
-      Values[i] := i else
-    for i := 0 to Count-1 do
-      Values[i] := StartValue+i;
+  if Count>0 then
+    if StartValue=0 then
+      for i := 0 to Count-1 do
+        Values[i] := i else
+      for i := 0 to Count-1 do begin
+        Values[i] := StartValue;
+        inc(StartValue);
+      end;
 end;
 
 procedure Int64ToUInt32(Values64: PInt64Array; Values32: PCardinalArray; Count: integer);
