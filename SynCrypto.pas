@@ -15059,16 +15059,16 @@ asm // rcx=crc, rdx=buf, r8=len (linux: rdi, rsi, rdx)
         {$else}
         db $F2,$48,$0F,$38,$F1,$02 // circumvent Delphi inline asm compiler bug
         {$endif}
+        add     rdx, 8
         dec     r8
-        lea     rdx, [rdx + 8]
         jnz     @1
 @2:     and     ecx, 7
         jz      @0
         cmp     ecx, 4
         jb      @4
         crc32   eax, dword ptr[rdx]
+        add     rdx, 4
         sub     ecx, 4
-        lea     rdx, [rdx + 4]
         jz      @0
 @4:     crc32   eax, byte ptr[rdx]
         dec     ecx

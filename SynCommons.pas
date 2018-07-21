@@ -21544,7 +21544,7 @@ asm // eax=P, edx=val
         push    edi
         mov     edi, eax
         mov     eax, edx
-@s:     lea     edi, [edi - 2]
+@s:     sub     edi, 2
         cmp     eax, 100
         jb      @2
         mov     ecx, eax
@@ -21564,7 +21564,7 @@ asm // eax=P, edx=val
         mov     eax, edi
         pop     edi
         pop     ecx
-        lea     eax, [eax + ecx] // includes '-' if val<0
+        add     eax, ecx // includes '-' if val<0
         ret
 @2:     movzx   eax, word ptr[TwoDigitLookup + eax * 2]
         mov     byte ptr[edi - 1], '-'
@@ -21572,14 +21572,14 @@ asm // eax=P, edx=val
         mov     eax, edi
         pop     edi
         pop     ecx
-        lea     eax, [eax + ecx] // includes '-' if val<0
+        add     eax, ecx // includes '-' if val<0
         ret
 @3:     dec     eax
         pop     ecx
         or      dl, '0'
         mov     byte ptr[eax - 1], '-'
         mov     [eax], dl
-        lea     eax, [eax + ecx] // includes '-' if val<0
+        add     eax, ecx // includes '-' if val<0
 end;
 {$endif CPU64}
 {$endif PUREPASCAL}
@@ -21607,7 +21607,7 @@ asm // rcx=P, rdx=val (Linux: rdi,rsi)
         shr     rdx, 2
         mov     rax, rdx
         imul    rdx, -200
-        lea     rdx, [rdx + r8]
+        add     rdx, r8
         movzx   rdx, word ptr[rdx + r9]
         mov     [rcx], dx
         cmp     rax, 10
@@ -21660,7 +21660,7 @@ asm     // eax=P, edx=val
         mov     eax, edx
         nop
         nop         // @s loop alignment
-@s:     lea     edi, [edi - 2]
+@s:     sub     edi, 2
         cmp     eax, 100
         jb      @2
         mov     ecx, eax
@@ -21958,24 +21958,24 @@ asm // eax=P1, edx=P2, ecx=count
         push    ecx
         shr     ecx, 2
         jz      @2
-@4:     dec     ecx
-        mov     ebx, [eax]
+@4:     mov     ebx, [eax]
         mov     esi, [edx]
         mov     [eax], esi
         mov     [edx], ebx
-        lea     eax, [eax + 4]
-        lea     edx, [edx + 4]
+        add     eax, 4
+        add     edx, 4
+        dec     ecx
         jnz     @4
 @2:     pop     ecx
         and     ecx, 3
         jz      @0
-@1:     dec     ecx
-        mov     bl, [eax]
+@1:     mov     bl, [eax]
         mov     bh, [edx]
         mov     [eax], bh
         mov     [edx], bl
-        lea     eax, [eax + 1]
-        lea     edx, [edx + 1]
+        inc     eax
+        inc     edx
+        dec     ecx
         jnz     @1
 @0:     pop     esi
         pop     ebx
@@ -24243,7 +24243,7 @@ asm     // eax=SubStr, edx=S, ecx=Offset
         je      @c1fnd
 @notc1: cmp     bl, [edx + 1]
         je      @c2fnd
-@notc2: lea     edx, [edx + 2]
+@notc2: add     edx, 2
         cmp     edx, ecx            // next start position <= max start position
         jle     @l
         pop     ebp
@@ -24277,7 +24277,7 @@ asm     // eax=SubStr, edx=S, ecx=Offset
         je      @setres
         cmp     al, [edx + 1]
         je      @chkres
-        lea     edx, [edx + 2]
+        add     edx, 2
         cmp     edx, ecx
         jle     @charl
         jmp     @notfnd
@@ -27987,7 +27987,7 @@ asm // eax=rp edx=sp ecx=len - pipeline optimized version by AB
         shl     edx, 16
         mov     al, [ebx + 2]
         mov     ah, [ebx + 1]
-        lea     ebx, [ebx + 3]
+        add     ebx, 3
         or      eax, edx
         // encode as Base64
         mov     ecx, eax
@@ -28007,9 +28007,9 @@ asm // eax=rp edx=sp ecx=len - pipeline optimized version by AB
         mov     ch, [edi + eax]
         or      ecx, edx
         // write the 4 encoded bytes into rp
-        dec     ebp
         mov     [esi], ecx
-        lea     esi, [esi + 4]
+        add     esi, 4
+        dec     ebp
         jnz     @1
 @z:     pop     eax // result := len div 3
         pop     ebp
@@ -28286,7 +28286,7 @@ asm // eax=rp edx=sp ecx=len - pipeline optimized version by AB
         shl     edx, 16
         mov     al, [ebx + 2]
         mov     ah, [ebx + 1]
-        lea     ebx, [ebx + 3]
+        add     ebx, 3
         or      eax, edx
         // encode as Base64uri
         mov     ecx, eax
@@ -28306,9 +28306,9 @@ asm // eax=rp edx=sp ecx=len - pipeline optimized version by AB
         mov     ch, [edi + eax]
         or      ecx, edx
         // write the 4 encoded bytes into rp
-        dec     ebp
         mov     [esi], ecx
-        lea     esi, [esi + 4]
+        add     esi, 4
+        dec     ebp
         jnz     @1
 @z:     pop     eax // result := len div 3
         pop     ebp
@@ -29320,9 +29320,9 @@ asm
         test    cl, cl
         mov     bl, [ebx + esi] // bl=NormToUpper[p^]
         jz      @z              // up^=#0 -> OK
-        lea     edx, [edx + 1]  // = inc edx without changing flags
+        inc     edx
+        add     eax, 2
         cmp     bl, cl
-        lea     eax, [eax + 2]
         je      @1
 @n:     pop     esi
         pop     ebx
@@ -29387,7 +29387,7 @@ asm // eax=source edx=search
 @s:     mov     ecx, eax
         xor     eax, eax   // result := false
 @1:     mov     dx, [ecx]  // while not (source^ in [#0,#10,#13]) do inc(source)
-        lea     ecx, [ecx + 2]
+        add     ecx, 2
         cmp     dx, 13
         ja      @1
         je      @e
@@ -29398,7 +29398,7 @@ asm // eax=source edx=search
         jmp     @4
 @e:     cmp     word ptr[ecx], 10 // jump #13#10
         jne     @4
-        lea     ecx, [ecx + 2]
+        add     ecx, 2
 @4:     test    al, al
         jnz     @x         // exit if IdemPChar returned true
         cmp     word ptr[ecx], '['
@@ -30592,19 +30592,19 @@ asm // eax=P, edx=Count, Value=ecx
 @z:     xor     eax, eax // return nil if not found
         ret
 @ok0:   rep     ret
-@ok28:  lea     eax, [eax + 28]
+@ok28:  add     eax, 28
         ret
-@ok24:  lea     eax, [eax + 24]
+@ok24:  add     eax, 24
         ret
-@ok20:  lea     eax, [eax + 20]
+@ok20:  add     eax, 20
         ret
-@ok16:  lea     eax, [eax + 16]
+@ok16:  add     eax, 16
         ret
-@ok12:  lea     eax, [eax + 12]
+@ok12:  add     eax, 12
         ret
-@ok8:   lea     eax, [eax + 8]
+@ok8:   add     eax, 8
         ret
-@ok4:   lea     eax, [eax + 4]
+@ok4:   add     eax, 4
 end;
 {$endif}
 
@@ -32762,41 +32762,41 @@ function UpperCopy255BufSSE42(dest: PAnsiChar; source: PUTF8Char; sourceLen: int
 asm // eax=dest edx=source ecx=sourceLen
        test    ecx,ecx
        jz      @z
-       movdqu  xmm1,dqword ptr [@az]
-       movdqu  xmm3,dqword ptr [@bits]
-       cmp     ecx,16
+       movdqu  xmm1, dqword ptr [@az]
+       movdqu  xmm3, dqword ptr [@bits]
+       cmp     ecx, 16
        ja      @big
        // optimize the common case of sourceLen<=16
-       movdqu  xmm2,[edx]
+       movdqu  xmm2, [edx]
        {$ifdef HASAESNI}
-       pcmpistrm xmm1,xmm2,CMP_RANGES // find in range a-z, return mask in xmm0
+       pcmpistrm xmm1, xmm2, CMP_RANGES // find in range a-z, return mask in xmm0
        {$else}
-       db $66,$0F,$3A,$62,$CA,CMP_RANGES
+       db $66, $0F, $3A, $62, $CA, CMP_RANGES
        {$endif}
-       pand    xmm0,xmm3
-       pxor    xmm2,xmm0
-       movdqu  [eax],xmm2
-       add     eax,ecx
+       pand    xmm0, xmm3
+       pxor    xmm2, xmm0
+       movdqu  [eax], xmm2
+       add     eax, ecx
 @z:    ret
 @big:  push    eax
-       cmp     ecx,240
+       cmp     ecx, 240
        jb      @ok
-       mov     ecx,239
-@ok:   add     [esp],ecx // save to return end position with the exact size
-       shr     ecx,4
-       sub     edx,eax
+       mov     ecx, 239
+@ok:   add     [esp], ecx // save to return end position with the exact size
+       shr     ecx, 4
+       sub     edx, eax
        inc     ecx
-@s:    movdqu  xmm2,[edx+eax]
+@s:    movdqu  xmm2, [edx+eax]
        {$ifdef HASAESNI}
-       pcmpistrm xmm1,xmm2,CMP_RANGES
+       pcmpistrm xmm1, xmm2, CMP_RANGES
        {$else}
-       db $66,$0F,$3A,$62,$CA,CMP_RANGES
+       db $66, $0F, $3A, $62, $CA, CMP_RANGES
        {$endif}
-       pand    xmm0,xmm3
-       pxor    xmm2,xmm0
-       movdqu  [eax],xmm2
+       pand    xmm0, xmm3
+       pxor    xmm2, xmm0
+       movdqu  [eax], xmm2
+       add     eax, 16
        dec     ecx
-       lea     eax,[eax+16]
        jnz     @s
        pop     eax
        ret
@@ -34801,29 +34801,29 @@ asm // eax=crc, edx=buf, ecx=len
         cmp     ecx, 4
         jb      @s
 @8:     mov     ebx, [edx] // unrolled version reading per dword
-        lea     edx, [edx + 4]
+        add     edx, 4
         mov     esi, eax
         movzx   edi, bl
         movzx   ebp, bh
         shr     ebx, 16
         shl     eax, 5
         sub     eax, esi
-        lea     eax, [eax + edi]
+        add     eax, edi
         mov     esi, eax
         shl     eax, 5
         sub     eax, esi
         lea     esi, [eax + ebp]
-        lea     eax, [eax + ebp]
+        add     eax, ebp
         movzx   edi, bl
         movzx   ebx, bh
         shl     eax, 5
         sub     eax, esi
         lea     ebp, [eax + edi]
-        lea     eax, [eax + edi]
+        add     eax, edi
         shl     eax, 5
         sub     eax, ebp
+        add     eax, ebx
         cmp     ecx, 8
-        lea     eax, [eax + ebx]
         lea     ecx, [ecx - 4]
         jae     @8
         test    ecx, ecx
@@ -34831,11 +34831,11 @@ asm // eax=crc, edx=buf, ecx=len
 @s:     mov     esi, eax
 @1:     shl     eax, 5
         movzx   ebx, byte ptr[edx]
-        lea     edx, [edx + 1]
+        inc     edx
         sub     eax, esi
-        dec     ecx
         lea     esi, [eax + ebx]
-        lea     eax, [eax + ebx]
+        add     eax, ebx
+        dec     ecx
         jnz     @1
 @z:     pop     ebp
         pop     ebx
@@ -35172,9 +35172,9 @@ asm // ecx=crc, rdx=buf, r8=len (Linux: edi,rsi,rdx)
         jz      @0
         test    r8, r8
         jz      @0
-@7:     test    dl, 7
+        test    dl, 7
         jz      @8 // align to 8 bytes boundary
-        crc32   eax, byte ptr[rdx]
+@7:     crc32   eax, byte ptr[rdx]
         inc     rdx
         dec     r8
         jz      @0
@@ -35188,16 +35188,16 @@ asm // ecx=crc, rdx=buf, r8=len (Linux: edi,rsi,rdx)
         {$else}
         db $F2,$48,$0F,$38,$F1,$02 // circumvent Delphi inline asm compiler bug
         {$endif}
+        add     rdx, 8
         dec     r8
-        lea     rdx, [rdx + 8]
         jnz     @1
 @2:     and     ecx, 7
         jz      @0
         cmp     ecx, 4
         jb      @4
         crc32   eax, dword ptr[rdx]
+        add     rdx, 4
         sub     ecx, 4
-        lea     rdx, [rdx + 4]
         jz      @0
 @4:     crc32   eax, byte ptr[rdx]
         dec     ecx
@@ -35756,8 +35756,8 @@ asm // eax=crc, edx=buf, ecx=len
         db      $F2, $0F, $38, $F1, $02
         db      $F2, $0F, $38, $F1, $42, $04
         {$endif}
+        add     edx, 8
         dec     ecx
-        lea     edx, [edx + 8]
         jnz     @1
 @2:     pop     ecx
         and     ecx, 7
@@ -35769,8 +35769,8 @@ asm // eax=crc, edx=buf, ecx=len
         {$else}
         db      $F2, $0F, $38, $F1, $02
         {$endif}
+        add     edx, 4
         sub     ecx, 4
-        lea     edx, [edx + 4]
         jz      @0
 @4:     {$ifdef FPC_OR_UNICODE}
         crc32   eax, byte ptr[edx]
@@ -38083,14 +38083,14 @@ asm // eax=V
         push    edx // save result RawUTF8
         test    eax, eax
         jz      @2 // avoid GPF
-        lea     edx, eax + 1
+        lea     edx, [eax + 1]
         mov     cl, [eax]
 @1:     mov     ch, [edx] // edx=source cl=length
         sub     ch, 'a'
         sub     ch, 'z' - 'a'
         ja      @2 // not a lower char -> create a result string starting at edx
+        inc     edx
         dec     cl
-        lea     edx, [edx + 1]
         jnz     @1
         mov     cl, [eax]
         lea     edx, [eax + 1]  // no UpperCase -> retrieve full text (result := V^)
@@ -41129,9 +41129,9 @@ asm // faster version by AB
 @loop:  mov     edx, [esi].TFieldInfo.TypeInfo
         mov     eax, [esi].TFieldInfo.&Offset
         mov     edx, [edx]
-        lea     esi, [esi + 8]
+        add     esi, 8
         movzx   ecx, [edx].TTypeInfo.Kind
-        lea     eax, [eax + ebx] // eax=data to be initialized
+        add     eax, ebx // eax=data to be initialized
         jmp     dword ptr[@tab + ecx * 4 - tkLString * 4]
 @tab:   dd      @ptr, @ptr, @varrec, @array, @array, @ptr, @ptr, @ptr, @ptr
 @ptr:   dec     edi
@@ -41211,9 +41211,9 @@ asm // faster version by AB (direct call to finalization procedures)
 @loop:  mov     edx, [esi].TFieldInfo.TypeInfo
         mov     eax, [esi].TFieldInfo.&Offset
         mov     edx, [edx]
-        lea     esi, [esi + 8]
+        add     esi, 8
         movzx   ecx, [edx].TTypeInfo.Kind
-        lea     eax, [eax + ebx] // eax=data to be initialized
+        add     eax, ebx // eax=data to be initialized
         sub     cl, tkLString
 {$ifdef UNICODE}
         cmp     cl, tkUString - tkLString + 1
@@ -41287,8 +41287,8 @@ asm  // faster version of _CopyRecord{dest, source, typeInfo: Pointer} by AB
         sub     ecx, eax
         mov     edx, [edx]
         jle     @nomov
-        lea     esi, [esi + ecx]
-        lea     edi, [edi + ecx]
+        add     esi, ecx
+        add     edi, ecx
         neg     ecx
 @mov1:  mov     al, [esi + ecx] // fast copy not destructable data
         mov     [edi + ecx], al
@@ -41389,8 +41389,8 @@ asm  // faster version of _CopyRecord{dest, source, typeInfo: Pointer} by AB
         add     esi, eax
         add     edi, eax
         add     eax, [ebx].TFieldInfo.&Offset
+        add     ebx, 8
         dec     ebp    // any other TFieldInfo?
-        lea     ebx, [ebx + 8]
         jnz     @next
         pop     ecx // ecx= SizeOf(record)
 @fullcopy:
@@ -41468,26 +41468,25 @@ asm // rcx=Source, rdx=Dest, r8=Count
         shr     r9, 3
         jz      @09
         nop
-@08:    dec     r9
-        mov     rax, qword ptr[rcx + rdx]
+@08:    mov     rax, qword ptr[rcx + rdx]
         mov     qword ptr[rdx], rax
-        lea     rdx, rdx + 8
+        add     rdx, 8
+        dec     r9
         jnz     @08
         and     r8, 07H
 @09:    test    r8, r8
         jle     @11
-@10:    dec     r8
-        mov     al, byte ptr[rcx + rdx]
+@10:    mov     al, byte ptr[rcx + rdx]
         mov     byte ptr[rdx], al
-        lea     rdx, rdx + 1
+        add     rdx, 1
+        dec     r8
         jnz     @10
 @11:    ret
 @12:    cmp     r9, 8192
         jc      @13
         cmp     rcx, 4096
         jnc     @14
-@13:    dec     r9
-        lea     rdx, rdx + 32
+@13:    add     rdx, 32
         mov     rax, qword ptr[rcx + rdx - 20H]
         mov     r10, qword ptr[rcx + rdx - 18H]
         mov     qword ptr[rdx - 20H], rax
@@ -41496,6 +41495,7 @@ asm // rcx=Source, rdx=Dest, r8=Count
         mov     r10, qword ptr[rcx + rdx - 8H]
         mov     qword ptr[rdx - 10H], rax
         mov     qword ptr[rdx - 8H], r10
+        dec     r9
         jnz     @13
         and     r8, 1FH
         jmp     @07
@@ -62445,8 +62445,8 @@ asm
         bt      [ecx], edx
         jnb     @1
         mov     dl, [eax + 3]
+        add     eax, 4
         bt      [ecx], edx
-        lea     eax, [eax + 4]
         jb      @s
 @1:     test    dl, dl
         setz    al
