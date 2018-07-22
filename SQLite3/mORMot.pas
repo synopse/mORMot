@@ -26781,13 +26781,13 @@ end;
 asm // eax=P1 edx=P2 ecx=FieldCount
         push    esi
         push    edi
-@1:     dec     ecx
-        mov     esi, [eax]
+@1:     mov     esi, [eax]
         mov     edi, [edx]
         mov     [edx], esi
         mov     [eax], edi
-        lea     eax, [eax + 4]
-        lea     edx, [edx + 4]
+        add     eax, 4
+        add     edx, 4
+        dec     ecx
         jnz     @1
         pop     edi
         pop     esi
