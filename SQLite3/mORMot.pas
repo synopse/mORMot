@@ -32523,7 +32523,7 @@ begin
       for i := 0 to fields.Count-1 do
         with fields.List[i] do
         if Name[1]='_' then // auxiliary columns for SQlite3 >= 3.24.0
-          result := FormatUTF8('%+% %,',[result,@Name[2],Props.Props.SQLFieldTypeToSQL(i)]) else
+          result := FormatUTF8('%+% %,',[result,copy(Name,2,maxInt),Props.Props.SQLFieldTypeToSQL(i)]) else
           result := result+Name+',';
       result[length(result)] := ')';
     end;
