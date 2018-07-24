@@ -927,6 +927,12 @@ type
     function GetRuntime: PJSRuntime; {$ifdef HASINLINE}inline;{$endif}
 {$ENDIF}
     function GetIsRunning: boolean; {$ifdef HASINLINE}inline;{$endif}
+  protected
+    // Return the ArrayBuffer underlying an ArrayBufferView
+    // - If the buffer has been neutered, this will still return the neutered buffer.
+    // - obj must be an object that would return true for JS_IsArrayBufferViewObject()
+    function GetArrayBufferViewBuffer(var obj: PJSObject; out isSharedMemory: Boolean): PJSObject; overload;{$ifdef HASINLINE}inline;{$endif}
+    function GetArrayBufferViewBuffer(var obj: PJSObject): PJSObject; overload;{$ifdef HASINLINE}inline;{$endif}
   public
 {$IFDEF SM52}
     /// Initializes the JavaScript context.
@@ -1316,13 +1322,6 @@ type
     /// Create a new ArrayBuffer with the given byte length.
     function NewArrayBuffer(nbytes: uint32): PJSObject;{$ifdef HASINLINE}inline;{$endif}
 
-    /// Return the ArrayBuffer underlying an ArrayBufferView
-    // - If the buffer has been neutered, this will still return the neutered buffer.
-    // - obj must be an object that would return true for JS_IsArrayBufferViewObject()
-    function GetArrayBufferViewBuffer(var obj: PJSObject; out isSharedMemory: Boolean): PJSObject; overload;{$ifdef HASINLINE}inline;{$endif}
-    function GetArrayBufferViewBuffer(var obj: PJSObject): PJSObject; overload;{$ifdef HASINLINE}inline;{$endif}
-
-
     /// Indicates whether or not a script or function is currently executing in a given context.
     property IsRunning: boolean read GetIsRunning;
     /// Destroy a JSContext.
@@ -1360,6 +1359,21 @@ type
     procedure SetReservedSlot(index: uint32; v: jsval); {$ifdef HASINLINE}inline;{$endif}
     function GetClass: PJSClass; {$ifdef HASINLINE}inline;{$endif}
     function GetConstructor(cx: PJSContext): PJSObject; {$ifdef HASINLINE}inline;{$endif}
+  protected
+    // Return the available byte length of an array buffer
+    // - obj must have passed a JS_IsArrayBufferObject test, or somehow be known
+    // that it would pass such a test: it is an ArrayBuffer or a wrapper of an
+    // ArrayBuffer, and the unwrapping will succeed
+    function GetArrayBufferByteLength: uint32;{$ifdef HASINLINE}inline;{$endif}
+    function GetSharedArrayBufferByteLength: uint32;{$ifdef HASINLINE}inline;{$endif}
+    // Return a pointer to the start of the data referenced by any typed array
+    // - The data is still owned by the typed array, and should not be modified on
+    // another thread
+    // - obj must have passed a JS_Is*Array test, or somehow be known that it would
+    // pass such a test: it is a typed array or a wrapper of a typed array, and the
+    // unwrapping will succeed
+    // - Prefer the type-specific versions when possible
+    function GetArrayBufferViewData(out isSharedMemory: Boolean; nogc: PJSAutoCheckCannotGC): Pointer;{$ifdef HASINLINE}inline;{$endif}
   public
     /// get a jsval corresponding to this object
     function ToJSValue: jsval; {$ifdef HASINLINE}inline;{$endif}
@@ -1613,14 +1627,6 @@ type
 
     function IsSharedArrayBufferObject: Boolean;
 
-    /// Return the available byte length of an array buffer
-    // - obj must have passed a JS_IsArrayBufferObject test, or somehow be known
-    // that it would pass such a test: it is an ArrayBuffer or a wrapper of an
-    // ArrayBuffer, and the unwrapping will succeed
-    function GetArrayBufferByteLength: uint32;{$ifdef HASINLINE}inline;{$endif}
-
-    function GetSharedArrayBufferByteLength: uint32;{$ifdef HASINLINE}inline;{$endif}
-
     /// Return true if the arrayBuffer contains any data. This will return false for
     // ArrayBuffer.prototype and neutered ArrayBuffers.
     //
@@ -1739,13 +1745,11 @@ type
     function GetFloat64ArrayData(out isSharedMemory: Boolean; nogc: PJSAutoCheckCannotGC): Pfloat64Vector;{$ifdef HASINLINE}inline;{$endif}
 
     /// Return a pointer to the start of the data referenced by any typed array
+    // and it's length. For ArrayBufferView return a pointer and length of slice.
     // - The data is still owned by the typed array, and should not be modified on
     // another thread
-    // - obj must have passed a JS_Is*Array test, or somehow be known that it would
-    // pass such a test: it is a typed array or a wrapper of a typed array, and the
-    // unwrapping will succeed
-    // - Prefer the type-specific versions when possible
-    function GetArrayBufferViewData(out isSharedMemory: Boolean; nogc: PJSAutoCheckCannotGC): Pointer;{$ifdef HASINLINE}inline;{$endif}
+    // - If JSObject is not a typed array or arrayBufferView return false
+    function GetBufferDataAndLength(out data: Puint8Vector; out len: uint32): boolean;{$ifdef HASINLINE}inline;{$endif}
   end;
 
 
@@ -4954,6 +4958,20 @@ end;
 function JSObject.ToJSValue: jsval;
 begin
   Result.asObject := @self;
+end;
+
+function JSObject.GetBufferDataAndLength(out data: Puint8Vector; out len: uint32): boolean;
+var
+  isShared: boolean;
+begin
+  if Self.IsArrayBufferViewObject then begin
+    Result := Self.GetObjectAsArrayBufferView(len, isShared, data) <> nil;
+  end else if Self.IsArrayBufferObject then begin
+    data := Self.GetArrayBufferData;
+    len := Self.GetArrayBufferByteLength;
+    Result := True
+  end else
+    Result := False;
 end;
 
 { ESMException }

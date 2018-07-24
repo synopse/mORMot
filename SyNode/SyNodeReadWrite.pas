@@ -62,7 +62,8 @@ end;
 function SMWrite_impl(cx: PJSContext; argc: uintN; vals: PjsvalVector; dest: TTextWriter): jsval; cdecl;
 var
   encoding: RawUTF8;
-  len: size_t;
+  len: uint32;
+  isShared: boolean;
   bufObj: PJSObject;
   bufData: pointer;
   tmp1: RawByteString;
@@ -98,12 +99,7 @@ begin
         Result.asBoolean := true;
         Exit;
       end;
-      if bufObj.IsArrayBufferViewObject then
-        bufObj := cx.GetArrayBufferViewBuffer(bufObj);
-
-      if bufObj.IsArrayBufferObject then begin
-        bufData := bufObj.GetArrayBufferData;
-        len := bufObj.GetArrayBufferByteLength;
+      if bufObj.GetBufferDataAndLength(bufData, len) then begin
         if encoding = 'base64' then begin
           tmp1 := BinToBase64(PAnsiChar(bufData), len);
           bufData := Pointer(tmp1);
