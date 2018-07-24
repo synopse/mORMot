@@ -6775,6 +6775,12 @@ function PtrArrayFind(var aPtrArray; aItem: pointer): integer;
 function ObjArrayAdd(var aObjArray; aItem: TObject): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// wrapper to add items to a T*ObjArray dynamic array storage
+// - aSourceObjArray[] items will be owned by aDestObjArray[], therefore
+// aSourceObjArray is set to nil
+// - return the new number of the items in aDestObjArray
+function ObjArrayAppend(var aDestObjArray, aSourceObjArray): integer;
+
 /// wrapper to add an item to a T*ObjArray dynamic array storage
 // - this overloaded function will use a separated variable to store the items
 // count, so will be slightly faster: but you should call SetLength() when done,
@@ -9920,7 +9926,7 @@ type
     class function Algo(AlgoID: byte): TAlgoCompress; overload;
     /// returns the algorithm name, from its classname
     // - e.g. TAlgoSynLZ->'synlz' TAlgoLizard->'lizard' nil->'none'
-    function AlgoName: TGUIDShortString;
+    function AlgoName: TShort16;
   end;
 
   /// implement our fast SynLZ compression as a TAlgoCompress class
@@ -36211,6 +36217,10 @@ var dt: TDateTime;
     HH,MM,SS,MS,Y,M,D: word;
     tab: {$ifdef CPUX86}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
 begin // use 'YYMMDDHHMMSS' format
+  if UnixTime <= 0 then begin
+    PWord(@result[0])^ := 1+ord('0') shl 8;
+    exit;
+  end;
   dt := UnixTime/SecsPerDay+UnixDateDelta;
   DecodeDate(dt,Y,M,D);
   if Y > 1999 then
@@ -44656,7 +44666,7 @@ begin
     vtPChar, vtChar, vtWideChar, vtWideString, vtClass: begin
       VType := varString;
       VString := nil; // avoid GPF on next line
-      VarRecToUTF8(V,RawUTF8(VString));
+      VarRecToUTF8(V,RawUTF8(VString)); // convert to a new RawUTF8 instance
     end;
     vtObject: // class instance will be serialized as a TDocVariant
       ObjectToVariant(V.VObject,result,[woDontStoreDefault]);
@@ -50949,6 +50959,19 @@ begin
   result := length(a);
   SetLength(a,result+1);
   a[result] := aItem;
+end;
+
+function ObjArrayAppend(var aDestObjArray, aSourceObjArray): integer;
+var n: integer;
+    s: TObjectDynArray absolute aSourceObjArray;
+    d: TObjectDynArray absolute aDestObjArray;
+begin
+  result := length(d);
+  n := length(s);
+  SetLength(d,result+n);
+  MoveFast(s[0],d[result],n*SizeOf(pointer));
+  d := nil; // d[] will be owned by s[]
+  inc(result,n);
 end;
 
 function ObjArrayAddCount(var aObjArray; aItem: TObject; var aObjArrayCount: integer): integer;
@@ -62939,7 +62962,7 @@ begin
   end;
 end;
 
-function TAlgoCompress.AlgoName: TGUIDShortString;
+function TAlgoCompress.AlgoName: TShort16;
 var s: PShortString;
     i: integer;
 begin
@@ -62948,9 +62971,11 @@ begin
     s := ClassNameShort(self);
     if IdemPChar(@s^[1],'TALGO') then begin
       result[0] := AnsiChar(ord(s^[0])-5);
-      inc(PtrInt(s),5);
+      inc(PtrUInt(s),5);
     end else
       result[0] := s^[0];
+    if result[0]>#16 then
+      result[0] := #16;
     for i := 1 to ord(result[0]) do
       result[i] := NormToLower[s^[i]];
   end;
