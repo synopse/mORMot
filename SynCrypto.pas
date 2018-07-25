@@ -15054,6 +15054,7 @@ asm // rcx=crc, rdx=buf, r8=len (linux: rdi, rsi, rdx)
         ja      @intel // only call Intel code if worth it
         shr     r8, 3
         jz      @2
+        {$ifdef FPC}align 8{$endif}
 @1:     {$ifdef FPC}
         crc32   rax, qword [rdx] // hash 8 bytes per opcode
         {$else}

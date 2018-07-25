@@ -35185,6 +35185,7 @@ asm // ecx=crc, rdx=buf, r8=len (Linux: edi,rsi,rdx)
         jz      @0
         test    dl, 7
         jz      @8 // align to 8 bytes boundary
+        {$ifdef FPC}align 8{$endif}
 @7:     crc32   eax, byte ptr[rdx]
         inc     rdx
         dec     r8
@@ -35194,6 +35195,7 @@ asm // ecx=crc, rdx=buf, r8=len (Linux: edi,rsi,rdx)
 @8:     mov     rcx, r8
         shr     r8, 3
         jz      @2
+        {$ifdef FPC}align 8{$endif}
 @1:     {$ifdef FPC}
         crc32   rax, qword [rdx] // hash 8 bytes per loop
         {$else}
@@ -35248,6 +35250,7 @@ asm // rcx=S (Linux: rdi)
         bsf     edx, edx             // find first 1-bit
         jnz     @L2                  // found
         // Main loop, search 16 bytes at a time
+        {$ifdef FPC}align 8{$endif}
 @L1:    add     rax, 10H             // increment pointer by 16
         movdqa  xmm1, [rax]          // read 16 bytes aligned
         pcmpeqb xmm1, xmm0           // compare 16 bytes with zero
@@ -35287,6 +35290,7 @@ asm // rcx=S (Linux: rdi)
         mov     rax, -16
         jz      @null
         pxor    xmm0, xmm0
+        {$ifdef FPC}align 8{$endif}
 @L:     add     rax, 16   // add before comparison flag
         pcmpistri xmm0, [rdx + rax], EQUAL_EACH // result in rcx
         jnz     @L
@@ -35316,6 +35320,7 @@ asm // rcx=Str1, rdx=Str2 (Linux: rdi,rsi)
       jc        @2
       xor       rax, rax
       ret
+      {$ifdef FPC}align 8{$endif}
 @1:   add       rdx, 16
       movdqu    xmm0, dqword [rdx]
       pcmpistri xmm0, dqword [rdx + rax], EQUAL_EACH + NEGATIVE_POLARITY
@@ -49472,7 +49477,7 @@ begin
   if (@Quicksort.Compare<>nil) and (fValue<>nil) and (fValue^<>nil) then begin
     Quicksort.Value := fValue^;
     Quicksort.ElemSize := ElemSize;
-    Quicksort.QuickSort(aStart,aStop-1);
+    Quicksort.QuickSort(aStart,aStop);
     fSorted := true;
   end;
 end;
@@ -49642,7 +49647,8 @@ var n: Cardinal;
 begin
   if (fValue=nil) or (ArrayType<>Source.ArrayType) then
     exit;
-  SetCapacity(Source.Capacity);
+  if (fCountP<>nil) and (Source.fCountP<>nil) then
+    SetCapacity(Source.Capacity);
   n := Source.Count;
   SetCount(n);
   if n<>0 then
@@ -49948,7 +49954,7 @@ begin
 end;
 
 function TDynArray.GetCapacity: integer;
-begin // capacity := length(DynArray)
+begin // capacity = length(DynArray)
   if (fValue<>nil) and (PtrUInt(fValue^)<>0) then
     result := PDynArrayRec(PtrUInt(fValue^)-SizeOf(TDynArrayRec))^.length else
     result := 0;
