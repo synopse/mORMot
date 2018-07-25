@@ -5429,6 +5429,11 @@ type
     // - it will change the dynamic array content, and exchange all elements
     // in order to be sorted in increasing order according to Compare function
     procedure Sort(aCompare: TDynArraySortCompare=nil);
+    /// sort some dynamic array elements, using the Compare property function
+    // - this method allows to sort only some part of the items
+    // - it will change the dynamic array content, and exchange all elements
+    // in order to be sorted in increasing order according to Compare function
+    procedure SortRange(aStart, aStop: integer; aCompare: TDynArraySortCompare=nil);
     /// search the elements range which match a given value in a sorted dynamic array
     // - this method will use the Compare property function for the search
     // - returns TRUE and the matching indexes, or FALSE if none found
@@ -49452,15 +49457,22 @@ begin
 end;
 
 procedure TDynArray.Sort(aCompare: TDynArraySortCompare);
+begin
+  SortRange(0,Count-1,aCompare)
+end;
+
+procedure TDynArray.SortRange(aStart, aStop: integer; aCompare: TDynArraySortCompare);
 var QuickSort: TDynArrayQuickSort;
 begin
+  if aStop<=aStart then
+    exit; // nothing to sort
   if @aCompare=nil then
     Quicksort.Compare := @fCompare else
     Quicksort.Compare := aCompare;
   if (@Quicksort.Compare<>nil) and (fValue<>nil) and (fValue^<>nil) then begin
     Quicksort.Value := fValue^;
     Quicksort.ElemSize := ElemSize;
-    Quicksort.QuickSort(0,Count-1);
+    Quicksort.QuickSort(aStart,aStop-1);
     fSorted := true;
   end;
 end;
