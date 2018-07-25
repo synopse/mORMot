@@ -3334,7 +3334,7 @@ function UpperCopy255(dest: PAnsiChar; const source: RawUTF8): PAnsiChar; overlo
 // - returns final dest pointer
 // - will copy up to 255 AnsiChar (expect the dest buffer to be defined e.g. as
 // array[byte] of AnsiChar on the caller stack)
-var UpperCopy255Buf: function(dest: PAnsiChar; source: PUTF8Char; sourceLen: integer): PAnsiChar;
+var UpperCopy255Buf: function(dest: PAnsiChar; source: PUTF8Char; sourceLen: PtrInt): PAnsiChar;
 
 /// copy source^ into a 256 chars dest^ buffer with 7 bits upper case conversion
 // - used internally for short keys match or case-insensitive hash
@@ -3343,7 +3343,7 @@ var UpperCopy255Buf: function(dest: PAnsiChar; source: PUTF8Char; sourceLen: int
 // - returns final dest pointer
 // - will copy up to 255 AnsiChar (expect the dest buffer to be defined e.g. as
 // array[byte] of AnsiChar on the caller stack)
-function UpperCopy255BufPas(dest: PAnsiChar; source: PUTF8Char; sourceLen: integer): PAnsiChar;
+function UpperCopy255BufPas(dest: PAnsiChar; source: PUTF8Char; sourceLen: PtrInt): PAnsiChar;
 
 {$ifndef PUREPASCAL}
 {$ifndef DELPHI5OROLDER}
@@ -3356,7 +3356,7 @@ function UpperCopy255BufPas(dest: PAnsiChar; source: PUTF8Char; sourceLen: integ
 // - returns final dest pointer
 // - will copy up to 255 AnsiChar (expect the dest buffer to be defined e.g. as
 // array[byte] of AnsiChar on the caller stack)
-function UpperCopy255BufSSE42(dest: PAnsiChar; source: PUTF8Char; sourceLen: integer): PAnsiChar;
+function UpperCopy255BufSSE42(dest: PAnsiChar; source: PUTF8Char; sourceLen: PtrInt): PAnsiChar;
 
 {$endif}
 {$endif}
@@ -32734,23 +32734,24 @@ begin
     result := dest;
 end;
 
-function UpperCopy255BufPas(dest: PAnsiChar; source: PUTF8Char; sourceLen: integer): PAnsiChar;
-var i: integer;
-    c,d: PtrUInt;
+function UpperCopy255BufPas(dest: PAnsiChar; source: PUTF8Char; sourceLen: PtrInt): PAnsiChar;
+var i,c,d{$ifdef CPU64},_80,_61,_7b{$endif}: PtrUInt;
 begin
   if sourceLen>0 then begin
     if sourceLen>248 then
       sourceLen := 248; // avoid buffer overflow
     // we allow to copy up to 3/7 more chars in Dest^ since its size is 255
     {$ifdef CPU64} // unbranched uppercase conversion of 8 chars blocks
+    _80 := $8080808080808080; // use registers for constants
+    _61 := $6161616161616161;
+    _7b := $7b7b7b7b7b7b7b7b;
     for i := 0 to sourceLen shr 3 do begin
       c := PPtrUIntArray(source)^[i];
-      d := c or $8080808080808080;
-      PPtrUIntArray(dest)^[i] :=
-        c-((d-PtrUInt($6161616161616161)) and not(d-PtrUInt($7b7b7b7b7b7b7b7b))) and
-        ((not c) and $8080808080808080)shr 2;
+      d := c or _80;
+      PPtrUIntArray(dest)^[i] := c-((d-PtrUInt(_61)) and not(d-_7b)) and
+        ((not c) and _80)shr 2;
     end;
-    {$else}       // unbranched uppercase conversion of 4 chars blocks
+    {$else} // unbranched uppercase conversion of 4 chars blocks
     for i := 0 to sourceLen shr 2 do begin
       c := PPtrUIntArray(source)^[i];
       d := c or $80808080;
@@ -32769,7 +32770,7 @@ end;
 const
   CMP_RANGES = $44; // see https://msdn.microsoft.com/en-us/library/bb531425
 
-function UpperCopy255BufSSE42(dest: PAnsiChar; source: PUTF8Char; sourceLen: integer): PAnsiChar;
+function UpperCopy255BufSSE42(dest: PAnsiChar; source: PUTF8Char; sourceLen: PtrInt): PAnsiChar;
 asm // eax=dest edx=source ecx=sourceLen
        test    ecx,ecx
        jz      @z
@@ -35164,6 +35165,66 @@ asm // ecx=param, rdx=Registers (Linux: edi,rsi)
         mov     TRegisters(r9).&ecx, ecx
         mov     TRegisters(r9).&edx, edx
         mov     rbx, r10
+end;
+
+const
+  CMP_RANGES = $44; // see https://msdn.microsoft.com/en-us/library/bb531425
+  _UpperCopy255BufSSE42: array[0..31] of AnsiChar =
+    'azazazazazazazaz                ';
+
+function UpperCopy255BufSSE42(dest: PAnsiChar; source: PUTF8Char; sourceLen: PtrInt): PAnsiChar;
+{$ifdef FPC}nostackframe; assembler; asm {$else}
+asm // rcx=dest, rdx=source, r8=len (Linux: rdi,rsi,rdx)
+        .noframe
+{$endif FPC}
+       {$ifdef win64}
+       mov     rax, rcx
+       mov     r9, rdx
+       mov     rdx, r8
+       {$else}
+       mov     rax, rdi
+       mov     r9, rsi
+       {$endif}
+       lea     rcx, [rip + _UpperCopy255BufSSE42]
+       test    rdx, rdx
+       jz      @z
+       movdqu  xmm1, dqword ptr [rcx]
+       movdqu  xmm3, dqword ptr [rcx + 16]
+       cmp     rdx, 16
+       ja      @big
+       // optimize the common case of sourceLen<=16
+       movdqu  xmm2, [r9]
+       {$ifdef HASAESNI}
+       pcmpistrm xmm1, xmm2, CMP_RANGES // find in range a-z, return mask in xmm0
+       {$else}
+       db $66, $0F, $3A, $62, $CA, CMP_RANGES
+       {$endif}
+       pand    xmm0, xmm3
+       pxor    xmm2, xmm0
+       movdqu  [rax], xmm2
+       add     rax, rdx
+@z:    ret
+@big:  mov     rcx, rax
+       cmp     rdx, 240
+       jb      @ok
+       mov     rdx, 239
+@ok:   add     rax, rdx // return end position with the exact size
+       shr     rdx, 4
+       sub     r9, rcx
+       add     rdx, 1
+       {$ifdef FPC}align 8{$endif}
+@s:    movdqu  xmm2, [r9 + rcx]
+       {$ifdef HASAESNI}
+       pcmpistrm xmm1, xmm2, CMP_RANGES
+       {$else}
+       db $66, $0F, $3A, $62, $CA, CMP_RANGES
+       {$endif}
+       pand    xmm0, xmm3
+       pxor    xmm2, xmm0
+       movdqu  [rcx], xmm2
+       add     rcx, 16
+       dec     rdx
+       jnz     @s
 end;
 
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
@@ -66211,6 +66272,9 @@ begin
     StrComp := @StrCompSSE42;
     {$endif}
     {$endif}
+    {$ifndef DELPHI5OROLDER}
+    UpperCopy255Buf := @UpperCopy255BufSSE42;
+    {$endif}
     {$ifndef PUREPASCAL}
     StrComp := @StrCompSSE42;
     DYNARRAY_SORTFIRSTFIELD[false,djRawUTF8] := @SortDynArrayAnsiStringSSE42;
@@ -66220,9 +66284,6 @@ begin
     DYNARRAY_SORTFIRSTFIELD[false,djString] := @SortDynArrayAnsiStringSSE42;
     {$endif}
     DYNARRAY_SORTFIRSTFIELDHASHONLY[true] := @SortDynArrayAnsiStringSSE42;
-    {$ifndef DELPHI5OROLDER}
-    UpperCopy255Buf := @UpperCopy255BufSSE42;
-    {$endif}
     {$endif PUREPASCAL}
     DefaultHasher := crc32c;
   end;
