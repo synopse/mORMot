@@ -41,6 +41,7 @@ unit SynCommons;
    - Marius Maximus (mariuszekpl)
    - mazinsw
    - mingda
+   - PBa
    - RalfS
    - Sanyin
    - Pavel (mpv)
@@ -51049,7 +51050,7 @@ begin
   n := length(s);
   SetLength(d,result+n);
   MoveFast(s[0],d[result],n*SizeOf(pointer));
-  d := nil; // d[] will be owned by s[]
+  s := nil; // s[] will be owned by d[]
   inc(result,n);
 end;
 
