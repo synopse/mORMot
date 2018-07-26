@@ -80,15 +80,17 @@ type
   TByteDynArray = array of byte;
   PByteDynArray = ^TByteDynArray;
 
-  {$ifndef UNICODE}
   {$ifdef FPC}
   NativeInt = PtrInt;
   NativeUInt = PtrUInt;
   {$else}
+  {$ifndef ISDELPHI2010} // Delphi 2009 NativeUInt is buggy
   NativeInt = integer;
   NativeUInt = cardinal;
   {$endif}
+  {$ifndef UNICODE}
   RawByteString = AnsiString;
+  {$endif}
   {$endif}
 
   // this type will store UTF-8 encoded buffer (also on NextGen platform)

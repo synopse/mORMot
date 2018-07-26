@@ -19641,10 +19641,10 @@ type
     // optional binary data associated with this user via RetrieveBlobFields()
     property SessionUser: TSQLAuthUser read fSessionUser;
     /// access to the low-level HTTP header used for authentication
-    // - e.g. after TSQLRestServerAuthenticationHttpBasic.SetUser
-    // - you can force here you own header, a JWT as authentication bearer
+    // - you can force here your own header, e.g. a JWT as authentication bearer
+    // or as in TSQLRestServerAuthenticationHttpAbstract.ClientSetUserHttpOnlyUser
     property SessionHttpHeader: RawUTF8 read fSessionHttpHeader write fSessionHttpHeader;
-{$ifndef LVCL}
+    {$ifndef LVCL}
     /// set a callback event to be executed in loop during remote blocking
     // process, e.g. to refresh the UI during a somewhat long request
     // - if not set, the request will be executed in the current thread,
@@ -19659,7 +19659,7 @@ type
     // during process
     // - to be used e.g. to ensure no re-entrance from User Interface messages
     property OnIdleBackgroundThreadActive: Boolean read GetOnIdleBackgroundThreadActive;
-{$endif}
+    {$endif}
     /// this Event is called in case of remote authentication failure
     // - client software can ask the user to enter a password and user name
     // - if no event is specified, the URI() method will return directly
@@ -19847,7 +19847,7 @@ type
     // expected ApplicationName
     procedure DefinitionTo(Definition: TSynConnectionDefinition); override;
   end;
-{$endif Win32}
+{$endif MSWINDOWS}
 
   /// will define a validation to be applied to a TSQLRecord field, using
   // if necessary an associated TSQLRest instance and a TSQLRecord class

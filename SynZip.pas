@@ -274,18 +274,16 @@ function UnCompressStream(src: pointer; srcLen: integer; tmp: TStream;
 
 type
 {$ifdef HASCODEPAGE}
-  /// define a raw storage string type, used for data buffer management
   ZipString = type RawByteString;
-  {$ifdef FPC}
-  ZipPtrUInt = PtrUInt;
-  {$else}
-  ZipPtrUInt = NativeUInt;
-  {$endif}
 {$else}
   /// define a raw storage string type, used for data buffer management
   ZipString = type AnsiString;
+{$endif}
+{$ifdef FPC}
+  ZipPtrUInt = PtrUInt;
+{$else}
   /// as available in FPC
-  ZipPtrUint = cardinal;
+  ZipPtrUInt = {$ifdef CPU64}NativeUInt{$else}cardinal{$endif};
 {$endif}
 
 /// ZLib INFLATE decompression from memory into a AnsiString (ZipString) variable

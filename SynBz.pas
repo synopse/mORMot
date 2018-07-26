@@ -94,7 +94,7 @@ interface
 
 uses
   SysUtils, Types, Classes,
-{$ifdef WIN32}
+{$ifdef MSWINDOWS}
   Windows;
 {$else}
   LibC;
@@ -176,7 +176,7 @@ function BZ2_bzDecompress(var strm: TBZStreamRec): Integer; cdecl;
 function BZ2_bzDecompressEnd(var strm: TBZStreamRec): Integer; cdecl;
 {$endif}
 
-{$ifdef Win32}
+{$ifdef MSWINDOWS}
 function BZCompressorInit: boolean;
 {$ifdef USEBZAASM}
 const BZDeCompressorInit = true;
@@ -186,7 +186,7 @@ function BZDeCompressorInit: boolean;
 {$endif}
 
 var
-{$ifdef Win32}
+{$ifdef MSWINDOWS}
   BZ2_bzCompressInit: function(var strm: TBZStreamRec;
     blockSize100k, verbosity, workFactor: Integer): Integer; stdcall = nil;
   BZ2_bzCompress: function(var strm: TBZStreamRec;
@@ -257,7 +257,7 @@ const
 {$I bunzipasm.inc} // all asm code extracted from bunzip.dll :)
 {$endif}
 
-{$ifdef Win32}
+{$ifdef MSWINDOWS}
 var BZCompressModule:   HMODULE = 0;
     BZDecompressModule: HMODULE = 0;
 
@@ -326,7 +326,7 @@ begin
   raise Exception.CreateFmt(SBzlibInternalErrorN, [Code]);
 end;
 
-{$ifdef Win32}
+{$ifdef MSWINDOWS}
 function BZCompressorInit: boolean;
 var F: string;
 begin
@@ -354,7 +354,7 @@ end;
 
 constructor TBZCompressor.Create(outStream: TStream; CompressionLevel: Integer);
 begin
-{$ifdef Win32}
+{$ifdef MSWINDOWS}
   BZCompressorInit;
   if @BZ2_bzCompressInit=nil then
     CompressionLevel := -1; // <0 -> direct copy (no compression)
@@ -481,7 +481,7 @@ begin
 end;
 
 procedure TBZCompressor.WriteDest(const Buffer; Count: Integer);
-begin
+begin
   inc(DestLen,Count);
   FDestStream.Write(Buffer, Count);
 end;
@@ -630,13 +630,13 @@ end;
 procedure TBZStreamRec.Init;
 begin
   FillChar(self, SizeOf(self), 0);
-{$ifdef Win32}  // use LibC Alloc/Free on Linux
+{$ifdef MSWINDOWS}  // use LibC Alloc/Free on Linux
   zalloc := BZAllocMem;
   zfree := BZFreeMem;
 {$endif}
 end;
 
-{$ifdef Win32}
+{$ifdef MSWINDOWS}
 initialization
 finalization
   if BZCompressModule<>0 then

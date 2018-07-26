@@ -847,32 +847,20 @@ type
 {$else FPC}
 
 type
-  /// a CPU-dependent unsigned integer type cast of a pointer / register
-  // - used for 64 bits compatibility, native under Free Pascal Compiler
-{$ifdef ISDELPHI2009}
-  PtrUInt = cardinal; { see https://synopse.info/forum/viewtopic.php?id=136 }
-{$else}
-  {$ifdef UNICODE}
+  {$ifdef CPU64} // Delphi XE2 seems stable about those types (not Delphi 2009)
+  PtrInt = NativeInt;
   PtrUInt = NativeUInt;
   {$else}
+  /// a CPU-dependent signed integer type cast of a pointer / register
+  // - used for 64 bits compatibility, native under Free Pascal Compiler
+  PtrInt = integer;
+  /// a CPU-dependent unsigned integer type cast of a pointer / register
+  // - used for 64 bits compatibility, native under Free Pascal Compiler
   PtrUInt = cardinal;
   {$endif}
-{$endif}
   /// a CPU-dependent unsigned integer type cast of a pointer of pointer
   // - used for 64 bits compatibility, native under Free Pascal Compiler
   PPtrUInt = ^PtrUInt;
-
-  /// a CPU-dependent signed integer type cast of a pointer / register
-  // - used for 64 bits compatibility, native under Free Pascal Compiler
-{$ifdef ISDELPHI2009}
-  PtrInt = integer;
-{$else}
-  {$ifdef UNICODE}
-  PtrInt = NativeInt;
-  {$else}
-  PtrInt = integer;
-  {$endif}
-{$endif}
   /// a CPU-dependent signed integer type cast of a pointer of pointer
   // - used for 64 bits compatibility, native under Free Pascal Compiler
   PPtrInt = ^PtrInt;

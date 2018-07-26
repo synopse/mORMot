@@ -269,7 +269,7 @@ end;
 
 type
   {$ifndef FPC}
-  PtrUInt = {$ifdef CPUX64} NativeUInt {$else} cardinal {$endif};
+  PtrUInt = {$ifdef CPU64}NativeUInt{$else}cardinal{$endif};
   {$endif}
   {$ifdef DELPHI5OROLDER} // Delphi 5 doesn't have those base types defined :(
   PByte = ^Byte;

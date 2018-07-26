@@ -179,7 +179,7 @@ function CompressSynLZO(var Data: AnsiString; Compress: boolean): AnsiString;
 
 {$ifdef LZOFILE}
 
-{$ifdef WIN32}
+{$ifdef MSWINDOWS}
 // file compression functions using fast SynLZO library (up to 2GB file size)
 // - if you are dealing directly with file compression, this is where to begin
 // - SynLZO compressed files read/write is faster than copying plain files :)
@@ -1322,7 +1322,7 @@ end;
 
 
 {$ifdef LZOFILE}
-{$ifdef WIN32}
+{$ifdef MSWINDOWS}
 
 function adler32(adler: cardinal; buf: pointer; len: cardinal): cardinal;
 {$ifdef USEASM}
@@ -1796,7 +1796,7 @@ begin
     SetLastError(err);
 end;
 
-{$endif WIN32}
+{$endif MSWINDOWS}
 {$endif LZOFILE}
 
 function Hash32(P: PIntegerArray; L: integer): cardinal;
