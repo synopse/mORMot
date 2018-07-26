@@ -702,14 +702,15 @@ begin
       timeout := GetTickCount64+fConnectRetrySeconds shl 10;
       repeat
         try
-          fSocket := fSocketClass.Open(fServer,fPort,cslTCP,fConnectTimeout);
+          fSocket := fSocketClass.Open(fServer,fPort,cslTCP,fConnectTimeout,fHttps);
         except
           on E: Exception do begin
             FreeAndNil(fSocket);
             if GetTickCount64>=timeout then
               exit;
-            fLogClass.Add.Log(sllTrace, 'InternalCheckOpen: % -> wait and retry %s',
-              [E.ClassType, fConnectRetrySeconds], self);
+            fLogClass.Add.Log(sllTrace,
+              'InternalCheckOpen: % on %:% -> wait and retry up to % seconds',
+              [E.ClassType,fServer,fPort,fConnectRetrySeconds], self);
             sleep(250);
           end;
         end;
@@ -966,8 +967,9 @@ begin
             FreeAndNil(fRequest);
             if GetTickCount64>=timeout then
               exit;
-            fLogClass.Add.Log(sllTrace, 'InternalCheckOpen: % -> wait and retry %s',
-              [E.ClassType, fConnectRetrySeconds], self);
+            fLogClass.Add.Log(sllTrace,
+              'InternalCheckOpen: % on %:% -> wait and retry up to % seconds',
+              [E.ClassType,fServer,fPort,fConnectRetrySeconds], self);
             sleep(250);
           end;
         end;
