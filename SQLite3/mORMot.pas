@@ -27173,7 +27173,7 @@ end;
 procedure TSQLTable.ToObjectList(DestList: TObjectList; RecordType: TSQLRecordClass=nil);
 var R: TSQLRecord;
     row: PPUtf8Char;
-    rec: PSQLRecordArray;
+    rec: ^TSQLRecord;
     i: integer;
 begin
   if DestList=nil then
@@ -27189,13 +27189,14 @@ begin
   R := RecordType.Create;
   try
     R.FillPrepare(self);
-    DestList.Count := fRowCount;       // faster than manual Add()
+    DestList.Count := fRowCount;     // faster than manual Add()
     rec := pointer(DestList.List);
-    row := @fResults[FieldCount];      // row^ points to first row of data
-    for i := 0 to fRowCount-1 do begin // TObjectList will free each instance
-      rec[i] := RecordType.Create;
-      R.fFill.Fill(pointer(row),rec[i]);
-      rec[i].fInternalState := fInternalState; // set InternalState property
+    row := @fResults[FieldCount];    // row^ points to first row of data
+    for i := 1 to fRowCount do begin
+      rec^ := RecordType.Create; // TObjectList will own and free each instance
+      R.fFill.Fill(pointer(row),rec^);
+      rec^.fInternalState := fInternalState; // set InternalState property
+      inc(rec);
       inc(row,FieldCount); // next data row
     end;
   finally
@@ -41158,9 +41159,12 @@ procedure TSQLRestServerURIContext.InternalExecuteSOAByInterface;
       ForceServiceResultAsXMLObjectNameSpace := Service.ResultAsXMLObjectNameSpace;
     with Server.fStats do begin
       EnterCriticalSection(fLock);
-      inc(fServiceInterface);
-      Changed;
-      LeaveCriticalSection(fLock);
+      try
+        inc(fServiceInterface);
+        Changed;
+      finally
+        LeaveCriticalSection(fLock);
+      end;
     end;
     case ServiceMethodIndex of
     ord(imFree):

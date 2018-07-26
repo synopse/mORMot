@@ -11373,7 +11373,7 @@ type
   // "Year 2038" overflow issue
   // - use UnixTimeToDateTime/DateTimeToUnixTime functions to convert it to/from
   // a regular TDateTime
-  // - use UnixTimeUTC to return the current timestamp, using fast OS API calls
+  // - use UnixTimeUTC to return the current timestamp, using fast OS API call
   // - also one of the encodings supported by SQLite3 date/time functions
   TUnixTime = type Int64;
 
@@ -11386,9 +11386,12 @@ type
 
   /// pointer to a timestamp stored as second-based Unix Time
   PUnixTime = ^TUnixTime;
-
   /// pointer to a timestamp stored as millisecond-based Unix Time
   PUnixMSTime = ^TUnixMSTime;
+  /// dynamic array of timestamps stored as second-based Unix Time
+  TUnixTimeDynArray = array of TUnixTime;
+  /// dynamic array of timestamps stored as millisecond-based Unix Time
+  TUnixMSTimeDynArray = array of TUnixMSTime;
 
 type
   /// calling context of TSynLogExceptionToStr callbacks
