@@ -40701,7 +40701,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
     result := DynArray.SaveToLength;
   end;
   tkInterface: begin
-    len := SizeOf(PtrUInt);
+    len := SizeOf(Int64); // consume 64 bits even on CPU32
     result := SizeOf(PtrUInt);
   end;
   else
@@ -40768,7 +40768,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
   {$ifndef DELPHI5OROLDER}
   tkInterface: begin
     PIInterface(dest)^ := PIInterface(data)^; // with proper refcount
-    result := dest+SizeOf(PtrUInt);
+    result := dest+SizeOf(Int64); // consume 64 bits even on CPU32
     len := SizeOf(PtrUInt);
   end;
   {$endif}
@@ -40839,7 +40839,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
   {$ifndef DELPHI5OROLDER}
   tkInterface: begin
     PIInterface(data)^ := PIInterface(source)^; // with proper refcount
-    inc(source,SizeOf(PtrUInt));
+    inc(source,SizeOf(Int64)); // consume 64 bits even on CPU32
     result := SizeOf(PtrUInt);
   end;
   {$endif}
