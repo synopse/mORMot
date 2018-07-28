@@ -1241,7 +1241,7 @@ procedure TSQLDBZEOSStatement.ColumnsToJSON(WR: TJSONWriter);
 {$if not (defined(ZEOS73UP) and defined(USE_SYNCOMMONS))}
 var col: integer;
     P: PAnsiChar;
-    Len: PtrUInt;
+    Len: NativeUInt; // required by Zeos for GetPAnsiChar out param (not PtrUInt)
 procedure WriteIZBlob;
 var blob: IZBlob;
 begin
