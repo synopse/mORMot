@@ -5629,14 +5629,14 @@ type
     function ElemPtr(index: PtrInt): pointer; {$ifdef HASINLINE}inline;{$endif}
     /// will copy one element content from its index into another variable
     // - do nothing if index is out of range
-    procedure ElemCopyAt(index: PtrInt; var Dest); {$ifdef HASINLINE}inline;{$endif}
+    procedure ElemCopyAt(index: PtrInt; var Dest); {$ifdef FPC}inline;{$endif}
     /// will move one element content from its index into another variable
     // - will erase the internal item ater copy
     // - do nothing if index is out of range
     procedure ElemMoveTo(index: PtrInt; var Dest);
     /// will copy one variable content into an indexed element
     // - do nothing if index is out of range
-    procedure ElemCopyFrom(const Source; index: PtrInt); {$ifdef HASINLINE}inline;{$endif}
+    procedure ElemCopyFrom(const Source; index: PtrInt); {$ifdef FPC}inline;{$endif}
     /// compare the content of two elements, returning TRUE if both values equal
     // - this method compares first using any supplied Compare property,
     // then by content using the RTTI element description of the whole record
@@ -7232,11 +7232,11 @@ function RecordLoadJSON(var Rec; JSON: PUTF8Char; TypeInfo: pointer;
 function RecordLoadJSON(var Rec; const JSON: RawUTF8; TypeInfo: pointer): boolean; overload;
 
 /// copy a record content from source to Dest
-// - this unit includes a fast optimized asm version for x86
+// - this unit includes a fast optimized asm version for x86 on Delphi
 procedure RecordCopy(var Dest; const Source; TypeInfo: pointer); {$ifdef FPC}inline;{$endif}
 
 /// clear a record content
-// - this unit includes a fast optimized asm version for x86
+// - this unit includes a fast optimized asm version for x86 on Delphi
 procedure RecordClear(var Dest; TypeInfo: pointer); {$ifdef FPC}inline;{$endif}
 
 {$ifndef DELPHI5OROLDER}
@@ -32843,9 +32843,9 @@ begin
       if c and $80808080<>0 then
         goto By1; // break on first non ASCII quad
       inc(Source,4);
-      Dest[0] := AnsiChar(NormToUpperByte[c and $ff]);
-      Dest[1] := AnsiChar(NormToUpperByte[(c shr 8) and $ff]);
-      Dest[2] := AnsiChar(NormToUpperByte[(c shr 16) and $ff]);
+      Dest[0] := AnsiChar(NormToUpperByte[ToByte(c)]);
+      Dest[1] := AnsiChar(NormToUpperByte[ToByte(c shr 8)]);
+      Dest[2] := AnsiChar(NormToUpperByte[ToByte(c shr 16)]);
       Dest[3] := AnsiChar(NormToUpperByte[c shr 24]);
       inc(Dest,4);
     until Source>endSourceBy4;
@@ -48327,13 +48327,39 @@ begin
   end;
 end;
 
+procedure TDynArray.ElemCopy(const A; var B);
+begin
+  if ElemType=nil then
+    MoveFast(A,B,ElemSize) else begin
+    {$ifdef FPC}
+    {$ifdef FPC_OLDRTTI}
+    FPCFinalize(@B,ElemType); // inlined CopyArray()
+    MoveFast(A,B,ElemSize);
+    FPCRecordAddRef(B,ElemType);
+    {$else}
+    FPCRecordCopy(A,B,ElemType);
+    {$endif FPC_OLDRTTI}
+    {$else}
+    CopyArray(@B,@A,ElemType,1);
+    {$endif FPC}
+  end;
+end;
+
 function TDynArray.Add(const Elem): PtrInt;
+var p: PtrUInt;
 begin
   result := GetCount;
   if fValue=nil then
     exit; // avoid GPF if void
   SetCount(result+1);
-  ElemCopy(Elem,pointer(PtrUInt(fValue^)+PtrUInt(result)*ElemSize)^);
+  p := PtrUInt(fValue^)+PtrUInt(result)*ElemSize;
+  if ElemType=nil then
+    MoveFast(Elem,pointer(p)^,ElemSize) else
+    {$ifdef FPC}
+    FPCRecordCopy(Elem,pointer(p)^,ElemType);
+    {$else}
+    CopyArray(pointer(p),@Elem,ElemType,1);
+    {$endif}
 end;
 
 function TDynArray.New: integer;
@@ -48438,7 +48464,7 @@ begin
 end;
 
 function TDynArray.ElemPtr(index: PtrInt): pointer;
-label ok, no;
+label ok;
 var c: PtrUInt;
 begin // very efficient code on FPC and modern Delphi
   result := pointer(fValue);
@@ -48451,15 +48477,15 @@ begin // very efficient code on FPC and modern Delphi
   if c<>0 then begin
     if PtrUInt(index)<PCardinal(c)^ then
 ok:   inc(PByte(result),PtrUInt(index)*ElemSize) else
-no:   result := nil
+      result := nil
   end else
     {$ifdef FPC}
-    if PtrUInt(index)>PtrUInt(PDynArrayRec(PtrUInt(result)-SizeOf(TDynArrayRec))^.high) then
+    if PtrUInt(index)<=PtrUInt(PDynArrayRec(PtrUInt(result)-SizeOf(TDynArrayRec))^.high) then
     {$else}
-    if cardinal(index)>=PCardinal(PtrUInt(result)-SizeOf(PtrInt))^ then
+    if cardinal(index)<PCardinal(PtrUInt(result)-SizeOf(PtrInt))^ then
     {$endif}
-      goto no else
-      goto ok;
+      goto ok else
+      result := nil;
 end;
 
 procedure TDynArray.ElemCopyAt(index: PtrInt; var Dest);
@@ -48467,7 +48493,13 @@ var p: pointer;
 begin
   p := ElemPtr(index);
   if p<>nil then
-    ElemCopy(p^,Dest);
+    if ElemType=nil then
+      MoveFast(p^,Dest,ElemSize) else
+      {$ifdef FPC}
+      FPCRecordCopy(p^,Dest,ElemType);
+      {$else}
+      CopyArray(@Dest,p,ElemType,1);
+      {$endif}
 end;
 
 procedure TDynArray.ElemMoveTo(index: PtrInt; var Dest);
@@ -48486,7 +48518,13 @@ var p: pointer;
 begin
   p := ElemPtr(index);
   if p<>nil then
-    ElemCopy(Source,p^);
+    if ElemType=nil then
+      MoveFast(Source,p^,ElemSize) else
+      {$ifdef FPC}
+      FPCRecordCopy(Source,p^,ElemType);
+      {$else}
+      CopyArray(p,@Source,ElemType,1);
+      {$endif}
 end;
 
 procedure TDynArray.Reverse;
@@ -50085,20 +50123,6 @@ begin
     if (fIsObjArray=oaTrue) or ((fIsObjArray=oaUnknown) and ComputeIsObjArray) then
       TObject(Elem).Free;
   FillcharFast(Elem,ElemSize,0); // always fill with zero binary content
-end;
-
-procedure TDynArray.ElemCopy(const A; var B);
-begin
-  if ElemType=nil then
-    MoveFast(A,B,ElemSize) else begin
-    {$ifdef FPC_OLDRTTI}
-    FPCFinalize(@B,ElemType); // inlined CopyArray()
-    MoveFast(A,B,ElemSize);
-    FPCRecordAddRef(B,ElemType);
-    {$else}
-    CopyArray(@B,@A,ElemType,1);
-    {$endif}
-  end;
 end;
 
 function TDynArray.ElemLoad(Source: PAnsiChar): RawByteString;
