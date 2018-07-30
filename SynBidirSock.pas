@@ -131,7 +131,8 @@ type
     // - once set, you can change the request URI using the Address property
     // - aKeepAliveSeconds = 0 will force "Connection: Close" HTTP/1.0 requests
     // - an internal cache will be maintained, and entries will be flushed after
-    // aTimeoutSeconds - i.e. 15 minutes per default
+    // aTimeoutSeconds - i.e. 15 minutes per default - setting 0 will disable
+    // the client-side cache content
     // - aToken is an optional token which will be transmitted as HTTP header:
     // $ Authorization: Bearer <aToken>
     // - TWinHttp will be used by default under Windows, unless you specify
@@ -1206,8 +1207,9 @@ constructor THttpRequestCached.Create(const aURI: RawUTF8;
 begin
   inherited Create;
   fKeepAlive := aKeepAliveSeconds*1000;
-  fCache := TSynDictionary.Create(TypeInfo(TRawUTF8DynArray),
-    TypeInfo(THttpRequestCacheDynArray),true,aTimeoutSeconds);
+  if aTimeoutSeconds > 0 then // 0 means no cache
+    fCache := TSynDictionary.Create(TypeInfo(TRawUTF8DynArray),
+      TypeInfo(THttpRequestCacheDynArray),true,aTimeoutSeconds);
   if not LoadFromURI(aURI,aToken,aHttpClass) then
     raise ESynException.CreateUTF8('%.Create: invalid aURI=%',[self,aURI]);
 end;
@@ -1216,7 +1218,8 @@ procedure THttpRequestCached.Clear;
 begin
   FreeAndNil(fHttp); // either fHttp or fSocket is used
   FreeAndNil(fSocket);
-  fCache.DeleteAll;
+  if fCache <> nil then
+    fCache.DeleteAll;
   fURI.Clear;
   fTokenHeader := '';
 end;
@@ -1239,29 +1242,30 @@ begin
   result := '';
   if (fHttp=nil) and (fSocket=nil) then // either fHttp or fSocket is used
     exit;
-  if fCache.FindAndCopy(aAddress,cache) then
+  if (fCache <> nil) and fCache.FindAndCopy(aAddress,cache) then
     FormatUTF8('If-None-Match: %',[cache.Tag],RawUTF8(headin));
   if fTokenHeader<>'' then begin
     if headin<>'' then
       headin := headin+#13#10;
     headin := headin+fTokenHeader;
   end;
-  if fSocket<>nil then
-    status := fSocket.Get(aAddress,fKeepAlive,headin) else
+  if fSocket<>nil then begin
+    status := fSocket.Get(aAddress,fKeepAlive,headin);
+    result := fSocket.Content;
+  end else
     status := fHttp.Request(aAddress,'GET',fKeepAlive,headin,'','',headout,result);
   modified := true;
   case status of
-  STATUS_SUCCESS: begin
-    if fHttp<>nil then
-      cache.Tag := trim(FindIniNameValue(pointer(headout),'ETAG:')) else begin
-      cache.Tag := fSocket.HeaderValue('ETAG');
-      result := fSocket.Content;
+  STATUS_SUCCESS:
+    if fCache <> nil then begin
+      if fHttp <> nil then
+        cache.Tag := trim(FindIniNameValue(pointer(headout),'ETAG:')) else
+        cache.Tag := fSocket.HeaderValue('ETAG');
+      if cache.Tag <> '' then begin
+        cache.Content := result;
+        fCache.AddOrUpdate(aAddress,cache);
+      end;
     end;
-    if cache.Tag <> '' then begin
-      cache.Content := result;
-      fCache.AddOrUpdate(aAddress,cache);
-    end;
-  end;
   STATUS_NOTMODIFIED: begin
     result := cache.Content;
     modified := false;
@@ -1299,7 +1303,9 @@ end;
 
 function THttpRequestCached.Flush(const aAddress: SockString): boolean;
 begin
-  result := fCache.Delete(aAddress)>=0;
+  if fCache <> nil then
+    result := fCache.Delete(aAddress)>=0 else
+    result := true;
 end;
 
 
