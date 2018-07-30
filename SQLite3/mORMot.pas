@@ -11169,7 +11169,7 @@ type
     /// the response body
     // - corresponding to the response type, as defined in Header
     Content: RawByteString;
-    /// the HTML response code
+    /// the HTTP response code
     // - if not overriden, will default to HTTP_SUCCESS = 200 on server side
     // - on client side, will always contain HTTP_SUCCESS = 200 on success,
     // or any error should be handled as expected by the caller (e.g. using
@@ -56462,7 +56462,7 @@ begin
   fRest := aRest;
   if aThreadName<>'' then
     aName := aThreadName else
-    FormatUTF8('% %',[self, fRest.Model.Root],aName);
+    FormatUTF8('% %',[fRest.Model.Root, ClassType],aName);
   inherited Create(aName,fRest.BeginCurrentThread,fRest.EndCurrentThread,aStats);
 end;
 
