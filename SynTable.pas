@@ -124,6 +124,9 @@ type
     // - this method is not thread-safe
     function Match(aText: PUTF8Char; aTextLen: PtrInt): boolean; overload;
       {$ifdef FPC}inline;{$endif}
+    /// returns TRUE if the supplied VCL/LCL content matches a grep-like pattern
+    // - this method IS thread-safe, and won't lock
+    function MatchString(const aText: string): boolean;
     /// returns TRUE if the supplied content matches a grep-like pattern
     // - this method IS thread-safe, and won't lock
     function MatchThreadSafe(const aText: RawUTF8): boolean;
@@ -4949,6 +4952,28 @@ begin
     result := Search(@self, aText, aTextLen)
   else
     result := PMax < 0;
+end;
+
+function TMatch.MatchString(const aText: string): boolean;
+var
+  local: TMatch; // thread-safe with no lock!
+  temp: TSynTempBuffer;
+  len: integer;
+begin
+  if aText = '' then begin
+    result := PMax < 0;
+    exit;
+  end;
+  len := length(aText);
+  {$ifdef UNICODE}
+  temp.Init(len * 3);
+  len := RawUnicodeToUtf8(temp.buf, temp.len + 1, pointer(aText), len, [ccfNoTrailingZero]);
+  {$else}
+  len := CurrentAnsiConvert.AnsiBufferToRawUTF8(pointer(aText), len, temp);
+  {$endif}
+  local := self;
+  result := local.Search(@local, temp.buf, len);
+  temp.Done;
 end;
 
 function TMatch.MatchThreadSafe(const aText: RawUTF8): boolean;
