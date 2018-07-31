@@ -155,12 +155,18 @@ type
     /// add once some grep-like patterns to the internal TMach list
     // - each CSV item in aPatterns follows the IsMatch() syntax
     procedure Subscribe(const aPatternsCSV: RawUTF8; CaseInsensitive: Boolean); overload;
-    /// search patterns in the supplied text
+    /// search patterns in the supplied UTF-8 text
     // - returns -1 if no filter has been subscribed
     // - returns -2 if there is no match on any previous pattern subscription
     // - returns fMatch[] index, i.e. >= 0 number on first matching pattern
     // - this method is thread-safe
-    function Match(const aText: RawUTF8): integer;
+    function Match(const aText: RawUTF8): integer; overload; {$ifdef HASINLINE}inline;{$endif}
+    /// search patterns in the supplied UTF-8 text buffer
+    function Match(aText: PUTF8Char; aLen: integer): integer; overload;
+    /// search patterns in the supplied VCL/LCL text
+    // - could be used on a TFileName for instance
+    // - will avoid any memory allocation if aText is small enough
+    function MatchString(const aText: string): integer;
   end;
 
 type
@@ -4972,20 +4978,24 @@ begin
 end;
 
 function TMatchs.Match(const aText: RawUTF8): integer;
+begin
+  result := Match(pointer(aText), length(aText));
+end;
+
+function TMatchs.Match(aText: PUTF8Char; aLen: integer): integer;
 var
-  i, len: integer;
+  i: integer;
   one: ^TMatchStore;
   local: TMatch; // thread-safe with no lock!
 begin
   if (self = nil) or (fMatch = nil) then
     result := -1 // no filter by name -> allow e.g. to process everything
   else begin
-    len := length(aText);
     one := pointer(fMatch);
     for i := 0 to fMatchCount - 1 do begin
-      if len <> 0 then begin
+      if aLen <> 0 then begin
         local := one^.Parent;
-        if local.Search(@local, pointer(aText), len) then begin
+        if local.Search(@local, aText, aLen) then begin
           result := i;
           exit;
         end;
@@ -4998,6 +5008,22 @@ begin
     end;
     result := -2;
   end;
+end;
+
+function TMatchs.MatchString(const aText: string): integer;
+var
+  temp: TSynTempBuffer;
+  len: integer;
+begin
+  {$ifdef UNICODE}
+  len := length(aText);
+  temp.Init(len * 3);
+  len := RawUnicodeToUtf8(temp.buf, temp.len + 1, pointer(aText), len, [ccfNoTrailingZero]);
+  {$else}
+  len := CurrentAnsiConvert.AnsiBufferToRawUTF8(pointer(aText), length(aText), temp);
+  {$endif}
+  result := Match(temp.buf, len);
+  temp.Done;
 end;
 
 procedure TMatchs.Subscribe(const aPatternsCSV: RawUTF8; CaseInsensitive: Boolean);
