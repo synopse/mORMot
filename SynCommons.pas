@@ -4097,7 +4097,11 @@ function FileAgeToDateTime(const FileName: TFileName): TDateTime;
 /// get a file size, from its name
 // - returns 0 if file doesn't exist
 // - under Windows, will use GetFileAttributesEx fast API
-function FileSize(const FileName: TFileName): Int64;
+function FileSize(const FileName: TFileName): Int64; overload;
+
+/// get a file size, from its handle
+// - returns 0 if file doesn't exist
+function FileSize(F: THandle): Int64; overload;
 
 /// get a file date and time, from a FindFirst/FindNext search
 // - the returned timestamp is in local time, not UTC
@@ -30052,6 +30056,15 @@ begin
   end;
 end;
 {$endif}
+
+function FileSize(F: THandle): Int64;
+var res: Int64Rec absolute result;
+begin
+  result := 0;
+  if PtrInt(F)>0 then
+    res.Lo := GetFileSize(F,@res.Hi); // from WinAPI or SynKylix/SynFPCLinux
+end;
+
 
 function FileAgeToDateTime(const FileName: TFileName): TDateTime;
 {$ifdef MSWINDOWS}
