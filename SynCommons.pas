@@ -1195,6 +1195,46 @@ type
   /// kind of adding in a TTextWriter
   TTextWriterKind = (twNone, twJSONEscape, twOnSameLine);
 
+  /// implements a stack-based storage of some (UTF-8 or binary) text
+  // - could be used e.g. to make a temporary copy when JSON is parsed in-place
+  // - call one of the Init() overloaded methods, then Done to release its memory
+  // - will avoid temporary memory allocation via the heap for up to 4KB of text
+  {$ifdef UNICODE}TSynTempBuffer = record{$else}TSynTempBuffer = object{$endif}
+  public
+    /// the text/binary length, in bytes, excluding the trailing #0
+    len: integer;
+    /// where the text/binary is available (and any Source has been copied)
+    // - equals nil if len=0
+    buf: pointer;
+    /// initialize a temporary copy of the content supplied as RawByteString
+    // - will also allocate and copy the ending #0 (even for binary)
+    procedure Init(const Source: RawByteString); overload;
+    /// initialize a temporary copy of the supplied text buffer, ending with #0
+    function Init(Source: PUTF8Char): PUTF8Char; overload;
+    /// initialize a temporary copy of the supplied text buffer
+    procedure Init(Source: pointer; SourceLen: integer); overload;
+    /// initialize a new temporary buffer of a given number of bytes
+    function Init(SourceLen: integer): pointer; overload;
+    /// initialize the buffer returning the internal buffer size (4095 bytes)
+    // - could be used e.g. for an API call, first trying with plain temp.Init
+    // and using temp.buf and temp.len safely in the call, only calling
+    // temp.Init(expectedsize) if the API returned an error about an insufficient
+    // buffer space
+    function Init: integer; overload; {$ifdef HASINLINE}inline;{$endif}
+    /// initialize a new temporary buffer of a given number of random bytes
+    // - will fill the buffer via FillRandom() calls
+    function InitRandom(RandomLen: integer): pointer;
+    /// initialize a new temporary buffer filled with integer increasing values
+    function InitIncreasing(Count: integer; Start: integer=0): PIntegerArray;
+    /// finalize the temporary storage
+    procedure Done; overload; {$ifdef HASINLINE}inline;{$endif}
+    /// finalize the temporary storage, and create a RawUTF8 string from it
+    procedure Done(EndBuf: pointer; var Dest: RawUTF8); overload; {$ifdef HASINLINE}inline;{$endif}
+  private
+    // default 4KB buffer allocated on stack
+    tmp: array[0..4095] of AnsiChar;
+  end;
+
   /// an abstract class to handle Ansi to/from Unicode translation
   // - implementations of this class will handle efficiently all Code Pages
   // - this default implementation will use the Operating System APIs
@@ -1251,6 +1291,9 @@ type
     /// direct conversion of a PAnsiChar buffer into a UTF-8 encoded string
     // - will call AnsiBufferToUnicode() overloaded virtual method
     function AnsiBufferToRawUTF8(Source: PAnsiChar; SourceChars: Cardinal): RawUTF8; overload; virtual;
+    /// direct conversion of a PAnsiChar buffer into a UTF-8 encoded temporary buffer
+    // - caller should make Dest.Done once used
+    function AnsiBufferToRawUTF8(Source: PAnsiChar; SourceChars: Cardinal; var Dest: TSynTempBuffer): integer; overload;
     /// direct conversion of an Unicode buffer into a PAnsiChar buffer
     // - Dest^ buffer must be reserved with at least SourceChars*3 bytes
     // - this default implementation will rely on the Operating System for
@@ -1446,46 +1489,6 @@ type
     // - no trailing #0 is appended to the buffer
     function UTF8BufferToAnsi(Dest: PAnsiChar; Source: PUTF8Char;
       SourceChars: Cardinal): PAnsiChar; override;
-  end;
-
-  /// implements a stack-based storage of some (UTF-8 or binary) text
-  // - could be used e.g. to make a temporary copy when JSON is parsed in-place
-  // - call one of the Init() overloaded methods, then Done to release its memory
-  // - will avoid temporary memory allocation via the heap for up to 4KB of text
-  {$ifdef UNICODE}TSynTempBuffer = record{$else}TSynTempBuffer = object{$endif}
-  public
-    /// the text/binary length, in bytes, excluding the trailing #0
-    len: integer;
-    /// where the text/binary is available (and any Source has been copied)
-    // - equals nil if len=0
-    buf: pointer;
-    /// initialize a temporary copy of the content supplied as RawByteString
-    // - will also allocate and copy the ending #0 (even for binary)
-    procedure Init(const Source: RawByteString); overload;
-    /// initialize a temporary copy of the supplied text buffer, ending with #0
-    function Init(Source: PUTF8Char): PUTF8Char; overload;
-    /// initialize a temporary copy of the supplied text buffer
-    procedure Init(Source: pointer; SourceLen: integer); overload;
-    /// initialize a new temporary buffer of a given number of bytes
-    function Init(SourceLen: integer): pointer; overload;
-    /// initialize the buffer returning the internal buffer size (4095 bytes)
-    // - could be used e.g. for an API call, first trying with plain temp.Init
-    // and using temp.buf and temp.len safely in the call, only calling
-    // temp.Init(expectedsize) if the API returned an error about an insufficient
-    // buffer space
-    function Init: integer; overload; {$ifdef HASINLINE}inline;{$endif}
-    /// initialize a new temporary buffer of a given number of random bytes
-    // - will fill the buffer via FillRandom() calls
-    function InitRandom(RandomLen: integer): pointer;
-    /// initialize a new temporary buffer filled with integer increasing values
-    function InitIncreasing(Count: integer; Start: integer=0): PIntegerArray;
-    /// finalize the temporary storage
-    procedure Done; overload; {$ifdef HASINLINE}inline;{$endif}
-    /// finalize the temporary storage, and create a RawUTF8 string from it
-    procedure Done(EndBuf: pointer; var Dest: RawUTF8); overload; {$ifdef HASINLINE}inline;{$endif}
-  private
-    // default 4KB buffer allocated on stack
-    tmp: array[0..4095] of AnsiChar;
   end;
 
   /// implements a stack-based writable storage of binary content
@@ -4360,7 +4363,8 @@ function UnCamelCase(D, P: PUTF8Char): integer; overload;
 /// convert a string into an human-friendly CamelCase identifier
 // - replacing spaces or punctuations by an uppercase character
 // - it is not the reverse function to UnCamelCase()
-procedure CamelCase(P: PAnsiChar; len: integer; var s: RawUTF8);
+procedure CamelCase(P: PAnsiChar; len: integer; var s: RawUTF8;
+  const isWord: TSynByteSet=[ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z')]);
 
 /// UnCamelCase and translate a char buffer
 // - P is expected to be #0 ended
@@ -9501,6 +9505,8 @@ type
     function SafeExists(AObject: TObject): boolean;
     /// returns the number of instances stored using the global critical section
     function SafeCount: integer;
+    /// delete all items of the list using global critical section
+    procedure SafeClear;
     /// the critical section associated to this list instance
     // - could be used to protect shared resources within the internal process
     // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
@@ -9672,6 +9678,8 @@ type
     // - returns FALSE if there is no pending item in the list
     // - you may have used SafePush before to handle a thread-safe FIFO
     function SafePop(out aValue: RawUTF8): boolean;
+    /// thread-safe delete all items from the list
+    procedure SafeClear;
     /// access to the locking methods of this instance
     // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
     property Safe: TSynLocker read fSafe;
@@ -12531,6 +12539,9 @@ function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 // key: consider using SynCrypto proven AES-based algorithms instead
 procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
 
+type
+  TCrc32cBy4 = function(crc, value: cardinal): cardinal;
+
 var
   /// compute CRC32C checksum on the supplied buffer
   // - this variable will use the fastest mean available, e.g. SSE 4.2
@@ -12542,7 +12553,7 @@ var
   // to start with "crc := cardinal(not 0)" and make "crc := not crc" at the end,
   // to compute the very same hash value than regular crc32c()
   // - this variable will use the fastest mean available, e.g. SSE 4.2
-  crc32cBy4: function(crc, value: cardinal): cardinal;
+  crc32cBy4: TCrc32cBy4;
 
 /// compute the hexadecimal representation of the crc32 checkum of a given text
 // - wrapper around CardinalToHex(crc32c(...))
@@ -18843,6 +18854,12 @@ end;
 function TSynAnsiConvert.AnsiToUTF8(const AnsiText: RawByteString): RawUTF8;
 begin
   result := AnsiBufferToRawUTF8(pointer(AnsiText),length(AnsiText));
+end;
+
+function TSynAnsiConvert.AnsiBufferToRawUTF8(Source: PAnsiChar; SourceChars: Cardinal;
+  var Dest: TSynTempBuffer): integer;
+begin
+  result := AnsiBufferToUTF8(Dest.Init(SourceChars*3+1),Source,SourceChars)-Dest.buf;
 end;
 
 function TSynAnsiConvert.AnsiBufferToRawUTF8(Source: PAnsiChar; SourceChars: Cardinal): RawUTF8;
@@ -38251,7 +38268,8 @@ Next: if Space=SpaceBeg then
   result := D-DBeg;
 end;
 
-procedure CamelCase(P: PAnsiChar; len: integer; var s: RawUTF8);
+procedure CamelCase(P: PAnsiChar; len: integer; var s: RawUTF8;
+  const isWord: TSynByteSet);
 var i: integer;
     d: PAnsiChar;
     tmp: array[byte] of AnsiChar;
@@ -38259,13 +38277,13 @@ begin
   if len > SizeOf(tmp) then
     len := SizeOf(tmp);
   for i := 0 to len - 1 do
-    if not (ord(P[i]) in IsWord) then begin
+    if not (ord(P[i]) in isWord) then begin
       MoveFast(P^,tmp,i);
       inc(P,i);
       d := @tmp[i];
       dec(len,i);
       while len > 0 do begin
-        while (len > 0) and not (ord(P^) in IsWord) do begin
+        while (len > 0) and not (ord(P^) in isWord) do begin
           inc(P);
           dec(len);
         end;
@@ -38276,7 +38294,7 @@ begin
         repeat
           inc(P);
           dec(len);
-          if not (ord(P^) in IsWord) then
+          if not (ord(P^) in isWord) then
             break;
           d^ := P^;
           inc(d);
@@ -59116,6 +59134,18 @@ begin
   end;
 end;
 
+procedure TRawUTF8ListLocked.SafeClear;
+begin
+  if self=nil then
+    exit;
+  fSafe.Lock;
+  try
+    Clear;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
 
 { TObjectListHashedAbstract}
 
@@ -59371,6 +59401,16 @@ begin
   Safe.Lock;
   try
     result := Count;
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+procedure TObjectListLocked.SafeClear;
+begin
+  Safe.Lock;
+  try
+    Clear;
   finally
     Safe.UnLock;
   end;
