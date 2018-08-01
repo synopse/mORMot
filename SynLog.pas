@@ -3101,7 +3101,7 @@ var
 {$ifdef AUTOFLUSHRAWWIN}
 var
   AutoFlushThread: pointer;
-  
+
 procedure AutoFlushProc(P: pointer); stdcall;
   function Terminated: boolean;
   begin

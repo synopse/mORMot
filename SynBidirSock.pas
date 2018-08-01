@@ -554,7 +554,7 @@ type
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
       var request: TWebSocketFrame; const info: RawUTF8); override;
   public
-    /// initialize the chat protocol with an incoming frame callback 
+    /// initialize the chat protocol with an incoming frame callback
     constructor Create(const aName,aURI: RawUTF8;
       const aOnIncomingFrame: TOnWebSocketProtocolChatIncomingFrame); overload;
     /// compute a new instance of the WebSockets protocol, with same parameters
@@ -2679,7 +2679,7 @@ begin
         // huge payload sent outside TCrtSock buffers
         if not fSocket.TrySndLow(@hdr,10+fMaskSentFrames shr 5) or
            not fSocket.TrySndLow(pointer(Frame.payload),len) then
-          result := false; 
+          result := false;
         SetLastPingTicks(not result);
         exit;
       end;

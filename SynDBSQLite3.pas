@@ -119,6 +119,7 @@ uses
   SynCommons,
   SynLog,
   SynSQLite3,
+  SynTable,
   SynDB;
 
 { -------------- SQlite3 database engine native connection  }

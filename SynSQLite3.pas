@@ -222,6 +222,7 @@ uses
   Contnrs,
   {$endif}
   SynCommons,
+  SynTable,
   SynLog;
 
 
@@ -1271,8 +1272,8 @@ type
     // -  can also decrypt a previously encrypted database (so that it is accessible
     // from any version of SQLite) by specifying a nil key
     // - Assigned(rekey)=false if encryption is not available, i.e. if
-    // NOSQLITE3STATIC is defined 
-    // - also see ChangeSQLEncryptTablePassWord() procedure 
+    // NOSQLITE3STATIC is defined
+    // - also see ChangeSQLEncryptTablePassWord() procedure
     rekey: function(DB: TSQLite3DB; key: pointer; keyLen: Integer): integer; cdecl;
 
     /// Destructor for the sqlite3 object, which handle is DB
@@ -2042,7 +2043,7 @@ type
     // - BufSize is the size of the buffer Data, which might be larger than DBSize
     deserialize: function(DB: TSQLite3DB; Schema: PUTF8Char; Data: pointer;
       DBSize, BufSize: Int64; Flags: integer): pointer; cdecl;
-      
+
     /// sets and/or queries the soft limit on the amount of heap memory
     // that may be allocated by SQLite
     // - SQLite strives to keep heap memory utilization below the soft heap limit

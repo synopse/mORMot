@@ -291,8 +291,8 @@ end;
 
 {$ifdef CPUINTEL}
 // using direct x86 jmp also circumvents Internal Error C11715 for Delphi 5
-function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 {$ifdef CPUX86}
+function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 asm
         push    ebp
         push    ebx
@@ -461,6 +461,7 @@ asm
         pop     ebx
         pop     ebp
 {$else CPUX86}
+function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 var off: TOffsets;
     cache: array[0..4095] of cardinal; // uses 32B+16KB=48KB on stack
 asm // rcx=src, edx=size, r8=dest
@@ -821,9 +822,9 @@ nextCW:
 end;
 
 {$ifdef CPUINTEL}
+{$ifdef CPUX86}
 // using direct x86 jmp also circumvents Internal Error C11715 for Delphi 5
 function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
-{$ifdef CPUX86}
 asm
         push    ebp
         push    ebx
@@ -978,6 +979,7 @@ asm
         pop     ebx
         pop     ebp
 {$else CPUX86}
+function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 var off: TOffsets;
 asm // rcx=src, edx=size, r8=dest
         {$ifndef win64} // Linux 64-bit ABI

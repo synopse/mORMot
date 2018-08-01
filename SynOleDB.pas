@@ -132,6 +132,7 @@ uses
   Contnrs,
   SynCommons,
   SynLog,
+  SynTable,
   SynDB;
 
 

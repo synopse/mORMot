@@ -1268,8 +1268,8 @@ unit mORMot;
 {$ifdef GSSAPIAUTH}
   {$undef SSPIAUTH} // exclusive
   {$ifdef NOGSSAPIAUTH}
-    {$undef GSSAPIAUTH} // force disable 
-    {$undef DOMAINAUTH}   
+    {$undef GSSAPIAUTH} // force disable
+    {$undef DOMAINAUTH}
   {$else}
     {$define DOMAINAUTH}
   {$endif}
@@ -11652,7 +11652,7 @@ type
   // - by default, fInvoke() will receive standard JSON content, unless
   // ifoJsonAsExtended is set, and extended JSON is used
   // - ifoDontStoreVoidJSON will ensure objects and records won't include
-  // default void fields in JSON serialization 
+  // default void fields in JSON serialization
   TInterfacedObjectFromFactoryOption = (ifoJsonAsExtended, ifoDontStoreVoidJSON);
   /// defines how TInterfacedObjectFromFactory will perform its execution
   TInterfacedObjectFromFactoryOptions = set of TInterfacedObjectFromFactoryOption;

@@ -73,6 +73,7 @@ uses
   {$endif}
   SynCommons,
   SynCrtSock,
+  SynTable,
   SynDB;
 
 { -------------- HTTP Server classes for SynDB remote access }

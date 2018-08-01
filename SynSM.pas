@@ -83,6 +83,7 @@ uses
   SynCommons,
   SynLog,
   SynTests,
+  SynTable,
   SynSMAPI;
 
 const

@@ -182,7 +182,7 @@ type
 // cyphered format, which was much less safe (simple XOR on fixed tables), and
 // was not working on any database size, making unclean patches to the official
 // sqlite3.c amalgamation file, so is deprecated and unsupported any longer -
-// see OldSQLEncryptTablePassWordToPlain() to convert your existing databases 
+// see OldSQLEncryptTablePassWordToPlain() to convert your existing databases
 function ChangeSQLEncryptTablePassWord(const FileName: TFileName;
   const OldPassWord, NewPassword: RawUTF8): boolean;
 
@@ -815,9 +815,9 @@ begin
         aes^.DoBlocksOFB(iv.b,data+16,data+16,len-1);
         if (data[21]=#64) and (data[22]=#32) and (data[23]=#32) then
           PHash128(data)^ := SQLITE_FILE_HEADER128.b else
-          FillZero(PHash128(data)^); // report incorrect password 
+          FillZero(PHash128(data)^); // report incorrect password
       end else
-      FillZero(PHash128(data)^) else 
+      FillZero(PHash128(data)^) else
     aes^.DoBlocksOFB(iv.b,data,data,len);
 end;
 
@@ -832,7 +832,7 @@ end;
 procedure CodecDecrypt(codec: pointer; page: integer; data: PAnsiChar; len: integer); cdecl;
   {$ifdef FPC}public name _PREFIX+'CodecDecrypt';{$endif} export;
 begin
-  CodeEncryptDecrypt(page,data,len,CodecGetReadKey(codec),false);  
+  CodeEncryptDecrypt(page,data,len,CodecGetReadKey(codec),false);
 end;
 
 procedure CodecTerm(codec: pointer); cdecl;
@@ -847,7 +847,7 @@ function ChangeSQLEncryptTablePassWord(const FileName: TFileName;
 var F: THandle;
     bufsize,page,pagesize,pagecount,n,p,read: cardinal;
     head: THash256Rec;
-    buf: PAnsiChar; 
+    buf: PAnsiChar;
     temp: RawByteString;
     size: TQWordRec;
     posi: Int64;
