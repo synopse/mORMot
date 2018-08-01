@@ -98,7 +98,7 @@ function IsMatch(const Pattern, Text: RawUTF8; CaseInsensitive: boolean=false): 
 
 type
   PMatch = ^TMatch;
-  /// low-level structure used by IsMatch() for actual glog search
+  /// low-level structure used by IsMatch() for actual glob search
   // - you can use this object to prepare a given pattern, e.g. in a loop
   // - implemented as a fast brute-force state-machine without any heap allocation
   // - some common patterns ('exactmatch', 'startwith*', '*endwith', '*contained*')
@@ -114,20 +114,27 @@ type
     procedure MatchAfterStar;
     procedure MatchMain;
   public
-    /// initialize the internal fields for a given grep-like search pattern
-    procedure Prepare(const aPattern: RawUTF8; aCaseInsensitive, aReuse: boolean);
-    /// returns TRUE if the supplied content matches a grep-like pattern
+    /// initialize the internal fields for a given glob search pattern
+    // - note that the aPattern instance should remain in memory, since it will
+    // be pointed to by the Pattern private field of this object
+    procedure Prepare(const aPattern: RawUTF8; aCaseInsensitive, aReuse: boolean); overload;
+    /// initialize the internal fields for a given glob search pattern
+    // - note that the aPattern buffer should remain in memory, since it will
+    // be pointed to by the Pattern private field of this object
+    procedure Prepare(aPattern: PUTF8Char; aPatternLen: integer; aCaseInsensitive, aReuse: boolean); overload;
+    /// returns TRUE if the supplied content matches the prepared glob pattern
     // - this method is not thread-safe
     function Match(const aText: RawUTF8): boolean; overload;
       {$ifdef FPC}inline;{$endif}
-    /// returns TRUE if the supplied content matches a grep-like pattern
+    /// returns TRUE if the supplied content matches the prepared glob pattern
     // - this method is not thread-safe
     function Match(aText: PUTF8Char; aTextLen: PtrInt): boolean; overload;
       {$ifdef FPC}inline;{$endif}
-    /// returns TRUE if the supplied VCL/LCL content matches a grep-like pattern
-    // - this method IS thread-safe, and won't lock
+    /// returns TRUE if the supplied VCL/LCL content matches the prepared glob pattern
+    // - this method IS thread-safe, will use stack to UTF-8 temporary conversion
+    // if possible, and won't lock
     function MatchString(const aText: string): boolean;
-    /// returns TRUE if the supplied content matches a grep-like pattern
+    /// returns TRUE if the supplied content matches the prepared glob pattern
     // - this method IS thread-safe, and won't lock
     function MatchThreadSafe(const aText: RawUTF8): boolean;
   end;
@@ -149,13 +156,13 @@ type
     fMatch: TMatchStoreDynArray;
     fMatchCount: integer;
   public
-    /// add once some grep-like patterns to the internal TMach list
+    /// add once some glob patterns to the internal TMach list
     // - aPatterns[] follows the IsMatch() syntax
     constructor Create(const aPatterns: TRawUTF8DynArray; CaseInsensitive: Boolean); reintroduce; overload;  
-    /// add once some grep-like patterns to the internal TMach list
+    /// add once some glob patterns to the internal TMach list
     // - aPatterns[] follows the IsMatch() syntax
     procedure Subscribe(const aPatterns: TRawUTF8DynArray; CaseInsensitive: Boolean); overload; virtual; 
-    /// add once some grep-like patterns to the internal TMach list
+    /// add once some glob patterns to the internal TMach list
     // - each CSV item in aPatterns follows the IsMatch() syntax
     procedure Subscribe(const aPatternsCSV: RawUTF8; CaseInsensitive: Boolean); overload;
     /// search patterns in the supplied UTF-8 text
@@ -171,6 +178,13 @@ type
     // - will avoid any memory allocation if aText is small enough
     function MatchString(const aText: string): integer;
   end;
+
+/// fill the Match[] dynamic array with all glob patterns supplied as CSV
+// - note that the CSVPattern instance should remain in memory, since it will
+// be pointed to by the Match[].Pattern private field
+function SetMatchs(const CSVPattern: RawUTF8; CaseInsensitive: boolean;
+  out Match: TMatchDynArray): integer;
+
 
 type
   TSynFilterOrValidate = class;
@@ -285,8 +299,8 @@ type
     property ForbiddenDomains: RawUTF8 read fForbiddenDomains write fForbiddenDomains;
   end;
 
-  /// grep-like case-sensitive pattern validation of a Record field content
-  // - parameter is NOT JSON encoded, but is some basic grep-like pattern
+  /// glob case-sensitive pattern validation of a Record field content
+  // - parameter is NOT JSON encoded, but is some basic TMatch glob pattern
   // - ?	   	Matches any single characer
   // - *	   	Matches any contiguous characters
   // - [abc]  Matches a or b or c at that position
@@ -313,9 +327,9 @@ type
       var ErrorMsg: string): boolean; override;
   end;
 
-  /// grep-like case-insensitive pattern validation of a text field content
+  /// glob case-insensitive pattern validation of a text field content
   // (typicaly a TSQLRecord)
-  // - parameter is NOT JSON encoded, but is some basic grep-like pattern
+  // - parameter is NOT JSON encoded, but is some basic TMatch glob pattern
   // - same as TSynValidatePattern, but is NOT case sensitive
   TSynValidatePatternI = class(TSynValidatePattern);
 
@@ -4870,10 +4884,16 @@ begin
 end;
 
 procedure TMatch.Prepare(const aPattern: RawUTF8; aCaseInsensitive, aReuse: boolean);
+begin
+  Prepare(pointer(aPattern), length(aPattern), aCaseInsensitive, aReuse);
+end;
+
+procedure TMatch.Prepare(aPattern: PUTF8Char; aPatternLen: integer;
+  aCaseInsensitive, aReuse: boolean);
 const SPECIALS: PUTF8Char = '*?[';
 begin
-  Pattern := pointer(aPattern);
-  PMax := length(aPattern) - 1; // search in Pattern[0..PMax]
+  Pattern := aPattern;
+  PMax := aPatternLen - 1; // search in Pattern[0..PMax]
   if aCaseInsensitive then
     Upper := @NormToUpperAnsi7 else
     Upper := @NormToNorm;
@@ -4920,7 +4940,7 @@ begin
             end;
           end;
       end
-      else if (Pattern[0] = '*') and (strcspn(Pattern + 1, SPECIALS) > PMax) then begin
+      else if (Pattern[0] = '*') and (strcspn(Pattern + 1, SPECIALS) >= PMax) then begin
         inc(Pattern); // jump leading *
         if aCaseInsensitive then
           Search := SearchEndWithU
@@ -4928,14 +4948,16 @@ begin
           Search := SearchEndWith;
       end;
     end;
- if not Assigned(Search) then
-    if PosChar(Pattern, '[') = nil then
+ if not Assigned(Search) then begin
+   aPattern := PosChar(Pattern, '[');
+    if (aPattern = nil) or (aPattern - Pattern > PMax) then
       if aCaseInsensitive then
         Search := SearchNoRangeU
       else
         Search := SearchNoRange
     else
       Search := SearchAny;
+ end;
 end;
 
 function TMatch.Match(const aText: RawUTF8): boolean;
@@ -4991,6 +5013,28 @@ var match: TMatch;
 begin
   match.Prepare(Pattern, CaseInsensitive, false);
   result := match.Match(Text);
+end;
+
+function SetMatchs(const CSVPattern: RawUTF8; CaseInsensitive: boolean;
+  out Match: TMatchDynArray): integer;
+var P, S: PUTF8Char;
+begin
+  result := 0;
+  P := pointer(CSVPattern);
+  if P <> nil then
+    repeat
+      S := P;
+      while not (P^ in [#0, ',']) do
+        inc(P);
+      if P <> S then begin
+        SetLength(Match, result + 1);
+        Match[result].Prepare(S, P - S, CaseInsensitive, {reuse=}true);
+        inc(result);
+      end;
+      if P^ = #0 then
+        break;
+      inc(P);
+    until false;
 end;
 
 

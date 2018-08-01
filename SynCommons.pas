@@ -5295,6 +5295,12 @@ type
     function Add(const Elem): PtrInt;
     /// add an element to the dynamic array
     // - this version add a void element to the array, and returns its index
+    // - note: if you use this method to add a new item with a reference to the
+    // dynamic array, using a local variable is needed under FPC:
+    // !    i := DynArray.New;
+    // !    with Values[i] do begin // otherwise Values is nil -> GPF
+    // !      Field1 := 1;
+    // !      ...
     function New: integer;
     /// add an element to the dynamic array at the position specified by Index
     // - warning: Elem must be of the same exact type than the dynamic array,
