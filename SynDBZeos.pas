@@ -172,6 +172,7 @@ uses
   ZCompatibility, ZVariant, ZURL, ZDbcIntfs, ZDbcResultSet,
   // mORMot units after ZDBC due to some name conflicts (e.g. UTF8ToString)
   SynCommons,
+  SynTable,
   SynLog,
   SynDB;
 

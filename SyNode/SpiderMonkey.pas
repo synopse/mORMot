@@ -62,6 +62,7 @@ uses
   Windows,
   {$endif}
   SynCommons,
+  SynTable,
   SynLog,
   SysUtils;
 
