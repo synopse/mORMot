@@ -24632,21 +24632,6 @@ begin
   result := dest;
 end;
 
-function TrimLeftLowerCaseShort(V: PShortString): RawUTF8;
-var P: PAnsiChar;
-    L: integer;
-begin
-  L := length(V^);
-  P := @V^[1];
-  while (L>0) and (P^ in ['a'..'z']) do begin
-    inc(P);
-    dec(L);
-  end;
-  if L=0 then
-    FastSetString(result,@V^[1],length(V^)) else
-    FastSetString(result,P,L);
-end;
-
 function IdemPCharAndGetNextLine(var source: PUTF8Char; searchUp: PAnsiChar): boolean;
 begin
   if source=nil then
@@ -25508,33 +25493,6 @@ asm // eax=dest source=edx
 @2:     pop     ebx
         pop     esi
 @z:
-end;
-
-function TrimLeftLowerCaseShort(V: PShortString): RawUTF8;
-asm // eax=V
-        xor     ecx, ecx
-        push    edx // save result RawUTF8
-        test    eax, eax
-        jz      @2 // avoid GPF
-        lea     edx, [eax + 1]
-        mov     cl, [eax]
-@1:     mov     ch, [edx] // edx=source cl=length
-        sub     ch, 'a'
-        sub     ch, 'z' - 'a'
-        ja      @2 // not a lower char -> create a result string starting at edx
-        inc     edx
-        dec     cl
-        jnz     @1
-        mov     cl, [eax]
-        lea     edx, [eax + 1]  // no UpperCase -> retrieve full text (result := V^)
-@2:     pop     eax
-        movzx   ecx, cl
-{$ifdef UNICODE}
-        push    CP_UTF8 // UTF-8 code page for Delphi 2009+ + call below, not jump
-        call    System.@LStrFromPCharLen // eax=Dest edx=Source ecx=Length
-        rep     ret // we need a call just above for right push CP_UTF8 retrieval
-{$else} jmp     System.@LStrFromPCharLen // eax=dest edx=source ecx=length(source)
-{$endif}
 end;
 
 function IdemPCharAndGetNextLine(var source: PUTF8Char; searchUp: PAnsiChar): boolean;
@@ -36991,6 +36949,50 @@ begin
     result := V^ else
     SetString(result,P,L);
 end;
+
+{$ifdef FPC_OR_PUREPASCAL}
+function TrimLeftLowerCaseShort(V: PShortString): RawUTF8;
+var P: PAnsiChar;
+    L: integer;
+begin
+  L := length(V^);
+  P := @V^[1];
+  while (L>0) and (P^ in ['a'..'z']) do begin
+    inc(P);
+    dec(L);
+  end;
+  if L=0 then
+    FastSetString(result,@V^[1],length(V^)) else
+    FastSetString(result,P,L);
+end;
+{$else}
+function TrimLeftLowerCaseShort(V: PShortString): RawUTF8;
+asm // eax=V
+        xor     ecx, ecx
+        push    edx // save result RawUTF8
+        test    eax, eax
+        jz      @2 // avoid GPF
+        lea     edx, [eax + 1]
+        mov     cl, [eax]
+@1:     mov     ch, [edx] // edx=source cl=length
+        sub     ch, 'a'
+        sub     ch, 'z' - 'a'
+        ja      @2 // not a lower char -> create a result string starting at edx
+        inc     edx
+        dec     cl
+        jnz     @1
+        mov     cl, [eax]
+        lea     edx, [eax + 1]  // no UpperCase -> retrieve full text (result := V^)
+@2:     pop     eax
+        movzx   ecx, cl
+{$ifdef UNICODE}
+        push    CP_UTF8 // UTF-8 code page for Delphi 2009+ + call below, not jump
+        call    System.@LStrFromPCharLen // eax=Dest edx=Source ecx=Length
+        rep     ret // we need a call just above for right push CP_UTF8 retrieval
+{$else} jmp     System.@LStrFromPCharLen // eax=dest edx=source ecx=length(source)
+{$endif}
+end;
+{$endif FPC_OR_PUREPASCAL}
 
 function UnCamelCase(const S: RawUTF8): RawUTF8;
 begin
