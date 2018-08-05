@@ -532,7 +532,8 @@ uses
   SyNodeBinding_const,
   SyNodeBinding_buffer,
   SyNodeBinding_util,
-  SyNodeBinding_uv;
+  SyNodeBinding_uv,
+  SyNodeBinding_os;
 
 const
   jsglobal_class: JSClass = (name: 'global';
