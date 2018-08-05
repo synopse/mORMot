@@ -451,7 +451,8 @@ type
     // - KeySize is in bits, i.e. 128,192,256
     function DecryptInit(const Key; KeySize: cardinal): boolean;
     /// Initialize AES contexts for uncypher, from another TAES.EncryptInit
-    function DecryptInitFrom(const Encryption: TAES; const Key; KeySize: cardinal): boolean;
+    function DecryptInitFrom(const Encryption{$ifndef DELPHI5OROLDER}: TAES{$endif};
+      const Key; KeySize: cardinal): boolean;
     /// decrypt an AES data block
     procedure Decrypt(var B: TAESBlock); overload;
       {$ifdef FPC}inline;{$endif}
@@ -6118,7 +6119,8 @@ begin
   until rounds=1;
 end;
 
-function TAES.DecryptInitFrom(const Encryption: TAES; const Key; KeySize: cardinal): boolean;
+function TAES.DecryptInitFrom(const Encryption{$ifndef DELPHI5OROLDER}: TAES{$endif};
+  const Key; KeySize: cardinal): boolean;
 var ctx: TAESContext absolute Context;
 begin
   {$ifdef USEPADLOCK}
@@ -6130,9 +6132,10 @@ begin
   end;
   {$endif}
   ctx.Initialized := false;
-  if not Encryption.Initialized then // e.g. called from DecryptInit()
+  if not {$ifdef DELPHI5OROLDER}TAES{$endif}(Encryption).Initialized then
+    // e.g. called from DecryptInit()
     EncryptInit(Key, KeySize) else // contains Initialized := true
-    self := Encryption;
+    self := {$ifdef DELPHI5OROLDER}TAES{$endif}(Encryption);
   result := ctx.Initialized;
   if not result then
     exit;
