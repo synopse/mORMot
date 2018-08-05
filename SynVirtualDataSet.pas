@@ -69,6 +69,7 @@ uses
   Variants,
   {$endif}
   SynCommons,
+  SynTable,
   {$ifdef ISDELPHIXE2}
   System.Generics.Collections,
   Data.DB, Data.FMTBcd;
@@ -864,19 +865,19 @@ begin
       fColumns[ndx].Name := first^.Names[ndx];
       fColumns[ndx].FieldType := VariantTypeToSQLDBFieldType(first^.Values[ndx]);
       case fColumns[ndx].FieldType of
-      SynCommons.ftNull:
-        fColumns[ndx].FieldType := SynCommons.ftBlob;
-      SynCommons.ftCurrency:
-        fColumns[ndx].FieldType := SynCommons.ftDouble;
-      SynCommons.ftInt64: // ensure type coherency of whole column
+      SynTable.ftNull:
+        fColumns[ndx].FieldType := SynTable.ftBlob;
+      SynTable.ftCurrency:
+        fColumns[ndx].FieldType := SynTable.ftDouble;
+      SynTable.ftInt64: // ensure type coherency of whole column
         for j := 1 to first^.Count-1 do
           if j>=Length(fValues) then // check objects are consistent
             break else
             with _Safe(fValues[j],dvObject)^ do
             if (ndx<Length(Names)) and IdemPropNameU(Names[ndx],fColumns[ndx].Name) then
             if VariantTypeToSQLDBFieldType(Values[ndx]) in
-                [SynCommons.ftNull,SynCommons.ftDouble,SynCommons.ftCurrency] then begin
-              fColumns[ndx].FieldType := SynCommons.ftDouble;
+                [SynTable.ftNull,SynTable.ftDouble,SynTable.ftCurrency] then begin
+              fColumns[ndx].FieldType := SynTable.ftDouble;
               break;
             end;
       end;
@@ -899,7 +900,7 @@ begin
   F := Field.Index;
   if (cardinal(RowIndex)<cardinal(length(fValues))) and
      (cardinal(F)<cardinal(length(fColumns))) and
-     not (fColumns[F].FieldType in [ftNull,SynCommons.ftUnknown,SynCommons.ftCurrency]) then
+     not (fColumns[F].FieldType in [ftNull,SynTable.ftUnknown,SynTable.ftCurrency]) then
     with _Safe(fValues[RowIndex])^ do
     if (Kind=dvObject) and (Count>0) then begin
       if IdemPropNameU(fColumns[F].Name,Names[F]) then
@@ -913,14 +914,14 @@ begin
           case fColumns[F].FieldType of
           ftInt64:
             VariantToInt64(Values[ndx],fTemp64);
-          ftDouble,SynCommons.ftDate:
+          ftDouble,SynTable.ftDate:
             VariantToDouble(Values[ndx],PDouble(@fTemp64)^);
           ftUTF8: begin
             VariantToUTF8(Values[ndx],fTempUTF8,wasString);
             result := pointer(fTempUTF8);
             ResultLen := length(fTempUTF8);
           end;
-          SynCommons.ftBlob: begin
+          SynTable.ftBlob: begin
             VariantToUTF8(Values[ndx],fTempUTF8,wasString);
             if Base64MagicCheckAndDecode(pointer(fTempUTF8),length(fTempUTF8),fTempBlob) then begin
               result := pointer(fTempBlob);

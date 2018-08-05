@@ -104,7 +104,7 @@ uses
 {$ifdef USETMSPACK}
   TaskDialog,
 {$endif}
-  SynCommons, mORMot, mORMotUILogin, mORMotUI, mORMoti18n, mORMotToolBar,
+  SynCommons, SynTable, mORMot, mORMotUILogin, mORMotUI, mORMoti18n, mORMotToolBar,
   SynTaskDialog, StdCtrls, ExtCtrls, ImgList, ComCtrls;
 
 type

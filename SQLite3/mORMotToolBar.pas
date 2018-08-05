@@ -118,7 +118,7 @@ uses
 {$else}
   StdCtrls, ComCtrls, SynTaskDialog, Buttons, CommCtrl,
 {$endif USETMSPACK}
-  SynCommons, SynGdiPlus, SynZip,
+  SynCommons, SynTable, SynGdiPlus, SynZip,
   mORMot, mORMotReport, mORMotUI, mORMoti18n, mORMotUILogin;
 
 

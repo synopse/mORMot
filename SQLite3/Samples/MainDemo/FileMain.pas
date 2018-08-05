@@ -14,7 +14,7 @@ uses
   AdvToolBar, AdvPreviewMenu, AdvShapeButton, AdvOfficePager,
 {$endif}
   ImgList, ShellApi,
-  SynCommons, SynGdiPlus, mORMot, mORMotHttpClient,
+  SynCommons, SynTable, SynGdiPlus, mORMot, mORMotHttpClient,
   mORMotToolBar, mORMotUI, mORMotUILogin, mORMoti18n,
 {$ifdef DEBUGINTERNALSERVER}
   FileServer,

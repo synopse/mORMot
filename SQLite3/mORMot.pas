@@ -14634,7 +14634,7 @@ type
     // - this method will call EngineAdd() to perform the request
     function Add(Value: TSQLRecord; SendData: boolean; ForceID: boolean=false;
       DoNotAutoComputeFields: boolean=false): TID; overload;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef FPC}inline;{$endif}
     /// create a new member, including selected fields
     // - implements REST POST collection
     // - if ForceID is true, client sends the Value.ID field to use this ID for
@@ -14649,7 +14649,7 @@ type
     // - this method will call EngineAdd() to perform the request
     function Add(Value: TSQLRecord; const CustomFields: TSQLFieldBits;
       ForceID: boolean=false; DoNotAutoComputeFields: boolean=false): TID; overload;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef FPC}inline;{$endif}
     /// create a new member, including its BLOB fields
     // - implements REST POST collection
     // - this method will create a JSON representation of the document
@@ -15020,7 +15020,7 @@ type
     function RetrieveList<T: TSQLRecord>(const FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8=''): TObjectList<T>; overload;
-    {$endif}
+    {$endif ISDELPHI2010}
 
     /// you can call this method in TThread.Execute to ensure that
     // the thread will be taken in account during process
