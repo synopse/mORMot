@@ -22426,6 +22426,7 @@ asm
 end;
 {$else}
 {$ifdef FPC}
+procedure bswap64array(a,b: PQWordArray; n: integer);
 var i: integer;
 begin
   for i := 0 to n-1 do
@@ -64553,8 +64554,10 @@ begin
     StrComp := @StrCompSSE42;
     {$endif}
     {$endif}
+    {$ifndef PUREPASCAL}
     {$ifndef DELPHI5OROLDER}
     UpperCopy255Buf := @UpperCopy255BufSSE42;
+    {$endif}
     {$endif}
     {$ifndef PUREPASCAL}
     StrComp := @StrCompSSE42;
