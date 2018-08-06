@@ -553,7 +553,7 @@ procedure RunUntilSigTerminated(daemon: TObject; dofork: boolean;
 // waitseconds for the .pid file to disapear
 // - returns true on success, false on error (e.g. no valid .pid file or
 // the file didn't disappear, which may mean that the daemon is broken)
-function RunUntilSigTerminatedForkKill(waitseconds: integer = 30): boolean;
+function RunUntilSigTerminatedForKill(waitseconds: integer = 30): boolean;
 
 /// local .pid file name as created by RunUntilSigTerminated(dofork=true)
 function RunUntilSigTerminatedPidFile: TFileName;
@@ -1290,7 +1290,7 @@ begin
   result := format('%s.%s.pid', [ExeVersion.ProgramFilePath, ExeVersion.ProgramName]);
 end;
 
-function RunUntilSigTerminatedForkKill(waitseconds: integer): boolean;
+function RunUntilSigTerminatedForKill(waitseconds: integer): boolean;
 var
   pid: PtrInt;
   pidfilename: TFileName;
@@ -1562,7 +1562,7 @@ end;
 
 type
   TExecuteCommandLineCmd = (
-     cNone, cVersion, cVerbose, cStart, cStop, cState,
+     cNone, cVersion, cVerbose, cStart, cStop, cState, cSilentKill,
      cHelp, cInstall, cRun, cFork, cUninstall, cConsole, cKill);
 
 procedure TSynDaemon.CommandLine(aAutoStart: boolean);
@@ -1660,7 +1660,8 @@ begin
         break;
       end;
     if cmd = cNone then
-      byte(cmd) := ord(cVersion) + IdemPCharArray(@param[2], ['VERS', 'VERB', 'START', 'STOP', 'STAT']);
+      byte(cmd) := ord(cVersion) +
+        IdemPCharArray(@param[2], ['VERS', 'VERB', 'START', 'STOP', 'STAT', 'SILENTK']);
     end;
   try
     case cmd of
@@ -1760,9 +1761,11 @@ begin
     {$else}
     cRun, cFork:
       RunUntilSigTerminated(self,(cmd=cFork),Start,Stop,fSettings.fLogClass.Add,fSettings.ServiceName);
-    cKill:
-      if RunUntilSigTerminatedForkKill then
-        writeln('Forked process ', ExeVersion.ProgramName, ' killed successfully')
+    cKill, cSilentKill:
+      if RunUntilSigTerminatedForKill then begin
+        if cmd <> cSilentKill then
+          writeln('Forked process ', ExeVersion.ProgramName, ' killed successfully');
+      end
       else
         raise EServiceException.Create('No forked process found to be killed');
     else
@@ -1771,11 +1774,13 @@ begin
     end;
   except
     on E: Exception do begin
-      ConsoleShowFatalException(E, true);
+      if cmd <> cSilentKill then
+        ConsoleShowFatalException(E, true);
       ExitCode := 1; // indicates error
     end;
   end;
-  TextColor(ccLightGray);
+  if cmd <> cSilentKill then
+    TextColor(ccLightGray);
   ioresult;
 end;
 
