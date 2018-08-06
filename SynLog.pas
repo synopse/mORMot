@@ -1514,6 +1514,10 @@ function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
   const msg, procid, msgid: RawUTF8; destbuffer: PUTF8Char; destsize: integer;
   trimmsgfromlog: boolean): integer;
 
+/// check if the supplied file name is a currently working log file
+// - may be used to avoid e.g. infinite recursion when monitoring the log file
+function IsActiveLogFile(const aFileName: TFileName): boolean;
+
 
 implementation
 
@@ -2359,6 +2363,25 @@ begin
   result := destbuffer-start;
   MoveFast(P^,destbuffer^,len);
   inc(result,len);
+end;
+
+function IsActiveLogFile(const aFileName: TFileName): boolean;
+var i: PtrInt;
+    one: ^TSynLog;
+begin
+  result := true;
+  SynLogFileList.Safe.Lock;
+  try
+    one := pointer(SynLogFileList.List);
+    for i := 1 to SynLogFileList.Count do
+      if {$ifdef MSWINDOWS}CompareText(one^.FileName,aFileName)=0{$else}
+         one^.FileName=aFileName{$endif} then
+        exit else
+        inc(one);
+  finally
+    SynLogFileList.Safe.UnLock;
+  end;
+  result := false;
 end;
 
 {$ifdef NOEXCEPTIONINTERCEPT}

@@ -130,13 +130,13 @@ type
     // - this method is not thread-safe
     function Match(aText: PUTF8Char; aTextLen: PtrInt): boolean; overload;
       {$ifdef FPC}inline;{$endif}
+    /// returns TRUE if the supplied content matches the prepared glob pattern
+    // - this method IS thread-safe, and won't lock
+    function MatchThreadSafe(const aText: RawUTF8): boolean;
     /// returns TRUE if the supplied VCL/LCL content matches the prepared glob pattern
     // - this method IS thread-safe, will use stack to UTF-8 temporary conversion
     // if possible, and won't lock
     function MatchString(const aText: string): boolean;
-    /// returns TRUE if the supplied content matches the prepared glob pattern
-    // - this method IS thread-safe, and won't lock
-    function MatchThreadSafe(const aText: RawUTF8): boolean;
   end;
   TMatchDynArray = array of TMatch;
 
@@ -5377,6 +5377,16 @@ begin
     result := PMax < 0;
 end;
 
+function TMatch.MatchThreadSafe(const aText: RawUTF8): boolean;
+var local: TMatch; // thread-safe with no lock!
+begin
+  local := self;
+  if aText <> '' then
+    result := local.Search(@local, pointer(aText), length(aText))
+  else
+    result := local.PMax < 0;
+end;
+
 function TMatch.MatchString(const aText: string): boolean;
 var
   local: TMatch; // thread-safe with no lock!
@@ -5399,20 +5409,10 @@ begin
   temp.Done;
 end;
 
-function TMatch.MatchThreadSafe(const aText: RawUTF8): boolean;
-var local: TMatch; // thread-safe with no lock!
-begin
-  local := self;
-  if aText <> '' then
-    result := local.Search(@local, pointer(aText), length(aText))
-  else
-    result := local.PMax < 0;
-end;
-
 function IsMatch(const Pattern, Text: RawUTF8; CaseInsensitive: boolean): boolean;
 var match: TMatch;
 begin
-  match.Prepare(Pattern, CaseInsensitive, false);
+  match.Prepare(Pattern, CaseInsensitive, {reuse=}false);
   result := match.Match(Text);
 end;
 
@@ -5528,7 +5528,7 @@ begin
     if found <> nil then
       with fMatch[n] do begin
         PatternInstance := pat^; // avoid GPF if aPatterns[] is released
-        Parent.Prepare(PatternInstance, CaseInsensitive, true);
+        Parent.Prepare(PatternInstance, CaseInsensitive, {reuse=}true);
         inc(n);
       end;
     inc(pat);
@@ -5706,7 +5706,7 @@ end;
 procedure TSynValidatePattern.SetParameters(const Value: RawUTF8);
 begin
   inherited SetParameters(Value);
-  fMatch.Prepare(Value, ClassType=TSynValidatePatternI, true);
+  fMatch.Prepare(Value, ClassType=TSynValidatePatternI, {reuse=}true);
 end;
 
 function TSynValidatePattern.Process(aFieldIndex: integer; const value: RawUTF8;
