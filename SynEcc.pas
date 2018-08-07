@@ -367,7 +367,7 @@ type
     Signature: TECCSignature;
     /// FNV-1a checksum of all previous fields
     // - we use fnv32 and not crc32c here to avoid colision with crc64c hashing
-    // - avoiding to compute slow ECDSA verification in case of corrumption,
+    // - avoiding to compute slow ECDSA verification in case of corruption,
     // due e.g. to unexpected transmission/bug/fuzzing
     // - should be the very last field in the record
     CRC: cardinal;

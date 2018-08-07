@@ -580,7 +580,7 @@ begin
     else
       raise Exception.CreateFmt('%s has unexpected versionNumber=%d',
         [fLibraryName, versionNumber]);
-  inherited Create; // register AlgoLizard/AlgoLizardFast
+  inherited Create; // register AlgoLizard/AlgoLizardFast/AlgoLizardHuffman
   fLoaded := true;
 end;
 

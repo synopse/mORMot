@@ -24549,7 +24549,7 @@ begin
 end;
 
 function fnv32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
-var i: integer;
+var i: PtrInt;
 begin
   if buf<>nil then
     for i := 0 to len-1 do
@@ -24558,7 +24558,7 @@ begin
 end;
 
 function kr32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
-var i: integer;
+var i: PtrInt;
 begin
   for i := 0 to len-1 do
     crc := ord(buf[i])+crc*31;
@@ -25978,7 +25978,7 @@ asm // rcx=s, rdx=reject (Linux: rdi,rsi)
         {$endif}
         movd    eax, xmm0
         jns     @5
-@2:     cmp     ax, -1
+@2:     cmp     eax, 65535
         jne     @3
         add     rdi, 16 // first 16 chars matched, continue with next 16 chars
         add     rcx, 16
@@ -26002,7 +26002,11 @@ asm // rcx=s, rdx=reject (Linux: rdi,rsi)
         jns     @4
         mov     rsi, r8    // restore set pointer
         and     eax, edx   // accumulate matches
-        jmp     @2
+        cmp     eax, 65535
+        jne     @3
+        add     rdi, 16
+        add     rcx, 16
+        jmp     @1
 end;
 function strspnsse42(s,accept: pointer): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else}
@@ -26025,7 +26029,7 @@ asm // rcx=s, rdx=accept (Linux: rdi,rsi)
         {$endif}
         movd    eax, xmm0
         jns     @5
-@2:     cmp     ax, -1
+@2:     cmp     eax, 65535
         jne     @3
         add     rdi, 16 // first 16 chars matched, continue with next 16 chars
         add     rcx, 16
@@ -26049,7 +26053,11 @@ asm // rcx=s, rdx=accept (Linux: rdi,rsi)
         jns     @4
         mov     rsi, r8    // restore set pointer
         and     eax, edx   // accumulate matches
-        jmp     @2
+        cmp     eax, 65535
+        jne     @3
+        add     rdi, 16 // first 16 chars matched, continue with next 16 chars
+        add     rcx, 16
+        jmp     @1
 end;
 {$endif CPUX64}
 {$ifdef CPUX86}
@@ -26074,7 +26082,7 @@ asm // eax=s, edx=reject
         db $66,$0F,$7E,$C0
         {$endif}
         jns     @5
-@2:     cmp     ax, -1
+@2:     cmp     eax, 65535
         jne     @3
         add     edi, 16 // first 16 chars matched, continue with next 16 chars
         add     ecx, 16
@@ -26100,7 +26108,11 @@ asm // eax=s, edx=reject
         jns     @4
         mov     esi, ebx   // restore set pointer
         and     eax, edx   // accumulate matches
-        jmp     @2
+        cmp     eax, 65535
+        jne     @3
+        add     edi, 16 // first 16 chars matched, continue with next 16 chars
+        add     ecx, 16
+        jmp     @1
 end;
 function strspnsse42(s,accept: pointer): integer;
 asm // eax=s, edx=accept
@@ -26123,7 +26135,7 @@ asm // eax=s, edx=accept
         db $66,$0F,$7E,$C0
         {$endif}
         jns     @5
-@2:     cmp     ax, -1
+@2:     cmp     eax, 65535
         jne     @3
         add     edi, 16 // first 16 chars matched, continue with next 16 chars
         add     ecx, 16
@@ -26149,7 +26161,11 @@ asm // eax=s, edx=accept
         jns     @4
         mov     esi, ebx   // restore set pointer
         and     eax, edx   // accumulate matches
-        jmp     @2
+        cmp     eax, 65535
+        jne     @3
+        add     edi, 16 // first 16 chars matched, continue with next 16 chars
+        add     ecx, 16
+        jmp     @1
 end;
 {$ifndef DELPHI5OROLDER}
 function StrLenSSE2(S: pointer): PtrInt;
