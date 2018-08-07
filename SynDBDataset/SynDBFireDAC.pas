@@ -65,6 +65,7 @@ uses
   {$ENDIF}
   Classes, Contnrs,
   SynCommons,
+  SynTable,
   SynLog,
   SynDB,
   SynDBDataset,
@@ -541,12 +542,12 @@ begin
     P.ParamType := SQLParamTypeToDBParamType(VInOut);
     if VinOut <> paramInOut then
       case VType of
-        SynCommons.ftNull:
+        SynTable.ftNull:
           if fPreparedUseArrayDML then
             for i := 0 to fParamsArrayCount-1 do
               P.Clear(i) else
             P.Clear;
-        SynCommons.ftInt64: begin
+        SynTable.ftInt64: begin
           if fPreparedUseArrayDML then
             for i := 0 to fParamsArrayCount-1 do
               if VArray[i]='null' then
@@ -558,7 +559,7 @@ begin
               P.AsLargeInt := GetInt64(pointer(VArray[aArrayIndex])) else
             P.AsLargeInt := VInt64;
         end;
-        SynCommons.ftDouble:
+        SynTable.ftDouble:
           if fPreparedUseArrayDML then
             for i := 0 to fParamsArrayCount-1 do
               if VArray[i]='null' then
@@ -569,7 +570,7 @@ begin
               P.Clear else
               P.AsFloat := GetExtended(pointer(VArray[aArrayIndex])) else
             P.AsFloat := PDouble(@VInt64)^;
-        SynCommons.ftCurrency:
+        SynTable.ftCurrency:
           if fPreparedUseArrayDML then
             for i := 0 to fParamsArrayCount-1 do
               if VArray[i]='null' then
@@ -580,7 +581,7 @@ begin
               P.Clear else
               P.AsCurrency := StrToCurrency(pointer(VArray[aArrayIndex])) else
             P.AsCurrency := PCurrency(@VInt64)^;
-        SynCommons.ftDate:
+        SynTable.ftDate:
           if fPreparedUseArrayDML then
             for i := 0 to fParamsArrayCount-1 do
             if VArray[i]='null' then
@@ -595,7 +596,7 @@ begin
               P.AsDateTime := Iso8601ToDateTime(tmp);
             end else
               P.AsDateTime := PDateTime(@VInt64)^;
-        SynCommons.ftUTF8:
+        SynTable.ftUTF8:
           if fPreparedUseArrayDML then begin
             StoreVoidStringAsNull := fConnection.Properties.StoreVoidStringAsNull;
             for i := 0 to fParamsArrayCount-1 do
@@ -635,7 +636,7 @@ begin
                 P.AsString := UTF8ToString(VData) else
                 P.AsWideString := UTF8ToWideString(VData);
               {$endif}
-        SynCommons.ftBlob:
+        SynTable.ftBlob:
           if fPreparedUseArrayDML then
             for i := 0 to fParamsArrayCount-1 do
               if VArray[i]='null' then
@@ -660,12 +661,12 @@ var Par: TADParam;
 begin
   Par := fQueryParams[aParamIndex];
   case aParam.VType of
-    SynCommons.ftInt64:    aParam.VInt64 := Par.AsLargeInt;
-    SynCommons.ftDouble:   PDouble(@aParam.VInt64)^ := Par.AsFloat;
-    SynCommons.ftCurrency: PCurrency(@aParam.VInt64)^ := Par.AsCurrency;
-    SynCommons.ftDate:     PDateTime(@aParam.VInt64)^ := Par.AsDateTime;
-    SynCommons.ftUTF8:     aParam.VData := StringToUTF8(Par.AsString);
-    SynCommons.ftBlob:     aParam.VData := Par.AsBlob;
+    SynTable.ftInt64:    aParam.VInt64 := Par.AsLargeInt;
+    SynTable.ftDouble:   PDouble(@aParam.VInt64)^ := Par.AsFloat;
+    SynTable.ftCurrency: PCurrency(@aParam.VInt64)^ := Par.AsCurrency;
+    SynTable.ftDate:     PDateTime(@aParam.VInt64)^ := Par.AsDateTime;
+    SynTable.ftUTF8:     aParam.VData := StringToUTF8(Par.AsString);
+    SynTable.ftBlob:     aParam.VData := Par.AsBlob;
   end;
 end;
 
