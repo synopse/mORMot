@@ -78,7 +78,7 @@ unit SynLizard;
 
   Revision history
 
-  Version 1.8
+  Version 1.18
   - first release, associated with the main Synopse mORMot framework
 
   Some numbers, for a 53MB log file (taken from a production server):

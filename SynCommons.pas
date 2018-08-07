@@ -12126,9 +12126,10 @@ type
   {$ifdef ISDELPHI2006ANDUP}TSynSystemTime = record{$else}TSynSystemTime = object{$endif}
     Year, Month, DayOfWeek, Day,
     Hour, Minute, Second, MilliSecond: word;
+    /// set all fields to 0
+    procedure Clear; {$ifdef HASINLINE}inline;{$endif}
     /// returns true if all fields are zero
-    function IsZero: boolean;
-      {$ifdef HASINLINE}inline;{$endif}
+    function IsZero: boolean; {$ifdef HASINLINE}inline;{$endif}
     /// returns true if all fields do match
     function IsEqual(const another{$ifndef DELPHI5OROLDER}: TSynSystemTime{$endif}): boolean;
     /// used by TSynTimeZone
@@ -35104,7 +35105,7 @@ begin
   SS := t2;
   MS := t - t2 * 1000;
 end;
-{$endif}
+{$endif FPC}
 
 function UnixTimeToFileShort(const UnixTime: TUnixTime): TShort16;
 var dt: TDateTime;
@@ -35782,6 +35783,7 @@ begin
     tix := GetTickCount64 {$ifndef MSWINDOWS}shr 3{$endif}; // Linux: 8ms refresh
     if clock<>tix then begin // Windows: typically in range of 10-16 ms
       clock := tix;
+      NewTime.Clear;
       if LocalTime then
         GetLocalTime(newtimesys) else
         {$ifdef MSWINDOWS}GetSystemTime{$else}GetNowUTCSystem{$endif}(newtimesys);
@@ -36101,6 +36103,12 @@ begin
   end;
   // finally add the time when change is due
   result := result+EncodeTime(Hour,Minute,Second,MilliSecond);
+end;
+
+procedure TSynSystemTime.Clear;
+begin
+  PInt64Array(@self)[0] := 0;
+  PInt64Array(@self)[1] := 0;
 end;
 
 function TSynSystemTime.IsZero: boolean;
@@ -55463,7 +55471,7 @@ end;
 { ************ Unit-Testing classes and functions }
 
 procedure KB(bytes: Int64; out result: TShort16);
-const _B: array[0..3] of string[3] = ('KB','MB','GB','TB');
+const _B: array[0..3] of string[3] = (' KB',' MB',' GB',' TB');
 var hi,rem,b: cardinal;
 begin
   if bytes<1 shl 10 then begin
@@ -55497,8 +55505,8 @@ begin
     inc(hi); // round up as expected by an human being
   end;
   if rem<>0 then
-    FormatShort16('%.% %',[hi,rem,_B[b]],result) else
-    FormatShort16('% %',[hi,_B[b]],result);
+    FormatShort16('%.%%',[hi,rem,_B[b]],result) else
+    FormatShort16('%%',[hi,_B[b]],result);
 end;
 
 function KB(bytes: Int64): TShort16;
