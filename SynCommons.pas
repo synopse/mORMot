@@ -11141,7 +11141,7 @@ function Hash32(const Text: RawByteString): cardinal; overload;
 /// standard Kernighan & Ritchie hash from "The C programming Language", 3rd edition
 // - simple and efficient code, but too much collisions for THasher
 // - kr32() is 898.8 MB/s - crc32cfast() 1.7 GB/s, crc32csse42() 4.3 GB/s
-function kr32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+function kr32(crc: cardinal; buf: PAnsiChar; len: PtrInt): cardinal;
 
 /// simple FNV-1a hashing function
 // - when run over our regression suite, is similar to crc32c() about collisions,
@@ -11149,7 +11149,7 @@ function kr32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 // - fnv32() is 715.5 MB/s - kr32() 898.8 MB/s
 // - this hash function should not be usefull, unless you need several hashing
 // algorithms at once (e.g. if crc32c with diverse seeds is not enough)
-function fnv32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+function fnv32(crc: cardinal; buf: PAnsiChar; len: PtrInt): cardinal;
 
 /// perform very fast xxHash hashing in 32-bit mode
 // - will use optimized asm for x86/x64, or a pascal version on other CPUs
@@ -24548,7 +24548,7 @@ begin
   end;
 end;
 
-function fnv32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+function fnv32(crc: cardinal; buf: PAnsiChar; len: PtrInt): cardinal;
 var i: PtrInt;
 begin
   if buf<>nil then
@@ -24557,7 +24557,7 @@ begin
   result := crc;
 end;
 
-function kr32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+function kr32(crc: cardinal; buf: PAnsiChar; len: PtrInt): cardinal;
 var i: PtrInt;
 begin
   for i := 0 to len-1 do
