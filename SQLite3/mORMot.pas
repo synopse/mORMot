@@ -42590,8 +42590,8 @@ begin
 end;
 
 procedure TSQLRestServer.URI(var Call: TSQLRestURIParams);
-const COMMANDTEXT: array[TSQLRestServerURIContextCommand] of string[15] =
-  ('','SOA-Method ','SOA-Interface ','ORM-Get ','ORM-Write ');
+const COMMANDTEXT: array[TSQLRestServerURIContextCommand] of string[9] =
+  ('?','Method','Interface','Read','Write');
 var Ctxt: TSQLRestServerURIContext;
     timeStart,timeEnd: Int64;
     elapsed, len: cardinal;
@@ -42603,7 +42603,7 @@ var Ctxt: TSQLRestServerURIContext;
     {$endif}
 begin
   {$ifdef WITHLOG}
-  log := fLogClass.Enter('URI(% % inlen=%)',[Call.Method,Call.Url,length(Call.InBody)],self);
+  log := fLogClass.Enter('URI % % in=%',[Call.Method,Call.Url,KB(Call.InBody)],self);
   {$endif}
   QueryPerformanceCounter(timeStart);
   fStats.AddCurrentRequestCount(1);
@@ -42630,9 +42630,9 @@ begin
     if fShutdownRequested then
       Ctxt.Error('Server is shutting down',HTTP_UNAVAILABLE) else
     if Ctxt.Method=mNone then
-      Ctxt.Error('Unknown VERB') else
+      Ctxt.Error('Unknown Verb %',[Call.Method]) else
     if (fIPBan<>nil) and fIPBan.Exists(Ctxt.RemoteIP) then
-      Ctxt.Error('Banned IP %', [Ctxt.fRemoteIP]) else
+      Ctxt.Error('Banned IP %',[Ctxt.fRemoteIP]) else
     // 1. decode URI
     if not Ctxt.URIDecodeREST then
       Ctxt.Error('Invalid Root',HTTP_NOTFOUND) else
@@ -42721,9 +42721,10 @@ begin
     QueryPerformanceCounter(timeEnd);
     Ctxt.MicroSecondsElapsed := fStats.FromExternalQueryPerformanceCounters(timeEnd-timeStart);
     {$ifdef WITHLOG}
-    InternalLog('% % % %/% %-> % with outlen=% in % us',
+    InternalLog('% % % %/% %=% out=% in %',
       [Ctxt.SessionUserName,Ctxt.RemoteIPNotLocal,Call.Method,Model.Root,Ctxt.URI,
-      COMMANDTEXT[Ctxt.Command],Call.OutStatus,length(Call.OutBody),Ctxt.MicroSecondsElapsed],sllServer);
+       COMMANDTEXT[Ctxt.Command],Call.OutStatus,KB(Call.OutBody),
+       MicroSecToString(Ctxt.MicroSecondsElapsed)],sllServer);
     if (Call.OutBody<>'') and (sllServiceReturn in fLogFamily.Level) then
       if not(optNoLogOutput in Ctxt.ServiceExecutionOptions) then
         if IsHTMLContentTypeTextual(pointer(Call.OutHead)) then
