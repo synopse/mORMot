@@ -10450,6 +10450,7 @@ type
   // - i.e. the number of seconds since 1970-01-01 00:00:00 UTC
   // - is stored as 64-bit value, so that it won't be affected by the
   // "Year 2038" overflow issue
+  // - see TUnixMSTime for a millisecond resolution Unix Timestamp
   // - use UnixTimeToDateTime/DateTimeToUnixTime functions to convert it to/from
   // a regular TDateTime
   // - use UnixTimeUTC to return the current timestamp, using fast OS API call
@@ -10458,6 +10459,7 @@ type
 
   /// timestamp stored as millisecond-based Unix Time
   // - i.e. the number of milliseconds since 1970-01-01 00:00:00 UTC
+  // - see TUnixTime for a second resolution Unix Timestamp
   // - use UnixMSTimeToDateTime/DateTimeToUnixMSTime functions to convert it
   // to/from a regular TDateTime
   // - also one of the JavaScript date encodings
@@ -13666,6 +13668,10 @@ procedure SetVariantByValue(const Source: Variant; var Dest: Variant);
 procedure ZeroFill(Value: PVarData);
   {$ifdef HASINLINE}inline;{$endif}
 
+/// fill all bytes of the value's memory buffer with zeros, i.e. 'toto' -> #0#0#0#0
+// - may be used to cleanup stack-allocated content
+procedure FillZero(var value: variant); overload;
+
 /// retrieve a variant value from variable-length buffer
 // - matches TFileBufferWriter.Write()
 // - how custom type variants are created can be defined via CustomVariantOptions
@@ -14377,6 +14383,9 @@ type
     // - like Clear + Init() with the same options
     // - will reset Kind to dvUndefined
     procedure Reset;
+    /// fill all Values[] with #0, then delete all values
+    // - could be used to specifically remove sensitive information from memory
+    procedure FillZero;
     /// low-level method to force a number of items
     // - could be used to fast add items to the internal Values[]/Names[] arrays
     // - just set protected VCount field, do not resize the arrays: caller
@@ -42988,6 +42997,15 @@ begin // slightly faster than FillChar(Value,SizeOf(Value),0);
   {$endif}
 end;
 
+procedure FillZero(var value: variant); overload;
+begin
+  with TVarData(Value) do
+    case VType of
+    varString: FillZero(RawByteString(VAny));
+    end;
+  VarClear(Value);
+end;
+
 procedure RawUTF8ToVariant(Txt: PUTF8Char; TxtLen: integer; var Value: variant);
 begin
   with TVarData(Value) do begin
@@ -44591,10 +44609,20 @@ end;
 procedure TDocVariantData.Reset;
 var backup: TDocVariantOptions;
 begin
+  if VCount=0 then
+    exit;
   backup := VOptions-[dvoIsArray,dvoIsObject];
   DocVariantType.Clear(TVarData(self));
   VType := DocVariantVType;
   VOptions := backup;
+end;
+
+procedure TDocVariantData.FillZero;
+var ndx: integer;
+begin
+  for ndx := 0 to VCount-1 do
+    SynCommons.FillZero(VValue[ndx]);
+  Reset;
 end;
 
 procedure TDocVariantData.SetCount(aCount: integer);

@@ -13110,13 +13110,11 @@ type
     // with an optional custom contract to be used instead of methods signature
     // (only for the first interface)
     function AddInterface(const aInterfaces: array of PTypeInfo;
-      aInstanceCreation: TServiceInstanceImplementation;
-      aContractExpected: RawUTF8=''): boolean; overload;
+      aInstanceCreation: TServiceInstanceImplementation; aContractExpected: RawUTF8=''): boolean; overload;
     /// method called on the client side to register a service via one interface
     // - overloaded method returning the corresponding service factory client,
     // or nil on error
-    function AddInterface(aInterface: PTypeInfo;
-      aInstanceCreation: TServiceInstanceImplementation;
+    function AddInterface(aInterface: PTypeInfo; aInstanceCreation: TServiceInstanceImplementation;
       const aContractExpected: RawUTF8=''): TServiceFactoryClient; overload;
     /// retrieve a service provider from its index in the list
     // - returns nil if out of range index
@@ -38957,8 +38955,10 @@ function TSQLRestClientURI.ServiceDefineSharedAPI(const aInterface: TGUID;
   const aContractExpected: RawUTF8): TServiceFactoryClient;
 begin
   result := ServiceDefine(aInterface,sicShared,aContractExpected);
-  result.ParamsAsJSONObject := true; // no contract -> explicit parameters
-  result.ResultAsJSONObjectWithoutResult := true;
+  if result<>nil then begin
+    result.ParamsAsJSONObject := true; // no contract -> explicit parameters
+    result.ResultAsJSONObjectWithoutResult := true;
+  end;
 end;
 
 procedure TSQLRestClientURI.ServicePublishOwnInterfaces(OwnServer: TSQLRestServer);
