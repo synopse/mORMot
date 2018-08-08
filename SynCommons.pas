@@ -3681,7 +3681,14 @@ function UnCamelCase(D, P: PUTF8Char): integer; overload;
 // - replacing spaces or punctuations by an uppercase character
 // - it is not the reverse function to UnCamelCase()
 procedure CamelCase(P: PAnsiChar; len: integer; var s: RawUTF8;
-  const isWord: TSynByteSet=[ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z')]);
+  const isWord: TSynByteSet=[ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z')]); overload;
+
+/// convert a string into an human-friendly CamelCase identifier
+// - replacing spaces or punctuations by an uppercase character
+// - it is not the reverse function to UnCamelCase()
+procedure CamelCase(const text: RawUTF8; var s: RawUTF8;
+  const isWord: TSynByteSet=[ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z')]); overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// UnCamelCase and translate a char buffer
 // - P is expected to be #0 ended
@@ -25639,7 +25646,7 @@ asm // eax=dest edx=source ecx=sourceLen
 end;
 {$endif DELPHI5OROLDER}
 
-function fnv32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+function fnv32(crc: cardinal; buf: PAnsiChar; len: PtrInt): cardinal;
 asm // eax=crc, edx=buf, ecx=len
         push    ebx
         test    edx, edx
@@ -25655,7 +25662,7 @@ asm // eax=crc, edx=buf, ecx=len
 @0:     pop     ebx
 end; // we tried an unrolled version, but it was slower on our Core i7!
 
-function kr32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+function kr32(crc: cardinal; buf: PAnsiChar; len: PtrInt): cardinal;
 asm // eax=crc, edx=buf, ecx=len
         test    ecx, ecx
         push    edi
@@ -37034,6 +37041,11 @@ begin
       break;
     end;
   FastSetString(s,P,len);
+end;
+
+procedure CamelCase(const text: RawUTF8; var s: RawUTF8; const isWord: TSynByteSet);
+begin
+  CamelCase(pointer(text), length(text), s, isWord);
 end;
 
 procedure GetCaptionFromPCharLen(P: PUTF8Char; out result: string);
