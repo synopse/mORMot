@@ -238,7 +238,7 @@ type
     // - returns number of bytes written to dst (<= maxDstSize), or <=0 on failure
     // - number can be <targetDstSize should the compressed block to decode be smaller
     // - this function is protected against buffer overflow exploits
-    decompress_safe_partial: function(src, dst: pointer; srcSize, targetDstSize: integer): integer; cdecl;
+    decompress_safe_partial: function(src, dst: pointer; srcSize, targetDstSize, maxDstSize: integer): integer; cdecl;
   end;
 
 var
@@ -328,7 +328,7 @@ function Lizard_compress_continue(streamPtr: pointer; src, dst: pointer; srcSize
 function Lizard_saveDict(streamPtr, safeBuffer: pointer; dictSize: integer): integer; cdecl; external;
 }
 function Lizard_decompress_safe(src, dst: pointer; srcSize, maxDstSize: integer): integer; cdecl; external;
-function Lizard_decompress_safe_partial(src, dst: pointer; srcSize, targetDstSize: integer): integer; cdecl; external;
+function Lizard_decompress_safe_partial(src, dst: pointer; srcSize, targetDstSize, maxDstSize: integer): integer; cdecl; external;
 {
 function Lizard_createStreamDecode: pointer; cdecl; external;
 function Lizard_freeStreamDecode(streamDec: pointer): integer; cdecl; external;
@@ -422,7 +422,7 @@ type
   TAlgoLizard = class(TAlgoCompressWithNoDestLen)
   protected
     fCompressionLevel: integer;
-    function RawProcess(src,dst: pointer; srcLen,dstLen: integer;
+    function RawProcess(src,dst: pointer; srcLen,dstLen,dstMax: integer;
       process: TAlgoCompressWithNoDestLenProcess): integer;  override;
   public
     constructor Create; override;
@@ -463,7 +463,7 @@ begin
     result := Lizard.compressBound(PlainLen);
 end;
 
-function TAlgoLizard.RawProcess(src, dst: pointer; srcLen, dstLen: integer;
+function TAlgoLizard.RawProcess(src, dst: pointer; srcLen, dstLen, dstMax: integer;
   process: TAlgoCompressWithNoDestLenProcess): integer;
 begin
   if Lizard = nil then
@@ -475,7 +475,7 @@ begin
   doUnCompress:
     result := Lizard.decompress_safe(src,dst,srcLen,dstLen);
   doUncompressPartial:
-    result := Lizard.decompress_safe_partial(src,dst,srcLen,dstLen);
+    result := Lizard.decompress_safe_partial(src,dst,srcLen,dstLen,dstMax);
   else
     result := 0;
   end;

@@ -60967,7 +60967,7 @@ type // implements the AlgoDeflate global variable
   TAlgoDeflate = class(TAlgoCompressWithNoDestLen)
   protected
     fDeflateLevel: integer;
-    function RawProcess(src,dst: pointer; srcLen,dstLen: integer;
+    function RawProcess(src,dst: pointer; srcLen,dstLen,dstMax: integer;
       process: TAlgoCompressWithNoDestLenProcess): integer;  override;
   public
     constructor Create; override;
@@ -60986,7 +60986,7 @@ begin
   result := 2;
 end;
 
-function TAlgoDeflate.RawProcess(src,dst: pointer; srcLen,dstLen: integer;
+function TAlgoDeflate.RawProcess(src,dst: pointer; srcLen,dstLen,dstMax: integer;
   process: TAlgoCompressWithNoDestLenProcess): integer;
 begin
   case process of

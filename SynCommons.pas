@@ -9010,8 +9010,9 @@ type
     /// this method will decompress the supplied data
     function AlgoDecompress(Comp: pointer; CompLen: integer; Plain: pointer): integer; virtual; abstract;
     /// this method will partially and safely decompress the supplied data
+    // - expects PartialLen <= result < PartialLenMax, depending on the algorithm
     function AlgoDecompressPartial(Comp: pointer; CompLen: integer;
-      Partial: pointer; PartialLenMax: integer): integer; virtual; abstract;
+      Partial: pointer; PartialLen, PartialLenMax: integer): integer; virtual; abstract;
   public
     /// will register AlgoID in the global list, for Algo() class methods
     // - no need to free this instance, since it will be owned by the global list
@@ -9079,7 +9080,11 @@ type
     // - returns 0 on error, or how many bytes have been written to Partial
     // - will call virtual AlgoDecompressPartial() which is slower, but expected
     // to avoid any buffer overflow on the Partial destination buffer
-    function DecompressPartial(Comp,Partial: PAnsiChar; CompLen,PartialLen: integer): integer;
+    // - some algorithms (e.g. Lizard) may need some additional bytes in the
+    // decode buffer, so PartialLenMax bytes should be allocated in Partial^,
+    // with PartialLenMax > expected PartialLen, and returned bytes may be >
+    // PartialLen, but always <= PartialLenMax
+    function DecompressPartial(Comp,Partial: PAnsiChar; CompLen,PartialLen,PartialLenMax: integer): integer;
     /// get the TAlgoCompress instance corresponding to the AlgoID stored
     // in the supplied compressed buffer
     // - returns nil if no algorithm was identified
@@ -9121,7 +9126,7 @@ type
     function AlgoDecompress(Comp: pointer; CompLen: integer; Plain: pointer): integer; override;
     /// partial (and safe) decompression of the supplied data using SynLZ
     function AlgoDecompressPartial(Comp: pointer; CompLen: integer;
-      Partial: pointer; PartialLenMax: integer): integer; override;
+      Partial: pointer; PartialLen, PartialLenMax: integer): integer; override;
   end;
 
   TAlgoCompressWithNoDestLenProcess = (doCompress, doUnCompress, doUncompressPartial);
@@ -9133,7 +9138,8 @@ type
   TAlgoCompressWithNoDestLen = class(TAlgoCompress)
   protected
     /// inherited classes should implement this single method for the actual process
-    function RawProcess(src,dst: pointer; srcLen,dstLen: integer;
+    // - dstMax is oinly used for doUncompressPartial
+    function RawProcess(src,dst: pointer; srcLen,dstLen,dstMax: integer;
       process: TAlgoCompressWithNoDestLenProcess): integer; virtual; abstract;
   public
     /// performs the compression, storing PlainLen and calling protected RawProcess
@@ -9144,7 +9150,7 @@ type
     function AlgoDecompress(Comp: pointer; CompLen: integer; Plain: pointer): integer; override;
     /// performs the decompression, retrieving PlainLen and calling protected RawProcess
     function AlgoDecompressPartial(Comp: pointer; CompLen: integer;
-      Partial: pointer; PartialLenMax: integer): integer; override;
+      Partial: pointer; PartialLen, PartialLenMax: integer): integer; override;
   end;
 
 
@@ -29852,7 +29858,8 @@ begin
     CSVToRawUTF8DynArray(pointer(StringToUTF8(Mask)),masks,';');
   if masks<>nil then begin
     if SortByName then
-      QuickSortRawUTF8(masks,length(masks),nil,@StrIComp);
+      QuickSortRawUTF8(masks,length(masks),nil,
+        {$ifdef MSWINDOWS}@StrIComp{$else}@StrComp{$endif});
     for n := 0 to high(masks) do begin
       masked := FindFiles(Directory,UTF8ToString(masks[n]),
         IgnoreFileName,SortByName,IncludesDir);
@@ -55509,8 +55516,6 @@ procedure MicroSecToString(Micro: QWord; out result: TShort16);
   procedure TwoDigitToString(value: cardinal; const u: shortstring; var result: TShort16);
   var d100: TDiv100Rec;
   begin
-    if value<10 then
-      FormatShort16('0.0%%',[AnsiChar(value+48),u],result) else
     if value<100 then
       FormatShort16('0.%%',[UInt2DigitsToShortFast(value),u],result) else begin
       Div100(value,d100);
@@ -61579,11 +61584,11 @@ begin
 end;
 
 function TAlgoCompress.DecompressPartial(Comp, Partial: PAnsiChar;
-  CompLen, PartialLen: integer): integer;
+  CompLen, PartialLen, PartialLenMax: integer): integer;
 var BodyLen: integer;
 begin
   result := 0;
-  if (self=nil) or (CompLen<=9) or (Comp=nil) then
+  if (self=nil) or (CompLen<=9) or (Comp=nil) or (PartialLenMax<PartialLen) then
     exit;
   if Comp[4]=COMPRESS_STORED then begin
     if PCardinal(Comp)^=PCardinal(Comp+5)^ then
@@ -61597,7 +61602,7 @@ begin
     PartialLen := BodyLen;
   if Comp[4]=COMPRESS_STORED then
     MoveFast(Comp[9],Partial[0],PartialLen) else
-    if AlgoDecompressPartial(Comp+9,CompLen-9,Partial,PartialLen)<>PartialLen then
+    if AlgoDecompressPartial(Comp+9,CompLen-9,Partial,PartialLen,PartialLenMax)<PartialLen then
       exit;
   result := PartialLen;
 end;
@@ -61632,7 +61637,7 @@ begin
          (AlgoHash(0,Plain,PlainLen)<>PCardinal(Comp)^) then
         exit;
     aclSafeSlow:
-      if (AlgoDecompressPartial(Comp+9,CompLen-9,Plain,PlainLen)<>PlainLen) or
+      if (AlgoDecompressPartial(Comp+9,CompLen-9,Plain,PlainLen,PlainLen)<>PlainLen) or
          (AlgoHash(0,Plain,PlainLen)<>PCardinal(Comp)^) then
         exit;
     aclNoCrcFast:
@@ -61673,9 +61678,9 @@ begin
 end;
 
 function TAlgoSynLZ.AlgoDecompressPartial(Comp: pointer;
-  CompLen: integer; Partial: pointer; PartialLenMax: integer): integer;
+  CompLen: integer; Partial: pointer; PartialLen, PartialLenMax: integer): integer;
 begin
-  result := SynLZdecompress1partial(Comp,CompLen,Partial,PartialLenMax);
+  result := SynLZdecompress1partial(Comp,CompLen,Partial,PartialLen);
 end;
 
 // deprecated wrapper methods - use SynLZ global variable instead
@@ -61717,7 +61722,7 @@ end;
 
 function SynLZDecompressPartial(P,Partial: PAnsiChar; PLen,PartialLen: integer): integer;
 begin
-  result := AlgoSynLZ.DecompressPartial(P,Partial,PLen,PartialLen);
+  result := AlgoSynLZ.DecompressPartial(P,Partial,PLen,PartialLen,PartialLen);
 end;
 
 procedure SynLZDecompress(P: PAnsiChar; PLen: integer; out Result: RawByteString;
@@ -61761,7 +61766,7 @@ function TAlgoCompressWithNoDestLen.AlgoCompress(Plain: pointer;
   PlainLen: integer; Comp: pointer): integer;
 begin
   Comp := ToVarUInt32(PlainLen,Comp); // deflate don't store PlainLen
-  result := RawProcess(Plain,Comp,PlainLen,AlgoCompressDestLen(PlainLen),doCompress);
+  result := RawProcess(Plain,Comp,PlainLen,AlgoCompressDestLen(PlainLen),0,doCompress);
   if result>0 then
     inc(result,ToVarUInt32Length(PlainLen));
 end;
@@ -61772,7 +61777,7 @@ var start: PAnsiChar;
 begin
   start := Comp;
   result := FromVarUInt32(PByte(Comp));
-  if RawProcess(Comp,Plain,CompLen+(Start-Comp),result,doUnCompress)<>result then
+  if RawProcess(Comp,Plain,CompLen+(Start-Comp),result,0,doUnCompress)<>result then
     result := 0;
 end;
 
@@ -61784,14 +61789,14 @@ begin
 end;
 
 function TAlgoCompressWithNoDestLen.AlgoDecompressPartial(Comp: pointer;
-  CompLen: integer; Partial: pointer; PartialLenMax: integer): integer;
+  CompLen: integer; Partial: pointer; PartialLen, PartialLenMax: integer): integer;
 var start: PAnsiChar;
 begin
   start := Comp;
   result := FromVarUInt32(PByte(Comp));
   if PartialLenMax>result then
     PartialLenMax := result;
-  result := RawProcess(Comp,Partial,CompLen+(Start-Comp),PartialLenMax,doUncompressPartial);
+  result := RawProcess(Comp,Partial,CompLen+(Start-Comp),PartialLen,PartialLenMax,doUncompressPartial);
 end;
 
 
