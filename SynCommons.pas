@@ -1343,7 +1343,7 @@ function ToUTF8(const Ansi7Text: ShortString): RawUTF8; overload;
 /// convert a TGUID into UTF-8 encoded text
 // - will return e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without the {})
 // - if you need the embracing { }, use GUIDToRawUTF8() function instead
-function ToUTF8(const guid: TGUID): RawUTF8; overload;
+function ToUTF8({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID): RawUTF8; overload;
 
 {$ifndef NOVARIANTS}
 
@@ -1588,29 +1588,31 @@ function StringToWinAnsi(const Text: string): WinAnsiString;
   {$ifdef UNICODE}inline;{$endif}
 
 /// fast Format() function replacement, optimized for RawUTF8
-// - only supported token is %, which will be inlined in the resulting string
-// according to each Args[] supplied item
+// - only supported token is %, which will be written in the resulting string
+// according to each Args[] supplied items - so you will never get any exception
+// as with the SysUtils.Format() when a specifier is incorrect
 // - resulting string has no length limit and uses fast concatenation
-// - note that cardinal values should be type-casted to Int64() (otherwise
-// the integer mapped value will be transmitted, therefore wrongly)
+// - note that, due to a Delphi compiler limitation, cardinal values should be
+// type-casted to Int64() (otherwise the integer mapped value will be converted)
 // - any supplied TObject instance will be written as their class name
 function FormatUTF8(const Format: RawUTF8; const Args: array of const): RawUTF8; overload;
   {$ifdef FPC}inline;{$endif}
 
 /// fast Format() function replacement, optimized for RawUTF8
-// - overloaded function, which avoid a temporary RawUTF8 string on stack
+// - overloaded function, which avoid a temporary RawUTF8 instance on stack
 procedure FormatUTF8(const Format: RawUTF8; const Args: array of const;
   out result: RawUTF8); overload;
 
 /// fast Format() function replacement, for UTF-8 content stored in shortstring
 // - shortstring allows fast stack allocation, so is perfect for small content
-// - set result='' if the resulting size exceed 255 bytes
+// - truncate result if the resulting size exceeds 255 bytes
 procedure FormatShort(const Format: RawUTF8; const Args: array of const;
   var result: shortstring);
 
 type
-  /// used e.g. by PointerToHexShort/CardinalToHexShort/Int64ToHexShort
-  // - such result type would avoid a string allocation on heap
+  /// used e.g. by PointerToHexShort/CardinalToHexShort/Int64ToHexShort/FormatShort16
+  // - such result type would avoid a string allocation on heap, so are highly
+  // recommended e.g. when logging information
   TShort16 = string[16];
 
 /// fast Format() function replacement, for UTF-8 content stored in TShort16
@@ -1625,8 +1627,8 @@ procedure FormatShort16(const Format: RawUTF8; const Args: array of const;
 // - if optional JSONFormat parameter is TRUE, ? parameters will be written
 // as JSON quoted strings, without :(...): tokens, e.g. "quoted "" string"
 // - resulting string has no length limit and uses fast concatenation
-// - note that cardinal values should be type-casted to Int64() (otherwise
-// the integer mapped value will be transmitted, therefore wrongly)
+// - note that, due to a Delphi compiler limitation, cardinal values should be
+// type-casted to Int64() (otherwise the integer mapped value will be converted)
 // - any supplied TObject instance will be written as their class name
 function FormatUTF8(const Format: RawUTF8; const Args, Params: array of const;
   JSONFormat: boolean=false): RawUTF8; overload;
@@ -1648,15 +1650,15 @@ function ScanUTF8(P: PUTF8Char; PLen: integer; const fmt: RawUTF8;
 
 /// convert an open array (const Args: array of const) argument to an UTF-8
 // encoded text
-// - note that cardinal values should be type-casted to Int64() (otherwise
-// the signed integer mapped value will be transmitted, therefore wrongly)
+// - note that, due to a Delphi compiler limitation, cardinal values should be
+// type-casted to Int64() (otherwise the integer mapped value will be converted)
 // - any supplied TObject instance will be written as their class name
 procedure VarRecToUTF8(const V: TVarRec; var result: RawUTF8;
   wasString: PBoolean=nil);
 
 type
-  /// a memory structure which avoid a temporary RawUTF8 allocation
-  // - used by VarRecToTempUTF8() and FormatUTF8()
+  /// a memory structure which avoids a temporary RawUTF8 allocation
+  // - used by VarRecToTempUTF8() and FormatUTF8()/FormatShort()
   TTempUTF8 = record
     Len: PtrInt;
     Text: PUTF8Char;
@@ -1671,8 +1673,8 @@ type
 // but use the supplied Res.Temp[] buffer for numbers to text conversion -
 // caller should ensure to make RawUTF8(TempRawUTF8) := '' on the entry
 // - it would return the number of UTF-8 bytes, i.e. Res.Len
-// - note that cardinal values should be type-casted to Int64() (otherwise
-// the signed integer mapped value will be transmitted, therefore wrongly)
+// - note that, due to a Delphi compiler limitation, cardinal values should be
+// type-casted to Int64() (otherwise the integer mapped value will be converted)
 // - any supplied TObject instance will be written as their class name
 function VarRecToTempUTF8(const V: TVarRec; var Res: TTempUTF8): integer;
 
@@ -1685,8 +1687,8 @@ function VarRecToUTF8IsString(const V: TVarRec; var value: RawUTF8): boolean;
 // - returns TRUE and set Value if the supplied argument is a vtInteger, vtInt64
 // or vtBoolean
 // - returns FALSE if the argument is not an integer
-// - note that cardinal values should be type-casted to Int64() (otherwise
-// the signed integer mapped value will be transmitted, therefore wrongly)
+// - note that, due to a Delphi compiler limitation, cardinal values should be
+// type-casted to Int64() (otherwise the integer mapped value will be converted)
 function VarRecToInt64(const V: TVarRec; out value: Int64): boolean;
 
 /// convert an open array (const Args: array of const) argument to a floating
@@ -1694,14 +1696,14 @@ function VarRecToInt64(const V: TVarRec; out value: Int64): boolean;
 // - returns TRUE and set Value if the supplied argument is a number (e.g.
 // vtInteger, vtInt64, vtCurrency or vtExtended)
 // - returns FALSE if the argument is not a number
-// - note that cardinal values should be type-casted to Int64() (otherwise
-// the signed integer mapped value will be transmitted, therefore wrongly)
+// - note that, due to a Delphi compiler limitation, cardinal values should be
+// type-casted to Int64() (otherwise the integer mapped value will be converted)
 function VarRecToDouble(const V: TVarRec; out value: double): boolean;
 
 /// convert an open array (const Args: array of const) argument to a value
 // encoded as with :(...): inlined parameters in FormatUTF8(Format,Args,Params)
-// - note that cardinal values should be type-casted to Int64() (otherwise
-// the signed integer mapped value will be transmitted, therefore wrongly)
+// - note that, due to a Delphi compiler limitation, cardinal values should be
+// type-casted to Int64() (otherwise the integer mapped value will be converted)
 // - any supplied TObject instance will be written as their class name
 procedure VarRecToInlineValue(const V: TVarRec; var result: RawUTF8);
 
@@ -6321,16 +6323,17 @@ procedure DynArraySortIndexed(Values: pointer; ElemSize, Count: Integer;
 
 /// compare two TGUID values
 // - this version is faster than the one supplied by SysUtils
-function IsEqualGUID(const guid1, guid2: TGUID): Boolean;
-  {$ifdef HASINLINE}inline;{$endif}
+function IsEqualGUID({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF}
+  guid1, guid2: TGUID): Boolean; {$ifdef HASINLINE}inline;{$endif}
 
 /// returns the index of a matching TGUID in an array
 // - returns -1 if no item matched
-function IsEqualGUIDArray(const guid: TGUID; const guids: array of TGUID): integer;
+function IsEqualGUIDArray({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF}
+  guid: TGUID; const guids: array of TGUID): integer;
 
 /// check if a TGUID value contains only 0 bytes
 // - this version is faster than the one supplied by SysUtils
-function IsNullGUID(const guid: TGUID): Boolean;
+function IsNullGUID({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID): Boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// append one TGUID item to a TGUID dynamic array
@@ -6348,12 +6351,12 @@ function GUIDToText(P: PUTF8Char; guid: PByteArray): PUTF8Char;
 /// convert a TGUID into UTF-8 encoded text
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - if you do not need the embracing { }, use ToUTF8() overloaded function
-function GUIDToRawUTF8(const guid: TGUID): RawUTF8;
+function GUIDToRawUTF8({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID): RawUTF8;
 
 /// convert a TGUID into text
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - this version is faster than the one supplied by SysUtils
-function GUIDToString(const guid: TGUID): string;
+function GUIDToString({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID): string;
 
 /// fast compute of some 32-bit random value
 // - will use RDRAND Intel x86/x64 opcode if available, or fast gsl_rng_taus2
@@ -6426,14 +6429,15 @@ const
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - using a shortstring will allow fast allocation on the stack, so is
 // preferred e.g. when providing a GUID to a ESynException.CreateUTF8()
-function GUIDToShort(const guid: TGUID): TGUIDShortString; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+function GUIDToShort({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF}
+  guid: TGUID): TGUIDShortString; overload; {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a TGUID into text
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - using a shortstring will allow fast allocation on the stack, so is
 // preferred e.g. when providing a GUID to a ESynException.CreateUTF8()
-procedure GUIDToShort(const guid: TGUID; out dest: TGUIDShortString); overload;
+procedure GUIDToShort({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF}
+  guid: TGUID; out dest: TGUIDShortString); overload;
 
 /// convert some text into its TGUID binary value
 // - expect e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without any {})
@@ -7649,7 +7653,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// append a GUID value, encoded as text without any {}
     // - will store e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
-    procedure Add(const guid: TGUID); overload;
+    procedure Add({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID); overload;
     /// append a floating-point Value as a String
     // - write "Infinity", "-Infinity", and "NaN" for corresponding IEEE values
     // - noexp=true will call ExtendedToStringNoExp() to avoid any scientific
@@ -7938,8 +7942,8 @@ type
     // ! aWriter.AddJSONEscape(['doc','{','name','John','ab','[','a','b']','}','id',123]);
     // will append to the buffer:
     // ! '{"doc":{"name":"John","abc":["a","b"]},"id":123}'
-    // - note that cardinal values should be type-casted to Int64() (otherwise
-    // the integer mapped value will be transmitted, therefore wrongly)
+    // - note that, due to a Delphi compiler limitation, cardinal values should be
+    // type-casted to Int64() (otherwise the integer mapped value will be converted)
     // - you can pass nil as parameter for a null JSON value
     procedure AddJSONEscape(const NameValuePairs: array of const); overload;
     {$ifndef NOVARIANTS}
@@ -9937,6 +9941,8 @@ type
     OnErrorOverflow: procedure of object;
     /// use this event to customize the ErrorData process
     OnErrorData: procedure(const fmt: RawUTF8; const args: array of const) of object;
+    /// some opaque value, which may be a version number to define the binary layout
+    Tag: PtrInt;
     /// initialize the reader from a memory block
     procedure Init(Buffer: pointer; Len: integer); overload;
     /// initialize the reader from a RawByteString content
@@ -10026,8 +10032,8 @@ function FileSeek64(Handle: THandle; const Offset: Int64; Origin: cardinal): Int
 // - or you can specify nested arrays or objects with '['..']' or '{'..'}':
 // ! J := JSONEncode(['doc','{','name','John','abc','[','a','b','c',']','}','id',123]);
 // ! assert(J='{"doc":{"name":"John","abc":["a","b","c"]},"id":123}');
-// - note that cardinal values should be type-casted to Int64() (otherwise
-// the integer mapped value will be transmitted, therefore wrongly)
+// - note that, due to a Delphi compiler limitation, cardinal values should be
+// type-casted to Int64() (otherwise the integer mapped value will be converted)
 // - you can pass nil as parameter for a null JSON value
 function JSONEncode(const NameValuePairs: array of const): RawUTF8; overload;
 
@@ -10065,15 +10071,15 @@ function JSONEncodeArrayDouble(const Values: array of double): RawUTF8; overload
 
 /// encode the supplied array data as a valid JSON array content
 // - if WithoutBraces is TRUE, no [ ] will be generated
-// - note that cardinal values should be type-casted to Int64() (otherwise
-// the integer mapped value will be transmitted, therefore wrongly)
+// - note that, due to a Delphi compiler limitation, cardinal values should be
+// type-casted to Int64() (otherwise the integer mapped value will be converted)
 function JSONEncodeArrayOfConst(const Values: array of const;
   WithoutBraces: boolean=false): RawUTF8; overload;
 
 /// encode the supplied array data as a valid JSON array content
 // - if WithoutBraces is TRUE, no [ ] will be generated
-// - note that cardinal values should be type-casted to Int64() (otherwise
-// the integer mapped value will be transmitted, therefore wrongly)
+// - note that, due to a Delphi compiler limitation, cardinal values should be
+// type-casted to Int64() (otherwise the integer mapped value will be converted)
 procedure JSONEncodeArrayOfConst(const Values: array of const;
   WithoutBraces: boolean; var result: RawUTF8); overload;
 
@@ -13879,13 +13885,13 @@ procedure RawUTF8ToVariant(const Txt: RawUTF8; var Value: TVarData;
   ExpectedValueType: word); overload;
 
 /// convert an open array (const Args: array of const) argument to a variant
-// - note that cardinal values should be type-casted to Int64() (otherwise
-// the integer mapped value will be transmitted, therefore wrongly)
+// - note that, due to a Delphi compiler limitation, cardinal values should be
+// type-casted to Int64() (otherwise the integer mapped value will be converted)
 procedure VarRecToVariant(const V: TVarRec; var result: variant); overload;
 
 /// convert an open array (const Args: array of const) argument to a variant
-// - note that cardinal values should be type-casted to Int64() (otherwise
-// the integer mapped value will be transmitted, therefore wrongly)
+// - note that, due to a Delphi compiler limitation, cardinal values should be
+// type-casted to Int64() (otherwise the integer mapped value will be converted)
 function VarRecToVariant(const V: TVarRec): variant; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -19841,7 +19847,7 @@ begin
   FastSetString(result,@Ansi7Text[1],ord(Ansi7Text[0]));
 end;
 
-function ToUTF8(const guid: TGUID): RawUTF8;
+function ToUTF8({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID): RawUTF8;
 begin
   FastSetString(result,nil,36);
   GUIDToText(pointer(result),@guid);
@@ -23715,7 +23721,7 @@ type
   TFormatUTF8 = object // only supported token is %, with any const arguments
     b: PTempUTF8;
     L,argN: integer;
-    blocks: array[0..63] of TTempUTF8;
+    blocks: array[0..63] of TTempUTF8; // to avoid most heap allocations
     procedure Parse(const Format: RawUTF8; const Args: array of const);
     procedure Write(Dest: PUTF8Char);
     function WriteMax(Dest: PUTF8Char; Max: PtrUInt): PUTF8Char;
@@ -36392,15 +36398,14 @@ begin
     (ChangeFileExt(ExeVersion.ProgramFileName,'.log')));
 end;
 
-function IsEqualGUID(const guid1, guid2: TGUID): Boolean;
-var a: TPtrIntArray absolute guid1;
-    b: TPtrIntArray absolute guid2;
+function IsEqualGUID({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid1, guid2: TGUID): Boolean;
 begin
-  result := (a[0]=b[0]) and (a[1]=b[1])
-    {$ifndef CPU64} and (a[2]=b[2]) and (a[3]=b[3]){$endif};
+  result := (PHash128Rec(@guid1).L=PHash128Rec(@guid2).L) and
+            (PHash128Rec(@guid1).H=PHash128Rec(@guid2).H);
 end;
 
-function IsEqualGUIDArray(const guid: TGUID; const guids: array of TGUID): integer;
+function IsEqualGUIDArray({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF}
+  guid: TGUID; const guids: array of TGUID): integer;
 begin
   for result := 0 to high(guids) do
     if IsEqualGUID(guid,guids[result]) then
@@ -36408,7 +36413,7 @@ begin
   result := -1;
 end;
 
-function IsNullGUID(const guid: TGUID): Boolean;
+function IsNullGUID({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID): Boolean;
 var a: TPtrIntArray absolute guid;
 begin
   result := (a[0]=0) and (a[1]=0)
@@ -36498,7 +36503,7 @@ begin // decode from '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
   result := P;
 end;
 
-function GUIDToRawUTF8(const guid: TGUID): RawUTF8;
+function GUIDToRawUTF8({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID): RawUTF8;
 var P: PUTF8Char;
 begin
   FastSetString(result,nil,38);
@@ -36507,12 +36512,13 @@ begin
   GUIDToText(P+1,@guid)^ := '}';
 end;
 
-function GUIDToShort(const guid: TGUID): TGUIDShortString;
+function GUIDToShort({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID): TGUIDShortString;
 begin
   GUIDToShort(guid,result);
 end;
 
-procedure GUIDToShort(const guid: TGUID; out dest: TGUIDShortString);
+procedure GUIDToShort({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID;
+  out dest: TGUIDShortString);
 begin
   dest[0] := #38;
   dest[1] := '{';
@@ -36520,7 +36526,7 @@ begin
   GUIDToText(@dest[2],@guid);
 end;
 
-function GUIDToString(const guid: TGUID): string;
+function GUIDToString({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID): string;
 {$ifdef UNICODE}
 var tmp: array[0..35] of AnsiChar;
     i: integer;
@@ -47239,7 +47245,6 @@ begin
       raise ESynException.Create('TDynArray.SaveTo len concern');
 end;
 
-
 function TDynArray.SaveToJSON(EnumSetsAsText: boolean; reformat: TTextWriterJSONFormat): RawUTF8;
 begin
   SaveToJSON(result,EnumSetsAsText,reformat);
@@ -51074,7 +51079,7 @@ begin
   inc(B,2);
 end;
 
-procedure TTextWriter.Add(const guid: TGUID);
+procedure TTextWriter.Add({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID);
 begin
   if BEnd-B<=36 then
     FlushToStream;
@@ -60453,6 +60458,7 @@ begin
   Last := P+Len;
   OnErrorOverflow := nil;
   OnErrorData := nil;
+  Tag := 0;
 end;
 
 procedure TFastReader.Init(const Buffer: RawByteString);
