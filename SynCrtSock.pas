@@ -2393,8 +2393,39 @@ type
 
 {$endif USELIBCURL}
 
+  /// simple wrapper around THttpClientSocket/THttpRequest instances
+  // - this class will reuse the previous connection if possible, and select the
+  // best connection class available on this platform
+  TSimpleHttpClient = class
+  protected
+    fHttp: THttpClientSocket;
+    fHttps: THttpRequest;
+    fBody, fHeaders: SockString;
+    fOnlyUseClientSocket: boolean;
+  public
+    /// initialize the instance
+    constructor Create(aOnlyUseClientSocket: boolean=false); reintroduce;
+    /// finalize the connection
+    destructor Destroy; override;
+    /// low-level entry point of this instance
+    function RawRequest(const uri: TURI; const method, Header, Data, DataType: SockString;
+      KeepAlive: cardinal): integer; overload;
+    /// simple-to-use entry point of this instance
+    // - use Body and Headers properties to retrieve the HTTP body and headers
+    function Request(const uri: SockString; const method: SockString='GET';
+      const header: SockString = ''; const data: SockString = '';
+      const datatype: SockString = ''; keepalive: cardinal=10000): integer; overload;
+    /// returns the HTTP body as returnsd by a previous call to Request()
+    property Body: SockString read fBody;
+    /// returns the HTTP headers as returnsd by a previous call to Request()
+    property Headers: SockString read fHeaders;
+  end;
+
+
+
 /// returns the best THttpRequest class, depending on the system it runs on
 // - e.g. TWinHTTP or TCurlHTTP
+// - consider using TSimpleHttpClient if you just need a simple connection
 function MainHttpClass: THttpRequestClass;
 
 /// low-level forcing of another THttpRequest class
@@ -11212,6 +11243,62 @@ begin
 end;
 
 {$endif USELIBCURL}
+
+
+{ TSimpleHttpClient }
+
+constructor TSimpleHttpClient.Create(aOnlyUseClientSocket: boolean);
+begin
+  fOnlyUseClientSocket := aOnlyUseClientSocket;
+  inherited Create;
+end;
+
+destructor TSimpleHttpClient.Destroy;
+begin
+  FreeAndNil(fHttp);
+  FreeAndNil(fHttps);
+  inherited Destroy;
+end;
+
+function TSimpleHttpClient.RawRequest(const uri: TURI; const method, Header,
+  Data, DataType: SockString; KeepAlive: cardinal): integer;
+begin
+  result := 0;
+  if uri.Https and not fOnlyUseClientSocket then
+    try
+      if (fHttps = nil) or (fHttps.Server <> uri.Server) or
+         (integer(fHttps.Port) <> uri.PortInt) then begin
+        fHttps.Free; // need a new HTTPS connection
+        fHttps := MainHttpClass.Create(uri.Server, uri.Port, uri.Https);
+      end;
+      result := fHttps.Request(uri.Address, method, keepalive, header,
+        data, datatype, fHeaders, fBody);
+    except
+      FreeAndNil(fHttps);
+    end
+  else
+    try
+      if (fHttp = nil) or (fHttp.Server <> uri.Server) or
+         (fHttp.Port <> uri.Port) then begin
+        fHttp.Free; // need a new HTTP connection
+        fHttp := THttpClientSocket.Open(uri.Server, uri.Port, cslTCP, 5000, uri.Https);
+      end;
+      result := fHttp.Request(uri.Address, method, keepalive, header, data, datatype, true);
+      fBody := fHttp.Content;
+      fHeaders := fHttp.HeaderGetText;
+    except
+      FreeAndNil(fHttp);
+    end;
+end;
+
+function TSimpleHttpClient.Request(const uri, method, header, data, datatype: SockString;
+  keepalive: cardinal): integer;
+var u: TURI;
+begin
+  if u.From(uri) then
+    result := RawRequest(u, method, header, data, datatype, keepalive) else
+    result := STATUS_NOTFOUND;
+end;
 
 
 { ************ socket polling for optimized multiple connections }
