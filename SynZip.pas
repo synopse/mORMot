@@ -1473,8 +1473,12 @@ var Parent: TFileName;
 begin
   result := false;
   if Path='' then exit;
+  {$IFDEF FPC}
+  Path := IncludeTrailingPathDelimiter(SetDirSeparators(Path));
+  {$ELSE} // We assume Delphi for Windows here
   if Path[length(Path)]<>'\' then
     Path := Path+'\';
+  {$ENDIF}
   if DirectoryExists(Path) then
     result := true else begin
     Parent := ExtractFilePath(system.copy(Path,1,length(Path)-1));
