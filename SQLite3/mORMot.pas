@@ -21652,7 +21652,7 @@ begin
     result.VDouble := GetExtended(Value,err);
     if err<>0 then begin
       result.VType := varString;
-      FastSetString(result.VAny,Value,ValueLen);
+      FastSetString(RawUTF8(result.VAny),Value,ValueLen);
     end;
   end;
   sftDateTime, sftDateTimeMS:
@@ -21666,7 +21666,7 @@ begin
   sftTimeLog, sftModTime, sftCreateTime, sftUnixTime, sftUnixMSTime:
     SetInt64(Value,result.VInt64);
   sftAnsiText, sftUTF8Text:
-    FastSetString(result.VAny,Value,ValueLen);
+    FastSetString(RawUTF8(result.VAny),Value,ValueLen);
   sftBlobCustom, sftBlob:
     BlobToTSQLRawBlob(Value,TSQLRawBlob(result.VAny));
   {$ifndef NOVARIANTS}sftVariant, sftNullable,{$endif}
@@ -52626,7 +52626,7 @@ procedure TSQLVirtualTableCursor.SetColumn(var aResult: TSQLVar;
 begin
   aResult.Options := [];
   aResult.VType := ftUTF8;
-  FastSetString(fColumnTemp,aValue,aValueLength); // temporary copy
+  FastSetString(RawUTF8(fColumnTemp),aValue,aValueLength); // temporary copy
   aResult.VText := pointer(fColumnTemp);
 end;
 

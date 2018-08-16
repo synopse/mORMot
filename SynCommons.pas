@@ -949,7 +949,7 @@ var
 
 /// equivalence to SetString(s,nil,len) function
 // - faster especially under FPC
-procedure FastSetString(var s; p: pointer; len: PtrInt);
+procedure FastSetString(var s: RawUTF8; p: pointer; len: PtrInt);
 
 /// equivalence to SetString(s,nil,len) function with a specific code page
 // - faster especially under FPC
@@ -18371,7 +18371,7 @@ end;
 procedure TSynAnsiUTF8.UTF8BufferToAnsi(Source: PUTF8Char; SourceChars: Cardinal;
   var result: RawByteString);
 begin
-  FastSetString(result,Source,SourceChars);
+  FastSetString(RawUTF8(result),Source,SourceChars);
 end;
 
 function TSynAnsiUTF8.UTF8ToAnsi(const UTF8: RawUTF8): RawByteString;
@@ -20928,22 +20928,19 @@ type
 
   PStrRec = ^TStrRec;
   /// map the Delphi/FPC string header, as defined in System.pas
-  TStrRec =
-    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
-    packed
-    {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
-    record
-{$ifdef FPC}
+{$ifdef FPC} // see TAnsiRec in astrings.inc
+  TStrRec = record
   {$ifdef ISFPC27}
-    codePage: Word;
+    codePage: TSystemCodePage;
     elemSize: Word;
   {$endif}
   {$ifdef CPU64}
-    _Padding: LongInt;
+    _Padding: DWord;
   {$endif}
     refCnt: SizeInt;
     length: SizeInt;
 {$else FPC}
+   TStrRec = packed record
   {$ifdef UNICODE}
     {$ifdef CPU64}
     /// padding bytes for 16 byte alignment of the header
@@ -21195,7 +21192,7 @@ const
 {$ifdef HASCODEPAGE}
 procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
 var r: PAnsiChar; // s may = p -> stand-alone variable
-    sr: PStrRec; // stand-alone to use register
+    sr: PStrRec; // local copy of r, to use register
 begin
   if len>0 then begin
     GetMem(r,len+(STRRECSIZE+2));
@@ -21216,9 +21213,9 @@ begin
     {$ifdef FPC}Finalize(RawByteString(s)){$else}RawByteString(s) := ''{$endif};
 end;
 
-procedure FastSetString(var s; p: pointer; len: PtrInt);
-var r: PAnsiChar; // s may = p -> stand-alone variable
-    sr: PStrRec; // stand-alone to use register
+procedure FastSetString(var s: RawUTF8; p: pointer; len: PtrInt);
+var r: PAnsiChar;
+    sr: PStrRec;
 begin
   if len>0 then begin
     GetMem(r,len+(STRRECSIZE+2));
@@ -21232,18 +21229,18 @@ begin
     r := pointer(sr);
     if p<>nil then
       MoveFast(p^,sr^,len);
-    {$ifdef FPC}Finalize(RawByteString(s)){$else}RawByteString(s) := ''{$endif};
+    {$ifdef FPC}Finalize(s){$else}s := ''{$endif};
     pointer(s) := r;
   end
   else
-    {$ifdef FPC}Finalize(RawByteString(s)){$else}RawByteString(s) := ''{$endif};
+    {$ifdef FPC}Finalize(s){$else}s := ''{$endif};
 end;
 {$else}
 procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
 begin
   SetString(RawByteString(s),PAnsiChar(p),len);
 end;
-procedure FastSetString(var s; p: pointer; len: PtrInt);
+procedure FastSetString(var s: RawUTF8; p: pointer; len: PtrInt);
 begin
   SetString(RawByteString(s),PAnsiChar(p),len);
 end;
@@ -43028,7 +43025,7 @@ begin
       VType := varString;
       VAny := nil; // avoid GPF below when assigning a string variable to VAny
     end;
-    FastSetString(VString,Txt,TxtLen);
+    FastSetString(RawUTF8(VString),Txt,TxtLen);
   end;
 end;
 
@@ -43244,7 +43241,7 @@ begin
       tmp.Len := FromVarUInt32(PByte(Source));
       case VType of
       varString:
-        FastSetString(VString,Source,tmp.Len); // explicit RawUTF8
+        FastSetString(RawUTF8(VString),Source,tmp.Len); // explicit RawUTF8
       varOleStr:
         SetString(WideString(VAny),PWideChar(Source),tmp.Len shr 1);
       {$ifdef HASVARUSTRING}
@@ -43906,7 +43903,7 @@ begin
     // found no numerical value -> return a string in the expected format
     VType := varString;
     VString := nil; // avoid GPF below when assigning a string variable to VAny
-    FastSetString(VString,JSON,StrLen(JSON));
+    FastSetString(RawUTF8(VString),JSON,StrLen(JSON));
   end;
 end;
 
@@ -54302,7 +54299,7 @@ begin
   P := GotoEndJSONItem(B);
   if P=nil then
     exit;
-  FastSetString(result,B,P-B);
+  FastSetString(RawUTF8(result),B,P-B);
   while (P^<=' ') and (P^<>#0) do inc(P);
   if EndOfObject<>nil then
     EndOfObject^ := P^;

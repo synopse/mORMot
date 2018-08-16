@@ -27,7 +27,7 @@
           <SearchPaths>
             <IncludeFiles Value="$(ProjOutDir)"/>
             <Libraries Value="static\$(TargetCPU)-$(TargetOS)"/>
-            <UnitOutputDirectory Value="SQLite3\fpc\x86_64-win64"/>
+            <UnitOutputDirectory Value="SQLite3\fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <CodeGeneration>
             <SmartLinkUnit Value="True"/>
@@ -80,7 +80,7 @@
     </Target>
     <SearchPaths>
       <Libraries Value="static\$(TargetCPU)-$(TargetOS)"/>
-      <UnitOutputDirectory Value="SQLite3\fpc\i386-win32"/>
+      <UnitOutputDirectory Value="SQLite3\fpc\lib\$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
     <CodeGeneration>
       <SmartLinkUnit Value="True"/>
