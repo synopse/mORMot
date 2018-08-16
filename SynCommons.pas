@@ -23849,10 +23849,11 @@ end;
 procedure FormatString(const Format: RawUTF8; const Args: array of const;
   out result: string);
 var process: TFormatUTF8;
-    temp: TSynTempBuffer; // will avoid most memory a
+    temp: TSynTempBuffer; // will avoid most memory allocations
 begin
   if (Format='') or (high(Args)<0) then begin // no formatting needed
     UTF8DecodeToString(pointer(Format),length(Format),result);
+    exit;
   end;
   process.Parse(Format,Args);
   temp.Init(process.L);
