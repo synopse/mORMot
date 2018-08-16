@@ -1609,6 +1609,10 @@ procedure FormatUTF8(const Format: RawUTF8; const Args: array of const;
 procedure FormatShort(const Format: RawUTF8; const Args: array of const;
   var result: shortstring);
 
+/// fast Format() function replacement, tuned for small content
+procedure FormatString(const Format: RawUTF8; const Args: array of const;
+  out result: string);
+
 type
   /// used e.g. by PointerToHexShort/CardinalToHexShort/Int64ToHexShort/FormatShort16
   // - such result type would avoid a string allocation on heap, so are highly
@@ -23842,6 +23846,21 @@ begin
   end;
 end;
 
+procedure FormatString(const Format: RawUTF8; const Args: array of const;
+  out result: string);
+var process: TFormatUTF8;
+    temp: TSynTempBuffer; // will avoid most memory a
+begin
+  if (Format='') or (high(Args)<0) then begin // no formatting needed
+    UTF8DecodeToString(pointer(Format),length(Format),result);
+  end;
+  process.Parse(Format,Args);
+  temp.Init(process.L);
+  process.Write(temp.buf);
+  UTF8DecodeToString(temp.buf,process.L,result);
+  temp.Done;
+end;
+
 function FormatUTF8(const Format: RawUTF8; const Args, Params: array of const; JSONFormat: boolean): RawUTF8;
 var i, tmpN, L, A, P, len: PtrInt;
     isParam: AnsiChar;
@@ -29930,8 +29949,8 @@ begin // fast cross-platform implementation
   if TemporaryFileNameRandom=0 then
     TemporaryFileNameRandom := Random32;
   repeat // thread-safe unique file name generation
-    result := format('%s%s_%s.tmp',[folder,ExeVersion.ProgramName,
-      CardinalToHexShort(InterlockedIncrement(TemporaryFileNameRandom))]);
+    FormatString('%%_%.tmp',[folder,ExeVersion.ProgramName,
+      CardinalToHexShort(InterlockedIncrement(TemporaryFileNameRandom))], string(result));
   until not FileExists(result);
 end;
 
