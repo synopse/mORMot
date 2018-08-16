@@ -139,7 +139,7 @@ interface
 {$endif FPC}
 
 {.$define LIZARD_STANDALONE}
-// used only with
+// used only with lizard.dpr
 // if not defined (by default), register Lizard as TAlgoCompress.AlgoID=4/5/6
 
 {$ifndef LIZARD_STANDALONE}
@@ -347,25 +347,21 @@ function Lizard_decompress_safe_usingDict(src, dst: pointer; srcSize, maxDstSize
     {$ifdef MSWINDOWS}
     {$L static\x86_64-win64\lizard_compress.o}
     {$L static\x86_64-win64\lizard_decompress.o}
-    {$L static\x86_64-win64\lizard_frame.o}
     {$L static\x86_64-win64\huf_compress.o}
     {$L static\x86_64-win64\huf_decompress.o}
     {$L static\x86_64-win64\fse_compress.o}
     {$L static\x86_64-win64\fse_decompress.o}
     {$L static\x86_64-win64\entropy_common.o}
-    {$L static\x86_64-win64\xxhash.o}
     {$linklib static\x86_64-win64\libgcc.a}
     {$linklib static\x86_64-win64\libmsvcrt.a}
     {$else MSWINDOWS}
     {$L static/x86_64-linux/lizard_compress.o}
     {$L static/x86_64-linux/lizard_decompress.o}
-    {$L static/x86_64-linux/lizard_frame.o}
     {$L static/x86_64-linux/huf_compress.o}
     {$L static/x86_64-linux/huf_decompress.o}
     {$L static/x86_64-linux/fse_compress.o}
     {$L static/x86_64-linux/fse_decompress.o}
     {$L static/x86_64-linux/entropy_common.o}
-    {$L static/x86_64-linux/xxhash.o}
     {$endif MSWINDOWS}
   {$endif FPC}
 {$endif CPUX64}
@@ -375,25 +371,21 @@ function Lizard_decompress_safe_usingDict(src, dst: pointer; srcSize, maxDstSize
     {$ifdef MSWINDOWS}
     {$L static\i386-win32\lizard_compress.o}
     {$L static\i386-win32\lizard_decompress.o}
-    {$L static\i386-win32\lizard_frame.o}
     {$L static\i386-win32\huf_compress.o}
     {$L static\i386-win32\huf_decompress.o}
     {$L static\i386-win32\fse_compress.o}
     {$L static\i386-win32\fse_decompress.o}
     {$L static\i386-win32\entropy_common.o}
-    {$L static\i386-win32\xxhash.o}
     {$linklib static\i386-win32\libgcc.a}
     {$linklib static\i386-win32\libmsvcrt.a}
     {$else MSWINDOWS}
     {$L static/i386-linux/lizard_compress.o}
     {$L static/i386-linux/lizard_decompress.o}
-    {$L static/i386-linux/lizard_frame.o}
     {$L static/i386-linux/huf_compress.o}
     {$L static/i386-linux/huf_decompress.o}
     {$L static/i386-linux/fse_compress.o}
     {$L static/i386-linux/fse_decompress.o}
     {$L static/i386-linux/entropy_common.o}
-    {$L static/i386-linux/xxhash.o}
     {$linklib static/i386-linux\libgcc.a}
     {$endif MSWINDOWS}
   {$endif FPC}
@@ -630,4 +622,3 @@ finalization
 {$endif LIZARD_STANDALONE}
 
 end.
-
