@@ -4812,10 +4812,10 @@ asm // input: rcx/rdi=TAESContext, rdx/rsi=source, r8/rdx=dest
         push    r13
         push    r12
         push    rbx
-        push    rdi
-        push    rsi
         push    rbp
         {$ifdef win64}
+        push    rdi
+        push    rsi
         mov     r15, r8
         mov     r12, rcx
         {$else}
@@ -4963,9 +4963,11 @@ asm // input: rcx/rdi=TAESContext, rdx/rsi=source, r8/rdx=dest
         xor     r14d, r8d
         xor     r14d, dword ptr [r12+0CH]
         mov     dword ptr [r15+0CH], r14d
-        pop     rbp
+        {$ifdef win64}
         pop     rsi
         pop     rdi
+        {$endif win64}
+        pop     rbp
         pop     rbx
         pop     r12
         pop     r13

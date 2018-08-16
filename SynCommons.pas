@@ -20941,7 +20941,7 @@ type
     length: SizeInt;
 {$else FPC}
    TStrRec = packed record
-  {$ifdef UNICODE}
+ {$ifdef UNICODE}
     {$ifdef CPU64}
     /// padding bytes for 16 byte alignment of the header
     _Padding: LongInt;
@@ -33857,26 +33857,26 @@ asm
         lea     eax, [ebx+61C8864FH]
         mov     ebp, edx
 @1:     mov     edx, dword ptr [ecx]
-        imul    edx, edx, -2048144777
+        imul    edx, -2048144777
         add     edi, edx
         rol     edi, 13
-        imul    edi, edi, -1640531535
+        imul    edi, -1640531535
         mov     edx, dword ptr [ecx+4]
-        imul    edx, edx, -2048144777
+        imul    edx, -2048144777
         add     esi, edx
         rol     esi, 13
-        imul    esi, esi, -1640531535
+        imul    esi, -1640531535
         mov     edx, dword ptr [ecx+8]
-        imul    edx, edx, -2048144777
+        imul    edx, -2048144777
         add     ebx, edx
         rol     ebx, 13
-        imul    ebx, ebx, -1640531535
+        imul    ebx, -1640531535
         mov     edx, dword ptr [ecx+12]
         lea     ecx, [ecx+16]
-        imul    edx, edx, -2048144777
+        imul    edx, -2048144777
         add     eax, edx
         rol     eax, 13
-        imul    eax, eax, -1640531535
+        imul    eax, -1640531535
         cmp     ebp, ecx
         jnc     @1
         rol     edi, 1
@@ -33897,7 +33897,7 @@ asm
         add     ebx, 4
         add     eax, edx
         ror     eax, 15
-        imul    eax, eax, 668265263
+        imul    eax, 668265263
         cmp     ebp, ebx
         jnc     @3
         lea     edx, [ebp-4H]
@@ -33909,10 +33909,10 @@ asm
         jbe     @6
 @5:     movzx   edx, byte ptr [ecx]
         add     ecx, 1
-        imul    edx, edx, 374761393
+        imul    edx, 374761393
         add     eax, edx
         rol     eax, 11
-        imul    eax, eax, -1640531535
+        imul    eax, -1640531535
         cmp     ebp, ecx
         jnz     @5
         nop
@@ -33920,13 +33920,13 @@ asm
         add     esp, 8
         shr     edx, 15
         xor     eax, edx
-        imul    eax, eax, -2048144777
+        imul    eax, -2048144777
         pop     ebx
         pop     esi
         mov     edx, eax
         shr     edx, 13
         xor     eax, edx
-        imul    eax, eax, -1028477379
+        imul    eax, -1028477379
         pop     edi
         pop     ebp
         mov     edx, eax
@@ -33950,7 +33950,9 @@ asm
         push    rdi
         {$endif}
         // P=r8 len=rcx crc=rdx
+        push    r12
         push    rbx
+        mov     r12d, -1640531535
         lea     r10, [rcx+rdx]
         lea     eax, [r8+165667B1H]
         cmp     rdx, 15
@@ -33966,16 +33968,16 @@ asm
         lea     r9d, [r11+rdi]
         rol     ebx, 13
         rol     r9d, 13
-        imul    ebx, ebx, -1640531535
+        imul    ebx, r12d
         imul    edi, r9d, -1640531535
         imul    r9d, dword ptr [rcx-8H], -2048144777
         add     r8d, r9d
         imul    r9d, dword ptr [rcx-4H], -2048144777
         rol     r8d, 13
-        imul    r8d, r8d, -1640531535
+        imul    r8d, r12d
         add     eax, r9d
         rol     eax, 13
-        imul    eax, eax, -1640531535
+        imul    eax, r12d
         cmp     rsi, rcx
         jnc     @1
         rol     edi, 7
@@ -33995,7 +33997,7 @@ asm
         add     r8, 4
         add     eax, edx
         ror     eax, 15
-        imul    eax, eax, 668265263
+        imul    eax, 668265263
         cmp     r10, r8
         jnc     @3
         lea     rdx, [r10-4H]
@@ -34007,24 +34009,25 @@ asm
         jbe     @6
 @5:     movzx   edx, byte ptr [rcx]
         add     rcx, 1
-        imul    edx, edx, 374761393
+        imul    edx, 374761393
         add     eax, edx
         rol     eax, 11
-        imul    eax, eax, -1640531535
+        imul    eax, r12d
         cmp     r10, rcx
         jnz     @5
 @6:     mov     edx, eax
         shr     edx, 15
         xor     eax, edx
-        imul    eax, eax, -2048144777
+        imul    eax, -2048144777
         mov     edx, eax
         shr     edx, 13
         xor     eax, edx
-        imul    eax, eax, -1028477379
+        imul    eax, -1028477379
         mov     edx, eax
         shr     edx, 16
         xor     eax, edx
         pop     rbx
+        pop     r12
         {$ifndef LINUX}
         pop     rdi
         pop     rsi
