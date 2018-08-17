@@ -1604,14 +1604,21 @@ procedure FormatUTF8(const Format: RawUTF8; const Args: array of const;
   out result: RawUTF8); overload;
 
 /// fast Format() function replacement, for UTF-8 content stored in shortstring
+// - use the same single token % (and implementation) than FormatUTF8()
 // - shortstring allows fast stack allocation, so is perfect for small content
 // - truncate result if the resulting size exceeds 255 bytes
 procedure FormatShort(const Format: RawUTF8; const Args: array of const;
   var result: shortstring);
 
 /// fast Format() function replacement, tuned for small content
+// - use the same single token % (and implementation) than FormatUTF8()
 procedure FormatString(const Format: RawUTF8; const Args: array of const;
-  out result: string);
+  out result: string); overload;
+
+/// fast Format() function replacement, tuned for small content
+// - use the same single token % (and implementation) than FormatUTF8()
+function FormatString(const Format: RawUTF8; const Args: array of const): string; overload;
+  {$ifdef FPC}inline;{$endif}
 
 type
   /// used e.g. by PointerToHexShort/CardinalToHexShort/Int64ToHexShort/FormatShort16
@@ -17535,6 +17542,7 @@ function _LStrLenP(s: pointer): SizeInt; inline;
 begin // here caller ensured s<>''
   result := PSizeInt(PAnsiChar(s)-SizeOf(SizeInt))^;
 end;
+
 {$endif FPC}
 
 
@@ -21425,7 +21433,7 @@ begin
   TypeInfoToName(aTypeInfo,Result,'');
 end;
 
-function RecordTypeInfoSize(aRecordTypeInfo: Pointer): integer;
+function RecordTypeInfoSize(aRecordTypeInfo: pointer): integer;
 var info: PTypeInfo;
 begin
   info := GetTypeInfo(aRecordTypeInfo,tkRecordTypeOrSet);
@@ -23465,7 +23473,7 @@ end;
 
 {$ifndef DEFINED_INT32TOUTF8}
 
-function Int32ToUTF8(Value: integer): RawUTF8; // faster than SysUtils.IntToStr
+function Int32ToUtf8(Value: integer): RawUTF8; // faster than SysUtils.IntToStr
 var tmp: array[0..15] of AnsiChar;
     P: PAnsiChar;
 begin
@@ -23524,7 +23532,7 @@ begin
   FastSetString(result,P,@tmp[15]-P);
 end;
 
-function UInt32ToUTF8(Value: Cardinal): RawUTF8;
+function UInt32ToUtf8(Value: cardinal): RawUTF8;
 var tmp: array[0..15] of AnsiChar;
     P: PAnsiChar;
 begin
@@ -23860,6 +23868,11 @@ begin
   process.Write(temp.buf);
   UTF8DecodeToString(temp.buf,process.L,result);
   temp.Done;
+end;
+
+function FormatString(const Format: RawUTF8; const Args: array of const): string;
+begin
+  FormatString(Format,Args,result);
 end;
 
 function FormatUTF8(const Format: RawUTF8; const Args, Params: array of const; JSONFormat: boolean): RawUTF8;
@@ -35082,7 +35095,7 @@ var dt: TDateTime;
     HH,MM,SS,MS,Y,M,D: word;
     tab: {$ifdef CPUX86}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
 begin // use 'YYMMDDHHMMSS' format
-  if UnixTime <= 0 then begin
+  if UnixTime<=0 then begin
     PWord(@result[0])^ := 1+ord('0') shl 8;
     exit;
   end;
@@ -38825,7 +38838,7 @@ begin
   Source := p;
 end;
 
-function FromVarUInt32up128(var Source: PByte): cardinal;
+function FromVarUInt32Up128(var Source: PByte): cardinal;
 var c: cardinal;
     p: PByte;
 begin
