@@ -34365,6 +34365,7 @@ function StrLenSSE42(S: pointer): PtrInt;
 asm // rcx=S (Linux: rdi)
         .noframe
 {$endif FPC}
+        xor     rax, rax
         {$ifdef win64}
         mov     rdx, rcx
         test    rcx, rcx
@@ -34372,16 +34373,18 @@ asm // rcx=S (Linux: rdi)
         mov     rdx, rdi
         test    rdi, rdi
         {$endif}
-        mov     rax, -16
         jz      @null
+        xor     rcx, rcx
         pxor    xmm0, xmm0
+        pcmpistri xmm0, [rdx], EQUAL_EACH // result in ecx
+        jnz     @L
+        mov     eax, ecx
+@null:  ret
         {$ifdef FPC}align 8{$endif}
 @L:     add     rax, 16   // add before comparison flag
-        pcmpistri xmm0, [rdx + rax], EQUAL_EACH // result in rcx
+        pcmpistri xmm0, [rdx + rax], EQUAL_EACH // result in ecx
         jnz     @L
         add     rax, rcx
-        ret
-@null:  xor     rax, rax
 end;
 
 function StrCompSSE42(Str1, Str2: pointer): PtrInt;
@@ -34399,6 +34402,7 @@ asm // rcx=Str1, rdx=Str2 (Linux: rdi,rsi)
       {$endif}
       jz        @n
 @ok:  sub       rax, rdx
+      xor       rcx, rcx
       movdqu    xmm0, dqword [rdx]
       pcmpistri xmm0, dqword [rdx + rax], EQUAL_EACH + NEGATIVE_POLARITY // result in rcx
       ja        @1
@@ -34421,11 +34425,11 @@ asm // rcx=Str1, rdx=Str2 (Linux: rdi,rsi)
       jnz       @ok
       mov       rax, 1
       ret
-@max: dec       rax
+@max: dec       rax  // returns -1
       ret
 @2:   add       rax, rdx
-      movzx     rax, byte ptr [rax+rcx]
-      movzx     rdx, byte ptr [rdx+rcx]
+      movzx     rax, byte ptr [rax + rcx]
+      movzx     rdx, byte ptr [rdx + rcx]
       sub       rax, rdx
 end;
 {$endif HASAESNI}
@@ -35154,8 +35158,10 @@ end;
 function UnixMSTimeToString(const UnixMSTime: TUnixMSTime; Expanded: boolean;
   FirstTimeChar: AnsiChar; const TZD: RawUTF8): RawUTF8;
 begin // inlined UnixMSTimeToDateTime()
-  result := DateTimeMSToString(UnixMSTime/MSecsPerDay+UnixDateDelta,Expanded,
-    FirstTimeChar,TZD);
+  if UnixMSTime<=0 then
+    result := '' else
+    result := DateTimeMSToString(UnixMSTime/MSecsPerDay+UnixDateDelta,Expanded,
+      FirstTimeChar,TZD);
 end;
 
 function NowUTC: TDateTime;
@@ -40877,8 +40883,8 @@ end;
 
 function StrLenSSE42(S: pointer): PtrInt;
 asm // warning: may read up to 15 bytes beyond the string itself
-        test    eax, eax
         mov     edx, eax             // copy pointer
+        test    eax, eax
         jz      @null                // returns 0 if S=nil
         xor     eax, eax
         pxor    xmm0, xmm0
