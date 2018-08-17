@@ -4186,6 +4186,9 @@ procedure DeduplicateInteger(var Values: TIntegerDynArray); overload;
 /// sort and remove any 32-bit duplicated integer from Values[]
 procedure DeduplicateInteger(var Values: TIntegerDynArray; Count: integer); overload;
 
+/// low-level function called by DeduplicateInteger()
+function DeduplicateIntegerSorted(val: PIntegerArray; v: PtrInt): PtrInt;
+
 /// create a new 32-bit integer dynamic array with the values from another one
 procedure CopyInteger(const Source: TIntegerDynArray; out Dest: TIntegerDynArray);
 
@@ -4209,6 +4212,9 @@ procedure DeduplicateInt64(var Values: TInt64DynArray); overload;
 
 /// sort and remove any 64-bit duplicated integer from Values[]
 procedure DeduplicateInt64(var Values: TInt64DynArray; Count: integer); overload;
+
+/// low-level function called by DeduplicateInt64()
+function DeduplicateInt64Sorted(val: PInt64Array; v: PtrInt): PtrInt;
 
 /// create a new 64-bit integer dynamic array with the values from another one
 procedure CopyInt64(const Source: TInt64DynArray; out Dest: TInt64DynArray);
@@ -30360,36 +30366,39 @@ begin
   DeduplicateInteger(Values, length(Values));
 end;
 
-procedure DeduplicateInteger(var Values: TIntegerDynArray; Count: integer);
-  function dedup(val: PIntegerArray; v: PtrInt): PtrInt;
-  var i: PtrInt;
-  begin // sub-function for better code generation
-    i := 0;
-    repeat // here v>0 so i<v
-      if val[i]=val[i+1] then begin
-        result := i;
-        inc(i);
-        if i<>v then begin
-          repeat
-            if val[i]<>val[i+1] then begin
-              val[result] := val[i];
-              inc(result);
-            end;
-            inc(i);
-          until i=v;
-          val[result] := val[i];
-        end;
-        exit;
+function DeduplicateIntegerSorted(val: PIntegerArray; v: PtrInt): PtrInt;
+var i: PtrInt;
+begin // sub-function for better code generation
+  i := 0;
+  repeat // here v>0 so i<v
+    if val[i]=val[i+1] then
+      break;
+    inc(i);
+    if i<>v then
+      continue;
+    result := i;
+    exit;
+  until false;
+  result := i;
+  inc(i);
+  if i<>v then begin
+    repeat
+      if val[i]<>val[i+1] then begin
+        val[result] := val[i];
+        inc(result);
       end;
       inc(i);
     until i=v;
-    result := v;
+    val[result] := val[i];
   end;
+end;
+
+procedure DeduplicateInteger(var Values: TIntegerDynArray; Count: integer);
 begin
   dec(Count);
   if Count>0 then begin
     QuickSortInteger(pointer(Values),0,Count);
-    Count := dedup(pointer(Values),Count);
+    Count := DeduplicateIntegerSorted(pointer(Values),Count);
   end;
   if high(Values)<>Count then
     SetLength(Values,Count+1);
@@ -30400,36 +30409,39 @@ begin
   DeduplicateInt64(Values, length(Values));
 end;
 
-procedure DeduplicateInt64(var Values: TInt64DynArray; Count: integer);
-  function dedup(val: PInt64Array; v: PtrInt): PtrInt;
-  var i: PtrInt;
-  begin // sub-function for better code generation
-    i := 0;
-    repeat // here v>0 so i<v
-      if val[i]=val[i+1] then begin
-        result := i;
-        inc(i);
-        if i<>v then begin
-          repeat
-            if val[i]<>val[i+1] then begin
-              val[result] := val[i];
-              inc(result);
-            end;
-            inc(i);
-          until i=v;
-          val[result] := val[i];
-        end;
-        exit;
+function DeduplicateInt64Sorted(val: PInt64Array; v: PtrInt): PtrInt;
+var i: PtrInt;
+begin // sub-function for better code generation
+  i := 0;
+  repeat // here v>0 so i<v
+    if val[i]=val[i+1] then
+      break;
+    inc(i);
+    if i<>v then
+      continue;
+    result := i;
+    exit;
+  until false;
+  result := i;
+  inc(i);
+  if i<>v then begin
+    repeat
+      if val[i]<>val[i+1] then begin
+        val[result] := val[i];
+        inc(result);
       end;
       inc(i);
     until i=v;
-    result := v;
+    val[result] := val[i];
   end;
+end;
+
+procedure DeduplicateInt64(var Values: TInt64DynArray; Count: integer);
 begin
   dec(Count);
   if Count>0 then begin
     QuickSortInt64(pointer(Values),0,Count);
-    Count := dedup(pointer(Values),Count);
+    Count := DeduplicateInt64Sorted(pointer(Values),Count);
   end;
   if high(Values)<>Count then
     SetLength(Values,Count+1);
