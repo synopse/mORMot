@@ -47336,71 +47336,70 @@ var nested: PTypeInfo;
     field: PFieldInfo;
 label Bin, Rec;
 begin
-  if fKnownType<>djNone then begin
-    result := fKnownType;
+  result := fKnownType;
+  if result<>djNone then
     exit;
-  end;
   case ElemSize of
   1: if fTypeInfo=TypeInfo(TBooleanDynArray) then
-       fKnownType := djBoolean;
+       result := djBoolean;
   4: if fTypeInfo=TypeInfo(TCardinalDynArray) then
-       fKnownType := djCardinal else
+       result := djCardinal else
      if fTypeInfo=TypeInfo(TSingleDynArray) then
-       fKnownType := djSingle
+       result := djSingle
   {$ifdef CPU64} ; 8: {$else} else {$endif}
     if fTypeInfo=TypeInfo(TRawUTF8DynArray) then
-      fKnownType := djRawUTF8 else
+      result := djRawUTF8 else
     if fTypeInfo=TypeInfo(TStringDynArray) then
-      fKnownType := djString else
+      result := djString else
     if fTypeInfo=TypeInfo(TWinAnsiDynArray) then
-      fKnownType := djWinAnsi else
+      result := djWinAnsi else
     if fTypeInfo=TypeInfo(TRawByteStringDynArray) then
-      fKnownType := djRawByteString else
+      result := djRawByteString else
     if fTypeInfo=TypeInfo(TSynUnicodeDynArray) then
-      fKnownType := djSynUnicode else
+      result := djSynUnicode else
     if (fTypeInfo=TypeInfo(TClassDynArray)) or
        (fTypeInfo=TypeInfo(TPointerDynArray)) then
-      fKnownType := djPointer else
+      result := djPointer else
     {$ifndef DELPHI5OROLDER}
     if fTypeInfo=TypeInfo(TInterfaceDynArray) then
-      fKnownType := djInterface
+      result := djInterface
     {$endif DELPHI5OROLDER}
   {$ifdef CPU64} else {$else} ; 8: {$endif}
      if fTypeInfo=TypeInfo(TDoubleDynArray) then
-       fKnownType := djDouble else
+       result := djDouble else
      if fTypeInfo=TypeInfo(TCurrencyDynArray) then
-       fKnownType := djCurrency else
+       result := djCurrency else
      if fTypeInfo=TypeInfo(TTimeLogDynArray) then
-       fKnownType := djTimeLog else
+       result := djTimeLog else
      if fTypeInfo=TypeInfo(TDateTimeDynArray) then
-       fKnownType := djDateTime else
+       result := djDateTime else
      if fTypeInfo=TypeInfo(TDateTimeMSDynArray) then
-       fKnownType := djDateTimeMS;
+       result := djDateTimeMS;
   end;
-  if (fKnownType=djNone) and not exactType then begin
+  if (result=djNone) and not exactType then begin
     fKnownSize := 0;
     if ElemType=nil then
 Bin:  case ElemSize of
-      1: fKnownType := djByte;
-      2: fKnownType := djWord;
-      4: fKnownType := djInteger;
-      8: fKnownType := djInt64;
+      1: result := djByte;
+      2: result := djWord;
+      4: result := djInteger;
+      8: result := djInt64;
       else fKnownSize := ElemSize;
       end else
     case PTypeKind(ElemType)^ of
-      tkLString{$ifdef FPC},tkLStringOld{$endif}: fKnownType := djRawUTF8;
-      tkWString: fKnownType := djWideString;
+      tkLString{$ifdef FPC},tkLStringOld{$endif}: result := djRawUTF8;
+      tkWString: result := djWideString;
       {$ifdef UNICODE}
-      tkUString: fKnownType := djString;
+      tkUString: result := djString;
       {$else}
       {$ifdef FPC_HAS_FEATURE_UNICODESTRINGS}
-      tkUString: fKnownType := djSynUnicode;
+      tkUString: result := djSynUnicode;
       {$endif FPC_HAS_FEATURE_UNICODESTRINGS}
       {$endif}
       {$ifndef NOVARIANTS}
-      tkVariant: fKnownType := djVariant;
+      tkVariant: result := djVariant;
       {$endif}
-      tkInterface: fKnownType := djInterface;
+      tkInterface: result := djInterface;
       tkRecord{$ifdef FPC},tkObject{$endif}: begin
         nested := ElemType; // inlined GetTypeInfo()
         {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
@@ -47417,13 +47416,13 @@ rec:    inc(PByte(nested),nested^.NameLen);
           goto Bin;
         case field^.Offset of
         0: case DeRef(field^.TypeInfo)^.Kind of
-           tkLString{$ifdef FPC},tkLStringOld{$endif}: fKnownType := djRawUTF8;
-           tkWString: fKnownType := djWideString;
+           tkLString{$ifdef FPC},tkLStringOld{$endif}: result := djRawUTF8;
+           tkWString: result := djWideString;
            {$ifdef UNICODE}
-           tkUString: fKnownType := djString;
+           tkUString: result := djString;
            {$else}
            {$ifdef FPC_HAS_FEATURE_UNICODESTRINGS}
-           tkUString: fKnownType := djSynUnicode;
+           tkUString: result := djSynUnicode;
            {$endif FPC_HAS_FEATURE_UNICODESTRINGS}
            {$endif}
            tkRecord{$ifdef FPC},tkObject{$endif}: begin
@@ -47431,22 +47430,22 @@ rec:    inc(PByte(nested),nested^.NameLen);
              goto Rec;
            end;
            {$ifndef NOVARIANTS}
-           tkVariant: fKnownType := djVariant;
+           tkVariant: result := djVariant;
            {$endif}
            else goto bin;
            end;
-        1: fKnownType := djByte;
-        2: fKnownType := djWord;
-        4: fKnownType := djInteger;
-        8: fKnownType := djInt64;
+        1: result := djByte;
+        2: result := djWord;
+        4: result := djInteger;
+        8: result := djInt64;
         else fKnownSize := field^.Offset;
         end;
       end;
     end;
   end;
-  if KNOWNTYPE_SIZE[fKnownType]<>0 then
-    fKnownSize := KNOWNTYPE_SIZE[fKnownType];
-  result := fKnownType;
+  if KNOWNTYPE_SIZE[result]<>0 then
+    fKnownSize := KNOWNTYPE_SIZE[result];
+  fKnownType := result;
 end;
 
 function TDynArray.ElemCopyFirstField(Source,Dest: Pointer): boolean;
