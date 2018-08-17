@@ -14635,7 +14635,7 @@ var payloadend,j,toklen,c,cap,headerlen,len,a: integer;
     id: TSynUniqueIdentifierBits;
     value: variant;
     payload: RawUTF8;
-    head: TPUtf8CharDynArray;
+    head: array[0..1] of TValuePUTF8Char;
     aud: TDocVariantData;
     tok: PAnsiChar absolute Token;
 begin
@@ -14653,9 +14653,9 @@ begin
     if (headerlen=0) or (headerlen>512) then
       exit;
     Base64URIToBin(tok,headerlen-1,signature);
-    JSONDecode(pointer(signature),['alg','typ'],head);
-    if not IdemPropNameU(fAlgorithm,head[0],StrLen(head[0])) or
-       ((head[1]<>nil) and not IdemPropNameU('JWT',head[1],StrLen(head[1]))) then
+    JSONDecode(pointer(signature),['alg','typ'],@head);
+    if not head[0].Idem(fAlgorithm) or
+       ((head[1].Value<>nil) and not head[1].Idem('JWT')) then
       exit;
   end else begin
     headerlen := length(fHeaderB64); // fast direct compare of fHeaderB64 (including "alg")
@@ -14772,7 +14772,7 @@ class function TJWTAbstract.VerifyPayload(const Token, ExpectedSubject, Expected
   ExpectedAudience: RawUTF8; Expiration: PUnixTime; Signature: PRawUTF8; Payload: PVariant;
   IgnoreTime: boolean): TJWTResult;
 var P,B: PUTF8Char;
-    V: TPUtf8CharDynArray;
+    V: array[0..4] of TValuePUTF8Char;
     now, time: PtrUInt;
     text: RawUTF8;
 begin
@@ -14797,29 +14797,28 @@ begin
     exit;
   if Payload<>nil then
     _Json(text,Payload^,JSON_OPTIONS_FAST);
-  JSONDecode(pointer(text),['iss','aud','exp','nbf','sub'],V,true);
+  JSONDecode(pointer(text),['iss','aud','exp','nbf','sub'],@V,true);
   result := jwtUnexpectedClaim;
-  if (ExpectedSubject<>'') and not IdemPropNameU(ExpectedSubject,V[4],StrLen(V[4])) then
-    exit;
-  if (ExpectedIssuer<>'') and not IdemPropNameU(ExpectedIssuer,V[0],StrLen(V[0])) then
+  if ((ExpectedSubject<>'') and not V[4].Idem(ExpectedSubject)) or
+     ((ExpectedIssuer<>'') and not V[0].Idem(ExpectedIssuer)) then
     exit;
   result := jwtUnknownAudience;
-  if (ExpectedAudience<>'') and not IdemPropNameU(ExpectedAudience,V[1],StrLen(V[1])) then
+  if (ExpectedAudience<>'') and not V[1].Idem(ExpectedAudience) then
     exit;
   if Expiration<>nil then
     Expiration^ := 0;
-  if (V[2]<>nil) or (V[3]<>nil) then begin
+  if (V[2].Value<>nil) or (V[3].Value<>nil) then begin
     now := UnixTimeUTC;
-    if V[2]<>nil then begin
-      time := GetCardinal(V[2]);
+    if V[2].Value<>nil then begin
+      time := V[2].ToCardinal;
       result := jwtExpired;
       if not IgnoreTime and (now>time) then
         exit;
       if Expiration<>nil then
         Expiration^ := time;
     end;
-    if not IgnoreTime and (V[3]<>nil) then begin
-      time := GetCardinal(V[3]);
+    if not IgnoreTime and (V[3].Value<>nil) then begin
+      time := V[3].ToCardinal;
       result := jwtNotBeforeFailed;
       if (time=0) or (now<time) then
         exit;

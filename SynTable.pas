@@ -5715,13 +5715,13 @@ end;
 { TSynFilterTruncate}
 
 procedure TSynFilterTruncate.SetParameters(const value: RawUTF8);
-var V: TPUtf8CharDynArray;
+var V: array[0..1] of TValuePUTF8Char;
     tmp: TSynTempBuffer;
 begin
   tmp.Init(value);
-  JSONDecode(tmp.buf,['MaxLength','UTF8Length'],V);
-  fMaxLength := GetCardinalDef(V[0],0);
-  fUTF8Length := IdemPChar(V[1],'1') or IdemPChar(V[1],'TRUE');
+  JSONDecode(tmp.buf,['MaxLength','UTF8Length'],@V);
+  fMaxLength := GetCardinalDef(V[0].Value,0);
+  fUTF8Length := V[1].Idem('1') or V[1].Idem('true');
   tmp.Done;
 end;
 
@@ -5782,16 +5782,16 @@ begin
 end;
 
 procedure TSynValidateEmail.SetParameters(const value: RawUTF8);
-var V: TPUtf8CharDynArray;
+var V: array[0..3] of TValuePUTF8Char;
     tmp: TSynTempBuffer;
 begin
   inherited;
   tmp.Init(value);
-  JSONDecode(tmp.buf,['AllowedTLD','ForbiddenTLD','ForbiddenDomains','AnyTLD'],V);
-  LowerCaseCopy(V[0],StrLen(V[0]),fAllowedTLD);
-  LowerCaseCopy(V[1],StrLen(V[1]),fForbiddenTLD);
-  LowerCaseCopy(V[2],StrLen(V[2]),fForbiddenDomains);
-  AnyTLD := IdemPChar(V[3],'1') or IdemPChar(V[3],'TRUE');
+  JSONDecode(tmp.buf,['AllowedTLD','ForbiddenTLD','ForbiddenDomains','AnyTLD'],@V);
+  LowerCaseCopy(V[0].Value,V[0].ValueLen,fAllowedTLD);
+  LowerCaseCopy(V[1].Value,V[1].ValueLen,fForbiddenTLD);
+  LowerCaseCopy(V[2].Value,V[2].ValueLen,fForbiddenDomains);
+  AnyTLD := V[3].Idem('1') or V[3].Idem('true');
   tmp.Done;
 end;
 
@@ -5925,7 +5925,7 @@ begin
 end;
 
 procedure TSynValidateText.SetParameters(const value: RawUTF8);
-var V: TPUtf8CharDynArray;
+var V: array[0..high(TSynValidateTextProps)] of TValuePUTF8Char;
     i: integer;
     tmp: TSynTempBuffer;
 const DEFAULT: TSynValidateTextProps = (
@@ -5944,13 +5944,11 @@ begin
       'MaxLeftTrimCount','MaxRightTrimCount',
       'MaxAlphaCount','MaxDigitCount','MaxPunctCount',
       'MaxLowerCount','MaxUpperCount','MaxSpaceCount',
-      'UTF8Length'],V);
-    if length(V)<>length(fProps)+1 then
-      exit;
+      'UTF8Length'],@V);
     for i := 0 to high(fProps) do
-      fProps[i] := GetCardinalDef(V[i],fProps[i]);
-    fUTF8Length := IdemPChar(V[length(fProps)],'1') or
-                   IdemPChar(V[length(fProps)],'TRUE');
+      fProps[i] := GetCardinalDef(V[i].Value,fProps[i]);
+    with V[high(V)] do
+      fUTF8Length := Idem('1') or Idem('true');
   finally
     tmp.Done;
   end;

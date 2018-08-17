@@ -6843,17 +6843,18 @@ On the other side, the corresponding reader callback will be like:
 !class function TTestServiceOrientedArchitecture.CustomReader(P: PUTF8Char;
 !  var aValue; out aValid: Boolean): PUTF8Char;
 !var V: TSQLRestCacheEntryValue absolute aValue;
-!    Values: TPUtf8CharDynArray;
+!    Values: array[0..2] of TValuePUTF8Char;
 !begin
-!  result := JSONDecode(P,['ID','Timestamp','JSON'],Values);
+!  result := JSONDecode(P,['ID','Timestamp','JSON'],@Values);
 !  if result=nil then
 !    aValid := false else begin
-!    V.ID := GetInt64(Values[0]);
-!    V.Timestamp := GetCardinal(Values[1]);
-!    V.JSON := Values[2];
+!    V.ID := GetInt64(Values[0].Value);
+!    V.Timestamp := GetCardinal(Values[1].Value);
+!    Values[2].ToUTF8(V.JSON);
 !    aValid := true;
 !  end;
 !end;
+Here {\f1\fs20 JSONDecode()} is used for fast deserialization of a JSON object.
 :    Text-based definition
 Writing those callbacks by hand could be error-prone, especially for the {\f1\fs20 Reader} event.
 You can use the {\f1\fs20 TTextWriter.@*RegisterCustomJSONSerializerFromText@} method to define the {\f1\fs20 record} layout in a convenient text-based format. Once more, those types need to be defined as {\f1\fs20 packed record}, so that the text layout definition will not depend on compiler-specific field alignment.
@@ -7076,21 +7077,21 @@ Then the corresponding {\i Reader} callback could be written as:
 !class function TCollTstDynArray.FVReader2(P: PUTF8Char; var aValue;
 !  out aValid: Boolean): PUTF8Char;
 !var V: TFV absolute aValue;
-!    Values: TPUtf8CharDynArray;
+!    Values: array[0..5] of TValuePUTF8Char;
 !begin
 !  aValid := false;
-!  result := JSONDecode(P,['Major','Minor','Release','Build','Main','Detailed'],Values);
+!  result := JSONDecode(P,['Major','Minor','Release','Build','Main','Detailed'],@Values);
 !  if result=nil then
 !    exit; // result^ = ',' or ']' for last item of array
-!  V.Major := GetInteger(Values[0]);
-!  V.Minor := GetInteger(Values[1]);
-!  V.Release := GetInteger(Values[2]);
-!  V.Build := GetInteger(Values[3]);
-!  V.Main := UTF8DecodeToString(Values[4],StrLen(Values[4]));
-!  V.Detailed := UTF8DecodeToString(Values[5],StrLen(Values[5]));
+!  V.Major := Values[0].ToInteger;
+!  V.Minor := Values[1].ToInteger;
+!  V.Release := Values[2].ToInteger;
+!  V.Build := Values[3].ToInteger;
+!  V.Main := Values[4].ToString;
+!  V.Detailed := Values[5].ToString;
 !  aValid := true;
 !end;
-Most of the JSON decoding process is performed within the {\f1\fs20 JSONDecode()} function, which will let {\f1\fs20 Values[]} point to null-terminated un-escaped content within the {\f1\fs20 P^} buffer. In fact, such process will do only one memory allocation (for {\f1\fs20 Values[]}), and will therefore be very fast.
+Most of the JSON decoding process is performed within the {\f1\fs20 JSONDecode()} function, which will let {\f1\fs20 Values[].Value/ValueLen} couples point to null-terminated un-escaped content within the {\f1\fs20 P^} buffer. In fact, unserialization will do no memory allocation, and will therefore be very fast.
 If you want to go back to the default binary + {\i Base64} encoding serialization, you may run the registering method as such:
 !  TTextWriter.RegisterCustomJSONSerializer(TypeInfo(TFVs),nil,nil);
 Or calling the text-based registration with a void definition:
@@ -7141,22 +7142,20 @@ Then the associated {\i Reader} callback could be, for instance:
 !class function TCollTstDynArray.FVClassReader(const aValue: TObject; aFrom: PUTF8Char;
 !  var aValid: Boolean; aOptions: TJSONToObjectOptions): PUTF8Char;
 !var V: TFileVersion absolute aValue;
-!    Values: TPUtf8CharDynArray;
+!    Values: array[0..5] of TValuePUTF8Char;
 !begin
-!  aValid := false;
-!  aFrom := JSONDecode(aFrom,['Major','Minor','Release','Build','Main','BuildDateTime'],Values);
-!  if aFrom=nil then
-!    exit;
-!  V.Major := GetInteger(Values[0]);
-!  V.Minor := GetInteger(Values[1]);
-!  V.Release := GetInteger(Values[2]);
-!  V.Build := GetInteger(Values[3]);
-!  V.Main := UTF8DecodeToString(Values[4],StrLen(Values[4]));
-!  V.BuildDateTime := Iso8601ToDateTimePUTF8Char(Values[5]);
-!  aValid := true;
-!  result := aFrom;
+!  result := JSONDecode(aFrom,['Major','Minor','Release','Build','Main','BuildDateTime'],@Values);
+!  aValid := (result<>nil);
+!  if aValid then begin
+!    V.Major := Values[0].ToInteger;
+!    V.Minor := Values[1].ToInteger;
+!    V.Release := Values[2].ToInteger;
+!    V.Build := Values[3].ToInteger;
+!    V.Main := Values[4].ToString;
+!    V.BuildDateTime := Iso8601ToDateTimePUTF8Char(Values[5].Value,Values[5].ValueLen);
+!  end;
 !end;
-Here, the {\f1\fs20 JSONDecode} function will un-serialize the JSON object into an array of {\f1\fs20 PUTF8Char} values, without any memory allocation (in fact, {\f1\fs20 Values[]} will point to un-escaped and #0 terminated content within the {\f1\fs20 aFrom} memory buffer. So decoding is very fast.
+Here, the {\f1\fs20 JSONDecode} function will un-serialize the JSON object into an array of {\f1\fs20 PUTF8Char} values, without any memory allocation (in fact, {\f1\fs20 Values[].Value} will point to un-escaped and #0 terminated content within the {\f1\fs20 aFrom} memory buffer. So decoding is very fast.
 Then, the registration step will be defined as such:
 !  TJSONSerializer.RegisterCustomSerializer(TFileVersion,
 !    TCollTstDynArray.FVClassReader,TCollTstDynArray.FVClassWriter);

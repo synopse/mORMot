@@ -10043,6 +10043,11 @@ type
 // (thanks to sanyin for the report)
 function FileSeek64(Handle: THandle; const Offset: Int64; Origin: cardinal): Int64;
 
+/// wrapper to serialize a T*ObjArray dynamic array as JSON
+// - as expected by TJSONSerializer.RegisterObjArrayForJSON()
+function ObjArrayToJSON(const aObjArray;
+  aOptions: TTextWriterWriteObjectOptions=[woDontStoreDefault]): RawUTF8;
+
 /// encode the supplied data as an UTF-8 valid JSON object content
 // - data must be supplied two by two, as Name,Value pairs, e.g.
 // ! JSONEncode(['name','John','year',1972]) = '{"name":"John","year":1972}'
@@ -10104,46 +10109,24 @@ procedure JSONEncodeArrayOfConst(const Values: array of const;
 // - will unquote the SQLValue using TTextWriter.AddQuotedStringAsJSON()
 procedure JSONEncodeNameSQLValue(const Name,SQLValue: RawUTF8; var result: RawUTF8);
 
-/// decode the supplied UTF-8 JSON content for the supplied names
-// - data will be set in Values, according to the Names supplied e.g.
-// ! JSONDecode(JSON,['name','year'],Values) -> Values[0]^='John'; Values[1]^='1972';
-// - if any supplied name wasn't found its corresponding Values[] will be nil
-// - this procedure will decode the JSON content in-memory, i.e. the PUtf8Char
-// array is created inside JSON, which is therefore modified: make a private
-// copy first if you want to reuse the JSON content
-// - if HandleValuesAsObjectOrArray is TRUE, then this procedure will handle
-// JSON arrays or objects
-// - support enhanced JSON syntax, e.g. '{name:'"John",year:1972}' is decoded
-// just like '{"name":'"John","year":1972}'
-procedure JSONDecode(var JSON: RawUTF8;
-  const Names: array of PUTF8Char; var Values: TPUtf8CharDynArray;
-  HandleValuesAsObjectOrArray: Boolean=false); overload;
-
-/// decode the supplied UTF-8 JSON content for the supplied names
-// - an overloaded function when the JSON is supplied as a RawJSON variable
-procedure JSONDecode(var JSON: RawJSON;
-  const Names: array of PUTF8Char; var Values: TPUtf8CharDynArray;
-  HandleValuesAsObjectOrArray: Boolean=false); overload;
-
-/// wrapper to serialize a T*ObjArray dynamic array as JSON
-// - as expected by TJSONSerializer.RegisterObjArrayForJSON()
-function ObjArrayToJSON(const aObjArray;
-  aOptions: TTextWriterWriteObjectOptions=[woDontStoreDefault]): RawUTF8;
-
-/// decode the supplied UTF-8 JSON content for the supplied names
-// - data will be set in Values, according to the Names supplied e.g.
-// ! JSONDecode(P,['name','year'],Values) -> Values[0]^='John'; Values[1]^='1972';
-// - if any supplied name wasn't found its corresponding Values[] will be nil
-// - this procedure will decode the JSON content in-memory, i.e. the PUtf8Char
-// array is created inside P, which is therefore modified: make a private
-// copy first if you want to reuse the JSON content
-// - if HandleValuesAsObjectOrArray is TRUE, then this procedure will handle
-// JSON arrays or objects
-// - returns a pointer to the next content item in the JSON buffer
-function JSONDecode(P: PUTF8Char; const Names: array of PUTF8Char;
-  var Values: TPUtf8CharDynArray; HandleValuesAsObjectOrArray: Boolean=false): PUTF8Char; overload;
-
 type
+  /// points to one value of raw UTF-8 content, decoded from a JSON buffer
+  // - used e.g. by JSONDecode() overloaded function to returns names/values
+  {$ifdef UNICODE}TValuePUTF8Char = record{$else}TValuePUTF8Char = object{$endif}
+  public
+    Value: PUTF8Char;
+    ValueLen: PtrInt;
+    procedure ToUTF8(var Text: RawUTF8); overload; {$ifdef HASINLINE}inline;{$endif}
+    function ToUTF8: RawUTF8; overload; {$ifdef HASINLINE}inline;{$endif}
+    function ToString: string;
+    function ToInteger: PtrInt; {$ifdef HASINLINE}inline;{$endif}
+    function ToCardinal: PtrUInt; {$ifdef HASINLINE}inline;{$endif}
+    function Idem(const Text: RawUTF8): boolean; {$ifdef HASINLINE}inline;{$endif}
+  end;
+  /// used e.g. by JSONDecode() overloaded function to returns values
+  TValuePUTF8CharArray = array[0..maxInt div SizeOf(TValuePUTF8Char)-1] of TValuePUTF8Char;
+  PValuePUTF8CharArray = ^TValuePUTF8CharArray;
+
   /// store one name/value pair of raw UTF-8 content, from a JSON buffer
   // - used e.g. by JSONDecode() overloaded function to returns names/values
   TNameValuePUTF8Char = record
@@ -10154,6 +10137,39 @@ type
   end;
   /// used e.g. by JSONDecode() overloaded function to returns name/value pairs
   TNameValuePUTF8CharDynArray = array of TNameValuePUTF8Char;
+
+/// decode the supplied UTF-8 JSON content for the supplied names
+// - data will be set in Values, according to the Names supplied e.g.
+// ! JSONDecode(JSON,['name','year'],@Values) -> Values[0].Value='John'; Values[1].Value='1972';
+// - if any supplied name wasn't found its corresponding Values[] will be nil
+// - this procedure will decode the JSON content in-memory, i.e. the PUtf8Char
+// array is created inside JSON, which is therefore modified: make a private
+// copy first if you want to reuse the JSON content
+// - if HandleValuesAsObjectOrArray is TRUE, then this procedure will handle
+// JSON arrays or objects
+// - support enhanced JSON syntax, e.g. '{name:'"John",year:1972}' is decoded
+// just like '{"name":'"John","year":1972}'
+procedure JSONDecode(var JSON: RawUTF8; const Names: array of RawUTF8;
+  Values: PValuePUTF8CharArray; HandleValuesAsObjectOrArray: Boolean=false); overload;
+
+/// decode the supplied UTF-8 JSON content for the supplied names
+// - an overloaded function when the JSON is supplied as a RawJSON variable
+procedure JSONDecode(var JSON: RawJSON; const Names: array of RawUTF8;
+  Values: PValuePUTF8CharArray; HandleValuesAsObjectOrArray: Boolean=false); overload;
+
+/// decode the supplied UTF-8 JSON content for the supplied names
+// - data will be set in Values, according to the Names supplied e.g.
+// ! JSONDecode(P,['name','year'],Values) -> Values[0]^='John'; Values[1]^='1972';
+// - if any supplied name wasn't found its corresponding Values[] will be nil
+// - this procedure will decode the JSON content in-memory, i.e. the PUtf8Char
+// array is created inside P, which is therefore modified: make a private
+// copy first if you want to reuse the JSON content
+// - if HandleValuesAsObjectOrArray is TRUE, then this procedure will handle
+// JSON arrays or objects
+// - if ValuesLen is set, ValuesLen[] will contain the length of each Values[]
+// - returns a pointer to the next content item in the JSON buffer
+function JSONDecode(P: PUTF8Char; const Names: array of RawUTF8;
+  Values: PValuePUTF8CharArray; HandleValuesAsObjectOrArray: Boolean=false): PUTF8Char; overload;
 
 /// decode the supplied UTF-8 JSON content into an array of name/value pairs
 // - this procedure will decode the JSON content in-memory, i.e. the PUtf8Char
@@ -53710,31 +53726,62 @@ begin
     result := '{"'+Name+'":'+SQLValue+'}';
 end;
 
-procedure JSONDecode(var JSON: RawUTF8; const Names: array of PUTF8Char;
-  var Values: TPUtf8CharDynArray; HandleValuesAsObjectOrArray: Boolean);
+procedure TValuePUTF8Char.ToUTF8(var Text: RawUTF8);
+begin
+  FastSetString(Text,Value,ValueLen);
+end;
+
+function TValuePUTF8Char.ToUTF8: RawUTF8;
+begin
+  FastSetString(result,Value,ValueLen);
+end;
+
+function TValuePUTF8Char.ToString: string;
+begin
+  UTF8DecodeToString(Value,ValueLen,result);
+end;
+
+function TValuePUTF8Char.ToInteger: PtrInt;
+begin
+  result := GetInteger(Value);
+end;
+
+function TValuePUTF8Char.ToCardinal: PtrUInt;
+begin
+  result := GetCardinal(Value);
+end;
+
+function TValuePUTF8Char.Idem(const Text: RawUTF8): boolean;
+begin
+  if length(Text)=ValueLen then
+    result := IdemPropNameUSameLen(pointer(Text),Value,ValueLen) else
+    result := false;
+end;
+
+procedure JSONDecode(var JSON: RawUTF8; const Names: array of RawUTF8;
+  Values: PValuePUTF8CharArray; HandleValuesAsObjectOrArray: Boolean);
 begin
   JSONDecode(UniqueRawUTF8(JSON),Names,Values,HandleValuesAsObjectOrArray);
 end;
 
-procedure JSONDecode(var JSON: RawJSON; const Names: array of PUTF8Char;
-  var Values: TPUtf8CharDynArray; HandleValuesAsObjectOrArray: Boolean);
+procedure JSONDecode(var JSON: RawJSON; const Names: array of RawUTF8;
+  Values: PValuePUTF8CharArray; HandleValuesAsObjectOrArray: Boolean);
 begin
   JSONDecode(UniqueRawUTF8(RawUTF8(JSON)),Names,Values,HandleValuesAsObjectOrArray);
 end;
 
-function JSONDecode(P: PUTF8Char; const Names: array of PUTF8Char;
-  var Values: TPUtf8CharDynArray; HandleValuesAsObjectOrArray: Boolean): PUTF8Char;
-var n, i: integer;
-    Name, Value: PUTF8Char;
+function JSONDecode(P: PUTF8Char; const Names: array of RawUTF8;
+  Values: PValuePUTF8CharArray; HandleValuesAsObjectOrArray: Boolean): PUTF8Char;
+var n, i: PtrInt;
+    namelen, valuelen: integer;
+    name, value: PUTF8Char;
     EndOfObject: AnsiChar;
-    NewValues: boolean;
 begin
   result := nil;
+  if Values=nil then
+    exit; // avoid GPF
   n := length(Names);
-  NewValues := pointer(Values)=nil;
-  SetLength(Values,n);
-  if not NewValues then
-    FillcharFast(Values[0],n*SizeOf(PUTF8Char),0); // SetLength() could leave it not void
+  FillcharFast(Values[0],n*SizeOf(Values[0]),0);
   dec(n);
   if P=nil then
     exit;
@@ -53744,15 +53791,16 @@ begin
       inc(P);
   inc(P); // jump {
   repeat
-    Name := GetJSONPropName(P);
-    if Name=nil then
+    name := GetJSONPropName(P,@namelen);
+    if name=nil then
       exit;  // invalid JSON content
-    Value := GetJSONFieldOrObjectOrArray(P,nil,@EndOfObject,HandleValuesAsObjectOrArray);
+    value := GetJSONFieldOrObjectOrArray(P,nil,@EndOfObject,HandleValuesAsObjectOrArray,true,@valuelen);
     if not(EndOfObject in [',','}']) then
       exit; // invalid item separator
     for i := 0 to n do
-      if StrIComp(Name,Names[i])=0 then begin
-        Values[i] := Value;
+      if IdemPropNameU(Names[i],name,namelen) then begin
+        Values[i].Value := value;
+        Values[i].ValueLen := valuelen;
         break;
       end;
   until (P=nil) or (EndOfObject='}');
@@ -54206,8 +54254,8 @@ s:  repeat inc(P) until (P^>' ') or (P^=#0);
 end;
 
 function GetJSONFieldOrObjectOrArray(var P: PUTF8Char; wasString: PBoolean;
-  EndOfObject: PUTF8Char; HandleValuesAsObjectOrArray,NormalizeBoolean: Boolean;
-  Len: PInteger): PUTF8Char;
+  EndOfObject: PUTF8Char; HandleValuesAsObjectOrArray: Boolean;
+  NormalizeBoolean: Boolean; Len: PInteger): PUTF8Char;
 var Value: PUTF8Char;
     wStr: boolean;
 begin
@@ -54943,7 +54991,8 @@ begin
     end;
 end;
 
-function JSONToXML(const JSON: RawUTF8; const Header,NameSpace: RawUTF8): RawUTF8;
+function JSONToXML(const JSON: RawUTF8; const Header: RawUTF8;
+  const NameSpace: RawUTF8): RawUTF8;
 var tmp: TSynTempBuffer;
 begin
   tmp.Init(JSON);
@@ -55137,16 +55186,16 @@ end;
 constructor TSynConnectionDefinition.CreateFromJSON(const JSON: RawUTF8;
   Key: cardinal);
 var privateCopy: RawUTF8;
-    values: TPUtf8CharDynArray;
+    values: array[0..4] of TValuePUTF8Char;
 begin
   fKey := Key;
   privateCopy := JSON;
-  JSONDecode(privateCopy,['Kind','ServerName','DatabaseName','User','Password'],values);
-  UTF8DecodeToString(values[0],StrLen(values[0]),fKind);
-  fServerName := values[1];
-  fDatabaseName := values[2];
-  fUser := values[3];
-  fPassWord := values[4];
+  JSONDecode(privateCopy,['Kind','ServerName','DatabaseName','User','Password'],@values);
+  fKind := values[0].ToString;
+  values[1].ToUTF8(fServerName);
+  values[2].ToUTF8(fDatabaseName);
+  values[3].ToUTF8(fUser);
+  values[4].ToUTF8(fPassWord);
 end;
 
 function TSynConnectionDefinition.SaveToJSON: RawUTF8;
