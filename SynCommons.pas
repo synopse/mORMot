@@ -4476,7 +4476,7 @@ type
   // (see TDynArray and TDynArrayHash InitSpecific method)
   // - djBoolean would generate an array of JSON boolean values
   // - djByte .. djTimeLog match numerical JSON values
-  // - djDateTime .. djSynUnicode match textual JSON values
+  // - djDateTime .. djHash512 match textual JSON values
   // - djVariant will match standard variant JSON serialization (including
   // TDocVariant or other custom types, if any)
   // - djCustom will be used for registered JSON serializer (invalid for
@@ -4487,10 +4487,11 @@ type
   TDynArrayKind = (
     djNone,
     djBoolean, djByte, djWord, djInteger, djCardinal, djSingle,
-    djInt64, djQWord, djDouble, djCurrency,
-    djTimeLog, djDateTime, djDateTimeMS, djRawUTF8, djWinAnsi, djString,
-    djRawByteString, djWideString, djSynUnicode, djInterface,
-    {$ifndef NOVARIANTS}djVariant,{$endif}
+    djInt64, djQWord, djDouble, djCurrency,  djTimeLog,
+    djDateTime, djDateTimeMS, djRawUTF8, djWinAnsi, djString,
+    djRawByteString, djWideString, djSynUnicode,
+    djHash128, djHash256, djHash512,
+    djInterface, {$ifndef NOVARIANTS}djVariant,{$endif}
     djCustom);
 
   /// internal set to specify some standard Delphi arrays
@@ -4608,7 +4609,7 @@ type
     // - djNone and djCustom are too vague, and will raise an exception
     // - no RTTI check is made over the corresponding array layout: you shall
     // ensure that the aKind parameter matches the dynamic array element definition
-    // - aCaseInsensitive will be used for djRawUTF8..djSynUnicode comparison
+    // - aCaseInsensitive will be used for djRawUTF8..djHash512 text comparison
     procedure InitSpecific(aTypeInfo: pointer; var aValue; aKind: TDynArrayKind;
       aCountPointer: PInteger=nil; aCaseInsensitive: boolean=false);
     /// define the reference to an external count integer variable
@@ -5228,7 +5229,7 @@ type
     // - djNone and djCustom are too vague, and will raise an exception
     // - no RTTI check is made over the corresponding array layout: you shall
     // ensure that aKind matches the dynamic array element definition
-    // - aCaseInsensitive will be used for djRawUTF8..djSynUnicode comparison
+    // - aCaseInsensitive will be used for djRawUTF8..djHash512 text comparison
     procedure InitSpecific(aTypeInfo: pointer; var aValue; aKind: TDynArrayKind;
       aCountPointer: PInteger=nil; aCaseInsensitive: boolean=false);
     /// will compute all hash from the current elements of the dynamic array
@@ -6658,7 +6659,8 @@ function DynArrayBlobSaveJSON(TypeInfo, BlobValue: pointer): RawUTF8;
 // will be returned (e.g. 'byte' for an array of 1 byte items), and ElemTypeInfo
 // will be set to nil
 // - this low-level function is used e.g. by mORMotWrappers unit
-function DynArrayElementTypeName(TypeInfo: pointer; ElemTypeInfo: PPointer=nil): RawUTF8;
+function DynArrayElementTypeName(TypeInfo: pointer; ElemTypeInfo: PPointer=nil;
+  ExactType: boolean=false): RawUTF8;
 
 /// trim ending 'DynArray' or 's' chars from a dynamic array type name
 // - used internally to guess the associated item type name
@@ -6695,6 +6697,15 @@ function SortDynArrayInt64(const A,B): integer;
 // better use this function to properly compare two QWord values over CPUX86
 function SortDynArrayQWord(const A,B): integer;
   {$ifndef CPUX86}{$ifdef HASINLINE}inline;{$endif}{$endif}
+
+/// compare two "array of THash128" elements
+function SortDynArray128(const A,B): integer; {$ifdef HASINLINE}inline;{$endif}
+
+/// compare two "array of THash256" elements
+function SortDynArray256(const A,B): integer; {$ifdef HASINLINE}inline;{$endif}
+
+/// compare two "array of THash512" elements
+function SortDynArray512(const A,B): integer; {$ifdef HASINLINE}inline;{$endif}
 
 /// compare two "array of TObject/pointer" elements
 function SortDynArrayPointer(const A,B): integer;
@@ -6808,6 +6819,15 @@ function HashCardinal(const Elem; Hasher: THasher): cardinal;
 /// hash one Int64 value with the suppplied Hasher() function
 function HashInt64(const Elem; Hasher: THasher): cardinal;
 
+/// hash one THash128 value with the suppplied Hasher() function
+function Hash128(const Elem; Hasher: THasher): cardinal;
+
+/// hash one THash256 value with the suppplied Hasher() function
+function Hash256(const Elem; Hasher: THasher): cardinal;
+
+/// hash one THash512 value with the suppplied Hasher() function
+function Hash512(const Elem; Hasher: THasher): cardinal;
+
 /// hash one pointer value with the suppplied Hasher() function
 // - this version is not the same as HashPtrUInt, since it will always
 // use the hasher function
@@ -6824,7 +6844,8 @@ var
     SortDynArrayInt64, SortDynArrayInt64, SortDynArrayDouble, SortDynArrayDouble,
     SortDynArrayAnsiString, SortDynArrayAnsiString, SortDynArrayString,
     SortDynArrayAnsiString, SortDynArrayUnicodeString,
-    SortDynArrayUnicodeString, SortDynArrayPointer,
+    SortDynArrayUnicodeString, SortDynArray128, SortDynArray256,
+    SortDynArray512, SortDynArrayPointer,
     {$ifndef NOVARIANTS}SortDynArrayVariant,{$endif} nil),
     (nil, SortDynArrayBoolean, SortDynArrayByte, SortDynArrayWord,
     SortDynArrayInteger, SortDynArrayCardinal, SortDynArraySingle,
@@ -6832,7 +6853,8 @@ var
     SortDynArrayInt64, SortDynArrayInt64, SortDynArrayDouble, SortDynArrayDouble,
     SortDynArrayAnsiStringI, SortDynArrayAnsiStringI, SortDynArrayStringI,
     SortDynArrayAnsiStringI, SortDynArrayUnicodeStringI,
-    SortDynArrayUnicodeStringI, SortDynArrayPointer,
+    SortDynArrayUnicodeStringI, SortDynArray128, SortDynArray256,
+    SortDynArray512, SortDynArrayPointer,
     {$ifndef NOVARIANTS}SortDynArrayVariantI,{$endif} nil));
 
   /// helper array to get the hashing function corresponding to a given
@@ -6844,14 +6866,16 @@ var
     HashInt64, HashInt64, HashInt64, HashInt64,
     HashAnsiString, HashAnsiString,
     {$ifdef UNICODE}HashUnicodeString{$else}HashAnsiString{$endif},
-    HashAnsiString, HashWideString, HashSynUnicode, HashPointer,
+    HashAnsiString, HashWideString, HashSynUnicode, Hash128,
+    Hash256, Hash512, HashPointer,
     {$ifndef NOVARIANTS}HashVariant,{$endif} nil),
     (nil, HashByte, HashByte, HashWord, HashInteger,
     HashCardinal, HashCardinal, HashInt64, HashInt64, HashInt64,
     HashInt64, HashInt64, HashInt64, HashInt64,
     HashAnsiStringI, HashAnsiStringI,
     {$ifdef UNICODE}HashUnicodeStringI{$else}HashAnsiStringI{$endif},
-    HashAnsiStringI, HashWideStringI, HashSynUnicodeI, HashPointer,
+    HashAnsiStringI, HashWideStringI, HashSynUnicodeI, Hash128,
+    Hash256, Hash512, HashPointer,
     {$ifndef NOVARIANTS}HashVariantI,{$endif} nil));
 
 
@@ -46650,14 +46674,15 @@ begin
   end;
 end;
 
-function DynArrayElementTypeName(TypeInfo: pointer; ElemTypeInfo: PPointer): RawUTF8;
+function DynArrayElementTypeName(TypeInfo: pointer; ElemTypeInfo: PPointer;
+  ExactType: boolean): RawUTF8;
 var DynArray: TDynArray;
     VoidArray: pointer;
 const KNOWNTYPE_ITEMNAME: array[TDynArrayKind] of RawUTF8 = ('',
   'boolean','byte','word','integer','cardinal','single','Int64','QWord',
   'double','currency','TTimeLog','TDateTime','TDateTimeMS',
   'RawUTF8','WinAnsiString','string','RawByteString','WideString','SynUnicode',
-  'IInterface',{$ifndef NOVARIANTS}'variant',{$endif}'');
+  'THash128','THash256','THash512','IInterface',{$ifndef NOVARIANTS}'variant',{$endif}'');
 begin
   VoidArray := nil;
   DynArray.Init(TypeInfo,VoidArray);
@@ -46666,7 +46691,7 @@ begin
     ElemTypeInfo^ := DynArray.ElemType;
   if DynArray.ElemType<>nil then
     TypeInfoToName(ElemTypeInfo,result) else
-    result := KNOWNTYPE_ITEMNAME[DynArray.ToKnownType];
+    result := KNOWNTYPE_ITEMNAME[DynArray.ToKnownType(ExactType)];
 end;
 
 function SortDynArrayBoolean(const A,B): integer;
@@ -46779,6 +46804,39 @@ end;
 function SortDynArrayUnicodeStringI(const A,B): integer;
 begin
   result := AnsiICompW(PWideChar(A),PWideChar(B));
+end;
+
+function SortDynArray128(const A,B): integer;
+begin
+  if THash128Rec(A).Lo<THash128Rec(B).Lo then
+    result := -1 else
+  if THash128Rec(A).Lo>THash128Rec(B).Lo then
+    result := 1 else
+    if THash128Rec(A).Hi<THash128Rec(B).Hi then
+      result := -1 else
+    if THash128Rec(A).Hi>THash128Rec(B).Hi then
+      result := 1 else
+      result := 0;
+end;
+
+function SortDynArray256(const A,B): integer;
+begin
+  result := SortDynArray128(THash256Rec(A).Lo,THash256Rec(B).Lo);
+  if result = 0 then
+    result := SortDynArray128(THash256Rec(A).Hi,THash256Rec(B).Hi);
+end;
+
+function SortDynArray512(const A,B): integer;
+begin
+  result := SortDynArray128(THash512Rec(A).c0,THash512Rec(B).c0);
+  if result = 0 then begin
+    result := SortDynArray128(THash512Rec(A).c1,THash512Rec(B).c1);
+    if result = 0 then begin
+      result := SortDynArray128(THash512Rec(A).c2,THash512Rec(B).c2);
+      if result = 0 then
+        result := SortDynArray128(THash512Rec(A).c3,THash512Rec(B).c3);
+    end;
+  end;
 end;
 
 {$ifndef NOVARIANTS}
@@ -47335,7 +47393,8 @@ end;
 const
   PTRSIZ = SizeOf(Pointer);
   KNOWNTYPE_SIZE: array[TDynArrayKind] of byte = (
-    0, 1,1, 2, 4,4,4, 8,8,8,8,8,8,8, PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,
+    0, 1,1, 2, 4,4,4, 8,8,8,8,8,8,8, PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,
+    16,32,64, PTRSIZ,
     {$ifndef NOVARIANTS}SizeOf(Variant),{$endif} 0);
   DYNARRAY_PARSERUNKNOWN = -2;
 
@@ -47392,7 +47451,7 @@ begin
      if fTypeInfo=TypeInfo(TDateTimeMSDynArray) then
        result := djDateTimeMS;
   end;
-  if (result=djNone) and not exactType then begin
+  if result=djNone then begin
     fKnownSize := 0;
     if ElemType=nil then
 Bin:  case ElemSize of
@@ -47400,64 +47459,70 @@ Bin:  case ElemSize of
       2: result := djWord;
       4: result := djInteger;
       8: result := djInt64;
+      16: result := djHash128;
+      32: result := djHash256;
+      64: result := djHash512;
       else fKnownSize := ElemSize;
       end else
-    case PTypeKind(ElemType)^ of
-      tkLString{$ifdef FPC},tkLStringOld{$endif}: result := djRawUTF8;
-      tkWString: result := djWideString;
-      {$ifdef UNICODE}
-      tkUString: result := djString;
-      {$else}
-      {$ifdef FPC_HAS_FEATURE_UNICODESTRINGS}
-      tkUString: result := djSynUnicode;
-      {$endif FPC_HAS_FEATURE_UNICODESTRINGS}
-      {$endif}
-      {$ifndef NOVARIANTS}
-      tkVariant: result := djVariant;
-      {$endif}
-      tkInterface: result := djInterface;
-      tkRecord{$ifdef FPC},tkObject{$endif}: begin
-        nested := ElemType; // inlined GetTypeInfo()
-        {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-rec:    nested := GetFPCAlignPtr(nested);
+      case PTypeKind(ElemType)^ of
+        tkLString{$ifdef FPC},tkLStringOld{$endif}: result := djRawUTF8;
+        tkWString: result := djWideString;
+        {$ifdef UNICODE}
+        tkUString: result := djString;
         {$else}
-rec:    inc(PByte(nested),nested^.NameLen);
+        {$ifdef FPC_HAS_FEATURE_UNICODESTRINGS}
+        tkUString: result := djSynUnicode;
+        {$endif FPC_HAS_FEATURE_UNICODESTRINGS}
         {$endif}
-        {$ifdef FPC_OLDRTTI}
-        field := OldRTTIFirstManagedField(nested);
-        if field=nil then
-        {$else FPC_OLDRTTI}
-        if GetManagedFields(nested,field)=0 then // only binary content
-        {$endif FPC_OLDRTTI}
-          goto Bin;
-        case field^.Offset of
-        0: case DeRef(field^.TypeInfo)^.Kind of
-           tkLString{$ifdef FPC},tkLStringOld{$endif}: result := djRawUTF8;
-           tkWString: result := djWideString;
-           {$ifdef UNICODE}
-           tkUString: result := djString;
-           {$else}
-           {$ifdef FPC_HAS_FEATURE_UNICODESTRINGS}
-           tkUString: result := djSynUnicode;
-           {$endif FPC_HAS_FEATURE_UNICODESTRINGS}
-           {$endif}
-           tkRecord{$ifdef FPC},tkObject{$endif}: begin
-             nested := DeRef(field^.TypeInfo);
-             goto Rec;
-           end;
-           {$ifndef NOVARIANTS}
-           tkVariant: result := djVariant;
-           {$endif}
-           else goto bin;
-           end;
-        1: result := djByte;
-        2: result := djWord;
-        4: result := djInteger;
-        8: result := djInt64;
-        else fKnownSize := field^.Offset;
+        {$ifndef NOVARIANTS}
+        tkVariant: result := djVariant;
+        {$endif}
+        tkInterface: result := djInterface;
+        tkRecord{$ifdef FPC},tkObject{$endif}: if not exacttype then begin
+          nested := ElemType; // inlined GetTypeInfo()
+          {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+  rec:    nested := GetFPCAlignPtr(nested);
+          {$else}
+  rec:    inc(PByte(nested),nested^.NameLen);
+          {$endif}
+          {$ifdef FPC_OLDRTTI}
+          field := OldRTTIFirstManagedField(nested);
+          if field=nil then
+          {$else FPC_OLDRTTI}
+          if GetManagedFields(nested,field)=0 then // only binary content
+          {$endif FPC_OLDRTTI}
+            goto Bin;
+          case field^.Offset of
+          0: case DeRef(field^.TypeInfo)^.Kind of
+             tkLString{$ifdef FPC},tkLStringOld{$endif}: result := djRawUTF8;
+             tkWString: result := djWideString;
+             {$ifdef UNICODE}
+             tkUString: result := djString;
+             {$else}
+             {$ifdef FPC_HAS_FEATURE_UNICODESTRINGS}
+             tkUString: result := djSynUnicode;
+             {$endif FPC_HAS_FEATURE_UNICODESTRINGS}
+             {$endif}
+             tkRecord{$ifdef FPC},tkObject{$endif}: begin
+               nested := DeRef(field^.TypeInfo);
+               goto Rec;
+             end;
+             {$ifndef NOVARIANTS}
+             tkVariant: result := djVariant;
+             {$endif}
+             else goto bin;
+             end;
+          1: result := djByte;
+          2: result := djWord;
+          4: result := djInteger;
+          8: result := djInt64;
+          16: result := djHash128;
+          32: result := djHash256;
+          64: result := djHash512;
+          else fKnownSize := field^.Offset;
+          end;
         end;
       end;
-    end;
   end;
   if KNOWNTYPE_SIZE[result]<>0 then
     fKnownSize := KNOWNTYPE_SIZE[result];
@@ -47469,7 +47534,7 @@ begin
   if fKnownType=djNone then
     ToKnownType(false);
   case fKnownType of
-  djBoolean..djDateTimeMS: // no managed field
+  djBoolean..djDateTimeMS,djHash128..djHash512: // no managed field
     MoveFast(Source^,Dest^,fKnownSize);
   djRawUTF8, djWinAnsi, djRawByteString:
     PRawByteString(Dest)^ := PRawByteString(Source)^;
@@ -47492,7 +47557,7 @@ function TDynArray.LoadKnownType(Data,Source: PAnsiChar): boolean;
 var info: PTypeInfo;
 begin
   if fKnownType=djNone then
-    ToKnownType(false); // set fKnownType and fKnownSize
+    ToKnownType({exacttype=}false); // set fKnownType and fKnownSize
   if fKnownType in [djBoolean..djDateTimeMS] then begin
     MoveFast(Source^,Data^,fKnownSize);
     result := true;
@@ -47510,6 +47575,7 @@ var n, i, ValLen: integer;
     wasString, expectedString, isValid: boolean;
     EndOfObject: AnsiChar;
     Val: PUTF8Char;
+    V: pointer;
     CustomReader: TDynArrayJSONCustomReader;
     NestedDynArray: TDynArray;
 begin // code below must match TTextWriter.AddDynArrayJSON()
@@ -47533,7 +47599,7 @@ begin // code below must match TTextWriter.AddDynArrayJSON()
     CustomReader := nil;
   if Assigned(CustomReader) then
     T := djCustom else
-    T := ToKnownType;
+    T := ToKnownType({exacttype=}true);
   if (T=djNone) and (P^='[') and (PTypeKind(ElemType)^=tkDynArray) then begin
     Count := n; // fast allocation of the whole dynamic array memory at once
     for i := 0 to n-1 do begin
@@ -47577,33 +47643,40 @@ begin // code below must match TTextWriter.AddDynArrayJSON()
       end;
     end;
     else begin
-      expectedString := (T in [djTimeLog..djSynUnicode]);
+      V := fValue^;
+      expectedString := (T in [djTimeLog..djHash512]);
       for i := 0 to n-1 do begin
         Val := GetJSONField(P,P,@wasString,@EndOfObject,@ValLen);
         if (Val=nil) or (wasString<>expectedString) then
           exit;
         case T of
-        djBoolean:  PBooleanArray(fValue^)^[i] := GetBoolean(Val);
-        djByte:     PByteArray(fValue^)^[i] := GetCardinal(Val);
-        djWord:     PWordArray(fValue^)^[i] := GetCardinal(Val);
-        djInteger:  PIntegerArray(fValue^)^[i] := GetInteger(Val);
-        djCardinal: PCardinalArray(fValue^)^[i] := GetCardinal(Val);
-        djSingle:   PSingleArray(fValue^)^[i] := GetExtended(Val);
-        djInt64:    SetInt64(Val,PInt64Array(fValue^)^[i]);
-        djQWord:    SetQWord(Val,PQWordArray(fValue^)^[i]);
-        djTimeLog:  PInt64Array(fValue^)^[i] := Iso8601ToTimeLogPUTF8Char(Val,ValLen);
+        djBoolean:  PBooleanArray(V)^[i] := GetBoolean(Val);
+        djByte:     PByteArray(V)^[i] := GetCardinal(Val);
+        djWord:     PWordArray(V)^[i] := GetCardinal(Val);
+        djInteger:  PIntegerArray(V)^[i] := GetInteger(Val);
+        djCardinal: PCardinalArray(V)^[i] := GetCardinal(Val);
+        djSingle:   PSingleArray(V)^[i] := GetExtended(Val);
+        djInt64:    SetInt64(Val,PInt64Array(V)^[i]);
+        djQWord:    SetQWord(Val,PQWordArray(V)^[i]);
+        djTimeLog:  PInt64Array(V)^[i] := Iso8601ToTimeLogPUTF8Char(Val,ValLen);
         djDateTime, djDateTimeMS:
-          Iso8601ToDateTimePUTF8CharVar(Val,ValLen,PDateTimeArray(fValue^)^[i]);
-        djDouble:   PDoubleArray(fValue^)^[i] := GetExtended(Val);
-        djCurrency: PInt64Array(fValue^)^[i] := StrToCurr64(Val);
-        djRawUTF8:  FastSetString(PRawUTF8Array(fValue^)^[i],Val,ValLen);
+          Iso8601ToDateTimePUTF8CharVar(Val,ValLen,PDateTimeArray(V)^[i]);
+        djDouble:   PDoubleArray(V)^[i] := GetExtended(Val);
+        djCurrency: PInt64Array(V)^[i] := StrToCurr64(Val);
+        djRawUTF8:  FastSetString(PRawUTF8Array(V)^[i],Val,ValLen);
         djRawByteString:
-          if not Base64MagicCheckAndDecode(Val,ValLen,PRawByteStringArray(fValue^)^[i]) then
-            FastSetString(PRawUTF8Array(fValue^)^[i],Val,ValLen);
-        djWinAnsi:  WinAnsiConvert.UTF8BufferToAnsi(Val,ValLen,PRawByteStringArray(fValue^)^[i]);
-        djString:   UTF8DecodeToString(Val,ValLen,string(PPointerArray(fValue^)^[i]));
-        djWideString: UTF8ToWideString(Val,ValLen,WideString(PPointerArray(fValue^)^[i]));
-        djSynUnicode: UTF8ToSynUnicode(Val,ValLen,SynUnicode(PPointerArray(fValue^)^[i]));
+          if not Base64MagicCheckAndDecode(Val,ValLen,PRawByteStringArray(V)^[i]) then
+            FastSetString(PRawUTF8Array(V)^[i],Val,ValLen);
+        djWinAnsi:  WinAnsiConvert.UTF8BufferToAnsi(Val,ValLen,PRawByteStringArray(V)^[i]);
+        djString:   UTF8DecodeToString(Val,ValLen,string(PPointerArray(V)^[i]));
+        djWideString: UTF8ToWideString(Val,ValLen,WideString(PPointerArray(V)^[i]));
+        djSynUnicode: UTF8ToSynUnicode(Val,ValLen,SynUnicode(PPointerArray(V)^[i]));
+        djHash128:  if ValLen<>SizeOf(THash128)*2 then FillZero(PHash128Array(V)^[i]) else
+                      HexDisplayToBin(pointer(Val),@PHash128Array(V)^[i],SizeOf(THash128));
+        djHash256:  if ValLen<>SizeOf(THash256)*2 then FillZero(PHash256Array(V)^[i]) else
+                      HexDisplayToBin(pointer(Val),@PHash256Array(V)^[i],SizeOf(THash256));
+        djHash512:  if ValLen<>SizeOf(THash512)*2 then FillZero(PHash512Array(V)^[i]) else
+                      HexDisplayToBin(pointer(Val),@PHash512Array(V)^[i],SizeOf(THash512));
         else raise ESynException.CreateUTF8('% not readable',[ToText(T)^]);
         end;
       end;
@@ -49160,6 +49233,21 @@ end;
 function HashInt64(const Elem; Hasher: THasher): cardinal;
 begin
   result := Hasher(0,@Elem,SizeOf(Int64));
+end;
+
+function Hash128(const Elem; Hasher: THasher): cardinal;
+begin
+  result := Hasher(0,@Elem,SizeOf(THash128));
+end;
+
+function Hash256(const Elem; Hasher: THasher): cardinal;
+begin
+  result := Hasher(0,@Elem,SizeOf(THash256));
+end;
+
+function Hash512(const Elem; Hasher: THasher): cardinal;
+begin
+  result := Hasher(0,@Elem,SizeOf(THash512));
 end;
 
 {$ifndef NOVARIANTS}
@@ -51994,7 +52082,7 @@ begin // code below must match TDynArray.LoadFromJSON
     end;
   if Assigned(customWriter) then
     T := djCustom else
-    T := aDynArray.ToKnownType;
+    T := aDynArray.ToKnownType({exacttype=}true);
   P := aDynArray.fValue^;
   Add('[');
   case T of
@@ -52056,6 +52144,9 @@ begin // code below must match TDynArray.LoadFromJSON
         {$else}
         AddAnyAnsiString(PRawByteStringArray(P)^[i],twJSONEscape,0);
         {$endif}
+      djHash128: AddBinToHexDisplayLower(@PHash128Array(P)[i],SizeOf(THash128));
+      djHash256: AddBinToHexDisplayLower(@PHash256Array(P)[i],SizeOf(THash256));
+      djHash512: AddBinToHexDisplayLower(@PHash512Array(P)[i],SizeOf(THash512));
       djInterface: AddPointer(PPtrIntArray(P)^[i]);
       end;
       Add('"',',');
