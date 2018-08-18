@@ -11459,7 +11459,7 @@ function IP6Text(ip6: PHash128): shortstring; overload; {$ifdef HASINLINE}inline
 
 /// convert a 128-bit buffer (storing an IP6 address) into its full notation
 // - returns e.g. '2001:0db8:0a0b:12f0:0000:0000:0000:0001'
-procedure IP6Text(ip6: PHash128; var result: shortstring); overload;
+procedure IP6Text(ip6: PHash128; result: PShortString); overload;
 
 /// compute a 256-bit checksum on the supplied buffer using crc32c
 // - will use SSE 4.2 hardware accelerated instruction, if available
@@ -34810,20 +34810,15 @@ begin // fast O(n) brute force search
   result := false;
 end;
 
-function IP6Text(ip6: PHash128): shortstring;
-begin
-  IP6Text(ip6, result);
-end;
-
-procedure IP6Text(ip6: PHash128; var result: shortstring);
+procedure IP6Text(ip6: PHash128; result: PShortString);
 var i: integer;
     p: PByte;
     {$ifdef PUREPASCAL}tab: ^TByteToWord;{$endif}
 begin
   if IsZero(ip6^) then
-    result := '' else begin
-    result[0] := AnsiChar(39);
-    p := @result[1];
+    result^ := '' else begin
+    result^[0] := AnsiChar(39);
+    p := @result^[1];
     {$ifdef PUREPASCAL}tab := @TwoDigitsHexWBLower;{$endif}
     for i := 0 to 7 do begin
       PWord(p)^ := {$ifdef PUREPASCAL}tab{$else}TwoDigitsHexWBLower{$endif}[ip6^[0]]; inc(p,2);
@@ -34832,6 +34827,11 @@ begin
       p^ := ord(':'); inc(p);
     end;
   end;
+end;
+
+function IP6Text(ip6: PHash128): shortstring;
+begin
+  IP6Text(ip6, @result);
 end;
 
 procedure crc256c(buf: PAnsiChar; len: cardinal; out crc: THash256);
