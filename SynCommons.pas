@@ -11455,7 +11455,11 @@ function HashFound(P: PHash128Rec; Count: integer; const h: THash128Rec): boolea
 
 /// convert a 128-bit buffer (storing an IP6 address) into its full notation
 // - returns e.g. '2001:0db8:0a0b:12f0:0000:0000:0000:0001'
-function IP6Text(ip6: PHash128): shortstring;
+function IP6Text(ip6: PHash128): shortstring; overload; {$ifdef HASINLINE}inline;{$endif}
+
+/// convert a 128-bit buffer (storing an IP6 address) into its full notation
+// - returns e.g. '2001:0db8:0a0b:12f0:0000:0000:0000:0001'
+procedure IP6Text(ip6: PHash128; var result: shortstring); overload;
 
 /// compute a 256-bit checksum on the supplied buffer using crc32c
 // - will use SSE 4.2 hardware accelerated instruction, if available
@@ -34807,6 +34811,11 @@ begin // fast O(n) brute force search
 end;
 
 function IP6Text(ip6: PHash128): shortstring;
+begin
+  IP6Text(ip6, result);
+end;
+
+procedure IP6Text(ip6: PHash128; var result: shortstring);
 var i: integer;
     p: PByte;
     {$ifdef PUREPASCAL}tab: ^TByteToWord;{$endif}
@@ -48734,16 +48743,16 @@ end;
 
 procedure TDynArray.AddArray(const DynArrayVar; aStartIndex: integer;
   aCount: integer);
-var DynArrayCount, n: integer;
+var c, n: integer;
     PS,PD: pointer;
 begin
   if fValue=nil then
     exit; // avoid GPF if void
-  DynArrayCount := DynArrayLength(pointer(DynArrayVar));
-  if aStartIndex>=DynArrayCount then
+  c := DynArrayLength(pointer(DynArrayVar));
+  if aStartIndex>=c then
     exit; // nothing to copy
-  if (aCount<0) or (cardinal(aStartIndex+aCount)>cardinal(DynArrayCount)) then
-    aCount := DynArrayCount-aStartIndex;
+  if (aCount<0) or (cardinal(aStartIndex+aCount)>cardinal(c)) then
+    aCount := c-aStartIndex;
   if aCount<=0 then
     exit;
   n := GetCount;
