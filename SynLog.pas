@@ -790,7 +790,7 @@ type
     procedure LogInternal(Level: TSynLogInfo; const Text: RawUTF8;
       Instance: TObject; TextTruncateAtLength: integer); overload;
     procedure LogInternal(Level: TSynLogInfo; const aName: RawUTF8;
-     aTypeInfo: pointer; const aValue; Instance: TObject); overload;
+      aTypeInfo: pointer; const aValue; Instance: TObject); overload;
     // any call to this method MUST call LogTrailerUnLock
     function LogHeaderLock(Level: TSynLogInfo; AlreadyLocked: boolean): boolean;
     procedure LogTrailerUnLock(Level: TSynLogInfo); {$ifdef HASINLINENOTX86}inline;{$endif}
@@ -4459,7 +4459,8 @@ begin
   try
     if Instance<>nil then
       fWriter.AddInstancePointer(Instance,' ',fFamily.WithUnitName);
-    fWriter.AddFieldName(aName);
+    fWriter.AddOnSameLine(pointer(aName));
+    fWriter.Add('=');
     fWriter.AddTypedJSON(aTypeInfo,aValue);
   finally
     LogTrailerUnLock(Level);
