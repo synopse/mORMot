@@ -2022,7 +2022,7 @@ function PosCharAny(Str: PUTF8Char; Characters: PAnsiChar): PUTF8Char;
 /// a non case-sensitive RawUTF8 version of Pos()
 // - uppersubstr is expected to be already in upper case
 // - this version handle only 7 bit ASCII (no accentuated characters)
-function PosI(uppersubstr: PUTF8Char; const str: RawUTF8): Integer;
+function PosI(uppersubstr: PUTF8Char; const str: RawUTF8): PtrInt;
 
 /// a non case-sensitive version of Pos()
 // - uppersubstr is expected to be already in upper case
@@ -10012,7 +10012,7 @@ type
     // - returns true on read success
     function VarUInt32Safe(out Value: cardinal): boolean;
     /// read the next 64-bit signed value from the buffer
-    function VarInt64: Int64;  {$ifdef HASINLINE}inline;{$endif}
+    function VarInt64: Int64; {$ifdef HASINLINE}inline;{$endif}
     /// read the next 64-bit unsigned value from the buffer
     function VarUInt64: QWord;
     /// read the next RawUTF8 value from the buffer
@@ -22473,8 +22473,8 @@ end;
 function bswap64(const a: QWord): QWord;
 asm
   mov edx, a.TQWordRec.L
-  bswap edx
   mov eax, a.TQWordRec.H
+  bswap edx
   bswap eax
 end;
 {$else}
@@ -22870,16 +22870,16 @@ begin
   result := true;
 end;
 
-{$ifndef HASINLINE}
+{$ifdef HASINLINE}
+procedure FillZero(var dest; count: PtrInt);
+begin
+  FillCharFast(dest,count,0);
+end;
+{$else}
 procedure FillZero(var dest; count: PtrInt);
 asm
   xor ecx, ecx
   jmp dword ptr [FillCharFast]
-end;
-{$else}
-procedure FillZero(var dest; count: PtrInt);
-begin
-  FillCharFast(dest,count,0);
 end;
 {$endif}
 
@@ -23077,28 +23077,51 @@ begin
   result := Source;
 end;
 
-function PosI(uppersubstr: PUTF8Char; const str: RawUTF8): Integer;
-var C: AnsiChar;
+function IdemPChar2(table: PNormTable; p: PUTF8Char; up: PAnsiChar): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+var u: AnsiChar;
+begin // here p and up are expected to be <> nil
+  result := false;
+  dec(PtrUInt(p),PtrUInt(up));
+  repeat
+    u := up^;
+    if u=#0 then
+      break;
+    if u<>table^[up[PtrUInt(p)]] then
+      exit;
+    inc(up);
+  until false;
+  result := true;
+end;
+
+function PosI(uppersubstr: PUTF8Char; const str: RawUTF8): PtrInt;
+var u: AnsiChar;
+    table: {$ifdef CPUX86}TNormTable absolute NormToUpperAnsi7{$else}PNormTable{$endif};
 begin
   if uppersubstr<>nil then begin
-    C := uppersubstr^;
+    {$ifndef CPUX86}table := @NormToUpperAnsi7;{$endif}
+    u := uppersubstr^;
     for result := 1 to Length(str) do
-      if NormToUpperAnsi7[str[result]]=C then
-        if IdemPChar(@PUTF8Char(pointer(str))[result],PAnsiChar(uppersubstr)+1) then
+      if table[str[result]]=u then
+        if {$ifdef CPUX86}IdemPChar({$else}IdemPChar2(table,{$endif}
+           @PUTF8Char(pointer(str))[result],PAnsiChar(uppersubstr)+1) then
           exit;
   end;
   result := 0;
 end;
 
 function StrPosI(uppersubstr,str: PUTF8Char): PUTF8Char;
-var C: AnsiChar;
+var u: AnsiChar;
+    table: {$ifdef CPUX86}TNormTable absolute NormToUpperAnsi7{$else}PNormTable{$endif};
 begin
   if (uppersubstr<>nil) and (str<>nil) then begin
-    C := uppersubstr^;
+    {$ifndef CPUX86}table := @NormToUpperAnsi7;{$endif}
+    u := uppersubstr^;
     result := str;
     while result^<>#0 do begin
-      if NormToUpperAnsi7[result^]=C then
-        if IdemPChar(result+1,PAnsiChar(uppersubstr)+1) then
+      if table[result^]=u then
+        if {$ifdef CPUX86}IdemPChar({$else}IdemPChar2(table,{$endif}
+           result+1,PAnsiChar(uppersubstr)+1) then
           exit;
       inc(result);
     end;
@@ -29206,23 +29229,6 @@ begin // expect UpperName as 'NAME='
   result := '';
 end;
 
-function IdemPChar2(p: PUTF8Char; up: PAnsiChar; table: PNormTable): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
-var u: AnsiChar;
-begin // here p and up are expected to be <> nil
-  result := false;
-  dec(PtrInt(p),PtrInt(up));
-  repeat
-    u := up^;
-    if u=#0 then
-      break;
-    if u<>table^[up[PtrInt(p)]] then
-      exit;
-    inc(up);
-  until false;
-  result := true;
-end;
-
 function ExistsIniName(P: PUTF8Char; UpperName: PAnsiChar): boolean;
 var table: PNormTable;
 begin
@@ -29235,7 +29241,7 @@ begin
         if P^=#0 then
           break;
       end;
-      if IdemPChar2(P,UpperName,table) then begin
+      if IdemPChar2(table,P,UpperName) then begin
         result := true;
         exit;
       end;
@@ -32116,19 +32122,16 @@ end;
 
 function IdemPCharArray(p: PUTF8Char; const upArray: array of PAnsiChar): integer;
 var w: word;
-    tab: {$ifndef PUREPASCAL}TNormTableByte absolute NormToUpperAnsi7{$else}PNormTableByte{$endif};
+    tab: {$ifdef CPUX86}TNormTableByte absolute NormToUpperAnsi7{$else}PNormTableByte{$endif};
     up: ^PAnsiChar;
 begin
   if p<>nil then begin
-    {$ifdef PUREPASCAL}tab := @NormToUpperAnsi7;{$endif} // faster on PIC and x86_64
+    {$ifndef CPUX86}tab := @NormToUpperAnsi7;{$endif} // faster on PIC and x86_64
     w := tab[ord(p[0])]+tab[ord(p[1])]shl 8;
     up := @upArray[0];
     for result := 0 to high(upArray) do
-      {$ifdef PUREPASCAL}
-      if (PWord(up^)^=w) and IdemPChar2(p+2,up^+2,pointer(tab)) then
-      {$else}
-      if (PWord(up^)^=w) and IdemPChar(p+2,up^+2) then
-      {$endif}
+      if (PWord(up^)^=w) and
+        {$ifdef CPUX86}IdemPChar({$else}IdemPChar2(pointer(tab),{$endif}p+2,up^+2) then
         exit else
         inc(up);
   end;
