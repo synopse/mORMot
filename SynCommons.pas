@@ -6699,13 +6699,14 @@ function SortDynArrayQWord(const A,B): integer;
   {$ifndef CPUX86}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// compare two "array of THash128" elements
-function SortDynArray128(const A,B): integer; {$ifdef HASINLINE}inline;{$endif}
+function SortDynArray128(const A,B): integer;
+  {$ifdef FPC_OR_UNICODE}inline;{$endif} // C2096 Delphi 2007 internal error
 
 /// compare two "array of THash256" elements
-function SortDynArray256(const A,B): integer; {$ifdef HASINLINE}inline;{$endif}
+function SortDynArray256(const A,B): integer; {$ifdef FPC_OR_UNICODE}inline;{$endif}
 
 /// compare two "array of THash512" elements
-function SortDynArray512(const A,B): integer; {$ifdef HASINLINE}inline;{$endif}
+function SortDynArray512(const A,B): integer; {$ifdef FPC_OR_UNICODE}inline;{$endif}
 
 /// compare two "array of TObject/pointer" elements
 function SortDynArrayPointer(const A,B): integer;
