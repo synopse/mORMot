@@ -4186,10 +4186,11 @@ procedure ExcludeInteger(var Values, Excluded: TIntegerDynArray;
 procedure DeduplicateInteger(var Values: TIntegerDynArray); overload;
 
 /// sort and remove any 32-bit duplicated integer from Values[]
-procedure DeduplicateInteger(var Values: TIntegerDynArray; Count: integer); overload;
+// - returns the new Values[] length
+function DeduplicateInteger(var Values: TIntegerDynArray; Count: integer): integer; overload;
 
 /// low-level function called by DeduplicateInteger()
-function DeduplicateIntegerSorted(val: PIntegerArray; v: PtrInt): PtrInt;
+function DeduplicateIntegerSorted(val: PIntegerArray; last: PtrInt): PtrInt;
 
 /// create a new 32-bit integer dynamic array with the values from another one
 procedure CopyInteger(const Source: TIntegerDynArray; out Dest: TIntegerDynArray);
@@ -4213,10 +4214,11 @@ procedure ExcludeInt64(var Values, Excluded: TInt64DynArray;
 procedure DeduplicateInt64(var Values: TInt64DynArray); overload;
 
 /// sort and remove any 64-bit duplicated integer from Values[]
-procedure DeduplicateInt64(var Values: TInt64DynArray; Count: integer); overload;
+// - returns the new Values[] length
+function DeduplicateInt64(var Values: TInt64DynArray; Count: integer): integer; overload;
 
 /// low-level function called by DeduplicateInt64()
-function DeduplicateInt64Sorted(val: PInt64Array; v: PtrInt): PtrInt;
+function DeduplicateInt64Sorted(val: PInt64Array; last: PtrInt): PtrInt;
 
 /// create a new 64-bit integer dynamic array with the values from another one
 procedure CopyInt64(const Source: TInt64DynArray; out Dest: TInt64DynArray);
@@ -5155,12 +5157,12 @@ type
   TDynArrayHashed = record
   // pseudo inheritance for most used methods
   private
+    function GetCount: Integer;                 inline;
     procedure SetCount(aCount: integer);        inline;
     procedure SetCapacity(aCapacity: Integer);  inline;
     function GetCapacity: Integer;              inline;
   public
     InternalDynArray: TDynArray;
-    function Count: Integer;            inline;
     function Value: PPointer;           inline;
     function ElemSize: PtrUInt;         inline;
     function ElemType: Pointer;         inline;
@@ -5178,6 +5180,7 @@ type
     function LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char=nil): PUTF8Char; inline;
     function SaveToLength: integer; inline;
     function LoadFrom(Source: PAnsiChar): PAnsiChar;  inline;
+    property Count: integer read GetCount write SetCount;
     property Capacity: integer read GetCapacity write SetCapacity;
   private
   {$else UNDIRECTDYNARRAY}
@@ -30425,42 +30428,43 @@ begin
   DeduplicateInteger(Values, length(Values));
 end;
 
-function DeduplicateIntegerSorted(val: PIntegerArray; v: PtrInt): PtrInt;
+function DeduplicateIntegerSorted(val: PIntegerArray; last: PtrInt): PtrInt;
 var i: PtrInt;
 begin // sub-function for better code generation
   i := 0;
-  repeat // here v>0 so i<v
+  repeat // here last>0 so i<last
     if val[i]=val[i+1] then
       break;
     inc(i);
-    if i<>v then
+    if i<>last then
       continue;
     result := i;
     exit;
   until false;
   result := i;
   inc(i);
-  if i<>v then begin
+  if i<>last then begin
     repeat
       if val[i]<>val[i+1] then begin
         val[result] := val[i];
         inc(result);
       end;
       inc(i);
-    until i=v;
+    until i=last;
     val[result] := val[i];
   end;
 end;
 
-procedure DeduplicateInteger(var Values: TIntegerDynArray; Count: integer);
+function DeduplicateInteger(var Values: TIntegerDynArray; Count: integer): integer;
 begin
+  result := Count;
   dec(Count);
   if Count>0 then begin
     QuickSortInteger(pointer(Values),0,Count);
-    Count := DeduplicateIntegerSorted(pointer(Values),Count);
+    result := DeduplicateIntegerSorted(pointer(Values),Count)+1;
   end;
-  if high(Values)<>Count then
-    SetLength(Values,Count+1);
+  if result<>length(Values) then
+    SetLength(Values,result);
 end;
 
 procedure DeduplicateInt64(var Values: TInt64DynArray);
@@ -30468,42 +30472,43 @@ begin
   DeduplicateInt64(Values, length(Values));
 end;
 
-function DeduplicateInt64Sorted(val: PInt64Array; v: PtrInt): PtrInt;
+function DeduplicateInt64Sorted(val: PInt64Array; last: PtrInt): PtrInt;
 var i: PtrInt;
 begin // sub-function for better code generation
   i := 0;
-  repeat // here v>0 so i<v
+  repeat // here last>0 so i<last
     if val[i]=val[i+1] then
       break;
     inc(i);
-    if i<>v then
+    if i<>last then
       continue;
     result := i;
     exit;
   until false;
   result := i;
   inc(i);
-  if i<>v then begin
+  if i<>last then begin
     repeat
       if val[i]<>val[i+1] then begin
         val[result] := val[i];
         inc(result);
       end;
       inc(i);
-    until i=v;
+    until i=last;
     val[result] := val[i];
   end;
 end;
 
-procedure DeduplicateInt64(var Values: TInt64DynArray; Count: integer);
+function DeduplicateInt64(var Values: TInt64DynArray; Count: integer): integer;
 begin
+  result := Count;
   dec(Count);
   if Count>0 then begin
     QuickSortInt64(pointer(Values),0,Count);
-    Count := DeduplicateInt64Sorted(pointer(Values),Count);
+    result := DeduplicateInt64Sorted(pointer(Values),Count)+1;
   end;
-  if high(Values)<>Count then
-    SetLength(Values,Count+1);
+  if result<>length(Values) then
+    SetLength(Values,result);
 end;
 
 procedure CopyInteger(const Source: TIntegerDynArray; out Dest: TIntegerDynArray);
@@ -48868,7 +48873,7 @@ const
 
 {$ifdef UNDIRECTDYNARRAY}
 
-function TDynArrayHashed.Count: Integer;
+function TDynArrayHashed.GetCount: Integer;
 begin
   result := InternalDynArray.GetCount;
 end;
