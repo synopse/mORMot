@@ -797,6 +797,8 @@ type
     function InitRandom(RandomLen: integer): pointer;
     /// initialize a new temporary buffer filled with integer increasing values
     function InitIncreasing(Count: integer; Start: integer=0): PIntegerArray;
+    /// initialize a new temporary buffer of a given number of zero bytes
+    function InitZero(ZeroLen: integer): pointer;
     /// finalize the temporary storage
     procedure Done; overload; {$ifdef HASINLINE}inline;{$endif}
     /// finalize the temporary storage, and create a RawUTF8 string from it
@@ -18576,7 +18578,13 @@ end;
 function TSynTempBuffer.InitIncreasing(Count, Start: integer): PIntegerArray;
 begin
   result := Init((Count-Start)*4);
-  FillIncreasing(result, Start, Count);
+  FillIncreasing(result,Start,Count);
+end;
+
+function TSynTempBuffer.InitZero(ZeroLen: integer): pointer;
+begin
+  result := Init(ZeroLen);
+  FillCharFast(result^,ZeroLen,0);
 end;
 
 procedure TSynTempBuffer.Done;

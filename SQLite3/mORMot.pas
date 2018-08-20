@@ -26036,7 +26036,6 @@ var i: integer;
     U: PPUTF8Char;
 begin
   result := 0;
-  Finalize(Values);
   if (self=nil) or (cardinal(Field)>cardinal(FieldCount)) or (fRowCount=0) then
     exit;
   SetLength(Values,fRowCount);
@@ -26053,7 +26052,6 @@ var i: integer;
     U: PPUTF8Char;
 begin
   result := 0;
-  Finalize(Values);
   if (self=nil) or (cardinal(Field)>cardinal(FieldCount)) or (fRowCount=0) then
     exit;
   SetLength(Values,fRowCount);
@@ -46311,11 +46309,11 @@ var MS: TRawByteStringStream;
     ResCount: PtrInt;
     Stmt: TSynTableStatement;
     max: Int64;
-procedure SetCount(aCount: integer);
-begin
-  FormatUTF8('[{"Count(*)":%}]'#$A,[aCount],result);
-  ResCount := 1;
-end;
+  procedure SetCount(aCount: integer);
+  begin
+    FormatUTF8('[{"Count(*)":%}]'#$A,[aCount],result);
+    ResCount := 1;
+  end;
 begin
   result := '';
   ResCount := 0;

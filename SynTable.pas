@@ -138,6 +138,7 @@ type
     // if possible, and won't lock
     function MatchString(const aText: string): boolean;
   end;
+  /// use SetMatchs() to initialize such an array from a CSV pattern text
   TMatchDynArray = array of TMatch;
 
   /// TMatch descendant owning a copy of the Pattern string to avoid GPF issues
@@ -5446,13 +5447,13 @@ begin
     end;
  if not Assigned(Search) then begin
    aPattern := PosChar(Pattern, '[');
-    if (aPattern = nil) or (aPattern - Pattern > PMax) then
-      if aCaseInsensitive then
-        Search := SearchNoRangeU
-      else
-        Search := SearchNoRange
-    else
-      Search := SearchAny;
+   if (aPattern = nil) or (aPattern - Pattern > PMax) then
+     if aCaseInsensitive then
+       Search := SearchNoRangeU
+     else
+       Search := SearchNoRange
+   else
+     Search := SearchAny;
  end;
 end;
 
