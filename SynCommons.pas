@@ -12761,6 +12761,13 @@ type
   TOnStringTranslate = procedure (var English: string) of object;
 
 
+const
+  /// Rotate local log file if reached this size (1MB by default)
+  // - .log file will be save as .log.bak file
+  // - a new .log file is created
+  // - used by AppendToTextFile() and LogToTextFile() functions (not TSynLog)
+  MAXLOGSIZE = 1024*1024;
+
 /// log a message to a local text file
 // - the text file is located in the executable directory, and its name is
 // simply the executable file name with the '.log' extension instead of '.exe'
@@ -12772,14 +12779,7 @@ procedure LogToTextFile(Msg: RawUTF8);
 // - this version expects the filename to be specified
 // - format contains the current date and time, then the Msg on one line
 // - date and time format used is 'YYYYMMDD hh:mm:ss'
-procedure AppendToTextFile(aLine: RawUTF8; const aFileName: TFileName);
-
-const
-  /// Rotate local log file if reached this size (1MB by default)
-  // - .log file will be save as .log.bak file
-  // - a new .log file is created
-  // - used by AppendToTextFile() and LogToTextFile() functions (not TSynLog)
-  MAXLOGSIZE = 1024*1024;
+procedure AppendToTextFile(aLine: RawUTF8; const aFileName: TFileName; aMaxSize: Int64=MAXLOGSIZE);
 
 
 { ************ fast low-level lookup types used by internal conversion routines }
@@ -36490,23 +36490,25 @@ begin
 end;
 
 
-procedure AppendToTextFile(aLine: RawUTF8; const aFileName: TFileName);
+procedure AppendToTextFile(aLine: RawUTF8; const aFileName: TFileName; aMaxSize: Int64);
 var F: THandle;
     Old: TFileName;
     Date: array[1..22] of AnsiChar;
+    size: Int64;
     i: integer;
     now: TSynSystemTime;
 begin
   if aFileName='' then
     exit;
-  F := FileOpen(aFileName,fmOpenWrite);
+  F := FileOpen(aFileName,fmOpenWrite or fmShareDenyNone);
   if PtrInt(F)<0 then begin
     F := FileCreate(aFileName);
     if PtrInt(F)<0 then
       exit; // you may not have write access to this folder
   end;
    // append to end of file
-  if FileSeek64(F,0,soFromEnd)>MAXLOGSIZE then begin
+  size := FileSeek64(F,0,soFromEnd);
+  if (aMaxSize>0) and (size>aMaxSize) then begin
     // rotate log file if too big
     FileClose(F);
     Old := aFileName+'.bak'; // '.log.bak'
