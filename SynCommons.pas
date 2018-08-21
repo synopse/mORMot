@@ -3439,6 +3439,10 @@ function FileSize(F: THandle): Int64; overload;
 function SearchRecToDateTime(const F: TSearchRec): TDateTime;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// check if a FindFirst/FindNext found instance is actually a file
+function SearchRecValidFile(const F: TSearchRec): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// delete the content of a specified directory
 // - only one level of file is deleted within the folder: no recursive deletion
 // is processed by this function (for safety)
@@ -29866,7 +29870,7 @@ begin
   {$endif}
 end;
 
-function SearchRecValidFile(const F: TSearchRec): boolean; {$ifdef HASINLINE}inline;{$endif}
+function SearchRecValidFile(const F: TSearchRec): boolean; 
 begin
   {$ifndef DELPHI5OROLDER}
   {$WARN SYMBOL_DEPRECATED OFF} // for faVolumeID
