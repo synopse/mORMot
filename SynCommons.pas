@@ -55670,21 +55670,21 @@ procedure KB(bytes: Int64; out result: TShort16);
 const _B: array[0..3] of string[3] = (' KB',' MB',' GB',' TB');
 var hi,rem,b: cardinal;
 begin
-  if bytes<1 shl 10 then begin
+  if bytes<1 shl 10-(1 shl 10) div 10 then begin
     FormatShort16('% B',[integer(bytes)],result);
     exit;
   end;
-  if bytes<1 shl 20 then begin
+  if bytes<1 shl 20-(1 shl 20) div 10 then begin
     b := 0;
     rem := bytes;
     hi := bytes shr 10;
   end else
-  if bytes<1 shl 30 then begin
+  if bytes<1 shl 30-(1 shl 30) div 10 then begin
     b := 1;
     rem := bytes shr 10;
     hi := bytes shr 20;
   end else
-  if bytes<Int64(1) shl 40 then begin
+  if bytes<Int64(1) shl 40-(Int64(1) shl 40) div 10 then begin
     b := 2;
     rem := bytes shr 20;
     hi := bytes shr 30;
