@@ -3190,7 +3190,7 @@ begin
   timer.Start;
   for i := 0 to MAX do begin
     v := i and 511;
-    SetString(vs[i],PAnsiChar(pointer(SmallUInt32UTF8[v])),length(SmallUInt32UTF8[v]));
+    FastSetString(vs[i],pointer(SmallUInt32UTF8[v]),length(SmallUInt32UTF8[v]));
   end;
   NotifyTestSpeed(Format('direct %s',[KB(DIRSIZE)]),MAX,DIRSIZE,@timer);
   for i := 0 to MAX do
@@ -4536,6 +4536,8 @@ begin
   Check(IdemPropNameU('a','A'));
   Check(not IdemPropNameU('a','z'));
   Check(IdemPropNameU('ab','AB'));
+  Check(not IdemPropNameU('abc','ABz'));
+  Check(not IdemPropNameU('zbc','abc'));
   Check(IdemPropNameU('abc','ABc'));
   Check(IdemPropNameU('abcD','ABcd'));
   Check(not IdemPropNameU('abcD','ABcF'));
@@ -5577,12 +5579,12 @@ begin
       b.Insert(@i,sizeof(i));
     CheckLogTime(b.Inserted=1000,'Insert(%)',[b.Inserted]);
     sav1000 := b.SaveTo;
-    CheckLogTime(sav1000<>'','b.SaveTo(%) len=%',[b.Inserted,kb(length(sav1000))]);
+    CheckLogTime(sav1000<>'','b.SaveTo(%) len=%',[b.Inserted,kb(sav1000)]);
     for i := 1001 to SIZ do
       b.Insert(@i,sizeof(i));
     CheckLogTime(b.Inserted=SIZ,'Insert(%)',[SIZ-1000]);
     savSIZ := b.SaveTo;
-    CheckLogTime(length(savSIZ)>length(sav1000),'b.SaveTo(%) len=%',[SIZ,kb(length(savSIZ))]);
+    CheckLogTime(length(savSIZ)>length(sav1000),'b.SaveTo(%) len=%',[SIZ,kb(savSIZ)]);
     for i := 1 to SIZ do
       Check(b.MayExist(@i,sizeof(i)));
     CheckLogTime(b.Inserted=SIZ,'MayExists(%)=true',[SIZ]);
@@ -5621,7 +5623,7 @@ begin
       n := SIZ;
       for j := 1 to 3 do begin
         savSiz := d1.SaveToDiff(d2.Revision);
-        CheckLogTime(savSiz<>'','d1.SaveToDiff(%) len=%',[d2.Revision,KB(length(savSiz))]);
+        CheckLogTime(savSiz<>'','d1.SaveToDiff(%) len=%',[d2.Revision,KB(savSiz)]);
         Check(d1.DiffKnownRevision(savSIZ)=d1.Revision);
         Check((d2.Revision=d1.Revision)=(j>1));
         CheckLogTime(d2.LoadFromDiff(savSiz),'d2.LoadFromDiff(%)',[n]);
@@ -5634,7 +5636,7 @@ begin
           d1.Insert(@i,sizeof(i));
         CheckLogTime(d2.Revision<>d1.Revision,'d1.Insert(%)',[1000]);
         savSiz := d1.SaveToDiff(d2.Revision);
-        CheckLogTime(savSiz<>'','d1.SaveToDiff(%) len=%',[d2.Revision,kb(length(savSiz))]);
+        CheckLogTime(savSiz<>'','d1.SaveToDiff(%) len=%',[d2.Revision,kb(savSiz)]);
         Check(d1.DiffKnownRevision(savSIZ)=d1.Revision);
         Check(d2.Revision<>d1.Revision);
         CheckLogTime(d2.LoadFromDiff(savSiz),'d2.LoadFromDiff(%)',[n]);

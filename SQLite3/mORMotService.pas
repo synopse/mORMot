@@ -107,6 +107,7 @@ uses
   {$endif}
   SynCommons,
   SynLog,
+  SynCrypto,
   mORMot; // for TSynJsonFileSettings (i.e. JSON serialization)
 
 {$ifdef MSWINDOWS}
@@ -1570,6 +1571,7 @@ var
   cmd, c: TExecuteCommandLineCmd;
   ch: AnsiChar;
   param: RawUTF8;
+  exe: RawByteString;
   log: TSynLog;
   {$ifdef MSWINDOWS}
   service: TServiceSingle;
@@ -1666,9 +1668,12 @@ begin
       Syntax;
     cVersion: begin
       WriteCopyright;
+      exe := StringFromFile(ExeVersion.ProgramFileName);
       writeln(' ', fSettings.ServiceName,
-        #13#10' Size: ', FileSize(ExeVersion.ProgramFileName), ' bytes' +
-        #13#10' Build date: ', ExeVersion.Version.BuildDateTimeString);
+        #13#10' Size: ', length(exe), ' bytes (', KB(exe), ')' +
+        #13#10' Build date: ', ExeVersion.Version.BuildDateTimeString,
+        #13#10' MD5: ', MD5(exe),
+        #13#10' SHA256: ', SHA256(exe));
       if ExeVersion.Version.Version32 <> 0 then
         writeln(' Version: ', ExeVersion.Version.Detailed);
     end;
@@ -1677,8 +1682,10 @@ begin
         writeln('Launched in ', cmdText, ' mode'#10);
         TextColor(ccLightGray);
         log := fSettings.fLogClass.Add;
-        if (cmd = cVerbose) and (log <> nil) then  // leave as in settings for -c
+        if (cmd = cVerbose) and (log <> nil) then begin
+          log.Family.Level := LOG_VERBOSE;
           log.Family.EchoToConsole := LOG_VERBOSE;
+        end;
         try
           log.Log(sllNewRun, 'Start % /% %', [fSettings.ServiceName,cmdText,
             ExeVersion.Version.DetailedOrVoid], self);

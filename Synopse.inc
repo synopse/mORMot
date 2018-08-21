@@ -268,6 +268,7 @@
     {$define PUREPASCAL} // e.g. x64, AARCH64
     {$ifdef CPUX64}
       {$define CPUINTEL}
+      {$define FPC_CPUINTEL}
       {$ASMMODE INTEL} // as Delphi expects
     {$endif CPUX64}
   {$else}
@@ -277,6 +278,7 @@
     {$endif CPUARM}
     {$ifdef CPUX86}
       {$define CPUINTEL}
+      {$define FPC_CPUINTEL}
       {$ASMMODE INTEL} // as Delphi expects
     {$endif CPUX86}
   {$endif CPU64}
@@ -401,89 +403,89 @@
     {$endif LINUX}
     {$if CompilerVersion >= 17}
       {$define ISDELPHI2005ANDUP} // Delphi 2005 or newer
-    {$ifend}
-    {$if CompilerVersion >= 18}
-      {$define ISDELPHI2006ANDUP} // Delphi 2006 or newer
-      {$define HASNEWFILEAGE}
-      {$define HASINLINE}
-      {$define HASINLINEDELPHI}
-      {$define HASINLINENOTX86}
-      {$define HASREGION}
-      {$define HASFASTMM4}
-    {$ifend}
-    {$ifdef VER180}
-      {$define ISDELPHI20062007} // to circumvent some specific bugs
-    {$endif}
-    {$ifdef VER185}
-      {$define ISDELPHI20062007}
-    {$endif}
-    {$if CompilerVersion > 18}
-      {$define ISDELPHI2007ANDUP} // Delphi 2007 or newer
-    {$ifend}
-    {$if CompilerVersion = 20}
-      {$define ISDELPHI2009} // Delphi 2009 has specific compilation issues :(
-      // for Delphi 2009 and up, use UNICODE conditional :)
-      {$define FPC_OR_UNICODE}
-    {$ifend}
-    {$if CompilerVersion >= 21.0}
-      // Delphi 2010/XE: Reduce EXE size by disabling much RTTI
-      {$define ISDELPHI2010}
-      {$define ISDELPHI2010_OR_FPC_NEWRTTI}
-      {$define FPC_OR_UNICODE}
-      {$define HASTTHREADSTART}
-      {$define HASINTERFACEASTOBJECT}
-      {$ifdef NEWRTTINOTUSED}
-        {$WEAKLINKRTTI ON}
-        {$RTTI EXPLICIT METHODS([]) PROPERTIES([]) FIELDS([])}
-      {$endif NEWRTTINOTUSED}
-    {$ifend}
-    {$if CompilerVersion >= 22.0}
-      {$define ISDELPHIXE}
-    {$ifend}
-    {$if CompilerVersion >= 23.0}
-      // Delphi XE2 has some cross-platform features
-      // e.g. {$ifdef ISDELPHIXE2}VCL.Graphics{$else}Graphics{$endif}
-      {$define ISDELPHIXE2}
-      {$define HASVARUSTRARG}
-      {$define HASTTHREADTERMINATESET} // introduced TThread.TerminateSet
-    {$ifend}
-    {$if CompilerVersion >= 24.0}
-      {$define ISDELPHIXE3}
-    {$ifend}
-    {$if CompilerVersion >= 25.0}
-      {$define ISDELPHIXE4}
-      {$define HASAESNI}
-    {$ifend}
-    {$if CompilerVersion >= 26.0}
-      {$define ISDELPHIXE5}
-      {$define PUBLISHRECORD}
-      // if defined, will handle RTTI available only since Delphi XE5 for
-      // record published properties 
-    {$ifend}
-    {$if CompilerVersion >= 27.0}
-      {$define ISDELPHIXE6}
-    {$ifend}
-    {$if CompilerVersion >= 28.0}
-      {$define ISDELPHIXE7}
-    {$ifend}
-    {$if CompilerVersion >= 29.0}
-      {$define ISDELPHIXE8}
-    {$ifend}
-    {$if CompilerVersion >= 30.0}
-      {$define ISDELPHI10}
-    {$ifend}
-    {$if CompilerVersion >= 31.0}
-      {$define ISDELPHI101}
-    {$ifend}
-    {$if CompilerVersion >= 32.0}
-      {$define ISDELPHI102}
-      {$ifdef CPUX64}
-      {$ifdef VER320withoutAprilUpdate}
-        {$undef HASINLINE} // circumvent Delphi 10.2 Tokyo Win64 compiler bug
+      {$if CompilerVersion >= 18}
+        {$define ISDELPHI2006ANDUP} // Delphi 2006 or newer
+        {$define HASNEWFILEAGE}
+        {$define HASINLINE}
+        {$define HASINLINEDELPHI}
         {$define HASINLINENOTX86}
+        {$define HASREGION}
+        {$define HASFASTMM4}
+      {$ifend}
+      {$ifdef VER180}
+        {$define ISDELPHI20062007} // to circumvent some specific bugs
       {$endif}
+      {$ifdef VER185}
+        {$define ISDELPHI20062007}
       {$endif}
-    {$ifend}
+      {$if CompilerVersion > 18}
+        {$define ISDELPHI2007ANDUP} // Delphi 2007 or newer
+      {$ifend}
+      {$if CompilerVersion = 20}
+        {$define ISDELPHI2009} // Delphi 2009 has specific compilation issues :(
+        // for Delphi 2009 and up, use UNICODE conditional :)
+        {$define FPC_OR_UNICODE}
+      {$ifend}
+      {$if CompilerVersion >= 21.0}
+        // Delphi 2010/XE: Reduce EXE size by disabling much RTTI
+        {$define ISDELPHI2010}
+        {$define ISDELPHI2010_OR_FPC_NEWRTTI}
+        {$define FPC_OR_UNICODE}
+        {$define HASTTHREADSTART}
+        {$define HASINTERFACEASTOBJECT}
+        {$ifdef NEWRTTINOTUSED}
+          {$WEAKLINKRTTI ON}
+          {$RTTI EXPLICIT METHODS([]) PROPERTIES([]) FIELDS([])}
+        {$endif NEWRTTINOTUSED}
+      {$ifend}
+      {$if CompilerVersion >= 22.0}
+        {$define ISDELPHIXE}
+      {$ifend}
+      {$if CompilerVersion >= 23.0}
+        // Delphi XE2 has some cross-platform features
+        // e.g. {$ifdef ISDELPHIXE2}VCL.Graphics{$else}Graphics{$endif}
+        {$define ISDELPHIXE2}
+        {$define HASVARUSTRARG}
+        {$define HASTTHREADTERMINATESET} // introduced TThread.TerminateSet
+      {$ifend}
+      {$if CompilerVersion >= 24.0}
+        {$define ISDELPHIXE3}
+      {$ifend}
+      {$if CompilerVersion >= 25.0}
+        {$define ISDELPHIXE4}
+        {$define HASAESNI}
+      {$ifend}
+      {$if CompilerVersion >= 26.0}
+        {$define ISDELPHIXE5}
+        {$define PUBLISHRECORD}
+        // if defined, will handle RTTI available only since Delphi XE5 for
+        // record published properties 
+      {$ifend}
+      {$if CompilerVersion >= 27.0}
+        {$define ISDELPHIXE6}
+      {$ifend}
+      {$if CompilerVersion >= 28.0}
+        {$define ISDELPHIXE7}
+      {$ifend}
+      {$if CompilerVersion >= 29.0}
+        {$define ISDELPHIXE8}
+      {$ifend}
+      {$if CompilerVersion >= 30.0}
+        {$define ISDELPHI10}
+      {$ifend}
+      {$if CompilerVersion >= 31.0}
+        {$define ISDELPHI101}
+      {$ifend}
+      {$if CompilerVersion >= 32.0}
+        {$define ISDELPHI102}
+        {$ifdef CPUX64}
+        {$ifdef VER320withoutAprilUpdate}
+          {$undef HASINLINE} // circumvent Delphi 10.2 Tokyo Win64 compiler bug
+          {$define HASINLINENOTX86}
+        {$endif}
+        {$endif}
+      {$ifend}
+    {$ifend CompilerVersion >= 17}
     {$ifopt O-} // if we don't expect fast code, don't optimize the framework
       {$undef ENHANCEDRTL}
       {$undef DOPATCHTRTL}

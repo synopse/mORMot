@@ -62,6 +62,8 @@ end;
 function SMWrite_impl(cx: PJSContext; argc: uintN; vals: PjsvalVector; dest: TTextWriter): jsval; cdecl;
 var
   encoding: RawUTF8;
+  len: uint32;
+  isShared: boolean;
   bufObj: PJSObject;
 
   tmp1: RawByteString;
@@ -113,18 +115,12 @@ begin
         Result.asBoolean := true;
         Exit;
       end;
-      if bufObj.IsTypedArrayObject then // node's Buffer
-        WriteBuf(Pointer(bufObj.GetUint8ArrayData), bufObj.GetTypedArrayByteLength, encoding)
-      else begin
-        if bufObj.IsArrayBufferViewObject then
-          bufObj := cx.GetArrayBufferViewBuffer(bufObj);
-        if bufObj.IsArrayBufferObject then
-          WriteBuf(bufObj.GetArrayBufferData, bufObj.GetArrayBufferByteLength, encoding)
-        else begin
-          if (encoding = '') or (encoding = 'utf-8') or (encoding = 'utf8') then // default is utf-8
-            vals[0].AddJSON(cx, dest)
-          else
-            raise ESMException.Create('invalid encoding');
+      if bufObj.GetBufferDataAndLength(bufData, len) then begin
+        if encoding = 'base64' then begin
+          tmp1 := BinToBase64(PAnsiChar(bufData), len);
+          bufData := Pointer(tmp1);
+          len := Length(tmp1);
+          encoding := 'bin';
         end;
       end;
     end;

@@ -103,6 +103,7 @@ uses
   Classes,
   SynCommons,
   SynLog,
+  SynTable,
   SynDB;
 
 

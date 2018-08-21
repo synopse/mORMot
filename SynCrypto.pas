@@ -450,6 +450,8 @@ type
     // - first method to call before using this object for decryption
     // - KeySize is in bits, i.e. 128,192,256
     function DecryptInit(const Key; KeySize: cardinal): boolean;
+    /// Initialize AES contexts for uncypher, from another TAES.EncryptInit
+    function DecryptInitFrom(const Encryption: TAES; const Key; KeySize: cardinal): boolean;
     /// decrypt an AES data block
     procedure Decrypt(var B: TAESBlock); overload;
       {$ifdef FPC}inline;{$endif}
@@ -2061,6 +2063,8 @@ type
     /// prepare a TAES object with the key derivated via a PBKDF2() call
     // - aDerivatedKey is defined as "var", since it will be zeroed after use
     procedure AssignTo(var aDerivatedKey: THash512Rec; out aAES: TAES; aEncrypt: boolean);
+    /// fill the intenral context with zeros, for security
+    procedure Done;
     /// the algorithm used for digitial signature
     property Algo: TSignAlgo read fAlgo;
     /// the size, in bytes, of the digital signature of this algorithm
@@ -2380,6 +2384,18 @@ function AESSelfTest(onlytables: Boolean): boolean;
 
 /// self test of RC4 routines
 function RC4SelfTest: boolean;
+
+/// entry point of the MD5 transform function - may be used from outside
+procedure RawMd5Compress(var Hash; Data: pointer);
+
+/// entry point of the SHA-1 transform function - may be used from outside
+procedure RawSha1Compress(var Hash; Data: pointer);
+
+/// entry point of the SHA-256 transform function - may be used from outside
+procedure RawSha256Compress(var Hash; Data: pointer);
+
+/// entry point of the SHA-512 transform function - may be used from outside
+procedure RawSha512Compress(var Hash; Data: pointer);
 
 // little endian fast conversion
 // - 160 bits = 5 integers
@@ -2799,6 +2815,8 @@ type
     property SignatureSize: integer read fSignPrepared.fSignatureSize;
     /// the TSynSigner raw algorithm used for digital signature
     property SignatureAlgo: TSignAlgo read fSignPrepared.fAlgo;
+    /// low-level read access to the internal signature structure
+    property SignPrepared: TSynSigner read fSignPrepared;
   end;
   /// meta-class for TJWTSynSignerAbstract creations
   TJWTSynSignerAbstractClass = class of TJWTSynSignerAbstract;
@@ -6100,7 +6118,7 @@ begin
   until rounds=1;
 end;
 
-function TAES.DecryptInit(const Key; KeySize: cardinal): boolean;
+function TAES.DecryptInitFrom(const Encryption: TAES; const Key; KeySize: cardinal): boolean;
 var ctx: TAESContext absolute Context;
 begin
   {$ifdef USEPADLOCK}
@@ -6111,7 +6129,11 @@ begin
     exit; // Init OK
   end;
   {$endif}
-  result := EncryptInit(Key, KeySize); // contains Initialized := true
+  ctx.Initialized := false;
+  if not Encryption.Initialized then // e.g. called from DecryptInit()
+    EncryptInit(Key, KeySize) else // contains Initialized := true
+    self := Encryption;
+  result := ctx.Initialized;
   if not result then
     exit;
   {$ifdef CPUX86_NOTPIC}
@@ -6130,6 +6152,11 @@ begin
   end else
   {$endif}
     MakeDecrKey(ctx.Rounds,@ctx.RK);
+end;
+
+function TAES.DecryptInit(const Key; KeySize: cardinal): boolean;
+begin
+  result := DecryptInitFrom(self, Key, KeySize);
 end;
 
 procedure TAES.Decrypt(var B: TAESBlock);
@@ -7528,6 +7555,11 @@ begin
   inc(Hash.H,H.H);
 end;
 
+procedure RawSha256Compress(var Hash; Data: pointer);
+begin
+  sha256Compress(TSHAHash(Hash), Data);
+end;
+
 procedure TSHA256.Final(out Digest: TSHA256Digest; NoInit: boolean);
 // finalize SHA-256 calculation, clear context
 var Data: TSHAContext absolute Context;
@@ -7970,6 +8002,19 @@ begin
       break;
     end;
   until Len<=0;
+end;
+
+procedure RawSha512Compress(var Hash; Data: pointer);
+begin
+  {$ifdef SHA512_X86}
+  if cfSSSE3 in CpuFeatures then
+    sha512_compress(@Hash,Data) else
+  {$endif}
+  {$ifdef SHA512_X64}
+  if cfSSE41 in CpuFeatures then
+    sha512_sse4(Data,@Hash,1) else
+  {$endif}
+    sha512_compresspas(TSHA512Hash(Hash), Data);
 end;
 
 procedure TSHA512.Update(const Buffer: RawByteString);
@@ -9412,13 +9457,13 @@ begin
   if (aParamsJSON=nil) or (aParamsJSONLen<=0) then
     k.secret := aDefaultSalt else
     if aParamsJSON[1]<>'{' then
-      SetString(k.secret,PAnsiChar(aParamsJSON),aParamsJSONLen) else begin
+      FastSetString(k.secret,aParamsJSON,aParamsJSONLen) else begin
     tmp.Init(aParamsJSON,aParamsJSONLen);
     try
       if (RecordLoadJSON(k,tmp.buf,TypeInfo(TSynSignerParams))=nil) or
          (k.secret='') or (k.salt='') then begin
         SetDefault;
-        SetString(k.secret,PAnsiChar(aParamsJSON),aParamsJSONLen);
+        FastSetString(k.secret,aParamsJSON,aParamsJSONLen);
       end;
     finally
       FillCharFast(tmp.buf^,tmp.len,0);
@@ -9466,6 +9511,11 @@ begin
   end;
   aAES.DoInit(aDerivatedKey,ks,aEncrypt);
   FillZero(aDerivatedKey.b);
+end;
+
+procedure TSynSigner.Done;
+begin
+  FillCharFast(self, SizeOf(self), 0);
 end;
 
 procedure AES(const Key; KeySize: cardinal; buffer: pointer; Len: Integer; Encrypt: boolean);
@@ -11647,6 +11697,11 @@ end;
 {$endif PUREPASCAL}
 {$endif CPUX64}
 
+procedure RawMd5Compress(var Hash; Data: pointer);
+begin
+  MD5Transform(TMD5Buf(Hash), PMD5In(Data)^);
+end;
+
 function TMD5.Final: TMD5Digest;
 begin
   Finalize;
@@ -11778,7 +11833,7 @@ end;
 
 function AESBlockToString(const block: TAESBlock): RawUTF8;
 begin
-  SetString(result,nil,32);
+  FastSetString(result,nil,32);
   SynCommons.BinToHex(@block,pointer(result),16);
 end;
 
@@ -11951,6 +12006,11 @@ begin
   inc(Hash.C,C);
   inc(Hash.D,D);
   inc(Hash.E,E);
+end;
+
+procedure RawSha1Compress(var Hash; Data: pointer);
+begin
+  sha1Compress(TSHAHash(Hash), Data);
 end;
 
 procedure TSHA1.Final(out Digest: TSHA1Digest; NoInit: boolean);
@@ -13716,7 +13776,7 @@ end;
 function TAESPRNG.FillRandomHex(Len: integer): RawUTF8;
 var bin: pointer;
 begin
-  SetString(result,nil,Len*2);
+  FastSetString(result,nil,Len*2);
   if Len=0 then
     exit;
   bin := @PByteArray(result)[Len]; // temporary store random bytes at the end
@@ -14637,7 +14697,7 @@ begin
             JWT.result := jwtUnexpectedClaim;
             exit;
           end;
-          SetString(JWT.reg[claim],V,StrLen(V));
+          FastSetString(JWT.reg[claim],V,StrLen(V));
           if claim in requiredclaims then
           case claim of
           jrcJwtID:
@@ -14688,7 +14748,7 @@ begin
     JWT.data.Capacity := JWT.data.Count;
   if requiredclaims-JWT.claims<>[] then
     JWT.result := jwtMissingClaim else begin
-    SetString(headpayload,tok,payloadend-1);
+    FastSetString(headpayload,tok,payloadend-1);
     JWT.result := jwtValid;
   end;
 end;
@@ -14762,7 +14822,7 @@ begin
   end;
   inc(P);
   if Signature<>nil then
-    SetRawUTF8(Signature^,P,StrLen(P));
+    FastSetString(Signature^,P,StrLen(P));
   result := jwtValid;
 end;
 
@@ -14994,21 +15054,22 @@ asm // rcx=crc, rdx=buf, r8=len (linux: rdi, rsi, rdx)
         ja      @intel // only call Intel code if worth it
         shr     r8, 3
         jz      @2
+        {$ifdef FPC}align 8{$endif}
 @1:     {$ifdef FPC}
         crc32   rax, qword [rdx] // hash 8 bytes per opcode
         {$else}
         db $F2,$48,$0F,$38,$F1,$02 // circumvent Delphi inline asm compiler bug
         {$endif}
+        add     rdx, 8
         dec     r8
-        lea     rdx, [rdx + 8]
         jnz     @1
 @2:     and     ecx, 7
         jz      @0
         cmp     ecx, 4
         jb      @4
         crc32   eax, dword ptr[rdx]
+        add     rdx, 4
         sub     ecx, 4
-        lea     rdx, [rdx + 4]
         jz      @0
 @4:     crc32   eax, byte ptr[rdx]
         dec     ecx

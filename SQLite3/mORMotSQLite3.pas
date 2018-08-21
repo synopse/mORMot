@@ -276,6 +276,7 @@ uses
   SynCommons,
   SynLog,
   SynSQLite3,
+  SynTable,
   mORMot;
 
 {.$define WITHUNSAFEBACKUP}

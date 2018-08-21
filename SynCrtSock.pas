@@ -340,7 +340,6 @@ type
 {$endif}
 
 {$ifndef FPC}
-
   /// FPC 64-bit compatibility integer type
   {$ifdef CPU64}
   PtrInt = NativeInt;
@@ -349,10 +348,8 @@ type
   PtrInt = integer;
   PtrUInt = cardinal;
   {$endif}
-  /// FPC 64-bit compatibility pointer type
   PPtrInt = ^PtrInt;
   PPtrUInt = ^PtrUInt;
-
 {$endif FPC}
 
   {$M+}
@@ -501,12 +498,14 @@ type
     /// append P^ data into SndBuf (used by SockSend(), e.g.)
     // - call SockSendFlush to send it through the network via SndLow()
     procedure SockSend(P: pointer; Len: integer); overload;
-    /// flush all pending data to be sent
+    /// flush all pending data to be sent, optionally with some body content
     // - raise ECrtSocket on error
-    procedure SockSendFlush;
+    procedure SockSendFlush(const aBody: SockString='');
     /// flush all pending data to be sent
     // - returning true on success
     function TrySockSendFlush: boolean;
+    /// how many bytes could be added by SockSend() in the internal buffer
+    function SockSendRemainingSize: integer;
     /// fill the Buffer with Length bytes
     // - use TimeOut milliseconds wait for incoming data
     // - bypass the SockIn^ buffers
@@ -2039,6 +2038,8 @@ type
     procedure InternalCloseRequest; virtual; abstract;
     procedure InternalAddHeader(const hdr: SockString); virtual; abstract;
   public
+    /// returns TRUE if the class is actually supported on this system
+    class function IsAvailable: boolean; virtual; abstract;
     /// connect to http://aServer:aPort or https://aServer:aPort
     // - optional aProxyName may contain the name of the proxy server to use,
     // and aProxyByPass an optional semicolon delimited list of host names or
@@ -2205,6 +2206,8 @@ type
     function InternalRetrieveAnswer(
       var Header, Encoding, AcceptEncoding, Data: SockString): integer; override;
   public
+    /// returns TRUE if the class is actually supported on this system
+    class function IsAvailable: boolean; override;
     /// download would call this method to notify progress
     property OnProgress: TWinHttpProgress read fOnProgress write fOnProgress;
     /// download would call this method instead of filling Data: SockString value
@@ -2377,6 +2380,8 @@ type
     procedure InternalCloseRequest; override;
     procedure InternalAddHeader(const hdr: SockString); override;
   public
+    /// returns TRUE if the class is actually supported on this system
+    class function IsAvailable: boolean; override;
     /// release the connection
     destructor Destroy; override;
     /// set the client SSL certification details
@@ -2389,7 +2394,13 @@ type
 {$endif USELIBCURL}
 
 /// returns the best THttpRequest class, depending on the system it runs on
+// - e.g. TWinHTTP or TCurlHTTP
 function MainHttpClass: THttpRequestClass;
+
+/// low-level forcing of another THttpRequest class
+// - could be used if we found out that the current MainHttpClass failed (which
+// could easily happen with TCurlHTTP if the library is missing or deprecated)
+procedure ReplaceMainHttpClass(aClass: THttpRequestClass);
 
 /// create a TCrtSocket, returning nil on error
 // (useful to easily catch socket error exception ECrtSocket)
@@ -2431,6 +2442,9 @@ function HttpPost(const server, port: SockString; const url, Data, DataType: Soc
 
 /// compute the 'Authorization: Bearer ####' HTTP header of a given token value
 function AuthorizationBearer(const AuthToken: SockString): SockString;
+
+/// compute the '1.2.3.4' text representation of a raw IP4 binary
+procedure IP4Text(const ip4addr; var result: SockString);
 
 const
   /// the layout of TSMTPConnection.FromText method
@@ -2585,6 +2599,9 @@ function SockBase64Decode(const s: SockString): SockString;
 /// escaping of HTML codes like < > & "
 function HtmlEncode(const s: SockString): SockString;
 
+/// decode a HTTP chunk length
+function HttpChunkToHex32(p: PAnsiChar): integer;
+
 {$ifdef MSWINDOWS}
 
 /// remotly get the MAC address of a computer, from its IP Address
@@ -2642,12 +2659,12 @@ procedure DirectShutdown(sock: TSocket);
 // - used e.g. by TPollAsynchSockets.Start
 function AsynchSocket(sock: TSocket): boolean;
 
-/// low-level direct write to the socket recv() function
-// - by-pass overriden blocking recv() e.g. in SynFPCSock, so will work
+/// low-level direct call of the socket recv() function
+// - by-pass overriden blocking recv() e.g. in SynFPCSock, so will work if
 // the socket is in non-blocking mode, as with AsynchSocket/TPollAsynchSockets
 function AsynchRecv(sock: TSocket; buf: pointer; buflen: integer): integer;
 
-/// low-level direct write to the socket send() function
+/// low-level direct call of the socket send() function
 // - by-pass overriden blocking send() e.g. in SynFPCSock, so will work if
 // the socket is in non-blocking mode, as with AsynchSocket/TPollAsynchSockets
 function AsynchSend(sock: TSocket; buf: pointer; buflen: integer): integer;
@@ -3126,13 +3143,13 @@ begin
   ReasonCache[Hi,Lo] := result;
 end;
 
-function Hex2Dec(c: AnsiChar): byte;
+function Hex2Dec(c: AnsiChar): integer; {$ifdef HASINLINE}inline;{$endif}
 begin
   case c of
   'A'..'Z': result := Ord(c) - (Ord('A') - 10);
   'a'..'z': result := Ord(c) - (Ord('a') - 10);
   '0'..'9': result := Ord(c) - Ord('0');
-  else result := 255;
+  else result := -1;
   end;
 end;
 
@@ -3562,26 +3579,23 @@ begin
   end;
 end;
 
-function PCharToHex32(p: PAnsiChar): cardinal;
-var v0,v1: byte;
+function HttpChunkToHex32(p: PAnsiChar): integer;
+var v0,v1: integer;
 begin
   result := 0;
   if p<>nil then begin
     while p^=' ' do inc(p);
     repeat
       v0 := Hex2Dec(p[0]);
-      if v0=255 then break; // not in '0'..'9','a'..'f'
+      if v0<0 then break; // not in '0'..'9','a'..'f'
       v1 := Hex2Dec(p[1]);
       inc(p);
-      if v1=255 then begin
-        result := (result shl 4)+v0; // only one char left
+      if v1<0 then begin
+        result := (result shl 4) or v0; // only one char left
         break;
       end;
-      v0 := v0 shl 4;
-      result := result shl 8;
-      inc(v0,v1);
+      result := (result shl 8) or (v0 shl 4) or v1;
       inc(p);
-      inc(result,v0);
     until false;
   end;
 end;
@@ -4502,12 +4516,21 @@ begin
   SockSend(@CRLF,2);
 end;
 
-procedure TCrtSocket.SockSendFlush;
+procedure TCrtSocket.SockSendFlush(const aBody: SockString);
+var body,avail: integer;
 begin
-  if fSndBufLen=0 then
-    exit;
-  SndLow(pointer(fSndBuf),fSndBufLen);
-  fSndBufLen := 0;
+  body := Length(aBody);
+  if body>0 then begin
+    avail := SockSendRemainingSize; // around 1800 bytes
+    if avail>=body then begin
+      SockSend(pointer(aBody),body); // append to buffer as single TCP packet
+      body := 0;
+    end;
+  end;
+  if not TrySockSendFlush then
+    raise ECrtSocket.CreateFmt('SockSendFlush(%s) len=%d',[fServer,fSndBufLen],-1);
+  if body>0 then
+    SndLow(pointer(aBody),body); // direct sending of biggest packets
 end;
 
 function TCrtSocket.TrySockSendFlush: boolean;
@@ -4520,10 +4543,15 @@ begin
   end;
 end;
 
+function TCrtSocket.SockSendRemainingSize: integer;
+begin
+  result := length(fSndBuf)-fSndBufLen;
+end;
+
 procedure TCrtSocket.SndLow(P: pointer; Len: integer);
 begin
   if not TrySndLow(P,Len) then
-    raise ECrtSocket.Create('SndLow');
+    raise ECrtSocket.CreateFmt('SndLow(%s) len=%d',[fServer,Len],-1);
 end;
 
 function TCrtSocket.TrySndLow(P: pointer; Len: integer): boolean;
@@ -4842,35 +4870,35 @@ begin
 end;
 
 procedure TCrtSocket.SockRecvLn(out Line: SockString; CROnly: boolean=false);
-procedure RecvLn(var Line: SockString);
-var P: PAnsiChar;
-    LP, L: PtrInt;
-    tmp: array[0..1023] of AnsiChar; // avoid ReallocMem() every char
-begin
-  P := @tmp;
-  Line := '';
-  repeat
-    SockRecv(P,1); // this is very slow under Windows -> use SockIn^ instead
-    if P^<>#13 then // at least NCSA 1.3 does send a #10 only -> ignore #13
-      if P^=#10 then begin
-        if Line='' then // get line
-          SetString(Line,tmp,P-tmp) else begin
-          LP := P-tmp; // append to already read chars
-          L := length(Line);
-          Setlength(Line,L+LP);
-          move(tmp,(PAnsiChar(pointer(Line))+L)^,LP);
-        end;
-        exit;
-      end else
-      if P=@tmp[1023] then begin // tmp[] buffer full?
-        L := length(Line); // -> append to already read chars
-        Setlength(Line,L+1024);
-        move(tmp,(PAnsiChar(pointer(Line))+L)^,1024);
-        P := tmp;
-      end else
-        inc(P);
-  until false;
-end;
+  procedure RecvLn(var Line: SockString);
+  var P: PAnsiChar;
+      LP, L: PtrInt;
+      tmp: array[0..1023] of AnsiChar; // avoid ReallocMem() every char
+  begin
+    P := @tmp;
+    Line := '';
+    repeat
+      SockRecv(P,1); // this is very slow under Windows -> use SockIn^ instead
+      if P^<>#13 then // at least NCSA 1.3 does send a #10 only -> ignore #13
+        if P^=#10 then begin
+          if Line='' then // get line
+            SetString(Line,tmp,P-tmp) else begin
+            LP := P-tmp; // append to already read chars
+            L := length(Line);
+            Setlength(Line,L+LP);
+            move(tmp,(PAnsiChar(pointer(Line))+L)^,LP);
+          end;
+          exit;
+        end else
+        if P=@tmp[1023] then begin // tmp[] buffer full?
+          L := length(Line); // -> append to already read chars
+          Setlength(Line,L+1024);
+          move(tmp,(PAnsiChar(pointer(Line))+L)^,1024);
+          P := tmp;
+        end else
+          inc(P);
+    until false;
+  end;
 var c: AnsiChar;
    Error: integer;
 begin
@@ -5077,9 +5105,7 @@ begin
     if fCompressAcceptEncoding<>'' then
       SockSend(fCompressAcceptEncoding);
     SockSend; // send CRLF
-    SockSendFlush; // flush all pending data (i.e. headers) to network
-    if aData<>'' then // for POST and PUT methods: content to be sent
-      SndLow(pointer(aData),length(aData)); // no CRLF at the end of data
+    SockSendFlush(aData); // flush all pending data to network
     // get headers
     SockRecvLn(Command); // will raise ECrtSocket on any error
     if TCPPrefix<>'' then
@@ -5109,7 +5135,7 @@ begin
       exit;
     end;
     GetHeader; // read all other headers
-    if not IdemPChar(pointer(method),'HEAD') then
+    if (result<>STATUS_NOCONTENT) and not IdemPChar(pointer(method),'HEAD') then
       GetBody; // get content if necessary (not HEAD method)
   except
     on Exception do
@@ -5573,7 +5599,7 @@ end;
 
 function THttpServer.OnNginxAllowSend(Context: THttpServerRequest;
   const LocalFileName: TFileName): boolean;
-var match,i,f: integer;
+var match,i,f: PtrInt;
     folder: ^TFileName;
 begin
   match := 0;
@@ -5600,7 +5626,7 @@ begin
 end;
 
 procedure THttpServer.NginxSendFileFrom(const FileNameLeftTrim: TFileName);
-var n: integer;
+var n: PtrInt;
 begin
   n := length(fNginxSendFileFrom);
   SetLength(fNginxSendFileFrom,n+1);
@@ -5782,11 +5808,8 @@ var ctxt: THttpServerRequest;
       ClientSock.SockSend('Connection: Keep-Alive'#13#10); // #13#10 -> end headers
     end else
       ClientSock.SockSend; // headers must end with a void line
-    ClientSock.SockSendFlush; // flush all pending data (i.e. headers) to network
     // 3. sent HTTP body content (if any)
-    if ctxt.OutContent<>'' then
-      // direct send to socket (no CRLF at the end of data)
-      ClientSock.SndLow(pointer(ctxt.OutContent),length(ctxt.OutContent));
+    ClientSock.SockSendFlush(ctxt.OutContent); // flush all data to network
   end;
 
 begin
@@ -6027,10 +6050,10 @@ begin
         Error := ioresult;
         if Error<>0 then
           raise ECrtSocket.Create('GetBody1',Error);
-        Len := PCharToHex32(LinePChar); // get chunk length in hexa
+        Len := HttpChunkToHex32(LinePChar); // get chunk length in hexa
       end else begin
         SockRecvLn(Line);
-        Len := PCharToHex32(pointer(Line)); // get chunk length in hexa
+        Len := HttpChunkToHex32(pointer(Line)); // get chunk length in hexa
       end;
       if Len=0 then begin // ignore next line (normaly void)
         SockRecvLn;
@@ -6098,7 +6121,7 @@ begin
     case IdemPCharArray(P,['CONTENT-','TRANSFER-ENCODING: CHUNKED','CONNECTION: ',
       'ACCEPT-ENCODING:']) of
     0: case IdemPCharArray(P+8,['LENGTH:','TYPE:','ENCODING:']) of
-       0: ContentLength := GetCardinal(pointer(PAnsiChar(pointer(s))+16));
+       0: ContentLength := GetCardinal(P+16);
        1: ContentType := trim(copy(s,14,128));
        2: if fCompress<>nil then begin
             i := 18;
@@ -6300,7 +6323,7 @@ begin
       if (ContentLength>0) and (fServer.MaximumAllowedContentLength>0) and
          (cardinal(ContentLength)>fServer.MaximumAllowedContentLength) then begin
         SockSend('HTTP/1.0 413 Payload Too Large'#13#10#13#10'Rejected');
-        SockSendFlush;
+        SockSendFlush('');
         exit;
       end;
       if Assigned(fServer.OnBeforeBody) then begin
@@ -6309,7 +6332,7 @@ begin
         if status<>STATUS_SUCCESS then begin
           reason := StatusCodeToReason(status);
           SockSend(['HTTP/1.0 ',status,' ',reason,#13#10#13#10,reason,' ', status]);
-          SockSendFlush;
+          SockSendFlush('');
           exit;
         end;
       end;
@@ -10053,6 +10076,11 @@ begin // HTTP_QUERY* and WINHTTP_QUERY* do match -> common to TWinINet + TWinHTT
   end;
 end;
 
+class function TWinHttpAPI.IsAvailable: boolean;
+begin
+  result := true; // both WinINet and WinHTTP are statically linked
+end;
+
 
 { EWinINet }
 
@@ -10997,8 +11025,9 @@ begin
       {$endif}
       {$endif}
       if curl.Module=0 then
-        raise ECrtSocket.CreateFmt('Unable to find %s'{$ifdef LINUX}
-          +': try e.g. sudo apt-get install libcurl3:i386'{$endif},[LIBCURL_DLL]);
+        raise ECrtSocket.CreateFmt('Unable to find %s'{$ifdef LINUX}+
+          ': try e.g. sudo apt-get install libcurl3'{$ifdef CPUX86}+':i386'{$endif}
+          {$endif LINUX},[LIBCURL_DLL]);
       P := @@curl.global_init;
       for api := low(NAMES) to high(NAMES) do begin
         P^ := GetProcAddress(curl.Module,{$ifndef FPC}PChar{$endif}('curl_'+NAMES[api]));
@@ -11018,11 +11047,7 @@ begin
         if curl.Module<>0 then
           FreeLibrary(curl.Module);
         curl.Module := {$ifdef KYLIX3}THandle{$endif}(-1); // don't try to load any more
-        {$ifdef LINUX}
-        writeln(E.Message);
-        {$else}
         raise;
-        {$endif}
       end;
     end;
   finally
@@ -11049,10 +11074,7 @@ end;
 procedure TCurlHTTP.InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD);
 const HTTPS: array[boolean] of string = ('','s');
 begin
-  inherited;
-  if curl.Module=0 then
-    LibCurlInitialize;
-  if PtrInt(curl.Module)=-1 then
+  if not IsAvailable then
     raise ECrtSocket.CreateFmt('No available %s',[LIBCURL_DLL]);
   fHandle := curl.easy_init;
   fRootURL := AnsiString(Format('http%s://%s:%d',[HTTPS[fHttps],fServer,fPort]));
@@ -11115,6 +11137,17 @@ begin
     H := pointer(GetNextLine(P));
     if H<>nil then // nil would reset the whole list
       fIn.Headers := curl.slist_append(fIn.Headers,H);
+  end;
+end;
+
+class function TCurlHTTP.IsAvailable: boolean;
+begin
+  try
+    if curl.Module=0 then
+      LibCurlInitialize;
+    result := PtrInt(curl.Module)>0;
+  except
+    result := false;
   end;
 end;
 
@@ -12032,6 +12065,11 @@ begin
     {$endif}
   end;
   result := _MainHttpClass;
+end;
+
+procedure ReplaceMainHttpClass(aClass: THttpRequestClass);
+begin
+  _MainHttpClass := aClass;
 end;
 
 initialization

@@ -172,6 +172,7 @@ uses
   ZCompatibility, ZVariant, ZURL, ZDbcIntfs, ZDbcResultSet,
   // mORMot units after ZDBC due to some name conflicts (e.g. UTF8ToString)
   SynCommons,
+  SynTable,
   SynLog,
   SynDB;
 
@@ -1241,7 +1242,7 @@ procedure TSQLDBZEOSStatement.ColumnsToJSON(WR: TJSONWriter);
 {$if not (defined(ZEOS73UP) and defined(USE_SYNCOMMONS))}
 var col: integer;
     P: PAnsiChar;
-    Len: NativeUInt;
+    Len: NativeUInt; // required by Zeos for GetPAnsiChar out param (not PtrUInt)
 procedure WriteIZBlob;
 var blob: IZBlob;
 begin

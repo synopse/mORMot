@@ -222,6 +222,7 @@ uses
   Contnrs,
   {$endif}
   SynCommons,
+  SynTable,
   SynLog;
 
 
@@ -1271,8 +1272,8 @@ type
     // -  can also decrypt a previously encrypted database (so that it is accessible
     // from any version of SQLite) by specifying a nil key
     // - Assigned(rekey)=false if encryption is not available, i.e. if
-    // NOSQLITE3STATIC is defined 
-    // - also see ChangeSQLEncryptTablePassWord() procedure 
+    // NOSQLITE3STATIC is defined
+    // - also see ChangeSQLEncryptTablePassWord() procedure
     rekey: function(DB: TSQLite3DB; key: pointer; keyLen: Integer): integer; cdecl;
 
     /// Destructor for the sqlite3 object, which handle is DB
@@ -1300,8 +1301,7 @@ type
 
     /// returns the numeric result code or extended result code for the most
     // recent failed sqlite3 API call associated with a database connection
-    extended_errcode: function(DB: TSQLite3DB): integer;
-      cdecl;
+    extended_errcode: function(DB: TSQLite3DB): integer; cdecl;
 
     /// add SQL functions or aggregates or to redefine the behavior of existing
     // SQL functions or aggregates
@@ -1327,8 +1327,8 @@ type
     // that involves the least amount of data conversion. If there is only a single
     // implementation which does not care what text encoding is used, then the
     // fourth argument should be SQLITE_ANY.
-    // - The fifth parameter, pApp, is an arbitrary pointer. The implementation of the
-    // function can gain access to this pointer using sqlite3.user_data().
+    // - The fifth parameter, pApp, is an arbitrary pointer. The implementation
+    // of the function can gain access to this pointer using sqlite3.user_data().
     // - The seventh, eighth and ninth parameters, xFunc, xStep and xFinal, are
     // pointers to C-language functions that implement the SQL function or aggregate.
     // A scalar SQL function requires an implementation of the xFunc callback only;
@@ -2043,7 +2043,7 @@ type
     // - BufSize is the size of the buffer Data, which might be larger than DBSize
     deserialize: function(DB: TSQLite3DB; Schema: PUTF8Char; Data: pointer;
       DBSize, BufSize: Int64; Flags: integer): pointer; cdecl;
-      
+
     /// sets and/or queries the soft limit on the amount of heap memory
     // that may be allocated by SQLite
     // - SQLite strives to keep heap memory utilization below the soft heap limit
@@ -2322,7 +2322,7 @@ type
   // needed, in case of a heavy loaded mORMot server
   TSQLLockingMode = (lmNormal, lmExclusive);
 
-  /// availabel Run-Time limit categories
+  /// available Run-Time limit categories
   // - as expected by sqlite3.limit() function and TSQLDatabase.Limit property
   // - lcLength The maximum size of any string or BLOB or table row, in bytes.
   // - lcSQLLength The maximum length of an SQL statement, in bytes.
@@ -3905,16 +3905,16 @@ begin // JsonSet(VariantField,'PropName','abc') to set a value
   if sqlite3.value_type(argv[0])<>SQLITE_TEXT then
     sqlite3.result_null(Context) else begin
     json := sqlite3.value_text(argv[0]);
-    SetString(tmp,PAnsiChar(json),SynCommons.StrLen(json));
+    FastSetString(tmp,json,SynCommons.StrLen(json));
     doc.InitJSONInPlace(pointer(tmp),JSON_OPTIONS_FAST);
     v := doc.GetPVariantByPath(sqlite3.value_text(argv[1]));
     if v<>nil then begin
       json := sqlite3.value_text(argv[2]);
-      SetString(tmp,PAnsiChar(json),SynCommons.StrLen(json));
+      FastSetString(tmp,json,SynCommons.StrLen(json));
       VariantLoadJSON(v^,pointer(tmp),nil,@JSON_OPTIONS[true]);
       RawUTF8ToSQlite3Context(doc.ToJSON,Context,false);
     end else begin
-      SetString(tmp,PAnsiChar(json),SynCommons.StrLen(json));
+      FastSetString(tmp,json,SynCommons.StrLen(json));
       RawUTF8ToSQlite3Context(tmp,Context,false);
     end;
   end;
@@ -5141,7 +5141,7 @@ begin
   if cardinal(Col)>=cardinal(FieldCount) then
     raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE,'FieldName');
   P := sqlite3.column_name(Request,Col);
-  SetString(result,P,SynCommons.StrLen(P));
+  FastSetString(result,P,SynCommons.StrLen(P));
 end;
 
 function TSQLRequest.FieldIndex(const aColumnName: RawUTF8): integer;
@@ -5174,7 +5174,7 @@ begin
   if cardinal(Col)>=cardinal(FieldCount) then
     raise ESQLite3Exception.Create(RequestDB,SQLITE_RANGE,'FieldDeclaredType');
   P := pointer(sqlite3.column_decltype(Request,Col));
-  SetString(result,P,SynCommons.StrLen(P));
+  FastSetString(result,P,SynCommons.StrLen(P));
 end;
 
 function TSQLRequest.FieldDeclaredTypeS(Col: Integer): String;
@@ -5192,7 +5192,7 @@ begin
   if cardinal(Col)>=cardinal(FieldCount) then
     raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE,'FieldUTF8');
   P := pointer(sqlite3.column_text(Request,Col));
-  SetString(result,P,SynCommons.StrLen(P));
+  FastSetString(result,P,SynCommons.StrLen(P));
 end;
 
 function TSQLRequest.FieldS(Col: integer): string;

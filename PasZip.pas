@@ -918,12 +918,8 @@ const
 
 {$ifndef FPC}
 type
-{$ifdef UNICODE}
-  PtrUInt = NativeUInt;
-{$else}
-  PtrUInt = cardinal;
-{$endif}
-{$endif}
+  PtrUInt = {$ifdef CPU64}NativeUInt{$else}cardinal{$endif};
+{$endif FPC}
 
 const
   InflateMask: array[0..16] of Cardinal = ($0000, $0001, $0003, $0007, $000F,

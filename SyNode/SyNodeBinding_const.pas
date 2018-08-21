@@ -14,6 +14,7 @@ uses
 implementation
 
 uses
+  SynZip,
   {$IFDEF MSWINDOWS}
   Windows
   {$ELSE}
@@ -77,10 +78,29 @@ const
   S_IFLNK  = 0;     // symbolic link
   S_IFSOCK = 0;     // socket
 {$ENDIF}
+  Z_MIN_WINDOWBITS = 8;
+  Z_MAX_WINDOWBITS = 15;
+  Z_DEFAULT_WINDOWBITS = 15;
+  // Fewer than 64 bytes per chunk is not recommended.
+  // Technically it could work with as few as 8, but even 64 bytes
+  // is low.  Usually a MB or more is best.
+  Z_MIN_CHUNK = 64;
+  Z_MAX_CHUNK = $0FFFFFFF;
+  Z_DEFAULT_CHUNK = 16 * 1024;
+  Z_MIN_MEMLEVEL = 1;
+  Z_MAX_MEMLEVEL = 9;
+  Z_DEFAULT_MEMLEVEL = 8;
+  Z_MIN_LEVEL = -1;
+  Z_MAX_LEVEL = 9;
+  Z_DEFAULT_LEVEL = Z_DEFAULT_COMPRESSION;
+
+type
+  node_zlib_mode = (nzlmNONE, nzlmDEFLATE, nzlmINFLATE, nzlmGZIP, nzlmGUNZIP,
+    nzlmDEFLATERAW, nzlmINFLATERAW, nzlmUNZIP);
 
 function SyNodeBindingProc_consts(const aEngine: TSMEngine; const bindingNamespaceName: SynUnicode): jsval;
 var
-  obj, obj_fs: PJSRootedObject;
+  obj, obj_fs, obj_zlib: PJSRootedObject;
   jsv: jsval;
   cx: PJSContext;
 const
@@ -89,6 +109,7 @@ begin
   cx := aEngine.cx;
   obj := cx.NewRootedObject(cx.NewObject(nil));
   obj_fs := cx.NewRootedObject(cx.NewObject(nil));
+  obj_zlib := cx.NewRootedObject(cx.NewObject(nil));
   try
     // constansts.fs
     jsv.asInteger := F_OK; obj_fs.ptr.DefineProperty(cx, 'F_OK', jsv, attrs);
@@ -142,8 +163,64 @@ begin
     jsv.asInteger := S_IXOTH; obj_??.ptr.DefineProperty(cx, 'S_IXOTH', jsv, attrs);
 }
     obj.ptr.DefineProperty(cx, 'fs', obj_fs.ptr.ToJSValue, attrs);
+
+    //constants zlib
+    jsv.asInteger := Z_NO_FLUSH; obj_zlib.ptr.DefineProperty(cx, 'Z_NO_FLUSH', jsv, attrs);
+    jsv.asInteger := Z_PARTIAL_FLUSH; obj_zlib.ptr.DefineProperty(cx, 'Z_PARTIAL_FLUSH', jsv, attrs);
+    jsv.asInteger := Z_SYNC_FLUSH; obj_zlib.ptr.DefineProperty(cx, 'Z_SYNC_FLUSH', jsv, attrs);
+    jsv.asInteger := Z_FULL_FLUSH; obj_zlib.ptr.DefineProperty(cx, 'Z_FULL_FLUSH', jsv, attrs);
+    jsv.asInteger := Z_FINISH; obj_zlib.ptr.DefineProperty(cx, 'Z_FINISH', jsv, attrs);
+    jsv.asInteger := Z_BLOCK; obj_zlib.ptr.DefineProperty(cx, 'Z_BLOCK', jsv, attrs);
+
+    // return/error codes
+    jsv.asInteger := Z_OK; obj_zlib.ptr.DefineProperty(cx, 'Z_OK', jsv, attrs);
+    jsv.asInteger := Z_STREAM_END; obj_zlib.ptr.DefineProperty(cx, 'Z_STREAM_END', jsv, attrs);
+    jsv.asInteger := Z_NEED_DICT; obj_zlib.ptr.DefineProperty(cx, 'Z_NEED_DICT', jsv, attrs);
+    jsv.asInteger := Z_ERRNO; obj_zlib.ptr.DefineProperty(cx, 'Z_ERRNO', jsv, attrs);
+    jsv.asInteger := Z_STREAM_ERROR; obj_zlib.ptr.DefineProperty(cx, 'Z_STREAM_ERROR', jsv, attrs);
+    jsv.asInteger := Z_DATA_ERROR; obj_zlib.ptr.DefineProperty(cx, 'Z_DATA_ERROR', jsv, attrs);
+    jsv.asInteger := Z_MEM_ERROR; obj_zlib.ptr.DefineProperty(cx, 'Z_MEM_ERROR', jsv, attrs);
+    jsv.asInteger := Z_BUF_ERROR; obj_zlib.ptr.DefineProperty(cx, 'Z_BUF_ERROR', jsv, attrs);
+    jsv.asInteger := Z_VERSION_ERROR; obj_zlib.ptr.DefineProperty(cx, 'Z_VERSION_ERROR', jsv, attrs);
+
+    jsv.asInteger := Z_NO_COMPRESSION; obj_zlib.ptr.DefineProperty(cx, 'Z_NO_COMPRESSION', jsv, attrs);
+    jsv.asInteger := Z_BEST_SPEED; obj_zlib.ptr.DefineProperty(cx, 'Z_BEST_SPEED', jsv, attrs);
+    jsv.asInteger := Z_BEST_COMPRESSION; obj_zlib.ptr.DefineProperty(cx, 'Z_BEST_COMPRESSION', jsv, attrs);
+    jsv.asInteger := Z_DEFAULT_COMPRESSION; obj_zlib.ptr.DefineProperty(cx, 'Z_DEFAULT_COMPRESSION', jsv, attrs);
+    jsv.asInteger := Z_FILTERED; obj_zlib.ptr.DefineProperty(cx, 'Z_FILTERED', jsv, attrs);
+    jsv.asInteger := Z_HUFFMAN_ONLY; obj_zlib.ptr.DefineProperty(cx, 'Z_HUFFMAN_ONLY', jsv, attrs);
+    jsv.asInteger := Z_RLE; obj_zlib.ptr.DefineProperty(cx, 'Z_RLE', jsv, attrs);
+    jsv.asInteger := Z_FIXED; obj_zlib.ptr.DefineProperty(cx, 'Z_FIXED', jsv, attrs);
+    jsv.asInteger := Z_DEFAULT_STRATEGY; obj_zlib.ptr.DefineProperty(cx, 'Z_DEFAULT_STRATEGY', jsv, attrs);
+    jsv.asInteger := ZLIB_VERNUM; obj_zlib.ptr.DefineProperty(cx, 'ZLIB_VERNUM', jsv, attrs);
+
+    // modes
+    jsv.asInteger := ord(nzlmDEFLATE); obj_zlib.ptr.DefineProperty(cx, 'DEFLATE', jsv, attrs);
+    jsv.asInteger := ord(nzlmINFLATE); obj_zlib.ptr.DefineProperty(cx, 'INFLATE', jsv, attrs);
+    jsv.asInteger := ord(nzlmGZIP); obj_zlib.ptr.DefineProperty(cx, 'GZIP', jsv, attrs);
+    jsv.asInteger := ord(nzlmGUNZIP); obj_zlib.ptr.DefineProperty(cx, 'GUNZIP', jsv, attrs);
+    jsv.asInteger := ord(nzlmDEFLATERAW); obj_zlib.ptr.DefineProperty(cx, 'DEFLATERAW', jsv, attrs);
+    jsv.asInteger := ord(nzlmINFLATERAW); obj_zlib.ptr.DefineProperty(cx, 'INFLATERAW', jsv, attrs);
+    jsv.asInteger := ord(nzlmUNZIP); obj_zlib.ptr.DefineProperty(cx, 'UNZIP', jsv, attrs);
+
+    // other consts (not used by SynZip yet)
+    jsv.asInteger := Z_MIN_WINDOWBITS; obj_zlib.ptr.DefineProperty(cx, 'Z_MIN_WINDOWBITS', jsv, attrs);
+    jsv.asInteger := Z_MAX_WINDOWBITS; obj_zlib.ptr.DefineProperty(cx, 'Z_MAX_WINDOWBITS', jsv, attrs);
+    jsv.asInteger := Z_DEFAULT_WINDOWBITS; obj_zlib.ptr.DefineProperty(cx, 'Z_DEFAULT_WINDOWBITS', jsv, attrs);
+    jsv.asInteger := Z_MIN_CHUNK; obj_zlib.ptr.DefineProperty(cx, 'Z_MIN_CHUNK', jsv, attrs);
+    jsv.asInteger := Z_MAX_CHUNK; obj_zlib.ptr.DefineProperty(cx, 'Z_MAX_CHUNK', jsv, attrs);
+    jsv.asInteger := Z_DEFAULT_CHUNK; obj_zlib.ptr.DefineProperty(cx, 'Z_DEFAULT_CHUNK', jsv, attrs);
+    jsv.asInteger := Z_MIN_MEMLEVEL; obj_zlib.ptr.DefineProperty(cx, 'Z_MIN_MEMLEVEL', jsv, attrs);
+    jsv.asInteger := Z_MAX_MEMLEVEL; obj_zlib.ptr.DefineProperty(cx, 'Z_MAX_MEMLEVEL', jsv, attrs);
+    jsv.asInteger := Z_DEFAULT_MEMLEVEL; obj_zlib.ptr.DefineProperty(cx, 'Z_DEFAULT_MEMLEVEL', jsv, attrs);
+    jsv.asInteger := Z_MIN_LEVEL; obj_zlib.ptr.DefineProperty(cx, 'Z_MIN_LEVEL', jsv, attrs);
+    jsv.asInteger := Z_MAX_LEVEL; obj_zlib.ptr.DefineProperty(cx, 'Z_MAX_LEVEL', jsv, attrs);
+    jsv.asInteger := Z_DEFAULT_LEVEL; obj_zlib.ptr.DefineProperty(cx, 'Z_DEFAULT_LEVEL', jsv, attrs);
+
+    obj.ptr.DefineProperty(cx, 'zlib', obj_zlib.ptr.ToJSValue, attrs);
     Result := obj.ptr.ToJSValue;
   finally
+    cx.FreeRootedObject(obj_zlib);
     cx.FreeRootedObject(obj_fs);
     cx.FreeRootedObject(obj);
   end;

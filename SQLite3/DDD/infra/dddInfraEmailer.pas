@@ -69,6 +69,7 @@ uses
   SynTests,
   SynCrtSock,
   SynMustache,
+  SynTable,
   SyncObjs,
   mORMot,
   mORMotDDD,

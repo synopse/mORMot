@@ -119,7 +119,7 @@ type
 
 function TTestSynopsemORMotFramework.Run: boolean;
 begin
-  CustomVersions := format(#13#10#13#10'Run on: %s - codepage=%d'#13#10 +
+  CustomVersions := format(#13#10#13#10'%s (cp%d)'#13#10 +
     '    %s'#13#10'Using mORMot %s'#13#10'    %s %s',
     [OSVersionText, GetACP, CpuInfoText, SYNOPSE_FRAMEWORK_FULLVERSION,
      sqlite3.ClassName, sqlite3.Version]);
