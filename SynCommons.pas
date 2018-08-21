@@ -12131,6 +12131,10 @@ type
     procedure FromNowUTC;
     /// fill fields with the current Local time, using a 8-16ms thread-safe cache
     procedure FromNowLocal;
+    /// append the stored date and time, in a log-friendly format
+    // - e.g. append '20110325 19241502 '
+    // - as called by TTextWriter.AddCurrentLogTime()
+    procedure AddLogTime(WR: TTextWriter);
   end;
   PSynSystemTime = ^TSynSystemTime;
 
@@ -29862,6 +29866,19 @@ begin
   {$endif}
 end;
 
+function SearchRecValidFile(const F: TSearchRec): boolean; {$ifdef HASINLINE}inline;{$endif}
+begin
+  {$ifndef DELPHI5OROLDER}
+  {$WARN SYMBOL_DEPRECATED OFF} // for faVolumeID
+  {$endif}
+  result := (F.Attr and (faDirectory
+    {$ifdef MSWINDOWS}+faVolumeID+faSysFile+faHidden)=0) and (F.Name[1]<>'.')
+    {$else})=0){$endif};
+  {$ifndef DELPHI5OROLDER}
+  {$WARN SYMBOL_DEPRECATED ON}
+  {$endif}
+end;
+
 function DirectoryDelete(const Directory: TFileName; const Mask: TFileName;
   DeleteOnlyFilesNotDirectory: Boolean; DeletedCount: PInteger): Boolean;
 var F: TSearchRec;
@@ -29874,17 +29891,10 @@ begin
     Dir := IncludeTrailingPathDelimiter(Directory);
     if FindFirst(Dir+Mask,faAnyFile-faDirectory,F)=0 then begin
       repeat
-        {$ifndef DELPHI5OROLDER}
-        {$WARN SYMBOL_DEPRECATED OFF} // for faVolumeID
-        {$endif}
-        if (F.Attr and (faDirectory+faVolumeID+faSysFile+faHidden)=0) and
-           (F.Name[1]<>'.') then
+        if SearchRecValidFile(F) then
           if DeleteFile(Dir+F.Name) then
             inc(n) else
             result := false;
-        {$ifndef DELPHI5OROLDER}
-        {$WARN SYMBOL_DEPRECATED ON}
-        {$endif}
       until FindNext(F)<>0;
       FindClose(F);
     end;
@@ -29913,18 +29923,11 @@ begin
       if F.Name[1]<>'.' then
         if Recursive and (F.Attr and faDirectory<>0) then
           DirectoryDeleteOlderFiles(Dir+F.Name,TimePeriod,Mask,true,TotalSize) else
-        {$ifndef DELPHI5OROLDER}
-        {$WARN SYMBOL_DEPRECATED OFF} // for faVolumeID
-        {$endif}
-        if (F.Attr and (faDirectory+faVolumeID+faSysFile+faHidden)=0) then
-          if SearchRecToDateTime(F) < old then
-            if not DeleteFile(Dir+F.Name) then
-              result := false else
-              if TotalSize<>nil then
-                inc(TotalSize^,F.Size);
-        {$ifndef DELPHI5OROLDER}
-        {$WARN SYMBOL_DEPRECATED ON}
-        {$endif}
+        if SearchRecValidFile(F) and (SearchRecToDateTime(F) < old) then
+          if not DeleteFile(Dir+F.Name) then
+            result := false else
+            if TotalSize<>nil then
+              inc(TotalSize^,F.Size);
     until FindNext(F)<>0;
     FindClose(F);
   end;
@@ -29974,11 +29977,7 @@ begin
       Dir := IncludeTrailingPathDelimiter(Directory);
     if FindFirst(Dir+Mask,faAnyfile-faDirectory,F)=0 then begin
       repeat
-        {$ifndef DELPHI5OROLDER}
-        {$WARN SYMBOL_DEPRECATED OFF} // for faVolumeID
-        {$endif}
-        if (F.Attr and (faDirectory+faVolumeID+faSysFile+faHidden)=0) and
-           (F.Name[1]<>'.') and ((IgnoreFileName='') or
+        if SearchRecValidFile(F) and ((IgnoreFileName='') or
             (AnsiCompareFileName(F.Name,IgnoreFileName)<>0)) then begin
           if n=length(result) then
             SetLength(result,n+n shr 3+8);
@@ -29987,9 +29986,6 @@ begin
             result[n].FromSearchRec('',F);
           inc(n);
         end;
-        {$ifndef DELPHI5OROLDER}
-        {$WARN SYMBOL_DEPRECATED ON}
-        {$endif}
       until FindNext(F)<>0;
       FindClose(F);
       if n=0 then
@@ -36197,6 +36193,31 @@ end;
 procedure TSynSystemTime.FromNowLocal;
 begin
   FromGlobalTime(true,self);
+end;
+
+procedure TSynSystemTime.AddLogTime(WR: TTextWriter);
+var y,d100: PtrUInt;
+    P: PUTF8Char;
+    tab: {$ifdef CPUX86}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
+begin
+  if WR.BEnd-WR.B<=17 then
+    WR.FlushToStream;
+  {$ifndef CPUX86}tab := @TwoDigitLookupW;{$endif}
+  y := Year;
+  d100 := y div 100;
+  P := WR.B+1;
+  PWord(P)^ := tab[d100];
+  PWord(P+2)^ := tab[y-(d100*100)];
+  PWord(P+4)^ := tab[Month];
+  PWord(P+6)^ := tab[Day];
+  P[8] := ' ';
+  PWord(P+9)^ := tab[Hour];
+  PWord(P+11)^ := tab[Minute];
+  PWord(P+13)^ := tab[Second];
+  y := Millisecond;
+  PWord(P+15)^ := tab[y shr 4];
+  P[17] := ' ';
+  WR.B := P+16;
 end;
 
 
@@ -51346,30 +51367,10 @@ begin
 end;
 
 procedure TTextWriter.AddCurrentLogTime(LocalTime: boolean);
-var y,d100: PtrUInt;
-    P: PUTF8Char;
-    tab: {$ifdef CPUX86}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
-    time: TSynSystemTime;
+var time: TSynSystemTime;
 begin
-  if BEnd-B<=17 then
-    FlushToStream;
   FromGlobalTime(LocalTime,time);
-  {$ifndef CPUX86}tab := @TwoDigitLookupW;{$endif}
-  y := time.Year;
-  d100 := y div 100;
-  P := B+1;
-  PWord(P)^ := tab[d100];
-  PWord(P+2)^ := tab[y-(d100*100)];
-  PWord(P+4)^ := tab[time.Month];
-  PWord(P+6)^ := tab[time.Day];
-  P[8] := ' ';
-  PWord(P+9)^ := tab[time.Hour];
-  PWord(P+11)^ := tab[time.Minute];
-  PWord(P+13)^ := tab[time.Second];
-  y := time.Millisecond;
-  PWord(P+15)^ := tab[y shr 4];
-  P[17] := ' ';
-  B := P+16;
+  time.AddLogTime(self);
 end;
 
 procedure TTextWriter.AddMicroSec(MS: cardinal);
