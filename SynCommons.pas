@@ -11801,6 +11801,7 @@ type
     fThreadName: RawUTF8;
     fExecute: (exCreated,exRun,exFinished);
     fExecuteLoopPause: boolean;
+    procedure SetExecuteLoopPause(dopause: boolean);
     /// where the main process takes place
     procedure Execute; override;
     procedure ExecuteLoop; virtual; abstract;
@@ -11835,7 +11836,7 @@ type
     /// temporary stop the execution of ExecuteLoop, until set back to false
     // - may be used e.g. by TSynBackgroundTimer to delay the process of
     // background tasks
-    property Pause: boolean read fExecuteLoopPause write fExecuteLoopPause;
+    property Pause: boolean read fExecuteLoopPause write SetExecuteLoopPause;
     /// access to the low-level associated event used to notify task execution
     // to the background thread
     // - you may call ProcessEvent.SetEvent to trigger the internal process loop
@@ -36506,7 +36507,7 @@ begin
     if PtrInt(F)<0 then
       exit; // you may not have write access to this folder
   end;
-   // append to end of file
+  // append to end of file
   size := FileSeek64(F,0,soFromEnd);
   if (aMaxSize>0) and (size>aMaxSize) then begin
     // rotate log file if too big
@@ -63012,6 +63013,14 @@ begin
   end;
   inherited Destroy;
   FreeAndNil(fProcessEvent);
+end;
+
+procedure TSynBackgroundThreadAbstract.SetExecuteLoopPause(dopause: boolean);
+begin
+  if Terminated or (dopause=fExecuteLoopPause) or (fExecute=exFinished) then
+    exit;
+  fExecuteLoopPause := dopause;
+  fProcessEvent.SetEvent; // notify Execute main loop
 end;
 
 procedure TSynBackgroundThreadAbstract.Execute;
