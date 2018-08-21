@@ -65,7 +65,7 @@ var
   len: uint32;
   isShared: boolean;
   bufObj: PJSObject;
-
+  bufData: pointer;
   tmp1: RawByteString;
   tmp2: SynUnicode;
 

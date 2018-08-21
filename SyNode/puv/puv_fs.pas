@@ -104,14 +104,14 @@ function puv_fs_fstat(fd: Integer; out info: Tpuv_stat_info): Integer;
 function puv_fs_ftruncate(fd: Integer): Integer;
 function puv_fs_utime(): Integer;
 function puv_fs_futime(): Integer;
-function puv_fs_access(): Integer;
+function puv_fs_access(path: TFileName; mode: Integer): Integer;
 function puv_fs_chmod(): Integer;
 function puv_fs_fchmod(): Integer;
 function puv_fs_fsync(): Integer;
 function puv_fs_fdatasync(): Integer;
-function puv_fs_unlink(): Integer;
-function puv_fs_rmdir(): Integer;
-function puv_fs_mkdir(): Integer;
+function puv_fs_unlink(path: TFileName): Integer;
+function puv_fs_rmdir(path: TFileName): Integer;
+function puv_fs_mkdir(path: TFileName; mode: Integer): Integer;
 function puv_fs_mkdtemp(): Integer;
 function puv_fs_rename(): Integer;
 function puv_fs_scandir(): Integer;
@@ -839,9 +839,9 @@ begin
 
 end;
 
-function puv_fs_access(): Integer;
+function puv_fs_access(path: TFileName; mode: Integer): Integer;
 begin
-
+  Result := FpAccess(path, mode);
 end;
 
 function puv_fs_chmod(): Integer;
@@ -864,19 +864,19 @@ begin
 
 end;
 
-function puv_fs_unlink(): Integer;
+function puv_fs_unlink(path: TFileName): Integer;
 begin
-
+  Result := FpUnlink(path);
 end;
 
-function puv_fs_rmdir(): Integer;
+function puv_fs_rmdir(path: TFileName): Integer;
 begin
-
+  Result := FpRmdir(path);
 end;
 
-function puv_fs_mkdir(): Integer;
+function puv_fs_mkdir(path: TFileName; mode: Integer): Integer;
 begin
-
+  Result := FpMkdir(path, mode);
 end;
 
 function puv_fs_mkdtemp(): Integer;
