@@ -318,6 +318,14 @@
     // define this for trunk revisions older than June 2016 - see
     // http://wiki.freepascal.org/User_Changes_Trunk#RTTI_Binary_format_change
   {$endif}
+  {$ifdef VER3_2}
+    {$define ISFPC27}
+    {$define ISFPC30}
+  {$endif}
+  {$ifdef VER3_3}
+    {$define ISFPC27}
+    {$define ISFPC30}
+  {$endif}
   {$ifdef FPC_HAS_CPSTRING}
     // see http://wiki.freepascal.org/FPC_Unicode_support
     {$define HASCODEPAGE} // UNICODE means {$mode delphiunicode}
