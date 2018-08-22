@@ -3617,7 +3617,7 @@ begin
   Check(KB(-123)='-123 B');
   Check(KB(0)='0 B');
   Check(KB(123)='123 B');
-  Check(KB(1023)='1023 B');
+  Check(KB(1023)='1 KB');
   Check(KB(1024)='1 KB');
   Check(KB(1025)='1 KB');
   Check(KB(16383)='16 KB');

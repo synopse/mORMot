@@ -179,6 +179,8 @@ type
     /// any text assigned to this field will be displayed on console
     fRunConsole: string;
     fCheckLogTime: TPrecisionTimer;
+    fCheckLastMsg: string;
+    fCheckLastTix: cardinal;
     /// override this method to prepare any published method execution
     procedure Setup; virtual;
     /// override this method to process some clean-up before Destroy call
@@ -217,7 +219,7 @@ type
     function CheckSame(const Value1,Value2: double;
       const Precision: double=1E-12; const msg: string = ''): Boolean;
     /// perform a string comparison with several value
-    // - test passes if (Value=Values[0]) or (Value=Value[1]) or (Value=Values[...
+    // - test passes if (Value=Values[0]) or (Value=Value[1]) or (Value=Values[2])...
     // and ExpectedResult=true
     procedure CheckMatchAny(const Value: RawUTF8; const Values: array of RawUTF8;
       CaseSentitive: Boolean=true; ExpectedResult: Boolean=true; const msg: string = '');
@@ -537,7 +539,18 @@ end;
 
 procedure TSynTestCase.AddLog(condition: Boolean; const msg: string);
 const LEV: array[boolean] of TSynLogInfo = (sllFail, sllCustom4);
+var tix: cardinal;
 begin
+  if condition then begin
+    if msg=fCheckLastMsg then begin // no need to be too much verbose
+      tix := GetTickCount64 shr 8;
+      if tix=fCheckLastTix then
+        exit;
+      fCheckLastTix := tix;
+    end;
+    fCheckLastMsg := msg;
+  end else
+    fCheckLastMsg := '';
   TSynLogTestLog.Add.Log(LEV[condition],'% % [%]',
     [ClassType,TestName[Owner.fCurrentMethodIndex],msg]);
 end;
