@@ -318,7 +318,7 @@ begin
     if (argc < 1) or not in_argv[0].isString then
       raise ESMException.Create(USAGE);
     if (argc = 2) and in_argv[1].isString then
-      encoding := ParseEncoding(in_argv[3].asJSString.ToUTF8(cx), UTF8)
+      encoding := ParseEncoding(in_argv[1].asJSString.ToUTF8(cx), UTF8)
     else
       encoding := UTF8;
 
@@ -704,7 +704,7 @@ begin
     if (argc < 2) or not in_argv[1].isObject then
       raise ESMException.Create(f_usage);
     if not in_argv[0].isInteger or (in_argv[0].asInteger < 0) then
-      raise ESMException.Create('fd must be a file descriptor');
+      raise ESMTypeException.Create('fd must be a file descriptor');
     fd := in_argv[0].asInteger;
     target := cx.NewRootedObject(in_argv[1].asObject);
     try
@@ -725,7 +725,7 @@ begin
     if (len > 0) then begin
       if (Int64(len) + offset > size) then
         raise ESMException.Create('Length extends beyond buffer');
-      if (argc > 4) and not (in_argv[4].ValType(cx) in [JSTYPE_VOID, JSTYPE_NULL]) then
+      if (argc > 4) and not (in_argv[4].isVoid or in_argv[4].isNull) then
         raise ENotImplemented.Create('Not null position is currently not supported');
       Inc(buf, offset);
       res := puv_fs_read(fd, buf^, len);
@@ -760,6 +760,7 @@ var
   size: size_t;
   res: Int64;
   val: jsval;
+  t: JSType;
 const
   f_usage = 'usage: writeFileBuffer(handle: Integer; buffer: Buffer; [offset: Integer = 0]; len: Integer; [position: Integer]): Integer';
 begin
@@ -768,7 +769,7 @@ begin
     if (argc < 4) or not in_argv[1].isObject then
       raise ESMException.Create(f_usage);
     if not in_argv[0].isInteger or (in_argv[0].asInteger < 0) then
-      raise ESMException.Create('fd must be a file descriptor');
+      raise ESMTypeException.Create('fd must be a file descriptor');
     fd := in_argv[0].asInteger;
     target := cx.NewRootedObject(in_argv[1].asObject);
     try
@@ -789,7 +790,7 @@ begin
     if (len > 0) then begin
       if (Int64(len) + offset > size) then
         raise ESMException.Create('Length extends beyond buffer');
-      if (argc > 4) and not (in_argv[4].ValType(cx) in [JSTYPE_VOID, JSTYPE_NULL]) then
+      if (argc > 4) and not (in_argv[4].isVoid or in_argv[4].isNull) then
         raise ENotImplemented.Create('Not null position is currently not supported');
       Inc(buf, offset);
       res := puv_fs_write(fd, buf^, len);
@@ -836,7 +837,7 @@ begin
     if (argc < 4) or not (in_argv[1].isString and in_argv[2].isInteger and  in_argv[3].isString) then
       raise ESMException.Create(f_usage);
     if not in_argv[0].isInteger or (in_argv[0].asInteger < 0) then
-      raise ESMException.Create('fd must be a file descriptor');
+      raise ESMTypeException.Create('fd must be a file descriptor');
     fd := in_argv[0].asInteger;
     _str := in_argv[1].asJSString;
     position := in_argv[2].asInteger;
