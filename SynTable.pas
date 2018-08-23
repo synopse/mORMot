@@ -184,7 +184,13 @@ type
 // - note that the CSVPattern instance should remain in memory, since it will
 // be pointed to by the Match[].Pattern private field
 function SetMatchs(const CSVPattern: RawUTF8; CaseInsensitive: boolean;
-  out Match: TMatchDynArray): integer;
+  out Match: TMatchDynArray): integer; overload;
+
+/// fill the Match[0..MatchMax] static array with all glob patterns supplied as CSV
+// - note that the CSVPattern instance should remain in memory, since it will
+// be pointed to by the Match[].Pattern private field
+function SetMatchs(CSVPattern: PUTF8Char; CaseInsensitive: boolean;
+  Match: PMatch; MatchMax: integer): integer; overload;
 
 
 type
@@ -5531,6 +5537,29 @@ begin
       if P^ = #0 then
         break;
       inc(P);
+    until false;
+end;
+
+function SetMatchs(CSVPattern: PUTF8Char; CaseInsensitive: boolean;
+  Match: PMatch; MatchMax: integer): integer;
+var S: PUTF8Char;
+begin
+  result := 0;
+  if (CSVPattern <> nil) and (MatchMax >= 0) then
+    repeat
+      S := CSVPattern;
+      while not (CSVPattern^ in [#0, ',']) do
+        inc(CSVPattern);
+      if CSVPattern <> S then begin
+        Match^.Prepare(S, CSVPattern - S, CaseInsensitive, {reuse=}true);
+        inc(result);
+        if result > MatchMax then
+          break;
+        inc(Match);
+      end;
+      if CSVPattern^ = #0 then
+        break;
+      inc(CSVPattern);
     until false;
 end;
 
