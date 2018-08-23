@@ -1412,6 +1412,9 @@ const
   /// may be used to log as Trace or Warning event, depending on an Error: boolean
   LOG_TRACEWARNING: array[boolean] of TSynLogInfo = (sllTrace, sllWarning);
 
+  /// may be used to log as Info or Warning event, depending on an Error: boolean
+  LOG_INFOWARNING: array[boolean] of TSynLogInfo = (sllInfo, sllWarning);
+
   /// used to convert a TSynLog event level into a syslog message severity
   LOG_TO_SYSLOG: array[TSynLogInfo] of TSyslogSeverity = (
    ssDebug, ssInfo, ssDebug, ssDebug, ssNotice, ssWarn,

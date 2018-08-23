@@ -12579,7 +12579,14 @@ function UnixTimeToString(const UnixTime: TUnixTime; Expanded: boolean=true;
 // a small text layout, perfect e.g. for naming a local file
 // - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits, expecting
 // a date > 1999 (a current date would be fine)
-function UnixTimeToFileShort(const UnixTime: TUnixTime): TShort16;
+procedure UnixTimeToFileShort(const UnixTime: TUnixTime; out result: TShort16); overload;
+
+/// convert some second-based c-encoded time (from Unix epoch 1/1/1970) to
+// a small text layout, perfect e.g. for naming a local file
+// - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits, expecting
+// a date > 1999 (a current date would be fine)
+function UnixTimeToFileShort(const UnixTime: TUnixTime): TShort16; overload;
+  {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
 
 /// convert some second-based c-encoded time to the ISO 8601 text layout, either
 // as time or date elapsed period
@@ -12609,6 +12616,14 @@ function DateTimeToUnixMSTime(const AValue: TDateTime): TUnixMSTime;
 // - TZD is the ending time zone designator ('', 'Z' or '+hh:mm' or '-hh:mm')
 function UnixMSTimeToString(const UnixMSTime: TUnixMSTime; Expanded: boolean=true;
   FirstTimeChar: AnsiChar='T'; const TZD: RawUTF8=''): RawUTF8;
+
+/// convert some milllisecond-based c-encoded time (from Unix epoch 1/1/1970) to
+// a small text layout, trimming to the second resolution, perfect e.g. for
+// naming a local file
+// - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits, expecting
+// a date > 1999 (a current date would be fine)
+function UnixMSTimeToFileShort(const UnixMSTime: TUnixMSTime): TShort16;
+  {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
 
 /// convert some millisecond-based c-encoded time to the ISO 8601 text layout,
 // as time or date elapsed period
@@ -35179,7 +35194,7 @@ begin
 end;
 {$endif FPC}
 
-function UnixTimeToFileShort(const UnixTime: TUnixTime): TShort16;
+procedure UnixTimeToFileShort(const UnixTime: TUnixTime; out result: TShort16);
 var dt: TDateTime;
     HH,MM,SS,MS,Y,M,D: word;
     tab: {$ifdef CPUX86}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
@@ -35202,6 +35217,16 @@ begin // use 'YYMMDDHHMMSS' format
   PWord(@result[7])^ := tab[HH];
   PWord(@result[9])^ := tab[MM];
   PWord(@result[11])^ := tab[SS];
+end;
+
+function UnixTimeToFileShort(const UnixTime: TUnixTime): TShort16;
+begin
+  UnixTimeToFileShort(UnixTime, result);
+end;
+
+function UnixMSTimeToFileShort(const UnixMSTime: TUnixMSTime): TShort16;
+begin
+  UnixTimeToFileShort(UnixMSTime div MSecsPerSec, result);
 end;
 
 function UnixTimePeriodToString(const UnixTime: TUnixTime; FirstTimeChar: AnsiChar): RawUTF8;
