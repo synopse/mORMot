@@ -5926,7 +5926,7 @@ begin
 end;
 
 procedure TSynValidateText.SetParameters(const value: RawUTF8);
-var V: array[0..high(TSynValidateTextProps)] of TValuePUTF8Char;
+var V: array[0..high(TSynValidateTextProps)+1] of TValuePUTF8Char;
     i: integer;
     tmp: TSynTempBuffer;
 const DEFAULT: TSynValidateTextProps = (
