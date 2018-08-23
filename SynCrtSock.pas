@@ -11273,6 +11273,8 @@ begin
       end;
       result := fHttps.Request(uri.Address, method, keepalive, header,
         data, datatype, fHeaders, fBody);
+      if KeepAlive = 0 then
+        FreeAndNil(fHttps);
     except
       FreeAndNil(fHttps);
     end
@@ -11286,6 +11288,8 @@ begin
       result := fHttp.Request(uri.Address, method, keepalive, header, data, datatype, true);
       fBody := fHttp.Content;
       fHeaders := fHttp.HeaderGetText;
+      if KeepAlive = 0 then
+        FreeAndNil(fHttp);
     except
       FreeAndNil(fHttp);
     end;
