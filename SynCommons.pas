@@ -12121,7 +12121,7 @@ type
   /// a cross-platform and cross-compiler TSystemTime structure
   // - FPC's TSystemTime in datih.inc does NOT match Windows TSystemTime fields!
   // - also used to store a Date/Time in TSynTimeZone internal structures
-  {$ifdef ISDELPHI2006ANDUP}TSynSystemTime = record{$else}TSynSystemTime = object{$endif}
+  {$ifdef UNICODE}TSynSystemTime = record{$else}TSynSystemTime = object{$endif}
     Year, Month, DayOfWeek, Day,
     Hour, Minute, Second, MilliSecond: word;
     /// set all fields to 0
@@ -12632,7 +12632,7 @@ type
   TTimeZoneID = type RawUTF8;
 
   /// used to store Time Zone information for a single area in TSynTimeZone
-  {$ifdef ISDELPHI2006ANDUP}TTimeZoneData = record{$else}TTimeZoneData = object{$endif}
+  {$ifdef UNICODE}TTimeZoneData = record{$else}TTimeZoneData = object{$endif}
     id: TTimeZoneID;
     display: RawUTF8;
     tzi: TTimeZoneInfo;
