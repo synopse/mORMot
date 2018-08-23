@@ -68,6 +68,12 @@
   {$ifdef VER3_1}
     {$define ISFPC27}
   {$endif}
+  {$ifdef VER3_2}
+    {$define ISFPC27}
+  {$endif}
+  {$ifdef VER3_3}
+    {$define ISFPC27}
+  {$endif}
 
 
   {$ifdef ISFPC27}
