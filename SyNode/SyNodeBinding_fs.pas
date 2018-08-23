@@ -459,7 +459,7 @@ begin
   end;
 end;
 
-function fs_rename(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
+function fs_renameFile(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
 const
   USAGE = 'usage: rename(fromPath, toPath: String)';
 var
@@ -834,7 +834,7 @@ const
 begin
   try
     in_argv := vp.argv;
-    if (argc < 4) or not (in_argv[1].isString and in_argv[2].isInteger and  in_argv[3].isString) then
+    if (argc < 4) or not (in_argv[1].isString and in_argv[2].isInteger and in_argv[3].isString) then
       raise ESMException.Create(f_usage);
     if not in_argv[0].isInteger or (in_argv[0].asInteger < 0) then
       raise ESMTypeException.Create('fd must be a file descriptor');
@@ -872,26 +872,71 @@ begin
   end;
 end;
 
-function fs_access(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
-const
-  f_usage = 'usage: access(path: String[; mode: Integer])';
+function fs_accessFile(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
 var
   in_argv: PjsvalVector;
   path: TFileName;
   mode: Integer;
+  res: Integer;
 begin
   try
     in_argv := vp.argv;
-    if (argc < 1) or (argc > 2) and in_argv[0].isString then
-      raise ESMException.Create(f_usage);
-    if (argc = 2) then begin
-      if in_argv[1].isInteger then
-        mode := in_argv[1].asInteger
-      else
-        raise ESMException.Create('Invalid second argument type');
-    end else
-      mode := 0;
-    puv_fs_access(path, mode);
+    if (argc <> 2) then
+      raise ESMTypeException.Create('path and mode are required');
+    if in_argv[0].isString then
+      path := in_argv[0].asJSString.ToString(cx)
+    else
+      raise ESMTypeException.Create('path must be a string or Buffer');
+    if in_argv[1].isInteger then
+      mode := in_argv[1].asInteger
+    else
+      raise ESMTypeException.Create('mode must be an integer');
+    res := puv_fs_access(path, mode);
+    if res <> 0 then begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
+      JSOSErrorUC(cx, '', GetLastOSError, 'access', path);
+      Exit;
+    end;
+    Result := True;
+  except
+    on E: Exception do
+    begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
+      JSError(cx, E);
+    end;
+  end;
+end;
+
+function fs_chmodFile(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
+var
+  in_argv: PjsvalVector;
+  path: RawUTF8 = '';
+  mode: Integer;
+  res: Integer;
+begin
+  try
+    in_argv := vp.argv;
+    if argc <> 2 then
+      raise ESMTypeException.Create('path and mode are required');
+    if in_argv[1].isInteger then
+      mode := in_argv[1].asInteger
+    else
+      raise ESMTypeException.Create('mode must be an integer');
+    if in_argv[0].isString then begin
+      path := in_argv[0].asJSString.ToString(cx);
+      res := puv_fs_chmod(path, mode)
+    end else if in_argv[0].isInteger then
+      res := puv_fs_fchmod(in_argv[0].asInteger, mode)
+    else
+      raise ESMTypeException.Create('path must be a string or Buffer');
+    if res <> 0 then begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
+      JSOSErrorUC(cx, '', GetLastOSError, 'chmod', path);
+      Exit;
+    end;
     Result := True;
   except
     on E: Exception do
@@ -914,7 +959,7 @@ begin
   cx := Engine.cx;
   obj := cx.NewRootedObject(cx.NewObject(nil));
   try
-    obj.ptr.DefineFunction(cx, 'access', fs_access, 2, attrs);
+    obj.ptr.DefineFunction(cx, 'access', fs_accessFile, 2, attrs);
     obj.ptr.DefineFunction(cx, 'loadFile', fs_loadFile, 1, attrs); // Used from Module
     obj.ptr.DefineFunction(cx, 'relToAbs', fs_relToAbs, 2, attrs);
     obj.ptr.DefineFunction(cx, 'fileStat', fs_fileStat, 1, attrs);
@@ -924,7 +969,7 @@ begin
     obj.ptr.DefineFunction(cx, 'internalModuleStat', fs_internalModuleStat, 1, attrs);
     obj.ptr.DefineFunction(cx, 'readdir', fs_readDir, 2, attrs);
     obj.ptr.DefineFunction(cx, 'realpath', fs_realPath, 1, attrs);
-    obj.ptr.DefineFunction(cx, 'rename', fs_rename, 2, attrs);
+    obj.ptr.DefineFunction(cx, 'rename', fs_renameFile, 2, attrs);
     obj.ptr.DefineFunction(cx, 'writeFile', fs_writeFile, 3, attrs);
     obj.ptr.DefineFunction(cx, 'mkdir', fs_makeDir, 2, attrs);
     obj.ptr.DefineFunction(cx, 'rmdir', fs_removeDir, 1, attrs);
@@ -934,6 +979,7 @@ begin
     obj.ptr.DefineFunction(cx, 'read', fs_readFile, 2, attrs);
     obj.ptr.DefineFunction(cx, 'writeBuffer', fs_writeFileBuffer, 4, attrs);
     obj.ptr.DefineFunction(cx, 'writeString', fs_writeFileString, 4, attrs);
+    obj.ptr.DefineFunction(cx, 'chmodFile', fs_chmodFile, 1, attrs);
     Result := obj.ptr.ToJSValue;
   finally
     cx.FreeRootedObject(obj);

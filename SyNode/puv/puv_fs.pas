@@ -105,8 +105,8 @@ function puv_fs_ftruncate(fd: Integer): Integer;
 function puv_fs_utime(): Integer;
 function puv_fs_futime(): Integer;
 function puv_fs_access(path: TFileName; mode: Integer): Integer;
-function puv_fs_chmod(): Integer;
-function puv_fs_fchmod(): Integer;
+function puv_fs_chmod(path: TFileName; mode: Integer): Integer;
+function puv_fs_fchmod(fd: Integer; mode: Integer): Integer;
 function puv_fs_fsync(): Integer;
 function puv_fs_fdatasync(): Integer;
 function puv_fs_unlink(path: TFileName): Integer;
@@ -660,6 +660,7 @@ uses
   BaseUnix,
   Unix,
   Linux,
+  syscall,
   puv_core;
 
 var
@@ -844,14 +845,14 @@ begin
   Result := FpAccess(path, mode);
 end;
 
-function puv_fs_chmod(): Integer;
+function puv_fs_chmod(path: TFileName; mode: Integer): Integer;
 begin
-
+  Result := FpChmod(path, mode);
 end;
 
-function puv_fs_fchmod(): Integer;
+function puv_fs_fchmod(fd: Integer; mode: Integer): Integer;
 begin
-
+  Result := do_syscall(syscall_nr_fchmod, TSysParam(fd), TSysParam(mode));
 end;
 
 function puv_fs_fsync(): Integer;

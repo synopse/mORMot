@@ -3452,12 +3452,14 @@ var
   vp: jsval;
   ex: PJSObject;
   val: jsval;
+  code: string;
 begin
   if not JS_IsExceptionPending(cx) then begin
+    code := puv_errno_str(ErrorCode);
     if (aMessage = '') then begin
       if ErrorCode<>0 then
         aMessage := StringToSynUnicode(
-          Format(SOSError, [ErrorCode, SysErrorMessage(ErrorCode)]))
+          Format('%s: %s', [code, SysErrorMessage(ErrorCode)]))
       else
         aMessage := StringToSynUnicode(SUnkOSError);
     end;
@@ -3466,7 +3468,7 @@ begin
       ex := vp.asObject;
       // error.code: string
       // The error.code property is a string representing the error code, which is typically E followed by a sequence of capital letters.
-      val.asJSString := cx.NewJSString(puv_errno_str(ErrorCode));
+      val.asJSString := cx.NewJSString(code);
       ex.DefineProperty(cx, 'code', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
       // error.errno : string | number
       // The error.errno property is a number or a string. The number is a negative value which corresponds to the error code defined in libuv Error handling. See uv-errno.h header file (deps/uv/include/uv-errno.h in the Node.js source tree) for details. In case of a string, it is the same as error.code.
