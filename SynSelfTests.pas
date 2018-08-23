@@ -3566,10 +3566,11 @@ var i, j, b, err: integer;
     {$endif}
     a: shortstring;
     u: string;
-    varint: array[0..31] of byte;
+    varint: array[0..255] of byte;
+    st: TFastReader;
     PB,PC: PByte;
     P: PUTF8Char;
-    crc: cardinal;
+    crc, n: cardinal;
     Timer: TPrecisionTimer;
 begin
   Check(Plural('row',0)='0 row');
@@ -3777,7 +3778,7 @@ begin
     Check(crc32c(0,pointer(s),length(s))=crc);
     if s<>'' then
       Check(xxhash32(0,pointer(s),length(s))=xxHash32reference(pointer(s),length(s)));
-    j := Random(maxInt)-Random(maxInt);
+    j := Random32gsl;
     str(j,a);
     s := RawUTF8(a);
     u := string(a);
@@ -3919,6 +3920,37 @@ begin
     PB := @varint;
     Check(FromVarUint64(PB)=i);
     Check(PB=PC);
+    PC := @varint;
+    for n := 0 to 49 do
+      PC := ToVarUInt32(juint+n,PC);
+    check(PC<>nil);
+    st.Init(@varint, PtrInt(PC) - PtrInt(@varint));
+    check(not st.EOF);
+    for n := 0 to 48 do
+      check(st.VarUInt32 = cardinal(juint+n));
+    check(not st.EOF);
+    check(st.VarUInt32 = cardinal(juint+49));
+    check(pointer(st.P) = pointer(PC));
+    check(st.EOF);
+    st.Init(@varint, PtrInt(PC) - PtrInt(@varint));
+    check(not st.EOF);
+    for n := 0 to 49 do
+      check(st.VarUInt64 = cardinal(juint+n));
+    check(pointer(st.P) = pointer(PC));
+    check(st.EOF);
+    st.Init(@varint, PtrInt(PC) - PtrInt(@varint));
+    for n := 0 to 48 do
+      st.VarNextInt;
+    check(not st.EOF);
+    check(st.VarUInt32 = cardinal(juint+49));
+    check(pointer(st.P) = pointer(PC));
+    check(st.EOF);
+    st.Init(@varint, PtrInt(PC) - PtrInt(@varint));
+    st.VarNextInt(49);
+    check(not st.EOF);
+    check(st.VarUInt32 = cardinal(juint+49));
+    check(pointer(st.P) = pointer(PC));
+    check(st.EOF);
   end;
   exit; // code below is speed informative only, without any test
   Timer.Start;

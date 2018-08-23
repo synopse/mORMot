@@ -10002,10 +10002,6 @@ type
     procedure ErrorOverflow;
     /// raise a EFastReader with an "incorrect data" error message
     procedure ErrorData(const fmt: RawUTF8; const args: array of const);
-    /// read the next byte from the buffer
-    function NextByte: byte;      {$ifdef HASINLINE}inline;{$endif}
-    /// consumes the next byte from the buffer, if matches a given value
-    function NextByteEquals(Value: byte): boolean; {$ifdef HASINLINE}inline;{$endif}
     /// read the next 32-bit signed value from the buffer
     function VarInt32: integer;    {$ifdef HASINLINE}inline;{$endif}
     /// read the next 32-bit unsigned value from the buffer
@@ -10040,6 +10036,20 @@ type
     function VarBlob: TValueResult; overload;  {$ifdef HASINLINE}inline;{$endif}
     /// read the next ShortString value from the buffer
     function VarShortString: shortstring; {$ifdef HASINLINE}inline;{$endif}
+    /// fast ignore the next VarUInt32/VarInt32/VarUInt64/VarInt64 value
+    // - don't raise any exception, so caller could check explicitly for any EOF
+    procedure VarNextInt; overload; {$ifdef HASINLINE}inline;{$endif}
+    /// fast ignore the next count VarUInt32/VarInt32/VarUInt64/VarInt64 values
+    // - don't raise any exception, so caller could check explicitly for any EOF
+    procedure VarNextInt(count: integer); overload;
+    /// read the next byte from the buffer
+    function NextByte: byte; {$ifdef HASINLINE}inline;{$endif}
+    /// consumes the next byte from the buffer, if matches a given value
+    function NextByteEquals(Value: byte): boolean; {$ifdef HASINLINE}inline;{$endif}
+    /// returns the current position, and move ahead the specified bytes
+    function Next(DataLen: PtrInt): pointer;   {$ifdef HASINLINE}inline;{$endif}
+    /// returns the current position, and move ahead the specified bytes
+    function NextSafe(out Data: Pointer; DataLen: PtrInt): boolean; {$ifdef HASINLINE}inline;{$endif}
     {$ifndef NOVARIANTS}
     /// read the next variant from the buffer
     // - is a wrapper around VariantLoad(), so may suffer from buffer overflow
@@ -10049,10 +10059,6 @@ type
     procedure NextDocVariantData(out Value: variant; CustomVariantOptions: pointer);
       {$ifdef FPC}inline;{$endif}
     {$endif NOVARIANTS}
-    /// returns the current position, and move ahead the specified bytes
-    function Next(DataLen: PtrInt): pointer;   {$ifdef HASINLINE}inline;{$endif}
-    /// returns the current position, and move ahead the specified bytes
-    function NextSafe(out Data: Pointer; DataLen: PtrInt): boolean; {$ifdef HASINLINE}inline;{$endif}
     /// copy data from the current position, and move ahead the specified bytes
     procedure Copy(out Dest; DataLen: PtrInt); {$ifdef HASINLINE}inline;{$endif}
     /// copy data from the current position, and move ahead the specified bytes
@@ -60921,6 +60927,72 @@ fin:
 {$endif}
 end;
 
+procedure TFastReader.VarNextInt;
+{$ifdef CPUX86} // not enough CPU registers
+begin
+  repeat
+    if P>=Last then
+      break;  // reached end of input
+    if P^<=#$7f then
+      break; // reached end of VarUInt32/VarUInt64
+    inc(P);
+  until false;
+  inc(P);
+{$else}
+var s: PAnsiChar;
+begin
+  s := P;
+  repeat
+    if s>=Last then
+      break;  // reached end of input
+    if s^<=#$7f then
+      break; // reached end of VarUInt32/VarUInt64
+    inc(s);
+  until false;
+  P := s+1;
+{$endif CPUX86}
+end;
+
+procedure TFastReader.VarNextInt(count: integer);
+{$ifdef CPUX86} // not enough CPU registers
+begin
+  if count=0 then
+    exit;
+  repeat
+    if P>=Last then
+      break;  // reached end of input
+    if P^>#$7f then begin
+      inc(P);
+      continue; // didn't reach end of VarUInt32/VarUInt64
+    end;
+    inc(P);
+    dec(count);
+    if count=0 then
+      break;
+  until false;
+{$else}
+var s, max: PAnsiChar;
+begin
+  if count=0 then
+    exit;
+  s := P;
+  max := Last;
+  repeat
+    if s>=max then
+      break;  // reached end of input
+    if s^>#$7f then begin
+      inc(s);
+      continue; // didn't reach end of VarUInt32/VarUInt64
+    end;
+    inc(s);
+    dec(count);
+    if count=0 then
+      break;
+  until false;
+  P := s;
+{$endif CPUX86}
+end;
+
 function TFastReader.PeekVarInt32(out value: PtrInt): boolean;
 begin
   result := PeekVarUInt32(PtrUInt(value));
@@ -60939,7 +61011,7 @@ begin
   s := P;
   repeat
     if s>=Last then
-      exit;  // reached end of input
+      exit;  // reached end of input -> returns false
     if s^<=#$7f then
       break; // reached end of VarUInt32
     inc(s);
