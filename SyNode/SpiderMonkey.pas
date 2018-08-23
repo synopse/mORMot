@@ -3448,18 +3448,31 @@ end;
 
 procedure JSOSErrorUC(cx: PJSContext; aMessage: WideString; ErrorCode: Integer;
    SysCall, Path, Address: RawUTF8; Port: Integer);
+
+  function ToAppendStr(const str: RawUTF8; enquote: Boolean = False): String;
+  begin
+    if str <> '' then
+      if enquote then
+        Result := ' ''' + str + ''''
+      else
+        Result := ', ' + str
+    else
+      Result := ''
+  end;
+
 var
   vp: jsval;
   ex: PJSObject;
   val: jsval;
-  code: string;
+  code: String;
 begin
   if not JS_IsExceptionPending(cx) then begin
     code := puv_errno_str(ErrorCode);
     if (aMessage = '') then begin
       if ErrorCode<>0 then
         aMessage := StringToSynUnicode(
-          Format('%s: %s', [code, SysErrorMessage(ErrorCode)]))
+          Format('%s: %s%s%s', [code, SysErrorMessage(ErrorCode),
+            ToAppendStr(SysCall), ToAppendStr(Path, True)]))
       else
         aMessage := StringToSynUnicode(SUnkOSError);
     end;
