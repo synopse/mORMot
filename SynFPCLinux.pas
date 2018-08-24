@@ -445,7 +445,7 @@ var uts: UtsName;
   end;
 begin
   if fpuname(uts)=0 then begin
-    P := @uts.release;
+    P := @uts.release[0];
     KernelRevision := GetNext shl 16+GetNext shl 8+GetNext;
     {$ifndef BSD}
     if KernelRevision>=$020620 then begin // expects kernel 2.6.32 or higher
@@ -530,7 +530,7 @@ begin
   {$ifndef BSD}
   ExternalLibraries.EnsureLoaded;
   if Assigned(ExternalLibraries.pthread_setname_np) then
-    ExternalLibraries.pthread_setname_np(pointer(ThreadID), @trunc);
+    ExternalLibraries.pthread_setname_np(pointer(ThreadID), @trunc[0]);
   {$endif}
 end;
 

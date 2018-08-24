@@ -35107,10 +35107,10 @@ begin
   if IsZero(CustomFields) then
     Value.FillContext.ComputeSetUpdatedFieldBits(Props,FieldBits) else
     if DoNotAutoComputeFields then
-      FieldBits := CustomFields else
-      FieldBits := CustomFields+Value.RecordProps.FieldBits[sftModTime];
+      FieldBits := CustomFields*Props.CopiableFieldsBits else
+      FieldBits := CustomFields*Props.CopiableFieldsBits+Props.FieldBits[sftModTime];
   SetExpandedJSONWriter(Props,fTablePreviousSendData<>PSQLRecordClass(Value)^,
-    true,FieldBits);
+    {withID=}true,FieldBits);
   fTablePreviousSendData := PSQLRecordClass(Value)^;
   if not DoNotAutoComputeFields then
     Value.ComputeFieldsBeforeWrite(fRest,seUpdate); // update sftModTime fields
@@ -36560,6 +36560,7 @@ procedure TSQLRest.GetJSONValuesForAdd(TableIndex: integer; Value: TSQLRecord;
   ForceID, DoNotAutoComputeFields, WithBlobs: boolean;
   CustomFields: PSQLFieldBits; var result: RawUTF8);
 var fields: TSQLFieldBits;
+    props: TSQLRecordProperties;
 begin
   if not DoNotAutoComputeFields then // update TModTime/TCreateTime fields
     Value.ComputeFieldsBeforeWrite(self,seAdd);
@@ -36573,13 +36574,14 @@ begin
   end else
     if Value.fID=0 then
       ForceID := false;
+  props := Value.RecordProps;
   if CustomFields <> nil then
     if DoNotAutoComputeFields then
-      fields := CustomFields^ else
-      fields := CustomFields^+Value.RecordProps.ComputeBeforeAddFieldsBits else
+      fields := CustomFields^*props.CopiableFieldsBits else
+      fields := CustomFields^*props.CopiableFieldsBits+props.ComputeBeforeAddFieldsBits else
     if withBlobs then
-      fields := Value.RecordProps.CopiableFieldsBits else
-      fields := Value.RecordProps.SimpleFieldsBits[soInsert];
+      fields := props.CopiableFieldsBits else
+      fields := props.SimpleFieldsBits[soInsert];
   if not ForceID and IsZero(fields) then
     result := '' else
     result := Value.GetJSONValues(true,ForceID,fields);

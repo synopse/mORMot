@@ -3456,8 +3456,8 @@ begin
   if result<>nil then begin // inlined TSynLog.Family (Add is already inlined)
     result := PPointer(PtrInt(result)+vmtAutoTable)^;
     if result=nil then
-      TSynLogFamily(result) := FamilyCreate;
-    result := TSynLogFamily(result).SynLog;
+      TSynLogFamily(pointer(result)) := FamilyCreate;
+    result := TSynLogFamily(pointer(result)).SynLog;
   end;
 end;
 {$else}
@@ -3821,8 +3821,8 @@ begin
   end;
   aSynLog := PPointer(PtrInt(aSynLog)+vmtAutoTable)^;
   if aSynLog=nil then
-    TSynLogFamily(aSynLog) := FamilyCreate;
-  aSynLog := TSynLogFamily(aSynLog).SynLog;
+    TSynLogFamily(pointer(aSynLog)) := FamilyCreate;
+  aSynLog := TSynLogFamily(pointer(aSynLog)).SynLog;
   // recursively store parameters
   if sllEnter in aSynLog.fFamily.fLevel then begin
     aSynLog.LockAndGetThreadContext;
