@@ -310,6 +310,7 @@ var
   res: PJSRootedObject;
   cNum, searchAttr: integer;
   encoding: TEncoding;
+  info: Tpuv_stat_info;
 const
   USAGE = 'usage: readDir(dirPath: String; [encoding: String = "uft8"]): Array';
 begin
@@ -323,10 +324,16 @@ begin
       encoding := UTF8;
 
     dir := in_argv[0].asJSString.ToString(cx);
-    if not DirectoryExists(Dir) then
-    begin
-      vp.rval := JSVAL_NULL;
-      Result := true;
+    if puv_fs_stat(dir, info) <> 0 then begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
+      JSOSErrorUC(cx, '', GetLastOSError, 'readdir', RawUTF8(dir));
+      Exit;
+    end;
+    if (info.mode and S_IFMT) <> S_IFDIR then begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
+      JSOSErrorUC(cx, '', 20{ENOTDIR}, 'readdir', RawUTF8(dir));
       Exit;
     end;
 
