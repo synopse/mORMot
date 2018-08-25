@@ -451,7 +451,8 @@ type
     // - KeySize is in bits, i.e. 128,192,256
     function DecryptInit(const Key; KeySize: cardinal): boolean;
     /// Initialize AES contexts for uncypher, from another TAES.EncryptInit
-    function DecryptInitFrom(const Encryption: TAES; const Key; KeySize: cardinal): boolean;
+    function DecryptInitFrom(const Encryption{$ifndef DELPHI5OROLDER}: TAES{$endif};
+      const Key; KeySize: cardinal): boolean;
     /// decrypt an AES data block
     procedure Decrypt(var B: TAESBlock); overload;
       {$ifdef FPC}inline;{$endif}
@@ -4811,10 +4812,10 @@ asm // input: rcx/rdi=TAESContext, rdx/rsi=source, r8/rdx=dest
         push    r13
         push    r12
         push    rbx
-        push    rdi
-        push    rsi
         push    rbp
         {$ifdef win64}
+        push    rdi
+        push    rsi
         mov     r15, r8
         mov     r12, rcx
         {$else}
@@ -4962,9 +4963,11 @@ asm // input: rcx/rdi=TAESContext, rdx/rsi=source, r8/rdx=dest
         xor     r14d, r8d
         xor     r14d, dword ptr [r12+0CH]
         mov     dword ptr [r15+0CH], r14d
-        pop     rbp
+        {$ifdef win64}
         pop     rsi
         pop     rdi
+        {$endif win64}
+        pop     rbp
         pop     rbx
         pop     r12
         pop     r13
@@ -6118,7 +6121,8 @@ begin
   until rounds=1;
 end;
 
-function TAES.DecryptInitFrom(const Encryption: TAES; const Key; KeySize: cardinal): boolean;
+function TAES.DecryptInitFrom(const Encryption{$ifndef DELPHI5OROLDER}: TAES{$endif};
+  const Key; KeySize: cardinal): boolean;
 var ctx: TAESContext absolute Context;
 begin
   {$ifdef USEPADLOCK}
@@ -6130,9 +6134,10 @@ begin
   end;
   {$endif}
   ctx.Initialized := false;
-  if not Encryption.Initialized then // e.g. called from DecryptInit()
+  if not {$ifdef DELPHI5OROLDER}TAES{$endif}(Encryption).Initialized then
+    // e.g. called from DecryptInit()
     EncryptInit(Key, KeySize) else // contains Initialized := true
-    self := Encryption;
+    self := {$ifdef DELPHI5OROLDER}TAES{$endif}(Encryption);
   result := ctx.Initialized;
   if not result then
     exit;
@@ -14277,8 +14282,8 @@ begin
   PBKDF2_HMAC_SHA256(appsec,ExeVersion.User,100,instance);
   FillZero(appsec);
   appsec := BinToBase64URI(@instance,15); // local file has 21 chars length
-  keyfile := format({$ifdef MSWINDOWS}'%s_%s'{$else}'%s.syn-%s'{$endif},
-    [GetSystemPath(spUserData),appsec]); // .* files are hidden under Linux
+  FormatString({$ifdef MSWINDOWS}'%_%'{$else}'%.syn-%'{$endif},
+    [GetSystemPath(spUserData),appsec], string(keyfile)); // .* files are hidden under Linux
   SetString(appsec,PAnsiChar(@instance[15]),17); // use remaining bytes as key
   try
     key := StringFromFile(keyfile);
@@ -14630,7 +14635,7 @@ var payloadend,j,toklen,c,cap,headerlen,len,a: integer;
     id: TSynUniqueIdentifierBits;
     value: variant;
     payload: RawUTF8;
-    head: TPUtf8CharDynArray;
+    head: array[0..1] of TValuePUTF8Char;
     aud: TDocVariantData;
     tok: PAnsiChar absolute Token;
 begin
@@ -14648,9 +14653,9 @@ begin
     if (headerlen=0) or (headerlen>512) then
       exit;
     Base64URIToBin(tok,headerlen-1,signature);
-    JSONDecode(pointer(signature),['alg','typ'],head);
-    if not IdemPropNameU(fAlgorithm,head[0],StrLen(head[0])) or
-       ((head[1]<>nil) and not IdemPropNameU('JWT',head[1],StrLen(head[1]))) then
+    JSONDecode(pointer(signature),['alg','typ'],@head);
+    if not head[0].Idem(fAlgorithm) or
+       ((head[1].Value<>nil) and not head[1].Idem('JWT')) then
       exit;
   end else begin
     headerlen := length(fHeaderB64); // fast direct compare of fHeaderB64 (including "alg")
@@ -14767,7 +14772,7 @@ class function TJWTAbstract.VerifyPayload(const Token, ExpectedSubject, Expected
   ExpectedAudience: RawUTF8; Expiration: PUnixTime; Signature: PRawUTF8; Payload: PVariant;
   IgnoreTime: boolean): TJWTResult;
 var P,B: PUTF8Char;
-    V: TPUtf8CharDynArray;
+    V: array[0..4] of TValuePUTF8Char;
     now, time: PtrUInt;
     text: RawUTF8;
 begin
@@ -14792,29 +14797,28 @@ begin
     exit;
   if Payload<>nil then
     _Json(text,Payload^,JSON_OPTIONS_FAST);
-  JSONDecode(pointer(text),['iss','aud','exp','nbf','sub'],V,true);
+  JSONDecode(pointer(text),['iss','aud','exp','nbf','sub'],@V,true);
   result := jwtUnexpectedClaim;
-  if (ExpectedSubject<>'') and not IdemPropNameU(ExpectedSubject,V[4],StrLen(V[4])) then
-    exit;
-  if (ExpectedIssuer<>'') and not IdemPropNameU(ExpectedIssuer,V[0],StrLen(V[0])) then
+  if ((ExpectedSubject<>'') and not V[4].Idem(ExpectedSubject)) or
+     ((ExpectedIssuer<>'') and not V[0].Idem(ExpectedIssuer)) then
     exit;
   result := jwtUnknownAudience;
-  if (ExpectedAudience<>'') and not IdemPropNameU(ExpectedAudience,V[1],StrLen(V[1])) then
+  if (ExpectedAudience<>'') and not V[1].Idem(ExpectedAudience) then
     exit;
   if Expiration<>nil then
     Expiration^ := 0;
-  if (V[2]<>nil) or (V[3]<>nil) then begin
+  if (V[2].Value<>nil) or (V[3].Value<>nil) then begin
     now := UnixTimeUTC;
-    if V[2]<>nil then begin
-      time := GetCardinal(V[2]);
+    if V[2].Value<>nil then begin
+      time := V[2].ToCardinal;
       result := jwtExpired;
       if not IgnoreTime and (now>time) then
         exit;
       if Expiration<>nil then
         Expiration^ := time;
     end;
-    if not IgnoreTime and (V[3]<>nil) then begin
-      time := GetCardinal(V[3]);
+    if not IgnoreTime and (V[3].Value<>nil) then begin
+      time := V[3].ToCardinal;
       result := jwtNotBeforeFailed;
       if (time=0) or (now<time) then
         exit;

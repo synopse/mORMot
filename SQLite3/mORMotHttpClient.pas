@@ -595,7 +595,7 @@ begin
   fServer := aServer;
   fPort := aPort;
   fKeepAliveMS := 20000; // 20 seconds connection keep alive by default
-  fCompression := [hcSynLZ]; // may add hcDeflate for AJAX clients
+  fCompression := []; // may add hcSynLZ or hcDeflate for AJAX clients
   if aConnectTimeout=0 then
     fConnectTimeout := HTTP_DEFAULT_CONNECTTIMEOUT else
     fConnectTimeout := aConnectTimeout;
@@ -727,7 +727,7 @@ begin
       // note that first registered algo will be the prefered one
       if hcSynShaAes in Compression then
         // global SHA-256 / AES-256-CFB encryption + SynLZ compression
-        fSocket.RegisterCompress(CompressShaAes,0); // CompressMinSize=0
+        fSocket.RegisterCompress(CompressShaAes,{CompressMinSize=}0);
       if hcSynLz in Compression then
         // SynLZ is very fast and efficient, perfect for a Delphi Client
         fSocket.RegisterCompress(CompressSynLZ);

@@ -130,14 +130,15 @@ type
     // - this method is not thread-safe
     function Match(aText: PUTF8Char; aTextLen: PtrInt): boolean; overload;
       {$ifdef FPC}inline;{$endif}
+    /// returns TRUE if the supplied content matches the prepared glob pattern
+    // - this method IS thread-safe, and won't lock
+    function MatchThreadSafe(const aText: RawUTF8): boolean;
     /// returns TRUE if the supplied VCL/LCL content matches the prepared glob pattern
     // - this method IS thread-safe, will use stack to UTF-8 temporary conversion
     // if possible, and won't lock
     function MatchString(const aText: string): boolean;
-    /// returns TRUE if the supplied content matches the prepared glob pattern
-    // - this method IS thread-safe, and won't lock
-    function MatchThreadSafe(const aText: RawUTF8): boolean;
   end;
+  /// use SetMatchs() to initialize such an array from a CSV pattern text
   TMatchDynArray = array of TMatch;
 
   /// TMatch descendant owning a copy of the Pattern string to avoid GPF issues
@@ -183,7 +184,13 @@ type
 // - note that the CSVPattern instance should remain in memory, since it will
 // be pointed to by the Match[].Pattern private field
 function SetMatchs(const CSVPattern: RawUTF8; CaseInsensitive: boolean;
-  out Match: TMatchDynArray): integer;
+  out Match: TMatchDynArray): integer; overload;
+
+/// fill the Match[0..MatchMax] static array with all glob patterns supplied as CSV
+// - note that the CSVPattern instance should remain in memory, since it will
+// be pointed to by the Match[].Pattern private field
+function SetMatchs(CSVPattern: PUTF8Char; CaseInsensitive: boolean;
+  Match: PMatch; MatchMax: integer): integer; overload;
 
 
 type
@@ -1952,8 +1959,103 @@ function DeltaExtract(const Delta,Old: RawByteString; out New: RawByteString): T
 // - return dsSuccess if was uncompressed to aOutUpd as expected
 function DeltaExtract(Delta,Old,New: PAnsiChar): TDeltaError; overload;
 
-
 function ToText(err: TDeltaError): PShortString; overload;
+
+
+type
+  /// item as stored in a TRawByteStringGroup instance
+  TRawByteStringGroupValue = record
+    Position: integer;
+    Value: RawByteString;
+  end;
+  PRawByteStringGroupValue = ^TRawByteStringGroupValue;
+  /// items as stored in a TRawByteStringGroup instance
+  TRawByteStringGroupValueDynArray = array of TRawByteStringGroupValue;
+
+  /// store several RawByteString content with automatic concatenation
+  // - an optimized compaction algorithm will occur to ensure that every 512
+  // items will be compacted to at least 1MB: this reduces memory fragmentation
+  // with almost no performance impact
+  {$ifdef UNICODE}TRawByteStringGroup = record{$else}TRawByteStringGroup = object{$endif}
+  private
+    procedure Compact(len: integer);
+  public
+    /// actual list storing the data
+    Values: TRawByteStringGroupValueDynArray;
+    /// how many items are currently stored in Values[]
+    Count: integer;
+    /// the current size of data stored in Values[]
+    Position: integer;
+    /// the Count when the next compaction should occur
+    NextCompact: integer;
+    /// naive but efficient cache for Find()
+    LastFind: integer;
+    /// add a new item to Values[]
+    procedure Add(const aItem: RawByteString); overload;
+    /// add a new item to Values[]
+    procedure Add(aItem: pointer; aItemLen: integer); overload;
+    {$ifndef DELPHI5OROLDER}
+    /// add another TRawByteStringGroup to Values[]
+    procedure Add(const aAnother: TRawByteStringGroup); overload;
+    /// low-level method to abort the latest Add() call
+    // - warning: will work only once, if an Add() has actually been just called:
+    // otherwise, the behavior is unexpected, and may wrongly truncate data
+    procedure RemoveLastAdd;
+    /// compare two TRawByteStringGroup instance stored text
+    function Equals(const aAnother: TRawByteStringGroup): boolean;
+    {$endif DELPHI5OROLDER}
+    /// clear any stored information
+    procedure Clear;
+    /// return all content as a single RawByteString
+    function AsText: RawByteString;
+    /// return all content as a single TByteDynArray
+    function AsBytes: TByteDynArray;
+    /// save all content into a TTextWriter instance
+    procedure Write(W: TTextWriter; Escape: TTextWriterKind=twJSONEscape); overload;
+    /// save all content into a TFileBufferWriter instance
+    procedure WriteBinary(W: TFileBufferWriter); overload;
+    /// save all content as a string into a TFileBufferWriter instance
+    // - storing the length as WriteVarUInt32() prefix
+    procedure WriteString(W: TFileBufferWriter);
+    /// add another TRawByteStringGroup previously serialized via WriteString()
+    procedure AddFromReader(var aReader: TFastReader);
+    /// returns a pointer to Values[] containing a given position
+    // - returns nil if not found
+    function Find(aPosition: integer): PRawByteStringGroupValue; overload;
+    /// returns a pointer to Values[].Value containing a given position and length
+    // - returns nil if not found
+    function Find(aPosition, aLength: integer): pointer; overload;
+    /// returns the text at a given position in Values[]
+    // - text should be in a single Values[] entry
+    procedure FindAsText(aPosition, aLength: integer; out aText: RawByteString); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// returns the text at a given position in Values[]
+    // - text should be in a single Values[] entry
+    function FindAsText(aPosition, aLength: integer): RawByteString; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    {$ifndef NOVARIANTS}
+    /// returns the text at a given position in Values[]
+    // - text should be in a single Values[] entry
+    // - explicitly returns null if the supplied text was not found
+    procedure FindAsVariant(aPosition, aLength: integer; out aDest: variant);
+      {$ifdef HASINLINE}inline;{$endif}
+    {$endif}
+    /// append the text at a given position in Values[], JSON escaped by default
+    // - text should be in a single Values[] entry
+    procedure FindWrite(aPosition, aLength: integer; W: TTextWriter;
+      Escape: TTextWriterKind=twJSONEscape);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// append the blob at a given position in Values[], base-64 encoded
+    // - text should be in a single Values[] entry
+    procedure FindWriteBase64(aPosition, aLength: integer; W: TTextWriter;
+      withMagic: boolean);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// copy the text at a given position in Values[]
+    // - text should be in a single Values[] entry
+    procedure FindMove(aPosition, aLength: integer; aDest: pointer);
+  end;
+  /// pointer reference to a TRawByteStringGroup
+  PRawByteStringGroup = ^TRawByteStringGroup;
 
 
 { ************  Security and Identifier classes ************************** }
@@ -5351,13 +5453,13 @@ begin
     end;
  if not Assigned(Search) then begin
    aPattern := PosChar(Pattern, '[');
-    if (aPattern = nil) or (aPattern - Pattern > PMax) then
-      if aCaseInsensitive then
-        Search := SearchNoRangeU
-      else
-        Search := SearchNoRange
-    else
-      Search := SearchAny;
+   if (aPattern = nil) or (aPattern - Pattern > PMax) then
+     if aCaseInsensitive then
+       Search := SearchNoRangeU
+     else
+       Search := SearchNoRange
+   else
+     Search := SearchAny;
  end;
 end;
 
@@ -5375,6 +5477,16 @@ begin
     result := Search(@self, aText, aTextLen)
   else
     result := PMax < 0;
+end;
+
+function TMatch.MatchThreadSafe(const aText: RawUTF8): boolean;
+var local: TMatch; // thread-safe with no lock!
+begin
+  local := self;
+  if aText <> '' then
+    result := local.Search(@local, pointer(aText), length(aText))
+  else
+    result := local.PMax < 0;
 end;
 
 function TMatch.MatchString(const aText: string): boolean;
@@ -5399,20 +5511,10 @@ begin
   temp.Done;
 end;
 
-function TMatch.MatchThreadSafe(const aText: RawUTF8): boolean;
-var local: TMatch; // thread-safe with no lock!
-begin
-  local := self;
-  if aText <> '' then
-    result := local.Search(@local, pointer(aText), length(aText))
-  else
-    result := local.PMax < 0;
-end;
-
 function IsMatch(const Pattern, Text: RawUTF8; CaseInsensitive: boolean): boolean;
 var match: TMatch;
 begin
-  match.Prepare(Pattern, CaseInsensitive, false);
+  match.Prepare(Pattern, CaseInsensitive, {reuse=}false);
   result := match.Match(Text);
 end;
 
@@ -5435,6 +5537,29 @@ begin
       if P^ = #0 then
         break;
       inc(P);
+    until false;
+end;
+
+function SetMatchs(CSVPattern: PUTF8Char; CaseInsensitive: boolean;
+  Match: PMatch; MatchMax: integer): integer;
+var S: PUTF8Char;
+begin
+  result := 0;
+  if (CSVPattern <> nil) and (MatchMax >= 0) then
+    repeat
+      S := CSVPattern;
+      while not (CSVPattern^ in [#0, ',']) do
+        inc(CSVPattern);
+      if CSVPattern <> S then begin
+        Match^.Prepare(S, CSVPattern - S, CaseInsensitive, {reuse=}true);
+        inc(result);
+        if result > MatchMax then
+          break;
+        inc(Match);
+      end;
+      if CSVPattern^ = #0 then
+        break;
+      inc(CSVPattern);
     until false;
 end;
 
@@ -5528,7 +5653,7 @@ begin
     if found <> nil then
       with fMatch[n] do begin
         PatternInstance := pat^; // avoid GPF if aPatterns[] is released
-        Parent.Prepare(PatternInstance, CaseInsensitive, true);
+        Parent.Prepare(PatternInstance, CaseInsensitive, {reuse=}true);
         inc(n);
       end;
     inc(pat);
@@ -5620,13 +5745,13 @@ end;
 { TSynFilterTruncate}
 
 procedure TSynFilterTruncate.SetParameters(const value: RawUTF8);
-var V: TPUtf8CharDynArray;
+var V: array[0..1] of TValuePUTF8Char;
     tmp: TSynTempBuffer;
 begin
   tmp.Init(value);
-  JSONDecode(tmp.buf,['MaxLength','UTF8Length'],V);
-  fMaxLength := GetCardinalDef(V[0],0);
-  fUTF8Length := IdemPChar(V[1],'1') or IdemPChar(V[1],'TRUE');
+  JSONDecode(tmp.buf,['MaxLength','UTF8Length'],@V);
+  fMaxLength := GetCardinalDef(V[0].Value,0);
+  fUTF8Length := V[1].Idem('1') or V[1].Idem('true');
   tmp.Done;
 end;
 
@@ -5687,16 +5812,16 @@ begin
 end;
 
 procedure TSynValidateEmail.SetParameters(const value: RawUTF8);
-var V: TPUtf8CharDynArray;
+var V: array[0..3] of TValuePUTF8Char;
     tmp: TSynTempBuffer;
 begin
   inherited;
   tmp.Init(value);
-  JSONDecode(tmp.buf,['AllowedTLD','ForbiddenTLD','ForbiddenDomains','AnyTLD'],V);
-  LowerCaseCopy(V[0],StrLen(V[0]),fAllowedTLD);
-  LowerCaseCopy(V[1],StrLen(V[1]),fForbiddenTLD);
-  LowerCaseCopy(V[2],StrLen(V[2]),fForbiddenDomains);
-  AnyTLD := IdemPChar(V[3],'1') or IdemPChar(V[3],'TRUE');
+  JSONDecode(tmp.buf,['AllowedTLD','ForbiddenTLD','ForbiddenDomains','AnyTLD'],@V);
+  LowerCaseCopy(V[0].Value,V[0].ValueLen,fAllowedTLD);
+  LowerCaseCopy(V[1].Value,V[1].ValueLen,fForbiddenTLD);
+  LowerCaseCopy(V[2].Value,V[2].ValueLen,fForbiddenDomains);
+  AnyTLD := V[3].Idem('1') or V[3].Idem('true');
   tmp.Done;
 end;
 
@@ -5706,7 +5831,7 @@ end;
 procedure TSynValidatePattern.SetParameters(const Value: RawUTF8);
 begin
   inherited SetParameters(Value);
-  fMatch.Prepare(Value, ClassType=TSynValidatePatternI, true);
+  fMatch.Prepare(Value, ClassType=TSynValidatePatternI, {reuse=}true);
 end;
 
 function TSynValidatePattern.Process(aFieldIndex: integer; const value: RawUTF8;
@@ -5830,7 +5955,7 @@ begin
 end;
 
 procedure TSynValidateText.SetParameters(const value: RawUTF8);
-var V: TPUtf8CharDynArray;
+var V: array[0..high(TSynValidateTextProps)+1] of TValuePUTF8Char;
     i: integer;
     tmp: TSynTempBuffer;
 const DEFAULT: TSynValidateTextProps = (
@@ -5849,13 +5974,11 @@ begin
       'MaxLeftTrimCount','MaxRightTrimCount',
       'MaxAlphaCount','MaxDigitCount','MaxPunctCount',
       'MaxLowerCount','MaxUpperCount','MaxSpaceCount',
-      'UTF8Length'],V);
-    if length(V)<>length(fProps)+1 then
-      exit;
+      'UTF8Length'],@V);
     for i := 0 to high(fProps) do
-      fProps[i] := GetCardinalDef(V[i],fProps[i]);
-    fUTF8Length := IdemPChar(V[length(fProps)],'1') or
-                   IdemPChar(V[length(fProps)],'TRUE');
+      fProps[i] := GetCardinalDef(V[i].Value,fProps[i]);
+    with V[high(V)] do
+      fUTF8Length := Idem('1') or Idem('true');
   finally
     tmp.Done;
   end;
@@ -6863,6 +6986,290 @@ end;
 function ToText(err: TDeltaError): PShortString;
 begin
   result := GetEnumName(TypeInfo(TDeltaError),ord(err));
+end;
+
+
+
+{ TRawByteStringGroup }
+
+const
+  COMPACT_COUNT = 512; // auto-compaction if 512 last items < 1MB
+  COMPACT_LEN = 1 shl 20;
+
+procedure TRawByteStringGroup.Compact(len: integer);
+var tmp: RawByteString;
+    i, L: integer;
+    P: PAnsiChar;
+begin
+  SetLength(tmp,len);
+  P := pointer(tmp);
+  for i := Count-COMPACT_COUNT to Count-1 do
+    with Values[i] do begin
+      L := length(Value);
+      MoveFast(pointer(Value)^,P^,L);
+      inc(P,L);
+      Value := '';
+    end;
+  //assert(P-pointer(tmp)=len);
+  dec(Count,COMPACT_COUNT);
+  Values[Count].Value := tmp;
+  inc(Count);
+end;
+
+procedure TRawByteStringGroup.Add(const aItem: RawByteString);
+var len: integer;
+begin
+  if Values=nil then
+    Clear else
+    if Count=NextCompact then begin
+      len := Position-Values[Count-COMPACT_COUNT].Position;
+      if len<COMPACT_LEN then
+        Compact(len) else
+        inc(NextCompact); // slide the compaction window once we reached 1MB
+    end;
+  if Count=Length(Values) then
+    SetLength(Values,Count+COMPACT_COUNT+Count shr 3);
+  with Values[Count] do begin
+    Position := self.Position;
+    Value := aItem;
+  end;
+  LastFind := Count;
+  inc(Count);
+  inc(Position,Length(aItem));
+end;
+
+procedure TRawByteStringGroup.Add(aItem: pointer; aItemLen: integer);
+var tmp: RawByteString;
+begin
+  SetString(tmp,PAnsiChar(aItem),aItemLen);
+  Add(tmp);
+end;
+
+{$ifndef DELPHI5OROLDER} // circumvent Delphi 5 compiler bug
+
+procedure TRawByteStringGroup.Add(const aAnother: TRawByteStringGroup);
+var i: integer;
+    s,d: PRawByteStringGroupValue;
+begin
+  if aAnother.Values=nil then
+    exit;
+  if Count+aAnother.Count>Length(Values) then
+    SetLength(Values,Count+aAnother.Count);
+  s := pointer(aAnother.Values);
+  d := @Values[Count];
+  for i := 1 to aAnother.Count do begin
+    d^.Position := Position;
+    d^.Value := s^.Value;
+    inc(Position,length(s^.Value));
+    inc(s);
+    inc(d);
+  end;
+  inc(Count,aAnother.Count);
+end;
+
+procedure TRawByteStringGroup.RemoveLastAdd;
+begin
+  if Count>0 then begin
+    dec(Count);
+    LastFind := Count;
+    dec(Position,Length(Values[Count].Value));
+    Values[Count].Value := ''; // release memory
+  end;
+end;
+
+function TRawByteStringGroup.Equals(const aAnother: TRawByteStringGroup): boolean;
+begin
+  if ((Values=nil) and (aAnother.Values<>nil)) or ((Values<>nil) and (aAnother.Values=nil)) or
+     (Position<>aAnother.Position) then
+    result := false else
+    if (Count<>1) or (aAnother.Count<>1) or (Values[0].Value<>aAnother.Values[0].Value) then
+      result := AsText=aAnother.AsText else
+      result := true;
+end;
+
+{$endif DELPHI5OROLDER}
+
+procedure TRawByteStringGroup.Clear;
+begin
+  Values := nil;
+  Position := 0;
+  Count := 0;
+  LastFind := 0;
+  NextCompact := COMPACT_COUNT;
+end;
+
+function TRawByteStringGroup.AsText: RawByteString;
+var i: integer;
+    v: PRawByteStringGroupValue;
+begin
+  if Values=nil then
+    result := '' else
+  if Count=1 then
+    result := Values[0].Value else begin
+    SetString(result,nil,Position);
+    v := pointer(Values);
+    for i := 1 to Count do begin
+      MoveFast(pointer(v^.Value)^,PByteArray(result)[v^.Position],length(v^.Value));
+      {$ifdef FPC}Finalize(v^.Value){$else}v^.Value := ''{$endif};
+      inc(v);
+    end;
+    Values[0].Value := result; // use result for absolute compaction ;)
+    Count := 1;
+  end;
+end;
+
+function TRawByteStringGroup.AsBytes: TByteDynArray;
+var i: integer;
+begin
+  result := nil;
+  if Values=nil then
+    exit;
+  SetLength(result, Position);
+  for i := 0 to Count-1 do
+  with Values[i] do
+    MoveFast(pointer(Value)^,PByteArray(result)[Position],length(Value));
+end;
+
+procedure TRawByteStringGroup.Write(W: TTextWriter; Escape: TTextWriterKind);
+var i: integer;
+begin
+  if Values<>nil then
+    for i := 0 to Count-1 do
+    with Values[i] do
+      W.Add(PUTF8Char(pointer(Value)),length(Value),Escape);
+end;
+
+procedure TRawByteStringGroup.WriteBinary(W: TFileBufferWriter);
+var i: integer;
+begin
+  if Values<>nil then
+    for i := 0 to Count-1 do
+      W.WriteBinary(Values[i].Value);
+end;
+
+procedure TRawByteStringGroup.WriteString(W: TFileBufferWriter);
+begin
+  if Values=nil then begin
+    W.Write1(0);
+    exit;
+  end;
+  W.WriteVarUInt32(Position);
+  WriteBinary(W);
+end;
+
+procedure TRawByteStringGroup.AddFromReader(var aReader: TFastReader);
+var complexsize: integer;
+begin
+  complexsize := aReader.VarUInt32;
+  if complexsize>0 then // directly create a RawByteString from aReader buffer
+    Add(aReader.Next(complexsize),complexsize);
+end;
+
+function TRawByteStringGroup.Find(aPosition: integer): PRawByteStringGroupValue;
+var i: integer;
+begin
+  if (pointer(Values)<>nil) and (cardinal(aPosition)<cardinal(Position)) then begin
+    result := @Values[LastFind]; // this cache is very efficient in practice
+    if (aPosition>=result^.Position) and (aPosition<result^.Position+length(result^.Value)) then
+      exit;
+    result := @Values[1]; // seldom O(n) brute force search (in CPU L1 cache)
+    for i := 0 to Count-2 do
+      if result^.Position>aPosition then begin
+        dec(result);
+        LastFind := i;
+        exit;
+      end else
+        inc(result);
+    dec(result);
+    LastFind := Count-1;
+  end
+  else
+    result := nil;
+end;
+
+function TRawByteStringGroup.Find(aPosition, aLength: integer): pointer;
+var P: PRawByteStringGroupValue;
+    i: integer;
+label found;
+begin
+  if (pointer(Values)<>nil) and (cardinal(aPosition)<cardinal(Position)) then begin
+    P := @Values[LastFind]; // this cache is very efficient in practice
+    i := aPosition-P^.Position;
+    if (i>=0) and (i+aLength<length(P^.Value)) then begin
+      result := @PByteArray(P^.Value)[i];
+      exit;
+    end;
+    P := @Values[1]; // seldom O(n) brute force search (in CPU L1 cache)
+    for i := 0 to Count-2 do
+      if P^.Position>aPosition then begin
+        LastFind := i;
+found:  dec(P);
+        dec(aPosition,P^.Position);
+        if aLength-aPosition<=length(P^.Value) then
+          result := @PByteArray(P^.Value)[aPosition] else
+          result := nil;
+        exit;
+      end else
+        inc(P);
+    LastFind := Count-1;
+    goto found;
+  end
+  else
+    result := nil;
+end;
+
+procedure TRawByteStringGroup.FindAsText(aPosition, aLength: integer; out aText: RawByteString);
+var P: PRawByteStringGroupValue;
+begin
+  P := Find(aPosition);
+  if P=nil then
+    exit;
+  dec(aPosition,P^.Position);
+  if (aPosition=0) and (length(P^.Value)=aLength) then
+    aText := P^.Value else // direct return if not yet compacted
+    if aLength-aPosition<=length(P^.Value) then
+      SetString(aText,PAnsiChar(@PByteArray(P^.Value)[aPosition]),aLength);
+end;
+
+function TRawByteStringGroup.FindAsText(aPosition, aLength: integer): RawByteString;
+begin
+  FindAsText(aPosition,aLength,result);
+end;
+
+{$ifndef NOVARIANTS}
+procedure TRawByteStringGroup.FindAsVariant(aPosition, aLength: integer; out aDest: variant);
+var tmp: RawByteString;
+begin
+  tmp := FindAsText(aPosition,aLength);
+  if tmp <> '' then
+    RawUTF8ToVariant(tmp,aDest);
+end;
+{$endif NOVARIANTS}
+
+procedure TRawByteStringGroup.FindWrite(aPosition, aLength: integer;
+  W: TTextWriter; Escape: TTextWriterKind);
+var P: pointer;
+begin
+  P := Find(aPosition,aLength);
+  if P<>nil then
+    W.Add(P,aLength,Escape);
+end;
+
+procedure TRawByteStringGroup.FindWriteBase64(aPosition, aLength: integer;
+  W: TTextWriter; withMagic: boolean);
+var P: pointer;
+begin
+  P := Find(aPosition,aLength);
+  if P<>nil then
+    W.WrBase64(P,aLength,withMagic);
+end;
+
+procedure TRawByteStringGroup.FindMove(aPosition, aLength: integer; aDest: pointer);
+var P: pointer;
+begin
+  P := Find(aPosition,aLength);
+  if P<>nil then
+    MoveFast(P^,aDest^,aLength);
 end;
 
 

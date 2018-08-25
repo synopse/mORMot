@@ -1145,7 +1145,7 @@ begin
       RunUntilSigTerminated(self, (cmd=cFork), DoStart, DoStop
         {$ifdef WITHLOG},SQLite3Log.Add, fSettings.ServiceName{$endif});
     cKill:
-      if not RunUntilSigTerminatedForkKill then
+      if not RunUntilSigTerminatedForKill then
         raise EServiceException.Create('No forked process found to be killed');
     else
       Syntax;

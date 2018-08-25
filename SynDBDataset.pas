@@ -65,6 +65,7 @@ uses
   {$ENDIF}
   Classes, Contnrs,
   SynCommons,
+  SynTable,
   SynLog,
   SynDB,
   {$ifdef ISDELPHIXE2}
@@ -470,28 +471,28 @@ begin
     ftLongWord,ftShortint,ftByte,
     {$endif}
     ftAutoInc,ftBoolean, ftSmallint,ftInteger,ftLargeint,ftWord:
-      result := SynCommons.ftInt64;
+      result := SynTable.ftInt64;
     {$ifdef UNICODE}
     ftSingle,ftExtended,
     {$endif}
     ftFloat:
-      result := SynCommons.ftDouble;
+      result := SynTable.ftDouble;
     ftCurrency, ftBCD, ftFMTBcd:
-      result := SynCommons.ftCurrency;
+      result := SynTable.ftCurrency;
     {$ifdef UNICODE}
     ftOraTimeStamp,ftOraInterval,
     {$endif}
     ftDate,ftTime,ftDateTime,ftTimeStamp:
-      result := SynCommons.ftDate;
+      result := SynTable.ftDate;
     ftBytes,ftVarBytes,ftBlob,ftGraphic,ftOraBlob:
-      result := SynCommons.ftBlob;
+      result := SynTable.ftBlob;
     {$ifdef UNICODE}
     ftFixedWideChar,ftWideMemo,
     {$endif}
     ftString,ftFixedChar,ftWideString,ftMemo,ftFmtMemo,ftOraClob,ftVariant,ftGuid:
-      result := SynCommons.ftUTF8;
+      result := SynTable.ftUTF8;
   else // will use TEXT for other fields (any feedback is welcome!)
-      result := SynCommons.ftUTF8;
+      result := SynTable.ftUTF8;
   end;
 end;
 
@@ -513,9 +514,9 @@ begin
     if TField(ColumnAttr).IsNull then
       WR.AddShort('null') else
     case ColumnType of
-      SynCommons.ftNull:
+      SynTable.ftNull:
         WR.AddShort('null');
-      SynCommons.ftInt64:
+      SynTable.ftInt64:
         if TField(ColumnAttr).DataType=ftBoolean then
           WR.Add(ord(TField(ColumnAttr).AsBoolean)) else
           {$ifdef UNICODE}
@@ -525,18 +526,18 @@ begin
             WR.Add(TLargeintField(ColumnAttr).AsLargeInt) else
             WR.Add(TField(ColumnAttr).AsInteger);
           {$endif}
-      SynCommons.ftDouble:
+      SynTable.ftDouble:
         WR.AddDouble(TField(ColumnAttr).AsFloat);
-      SynCommons.ftCurrency:
+      SynTable.ftCurrency:
         if TField(ColumnAttr).DataType in [ftBCD,ftFMTBcd] then
           AddBcd(WR,TField(ColumnAttr).AsBCD) else
           WR.AddCurr64(TField(ColumnAttr).AsCurrency);
-      SynCommons.ftDate: begin
+      SynTable.ftDate: begin
         WR.Add('"');
         WR.AddDateTime(TField(ColumnAttr).AsDateTime,fForceDateWithMS);
         WR.Add('"');
       end;
-      SynCommons.ftUTF8: begin
+      SynTable.ftUTF8: begin
         WR.Add('"');
         {$ifndef UNICODE}
         if ColumnValueDBType=IsTWideStringField then
@@ -545,7 +546,7 @@ begin
           WR.AddJSONEscapeString(TField(ColumnAttr).AsString);
         WR.Add('"');
       end;
-      SynCommons.ftBlob:
+      SynTable.ftBlob:
         if fForceBlobAsNull then
           WR.AddShort('null') else begin
           blob := ColumnBlob(col);
@@ -575,7 +576,7 @@ begin
     P.ParamType := SQLParamTypeToDBParamType(VInOut);
     if VinOut <> paramInOut then
       case VType of
-        SynCommons.ftNull: begin
+        SynTable.ftNull: begin
           P.Clear;
           {$ifdef UNICODE}
           P.AsBlob := nil; // avoid type errors when a blob field is adressed
@@ -583,7 +584,7 @@ begin
           P.AsString := '';
           {$endif}
         end;
-        SynCommons.ftInt64: begin
+        SynTable.ftInt64: begin
           if aArrayIndex>=0 then
             I64 := GetInt64(pointer(VArray[aArrayIndex])) else
             I64 := VInt64;
@@ -598,21 +599,21 @@ begin
               P.Value := I64;
           {$endif}
         end;
-        SynCommons.ftDouble:
+        SynTable.ftDouble:
           if aArrayIndex>=0 then
             P.AsFloat := GetExtended(pointer(VArray[aArrayIndex])) else
             P.AsFloat := PDouble(@VInt64)^;
-        SynCommons.ftCurrency:
+        SynTable.ftCurrency:
           if aArrayIndex>=0 then
             P.AsCurrency := StrToCurrency(pointer(VArray[aArrayIndex])) else
             P.AsCurrency := PCurrency(@VInt64)^;
-        SynCommons.ftDate:
+        SynTable.ftDate:
           if aArrayIndex>=0 then begin
             UnQuoteSQLStringVar(pointer(VArray[aArrayIndex]),tmp);
             P.AsDateTime := Iso8601ToDateTime(tmp);
           end else
             P.AsDateTime := PDateTime(@VInt64)^;
-        SynCommons.ftUTF8:
+        SynTable.ftUTF8:
           if aArrayIndex>=0 then
             if (VArray[aArrayIndex]='') and
                fConnection.Properties.StoreVoidStringAsNull then
@@ -627,7 +628,7 @@ begin
             if fForceUseWideString then
               P.Value := UTF8ToWideString(VData) else
               P.AsString := UTF8ToString(VData);
-        SynCommons.ftBlob:
+        SynTable.ftBlob:
           {$ifdef UNICODE}
           if aArrayIndex>=0 then
             P.SetBlobData(TValueBuffer(VArray[aArrayIndex]),Length(VArray[aArrayIndex])) else
@@ -654,17 +655,17 @@ var Par: TParam;
 begin
   Par := fQueryParams[aParamIndex];
   case aParam.VType of
-    SynCommons.ftInt64:
+    SynTable.ftInt64:
       {$ifdef UNICODE}
       aParam.VInt64 := Par.AsLargeInt;
       {$else}
       aParam.VInt64 := trunc(Par.AsFloat);
       {$endif}
-    SynCommons.ftDouble:  PDouble(@aParam.VInt64)^ := Par.AsFloat;
-    SynCommons.ftCurrency:PCurrency(@aParam.VInt64)^ := Par.AsCurrency;
-    SynCommons.ftDate:    PDateTime(@aParam.VInt64)^ := Par.AsDateTime;
-    SynCommons.ftUTF8:    aParam.VData := StringToUTF8(Par.AsString);
-    SynCommons.ftBlob: begin
+    SynTable.ftDouble:  PDouble(@aParam.VInt64)^ := Par.AsFloat;
+    SynTable.ftCurrency:PCurrency(@aParam.VInt64)^ := Par.AsCurrency;
+    SynTable.ftDate:    PDateTime(@aParam.VInt64)^ := Par.AsDateTime;
+    SynTable.ftUTF8:    aParam.VData := StringToUTF8(Par.AsString);
+    SynTable.ftBlob: begin
       {$ifdef UNICODE}
       tmpBytes := Par.AsBlob;
       SetString(aParam.VData,PAnsiChar(pointer(tmpBytes)),Length(tmpBytes));

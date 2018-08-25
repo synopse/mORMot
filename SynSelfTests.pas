@@ -3566,10 +3566,11 @@ var i, j, b, err: integer;
     {$endif}
     a: shortstring;
     u: string;
-    varint: array[0..31] of byte;
+    varint: array[0..255] of byte;
+    st: TFastReader;
     PB,PC: PByte;
     P: PUTF8Char;
-    crc: cardinal;
+    crc, n: cardinal;
     Timer: TPrecisionTimer;
 begin
   Check(Plural('row',0)='0 row');
@@ -3617,7 +3618,7 @@ begin
   Check(KB(-123)='-123 B');
   Check(KB(0)='0 B');
   Check(KB(123)='123 B');
-  Check(KB(1023)='1023 B');
+  Check(KB(1023)='1 KB');
   Check(KB(1024)='1 KB');
   Check(KB(1025)='1 KB');
   Check(KB(16383)='16 KB');
@@ -3777,7 +3778,7 @@ begin
     Check(crc32c(0,pointer(s),length(s))=crc);
     if s<>'' then
       Check(xxhash32(0,pointer(s),length(s))=xxHash32reference(pointer(s),length(s)));
-    j := Random(maxInt)-Random(maxInt);
+    j := Random32gsl;
     str(j,a);
     s := RawUTF8(a);
     u := string(a);
@@ -3919,6 +3920,37 @@ begin
     PB := @varint;
     Check(FromVarUint64(PB)=i);
     Check(PB=PC);
+    PC := @varint;
+    for n := 0 to 49 do
+      PC := ToVarUInt32(juint+n,PC);
+    check(PC<>nil);
+    st.Init(@varint, PtrInt(PC) - PtrInt(@varint));
+    check(not st.EOF);
+    for n := 0 to 48 do
+      check(st.VarUInt32 = cardinal(juint+n));
+    check(not st.EOF);
+    check(st.VarUInt32 = cardinal(juint+49));
+    check(pointer(st.P) = pointer(PC));
+    check(st.EOF);
+    st.Init(@varint, PtrInt(PC) - PtrInt(@varint));
+    check(not st.EOF);
+    for n := 0 to 49 do
+      check(st.VarUInt64 = cardinal(juint+n));
+    check(pointer(st.P) = pointer(PC));
+    check(st.EOF);
+    st.Init(@varint, PtrInt(PC) - PtrInt(@varint));
+    for n := 0 to 48 do
+      st.VarNextInt;
+    check(not st.EOF);
+    check(st.VarUInt32 = cardinal(juint+49));
+    check(pointer(st.P) = pointer(PC));
+    check(st.EOF);
+    st.Init(@varint, PtrInt(PC) - PtrInt(@varint));
+    st.VarNextInt(49);
+    check(not st.EOF);
+    check(st.VarUInt32 = cardinal(juint+49));
+    check(pointer(st.P) = pointer(PC));
+    check(st.EOF);
   end;
   exit; // code below is speed informative only, without any test
   Timer.Start;
@@ -4060,6 +4092,17 @@ begin
   Check(U='ah-bee-see');
   for i := 0 to High(IDPU) do
     Check(IdemPChar(IDPU[i],IDPA[i])=(i<12));
+  res := '{"result":[{"000001000013":{"00100000000016":[1534510257860,103100,2000,' +
+    '103108,1004,104132],"00100000000026":[1534510257860,12412,2000,12420,1004,12420],' +
+    '"00100000000036":[1534510257860,1378116,2000,1378112,1004,1378112],"00100000000056":' +
+    '[1534510257860,479217551,2000,479217551],"00100000000076":[1534510257860,136079943,' +
+    '2000,136079943,1004,136079944],"00100000000086":[1534510257860,1648800821,2000,' +
+    '1648801020,1004,1648801119],"00100000000096":[1534510257860,87877677,2000,87877678,' +
+    '1004,87877678],"001000000000ec":[1534510257860,1.64,2000,1.64],"001000000000fc":[' +
+    '1534510257860,1.72,2000,1.72],"0010000000010c":[1534510257860,1.64,2000,1.64],"' +
+    '00100000000196":[1534510257860,0,2000,0]}}]}';
+  i := SynCommons.StrLenPas(@res[1]);
+  check(SynCommons.StrLen(@res[1])=i);
   res := 'one,two,three';
   Check(EndWith('three','THREE'));
   Check(EndWith(res,'E'));
@@ -6304,18 +6347,18 @@ end;
 class function TCollTstDynArray.FVReader2(P: PUTF8Char; var aValue;
   out aValid: Boolean): PUTF8Char;
 var V: TFV absolute aValue;
-    Values: TPUtf8CharDynArray;
+    Values: array[0..5] of TValuePUTF8Char;
 begin // '{"Major":1,"Minor":2001,"Release":3001,"Build":4001,"Main":"1","Detailed":"1001"},..
   aValid := false;
-  result := JSONDecode(P,['Major','Minor','Release','Build','Main','Detailed'],Values);
+  result := JSONDecode(P,['Major','Minor','Release','Build','Main','Detailed'],@Values);
   if result=nil then
     exit; // result^ = ',' or ']' for last item of array
-  V.Major := GetInteger(Values[0]);
-  V.Minor := GetInteger(Values[1]);
-  V.Release := GetInteger(Values[2]);
-  V.Build := GetInteger(Values[3]);
-  V.Main := UTF8DecodeToString(Values[4],SynCommons.StrLen(Values[4]));
-  V.Detailed := UTF8DecodeToString(Values[5],SynCommons.StrLen(Values[5]));
+  V.Major := Values[0].ToInteger;
+  V.Minor := Values[1].ToInteger;
+  V.Release := Values[2].ToInteger;
+  V.Build := Values[3].ToInteger;
+  V.Main := Values[4].ToString;
+  V.Detailed := Values[5].ToString;
   aValid := true;
 end;
 
@@ -6329,17 +6372,17 @@ end;
 class function TCollTstDynArray.FVClassReader(const aValue: TObject; aFrom: PUTF8Char;
   var aValid: Boolean; aOptions: TJSONToObjectOptions): PUTF8Char;
 var V: TFileVersion absolute aValue;
-    Values: TPUtf8CharDynArray;
+    Values: array[0..5] of TValuePUTF8Char;
 begin // '{"Major":2,"Minor":2002,"Release":3002,"Build":4002,"Main":"2","BuildDateTime":"1911-03-15"}'
-  result := JSONDecode(aFrom,['Major','Minor','Release','Build','Main','BuildDateTime'],Values);
+  result := JSONDecode(aFrom,['Major','Minor','Release','Build','Main','BuildDateTime'],@Values);
   aValid := (result<>nil);
   if aValid then begin
-    V.Major := GetInteger(Values[0]);
-    V.Minor := GetInteger(Values[1]);
-    V.Release := GetInteger(Values[2]);
-    V.Build := GetInteger(Values[3]);
-    V.Main := UTF8DecodeToString(Values[4],SynCommons.StrLen(Values[4]));
-    V.BuildDateTime := Iso8601ToDateTimePUTF8Char(Values[5]);
+    V.Major := Values[0].ToInteger;
+    V.Minor := Values[1].ToInteger;
+    V.Release := Values[2].ToInteger;
+    V.Build := Values[3].ToInteger;
+    V.Main := Values[4].ToString;
+    V.BuildDateTime := Iso8601ToDateTimePUTF8Char(Values[5].Value,Values[5].ValueLen);
   end;
 end;
 
@@ -6454,23 +6497,19 @@ begin
 end;
 
 procedure RangeFromJSON(out Range: TRange; JSON: PUTF8Char);
-var V: TPUtf8CharDynArray;
+var V: array[0..1] of TValuePUTF8Char;
 begin
-  JSONDecode(JSON, ['min', 'max'], V);
-  if V=nil then
-    exit;
-  Range.Min := GetInteger(V[0]);
-  Range.Max := GetInteger(V[1]);
+  JSONDecode(JSON, ['min', 'max'],@V);
+  Range.Min := V[0].ToInteger;
+  Range.Max := V[1].ToInteger;
 end;
 
 procedure TEnemy.SetOffense(Value: RawJSON);
-var V: TPUtf8CharDynArray;
+var V: array[0..1] of TValuePUTF8Char;
 begin
-  JSONDecode(Value,['damage','attackspeed'],V,true);
-  if V=nil then
-    exit;
-  RangeFromJSON(Off.Damage, V[0]);
-  RangeFromJSON(Off.AttackSpeed, V[1]);
+  JSONDecode(Value,['damage','attackspeed'],@V,true);
+  RangeFromJSON(Off.Damage, V[0].Value);
+  RangeFromJSON(Off.AttackSpeed, V[1].Value);
 end;
 
 {$endif}
@@ -6599,10 +6638,10 @@ const // convention may be to use __ before the type name
   discogsFileName = 'discogs.json';
 
 procedure TTestLowLevelTypes.EncodeDecodeJSON;
-var J,U: RawUTF8;
+var J,U,U2: RawUTF8;
     P: PUTF8Char;
     binary,zendframeworkJson,discogsJson: RawByteString;
-    V: TPUtf8CharDynArray;
+    V: array[0..4] of TValuePUTF8Char;
     i, a, err: integer;
     r: Double;
     Parser: TJSONRecordTextDefinition;
@@ -6617,7 +6656,7 @@ var J,U: RawUTF8;
     Cache: TSQLRestCacheEntryValue;
 {$ifndef DELPHI5OROLDER}
     peop: TSQLRecordPeople;
-    K,U2: RawUTF8;
+    K: RawUTF8;
     Valid: boolean;
     RB: TSQLRawBlob;
     Enemy: TEnemy;
@@ -7211,20 +7250,18 @@ begin
   {$endif}
   J := JSONEncode(['name','john','year',1982,'pi',3.14159]);
   Check(J='{"name":"john","year":1982,"pi":3.14159}');
-  JSONDecode(J,['year','pi','john','name'],V);
-  Check(length(V)=4);
-  Check(V[0]='1982');
-  Check(V[1]='3.14159');
-  Check(V[2]=nil);
-  Check(V[3]='john');
+  JSONDecode(J,['year','pi','john','name'],@V);
+  Check(V[0].Value='1982');
+  Check(V[1].Value='3.14159');
+  Check(V[2].Value=nil);
+  Check(V[3].Value='john');
   J := '{surrogate:"\uD801\uDC00"}'; // see https://en.wikipedia.org/wiki/CESU-8
-  JSONDecode(J,['surrogate'],V);
-  Check(length(V)=1);
-  Check(StrLen(V[0])=4);
-  Check(V[0][0]=#$F0);
-  Check(V[0][1]=#$90);
-  Check(V[0][2]=#$90);
-  Check(V[0][3]=#$80);
+  JSONDecode(J,['surrogate'],@V);
+  Check(V[0].ValueLen=4);
+  Check(V[0].Value[0]=#$F0);
+  Check(V[0].Value[1]=#$90);
+  Check(V[0].Value[2]=#$90);
+  Check(V[0].Value[3]=#$80);
   J := JSONEncode(['name','john','ab','[','a','b',']']);
   Check(J='{"name":"john","ab":["a","b"]}');
   J := JSONEncode(['name','john','ab','[','a','b']);
@@ -7306,14 +7343,14 @@ begin
     r := Random;
     U := RandomUTF8(i);
     J := JSONEncode(['a',a,'r',r,'u',U]);
-    JSONDecode(J,['U','R','A','FOO'],V);
-    Check(Length(V)=4);
-    Check(RawUTF8(V[0])=U);
-    Check(SameValue(GetExtended(V[1],err),r));
-    Check(not IsString(V[2]));
-    Check(not IsStringJSON(V[2]));
-    Check(GetInteger(V[2])=a);
-    Check(V[3]=nil);
+    JSONDecode(J,['U','R','A','FOO'],@V);
+    V[0].ToUTF8(U2);
+    Check(U2=U);
+    Check(SameValue(GetExtended(V[1].Value,err),r));
+    Check(not IsString(V[2].Value));
+    Check(not IsStringJSON(V[2].Value));
+    Check(V[2].ToInteger=a);
+    Check(V[3].Value=nil);
     J := BinToBase64WithMagic(U);
     check(PInteger(J)^ and $00ffffff=JSON_BASE64_MAGIC);
 {$ifndef DELPHI5OROLDER}
@@ -17191,14 +17228,14 @@ end;
 class function TTestServiceOrientedArchitecture.CustomReader(P: PUTF8Char;
   var aValue; out aValid: Boolean): PUTF8Char;
 var V: TSQLRestCacheEntryValue absolute aValue;
-    Values: TPUtf8CharDynArray;
+    Values: array[0..2] of TValuePUTF8Char;
 begin // {"ID":1786554763,"Timestamp":323618765,"JSON":"D:\\TestSQL3.exe"}
-  result := JSONDecode(P,['ID','Timestamp','JSON'],Values);
+  result := JSONDecode(P,['ID','Timestamp','JSON'],@Values);
   if result=nil then
     aValid := false else begin
-    V.ID := GetInteger(Values[0]);
-    V.Timestamp512 := GetCardinal(Values[1]);
-    V.JSON := Values[2];
+    V.ID := GetInt64(Values[0].Value);
+    V.Timestamp512 := Values[1].ToCardinal;
+    Values[2].ToUTF8(V.JSON);
     aValid := true;
   end;
 end;

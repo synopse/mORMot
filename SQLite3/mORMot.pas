@@ -13110,13 +13110,11 @@ type
     // with an optional custom contract to be used instead of methods signature
     // (only for the first interface)
     function AddInterface(const aInterfaces: array of PTypeInfo;
-      aInstanceCreation: TServiceInstanceImplementation;
-      aContractExpected: RawUTF8=''): boolean; overload;
+      aInstanceCreation: TServiceInstanceImplementation; aContractExpected: RawUTF8=''): boolean; overload;
     /// method called on the client side to register a service via one interface
     // - overloaded method returning the corresponding service factory client,
     // or nil on error
-    function AddInterface(aInterface: PTypeInfo;
-      aInstanceCreation: TServiceInstanceImplementation;
+    function AddInterface(aInterface: PTypeInfo; aInstanceCreation: TServiceInstanceImplementation;
       const aContractExpected: RawUTF8=''): TServiceFactoryClient; overload;
     /// retrieve a service provider from its index in the list
     // - returns nil if out of range index
@@ -14634,7 +14632,7 @@ type
     // - this method will call EngineAdd() to perform the request
     function Add(Value: TSQLRecord; SendData: boolean; ForceID: boolean=false;
       DoNotAutoComputeFields: boolean=false): TID; overload;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef FPC}inline;{$endif}
     /// create a new member, including selected fields
     // - implements REST POST collection
     // - if ForceID is true, client sends the Value.ID field to use this ID for
@@ -14649,7 +14647,7 @@ type
     // - this method will call EngineAdd() to perform the request
     function Add(Value: TSQLRecord; const CustomFields: TSQLFieldBits;
       ForceID: boolean=false; DoNotAutoComputeFields: boolean=false): TID; overload;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef FPC}inline;{$endif}
     /// create a new member, including its BLOB fields
     // - implements REST POST collection
     // - this method will create a JSON representation of the document
@@ -15020,7 +15018,7 @@ type
     function RetrieveList<T: TSQLRecord>(const FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8=''): TObjectList<T>; overload;
-    {$endif}
+    {$endif ISDELPHI2010}
 
     /// you can call this method in TThread.Execute to ensure that
     // the thread will be taken in account during process
@@ -21654,7 +21652,7 @@ begin
     result.VDouble := GetExtended(Value,err);
     if err<>0 then begin
       result.VType := varString;
-      FastSetString(result.VAny,Value,ValueLen);
+      FastSetString(RawUTF8(result.VAny),Value,ValueLen);
     end;
   end;
   sftDateTime, sftDateTimeMS:
@@ -21668,7 +21666,7 @@ begin
   sftTimeLog, sftModTime, sftCreateTime, sftUnixTime, sftUnixMSTime:
     SetInt64(Value,result.VInt64);
   sftAnsiText, sftUTF8Text:
-    FastSetString(result.VAny,Value,ValueLen);
+    FastSetString(RawUTF8(result.VAny),Value,ValueLen);
   sftBlobCustom, sftBlob:
     BlobToTSQLRawBlob(Value,TSQLRawBlob(result.VAny));
   {$ifndef NOVARIANTS}sftVariant, sftNullable,{$endif}
@@ -26038,7 +26036,6 @@ var i: integer;
     U: PPUTF8Char;
 begin
   result := 0;
-  Finalize(Values);
   if (self=nil) or (cardinal(Field)>cardinal(FieldCount)) or (fRowCount=0) then
     exit;
   SetLength(Values,fRowCount);
@@ -26055,7 +26052,6 @@ var i: integer;
     U: PPUTF8Char;
 begin
   result := 0;
-  Finalize(Values);
   if (self=nil) or (cardinal(Field)>cardinal(FieldCount)) or (fRowCount=0) then
     exit;
   SetLength(Values,fRowCount);
@@ -35111,10 +35107,10 @@ begin
   if IsZero(CustomFields) then
     Value.FillContext.ComputeSetUpdatedFieldBits(Props,FieldBits) else
     if DoNotAutoComputeFields then
-      FieldBits := CustomFields else
-      FieldBits := CustomFields+Value.RecordProps.FieldBits[sftModTime];
+      FieldBits := CustomFields*Props.CopiableFieldsBits else
+      FieldBits := CustomFields*Props.CopiableFieldsBits+Props.FieldBits[sftModTime];
   SetExpandedJSONWriter(Props,fTablePreviousSendData<>PSQLRecordClass(Value)^,
-    true,FieldBits);
+    {withID=}true,FieldBits);
   fTablePreviousSendData := PSQLRecordClass(Value)^;
   if not DoNotAutoComputeFields then
     Value.ComputeFieldsBeforeWrite(fRest,seUpdate); // update sftModTime fields
@@ -36564,6 +36560,7 @@ procedure TSQLRest.GetJSONValuesForAdd(TableIndex: integer; Value: TSQLRecord;
   ForceID, DoNotAutoComputeFields, WithBlobs: boolean;
   CustomFields: PSQLFieldBits; var result: RawUTF8);
 var fields: TSQLFieldBits;
+    props: TSQLRecordProperties;
 begin
   if not DoNotAutoComputeFields then // update TModTime/TCreateTime fields
     Value.ComputeFieldsBeforeWrite(self,seAdd);
@@ -36577,13 +36574,14 @@ begin
   end else
     if Value.fID=0 then
       ForceID := false;
+  props := Value.RecordProps;
   if CustomFields <> nil then
     if DoNotAutoComputeFields then
-      fields := CustomFields^ else
-      fields := CustomFields^+Value.RecordProps.ComputeBeforeAddFieldsBits else
+      fields := CustomFields^*props.CopiableFieldsBits else
+      fields := CustomFields^*props.CopiableFieldsBits+props.ComputeBeforeAddFieldsBits else
     if withBlobs then
-      fields := Value.RecordProps.CopiableFieldsBits else
-      fields := Value.RecordProps.SimpleFieldsBits[soInsert];
+      fields := props.CopiableFieldsBits else
+      fields := props.SimpleFieldsBits[soInsert];
   if not ForceID and IsZero(fields) then
     result := '' else
     result := Value.GetJSONValues(true,ForceID,fields);
@@ -38957,8 +38955,10 @@ function TSQLRestClientURI.ServiceDefineSharedAPI(const aInterface: TGUID;
   const aContractExpected: RawUTF8): TServiceFactoryClient;
 begin
   result := ServiceDefine(aInterface,sicShared,aContractExpected);
-  result.ParamsAsJSONObject := true; // no contract -> explicit parameters
-  result.ResultAsJSONObjectWithoutResult := true;
+  if result<>nil then begin
+    result.ParamsAsJSONObject := true; // no contract -> explicit parameters
+    result.ResultAsJSONObjectWithoutResult := true;
+  end;
 end;
 
 procedure TSQLRestClientURI.ServicePublishOwnInterfaces(OwnServer: TSQLRestServer);
@@ -42487,7 +42487,7 @@ end;
 
 procedure TSQLRestRoutingJSON_RPC.ExecuteSOAByInterface;
 var method: RawUTF8;
-    Values: TPUtf8CharDynArray;
+    Values: array[0..2] of TValuePUTF8Char;
     internal: TServiceInternalMethod;
     tmp: TSynTempBuffer;
 begin // here Ctxt.Service is set (not ServiceMethodIndex yet)
@@ -42495,12 +42495,12 @@ begin // here Ctxt.Service is set (not ServiceMethodIndex yet)
     raise EServiceException.CreateUTF8('%.ExecuteSOAByInterface invalid call',[self]);
   tmp.Init(call.Inbody);
   try
-    JSONDecode(tmp.buf,['method','params','id'],Values,True);
-    if Values[0]=nil then // Method name required
+    JSONDecode(tmp.buf,['method','params','id'],@Values,true);
+    if Values[0].Value=nil then // Method name required
       exit;
-    FastSetString(method,Values[0],StrLen(Values[0]));
-    ServiceParameters := Values[1];
-    ServiceInstanceID := GetCardinal(Values[2]); // retrieve "id":ClientDrivenID
+    Values[0].ToUTF8(method);
+    ServiceParameters := Values[1].Value;
+    ServiceInstanceID := Values[2].ToCardinal; // retrieve "id":ClientDrivenID
     ServiceMethodIndex := Service.fInterface.FindMethodIndex(method);
     if ServiceMethodIndex>=0 then
       inc(ServiceMethodIndex,SERVICE_PSEUDO_METHOD_COUNT) else begin
@@ -42516,6 +42516,7 @@ begin // here Ctxt.Service is set (not ServiceMethodIndex yet)
     end;
     // now Service, ServiceParameters, ServiceMethod(Index) are set
     InternalExecuteSOAByInterface;
+    ServiceParameters := nil;
   finally
     tmp.Done; // release temp storage for Values[] = Service* fields
   end;
@@ -42590,8 +42591,8 @@ begin
 end;
 
 procedure TSQLRestServer.URI(var Call: TSQLRestURIParams);
-const COMMANDTEXT: array[TSQLRestServerURIContextCommand] of string[15] =
-  ('','SOA-Method ','SOA-Interface ','ORM-Get ','ORM-Write ');
+const COMMANDTEXT: array[TSQLRestServerURIContextCommand] of string[9] =
+  ('?','Method','Interface','Read','Write');
 var Ctxt: TSQLRestServerURIContext;
     timeStart,timeEnd: Int64;
     elapsed, len: cardinal;
@@ -42603,7 +42604,7 @@ var Ctxt: TSQLRestServerURIContext;
     {$endif}
 begin
   {$ifdef WITHLOG}
-  log := fLogClass.Enter('URI(% % inlen=%)',[Call.Method,Call.Url,length(Call.InBody)],self);
+  log := fLogClass.Enter('URI % % in=%',[Call.Method,Call.Url,KB(Call.InBody)],self);
   {$endif}
   QueryPerformanceCounter(timeStart);
   fStats.AddCurrentRequestCount(1);
@@ -42630,9 +42631,9 @@ begin
     if fShutdownRequested then
       Ctxt.Error('Server is shutting down',HTTP_UNAVAILABLE) else
     if Ctxt.Method=mNone then
-      Ctxt.Error('Unknown VERB') else
+      Ctxt.Error('Unknown Verb %',[Call.Method]) else
     if (fIPBan<>nil) and fIPBan.Exists(Ctxt.RemoteIP) then
-      Ctxt.Error('Banned IP %', [Ctxt.fRemoteIP]) else
+      Ctxt.Error('Banned IP %',[Ctxt.fRemoteIP]) else
     // 1. decode URI
     if not Ctxt.URIDecodeREST then
       Ctxt.Error('Invalid Root',HTTP_NOTFOUND) else
@@ -42721,9 +42722,10 @@ begin
     QueryPerformanceCounter(timeEnd);
     Ctxt.MicroSecondsElapsed := fStats.FromExternalQueryPerformanceCounters(timeEnd-timeStart);
     {$ifdef WITHLOG}
-    InternalLog('% % % %/% %-> % with outlen=% in % us',
+    InternalLog('% % % %/% %=% out=% in %',
       [Ctxt.SessionUserName,Ctxt.RemoteIPNotLocal,Call.Method,Model.Root,Ctxt.URI,
-      COMMANDTEXT[Ctxt.Command],Call.OutStatus,length(Call.OutBody),Ctxt.MicroSecondsElapsed],sllServer);
+       COMMANDTEXT[Ctxt.Command],Call.OutStatus,KB(Call.OutBody),
+       MicroSecToString(Ctxt.MicroSecondsElapsed)],sllServer);
     if (Call.OutBody<>'') and (sllServiceReturn in fLogFamily.Level) then
       if not(optNoLogOutput in Ctxt.ServiceExecutionOptions) then
         if IsHTMLContentTypeTextual(pointer(Call.OutHead)) then
@@ -46309,11 +46311,11 @@ var MS: TRawByteStringStream;
     ResCount: PtrInt;
     Stmt: TSynTableStatement;
     max: Int64;
-procedure SetCount(aCount: integer);
-begin
-  FormatUTF8('[{"Count(*)":%}]'#$A,[aCount],result);
-  ResCount := 1;
-end;
+  procedure SetCount(aCount: integer);
+  begin
+    FormatUTF8('[{"Count(*)":%}]'#$A,[aCount],result);
+    ResCount := 1;
+  end;
 begin
   result := '';
   ResCount := 0;
@@ -51915,13 +51917,13 @@ end;
 { TSynValidateUniqueFields }
 
 procedure TSynValidateUniqueFields.SetParameters(const Value: RawUTF8);
-var V: TPUtf8CharDynArray;
+var V: array[0..0] of TValuePUTF8Char;
     tmp: TSynTempBuffer;
 begin
   tmp.Init(Value);
   try
-    JSONDecode(tmp.buf,['FieldNames'],V,True);
-    CSVToRawUTF8DynArray(V[0],fFieldNames);
+    JSONDecode(tmp.buf,['FieldNames'],@V,True);
+    CSVToRawUTF8DynArray(V[0].Value,fFieldNames);
   finally
     tmp.Done;
   end;
@@ -52625,7 +52627,7 @@ procedure TSQLVirtualTableCursor.SetColumn(var aResult: TSQLVar;
 begin
   aResult.Options := [];
   aResult.VType := ftUTF8;
-  FastSetString(fColumnTemp,aValue,aValueLength); // temporary copy
+  FastSetString(RawUTF8(fColumnTemp),aValue,aValueLength); // temporary copy
   aResult.VText := pointer(fColumnTemp);
 end;
 
@@ -53401,29 +53403,29 @@ end;
 class function TSQLRestServerAuthentication.ClientGetSessionKey(
   Sender: TSQLRestClientURI; User: TSQLAuthUser; const aNameValueParameters: array of const): RawUTF8;
 var resp: RawUTF8;
-    values: TPUtf8CharDynArray;
+    values: array[0..9] of TValuePUTF8Char;
     a: integer;
     algo: TSQLRestServerAuthenticationSignedURIAlgo absolute a;
 begin
   if (Sender.CallBackGet('Auth',aNameValueParameters,resp)<>HTTP_SUCCESS) or
      (JSONDecode(pointer(resp),['result','data','server','version','logonid',
-      'logonname','logondisplay','logongroup','timeout','algo'],values)=nil) then begin
+      'logonname','logondisplay','logongroup','timeout','algo'],@values)=nil) then begin
     Sender.fSessionData := ''; // reset temporary 'data' field
     result := '';
   end else begin
-    FastSetString(result,values[0],StrLen(values[0]));
-    Base64ToBin(PAnsiChar(values[1]),StrLen(values[1]),Sender.fSessionData);
-    FastSetString(Sender.fSessionServer,values[2],StrLen(values[2]));
-    FastSetString(Sender.fSessionVersion,values[3],StrLen(values[3]));
-    SetID(values[4],User.fID);
-    User.LogonName := values[5]; // set/fix using values from server
-    User.DisplayName := values[6];
-    User.GroupRights := pointer(GetInteger(values[7]));
-    Sender.fSessionServerTimeout := GetInteger(values[8]);
+    values[0].ToUTF8(result);
+    Base64ToBin(PAnsiChar(values[1].Value),values[1].ValueLen,Sender.fSessionData);
+    values[2].ToUTF8(Sender.fSessionServer);
+    values[3].ToUTF8(Sender.fSessionVersion);
+    SetID(values[4].Value,User.fID);
+    values[5].ToUTF8(User.fLogonName); // set/fix using values from server
+    values[6].ToUTF8(User.fDisplayName);
+    User.GroupRights := pointer(values[7].ToInteger);
+    Sender.fSessionServerTimeout := values[8].ToInteger;
     if Sender.fSessionServerTimeout<=0 then
       Sender.fSessionServerTimeout := 60; // default 1 hour if not suppplied
     a := GetEnumNameValueTrimmed(TypeInfo(TSQLRestServerAuthenticationSignedURIAlgo),
-      values[9],StrLen(values[9]));
+      values[9].Value,values[9].ValueLen);
     if a>=0 then
       Sender.fComputeSignature := TSQLRestServerAuthenticationSignedURI.GetComputeSignature(algo);
   end;
@@ -60966,7 +60968,7 @@ type // implements the AlgoDeflate global variable
   TAlgoDeflate = class(TAlgoCompressWithNoDestLen)
   protected
     fDeflateLevel: integer;
-    function RawProcess(src,dst: pointer; srcLen,dstLen: integer;
+    function RawProcess(src,dst: pointer; srcLen,dstLen,dstMax: integer;
       process: TAlgoCompressWithNoDestLenProcess): integer;  override;
   public
     constructor Create; override;
@@ -60985,7 +60987,7 @@ begin
   result := 2;
 end;
 
-function TAlgoDeflate.RawProcess(src,dst: pointer; srcLen,dstLen: integer;
+function TAlgoDeflate.RawProcess(src,dst: pointer; srcLen,dstLen,dstMax: integer;
   process: TAlgoCompressWithNoDestLenProcess): integer;
 begin
   case process of
@@ -62184,7 +62186,7 @@ function TServiceFactoryClient.InternalInvoke(const aMethod: RawUTF8;
   aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer;
   aClient: TSQLRestClientURI): boolean;
 var baseuri,uri,sent,resp,clientDrivenID,head,error: RawUTF8;
-    Values: TPUtf8CharDynArray;
+    Values: array[0..1] of TValuePUTF8Char;
     status,m: integer;
     service: PServiceMethod;
     ctxt: TSQLRestServerURIContextClientInvoke;
@@ -62280,19 +62282,18 @@ begin
       if aResult<>nil then
         aResult^ := resp; // e.g. when client retrieves the contract
     end else begin
-      JSONDecode(pointer(resp),['result','id'],Values,True);
-      if Values[0]=nil then begin // no "result":... layout
+      if (JSONDecode(pointer(resp),['result','id'],@Values,true)=nil) or
+         (Values[0].Value=nil) then begin // no "result":... layout
         if aErrorMsg<>nil then begin
           UniqueRawUTF8ZeroToTilde(resp,1 shl 10);
-          aErrorMsg^ :=
-            'Invalid returned JSON content: expects {result:...}, got '+resp;
+          aErrorMsg^ := 'Invalid returned JSON content: expects {result:...}, got '+resp;
         end;
         exit; // leave result=false
       end;
       if aResult<>nil then
-        FastSetString(aResult^,Values[0],StrLen(Values[0]));
-      if (aClientDrivenID<>nil) and (Values[1]<>nil) then // keep ID if no "id":...
-        aClientDrivenID^ := GetCardinal(Values[1]);
+        Values[0].ToUTF8(aResult^);
+      if (aClientDrivenID<>nil) and (Values[1].Value<>nil) then // keep ID if no "id":...
+        aClientDrivenID^ := Values[1].ToCardinal;
     end;
   end else begin
     // custom answer returned in TServiceCustomAnswer

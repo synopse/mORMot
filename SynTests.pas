@@ -179,6 +179,8 @@ type
     /// any text assigned to this field will be displayed on console
     fRunConsole: string;
     fCheckLogTime: TPrecisionTimer;
+    fCheckLastMsg: string;
+    fCheckLastTix: cardinal;
     /// override this method to prepare any published method execution
     procedure Setup; virtual;
     /// override this method to process some clean-up before Destroy call
@@ -217,7 +219,7 @@ type
     function CheckSame(const Value1,Value2: double;
       const Precision: double=1E-12; const msg: string = ''): Boolean;
     /// perform a string comparison with several value
-    // - test passes if (Value=Values[0]) or (Value=Value[1]) or (Value=Values[...
+    // - test passes if (Value=Values[0]) or (Value=Value[1]) or (Value=Values[2])...
     // and ExpectedResult=true
     procedure CheckMatchAny(const Value: RawUTF8; const Values: array of RawUTF8;
       CaseSentitive: Boolean=true; ExpectedResult: Boolean=true; const msg: string = '');
@@ -253,6 +255,9 @@ type
     /// create a temporary string, containing some fake text, with paragraphs
     class function RandomTextParagraph(WordCount: Integer;
       LastPunctuation: AnsiChar='.'; const RandomInclude: RawUTF8=''): RawUTF8;
+    /// add containing some fake text, with paragraphs
+    class procedure AddRandomTextParagraph(WR: TTextWriter; WordCount: Integer;
+      LastPunctuation: AnsiChar='.'; const RandomInclude: RawUTF8=''; NoLineFeed: boolean=false);
     /// this method is triggered internaly - e.g. by Check() - when a test failed
     procedure TestFailed(const msg: string);
     /// will add to the console a message with a speed estimation
@@ -534,7 +539,18 @@ end;
 
 procedure TSynTestCase.AddLog(condition: Boolean; const msg: string);
 const LEV: array[boolean] of TSynLogInfo = (sllFail, sllCustom4);
+var tix: cardinal;
 begin
+  if condition then begin
+    if msg=fCheckLastMsg then begin // no need to be too much verbose
+      tix := GetTickCount64 shr 8;
+      if tix=fCheckLastTix then
+        exit;
+      fCheckLastTix := tix;
+    end;
+    fCheckLastMsg := msg;
+  end else
+    fCheckLastMsg := '';
   TSynLogTestLog.Add.Log(LEV[condition],'% % [%]',
     [ClassType,TestName[Owner.fCurrentMethodIndex],msg]);
 end;
@@ -698,59 +714,69 @@ end;
 
 class function TSynTestCase.RandomTextParagraph(WordCount: Integer;
   LastPunctuation: AnsiChar; const RandomInclude: RawUTF8): RawUTF8;
+var
+  tmp: TTextWriterStackBuffer;
+  WR: TTextWriter;
+begin
+  WR := TTextWriter.CreateOwnedStream(tmp);
+  try
+    AddRandomTextParagraph(WR, WordCount, LastPunctuation, RandomInclude);
+    WR.SetText(result);
+  finally
+    WR.Free;
+  end;
+end;
+
+class procedure TSynTestCase.AddRandomTextParagraph(WR: TTextWriter; WordCount: Integer;
+  LastPunctuation: AnsiChar; const RandomInclude: RawUTF8; NoLineFeed: boolean);
 type TKind = (space, comma, dot, question, paragraph);
 const bla: array[0..4] of string[3]=('bla','ble','bli','blo','blu');
       endKind = [dot,paragraph,question];
 var n: integer;
-    WR: TTextWriter;
     s: string[3];
     last: TKind;
-    tmp: TTextWriterStackBuffer;
+    rnd: cardinal;
 begin
-  WR := TTextWriter.CreateOwnedStream(tmp);
-  try
-    last := paragraph;
-    while WordCount>0 do begin
-      for n := 0 to random(4) do begin
-         s := bla[random(5)];
-        if last in endKind then
-          s[1] := upcase(s[1]);
-        WR.AddShort(s);
+  last := paragraph;
+  while WordCount>0 do begin
+    rnd := Random32gsl;
+    for n := 0 to rnd mod 4 do begin
+      rnd := rnd shr 3;
+      s := bla[rnd mod 5];
+      if last in endKind then
+        s[1] := upcase(s[1]);
+      WR.AddShort(s);
+      WR.Add(' ');
+      dec(WordCount);
+      last := space;
+    end;
+    WR.CancelLastChar(' ');
+    case (rnd shr 3) mod 100 of
+    0..2: begin
+      if RandomInclude<>'' then begin
         WR.Add(' ');
-        dec(WordCount);
-        last := space;
+        WR.AddString(RandomInclude);
       end;
-      WR.CancelLastChar(' ');
-      case random(100) of
-      0..2: begin
-        if RandomInclude<>'' then begin
-          WR.Add(' ');
-          WR.AddString(RandomInclude);
-        end;
-        last := space;
-      end;
-      3..40:  last := space;
-      41..70: last := comma;
-      71..85: last := dot;
-      86..90: last := question;
-      91..99: last := paragraph;
-      end;
-      case last of
-      space: WR.Add(' ');
-      comma: WR.Add(',',' ');
-      dot:   WR.Add('.',' ');
-      question:  WR.Add('?',' ');
-      paragraph: WR.AddShort('.'#13#10);
-      end;
+      last := space;
     end;
-    if not (last in endKind) then begin
-      WR.AddShort('bla');
-      if LastPunctuation<>' ' then
-        WR.Add(LastPunctuation);
+    3..40:  last := space;
+    41..70: last := comma;
+    71..85: last := dot;
+    86..90: last := question;
+    91..99: if NoLineFeed then last := dot else last := paragraph;
     end;
-    WR.SetText(result);
-  finally
-    WR.Free;
+    case last of
+    space: WR.Add(' ');
+    comma: WR.Add(',',' ');
+    dot:   WR.Add('.',' ');
+    question:  WR.Add('?',' ');
+    paragraph: WR.AddShort('.'#13#10);
+    end;
+  end;
+  if not (last in endKind) then begin
+    WR.AddShort('bla');
+    if LastPunctuation<>' ' then
+      WR.Add(LastPunctuation);
   end;
 end;
 
@@ -778,9 +804,9 @@ begin
     Temp := Owner.TestTimer else
     Temp := Timer^;
   if ItemCount <= 1 then
-    msg := format('%s in %s', [ItemName,Temp.Stop]) else
-    msg := format('%d %s in %s i.e. %d/s, aver. %s',
-      [ItemCount,ItemName,Temp.Stop,Temp.PerSec(ItemCount),Temp.ByCount(ItemCount)]);
+    FormatString('% in %', [ItemName,Temp.Stop], msg) else
+    FormatString('% % in % i.e. %/s, aver. %', [ItemCount,ItemName,Temp.Stop,
+      Temp.PerSec(ItemCount),Temp.ByCount(ItemCount)], msg);
   if SizeInBytes>0 then
     msg := format('%s, %s/s',[msg,KB(Temp.PerSec(SizeInBytes))]);
   AddConsole(msg);

@@ -797,6 +797,8 @@ type
     function InitRandom(RandomLen: integer): pointer;
     /// initialize a new temporary buffer filled with integer increasing values
     function InitIncreasing(Count: integer; Start: integer=0): PIntegerArray;
+    /// initialize a new temporary buffer of a given number of zero bytes
+    function InitZero(ZeroLen: integer): pointer;
     /// finalize the temporary storage
     procedure Done; overload; {$ifdef HASINLINE}inline;{$endif}
     /// finalize the temporary storage, and create a RawUTF8 string from it
@@ -949,7 +951,7 @@ var
 
 /// equivalence to SetString(s,nil,len) function
 // - faster especially under FPC
-procedure FastSetString(var s; p: pointer; len: PtrInt);
+procedure FastSetString(var s: RawUTF8; p: pointer; len: PtrInt);
 
 /// equivalence to SetString(s,nil,len) function with a specific code page
 // - faster especially under FPC
@@ -1343,7 +1345,7 @@ function ToUTF8(const Ansi7Text: ShortString): RawUTF8; overload;
 /// convert a TGUID into UTF-8 encoded text
 // - will return e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without the {})
 // - if you need the embracing { }, use GUIDToRawUTF8() function instead
-function ToUTF8(const guid: TGUID): RawUTF8; overload;
+function ToUTF8({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID): RawUTF8; overload;
 
 {$ifndef NOVARIANTS}
 
@@ -1588,29 +1590,42 @@ function StringToWinAnsi(const Text: string): WinAnsiString;
   {$ifdef UNICODE}inline;{$endif}
 
 /// fast Format() function replacement, optimized for RawUTF8
-// - only supported token is %, which will be inlined in the resulting string
-// according to each Args[] supplied item
+// - only supported token is %, which will be written in the resulting string
+// according to each Args[] supplied items - so you will never get any exception
+// as with the SysUtils.Format() when a specifier is incorrect
 // - resulting string has no length limit and uses fast concatenation
-// - note that cardinal values should be type-casted to Int64() (otherwise
-// the integer mapped value will be transmitted, therefore wrongly)
+// - note that, due to a Delphi compiler limitation, cardinal values should be
+// type-casted to Int64() (otherwise the integer mapped value will be converted)
 // - any supplied TObject instance will be written as their class name
 function FormatUTF8(const Format: RawUTF8; const Args: array of const): RawUTF8; overload;
   {$ifdef FPC}inline;{$endif}
 
 /// fast Format() function replacement, optimized for RawUTF8
-// - overloaded function, which avoid a temporary RawUTF8 string on stack
+// - overloaded function, which avoid a temporary RawUTF8 instance on stack
 procedure FormatUTF8(const Format: RawUTF8; const Args: array of const;
   out result: RawUTF8); overload;
 
 /// fast Format() function replacement, for UTF-8 content stored in shortstring
+// - use the same single token % (and implementation) than FormatUTF8()
 // - shortstring allows fast stack allocation, so is perfect for small content
-// - set result='' if the resulting size exceed 255 bytes
+// - truncate result if the resulting size exceeds 255 bytes
 procedure FormatShort(const Format: RawUTF8; const Args: array of const;
   var result: shortstring);
 
+/// fast Format() function replacement, tuned for small content
+// - use the same single token % (and implementation) than FormatUTF8()
+procedure FormatString(const Format: RawUTF8; const Args: array of const;
+  out result: string); overload;
+
+/// fast Format() function replacement, tuned for small content
+// - use the same single token % (and implementation) than FormatUTF8()
+function FormatString(const Format: RawUTF8; const Args: array of const): string; overload;
+  {$ifdef FPC}inline;{$endif}
+
 type
-  /// used e.g. by PointerToHexShort/CardinalToHexShort/Int64ToHexShort
-  // - such result type would avoid a string allocation on heap
+  /// used e.g. by PointerToHexShort/CardinalToHexShort/Int64ToHexShort/FormatShort16
+  // - such result type would avoid a string allocation on heap, so are highly
+  // recommended e.g. when logging information
   TShort16 = string[16];
 
 /// fast Format() function replacement, for UTF-8 content stored in TShort16
@@ -1625,8 +1640,8 @@ procedure FormatShort16(const Format: RawUTF8; const Args: array of const;
 // - if optional JSONFormat parameter is TRUE, ? parameters will be written
 // as JSON quoted strings, without :(...): tokens, e.g. "quoted "" string"
 // - resulting string has no length limit and uses fast concatenation
-// - note that cardinal values should be type-casted to Int64() (otherwise
-// the integer mapped value will be transmitted, therefore wrongly)
+// - note that, due to a Delphi compiler limitation, cardinal values should be
+// type-casted to Int64() (otherwise the integer mapped value will be converted)
 // - any supplied TObject instance will be written as their class name
 function FormatUTF8(const Format: RawUTF8; const Args, Params: array of const;
   JSONFormat: boolean=false): RawUTF8; overload;
@@ -1648,15 +1663,15 @@ function ScanUTF8(P: PUTF8Char; PLen: integer; const fmt: RawUTF8;
 
 /// convert an open array (const Args: array of const) argument to an UTF-8
 // encoded text
-// - note that cardinal values should be type-casted to Int64() (otherwise
-// the signed integer mapped value will be transmitted, therefore wrongly)
+// - note that, due to a Delphi compiler limitation, cardinal values should be
+// type-casted to Int64() (otherwise the integer mapped value will be converted)
 // - any supplied TObject instance will be written as their class name
 procedure VarRecToUTF8(const V: TVarRec; var result: RawUTF8;
   wasString: PBoolean=nil);
 
 type
-  /// a memory structure which avoid a temporary RawUTF8 allocation
-  // - used by VarRecToTempUTF8() and FormatUTF8()
+  /// a memory structure which avoids a temporary RawUTF8 allocation
+  // - used by VarRecToTempUTF8() and FormatUTF8()/FormatShort()
   TTempUTF8 = record
     Len: PtrInt;
     Text: PUTF8Char;
@@ -1671,8 +1686,8 @@ type
 // but use the supplied Res.Temp[] buffer for numbers to text conversion -
 // caller should ensure to make RawUTF8(TempRawUTF8) := '' on the entry
 // - it would return the number of UTF-8 bytes, i.e. Res.Len
-// - note that cardinal values should be type-casted to Int64() (otherwise
-// the signed integer mapped value will be transmitted, therefore wrongly)
+// - note that, due to a Delphi compiler limitation, cardinal values should be
+// type-casted to Int64() (otherwise the integer mapped value will be converted)
 // - any supplied TObject instance will be written as their class name
 function VarRecToTempUTF8(const V: TVarRec; var Res: TTempUTF8): integer;
 
@@ -1685,8 +1700,8 @@ function VarRecToUTF8IsString(const V: TVarRec; var value: RawUTF8): boolean;
 // - returns TRUE and set Value if the supplied argument is a vtInteger, vtInt64
 // or vtBoolean
 // - returns FALSE if the argument is not an integer
-// - note that cardinal values should be type-casted to Int64() (otherwise
-// the signed integer mapped value will be transmitted, therefore wrongly)
+// - note that, due to a Delphi compiler limitation, cardinal values should be
+// type-casted to Int64() (otherwise the integer mapped value will be converted)
 function VarRecToInt64(const V: TVarRec; out value: Int64): boolean;
 
 /// convert an open array (const Args: array of const) argument to a floating
@@ -1694,14 +1709,14 @@ function VarRecToInt64(const V: TVarRec; out value: Int64): boolean;
 // - returns TRUE and set Value if the supplied argument is a number (e.g.
 // vtInteger, vtInt64, vtCurrency or vtExtended)
 // - returns FALSE if the argument is not a number
-// - note that cardinal values should be type-casted to Int64() (otherwise
-// the signed integer mapped value will be transmitted, therefore wrongly)
+// - note that, due to a Delphi compiler limitation, cardinal values should be
+// type-casted to Int64() (otherwise the integer mapped value will be converted)
 function VarRecToDouble(const V: TVarRec; out value: double): boolean;
 
 /// convert an open array (const Args: array of const) argument to a value
 // encoded as with :(...): inlined parameters in FormatUTF8(Format,Args,Params)
-// - note that cardinal values should be type-casted to Int64() (otherwise
-// the signed integer mapped value will be transmitted, therefore wrongly)
+// - note that, due to a Delphi compiler limitation, cardinal values should be
+// type-casted to Int64() (otherwise the integer mapped value will be converted)
 // - any supplied TObject instance will be written as their class name
 procedure VarRecToInlineValue(const V: TVarRec; var result: RawUTF8);
 
@@ -2009,7 +2024,7 @@ function PosCharAny(Str: PUTF8Char; Characters: PAnsiChar): PUTF8Char;
 /// a non case-sensitive RawUTF8 version of Pos()
 // - uppersubstr is expected to be already in upper case
 // - this version handle only 7 bit ASCII (no accentuated characters)
-function PosI(uppersubstr: PUTF8Char; const str: RawUTF8): Integer;
+function PosI(uppersubstr: PUTF8Char; const str: RawUTF8): PtrInt;
 
 /// a non case-sensitive version of Pos()
 // - uppersubstr is expected to be already in upper case
@@ -3424,6 +3439,10 @@ function FileSize(F: THandle): Int64; overload;
 function SearchRecToDateTime(const F: TSearchRec): TDateTime;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// check if a FindFirst/FindNext found instance is actually a file
+function SearchRecValidFile(const F: TSearchRec): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// delete the content of a specified directory
 // - only one level of file is deleted within the folder: no recursive deletion
 // is processed by this function (for safety)
@@ -3681,7 +3700,14 @@ function UnCamelCase(D, P: PUTF8Char): integer; overload;
 // - replacing spaces or punctuations by an uppercase character
 // - it is not the reverse function to UnCamelCase()
 procedure CamelCase(P: PAnsiChar; len: integer; var s: RawUTF8;
-  const isWord: TSynByteSet=[ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z')]);
+  const isWord: TSynByteSet=[ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z')]); overload;
+
+/// convert a string into an human-friendly CamelCase identifier
+// - replacing spaces or punctuations by an uppercase character
+// - it is not the reverse function to UnCamelCase()
+procedure CamelCase(const text: RawUTF8; var s: RawUTF8;
+  const isWord: TSynByteSet=[ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z')]); overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// UnCamelCase and translate a char buffer
 // - P is expected to be #0 ended
@@ -4164,7 +4190,11 @@ procedure ExcludeInteger(var Values, Excluded: TIntegerDynArray;
 procedure DeduplicateInteger(var Values: TIntegerDynArray); overload;
 
 /// sort and remove any 32-bit duplicated integer from Values[]
-procedure DeduplicateInteger(var Values: TIntegerDynArray; Count: integer); overload;
+// - returns the new Values[] length
+function DeduplicateInteger(var Values: TIntegerDynArray; Count: integer): integer; overload;
+
+/// low-level function called by DeduplicateInteger()
+function DeduplicateIntegerSorted(val: PIntegerArray; last: PtrInt): PtrInt;
 
 /// create a new 32-bit integer dynamic array with the values from another one
 procedure CopyInteger(const Source: TIntegerDynArray; out Dest: TIntegerDynArray);
@@ -4188,7 +4218,11 @@ procedure ExcludeInt64(var Values, Excluded: TInt64DynArray;
 procedure DeduplicateInt64(var Values: TInt64DynArray); overload;
 
 /// sort and remove any 64-bit duplicated integer from Values[]
-procedure DeduplicateInt64(var Values: TInt64DynArray; Count: integer); overload;
+// - returns the new Values[] length
+function DeduplicateInt64(var Values: TInt64DynArray; Count: integer): integer; overload;
+
+/// low-level function called by DeduplicateInt64()
+function DeduplicateInt64Sorted(val: PInt64Array; last: PtrInt): PtrInt;
 
 /// create a new 64-bit integer dynamic array with the values from another one
 procedure CopyInt64(const Source: TInt64DynArray; out Dest: TInt64DynArray);
@@ -4450,7 +4484,7 @@ type
   // (see TDynArray and TDynArrayHash InitSpecific method)
   // - djBoolean would generate an array of JSON boolean values
   // - djByte .. djTimeLog match numerical JSON values
-  // - djDateTime .. djSynUnicode match textual JSON values
+  // - djDateTime .. djHash512 match textual JSON values
   // - djVariant will match standard variant JSON serialization (including
   // TDocVariant or other custom types, if any)
   // - djCustom will be used for registered JSON serializer (invalid for
@@ -4461,10 +4495,11 @@ type
   TDynArrayKind = (
     djNone,
     djBoolean, djByte, djWord, djInteger, djCardinal, djSingle,
-    djInt64, djQWord, djDouble, djCurrency,
-    djTimeLog, djDateTime, djDateTimeMS, djRawUTF8, djWinAnsi, djString,
-    djRawByteString, djWideString, djSynUnicode, djInterface,
-    {$ifndef NOVARIANTS}djVariant,{$endif}
+    djInt64, djQWord, djDouble, djCurrency,  djTimeLog,
+    djDateTime, djDateTimeMS, djRawUTF8, djWinAnsi, djString,
+    djRawByteString, djWideString, djSynUnicode,
+    djHash128, djHash256, djHash512,
+    djInterface, {$ifndef NOVARIANTS}djVariant,{$endif}
     djCustom);
 
   /// internal set to specify some standard Delphi arrays
@@ -4582,7 +4617,7 @@ type
     // - djNone and djCustom are too vague, and will raise an exception
     // - no RTTI check is made over the corresponding array layout: you shall
     // ensure that the aKind parameter matches the dynamic array element definition
-    // - aCaseInsensitive will be used for djRawUTF8..djSynUnicode comparison
+    // - aCaseInsensitive will be used for djRawUTF8..djHash512 text comparison
     procedure InitSpecific(aTypeInfo: pointer; var aValue; aKind: TDynArrayKind;
       aCountPointer: PInteger=nil; aCaseInsensitive: boolean=false);
     /// define the reference to an external count integer variable
@@ -5126,12 +5161,12 @@ type
   TDynArrayHashed = record
   // pseudo inheritance for most used methods
   private
+    function GetCount: Integer;                 inline;
     procedure SetCount(aCount: integer);        inline;
     procedure SetCapacity(aCapacity: Integer);  inline;
     function GetCapacity: Integer;              inline;
   public
     InternalDynArray: TDynArray;
-    function Count: Integer;            inline;
     function Value: PPointer;           inline;
     function ElemSize: PtrUInt;         inline;
     function ElemType: Pointer;         inline;
@@ -5149,6 +5184,7 @@ type
     function LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char=nil): PUTF8Char; inline;
     function SaveToLength: integer; inline;
     function LoadFrom(Source: PAnsiChar): PAnsiChar;  inline;
+    property Count: integer read GetCount write SetCount;
     property Capacity: integer read GetCapacity write SetCapacity;
   private
   {$else UNDIRECTDYNARRAY}
@@ -5202,7 +5238,7 @@ type
     // - djNone and djCustom are too vague, and will raise an exception
     // - no RTTI check is made over the corresponding array layout: you shall
     // ensure that aKind matches the dynamic array element definition
-    // - aCaseInsensitive will be used for djRawUTF8..djSynUnicode comparison
+    // - aCaseInsensitive will be used for djRawUTF8..djHash512 text comparison
     procedure InitSpecific(aTypeInfo: pointer; var aValue; aKind: TDynArrayKind;
       aCountPointer: PInteger=nil; aCaseInsensitive: boolean=false);
     /// will compute all hash from the current elements of the dynamic array
@@ -6314,16 +6350,17 @@ procedure DynArraySortIndexed(Values: pointer; ElemSize, Count: Integer;
 
 /// compare two TGUID values
 // - this version is faster than the one supplied by SysUtils
-function IsEqualGUID(const guid1, guid2: TGUID): Boolean;
-  {$ifdef HASINLINE}inline;{$endif}
+function IsEqualGUID({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF}
+  guid1, guid2: TGUID): Boolean; {$ifdef HASINLINE}inline;{$endif}
 
 /// returns the index of a matching TGUID in an array
 // - returns -1 if no item matched
-function IsEqualGUIDArray(const guid: TGUID; const guids: array of TGUID): integer;
+function IsEqualGUIDArray({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF}
+  guid: TGUID; const guids: array of TGUID): integer;
 
 /// check if a TGUID value contains only 0 bytes
 // - this version is faster than the one supplied by SysUtils
-function IsNullGUID(const guid: TGUID): Boolean;
+function IsNullGUID({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID): Boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// append one TGUID item to a TGUID dynamic array
@@ -6341,12 +6378,12 @@ function GUIDToText(P: PUTF8Char; guid: PByteArray): PUTF8Char;
 /// convert a TGUID into UTF-8 encoded text
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - if you do not need the embracing { }, use ToUTF8() overloaded function
-function GUIDToRawUTF8(const guid: TGUID): RawUTF8;
+function GUIDToRawUTF8({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID): RawUTF8;
 
 /// convert a TGUID into text
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - this version is faster than the one supplied by SysUtils
-function GUIDToString(const guid: TGUID): string;
+function GUIDToString({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID): string;
 
 /// fast compute of some 32-bit random value
 // - will use RDRAND Intel x86/x64 opcode if available, or fast gsl_rng_taus2
@@ -6419,14 +6456,15 @@ const
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - using a shortstring will allow fast allocation on the stack, so is
 // preferred e.g. when providing a GUID to a ESynException.CreateUTF8()
-function GUIDToShort(const guid: TGUID): TGUIDShortString; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+function GUIDToShort({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF}
+  guid: TGUID): TGUIDShortString; overload; {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a TGUID into text
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - using a shortstring will allow fast allocation on the stack, so is
 // preferred e.g. when providing a GUID to a ESynException.CreateUTF8()
-procedure GUIDToShort(const guid: TGUID; out dest: TGUIDShortString); overload;
+procedure GUIDToShort({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF}
+  guid: TGUID; out dest: TGUIDShortString); overload;
 
 /// convert some text into its TGUID binary value
 // - expect e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without any {})
@@ -6630,7 +6668,8 @@ function DynArrayBlobSaveJSON(TypeInfo, BlobValue: pointer): RawUTF8;
 // will be returned (e.g. 'byte' for an array of 1 byte items), and ElemTypeInfo
 // will be set to nil
 // - this low-level function is used e.g. by mORMotWrappers unit
-function DynArrayElementTypeName(TypeInfo: pointer; ElemTypeInfo: PPointer=nil): RawUTF8;
+function DynArrayElementTypeName(TypeInfo: pointer; ElemTypeInfo: PPointer=nil;
+  ExactType: boolean=false): RawUTF8;
 
 /// trim ending 'DynArray' or 's' chars from a dynamic array type name
 // - used internally to guess the associated item type name
@@ -6667,6 +6706,16 @@ function SortDynArrayInt64(const A,B): integer;
 // better use this function to properly compare two QWord values over CPUX86
 function SortDynArrayQWord(const A,B): integer;
   {$ifndef CPUX86}{$ifdef HASINLINE}inline;{$endif}{$endif}
+
+/// compare two "array of THash128" elements
+function SortDynArray128(const A,B): integer;
+  {$ifdef FPC_OR_UNICODE}inline;{$endif} // C2096 Delphi 2007 internal error
+
+/// compare two "array of THash256" elements
+function SortDynArray256(const A,B): integer; {$ifdef FPC_OR_UNICODE}inline;{$endif}
+
+/// compare two "array of THash512" elements
+function SortDynArray512(const A,B): integer; {$ifdef FPC_OR_UNICODE}inline;{$endif}
 
 /// compare two "array of TObject/pointer" elements
 function SortDynArrayPointer(const A,B): integer;
@@ -6780,6 +6829,15 @@ function HashCardinal(const Elem; Hasher: THasher): cardinal;
 /// hash one Int64 value with the suppplied Hasher() function
 function HashInt64(const Elem; Hasher: THasher): cardinal;
 
+/// hash one THash128 value with the suppplied Hasher() function
+function Hash128(const Elem; Hasher: THasher): cardinal;
+
+/// hash one THash256 value with the suppplied Hasher() function
+function Hash256(const Elem; Hasher: THasher): cardinal;
+
+/// hash one THash512 value with the suppplied Hasher() function
+function Hash512(const Elem; Hasher: THasher): cardinal;
+
 /// hash one pointer value with the suppplied Hasher() function
 // - this version is not the same as HashPtrUInt, since it will always
 // use the hasher function
@@ -6796,7 +6854,8 @@ var
     SortDynArrayInt64, SortDynArrayInt64, SortDynArrayDouble, SortDynArrayDouble,
     SortDynArrayAnsiString, SortDynArrayAnsiString, SortDynArrayString,
     SortDynArrayAnsiString, SortDynArrayUnicodeString,
-    SortDynArrayUnicodeString, SortDynArrayPointer,
+    SortDynArrayUnicodeString, SortDynArray128, SortDynArray256,
+    SortDynArray512, SortDynArrayPointer,
     {$ifndef NOVARIANTS}SortDynArrayVariant,{$endif} nil),
     (nil, SortDynArrayBoolean, SortDynArrayByte, SortDynArrayWord,
     SortDynArrayInteger, SortDynArrayCardinal, SortDynArraySingle,
@@ -6804,7 +6863,8 @@ var
     SortDynArrayInt64, SortDynArrayInt64, SortDynArrayDouble, SortDynArrayDouble,
     SortDynArrayAnsiStringI, SortDynArrayAnsiStringI, SortDynArrayStringI,
     SortDynArrayAnsiStringI, SortDynArrayUnicodeStringI,
-    SortDynArrayUnicodeStringI, SortDynArrayPointer,
+    SortDynArrayUnicodeStringI, SortDynArray128, SortDynArray256,
+    SortDynArray512, SortDynArrayPointer,
     {$ifndef NOVARIANTS}SortDynArrayVariantI,{$endif} nil));
 
   /// helper array to get the hashing function corresponding to a given
@@ -6816,14 +6876,16 @@ var
     HashInt64, HashInt64, HashInt64, HashInt64,
     HashAnsiString, HashAnsiString,
     {$ifdef UNICODE}HashUnicodeString{$else}HashAnsiString{$endif},
-    HashAnsiString, HashWideString, HashSynUnicode, HashPointer,
+    HashAnsiString, HashWideString, HashSynUnicode, Hash128,
+    Hash256, Hash512, HashPointer,
     {$ifndef NOVARIANTS}HashVariant,{$endif} nil),
     (nil, HashByte, HashByte, HashWord, HashInteger,
     HashCardinal, HashCardinal, HashInt64, HashInt64, HashInt64,
     HashInt64, HashInt64, HashInt64, HashInt64,
     HashAnsiStringI, HashAnsiStringI,
     {$ifdef UNICODE}HashUnicodeStringI{$else}HashAnsiStringI{$endif},
-    HashAnsiStringI, HashWideStringI, HashSynUnicodeI, HashPointer,
+    HashAnsiStringI, HashWideStringI, HashSynUnicodeI, Hash128,
+    Hash256, Hash512, HashPointer,
     {$ifndef NOVARIANTS}HashVariantI,{$endif} nil));
 
 
@@ -7642,7 +7704,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// append a GUID value, encoded as text without any {}
     // - will store e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
-    procedure Add(const guid: TGUID); overload;
+    procedure Add({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID); overload;
     /// append a floating-point Value as a String
     // - write "Infinity", "-Infinity", and "NaN" for corresponding IEEE values
     // - noexp=true will call ExtendedToStringNoExp() to avoid any scientific
@@ -7931,8 +7993,8 @@ type
     // ! aWriter.AddJSONEscape(['doc','{','name','John','ab','[','a','b']','}','id',123]);
     // will append to the buffer:
     // ! '{"doc":{"name":"John","abc":["a","b"]},"id":123}'
-    // - note that cardinal values should be type-casted to Int64() (otherwise
-    // the integer mapped value will be transmitted, therefore wrongly)
+    // - note that, due to a Delphi compiler limitation, cardinal values should be
+    // type-casted to Int64() (otherwise the integer mapped value will be converted)
     // - you can pass nil as parameter for a null JSON value
     procedure AddJSONEscape(const NameValuePairs: array of const); overload;
     {$ifndef NOVARIANTS}
@@ -9003,8 +9065,9 @@ type
     /// this method will decompress the supplied data
     function AlgoDecompress(Comp: pointer; CompLen: integer; Plain: pointer): integer; virtual; abstract;
     /// this method will partially and safely decompress the supplied data
+    // - expects PartialLen <= result < PartialLenMax, depending on the algorithm
     function AlgoDecompressPartial(Comp: pointer; CompLen: integer;
-      Partial: pointer; PartialLenMax: integer): integer; virtual; abstract;
+      Partial: pointer; PartialLen, PartialLenMax: integer): integer; virtual; abstract;
   public
     /// will register AlgoID in the global list, for Algo() class methods
     // - no need to free this instance, since it will be owned by the global list
@@ -9072,7 +9135,11 @@ type
     // - returns 0 on error, or how many bytes have been written to Partial
     // - will call virtual AlgoDecompressPartial() which is slower, but expected
     // to avoid any buffer overflow on the Partial destination buffer
-    function DecompressPartial(Comp,Partial: PAnsiChar; CompLen,PartialLen: integer): integer;
+    // - some algorithms (e.g. Lizard) may need some additional bytes in the
+    // decode buffer, so PartialLenMax bytes should be allocated in Partial^,
+    // with PartialLenMax > expected PartialLen, and returned bytes may be >
+    // PartialLen, but always <= PartialLenMax
+    function DecompressPartial(Comp,Partial: PAnsiChar; CompLen,PartialLen,PartialLenMax: integer): integer;
     /// get the TAlgoCompress instance corresponding to the AlgoID stored
     // in the supplied compressed buffer
     // - returns nil if no algorithm was identified
@@ -9114,7 +9181,7 @@ type
     function AlgoDecompress(Comp: pointer; CompLen: integer; Plain: pointer): integer; override;
     /// partial (and safe) decompression of the supplied data using SynLZ
     function AlgoDecompressPartial(Comp: pointer; CompLen: integer;
-      Partial: pointer; PartialLenMax: integer): integer; override;
+      Partial: pointer; PartialLen, PartialLenMax: integer): integer; override;
   end;
 
   TAlgoCompressWithNoDestLenProcess = (doCompress, doUnCompress, doUncompressPartial);
@@ -9126,7 +9193,8 @@ type
   TAlgoCompressWithNoDestLen = class(TAlgoCompress)
   protected
     /// inherited classes should implement this single method for the actual process
-    function RawProcess(src,dst: pointer; srcLen,dstLen: integer;
+    // - dstMax is oinly used for doUncompressPartial
+    function RawProcess(src,dst: pointer; srcLen,dstLen,dstMax: integer;
       process: TAlgoCompressWithNoDestLenProcess): integer; virtual; abstract;
   public
     /// performs the compression, storing PlainLen and calling protected RawProcess
@@ -9137,7 +9205,7 @@ type
     function AlgoDecompress(Comp: pointer; CompLen: integer; Plain: pointer): integer; override;
     /// performs the decompression, retrieving PlainLen and calling protected RawProcess
     function AlgoDecompressPartial(Comp: pointer; CompLen: integer;
-      Partial: pointer; PartialLenMax: integer): integer; override;
+      Partial: pointer; PartialLen, PartialLenMax: integer): integer; override;
   end;
 
 
@@ -9924,6 +9992,8 @@ type
     OnErrorOverflow: procedure of object;
     /// use this event to customize the ErrorData process
     OnErrorData: procedure(const fmt: RawUTF8; const args: array of const) of object;
+    /// some opaque value, which may be a version number to define the binary layout
+    Tag: PtrInt;
     /// initialize the reader from a memory block
     procedure Init(Buffer: pointer; Len: integer); overload;
     /// initialize the reader from a RawByteString content
@@ -9932,10 +10002,6 @@ type
     procedure ErrorOverflow;
     /// raise a EFastReader with an "incorrect data" error message
     procedure ErrorData(const fmt: RawUTF8; const args: array of const);
-    /// read the next byte from the buffer
-    function NextByte: byte;      {$ifdef HASINLINE}inline;{$endif}
-    /// consumes the next byte from the buffer, if matches a given value
-    function NextByteEquals(Value: byte): boolean; {$ifdef HASINLINE}inline;{$endif}
     /// read the next 32-bit signed value from the buffer
     function VarInt32: integer;    {$ifdef HASINLINE}inline;{$endif}
     /// read the next 32-bit unsigned value from the buffer
@@ -9951,7 +10017,7 @@ type
     // - returns true on read success
     function VarUInt32Safe(out Value: cardinal): boolean;
     /// read the next 64-bit signed value from the buffer
-    function VarInt64: Int64;  {$ifdef HASINLINE}inline;{$endif}
+    function VarInt64: Int64; {$ifdef HASINLINE}inline;{$endif}
     /// read the next 64-bit unsigned value from the buffer
     function VarUInt64: QWord;
     /// read the next RawUTF8 value from the buffer
@@ -9970,6 +10036,20 @@ type
     function VarBlob: TValueResult; overload;  {$ifdef HASINLINE}inline;{$endif}
     /// read the next ShortString value from the buffer
     function VarShortString: shortstring; {$ifdef HASINLINE}inline;{$endif}
+    /// fast ignore the next VarUInt32/VarInt32/VarUInt64/VarInt64 value
+    // - don't raise any exception, so caller could check explicitly for any EOF
+    procedure VarNextInt; overload; {$ifdef HASINLINE}inline;{$endif}
+    /// fast ignore the next count VarUInt32/VarInt32/VarUInt64/VarInt64 values
+    // - don't raise any exception, so caller could check explicitly for any EOF
+    procedure VarNextInt(count: integer); overload;
+    /// read the next byte from the buffer
+    function NextByte: byte; {$ifdef HASINLINE}inline;{$endif}
+    /// consumes the next byte from the buffer, if matches a given value
+    function NextByteEquals(Value: byte): boolean; {$ifdef HASINLINE}inline;{$endif}
+    /// returns the current position, and move ahead the specified bytes
+    function Next(DataLen: PtrInt): pointer;   {$ifdef HASINLINE}inline;{$endif}
+    /// returns the current position, and move ahead the specified bytes
+    function NextSafe(out Data: Pointer; DataLen: PtrInt): boolean; {$ifdef HASINLINE}inline;{$endif}
     {$ifndef NOVARIANTS}
     /// read the next variant from the buffer
     // - is a wrapper around VariantLoad(), so may suffer from buffer overflow
@@ -9979,10 +10059,6 @@ type
     procedure NextDocVariantData(out Value: variant; CustomVariantOptions: pointer);
       {$ifdef FPC}inline;{$endif}
     {$endif NOVARIANTS}
-    /// returns the current position, and move ahead the specified bytes
-    function Next(DataLen: PtrInt): pointer;   {$ifdef HASINLINE}inline;{$endif}
-    /// returns the current position, and move ahead the specified bytes
-    function NextSafe(out Data: Pointer; DataLen: PtrInt): boolean; {$ifdef HASINLINE}inline;{$endif}
     /// copy data from the current position, and move ahead the specified bytes
     procedure Copy(out Dest; DataLen: PtrInt); {$ifdef HASINLINE}inline;{$endif}
     /// copy data from the current position, and move ahead the specified bytes
@@ -10002,105 +10078,15 @@ type
     function RemainingLength: PtrUInt; {$ifdef HASINLINE}inline;{$endif}
   end;
 
-  /// item as stored in a TRawByteStringGroup instance
-  TRawByteStringGroupValue = record
-    Position: integer;
-    Value: RawByteString;
-  end;
-  PRawByteStringGroupValue = ^TRawByteStringGroupValue;
-  /// items as stored in a TRawByteStringGroup instance
-  TRawByteStringGroupValueDynArray = array of TRawByteStringGroupValue;
-
-  /// store several RawByteString content with automatic concatenation
-  // - an optimized compaction algorithm will occur to ensure that every 512
-  // items will be compacted to at least 1MB: this reduces memory fragmentation
-  // with almost no performance impact
-  {$ifdef UNICODE}TRawByteStringGroup = record{$else}TRawByteStringGroup = object{$endif}
-  private
-    procedure Compact(len: integer);
-  public
-    /// actual list storing the data
-    Values: TRawByteStringGroupValueDynArray;
-    /// how many items are currently stored in Values[]
-    Count: integer;
-    /// the current size of data stored in Values[]
-    Position: integer;
-    /// the Count when the next compaction should occur
-    NextCompact: integer;
-    /// naive but efficient cache for Find()
-    LastFind: integer;
-    /// add a new item to Values[]
-    procedure Add(const aItem: RawByteString); overload;
-    /// add a new item to Values[]
-    procedure Add(aItem: pointer; aItemLen: integer); overload;
-    {$ifndef DELPHI5OROLDER}
-    /// add another TRawByteStringGroup to Values[]
-    procedure Add(const aAnother: TRawByteStringGroup); overload;
-    /// low-level method to abort the latest Add() call
-    // - warning: will work only once, if an Add() has actually been just called:
-    // otherwise, the behavior is unexpected, and may wrongly truncate data
-    procedure RemoveLastAdd;
-    /// compare two TRawByteStringGroup instance stored text
-    function Equals(const aAnother: TRawByteStringGroup): boolean;
-    {$endif DELPHI5OROLDER}
-    /// clear any stored information
-    procedure Clear;
-    /// return all content as a single RawByteString
-    function AsText: RawByteString;
-    /// return all content as a single TByteDynArray
-    function AsBytes: TByteDynArray;
-    /// save all content into a TTextWriter instance
-    procedure Write(W: TTextWriter; Escape: TTextWriterKind=twJSONEscape); overload;
-    /// save all content into a TFileBufferWriter instance
-    procedure WriteBinary(W: TFileBufferWriter); overload;
-    /// save all content as a string into a TFileBufferWriter instance
-    // - storing the length as WriteVarUInt32() prefix
-    procedure WriteString(W: TFileBufferWriter);
-    /// add another TRawByteStringGroup previously serialized via WriteString()
-    procedure AddFromReader(var aReader: TFastReader);
-    /// returns a pointer to Values[] containing a given position
-    // - returns nil if not found
-    function Find(aPosition: integer): PRawByteStringGroupValue; overload;
-    /// returns a pointer to Values[].Value containing a given position and length
-    // - returns nil if not found
-    function Find(aPosition, aLength: integer): pointer; overload;
-    /// returns the text at a given position in Values[]
-    // - text should be in a single Values[] entry
-    procedure FindAsText(aPosition, aLength: integer; out aText: RawByteString); overload;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// returns the text at a given position in Values[]
-    // - text should be in a single Values[] entry
-    function FindAsText(aPosition, aLength: integer): RawByteString; overload;
-      {$ifdef HASINLINE}inline;{$endif}
-    {$ifndef NOVARIANTS}
-    /// returns the text at a given position in Values[]
-    // - text should be in a single Values[] entry
-    // - explicitly returns null if the supplied text was not found
-    procedure FindAsVariant(aPosition, aLength: integer; out aDest: variant);
-      {$ifdef HASINLINE}inline;{$endif}
-    {$endif}
-    /// append the text at a given position in Values[], JSON escaped by default
-    // - text should be in a single Values[] entry
-    procedure FindWrite(aPosition, aLength: integer; W: TTextWriter;
-      Escape: TTextWriterKind=twJSONEscape);
-      {$ifdef HASINLINE}inline;{$endif}
-    /// append the blob at a given position in Values[], base-64 encoded
-    // - text should be in a single Values[] entry
-    procedure FindWriteBase64(aPosition, aLength: integer; W: TTextWriter;
-      withMagic: boolean);
-      {$ifdef HASINLINE}inline;{$endif}
-    /// copy the text at a given position in Values[]
-    // - text should be in a single Values[] entry
-    procedure FindMove(aPosition, aLength: integer; aDest: pointer);
-  end;
-  /// pointer reference to a TRawByteStringGroup
-  PRawByteStringGroup = ^TRawByteStringGroup;
-
 /// FileSeek() overloaded function, working with huge files
 // - Delphi FileSeek() is buggy -> use this function to safe access files > 2 GB
 // (thanks to sanyin for the report)
 function FileSeek64(Handle: THandle; const Offset: Int64; Origin: cardinal): Int64;
 
+/// wrapper to serialize a T*ObjArray dynamic array as JSON
+// - as expected by TJSONSerializer.RegisterObjArrayForJSON()
+function ObjArrayToJSON(const aObjArray;
+  aOptions: TTextWriterWriteObjectOptions=[woDontStoreDefault]): RawUTF8;
 
 /// encode the supplied data as an UTF-8 valid JSON object content
 // - data must be supplied two by two, as Name,Value pairs, e.g.
@@ -10108,8 +10094,8 @@ function FileSeek64(Handle: THandle; const Offset: Int64; Origin: cardinal): Int
 // - or you can specify nested arrays or objects with '['..']' or '{'..'}':
 // ! J := JSONEncode(['doc','{','name','John','abc','[','a','b','c',']','}','id',123]);
 // ! assert(J='{"doc":{"name":"John","abc":["a","b","c"]},"id":123}');
-// - note that cardinal values should be type-casted to Int64() (otherwise
-// the integer mapped value will be transmitted, therefore wrongly)
+// - note that, due to a Delphi compiler limitation, cardinal values should be
+// type-casted to Int64() (otherwise the integer mapped value will be converted)
 // - you can pass nil as parameter for a null JSON value
 function JSONEncode(const NameValuePairs: array of const): RawUTF8; overload;
 
@@ -10147,15 +10133,15 @@ function JSONEncodeArrayDouble(const Values: array of double): RawUTF8; overload
 
 /// encode the supplied array data as a valid JSON array content
 // - if WithoutBraces is TRUE, no [ ] will be generated
-// - note that cardinal values should be type-casted to Int64() (otherwise
-// the integer mapped value will be transmitted, therefore wrongly)
+// - note that, due to a Delphi compiler limitation, cardinal values should be
+// type-casted to Int64() (otherwise the integer mapped value will be converted)
 function JSONEncodeArrayOfConst(const Values: array of const;
   WithoutBraces: boolean=false): RawUTF8; overload;
 
 /// encode the supplied array data as a valid JSON array content
 // - if WithoutBraces is TRUE, no [ ] will be generated
-// - note that cardinal values should be type-casted to Int64() (otherwise
-// the integer mapped value will be transmitted, therefore wrongly)
+// - note that, due to a Delphi compiler limitation, cardinal values should be
+// type-casted to Int64() (otherwise the integer mapped value will be converted)
 procedure JSONEncodeArrayOfConst(const Values: array of const;
   WithoutBraces: boolean; var result: RawUTF8); overload;
 
@@ -10163,46 +10149,24 @@ procedure JSONEncodeArrayOfConst(const Values: array of const;
 // - will unquote the SQLValue using TTextWriter.AddQuotedStringAsJSON()
 procedure JSONEncodeNameSQLValue(const Name,SQLValue: RawUTF8; var result: RawUTF8);
 
-/// decode the supplied UTF-8 JSON content for the supplied names
-// - data will be set in Values, according to the Names supplied e.g.
-// ! JSONDecode(JSON,['name','year'],Values) -> Values[0]^='John'; Values[1]^='1972';
-// - if any supplied name wasn't found its corresponding Values[] will be nil
-// - this procedure will decode the JSON content in-memory, i.e. the PUtf8Char
-// array is created inside JSON, which is therefore modified: make a private
-// copy first if you want to reuse the JSON content
-// - if HandleValuesAsObjectOrArray is TRUE, then this procedure will handle
-// JSON arrays or objects
-// - support enhanced JSON syntax, e.g. '{name:'"John",year:1972}' is decoded
-// just like '{"name":'"John","year":1972}'
-procedure JSONDecode(var JSON: RawUTF8;
-  const Names: array of PUTF8Char; var Values: TPUtf8CharDynArray;
-  HandleValuesAsObjectOrArray: Boolean=false); overload;
-
-/// decode the supplied UTF-8 JSON content for the supplied names
-// - an overloaded function when the JSON is supplied as a RawJSON variable
-procedure JSONDecode(var JSON: RawJSON;
-  const Names: array of PUTF8Char; var Values: TPUtf8CharDynArray;
-  HandleValuesAsObjectOrArray: Boolean=false); overload;
-
-/// wrapper to serialize a T*ObjArray dynamic array as JSON
-// - as expected by TJSONSerializer.RegisterObjArrayForJSON()
-function ObjArrayToJSON(const aObjArray;
-  aOptions: TTextWriterWriteObjectOptions=[woDontStoreDefault]): RawUTF8;
-
-/// decode the supplied UTF-8 JSON content for the supplied names
-// - data will be set in Values, according to the Names supplied e.g.
-// ! JSONDecode(P,['name','year'],Values) -> Values[0]^='John'; Values[1]^='1972';
-// - if any supplied name wasn't found its corresponding Values[] will be nil
-// - this procedure will decode the JSON content in-memory, i.e. the PUtf8Char
-// array is created inside P, which is therefore modified: make a private
-// copy first if you want to reuse the JSON content
-// - if HandleValuesAsObjectOrArray is TRUE, then this procedure will handle
-// JSON arrays or objects
-// - returns a pointer to the next content item in the JSON buffer
-function JSONDecode(P: PUTF8Char; const Names: array of PUTF8Char;
-  var Values: TPUtf8CharDynArray; HandleValuesAsObjectOrArray: Boolean=false): PUTF8Char; overload;
-
 type
+  /// points to one value of raw UTF-8 content, decoded from a JSON buffer
+  // - used e.g. by JSONDecode() overloaded function to returns names/values
+  {$ifdef UNICODE}TValuePUTF8Char = record{$else}TValuePUTF8Char = object{$endif}
+  public
+    Value: PUTF8Char;
+    ValueLen: PtrInt;
+    procedure ToUTF8(var Text: RawUTF8); overload; {$ifdef HASINLINE}inline;{$endif}
+    function ToUTF8: RawUTF8; overload; {$ifdef HASINLINE}inline;{$endif}
+    function ToString: string;
+    function ToInteger: PtrInt; {$ifdef HASINLINE}inline;{$endif}
+    function ToCardinal: PtrUInt; {$ifdef HASINLINE}inline;{$endif}
+    function Idem(const Text: RawUTF8): boolean; {$ifdef HASINLINE}inline;{$endif}
+  end;
+  /// used e.g. by JSONDecode() overloaded function to returns values
+  TValuePUTF8CharArray = array[0..maxInt div SizeOf(TValuePUTF8Char)-1] of TValuePUTF8Char;
+  PValuePUTF8CharArray = ^TValuePUTF8CharArray;
+
   /// store one name/value pair of raw UTF-8 content, from a JSON buffer
   // - used e.g. by JSONDecode() overloaded function to returns names/values
   TNameValuePUTF8Char = record
@@ -10213,6 +10177,39 @@ type
   end;
   /// used e.g. by JSONDecode() overloaded function to returns name/value pairs
   TNameValuePUTF8CharDynArray = array of TNameValuePUTF8Char;
+
+/// decode the supplied UTF-8 JSON content for the supplied names
+// - data will be set in Values, according to the Names supplied e.g.
+// ! JSONDecode(JSON,['name','year'],@Values) -> Values[0].Value='John'; Values[1].Value='1972';
+// - if any supplied name wasn't found its corresponding Values[] will be nil
+// - this procedure will decode the JSON content in-memory, i.e. the PUtf8Char
+// array is created inside JSON, which is therefore modified: make a private
+// copy first if you want to reuse the JSON content
+// - if HandleValuesAsObjectOrArray is TRUE, then this procedure will handle
+// JSON arrays or objects
+// - support enhanced JSON syntax, e.g. '{name:'"John",year:1972}' is decoded
+// just like '{"name":'"John","year":1972}'
+procedure JSONDecode(var JSON: RawUTF8; const Names: array of RawUTF8;
+  Values: PValuePUTF8CharArray; HandleValuesAsObjectOrArray: Boolean=false); overload;
+
+/// decode the supplied UTF-8 JSON content for the supplied names
+// - an overloaded function when the JSON is supplied as a RawJSON variable
+procedure JSONDecode(var JSON: RawJSON; const Names: array of RawUTF8;
+  Values: PValuePUTF8CharArray; HandleValuesAsObjectOrArray: Boolean=false); overload;
+
+/// decode the supplied UTF-8 JSON content for the supplied names
+// - data will be set in Values, according to the Names supplied e.g.
+// ! JSONDecode(P,['name','year'],Values) -> Values[0]^='John'; Values[1]^='1972';
+// - if any supplied name wasn't found its corresponding Values[] will be nil
+// - this procedure will decode the JSON content in-memory, i.e. the PUtf8Char
+// array is created inside P, which is therefore modified: make a private
+// copy first if you want to reuse the JSON content
+// - if HandleValuesAsObjectOrArray is TRUE, then this procedure will handle
+// JSON arrays or objects
+// - if ValuesLen is set, ValuesLen[] will contain the length of each Values[]
+// - returns a pointer to the next content item in the JSON buffer
+function JSONDecode(P: PUTF8Char; const Names: array of RawUTF8;
+  Values: PValuePUTF8CharArray; HandleValuesAsObjectOrArray: Boolean=false): PUTF8Char; overload;
 
 /// decode the supplied UTF-8 JSON content into an array of name/value pairs
 // - this procedure will decode the JSON content in-memory, i.e. the PUtf8Char
@@ -10538,6 +10535,7 @@ type
   // - i.e. the number of seconds since 1970-01-01 00:00:00 UTC
   // - is stored as 64-bit value, so that it won't be affected by the
   // "Year 2038" overflow issue
+  // - see TUnixMSTime for a millisecond resolution Unix Timestamp
   // - use UnixTimeToDateTime/DateTimeToUnixTime functions to convert it to/from
   // a regular TDateTime
   // - use UnixTimeUTC to return the current timestamp, using fast OS API call
@@ -10546,6 +10544,7 @@ type
 
   /// timestamp stored as millisecond-based Unix Time
   // - i.e. the number of milliseconds since 1970-01-01 00:00:00 UTC
+  // - see TUnixTime for a second resolution Unix Timestamp
   // - use UnixMSTimeToDateTime/DateTimeToUnixMSTime functions to convert it
   // to/from a regular TDateTime
   // - also one of the JavaScript date encodings
@@ -11236,7 +11235,7 @@ function Hash32(const Text: RawByteString): cardinal; overload;
 /// standard Kernighan & Ritchie hash from "The C programming Language", 3rd edition
 // - simple and efficient code, but too much collisions for THasher
 // - kr32() is 898.8 MB/s - crc32cfast() 1.7 GB/s, crc32csse42() 4.3 GB/s
-function kr32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+function kr32(crc: cardinal; buf: PAnsiChar; len: PtrInt): cardinal;
 
 /// simple FNV-1a hashing function
 // - when run over our regression suite, is similar to crc32c() about collisions,
@@ -11244,7 +11243,7 @@ function kr32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 // - fnv32() is 715.5 MB/s - kr32() 898.8 MB/s
 // - this hash function should not be usefull, unless you need several hashing
 // algorithms at once (e.g. if crc32c with diverse seeds is not enough)
-function fnv32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+function fnv32(crc: cardinal; buf: PAnsiChar; len: PtrInt): cardinal;
 
 /// perform very fast xxHash hashing in 32-bit mode
 // - will use optimized asm for x86/x64, or a pascal version on other CPUs
@@ -11472,7 +11471,11 @@ function HashFound(P: PHash128Rec; Count: integer; const h: THash128Rec): boolea
 
 /// convert a 128-bit buffer (storing an IP6 address) into its full notation
 // - returns e.g. '2001:0db8:0a0b:12f0:0000:0000:0000:0001'
-function IP6Text(ip6: PHash128): shortstring;
+function IP6Text(ip6: PHash128): shortstring; overload; {$ifdef HASINLINE}inline;{$endif}
+
+/// convert a 128-bit buffer (storing an IP6 address) into its full notation
+// - returns e.g. '2001:0db8:0a0b:12f0:0000:0000:0000:0001'
+procedure IP6Text(ip6: PHash128; result: PShortString); overload;
 
 /// compute a 256-bit checksum on the supplied buffer using crc32c
 // - will use SSE 4.2 hardware accelerated instruction, if available
@@ -11804,6 +11807,7 @@ type
     fThreadName: RawUTF8;
     fExecute: (exCreated,exRun,exFinished);
     fExecuteLoopPause: boolean;
+    procedure SetExecuteLoopPause(dopause: boolean);
     /// where the main process takes place
     procedure Execute; override;
     procedure ExecuteLoop; virtual; abstract;
@@ -11838,7 +11842,7 @@ type
     /// temporary stop the execution of ExecuteLoop, until set back to false
     // - may be used e.g. by TSynBackgroundTimer to delay the process of
     // background tasks
-    property Pause: boolean read fExecuteLoopPause write fExecuteLoopPause;
+    property Pause: boolean read fExecuteLoopPause write SetExecuteLoopPause;
     /// access to the low-level associated event used to notify task execution
     // to the background thread
     // - you may call ProcessEvent.SetEvent to trigger the internal process loop
@@ -12123,12 +12127,13 @@ type
   /// a cross-platform and cross-compiler TSystemTime structure
   // - FPC's TSystemTime in datih.inc does NOT match Windows TSystemTime fields!
   // - also used to store a Date/Time in TSynTimeZone internal structures
-  {$ifdef ISDELPHI2006ANDUP}TSynSystemTime = record{$else}TSynSystemTime = object{$endif}
+  {$ifdef UNICODE}TSynSystemTime = record{$else}TSynSystemTime = object{$endif}
     Year, Month, DayOfWeek, Day,
     Hour, Minute, Second, MilliSecond: word;
+    /// set all fields to 0
+    procedure Clear; {$ifdef HASINLINE}inline;{$endif}
     /// returns true if all fields are zero
-    function IsZero: boolean;
-      {$ifdef HASINLINE}inline;{$endif}
+    function IsZero: boolean; {$ifdef HASINLINE}inline;{$endif}
     /// returns true if all fields do match
     function IsEqual(const another{$ifndef DELPHI5OROLDER}: TSynSystemTime{$endif}): boolean;
     /// used by TSynTimeZone
@@ -12137,6 +12142,10 @@ type
     procedure FromNowUTC;
     /// fill fields with the current Local time, using a 8-16ms thread-safe cache
     procedure FromNowLocal;
+    /// append the stored date and time, in a log-friendly format
+    // - e.g. append '20110325 19241502 '
+    // - as called by TTextWriter.AddCurrentLogTime()
+    procedure AddLogTime(WR: TTextWriter);
   end;
   PSynSystemTime = ^TSynSystemTime;
 
@@ -12570,7 +12579,14 @@ function UnixTimeToString(const UnixTime: TUnixTime; Expanded: boolean=true;
 // a small text layout, perfect e.g. for naming a local file
 // - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits, expecting
 // a date > 1999 (a current date would be fine)
-function UnixTimeToFileShort(const UnixTime: TUnixTime): TShort16;
+procedure UnixTimeToFileShort(const UnixTime: TUnixTime; out result: TShort16); overload;
+
+/// convert some second-based c-encoded time (from Unix epoch 1/1/1970) to
+// a small text layout, perfect e.g. for naming a local file
+// - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits, expecting
+// a date > 1999 (a current date would be fine)
+function UnixTimeToFileShort(const UnixTime: TUnixTime): TShort16; overload;
+  {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
 
 /// convert some second-based c-encoded time to the ISO 8601 text layout, either
 // as time or date elapsed period
@@ -12601,6 +12617,14 @@ function DateTimeToUnixMSTime(const AValue: TDateTime): TUnixMSTime;
 function UnixMSTimeToString(const UnixMSTime: TUnixMSTime; Expanded: boolean=true;
   FirstTimeChar: AnsiChar='T'; const TZD: RawUTF8=''): RawUTF8;
 
+/// convert some milllisecond-based c-encoded time (from Unix epoch 1/1/1970) to
+// a small text layout, trimming to the second resolution, perfect e.g. for
+// naming a local file
+// - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits, expecting
+// a date > 1999 (a current date would be fine)
+function UnixMSTimeToFileShort(const UnixMSTime: TUnixMSTime): TShort16;
+  {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
+
 /// convert some millisecond-based c-encoded time to the ISO 8601 text layout,
 // as time or date elapsed period
 // - this function won't add the Unix epoch 1/1/1970 offset to the timestamp
@@ -12629,7 +12653,7 @@ type
   TTimeZoneID = type RawUTF8;
 
   /// used to store Time Zone information for a single area in TSynTimeZone
-  {$ifdef ISDELPHI2006ANDUP}TTimeZoneData = record{$else}TTimeZoneData = object{$endif}
+  {$ifdef UNICODE}TTimeZoneData = record{$else}TTimeZoneData = object{$endif}
     id: TTimeZoneID;
     display: RawUTF8;
     tzi: TTimeZoneInfo;
@@ -12759,6 +12783,13 @@ type
   TOnStringTranslate = procedure (var English: string) of object;
 
 
+const
+  /// Rotate local log file if reached this size (1MB by default)
+  // - .log file will be save as .log.bak file
+  // - a new .log file is created
+  // - used by AppendToTextFile() and LogToTextFile() functions (not TSynLog)
+  MAXLOGSIZE = 1024*1024;
+
 /// log a message to a local text file
 // - the text file is located in the executable directory, and its name is
 // simply the executable file name with the '.log' extension instead of '.exe'
@@ -12770,14 +12801,7 @@ procedure LogToTextFile(Msg: RawUTF8);
 // - this version expects the filename to be specified
 // - format contains the current date and time, then the Msg on one line
 // - date and time format used is 'YYYYMMDD hh:mm:ss'
-procedure AppendToTextFile(aLine: RawUTF8; const aFileName: TFileName);
-
-const
-  /// Rotate local log file if reached this size (1MB by default)
-  // - .log file will be save as .log.bak file
-  // - a new .log file is created
-  // - used by AppendToTextFile() and LogToTextFile() functions (not TSynLog)
-  MAXLOGSIZE = 1024*1024;
+procedure AppendToTextFile(aLine: RawUTF8; const aFileName: TFileName; aMaxSize: Int64=MAXLOGSIZE);
 
 
 { ************ fast low-level lookup types used by internal conversion routines }
@@ -13753,6 +13777,10 @@ procedure SetVariantByValue(const Source: Variant; var Dest: Variant);
 procedure ZeroFill(Value: PVarData);
   {$ifdef HASINLINE}inline;{$endif}
 
+/// fill all bytes of the value's memory buffer with zeros, i.e. 'toto' -> #0#0#0#0
+// - may be used to cleanup stack-allocated content
+procedure FillZero(var value: variant); overload;
+
 /// retrieve a variant value from variable-length buffer
 // - matches TFileBufferWriter.Write()
 // - how custom type variants are created can be defined via CustomVariantOptions
@@ -13954,13 +13982,13 @@ procedure RawUTF8ToVariant(const Txt: RawUTF8; var Value: TVarData;
   ExpectedValueType: word); overload;
 
 /// convert an open array (const Args: array of const) argument to a variant
-// - note that cardinal values should be type-casted to Int64() (otherwise
-// the integer mapped value will be transmitted, therefore wrongly)
+// - note that, due to a Delphi compiler limitation, cardinal values should be
+// type-casted to Int64() (otherwise the integer mapped value will be converted)
 procedure VarRecToVariant(const V: TVarRec; var result: variant); overload;
 
 /// convert an open array (const Args: array of const) argument to a variant
-// - note that cardinal values should be type-casted to Int64() (otherwise
-// the integer mapped value will be transmitted, therefore wrongly)
+// - note that, due to a Delphi compiler limitation, cardinal values should be
+// type-casted to Int64() (otherwise the integer mapped value will be converted)
 function VarRecToVariant(const V: TVarRec): variant; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -14464,6 +14492,9 @@ type
     // - like Clear + Init() with the same options
     // - will reset Kind to dvUndefined
     procedure Reset;
+    /// fill all Values[] with #0, then delete all values
+    // - could be used to specifically remove sensitive information from memory
+    procedure FillZero;
     /// low-level method to force a number of items
     // - could be used to fast add items to the internal Values[]/Names[] arrays
     // - just set protected VCount field, do not resize the arrays: caller
@@ -17597,6 +17628,7 @@ function _LStrLenP(s: pointer): SizeInt; inline;
 begin // here caller ensured s<>''
   result := PSizeInt(PAnsiChar(s)-SizeOf(SizeInt))^;
 end;
+
 {$endif FPC}
 
 
@@ -18437,7 +18469,7 @@ end;
 procedure TSynAnsiUTF8.UTF8BufferToAnsi(Source: PUTF8Char; SourceChars: Cardinal;
   var result: RawByteString);
 begin
-  FastSetString(result,Source,SourceChars);
+  FastSetString(RawUTF8(result),Source,SourceChars);
 end;
 
 function TSynAnsiUTF8.UTF8ToAnsi(const UTF8: RawUTF8): RawByteString;
@@ -18579,7 +18611,13 @@ end;
 function TSynTempBuffer.InitIncreasing(Count, Start: integer): PIntegerArray;
 begin
   result := Init((Count-Start)*4);
-  FillIncreasing(result, Start, Count);
+  FillIncreasing(result,Start,Count);
+end;
+
+function TSynTempBuffer.InitZero(ZeroLen: integer): pointer;
+begin
+  result := Init(ZeroLen);
+  FillCharFast(result^,ZeroLen,0);
 end;
 
 procedure TSynTempBuffer.Done;
@@ -19913,7 +19951,7 @@ begin
   FastSetString(result,@Ansi7Text[1],ord(Ansi7Text[0]));
 end;
 
-function ToUTF8(const guid: TGUID): RawUTF8;
+function ToUTF8({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID): RawUTF8;
 begin
   FastSetString(result,nil,36);
   GUIDToText(pointer(result),@guid);
@@ -20994,23 +21032,20 @@ type
 
   PStrRec = ^TStrRec;
   /// map the Delphi/FPC string header, as defined in System.pas
-  TStrRec =
-    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
-    packed
-    {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
-    record
-{$ifdef FPC}
+{$ifdef FPC} // see TAnsiRec in astrings.inc
+  TStrRec = record
   {$ifdef ISFPC27}
-    codePage: Word;
+    codePage: TSystemCodePage;
     elemSize: Word;
   {$endif}
   {$ifdef CPU64}
-    _Padding: LongInt;
+    _Padding: DWord;
   {$endif}
     refCnt: SizeInt;
     length: SizeInt;
 {$else FPC}
-  {$ifdef UNICODE}
+   TStrRec = packed record
+ {$ifdef UNICODE}
     {$ifdef CPU64}
     /// padding bytes for 16 byte alignment of the header
     _Padding: LongInt;
@@ -21261,7 +21296,7 @@ const
 {$ifdef HASCODEPAGE}
 procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
 var r: PAnsiChar; // s may = p -> stand-alone variable
-    sr: PStrRec; // stand-alone to use register
+    sr: PStrRec; // local copy of r, to use register
 begin
   if len>0 then begin
     GetMem(r,len+(STRRECSIZE+2));
@@ -21282,9 +21317,9 @@ begin
     {$ifdef FPC}Finalize(RawByteString(s)){$else}RawByteString(s) := ''{$endif};
 end;
 
-procedure FastSetString(var s; p: pointer; len: PtrInt);
-var r: PAnsiChar; // s may = p -> stand-alone variable
-    sr: PStrRec; // stand-alone to use register
+procedure FastSetString(var s: RawUTF8; p: pointer; len: PtrInt);
+var r: PAnsiChar;
+    sr: PStrRec;
 begin
   if len>0 then begin
     GetMem(r,len+(STRRECSIZE+2));
@@ -21298,18 +21333,18 @@ begin
     r := pointer(sr);
     if p<>nil then
       MoveFast(p^,sr^,len);
-    {$ifdef FPC}Finalize(RawByteString(s)){$else}RawByteString(s) := ''{$endif};
+    {$ifdef FPC}Finalize(s){$else}s := ''{$endif};
     pointer(s) := r;
   end
   else
-    {$ifdef FPC}Finalize(RawByteString(s)){$else}RawByteString(s) := ''{$endif};
+    {$ifdef FPC}Finalize(s){$else}s := ''{$endif};
 end;
 {$else}
 procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
 begin
   SetString(RawByteString(s),PAnsiChar(p),len);
 end;
-procedure FastSetString(var s; p: pointer; len: PtrInt);
+procedure FastSetString(var s: RawUTF8; p: pointer; len: PtrInt);
 begin
   SetString(RawByteString(s),PAnsiChar(p),len);
 end;
@@ -21490,7 +21525,7 @@ begin
   TypeInfoToName(aTypeInfo,Result,'');
 end;
 
-function RecordTypeInfoSize(aRecordTypeInfo: Pointer): integer;
+function RecordTypeInfoSize(aRecordTypeInfo: pointer): integer;
 var info: PTypeInfo;
 begin
   info := GetTypeInfo(aRecordTypeInfo,tkRecordTypeOrSet);
@@ -22426,6 +22461,7 @@ asm
 end;
 {$else}
 {$ifdef FPC}
+procedure bswap64array(a,b: PQWordArray; n: integer);
 var i: integer;
 begin
   for i := 0 to n-1 do
@@ -22478,8 +22514,8 @@ end;
 function bswap64(const a: QWord): QWord;
 asm
   mov edx, a.TQWordRec.L
-  bswap edx
   mov eax, a.TQWordRec.H
+  bswap edx
   bswap eax
 end;
 {$else}
@@ -22875,16 +22911,16 @@ begin
   result := true;
 end;
 
-{$ifndef HASINLINE}
+{$ifdef HASINLINE}
+procedure FillZero(var dest; count: PtrInt);
+begin
+  FillCharFast(dest,count,0);
+end;
+{$else}
 procedure FillZero(var dest; count: PtrInt);
 asm
   xor ecx, ecx
   jmp dword ptr [FillCharFast]
-end;
-{$else}
-procedure FillZero(var dest; count: PtrInt);
-begin
-  FillCharFast(dest,count,0);
 end;
 {$endif}
 
@@ -23082,28 +23118,51 @@ begin
   result := Source;
 end;
 
-function PosI(uppersubstr: PUTF8Char; const str: RawUTF8): Integer;
-var C: AnsiChar;
+function IdemPChar2(table: PNormTable; p: PUTF8Char; up: PAnsiChar): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+var u: AnsiChar;
+begin // here p and up are expected to be <> nil
+  result := false;
+  dec(PtrUInt(p),PtrUInt(up));
+  repeat
+    u := up^;
+    if u=#0 then
+      break;
+    if u<>table^[up[PtrUInt(p)]] then
+      exit;
+    inc(up);
+  until false;
+  result := true;
+end;
+
+function PosI(uppersubstr: PUTF8Char; const str: RawUTF8): PtrInt;
+var u: AnsiChar;
+    table: {$ifdef CPUX86}TNormTable absolute NormToUpperAnsi7{$else}PNormTable{$endif};
 begin
   if uppersubstr<>nil then begin
-    C := uppersubstr^;
+    {$ifndef CPUX86}table := @NormToUpperAnsi7;{$endif}
+    u := uppersubstr^;
     for result := 1 to Length(str) do
-      if NormToUpperAnsi7[str[result]]=C then
-        if IdemPChar(@PUTF8Char(pointer(str))[result],PAnsiChar(uppersubstr)+1) then
+      if table[str[result]]=u then
+        if {$ifdef CPUX86}IdemPChar({$else}IdemPChar2(table,{$endif}
+           @PUTF8Char(pointer(str))[result],PAnsiChar(uppersubstr)+1) then
           exit;
   end;
   result := 0;
 end;
 
 function StrPosI(uppersubstr,str: PUTF8Char): PUTF8Char;
-var C: AnsiChar;
+var u: AnsiChar;
+    table: {$ifdef CPUX86}TNormTable absolute NormToUpperAnsi7{$else}PNormTable{$endif};
 begin
   if (uppersubstr<>nil) and (str<>nil) then begin
-    C := uppersubstr^;
+    {$ifndef CPUX86}table := @NormToUpperAnsi7;{$endif}
+    u := uppersubstr^;
     result := str;
     while result^<>#0 do begin
-      if NormToUpperAnsi7[result^]=C then
-        if IdemPChar(result+1,PAnsiChar(uppersubstr)+1) then
+      if table[result^]=u then
+        if {$ifdef CPUX86}IdemPChar({$else}IdemPChar2(table,{$endif}
+           result+1,PAnsiChar(uppersubstr)+1) then
           exit;
       inc(result);
     end;
@@ -23529,7 +23588,7 @@ end;
 
 {$ifndef DEFINED_INT32TOUTF8}
 
-function Int32ToUTF8(Value: integer): RawUTF8; // faster than SysUtils.IntToStr
+function Int32ToUtf8(Value: integer): RawUTF8; // faster than SysUtils.IntToStr
 var tmp: array[0..15] of AnsiChar;
     P: PAnsiChar;
 begin
@@ -23588,7 +23647,7 @@ begin
   FastSetString(result,P,@tmp[15]-P);
 end;
 
-function UInt32ToUTF8(Value: Cardinal): RawUTF8;
+function UInt32ToUtf8(Value: cardinal): RawUTF8;
 var tmp: array[0..15] of AnsiChar;
     P: PAnsiChar;
 begin
@@ -23786,7 +23845,7 @@ type
   TFormatUTF8 = object // only supported token is %, with any const arguments
     b: PTempUTF8;
     L,argN: integer;
-    blocks: array[0..63] of TTempUTF8;
+    blocks: array[0..63] of TTempUTF8; // to avoid most heap allocations
     procedure Parse(const Format: RawUTF8; const Args: array of const);
     procedure Write(Dest: PUTF8Char);
     function WriteMax(Dest: PUTF8Char; Max: PtrUInt): PUTF8Char;
@@ -23908,6 +23967,27 @@ begin
     process.Parse(Format,Args);
     result[0] := AnsiChar(process.WriteMax(@result[1],16)-@result[1]);
   end;
+end;
+
+procedure FormatString(const Format: RawUTF8; const Args: array of const;
+  out result: string);
+var process: TFormatUTF8;
+    temp: TSynTempBuffer; // will avoid most memory allocations
+begin
+  if (Format='') or (high(Args)<0) then begin // no formatting needed
+    UTF8DecodeToString(pointer(Format),length(Format),result);
+    exit;
+  end;
+  process.Parse(Format,Args);
+  temp.Init(process.L);
+  process.Write(temp.buf);
+  UTF8DecodeToString(temp.buf,process.L,result);
+  temp.Done;
+end;
+
+function FormatString(const Format: RawUTF8; const Args: array of const): string;
+begin
+  FormatString(Format,Args,result);
 end;
 
 function FormatUTF8(const Format: RawUTF8; const Args, Params: array of const; JSONFormat: boolean): RawUTF8;
@@ -24632,21 +24712,6 @@ begin
   result := dest;
 end;
 
-function TrimLeftLowerCaseShort(V: PShortString): RawUTF8;
-var P: PAnsiChar;
-    L: integer;
-begin
-  L := length(V^);
-  P := @V^[1];
-  while (L>0) and (P^ in ['a'..'z']) do begin
-    inc(P);
-    dec(L);
-  end;
-  if L=0 then
-    FastSetString(result,@V^[1],length(V^)) else
-    FastSetString(result,P,L);
-end;
-
 function IdemPCharAndGetNextLine(var source: PUTF8Char; searchUp: PAnsiChar): boolean;
 begin
   if source=nil then
@@ -24656,8 +24721,8 @@ begin
   end;
 end;
 
-function fnv32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
-var i: integer;
+function fnv32(crc: cardinal; buf: PAnsiChar; len: PtrInt): cardinal;
+var i: PtrInt;
 begin
   if buf<>nil then
     for i := 0 to len-1 do
@@ -24665,8 +24730,8 @@ begin
   result := crc;
 end;
 
-function kr32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
-var i: integer;
+function kr32(crc: cardinal; buf: PAnsiChar; len: PtrInt): cardinal;
+var i: PtrInt;
 begin
   for i := 0 to len-1 do
     crc := ord(buf[i])+crc*31;
@@ -25510,33 +25575,6 @@ asm // eax=dest source=edx
 @z:
 end;
 
-function TrimLeftLowerCaseShort(V: PShortString): RawUTF8;
-asm // eax=V
-        xor     ecx, ecx
-        push    edx // save result RawUTF8
-        test    eax, eax
-        jz      @2 // avoid GPF
-        lea     edx, [eax + 1]
-        mov     cl, [eax]
-@1:     mov     ch, [edx] // edx=source cl=length
-        sub     ch, 'a'
-        sub     ch, 'z' - 'a'
-        ja      @2 // not a lower char -> create a result string starting at edx
-        inc     edx
-        dec     cl
-        jnz     @1
-        mov     cl, [eax]
-        lea     edx, [eax + 1]  // no UpperCase -> retrieve full text (result := V^)
-@2:     pop     eax
-        movzx   ecx, cl
-{$ifdef UNICODE}
-        push    CP_UTF8 // UTF-8 code page for Delphi 2009+ + call below, not jump
-        call    System.@LStrFromPCharLen // eax=Dest edx=Source ecx=Length
-        rep     ret // we need a call just above for right push CP_UTF8 retrieval
-{$else} jmp     System.@LStrFromPCharLen // eax=dest edx=source ecx=length(source)
-{$endif}
-end;
-
 function IdemPCharAndGetNextLine(var source: PUTF8Char; searchUp: PAnsiChar): boolean;
 asm // eax=source edx=searchUp
         push    eax        // save source var
@@ -25774,7 +25812,7 @@ asm // eax=dest edx=source ecx=sourceLen
 end;
 {$endif DELPHI5OROLDER}
 
-function fnv32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+function fnv32(crc: cardinal; buf: PAnsiChar; len: PtrInt): cardinal;
 asm // eax=crc, edx=buf, ecx=len
         push    ebx
         test    edx, edx
@@ -25790,7 +25828,7 @@ asm // eax=crc, edx=buf, ecx=len
 @0:     pop     ebx
 end; // we tried an unrolled version, but it was slower on our Core i7!
 
-function kr32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+function kr32(crc: cardinal; buf: PAnsiChar; len: PtrInt): cardinal;
 asm // eax=crc, edx=buf, ecx=len
         test    ecx, ecx
         push    edi
@@ -26113,7 +26151,7 @@ asm // rcx=s, rdx=reject (Linux: rdi,rsi)
         {$endif}
         movd    eax, xmm0
         jns     @5
-@2:     cmp     ax, -1
+@2:     cmp     eax, 65535
         jne     @3
         add     rdi, 16 // first 16 chars matched, continue with next 16 chars
         add     rcx, 16
@@ -26137,7 +26175,11 @@ asm // rcx=s, rdx=reject (Linux: rdi,rsi)
         jns     @4
         mov     rsi, r8    // restore set pointer
         and     eax, edx   // accumulate matches
-        jmp     @2
+        cmp     eax, 65535
+        jne     @3
+        add     rdi, 16
+        add     rcx, 16
+        jmp     @1
 end;
 function strspnsse42(s,accept: pointer): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else}
@@ -26160,7 +26202,7 @@ asm // rcx=s, rdx=accept (Linux: rdi,rsi)
         {$endif}
         movd    eax, xmm0
         jns     @5
-@2:     cmp     ax, -1
+@2:     cmp     eax, 65535
         jne     @3
         add     rdi, 16 // first 16 chars matched, continue with next 16 chars
         add     rcx, 16
@@ -26184,7 +26226,11 @@ asm // rcx=s, rdx=accept (Linux: rdi,rsi)
         jns     @4
         mov     rsi, r8    // restore set pointer
         and     eax, edx   // accumulate matches
-        jmp     @2
+        cmp     eax, 65535
+        jne     @3
+        add     rdi, 16 // first 16 chars matched, continue with next 16 chars
+        add     rcx, 16
+        jmp     @1
 end;
 {$endif CPUX64}
 {$ifdef CPUX86}
@@ -26209,7 +26255,7 @@ asm // eax=s, edx=reject
         db $66,$0F,$7E,$C0
         {$endif}
         jns     @5
-@2:     cmp     ax, -1
+@2:     cmp     eax, 65535
         jne     @3
         add     edi, 16 // first 16 chars matched, continue with next 16 chars
         add     ecx, 16
@@ -26235,7 +26281,11 @@ asm // eax=s, edx=reject
         jns     @4
         mov     esi, ebx   // restore set pointer
         and     eax, edx   // accumulate matches
-        jmp     @2
+        cmp     eax, 65535
+        jne     @3
+        add     edi, 16 // first 16 chars matched, continue with next 16 chars
+        add     ecx, 16
+        jmp     @1
 end;
 function strspnsse42(s,accept: pointer): integer;
 asm // eax=s, edx=accept
@@ -26258,7 +26308,7 @@ asm // eax=s, edx=accept
         db $66,$0F,$7E,$C0
         {$endif}
         jns     @5
-@2:     cmp     ax, -1
+@2:     cmp     eax, 65535
         jne     @3
         add     edi, 16 // first 16 chars matched, continue with next 16 chars
         add     ecx, 16
@@ -26284,7 +26334,11 @@ asm // eax=s, edx=accept
         jns     @4
         mov     esi, ebx   // restore set pointer
         and     eax, edx   // accumulate matches
-        jmp     @2
+        cmp     eax, 65535
+        jne     @3
+        add     edi, 16 // first 16 chars matched, continue with next 16 chars
+        add     ecx, 16
+        jmp     @1
 end;
 {$ifndef DELPHI5OROLDER}
 function StrLenSSE2(S: pointer): PtrInt;
@@ -29216,23 +29270,6 @@ begin // expect UpperName as 'NAME='
   result := '';
 end;
 
-function IdemPChar2(p: PUTF8Char; up: PAnsiChar; table: PNormTable): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
-var u: AnsiChar;
-begin // here p and up are expected to be <> nil
-  result := false;
-  dec(PtrInt(p),PtrInt(up));
-  repeat
-    u := up^;
-    if u=#0 then
-      break;
-    if u<>table^[up[PtrInt(p)]] then
-      exit;
-    inc(up);
-  until false;
-  result := true;
-end;
-
 function ExistsIniName(P: PUTF8Char; UpperName: PAnsiChar): boolean;
 var table: PNormTable;
 begin
@@ -29245,7 +29282,7 @@ begin
         if P^=#0 then
           break;
       end;
-      if IdemPChar2(P,UpperName,table) then begin
+      if IdemPChar2(table,P,UpperName) then begin
         result := true;
         exit;
       end;
@@ -29855,6 +29892,19 @@ begin
   {$endif}
 end;
 
+function SearchRecValidFile(const F: TSearchRec): boolean; 
+begin
+  {$ifndef DELPHI5OROLDER}
+  {$WARN SYMBOL_DEPRECATED OFF} // for faVolumeID
+  {$endif}
+  result := (F.Attr and (faDirectory
+    {$ifdef MSWINDOWS}+faVolumeID+faSysFile+faHidden)=0) and (F.Name[1]<>'.')
+    {$else})=0){$endif};
+  {$ifndef DELPHI5OROLDER}
+  {$WARN SYMBOL_DEPRECATED ON}
+  {$endif}
+end;
+
 function DirectoryDelete(const Directory: TFileName; const Mask: TFileName;
   DeleteOnlyFilesNotDirectory: Boolean; DeletedCount: PInteger): Boolean;
 var F: TSearchRec;
@@ -29867,17 +29917,10 @@ begin
     Dir := IncludeTrailingPathDelimiter(Directory);
     if FindFirst(Dir+Mask,faAnyFile-faDirectory,F)=0 then begin
       repeat
-        {$ifndef DELPHI5OROLDER}
-        {$WARN SYMBOL_DEPRECATED OFF} // for faVolumeID
-        {$endif}
-        if (F.Attr and (faDirectory+faVolumeID+faSysFile+faHidden)=0) and
-           (F.Name[1]<>'.') then
+        if SearchRecValidFile(F) then
           if DeleteFile(Dir+F.Name) then
             inc(n) else
             result := false;
-        {$ifndef DELPHI5OROLDER}
-        {$WARN SYMBOL_DEPRECATED ON}
-        {$endif}
       until FindNext(F)<>0;
       FindClose(F);
     end;
@@ -29906,18 +29949,11 @@ begin
       if F.Name[1]<>'.' then
         if Recursive and (F.Attr and faDirectory<>0) then
           DirectoryDeleteOlderFiles(Dir+F.Name,TimePeriod,Mask,true,TotalSize) else
-        {$ifndef DELPHI5OROLDER}
-        {$WARN SYMBOL_DEPRECATED OFF} // for faVolumeID
-        {$endif}
-        if (F.Attr and (faDirectory+faVolumeID+faSysFile+faHidden)=0) then
-          if SearchRecToDateTime(F) < old then
-            if not DeleteFile(Dir+F.Name) then
-              result := false else
-              if TotalSize<>nil then
-                inc(TotalSize^,F.Size);
-        {$ifndef DELPHI5OROLDER}
-        {$WARN SYMBOL_DEPRECATED ON}
-        {$endif}
+        if SearchRecValidFile(F) and (SearchRecToDateTime(F) < old) then
+          if not DeleteFile(Dir+F.Name) then
+            result := false else
+            if TotalSize<>nil then
+              inc(TotalSize^,F.Size);
     until FindNext(F)<>0;
     FindClose(F);
   end;
@@ -29955,7 +29991,8 @@ begin
     CSVToRawUTF8DynArray(pointer(StringToUTF8(Mask)),masks,';');
   if masks<>nil then begin
     if SortByName then
-      QuickSortRawUTF8(masks,length(masks),nil,@StrIComp);
+      QuickSortRawUTF8(masks,length(masks),nil,
+        {$ifdef MSWINDOWS}@StrIComp{$else}@StrComp{$endif});
     for n := 0 to high(masks) do begin
       masked := FindFiles(Directory,UTF8ToString(masks[n]),
         IgnoreFileName,SortByName,IncludesDir);
@@ -29966,11 +30003,7 @@ begin
       Dir := IncludeTrailingPathDelimiter(Directory);
     if FindFirst(Dir+Mask,faAnyfile-faDirectory,F)=0 then begin
       repeat
-        {$ifndef DELPHI5OROLDER}
-        {$WARN SYMBOL_DEPRECATED OFF} // for faVolumeID
-        {$endif}
-        if (F.Attr and (faDirectory+faVolumeID+faSysFile+faHidden)=0) and
-           (F.Name[1]<>'.') and ((IgnoreFileName='') or
+        if SearchRecValidFile(F) and ((IgnoreFileName='') or
             (AnsiCompareFileName(F.Name,IgnoreFileName)<>0)) then begin
           if n=length(result) then
             SetLength(result,n+n shr 3+8);
@@ -29979,9 +30012,6 @@ begin
             result[n].FromSearchRec('',F);
           inc(n);
         end;
-        {$ifndef DELPHI5OROLDER}
-        {$WARN SYMBOL_DEPRECATED ON}
-        {$endif}
       until FindNext(F)<>0;
       FindClose(F);
       if n=0 then
@@ -30023,8 +30053,8 @@ begin // fast cross-platform implementation
   if TemporaryFileNameRandom=0 then
     TemporaryFileNameRandom := Random32;
   repeat // thread-safe unique file name generation
-    result := format('%s%s_%s.tmp',[folder,ExeVersion.ProgramName,
-      CardinalToHexShort(InterlockedIncrement(TemporaryFileNameRandom))]);
+    FormatString('%%_%.tmp',[folder,ExeVersion.ProgramName,
+      CardinalToHexShort(InterlockedIncrement(TemporaryFileNameRandom))], string(result));
   until not FileExists(result);
 end;
 
@@ -30420,39 +30450,43 @@ begin
   DeduplicateInteger(Values, length(Values));
 end;
 
-procedure DeduplicateInteger(var Values: TIntegerDynArray; Count: integer);
-  function dedup(val: PIntegerArray; v: PtrInt): PtrInt;
-  var i: PtrInt;
-  begin // sub-function for better code generation
-    i := 0;
-    repeat // here v>0 so i<v
-      if val[i]=val[i+1] then begin
-        result := i;
-        inc(i);
-        if i<>v then begin
-          repeat
-            if val[i]<>val[i+1] then begin
-              val[result] := val[i];
-              inc(result);
-            end;
-            inc(i);
-          until i=v;
-          val[result] := val[i];
-        end;
-        exit;
+function DeduplicateIntegerSorted(val: PIntegerArray; last: PtrInt): PtrInt;
+var i: PtrInt;
+begin // sub-function for better code generation
+  i := 0;
+  repeat // here last>0 so i<last
+    if val[i]=val[i+1] then
+      break;
+    inc(i);
+    if i<>last then
+      continue;
+    result := i;
+    exit;
+  until false;
+  result := i;
+  inc(i);
+  if i<>last then begin
+    repeat
+      if val[i]<>val[i+1] then begin
+        val[result] := val[i];
+        inc(result);
       end;
       inc(i);
-    until i=v;
-    result := v;
+    until i=last;
+    val[result] := val[i];
   end;
+end;
+
+function DeduplicateInteger(var Values: TIntegerDynArray; Count: integer): integer;
 begin
+  result := Count;
   dec(Count);
   if Count>0 then begin
     QuickSortInteger(pointer(Values),0,Count);
-    Count := dedup(pointer(Values),Count);
+    result := DeduplicateIntegerSorted(pointer(Values),Count)+1;
   end;
-  if high(Values)<>Count then
-    SetLength(Values,Count+1);
+  if result<>length(Values) then
+    SetLength(Values,result);
 end;
 
 procedure DeduplicateInt64(var Values: TInt64DynArray);
@@ -30460,39 +30494,43 @@ begin
   DeduplicateInt64(Values, length(Values));
 end;
 
-procedure DeduplicateInt64(var Values: TInt64DynArray; Count: integer);
-  function dedup(val: PInt64Array; v: PtrInt): PtrInt;
-  var i: PtrInt;
-  begin // sub-function for better code generation
-    i := 0;
-    repeat // here v>0 so i<v
-      if val[i]=val[i+1] then begin
-        result := i;
-        inc(i);
-        if i<>v then begin
-          repeat
-            if val[i]<>val[i+1] then begin
-              val[result] := val[i];
-              inc(result);
-            end;
-            inc(i);
-          until i=v;
-          val[result] := val[i];
-        end;
-        exit;
+function DeduplicateInt64Sorted(val: PInt64Array; last: PtrInt): PtrInt;
+var i: PtrInt;
+begin // sub-function for better code generation
+  i := 0;
+  repeat // here last>0 so i<last
+    if val[i]=val[i+1] then
+      break;
+    inc(i);
+    if i<>last then
+      continue;
+    result := i;
+    exit;
+  until false;
+  result := i;
+  inc(i);
+  if i<>last then begin
+    repeat
+      if val[i]<>val[i+1] then begin
+        val[result] := val[i];
+        inc(result);
       end;
       inc(i);
-    until i=v;
-    result := v;
+    until i=last;
+    val[result] := val[i];
   end;
+end;
+
+function DeduplicateInt64(var Values: TInt64DynArray; Count: integer): integer;
 begin
+  result := Count;
   dec(Count);
   if Count>0 then begin
     QuickSortInt64(pointer(Values),0,Count);
-    Count := dedup(pointer(Values),Count);
+    result := DeduplicateInt64Sorted(pointer(Values),Count)+1;
   end;
-  if high(Values)<>Count then
-    SetLength(Values,Count+1);
+  if result<>length(Values) then
+    SetLength(Values,result);
 end;
 
 procedure CopyInteger(const Source: TIntegerDynArray; out Dest: TIntegerDynArray);
@@ -32119,19 +32157,16 @@ end;
 
 function IdemPCharArray(p: PUTF8Char; const upArray: array of PAnsiChar): integer;
 var w: word;
-    tab: {$ifndef PUREPASCAL}TNormTableByte absolute NormToUpperAnsi7{$else}PNormTableByte{$endif};
+    tab: {$ifdef CPUX86}TNormTableByte absolute NormToUpperAnsi7{$else}PNormTableByte{$endif};
     up: ^PAnsiChar;
 begin
   if p<>nil then begin
-    {$ifdef PUREPASCAL}tab := @NormToUpperAnsi7;{$endif} // faster on PIC and x86_64
+    {$ifndef CPUX86}tab := @NormToUpperAnsi7;{$endif} // faster on PIC and x86_64
     w := tab[ord(p[0])]+tab[ord(p[1])]shl 8;
     up := @upArray[0];
     for result := 0 to high(upArray) do
-      {$ifdef PUREPASCAL}
-      if (PWord(up^)^=w) and IdemPChar2(p+2,up^+2,pointer(tab)) then
-      {$else}
-      if (PWord(up^)^=w) and IdemPChar(p+2,up^+2) then
-      {$endif}
+      if (PWord(up^)^=w) and
+        {$ifdef CPUX86}IdemPChar({$else}IdemPChar2(pointer(tab),{$endif}p+2,up^+2) then
         exit else
         inc(up);
   end;
@@ -33950,26 +33985,26 @@ asm
         lea     eax, [ebx+61C8864FH]
         mov     ebp, edx
 @1:     mov     edx, dword ptr [ecx]
-        imul    edx, edx, -2048144777
+        imul    edx, -2048144777
         add     edi, edx
         rol     edi, 13
-        imul    edi, edi, -1640531535
+        imul    edi, -1640531535
         mov     edx, dword ptr [ecx+4]
-        imul    edx, edx, -2048144777
+        imul    edx, -2048144777
         add     esi, edx
         rol     esi, 13
-        imul    esi, esi, -1640531535
+        imul    esi, -1640531535
         mov     edx, dword ptr [ecx+8]
-        imul    edx, edx, -2048144777
+        imul    edx, -2048144777
         add     ebx, edx
         rol     ebx, 13
-        imul    ebx, ebx, -1640531535
+        imul    ebx, -1640531535
         mov     edx, dword ptr [ecx+12]
         lea     ecx, [ecx+16]
-        imul    edx, edx, -2048144777
+        imul    edx, -2048144777
         add     eax, edx
         rol     eax, 13
-        imul    eax, eax, -1640531535
+        imul    eax, -1640531535
         cmp     ebp, ecx
         jnc     @1
         rol     edi, 1
@@ -33990,7 +34025,7 @@ asm
         add     ebx, 4
         add     eax, edx
         ror     eax, 15
-        imul    eax, eax, 668265263
+        imul    eax, 668265263
         cmp     ebp, ebx
         jnc     @3
         lea     edx, [ebp-4H]
@@ -34002,10 +34037,10 @@ asm
         jbe     @6
 @5:     movzx   edx, byte ptr [ecx]
         add     ecx, 1
-        imul    edx, edx, 374761393
+        imul    edx, 374761393
         add     eax, edx
         rol     eax, 11
-        imul    eax, eax, -1640531535
+        imul    eax, -1640531535
         cmp     ebp, ecx
         jnz     @5
         nop
@@ -34013,13 +34048,13 @@ asm
         add     esp, 8
         shr     edx, 15
         xor     eax, edx
-        imul    eax, eax, -2048144777
+        imul    eax, -2048144777
         pop     ebx
         pop     esi
         mov     edx, eax
         shr     edx, 13
         xor     eax, edx
-        imul    eax, eax, -1028477379
+        imul    eax, -1028477379
         pop     edi
         pop     ebp
         mov     edx, eax
@@ -34043,7 +34078,9 @@ asm
         push    rdi
         {$endif}
         // P=r8 len=rcx crc=rdx
+        push    r12
         push    rbx
+        mov     r12d, -1640531535
         lea     r10, [rcx+rdx]
         lea     eax, [r8+165667B1H]
         cmp     rdx, 15
@@ -34059,16 +34096,16 @@ asm
         lea     r9d, [r11+rdi]
         rol     ebx, 13
         rol     r9d, 13
-        imul    ebx, ebx, -1640531535
+        imul    ebx, r12d
         imul    edi, r9d, -1640531535
         imul    r9d, dword ptr [rcx-8H], -2048144777
         add     r8d, r9d
         imul    r9d, dword ptr [rcx-4H], -2048144777
         rol     r8d, 13
-        imul    r8d, r8d, -1640531535
+        imul    r8d, r12d
         add     eax, r9d
         rol     eax, 13
-        imul    eax, eax, -1640531535
+        imul    eax, r12d
         cmp     rsi, rcx
         jnc     @1
         rol     edi, 7
@@ -34088,7 +34125,7 @@ asm
         add     r8, 4
         add     eax, edx
         ror     eax, 15
-        imul    eax, eax, 668265263
+        imul    eax, 668265263
         cmp     r10, r8
         jnc     @3
         lea     rdx, [r10-4H]
@@ -34100,24 +34137,25 @@ asm
         jbe     @6
 @5:     movzx   edx, byte ptr [rcx]
         add     rcx, 1
-        imul    edx, edx, 374761393
+        imul    edx, 374761393
         add     eax, edx
         rol     eax, 11
-        imul    eax, eax, -1640531535
+        imul    eax, r12d
         cmp     r10, rcx
         jnz     @5
 @6:     mov     edx, eax
         shr     edx, 15
         xor     eax, edx
-        imul    eax, eax, -2048144777
+        imul    eax, -2048144777
         mov     edx, eax
         shr     edx, 13
         xor     eax, edx
-        imul    eax, eax, -1028477379
+        imul    eax, -1028477379
         mov     edx, eax
         shr     edx, 16
         xor     eax, edx
         pop     rbx
+        pop     r12
         {$ifndef LINUX}
         pop     rdi
         pop     rsi
@@ -34410,6 +34448,7 @@ function StrLenSSE42(S: pointer): PtrInt;
 asm // rcx=S (Linux: rdi)
         .noframe
 {$endif FPC}
+        xor     rax, rax
         {$ifdef win64}
         mov     rdx, rcx
         test    rcx, rcx
@@ -34417,16 +34456,18 @@ asm // rcx=S (Linux: rdi)
         mov     rdx, rdi
         test    rdi, rdi
         {$endif}
-        mov     rax, -16
         jz      @null
+        xor     rcx, rcx
         pxor    xmm0, xmm0
+        pcmpistri xmm0, [rdx], EQUAL_EACH // result in ecx
+        jnz     @L
+        mov     eax, ecx
+@null:  ret
         {$ifdef FPC}align 8{$endif}
 @L:     add     rax, 16   // add before comparison flag
-        pcmpistri xmm0, [rdx + rax], EQUAL_EACH // result in rcx
+        pcmpistri xmm0, [rdx + rax], EQUAL_EACH // result in ecx
         jnz     @L
         add     rax, rcx
-        ret
-@null:  xor     rax, rax
 end;
 
 function StrCompSSE42(Str1, Str2: pointer): PtrInt;
@@ -34444,6 +34485,7 @@ asm // rcx=Str1, rdx=Str2 (Linux: rdi,rsi)
       {$endif}
       jz        @n
 @ok:  sub       rax, rdx
+      xor       rcx, rcx
       movdqu    xmm0, dqword [rdx]
       pcmpistri xmm0, dqword [rdx + rax], EQUAL_EACH + NEGATIVE_POLARITY // result in rcx
       ja        @1
@@ -34466,11 +34508,11 @@ asm // rcx=Str1, rdx=Str2 (Linux: rdi,rsi)
       jnz       @ok
       mov       rax, 1
       ret
-@max: dec       rax
+@max: dec       rax  // returns -1
       ret
 @2:   add       rax, rdx
-      movzx     rax, byte ptr [rax+rcx]
-      movzx     rdx, byte ptr [rdx+rcx]
+      movzx     rax, byte ptr [rax + rcx]
+      movzx     rdx, byte ptr [rdx + rcx]
       sub       rax, rdx
 end;
 {$endif HASAESNI}
@@ -34807,15 +34849,15 @@ begin // fast O(n) brute force search
   result := false;
 end;
 
-function IP6Text(ip6: PHash128): shortstring;
+procedure IP6Text(ip6: PHash128; result: PShortString);
 var i: integer;
     p: PByte;
     {$ifdef PUREPASCAL}tab: ^TByteToWord;{$endif}
 begin
   if IsZero(ip6^) then
-    result := '' else begin
-    result[0] := AnsiChar(39);
-    p := @result[1];
+    result^ := '' else begin
+    result^[0] := AnsiChar(39);
+    p := @result^[1];
     {$ifdef PUREPASCAL}tab := @TwoDigitsHexWBLower;{$endif}
     for i := 0 to 7 do begin
       PWord(p)^ := {$ifdef PUREPASCAL}tab{$else}TwoDigitsHexWBLower{$endif}[ip6^[0]]; inc(p,2);
@@ -34824,6 +34866,11 @@ begin
       p^ := ord(':'); inc(p);
     end;
   end;
+end;
+
+function IP6Text(ip6: PHash128): shortstring;
+begin
+  IP6Text(ip6, @result);
 end;
 
 procedure crc256c(buf: PAnsiChar; len: cardinal; out crc: THash256);
@@ -35145,14 +35192,14 @@ begin
   SS := t2;
   MS := t - t2 * 1000;
 end;
-{$endif}
+{$endif FPC}
 
-function UnixTimeToFileShort(const UnixTime: TUnixTime): TShort16;
+procedure UnixTimeToFileShort(const UnixTime: TUnixTime; out result: TShort16);
 var dt: TDateTime;
     HH,MM,SS,MS,Y,M,D: word;
     tab: {$ifdef CPUX86}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
 begin // use 'YYMMDDHHMMSS' format
-  if UnixTime <= 0 then begin
+  if UnixTime<=0 then begin
     PWord(@result[0])^ := 1+ord('0') shl 8;
     exit;
   end;
@@ -35170,6 +35217,16 @@ begin // use 'YYMMDDHHMMSS' format
   PWord(@result[7])^ := tab[HH];
   PWord(@result[9])^ := tab[MM];
   PWord(@result[11])^ := tab[SS];
+end;
+
+function UnixTimeToFileShort(const UnixTime: TUnixTime): TShort16;
+begin
+  UnixTimeToFileShort(UnixTime, result);
+end;
+
+function UnixMSTimeToFileShort(const UnixMSTime: TUnixMSTime): TShort16;
+begin
+  UnixTimeToFileShort(UnixMSTime div MSecsPerSec, result);
 end;
 
 function UnixTimePeriodToString(const UnixTime: TUnixTime; FirstTimeChar: AnsiChar): RawUTF8;
@@ -35199,8 +35256,10 @@ end;
 function UnixMSTimeToString(const UnixMSTime: TUnixMSTime; Expanded: boolean;
   FirstTimeChar: AnsiChar; const TZD: RawUTF8): RawUTF8;
 begin // inlined UnixMSTimeToDateTime()
-  result := DateTimeMSToString(UnixMSTime/MSecsPerDay+UnixDateDelta,Expanded,
-    FirstTimeChar,TZD);
+  if UnixMSTime<=0 then
+    result := '' else
+    result := DateTimeMSToString(UnixMSTime/MSecsPerDay+UnixDateDelta,Expanded,
+      FirstTimeChar,TZD);
 end;
 
 function NowUTC: TDateTime;
@@ -35823,6 +35882,7 @@ begin
     tix := GetTickCount64 {$ifndef MSWINDOWS}shr 3{$endif}; // Linux: 8ms refresh
     if clock<>tix then begin // Windows: typically in range of 10-16 ms
       clock := tix;
+      NewTime.Clear;
       if LocalTime then
         GetLocalTime(newtimesys) else
         {$ifdef MSWINDOWS}GetSystemTime{$else}GetNowUTCSystem{$endif}(newtimesys);
@@ -36144,6 +36204,12 @@ begin
   result := result+EncodeTime(Hour,Minute,Second,MilliSecond);
 end;
 
+procedure TSynSystemTime.Clear;
+begin
+  PInt64Array(@self)[0] := 0;
+  PInt64Array(@self)[1] := 0;
+end;
+
 function TSynSystemTime.IsZero: boolean;
 begin
   result := (PInt64Array(@self)[0]=0) and (PInt64Array(@self)[1]=0);
@@ -36163,6 +36229,31 @@ end;
 procedure TSynSystemTime.FromNowLocal;
 begin
   FromGlobalTime(true,self);
+end;
+
+procedure TSynSystemTime.AddLogTime(WR: TTextWriter);
+var y,d100: PtrUInt;
+    P: PUTF8Char;
+    tab: {$ifdef CPUX86}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
+begin
+  if WR.BEnd-WR.B<=17 then
+    WR.FlushToStream;
+  {$ifndef CPUX86}tab := @TwoDigitLookupW;{$endif}
+  y := Year;
+  d100 := y div 100;
+  P := WR.B+1;
+  PWord(P)^ := tab[d100];
+  PWord(P+2)^ := tab[y-(d100*100)];
+  PWord(P+4)^ := tab[Month];
+  PWord(P+6)^ := tab[Day];
+  P[8] := ' ';
+  PWord(P+9)^ := tab[Hour];
+  PWord(P+11)^ := tab[Minute];
+  PWord(P+13)^ := tab[Second];
+  y := Millisecond;
+  PWord(P+15)^ := tab[y shr 4];
+  P[17] := ' ';
+  WR.B := P+16;
 end;
 
 
@@ -36431,23 +36522,25 @@ begin
 end;
 
 
-procedure AppendToTextFile(aLine: RawUTF8; const aFileName: TFileName);
+procedure AppendToTextFile(aLine: RawUTF8; const aFileName: TFileName; aMaxSize: Int64);
 var F: THandle;
     Old: TFileName;
     Date: array[1..22] of AnsiChar;
+    size: Int64;
     i: integer;
     now: TSynSystemTime;
 begin
   if aFileName='' then
     exit;
-  F := FileOpen(aFileName,fmOpenWrite);
+  F := FileOpen(aFileName,fmOpenWrite or fmShareDenyNone);
   if PtrInt(F)<0 then begin
     F := FileCreate(aFileName);
     if PtrInt(F)<0 then
       exit; // you may not have write access to this folder
   end;
-   // append to end of file
-  if FileSeek64(F,0,soFromEnd)>MAXLOGSIZE then begin
+  // append to end of file
+  size := FileSeek64(F,0,soFromEnd);
+  if (aMaxSize>0) and (size>aMaxSize) then begin
     // rotate log file if too big
     FileClose(F);
     Old := aFileName+'.bak'; // '.log.bak'
@@ -36481,15 +36574,14 @@ begin
     (ChangeFileExt(ExeVersion.ProgramFileName,'.log')));
 end;
 
-function IsEqualGUID(const guid1, guid2: TGUID): Boolean;
-var a: TPtrIntArray absolute guid1;
-    b: TPtrIntArray absolute guid2;
+function IsEqualGUID({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid1, guid2: TGUID): Boolean;
 begin
-  result := (a[0]=b[0]) and (a[1]=b[1])
-    {$ifndef CPU64} and (a[2]=b[2]) and (a[3]=b[3]){$endif};
+  result := (PHash128Rec(@guid1).L=PHash128Rec(@guid2).L) and
+            (PHash128Rec(@guid1).H=PHash128Rec(@guid2).H);
 end;
 
-function IsEqualGUIDArray(const guid: TGUID; const guids: array of TGUID): integer;
+function IsEqualGUIDArray({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF}
+  guid: TGUID; const guids: array of TGUID): integer;
 begin
   for result := 0 to high(guids) do
     if IsEqualGUID(guid,guids[result]) then
@@ -36497,7 +36589,7 @@ begin
   result := -1;
 end;
 
-function IsNullGUID(const guid: TGUID): Boolean;
+function IsNullGUID({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID): Boolean;
 var a: TPtrIntArray absolute guid;
 begin
   result := (a[0]=0) and (a[1]=0)
@@ -36587,7 +36679,7 @@ begin // decode from '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
   result := P;
 end;
 
-function GUIDToRawUTF8(const guid: TGUID): RawUTF8;
+function GUIDToRawUTF8({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID): RawUTF8;
 var P: PUTF8Char;
 begin
   FastSetString(result,nil,38);
@@ -36596,12 +36688,13 @@ begin
   GUIDToText(P+1,@guid)^ := '}';
 end;
 
-function GUIDToShort(const guid: TGUID): TGUIDShortString;
+function GUIDToShort({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID): TGUIDShortString;
 begin
   GUIDToShort(guid,result);
 end;
 
-procedure GUIDToShort(const guid: TGUID; out dest: TGUIDShortString);
+procedure GUIDToShort({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID;
+  out dest: TGUIDShortString);
 begin
   dest[0] := #38;
   dest[1] := '{';
@@ -36609,7 +36702,7 @@ begin
   GUIDToText(@dest[2],@guid);
 end;
 
-function GUIDToString(const guid: TGUID): string;
+function GUIDToString({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID): string;
 {$ifdef UNICODE}
 var tmp: array[0..35] of AnsiChar;
     i: integer;
@@ -36992,6 +37085,50 @@ begin
     SetString(result,P,L);
 end;
 
+{$ifdef FPC_OR_PUREPASCAL}
+function TrimLeftLowerCaseShort(V: PShortString): RawUTF8;
+var P: PAnsiChar;
+    L: integer;
+begin
+  L := length(V^);
+  P := @V^[1];
+  while (L>0) and (P^ in ['a'..'z']) do begin
+    inc(P);
+    dec(L);
+  end;
+  if L=0 then
+    FastSetString(result,@V^[1],length(V^)) else
+    FastSetString(result,P,L);
+end;
+{$else}
+function TrimLeftLowerCaseShort(V: PShortString): RawUTF8;
+asm // eax=V
+        xor     ecx, ecx
+        push    edx // save result RawUTF8
+        test    eax, eax
+        jz      @2 // avoid GPF
+        lea     edx, [eax + 1]
+        mov     cl, [eax]
+@1:     mov     ch, [edx] // edx=source cl=length
+        sub     ch, 'a'
+        sub     ch, 'z' - 'a'
+        ja      @2 // not a lower char -> create a result string starting at edx
+        inc     edx
+        dec     cl
+        jnz     @1
+        mov     cl, [eax]
+        lea     edx, [eax + 1]  // no UpperCase -> retrieve full text (result := V^)
+@2:     pop     eax
+        movzx   ecx, cl
+{$ifdef UNICODE}
+        push    CP_UTF8 // UTF-8 code page for Delphi 2009+ + call below, not jump
+        call    System.@LStrFromPCharLen // eax=Dest edx=Source ecx=Length
+        rep     ret // we need a call just above for right push CP_UTF8 retrieval
+{$else} jmp     System.@LStrFromPCharLen // eax=dest edx=source ecx=length(source)
+{$endif}
+end;
+{$endif FPC_OR_PUREPASCAL}
+
 function UnCamelCase(const S: RawUTF8): RawUTF8;
 begin
   result := '';
@@ -37102,6 +37239,11 @@ begin
       break;
     end;
   FastSetString(s,P,len);
+end;
+
+procedure CamelCase(const text: RawUTF8; var s: RawUTF8; const isWord: TSynByteSet);
+begin
+  CamelCase(pointer(text), length(text), s, isWord);
 end;
 
 procedure GetCaptionFromPCharLen(P: PUTF8Char; out result: string);
@@ -38839,7 +38981,7 @@ begin
   Source := p;
 end;
 
-function FromVarUInt32up128(var Source: PByte): cardinal;
+function FromVarUInt32Up128(var Source: PByte): cardinal;
 var c: cardinal;
     p: PByte;
 begin
@@ -40866,8 +41008,8 @@ end;
 
 function StrLenSSE42(S: pointer): PtrInt;
 asm // warning: may read up to 15 bytes beyond the string itself
-        test    eax, eax
         mov     edx, eax             // copy pointer
+        test    eax, eax
         jz      @null                // returns 0 if S=nil
         xor     eax, eax
         pxor    xmm0, xmm0
@@ -43044,6 +43186,15 @@ begin // slightly faster than FillChar(Value,SizeOf(Value),0);
   {$endif}
 end;
 
+procedure FillZero(var value: variant); overload;
+begin
+  with TVarData(Value) do
+    case VType of
+    varString: FillZero(RawByteString(VAny));
+    end;
+  VarClear(Value);
+end;
+
 procedure RawUTF8ToVariant(Txt: PUTF8Char; TxtLen: integer; var Value: variant);
 begin
   with TVarData(Value) do begin
@@ -43053,7 +43204,7 @@ begin
       VType := varString;
       VAny := nil; // avoid GPF below when assigning a string variable to VAny
     end;
-    FastSetString(VString,Txt,TxtLen);
+    FastSetString(RawUTF8(VString),Txt,TxtLen);
   end;
 end;
 
@@ -43269,7 +43420,7 @@ begin
       tmp.Len := FromVarUInt32(PByte(Source));
       case VType of
       varString:
-        FastSetString(VString,Source,tmp.Len); // explicit RawUTF8
+        FastSetString(RawUTF8(VString),Source,tmp.Len); // explicit RawUTF8
       varOleStr:
         SetString(WideString(VAny),PWideChar(Source),tmp.Len shr 1);
       {$ifdef HASVARUSTRING}
@@ -43931,7 +44082,7 @@ begin
     // found no numerical value -> return a string in the expected format
     VType := varString;
     VString := nil; // avoid GPF below when assigning a string variable to VAny
-    FastSetString(VString,JSON,StrLen(JSON));
+    FastSetString(RawUTF8(VString),JSON,StrLen(JSON));
   end;
 end;
 
@@ -44647,10 +44798,20 @@ end;
 procedure TDocVariantData.Reset;
 var backup: TDocVariantOptions;
 begin
+  if VCount=0 then
+    exit;
   backup := VOptions-[dvoIsArray,dvoIsObject];
   DocVariantType.Clear(TVarData(self));
   VType := DocVariantVType;
   VOptions := backup;
+end;
+
+procedure TDocVariantData.FillZero;
+var ndx: integer;
+begin
+  for ndx := 0 to VCount-1 do
+    SynCommons.FillZero(VValue[ndx]);
+  Reset;
 end;
 
 procedure TDocVariantData.SetCount(aCount: integer);
@@ -46598,14 +46759,15 @@ begin
   end;
 end;
 
-function DynArrayElementTypeName(TypeInfo: pointer; ElemTypeInfo: PPointer): RawUTF8;
+function DynArrayElementTypeName(TypeInfo: pointer; ElemTypeInfo: PPointer;
+  ExactType: boolean): RawUTF8;
 var DynArray: TDynArray;
     VoidArray: pointer;
 const KNOWNTYPE_ITEMNAME: array[TDynArrayKind] of RawUTF8 = ('',
   'boolean','byte','word','integer','cardinal','single','Int64','QWord',
   'double','currency','TTimeLog','TDateTime','TDateTimeMS',
   'RawUTF8','WinAnsiString','string','RawByteString','WideString','SynUnicode',
-  'IInterface',{$ifndef NOVARIANTS}'variant',{$endif}'');
+  'THash128','THash256','THash512','IInterface',{$ifndef NOVARIANTS}'variant',{$endif}'');
 begin
   VoidArray := nil;
   DynArray.Init(TypeInfo,VoidArray);
@@ -46614,7 +46776,7 @@ begin
     ElemTypeInfo^ := DynArray.ElemType;
   if DynArray.ElemType<>nil then
     TypeInfoToName(ElemTypeInfo,result) else
-    result := KNOWNTYPE_ITEMNAME[DynArray.ToKnownType];
+    result := KNOWNTYPE_ITEMNAME[DynArray.ToKnownType(ExactType)];
 end;
 
 function SortDynArrayBoolean(const A,B): integer;
@@ -46727,6 +46889,39 @@ end;
 function SortDynArrayUnicodeStringI(const A,B): integer;
 begin
   result := AnsiICompW(PWideChar(A),PWideChar(B));
+end;
+
+function SortDynArray128(const A,B): integer;
+begin
+  if THash128Rec(A).Lo<THash128Rec(B).Lo then
+    result := -1 else
+  if THash128Rec(A).Lo>THash128Rec(B).Lo then
+    result := 1 else
+    if THash128Rec(A).Hi<THash128Rec(B).Hi then
+      result := -1 else
+    if THash128Rec(A).Hi>THash128Rec(B).Hi then
+      result := 1 else
+      result := 0;
+end;
+
+function SortDynArray256(const A,B): integer;
+begin
+  result := SortDynArray128(THash256Rec(A).Lo,THash256Rec(B).Lo);
+  if result = 0 then
+    result := SortDynArray128(THash256Rec(A).Hi,THash256Rec(B).Hi);
+end;
+
+function SortDynArray512(const A,B): integer;
+begin
+  result := SortDynArray128(THash512Rec(A).c0,THash512Rec(B).c0);
+  if result = 0 then begin
+    result := SortDynArray128(THash512Rec(A).c1,THash512Rec(B).c1);
+    if result = 0 then begin
+      result := SortDynArray128(THash512Rec(A).c2,THash512Rec(B).c2);
+      if result = 0 then
+        result := SortDynArray128(THash512Rec(A).c3,THash512Rec(B).c3);
+    end;
+  end;
 end;
 
 {$ifndef NOVARIANTS}
@@ -47260,7 +47455,6 @@ begin
       raise ESynException.Create('TDynArray.SaveTo len concern');
 end;
 
-
 function TDynArray.SaveToJSON(EnumSetsAsText: boolean; reformat: TTextWriterJSONFormat): RawUTF8;
 begin
   SaveToJSON(result,EnumSetsAsText,reformat);
@@ -47284,7 +47478,8 @@ end;
 const
   PTRSIZ = SizeOf(Pointer);
   KNOWNTYPE_SIZE: array[TDynArrayKind] of byte = (
-    0, 1,1, 2, 4,4,4, 8,8,8,8,8,8,8, PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,
+    0, 1,1, 2, 4,4,4, 8,8,8,8,8,8,8, PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,
+    16,32,64, PTRSIZ,
     {$ifndef NOVARIANTS}SizeOf(Variant),{$endif} 0);
   DYNARRAY_PARSERUNKNOWN = -2;
 
@@ -47301,117 +47496,122 @@ var nested: PTypeInfo;
     field: PFieldInfo;
 label Bin, Rec;
 begin
-  if fKnownType<>djNone then begin
-    result := fKnownType;
+  result := fKnownType;
+  if result<>djNone then
     exit;
-  end;
   case ElemSize of
   1: if fTypeInfo=TypeInfo(TBooleanDynArray) then
-       fKnownType := djBoolean;
+       result := djBoolean;
   4: if fTypeInfo=TypeInfo(TCardinalDynArray) then
-       fKnownType := djCardinal else
+       result := djCardinal else
      if fTypeInfo=TypeInfo(TSingleDynArray) then
-       fKnownType := djSingle
+       result := djSingle
   {$ifdef CPU64} ; 8: {$else} else {$endif}
     if fTypeInfo=TypeInfo(TRawUTF8DynArray) then
-      fKnownType := djRawUTF8 else
+      result := djRawUTF8 else
     if fTypeInfo=TypeInfo(TStringDynArray) then
-      fKnownType := djString else
+      result := djString else
     if fTypeInfo=TypeInfo(TWinAnsiDynArray) then
-      fKnownType := djWinAnsi else
+      result := djWinAnsi else
     if fTypeInfo=TypeInfo(TRawByteStringDynArray) then
-      fKnownType := djRawByteString else
+      result := djRawByteString else
     if fTypeInfo=TypeInfo(TSynUnicodeDynArray) then
-      fKnownType := djSynUnicode else
+      result := djSynUnicode else
     if (fTypeInfo=TypeInfo(TClassDynArray)) or
        (fTypeInfo=TypeInfo(TPointerDynArray)) then
-      fKnownType := djPointer else
+      result := djPointer else
     {$ifndef DELPHI5OROLDER}
     if fTypeInfo=TypeInfo(TInterfaceDynArray) then
-      fKnownType := djInterface
+      result := djInterface
     {$endif DELPHI5OROLDER}
   {$ifdef CPU64} else {$else} ; 8: {$endif}
      if fTypeInfo=TypeInfo(TDoubleDynArray) then
-       fKnownType := djDouble else
+       result := djDouble else
      if fTypeInfo=TypeInfo(TCurrencyDynArray) then
-       fKnownType := djCurrency else
+       result := djCurrency else
      if fTypeInfo=TypeInfo(TTimeLogDynArray) then
-       fKnownType := djTimeLog else
+       result := djTimeLog else
      if fTypeInfo=TypeInfo(TDateTimeDynArray) then
-       fKnownType := djDateTime else
+       result := djDateTime else
      if fTypeInfo=TypeInfo(TDateTimeMSDynArray) then
-       fKnownType := djDateTimeMS;
+       result := djDateTimeMS;
   end;
-  if (fKnownType=djNone) and not exactType then begin
+  if result=djNone then begin
     fKnownSize := 0;
     if ElemType=nil then
 Bin:  case ElemSize of
-      1: fKnownType := djByte;
-      2: fKnownType := djWord;
-      4: fKnownType := djInteger;
-      8: fKnownType := djInt64;
+      1: result := djByte;
+      2: result := djWord;
+      4: result := djInteger;
+      8: result := djInt64;
+      16: result := djHash128;
+      32: result := djHash256;
+      64: result := djHash512;
       else fKnownSize := ElemSize;
       end else
-    case PTypeKind(ElemType)^ of
-      tkLString{$ifdef FPC},tkLStringOld{$endif}: fKnownType := djRawUTF8;
-      tkWString: fKnownType := djWideString;
-      {$ifdef UNICODE}
-      tkUString: fKnownType := djString;
-      {$else}
-      {$ifdef FPC_HAS_FEATURE_UNICODESTRINGS}
-      tkUString: fKnownType := djSynUnicode;
-      {$endif FPC_HAS_FEATURE_UNICODESTRINGS}
-      {$endif}
-      {$ifndef NOVARIANTS}
-      tkVariant: fKnownType := djVariant;
-      {$endif}
-      tkInterface: fKnownType := djInterface;
-      tkRecord{$ifdef FPC},tkObject{$endif}: begin
-        nested := ElemType; // inlined GetTypeInfo()
-        {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-rec:    nested := GetFPCAlignPtr(nested);
+      case PTypeKind(ElemType)^ of
+        tkLString{$ifdef FPC},tkLStringOld{$endif}: result := djRawUTF8;
+        tkWString: result := djWideString;
+        {$ifdef UNICODE}
+        tkUString: result := djString;
         {$else}
-rec:    inc(PByte(nested),nested^.NameLen);
+        {$ifdef FPC_HAS_FEATURE_UNICODESTRINGS}
+        tkUString: result := djSynUnicode;
+        {$endif FPC_HAS_FEATURE_UNICODESTRINGS}
         {$endif}
-        {$ifdef FPC_OLDRTTI}
-        field := OldRTTIFirstManagedField(nested);
-        if field=nil then
-        {$else FPC_OLDRTTI}
-        if GetManagedFields(nested,field)=0 then // only binary content
-        {$endif FPC_OLDRTTI}
-          goto Bin;
-        case field^.Offset of
-        0: case DeRef(field^.TypeInfo)^.Kind of
-           tkLString{$ifdef FPC},tkLStringOld{$endif}: fKnownType := djRawUTF8;
-           tkWString: fKnownType := djWideString;
-           {$ifdef UNICODE}
-           tkUString: fKnownType := djString;
-           {$else}
-           {$ifdef FPC_HAS_FEATURE_UNICODESTRINGS}
-           tkUString: fKnownType := djSynUnicode;
-           {$endif FPC_HAS_FEATURE_UNICODESTRINGS}
-           {$endif}
-           tkRecord{$ifdef FPC},tkObject{$endif}: begin
-             nested := DeRef(field^.TypeInfo);
-             goto Rec;
-           end;
-           {$ifndef NOVARIANTS}
-           tkVariant: fKnownType := djVariant;
-           {$endif}
-           else goto bin;
-           end;
-        1: fKnownType := djByte;
-        2: fKnownType := djWord;
-        4: fKnownType := djInteger;
-        8: fKnownType := djInt64;
-        else fKnownSize := field^.Offset;
+        {$ifndef NOVARIANTS}
+        tkVariant: result := djVariant;
+        {$endif}
+        tkInterface: result := djInterface;
+        tkRecord{$ifdef FPC},tkObject{$endif}: if not exacttype then begin
+          nested := ElemType; // inlined GetTypeInfo()
+          {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+  rec:    nested := GetFPCAlignPtr(nested);
+          {$else}
+  rec:    inc(PByte(nested),nested^.NameLen);
+          {$endif}
+          {$ifdef FPC_OLDRTTI}
+          field := OldRTTIFirstManagedField(nested);
+          if field=nil then
+          {$else FPC_OLDRTTI}
+          if GetManagedFields(nested,field)=0 then // only binary content
+          {$endif FPC_OLDRTTI}
+            goto Bin;
+          case field^.Offset of
+          0: case DeRef(field^.TypeInfo)^.Kind of
+             tkLString{$ifdef FPC},tkLStringOld{$endif}: result := djRawUTF8;
+             tkWString: result := djWideString;
+             {$ifdef UNICODE}
+             tkUString: result := djString;
+             {$else}
+             {$ifdef FPC_HAS_FEATURE_UNICODESTRINGS}
+             tkUString: result := djSynUnicode;
+             {$endif FPC_HAS_FEATURE_UNICODESTRINGS}
+             {$endif}
+             tkRecord{$ifdef FPC},tkObject{$endif}: begin
+               nested := DeRef(field^.TypeInfo);
+               goto Rec;
+             end;
+             {$ifndef NOVARIANTS}
+             tkVariant: result := djVariant;
+             {$endif}
+             else goto bin;
+             end;
+          1: result := djByte;
+          2: result := djWord;
+          4: result := djInteger;
+          8: result := djInt64;
+          16: result := djHash128;
+          32: result := djHash256;
+          64: result := djHash512;
+          else fKnownSize := field^.Offset;
+          end;
         end;
       end;
-    end;
   end;
-  if KNOWNTYPE_SIZE[fKnownType]<>0 then
-    fKnownSize := KNOWNTYPE_SIZE[fKnownType];
-  result := fKnownType;
+  if KNOWNTYPE_SIZE[result]<>0 then
+    fKnownSize := KNOWNTYPE_SIZE[result];
+  fKnownType := result;
 end;
 
 function TDynArray.ElemCopyFirstField(Source,Dest: Pointer): boolean;
@@ -47419,7 +47619,7 @@ begin
   if fKnownType=djNone then
     ToKnownType(false);
   case fKnownType of
-  djBoolean..djDateTimeMS: // no managed field
+  djBoolean..djDateTimeMS,djHash128..djHash512: // no managed field
     MoveFast(Source^,Dest^,fKnownSize);
   djRawUTF8, djWinAnsi, djRawByteString:
     PRawByteString(Dest)^ := PRawByteString(Source)^;
@@ -47442,7 +47642,7 @@ function TDynArray.LoadKnownType(Data,Source: PAnsiChar): boolean;
 var info: PTypeInfo;
 begin
   if fKnownType=djNone then
-    ToKnownType(false); // set fKnownType and fKnownSize
+    ToKnownType({exacttype=}false); // set fKnownType and fKnownSize
   if fKnownType in [djBoolean..djDateTimeMS] then begin
     MoveFast(Source^,Data^,fKnownSize);
     result := true;
@@ -47460,6 +47660,7 @@ var n, i, ValLen: integer;
     wasString, expectedString, isValid: boolean;
     EndOfObject: AnsiChar;
     Val: PUTF8Char;
+    V: pointer;
     CustomReader: TDynArrayJSONCustomReader;
     NestedDynArray: TDynArray;
 begin // code below must match TTextWriter.AddDynArrayJSON()
@@ -47483,7 +47684,7 @@ begin // code below must match TTextWriter.AddDynArrayJSON()
     CustomReader := nil;
   if Assigned(CustomReader) then
     T := djCustom else
-    T := ToKnownType;
+    T := ToKnownType({exacttype=}true);
   if (T=djNone) and (P^='[') and (PTypeKind(ElemType)^=tkDynArray) then begin
     Count := n; // fast allocation of the whole dynamic array memory at once
     for i := 0 to n-1 do begin
@@ -47527,33 +47728,40 @@ begin // code below must match TTextWriter.AddDynArrayJSON()
       end;
     end;
     else begin
-      expectedString := (T in [djTimeLog..djSynUnicode]);
+      V := fValue^;
+      expectedString := (T in [djTimeLog..djHash512]);
       for i := 0 to n-1 do begin
         Val := GetJSONField(P,P,@wasString,@EndOfObject,@ValLen);
         if (Val=nil) or (wasString<>expectedString) then
           exit;
         case T of
-        djBoolean:  PBooleanArray(fValue^)^[i] := GetBoolean(Val);
-        djByte:     PByteArray(fValue^)^[i] := GetCardinal(Val);
-        djWord:     PWordArray(fValue^)^[i] := GetCardinal(Val);
-        djInteger:  PIntegerArray(fValue^)^[i] := GetInteger(Val);
-        djCardinal: PCardinalArray(fValue^)^[i] := GetCardinal(Val);
-        djSingle:   PSingleArray(fValue^)^[i] := GetExtended(Val);
-        djInt64:    SetInt64(Val,PInt64Array(fValue^)^[i]);
-        djQWord:    SetQWord(Val,PQWordArray(fValue^)^[i]);
-        djTimeLog:  PInt64Array(fValue^)^[i] := Iso8601ToTimeLogPUTF8Char(Val,ValLen);
+        djBoolean:  PBooleanArray(V)^[i] := GetBoolean(Val);
+        djByte:     PByteArray(V)^[i] := GetCardinal(Val);
+        djWord:     PWordArray(V)^[i] := GetCardinal(Val);
+        djInteger:  PIntegerArray(V)^[i] := GetInteger(Val);
+        djCardinal: PCardinalArray(V)^[i] := GetCardinal(Val);
+        djSingle:   PSingleArray(V)^[i] := GetExtended(Val);
+        djInt64:    SetInt64(Val,PInt64Array(V)^[i]);
+        djQWord:    SetQWord(Val,PQWordArray(V)^[i]);
+        djTimeLog:  PInt64Array(V)^[i] := Iso8601ToTimeLogPUTF8Char(Val,ValLen);
         djDateTime, djDateTimeMS:
-          Iso8601ToDateTimePUTF8CharVar(Val,ValLen,PDateTimeArray(fValue^)^[i]);
-        djDouble:   PDoubleArray(fValue^)^[i] := GetExtended(Val);
-        djCurrency: PInt64Array(fValue^)^[i] := StrToCurr64(Val);
-        djRawUTF8:  FastSetString(PRawUTF8Array(fValue^)^[i],Val,ValLen);
+          Iso8601ToDateTimePUTF8CharVar(Val,ValLen,PDateTimeArray(V)^[i]);
+        djDouble:   PDoubleArray(V)^[i] := GetExtended(Val);
+        djCurrency: PInt64Array(V)^[i] := StrToCurr64(Val);
+        djRawUTF8:  FastSetString(PRawUTF8Array(V)^[i],Val,ValLen);
         djRawByteString:
-          if not Base64MagicCheckAndDecode(Val,ValLen,PRawByteStringArray(fValue^)^[i]) then
-            FastSetString(PRawUTF8Array(fValue^)^[i],Val,ValLen);
-        djWinAnsi:  WinAnsiConvert.UTF8BufferToAnsi(Val,ValLen,PRawByteStringArray(fValue^)^[i]);
-        djString:   UTF8DecodeToString(Val,ValLen,string(PPointerArray(fValue^)^[i]));
-        djWideString: UTF8ToWideString(Val,ValLen,WideString(PPointerArray(fValue^)^[i]));
-        djSynUnicode: UTF8ToSynUnicode(Val,ValLen,SynUnicode(PPointerArray(fValue^)^[i]));
+          if not Base64MagicCheckAndDecode(Val,ValLen,PRawByteStringArray(V)^[i]) then
+            FastSetString(PRawUTF8Array(V)^[i],Val,ValLen);
+        djWinAnsi:  WinAnsiConvert.UTF8BufferToAnsi(Val,ValLen,PRawByteStringArray(V)^[i]);
+        djString:   UTF8DecodeToString(Val,ValLen,string(PPointerArray(V)^[i]));
+        djWideString: UTF8ToWideString(Val,ValLen,WideString(PPointerArray(V)^[i]));
+        djSynUnicode: UTF8ToSynUnicode(Val,ValLen,SynUnicode(PPointerArray(V)^[i]));
+        djHash128:  if ValLen<>SizeOf(THash128)*2 then FillZero(PHash128Array(V)^[i]) else
+                      HexDisplayToBin(pointer(Val),@PHash128Array(V)^[i],SizeOf(THash128));
+        djHash256:  if ValLen<>SizeOf(THash256)*2 then FillZero(PHash256Array(V)^[i]) else
+                      HexDisplayToBin(pointer(Val),@PHash256Array(V)^[i],SizeOf(THash256));
+        djHash512:  if ValLen<>SizeOf(THash512)*2 then FillZero(PHash512Array(V)^[i]) else
+                      HexDisplayToBin(pointer(Val),@PHash512Array(V)^[i],SizeOf(THash512));
         else raise ESynException.CreateUTF8('% not readable',[ToText(T)^]);
         end;
       end;
@@ -48611,16 +48819,16 @@ end;
 
 procedure TDynArray.AddArray(const DynArrayVar; aStartIndex: integer;
   aCount: integer);
-var DynArrayCount, n: integer;
+var c, n: integer;
     PS,PD: pointer;
 begin
   if fValue=nil then
     exit; // avoid GPF if void
-  DynArrayCount := DynArrayLength(pointer(DynArrayVar));
-  if aStartIndex>=DynArrayCount then
+  c := DynArrayLength(pointer(DynArrayVar));
+  if aStartIndex>=c then
     exit; // nothing to copy
-  if (aCount<0) or (cardinal(aStartIndex+aCount)>cardinal(DynArrayCount)) then
-    aCount := DynArrayCount-aStartIndex;
+  if (aCount<0) or (cardinal(aStartIndex+aCount)>cardinal(c)) then
+    aCount := c-aStartIndex;
   if aCount<=0 then
     exit;
   n := GetCount;
@@ -48724,7 +48932,7 @@ const
 
 {$ifdef UNDIRECTDYNARRAY}
 
-function TDynArrayHashed.Count: Integer;
+function TDynArrayHashed.GetCount: Integer;
 begin
   result := InternalDynArray.GetCount;
 end;
@@ -49110,6 +49318,21 @@ end;
 function HashInt64(const Elem; Hasher: THasher): cardinal;
 begin
   result := Hasher(0,@Elem,SizeOf(Int64));
+end;
+
+function Hash128(const Elem; Hasher: THasher): cardinal;
+begin
+  result := Hasher(0,@Elem,SizeOf(THash128));
+end;
+
+function Hash256(const Elem; Hasher: THasher): cardinal;
+begin
+  result := Hasher(0,@Elem,SizeOf(THash256));
+end;
+
+function Hash512(const Elem; Hasher: THasher): cardinal;
+begin
+  result := Hasher(0,@Elem,SizeOf(THash512));
 end;
 
 {$ifndef NOVARIANTS}
@@ -51095,7 +51318,7 @@ begin
   inc(B,2);
 end;
 
-procedure TTextWriter.Add(const guid: TGUID);
+procedure TTextWriter.Add({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID);
 begin
   if BEnd-B<=36 then
     FlushToStream;
@@ -51182,30 +51405,10 @@ begin
 end;
 
 procedure TTextWriter.AddCurrentLogTime(LocalTime: boolean);
-var y,d100: PtrUInt;
-    P: PUTF8Char;
-    tab: {$ifdef CPUX86}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
-    time: TSynSystemTime;
+var time: TSynSystemTime;
 begin
-  if BEnd-B<=17 then
-    FlushToStream;
   FromGlobalTime(LocalTime,time);
-  {$ifndef CPUX86}tab := @TwoDigitLookupW;{$endif}
-  y := time.Year;
-  d100 := y div 100;
-  P := B+1;
-  PWord(P)^ := tab[d100];
-  PWord(P+2)^ := tab[y-(d100*100)];
-  PWord(P+4)^ := tab[time.Month];
-  PWord(P+6)^ := tab[time.Day];
-  P[8] := ' ';
-  PWord(P+9)^ := tab[time.Hour];
-  PWord(P+11)^ := tab[time.Minute];
-  PWord(P+13)^ := tab[time.Second];
-  y := time.Millisecond;
-  PWord(P+15)^ := tab[y shr 4];
-  P[17] := ' ';
-  B := P+16;
+  time.AddLogTime(self);
 end;
 
 procedure TTextWriter.AddMicroSec(MS: cardinal);
@@ -51944,7 +52147,7 @@ begin // code below must match TDynArray.LoadFromJSON
     end;
   if Assigned(customWriter) then
     T := djCustom else
-    T := aDynArray.ToKnownType;
+    T := aDynArray.ToKnownType({exacttype=}true);
   P := aDynArray.fValue^;
   Add('[');
   case T of
@@ -52006,6 +52209,9 @@ begin // code below must match TDynArray.LoadFromJSON
         {$else}
         AddAnyAnsiString(PRawByteStringArray(P)^[i],twJSONEscape,0);
         {$endif}
+      djHash128: AddBinToHexDisplayLower(@PHash128Array(P)[i],SizeOf(THash128));
+      djHash256: AddBinToHexDisplayLower(@PHash256Array(P)[i],SizeOf(THash256));
+      djHash512: AddBinToHexDisplayLower(@PHash512Array(P)[i],SizeOf(THash512));
       djInterface: AddPointer(PPtrIntArray(P)^[i]);
       end;
       Add('"',',');
@@ -53676,31 +53882,62 @@ begin
     result := '{"'+Name+'":'+SQLValue+'}';
 end;
 
-procedure JSONDecode(var JSON: RawUTF8; const Names: array of PUTF8Char;
-  var Values: TPUtf8CharDynArray; HandleValuesAsObjectOrArray: Boolean);
+procedure TValuePUTF8Char.ToUTF8(var Text: RawUTF8);
+begin
+  FastSetString(Text,Value,ValueLen);
+end;
+
+function TValuePUTF8Char.ToUTF8: RawUTF8;
+begin
+  FastSetString(result,Value,ValueLen);
+end;
+
+function TValuePUTF8Char.ToString: string;
+begin
+  UTF8DecodeToString(Value,ValueLen,result);
+end;
+
+function TValuePUTF8Char.ToInteger: PtrInt;
+begin
+  result := GetInteger(Value);
+end;
+
+function TValuePUTF8Char.ToCardinal: PtrUInt;
+begin
+  result := GetCardinal(Value);
+end;
+
+function TValuePUTF8Char.Idem(const Text: RawUTF8): boolean;
+begin
+  if length(Text)=ValueLen then
+    result := IdemPropNameUSameLen(pointer(Text),Value,ValueLen) else
+    result := false;
+end;
+
+procedure JSONDecode(var JSON: RawUTF8; const Names: array of RawUTF8;
+  Values: PValuePUTF8CharArray; HandleValuesAsObjectOrArray: Boolean);
 begin
   JSONDecode(UniqueRawUTF8(JSON),Names,Values,HandleValuesAsObjectOrArray);
 end;
 
-procedure JSONDecode(var JSON: RawJSON; const Names: array of PUTF8Char;
-  var Values: TPUtf8CharDynArray; HandleValuesAsObjectOrArray: Boolean);
+procedure JSONDecode(var JSON: RawJSON; const Names: array of RawUTF8;
+  Values: PValuePUTF8CharArray; HandleValuesAsObjectOrArray: Boolean);
 begin
   JSONDecode(UniqueRawUTF8(RawUTF8(JSON)),Names,Values,HandleValuesAsObjectOrArray);
 end;
 
-function JSONDecode(P: PUTF8Char; const Names: array of PUTF8Char;
-  var Values: TPUtf8CharDynArray; HandleValuesAsObjectOrArray: Boolean): PUTF8Char;
-var n, i: integer;
-    Name, Value: PUTF8Char;
+function JSONDecode(P: PUTF8Char; const Names: array of RawUTF8;
+  Values: PValuePUTF8CharArray; HandleValuesAsObjectOrArray: Boolean): PUTF8Char;
+var n, i: PtrInt;
+    namelen, valuelen: integer;
+    name, value: PUTF8Char;
     EndOfObject: AnsiChar;
-    NewValues: boolean;
 begin
   result := nil;
+  if Values=nil then
+    exit; // avoid GPF
   n := length(Names);
-  NewValues := pointer(Values)=nil;
-  SetLength(Values,n);
-  if not NewValues then
-    FillcharFast(Values[0],n*SizeOf(PUTF8Char),0); // SetLength() could leave it not void
+  FillcharFast(Values[0],n*SizeOf(Values[0]),0);
   dec(n);
   if P=nil then
     exit;
@@ -53710,15 +53947,16 @@ begin
       inc(P);
   inc(P); // jump {
   repeat
-    Name := GetJSONPropName(P);
-    if Name=nil then
+    name := GetJSONPropName(P,@namelen);
+    if name=nil then
       exit;  // invalid JSON content
-    Value := GetJSONFieldOrObjectOrArray(P,nil,@EndOfObject,HandleValuesAsObjectOrArray);
+    value := GetJSONFieldOrObjectOrArray(P,nil,@EndOfObject,HandleValuesAsObjectOrArray,true,@valuelen);
     if not(EndOfObject in [',','}']) then
       exit; // invalid item separator
     for i := 0 to n do
-      if StrIComp(Name,Names[i])=0 then begin
-        Values[i] := Value;
+      if IdemPropNameU(Names[i],name,namelen) then begin
+        Values[i].Value := value;
+        Values[i].ValueLen := valuelen;
         break;
       end;
   until (P=nil) or (EndOfObject='}');
@@ -54172,8 +54410,8 @@ s:  repeat inc(P) until (P^>' ') or (P^=#0);
 end;
 
 function GetJSONFieldOrObjectOrArray(var P: PUTF8Char; wasString: PBoolean;
-  EndOfObject: PUTF8Char; HandleValuesAsObjectOrArray,NormalizeBoolean: Boolean;
-  Len: PInteger): PUTF8Char;
+  EndOfObject: PUTF8Char; HandleValuesAsObjectOrArray: Boolean;
+  NormalizeBoolean: Boolean; Len: PInteger): PUTF8Char;
 var Value: PUTF8Char;
     wStr: boolean;
 begin
@@ -54318,7 +54556,7 @@ begin
   P := GotoEndJSONItem(B);
   if P=nil then
     exit;
-  FastSetString(result,B,P-B);
+  FastSetString(RawUTF8(result),B,P-B);
   while (P^<=' ') and (P^<>#0) do inc(P);
   if EndOfObject<>nil then
     EndOfObject^ := P^;
@@ -54909,7 +55147,8 @@ begin
     end;
 end;
 
-function JSONToXML(const JSON: RawUTF8; const Header,NameSpace: RawUTF8): RawUTF8;
+function JSONToXML(const JSON: RawUTF8; const Header: RawUTF8;
+  const NameSpace: RawUTF8): RawUTF8;
 var tmp: TSynTempBuffer;
 begin
   tmp.Init(JSON);
@@ -55103,16 +55342,16 @@ end;
 constructor TSynConnectionDefinition.CreateFromJSON(const JSON: RawUTF8;
   Key: cardinal);
 var privateCopy: RawUTF8;
-    values: TPUtf8CharDynArray;
+    values: array[0..4] of TValuePUTF8Char;
 begin
   fKey := Key;
   privateCopy := JSON;
-  JSONDecode(privateCopy,['Kind','ServerName','DatabaseName','User','Password'],values);
-  UTF8DecodeToString(values[0],StrLen(values[0]),fKind);
-  fServerName := values[1];
-  fDatabaseName := values[2];
-  fUser := values[3];
-  fPassWord := values[4];
+  JSONDecode(privateCopy,['Kind','ServerName','DatabaseName','User','Password'],@values);
+  fKind := values[0].ToString;
+  values[1].ToUTF8(fServerName);
+  values[2].ToUTF8(fDatabaseName);
+  values[3].ToUTF8(fUser);
+  values[4].ToUTF8(fPassWord);
 end;
 
 function TSynConnectionDefinition.SaveToJSON: RawUTF8;
@@ -55460,24 +55699,24 @@ end;
 { ************ Unit-Testing classes and functions }
 
 procedure KB(bytes: Int64; out result: TShort16);
-const _B: array[0..3] of string[3] = ('KB','MB','GB','TB');
+const _B: array[0..3] of string[3] = (' KB',' MB',' GB',' TB');
 var hi,rem,b: cardinal;
 begin
-  if bytes<1 shl 10 then begin
+  if bytes<1 shl 10-(1 shl 10) div 10 then begin
     FormatShort16('% B',[integer(bytes)],result);
     exit;
   end;
-  if bytes<1 shl 20 then begin
+  if bytes<1 shl 20-(1 shl 20) div 10 then begin
     b := 0;
     rem := bytes;
     hi := bytes shr 10;
   end else
-  if bytes<1 shl 30 then begin
+  if bytes<1 shl 30-(1 shl 30) div 10 then begin
     b := 1;
     rem := bytes shr 10;
     hi := bytes shr 20;
   end else
-  if bytes<Int64(1) shl 40 then begin
+  if bytes<Int64(1) shl 40-(Int64(1) shl 40) div 10 then begin
     b := 2;
     rem := bytes shr 20;
     hi := bytes shr 30;
@@ -55494,8 +55733,8 @@ begin
     inc(hi); // round up as expected by an human being
   end;
   if rem<>0 then
-    FormatShort16('%.% %',[hi,rem,_B[b]],result) else
-    FormatShort16('% %',[hi,_B[b]],result);
+    FormatShort16('%.%%',[hi,rem,_B[b]],result) else
+    FormatShort16('%%',[hi,_B[b]],result);
 end;
 
 function KB(bytes: Int64): TShort16;
@@ -55537,8 +55776,6 @@ procedure MicroSecToString(Micro: QWord; out result: TShort16);
   procedure TwoDigitToString(value: cardinal; const u: shortstring; var result: TShort16);
   var d100: TDiv100Rec;
   begin
-    if value<10 then
-      FormatShort16('0.0%%',[AnsiChar(value+48),u],result) else
     if value<100 then
       FormatShort16('0.%%',[UInt2DigitsToShortFast(value),u],result) else begin
       Div100(value,d100);
@@ -56999,6 +57236,8 @@ begin
   {$ifdef VER3_0_1}+' 3.0.1'{$endif}
   {$ifdef VER3_0_2}+' 3.0.2'{$endif}
   {$ifdef VER3_1_1}+' 3.1.1'{$endif}
+  {$ifdef VER3_2}+' 3.2'{$endif}
+  {$ifdef VER3_3_1}+' 3.3.1'{$endif}
 {$else}
   {$ifdef VER130} 'Delphi 5'{$endif}
   {$ifdef CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
@@ -60476,6 +60715,7 @@ begin
   Last := P+Len;
   OnErrorOverflow := nil;
   OnErrorData := nil;
+  Tag := 0;
 end;
 
 procedure TFastReader.Init(const Buffer: RawByteString);
@@ -60714,6 +60954,72 @@ fin:
 {$endif}
 end;
 
+procedure TFastReader.VarNextInt;
+{$ifdef CPUX86} // not enough CPU registers
+begin
+  repeat
+    if P>=Last then
+      break;  // reached end of input
+    if P^<=#$7f then
+      break; // reached end of VarUInt32/VarUInt64
+    inc(P);
+  until false;
+  inc(P);
+{$else}
+var s: PAnsiChar;
+begin
+  s := P;
+  repeat
+    if s>=Last then
+      break;  // reached end of input
+    if s^<=#$7f then
+      break; // reached end of VarUInt32/VarUInt64
+    inc(s);
+  until false;
+  P := s+1;
+{$endif CPUX86}
+end;
+
+procedure TFastReader.VarNextInt(count: integer);
+{$ifdef CPUX86} // not enough CPU registers
+begin
+  if count=0 then
+    exit;
+  repeat
+    if P>=Last then
+      break;  // reached end of input
+    if P^>#$7f then begin
+      inc(P);
+      continue; // didn't reach end of VarUInt32/VarUInt64
+    end;
+    inc(P);
+    dec(count);
+    if count=0 then
+      break;
+  until false;
+{$else}
+var s, max: PAnsiChar;
+begin
+  if count=0 then
+    exit;
+  s := P;
+  max := Last;
+  repeat
+    if s>=max then
+      break;  // reached end of input
+    if s^>#$7f then begin
+      inc(s);
+      continue; // didn't reach end of VarUInt32/VarUInt64
+    end;
+    inc(s);
+    dec(count);
+    if count=0 then
+      break;
+  until false;
+  P := s;
+{$endif CPUX86}
+end;
+
 function TFastReader.PeekVarInt32(out value: PtrInt): boolean;
 begin
   result := PeekVarUInt32(PtrUInt(value));
@@ -60732,7 +61038,7 @@ begin
   s := P;
   repeat
     if s>=Last then
-      exit;  // reached end of input
+      exit;  // reached end of input -> returns false
     if s^<=#$7f then
       break; // reached end of VarUInt32
     inc(s);
@@ -60853,289 +61159,6 @@ begin
   wkVarUInt32: for i := 0 to result-1 do Values[i] := VarUInt32;
   else ErrorData('ReadVarUInt32Array: unhandled kind=%', [ord(k)]);
   end;
-end;
-
-
-{ TRawByteStringGroup }
-
-const
-  COMPACT_COUNT = 512; // auto-compaction if 512 last items < 1MB
-  COMPACT_LEN = 1 shl 20;
-
-procedure TRawByteStringGroup.Compact(len: integer);
-var tmp: RawByteString;
-    i, L: integer;
-    P: PAnsiChar;
-begin
-  SetLength(tmp,len);
-  P := pointer(tmp);
-  for i := Count-COMPACT_COUNT to Count-1 do
-    with Values[i] do begin
-      L := length(Value);
-      MoveFast(pointer(Value)^,P^,L);
-      inc(P,L);
-      Value := '';
-    end;
-  //assert(P-pointer(tmp)=len);
-  dec(Count,COMPACT_COUNT);
-  Values[Count].Value := tmp;
-  inc(Count);
-end;
-
-procedure TRawByteStringGroup.Add(const aItem: RawByteString);
-var len: integer;
-begin
-  if Values=nil then
-    Clear else
-    if Count=NextCompact then begin
-      len := Position-Values[Count-COMPACT_COUNT].Position;
-      if len<COMPACT_LEN then
-        Compact(len) else
-        inc(NextCompact); // slide the compaction window once we reached 1MB
-    end;
-  if Count=Length(Values) then
-    SetLength(Values,Count+COMPACT_COUNT+Count shr 3);
-  with Values[Count] do begin
-    Position := self.Position;
-    Value := aItem;
-  end;
-  LastFind := Count;
-  inc(Count);
-  inc(Position,Length(aItem));
-end;
-
-procedure TRawByteStringGroup.Add(aItem: pointer; aItemLen: integer);
-var tmp: RawByteString;
-begin
-  SetString(tmp,PAnsiChar(aItem),aItemLen);
-  Add(tmp);
-end;
-
-{$ifndef DELPHI5OROLDER} // circumvent Delphi 5 compiler bug
-
-procedure TRawByteStringGroup.Add(const aAnother: TRawByteStringGroup);
-var i: integer;
-    s,d: PRawByteStringGroupValue;
-begin
-  if aAnother.Values=nil then
-    exit;
-  if Count+aAnother.Count>Length(Values) then
-    SetLength(Values,Count+aAnother.Count);
-  s := pointer(aAnother.Values);
-  d := @Values[Count];
-  for i := 1 to aAnother.Count do begin
-    d^.Position := Position;
-    d^.Value := s^.Value;
-    inc(Position,length(s^.Value));
-    inc(s);
-    inc(d);
-  end;
-  inc(Count,aAnother.Count);
-end;
-
-procedure TRawByteStringGroup.RemoveLastAdd;
-begin
-  if Count>0 then begin
-    dec(Count);
-    LastFind := Count;
-    dec(Position,Length(Values[Count].Value));
-    Values[Count].Value := ''; // release memory
-  end;
-end;
-
-function TRawByteStringGroup.Equals(const aAnother: TRawByteStringGroup): boolean;
-begin
-  if ((Values=nil) and (aAnother.Values<>nil)) or ((Values<>nil) and (aAnother.Values=nil)) or
-     (Position<>aAnother.Position) then
-    result := false else
-    if (Count<>1) or (aAnother.Count<>1) or (Values[0].Value<>aAnother.Values[0].Value) then
-      result := AsText=aAnother.AsText else
-      result := true;
-end;
-
-{$endif DELPHI5OROLDER}
-
-procedure TRawByteStringGroup.Clear;
-begin
-  Values := nil;
-  Position := 0;
-  Count := 0;
-  LastFind := 0;
-  NextCompact := COMPACT_COUNT;
-end;
-
-function TRawByteStringGroup.AsText: RawByteString;
-var i: integer;
-    v: PRawByteStringGroupValue;
-begin
-  if Values=nil then
-    result := '' else
-  if Count=1 then
-    result := Values[0].Value else begin
-    SetString(result,nil,Position);
-    v := pointer(Values);
-    for i := 1 to Count do begin
-      MoveFast(pointer(v^.Value)^,PByteArray(result)[v^.Position],length(v^.Value));
-      {$ifdef FPC}Finalize(v^.Value){$else}v^.Value := ''{$endif};
-      inc(v);
-    end;
-    Values[0].Value := result; // use result for absolute compaction ;)
-    Count := 1;
-  end;
-end;
-
-function TRawByteStringGroup.AsBytes: TByteDynArray;
-var i: integer;
-begin
-  result := nil;
-  if Values=nil then
-    exit;
-  SetLength(result, Position);
-  for i := 0 to Count-1 do
-  with Values[i] do
-    MoveFast(pointer(Value)^,PByteArray(result)[Position],length(Value));
-end;
-
-procedure TRawByteStringGroup.Write(W: TTextWriter; Escape: TTextWriterKind);
-var i: integer;
-begin
-  if Values<>nil then
-    for i := 0 to Count-1 do
-    with Values[i] do
-      W.Add(PUTF8Char(pointer(Value)),length(Value),Escape);
-end;
-
-procedure TRawByteStringGroup.WriteBinary(W: TFileBufferWriter);
-var i: integer;
-begin
-  if Values<>nil then
-    for i := 0 to Count-1 do
-      W.WriteBinary(Values[i].Value);
-end;
-
-procedure TRawByteStringGroup.WriteString(W: TFileBufferWriter);
-begin
-  if Values=nil then begin
-    W.Write1(0);
-    exit;
-  end;
-  W.WriteVarUInt32(Position);
-  WriteBinary(W);
-end;
-
-procedure TRawByteStringGroup.AddFromReader(var aReader: TFastReader);
-var complexsize: integer;
-begin
-  complexsize := aReader.VarUInt32;
-  if complexsize>0 then // directly create a RawByteString from aReader buffer
-    Add(aReader.Next(complexsize),complexsize);
-end;
-
-function TRawByteStringGroup.Find(aPosition: integer): PRawByteStringGroupValue;
-var i: integer;
-begin
-  if (pointer(Values)<>nil) and (cardinal(aPosition)<cardinal(Position)) then begin
-    result := @Values[LastFind]; // this cache is very efficient in practice
-    if (aPosition>=result^.Position) and (aPosition<result^.Position+length(result^.Value)) then
-      exit;
-    result := @Values[1]; // seldom O(n) brute force search (in CPU L1 cache)
-    for i := 0 to Count-2 do
-      if result^.Position>aPosition then begin
-        dec(result);
-        LastFind := i;
-        exit;
-      end else
-        inc(result);
-    dec(result);
-    LastFind := Count-1;
-  end
-  else
-    result := nil;
-end;
-
-function TRawByteStringGroup.Find(aPosition, aLength: integer): pointer;
-var P: PRawByteStringGroupValue;
-    i: integer;
-label found;
-begin
-  if (pointer(Values)<>nil) and (cardinal(aPosition)<cardinal(Position)) then begin
-    P := @Values[LastFind]; // this cache is very efficient in practice
-    i := aPosition-P^.Position;
-    if (i>=0) and (i+aLength<length(P^.Value)) then begin
-      result := @PByteArray(P^.Value)[i];
-      exit;
-    end;
-    P := @Values[1]; // seldom O(n) brute force search (in CPU L1 cache)
-    for i := 0 to Count-2 do
-      if P^.Position>aPosition then begin
-        LastFind := i;
-found:  dec(P);
-        dec(aPosition,P^.Position);
-        if aLength-aPosition<=length(P^.Value) then
-          result := @PByteArray(P^.Value)[aPosition] else
-          result := nil;
-        exit;
-      end else
-        inc(P);
-    LastFind := Count-1;
-    goto found;
-  end
-  else
-    result := nil;
-end;
-
-procedure TRawByteStringGroup.FindAsText(aPosition, aLength: integer; out aText: RawByteString);
-var P: PRawByteStringGroupValue;
-begin
-  P := Find(aPosition);
-  if P=nil then
-    exit;
-  dec(aPosition,P^.Position);
-  if (aPosition=0) and (length(P^.Value)=aLength) then
-    aText := P^.Value else // direct return if not yet compacted
-    if aLength-aPosition<=length(P^.Value) then
-      SetString(aText,PAnsiChar(@PByteArray(P^.Value)[aPosition]),aLength);
-end;
-
-function TRawByteStringGroup.FindAsText(aPosition, aLength: integer): RawByteString;
-begin
-  FindAsText(aPosition,aLength,result);
-end;
-
-{$ifndef NOVARIANTS}
-procedure TRawByteStringGroup.FindAsVariant(aPosition, aLength: integer; out aDest: variant);
-var tmp: RawByteString;
-begin
-  tmp := FindAsText(aPosition,aLength);
-  if tmp <> '' then
-    RawUTF8ToVariant(tmp,aDest);
-end;
-{$endif NOVARIANTS}
-
-procedure TRawByteStringGroup.FindWrite(aPosition, aLength: integer;
-  W: TTextWriter; Escape: TTextWriterKind);
-var P: pointer;
-begin
-  P := Find(aPosition,aLength);
-  if P<>nil then
-    W.Add(P,aLength,Escape);
-end;
-
-procedure TRawByteStringGroup.FindWriteBase64(aPosition, aLength: integer;
-  W: TTextWriter; withMagic: boolean);
-var P: pointer;
-begin
-  P := Find(aPosition,aLength);
-  if P<>nil then
-    W.WrBase64(P,aLength,withMagic);
-end;
-
-procedure TRawByteStringGroup.FindMove(aPosition, aLength: integer; aDest: pointer);
-var P: pointer;
-begin
-  P := Find(aPosition,aLength);
-  if P<>nil then
-    MoveFast(P^,aDest^,aLength);
 end;
 
 
@@ -61890,11 +61913,11 @@ begin
 end;
 
 function TAlgoCompress.DecompressPartial(Comp, Partial: PAnsiChar;
-  CompLen, PartialLen: integer): integer;
+  CompLen, PartialLen, PartialLenMax: integer): integer;
 var BodyLen: integer;
 begin
   result := 0;
-  if (self=nil) or (CompLen<=9) or (Comp=nil) then
+  if (self=nil) or (CompLen<=9) or (Comp=nil) or (PartialLenMax<PartialLen) then
     exit;
   if Comp[4]=COMPRESS_STORED then begin
     if PCardinal(Comp)^=PCardinal(Comp+5)^ then
@@ -61908,7 +61931,7 @@ begin
     PartialLen := BodyLen;
   if Comp[4]=COMPRESS_STORED then
     MoveFast(Comp[9],Partial[0],PartialLen) else
-    if AlgoDecompressPartial(Comp+9,CompLen-9,Partial,PartialLen)<>PartialLen then
+    if AlgoDecompressPartial(Comp+9,CompLen-9,Partial,PartialLen,PartialLenMax)<PartialLen then
       exit;
   result := PartialLen;
 end;
@@ -61943,7 +61966,7 @@ begin
          (AlgoHash(0,Plain,PlainLen)<>PCardinal(Comp)^) then
         exit;
     aclSafeSlow:
-      if (AlgoDecompressPartial(Comp+9,CompLen-9,Plain,PlainLen)<>PlainLen) or
+      if (AlgoDecompressPartial(Comp+9,CompLen-9,Plain,PlainLen,PlainLen)<>PlainLen) or
          (AlgoHash(0,Plain,PlainLen)<>PCardinal(Comp)^) then
         exit;
     aclNoCrcFast:
@@ -61984,9 +62007,9 @@ begin
 end;
 
 function TAlgoSynLZ.AlgoDecompressPartial(Comp: pointer;
-  CompLen: integer; Partial: pointer; PartialLenMax: integer): integer;
+  CompLen: integer; Partial: pointer; PartialLen, PartialLenMax: integer): integer;
 begin
-  result := SynLZdecompress1partial(Comp,CompLen,Partial,PartialLenMax);
+  result := SynLZdecompress1partial(Comp,CompLen,Partial,PartialLen);
 end;
 
 // deprecated wrapper methods - use SynLZ global variable instead
@@ -62028,7 +62051,7 @@ end;
 
 function SynLZDecompressPartial(P,Partial: PAnsiChar; PLen,PartialLen: integer): integer;
 begin
-  result := AlgoSynLZ.DecompressPartial(P,Partial,PLen,PartialLen);
+  result := AlgoSynLZ.DecompressPartial(P,Partial,PLen,PartialLen,PartialLen);
 end;
 
 procedure SynLZDecompress(P: PAnsiChar; PLen: integer; out Result: RawByteString;
@@ -62072,7 +62095,7 @@ function TAlgoCompressWithNoDestLen.AlgoCompress(Plain: pointer;
   PlainLen: integer; Comp: pointer): integer;
 begin
   Comp := ToVarUInt32(PlainLen,Comp); // deflate don't store PlainLen
-  result := RawProcess(Plain,Comp,PlainLen,AlgoCompressDestLen(PlainLen),doCompress);
+  result := RawProcess(Plain,Comp,PlainLen,AlgoCompressDestLen(PlainLen),0,doCompress);
   if result>0 then
     inc(result,ToVarUInt32Length(PlainLen));
 end;
@@ -62083,7 +62106,7 @@ var start: PAnsiChar;
 begin
   start := Comp;
   result := FromVarUInt32(PByte(Comp));
-  if RawProcess(Comp,Plain,CompLen+(Start-Comp),result,doUnCompress)<>result then
+  if RawProcess(Comp,Plain,CompLen+(Start-Comp),result,0,doUnCompress)<>result then
     result := 0;
 end;
 
@@ -62095,14 +62118,14 @@ begin
 end;
 
 function TAlgoCompressWithNoDestLen.AlgoDecompressPartial(Comp: pointer;
-  CompLen: integer; Partial: pointer; PartialLenMax: integer): integer;
+  CompLen: integer; Partial: pointer; PartialLen, PartialLenMax: integer): integer;
 var start: PAnsiChar;
 begin
   start := Comp;
   result := FromVarUInt32(PByte(Comp));
   if PartialLenMax>result then
     PartialLenMax := result;
-  result := RawProcess(Comp,Partial,CompLen+(Start-Comp),PartialLenMax,doUncompressPartial);
+  result := RawProcess(Comp,Partial,CompLen+(Start-Comp),PartialLen,PartialLenMax,doUncompressPartial);
 end;
 
 
@@ -63089,6 +63112,14 @@ begin
   end;
   inherited Destroy;
   FreeAndNil(fProcessEvent);
+end;
+
+procedure TSynBackgroundThreadAbstract.SetExecuteLoopPause(dopause: boolean);
+begin
+  if Terminated or (dopause=fExecuteLoopPause) or (fExecute=exFinished) then
+    exit;
+  fExecuteLoopPause := dopause;
+  fProcessEvent.SetEvent; // notify Execute main loop
 end;
 
 procedure TSynBackgroundThreadAbstract.Execute;
@@ -64551,8 +64582,10 @@ begin
     StrComp := @StrCompSSE42;
     {$endif}
     {$endif}
+    {$ifndef PUREPASCAL}
     {$ifndef DELPHI5OROLDER}
     UpperCopy255Buf := @UpperCopy255BufSSE42;
+    {$endif}
     {$endif}
     {$ifndef PUREPASCAL}
     StrComp := @StrCompSSE42;
