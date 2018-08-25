@@ -65,7 +65,7 @@ var
   len: uint32;
   isShared: boolean;
   bufObj: PJSObject;
-  bufData: pointer;
+  bufData: Puint8Vector;
   tmp1: RawByteString;
   tmp2: SynUnicode;
 begin
@@ -102,7 +102,7 @@ begin
       if bufObj.GetBufferDataAndLength(bufData, len) then begin
         if encoding = 'base64' then begin
           tmp1 := BinToBase64(PAnsiChar(bufData), len);
-          bufData := Pointer(tmp1);
+          bufData := Puint8Vector(tmp1);
           len := Length(tmp1);
           encoding := 'bin';
         end;

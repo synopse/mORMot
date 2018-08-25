@@ -1360,7 +1360,6 @@ type
     procedure SetReservedSlot(index: uint32; v: jsval); {$ifdef HASINLINE}inline;{$endif}
     function GetClass: PJSClass; {$ifdef HASINLINE}inline;{$endif}
     function GetConstructor(cx: PJSContext): PJSObject; {$ifdef HASINLINE}inline;{$endif}
-  protected
     // Return the available byte length of an array buffer
     // - obj must have passed a JS_IsArrayBufferObject test, or somehow be known
     // that it would pass such a test: it is an ArrayBuffer or a wrapper of an
