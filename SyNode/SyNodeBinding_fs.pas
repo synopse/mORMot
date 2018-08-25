@@ -696,15 +696,15 @@ var
   size: size_t;
   res: Int64;
   val: jsval;
-const
-  f_usage = 'usage: readFile(handle: Integer; buffer: Buffer; [offset: Integer = 0]; len: Integer; [position: Integer]): Integer';
 begin
   try
     in_argv := vp.argv;
-    if (argc < 2) or not in_argv[1].isObject then
-      raise ESMException.Create(f_usage);
+    if (argc < 2) then
+      raise ESMTypeException.Create('fd and buffer are required');
     if not in_argv[0].isInteger or (in_argv[0].asInteger < 0) then
       raise ESMTypeException.Create('fd must be a file descriptor');
+    if not in_argv[1].isObject or not in_argv[1].asObject.IsTypedArrayObject then
+      raise ESMTypeException.Create('Second argument needs to be a buffer');
     fd := in_argv[0].asInteger;
     target := cx.NewRootedObject(in_argv[1].asObject);
     try
