@@ -566,17 +566,17 @@ begin
 
 end;
 
-function puv_fs_access(): Integer;
+function puv_fs_access(path: TFileName; mode: Integer): Integer;
 begin
 
 end;
 
-function puv_fs_chmod(): Integer;
+function puv_fs_chmod(path: TFileName; mode: Integer): Integer;
 begin
 
 end;
 
-function puv_fs_fchmod(): Integer;
+function puv_fs_fchmod(fd: Integer; mode: Integer): Integer;
 begin
 
 end;
@@ -591,17 +591,17 @@ begin
 
 end;
 
-function puv_fs_unlink(): Integer;
+function puv_fs_unlink(path: TFileName): Integer;
 begin
 
 end;
 
-function puv_fs_rmdir(): Integer;
+function puv_fs_rmdir(path: TFileName): Integer;
 begin
 
 end;
 
-function puv_fs_mkdir(): Integer;
+function puv_fs_mkdir(path: TFileName; mode: Integer): Integer;
 begin
 
 end;
