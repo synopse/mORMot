@@ -769,7 +769,7 @@ type
   /// implements a stack-based storage of some (UTF-8 or binary) text
   // - could be used e.g. to make a temporary copy when JSON is parsed in-place
   // - call one of the Init() overloaded methods, then Done to release its memory
-  // - will avoid temporary memory allocation via the heap for up to 4KB of text
+  // - will avoid temporary memory allocation via the heap for up to 4KB of data
   {$ifdef UNICODE}TSynTempBuffer = record{$else}TSynTempBuffer = object{$endif}
   public
     /// the text/binary length, in bytes, excluding the trailing #0
@@ -12142,6 +12142,8 @@ type
     procedure FromNowUTC;
     /// fill fields with the current Local time, using a 8-16ms thread-safe cache
     procedure FromNowLocal;
+    /// encode the stored date/time as text
+    function ToText(Expanded: boolean=true; FirstTimeChar: AnsiChar='T'; const TZD: RawUTF8=''): RawUTF8;
     /// append the stored date and time, in a log-friendly format
     // - e.g. append '20110325 19241502 '
     // - as called by TTextWriter.AddCurrentLogTime()
@@ -13150,6 +13152,12 @@ procedure SleepHiRes(ms: cardinal);
 // - as recommended by MSDN to avoid dword alignment issue
 procedure FileTimeToInt64(const FT: TFileTime; out I64: Int64);
   {$ifdef HASINLINE}inline;{$endif}
+
+/// low-level conversion of a Windows 64-bit TFileTime into a Unix time seconds stamp
+function FileTimeToUnixTime(const FT: TFileTime): TUnixTime;
+
+/// low-level conversion of a Windows 64-bit TFileTime into a Unix time ms stamp
+function FileTimeToUnixMSTime(const FT: TFileTime): TUnixMSTime;
 
 {$else MSWINDOWS}
 
@@ -35112,32 +35120,20 @@ const
   DateFileTimeDelta =  94353120000000000; // from year 1601 to 1899
 
 {$ifdef MSWINDOWS}
-function UnixTimeUTC: TUnixTime;
-var ft: TFileTime;
-    {$ifdef CPU64}nano100: Int64;{$endif}
+function FileTimeToUnixTime(const FT: TFileTime): TUnixTime;
+{$ifdef CPU64}var nano100: Int64;{$endif}
 begin
-  GetSystemTimeAsFileTime(ft); // very fast, with 100 ns unit
   {$ifdef CPU64}
   FileTimeToInt64(ft,nano100);
   result := (nano100-UnixFileTimeDelta) div 10000000;
   {$else} // use PInt64 to avoid URW699 with Delphi 6 / Kylix
   result := (PInt64(@ft)^-UnixFileTimeDelta) div 10000000;
   {$endif}
-// assert(Round((NowUTC-UnixDateDelta)*SecsPerDay)-result<2);
 end;
-{$else}
-function UnixTimeUTC: TUnixTime;
-begin
-  result := GetUnixUTC; // direct retrieval from UNIX API
-end;
-{$endif}
 
-function UnixMSTimeUTC: TUnixMSTime;
-{$ifdef MSWINDOWS}
-var ft: TFileTime;
-    {$ifdef CPU64}nano100: Int64;{$endif}
+function FileTimeToUnixMSTime(const FT: TFileTime): TUnixMSTime;
+{$ifdef CPU64}var nano100: Int64;{$endif}
 begin
-  GetSystemTimeAsFileTime(ft); // very fast, with 100 ns unit
   {$ifdef CPU64}
   FileTimeToInt64(ft,nano100);
   result := (nano100-UnixFileTimeDelta) div 10000;
@@ -35145,11 +35141,31 @@ begin
   result := (PInt64(@ft)^-UnixFileTimeDelta) div 10000;
   {$endif}
 end;
-{$else}
+
+function UnixTimeUTC: TUnixTime;
+var ft: TFileTime;
+begin
+  GetSystemTimeAsFileTime(ft); // very fast, with 100 ns unit
+  result := FileTimeToUnixTime(ft);
+end;
+
+function UnixMSTimeUTC: TUnixMSTime;
+var ft: TFileTime;
+begin
+  GetSystemTimeAsFileTime(ft); // very fast, with 100 ns unit
+  result := FileTimeToUnixMSTime(ft);
+end;
+{$else MSWINDOWS}
+function UnixTimeUTC: TUnixTime;
+begin
+  result := GetUnixUTC; // direct retrieval from UNIX API
+end;
+
+function UnixMSTimeUTC: TUnixMSTime;
 begin
   result := GetUnixMSUTC; // direct retrieval from UNIX API
 end;
-{$endif}
+{$endif MSWINDOWS}
 
 function DaysToIso8601(Days: cardinal; Expanded: boolean): RawUTF8;
 var Y,M: cardinal;
@@ -36176,7 +36192,10 @@ function TryEncodeDayOfWeekInMonth(AYear, AMonth, ANthDayOfWeek, ADayOfWeek: int
   out AValue: TDateTime): Boolean;
 var LStartOfMonth, LDay: integer;
 begin // adapted from DateUtils
-  LStartOfMonth := (DateTimeToTimestamp(EncodeDate(AYear,AMonth,1)).Date-1)mod 7+1;
+  result := TryEncodeDate(AYear,AMonth,1,aValue);
+  if not result then
+    exit;
+  LStartOfMonth := (DateTimeToTimestamp(aValue).Date-1)mod 7+1;
   if LStartOfMonth<=ADayOfWeek then
     dec(ANthDayOfWeek);
   LDay := (ADayOfWeek-LStartOfMonth+1)+7*ANthDayOfWeek;
@@ -36229,6 +36248,13 @@ end;
 procedure TSynSystemTime.FromNowLocal;
 begin
   FromGlobalTime(true,self);
+end;
+
+function TSynSystemTime.ToText(Expanded: boolean;
+  FirstTimeChar: AnsiChar; const TZD: RawUTF8): RawUTF8;
+begin
+  result := DateTimeMSToString(Hour,Minute,Second,MilliSecond,Year,Month,Day,
+    Expanded,FirstTimeChar,TZD);
 end;
 
 procedure TSynSystemTime.AddLogTime(WR: TTextWriter);
