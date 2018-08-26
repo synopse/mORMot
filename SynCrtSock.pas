@@ -11271,7 +11271,7 @@ begin
         fHttps.Free; // need a new HTTPS connection
         fHttps := MainHttpClass.Create(uri.Server, uri.Port, uri.Https);
       end;
-      result := fHttps.Request(uri.Address, method, keepalive, header,
+      result := fHttps.Request(uri.Address, method, KeepAlive, header,
         data, datatype, fHeaders, fBody);
       if KeepAlive = 0 then
         FreeAndNil(fHttps);
@@ -11285,7 +11285,7 @@ begin
         fHttp.Free; // need a new HTTP connection
         fHttp := THttpClientSocket.Open(uri.Server, uri.Port, cslTCP, 5000, uri.Https);
       end;
-      result := fHttp.Request(uri.Address, method, keepalive, header, data, datatype, true);
+      result := fHttp.Request(uri.Address, method, KeepAlive, header, data, datatype, true);
       fBody := fHttp.Content;
       fHeaders := fHttp.HeaderGetText;
       if KeepAlive = 0 then

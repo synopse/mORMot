@@ -4222,6 +4222,7 @@ procedure DeduplicateInt64(var Values: TInt64DynArray); overload;
 function DeduplicateInt64(var Values: TInt64DynArray; Count: integer): integer; overload;
 
 /// low-level function called by DeduplicateInt64()
+// - warning: caller should ensure that last>0
 function DeduplicateInt64Sorted(val: PInt64Array; last: PtrInt): PtrInt;
 
 /// create a new 64-bit integer dynamic array with the values from another one
