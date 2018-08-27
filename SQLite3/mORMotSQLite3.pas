@@ -337,6 +337,7 @@ type
     fStatementMaxParam: integer;
     fStatementLastException: RawUTF8;
     fStatementTruncateSQLLogLen: integer;
+    fStatementPreparedSelectQueryPlan: boolean;
     /// check if a VACUUM statement is possible
     // - VACUUM in fact DISCONNECT all virtual modules (sounds like a SQLite3
     // design problem), so calling it during process could break the engine
@@ -557,6 +558,9 @@ type
     // - default is 0, meaning no truncation
     property StatementTruncateSQLLogLen: integer read fStatementTruncateSQLLogLen
       write fStatementTruncateSQLLogLen;
+    /// executes (therefore log) the QUERY PLAN for each prepared statement
+    property StatementPreparedSelectQueryPlan: boolean
+      read fStatementPreparedSelectQueryPlan write fStatementPreparedSelectQueryPlan;
   published
     /// associated database
     property DB: TSQLDataBase read fDB;
@@ -760,9 +764,13 @@ begin
     timer := @fStatementTimer else
     timer := nil;
   fStatement := fStatementCache.Prepare(fStatementGenericSQL,@wasPrepared,timer,@fStatementMonitor);
-  if wasPrepared then
-    InternalLog('prepared % % %',
-      [fStaticStatementTimer.Stop,DB.FileNameWithoutPath,fStatementGenericSQL],sllDB);
+  if wasPrepared then begin
+    InternalLog('prepared % % %', [fStaticStatementTimer.Stop,
+      DB.FileNameWithoutPath,fStatementGenericSQL],sllDB);
+    if fStatementPreparedSelectQueryPlan then
+      DB.ExecuteJSON('explain query plan '+
+        StringReplaceChars(fStatementGenericSQL,'?','1'), {expand=}true);
+  end;
   if timer=nil then begin
     fStaticStatementTimer.Start;
     fStatementTimer := @fStaticStatementTimer;

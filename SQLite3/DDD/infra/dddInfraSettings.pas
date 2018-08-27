@@ -274,7 +274,8 @@ type
      optSQlite3FileSafeNonExclusive,
      optNoSystemUse,
      optSQlite3File4MBCacheSize,
-     optForceAjaxJson);
+     optForceAjaxJson,
+     optSQLite3LogQueryPlan);
 
   /// define options to be used for TDDDRestSettings
   TDDDRestSettingsOptions = set of TDDDRestSettingsOption;
@@ -916,6 +917,8 @@ begin
         Synchronous := smOff;
       if optSQlite3File4MBCacheSize in Options then
         CacheSize := (4 shl 20) div PageSize;
+      if optSQLite3LogQueryPlan in Options then
+        TSQLRestServerDB(DB).StatementPreparedSelectQueryPlan := true;
     end;
   DB.NoAJAXJSON := not (optForceAjaxJson in Options);
 end;

@@ -757,7 +757,8 @@ begin
   fLogFamily.SynLog.Log(sllTrace,'InternalRequest % calling %(%).Request',
      [method,fSocket.ClassType,pointer(fSocket)],self);
   {$endif}
-  result.Lo := fSocket.Request(url,method,KeepAliveMS,Header,Data,DataType,false);
+  result.Lo := fSocket.Request(SockString(url),SockString(method),
+    KeepAliveMS,SockString(Header),SockString(Data),SockString(DataType),false);
   result.Hi := GetCardinal(pointer(fSocket.HeaderValue('Server-InternalState')));
   Header := fSocket.HeaderGetText;
   Data := fSocket.Content;
@@ -1003,7 +1004,8 @@ var OutHeader, OutData: RawByteString;
 begin
   if fRequest=nil then
     result.Lo := HTTP_NOTIMPLEMENTED else begin
-    result.Lo := fRequest.Request(url,method,KeepAliveMS,Header,Data,DataType,
+    result.Lo := fRequest.Request(SockString(url),SockString(method),
+      KeepAliveMS,SockString(Header),SockString(Data),SockString(DataType),
       SockString(OutHeader),SockString(OutData));
     result.Hi := GetCardinal(pointer(
       FindIniNameValue(pointer(OutHeader),'SERVER-INTERNALSTATE: ')));
