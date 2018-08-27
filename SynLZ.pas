@@ -259,6 +259,7 @@ function SynLZcompress2(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 // - this algorithm is a bit smaller, but slower, so the 1st method is preferred
 function SynLZdecompress2(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 
+
 implementation
 
 function SynLZcompressdestlen(in_len: integer): integer;

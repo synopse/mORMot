@@ -603,10 +603,10 @@ end;
 procedure TSynTestCase.CheckUTF8(condition: Boolean; const msg: RawUTF8;
   const args: array of const);
   procedure SubProcToAvoidTryFinally;
-  var utf8: RawUTF8;
+  var str: string;
   begin
-    FormatUTF8(msg,args,utf8);
-    Check(condition,UTF8ToString(utf8));
+    FormatString(msg,args,str);
+    Check(condition,str);
   end;
 begin
   if condition and not (tcoLogEachCheck in fOptions) then
@@ -621,11 +621,11 @@ end;
 
 procedure TSynTestCase.CheckLogTime(condition: boolean; const msg: RawUTF8;
   const args: array of const; level: TSynLogInfo);
-var utf8: RawUTF8;
+var str: string;
 begin
-  FormatUTF8(msg,args,utf8);
-  Check(condition,UTF8ToString(utf8));
-  TSynLogTestLog.Add.Log(level,'% %',[utf8,fCheckLogTime.Stop],self);
+  FormatString(msg,args,str);
+  Check(condition,str);
+  TSynLogTestLog.Add.Log(level,'% %',[str,fCheckLogTime.Stop],self);
   fCheckLogTime.Start;
 end;
 

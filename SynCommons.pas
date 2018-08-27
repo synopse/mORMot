@@ -3347,7 +3347,7 @@ function ExistsIniNameValue(P: PUTF8Char; const UpperName: RawUTF8;
 /// find the integer Value of UpperName in P, till end of current section
 // - expect UpperName as 'NAME='
 // - return 0 if no NAME= entry was found
-function FindIniNameValueInteger(P: PUTF8Char; UpperName: PAnsiChar): integer;
+function FindIniNameValueInteger(P: PUTF8Char; UpperName: PAnsiChar): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// replace a value from a given set of name=value lines
@@ -20084,7 +20084,7 @@ begin
       exit;
     end;
     vtChar: begin
-      {$ifdef FPC} // alf: to circumvent FPC issues
+      {$ifdef FPC} // alf: to circumvent FPC issue
       RawUnicodeToUtf8(@V.VChar,1,RawUTF8(Res.TempRawUTF8));
       {$else}
       Res.Text := @V.VChar;
@@ -23071,7 +23071,7 @@ function StringReplaceTabs(const Source,TabText: RawUTF8): RawUTF8;
     until false;
   end;
 
-var L,i,n,ttl: integer;
+var L,i,n,ttl: PtrInt;
 begin
   ttl := length(TabText);
   L := Length(Source);
@@ -23111,7 +23111,7 @@ begin
 end;
 
 function StringReplaceChars(const Source: RawUTF8; OldChar, NewChar: AnsiChar): RawUTF8;
-var i,j,n: integer;
+var i,j,n: PtrInt;
 begin
   if (OldChar<>NewChar) and (Source<>'') then begin
     n := length(Source);
@@ -29421,7 +29421,7 @@ begin
     Content := Content+'['+SectionName+']'#13#10+NewSectionContent;
 end;
 
-function FindIniNameValueInteger(P: PUTF8Char; UpperName: PAnsiChar): integer;
+function FindIniNameValueInteger(P: PUTF8Char; UpperName: PAnsiChar): PtrInt;
 begin
   result := GetInteger(pointer(FindIniNameValue(P,UpperName)));
 end;
@@ -61946,12 +61946,11 @@ begin
   result := 0;
   if (self=nil) or (CompLen<=9) or (Comp=nil) or (PartialLenMax<PartialLen) then
     exit;
-  if Comp[4]=COMPRESS_STORED then begin
+  if Comp[4]=COMPRESS_STORED then
     if PCardinal(Comp)^=PCardinal(Comp+5)^ then
       BodyLen := CompLen-9 else
-      exit;
-  end else
-  if Comp[4]=AnsiChar(AlgoID) then
+      exit
+  else if Comp[4]=AnsiChar(AlgoID) then
     BodyLen := AlgoDecompressDestLen(Comp+9) else
     exit;
   if PartialLen>BodyLen then
@@ -63690,7 +63689,6 @@ end;
 { TProcessInfo }
 
 {$ifdef MSWINDOWS}
-
 function TProcessInfo.Init: boolean;
 begin
   FillCharFast(self,SizeOf(self),0);
@@ -63755,8 +63753,21 @@ begin
     end;
 end;
 
+function TProcessInfo.PerSystem(out Idle,Kernel,User: currency): boolean;
+begin
+  if fDiffTotal<=0 then begin
+    Idle := 0;
+    Kernel := 0;
+    User := 0;
+    result := false;
+  end else begin
+    Kernel := SimpleRoundTo2Digits((fDiffKernel*100)/fDiffTotal);
+    User := SimpleRoundTo2Digits((fDiffUser*100)/fDiffTotal);
+    Idle := 100-Kernel-User; // ensure sum is always 100%
+    result := true;
+  end;
+end;
 {$else} // not implemented yet (use /proc ?)
-
 function TProcessInfo.Init: boolean;
 begin
   FillZero(self,SizeOf(self));
@@ -63774,22 +63785,24 @@ begin
   result := false;
 end;
 
-{$endif MSWINDOWS}
-
 function TProcessInfo.PerSystem(out Idle,Kernel,User: currency): boolean;
-begin
-  if fDiffTotal<=0 then begin
-    Idle := 0;
-    Kernel := 0;
-    User := 0;
-    result := false;
-  end else begin
-    Kernel := SimpleRoundTo2Digits((fDiffKernel*100)/fDiffTotal);
-    User := SimpleRoundTo2Digits((fDiffUser*100)/fDiffTotal);
-    Idle := 100-Kernel-User; // ensure sum is always 100%
-    result := true;
-  end;
-end;
+var P: PUTF8Char;
+    U, K, I, S: cardinal;
+begin // see http://www.linuxhowtos.org/System/procstat.htm
+  result := false;
+  P := pointer(StringFromFile('/proc/stat', {nosize=}true));
+  if P=nil then
+    exit;
+  U := GetNextItemCardinal(P,' '){=user}+GetNextItemCardinal(P,' '){=nice};
+  K := GetNextItemCardinal(P,' '){=system};
+  I := GetNextItemCardinal(P,' '){=idle};
+  S := U+K+I;
+  Kernel := SimpleRoundTo2Digits((K*100)/S);
+  User := SimpleRoundTo2Digits((U*100)/S);
+  Idle := 100-Kernel-User; // ensure sum is always 100%
+  result := S<>0;
+end; { TODO : use a diff approach for TProcessInfo.PerSystem on Linux }
+{$endif MSWINDOWS}
 
 
 { TSystemUse }
