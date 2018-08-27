@@ -131,6 +131,12 @@ uses
   JwaWindows,
   puv_error;
 
+type
+  FILE_DISPOSITION_INFORMATION = record
+    DeleteFile: BOOLEAN;
+  end;
+  PFILE_DISPOSITION_INFORMATION = ^FILE_DISPOSITION_INFORMATION;
+
 function msvcrt_get_errno: LongInt; stdcall;
   external 'msvcrt' name '_get_errno';
 function msvcrt_close(fd: LongInt): LongInt; stdcall;
@@ -503,7 +509,7 @@ var
 begin
   flags := FILE_FLAG_BACKUP_SEMANTICS;
   if (do_lstat) then
-    SetBit(flags, FILE_FLAG_OPEN_REPARSE_POINT);
+    BitsSet(flags, FILE_FLAG_OPEN_REPARSE_POINT);
 
   handle := CreateFile(PChar(path),
                        FILE_READ_ATTRIBUTES,
@@ -567,18 +573,84 @@ begin
 end;
 
 function puv_fs_access(path: TFileName; mode: Integer): Integer;
+var
+  attr: DWORD;
 begin
+  Result := -1;
 
+  attr := GetFileAttributes(PChar(path));
+
+  if (attr = INVALID_FILE_ATTRIBUTES) then
+    Exit;
+
+  if ((mode and W_OK) = 0) or
+     ((attr and FILE_ATTRIBUTE_READONLY) = 0) or
+     ((attr and FILE_ATTRIBUTE_DIRECTORY) <> 0) then
+    Result := 0
+  else
+    SetLastError(ERROR_ACCESS_DENIED);
+end;
+
+function hchmod(handle: THandle; mode: Integer): Integer;
+var
+  nt_status: NTSTATUS;
+  io_status: IO_STATUS_BLOCK;
+  file_info: FILE_BASIC_INFORMATION;
+begin
+  nt_status := NtQueryInformationFile(
+    handle, @io_status, @file_info, sizeof(file_info), FileBasicInformation);
+
+  if not NT_SUCCESS(nt_status) then begin
+    SetLastError(RtlNtStatusToDosError(nt_status));
+    Exit(-1);
+  end;
+
+  if (mode and S_IWRITE) <> 0 then
+    file_info.FileAttributes := file_info.FileAttributes and not FILE_ATTRIBUTE_READONLY
+  else
+    file_info.FileAttributes := file_info.FileAttributes or FILE_ATTRIBUTE_READONLY;
+
+  nt_status := NtSetInformationFile(
+    handle, @io_status, @file_info, sizeof(file_info), FileBasicInformation);
+
+  if not NT_SUCCESS(nt_status) then begin
+    SetLastError(RtlNtStatusToDosError(nt_status));
+    Exit(-1);
+  end;
+
+  Result := 0;
 end;
 
 function puv_fs_chmod(path: TFileName; mode: Integer): Integer;
+var
+  handle: THandle;
+  err: Integer;
 begin
-
+  handle := CreateFile(PChar(path),
+    FILE_READ_ATTRIBUTES, FILE_SHARE_READ or FILE_SHARE_WRITE or FILE_SHARE_DELETE,
+    nil, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, 0);
+  if (handle = INVALID_HANDLE_VALUE) then
+    Result := -1
+  else begin
+    Result := hchmod(handle, mode);
+    err := GetLastError; // save...
+    CloseHandle(handle);
+    SetLastError(err);   // ... and restore last error code
+  end;
 end;
 
 function puv_fs_fchmod(fd: Integer; mode: Integer): Integer;
+var
+  handle: THandle;
 begin
+  if (fd = -1) then begin
+    SetLastError(ERROR_INVALID_HANDLE);
+    Exit(PUV_EBADF);
+  end;
 
+  handle := msvcrt_get_osfhandle(fd);
+
+  Result := hchmod(handle, mode);
 end;
 
 function puv_fs_fsync(): Integer;
@@ -592,18 +664,102 @@ begin
 end;
 
 function puv_fs_unlink(path: TFileName): Integer;
+var
+  handle: THandle;
+  info: BY_HANDLE_FILE_INFORMATION;
+  disposition: FILE_DISPOSITION_INFORMATION;
+  iosb: IO_STATUS_BLOCK;
+  basic: FILE_BASIC_INFORMATION;
+  status: NTSTATUS;
 begin
+  handle := CreateFile(
+    PChar(path),
+    FILE_READ_ATTRIBUTES or FILE_WRITE_ATTRIBUTES or DELETE,
+    FILE_SHARE_READ or FILE_SHARE_WRITE or FILE_SHARE_DELETE,
+    nil,
+    OPEN_EXISTING,
+    FILE_FLAG_OPEN_REPARSE_POINT or FILE_FLAG_BACKUP_SEMANTICS,
+    0);
 
+  if (handle = INVALID_HANDLE_VALUE) then
+    //SET_REQ_WIN32_ERROR(req, GetLastError());
+    Exit(-1);
+
+  if not GetFileInformationByHandle(handle, info) then begin
+    //SET_REQ_WIN32_ERROR(req, GetLastError());
+    CloseHandle(handle);
+    Exit(-1)
+  end;
+
+  if (info.dwFileAttributes and FILE_ATTRIBUTE_DIRECTORY) <> 0 then begin
+    // Do not allow deletion of directories, unless it is a symlink. When
+    // the path refers to a non-symlink directory, report EPERM as mandated
+    // by POSIX.1.
+
+    // Check if it is a reparse point. If it's not, it's a normal directory.
+    if (info.dwFileAttributes and FILE_ATTRIBUTE_REPARSE_POINT) = 0 then begin
+      //SET_REQ_WIN32_ERROR(req, ERROR_ACCESS_DENIED);
+      CloseHandle(handle);
+      Exit(-1);
+    end;
+
+    // Read the reparse point and check if it is a valid symlink.
+    // If not, don't unlink.
+    //if (fs__readlink_handle(handle, NULL, NULL) < 0) {
+    //  DWORD error = GetLastError();
+    //  if (error == ERROR_SYMLINK_NOT_SUPPORTED)
+    //    error = ERROR_ACCESS_DENIED;
+    //  SET_REQ_WIN32_ERROR(req, error);
+    //  CloseHandle(handle);
+    //  return;
+    //}
+  end;
+
+  if (info.dwFileAttributes and FILE_ATTRIBUTE_READONLY) <> 0 then begin
+    // Remove read-only attribute
+    FillChar(basic, sizeof(basic), 0);
+    basic.FileAttributes := info.dwFileAttributes and not FILE_ATTRIBUTE_READONLY;
+
+    status := NtSetInformationFile(
+      handle, @iosb, @basic, sizeof(basic), FileBasicInformation);
+    if not NT_SUCCESS(status) then begin
+      //SET_REQ_WIN32_ERROR(req, pRtlNtStatusToDosError(status));
+      CloseHandle(handle);
+      Exit(-1);
+    end;
+  end;
+
+  // Try to set the delete flag.
+  disposition.DeleteFile := True;
+  status := NtSetInformationFile(
+    handle, @iosb, @disposition, sizeof(disposition), FileDispositionInformation);
+
+  CloseHandle(handle);
+
+  if (NT_SUCCESS(status)) then
+    //SET_REQ_SUCCESS(req);
+    Result := 0
+  else begin
+    //SET_REQ_WIN32_ERROR(req, pRtlNtStatusToDosError(status));
+    SetLastError(RtlNtStatusToDosError(status));
+    Result := -1;
+  end;
 end;
 
 function puv_fs_rmdir(path: TFileName): Integer;
 begin
-
+  if RemoveDirectory(PChar(path)) then
+    Result := 0
+  else
+    Result := -1;
 end;
 
 function puv_fs_mkdir(path: TFileName; mode: Integer): Integer;
 begin
-
+  if CreateDirectory(PChar(path), nil) then
+    Result := 0
+  else
+    Result := -1;
 end;
 
 function puv_fs_mkdtemp(): Integer;

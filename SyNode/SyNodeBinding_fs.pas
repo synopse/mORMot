@@ -537,15 +537,23 @@ end;
 function fs_deleteFile(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
 var
   in_argv: PjsvalVector;
-  filePath: TFileName;
+  path: TFileName;
   val: jsval;
+  res: Integer;
 begin
   try
     if (argc <> 1) then
       raise ESMException.Create('Invalid number of args for function nsm_deleteFile. Requied 1  - filePath');
     in_argv := vp.argv;
-    filePath := in_argv[0].asJSString.ToString(cx);
-    val.asInteger := puv_fs_unlink(filePath);
+    path := in_argv[0].asJSString.ToString(cx);
+    res := puv_fs_unlink(path);
+    if res <> 0 then begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
+      JSOSErrorUC(cx, '', GetLastOSError, 'unlink', RawUTF8(path));
+      Exit;
+    end;
+    val.asInteger := res;
     vp.rval := val;
     Result := True;
   except

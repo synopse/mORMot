@@ -3466,7 +3466,7 @@ var
   code: String;
 begin
   if not JS_IsExceptionPending(cx) then begin
-    code := puv_errno_str(ErrorCode);
+    code := puv_errno_str(puv_translate_sys_error(ErrorCode));
     if (aMessage = '') then begin
       if ErrorCode<>0 then
         aMessage := StringToSynUnicode(
