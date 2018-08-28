@@ -2341,6 +2341,9 @@ type
 
 {$ifdef USELIBCURL}
 type
+  /// libcurl exception type
+  ECurlHTTP = class(Exception);
+
   /// a class to handle HTTP/1.1 request using the libcurl library
   // - libcurl is a free and easy-to-use cross-platform URL transfer library,
   // able to directly connect via HTTP or HTTPS on most Linux systems
@@ -11199,6 +11202,29 @@ begin // see http://curl.haxx.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
   curl.easy_setopt(fHandle,coWriteHeader,@fOut.Header);
 end;
 
+const CURL_RESULT_STR: array[TCurlResult] of string = ( // mORMot rtti not accessible here
+  'OK', 'UnsupportedProtocol', 'FailedInit', 'URLMalformat', 'URLMalformatUser',
+  'CouldntResolveProxy', 'CouldntResolveHost', 'CouldntConnect',
+  'FTPWeirdServerReply', 'FTPAccessDenied', 'FTPUserPasswordIncorrect',
+  'FTPWeirdPassReply', 'FTPWeirdUserReply', 'FTPWeirdPASVReply',
+  'FTPWeird227Format', 'FTPCantGetHost', 'FTPCantReconnect', 'FTPCouldntSetBINARY',
+  'PartialFile', 'FTPCouldntRetrFile', 'FTPWriteError', 'FTPQuoteError',
+  'HTTPReturnedError', 'WriteError', 'MalFormatUser', 'FTPCouldntStorFile',
+  'ReadError', 'OutOfMemory', 'OperationTimeouted',
+  'FTPCouldntSetASCII', 'FTPPortFailed', 'FTPCouldntUseREST', 'FTPCouldntGetSize',
+  'HTTPRangeError', 'HTTPPostError', 'SSLConnectError', 'BadDownloadResume',
+  'FileCouldntReadFile', 'LDAPCannotBind', 'LDAPSearchFailed',
+  'LibraryNotFound', 'FunctionNotFound', 'AbortedByCallback',
+  'BadFunctionArgument', 'BadCallingOrder', 'InterfaceFailed',
+  'BadPasswordEntered', 'TooManyRedirects', 'UnknownTelnetOption',
+  'TelnetOptionSyntax', 'Obsolete', 'SSLPeerCertificate', 'GotNothing',
+  'SSLEngineNotFound', 'SSLEngineSetFailed', 'SendError', 'RecvError',
+  'ShareInUse', 'SSLCertProblem', 'SSLCipher', 'SSLCACert', 'BadContentEncoding',
+  'LDAPInvalidURL', 'FileSizeExceeded', 'FTPSSLFailed', 'SendFailRewind',
+  'SSLEngineInitFailed', 'LoginDenied', 'TFTPNotFound', 'TFTPPerm',
+  'TFTPDiskFull', 'TFTPIllegal', 'TFTPUnknownID', 'TFTPExists', 'TFTPNoSuchUser'
+);
+
 function TCurlHTTP.InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding,
   Data: SockString): integer;
 var res: TCurlResult;
@@ -11209,8 +11235,7 @@ var res: TCurlResult;
 begin
   res := curl.easy_perform(fHandle);
   if res<>crOK then begin
-    result := STATUS_NOTFOUND;
-    Data := SockString(format('libcurl easy_perform=%d', [ord(res)]));
+    raise ECurlHTTP.CreateFmt('libcurl error (%d) %s', [res, CURL_RESULT_STR[res]]);
   end else begin
     curl.easy_getinfo(fHandle,ciResponseCode,rc);
     result := rc;
