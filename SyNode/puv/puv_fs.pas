@@ -178,6 +178,8 @@ var
   fd, current_umask: Integer;
 label einval;
 begin
+  Result := -1;
+
   attributes := 0;
 
   // Obtain the active umask. umask() never fails and returns the previous
@@ -747,10 +749,10 @@ begin
 
   CloseHandle(handle);
 
-  if (NT_SUCCESS(status)) then
+  if (NT_SUCCESS(status)) then begin
     //SET_REQ_SUCCESS(req);
-    Result := 0
-  else begin
+    Result := 0;
+  end else begin
     //SET_REQ_WIN32_ERROR(req, pRtlNtStatusToDosError(status));
     SetLastError(RtlNtStatusToDosError(status));
     Result := -1;
