@@ -103,6 +103,8 @@ type
     class procedure SetWin32Error(out AResult: TReqResult; ASysErrno: DWord); static; inline;
     class procedure SetPUVError(out AResult: TReqResult; AValue: Integer; ASysErrno: DWord); static; inline;
     class function VerifyFD(out AResult: TReqResult; fd: Integer): Boolean; static; inline;
+  {$ELSE}
+    class procedure SetResult(out AResult: TReqResult; AValue: Integer); static; inline;
   {$ENDIF}
   end;
 
@@ -985,6 +987,7 @@ begin
 end;
 
 {$ELSE}
+
 uses
   BaseUnix,
   Unix,
@@ -1079,47 +1082,46 @@ begin
 end;
 
 function puv_fs_open(path: TFileName; flags: Cardinal; mode: Cardinal): TReqResult;
+var
+  res: Integer;
 begin
   // Try O_CLOEXEC before entering locks
   if (no_cloexec_support = 0) then begin
-    Result := FpOpen(path, flags or O_CLOEXEC, mode);
-    if (Result >= 0) or (errno <> ESysEINVAL) then
+    res := FpOpen(path, flags or O_CLOEXEC, mode);
+    if (res >= 0) or (errno <> ESysEINVAL) then begin
+      TReqResult.SetResult(Result, res);
       Exit;
+    end;
     InterLockedIncrement(no_cloexec_support);
   end;
 
-  //if (req->cb != NULL)
-  //  uv_rwlock_rdlock(&req->loop->cloexec_lock);
+  res := FpOpen(path, flags, mode);
 
-  Result := FpOpen(path, flags, mode);
-
-  {* In case of failure `uv__cloexec` will leave error in `errno`,
-   * so it is enough to just set `r` to `-1`.
-   *}
-  if (Result >= 0) and (puv_cloexec(Result, True) <> 0) then begin
-    Result := puv_fs_close(Result);
-    if (Result <> 0) then
+  // In case of failure `puv__cloexec` will leave error in `errno`,
+  // so it is enough to just set `res` to `-1`.
+  if (res >= 0) and (puv_cloexec(res, True) <> 0) then begin
+    Result := puv_fs_close(res);
+    if (Result.Result <> 0) then
       Abort;
-    Result := -1;
+    res := -1;
   end;
 
-  //if (req->cb != NULL)
-  //  uv_rwlock_rdunlock(&req->loop->cloexec_lock);
+  TReqResult.SetResult(Result, res);
 end;
 
 function puv_fs_close(fd: Integer): TReqResult;
 begin
-  Result := FpClose(fd);
+  TReqResult.SetResult(Result, FpClose(fd));
 end;
 
-function puv_fs_read(fd: Integer; out buf; size: Integer): TReqResult;
+function puv_fs_read(fd: Integer; out buf; size: Integer; offset: Int64): TReqResult;
 begin
-  Result := FpRead(fd, buf, size);
+  TReqResult.SetResult(Result, FpRead(fd, buf, size));
 end;
 
-function puv_fs_write(fd: Integer; const buf; size: Integer): TReqResult;
+function puv_fs_write(fd: Integer; const buf; size: Integer; offset: Int64): TReqResult;
 begin
-  Result := FpWrite(fd, buf, size);
+  TReqResult.SetResult(Result, FpWrite(fd, buf, size));
 end;
 
 function puv_fs_sendfile(): TReqResult;
@@ -1131,8 +1133,8 @@ function puv_fs_stat(path: TFileName; out info: Tpuv_stat_info): TReqResult;
 var
   buf: TStat;
 begin
-  Result := FpStat(path, buf);
-  if (Result = 0) then
+  TReqResult.SetResult(Result, FpStat(path, buf));
+  if (Result.Result = 0) then
     StatToInfo(buf, info);
 end;
 
@@ -1140,8 +1142,8 @@ function puv_fs_lstat(path: TFileName; out info: Tpuv_stat_info): TReqResult;
 var
   buf: TStat;
 begin
-  Result := fpLstat(path, buf);
-  if (Result = 0) then
+  TReqResult.SetResult(Result, fpLstat(path, buf));
+  if (Result.Result = 0) then
     StatToInfo(buf, info);
 end;
 
@@ -1149,8 +1151,8 @@ function puv_fs_fstat(fd: Integer; out info: Tpuv_stat_info): TReqResult;
 var
   buf: TStat;
 begin
-  Result := FpFStat(fd, buf);
-  if (Result = 0) then
+  TReqResult.SetResult(Result, FpFStat(fd, buf));
+  if (Result.Result = 0) then
     StatToInfo(buf, info);
 end;
 
@@ -1171,17 +1173,18 @@ end;
 
 function puv_fs_access(path: TFileName; mode: Integer): TReqResult;
 begin
-  Result := FpAccess(path, mode);
+  TReqResult.SetResult(Result, FpAccess(path, mode));
 end;
 
 function puv_fs_chmod(path: TFileName; mode: Integer): TReqResult;
 begin
-  Result := FpChmod(path, mode);
+  TReqResult.SetResult(Result, FpChmod(path, mode));
 end;
 
 function puv_fs_fchmod(fd: Integer; mode: Integer): TReqResult;
 begin
-  Result := do_syscall(syscall_nr_fchmod, TSysParam(fd), TSysParam(mode));
+  TReqResult.SetResult(Result,
+    do_syscall(syscall_nr_fchmod, TSysParam(fd), TSysParam(mode)));
 end;
 
 function puv_fs_fsync(): TReqResult;
@@ -1196,17 +1199,17 @@ end;
 
 function puv_fs_unlink(path: TFileName): TReqResult;
 begin
-  Result := FpUnlink(path);
+  TReqResult.SetResult(Result, FpUnlink(path));
 end;
 
 function puv_fs_rmdir(path: TFileName): TReqResult;
 begin
-  Result := FpRmdir(path);
+  TReqResult.SetResult(Result, FpRmdir(path));
 end;
 
 function puv_fs_mkdir(path: TFileName; mode: Integer): TReqResult;
 begin
-  Result := FpMkdir(path, mode);
+  TReqResult.SetResult(Result, FpMkdir(path, mode));
 end;
 
 function puv_fs_mkdtemp(): TReqResult;
@@ -1258,6 +1261,18 @@ function puv_fs_copyfile(): TReqResult;
 begin
 
 end;
+
+{ TReqResult }
+
+class procedure TReqResult.SetResult(out AResult: TReqResult; AValue: Integer);
+begin
+  if AValue = -1 then
+    AResult.Result := -errno
+  else
+    AResult.Result := AValue;
+end;
+
 {$ENDIF}
+
 end.
 

@@ -2,6 +2,11 @@ unit puv_error;
 
 interface
 
+{$IFNDEF MSWINDOWS}
+uses
+  BaseUnix;
+{$ENDIF}
+
 const
   PUV_EOF     = -4095;
   PUV_UNKNOWN = -4094;
@@ -83,11 +88,11 @@ const
   PUV_ECANCELED = -4081;
   {$ENDIF}
 
-  {$IFNDEF MSWINDOWS}
-  PUV_ECHARSET = -ESysECHARSET;
-  {$ELSE}
+  //{$IFNDEF MSWINDOWS}
+  //PUV_ECHARSET = -ESysECHARSET;
+  //{$ELSE}
   PUV_ECHARSET = -4080;
-  {$ENDIF}
+  //{$ENDIF}
 
   {$IFNDEF MSWINDOWS}
   PUV_ECONNABORTED = -ESysECONNABORTED;
@@ -269,11 +274,11 @@ const
   PUV_ENOTSOCK = -4050;
   {$ENDIF}
 
-  {$IFNDEF MSWINDOWS}
-  PUV_ENOTSUP = -ESysENOTSUP;
-  {$ELSE}
+//  {$IFNDEF MSWINDOWS}
+  //PUV_ENOTSUP = -ESysENOTSUP;
+  //{$ELSE}
   PUV_ENOTSUP = -4049;
-  {$ENDIF}
+  //{$ENDIF}
 
   {$IFNDEF MSWINDOWS}
   PUV_EPERM = -ESysEPERM;
@@ -382,7 +387,6 @@ const
   // icky to hard-code it.
   {$IFNDEF MSWINDOWS}
   PUV_EHOSTDOWN = -ESysEHOSTDOWN;
-  PUV_EHOSTDOWN = -64;
   {$ELSE}
   PUV_EHOSTDOWN = -4031;
   {$ENDIF}
@@ -421,11 +425,13 @@ function puv_translate_sys_error(sys_errno: Integer): Integer;
 implementation
 
 uses
-  SysUtils,
+  SysUtils
 {$IFDEF MSWINDOWS}
-  Windows,
-  winsock;
+  ,Windows
+  ,winsock
+{$ENDIF};
 
+{$IFDEF MSWINDOWS}
 function puv_translate_sys_error(sys_errno: Integer): Integer;
 begin
   if (sys_errno <= 0) then
