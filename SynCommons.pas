@@ -1608,7 +1608,7 @@ procedure FormatUTF8(const Format: RawUTF8; const Args: array of const;
 /// fast Format() function replacement, for UTF-8 content stored in shortstring
 // - use the same single token % (and implementation) than FormatUTF8()
 // - shortstring allows fast stack allocation, so is perfect for small content
-// - truncate result if the resulting size exceeds 255 bytes
+// - truncate result if the text size exceeds 255 bytes
 procedure FormatShort(const Format: RawUTF8; const Args: array of const;
   var result: shortstring);
 
@@ -1625,10 +1625,11 @@ function FormatString(const Format: RawUTF8; const Args: array of const): string
 type
   /// used e.g. by PointerToHexShort/CardinalToHexShort/Int64ToHexShort/FormatShort16
   // - such result type would avoid a string allocation on heap, so are highly
-  // recommended e.g. when logging information
+  // recommended e.g. when logging small pieces of information
   TShort16 = string[16];
 
 /// fast Format() function replacement, for UTF-8 content stored in TShort16
+// - truncate result if the text size exceeds 16 bytes
 procedure FormatShort16(const Format: RawUTF8; const Args: array of const;
   var result: TShort16);
 
@@ -9403,7 +9404,7 @@ type
     /// save the content as SynLZ-compressed raw binary data
     // - warning: this format is tied to the values low-level RTTI, so if you
     // change the value/key type definitions, LoadFromBinary() would fail
-    function SaveToBinary: RawByteString;
+    function SaveToBinary(NoCompression: boolean=false): RawByteString;
     /// load the content from SynLZ-compressed raw binary data
     // - as previously saved by SaveToBinary method
     function LoadFromBinary(const binary: RawByteString): boolean;
@@ -59099,7 +59100,7 @@ begin
     if P<>nil then
       P := fValues.LoadFrom(P);
     if (P<>nil) and (fKeys.Count=fValues.Count) then begin
-      SetTimeouts;
+      SetTimeouts;  // set ComputeNextTimeOut for all items
       fKeys.ReHash; // optimistic: input from safe TSynDictionary.SaveToBinary
       result := true;
     end;
@@ -59120,8 +59121,9 @@ begin
   result := not TSynPersistentLocked(aValue).Safe.IsLocked;
 end;
 
-function TSynDictionary.SaveToBinary: RawByteString;
+function TSynDictionary.SaveToBinary(NoCompression: boolean): RawByteString;
 var tmp: TSynTempBuffer;
+    trigger: integer;
 begin
   fSafe.Lock;
   try
@@ -59129,8 +59131,12 @@ begin
     if fSafe.Padding[DIC_KEYCOUNT].VInteger = 0 then
       exit;
     tmp.Init(fKeys.SaveToLength+fValues.SaveToLength);
-    if fValues.SaveTo(fKeys.SaveTo(tmp.buf))-tmp.buf=tmp.len then
-      fCompressAlgo.Compress(tmp.buf,tmp.len,result);
+    if fValues.SaveTo(fKeys.SaveTo(tmp.buf))-tmp.buf=tmp.len then begin
+      if NoCompression then
+        trigger := maxInt else
+        trigger := 128;
+      fCompressAlgo.Compress(tmp.buf,tmp.len,result,trigger);
+    end;
     tmp.Done;
   finally
     fSafe.UnLock;
@@ -62164,8 +62170,10 @@ end;
 { ESynException }
 
 constructor ESynException.CreateUTF8(const Format: RawUTF8; const Args: array of const);
+var msg: string;
 begin
-  inherited Create(UTF8ToString(FormatUTF8(Format,Args)));
+  FormatString(Format,Args,msg);
+  inherited Create(msg);
 end;
 
 constructor ESynException.CreateLastOSError(const Format: RawUTF8; const Args: array of const);
