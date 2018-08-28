@@ -39229,6 +39229,11 @@ begin // 0=0,1=1,2=-1,3=2,4=-2...
 end;
 
 function FromVarInt64Value(Source: PByte): Int64;
+{$ifdef DELPHI5OROLDER}
+begin // try to circumvent Internal Error C1093 on Delphi 5 :(
+  result := FromVarInt64(Source);
+end;
+{$else}
 var c,n: PtrUInt;
 begin // 0=0,1=1,2=-1,3=2,4=-2...
   c := Source^;
@@ -39253,12 +39258,13 @@ begin // 0=0,1=1,2=-1,3=2,4=-2...
   end else
     if c=0 then
       result := 0 else
-    if c and 1<>0 then
-      // 1->1, 3->2..
-      result := (c shr 1)+1 else
-      // 0->0, 2->-1, 4->-2..
-      result := -Int64(c shr 1);
+      if c and 1=0 then
+        // 0->0, 2->-1, 4->-2..
+        result := -Int64(c shr 1) else
+        // 1->1, 3->2..
+        result := (c shr 1)+1;
 end;
+{$endif DELPHI5OROLDER}
 
 function GotoNextVarInt(Source: PByte): pointer;
 begin
@@ -60715,7 +60721,7 @@ begin
     result := False else
   if fMap.fBuf=nil then
     result := FileSeek64(fMap.fFile,Offset,soFromBeginning)=Offset else begin
-    fCurrentPos := Int64Rec(Offset).Lo;
+    fCurrentPos := PCardinal(@Offset)^;
     result := true;
   end;
 end;
