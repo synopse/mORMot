@@ -1584,7 +1584,7 @@ begin
 end;
 
 const
-  GZHEAD : array [0..2] of cardinal = ($88B1F,0,0);
+  GZHEAD: array [0..2] of cardinal = ($88B1F,0,0);
   GZHEAD_SIZE = 10;
   GZHEADTRAIL_SIZE = GZHEAD_SIZE + sizeof(cardinal) * 2;
 
@@ -1592,7 +1592,7 @@ function GZRead(gz: PAnsiChar; gzLen: integer): ZipString;
 var Len: integer;
 begin
   result := '';
-  if (gz=nil) or (gzLen<=18) or (PCardinal(gz)^<>$88B1F) then
+  if (gz=nil) or (gzLen<=18) or (PCardinal(gz)^<>GZHEAD[0]) then
     exit; // .gz file as header + compressed + crc32 + len32 format
   Len := pInteger(@gz[gzLen-4])^;
   if Len=0 then

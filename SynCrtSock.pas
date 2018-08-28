@@ -4468,7 +4468,9 @@ end;
 
 procedure TCrtSocket.OpenBind(const aServer, aPort: SockString;
   doBind: boolean; aSock: integer; aLayer: TCrtSocketLayer; aTLS: boolean);
-const BINDTXT: array[boolean] of string = ('open','bind');
+const BINDTXT: array[boolean] of string[4] = ('open','bind');
+      BINDMSG: array[boolean] of string = ('Is a server running on this address:port?',
+        'Another process may be currently listening to this port!');
 begin
   fSocketLayer := aLayer;
   if aSock<0 then begin
@@ -4478,8 +4480,8 @@ begin
     fServer := aServer;
     fSock := CallServer(aServer,Port,doBind,aLayer,Timeout); // OPEN or BIND
     if fSock<0 then
-      raise ECrtSocket.CreateFmt('OpenBind(%s:%s,%s): CallServer=%d',
-        [aServer,Port,BINDTXT[doBind],fSock],-1);
+      raise ECrtSocket.CreateFmt('OpenBind(%s:%s,%s) failed: %s',
+        [aServer,fPort,BINDTXT[doBind],BINDMSG[doBind]],-1);
   end else
     fSock := aSock; // ACCEPT mode -> socket is already created by caller
   if TimeOut>0 then begin // set timout values for both directions
@@ -4499,8 +4501,8 @@ begin
       fTLS := true;
     except
       on E: Exception do
-        raise ECrtSocket.CreateFmt('OpenBind(%s:%s): aTLS failed [%s %s]',
-          [aServer,Port,E.ClassName,E.Message],-1);
+        raise ECrtSocket.CreateFmt('OpenBind(%s:%s,%s): aTLS failed [%s %s]',
+          [aServer,Port,BINDTXT[doBind],E.ClassName,E.Message],-1);
     end;
   end;
 end;
@@ -6444,7 +6446,7 @@ begin
   WSAEMFILE:       result := 'WSAEMFILE';
   else result := '';
   end;
-  result := Format('%d %s [%s]',[Error,result,SysErrorMessage(Error)]);
+  result := Format('%d %s "%s"',[Error,result,SysErrorMessage(Error)]);
 end;
 constructor ECrtSocket.Create(const Msg: string);
 begin
@@ -6456,7 +6458,7 @@ begin
   if Error=0 then
     fLastError := WSAEWOULDBLOCK else // if unknown, probably a timeout
     fLastError := abs(Error);
-  inherited Create(Msg+' '+SocketErrorMessage(fLastError));
+  inherited CreateFmt('%s [%s]', [Msg,SocketErrorMessage(fLastError)]);
 end;
 
 constructor ECrtSocket.CreateFmt(const Msg: string; const Args: array of const; Error: integer);
