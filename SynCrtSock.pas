@@ -2351,8 +2351,8 @@ type
   // like OpenSSL) may not be installed - you can add it via your package
   // manager, e.g. on Ubuntu:
   // $ sudo apt-get install libcurl3
-  // - under a 64-bit Linux system, you should install the 32-bit flavor of
-  // libcurl, e.g. on Ubuntu:
+  // - under a 64-bit Linux system, if compiled with Kylix, you should install
+  // the 32-bit flavor of libcurl, e.g. on Ubuntu:
   // $ sudo apt-get install libcurl3:i386
   // - will use in fact libcurl.so, so either libcurl.so.3 or libcurl.so.4,
   // depending on the default version installation on the system
@@ -11234,28 +11234,26 @@ var res: TCurlResult;
     rc: longint; // needed on Linux x86-64
 begin
   res := curl.easy_perform(fHandle);
-  if res<>crOK then begin
+  if res<>crOK then
     raise ECurlHTTP.CreateFmt('libcurl error (%d) %s', [res, CURL_RESULT_STR[res]]);
-  end else begin
-    curl.easy_getinfo(fHandle,ciResponseCode,rc);
-    result := rc;
-    Header := Trim(fOut.Header);
-    if IdemPChar(pointer(Header),'HTTP/') then begin
-      i := 6;
-      while Header[i]>=' ' do inc(i);
-      while Header[i] in [#13,#10] do inc(i);
-      system.Delete(Header,1,i-1); // trim leading 'HTTP/1.1 200 OK'#$D#$A
-    end;
-    P := pointer(Header);
-    while P<>nil do begin
-      s := GetNextLine(P);
-      if IdemPChar(pointer(s),'ACCEPT-ENCODING:') then
-        AcceptEncoding := trim(copy(s,17,100)) else
-      if IdemPChar(pointer(s),'CONTENT-ENCODING:') then
-        Encoding := trim(copy(s,19,100))
-    end;
-    Data := fOut.Data;
+  curl.easy_getinfo(fHandle,ciResponseCode,rc);
+  result := rc;
+  Header := Trim(fOut.Header);
+  if IdemPChar(pointer(Header),'HTTP/') then begin
+    i := 6;
+    while Header[i]>=' ' do inc(i);
+    while Header[i] in [#13,#10] do inc(i);
+    system.Delete(Header,1,i-1); // trim leading 'HTTP/1.1 200 OK'#$D#$A
   end;
+  P := pointer(Header);
+  while P<>nil do begin
+    s := GetNextLine(P);
+    if IdemPChar(pointer(s),'ACCEPT-ENCODING:') then
+      AcceptEncoding := trim(copy(s,17,100)) else
+    if IdemPChar(pointer(s),'CONTENT-ENCODING:') then
+      Encoding := trim(copy(s,19,100))
+  end;
+  Data := fOut.Data;
 end;
 
 procedure TCurlHTTP.InternalCloseRequest;
