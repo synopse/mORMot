@@ -34,6 +34,7 @@ uses
 {$IFDEF FPC}
   LazFileUtils,
 {$ENDIF}
+  puv_error,
   puv_fs,
   SynLog,
   SyNodeReadWrite,
@@ -140,11 +141,11 @@ begin
       if in_argv[0].isString then begin
         fn := in_argv[0].asJSString.ToString(cx);
         if (argc = 1) or not in_argv[1].isBoolean or not in_argv[1].asBoolean then
-          res := puv_fs_stat(fn, info)
+          res := puv_fs_stat(fn, info).Result
         else
-          res := puv_fs_lstat(fn, info);
+          res := puv_fs_lstat(fn, info).Result;
       end else
-        res := puv_fs_fstat(in_argv[0].asInteger, info);
+        res := puv_fs_fstat(in_argv[0].asInteger, info).Result;
       if res = 0 then begin
         val.asInt64 := info.dev;
         obj.ptr.DefineProperty(cx, 'dev', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
@@ -185,7 +186,7 @@ begin
       end else begin
         Result := False;
         vp.rval := JSVAL_VOID;
-        JSOSErrorUC(cx, '', GetLastOSError, 'stat', RawUTF8(fn));
+        JSOSErrorUC(cx, '', res, 'stat', RawUTF8(fn));
         Exit;
       end;
     finally
@@ -311,6 +312,7 @@ var
   cNum, searchAttr: integer;
   encoding: TEncoding;
   info: Tpuv_stat_info;
+  r: Integer;
 const
   USAGE = 'usage: readDir(dirPath: String; [encoding: String = "uft8"]): Array';
 begin
@@ -324,16 +326,17 @@ begin
       encoding := UTF8;
 
     dir := in_argv[0].asJSString.ToString(cx);
-    if puv_fs_stat(dir, info) <> 0 then begin
+    r := puv_fs_stat(dir, info).Result;
+    if r <> 0 then begin
       Result := False;
       vp.rval := JSVAL_VOID;
-      JSOSErrorUC(cx, '', GetLastOSError, 'readdir', RawUTF8(dir));
+      JSOSErrorUC(cx, '', r, 'readdir', RawUTF8(dir));
       Exit;
     end;
     if (info.mode and S_IFMT) <> S_IFDIR then begin
       Result := False;
       vp.rval := JSVAL_VOID;
-      JSOSErrorUC(cx, '', 20{ENOTDIR}, 'readdir', RawUTF8(dir));
+      JSOSErrorUC(cx, '', PUV_ENOTDIR, 'readdir', RawUTF8(dir));
       Exit;
     end;
 
@@ -546,11 +549,11 @@ begin
       raise ESMException.Create('Invalid number of args for function nsm_deleteFile. Requied 1  - filePath');
     in_argv := vp.argv;
     path := in_argv[0].asJSString.ToString(cx);
-    res := puv_fs_unlink(path);
+    res := puv_fs_unlink(path).Result;
     if res <> 0 then begin
       Result := False;
       vp.rval := JSVAL_VOID;
-      JSOSErrorUC(cx, '', GetLastOSError, 'unlink', RawUTF8(path));
+      JSOSErrorUC(cx, '', res, 'unlink', RawUTF8(path));
       Exit;
     end;
     val.asInteger := res;
@@ -574,6 +577,7 @@ var
   in_argv: PjsvalVector;
   dir: TFileName;
   mode: Integer;
+  res: Integer;
 begin
   try
     in_argv := vp.argv;
@@ -589,10 +593,11 @@ begin
       mode := &777;
     if (dir = '') or {$IFNDEF FPC}IsRelativePath(dir){$ELSE}not FilenameIsAbsolute(dir){$ENDIF} then
       raise ESMException.Create(f_invalidPath);
-    if puv_fs_mkdir(dir, mode) <> 0 then begin
+    res := puv_fs_mkdir(dir, mode).Result;
+    if res <> 0 then begin
       Result := False;
       vp.rval := JSVAL_VOID;
-      JSOSErrorUC(cx, '', GetLastOSError, 'mkdir', RawUTF8(dir));
+      JSOSErrorUC(cx, '', res, 'mkdir', RawUTF8(dir));
       Exit;
     end;
     Result := True;
@@ -611,6 +616,7 @@ var
   in_argv: PjsvalVector;
   dir: TFileName;
   val: jsval;
+  res: Integer;
 const
   f_usage = 'usage: removeDir(dirPath: String): Boolean';
   f_invalidPath = 'empty or relative path is not allowed';
@@ -622,10 +628,11 @@ begin
     dir := in_argv[0].asJSString.ToString(cx);
     if (dir = '') or {$IFNDEF FPC}IsRelativePath(dir){$ELSE}not FilenameIsAbsolute(dir){$ENDIF} then
       raise ESMException.Create(f_invalidPath);
-    if puv_fs_rmdir(dir) <> 0 then begin
+    res := puv_fs_rmdir(dir).Result;
+    if res <> 0 then begin
       Result := False;
       vp.rval := JSVAL_VOID;
-      JSOSErrorUC(cx, '', GetLastOSError, 'rmdir', RawUTF8(dir));
+      JSOSErrorUC(cx, '', res, 'rmdir', RawUTF8(dir));
       Exit;
     end;
     Result := True;
@@ -656,14 +663,14 @@ begin
     fn := in_argv[0].asJSString.ToString(cx);
     flags := in_argv[1].asInteger;
     mode := in_argv[2].asInteger;
-    handle := puv_fs_open(fn, flags, mode);
+    handle := puv_fs_open(fn, flags, mode).Result;
     Result := handle >= 0;
     if Result then begin
       val.asInteger := handle;
       vp.rval := val;
     end else begin
       vp.rval := JSVAL_VOID;
-      JSOSErrorUC(cx, '', GetLastOSError, 'open', RawUTF8(fn));
+      JSOSErrorUC(cx, '', handle, 'open', RawUTF8(fn));
     end;
   except
     on E: Exception do
@@ -688,7 +695,7 @@ begin
     if (argc <> 1) or not in_argv[0].isInteger then
       raise ESMException.Create(f_usage);
     fd := in_argv[0].asInteger;
-    val.asInteger := puv_fs_close(fd);
+    val.asInteger := puv_fs_close(fd).Result;
     vp.rval := val;
     Result := True;
   except
@@ -743,11 +750,11 @@ begin
       if (argc > 4) and not (in_argv[4].isVoid or in_argv[4].isNull) then
         raise ENotImplemented.Create('Not null position is currently not supported');
       Inc(buf, offset);
-      res := puv_fs_read(fd, buf^, len);
+      res := puv_fs_read(fd, buf^, len).Result;
       if res < 0 then begin
         Result := False;
         vp.rval := JSVAL_VOID;
-        JSOSErrorUC(cx, '', GetLastOSError, 'read');
+        JSOSErrorUC(cx, '', res, 'read');
         Exit;
       end;
       val.asInteger := res;
@@ -808,11 +815,11 @@ begin
       if (argc > 4) and not (in_argv[4].isVoid or in_argv[4].isNull) then
         raise ENotImplemented.Create('Not null position is currently not supported');
       Inc(buf, offset);
-      res := puv_fs_write(fd, buf^, len);
+      res := puv_fs_write(fd, buf^, len).Result;
       if res < 0 then begin
         Result := False;
         vp.rval := JSVAL_VOID;
-        JSOSErrorUC(cx, '', GetLastOSError, 'write');
+        JSOSErrorUC(cx, '', res, 'write');
         Exit;
       end;
       val.asInteger := res;
@@ -865,11 +872,11 @@ begin
       size := StringBytesWrite(PChar(buf), size, str, len, isLatin1, encoding);
       if (size = 0) then
         raise ESMException.Create('Invalid string');
-      res := puv_fs_write(fd, PChar(buf)^, size);
+      res := puv_fs_write(fd, PChar(buf)^, size).Result;
       if res < 0 then begin
         Result := False;
         vp.rval := JSVAL_VOID;
-        JSOSErrorUC(cx, '', GetLastOSError, 'write');
+        JSOSErrorUC(cx, '', res, 'write');
         Exit;
       end;
       val.asInteger := res;
@@ -906,11 +913,11 @@ begin
       mode := in_argv[1].asInteger
     else
       raise ESMTypeException.Create('mode must be an integer');
-    res := puv_fs_access(path, mode);
+    res := puv_fs_access(path, mode).Result;
     if res <> 0 then begin
       Result := False;
       vp.rval := JSVAL_VOID;
-      JSOSErrorUC(cx, '', GetLastOSError, 'access', path);
+      JSOSErrorUC(cx, '', res, 'access', path);
       Exit;
     end;
     Result := True;
@@ -941,15 +948,15 @@ begin
       raise ESMTypeException.Create('mode must be an integer');
     if in_argv[0].isString then begin
       path := in_argv[0].asJSString.ToString(cx);
-      res := puv_fs_chmod(path, mode)
+      res := puv_fs_chmod(path, mode).Result;
     end else if in_argv[0].isInteger then
-      res := puv_fs_fchmod(in_argv[0].asInteger, mode)
+      res := puv_fs_fchmod(in_argv[0].asInteger, mode).Result
     else
       raise ESMTypeException.Create('path must be a string or Buffer');
     if res <> 0 then begin
       Result := False;
       vp.rval := JSVAL_VOID;
-      JSOSErrorUC(cx, '', GetLastOSError, 'chmod', path);
+      JSOSErrorUC(cx, '', res, 'chmod', path);
       Exit;
     end;
     Result := True;

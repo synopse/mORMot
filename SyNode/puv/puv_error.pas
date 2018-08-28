@@ -3,154 +3,401 @@ unit puv_error;
 interface
 
 const
-  // Standard Unix errors from FPC's errno.inc
-  PUV_EPERM           = 1;    { Operation not permitted }
-  PUV_ENOENT          = 2;    { No such file or directory }
-  PUV_ESRCH           = 3;    { No such process }
-  PUV_EINTR           = 4;    { Interrupted system call }
-  PUV_EIO             = 5;    { I/O error }
-  PUV_ENXIO           = 6;    { No such device or address }
-  PUV_E2BIG           = 7;    { Arg list too long }
-  PUV_ENOEXEC         = 8;    { Exec format error }
-  PUV_EBADF           = 9;    { Bad file number }
-  PUV_ECHILD          = 10;   { No child processes }
-  PUV_EAGAIN          = 11;   { Try again }
-  PUV_ENOMEM          = 12;   { Out of memory }
-  PUV_EACCES          = 13;   { Permission denied }
-  PUV_EFAULT          = 14;   { Bad address }
-  PUV_ENOTBLK         = 15;   { Block device required, NOT POSIX! }
-  PUV_EBUSY           = 16;   { Device or resource busy }
-  PUV_EEXIST          = 17;   { File exists }
-  PUV_EXDEV           = 18;   { Cross-device link }
-  PUV_ENODEV          = 19;   { No such device }
-  PUV_ENOTDIR         = 20;   { Not a directory }
-  PUV_EISDIR          = 21;   { Is a directory }
-  PUV_EINVAL          = 22;   { Invalid argument }
-  PUV_ENFILE          = 23;   { File table overflow }
-  PUV_EMFILE          = 24;   { Too many open files }
-  PUV_ENOTTY          = 25;   { Not a typewriter }
-  PUV_ETXTBSY         = 26;   { Text file busy. The new process was
-                                a pure procedure (shared text) file which was
-                                open for writing by another process, or file
-                                which was open for writing by another process,
-                                or while the pure procedure file was being
-                                executed an open(2) call requested write access
-                                requested write access.}
-  PUV_EFBIG           = 27;   { File too large }
-  PUV_ENOSPC          = 28;   { No space left on device }
-  PUV_ESPIPE          = 29;   { Illegal seek }
-  PUV_EROFS           = 30;   { Read-only file system }
-  PUV_EMLINK          = 31;   { Too many links }
-  PUV_EPIPE           = 32;   { Broken pipe }
-  PUV_EDOM            = 33;   { Math argument out of domain of func }
-  PUV_ERANGE          = 34;   { Math result not representable }
+  PUV_EOF     = -4095;
+  PUV_UNKNOWN = -4094;
 
+  PUV_EAI_ADDRFAMILY  = -3000;
+  PUV_EAI_AGAIN       = -3001;
+  PUV_EAI_BADFLAGS    = -3002;
+  PUV_EAI_CANCELED    = -3003;
+  PUV_EAI_FAIL        = -3004;
+  PUV_EAI_FAMILY      = -3005;
+  PUV_EAI_MEMORY      = -3006;
+  PUV_EAI_NODATA      = -3007;
+  PUV_EAI_NONAME      = -3008;
+  PUV_EAI_OVERFLOW    = -3009;
+  PUV_EAI_SERVICE     = -3010;
+  PUV_EAI_SOCKTYPE    = -3011;
+  PUV_EAI_BADHINTS    = -3013;
+  PUV_EAI_PROTOCOL    = -3014;
 
-  PUV_EDEADLK         = 35;   { Resource deadlock would occur }
-  PUV_ENAMETOOLONG    = 36;   { File name too long }
-  PUV_ENOLCK          = 37;   { No record locks available }
-  PUV_ENOSYS          = 38;   { Function not implemented }
-  PUV_ENOTEMPTY       = 39;   { Directory not empty }
-  PUV_ELOOP           = 40;   { Too many symbolic links encountered }
-  PUV_EWOULDBLOCK     = PUV_EAGAIN;   { Operation would block }
-  PUV_ENOMSG          = 42;   { No message of desired type }
-  PUV_EIDRM           = 43;   { Identifier removed }
-  PUV_ECHRNG          = 44;   { Channel number out of range }
-  PUV_EL2NSYNC        = 45;   { Level 2 not synchronized }
-  PUV_EL3HLT          = 46;   { Level 3 halted }
-  PUV_EL3RST          = 47;   { Level 3 reset }
-  PUV_ELNRNG          = 48;   { Link number out of range }
-  PUV_EUNATCH         = 49;   { Protocol driver not attached }
-  PUV_ENOCSI          = 50;   { No CSI structure available }
-  PUV_EL2HLT          = 51;   { Level 2 halted }
-  PUV_EBADE           = 52;   { Invalid exchange }
-  PUV_EBADR           = 53;   { Invalid request descriptor }
-  PUV_EXFULL          = 54;   { Exchange full }
-  PUV_ENOANO          = 55;   { No anode }
-  PUV_EBADRQC         = 56;   { Invalid request code }
-  PUV_EBADSLT         = 57;   { Invalid slot }
-  PUV_EDEADLOCK       = PUV_EDEADLK; { number 58 is missing }
-  PUV_EBFONT          = 59;   { Bad font file format }
-  PUV_ENOSTR          = 60;   { Device not a stream }
-  PUV_ENODATA         = 61;   { No data available }
-  PUV_ETIME           = 62;   { Timer expired }
-  PUV_ENOSR           = 63;   { Out of streams resources }
-  PUV_ENONET          = 64;   { Machine is not on the network }
-  PUV_ENOPKG          = 65;   { Package not installed }
-  PUV_EREMOTE         = 66;   { Object is remote }
-  PUV_ENOLINK         = 67;   { Link has been severed }
-  PUV_EADV            = 68;   { Advertise error }
-  PUV_ESRMNT          = 69;   { Srmount error }
-  PUV_ECOMM           = 70;   { Communication error on send }
-  PUV_EPROTO          = 71;   { Protocol error }
-  PUV_EMULTIHOP       = 72;   { Multihop attempted }
-  PUV_EDOTDOT         = 73;   { RFS specific error }
-  PUV_EBADMSG         = 74;   { Not a data message }
-  PUV_EOVERFLOW       = 75;   { Value too large for defined data type }
-  PUV_ENOTUNIQ        = 76;   { Name not unique on network }
-  PUV_EBADFD          = 77;   { File descriptor in bad state }
-  PUV_EREMCHG         = 78;   { Remote address changed }
-  PUV_ELIBACC         = 79;   { Can not access a needed shared library }
-  PUV_ELIBBAD         = 80;   { Accessing a corrupted shared library }
-  PUV_ELIBSCN         = 81;   { .lib section in a.out corrupted }
-  PUV_ELIBMAX         = 82;   { Attempting to link in too many shared libraries }
-  PUV_ELIBEXEC        = 83;   { Cannot exec a shared library directly }
-  PUV_EILSEQ          = 84;   { Illegal byte sequence }
-  PUV_ERESTART        = 85;   { Interrupted system call should be restarted }
-  PUV_ESTRPIPE        = 86;   { Streams pipe error }
-  PUV_EUSERS          = 87;   { Too many users }
-  PUV_ENOTSOCK        = 88;   { Socket operation on non-socket }
-  PUV_EDESTADDRREQ    = 89;   { Destination address required }
-  PUV_EMSGSIZE        = 90;   { Message too long }
-  PUV_EPROTOTYPE      = 91;   { Protocol wrong type for socket }
-  PUV_ENOPROTOOPT     = 92;   { Protocol not available }
-  PUV_EPROTONOSUPPORT = 93;   { Protocol not supported }
-  PUV_ESOCKTNOSUPPORT = 94;   { Socket type not supported }
-  PUV_EOPNOTSUPP      = 95;   { Operation not supported on transport endpoint }
-  PUV_EPFNOSUPPORT    = 96;   { Protocol family not supported }
-  PUV_EAFNOSUPPORT    = 97;   { Address family not supported by protocol }
-  PUV_EADDRINUSE      = 98;   { Address already in use }
-  PUV_EADDRNOTAVAIL   = 99;   { Cannot assign requested address }
-  PUV_ENETDOWN        = 100;  { Network is down }
-  PUV_ENETUNREACH     = 101;  { Network is unreachable }
-  PUV_ENETRESET       = 102;  { Network dropped connection because of reset }
-  PUV_ECONNABORTED    = 103;  { Software caused connection abort }
-  PUV_ECONNRESET      = 104;  { Connection reset by peer }
-  PUV_ENOBUFS         = 105;  { No buffer space available }
-  PUV_EISCONN         = 106;  { Transport endpoint is already connected }
-  PUV_ENOTCONN        = 107;  { Transport endpoint is not connected }
-  PUV_ESHUTDOWN       = 108;  { Cannot send after transport endpoint shutdown }
-  PUV_ETOOMANYREFS    = 109;  { Too many references: cannot splice }
-  PUV_ETIMEDOUT       = 110;  { Connection timed out }
-  PUV_ECONNREFUSED    = 111;  { Connection refused }
-  PUV_EHOSTDOWN       = 112;  { Host is down }
-  PUV_EHOSTUNREACH    = 113;  { No route to host }
-  PUV_EALREADY        = 114;  { Operation already in progress }
-  PUV_EINPROGRESS     = 115;  { Operation now in progress }
-  PUV_ESTALE          = 116;  { Stale NFS file handle }
-  PUV_EUCLEAN         = 117;  { Structure needs cleaning }
-  PUV_ENOTNAM         = 118;  { Not a XENIX named type file }
-  PUV_ENAVAIL         = 119;  { No XENIX semaphores available }
-  PUV_EISNAM          = 120;  { Is a named type file }
-  PUV_EREMOTEIO       = 121;  { Remote I/O error }
-  PUV_EDQUOT          = 122;  { Quota exceeded }
+  // Only map to the system errno on non-Windows platforms. It's apparently
+  // a fairly common practice for Windows programmers to redefine errno codes.
+  {$IFNDEF MSWINDOWS}
+  PUV_E2BIG = -ESysE2BIG;
+  {$ELSE}
+  PUV_E2BIG = -4093;
+  {$ENDIF}
 
-  PUV_ENOMEDIUM       = 123;
-  PUV_EMEDIUMTYPE     = 124;
-  PUV_ECANCELED       = 125;
-  PUV_ENOKEY          = 126;
-  PUV_EKEYEXPIRED     = 127;
-  PUV_EKEYREVOKED     = 128;
-  PUV_EKEYREJECTED    = 129;
-  PUV_EOWNERDEAD      = 130;
-  PUV_ENOTRECOVERABLE = 131;
-  PUV_ERFKILL         = 132;
+  {$IFNDEF MSWINDOWS}
+  PUV_EACCES = -ESysEACCES;
+  {$ELSE}
+  PUV_EACCES = -4092;
+  {$ENDIF}
 
-  // Specific codes. Not sure is these needed
-  PUV_ENOTSUP         = -4049;
-  PUV_ECHARSET        = -4080;
-  PUV_UNKNOWN         = -4094;
-  PUV_EOF             = -4095;
+  {$IFNDEF MSWINDOWS}
+  PUV_EADDRINUSE = -ESysEADDRINUSE;
+  {$ELSE}
+  PUV_EADDRINUSE = -4091;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_EADDRNOTAVAIL = -ESysEADDRNOTAVAIL;
+  {$ELSE}
+  PUV_EADDRNOTAVAIL = -4090;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_EAFNOSUPPORT = -ESysEAFNOSUPPORT;
+  {$ELSE}
+  PUV_EAFNOSUPPORT = -4089;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_EAGAIN = -ESysEAGAIN;
+  {$ELSE}
+  PUV_EAGAIN = -4088;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_EALREADY = -ESysEALREADY;
+  {$ELSE}
+  PUV_EALREADY = -4084;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_EBADF = -ESysEBADF;
+  {$ELSE}
+  PUV_EBADF = -4083;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_EBUSY = -ESysEBUSY;
+  {$ELSE}
+  PUV_EBUSY = -4082;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ECANCELED = -ESysECANCELED;
+  {$ELSE}
+  PUV_ECANCELED = -4081;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ECHARSET = -ESysECHARSET;
+  {$ELSE}
+  PUV_ECHARSET = -4080;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ECONNABORTED = -ESysECONNABORTED;
+  {$ELSE}
+  PUV_ECONNABORTED = -4079;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ECONNREFUSED = -ESysECONNREFUSED;
+  {$ELSE}
+  PUV_ECONNREFUSED = -4078;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ECONNRESET = -ESysECONNRESET;
+  {$ELSE}
+  PUV_ECONNRESET = -4077;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_EDESTADDRREQ = -ESysEDESTADDRREQ;
+  {$ELSE}
+  PUV_EDESTADDRREQ = -4076;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_EEXIST = -ESysEEXIST;
+  {$ELSE}
+  PUV_EEXIST = -4075;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_EFAULT = -ESysEFAULT;
+  {$ELSE}
+  PUV_EFAULT = -4074;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_EHOSTUNREACH = -ESysEHOSTUNREACH;
+  {$ELSE}
+  PUV_EHOSTUNREACH = -4073;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_EINTR = -ESysEINTR;
+  {$ELSE}
+  PUV_EINTR = -4072;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_EINVAL = -ESysEINVAL;
+  {$ELSE}
+  PUV_EINVAL = -4071;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_EIO = -ESysEIO;
+  {$ELSE}
+  PUV_EIO = -4070;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_EISCONN = -ESysEISCONN;
+  {$ELSE}
+  PUV_EISCONN = -4069;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_EISDIR = -ESysEISDIR;
+  {$ELSE}
+  PUV_EISDIR = -4068;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ELOOP = -ESysELOOP;
+  {$ELSE}
+  PUV_ELOOP = -4067;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_EMFILE = -ESysEMFILE;
+  {$ELSE}
+  PUV_EMFILE = -4066;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_EMSGSIZE = -ESysEMSGSIZE;
+  {$ELSE}
+  PUV_EMSGSIZE = -4065;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ENAMETOOLONG = -ESysENAMETOOLONG;
+  {$ELSE}
+  PUV_ENAMETOOLONG = -4064;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ENETDOWN = -ESysENETDOWN;
+  {$ELSE}
+  PUV_ENETDOWN = -4063;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ENETUNREACH = -ESysENETUNREACH;
+  {$ELSE}
+  PUV_ENETUNREACH = -4062;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ENFILE = -ESysENFILE;
+  {$ELSE}
+  PUV_ENFILE = -4061;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ENOBUFS = -ESysENOBUFS;
+  {$ELSE}
+  PUV_ENOBUFS = -4060;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ENODEV = -ESysENODEV;
+  {$ELSE}
+  PUV_ENODEV = -4059;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ENOENT = -ESysENOENT;
+  {$ELSE}
+  PUV_ENOENT = -4058;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ENOMEM = -ESysENOMEM;
+  {$ELSE}
+  PUV_ENOMEM = -4057;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ENONET = -ESysENONET;
+  {$ELSE}
+  PUV_ENONET = -4056;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ENOSPC = -ESysENOSPC;
+  {$ELSE}
+  PUV_ENOSPC = -4055;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ENOSYS = -ESysENOSYS;
+  {$ELSE}
+  PUV_ENOSYS = -4054;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ENOTCONN = -ESysENOTCONN;
+  {$ELSE}
+  PUV_ENOTCONN = -4053;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ENOTDIR = -ESysENOTDIR;
+  {$ELSE}
+  PUV_ENOTDIR = -4052;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ENOTEMPTY = -ESysENOTEMPTY;
+  {$ELSE}
+  PUV_ENOTEMPTY = -4051;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ENOTSOCK = -ESysENOTSOCK;
+  {$ELSE}
+  PUV_ENOTSOCK = -4050;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ENOTSUP = -ESysENOTSUP;
+  {$ELSE}
+  PUV_ENOTSUP = -4049;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_EPERM = -ESysEPERM;
+  {$ELSE}
+  PUV_EPERM = -4048;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_EPIPE = -ESysEPIPE;
+  {$ELSE}
+  PUV_EPIPE = -4047;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_EPROTO = -ESysEPROTO;
+  {$ELSE}
+  PUV_EPROTO = -4046;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_EPROTONOSUPPORT = -ESysEPROTONOSUPPORT;
+  {$ELSE}
+  PUV_EPROTONOSUPPORT = -4045;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_EPROTOTYPE = -ESysEPROTOTYPE;
+  {$ELSE}
+  PUV_EPROTOTYPE = -4044;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_EROFS = -ESysEROFS;
+  {$ELSE}
+  PUV_EROFS = -4043;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ESHUTDOWN = -ESysESHUTDOWN;
+  {$ELSE}
+  PUV_ESHUTDOWN = -4042;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ESPIPE = -ESysESPIPE;
+  {$ELSE}
+  PUV_ESPIPE = -4041;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ESRCH = -ESysESRCH;
+  {$ELSE}
+  PUV_ESRCH = -4040;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ETIMEDOUT = -ESysETIMEDOUT;
+  {$ELSE}
+  PUV_ETIMEDOUT = -4039;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ETXTBSY = -ESysETXTBSY;
+  {$ELSE}
+  PUV_ETXTBSY = -4038;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_EXDEV = -ESysEXDEV;
+  {$ELSE}
+  PUV_EXDEV = -4037;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_EFBIG = -ESysEFBIG;
+  {$ELSE}
+  PUV_EFBIG = -4036;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ENOPROTOOPT = -ESysENOPROTOOPT;
+  {$ELSE}
+  PUV_ENOPROTOOPT = -4035;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ERANGE = -ESysERANGE;
+  {$ELSE}
+  PUV_ERANGE = -4034;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ENXIO = -ESysENXIO;
+  {$ELSE}
+  PUV_ENXIO = -4033;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_EMLINK = -ESysEMLINK;
+  {$ELSE}
+  PUV_EMLINK = -4032;
+  {$ENDIF}
+
+  // EHOSTDOWN is not visible on BSD-like systems when _POSIX_C_SOURCE is
+  // defined. Fortunately, its value is always 64 so it's possible albeit
+  // icky to hard-code it.
+  {$IFNDEF MSWINDOWS}
+  PUV_EHOSTDOWN = -ESysEHOSTDOWN;
+  PUV_EHOSTDOWN = -64;
+  {$ELSE}
+  PUV_EHOSTDOWN = -4031;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_EREMOTEIO = -ESysEREMOTEIO;
+  {$ELSE}
+  PUV_EREMOTEIO = -4030;
+  {$ENDIF}
+
+  {$IFNDEF MSWINDOWS}
+  PUV_ENOTTY = -ESysENOTTY;
+  {$ELSE}
+  PUV_ENOTTY = -4029;
+  {$ENDIF}
 
 {$IFDEF MSWINDOWS}
 // Omitted standard constants
@@ -165,23 +412,19 @@ const
   ERROR_INVALID_REPARSE_DATA      = 4392;
 {$ENDIF}
 
-function puv_get_errno: Integer;
 function puv_errno_str(errno: Integer): String;
+function puv_errno_codestr(errno: Integer): String;
+{$IFDEF MSWINDOWS}
 function puv_translate_sys_error(sys_errno: Integer): Integer;
+{$ENDIF}
 
 implementation
-{$IFDEF MSWINDOWS}
+
 uses
+  SysUtils,
+{$IFDEF MSWINDOWS}
   Windows,
   winsock;
-
-function _get_errno(out errno: LongInt): LongInt; cdecl;
-  external 'msvcrt';
-
-function puv_get_errno: Integer;
-begin
-  _get_errno(Result);
-end;
 
 function puv_translate_sys_error(sys_errno: Integer): Integer;
 begin
@@ -290,160 +533,178 @@ begin
       Result := PUV_UNKNOWN;
   end;
 end;
-{$ELSE}
-uses
-  BaseUnix;
-
-function puv_get_errno: Integer;
-begin
-  Result := fpgeterrno;
-end;
-
-function puv_translate_sys_error(sys_errno: Integer): Integer;
-begin
-  Result := sys_errno; // Under Unix this is the same
-end;
 {$ENDIF}
+
 function puv_errno_str(errno: Integer): String;
-const
-  err_strs: array [1..132] of String = (
-  'EPERM',
-  'ENOENT',
-  'ESRCH',
-  'EINTR',
-  'EIO',
-  'ENXIO',
-  'E2BIG',
-  'ENOEXEC',
-  'EBADF',
-  'ECHILD',
-  'EAGAIN',
-  'ENOMEM',
-  'EACCES',
-  'EFAULT',
-  'ENOTBLK',
-  'EBUSY',
-  'EEXIST',
-  'EXDEV',
-  'ENODEV',
-  'ENOTDIR',
-  'EISDIR',
-  'EINVAL',
-  'ENFILE',
-  'EMFILE',
-  'ENOTTY',
-  'ETXTBSY',
-  'EFBIG',
-  'ENOSPC',
-  'ESPIPE',
-  'EROFS',
-  'EMLINK',
-  'EPIPE',
-  'EDOM',
-  'ERANGE',
-  'EDEADLK',
-  'ENAMETOOLONG',
-  'ENOLCK',
-  'ENOSYS',
-  'ENOTEMPTY',
-  'ELOOP',
-  '',
-  'ENOMSG',
-  'EIDRM',
-  'ECHRNG',
-  'EL2NSYNC',
-  'EL3HLT',
-  'EL3RST',
-  'ELNRNG',
-  'EUNATCH',
-  'ENOCSI',
-  'EL2HLT',
-  'EBADE',
-  'EBADR',
-  'EXFULL',
-  'ENOANO',
-  'EBADRQC',
-  'EBADSLT',
-  '',
-  'EBFONT',
-  'ENOSTR',
-  'ENODATA',
-  'ETIME',
-  'ENOSR',
-  'ENONET',
-  'ENOPKG',
-  'EREMOTE',
-  'ENOLINK',
-  'EADV',
-  'ESRMNT',
-  'ECOMM',
-  'EPROTO',
-  'EMULTIHOP',
-  'EDOTDOT',
-  'EBADMSG',
-  'EOVERFLOW',
-  'ENOTUNIQ',
-  'EBADFD',
-  'EREMCHG',
-  'ELIBACC',
-  'ELIBBAD',
-  'ELIBSCN',
-  'ELIBMAX',
-  'ELIBEXEC',
-  'EILSEQ',
-  'ERESTART',
-  'ESTRPIPE',
-  'EUSERS',
-  'ENOTSOCK',
-  'EDESTADDRREQ',
-  'EMSGSIZE',
-  'EPROTOTYPE',
-  'ENOPROTOOPT',
-  'EPROTONOSUPPORT',
-  'ESOCKTNOSUPPORT',
-  'EOPNOTSUPP',
-  'EPFNOSUPPORT',
-  'EAFNOSUPPORT',
-  'EADDRINUSE',
-  'EADDRNOTAVAIL',
-  'ENETDOWN',
-  'ENETUNREACH',
-  'ENETRESET',
-  'ECONNABORTED',
-  'ECONNRESET',
-  'ENOBUFS',
-  'EISCONN',
-  'ENOTCONN',
-  'ESHUTDOWN',
-  'ETOOMANYREFS',
-  'ETIMEDOUT',
-  'ECONNREFUSED',
-  'EHOSTDOWN',
-  'EHOSTUNREACH',
-  'EALREADY',
-  'EINPROGRESS',
-  'ESTALE',
-  'EUCLEAN',
-  'ENOTNAM',
-  'ENAVAIL',
-  'EISNAM',
-  'EREMOTEIO',
-  'EDQUOT',
-  'ENOMEDIUM',
-  'EMEDIUMTYPE',
-  'ECANCELED',
-  'ENOKEY',
-  'EKEYEXPIRED',
-  'EKEYREVOKED',
-  'EKEYREJECTED',
-  'EOWNERDEAD',
-  'ENOTRECOVERABLE',
-  'ERFKILL');
 begin
-  if (errno >= Low(err_strs)) and (errno <= High(err_strs)) then
-    Result := err_strs[errno]
-  else
-    Result := '';
+  case errno of
+    PUV_E2BIG: Result := 'argument list too long';
+    PUV_EACCES: Result := 'permission denied';
+    PUV_EADDRINUSE: Result := 'address already in use';
+    PUV_EADDRNOTAVAIL: Result := 'address not available';
+    PUV_EAFNOSUPPORT: Result := 'address family not supported';
+    PUV_EAGAIN: Result := 'resource temporarily unavailable';
+    PUV_EAI_ADDRFAMILY: Result := 'address family not supported';
+    PUV_EAI_AGAIN: Result := 'temporary failure';
+    PUV_EAI_BADFLAGS: Result := 'bad ai_flags value';
+    PUV_EAI_BADHINTS: Result := 'invalid value for hints';
+    PUV_EAI_CANCELED: Result := 'request canceled';
+    PUV_EAI_FAIL: Result := 'permanent failure';
+    PUV_EAI_FAMILY: Result := 'ai_family not supported';
+    PUV_EAI_MEMORY: Result := 'out of memory';
+    PUV_EAI_NODATA: Result := 'no address';
+    PUV_EAI_NONAME: Result := 'unknown node or service';
+    PUV_EAI_OVERFLOW: Result := 'argument buffer overflow';
+    PUV_EAI_PROTOCOL: Result := 'resolved protocol is unknown';
+    PUV_EAI_SERVICE: Result := 'service not available for socket type';
+    PUV_EAI_SOCKTYPE: Result := 'socket type not supported';
+    PUV_EALREADY: Result := 'connection already in progress';
+    PUV_EBADF: Result := 'bad file descriptor';
+    PUV_EBUSY: Result := 'resource busy or locked';
+    PUV_ECANCELED: Result := 'operation canceled';
+    PUV_ECHARSET: Result := 'invalid Unicode character';
+    PUV_ECONNABORTED: Result := 'software caused connection abort';
+    PUV_ECONNREFUSED: Result := 'connection refused';
+    PUV_ECONNRESET: Result := 'connection reset by peer';
+    PUV_EDESTADDRREQ: Result := 'destination address required';
+    PUV_EEXIST: Result := 'file already exists';
+    PUV_EFAULT: Result := 'bad address in system call argument';
+    PUV_EFBIG: Result := 'file too large';
+    PUV_EHOSTUNREACH: Result := 'host is unreachable';
+    PUV_EINTR: Result := 'interrupted system call';
+    PUV_EINVAL: Result := 'invalid argument';
+    PUV_EIO: Result := 'i/o error';
+    PUV_EISCONN: Result := 'socket is already connected';
+    PUV_EISDIR: Result := 'illegal operation on a directory';
+    PUV_ELOOP: Result := 'too many symbolic links encountered';
+    PUV_EMFILE: Result := 'too many open files';
+    PUV_EMSGSIZE: Result := 'message too long';
+    PUV_ENAMETOOLONG: Result := 'name too long';
+    PUV_ENETDOWN: Result := 'network is down';
+    PUV_ENETUNREACH: Result := 'network is unreachable';
+    PUV_ENFILE: Result := 'file table overflow';
+    PUV_ENOBUFS: Result := 'no buffer space available';
+    PUV_ENODEV: Result := 'no such device';
+    PUV_ENOENT: Result := 'no such file or directory';
+    PUV_ENOMEM: Result := 'not enough memory';
+    PUV_ENONET: Result := 'machine is not on the network';
+    PUV_ENOPROTOOPT: Result := 'protocol not available';
+    PUV_ENOSPC: Result := 'no space left on device';
+    PUV_ENOSYS: Result := 'function not implemented';
+    PUV_ENOTCONN: Result := 'socket is not connected';
+    PUV_ENOTDIR: Result := 'not a directory';
+    PUV_ENOTEMPTY: Result := 'directory not empty';
+    PUV_ENOTSOCK: Result := 'socket operation on non-socket';
+    PUV_ENOTSUP: Result := 'operation not supported on socket';
+    PUV_EPERM: Result := 'operation not permitted';
+    PUV_EPIPE: Result := 'broken pipe';
+    PUV_EPROTO: Result := 'protocol error';
+    PUV_EPROTONOSUPPORT: Result := 'protocol not supported';
+    PUV_EPROTOTYPE: Result := 'protocol wrong type for socket';
+    PUV_ERANGE: Result := 'result too large';
+    PUV_EROFS: Result := 'read-only file system';
+    PUV_ESHUTDOWN: Result := 'cannot send after transport endpoint shutdown';
+    PUV_ESPIPE: Result := 'invalid seek';
+    PUV_ESRCH: Result := 'no such process';
+    PUV_ETIMEDOUT: Result := 'connection timed out';
+    PUV_ETXTBSY: Result := 'text file is busy';
+    PUV_EXDEV: Result := 'cross-device link not permitted';
+    PUV_UNKNOWN: Result := 'unknown error';
+    PUV_EOF: Result := 'end of file';
+    PUV_ENXIO: Result := 'no such device or address';
+    PUV_EMLINK: Result := 'too many links';
+    PUV_EHOSTDOWN: Result := 'host is down';
+    PUV_EREMOTEIO: Result := 'remote I/O error';
+    PUV_ENOTTY: Result := 'inappropriate ioctl for device';
+    else
+      Result := Format('Unknown system error %d', [errno]);
+  end;
+end;
+
+function puv_errno_codestr(errno: Integer): String;
+begin
+  case errno of
+    PUV_E2BIG: Result := 'E2BIG';
+    PUV_EACCES: Result := 'EACCES';
+    PUV_EADDRINUSE: Result := 'EADDRINUSE';
+    PUV_EADDRNOTAVAIL: Result := 'EADDRNOTAVAIL';
+    PUV_EAFNOSUPPORT: Result := 'EAFNOSUPPORT';
+    PUV_EAGAIN: Result := 'EAGAIN';
+    PUV_EAI_ADDRFAMILY: Result := 'EAI_ADDRFAMILY';
+    PUV_EAI_AGAIN: Result := 'EAI_AGAIN';
+    PUV_EAI_BADFLAGS: Result := 'EAI_BADFLAGS';
+    PUV_EAI_BADHINTS: Result := 'EAI_BADHINTS';
+    PUV_EAI_CANCELED: Result := 'EAI_CANCELED';
+    PUV_EAI_FAIL: Result := 'EAI_FAIL';
+    PUV_EAI_FAMILY: Result := 'EAI_FAMILY';
+    PUV_EAI_MEMORY: Result := 'EAI_MEMORY';
+    PUV_EAI_NODATA: Result := 'EAI_NODATA';
+    PUV_EAI_NONAME: Result := 'EAI_NONAME';
+    PUV_EAI_OVERFLOW: Result := 'EAI_OVERFLOW';
+    PUV_EAI_PROTOCOL: Result := 'EAI_PROTOCOL';
+    PUV_EAI_SERVICE: Result := 'EAI_SERVICE';
+    PUV_EAI_SOCKTYPE: Result := 'EAI_SOCKTYPE';
+    PUV_EALREADY: Result := 'EALREADY';
+    PUV_EBADF: Result := 'EBADF';
+    PUV_EBUSY: Result := 'EBUSY';
+    PUV_ECANCELED: Result := 'ECANCELED';
+    PUV_ECHARSET: Result := 'ECHARSET';
+    PUV_ECONNABORTED: Result := 'ECONNABORTED';
+    PUV_ECONNREFUSED: Result := 'ECONNREFUSED';
+    PUV_ECONNRESET: Result := 'ECONNRESET';
+    PUV_EDESTADDRREQ: Result := 'EDESTADDRREQ';
+    PUV_EEXIST: Result := 'EEXIST';
+    PUV_EFAULT: Result := 'EFAULT';
+    PUV_EFBIG: Result := 'EFBIG';
+    PUV_EHOSTUNREACH: Result := 'EHOSTUNREACH';
+    PUV_EINTR: Result := 'EINTR';
+    PUV_EINVAL: Result := 'EINVAL';
+    PUV_EIO: Result := 'EIO';
+    PUV_EISCONN: Result := 'EISCONN';
+    PUV_EISDIR: Result := 'EISDIR';
+    PUV_ELOOP: Result := 'ELOOP';
+    PUV_EMFILE: Result := 'EMFILE';
+    PUV_EMSGSIZE: Result := 'EMSGSIZE';
+    PUV_ENAMETOOLONG: Result := 'ENAMETOOLONG';
+    PUV_ENETDOWN: Result := 'ENETDOWN';
+    PUV_ENETUNREACH: Result := 'ENETUNREACH';
+    PUV_ENFILE: Result := 'ENFILE';
+    PUV_ENOBUFS: Result := 'ENOBUFS';
+    PUV_ENODEV: Result := 'ENODEV';
+    PUV_ENOENT: Result := 'ENOENT';
+    PUV_ENOMEM: Result := 'ENOMEM';
+    PUV_ENONET: Result := 'ENONET';
+    PUV_ENOPROTOOPT: Result := 'ENOPROTOOPT';
+    PUV_ENOSPC: Result := 'ENOSPC';
+    PUV_ENOSYS: Result := 'ENOSYS';
+    PUV_ENOTCONN: Result := 'ENOTCONN';
+    PUV_ENOTDIR: Result := 'ENOTDIR';
+    PUV_ENOTEMPTY: Result := 'ENOTEMPTY';
+    PUV_ENOTSOCK: Result := 'ENOTSOCK';
+    PUV_ENOTSUP: Result := 'ENOTSUP';
+    PUV_EPERM: Result := 'EPERM';
+    PUV_EPIPE: Result := 'EPIPE';
+    PUV_EPROTO: Result := 'EPROTO';
+    PUV_EPROTONOSUPPORT: Result := 'EPROTONOSUPPORT';
+    PUV_EPROTOTYPE: Result := 'EPROTOTYPE';
+    PUV_ERANGE: Result := 'ERANGE';
+    PUV_EROFS: Result := 'EROFS';
+    PUV_ESHUTDOWN: Result := 'ESHUTDOWN';
+    PUV_ESPIPE: Result := 'ESPIPE';
+    PUV_ESRCH: Result := 'ESRCH';
+    PUV_ETIMEDOUT: Result := 'ETIMEDOUT';
+    PUV_ETXTBSY: Result := 'ETXTBSY';
+    PUV_EXDEV: Result := 'EXDEV';
+    PUV_UNKNOWN: Result := 'UNKNOWN';
+    PUV_EOF: Result := 'EOF';
+    PUV_ENXIO: Result := 'ENXIO';
+    PUV_EMLINK: Result := 'EMLINK';
+    PUV_EHOSTDOWN: Result := 'EHOSTDOWN';
+    PUV_EREMOTEIO: Result := 'EREMOTEIO';
+    PUV_ENOTTY: Result := 'ENOTTY';
+    else
+      Result := Format('Unknown system error %d', [errno]);
+  end;
 end;
 
 end.

@@ -93,35 +93,48 @@ type
     birthtime: TDateTime;
   end;
 
-function puv_fs_open(path: TFileName; flags: Cardinal; mode: Cardinal): Integer;
-function puv_fs_close(fd: Integer): Integer;
-function puv_fs_read(fd: Integer; out buf; size: Integer): Integer;
-function puv_fs_write(fd: Integer; const buf; size: Integer): Integer;
-function puv_fs_sendfile(): Integer;
-function puv_fs_stat(path: TFileName; out info: Tpuv_stat_info): Integer;
-function puv_fs_lstat(path: TFileName; out info: Tpuv_stat_info): Integer;
-function puv_fs_fstat(fd: Integer; out info: Tpuv_stat_info): Integer;
-function puv_fs_ftruncate(fd: Integer): Integer;
-function puv_fs_utime(): Integer;
-function puv_fs_futime(): Integer;
-function puv_fs_access(path: TFileName; mode: Integer): Integer;
-function puv_fs_chmod(path: TFileName; mode: Integer): Integer;
-function puv_fs_fchmod(fd: Integer; mode: Integer): Integer;
-function puv_fs_fsync(): Integer;
-function puv_fs_fdatasync(): Integer;
-function puv_fs_unlink(path: TFileName): Integer;
-function puv_fs_rmdir(path: TFileName): Integer;
-function puv_fs_mkdir(path: TFileName; mode: Integer): Integer;
-function puv_fs_mkdtemp(): Integer;
-function puv_fs_rename(): Integer;
-function puv_fs_scandir(): Integer;
-function puv_fs_link(): Integer;
-function puv_fs_symlink(): Integer;
-function puv_fs_readlink(): Integer;
-function puv_fs_chown(): Integer;
-function puv_fs_fchown(): Integer;
-function puv_fs_realpath(): Integer;
-function puv_fs_copyfile(): Integer;
+  { TReqResult }
+
+  TReqResult = record
+    Result: Integer;
+  {$IFDEF MSWINDOWS}
+    SysErrno: DWord;
+    class procedure SetResult(out AResult: TReqResult; AValue: Integer); static; inline;
+    class procedure SetWin32Error(out AResult: TReqResult; ASysErrno: DWord); static; inline;
+    class procedure SetPUVError(out AResult: TReqResult; AValue: Integer; ASysErrno: DWord); static; inline;
+    class function VerifyFD(out AResult: TReqResult; fd: Integer): Boolean; static; inline;
+  {$ENDIF}
+  end;
+
+function puv_fs_open(path: TFileName; flags: Cardinal; mode: Cardinal): TReqResult;
+function puv_fs_close(fd: Integer): TReqResult;
+function puv_fs_read(fd: Integer; out buf; size: Integer; offset: Int64 = -1): TReqResult;
+function puv_fs_write(fd: Integer; const buf; size: Integer; offset: Int64 = -1): TReqResult;
+function puv_fs_sendfile(): TReqResult;
+function puv_fs_stat(path: TFileName; out info: Tpuv_stat_info): TReqResult;
+function puv_fs_lstat(path: TFileName; out info: Tpuv_stat_info): TReqResult;
+function puv_fs_fstat(fd: Integer; out info: Tpuv_stat_info): TReqResult;
+function puv_fs_ftruncate(fd: Integer): TReqResult;
+function puv_fs_utime(): TReqResult;
+function puv_fs_futime(): TReqResult;
+function puv_fs_access(path: TFileName; mode: Integer): TReqResult;
+function puv_fs_chmod(path: TFileName; mode: Integer): TReqResult;
+function puv_fs_fchmod(fd: Integer; mode: Integer): TReqResult;
+function puv_fs_fsync(): TReqResult;
+function puv_fs_fdatasync(): TReqResult;
+function puv_fs_unlink(path: TFileName): TReqResult;
+function puv_fs_rmdir(path: TFileName): TReqResult;
+function puv_fs_mkdir(path: TFileName; mode: Integer): TReqResult;
+function puv_fs_mkdtemp(): TReqResult;
+function puv_fs_rename(): TReqResult;
+function puv_fs_scandir(): TReqResult;
+function puv_fs_link(): TReqResult;
+function puv_fs_symlink(): TReqResult;
+function puv_fs_readlink(): TReqResult;
+function puv_fs_chown(): TReqResult;
+function puv_fs_fchown(): TReqResult;
+function puv_fs_realpath(): TReqResult;
+function puv_fs_copyfile(): TReqResult;
 
 implementation
 {$IFDEF MSWINDOWS}
@@ -147,6 +160,12 @@ function msvcrt_get_osfhandle(fd: LongInt): THandle; stdcall;
   external 'msvcrt' name '_get_osfhandle';
 function msvcrt_umask(mask: LongInt): LongInt; stdcall;
   external 'msvcrt' name '_umask';
+function msvcrt_rmdir(path: PChar): LongInt; stdcall;
+  external 'msvcrt' name '_rmdir';
+function msvcrt_mkdir(path: PChar): LongInt; stdcall;
+  external 'msvcrt' name '_mkdir';
+function msvcrt_chmod(path: PChar; mode: LongInt): LongInt; stdcall;
+  external 'msvcrt' name '_chmod';
 
 procedure BitsSet(var value: QWord; Bits: QWord); inline; overload;
 begin
@@ -168,7 +187,7 @@ begin
   value := value and not Bits;
 end;
 
-function puv_fs_open(path: TFileName; flags: Cardinal; mode: Cardinal): Integer;
+function puv_fs_open(path: TFileName; flags: Cardinal; mode: Cardinal): TReqResult;
 var
   access: DWORD;
   share: DWORD;
@@ -176,10 +195,9 @@ var
   attributes: DWORD;
   f: THandle;
   fd, current_umask: Integer;
+  error: DWord;
 label einval;
 begin
-  Result := -1;
-
   attributes := 0;
 
   // Obtain the active umask. umask() never fails and returns the previous
@@ -279,12 +297,14 @@ begin
                   attributes,
                   0);
   if (f = INVALID_HANDLE_VALUE) then begin
-    //error := GetLastError;
-    //if (error = ERROR_FILE_EXISTS) and ((flags and O_CREAT) <> 0) and
-    //    ((flags and O_EXCL) = 0) then
-    //  // Special case: when ERROR_FILE_EXISTS happens and UV_FS_O_CREAT was
-    //  // specified, it means the path referred to a directory.
-    //  SET_REQ_UV_ERROR(req, UV_EISDIR, error)
+    error := GetLastError;
+    if (error = ERROR_FILE_EXISTS) and ((flags and O_CREAT) <> 0) and
+        ((flags and O_EXCL) = 0) then
+      // Special case: when ERROR_FILE_EXISTS happens and UV_FS_O_CREAT was
+      // specified, it means the path referred to a directory.
+      TReqResult.SetPUVError(Result, PUV_EISDIR, error)
+    else
+      TReqResult.SetWin32Error(Result, GetLastError());
     Exit;
   end;
 
@@ -295,46 +315,240 @@ begin
      * errors as well, should they ever occur.
      *}
     if (msvcrt_get_errno = PUV_EMFILE) then
-      SetLastError(ERROR_TOO_MANY_OPEN_FILES);
+      TReqResult.SetPUVError(Result, PUV_EMFILE, ERROR_TOO_MANY_OPEN_FILES)
+    else if GetLastError() <> ERROR_SUCCESS then
+      TReqResult.SetWin32Error(Result, GetLastError())
+    else
+      TReqResult.SetWin32Error(Result, PUV_UNKNOWN);
     CloseHandle(f);
     Exit;
   end;
 
-  Result := fd;
+  TReqResult.SetResult(Result, fd);
   Exit;
 
 einval:
-  SetLastError(ERROR_INVALID_PARAMETER);
+  TReqResult.SetPUVError(Result, PUV_EINVAL, ERROR_INVALID_PARAMETER);
 end;
 
-function puv_fs_close(fd: Integer): Integer;
+function puv_fs_close(fd: Integer): TReqResult;
+var
+  res: Integer;
 begin
-  Result := msvcrt_close(fd);
+  if TReqResult.VerifyFD(Result, fd) then begin
+    if fd > 2 then
+      res := msvcrt_close(fd)
+    else
+      res := 0;
+
+    // _close doesn't set _doserrno on failure, but it does always set errno
+    // to EBADF on failure.
+    if res = -1 then
+      TReqResult.SetPUVError(Result, PUV_EBADF, ERROR_INVALID_HANDLE)
+    else
+      Result.Result := 0;
+  end;
 end;
 
-function puv_fs_read(fd: Integer; out buf; size: Integer): Integer;
+function puv_fs_read(fd: Integer; out buf; size: Integer; offset: Int64): TReqResult;
 var
   handle: THandle;
-  read: DWORD;
+  overlapped: _OVERLAPPED;
+  overlapped_ptr: POVERLAPPED;
+  offset_: LARGE_INTEGER;
+  bytes: DWORD;
+  error: DWord;
+  res: BOOL;
+  original_position: LARGE_INTEGER;
+  zero_offset: LARGE_INTEGER;
+  restore_position: Boolean;
 begin
-  Result := -1;
-  handle := msvcrt_get_osfhandle(fd);
-  if (handle <> INVALID_HANDLE_VALUE) and Windows.ReadFile(handle, buf, size, read, nil) then
-    Result := read;
+  if TReqResult.VerifyFD(Result, fd) then begin
+    zero_offset.QuadPart := 0;
+    restore_position := False;
+    handle := msvcrt_get_osfhandle(fd);
+    if handle = INVALID_HANDLE_VALUE then begin
+      TReqResult.SetWin32Error(Result, ERROR_INVALID_HANDLE);
+      Exit;
+    end;
+
+    if offset <> -1 then begin
+      FillChar(overlapped, sizeof(overlapped), 0);
+      overlapped_ptr := @overlapped;
+      if SetFilePointerEx(handle, zero_offset, @original_position, FILE_CURRENT) then
+        restore_position := True;
+    end else
+      overlapped_ptr := nil;
+
+    bytes := 0; // Handling multiple buffers omitted here
+    res := Windows.ReadFile(handle, buf, size, bytes, nil);
+
+    if restore_position then
+      SetFilePointerEx(handle, original_position, nil, FILE_BEGIN);
+
+    if res or (bytes > 0) then
+      TReqResult.SetResult(Result, bytes)
+    else begin
+      error := GetLastError();
+      if error = ERROR_HANDLE_EOF then
+        TReqResult.SetResult(Result, bytes)
+      else
+        TReqResult.SetWin32Error(Result, error);
+    end;
+  end;
 end;
 
-function puv_fs_write(fd: Integer; const buf; size: Integer): Integer;
+function puv_fs_write(fd: Integer; const buf; size: Integer; offset: Int64): TReqResult;
 var
   handle: THandle;
-  written: DWORD;
+  overlapped: _OVERLAPPED;
+  overlapped_ptr: POVERLAPPED;
+  offset_: LARGE_INTEGER;
+  bytes: DWORD;
+  res: BOOL;
+  original_position: LARGE_INTEGER;
+  zero_offset: LARGE_INTEGER;
+  restore_position: Boolean;
 begin
-  Result := -1;
-  handle := msvcrt_get_osfhandle(fd);
-  if (handle <> INVALID_HANDLE_VALUE) and Windows.WriteFile(handle, buf, size, written, nil) then
-    Result := written;
+  if TReqResult.VerifyFD(Result, fd) then begin
+    zero_offset.QuadPart := 0;
+    restore_position := False;
+    handle := msvcrt_get_osfhandle(fd);
+    if handle = INVALID_HANDLE_VALUE then begin
+      TReqResult.SetWin32Error(Result, ERROR_INVALID_HANDLE);
+      Exit;
+    end;
+
+    if offset <> -1 then begin
+      FillChar(overlapped, sizeof(overlapped), 0);
+      overlapped_ptr := @overlapped;
+      if SetFilePointerEx(handle, zero_offset, @original_position, FILE_CURRENT) then
+        restore_position := True;
+    end else
+      overlapped_ptr := nil;
+
+    bytes := 0;
+    res := Windows.WriteFile(handle, buf, size, bytes, nil);
+
+    if restore_position then
+      SetFilePointerEx(handle, original_position, nil, FILE_BEGIN);
+
+    if res or (bytes > 0) then
+      TReqResult.SetResult(Result, bytes)
+    else
+      TReqResult.SetWin32Error(Result, GetLastError());
+  end;
 end;
 
-function puv_fs_sendfile(): Integer;
+function puv_fs_rmdir(path: TFileName): TReqResult;
+var
+  res: Integer;
+begin
+  res := msvcrt_rmdir(PChar(path));
+  TReqResult.SetResult(Result, res);
+  {if RemoveDirectory(PChar(path)) then
+    Result := 0
+  else
+    Result := -1;}
+end;
+
+function puv_fs_unlink(path: TFileName): TReqResult;
+var
+  handle: THandle;
+  info: BY_HANDLE_FILE_INFORMATION;
+  disposition: FILE_DISPOSITION_INFORMATION;
+  iosb: IO_STATUS_BLOCK;
+  basic_info: record
+    file_info: FILE_BASIC_INFORMATION;
+    gap1: ULONG;
+  end;
+  basic: FILE_BASIC_INFORMATION absolute basic_info;
+  status: NTSTATUS;
+begin
+  handle := CreateFile(
+    PChar(path),
+    FILE_READ_ATTRIBUTES or FILE_WRITE_ATTRIBUTES or DELETE,
+    FILE_SHARE_READ or FILE_SHARE_WRITE or FILE_SHARE_DELETE,
+    nil,
+    OPEN_EXISTING,
+    FILE_FLAG_OPEN_REPARSE_POINT or FILE_FLAG_BACKUP_SEMANTICS,
+    0);
+
+  if (handle = INVALID_HANDLE_VALUE) then begin
+    TReqResult.SetWin32Error(Result, GetLastError());
+    Exit;
+  end;
+
+  if not GetFileInformationByHandle(handle, info) then begin
+    TReqResult.SetWin32Error(Result, GetLastError());
+    CloseHandle(handle);
+    Exit;
+  end;
+
+  if (info.dwFileAttributes and FILE_ATTRIBUTE_DIRECTORY) <> 0 then begin
+    // Do not allow deletion of directories, unless it is a symlink. When
+    // the path refers to a non-symlink directory, report EPERM as mandated
+    // by POSIX.1.
+
+    // Check if it is a reparse point. If it's not, it's a normal directory.
+    if (info.dwFileAttributes and FILE_ATTRIBUTE_REPARSE_POINT) = 0 then begin
+      TReqResult.SetWin32Error(Result, ERROR_ACCESS_DENIED);
+      CloseHandle(handle);
+      Exit;
+    end;
+
+    // Read the reparse point and check if it is a valid symlink.
+    // If not, don't unlink.
+    //if (fs__readlink_handle(handle, NULL, NULL) < 0) {
+    //  DWORD error = GetLastError();
+    //  if (error == ERROR_SYMLINK_NOT_SUPPORTED)
+    //    error = ERROR_ACCESS_DENIED;
+    //  SET_REQ_WIN32_ERROR(req, error);
+    //  CloseHandle(handle);
+    //  return;
+    //}
+  end;
+
+  if (info.dwFileAttributes and FILE_ATTRIBUTE_READONLY) <> 0 then begin
+    // Remove read-only attribute
+    FillChar(basic, sizeof(basic), 0);
+    basic.FileAttributes := info.dwFileAttributes and not FILE_ATTRIBUTE_READONLY;
+
+    status := NtSetInformationFile(
+      handle, @iosb, @basic_info, sizeof(basic_info), FileBasicInformation);
+    if not NT_SUCCESS(status) then begin
+      TReqResult.SetWin32Error(Result, RtlNtStatusToDosError(status));
+      CloseHandle(handle);
+      Exit;
+    end;
+  end;
+
+  // Try to set the delete flag.
+  disposition.DeleteFile := True;
+  status := NtSetInformationFile(
+    handle, @iosb, @disposition, sizeof(disposition), FileDispositionInformation);
+
+  CloseHandle(handle);
+
+  if (NT_SUCCESS(status)) then
+    TReqResult.SetResult(Result, 0)
+  else
+    TReqResult.SetWin32Error(Result, RtlNtStatusToDosError(status));
+end;
+
+function puv_fs_mkdir(path: TFileName; mode: Integer): TReqResult;
+var
+  res: Integer;
+begin
+  res := msvcrt_mkdir(PChar(path));
+  TReqResult.SetResult(Result, res);
+  {if CreateDirectory(PChar(path), nil) then
+    Result := 0
+  else
+    Result := -1;}
+end;
+
+function puv_fs_sendfile(): TReqResult;
 begin
 
 end;
@@ -503,7 +717,7 @@ begin
     Result := path;
 end;
 
-function fs_stat_impl(path: TFileName; out info: Tpuv_stat_info; do_lstat: Boolean): Integer;
+function fs_stat_impl(path: TFileName; out info: Tpuv_stat_info; do_lstat: Boolean): TReqResult;
 var
   handle: THandle;
   flags: DWORD;
@@ -521,79 +735,94 @@ begin
                        flags,
                        0);
   if (handle = INVALID_HANDLE_VALUE) then
-    Result := -1
+    TReqResult.SetWin32Error(Result, GetLastError())
   else begin
-    Result := fs_stat_handle(handle, info, do_lstat);
-    if (Result <> 0) then begin
+    if fs_stat_handle(handle, info, do_lstat) <> 0 then begin
       error := GetLastError();
       if (do_lstat and
           ((error = ERROR_SYMLINK_NOT_SUPPORTED) or
            (error = ERROR_NOT_A_REPARSE_POINT))) then
         // We opened a reparse point but it was not a symlink. Try again.
-        Result := fs_stat_impl(path, info, False);
-    end;
+        Result := fs_stat_impl(path, info, False)
+      else
+        TReqResult.SetWin32Error(Result, GetLastError());
+    end else
+      TReqResult.SetResult(Result, 0);
     CloseHandle(handle);
   end;
 end;
 
-function puv_fs_stat(path: TFileName; out info: Tpuv_stat_info): Integer;
+function puv_fs_stat(path: TFileName; out info: Tpuv_stat_info): TReqResult;
 begin
   Result := fs_stat_impl(fs_stat_prepare_path(path), info, False);
 end;
 
-function puv_fs_lstat(path: TFileName; out info: Tpuv_stat_info): Integer;
+function puv_fs_lstat(path: TFileName; out info: Tpuv_stat_info): TReqResult;
 begin
   Result := fs_stat_impl(fs_stat_prepare_path(path), info, True);
 end;
 
-function puv_fs_fstat(fd: Integer; out info: Tpuv_stat_info): Integer;
+function puv_fs_fstat(fd: Integer; out info: Tpuv_stat_info): TReqResult;
 var
   handle: THandle;
 begin
-  handle := msvcrt_get_osfhandle(fd);
+  if TReqResult.VerifyFD(Result, fd) then begin
+    handle := msvcrt_get_osfhandle(fd);
 
-  if (handle = INVALID_HANDLE_VALUE) then begin
-    SetLastError(ERROR_INVALID_HANDLE);
-    Result := -1;
-  end else
-    Result := fs_stat_handle(handle, info, False);
+    if handle = INVALID_HANDLE_VALUE then begin
+      TReqResult.SetWin32Error(Result, ERROR_INVALID_HANDLE);
+      Exit;
+    end;
+
+    if fs_stat_handle(handle, info, False) <> 0 then begin
+      TReqResult.SetWin32Error(Result, GetLastError());
+      Exit;
+    end;
+
+    TReqResult.SetResult(Result, 0);
+  end;
 end;
 
-function puv_fs_ftruncate(fd: Integer): Integer;
+function puv_fs_ftruncate(fd: Integer): TReqResult;
 begin
 
 end;
 
-function puv_fs_utime(): Integer;
+function puv_fs_utime(): TReqResult;
 begin
 
 end;
 
-function puv_fs_futime(): Integer;
+function puv_fs_futime(): TReqResult;
 begin
 
 end;
 
-function puv_fs_access(path: TFileName; mode: Integer): Integer;
+function puv_fs_access(path: TFileName; mode: Integer): TReqResult;
 var
   attr: DWORD;
 begin
-  Result := -1;
-
   attr := GetFileAttributes(PChar(path));
 
-  if (attr = INVALID_FILE_ATTRIBUTES) then
+  if (attr = INVALID_FILE_ATTRIBUTES) then begin
+    TReqResult.SetWin32Error(Result, GetLastError());
     Exit;
+  end;
 
+  // Access is possible if
+  // - write access wasn't requested,
+  // - or the file isn't read-only,
+  // - or it's a directory.
+  // (Directories cannot be read-only on Windows.)
   if ((mode and W_OK) = 0) or
      ((attr and FILE_ATTRIBUTE_READONLY) = 0) or
      ((attr and FILE_ATTRIBUTE_DIRECTORY) <> 0) then
-    Result := 0
+    TReqResult.SetResult(Result,  0)
   else
-    SetLastError(ERROR_ACCESS_DENIED);
+    TReqResult.SetWin32Error(Result, PUV_EPERM);
 end;
 
-function hchmod(handle: THandle; mode: Integer): Integer;
+function hchmod(handle: THandle; mode: Integer): TReqResult;
 var
   nt_status: NTSTATUS;
   io_status: IO_STATUS_BLOCK;
@@ -607,8 +836,8 @@ begin
     @info, sizeof(info), FileBasicInformation);
 
   if not NT_SUCCESS(nt_status) then begin
-    SetLastError(RtlNtStatusToDosError(nt_status));
-    Exit(-1);
+    TReqResult.SetWin32Error(Result, RtlNtStatusToDosError(nt_status));
+    Exit;
   end;
 
   if (mode and S_IWRITE) <> 0 then
@@ -620,15 +849,15 @@ begin
     handle, @io_status, @info, sizeof(info), FileBasicInformation);
 
   if not NT_SUCCESS(nt_status) then begin
-    SetLastError(RtlNtStatusToDosError(nt_status));
-    Exit(-1);
+    TReqResult.SetWin32Error(Result, RtlNtStatusToDosError(nt_status));
+    Exit;
   end;
 
-  Result := 0;
+  TReqResult.SetResult(Result, 0);
 end;
 
-function puv_fs_chmod(path: TFileName; mode: Integer): Integer;
-var
+function puv_fs_chmod(path: TFileName; mode: Integer): TReqResult;
+{var
   handle: THandle;
   err: Integer;
 begin
@@ -640,190 +869,121 @@ begin
     Result := -1
   else begin
     Result := hchmod(handle, mode);
-    err := GetLastError; // save...
     CloseHandle(handle);
-    SetLastError(err);   // ... and restore last error code
-  end;
+  end;}
+var
+  res: Integer;
+begin
+  res := msvcrt_chmod(PChar(path), mode);
+  TReqResult.SetResult(Result, res);
 end;
 
-function puv_fs_fchmod(fd: Integer; mode: Integer): Integer;
+function puv_fs_fchmod(fd: Integer; mode: Integer): TReqResult;
 var
   handle: THandle;
 begin
-  if (fd = -1) then begin
-    SetLastError(ERROR_INVALID_HANDLE);
-    Exit(PUV_EBADF);
-  end;
+  if TReqResult.VerifyFD(Result, fd) then begin
+    handle := msvcrt_get_osfhandle(fd);
 
-  handle := msvcrt_get_osfhandle(fd);
-
-  Result := hchmod(handle, mode);
-end;
-
-function puv_fs_fsync(): Integer;
-begin
-
-end;
-
-function puv_fs_fdatasync(): Integer;
-begin
-
-end;
-
-function puv_fs_unlink(path: TFileName): Integer;
-var
-  handle: THandle;
-  info: BY_HANDLE_FILE_INFORMATION;
-  disposition: FILE_DISPOSITION_INFORMATION;
-  iosb: IO_STATUS_BLOCK;
-  basic_info: record
-    file_info: FILE_BASIC_INFORMATION;
-    gap1: ULONG;
-  end;
-  basic: FILE_BASIC_INFORMATION absolute basic_info;
-  status: NTSTATUS;
-begin
-  handle := CreateFile(
-    PChar(path),
-    FILE_READ_ATTRIBUTES or FILE_WRITE_ATTRIBUTES or DELETE,
-    FILE_SHARE_READ or FILE_SHARE_WRITE or FILE_SHARE_DELETE,
-    nil,
-    OPEN_EXISTING,
-    FILE_FLAG_OPEN_REPARSE_POINT or FILE_FLAG_BACKUP_SEMANTICS,
-    0);
-
-  if (handle = INVALID_HANDLE_VALUE) then
-    //SET_REQ_WIN32_ERROR(req, GetLastError());
-    Exit(-1);
-
-  if not GetFileInformationByHandle(handle, info) then begin
-    //SET_REQ_WIN32_ERROR(req, GetLastError());
-    CloseHandle(handle);
-    Exit(-1)
-  end;
-
-  if (info.dwFileAttributes and FILE_ATTRIBUTE_DIRECTORY) <> 0 then begin
-    // Do not allow deletion of directories, unless it is a symlink. When
-    // the path refers to a non-symlink directory, report EPERM as mandated
-    // by POSIX.1.
-
-    // Check if it is a reparse point. If it's not, it's a normal directory.
-    if (info.dwFileAttributes and FILE_ATTRIBUTE_REPARSE_POINT) = 0 then begin
-      //SET_REQ_WIN32_ERROR(req, ERROR_ACCESS_DENIED);
-      SetLastError(ERROR_ACCESS_DENIED);
-      CloseHandle(handle);
-      Exit(-1);
-    end;
-
-    // Read the reparse point and check if it is a valid symlink.
-    // If not, don't unlink.
-    //if (fs__readlink_handle(handle, NULL, NULL) < 0) {
-    //  DWORD error = GetLastError();
-    //  if (error == ERROR_SYMLINK_NOT_SUPPORTED)
-    //    error = ERROR_ACCESS_DENIED;
-    //  SET_REQ_WIN32_ERROR(req, error);
-    //  CloseHandle(handle);
-    //  return;
-    //}
-  end;
-
-  if (info.dwFileAttributes and FILE_ATTRIBUTE_READONLY) <> 0 then begin
-    // Remove read-only attribute
-    FillChar(basic, sizeof(basic), 0);
-    basic.FileAttributes := info.dwFileAttributes and not FILE_ATTRIBUTE_READONLY;
-
-    status := NtSetInformationFile(
-      handle, @iosb, @basic_info, sizeof(basic_info), FileBasicInformation);
-    if not NT_SUCCESS(status) then begin
-      //SET_REQ_WIN32_ERROR(req, pRtlNtStatusToDosError(status));
-      SetLastError(RtlNtStatusToDosError(status));
-      CloseHandle(handle);
-      Exit(-1);
-    end;
-  end;
-
-  // Try to set the delete flag.
-  disposition.DeleteFile := True;
-  status := NtSetInformationFile(
-    handle, @iosb, @disposition, sizeof(disposition), FileDispositionInformation);
-
-  CloseHandle(handle);
-
-  if (NT_SUCCESS(status)) then begin
-    //SET_REQ_SUCCESS(req);
-    Result := 0;
-  end else begin
-    //SET_REQ_WIN32_ERROR(req, pRtlNtStatusToDosError(status));
-    SetLastError(RtlNtStatusToDosError(status));
-    Result := -1;
+    Result := hchmod(handle, mode);
   end;
 end;
 
-function puv_fs_rmdir(path: TFileName): Integer;
-begin
-  if RemoveDirectory(PChar(path)) then
-    Result := 0
-  else
-    Result := -1;
-end;
-
-function puv_fs_mkdir(path: TFileName; mode: Integer): Integer;
-begin
-  if CreateDirectory(PChar(path), nil) then
-    Result := 0
-  else
-    Result := -1;
-end;
-
-function puv_fs_mkdtemp(): Integer;
+function puv_fs_fsync(): TReqResult;
 begin
 
 end;
 
-function puv_fs_rename(): Integer;
+function puv_fs_fdatasync(): TReqResult;
 begin
 
 end;
 
-function puv_fs_scandir(): Integer;
+function puv_fs_mkdtemp(): TReqResult;
 begin
 
 end;
 
-function puv_fs_link(): Integer;
+function puv_fs_rename(): TReqResult;
 begin
 
 end;
 
-function puv_fs_symlink(): Integer;
+function puv_fs_scandir(): TReqResult;
 begin
 
 end;
 
-function puv_fs_readlink(): Integer;
+function puv_fs_link(): TReqResult;
 begin
 
 end;
 
-function puv_fs_chown(): Integer;
+function puv_fs_symlink(): TReqResult;
 begin
 
 end;
 
-function puv_fs_fchown(): Integer;
+function puv_fs_readlink(): TReqResult;
 begin
 
 end;
 
-function puv_fs_realpath(): Integer;
+function puv_fs_chown(): TReqResult;
 begin
 
 end;
 
-function puv_fs_copyfile(): Integer;
+function puv_fs_fchown(): TReqResult;
 begin
 
 end;
+
+function puv_fs_realpath(): TReqResult;
+begin
+
+end;
+
+function puv_fs_copyfile(): TReqResult;
+begin
+
+end;
+
+{ TReqResult }
+
+class procedure TReqResult.SetResult(out AResult: TReqResult; AValue: Integer);
+begin
+  AResult.Result := AValue;
+  if AResult.Result = -1 then begin
+    AResult.SysErrno := GetLastError();
+    AResult.Result := puv_translate_sys_error(AResult.SysErrno);
+  end;
+end;
+
+class procedure TReqResult.SetWin32Error(out AResult: TReqResult;
+  ASysErrno: DWord);
+begin
+  AResult.SysErrno := ASysErrno;
+  AResult.Result := puv_translate_sys_error(AResult.SysErrno);
+end;
+
+class procedure TReqResult.SetPUVError(out AResult: TReqResult;
+  AValue: Integer; ASysErrno: DWord);
+begin
+  AResult.SysErrno := ASysErrno;
+  AResult.Result := AValue;
+end;
+
+class function TReqResult.VerifyFD(out AResult: TReqResult;
+  fd: Integer): Boolean;
+begin
+  Result := fd <> -1;
+  if not Result then begin
+    AResult.Result := PUV_EBADF;
+    AResult.SysErrno := ERROR_INVALID_HANDLE;
+  end;
+end;
+
 {$ELSE}
 uses
   BaseUnix,
@@ -918,7 +1078,7 @@ begin
 #endif*)
 end;
 
-function puv_fs_open(path: TFileName; flags: Cardinal; mode: Cardinal): Integer;
+function puv_fs_open(path: TFileName; flags: Cardinal; mode: Cardinal): TReqResult;
 begin
   // Try O_CLOEXEC before entering locks
   if (no_cloexec_support = 0) then begin
@@ -947,27 +1107,27 @@ begin
   //  uv_rwlock_rdunlock(&req->loop->cloexec_lock);
 end;
 
-function puv_fs_close(fd: Integer): Integer;
+function puv_fs_close(fd: Integer): TReqResult;
 begin
   Result := FpClose(fd);
 end;
 
-function puv_fs_read(fd: Integer; out buf; size: Integer): Integer;
+function puv_fs_read(fd: Integer; out buf; size: Integer): TReqResult;
 begin
   Result := FpRead(fd, buf, size);
 end;
 
-function puv_fs_write(fd: Integer; const buf; size: Integer): Integer;
+function puv_fs_write(fd: Integer; const buf; size: Integer): TReqResult;
 begin
   Result := FpWrite(fd, buf, size);
 end;
 
-function puv_fs_sendfile(): Integer;
+function puv_fs_sendfile(): TReqResult;
 begin
 
 end;
 
-function puv_fs_stat(path: TFileName; out info: Tpuv_stat_info): Integer;
+function puv_fs_stat(path: TFileName; out info: Tpuv_stat_info): TReqResult;
 var
   buf: TStat;
 begin
@@ -976,7 +1136,7 @@ begin
     StatToInfo(buf, info);
 end;
 
-function puv_fs_lstat(path: TFileName; out info: Tpuv_stat_info): Integer;
+function puv_fs_lstat(path: TFileName; out info: Tpuv_stat_info): TReqResult;
 var
   buf: TStat;
 begin
@@ -985,7 +1145,7 @@ begin
     StatToInfo(buf, info);
 end;
 
-function puv_fs_fstat(fd: Integer; out info: Tpuv_stat_info): Integer;
+function puv_fs_fstat(fd: Integer; out info: Tpuv_stat_info): TReqResult;
 var
   buf: TStat;
 begin
@@ -994,107 +1154,107 @@ begin
     StatToInfo(buf, info);
 end;
 
-function puv_fs_ftruncate(fd: Integer): Integer;
+function puv_fs_ftruncate(fd: Integer): TReqResult;
 begin
 
 end;
 
-function puv_fs_utime(): Integer;
+function puv_fs_utime(): TReqResult;
 begin
 
 end;
 
-function puv_fs_futime(): Integer;
+function puv_fs_futime(): TReqResult;
 begin
 
 end;
 
-function puv_fs_access(path: TFileName; mode: Integer): Integer;
+function puv_fs_access(path: TFileName; mode: Integer): TReqResult;
 begin
   Result := FpAccess(path, mode);
 end;
 
-function puv_fs_chmod(path: TFileName; mode: Integer): Integer;
+function puv_fs_chmod(path: TFileName; mode: Integer): TReqResult;
 begin
   Result := FpChmod(path, mode);
 end;
 
-function puv_fs_fchmod(fd: Integer; mode: Integer): Integer;
+function puv_fs_fchmod(fd: Integer; mode: Integer): TReqResult;
 begin
   Result := do_syscall(syscall_nr_fchmod, TSysParam(fd), TSysParam(mode));
 end;
 
-function puv_fs_fsync(): Integer;
+function puv_fs_fsync(): TReqResult;
 begin
 
 end;
 
-function puv_fs_fdatasync(): Integer;
+function puv_fs_fdatasync(): TReqResult;
 begin
 
 end;
 
-function puv_fs_unlink(path: TFileName): Integer;
+function puv_fs_unlink(path: TFileName): TReqResult;
 begin
   Result := FpUnlink(path);
 end;
 
-function puv_fs_rmdir(path: TFileName): Integer;
+function puv_fs_rmdir(path: TFileName): TReqResult;
 begin
   Result := FpRmdir(path);
 end;
 
-function puv_fs_mkdir(path: TFileName; mode: Integer): Integer;
+function puv_fs_mkdir(path: TFileName; mode: Integer): TReqResult;
 begin
   Result := FpMkdir(path, mode);
 end;
 
-function puv_fs_mkdtemp(): Integer;
+function puv_fs_mkdtemp(): TReqResult;
 begin
 
 end;
 
-function puv_fs_rename(): Integer;
+function puv_fs_rename(): TReqResult;
 begin
 
 end;
 
-function puv_fs_scandir(): Integer;
+function puv_fs_scandir(): TReqResult;
 begin
 
 end;
 
-function puv_fs_link(): Integer;
+function puv_fs_link(): TReqResult;
 begin
 
 end;
 
-function puv_fs_symlink(): Integer;
+function puv_fs_symlink(): TReqResult;
 begin
 
 end;
 
-function puv_fs_readlink(): Integer;
+function puv_fs_readlink(): TReqResult;
 begin
 
 end;
 
-function puv_fs_chown(): Integer;
+function puv_fs_chown(): TReqResult;
 begin
 
 end;
 
-function puv_fs_fchown(): Integer;
+function puv_fs_fchown(): TReqResult;
 begin
 
 end;
 
-function puv_fs_realpath(): Integer;
+function puv_fs_realpath(): TReqResult;
 begin
 
 end;
 
-function puv_fs_copyfile(): Integer;
+function puv_fs_copyfile(): TReqResult;
 begin
 
 end;

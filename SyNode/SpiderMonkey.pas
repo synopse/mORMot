@@ -3466,11 +3466,11 @@ var
   code: String;
 begin
   if not JS_IsExceptionPending(cx) then begin
-    code := puv_errno_str(puv_translate_sys_error(ErrorCode));
+    code := puv_errno_codestr(ErrorCode);
     if (aMessage = '') then begin
       if ErrorCode<>0 then
         aMessage := StringToSynUnicode(
-          Format('%s: %s%s%s', [code, SysErrorMessage(ErrorCode),
+          Format('%s: %s%s%s', [code, puv_errno_str(ErrorCode),
             ToAppendStr(SysCall), ToAppendStr(Path, True)]))
       else
         aMessage := StringToSynUnicode(SUnkOSError);
