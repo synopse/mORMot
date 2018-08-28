@@ -595,10 +595,14 @@ function hchmod(handle: THandle; mode: Integer): Integer;
 var
   nt_status: NTSTATUS;
   io_status: IO_STATUS_BLOCK;
-  file_info: FILE_BASIC_INFORMATION;
+  info: record
+    file_info: FILE_BASIC_INFORMATION;
+    gap1: ULONG;
+  end;
+  file_info: FILE_BASIC_INFORMATION absolute info;
 begin
-  nt_status := NtQueryInformationFile(
-    handle, @io_status, @file_info, sizeof(file_info), FileBasicInformation);
+  nt_status := NtQueryInformationFile(handle, @io_status,
+    @info, sizeof(info), FileBasicInformation);
 
   if not NT_SUCCESS(nt_status) then begin
     SetLastError(RtlNtStatusToDosError(nt_status));
@@ -611,7 +615,7 @@ begin
     file_info.FileAttributes := file_info.FileAttributes or FILE_ATTRIBUTE_READONLY;
 
   nt_status := NtSetInformationFile(
-    handle, @io_status, @file_info, sizeof(file_info), FileBasicInformation);
+    handle, @io_status, @info, sizeof(info), FileBasicInformation);
 
   if not NT_SUCCESS(nt_status) then begin
     SetLastError(RtlNtStatusToDosError(nt_status));
@@ -627,7 +631,8 @@ var
   err: Integer;
 begin
   handle := CreateFile(PChar(path),
-    FILE_READ_ATTRIBUTES, FILE_SHARE_READ or FILE_SHARE_WRITE or FILE_SHARE_DELETE,
+    FILE_READ_ATTRIBUTES or FILE_WRITE_ATTRIBUTES,
+    FILE_SHARE_READ or FILE_SHARE_WRITE or FILE_SHARE_DELETE,
     nil, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, 0);
   if (handle = INVALID_HANDLE_VALUE) then
     Result := -1
