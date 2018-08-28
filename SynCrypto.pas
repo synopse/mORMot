@@ -9305,8 +9305,8 @@ begin
 end;
 
 procedure HashFile(const aFileName: TFileName; aAlgos: THashAlgos);
-var data: RawByteString;
-    efn: TFileName;
+var data, hash: RawUTF8;
+    efn, fn: string;
     a: THashAlgo;
 begin
   if aAlgos=[] then
@@ -9315,10 +9315,11 @@ begin
   data := StringFromFile(aFileName);
   if data<>'' then
     for a := low(a) to high(a) do
-      if a in aAlgos then
-        FileFromString(
-          FormatUTF8('% *%'#13#10,[HashFull(a,pointer(data),length(data)),aFileName]),
-          format('%s.%s',[efn,LowerCase(TrimLeftLowerCaseShort(ToText(a)))]));
+      if a in aAlgos then begin
+        FormatUTF8('% *%',[HashFull(a,pointer(data),length(data)),efn],hash);
+        FormatString('%.%',[efn,LowerCase(TrimLeftLowerCaseShort(ToText(a)))],fn);
+        FileFromString(hash,fn);
+      end;
 end;
 
 
