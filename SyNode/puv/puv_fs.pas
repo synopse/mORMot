@@ -674,7 +674,11 @@ var
   info: BY_HANDLE_FILE_INFORMATION;
   disposition: FILE_DISPOSITION_INFORMATION;
   iosb: IO_STATUS_BLOCK;
-  basic: FILE_BASIC_INFORMATION;
+  basic_info: record
+    file_info: FILE_BASIC_INFORMATION;
+    gap1: ULONG;
+  end;
+  basic: FILE_BASIC_INFORMATION absolute basic_info;
   status: NTSTATUS;
 begin
   handle := CreateFile(
@@ -704,6 +708,7 @@ begin
     // Check if it is a reparse point. If it's not, it's a normal directory.
     if (info.dwFileAttributes and FILE_ATTRIBUTE_REPARSE_POINT) = 0 then begin
       //SET_REQ_WIN32_ERROR(req, ERROR_ACCESS_DENIED);
+      SetLastError(ERROR_ACCESS_DENIED);
       CloseHandle(handle);
       Exit(-1);
     end;
@@ -726,9 +731,10 @@ begin
     basic.FileAttributes := info.dwFileAttributes and not FILE_ATTRIBUTE_READONLY;
 
     status := NtSetInformationFile(
-      handle, @iosb, @basic, sizeof(basic), FileBasicInformation);
+      handle, @iosb, @basic_info, sizeof(basic_info), FileBasicInformation);
     if not NT_SUCCESS(status) then begin
       //SET_REQ_WIN32_ERROR(req, pRtlNtStatusToDosError(status));
+      SetLastError(RtlNtStatusToDosError(status));
       CloseHandle(handle);
       Exit(-1);
     end;
