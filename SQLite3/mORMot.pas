@@ -2694,7 +2694,8 @@ type
     procedure GetEnumNameAll(var result: RawUTF8; const Prefix: RawUTF8='';
       quotedValues: boolean=false); overload;
     /// get all enumeration names as a JSON array of strings
-    function GetEnumNameAllAsJSONArray(TrimLeftLowerCase: boolean): RawUTF8;
+    function GetEnumNameAllAsJSONArray(TrimLeftLowerCase: boolean;
+      UnCamelCased: boolean=false): RawUTF8;
     /// get the corresponding enumeration ordinal value, from its name
     // - if EnumName does start with lowercases 'a'..'z', they will be searched:
     // e.g. GetEnumNameValue('sllWarning') will find sllWarning item
@@ -31382,9 +31383,10 @@ begin
   end;
 end;
 
-function TEnumType.GetEnumNameAllAsJSONArray(TrimLeftLowerCase: boolean): RawUTF8;
+function TEnumType.GetEnumNameAllAsJSONArray(TrimLeftLowerCase, UnCamelCased: boolean): RawUTF8;
 var i: integer;
     V: PShortString;
+    uncamel: string;
     temp: TTextWriterStackBuffer;
 begin
   with TTextWriter.CreateOwnedStream(temp) do
@@ -31393,9 +31395,13 @@ begin
     V := @NameList;
     for i := MinValue to MaxValue do begin
       Add('"');
-      if TrimLeftLowerCase then
-        AddTrimLeftLowerCase(V) else
-        AddShort(V^);
+      if UnCamelCased then begin
+        GetCaptionFromTrimmed(V,uncamel);
+        AddNoJSONEscapeString(uncamel);
+      end else
+        if TrimLeftLowerCase then
+          AddTrimLeftLowerCase(V) else
+          AddShort(V^);
       Add('"',',');
       inc(PByte(V),length(V^)+1);
     end;

@@ -2895,7 +2895,7 @@ procedure Split(const Str, SepStr: RawUTF8; var LeftStr, RightStr: RawUTF8; ToUp
 function Split(const Str, SepStr: RawUTF8; var LeftStr: RawUTF8; ToUpperCase: boolean=false): RawUTF8; overload;
 
 /// returns the left part of a RawUTF8 string, according to SepStr separator
-// - if SepStr is found, returns Str first chars until (and exluding) SepStr
+// - if SepStr is found, returns Str first chars until (and excluding) SepStr
 // - if SepStr is not found, returns Str
 function Split(const Str, SepStr: RawUTF8; StartPos: integer=1): RawUTF8; overload;
 
@@ -13012,7 +13012,12 @@ function SystemInfoJson: RawUTF8;
 
 type
   /// the recognized operating systems
-  TOperatingSystem = (osUnknown, osWindows, osLinux, osOSX, osBSD, osPOSIX);
+  // - it will also recognize some of the distributions
+  TOperatingSystem = (osUnknown, osWindows, osLinux, osOSX, osBSD, osPOSIX,
+    osArch, osAurox, osDebian, osFedora, osGentoo, osKnoppix, osMint, osMandrake,
+    osMandriva, osNovell, osUbuntu, osSlackware, osSolaris, osSuse, osSynology,
+    osTrustix, osClear, osUnited, osRedHat, osLFS, osOracle, osMageia, osCentOS,
+    osCloud, osXen, osAmazon, osCoreOS);
   /// the recognized Windows versions
   // - defined even outside MSWINDOWS to allow process e.g. from monitoring tools
   TWindowsVersion = (
@@ -13027,7 +13032,7 @@ type
     case os: TOperatingSystem of
     osUnknown: (b: array[0..2] of byte);
     osWindows: (win: TWindowsVersion);
-    osLinux, osOSX, osBSD, osPOSIX: (utsrelease: array[0..2] of byte);
+    osLinux:   (utsrelease: array[0..2] of byte);
   end;
 
 const
@@ -13043,10 +13048,6 @@ const
 
   /// the compiler family used
   COMP_TEXT = {$ifdef FPC}'fpc'{$else}'delphi'{$endif};
-  /// the target Operating System used for compilation, as TOperatingSystem
-  OS_KIND = {$ifdef MSWINDOWS}osWindows{$else}{$ifdef DARWIN}osOSX{$else}
-  {$ifdef BSD}osBSD{$else}{$ifdef LINUX}osLinux{$else}osPOSIX
-  {$endif}{$endif}{$endif}{$endif};
   /// the target Operating System used for compilation, as text
   OS_TEXT = {$ifdef MSWINDOWS}'win'{$else}{$ifdef DARWIN}'osx'{$else}
   {$ifdef BSD}'bsd'{$else}{$ifdef LINUX}'linux'{$else}'posix'
@@ -13058,10 +13059,16 @@ const
     {$ifdef CPUSPARC}'sparc'+{$endif}{$endif}{$endif}
     {$ifdef CPU32}'32'{$else}'64'{$endif}{$endif}{$endif};
 
+function ToText(os: TOperatingSystem): PShortString; overload;
+
 var
+  /// the target Operating System used for compilation, as TOperatingSystem
+  OS_KIND: TOperatingSystem = {$ifdef MSWINDOWS}osWindows{$else}{$ifdef DARWIN}osOSX{$else}
+  {$ifdef BSD}osBSD{$else}{$ifdef LINUX}osLinux{$else}osPOSIX
+  {$endif}{$endif}{$endif}{$endif};
   /// the current Operating System version, as retrieved for the current process
   // - contains e.g. 'Windows Seven 64 SP1 (6.1.7601)' or
-  // 'Linux 3.13.0 110 generic#157 Ubuntu SMP Mon Feb 20 11:55:25 UTC 2017'
+  // 'Ubuntu 16.04.5 LTS - Linux 3.13.0 110 generic#157 Ubuntu SMP Mon Feb 20 11:55:25 UTC 2017'
   OSVersionText: RawUTF8;
   /// some textual information about the current CPU
   CpuInfoText: RawUTF8;
@@ -13175,6 +13182,8 @@ var
     dwNumberOfProcessors: cardinal;
     // as returned by fpuname()
     uts: UtsName;
+    // as from /etc/*-release
+    release: RawUTF8;
   end;
 
 {$ifdef KYLIX3}
@@ -26421,6 +26430,11 @@ begin
     result := false;
 end;
 
+function ToText(os: TOperatingSystem): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TOperatingSystem),ord(os));
+end;
+
 {$ifdef MSWINDOWS}
 procedure FileTimeToInt64(const FT: TFileTime; out I64: Int64);
 begin
@@ -26653,17 +26667,20 @@ var modname, beg: PUTF8Char;
     temp: shortstring;
     {$else}
     cpuinfo: PUTF8Char;
-    prod,prodver: RawUTF8;
+    proccpuinfo,prod,prodver,release,dist: RawUTF8;
+    distrib: TOperatingSystem;
+    SR: TSearchRec;
     {$endif BSD}
 begin
   modname := nil;
-  OSVersionInt32 := {$ifdef FPC}integer(KernelRevision shl 8)+{$endif}ord(OS_KIND);
   SystemInfo.dwPageSize := getpagesize; // use libc for this value
   {$ifdef BSD}
   fpuname(SystemInfo.uts);
   SystemInfo.dwNumberOfProcessors := fpsysctlhwint(HW_NCPU);
   BiosInfoText := fpsysctlhwstr(HW_MACHINE,temp);
   modname := fpsysctlhwstr(HW_MODEL,temp);
+  with SystemInfo.uts do
+    FormatUTF8('%-% %',[sysname,release,version],OSVersionText);
   {$else}
   {$ifdef KYLIX3}
   uname(SystemInfo.uts);
@@ -26678,7 +26695,8 @@ begin
       BiosInfoText := prod;
   end;
   SystemInfo.dwNumberOfProcessors := 0;
-  cpuinfo := pointer(StringFromFile('/proc/cpuinfo',true));
+  proccpuinfo := StringFromFile('/proc/cpuinfo',true);
+  cpuinfo := pointer(proccpuinfo);
   while cpuinfo<>nil do begin
     beg := cpuinfo;
     cpuinfo := GotoNextLine(cpuinfo);
@@ -26692,9 +26710,43 @@ begin
   modname := PosChar(modname,':');
   if modname<>nil then
     modname := GotoNextNotSpace(modname+1);
+  release := trim(FindIniNameValue(pointer(StringFromFile('/etc/os-release')),'PRETTY_NAME='));
+  if (release<>'') and (release[1]='"') then
+    release := copy(release,2,length(release)-2);
+  release := trim(release);
+  if release='' then begin
+    release := trim(FindIniNameValue(pointer(StringFromFile('/etc/lsb-release')),'DISTRIB_DESCRIPTION='));
+    if (release<>'') and (release[1]='"') then
+      release := copy(release,2,length(release)-2);
+  end;
+  if (release='') and (FindFirst('/etc/*-release',faAnyFile,SR)=0) then begin
+    release := StringToUTF8(SR.Name); // 'redhat-release' 'SuSE-release'
+    if IdemPChar(pointer(release),'LSB-') and (FindNext(SR)=0) then
+       release := StringToUTF8(SR.Name);
+    release := split(release,'-');
+    dist := split(trim(StringFromFile('/etc/'+SR.Name)),#10);
+    if (dist<>'') and (PosEx('=',dist)=0) then
+      release := dist; // e.g. 'Red Hat Enterprise Linux Server release 6.7 (Santiago)'
+    FindClose(SR);
+  end;
+  if release<>'' then begin
+    for distrib := osArch to high(distrib) do begin
+      dist := UpperCase(TrimLeftLowerCaseShort(ToText(distrib)));
+      if PosI(pointer(dist),release)>0 then begin
+        OS_KIND := distrib;
+        break;
+      end;
+    end;
+    if (OS_KIND=osLinux) and (PosEx('RH',release)>0) or (PosEx('Red Hat',release)>0) then
+      OS_KIND := osRedHat;
+  end;
+  SystemInfo.release := release;
   {$endif BSD}
+  OSVersionInt32 := {$ifdef FPC}integer(KernelRevision shl 8)+{$endif}ord(OS_KIND);
   with SystemInfo.uts do
-    FormatUTF8('%-% %',[sysname,release,version],OSVersionText);
+    FormatUTF8('% %',[sysname,release],OSVersionText);
+  if SystemInfo.release<>'' then
+    OSVersionText := FormatUTF8('% - %',[SystemInfo.release,OSVersionText]);
   if (SystemInfo.dwNumberOfProcessors>0) and (modname<>nil) then begin
     beg := modname;
     while not (ord(modname^) in [0,10,13]) do begin
