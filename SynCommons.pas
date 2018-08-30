@@ -5000,7 +5000,10 @@ type
     procedure ElemMoveTo(index: PtrInt; var Dest);
     /// will copy one variable content into an indexed element
     // - do nothing if index is out of range
-    procedure ElemCopyFrom(const Source; index: PtrInt); {$ifdef FPC}inline;{$endif}
+    // - ClearBeforeCopy will call ElemClear() before the copy, which may be safer
+    // if the source item is a copy of Values[index] with some dynamic arrays
+    procedure ElemCopyFrom(const Source; index: PtrInt;
+      ClearBeforeCopy: boolean=false); {$ifdef FPC}inline;{$endif}
     /// compare the content of two elements, returning TRUE if both values equal
     // - this method compares first using any supplied Compare property,
     // then by content using the RTTI element description of the whole record
@@ -47269,18 +47272,21 @@ begin
   FillCharFast(p^,ElemSize,0); // ElemType=nil for ObjArray
 end;
 
-procedure TDynArray.ElemCopyFrom(const Source; index: PtrInt);
+procedure TDynArray.ElemCopyFrom(const Source; index: PtrInt; ClearBeforeCopy: boolean);
 var p: pointer;
 begin
   p := ElemPtr(index);
   if p<>nil then
     if ElemType=nil then
-      MoveFast(Source,p^,ElemSize) else
+      MoveFast(Source,p^,ElemSize) else begin
+      if ClearBeforeCopy then // safer if Source is a copy of p^
+        {$ifdef FPC}FPCFinalize{$else}_Finalize{$endif}(p,ElemType);
       {$ifdef FPC}
       FPCRecordCopy(Source,p^,ElemType);
       {$else}
       CopyArray(p,@Source,ElemType,1);
       {$endif}
+    end;
 end;
 
 procedure TDynArray.Reverse;
@@ -58757,7 +58763,7 @@ begin
       if tim<>0 then
         fTimeOuts.Add(tim);
     end else begin
-      fValues.ElemCopyFrom(aValue,result);
+      fValues.ElemCopyFrom(aValue,result,{ClearBeforeCopy=}true);
       if tim<>0 then
         fTimeOut[result] := tim;
     end;
