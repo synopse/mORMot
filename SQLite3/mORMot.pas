@@ -9890,7 +9890,7 @@ type
     function Lock(aTable: TSQLRecordClass; aID: TID): boolean; overload;
     /// lock a record
     // - returns true on success, false if was already locked
-    function Lock(aTableIndex, aID: TID): boolean; overload;
+    function Lock(aTableIndex: integer; aID: TID): boolean; overload;
     /// lock a record
     // - returns true on success, false if was already locked
     function Lock(aRec: TSQLRecord): boolean; overload;
@@ -13602,7 +13602,7 @@ type
     fCache: TSQLRestCacheEntryDynArray;
     /// retrieve a record specified by its ID from cache into JSON content
     // - return '' if the item is not in cache
-    function Retrieve(aTableIndex, aID: TID): RawUTF8; overload;
+    function Retrieve(aTableIndex: integer; aID: TID): RawUTF8; overload;
     /// fill a record specified by its ID from cache into a new TSQLRecord instance
     // - return false if the item is not in cache
     // - this method will call RetrieveJSON method, unserializing the cached
@@ -13694,10 +13694,10 @@ type
     /// TSQLRest instance shall call this method when a record is deleted
     // - this method is dedicated for a record deletion
     // - TSQLRecordClass to be specified as its index in Rest.Model.Tables[]
-    procedure NotifyDeletion(aTableIndex, aID: TID); overload;
+    procedure NotifyDeletion(aTableIndex: integer; aID: TID); overload;
     /// TSQLRest instance shall call this method when records are deleted
     // - TSQLRecordClass to be specified as its index in Rest.Model.Tables[]
-    procedure NotifyDeletions(aTableIndex: TID; const aIDs: array of Int64); overload;
+    procedure NotifyDeletions(aTableIndex: integer; const aIDs: array of Int64); overload;
   end;
 
   /// optimized thread-safe storage of a list of IP v4 adresses
@@ -34625,7 +34625,7 @@ begin
     result := Tables[aTableIndex].GetSQLCreate(self);
 end;
 
-function TSQLModel.GetSQLAddField(aTableIndex, aFieldIndex: integer): RawUTF8;
+function TSQLModel.GetSQLAddField(aTableIndex: integer; aFieldIndex: integer): RawUTF8;
 begin
   if (self=nil) or (cardinal(aTableIndex)>cardinal(fTablesMax)) then
     result := '' else
@@ -34654,7 +34654,7 @@ begin
   end;
 end;
 
-function TSQLModel.Lock(aTableIndex, aID: TID): boolean;
+function TSQLModel.Lock(aTableIndex: integer; aID: TID): boolean;
 begin
   if (self=nil) or (Cardinal(aTableIndex)>cardinal(fTablesMax)) then
     result := false else begin
@@ -35695,7 +35695,9 @@ end;
 
 function TSQLRest.MemberExists(Table: TSQLRecordClass; ID: TID): boolean;
 begin
-  result := OneFieldValue(Table,'RowID',ID)<>'';
+  if fCache.Retrieve(Model.GetTableIndexExisting(Table),ID)<>'' then
+    result := true else
+    result := OneFieldValue(Table,'RowID',ID)<>''; // try from DB
 end;
 
 function TSQLRest.OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
@@ -37555,7 +37557,7 @@ begin
         SetJSON(aID,aJSON);
 end;
 
-procedure TSQLRestCache.NotifyDeletion(aTableIndex, aID: TID);
+procedure TSQLRestCache.NotifyDeletion(aTableIndex: integer; aID: TID);
 begin
   if (self<>nil) and (aID>0) and
      (Cardinal(aTableIndex)<Cardinal(Length(fCache))) then
@@ -37570,7 +37572,7 @@ begin
     end;
 end;
 
-procedure TSQLRestCache.NotifyDeletions(aTableIndex: TID; const aIDs: array of Int64);
+procedure TSQLRestCache.NotifyDeletions(aTableIndex: integer; const aIDs: array of Int64);
 var i: integer;
 begin
   if (self<>nil) and (high(aIDs)>=0) and
@@ -37602,18 +37604,18 @@ begin
   TableIndex := fRest.Model.GetTableIndexExisting(PSQLRecordClass(aValue)^);
   if TableIndex<cardinal(Length(fCache)) then
     with fCache[TableIndex] do
-    if CacheEnable and RetrieveJSON(aID,aValue) then
-      result := true;
+      if CacheEnable and RetrieveJSON(aID,aValue) then
+        result := true;
 end;
 
-function TSQLRestCache.Retrieve(aTableIndex, aID: TID): RawUTF8;
+function TSQLRestCache.Retrieve(aTableIndex: integer; aID: TID): RawUTF8;
 begin
   result := '';
   if (self<>nil) and (aID>0) and
      (Cardinal(aTableIndex)<Cardinal(Length(fCache))) then
     with fCache[aTableIndex] do
-    if CacheEnable then
-      RetrieveJSON(aID,result);
+      if CacheEnable then
+        RetrieveJSON(aID,result);
 end;
 
 

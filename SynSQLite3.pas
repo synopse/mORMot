@@ -3556,10 +3556,11 @@ begin
 end;
 
 function CheckNumberOfArgs(Context: TSQLite3FunctionContext; expected,sent: integer): boolean;
+var msg: ShortString;
 begin
   if sent<>expected then begin
-    sqlite3.result_error(Context,
-      pointer(FormatUTF8('wrong number of arguments: expected %, got %',[expected,sent])));
+    FormatShort('wrong number of arguments: expected %, got %',[expected,sent],msg);
+    sqlite3.result_error(Context,@msg[1],ord(msg[0]));
     result := false;
   end else
     result := true;
@@ -3577,7 +3578,7 @@ procedure InternalSoundex(Context: TSQLite3FunctionContext;
   argc: integer; var argv: TSQLite3ValueArray); cdecl;
 begin
   if CheckNumberOfArgs(Context,1,argc) then
-    sqlite3.result_int64(Context, SoundExUTF8(sqlite3.value_text(argv[0]))) else
+    sqlite3.result_int64(Context, SoundExUTF8(sqlite3.value_text(argv[0])));
 end;
 
 procedure InternalSoundexFr(Context: TSQLite3FunctionContext;
