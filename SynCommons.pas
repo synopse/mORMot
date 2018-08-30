@@ -13980,6 +13980,9 @@ procedure RawUTF8ToVariant(Txt: PUTF8Char; TxtLen: integer; var Value: variant);
 /// convert an UTF-8 encoded string into a variant RawUTF8 varString
 procedure RawUTF8ToVariant(const Txt: RawUTF8; var Value: variant); overload;
 
+/// convert a FormatUTF8() UTF-8 encoded string into a variant RawUTF8 varString
+procedure FormatUTF8ToVariant(const Fmt: RawUTF8; const Args: array of const; var Value: variant);
+
 /// convert an UTF-8 encoded string into a variant RawUTF8 varString
 function RawUTF8ToVariant(const Txt: RawUTF8): variant; overload;
   {$ifdef HASINLINE}inline;{$endif}
@@ -43259,6 +43262,12 @@ begin
       SetCodePage(RawByteString(VAny),CP_UTF8,false); // force explicit UTF-8
     {$endif}
   end;
+end;
+
+procedure FormatUTF8ToVariant(const Fmt: RawUTF8; const Args: array of const;
+  var Value: variant);
+begin
+  RawUTF8ToVariant(FormatUTF8(Fmt,Args),Value);
 end;
 
 function RawUTF8ToVariant(const Txt: RawUTF8): variant;
