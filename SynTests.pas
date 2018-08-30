@@ -179,7 +179,7 @@ type
     /// any text assigned to this field will be displayed on console
     fRunConsole: string;
     fCheckLogTime: TPrecisionTimer;
-    fCheckLastMsg: string;
+    fCheckLastMsg: cardinal;
     fCheckLastTix: cardinal;
     /// override this method to prepare any published method execution
     procedure Setup; virtual;
@@ -539,18 +539,19 @@ end;
 
 procedure TSynTestCase.AddLog(condition: Boolean; const msg: string);
 const LEV: array[boolean] of TSynLogInfo = (sllFail, sllCustom4);
-var tix: cardinal;
+var tix, crc: cardinal; // use a crc since strings are not thread-safe
 begin
   if condition then begin
-    if msg=fCheckLastMsg then begin // no need to be too much verbose
+    crc := crc32c(0,pointer(msg),length(msg)*SizeOf(msg[1]));
+    if crc=fCheckLastMsg then begin // no need to be too much verbose
       tix := GetTickCount64 shr 8;
       if tix=fCheckLastTix then
         exit;
       fCheckLastTix := tix;
     end;
-    fCheckLastMsg := msg;
+    fCheckLastMsg := crc;
   end else
-    fCheckLastMsg := '';
+    fCheckLastMsg := 0;
   TSynLogTestLog.Add.Log(LEV[condition],'% % [%]',
     [ClassType,TestName[Owner.fCurrentMethodIndex],msg]);
 end;
@@ -602,16 +603,21 @@ end;
 
 procedure TSynTestCase.CheckUTF8(condition: Boolean; const msg: RawUTF8;
   const args: array of const);
-  procedure SubProcToAvoidTryFinally;
+  procedure SubProcForMessage;
   var str: string;
   begin
-    FormatString(msg,args,str);
-    Check(condition,str);
+    if msg<>'' then begin
+      FormatString(msg,args,str);
+      if tcoLogEachCheck in fOptions then
+        AddLog(condition,str);
+    end;
+    if not condition then
+      TestFailed(str);
   end;
 begin
-  if condition and not (tcoLogEachCheck in fOptions) then
-    InterlockedIncrement(fAssertions) else
-    SubProcToAvoidTryFinally;
+  InterlockedIncrement(fAssertions);
+  if not condition or (tcoLogEachCheck in fOptions) then
+    SubProcForMessage;
 end;
 
 procedure TSynTestCase.CheckLogTimeStart;
@@ -991,7 +997,7 @@ function TSynTests.Run: Boolean;
 var i,t,m: integer;
     Elapsed, Version: RawUTF8;
     C: TSynTestCase;
-    ILog: IUnknown;
+    log: IUnknown;
 begin
   if TTextRec(fSaveToFile).Handle=0 then
     CreateSaveToFile;
@@ -1033,10 +1039,10 @@ begin
         C.fRunConsoleOccurenceNumber := fRunConsoleOccurenceNumber;
         fCurrentMethod := i;
         fCurrentMethodIndex := t;
-        ILog := BeforeRun(C.fTests[t].TestNameUTF8);
+        log := BeforeRun(C.fTests[t].TestNameUTF8);
         TestTimer.Start;
         TSynTestEvent(C.TestMethod[t])(); // run tests + Check() and TestFailed()
-        ILog := nil; // will trigger logging leave method e.g.
+        log := nil; // will trigger logging leave method e.g.
         DuringRun(i,t);
       except
         on E: Exception do begin

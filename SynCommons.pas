@@ -1811,7 +1811,7 @@ function AsciiToBaudot(P: PAnsiChar; len: integer): RawByteString; overload;
 
 /// convert some ASCII-7 text into binary, using Emile Baudot code
 // - as used in telegraphs, covering a-z 0-9 - ' , ! : ( + ) $ ? @ . / ; charset
-// - also #13 and #10 control chars will be transcoded
+// - also ' ' (#32) and #13 / #10 control chars will be transcoded
 // - any upper case char will be converted into lowercase during encoding
 // - other characters (e.g. UTF-8 accents, or controls chars) will be ignored
 // - resulting binary will consume 5 (or 10) bits per character
@@ -11289,7 +11289,7 @@ function crc32cinlined(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 function crc64c(buf: PAnsiChar; len: cardinal): Int64;
 
 /// compute CRC63C checksum on the supplied buffer, cascading two crc32c
-// - similar to crc64c, but with 63-bit, so no negative value, so may be used
+// - similar to crc64c, but with 63-bit, so no negative value: may be used
 // safely e.g. as mORMot's TID source
 // - will use SSE 4.2 hardware accelerated instruction, if available
 // - will combine two crc32c() calls into a single Int64 result

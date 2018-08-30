@@ -62706,7 +62706,7 @@ var i: integer;
     a: TSQLRecordObjArray absolute aSQLRecordObjArray;
 begin
   for i := 0 to length(a)-1 do
-    if a[i].IDValue=aID then begin
+    if a[i].fID=aID then begin
       result := a[i];
       exit;
     end;
