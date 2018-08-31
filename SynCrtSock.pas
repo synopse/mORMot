@@ -1152,6 +1152,7 @@ type
     fRemoteIPHeader, fRemoteIPHeaderUpper: SockString;
     function GetAPIVersion: string; virtual; abstract;
     procedure SetServerName(const aName: SockString); virtual;
+    procedure SetOnRequest(const aRequest: TOnHttpServerRequest); virtual;
     procedure SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody); virtual;
     procedure SetOnBeforeRequest(const aEvent: TOnHttpServerRequest); virtual;
     procedure SetOnAfterRequest(const aEvent: TOnHttpServerRequest); virtual;
@@ -1207,7 +1208,7 @@ type
     // virtual Request method
     // - warning: this process must be thread-safe (can be called by several
     // threads simultaneously)
-    property OnRequest: TOnHttpServerRequest read fOnRequest write fOnRequest;
+    property OnRequest: TOnHttpServerRequest read fOnRequest write SetOnRequest;
     /// event handler called just before the body is retrieved from the client
     // - should return STATUS_SUCCESS=200 to continue the process, or an HTTP
     // error code to reject the request immediatly, and close the connection
@@ -1363,6 +1364,7 @@ type
     function GetAPIVersion: string; override;
     function GetLogging: boolean;
     procedure SetServerName(const aName: SockString); override;
+    procedure SetOnRequest(const aRequest: TOnHttpServerRequest); override;
     procedure SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody); override;
     procedure SetOnBeforeRequest(const aEvent: TOnHttpServerRequest); override;
     procedure SetOnAfterRequest(const aEvent: TOnHttpServerRequest); override;
@@ -5513,6 +5515,11 @@ begin
   fServerName := aName;
 end;
 
+procedure THttpServerGeneric.SetOnRequest(const aRequest: TOnHttpServerRequest);
+begin
+  fOnRequest := aRequest;
+end;
+
 procedure THttpServerGeneric.SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody);
 begin
   fOnBeforeBody := aEvent;
@@ -8676,6 +8683,15 @@ begin
   if fClones<>nil then // server name is shared by all clones
     for i := 0 to fClones.Count-1 do
       THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetServerName(aName);
+end;
+
+procedure THttpApiServer.SetOnRequest(const aRequest: TOnHttpServerRequest);
+var i: integer;
+begin
+  inherited SetOnRequest(aRequest);
+  if fClones<>nil then // event is shared by all clones
+    for i := 0 to fClones.Count-1 do
+      THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetOnRequest(aRequest);
 end;
 
 procedure THttpApiServer.SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody);

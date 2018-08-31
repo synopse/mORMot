@@ -26737,7 +26737,7 @@ begin
         break;
       end;
     end;
-    if (OS_KIND=osLinux) and (PosEx('RH',release)>0) or (PosEx('Red Hat',release)>0) then
+    if (OS_KIND=osLinux) and ((PosEx('RH',release)>0) or (PosEx('Red Hat',release)>0)) then
       OS_KIND := osRedHat;
   end;
   SystemInfo.release := release;
