@@ -1221,14 +1221,14 @@ type
     // unless return code is STATUS_ACCEPTED (202), then OnRequest will be called
     // - warning: this handler must be thread-safe (can be called by several
     // threads simultaneously)
-    property OnBeforeRequest: TOnHttpServerRequest read fOnBeforeRequest write fOnBeforeRequest;
+    property OnBeforeRequest: TOnHttpServerRequest read fOnBeforeRequest write SetOnBeforeRequest;
     /// event handler called after request is processed but before response
     // is sent back to client
     // - main purpose is to apply post-processor, not part of request logic
     // - if handler returns value > 0 it will override the OnProcess response code
     // - warning: this handler must be thread-safe (can be called by several
     // threads simultaneously)
-    property OnAfterRequest: TOnHttpServerRequest  read fOnAfterRequest write fOnAfterRequest;
+    property OnAfterRequest: TOnHttpServerRequest  read fOnAfterRequest write SetOnAfterRequest;
     /// event handler called after each working Thread is just initiated
     // - called in the thread context at first place in THttpServerGeneric.Execute
     property OnHttpThreadStart: TNotifyThreadEvent
