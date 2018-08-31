@@ -100,7 +100,6 @@ type
   /// set of options to tune TSynTest process
   TSynTestOptions = set of TSynTestOption;
 
-{$M+} { we need the RTTI for the published methods of this object class }
   /// a generic class for both tests suit and cases
   // - purpose of this ancestor is to have RTTI for its published methods,
   // and to handle a class text identifier, or uncamelcase its class name
@@ -108,7 +107,7 @@ type
   // - sample code about how to use this test framework is available in
   // the "Sample\07 - SynTest" folder
   // - see @https://synopse.info/forum/viewtopic.php?pid=277
-  TSynTest = class
+  TSynTest = class(TSynPersistentLock)
   protected
     fTests: array of record
       TestName: string;
@@ -128,7 +127,7 @@ type
     // T[Syn][Test] left trim and un-camel-case
     // - this constructor will add all published methods to the internal
     // test list, accessible via the Count/TestName/TestMethod properties
-    constructor Create(const Ident: string = '');
+    constructor Create(const Ident: string = ''); reintroduce;
     /// register a specified test to this class instance
     procedure Add(const aMethod: TSynTestEvent; const aName: string);
     /// the test name
@@ -156,7 +155,6 @@ type
     { all published methods of the children will be run as individual tests
       - these methods must be declared as procedure with no parameter }
   end;
-{$M-}
 
   TSynTests = class;
 
@@ -193,7 +191,7 @@ type
     // - must supply a test suit owner
     // - if an identifier is not supplied, the class name is used, after
     // T[Syn][Test] left trim and un-camel-case
-    constructor Create(Owner: TSynTests; const Ident: string = ''); virtual;
+    constructor Create(Owner: TSynTests; const Ident: string = ''); reintroduce; virtual; 
     /// clean up the instance
     // - will call CleanUp, even if already done before
     destructor Destroy; override;
@@ -229,6 +227,7 @@ type
     procedure CheckUTF8(condition: Boolean; const msg: RawUTF8; const args: array of const);
     /// used by published methods to start some timing on associated log
     // - call this once, before one or several consecutive CheckLogTime()
+    // - warning: this method is not thread-safe
     procedure CheckLogTimeStart;
       {$ifdef HASINLINE}inline;{$endif}
     /// used by published methods to write some timing on associated log
@@ -236,6 +235,7 @@ type
     // internal timer
     // - condition must equals TRUE to pass the test
     // - the supplied message would be appended, with its timing
+    // - warning: this method is not thread-safe
     procedure CheckLogTime(condition: boolean;
       const msg: RawUTF8; const args: array of const; level: TSynLogInfo=sllTrace);
     /// create a temporary string random content, WinAnsi (code page 1252) content
@@ -262,6 +262,7 @@ type
     procedure TestFailed(const msg: string);
     /// will add to the console a message with a speed estimation
     // - speed is computed from the method start
+    // - warning: this method is not thread-safe if a local Timer is not specified
     procedure NotifyTestSpeed(const ItemName: string; ItemCount: integer;
       SizeInBytes: cardinal=0; Timer: PPrecisionTimer=nil);
     /// append some text to the current console
@@ -354,7 +355,7 @@ type
     // T[Syn][Test] left trim and un-camel-case
     // - this constructor will add all published methods to the internal
     // test list, accessible via the Count/TestName/TestMethod properties
-    constructor Create(const Ident: string = '');
+    constructor Create(const Ident: string = ''); reintroduce;
     /// finalize the class instance
     // - release all registered Test case instance
     destructor Destroy; override;
@@ -447,7 +448,7 @@ type
   public
     /// create the test instance and initialize associated LogFile instance
     // - this will allow logging of all exceptions to the LogFile
-    constructor Create(const Ident: string = '');
+    constructor Create(const Ident: string = ''); reintroduce;
     /// release associated memory
     destructor Destroy; override;
     /// the .log file generator created if any test case failed
@@ -483,6 +484,7 @@ var id: RawUTF8;
     methods: TPublishedMethodInfoDynArray;
     i: integer;
 begin
+  inherited Create;
   if Ident<>'' then
     fIdent := Ident else begin
     ToText(ClassType,id);
@@ -796,9 +798,14 @@ end;
 
 procedure TSynTestCase.AddConsole(const msg: string);
 begin
-  if fRunConsole<>'' then
-    fRunConsole := fRunConsole+#13#10'     '+msg else
-    fRunConsole := fRunConsole+msg;
+  fSafe.Lock;
+  try
+    if fRunConsole<>'' then
+      fRunConsole := fRunConsole+#13#10'     '+msg else
+      fRunConsole := fRunConsole+msg;
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 procedure TSynTestCase.NotifyTestSpeed(const ItemName: string;
@@ -862,7 +869,7 @@ end;
 
 procedure TSynTests.CreateSaveToFile;
 begin
-  Assign(fSaveToFile,'');
+  System.Assign(fSaveToFile,'');
   Rewrite(fSaveToFile);
   StdOut := TTextRec(fSaveToFile).Handle;
 end;
@@ -934,7 +941,12 @@ end;
 
 procedure TSynTests.Failed(const msg: string; aTest: TSynTestCase);
 begin
-  fFailed.AddObject(msg,aTest);
+  fSafe.Lock;
+  try
+    fFailed.AddObject(msg,aTest);
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 function TSynTests.GetFailedCase(Index: integer): TSynTestCase;
@@ -1102,7 +1114,7 @@ begin
     FN := DestPath+FileName;
   if ExtractFilePath(FN)='' then
     FN := ExeVersion.ProgramFilePath+FN;
-  assign(fSaveToFile,FN);
+  system.assign(fSaveToFile,FN);
   rewrite(fSaveToFile);
   if IOResult<>0 then
     fillchar(fSaveToFile,sizeof(fSaveToFile),0);
