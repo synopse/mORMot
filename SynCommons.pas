@@ -6734,6 +6734,10 @@ function SortDynArrayDouble(const A,B): integer;
 /// compare two "array of AnsiString" elements, with case sensitivity
 function SortDynArrayAnsiString(const A,B): integer;
 
+/// compare two "array of RawByteString" elements, with case sensitivity
+// - can't use StrComp() or similar functions since RawByteString may contain #0
+function SortDynArrayRawByteString(const A,B): integer;
+
 /// compare two "array of AnsiString" elements, with no case sensitivity
 function SortDynArrayAnsiStringI(const A,B): integer;
 
@@ -6858,7 +6862,7 @@ var
     SortDynArrayInt64, SortDynArrayQWord, SortDynArrayDouble,
     SortDynArrayInt64, SortDynArrayInt64, SortDynArrayDouble, SortDynArrayDouble,
     SortDynArrayAnsiString, SortDynArrayAnsiString, SortDynArrayString,
-    SortDynArrayAnsiString, SortDynArrayUnicodeString,
+    SortDynArrayRawByteString, SortDynArrayUnicodeString,
     SortDynArrayUnicodeString, SortDynArray128, SortDynArray256,
     SortDynArray512, SortDynArrayPointer,
     {$ifndef NOVARIANTS}SortDynArrayVariant,{$endif} nil),
@@ -6867,7 +6871,7 @@ var
     SortDynArrayInt64, SortDynArrayQWord, SortDynArrayDouble,
     SortDynArrayInt64, SortDynArrayInt64, SortDynArrayDouble, SortDynArrayDouble,
     SortDynArrayAnsiStringI, SortDynArrayAnsiStringI, SortDynArrayStringI,
-    SortDynArrayAnsiStringI, SortDynArrayUnicodeStringI,
+    SortDynArrayRawByteString, SortDynArrayUnicodeStringI,
     SortDynArrayUnicodeStringI, SortDynArray128, SortDynArray256,
     SortDynArray512, SortDynArrayPointer,
     {$ifndef NOVARIANTS}SortDynArrayVariantI,{$endif} nil));
@@ -24900,6 +24904,34 @@ begin
   result := StrIComp(PUTF8Char(A),PUTF8Char(B));
 end;
 
+function SortDynArrayRawByteString(const A,B): integer;
+var p1,p2: PByteArray;
+    l1,l2,i,l: PtrInt; // FPC uses efficiently the CPU registers
+begin // we can't use StrComp() since a RawByteString may contain #0
+  p1 := pointer(A);
+  p2 := pointer(B);
+  if p1<>p2 then
+    if p1<>nil then
+      if p2<>nil then begin
+        l1 := PStrRec(Pointer(PtrInt(p1)-STRRECSIZE))^.length;
+        l2 := PStrRec(Pointer(PtrInt(p2)-STRRECSIZE))^.length;
+        l := l1;
+        if l2<l1 then
+          l := l2;
+        i := 0;
+        repeat
+          result := p1[i]-p2[i];
+          if result<>0 then
+            exit;
+          inc(i);
+        until i>=l;
+        result := l1-l2;
+      end else
+      result := 1 else  // p2=''
+    result := -1 else // p1=''
+  result := 0;      // p1=p2
+end;
+
 function SortDynArrayPUTF8Char(const A,B): integer;
 begin
   result := StrComp(pointer(A),pointer(B));
@@ -26004,8 +26036,13 @@ asm // Delphi x86 compiler is not efficient, and oldest even incorrect
 @p:     mov     eax, 1
 end;
 
+function SortDynArrayRawByteString(const A,B): integer;
+asm
+        jmp     SortDynArrayAnsiString
+end;
+
 function SortDynArrayAnsiString(const A,B): integer;
-asm // x86 version optimized for RawByteString/AnsiString/RawUTF8 types
+asm // x86 version optimized for AnsiString/RawUTF8 types
         mov     eax, [eax]
         mov     edx, [edx]
         cmp     eax, edx
@@ -64712,7 +64749,6 @@ begin
     StrComp := @StrCompSSE42;
     DYNARRAY_SORTFIRSTFIELD[false,djRawUTF8] := @SortDynArrayAnsiStringSSE42;
     DYNARRAY_SORTFIRSTFIELD[false,djWinAnsi] := @SortDynArrayAnsiStringSSE42;
-    DYNARRAY_SORTFIRSTFIELD[false,djRawByteString] := @SortDynArrayAnsiStringSSE42;
     {$ifndef UNICODE}
     DYNARRAY_SORTFIRSTFIELD[false,djString] := @SortDynArrayAnsiStringSSE42;
     {$endif}
