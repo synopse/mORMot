@@ -100,14 +100,13 @@ type
   /// set of options to tune TSynTest process
   TSynTestOptions = set of TSynTestOption;
 
-  /// a generic class for both tests suit and cases
+  /// abstract parent class for both tests suit (TSynTests) and cases (TSynTestCase)
   // - purpose of this ancestor is to have RTTI for its published methods,
   // and to handle a class text identifier, or uncamelcase its class name
   // if no identifier was defined
   // - sample code about how to use this test framework is available in
   // the "Sample\07 - SynTest" folder
-  // - see @https://synopse.info/forum/viewtopic.php?pid=277
-  TSynTest = class(TSynPersistentLock)
+  TSynTest = class(TSynPersistent)
   protected
     fTests: array of record
       TestName: string;
@@ -127,7 +126,7 @@ type
     // T[Syn][Test] left trim and un-camel-case
     // - this constructor will add all published methods to the internal
     // test list, accessible via the Count/TestName/TestMethod properties
-    constructor Create(const Ident: string = ''); reintroduce;
+    constructor Create(const Ident: string = ''); reintroduce; virtual;
     /// register a specified test to this class instance
     procedure Add(const aMethod: TSynTestEvent; const aName: string);
     /// the test name
@@ -191,7 +190,7 @@ type
     // - must supply a test suit owner
     // - if an identifier is not supplied, the class name is used, after
     // T[Syn][Test] left trim and un-camel-case
-    constructor Create(Owner: TSynTests; const Ident: string = ''); reintroduce; virtual; 
+    constructor Create(Owner: TSynTests; const Ident: string = ''); reintroduce; virtual;
     /// clean up the instance
     // - will call CleanUp, even if already done before
     destructor Destroy; override;
@@ -308,6 +307,7 @@ type
     fAssertionsFailed: integer;
     fCurrentMethod, fCurrentMethodIndex: integer;
     fSaveToFile: Text;
+    fSafe: TSynLocker;
     function GetTestCase(Index: integer): TSynTestCase;
     function GetTestCaseCount: Integer;
     function GetFailedCaseIdent(Index: integer): string;
@@ -335,6 +335,15 @@ type
     CustomVersions: string;
     /// contains the run elapsed time
     RunTimer, TestTimer, TotalTimer: TPrecisionTimer;
+    /// create the test suit
+    // - if an identifier is not supplied, the class name is used, after
+    // T[Syn][Test] left trim and un-camel-case
+    // - this constructor will add all published methods to the internal
+    // test list, accessible via the Count/TestName/TestMethod properties
+    constructor Create(const Ident: string = ''); override;
+    /// finalize the class instance
+    // - release all registered Test case instance
+    destructor Destroy; override;
     /// you can call this class method to perform all the tests on the Console
     // - it will create an instance of the corresponding class, with the
     // optional identifier to be supplied to its constructor
@@ -350,15 +359,6 @@ type
     class procedure RunAsConsole(const CustomIdent: string='';
       withLogs: TSynLogInfos=[sllLastError,sllError,sllException,sllExceptionOS];
       options: TSynTestOptions=[]); virtual;
-    /// create the test instance
-    // - if an identifier is not supplied, the class name is used, after
-    // T[Syn][Test] left trim and un-camel-case
-    // - this constructor will add all published methods to the internal
-    // test list, accessible via the Count/TestName/TestMethod properties
-    constructor Create(const Ident: string = ''); reintroduce;
-    /// finalize the class instance
-    // - release all registered Test case instance
-    destructor Destroy; override;
     /// save the debug messages into an external file
     // - if no file name is specified, the current Ident is used
     procedure SaveToFile(const DestPath: TFileName; const FileName: TFileName='');
@@ -546,7 +546,7 @@ begin
   if condition then begin
     crc := crc32c(0,pointer(msg),length(msg)*SizeOf(msg[1]));
     if crc=fCheckLastMsg then begin // no need to be too much verbose
-      tix := GetTickCount64 shr 8;
+      tix := GetTickCount64 shr 8; // also avoid to use a lock
       if tix=fCheckLastTix then
         exit;
       fCheckLastTix := tix;
@@ -555,7 +555,7 @@ begin
   end else
     fCheckLastMsg := 0;
   TSynLogTestLog.Add.Log(LEV[condition],'% % [%]',
-    [ClassType,TestName[Owner.fCurrentMethodIndex],msg]);
+    [ClassType,TestName[fOwner.fCurrentMethodIndex],msg]);
 end;
 
 procedure TSynTestCase.Check(condition: Boolean; const msg: string);
@@ -790,21 +790,26 @@ end;
 
 procedure TSynTestCase.TestFailed(const msg: string);
 begin
-  TSynLogTestLog.DebuggerNotify(sllFail,'#% %',[fAssertions-fAssertionsBeforeRun,msg]);
-  if Owner<>nil then // avoid GPF
-    Owner.Failed(msg,self);
-  InterlockedIncrement(fAssertionsFailed);
+  fOwner.fSafe.Lock; // protect when the test case is run from multiple threads
+  try
+    TSynLogTestLog.DebuggerNotify(sllFail,'#% %',[fAssertions-fAssertionsBeforeRun,msg]);
+    if Owner<>nil then // avoid GPF
+      Owner.Failed(msg,self);
+    inc(fAssertionsFailed);
+  finally
+    fOwner.fSafe.UnLock;
+  end;   
 end;
 
 procedure TSynTestCase.AddConsole(const msg: string);
 begin
-  fSafe.Lock;
+  fOwner.fSafe.Lock;
   try
     if fRunConsole<>'' then
       fRunConsole := fRunConsole+#13#10'     '+msg else
       fRunConsole := fRunConsole+msg;
   finally
-    fSafe.UnLock;
+    fOwner.fSafe.UnLock;
   end;
 end;
 
@@ -857,6 +862,7 @@ begin
   inherited Create(Ident);
   fFailed := TStringList.Create;
   fTestCase := TObjectList.Create;
+  fSafe.Init;
 end;
 
 {$I-}
@@ -881,6 +887,7 @@ begin
   if TTextRec(fSaveToFile).Handle<>0 then
     Close(fSaveToFile);
   inherited Destroy;
+  fSafe.Done;
 end;
 
 procedure TSynTests.DuringRun(TestCaseIndex, TestMethodIndex: integer);
@@ -907,8 +914,8 @@ begin
         Write(fSaveToFile,IntToThousandString(Run),' assertions passed');
     end else begin
       Color(ccLightRed);
-      Write(fSaveToFile,'!  - ',C.TestName[TestMethodIndex],': ',
-        IntToThousandString(Failed),' / ',
+      Write(fSaveToFile,{$ifdef LINUX}#10+{$endif}'!  - ',
+        C.TestName[TestMethodIndex],': ',IntToThousandString(Failed),' / ',
         IntToThousandString(Run),' FAILED'); // ! to highlight the line
     end;
     Write(fSaveToFile,'  ',TestTimer.Stop);
@@ -941,12 +948,7 @@ end;
 
 procedure TSynTests.Failed(const msg: string; aTest: TSynTestCase);
 begin
-  fSafe.Lock;
-  try
-    fFailed.AddObject(msg,aTest);
-  finally
-    fSafe.UnLock;
-  end;
+  fFailed.AddObject(msg,aTest);
 end;
 
 function TSynTests.GetFailedCase(Index: integer): TSynTestCase;
