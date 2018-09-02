@@ -2341,6 +2341,9 @@ type
 
 {$ifdef USELIBCURL}
 type
+  /// libcurl exception type
+  ECurlHTTP = class(Exception);
+
   /// a class to handle HTTP/1.1 request using the libcurl library
   // - libcurl is a free and easy-to-use cross-platform URL transfer library,
   // able to directly connect via HTTP or HTTPS on most Linux systems
@@ -2348,8 +2351,8 @@ type
   // like OpenSSL) may not be installed - you can add it via your package
   // manager, e.g. on Ubuntu:
   // $ sudo apt-get install libcurl3
-  // - under a 64-bit Linux system, you should install the 32-bit flavor of
-  // libcurl, e.g. on Ubuntu:
+  // - under a 64-bit Linux system, if compiled with Kylix, you should install
+  // the 32-bit flavor of libcurl, e.g. on Ubuntu:
   // $ sudo apt-get install libcurl3:i386
   // - will use in fact libcurl.so, so either libcurl.so.3 or libcurl.so.4,
   // depending on the default version installation on the system
@@ -4468,7 +4471,9 @@ end;
 
 procedure TCrtSocket.OpenBind(const aServer, aPort: SockString;
   doBind: boolean; aSock: integer; aLayer: TCrtSocketLayer; aTLS: boolean);
-const BINDTXT: array[boolean] of string = ('open','bind');
+const BINDTXT: array[boolean] of string[4] = ('open','bind');
+      BINDMSG: array[boolean] of string = ('Is a server running on this address:port?',
+        'Another process may be currently listening to this port!');
 begin
   fSocketLayer := aLayer;
   if aSock<0 then begin
@@ -4478,8 +4483,8 @@ begin
     fServer := aServer;
     fSock := CallServer(aServer,Port,doBind,aLayer,Timeout); // OPEN or BIND
     if fSock<0 then
-      raise ECrtSocket.CreateFmt('OpenBind(%s:%s,%s): CallServer=%d',
-        [aServer,Port,BINDTXT[doBind],fSock],-1);
+      raise ECrtSocket.CreateFmt('OpenBind(%s:%s,%s) failed: %s',
+        [aServer,fPort,BINDTXT[doBind],BINDMSG[doBind]],-1);
   end else
     fSock := aSock; // ACCEPT mode -> socket is already created by caller
   if TimeOut>0 then begin // set timout values for both directions
@@ -4499,8 +4504,8 @@ begin
       fTLS := true;
     except
       on E: Exception do
-        raise ECrtSocket.CreateFmt('OpenBind(%s:%s): aTLS failed [%s %s]',
-          [aServer,Port,E.ClassName,E.Message],-1);
+        raise ECrtSocket.CreateFmt('OpenBind(%s:%s,%s): aTLS failed [%s %s]',
+          [aServer,Port,BINDTXT[doBind],E.ClassName,E.Message],-1);
     end;
   end;
 end;
@@ -6444,7 +6449,7 @@ begin
   WSAEMFILE:       result := 'WSAEMFILE';
   else result := '';
   end;
-  result := Format('%d %s [%s]',[Error,result,SysErrorMessage(Error)]);
+  result := Format('%d %s "%s"',[Error,result,SysErrorMessage(Error)]);
 end;
 constructor ECrtSocket.Create(const Msg: string);
 begin
@@ -6456,7 +6461,7 @@ begin
   if Error=0 then
     fLastError := WSAEWOULDBLOCK else // if unknown, probably a timeout
     fLastError := abs(Error);
-  inherited Create(Msg+' '+SocketErrorMessage(fLastError));
+  inherited CreateFmt('%s [%s]', [Msg,SocketErrorMessage(fLastError)]);
 end;
 
 constructor ECrtSocket.CreateFmt(const Msg: string; const Args: array of const; Error: integer);
@@ -11197,6 +11202,29 @@ begin // see http://curl.haxx.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
   curl.easy_setopt(fHandle,coWriteHeader,@fOut.Header);
 end;
 
+const CURL_RESULT_STR: array[TCurlResult] of string = ( // mORMot rtti not accessible here
+  'OK', 'UnsupportedProtocol', 'FailedInit', 'URLMalformat', 'URLMalformatUser',
+  'CouldntResolveProxy', 'CouldntResolveHost', 'CouldntConnect',
+  'FTPWeirdServerReply', 'FTPAccessDenied', 'FTPUserPasswordIncorrect',
+  'FTPWeirdPassReply', 'FTPWeirdUserReply', 'FTPWeirdPASVReply',
+  'FTPWeird227Format', 'FTPCantGetHost', 'FTPCantReconnect', 'FTPCouldntSetBINARY',
+  'PartialFile', 'FTPCouldntRetrFile', 'FTPWriteError', 'FTPQuoteError',
+  'HTTPReturnedError', 'WriteError', 'MalFormatUser', 'FTPCouldntStorFile',
+  'ReadError', 'OutOfMemory', 'OperationTimeouted',
+  'FTPCouldntSetASCII', 'FTPPortFailed', 'FTPCouldntUseREST', 'FTPCouldntGetSize',
+  'HTTPRangeError', 'HTTPPostError', 'SSLConnectError', 'BadDownloadResume',
+  'FileCouldntReadFile', 'LDAPCannotBind', 'LDAPSearchFailed',
+  'LibraryNotFound', 'FunctionNotFound', 'AbortedByCallback',
+  'BadFunctionArgument', 'BadCallingOrder', 'InterfaceFailed',
+  'BadPasswordEntered', 'TooManyRedirects', 'UnknownTelnetOption',
+  'TelnetOptionSyntax', 'Obsolete', 'SSLPeerCertificate', 'GotNothing',
+  'SSLEngineNotFound', 'SSLEngineSetFailed', 'SendError', 'RecvError',
+  'ShareInUse', 'SSLCertProblem', 'SSLCipher', 'SSLCACert', 'BadContentEncoding',
+  'LDAPInvalidURL', 'FileSizeExceeded', 'FTPSSLFailed', 'SendFailRewind',
+  'SSLEngineInitFailed', 'LoginDenied', 'TFTPNotFound', 'TFTPPerm',
+  'TFTPDiskFull', 'TFTPIllegal', 'TFTPUnknownID', 'TFTPExists', 'TFTPNoSuchUser'
+);
+
 function TCurlHTTP.InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding,
   Data: SockString): integer;
 var res: TCurlResult;
@@ -11206,29 +11234,26 @@ var res: TCurlResult;
     rc: longint; // needed on Linux x86-64
 begin
   res := curl.easy_perform(fHandle);
-  if res<>crOK then begin
-    result := STATUS_NOTFOUND;
-    Data := SockString(format('libcurl easy_perform=%d', [ord(res)]));
-  end else begin
-    curl.easy_getinfo(fHandle,ciResponseCode,rc);
-    result := rc;
-    Header := Trim(fOut.Header);
-    if IdemPChar(pointer(Header),'HTTP/') then begin
-      i := 6;
-      while Header[i]>=' ' do inc(i);
-      while Header[i] in [#13,#10] do inc(i);
-      system.Delete(Header,1,i-1); // trim leading 'HTTP/1.1 200 OK'#$D#$A
-    end;
-    P := pointer(Header);
-    while P<>nil do begin
-      s := GetNextLine(P);
-      if IdemPChar(pointer(s),'ACCEPT-ENCODING:') then
-        AcceptEncoding := trim(copy(s,17,100)) else
-      if IdemPChar(pointer(s),'CONTENT-ENCODING:') then
-        Encoding := trim(copy(s,19,100))
-    end;
-    Data := fOut.Data;
+  if res<>crOK then
+    raise ECurlHTTP.CreateFmt('libcurl error (%d) %s', [res, CURL_RESULT_STR[res]]);
+  curl.easy_getinfo(fHandle,ciResponseCode,rc);
+  result := rc;
+  Header := Trim(fOut.Header);
+  if IdemPChar(pointer(Header),'HTTP/') then begin
+    i := 6;
+    while Header[i]>=' ' do inc(i);
+    while Header[i] in [#13,#10] do inc(i);
+    system.Delete(Header,1,i-1); // trim leading 'HTTP/1.1 200 OK'#$D#$A
   end;
+  P := pointer(Header);
+  while P<>nil do begin
+    s := GetNextLine(P);
+    if IdemPChar(pointer(s),'ACCEPT-ENCODING:') then
+      AcceptEncoding := trim(copy(s,17,100)) else
+    if IdemPChar(pointer(s),'CONTENT-ENCODING:') then
+      Encoding := trim(copy(s,19,100))
+  end;
+  Data := fOut.Data;
 end;
 
 procedure TCurlHTTP.InternalCloseRequest;
@@ -11271,7 +11296,7 @@ begin
         fHttps.Free; // need a new HTTPS connection
         fHttps := MainHttpClass.Create(uri.Server, uri.Port, uri.Https);
       end;
-      result := fHttps.Request(uri.Address, method, keepalive, header,
+      result := fHttps.Request(uri.Address, method, KeepAlive, header,
         data, datatype, fHeaders, fBody);
       if KeepAlive = 0 then
         FreeAndNil(fHttps);
@@ -11285,7 +11310,7 @@ begin
         fHttp.Free; // need a new HTTP connection
         fHttp := THttpClientSocket.Open(uri.Server, uri.Port, cslTCP, 5000, uri.Https);
       end;
-      result := fHttp.Request(uri.Address, method, keepalive, header, data, datatype, true);
+      result := fHttp.Request(uri.Address, method, KeepAlive, header, data, datatype, true);
       fBody := fHttp.Content;
       fHeaders := fHttp.HeaderGetText;
       if KeepAlive = 0 then

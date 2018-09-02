@@ -769,7 +769,7 @@ type
   /// implements a stack-based storage of some (UTF-8 or binary) text
   // - could be used e.g. to make a temporary copy when JSON is parsed in-place
   // - call one of the Init() overloaded methods, then Done to release its memory
-  // - will avoid temporary memory allocation via the heap for up to 4KB of text
+  // - will avoid temporary memory allocation via the heap for up to 4KB of data
   {$ifdef UNICODE}TSynTempBuffer = record{$else}TSynTempBuffer = object{$endif}
   public
     /// the text/binary length, in bytes, excluding the trailing #0
@@ -1608,7 +1608,7 @@ procedure FormatUTF8(const Format: RawUTF8; const Args: array of const;
 /// fast Format() function replacement, for UTF-8 content stored in shortstring
 // - use the same single token % (and implementation) than FormatUTF8()
 // - shortstring allows fast stack allocation, so is perfect for small content
-// - truncate result if the resulting size exceeds 255 bytes
+// - truncate result if the text size exceeds 255 bytes
 procedure FormatShort(const Format: RawUTF8; const Args: array of const;
   var result: shortstring);
 
@@ -1625,10 +1625,11 @@ function FormatString(const Format: RawUTF8; const Args: array of const): string
 type
   /// used e.g. by PointerToHexShort/CardinalToHexShort/Int64ToHexShort/FormatShort16
   // - such result type would avoid a string allocation on heap, so are highly
-  // recommended e.g. when logging information
+  // recommended e.g. when logging small pieces of information
   TShort16 = string[16];
 
 /// fast Format() function replacement, for UTF-8 content stored in TShort16
+// - truncate result if the text size exceeds 16 bytes
 procedure FormatShort16(const Format: RawUTF8; const Args: array of const;
   var result: TShort16);
 
@@ -3347,7 +3348,7 @@ function ExistsIniNameValue(P: PUTF8Char; const UpperName: RawUTF8;
 /// find the integer Value of UpperName in P, till end of current section
 // - expect UpperName as 'NAME='
 // - return 0 if no NAME= entry was found
-function FindIniNameValueInteger(P: PUTF8Char; UpperName: PAnsiChar): integer;
+function FindIniNameValueInteger(P: PUTF8Char; UpperName: PAnsiChar): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// replace a value from a given set of name=value lines
@@ -4222,6 +4223,7 @@ procedure DeduplicateInt64(var Values: TInt64DynArray); overload;
 function DeduplicateInt64(var Values: TInt64DynArray; Count: integer): integer; overload;
 
 /// low-level function called by DeduplicateInt64()
+// - warning: caller should ensure that last>0
 function DeduplicateInt64Sorted(val: PInt64Array; last: PtrInt): PtrInt;
 
 /// create a new 64-bit integer dynamic array with the values from another one
@@ -9402,7 +9404,7 @@ type
     /// save the content as SynLZ-compressed raw binary data
     // - warning: this format is tied to the values low-level RTTI, so if you
     // change the value/key type definitions, LoadFromBinary() would fail
-    function SaveToBinary: RawByteString;
+    function SaveToBinary(NoCompression: boolean=false): RawByteString;
     /// load the content from SynLZ-compressed raw binary data
     // - as previously saved by SaveToBinary method
     function LoadFromBinary(const binary: RawByteString): boolean;
@@ -12142,6 +12144,8 @@ type
     procedure FromNowUTC;
     /// fill fields with the current Local time, using a 8-16ms thread-safe cache
     procedure FromNowLocal;
+    /// encode the stored date/time as text
+    function ToText(Expanded: boolean=true; FirstTimeChar: AnsiChar='T'; const TZD: RawUTF8=''): RawUTF8;
     /// append the stored date and time, in a log-friendly format
     // - e.g. append '20110325 19241502 '
     // - as called by TTextWriter.AddCurrentLogTime()
@@ -13150,6 +13154,12 @@ procedure SleepHiRes(ms: cardinal);
 // - as recommended by MSDN to avoid dword alignment issue
 procedure FileTimeToInt64(const FT: TFileTime; out I64: Int64);
   {$ifdef HASINLINE}inline;{$endif}
+
+/// low-level conversion of a Windows 64-bit TFileTime into a Unix time seconds stamp
+function FileTimeToUnixTime(const FT: TFileTime): TUnixTime;
+
+/// low-level conversion of a Windows 64-bit TFileTime into a Unix time ms stamp
+function FileTimeToUnixMSTime(const FT: TFileTime): TUnixMSTime;
 
 {$else MSWINDOWS}
 
@@ -20075,7 +20085,7 @@ begin
       exit;
     end;
     vtChar: begin
-      {$ifdef FPC} // alf: to circumvent FPC issues
+      {$ifdef FPC} // alf: to circumvent FPC issue
       RawUnicodeToUtf8(@V.VChar,1,RawUTF8(Res.TempRawUTF8));
       {$else}
       Res.Text := @V.VChar;
@@ -23062,7 +23072,7 @@ function StringReplaceTabs(const Source,TabText: RawUTF8): RawUTF8;
     until false;
   end;
 
-var L,i,n,ttl: integer;
+var L,i,n,ttl: PtrInt;
 begin
   ttl := length(TabText);
   L := Length(Source);
@@ -23102,7 +23112,7 @@ begin
 end;
 
 function StringReplaceChars(const Source: RawUTF8; OldChar, NewChar: AnsiChar): RawUTF8;
-var i,j,n: integer;
+var i,j,n: PtrInt;
 begin
   if (OldChar<>NewChar) and (Source<>'') then begin
     n := length(Source);
@@ -29412,7 +29422,7 @@ begin
     Content := Content+'['+SectionName+']'#13#10+NewSectionContent;
 end;
 
-function FindIniNameValueInteger(P: PUTF8Char; UpperName: PAnsiChar): integer;
+function FindIniNameValueInteger(P: PUTF8Char; UpperName: PAnsiChar): PtrInt;
 begin
   result := GetInteger(pointer(FindIniNameValue(P,UpperName)));
 end;
@@ -35112,32 +35122,20 @@ const
   DateFileTimeDelta =  94353120000000000; // from year 1601 to 1899
 
 {$ifdef MSWINDOWS}
-function UnixTimeUTC: TUnixTime;
-var ft: TFileTime;
-    {$ifdef CPU64}nano100: Int64;{$endif}
+function FileTimeToUnixTime(const FT: TFileTime): TUnixTime;
+{$ifdef CPU64}var nano100: Int64;{$endif}
 begin
-  GetSystemTimeAsFileTime(ft); // very fast, with 100 ns unit
   {$ifdef CPU64}
   FileTimeToInt64(ft,nano100);
   result := (nano100-UnixFileTimeDelta) div 10000000;
   {$else} // use PInt64 to avoid URW699 with Delphi 6 / Kylix
   result := (PInt64(@ft)^-UnixFileTimeDelta) div 10000000;
   {$endif}
-// assert(Round((NowUTC-UnixDateDelta)*SecsPerDay)-result<2);
 end;
-{$else}
-function UnixTimeUTC: TUnixTime;
-begin
-  result := GetUnixUTC; // direct retrieval from UNIX API
-end;
-{$endif}
 
-function UnixMSTimeUTC: TUnixMSTime;
-{$ifdef MSWINDOWS}
-var ft: TFileTime;
-    {$ifdef CPU64}nano100: Int64;{$endif}
+function FileTimeToUnixMSTime(const FT: TFileTime): TUnixMSTime;
+{$ifdef CPU64}var nano100: Int64;{$endif}
 begin
-  GetSystemTimeAsFileTime(ft); // very fast, with 100 ns unit
   {$ifdef CPU64}
   FileTimeToInt64(ft,nano100);
   result := (nano100-UnixFileTimeDelta) div 10000;
@@ -35145,11 +35143,31 @@ begin
   result := (PInt64(@ft)^-UnixFileTimeDelta) div 10000;
   {$endif}
 end;
-{$else}
+
+function UnixTimeUTC: TUnixTime;
+var ft: TFileTime;
+begin
+  GetSystemTimeAsFileTime(ft); // very fast, with 100 ns unit
+  result := FileTimeToUnixTime(ft);
+end;
+
+function UnixMSTimeUTC: TUnixMSTime;
+var ft: TFileTime;
+begin
+  GetSystemTimeAsFileTime(ft); // very fast, with 100 ns unit
+  result := FileTimeToUnixMSTime(ft);
+end;
+{$else MSWINDOWS}
+function UnixTimeUTC: TUnixTime;
+begin
+  result := GetUnixUTC; // direct retrieval from UNIX API
+end;
+
+function UnixMSTimeUTC: TUnixMSTime;
 begin
   result := GetUnixMSUTC; // direct retrieval from UNIX API
 end;
-{$endif}
+{$endif MSWINDOWS}
 
 function DaysToIso8601(Days: cardinal; Expanded: boolean): RawUTF8;
 var Y,M: cardinal;
@@ -36176,7 +36194,10 @@ function TryEncodeDayOfWeekInMonth(AYear, AMonth, ANthDayOfWeek, ADayOfWeek: int
   out AValue: TDateTime): Boolean;
 var LStartOfMonth, LDay: integer;
 begin // adapted from DateUtils
-  LStartOfMonth := (DateTimeToTimestamp(EncodeDate(AYear,AMonth,1)).Date-1)mod 7+1;
+  result := TryEncodeDate(AYear,AMonth,1,aValue);
+  if not result then
+    exit;
+  LStartOfMonth := (DateTimeToTimestamp(aValue).Date-1)mod 7+1;
   if LStartOfMonth<=ADayOfWeek then
     dec(ANthDayOfWeek);
   LDay := (ADayOfWeek-LStartOfMonth+1)+7*ANthDayOfWeek;
@@ -36229,6 +36250,13 @@ end;
 procedure TSynSystemTime.FromNowLocal;
 begin
   FromGlobalTime(true,self);
+end;
+
+function TSynSystemTime.ToText(Expanded: boolean;
+  FirstTimeChar: AnsiChar; const TZD: RawUTF8): RawUTF8;
+begin
+  result := DateTimeMSToString(Hour,Minute,Second,MilliSecond,Year,Month,Day,
+    Expanded,FirstTimeChar,TZD);
 end;
 
 procedure TSynSystemTime.AddLogTime(WR: TTextWriter);
@@ -39202,6 +39230,11 @@ begin // 0=0,1=1,2=-1,3=2,4=-2...
 end;
 
 function FromVarInt64Value(Source: PByte): Int64;
+{$ifdef DELPHI5OROLDER}
+begin // try to circumvent Internal Error C1093 on Delphi 5 :(
+  result := FromVarInt64(Source);
+end;
+{$else}
 var c,n: PtrUInt;
 begin // 0=0,1=1,2=-1,3=2,4=-2...
   c := Source^;
@@ -39226,12 +39259,13 @@ begin // 0=0,1=1,2=-1,3=2,4=-2...
   end else
     if c=0 then
       result := 0 else
-    if c and 1<>0 then
-      // 1->1, 3->2..
-      result := (c shr 1)+1 else
-      // 0->0, 2->-1, 4->-2..
-      result := -Int64(c shr 1);
+      if c and 1=0 then
+        // 0->0, 2->-1, 4->-2..
+        result := -Int64(c shr 1) else
+        // 1->1, 3->2..
+        result := (c shr 1)+1;
 end;
+{$endif DELPHI5OROLDER}
 
 function GotoNextVarInt(Source: PByte): pointer;
 begin
@@ -59066,7 +59100,7 @@ begin
     if P<>nil then
       P := fValues.LoadFrom(P);
     if (P<>nil) and (fKeys.Count=fValues.Count) then begin
-      SetTimeouts;
+      SetTimeouts;  // set ComputeNextTimeOut for all items
       fKeys.ReHash; // optimistic: input from safe TSynDictionary.SaveToBinary
       result := true;
     end;
@@ -59087,8 +59121,9 @@ begin
   result := not TSynPersistentLocked(aValue).Safe.IsLocked;
 end;
 
-function TSynDictionary.SaveToBinary: RawByteString;
+function TSynDictionary.SaveToBinary(NoCompression: boolean): RawByteString;
 var tmp: TSynTempBuffer;
+    trigger: integer;
 begin
   fSafe.Lock;
   try
@@ -59096,8 +59131,12 @@ begin
     if fSafe.Padding[DIC_KEYCOUNT].VInteger = 0 then
       exit;
     tmp.Init(fKeys.SaveToLength+fValues.SaveToLength);
-    if fValues.SaveTo(fKeys.SaveTo(tmp.buf))-tmp.buf=tmp.len then
-      fCompressAlgo.Compress(tmp.buf,tmp.len,result);
+    if fValues.SaveTo(fKeys.SaveTo(tmp.buf))-tmp.buf=tmp.len then begin
+      if NoCompression then
+        trigger := maxInt else
+        trigger := 128;
+      fCompressAlgo.Compress(tmp.buf,tmp.len,result,trigger);
+    end;
     tmp.Done;
   finally
     fSafe.UnLock;
@@ -60688,7 +60727,7 @@ begin
     result := False else
   if fMap.fBuf=nil then
     result := FileSeek64(fMap.fFile,Offset,soFromBeginning)=Offset else begin
-    fCurrentPos := Int64Rec(Offset).Lo;
+    fCurrentPos := PCardinal(@Offset)^;
     result := true;
   end;
 end;
@@ -61919,12 +61958,11 @@ begin
   result := 0;
   if (self=nil) or (CompLen<=9) or (Comp=nil) or (PartialLenMax<PartialLen) then
     exit;
-  if Comp[4]=COMPRESS_STORED then begin
+  if Comp[4]=COMPRESS_STORED then
     if PCardinal(Comp)^=PCardinal(Comp+5)^ then
       BodyLen := CompLen-9 else
-      exit;
-  end else
-  if Comp[4]=AnsiChar(AlgoID) then
+      exit
+  else if Comp[4]=AnsiChar(AlgoID) then
     BodyLen := AlgoDecompressDestLen(Comp+9) else
     exit;
   if PartialLen>BodyLen then
@@ -62132,8 +62170,10 @@ end;
 { ESynException }
 
 constructor ESynException.CreateUTF8(const Format: RawUTF8; const Args: array of const);
+var msg: string;
 begin
-  inherited Create(UTF8ToString(FormatUTF8(Format,Args)));
+  FormatString(Format,Args,msg);
+  inherited Create(msg);
 end;
 
 constructor ESynException.CreateLastOSError(const Format: RawUTF8; const Args: array of const);
@@ -63663,7 +63703,6 @@ end;
 { TProcessInfo }
 
 {$ifdef MSWINDOWS}
-
 function TProcessInfo.Init: boolean;
 begin
   FillCharFast(self,SizeOf(self),0);
@@ -63728,8 +63767,21 @@ begin
     end;
 end;
 
+function TProcessInfo.PerSystem(out Idle,Kernel,User: currency): boolean;
+begin
+  if fDiffTotal<=0 then begin
+    Idle := 0;
+    Kernel := 0;
+    User := 0;
+    result := false;
+  end else begin
+    Kernel := SimpleRoundTo2Digits((fDiffKernel*100)/fDiffTotal);
+    User := SimpleRoundTo2Digits((fDiffUser*100)/fDiffTotal);
+    Idle := 100-Kernel-User; // ensure sum is always 100%
+    result := true;
+  end;
+end;
 {$else} // not implemented yet (use /proc ?)
-
 function TProcessInfo.Init: boolean;
 begin
   FillZero(self,SizeOf(self));
@@ -63747,22 +63799,24 @@ begin
   result := false;
 end;
 
-{$endif MSWINDOWS}
-
 function TProcessInfo.PerSystem(out Idle,Kernel,User: currency): boolean;
-begin
-  if fDiffTotal<=0 then begin
-    Idle := 0;
-    Kernel := 0;
-    User := 0;
-    result := false;
-  end else begin
-    Kernel := SimpleRoundTo2Digits((fDiffKernel*100)/fDiffTotal);
-    User := SimpleRoundTo2Digits((fDiffUser*100)/fDiffTotal);
-    Idle := 100-Kernel-User; // ensure sum is always 100%
-    result := true;
-  end;
-end;
+var P: PUTF8Char;
+    U, K, I, S: cardinal;
+begin // see http://www.linuxhowtos.org/System/procstat.htm
+  result := false;
+  P := pointer(StringFromFile('/proc/stat', {nosize=}true));
+  if P=nil then
+    exit;
+  U := GetNextItemCardinal(P,' '){=user}+GetNextItemCardinal(P,' '){=nice};
+  K := GetNextItemCardinal(P,' '){=system};
+  I := GetNextItemCardinal(P,' '){=idle};
+  S := U+K+I;
+  Kernel := SimpleRoundTo2Digits((K*100)/S);
+  User := SimpleRoundTo2Digits((U*100)/S);
+  Idle := 100-Kernel-User; // ensure sum is always 100%
+  result := S<>0;
+end; { TODO : use a diff approach for TProcessInfo.PerSystem on Linux }
+{$endif MSWINDOWS}
 
 
 { TSystemUse }

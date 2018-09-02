@@ -1535,7 +1535,8 @@ begin
 
   if ACheckResultInsideBase and
      ((Length(Result) < Length(aBase)) or (Length(aBase)=0) or
-      (not Result.StartsWith(aBase, false))) then
+      (StrCompL(PUtf8Char(Result), PUtf8Char(aBase), length(aBase), 0) <> 0)) then
+      //{ not Result.StartsWith(aBase, false))} not compiled in fpc 3.1.1
     Result := ''
 {$ENDIF}
 end;
