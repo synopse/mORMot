@@ -1,7 +1,7 @@
 unit SyNodeReadWrite;
 
 interface
-                     
+
 uses
   SpiderMonkey, Classes, SynCommons;
 
@@ -68,22 +68,6 @@ var
   bufData: Puint8Vector;
   tmp1: RawByteString;
   tmp2: SynUnicode;
-
-  procedure WriteBuf(bufData: pointer; len: size_t; encoding: RawUTF8);
-  begin
-    if encoding = 'base64' then begin
-      tmp1 := BinToBase64(PAnsiChar(bufData), len);
-      bufData := Pointer(tmp1);
-      len := Length(tmp1);
-      encoding := 'bin';
-    end;
-    if (encoding = '') or (encoding = 'bin') then begin // default is bin
-      if len>0 then
-        dest.AddNoJSONEscape(pointer(bufData), len)
-    end else
-      raise ESMException.Create('invalid encoding');
-  end;
-
 begin
   if (argc < 1) or (argc>2) then
     raise ESMException.Create('Usage: write(data: ArrayBuffer|String|Object, [encoding: "utf-8"|"ucs2"|"bin"|"base64"]');
@@ -122,6 +106,16 @@ begin
           len := Length(tmp1);
           encoding := 'bin';
         end;
+        if (encoding = '') or (encoding = 'bin') then begin // default is bin
+          if len>0 then
+            dest.AddNoJSONEscape(pointer(bufData), len)
+        end else
+          raise ESMException.Create('invalid encoding');
+      end else begin
+        if (encoding = '') or (encoding = 'utf-8') or (encoding = 'utf8') then // default is utf-8
+          vals[0].AddJSON(cx, dest)
+        else
+          raise ESMException.Create('invalid encoding');
       end;
     end;
     JSTYPE_VOID: begin end; // do nothing
