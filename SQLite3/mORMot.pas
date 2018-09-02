@@ -62196,7 +62196,7 @@ function TServiceFactoryClient.InternalInvoke(const aMethod: RawUTF8;
   const aParams: RawUTF8; aResult: PRawUTF8; aErrorMsg: PRawUTF8;
   aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer;
   aClient: TSQLRestClientURI): boolean;
-var baseuri,uri,sent,resp,clientDrivenID,head,error: RawUTF8;
+var baseuri,uri,sent,resp,clientDrivenID,head,error,ct: RawUTF8;
     Values: array[0..1] of TValuePUTF8Char;
     status,m: integer;
     service: PServiceMethod;
@@ -62278,10 +62278,10 @@ begin
     {$ifdef WITHLOG}
     if (service=nil) or not((optNoLogOutput in fExecution[m].Options) or
        ([smdVar,smdOut,smdResult]*service^.HasSPIParams<>[])) then
-    with fRest.fLogFamily do
-      if (sllServiceReturn in Level) and (resp<>'') then
-        SynLog.Log(sllServiceReturn,resp,self,MAX_SIZE_RESPONSE_LOG);
-    {$endif}
+      with fRest.fLogFamily do
+        if (sllServiceReturn in Level) and (resp<>'') then
+          SynLog.Log(sllServiceReturn,resp,self,MAX_SIZE_RESPONSE_LOG);
+    {$endif WITHLOG}
     if fResultAsJSONObject then begin
       if aResult<>nil then
         aResult^ := resp;
@@ -62308,8 +62308,16 @@ begin
     end;
   end else begin
     // custom answer returned in TServiceCustomAnswer
-    fRest.InternalLog('TServiceCustomAnswer(%) returned status=% len=%',
-      [head,status,length(resp)],sllServiceReturn);
+    {$ifdef WITHLOG}
+    with fRest.fLogFamily do
+      if (sllServiceReturn in Level) and (resp<>'') then begin
+        ct := FindIniNameValue(pointer(head), HEADER_CONTENT_TYPE_UPPER);
+        if (resp[1] in ['[','{','"']) and IdemPChar(pointer(ct), JSON_CONTENT_TYPE_UPPER) then
+          SynLog.Log(sllServiceReturn,resp,self,MAX_SIZE_RESPONSE_LOG) else
+          SynLog.Log(sllServiceReturn,'TServiceCustomAnswer=% % len=%',
+            [status,ct,length(resp)],self);
+      end;
+    {$endif WITHLOG}
     aServiceCustomAnswer^.Status := status;
     aServiceCustomAnswer^.Header := head;
     aServiceCustomAnswer^.Content := resp;
