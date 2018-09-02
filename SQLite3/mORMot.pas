@@ -19528,8 +19528,11 @@ type
     // ! TSQLRestServer.ServiceDefine(...).ResultAsJSONObjectWithoutResult := true
     // - this method expects the interface to have been registered previously:
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
+    // - aIgnoreAnyException may be set to TRUE if the server is likely
+    // to not propose this service, and any exception is to be catched
     function ServiceDefineSharedAPI(const aInterface: TGUID;
-      const aContractExpected: RawUTF8=SERVICE_CONTRACT_NONE_EXPECTED): TServiceFactoryClient;
+      const aContractExpected: RawUTF8=SERVICE_CONTRACT_NONE_EXPECTED;
+      aIgnoreAnyException: boolean=false): TServiceFactoryClient;
     /// allow to notify a server the services this client may be actually capable
     // - when this client will connect to a remote server to access its services,
     // it will register its own services, supplying its TSQLRestServer instance,
@@ -35732,13 +35735,7 @@ begin
   T := MultiFieldValues(Table,FieldName,WhereClause);
   if T<>nil then
   try
-    if (T.FieldCount<>1) or (T.fRowCount<=0) then
-      exit;
-    // get row values
-    SetLength(Data,T.fRowCount);
-    for i := 1 to T.fRowCount do // ignore fResults[0] i.e. field name
-      Data[i-1] := T.fResults[i];
-    result := true;
+    result := T.GetRowValues(0,Data)>0;
   finally
     T.Free;
   end;
@@ -38960,12 +38957,18 @@ begin
 end;
 
 function TSQLRestClientURI.ServiceDefineSharedAPI(const aInterface: TGUID;
-  const aContractExpected: RawUTF8): TServiceFactoryClient;
+  const aContractExpected: RawUTF8; aIgnoreAnyException: boolean): TServiceFactoryClient;
 begin
-  result := ServiceDefine(aInterface,sicShared,aContractExpected);
-  if result<>nil then begin
-    result.ParamsAsJSONObject := true; // no contract -> explicit parameters
-    result.ResultAsJSONObjectWithoutResult := true;
+  try
+    result := ServiceDefine(aInterface,sicShared,aContractExpected);
+    if result<>nil then begin
+      result.ParamsAsJSONObject := true; // no contract -> explicit parameters
+      result.ResultAsJSONObjectWithoutResult := true;
+    end;
+  except
+    if aIgnoreAnyException then
+      result := nil else
+      raise;
   end;
 end;
 
