@@ -1584,21 +1584,27 @@ begin
 end;
 
 const
-  GZHEAD: array [0..2] of cardinal = ($88B1F,0,0);
+  GZHEAD: array [0..2] of cardinal = ($088B1F,0,0);
   GZHEAD_SIZE = 10;
-  GZHEADTRAIL_SIZE = GZHEAD_SIZE + sizeof(cardinal) * 2;
 
 function GZRead(gz: PAnsiChar; gzLen: integer): ZipString;
-var Len: integer;
+var Offset,Len: integer;
 begin
   result := '';
-  if (gz=nil) or (gzLen<=18) or (PCardinal(gz)^<>GZHEAD[0]) then
+  if (gz=nil) or (gzLen<=18) or (PCardinal(gz)^ and $ffffff<>GZHEAD[0]) then
     exit; // .gz file as header + compressed + crc32 + len32 format
+  Offset := GZHEAD_SIZE;
+  if gz[3]=#8 then begin // FNAME flag (as created e.g. by 7Zip)
+    while (Offset<gzlen) and (gz[offset]<>#0) do
+      inc(Offset);
+    if Offset<gzlen then
+      inc(Offset);
+  end;
   Len := pInteger(@gz[gzLen-4])^;
   if Len=0 then
     exit;
   SetLength(result,Len);
-  if (UnCompressMem(@gz[10],pointer(result),gzLen-GZHEADTRAIL_SIZE,Len)<>Len) or
+  if (UnCompressMem(@gz[Offset],pointer(result),gzLen-Offset-8,Len)<>Len) or
      (SynZip.crc32(0,pointer(result),Len)<>PCardinal(@gz[gzLen-8])^) then
     result := ''; // invalid CRC
 end;
@@ -5173,7 +5179,7 @@ begin
     P := pointer(result);
     move(GZHEAD,P^,GZHEAD_SIZE);
     inc(P,GZHEAD_SIZE);
-    inc(P,CompressMem(pointer(Data),P,L,length(result)-GZHEADTRAIL_SIZE,HTTP_LEVEL));
+    inc(P,CompressMem(pointer(Data),P,L,length(result)-(GZHEAD_SIZE+8),HTTP_LEVEL));
     PCardinal(P)^ := SynZip.crc32(0,pointer(Data),L);
     inc(P,4);
     PCardinal(P)^ := L;
