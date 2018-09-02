@@ -192,6 +192,11 @@ function SetMatchs(const CSVPattern: RawUTF8; CaseInsensitive: boolean;
 function SetMatchs(CSVPattern: PUTF8Char; CaseInsensitive: boolean;
   Match: PMatch; MatchMax: integer): integer; overload;
 
+/// apply the CSV-supplied glob patterns to an array of RawUTF8
+// - any text not maching the pattern will be deleted from the array
+procedure FilterMatchs(const CSVPattern: RawUTF8; CaseInsensitive: boolean;
+  var Values: TRawUTF8DynArray);
+
 
 type
   TSynFilterOrValidate = class;
@@ -5411,10 +5416,10 @@ begin
       if Pattern[PMax] = '*' then begin
         if strcspn(Pattern + 1, SPECIALS) = PMax - 1 then
           case Pattern[0] of
-            '*': begin
+            '*': begin // *something*
               inc(Pattern);
               dec(PMax, 2); // trim trailing and ending *
-              if PMax <= 0 then
+              if PMax < 0 then
                 Search := SearchContainsValid
               else if aCaseInsensitive then
                 Search := SearchContainsU
@@ -5450,7 +5455,9 @@ begin
         else
           Search := SearchEndWith;
       end;
-    end;
+    end else
+      if Pattern[0] in ['*','?'] then
+        Search := SearchContainsValid;
  if not Assigned(Search) then begin
    aPattern := PosChar(Pattern, '[');
    if (aPattern = nil) or (aPattern - Pattern > PMax) then
@@ -5561,6 +5568,27 @@ begin
         break;
       inc(CSVPattern);
     until false;
+end;
+
+procedure FilterMatchs(const CSVPattern: RawUTF8; CaseInsensitive: boolean;
+  var Values: TRawUTF8DynArray);
+var
+  match: TMatchDynArray;
+  m, n, i: integer;
+begin
+  if SetMatchs(CSVPattern, CaseInsensitive, match) = 0 then
+    exit;
+  n := 0;
+  for i := 0 to high(Values) do
+    for m := 0 to high(match) do
+      if match[m].Match(Values[i]) then begin
+        if i <> n then
+          Values[n] := Values[i];
+        inc(n);
+        break;
+      end;
+  if n <> length(Values) then
+    SetLength(Values, n);
 end;
 
 
