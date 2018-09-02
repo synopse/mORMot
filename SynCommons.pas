@@ -2910,6 +2910,12 @@ procedure Split(const Str: RawUTF8; const SepStr: array of RawUTF8;
 // - if SepChar doesn't appear, will return Str, e.g. SplitRight('123','/')='123'
 function SplitRight(const Str: RawUTF8; SepChar: AnsiChar): RawUTF8;
 
+/// returns the last occurence of the given SepChar separated context
+// - e.g. SplitRight('path/one\two/file.ext','/\')='file.ext', i.e.
+// SepChars='/\' will be like ExtractFileName() over RawUTF8 string
+// - if SepChar doesn't appear, will return Str, e.g. SplitRight('123','/')='123'
+function SplitRights(const Str, SepChar: RawUTF8): RawUTF8;
+
 /// fast version of StringReplace(S, OldPattern, NewPattern,[rfReplaceAll]);
 function StringReplaceAll(const S, OldPattern, NewPattern: RawUTF8): RawUTF8;
 
@@ -16072,14 +16078,14 @@ type
     procedure LockedPerSecProperties; override;
     procedure LockedSum(another: TSynMonitor); override;
   public
-    /// increase the internal size counters
-    // - thread-safe method
-    procedure AddSize(const Incoming, Outgoing: QWord);
-  published
     /// initialize the instance nested class properties
     constructor Create; override;
     /// finalize the instance
     destructor Destroy; override;
+    /// increase the internal size counters
+    // - thread-safe method
+    procedure AddSize(const Incoming, Outgoing: QWord);
+  published
     /// how many data has been received
     property Input: TSynMonitorSize read fInput;
     /// how many data has been sent back
@@ -22954,13 +22960,33 @@ end;
 {$endif}
 
 function SplitRight(const Str: RawUTF8; SepChar: AnsiChar): RawUTF8;
-var i: integer;
+var i: PtrInt;
 begin
   for i := length(Str) downto 1 do
     if Str[i]=SepChar then begin
       result := copy(Str,i+1,maxInt);
       exit;
     end;
+  result := Str;
+end;
+
+function SplitRights(const Str, SepChar: RawUTF8): RawUTF8;
+var i, j, sep: PtrInt;
+    c: AnsiChar;
+begin
+  sep := length(SepChar);
+  if sep > 0 then
+    if sep = 1 then
+      result := SplitRight(Str,SepChar[1]) else begin
+    for i := length(Str) downto 1 do begin
+      c := Str[i];
+      for j := 1 to sep do
+        if c=SepChar[j] then begin
+          result := copy(Str,i+1,maxInt);
+          exit;
+        end;
+    end;
+  end;
   result := Str;
 end;
 
@@ -37628,8 +37654,8 @@ begin // see http://www.garykessler.net/library/file_sigs.html for magic numbers
       // 1   5   9    14  18   23  27  31  35   40  44 47  51  55  59
         'atom,rdf,rss,webp,appc,mani,docx,xml,json,woff,ogg,ogv,mp4,m2v,'+
       // 63   68  72  76   81   86   91   96  100  105  110 114 118 122
-        'm2p,mp3,h264,gz') of
-      // 126 130 134  139
+        'm2p,mp3,h264,text,log,gz') of
+      // 126 130 134  139  144 148
       1:  result := 'image/png';
       5:  result := 'image/gif';
       9:  result := 'image/tiff';
@@ -37642,7 +37668,7 @@ begin // see http://www.garykessler.net/library/file_sigs.html for magic numbers
       // text/javascript and application/x-javascript are obsolete (RFC 4329)
       47: result := 'image/x-icon';
       51,105: result := 'application/font-woff';
-      55: result := TEXT_CONTENT_TYPE;
+      55,139,144: result := TEXT_CONTENT_TYPE;
       59: result := 'image/svg+xml';
       63,68,72,96: result := XML_CONTENT_TYPE;
       76: result := 'image/webp';
@@ -37653,7 +37679,7 @@ begin // see http://www.garykessler.net/library/file_sigs.html for magic numbers
       122,126: result := 'video/mp2';
       130: result := 'audio/mpeg';     // RFC 3003
       134: result := 'video/H264';     // RFC 6184
-      139: result := 'application/gzip';
+      148: result := 'application/gzip';
       else
         if result<>'' then
           result := 'application/'+copy(result,2,10);

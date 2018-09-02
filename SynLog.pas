@@ -4136,14 +4136,15 @@ begin
     FormatUTF8(Format,Args,Msg);
     Add.LogInternal(Level,Msg,nil,maxInt);
     {$ifdef MSWINDOWS}
+    {$ifndef FPC} // external exception :(
     OutputDebugStringA(pointer(CurrentAnsiConvert.UTF8ToAnsi(Msg)));
-    {$endif}
-    {$ifdef LINUX}
+    {$endif FPC}
+    {$else}
     {$I-}
     write(Msg, '  ');
     ioresult;
     {$I+}
-    {$endif}
+    {$endif MSWINDOWS}
   end;
   {$ifndef FPC_OR_PUREPASCAL}
   if DebugHook<>0 then

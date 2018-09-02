@@ -464,7 +464,7 @@ asm
 {$else CPUX86}
 function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 var off: TOffsets;
-    cache: array[0..4095] of cardinal; // uses 32B+16KB=48KB on stack
+    cache: array[0..4095] of cardinal; // uses 32KB+16KB=48KB on stack
 asm // rcx=src, edx=size, r8=dest
         {$ifndef win64} // Linux 64-bit ABI
         mov     r8, rdx
@@ -660,7 +660,7 @@ begin
     cached := v xor cache[h]; // o=nil if cache[h] is uninitialized
     cache[h] := v;
     if (cached and $00ffffff=0) and (o<>nil) and (src-o>2) then begin
-      CWpoint^ := CWpoint^ or (1 shl CWbit);
+      CWpoint^ := CWpoint^ or (cardinal(1) shl CWbit);
       inc(src,2);
       inc(o,2);
       t := 1;
@@ -1363,7 +1363,7 @@ dotdiff:v := tdiff;
             end;
           end;
         end else begin
-          CWpoint^ := CWpoint^ or (1 shl CWbit);
+          CWpoint^ := CWpoint^ or (cardinal(1) shl CWbit);
           dec(v,9);
           if v>15 then begin
             v := 15; // v=9..24 -> h=0..15
@@ -1393,7 +1393,7 @@ dotdiff:v := tdiff;
       end;
 //      assert(PWord(o)^=PWord(src)^);
       tdiff := 0;
-      CWpoint^ := CWpoint^ or (1 shl CWbit);
+      CWpoint^ := CWpoint^ or (cardinal(1) shl CWbit);
       inc(src,2);
       inc(o,2);
       t := 0; // t=matchlen-2
