@@ -6179,11 +6179,6 @@ type
     // - match TServiceMethodInternalExecuteCallback signature
     procedure ExecuteCallback(var Par: PUTF8Char; ParamInterfaceInfo: PTypeInfo;
       out Obj);
-    /// initialize the execution context
-    // - this method has been declared as protected, since it shuold never be
-    // called outside the TSQLRestServer.URI() method workflow
-    // - should set Call,  and Method members
-    constructor Create(aServer: TSQLRestServer; const aCall: TSQLRestURIParams); virtual;
     /// retrieve RESTful URI routing
     // - should set URI, Table,TableIndex,TableRecordProps,TableEngine,
     // ID, URIBlobFieldName and Parameters members
@@ -6365,6 +6360,11 @@ type
     // - you can use it to log some process on the server side
     Log: TSynLog;
     {$endif}
+    /// initialize the execution context
+    // - this method could have been declared as protected, since it should
+    // never be called outside the TSQLRestServer.URI() method workflow
+    // - should set Call, and Method members
+    constructor Create(aServer: TSQLRestServer; const aCall: TSQLRestURIParams); virtual;
     /// finalize the execution context
     destructor Destroy; override;
     /// extract the input parameters from its URI
@@ -15407,6 +15407,8 @@ type
     property Event: TEvent read fEvent;
     /// publishes the thread running state
     property Terminated;
+    /// publishes the thread executing state (set when Execute leaves)
+    property Executing: boolean read fExecuting;
   end;
   {$M-}
 
@@ -40739,6 +40741,7 @@ end;
 constructor TSQLRestServerURIContext.Create(aServer: TSQLRestServer;
   const aCall: TSQLRestURIParams);
 begin
+  inherited Create;
   Server := aServer;
   Call := @aCall;
   Method := StringToMethod(aCall.method);;
@@ -40748,7 +40751,8 @@ end;
 
 destructor TSQLRestServerURIContext.Destroy;
 begin
-  fThreadServer^.Request := nil;
+  if fThreadServer<>nil then
+    fThreadServer^.Request := nil;
   inherited Destroy;
 end;
 
@@ -42308,8 +42312,10 @@ end;
 
 procedure TSQLRestServerURIContext.Error(const Format: RawUTF8;
   const Args: array of const; Status: integer);
+var msg: RawUTF8;
 begin
-  Error(FormatUTF8(Format,Args),Status);
+  FormatUTF8(Format,Args,msg);
+  Error(msg,Status);
 end;
 
 procedure TSQLRestServerURIContext.Error(E: Exception;
