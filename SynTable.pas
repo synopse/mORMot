@@ -2012,6 +2012,7 @@ type
     /// clear any stored information
     procedure Clear;
     /// return all content as a single RawByteString
+    // - will also compact the Values[] array into a single item (which is returned)
     function AsText: RawByteString;
     /// return all content as a single TByteDynArray
     function AsBytes: TByteDynArray;
@@ -2048,7 +2049,7 @@ type
     /// append the text at a given position in Values[], JSON escaped by default
     // - text should be in a single Values[] entry
     procedure FindWrite(aPosition, aLength: integer; W: TTextWriter;
-      Escape: TTextWriterKind=twJSONEscape);
+      Escape: TTextWriterKind=twJSONEscape; TrailingCharsToIgnore: integer=0);
       {$ifdef HASINLINE}inline;{$endif}
     /// append the blob at a given position in Values[], base-64 encoded
     // - text should be in a single Values[] entry
@@ -7275,12 +7276,12 @@ end;
 {$endif NOVARIANTS}
 
 procedure TRawByteStringGroup.FindWrite(aPosition, aLength: integer;
-  W: TTextWriter; Escape: TTextWriterKind);
+  W: TTextWriter; Escape: TTextWriterKind; TrailingCharsToIgnore: integer);
 var P: pointer;
 begin
   P := Find(aPosition,aLength);
   if P<>nil then
-    W.Add(P,aLength,Escape);
+    W.Add(PUTF8Char(P)+TrailingCharsToIgnore,aLength-TrailingCharsToIgnore,Escape);
 end;
 
 procedure TRawByteStringGroup.FindWriteBase64(aPosition, aLength: integer;

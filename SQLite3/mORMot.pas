@@ -35728,17 +35728,16 @@ end;
 
 function TSQLRest.OneFieldValues(Table: TSQLRecordClass; const FieldName,
   WhereClause: RawUTF8; out Data: TRawUTF8DynArray): boolean;
-var i: integer;
-    T: TSQLTableJSON;
+var T: TSQLTableJSON;
 begin
   result := false;
   T := MultiFieldValues(Table,FieldName,WhereClause);
   if T<>nil then
-  try
-    result := T.GetRowValues(0,Data)>0;
-  finally
-    T.Free;
-  end;
+    try
+      result := T.GetRowValues(0,Data)>0;
+    finally
+      T.Free;
+    end;
 end;
 
 function TSQLRest.OneFieldValues(Table: TSQLRecordClass; const FieldName,

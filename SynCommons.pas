@@ -26934,7 +26934,6 @@ asm
    lock xadd    [edx], eax
         inc     eax
 end;
-
 function InterlockedDecrement(var I: Integer): Integer;
 asm
         mov     edx, -1
@@ -51538,13 +51537,17 @@ begin
 end;
 
 procedure TTextWriter.AddChars(aChar: AnsiChar; aCount: integer);
+var n: integer;
 begin
-  if cardinal(aCount-1)>=cardinal(fTempBufSize) then
-    exit; // avoid buffer overflow
-  if BEnd-B<=aCount then
-    FlushToStream;
-  FillcharFast(B[1],aCount,ord(aChar));
-  inc(B,aCount);
+  repeat
+    n := BEnd-B;
+    if aCount<n then
+      n := aCount else
+      FlushToStream; // loop to avoid buffer overflow
+    FillcharFast(B[1],n,ord(aChar));
+    inc(B,n);
+    dec(aCount,n);
+  until aCount<=0;
 end;
 
 procedure TTextWriter.Add2(Value: integer);
@@ -53169,8 +53172,10 @@ noesc:c := i;
         MoveFast(P^,B[1],i);
         inc(B,i);
       end;
+      if i>=Len then
+        break;
     end;
-    while i<Len do begin
+    repeat
       c := PByteArray(P)[i];
       case c of
       0:  exit;
@@ -53189,10 +53194,12 @@ noesc:c := i;
       end;
       if BEnd-B<=1 then
         FlushToStream;
+      inc(i);
       PWord(B+1)^ := c;
       inc(B,2);
-      inc(i);
-    end;
+      if i>=Len then
+        exit;
+    until false;
   end;
 end;
 
