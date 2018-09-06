@@ -1584,7 +1584,12 @@ begin
     result.PixelFormat := pf24bit; // create as DIB (device-independent bitmap)
     result.Width := Width;
     result.Height := Height;
-    result.Canvas.Draw(0,0,self);
+    result.Canvas.Lock;
+    try
+      result.Canvas.Draw(0,0,self);
+    finally
+      result.Canvas.Unlock;
+    end;
   end;
 end;
 
@@ -1689,7 +1694,12 @@ begin
           R := Pic.RectNotBiggerThan(MaxPixelsForBiggestSide);
           Bmp.Width := R.Right;
           Bmp.Height := R.Bottom;
-          Pic.Draw(Bmp.Canvas,R);
+          Bmp.Canvas.Lock;
+          try
+            Pic.Draw(Bmp.Canvas,R);
+          finally
+            Bmp.Canvas.Unlock;
+          end;
           SynGdiPlus.SaveAs(Bmp,Stream,Format,CompressionQuality,0,BitmapSetResolution);
         finally
           Bmp.Free;
