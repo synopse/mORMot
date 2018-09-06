@@ -11251,7 +11251,7 @@ var res: TCurlResult;
 begin
   res := curl.easy_perform(fHandle);
   if res<>crOK then
-    raise ECurlHTTP.CreateFmt('libcurl error (%d) %s', [res, CURL_RESULT_STR[res]]);
+    raise ECurlHTTP.CreateFmt('libcurl error (%d) %s', [ord(res), CURL_RESULT_STR[res]]);
   curl.easy_getinfo(fHandle,ciResponseCode,rc);
   result := rc;
   Header := Trim(fOut.Header);

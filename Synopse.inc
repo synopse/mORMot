@@ -404,6 +404,7 @@
         {$define FPC_OR_KYLIX}
         // Kylix 3 will be handled just like Delphi 7
         {$undef ENHANCEDRTL}   // Enhanced Runtime library not fully tested yet
+        {$define EXTENDEDTOSTRING_USESTR}
         {$define DOPATCHTRTL}  // nice speed up for server apps
         {$define NOVARCOPYPROC}
         {$define NOSQLITE3STATIC} // Kylix will use external sqlite3.so

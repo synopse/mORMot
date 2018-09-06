@@ -371,14 +371,22 @@ type
         libz='zlib-64.dll'; // as available in \fpc-win64 sub-folder
         {$endif}
       {$endif MSWINDOWS}
-      {$ifdef UNIX} // dynamically linked with new 64-bit TZStream
+      {$ifdef KYLIX3}
       type
-        TZLong = ZipPtrUint;
-        TZCRC = Int64;
+        TZLong = cardinal;
+        TZCRC = cardinal;
       const
-        libz='z';
-        {$linklib libz}
-      {$endif}
+        libz = 'libz.so.1';
+      {$else}
+        {$ifdef UNIX} // dynamically linked with new 64-bit TZStream
+        type
+          TZLong = ZipPtrUint;
+          TZCRC = Int64;
+        const
+          libz='z';
+          {$linklib libz}
+        {$endif UNIX}
+      {$endif KYLIX3}
     {$else} // statically linked with old 32-bit TZStream
     type
       TZLong = cardinal;
