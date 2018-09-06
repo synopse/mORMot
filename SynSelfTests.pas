@@ -1161,6 +1161,9 @@ type
       var Rec2: TSQLRestCacheEntryValue; Float1: double; var Float2: double): TSQLRestCacheEntryValue;
     /// validates ArgsInputIsOctetStream raw binary upload
     function DirectCall(const Data: TSQLRawBlob): integer;
+    /// validates huge RawJSON/RawUTF8
+    function RepeatJsonArray(const item: RawUTF8; count: integer): RawJSON;
+    function RepeatTextArray(const item: RawUTF8; count: integer): RawUTF8;
   end;
 
   /// a test interface, used by TTestServiceOrientedArchitecture
@@ -16025,6 +16028,8 @@ type
       var Str2: TWideStringDynArray; const Rec1: TVirtualTableModuleProperties;
       var Rec2: TSQLRestCacheEntryValue; Float1: double; var Float2: double): TSQLRestCacheEntryValue;
     function DirectCall(const Data: TSQLRawBlob): integer;
+    function RepeatJsonArray(const item: RawUTF8; count: integer): RawJSON;  
+    function RepeatTextArray(const item: RawUTF8; count: integer): RawUTF8;
     function Test(A,B: Integer): RawUTF8;
   end;
 
@@ -16168,6 +16173,41 @@ begin
       result := 0;
 end;
 
+function TServiceCalculator.RepeatJsonArray(const item: RawUTF8; count: integer): RawJSON;
+var buf: array[word] of byte;
+begin
+  with TTextWriter.CreateOwnedStream(@buf, SizeOf(buf)) do
+    try
+      Add('[');
+      while count > 0 do begin
+        Add('"');
+        AddJSONEscape(pointer(item));
+        Add('"',',');
+        dec(count);
+      end;
+      CancelLastComma;
+      Add(']');
+      SetText(RawUTF8(result));
+    finally
+      Free;
+    end;
+end;
+
+function TServiceCalculator.RepeatTextArray(const item: RawUTF8; count: integer): RawUTF8;
+var buf: array[word] of byte;
+begin
+  with TTextWriter.CreateOwnedStream(@buf, SizeOf(buf)) do
+    try
+      while count > 0 do begin
+        AddJSONEscape(pointer(item));
+        dec(count);
+      end;
+      SetText(result);
+    finally
+      Free;
+    end;
+end;
+
 
 { TServiceComplexCalculator }
 
@@ -16210,7 +16250,9 @@ function TServiceComplexCalculator.TestBlob(n: TComplexNumber): TServiceCustomAn
 begin
   EnsureInExpectedThread;
   Result.Header := TEXT_CONTENT_TYPE_HEADER;
-  Result.Content := FormatUTF8('%,%',[n.Real,n.Imaginary]);
+  if n.Real = maxInt then
+    Result.Content := StringOfChar('-', 600) else
+    Result.Content := FormatUTF8('%,%',[n.Real,n.Imaginary]);
 end;
 
 {$ifndef NOVARIANTS}
@@ -16460,6 +16502,11 @@ begin
   Check(Str2[4]='');
   s := StringToUTF8(StringOfChar(#1,100));
   check(I.DirectCall(s)=100);
+  s := StringToUTF8(StringOfChar('-',600));
+  t := length(I.RepeatJsonArray(s, 100));
+  checkutf8(t = 1 + 100 * 603, 'RawJSON %', [KB(t)]);
+  t := length(I.RepeatTextArray(s, 100));
+  checkutf8(t = 100 * 600, 'RawUTF8 %', [KB(t)]);
 end;
 var s: RawUTF8;
 {$ifndef LVCL}
@@ -16582,6 +16629,10 @@ begin
         end;
       C1.Real := C1.Real+1;
     end;
+    C3.Real := maxInt; // magic value for huge content
+    cust := Inst.CC.TestBlob(C3);
+    j := length(cust.Content);
+    checkutf8(j = 600, 'TestBlob len=%', [j]);
   finally
     C3.Free;
     C1.Free;
@@ -16891,8 +16942,8 @@ begin
   fClient.Server.Services.ExpectMangledURI := false;
   Check(fClient.Server.Services['CALCULAtor']=S);
   Check(fClient.Server.Services['CALCULAtors']=nil);
-  if CheckFailed(length(S.InterfaceFactory.Methods)=11) then exit;
-  Check(S.ContractHash='"A0BE4DD5C1766347"');
+  if CheckFailed(length(S.InterfaceFactory.Methods)=13) then exit;
+  Check(S.ContractHash='"4C65C91D6536270A"');
   Check(TServiceCalculator(nil).Test(1,2)='3');
   Check(TServiceCalculator(nil).ToTextFunc(777)='777');
   for i := 0 to high(ExpectedURI) do // SpecialCall interface not checked
