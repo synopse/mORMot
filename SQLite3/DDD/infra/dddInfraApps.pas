@@ -858,6 +858,7 @@ type
 procedure TDDDDaemon.ExecuteCommandLine(ForceRun: boolean);
 var
   name, param: RawUTF8;
+  p: PUTF8Char;
   passwords, exe: RawByteString;
   cmd: TExecuteCommandLineCmd;
   daemon: TDDDAdministratedDaemon;
@@ -1005,8 +1006,11 @@ begin
       param := trim(StringToUTF8(paramstr(1)));
     if (param = '') or not (param[1] in ['/', '-']) then
       cmd := cNone
-    else
-      case NormToUpper[param[2]] of
+    else begin
+      p := @param[2];
+      if p^ = '-' then // allow e.g. --fork switch (idem to /f -f /fork -fork)
+        inc(p);
+      case NormToUpper[p^] of
         'C':
           cmd := cConsole;
         'D':
@@ -1018,10 +1022,11 @@ begin
         'K':
           cmd := cKill;
       else
-        byte(cmd) := ord(cInstall) + IdemPCharArray(@param[2],
+        byte(cmd) := ord(cInstall) + IdemPCharArray(p,
           ['INST', 'UNINST', 'START', 'STOP', 'STAT', 'VERS', 'VERB', 'HELP',
            'HARDEN', 'PLAIN']);
       end;
+    end;
     case cmd of
       cHelp:
         Syntax;

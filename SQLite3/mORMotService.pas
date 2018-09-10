@@ -559,7 +559,7 @@ function RunUntilSigTerminatedForKill(waitseconds: integer = 30): boolean;
 function RunUntilSigTerminatedPidFile: TFileName;
 
 /// like SysUtils.ExecuteProcess, but allowing not to wait for the process to finish
-function RunProcess(const path, arg1: RawUTF8; waitfor: boolean): integer;
+function RunProcess(const path, arg1: TFileName; waitfor: boolean): integer;
 
 {$endif MSWINDOWS}
 
@@ -1408,12 +1408,12 @@ begin
       result := WEXITSTATUS(s) else
       result := -abs(s); // ensure returns a negative value for other errors
 end;
-{$endif}
+{$endif FPC}
 
-function RunProcess(const path, arg1: RawUTF8; waitfor: boolean): integer;
+function RunProcess(const path, arg1: TFileName; waitfor: boolean): integer;
 var
   pid: {$ifdef FPC}TPID{$else}pid_t{$endif};
-  a: array[0..2] of PAnsiChar;
+  a: array[0..2] of PAnsiChar; // assume no UNICODE on BSD, i.e. TFileName is
 begin
   {$ifdef FPC}
   {$if (defined(BSD) or defined(SUNOS)) and defined(FPC_USE_LIBC)}
@@ -1569,6 +1569,7 @@ procedure TSynDaemon.CommandLine(aAutoStart: boolean);
 const CMD_CHR: array[cHelp .. cKill] of AnsiChar = ('H', 'I', 'R', 'F', 'U', 'C', 'K');
 var
   cmd, c: TExecuteCommandLineCmd;
+  p: PUTF8Char;
   ch: AnsiChar;
   param: RawUTF8;
   exe: RawByteString;
@@ -1653,7 +1654,10 @@ begin
   param := trim(StringToUTF8(paramstr(1)));
   cmd := cNone;
   if (param <> '') and (param[1] in ['/', '-']) then begin
-    ch := NormToUpper[param[2]];
+    p := @param[2];
+    if p^ = '-' then
+      inc(p); // allow e.g. --fork switch (idem to /f -f /fork -fork)
+    ch := NormToUpper[p^];
     for c := low(CMD_CHR) to high(CMD_CHR) do
       if CMD_CHR[c] = ch then begin
         cmd := c;
@@ -1661,7 +1665,7 @@ begin
       end;
     if cmd = cNone then
       byte(cmd) := ord(cVersion) +
-        IdemPCharArray(@param[2], ['VERS', 'VERB', 'START', 'STOP', 'STAT', 'SILENTK']);
+        IdemPCharArray(p, ['VERS', 'VERB', 'START', 'STOP', 'STAT', 'SILENTK']);
     end;
   try
     case cmd of

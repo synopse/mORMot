@@ -16,6 +16,7 @@ Contributors
   Aweste
   Bas Schouten
   BigStar
+  BugsDigger
   Cheemeng
   CoMPi
   Damien (ddemars)

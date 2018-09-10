@@ -42902,7 +42902,7 @@ begin
   if (recordInfoSize<>0) and (fRoot.fDataSize<>recordInfoSize) then
     raise ESynException.CreateUTF8('%.Create: % text definition is not accurate,'+
       ' or the type has not been defined as PACKED record: RTTI size is %'+
-      ' bytes but text definition generated % bytes',
+      ' bytes but text definition covers % bytes',
       [self,fRoot.fCustomTypeName,recordInfoSize,fRoot.fDataSize]);
 end;
 
