@@ -558,11 +558,10 @@ function RunUntilSigTerminatedForKill(waitseconds: integer = 30): boolean;
 /// local .pid file name as created by RunUntilSigTerminated(dofork=true)
 function RunUntilSigTerminatedPidFile: TFileName;
 
-/// like SysUtils.ExecuteProcess, but allowing not to wait for the process to finish
-function RunProcess(const path, arg1: TFileName; waitfor: boolean): integer;
-
 {$endif MSWINDOWS}
 
+/// like SysUtils.ExecuteProcess, but allowing not to wait for the process to finish
+function RunProcess(const path, arg1: TFileName; waitfor: boolean): integer;
 
 { *** cross-plaform high-level services/daemons }
 
@@ -1247,6 +1246,36 @@ begin
   finally
     ServiceSingle := nil;
   end;
+end;
+
+function RunProcess(const path, arg1: TFileName; waitfor: boolean): integer;
+var
+  startupinfo: STARTUPINFOW;
+  processinfo: PROCESS_INFORMATION;
+  wfilename, wcmdline, currentdir: widestring;
+  exitcode: DWORD;
+begin
+  // CreateProcess can alter the strings so do the copy!
+  wfilename := widestring(path);
+  wcmdline := UTF8ToWideString(arg1);
+  currentdir := widestring(ExeVersion.ProgramFilePath);
+  FillCharFast(startupinfo, SizeOf(STARTUPINFOW), 0);
+  startupinfo.cb := SizeOf(STARTUPINFOW);
+  if CreateProcessW(PWideChar(wfilename), PWideChar(wcmdline), nil, nil, false,
+    0, nil, PWideChar(currentdir), @startupinfo, @processinfo) then begin
+    if waitfor then begin
+      if WaitForSingleObject(processinfo.hProcess,INFINITE) = WAIT_FAILED then
+        result := -GetLastError
+      else
+        if not GetExitCodeProcess(processinfo.hProcess, @exitcode) then
+          result := -GetLastError
+        else
+          result := exitcode;
+    end else
+      result := 0;
+    CloseHandle(processinfo.hProcess);
+  end else
+    result := -GetLastError;
 end;
 
 {$else} // Linux/POSIX signal interception
