@@ -1252,17 +1252,22 @@ function RunProcess(const path, arg1: TFileName; waitfor: boolean): integer;
 var
   startupinfo: STARTUPINFOW;
   processinfo: PROCESS_INFORMATION;
-  wfilename, wcmdline, currentdir: widestring;
+  cmdline: TFileName;
+  wcmdline, currentdir: widestring;
   exitcode: DWORD;
 begin
+  // https://support.microsoft.com/en-us/help/175986/info-understanding-createprocess-and-command-line-arguments
+  cmdline := '"' + path + '"';
+  if arg1<>'' then
+    cmdline := cmdline + ' ' + arg1;
   // CreateProcess can alter the strings so do the copy!
-  wfilename := widestring(path);
-  wcmdline := UTF8ToWideString(arg1);
+  wcmdline := widestring(cmdline);
   currentdir := widestring(ExeVersion.ProgramFilePath);
   FillCharFast(startupinfo, SizeOf(STARTUPINFOW), 0);
   startupinfo.cb := SizeOf(STARTUPINFOW);
-  if CreateProcessW(PWideChar(wfilename), PWideChar(wcmdline), nil, nil, false,
-    0, nil, PWideChar(currentdir), @startupinfo, @processinfo) then begin
+  // https://docs.microsoft.com/pl-pl/windows/desktop/ProcThread/process-creation-flags
+  if CreateProcessW(nil, PWideChar(wcmdline), nil, nil, false,
+    CREATE_DEFAULT_ERROR_MODE or DETACHED_PROCESS, nil, PWideChar(currentdir), @startupinfo, @processinfo) then begin
     if waitfor then begin
       if WaitForSingleObject(processinfo.hProcess,INFINITE) = WAIT_FAILED then
         result := -GetLastError
@@ -1274,6 +1279,7 @@ begin
     end else
       result := 0;
     CloseHandle(processinfo.hProcess);
+    CloseHandle(processinfo.hThread);
   end else
     result := -GetLastError;
 end;
