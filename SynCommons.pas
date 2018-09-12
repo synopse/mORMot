@@ -3490,6 +3490,8 @@ type
     Timestamp: TDateTime;
     /// fill the item properties from a FindFirst/FindNext's TSearchRec
     procedure FromSearchRec(const Directory: TFileName; const F: TSearchRec);
+    /// returns some ready-to-be-loggued text
+    function ToText: shortstring;
   end;
   {$A+}
   /// result list, as returned by FindFiles()
@@ -9091,6 +9093,7 @@ type
     // variable holding a reference to a shared instance
     constructor Create; override;
     /// get maximum possible (worse) compressed size for the supplied length
+    // - including the crc32c + algo 9 bytes header
     function CompressDestLen(PlainLen: integer): integer;
       {$ifdef HASINLINE}inline;{$endif}
     /// compress a memory buffer with crc32c hashing to a RawByteString
@@ -10059,6 +10062,10 @@ type
     procedure VarNextInt(count: integer); overload;
     /// read the next byte from the buffer
     function NextByte: byte; {$ifdef HASINLINE}inline;{$endif}
+    /// read the next 4 bytes from the buffer as a 32-bit unsigned value
+    function Next4: cardinal; {$ifdef HASINLINE}inline;{$endif}
+    /// read the next 8 bytes from the buffer as a 64-bit unsigned value
+    function Next8: Qword; {$ifdef HASINLINE}inline;{$endif}
     /// consumes the next byte from the buffer, if matches a given value
     function NextByteEquals(Value: byte): boolean; {$ifdef HASINLINE}inline;{$endif}
     /// returns the current position, and move ahead the specified bytes
@@ -16998,9 +17005,9 @@ type
     property ObjArray: TSynPersistentLockDynArray read fObjArray;
   end;
 
-  /// abstract high-level handling of SynLZ-compressed persisted storage
+  /// abstract high-level handling of (SynLZ-)compressed persisted storage
   // - LoadFromReader/SaveToWriter abstract methods should be overriden
-  // with proper persistence binary implementation
+  // with proper binary persistence implementation
   TSynPersistentStore = class(TSynPersistentLock)
   protected
     fName: RawUTF8;
@@ -17060,7 +17067,7 @@ type
     function SaveToFile(const aFileName: TFileName; nocompression: boolean=false;
       BufLen: integer=65536; ForcedAlgo: TAlgoCompress=nil): PtrUInt;
     /// one optional text associated with this storage
-    // - you can define it as published to serialize its value
+    // - you can define this field as published to serialize its value in log/JSON
     property Name: RawUTF8 read fName;
     /// after a LoadFrom(), contains the uncompressed data size read
     property LoadFromLastUncompressed: integer read fLoadFromLastUncompressed;
@@ -30114,6 +30121,11 @@ begin
   {$endif}
   Attr := F.Attr;
   Timestamp := SearchRecToDateTime(F);
+end;
+
+function TFindFiles.ToText: shortstring;
+begin
+  FormatShort('% % %', [Name, KB(Size), DateTimeToFileShort(Timestamp)], result);
 end;
 
 function FindFiles(const Directory,Mask,IgnoreFileName: TFileName;
@@ -60950,6 +60962,22 @@ begin
     ErrorOverflow;
   result := ord(P^);
   inc(P);
+end;
+
+function TFastReader.Next4: cardinal;
+begin
+  if P+3>=Last then
+    ErrorOverflow;
+  result := PCardinal(P)^;
+  inc(P,4);
+end;
+
+function TFastReader.Next8: QWord;
+begin
+  if P+7>=Last then
+    ErrorOverflow;
+  result := PQWord(P)^;
+  inc(P,8);
 end;
 
 function TFastReader.NextByteEquals(Value: byte): boolean;
