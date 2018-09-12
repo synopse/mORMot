@@ -1394,6 +1394,22 @@ const
      $000000,$000000,$000000,
      $000000,$000000,$000000,$000000,$000000,$FFFFFF,$000000,$000000));
 
+  /// console colors corresponding to each logging level
+  // - SynCommons' TextColor()
+  LOG_CONSOLE_COLORS: array[TSynLogInfo] of TConsoleColor = (
+  //    sllNone, sllInfo, sllDebug, sllTrace, sllWarning, sllError, sllEnter, sllLeave
+    ccLightGray,ccWhite,ccLightGray,ccLightBlue,ccBrown,ccLightRed,ccGreen,ccGreen,
+  //    sllLastError, sllException, sllExceptionOS, sllMemory, sllStackTrace,
+    ccLightRed, ccLightRed, ccLightRed, ccLightGray, ccCyan,
+  //    sllFail, sllSQL, sllCache, sllResult, sllDB, sllHTTP, sllClient, sllServer,
+    ccLightRed, ccBrown, ccBlue, ccLightCyan, ccMagenta, ccCyan, ccLightCyan, ccLightCyan,
+  //    sllServiceCall, sllServiceReturn, sllUserAuth,
+    ccLightMagenta, ccLightMagenta, ccMagenta,
+  //    sllCustom1, sllCustom2, sllCustom3, sllCustom4,
+    ccLightGray, ccLightGray,ccLightGray,ccLightGray,
+  //    sllNewRun, sllDDDError, sllDDDInfo, sllMonitoring
+    ccLightMagenta, ccLightRed, ccWhite, ccLightBlue);
+
   /// how TLogFilter map TSynLogInfo events
   LOG_FILTER: array[TSynLogFilter] of TSynLogInfos = (
     [], [succ(sllNone)..high(TSynLogInfo)],
@@ -3944,24 +3960,11 @@ function TSynLog.ConsoleEcho(Sender: TTextWriter; Level: TSynLogInfo;
 {$ifdef MSWINDOWS}
 var tmp: AnsiString;
 {$endif}
-const LOGCOLORS: array[TSynLogInfo] of TConsoleColor = (
-//    sllNone, sllInfo, sllDebug, sllTrace, sllWarning, sllError, sllEnter, sllLeave
-  ccLightGray,ccWhite,ccLightGray,ccLightBlue,ccBrown,ccLightRed,ccGreen,ccGreen,
-//    sllLastError, sllException, sllExceptionOS, sllMemory, sllStackTrace,
-  ccLightRed, ccLightRed, ccLightRed, ccLightGray, ccCyan,
-//    sllFail, sllSQL, sllCache, sllResult, sllDB, sllHTTP, sllClient, sllServer,
-  ccLightRed, ccBrown, ccBlue, ccLightCyan, ccMagenta, ccCyan, ccLightCyan, ccLightCyan,
-//    sllServiceCall, sllServiceReturn, sllUserAuth,
-  ccLightMagenta, ccLightMagenta, ccMagenta,
-//    sllCustom1, sllCustom2, sllCustom3, sllCustom4,
-  ccLightGray, ccLightGray,ccLightGray,ccLightGray,
-//    sllNewRun, sllDDDError, sllDDDInfo, sllMonitoring
-  ccLightMagenta, ccLightRed, ccWhite, ccLightBlue);
 begin
   result := true;
   if not (Level in fFamily.fEchoToConsole) then
     exit;
-  TextColor(LOGCOLORS[Level]);
+  TextColor(LOG_CONSOLE_COLORS[Level]);
   {$ifdef MSWINDOWS}
   tmp := CurrentAnsiConvert.UTF8ToAnsi(Text);
   {$ifndef HASCODEPAGE}
