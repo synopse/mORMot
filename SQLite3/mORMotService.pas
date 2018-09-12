@@ -558,11 +558,10 @@ function RunUntilSigTerminatedForKill(waitseconds: integer = 30): boolean;
 /// local .pid file name as created by RunUntilSigTerminated(dofork=true)
 function RunUntilSigTerminatedPidFile: TFileName;
 
-/// like SysUtils.ExecuteProcess, but allowing not to wait for the process to finish
-function RunProcess(const path, arg1: TFileName; waitfor: boolean): integer;
-
 {$endif MSWINDOWS}
 
+/// like SysUtils.ExecuteProcess, but allowing not to wait for the process to finish
+function RunProcess(const path, arg1: TFileName; waitfor: boolean): integer;
 
 { *** cross-plaform high-level services/daemons }
 
@@ -1247,6 +1246,42 @@ begin
   finally
     ServiceSingle := nil;
   end;
+end;
+
+function RunProcess(const path, arg1: TFileName; waitfor: boolean): integer;
+var
+  startupinfo: STARTUPINFOW;
+  processinfo: PROCESS_INFORMATION;
+  cmdline: TFileName;
+  wcmdline, currentdir: widestring;
+  exitcode: DWORD;
+begin
+  // https://support.microsoft.com/en-us/help/175986/info-understanding-createprocess-and-command-line-arguments
+  cmdline := '"' + path + '"';
+  if arg1<>'' then
+    cmdline := cmdline + ' ' + arg1;
+  // CreateProcess can alter the strings so do the copy!
+  wcmdline := widestring(cmdline);
+  currentdir := widestring(ExeVersion.ProgramFilePath);
+  FillCharFast(startupinfo, SizeOf(STARTUPINFOW), 0);
+  startupinfo.cb := SizeOf(STARTUPINFOW);
+  // https://docs.microsoft.com/pl-pl/windows/desktop/ProcThread/process-creation-flags
+  if CreateProcessW(nil, PWideChar(wcmdline), nil, nil, false,
+    CREATE_DEFAULT_ERROR_MODE or DETACHED_PROCESS, nil, PWideChar(currentdir), @startupinfo, @processinfo) then begin
+    if waitfor then begin
+      if WaitForSingleObject(processinfo.hProcess,INFINITE) = WAIT_FAILED then
+        result := -GetLastError
+      else
+        if not GetExitCodeProcess(processinfo.hProcess, @exitcode) then
+          result := -GetLastError
+        else
+          result := exitcode;
+    end else
+      result := 0;
+    CloseHandle(processinfo.hProcess);
+    CloseHandle(processinfo.hThread);
+  end else
+    result := -GetLastError;
 end;
 
 {$else} // Linux/POSIX signal interception
