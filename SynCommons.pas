@@ -12556,6 +12556,17 @@ function DateTimeMSToString(HH,MM,SS,MS,Y,M,D: cardinal; Expanded: boolean;
 // using TSynTimeZone.LocalToUtc
 function DateTimeToHTTPDate(UTCDateTime: TDateTime): RawUTF8;
 
+/// convert some TDateTime to a small text layout, perfect e.g. for naming a local file
+// - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits, expecting
+// a date > 1999 (a current date would be fine)
+function DateTimeToFileShort(const DateTime: TDateTime): TShort16; overload;
+  {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
+
+/// convert some TDateTime to a small text layout, perfect e.g. for naming a local file
+// - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits, expecting
+// a date > 1999 (a current date would be fine)
+procedure DateTimeToFileShort(const DateTime: TDateTime; out result: TShort16); overload;
+
 /// retrieve the current Time (whithout Date), in the ISO 8601 layout
 // - useful for direct on screen logging e.g.
 function TimeToString: RawUTF8;
@@ -35332,21 +35343,24 @@ begin
 end;
 {$endif FPC}
 
-procedure UnixTimeToFileShort(const UnixTime: TUnixTime; out result: TShort16);
-var dt: TDateTime;
-    HH,MM,SS,MS,Y,M,D: word;
+function DateTimeToFileShort(const DateTime: TDateTime): TShort16;
+begin
+  DateTimeToFileShort(DateTime,result);
+end;
+
+procedure DateTimeToFileShort(const DateTime: TDateTime; out result: TShort16);
+var HH,MM,SS,MS,Y,M,D: word;
     tab: {$ifdef CPUX86}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
 begin // use 'YYMMDDHHMMSS' format
-  if UnixTime<=0 then begin
+  if DateTime<=0 then begin
     PWord(@result[0])^ := 1+ord('0') shl 8;
     exit;
   end;
-  dt := UnixTime/SecsPerDay+UnixDateDelta;
-  DecodeDate(dt,Y,M,D);
+  DecodeDate(DateTime,Y,M,D);
   if Y > 1999 then
     dec(Y,2000) else
     Y := 0;
-  DecodeTime(dt,HH,MM,SS,MS);
+  DecodeTime(DateTime,HH,MM,SS,MS);
   {$ifndef CPUX86}tab := @TwoDigitLookupW;{$endif}
   result[0] := #12;
   PWord(@result[1])^ := tab[Y];
@@ -35355,6 +35369,13 @@ begin // use 'YYMMDDHHMMSS' format
   PWord(@result[7])^ := tab[HH];
   PWord(@result[9])^ := tab[MM];
   PWord(@result[11])^ := tab[SS];
+end;
+
+procedure UnixTimeToFileShort(const UnixTime: TUnixTime; out result: TShort16);
+begin // use 'YYMMDDHHMMSS' format
+  if UnixTime<=0 then
+    PWord(@result[0])^ := 1+ord('0') shl 8 else
+    DateTimeToFileShort(UnixTime/SecsPerDay+UnixDateDelta, result);
 end;
 
 function UnixTimeToFileShort(const UnixTime: TUnixTime): TShort16;
