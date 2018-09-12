@@ -1639,18 +1639,21 @@ var
 
   procedure Syntax;
   var
-    spaces: string;
+    spaces, custom: string;
   begin
     WriteCopyright;
     writeln('Try with one of the switches:');
-    writeln({$ifdef MSWINDOWS}'   '{$else}' ./'{$endif}, ExeVersion.ProgramName,
-      ' /console -c /verbose /help -h /version');
     spaces := StringOfChar(' ', length(ExeVersion.ProgramName) + 4);
     {$ifdef MSWINDOWS}
-    writeln(spaces, '/install /uninstall /start /stop /state', CustomCommandLineSyntax);
+    writeln('   ', ExeVersion.ProgramName, ' /console -c /verbose /help -h /version');
+    writeln(spaces, '/install /uninstall /start /stop /state');
     {$else}
-    writeln(spaces, '/run -r /fork -f /kill -k', CustomCommandLineSyntax);
-    {$endif}
+    writeln(' ./', ExeVersion.ProgramName, ' --console -c --verbose --help -h --version');
+    writeln(spaces, '--run -r --fork -f --kill -k');
+    {$endif MSWINDOWS}
+    custom := CustomCommandLineSyntax;
+    if custom <> '' then
+      writeln(spaces, custom);
   end;
 
   function cmdText: RawUTF8;
