@@ -5612,7 +5612,7 @@ var starttix,endtix: Cardinal;
 begin
   Terminate; // set Terminated := true for THttpServerResp.Execute
   // force Accept() to return and terminate - shutdown(Sock.Sock) is not enough
-  if (Sock.Sock>0) and not fExecuteFinished then
+  if (Sock<>nil) and (Sock.Sock>0) and not fExecuteFinished then
     DirectShutdown(CallServer('localhost',Sock.Port,false,cslTCP,1));
   starttix := GetTickCount;
   endtix := starttix+20000;

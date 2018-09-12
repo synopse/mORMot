@@ -37744,7 +37744,7 @@ function TSQLRestThread.SleepOrTerminated(MS: integer): boolean;
 var endtix: Int64;
 begin
   result := true; // notify Terminated
-  if Terminated then
+  if (self = nil) or Terminated then
     exit;
   endtix := GetTickCount64+MS;
   repeat
