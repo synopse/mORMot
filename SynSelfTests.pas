@@ -16251,7 +16251,7 @@ begin
   EnsureInExpectedThread;
   Result.Header := TEXT_CONTENT_TYPE_HEADER;
   if n.Real = maxInt then
-    Result.Content := StringOfChar('-', 600) else
+    Result.Content := StringOfChar(AnsiChar('-'), 600) else
     Result.Content := FormatUTF8('%,%',[n.Real,n.Imaginary]);
 end;
 

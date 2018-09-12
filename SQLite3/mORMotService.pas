@@ -1248,12 +1248,21 @@ begin
   end;
 end;
 
+// redefined here so that we can share code with FPC and Delphi
+function CreateProcessW(lpApplicationName: PWideChar; lpCommandLine: PWideChar;
+  lpProcessAttributes, lpThreadAttributes: PSecurityAttributes;
+  bInheritHandles: BOOL; dwCreationFlags: DWORD; lpEnvironment: Pointer;
+  lpCurrentDirectory: PWideChar; const lpStartupInfo: TStartupInfo;
+  out lpProcessInformation: TProcessInformation): BOOL; stdcall; external kernel32;
+function GetExitCodeProcess(hProcess: THandle; out lpExitCode: DWORD): BOOL; stdcall;
+  external kernel32;
+
 function RunProcess(const path, arg1: TFileName; waitfor: boolean): integer;
 var
-  startupinfo: STARTUPINFOW;
-  processinfo: PROCESS_INFORMATION;
-  cmdline: TFileName;
-  wcmdline, currentdir: widestring;
+  startupinfo: TStartupInfo; // _STARTUPINFOW or _STARTUPINFOA is equal here
+  processinfo: TProcessInformation;
+  cmdline, runpath: TFileName;
+  wcmdline, currentdir: SynUnicode;
   exitcode: DWORD;
 begin
   // https://support.microsoft.com/en-us/help/175986/info-understanding-createprocess-and-command-line-arguments
@@ -1261,18 +1270,21 @@ begin
   if arg1<>'' then
     cmdline := cmdline + ' ' + arg1;
   // CreateProcess can alter the strings so do the copy!
-  wcmdline := widestring(cmdline);
-  currentdir := widestring(ExeVersion.ProgramFilePath);
-  FillCharFast(startupinfo, SizeOf(STARTUPINFOW), 0);
-  startupinfo.cb := SizeOf(STARTUPINFOW);
+  wcmdline := StringToSynUnicode(cmdline);
+  runpath := ExtractFilePath(path);
+  if runpath = '' then
+    runpath := ExeVersion.ProgramFilePath;
+  currentdir := StringToSynUnicode(runpath);
+  FillCharFast(startupinfo, SizeOf(startupinfo), 0);
+  startupinfo.cb := SizeOf(startupinfo);
   // https://docs.microsoft.com/pl-pl/windows/desktop/ProcThread/process-creation-flags
-  if CreateProcessW(nil, PWideChar(wcmdline), nil, nil, false,
-    CREATE_DEFAULT_ERROR_MODE or DETACHED_PROCESS, nil, PWideChar(currentdir), @startupinfo, @processinfo) then begin
+  if CreateProcessW(nil, pointer(wcmdline), nil, nil, false,
+    CREATE_DEFAULT_ERROR_MODE or DETACHED_PROCESS, nil, pointer(currentdir), startupinfo, processinfo) then begin
     if waitfor then begin
       if WaitForSingleObject(processinfo.hProcess,INFINITE) = WAIT_FAILED then
         result := -GetLastError
       else
-        if not GetExitCodeProcess(processinfo.hProcess, @exitcode) then
+        if not GetExitCodeProcess(processinfo.hProcess, exitcode) then
           result := -GetLastError
         else
           result := exitcode;
