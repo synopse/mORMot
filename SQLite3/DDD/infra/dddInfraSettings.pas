@@ -1116,12 +1116,14 @@ end;
 { TDDDAppSettingsStorageFile }
 
 constructor TDDDAppSettingsStorageFile.Create(const aSettingsJsonFileName: TFileName);
+var content: RawUTF8;
 begin
   if aSettingsJsonFileName<>'' then
     fSettingsJsonFileName := aSettingsJsonFileName else
     fSettingsJsonFileName := ChangeFileExt(ExeVersion.ProgramFileName,'.settings');
   fSettingsJsonFileName := ExpandFileName(fSettingsJsonFileName);
-  inherited Create(AnyTextFileToRawUTF8(fSettingsJsonFileName,true));
+  content := AnyTextFileToRawUTF8(fSettingsJsonFileName,true);
+  inherited Create(content);
 end;
 
 function TDDDAppSettingsStorageFile.FileNameRelativeToSettingsFile(

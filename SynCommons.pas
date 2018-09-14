@@ -9355,6 +9355,10 @@ type
     function ForEach(const OnMatch: TSynDictionaryEvent;
       KeyCompare,ValueCompare: TDynArraySortCompare; const aKey,aValue;
       Opaque: pointer=nil): integer; overload;
+    /// touch the entry timeout field so that it won't be deprecated sooner
+    // - this method is not thread-safe, and is expected to be execute e.g.
+    // from a ForEach() TSynDictionaryEvent callback
+    procedure SetTimeoutAtIndex(aIndex: integer);
     /// search aArrayValue item in a dynamic-array value associated via aKey
     // - expect the stored value to be a dynamic array itself
     // - would search for aKey as primary key, then use TDynArray.Find
@@ -9451,7 +9455,7 @@ type
     property CompressAlgo: TAlgoCompress read fCompressAlgo write fCompressAlgo;
     /// callback to by-pass DeleteDeprecated deletion by returning false
     // - can be assigned e.g. to OnCanDeleteSynPersistentLock if Value is a
-    // TSynPersistentLock instance, to avoid any potential access violdation
+    // TSynPersistentLock instance, to avoid any potential access violation
     property OnCanDeleteDeprecated: TSynDictionaryCanDeleteEvent read fOnCanDelete write fOnCanDelete;
   end;
 
@@ -59174,6 +59178,16 @@ begin
   finally
     fSafe.UnLock;
   end;
+end;
+
+procedure TSynDictionary.SetTimeoutAtIndex(aIndex: integer);
+var tim: cardinal;
+begin
+  if cardinal(aIndex) >= cardinal(fSafe.Padding[DIC_KEYCOUNT].VInteger) then
+    exit;
+  tim := fSafe.Padding[DIC_TIMESEC].VInteger;
+  if tim > 0 then
+    fTimeOut[aIndex] := cardinal(GetTickCount64 shr 10)+tim;
 end;
 
 function TSynDictionary.Count: integer;
