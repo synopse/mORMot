@@ -937,7 +937,7 @@ type
     /// IAdministratedDaemon command to finalize the associated process
     // - and returns updated statistics as a TDocVariant
     function Stop(out Information: variant): TCQRSResult; virtual;
-    /// IAdministratedDaemon command to  Stop the associated process, then
+    /// IAdministratedDaemon command to Stop the associated process, then
     // quit the executable
     // - returning the same output information than Stop()
     function Halt(out Information: variant): TCQRSResult; virtual;

@@ -46293,7 +46293,7 @@ begin
           R := result - 1;
       until (L > R);
     end else
-      // IDs are not sorted (not possible in practice) -> O(n) lookup
+      // IDs are not sorted (not possible in practice) or only a few -> O(n) lookup
       for result := 0 to R do
         if rec[result].fID=ID then
           exit;
