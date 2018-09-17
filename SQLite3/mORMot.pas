@@ -17653,7 +17653,10 @@ type
     // - any connection attempt from this IP Address will be rejected by
     function BanIP(const aIP: RawUTF8; aRemoveBan: boolean=false): boolean;
     /// (un)register a an IPv4 value to the JWT white list
-    // - JWT connection attempts will be validated against this IP list
+    // - by default, a JWT validated by JWTForUnauthenticatedRequest will be accepted
+    // - to avoid MiM (Man-In-the-Middle) attacks, if a JWT white list is defined
+    // using this method, any connection from a non registered IP will be rejected,
+    // even with a valid JWT
     // - WebSockets connections are secure enough to bypass this list
     function JWTForUnauthenticatedRequestWhiteIP(const aIP: RawUTF8; aRemoveWhite: boolean=false): boolean;
     /// add all published methods of a given object instance to the method-based

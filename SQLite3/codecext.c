@@ -296,7 +296,7 @@ int sqlite3_rekey_v2(sqlite3 *db, const char *zDbName, const void *zKey, int nKe
   sqlite3_mutex_enter(db->mutex);
 
   /* Start transaction */
-  rc = sqlite3BtreeBeginTrans(pbt, 1);
+  rc = sqlite3BtreeBeginTrans(pbt, 1, NULL);
   if (!rc)
   {
     int pageSize = sqlite3BtreeGetPageSize(pbt);
