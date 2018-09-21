@@ -2676,6 +2676,22 @@ function GetIPAddresses(Kind: TIPAddress = tiaAny): TSockStringDynArray;
 function GetIPAddressesText(const Sep: SockString = ' ';
   PublicOnly: boolean = false): SockString;
 
+type
+  /// interface name/address pairs as returned by GetMacAddresses
+  TMacAddress = record
+    /// contains e.g. 'eth0' on Linux
+    name: SockString;
+    /// contains e.g. '12:50:b6:1e:c6:aa' from /sys/class/net/eth0/adddress
+    address: SockString;
+  end;
+  TMacAddressDynArray = array of TMacAddress;
+
+/// enumerate all Mac addresses of the current computer
+function GetMacAddresses: TMacAddressDynArray;
+
+/// enumerate all Mac addresses of the current computer as 'name1=addr1 name2=addr2'
+function GetMacAddressesText: SockString;
+
 /// low-level text description of  Socket error code
 // - if Error is -1, will call WSAGetLastError to retrieve the last error code
 function SocketErrorMessage(Error: integer=-1): string;
@@ -3701,6 +3717,7 @@ end;
 
 const
   HexChars: array[0..15] of AnsiChar = '0123456789ABCDEF';
+  HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
 
 procedure BinToHexDisplay(Bin: PByte; BinBytes: integer; var result: shortstring);
 var j: cardinal;
@@ -3860,6 +3877,24 @@ end;
 
 {$ifdef MSWINDOWS}
 
+function MacToText(pMacAddr: PByteArray): SockString;
+var P: PAnsiChar;
+    i: integer;
+begin
+  SetLength(result,17);
+  P := pointer(result);
+  i := 0;
+  repeat
+    P[0] := HexCharsLower[pMacAddr[i] shr 4];
+    P[1] := HexCharsLower[pMacAddr[i] and $F];
+    if i = 5 then
+      break;
+    P[2] := ':'; // as in Linux
+    inc(P,3);
+    inc(i);
+  until false;
+end;
+
 function SendARP(DestIp: DWORD; srcIP: DWORD; pMacAddr: pointer;
   PhyAddrLen: Pointer): DWORD; stdcall; external 'iphlpapi.dll';
 
@@ -3868,23 +3903,14 @@ function GetRemoteMacAddress(const IP: SockString): SockString;
 var dwRemoteIP: DWORD;
     PhyAddrLen: Longword;
     pMacAddr: array [0..7] of byte;
-    I: integer;
-    P: PAnsiChar;
 begin
   result := '';
   dwremoteIP := inet_addr(pointer(IP));
   if dwremoteIP<>0 then begin
     PhyAddrLen := 8;
     if SendARP(dwremoteIP, 0, @pMacAddr, @PhyAddrLen)=NO_ERROR then begin
-      if PhyAddrLen=6 then begin
-        SetLength(result,12);
-        P := pointer(result);
-        for i := 0 to 5 do begin
-          P[0] := HexChars[pMacAddr[i] shr 4];
-          P[1] := HexChars[pMacAddr[i] and $F];
-          inc(P,2);
-        end;
-      end;
+      if PhyAddrLen=6 then
+        result := MacToText(@pMacAddr);
     end;
   end;
 end;
@@ -3906,6 +3932,77 @@ type
 
 function GetIpAddrTable(pIpAddrTable: PMIB_IPADDRTABLE;
   var pdwSize: DWORD; bOrder: BOOL): DWORD; stdcall; external 'iphlpapi.dll';
+
+const
+  MAX_ADAPTER_ADDRESS_LENGTH = 8;
+  GAA_FLAG_SKIP_UNICAST = $1;
+  GAA_FLAG_SKIP_ANYCAST = $2;
+  GAA_FLAG_SKIP_MULTICAST = $4;
+  GAA_FLAG_SKIP_DNS_SERVER = $8;
+  GAA_FLAG_SKIP_FRIENDLY_NAME = $20;
+  GAA_FLAG_INCLUDE_ALL_INTERFACES = $100; // Vista+
+  GAA_FLAGS = GAA_FLAG_SKIP_UNICAST or GAA_FLAG_SKIP_ANYCAST or
+    GAA_FLAG_SKIP_MULTICAST or GAA_FLAG_SKIP_DNS_SERVER or
+    GAA_FLAG_SKIP_FRIENDLY_NAME; // or GAA_FLAG_INCLUDE_ALL_INTERFACES;
+  IfOperStatusUp = 1;
+type
+  SOCKET_ADDRESS = record
+    lpSockaddr: PSOCKADDR;
+    iSockaddrLength: Integer;
+  end;
+  PIP_ADAPTER_UNICAST_ADDRESS = pointer;
+  PIP_ADAPTER_ANYCAST_ADDRESS = pointer;
+  PIP_ADAPTER_DNS_SERVER_ADDRESS = pointer;
+  PIP_ADAPTER_MULTICAST_ADDRESS = pointer;
+  PIP_ADAPTER_ADDRESSES = ^_IP_ADAPTER_ADDRESSES;
+  _IP_ADAPTER_ADDRESSES = record
+    Union: record
+      case Integer of
+        0: (
+          Alignment: ULONGLONG);
+        1: (
+          Length: ULONG;
+          IfIndex: DWORD);
+    end;
+    Next: PIP_ADAPTER_ADDRESSES;
+    AdapterName: PAnsiChar;
+    FirstUnicastAddress: PIP_ADAPTER_UNICAST_ADDRESS;
+    FirstAnycastAddress: PIP_ADAPTER_ANYCAST_ADDRESS;
+    FirstMulticastAddress: PIP_ADAPTER_MULTICAST_ADDRESS;
+    FirstDnsServerAddress: PIP_ADAPTER_DNS_SERVER_ADDRESS;
+    DnsSuffix: PWCHAR;
+    Description: PWCHAR;
+    FriendlyName: PWCHAR;
+    PhysicalAddress: array [0..MAX_ADAPTER_ADDRESS_LENGTH - 1] of BYTE;
+    PhysicalAddressLength: DWORD;
+    Flags: DWORD;
+    Mtu: DWORD;
+    IfType: ULONG;
+    OperStatus: DWORD;
+    // below fields are only available on Windows XP with SP1 and later
+    Ipv6IfIndex: ULONG;
+    ZoneIndices: array [0..15] of DWORD;
+    FirstPrefix: pointer;
+    // below fields are only available on Windows Vista and later
+    TransmitLinkSpeed: Int64;
+    ReceiveLinkSpeed: Int64;
+    FirstWinsServerAddress: pointer;
+    FirstGatewayAddress: pointer;
+    Ipv4Metric: ULONG;
+    Ipv6Metric: ULONG;
+    Luid: Int64;
+    Dhcpv4Server: SOCKET_ADDRESS;
+    CompartmentId: DWORD;
+    NetworkGuid: TGUID;
+    ConnectionType: DWORD;
+    TunnelType: DWORD;
+    // DHCP v6 Info following
+  end;
+
+function GetAdaptersAddresses(Family: ULONG; Flags: DWORD; Reserved: pointer;
+  pAdapterAddresses: PIP_ADAPTER_ADDRESSES; pOutBufLen: PULONG): DWORD; stdcall;
+  external 'iphlpapi.dll';
+
 
 function GetIPAddresses(Kind: TIPAddress): TSockStringDynArray;
 var Table: MIB_IPADDRTABLE;
@@ -3933,7 +4030,7 @@ begin
     SetLength(result,n);
 end;
 
-{$else}
+{$else MSWINDOWS}
 
 function GetFileOpenLimit(hard: boolean=false): integer;
 var limit: TRLIMIT;
@@ -4078,12 +4175,110 @@ begin
     IPAddressesText[PublicOnly] := result;
 end;
 
+var
+  MacAddressesSearched: boolean;
+  MacAddresses: TMacAddressDynArray;
+  MacAddressesText: SockString;
+
+procedure GetSmallFile(const fn: TFileName; out result: SockString);
+var tmp: array[byte] of AnsiChar;
+    F: THandle;
+    t: PtrInt;
+begin
+  F := FileOpen(fn, fmOpenRead or fmShareDenyNone);
+  if PtrInt(F) < 0 then
+   exit;
+  t := FileRead(F, tmp, SizeOf(tmp));
+  FileClose(F);
+  while (t > 0) and (tmp[t - 1] <= ' ') do dec(t); // trim right
+  if t > 0 then
+    SetString(result, PAnsiChar(@tmp), t);
+end;
+
+procedure RetrieveMacAddresses;
+var n: integer;
+{$ifdef LINUX}
+   SR: TSearchRec;
+   fn: TFileName;
+   f: SockString;
+{$endif LINUX}
+{$ifdef MSWINDOWS}
+   tmp: array[word] of byte;
+   siz: ULONG;
+   p: PIP_ADAPTER_ADDRESSES;
+{$endif MSWINDOWS}
+begin
+  n := 0;
+  {$ifdef LINUX}
+  if FindFirst('/sys/class/net/*', faDirectory, SR) = 0 then begin
+    repeat
+      if (SR.Name <> 'lo') and (SR.Name[1] <> '.') then begin
+        fn := '/sys/class/net/' + SR.Name;
+        GetSmallFile(fn + '/flags', f);
+        if (length(f) > 2) and // e.g. '0x40' or '0x1043'
+           (HttpChunkToHex32(@f[3]) and (IFF_UP or IFF_LOOPBACK) = IFF_UP) then begin
+          GetSmallFile(fn + '/address', f);
+          if f <> '' then begin
+            SetLength(MacAddresses, n + 1);
+            MacAddresses[n].name := SR.Name;
+            MacAddresses[n].address := f;
+            inc(n);
+          end;
+        end;
+      end;
+    until FindNext(SR) <> 0;
+    FindClose(SR);
+  end;
+  {$endif LINUX}
+  {$ifdef MSWINDOWS}
+  siz := SizeOf(tmp);
+  p := @tmp;
+  if GetAdaptersAddresses(AF_UNSPEC, GAA_FLAGS, nil, p, @siz) = ERROR_SUCCESS then begin
+    repeat
+      if (p^.Flags <> 0) and (p^.OperStatus = IfOperStatusUp) and
+         (p^.PhysicalAddressLength = 6) then begin
+        SetLength(MacAddresses, n + 1);
+        MacAddresses[n].name := {$ifdef UNICODE}UTF8String{$else}UTF8Encode{$endif}(WideString(p^.Description));
+        MacAddresses[n].address := MacToText(@p^.PhysicalAddress);
+        inc(n);
+      end;
+      p := p^.Next;
+    until p = nil;
+  end;
+  {$endif MSWINDOWS}
+  MacAddressesSearched := true;
+end;
+
+function GetMacAddresses: TMacAddressDynArray;
+begin
+  if not MacAddressesSearched then
+    RetrieveMacAddresses;
+  result := MacAddresses;
+end;
+
+function GetMacAddressesText: SockString;
+var i: integer;
+begin
+  result := MacAddressesText;
+  if (result <> '') or MacAddressesSearched then
+    exit;
+  RetrieveMacAddresses;
+  result := '';
+  if MacAddresses = nil then
+    exit;
+  for i := 0 to high(MacAddresses) do
+    with MacAddresses[i] do
+      result := result + name + '=' + address + ' ';
+  SetLength(result, length(result) - 1);
+  MacAddressesText := result;
+end;
 
 {$ifndef NOXPOWEREDNAME}
 const
   XPOWEREDNAME = 'X-Powered-By';
   XPOWEREDVALUE = XPOWEREDPROGRAM + ' synopse.info';
 {$endif}
+
 
 { TURI }
 
