@@ -238,7 +238,6 @@ uses
 {$else MSWINDOWS}
   {$undef USEWININET}
   {$ifdef FPC}
-  Sockets,
   SynFPCSock,
   SynFPCLinux,
   BaseUnix, // for fpgetrlimit/fpsetrlimit
@@ -4232,7 +4231,7 @@ var sin: TVarSin;
     IP: SockString;
     socktype, ipproto: integer;
     {$ifndef MSWINDOWS}
-    serveraddr: sockaddr;
+    serveraddr: TSockAddr;
     {$endif}
 begin
   result := -1;
