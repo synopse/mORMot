@@ -1357,6 +1357,23 @@ type
       nArg, eTextRep: integer; pApp: pointer; xFunc, xStep: TSQLFunctionFunc;
       xFinal: TSQLFunctionFinal; xDestroy: TSQLDestroyPtr): Integer; cdecl;
 
+    /// add SQL functions or aggregates or to redefine the behavior of existing
+    // SQL functions or aggregates, including  extra callback functions needed
+    // by aggregate window functions
+    // - see https://www.sqlite.org/windowfunctions.html#aggregate_window_functions
+    // - sixth, seventh, eighth and ninth parameters (xStep, xFinal, xValue
+    // and xInverse) passed to this function are pointers to callbacks that
+    // implement the new aggregate window function. xStep and xFinal must both
+    // be non-nil. xValue and xInverse may either both be nil, in which case a
+    // regular aggregate function is created, or must both be non-nil, in which
+    // case the new function may be used as either an aggregate or aggregate
+    // window function
+    // - this function is not available in older revisions, i.e. before 3.25.0
+    create_window_function: function(DB: TSQLite3DB; FunctionName: PUTF8Char;
+      nArg, eTextRep: integer; pApp: pointer; xStep: TSQLFunctionFunc;
+      xFinal, xValue: TSQLFunctionFinal; xInverse: TSQLFunctionFunc;
+      xDestroy: TSQLDestroyPtr): Integer; cdecl;
+
     /// Define New Collating Sequences
     // - add new collation sequences to the database connection specified
     // - collation name is to be used in CREATE TABLE t1 (a COLLATE CollationName);
@@ -5803,10 +5820,10 @@ end;
 { TSQLite3LibraryDynamic }
 
 const
-  SQLITE3_ENTRIES: array[0..90] of TFileName =
+  SQLITE3_ENTRIES: array[0..91] of TFileName =
   ('initialize','shutdown','open','open_v2','key','rekey','close',
    'libversion','errmsg','extended_errcode',
-   'create_function','create_function_v2',
+   'create_function','create_function_v2', 'create_window_function',
    'create_collation','last_insert_rowid','busy_timeout','busy_handler',
    'prepare_v2','finalize','next_stmt','reset','stmt_readonly','step',
    'column_count','column_type','column_decltype','column_name','column_bytes',

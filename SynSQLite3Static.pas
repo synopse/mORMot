@@ -1009,12 +1009,13 @@ function sqlite3_key(DB: TSQLite3DB; key: pointer; keyLen: Integer): integer; cd
 function sqlite3_rekey(DB: TSQLite3DB; key: pointer; keyLen: Integer): integer; cdecl; external;
 function sqlite3_create_function(DB: TSQLite3DB; FunctionName: PUTF8Char;
   nArg, eTextRep: integer; pApp: pointer; xFunc, xStep: TSQLFunctionFunc;
-  xFinal: TSQLFunctionFinal): Integer;
-  cdecl; external;
+  xFinal: TSQLFunctionFinal): Integer; cdecl; external;
 function sqlite3_create_function_v2(DB: TSQLite3DB; FunctionName: PUTF8Char;
   nArg, eTextRep: integer; pApp: pointer; xFunc, xStep: TSQLFunctionFunc;
-  xFinal: TSQLFunctionFinal; xDestroy: TSQLDestroyPtr): Integer;
-  cdecl; external;
+  xFinal: TSQLFunctionFinal; xDestroy: TSQLDestroyPtr): Integer; cdecl; external;
+function sqlite3_create_window_function(DB: TSQLite3DB; FunctionName: PUTF8Char;
+  nArg, eTextRep: integer; pApp: pointer; xStep: TSQLFunctionFunc;
+  xFinal, xValue: TSQLFunctionFinal; xInverse: TSQLFunctionFunc; xDestroy: TSQLDestroyPtr): Integer;   cdecl; external;
 function sqlite3_create_collation(DB: TSQLite3DB; CollationName: PUTF8Char;
   StringEncoding: integer; CollateParam: pointer; cmp: TSQLCollateFunc): integer; cdecl; external;
 function sqlite3_libversion: PUTF8Char; cdecl; external;
@@ -1140,6 +1141,7 @@ begin
   extended_errcode     := @sqlite3_extended_errcode;
   create_function      := @sqlite3_create_function;
   create_function_v2   := @sqlite3_create_function_v2;
+  create_window_function := @sqlite3_create_window_function;
   create_collation     := @sqlite3_create_collation;
   last_insert_rowid    := @sqlite3_last_insert_rowid;
   busy_timeout         := @sqlite3_busy_timeout;
