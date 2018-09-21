@@ -2560,6 +2560,8 @@ const
   STATUS_SERVERERROR = 500;
   /// HTTP Status Code for "Not Implemented"
   STATUS_NOTIMPLEMENTED = 501;
+  /// HTTP Status Code for "HTTP Version Not Supported"
+  STATUS_HTTPVERSIONNONSUPPORTED = 505;
 
   {$ifdef MSWINDOWS}
   /// can be used with THttpApiServer.AuthenticationSchemes to enable all schemes
@@ -5131,7 +5133,7 @@ begin
   try
   try
     // send request - we use SockSend because writeln() is calling flush()
-    // -> all header will be sent at once
+    // -> all headers will be sent at once
     RequestSendHeader(url,method);
     if KeepAlive>0 then
       SockSend(['Keep-Alive: ',KeepAlive,#13#10'Connection: Keep-Alive']) else
@@ -5148,19 +5150,19 @@ begin
     SockRecvLn(Command); // will raise ECrtSocket on any error
     if TCPPrefix<>'' then
       if Command<>TCPPrefix then begin
-        result :=  505;
+        result :=  STATUS_HTTPVERSIONNONSUPPORTED; // 505
         exit;
       end else
       SockRecvLn(Command);
     P := pointer(Command);
     if IdemPChar(P,'HTTP/1.') then begin
-      result := GetCardinal(P+9); // get http numeric status code
+      result := GetCardinal(P+9); // get http numeric status code (200,404...)
       if result=0 then begin
-        result :=  505;
+        result := STATUS_HTTPVERSIONNONSUPPORTED;
         exit;
       end;
       while result=100 do begin
-        repeat // 100 CONTINUE will just be ignored client side
+        repeat // 100 CONTINUE is just to be ignored client side
           SockRecvLn(Command);
           P := pointer(Command);
         until IdemPChar(P,'HTTP/1.');  // ignore up to next command
@@ -5169,7 +5171,7 @@ begin
       if P[7]='0' then
         KeepAlive := 0; // HTTP/1.0 -> force connection close
     end else begin // error on reading answer
-      DoRetry(505); // 505=wrong format
+      DoRetry(STATUS_HTTPVERSIONNONSUPPORTED); // 505=wrong format
       exit;
     end;
     GetHeader; // read all other headers

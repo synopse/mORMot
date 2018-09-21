@@ -6119,9 +6119,9 @@ type
   // kind of custom routing or execution scheme
   // - instantiated by the TSQLRestServer.URI() method using its ServicesRouting
   // property
-  // - see TSQLRestRoutingREST and TSQLRestRoutingJSON_RPC
-  // for overridden methods - NEVER set this abstract TSQLRestServerURIContext
-  // class on TSQLRest.ServicesRouting property !
+  // - see TSQLRestRoutingREST and TSQLRestRoutingJSON_RPC for working inherited
+  // classes - NEVER set this abstract TSQLRestServerURIContext class to
+  // TSQLRest.ServicesRouting property !
   TSQLRestServerURIContext = class
   protected
     fInput: TRawUTF8DynArray; // even items are parameter names, odd are values

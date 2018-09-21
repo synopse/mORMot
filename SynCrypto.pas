@@ -481,7 +481,7 @@ type
     procedure DoBlocksThread(var bIn, bOut: PAESBlock; Count: integer; doEncrypt: boolean);
     {$endif}
     /// performs AES-OFB encryption and decryption on whole blocks
-    // - may be used instead of TAESOFB when a raw TAES is used
+    // - may be called instead of TAESOFB when only a raw TAES is available
     // - this method is thread-safe (except if padlock is used)
     procedure DoBlocksOFB(const iv: TAESBlock; src, dst: pointer; blockcount: PtrUInt);
     /// TRUE if the context was initialized via EncryptInit/DecryptInit
