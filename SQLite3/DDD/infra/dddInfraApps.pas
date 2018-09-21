@@ -1974,12 +1974,14 @@ begin
     else
       fORM.Kind := TSQLHttpClient.ClassName;
   if ForceSetCredentials or (fORM.ServerName = '') then begin
-    if (fORM.ServerName = '') and (Port <> '') then
-      if Server = '' then
-        fORM.ServerName := 'http://localhost:' + Port else
-        if PosEx(':', Server) = 0 then
-          fORM.ServerName := 'http://' + Server + ':' + Port else
-          fORM.ServerName := Server;
+    if fORM.ServerName = '' then
+      if Port = '' then
+        fORM.ServerName := Server else
+        if Server = '' then
+          fORM.ServerName := 'http://localhost:' + Port else
+          if PosEx(':', Server) = 0 then
+            fORM.ServerName := 'http://' + Server + ':' + Port else
+            fORM.ServerName := Server;
     if fClient.WebSocketsPassword = '' then
       fClient.WebSocketsPassword := WebSocketPassword;
     fClient.ConnectRetrySeconds := ConnectRetrySeconds;
