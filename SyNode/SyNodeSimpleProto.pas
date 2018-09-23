@@ -174,7 +174,7 @@ begin
   PI := GetPropCacheForWrite(cx, vp.thisObject[cx], id, Instance).mbr;
   val := vp.argv[0];
   case PI.PropType^{$IFNDEF FPC}^{$ENDIF}.Kind of
-    tkInteger, tkEnumeration, tkSet:
+    tkInteger, tkEnumeration, tkSet{$ifdef FPC},tkBool{$endif}:
       PI.SetOrdValue(Instance^.instance,val.asInteger);
     tkInt64:
       PI.SetInt64Value(Instance^.instance, val.asInt64);
