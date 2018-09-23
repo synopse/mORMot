@@ -9926,7 +9926,9 @@ var Z: TSynZipCompressor;
     L,n: integer;
     P: PAnsiChar;
     crc2: Cardinal;
-    s: RawByteString;
+    st: TRawByteStringStream;
+    s,tmp: RawByteString;
+    gzr: TGZRead;
 begin
   Check(crc32(0,@crc32tab,5)=$DF4EC16C,'crc32');
   Check(UpdateCrc32(0,@crc32tab,5)=$DF4EC16C,'crc32');
@@ -9963,6 +9965,30 @@ begin
   Check(CompressGZip(s,true)='gzip');
   Check(CompressGZip(s,false)='gzip');
   Check(s=Data,'compressGZip');
+  Check(gzr.Init(M.Memory,M.Position),'TGZRead');
+  Check(gzr.uncomplen=length(data));
+  Check(gzr.crc32=crc0);
+  Check(gzr.ToMem=data,'ToMem');
+  st := TRawByteStringStream.Create;
+  try
+    Check(gzr.ToStream(st),'ToStream');
+    s := st.DataString;
+    Check(s=Data,'ToStream?');
+  finally
+    st.Free;
+  end;
+  SetLength(tmp,gzr.uncomplen div 5);
+  Check(gzr.ZStreamStart(pointer(tmp),length(tmp)),'ZStreamStart');
+  s := '';
+  repeat
+    n := gzr.ZStreamNext;
+    if n=0 then
+      break;
+    s := s+copy(tmp,1,n);
+  until false;
+  check(gzr.ZStreamDone,'ZStreamDone');
+  Check(gzr.uncomplen=length(s));
+  check(s=Data);
   s := Data;
   Check(CompressDeflate(s,true)='deflate');
   Check(CompressDeflate(s,false)='deflate');
