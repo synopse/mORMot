@@ -1737,25 +1737,11 @@ end;
 
 
 function GZRead(gz: PAnsiChar; gzLen: integer): ZipString;
-var Offset,Len: integer;
+var gzr: TGZRead;
 begin
-  result := '';
-  if (gz=nil) or (gzLen<=18) or (PCardinal(gz)^ and $ffffff<>GZHEAD[0]) then
-    exit; // .gz file as header + compressed + crc32 + len32 format
-  Offset := GZHEAD_SIZE;
-  if gz[3]=#8 then begin // FNAME flag (as created e.g. by 7Zip)
-    while (Offset<gzlen) and (gz[offset]<>#0) do
-      inc(Offset);
-    if Offset<gzlen then
-      inc(Offset);
-  end;
-  Len := PInteger(@gz[gzLen-4])^;
-  if Len=0 then
-    exit;
-  SetLength(result,Len);
-  if (UnCompressMem(@gz[Offset],pointer(result),gzLen-Offset-8,Len)<>Len) or
-     (SynZip.crc32(0,pointer(result),Len)<>PCardinal(@gz[gzLen-8])^) then
-    result := ''; // invalid CRC
+  if gzr.Init(gz,gzlen) then
+    result := gzr.ToMem else
+    result := '';
 end;
 
 function GZFile(const orig, destgz: TFileName; CompressionLevel: Integer=6): boolean;
