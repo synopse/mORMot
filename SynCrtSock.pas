@@ -8546,25 +8546,25 @@ begin
             HttpAuthStatusFailure:
               Context.fAuthenticationStatus := hraFailed;
             end;
-        // retrieve body
-        if HTTP_REQUEST_FLAG_MORE_ENTITY_BODY_EXISTS and Req^.Flags<>0 then begin
-          with Req^.Headers.KnownHeaders[reqContentLength] do
-            InContentLength := GetCardinal(pRawValue,pRawValue+RawValueLength);
-          with Req^.Headers.KnownHeaders[reqContentEncoding] do
-            SetString(InContentEncoding,pRawValue,RawValueLength);
-          if (InContentLength>0) and (MaximumAllowedContentLength>0) and
-             (InContentLength>MaximumAllowedContentLength) then begin
-            SendError(STATUS_PAYLOADTOOLARGE,'Rejected');
+        with Req^.Headers.KnownHeaders[reqContentLength] do
+          InContentLength := GetCardinal(pRawValue,pRawValue+RawValueLength);
+        if (InContentLength>0) and (MaximumAllowedContentLength>0) and
+           (InContentLength>MaximumAllowedContentLength) then begin
+          SendError(STATUS_PAYLOADTOOLARGE,'Rejected');
+          continue;
+        end;
+        if Assigned(OnBeforeBody) then begin
+          with Context do
+            Err := OnBeforeBody(URL,Method,InHeaders,InContentType,RemoteIP,InContentLength,fUseSSL);
+          if Err<>STATUS_SUCCESS then begin
+            SendError(Err,'Rejected');
             continue;
           end;
-          if Assigned(OnBeforeBody) then begin
-            with Context do
-              Err := OnBeforeBody(URL,Method,InHeaders,InContentType,RemoteIP,InContentLength,fUseSSL);
-            if Err<>STATUS_SUCCESS then begin
-              SendError(Err,'Rejected');
-              continue;
-            end;
-          end;
+        end;
+        // retrieve body
+        if HTTP_REQUEST_FLAG_MORE_ENTITY_BODY_EXISTS and Req^.Flags<>0 then begin
+          with Req^.Headers.KnownHeaders[reqContentEncoding] do
+            SetString(InContentEncoding,pRawValue,RawValueLength);
           if InContentLength<>0 then begin
             SetLength(Context.fInContent,InContentLength);
             BufRead := pointer(Context.InContent);
