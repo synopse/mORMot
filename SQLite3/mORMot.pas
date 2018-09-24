@@ -12590,6 +12590,10 @@ type
   TOnServiceCanExecute = function(Ctxt: TSQLRestServerURIContext;
     const Method: TServiceMethod): boolean of object;
 
+  /// callbacked used by TServiceFactoryServer.RunOnAllInstances method
+  TOnServiceFactoryServerOne = function(Sender: TServiceFactoryServer;
+    var Instance: TServiceFactoryServerInstance; var Opaque): integer of object;
+
   /// a service provider implemented on the server side
   // - each registered interface has its own TServiceFactoryServer instance,
   // available as one TSQLServiceContainerServer item from TSQLRest.Services property
@@ -12600,7 +12604,7 @@ type
   protected
     fInstances: TServiceFactoryServerInstanceDynArray;
     fInstance: TDynArray;
-    fInstanceCapacity: integer;
+    fInstanceCapacity: integer; // some void entries may have P^.InstanceID=0
     fInstanceCount: integer;
     fInstanceCurrentID: TID;
     fInstanceTimeOut: cardinal;
@@ -12821,6 +12825,10 @@ type
     // will be able to retrieve it only if TServiceContainerServer.PublishSignature
     // is set to TRUE (which is not the default setting, for security reasons)
     function RetrieveSignature: RawUTF8; override;
+    /// call the supplied aEvent callback for all class instances implementing
+    // this service
+    function RunOnAllInstances(const aEvent: TOnServiceFactoryServerOne;
+      var aOpaque): integer;
 
     /// just type-cast the associated TSQLRest instance to a true TSQLRestServer
     function RestServer: TSQLRestServer;
@@ -59383,6 +59391,27 @@ begin
         P^.LastAccess64 := tix;
         inc(result);
       end;
+      inc(P);
+    end;
+  finally
+    LeaveCriticalSection(fInstanceLock);
+  end;
+end;
+
+function TServiceFactoryServer.RunOnAllInstances(const aEvent: TOnServiceFactoryServerOne;
+  var aOpaque): integer;
+var i: integer;
+    P: ^TServiceFactoryServerInstance;
+begin
+  result := 0;
+  if (self = nil) or not Assigned(aEvent) or (fInstanceCount=0) then
+    exit;
+  EnterCriticalSection(fInstanceLock);
+  try
+    P := pointer(fInstances);
+    for i := 1 to fInstanceCapacity do begin
+      if (P^.InstanceID<>0) and (P^.Instance<>nil) then
+        inc(result,aEvent(self,P^,aOpaque));
       inc(P);
     end;
   finally
