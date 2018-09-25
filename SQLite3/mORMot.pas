@@ -6145,7 +6145,6 @@ type
     {$ifndef NOVARIANTS}
     function GetInput(const ParamName: RawUTF8): variant;
     function GetInputOrVoid(const ParamName: RawUTF8): variant;
-    function GetInputAsTDocVariant: variant;
     {$endif}
     function GetInputNameIndex(const ParamName: RawUTF8): integer;
     function GetInputExists(const ParamName: RawUTF8): Boolean;
@@ -6452,13 +6451,14 @@ type
     // - returns Unassigned if no parameter was defined
     // - returns a JSON object with input parameters encoded as
     // ! {"name1":value1,"name2":value2...}
+    // - optionally with a PServiceMethod information about the actual values types
     // - if the parameters were encoded as multipart, the JSON object
     // will be encoded with its textual values, or with nested objects, if
     // the data was supplied as binary:
     // ! {"name1":{"data":..,"filename":...,"contenttype":...},"name2":...}
     // since name1.data will be Base64 encoded, so you should better
     // use the InputAsMultiPart() method instead when working with binary
-    property InputAsTDocVariant: variant read GetInputAsTDocVariant;
+    function GetInputAsTDocVariant(const Options: TDocVariantOptions; ServiceMethod: pointer): variant;
     {$endif}
     /// decode any multipart/form-data POST request input
     // - returns TRUE and set MultiPart array as expected, on success
@@ -41914,23 +41914,33 @@ begin
     GetVariantFromJSON(pointer(ValueUTF8),false,Value);
 end;
 
-function TSQLRestServerURIContext.GetInputAsTDocVariant: variant;
-var ndx: integer;
+function TSQLRestServerURIContext.GetInputAsTDocVariant(const Options: TDocVariantOptions; 
+  ServiceMethod: pointer): variant;
+var ndx, a: PtrInt;
+    forcestring: boolean;
     v: variant;
     MultiPart: TMultiPartDynArray;
+    name: RawUTF8;
+    met: PServiceMethod absolute ServiceMethod;
     res: TDocVariantData absolute result;
 begin
   VarClear(result);
   FillInput;
   if fInput<>nil then begin
-    res.InitFast;
+    res.Init(Options,dvObject);
     for ndx := 0 to (length(fInput) shr 1)-1 do begin
-      GetVariantFromJSON(pointer(fInput[ndx*2+1]),false,v,@JSON_OPTIONS[true]);
-      res.AddValue(fInput[ndx*2],v);
+      name := fInput[ndx*2];
+      if met<>nil then begin
+        a := met.ArgIndex(pointer(name),length(name),{input=}true);
+        forcestring := (a>=0) and (vIsString  in met.Args[a].ValueKindAsm);
+      end else
+        forcestring := false;
+      GetVariantFromJSON(pointer(fInput[ndx*2+1]),forcestring,v,@Options);
+      res.AddValue(name,v);
     end;
   end else
   if InputAsMultiPart(MultiPart) then begin
-    res.InitFast;
+    res.Init(Options,dvObject);
     for ndx := 0 to high(MultiPart) do
       with MultiPart[ndx] do
         if ContentType=TEXT_CONTENT_TYPE then begin

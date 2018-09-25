@@ -1822,15 +1822,14 @@ begin
       if Ctxt.Method in [mGET,mPOST] then begin
         methodIndex := fApplication.fFactory.FindMethodIndex(rawMethodName);
         if methodIndex>=0 then begin
-          inputContext := Ctxt.InputAsTDocVariant;
+          method := @fApplication.fFactory.Methods[methodIndex];
+          inputContext := Ctxt.GetInputAsTDocVariant(JSON_OPTIONS_FAST_EXTENDED,method);
           if not VarIsEmpty(inputContext) then
           with _Safe(inputContext)^ do begin
-            if (Kind=dvObject) and (Count>0) then begin
+            if (Kind=dvObject) and (Count>0) then
               // try {"p.a1":5,"p.a2":"dfasdfa"} -> {"p":{"a1":5,"a2":"dfasdfa"}}
-              method := @fViews.fFactory.Methods[methodIndex];
               if method^.ArgsInputValuesCount=1 then
                 FlattenAsNestedObject(RawUTF8(method^.Args[method^.ArgsInFirst].ParamName^));
-            end;
             renderer.fInput := ToJSON;
           end;
         end;
