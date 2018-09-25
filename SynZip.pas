@@ -601,6 +601,8 @@ type
   public
     complen, uncomplen: integer;
     crc32: cardinal;
+    unixmodtime: cardinal;
+    fname, fcomment, extra: PAnsiChar;
     /// read and validate the .gz header
     // - on success, return true and fill complen/uncomplen/crc32c properties
     function Init(gz: PAnsiChar; gzLen: integer): boolean;
@@ -1625,31 +1627,56 @@ end;
 const
   GZHEAD: array [0..2] of cardinal = ($088B1F,0,0);
   GZHEAD_SIZE = 10;
+type
+  TGZFlags = set of (gzfText, gzfHCRC, gzfExtra, gzfName, gzfComment);
 
 { TGZRead }
 
 function TGZRead.Init(gz: PAnsiChar; gzLen: integer): boolean;
-var Offset: integer;
-begin
+var offset: integer;
+    flags: TGZFlags;
+begin // see https://www.ietf.org/rfc/rfc1952.txt
   comp := nil;
   complen := 0;
   uncomplen := 0;
   zsdest := nil;
   result := false;
+  extra := nil;
+  fname := nil;
+  fcomment := nil;
   if (gz=nil) or (gzLen<=18) or (PCardinal(gz)^ and $ffffff<>GZHEAD[0]) then
     exit; // .gz file as header + compressed + crc32 + len32 format
-  Offset := GZHEAD_SIZE;
-  if gz[3]=#8 then begin // FNAME flag (as created e.g. by 7Zip)
-    while (Offset<gzlen) and (gz[offset]<>#0) do
-      inc(Offset);
-    if Offset<gzlen then
-      inc(Offset);
+  flags := TGZFlags(gz[3]);
+  unixmodtime := PCardinal(gz+4)^;
+  offset := GZHEAD_SIZE;
+  if gzfExtra in flags then begin
+    extra := gz+offset;
+    inc(offset,PWord(extra)^+SizeOf(word));
   end;
+  if gzfName in flags then begin // FNAME flag (as created e.g. by 7Zip)
+    fname := gz+offset;
+    while (offset<gzlen) and (gz[offset]<>#0) do
+      inc(offset);
+    inc(offset);
+  end;
+  if gzfComment in flags then begin
+    fcomment := gz+offset;
+    while (offset<gzlen) and (gz[offset]<>#0) do
+      inc(offset);
+    inc(offset);
+  end;
+  if gzfHCRC in flags then
+    if PWord(gz+offset)^<>SynZip.crc32(0,gz,offset) and $ffff then
+      exit
+    else
+      inc(offset,SizeOf(word));
+  if offset>=gzlen-8 then
+    exit;
   uncomplen := PInteger(@gz[gzLen-4])^;
   if uncomplen<=0 then
     exit;
-  comp := gz+Offset;
-  complen := gzLen-Offset-8;
+  comp := gz+offset;
+  complen := gzLen-offset-8;
   crc32 := PCardinal(@gz[gzLen-8])^;
   result := true;
 end;
