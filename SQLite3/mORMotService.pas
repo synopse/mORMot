@@ -182,7 +182,7 @@ const
 
 type
   PServiceStatus = ^TServiceStatus;
-  TServiceStatus = record
+  TServiceStatus = object
     dwServiceType: DWORD;
     dwCurrentState: DWORD;
     dwControlsAccepted: DWORD;
@@ -191,6 +191,13 @@ type
     dwCheckPoint: DWORD;
     dwWaitHint: DWORD;
   end;
+
+  PServiceStatusProcess = ^TServiceStatusProcess;
+  TServiceStatusProcess = object(TServiceStatus)
+    dwProcessId: DWORD;
+    dwServiceFlags: DWORD;
+  end;
+
   SC_HANDLE = THandle;
   SERVICE_STATUS_HANDLE = DWORD;
   TServiceTableEntry = record
@@ -198,6 +205,9 @@ type
     lpServiceProc: procedure(ArgCount: DWORD; Args: PPChar); stdcall;
   end;
   PServiceTableEntry = ^TServiceTableEntry;
+  {$Z4}
+  SC_STATUS_TYPE = (SC_STATUS_PROCESS_INFO);
+  {$Z1}
 
 function OpenSCManager(lpMachineName, lpDatabaseName: PChar;
   dwDesiredAccess: DWORD): SC_HANDLE; stdcall; external advapi32
@@ -219,6 +229,9 @@ function DeleteService(hService: SC_HANDLE): BOOL; stdcall; external advapi32;
 function CloseServiceHandle(hSCObject: SC_HANDLE): BOOL; stdcall; external advapi32;
 function QueryServiceStatus(hService: SC_HANDLE;
   var lpServiceStatus: TServiceStatus): BOOL; stdcall; external advapi32;
+function QueryServiceStatusEx(hService: SC_HANDLE;
+  InfoLevel: SC_STATUS_TYPE; lpBuffer: Pointer; cbBufSize: DWORD;
+  var pcbBytesNeeded: DWORD): BOOL; stdcall; external advapi32;
 function ControlService(hService: SC_HANDLE; dwControl: DWORD;
   var lpServiceStatus: TServiceStatus): BOOL; stdcall; external advapi32;
 function SetServiceStatus(hServiceStatus: SERVICE_STATUS_HANDLE;
@@ -538,6 +551,12 @@ function CurrentStateToServiceState(CurrentState: DWORD): TServiceState;
 
 /// return the ready to be displayed text of a TServiceState value
 function ServiceStateText(State: TServiceState): string;
+
+/// return service PID
+function GetServicePid(const aServiceName: string): DWORD;
+
+/// kill Windows process
+function KillProcess(pid: DWORD; waitseconds: integer = 30): boolean;
 
 {$else}
 
@@ -1154,6 +1173,55 @@ var P: PShortString;
 begin
   P := GetEnumName(TypeInfo(TServiceState),ord(State));
   result := string(copy(P^,3,length(P^)-2));
+end;
+
+function GetServicePid(const aServiceName: string): DWORD;
+var
+  ssp: TServiceStatusProcess;
+  scm: THandle;
+  svc: THandle;
+  size: DWORD;
+begin
+  result := 0;
+  scm := OpenSCManager(nil, nil, SC_MANAGER_CONNECT);
+  if scm <> 0 then
+  try
+    svc := OpenService(scm, pointer(aServiceName), SERVICE_QUERY_STATUS);
+    if svc <> 0 then
+    try
+      if QueryServiceStatusEx(svc, SC_STATUS_PROCESS_INFO, @ssp, SizeOf(TServiceStatusProcess), size) then
+        result := ssp.dwProcessId
+      else
+        ServiceLog.Add.Log(sllLastError);
+    finally
+      CloseServiceHandle(svc);
+    end;
+  finally
+    CloseServiceHandle(scm);
+  end;
+end;
+
+function KillProcess(pid: DWORD; waitseconds: integer = 30): boolean;
+var
+  ph: THandle;
+  error: DWORD;
+begin
+  ph := OpenProcess(PROCESS_TERMINATE, false, pid);
+  result := ph <> 0;
+  if result then begin
+    try
+      result := TerminateProcess(ph, 0);
+      if result then begin
+        result := waitseconds = 0;
+        if not result then begin
+          error := WaitForSingleObject(pid, waitseconds * 1000);
+          result := (error <> WAIT_FAILED) and (error <> WAIT_TIMEOUT);
+        end;
+      end;
+    finally
+      CloseHandle(ph);
+    end;
+  end;
 end;
 
 {  function that a service process specifies as the entry point function
