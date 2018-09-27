@@ -4793,6 +4793,8 @@ const
   HTTP_PROXYAUTHREQUIRED = 407;
   /// HTTP Status Code for "Request Time-out"
   HTTP_TIMEOUT = 408;
+  /// HTTP Status Code for "Conflict"
+  HTTP_CONFLICT = 409;
   /// HTTP Status Code for "Payload Too Large"
   HTTP_PAYLOADTOOLARGE = 413;
   /// HTTP Status Code for "Internal Server Error"
