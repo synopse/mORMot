@@ -594,7 +594,7 @@ type
   /// simple wrapper class to decompress a .gz file into memory or stream/file
   TGZRead = object
   private
-    comp, zsdest: PAnsiChar;
+    comp, zsdest: pointer;
     zscrc: cardinal;
     zssize, zscode: integer;
     zs: TZStream;
