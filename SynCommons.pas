@@ -4585,6 +4585,7 @@ type
     function FindIndex(const Elem; aIndex: PIntegerDynArray;
       aCompare: TDynArraySortCompare): PtrInt;
     function GetArrayTypeName: RawUTF8;
+    function GetArrayTypeShort: PShortString;
     function GetIsObjArray: boolean; {$ifdef HASINLINE}inline;{$endif}
     function ComputeIsObjArray: boolean;
     procedure SetIsObjArray(aValue: boolean); {$ifdef HASINLINE}inline;{$endif}
@@ -5086,8 +5087,10 @@ type
     property KnownType: TDynArrayKind read fKnownType;
     /// the known RTTI information of the whole array
     property ArrayType: pointer read fTypeInfo;
-    /// the known type name of the whole array
+    /// the known type name of the whole array, as RawUTF8
     property ArrayTypeName: RawUTF8 read GetArrayTypeName;
+    /// the known type name of the whole array, as PShortString
+    property ArrayTypeShort: PShortString read GetArrayTypeShort;
     /// the internal in-memory size of one element, as retrieved from RTTI
     property ElemSize: cardinal read fElemSize;
     /// the internal type information of one element, as retrieved from RTTI
@@ -13354,7 +13357,7 @@ procedure SetExecutableVersion(const aVersionText: RawUTF8); overload;
 type
   /// identify an operating system folder
   TSystemPath = (
-    spCommonData, spUserData, spCommonDocuments, spUserDocuments, spTempFolder);
+    spCommonData, spUserData, spCommonDocuments, spUserDocuments, spTempFolder, spLog);
 
 /// returns an operating system folder
 // - will return the full path of a given kind of private or shared folder,
@@ -38700,11 +38703,12 @@ const
   CSIDL_COMMON_APPDATA = $0023;
   CSIDL_COMMON_DOCUMENTS = $002E;
   CSIDL: array[TSystemPath] of integer = (
-  // spCommonData, spUserData, spCommonDocuments, spUserDocuments, spTempFolder
-    CSIDL_COMMON_APPDATA, CSIDL_LOCAL_APPDATA,
-    CSIDL_COMMON_DOCUMENTS, CSIDL_PERSONAL, 0);
+    // spCommonData, spUserData, spCommonDocuments
+    CSIDL_COMMON_APPDATA, CSIDL_LOCAL_APPDATA, CSIDL_COMMON_DOCUMENTS,
+    // spUserDocuments, spTempFolder, spLog
+    CSIDL_PERSONAL, 0, CSIDL_COMMON_APPDATA);
   ENV: array[TSystemPath] of TFileName = (
-    'ALLUSERSAPPDATA', 'LOCALAPPDATA', '', '', 'TEMP');
+    'ALLUSERSAPPDATA', 'LOCALAPPDATA', '', '', 'TEMP', 'ALLUSERSAPPDATA');
 var tmp: array[0..MAX_PATH] of char;
     k: TSystemPath;
 begin
@@ -38723,11 +38727,19 @@ begin
 end;
 {$else MSWINDOWS}
 var
-  _HomePath,_TempPath: TFileName;
+  _HomePath, _TempPath, _LogPath: TFileName;
 
 function GetSystemPath(kind: TSystemPath): TFileName;
 begin
-  if kind=spTempFolder then begin
+  case kind of
+  spLog: begin
+    if _LogPath='' then
+      if DirectoryExists('/var/log') then
+        _LogPath := '/var/log/' else
+        _LogPath := GetSystemPath(spUserDocuments); // fallback to HOME
+    result := _LogPath;
+  end;
+  spTempFolder: begin
     if _TempPath='' then begin
       _TempPath := GetEnvironmentVariable('TMPDIR'); // POSIX
       if _TempPath='' then
@@ -38743,6 +38755,7 @@ begin
     if _HomePath='' then // POSIX requires a value for $HOME
       _HomePath := IncludeTrailingPathDelimiter(GetEnvironmentVariable('HOME'));
     result := _HomePath;
+  end;
   end;
 end;
 {$endif MSWINDOWS}
@@ -47594,7 +47607,7 @@ begin
   if ElemType=nil then // FPC: nil also if not Kind in tkManagedTypes
     if GetIsObjArray then
       raise ESynException.CreateUTF8('TDynArray.SaveTo(%) is a T*ObjArray',
-        [PShortString(@PTypeInfo(ArrayType).NameLen)^]) else begin
+        [ArrayTypeShort^]) else begin
       // binary types: store as once
       n := n*integer(ElemSize);
       MoveFast(P^,Dest^,n);
@@ -47635,7 +47648,7 @@ begin
   if ElemType=nil then // FPC: nil also if not Kind in tkManagedTypes
     if GetIsObjArray then
       raise ESynException.CreateUTF8('TDynArray.SaveToLength(%) is a T*ObjArray',
-        [PShortString(@PTypeInfo(ArrayType).NameLen)^]) else
+        [ArrayTypeShort^]) else
       inc(result,integer(ElemSize)*n) else begin
     P := fValue^;
     case PTypeKind(ElemType)^ of // inlined the most used kind of items
@@ -47708,6 +47721,13 @@ var
 function TDynArray.GetArrayTypeName: RawUTF8;
 begin
   TypeInfoToName(fTypeInfo,result);
+end;
+
+function TDynArray.GetArrayTypeShort: PShortString;
+begin
+  if fTypeInfo=nil then
+    result := @NULCHAR else
+    result := PShortString(@PTypeInfo(fTypeInfo).NameLen);
 end;
 
 function TDynArray.ToKnownType(exactType: boolean): TDynArrayKind;
@@ -48158,7 +48178,7 @@ begin
   if ElemType=nil then // FPC: nil also if not Kind in tkManagedTypes
     if GetIsObjArray then
       raise ESynException.CreateUTF8('TDynArray.LoadFrom(%) is a T*ObjArray',
-        [PShortString(@PTypeInfo(ArrayType).NameLen)^]) else begin
+        [ArrayTypeShort^]) else begin
       // binary type was stored directly
       n := n*integer(ElemSize);
       MoveFast(Source^,P^,n);
@@ -48898,7 +48918,7 @@ begin // this method is faster than default System.DynArraySetLength() function
   {$ifndef CPU64}
   if NeededSize>1024*1024*1024 then // max workable memory block is 1 GB
     raise ERangeError.CreateFmt('TDynArray SetLength(%s,%d) size concern',
-      [PShortString(@PTypeInfo(ArrayType).NameLen)^,NewLength]);
+      [ArrayTypeShort^,NewLength]);
   {$endif}
   // if not shared (refCnt=1), resize; if shared, create copy (not thread safe)
   if (p=nil) or (p^.refCnt=1) then begin
@@ -49772,7 +49792,7 @@ begin
   raise ESynException.CreateUTF8('TDynArrayHashed.% fatal collision: '+
     'aHashCode=% fHashsCount=% Count=% Capacity=% ArrayType=% fKnownType=%',
     [caller,CardinalToHexShort(aHashCode),fHashsCount,GetCount,GetCapacity,
-    PShortString(@PTypeInfo(ArrayType).NameLen)^,ToText(fKnownType)^]);
+     ArrayTypeShort^,ToText(fKnownType)^]);
 end;
 
 function TDynArrayHashed.GetHashFromIndex(aIndex: PtrInt): Cardinal;
@@ -58988,7 +59008,7 @@ begin
   result := false;
   if (fValues.ElemType=nil) or (PTypeKind(fValues.ElemType)^<>tkDynArray) then
     raise ESynException.CreateUTF8('%.Values: % items are not dynamic arrays',
-      [self,PShortString(@PTypeInfo(fValues.ArrayType)^.NameLen)^]);
+      [self,fValues.ArrayTypeShort^]);
   fSafe.Lock;
   try
     ndx := fKeys.FindHashed(aKey);
