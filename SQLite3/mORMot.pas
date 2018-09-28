@@ -56282,7 +56282,9 @@ begin
             Args[n-1]:=Args[n];
             SetLength(Args,n);
           end else
-            ParamName := @VMP^.Name;
+            { Since https://svn.freepascal.org/cgi-bin/viewvc.cgi?view=revision&revision=39684 ,
+              we cannot take an address of TVmtMethodParam.Name , we have to use NamePtr instead. }
+            ParamName := {$ifdef VER3_1} @VMP^.Name {$else} VMP^.NamePtr {$endif};
         end;
         Inc(paramcounter);
         Inc(argsindex);
