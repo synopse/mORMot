@@ -556,7 +556,7 @@ function ServiceStateText(State: TServiceState): string;
 function GetServicePid(const aServiceName: string): DWORD;
 
 /// kill Windows process
-function KillProcess(pid: DWORD; waitseconds: integer = 30): boolean;
+function KillProcess(pid: DWORD; waitseconds: integer = 30; tryclose: boolean = true): boolean;
 
 {$else}
 
@@ -1202,23 +1202,31 @@ begin
   end;
 end;
 
-function KillProcess(pid: DWORD; waitseconds: integer = 30): boolean;
+function TryCloseAppCallback(aHwnd: HWND; lParam: LPARAM): BOOL; stdcall;
+var
+  dwID: DWORD;
+begin
+  GetWindowThreadProcessId(aHwnd, dwID) ;
+  if dwID = lParam then
+    PostMessage(aHwnd, WM_CLOSE, 0, 0) ;
+  result := true;
+end;
+
+function KillProcess(pid: DWORD; waitseconds: integer; tryclose: boolean): boolean;
 var
   ph: THandle;
   error: DWORD;
 begin
-  ph := OpenProcess(PROCESS_TERMINATE, false, pid);
+  ph := OpenProcess(PROCESS_TERMINATE or SYNCHRONIZE, false, pid);
   result := ph <> 0;
   if result then begin
     try
-      result := TerminateProcess(ph, 0);
-      if result then begin
-        result := waitseconds = 0;
-        if not result then begin
-          error := WaitForSingleObject(pid, waitseconds * 1000);
-          result := (error <> WAIT_FAILED) and (error <> WAIT_TIMEOUT);
-        end;
+      if tryclose then begin
+        EnumWindows(TryCloseAppCallback, pid);
+        error := WaitForSingleObject(ph, waitseconds * 1000);
+        result := (error <> WAIT_FAILED) and (error <> WAIT_TIMEOUT);
       end;
+      result := TerminateProcess(ph, 0) and (WaitForSingleObject(ph, waitseconds * 1000) <> WAIT_TIMEOUT);
     finally
       CloseHandle(ph);
     end;
