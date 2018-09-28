@@ -9105,8 +9105,8 @@ type
       CheckMagicForCompressed: boolean=false): RawByteString; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// compress a memory buffer with crc32c hashing to a RawByteString
-    procedure Compress(Plain: PAnsiChar; PlainLen: integer; out Result: RawByteString;
-      CompressionSizeTrigger: integer=100; CheckMagicForCompressed: boolean=false); overload;
+    function Compress(Plain: PAnsiChar; PlainLen: integer; CompressionSizeTrigger: integer=100;
+      CheckMagicForCompressed: boolean=false): RawByteString; overload;
     /// compress a memory buffer with crc32c hashing
     // - supplied Comp buffer should contain at least CompressDestLen(PlainLen) bytes
     function Compress(Plain, Comp: PAnsiChar; PlainLen, CompLen: integer;
@@ -9121,6 +9121,10 @@ type
     /// uncompress a RawByteString memory buffer with crc32c hashing
     function Decompress(const Comp: RawByteString; Load: TAlgoCompressLoad=aclNormal): RawByteString; overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// uncompress a RawByteString memory buffer with crc32c hashing
+    // - returns TRUE on success
+    function TryDecompress(const Comp: RawByteString; out Dest: RawByteString;
+      Load: TAlgoCompressLoad=aclNormal): boolean;
     /// uncompress a memory buffer with crc32c hashing
     procedure Decompress(Comp: PAnsiChar; CompLen: integer; out Result: RawByteString;
       Load: TAlgoCompressLoad=aclNormal); overload;
@@ -59358,7 +59362,7 @@ begin
       if NoCompression then
         trigger := maxInt else
         trigger := 128;
-      fCompressAlgo.Compress(tmp.buf,tmp.len,result,trigger);
+      result := fCompressAlgo.Compress(tmp.buf,tmp.len,trigger);
     end;
     tmp.Done;
   finally
@@ -60412,7 +60416,7 @@ begin
     algo := AlgoSynLZ;
   trig := SYNLZTRIG[nocompression];
   if fStream.Position=0 then // direct compression from internal buffer
-    algo.Compress(PAnsiChar(fBuffer),fPos,result,trig) else begin
+    result := algo.Compress(PAnsiChar(fBuffer),fPos,trig) else begin
     Flush;
     result := algo.Compress((fStream as TRawByteStringStream).DataString,trig);
   end;
@@ -62024,17 +62028,17 @@ end;
 function TAlgoCompress.Compress(const Plain: RawByteString;
   CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean): RawByteString;
 begin
-  Compress(pointer(Plain),Length(Plain),result,CompressionSizeTrigger,CheckMagicForCompressed);
+  result := Compress(pointer(Plain),Length(Plain),CompressionSizeTrigger,CheckMagicForCompressed);
 end;
 
-procedure TAlgoCompress.Compress(Plain: PAnsiChar; PlainLen: integer;
-  out Result: RawByteString; CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean);
+function TAlgoCompress.Compress(Plain: PAnsiChar; PlainLen: integer;
+  CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean): RawByteString;
 var len: integer;
     R: PAnsiChar;
     crc: cardinal;
     tmp: array[0..16383] of AnsiChar;  // will resize Result in-place
 begin
-  if (self=nil) or (PlainLen=0) then
+  if (self=nil) or (PlainLen=0) or (Plain=nil) then
     exit;
   crc := AlgoHash(0,Plain,PlainLen);
   if (PlainLen<CompressionSizeTrigger) or
@@ -62168,6 +62172,22 @@ begin
   Decompress(pointer(Comp),length(Comp),result,Load);
 end;
 
+function TAlgoCompress.TryDecompress(const Comp: RawByteString;
+  out Dest: RawByteString; Load: TAlgoCompressLoad): boolean;
+var len: integer;
+begin
+  result := Comp='';
+  if result then
+    exit;
+  len := DecompressHeader(pointer(Comp),length(Comp),Load);
+  if len=0 then
+    exit; // invalid crc32c
+  SetString(Dest,nil,len);
+  if DecompressBody(pointer(Comp),pointer(Dest),length(Comp),len,Load) then
+    result := true else
+    Dest := '';
+end;
+
 function TAlgoCompress.Decompress(const Comp: RawByteString;
   out PlainLen: integer; var tmp: RawByteString; Load: TAlgoCompressLoad): pointer;
 begin
@@ -62294,14 +62314,14 @@ end;
 function SynLZCompress(const Data: RawByteString; CompressionSizeTrigger: integer;
   CheckMagicForCompressed: boolean): RawByteString;
 begin
-  AlgoSynLZ.Compress(pointer(Data),length(Data),result,CompressionSizeTrigger,
+  result := AlgoSynLZ.Compress(pointer(Data),length(Data),CompressionSizeTrigger,
     CheckMagicForCompressed);
 end;
 
 procedure SynLZCompress(P: PAnsiChar; PLen: integer; out Result: RawByteString;
   CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean);
 begin
-  AlgoSynLZ.Compress(P,PLen,Result,CompressionSizeTrigger,CheckMagicForCompressed);
+  result := AlgoSynLZ.Compress(P,PLen,CompressionSizeTrigger,CheckMagicForCompressed);
 end;
 
 function SynLZCompress(P, Dest: PAnsiChar; PLen, DestLen: integer;
