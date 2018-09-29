@@ -41,6 +41,7 @@ unit mORMot;
     Jean-Baptiste Roussia (jbroussia)
     Maciej Izak (hnb)
     Martin Suer
+    Michalis Kamburelis
     MilesYou
     Ondrej
     Pavel (mpv)
