@@ -556,7 +556,7 @@ function ServiceStateText(State: TServiceState): string;
 function GetServicePid(const aServiceName: string): DWORD;
 
 /// kill Windows process
-function KillProcess(pid: DWORD; waitseconds: integer = 30; tryclose: boolean = true): boolean;
+function KillProcess(pid: DWORD; waitseconds: integer = 30): boolean;
 
 {$else}
 
@@ -1202,17 +1202,7 @@ begin
   end;
 end;
 
-function TryCloseAppCallback(aHwnd: HWND; lParam: LPARAM): BOOL; stdcall;
-var
-  dwID: DWORD;
-begin
-  GetWindowThreadProcessId(aHwnd, dwID) ;
-  if dwID = lParam then
-    PostMessage(aHwnd, WM_CLOSE, 0, 0) ;
-  result := true;
-end;
-
-function KillProcess(pid: DWORD; waitseconds: integer; tryclose: boolean): boolean;
+function KillProcess(pid: DWORD; waitseconds: integer): boolean;
 var
   ph: THandle;
   error: DWORD;
@@ -1221,11 +1211,6 @@ begin
   result := ph <> 0;
   if result then begin
     try
-      if tryclose then begin
-        EnumWindows(TryCloseAppCallback, pid);
-        error := WaitForSingleObject(ph, waitseconds * 1000);
-        result := (error <> WAIT_FAILED) and (error <> WAIT_TIMEOUT);
-      end;
       result := TerminateProcess(ph, 0) and (WaitForSingleObject(ph, waitseconds * 1000) <> WAIT_TIMEOUT);
     finally
       CloseHandle(ph);
@@ -1356,7 +1341,8 @@ begin
   startupinfo.cb := SizeOf(startupinfo);
   // https://docs.microsoft.com/pl-pl/windows/desktop/ProcThread/process-creation-flags
   if CreateProcessW(nil, pointer(wcmdline), nil, nil, false,
-    CREATE_DEFAULT_ERROR_MODE or DETACHED_PROCESS, nil, pointer(currentdir), startupinfo, processinfo) then begin
+   CREATE_DEFAULT_ERROR_MODE or DETACHED_PROCESS or CREATE_NEW_PROCESS_GROUP,
+   nil, pointer(currentdir), startupinfo, processinfo) then begin
     if waitfor then begin
       if WaitForSingleObject(processinfo.hProcess,INFINITE) = WAIT_FAILED then
         result := -GetLastError
