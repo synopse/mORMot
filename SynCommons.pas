@@ -3441,6 +3441,15 @@ function FileSize(const FileName: TFileName): Int64; overload;
 // - returns 0 if file doesn't exist
 function FileSize(F: THandle): Int64; overload;
 
+/// get low-level file information, in a cross-platform way
+// - returns true on success
+// - here file write/creation time are given as TUnixMSTime values, for better
+// cross-platform process - note that FileCreateDateTime may not be supported
+// by most Linux file systems, so the oldest timestamp available is returned
+// as failover on such systems (probably the latest file metadata writing)
+function FileInfoByHandle(aFileHandle: THandle; out FileId, FileSize,
+  LastWriteAccess, FileCreateDateTime: Int64): Boolean;
+
 /// get a file date and time, from a FindFirst/FindNext search
 // - the returned timestamp is in local time, not UTC
 // - this method would use the F.Timestamp field available since Delphi XE2
@@ -30002,6 +30011,49 @@ begin
     res.Lo := GetFileSize(F,@res.Hi); // from WinAPI or SynKylix/SynFPCLinux
 end;
 
+function FileInfoByHandle(aFileHandle: THandle; out FileId, FileSize,
+  LastWriteAccess, FileCreateDateTime: Int64): Boolean;
+var
+ lastreadaccess: TUnixMSTime;
+ {$ifdef MSWINDOWS}
+ lp: TByHandleFileInformation;
+ {$else}
+ lp: {$ifdef FPC}stat{$else}TStatBuf64{$endif};
+ r: integer;
+ {$endif MSWINDOWS}
+begin
+{$ifdef MSWINDOWS}
+  result := GetFileInformationByHandle(aFileHandle,lp);
+  if result then begin
+    LastWriteAccess := FileTimeToUnixMSTime(lp.ftLastWriteTime);
+    FileCreateDateTime := FileTimeToUnixMSTime(lp.ftCreationTime);
+    lastreadaccess := FileTimeToUnixMSTime(lp.ftLastAccessTime);
+    PInt64Rec(@FileSize).lo := lp.nFileSizeLow;
+    PInt64Rec(@FileSize).hi := lp.nFileSizeHigh;
+    PInt64Rec(@FileId).lo := lp.nFileIndexLow;
+    PInt64Rec(@FileId).hi := lp.nFileIndexHigh;
+{$else}
+    r := {$ifdef FPC}FpFStat{$else}fstat64{$endif}(aFileHandle, lp);
+  result := r >= 0;
+  if result then begin
+    FileId := lp.st_ino;
+    FileSize := lp.st_size;
+    lastreadaccess := lp.st_atime * MSecsPerSec;
+    LastWriteAccess := lp.st_mtime * MSecsPerSec;
+    {$ifdef OPENBSD}
+    if (lp.st_birthtime <> 0) and (lp.st_birthtime < lp.st_ctime) then
+      lp.st_ctime:= lp.st_birthtime;
+    {$endif}
+    FileCreateDateTime := lp.st_ctime * MSecsPerSec;
+{$endif MSWINDOWS}
+    if LastWriteAccess <> 0 then
+      if (FileCreateDateTime = 0) or (FileCreateDateTime > LastWriteAccess) then
+        FileCreateDateTime:= LastWriteAccess;
+    if lastreadaccess <> 0 then
+      if (FileCreateDateTime = 0) or (FileCreateDateTime > lastreadaccess) then
+        FileCreateDateTime:= lastreadaccess;
+  end;
+end;
 
 function FileAgeToDateTime(const FileName: TFileName): TDateTime;
 {$ifdef MSWINDOWS}
