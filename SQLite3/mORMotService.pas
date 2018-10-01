@@ -582,6 +582,7 @@ function RunUntilSigTerminatedPidFile: TFileName;
 /// like SysUtils.ExecuteProcess, but allowing not to wait for the process to finish
 function RunProcess(const path, arg1: TFileName; waitfor: boolean): integer;
 
+
 { *** cross-plaform high-level services/daemons }
 
 type
@@ -1343,7 +1344,7 @@ var
 begin
   // https://support.microsoft.com/en-us/help/175986/info-understanding-createprocess-and-command-line-arguments
   cmdline := '"' + path + '"';
-  if arg1<>'' then
+  if arg1 <> '' then
     cmdline := cmdline + ' ' + arg1;
   // CreateProcess can alter the strings so do the copy!
   wcmdline := StringToSynUnicode(cmdline);

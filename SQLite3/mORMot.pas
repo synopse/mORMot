@@ -41,6 +41,7 @@ unit mORMot;
     Jean-Baptiste Roussia (jbroussia)
     Maciej Izak (hnb)
     Martin Suer
+    Michalis Kamburelis
     MilesYou
     Ondrej
     Pavel (mpv)
@@ -4793,6 +4794,8 @@ const
   HTTP_PROXYAUTHREQUIRED = 407;
   /// HTTP Status Code for "Request Time-out"
   HTTP_TIMEOUT = 408;
+  /// HTTP Status Code for "Conflict"
+  HTTP_CONFLICT = 409;
   /// HTTP Status Code for "Payload Too Large"
   HTTP_PAYLOADTOOLARGE = 413;
   /// HTTP Status Code for "Internal Server Error"
@@ -31240,8 +31243,7 @@ var j: integer;
     PS: PShortString;
 begin
   W.Add('[');
-  if FullSetsAsStar and (MaxValue<32) and
-     GetAllBits(Value,MaxValue+1) then
+  if FullSetsAsStar and (MaxValue in [1..31]) and GetAllBits(Value,MaxValue+1) then
     W.AddShort('"*"') else begin
     PS := @NameList;
     for j := MinValue to MaxValue do begin
@@ -31265,8 +31267,7 @@ var j: integer;
     arr: TDocVariantData;
 begin
   arr.InitFast;
-  if FullSetsAsStar and (MaxValue<32) and
-     GetAllBits(Value,MaxValue+1) then
+  if FullSetsAsStar and (MaxValue in [1..31]) and GetAllBits(Value,MaxValue+1) then
     arr.AddItem('*') else begin
     PS := @NameList;
     for j := MinValue to MaxValue do begin
@@ -56282,7 +56283,9 @@ begin
             Args[n-1]:=Args[n];
             SetLength(Args,n);
           end else
-            ParamName := @VMP^.Name;
+            { Since https://svn.freepascal.org/cgi-bin/viewvc.cgi?view=revision&revision=39684 ,
+              we cannot take an address of TVmtMethodParam.Name , we have to use NamePtr instead. }
+            ParamName := {$ifdef VER3_1} @VMP^.Name {$else} VMP^.NamePtr {$endif};
         end;
         Inc(paramcounter);
         Inc(argsindex);

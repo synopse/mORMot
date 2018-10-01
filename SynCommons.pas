@@ -3441,6 +3441,15 @@ function FileSize(const FileName: TFileName): Int64; overload;
 // - returns 0 if file doesn't exist
 function FileSize(F: THandle): Int64; overload;
 
+/// get low-level file information, in a cross-platform way
+// - returns true on success
+// - here file write/creation time are given as TUnixMSTime values, for better
+// cross-platform process - note that FileCreateDateTime may not be supported
+// by most Linux file systems, so the oldest timestamp available is returned
+// as failover on such systems (probably the latest file metadata writing)
+function FileInfoByHandle(aFileHandle: THandle; out FileId, FileSize,
+  LastWriteAccess, FileCreateDateTime: Int64): Boolean;
+
 /// get a file date and time, from a FindFirst/FindNext search
 // - the returned timestamp is in local time, not UTC
 // - this method would use the F.Timestamp field available since Delphi XE2
@@ -4585,6 +4594,7 @@ type
     function FindIndex(const Elem; aIndex: PIntegerDynArray;
       aCompare: TDynArraySortCompare): PtrInt;
     function GetArrayTypeName: RawUTF8;
+    function GetArrayTypeShort: PShortString;
     function GetIsObjArray: boolean; {$ifdef HASINLINE}inline;{$endif}
     function ComputeIsObjArray: boolean;
     procedure SetIsObjArray(aValue: boolean); {$ifdef HASINLINE}inline;{$endif}
@@ -5086,8 +5096,10 @@ type
     property KnownType: TDynArrayKind read fKnownType;
     /// the known RTTI information of the whole array
     property ArrayType: pointer read fTypeInfo;
-    /// the known type name of the whole array
+    /// the known type name of the whole array, as RawUTF8
     property ArrayTypeName: RawUTF8 read GetArrayTypeName;
+    /// the known type name of the whole array, as PShortString
+    property ArrayTypeShort: PShortString read GetArrayTypeShort;
     /// the internal in-memory size of one element, as retrieved from RTTI
     property ElemSize: cardinal read fElemSize;
     /// the internal type information of one element, as retrieved from RTTI
@@ -9102,8 +9114,8 @@ type
       CheckMagicForCompressed: boolean=false): RawByteString; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// compress a memory buffer with crc32c hashing to a RawByteString
-    procedure Compress(Plain: PAnsiChar; PlainLen: integer; out Result: RawByteString;
-      CompressionSizeTrigger: integer=100; CheckMagicForCompressed: boolean=false); overload;
+    function Compress(Plain: PAnsiChar; PlainLen: integer; CompressionSizeTrigger: integer=100;
+      CheckMagicForCompressed: boolean=false): RawByteString; overload;
     /// compress a memory buffer with crc32c hashing
     // - supplied Comp buffer should contain at least CompressDestLen(PlainLen) bytes
     function Compress(Plain, Comp: PAnsiChar; PlainLen, CompLen: integer;
@@ -9118,6 +9130,10 @@ type
     /// uncompress a RawByteString memory buffer with crc32c hashing
     function Decompress(const Comp: RawByteString; Load: TAlgoCompressLoad=aclNormal): RawByteString; overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// uncompress a RawByteString memory buffer with crc32c hashing
+    // - returns TRUE on success
+    function TryDecompress(const Comp: RawByteString; out Dest: RawByteString;
+      Load: TAlgoCompressLoad=aclNormal): boolean;
     /// uncompress a memory buffer with crc32c hashing
     procedure Decompress(Comp: PAnsiChar; CompLen: integer; out Result: RawByteString;
       Load: TAlgoCompressLoad=aclNormal); overload;
@@ -13354,7 +13370,7 @@ procedure SetExecutableVersion(const aVersionText: RawUTF8); overload;
 type
   /// identify an operating system folder
   TSystemPath = (
-    spCommonData, spUserData, spCommonDocuments, spUserDocuments, spTempFolder);
+    spCommonData, spUserData, spCommonDocuments, spUserDocuments, spTempFolder, spLog);
 
 /// returns an operating system folder
 // - will return the full path of a given kind of private or shared folder,
@@ -29995,6 +30011,49 @@ begin
     res.Lo := GetFileSize(F,@res.Hi); // from WinAPI or SynKylix/SynFPCLinux
 end;
 
+function FileInfoByHandle(aFileHandle: THandle; out FileId, FileSize,
+  LastWriteAccess, FileCreateDateTime: Int64): Boolean;
+var
+ lastreadaccess: TUnixMSTime;
+ {$ifdef MSWINDOWS}
+ lp: TByHandleFileInformation;
+ {$else}
+ lp: {$ifdef FPC}stat{$else}TStatBuf64{$endif};
+ r: integer;
+ {$endif MSWINDOWS}
+begin
+{$ifdef MSWINDOWS}
+  result := GetFileInformationByHandle(aFileHandle,lp);
+  if result then begin
+    LastWriteAccess := FileTimeToUnixMSTime(lp.ftLastWriteTime);
+    FileCreateDateTime := FileTimeToUnixMSTime(lp.ftCreationTime);
+    lastreadaccess := FileTimeToUnixMSTime(lp.ftLastAccessTime);
+    PInt64Rec(@FileSize).lo := lp.nFileSizeLow;
+    PInt64Rec(@FileSize).hi := lp.nFileSizeHigh;
+    PInt64Rec(@FileId).lo := lp.nFileIndexLow;
+    PInt64Rec(@FileId).hi := lp.nFileIndexHigh;
+{$else}
+    r := {$ifdef FPC}FpFStat{$else}fstat64{$endif}(aFileHandle, lp);
+  result := r >= 0;
+  if result then begin
+    FileId := lp.st_ino;
+    FileSize := lp.st_size;
+    lastreadaccess := lp.st_atime * MSecsPerSec;
+    LastWriteAccess := lp.st_mtime * MSecsPerSec;
+    {$ifdef OPENBSD}
+    if (lp.st_birthtime <> 0) and (lp.st_birthtime < lp.st_ctime) then
+      lp.st_ctime:= lp.st_birthtime;
+    {$endif}
+    FileCreateDateTime := lp.st_ctime * MSecsPerSec;
+{$endif MSWINDOWS}
+    if LastWriteAccess <> 0 then
+      if (FileCreateDateTime = 0) or (FileCreateDateTime > LastWriteAccess) then
+        FileCreateDateTime:= LastWriteAccess;
+    if lastreadaccess <> 0 then
+      if (FileCreateDateTime = 0) or (FileCreateDateTime > lastreadaccess) then
+        FileCreateDateTime:= lastreadaccess;
+  end;
+end;
 
 function FileAgeToDateTime(const FileName: TFileName): TDateTime;
 {$ifdef MSWINDOWS}
@@ -38700,11 +38759,12 @@ const
   CSIDL_COMMON_APPDATA = $0023;
   CSIDL_COMMON_DOCUMENTS = $002E;
   CSIDL: array[TSystemPath] of integer = (
-  // spCommonData, spUserData, spCommonDocuments, spUserDocuments, spTempFolder
-    CSIDL_COMMON_APPDATA, CSIDL_LOCAL_APPDATA,
-    CSIDL_COMMON_DOCUMENTS, CSIDL_PERSONAL, 0);
+    // spCommonData, spUserData, spCommonDocuments
+    CSIDL_COMMON_APPDATA, CSIDL_LOCAL_APPDATA, CSIDL_COMMON_DOCUMENTS,
+    // spUserDocuments, spTempFolder, spLog
+    CSIDL_PERSONAL, 0, CSIDL_COMMON_APPDATA);
   ENV: array[TSystemPath] of TFileName = (
-    'ALLUSERSAPPDATA', 'LOCALAPPDATA', '', '', 'TEMP');
+    'ALLUSERSAPPDATA', 'LOCALAPPDATA', '', '', 'TEMP', 'ALLUSERSAPPDATA');
 var tmp: array[0..MAX_PATH] of char;
     k: TSystemPath;
 begin
@@ -38723,11 +38783,19 @@ begin
 end;
 {$else MSWINDOWS}
 var
-  _HomePath,_TempPath: TFileName;
+  _HomePath, _TempPath, _LogPath: TFileName;
 
 function GetSystemPath(kind: TSystemPath): TFileName;
 begin
-  if kind=spTempFolder then begin
+  case kind of
+  spLog: begin
+    if _LogPath='' then
+      if DirectoryExists('/var/log') then
+        _LogPath := '/var/log/' else
+        _LogPath := GetSystemPath(spUserDocuments); // fallback to HOME
+    result := _LogPath;
+  end;
+  spTempFolder: begin
     if _TempPath='' then begin
       _TempPath := GetEnvironmentVariable('TMPDIR'); // POSIX
       if _TempPath='' then
@@ -38743,6 +38811,7 @@ begin
     if _HomePath='' then // POSIX requires a value for $HOME
       _HomePath := IncludeTrailingPathDelimiter(GetEnvironmentVariable('HOME'));
     result := _HomePath;
+  end;
   end;
 end;
 {$endif MSWINDOWS}
@@ -47594,7 +47663,7 @@ begin
   if ElemType=nil then // FPC: nil also if not Kind in tkManagedTypes
     if GetIsObjArray then
       raise ESynException.CreateUTF8('TDynArray.SaveTo(%) is a T*ObjArray',
-        [PShortString(@PTypeInfo(ArrayType).NameLen)^]) else begin
+        [ArrayTypeShort^]) else begin
       // binary types: store as once
       n := n*integer(ElemSize);
       MoveFast(P^,Dest^,n);
@@ -47635,7 +47704,7 @@ begin
   if ElemType=nil then // FPC: nil also if not Kind in tkManagedTypes
     if GetIsObjArray then
       raise ESynException.CreateUTF8('TDynArray.SaveToLength(%) is a T*ObjArray',
-        [PShortString(@PTypeInfo(ArrayType).NameLen)^]) else
+        [ArrayTypeShort^]) else
       inc(result,integer(ElemSize)*n) else begin
     P := fValue^;
     case PTypeKind(ElemType)^ of // inlined the most used kind of items
@@ -47708,6 +47777,13 @@ var
 function TDynArray.GetArrayTypeName: RawUTF8;
 begin
   TypeInfoToName(fTypeInfo,result);
+end;
+
+function TDynArray.GetArrayTypeShort: PShortString;
+begin
+  if fTypeInfo=nil then
+    result := @NULCHAR else
+    result := PShortString(@PTypeInfo(fTypeInfo).NameLen);
 end;
 
 function TDynArray.ToKnownType(exactType: boolean): TDynArrayKind;
@@ -48158,7 +48234,7 @@ begin
   if ElemType=nil then // FPC: nil also if not Kind in tkManagedTypes
     if GetIsObjArray then
       raise ESynException.CreateUTF8('TDynArray.LoadFrom(%) is a T*ObjArray',
-        [PShortString(@PTypeInfo(ArrayType).NameLen)^]) else begin
+        [ArrayTypeShort^]) else begin
       // binary type was stored directly
       n := n*integer(ElemSize);
       MoveFast(Source^,P^,n);
@@ -48898,7 +48974,7 @@ begin // this method is faster than default System.DynArraySetLength() function
   {$ifndef CPU64}
   if NeededSize>1024*1024*1024 then // max workable memory block is 1 GB
     raise ERangeError.CreateFmt('TDynArray SetLength(%s,%d) size concern',
-      [PShortString(@PTypeInfo(ArrayType).NameLen)^,NewLength]);
+      [ArrayTypeShort^,NewLength]);
   {$endif}
   // if not shared (refCnt=1), resize; if shared, create copy (not thread safe)
   if (p=nil) or (p^.refCnt=1) then begin
@@ -49772,7 +49848,7 @@ begin
   raise ESynException.CreateUTF8('TDynArrayHashed.% fatal collision: '+
     'aHashCode=% fHashsCount=% Count=% Capacity=% ArrayType=% fKnownType=%',
     [caller,CardinalToHexShort(aHashCode),fHashsCount,GetCount,GetCapacity,
-    PShortString(@PTypeInfo(ArrayType).NameLen)^,ToText(fKnownType)^]);
+     ArrayTypeShort^,ToText(fKnownType)^]);
 end;
 
 function TDynArrayHashed.GetHashFromIndex(aIndex: PtrInt): Cardinal;
@@ -58988,7 +59064,7 @@ begin
   result := false;
   if (fValues.ElemType=nil) or (PTypeKind(fValues.ElemType)^<>tkDynArray) then
     raise ESynException.CreateUTF8('%.Values: % items are not dynamic arrays',
-      [self,PShortString(@PTypeInfo(fValues.ArrayType)^.NameLen)^]);
+      [self,fValues.ArrayTypeShort^]);
   fSafe.Lock;
   try
     ndx := fKeys.FindHashed(aKey);
@@ -59338,7 +59414,7 @@ begin
       if NoCompression then
         trigger := maxInt else
         trigger := 128;
-      fCompressAlgo.Compress(tmp.buf,tmp.len,result,trigger);
+      result := fCompressAlgo.Compress(tmp.buf,tmp.len,trigger);
     end;
     tmp.Done;
   finally
@@ -60392,7 +60468,7 @@ begin
     algo := AlgoSynLZ;
   trig := SYNLZTRIG[nocompression];
   if fStream.Position=0 then // direct compression from internal buffer
-    algo.Compress(PAnsiChar(fBuffer),fPos,result,trig) else begin
+    result := algo.Compress(PAnsiChar(fBuffer),fPos,trig) else begin
     Flush;
     result := algo.Compress((fStream as TRawByteStringStream).DataString,trig);
   end;
@@ -62004,17 +62080,17 @@ end;
 function TAlgoCompress.Compress(const Plain: RawByteString;
   CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean): RawByteString;
 begin
-  Compress(pointer(Plain),Length(Plain),result,CompressionSizeTrigger,CheckMagicForCompressed);
+  result := Compress(pointer(Plain),Length(Plain),CompressionSizeTrigger,CheckMagicForCompressed);
 end;
 
-procedure TAlgoCompress.Compress(Plain: PAnsiChar; PlainLen: integer;
-  out Result: RawByteString; CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean);
+function TAlgoCompress.Compress(Plain: PAnsiChar; PlainLen: integer;
+  CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean): RawByteString;
 var len: integer;
     R: PAnsiChar;
     crc: cardinal;
     tmp: array[0..16383] of AnsiChar;  // will resize Result in-place
 begin
-  if (self=nil) or (PlainLen=0) then
+  if (self=nil) or (PlainLen=0) or (Plain=nil) then
     exit;
   crc := AlgoHash(0,Plain,PlainLen);
   if (PlainLen<CompressionSizeTrigger) or
@@ -62148,6 +62224,22 @@ begin
   Decompress(pointer(Comp),length(Comp),result,Load);
 end;
 
+function TAlgoCompress.TryDecompress(const Comp: RawByteString;
+  out Dest: RawByteString; Load: TAlgoCompressLoad): boolean;
+var len: integer;
+begin
+  result := Comp='';
+  if result then
+    exit;
+  len := DecompressHeader(pointer(Comp),length(Comp),Load);
+  if len=0 then
+    exit; // invalid crc32c
+  SetString(Dest,nil,len);
+  if DecompressBody(pointer(Comp),pointer(Dest),length(Comp),len,Load) then
+    result := true else
+    Dest := '';
+end;
+
 function TAlgoCompress.Decompress(const Comp: RawByteString;
   out PlainLen: integer; var tmp: RawByteString; Load: TAlgoCompressLoad): pointer;
 begin
@@ -62274,14 +62366,14 @@ end;
 function SynLZCompress(const Data: RawByteString; CompressionSizeTrigger: integer;
   CheckMagicForCompressed: boolean): RawByteString;
 begin
-  AlgoSynLZ.Compress(pointer(Data),length(Data),result,CompressionSizeTrigger,
+  result := AlgoSynLZ.Compress(pointer(Data),length(Data),CompressionSizeTrigger,
     CheckMagicForCompressed);
 end;
 
 procedure SynLZCompress(P: PAnsiChar; PLen: integer; out Result: RawByteString;
   CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean);
 begin
-  AlgoSynLZ.Compress(P,PLen,Result,CompressionSizeTrigger,CheckMagicForCompressed);
+  result := AlgoSynLZ.Compress(P,PLen,CompressionSizeTrigger,CheckMagicForCompressed);
 end;
 
 function SynLZCompress(P, Dest: PAnsiChar; PLen, DestLen: integer;
