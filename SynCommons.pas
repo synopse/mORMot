@@ -9319,6 +9319,10 @@ type
     // - returns the index of the deleted item, -1 if aKey was not found
     // - this method is thread-safe, since it will lock the instance
     function Delete(const aKey): integer;
+    /// delete a key/value association from its internal index
+    // - this method is not thread-safe: you should use fSafe.Lock/Unlock
+    // e.g. then Find/FindValue to retrieve the index value
+    function DeleteAt(aIndex: integer): boolean;
     /// search and delete all deprecated items according to TimeoutSeconds
     // - returns how many items have been deleted
     // - you can call this method very often: it will ensure that the
@@ -13102,10 +13106,10 @@ const
     '10', '10 64bit', 'Server 2016', 'Server 2016 64bit');
 
   /// the compiler family used
-  COMP_TEXT = {$ifdef FPC}'fpc'{$else}'delphi'{$endif};
+  COMP_TEXT = {$ifdef FPC}'Fpc'{$else}'Delphi'{$endif};
   /// the target Operating System used for compilation, as text
-  OS_TEXT = {$ifdef MSWINDOWS}'win'{$else}{$ifdef DARWIN}'osx'{$else}
-  {$ifdef BSD}'bsd'{$else}{$ifdef LINUX}'linux'{$else}'posix'
+  OS_TEXT = {$ifdef MSWINDOWS}'Win'{$else}{$ifdef DARWIN}'OSX'{$else}
+  {$ifdef BSD}'BSD'{$else}{$ifdef LINUX}'Linux'{$else}'Posix'
   {$endif}{$endif}{$endif}{$endif};
   /// the CPU architecture used for compilation
   CPU_ARCH_TEXT = {$ifdef CPUX86}'x86'{$else}{$ifdef CPUX64}'x64'{$else}
@@ -59054,6 +59058,20 @@ begin
   finally
     fSafe.UnLock;
   end;
+end;
+
+function TSynDictionary.DeleteAt(aIndex: integer): boolean;
+begin
+  if cardinal(aIndex)<cardinal(fSafe.Padding[DIC_KEYCOUNT].VInteger) then begin
+    fKeys.Delete(aIndex);
+    fKeys.ReHash;
+    fValues.Delete(aIndex);
+    if fSafe.Padding[DIC_TIMESEC].VInteger>0 then
+      fTimeOuts.Delete(aIndex);
+    result := true;
+  end
+  else
+    result := false;
 end;
 
 function TSynDictionary.InArray(const aKey, aArrayValue;
