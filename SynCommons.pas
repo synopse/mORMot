@@ -17448,26 +17448,26 @@ type
   end;
 
 
-/// convert a size to a human readable value
-// - append TB, GB, MB, KB or B symbol
-// - for TB, GB, MB and KB, add one fractional digit
+/// convert a size to a human readable value power-of-two metric value
+// - append EB, PB, TB, GB, MB, KB or B symbol
+// - for EB, PB, TB, GB, MB and KB, add one fractional digit
 procedure KB(bytes: Int64; out result: TShort16); overload;
 
 /// convert a size to a human readable value
-// - append TB, GB, MB, KB or B symbol
-// - for TB, GB, MB and KB, add one fractional digit
+// - append EB, PB, TB, GB, MB, KB or B symbol
+// - for EB, PB, TB, GB, MB and KB, add one fractional digit
 function KB(bytes: Int64): TShort16; overload;
   {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
 
 /// convert a string size to a human readable value
-// - append TB, GB, MB, KB or B symbol
-// - for TB, GB, MB and KB, add one fractional digit
+// - append EB, PB, TB, GB, MB, KB or B symbol
+// - for EB, PB, TB, GB, MB and KB, add one fractional digit
 function KB(const buffer: RawByteString): TShort16; overload;
   {$ifdef FPC_OR_UNICODE}inline;{$endif}
 
 /// convert a size to a human readable value
-// - append TB, GB, MB, KB or B symbol
-// - for TB, GB, MB and KB, add one fractional digit
+// - append EB, PB, TB, GB, MB, KB or B symbol
+// - for EB, PB, TB, GB, MB and KB, add one fractional digit
 procedure KBU(bytes: Int64; var result: RawUTF8);
 
 /// convert a micro seconds elapsed time into a human readable value
@@ -56006,7 +56006,7 @@ end;
 { ************ Unit-Testing classes and functions }
 
 procedure KB(bytes: Int64; out result: TShort16);
-const _B: array[0..3] of string[3] = (' KB',' MB',' GB',' TB');
+const _B: array[0..5] of string[3] = (' KB',' MB',' GB',' TB',' PB',' EB');
 var hi,rem,b: cardinal;
 begin
   if bytes<1 shl 10-(1 shl 10) div 10 then begin
@@ -56027,10 +56027,20 @@ begin
     b := 2;
     rem := bytes shr 20;
     hi := bytes shr 30;
-  end else begin
+  end else
+  if bytes<Int64(1) shl 50-(Int64(1) shl 50) div 10 then begin
     b := 3;
     rem := bytes shr 30;
     hi := bytes shr 40;
+  end else
+  if bytes<Int64(1) shl 60-(Int64(1) shl 60) div 10 then begin
+    b := 4;
+    rem := bytes shr 40;
+    hi := bytes shr 50;
+  end else begin
+    b := 5;
+    rem := bytes shr 50;
+    hi := bytes shr 60;
   end;
   rem := rem and 1023;
   if rem<>0 then
