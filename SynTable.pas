@@ -137,6 +137,8 @@ type
     // - this method IS thread-safe, will use stack to UTF-8 temporary conversion
     // if possible, and won't lock
     function MatchString(const aText: string): boolean;
+    /// returns TRUE if this search pattern matches another
+    function Equals(const aAnother: TMatch): boolean; {$ifdef HASINLINE}inline;{$endif}
   end;
   /// use SetMatchs() to initialize such an array from a CSV pattern text
   TMatchDynArray = array of TMatch;
@@ -191,6 +193,12 @@ function SetMatchs(const CSVPattern: RawUTF8; CaseInsensitive: boolean;
 // be pointed to by the Match[].Pattern private field
 function SetMatchs(CSVPattern: PUTF8Char; CaseInsensitive: boolean;
   Match: PMatch; MatchMax: integer): integer; overload;
+
+/// search if one TMach is already registered in the Several[] dynamic array
+function MatchExists(const One: TMatch; const Several: TMatchDynArray): boolean;
+
+/// add one TMach if not already registered in the Several[] dynamic array
+function MatchAdd(const One: TMatch; var Several: TMatchDynArray): boolean;
 
 /// apply the CSV-supplied glob patterns to an array of RawUTF8
 // - any text not maching the pattern will be deleted from the array
@@ -5519,6 +5527,12 @@ begin
   temp.Done;
 end;
 
+function TMatch.Equals(const aAnother: TMatch): boolean;
+begin
+  result := (PMax = aAnother.PMax) and (Upper = aAnother.Upper) and
+    CompareMemSmall(Pattern, aAnother.Pattern, PMax + 1);
+end;
+
 function IsMatch(const Pattern, Text: RawUTF8; CaseInsensitive: boolean): boolean;
 var match: TMatch;
 begin
@@ -5569,6 +5583,29 @@ begin
         break;
       inc(CSVPattern);
     until false;
+end;
+
+function MatchExists(const One: TMatch; const Several: TMatchDynArray): boolean;
+var
+  i: integer;
+begin
+  result := true;
+  for i := 0 to high(Several) do
+    if Several[i].Equals(One) then
+      exit;
+  result := false;
+end;
+
+function MatchAdd(const One: TMatch; var Several: TMatchDynArray): boolean;
+var
+  n: integer;
+begin
+  result := not MatchExists(One, Several);
+  if result then begin
+    n := length(Several);
+    SetLength(Several, n + 1);
+    Several[n] := One;
+  end;
 end;
 
 procedure FilterMatchs(const CSVPattern: RawUTF8; CaseInsensitive: boolean;

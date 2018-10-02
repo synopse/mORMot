@@ -1205,7 +1205,6 @@ end;
 function KillProcess(pid: DWORD; waitseconds: integer): boolean;
 var
   ph: THandle;
-  error: DWORD;
 begin
   ph := OpenProcess(PROCESS_TERMINATE or SYNCHRONIZE, false, pid);
   result := ph <> 0;
