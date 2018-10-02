@@ -1202,16 +1202,23 @@ begin
   end;
 end;
 
-function KillProcess(pid: DWORD; waitseconds: integer): boolean;
+function KillProcess(pid: DWORD; waitseconds: integer = 30): boolean;
 var
   ph: THandle;
   error: DWORD;
 begin
-  ph := OpenProcess(PROCESS_TERMINATE or SYNCHRONIZE, false, pid);
+  ph := OpenProcess(PROCESS_TERMINATE, false, pid);
   result := ph <> 0;
   if result then begin
     try
-      result := TerminateProcess(ph, 0) and (WaitForSingleObject(ph, waitseconds * 1000) <> WAIT_TIMEOUT);
+      result := TerminateProcess(ph, 0);
+      if result then begin
+        result := waitseconds = 0;
+        if not result then begin
+          error := WaitForSingleObject(pid, waitseconds * 1000);
+          result := (error <> WAIT_FAILED) and (error <> WAIT_TIMEOUT);
+        end;
+      end;
     finally
       CloseHandle(ph);
     end;
@@ -1341,8 +1348,7 @@ begin
   startupinfo.cb := SizeOf(startupinfo);
   // https://docs.microsoft.com/pl-pl/windows/desktop/ProcThread/process-creation-flags
   if CreateProcessW(nil, pointer(wcmdline), nil, nil, false,
-   CREATE_DEFAULT_ERROR_MODE or DETACHED_PROCESS or CREATE_NEW_PROCESS_GROUP,
-   nil, pointer(currentdir), startupinfo, processinfo) then begin
+    CREATE_DEFAULT_ERROR_MODE or DETACHED_PROCESS, nil, pointer(currentdir), startupinfo, processinfo) then begin
     if waitfor then begin
       if WaitForSingleObject(processinfo.hProcess,INFINITE) = WAIT_FAILED then
         result := -GetLastError
