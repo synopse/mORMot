@@ -35,7 +35,7 @@ begin
         with TSynMapFile.Create(FN,true) do // true = .map -> .mab
         try
           if not HasDebugInfo then begin
-            WriteLn('Error: no Debug Info found on ' + FN);
+            WriteLn('Error: no Debug Info found on ',FN);
             AllOk := False;            
           end else if (Ext>0) then // has debug info and is not a map
             SaveToExe(FN);
@@ -44,7 +44,7 @@ begin
         end;
       except
         on E: Exception do begin // ignore any problem here: just print it and process next file
-          WriteLn('Error: ' + E.Message);
+          WriteLn('Error: ', E.ClassType,' ',E.Message);
           AllOk := False;
         end;
       end;
@@ -52,7 +52,7 @@ begin
   finally
     FindClose(SR);
   end else begin
-    WriteLn('Error: cant find any file to process matching: ' + FileName);
+    WriteLn('Error: cant find any file to process matching: ', FileName);
     ExitCode := 2;
   end;
   if not AllOk then
