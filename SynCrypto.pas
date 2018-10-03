@@ -2725,11 +2725,12 @@ type
     // - it will decode the JWT payload and check for its expiration, and some
     // mandatory fied values - you can optionally retrieve the Expiration time,
     // the ending Signature, and/or the Payload decoded as TDocVariant
+    // - NotBeforeDelta allows to define some time frame for the "nbf" field
     // - may be used on client side to quickly validate a JWT received from
     // server, without knowing the exact algorithm or secret keys
     class function VerifyPayload(const Token, ExpectedSubject, ExpectedIssuer,
       ExpectedAudience: RawUTF8; Expiration: PUnixTime=nil; Signature: PRawUTF8=nil;
-      Payload: PVariant=nil; IgnoreTime: boolean=false): TJWTResult;
+      Payload: PVariant=nil; IgnoreTime: boolean=false; NotBeforeDelta: TUnixTime=15): TJWTResult;
   published
     /// the name of the algorithm used by this instance (e.g. 'HS256')
     property Algorithm: RawUTF8 read fAlgorithm;
@@ -14771,7 +14772,7 @@ end;
 
 class function TJWTAbstract.VerifyPayload(const Token, ExpectedSubject, ExpectedIssuer,
   ExpectedAudience: RawUTF8; Expiration: PUnixTime; Signature: PRawUTF8; Payload: PVariant;
-  IgnoreTime: boolean): TJWTResult;
+  IgnoreTime: boolean; NotBeforeDelta: TUnixTime): TJWTResult;
 var P,B: PUTF8Char;
     V: array[0..4] of TValuePUTF8Char;
     now, time: PtrUInt;
@@ -14821,7 +14822,7 @@ begin
     if not IgnoreTime and (V[3].Value<>nil) then begin
       time := V[3].ToCardinal;
       result := jwtNotBeforeFailed;
-      if (time=0) or (now<time) then
+      if (time=0) or (now+PtrUInt(NotBeforeDelta)<time) then
         exit;
     end;
   end;

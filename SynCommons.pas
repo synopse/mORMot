@@ -6641,7 +6641,7 @@ procedure DynArrayCopy(var Dest; const Source; SourceMaxElem: integer;
 /// fill a dynamic array content from a binary serialization as saved by
 // DynArraySave() / TDynArray.Save()
 // - Value shall be set to the target dynamic array field
-// - just a function helper around TDynArray.Init + TDynArray.Load
+// - just a function helper around TDynArray.Init + TDynArray.LoadFrom
 function DynArrayLoad(var Value; Source: PAnsiChar; TypeInfo: pointer): PAnsiChar;
 
 /// serialize a dynamic array content as binary, ready to be loaded by
