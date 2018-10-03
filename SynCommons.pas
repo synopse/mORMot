@@ -61703,7 +61703,7 @@ begin
     result := 0 else
     with PSynLZTrailer(P+Len-SizeOf(TSynLZTrailer))^ do
       if (Magic=aMagic) and (HeaderRelativeOffset<Len) and
-         (PSynLZHead(P-HeaderRelativeOffset)^.Magic=aMagic) then
+         (PSynLZHead(P+Len-HeaderRelativeOffset)^.Magic=aMagic) then
         // trim existing content
         result := Len-HeaderRelativeOffset else
         result := Len;
