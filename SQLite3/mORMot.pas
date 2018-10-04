@@ -7997,7 +7997,7 @@ type
     // - the Row number is taken from property FillCurrentRow
     // - return true on success, false if no more Row data is available
     // - internally call FillRow() to update published properties values
-    function FillOne: boolean;
+    function FillOne(aDest: TSQLRecord=nil): boolean;
     /// go to the first prepared row, ready to loop through all rows with FillOne()
     // - the Row number (property FillCurrentRow) is reset to 1
     // - return true on success, false if no Row data is available
@@ -32154,13 +32154,13 @@ begin
     result := false;
 end;
 
-function TSQLRecord.FillOne: boolean;
+function TSQLRecord.FillOne(aDest: TSQLRecord=nil): boolean;
 begin
   if (self=nil) or (fFill=nil) or (fFill.Table=nil) or
      (fFill.Table.fRowCount=0) or // also check if FillTable is emtpy
      (cardinal(fFill.FillCurrentRow)>cardinal(fFill.Table.fRowCount)) then
     result := false else begin
-    FillRow(fFill.FillCurrentRow);
+    FillRow(fFill.FillCurrentRow,aDest);
     inc(fFill.fFillCurrentRow);
     result := true;
   end;
