@@ -44,7 +44,7 @@ begin
         end;
       except
         on E: Exception do begin // ignore any problem here: just print it and process next file
-          WriteLn('Error: ', E.ClassType,' ',E.Message);
+          WriteLn('Error: ', E.ClassName,' ',E.Message);
           AllOk := False;
         end;
       end;

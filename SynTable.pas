@@ -138,7 +138,8 @@ type
     // if possible, and won't lock
     function MatchString(const aText: string): boolean;
     /// returns TRUE if this search pattern matches another
-    function Equals(const aAnother: TMatch): boolean; {$ifdef HASINLINE}inline;{$endif}
+    function Equals(const aAnother{$ifndef DELPHI5OROLDER}: TMatch{$endif}): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
   end;
   /// use SetMatchs() to initialize such an array from a CSV pattern text
   TMatchDynArray = array of TMatch;
@@ -5527,10 +5528,10 @@ begin
   temp.Done;
 end;
 
-function TMatch.Equals(const aAnother: TMatch): boolean;
+function TMatch.Equals(const aAnother{$ifndef DELPHI5OROLDER}: TMatch{$endif}): boolean;
 begin
-  result := (PMax = aAnother.PMax) and (Upper = aAnother.Upper) and
-    CompareMemSmall(Pattern, aAnother.Pattern, PMax + 1);
+  result := (PMax = TMatch(aAnother).PMax) and (Upper = TMatch(aAnother).Upper) and
+    CompareMemSmall(Pattern, TMatch(aAnother).Pattern, PMax + 1);
 end;
 
 function IsMatch(const Pattern, Text: RawUTF8; CaseInsensitive: boolean): boolean;
