@@ -31,6 +31,7 @@ unit mORMotService;
   Contributor(s):
   - Eric Grange
   - Leander007
+  - Maciej Izak (hnb)
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -663,6 +664,56 @@ type
     // - will be allocated in Create constructor, and released in Destroy
     property Settings: TSynDaemonSettings read fSettings;
   end;
+
+  {$ifdef MSWINDOWS}
+  /// Enum synchronized with WinAPI
+  // - see https://docs.microsoft.com/en-us/windows/desktop/secauthz/privilege-constants
+  TWinSystemPrivilege = (wspCreateToken, wspAssignPrimaryToken, wspLockMemory,
+    wspIncreaseQuota, wspUnsolicitedInput, wspMAchineAccount, wspTCP, wspSecurity,
+    wspTakeOwnership, wspLoadDriver, wspSystemProfile, wspSystemTime, wspProfSingleProcess,
+    wspIncBasePriority, wspCreatePageFile, wspCreatePermanent, wspBackup, wspRestore,
+    wspShutdown, wspDebug, wspAudit, wspSystemEnvironment, wspChangeNotify,
+    wspRemoteShutdown, wspUndock, wspSyncAgent, wspEnableDelegation, wspManageVolume,
+    wspImpersonate, wspCreateGlobal, wspTrustedCredmanAccess, wspRelabel,
+    wspIncWorkingSet, wspTimeZone, wspCreateSymbolicLink);
+  TWinSystemPrivileges = set of TWinSystemPrivilege;
+  TPrivilegeTokenType = (pttProcess, pttThread);
+
+  /// object dedicated to management of available privileges for Windows platform
+  // - not all available privileges are active for process
+  // - for usage of more advanced WinAPI, explicit enabling of privilege is
+  // sometimes needed
+  TSynWindowsPrivileges = object
+  private
+    fAvailable: TWinSystemPrivileges;
+    fEnabled: TWinSystemPrivileges;
+    fDefEnabled: TWinSystemPrivileges;
+    function SetPrivilege(aPrivilege: Pointer; aEnablePrivilege: boolean): boolean;
+    procedure LoadPrivileges;
+  public
+    /// handle to privileges token
+    Token: THandle;
+    /// initialize the object dedicated to management of available privileges
+    // - aTokenPrivilege can be used for current process or current thread
+    procedure Init(aTokenPrivilege: TPrivilegeTokenType = pttProcess);
+    /// finalize the object and relese Token handle
+    // - aRestoreInitiallyEnabled parameter can be used to restore initially
+    // state of enabled privileges
+    procedure Done(aRestoreInitiallyEnabled: boolean = true);
+    /// enable privilege
+    // - if aPrivilege is already enabled return true, if operation is not
+    // possible (required privilege doesn't exist or API error) return false
+    function Enable(aPrivilege: TWinSystemPrivilege): boolean;
+    /// disable privilege
+    // - if aPrivilege is already disabled return true, if operation is not
+    // possible (required privilege doesn't exist or API error) return false
+    function Disable(aPrivilege: TWinSystemPrivilege): boolean;
+    /// set of available privileges for current process/thread
+    property Available: TWinSystemPrivileges read fAvailable;
+    /// set of enabled privileges for current process/thread
+    property Enabled: TWinSystemPrivileges read fEnabled;
+  end;
+  {$endif}
 
 implementation
 
@@ -1901,5 +1952,257 @@ begin
 end;
 
 {$I+}
+
+{$ifdef MSWINDOWS}
+const
+  SE_CREATE_TOKEN_NAME           = 'SeCreateTokenPrivilege';
+  SE_ASSIGNPRIMARYTOKEN_NAME     = 'SeAssignPrimaryTokenPrivilege';
+  SE_LOCK_MEMORY_NAME            = 'SeLockMemoryPrivilege';
+  SE_INCREASE_QUOTA_NAME         = 'SeIncreaseQuotaPrivilege';
+  SE_UNSOLICITED_INPUT_NAME      = 'SeUnsolicitedInputPrivilege';
+  SE_MACHINE_ACCOUNT_NAME        = 'SeMachineAccountPrivilege';
+  SE_TCB_NAME                    = 'SeTcbPrivilege';
+  SE_SECURITY_NAME               = 'SeSecurityPrivilege';
+  SE_TAKE_OWNERSHIP_NAME         = 'SeTakeOwnershipPrivilege';
+  SE_LOAD_DRIVER_NAME            = 'SeLoadDriverPrivilege';
+  SE_SYSTEM_PROFILE_NAME         = 'SeSystemProfilePrivilege';
+  SE_SYSTEMTIME_NAME             = 'SeSystemtimePrivilege';
+  SE_PROF_SINGLE_PROCESS_NAME    = 'SeProfileSingleProcessPrivilege';
+  SE_INC_BASE_PRIORITY_NAME      = 'SeIncreaseBasePriorityPrivilege';
+  SE_CREATE_PAGEFILE_NAME        = 'SeCreatePagefilePrivilege';
+  SE_CREATE_PERMANENT_NAME       = 'SeCreatePermanentPrivilege';
+  SE_BACKUP_NAME                 = 'SeBackupPrivilege';
+  SE_RESTORE_NAME                = 'SeRestorePrivilege';
+  SE_SHUTDOWN_NAME               = 'SeShutdownPrivilege';
+  SE_DEBUG_NAME                  = 'SeDebugPrivilege';
+  SE_AUDIT_NAME                  = 'SeAuditPrivilege';
+  SE_SYSTEM_ENVIRONMENT_NAME     = 'SeSystemEnvironmentPrivilege';
+  SE_CHANGE_NOTIFY_NAME          = 'SeChangeNotifyPrivilege';
+  SE_REMOTE_SHUTDOWN_NAME        = 'SeRemoteShutdownPrivilege';
+  SE_UNDOCK_NAME                 = 'SeUndockPrivilege';
+  SE_SYNC_AGENT_NAME             = 'SeSyncAgentPrivilege';
+  SE_ENABLE_DELEGATION_NAME      = 'SeEnableDelegationPrivilege';
+  SE_MANAGE_VOLUME_NAME          = 'SeManageVolumePrivilege';
+  SE_IMPERSONATE_NAME            = 'SeImpersonatePrivilege';
+  SE_CREATE_GLOBAL_NAME          = 'SeCreateGlobalPrivilege';
+  SE_TRUSTED_CREDMAN_ACCESS_NAME = 'SeTrustedCredManAccessPrivilege';
+  SE_RELABEL_NAME                = 'SeRelabelPrivilege';
+  SE_INC_WORKING_SET_NAME        = 'SeIncreaseWorkingSetPrivilege';
+  SE_TIME_ZONE_NAME              = 'SeTimeZonePrivilege';
+  SE_CREATE_SYMBOLIC_LINK_NAME   = 'SeCreateSymbolicLinkPrivilege';
+
+  MAX_SE_NAME_LENGTH = 31;
+
+  WinSystemPrivilegeToSE_NAME: array[TWinSystemPrivilege] of string = (
+    SE_CREATE_TOKEN_NAME,
+    SE_ASSIGNPRIMARYTOKEN_NAME,
+    SE_LOCK_MEMORY_NAME,
+    SE_INCREASE_QUOTA_NAME,
+    SE_UNSOLICITED_INPUT_NAME,
+    SE_MACHINE_ACCOUNT_NAME,
+    SE_TCB_NAME,
+    SE_SECURITY_NAME,
+    SE_TAKE_OWNERSHIP_NAME,
+    SE_LOAD_DRIVER_NAME,
+    SE_SYSTEM_PROFILE_NAME,
+    SE_SYSTEMTIME_NAME,
+    SE_PROF_SINGLE_PROCESS_NAME,
+    SE_INC_BASE_PRIORITY_NAME,
+    SE_CREATE_PAGEFILE_NAME,
+    SE_CREATE_PERMANENT_NAME,
+    SE_BACKUP_NAME,
+    SE_RESTORE_NAME,
+    SE_SHUTDOWN_NAME,
+    SE_DEBUG_NAME,
+    SE_AUDIT_NAME,
+    SE_SYSTEM_ENVIRONMENT_NAME,
+    SE_CHANGE_NOTIFY_NAME,
+    SE_REMOTE_SHUTDOWN_NAME,
+    SE_UNDOCK_NAME,
+    SE_SYNC_AGENT_NAME,
+    SE_ENABLE_DELEGATION_NAME,
+    SE_MANAGE_VOLUME_NAME,
+    SE_IMPERSONATE_NAME,
+    SE_CREATE_GLOBAL_NAME,
+    SE_TRUSTED_CREDMAN_ACCESS_NAME,
+    SE_RELABEL_NAME,
+    SE_INC_WORKING_SET_NAME,
+    SE_TIME_ZONE_NAME,
+    SE_CREATE_SYMBOLIC_LINK_NAME
+  );
+
+type
+  PTOKEN_PRIVILEGES = ^TOKEN_PRIVILEGES;
+  TOKEN_PRIVILEGES = packed record
+    PrivilegeCount : DWORD;
+    Privileges : array[0..0] of LUID_AND_ATTRIBUTES;
+  end;
+
+function OpenProcessToken(ProcessHandle: THandle; DesiredAccess: DWORD;
+  var TokenHandle: THandle): BOOL; stdcall; external advapi32 name 'OpenProcessToken';
+function LookupPrivilegeValue(lpSystemName, lpName: PChar;
+  var lpLuid: LUID): BOOL; stdcall; external advapi32
+  name {$ifdef UNICODE}'LookupPrivilegeValueW'{$else}'LookupPrivilegeValueA'{$endif};
+function LookupPrivilegeNameA(lpSystemName: LPCSTR; var lpLuid: TLargeInteger;
+  lpName: LPCSTR; var cbName: DWORD): BOOL; stdcall; external advapi32 name 'LookupPrivilegeNameA';
+function AdjustTokenPrivileges(TokenHandle: THandle; DisableAllPrivileges: BOOL;
+  const NewState: TOKEN_PRIVILEGES; BufferLength: DWORD;
+  PreviousState: PTokenPrivileges; ReturnLength: PDWORD): BOOL; stdcall; external advapi32
+  name 'AdjustTokenPrivileges';
+
+{ TSynWindowsPrivileges }
+
+procedure TSynWindowsPrivileges.Init(aTokenPrivilege: TPrivilegeTokenType);
+var
+  access: Cardinal;
+begin
+  Token := 0;
+  fAvailable := [];
+  fEnabled := [];
+  fDefEnabled := [];
+  access := TOKEN_QUERY or TOKEN_ADJUST_PRIVILEGES;
+  if aTokenPrivilege = pttProcess then begin
+    if not OpenProcessToken(GetCurrentProcess, access, Token) then
+      raise ESynException.Create('TSynWindowsPrivileges cannot open process token');
+  end
+  else if not OpenThreadToken(GetCurrentThread, access, false, Token) then
+    if GetLastError = ERROR_NO_TOKEN then begin
+      if not ImpersonateSelf(SecurityImpersonation) or
+       not OpenThreadToken(GetCurrentThread, access, false, Token) then
+        raise ESynException.Create('TSynWindowsPrivileges cannot open thread token');
+    end else
+      raise ESynException.Create('TSynWindowsPrivileges cannot open thread token');
+  LoadPrivileges;
+end;
+
+procedure TSynWindowsPrivileges.Done(aRestoreInitiallyEnabled: boolean = true);
+var
+  i: TWinSystemPrivilege;
+  new: TWinSystemPrivileges;
+begin
+  if aRestoreInitiallyEnabled then begin
+    new := fEnabled-fDefEnabled;
+    for i := low(TWinSystemPrivilege) to high(TWinSystemPrivilege) do
+      if i in new then
+        Disable(i);
+  end;
+  CloseHandle(Token);
+end;
+
+function TSynWindowsPrivileges.Enable(aPrivilege: TWinSystemPrivilege): boolean;
+begin
+  result := aPrivilege in fEnabled;
+  if result or not (aPrivilege in fAvailable) or not SetPrivilege(Pointer(WinSystemPrivilegeToSE_NAME[aPrivilege]), true) then
+    exit;
+  Include(fEnabled, aPrivilege);
+  result := true;
+end;
+
+function TSynWindowsPrivileges.Disable(aPrivilege: TWinSystemPrivilege
+  ): boolean;
+begin
+  result := not (aPrivilege in fEnabled);
+  if result or not (aPrivilege in fAvailable) or not SetPrivilege(Pointer(WinSystemPrivilegeToSE_NAME[aPrivilege]), false) then
+    exit;
+  Exclude(fEnabled, aPrivilege);
+  result := true;
+end;
+
+procedure TSynWindowsPrivileges.LoadPrivileges;
+const
+  UPCASE_SE_NAMES: array[TWinSystemPrivilege] of PAnsiChar = (
+    'SECREATETOKENPRIVILEGE','SEASSIGNPRIMARYTOKENPRIVILEGE','SELOCKMEMORYPRIVILEGE',
+    'SEINCREASEQUOTAPRIVILEGE','SEUNSOLICITEDINPUTPRIVILEGE','SEMACHINEACCOUNTPRIVILEGE',
+    'SETCBPRIVILEGE','SESECURITYPRIVILEGE','SETAKEOWNERSHIPPRIVILEGE',
+    'SELOADDRIVERPRIVILEGE','SESYSTEMPROFILEPRIVILEGE','SESYSTEMTIMEPRIVILEGE',
+    'SEPROFILESINGLEPROCESSPRIVILEGE','SEINCREASEBASEPRIORITYPRIVILEGE',
+    'SECREATEPAGEFILEPRIVILEGE','SECREATEPERMANENTPRIVILEGE','SEBACKUPPRIVILEGE',
+    'SERESTOREPRIVILEGE','SESHUTDOWNPRIVILEGE','SEDEBUGPRIVILEGE','SEAUDITPRIVILEGE',
+    'SESYSTEMENVIRONMENTPRIVILEGE','SECHANGENOTIFYPRIVILEGE','SEREMOTESHUTDOWNPRIVILEGE',
+    'SEUNDOCKPRIVILEGE','SESYNCAGENTPRIVILEGE','SEENABLEDELEGATIONPRIVILEGE',
+    'SEMANAGEVOLUMEPRIVILEGE','SEIMPERSONATEPRIVILEGE','SECREATEGLOBALPRIVILEGE',
+    'SETRUSTEDCREDMANACCESSPRIVILEGE','SERELABELPRIVILEGE','SEINCREASEWORKINGSETPRIVILEGE',
+    'SETIMEZONEPRIVILEGE','SECREATESYMBOLICLINKPRIVILEGE');
+var
+  buf: TSynTempBuffer;
+  tp: PTOKEN_PRIVILEGES;
+  len: Cardinal;
+  i: integer;
+  name: AnsiString;
+  enumval: integer;
+begin
+  if Token = 0 then
+    raise ESynException.Create('TSynWindowsPrivileges: invalid privileges token');
+  buf.Init;
+  try
+    len := 0;
+    if not GetTokenInformation(Token, TokenPrivileges, buf.buf, buf.len, len) then
+      if GetLastError <> ERROR_INSUFFICIENT_BUFFER then
+        raise ESynException.Create('TSynWindowsPrivileges cannot get token information')
+      else begin
+        buf.Done;
+        buf.Init(len);
+        if not GetTokenInformation(Token, TokenPrivileges, buf.buf, buf.len, len) then
+          raise ESynException.Create('TSynWindowsPrivileges cannot get token information')
+      end;
+    tp := buf.buf;
+    SetLength(name, MAX_SE_NAME_LENGTH);
+    for i := 0 to tp.PrivilegeCount-1 do
+    begin
+      len := Length(name);
+      if not LookupPrivilegeNameA(nil,tp.Privileges[i].Luid,@name[1],len) then begin
+      WriteLn(GetLastError);
+        if GetLastError <> ERROR_INSUFFICIENT_BUFFER then
+          raise ESynException.CreateUTF8('TSynWindowsPrivileges cannot lookup privilege name for Luid (%)', [Int64(tp.Privileges[i].Luid)])
+        else begin
+          SetLength(name, len);
+          if not LookupPrivilegeNameA(nil,tp.Privileges[i].Luid,@name[1],len) then
+            raise ESynException.CreateUTF8('TSynWindowsPrivileges cannot lookup privilege name for Luid (%)', [Int64(tp.Privileges[i].Luid)])
+        end;
+      end;
+      enumval := IdemPCharArray(@name[1], UPCASE_SE_NAMES);
+      if (enumval >= ord(low(TWinSystemPrivilege))) and (enumval <= ord(high(TWinSystemPrivilege))) then begin
+        Include(fAvailable, TWinSystemPrivilege(enumval));
+        if tp.Privileges[i].Attributes and SE_PRIVILEGE_ENABLED <> 0 then
+          Include(fDefEnabled, TWinSystemPrivilege(enumval));
+      end;
+    end;
+    fEnabled := fDefEnabled;
+  finally
+    buf.Done;
+  end;
+end;
+
+function TSynWindowsPrivileges.SetPrivilege(aPrivilege: Pointer;
+  aEnablePrivilege: boolean): boolean;
+var
+  tp: TOKEN_PRIVILEGES;
+  id: LUID;
+  tpprev: TOKEN_PRIVILEGES;
+  cbprev: DWORD;
+begin
+  result := false;
+  cbprev := sizeof(TOKEN_PRIVILEGES);
+  if not LookupPrivilegeValue(nil, aPrivilege, id) then
+    exit;
+  tp.PrivilegeCount := 1;
+  tp.Privileges[0].Luid := Int64(id);
+  tp.Privileges[0].Attributes := 0;
+  AdjustTokenPrivileges(Token, false, tp, sizeof(TOKEN_PRIVILEGES), @tpprev, @cbprev);
+  if GetLastError <> ERROR_SUCCESS then
+    exit;
+  tpprev.PrivilegeCount     := 1;
+  tpprev.Privileges[0].Luid := Int64(id);
+  with tpprev.Privileges[0] do
+    if aEnablePrivilege then
+      Attributes := Attributes or SE_PRIVILEGE_ENABLED
+    else
+      Attributes := Attributes xor (SE_PRIVILEGE_ENABLED and Attributes);
+  AdjustTokenPrivileges(Token, false, tpprev, cbprev, nil, nil);
+  if GetLastError <> ERROR_SUCCESS then
+    exit;
+  result := true;
+end;
+{$endif}
 
 end.
