@@ -913,11 +913,9 @@ type
   protected
     fOwner: TSynThreadPool;
     fNotifyThreadStartName: AnsiString;
-    fProcessingContext: pointer;
-    fProcessingContextCS: TRTLCriticalSection;
     {$ifndef USE_WINIOCP}
+    fProcessingContext: pointer;
     fEvent: TEvent;
-    function AssignProcess(aContext: pointer): boolean;
     {$endif}
     procedure NotifyThreadStart(Sender: TSynThread);
   public
@@ -934,32 +932,42 @@ type
   // Event-driven approach under Linux/POSIX
   TSynThreadPool = class
   protected
-    {$ifdef USE_WINIOCP}
-    fRequestQueue: THandle;
-    {$endif}
     fSubThread: TObjectList; // holds TSynThreadPoolSubThread
     fRunningThreads: integer;
     fExceptionsCount: integer;
     fOnTerminate: TNotifyThreadEvent;
     fTerminated: boolean;
     fOnThreadStart: TNotifyThreadEvent;
+    {$ifdef USE_WINIOCP}
+    fRequestQueue: THandle;
+    {$else}
+    fQueuePendingContext: boolean;
+    fPendingContext: array of pointer;
+    fPendingContextCount: integer;
+    fSafe: TRTLCriticalSection;
+    function PopPendingContext: pointer;
+    {$endif USE_WINIOCP}
     /// end thread on IO error
     function NeedStopOnIOError: boolean; virtual;
     /// process to be executed after notification
     procedure Task(aCaller: TSynThread; aContext: Pointer); virtual; abstract;
+    procedure TaskAbort(aContext: Pointer); virtual;
   public
     /// initialize a thread pool with the supplied number of threads
     // - abstract Task() virtual method will be called by one of the threads
     // - up to 256 threads can be associated to a Thread Pool
     // - can optionaly accept aOverlapHandle - a handle previously
     // opened for overlapped I/O (IOCP)
-    constructor Create(NumberOfThreads: Integer=32
-      {$ifdef USE_WINIOCP}; aOverlapHandle: THandle=INVALID_HANDLE_VALUE{$endif});
+    constructor Create(NumberOfThreads: Integer=32;
+      {$ifdef USE_WINIOCP}aOverlapHandle: THandle=INVALID_HANDLE_VALUE
+      {$else}aQueuePendingContext: boolean=false{$endif});
     /// shut down the Thread pool, releasing all associated threads
     destructor Destroy; override;
     /// let a task be processed by the Thread Pool
-    // - returns false if there is no idle thread available in the pool (caller
-    // should retry later)
+    // - returns false if there is no idle thread available in the pool and
+    // Create(aQueuePendingContext=false) was used  (caller // should retry later)
+    // - if aQueuePendingContext was true in Create, the supplied context will
+    // be added to an internal list and handled as soon a thread is available
     // - matches TOnThreadPoolSocketPush event handler signature
     function Push(aContext: pointer): boolean;
   published
@@ -981,6 +989,7 @@ type
     fBodyOwnThreads: integer;
     // here aContext is a pointer(TSocket=THandle) value
     procedure Task(aCaller: TSynThread; aContext: Pointer); override;
+    procedure TaskAbort(aContext: Pointer); override;
   public
     /// initialize a thread pool with the supplied number of threads
     // - Task() overridden method processs the HTTP request set by Push()
@@ -6285,7 +6294,7 @@ begin
     LContent := 0; // current read position in Content
     repeat
       if SockIn<>nil then begin
-        readln(SockIn^,LinePChar);      // use of a static PChar is faster
+        readln(SockIn^,LinePChar); // use of a static PChar is faster
         Error := ioresult;
         if Error<>0 then
           raise ECrtSocket.Create('GetBody1',Error);
@@ -6686,11 +6695,11 @@ const
   // - keep the value to a decent number, to let resources be constrained up to 1GB
   THREADPOOL_MAXWORKTHREADS = 512;
 
-  // if HTTP body length is bigger than 1 MB, creates a dedicated THttpServerResp
-  THREADPOOL_BIGBODYSIZE = 1024*1024;
+  // if HTTP body length is bigger than 16 MB, creates a dedicated THttpServerResp
+  THREADPOOL_BIGBODYSIZE = 16*1024*1024;
 
-constructor TSynThreadPool.Create(NumberOfThreads: Integer
-  {$ifdef USE_WINIOCP}; aOverlapHandle: THandle{$endif});
+constructor TSynThreadPool.Create(NumberOfThreads: Integer;
+  {$ifdef USE_WINIOCP}aOverlapHandle: THandle{$else}aQueuePendingContext: boolean{$endif});
 var i: integer;
 begin
   if NumberOfThreads=0 then
@@ -6704,6 +6713,9 @@ begin
     fRequestQueue := 0;
     exit;
   end;
+  {$else}
+  InitializeCriticalSection(fSafe);
+  fQueuePendingContext := aQueuePendingContext;
   {$endif}
   // now create the worker threads
   fSubThread := TObjectList.Create(true);
@@ -6724,6 +6736,11 @@ begin
       {$else}
       TSynThreadPoolSubThread(fSubThread.Items[i]).fEvent.SetEvent;
       {$endif}
+    {$ifndef USE_WINIOCP}
+    // cleanup now any pending task
+    for i := 0 to fPendingContextCount-1 do
+      TaskAbort(fPendingContext[i]);
+    {$endif}
     // wait for threads to finish, with 30 seconds TimeOut
     endtix := GetTickCount+30000;
     while (fRunningThreads>0) and (GetTickCount<endtix) do
@@ -6732,7 +6749,9 @@ begin
   finally
     {$ifdef USE_WINIOCP}
     CloseHandle(fRequestQueue);
-    {$endif}
+    {$else}
+    DeleteCriticalSection(fSafe);
+    {$endif USE_WINIOCP}
   end;
   inherited Destroy;
 end;
@@ -6749,20 +6768,58 @@ begin
   {$ifdef USE_WINIOCP}
   result := PostQueuedCompletionStatus(fRequestQueue,0,0,aContext);
   {$else}
-  thread := pointer(fSubThread.List);
-  for i := 1 to fSubThread.Count do // fast search for an available thread
-    if (thread^.fProcessingContext=nil) and thread^.AssignProcess(aContext) then begin
+  EnterCriticalsection(fSafe);
+  try
+    thread := pointer(fSubThread.List);
+    for i := 1 to fSubThread.Count do
+      if thread^.fProcessingContext=nil then begin
+        thread^.fProcessingContext := aContext;
+        thread^.fEvent.SetEvent;
+        result := true; // found one available thread
+        exit;
+      end else
+        inc(thread);
+    if fQueuePendingContext then begin
+      if fPendingContextCount=length(fPendingContext) then
+        SetLength(fPendingContext,fPendingContextCount+fPendingContextCount shr 3+64);
+      fPendingContext[fPendingContextCount] := aContext;
+      inc(fPendingContextCount);
       result := true;
-      exit;
-    end else
-      inc(thread);
-  {$endif}
+    end;
+  finally
+    LeaveCriticalsection(fSafe);
+  end;
+  {$endif USE_WINIOCP}
 end;
+
+{$ifndef USE_WINIOCP}
+function TSynThreadPool.PopPendingContext: pointer;
+begin
+  result := nil;
+  if (self=nil) or fTerminated or (fPendingContext=nil) then
+    exit;
+  EnterCriticalsection(fSafe);
+  try
+    if fPendingContextCount > 0 then begin
+      result := fPendingContext[0];
+      dec(fPendingContextCount);
+      Move(fPendingContext[1],fPendingContext[0],fPendingContextCount*SizeOf(pointer));
+    end;
+  finally
+    LeaveCriticalsection(fSafe);
+  end;
+end;
+{$endif USE_WINIOCP}
 
 function TSynThreadPool.NeedStopOnIOError: boolean;
 begin
   result := True;
 end;
+
+procedure TSynThreadPool.TaskAbort(aContext: Pointer);
+begin
+end;
+
 
 { TSynThreadPoolSubThread }
 
@@ -6770,7 +6827,6 @@ constructor TSynThreadPoolSubThread.Create(Owner: TSynThreadPool);
 begin
   fOwner := Owner; // ensure it is set ASAP: on Linux, Execute raises immediately
   fOnTerminate := Owner.fOnTerminate;
-  InitializeCriticalSection(fProcessingContextCS);
   {$ifndef USE_WINIOCP}
   fEvent := TEvent.Create(nil,false,false,'');
   {$endif}
@@ -6780,7 +6836,6 @@ end;
 destructor TSynThreadPoolSubThread.Destroy;
 begin
   inherited Destroy;
-  DeleteCriticalSection(fProcessingContextCS);
   {$ifndef USE_WINIOCP}
   fEvent.Free;
   {$endif}
@@ -6791,21 +6846,6 @@ function GetQueuedCompletionStatus(CompletionPort: THandle;
   var lpNumberOfBytesTransferred: DWORD; var lpCompletionKey: PtrUInt;
   var lpOverlapped: pointer; dwMilliseconds: DWORD): BOOL; stdcall;
   external kernel32; // redefine with an unique signature for all Delphi/FPC
-{$else}
-function TSynThreadPoolSubThread.AssignProcess(aContext: pointer): boolean;
-begin
-  result := false;
-  EnterCriticalSection(fProcessingContextCS);
-  try
-    if fProcessingContext=nil then begin
-      fProcessingContext := aContext;
-      fEvent.SetEvent;
-      result := true; // successfully sent to an idle thread
-    end;
-  finally
-    LeaveCriticalSection(fProcessingContextCS);
-  end;
-end;
 {$endif}
 
 procedure TSynThreadPoolSubThread.Execute;
@@ -6824,27 +6864,33 @@ begin
       if not GetQueuedCompletionStatus(fOwner.fRequestQueue,Dummy1,Dummy2,Context,INFINITE) and
          fOwner.NeedStopOnIOError then
         break;
-      {$else}
-      fEvent.WaitFor(INFINITE);
-      if fOwner.fTerminated then
-        break;
-      EnterCriticalSection(fProcessingContextCS);
-      Context := fProcessingContext;
-      LeaveCriticalSection(fProcessingContextCS);
-      {$endif}
       if Context<>nil then
         try
-          try
-            fOwner.Task(Self,Context);
-          finally
-            EnterCriticalSection(fProcessingContextCS);
-            fProcessingContext := nil; // indicates this thread is now available
-            LeaveCriticalSection(fProcessingContextCS);
-          end;
+          fOwner.Task(Self,Context);
         except
           on Exception do  // we should handle all exceptions in this loop
             inc(fOwner.fExceptionsCount);
         end;
+      {$else}
+      fEvent.WaitFor(INFINITE);
+      if fOwner.fTerminated then
+        break;
+      EnterCriticalSection(fOwner.fSafe);
+      Context := fProcessingContext;
+      LeaveCriticalSection(fOwner.fSafe);
+      while Context<>nil do begin
+        try
+          fOwner.Task(Self,Context);
+        except
+          on Exception do  // we should handle all exceptions in this loop
+            inc(fOwner.fExceptionsCount);
+        end;
+        Context := fOwner.PopPendingContext; // unqueue any pending context
+      end;
+      EnterCriticalSection(fOwner.fSafe);
+      fProcessingContext := nil; // indicates this thread is now available
+      LeaveCriticalSection(fOwner.fSafe);
+      {$endif USE_WINIOCP}
     until fOwner.fTerminated;
   finally
     InterlockedDecrement(fOwner.fRunningThreads);
@@ -6876,7 +6922,7 @@ constructor TSynThreadPoolTHttpServer.Create(Server: THttpServer; NumberOfThread
 begin
   fServer := Server;
   fOnTerminate := fServer.fOnTerminate;
-  inherited Create(NumberOfThreads);
+  inherited Create(NumberOfThreads{$ifndef USE_WINIOCP},{queuepending=}true{$endif});
 end;
 
 procedure TSynThreadPoolTHttpServer.Task(aCaller: TSynThread; aContext: Pointer);
@@ -6895,7 +6941,7 @@ begin
          (fServer.fInternalHttpServerRespList.Count<THREADPOOL_MAXWORKTHREADS) and
          (ServerSock.KeepAliveClient or
           (ServerSock.ContentLength>THREADPOOL_BIGBODYSIZE)) then begin
-        // HTTP/1.1 Keep Alive (including WebSockets) or posted data > 1 MB
+        // HTTP/1.1 Keep Alive (including WebSockets) or posted data > 16 MB
         // -> process in dedicated background thread
         fServer.fThreadRespClass.Create(ServerSock,fServer);
         ServerSock := nil; // THttpServerResp will do ServerSock.Free
@@ -6914,6 +6960,11 @@ begin
   finally
     FreeAndNil(ServerSock);
   end;
+end;
+
+procedure TSynThreadPoolTHttpServer.TaskAbort(aContext: Pointer);
+begin
+  DirectShutdown(TSocket(aContext));
 end;
 
 

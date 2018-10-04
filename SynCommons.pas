@@ -16895,6 +16895,7 @@ type
   // - Msg is set for each pending message in this task FIFO
   TOnSynBackgroundTimerProcess = procedure(Sender: TSynBackgroundTimer;
     Event: TWaitResult; const Msg: RawUTF8) of object;
+
   /// used by TSynBackgroundTimer internal registration list
   TSynBackgroundTimerTask = record
     OnProcess: TOnSynBackgroundTimerProcess;
