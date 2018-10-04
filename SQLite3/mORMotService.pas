@@ -2150,8 +2150,7 @@ begin
     for i := 0 to tp.PrivilegeCount-1 do
     begin
       len := Length(name);
-      if not LookupPrivilegeNameA(nil,tp.Privileges[i].Luid,@name[1],len) then begin
-      WriteLn(GetLastError);
+      if not LookupPrivilegeNameA(nil,tp.Privileges[i].Luid,@name[1],len) then
         if GetLastError <> ERROR_INSUFFICIENT_BUFFER then
           raise ESynException.CreateUTF8('TSynWindowsPrivileges cannot lookup privilege name for Luid (%)', [Int64(tp.Privileges[i].Luid)])
         else begin
@@ -2159,7 +2158,6 @@ begin
           if not LookupPrivilegeNameA(nil,tp.Privileges[i].Luid,@name[1],len) then
             raise ESynException.CreateUTF8('TSynWindowsPrivileges cannot lookup privilege name for Luid (%)', [Int64(tp.Privileges[i].Luid)])
         end;
-      end;
       enumval := IdemPCharArray(@name[1], UPCASE_SE_NAMES);
       if (enumval >= ord(low(TWinSystemPrivilege))) and (enumval <= ord(high(TWinSystemPrivilege))) then begin
         Include(fAvailable, TWinSystemPrivilege(enumval));
