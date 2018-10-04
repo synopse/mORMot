@@ -2041,7 +2041,7 @@ type
 function OpenProcessToken(ProcessHandle: THandle; DesiredAccess: DWORD;
   var TokenHandle: THandle): BOOL; stdcall; external advapi32 name 'OpenProcessToken';
 function LookupPrivilegeValue(lpSystemName, lpName: PChar;
-  var lpLuid: LUID): BOOL; stdcall; external advapi32
+  var lpLuid: TLargeInteger): BOOL; stdcall; external advapi32
   name {$ifdef UNICODE}'LookupPrivilegeValueW'{$else}'LookupPrivilegeValueA'{$endif};
 function LookupPrivilegeNameA(lpSystemName: LPCSTR; var lpLuid: TLargeInteger;
   lpName: LPCSTR; var cbName: DWORD): BOOL; stdcall; external advapi32 name 'LookupPrivilegeNameA';
@@ -2177,7 +2177,7 @@ function TSynWindowsPrivileges.SetPrivilege(aPrivilege: Pointer;
   aEnablePrivilege: boolean): boolean;
 var
   tp: TOKEN_PRIVILEGES;
-  id: LUID;
+  id: TLargeInteger;
   tpprev: TOKEN_PRIVILEGES;
   cbprev: DWORD;
 begin
