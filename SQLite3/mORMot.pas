@@ -8903,6 +8903,7 @@ type
     /// read-only access to the number of data Rows in this table
     // - first row contains field name
     // - then 1..RowCount rows contain the data itself
+    // - safely returns 0 if the TSQLTable instance is nil
     property RowCount: integer read GetRowCount;
     /// read-only access to the number of fields for each Row in this table
     property FieldCount: integer read fFieldCount;
@@ -15063,6 +15064,14 @@ type
     function NewBackgroundThreadProcess(aOnProcess: TOnSynBackgroundThreadProcess;
       aOnProcessMS: cardinal; const Format: RawUTF8; const Args: array of const;
       aStats: TSynMonitorClass=nil): TSynBackgroundThreadProcess;
+    /// allows to safely execute a process in parallel
+    // - returns a TSynParallelProcess instance, ready to execute any task
+    // in parrallel in a thread-pool given by ThreadCount
+    // - will properly call BeginCurrentThread/EndCurrentThread methods
+    // - you should supply some runtime information to name the thread, for
+    // proper debugging
+    function NewParallelProcess(ThreadCount: integer; const Format: RawUTF8;
+      const Args: array of const): TSynParallelProcess;
     /// define a task running on a periodic number of seconds in a background thread
     // - could be used to run background maintenance or monitoring tasks on
     // this TSQLRest instance, at a low pace (typically every few minutes)
@@ -35359,6 +35368,13 @@ function TSQLRest.NewBackgroundThreadMethod(const Format: RawUTF8;
    const Args: array of const): TSynBackgroundThreadMethod;
 begin
   result := TSynBackgroundThreadMethod.Create(nil,FormatUTF8(Format,Args),
+    BeginCurrentThread,EndCurrentThread);
+end;
+
+function TSQLRest.NewParallelProcess(ThreadCount: integer; const Format: RawUTF8;
+  const Args: array of const): TSynParallelProcess;
+begin
+  result := TSynParallelProcess.Create(ThreadCount,FormatUTF8(Format,Args),
     BeginCurrentThread,EndCurrentThread);
 end;
 
