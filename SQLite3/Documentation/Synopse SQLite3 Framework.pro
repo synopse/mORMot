@@ -7383,6 +7383,7 @@ A {\f1\fs20 TSynCache} instance is instantiated within the {\f1\fs20 TSQLDataBas
 !!  aDB.UseCache := true; // we better use caching in this JSON oriented use
 !  (...)
 This will enable a global JSON cache at the SQL level. This cache will be reset on every {\f1\fs20 INSERT, UPDATE} or {\f1\fs20 DELETE} SQL statement, whatever the corresponding table is.
+If you need to disable the JSON cache for a particular request, add the {\f1\fs20 @*SQLDATABASE_NOCACHE@} text, i.e. the {\f1\fs20 '/*nocache*/'} text comment, anywhere in the SQL statement, e.g. in the ORM WHERE clause. It will indicate to {\f1\fs20 @*TSQLDataBase@} to not cache the returned JSON content. It may be usefull e.g. if you pass a pointer as {\f1\fs20 PtrInt(aVariable)} bound parameter, which may have the very same integer reference value, but diverse content.
 In practice, this global cache was found to be efficient, even if its implementation is some kind of "naive". It is in fact much more tuned than other HTTP-level caching mechanisms used in most client-server solutions (using e.g. a {\i Squid} proxy) - since our caching is at the SQL level, it is shared among all @*CRUD@ / @*Rest@ful queries, and is also indenpendent from the authentication scheme, which pollutes the URI. Associated with the other levels of cache - see @38@ - the framework scaling was found to be very good.
 :35Client-Server process
 %cartoon08.png

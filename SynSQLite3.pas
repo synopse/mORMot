@@ -3318,13 +3318,20 @@ function IsSQLite3FileEncrypted(const FileName: TFileName): boolean;
 /// comparison function using TSQLStatementCache.Timer.TimeInMicroSec
 function StatementCacheTotalTimeCompare(const A,B): integer;
 
+
 const
+  /// a magic text constant which will prevent any JSON result to be cached
+  // in TSQLDataBase, if present in the SQL statement
+  // - to be used e.g. when you put some pointers as bound parameters
+  SQLDATABASE_NOCACHE: RawUTF8 = '/*nocache*/';
+
   /// the "magic" number used to identify .dbsynlz compressed files, as
   // created by TSQLDataBase.BackupSynLZ() or if SynLZCompress parameter is TRUE
   // for the TSQLDataBase.BackupBackground() method
   // - note that the SynDBExplorer tool is able to recognize such files, and
   // open them directly - or use the DBSynLZ.dpr command-line sample tool
   SQLITE3_MAGIC = $ABA5A5AB;
+
   /// the "magic" 16 bytes header stored at the begining of every SQlite3 file
   SQLITE_FILE_HEADER: array[0..15] of AnsiChar = 'SQLite format 3';
 var
@@ -4287,11 +4294,16 @@ begin
         FreeAndNil(fCache);
 end;
 
+function IsCacheable(const aSQL: RawUTF8): boolean;
+begin
+  result := isSelect(pointer(aSQL)) and (PosEx(SQLDATABASE_NOCACHE, aSQL) = 0);
+end;
+
 procedure TSQLDataBase.Lock(const aSQL: RawUTF8);
 begin
   if self=nil then
     exit; // avoid GPF in case of call from a static-only server
-  if (aSQL='') or isSelect(pointer(aSQL)) then
+  if (aSQL='') or IsCacheable(aSQL) then
     EnterCriticalSection(fLock) else // on non-concurent calls, is very fast
     LockAndFlushCache; // INSERT UPDATE DELETE statements need to flush cache
 end;
@@ -4329,7 +4341,7 @@ begin
     exit; // avoid GPF in case of call from a static-only server
   EnterCriticalSection(fLock); // cache access is also protected by fLock
   try
-    if isSelect(pointer(aSQL)) then begin
+    if IsCacheable(aSQL) then begin
       result := fCache.Find(aSQL,aResultCount); // try to get JSON result from cache
       if result<>'' then begin
         {$ifdef WITHLOG}
