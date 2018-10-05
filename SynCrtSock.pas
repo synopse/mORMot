@@ -906,7 +906,7 @@ type
     // I/O completion ports API is the best option under Windows
     // under Linux/POSIX, we fallback to a classical event-driven pool
     {$define USE_WINIOCP}
-  {$endif}
+  {$endif MSWINDOWS}
 
   /// defines the sub-threads used by TSynThreadPool
   TSynThreadPoolSubThread = class(TSynThread)
@@ -916,14 +916,15 @@ type
     {$ifndef USE_WINIOCP}
     fProcessingContext: pointer;
     fEvent: TEvent;
-    {$endif}
+    {$endif USE_WINIOCP}
     procedure NotifyThreadStart(Sender: TSynThread);
+    procedure DoTask(Context: pointer); // exception-safe call of fOwner.Task()
   public
     /// initialize the thread
     constructor Create(Owner: TSynThreadPool); reintroduce;
     /// finalize the thread
     destructor Destroy; override;
-    /// will loop for any pending IOCP commands, and execute fOwner.Task()
+    /// will loop for any pending task, and execute fOwner.Task()
     procedure Execute; override;
   end;
 
@@ -957,22 +958,28 @@ type
     // - abstract Task() virtual method will be called by one of the threads
     // - up to 256 threads can be associated to a Thread Pool
     // - can optionaly accept aOverlapHandle - a handle previously
-    // opened for overlapped I/O (IOCP)
+    // opened for overlapped I/O (IOCP) under Windows
+    // - aQueuePendingContext=true will store the pending context into
+    // an internal queue, so that Push() always returns true
     constructor Create(NumberOfThreads: Integer=32;
       {$ifdef USE_WINIOCP}aOverlapHandle: THandle=INVALID_HANDLE_VALUE
       {$else}aQueuePendingContext: boolean=false{$endif});
     /// shut down the Thread pool, releasing all associated threads
     destructor Destroy; override;
-    /// let a task be processed by the Thread Pool
+    /// let a task (specified as a pointer) be processed by the Thread Pool
     // - returns false if there is no idle thread available in the pool and
-    // Create(aQueuePendingContext=false) was used  (caller // should retry later)
-    // - if aQueuePendingContext was true in Create, the supplied context will
+    // Create(aQueuePendingContext=false) was used (caller should retry later);
+    // if aQueuePendingContext was true in Create, the supplied context will
     // be added to an internal list and handled as soon a thread is available
     // - matches TOnThreadPoolSocketPush event handler signature
     function Push(aContext: pointer): boolean;
   published
     /// how many threads are currently running in this thread pool
     property RunningThreads: integer read fRunningThreads;
+    {$ifndef USE_WINIOCP}
+    /// how many input tasks are currently waiting to be affected to threads
+    property PendingContextCount: integer read fPendingContextCount;
+    {$endif}
   end;
 
   /// a simple Thread Pool, used for fast handling HTTP requests of a THttpServer
@@ -6784,7 +6791,7 @@ begin
         SetLength(fPendingContext,fPendingContextCount+fPendingContextCount shr 3+64);
       fPendingContext[fPendingContextCount] := aContext;
       inc(fPendingContextCount);
-      result := true;
+      result := true; // put in pending queue
     end;
   finally
     LeaveCriticalsection(fSafe);
@@ -6848,6 +6855,16 @@ function GetQueuedCompletionStatus(CompletionPort: THandle;
   external kernel32; // redefine with an unique signature for all Delphi/FPC
 {$endif}
 
+procedure TSynThreadPoolSubThread.DoTask(Context: pointer);
+begin
+  try
+    fOwner.Task(Self,Context);
+  except
+    on Exception do  // intercept any exception and let the thread continue
+      inc(fOwner.fExceptionsCount);
+  end;
+end;
+
 procedure TSynThreadPoolSubThread.Execute;
 var Context: pointer;
     {$ifdef USE_WINIOCP}
@@ -6861,16 +6878,11 @@ begin
     NotifyThreadStart(self);
     repeat
       {$ifdef USE_WINIOCP}
-      if not GetQueuedCompletionStatus(fOwner.fRequestQueue,Dummy1,Dummy2,Context,INFINITE) and
-         fOwner.NeedStopOnIOError then
+      if (not GetQueuedCompletionStatus(fOwner.fRequestQueue,Dummy1,Dummy2,Context,INFINITE) and
+         fOwner.NeedStopOnIOError) or fOwner.fTerminated then
         break;
       if Context<>nil then
-        try
-          fOwner.Task(Self,Context);
-        except
-          on Exception do  // we should handle all exceptions in this loop
-            inc(fOwner.fExceptionsCount);
-        end;
+        DoTask(Context);
       {$else}
       fEvent.WaitFor(INFINITE);
       if fOwner.fTerminated then
@@ -6879,12 +6891,7 @@ begin
       Context := fProcessingContext;
       LeaveCriticalSection(fOwner.fSafe);
       while Context<>nil do begin
-        try
-          fOwner.Task(Self,Context);
-        except
-          on Exception do  // we should handle all exceptions in this loop
-            inc(fOwner.fExceptionsCount);
-        end;
+        DoTask(Context);
         Context := fOwner.PopPendingContext; // unqueue any pending context
       end;
       EnterCriticalSection(fOwner.fSafe);
