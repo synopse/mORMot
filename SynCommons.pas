@@ -9351,8 +9351,9 @@ type
     /// search of a stored value by its primary key, and return a local copy
     // - so this method is thread-safe
     // - returns TRUE if aKey was found, FALSE if no match exists
-    // - will update the associated timeout value of the entry, if applying
-    function FindAndCopy(const aKey; out aValue): boolean;
+    // - will update the associated timeout value of the entry, unless
+    // aUpdateTimeOut is set to false
+    function FindAndCopy(const aKey; out aValue; aUpdateTimeOut: boolean=true): boolean;
     /// search of a stored value by its primary key, then delete and return it
     // - returns TRUE if aKey was found, fill aValue with its content,
     // and delete the entry in the internal storage
@@ -59190,12 +59191,12 @@ begin
   result := fValues.ElemPtr(ndx);
 end;
 
-function TSynDictionary.FindAndCopy(const aKey; out aValue): boolean;
+function TSynDictionary.FindAndCopy(const aKey; out aValue; aUpdateTimeOut: boolean): boolean;
 var ndx: integer;
 begin
   fSafe.Lock;
   try
-    ndx := Find(aKey, {aUpdateTimeOut=}true);
+    ndx := Find(aKey, aUpdateTimeOut);
     if ndx>=0 then begin
       fValues.ElemCopyAt(ndx,aValue);
       result := true;
