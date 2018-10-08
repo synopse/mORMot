@@ -156,7 +156,7 @@ unit SynCrtSock;
   - added optional queue name for THttpApiServer.Create constructor [149cf42383]
   - added THttpApiServer.RemoveUrl() method
   - introduced THttpApiServer.ReceiveBufferSize property
-  - added THttpApiServer.HTTPQueueLength property (for HTTP API 2.0 only)
+  - added HTTPQueueLength property (for HTTP API 2.0 only)
   - added THttpApiServer.MaxBandwidth and THttpApiServer.MaxConnections
     properties (for HTTP API 2.0 only) - thanks mpv for the proposal!
   - added THttpApiServer.LogStart/LogStop for HTTP API 2.0 integrated logging
@@ -946,6 +946,7 @@ type
     fPendingContext: array of pointer;
     fPendingContextCount: integer;
     fSafe: TRTLCriticalSection;
+    function GetPendingContextCount: integer;
     function PopPendingContext: pointer;
     {$endif USE_WINIOCP}
     /// end thread on IO error
@@ -971,14 +972,13 @@ type
     // Create(aQueuePendingContext=false) was used (caller should retry later);
     // if aQueuePendingContext was true in Create, the supplied context will
     // be added to an internal list and handled as soon a thread is available
-    // - matches TOnThreadPoolSocketPush event handler signature
     function Push(aContext: pointer): boolean;
   published
     /// how many threads are currently running in this thread pool
     property RunningThreads: integer read fRunningThreads;
     {$ifndef USE_WINIOCP}
     /// how many input tasks are currently waiting to be affected to threads
-    property PendingContextCount: integer read fPendingContextCount;
+    property PendingContextCount: integer read GetPendingContextCount;
     {$endif}
   end;
 
@@ -1174,6 +1174,8 @@ type
     procedure SetOnAfterResponse(const aEvent: TOnHttpServerRequest); virtual;
     procedure SetMaximumAllowedContentLength(aMax: cardinal); virtual;
     procedure SetRemoteIPHeader(const aHeader: SockString);
+    function GetHTTPQueueLength: Cardinal; virtual; abstract;
+    procedure SetHTTPQueueLength(aValue: Cardinal); virtual; abstract;
     function DoBeforeRequest(Ctxt: THttpServerRequest): cardinal;
     function DoAfterRequest(Ctxt: THttpServerRequest): cardinal;
     procedure DoAfterResponse(Ctxt: THttpServerRequest); virtual;
@@ -1267,6 +1269,30 @@ type
     // header overflow the supplied number of bytes
     property MaximumAllowedContentLength: cardinal read fMaximumAllowedContentLength
       write SetMaximumAllowedContentLength;
+    /// defines request/response internal queue length
+    // - default value if 1000, which sounds fine for most use cases
+    // - for THttpApiServer, will return 0 if the system does not support HTTP
+    // API 2.0 (i.e. under Windows XP or Server 2003)
+    // - for THttpServer, will shutdown any incoming accepted socket if the
+    // internal TSynThreadPool.PendingContextCount exceeds this limit
+    // - increase this value if you don't have any load-balancing in place, and
+    // in case of e.g. many 503 HTTP answers or if many "QueueFull" messages
+    // appear in HTTP.sys log files (normaly in
+    // C:\Windows\System32\LogFiles\HTTPERR\httperr*.log) - may appear with
+    // thousands of concurrent clients accessing at once the same server -
+  	// see @http://msdn.microsoft.com/en-us/library/windows/desktop/aa364501
+    // - you can use this property with a reverse-proxy as load balancer, e.g.
+    // with nginx configured as such:
+    // $ location / {
+    // $       proxy_pass              http://balancing_upstream;
+    // $       proxy_next_upstream     error timeout invalid_header http_500 http_503;
+    // $       proxy_connect_timeout   2;
+    // $       proxy_set_header        Host            $host;
+    // $       proxy_set_header        X-Real-IP       $remote_addr;
+    // $       proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+    // $ }
+    // see https://synopse.info/forum/viewtopic.php?pid=28174#p28174
+    property HTTPQueueLength: cardinal read GetHTTPQueueLength write SetHTTPQueueLength;
     /// TRUE if the inherited class is able to handle callbacks
     // - only TWebSocketServer has this ability by now
     property CanNotifyCallback: boolean read fCanNotifyCallback;
@@ -1369,8 +1395,8 @@ type
     procedure SetReceiveBufferSize(Value: cardinal);
     function GetRegisteredUrl: SynUnicode;
     function GetCloned: boolean;
-    function GetHTTPQueueLength: Cardinal;
-    procedure SetHTTPQueueLength(aValue: Cardinal);
+    function GetHTTPQueueLength: Cardinal; override;
+    procedure SetHTTPQueueLength(aValue: Cardinal); override;
     function GetMaxBandwidth: Cardinal;
     procedure SetMaxBandwidth(aValue: Cardinal);
     function GetMaxConnections: Cardinal;
@@ -1555,19 +1581,6 @@ type
     property Cloned: boolean read GetCloned;
     /// return the list of registered URL on this server instance
     property RegisteredUrl: SynUnicode read GetRegisteredUrl;
-    /// HTTP.sys request/response queue length (via HTTP API 2.0)
-    // - default value if 1000, which sounds fine for most use cases
-    // - increase this value in case of many 503 HTTP answers or if many
-    // "QueueFull" messages appear in HTTP.sys log files (normaly in
-    // C:\Windows\System32\LogFiles\HTTPERR\httperr*.log) - may appear with
-    // thousands of concurrent clients accessing at once the same server
-  	// - see @http://msdn.microsoft.com/en-us/library/windows/desktop/aa364501
-    // - will return 0 if the system does not support HTTP API 2.0 (i.e.
-    // under Windows XP or Server 2003)
-    // - this method will also handle any cloned instances, so you can write e.g.
-    // ! if aSQLHttpServer.HttpServer.InheritsFrom(THttpApiServer) then
-    // !   THttpApiServer(aSQLHttpServer.HttpServer).HTTPQueueLength := 5000;
-    property HTTPQueueLength: Cardinal read GetHTTPQueueLength write SetHTTPQueueLength;
     /// the maximum allowed bandwidth rate in bytes per second (via HTTP API 2.0)
     // - Setting this value to 0 allows an unlimited bandwidth
     // - by default Windows not limit bandwidth (actually limited to 4 Gbit/sec).
@@ -1803,8 +1816,8 @@ type
   TSynThreadPoolHttpApiWebSocketServer = class(TSynThreadPool)
   protected
     fServer: THttpApiWebSocketServer;
-    procedure onThreadStart(Sender: TThread);
-    procedure onThreadTerminate(Sender: TThread);
+    procedure OnThreadStart(Sender: TThread);
+    procedure OnThreadTerminate(Sender: TThread);
     function NeedStopOnIOError: Boolean; override;
     procedure Task(aCaller: TSynThread; aContext: Pointer); override;
   public
@@ -1823,12 +1836,6 @@ type
     constructor Create(Server: THttpApiWebSocketServer); reintroduce;
   end;
   {$endif MSWINDOWS}
-
-  /// an event handler for implementing a socked-based Thread Pool
-  // - matches TSynThreadPool.Push method signature
-  // - uses pointer instead of TSocket=THandle to be implementation neutral
-  // - should return false if there is no thread available in the pool
-  TOnThreadPoolSocketPush = function(aClientSock: pointer): boolean of object;
 
   /// event handler used by THttpServer.Process to send a local file
   // when HTTP_RESP_STATICFILE content-type is returned by the service
@@ -1857,7 +1864,6 @@ type
   protected
     /// used to protect Process() call
     fProcessCS: TRTLCriticalSection;
-    fThreadPoolPush: TOnThreadPoolSocketPush;
     fThreadPoolContentionTime: cardinal;
     fThreadPoolContentionCount: cardinal;
     fThreadPoolContentionAbortCount: cardinal;
@@ -1871,7 +1877,10 @@ type
     fThreadRespClass: THttpServerRespClass;
     fOnSendFile: TOnHttpServerSendFile;
     fNginxSendFileFrom: array of TFileName;
+    fHTTPQueueLength: cardinal;
     fExecuteFinished: boolean;
+    function GetHTTPQueueLength: Cardinal; override;
+    procedure SetHTTPQueueLength(aValue: Cardinal); override;
     function OnNginxAllowSend(Context: THttpServerRequest; const LocalFileName: TFileName): boolean;
     // this overridden version will return e.g. 'Winsock 2.514'
     function GetAPIVersion: string; override;
@@ -1958,7 +1967,8 @@ type
     // average contention time
     property ThreadPoolContentionCount: cardinal read fThreadPoolContentionCount;
     /// how many connections were rejected due to thread pool contention
-    // - disconnect the client socket after ThreadPoolContentionAbortDelay
+    // - disconnect the client socket after ThreadPoolContentionAbortDelay, or
+    // if HTTPQueueLength limit has been reached
     // - any high number here requires code refactoring of Request method! :)
     property ThreadPoolContentionAbortCount: cardinal read fThreadPoolContentionAbortCount;
     /// milliseconds delay to reject a connection due to thread pool contention
@@ -5793,7 +5803,7 @@ end;
 
 constructor THttpServer.Create(const aPort: SockString; OnStart,
   OnStop: TNotifyThreadEvent; const ProcessName: SockString;
-  ServerThreadPoolCount, KeepAliveTimeOut: integer);
+  ServerThreadPoolCount: integer; KeepAliveTimeOut: integer);
 begin
   InitializeCriticalSection(fProcessCS);
   fSock := TCrtSocket.Bind(aPort); // BIND + LISTEN
@@ -5807,7 +5817,7 @@ begin
     fThreadRespClass := THttpServerResp;
   if ServerThreadPoolCount>0 then begin
     fThreadPool := TSynThreadPoolTHttpServer.Create(self,ServerThreadPoolCount);
-    fThreadPoolPush := fThreadPool.Push;
+    fHTTPQueueLength := 1000;
   end;
   inherited Create(false,OnStart,OnStop,ProcessName);
 end;
@@ -5845,11 +5855,20 @@ begin
     FreeAndNil(fInternalHttpServerRespList);
   end;
   LeaveCriticalSection(fProcessCS);
-  fThreadPoolPush := nil;
   FreeAndNil(fThreadPool); // release all associated threads and I/O completion
   FreeAndNil(fSock);
   inherited Destroy;     // direct Thread abort, no wait till ended
   DeleteCriticalSection(fProcessCS);
+end;
+
+function THttpServer.GetHTTPQueueLength: Cardinal;
+begin
+  result := fHTTPQueueLength;
+end;
+
+procedure THttpServer.SetHTTPQueueLength(aValue: Cardinal);
+begin
+  fHTTPQueueLength := aValue;
 end;
 
 function THttpServer.OnNginxAllowSend(Context: THttpServerRequest;
@@ -5930,9 +5949,17 @@ begin
         ClientCrtSock.Free;
       end;
       {$else}
-      if Assigned(fThreadPoolPush) then begin
+      if Assigned(fThreadPool) then begin
+        {$ifndef USE_WINIOCP}
+        if (fHTTPQueueLength>0) and // too many connection limit reached?
+           (fThreadPool.PendingContextCount+fThreadPool.fSubThread.Count>fHTTPQueueLength) then begin
+          inc(fThreadPoolContentionAbortCount);
+          DirectShutdown(ClientSock); // expects the proxy to balance to another server
+          continue;
+        end;
+        {$endif USE_WINIOCP}
         // use thread pool to process the request header, and probably its body
-        if not fThreadPoolPush(pointer(ClientSock)) then begin
+        if not fThreadPool.Push(pointer(ClientSock)) then begin
           // returned false if there is no idle thread in the pool
           inc(fThreadPoolContentionCount);
           tix := GetTickCount;
@@ -5945,7 +5972,7 @@ begin
             tix := GetTickCount;
             if Terminated then
               break;
-            if fThreadPoolPush(pointer(ClientSock)) then begin
+            if fThreadPool.Push(pointer(ClientSock)) then begin
               aborttix := 0; // thread pool acquired the client sock
               break;
             end;
@@ -6800,6 +6827,19 @@ begin
 end;
 
 {$ifndef USE_WINIOCP}
+function TSynThreadPool.GetPendingContextCount: integer;
+begin
+  result := 0;
+  if (self=nil) or fTerminated or (fPendingContext=nil) then
+    exit;
+  EnterCriticalsection(fSafe);
+  try
+    result := fPendingContextCount;
+  finally
+    LeaveCriticalsection(fSafe);
+  end;
+end;
+
 function TSynThreadPool.PopPendingContext: pointer;
 begin
   result := nil;
@@ -9978,13 +10018,13 @@ begin
   result := False;
 end;
 
-procedure TSynThreadPoolHttpApiWebSocketServer.onThreadStart(Sender: TThread);
+procedure TSynThreadPoolHttpApiWebSocketServer.OnThreadStart(Sender: TThread);
 begin
   if Assigned(fServer.OnWSThreadStart) then
     fServer.OnWSThreadStart(Sender);
 end;
 
-procedure TSynThreadPoolHttpApiWebSocketServer.onThreadTerminate(
+procedure TSynThreadPoolHttpApiWebSocketServer.OnThreadTerminate(
   Sender: TThread);
 begin
   if Assigned(fServer.OnWSThreadTerminate) then
