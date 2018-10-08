@@ -64468,7 +64468,7 @@ begin
   if (MethodCount<=0) or not Assigned(Method) then
     exit;
   if (self=nil) or (MethodCount=1) or (fThreadPoolCount=0) then begin
-    Method(0,0); // no need to use a background thread here
+    Method(0,MethodCount-1); // no need (or impossible) to use background thread
     exit;
   end;
   use := MethodCount;
