@@ -35526,14 +35526,15 @@ end;
 function NowUTC: TDateTime;
 {$ifdef MSWINDOWS}
 var ft: TFileTime;
-    {$ifdef CPU64}nano100: Int64;{$endif}
+    {$ifdef CPU64}nano100: Int64; d: double;{$endif}
 begin
   GetSystemTimeAsFileTime(ft); // very fast, with 100 ns unit
   {$ifdef CPU64}
   FileTimeToInt64(ft,nano100);
   // in two explicit steps to circumvent weird precision error on FPC
-  result := nano100-DateFileTimeDelta;
-  result := result/(10000000.0*SecsPerDay);
+  // having d: double is important here
+  d := (nano100-DateFileTimeDelta) / 10000000;
+  result := d/SecsPerDay;
   {$else} // use PInt64 to avoid URW699 with Delphi 6 / Kylix
   dec(PInt64(@ft)^,DateFileTimeDelta);
   result := PInt64(@ft)^/(10000000.0*SecsPerDay);
