@@ -13078,7 +13078,7 @@ type
     osArch, osAurox, osDebian, osFedora, osGentoo, osKnoppix, osMint, osMandrake,
     osMandriva, osNovell, osUbuntu, osSlackware, osSolaris, osSuse, osSynology,
     osTrustix, osClear, osUnited, osRedHat, osLFS, osOracle, osMageia, osCentOS,
-    osCloud, osXen, osAmazon, osCoreOS);
+    osCloud, osXen, osAmazon, osCoreOS, osAlpine);
   /// the recognized Windows versions
   // - defined even outside MSWINDOWS to allow process e.g. from monitoring tools
   TWindowsVersion = (
@@ -26774,6 +26774,20 @@ begin
     result := @temp else
     result := nil;
 end;
+{$else}
+procedure SetLinuxDistrib(const release: RawUTF8);
+var
+  distrib: TOperatingSystem;
+  dist: RawUTF8;
+begin
+  for distrib := osArch to high(distrib) do begin
+    dist := UpperCase(TrimLeftLowerCaseShort(ToText(distrib)));
+    if PosI(pointer(dist),release)>0 then begin
+      OS_KIND := distrib;
+      break;
+    end;
+  end;
+end;
 {$endif BSD}
 
 procedure RetrieveSystemInfo;
@@ -26783,7 +26797,6 @@ var modname, beg: PUTF8Char;
     {$else}
     cpuinfo: PUTF8Char;
     proccpuinfo,prod,prodver,release,dist: RawUTF8;
-    distrib: TOperatingSystem;
     SR: TSearchRec;
     {$endif BSD}
 begin
@@ -26840,17 +26853,17 @@ begin
        release := StringToUTF8(SR.Name);
     release := split(release,'-');
     dist := split(trim(StringFromFile('/etc/'+SR.Name)),#10);
-    if (dist<>'') and (PosEx('=',dist)=0) then
-      release := dist; // e.g. 'Red Hat Enterprise Linux Server release 6.7 (Santiago)'
+    if (dist<>'') and (PosEx('=',dist)=0) and (PosEx(' ',dist)>0) then
+      SetLinuxDistrib(dist) // e.g. 'Red Hat Enterprise Linux Server release 6.7 (Santiago)'
+    else
+      dist := '';
     FindClose(SR);
   end;
-  if release<>'' then begin
-    for distrib := osArch to high(distrib) do begin
-      dist := UpperCase(TrimLeftLowerCaseShort(ToText(distrib)));
-      if PosI(pointer(dist),release)>0 then begin
-        OS_KIND := distrib;
-        break;
-      end;
+  if (release<>'') and (OS_KIND=osLinux) then begin
+    SetLinuxDistrib(release);
+    if (OS_KIND=osLinux) and (dist<>'') then begin
+      SetLinuxDistrib(dist);
+      release := dist;
     end;
     if (OS_KIND=osLinux) and ((PosEx('RH',release)>0) or (PosEx('Red Hat',release)>0)) then
       OS_KIND := osRedHat;
