@@ -5622,7 +5622,7 @@ type
   {$ifdef UNICODE}TSynLocker = record{$else}TSynLocker = object{$endif}
   private
     fSection: TRTLCriticalSection;
-    fLocked: boolean;
+    fLocked, fInitialized: boolean;
     {$ifndef NOVARIANTS}
     function GetVariant(Index: integer): Variant;
     procedure SetVariant(Index: integer; const Value: Variant);
@@ -5706,6 +5706,10 @@ type
     function ProtectMethod: IUnknown;
     /// returns true if the mutex is currently locked by another thread
     property IsLocked: boolean read fLocked;
+    /// returns true if the Init method has been called for this mutex
+    // - is only relevant if the whole object has been previously filled with 0,
+    // i.e. as part of a class, but may not be accurate when allocated on stack
+    property IsInitialized: boolean read fInitialized;
     {$ifndef NOVARIANTS}
     /// safe locked access to a Variant value
     // - you may store up to 7 variables, using an 0..6 index, shared with
@@ -50493,6 +50497,7 @@ begin
   InitializeCriticalSection(fSection);
   PaddingMaxUsedIndex := -1;
   fLocked := false;
+  fInitialized := true;
 end;
 
 procedure TSynLocker.Done;
@@ -50502,6 +50507,7 @@ begin
     if Padding[i].VType<>varUnknown then
       VarClear(variant(Padding[i]));
   DeleteCriticalSection(fSection);
+  fInitialized := false;
 end;
 
 procedure TSynLocker.Lock;
