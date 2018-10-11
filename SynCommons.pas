@@ -4969,7 +4969,8 @@ type
     // want to add another TDynArray, use AddDynArray() method
     // - you can specify the start index and the number of items to take from
     // the source dynamic array (leave as -1 to add till the end)
-    procedure AddArray(const DynArrayVar; aStartIndex: integer=0; aCount: integer=-1);
+    // - returns the number of items added to the array
+    function AddArray(const DynArrayVar; aStartIndex: integer=0; aCount: integer=-1): integer;
     {$ifndef DELPHI5OROLDER}
     /// fast initialize a wrapper for an existing dynamic array of the same type
     // - is slightly faster than
@@ -49111,7 +49112,7 @@ begin
   end;
 end;
 
-procedure TDynArray.Slice(var Dest; aCount: Cardinal; aFirstIndex: cardinal=0);
+procedure TDynArray.Slice(var Dest; aCount, aFirstIndex: cardinal);
 var n: Cardinal;
     D: PPointer;
     P: PAnsiChar;
@@ -49133,11 +49134,11 @@ begin
   end;
 end;
 
-procedure TDynArray.AddArray(const DynArrayVar; aStartIndex: integer;
-  aCount: integer);
+function TDynArray.AddArray(const DynArrayVar; aStartIndex, aCount: integer): integer;
 var c, n: integer;
     PS,PD: pointer;
 begin
+  result := 0;
   if fValue=nil then
     exit; // avoid GPF if void
   c := DynArrayLength(pointer(DynArrayVar));
@@ -49147,6 +49148,7 @@ begin
     aCount := c-aStartIndex;
   if aCount<=0 then
     exit;
+  result := aCount;
   n := GetCount;
   SetCount(n+aCount);
   PS := pointer(PtrUInt(DynArrayVar)+cardinal(aStartIndex)*ElemSize);
