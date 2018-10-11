@@ -8202,8 +8202,8 @@ type
     // array of the same simple types or record
     // - RTTI textual information shall be supplied as text, with the
     // same format as with a pascal record:
-    // ! 'A,B,C: integer; D: RawUTF8; E: record E1,E2: double; end;'
-    // ! 'A,B,C: integer; D: RawUTF8; E: array of record E1,E2: double; end;'
+    // ! 'A,B,C: integer; D: RawUTF8; E: record E1,E2: double;'
+    // ! 'A,B,C: integer; D: RawUTF8; E: array of record E1,E2: double;'
     // ! 'A,B,C: integer; D: RawUTF8; E: array of SynUnicode; F: array of TGUID'
     // or a shorter alternative syntax for records and arrays:
     // ! 'A,B,C: integer; D: RawUTF8; E: {E1,E2: double}'

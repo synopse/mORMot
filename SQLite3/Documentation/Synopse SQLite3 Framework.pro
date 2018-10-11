@@ -2952,7 +2952,7 @@ Generally, there is a direct analogy between this {\i schema-less} style and dyn
 !end;
 One of the great benefits of these dynamic objects is that schema migrations become very easy. With a traditional RDBMS, releases of code might contain data migration scripts. Further, each release should have a reverse migration script in case a rollback is necessary. {\f1\fs20 ALTER TABLE} operations can be very slow and result in scheduled downtime.
 With a {\i schema-less} organization of the data, 90% of the time adjustments to the database become transparent and automatic. For example, if we wish to add GPA to the {\i student} objects, we add the attribute, re-save, and all is well - if we look up an existing student and reference GPA, we just get back null. Further, if we roll back our code, the new GPA fields in the existing objects are unlikely to cause problems if our code was well written.
-In fact, {\i SQlite3} is so efficient about its indexes B-TREE storage, that such a structure may be used as a credible alternative to much heavier {\i NoSQL} engines, like {\i MongoDB} or {\i CouchDB}.\line With the possibility to add some "regular" fields, e.g. plain numbers (like ahead-computed @*aggregation@ values), or text (like a summary or description field), you can still use any needed fast SQL query, without the complexity of {\i @*map/reduce@} algorithm used by the {\i NoSQL} paradigm. You could even use the {\i @*Full Text@ Search} - FTS3/FTS4, see @8@ - or @*RTREE@ extension advanced features of {\i SQLite3} to perform your queries. Then, thanks to {\i mORMot}'s ability to access any external database engine, you are able to perform a JOINed query of your {\i schema-less} data with some data stored e.g. in an @*Oracle@, @*PostgreSQL@ or @*MS SQL@ enterprise database. Or switch later to a true {\i @*MongoDB@} storage, in just one line of code - see @84@.
+In fact, {\i SQlite3} is so efficient about its indexes B-TREE storage, that such a structure may be used as a credible alternative to much heavier {\i NoSQL} engines, like {\i MongoDB} or {\i CouchDB}.\line With the possibility to add some "regular" fields, e.g. plain numbers (like ahead-computed @*aggregation@ values), or text (like a summary or description field), you can still use any needed fast SQL query, without the complexity of {\i @*map/reduce@} algorithm used by the {\i NoSQL} paradigm. You could even use the {\i @*Full Text@ Search} - FTS3/FTS4/FTS5, see @8@ - or @*RTREE@ extension advanced features of {\i SQLite3} to perform your queries. Then, thanks to {\i mORMot}'s ability to access any external database engine, you are able to perform a JOINed query of your {\i schema-less} data with some data stored e.g. in an @*Oracle@, @*PostgreSQL@ or @*MS SQL@ enterprise database. Or switch later to a true {\i @*MongoDB@} storage, in just one line of code - see @84@.
 :      JSON operations from SQL code
 As we stated, any {\f1\fs20 variant} field will be serialized as @*JSON@, then stored as plain TEXT in the database. In order to make a complex query on the stored JSON, you could retrieve it in your end-user code, then use the corresponding {\f1\fs20 @*TDocVariant@} instance to perform the search on its content. Of course, all this has a noticeable performance cost, especially when the data tend to grow.
 The natural way of solving those performance issue is to add some "regular" RDBMS fields, with a proper index, then perform the requests on those fields. But sometimes, you may need to do some addition query, perhaps in conjunction with "regular" field lookup, on the JSON data stored itself.\line In order to avoid the slowest conversion to the ORM client side, we defined some @*SQL function@s, dedicated to JSON process.
@@ -4441,7 +4441,7 @@ It is also worth noting that external databases (see next paragraph) will also b
 :  R-Tree inclusion
 Since the 2010-06-25 source code repository update, the @*RTREE@ extension is now compiled by default within all supplied {\f1\fs20 .obj} files.
 An R-Tree is a special index that is designed for doing range queries. R-Trees are most commonly used in geospatial systems where each entry is a rectangle with minimum and maximum X and Y coordinates. Given a query rectangle, an R-Tree is able to quickly find all entries that are contained within the query rectangle or which overlap the query rectangle. This idea is easily extended to three dimensions for use in CAD systems. R-Trees also find use in time-domain range look-ups. For example, suppose a database records the starting and ending times for a large number of events. A R-Tree is able to quickly find all events, for example, that were active at any time during a given time interval, or all events that started during a particular time interval, or all events that both started and ended within a given time interval. And so forth. See @http://www.sqlite.org/rtree.html
-A dedicated @*ORM@ class, named {\f1\fs20 TSQLRecordRTree}, is available to create such tables. It inherits from {\f1\fs20 TSQLRecordVirtual}, like the other @*virtual table@s types (e.g. {\f1\fs20 TSQLRecordFTS3}).
+A dedicated @*ORM@ class, named {\f1\fs20 TSQLRecordRTree}, is available to create such tables. It inherits from {\f1\fs20 TSQLRecordVirtual}, like the other @*virtual table@s types (e.g. {\f1\fs20 TSQLRecordFTS5}).
 Any record which inherits from this {\f1\fs20 TSQLRecordRTree} class must have only {\f1\fs20 sftFloat} (i.e. {\i Delphi} {\f1\fs20 @*double@}) @*published properties@ grouped by pairs, each as minimum- and maximum-value, up to 5 dimensions (i.e. 11 columns, including the ID property). Its {\f1\fs20 ID: @*TID@} property must be set before adding a {\f1\fs20 TSQLRecordRTree} to the database, e.g. to link an R-Tree representation to a regular {\f1\fs20 @*TSQLRecord@} table containing the main data.
 Queries against the ID or the coordinate ranges are almost immediate: so you can e.g. extract some coordinates box from the main regular {\f1\fs20 TSQLRecord} table, then use a {\f1\fs20 TSQLRecordRTree}-joined query to make the process faster; this is exactly what the {\f1\fs20 TSQLRestClient. RTreeMatch} method offers: for instance, running with {\f1\fs20 aMapData. @*Blob@Field} filled with {\f1\fs20 [-81,-79.6,35,36.2]} the following lines:
 ! aClient.RTreeMatch(TSQLRecordMapData,'BlobField',TSQLRecordMapBox,
@@ -4451,28 +4451,35 @@ $ SELECT MapData.ID From MapData, MapBox WHERE MapData.ID=MapBox.ID
 $  AND minX>=:(-81.0): AND maxX<=:(-79.6): AND minY>=:(35.0): AND :(maxY<=36.2):
 $  AND MapBox_in(MapData.BlobField,:('\uFFF0base64encoded-81,-79.6,35,36.2'):);
 The {\f1\fs20 MapBox_in} @*SQL function@ is registered in {\f1\fs20 @*TSQLRestServerDB@. Create} constructor for all {\f1\fs20 TSQLRecordRTree} classes of the current database model. Both {\f1\fs20 BlobToCoord} and {\f1\fs20 ContainedIn} class methods are used to handle the box storage in the BLOB. By default, it will process a raw {\f1\fs20 array of double}, with a default box match (that is {\f1\fs20 ContainedIn} method will match the simple {\f1\fs20 minX>=...maxY<=...} where clause).
-:8  FTS3/FTS4
-@**FTS@3/FTS4 are {\i @*SQLite3@} @*virtual table@ modules that allow users to perform full-text searches on a set of documents. The most common (and effective) way to describe full-text searches is "what Google, Yahoo and Altavista do with documents placed on the World Wide Web". Users input a term, or series of terms, perhaps connected by a binary operator or grouped together into a phrase, and the full-text query system finds the set of documents that best matches those terms considering the operators and groupings the user has specified. See @http://www.sqlite.org/fts3.html as reference material about FTS3 usage in {\i SQLite3}.
-Since version 1.5 of the framework, the {\f1\fs20 sqlite3fts3.obj} file is always available in the distribution file: just define the {\f1\fs20 INCLUDE_FTS3} conditional globally for your application (it is expected e.g. in {\f1\fs20 mORMotSQLite3.pas} and {\f1\fs20 SynSQLite3.pas}) to enable {\i FTS3} in your application.
-Leave it undefined if you do not need this feature, and will therefore spare some KB of code.
-FTS3 and FTS4 are nearly identical. FTS4 is indeed an enhancement to FTS3, added with SQLite version 3.7.4, and included in the release v.1.11 of the framework. They share most of their code in common, and their interfaces are the same. The differences are:
-- FTS4 contains query performance optimizations that may significantly improve the performance of full-text queries that contain terms that are very common (present in a large percentage of table rows).
-- FTS4 supports some additional options that may used with the {\f1\fs20 matchinfo()} function.
-Because it stores extra information on disk in two new shadow tables in order to support the performance optimizations and extra {\f1\fs20 matchinfo()} options, FTS4 tables may consume more disk space than the equivalent table created using FTS3. Usually the overhead is 1-2% or less, but may be as high as 10% if the documents stored in the FTS table are very small. The overhead may be reduced by using a {\f1\fs20 TSQLRecordFTS3} table type instead of {\f1\fs20 TSQLRecordFTS4} declaration, but this comes at the expense of sacrificing some of the extra supported {\f1\fs20 matchinfo()} options.
-:   Dedicated FTS3/FTS4 record type
+:8  FTS3/FTS4/FTS5
+@**FTS@3/FTS4/FTS5 are {\i @*SQLite3@} @*virtual table@ modules that allow users to perform full-text searches on a set of documents. The most common (and effective) way to describe full-text searches is "what Google, Yahoo and Altavista do with documents placed on the World Wide Web". Users input a term, or series of terms, perhaps connected by a binary operator or grouped together into a phrase, and the full-text query system finds the set of documents that best matches those terms considering the operators and groupings the user has specified.
+See @http://www.sqlite.org/fts3.html as reference material about FTS3/FTS4 usage in {\i SQLite3}, and @https://www.sqlite.org/fts5.html about FTS5. In short, FTS5 is a new version of FTS4 that includes various fixes and solutions for problems that could not be fixed in FTS4 without sacrificing backwards compatibility.
+Since recent versions of the framework, the {\f1\fs20 sqlite3.obj} static file available with the distribution includes the FTS3/FTS4/FTS5 engines (also on other platforms with {\f1\fs20 FPC}).
+:   Dedicated FTS3/FTS4/FTS5 record type
 In order to allow easy use of the @*FTS@ feature, some types have been defined:
 - {\f1\fs20 TSQLRecordFTS3} to create a FTS3 table with default "simple" stemming;
 - {\f1\fs20 TSQLRecordFTS3Porter} to create a FTS3 table using the {\i Porter Stemming} algorithm (see below);
+- {\f1\fs20 TSQLRecordFTS3Unicode61} to create a FTS3 table using the {\i Unicode61 Stemming} algorithm (see below);
 - {\f1\fs20 TSQLRecordFTS4} to create a FTS4 table with default "simple" stemming;
-- {\f1\fs20 TSQLRecordFTS4Porter} to create a FTS4 table using the {\i Porter Stemming} algorithm.
+- {\f1\fs20 TSQLRecordFTS4Porter} to create a FTS4 table using the {\i Porter Stemming} algorithm;
+- {\f1\fs20 TSQLRecordFTS4Unicode61} to create a FTS4 table using the {\i Unicode61 Stemming};
+- {\f1\fs20 TSQLRecordFTS5} to create a FTS5 table with default "simple" stemming;
+- {\f1\fs20 TSQLRecordFTS5Porter} to create a FTS5 table using the {\i Porter Stemming} algorithm;
+- {\f1\fs20 TSQLRecordFTS5Unicode61} to create a FTS5 table using the {\i Unicode61 Stemming};
 The following graph will detail this class hierarchy:
-\graph FTSORMClasses FTS3/FTS4 ORM classes
+\graph FTSORMClasses FTS ORM classes
 \TSQLRecord\TSQLRecordVirtual
 \TSQLRecordVirtual\TSQLRecordFTS3
 \TSQLRecordFTS3\TSQLRecordFTS3Porter
 \TSQLRecordFTS3\TSQLRecordFTS4
+\TSQLRecordFTS3\TSQLRecordFTS3Unicode61
 \TSQLRecordFTS4\TSQLRecordFTS4Porter
+\TSQLRecordFTS4\TSQLRecordFTS5
+\TSQLRecordFTS4\TSQLRecordFTS4Unicode61
+\TSQLRecordFTS5\TSQLRecordFTS5Porter
+\TSQLRecordFTS5\TSQLRecordFTS5Unicode61
 \
+In practice, you should use {\f1\fs20 TSQLRecordFTS5} when working with latin content, {\f1\fs20 TSQLRecordFTS5Unicode61} for better non-latin support, and {\f1\fs20 TSQLRecordFTS5Porter} if your content is some plain English text.
 :   Stemming
 The "stemming" algorithm - see @http://sqlite.org/fts3.html#tokenizer - is the way the english text is parsed for creating the word index from raw text.
 The {\i simple} (default) tokenizer extracts tokens from a document or basic @*FTS@ full-text query according to the following rules:
@@ -4480,10 +4487,11 @@ The {\i simple} (default) tokenizer extracts tokens from a document or basic @*F
 - All uppercase characters within the ASCII range (UTF code-points less than 128), are transformed to their lowercase equivalents as part of the tokenization process. Thus, full-text queries are case-insensitive when using the simple tokenizer.
 For example, when a document containing the text "{\i Right now, they're very frustrated.}", the terms extracted from the document and added to the full-text index are, in order, "{\f1\fs20 right now they re very frustrated}". Such a document will match a full-text query such as "{\f1\fs20 MATCH 'Frustrated'}", as the simple tokenizer transforms the term in the query to lowercase before searching the full-text index.
 The {\i Porter Stemming algorithm} tokenizer uses the same rules to separate the input document into terms, but as well as folding all terms to lower case it uses the {\i Porter Stemming} algorithm to reduce related English language words to a common root. For example, using the same input document as in the paragraph above, the porter tokenizer extracts the following tokens: "{\f1\fs20 right now thei veri frustrat}". Even though some of these terms are not even English words, in some cases using them to build the full-text index is more useful than the more intelligible output produced by the simple tokenizer. Using the porter tokenizer, the document not only matches full-text queries such as "{\f1\fs20 MATCH 'Frustrated'}", but also queries such as "{\f1\fs20 MATCH 'Frustration'}", as the term "{\i Frustration}" is reduced by the Porter stemmer algorithm to "{\i frustrat}" - just as "{\i Frustrated}" is. So, when using the porter tokenizer, FTS is able to find not just exact matches for queried terms, but matches against similar English language terms. For more information on the Porter Stemmer algorithm, please refer to the @http://tartarus.org/~martin/PorterStemmer page.
+The {\i Unicode61 Stemming algorithm} tokenizer works very much like "simple" except that it does simple unicode case folding according to rules in Unicode Version 6.1 and it recognizes unicode space and punctuation characters and uses those to separate tokens. By default, "Unicode61" also removes all diacritics from Latin script characters.
 :24   FTS searches
-A good approach is to store your data in a regular {\f1\fs20 @*TSQLRecord@} table, then store your text content in a separated @*FTS@3 table, associated to this {\f1\fs20 TSQLRecordFTS3} table via its {\f1\fs20 ID / DocID} property. Note that for {\f1\fs20 TSQLRecordFTS*} types, the {\f1\fs20 ID} property was renamed as {\f1\fs20 DocID}, which is the internal name for the FTS virtual table definition of its unique integer key {\f1\fs20 ID} property.
+A good approach is to store your data in a regular {\f1\fs20 @*TSQLRecord@} table, then store your text content in a separated @*FTS@ table, associated to this {\f1\fs20 TSQLRecordFTS5} table via its {\f1\fs20 ID / DocID} property. Note that for {\f1\fs20 TSQLRecordFTS*} types, the {\f1\fs20 ID} property was renamed as {\f1\fs20 DocID}, which is the internal name for the FTS virtual table definition of its unique integer key {\f1\fs20 ID} property.
 For example (extracted from the regression @*test@ code), you can define this new class:
-!  TSQLFTSTest = class(TSQLRecordFTS3)
+!  TSQLFTSTest = class(TSQLRecordFTS5)
 !  private
 !    fSubject: RawUTF8;
 !    fBody: RawUTF8;
@@ -4492,7 +4500,7 @@ For example (extracted from the regression @*test@ code), you can define this ne
 !    property Body: RawUTF8 read fBody write fBody;
 !  end;
 Note that FTS tables must only content @*UTF-8@ text field, that is {\f1\fs20 @*RawUTF8@} (under {\i Delphi} 2009 and up, you could also use the Unicode {\f1\fs20 string} type, which is mapped as a UTF-8 text field for the {\i SQLite3} engine).
-Then you can add some {\i Body/Subject} content to this FTS3 table, just like any regular {\f1\fs20 TSQLRecord} content, via the @*ORM@ feature of the framework:
+Then you can add some {\i Body/Subject} content to this FTS table, just like any regular {\f1\fs20 TSQLRecord} content, via the @*ORM@ feature of the framework:
 !  FTS := TSQLFTSTest.Create;
 !  try
 !    Check(aClient.TransactionBegin(TSQLFTSTest)); // MUCH faster with this
@@ -4505,8 +4513,8 @@ Then you can add some {\i Body/Subject} content to this FTS3 table, just like an
 !    end;
 !    aClient.Commit; // Commit must be BEFORE OptimizeFTS3, memory leak otherwise
 !    Check(FTS.OptimizeFTS3Index(Client.fServer));
-The steps above are just typical. The only difference with a "standard" @*ORM@ approach is that the {\f1\fs20 DocID} property must be set {\i before} adding the {\f1\fs20 TSQLRecordFTS3} instance: there is no ID automatically created by {\i SQLite}, but an ID must be specified in order to link the FTS record to the original {\f1\fs20 TSQLRecordPeople} row, from its ID.
-To support full-text queries, FTS maintains an inverted index that maps from each unique term or word that appears in the dataset to the locations in which it appears within the table contents. The dedicated {\f1\fs20 OptimizeFTS3Index} method is called to merge all existing index b-trees into a single large b-tree containing the entire index. This can be an expensive operation, but may speed up future queries: you should not call this method after every modification of the FTS tables, but after some text has been added.
+The steps above are just typical. The only difference with a "standard" @*ORM@ approach is that the {\f1\fs20 DocID} property must be set {\i before} adding the {\f1\fs20 TSQLRecordFTS5} instance: there is no ID automatically created by {\i SQLite}, but an ID must be specified in order to link the FTS record to the original {\f1\fs20 TSQLRecordPeople} row, from its ID.
+To support full-text queries, FTS maintains an inverted index that maps from each unique term or word that appears in the dataset to the locations in which it appears within the table contents. The dedicated {\f1\fs20 OptimizeFTS3Index} method is called to merge all existing index b-trees into a single large b-tree containing the entire index - this method will work with FTS3, FTS4 and FTS5 classes, whatever its name states. This can be an expensive operation, but may speed up future queries: you should not call this method after every modification of the FTS tables, but after some text has been added.
 Then the FTS search query will use the custom {\f1\fs20 FTSMatch} method:
 !  Check(aClient.FTSMatch(TSQLFTSTest,'Subject MATCH ''salVador1''',IntResult));
 The matching IDs are stored in the {\f1\fs20 IntResult} integer {\i dynamic array}. Note that you can use a regular @*SQL@ query instead. Use of the {\f1\fs20 FTSMatch} method is not mandatory: in fact, it is just a wrapper around the {\f1\fs20 OneFieldValues} method, just using the "neutral" {\i RowID} column name for the results:
@@ -4517,7 +4525,7 @@ The matching IDs are stored in the {\f1\fs20 IntResult} integer {\i dynamic arra
 !end;
 An overloaded {\f1\fs20 FTSMatch} method has been defined, and will handle detailed matching information, able to use a ranking algorithm. With this method, the results will be sorted by relevance:
 !  Check(aClient.FTSMatch(TSQLFTSTest,'body1*',IntResult,[1,0.5]));
-This method expects some additional constant parameters for weighting each FTS table column (there must be the same number of {\f1\fs20 PerFieldWeight} parameters as there are columns in the {\f1\fs20 TSQLRecordFTS3} table). In the above sample code, the {\f1\fs20 Subject} field will have a weight of 1.0, and he {\f1\fs20 Body} will be weighted as 0.5, i.e. any match in the '{\i body}' column content will be ranked twice less than any match in the '{\i subject}', which is probably of higher density.
+This method expects some additional constant parameters for weighting each FTS table column (there must be the same number of {\f1\fs20 PerFieldWeight} parameters as there are columns in the {\f1\fs20 TSQLRecordFTS5} table). In the above sample code, the {\f1\fs20 Subject} field will have a weight of 1.0, and he {\f1\fs20 Body} will be weighted as 0.5, i.e. any match in the '{\i body}' column content will be ranked twice less than any match in the '{\i subject}', which is probably of higher density.
 The above query will call the following SQL statement:
 $ SELECT RowID FROM FTSTest WHERE FTSTest MATCH 'body1*'
 $ ORDER BY rank(matchinfo(FTSTest),1.0,0.5) DESC
@@ -4853,7 +4861,7 @@ The framework @*ORM@ is able to use @*Virtual Table@ modules, just by defining s
 \TSQLRecordVirtualTableForcedID\TSQLRecordVirtual
 \
 {\f1\fs20 @*TSQLRecordVirtualTableAutoID@} children can be defined for Virtual Table implemented in {\i Delphi}, with a new {\f1\fs20 ID} generated automatically at {\f1\fs20 INSERT}.
-{\f1\fs20 @*TSQLRecordVirtualTableForcedID@} children can be defined for Virtual Table implemented in {\i Delphi}, with an {\f1\fs20 ID} value forced at {\f1\fs20 INSERT} (in a similar manner than for {\f1\fs20 TSQLRecordRTree} or {\f1\fs20 TSQLRecordFTS3/4}).
+{\f1\fs20 @*TSQLRecordVirtualTableForcedID@} children can be defined for Virtual Table implemented in {\i Delphi}, with an {\f1\fs20 ID} value forced at {\f1\fs20 INSERT} (in a similar manner than for {\f1\fs20 TSQLRecordRTree} or {\f1\fs20 TSQLRecordFTS3}/{\f1\fs20 FTS4}/{\f1\fs20 FTS5}).
 {\f1\fs20 TSQLRecordLogFile} was defined to map the column name as retrieved by the {\f1\fs20 TSQLVirtualTableLog} ('{\f1\fs20 log}') module, and should not to be used for any other purpose.
 The Virtual Table module associated from such classes is retrieved from an association made to the server {\f1\fs20 @*TSQLModel@}. In a @*Client-Server@ application, the association is not needed (nor to be used, since it may increase code size) on the Client side. But on the server side, the {\f1\fs20 TSQLModel. VirtualTableRegister} method must be called to associate a {\f1\fs20 TSQLVirtualTableClass} (i.e. a Virtual Table module implementation) to a {\f1\fs20 TSQLRecordVirtualClass} (i.e. its ORM representation).
 For instance, the following code will register two {\f1\fs20 TSQLRecord} classes, the first using the '{\f1\fs20 JSON}' virtual table module, the second using the '{\f1\fs20 Binary}' module:
