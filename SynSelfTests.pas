@@ -6880,6 +6880,8 @@ var i: Integer;
     git,git2: TTestCustomJSONGitHubs;
     item,value: PUTF8Char;
 begin
+  if zendframeworkJson='' then
+    exit; // avoid GPF e.g. on Windows XP where https is broken
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSONGitHub),
     __TTestCustomJSONGitHub).Options := Options;
   FillCharFast(git,sizeof(git),0);
