@@ -51,6 +51,7 @@ Contributors
   MilesYou
   Mingda
   Nzsolt
+  Oleg Tretyakov
   Ondrej (reddwarf)
   Pavel (mpv)
   Pierre le Riche

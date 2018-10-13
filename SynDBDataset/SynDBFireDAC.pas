@@ -30,6 +30,7 @@ unit SynDBFireDAC;
 
   Contributor(s):
   - delphinium (louisyeow)
+  - Oleg Tretyakov
 
   
   Alternatively, the contents of this file may be used under the terms of
