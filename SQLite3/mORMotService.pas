@@ -669,7 +669,7 @@ type
   /// Enum synchronized with WinAPI
   // - see https://docs.microsoft.com/en-us/windows/desktop/secauthz/privilege-constants
   TWinSystemPrivilege = (wspCreateToken, wspAssignPrimaryToken, wspLockMemory,
-    wspIncreaseQuota, wspUnsolicitedInput, wspMAchineAccount, wspTCP, wspSecurity,
+    wspIncreaseQuota, wspUnsolicitedInput, wspMachineAccount, wspTCP, wspSecurity,
     wspTakeOwnership, wspLoadDriver, wspSystemProfile, wspSystemTime, wspProfSingleProcess,
     wspIncBasePriority, wspCreatePageFile, wspCreatePermanent, wspBackup, wspRestore,
     wspShutdown, wspDebug, wspAudit, wspSystemEnvironment, wspChangeNotify,
