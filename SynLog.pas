@@ -426,10 +426,6 @@ type
   /// how file existing shall be handled during logging
   TSynLogExistsAction = (acOverwrite, acAppend);
 
-  /// See TSynLogFamily.HandleExceptionBeforeLogging for details
-  TSynLogExceptionHandlingEvent = function(aExceptionContext: TSynLogExceptionContext): boolean of object;
-
-
   /// regroup several logs under an unique family name
   // - you should usualy use one family per application or per architectural
   // module: e.g. a server application may want to log in separate files the
@@ -449,8 +445,6 @@ type
   // !   ILog.Log(sllInfo,'method called');
   // ! end;
   TSynLogFamily = class
-  private
-    FHandleExceptionBeforeLogging: TSynLogExceptionHandlingEvent;
   protected
     fLevel, fLevelStackTrace: TSynLogInfos;
     fArchiveAfterDays: Integer;
@@ -569,11 +563,6 @@ type
     property EchoCustom: TOnTextWriterEcho read fEchoCustom write SetEchoCustom;
     /// the associated TSynLog class
     property SynLogClass: TSynLogClass read fSynLogClass;
-    /// you can choose to log or ignore each exception caught by TSynLog using
-    // this HandleExceptionBeforeLogging event. In other words, TSynLog will NOT
-    // log the exception the event handler returns true, otherwise the exception wil be logged.
-    property HandleExceptionBeforeLogging: TSynLogExceptionHandlingEvent read FHandleExceptionBeforeLogging write
-        FHandleExceptionBeforeLogging;
   published
     /// the associated TSynLog class
     property SynLogClassName: string read GetSynLogClassName;
@@ -2573,9 +2562,6 @@ begin
   if (Ctxt.EClass=ESynLogSilent) or
      (SynLog.fFamily.ExceptionIgnore.IndexOf(Ctxt.EClass)>=0) then
     exit;
-  if Assigned(SynLog.fFamily.FHandleExceptionBeforeLogging) then
-    if SynLog.fFamily.FHandleExceptionBeforeLogging(Ctxt) then
-      exit;
   if SynLog.LogHeaderLock(Ctxt.ELevel,false) then
   try
     if GlobalLastExceptionIndex=MAX_EXCEPTHISTORY then

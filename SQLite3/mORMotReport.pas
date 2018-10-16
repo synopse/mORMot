@@ -346,7 +346,7 @@ type
   end;
 
   /// contains one page
-  TGDIPageContent = object
+  TGDIPageContent = record
     /// SynLZ-compressed content of the page
     MetaFileCompressed: RawByteString;
     /// text equivalent of the page

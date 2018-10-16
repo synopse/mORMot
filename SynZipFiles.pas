@@ -121,7 +121,8 @@ type
 
   TSynCompressionAlgoClass = class of TSynCompressionAlgo;
 
-  TSynCompressionAlgos = object
+  {$ifdef UNICODE}TSynCompressionAlgos = record{$else}TSynCompressionAlgos = object{$endif}
+  public
     Values: array of record
       ID, WholeID: integer;
       func: TSynCompressionAlgoClass;
@@ -240,7 +241,7 @@ type
   // used to transfert Blob Data from/to Client without compress/uncompress:
 {$A-}
   PBlobData = ^TBlobData;
-  TBlobData = object
+  {$ifdef UNICODE}TBlobData = record{$else}TBlobData = object{$endif}
   private
     // test if algo is registered, perform crc32 check and create one instance
     function AlgoCreate(data: pointer): TSynCompressionAlgo;
@@ -264,7 +265,7 @@ const
   BLOBDATA_HEADSIZE = sizeof(TBlobData)-sizeof(AnsiChar); // databuf: AnsiChar
 
 type
-  TMemoryMap = object
+  {$ifdef UNICODE}TMemoryMap = record{$else}TMemoryMap = object{$endif}
   // use mapped files: very fast + avoid unnecessary disk access
   private
     _map: cardinal;

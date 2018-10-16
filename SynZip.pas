@@ -592,7 +592,7 @@ function get_crc_table: pointer; cdecl;
 
 type
   /// simple wrapper class to decompress a .gz file into memory or stream/file
-  TGZRead = object
+  {$ifdef UNICODE}TGZRead = record{$else}TGZRead = object{$endif}
   private
     comp, zsdest: pointer;
     zscrc: cardinal;

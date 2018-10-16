@@ -184,6 +184,7 @@ const
 type
   PServiceStatus = ^TServiceStatus;
   TServiceStatus = object
+  public
     dwServiceType: DWORD;
     dwCurrentState: DWORD;
     dwControlsAccepted: DWORD;
@@ -195,6 +196,7 @@ type
 
   PServiceStatusProcess = ^TServiceStatusProcess;
   TServiceStatusProcess = object(TServiceStatus)
+  public
     dwProcessId: DWORD;
     dwServiceFlags: DWORD;
   end;

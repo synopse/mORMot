@@ -847,7 +847,7 @@ type
   PSecPkgContextStreamSizes = ^TSecPkgContextStreamSizes;
 
   ESChannel = class(Exception);
-  TSChannelClient = object
+  {$ifdef UNICODE}TSChannelClient = record{$else}TSChannelClient = object{$endif}
   private
     Cred: TCredHandle;
     Ctxt: TCtxtHandle;
@@ -1659,7 +1659,8 @@ const
   TLSRECMAXSIZE = 19000; // stack buffers for TSChannelClient.Receive/Send
 
 type
-  THandshakeBuf = object
+  {$ifdef UNICODE}THandshakeBuf = record{$else}THandshakeBuf = object{$endif}
+  public
     buf: array[0..2] of TSecBuffer;
     input, output: TSecBufferDesc;
     procedure Init;

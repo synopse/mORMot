@@ -127,7 +127,8 @@ type
   TFreeShortCutSet = set of ord('A')..ord('Z');
 
   /// a simple object to get one char shortcuts from caption value
-  TFreeShortCut = object
+  {$ifdef UNICODE}TFreeShortCut = record{$else}TFreeShortCut = object{$endif}
+  public
     /// bit set for already used short cut, from 'A' to 'Z'
     Values: TFreeShortCutSet;
     /// attempt to create free shortcut of one char length, from
@@ -478,7 +479,7 @@ type
   // custom buttons to a previously created one by TSQLLister.SetToolBar()
   // - simply set the associated objects via the Init() method, then call
   // AddToolBar() for every toolbar which need to be created
-  TSQLCustomToolBar = object
+  {$ifdef UNICODE}TSQLCustomToolBar = record{$else}TSQLCustomToolBar = object{$endif}
   public
     Page: TSynPage;
     ActionHints: string;

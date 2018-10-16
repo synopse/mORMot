@@ -3226,6 +3226,7 @@ procedure AddRawUTF8(var Values: TRawUTF8DynArray; var ValuesCount: integer;
 type
   /// simple stack-allocated type for handling a type names list
   {$ifdef UNICODE}TPropNameList = record{$else}TPropNameList = object{$endif}
+  public
     Values: TRawUTF8DynArray;
     Count: Integer;
     /// initialize the list
@@ -3491,6 +3492,7 @@ type
   {$A-}
   /// file found result item, as returned by FindFiles()
   {$ifdef UNICODE}TFindFiles = record{$else}TFindFiles = object{$endif}
+  public
     /// the matching file name, including its folder name
     Name: TFileName;
     /// the matching file attributes
@@ -5881,6 +5883,7 @@ type
 
   /// used to store one list of hashed RawUTF8 in TRawUTF8Interning pool
   {$ifdef UNICODE}TRawUTF8InterningSlot = record{$else}TRawUTF8InterningSlot = object{$endif}
+  public
     /// actual RawUTF8 storage
     Value: TRawUTF8DynArray;
     /// hashed access to the Value[] list
@@ -6007,6 +6010,7 @@ type
   // in Delphi 2009/2010 compiler (at least): this structure is not initialized
   // if defined as an object on the stack, but will be as a record :(
   {$ifdef UNICODE}TSynNameValue = record{$else}TSynNameValue = object{$endif}
+  private
     fDynArray: TDynArrayHashed;
     fOnAdd: TSynNameValueNotify;
     function GetBlobData: RawByteString;
@@ -10033,7 +10037,8 @@ type
   // - is also safer, since will check for reaching end of buffer
   // - raise a EFastReader exception on decoding error (e.g. if a buffer
   // overflow may occur) or call OnErrorOverflow/OnErrorData event handlers
-  TFastReader = object
+  {$ifdef UNICODE}TFastReader = record{$else}TFastReader = object{$endif}
+  public
     /// the current position in the memory
     P: PAnsiChar;
     /// the last position in the buffer
@@ -12188,6 +12193,7 @@ type
   // - FPC's TSystemTime in datih.inc does NOT match Windows TSystemTime fields!
   // - also used to store a Date/Time in TSynTimeZone internal structures
   {$ifdef UNICODE}TSynSystemTime = record{$else}TSynSystemTime = object{$endif}
+  public
     Year, Month, DayOfWeek, Day,
     Hour, Minute, Second, MilliSecond: word;
     /// set all fields to 0
@@ -12241,6 +12247,7 @@ type
   // - TTimeLogBits.Value has a 38-bit precision, so features exact representation
   // as JavaScript numbers (stored in a 52-bit mantissa)
   {$ifdef UNICODE}TTimeLogBits = record{$else}TTimeLogBits = object{$endif}
+  public
     /// the bit-encoded value itself, which follows an abstract "year" of 16
     // months of 32 days of 32 hours of 64 minutes of 64 seconds
     // - bits 0..5   = Seconds (0..59)
@@ -12727,6 +12734,7 @@ type
 
   /// used to store Time Zone information for a single area in TSynTimeZone
   {$ifdef UNICODE}TTimeZoneData = record{$else}TTimeZoneData = object{$endif}
+  public
     id: TTimeZoneID;
     display: RawUTF8;
     tzi: TTimeZoneInfo;
@@ -23954,7 +23962,9 @@ begin
 end;
 
 type
-  TFormatUTF8 = object // only supported token is %, with any const arguments
+  // only supported token is %, with any const arguments
+  {$ifdef UNICODE}TFormatUTF8 = record{$else}TFormatUTF8 = object{$endif}
+  public
     b: PTempUTF8;
     L,argN: integer;
     blocks: array[0..63] of TTempUTF8; // to avoid most heap allocations
@@ -37025,6 +37035,7 @@ end;
 
 type
   {$ifdef UNICODE}TLecuyer = record{$else}TLecuyer = object{$endif}
+  public
     rs1, rs2, rs3: cardinal;
     seedcount: cardinal;
     procedure Seed(entropy: PByteArray; entropylen: integer);
@@ -38228,6 +38239,7 @@ end;
 type
   /// used internaly for faster quick sort
   {$ifdef UNICODE}TQuickSortRawUTF8 = record{$else}TQuickSortRawUTF8 = object{$endif}
+  public
     Values: PPointerArray;
     Compare: TUTF8Compare;
     CoValues: PIntegerArray;
@@ -48492,6 +48504,7 @@ end;
 type
   // internal structure used to make QuickSort faster & with less stack usage
   {$ifdef UNICODE}TDynArrayQuickSort = record{$else}TDynArrayQuickSort = object{$endif}
+  public
     Compare: TDynArraySortCompare;
     Pivot: pointer;
     Index: PCardinalArray;

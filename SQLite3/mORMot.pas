@@ -1990,6 +1990,7 @@ type
   // - used e.g. by GetJSONObjectAsSQL() function or ExecuteFromJSON and
   // InternalBatchStop methods
   {$ifdef UNICODE}TJSONObjectDecoder = record{$else}TJSONObjectDecoder = object{$endif}
+  public
     /// contains the decoded field names
     FieldNames: array[0..MAX_SQLFIELDS-1] of RawUTF8;
     /// contains the decoded field values
@@ -2485,7 +2486,7 @@ type
   /// store information about a class, able to easily create new instances
   // - using this temporary storage will speed up the creation process
   // - any virtual constructor will be used, including for TCollection types
-  TClassInstance = object
+  {$ifdef UNICODE}TClassInstance = record{$else}TClassInstance = object{$endif}
   public
     /// the class type itself
     ItemClass: TClass;
@@ -2595,6 +2596,7 @@ type
   // - for TSQLRecord, you should better use the RecordProps.Fields[] array,
   // which is faster and contains the properties published in parent classes
   {$ifdef UNICODE}TClassProp = record{$else}TClassProp = object{$endif}
+  public
     /// number of published properties in this object
     PropCount: Word;
     /// point to a TPropInfo packed array
@@ -2614,6 +2616,7 @@ type
   PClassType = ^TClassType;
   /// a wrapper to class type information, as defined by the Delphi RTTI
   {$ifdef UNICODE}TClassType = record{$else}TClassType = object{$endif}
+  public
     /// the class type
     ClassType: TClass;
     /// the parent class type information
@@ -2642,6 +2645,7 @@ type
   // a text equivalent, translated if necessary, from the enumeration type
   // definition itself
   {$ifdef UNICODE}TEnumType = record{$else}TEnumType = object{$endif}
+  public
     /// specify ordinal storage size and sign
     // - is prefered to MaxValue to identify the number of stored bytes
     OrdType: TOrdType;
@@ -2816,6 +2820,7 @@ type
   // - user types defined as new types have this type information:
   // & type NewType = type OldType;
   {$ifdef UNICODE}TTypeInfo = record{$else}TTypeInfo = object{$endif}
+  public
     /// the value type family
     Kind: TTypeKind;
     /// the declared name of the type ('String','Word','RawUnicode'...)
@@ -2919,6 +2924,7 @@ type
   // indexed properties are not handled yet (use faster RawUnicodeString instead
   // of WideString and UnicodeString) - in fact, the generic string type is handled
   {$ifdef UNICODE}TPropInfo = record{$else}TPropInfo = object{$endif}
+  public
     {$ifdef USETYPEINFO}
     function RetrieveFieldSize: integer;
     {$endif}
@@ -3189,6 +3195,7 @@ type
 {$A-} { Delphi and FPC compiler use packed storage for this internal type }
   /// a wrapper around method returned result definition
   {$ifdef UNICODE}TReturnInfo = record{$else}TReturnInfo = object{$endif}
+  public
     /// RTTI version
     // - 2 up to Delphi 2010, 3 for Delphi XE and up
     Version: byte;
@@ -3209,6 +3216,7 @@ type
 {$A-} { Delphi and FPC compiler use packed storage for this internal type }
   /// a wrapper around an individual method parameter definition
   {$ifdef UNICODE}TParamInfo = record{$else}TParamInfo = object{$endif}
+  public
     /// the kind of parameter
     Flags: TParamFlags;
     /// the parameter type information
@@ -3233,6 +3241,7 @@ type
 {$A-} { Delphi and FPC compiler use packed storage for this internal type }
   /// a wrapper around a method definition
   {$ifdef UNICODE}TMethodInfo = record{$else}TMethodInfo = object{$endif}
+  public
     {$ifdef FPC}
     /// method name
     Name: PShortString;
@@ -4935,7 +4944,7 @@ type
   // consolidated statistics
   // - it will therefore store up to 24*365+365+12+1 = 9138 records per year
   // in the associated storage engine (so there is no actual need to purge it)
-  TSynMonitorUsageID = object
+  {$ifdef UNICODE}TSynMonitorUsageID = record{$else}TSynMonitorUsageID = object{$endif}
   public
     /// the TID, as computed from time and granularity
     Value: integer;
@@ -5800,6 +5809,7 @@ type
   /// store all parameters for a Client or Server method call
   // - as used by TSQLRestServer.URI or TSQLRestClientURI.InternalURI
   {$ifdef UNICODE}TSQLRestURIParams = record{$else}TSQLRestURIParams = object{$endif}
+  public
     /// input parameter containing the caller URI
     Url: RawUTF8;
     /// input parameter containing the caller method
@@ -6059,6 +6069,7 @@ type
   // - one property for every and each URI method (GET/POST/PUT/DELETE)
   // - one bit for every and each Table in Model.Tables[]
   {$ifdef UNICODE}TSQLAccessRights = record{$else}TSQLAccessRights = object{$endif}
+  public
     /// set of allowed actions on the server side
     AllowRemoteExecute: TSQLAllowRemoteExecute;
     /// GET method (retrieve record) table access bits
@@ -9136,6 +9147,7 @@ type
   // - the maximum count of the locked list if fixed to 512 by default,
   // which seems correct for common usage
   {$ifdef UNICODE}TSQLLocks = record{$else}TSQLLocks = object{$endif}
+  public
     /// the number of locked records stored in this object
     Count: integer;
     /// contains the locked record ID
@@ -9275,7 +9287,7 @@ type
 
   /// defines the settings for a Tab for User Interface generation
   // - used in mORMotToolBar.pas unit and TSQLModel.Create() overloaded method
-  TSQLRibbonTabParameters = object
+  {$ifdef UNICODE}TSQLRibbonTabParameters = record{$else}TSQLRibbonTabParameters = object{$endif}
   public
     /// the Table associated to this Tab
     Table: TSQLRecordClass;
@@ -11930,6 +11942,7 @@ type
 
   /// define the rules for a given method as used internaly by TInterfaceStub
   {$ifdef UNICODE}TInterfaceStubRules = record{$else}TInterfaceStubRules = object{$endif}
+  public
     /// the mocking / stubing rules associated to this method
     Rules: array of TInterfaceStubRule;
     /// index in Rules[] of the default rule, i.e. the one with Params=''
@@ -11977,6 +11990,7 @@ type
 
   /// used to keep track of one stubbed method call
   {$ifdef UNICODE}TInterfaceStubLog = record{$else}TInterfaceStubLog = object{$endif}
+  public
     /// call timestamp, in milliseconds
     // - is filled with GetTickCount64() API returned value
     Timestamp64: Int64;
@@ -16811,7 +16825,8 @@ type
   /// used to publish all Services supported by a TSQLRestServer instance
   // - as expected by TSQLRestServer.ServicesPublishedInterfaces
   // - can be serialized as a JSON object via RecordLoadJSON/RecordSaveJSON
-  TServicesPublishedInterfaces = object
+  {$ifdef UNICODE}TServicesPublishedInterfaces = record{$else}TServicesPublishedInterfaces = object{$endif}
+  public
     /// how this TSQLRestServer could be accessed
     PublicURI: TSQLRestServerURI;
     /// the list of supported services names
