@@ -426,6 +426,10 @@ type
   /// how file existing shall be handled during logging
   TSynLogExistsAction = (acOverwrite, acAppend);
 
+  /// callback signature used by TSynLogFamilly.OnBeforeException
+  // - should return true to log the exception, or false to ignore it
+  TSynLogOnBeforeException = function(aExceptionContext: TSynLogExceptionContext): boolean of object;
+
   /// regroup several logs under an unique family name
   // - you should usualy use one family per application or per architectural
   // module: e.g. a server application may want to log in separate files the
@@ -475,6 +479,7 @@ type
     fStackTraceUse: TSynLogStackTraceUse;
     fFileExistsAction: TSynLogExistsAction;
     fExceptionIgnore: TList;
+    fOnBeforeException: TSynLogOnBeforeException;
     fEchoToConsole: TSynLogInfos;
     fEchoCustom: TOnTextWriterEcho;
     fEchoRemoteClient: TObject;
@@ -529,6 +534,12 @@ type
     // ! TSQLLog.Family.ExceptionIgnore.Add(EConvertError);
     // - you may also trigger ESynLogSilent exceptions for silent process
     property ExceptionIgnore: TList read fExceptionIgnore;
+    /// you can let exceptions be ignored from a callback
+    // - if set and returns true, the given exception won't be logged
+    // - may be handy e.g. when working with code triggerring a lot of
+    // exceptions (e.g. Indy), where ExceptionIgnore could be refined
+    property OnBeforeException: TSynLogOnBeforeException
+      read fOnBeforeException write fOnBeforeException;
     /// event called to archive the .log content after a defined delay
     // - Destroy will parse DestinationPath folder for *.log files matching
     // ArchiveAfterDays property value
@@ -2560,7 +2571,9 @@ begin
   if (SynLog=nil) or not (Ctxt.ELevel in SynLog.fFamily.Level) then
     exit;
   if (Ctxt.EClass=ESynLogSilent) or
-     (SynLog.fFamily.ExceptionIgnore.IndexOf(Ctxt.EClass)>=0) then
+     (SynLog.fFamily.ExceptionIgnore.IndexOf(Ctxt.EClass)>=0) or
+     (Assigned(SynLog.fFamily.OnBeforeException) and
+      SynLog.fFamily.OnBeforeException(Ctxt)) then
     exit;
   if SynLog.LogHeaderLock(Ctxt.ELevel,false) then
   try
