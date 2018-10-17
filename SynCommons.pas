@@ -9806,6 +9806,8 @@ type
     // - aStream parameter could be e.g. THeapMemoryStream or TRawByteStringStream
     constructor Create(aClass: TStreamClass; aTempBuf: pointer; aTempLen: integer); overload;
     /// release internal TStream (after AssignToHandle call)
+    // - warning: an explicit call to Flush is needed to write the data pending
+    // in internal buffer
     destructor Destroy; override;
     /// append some data at the current position
     procedure Write(Data: pointer; DataLen: integer); overload;

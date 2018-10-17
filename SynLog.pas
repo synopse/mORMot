@@ -427,7 +427,7 @@ type
   TSynLogExistsAction = (acOverwrite, acAppend);
 
   /// callback signature used by TSynLogFamilly.OnBeforeException
-  // - should return true to log the exception, or false to ignore it
+  // - should return false to log the exception, or true to ignore it
   TSynLogOnBeforeException = function(aExceptionContext: TSynLogExceptionContext): boolean of object;
 
   /// regroup several logs under an unique family name
