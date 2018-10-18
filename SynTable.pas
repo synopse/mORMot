@@ -96,6 +96,10 @@ function IsValidIP4Address(P: PUTF8Char): boolean;
 // - consider using TMatch or TMatchs if you expect to reuse the pattern
 function IsMatch(const Pattern, Text: RawUTF8; CaseInsensitive: boolean=false): boolean;
 
+/// return TRUE if the supplied content matchs a glob pattern, using VCL strings
+// - is a wrapper around IsMatch() with fast UTF-8 conversion
+function IsMatchString(const Pattern, Text: string; CaseInsensitive: boolean=false): boolean;
+
 type
   PMatch = ^TMatch;
   /// low-level structure used by IsMatch() for actual glob search
@@ -5539,6 +5543,13 @@ var match: TMatch;
 begin
   match.Prepare(Pattern, CaseInsensitive, {reuse=}false);
   result := match.Match(Text);
+end;
+
+function IsMatchString(const Pattern, Text: string; CaseInsensitive: boolean=false): boolean;
+var match: TMatch;
+begin
+  match.Prepare(StringToUTF8(Pattern), CaseInsensitive, {reuse=}false);
+  result := match.Match(StringToUTF8(Text));
 end;
 
 function SetMatchs(const CSVPattern: RawUTF8; CaseInsensitive: boolean;
