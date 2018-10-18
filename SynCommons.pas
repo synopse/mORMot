@@ -15527,6 +15527,11 @@ type
     ccDarkGray, ccLightBlue, ccLightGreen, ccLightCyan, ccLightRed, ccLightMagenta,
     ccYellow, ccWhite);
 
+{$ifdef FPC}{$ifdef Linux}
+var
+  stdoutIsTTY: boolean;
+{$endif}{$endif}
+
 /// change the Windows console text writing color
 // - you should call this procedure to initialize StdOut global variable, if
 // you manually initialized the Windows console, e.g. via the following code:
@@ -17674,6 +17679,7 @@ uses
   SynFPCLinux,
   Unix,
   dynlibs,
+  termio,
   {$ifdef BSD}
   ctypes,
   sysctl,
@@ -55808,6 +55814,10 @@ end;
 procedure TextColor(Color: TConsoleColor);
 const AnsiTbl : string[8]='04261537';
 begin
+{$ifdef FPC}{$ifdef Linux}
+  if not stdoutIsTTY then
+    exit;
+{$endif}{$endif}
   if ord(color)=TextAttr then
     exit;
   TextAttr := ord(color);
@@ -65075,6 +65085,9 @@ initialization
   MoveFast := @System.Move;
   {$ifdef FPC}
   FillCharFast := @System.FillChar; // FPC cross-platform RTL is optimized enough
+  {$ifdef Linux}
+  stdoutIsTTY := IsATTY(StdOutputHandle)=1;
+  {$endif}
   {$else}
   {$ifdef CPUARM}
   FillCharFast := @System.FillChar;
