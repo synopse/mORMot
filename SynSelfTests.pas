@@ -11899,7 +11899,7 @@ var sw: ICommandLine;
   end;
 begin
   if DirectoryExists('synecc') then
-    DirectoryDelete('synecc','*.*',true) else
+    DirectoryDelete('synecc',FILES_ALL,true) else
     CreateDir('synecc');
   SetCurrentDir('synecc');
   try

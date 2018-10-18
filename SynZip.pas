@@ -631,6 +631,10 @@ function GZRead(gz: PAnsiChar; gzLen: integer): ZipString;
 // - will use TSynZipCompressor for minimal memory use during file compression
 function GZFile(const orig, destgz: TFileName; CompressionLevel: Integer=6): boolean;
 
+const
+  /// operating-system dependent wildchar to match all files in a folder
+  ZIP_FILES_ALL = {$ifdef MSWINDOWS}'*.*'{$else}'*'{$endif};
+
 type
   /// a simple TStream descendant for compressing data into a stream
   // - this simple version don't use any internal buffer, but rely
@@ -821,7 +825,7 @@ type
     /// compress (using the deflate method) all files within a folder, and
     // add it to the zip file
     // - if Recursive is TRUE, would include files from nested sub-folders
-    procedure AddFolder(const FolderName: TFileName; const Mask: TFileName='*.*';
+    procedure AddFolder(const FolderName: TFileName; const Mask: TFileName=ZIP_FILES_ALL;
       Recursive: boolean=true; CompressLevel: integer=6);
     /// add a file from an already compressed zip entry
     procedure AddFromZip(const ZipEntry: TZipEntry);
@@ -1046,13 +1050,13 @@ begin
   FileWrite(Handle,buf,len);
 end;
 
-procedure TZipWrite.AddFolder(const FolderName: TFileName; const Mask: TFileName='*.*';
-  Recursive: boolean=true; CompressLevel: integer=6);
+procedure TZipWrite.AddFolder(const FolderName: TFileName; const Mask: TFileName;
+  Recursive: boolean; CompressLevel: integer);
 procedure RecursiveAdd(const fileDir,zipDir: TFileName);
 var f: TSearchRec;
 begin
   if Recursive then
-    if FindFirst(fileDir+{$ifdef MSWINDOWS}'*.*'{$else}'*'{$endif},faDirectory,f)=0 then begin
+    if FindFirst(fileDir+ZIP_FILES_ALL,faDirectory,f)=0 then begin
       repeat
         if f.Name[1]<>'.' then
           RecursiveAdd(fileDir+f.Name+PathDelim,zipDir+f.Name+'\');

@@ -3462,12 +3462,16 @@ function SearchRecToDateTime(const F: TSearchRec): TDateTime;
 function SearchRecValidFile(const F: TSearchRec): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+const
+  /// operating-system dependent wildchar to match all files in a folder
+  FILES_ALL = {$ifdef MSWINDOWS}'*.*'{$else}'*'{$endif};
+
 /// delete the content of a specified directory
 // - only one level of file is deleted within the folder: no recursive deletion
 // is processed by this function (for safety)
 // - if DeleteOnlyFilesNotDirectory is TRUE, it won't remove the folder itself,
 // but just the files found in it
-function DirectoryDelete(const Directory: TFileName; const Mask: TFileName='*.*';
+function DirectoryDelete(const Directory: TFileName; const Mask: TFileName=FILES_ALL;
   DeleteOnlyFilesNotDirectory: Boolean=false; DeletedCount: PInteger=nil): Boolean;
 
 /// delete the files older than a given age in a specified directory
@@ -3477,7 +3481,7 @@ function DirectoryDelete(const Directory: TFileName; const Mask: TFileName='*.*'
 // is processed by this function, unless Recursive is TRUE
 // - if Recursive=true, caller should set TotalSize^=0 to have an accurate value
 function DirectoryDeleteOlderFiles(const Directory: TFileName; TimePeriod: TDateTime;
-   const Mask: TFileName='*.*'; Recursive: Boolean=false; TotalSize: PInt64=nil): Boolean;
+   const Mask: TFileName=FILES_ALL; Recursive: Boolean=false; TotalSize: PInt64=nil): Boolean;
 
 /// creates a directory if not already existing
 // - returns the full expanded directory name, including trailing backslash
@@ -3528,6 +3532,9 @@ function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray): TFileNam
 /// DirectoryExists returns a boolean value that indicates whether the
 //  specified directory exists (and is actually a directory)
 function DirectoryExists(const Directory: string): Boolean;
+
+/// case-insensitive comparison of filenames
+function SameFileName(const S1, S2: TFileName): Boolean;
 
 /// retrieve the corresponding environment variable value
 function GetEnvironmentVariable(const Name: string): string;
@@ -30165,7 +30172,7 @@ begin
   {$ifndef DELPHI5OROLDER}
   {$WARN SYMBOL_DEPRECATED OFF} // for faVolumeID
   {$endif}
-  result := (F.Attr and (faDirectory
+  result := (F.Name<>'') and (F.Attr and (faDirectory
     {$ifdef MSWINDOWS}+faVolumeID+faSysFile+faHidden)=0) and (F.Name[1]<>'.')
     {$else})=0){$endif};
   {$ifndef DELPHI5OROLDER}
@@ -30333,13 +30340,16 @@ end;
 
 {$ifdef DELPHI5OROLDER}
 
-/// DirectoryExists returns a boolean value that indicates whether the
-//  specified directory exists (and is actually a directory)
 function DirectoryExists(const Directory: string): boolean;
 var Code: Integer;
 begin
   Code := GetFileAttributes(pointer(Directory));
   result := (Code<>-1) and (FILE_ATTRIBUTE_DIRECTORY and Code<>0);
+end;
+
+function SameFileName(const S1, S2: TFileName): Boolean;
+begin
+  result := AnsiCompareFileName(S1,S2)=0;
 end;
 
 function GetEnvironmentVariable(const Name: string): string;
