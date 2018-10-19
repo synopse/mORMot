@@ -550,7 +550,7 @@ type
     /// direct send data through network
     // - raise a ECrtSocket exception on any error
     // - bypass the SndBuf or SockOut^ buffers
-    // - raw Data is sent directly to OS: no CR/CRLF is appened to the block
+    // - raw Data is sent directly to OS: no LF/CRLF is appened to the block
     procedure Write(const Data: SockString);
     /// direct accept an new incoming connection on a bound socket
     // - instance should have been setup as a server via a previous Bind() call
@@ -5162,11 +5162,11 @@ procedure TCrtSocket.SockRecvLn(out Line: SockString; CROnly: boolean=false);
 var c: AnsiChar;
    Error: integer;
 begin
-  if CROnly then begin // slow but accurate version expecting #13 as line end
+  if CROnly then begin // slower but accurate version expecting #13 as line end
     // SockIn^ expect either #10, either #13#10 -> a dedicated version is needed
     repeat
       SockRecv(@c,1); // this is slow but works
-      if c in [#0,#13] then
+      if ord(c) in [0,13] then
         exit; // end of line
       Line := Line+c; // will do the work anyway
     until false;
@@ -6058,7 +6058,7 @@ var ctxt: THttpServerRequest;
       ctxt.OutCustomHeaders := '';
       ctxt.OutContentType := 'text/html; charset=utf-8'; // create message to display
       ctxt.OutContent := {$ifdef UNICODE}UTF8String{$else}UTF8Encode{$endif}(
-        format('<body style="font-family:verdana">'#13+
+        format('<body style="font-family:verdana">'#10+
         '<h1>%s Server Error %d</h1><hr><p>HTTP %d %s<p>%s<p><small>%s',
         [ClassName,Code,Code,reason,HtmlEncodeString(ErrorMsg),fServerName]));
     end;
@@ -10197,7 +10197,7 @@ begin
   {$endif}
   if P<>nil then
   repeat
-    while P^ in [#13,#10] do inc(P);
+    while ord(P^) in [10,13] do inc(P);
     if P^=#0 then
       break;
     P := AddCustomHeader(P,UnknownHeaders,false);
@@ -11552,7 +11552,7 @@ begin
   if IdemPChar(pointer(Header),'HTTP/') then begin
     i := 6;
     while Header[i]>=' ' do inc(i);
-    while Header[i] in [#13,#10] do inc(i);
+    while ord(Header[i]) in [10,13] do inc(i);
     system.Delete(Header,1,i-1); // trim leading 'HTTP/1.1 200 OK'#$D#$A
   end;
   P := pointer(Header);
