@@ -7782,8 +7782,6 @@ type
     // - note that due to a limitation of the "array of const" format, cardinal
     // values should be type-casted to Int64() - otherwise the integer mapped
     // value will be transmitted, therefore wrongly
-    // - CR = #13 writes CR+LF chars (i.e. if you write #13 in the Format
-    // string, it will output #13#10 chars)
     {$ifdef OLDTEXTWRITERFORMAT}
     // - $ dollar = #36 indicates an integer to be written with 2 digits and a comma
     // - | vertical = #124 will write the next char e.g. Add('%|$',[10]) will write '10$'
@@ -7803,10 +7801,12 @@ type
     /// append CR+LF (#13#10) chars
     // - this method won't call EchoAdd() registered events - use AddEndOfLine()
     // method instead
+    // - AddEndOfLine() will append either CR+LF (#13#10) or LF (#10) depending
+    // on a flag
     procedure AddCR;
     /// mark an end of line, ready to be "echoed" to registered listeners
-    // - append a CR (#13) char or CR+LF (#13#10) chars to the buffer, depending
-    // on the EndOfLineCRLF property value (default is CR, to minimize storage)
+    // - append a LF (#10) char or CR+LF (#13#10) chars to the buffer, depending
+    // on the EndOfLineCRLF property value (default is LF, to minimize storage)
     // - any callback registered via EchoAdd() will monitor this line
     // - used e.g. by TSynLog for console output, as stated by Level parameter
     procedure AddEndOfLine(aLevel: TSynLogInfo=sllNone);
@@ -8346,7 +8346,7 @@ type
     // or WrittenBytes for the number of bytes already written to disk
     property TextLength: cardinal read GetLength;
     /// define how AddEndOfLine method stores its line feed characters
-    // - by default (FALSE), it will append a CR (#13) char to the buffer
+    // - by default (FALSE), it will append a LF (#10) char to the buffer
     // - you can set this property to TRUE, so that CR+LF (#13#10) chars will
     // be appended instead
     // - is just a wrapper around twoEndOfLineCRLF item in CustomOptions
@@ -28596,8 +28596,8 @@ begin
     exit;
   Dest.AddShort('const');
   if Comment<>'' then
-    Dest.Add(#13'  // %',[Comment]);
-  Dest.Add(#13'  %: array[0..%] of byte = (',[ConstName,Len-1]);
+    Dest.Add(#13#10'  // %',[Comment]);
+  Dest.Add(#13#10'  %: array[0..%] of byte = (',[ConstName,Len-1]);
   P := pointer(Data);
   repeat
     if len>PerLine then
@@ -28613,7 +28613,7 @@ begin
     dec(Len,line);
   until Len=0;
   Dest.CancelLastComma;
-  Dest.Add(');'#13'  %_LEN = SizeOf(%);'#13,[ConstName,ConstName]);
+  Dest.Add(');'#13#10'  %_LEN = SizeOf(%);'#13#10,[ConstName,ConstName]);
 end;
 
 function UpperCaseUnicode(const S: RawUTF8): RawUTF8;
@@ -29294,7 +29294,7 @@ asm // eax=source edx=search
         cmp     dl, 13
         ja      @1
         je      @e
-        OR      dl, dl
+        or      dl, dl
         jz      @0
         cmp     dl, 10
         jne     @1
@@ -32909,7 +32909,7 @@ begin
 end;
 
 procedure AppendCSVValues(const CSV: string; const Values: array of string;
-  var Result: string; const AppendBefore: string=#13#10);
+  var Result: string; const AppendBefore: string);
 var Caption: string;
     i, bool: integer;
     P: PChar;
@@ -38053,35 +38053,35 @@ begin
   filescount := 0;
   W := TTextWriter.CreateOwnedStream(temp);
   try
-    // header multipart
+    // header - see https://www.w3.org/Protocols/rfc1341/7_2_Multipart.html
     NewBound;
     MultiPartContentType := 'Content-Type: multipart/form-data; boundary='+bound;
     for i := 0 to len-1 do
     with MultiPart[i] do begin
       if FileName='' then
-        W.Add('--%'#13'Content-Disposition: form-data; name="%"'#13+
-          'Content-Type: %'#13#13'%'#13'--%'#13,
+        W.Add('--%'#13#10'Content-Disposition: form-data; name="%"'#13#10+
+          'Content-Type: %'#13#10#13#10'%'#10'--%'#13#10,
           [bound,Name,ContentType,Content,bound]) else begin
         // if this is the first file, create the header for files
         if filescount=0 then begin
           if i>0 then
             NewBound;
-          W.Add('Content-Disposition: form-data; name="files"'#13+
-            'Content-Type: multipart/mixed; boundary=%'#13#13,[bound]);
+          W.Add('Content-Disposition: form-data; name="files"'#13#10+
+            'Content-Type: multipart/mixed; boundary=%'#13#10#13#10,[bound]);
         end;
         inc(filescount);
-        W.Add('--%'#13'Content-Disposition: file; filename="%"'#13+
-          'Content-Type: %'#13,[bound,FileName,ContentType]);
+        W.Add('--%'#13#10'Content-Disposition: file; filename="%"'#13#10+
+          'Content-Type: %'#13#10,[bound,FileName,ContentType]);
         if Encoding<>'' then
-          W.Add('Content-Transfer-Encoding: %'#13,[Encoding]);
+          W.Add('Content-Transfer-Encoding: %'#13#10,[Encoding]);
         W.AddCR;
         W.AddString(MultiPart[i].Content);
-        W.Add(#13'--%'#13,[bound]);
+        W.Add(#13#10'--%'#13#10,[bound]);
       end;
     end;
     // footer multipart
     for i := boundcount-1 downto 0 do
-      W.Add('--%--'#13, [boundaries[i]]);
+      W.Add('--%--'#13#10, [boundaries[i]]);
     W.SetText(MultiPartContent);
     result := True;
   finally
@@ -51698,7 +51698,7 @@ begin
     PWord(B+1)^ := 13+10 shl 8; // CR + LF
     inc(B,2);
   end else begin
-    B[1] := #13; // CR
+    B[1] := #10; // LF
     inc(B);
   end;
   if fEchos<>nil then begin
@@ -52615,7 +52615,6 @@ begin // we put const char > #127 as #??? -> asiatic MBCS codepage OK
     repeat
       case ord(F^) of
       0: exit;
-      13: AddCR;
       ord('%'): break;
       {$ifdef OLDTEXTWRITERFORMAT}
       164: AddCR; // currency sign -> add CR,LF
@@ -53973,7 +53972,9 @@ end;
 
 procedure TTextWriter.SetEndOfLineCRLF(aEndOfLineCRLF: boolean);
 begin
-  Include(fCustomOptions,twoEndOfLineCRLF);
+  if aEndOfLineCRLF then
+    include(fCustomOptions,twoEndOfLineCRLF) else
+    exclude(fCustomOptions,twoEndOfLineCRLF);
 end;
 
 function TTextWriter.GetLength: cardinal;
@@ -62640,10 +62641,10 @@ begin
   W := TTextWriter.Create(Dest,@temp,SizeOf(temp));
   try
     if (fMap.Size>0) and (fMap.Buffer[fMap.Size-1]>=' ') then
-      W.Add(#13);
+      W.Add(#10);
     for i := 0 to fAppendedLinesCount-1 do begin
       W.AddString(fAppendedLines[i]);
-      W.Add(#13);
+      W.Add(#10);
     end;
     W.FlushFinal;
   finally

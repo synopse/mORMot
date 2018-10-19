@@ -29052,35 +29052,35 @@ begin
     if WithSection then
       // new TObject.ClassName is UnicodeString (Delphi 20009) -> inline code with
       // vmtClassName = UTF-8 encoded text stored in a shortstring = -44
-      Add(#13'[%]'#13,[ClassNameShort(Value)^]);
+      Add(#13#10'[%]'#13#10,[ClassNameShort(Value)^]);
     for i := 1 to InternalClassPropInfo(Value.ClassType,P) do begin
       case P^.PropType^.Kind of
         tkInt64{$ifdef FPC}, tkQWord{$endif}:
-          Add('%%=%'#13,[SubCompName,P^.Name,P^.GetInt64Prop(Value)]);
+          Add('%%=%'#13#10,[SubCompName,P^.Name,P^.GetInt64Prop(Value)]);
         {$ifdef FPC}tkBool,{$endif}
         tkEnumeration, tkInteger, tkSet: begin
           V := P^.GetOrdProp(Value);
           if V<>P^.Default then
-            Add('%%=%'#13,[SubCompName,P^.Name,V]);
+            Add('%%=%'#13#10,[SubCompName,P^.Name,V]);
         end;
         {$ifdef FPC}tkAString,{$endif} tkLString, tkWString
         {$ifdef HASVARUSTRING},tkUString{$endif}: begin
           P^.GetLongStrValue(Value,tmp);
-          Add('%%=%'#13,[SubCompName,P^.Name,tmp]);
+          Add('%%=%'#13#10,[SubCompName,P^.Name,tmp]);
         end;
         tkFloat: begin
           VT[0] := AnsiChar(ExtendedToString(VT,P^.GetFloatProp(Value),DOUBLE_PRECISION));
-          Add('%%=%'#13,[SubCompName,P^.Name,VT]);
+          Add('%%=%'#13#10,[SubCompName,P^.Name,VT]);
         end;
         tkDynArray: begin
-          Add('%%=%'#13,[SubCompName,P^.Name]);
+          Add('%%=%'#13#10,[SubCompName,P^.Name]);
           P^.GetDynArray(Value,arr);
           AddDynArrayJSON(arr);
-          Add(#13);
+          AddCR;
         end;
         {$ifdef PUBLISHRECORD}
         tkRecord{$ifdef FPC},tkObject{$endif}:
-          Add('%%=%'#13,[SubCompName,P^.Name,BinToBase64WithMagic(
+          Add('%%=%'#13#10,[SubCompName,P^.Name,BinToBase64WithMagic(
             RecordSave(P^.GetFieldAddr(Value)^,P^.PropType^))]);
         {$endif}
         tkClass: begin
@@ -29091,7 +29091,7 @@ begin
         {$ifndef NOVARIANTS}
         tkVariant: begin // stored as JSON, e.g. '1.234' or '"text"'
           P^.GetVariantProp(Value,VV);
-          Add('%%=%'#13,[SubCompName,P^.Name,VariantSaveJSON(VV)]);
+          Add('%%=%'#13#10,[SubCompName,P^.Name,VariantSaveJSON(VV)]);
         end;
         {$endif}
       end; // tkString (shortstring) and tkInterface is not handled
