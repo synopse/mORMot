@@ -4498,7 +4498,7 @@ var tz: TSynTimeZone;
     i,bias: integer;
     hdl,reload: boolean;
     buf: RawByteString;
-    dt {$ifdef MSWINDOWS},local{$endif}: TDateTime;
+    dt {$if defined(MSWINDOWS) or defined(FPC)},local{$endif}: TDateTime;
 procedure testBias(year,expected: integer);
 begin
   check(tz.GetBiasForDateTime(EncodeDate(year,10,30),'1',bias,hdl));
