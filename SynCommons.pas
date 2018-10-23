@@ -35506,7 +35506,9 @@ begin // use 'YYMMDDHHMMSS' format
   end;
   DecodeDate(DateTime,Y,M,D);
   if Y > 1999 then
-    dec(Y,2000) else
+    if Y < 2100 then
+      dec(Y,2000) else
+      Y := 99 else
     Y := 0;
   DecodeTime(DateTime,HH,MM,SS,MS);
   {$ifndef CPUX86}tab := @TwoDigitLookupW;{$endif}
