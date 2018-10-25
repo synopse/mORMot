@@ -44239,9 +44239,9 @@ var EndOfObject: AnsiChar;
     for i := 0 to high(RunTableTransactions) do
       if RunTableTransactions[i]<>nil then begin
         RunTableTransactions[i].Commit(CONST_AUTHENTICATION_NOT_USED,true);
-        RunTableTransactions[i] := nil;
         if RunTableTransactions[i]=Self then
           RunMainTransaction := false;
+        RunTableTransactions[i] := nil; // to acquire and begin a new transaction
       end;
     RowCountForCurrentTransaction := 0;
   end;
