@@ -66,7 +66,7 @@ unit SynPdf;
 
   ***** END LICENSE BLOCK *****
 
-  Sponsors:               https://synopse.info/fossil/wiki?name=HelpDonate
+  Sponsors: https://synopse.info/fossil/wiki?name=HelpDonate
   Ongoing development and maintenance of the SynPDF library was sponsored
   in part by:
    http://www.helpndoc.com
@@ -2637,7 +2637,8 @@ type
     // it is in fact a TMetaFileCanvas instance from fVCLCurrentMetaFile
     fVCLCurrentCanvas: TCanvas;
     fVCLCurrentMetaFile: TMetaFile;
-    // allow to create the meta file and its canvas only if necessary
+    // allow to create the meta file and its canvas only if necessary, and
+    // compress the page content using SynLZ to reduce memory usage
     procedure CreateVCLCanvas;
     procedure SetVCLCurrentMetaFile;
     procedure FlushVCLCanvas;
@@ -8991,8 +8992,8 @@ begin
   FCanvas.FContents.FSaveAtTheEnd := true; // as expected in SaveToStream() below
 end;
 
-constructor TPdfDocumentGDI.Create(AUseOutlines: Boolean=false; ACodePage: integer=0;
-  APDFA1: boolean=false {$ifdef USE_PDFSECURITY}; AEncryption: TPdfEncryption=nil{$endif});
+constructor TPdfDocumentGDI.Create(AUseOutlines: Boolean; ACodePage: integer;
+  APDFA1: boolean{$ifdef USE_PDFSECURITY}; AEncryption: TPdfEncryption{$endif});
 begin
   inherited;
   fTPdfPageClass := TPdfPageGdi;
@@ -9021,7 +9022,7 @@ begin
     Int64(result) := 0;
 end;
 
-procedure TPdfDocumentGDI.SaveToStream(AStream: TStream; ForceModDate: TDateTime=0);
+procedure TPdfDocumentGDI.SaveToStream(AStream: TStream; ForceModDate: TDateTime);
 var i: integer;
     P: TPdfPageGDI;
 begin
@@ -9083,8 +9084,8 @@ begin
   fVCLCurrentMetaFile.Width  := fVCLCanvasSize.cx;
   fVCLCurrentMetaFile.Height := fVCLCanvasSize.cy;
   if fVCLMetaFileCompressed<>'' then begin
-    tmp := fVCLMetaFileCompressed;
-    CompressSynLZ(tmp,false);
+    SetLength(tmp,SynLZdecompressdestlen(pointer(fVCLMetaFileCompressed)));
+    SynLZdecompress1(Pointer(fVCLMetaFileCompressed),length(fVCLMetaFileCompressed),pointer(tmp));
     Stream := TRawByteStringStream.Create(tmp);
     try
       fVCLCurrentMetaFile.LoadFromStream(Stream);
@@ -9102,6 +9103,7 @@ end;
 
 procedure TPdfPageGDI.FlushVCLCanvas;
 var Stream: TRawByteStringStream;
+    len: integer;
 begin
   if (self=nil) or (fVCLCurrentCanvas=nil) then
     exit;
@@ -9110,8 +9112,10 @@ begin
   Stream := TRawByteStringStream.Create;
   try
     fVCLCurrentMetaFile.SaveToStream(Stream);
-    fVCLMetaFileCompressed := Stream.DataString;
-    CompressSynLZ(fVCLMetaFileCompressed,true);
+    len := Length(Stream.DataString);
+    SetLength(fVCLMetaFileCompressed,SynLZcompressdestlen(len));
+    SetLength(fVCLMetaFileCompressed,
+      SynLZcompress1(pointer(Stream.DataString),len,pointer(fVCLMetaFileCompressed)));
   finally
     Stream.Free;
   end;
@@ -9251,10 +9255,8 @@ function EnumEMFFunc(DC: HDC; var Table: THandleTable; R: PEnhMetaRecord;
 var i: integer;
     InitTransX: XForm;
     polytypes: PByteArray;
-
 begin
   result := true;
-
   with E.DC[E.nDC] do
   case R^.iType of
   EMR_HEADER: begin
