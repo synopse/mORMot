@@ -1134,7 +1134,7 @@ begin
         end;
         OffsEnd := D.Position;
         D.Position := OffsHead+sizeof(fMagic);
-        D.Write(fhr.fileInfo,sizeof(fhr.fileInfo));
+        D.WriteBuffer(fhr.fileInfo,sizeof(fhr.fileInfo));
         D.Position := OffsEnd;
       end;
       inc(Count);
@@ -1222,7 +1222,7 @@ end;
 
 procedure TZipWriteToStream.InternalWrite(const buf; len: cardinal);
 begin
-  fDest.Write(buf,len);
+  fDest.WriteBuffer(buf,len);
 end;
 
 
@@ -1540,7 +1540,7 @@ begin
   result := false;
   case aInfo.zZipMethod of
   Z_STORED: begin
-    aDest.Write(Entry[aIndex].data^,aInfo.zfullsize);
+    aDest.WriteBuffer(Entry[aIndex].data^,aInfo.zfullsize);
     crc := SynZip.crc32(0,Entry[aIndex].data,aInfo.zfullSize);
   end;
   Z_DEFLATED:
@@ -5198,7 +5198,7 @@ var strm: TZStream;
   begin
     Count := TempBufSize - integer(strm.avail_out);
     if Count=0 then exit;
-    tmp.Write(temp.buf^,Count);
+    tmp.WriteBuffer(temp.buf^,Count);
     strm.next_out := temp.buf;
     strm.avail_out := TempBufSize;
   end;
@@ -5257,7 +5257,7 @@ var strm: TZStream;
     if CheckCRC<>nil then
       CheckCRC^ := SynZip.crc32(CheckCRC^,temp.buf,Count);
     if tmp<>nil then
-      tmp.Write(temp.buf^,Count);
+      tmp.WriteBuffer(temp.buf^,Count);
     strm.next_out := temp.buf;
     strm.avail_out := TempBufSize;
   end;
@@ -5471,7 +5471,7 @@ begin
   fDestStream := outStream;
   fGZFormat := (Format=szcfGZ);
   if fGZFormat then
-    fDestStream.Write(GZHEAD,GZHEAD_SIZE);
+    fDestStream.WriteBuffer(GZHEAD,GZHEAD_SIZE);
   StreamInit(FStrm);
   FStrm.next_out := @FBufferOut;
   FStrm.avail_out := SizeOf(FBufferOut);
@@ -5497,8 +5497,8 @@ begin
     deflateEnd(FStrm);
   end;
   if fGZFormat then begin
-    fDestStream.Write(fCRC,4);
-    fDestStream.Write(FStrm.total_in,4);
+    fDestStream.WriteBuffer(fCRC,4);
+    fDestStream.WriteBuffer(FStrm.total_in,4);
   end;
   inherited;
 end;
@@ -5520,7 +5520,7 @@ begin
     exit;
   if FStrm.avail_out < SizeOf(FBufferOut) then begin
     result := SizeOf(FBufferOut) - FStrm.avail_out;
-    FDestStream.Write(FBufferOut, result);
+    FDestStream.WriteBuffer(FBufferOut, result);
     FStrm.next_out := @FBufferOut;
     FStrm.avail_out := SizeOf(FBufferOut);
   end;

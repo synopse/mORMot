@@ -277,7 +277,7 @@ var strm: TZStream;
   begin
     Count := tmpsize - integer(strm.avail_out);
     if Count=0 then exit;
-    aStream.Write(tmpbuf^,Count);
+    aStream.WriteBuffer(tmpbuf^,Count);
     strm.next_out := tmpbuf;
     strm.avail_out := tmpsize;
   end;
@@ -343,7 +343,7 @@ var strm: TZStream;
     if checkCRC<>nil then
       checkCRC^ := crc32(checkCRC^,tmpbuf,Count);
     if aStream<>nil then
-      aStream.Write(tmpbuf^,Count);
+      aStream.WriteBuffer(tmpbuf^,Count);
     strm.next_out := tmpbuf;
     strm.avail_out := tmpsize;
   end;

@@ -8603,7 +8603,7 @@ begin
     result := inherited FetchAllToBinary(Dest,MaxRowCount,DataRowPosition);
     exit;
   end;
-  Dest.Write(pointer(fDataInternalCopy)^,Length(fDataInternalCopy));
+  Dest.WriteBuffer(pointer(fDataInternalCopy)^,Length(fDataInternalCopy));
   if DataRowPosition<>nil then
     // TSQLDBProxyStatementRandomAccess.Create() will recompute it fast enough
     DataRowPosition^ := nil;

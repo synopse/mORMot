@@ -47665,11 +47665,12 @@ begin
     if PosiEnd>MemStream.Size then
       MemStream.Size := PosiEnd;
     if SaveTo(PAnsiChar(MemStream.Memory)+Posi)-MemStream.Memory<>PosiEnd then
-      EStreamError.Create('TDynArray.SaveToStream');
+      raise EStreamError.Create('TDynArray.SaveToStream: SaveTo');
     MemStream.Seek(PosiEnd,soBeginning);
   end else begin
     tmp := SaveTo;
-    Stream.Write(pointer(tmp)^,length(tmp));
+    if Stream.Write(pointer(tmp)^,length(tmp))<>length(tmp) then
+      raise EStreamError.Create('TDynArray.SaveToStream: Write error');
   end;
 end;
 
@@ -52742,7 +52743,9 @@ begin
     dec(BinBytes,ChunkBytes);
     if BinBytes=0 then break;
     // Flush writes B-buf+1 -> special one below:
-    inc(fTotalFileSize,fStream.Write(fTempBuf^,B-fTempBuf));
+    ChunkBytes := B-fTempBuf;
+    fStream.WriteBuffer(fTempBuf^,ChunkBytes);
+    inc(fTotalFileSize,ChunkBytes);
     B := fTempBuf;
   until false;
   dec(B); // allow CancelLastChar
@@ -53058,7 +53061,9 @@ begin
       inc(PByte(P),i);
       dec(Len,i);
       // FlushInc writes B-buf+1 -> special one below:
-      inc(fTotalFileSize,fStream.Write(fTempBuf^,B-fTempBuf));
+      i := B-fTempBuf;
+      fStream.WriteBuffer(fTempBuf^,i);
+      inc(fTotalFileSize,i);
       B := fTempBuf;
     until false;
     dec(B); // allow CancelLastChar
@@ -53949,12 +53954,15 @@ begin
 end;
 
 procedure TTextWriter.FlushToStream;
+var i: PtrInt;
 begin
   if fEchos<>nil then begin
     EchoFlush;
     fEchoStart := 0;
   end;
-  inc(fTotalFileSize,fStream.Write(fTempBuf^,B-fTempBuf+1));
+  i := B-fTempBuf+1;
+  fStream.WriteBuffer(fTempBuf^,i);
+  inc(fTotalFileSize,i);
   if not (twoFlushToStreamNoAutoResize in fCustomOptions) and
      not (twoBufferIsExternal in fCustomOptions) and
      (fTempBufSize<49152) and
@@ -53996,7 +54004,7 @@ begin
   CancelAll;
   if (fInitialStreamPosition=0) and fStream.InheritsFrom(TRawByteStringStream) then
     TRawByteStringStream(fStream).fDataString := text else
-    fStream.Write(pointer(text)^,length(text));
+    fStream.WriteBuffer(pointer(text)^,length(text));
   fTotalFileSize := fInitialStreamPosition+cardinal(length(text));
 end;
 
@@ -54076,8 +54084,10 @@ begin
         main := Base64EncodeMain(PAnsiChar(fTempBuf),P,n);
         n := main*4;
         if n<cardinal(fTempBufSize)-4 then
-          inc(B,n) else
-          inc(fTotalFileSize,fStream.Write(fTempBuf^,n));
+          inc(B,n) else begin
+          fStream.WriteBuffer(fTempBuf^,n);
+          inc(fTotalFileSize,n);
+        end;
         n := main*3;
         inc(P,n);
         dec(Len,n);
@@ -59915,7 +59925,7 @@ end;
 function TFileBufferWriter.Flush: Int64;
 begin
   if fPos>0 then begin
-    fStream.Write(fBuffer^,fPos);
+    fStream.WriteBuffer(fBuffer^,fPos);
     fPos := 0;
   end;
   result := fTotalWritten;
@@ -59938,11 +59948,11 @@ begin
   inc(fTotalWritten,DataLen);
   if fPos+DataLen>fBufLen then begin
     if fPos>0 then begin
-      fStream.Write(fBuffer^,fPos);
+      fStream.WriteBuffer(fBuffer^,fPos);
       fPos := 0;
     end;
     if DataLen>fBufLen then begin
-      fStream.Write(Data^,DataLen);
+      fStream.WriteBuffer(Data^,DataLen);
       exit;
     end;
   end;
@@ -59959,7 +59969,7 @@ begin
       len := fBufLen else
       len := Count;
     if fPos+len>fBufLen then begin
-      fStream.Write(fBuffer^,fPos);
+      fStream.WriteBuffer(fBuffer^,fPos);
       fPos := 0;
     end;
     FillcharFast(fBuffer^[fPos],len,Data);
@@ -59971,7 +59981,7 @@ end;
 procedure TFileBufferWriter.Write1(Data: byte);
 begin
   if fPos+1>fBufLen then begin
-    fStream.Write(fBuffer^,fPos);
+    fStream.WriteBuffer(fBuffer^,fPos);
     fPos := 0;
   end;
   fBuffer^[fPos] := Data;
@@ -59982,7 +59992,7 @@ end;
 procedure TFileBufferWriter.Write2(Data: word);
 begin
   if fPos+2>fBufLen then begin
-    fStream.Write(fBuffer^,fPos);
+    fStream.WriteBuffer(fBuffer^,fPos);
     fPos := 0;
   end;
   PWord(@fBuffer^[fPos])^ := Data;
@@ -59993,7 +60003,7 @@ end;
 procedure TFileBufferWriter.Write4(Data: integer);
 begin
   if fPos+SizeOf(integer)>fBufLen then begin
-    fStream.Write(fBuffer^,fPos);
+    fStream.WriteBuffer(fBuffer^,fPos);
     fPos := 0;
   end;
   PInteger(@fBuffer^[fPos])^ := Data;
@@ -60009,7 +60019,7 @@ end;
 procedure TFileBufferWriter.Write8(const Data8Bytes);
 begin
   if fPos+SizeOf(Int64)>fBufLen then begin
-    fStream.Write(fBuffer^,fPos);
+    fStream.WriteBuffer(fBuffer^,fPos);
     fPos := 0;
   end;
   PInt64(@fBuffer^[fPos])^ := Int64(Data8Bytes);
@@ -60051,7 +60061,7 @@ var len: integer;
 begin
   len := DA.SaveToLength;
   if (len<=fBufLen) and (fPos+len>fBufLen) then begin
-    fStream.Write(fBuffer^,fPos);
+    fStream.WriteBuffer(fBuffer^,fPos);
     fPos := 0;
   end;
   if fPos+len>fBufLen then begin
@@ -60088,7 +60098,7 @@ begin
     raise ESynException.CreateUTF8('%.Write(VType=%) VariantSaveLength=0',
       [self,TVarData(Value).VType]);
   if fPos+len>fBufLen then begin
-    fStream.Write(fBuffer^,fPos);
+    fStream.WriteBuffer(fBuffer^,fPos);
     fPos := 0;
     if len>fBufLen then begin
       GetMem(tmp,len);
@@ -60103,7 +60113,7 @@ begin
   inc(fTotalWritten,len);
   if tmp=nil then
     inc(fPos,len) else begin
-    fStream.Write(tmp^,len);
+    fStream.WriteBuffer(tmp^,len);
     FreeMem(tmp);
   end;
 end;
@@ -60127,7 +60137,7 @@ begin
   while Len>0 do begin
     Dest := pointer(fBuffer);
     if fPos+Len>fBufLen then begin
-      fStream.Write(fBuffer^,fPos);
+      fStream.WriteBuffer(fBuffer^,fPos);
       fPos := 0;
     end else
       inc(Dest,fPos);
@@ -60209,7 +60219,7 @@ begin
       if ValuesCount=0 then
         break;
     end;
-    fStream.Write(fBuffer^,fPos);
+    fStream.WriteBuffer(fBuffer^,fPos);
     fPos := 0;
   until false;
 end;
@@ -60256,7 +60266,7 @@ procedure TFileBufferWriter.WriteVarUInt32(Value: PtrUInt);
 var pos: integer;
 begin
   if fPos+16>fBufLen then begin
-    fStream.Write(fBuffer^,fPos);
+    fStream.WriteBuffer(fBuffer^,fPos);
     fPos := 0;
   end;
   pos := fPos;
@@ -60268,7 +60278,7 @@ procedure TFileBufferWriter.WriteVarInt64(Value: Int64);
 var pos: integer;
 begin
   if fPos+48>fBufLen then begin
-    fStream.Write(fBuffer^,fPos);
+    fStream.WriteBuffer(fBuffer^,fPos);
     fPos := 0;
   end;
   pos := fPos;
@@ -60280,7 +60290,7 @@ procedure TFileBufferWriter.WriteVarUInt64(Value: QWord);
 var pos: integer;
 begin
   if fPos+48>fBufLen then begin
-    fStream.Write(fBuffer^,fPos);
+    fStream.WriteBuffer(fBuffer^,fPos);
     fPos := 0;
   end;
   pos := fPos;
@@ -60470,7 +60480,7 @@ begin
       if ValuesCount=0 then
         break;
     end;
-    fStream.Write(fBuffer^,fPos);
+    fStream.WriteBuffer(fBuffer^,fPos);
     fPos := 0;
   until false;
 end;
@@ -60548,7 +60558,7 @@ begin
       if ValuesCount=0 then
         break;
     end;
-    fStream.Write(fBuffer^,fPos);
+    fStream.WriteBuffer(fBuffer^,fPos);
     fPos := 0;
   until false;
 end;
@@ -61838,11 +61848,11 @@ begin
       D := tmp.buf;
     Head.CompressedSize := result;
     Head.HashCompressed := Hash32(D,result);
-    Dest.Write(Head,SizeOf(Head));
-    Dest.Write(D^,Head.CompressedSize);
+    Dest.WriteBuffer(Head,SizeOf(Head));
+    Dest.WriteBuffer(D^,Head.CompressedSize);
     Trailer.HeaderRelativeOffset := result+(SizeOf(Head)+SizeOf(Trailer));
     Trailer.Magic := Magic;
-    Dest.Write(Trailer,SizeOf(Trailer));
+    Dest.WriteBuffer(Trailer,SizeOf(Trailer));
     result := Head.CompressedSize+(SizeOf(Head)+SizeOf(Trailer));
   finally
     tmp.Done;
@@ -62636,9 +62646,9 @@ var i: integer;
 begin
   i := length(Header);
   if i>0 then
-    Dest.Write(pointer(Header)^,i);
+    Dest.WriteBuffer(pointer(Header)^,i);
   if fMap.Size>0 then
-    Dest.Write(fMap.Buffer^,fMap.Size);
+    Dest.WriteBuffer(fMap.Buffer^,fMap.Size);
   if fAppendedLinesCount=0 then
     exit;
   W := TTextWriter.Create(Dest,@temp,SizeOf(temp));

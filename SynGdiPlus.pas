@@ -1531,7 +1531,7 @@ begin
   try
     fStream.Read(tmp,Len,nil);
     fStream := nil; // release ASAP
-    Stream.Write(tmp^,Len);
+    Stream.WriteBuffer(tmp^,Len);
   finally
     Freemem(tmp);
   end;
@@ -1546,7 +1546,7 @@ begin
   if (fGlobal<>0) and not fAssignedFromBitmap then begin
     // e.g. for a true .jpg file -> just save as it was loaded :)
     P := GlobalLock(fGlobal);
-    Stream.Write(P^,fGlobalLen);
+    Stream.WriteBuffer(P^,fGlobalLen);
     GlobalUnLock(fGlobal);
   end else begin
     // should come from a bitmap -> save in the expected format

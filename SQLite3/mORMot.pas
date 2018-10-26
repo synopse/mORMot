@@ -36815,7 +36815,8 @@ begin
   result := RetrieveBlob(Table,aID,BlobFieldName,BlobData);
   if not result or (BlobData='') then
     exit;
-  BlobStream.Write(pointer(BlobData)^,length(BlobData));
+  if BlobStream.Write(pointer(BlobData)^,length(BlobData))<>length(BlobData) then
+    result := false;
   BlobStream.Seek(0,soFromBeginning); // rewind
 end;
 
@@ -48143,19 +48144,19 @@ begin
         SaveToBinary(S);
       end;
     end else begin
-      S.Write(CHARS[0],1);
+      S.WriteBuffer(CHARS[0],1);
       for t := 0 to fStaticDataCount-1 do
       with TSQLRestStorageInMemory(fStaticData[t]) do begin
-        S.Write(CHARS[1],2);
+        S.WriteBuffer(CHARS[1],2);
         with fStoredClassRecordProps do
-          S.Write(pointer(SQLTableName)^,length(SQLTableName));
-        S.Write(CHARS[2],2);
+          S.WriteBuffer(pointer(SQLTableName)^,length(SQLTableName));
+        S.WriteBuffer(CHARS[2],2);
         SaveToJSON(S,true);
-        S.Write(CHARS[5],1);
+        S.WriteBuffer(CHARS[5],1);
         if t<integer(fStaticDataCount-1) then
-          S.Write(CHARS[4],1);
+          S.WriteBuffer(CHARS[4],1);
       end;
-      S.Write(CHARS[6],1);
+      S.WriteBuffer(CHARS[6],1);
     end;
   finally
     S.Free;
@@ -48598,7 +48599,7 @@ begin
     exit;
   end;
   fLogTableStorage.Seek(0,soFromBeginning);
-  fLogTableStorage.Write(Pointer(aJSON)^,L-2);
+  fLogTableStorage.WriteBuffer(Pointer(aJSON)^,L-2);
 end;
 
 procedure TSQLRecordLog.Log(OneLog: TSQLRecord);

@@ -9590,7 +9590,7 @@ begin
   if (KeySize>4) and not Crypt.DoInit(Key,KeySize,Encrypt) then
     KeySize := 4; // if error in KeySize, use default fast XorOffset()
   if KeySize=0 then begin // no Crypt -> direct write to dest Stream
-    Stream.Write(buffer^,Len);
+    Stream.WriteBuffer(buffer^,Len);
     result := true;
     exit;
   end;
@@ -9610,7 +9610,7 @@ begin
         inc(i,b);
       end else
         Crypt.DoBlocks(buffer,buf,b shr AESBlockShift,Encrypt);
-      Stream.Write(buf^,b);
+      Stream.WriteBuffer(buf^,b);
       inc(PByte(buffer),b);
       dec(n,b);
     end;
@@ -9618,7 +9618,7 @@ begin
     if last>0 then begin // crypt/uncrypt (Xor) last 0..15 bytes
       MoveFast(buffer^,buf^,Last);
       XorOffset(pointer(buf),Len-Last,Last);
-      Stream.Write(buf^,Last);
+      Stream.WriteBuffer(buf^,Last);
     end;
     result := true;
   finally
@@ -9660,7 +9660,7 @@ end;
 procedure Write(Tmp: pointer; ByteCount: cardinal);
 begin
   if pOut=nil then
-    OutStream.Write(Tmp^,ByteCount) else begin
+    OutStream.WriteBuffer(Tmp^,ByteCount) else begin
     MoveFast(Tmp^,pOut^,ByteCount);
     inc(PByte(pOut),ByteCount);
   end;
@@ -10054,7 +10054,7 @@ begin
   if BufCount=0 then exit;
   assert((BufCount<sizeof(TAESBlock)) and AES.Initialized and not NoCrypt);
   XorOffset(@Buf,DestSize,BufCount);
-  Dest.Write(Buf,BufCount);
+  Dest.WriteBuffer(Buf,BufCount);
   BufCount := 0;
 end;
 
@@ -10088,7 +10088,7 @@ begin
       if BufCount<sizeof(TAESBlock) then
         exit;
       AES.Encrypt(Buf);
-      Dest.Write(Buf,sizeof(TAESBlock));
+      Dest.WriteBuffer(Buf,sizeof(TAESBlock));
       inc(DestSize,sizeof(TAESBlock));
       Dec(Count,Len);
       AES.DoBlocks(@B[Len],@B[Len],cardinal(Count) shr AESBlockShift,true);
@@ -10100,7 +10100,7 @@ begin
       MoveFast(B[Count],Buf[0],BufCount);
     end;
   end;
-  Dest.Write(Buffer,Count);
+  Dest.WriteBuffer(Buffer,Count);
   inc(DestSize,Count);
 end;
 

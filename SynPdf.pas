@@ -4625,7 +4625,7 @@ begin
     if BEnd-B<=L then begin
       Save;
       inc(fDestStreamPosition,L);
-      fDestStream.Write(pointer(Text)^,L);
+      fDestStream.WriteBuffer(pointer(Text)^,L);
     end else begin
       MoveFast(pointer(Text)^,B^,L);
       inc(B,L);
@@ -4639,7 +4639,7 @@ begin
   if BEnd-B<=Len then begin
     Save;
     inc(fDestStreamPosition,Len);
-    fDestStream.Write(Text^,Len);
+    fDestStream.WriteBuffer(Text^,Len);
   end else begin
     MoveFast(Text^,B^,Len);
     inc(B,Len);
@@ -5331,7 +5331,7 @@ var L: integer;
 begin
   L := B-@Tmp;
   inc(fDestStreamPosition,L);
-  fDestStream.Write(Tmp,L);
+  fDestStream.WriteBuffer(Tmp,L);
   B := @Tmp;
 end;
 

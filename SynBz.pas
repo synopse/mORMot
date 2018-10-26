@@ -483,7 +483,7 @@ end;
 procedure TBZCompressor.WriteDest(const Buffer; Count: Integer);
 begin
   inc(DestLen,Count);
-  FDestStream.Write(Buffer, Count);
+  FDestStream.WriteBuffer(Buffer, Count);
 end;
 
 { TBZDecompressor }
