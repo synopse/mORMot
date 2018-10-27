@@ -16300,14 +16300,16 @@ type
   /// value object able to gather information about a system drive
   TSynMonitorDisk = class(TSynPersistent)
   protected
-    fName: RawUTF8;
-    fVolumeName: RawUTF8;
+    fName: TFileName;
+    {$ifdef MSWINDOWS}
+    fVolumeName: TFileName;
+    {$endif}
     fAvailableSize: TSynMonitorOneSize;
     fFreeSize: TSynMonitorOneSize;
     fTotalSize: TSynMonitorOneSize;
     fLastDiskInfoRetrievedTix: cardinal;
     procedure RetrieveDiskInfo; virtual;
-    function GetName: RawUTF8;
+    function GetName: TFileName;
     function GetAvailable: TSynMonitorOneSize;
     function GetFree: TSynMonitorOneSize;
     function GetTotal: TSynMonitorOneSize;
@@ -16321,9 +16323,11 @@ type
     class function FreeAsText: RawUTF8;
   published
     /// the disk name
-    property Name: RawUTF8 read GetName;
-    /// the volume name
-    property VolumeName: RawUTF8 read fVolumeName write fVolumeName;
+    property Name: TFileName read GetName;
+    {$ifdef MSWINDOWS}
+    /// the volume name (only available on Windows)
+    property VolumeName: TFileName read fVolumeName write fVolumeName;
+    {$endif MSWINDOWS}
     /// space currently available on this disk for the current user
     // - may be less then FreeSize, if user quotas are specified
     property AvailableSize: TSynMonitorOneSize read GetAvailable;
@@ -16332,6 +16336,12 @@ type
     /// total space
     property TotalSize: TSynMonitorOneSize read GetTotal;
   end;
+
+/// retrieve low-level information about a given disk partition
+// - as used by TSynMonitorDisk
+procedure GetDiskInfo(var aDriveFolderOrFile: TFileName;
+  out aAvailableBytes, aFreeBytes, aTotalBytes: QWord
+  {$ifdef MSWINDOWS}; aVolumeName: PFileName = nil{$endif});
 
 
 { ******************* cross-cutting classes and functions ***************** }
@@ -57135,7 +57145,7 @@ begin
   inherited;
 end;
 
-function TSynMonitorDisk.GetName: RawUTF8;
+function TSynMonitorDisk.GetName: TFileName;
 begin
   RetrieveDiskInfo;
   result := fName;
@@ -57160,72 +57170,77 @@ begin
 end;
 
 class function TSynMonitorDisk.FreeAsText: RawUTF8;
+var name: TFileName;
+    avail,free,total: QWord;
 begin
-  with TSynMonitorDisk.Create do
-  try
-    FormatUTF8('% % / %',[Name,FreeSize.Text,TotalSize.Text],result);
-  finally
-    Free;
-  end;
+  GetDiskInfo(name,avail,free,total);
+  FormatUTF8('% % / %',[name, KB(free),KB(total)],result);
 end;
 
 {$ifdef MSWINDOWS}
 function GetDiskFreeSpaceExA(lpDirectoryName: PAnsiChar;
   var lpFreeBytesAvailableToCaller, lpTotalNumberOfBytes,
-  lpTotalNumberOfFreeBytes: QWord): LongBool; stdcall; external kernel32;
+      lpTotalNumberOfFreeBytes: QWord): LongBool; stdcall; external kernel32;
+function GetDiskFreeSpaceExW(lpDirectoryName: PWideChar;
+  var lpFreeBytesAvailableToCaller, lpTotalNumberOfBytes,
+      lpTotalNumberOfFreeBytes: QWord): LongBool; stdcall; external kernel32;
 {$endif}
 
-procedure TSynMonitorDisk.RetrieveDiskInfo;
-  procedure RetrieveInfo;
-  {$ifdef MSWINDOWS}
-  var tmp: array[byte] of AnsiChar;
-      dummy,flags: DWORD;
-      dn: RawUTF8;
-  begin
-    if fName='' then
-      fName := UpperCase(StringToUTF8(ExtractFileDrive(ExeVersion.ProgramFilePath)));
-    dn := fName;
-    if (dn<>'') and (dn[2]=':') and (dn[3]=#0) then
-      dn := dn+'\';
-    if fVolumeName='' then begin
-      tmp[0] := #0;
-      GetVolumeInformationA(pointer(dn),tmp,SizeOf(tmp),nil,dummy,flags,nil,0);
-      SetString(fVolumeName,PAnsiChar(@tmp),StrLen(@tmp));
-    end;
-    GetDiskFreeSpaceExA(pointer(dn),PQWord(@fAvailableSize.fBytes)^,
-      PQWord(@fTotalSize.fBytes)^,PQWord(@fFreeSize.fBytes)^);
-  {$else}
-  {$ifdef KYLIX3}
-  var fs: TStatFs64;
-      h: THandle;
-  begin
-    if fName='' then
-      fName := '.';
-    h := FileOpen(fName,fmShareDenyNone);
-    fstatfs64(h,fs);
-    FileClose(h);
-    fAvailableSize.fBytes := fs.f_bavail*fs.f_bsize;
-    fFreeSize.fBytes := fAvailableSize.fBytes;
-    fTotalSize.fBytes := fs.f_blocks*fs.f_bsize;
-  {$endif}
-  {$ifdef FPC}
-  var fs: tstatfs;
-  begin
-    if fName='' then
-      fName := '.';
-    fpStatFS(fName,@fs);
-    fAvailableSize.fBytes := QWord(fs.bavail)*QWord(fs.bsize);
-    fFreeSize.fBytes := fAvailableSize.fBytes;
-    fTotalSize.fBytes := QWord(fs.blocks)*QWord(fs.bsize);
-  {$endif}
-  {$endif}
+procedure GetDiskInfo(var aDriveFolderOrFile: TFileName;
+  out aAvailableBytes, aFreeBytes, aTotalBytes: QWord
+  {$ifdef MSWINDOWS}; aVolumeName: PFileName = nil{$endif});
+{$ifdef MSWINDOWS}
+var tmp: array[0..MAX_PATH-1] of Char;
+    dummy,flags: DWORD;
+    dn: TFileName;
+begin
+  if aDriveFolderOrFile='' then
+    aDriveFolderOrFile := SysUtils.UpperCase(ExtractFileDrive(ExeVersion.ProgramFilePath));
+  dn := aDriveFolderOrFile;
+  if (dn<>'') and (dn[2]=':') and (dn[3]=#0) then
+    dn := dn+'\';
+  if (aVolumeName<>nil) and (aVolumeName^='') then begin
+    tmp[0] := #0;
+    GetVolumeInformation(pointer(dn),tmp,MAX_PATH,nil,dummy,flags,nil,0);
+    aVolumeName^ := tmp;
   end;
+  {$ifdef UNICODE}GetDiskFreeSpaceExW{$else}GetDiskFreeSpaceExA{$endif}(
+    pointer(dn),aAvailableBytes,aTotalBytes,aFreeBytes);
+{$else}
+{$ifdef KYLIX3}
+var fs: TStatFs64;
+    h: THandle;
+begin
+  if aDriveFolderOrFile='' then
+    aDriveFolderOrFile := '.';
+  h := FileOpen(aDriveFolderOrFile,fmShareDenyNone);
+  fstatfs64(h,fs);
+  FileClose(h);
+  aAvailableBytes := fs.f_bavail*fs.f_bsize;
+  aFreeBytes := aAvailableBytes;
+  aTotalBytes := fs.f_blocks*fs.f_bsize;
+{$endif}
+{$ifdef FPC}
+var fs: tstatfs;
+begin
+  if aDriveFolderOrFile='' then
+    aDriveFolderOrFile := '.';
+  fpStatFS(aDriveFolderOrFile,@fs);
+  aAvailableBytes := QWord(fs.bavail)*QWord(fs.bsize);
+  aFreeBytes := aAvailableBytes; // no user Quota involved here
+  aTotalBytes := QWord(fs.blocks)*QWord(fs.bsize);
+{$endif FPC}
+{$endif MSWINDOWS}
+end;
+
+procedure TSynMonitorDisk.RetrieveDiskInfo;
 var tix: cardinal;
 begin
   tix := GetTickCount64 shr 7; // allow 128 ms resolution for updates
   if fLastDiskInfoRetrievedTix<>tix then begin
     fLastDiskInfoRetrievedTix := tix;
-    RetrieveInfo;
+    GetDiskInfo(fName,PQWord(@fAvailableSize.fBytes)^,PQWord(@fFreeSize.fBytes)^,
+      PQWord(@fTotalSize.fBytes)^{$ifdef MSWINDOWS},@fVolumeName{$endif});
   end;
 end;
 

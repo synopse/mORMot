@@ -5952,7 +5952,7 @@ begin
       if Assigned(fThreadPool) then begin
         {$ifndef USE_WINIOCP}
         if (fHTTPQueueLength>0) and // too many connection limit reached?
-           (fThreadPool.PendingContextCount+fThreadPool.fSubThread.Count>fHTTPQueueLength) then begin
+           (fThreadPool.PendingContextCount+fThreadPool.fSubThread.Count>integer(fHTTPQueueLength)) then begin
           inc(fThreadPoolContentionAbortCount);
           DirectShutdown(ClientSock); // expects the proxy to balance to another server
           continue;
