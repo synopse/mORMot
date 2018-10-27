@@ -5682,12 +5682,21 @@ type
     /// will try to acquire the mutex
     // - use as such to avoid race condition (from a Safe: TSynLocker property):
     // ! if Safe.TryLock then
-    // ! try
-    // !   ...
-    // ! finally
-    // !   Safe.Unlock;
-    // ! end;
+    // !   try
+    // !     ...
+    // !   finally
+    // !     Safe.Unlock;
+    // !   end;
     function TryLock: boolean; {$ifdef HASINLINE}inline;{$endif}
+    /// will try to acquire the mutex for a given time
+    // - use as such to avoid race condition (from a Safe: TSynLocker property):
+    // ! if Safe.TryLockMS(100) then
+    // !   try
+    // !     ...
+    // !   finally
+    // !     Safe.Unlock;
+    // !   end;
+    function TryLockMS(retryms: integer): boolean;
     /// release the instance for exclusive access
     procedure UnLock; {$ifdef HASINLINE}inline;{$endif}
     /// will enter the mutex until the IUnknown reference is released
@@ -50560,6 +50569,17 @@ function TSynLocker.TryLock: boolean;
 begin
   result := not fLocked and
     (TryEnterCriticalSection(fSection){$ifdef LINUX}{$ifdef FPC}<>0{$endif}{$endif});
+end;
+
+function TSynLocker.TryLockMS(retryms: integer): boolean;
+begin
+  repeat
+    result := TryLock;
+    if result or (retryms <= 0) then
+      break;
+    SleepHiRes(1);
+    dec(retryms);
+  until false;
 end;
 
 function TSynLocker.ProtectMethod: IUnknown;
