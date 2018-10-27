@@ -745,6 +745,17 @@ type
   // pointer to thread-specific context information
   PSynLogThreadContext = ^TSynLogThreadContext;
 
+  /// File stream what ignore IO errors
+  // - in case the disk space is exceed TSynLogFileStream.writeBuffer
+  // will not throw error so application continue to work but without logging
+
+  { TSynLogFileStream }
+
+  TSynLogFileStream = class(TFileStream)
+  public
+    function Write(const Buffer; Count: Longint): Longint; override;
+  end;
+
   /// a per-family and/or per-thread log file content
   // - you should create a sub class per kind of log file
   // ! TSynLogDB = class(TSynLog);
@@ -3466,6 +3477,14 @@ begin
 end;
 
 
+{ TSynLogFileStream }
+
+function TSynLogFileStream.Write(const Buffer; Count: Longint): Longint;
+begin
+  Result:=inherited Write(Buffer, Count);
+  if Result = 0 then Result := Count; // ignore IO errors
+end;
+
 { TSynLog }
 
 {$ifdef HASINLINENOTX86}
@@ -4545,7 +4564,7 @@ begin
           end else
           if (fFileRotationSize=0) or not exists then
             TFileStream.Create(fFileName,fmCreate).Free;   // create a void file
-          fWriterStream := TFileStream.Create(fFileName,
+          fWriterStream := TSynLogFileStream.Create(fFileName,
             fmOpenReadWrite or fmShareDenyWrite); // open with read sharing
           break;
         except
