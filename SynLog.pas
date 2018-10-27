@@ -745,14 +745,14 @@ type
   // pointer to thread-specific context information
   PSynLogThreadContext = ^TSynLogThreadContext;
 
-  /// File stream what ignore IO errors
-  // - in case the disk space is exceed TSynLogFileStream.writeBuffer
-  // will not throw error so application continue to work but without logging
-
-  { TSynLogFileStream }
-
-  TSynLogFileStream = class(TFileStream)
+  /// file stream which ignores I/O write errors
+  // - in case disk space is exhausted, TFileStreamWithoutWriteError.WriteBuffer
+  // won't throw any exception, so application will continue to work
+  // - used by TSynLog to let the application continue with no exception,
+  // even in case of a disk/partition full of logs
+  TFileStreamWithoutWriteError = class(TFileStream)
   public
+    /// this overriden function returns Count, as if it was always sucessfull
     function Write(const Buffer; Count: Longint): Longint; override;
   end;
 
@@ -3477,13 +3477,15 @@ begin
 end;
 
 
-{ TSynLogFileStream }
+{ TFileStreamWithoutWriteError }
 
-function TSynLogFileStream.Write(const Buffer; Count: Longint): Longint;
+function TFileStreamWithoutWriteError.Write(const Buffer; Count: Longint): Longint;
+
 begin
-  Result:=inherited Write(Buffer, Count);
-  if Result = 0 then Result := Count; // ignore IO errors
+  inherited Write(Buffer,Count);
+  result := Count; // ignore I/O errors
 end;
+
 
 { TSynLog }
 
@@ -4564,7 +4566,7 @@ begin
           end else
           if (fFileRotationSize=0) or not exists then
             TFileStream.Create(fFileName,fmCreate).Free;   // create a void file
-          fWriterStream := TSynLogFileStream.Create(fFileName,
+          fWriterStream := TFileStreamWithoutWriteError.Create(fFileName,
             fmOpenReadWrite or fmShareDenyWrite); // open with read sharing
           break;
         except
