@@ -211,14 +211,21 @@ interface
   {$undef USEFORMCREATEHOOK}
 {$endif}
 
+{.$define FMXAPP}
+//must be set globally to use this unit in FireMonkey application
+
 uses
   Windows, SysUtils, Classes,
   {$ifdef USEFORMCREATEHOOK}
   {$ifndef LVCL}
+  {$ifndef FMXAPP}
   Menus,
   {$endif}
+  {$endif}
   {$endif USEFORMCREATEHOOK}
+  {$ifndef FMXAPP}
   StdCtrls, Forms,
+  {$else}FMX.Forms,{$endif}
   SynCommons,     // some basic types and functions
   mORmot;         // need extended RTTI information
 
@@ -322,6 +329,8 @@ var
     CodePage: CODEPAGE_US;
     LCID:     LCID_US
   );
+
+{$undef USEFORMCREATEHOOK}
 
 {$ifndef NOI18N}
 {$ifdef USEFORMCREATEHOOK} // language is read from registry once at startup:
@@ -703,13 +712,18 @@ implementation
 
 uses
 {$ifndef LVCL}
+  {$ifndef FMXAPP}
   ComCtrls,
+  {$endif}
   {$ifdef WITHUXTHEME}
   UxTheme,
   {$endif}
 {$endif}
+{$ifndef FMXAPP}
   Controls, ExtCtrls, Graphics;
-
+{$else}
+   FMX.Controls, FMX.ExtCtrls, FMX.Graphics;
+{$endif FMXAPP}
 var
   // to speed up search in LanguageAbrToIndex():
   LanguageAbrWord: array[TLanguages] of word; // copy of LanguageAbr[]
@@ -1337,7 +1351,8 @@ begin
     Already := Language.AlreadyTranslated;
     FreeAndNil(Language);
   end;
-  if LanguageForLanguageFile<>lngEnglish then
+  //if LanguageForLanguageFile<>lngEnglish then
+  //needed to be able to change language from any to english many times
     Language := TLanguageFile.Create(LanguageForLanguageFile);
   for i := 0 to high(Already) do // translate available forms again
   try
@@ -1631,6 +1646,7 @@ var Section: PUTF8Char; {$endif}
         P: PPropInfo;
         CL: TClass;
         s: string;
+      {$IFNDEF FMXAPP}
       {$ifndef LVCL} // doesn't allow to change Font during the run
       procedure DoFont(Font: TFont);
       var s: string;
@@ -1657,23 +1673,26 @@ var Section: PUTF8Char; {$endif}
           Font.Charset := Language.CharSet;
       end;
       {$endif}
+      {$endif}
     begin
       CL := PPointer(O)^;
       while (CL<>nil) and (CL<>TComponent) and (CL<>TObject) do begin
         for k := 1 to InternalClassPropInfo(CL,P) do begin
           // standard properties
           if (P^.Name='Caption') or (P^.Name='Hint') or
-             (P^.Name='Title') or (P^.Name='DisplayLabel') then
+             (P^.Name='Title') or (P^.Name='DisplayLabel') or
+             (P^.Name='Text') then
             TranslateOneProp(P,O,CName) else
           // class properties
           if P^.PropType^^.Kind=tkClass then begin
             Obj := pointer(P^.GetOrdValue(O));
             if Obj<>nil then
     {$ifndef LVCL} // doesn't allow to change Font during the run
+    {$ifndef FMXAPP}
             if Obj.InheritsFrom(TFont) then
               // TFont
               DoFont(TFont(Obj)) else
-    {$endif}if Obj.InheritsFrom(TStrings) then
+    {$endif}{$endif}if Obj.InheritsFrom(TStrings) then
               if P^.Name='Lines' then begin
                 // TMemo, TRichEdit
                 s := TranslateOne(CName,'Lines.Text');
@@ -1720,7 +1739,7 @@ var Section: PUTF8Char; {$endif}
     // TForm: not done in the following loop
     if ParentName='' then
       TranslateObj(Comp,'');  // Caption,Hint and all
-
+    {$Ifndef FMXAPP}
     // all components of this Form / Component collection
     for i := 0 to Comp.ComponentCount-1 do begin
       // 1. deal with subcomponents, if any
@@ -1743,6 +1762,7 @@ var Section: PUTF8Char; {$endif}
       // 5. Translate properties (Caption,Hint,Title,Lines,Items,Font..)
       TranslateObj(C,ParentName+RawUTF8(C.Name)+'.');
     end;
+   {$endif}
   end;
 
 var UpperSection: array[byte] of AnsiChar;
@@ -1750,8 +1770,10 @@ begin
   if (Self=nil) or (Text='') or (aForm=nil) then
     exit;
 {$ifndef LVCL}
+{$ifndef FMXAPP}
   DefCharSet := GetDefFontCharSet;
   DefFontData.Charset := Language.CharSet;
+{$endif}
 {$endif}
   Section := pointer(Text);
   PWord(UpperCopy(UpperSection,RawUTF8(aForm.ClassName)))^ := ord(']');
@@ -1761,9 +1783,11 @@ begin
 {$endif}
     Section := nil; // no [aForm.Name] section -> use Hash32() translation
   DoAll(aForm,'');
+  {$ifndef FMXAPP}
   if aForm.InheritsFrom(TCustomForm) then // can be called with TCustomFrame
     if TCustomForm(aForm).Visible then
       TCustomForm(aForm).Refresh;
+  {$endif}
   Application.ProcessMessages;
 end;
 
@@ -1907,9 +1931,10 @@ procedure TLanguageFile.Translate(var English: string);
 // case-sensitive (same as standard gettext)
 var result: string;
 begin
-  result := FindMessage(Hash32(
+  //resourcestrings may be not in English
+  result := FindMessage(Hash32(English)) ;
     // resourcestring are expected to be in English, that is WinAnsi encoded
-    {$ifdef UNICODE}StringToWinAnsi{$endif}(English)));
+ //   {$ifdef UNICODE}StringToWinAnsi{$endif}(English)));
   if result<>'' then
     English := result;
 end;
@@ -2196,7 +2221,7 @@ var
   // expect english text, converted into WinAnsi before Hash32()
   // - Delphi 2009 and up will do the implicit codepage conversion
   // (useful for chars with unicode value >255, e.g. '€')
-  CB_EnumStrings: TWinAnsiDynArray;
+  CB_EnumStrings: TRawUTF8DynArray;
   /// number of items in CB_EnumStrings[]
   CB_EnumStringsCount: integer;
   // store the curently identified Hash32() of each english text
@@ -2207,7 +2232,7 @@ begin
   result := Hash32(buf,len);
 end;
 
-function AddOnceDynArray(const S: WinAnsiString): integer;
+function AddOnceDynArray(const S: RawUTF8): integer;
 var added: boolean;
 begin
   if (S='') or (S[1] in ['_','@']) then
@@ -2225,15 +2250,15 @@ end;
 // called within *A() Win32 API -> only english=Ansi text is expected here
 function CB_EnumStringProc(hModule: THandle; lpszType, lpszName: PAnsiChar;
   lParam: PtrInt): Boolean; stdcall;
-var buf: array[0..4095] of AnsiChar;
-    s: WinAnsiString;
+var buf: array[0..4095] of WideChar;
+    s: RawUTF8;
     i: PtrInt;
 begin
   result := true;
   if (PtrInt(lpszType)<>PtrInt(RT_STRING)) then exit;
   i := (PtrInt(lpszName)-1)shl 4;
   for i := i to i+15 do begin // resourcestrings are stored by groups of 16
-    SetString(s,buf,LoadStringA(hInstance,i,buf,sizeof(buf)));
+    SetString(s,buf,LoadStringW(hInstance,i,buf,sizeof(buf)));
     if s='' then exit; // we reach the end
     AddOnceDynArray(s);
   end;
@@ -2259,6 +2284,7 @@ var F: ^Text absolute lparam;
         if (LastPropName='Caption') or (LastPropName='EditLabel.Caption') or
            (LastPropName='Hint') or (LastPropName='EditLabel.Hint') or
            (LastPropName='Title') or (LastPropName='Items') or
+           (LastPropName='Text') or
            (LastPropName='DisplayLabel') then begin
           Writeln(F^,PropName,'=_',Hash32(CB_EnumStrings[AddOnceDynArray(Value)]),
             '   ',Value); // add original caption for custom form translation
@@ -2300,7 +2326,7 @@ var F: ^Text absolute lparam;
           WriteProperty(WideStringToWinAnsi(Reader.ReadWideString));
         {$endif}
         vaString, vaLString:
-          WriteProperty(StringToWinAnsi(Reader.ReadString));
+          WriteProperty(Reader.ReadString);
         vaIdent, vaFalse, vaTrue, vaNil, vaNull:
   {        if (LastPropName='Font.Charset') then begin
             s := Reader.ReadIdent;
@@ -2441,7 +2467,7 @@ var F: Text;
     buf: RawByteString;
     i, index, j: integer;
     P: PPropInfo;
-    s: WinAnsiString;
+    s: RawUTF8;
     ClassList: TList;
     CT: TClass;
 
