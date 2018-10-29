@@ -1239,17 +1239,20 @@ begin
 end;
 
 procedure TODBCConnection.Disconnect;
+var log: ISynLog;
 begin
   try
     inherited Disconnect; // flush any cached statement
   finally
-    if (ODBC<>nil) and (fDbc<>nil) then
+    if (ODBC<>nil) and (fDbc<>nil) then begin
     with ODBC do begin
-      SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Disconnect'{$endif});
+      log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Disconnect'{$endif});
       Disconnect(fDbc);
       FreeHandle(SQL_HANDLE_DBC,fDbc);
       fDbc := nil;
     end;
+    end else
+      log := nil;
   end;
 end;
 
