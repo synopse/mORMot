@@ -141,8 +141,8 @@ type
   private
     fIndex: Integer;
     fIsPaused: boolean;
-    fMessagesQueue: TRawUTF8ListHashedLocked;
-    fLogQueue: TRawUTF8ListHashedLocked;
+    fMessagesQueue: TRawUTF8ListLocked;
+    fLogQueue: TRawUTF8ListLocked;
     {$IFNDEF SM52}
     fOldInterruptCallback: JSInterruptCallback;
     {$ENDIF}
@@ -218,7 +218,7 @@ begin
   eng := fManager.EngineForThread(curThreadID);
   if eng<>nil then begin
     Debugger := eng.PrivateDataForDebugger;
-    Debugger.fLogQueue.LockedAdd(Text);
+    Debugger.fLogQueue.SafePush(Text);
 
     if eng.cx.IsRunning then
 {$IFDEF SM52}
@@ -519,7 +519,7 @@ begin
 
     engine := fParent.fManager.EngineForThread(fDebugger.fSmThreadID);
     if (engine <> nil) then begin
-      fDebugger.fMessagesQueue.LockedAdd(VariantToUTF8(request));
+      fDebugger.fMessagesQueue.SafePush(VariantToUTF8(request));
       if not fDebugger.fIsPaused then begin
         if (not engine.cx.IsRunning) then begin
           if not Assigned(engine.doInteruptInOwnThread) then
@@ -596,18 +596,8 @@ end;
 procedure TSMDebugger.attach(aThread: TSMRemoteDebuggerCommunicationThread);
 begin
   fCommunicationThread := aThread;
-  fMessagesQueue.Safe.Lock;
-  try
-    fMessagesQueue.Clear;
-  finally
-    fMessagesQueue.Safe.UnLock;
-  end;
-  fLogQueue.Safe.Lock;
-  try
-    fLogQueue.Clear;
-  finally
-    fLogQueue.Safe.UnLock;
-  end;
+  fMessagesQueue.SafeClear;
+  fLogQueue.SafeClear;
 end;
 
 constructor TSMDebugger.Create(aParent: TSMRemoteDebuggerThread; aEng: TSMEngine);
@@ -624,8 +614,8 @@ begin
 
   fSmThreadID := GetCurrentThreadId;
 
-  fMessagesQueue := TRawUTF8ListHashedLocked.Create();
-  fLogQueue := TRawUTF8ListHashedLocked.Create();
+  fMessagesQueue := TRawUTF8ListLocked.Create();
+  fLogQueue := TRawUTF8ListLocked.Create();
   fNameForDebug := aEng.nameForDebug;
   fDebuggerName := 'synode_debPort_' + aParent.fPort;
   fWebAppRootPath := aEng.webAppRootDir;
@@ -685,18 +675,8 @@ var
   dbgObject: PJSRootedObject;
   res: Boolean;
 begin
-  fMessagesQueue.Safe.Lock;
-  try
-    fMessagesQueue.Clear;
-  finally
-    fMessagesQueue.Safe.UnLock;
-  end;
-  fLogQueue.Safe.Lock;
-  try
-    fLogQueue.Clear;
-  finally
-    fLogQueue.Safe.UnLock;
-  end;
+  fMessagesQueue.SafeClear;
+  fLogQueue.SafeClear;
 
   cx := aEng.cx;
   cmpDbg := cx.EnterCompartment(aEng.GlobalObjectDbg.ptr);
@@ -777,7 +757,7 @@ function debugger_read(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean; 
 var
   debugger: TSMDebugger;
   msg: RawUTF8;
-  Queue: TRawUTF8ListHashedLocked;
+  Queue: TRawUTF8ListLocked;
 begin
   debugger := TSMEngine(cx.PrivateData).PrivateDataForDebugger;
   if (argc = 0) or vp.argv[0].asBoolean then
@@ -785,12 +765,13 @@ begin
   else
     Queue := debugger.fLogQueue;
   msg := '';
-  while ((Queue <> nil) and (not Queue.PopFirst(msg))) and (argc = 0) do
+  while ((Queue <> nil) and (debugger.fCommunicationThread <> nil) and
+    (not Queue.SafePop(msg))) and (argc = 0) do
     SleepHiRes(10);
-  result :=  Queue <> nil;
-  if Result then
+  result := true;
+  if (Queue <> nil) and (debugger.fCommunicationThread <> nil) then
     vp.rval := SimpleVariantToJSval(cx, msg)
-  else
+  else // debugger.js will detach current debugee if msg === null
     vp.rval := JSVAL_NULL;
 end;
 
