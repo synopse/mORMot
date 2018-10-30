@@ -3449,8 +3449,9 @@ constructor TAsynchConnections.Create(OnStart, OnStop: TNotifyThreadEvent;
   aStreamClass: TAsynchConnectionClass; const ProcessName: SockString;
   aLog: TSynLogClass; aOptions: TAsynchConnectionsOptions; aThreadPoolCount: integer);
 var i: integer;
+    log: ISynLog;
 begin
-  aLog.Enter('Create(%,%,%)',[aStreamClass,ProcessName,aThreadPoolCount],self);
+  log := aLog.Enter('Create(%,%,%)',[aStreamClass,ProcessName,aThreadPoolCount],self);
   if (aStreamClass=TAsynchConnection) or (aStreamClass=nil) then
     raise EAsynchConnections.CreateUTF8('%.Create(%)',[self,aStreamClass]);
   if aThreadPoolCount<=0 then
