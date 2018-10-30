@@ -430,6 +430,36 @@ type
   // - should return false to log the exception, or true to ignore it
   TSynLogOnBeforeException = function(aExceptionContext: TSynLogExceptionContext): boolean of object;
 
+  /// store simple log-related settings
+  // - see also TDDDLogSettings in dddInfraSettings.pas and TSynDaemonSettings
+  // in mORMotService.pas, which may be more integrated
+  TSynLogSettings = class(TSynPersistent)
+  protected
+    fLevels: TSynLogInfos;
+    fDestinationPath: TFileName;
+    fRotateFileCount: integer;
+    fLogClass: TSynLogClass;
+  public
+    /// set some default values
+    constructor Create; override;
+    /// define the log information into the supplied TSynLog class
+    // - if you don't call this method, the logging won't be initiated
+    procedure SetLog(aLogClass: TSynLogClass = nil);
+    /// read-only access to the TSynLog class, if SetLog() has been called
+    property LogClass: TSynLogClass read fLogClass;
+  published
+    /// the log levels to be used for the log file
+    // - i.e. a combination of none or several logging event
+    // - if "*" is serialized, unneeded sllNone won't be part of the set
+    // - default is LOG_STACKTRACE
+    property Levels: TSynLogInfos read fLevels write fLevels;
+    /// allow to customize where the logs should be written
+    // - default is the system log folder (e.g. /var/log on Linux)
+    property DestinationPath: TFileName read fDestinationPath write fDestinationPath;
+    /// how many files will be rotated (default is 2)
+    property RotateFileCount: integer read fRotateFileCount write fRotateFileCount;
+  end;
+
   /// regroup several logs under an unique family name
   // - you should usualy use one family per application or per architectural
   // module: e.g. a server application may want to log in separate files the
@@ -1587,6 +1617,39 @@ end;
 function ToCaption(filter: TSynLogFilter): string;
 begin
   result := GetCaptionFromEnum(TypeInfo(TSynLogFilter), Ord(filter))
+end;
+
+
+{ TSynLogSettings }
+
+constructor TSynLogSettings.Create;
+begin
+  inherited Create;
+  fDestinationPath := GetSystemPath(spLog);
+  fLevels := LOG_STACKTRACE + [sllNewRun];
+  fRotateFileCount := 2;
+end;
+
+procedure TSynLogSettings.SetLog(aLogClass: TSynLogClass);
+var
+  f: TSynLogFamily;
+begin
+  if self = nil then
+    exit;
+  if aLogClass = nil then
+    aLogClass := TSynLog;
+  f := aLogClass.Family;
+  f.DestinationPath := EnsureDirectoryExists(fDestinationPath);
+  f.PerThreadLog := ptIdentifiedInOnFile; // ease multi-threaded server debug
+  f.RotateFileCount := fRotateFileCount;
+  if fRotateFileCount > 0 then begin
+    f.RotateFileSizeKB := 20 * 1024; // rotate by 20 MB logs
+    f.FileExistsAction := acAppend;  // as expected in rotation mode
+  end
+  else
+    f.HighResolutionTimestamp := true;
+  f.Level := fLevels;
+  fLogClass := aLogClass;
 end;
 
 

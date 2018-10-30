@@ -13414,6 +13414,7 @@ type
 // depending on the underlying operating system
 // - will use SHGetFolderPath and the corresponding CSIDL constant under Windows
 // - will return the $HOME folder (whatever kind value is given) otherwise
+// - returned folder name contains the trailing path delimiter (\ or /)
 function GetSystemPath(kind: TSystemPath): TFileName;
 
 /// self-modifying code - change some memory buffer in the code segment
@@ -31504,7 +31505,7 @@ end;
 
 function FastLocateIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt;
 var L,i: PtrInt;
-   cmp: integer;
+    cmp: integer;
 begin
   if R<0 then
     result := 0 else begin
