@@ -2261,7 +2261,7 @@ begin
   if (PtrInt(lpszType)<>PtrInt(RT_STRING)) then exit;
   i := (PtrInt(lpszName)-1)shl 4;
   for i := i to i+15 do begin // resourcestrings are stored by groups of 16
-    SetString(s,buf,LoadStringW(hInstance,i,buf,sizeof(buf)));
+    s := RawUnicodeToUtf8(buf,LoadStringW(hInstance,i,buf,sizeof(buf)));
     if s='' then exit; // we reach the end
     AddOnceDynArray(s);
   end;
