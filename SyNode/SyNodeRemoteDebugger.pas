@@ -765,12 +765,13 @@ begin
   else
     Queue := debugger.fLogQueue;
   msg := '';
-  while ((Queue <> nil) and (not Queue.SafePop(msg))) and (argc = 0) do
+  while ((Queue <> nil) and (debugger.fCommunicationThread <> nil) and
+    (not Queue.SafePop(msg))) and (argc = 0) do
     SleepHiRes(10);
-  result :=  Queue <> nil;
-  if Result then
+  result := true;
+  if (Queue <> nil) and (debugger.fCommunicationThread <> nil) then
     vp.rval := SimpleVariantToJSval(cx, msg)
-  else
+  else // debugger.js will detach current debugee if msg === null
     vp.rval := JSVAL_NULL;
 end;
 

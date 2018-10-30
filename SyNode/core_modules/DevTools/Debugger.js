@@ -1622,6 +1622,9 @@ class AddonActor extends Actor {
     listWorkers(aRequest) {
         return { from: this.fullActor, "workers":[] }
     }
+    focus(aRequest) {
+       return {}
+    }
 }
 
 export function newMessage (msg) {
@@ -1631,7 +1634,16 @@ export function newMessage (msg) {
         actor,
         handler;
     try {
-        inRequest = typeof(msg) === "string" ? JSON.parse(msg) : msg;
+        if (msg === null) { // debugger client close socket
+            // emulate detach without sending responses to detached client
+            // {"to":"thread","type":"detach"}
+            actor = actorManager.getActor('thread')
+            if (actor) {
+                actor.detach()
+            }
+            return
+        }
+        inRequest = (typeof msg === "string") ? JSON.parse(msg) : msg;
         actorName = inRequest.to;
         actor = actorManager.getActor(actorName);
         if (actor) {
