@@ -11303,8 +11303,8 @@ function Hash32(Data: pointer; Len: integer): cardinal; overload;
 // - has less colision than Adler32 for short strings
 // - is faster than CRC32 or Adler32, since use DQWord (128 bytes) aligned read
 // - uses RawByteString for binary content hashing, whatever the codepage is
-function Hash32(const Text: RawUTF8): cardinal; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+function Hash32(const Text: RawByteString): cardinal; overload;
+{$ifdef HASINLINE}inline;{$endif}
 
 /// standard Kernighan & Ritchie hash from "The C programming Language", 3rd edition
 // - simple and efficient code, but too much collisions for THasher
@@ -34068,7 +34068,7 @@ begin
   result := result and $ffff;
 end;
 
-function Hash32(const Text: RawUTF8): cardinal;
+function Hash32(const Text: RawByteString): cardinal;
 begin
   result := Hash32(pointer(Text),length(Text));
 end;

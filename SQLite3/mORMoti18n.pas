@@ -809,6 +809,11 @@ begin
     result := TLanguages(ndx);
 end;
 
+function Hash32(const Text: RawUTF8): cardinal;
+begin
+  result := SynCommons.Hash32(pointer(Text),length(Text));
+end;
+
 
 const
   // default character set for a specific language (for GUI i18n)
@@ -1931,10 +1936,8 @@ procedure TLanguageFile.Translate(var English: string);
 // case-sensitive (same as standard gettext)
 var result: string;
 begin
-  //resourcestrings may be not in English
   result := FindMessage(Hash32(English)) ;
-    // resourcestring are expected to be in English, that is WinAnsi encoded
- //   {$ifdef UNICODE}StringToWinAnsi{$endif}(English)));
+
   if result<>'' then
     English := result;
 end;
@@ -2229,7 +2232,7 @@ var
 
 function Hash32Str(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 begin
-  result := Hash32(buf,len);
+  result := SynCommons.Hash32(buf,len);
 end;
 
 function AddOnceDynArray(const S: RawUTF8): integer;
