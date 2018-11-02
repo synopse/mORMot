@@ -1159,25 +1159,25 @@ function IsValidUTF8WithoutControlChars(const source: RawUTF8): Boolean; overloa
 function Utf8TruncateToUnicodeLength(var text: RawUTF8; maxUtf16: integer): boolean;
 
 /// will truncate the supplied UTF-8 value if its length exceeds the specified
-// UTF-8 Unicode characters count
+// bytes count
 // - this function will ensure that the returned content will contain only valid
 // UTF-8 sequence, i.e. will trim the whole trailing UTF-8 sequence
 // - returns FALSE if text was not truncated, TRUE otherwise
-function Utf8TruncateToLength(var text: RawUTF8; maxUTF8: cardinal): boolean;
+function Utf8TruncateToLength(var text: RawUTF8; maxBytes: cardinal): boolean;
 
 /// compute the truncated length of the supplied UTF-8 value if it exceeds the
-// specified UTF-8 Unicode characters count
+// specified bytes count
 // - this function will ensure that the returned content will contain only valid
 // UTF-8 sequence, i.e. will trim the whole trailing UTF-8 sequence
 // - returns maxUTF8 if text was not truncated, or the number of fitting bytes
-function Utf8TruncatedLength(const text: RawUTF8; maxUTF8: cardinal): integer; overload;
+function Utf8TruncatedLength(const text: RawUTF8; maxBytes: cardinal): integer; overload;
 
 /// compute the truncated length of the supplied UTF-8 value if it exceeds the
-// specified UTF-8 Unicode characters count
+// specified bytes count
 // - this function will ensure that the returned content will contain only valid
 // UTF-8 sequence, i.e. will trim the whole trailing UTF-8 sequence
 // - returns maxUTF8 if text was not truncated, or the number of fitting bytes
-function Utf8TruncatedLength(text: PAnsiChar; textlen,maxUTF8: cardinal): integer; overload;
+function Utf8TruncatedLength(text: PAnsiChar; textlen,maxBytes: cardinal): integer; overload;
 
 /// calculate the UTF-16 Unicode characters count of the UTF-8 encoded first line
 // - count may not match the UCS4 glyphs number, in case of UTF-16 surrogates
@@ -19649,35 +19649,35 @@ begin
   result := false;
 end;
 
-function Utf8TruncateToLength(var text: RawUTF8; maxUTF8: cardinal): boolean;
+function Utf8TruncateToLength(var text: RawUTF8; maxBytes: cardinal): boolean;
 begin
-  if cardinal(length(text))<maxUTF8 then begin
+  if cardinal(length(text))<maxBytes then begin
     result := false;
     exit; // nothing to truncate
   end;
-  while (maxUTF8>0) and (ord(text[maxUTF8]) and $c0=$80) do dec(maxUTF8);
-  if (maxUTF8>0) and (ord(text[maxUTF8]) and $80<>0) then dec(maxUTF8);
-  SetLength(text,maxUTF8);
+  while (maxBytes>0) and (ord(text[maxBytes]) and $c0=$80) do dec(maxBytes);
+  if (maxBytes>0) and (ord(text[maxBytes]) and $80<>0) then dec(maxBytes);
+  SetLength(text,maxBytes);
   result := true;
 end;
 
-function Utf8TruncatedLength(const text: RawUTF8; maxUTF8: cardinal): integer;
+function Utf8TruncatedLength(const text: RawUTF8; maxBytes: cardinal): integer;
 begin
   result := length(text);
-  if cardinal(result)<maxUTF8 then
+  if cardinal(result)<maxBytes then
     exit;
-  result := maxUTF8;
+  result := maxBytes;
   while (result>0) and (ord(text[result]) and $c0=$80) do dec(result);
   if (result>0) and (ord(text[result]) and $80<>0) then dec(result);
 end;
 
-function Utf8TruncatedLength(text: PAnsiChar; textlen,maxUTF8: cardinal): integer;
+function Utf8TruncatedLength(text: PAnsiChar; textlen,maxBytes: cardinal): integer;
 begin
-  if textlen<maxUTF8 then begin
+  if textlen<maxBytes then begin
     result := textlen;
     exit;
   end;
-  result := maxUTF8;
+  result := maxBytes;
   while (result>0) and (ord(text[result]) and $c0=$80) do dec(result);
   if (result>0) and (ord(text[result]) and $80<>0) then dec(result);
 end;
