@@ -3273,7 +3273,8 @@ type
 
   /// ORM attributes for a TSQLPropInfo definition
   TSQLPropInfoAttribute = (
-    aIsUnique);
+    aIsUnique,
+    aAuxiliaryRTreeField);
 
   /// set of ORM attributes for a TSQLPropInfo definition
   TSQLPropInfoAttributes = set of TSQLPropInfoAttribute;
@@ -21545,8 +21546,11 @@ constructor TSQLPropInfo.Create(const aName: RawUTF8; aSQLFieldType: TSQLFieldTy
 begin
   if aName='' then
     EORMException.CreateUTF8('Void name for %.Create',[self]);
-  fName := aName;
-  fNameUnflattened := aName;
+  if aAuxiliaryRTreeField in aAttributes then
+    fName := copy(aName,2,MaxInt)
+  else
+    fName := aName;
+  fNameUnflattened := fName;
   fSQLFieldType := aSQLFieldType;
   fSQLFieldTypeStored := aSQLFieldType;
   fSQLDBFieldType := SQLFIELDTYPETODBFIELDTYPE[fSQLFieldTypeStored];
@@ -21982,6 +21986,8 @@ begin
   byte(attrib) := 0;
   if aPropInfo^.IsStored(nil)=AS_UNIQUE then
     Include(attrib,aIsUnique); // property MyProperty: RawUTF8 stored AS_UNIQUE;
+  if aPropInfo^.Name[1] = '_' then
+    Include(attrib,aAuxiliaryRTreeField);
   inherited Create(ToUTF8(aPropInfo^.Name),aSQLFieldType,attrib,
     aPropInfo^.Index,aPropIndex); // property MyProperty: RawUTF8 index 10; -> FieldWidth=10
   fPropInfo := aPropInfo;
@@ -32566,8 +32572,8 @@ begin
     rRTree, rRTreeInteger: begin
       for i := 0 to fields.Count-1 do
         with fields.List[i] do
-        if Name[1]='_' then // auxiliary columns for SQlite3 >= 3.24.0
-          result := FormatUTF8('%+% %,',[result,copy(Name,2,maxInt),Props.Props.SQLFieldTypeToSQL(i)]) else
+        if aAuxiliaryRTreeField in Attributes then // auxiliary columns for SQlite3 >= 3.24.0
+          result := FormatUTF8('%+% %',[result,Name,Props.Props.SQLFieldTypeToSQL(i)]) else
           result := result+Name+',';
       result[length(result)] := ')';
     end;
@@ -33983,7 +33989,7 @@ begin
       expected := sftInteger;
     for f := 0 to Props.Fields.Count-1 do
       with Props.Fields.List[f] do
-      if Name[1]='_' then // https://sqlite.org/rtree.html#auxiliary_columns
+      if aAuxiliaryRTreeField in Attributes then // https://sqlite.org/rtree.html#auxiliary_columns
         expected := sftUnknown // will expect further columns to be auxiliary
       else if SQLFieldTypeStored<>expected then
         raise EModelException.CreateUTF8('%.%: RTREE field must be %',
@@ -33991,7 +33997,7 @@ begin
         inc(Props.RTreeCoordBoundaryFields);
     if (Props.RTreeCoordBoundaryFields<2) or
        (Props.RTreeCoordBoundaryFields>RTREE_MAX_DIMENSION*2) or
-       (Props.RTreeCoordBoundaryFields and 2<>0) then
+       (Props.RTreeCoordBoundaryFields mod 2<>0) then
       raise EModelException.CreateUTF8('% has % fields: RTREE expects 2,4,6..% boundary columns',
         [Props.Table,Props.RTreeCoordBoundaryFields,RTREE_MAX_DIMENSION*2]);
   end;
