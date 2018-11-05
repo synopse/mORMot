@@ -4497,8 +4497,10 @@ begin
   else
     IP := ResolveName(Server,AF_INET,ipproto,socktype);
   // use AF_INET instead of AF_UNSPEC: IP6 is buggy!
+  {$ifdef UNIX}
   if (aLayer=cslUNIX) then
     family := AF_UNIX else
+  {$endif}
     family := AF_INET;
   if SetVarSin(sin,IP,Port,family,ipproto,socktype,false)<>0 then
     exit;
