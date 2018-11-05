@@ -5053,7 +5053,8 @@ type
     /// to be called when tracked properties changed on a tracked class instance
     procedure Modified(Instance: TObject); overload;
     /// to be called when tracked properties changed on a tracked class instance
-    procedure Modified(Instance: TObject; const PropNames: array of RawUTF8); overload; virtual;
+    procedure Modified(Instance: TObject; const PropNames: array of RawUTF8;
+      ModificationTime: TTimeLog=0); overload; virtual;
     /// some custom text, associated with the current stored state
     // - will be persistented by Save() methods
     property Comment: RawUTF8 read fComment write fComment;
@@ -16728,7 +16729,7 @@ type
     property Deleted: TSynMonitorCount64 read fDeleted;
   end;
 
-  /// ORM table used to store TSynMonitorUsage information
+  /// ORM table used to store TSynMonitorUsage information in TSynMonitorUsageRest
   // - the ID primary field is the TSynMonitorUsageID shifted by 16 bits
   TSQLMonitorUsage = class(TSQLRecord)
   protected
@@ -24802,9 +24803,9 @@ begin
 end;
 
 procedure TSynMonitorUsage.Modified(Instance: TObject;
-  const PropNames: array of RawUTF8);
+  const PropNames: array of RawUTF8; ModificationTime: TTimeLog);
   procedure save(const track: TSynMonitorUsageTrack);
-    function scope(var prev,current: Int64): TSynMonitorUsageGranularity;
+    function scope({$ifndef CPU64}var{$endif} prev,current: Int64): TSynMonitorUsageGranularity;
     begin
       if prev and AS_YEARS<>current and AS_YEARS then
         result := mugYear else
@@ -24822,7 +24823,9 @@ procedure TSynMonitorUsage.Modified(Instance: TObject;
       time: TTimeLogBits;
       v,diff: Int64;
   begin
-    SetCurrentUTCTime(time);
+    if ModificationTime=0 then
+      SetCurrentUTCTime(time) else
+      time.Value := ModificationTime;
     time.Value := time.Value and AS_MINUTES; // save every minute
     if fPrevious.Value<>time.Value then begin
       if fPrevious.Value=0 then // startup?
@@ -24845,7 +24848,7 @@ procedure TSynMonitorUsage.Modified(Instance: TObject;
             inc(Values[mugYear][time.Month-1],diff);
           end;
         end else
-          for k := min to 59 do // make instant values continous
+          for k := min to 59 do // make instant values continuous
             Values[mugHour][min] := v;
       end;
   end;
@@ -45354,7 +45357,7 @@ end;
 { TSQLMonitorUsage }
 
 const
-  SQLMONITORSHIFT = 16;
+  SQLMONITORSHIFT = 16; // see TSynUniqueIdentifierProcess
 
 function TSQLMonitorUsage.GetUsageID: integer;
 begin
