@@ -4560,8 +4560,8 @@ begin
   end;
   dt := NowUTC;
   {$ifdef FPC}
-  local := _LocalTimeToUniversal(Now(), - GetLocalTimeOffset);
-  CheckSame(local - dt, 0, 1E-5, 'NowUTC should not shift or truncate time');
+  CheckSame(_LocalTimeToUniversal(Now(), - GetLocalTimeOffset) - dt, 0, 1E-5,
+    'NowUTC should not shift or truncate time');
   {$endif}
   sleep(200);
   Check(not SameValue(dt,NowUTC), 'NowUTC should not truncate time to 5 sec resolution');
