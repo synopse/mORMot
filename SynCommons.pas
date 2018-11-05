@@ -2910,7 +2910,9 @@ procedure Split(const Str: RawUTF8; const SepStr: array of RawUTF8;
 /// returns the last occurence of the given SepChar separated context
 // - e.g. SplitRight('01/2/34','/')='34'
 // - if SepChar doesn't appear, will return Str, e.g. SplitRight('123','/')='123'
-function SplitRight(const Str: RawUTF8; SepChar: AnsiChar): RawUTF8;
+// - if LeftStr is supplied, the RawUTF8 it points to will be filled with
+// the left part just before SepChar ('' if SepChar doesn't appear)
+function SplitRight(const Str: RawUTF8; SepChar: AnsiChar; LeftStr: PRawUTF8=nil): RawUTF8;
 
 /// returns the last occurence of the given SepChar separated context
 // - e.g. SplitRight('path/one\two/file.ext','/\')='file.ext', i.e.
@@ -23059,15 +23061,19 @@ asm
 end;
 {$endif}
 
-function SplitRight(const Str: RawUTF8; SepChar: AnsiChar): RawUTF8;
+function SplitRight(const Str: RawUTF8; SepChar: AnsiChar; LeftStr: PRawUTF8): RawUTF8;
 var i: PtrInt;
 begin
   for i := length(Str) downto 1 do
     if Str[i]=SepChar then begin
       result := copy(Str,i+1,maxInt);
+      if LeftStr<>nil then
+        LeftStr^ := copy(Str,1,i-1);
       exit;
     end;
   result := Str;
+  if LeftStr<>nil then
+    LeftStr^ := '';
 end;
 
 function SplitRights(const Str, SepChar: RawUTF8): RawUTF8;
