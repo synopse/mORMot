@@ -7171,6 +7171,9 @@ type
   // - BLOB fields are decoded to auto-freeing TSQLRawBlob properties
   // - any published property defined as a T*ObjArray dynamic array storage
   // of persistents (via TJSONSerializer.RegisterObjArrayForJSON) will be freed
+  // - consider inherit from TSQLRecordNoCase and TSQLRecordNoCaseExtended if
+  // you expect regular NOCASE collation and smaller (but not standard JSON)
+  // variant fields persistence
   TSQLRecord = class(TObject)
   { note that every TSQLRecord has an Instance size of 20 bytes for private and
     protected fields (such as fID or fProps e.g.) }
@@ -16731,7 +16734,7 @@ type
 
   /// ORM table used to store TSynMonitorUsage information in TSynMonitorUsageRest
   // - the ID primary field is the TSynMonitorUsageID shifted by 16 bits
-  TSQLMonitorUsage = class(TSQLRecord)
+  TSQLMonitorUsage = class(TSQLRecordNoCaseExtended)
   protected
     fGran: TSynMonitorUsageGranularity;
     fProcess: TSynUniqueIdentifierProcess;
@@ -16740,8 +16743,8 @@ type
     function GetUsageID: integer;
     procedure SetUsageID(Value: integer);
   public
-    /// compute the corresponding TSynMonitorUsageID.Value
-    // - according to the stored Process field
+    /// compute the corresponding 23 bit TSynMonitorUsageID.Value time slice
+    // - according to the stored Process field, after bit shift
     property UsageID: integer read GetUsageID write SetUsageID;
   published
     /// the granularity of the statistics of this entry
@@ -16768,7 +16771,7 @@ type
     function LoadDB(ID: integer; Gran: TSynMonitorUsageGranularity; out Track: variant): boolean; override;
   public
     /// initialize storage via ORM
-    // - if a TSynUniqueIdentifierProcess is supplied, it will be used to
+    // - if a 16-bit TSynUniqueIdentifierProcess is supplied, it will be used to
     // identify the generating process by shifting TSynMonitorUsageID values
     // - will use TSQLMonitorUsage table, unless another one is specified
     constructor Create(aStorage: TSQLRest; aProcessID: TSynUniqueIdentifierProcess;
