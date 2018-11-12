@@ -304,6 +304,7 @@ type
     end;
     fOnWebSocketsUpgraded: TOnRestClientNotify;
     fOnWebSocketsClosed: TNotifyEvent;
+    fWebSocketLoopDelay: integer;
     function InternalCheckOpen: boolean; override;
     function FakeCallbackRegister(Sender: TServiceFactoryClient;
       const Method: TServiceMethod; const ParamInfo: TServiceMethodArgument;
@@ -357,6 +358,10 @@ type
     // after DisconnectAfterInvalidHeartbeatCount is reached
     property OnWebSocketsClosed: TNotifyEvent
       read fOnWebSocketsClosed write fOnWebSocketsClosed;
+    /// customize the internal REST loop delay
+    // - to be defined before WebSocketsUpdate/WebSocketsConnect
+    // - will set TWebSocketProcessSettings.LoopDelay value at WebSocketsUpgrade
+    property WebSocketLoopDelay: integer read fWebSocketLoopDelay write fWebSocketLoopDelay;
   end;
 
   /// HTTP/1.1 RESTful JSON mORMot Client abstract class using either WinINet,
@@ -880,6 +885,8 @@ begin
   sockets := WebSockets;
   if sockets=nil then
     result := 'Impossible to connect to the Server' else begin
+    if fWebSocketLoopDelay>0 then
+      sockets.Settings^.LoopDelay := fWebSocketLoopDelay;
     result := sockets.WebSocketsUpgrade(Model.Root,
       aWebSocketsEncryptionKey,aWebSocketsAJAX,aWebSocketsCompression);
     if result='' then // no error message = success

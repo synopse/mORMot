@@ -261,13 +261,14 @@ type
   protected
     fORM: TSynConnectionDefinition;
     fClient: TDDDRestClientDefinition;
-    fTimeout: integer;
+    fTimeout, fWebSocketsLoopDelay: integer;
   public
     /// set the default values for Client.Root, ORM.ServerName,
     // Client.WebSocketsPassword and ORM.Password
     procedure SetDefaults(const Root, Port, WebSocketPassword, UserPassword: RawUTF8;
       const User: RawUTF8 = 'User'; const Server: RawUTF8 = 'localhost';
-      ForceSetCredentials: boolean = false; ConnectRetrySeconds: integer = 0);
+      ForceSetCredentials: boolean = false; ConnectRetrySeconds: integer = 0;
+      WebSocketsLoopDelayMS: integer = 0);
     /// is able to instantiate a Client REST instance for the stored definition
     // - Definition.Kind is expected to specify a TSQLRestClient class to be
     // instantiated, not a TSQLRestServer instance
@@ -284,6 +285,8 @@ type
       out aPasswordHashed: boolean): boolean;
     /// you can overload here the TCP timeout delay, in seconds
     property Timeout: integer read fTimeout write fTimeout;
+    /// you can overload here the WebSockets internal loop delay, in milliseconds
+    property WebSocketsLoopDelay: integer read fWebSocketsLoopDelay write fWebSocketsLoopDelay;
   published
     /// defines a mean of access to a TSQLRest instance
     // - using Kind/ServerName/DatabaseName/User/Password properties: Kind
@@ -1964,7 +1967,7 @@ end;
 
 procedure TDDDRestClientSettings.SetDefaults(const Root, Port, WebSocketPassword,
   UserPassword, User, Server: RawUTF8; ForceSetCredentials: boolean;
-  ConnectRetrySeconds: integer);
+  ConnectRetrySeconds, WebSocketsLoopDelayMS: integer);
 begin
   if fClient.Root = '' then
     fClient.Root := Root;
@@ -1984,6 +1987,7 @@ begin
             fORM.ServerName := Server;
     if fClient.WebSocketsPassword = '' then
       fClient.WebSocketsPassword := WebSocketPassword;
+    fWebSocketsLoopDelay := WebSocketsLoopDelayMS;
     fClient.ConnectRetrySeconds := ConnectRetrySeconds;
     if UserPassword <> '' then begin
       fORM.User := User;
@@ -2296,8 +2300,10 @@ begin
   fConnectRetrySeconds := aSettings.Client.ConnectRetrySeconds;
   inherited Create(u.Server, u.Port, CreateModel(aSettings), t, t, t);
   Model.Owner := self; // just allocated by CreateModel()
-  if aSettings.Client.WebSocketsPassword <> '' then
+  if aSettings.Client.WebSocketsPassword <> '' then begin
+    fWebSocketLoopDelay := aSettings.WebSocketsLoopDelay;
     WebSocketsConnect(aSettings.Client.PasswordPlain);
+  end;
   OnAuthentificationFailed := aSettings.OnAuthentificationFailed;
   if aSettings.ORM.Password = '' then
     RegisterServices // plain REST connection without authentication

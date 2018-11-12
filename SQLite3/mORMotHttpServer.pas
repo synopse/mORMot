@@ -379,10 +379,12 @@ type
     // transmission definition; other parameters would be the standard one
     // - only the supplied aDefinition.Authentication will be defined
     // - under Windows, will use http.sys with automatic URI registration, unless
-    // aDefinition.WebSocketPassword is set (and then binary WebSockets would be
-    // expected with the corresponding encryption), or aForcedKind is overriden
+    // aDefinition.WebSocketPassword is set and binary WebSockets would be
+    // expected with the corresponding encryption, or aForcedKind is overriden
+    // - optional aWebSocketsLoopDelay parameter could be set for tuning
+    // WebSockets responsiveness
     constructor Create(aServer: TSQLRestServer; aDefinition: TSQLHttpServerDefinition;
-      aForcedKind: TSQLHttpServerOptions=HTTP_DEFAULT_MODE); reintroduce; overload;
+      aForcedKind: TSQLHttpServerOptions=HTTP_DEFAULT_MODE; aWebSocketsLoopDelay: integer=0); reintroduce; overload;
     /// release all memory, internal mORMot server and HTTP handlers
     destructor Destroy; override;
     /// you can call this method to prepare the HTTP server for shutting down
@@ -1179,7 +1181,8 @@ begin
 end;
 
 constructor TSQLHttpServer.Create(aServer: TSQLRestServer;
-  aDefinition: TSQLHttpServerDefinition; aForcedKind: TSQLHttpServerOptions);
+  aDefinition: TSQLHttpServerDefinition; aForcedKind: TSQLHttpServerOptions;
+  aWebSocketsLoopDelay: integer);
 const AUTH: array[TSQLHttpServerRestAuthentication] of TSQLRestServerAuthenticationClass = (
   // adDefault, adHttpBasic, adWeak, adSSPI
   TSQLRestServerAuthenticationDefault, TSQLRestServerAuthenticationHttpBasic,
@@ -1215,6 +1218,7 @@ begin
     websock := WebSocketsEnable(aServer,aDefinition.PasswordPlain);
     if HttpServerFullWebSocketsLog then
       websock.Settings.SetFullLog;
+    websock.Settings^.LoopDelay := aWebSocketsLoopDelay;
   end;
 end;
 
