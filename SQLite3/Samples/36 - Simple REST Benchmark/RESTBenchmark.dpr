@@ -1,6 +1,14 @@
 /// minimal REST server for a list of Persons stored in SQlite3
 program RESTBenchmark;
 
+{
+  run the Server executable then e.g.
+  - ab -n 1000 -c 100 http://localhost:8888/root/abc
+      for latency measure (return the current timestamp as a few bytes)
+  - ab -n 1000 -c 100 http://localhost:8888/root/xyz
+      for bandwidth measure (returns some ORM query as 77KB of JSON)
+}
+
 {$APPTYPE CONSOLE}
 
 uses
