@@ -16742,13 +16742,11 @@ type
     fProcess: Int64;
     fInfo: variant;
     fComment: RawUTF8;
-    function GetUsageID: integer;
-    procedure SetUsageID(Value: integer);
   public
     /// compute the corresponding 23 bit TSynMonitorUsageID.Value time slice
     // - according to the stored Process field, after bit shift
-    // - don't use this property if aProcessIDShift is not set as 16 bits
-    property UsageID: integer read GetUsageID write SetUsageID;
+    // - allows a custom aProcessIDShift if it is not set as default 16 bits
+    function UsageID(aProcessIDShift: integer=16): integer;
   published
     /// the granularity of the statistics of this entry
     property Gran: TSynMonitorUsageGranularity read fGran write fGran;
@@ -16784,7 +16782,7 @@ type
     // - will use TSQLMonitorUsage table, unless another one is specified
     constructor Create(aStorage: TSQLRest; aProcessID: Int64;
       aStoredClass: TSQLMonitorUsageClass=nil; aProcessIDShift: integer=16); reintroduce; virtual;
-    /// finalize the process
+    /// finalize the process, saving pending changes
     destructor Destroy; override;
     /// you can set an optional Batch instance to speed up DB writing
     // - when calling the Modified() method
@@ -24696,6 +24694,8 @@ begin
     result := smvCount else
   if typ=TypeInfo(TSynMonitorCount64) then
     result := smvCount64 else
+  if typ=TypeInfo(TSynMonitorOneCount) then
+    result := smvOneCount else
     result := smvUndefined;
 end;
 
@@ -45377,17 +45377,9 @@ end;
 
 { TSQLMonitorUsage }
 
-const
-  SQLMONITORSHIFT = 16; // see TSynUniqueIdentifierProcess
-
-function TSQLMonitorUsage.GetUsageID: integer;
+function TSQLMonitorUsage.UsageID(aProcessIDShift: integer): integer;
 begin
-  result := fID shr SQLMONITORSHIFT;
-end;
-
-procedure TSQLMonitorUsage.SetUsageID(Value: integer);
-begin
-  fID := (Int64(Value) shl SQLMONITORSHIFT) or Int64(fProcess);
+  result := fID shr aProcessIDShift;
 end;
 
 
@@ -45401,7 +45393,7 @@ begin
   if aStorage=nil then
     raise ESynException.CreateUTF8('%.Create(nil)',[self]);
   if aProcessIDShift<0 then
-    aProcessIDShift := SQLMONITORSHIFT else
+    aProcessIDShift := 16 { see TSynUniqueIdentifierProcess } else
   if aProcessIDShift>40 then
     aProcessIDShift := 40;
   fProcessIDShift := aProcessIDShift;
@@ -45478,7 +45470,7 @@ begin
   if fSaveBatch<>nil then
     if update then
       result := fSaveBatch.Update(rec)>=0 else
-      result := fSaveBatch.Add(rec,true,true)=recid else
+      result := fSaveBatch.Add(rec,true,true)>=0 else
     if update then
       result := fStorage.Update(rec) else
       result := fStorage.Add(rec,true,true)=recid;
