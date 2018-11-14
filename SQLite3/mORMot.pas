@@ -5000,7 +5000,7 @@ type
     Kind: TSynMonitorType;
     Name: RawUTF8;
     Values: array[mugHour..mugYear] of TInt64DynArray;
-    CumulativeLast: Int64;
+    ValueLast: Int64;
   end;
   TSynMonitorUsageTrackPropDynArray = array of TSynMonitorUsageTrackProp;
   TSynMonitorUsageTrack = record
@@ -5051,10 +5051,10 @@ type
     // stay available during the whole TSynMonitorUsage process
     procedure Track(const Instances: array of TSynMonitor); overload;
     /// to be called when tracked properties changed on a tracked class instance
-    procedure Modified(Instance: TObject); overload;
+    function Modified(Instance: TObject): integer; overload;
     /// to be called when tracked properties changed on a tracked class instance
-    procedure Modified(Instance: TObject; const PropNames: array of RawUTF8;
-      ModificationTime: TTimeLog=0); overload; virtual;
+    function Modified(Instance: TObject; const PropNames: array of RawUTF8;
+      ModificationTime: TTimeLog=0): integer; overload; virtual;
     /// some custom text, associated with the current stored state
     // - will be persistented by Save() methods
     property Comment: RawUTF8 read fComment write fComment;
@@ -16733,11 +16733,13 @@ type
   end;
 
   /// ORM table used to store TSynMonitorUsage information in TSynMonitorUsageRest
-  // - the ID primary field is the TSynMonitorUsageID shifted by 16 bits
+  // - the ID primary field is the TSynMonitorUsageID (accessible from UsageID
+  // public property) shifted by 16 bits (by default) to include a
+  // TSynUniqueIdentifierProcess value
   TSQLMonitorUsage = class(TSQLRecordNoCaseExtended)
   protected
     fGran: TSynMonitorUsageGranularity;
-    fProcess: TSynUniqueIdentifierProcess;
+    fProcess: Int64;
     fInfo: variant;
     fComment: RawUTF8;
     function GetUsageID: integer;
@@ -16745,12 +16747,15 @@ type
   public
     /// compute the corresponding 23 bit TSynMonitorUsageID.Value time slice
     // - according to the stored Process field, after bit shift
+    // - don't use this property if aProcessIDShift is not set as 16 bits
     property UsageID: integer read GetUsageID write SetUsageID;
   published
     /// the granularity of the statistics of this entry
     property Gran: TSynMonitorUsageGranularity read fGran write fGran;
     /// identify which application is monitored
-    property Process: TSynUniqueIdentifierProcess read fProcess write fProcess;
+    // - match the lower bits of each record ID
+    // - by default, is expected to be a TSynUniqueIdentifierProcess 16-bit value
+    property Process: Int64 read fProcess write fProcess;
     /// the actual statistics information, stored as a TDocVariant JSON object
     property Info: variant read fInfo write fInfo;
     /// a custom text, which may be used e.g. by support or developpers
@@ -16760,31 +16765,42 @@ type
   TSQLMonitorUsageClass = class of TSQLMonitorUsage;
 
   /// will store TSynMonitorUsage information in TSQLMonitorUsage ORM tables
-  // - the TSQLRecord.ID will be the TSynMonitorUsageID shifted by 16 bits
+  // - TSQLRecord.ID will be the TSynMonitorUsageID shifted by ProcessIDShift bits
   TSynMonitorUsageRest = class(TSynMonitorUsage)
   protected
     fStorage: TSQLRest;
-    fProcessID: TSynUniqueIdentifierProcess;
+    fProcessID: Int64;
+    fProcessIDShift: integer;
     fStoredClass: TSQLMonitorUsageClass;
     fStoredCache: array[mugHour..mugYear] of TSQLMonitorUsage;
+    fSaveBatch: TSQLRestBatch;
     function SaveDB(ID: integer; const Track: variant; Gran: TSynMonitorUsageGranularity): boolean; override;
     function LoadDB(ID: integer; Gran: TSynMonitorUsageGranularity; out Track: variant): boolean; override;
   public
     /// initialize storage via ORM
     // - if a 16-bit TSynUniqueIdentifierProcess is supplied, it will be used to
     // identify the generating process by shifting TSynMonitorUsageID values
+    // by aProcessIDShift bits (default 16 but you may increase it up to 40 bits)
     // - will use TSQLMonitorUsage table, unless another one is specified
-    constructor Create(aStorage: TSQLRest; aProcessID: TSynUniqueIdentifierProcess;
-      aStoredClass: TSQLMonitorUsageClass=nil); reintroduce; virtual;
+    constructor Create(aStorage: TSQLRest; aProcessID: Int64;
+      aStoredClass: TSQLMonitorUsageClass=nil; aProcessIDShift: integer=16); reintroduce; virtual;
     /// finalize the process
     destructor Destroy; override;
+    /// you can set an optional Batch instance to speed up DB writing
+    // - when calling the Modified() method
+    property SaveBatch: TSQLRestBatch read fSaveBatch write fSaveBatch;
   published
     /// the actual ORM class used for persistence
     property StoredClass: TSQLMonitorUsageClass read fStoredClass;
     /// how the information could be stored for several processes
     // - e.g. when several SOA nodes gather monitoring information in a
     // shared (MongoDB) database
-    property ProcessID: TSynUniqueIdentifierProcess read fProcessID;
+    // - is by default a TSynUniqueIdentifierProcess value, but may be
+    // any integer up to ProcessIDShift bits as set in Create()
+    property ProcessID: Int64 read fProcessID;
+    /// how process ID are stored within the mORMot TSQLRecord.ID
+    // - equals 16 bits by default, to match TSynUniqueIdentifierProcess resolution
+    property ProcessIDShift: integer read fProcessIDShift;
   end;
 
   /// the flags used for TSQLRestServer.AddStats
@@ -24708,8 +24724,7 @@ function TSynMonitorUsage.Track(Instance: TObject; const Name: RawUTF8): integer
             ToText(parent,p^.Name); // meaningful property name
           for g := low(p^.Values) to high(p^.Values) do
             SetLength(p^.Values[g],USAGE_VALUE_LEN[g]);
-          if k in SYNMONITORVALUE_CUMULATIVE then
-            p^.CumulativeLast := nfo^.GetInt64Value(Instance);
+          p^.ValueLast := nfo^.GetInt64Value(Instance);
           inc(n);
         end;
         nfo := nfo^.Next;
@@ -24794,10 +24809,11 @@ const
   AS_MONTHS = not TL_MASK_DAYS;
   AS_YEARS = not TL_MASK_MONTHS;
 
-procedure TSynMonitorUsage.Modified(Instance: TObject);
+function TSynMonitorUsage.Modified(Instance: TObject): integer;
 begin
   if self<>nil then
-    Modified(Instance,[]);
+    result := Modified(Instance,[]) else
+    result := 0;
 end;
 
 procedure TSynMonitorUsage.SetCurrentUTCTime(out minutes: TTimeLogBits);
@@ -24805,8 +24821,8 @@ begin
   minutes.FromUTCTime;
 end;
 
-procedure TSynMonitorUsage.Modified(Instance: TObject;
-  const PropNames: array of RawUTF8; ModificationTime: TTimeLog);
+function TSynMonitorUsage.Modified(Instance: TObject;
+  const PropNames: array of RawUTF8; ModificationTime: TTimeLog): integer;
   procedure save(const track: TSynMonitorUsageTrack);
     function scope({$ifndef CPU64}var{$endif} prev,current: Int64): TSynMonitorUsageGranularity;
     begin
@@ -24841,22 +24857,24 @@ procedure TSynMonitorUsage.Modified(Instance: TObject;
       with track.Props[j] do
       if (high(PropNames)<0) or (FindPropName(PropNames,Name)>=0) then begin
         v := Info^.GetInt64Value(Instance);
-        if Kind in SYNMONITORVALUE_CUMULATIVE then begin
-          diff := v-CumulativeLast;
-          if diff<>0 then begin
-            CumulativeLast := v;
+        diff := v-ValueLast;
+        if diff<>0 then begin
+          inc(result);
+          ValueLast := v;
+          if Kind in SYNMONITORVALUE_CUMULATIVE then begin
             inc(Values[mugHour][min],diff);
             inc(Values[mugDay][time.Hour],diff); // propagate
             inc(Values[mugMonth][time.Day-1],diff);
             inc(Values[mugYear][time.Month-1],diff);
-          end;
-        end else
-          for k := min to 59 do // make instant values continuous
-            Values[mugHour][min] := v;
+          end else
+            for k := min to 59 do // make instant values continuous
+              Values[mugHour][k] := v;
+        end;
       end;
   end;
 var i: integer;
 begin
+  result := 0;
   if Instance=nil then
     exit;
   fSafe.Lock;
@@ -45376,11 +45394,17 @@ end;
 { TSynMonitorUsageRest }
 
 constructor TSynMonitorUsageRest.Create(aStorage: TSQLRest;
-  aProcessID: TSynUniqueIdentifierProcess; aStoredClass: TSQLMonitorUsageClass);
+  aProcessID: Int64; aStoredClass: TSQLMonitorUsageClass;
+  aProcessIDShift: integer);
 var g: TSynMonitorUsageGranularity;
 begin
   if aStorage=nil then
     raise ESynException.CreateUTF8('%.Create(nil)',[self]);
+  if aProcessIDShift<0 then
+    aProcessIDShift := SQLMONITORSHIFT else
+  if aProcessIDShift>40 then
+    aProcessIDShift := 40;
+  fProcessIDShift := aProcessIDShift;
   if aStoredClass=nil then
     fStoredClass := TSQLMonitorUsage else
     fStoredClass := aStoredClass;
@@ -45412,7 +45436,7 @@ begin
     exit;
   end;
   rec := fStoredCache[Gran];
-  recid := (Int64(ID) shl SQLMONITORSHIFT) or Int64(fProcessID);
+  recid := (Int64(ID) shl fProcessIDShift) or Int64(fProcessID);
   if rec.IDValue=recid then
     result := true else
   if fStorage.Retrieve(recid,rec) then begin // may use REST cache
@@ -45440,7 +45464,7 @@ begin
     exit;
   end;
   rec := fStoredCache[Gran];
-  recid := (Int64(ID) shl SQLMONITORSHIFT) or Int64(fProcessID);
+  recid := (Int64(ID) shl fProcessIDShift) or Int64(fProcessID);
   if rec.IDValue=recid then // already available
     update := true else begin
     update := fStorage.Retrieve(recid,rec); // may use REST cache
@@ -45451,9 +45475,13 @@ begin
   if Gran=mugHour then
     rec.Comment := fComment;
   rec.Info := Track;
-  if update then
-    result := fStorage.Update(rec) else
-    result := fStorage.Add(rec,true,true)=recid;
+  if fSaveBatch<>nil then
+    if update then
+      result := fSaveBatch.Update(rec)>=0 else
+      result := fSaveBatch.Add(rec,true,true)=recid else
+    if update then
+      result := fStorage.Update(rec) else
+      result := fStorage.Add(rec,true,true)=recid;
 end;
 
 
