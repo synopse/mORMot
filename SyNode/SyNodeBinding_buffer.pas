@@ -316,130 +316,117 @@ const
 // - can optinaly accept a 2 bytes representation of str (0xC1 0x0 0xC2 0x0 ...) as
 //   returned by SpiderMonkey engine GetTwoByteStringCharsAndLength function.
 //   In this case strLen is duplet count
-// Return length of resulting bin or -1 in case of invalid Base64 input
+// Return length of resulting bin or 0 in case of invalid Base64 input
 //
 // To estimate a length of result buffer function should be called as
-//   estimatedLength := anyBase64ToBin(str, strLen, nil, 0);
+//   estimatedLength := anyBase64ToBin(str, strLen, nil, strLen);
 function anyBase64ToBin(str: PAnsiChar; strLen: PtrInt;
   bin: PAnsiChar; maxBinLength: PtrInt;
   strIsTwoBytes: boolean = false; isStrict: boolean = false): PtrInt;
 var
-  i, num: PtrInt;
-  eofBytes, numBytes: byte;
-  res: shortint;
+  maxS, maxB, bPos, sPos: PtrInt;
+  v: uint32;
   c: AnsiChar;
   mul: byte;
+
+  function failTolerantDecode: boolean;
+  var lo, hi: smallint;
+  begin
+    repeat
+      c := str[sPos]; lo := DECODE_TABLE[c];
+      inc(sPos, 1 shl mul);
+      if (lo >= 0) then break; // Legal character
+      if ((c = '=') or (sPos >= strLen)) then
+        exit(false); // Stop decoding
+    until false;
+    //exp
+    if (sPos >= strLen) then exit(false);
+    if (bPos >= maxBinLength) then exit(false);
+    hi := lo;
+
+    // first byte
+    repeat
+      c := str[sPos]; lo := DECODE_TABLE[c];
+      inc(sPos, 1 shl mul);
+      if (lo >= 0) then break; // Legal character
+      if ((c = '=') or (sPos >= strLen)) then
+        exit(false); // Stop decoding
+    until false;
+    if bin <> nil then
+      bin[bPos] := AnsiChar( ((hi and $3F) shl 2) or ((lo and $30) shr 4) );
+    inc(bPos);
+    if (sPos >= strLen) then exit(false);
+    if (bPos >= maxBinLength) then exit(false);
+    hi := lo;
+
+    // second byte
+    repeat
+      c := str[sPos]; lo := DECODE_TABLE[c];
+      inc(sPos, 1 shl mul);
+      if (lo >= 0) then break; // Legal character
+      if ((c = '=') or (sPos >= strLen)) then
+        exit(false); // Stop decoding
+    until false;
+    if bin <> nil then
+      bin[bPos] := AnsiChar( ((hi and $0F) shl 4) or ((lo and $3C) shr 2) );
+    inc(bPos);
+    if (sPos >= strLen) then exit(false);
+    if (bPos >= maxBinLength) then exit(false);
+    hi := lo;
+
+    // third byte
+    repeat
+      c := str[sPos]; lo := DECODE_TABLE[c];
+      inc(sPos, 1 shl mul);
+      if (lo >= 0) then break; // Legal character
+      if ((c = '=') or (sPos >= strLen)) then
+        exit(false); // Stop decoding
+    until false;
+    if bin <> nil then
+      bin[bPos] := AnsiChar( ((hi and $03) shl 6) or ((lo and $3F) shr 0) );
+    inc(bPos);
+    if (sPos >= strLen) then exit(false);
+    if (bPos >= maxBinLength) then exit(false);
+    Result := true;
+  end;
 begin
-  eofBytes := 0; numBytes:= 0; num := 0; Result := 0;
-  if strIsTwoBytes then mul := 1 else mul := 0;
-  for i := 0 to strLen - 1 do begin
-    c := str[i shl mul];
-    if c in [' ', #10, #13, #9] then
-      continue;
-    if c = '=' then begin
-      inc(eofBytes);
-      num := num shl 6; inc(numBytes);
-      case numBytes of
-        1, 2: exit(-1); // nexpected end of stream character (=)
-        3: continue; // Wait for the next '='
-        4: begin
-             if (Result < maxBinLength) then bin[Result] := AnsiChar(num shr 16);
-             inc(Result);
-             if (eofBytes = 1) then begin
-               if (Result < maxBinLength) then bin[Result] := AnsiChar(num shr 8);
-               inc(Result);
-             end;
-           end;
-        5: exit(-1); // Trailing garbage detected
-      else
-        exit(-1); // Invalid value for numBytes
-      end;
+  Result := 0;
+  if strIsTwoBytes then begin
+    mul := 1; strLen := strLen shl mul;
+  end else
+    mul := 0;
+  maxB := (maxBinLength div 3) * 3;
+  maxS := (strLen div (4 shl mul)) * (4 shl mul);
+  bPos := 0;
+  sPos := 0;
+  while (bPos < maxB) and (sPos < maxS) do begin
+    v := DECODE_TABLE[str[sPos + (0 shl mul)]] shl 24 or
+         DECODE_TABLE[str[sPos + (1 shl mul)]] shl 16 or
+         DECODE_TABLE[str[sPos + (2 shl mul)]] shl 8 or
+         DECODE_TABLE[str[sPos + (3 shl mul)]];
+    // If MSB is set, input contains whitespace or is not valid base64
+    if v and $80808080 > 0 then begin
+      if not failTolerantDecode() then
+        exit(bPos);
+      maxB := bPos + (strLen shr mul - bPos) div 4 * 4; // Align maxB again
     end else begin
-      if eofBytes > 0 then
-        exit(-1); // Base64 characters after end of stream character (=) detected
-      res := DECODE_TABLE[c];
-      if (res >= 0) then begin
-        num := (num shl 6) + res;
-        inc(numBytes);
-        if (numBytes = 4) then begin
-          if (Result < maxBinLength) then bin[Result] := AnsiChar(num shr 16);
-          inc(Result);
-          if (Result < maxBinLength) then bin[Result] := AnsiChar((num shr 8) and $FF);
-          inc(Result);
-          if (Result < maxBinLength) then bin[Result] := AnsiChar(num and $FF);
-          inc(Result);
-          num := 0;
-          numBytes := 0;
-        end;
-        continue;
+      if bin <> nil then begin
+        bin[bPos + 0] := AnsiChar( ((v shr 22) and $FC) or ((v shr 20) and $03) );
+        bin[bPos + 1] := AnsiChar( ((v shr 12) and $F0) or ((v shr 10) and $0F) );
+        bin[bPos + 2] := AnsiChar( ((v shr  2) and $C0) or ((v shr  0) and $3F) );
       end;
-      if isStrict and (res <> -2) then
-        exit(-1); // "Invalid Base64 character: " + c;
+      inc(bPos, 3);
+      inc(sPos, 4 shl mul);
     end;
   end;
-  //for (int i = 0;  i < pLen;  i++) {
-  //  char c = pData[pOffset++];
-  //  if (Character.isWhitespace(c)) {
-  //    continue;
-  //  }
-  //  if (c == '=') {
-  //    ++eofBytes;
-  //    num = num << 6;
-  //    switch(++numBytes) {
-  //      case 1:
-  //      case 2:
-  //        throw new DecodingException("Unexpected end of stream character (=)");
-  //      case 3:
-  //        // Wait for the next '='
-  //        break;
-  //      case 4:
-  //        byteBuffer[byteBufferOffset++] = (byte) (num >> 16);
-  //        if (eofBytes == 1) {
-  //          byteBuffer[byteBufferOffset++] = (byte) (num >> 8);
-  //        }
-  //        writeBuffer(byteBuffer, 0, byteBufferOffset);
-  //        byteBufferOffset = 0;
-  //        break;
-  //      case 5:
-  //        throw new DecodingException("Trailing garbage detected");
-  //      default:
-  //        throw new IllegalStateException("Invalid value for numBytes");
-  //    }
-  //  } else {
-  //    if (eofBytes > 0) {
-  //      throw new DecodingException("Base64 characters after end of stream character (=) detected.");
-  //    }
-  //    int result;
-  //    if (c >= 0  &&  c < base64ToInt.length) {
-  //      result = base64ToInt[c];
-  //      if (result >= 0) {
-  //        num = (num << 6) + result;
-  //        if (++numBytes == 4) {
-  //          byteBuffer[byteBufferOffset++] = (byte) (num >> 16);
-  //          byteBuffer[byteBufferOffset++] = (byte) ((num >> 8) & 0xff);
-  //          byteBuffer[byteBufferOffset++] = (byte) (num & 0xff);
-  //          if (byteBufferOffset + 3 > byteBuffer.length) {
-  //            writeBuffer(byteBuffer, 0, byteBufferOffset);
-  //            byteBufferOffset = 0;
-  //          }
-  //          num = 0;
-  //          numBytes = 0;
-  //        }
-  //        continue;
-  //      }
-  //    }
-  //    if (!Character.isWhitespace(c)) {
-  //      throw new DecodingException("Invalid Base64 character: " + (int) c);
-  //    }
-  //  }
-  //}
+  if (sPos < strLen) and (bPos < maxBinLength) then
+    failTolerantDecode();
+  Result := bPos;
 end;
 
 function StringBytesWrite(bufData: Pointer; max_length: size_t; str: Pointer; strLen: size_t; isLatin1: Boolean; encoding:TEncoding): size_t; {$ifdef HASINLINE}inline;{$endif}
 var
   strLenInBytes: size_t;
-  base64Tmp: RawByteString;
-  base64TmpRes: RawByteString;
   i: PtrInt;
   ch: PAnsiChar;
 begin
@@ -494,60 +481,6 @@ begin
         Result := max_length
       else
         Result := i;
-      //if isLatin1 then begin
-      //  strLenInBytes := strLenInBytes;
-      //  SetLength(base64Tmp, strLenInBytes + 3);
-      //  ch := pointer(base64Tmp);
-      //  for i := 1 to strLenInBytes do begin
-      //    case PAnsiChar(str)[i-1] of
-      //      '-': begin ch^ := '+'; inc(ch); end;
-      //      '_': begin ch^ := '/'; inc(ch); end;
-      //      'A'..'Z','a'..'z','0'..'9','+','/','=': begin ch^ := PAnsiChar(str)[i-1]; inc(ch); end;
-      //    end;
-      //  end;
-      //  strLenInBytes := ch - pointer(base64Tmp);
-      //  case strLenInBytes and 3 of
-      //    0: ;
-      //    1: if ((ch[-1] = '='))then Dec(strLenInBytes) else begin ch^ := '='; ch[1] := '='; ch[2] := '='; Inc(strLenInBytes,3); end;
-      //    2: if ((ch[-1] = '=') and (ch[-2] = '=')) then Dec(strLenInBytes, 2) else begin ch^ := '='; ch[1] := '='; Inc(strLenInBytes, 2) end;
-      //    3: if ((ch[-1] = '=') and (ch[-2] = '=')and (ch[-3] = '=')) then Dec(strLenInBytes, 3) else begin ch^ := '='; Inc(strLenInBytes) end;
-      //  end;
-      //  str := pointer(base64Tmp);
-      //  Result := Base64ToBinLength(str, strLenInBytes);
-      //  SetLength(base64TmpRes, Result);
-      //  if not Base64ToBin(str, Pointer(base64TmpRes), strLenInBytes, Result, false) then
-      //    Result := 0;
-      //  if Result > max_length then
-      //    Result := max_length;
-      //  MoveFast(Pointer(base64TmpRes)^, bufData^, Result);
-      //end else begin
-      //  strLenInBytes := strLenInBytes shr 1;
-      //  SetLength(base64Tmp, strLenInBytes + 3);
-      //  ch := pointer(base64Tmp);
-      //  for i := 1 to strLenInBytes do begin
-      //    if PAnsiChar(str)[2*i-1] = #0 then
-      //      case PAnsiChar(str)[2*i-2] of
-      //        '-': begin ch^ := '+'; inc(ch); end;
-      //        '_': begin ch^ := '/'; inc(ch); end;
-      //        'A'..'Z','a'..'z','0'..'9','+','/','=': begin ch^ := PAnsiChar(str)[2*i-2]; inc(ch); end;
-      //      end;
-      //  end;
-      //  strLenInBytes := ch - pointer(base64Tmp);
-      //  case strLenInBytes and 3 of
-      //    0: ;
-      //    1: if ((ch[-1] = '='))then Dec(strLenInBytes) else begin ch^ := '='; ch[1] := '='; ch[2] := '='; Inc(strLenInBytes,3); end;
-      //    2: if ((ch[-1] = '=') and (ch[-2] = '=')) then Dec(strLenInBytes, 2) else begin ch^ := '='; ch[1] := '='; Inc(strLenInBytes, 2) end;
-      //    3: if ((ch[-1] = '=') and (ch[-2] = '=')and (ch[-3] = '=')) then Dec(strLenInBytes, 3) else begin ch^ := '='; Inc(strLenInBytes) end;
-      //  end;
-      //  str := pointer(base64Tmp);
-      //  Result := Base64ToBinLength(str, strLenInBytes);
-      //  SetLength(base64TmpRes, Result);
-      //  if not Base64ToBin(str, Pointer(base64TmpRes), strLenInBytes, Result, false) then
-      //    Result := 0;
-      //  if Result > max_length then
-      //    Result := max_length;
-      //  MoveFast(Pointer(base64TmpRes)^, bufData^, Result);
-      //end;
     end;
     HEX: begin
       if isLatin1 then begin
@@ -839,6 +772,7 @@ function createFromString(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolea
 var
   in_argv: PjsvalVector;
   encoding: TEncoding;
+  tmp: RawByteString;
 
   _str: PJSString;
   isLatin1: Boolean;
@@ -885,10 +819,26 @@ begin
       BUFFER, UTF8: size := Length(_str.ToUTF8(cx));//todo fix it
       UCS2: size := strLen shl 1;
       BASE64: begin
-          size := anyBase64ToBin(str, strLen, nil, 0, not isLatin1);
-          //size := Base64ToBinLength(str, strLen);
-          if size < 0 then size := 0;
+        size := (strLen * 3) shr 2 + 2; // estimate
+        setLength(tmp, size);
+        size := anyBase64ToBin(str, strLen, pointer(tmp), size, not isLatin1);
+        if size < 0 then size := 0;
+        proto := cx.NewRootedObject(vp.thisObject[cx].ReservedSlot[0].asObject.Ctor[cx]);
+        try
+          val.asInteger := size;
+          buf := cx.NewRootedObject(cx.New(proto.ptr, 1, @val));
+          try
+            bufData := buf.ptr.GetUint8ArrayData;
+            vp.rval := buf.ptr.ToJSValue;
+          finally
+            cx.FreeRootedObject(buf);
+          end;
+          MoveFast(pointer(tmp)^, bufData^, size);
+        finally
+          cx.FreeRootedObject(proto);
         end;
+        exit;
+      end;
       HEX: size := strLen shr 1;
       else
         raise ESMException.Create(UNKNOWN_ENCODING);
