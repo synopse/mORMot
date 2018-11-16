@@ -275,14 +275,172 @@ begin
   result := (value < 128) or (value >= 192);
 end;
 
-function StringBytesWrite(bufData: Pointer; max_length: size_t; str: Pointer; strLen: size_t; isLatin1: Boolean; encoding:TEncoding): size_t; {$ifdef HASINLINE}inline;{$endif}
+/// This array is a lookup table that translates AnsiChar characters drawn from the "Base64 Alphabet" (as specified
+// in Table 1 of RFC 2045) into their 6-bit positive integer equivalents. Characters that are not in the Base64
+// alphabet but fall within the bounds of the array are translated to -1.
+//
+// Whitespaces are translated to -2.
+//
+// Note: '+' and '-' both decode to 62. '/' and '_' both decode to 63. This means decoder seamlessly handles both
+// URL_SAFE and STANDARD base64.
+//
+// Thanks to "commons" project in ws.apache.org for this code.
+// http://svn.apache.org/repos/asf/webservices/commons/trunk/modules/util/
 const
-  NOT_BASE64 = 'Not Base64';
+  DECODE_TABLE: array[AnsiChar] of shortint = (
+//   0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -2, -1, -1, -2, -1, -1, // 00-0f
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, // 10-1f
+    -2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 62, -1, 62, -1, 63, // 20-2f + - /
+    52, 53, 54, 55, 56, 57, 58, 59, 60, 61, -1, -1, -1, -1, -1, -1, // 30-3f 0-9
+    -1,  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, // 40-4f A-O
+    15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, -1, -1, -1, -1, 63, // 50-5f P-Z _
+    -1, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, // 60-6f a-o
+    41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, -1, -1, -1, -1, -1, // 70-7a p-z
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
+);
+
+/// Conversion from URL_SAFE and STANDARD base64 encoded text into binary data with features:
+// - padding is optional
+// - whitespaces (' ', \r, \n) are skipped to be compartible with
+//   transfer encoding for MIME (RFC 2045);
+//   for example SOAP/E-Mail use \r\n to split long Base64 string into parts
+// - will decode up to maxBinLength into bin buffer
+// - can optinaly accept a 2 bytes representation of str (0xC1 0x0 0xC2 0x0 ...) as
+//   returned by SpiderMonkey engine GetTwoByteStringCharsAndLength function.
+//   In this case strLen is duplet count
+// Return length of resulting bin or -1 in case of invalid Base64 input
+//
+// To estimate a length of result buffer function should be called as
+//   estimatedLength := anyBase64ToBin(str, strLen, nil, 0);
+function anyBase64ToBin(str: PAnsiChar; strLen: PtrInt;
+  bin: PAnsiChar; maxBinLength: PtrInt;
+  strIsTwoBytes: boolean = false; isStrict: boolean = false): PtrInt;
+var
+  i, num: PtrInt;
+  eofBytes, numBytes: byte;
+  res: shortint;
+  c: AnsiChar;
+  mul: byte;
+begin
+  eofBytes := 0; numBytes:= 0; num := 0; Result := 0;
+  if strIsTwoBytes then mul := 1 else mul := 0;
+  for i := 0 to strLen - 1 do begin
+    c := str[i shl mul];
+    if c in [' ', #10, #13, #9] then
+      continue;
+    if c = '=' then begin
+      inc(eofBytes);
+      num := num shl 6; inc(numBytes);
+      case numBytes of
+        1, 2: exit(-1); // nexpected end of stream character (=)
+        3: continue; // Wait for the next '='
+        4: begin
+             if (Result < maxBinLength) then bin[Result] := AnsiChar(num shr 16);
+             inc(Result);
+             if (eofBytes = 1) then begin
+               if (Result < maxBinLength) then bin[Result] := AnsiChar(num shr 8);
+               inc(Result);
+             end;
+           end;
+        5: exit(-1); // Trailing garbage detected
+      else
+        exit(-1); // Invalid value for numBytes
+      end;
+    end else begin
+      if eofBytes > 0 then
+        exit(-1); // Base64 characters after end of stream character (=) detected
+      res := DECODE_TABLE[c];
+      if (res >= 0) then begin
+        num := (num shl 6) + res;
+        inc(numBytes);
+        if (numBytes = 4) then begin
+          if (Result < maxBinLength) then bin[Result] := AnsiChar(num shr 16);
+          inc(Result);
+          if (Result < maxBinLength) then bin[Result] := AnsiChar((num shr 8) and $FF);
+          inc(Result);
+          if (Result < maxBinLength) then bin[Result] := AnsiChar(num and $FF);
+          inc(Result);
+          num := 0;
+          numBytes := 0;
+        end;
+        continue;
+      end;
+      if isStrict and (res <> -2) then
+        exit(-1); // "Invalid Base64 character: " + c;
+    end;
+  end;
+  //for (int i = 0;  i < pLen;  i++) {
+  //  char c = pData[pOffset++];
+  //  if (Character.isWhitespace(c)) {
+  //    continue;
+  //  }
+  //  if (c == '=') {
+  //    ++eofBytes;
+  //    num = num << 6;
+  //    switch(++numBytes) {
+  //      case 1:
+  //      case 2:
+  //        throw new DecodingException("Unexpected end of stream character (=)");
+  //      case 3:
+  //        // Wait for the next '='
+  //        break;
+  //      case 4:
+  //        byteBuffer[byteBufferOffset++] = (byte) (num >> 16);
+  //        if (eofBytes == 1) {
+  //          byteBuffer[byteBufferOffset++] = (byte) (num >> 8);
+  //        }
+  //        writeBuffer(byteBuffer, 0, byteBufferOffset);
+  //        byteBufferOffset = 0;
+  //        break;
+  //      case 5:
+  //        throw new DecodingException("Trailing garbage detected");
+  //      default:
+  //        throw new IllegalStateException("Invalid value for numBytes");
+  //    }
+  //  } else {
+  //    if (eofBytes > 0) {
+  //      throw new DecodingException("Base64 characters after end of stream character (=) detected.");
+  //    }
+  //    int result;
+  //    if (c >= 0  &&  c < base64ToInt.length) {
+  //      result = base64ToInt[c];
+  //      if (result >= 0) {
+  //        num = (num << 6) + result;
+  //        if (++numBytes == 4) {
+  //          byteBuffer[byteBufferOffset++] = (byte) (num >> 16);
+  //          byteBuffer[byteBufferOffset++] = (byte) ((num >> 8) & 0xff);
+  //          byteBuffer[byteBufferOffset++] = (byte) (num & 0xff);
+  //          if (byteBufferOffset + 3 > byteBuffer.length) {
+  //            writeBuffer(byteBuffer, 0, byteBufferOffset);
+  //            byteBufferOffset = 0;
+  //          }
+  //          num = 0;
+  //          numBytes = 0;
+  //        }
+  //        continue;
+  //      }
+  //    }
+  //    if (!Character.isWhitespace(c)) {
+  //      throw new DecodingException("Invalid Base64 character: " + (int) c);
+  //    }
+  //  }
+  //}
+end;
+
+function StringBytesWrite(bufData: Pointer; max_length: size_t; str: Pointer; strLen: size_t; isLatin1: Boolean; encoding:TEncoding): size_t; {$ifdef HASINLINE}inline;{$endif}
 var
   strLenInBytes: size_t;
   base64Tmp: RawByteString;
   base64TmpRes: RawByteString;
-  i: Integer;
+  i: PtrInt;
   ch: PAnsiChar;
 begin
   if isLatin1 then
@@ -304,8 +462,6 @@ begin
       end else begin
         for i := 0 to Result - 1 do
           Puint8Vector(bufData)[i] := Puint8Vector(str)[i*2];
-//        MoveFast(str^, bufData^, Result)
-//        WinAnsiConvert.UnicodeBufferToAnsi(bufData, str, Result);
       end;
     end;
     UTF8: begin
@@ -331,60 +487,67 @@ begin
       end;
     end;
     BASE64: begin
-      if isLatin1 then begin
-        strLenInBytes := strLenInBytes;
-        SetLength(base64Tmp, strLenInBytes + 3);
-        ch := pointer(base64Tmp);
-        for i := 1 to strLenInBytes do begin
-          case PAnsiChar(str)[i-1] of
-            '-': begin ch^ := '+'; inc(ch); end;
-            '_': begin ch^ := '/'; inc(ch); end;
-            'A'..'Z','a'..'z','0'..'9','+','/','=': begin ch^ := PAnsiChar(str)[i-1]; inc(ch); end;
-          end;
-        end;
-        strLenInBytes := ch - pointer(base64Tmp);
-        case strLenInBytes and 3 of
-          0: ;
-          1: if ((ch[-1] = '='))then Dec(strLenInBytes) else begin ch^ := '='; ch[1] := '='; ch[2] := '='; Inc(strLenInBytes,3); end;
-          2: if ((ch[-1] = '=') and (ch[-2] = '=')) then Dec(strLenInBytes, 2) else begin ch^ := '='; ch[1] := '='; Inc(strLenInBytes, 2) end;
-          3: if ((ch[-1] = '=') and (ch[-2] = '=')and (ch[-3] = '=')) then Dec(strLenInBytes, 3) else begin ch^ := '='; Inc(strLenInBytes) end;
-        end;
-        str := pointer(base64Tmp);
-        Result := Base64ToBinLength(str, strLenInBytes);
-        SetLength(base64TmpRes, Result);
-        if not Base64ToBin(str, Pointer(base64TmpRes), strLenInBytes, Result, false) then
-          Result := 0;
-        if Result > max_length then
-          Result := max_length;
-        MoveFast(Pointer(base64TmpRes)^, bufData^, Result);
-      end else begin
-        strLenInBytes := strLenInBytes shr 1;
-        SetLength(base64Tmp, strLenInBytes + 3);
-        ch := pointer(base64Tmp);
-        for i := 1 to strLenInBytes do begin
-          if PAnsiChar(str)[2*i-1] = #0 then
-            case PAnsiChar(str)[2*i-2] of
-              '-': begin ch^ := '+'; inc(ch); end;
-              '_': begin ch^ := '/'; inc(ch); end;
-              'A'..'Z','a'..'z','0'..'9','+','/','=': begin ch^ := PAnsiChar(str)[2*i-2]; inc(ch); end;
-            end;
-        end;
-        strLenInBytes := ch - pointer(base64Tmp);
-        case strLenInBytes and 3 of
-          0: ;
-          1: if ((ch[-1] = '='))then Dec(strLenInBytes) else begin ch^ := '='; ch[1] := '='; ch[2] := '='; Inc(strLenInBytes,3); end;
-          2: if ((ch[-1] = '=') and (ch[-2] = '=')) then Dec(strLenInBytes, 2) else begin ch^ := '='; ch[1] := '='; Inc(strLenInBytes, 2) end;
-          3: if ((ch[-1] = '=') and (ch[-2] = '=')and (ch[-3] = '=')) then Dec(strLenInBytes, 3) else begin ch^ := '='; Inc(strLenInBytes) end;
-        end;
-        str := pointer(base64Tmp);
-        Result := Base64ToBinLength(str, strLenInBytes);
-        SetLength(base64TmpRes, Result);
-        if not Base64ToBin(str, Pointer(base64TmpRes), strLenInBytes, Result, false) then
-          Result := 0;
-        if Result > max_length then
-          Result := max_length;
-        MoveFast(Pointer(base64TmpRes)^, bufData^, Result);
-      end;
+      i := anyBase64ToBin(str, strLen, bufData, max_length, not isLatin1);
+      if i = -1 then
+        Result := 0 // error in base64
+      else if i > max_length then
+        Result := max_length
+      else
+        Result := i;
+      //if isLatin1 then begin
+      //  strLenInBytes := strLenInBytes;
+      //  SetLength(base64Tmp, strLenInBytes + 3);
+      //  ch := pointer(base64Tmp);
+      //  for i := 1 to strLenInBytes do begin
+      //    case PAnsiChar(str)[i-1] of
+      //      '-': begin ch^ := '+'; inc(ch); end;
+      //      '_': begin ch^ := '/'; inc(ch); end;
+      //      'A'..'Z','a'..'z','0'..'9','+','/','=': begin ch^ := PAnsiChar(str)[i-1]; inc(ch); end;
+      //    end;
+      //  end;
+      //  strLenInBytes := ch - pointer(base64Tmp);
+      //  case strLenInBytes and 3 of
+      //    0: ;
+      //    1: if ((ch[-1] = '='))then Dec(strLenInBytes) else begin ch^ := '='; ch[1] := '='; ch[2] := '='; Inc(strLenInBytes,3); end;
+      //    2: if ((ch[-1] = '=') and (ch[-2] = '=')) then Dec(strLenInBytes, 2) else begin ch^ := '='; ch[1] := '='; Inc(strLenInBytes, 2) end;
+      //    3: if ((ch[-1] = '=') and (ch[-2] = '=')and (ch[-3] = '=')) then Dec(strLenInBytes, 3) else begin ch^ := '='; Inc(strLenInBytes) end;
+      //  end;
+      //  str := pointer(base64Tmp);
+      //  Result := Base64ToBinLength(str, strLenInBytes);
+      //  SetLength(base64TmpRes, Result);
+      //  if not Base64ToBin(str, Pointer(base64TmpRes), strLenInBytes, Result, false) then
+      //    Result := 0;
+      //  if Result > max_length then
+      //    Result := max_length;
+      //  MoveFast(Pointer(base64TmpRes)^, bufData^, Result);
+      //end else begin
+      //  strLenInBytes := strLenInBytes shr 1;
+      //  SetLength(base64Tmp, strLenInBytes + 3);
+      //  ch := pointer(base64Tmp);
+      //  for i := 1 to strLenInBytes do begin
+      //    if PAnsiChar(str)[2*i-1] = #0 then
+      //      case PAnsiChar(str)[2*i-2] of
+      //        '-': begin ch^ := '+'; inc(ch); end;
+      //        '_': begin ch^ := '/'; inc(ch); end;
+      //        'A'..'Z','a'..'z','0'..'9','+','/','=': begin ch^ := PAnsiChar(str)[2*i-2]; inc(ch); end;
+      //      end;
+      //  end;
+      //  strLenInBytes := ch - pointer(base64Tmp);
+      //  case strLenInBytes and 3 of
+      //    0: ;
+      //    1: if ((ch[-1] = '='))then Dec(strLenInBytes) else begin ch^ := '='; ch[1] := '='; ch[2] := '='; Inc(strLenInBytes,3); end;
+      //    2: if ((ch[-1] = '=') and (ch[-2] = '=')) then Dec(strLenInBytes, 2) else begin ch^ := '='; ch[1] := '='; Inc(strLenInBytes, 2) end;
+      //    3: if ((ch[-1] = '=') and (ch[-2] = '=')and (ch[-3] = '=')) then Dec(strLenInBytes, 3) else begin ch^ := '='; Inc(strLenInBytes) end;
+      //  end;
+      //  str := pointer(base64Tmp);
+      //  Result := Base64ToBinLength(str, strLenInBytes);
+      //  SetLength(base64TmpRes, Result);
+      //  if not Base64ToBin(str, Pointer(base64TmpRes), strLenInBytes, Result, false) then
+      //    Result := 0;
+      //  if Result > max_length then
+      //    Result := max_length;
+      //  MoveFast(Pointer(base64TmpRes)^, bufData^, Result);
+      //end;
     end;
     HEX: begin
       if isLatin1 then begin
@@ -685,7 +848,7 @@ var
 
   buf: PJSRootedObject;
   bufData: Pointer;
-  size: size_t;
+  size: PtrInt;
   actual: size_t;
   proto: PJSRootedObject;
   val: jsval;
@@ -721,7 +884,11 @@ begin
       ASCII, LATIN1: size := strLen;
       BUFFER, UTF8: size := Length(_str.ToUTF8(cx));//todo fix it
       UCS2: size := strLen shl 1;
-      BASE64: size := Base64ToBinLength(str, strLen);
+      BASE64: begin
+          size := anyBase64ToBin(str, strLen, nil, 0, not isLatin1);
+          //size := Base64ToBinLength(str, strLen);
+          if size < 0 then size := 0;
+        end;
       HEX: size := strLen shr 1;
       else
         raise ESMException.Create(UNKNOWN_ENCODING);
@@ -748,12 +915,9 @@ begin
           cx.FreeRootedObject(buf);
         end;
       end
-
     finally
       cx.FreeRootedObject(proto);
     end;
-
-
   except
     on E: Exception do
     begin
