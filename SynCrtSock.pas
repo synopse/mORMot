@@ -10255,9 +10255,9 @@ var URI: TURI;
 begin
   if not URI.From(aURI) then
     raise ECrtSocket.CreateFmt('%.Create: invalid aURI=%', [ClassName, aURI]);
+  IgnoreSSLCertificateErrors := aIgnoreSSLCertificateErrors;
   Create(URI.Server,URI.Port,URI.Https,aProxyName,aProxyByPass,
     ConnectionTimeOut,SendTimeout,ReceiveTimeout);
-  IgnoreSSLCertificateErrors := aIgnoreSSLCertificateErrors;
 end;
 
 class function THttpRequest.InternalREST(const url,method,data,header: SockString;
