@@ -322,7 +322,7 @@ const
 //   estimatedLength := anyBase64ToBin(str, strLen, nil, strLen);
 function anyBase64ToBin(str: PAnsiChar; strLen: PtrInt;
   bin: PAnsiChar; maxBinLength: PtrInt;
-  strIsTwoBytes: boolean = false; isStrict: boolean = false): PtrInt;
+  strIsTwoBytes: boolean = false): PtrInt;
 var
   maxS, maxB, bPos, sPos: PtrInt;
   v: uint32;
