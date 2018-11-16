@@ -22132,6 +22132,10 @@ function VariantToBoolean(const V: Variant; var Value: Boolean): boolean;
 var tmp: TVarData;
 begin
   case TVarData(V).VType of
+  varEmpty, varNull: begin
+    result := false;
+    exit;
+  end;
   varBoolean:
     Value := TVarData(V).VBoolean;
   varInteger: // coming e.g. from GetJsonField()

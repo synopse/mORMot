@@ -2198,7 +2198,7 @@ function SelectInClause(const PropName: RawUTF8; const Values: array of RawUTF8;
 /// compute 'PropName in (...)' where clause for a SQL statement
 // - if Values has no value, returns ''
 // - if Values has a single value, returns 'PropName=Values0' or inlined
-// 'PropName=:(Values0):' if ValuesInlined is true
+// 'PropName=:(Values0):' if ValuesInlined is bigger than 1
 // - if Values has more than one value, returns 'PropName in (Values0,Values1,...)'
 // or 'PropName in (:(Values0):,:(Values1):,...)' if length(Values)<ValuesInlinedMax
 // - PropName can be used as a prefix to the 'in ()' clause, in conjunction
