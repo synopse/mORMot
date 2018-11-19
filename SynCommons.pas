@@ -59820,8 +59820,7 @@ begin
     fMap := 0;
   end;
   {$else}
-  if (fBuf<>nil) and (fBufSize>0)
-    {$ifndef KYLIX3} and (fFileSize<>fBufSize){$endif} then
+  if (fBuf<>nil) and (fBufSize>0) then
     {$ifdef KYLIX3}munmap{$else}fpmunmap{$endif}(fBuf,fBufSize);
   {$endif}
   fBuf := nil;
