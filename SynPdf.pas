@@ -760,7 +760,7 @@ type
     // - will compute the internal keys
     procedure AttachDocument(aDoc: TPdfDocument); override;
   end;
-{$endif}
+{$endif USE_PDFSECURITY}
 
   /// buffered writer class, specialized for PDF encoding
   TPdfWrite = class
@@ -1400,7 +1400,7 @@ type
     fEncryptionObject: TPdfDictionary;
     fCurrentObjectNumber: integer;
     fCurrentGenerationNumber: integer;
-    {$endif}
+    {$endif USE_PDFSECURITY}
     function GetGeneratePDF15File: boolean;
     procedure SetGeneratePDF15File(const Value: boolean);
     function GetInfo: TPdfInfo;     {$ifdef HASINLINE}inline;{$endif}
@@ -1776,7 +1776,7 @@ type
   /// is used to define the TMetaFile kind of arc to be drawn
   TPdfCanvasArcType =(
     acArc, acArcTo, acArcAngle, acPie, acChoord);
-  {$endif}
+  {$endif USE_ARC}
 
   /// access to the PDF Canvas, used to draw on the page
   TPdfCanvas = class(TObject)
@@ -1839,7 +1839,7 @@ type
    {$ifdef USE_ARC}
    procedure ARCI(centerx, centery, W, H, Sx, Sy, Ex, Ey: integer;
      clockwise: boolean; arctype: TPdfCanvasArcType; var position: TPoint);
-   {$endif}
+   {$endif USE_ARC}
     // wrapper call I2X() and I2Y() for conversion (points to origin+size)
     function BoxI(Box: TRect; Normalize: boolean): TPdfBox; {$ifdef HASINLINE}inline;{$endif}
     // wrapper call I2X() and I2Y() for conversion
@@ -3737,7 +3737,7 @@ begin
       fCurrentObjectNumber := FObjectNumber;
       fCurrentGenerationNumber := FGenerationNumber;
     end;
-{$endif}
+{$endif USE_PDFSECURITY}
 end;
 
 procedure TPdfObject.SetObjectNumber(Value: integer);
@@ -4371,7 +4371,7 @@ begin
   {$ifdef USE_PDFSECURITY}
     if (TmpSize>0) and (W.fDoc.fEncryption<>nil) and not FDoNotEncrypt then
       W.fDoc.fEncryption.EncodeBuffer(Buf^,Buf^,TmpSize);
-  {$endif}
+  {$endif USE_PDFSECURITY}
     W.Add(#10'stream'#10).Add(Buf,TmpSize).
       Add(#10'endstream');
     FWriter.fDestStream.Size := 0; // release internal stream memory
@@ -4697,7 +4697,7 @@ function TPdfWrite.AddEscapeContent(const Text: RawByteString): TPdfWrite;
 var tmp: PAnsiChar;
     L: integer;
     buf: array[byte] of AnsiChar;
-{$endif}
+{$endif USE_PDFSECURITY}
 begin
 {$ifdef USE_PDFSECURITY}
   if (Text<>'') and (fDoc.fEncryption<>nil) then begin
@@ -4713,7 +4713,7 @@ begin
         Freemem(tmp);
     end;
   end else
-{$endif}
+{$endif USE_PDFSECURITY}
   result := AddEscape(pointer(Text),length(Text));
 end;
 
@@ -4949,7 +4949,7 @@ end;
 var L: Integer;
 {$ifdef USE_PDFSECURITY}
     tmp: TWordDynArray;
-{$endif}
+{$endif USE_PDFSECURITY}
 begin
   if WideCharCount>0 then begin
 {$ifdef USE_PDFSECURITY}
@@ -4958,7 +4958,7 @@ begin
       fDoc.fEncryption.EncodeBuffer(PW^,pointer(tmp)^,WideCharCount*2);
       PW := pointer(tmp);
     end;
-{$endif}
+{$endif USE_PDFSECURITY}
     repeat
       L := WideCharCount;
       if BEnd-B<=L*4 then begin
@@ -5439,7 +5439,7 @@ procedure TPdfTrailer.ToCrossReference(Doc: TPdfDocument);
 var i: integer;
 {$ifdef USE_PDFSECURITY}
     Enc: TPdfEncryption;
-{$endif}
+{$endif USE_PDFSECURITY}
 begin
   FXRef := Doc.FXref;
   FCrossReference := TPdfStream.Create(Doc);
@@ -5449,14 +5449,14 @@ begin
   FCrossReference.FDoNotEncrypt := true;
   if Doc.fEncryption<>nil then
     exit; // still a bug with encryption + objectstream
-{$endif}
+{$endif USE_PDFSECURITY}
   FObjectStream := TPdfObjectStream.Create(Doc);
 {$ifdef USE_PDFSECURITY}
   FObjectStream.FDoNotEncrypt := true;
   Enc := Doc.fEncryption;
   try
     Doc.fEncryption := nil; // force /ObjStm content not encrypted
-{$endif}
+{$endif USE_PDFSECURITY}
     for i := 1 to FXRef.ItemCount-1 do
     with FXRef.Items[i] do
       if (ByteOffset<=0) and Value.InheritsFrom(TPdfDictionary) then begin
@@ -5467,7 +5467,7 @@ begin
   finally
     Doc.fEncryption := Enc;
   end;
-{$endif}
+{$endif USE_PDFSECURITY}
 end;
 
 
@@ -5589,7 +5589,7 @@ begin
   fPDFA1 := APDFA1;
   {$ifdef USE_PDFSECURITY}
   fEncryption := AEncryption;
-  {$endif}
+  {$endif USE_PDFSECURITY}
   fTPdfPageClass := TPdfPage;
   if ACodePage=0 then
     FCodePage := LCIDToCodePage(SysLocale.DefaultLCID) else // GetACP can be<>SysLocale
@@ -5649,7 +5649,7 @@ begin
   inherited;
   {$ifdef USE_PDFSECURITY}
   fEncryption.Free;
-  {$endif}
+  {$endif USE_PDFSECURITY}
 end;
 
 function TPdfDocument.CreateEmbeddedFont(const FontName: RawUTF8): TPdfFont;
@@ -6017,7 +6017,7 @@ var CatalogDictionary: TPdfDictionary;
     FileID: array[0..3] of cardinal;
     {$ifndef USE_PDFSECURITY}
     P: PAnsiChar;
-    {$endif}
+    {$endif USE_PDFSECURITY}
 const
   ICC: array[0..139] of cardinal = (
     805437440,1161970753,4098,1920233069,541214546,542792024,134270983,318769920,989868800,
@@ -6076,14 +6076,14 @@ begin
   {$ifdef USE_PDFSECURITY}
   if fEncryption<>nil then
     NeedFileID := true;
-  {$endif}
+  {$endif USE_PDFSECURITY}
   if PDFA1 then begin
     if fFileFormat<pdf14 then
       fFileFormat := pdf14;
     {$ifdef USE_PDFSECURITY}
     if fEncryption<>nil then
       raise EPdfInvalidOperation.Create('PDF/A-1 not allowed when encryption is enabled');
-    {$endif}
+    {$endif USE_PDFSECURITY}
     fUseFontFallBack := true;
     FOutputIntents := TPdfArray.Create(FXref);
     Dico := TPdfDictionary.Create(FXRef);
@@ -6121,7 +6121,7 @@ begin
     P[0] := '<';
     SynCommons.BinToHex(PAnsiChar(@FileID[0]),P+1,16);
     P[33] := '>';
-    {$endif}
+    {$endif USE_PDFSECURITY}
     ID := TPdfArray.Create(FXref);
     ID.AddItem(TPdfRawText.Create(IDs));
     ID.AddItem(TPdfRawText.Create(IDs));
@@ -6130,7 +6130,7 @@ begin
   {$ifdef USE_PDFSECURITY}
   if fEncryption<>nil then
     fEncryption.AttachDocument(self);
-  {$endif}
+  {$endif USE_PDFSECURITY}
 end;
 
 function TPdfDocument.AddXObject(const AName: PDFString; AXObject: TPdfXObject): integer;
@@ -7668,7 +7668,7 @@ begin
         end;
       end;
 end;
-{$endif}
+{$endif USE_ARC}
 
 procedure TPdfCanvas.PointI(x, y: Single);
 begin
@@ -11186,7 +11186,6 @@ end;
 procedure TPdfEncryptionRC4MD5.EncodeBuffer(const BufIn; var BufOut; Count: cardinal);
 // see http://www.cs.cmu.edu/~dst/Adobe/Gallery/anon21jul01-pdf-encryption.txt
 // see "Algorithm 3.1 Encryption of data" in PDF Reference document
-var RC4: TRC4;
   procedure ComputeNewRC4Key;
   const KEYSIZE:  array[elRC4_40..elRC4_128] of integer = (10,16);
   var MD5: TMD5;
@@ -11197,17 +11196,16 @@ var RC4: TRC4;
     MD5.Update(fDoc.fCurrentObjectNumber,3);
     MD5.Update(fDoc.fCurrentGenerationNumber,2);
     MD5.Final(Digest);
-    RC4.Init(Digest,KEYSIZE[fLevel]);
-    fLastRC4Key := RC4; // a lot of string encodings have the same context
+    fLastRC4Key.Init(Digest,KEYSIZE[fLevel]);
     fLastObjectNumber := fDoc.fCurrentObjectNumber;
     fLastGenerationNumber := fDoc.fCurrentGenerationNumber;
   end;
 begin
   if (fDoc.fCurrentObjectNumber<>fLastObjectNumber) or
      (fDoc.fCurrentGenerationNumber<>fLastGenerationNumber) then
-    ComputeNewRC4Key else
-    RC4 := fLastRC4Key;
-  RC4.Encrypt(BufIn,BufOut,Count); // RC4 allows in-place encryption :)
+    // a lot of string encodings have the same context
+    ComputeNewRC4Key;
+  fLastRC4Key.Encrypt(BufIn,BufOut,Count); // RC4 allows in-place encryption :)
 end;
 
 {$endif USE_PDFSECURITY}
