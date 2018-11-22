@@ -59643,7 +59643,7 @@ end;
 procedure TServiceFactoryServer.OnLogRestExecuteMethod(Sender: TServiceMethodExecute;
   Step: TServiceMethodExecuteEventStep);
 var W: TTextWriter;
-    a: integer;
+    a, len: integer;
 begin
   W := Sender.TempTextWriter;
   with Sender.Method^ do
@@ -59669,28 +59669,33 @@ begin
     end;
     smsAfter: begin
       W.AddShort('},Output:{');
-      if fExcludeServiceLogCustomAnswer and ArgsResultIsServiceCustomAnswer then
-        with PServiceCustomAnswer(Sender.Values[ArgsResultIndex])^ do begin
-          W.AddShort('len:');
-          W.Add(length(Content));
-          if (Status<>0) and (Status<>HTTP_SUCCESS) then begin
-            W.AddShort(',status:');
-            W.Add(Status);
-          end;
-        end else
-      if not (optNoLogOutput in Sender.fOptions) then begin
-        for a := ArgsOutFirst to ArgsOutLast do
-        with Args[a] do
-        if (ValueDirection in [smdVar,smdOut,smdResult]) and
-           not IsDefault(Sender.Values[a]) then begin
-          W.AddShort(ParamName^);
-          W.Add(':');
-          if vIsSPI in ValueKindAsm then
-            W.AddShort('"****",') else
-            AddJSON(W,Sender.Values[a],SERVICELOG_WRITEOPTIONS);
+      if not (optNoLogOutput in Sender.fOptions) then
+        if ArgsResultIsServiceCustomAnswer then
+          with PServiceCustomAnswer(Sender.Values[ArgsResultIndex])^ do begin
+            len := length(Content);
+            W.AddShort('len:');
+            W.AddU(len);
+            if (Status<>0) and (Status<>HTTP_SUCCESS) then begin
+              W.AddShort(',status:');
+              W.AddU(Status);
+            end;
+            if not fExcludeServiceLogCustomAnswer and (len<=1024) then begin
+              W.AddShort(',result:');
+              W.WrBase64(pointer(content),len,false); // up to 1KB of base-64
+            end;
+          end else begin
+          for a := ArgsOutFirst to ArgsOutLast do
+            with Args[a] do
+              if (ValueDirection in [smdVar,smdOut,smdResult]) and
+                 not IsDefault(Sender.Values[a]) then begin
+                W.AddShort(ParamName^);
+                W.Add(':');
+                if vIsSPI in ValueKindAsm then
+                  W.AddShort('"****",') else
+                  AddJSON(W,Sender.Values[a],SERVICELOG_WRITEOPTIONS);
+              end;
+          W.CancelLastComma;
         end;
-        W.CancelLastComma;
-      end;
     end;
     smsError: begin
       W.AddShort('},Output:{');

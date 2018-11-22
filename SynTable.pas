@@ -188,6 +188,7 @@ type
   end;
 
 /// fill the Match[] dynamic array with all glob patterns supplied as CSV
+// - returns how many patterns have been set in Match[|]
 // - note that the CSVPattern instance should remain in memory, since it will
 // be pointed to by the Match[].Pattern private field
 function SetMatchs(const CSVPattern: RawUTF8; CaseInsensitive: boolean;
