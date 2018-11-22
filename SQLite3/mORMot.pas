@@ -59679,9 +59679,10 @@ begin
               W.AddShort(',status:');
               W.AddU(Status);
             end;
-            if not fExcludeServiceLogCustomAnswer and (len<=1024) then begin
-              W.AddShort(',result:');
+            if not fExcludeServiceLogCustomAnswer and (len>0) and (len<=1024) then begin
+              W.AddShort(',result:"');
               W.WrBase64(pointer(content),len,false); // up to 1KB of base-64
+              W.Add('"');
             end;
           end else begin
           for a := ArgsOutFirst to ArgsOutLast do
