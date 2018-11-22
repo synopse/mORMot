@@ -1116,7 +1116,7 @@ type
   end;
 
   /// a record used by IComplexCalculator.EchoRecord
-  {$ifdef UNICODE}TConsultaNav = record{$else}TConsultaNav = object{$endif}
+  TConsultaNav = packed record
   public
     MaxRows, Row0, RowCount: int64;
     IsSQLUpdateBack, EOF: boolean;
