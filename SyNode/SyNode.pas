@@ -74,6 +74,9 @@ unit SyNode;
 
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
 {$I SyNode.inc}   // define SM_DEBUG CONSIDER_TIME_IN_Z
+{$IFDEF CORE_MODULES_IN_RES}
+  {$R 'core_modules.res' 'core_modules.rc'}
+{$ENDIF}
 
 interface
 
@@ -231,6 +234,9 @@ type
 
     procedure Evaluate(const script: SynUnicode; const scriptName: RawUTF8;
       lineNo: Cardinal); overload;
+
+    /// evaluate script embadedd into application resources
+    procedure EvaluateRes(const ResName: string; out result: jsval);
 
     /// evaluate a JavaScript script as Module
     // - if exception raised in script - raise Delphi ESMException
@@ -402,6 +408,8 @@ type
     function GetBinding(const Name: RawUTF8): TSMProcessBindingHandler;
   public
     /// initialize the SpiderMonkey scripting engine
+    // aCoreModulesPath can be empty in case core modules are embadded
+    // as resources (CORE_MODULES_IN_RES is defined)
     constructor Create(const aCoreModulesPath: RawUTF8; aEngineClass: TSMEngineClass = nil); virtual;
     /// finalize the SpiderMonkey scripting engine
     destructor Destroy; override;
@@ -475,7 +483,8 @@ type
     // In case engine must never expire - set the NeverExpire property of engine manually
    property EngineExpireTimeOutMinutes: cardinal
       read GetEngineExpireTimeOutMinutes write SetEngineExpireTimeOutMinutes default 0;
-    /// Path to core synode modules
+    /// Path to synode core modules.
+    // Not used in case core modules are embadded as resources (CORE_MODULES_IN_RES is defined)
     property CoreModulesPath: RawUTF8 read FCoreModulesPath;
     /// event triggered every time a new Engine is created
     // event trigered before OnDebuggerInit and OnNewEngine events
@@ -777,23 +786,27 @@ var ModuleLoaderPath: TFileName;
     script: SynUnicode;
     rval: jsval;
 begin
+  {$IFDEF CORE_MODULES_IN_RES}
+  EvaluateRes('MODULELOADER.JS', rval);
+  {$ELSE}
   ModuleLoaderPath := RelToAbs(UTF8ToString(FManager.coreModulesPath) , 'ModuleLoader.js');
   script := AnyTextFileToSynUnicode(ModuleLoaderPath);
   if script = '' then
     raise ESMException.Create('File not found ' + ModuleLoaderPath);
   Evaluate(script, 'ModuleLoader.js', 1, rval);
+  {$ENDIF}
 end;
 
 procedure TSMEngine.DefineNodeProcess;
 var process: PJSRootedObject;
     env: PJSRootedObject;
     FStartupPath: TFileName;
-    L: PtrInt;
     {$IFDEF FPC}
     I, Cnt: Integer;
     EnvStr: AnsiString;
     Parts: array of AnsiString;
     {$ELSE}
+    L: PtrInt;
     EnvBlock, P, pEq: PChar;
     strName, strVal: SynUnicode;
     {$ENDIF}
@@ -1561,6 +1574,54 @@ begin
   end;
 end;
 
+// get a pointer to a file embadded as a UNICODE resource and it length in chars
+function getResCharsAndLength(const ResName: string; out pRes: pointer;
+  out resLength: LongWord): boolean;
+var HResInfo: THandle;
+    HGlobal: THandle;
+    Instance: THandle;
+begin
+  Instance := HInstance;
+  HResInfo := FindResource(Instance,PChar(ResName),PChar(10)); //RC_DATA
+  if HResInfo=0 then
+    exit(false);
+  HGlobal := LoadResource(Instance,HResInfo);
+  if HGlobal=0 then
+    exit(false);
+  pRes := LockResource(HGlobal);
+  resLength := SizeofResource(Instance,HResInfo) div 2;
+  Result := resLength > 0;
+end;
+
+procedure TSMEngine.EvaluateRes(const ResName: string; out result: jsval);
+var r: Boolean;
+    opts: PJSCompileOptions;
+    isFirst: Boolean;
+    pScript: pointer;
+    scriptLength: LongWord;
+    rval: jsval;
+begin
+  with TSynFPUException.ForLibraryCode do begin
+    ClearLastError;
+    ScheduleWatchdog(fTimeoutValue);
+    isFirst := not cx.IsRunning;
+    opts := cx.NewCompileOptions;
+    opts.filename := Pointer(ResName);
+
+    if not getResCharsAndLength(ResName, pScript, scriptLength) then
+      raise ESMException.CreateUTF8('Resource "%" not found', [ResName]);
+
+    r := cx.EvaluateUCScript(opts, pScript, scriptLength, result);
+    cx.FreeCompileOptions(opts);
+    if r and isFirst and GlobalObject.ptr.HasProperty(cx, '_timerLoop') then
+      r := GlobalObject.ptr.CallFunctionName(cx, '_timerLoop', 0, nil, rval);
+    if not r then
+      r := false;
+    ScheduleWatchdog(-1);
+    CheckJSError(r);
+  end;
+end;
+
 procedure TSMEngine.Evaluate(const script: SynUnicode;
   const scriptName: RawUTF8; lineNo: Cardinal; out result: jsval);
 var r: Boolean;
@@ -1873,6 +1934,60 @@ begin
   end;
 end;
 
+{$IFDEF CORE_MODULES_IN_RES}
+/// Parse and evaluate module stored in resources
+function synode_parseModuleRes(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean; cdecl;
+var
+  in_argv: PjsvalVector;
+  ResName: string;
+  FileName: RawUTF8;
+  global: PJSRootedObject;
+  options: PJSCompileOptions;
+  res: PJSRootedObject;
+  pScript: pointer;
+  scriptLength: LongWord;
+const
+  USAGE = 'usage parseModuleRes(resourceName, [path]: String): ModuleObject';
+begin
+  try
+    in_argv := vp.argv;
+    if (argc=0) or not in_argv[0].IsString or ((argc > 1) and not in_argv[1].IsString) then
+      raise ESMException.Create(USAGE);
+
+    ResName := in_argv[0].asJSString.ToString(cx);
+    if not getResCharsAndLength(ResName, pScript, scriptLength) then
+      raise ESMException.CreateUTF8('Resource "%" not found', [ResName]);
+
+    FileName := '';
+    if argc > 1 then
+      FileName := in_argv[1].asJSString.ToUTF8(cx);
+    if FileName = '' then
+      FileName := ResName;
+
+    global := cx.NewRootedObject(cx.CurrentGlobalOrNull);
+    try
+      options := cx.NewCompileOptions;
+      options.filename := Pointer(FileName);
+      res := cx.NewRootedObject(cx.CompileModule(global.ptr, options, pScript, scriptLength));
+      result := res <> nil;
+      if result then
+        vp.rval := res.ptr.ToJSValue;
+      cx.FreeRootedObject(res);
+      cx.FreeCompileOptions(options);
+    finally
+      cx.FreeRootedObject(global);
+    end;
+  except
+    on E: Exception do
+    begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
+      JSError(cx, E);
+    end;
+  end;
+end;
+{$endif}
+
 function synode_setModuleResolveHook(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean; cdecl;
 var
   in_argv: PjsvalVector;
@@ -1946,6 +2061,56 @@ begin
   end;
 end;
 
+{$IFDEF CORE_MODULES_IN_RES}
+/// Compile and execute a script from named resource
+function synode_runInThisContextRes(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean; cdecl;
+const
+  USAGE = 'usage: runResInThisContextRes(resourceName, [fileName]: string)';
+var
+  in_argv: PjsvalVector;
+  res: jsval;
+  ResName: string;
+  pScript: pointer;
+  scriptLength: LongWord;
+  FileName: RawUTF8;
+  opts: PJSCompileOptions;
+begin
+  try
+    in_argv := vp.argv;
+    if (argc < 1) or not in_argv[0].isString or ((argc >1) and not in_argv[1].isString) then
+      raise ESMException.Create(USAGE);
+    ResName := in_argv[0].asJSString.ToString(cx);
+    if not getResCharsAndLength(ResName, pScript, scriptLength) then
+      raise ESMException.CreateUTF8('Resource "%" not found', [ResName]);
+
+    FileName := '';
+    if argc > 1 then
+      FileName := in_argv[1].asJSString.ToUTF8(cx);
+    if FileName = '' then
+      FileName := ResName;
+    cx.BeginRequest;
+    try
+      opts := cx.NewCompileOptions;
+      opts.filename := Pointer(FileName);
+      Result := cx.EvaluateUCScript(opts, pScript, scriptLength, res);
+      cx.FreeCompileOptions(opts);
+      if Result then
+        vp.rval := res;
+    finally
+      cx.EndRequest;
+    end;
+    vp.rval := res;
+  except
+    on E: Exception do
+    begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
+      JSError(cx, E);
+    end;
+  end;
+end;
+{$ENDIF}
+
 function synode_loadDll(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
 const
   USAGE = 'usage: loadDll(module:Object , filename: String)';
@@ -1990,6 +2155,9 @@ function SyNodeBinding_modules(const Engine: TSMEngine; const bindingNamespaceNa
 var
   obj: PJSRootedObject;
   cx: PJSContext;
+  {$IFDEF CORE_MODULES_IN_RES}
+  val: jsval;
+  {$endif}
 begin
   cx := Engine.cx;
   obj := cx.NewRootedObject(cx.NewObject(nil));
@@ -1998,7 +2166,12 @@ begin
     obj.ptr.DefineFunction(cx, 'setModuleResolveHook', synode_setModuleResolveHook, 1, JSPROP_READONLY or JSPROP_PERMANENT);
     obj.ptr.DefineFunction(cx, 'runInThisContext', synode_runInThisContext, 2, JSPROP_READONLY or JSPROP_PERMANENT);
     obj.ptr.DefineFunction(cx, 'loadDll', synode_loadDll, 2, JSPROP_READONLY or JSPROP_PERMANENT);
-
+    {$IFDEF CORE_MODULES_IN_RES}
+    val.asBoolean := true;
+    obj.ptr.DefineProperty(cx, '_coreModulesInRes', val, JSPROP_READONLY or JSPROP_PERMANENT);
+    obj.ptr.DefineFunction(cx, 'parseModuleRes', synode_parseModuleRes, 2, JSPROP_READONLY or JSPROP_PERMANENT);
+    obj.ptr.DefineFunction(cx, 'runInThisContextRes', synode_runInThisContextRes, 2, JSPROP_READONLY or JSPROP_PERMANENT);
+    {$ENDIF}
     obj.ptr.DefineProperty(cx, 'coreModulesPath', cx.NewJSString(Engine.Manager.CoreModulesPath).ToJSVal, JSPROP_READONLY or JSPROP_PERMANENT);
     Result := obj.ptr.ToJSValue;
   finally

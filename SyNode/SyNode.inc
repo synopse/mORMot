@@ -62,6 +62,8 @@
 {.$DEFINE WITHASSERT}
 // ensure *TO_JSVAL() macros will check explicitly for the target type
 
+{$DEFINE CORE_MODULES_IN_RES} // core_modules is compiled into resources
+
 {$ifndef FPC}
 {$IFDEF CONDITIONALEXPRESSIONS}
 {$if CompilerVersion = 24.0}
