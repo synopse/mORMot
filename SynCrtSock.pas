@@ -11471,7 +11471,9 @@ begin
   curl.easy_setopt(fHandle,coWriteFunction,@CurlWriteRawByteString);
   curl.easy_setopt(fHandle,coHeaderFunction,@CurlWriteRawByteString);
   fIn.Method := UpperCase(method);
-  fIn.Headers := nil;
+  if fIn.Method = 'GET' then
+    fIn.Headers := nil else // disable Expect 100 continue in libcurl
+    fIn.Headers := curl.slist_append(fIn.Headers,'Expect:');
   Finalize(fOut);
 end;
 
