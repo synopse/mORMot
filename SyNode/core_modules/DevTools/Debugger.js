@@ -1,6 +1,7 @@
 // original FireFox implementation is in:
 // git clone https://github.com/mozilla/gecko-dev.git
 // cd gecko-dev/devtools/server 
+// FF debugger Protocol: https://searchfox.org/mozilla-central/source/devtools/docs/backend/protocol.md
 import * as DevToolsUtils from 'DevTools/DevToolsUtils.js';
 import {JSPropertyProvider} from 'DevTools/js-property-provider.js';
 import {ObjectActorPreviewers} from 'DevTools/ObjectActorPreviewers.js';

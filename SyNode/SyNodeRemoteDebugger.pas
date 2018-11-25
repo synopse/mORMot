@@ -63,7 +63,7 @@ interface
 {$I Synopse.inc} // define BRANCH_WIN_WEB_SOCKET
 
 uses
-  Classes, SynCrtSock,
+  Classes, SynCrtSock, SynTable {for TJSONWriter},
   SynCommons, SyNode, SpiderMonkey;
 
 type
@@ -155,6 +155,9 @@ type
     /// Debugger create his own compartmnet (his own global object & scripting context)
     // Here we initialize a new compartment
     procedure InitializeDebuggerCompartment(aEng: TSMEngine; aNeedPauseOnFirstStep: boolean);
+  protected
+    // writer for serialize outgiong JSON's
+    fJsonWriter: TJSONWriter;
   public
     constructor Create(aParent: TSMRemoteDebuggerThread; aEng: TSMEngine);
     destructor Destroy; override;
@@ -619,6 +622,7 @@ begin
   fNameForDebug := aEng.nameForDebug;
   fDebuggerName := 'synode_debPort_' + aParent.fPort;
   fWebAppRootPath := aEng.webAppRootDir;
+  fJsonWriter := TJSONWriter.CreateOwnedStream(1024*50);
 
   InitializeDebuggerCompartment(aEng, aParent.FNeedPauseOnFirstStep);
 end;
@@ -632,6 +636,7 @@ begin
   fMessagesQueue := nil;
   fLogQueue.Free;
   fLogQueue := nil;
+  fJsonWriter.Free;
   inherited;
 end;
 
@@ -734,8 +739,11 @@ begin
   val := vp.argv[0];
   if val.isString then
     msg := val.asJSString.ToUTF8(cx)
-  else
-    msg := val.asJson[cx];
+  else begin
+    debugger.fJsonWriter.CancelAll;
+    val.AddJSON(cx,debugger.fJsonWriter);
+    debugger.fJsonWriter.SetText(msg);
+  end;
   debugger.Send(msg);
 end;
 
