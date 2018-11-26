@@ -11473,7 +11473,7 @@ begin
   fIn.Method := UpperCase(method);
   if fIn.Method = 'GET' then
     fIn.Headers := nil else // disable Expect 100 continue in libcurl
-    fIn.Headers := curl.slist_append(fIn.Headers,'Expect:');
+    fIn.Headers := curl.slist_append(nil,'Expect:');
   Finalize(fOut);
 end;
 
