@@ -580,6 +580,18 @@ function RunUntilSigTerminatedForKill(waitseconds: integer = 30): boolean;
 /// local .pid file name as created by RunUntilSigTerminated(dofork=true)
 function RunUntilSigTerminatedPidFile: TFileName;
 
+var
+  /// once SynDaemonIntercept has been called, this global variable
+  // contains the SIGQUIT / SIGTERM / SIGINT received signal
+  SynDaemonTerminated: integer;
+
+/// enable low-level interception of executable stop signals
+// - any SIGQUIT / SIGTERM / SIGINT signal will set appropriately the global
+// SynDaemonTerminated variable
+// - as called e.g. by RunUntilSigTerminated()
+// - you can call this method several times with no issue
+procedure SynDaemonIntercept;
+
 {$endif MSWINDOWS}
 
 /// like SysUtils.ExecuteProcess, but allowing not to wait for the process to finish
@@ -1414,7 +1426,7 @@ end;
 {$else} // Linux/POSIX signal interception
 
 var
-  SynDaemonTerminated: integer;
+  SynDaemonIntercepted: boolean;
 
 {$ifdef FPC}
 procedure DoShutDown(Sig: Longint; Info: PSigInfo; Context: PSigContext); cdecl;
@@ -1425,26 +1437,25 @@ begin
   SynDaemonTerminated := Sig;
 end;
 
-procedure SigIntercept;
-{$ifdef FPC}
+procedure SynDaemonIntercept;
 var
-  saOld, saNew: SigactionRec;
+  saOld, saNew: {$ifdef FPC}SigactionRec{$else}TSigAction{$endif};
 begin
+  if SynDaemonIntercepted then
+    exit;
+  SynDaemonIntercepted := true;
   FillCharFast(saNew, SizeOf(saNew), 0);
+  {$ifdef FPC}
   saNew.sa_handler := @DoShutDown;
   fpSigaction(SIGQUIT, @saNew, @saOld);
   fpSigaction(SIGTERM, @saNew, @saOld);
   fpSigaction(SIGINT, @saNew, @saOld);
-{$else} // Kylix
-var
-  saOld, saNew: TSigAction;
-begin
-  FillCharFast(saNew, SizeOf(saNew), 0);
+  {$else} // Kylix
   saNew.__sigaction_handler := @DoShutDown;
   sigaction(SIGQUIT, @saNew, @saOld);
   sigaction(SIGTERM, @saNew, @saOld);
   sigaction(SIGINT, @saNew, @saOld);
-{$endif}
+  {$endif}
 end;
 
 function RunUntilSigTerminatedPidFile: TFileName;
@@ -1510,7 +1521,7 @@ var
 const
   TXT: array[boolean] of string[4] = ('run', 'fork');
 begin
-  SigIntercept;
+  SynDaemonIntercept;
   if dofork then begin
     pidfilename := RunUntilSigTerminatedPidFile;
     pid := GetInteger(pointer(StringFromFile(pidfilename)));
