@@ -727,6 +727,26 @@ type
     /// set of enabled privileges for current process/thread
     property Enabled: TWinSystemPrivileges read fEnabled;
   end;
+
+  TWinProcessAvailableInfos = set of (wpaiPID, wpaiBasic, wpaiPEB, wpaiCommandLine, wpaiImagePath);
+  PWinProcessInfo = ^TWinProcessInfo;
+  TWinProcessInfo = record
+    AvailableInfo: TWinProcessAvailableInfos;
+    PID: Cardinal;
+    ParentPID: Cardinal;
+    SessionID: Cardinal;
+    PEBBaseAddress: Pointer;
+    AffinityMask: Cardinal;
+    BasePriority: LongInt;
+    ExitStatus: LongInt;
+    BeingDebugged: Byte;
+    ImagePath: SynUnicode;
+    CommandLine: SynUnicode;
+  end;
+  TWinProcessInfoDynArray = array of TWinProcessInfo;
+
+  procedure GetProcessInfo(aPid: Cardinal; out aInfo: TWinProcessInfo); overload;
+  procedure GetProcessInfo(const aPidList: TCardinalDynArray; out aInfo: TWinProcessInfoDynArray); overload;
   {$endif}
 
 implementation
@@ -2214,6 +2234,210 @@ begin
     exit;
   result := true;
 end;
+
+const
+  ntdll = 'NTDLL.DLL';
+
+type
+  _PPS_POST_PROCESS_INIT_ROUTINE = ULONG;
+
+  PUNICODE_STRING = ^UNICODE_STRING;
+  UNICODE_STRING = packed record
+    Length: USHORT;
+    MaximumLength: USHORT;
+    {$ifdef CPUX64}
+    _align: array[0..3] of byte;
+    {$endif}
+    Buffer: PWideChar;
+  end;
+
+  PMS_PEB_LDR_DATA = ^MS_PEB_LDR_DATA;
+  MS_PEB_LDR_DATA = packed record
+    Reserved1: array[0..7] of BYTE;
+    Reserved2: array[0..2] of PVOID;
+    InMemoryOrderModuleList: LIST_ENTRY;
+  end;
+
+  PMS_RTL_USER_PROCESS_PARAMETERS = ^MS_RTL_USER_PROCESS_PARAMETERS;
+  MS_RTL_USER_PROCESS_PARAMETERS = packed record
+    Reserved1: array[0..15] of BYTE;
+    Reserved2: array[0..9] of PVOID;
+    ImagePathName: UNICODE_STRING;
+    CommandLine: UNICODE_STRING ;
+  end;
+
+  PMS_PEB = ^MS_PEB;
+  MS_PEB = packed record
+    Reserved1: array[0..1] of BYTE;
+    BeingDebugged: BYTE;
+    Reserved2: array[0..0] of BYTE;
+    {$ifdef CPUX64}
+    _align1: array[0..3] of byte;
+    {$endif}
+    Reserved3: array[0..1] of PVOID;
+    Ldr: PMS_PEB_LDR_DATA;
+    ProcessParameters: PMS_RTL_USER_PROCESS_PARAMETERS;
+    Reserved4: array[0..103] of BYTE;
+    Reserved5: array[0..51] of PVOID;
+    PostProcessInitRoutine: _PPS_POST_PROCESS_INIT_ROUTINE; // for sure not pointer, otherwise SessionId is broken
+    Reserved6: array[0..127] of BYTE;
+    {$ifdef CPUX64}
+    _align2: array[0..3] of byte;
+    {$endif}
+    Reserved7: array[0..0] of PVOID;
+    SessionId: ULONG;
+    {$ifdef CPUX64}
+    _align3: array[0..3] of byte;
+    {$endif}
+  end;
+
+  PMS_PROCESS_BASIC_INFORMATION = ^MS_PROCESS_BASIC_INFORMATION;
+  MS_PROCESS_BASIC_INFORMATION = packed record
+    ExitStatus: LONG;
+    {$ifdef CPUX64}
+    _align1: array[0..3] of byte;
+    {$endif}
+    PebBaseAddress: PMS_PEB;
+    AffinityMask: ULONG_PTR;
+    BasePriority: LONG;
+    {$ifdef CPUX64}
+    _align2: array[0..3] of byte;
+    {$endif}
+    UniqueProcessId: ULONG_PTR;
+    InheritedFromUniqueProcessId: ULONG_PTR;
+  end;
+
+  {$Z4}
+  PROCESSINFOCLASS = (ProcessBasicInformation = 0, ProcessDebugPort = 7,
+    ProcessWow64Information = 26, ProcessImageFileName = 27,
+    ProcessBreakOnTermination = 29, ProcessSubsystemInformation = 75);
+  {$Z1}
+
+  NTSTATUS = LongInt;
+
+function NtQueryInformationProcess(ProcessHandle: THandle;
+  ProcessInformationClass: PROCESSINFOCLASS; ProcessInformation: PVOID;
+  ProcessInformationLength: ULONG; ReturnLength: PULONG): NTSTATUS; stdcall;
+  external ntdll name 'NtQueryInformationProcess';
+
+function InternalGetProcessInfo(aPID: DWORD; out aInfo: TWinProcessInfo): boolean;
+var
+  bytesread: PtrUInt;
+  sizeneeded: DWORD;
+  pbi: PMS_PROCESS_BASIC_INFORMATION;
+  peb: MS_PEB;
+  peb_upp: MS_RTL_USER_PROCESS_PARAMETERS;
+  prochandle: THandle;
+  buf: TSynTempBuffer;
+begin
+  result := false;
+  with aInfo do begin
+    AvailableInfo := [];
+    PID := 0;
+    ParentPID := 0;
+    SessionID := 0;
+    PEBBaseAddress := nil;
+    AffinityMask := 0;
+    BasePriority := 0;
+    ExitStatus := 0;
+    BeingDebugged := 0;
+    ImagePath := '';
+    CommandLine := '';
+  end;
+  if APID = 0 then
+    exit;
+  prochandle := OpenProcess(PROCESS_QUERY_INFORMATION or PROCESS_VM_READ, FALSE, aPid);
+  if prochandle = INVALID_HANDLE_VALUE then
+    exit;
+  Include(aInfo.AvailableInfo, wpaiPID);
+  aInfo.PID := aPid;
+  buf.InitZero(SizeOf(MS_PROCESS_BASIC_INFORMATION));
+  try
+    sizeneeded := 0;
+    if NtQueryInformationProcess(prochandle, ProcessBasicInformation, buf.buf, buf.len, @sizeneeded) < 0 then
+      exit;
+    if buf.len < sizeneeded then begin
+      buf.Done;
+      buf.InitZero(sizeneeded);
+      if NtQueryInformationProcess(prochandle, ProcessBasicInformation, buf.buf, buf.len, @sizeneeded) < 0 then
+        exit;
+    end;
+    Include(aInfo.AvailableInfo, wpaiBasic);
+    pbi := buf.buf;
+    with aInfo do begin
+      PID := pbi^.UniqueProcessId;
+      ParentPID := pbi^.InheritedFromUniqueProcessId;
+      BasePriority := pbi^.BasePriority;
+      ExitStatus := pbi^.ExitStatus;
+      PEBBaseAddress := pbi^.PebBaseAddress;
+      AffinityMask := pbi^.AffinityMask;
+    end;
+    // read PEB (Process Environment Block)
+    if not Assigned(pbi.PebBaseAddress) then
+      exit;
+    bytesread := 0;
+    FillCharFast(peb, sizeof(MS_PEB), 0);
+    if not ReadProcessMemory(prochandle, pbi.PebBaseAddress, @peb, sizeof(MS_PEB), bytesread) then
+      exit;
+    Include(aInfo.AvailableInfo, wpaiPEB);
+    aInfo.SessionID := peb.SessionId;
+    aInfo.BeingDebugged := peb.BeingDebugged;
+    FillCharFast(peb_upp, sizeof(MS_RTL_USER_PROCESS_PARAMETERS), 0);
+    bytesread := 0;
+    if not ReadProcessMemory(prochandle, peb.ProcessParameters, @peb_upp, sizeof(MS_RTL_USER_PROCESS_PARAMETERS), bytesread) then
+      exit;
+    // command line info
+    if peb_upp.CommandLine.Length > 0 then begin
+      SetLength(aInfo.CommandLine, peb_upp.CommandLine.Length div 2);
+      bytesread := 0;
+      if not ReadProcessMemory(prochandle, peb_upp.CommandLine.Buffer, @aInfo.CommandLine[1], peb_upp.CommandLine.Length, bytesread) then
+        exit;
+      Include(aInfo.AvailableInfo, wpaiCommandLine);
+    end;
+    // image info
+    if(peb_upp.ImagePathName.Length > 0) then begin
+      SetLength(aInfo.ImagePath, peb_upp.ImagePathName.Length div 2);
+      bytesread := 0;
+      if not ReadProcessMemory(prochandle, peb_upp.ImagePathName.Buffer, @aInfo.ImagePath[1], peb_upp.ImagePathName.Length, bytesread) then
+        exit;
+      Include(aInfo.AvailableInfo, wpaiImagePath);
+    end;
+    result := true;
+  finally
+    CloseHandle(prochandle);
+    buf.Done;
+  end;
+end;
+
+procedure GetProcessInfo(aPid: Cardinal; out aInfo: TWinProcessInfo);
+var
+  privileges: TSynWindowsPrivileges;
+begin
+  privileges.Init(pttThread);
+  try
+    privileges.Enable(wspDebug);
+    InternalGetProcessInfo(aPid, aInfo);
+  finally
+    privileges.Done;
+  end;
+end;
+
+procedure GetProcessInfo(const aPidList: TCardinalDynArray; out aInfo: TWinProcessInfoDynArray);
+var
+  privileges: TSynWindowsPrivileges;
+  i: integer;
+begin
+  SetLength(aInfo, Length(aPidList));
+  privileges.Init(pttThread);
+  try
+    privileges.Enable(wspDebug);
+    for i := 0 to High(aPidList) do
+      InternalGetProcessInfo(aPidList[i], aInfo[i]);
+  finally
+    privileges.Done;
+  end;
+end;
+
 {$endif}
 
 end.
