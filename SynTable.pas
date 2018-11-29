@@ -107,7 +107,8 @@ type
   // - implemented as a fast brute-force state-machine without any heap allocation
   // - some common patterns ('exactmatch', 'startwith*', '*endwith', '*contained*')
   // are handled with dedicated code, optionally with case-insensitive search
-  // - consider using TMatchs if you expect to search for several patterns
+  // - consider using TMatchs (or SetMatchs/TMatchDynArray) if you expect to
+  // search for several patterns
   {$ifdef UNICODE}TMatch = record{$else}TMatch = object{$endif}
   private
     Pattern, Text: PUTF8Char;

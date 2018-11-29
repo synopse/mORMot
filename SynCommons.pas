@@ -5212,6 +5212,8 @@ type
     function KnownType: TDynArrayKind;  inline;
     procedure Clear;                    inline;
     procedure ElemCopy(const A; var B); inline;
+    function ElemPtr(index: PtrInt): pointer; inline;
+    procedure ElemCopyAt(index: PtrInt; var Dest); inline;
     // warning: you shall call ReHash() after manual Add/Delete
     function Add(const Elem): integer;  inline;
     procedure Delete(aIndex: PtrInt);  inline;
@@ -49350,6 +49352,14 @@ procedure TDynArrayHashed.ElemCopy(const A; var B);
 begin
   InternalDynArray.ElemCopy(A,B);
 end;
+function TDynArrayHashed.ElemPtr(index: PtrInt): pointer;
+begin
+  result := InternalDynArray.ElemPtr(index);
+end;
+procedure TDynArrayHashed.ElemCopyAt(index: PtrInt; var Dest);
+begin
+  InternalDynArray.ElemCopyAt(index,Dest);
+end;
 function TDynArrayHashed.KnownType: TDynArrayKind;
 begin
   result := InternalDynArray.KnownType;
@@ -59076,8 +59086,8 @@ begin
     fSafe.Padding[DIC_TIMETIX].VInteger := now;
     for i := fSafe.Padding[DIC_TIMECOUNT].VInteger-1 downto 0 do
       if (now>fTimeOut[i]) and (fTimeOut[i]<>0) and
-         (not Assigned(fOnCanDelete) or fOnCanDelete(fKeys.{$ifdef UNDIRECTDYNARRAY}
-         InternalDynArray.{$endif}ElemPtr(i)^,fValues.ElemPtr(i)^,i)) then begin
+         (not Assigned(fOnCanDelete) or
+         fOnCanDelete(fKeys.ElemPtr(i)^,fValues.ElemPtr(i)^,i)) then begin
         fKeys.Delete(i);
         fValues.Delete(i);
         fTimeOuts.Delete(i);
@@ -59218,7 +59228,7 @@ begin
     ndx := fKeys.FindHashed(aKey);
     if ndx<0 then
       exit;
-    nested.Init(fValues.ElemType, fValues.ElemPtr(ndx)^);
+    nested.Init(fValues.ElemType,fValues.ElemPtr(ndx)^);
     case aAction of
     iaFind:
       result := nested.Find(aArrayValue)>=0;
