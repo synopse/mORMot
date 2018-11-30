@@ -647,6 +647,7 @@ type
   // - you may consider using TDDDAdministratedDaemon from dddInfraApps
   TSynDaemon = class(TSynPersistent)
   protected
+    fConsoleMode: boolean;
     fWorkFolderName: TFileName;
     fSettings: TSynDaemonSettings;
     function CustomCommandLineSyntax: string; virtual;
@@ -674,6 +675,8 @@ type
     /// call Stop, finalize the instance, and its settings
     destructor Destroy; override;
   published
+    /// if this instance was run as /console or /verb
+    property ConsoleMode: boolean read fConsoleMode;
     /// the settings associated with this daemon
     // - will be allocated in Create constructor, and released in Destroy
     property Settings: TSynDaemonSettings read fSettings;
@@ -1870,6 +1873,7 @@ begin
         try
           log.Log(sllNewRun, 'Start % /% %', [fSettings.ServiceName,cmdText,
             ExeVersion.Version.DetailedOrVoid], self);
+          fConsoleMode := true;
           Start;
           writeln('Press [Enter] to quit');
           ioresult;
