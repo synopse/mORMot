@@ -1,4 +1,4 @@
-/// SQLite3 3.25.2 Database engine - statically linked for Windows/Linux
+/// SQLite3 3.26.0 Database engine - statically linked for Windows/Linux
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynSQLite3Static;
@@ -77,7 +77,7 @@ unit SynSQLite3Static;
 
   Version 1.18
   - initial revision, extracted from SynSQLite3.pas unit
-  - updated SQLite3 engine to latest version 3.25.2
+  - updated SQLite3 engine to latest version 3.26.0
   - now all sqlite3_*() API calls are accessible via sqlite3.*()
   - our custom file encryption is now called via sqlite3.key() - i.e. official
     SQLite Encryption Extension (SEE) sqlite3_key() API - and works for database
@@ -500,6 +500,18 @@ begin // called e.g. during LIKE process
   result := SynCommons.strcspn(str,reject); // use SSE4.2 if available
 end;
 
+function strrchr(s: PAnsiChar; c: AnsiChar): PAnsiChar; cdecl;
+  {$ifdef FPC}public name{$ifdef CPU64}'strrchr'{$else}'_strrchr'{$endif};{$endif}
+begin // simple full pascal version of the standard C library function
+  result := nil;
+  if s<>nil then
+    while s^<>#0 do begin
+      if s^=c then
+        result := s;
+      inc(s);
+    end;
+end;
+
 function memcmp(p1, p2: pByte; Size: integer): integer; cdecl; { always cdecl }
 {$ifdef FPC}
   public name{$ifdef CPU64}'memcmp'{$else}'_memcmp'{$endif};
@@ -531,9 +543,8 @@ end;
 
 function strncmp(p1, p2: PByte; Size: integer): integer; cdecl; { always cdecl }
   {$ifdef FPC}public name{$ifdef CPU64}'strncmp'{$else}'_strncmp'{$endif};{$endif}
-// a fast full pascal version of the standard C library function
 var i: integer;
-begin
+begin // a fast full pascal version of the standard C library function
   for i := 1 to Size do begin
     result := p1^-p2^;
     if (result<>0) or (p1^=0) then
@@ -1124,7 +1135,7 @@ function sqlite3_trace_v2(DB: TSQLite3DB; Mask: integer; Callback: TSQLTraceCall
 
 const
   // error message if statically linked sqlite3.o(bj) does not match this
-  EXPECTED_SQLITE3_VERSION = {$ifdef ANDROID}''{$else}'3.25.2'{$endif};
+  EXPECTED_SQLITE3_VERSION = {$ifdef ANDROID}''{$else}'3.26.0'{$endif};
 
 constructor TSQLite3LibraryStatic.Create;
 var error: RawUTF8;

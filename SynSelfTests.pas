@@ -1117,7 +1117,6 @@ type
 
   /// a record used by IComplexCalculator.EchoRecord
   TConsultaNav = packed record
-  public
     MaxRows, Row0, RowCount: int64;
     IsSQLUpdateBack, EOF: boolean;
   end;
