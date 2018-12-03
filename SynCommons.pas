@@ -65100,8 +65100,10 @@ begin
     strcspn := @strcspnSSE42;
     {$ifdef CPU64}
     {$ifdef FPC} // done in InitRedirectCode for Delphi
+    {$ifdef HASAESNI}
     StrLen := @StrLenSSE42;
     StrComp := @StrCompSSE42;
+    {$endif}
     {$endif}
     {$endif}
     {$ifndef PUREPASCAL}
