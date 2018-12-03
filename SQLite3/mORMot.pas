@@ -47862,14 +47862,11 @@ begin
   if aServer<>nil then begin
     fOwner := aServer;
     fModel := aServer.Model;
-    fStoredClassProps := fModel.Props[aClass];
-  end else
-    // if no server is defined, simply use the first model using this class
-    if fStoredClassRecordProps.fModel<>nil then
-    with fStoredClassRecordProps.fModel[0] do begin
-      fModel := Model;
-      fStoredClassProps := Properties;
-    end;
+   end else begin // fallback to an owned model instance
+     fModel := TSQLModel.Create([aClass]);
+     fModel.Owner := self;
+   end;
+  fStoredClassProps := fModel.Props[aClass];
   fIsUnique := fStoredClassRecordProps.IsUniqueFieldsBits;
   fBasicSQLCount := 'SELECT COUNT(*) FROM '+fStoredClassRecordProps.SQLTableName;
   fBasicSQLHasRows[false] := 'SELECT RowID FROM '+fStoredClassRecordProps.SQLTableName+' LIMIT 1';
