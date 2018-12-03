@@ -35329,7 +35329,7 @@ procedure FillZero(var secret: RawByteString);
 begin
   if secret<>'' then
     with PStrRec(Pointer(PtrInt(secret)-STRRECSIZE))^ do
-    if refCnt>0 then // avoid GPF if const
+    if refCnt=1 then // avoid GPF if const
       FillcharFast(pointer(secret)^,length,0);
 end;
 
@@ -35337,7 +35337,7 @@ procedure FillZero(var secret: RawUTF8);
 begin
   if secret<>'' then
     with PStrRec(Pointer(PtrInt(secret)-STRRECSIZE))^ do
-    if refCnt>0 then // avoid GPF if const
+    if refCnt=1 then // avoid GPF if const
       FillcharFast(pointer(secret)^,length,0);
 end;
 
