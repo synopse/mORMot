@@ -4226,6 +4226,8 @@ type
     // - any aClassField[] property name will be serialized using aJsonFields[]
     // - if any aJsonFields[] equals '', this published property will be
     // excluded from the serialization object
+    // - aJsonFields[] is expected to be only plain pascal identifier, i.e.
+    // A-Z a-z 0-9 and _ characters, up to 63 in length
     // - setting both aClassField=aJsonFields=[] will return back to the default
     // class serialization (i.e. serialization with published properties names)
     // - by design, this customization excludes RegisterCustomSerializer() with
@@ -49065,11 +49067,13 @@ type
      oUtfs, oStrings, oSQLRecord, oSQLMany, oPersistent, oSynAutoCreateFields,
      oSynPersistentWithPassword, oSynMonitor, oSQLTable,
      oCustomReaderWriter, oCustomPropName);
+  TShort63 = string[63];
+  TShort63DynArray = array of TShort63;
   TJSONCustomParser = record
     Reader: TJSONSerializerCustomReader;
     Writer: TJSONSerializerCustomWriter;
     Props: PPropInfoDynArray;
-    Fields: PShortStringDynArray; // match Props[] order
+    Fields: TShort63DynArray; // match Props[] order
     Kind: TJSONObject;
   end;
   TJSONCustomParsers = array of TJSONCustomParser;
@@ -49159,7 +49163,7 @@ var i: integer;
 begin
   if Parser^.Props<>nil then begin // search from RegisterCustomSerializerFieldNames()
     for i := 0 to length(Parser^.Fields)-1 do
-      if IdemPropNameU(Parser^.Fields[i]^,PropName,PropNameLen) then begin
+      if IdemPropName(Parser^.Fields[i],PropName,PropNameLen) then begin
         result := Parser^.Props[i];
         exit;
       end;
@@ -49171,7 +49175,7 @@ end;
 class procedure TJSONSerializer.RegisterCustomSerializerFieldNames(aClass: TClass;
   const aClassFields, aJsonFields: array of ShortString);
 var prop: PPropInfoDynArray;
-    field: PShortStringDynArray;
+    field: TShort63DynArray;
     n,p,f: integer;
     found: boolean;
     parser: PJSONCustomParser;
@@ -49190,7 +49194,7 @@ begin
     for f := 0 to high(aClassFields) do // check customized field name
       if IdemPropName(prop[p].Name,aClassFields[f]) then begin
         if aJsonFields[f]<>'' then begin // '' to ignore this property
-          field[n] := @aJsonFields[f];
+          field[n] := aJsonFields[f];
           prop[n] := prop[p];
           inc(n);
         end;
@@ -49198,7 +49202,7 @@ begin
         break;
       end;
     if not found then begin // default serialization of published property
-      field[n] := @prop[p].Name;
+      field[n] := prop[p].Name;
       prop[n] := prop[p];
       inc(n);
     end;
@@ -52498,7 +52502,7 @@ begin
         raise EParsingException.CreateUTF8('%.WriteObject woDontStoreInherited '+
           'after RegisterCustomSerializerFieldNames(%)', [self,aClassType]) else
         for i := 0 to length(parser^.Props)-1 do begin
-          CustomPropName := parser^.Fields[i];
+          CustomPropName := @parser^.Fields[i];
           WriteProp(parser^.Props[i]);
         end;
   end else
