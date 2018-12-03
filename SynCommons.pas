@@ -37500,52 +37500,54 @@ begin
   Space := D;
   DBeg := D;
   SpaceBeg := D;
-  if (D<>nil) and (P<>nil) then // avoid GPF
-  repeat
-    CapitalCount := 0;
-    Number := P^ in  ['0'..'9'];
-    if Number then
-      repeat
-        inc(CapitalCount);
-        D^ := P^;
+  if (D<>nil) and (P<>nil) then begin // avoid GPF
+    repeat
+      CapitalCount := 0;
+      Number := P^ in  ['0'..'9'];
+      if Number then
+        repeat
+          inc(CapitalCount);
+          D^ := P^;
+          inc(P);
+          inc(D);
+        until not (P^ in ['0'..'9']) else
+        repeat
+          inc(CapitalCount);
+          D^ := P^;
+          inc(P);
+          inc(D);
+        until not (P^ in ['A'..'Z']);
+      if P^=#0 then break; // no lowercase conversion of last fully uppercased word
+      if (CapitalCount > 1) and not Number then begin
+        dec(P);
+        dec(D);
+      end;
+      while P^ in ['a'..'z'] do begin
+        D^  := P^;
+        inc(D);
+        inc(P);
+      end;
+      if P^='_' then
+      if P[1]='_' then begin
+        D^ := ':';
         inc(P);
         inc(D);
-      until not (P^ in ['0'..'9']) else
-      repeat
-        inc(CapitalCount);
-        D^ := P^;
+        goto Next;
+      end else begin
+        PWord(D)^ := ord(' ')+ord('-')shl 8;
+        inc(D,2);
+  Next: if Space=SpaceBeg then
+          SpaceBeg := D+1;
         inc(P);
-        inc(D);
-      until not (P^ in ['A'..'Z']);
-    if P^=#0 then break; // no lowercase conversion of last fully uppercased word
-    if (CapitalCount > 1) and not Number then begin
-      dec(P);
-      dec(D);
-    end;
-    while P^ in ['a'..'z'] do begin
-      D^  := P^;
+        Space := D+1;
+      end else
+        Space := D;
+      if P^=#0 then break;
+      D^ := ' ';
       inc(D);
-      inc(P);
-    end;
-    if P^='_' then
-    if P[1]='_' then begin
-      D^ := ':';
-      inc(P);
-      inc(D);
-      goto Next;
-    end else begin
-      PWord(D)^ := ord(' ')+ord('-')shl 8;
-      inc(D,2);
-Next: if Space=SpaceBeg then
-        SpaceBeg := D+1;
-      inc(P);
-      Space := D+1;
-    end else
-      Space := D;
-    if P^=#0 then break;
-    D^ := ' ';
-    inc(D);
-  until false;
+    until false;
+    if (Space>DBeg) then Dec(Space); // here Space point to uninitialized memory
+  end;
   while Space>SpaceBeg do begin
     if Space^ in ['A'..'Z'] then
       if not (Space[1] in ['A'..'Z',' ']) then
@@ -65100,8 +65102,10 @@ begin
     strcspn := @strcspnSSE42;
     {$ifdef CPU64}
     {$ifdef FPC} // done in InitRedirectCode for Delphi
+    {$ifdef HASAESNI}
     StrLen := @StrLenSSE42;
     StrComp := @StrCompSSE42;
+    {$endif}
     {$endif}
     {$endif}
     {$ifndef PUREPASCAL}

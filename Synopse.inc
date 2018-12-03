@@ -200,7 +200,7 @@
   {$define HASUINT64}
   {$define HASINLINENOTX86}
   {$define NODELPHIASM}   // ignore low-level System.@LStrFromPCharLen calls
-  {$define HASAESNI}
+  {$define HASAESNI} // should be commented to test project with valgrind
   {$define HASTTHREADSTART}
   {$define HASINTERFACEASTOBJECT}
   {$define EXTENDEDTOSTRING_USESTR} // FloatToText uses str() in FPC
