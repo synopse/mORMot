@@ -29418,6 +29418,7 @@ end;
 procedure TPropInfo.GetVariant(Instance: TObject; var Dest: variant);
 var i: PtrInt;
     U: RawUTF8;
+    p: Pointer;
 begin
   if (Instance<>nil) and (@self<>nil) then
   case PropType^.Kind of
@@ -29447,8 +29448,10 @@ begin
   tkFloat: Dest := GetFloatProp(Instance);
   tkVariant: GetVariantProp(Instance,Dest);
   tkClass: ObjectToVariant(GetObjProp(Instance),Dest);
-  tkDynArray: TDocVariantData(Dest).InitArrayFromObjArray(
-    pointer(GetOrdProp(Instance))^,JSON_OPTIONS_FAST);
+  tkDynArray: begin
+    p := pointer(GetOrdProp(Instance));
+    TDocVariantData(Dest).InitArrayFromObjArray(p,JSON_OPTIONS_FAST);
+  end
   else VarClear(Dest);
   end;
 end;
