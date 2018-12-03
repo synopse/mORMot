@@ -55888,9 +55888,8 @@ begin
     exit;
   TextAttr := ord(color);
   if ord(color)>=8 then
-    write(#27'[1;3') else
-    write(#27'[0;3');
-  write(AnsiTbl[(ord(color) and 7)+1],'m');
+    write(#27'[1;3',AnsiTbl[(ord(color) and 7)+1],'m') else
+    write(#27'[0;3',AnsiTbl[(ord(color) and 7)+1],'m');
   ioresult;
 end;
 {$I+}
