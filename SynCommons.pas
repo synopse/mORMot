@@ -17831,7 +17831,7 @@ begin
     widestringmanager.Ansi2UnicodeMoveProc(Source,
       {$ifdef ISFPC27}fCodePage,{$endif}tmp,SourceChars);
     MoveFast(Pointer(tmp)^,Dest^,length(tmp)*2);
-    result := Dest+SourceChars;
+    result := Dest+length(tmp);
     {$else}
     {$ifdef KYLIX3}
     result := Dest; // makes compiler happy
