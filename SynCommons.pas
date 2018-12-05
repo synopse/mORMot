@@ -32885,7 +32885,9 @@ begin
     result := ''
   else if P^=Quote then begin
     P:=UnQuoteSQLStringVar(P,result);
-    if (P<>nil) and (P^<>#0) then
+    if P=nil then
+      result := ''
+    else if P^<>#0 then
       inc(P);
   end else
     GetNextItem(P,Sep,result);
