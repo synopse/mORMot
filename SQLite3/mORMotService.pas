@@ -2319,6 +2319,8 @@ function NtQueryInformationProcess(ProcessHandle: THandle;
   ProcessInformationClass: PROCESSINFOCLASS; ProcessInformation: PVOID;
   ProcessInformationLength: ULONG; ReturnLength: PULONG): NTSTATUS; stdcall;
   external ntdll name 'NtQueryInformationProcess';
+function ReadProcessMemory(hProcess: THandle; const lpBaseAddress: Pointer; lpBuffer: Pointer;
+  nSize: PTRUINT; var lpNumberOfBytesRead: PTRUINT): BOOL; external 'kernel32' name 'ReadProcessMemory';
 
 function InternalGetProcessInfo(aPID: DWORD; out aInfo: TWinProcessInfo): boolean;
 var
