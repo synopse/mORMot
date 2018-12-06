@@ -3156,7 +3156,6 @@ implementation
 
 {$ifdef FPC}
 uses
-  SynCommons, // MPV - temporary for GetInt64
   dynlibs;
 {$endif}
 
@@ -6228,7 +6227,7 @@ begin
   finally
     LeaveCriticalSection(fServer.fProcessCS);
   end;
-  if (aServerSock.RemoteConnectionID > 0) then
+  if (aServerSock.RemoteConnectionID <> 0) then
     fConnectionID := aServerSock.RemoteConnectionID
   else
     fConnectionID := fServer.NextConnectionID;
@@ -6583,6 +6582,7 @@ function THttpServerSocket.GetRequest(withBody: boolean=true): boolean;
 var P: PAnsiChar;
     i, L: integer;
     H: ^PAnsiChar;
+    pH: PAnsiChar;
     maxtix, status: cardinal;
     reason: SockString;
 begin
@@ -6622,7 +6622,8 @@ begin
         H := pointer(Headers);
         for i := 1 to length(Headers) do
         if IdemPChar(H^,pointer(fServer.fRemoteConnIDHeaderUpper)) and (H^[L]=':') then begin
-          fRemoteConnectionID := GetInt64(pointer(@H^[L+1]));
+          pH := H^+L+1; while (pH^=' ') do inc(pH);
+          fRemoteConnectionID := GetNextItemUInt64(pH);
           break;
         end else
           inc(H);
@@ -8670,8 +8671,9 @@ begin
           if P<>nil then
           for i := 1 to Req^.Headers.UnknownHeaderCount do
             if (P^.NameLength=L) and IdemPChar(P^.pName,Pointer(fRemoteConnIDHeaderUpper)) then begin
-              SetString(RemoteConn,p^.pRawValue,p^.RawValueLength);
-              Context.fConnectionID := GetInt64(pointer(RemoteConn));
+              SetString(RemoteConn,p^.pRawValue,p^.RawValueLength); // need #0 end
+              R := pointer(RemoteConn);
+              Context.fConnectionID := GetNextItemUInt64(R);
               break;
             end else
             inc(P);
