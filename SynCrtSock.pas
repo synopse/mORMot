@@ -1902,8 +1902,8 @@ type
     // - expects the port to be specified as string, e.g. '1234'; you can
     // optionally specify a server address to bind to, e.g. '1.2.3.4:1234'
     // - you can specify a number of threads to be initialized to handle
-    // incoming connections (default is 32, which may be sufficient for most
-    // cases, maximum is 256) - if you set 0, the thread pool will be disabled
+    // incoming connections. Default is 32, which may be sufficient for most
+    // cases, maximum is 256. If you set 0, the thread pool will be disabled
     // and one thread will be created for any incoming connection
     // - you can also tune (or disable with 0) HTTP/1.1 keep alive delay
     constructor Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
@@ -2048,6 +2048,7 @@ type
     fProxyByPass: SockString;
     fPort: cardinal;
     fHttps: boolean;
+    fLayer: TCrtSocketLayer;
     fKeepAlive: cardinal;
     fUserAgent: SockString;
     fExtendedOptions: THttpRequestExtendedOptions;
@@ -2088,7 +2089,8 @@ type
     // - *TimeOut parameters are currently ignored by TCurlHttp
     constructor Create(const aServer, aPort: SockString; aHttps: boolean;
       const aProxyName: SockString=''; const aProxyByPass: SockString='';
-      ConnectionTimeOut: DWORD=0; SendTimeout: DWORD=0; ReceiveTimeout: DWORD=0); overload; virtual;
+      ConnectionTimeOut: DWORD=0; SendTimeout: DWORD=0; ReceiveTimeout: DWORD=0;
+      aLayer: TCrtSocketLayer=cslTCP); overload; virtual;
     /// connect to the supplied URI
     // - is just a wrapper around TURI and the overloaded Create() constructor
     constructor Create(const aURI: SockString;
@@ -10242,13 +10244,17 @@ end;
 
 constructor THttpRequest.Create(const aServer, aPort: SockString;
   aHttps: boolean; const aProxyName,aProxyByPass: SockString;
-  ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD);
+  ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD;
+  aLayer: TCrtSocketLayer);
 begin
-  fPort := GetCardinal(pointer(aPort));
-  if fPort=0 then
-    if aHttps then
-      fPort := 443 else
-      fPort := 80;
+  fLayer := aLayer;
+  if (fLayer <> cslUNIX) then begin
+    fPort := GetCardinal(pointer(aPort));
+    if fPort=0 then
+      if aHttps then
+        fPort := 443 else
+        fPort := 80;
+  end;
   fServer := aServer;
   fHttps := aHttps;
   fProxyName := aProxyName;
@@ -10271,7 +10277,7 @@ begin
     raise ECrtSocket.CreateFmt('%.Create: invalid aURI=%', [ClassName, aURI]);
   IgnoreSSLCertificateErrors := aIgnoreSSLCertificateErrors;
   Create(URI.Server,URI.Port,URI.Https,aProxyName,aProxyByPass,
-    ConnectionTimeOut,SendTimeout,ReceiveTimeout);
+    ConnectionTimeOut,SendTimeout,ReceiveTimeout,URI.Layer);
 end;
 
 class function THttpRequest.InternalREST(const url,method,data,header: SockString;
@@ -10283,7 +10289,7 @@ begin
   with URI do
   if From(url) then
     try
-      with self.Create(Server,Port,Https,'','') do
+      with self.Create(Server,Port,Https,'','',0,0,0,Layer) do
       try
         IgnoreSSLCertificateErrors := aIgnoreSSLCertificateErrors;
         Request(Address,method,0,header,data,'',oh,result);
@@ -11233,6 +11239,7 @@ type
     coSourceQuote          = 10133,
     coFTPAccount           = 10134,
     coCookieList           = 10135,
+    coUnixSocketPath       = 10231,
     coWriteFunction        = 20011,
     coReadFunction         = 20012,
     coProgressFunction     = 20056,
@@ -11437,7 +11444,9 @@ begin
   if not IsAvailable then
     raise ECrtSocket.CreateFmt('No available %s',[LIBCURL_DLL]);
   fHandle := curl.easy_init;
-  fRootURL := AnsiString(Format('http%s://%s:%d',[HTTPS[fHttps],fServer,fPort]));
+  if (fLayer = cslUNIX) then
+    fRootURL := 'http://localhost' else // see CURLOPT_UNIX_SOCKET_PATH doc
+    fRootURL := AnsiString(Format('http%s://%s:%d',[HTTPS[fHttps],fServer,fPort]));
 end;
 
 destructor TCurlHTTP.Destroy;
@@ -11462,6 +11471,8 @@ var url: SockString;
 begin
   url := fRootURL+aURL;
   //curl.easy_setopt(fHandle,coTCPNoDelay,0); // disable Nagle
+  if fLayer=cslUNIX then
+    curl.easy_setopt(fHandle,coUnixSocketPath, pointer(fServer));
   curl.easy_setopt(fHandle,coURL,pointer(url));
   if fProxyName<>'' then
     curl.easy_setopt(fHandle,coProxy,pointer(fProxyName));
