@@ -5443,7 +5443,7 @@ begin
 end;
 
 function OpenHttp(const aServer, aPort: SockString; aTLS: boolean;
-  aLayer: TCrtSocketLayer = cslTCP): THttpClientSocket;
+  aLayer: TCrtSocketLayer): THttpClientSocket;
 begin
   try
     result := THttpClientSocket.Open(aServer,aPort,aLayer,0,aTLS); // HTTP_DEFAULT_RECEIVETIMEOUT
@@ -5466,7 +5466,7 @@ end;
 
 function HttpGet(const server, port: SockString; const url: SockString;
   const inHeaders: SockString; outHeaders: PSockString;
-  aLayer: TCrtSocketLayer = cslTCP): SockString;
+  aLayer: TCrtSocketLayer): SockString;
 var Http: THttpClientSocket;
 begin
   result := '';
@@ -11073,7 +11073,7 @@ end;
 constructor TWinHTTPUpgradeable.Create(const aServer, aPort: SockString;
   aHttps: boolean; const aProxyName, aProxyByPass: SockString;
   ConnectionTimeOut, SendTimeout, ReceiveTimeout: DWORD;
-  aLayer: TCrtSocketLayer=cslTCP);
+  aLayer: TCrtSocketLayer);
 begin
   inherited;
   fSocket := nil;

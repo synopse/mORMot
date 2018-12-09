@@ -4179,10 +4179,10 @@ begin
   Check(arr[2]='0');
   Check(AddPrefixToCSV('One,Two,Three','Pre')='PreOne,PreTwo,PreThree');
   Check(CSVOfValue('?',3)='?,?,?');
+{$ifndef DELPHI5OROLDER}
   Check(GetUnQuoteCSVItem('"""one,""","two "',1,',','"')='two ');
   Check(GetUnQuoteCSVItem('''''''one,''''''',0)='''one,''');
   Check(GetUnQuoteCSVItem('"""one,',0,',','"')='');
-{$ifndef DELPHI5OROLDER}
   Check(FormatUTF8('abcd',[U],[WS])='abcd');
 {$endif}
   for i := 0 to 1000 do begin

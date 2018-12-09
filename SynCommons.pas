@@ -32895,12 +32895,11 @@ begin
 end;
 
 procedure GetNextItem(var P: PUTF8Char; Sep, Quote: AnsiChar; var result: RawUTF8);
-var S: PUTF8Char;
 begin
   if P=nil then
     result := ''
   else if P^=Quote then begin
-    P : =UnQuoteSQLStringVar(P,result);
+    P := UnQuoteSQLStringVar(P,result);
     if P=nil then
       result := ''
     else if P^<>#0 then
@@ -48646,7 +48645,7 @@ end;
 
 procedure TDynArrayQuickSort.QuickSort(L, R: PtrInt);
 var I, J: PtrInt;
-    tmp: pointer;
+    {$ifndef PUREPASCAL}tmp: pointer;{$endif}
 begin
   if L<R then
   repeat
@@ -48666,7 +48665,7 @@ begin
       end;
       if I <= J then begin
         if I<>J then
-          {$ifndef PUREPASCAL}
+          {$ifndef PUREPASCAL} // inlined Exchg() is OK
           if ElemSize=SizeOf(pointer) then begin
             // optimized version e.g. for TRawUTF8DynArray/TObjectDynArray
             tmp := PPointer(IP)^;

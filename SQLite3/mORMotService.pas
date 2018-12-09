@@ -2247,8 +2247,8 @@ type
 
   PUNICODE_STRING = ^UNICODE_STRING;
   UNICODE_STRING = packed record
-    Length: USHORT;
-    MaximumLength: USHORT;
+    Length: word;
+    MaximumLength: word;
     {$ifdef CPUX64}
     _align: array[0..3] of byte;
     {$endif}
@@ -2258,14 +2258,14 @@ type
   PMS_PEB_LDR_DATA = ^MS_PEB_LDR_DATA;
   MS_PEB_LDR_DATA = packed record
     Reserved1: array[0..7] of BYTE;
-    Reserved2: array[0..2] of PVOID;
+    Reserved2: array[0..2] of pointer;
     InMemoryOrderModuleList: LIST_ENTRY;
   end;
 
   PMS_RTL_USER_PROCESS_PARAMETERS = ^MS_RTL_USER_PROCESS_PARAMETERS;
   MS_RTL_USER_PROCESS_PARAMETERS = packed record
     Reserved1: array[0..15] of BYTE;
-    Reserved2: array[0..9] of PVOID;
+    Reserved2: array[0..9] of pointer;
     ImagePathName: UNICODE_STRING;
     CommandLine: UNICODE_STRING ;
   end;
@@ -2278,17 +2278,17 @@ type
     {$ifdef CPUX64}
     _align1: array[0..3] of byte;
     {$endif}
-    Reserved3: array[0..1] of PVOID;
+    Reserved3: array[0..1] of pointer;
     Ldr: PMS_PEB_LDR_DATA;
     ProcessParameters: PMS_RTL_USER_PROCESS_PARAMETERS;
     Reserved4: array[0..103] of BYTE;
-    Reserved5: array[0..51] of PVOID;
+    Reserved5: array[0..51] of pointer;
     PostProcessInitRoutine: _PPS_POST_PROCESS_INIT_ROUTINE; // for sure not pointer, otherwise SessionId is broken
     Reserved6: array[0..127] of BYTE;
     {$ifdef CPUX64}
     _align2: array[0..3] of byte;
     {$endif}
-    Reserved7: array[0..0] of PVOID;
+    Reserved7: array[0..0] of pointer;
     SessionId: ULONG;
     {$ifdef CPUX64}
     _align3: array[0..3] of byte;
@@ -2297,18 +2297,18 @@ type
 
   PMS_PROCESS_BASIC_INFORMATION = ^MS_PROCESS_BASIC_INFORMATION;
   MS_PROCESS_BASIC_INFORMATION = packed record
-    ExitStatus: LONG;
+    ExitStatus: Longint;
     {$ifdef CPUX64}
     _align1: array[0..3] of byte;
     {$endif}
     PebBaseAddress: PMS_PEB;
-    AffinityMask: ULONG_PTR;
-    BasePriority: LONG;
+    AffinityMask: PtrUInt;
+    BasePriority: Longint;
     {$ifdef CPUX64}
     _align2: array[0..3] of byte;
     {$endif}
-    UniqueProcessId: ULONG_PTR;
-    InheritedFromUniqueProcessId: ULONG_PTR;
+    UniqueProcessId: PtrUInt;
+    InheritedFromUniqueProcessId: PtrUInt;
   end;
 
   {$Z4}
@@ -2320,7 +2320,7 @@ type
   NTSTATUS = LongInt;
 
 function NtQueryInformationProcess(ProcessHandle: THandle;
-  ProcessInformationClass: PROCESSINFOCLASS; ProcessInformation: PVOID;
+  ProcessInformationClass: PROCESSINFOCLASS; ProcessInformation: pointer;
   ProcessInformationLength: ULONG; ReturnLength: PULONG): NTSTATUS; stdcall;
   external ntdll name 'NtQueryInformationProcess';
 function ReadProcessMemory(hProcess: THandle; const lpBaseAddress: Pointer; lpBuffer: Pointer;
@@ -2362,7 +2362,7 @@ begin
     sizeneeded := 0;
     if NtQueryInformationProcess(prochandle, ProcessBasicInformation, buf.buf, buf.len, @sizeneeded) < 0 then
       exit;
-    if buf.len < sizeneeded then begin
+    if buf.len < integer(sizeneeded) then begin
       buf.Done;
       buf.InitZero(sizeneeded);
       if NtQueryInformationProcess(prochandle, ProcessBasicInformation, buf.buf, buf.len, @sizeneeded) < 0 then
