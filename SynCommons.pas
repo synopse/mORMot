@@ -3048,6 +3048,10 @@ function GetNextItem(var P: PUTF8Char; Sep: AnsiChar= ','): RawUTF8; overload;
 // - P=nil after call when end of text is reached
 procedure GetNextItem(var P: PUTF8Char; Sep: AnsiChar; var result: RawUTF8); overload;
 
+/// return next CSV string (unquoted if needed) from P
+// - P=nil after call when end of text is reached
+procedure GetNextItem(var P: PUTF8Char; Sep, Quote: AnsiChar; var result: RawUTF8); overload;
+
 /// return trimmed next CSV string from P
 // - P=nil after call when end of text is reached
 procedure GetNextItemTrimed(var P: PUTF8Char; Sep: AnsiChar; var result: RawUTF8);
@@ -3148,7 +3152,10 @@ function GetNextItemCurrency(var P: PUTF8Char; Sep: AnsiChar= ','): currency; ov
 procedure GetNextItemCurrency(var P: PUTF8Char; out result: currency; Sep: AnsiChar= ','); overload;
 
 /// return n-th indexed CSV string in P, starting at Index=0 for first one
-function GetCSVItem(P: PUTF8Char; Index: PtrUInt; Sep: AnsiChar = ','): RawUTF8;
+function GetCSVItem(P: PUTF8Char; Index: PtrUInt; Sep: AnsiChar = ','): RawUTF8; overload;
+
+/// return n-th indexed CSV string (unquoted if needed) in P, starting at Index=0 for first one
+function GetUnQuoteCSVItem(P: PUTF8Char; Index: PtrUInt; Sep: AnsiChar = ','; Quote: AnsiChar=''''): RawUTF8; overload;
 
 /// return n-th indexed CSV string in P, starting at Index=0 for first one
 // - this function return the generic string type of the compiler, and
@@ -32871,6 +32878,21 @@ begin
   end;
 end;
 
+procedure GetNextItem(var P: PUTF8Char; Sep, Quote: AnsiChar; var result: RawUTF8);
+var S: PUTF8Char;
+begin
+  if P=nil then
+    result := ''
+  else if P^=Quote then begin
+    P:=UnQuoteSQLStringVar(P,result);
+    if P=nil then
+      result := ''
+    else if P^<>#0 then
+      inc(P);
+  end else
+    GetNextItem(P,Sep,result);
+end;
+
 procedure GetNextItemTrimed(var P: PUTF8Char; Sep: AnsiChar; var result: RawUTF8);
 var S,E: PUTF8Char;
 begin
@@ -33275,6 +33297,15 @@ begin
     result := '' else
     for i := 0 to Index do
       GetNextItem(P,Sep,result);
+end;
+
+function GetUnQuoteCSVItem(P: PUTF8Char; Index: PtrUInt; Sep, Quote: AnsiChar): RawUTF8;
+var i: PtrUInt;
+begin
+  if P=nil then
+    result := '' else
+    for i := 0 to Index do
+      GetNextItem(P,Sep,Quote,result);
 end;
 
 function GetLastCSVItem(const CSV: RawUTF8; Sep: AnsiChar): RawUTF8;
