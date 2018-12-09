@@ -552,8 +552,11 @@ begin
     protoObj := cx.NewRootedObject(global.ptr.ReservedSlot[proto.fSlotIndex].asObject);
     jsobj := cx.NewRootedObject(cx.NewObjectWithGivenProto(@proto.FJSClass, protoObj.ptr));
     try
-      if Length(AProto.FJSProps)>0 then
-        jsobj.ptr.DefineProperties(cx,@AProto.FJSProps[0]);
+      // premature optimization is the root of evil
+      // as shown by valgrind profiler better to not redefine props in object
+      // but let's JS engine to use it from prototype
+      //if Length(AProto.FJSProps)>0 then
+      //  jsobj.ptr.DefineProperties(cx,@AProto.FJSProps[0]);
 
       Instance := AInstance;
       new(ObjRec);
