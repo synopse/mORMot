@@ -2343,7 +2343,7 @@ type
     constructor Create(const aServer, aPort: SockString; aHttps: boolean;
       const aProxyName: SockString=''; const aProxyByPass: SockString='';
       ConnectionTimeOut: DWORD=0; SendTimeout: DWORD=0;
-      ReceiveTimeout: DWORD=0); override;
+      ReceiveTimeout: DWORD=0; aLayer: TCrtSocketLayer=cslTCP); override;
   end;
 
   /// WebSocket client implementation
@@ -11023,7 +11023,8 @@ end;
 
 constructor TWinHTTPUpgradeable.Create(const aServer, aPort: SockString;
   aHttps: boolean; const aProxyName, aProxyByPass: SockString;
-  ConnectionTimeOut, SendTimeout, ReceiveTimeout: DWORD);
+  ConnectionTimeOut, SendTimeout, ReceiveTimeout: DWORD;
+  aLayer: TCrtSocketLayer=cslTCP);
 begin
   inherited;
   fSocket := nil;
