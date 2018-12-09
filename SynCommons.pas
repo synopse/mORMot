@@ -3736,13 +3736,13 @@ function UnCamelCase(D, P: PUTF8Char): integer; overload;
 
 /// convert a string into an human-friendly CamelCase identifier
 // - replacing spaces or punctuations by an uppercase character
-// - it is not the reverse function to UnCamelCase()
+// - as such, it is not the reverse function to UnCamelCase()
 procedure CamelCase(P: PAnsiChar; len: integer; var s: RawUTF8;
   const isWord: TSynByteSet=[ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z')]); overload;
 
 /// convert a string into an human-friendly CamelCase identifier
 // - replacing spaces or punctuations by an uppercase character
-// - it is not the reverse function to UnCamelCase()
+// - as such, it is not the reverse function to UnCamelCase()
 procedure CamelCase(const text: RawUTF8; var s: RawUTF8;
   const isWord: TSynByteSet=[ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z')]); overload;
   {$ifdef HASINLINE}inline;{$endif}
@@ -10242,13 +10242,21 @@ type
   // - used e.g. by JSONDecode() overloaded function to returns names/values
   {$ifdef UNICODE}TValuePUTF8Char = record{$else}TValuePUTF8Char = object{$endif}
   public
+    /// a pointer to the actual UTF-8 text
     Value: PUTF8Char;
+    /// how many UTF-8 bytes are stored in Value
     ValueLen: PtrInt;
+    /// convert the value into a UTF-8 string
     procedure ToUTF8(var Text: RawUTF8); overload; {$ifdef HASINLINE}inline;{$endif}
+    /// convert the value into a UTF-8 string
     function ToUTF8: RawUTF8; overload; {$ifdef HASINLINE}inline;{$endif}
+    /// convert the value into a VCL/generic string
     function ToString: string;
+    /// convert the value into a signed integer
     function ToInteger: PtrInt; {$ifdef HASINLINE}inline;{$endif}
+    /// convert the value into an unsigned integer
     function ToCardinal: PtrUInt; {$ifdef HASINLINE}inline;{$endif}
+    /// will call IdemPropNameU() over the stored text Value
     function Idem(const Text: RawUTF8): boolean; {$ifdef HASINLINE}inline;{$endif}
   end;
   /// used e.g. by JSONDecode() overloaded function to returns values
@@ -10258,9 +10266,13 @@ type
   /// store one name/value pair of raw UTF-8 content, from a JSON buffer
   // - used e.g. by JSONDecode() overloaded function to returns names/values
   TNameValuePUTF8Char = record
+    /// a pointer to the actual UTF-8 name text
     Name: PUTF8Char;
+    /// a pointer to the actual UTF-8 value text
     Value: PUTF8Char;
+    /// how many UTF-8 bytes are stored in Name
     NameLen: integer;
+    /// how many UTF-8 bytes are stored in Value
     ValueLen: integer;
   end;
   /// used e.g. by JSONDecode() overloaded function to returns name/value pairs
@@ -16965,10 +16977,14 @@ type
   /// stores TSynBackgroundTimer internal registration list
   TSynBackgroundTimerTaskDynArray = array of TSynBackgroundTimerTask;
 
-  /// TThread able to run one or several tasks at a periodic pace
+  /// TThread able to run one or several tasks at a periodic pace in a
+  // background thread
   // - as used e.g. by TSQLRest.TimerEnable/TimerDisable methods, via the
   // inherited TSQLRestBackgroundTimer
   // - each process can have its own FIFO of text messages
+  // - if you expect to update some GUI, you should rather use a TTimer
+  // component (with a period of e.g. 200ms), since TSynBackgroundTimer will
+  // use its own separated thread
   TSynBackgroundTimer = class(TSynBackgroundThreadProcess)
   protected
     fTask: TSynBackgroundTimerTaskDynArray;
@@ -32884,7 +32900,7 @@ begin
   if P=nil then
     result := ''
   else if P^=Quote then begin
-    P:=UnQuoteSQLStringVar(P,result);
+    P : =UnQuoteSQLStringVar(P,result);
     if P=nil then
       result := ''
     else if P^<>#0 then
@@ -48650,12 +48666,14 @@ begin
       end;
       if I <= J then begin
         if I<>J then
+          {$ifndef PUREPASCAL}
           if ElemSize=SizeOf(pointer) then begin
             // optimized version e.g. for TRawUTF8DynArray/TObjectDynArray
             tmp := PPointer(IP)^;
             PPointer(IP)^ := PPointer(JP)^;
             PPointer(JP)^ := tmp;
           end else
+          {$endif}
             // generic exchange of row element data
             Exchg(IP,JP,ElemSize);
         if P = I then P := J else
