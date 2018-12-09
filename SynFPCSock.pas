@@ -441,6 +441,7 @@ type
                     sin6_flowinfo: longword;
       	    	      sin6_addr:     TInAddr6;
       		          sin6_scope_id: longword);
+          AF_UNIX: (sun_path: array[0..{$ifdef SOCK_HAS_SINLEN}104{$else}107{$endif}] of Char);
           );
   end;
 
@@ -710,6 +711,7 @@ begin
   case sin.sin_family of
     AF_INET:  result := SizeOf(TSockAddrIn);
     AF_INET6: result := SizeOf(TSockAddrIn6);
+    AF_UNIX:  result := SizeOf(sockaddr_un);
   else        result := 0;
   end;
 end;
@@ -1105,6 +1107,11 @@ var TwoPass: boolean;
 begin
   result := 0;
   FillChar(Sin,Sizeof(Sin),0);
+  if (Family=AF_UNIX) then begin
+    Sin.AddressFamily := AF_UNIX;
+    Move(IP[1],Sin.sun_path,length(IP));
+    exit;
+  end;
   Sin.sin_port := Resolveport(port,family,SockProtocol,SockType);
   TwoPass := false;
   if Family=AF_UNSPEC then begin
