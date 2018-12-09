@@ -734,6 +734,7 @@ type
     fURL: SockString;
     fKeepAliveClient: boolean;
     fRemoteIP: SockString;
+    fRemoteConnectionID: Int64;
     fServer: THttpServer;
   public
     /// create the socket according to a server
@@ -760,8 +761,10 @@ type
     // support persistent connections MUST include the "close" connection option
     // in every message"
     property KeepAliveClient: boolean read fKeepAliveClient write fKeepAliveClient;
-    /// the recognized client IP, after a call to InitRequest()
+    /// the recognized client IP, after a call to GetRequest()
     property RemoteIP: SockString read fRemoteIP;
+    /// the recognized connection ID, after a call to GetRequest()
+    property RemoteConnectionID: Int64 read fRemoteConnectionID;
   end;
 
   /// Socket API based REST and HTTP/1.1 compatible client class
@@ -1166,6 +1169,7 @@ type
     fCurrentConnectionID: integer;
     fCanNotifyCallback: boolean;
     fRemoteIPHeader, fRemoteIPHeaderUpper: SockString;
+    fRemoteConnIDHeader, fRemoteConnIDHeaderUpper: SockString;
     function GetAPIVersion: string; virtual; abstract;
     procedure SetServerName(const aName: SockString); virtual;
     procedure SetOnRequest(const aRequest: TOnHttpServerRequest); virtual;
@@ -1175,6 +1179,7 @@ type
     procedure SetOnAfterResponse(const aEvent: TOnHttpServerRequest); virtual;
     procedure SetMaximumAllowedContentLength(aMax: cardinal); virtual;
     procedure SetRemoteIPHeader(const aHeader: SockString);
+    procedure SetRemoteConnIDHeader(const aHeader: SockString);
     function GetHTTPQueueLength: Cardinal; virtual; abstract;
     procedure SetHTTPQueueLength(aValue: Cardinal); virtual; abstract;
     function DoBeforeRequest(Ctxt: THttpServerRequest): cardinal;
@@ -1291,6 +1296,7 @@ type
     // $       proxy_set_header        Host            $host;
     // $       proxy_set_header        X-Real-IP       $remote_addr;
     // $       proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+    // $       proxy_set_header        X-Conn-ID       $connection
     // $ }
     // see https://synopse.info/forum/viewtopic.php?pid=28174#p28174
     property HTTPQueueLength: cardinal read GetHTTPQueueLength write SetHTTPQueueLength;
@@ -1303,6 +1309,12 @@ type
     // define here the HTTP header name which indicates the true remote client
     // IP value, mostly as 'X-Real-IP' or 'X-Forwarded-For'
     property RemoteIPHeader: SockString read fRemoteIPHeader write SetRemoteIPHeader;
+    /// the value of a custom HTTP header containing the real client connection ID
+    // - by default, the Ctxt.ConnectionID information will be retrieved from the socket
+    // layer - but if the server runs behind some proxy service, you should
+    // define here the HTTP header name which indicates the true remote connection
+    // ID value, for example as 'X-Conn-ID'
+    property RemoteConnIDHeader: SockString read fRemoteConnIDHeader write SetRemoteConnIDHeader;
   published
     /// returns the API version used by the inherited implementation
     property APIVersion: string read GetAPIVersion;
@@ -5808,6 +5820,12 @@ begin
   fRemoteIPHeaderUpper := UpperCase(aHeader);
 end;
 
+procedure THttpServerGeneric.SetRemoteConnIDHeader(const aHeader: SockString);
+begin
+  fRemoteConnIDHeader := aHeader;
+  fRemoteConnIDHeaderUpper := UpperCase(aHeader);
+end;
+
 function THttpServerGeneric.NextConnectionID: integer;
 begin
   result := InterlockedIncrement(fCurrentConnectionID);
@@ -6224,7 +6242,10 @@ begin
   finally
     LeaveCriticalSection(fServer.fProcessCS);
   end;
-  fConnectionID := fServer.NextConnectionID;
+  if (aServerSock.RemoteConnectionID <> 0) then
+    fConnectionID := aServerSock.RemoteConnectionID
+  else
+    fConnectionID := fServer.NextConnectionID;
   FreeOnTerminate := true;
   inherited Create(false);
 end;
@@ -6577,6 +6598,7 @@ function THttpServerSocket.GetRequest(withBody: boolean=true): boolean;
 var P: PAnsiChar;
     i, L: integer;
     H: ^PAnsiChar;
+    pH: PAnsiChar;
     maxtix, status: cardinal;
     reason: SockString;
 begin
@@ -6606,6 +6628,18 @@ begin
           repeat inc(L) until H^[L]<>' ';
           if H^[L]<>#0 then
             fRemoteIP := H^+L;
+          break;
+        end else
+          inc(H);
+      end;
+      // remote connection ID
+      L := length(fServer.fRemoteConnIDHeaderUpper);
+      if L<>0 then  begin
+        H := pointer(Headers);
+        for i := 1 to length(Headers) do
+        if IdemPChar(H^,pointer(fServer.fRemoteConnIDHeaderUpper)) and (H^[L]=':') then begin
+          pH := H^+L+1; while (pH^=' ') do inc(pH);
+          fRemoteConnectionID := GetNextItemUInt64(pH);
           break;
         end else
           inc(H);
@@ -7013,7 +7047,7 @@ begin
         // no Keep Alive = multi-connection -> process in the Thread Pool
         ServerSock.GetBody; // we need to get it now
         // multi-connection -> ID=0
-        fServer.Process(ServerSock,0,aCaller);
+        fServer.Process(ServerSock,ServerSock.RemoteConnectionID,aCaller);
         fServer.OnDisconnect;
         // no Shutdown here: will be done client-side
         InterlockedIncrement(fBodyProcessed);
@@ -8437,9 +8471,10 @@ const
     'MOVE','COPY','PROPFIND','PROPPATCH','MKCOL','LOCK','UNLOCK','SEARCH');
 var Req: PHTTP_REQUEST;
     ReqID: HTTP_REQUEST_ID;
-    ReqBuf, RespBuf, RemoteIP: SockString;
+    ReqBuf, RespBuf, RemoteIP, RemoteConn: SockString;
     ContentRange: shortstring;
-    i: integer;
+    i, L: integer;
+    P: PHTTP_UNKNOWN_HEADER;
     flags, bytesRead, bytesSent: cardinal;
     Err: HRESULT;
     InCompressAccept: THttpSocketCompressSet;
@@ -8645,6 +8680,20 @@ begin
         InCompressAccept := ComputeContentEncoding(fCompress,pointer(InAcceptEncoding));
         Context.fUseSSL := Req^.pSslInfo<>nil;
         Context.fInHeaders := RetrieveHeaders(Req^,fRemoteIPHeaderUpper,RemoteIP);
+        // compute remote connection ID
+        L := length(fRemoteConnIDHeaderUpper);
+        if L<>0 then begin
+          P := Req^.Headers.pUnknownHeaders;
+          if P<>nil then
+          for i := 1 to Req^.Headers.UnknownHeaderCount do
+            if (P^.NameLength=L) and IdemPChar(P^.pName,Pointer(fRemoteConnIDHeaderUpper)) then begin
+              SetString(RemoteConn,p^.pRawValue,p^.RawValueLength); // need #0 end
+              R := pointer(RemoteConn);
+              Context.fConnectionID := GetNextItemUInt64(R);
+              break;
+            end else
+            inc(P);
+        end;
         // retrieve any SetAuthenticationSchemes() information
         if byte(fAuthenticationSchemes)<>0 then // set only with HTTP API 2.0
           for i := 0 to Req^.RequestInfoCount-1 do
