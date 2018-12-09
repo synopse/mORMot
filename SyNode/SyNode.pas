@@ -142,6 +142,9 @@ type
     fManager: TSMEngineManager;
 
     fGlobalObject: PJSRootedObject;
+    // gloal._timerLoop function used to emulate setTimeout/setInterval
+    // event loop. Implemented in WindowsTimer.js
+    FGlobalTimerLoopFunc: PJSRootedValue;
     fGlobalObjectDbg: PJSRootedObject;
 
     fEngineContentVersion: Cardinal;
@@ -243,12 +246,15 @@ type
     // - JavaScript equivalent to import of ES6
     function EvaluateModule(const scriptName: RawUTF8): jsval;
 
-    /// run method in object
+    /// run method of object
     // - if exception raised in script - raise Delphi ESMException
-    // - on success returns function return value
+    // - on success returns function result
     // - JavaScript equivalent to
     // ! obj.funcName(args[0], args[1]...)
     function CallObjectFunction(obj: PJSRootedObject; funcName: PCChar; const args: array of jsval): jsval;
+    /// The same as CallObjectFunction but accept funcVal insteadof fuction name
+    // a little bit faster when CallObjectFunction
+    function CallObjectFunctionVal(obj: PJSRootedObject; const funcVal: PJSRootedValue; const args: array of jsval): jsval;
 
     /// access to the associated global object as low-level PJSRootedObject
     property GlobalObject: PJSRootedObject read FGlobalObject;
@@ -772,6 +778,7 @@ begin
   DefineModuleLoader;
 
   EvaluateModule('synode.js');
+  FGlobalTimerLoopFunc := cx.NewRootedValue(FGlobalObject.ptr.GetPropValue(cx, '_timerLoop'));
 
   FGlobalObjectDbg := cx.NewRootedObject(cx.NewGlobalObject(@jsglobal_class));
 end;
@@ -937,6 +944,7 @@ begin
   FDllModulesUnInitProcList.Free;
   inherited Destroy;
 
+  if FGlobalTimerLoopFunc <> nil then cx.FreeRootedValue(FGlobalTimerLoopFunc);
   if FGlobalObjectDbg <> nil then cx.FreeRootedObject(FGlobalObjectDbg);
   if FGlobalObject <> nil then cx.FreeRootedObject(FGlobalObject);
   with TSynFPUException.ForLibraryCode do begin
@@ -1673,6 +1681,31 @@ begin
   end;
 end;
 
+function TSMEngine.CallObjectFunctionVal(obj: PJSRootedObject; const funcVal: PJSRootedValue; const args: array of jsval): jsval;
+var r: Boolean;
+    isFirst: Boolean;
+    rval: jsval;
+    global: PJSRootedObject;
+begin
+  with TSynFPUException.ForLibraryCode do begin
+    ClearLastError;
+    ScheduleWatchdog(fTimeoutValue);
+    isFirst := not cx.IsRunning;
+    r := obj.ptr.CallFunctionValue(cx, funcVal.ptr, high(args) + 1, @args[0], Result);
+    if r and isFirst then begin
+      global := cx.NewRootedObject(cx.CurrentGlobalOrNull);
+      try
+        if FGlobalTimerLoopFunc <> nil then
+          r := global.ptr.CallFunctionValue(cx, FGlobalTimerLoopFunc.ptr, 0, nil, rval);
+      finally
+        cx.FreeRootedObject(global);
+      end;
+    end;
+    ScheduleWatchdog(-1);
+    CheckJSError(r);
+  end;
+end;
+
 function TSMEngine.CallObjectFunction(obj: PJSRootedObject; funcName: PCChar;
   const args: array of jsval): jsval;
 var r: Boolean;
@@ -1688,8 +1721,8 @@ begin
     if r and isFirst then begin
       global := cx.NewRootedObject(cx.CurrentGlobalOrNull);
       try
-        if global.ptr.HasProperty(cx, '_timerLoop') then
-          r := global.ptr.CallFunctionName(cx, '_timerLoop', 0, nil, rval);
+        if FGlobalTimerLoopFunc <> nil then
+          r := global.ptr.CallFunctionValue(cx, FGlobalTimerLoopFunc.ptr, 0, nil, rval);
       finally
         cx.FreeRootedObject(global);
       end;
