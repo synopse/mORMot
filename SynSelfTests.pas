@@ -13893,37 +13893,26 @@ end;
 
 procedure TTestExternalDatabase.AutoAdaptSQL;
 var SQLOrigin: RawUTF8;
-procedure Test(aDBMS: TSQLDBDefinition; AdaptShouldWork: boolean;
-  const SQLExpected: RawUTF8='');
-var Props: TSQLDBConnectionProperties;
-    SQL: RawUTF8;
-begin
-  Props := TSQLDBSQLite3ConnectionProperties.Create(SQLITE_MEMORY_DATABASE_NAME,'','','');
-  try
-    VirtualTableExternalMap(fExternalModel,TSQLRecordPeopleExt,Props,'SampleRecord').
-      MapField('LastChange','Changed');
-    with TSQLRestStorageExternalHook.Create(TSQLRecordPeopleExt,nil) do
-    try
-      SQL := SQLOrigin;
-      TSQLDBConnectionPropertiesHook(Props).fDBMS := aDBMS;
-      Check((Props.DBMS=aDBMS)or(aDBMS=dUnknown));
-      Check(AdaptSQLForEngineList(SQL)=AdaptShouldWork);
-      Check(SameTextU(SQL,SQLExpected)or not AdaptShouldWork,
-        SQLExpected+#13#10+SQL);
-    finally
-      Free;
-    end;
-  finally
-    Props.Free;
+    Props: TSQLDBConnectionProperties;
+    Server: TSQLRestServer;
+    Ext: TSQLRestStorageExternalHook;
+  procedure Test(aDBMS: TSQLDBDefinition; AdaptShouldWork: boolean;
+    const SQLExpected: RawUTF8='');
+  var SQL: RawUTF8;
+  begin
+    SQL := SQLOrigin;
+    TSQLDBConnectionPropertiesHook(Props).fDBMS := aDBMS;
+    Check((Props.DBMS=aDBMS)or(aDBMS=dUnknown));
+    Check(Ext.AdaptSQLForEngineList(SQL)=AdaptShouldWork);
+    Check(SameTextU(SQL,SQLExpected) or not AdaptShouldWork,SQLExpected+#13#10+SQL);
   end;
-end;
-procedure Test2(const Orig,Expected: RawUTF8);
-var DBMS: TSQLDBDefinition;
-begin
-  SQLOrigin := Orig;
-  for DBMS := low(DBMS) to high(DBMS) do
-    Test(DBMS,true,Expected);
-end;
+  procedure Test2(const Orig,Expected: RawUTF8);
+  var DBMS: TSQLDBDefinition;
+  begin
+    SQLOrigin := Orig;
+    for DBMS := low(DBMS) to high(DBMS) do
+      Test(DBMS,true,Expected);
+  end;
 begin
   check(TSQLDBConnectionProperties.IsSQLKeyword(dUnknown,'SELEct'));
   check(not TSQLDBConnectionProperties.IsSQLKeyword(dUnknown,'toto'));
@@ -13934,92 +13923,109 @@ begin
   check(TSQLDBConnectionProperties.IsSQLKeyword(dSQLite,'SELEct'));
   check(TSQLDBConnectionProperties.IsSQLKeyword(dSQLite,'clustER'));
   check(not TSQLDBConnectionProperties.IsSQLKeyword(dSQLite,'value'));
-  Test2('select rowid,firstname from PeopleExt where rowid=2',
-        'select id,firstname from SampleRecord where id=2');
-  Test2('select rowid,firstname from PeopleExt where rowid=?',
-        'select id,firstname from SampleRecord where id=?');
-  Test2('select rowid,firstname from PeopleExt where rowid>=?',
-        'select id,firstname from SampleRecord where id>=?');
-  Test2('select rowid,firstname from PeopleExt where rowid<?',
-        'select id,firstname from SampleRecord where id<?');
-  Test2('select rowid,firstname from PeopleExt where rowid=2 and lastname=:(''toto''):',
-        'select id,firstname from SampleRecord where id=2 and lastname=:(''toto''):');
-  Test2('select rowid,firstname from PeopleExt where rowid=2 and rowID=:(2): order by rowid',
-        'select id,firstname from SampleRecord where id=2 and id=:(2): order by id');
-  Test2('select rowid,firstname from PeopleExt where rowid=2 or lastname=:(''toto''):',
-        'select id,firstname from SampleRecord where id=2 or lastname=:(''toto''):');
-  Test2('select rowid,firstname from PeopleExt where rowid=2 and not lastname like ?',
-        'select id,firstname from SampleRecord where id=2 and not lastname like ?');
-  Test2('select rowid,firstname from PeopleExt where rowid=2 and not (lastname like ?)',
-        'select id,firstname from SampleRecord where id=2 and not (lastname like ?)');
-  Test2('select rowid,firstname from PeopleExt where (rowid=2 and lastname="toto") or lastname like ?',
-        'select id,firstname from SampleRecord where (id=2 and lastname="toto") or lastname like ?');
-  Test2('select rowid,firstname from PeopleExt where (rowid=2 or lastname=:("toto"):) and lastname like ?',
-        'select id,firstname from SampleRecord where (id=2 or lastname=:("toto"):) and lastname like ?');
-  Test2('select rowid,firstname from PeopleExt where (rowid=2) and (lastname="toto" or lastname like ?)',
-        'select id,firstname from SampleRecord where (id=2) and (lastname="toto" or lastname like ?)');
-  Test2('select rowid,firstname from PeopleExt where (rowid=2) and (lastname=:("toto"): or (lastname like ?))',
-        'select id,firstname from SampleRecord where (id=2) and (lastname=:("toto"): or (lastname like ?))');
-  Test2('select rowid,firstname from PeopleExt where rowid=2 order by RowID',
-        'select id,firstname from SampleRecord where id=2 order by ID');
-  Test2('select rowid,firstname from PeopleExt where rowid=2 order by RowID DeSC',
-        'select id,firstname from SampleRecord where id=2 order by ID desc');
-  Test2('select rowid,firstname from PeopleExt order by RowID,firstName DeSC',
-        'select id,firstname from SampleRecord order by ID,firstname desc');
-  Test2('select rowid, firstName from PeopleExt order by RowID, firstName',
-        'select id,firstname from SampleRecord order by ID,firstname');
-  Test2('select rowid, firstName from PeopleExt  order by RowID, firstName asC',
-        'select id,firstname from SampleRecord order by ID,firstname');
-  Test2('select rowid,firstname from PeopleExt where firstname like :(''test''): order by lastname',
-        'select id,firstname from SampleRecord where firstname like :(''test''): order by lastname');
-  Test2('   select    COUNT(*)  from   PeopleExt   ',
-        'select count(*) from SampleRecord');
-  Test2('select count(*) from PeopleExt where rowid=2',
-        'select count(*) from SampleRecord where id=2');
-  Test2('select Distinct(firstname) , max(lastchange)+100 from PeopleExt where rowid >= :(2):',
-        'select Distinct(FirstName),max(Changed)+100 as LastChange from SampleRecord where ID>=:(2):');
-  Test2('select Distinct(lastchange) , max(rowid)-100 as newid from PeopleExt where rowid >= :(2):',
-        'select Distinct(Changed) as lastchange,max(id)-100 as newid from SampleRecord where ID>=:(2):');
-  SQLOrigin := 'select rowid,firstname from PeopleExt where   rowid=2   limit 2';
-  Test(dUnknown,false);
-  Test(dDefault,false);
-  Test(dOracle,true,'select id,firstname from SampleRecord where rownum<=2 and id=2');
-  Test(dMSSQL,true,'select top(2) id,firstname from SampleRecord where id=2');
-  Test(dJet,true,'select top 2 id,firstname from SampleRecord where id=2');
-  Test(dMySQL,true,'select id,firstname from SampleRecord where id=2 limit 2');
-  Test(dSQLite,true,'select id,firstname from SampleRecord where id=2 limit 2');
-  SQLOrigin := 'select rowid,firstname from PeopleExt where rowid=2 order by LastName limit 2';
-  Test(dUnknown,false);
-  Test(dDefault,false);
-  Test(dOracle,true,'select id,firstname from SampleRecord where rownum<=2 and id=2 order by LastName');
-  Test(dMSSQL,true,'select top(2) id,firstname from SampleRecord where id=2 order by LastName');
-  Test(dJet,true,'select top 2 id,firstname from SampleRecord where id=2 order by LastName');
-  Test(dMySQL,true,'select id,firstname from SampleRecord where id=2 order by LastName limit 2');
-  Test(dSQLite,true,'select id,firstname from SampleRecord where id=2 order by LastName limit 2');
-  SQLOrigin := 'select rowid,firstname from PeopleExt where firstname=:(''test''): limit 2';
-  Test(dUnknown,false);
-  Test(dDefault,false);
-  Test(dOracle,true,'select id,firstname from SampleRecord where rownum<=2 and firstname=:(''test''):');
-  Test(dMSSQL,true,'select top(2) id,firstname from SampleRecord where firstname=:(''test''):');
-  Test(dJet,true,'select top 2 id,firstname from SampleRecord where firstname=:(''test''):');
-  Test(dMySQL,true,'select id,firstname from SampleRecord where firstname=:(''test''): limit 2');
-  Test(dSQLite,true,'select id,firstname from SampleRecord where firstname=:(''test''): limit 2');
-  SQLOrigin := 'select id,firstname from PeopleExt limit 2';
-  Test(dUnknown,false);
-  Test(dDefault,false);
-  Test(dOracle,true,'select id,firstname from SampleRecord where rownum<=2');
-  Test(dMSSQL,true,'select top(2) id,firstname from SampleRecord');
-  Test(dJet,true,'select top 2 id,firstname from SampleRecord');
-  Test(dMySQL,true,'select id,firstname from SampleRecord limit 2');
-  Test(dSQLite,true,'select id,firstname from SampleRecord limit 2');
-  SQLOrigin := 'select id,firstname from PeopleExt order by firstname limit 2';
-  Test(dUnknown,false);
-  Test(dDefault,false);
-  Test(dOracle,true,'select id,firstname from SampleRecord where rownum<=2 order by firstname');
-  Test(dMSSQL,true,'select top(2) id,firstname from SampleRecord order by firstname');
-  Test(dJet,true,'select top 2 id,firstname from SampleRecord order by firstname');
-  Test(dMySQL,true,'select id,firstname from SampleRecord order by firstname limit 2');
-  Test(dSQLite,true,'select id,firstname from SampleRecord order by firstname limit 2');
+  Server := TSQLRestServer.Create(fExternalModel);
+  try
+    Props := TSQLDBSQLite3ConnectionProperties.Create(SQLITE_MEMORY_DATABASE_NAME,'','','');
+    try
+      VirtualTableExternalMap(fExternalModel,TSQLRecordPeopleExt,Props,'SampleRecord').
+        MapField('LastChange','Changed');
+      Ext := TSQLRestStorageExternalHook.Create(TSQLRecordPeopleExt,Server);
+      try
+        Test2('select rowid,firstname from PeopleExt where rowid=2',
+              'select id,firstname from SampleRecord where id=2');
+        Test2('select rowid,firstname from PeopleExt where rowid=?',
+              'select id,firstname from SampleRecord where id=?');
+        Test2('select rowid,firstname from PeopleExt where rowid>=?',
+              'select id,firstname from SampleRecord where id>=?');
+        Test2('select rowid,firstname from PeopleExt where rowid<?',
+              'select id,firstname from SampleRecord where id<?');
+        Test2('select rowid,firstname from PeopleExt where rowid=2 and lastname=:(''toto''):',
+              'select id,firstname from SampleRecord where id=2 and lastname=:(''toto''):');
+        Test2('select rowid,firstname from PeopleExt where rowid=2 and rowID=:(2): order by rowid',
+              'select id,firstname from SampleRecord where id=2 and id=:(2): order by id');
+        Test2('select rowid,firstname from PeopleExt where rowid=2 or lastname=:(''toto''):',
+              'select id,firstname from SampleRecord where id=2 or lastname=:(''toto''):');
+        Test2('select rowid,firstname from PeopleExt where rowid=2 and not lastname like ?',
+              'select id,firstname from SampleRecord where id=2 and not lastname like ?');
+        Test2('select rowid,firstname from PeopleExt where rowid=2 and not (lastname like ?)',
+              'select id,firstname from SampleRecord where id=2 and not (lastname like ?)');
+        Test2('select rowid,firstname from PeopleExt where (rowid=2 and lastname="toto") or lastname like ?',
+              'select id,firstname from SampleRecord where (id=2 and lastname="toto") or lastname like ?');
+        Test2('select rowid,firstname from PeopleExt where (rowid=2 or lastname=:("toto"):) and lastname like ?',
+              'select id,firstname from SampleRecord where (id=2 or lastname=:("toto"):) and lastname like ?');
+        Test2('select rowid,firstname from PeopleExt where (rowid=2) and (lastname="toto" or lastname like ?)',
+              'select id,firstname from SampleRecord where (id=2) and (lastname="toto" or lastname like ?)');
+        Test2('select rowid,firstname from PeopleExt where (rowid=2) and (lastname=:("toto"): or (lastname like ?))',
+              'select id,firstname from SampleRecord where (id=2) and (lastname=:("toto"): or (lastname like ?))');
+        Test2('select rowid,firstname from PeopleExt where rowid=2 order by RowID',
+              'select id,firstname from SampleRecord where id=2 order by ID');
+        Test2('select rowid,firstname from PeopleExt where rowid=2 order by RowID DeSC',
+              'select id,firstname from SampleRecord where id=2 order by ID desc');
+        Test2('select rowid,firstname from PeopleExt order by RowID,firstName DeSC',
+              'select id,firstname from SampleRecord order by ID,firstname desc');
+        Test2('select rowid, firstName from PeopleExt order by RowID, firstName',
+              'select id,firstname from SampleRecord order by ID,firstname');
+        Test2('select rowid, firstName from PeopleExt  order by RowID, firstName asC',
+              'select id,firstname from SampleRecord order by ID,firstname');
+        Test2('select rowid,firstname from PeopleExt where firstname like :(''test''): order by lastname',
+              'select id,firstname from SampleRecord where firstname like :(''test''): order by lastname');
+        Test2('   select    COUNT(*)  from   PeopleExt   ',
+              'select count(*) from SampleRecord');
+        Test2('select count(*) from PeopleExt where rowid=2',
+              'select count(*) from SampleRecord where id=2');
+        Test2('select Distinct(firstname) , max(lastchange)+100 from PeopleExt where rowid >= :(2):',
+              'select Distinct(FirstName),max(Changed)+100 as LastChange from SampleRecord where ID>=:(2):');
+        Test2('select Distinct(lastchange) , max(rowid)-100 as newid from PeopleExt where rowid >= :(2):',
+              'select Distinct(Changed) as lastchange,max(id)-100 as newid from SampleRecord where ID>=:(2):');
+        SQLOrigin := 'select rowid,firstname from PeopleExt where   rowid=2   limit 2';
+        Test(dUnknown,false);
+        Test(dDefault,false);
+        Test(dOracle,true,'select id,firstname from SampleRecord where rownum<=2 and id=2');
+        Test(dMSSQL,true,'select top(2) id,firstname from SampleRecord where id=2');
+        Test(dJet,true,'select top 2 id,firstname from SampleRecord where id=2');
+        Test(dMySQL,true,'select id,firstname from SampleRecord where id=2 limit 2');
+        Test(dSQLite,true,'select id,firstname from SampleRecord where id=2 limit 2');
+        SQLOrigin := 'select rowid,firstname from PeopleExt where rowid=2 order by LastName limit 2';
+        Test(dUnknown,false);
+        Test(dDefault,false);
+        Test(dOracle,true,'select id,firstname from SampleRecord where rownum<=2 and id=2 order by LastName');
+        Test(dMSSQL,true,'select top(2) id,firstname from SampleRecord where id=2 order by LastName');
+        Test(dJet,true,'select top 2 id,firstname from SampleRecord where id=2 order by LastName');
+        Test(dMySQL,true,'select id,firstname from SampleRecord where id=2 order by LastName limit 2');
+        Test(dSQLite,true,'select id,firstname from SampleRecord where id=2 order by LastName limit 2');
+        SQLOrigin := 'select rowid,firstname from PeopleExt where firstname=:(''test''): limit 2';
+        Test(dUnknown,false);
+        Test(dDefault,false);
+        Test(dOracle,true,'select id,firstname from SampleRecord where rownum<=2 and firstname=:(''test''):');
+        Test(dMSSQL,true,'select top(2) id,firstname from SampleRecord where firstname=:(''test''):');
+        Test(dJet,true,'select top 2 id,firstname from SampleRecord where firstname=:(''test''):');
+        Test(dMySQL,true,'select id,firstname from SampleRecord where firstname=:(''test''): limit 2');
+        Test(dSQLite,true,'select id,firstname from SampleRecord where firstname=:(''test''): limit 2');
+        SQLOrigin := 'select id,firstname from PeopleExt limit 2';
+        Test(dUnknown,false);
+        Test(dDefault,false);
+        Test(dOracle,true,'select id,firstname from SampleRecord where rownum<=2');
+        Test(dMSSQL,true,'select top(2) id,firstname from SampleRecord');
+        Test(dJet,true,'select top 2 id,firstname from SampleRecord');
+        Test(dMySQL,true,'select id,firstname from SampleRecord limit 2');
+        Test(dSQLite,true,'select id,firstname from SampleRecord limit 2');
+        SQLOrigin := 'select id,firstname from PeopleExt order by firstname limit 2';
+        Test(dUnknown,false);
+        Test(dDefault,false);
+        Test(dOracle,true,'select id,firstname from SampleRecord where rownum<=2 order by firstname');
+        Test(dMSSQL,true,'select top(2) id,firstname from SampleRecord order by firstname');
+        Test(dJet,true,'select top 2 id,firstname from SampleRecord order by firstname');
+        Test(dMySQL,true,'select id,firstname from SampleRecord order by firstname limit 2');
+        Test(dSQLite,true,'select id,firstname from SampleRecord order by firstname limit 2');
+      finally
+        Ext.Free;
+      end;
+    finally
+      Props.Free;
+    end;
+  finally
+    Server.Free;
+  end;
 end;
 
 
