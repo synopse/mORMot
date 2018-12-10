@@ -1178,8 +1178,8 @@ type
     procedure SetOnAfterRequest(const aEvent: TOnHttpServerRequest); virtual;
     procedure SetOnAfterResponse(const aEvent: TOnHttpServerRequest); virtual;
     procedure SetMaximumAllowedContentLength(aMax: cardinal); virtual;
-    procedure SetRemoteIPHeader(const aHeader: SockString);
-    procedure SetRemoteConnIDHeader(const aHeader: SockString);
+    procedure SetRemoteIPHeader(const aHeader: SockString); virtual;
+    procedure SetRemoteConnIDHeader(const aHeader: SockString); virtual;
     function GetHTTPQueueLength: Cardinal; virtual; abstract;
     procedure SetHTTPQueueLength(aValue: Cardinal); virtual; abstract;
     function DoBeforeRequest(Ctxt: THttpServerRequest): cardinal;
@@ -1424,6 +1424,8 @@ type
     procedure SetOnAfterRequest(const aEvent: TOnHttpServerRequest); override;
     procedure SetOnAfterResponse(const aEvent: TOnHttpServerRequest); override;
     procedure SetMaximumAllowedContentLength(aMax: cardinal); override;
+    procedure SetRemoteIPHeader(const aHeader: SockString); override;
+    procedure SetRemoteConnIDHeader(const aHeader: SockString); override;
     procedure SetLoggingServiceName(const aName: SockString);
     /// server main loop - don't change directly
     // - will call the Request public virtual method with the appropriate
@@ -8369,6 +8371,8 @@ begin
   if From.fLogData<>nil then
     fLogData := pointer(fLogDataStorage);
   SetServerName(From.fServerName);
+  SetRemoteIPHeader(From.RemoteIPHeader);
+  SetRemoteConnIDHeader(From.RemoteConnIDHeader);
   fLoggingServiceName := From.fLoggingServiceName;
 end;
 
@@ -9096,6 +9100,24 @@ begin
   if fClones<>nil then // parameter is shared by all clones
     for i := 0 to fClones.Count-1 do
       THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetMaximumAllowedContentLength(aMax);
+end;
+
+procedure THttpApiServer.SetRemoteIPHeader(const aHeader: SockString);
+var i: integer;
+begin
+  inherited SetRemoteIPHeader(aHeader);
+  if fClones<>nil then // parameter is shared by all clones
+    for i := 0 to fClones.Count-1 do
+      THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetRemoteIPHeader(aHeader);
+end;
+
+procedure THttpApiServer.SetRemoteConnIDHeader(const aHeader: SockString);
+var i: integer;
+begin
+  inherited SetRemoteConnIDHeader(aHeader);
+  if fClones<>nil then // parameter is shared by all clones
+    for i := 0 to fClones.Count-1 do
+      THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetRemoteConnIDHeader(aHeader);
 end;
 
 procedure THttpApiServer.SetLoggingServiceName(const aName: SockString);
