@@ -577,13 +577,13 @@ begin
       max_length := bufLen - offset;
 
     if max_length = 0 then begin
-      vp.rval := SimpleVariantToJSval(cx, 0);
+      vp.rval := jsval.Int32Value(0);
       exit;
     end;
 
     bytesWrite := StringBytesWrite(bufData, max_length, str, strLen, isLatin1, encoding);
 
-    vp.rval := SimpleVariantToJSval(cx, bytesWrite);
+    vp.rval := jsval.Int32Value(bytesWrite);
   except
     on E: Exception do
     begin
@@ -685,7 +685,7 @@ begin
       sourceEnd := sourceLength;
 
     if (targetStart >= targetLength) or (sourceStart >= sourceEnd) then begin
-      vp.rval := SimpleVariantToJSval(cx, 0);
+      vp.rval := jsval.Int32Value(0);
       exit;
     end;
 
@@ -705,7 +705,7 @@ begin
 
     MoveFast(Pointer(UIntPtr(sourceData) + sourceStart)^, Pointer(UIntPtr(targetData) + targetStart)^, to_copy);
 
-    vp.rval := SimpleVariantToJSval(cx, to_copy);
+    vp.rval := jsval.Int32Value(to_copy);
   except
     on E: Exception do
     begin
@@ -889,7 +889,7 @@ begin
     in_argv := vp.argv;
     if (argc < 1) or (not in_argv[0].isString) then
       raise ESMException.Create(sInvalidCall);
-    vp.rval := SimpleVariantToJSval(cx, Length(in_argv[0].asJSString.ToUTF8(cx)));
+    vp.rval := jsval.Int32Value(Length(in_argv[0].asJSString.ToUTF8(cx)));
   except
     on E: Exception do
     begin
@@ -980,7 +980,7 @@ begin
         res := -1;
     end;
 
-    vp.rval := SimpleVariantToJSval(cx, res);
+    vp.rval := jsval.Int32Value(res);
   except
     on E: Exception do
     begin
@@ -1071,7 +1071,7 @@ begin
         res := -1;
     end;
 
-    vp.rval := SimpleVariantToJSval(cx, res);
+    vp.rval := jsval.Int32Value(res);
   except
     on E: Exception do
     begin
@@ -1340,7 +1340,7 @@ begin
     then
       raise ESMException.Create(sInvalidCall);
 
-    vp.rval := SimpleVariantToJSval(cx, -1);
+    vp.rval := jsval.Int32Value(-1);
 
     sourceObj := cx.NewRootedObject(in_argv[0].asObject);
     try
@@ -1391,7 +1391,7 @@ begin
       res := SearchString(haystack, haystack_length, needle, needle_length, offset, is_forward, false);
     if res = haystack_length then
       Exit;
-    vp.rval := SimpleVariantToJSval(cx, res);
+    vp.rval := jsval.Int32Value(res);
   except
     on E: Exception do
     begin
@@ -1428,7 +1428,7 @@ begin
     if (argc < 3) or (not in_argv[0].isObject) or (not in_argv[1].isNumber) or (not in_argv[2].isNumber) or (not in_argv[3].isBoolean) then
       raise ESMException.Create(sInvalidCall);
 
-    vp.rval := SimpleVariantToJSval(cx, -1);
+    vp.rval := jsval.Int32Value(-1);
     sourceObj := cx.NewRootedObject(in_argv[0].asObject);
     try
       getBufDataAndLength(cx, sourceObj, sourceData, sourceLength);
@@ -1452,7 +1452,7 @@ begin
     res := SearchString(sourceData, sourceLength, @needle, 1, offset, is_forward, False);
     if res = sourceLength then
       Exit;
-    vp.rval := SimpleVariantToJSval(cx, res);
+    vp.rval := jsval.Int32Value(res);
   except
     on E: Exception do
     begin
@@ -1471,10 +1471,6 @@ var
   sourceData: Pointer;
   sourceLength: size_t;
 
-//  bufObj: PJSRootedObject;
-//  bufData: Pointer;
-//  bufLength: size_t;
-
   offset_i64: Int64;
   opt_offset: Int64;
   offset: size_t;
@@ -1489,9 +1485,7 @@ var
   isLatin1: Boolean;
   needleUtf8: RawUTF8;
   needleSynUnicode: SynUnicode;
-
   res: size_t;
-
 const
   sInvalidCall = 'usage: indexOfString(source: Buffer; val: String; offset: Number; encoding: String; is_forward: boolean);';
 begin
@@ -1502,7 +1496,7 @@ begin
         or (not in_argv[4].isBoolean) then
       raise ESMException.Create(sInvalidCall);
 
-    vp.rval := SimpleVariantToJSval(cx, -1);
+    vp.rval := jsval.Int32Value(-1);
     if in_argv[3].isString then
       encoding := ParseEncoding(in_argv[3].asJSString.ToUTF8(cx), UTF8)
     else
@@ -1575,7 +1569,7 @@ begin
     if res = haystack_length then
       Exit;
 
-    vp.rval := SimpleVariantToJSval(cx, res);
+    vp.rval := jsval.Int32Value(res);
   except
     on E: Exception do
     begin
@@ -1862,8 +1856,8 @@ begin
   obj.ptr.DefineFunction(cx, 'swap32', swap32, 0, props);
   obj.ptr.DefineFunction(cx, 'swap64', swap64, 0, props);
 
-  obj.ptr.DefineProperty(cx, 'kMaxLength', SimpleVariantToJSval(cx, kMaxLength), props);
-  obj.ptr.DefineProperty(cx, 'kStringMaxLength', SimpleVariantToJSval(cx, kMaxLength), props);
+  obj.ptr.DefineProperty(cx, 'kMaxLength', jsval.Int32Value(kMaxLength), props);
+  obj.ptr.DefineProperty(cx, 'kStringMaxLength', jsval.Int32Value(kMaxLength), props);
 
   Result := obj.ptr.ToJSValue;
 

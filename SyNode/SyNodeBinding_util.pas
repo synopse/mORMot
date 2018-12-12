@@ -32,7 +32,7 @@ begin
     if (argc <> 1) then
       raise ESMException.Create(sInvalidCall);
     slotIndex := JSCLASS_GLOBAL_APPLICATION_SLOTS + Ord(proto);
-    vp.rval := SimpleVariantToJSval(cx, cx.CurrentGlobalOrNull.ReservedSlot[slotIndex].asObject.HasInstance(cx, in_argv[0]));
+    vp.rval := jsval.BooleanValue(cx.CurrentGlobalOrNull.ReservedSlot[slotIndex].asObject.HasInstance(cx, in_argv[0]));
     Result := True;
   except
     on E: Exception do begin
@@ -74,7 +74,7 @@ begin
 //    {$ENDIF}
     if (argc <> 1) then
       raise ESMException.Create(sInvalidCall);
-    vp.rval := SimpleVariantToJSval(cx,
+    vp.rval := jsval.BooleanValue(
       vp.argv[0].isObject and (vp.argv[0].asObject.Class_.name = 'Map Iterator')
     );
     Result := True;
@@ -90,7 +90,7 @@ end;
 function isPromise(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
 begin
   Result := True;
-  vp.rval := SimpleVariantToJSval(cx,false);
+  vp.rval := jsval.FalseValue;
 end;
 
 function isRegExp(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
@@ -115,7 +115,7 @@ begin
 //    {$ENDIF}
     if (argc <> 1) then
       raise ESMException.Create(sInvalidCall);
-    vp.rval := SimpleVariantToJSval(cx,
+    vp.rval := jsval.BooleanValue(
       vp.argv[0].isObject and (vp.argv[0].asObject.Class_.name = 'Set Iterator')
     );
     Result := True;
