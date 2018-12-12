@@ -620,69 +620,65 @@ type
     property isVoid: Boolean read getIsVoid;
     /// Set vaule void
     procedure setVoid;
-
     /// Is vaule null
     property isNull: Boolean read getIsNull;
     /// Set vaule null
     procedure setNull;
-
     /// Is vaule 32bit integer
     property isInteger: Boolean read getIsInteger;
     /// Get/set vaule as 32bit integer
     property asInteger: Integer read getAsInteger write setAsInteger;
-
     /// Get/set vaule as 64bit integer (if more than 32 bits than as double)
     property asInt64: Int64 read getAsInt64 write setAsInt64;
-
     /// Is vaule double
     property isDouble: Boolean read getIsDouble;
     /// Get/set vaule as double
     property asDouble: Double read getAsDouble write setAsDouble;
-
     /// Is vaule Number (32bit integer or double)
     property isNumber: Boolean read getIsNumber;
-
     /// Is vaule boolean
     property isBoolean: Boolean read getIsBoolean;
     /// Get/set vaule as boolean
     property asBoolean: Boolean read getAsBoolean write setAsBoolean;
-
     /// Is vaule object(null is object too)
     property isObject: Boolean read getIsObject;
     /// Get/set vaule as object
     property asObject: PJSObject read getAsObject write setAsObject;
-
     /// Is vaule string
     property isString: Boolean read getIsString;
     /// Get/set vaule as JSString
     property asJSString: PJSString read getJSString write setJSString;
-
     /// Is vaule simple(void, null, boolean, number or string)
     property isSimpleVariant[cx: PJSContext]: Boolean read getIsSimpleVariant;
     /// Get/set vaule as simple
     property asSimpleVariant[cx: PJSContext]: Variant read getSimpleVariant write setSimpleVariant;
-
     /// Get/set vaule as Custom pointer
     property asPrivate: Pointer read getPrivate write setPrivate;
-
     /// Get/set vaule as DateTime(object Date used)
     property asDate[cx: PJSContext]: TDateTime read getAsDate write setAsDate;
-
     /// Add JSON representation of value to Writer
     procedure AddJSON(cx: PJSContext; W: TTextWriter);
     /// Get/set vaule as JSON representation
     property asJson[cx: PJSContext]: RawUTF8 read getAsJson write setAsJson;
-
     /// Get JSON representation of value and launch callback
     function Stringify(cx: PJSContext; var replacer: PJSObject; space: jsval;
       callback: JSONWriteCallback; data: pointer): Boolean;
-
     /// Get type of value
     function ValType(cx: PJSContext): JSType;
-
     /// Get source of value
     function toSource(cx: PJSContext): PJSString;
-
+    /// jsval.*Value functions cunstruct new jsval as in JS::Value C++
+    // classes - see https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey/JSAPI_Reference/JS::Value
+    class function NullValue: jsval; {$ifdef HASINLINE}inline;{$endif}
+    class function Int32Value(v: integer): jsval; {$ifdef HASINLINE}inline;{$endif}
+    class function BooleanValue(v: boolean): jsval; {$ifdef HASINLINE}inline;{$endif}
+    class function TrueValue: jsval; {$ifdef HASINLINE}inline;{$endif}
+    class function FalseValue: jsval; {$ifdef HASINLINE}inline;{$endif}
+    class function DoubleValue(v: double): jsval; {$ifdef HASINLINE}inline;{$endif}
+    class function StringValue(v: PJSString): jsval; {$ifdef HASINLINE}inline;{$endif}
+    class function ObjectValue(v: PJSObject): jsval; {$ifdef HASINLINE}inline;{$endif}
+    // SyNode extension (not present in original C++)
+    class function Int64Value(v: Int64): jsval; {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// an abstract array of jsval JavaScript values
@@ -5665,6 +5661,51 @@ end;
 function jsval.ValType(cx: PJSContext): JSType;
 begin
   Result := cx.TypeOfValue(self);
+end;
+
+class function jsval.NullValue: jsval;
+begin
+  Result.setNull();
+end;
+
+class function jsval.Int32Value(v: integer): jsval;
+begin
+  Result.asInteger := v;
+end;
+
+class function jsval.BooleanValue(v: boolean): jsval;
+begin
+  Result.asBoolean := v;
+end;
+
+class function jsval.TrueValue: jsval;
+begin
+  Result.asBoolean := True;
+end;
+
+class function jsval.FalseValue: jsval;
+begin
+  Result.asBoolean := False;
+end;
+
+class function jsval.DoubleValue(v: double): jsval;
+begin
+  Result.asDouble := v;
+end;
+
+class function jsval.StringValue(v: PJSString): jsval;
+begin
+  Result.asJSString := v;
+end;
+
+class function jsval.ObjectValue(v: PJSObject): jsval;
+begin
+  Result.asObject := v;
+end;
+
+class function jsval.Int64Value(v: Int64): jsval;
+begin
+  Result.asInt64 := v;
 end;
 
 function SimpleVariantToJSval(cx: PJSContext; val: Variant): jsval;

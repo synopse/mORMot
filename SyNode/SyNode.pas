@@ -924,7 +924,7 @@ begin
   try
     process := cx.NewRootedObject(GlobalObject.ptr.GetPropValue(cx,'process').asObject);
     try
-      process.ptr.SetProperty(cx, '_exiting', SimpleVariantToJSval(cx, true));
+      process.ptr.SetProperty(cx, '_exiting', jsval.TrueValue);
       if process.ptr.HasProperty(cx, 'emit') then
         CallObjectFunction(process, 'emit', [cx.NewJSString('exit').ToJSVal])
       else

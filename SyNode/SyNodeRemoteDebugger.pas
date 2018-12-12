@@ -697,8 +697,8 @@ begin
       dbgObject := cx.NewRootedObject(aEng.GlobalObjectDbg.ptr.GetPropValue(cx, 'process').asObject.GetPropValue(cx, 'dbg').asObject);
       try
         aEng.CallObjectFunction(dbgObject, 'init', [
-          SimpleVariantToJSval(cx, fIndex),
-          SimpleVariantToJSval(cx, aNeedPauseOnFirstStep)
+          jsval.Int32Value(fIndex),
+          jsval.BooleanValue(aNeedPauseOnFirstStep)
           ],
           false{debugger compartment do not have timerLoop});
       finally
@@ -779,7 +779,7 @@ begin
     SleepHiRes(10);
   result := true;
   if (Queue <> nil) and (debugger.fCommunicationThread <> nil) then
-    vp.rval := SimpleVariantToJSval(cx, msg)
+    vp.rval := jsval.StringValue(cx.NewJSString(msg))
   else // debugger.js will detach current debugee if msg === null
     vp.rval := JSVAL_NULL;
 end;
@@ -789,7 +789,7 @@ var
   debugger: TSMDebugger;
 begin
   debugger := TSMEngine(cx.PrivateData).PrivateDataForDebugger;
-  vp.rval := SimpleVariantToJSval(cx, Assigned(debugger.fCommunicationThread));
+  vp.rval := jsval.BooleanValue(debugger.fCommunicationThread <> nil);
   result := true;
 end;
 
@@ -812,7 +812,7 @@ var
   debugger: TSMDebugger;
 begin
   debugger := TSMEngine(cx.PrivateData).PrivateDataForDebugger;
-  vp.rval := SimpleVariantToJSval(cx, debugger.fIsPaused);
+  vp.rval := jsval.BooleanValue(debugger.fIsPaused);
   result := true;
 end;
 
@@ -821,7 +821,7 @@ var
   debugger: TSMDebugger;
 begin
   debugger := TSMEngine(cx.PrivateData).PrivateDataForDebugger;
-  vp.rval := SimpleVariantToJSval(cx, debugger.fDebuggerName);
+  vp.rval := jsval.StringValue(cx.NewJSString(debugger.fDebuggerName));
   result := true;
 end;
 
@@ -830,17 +830,20 @@ var
   debugger: TSMDebugger;
 begin
   debugger := TSMEngine(cx.PrivateData).PrivateDataForDebugger;
-  vp.rval := SimpleVariantToJSval(cx, debugger.fNameForDebug);
+  vp.rval := jsval.StringValue(cx.NewJSString(debugger.fNameForDebug));
   result := true;
 end;
 
 function debugger_threadId(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean; cdecl;
 var
   debugger: TSMDebugger;
+  v: jsval;
 begin
   debugger := TSMEngine(cx.PrivateData).PrivateDataForDebugger;
-  { TODO : check that in multithread mode this field equal thread id with js context that we debug, otherwire replace with proper assigment }  
-  vp.rval := SimpleVariantToJSval(cx, ToUTF8(debugger.fSmThreadID));
+  // TODO: check that in multithread mode this field equal thread id with js
+  //   context that we debug, otherwire replace with proper assigment
+  vp.rval := cx.NewJSString(ToUTF8(debugger.fSmThreadID)).ToJSVal;
+  //SimpleVariantToJSval(cx, ToUTF8(debugger.fSmThreadID));
   // TSMDebugger(fParent.fDebuggers[i]).fSmThreadID
   result := true;
 end;
@@ -850,7 +853,7 @@ var
   debugger: TSMDebugger;
 begin
   debugger := TSMEngine(cx.PrivateData).PrivateDataForDebugger;
-  vp.rval := SimpleVariantToJSval(cx, debugger.fWebAppRootPath);
+  vp.rval := cx.NewJSString(debugger.fWebAppRootPath).ToJSVal;
   result := true;
 end;
 
