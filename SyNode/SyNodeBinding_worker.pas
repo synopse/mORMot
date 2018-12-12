@@ -23,7 +23,7 @@ type
 {$ENDIF}
     function getCurrentWorkerThreadIndex: integer;
     function getCurrentWorkerID: integer;
-    function getWorkerThreadIndexByID(ID: Integer): integer;
+    function getWorkerThreadIndexByID(aWorkerID: Integer): integer;
     function GetDoInteruptInOwnThreadhandlerForCurThread: TThreadMethod;
   public
     constructor Create;
@@ -32,10 +32,10 @@ type
     function curThreadIsWorker: Boolean;
     function getCurrentWorkerThreadName: RawUTF8;
     procedure EnqueueOutMessageToCurrentThread(const mess: RawUTF8);
-    function DequeueOutMessageFromThread(aID: Integer; out mess: RawUTF8): Boolean;
-    procedure EnqueueInMessageToThread(const mess: RawUTF8; aID: Integer);
+    function DequeueOutMessageFromThread(aWorkerID: Integer; out mess: RawUTF8): Boolean;
+    procedure EnqueueInMessageToThread(const mess: RawUTF8; aWorkerID: Integer);
     function DequeueInMessageFromCurrentThread(out mess: RawUTF8): Boolean;
-    procedure TerminateThread(aID: Integer; aNeedCancelExecution: Boolean = false);
+    procedure TerminateThread(aWorkerID: Integer; aNeedCancelExecution: Boolean = false);
 {$IFDEF SM52}
 {$ELSE}
     property OldErrorReporterForCurrentThread: JSErrorReporter read getOldErrorReporterForCurrentThread;
@@ -65,7 +65,7 @@ type
 {$ELSE}
     oldErrorReporter: JSErrorReporter;
 {$ENDIF}
-    fID: Integer;
+    FWorkerID: Integer;
     FName: RawUTF8;
     FScript: SynUnicode;
   protected
@@ -86,7 +86,7 @@ constructor TJSWorkerThread.Create(aSMManager: TSMEngineManager; workerName: Raw
 begin
   inherited Create(true);
   fSMManager := aSMManager;
-  fID := InterlockedIncrement(fSMManager.WorkersManager.FWorkerCounter);
+  FWorkerID := InterlockedIncrement(fSMManager.WorkersManager.FWorkerCounter);
   FName := workerName;
   FScript := script;
   fInMessages := TRawUTF8List.Create();
@@ -194,9 +194,9 @@ begin
     oldErrorReporter := FEng.rt.ErrorReporter;
     FEng.rt.ErrorReporter := WorkerThreadErrorReporter;
 {$ENDIF}
-
-    val.asInteger := ThreadID;
-    FEng.GlobalObject.ptr.defineProperty(cx, 'threadID', val);
+    // define threadID in global for debugger
+    //val.{$IFDEF CPU64}asInt64{$ELSE}asInteger{$ENDIF} := ThreadID;
+    //FEng.GlobalObject.ptr.defineProperty(cx, 'threadID', val);
     try
       FEng.Evaluate(FScript, '<initialization>', 0, rval);
       if rval.isObject then
@@ -280,21 +280,21 @@ end;
 
 function TJSWorkersManager.Add(cx: PJSContext; const workerName: RawUTF8; const script: SynUnicode): Integer;
 var
-  thread: TJSWorkerThread;
+  wThread: TJSWorkerThread;
   i: Integer;
 begin
   FPool.Safe.Lock;
   try
     // delete unused threads
     for i := FPool.Count - 1 downto 0 do begin
-      thread := TJSWorkerThread(FPool[i]);
-      if thread.Terminated and
-        (thread.fOutMessages.Count = 0) then
+      wThread := TJSWorkerThread(FPool[i]);
+      if wThread.Terminated and
+        (wThread.fOutMessages.Count = 0) then
         FPool.Delete(i);
     end;
-    thread := TJSWorkerThread.Create(TSMEngine(cx.PrivateData).Manager, workerName, script);
-    FPool.Add(thread);
-    Result := thread.fID;
+    wThread := TJSWorkerThread.Create(TSMEngine(cx.PrivateData).Manager, workerName, script);
+    FPool.Add(wThread);
+    Result := wThread.FWorkerID;
   finally
     FPool.Safe.UnLock;
   end;
@@ -333,21 +333,20 @@ begin
   end;
 end;
 
-function TJSWorkersManager.DequeueOutMessageFromThread(aID: Integer;
+function TJSWorkersManager.DequeueOutMessageFromThread(aWorkerID: Integer;
   out mess: RawUTF8): Boolean;
 var
   ThreadIndex: Integer;
-  thread: TJSWorkerThread;
+  wThread: TJSWorkerThread;
 begin
   Result := false;
   FPool.Safe.Lock;
   try
-    ThreadIndex := getWorkerThreadIndexByID(aID);
+    ThreadIndex := getWorkerThreadIndexByID(aWorkerID);
     if ThreadIndex <> -1 then begin
-      thread := TJSWorkerThread(FPool[ThreadIndex]);
-      Result := thread.fOutMessages.PopFirst(mess);
-      if thread.Terminated  and
-        (thread.fOutMessages.Count = 0) then
+      wThread := TJSWorkerThread(FPool[ThreadIndex]);
+      Result := wThread.fOutMessages.PopFirst(mess);
+      if wThread.Terminated and (wThread.fOutMessages.Count = 0) then
         FPool.Delete(ThreadIndex);
     end;
   finally
@@ -362,7 +361,7 @@ begin
   FPool.Safe.Lock;
   try
     for i := 0 to FPool.Count - 1 do begin
-      TerminateThread(TJSWorkerThread(FPool[i]).FID, True);
+      TerminateThread(TJSWorkerThread(FPool[i]).FWorkerID, True);
     end;
   finally
     FPool.Safe.UnLock;
@@ -372,14 +371,14 @@ begin
 end;
 
 procedure TJSWorkersManager.EnqueueInMessageToThread(const mess: RawUTF8;
-  aID: Integer);
+  aWorkerID: Integer);
 var
   ThreadIndex: Integer;
   thread: TJSWorkerThread;
 begin
   FPool.Safe.Lock;
   try
-    ThreadIndex := getWorkerThreadIndexByID(aID);
+    ThreadIndex := getWorkerThreadIndexByID(aWorkerID);
     if ThreadIndex <> -1 then begin
       thread := TJSWorkerThread(FPool[ThreadIndex]);
       if not thread.Terminated then begin
@@ -417,7 +416,7 @@ begin
   curThreadID := GetCurrentThreadId;
   for i := 0 to FPool.Count - 1 do begin
     if TJSWorkerThread(FPool[i]).ThreadID = curThreadID then begin
-      Result := TJSWorkerThread(FPool[i]).fID;
+      Result := TJSWorkerThread(FPool[i]).FWorkerID;
       Exit;
     end;
   end;
@@ -475,13 +474,13 @@ begin
 end;
 {$ENDIF}
 
-function TJSWorkersManager.getWorkerThreadIndexByID(ID: Integer): integer;
+function TJSWorkersManager.getWorkerThreadIndexByID(aWorkerID: Integer): integer;
 var
   i: Integer;
 begin
   Result := -1;
   for i := 0 to FPool.Count - 1 do begin
-    if TJSWorkerThread(FPool[i]).fID = ID then begin
+    if TJSWorkerThread(FPool[i]).FWorkerID = aWorkerID then begin
       Result := i;
       Exit;
     end;
@@ -503,14 +502,14 @@ begin
   end;
 end;
 
-procedure TJSWorkersManager.TerminateThread(aID: Integer; aNeedCancelExecution: Boolean = false);
+procedure TJSWorkersManager.TerminateThread(aWorkerID: Integer; aNeedCancelExecution: Boolean = false);
 var
   ThreadIndex: Integer;
   thread: TJSWorkerThread;
 begin
   FPool.Safe.Lock;
   try
-    ThreadIndex := getWorkerThreadIndexByID(aID);
+    ThreadIndex := getWorkerThreadIndexByID(aWorkerID);
     if ThreadIndex <> -1 then begin
       thread := TJSWorkerThread(FPool[ThreadIndex]);
       if aNeedCancelExecution and (thread.FEng <> nil) then
@@ -584,7 +583,7 @@ end;
 function worker_postMessage(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
 var
   in_argv: PjsvalVector;
-  threadID: Integer;
+  workerID: integer;
   mes: RawUTF8;
 const
   sInvalidCall = 'usage: postMessage(threadID: Number, message: String);';
@@ -593,13 +592,10 @@ begin
     in_argv := vp.argv;
     if (argc < 2) or not (in_argv[0].isNumber) or not (in_argv[1].isString) then
       raise ESMException.Create(sInvalidCall);
-    if in_argv[0].isInteger then
-      threadID := in_argv[0].asInteger
-    else
-      threadID := Round(in_argv[0].asDouble);
+    workerID := in_argv[0].asInteger;
 
     mes := in_argv[1].asJSString.ToUTF8(cx);
-    TSMEngine(cx.PrivateData).Manager.WorkersManager.EnqueueInMessageToThread(mes, threadID);
+    TSMEngine(cx.PrivateData).Manager.WorkersManager.EnqueueInMessageToThread(mes, workerID);
 
     Result := True;
   except
@@ -617,7 +613,7 @@ end;
 function  worker_getMessage(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
 var
   in_argv: PjsvalVector;
-  threadID: Integer;
+  workerID: Integer;
   mes: RawUTF8;
 const
   sInvalidCall = 'usage: getMessage(threadID: Number);';
@@ -628,11 +624,11 @@ begin
       raise ESMException.Create(sInvalidCall);
 
     if in_argv[0].isInteger then
-      threadID := in_argv[0].asInteger
+      workerID := in_argv[0].asInteger
     else
-      threadID := Round(in_argv[0].asDouble);
+      workerID := Round(in_argv[0].asDouble);
 
-    if TSMEngine(cx.PrivateData).Manager.WorkersManager.DequeueOutMessageFromThread(threadID, mes) then
+    if TSMEngine(cx.PrivateData).Manager.WorkersManager.DequeueOutMessageFromThread(workerID, mes) then
       vp.rval := cx.NewJSString(mes).ToJSVal
     else
       vp.rval := JSVAL_VOID;
