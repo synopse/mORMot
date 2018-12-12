@@ -341,7 +341,7 @@ begin
               dbgObject := cx.NewRootedObject(aEng.GlobalObjectDbg.ptr.GetPropValue(cx, 'process').asObject.GetPropValue(cx, 'dbg').asObject);
               try
                 if dbgObject.ptr.HasProperty(cx, 'uninit') then
-                  aEng.CallObjectFunction(dbgObject, 'uninit', []);
+                  aEng.CallObjectFunction(dbgObject, 'uninit', [], false{debugger compartment do not have timerLoop});
               finally
                 cx.FreeRootedObject(dbgObject);
               end;
@@ -655,7 +655,7 @@ begin
       try
         dbgObject := cx.NewRootedObject(engine.GlobalObjectDbg.ptr.GetPropValue(cx, 'process').asObject.GetPropValue(cx, 'dbg').asObject);
         try
-          engine.CallObjectFunction(dbgObject, 'doInterupt', []);
+          engine.CallObjectFunction(dbgObject, 'doInterupt', [], false{debugger compartment do not have timerLoop});
         finally
           cx.FreeRootedObject(dbgObject);
         end;
@@ -699,7 +699,8 @@ begin
         aEng.CallObjectFunction(dbgObject, 'init', [
           SimpleVariantToJSval(cx, fIndex),
           SimpleVariantToJSval(cx, aNeedPauseOnFirstStep)
-          ]);
+          ],
+          false{debugger compartment do not have timerLoop});
       finally
         cx.FreeRootedObject(dbgObject);
       end;
