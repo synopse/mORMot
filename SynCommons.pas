@@ -1651,7 +1651,7 @@ function FormatUTF8(const Format: RawUTF8; const Args, Params: array of const;
 /// read and store text into values[] according to fmt specifiers
 // - %d as PInteger, %D as PInt64, %u as PCardinal, %U as PQWord, %f as PDouble,
 // %F as PCurrency, %x as 8 hexa chars to PInteger, %X as 16 hexa chars to PInt64,
-// %s as PShortString (UTF-8 encoded)
+// %s as PShortString (UTF-8 encoded), %S as PRawUTF8
 // - optionally, specifiers and any whitespace separated identifiers may be
 // extracted and stored into the ident[] array, e.g. '%dFirstInt %s %DOneInt64'
 // will store ['dFirstInt','s','DOneInt64'] into ident
@@ -16363,9 +16363,35 @@ type
 
 /// retrieve low-level information about a given disk partition
 // - as used by TSynMonitorDisk
-procedure GetDiskInfo(var aDriveFolderOrFile: TFileName;
+function GetDiskInfo(var aDriveFolderOrFile: TFileName;
   out aAvailableBytes, aFreeBytes, aTotalBytes: QWord
-  {$ifdef MSWINDOWS}; aVolumeName: PFileName = nil{$endif});
+  {$ifdef MSWINDOWS}; aVolumeName: PFileName = nil{$endif}): boolean;
+
+type
+  /// stores information about a disk partition
+  TDiskPartition = packed record
+    /// the name of this partition
+    // - is the Volume name under Windows, or the Device name under POSIX
+    name: RawUTF8;
+    /// where this partition has been mounted
+    // - you can use GetDiskInfo(mounted) to retrieve current space information
+    mounted: TFileName;
+    /// total size (in bytes) of this partition
+    size: QWord;
+  end;
+  /// stores information about several disk partitions
+  TDiskPartitions = array of TDiskPartition;
+
+/// retrieve low-level information about all mounted disk partitions of the system
+// - returned partitions array is sorted by "mounted" ascending order
+function GetDiskPartitions: TDiskPartitions;
+
+/// retrieve low-level information about all mounted disk partitions as text
+// - returns e.g. under Linux
+// '/ /dev/sda3 (19 GB), /boot /dev/sda2 (486.8 MB), /home /dev/sda4 (0.9 TB)'
+// or under Windows 'C:\ System (115 GB), D:\ Data (99.3 GB)'
+// - uses internally a cache unless nocache is true
+function GetDiskPartitionsText(nocache: boolean=false): RawUTF8;
 
 
 { ******************* cross-cutting classes and functions ***************** }
@@ -24348,10 +24374,12 @@ begin
              exit;
       'X': if not GetNextItemHexDisplayToBin(P,values[v],8,#0) then
              exit;
-      's': begin
+      's','S': begin
         w := 0;
         while (P[w]>' ') and (P+w<=PEnd) do inc(w);
-        SetString(PShortString(values[v])^,P,w);
+        if F^='s' then
+          SetString(PShortString(values[v])^,PAnsiChar(P),w) else
+          SetString(PRawUTF8(values[v])^,PAnsiChar(P),w);
         inc(P,w);
         while (P^<=' ') and (P^<>#0) and (P<=PEnd) do inc(P);
       end;
@@ -57254,11 +57282,14 @@ function GetDiskFreeSpaceExA(lpDirectoryName: PAnsiChar;
 function GetDiskFreeSpaceExW(lpDirectoryName: PWideChar;
   var lpFreeBytesAvailableToCaller, lpTotalNumberOfBytes,
       lpTotalNumberOfFreeBytes: QWord): LongBool; stdcall; external kernel32;
+function DeviceIoControl(hDevice: THandle; dwIoControlCode: DWORD; lpInBuffer: Pointer;
+  nInBufferSize: DWORD; lpOutBuffer: Pointer; nOutBufferSize: DWORD;
+  var lpBytesReturned: DWORD; lpOverlapped: POverlapped): BOOL; stdcall; external kernel32;
 {$endif}
 
-procedure GetDiskInfo(var aDriveFolderOrFile: TFileName;
+function GetDiskInfo(var aDriveFolderOrFile: TFileName;
   out aAvailableBytes, aFreeBytes, aTotalBytes: QWord
-  {$ifdef MSWINDOWS}; aVolumeName: PFileName = nil{$endif});
+  {$ifdef MSWINDOWS}; aVolumeName: PFileName = nil{$endif}): boolean;
 {$ifdef MSWINDOWS}
 var tmp: array[0..MAX_PATH-1] of Char;
     dummy,flags: DWORD;
@@ -57274,7 +57305,7 @@ begin
     GetVolumeInformation(pointer(dn),tmp,MAX_PATH,nil,dummy,flags,nil,0);
     aVolumeName^ := tmp;
   end;
-  {$ifdef UNICODE}GetDiskFreeSpaceExW{$else}GetDiskFreeSpaceExA{$endif}(
+  result := {$ifdef UNICODE}GetDiskFreeSpaceExW{$else}GetDiskFreeSpaceExA{$endif}(
     pointer(dn),aAvailableBytes,aTotalBytes,aFreeBytes);
 {$else}
 {$ifdef KYLIX3}
@@ -57284,7 +57315,7 @@ begin
   if aDriveFolderOrFile='' then
     aDriveFolderOrFile := '.';
   h := FileOpen(aDriveFolderOrFile,fmShareDenyNone);
-  fstatfs64(h,fs);
+  result := fstatfs64(h,fs)=0;
   FileClose(h);
   aAvailableBytes := fs.f_bavail*fs.f_bsize;
   aFreeBytes := aAvailableBytes;
@@ -57295,7 +57326,7 @@ var fs: tstatfs;
 begin
   if aDriveFolderOrFile='' then
     aDriveFolderOrFile := '.';
-  fpStatFS(aDriveFolderOrFile,@fs);
+  result := fpStatFS(aDriveFolderOrFile,@fs)=0;
   aAvailableBytes := QWord(fs.bavail)*QWord(fs.bsize);
   aFreeBytes := aAvailableBytes; // no user Quota involved here
   aTotalBytes := QWord(fs.blocks)*QWord(fs.bsize);
@@ -57314,6 +57345,95 @@ begin
   end;
 end;
 
+function SortDynArrayDiskPartitions(const A,B): integer;
+begin
+  result := SortDynArrayString(TDiskPartition(A).mounted,TDiskPartition(B).mounted);
+end;
+
+function GetDiskPartitions: TDiskPartitions;
+{$ifdef MSWINDOWS} // DeviceIoControl(IOCTL_DISK_GET_PARTITION_INFO) requires root
+var drives, drive, m, n: integer;
+    fn, volume: TFileName;
+{$else}
+var mounts, fs, mnt, typ: RawUTF8;
+    p: PUTF8Char;
+    fn: TFileName;
+    n: integer;
+{$endif}
+    av, fr, tot: QWord;
+begin
+  result := nil;
+  n := 0;
+{$ifdef MSWINDOWS}
+   fn := '#:\';
+   drives := GetLogicalDrives;
+   m := 1 shl 2;
+   for drive := 3 to 26 do begin // retrieve partitions mounted as C..Z drives
+     if drives and m <> 0 then begin
+       fn[1] := char(64 + drive);
+       if GetDiskInfo(fn,av,fr,tot,@volume) then begin
+         SetLength(result,n+1);
+         StringToUTF8(volume,result[n].name);
+         result[n].mounted := fn;
+         volume := '';
+         result[n].size := tot;
+         inc(n);
+       end;
+     end;
+     m := m shl 1;
+   end;
+{$else} // see https://github.com/gagern/gnulib/blob/master/lib/mountlist.c
+  mounts := StringFromFile({$ifdef BSD}'/etc/mtab'{$else}'/proc/self/mounts'{$endif},
+    {hasnosize=}true);
+  p := pointer(mounts);
+  repeat
+    fs := '';
+    mnt := '';
+    typ := '';
+    ScanUTF8(GetNextLine(p,p),'%S %S %S',[@fs,@mnt,@typ]);
+    if (fs<>'') and (fs<>'rootfs') and (mnt<>'') and (mnt<>'/mnt') and (typ<>'') and
+       (IdemPCharArray(pointer(mnt),['/PROC/','/SYS/','/RUN/'])<0) and
+       (FindPropName(['autofs','proc','subfs','debugfs','devpts','fusectl','mqueue',
+        'rpc-pipefs','sysfs','devfs','kernfs','ignore','none','tmpfs','securityfs',
+        'ramfs','rootfs','devtmpfs'],typ)<0) then begin
+      fn := UTF8ToString(mnt);
+      if GetDiskInfo(fn,av,fr,tot) and (tot>1 shl 20) then begin
+        //writeln('fs=',fs,' mnt=',mnt,' typ=',typ, ' av=',KB(av),' fr=',KB(fr),' tot=',KB(tot));
+        SetLength(result,n+1);
+        result[n].name := fs;
+        result[n].mounted := fn;
+        result[n].size := tot;
+        inc(n);
+      end;
+    end;
+  until p=nil;
+  DynArray(TypeInfo(TDiskPartitions),result).Sort(SortDynArrayDiskPartitions);
+  {$endif}
+end;
+
+var
+  _DiskPartitionsText: RawUTF8; // partitions shouldn't change during execution
+
+procedure ComputeDiskPartitionsText;
+var i: integer;
+    parts: TDiskPartitions;
+    s: RawUTF8;
+begin
+  parts := GetDiskPartitions;
+  if parts=nil then
+    s := '' else
+    FormatUTF8('% % (%)',[parts[0].mounted,parts[0].name,KB(parts[0].size)],s);
+  for i := 1 to high(parts) do
+    s := FormatUTF8('%, % % (%)',[s,parts[i].mounted,parts[i].name,KB(parts[i].size)]);
+  _DiskPartitionsText := s;
+end;
+
+function GetDiskPartitionsText(nocache: boolean): RawUTF8;
+begin
+  if nocache or (_DiskPartitionsText='') then
+    ComputeDiskPartitionsText;
+  result := _DiskPartitionsText;
+end;
 
 
 { ******************* cross-cutting classes and functions ***************** }
@@ -65225,6 +65345,8 @@ initialization
   TTextWriter.RegisterCustomJSONSerializerFromText([
     TypeInfo(TFindFilesDynArray),
      'Name:string Attr:Integer Size:Int64 Timestamp:TDateTime',
+    TypeInfo(TDiskPartitions),
+      'name:RawUTF8 mounted:string size:QWord',
     TypeInfo(TSystemUseDataDynArray),
      'Timestamp:TDateTime Kernel,User:single WorkDB,VirtualKB:cardinal']);
   // some type definition assertions
