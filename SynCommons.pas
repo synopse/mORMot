@@ -4544,6 +4544,20 @@ type
   /// internal set to specify some standard Delphi arrays
   TDynArrayKinds = set of TDynArrayKind;
 
+  {$ifdef FPC}
+  /// map the Delphi/FPC dynamic array header (stored before each instance)
+  // - define globally for proper inlining
+  TDynArrayRec = packed record
+    /// dynamic array reference count (basic garbage memory mechanism)
+    refCnt: PtrInt;
+    high: tdynarrayindex;
+    function GetLength: sizeint; inline;
+    procedure SetLength(len: sizeint); inline;
+    property length: sizeint read GetLength write SetLength;
+  end;
+  PDynArrayRec = ^TDynArrayRec;
+  {$endif FPC}
+
 function ToText(k: TDynArrayKind): PShortString; overload;
 
 const
@@ -21232,6 +21246,19 @@ type
     refCnt: SizeInt;
     length: SizeInt;
 {$else FPC}
+  /// map the Delphi/FPC dynamic array header (stored before each instance)
+  TDynArrayRec = packed record
+    /// dynamic array reference count (basic garbage memory mechanism)
+    {$ifdef CPUX64}
+    _Padding: LongInt; // Delphi/FPC XE2+ expects 16 byte alignment
+    {$endif}
+    refCnt: Longint;
+    /// length in element count
+    // - size in bytes = length*ElemSize
+    length: PtrInt;
+  end;
+  PDynArrayRec = ^TDynArrayRec;
+
    TStrRec = packed record
  {$ifdef UNICODE}
     {$ifdef CPU64}
@@ -21256,27 +21283,6 @@ type
     length: Longint;
 {$endif FPC}
   end;
-
-  /// map the Delphi/FPC dynamic array header (stored before each instance)
-  TDynArrayRec = packed record
-    /// dynamic array reference count (basic garbage memory mechanism)
-    {$ifdef FPC}
-    refCnt: PtrInt;
-    high: tdynarrayindex;
-    function GetLength: sizeint; inline;
-    procedure SetLength(len: sizeint); inline;
-    property length: sizeint read GetLength write SetLength;
-    {$else}
-    {$ifdef CPUX64}
-    _Padding: LongInt; // Delphi/FPC XE2+ expects 16 byte alignment
-    {$endif}
-    refCnt: Longint;
-    /// length in element count
-    // - size in bytes = length*ElemSize
-    length: PtrInt;
-    {$endif}
-  end;
-  PDynArrayRec = ^TDynArrayRec;
 
   {$ifdef FPC}
     {$PACKRECORDS C}
