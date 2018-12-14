@@ -428,7 +428,8 @@ type
 
   /// callback signature used by TSynLogFamilly.OnBeforeException
   // - should return false to log the exception, or true to ignore it
-  TSynLogOnBeforeException = function(aExceptionContext: TSynLogExceptionContext): boolean of object;
+  TSynLogOnBeforeException = function(aExceptionContext: TSynLogExceptionContext;
+    const aThreadName: RawUTF8): boolean of object;
 
   /// store simple log-related settings
   // - see also TDDDLogSettings in dddInfraSettings.pas and TSynDaemonSettings
@@ -566,6 +567,7 @@ type
     property ExceptionIgnore: TList read fExceptionIgnore;
     /// you can let exceptions be ignored from a callback
     // - if set and returns true, the given exception won't be logged
+    // - execution of this event handler is protected via the logs global lock
     // - may be handy e.g. when working with code triggerring a lot of
     // exceptions (e.g. Indy), where ExceptionIgnore could be refined
     property OnBeforeException: TSynLogOnBeforeException
@@ -2628,6 +2630,7 @@ procedure SynLogException(const Ctxt: TSynLogExceptionContext);
   end;
 var SynLog: TSynLog;
     info: ^TSynLogExceptionInfo;
+    locked: boolean;
     {$ifdef FPC}i: integer;{$endif}
 label adr,fin;
 begin
@@ -2645,62 +2648,71 @@ begin
   if (SynLog=nil) or not (Ctxt.ELevel in SynLog.fFamily.Level) then
     exit;
   if (Ctxt.EClass=ESynLogSilent) or
-     (SynLog.fFamily.ExceptionIgnore.IndexOf(Ctxt.EClass)>=0) or
-     (Assigned(SynLog.fFamily.OnBeforeException) and
-      SynLog.fFamily.OnBeforeException(Ctxt)) then
+     (SynLog.fFamily.ExceptionIgnore.IndexOf(Ctxt.EClass)>=0) then
     exit;
-  if SynLog.LogHeaderLock(Ctxt.ELevel,false) then
+  locked := false;
   try
-    if GlobalLastExceptionIndex=MAX_EXCEPTHISTORY then
-      GlobalLastExceptionIndex := 0 else
-      inc(GlobalLastExceptionIndex);
-    info := @GlobalLastException[GlobalLastExceptionIndex];
-    info^.Context := Ctxt;
-    {$ifdef FPC}
-    if @BackTraceStrFunc<>@SysBackTraceStr then
-      ShortStringToAnsi7String(BackTraceStrFunc(pointer(Ctxt.EAddr)),info^.Addr) else
-    {$endif FPC}
-      info^.Addr := '';
-    if (Ctxt.ELevel=sllException) and (Ctxt.EInstance<>nil) then begin
-      info^.Message := Ctxt.EInstance.Message;
-      if Ctxt.EInstance.InheritsFrom(ESynException) then begin
-        ESynException(Ctxt.EInstance).RaisedAt := pointer(Ctxt.EAddr);
-        if ESynException(Ctxt.EInstance).CustomLog(SynLog.fWriter,Ctxt) then
-          goto fin;
-        goto adr;
-      end;
-    end else
-      info^.Message := '';
-    if Assigned(DefaultSynLogExceptionToStr) and
-       DefaultSynLogExceptionToStr(SynLog.fWriter,Ctxt) then
-      goto fin;
-adr:SynLog.fWriter.AddShort(' at ');
-    {$ifdef FPC} // note: BackTraceStrFunc is slower than TSynMapFile.Log
-    with SynLog.fWriter do
-    if @BackTraceStrFunc=@SysBackTraceStr then begin // no debug information
-      AddPointer(Ctxt.EAddr); // write addresses as hexa
-      for i := 0 to Ctxt.EStackCount-1 do
-        if (i=0) or (Ctxt.EStack[i]<>Ctxt.EStack[i-1]) then begin
-          Add(' ');
-          AddPointer(Ctxt.EStack[i]);
-        end;
-    end else begin
-      AddString(info^.Addr);
-      for i := 0 to Ctxt.EStackCount-1 do
-        if (i=0) or (Ctxt.EStack[i]<>Ctxt.EStack[i-1]) then
-          AddShort(BackTraceStrFunc(pointer(Ctxt.EStack[i])));
+    if Assigned(SynLog.fFamily.OnBeforeException) then begin
+      SynLog.LockAndGetThreadContext; // protect and set fThreadContext
+      locked := true;
+      if SynLog.fFamily.OnBeforeException(Ctxt,SynLog.fThreadContext^.ThreadName) then
+        exit;
     end;
-    {$else}
-    TSynMapFile.Log(SynLog.fWriter,Ctxt.EAddr,true);
-    {$ifndef WITH_VECTOREXCEPT} // stack frame OK for RTLUnwindProc by now
-    SynLog.AddStackTrace(Ctxt.EStack);
-    {$endif}
-    {$endif FPC}
-fin:SynLog.fWriter.AddEndOfLine(SynLog.fCurrentLevel);
-    SynLog.fWriter.FlushToStream; // we expect exceptions to be available on disk
+    if SynLog.LogHeaderLock(Ctxt.ELevel,locked) then begin
+      locked := true;
+      if GlobalLastExceptionIndex=MAX_EXCEPTHISTORY then
+        GlobalLastExceptionIndex := 0 else
+        inc(GlobalLastExceptionIndex);
+      info := @GlobalLastException[GlobalLastExceptionIndex];
+      info^.Context := Ctxt;
+      {$ifdef FPC}
+      if @BackTraceStrFunc<>@SysBackTraceStr then
+        ShortStringToAnsi7String(BackTraceStrFunc(pointer(Ctxt.EAddr)),info^.Addr) else
+      {$endif FPC}
+        info^.Addr := '';
+      if (Ctxt.ELevel=sllException) and (Ctxt.EInstance<>nil) then begin
+        info^.Message := Ctxt.EInstance.Message;
+        if Ctxt.EInstance.InheritsFrom(ESynException) then begin
+          ESynException(Ctxt.EInstance).RaisedAt := pointer(Ctxt.EAddr);
+          if ESynException(Ctxt.EInstance).CustomLog(SynLog.fWriter,Ctxt) then
+            goto fin;
+          goto adr;
+        end;
+      end else
+        info^.Message := '';
+      if Assigned(DefaultSynLogExceptionToStr) and
+         DefaultSynLogExceptionToStr(SynLog.fWriter,Ctxt) then
+        goto fin;
+adr:  SynLog.fWriter.AddShort(' at ');
+      {$ifdef FPC} // note: BackTraceStrFunc is slower than TSynMapFile.Log
+      with SynLog.fWriter do
+      if @BackTraceStrFunc=@SysBackTraceStr then begin // no debug information
+        AddPointer(Ctxt.EAddr); // write addresses as hexa
+        for i := 0 to Ctxt.EStackCount-1 do
+          if (i=0) or (Ctxt.EStack[i]<>Ctxt.EStack[i-1]) then begin
+            Add(' ');
+            AddPointer(Ctxt.EStack[i]);
+          end;
+      end else begin
+        AddString(info^.Addr);
+        for i := 0 to Ctxt.EStackCount-1 do
+          if (i=0) or (Ctxt.EStack[i]<>Ctxt.EStack[i-1]) then
+            AddShort(BackTraceStrFunc(pointer(Ctxt.EStack[i])));
+      end;
+      {$else}
+      TSynMapFile.Log(SynLog.fWriter,Ctxt.EAddr,true);
+      {$ifndef WITH_VECTOREXCEPT} // stack frame OK for RTLUnwindProc by now
+      SynLog.AddStackTrace(Ctxt.EStack);
+      {$endif}
+      {$endif FPC}
+fin:  SynLog.fWriter.AddEndOfLine(SynLog.fCurrentLevel);
+      SynLog.fWriter.FlushToStream; // we expect exceptions to be available on disk
+    end;
   finally
-    GlobalCurrentHandleExceptionSynLog := SynLog.fThreadHandleExceptionBackup;
-    LeaveCriticalSection(GlobalThreadLock);
+    if locked then begin
+      GlobalCurrentHandleExceptionSynLog := SynLog.fThreadHandleExceptionBackup;
+      LeaveCriticalSection(GlobalThreadLock);
+    end;
   end;
 end;
 
@@ -3688,7 +3700,7 @@ procedure TSynLog.ThreadContextRehash;
 var i: integer;
     id, hash: PtrUInt;
     secondpass: boolean;
-    ctxt: ^TSynLogThreadContext;
+    ctxt: PSynLogThreadContext;
 begin // should match TSynLog.GetThreadContextInternal
   if fFamily.fPerThreadLog=ptNoThreadProcess then
     exit;
