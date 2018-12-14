@@ -16405,7 +16405,9 @@ function GetDiskPartitions: TDiskPartitions;
 // '/ /dev/sda3 (19 GB), /boot /dev/sda2 (486.8 MB), /home /dev/sda4 (0.9 TB)'
 // or under Windows 'C:\ System (115 GB), D:\ Data (99.3 GB)'
 // - uses internally a cache unless nocache is true
-function GetDiskPartitionsText(nocache: boolean=false): RawUTF8;
+// - includes the free space if withfreespace is true - e.g. '(80 GB / 115 GB)'
+function GetDiskPartitionsText(nocache: boolean=false;
+  withfreespace: boolean=false): RawUTF8;
 
 
 { ******************* cross-cutting classes and functions ***************** }
@@ -21259,7 +21261,7 @@ type
   end;
   PDynArrayRec = ^TDynArrayRec;
 
-   TStrRec = packed record
+  TStrRec = packed record
  {$ifdef UNICODE}
     {$ifdef CPU64}
     /// padding bytes for 16 byte alignment of the header
@@ -38495,7 +38497,7 @@ begin
       {$ifdef CPUINTEL}'cpufeatures', LowerCase(ToText(CpuFeatures, ' ')),{$endif}
       'processcpu',cpu,'processmem',mem,
       'freemem',TSynMonitorMemory.FreeAsText,
-      'freedisk',TSynMonitorDisk.FreeAsText]);
+      'disk',GetDiskPartitionsText(false,true)]);
 end;
 
 {$ifdef MSWINDOWS}
@@ -57403,7 +57405,7 @@ begin
        (IdemPCharArray(pointer(mnt),['/PROC/','/SYS/','/RUN/'])<0) and
        (FindPropName(['autofs','proc','subfs','debugfs','devpts','fusectl','mqueue',
         'rpc-pipefs','sysfs','devfs','kernfs','ignore','none','tmpfs','securityfs',
-        'ramfs','rootfs','devtmpfs'],typ)<0) then begin
+        'ramfs','rootfs','devtmpfs','hugetlbfs'],typ)<0) then begin
       fn := UTF8ToString(mnt);
       if GetDiskInfo(fn,av,fr,tot) and (tot>1 shl 20) then begin
         //writeln('fs=',fs,' mnt=',mnt,' typ=',typ, ' av=',KB(av),' fr=',KB(fr),' tot=',KB(tot));
@@ -57420,27 +57422,27 @@ begin
 end;
 
 var
-  _DiskPartitionsText: RawUTF8; // partitions shouldn't change during execution
+  _DiskPartitions: TDiskPartitions;
 
-procedure ComputeDiskPartitionsText;
+function GetDiskPartitionsText(nocache, withfreespace: boolean): RawUTF8;
 var i: integer;
     parts: TDiskPartitions;
-    s: RawUTF8;
+   function GetInfo(var p: TDiskPartition): shortstring;
+   var av, fr, tot: QWord;
+   begin
+     if not withfreespace or not GetDiskInfo(p.mounted,av,fr,tot) then
+       FormatShort('% % (%)',[p.mounted,p.name,KB(p.size)],result) else
+       FormatShort('% % (% / %)',[p.mounted,p.name,KB(fr),KB(tot)],result);
+   end;
 begin
-  parts := GetDiskPartitions;
+  if (_DiskPartitions=nil) or nocache then
+    _DiskPartitions := GetDiskPartitions;
+  parts := _DiskPartitions;
   if parts=nil then
-    s := '' else
-    FormatUTF8('% % (%)',[parts[0].mounted,parts[0].name,KB(parts[0].size)],s);
+    result := '' else
+    ShortStringToAnsi7String(GetInfo(parts[0]),result);
   for i := 1 to high(parts) do
-    s := FormatUTF8('%, % % (%)',[s,parts[i].mounted,parts[i].name,KB(parts[i].size)]);
-  _DiskPartitionsText := s;
-end;
-
-function GetDiskPartitionsText(nocache: boolean): RawUTF8;
-begin
-  if nocache or (_DiskPartitionsText='') then
-    ComputeDiskPartitionsText;
-  result := _DiskPartitionsText;
+    result := FormatUTF8('%, %',[result,GetInfo(parts[i])]);
 end;
 
 
