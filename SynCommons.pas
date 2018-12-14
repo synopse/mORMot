@@ -7907,7 +7907,7 @@ type
     // - Instance must be not nil
     // - overriden version in TJSONSerializer would implement IncludeUnitName
     procedure AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
-      IncludeUnitName: boolean); virtual;
+      IncludeUnitName, IncludePointer: boolean); virtual;
     /// append a quoted string as JSON, with in-place decoding
     // - if QuotedString does not start with ' or ", it will written directly
     // (i.e. expects to be a number, or null/true/false constants)
@@ -53837,12 +53837,14 @@ begin
 end;
 
 procedure TTextWriter.AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
-  IncludeUnitName: boolean);
+  IncludeUnitName, IncludePointer: boolean);
 begin
   AddShort(PShortString(PPointer(PPtrInt(Instance)^+vmtClassName)^)^);
-  Add('(');
-  AddPointer(PtrUInt(Instance));
-  Add(')');
+  if IncludePointer then begin
+    Add('(');
+    AddPointer(PtrUInt(Instance));
+    Add(')');
+  end;
   if SepChar<>#0 then
     Add(SepChar);
 end;
