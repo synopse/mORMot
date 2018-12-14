@@ -4195,7 +4195,7 @@ type
       Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]); override;
     /// override method, handling IncludeUnitName option
     procedure AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
-      IncludeUnitName: boolean); override;
+      IncludeUnitName, IncludePointer: boolean); override;
     /// customize TSQLRecord.GetJSONValues serialization process
     // - jwoAsJsonNotAsString will force TSQLRecord.GetJSONValues to serialize
     // nested property instances as a JSON object/array, not a JSON string:
@@ -42893,7 +42893,7 @@ begin // called by root/Timestamp/info REST method
       'exe',ExeVersion.ProgramName, 'version',ExeVersion.Version.DetailedOrVoid,
       'host',ExeVersion.Host, 'cpu',cpu, {$ifdef MSWINDOWS}'mem',mem,{$endif}
       'memused',KB(m.AllocatedUsed.Bytes), 'memfree',free,
-      'diskfree',TSynMonitorDisk.FreeAsText, 'exception',GetLastExceptions(10)]);
+      'disk',GetDiskPartitionsText(false,true), 'exception',GetLastExceptions(10)]);
   finally
     m.Free;
   end;
@@ -52513,7 +52513,7 @@ begin
 end;
 
 procedure TJSONSerializer.AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
-  IncludeUnitName: boolean);
+  IncludeUnitName, IncludePointer: boolean);
 var info: PTypeInfo;
 begin
   if IncludeUnitName then begin
@@ -52524,7 +52524,7 @@ begin
       Add('.');
     end;
   end;
-  inherited AddInstancePointer(Instance,SepChar,IncludeUnitName);
+  inherited AddInstancePointer(Instance,SepChar,IncludeUnitName,IncludePointer);
 end;
 
 procedure TJSONSerializer.SetSQLRecordOptions(Value: TJSONSerializerSQLRecordOptions);

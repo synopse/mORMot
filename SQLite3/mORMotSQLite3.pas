@@ -1345,8 +1345,9 @@ begin
   if (self<>nil) and (DB<>nil) and (SQL<>'') then begin
     // need a SQL request for R.Execute() to prepare a statement
     result := DB.LockJSON(SQL,ReturnedRowCount); // lock and try from cache
-    if result='' then // Execute request if was not got from cache
-    try
+    if result<>'' then
+      exit;
+    try // Execute request if was not got from cache
       try
         GetAndPrepareStatement(SQL,false);
         MS := TRawByteStringStream.Create;
@@ -1696,37 +1697,37 @@ begin
   result := false;
   if (Self=nil) or (DB=nil) then
     exit;
-  fStatementCache.ReleaseAllDBStatements;
   user_version := DB.user_version;
   DB.LockAndFlushCache;
   try
-  try
-    // perform a VACCUM to recreate the database content
-    EngineExecute('VACUUM');
-    Closed := false;
     try
-      Closed := DB.DBClose=SQLITE_OK;
-      // compress the database content file
-      Source := FileStreamSequentialRead(DB.FileName);
+      fStatementCache.ReleaseAllDBStatements;
+      // perform a VACCUM to recreate the database content
+      EngineExecute('VACUUM');
+      Closed := false;
       try
-        Dest.CopyFrom(Source,0);  // Count=0 for whole stream copy
-        result := true;
+        Closed := DB.DBClose=SQLITE_OK;
+        // compress the database content file
+        Source := FileStreamSequentialRead(DB.FileName);
+        try
+          Dest.CopyFrom(Source,0);  // Count=0 for whole stream copy
+          result := true;
+        finally
+          Source.Free;
+        end;
       finally
-        Source.Free;
+        if Closed then begin
+          // reopen the database if was previously closed
+          DB.DBOpen;
+          // register functions and modules
+          InitializeEngine;
+          // register virtual tables
+          CreateMissingTables(user_version,fCreateMissingTablesOptions);
+        end;
       end;
     finally
-      if Closed then begin
-        // reopen the database if was previously closed
-        DB.DBOpen;
-        // register functions and modules
-        InitializeEngine;
-        // register virtual tables
-        CreateMissingTables(user_version,fCreateMissingTablesOptions);
-      end;
+      DB.UnLock;
     end;
-  finally
-    DB.UnLock;
-  end;
   except
     on E: Exception do
       result := false;

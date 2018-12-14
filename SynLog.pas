@@ -2687,7 +2687,7 @@ begin
       if Assigned(DefaultSynLogExceptionToStr) and
          DefaultSynLogExceptionToStr(SynLog.fWriter,Ctxt) then
         goto fin;
-adr:  SynLog.fWriter.AddShort(' at ');
+adr:  SynLog.fWriter.Add(' [%] at ',[SynLog.fThreadContext^.ThreadName],twOnSameLine);
       {$ifdef FPC} // note: BackTraceStrFunc is slower than TSynMapFile.Log
       with SynLog.fWriter do
       if @BackTraceStrFunc=@SysBackTraceStr then begin // no debug information
