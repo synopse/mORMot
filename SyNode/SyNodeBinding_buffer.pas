@@ -1639,7 +1639,7 @@ begin
       Swizzle(@d, cFloatSize[isDouble]);
 
     if isDouble then
-      vp.rval := SimpleVariantToJSval(cx, d)
+      vp.rval := jsval.DoubleValue(d)
     else
       vp.rval := SimpleVariantToJSval(cx, s);
   except
