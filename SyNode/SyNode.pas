@@ -234,8 +234,12 @@ type
     // ! eval(script)
     procedure Evaluate(const script: SynUnicode; const scriptName: RawUTF8;
       lineNo: Cardinal; out result: jsval); overload;
+    procedure Evaluate(const script: RawUTF8; const scriptName: RawUTF8;
+      lineNo: Cardinal; out result: jsval); overload;
 
     procedure Evaluate(const script: SynUnicode; const scriptName: RawUTF8;
+      lineNo: Cardinal); overload;
+    procedure Evaluate(const script: RawUTF8; const scriptName: RawUTF8;
       lineNo: Cardinal); overload;
 
     /// evaluate script embadedd into application resources
@@ -804,11 +808,11 @@ begin
   {$IFDEF CORE_MODULES_IN_RES}
   EvaluateRes('MODULELOADER.JS', rval);
   {$ELSE}
-  ModuleLoaderPath := RelToAbs(UTF8ToString(FManager.coreModulesPath) , 'ModuleLoader.js');
-  script := AnyTextFileToSynUnicode(ModuleLoaderPath);
-  if script = '' then
-    raise ESMException.Create('File not found ' + ModuleLoaderPath);
-  Evaluate(script, 'ModuleLoader.js', 1, rval);
+    ModuleLoaderPath := RelToAbs(UTF8ToString(FManager.coreModulesPath) , 'ModuleLoader.js');
+    script := AnyTextFileToSynUnicode(ModuleLoaderPath);
+    if script = '' then
+      raise ESMException.Create('File not found ' + ModuleLoaderPath);
+    Evaluate(script, 'ModuleLoader.js', 1, rval);
   {$ENDIF}
 end;
 
@@ -1580,11 +1584,22 @@ end;
 // Spidermonkey debugger crashes when `...`(new ES6 strings) contains #13#10
 procedure remChar13FromScript(const Script: SynUnicode); {$IFDEF HASINLINE}inline;{$ENDIF}
 var
-    c: PWideChar;
-    i: Integer;
+  c: PWideChar;
 begin
   c := pointer(script);
-  for I := 1 to Length(script) do begin
+  while c^ <> #0 do begin
+    if (c^ = #13) then
+        c^ := ' ';
+    Inc(c);
+  end;
+end;
+
+procedure remChar13FromScriptU(const Script: RawUTF8); {$IFDEF HASINLINE}inline;{$ENDIF}
+var
+  c: PUTF8Char;
+begin
+  c := pointer(script);
+  while c^ <> #0 do begin
     if (c^ = #13) then
         c^ := ' ';
     Inc(c);
@@ -1666,7 +1681,42 @@ begin
   end;
 end;
 
+procedure TSMEngine.Evaluate(const script: RawUTF8;
+  const scriptName: RawUTF8; lineNo: Cardinal; out result: jsval);
+var r: Boolean;
+    opts: PJSCompileOptions;
+    isFirst: Boolean;
+    rval: jsval;
+begin
+  with TSynFPUException.ForLibraryCode do begin
+    ClearLastError;
+    ScheduleWatchdog(fTimeoutValue);
+    isFirst := not cx.IsRunning;
+    opts := cx.NewCompileOptions;
+    opts.filename := Pointer(scriptName);
+    opts.utf8 := true;
+
+    remChar13FromScriptU(script);
+    r := cx.EvaluateScript(
+        opts, pointer(script), length(script), result);
+    cx.FreeCompileOptions(opts);
+    if r and isFirst and GlobalObject.ptr.HasProperty(cx, '_timerLoop') then
+      r := GlobalObject.ptr.CallFunctionName(cx, '_timerLoop', 0, nil, rval);
+    if not r then
+      r := false;
+    ScheduleWatchdog(-1);
+    CheckJSError(r);
+  end;
+end;
+
 procedure TSMEngine.Evaluate(const script: SynUnicode; const scriptName: RawUTF8; lineNo: Cardinal);
+var
+  jsvalue: jsval;
+begin
+  Evaluate(script, scriptName, lineNo, jsvalue);
+end;
+
+procedure TSMEngine.Evaluate(const script: RawUTF8; const scriptName: RawUTF8; lineNo: Cardinal);
 var
   jsvalue: jsval;
 begin
@@ -2064,31 +2114,38 @@ const
 var
   in_argv: PjsvalVector;
   res: jsval;
-  Script: SynUnicode;
   FileName: RawUTF8;
   opts: PJSCompileOptions;
+  pScriptString: PJSRootedString;
+  pScriptContent: pointer;
+  scriptLength: size_t;
 begin
   try
     in_argv := vp.argv;
     if (argc < 1) or not in_argv[0].isString or ((argc >1) and not in_argv[1].isString) then
       raise ESMException.Create(USAGE);
-    Script := in_argv[0].asJSString.ToSynUnicode(cx);
     FileName := '';
     if argc > 1 then
       FileName := in_argv[1].asJSString.ToUTF8(cx);
     if FileName = '' then
       FileName := 'no file';
     cx.BeginRequest;
+    pScriptString := cx.NewRootedString(in_argv[0].asJSString);
     try
       opts := cx.NewCompileOptions;
       opts.filename := Pointer(FileName);
-
-      remChar13FromScript(Script);
-      Result := cx.EvaluateUCScript(opts, Pointer(Script), Length(Script), res);
+      if pScriptString.ptr.HasLatin1Chars then begin
+        pScriptContent := pScriptString.ptr.GetLatin1StringCharsAndLength(cx, scriptLength);
+        Result := cx.EvaluateScript(opts, pScriptContent, scriptLength, res);
+      end else begin
+        pScriptContent := pScriptString.ptr.GetTwoByteStringCharsAndLength(cx, scriptLength);
+        Result := cx.EvaluateUCScript(opts, pScriptContent, scriptLength, res);
+      end;
       cx.FreeCompileOptions(opts);
       if Result then
         vp.rval := res;
     finally
+      cx.FreeRootedString(pScriptString);
       cx.EndRequest;
     end;
     vp.rval := res;

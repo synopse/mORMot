@@ -908,6 +908,9 @@ type
 {$ENDIF}
   /// JavaScript execution context
   // - this object does not store anything, but just provide some helper methods
+
+  { JSContext }
+
   JSContext = object
   private
     function GetPrivate: Pointer; {$ifdef HASINLINE}inline;{$endif}
@@ -1071,6 +1074,8 @@ type
 
     /// create a new JavaScript string instance
     function NewJSString(const Value: SynUnicode): PJSString; overload; {$ifdef HASINLINE}inline;{$endif}
+    /// create a new JavaScript string from a RawUTF8
+    // see https://gitlab.gnome.org/GNOME/gjs/commit/6fa31261e1131970f68aba63d977253118a5958a
     function NewJSString(const Value: RawUTF8): PJSString; overload; {$ifdef HASINLINE}inline;{$endif}
     function NewJSString(TextWide: PWideChar; TextLen: integer): PJSString; overload; {$ifdef HASINLINE}inline;{$endif}
     function NewJSString(TextAnsi: PAnsiChar; TextLen, CodePage: integer): PJSString; overload;
@@ -1820,10 +1825,30 @@ type
 {$ENDIF}
   end;
 
+  // internal alignment of JSCompileOptions is a HACK and depends on C++ pragma
+  // TODO - add a functions in C++ patch to expose a setUtf8() and setFileName
+  // see jsapi.h: class JS_FRIEND_API(TransitiveCompileOptions)
+  // Asserted in JSContext.NewCompileOptions
   JSCompileOptions = record
     reserved: array[0..1] of Pointer;
     filename: PCChar;
-    reserved1: array[3..24] of Pointer;
+
+    introducerFilename_: PCChar;
+    sourceMapURL_: PCChar16;
+    version: JSVersion; //JSVersion version;
+    versionSet: boolean; //bool versionSet;
+    utf8: boolean; //bool utf8
+    selfHostingMode: boolean; // bool selfHostingMode
+    canLazilyParse: boolean; // bool canLazilyParse
+    //strictOption: boolean;
+    //extraWarningsOption: boolean;
+    //werrorOption: boolean;
+    //AsmJSOption asmJSOption;
+    //bool throwOnAsmJSValidationFailureOption;
+    //bool forceAsync;
+    //bool installedFile;  // 'true' iff pre-compiling js file in packaged app
+    //bool sourceIsLazy;
+    reserved1: array[{$ifdef CPUX64}6{$else}7{$endif}..24] of Pointer;
   end;
 
   JSRootedValue = record
@@ -2708,6 +2733,11 @@ function JS_IsRunning(cx: PJSContext): Boolean; cdecl; external SpiderMonkeyLib;
 // and copy n characters from a character array, s, into the new JSString
 // Ansi version
 function JS_NewStringCopyN(cx: PJSContext; s: PCChar; n: size_t): PJSString; cdecl; external SpiderMonkeyLib;
+/// Allocate space for a JavaScript string and its underlying storage,
+// and copy characters from NULL TERMINATED! UTF8 character array
+function JS_NewStringCopyUTF8Z(cx: PJSContext; pNullTerminatedUTF8: PUTF8Char): PJSString; cdecl; external SpiderMonkeyLib;
+/// Returns the empty JSString as a JS value
+function JS_GetEmptyStringValue(cx: PJSContext): jsval; cdecl; external SpiderMonkeyLib;
 /// Allocate space for a JavaScript string and its underlying storage,
 // and copy n characters from a character array, s, into the new JSString
 // Unicode version
@@ -4008,7 +4038,7 @@ begin
   Result := JS_NewFloat64ArrayWithBuffer(@Self, arrayBuffer, byteOffset, length);
 end;
 
-function JSContext.NewFunction(call: JSNative; nargs, flags: uintN;
+function JSContext.NewFunction(call: JSNative; nargs: uintN; flags: uintN;
   name: PCChar): PJSObject;
 begin
   Result := JS_NewFunction(@Self, call, nargs, flags, name);
@@ -4022,6 +4052,7 @@ end;
 function JSContext.NewCompileOptions: PJSCompileOptions;
 begin
   result := JS_NewCompileOptions(@self);
+  Assert(result.canLazilyParse = true, 'wrong align of JSCompileOptions')
 end;
 
 function JSContext.CompileModule(var obj: PJSObject; opts: PJSCompileOptions;
@@ -4112,7 +4143,9 @@ end;
 
 function JSContext.NewJSString(const Value: RawUTF8): PJSString;
 begin
-  result := NewJSString(pointer(Value),length(Value),CP_UTF8);
+  if Value = '' then
+    result := JS_GetEmptyString(@self) else
+    result := JS_NewStringCopyUTF8Z(@self, pointer(Value));
 end;
 
 {$IFDEF SM52}
