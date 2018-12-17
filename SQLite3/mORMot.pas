@@ -52244,7 +52244,9 @@ var Added: boolean;
               Add('"');
             AddDateTime(D64);
             if woDateTimeWithZSuffix in Options then
-              Add('Z');
+              if frac(D64)=0 then // FireFox can't decode short form "2017-01-01Z"
+                AddShort('T00:00Z') else
+                Add('Z');
             Add('"');
           end;
         end else begin
