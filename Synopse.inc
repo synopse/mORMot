@@ -442,6 +442,9 @@
         {$define HASINLINENOTX86}
         {$define HASREGION}
         {$define HASFASTMM4}
+        // you can define this so that GetMemoryInfo/TSynMonitorMemory returns
+        // low-level FastMM4 information
+        {.$define WITH_FASTMM4STATS}
       {$ifend}
       {$ifdef VER180}
         {$define ISDELPHI20062007} // to circumvent some specific bugs
