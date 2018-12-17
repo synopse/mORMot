@@ -1313,7 +1313,8 @@ type
     // - by default, the Ctxt.ConnectionID information will be retrieved from the socket
     // layer - but if the server runs behind some proxy service, you should
     // define here the HTTP header name which indicates the true remote connection
-    // ID value, for example as 'X-Conn-ID'
+    // ID value, for example as 'X-Conn-ID', setting in nginx config:
+    //  $ proxy_set_header      X-Conn-ID       $connection
     property RemoteConnIDHeader: SockString read fRemoteConnIDHeader write SetRemoteConnIDHeader;
   published
     /// returns the API version used by the inherited implementation

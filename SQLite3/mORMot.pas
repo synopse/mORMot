@@ -13622,7 +13622,7 @@ type
   // values at either Client or Server level (like configuration settings)
   // - only caching synchronization is about the following RESTful basic commands:
   // RETRIEVE, ADD, DELETION and UPDATE (that is, a complex direct SQL UPDATE
-  // or via TSQLRecordMany pattern won't be taken in account)
+  // or via TSQLRecordMany pattern won't be taken into account)
   // - only Simple fields are cached: e.g. the BLOB fields are not stored
   // - this cache is thread-safe (access is locked per table)
   // - this caching will be located at the TSQLRest level, that is no automated
@@ -14852,7 +14852,7 @@ type
     // configuration for this particular TSQLRest instance
     // - only caching synchronization is about the direct RESTful/CRUD commands:
     // RETRIEVE, ADD, UPDATE and DELETE (that is, a complex direct SQL UPDATE or
-    // via TSQLRecordMany pattern won't be taken in account - only exception is
+    // via TSQLRecordMany pattern won't be taken into account - only exception is
     // TSQLRestStorage tables accessed as SQLite3 virtual table)
     // - this caching will be located at the TSQLRest level, that is no automated
     // synchronization is implemented between TSQLRestClient and TSQLRestServer -
@@ -15054,7 +15054,7 @@ type
     {$endif ISDELPHI2010}
 
     /// you can call this method in TThread.Execute to ensure that
-    // the thread will be taken in account during process
+    // the thread will be taken into account during process
     // - this abstract method won't do anything, but TSQLRestServer's will
     procedure BeginCurrentThread(Sender: TThread); virtual;
     /// you can call this method just before a thread is finished to ensure
@@ -17629,7 +17629,7 @@ type
     // unit will call TSQLDataBase.CacheFlush method
     procedure FlushInternalDBCache; virtual;
     /// you can call this method in TThread.Execute to ensure that
-    // the thread will be taken in account during process
+    // the thread will be taken into account during process
     // - caller must specify the TThread instance running
     // - used e.g. for optExecInMainThread option in TServiceMethodExecute
     // - this default implementation will call the methods of all its internal
@@ -18116,7 +18116,7 @@ type
     // - e.g. protected with a try ... finally StorageUnLock; end section
     procedure StorageUnLock; virtual;
     /// you can call this method in TThread.Execute to ensure that
-    // the thread will be taken in account during process
+    // the thread will be taken into account during process
     // - this overridden method will do nothing (should have been already made
     // at TSQLRestServer caller level)
     // - children classes may inherit from this method to notify e.g.
