@@ -4254,7 +4254,7 @@ begin
     Add.LogInternal(Level,Msg,nil,maxInt);
     {$ifdef MSWINDOWS}
     {$ifndef FPC} // external exception :(
-    OutputDebugStringA(pointer(CurrentAnsiConvert.UTF8ToAnsi(Msg)));
+    //OutputDebugStringA(pointer(CurrentAnsiConvert.UTF8ToAnsi(Msg)));
     {$endif FPC}
     {$else}
     {$I-}

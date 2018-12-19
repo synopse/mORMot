@@ -2781,39 +2781,43 @@ function ConvertCaseUTF8(P: PUTF8Char; const Table: TNormTableByte): PtrInt;
 
 {$endif USENORMTOUPPER}
 
+/// check if the supplied text has some case-insentitive 'a'..'z','A'..'Z' chars
+// - will therefore be correct with true UTF-8 content, but only for 7 bit
+function IsCaseSensitive(const S: RawUTF8): boolean;
+
 /// fast conversion of the supplied text into uppercase
 // - this will only convert 'a'..'z' into 'A'..'Z' (no NormToUpper use), and
-// will therefore by correct with true UTF-8 content, but only for 7 bit
+// will therefore be correct with true UTF-8 content, but only for 7 bit
 function UpperCase(const S: RawUTF8): RawUTF8;
 
 /// fast conversion of the supplied text into uppercase
 // - this will only convert 'a'..'z' into 'A'..'Z' (no NormToUpper use), and
-// will therefore by correct with true UTF-8 content, but only for 7 bit
+// will therefore be correct with true UTF-8 content, but only for 7 bit
 procedure UpperCaseCopy(Text: PUTF8Char; Len: integer; var result: RawUTF8); overload;
 
 /// fast conversion of the supplied text into uppercase
 // - this will only convert 'a'..'z' into 'A'..'Z' (no NormToUpper use), and
-// will therefore by correct with true UTF-8 content, but only for 7 bit
+// will therefore be correct with true UTF-8 content, but only for 7 bit
 procedure UpperCaseCopy(const Source: RawUTF8; var Dest: RawUTF8); overload;
 
 /// fast in-place conversion of the supplied variable text into uppercase
 // - this will only convert 'a'..'z' into 'A'..'Z' (no NormToUpper use), and
-// will therefore by correct with true UTF-8 content, but only for 7 bit
+// will therefore be correct with true UTF-8 content, but only for 7 bit
 procedure UpperCaseSelf(var S: RawUTF8);
 
 /// fast conversion of the supplied text into lowercase
 // - this will only convert 'A'..'Z' into 'a'..'z' (no NormToLower use), and
-// will therefore by correct with true UTF-8 content
+// will therefore be correct with true UTF-8 content
 function LowerCase(const S: RawUTF8): RawUTF8;
 
 /// fast conversion of the supplied text into lowercase
 // - this will only convert 'A'..'Z' into 'a'..'z' (no NormToLower use), and
-// will therefore by correct with true UTF-8 content
+// will therefore be correct with true UTF-8 content
 procedure LowerCaseCopy(Text: PUTF8Char; Len: integer; var result: RawUTF8);
 
 /// fast in-place conversion of the supplied variable text into lowercase
 // - this will only convert 'A'..'Z' into 'a'..'z' (no NormToLower use), and
-// will therefore by correct with true UTF-8 content, but only for 7 bit
+// will therefore be correct with true UTF-8 content, but only for 7 bit
 procedure LowerCaseSelf(var S: RawUTF8);
 
 /// accurate conversion of the supplied UTF-8 content into the corresponding
@@ -28753,6 +28757,18 @@ begin
 {$ifdef POSIX}
   result := WideStringToUTF8(WideLowerCase(UTF8ToWideString(S)));
 {$endif}
+end;
+
+function IsCaseSensitive(const S: RawUTF8): boolean;
+var i: PtrInt;
+    up: PByteArray; // better x86-64 / PIC asm generation
+begin
+  up := @NormToUpperAnsi7Byte;
+  result := true;
+  for i := 0 to length(S)-1 do
+    if up[PByteArray(S)[i]]<>PByteArray(S)[i] then
+      exit;
+  result := false;
 end;
 
 function UpperCase(const S: RawUTF8): RawUTF8;
