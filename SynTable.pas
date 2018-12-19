@@ -102,6 +102,8 @@ function IsMatchString(const Pattern, Text: string; CaseInsensitive: boolean=fal
 
 type
   PMatch = ^TMatch;
+  TMatchSearchFunction = function(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+
   /// low-level structure used by IsMatch() for actual glob search
   // - you can use this object to prepare a given pattern, e.g. in a loop
   // - implemented as a fast brute-force state-machine without any heap allocation
@@ -115,7 +117,7 @@ type
     P, T, PMax, TMax: PtrInt;
     Upper: PNormTable;
     State: (sNONE, sABORT, sEND, sLITERAL, sPATTERN, sRANGE, sVALID);
-    Search: function(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+    Search: TMatchSearchFunction;
     procedure MatchAfterStar;
     procedure MatchMain;
   public
@@ -127,6 +129,8 @@ type
     // - note that the aPattern buffer should remain in memory, since it will
     // be pointed to by the Pattern private field of this object
     procedure Prepare(aPattern: PUTF8Char; aPatternLen: integer; aCaseInsensitive, aReuse: boolean); overload;
+    /// initialize low-level internal fields for a custom search algorithm
+    procedure PrepareRaw(aPattern: PUTF8Char; aPatternLen: integer; aSearch: TMatchSearchFunction);
     /// returns TRUE if the supplied content matches the prepared glob pattern
     // - this method is not thread-safe
     function Match(const aText: RawUTF8): boolean; overload;
@@ -145,6 +149,10 @@ type
     /// returns TRUE if this search pattern matches another
     function Equals(const aAnother{$ifndef DELPHI5OROLDER}: TMatch{$endif}): boolean;
       {$ifdef HASINLINE}inline;{$endif}
+    /// access to the pattern length as stored in PMax + 1
+    function PatternLength: integer; {$ifdef HASINLINE}inline;{$endif}
+    /// access to the pattern text as stored in Pattern
+    function PatternText: PUTF8Char; {$ifdef HASINLINE}inline;{$endif}
   end;
   /// use SetMatchs() to initialize such an array from a CSV pattern text
   TMatchDynArray = array of TMatch;
@@ -5184,7 +5192,7 @@ begin
   until false;
   result := true;
 end;
-{$endif}
+{$endif CPUX86}
 
 function SearchNoRangeU(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
 var
@@ -5235,6 +5243,7 @@ begin
 end;
 
 function SimpleContainsU(t, tend, p: PUTF8Char; pmax: PtrInt; up: PNormTable): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 // brute force case-insensitive search p[0..pmax] in t..tend-1
 var first: AnsiChar;
     i: PtrInt;
@@ -5258,7 +5267,7 @@ next: inc(t);
 end;
 
 {$ifdef CPU64} // naive but very efficient code generation on FPC x86-64
-function SimpleContains8(t, tend, p: PUTF8Char; pmax: PtrInt): boolean;
+function SimpleContains8(t, tend, p: PUTF8Char; pmax: PtrInt): boolean; inline;
 label next;
 var i, first: PtrInt;
 begin
@@ -5281,6 +5290,7 @@ end;
 {$endif CPU64}
 
 function SimpleContains4(t, tend, p: PUTF8Char; pmax: PtrInt): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 label next;
 var i: PtrInt;
 {$ifdef CPUX86} // circumvent lack of registers for this CPU
@@ -5309,6 +5319,7 @@ next: inc(t);
 end;
 
 function SimpleContains1(t, tend, p: PUTF8Char; pmax: PtrInt): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 label next;
 var i: PtrInt;
 {$ifdef CPUX86}
@@ -5486,6 +5497,14 @@ begin
  end;
 end;
 
+procedure TMatch.PrepareRaw(aPattern: PUTF8Char; aPatternLen: integer;
+  aSearch: TMatchSearchFunction);
+begin
+  Pattern := aPattern;
+  PMax := aPatternLen - 1; // search in Pattern[0..PMax]
+  Search := aSearch;
+end;
+
 function TMatch.Match(const aText: RawUTF8): boolean;
 begin
   if aText <> '' then
@@ -5538,6 +5557,16 @@ function TMatch.Equals(const aAnother{$ifndef DELPHI5OROLDER}: TMatch{$endif}): 
 begin
   result := (PMax = TMatch(aAnother).PMax) and (Upper = TMatch(aAnother).Upper) and
     CompareMemSmall(Pattern, TMatch(aAnother).Pattern, PMax + 1);
+end;
+
+function TMatch.PatternLength: integer;
+begin
+  result := PMax + 1;
+end;
+
+function TMatch.PatternText: PUTF8Char;
+begin
+  result := Pattern;
 end;
 
 function IsMatch(const Pattern, Text: RawUTF8; CaseInsensitive: boolean): boolean;
