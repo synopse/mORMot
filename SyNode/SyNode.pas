@@ -548,7 +548,7 @@ implementation
 
 uses
   {$IFNDEF MSWINDOWS}
-  Errors, SynFPCLinux,
+  SynFPCLinux,
   {$ENDIF}
   SyNodeRemoteDebugger,
   SyNodeBinding_fs {used by other core modules},
@@ -559,12 +559,17 @@ uses
   synodebinding_os;
 
 const
-  jsglobal_class: JSClass = (name: 'global';
+  jsglobal_class: JSClass = (
+    name: 'global';
     flags:
       JSCLASS_GLOBAL_FLAGS or
       JSCLASS_HAS_PRIVATE or
       (255 shl JSCLASS_RESERVED_SLOTS_SHIFT);
-    );
+    {$IFDEF SM52}
+    cOps: nil;
+    reserved: (nil, nil, nil);
+    {$ENDIF}
+  );
 
 var
   GlobalSyNodeBindingHandlers: TRawUTF8ListHashedLocked;
@@ -645,8 +650,10 @@ begin
 end;
 
 constructor TSMEngine.Create(aManager: TSMEngineManager);
+{$IFNDEF CPUX64}
 const
   gMaxStackSize = 128 * sizeof(size_t) * 1024;
+{$ENDIF}
 var
 {$IFDEF SM52}
   cOpts: PJSContextOptions;
@@ -801,8 +808,11 @@ begin
 end;
 
 procedure TSMEngine.DefineModuleLoader;
-var ModuleLoaderPath: TFileName;
+var
+  {$IFNDEF CORE_MODULES_IN_RES}
+    ModuleLoaderPath: TFileName;
     script: SynUnicode;
+  {$ENDIF}
     rval: jsval;
 begin
   {$IFDEF CORE_MODULES_IN_RES}

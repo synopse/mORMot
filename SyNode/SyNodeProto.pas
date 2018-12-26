@@ -171,11 +171,11 @@ type
 
   TSMFastNativeCall = function(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean of object;
 
-function IsInstanceObject(cx: PJSContext; jsobj: PJSObject; var asmInstance: PSMInstanceRecord): boolean; overload;
-function IsInstanceObject(cx: PJSContext; jval: jsval; var asmInstance: PSMInstanceRecord): boolean; overload;
+function IsInstanceObject(cx: PJSContext; jsobj: PJSObject; out asmInstance: PSMInstanceRecord): boolean; overload;
+function IsInstanceObject(cx: PJSContext; jval: jsval; out asmInstance: PSMInstanceRecord): boolean; overload;
 
-function IsProtoObject(cx: PJSContext; jsobj: PJSObject; var asmProto: TSMCustomProtoObject): boolean; overload;
-function IsProtoObject(cx: PJSContext; jval: jsval; var asmProto: TSMCustomProtoObject): boolean; overload;
+function IsProtoObject(cx: PJSContext; jsobj: PJSObject; out asmProto: TSMCustomProtoObject): boolean; overload;
+function IsProtoObject(cx: PJSContext; jval: jsval; out asmProto: TSMCustomProtoObject): boolean; overload;
 
 procedure defineEnum(cx: PJSContext; ti: PTypeInfo; aParent: PJSRootedObject);
 function defineClass(cx: PJSContext; AForClass: TClass; AProto: TSMCustomProtoObjectClass; aParent: PJSRootedObject): TSMCustomProtoObject; overload;
@@ -260,12 +260,24 @@ const
   SMObjectRecordMagic: Word = 43857;
 {$IFDEF SM52}
   jsdef_classOpts: JSClassOps = (
-    finalize: SMCustomObjectDestroy; // call then JS object GC}
-    construct: SMCustomObjectConstruct
+    addProperty:        nil;
+    delProperty:        nil;
+    getProperty:        nil;
+    setProperty:        nil;
+    enumerate:          nil;
+    resolve:            nil;
+    mayResolve:         nil;
+    finalize:           SMCustomObjectDestroy; // call then JS object GC}
+    call:               nil;
+    hasInstance:        nil;
+    construct:          SMCustomObjectConstruct;
+    trace:              nil;
   );
-  jsdef_class: JSClass = (name: '';
+  jsdef_class: JSClass = (
+    name: '';
     flags: uint32(JSCLASS_HAS_PRIVATE);
-    cOps: @jsdef_classOpts
+    cOps: @jsdef_classOpts;
+    reserved: (nil, nil, nil)
     );
 {$ELSE}
   jsdef_class: JSClass = (name: '';
@@ -325,12 +337,12 @@ begin
   end;
 end;
 
-function IsSMObject(cx: PJSContext; jsobj: PJSObject; var aObj: PSMObjectRecord): boolean; overload;
+function IsSMObject(cx: PJSContext; jsobj: PJSObject; out aObj: PSMObjectRecord): boolean; overload;
 var
   P: PSMObjectRecord;
   CLS: PJSClass;
 begin
-  Result := false;
+  Result := false; aObj := nil;
   CLS := jsobj.Class_;
   if CLS.flags and JSCLASS_HAS_PRIVATE = 0 then
     Exit;
@@ -344,27 +356,33 @@ begin
       raise ESMException.Create('Incorrect IsMagicCorrect');
 end;
 
-function IsSMObject(cx: PJSContext; jval: jsval; var aObj: PSMObjectRecord): boolean; overload;
+function IsSMObject(cx: PJSContext; jval: jsval; out aObj: PSMObjectRecord): boolean; overload;
 var
   obj: PJSObject;
 begin
   Result := jval.isObject;
-  if not Result then exit;
+  if not Result then begin
+    aObj := nil;
+    exit;
+  end;
   obj := jval.asObject;
   Result := IsSMObject(cx, obj, aObj);
 end;
 
-function IsInstanceObject(cx: PJSContext; jval: jsval; var asmInstance: PSMInstanceRecord): boolean; overload;
+function IsInstanceObject(cx: PJSContext; jval: jsval; out asmInstance: PSMInstanceRecord): boolean; overload;
 var
   obj: PJSObject;
 begin
   Result := jval.isObject;
-  if not Result then exit;
+  if not Result then begin
+    asmInstance := nil;
+    exit;
+  end;
   obj := jval.asObject;
   Result := IsInstanceObject(cx, obj, asmInstance);
 end;
 
-function IsInstanceObject(cx: PJSContext; jsobj: PJSObject; var asmInstance: PSMInstanceRecord): boolean;
+function IsInstanceObject(cx: PJSContext; jsobj: PJSObject; out asmInstance: PSMInstanceRecord): boolean;
 var
   aObj: PSMObjectRecord;
 begin
@@ -377,7 +395,7 @@ begin
     asmInstance := aObj.Data;
 end;
 
-function IsProtoObject(cx: PJSContext; jsobj: PJSObject; var asmProto: TSMCustomProtoObject): boolean;
+function IsProtoObject(cx: PJSContext; jsobj: PJSObject; out asmProto: TSMCustomProtoObject): boolean;
 var
   aObj: PSMObjectRecord;
 begin
@@ -390,12 +408,15 @@ begin
     asmProto := aObj.Data;
 end;
 
-function IsProtoObject(cx: PJSContext; jval: jsval; var asmProto: TSMCustomProtoObject): boolean;
+function IsProtoObject(cx: PJSContext; jval: jsval; out asmProto: TSMCustomProtoObject): boolean;
 var
   obj: PJSObject;
 begin
   Result := jval.isObject;
-  if not Result then exit;
+  if not Result then begin
+    asmProto := nil;
+    exit;
+  end;
   obj := jval.asObject;
   Result := Assigned(obj) and IsProtoObject(cx, obj, asmProto);
 end;

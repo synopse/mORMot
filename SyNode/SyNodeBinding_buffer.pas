@@ -1816,10 +1816,14 @@ begin
 end;
 
 const
-  BufferBinding_class: JSClass = (name: 'BufferBinding';
-    flags:
-      (1 shl JSCLASS_RESERVED_SLOTS_SHIFT);
-    );
+  BufferBinding_class: JSClass = (
+    name: 'BufferBinding';
+    flags: (1 shl JSCLASS_RESERVED_SLOTS_SHIFT);
+    {$IFDEF SM52}
+    cOps:  nil;
+    reserved: (nil, nil, nil);
+    {$ENDIF}
+  );
 
 function SyNodeBindingProc_buffer(const aEngine: TSMEngine; const bindingNamespaceName: SynUnicode): jsval;
 var

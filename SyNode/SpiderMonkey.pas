@@ -1762,7 +1762,7 @@ type
     /// get the UTF-8 text corresponding to this string, for a given
     // runtime execution context
     // - slightly faster overloaded method (avoid string assignment)
-    procedure ToUTF8(cx: PJSContext; var result: RawUTF8); overload;
+    procedure ToUTF8(cx: PJSContext; out result: RawUTF8); overload;
     /// Add UTF-8 text corresponding to this string to writer,
     // without escaping
     procedure ToUTF8(cx: PJSContext; W: TTextWriter); overload;
@@ -3547,7 +3547,7 @@ begin
   ToUTF8(cx,result);
 end;
 
-procedure JSString.ToUTF8(cx: PJSContext; var result: RawUTF8);
+procedure JSString.ToUTF8(cx: PJSContext; out result: RawUTF8);
 var
   str8: PCChar;
   str16: PCChar16;

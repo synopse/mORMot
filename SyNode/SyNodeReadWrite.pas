@@ -63,7 +63,6 @@ function SMWrite_impl(cx: PJSContext; argc: uintN; vals: PjsvalVector; dest: TTe
 var
   encoding: RawUTF8;
   len: uint32;
-  isShared: boolean;
   bufObj: PJSObject;
   bufData: Puint8Vector;
   tmp1: RawByteString;

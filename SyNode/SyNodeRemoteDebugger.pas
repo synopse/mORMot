@@ -105,9 +105,6 @@ uses
     Windows,
     SynWinSock,
   {$else}
-    Types,
-    BaseUnix,
-    Sockets,
     SynFPCSock,
     SynFPCLinux,
   {$endif}
@@ -837,7 +834,6 @@ end;
 function debugger_threadId(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean; cdecl;
 var
   debugger: TSMDebugger;
-  v: jsval;
 begin
   debugger := TSMEngine(cx.PrivateData).PrivateDataForDebugger;
   // TODO: check that in multithread mode this field equal thread id with js
