@@ -9293,7 +9293,9 @@ type
 
   /// defines the settings for a Tab for User Interface generation
   // - used in mORMotToolBar.pas unit and TSQLModel.Create() overloaded method
-  {$ifdef UNICODE}TSQLRibbonTabParameters = record{$else}TSQLRibbonTabParameters = object{$endif}
+  // - is defined as an object and not a record to allow easy inheritance for
+  // proper per-application customization - see e.g. FileTables.pas in main demo
+  TSQLRibbonTabParameters = object
   public
     /// the Table associated to this Tab
     Table: TSQLRecordClass;
@@ -13622,7 +13624,7 @@ type
   // values at either Client or Server level (like configuration settings)
   // - only caching synchronization is about the following RESTful basic commands:
   // RETRIEVE, ADD, DELETION and UPDATE (that is, a complex direct SQL UPDATE
-  // or via TSQLRecordMany pattern won't be taken in account)
+  // or via TSQLRecordMany pattern won't be taken into account)
   // - only Simple fields are cached: e.g. the BLOB fields are not stored
   // - this cache is thread-safe (access is locked per table)
   // - this caching will be located at the TSQLRest level, that is no automated
@@ -14852,7 +14854,7 @@ type
     // configuration for this particular TSQLRest instance
     // - only caching synchronization is about the direct RESTful/CRUD commands:
     // RETRIEVE, ADD, UPDATE and DELETE (that is, a complex direct SQL UPDATE or
-    // via TSQLRecordMany pattern won't be taken in account - only exception is
+    // via TSQLRecordMany pattern won't be taken into account - only exception is
     // TSQLRestStorage tables accessed as SQLite3 virtual table)
     // - this caching will be located at the TSQLRest level, that is no automated
     // synchronization is implemented between TSQLRestClient and TSQLRestServer -
@@ -15054,7 +15056,7 @@ type
     {$endif ISDELPHI2010}
 
     /// you can call this method in TThread.Execute to ensure that
-    // the thread will be taken in account during process
+    // the thread will be taken into account during process
     // - this abstract method won't do anything, but TSQLRestServer's will
     procedure BeginCurrentThread(Sender: TThread); virtual;
     /// you can call this method just before a thread is finished to ensure
@@ -17629,7 +17631,7 @@ type
     // unit will call TSQLDataBase.CacheFlush method
     procedure FlushInternalDBCache; virtual;
     /// you can call this method in TThread.Execute to ensure that
-    // the thread will be taken in account during process
+    // the thread will be taken into account during process
     // - caller must specify the TThread instance running
     // - used e.g. for optExecInMainThread option in TServiceMethodExecute
     // - this default implementation will call the methods of all its internal
@@ -18116,7 +18118,7 @@ type
     // - e.g. protected with a try ... finally StorageUnLock; end section
     procedure StorageUnLock; virtual;
     /// you can call this method in TThread.Execute to ensure that
-    // the thread will be taken in account during process
+    // the thread will be taken into account during process
     // - this overridden method will do nothing (should have been already made
     // at TSQLRestServer caller level)
     // - children classes may inherit from this method to notify e.g.
@@ -27216,7 +27218,7 @@ begin
     R.FillPrepare(self);
     row := @fResults[FieldCount]; // row^ points to first row of data
     {$ifdef ISDELPHIXE3}
-    result.Count := fRowCount;    // faster than manual Add()
+    result.Count := fRowCount; // faster than manual Add()
     rec := pointer(result.List);
     for i := 0 to fRowCount-1 do begin
       Item := TSQLRecordClass(T).Create;
@@ -27255,9 +27257,9 @@ begin
   R := RecordType.Create;
   try
     R.FillPrepare(self);
-    DestList.Count := fRowCount;     // faster than manual Add()
+    DestList.Count := fRowCount; // faster than manual Add()
     rec := pointer(DestList.List);
-    row := @fResults[FieldCount];    // row^ points to first row of data
+    row := @fResults[FieldCount]; // row^ points to first row of data
     for i := 1 to fRowCount do begin
       rec^ := RecordType.Create; // TObjectList will own and free each instance
       R.fFill.Fill(pointer(row),rec^);
@@ -27291,8 +27293,8 @@ begin
   R := RecordType.Create;
   try
     R.FillPrepare(self);
-    SetLength(arr,fRowCount);       // faster than manual ObjArrayAdd()
-    Row := @fResults[FieldCount];   // Row^ points to first row of data
+    SetLength(arr,fRowCount); // faster than manual ObjArrayAdd()
+    Row := @fResults[FieldCount]; // Row^ points to first row of data
     for i := 0 to fRowCount-1 do begin
       arr[i] := RecordType.Create;
       R.fFill.Fill(pointer(Row),arr[i]);
@@ -52244,7 +52246,9 @@ var Added: boolean;
               Add('"');
             AddDateTime(D64);
             if woDateTimeWithZSuffix in Options then
-              Add('Z');
+              if frac(D64)=0 then // FireFox can't decode short form "2017-01-01Z"
+                AddShort('T00:00Z') else
+                Add('Z');
             Add('"');
           end;
         end else begin

@@ -74,12 +74,8 @@ unit SynCommons;
 interface
 
 uses
-{$ifndef LVCL}
-{$ifndef FPC}
-{$ifndef HASFASTMM4}
+{$ifdef WITH_FASTMM4STATS}
   FastMM4,
-{$endif}
-{$endif}
 {$endif}
 {$ifdef MSWINDOWS}
   Windows,
@@ -1419,7 +1415,7 @@ procedure VariantToInlineValue(const V: Variant; var result: RawUTF8);
 function VariantToVariantUTF8(const V: Variant): variant;
 
 /// faster alternative to Finalize(aVariantDynArray)
-// - this function will take in account and optimize the release of a dynamic
+// - this function will take account and optimize the release of a dynamic
 // array of custom variant types values
 // - for instance, an array of TDocVariant will be optimized for speed
 procedure VariantDynArrayClear(var Value: TVariantDynArray);
@@ -2785,39 +2781,43 @@ function ConvertCaseUTF8(P: PUTF8Char; const Table: TNormTableByte): PtrInt;
 
 {$endif USENORMTOUPPER}
 
+/// check if the supplied text has some case-insentitive 'a'..'z','A'..'Z' chars
+// - will therefore be correct with true UTF-8 content, but only for 7 bit
+function IsCaseSensitive(const S: RawUTF8): boolean;
+
 /// fast conversion of the supplied text into uppercase
 // - this will only convert 'a'..'z' into 'A'..'Z' (no NormToUpper use), and
-// will therefore by correct with true UTF-8 content, but only for 7 bit
+// will therefore be correct with true UTF-8 content, but only for 7 bit
 function UpperCase(const S: RawUTF8): RawUTF8;
 
 /// fast conversion of the supplied text into uppercase
 // - this will only convert 'a'..'z' into 'A'..'Z' (no NormToUpper use), and
-// will therefore by correct with true UTF-8 content, but only for 7 bit
+// will therefore be correct with true UTF-8 content, but only for 7 bit
 procedure UpperCaseCopy(Text: PUTF8Char; Len: integer; var result: RawUTF8); overload;
 
 /// fast conversion of the supplied text into uppercase
 // - this will only convert 'a'..'z' into 'A'..'Z' (no NormToUpper use), and
-// will therefore by correct with true UTF-8 content, but only for 7 bit
+// will therefore be correct with true UTF-8 content, but only for 7 bit
 procedure UpperCaseCopy(const Source: RawUTF8; var Dest: RawUTF8); overload;
 
 /// fast in-place conversion of the supplied variable text into uppercase
 // - this will only convert 'a'..'z' into 'A'..'Z' (no NormToUpper use), and
-// will therefore by correct with true UTF-8 content, but only for 7 bit
+// will therefore be correct with true UTF-8 content, but only for 7 bit
 procedure UpperCaseSelf(var S: RawUTF8);
 
 /// fast conversion of the supplied text into lowercase
 // - this will only convert 'A'..'Z' into 'a'..'z' (no NormToLower use), and
-// will therefore by correct with true UTF-8 content
+// will therefore be correct with true UTF-8 content
 function LowerCase(const S: RawUTF8): RawUTF8;
 
 /// fast conversion of the supplied text into lowercase
 // - this will only convert 'A'..'Z' into 'a'..'z' (no NormToLower use), and
-// will therefore by correct with true UTF-8 content
+// will therefore be correct with true UTF-8 content
 procedure LowerCaseCopy(Text: PUTF8Char; Len: integer; var result: RawUTF8);
 
 /// fast in-place conversion of the supplied variable text into lowercase
 // - this will only convert 'A'..'Z' into 'a'..'z' (no NormToLower use), and
-// will therefore by correct with true UTF-8 content, but only for 7 bit
+// will therefore be correct with true UTF-8 content, but only for 7 bit
 procedure LowerCaseSelf(var S: RawUTF8);
 
 /// accurate conversion of the supplied UTF-8 content into the corresponding
@@ -16365,18 +16365,35 @@ type
     {$ifdef MSWINDOWS}
     /// the volume name (only available on Windows)
     property VolumeName: TFileName read fVolumeName write fVolumeName;
-    {$endif MSWINDOWS}
     /// space currently available on this disk for the current user
-    // - may be less then FreeSize, if user quotas are specified
+    // - may be less then FreeSize, if user quotas are specified (only taken
+    // into account under Windows)
     property AvailableSize: TSynMonitorOneSize read GetAvailable;
+    {$endif MSWINDOWS}
     /// free space currently available on this disk
     property FreeSize: TSynMonitorOneSize read GetFree;
     /// total space
     property TotalSize: TSynMonitorOneSize read GetTotal;
   end;
 
+  /// hold low-level information about current memory usage
+  // - as filled by GetMemoryInfo()
+  TMemoryInfo = record
+    memtotal, memfree, filetotal, filefree, vmtotal, vmfree,
+    allocreserved, allocused: QWord;
+    percent: integer;
+  end;
+
+/// retrieve low-level information about current memory usage
+// - as used by TSynMonitorMemory
+// - under BSD, only memtotal/memfree/percent are properly returned
+// - allocreserved and allocused are set only if withalloc is TRUE
+function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
+
 /// retrieve low-level information about a given disk partition
-// - as used by TSynMonitorDisk
+// - as used by TSynMonitorDisk and GetDiskPartitionsText()
+// - only under Windows the Quotas are applied separately to aAvailableBytes
+// in respect to global aFreeBytes
 function GetDiskInfo(var aDriveFolderOrFile: TFileName;
   out aAvailableBytes, aFreeBytes, aTotalBytes: QWord
   {$ifdef MSWINDOWS}; aVolumeName: PFileName = nil{$endif}): boolean;
@@ -16388,6 +16405,7 @@ type
     // - is the Volume name under Windows, or the Device name under POSIX
     name: RawUTF8;
     /// where this partition has been mounted
+    // - e.g. 'C:' or '/home'
     // - you can use GetDiskInfo(mounted) to retrieve current space information
     mounted: TFileName;
     /// total size (in bytes) of this partition
@@ -23352,7 +23370,7 @@ begin // here p and up are expected to be <> nil
     u := up^;
     if u=#0 then
       break;
-    if u<>table^[up[PtrUInt(p)]] then
+    if table^[up[PtrUInt(p)]]<>u then
       exit;
     inc(up);
   until false;
@@ -28741,6 +28759,18 @@ begin
 {$endif}
 end;
 
+function IsCaseSensitive(const S: RawUTF8): boolean;
+var i: PtrInt;
+    up: PByteArray; // better x86-64 / PIC asm generation
+begin
+  up := @NormToUpperAnsi7Byte;
+  result := true;
+  for i := 0 to length(S)-1 do
+    if up[PByteArray(S)[i]]<>PByteArray(S)[i] then
+      exit;
+  result := false;
+end;
+
 function UpperCase(const S: RawUTF8): RawUTF8;
 var L, i: PtrInt;
 begin
@@ -32868,7 +32898,7 @@ begin
   end;
 end;
 
-{$WARNINGS OFF} // some Delphi compilers do not analyse well code below
+{$WARNINGS OFF} // some Delphi compilers do not analyze well code below
 function GotoNextLine(source: PUTF8Char): PUTF8Char;
 begin
   if source<>nil then
@@ -57146,12 +57176,10 @@ function GlobalMemoryStatusEx(var lpBuffer: TMemoryStatusEx): BOOL;
 {$endif}
 {$endif}
 
-procedure TSynMonitorMemory.RetrieveMemoryInfo;
-procedure RetrieveInfo;
-{$ifndef FPC}
+function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
+{$ifdef WITH_FASTMM4STATS}
 var Heap: TMemoryManagerState;
     sb: integer;
-    tot,res: QWord;
 {$endif}
 {$ifdef MSWINDOWS}
 var global: TMemoryStatusEx;
@@ -57159,79 +57187,90 @@ var global: TMemoryStatusEx;
 begin
   FillCharFast(global,SizeOf(global),0);
   global.dwLength := SizeOf(global);
-  GlobalMemoryStatusEx(global);
-  FMemoryLoadPercent := global.dwMemoryLoad;
-  FPhysicalMemoryTotal.fBytes := global.ullTotalPhys;
-  FPhysicalMemoryFree.fBytes := global.ullAvailPhys;
-  FPagingFileTotal.fBytes := global.ullTotalPageFile;
-  FPagingFileFree.fBytes := global.ullAvailPageFile;
-  FVirtualMemoryTotal.fBytes := global.ullTotalVirtual;
-  FVirtualMemoryFree.fBytes := global.ullAvailVirtual;
+  result := GlobalMemoryStatusEx(global);
+  info.percent := global.dwMemoryLoad;
+  info.memtotal := global.ullTotalPhys;
+  info.memfree := global.ullAvailPhys;
+  info.filetotal := global.ullTotalPageFile;
+  info.filefree := global.ullAvailPageFile;
+  info.vmtotal := global.ullTotalVirtual;
+  info.vmfree := global.ullAvailVirtual;
   {$ifdef FPC} // GetHeapStatus is only about current thread -> use WinAPI
-  if Assigned(GetProcessMemoryInfo) then begin
+  if withalloc and Assigned(GetProcessMemoryInfo) then begin
     FillcharFast(mem,SizeOf(mem),0);
     mem.cb := SizeOf(mem);
     GetProcessMemoryInfo(GetCurrentProcess,mem,SizeOf(mem));
-    FAllocatedReserved.fBytes := mem.PeakWorkingSetSize;
-    FAllocatedUsed.fBytes := mem.WorkingSetSize;
+    info.allocreserved := mem.PeakWorkingSetSize;
+    info.allocused := mem.WorkingSetSize;
   end;
   {$endif FPC}
 {$else}
 {$ifdef BSD}
 begin
-  FPhysicalMemoryTotal.fBytes := fpsysctlhwint(
-    {$ifdef DARWIN}HW_MEMSIZE{$else}HW_PHYSMEM{$endif});
-  FPhysicalMemoryFree.fBytes := FPhysicalMemoryTotal.fBytes-fpsysctlhwint(HW_USERMEM);
-  if FPhysicalMemoryTotal.fBytes<>0 then // avoid div per 0 exception
-    FMemoryLoadPercent := ((FPhysicalMemoryTotal.fBytes-FPhysicalMemoryFree.fBytes)*100)div FPhysicalMemoryTotal.fBytes;
+  FillCharFast(info,SizeOf(info),0);
+  info.memtotal := fpsysctlhwint({$ifdef DARWIN}HW_MEMSIZE{$else}HW_PHYSMEM{$endif});
+  info.memfree := info.memtotal-fpsysctlhwint(HW_USERMEM);
+  if info.memtotal<>0 then // avoid div per 0 exception
+    info.percent := ((info.memtotal-info.memfree)*100)div info.memtotal;
 {$else}
 var si: TSysInfo; // Linuxism
     P: PUTF8Char;
     {$ifdef FPC}mu: cardinal{$else}const mu=1{$endif};
 begin
+  FillCharFast(info,SizeOf(info),0);
   {$ifdef FPC}
-  SysInfo(@si);
+  result := SysInfo(@si)=0;
   mu := si.mem_unit;
   {$else}
-  SysInfo(si); // missing field in Kylix' Libc
+  result := SysInfo(si)=0; // some missing fields in Kylix' Libc
   {$endif}
   if si.totalram<>0 then // avoid div per 0 exception
-    FMemoryLoadPercent := ((si.totalram-si.freeram)*100)div si.totalram;
-  FPhysicalMemoryTotal.fBytes := si.totalram*mu;
-  FPhysicalMemoryFree.fBytes := si.freeram*mu;
-  FPagingFileTotal.fBytes := si.totalswap*mu;
-  FPagingFileFree.fBytes := si.freeswap*mu;
-  // virtual memory information is not available under Linux
-  P := pointer(StringFromFile('/proc/self/statm',true));
-  FAllocatedReserved.fBytes := GetNextItemCardinal(P,' ')*SystemInfo.dwPageSize; // VmSize
-  FAllocatedUsed.fBytes := GetNextItemCardinal(P,' ')*SystemInfo.dwPageSize;     // VmRSS
+    info.percent := ((si.totalram-si.freeram)*100)div si.totalram;
+  info.memtotal := si.totalram*mu;
+  info.memfree := si.freeram*mu;
+  info.filetotal := si.totalswap*mu;
+  info.filefree := si.freeswap*mu;
+  if withalloc then begin
+    // virtual memory information is not available under Linux
+    P := pointer(StringFromFile('/proc/self/statm',{hasnosize=}true));
+    info.allocreserved := GetNextItemCardinal(P,' ')*SystemInfo.dwPageSize; // VmSize
+    info.allocused := GetNextItemCardinal(P,' ')*SystemInfo.dwPageSize;     // VmRSS
+  end;
   // GetHeapStatus is only about current thread -> use /proc/[pid]/statm
 {$endif BSD}
 {$endif MSWINDOWS}
-{$ifndef FPC}
-{$ifdef LVCL}
-  tot := 0;
-  res := 0;
-{$else}
-  GetMemoryManagerState(Heap); // direct access to FastMM4 statistics
-  tot := Heap.TotalAllocatedMediumBlockSize+Heap.TotalAllocatedLargeBlockSize;
-  res := Heap.ReservedMediumBlockAddressSpace+Heap.ReservedLargeBlockAddressSpace;
-  for sb := 0 to high(Heap.SmallBlockTypeStates) do
-    with Heap.SmallBlockTypeStates[sb] do begin
-      inc(tot,UseableBlockSize*AllocatedBlockCount);
-      inc(res,ReservedAddressSpace);
-    end;
-{$endif LVCL}
-  FAllocatedUsed.fBytes := tot;
-  FAllocatedReserved.fBytes := res;
-{$endif FPC}
+{$ifdef WITH_FASTMM4STATS} // override OS information by actual FastMM4
+  if withalloc then begin
+    GetMemoryManagerState(Heap); // direct raw FastMM4 access
+    info.allocused := Heap.TotalAllocatedMediumBlockSize+Heap.TotalAllocatedLargeBlockSize;
+    info.allocreserved := Heap.ReservedMediumBlockAddressSpace+Heap.ReservedLargeBlockAddressSpace;
+    for sb := 0 to high(Heap.SmallBlockTypeStates) do
+      with Heap.SmallBlockTypeStates[sb] do begin
+        inc(info.allocused,UseableBlockSize*AllocatedBlockCount);
+        inc(info.allocreserved,ReservedAddressSpace);
+      end;
+  end;
+{$endif WITH_FASTMM4STATS}
 end;
+
+procedure TSynMonitorMemory.RetrieveMemoryInfo;
 var tix: cardinal;
+    info: TMemoryInfo;
 begin
   tix := GetTickCount64 shr 7; // allow 128 ms resolution for updates
   if fLastMemoryInfoRetrievedTix<>tix then begin
     fLastMemoryInfoRetrievedTix := tix;
-    RetrieveInfo;
+    if not GetMemoryInfo(info,{withalloc=}true) then
+      exit;
+    FMemoryLoadPercent := info.percent;
+    FPagingFileTotal.fBytes := info.memtotal;
+    FPhysicalMemoryFree.fBytes := info.memfree;
+    FPagingFileTotal.fBytes := info.filetotal;
+    FPagingFileFree.fBytes  := info.filefree;
+    FVirtualMemoryTotal.fBytes := info.vmtotal;
+    FVirtualMemoryFree.fBytes := info.vmfree;
+    FAllocatedReserved.fBytes := info.allocreserved;
+    FAllocatedUsed.fBytes := info.allocused;
   end;
 end;
 

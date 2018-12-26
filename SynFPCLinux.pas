@@ -107,10 +107,10 @@ var
 function getpagesize: Integer; cdecl; external 'c';
 
 /// compatibility function, wrapping Win32 API high resolution timer
-procedure QueryPerformanceCounter(var Value: Int64); inline;
+procedure QueryPerformanceCounter(out Value: Int64); inline;
 
 /// compatibility function, wrapping Win32 API high resolution timer
-function QueryPerformanceFrequency(var Value: Int64): boolean; inline;
+function QueryPerformanceFrequency(out Value: Int64): boolean; inline;
 
 /// compatibility function, wrapping Win32 API file position change
 function SetFilePointer(hFile: cInt; lDistanceToMove: TOff;
@@ -146,7 +146,7 @@ function GetUnixUTC: Int64; inline;
 function GetUnixMSUTC: Int64; inline;
 
 /// returns the current UTC time as TSystemTime
-procedure GetNowUTCSystem(var result: TSystemTime);
+procedure GetNowUTCSystem(out result: TSystemTime);
 
 var
   /// will contain the current Linux kernel revision, as one integer
@@ -224,6 +224,8 @@ begin
   inc(TempMonth,3);
   result.Month := TempMonth;
   result.Year := YYear+(JulianDN*100);
+  // initialize fake dayOfWeek - as used by SynCommons.FromGlobalTime RCU128
+  result.DayOfWeek := 0;
 end;
 
 procedure EpochToLocal(epoch: PtrUInt; out result: TSystemTime);
@@ -247,7 +249,7 @@ begin
   result := SystemTimeToDateTime(SystemTime);
 end;
 
-procedure GetNowUTCSystem(var result: TSystemTime);
+procedure GetNowUTCSystem(out result: TSystemTime);
 var tz: timeval;
 begin
   fpgettimeofday(@tz,nil);
@@ -351,7 +353,7 @@ begin
   result := r.tv_sec;
 end;
 
-procedure QueryPerformanceCounter(var Value: Int64);
+procedure QueryPerformanceCounter(out Value: Int64);
 var r : TTimeSpec;
 begin
   clock_gettime(CLOCK_MONOTONIC,@r);
@@ -360,7 +362,7 @@ end;
 
 {$endif Darwin}
 
-function QueryPerformanceFrequency(var Value: Int64): boolean;
+function QueryPerformanceFrequency(out Value: Int64): boolean;
 begin
   Value := C_BILLION; // 1 second = 1e9 nanoseconds
   result := true;

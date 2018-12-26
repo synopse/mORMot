@@ -1313,7 +1313,8 @@ type
     // - by default, the Ctxt.ConnectionID information will be retrieved from the socket
     // layer - but if the server runs behind some proxy service, you should
     // define here the HTTP header name which indicates the true remote connection
-    // ID value, for example as 'X-Conn-ID'
+    // ID value, for example as 'X-Conn-ID', setting in nginx config:
+    //  $ proxy_set_header      X-Conn-ID       $connection
     property RemoteConnIDHeader: SockString read fRemoteConnIDHeader write SetRemoteConnIDHeader;
   published
     /// returns the API version used by the inherited implementation
@@ -2015,8 +2016,8 @@ type
     /// the resource address
     // - e.g. '/category/name/10?param=1'
     Address: SockString;
-    /// cslUnix for unix socket URI
-    // http://unix:/path/to/socket.sock:/url/path
+    /// either cslTcp or cslUnix for unix socket URI
+    // - e.g. 'http://unix:/path/to/socket.sock:/url/path'
     Layer: TCrtSocketLayer;
     /// fill the members from a supplied URI
     function From(aURI: SockString; const DefaultPort: SockString=''): boolean;
@@ -3244,12 +3245,13 @@ begin
   ReasonCache[Hi,Lo] := result;
 end;
 
-function Hex2Dec(c: AnsiChar): integer; {$ifdef HASINLINE}inline;{$endif}
+function Hex2Dec(c: integer): integer; {$ifdef HASINLINE}inline;{$endif}
 begin
+  result := c;
   case c of
-  'A'..'Z': result := Ord(c) - (Ord('A') - 10);
-  'a'..'z': result := Ord(c) - (Ord('a') - 10);
-  '0'..'9': result := Ord(c) - Ord('0');
+    ord('A')..ord('Z'): dec(result,(ord('A') - 10));
+    ord('a')..ord('z'): dec(result,(ord('a') - 10));
+    ord('0')..ord('9'): dec(result,ord('0'));
   else result := -1;
   end;
 end;
@@ -3402,40 +3404,50 @@ begin
       exit;
 end;
 
-function IdemPChar(p, up: pAnsiChar): boolean;
-// if the beginning of p^ is same as up^ (ignore case - up^ must be already Upper)
-var c: AnsiChar;
+type
+  TNormToUpper = array[byte] of byte;
+var
+  NormToUpper: TNormToUpper;
+
+function IdemPCharUp(p: PByteArray; up: PByte; toup: PByteArray): boolean; {$ifdef HASINLINE}inline;{$endif}
+var u: cardinal;
 begin
   result := false;
-  if p=nil then
-    exit;
-  if (up<>nil) and (up^<>#0) then
-    repeat
-      c := p^;
-      if up^<>c then
-        if c in ['a'..'z'] then begin
-          dec(c,32);
-          if up^<>c then
-            exit;
-        end else exit;
-      inc(up);
-      inc(p);
-    until up^=#0;
+  dec(PtrUInt(p), PtrUInt(up));
+  repeat
+    u := up^;
+    if u=0 then
+      break;
+    if toup[p[PtrUInt(up)]]<>u then
+      exit;
+    inc(up);
+  until false;
   result := true;
+end;
+
+function IdemPChar(p, up: pAnsiChar): boolean;
+// if the beginning of p^ is same as up^ (ignore case - up^ must be already Upper)
+begin
+  if p=nil then
+    result := false else
+  if up=nil then
+    result := true else
+    result := IdemPCharUp(pointer(p),pointer(up),@NormToUpper);
 end;
 
 function IdemPCharArray(p: PAnsiChar; const upArray: array of PAnsiChar): integer;
 var w: word;
+    toup: PByteArray;
+    up: ^PAnsiChar;
 begin
   if p<>nil then begin
-    w := ord(p[0])+ord(p[1])shl 8;
-    if p[0] in ['a'..'z'] then
-      dec(w,32);
-    if p[1] in ['a'..'z'] then
-      dec(w,32 shl 8);
+    toup := @NormToUpper;
+    w := toup[ord(p[0])]+toup[ord(p[1])]shl 8;
+    up := @upArray[0];
     for result := 0 to high(upArray) do
-      if (PWord(upArray[result])^=w) and IdemPChar(p+2,upArray[result]+2) then
-        exit;
+      if (PWord(up^)^=w) and IdemPCharUp(pointer(@p[2]),pointer(@up^[2]),toup) then
+        exit else
+        inc(up);
   end;
   result := -1;
 end;
@@ -3458,22 +3470,14 @@ end;
 
 function SameText(const a,b: SockString): boolean;
 var n,i: integer;
-    c,d: AnsiChar;
 begin
   result := false;
   n := length(a);
   if length(b)<>n then
     exit;
-  for i := 1 to n do begin
-    c := a[i];
-    if c in ['a'..'z'] then
-      dec(c,32);
-    d := b[i];
-    if d in ['a'..'z'] then
-      dec(d,32);
-    if c<>d then
+  for i := 1 to n do
+    if NormToUpper[ord(a[i])]<>NormToUpper[ord(b[i])] then
       exit;
-  end;
   result := true;
 end;
 
@@ -3491,7 +3495,7 @@ begin
     until false;
 end; // P^ will point to the first non digit char
 
-function GetNextLine(var P: PAnsiChar): SockString;
+procedure GetNextLine(var P: PAnsiChar; var result: SockString);
 var S: PAnsiChar;
 begin
   if P=nil then
@@ -3607,20 +3611,17 @@ asm  // fast implementation by John O'Harrow
 end;
 {$endif}
 
-function UpperCase(const S: SockString): SockString;
-procedure Upper(Source, Dest: PAnsiChar; L: cardinal);
-var Ch: AnsiChar; // this sub-call is shorter and faster than 1 plain proc
+procedure UpperMove(Source, Dest, ToUp: PByte; L: cardinal);
 begin
   repeat
-    Ch := Source^;
-    if (Ch>='a') and (Ch<='z') then
-      dec(Ch,32);
-    Dest^ := Ch;
+    Dest^ := ToUp[Source^];
     dec(L);
     inc(Source);
     inc(Dest);
   until L=0;
 end;
+
+function UpperCase(const S: SockString): SockString;
 var L: cardinal;
 begin
   result := '';
@@ -3628,7 +3629,7 @@ begin
   if L=0 then
     exit;
   SetLength(result, L);
-  Upper(pointer(S),pointer(result),L);
+  UpperMove(pointer(S),pointer(result),@NormToUpper,L);
 end;
 
 {$endif HASCODEPAGE}
@@ -3687,9 +3688,9 @@ begin
   if p<>nil then begin
     while p^=' ' do inc(p);
     repeat
-      v0 := Hex2Dec(p[0]);
+      v0 := Hex2Dec(ord(p[0]));
       if v0<0 then break; // not in '0'..'9','a'..'f'
-      v1 := Hex2Dec(p[1]);
+      v1 := Hex2Dec(ord(p[1]));
       inc(p);
       if v1<0 then begin
         result := (result shl 4) or v0; // only one char left
@@ -4359,19 +4360,19 @@ begin
     P := S+3;
   end;
   S := P;
-  if (PInteger(S)^ = UNIX_LOW) and (S[4] = ':') then begin //http://unix:...:/path
-    Inc(S, 5);
-    Inc(P, 5);
+  if (PInteger(S)^=UNIX_LOW) and (S[4]=':') then begin
+    Inc(S,5); // 'http://unix:/path/to/socket.sock:/url/path'
+    Inc(P,5);
     Layer := cslUNIX;
-    while not (S^ in [#0,':']) do inc(S);
+    while not(S^ in [#0,':']) do inc(S);
   end else
-    while not (S^ in [#0,':','/']) do inc(S);
+    while not(S^ in [#0,':','/']) do inc(S);
   SetString(Server,P,S-P);
   if S^=':' then begin
     inc(S);
     P := S;
-    while not (S^ in [#0,'/']) do inc(S);
-    SetString(Port,P,S-P);
+    while not(S^ in [#0,'/']) do inc(S);
+    SetString(Port,P,S-P); // Port='' for cslUnix
   end else
     if DefaultPort<>'' then
       Port := DefaultPort else
@@ -4386,17 +4387,16 @@ end;
 function TURI.URI: SockString;
 const Prefix: array[boolean] of SockString = ('http://','https://');
 begin
-  if (Port='') or (Port='0') or (Port=DEFAULT_PORT[Https]) then
-    result := Prefix[Https]+Server+'/'+Address else
-    result := Prefix[Https]+Server+':'+Port+'/'+Address;
+  if Layer=cslUNIX then
+    result := 'http://unix:'+Server+':/'+Address else
+    if (Port='') or (Port='0') or (Port=DEFAULT_PORT[Https]) then
+      result := Prefix[Https]+Server+'/'+Address else
+      result := Prefix[Https]+Server+':'+Port+'/'+Address;
 end;
 
 function TURI.PortInt: integer;
-var err: integer;
 begin
-  Val(string(Port),result,err);
-  if err<>0 then
-    result := 0;
+  result := GetCardinal(pointer(port));
 end;
 
 function TURI.Root: SockString;
@@ -4507,16 +4507,15 @@ begin
   end;
   if SameText(Server,'localhost')
     {$ifndef MSWINDOWS}or ((Server='') and not doBind){$endif} then
-    IP := cLocalHost
-  else if (aLayer=cslUNIX) then
-    IP := Server
-  else
-    IP := ResolveName(Server,AF_INET,ipproto,socktype);
-  // use AF_INET instead of AF_UNSPEC: IP6 is buggy!
-  {$ifdef UNIX}
-  if (aLayer=cslUNIX) then
+    IP := cLocalHost else
+    if aLayer=cslUNIX then
+      IP := Server else
+      IP := ResolveName(Server,AF_INET,ipproto,socktype);
+  {$ifndef MSWINDOWS}
+  if aLayer=cslUNIX then
     family := AF_UNIX else
   {$endif}
+    // use AF_INET instead of AF_UNSPEC: IP6 is buggy!
     family := AF_INET;
   if SetVarSin(sin,IP,Port,family,ipproto,socktype,false)<>0 then
     exit;
@@ -4658,10 +4657,11 @@ begin
     s := '0.0.0.0';
     p := aPort;
   end;
-  {$ifdef UNIX}
-  if s = 'unix' then begin
+  {$ifndef MSWINDOWS}
+  if s='unix' then begin
     aLayer := cslUNIX;
-    s := p; p := '';
+    s := p;
+    p := '';
   end;
   {$endif}
   OpenBind(s,p,true,-1,aLayer); // raise an ECrtSocket exception on error
@@ -5576,20 +5576,20 @@ end;
 function SendEmail(const Server, From, CSVDest, Subject, Text, Headers,
   User, Pass, Port, TextCharSet: SockString; aTLS: boolean): boolean;
 var TCP: TCrtSocket;
-procedure Expect(const Answer: SockString);
-var Res: SockString;
-begin
-  repeat
-    readln(TCP.SockIn^,Res);
-  until (Length(Res)<4)or(Res[4]<>'-');
-  if not IdemPChar(pointer(Res),pointer(Answer)) then
-    raise ECrtSocket.Create(string(Res));
-end;
-procedure Exec(const Command, Answer: SockString);
-begin
-  writeln(TCP.SockOut^,Command);
-  Expect(Answer)
-end;
+  procedure Expect(const Answer: SockString);
+  var Res: SockString;
+  begin
+    repeat
+      readln(TCP.SockIn^,Res);
+    until (Length(Res)<4)or(Res[4]<>'-');
+    if not IdemPChar(pointer(Res),pointer(Answer)) then
+      raise ECrtSocket.Create(string(Res));
+  end;
+  procedure Exec(const Command, Answer: SockString);
+  begin
+    writeln(TCP.SockOut^,Command);
+    Expect(Answer)
+  end;
 var P: PAnsiChar;
     rec, ToList, head: SockString;
 begin
@@ -6107,7 +6107,7 @@ var ctxt: THttpServerRequest;
     // 2.1. custom headers from Request() method
     P := pointer(ctxt.fOutCustomHeaders);
     while P<>nil do begin
-      s := GetNextLine(P);
+      GetNextLine(P,s);
       if s<>'' then begin // no void line (means headers ending)
         ClientSock.SockSend(s);
         if IdemPChar(pointer(s),'CONTENT-ENCODING:') then
@@ -10319,7 +10319,7 @@ constructor THttpRequest.Create(const aServer, aPort: SockString;
   aLayer: TCrtSocketLayer);
 begin
   fLayer := aLayer;
-  if (fLayer <> cslUNIX) then begin
+  if fLayer<>cslUNIX then begin
     fPort := GetCardinal(pointer(aPort));
     if fPort=0 then
       if aHttps then
@@ -11516,7 +11516,7 @@ begin
   if not IsAvailable then
     raise ECrtSocket.CreateFmt('No available %s',[LIBCURL_DLL]);
   fHandle := curl.easy_init;
-  if (fLayer = cslUNIX) then
+  if fLayer=cslUNIX then
     fRootURL := 'http://localhost' else // see CURLOPT_UNIX_SOCKET_PATH doc
     fRootURL := AnsiString(Format('http%s://%s:%d',[HTTPS[fHttps],fServer,fPort]));
 end;
@@ -11576,13 +11576,14 @@ begin
 end;
 
 procedure TCurlHTTP.InternalAddHeader(const hdr: SockString);
-var P,H: PAnsiChar;
+var P: PAnsiChar;
+    s: SockString;
 begin
   P := pointer(hdr);
   while P<>nil do begin
-    H := pointer(GetNextLine(P));
-    if H<>nil then // nil would reset the whole list
-      fIn.Headers := curl.slist_append(fIn.Headers,H);
+    GetNextLine(P,s);
+    if s<>'' then // nil would reset the whole list
+      fIn.Headers := curl.slist_append(fIn.Headers,pointer(s));
   end;
 end;
 
@@ -11657,7 +11658,7 @@ begin
   end;
   P := pointer(Header);
   while P<>nil do begin
-    s := GetNextLine(P);
+    GetNextLine(P,s);
     if IdemPChar(pointer(s),'ACCEPT-ENCODING:') then
       AcceptEncoding := trim(copy(s,17,100)) else
     if IdemPChar(pointer(s),'CONTENT-ENCODING:') then
@@ -12598,6 +12599,15 @@ begin
   _MainHttpClass := aClass;
 end;
 
+procedure Initialize;
+var i: integer;
+begin
+  for i := 0 to high(NormToUpper) do
+    NormToUpper[i] := i;
+  for i := ord('a') to ord('z') do
+    dec(NormToUpper[i], 32);
+end;
+
 initialization
   {$ifdef MSWINDOWS}
   Assert(
@@ -12626,6 +12636,7 @@ initialization
   FillChar(WinHttpAPI, SizeOf(WinHttpAPI), 0);
   WinHttpAPIInitialize;
   {$endif MSWINDOWS}
+  Initialize;
   if InitSocketInterface then
     WSAStartup(WinsockLevel, WsaDataOnce) else
     fillchar(WsaDataOnce,sizeof(WsaDataOnce),0);
