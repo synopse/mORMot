@@ -9293,7 +9293,9 @@ type
 
   /// defines the settings for a Tab for User Interface generation
   // - used in mORMotToolBar.pas unit and TSQLModel.Create() overloaded method
-  {$ifdef UNICODE}TSQLRibbonTabParameters = record{$else}TSQLRibbonTabParameters = object{$endif}
+  // - is defined as an object and not a record to allow easy inheritance for
+  // proper per-application customization - see e.g. FileTables.pas in main demo
+  TSQLRibbonTabParameters = object
   public
     /// the Table associated to this Tab
     Table: TSQLRecordClass;
@@ -27216,7 +27218,7 @@ begin
     R.FillPrepare(self);
     row := @fResults[FieldCount]; // row^ points to first row of data
     {$ifdef ISDELPHIXE3}
-    result.Count := fRowCount;    // faster than manual Add()
+    result.Count := fRowCount; // faster than manual Add()
     rec := pointer(result.List);
     for i := 0 to fRowCount-1 do begin
       Item := TSQLRecordClass(T).Create;
@@ -27255,9 +27257,9 @@ begin
   R := RecordType.Create;
   try
     R.FillPrepare(self);
-    DestList.Count := fRowCount;     // faster than manual Add()
+    DestList.Count := fRowCount; // faster than manual Add()
     rec := pointer(DestList.List);
-    row := @fResults[FieldCount];    // row^ points to first row of data
+    row := @fResults[FieldCount]; // row^ points to first row of data
     for i := 1 to fRowCount do begin
       rec^ := RecordType.Create; // TObjectList will own and free each instance
       R.fFill.Fill(pointer(row),rec^);
@@ -27291,8 +27293,8 @@ begin
   R := RecordType.Create;
   try
     R.FillPrepare(self);
-    SetLength(arr,fRowCount);       // faster than manual ObjArrayAdd()
-    Row := @fResults[FieldCount];   // Row^ points to first row of data
+    SetLength(arr,fRowCount); // faster than manual ObjArrayAdd()
+    Row := @fResults[FieldCount]; // Row^ points to first row of data
     for i := 0 to fRowCount-1 do begin
       arr[i] := RecordType.Create;
       R.fFill.Fill(pointer(Row),arr[i]);

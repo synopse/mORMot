@@ -23370,7 +23370,7 @@ begin // here p and up are expected to be <> nil
     u := up^;
     if u=#0 then
       break;
-    if u<>table^[up[PtrUInt(p)]] then
+    if table^[up[PtrUInt(p)]]<>u then
       exit;
     inc(up);
   until false;
@@ -32898,7 +32898,7 @@ begin
   end;
 end;
 
-{$WARNINGS OFF} // some Delphi compilers do not analyse well code below
+{$WARNINGS OFF} // some Delphi compilers do not analyze well code below
 function GotoNextLine(source: PUTF8Char): PUTF8Char;
 begin
   if source<>nil then

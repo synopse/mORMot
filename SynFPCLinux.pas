@@ -224,7 +224,7 @@ begin
   inc(TempMonth,3);
   result.Month := TempMonth;
   result.Year := YYear+(JulianDN*100);
-  // initialize by fake dayOfWeek - it used by SynCommons.FromGlobalTime RCU128
+  // initialize fake dayOfWeek - as used by SynCommons.FromGlobalTime RCU128
   result.DayOfWeek := 0;
 end;
 
