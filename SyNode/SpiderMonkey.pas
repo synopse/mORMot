@@ -184,19 +184,20 @@ type
   );
 
   JSVersion = (
-  JSVERSION_ECMA_3  = 148,
-  /// Run-time version enumeration corresponding to 1.6
-  JSVERSION_1_6     = 160,
-  /// Run-time version enumeration corresponding to 1.7
-  JSVERSION_1_7     = 170,
-  /// Run-time version enumeration corresponding to 1.8
-  JSVERSION_1_8     = 180,
-  /// Run-time version enumeration corresponding to ECMA standard 5, i.e. 1.8.5
-  JSVERSION_ECMA_5  = 185,
-  /// Run-time version enumeration corresponding to default version
-  JSVERSION_DEFAULT = 0,
-  /// Run-time version enumeration corresponding to an identified version
-  JSVERSION_UNKNOWN = -1
+    /// Run-time version enumeration corresponding to an identified version
+    JSVERSION_UNKNOWN = -1,
+    /// Run-time version enumeration corresponding to default version
+    JSVERSION_DEFAULT = 0,
+
+    JSVERSION_ECMA_3  = 148,
+    /// Run-time version enumeration corresponding to 1.6
+    JSVERSION_1_6     = 160,
+    /// Run-time version enumeration corresponding to 1.7
+    JSVERSION_1_7     = 170,
+    /// Run-time version enumeration corresponding to 1.8
+    JSVERSION_1_8     = 180,
+    /// Run-time version enumeration corresponding to ECMA standard 5, i.e. 1.8.5
+    JSVERSION_ECMA_5  = 185
   );
 
 ///  This enum is used to select if properties with JSPROP_DEFINE_LATE flag
@@ -1499,7 +1500,7 @@ type
     function Enumerate(cx: PJSContext): JSIdArray;
 
     //array methods
-    function GetArrayLength(cx: PJSContext; var length: uint32): Boolean; {$ifdef HASINLINE}inline;{$endif}
+    function GetArrayLength(cx: PJSContext; out length: uint32): Boolean; {$ifdef HASINLINE}inline;{$endif}
     function GetElement(cx: PJSContext; index: uint32; out vp: jsval): Boolean; {$ifdef HASINLINE}inline;{$endif}
     function SetElement(cx: PJSContext; index: uint32; const vp: jsval): Boolean; {$ifdef HASINLINE}inline;{$endif}
     function DeleteElement(cx: PJSContext; index: uint32; out res: JS_ObjectOpResult): Boolean; {$ifdef HASINLINE}inline;{$endif}
@@ -3412,18 +3413,27 @@ end;
 const
  ErrorUCFormatString: JSErrorFormatString =
   (
+    {$IFDEF SM52}
+    name: 'Error';
+    {$ENDIF}
     format: '{0}';
     argCount: 1;
     exnType: JSEXN_ERR;
   );
  RangeErrorUCFormatString: JSErrorFormatString =
   (
+    {$IFDEF SM52}
+    name: 'RangeError';
+    {$ENDIF}
     format: '{0}';
     argCount: 1;
     exnType: JSEXN_RANGEERR;
   );
  TypeErrorUCFormatString: JSErrorFormatString =
   (
+    {$IFDEF SM52}
+    name: 'TypeError';
+    {$ENDIF}
     format: '{0}';
     argCount: 1;
     exnType: JSEXN_TYPEERR;
@@ -4894,7 +4904,7 @@ begin
   result := JS_GetArrayBufferViewType(@self);
 end;
 
-function JSObject.GetArrayLength(cx: PJSContext; var length: uint32): Boolean;
+function JSObject.GetArrayLength(cx: PJSContext; out length: uint32): Boolean;
 var obj: PJSObject;
 begin
   obj := @Self;
