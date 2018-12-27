@@ -69,7 +69,7 @@ type
   function nsmCallFunc(cx: PJSContext; argc: uintN;  var vp: JSArgRec; const overloads: TNSMCallInfoArray; overloadsCount: Integer = 1; isConstructor: Boolean = false): Boolean; cdecl;
 
 const
-  StaticROAttrs = JSPROP_ENUMERATE or JSPROP_READONLY or JSPROP_PERMANENT;
+  StaticROAttrs = JSPROPS_STATIC_RO;
 
 implementation
 

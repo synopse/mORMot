@@ -2063,7 +2063,8 @@ const
                                   // for property holding function
 
   JSFUN_CONSTRUCTOR      = $400; // native that can be called as a ctor
-
+  /// enumerabl eread-only property attributes
+  JSPROPS_STATIC_RO      = JSPROP_ENUMERATE or JSPROP_READONLY or JSPROP_PERMANENT;
 {$IFDEF SM52}
 // unused
 {$ELSE}

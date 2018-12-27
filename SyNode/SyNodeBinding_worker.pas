@@ -186,8 +186,8 @@ begin
   try
     cx := FEng.cx;
 
-    FEng.GlobalObject.ptr.DefineFunction(cx, 'postMessage', fromWorker_postMessage, 1, JSPROP_ENUMERATE or JSPROP_READONLY or JSPROP_PERMANENT);
-    FEng.GlobalObject.ptr.DefineFunction(cx, 'terminate', fromWorker_terminate, 0, JSPROP_ENUMERATE or JSPROP_READONLY or JSPROP_PERMANENT);
+    FEng.GlobalObject.ptr.DefineFunction(cx, 'postMessage', fromWorker_postMessage, 1, JSPROPS_STATIC_RO);
+    FEng.GlobalObject.ptr.DefineFunction(cx, 'terminate', fromWorker_terminate, 0, JSPROPS_STATIC_RO);
 
 {$IFDEF SM52}
 {$ELSE}
@@ -221,7 +221,8 @@ begin
         FNeedCallInterrupt := false;
       end;
 
-      isEmpty := fSMManager.WorkersManager.FIsInDestroyState or not fSMManager.WorkersManager.DequeueInMessageFromCurrentThread(mess);
+      isEmpty := fSMManager.WorkersManager.FIsInDestroyState
+        or not fSMManager.WorkersManager.DequeueInMessageFromCurrentThread(mess);
 
       if not isEmpty then begin
         val.asJson[cx] := mess;
