@@ -18773,26 +18773,12 @@ end;
 
 procedure TSynTempBuffer.Init(const Source: RawByteString);
 begin
-  len := length(Source);
-  if len<=0 then
-    buf := nil else begin
-    if len<=SizeOf(tmp)-16 then
-      buf := @tmp else
-      GetMem(buf,len+16); // +16 for trailing #0 and for PInteger() parsing
-    MoveFast(pointer(Source)^,buf^,len+1); // +1 to include trailing #0
-  end;
+  Init(pointer(Source),length(Source));
 end;
 
 function TSynTempBuffer.Init(Source: PUTF8Char): PUTF8Char;
 begin
-  len := StrLen(Source);
-  if len<=0 then
-    buf := nil else begin
-    if len<=SizeOf(tmp)-16 then
-      buf := @tmp else
-      GetMem(buf,len+16); // +16 for trailing #0 and for PInteger() parsing
-    MoveFast(Source^,buf^,len+1);
-  end;
+  Init(Source,StrLen(Source));
   result := buf;
 end;
 
@@ -18804,7 +18790,8 @@ begin
     if len<=SizeOf(tmp)-16 then
       buf := @tmp else
       GetMem(buf,len+16); // +16 for trailing #0 and for PInteger() parsing
-    MoveFast(Source^,buf^,len+1);
+    MoveFast(Source^,buf^,len);
+    PPtrInt(buf+len)^ := 0; // always init last 4/8 bytes (makes valgrid happy)
   end;
 end;
 
