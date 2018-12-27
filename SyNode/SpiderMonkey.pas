@@ -3517,9 +3517,9 @@ begin
   if JS_StringHasLatin1Chars(@self) then begin
     str8 := JS_GetLatin1StringCharsAndLength(cx, @nullPtr, @self, @strL);
     {$ifdef UNICODE}
-      SetString(Result, str8, strL);
-    {$else}
       Result := Latin1AnsiConvert.AnsiToUnicodeString(str8, strL);
+    {$else}
+      SetString(Result, str8, strL);
     {$endif}
   end else begin
     str16 := JS_GetTwoByteStringCharsAndLength(cx, @nullPtr, @self, @strL);
