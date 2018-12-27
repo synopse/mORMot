@@ -13219,6 +13219,7 @@ end;
 {$WARN SYMBOL_PLATFORM OFF}
 procedure TTestClientServerAccess._TSQLHttpClient;
 var Resp: TSQLTable;
+    len: integer;
 begin
   Client := TSQLHttpClient.Create('127.0.0.1',HTTP_DEFAULTPORT,Model);
   fRunConsole := fRunConsole+'using '+string(Client.ClassName);
@@ -13228,7 +13229,9 @@ begin
     exit;
   try
     Check(Resp.InheritsFrom(TSQLTableJSON));
-    Check(Hash32(TSQLTableJSON(Resp).PrivateInternalCopy)=$F11CEAC0);
+    len := Length(TSQLTableJSON(Resp).PrivateInternalCopy)-16;
+    if not CheckFailed(len>0) then
+      Check(Hash32(pointer(TSQLTableJSON(Resp).PrivateInternalCopy),len)=$F11CEAC0);
     //FileFromString(Resp.GetODSDocument,'people.ods');
   finally
     Resp.Free;
@@ -13316,9 +13319,9 @@ begin
   Resp := Client.List([TSQLRecordPeople],'*',CLIENTTEST_WHERECLAUSE);
   if CheckFailed(Resp<>nil) then
     exit;
-  siz := length(TSQLTableJSON(Resp).PrivateInternalCopy);
-  Check(siz=4818);
-  Check(Hash32(TSQLTableJSON(Resp).PrivateInternalCopy)=$8D727024);
+  siz := length(TSQLTableJSON(Resp).PrivateInternalCopy)-16;
+  if not CheckFailed(siz=4818) then
+    Check(Hash32(pointer(TSQLTableJSON(Resp).PrivateInternalCopy),siz)=$8D727024);
   Resp.Free;
 {$ifdef WTIME}
   fRunConsole := format('%s%s, first %s, ',[fRunConsole,KB(siz),Timer.Stop]);
@@ -13395,7 +13398,9 @@ begin
     try
       Check(Resp.InheritsFrom(TSQLTableJSON));
       // every answer contains 113 rows, for a total JSON size of 4803 bytes
-      Check(Hash32(TSQLTableJSON(Resp).PrivateInternalCopy)=$8D727024);
+      siz := length(TSQLTableJSON(Resp).PrivateInternalCopy)-16;
+      if not CheckFailed(siz>0) then
+        Check(Hash32(pointer(TSQLTableJSON(Resp).PrivateInternalCopy),siz)=$8D727024);
     finally
       Resp.Free;
     end;
