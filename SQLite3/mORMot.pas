@@ -9051,8 +9051,8 @@ type
     // if you want to reuse this JSON content, you shall make a private copy
     // before calling this constructor and you shall NOT release the corresponding
     // variable (fResults/JSONResults[] will point inside this memory buffer):
-    // use instead the overloaded Create constructor expecting aJSON parameter
-    // making a private copy of the data
+    // use instead the overloaded Create constructor expecting a const
+    // aJSON: RawUTF8 parameter to allocate and hold a private copy of the data
     constructor Create(const aSQL: RawUTF8;
       JSONBuffer: PUTF8Char; JSONBufferLen: integer); reintroduce; overload;
     /// create the result table from a JSON-formated Data message
@@ -9098,6 +9098,7 @@ type
     /// the private copy of the processed data buffer
     // - available e.g. for Create constructor using aJSON parameter,
     // or after the UpdateFrom() process
+    // - 16 more bytes will be allocated, to allow e.g. proper SSE4.2 process
     // - this buffer is not to be access directly: this won't be a valid JSON
     // content, but a processed buffer, on which fResults[] elements point to -
     // it will contain unescaped text and numerical values, ending with #0
@@ -22742,10 +22743,14 @@ end;
 procedure TSQLPropInfoRTTIObject.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
 var valid: boolean;
-    ValueLocalCopy: RawUTF8;
+    tmp: TSynTempBuffer;
 begin
-  ValueLocalCopy := Value; // private copy since the buffer will be modified
-  PropInfo^.ClassFromJSON(Instance,pointer(ValueLocalCopy),valid);
+  tmp.Init(Value); // private copy since the buffer will be modified
+  try
+    PropInfo^.ClassFromJSON(Instance,tmp.buf,valid);
+  finally
+    tmp.Done;
+  end;
 end;
 
 procedure TSQLPropInfoRTTIObject.GetValueVar(Instance: TObject;
@@ -25953,22 +25958,21 @@ procedure BlobToTSQLRawBlob(P: PUTF8Char; var result: TSQLRawBlob);
 var Len, LenHex: integer;
 begin
   result := '';
-  if P=nil then
-    exit;
   Len := StrLen(P);
   if Len=0 then
     exit;
-  if (P[0] in ['x','X']) and (P[1]='''') and (P[Len-1]='''') then begin
-    // BLOB literals are string literals containing hexadecimal data and
-    // preceded by a single "x" or "X" character. For example: X'53514C697465'
-    LenHex := (Len-3) shr 1;
-    SetLength(result,LenHex);
-    if SynCommons.HexToBin(@P[2],pointer(result),LenHex) then
-      exit; // valid hexa data
-  end else
-  if (PInteger(P)^ and $00ffffff=JSON_BASE64_MAGIC) and
-     Base64ToBinSafe(@P[3],Len-3,RawByteString(result)) then
-    exit; // safe decode Base-64 content ('\uFFF0base64encodedbinary')
+  if Len>=3 then
+    if (P[0] in ['x','X']) and (P[1]='''') and (P[Len-1]='''') then begin
+      // BLOB literals are string literals containing hexadecimal data and
+      // preceded by a single "x" or "X" character. For example: X'53514C697465'
+      LenHex := (Len-3) shr 1;
+      SetLength(result,LenHex);
+      if SynCommons.HexToBin(@P[2],pointer(result),LenHex) then
+        exit; // valid hexa data
+    end else
+    if (PInteger(P)^ and $00ffffff=JSON_BASE64_MAGIC) and
+       Base64ToBinSafe(@P[3],Len-3,RawByteString(result)) then
+      exit; // safe decode Base-64 content ('\uFFF0base64encodedbinary')
   // TEXT format
   SetString(result,PAnsiChar(P),Len);
 end;
@@ -25982,17 +25986,18 @@ begin
     exit;
   Len := length(Blob);
   P := pointer(Blob);
-  if (P[0] in ['x','X']) and (P[1]='''') and (P[Len-1]='''') then begin
-    // BLOB literals are string literals containing hexadecimal data and
-    // preceded by a single "x" or "X" character. For example: X'53514C697465'
-    LenHex := (Len-3) shr 1;
-    SetLength(result,LenHex);
-    if SynCommons.HexToBin(@P[2],pointer(result),LenHex) then
-      exit; // valid hexa data
-  end else
-  if (PInteger(P)^ and $00ffffff=JSON_BASE64_MAGIC) and
-     Base64ToBinSafe(@P[3],Len-3,RawByteString(result)) then
-    exit; // safe decode Base-64 content ('\uFFF0base64encodedbinary')
+  if Len>=3 then
+    if (P[0] in ['x','X']) and (P[1]='''') and (P[Len-1]='''') then begin
+      // BLOB literals are string literals containing hexadecimal data and
+      // preceded by a single "x" or "X" character. For example: X'53514C697465'
+      LenHex := (Len-3) shr 1;
+      SetLength(result,LenHex);
+      if SynCommons.HexToBin(@P[2],pointer(result),LenHex) then
+        exit; // valid hexa data
+    end else
+    if (PInteger(P)^ and $00ffffff=JSON_BASE64_MAGIC) and
+       Base64ToBinSafe(@P[3],Len-3,RawByteString(result)) then
+      exit; // safe decode Base-64 content ('\uFFF0base64encodedbinary')
   // TEXT format
   result := Blob;
 end;
@@ -26009,23 +26014,24 @@ begin
   Len := StrLen(P);
   if Len=0 then
     exit;
-  if (P[0] in ['x','X']) and (P[1]='''') and (P[Len-1]='''') then begin
-    // BLOB literals format
-    LenResult := (Len-3)shr 1;
-    SetLength(Result,LenResult);
-    if SynCommons.HexToBin(@P[2],pointer(Result),LenResult) then
-      exit; // valid hexa data
-  end else
-  if (PInteger(P)^ and $00ffffff=JSON_BASE64_MAGIC) and IsBase64(@P[3],Len-3) then begin
-    // Base-64 encoded content ('\uFFF0base64encodedbinary')
-    inc(P,3);
-    dec(Len,3);
-    LenResult := Base64ToBinLength(pointer(P),len);
-    SetLength(Result,LenResult);
-    if LenResult>0 then
-      Base64Decode(pointer(P),pointer(Result),Len shr 2);
-    exit;
-  end;
+  if Len>=3 then
+    if (P[0] in ['x','X']) and (P[1]='''') and (P[Len-1]='''') then begin
+      // BLOB literals format
+      LenResult := (Len-3)shr 1;
+      SetLength(Result,LenResult);
+      if SynCommons.HexToBin(@P[2],pointer(Result),LenResult) then
+        exit; // valid hexa data
+    end else
+    if (PInteger(P)^ and $00ffffff=JSON_BASE64_MAGIC) and IsBase64(@P[3],Len-3) then begin
+      // Base-64 encoded content ('\uFFF0base64encodedbinary')
+      inc(P,3);
+      dec(Len,3);
+      LenResult := Base64ToBinLength(pointer(P),len);
+      SetLength(Result,LenResult);
+      if LenResult>0 then
+        Base64Decode(pointer(P),pointer(Result),Len shr 2);
+      exit;
+    end;
   // TEXT format
   SetLength(Result,Len);
   MoveFast(P^,pointer(Result)^,Len);
@@ -28709,7 +28715,7 @@ begin
   result := (fPrivateCopyHash=0) or (Hash=0) or (Hash<>fPrivateCopyHash);
   if not result then
     exit;
-  FastSetString(fPrivateCopy,aJSON,aLen);
+  FastSetString(fPrivateCopy,aJSON,aLen+16); // +16 for SSE4.2 read-ahead
   fPrivateCopyHash := Hash;
 end;
 
@@ -28883,7 +28889,7 @@ constructor TSQLTableJSON.Create(const aSQL, aJSON: RawUTF8);
 var len: integer;
 begin
   len := length(aJSON);
-  FastSetString(fPrivateCopy,pointer(aJSON),len);
+  FastSetString(fPrivateCopy,pointer(aJSON),len+16); // +16 for SSE4.2 read-ahead
   Create(aSQL,pointer(fPrivateCopy),len);
 end;
 
@@ -28899,7 +28905,7 @@ constructor TSQLTableJSON.CreateFromTables(const Tables: array of TSQLRecordClas
 var len: integer;
 begin
   len := length(aJSON);
-  FastSetString(fPrivateCopy,pointer(aJSON),len);
+  FastSetString(fPrivateCopy,pointer(aJSON),len+16);
   CreateFromTables(Tables,aSQL,pointer(fPrivateCopy),len);
 end;
 
@@ -28915,7 +28921,7 @@ constructor TSQLTableJSON.CreateWithColumnTypes(const ColumnTypes: array of TSQL
 var len: integer;
 begin
   len := length(aJSON);
-  FastSetString(fPrivateCopy,pointer(aJSON),len);
+  FastSetString(fPrivateCopy,pointer(aJSON),len+16);
   CreateWithColumnTypes(ColumnTypes,aSQL,pointer(fPrivateCopy),len);
 end;
 
@@ -32061,7 +32067,7 @@ end;
 
 procedure TSQLRecord.FillFrom(const JSONTable: RawUTF8; Row: integer);
 var Table: TSQLTableJSON;
-    tmp: TSynTempBuffer;
+    tmp: TSynTempBuffer; // work on a private copy
 begin
   tmp.Init(JSONTable);
   Table := TSQLTableJSON.Create('',tmp.buf,tmp.len);

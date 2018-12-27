@@ -767,6 +767,9 @@ type
   // - could be used e.g. to make a temporary copy when JSON is parsed in-place
   // - call one of the Init() overloaded methods, then Done to release its memory
   // - will avoid temporary memory allocation via the heap for up to 4KB of data
+  // - all Init() methods will allocate 16 more bytes, for a trailing #0 and
+  // to ensure our fast JSON parsing won't trigger any GPF (since it may read
+  // up to 4 bytes ahead via its PInteger() trick) or any SSE4.2 function
   {$ifdef UNICODE}TSynTempBuffer = record{$else}TSynTempBuffer = object{$endif}
   public
     /// the text/binary length, in bytes, excluding the trailing #0
@@ -18771,11 +18774,11 @@ end;
 procedure TSynTempBuffer.Init(const Source: RawByteString);
 begin
   len := length(Source);
-  if len=0 then
+  if len<=0 then
     buf := nil else begin
-    if len<SizeOf(tmp) then
+    if len<=SizeOf(tmp)-16 then
       buf := @tmp else
-      GetMem(buf,len+1); // +1 to include trailing #0
+      GetMem(buf,len+16); // +16 for trailing #0 and for PInteger() parsing
     MoveFast(pointer(Source)^,buf^,len+1); // +1 to include trailing #0
   end;
 end;
@@ -18783,11 +18786,11 @@ end;
 function TSynTempBuffer.Init(Source: PUTF8Char): PUTF8Char;
 begin
   len := StrLen(Source);
-  if len=0 then
+  if len<=0 then
     buf := nil else begin
-    if len<SizeOf(tmp) then
+    if len<=SizeOf(tmp)-16 then
       buf := @tmp else
-      GetMem(buf,len+1); // +1 to include trailing #0
+      GetMem(buf,len+16); // +16 for trailing #0 and for PInteger() parsing
     MoveFast(Source^,buf^,len+1);
   end;
   result := buf;
@@ -18796,11 +18799,11 @@ end;
 procedure TSynTempBuffer.Init(Source: pointer; SourceLen: integer);
 begin
   len := SourceLen;
-  if len=0 then
+  if len<=0 then
     buf := nil else begin
-    if len<SizeOf(tmp) then
+    if len<=SizeOf(tmp)-16 then
       buf := @tmp else
-      GetMem(buf,len+1); // +1 to include trailing #0
+      GetMem(buf,len+16); // +16 for trailing #0 and for PInteger() parsing
     MoveFast(Source^,buf^,len+1);
   end;
 end;
@@ -18808,24 +18811,24 @@ end;
 function TSynTempBuffer.Init(SourceLen: integer): pointer;
 begin
   len := SourceLen;
-  if len=0 then
+  if len<=0 then
     buf := nil else
-    if len<SizeOf(tmp) then
+    if len<=SizeOf(tmp)-16 then
       buf := @tmp else
-      GetMem(buf,len+1); // +1 to include trailing #0
+      GetMem(buf,len+16); // +16 for trailing #0 and for PInteger() parsing
   result := buf;
 end;
 
 function TSynTempBuffer.Init: integer;
 begin
   buf := @tmp;
-  result := SizeOf(tmp)-1;
+  result := SizeOf(tmp)-16;
   len := result;
 end;
 
 function TSynTempBuffer.InitRandom(RandomLen: integer): pointer;
 begin
-  result := Init(RandomLen+3);
+  result := Init(RandomLen); 
   if RandomLen>0 then
     FillRandom(result,(RandomLen shr 2)+1);
 end;
@@ -18863,7 +18866,7 @@ end;
 procedure TSynTempWriter.Init(maxsize: integer);
 begin
   if maxsize<=0 then
-    maxsize := SizeOf(tmp.tmp)-1; // -1 for trailing #0
+    maxsize := SizeOf(tmp.tmp)-16; // TSynTempBuffer allocates +16
   pos := tmp.Init(maxsize);
 end;
 
@@ -42080,6 +42083,7 @@ var wasString, wasValid: boolean;
     Reader: TDynArrayJSONCustomReader;
     FirstChar,EndOfObj: AnsiChar;
     Val: PUTF8Char;
+    ValLen: integer;
 begin // code below must match TTextWriter.AddRecordJSON
   result := nil; // indicates error
   if JSON=nil then
@@ -42091,10 +42095,10 @@ begin // code below must match TTextWriter.AddRecordJSON
     if not (PTypeKind(TypeInfo)^ in tkRecordTypes) then
       raise ESynException.CreateUTF8('RecordLoadJSON(%/%)',
         [PShortString(@PTypeInfo(TypeInfo).NameLen)^,ToText(PTypeKind(TypeInfo)^)^]);
-    Val := GetJSONField(JSON,JSON,@wasString,@EndOfObj);
-    if (Val=nil) or not wasString or
+    Val := GetJSONField(JSON,JSON,@wasString,@EndOfObj,@ValLen);
+    if (Val=nil) or not wasString or (ValLen<3) or
        (PInteger(Val)^ and $00ffffff<>JSON_BASE64_MAGIC) or
-       (RecordLoad(Rec,pointer(Base64ToBin(Val+3)),TypeInfo)=nil) then
+       (RecordLoad(Rec,pointer(Base64ToBin(PAnsiChar(Val)+3,ValLen-3)),TypeInfo)=nil) then
       exit; // invalid content
   end else begin
     if not GlobalJSONCustomParsers.RecordSearch(TypeInfo,Reader) then
@@ -47755,7 +47759,7 @@ begin
       end;
     end;
     4: begin
-      // optimized version for TIntegerDynArray + TRawUTF8DynArray and such
+      // optimized version for TIntegerDynArray and such
       P2 := P1+n*SizeOf(Integer);
       while P1<P2 do begin
         tmp := PInteger(P1)^;
@@ -53326,7 +53330,7 @@ begin
   L := length(s);
   if L=0 then
     exit;
-  if PInteger(s)^ and $ffffff=JSON_BASE64_MAGIC then begin
+  if (L>2) and (PInteger(s)^ and $ffffff=JSON_BASE64_MAGIC) then begin
     AddNoJSONEscape(pointer(s),L); // identified as a BLOB content
     exit;
   end;
@@ -54001,33 +54005,38 @@ end;
 
 procedure TTextWriter.CancelLastChar;
 begin
-  dec(B);
+  if B>=fTempBuf then // Add() methods append at B+1
+    dec(B);
 end;
 
 function TTextWriter.LastChar: AnsiChar;
 begin
-  result := B^;
+  if B>=fTempBuf then
+    result := B^ else
+    result := #0; // returns #0 if no char has been written yet
 end;
 
 procedure TTextWriter.CancelLastChar(aCharToCancel: AnsiChar);
 begin
-  if B^=aCharToCancel then
+  if (B>=fTempBuf) and (B^=aCharToCancel) then
     dec(B);
 end;
 
 function TTextWriter.PendingBytes: PtrUInt;
 begin
-  result := B-fTempBuf;
+  result := B-fTempBuf+1;
 end;
 
 procedure TTextWriter.CancelLastComma;
 begin
-  if B^=',' then
+  if (B>=fTempBuf) and (B^=',') then
     dec(B);
 end;
 
 procedure TTextWriter.SetBuffer(aBuf: pointer; aBufSize: integer);
 begin
+  if aBufSize<=16 then
+    raise ESynException.CreateUTF8('%.SetBuffer(size=%)',[self,aBufSize]);
   if aBuf=nil then
     GetMem(fTempBuf,aBufSize) else begin
     fTempBuf := aBuf;
@@ -54035,7 +54044,7 @@ begin
   end;
   fTempBufSize := aBufSize;
   B := fTempBuf-1; // Add() methods will append at B+1
-  BEnd := fTempBuf+fTempBufSize-16; // -2 made reports with FPC heaptrc tooling
+  BEnd := fTempBuf+fTempBufSize-16; // -16 to avoid buffer overwrite/overread
   if DefaultTextWriterTrimEnum then
     Include(fCustomOptions,twoTrimLeftEnumSets);
 end;
@@ -54130,6 +54139,8 @@ begin
     fEchoStart := 0;
   end;
   i := B-fTempBuf+1;
+  if i<=0 then
+    exit;
   fStream.WriteBuffer(fTempBuf^,i);
   inc(fTotalFileSize,i);
   if not (twoFlushToStreamNoAutoResize in fCustomOptions) and

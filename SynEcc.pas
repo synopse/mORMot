@@ -4828,9 +4828,12 @@ var values: TRawUTF8DynArray;
     tmp: TSynTempBuffer; // private copy
 begin
   tmp.Init(json);
-  result := (DynArrayLoadJSON(values,tmp.buf,TypeInfo(TRawUTF8DynArray))<>nil) and
-    LoadFromArray(values);
-  tmp.Done;
+  try
+    result := (DynArrayLoadJSON(values,tmp.buf,TypeInfo(TRawUTF8DynArray))<>nil) and
+      LoadFromArray(values);
+  finally
+    tmp.Done;
+  end;
 end;
 
 function TECCCertificateChain.LoadFromArray(const values: TRawUTF8DynArray): boolean;

@@ -1359,6 +1359,8 @@ type
     // - FullCollectionName is e.g. 'dbname.collectionname'
     // - JSONDocuments is an array of JSON objects
     // - there is no response to an opInsert message
+    // - warning: JSONDocuments[] buffer will be modified in-place during
+    // parsing, so a private copy may have to be made by the caller
     constructor Create(const FullCollectionName: RawUTF8;
       const JSONDocuments: array of PUTF8Char; Flags: TMongoInsertFlags=[]); reintroduce; overload;
   end;
