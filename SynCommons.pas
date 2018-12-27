@@ -777,6 +777,10 @@ type
     /// initialize a temporary copy of the content supplied as RawByteString
     // - will also allocate and copy the ending #0 (even for binary)
     procedure Init(const Source: RawByteString); overload;
+    /// initialize a temporary copy of the content supplied as RawByteString
+    // - will also allocate +4 byte fill it with 0 to prevent JSON parser
+    // to access uninitialized memory (for stack) or out-of-process memory (for heap)
+    procedure InitForJSON(const Source: RawByteString);
     /// initialize a temporary copy of the supplied text buffer, ending with #0
     function Init(Source: PUTF8Char): PUTF8Char; overload;
     /// initialize a temporary copy of the supplied text buffer
@@ -18777,6 +18781,19 @@ begin
       buf := @tmp else
       GetMem(buf,len+1); // +1 to include trailing #0
     MoveFast(pointer(Source)^,buf^,len+1); // +1 to include trailing #0
+  end;
+end;
+
+procedure TSynTempBuffer.InitForJSON(const Source: RawByteString);
+begin
+  len := length(Source);
+  if len=0 then
+    buf := nil else begin
+    if len<SizeOf(tmp)-3 then
+      buf := @tmp else
+      GetMem(buf,len+4); // +4 to include 4 trailing #0
+    MoveFast(pointer(Source)^,buf^,len);
+    PInteger(@PUTF8Char(buf)[len])^ := 0; // init last 4 byte by 0
   end;
 end;
 
@@ -45164,7 +45181,7 @@ var tmp: TSynTempBuffer;
 begin
   if JSON='' then
     result := false else begin
-    tmp.Init(JSON);
+    tmp.InitForJSON(JSON);
     try
       result := InitJSONInPlace(tmp.buf,aOptions)<>nil;
     finally
