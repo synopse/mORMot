@@ -2410,18 +2410,14 @@ type
     fRootURL: SockString;
     fIn: record
       Headers: pointer;
-      Method: SockString;
-      Data: SockString;
       DataOffset: integer;
+      URL, Method, Data: SockString;
     end;
     fOut: record
       Header, Encoding, AcceptEncoding, Data: SockString;
     end;
     fSSL: record
-      CertFile: SockString;
-      CACertFile: SockString;
-      KeyName: SockString;
-      PassPhrase: SockString;
+      CertFile, CACertFile, KeyName, PassPhrase: SockString;
     end;
     procedure InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD); override;
     procedure InternalCreateRequest(const method, aURL: SockString); override;
@@ -11326,16 +11322,16 @@ type
   );
   TCurlResult = (
     crOK, crUnsupportedProtocol, crFailedInit, crURLMalformat, crURLMalformatUser,
-    crCouldntResolveProxy, crCouldntResolveHost, crCouldntConnect,
+    crCouldNotResolveProxy, crCouldNotResolveHost, crCouldNotConnect,
     crFTPWeirdServerReply, crFTPAccessDenied, crFTPUserPasswordIncorrect,
     crFTPWeirdPassReply, crFTPWeirdUserReply, crFTPWeirdPASVReply,
-    crFTPWeird227Format, crFTPCantGetHost, crFTPCantReconnect, crFTPCouldntSetBINARY,
-    crPartialFile, crFTPCouldntRetrFile, crFTPWriteError, crFTPQuoteError,
-    crHTTPReturnedError, crWriteError, crMalFormatUser, crFTPCouldntStorFile,
+    crFTPWeird227Format, crFTPCantGetHost, crFTPCantReconnect, crFTPCouldNotSetBINARY,
+    crPartialFile, crFTPCouldNotRetrFile, crFTPWriteError, crFTPQuoteError,
+    crHTTPReturnedError, crWriteError, crMalFormatUser, crFTPCouldNotStorFile,
     crReadError, crOutOfMemory, crOperationTimeouted,
-    crFTPCouldntSetASCII, crFTPPortFailed, crFTPCouldntUseREST, crFTPCouldntGetSize,
+    crFTPCouldNotSetASCII, crFTPPortFailed, crFTPCouldNotUseREST, crFTPCouldNotGetSize,
     crHTTPRangeError, crHTTPPostError, crSSLConnectError, crBadDownloadResume,
-    crFileCouldntReadFile, crLDAPCannotBind, crLDAPSearchFailed,
+    crFileCouldNotReadFile, crLDAPCannotBind, crLDAPSearchFailed,
     crLibraryNotFound, crFunctionNotFound, crAbortedByCallback,
     crBadFunctionArgument, crBadCallingOrder, crInterfaceFailed,
     crBadPasswordEntered, crTooManyRedirects, crUnknownTelnetOption,
@@ -11539,13 +11535,12 @@ end;
 
 procedure TCurlHTTP.InternalCreateRequest(const method, aURL: SockString);
 const CERT_PEM: SockString = 'PEM';
-var url: SockString;
 begin
-  url := fRootURL+aURL;
+  fIn.URL := fRootURL+aURL;
   //curl.easy_setopt(fHandle,coTCPNoDelay,0); // disable Nagle
   if fLayer=cslUNIX then
     curl.easy_setopt(fHandle,coUnixSocketPath, pointer(fServer));
-  curl.easy_setopt(fHandle,coURL,pointer(url));
+  curl.easy_setopt(fHandle,coURL,pointer(fIn.URL));
   if fProxyName<>'' then
     curl.easy_setopt(fHandle,coProxy,pointer(fProxyName));
   if fHttps then
@@ -11569,6 +11564,8 @@ begin
   curl.easy_setopt(fHandle,coWriteFunction,@CurlWriteRawByteString);
   curl.easy_setopt(fHandle,coHeaderFunction,@CurlWriteRawByteString);
   fIn.Method := UpperCase(method);
+  if fIn.Method = '' then
+    fIn.Method := 'GET';
   if fIn.Method = 'GET' then
     fIn.Headers := nil else // disable Expect 100 continue in libcurl
     fIn.Headers := curl.slist_append(nil,'Expect:');
@@ -11603,9 +11600,7 @@ begin // see http://curl.haxx.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
   if fIn.Method='HEAD' then // the only verb what do not expect body in answer is HEAD
     curl.easy_setopt(fHandle,coNoBody,1) else
     curl.easy_setopt(fHandle,coNoBody,0);
-  if (fIn.Method='') then
-    curl.easy_setopt(fHandle,coCustomRequest,PAnsiChar('GET')) else
-    curl.easy_setopt(fHandle,coCustomRequest,pointer(fIn.Method));
+  curl.easy_setopt(fHandle,coCustomRequest,pointer(fIn.Method));
   curl.easy_setopt(fHandle,coPostFields,pointer(aData));
   curl.easy_setopt(fHandle,coPostFieldSize,length(aData));
   curl.easy_setopt(fHandle,coHTTPHeader,fIn.Headers);
@@ -11615,16 +11610,16 @@ end;
 
 const CURL_RESULT_STR: array[TCurlResult] of string = ( // mORMot rtti not accessible here
   'OK', 'UnsupportedProtocol', 'FailedInit', 'URLMalformat', 'URLMalformatUser',
-  'CouldntResolveProxy', 'CouldntResolveHost', 'CouldntConnect',
+  'CouldNotResolveProxy', 'CouldNotResolveHost', 'CouldNotConnect',
   'FTPWeirdServerReply', 'FTPAccessDenied', 'FTPUserPasswordIncorrect',
   'FTPWeirdPassReply', 'FTPWeirdUserReply', 'FTPWeirdPASVReply',
-  'FTPWeird227Format', 'FTPCantGetHost', 'FTPCantReconnect', 'FTPCouldntSetBINARY',
-  'PartialFile', 'FTPCouldntRetrFile', 'FTPWriteError', 'FTPQuoteError',
-  'HTTPReturnedError', 'WriteError', 'MalFormatUser', 'FTPCouldntStorFile',
+  'FTPWeird227Format', 'FTPCantGetHost', 'FTPCantReconnect', 'FTPCouldNotSetBINARY',
+  'PartialFile', 'FTPCouldNotRetrFile', 'FTPWriteError', 'FTPQuoteError',
+  'HTTPReturnedError', 'WriteError', 'MalFormatUser', 'FTPCouldNotStorFile',
   'ReadError', 'OutOfMemory', 'OperationTimeouted',
-  'FTPCouldntSetASCII', 'FTPPortFailed', 'FTPCouldntUseREST', 'FTPCouldntGetSize',
+  'FTPCouldNotSetASCII', 'FTPPortFailed', 'FTPCouldNotUseREST', 'FTPCouldNotGetSize',
   'HTTPRangeError', 'HTTPPostError', 'SSLConnectError', 'BadDownloadResume',
-  'FileCouldntReadFile', 'LDAPCannotBind', 'LDAPSearchFailed',
+  'FileCouldNotReadFile', 'LDAPCannotBind', 'LDAPSearchFailed',
   'LibraryNotFound', 'FunctionNotFound', 'AbortedByCallback',
   'BadFunctionArgument', 'BadCallingOrder', 'InterfaceFailed',
   'BadPasswordEntered', 'TooManyRedirects', 'UnknownTelnetOption',
@@ -11646,7 +11641,8 @@ var res: TCurlResult;
 begin
   res := curl.easy_perform(fHandle);
   if res<>crOK then
-    raise ECurlHTTP.CreateFmt('libcurl error (%d) %s', [ord(res), CURL_RESULT_STR[res]]);
+    raise ECurlHTTP.CreateFmt('libcurl error %d (%s) on %s %s',
+      [ord(res), CURL_RESULT_STR[res], fIn.Method, fIn.URL]);
   curl.easy_getinfo(fHandle,ciResponseCode,rc);
   result := rc;
   Header := Trim(fOut.Header);
