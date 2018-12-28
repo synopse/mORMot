@@ -1650,7 +1650,8 @@ function FormatUTF8(const Format: RawUTF8; const Args, Params: array of const;
 /// read and store text into values[] according to fmt specifiers
 // - %d as PInteger, %D as PInt64, %u as PCardinal, %U as PQWord, %f as PDouble,
 // %F as PCurrency, %x as 8 hexa chars to PInteger, %X as 16 hexa chars to PInt64,
-// %s as PShortString (UTF-8 encoded), %S as PRawUTF8
+// %s as PShortString (UTF-8 encoded), %S as PRawUTF8, %L as PRawUTF8 (getting
+// all text until the end of the line)
 // - optionally, specifiers and any whitespace separated identifiers may be
 // extracted and stored into the ident[] array, e.g. '%dFirstInt %s %DOneInt64'
 // will store ['dFirstInt','s','DOneInt64'] into ident
@@ -24352,6 +24353,7 @@ function ScanUTF8(P: PUTF8Char; PLen: integer; const fmt: RawUTF8;
 var
   v,w: PtrInt;
   F,FEnd,PEnd: PUTF8Char;
+label next;
 begin
   result := 0;
   if (fmt='') or (P=nil) or (PLen<=0) or (high(values)<0) then
@@ -24399,6 +24401,13 @@ begin
         inc(P,w);
         while (P^<=' ') and (P^<>#0) and (P<=PEnd) do inc(P);
       end;
+      'L': begin
+        w := 0;
+        while not(P[w] in [#0,#10,#13]) and (P+w<=PEnd) do inc(w);
+        SetString(PRawUTF8(values[v])^,PAnsiChar(P),w);
+        inc(P,w);
+      end;
+      '%': goto next;
       else raise ESynException.CreateUTF8('ScanUTF8: unknown ''%'' specifier [%]',[F^,fmt]);
       end;
       inc(result);
@@ -24414,7 +24423,7 @@ begin
         exit;
       break;
     end else begin
-      while (P^<>F^) and (P<=PEnd) do inc(P);
+next: while (P^<>F^) and (P<=PEnd) do inc(P);
       inc(F);
       inc(P);
       if (F>=FEnd) or (P>=PEnd) then
