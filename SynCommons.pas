@@ -785,7 +785,7 @@ type
     /// initialize a temporary copy of the supplied text buffer
     procedure Init(Source: pointer; SourceLen: integer); overload;
     /// initialize a new temporary buffer of a given number of bytes
-    function Init(SourceLen: integer): pointer; overload;
+    function Init(SourceLen: integer): pointer; overload; {$ifdef HASINLINE}inline;{$endif}
     /// initialize the buffer returning the internal buffer size (4095 bytes)
     // - could be used e.g. for an API call, first trying with plain temp.Init
     // and using temp.buf and temp.len safely in the call, only calling
@@ -18783,6 +18783,12 @@ begin
   result := buf;
 end;
 
+function TSynTempBuffer.Init(SourceLen: integer): pointer;
+begin
+  Init(nil,SourceLen);
+  result := buf;
+end;
+
 procedure TSynTempBuffer.Init(Source: pointer; SourceLen: integer);
 begin
   len := SourceLen;
@@ -18791,20 +18797,11 @@ begin
     if len<=SizeOf(tmp)-16 then
       buf := @tmp else
       GetMem(buf,len+16); // +16 for trailing #0 and for PInteger() parsing
-    MoveFast(Source^,buf^,len);
-    PPtrInt(buf+len)^ := 0; // always init last 4/8 bytes (makes valgrid happy)
+    if Source<>nil then begin
+      MoveFast(Source^,buf^,len);
+      PPtrInt(PAnsiChar(buf)+len)^ := 0; // init last 4/8 bytes (makes valgrid happy)
+    end;
   end;
-end;
-
-function TSynTempBuffer.Init(SourceLen: integer): pointer;
-begin
-  len := SourceLen;
-  if len<=0 then
-    buf := nil else
-    if len<=SizeOf(tmp)-16 then
-      buf := @tmp else
-      GetMem(buf,len+16); // +16 for trailing #0 and for PInteger() parsing
-  result := buf;
 end;
 
 function TSynTempBuffer.Init: integer;
@@ -18816,21 +18813,24 @@ end;
 
 function TSynTempBuffer.InitRandom(RandomLen: integer): pointer;
 begin
-  result := Init(RandomLen); 
+  Init(nil,RandomLen);
   if RandomLen>0 then
-    FillRandom(result,(RandomLen shr 2)+1);
+    FillRandom(buf,(RandomLen shr 2)+1);
+  result := buf;     
 end;
 
 function TSynTempBuffer.InitIncreasing(Count, Start: integer): PIntegerArray;
 begin
-  result := Init((Count-Start)*4);
-  FillIncreasing(result,Start,Count);
+  Init(nil,(Count-Start)*4);
+  FillIncreasing(buf,Start,Count);
+  result := buf;     
 end;
 
 function TSynTempBuffer.InitZero(ZeroLen: integer): pointer;
 begin
-  result := Init(ZeroLen);
-  FillCharFast(result^,ZeroLen,0);
+  Init(nil,ZeroLen-16);
+  FillCharFast(buf^,ZeroLen,0);
+  result := buf;     
 end;
 
 procedure TSynTempBuffer.Done;
