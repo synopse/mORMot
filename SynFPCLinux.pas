@@ -219,9 +219,9 @@ begin
   result.Day := ((Temp-(TempMonth*153))+5) div 5;
   if TempMonth>=10 then begin
     inc(YYear);
-    dec(TempMonth,12);
-  end;
-  inc(TempMonth,3);
+    dec(TempMonth,12-3);
+  end else
+    inc(TempMonth,3);
   result.Month := TempMonth;
   result.Year := YYear+(JulianDN*100);
   // initialize fake dayOfWeek - as used by SynCommons.FromGlobalTime RCU128
