@@ -1418,12 +1418,12 @@ begin
     FEnginePool.Safe.UnLock;
   end;
 
-  if not WorkersManager.curThreadIsWorker then begin
+  //if not WorkersManager.curThreadIsWorker then begin
     if FRemoteDebuggerThread <> nil then
       TSMRemoteDebuggerThread(FRemoteDebuggerThread).startDebugCurrentThread(result);
     if WorkersManager.curThreadIsWorker then
       Result.doInteruptInOwnThread := WorkersManager.DoInteruptInOwnThreadhandlerForCurThread;
-  end;
+  //end;
   DoOnNewEngine(Result);
 end;
 
@@ -1755,21 +1755,14 @@ function TSMEngine.CallObjectFunctionVal(obj: PJSRootedObject; const funcVal: PJ
 var r: Boolean;
     isFirst: Boolean;
     rval: jsval;
-    global: PJSRootedObject;
 begin
   with TSynFPUException.ForLibraryCode do begin
     ClearLastError;
     ScheduleWatchdog(fTimeoutValue);
     isFirst := not cx.IsRunning;
     r := obj.ptr.CallFunctionValue(cx, funcVal.ptr, high(args) + 1, @args[0], Result);
-    if r and isFirst and withTimerLoop and (FGlobalTimerLoopFunc <> nil) then begin
-      global := cx.NewRootedObject(cx.CurrentGlobalOrNull);
-      try
-        r := global.ptr.CallFunctionValue(cx, FGlobalTimerLoopFunc.ptr, 0, nil, rval);
-      finally
-        cx.FreeRootedObject(global);
-      end;
-    end;
+    if r and isFirst and GlobalObject.ptr.HasProperty(cx, '_timerLoop') then
+      r := GlobalObject.ptr.CallFunctionName(cx, '_timerLoop', 0, nil, rval);
     ScheduleWatchdog(-1);
     CheckJSError(r);
   end;
@@ -1780,21 +1773,14 @@ function TSMEngine.CallObjectFunction(obj: PJSRootedObject; funcName: PCChar;
 var r: Boolean;
     isFirst: Boolean;
     rval: jsval;
-    global: PJSRootedObject;
 begin
   with TSynFPUException.ForLibraryCode do begin
     ClearLastError;
     ScheduleWatchdog(fTimeoutValue);
     isFirst := not cx.IsRunning;
     r := obj.ptr.CallFunctionName(cx, funcName, high(args) + 1, @args[0], Result);
-    if r and withTimerLoop and isFirst and (FGlobalTimerLoopFunc <> nil) then begin
-      global := cx.NewRootedObject(cx.CurrentGlobalOrNull);
-      try
-        r := global.ptr.CallFunctionValue(cx, FGlobalTimerLoopFunc.ptr, 0, nil, rval);
-      finally
-        cx.FreeRootedObject(global);
-      end;
-    end;
+    if r and isFirst and GlobalObject.ptr.HasProperty(cx, '_timerLoop') then
+      r := GlobalObject.ptr.CallFunctionName(cx, '_timerLoop', 0, nil, rval);
     ScheduleWatchdog(-1);
     CheckJSError(r);
   end;
