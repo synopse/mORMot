@@ -184,7 +184,8 @@ type
     fTimeoutValue: integer;
     fCreatedAtTick: Int64;
 
-    function ScheduleWatchdog(t: integer): Boolean;
+    function ScheduleWatchdog: Boolean;
+    procedure StopWatchdog;
     procedure KillWatchdog;
     function InitWatchdog: boolean;
     procedure SetTimeoutValue(const Value: Integer);
@@ -1645,7 +1646,7 @@ var r: Boolean;
 begin
   with TSynFPUException.ForLibraryCode do begin
     ClearLastError;
-    ScheduleWatchdog(fTimeoutValue);
+    ScheduleWatchdog;
     isFirst := not cx.IsRunning;
     opts := cx.NewCompileOptions;
     opts.filename := Pointer(ResName);
@@ -1659,7 +1660,7 @@ begin
       r := GlobalObject.ptr.CallFunctionName(cx, '_timerLoop', 0, nil, rval);
     if not r then
       r := false;
-    ScheduleWatchdog(-1);
+    StopWatchdog;
     CheckJSError(r);
   end;
 end;
@@ -1673,7 +1674,7 @@ var r: Boolean;
 begin
   with TSynFPUException.ForLibraryCode do begin
     ClearLastError;
-    ScheduleWatchdog(fTimeoutValue);
+    ScheduleWatchdog;
     isFirst := not cx.IsRunning;
     opts := cx.NewCompileOptions;
     opts.filename := Pointer(scriptName);
@@ -1686,7 +1687,7 @@ begin
       r := GlobalObject.ptr.CallFunctionName(cx, '_timerLoop', 0, nil, rval);
     if not r then
       r := false;
-    ScheduleWatchdog(-1);
+    StopWatchdog;
     CheckJSError(r);
   end;
 end;
@@ -1700,7 +1701,7 @@ var r: Boolean;
 begin
   with TSynFPUException.ForLibraryCode do begin
     ClearLastError;
-    ScheduleWatchdog(fTimeoutValue);
+    ScheduleWatchdog;
     isFirst := not cx.IsRunning;
     opts := cx.NewCompileOptions;
     opts.filename := Pointer(scriptName);
@@ -1714,7 +1715,7 @@ begin
       r := GlobalObject.ptr.CallFunctionName(cx, '_timerLoop', 0, nil, rval);
     if not r then
       r := false;
-    ScheduleWatchdog(-1);
+    StopWatchdog;
     CheckJSError(r);
   end;
 end;
@@ -1758,12 +1759,12 @@ var r: Boolean;
 begin
   with TSynFPUException.ForLibraryCode do begin
     ClearLastError;
-    ScheduleWatchdog(fTimeoutValue);
+    ScheduleWatchdog;
     isFirst := not cx.IsRunning;
     r := obj.ptr.CallFunctionValue(cx, funcVal.ptr, high(args) + 1, @args[0], Result);
     if r and isFirst and GlobalObject.ptr.HasProperty(cx, '_timerLoop') then
       r := GlobalObject.ptr.CallFunctionName(cx, '_timerLoop', 0, nil, rval);
-    ScheduleWatchdog(-1);
+    StopWatchdog;
     CheckJSError(r);
   end;
 end;
@@ -1776,12 +1777,12 @@ var r: Boolean;
 begin
   with TSynFPUException.ForLibraryCode do begin
     ClearLastError;
-    ScheduleWatchdog(fTimeoutValue);
+    ScheduleWatchdog;
     isFirst := not cx.IsRunning;
     r := obj.ptr.CallFunctionName(cx, funcName, high(args) + 1, @args[0], Result);
     if r and isFirst and GlobalObject.ptr.HasProperty(cx, '_timerLoop') then
       r := GlobalObject.ptr.CallFunctionName(cx, '_timerLoop', 0, nil, rval);
-    ScheduleWatchdog(-1);
+    StopWatchdog;
     CheckJSError(r);
   end;
 end;
@@ -1899,18 +1900,25 @@ begin
   PR_Unlock(eng.fWatchdogLock);
 end;
 
-function TSMEngine.ScheduleWatchdog(t: integer): Boolean;
+procedure TSMEngine.StopWatchdog;
+begin
+ if not fWatchdogHasTimeout then
+   Exit;
+
+  PR_Lock(fWatchdogLock);
+  fWatchdogHasTimeout := false;
+  PR_Unlock(fWatchdogLock);
+end;
+
+function TSMEngine.ScheduleWatchdog: Boolean;
 var interval: Int64;
     timeout: Int64;
 begin
-  if (t <= 0) then begin
-    PR_Lock(fWatchdogLock);
-    fWatchdogHasTimeout := false;
-    PR_Unlock(fWatchdogLock);
-    result := true;
+  if fTimeoutValue <= 0 then begin
+    Result := true;
     exit;
   end;
-  interval := int64(t * PRMJ_USEC_PER_SEC);
+  interval := int64(fTimeoutValue * PRMJ_USEC_PER_SEC);
 {$IFDEF SM52}
   timeout := cx.NowMs + interval;
 {$ELSE}
@@ -1966,10 +1974,7 @@ end;
 
 procedure TSMEngine.SetTimeoutValue(const Value: Integer);
 begin
-  if fTimeoutValue = Value then
-    exit;
   fTimeoutValue := Value;
-  ScheduleWatchdog(fTimeoutValue);
 end;
 
 // Bindings
