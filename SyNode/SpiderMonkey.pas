@@ -510,15 +510,14 @@ type
     mCapacity: size_t;
     mStorage: Int64;
   end;
+  _JSIdArrayPtr = ^_JSIdArray;
 /// internal Spidermonkey structure for storrage jsid
+
+  { JSIdArray }
+
   JSIdArray  = {$ifdef UNICODE}record{$else}object{$endif}
-  private
-    _internal: _JSIdArray;
-    procedure init(cx: PJSContext); {$ifdef HASINLINE}inline;{$endif}
-  public
-    property Length: size_t read _internal.mLength;
-    property vector: PjsidVector read _internal.mBegin;
   end;
+  PJSIdArray = ^JSIdArray;
 
 // jsvalue
   JSWhyMagic = Cardinal;
@@ -1497,7 +1496,8 @@ type
     //
     // This is the closest thing we currently have to the ES6 [[Enumerate]]
     // internal method.
-    function Enumerate(cx: PJSContext): JSIdArray;
+    function Enumerate(cx: PJSContext; out length: size_t;
+      out data: PjsidVector): PJSIdArray;
 
     //array methods
     function GetArrayLength(cx: PJSContext; out length: uint32): Boolean; {$ifdef HASINLINE}inline;{$endif}
@@ -2580,9 +2580,12 @@ function JS_DeleteElement(cx: PJSContext; var obj: PJSObject; index: uint32; out
 // This is the closest thing we currently have to the ES6 [[Enumerate]]
 // internal method.
 //
-// The JSIdArray returned by JS_Enumerate must be rooted to protect its
-// contents from garbage collection. Use JS::AutoIdArray.
-function JS_Enumerate(cx: PJSContext; var obj: PJSObject; out props: JSIdArray): Boolean;
+// The JSIdArray returned is rooted to protect its
+// contents from garbage collection.
+function JS_EnumerateToAutoIdVector(cx: PJSContext; var obj: PJSObject;
+  out length: size_t; out data: PjsidVector): PJSIdArray;
+  cdecl; external SpiderMonkeyLib;
+procedure JS_DestroyAutoIdVector(v: PJSIdArray);
   cdecl; external SpiderMonkeyLib;
 
 type
@@ -3483,7 +3486,6 @@ procedure ShutDownJS;
 begin
   JS_ShutDown;
 end;
-
 
 { JSString }
 
@@ -4792,17 +4794,13 @@ begin
   Result := JS_DeletePropertyById(cx, obj, _id, res);
 end;
 
-function JSObject.Enumerate(cx: PJSContext): JSIdArray;
+function JSObject.Enumerate(cx: PJSContext; out length: size_t; out data: PjsidVector): PJSIdArray;
 var obj: PJSObject;
 begin
   obj := @Self;
-  Result.init(cx);
+  Result := JS_EnumerateToAutoIdVector(cx, obj, length, data);
   {$ifdef WITHASSERT}
-  Assert(
-  {$ENDIF}
-  JS_Enumerate(cx, obj, Result)
-  {$ifdef WITHASSERT}
-  );
+  Assert(Assigned(Result));
   {$ENDIF}
 end;
 
@@ -5115,17 +5113,6 @@ begin
 {$endif}
   Result := PJSString(asBits);
 end;
-
-{ JSIdArray }
-
-procedure JSIdArray.init(cx: PJSContext);
-begin
-  _internal.cx := cx;
-  _internal.mBegin := @_internal.mStorage;
-  _internal.mLength := 0;
-  _internal.mCapacity := 1;
-end;
-
 
 { jsval }
 
