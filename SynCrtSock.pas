@@ -6,7 +6,7 @@ unit SynCrtSock;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynCrtSock;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -2410,18 +2410,14 @@ type
     fRootURL: SockString;
     fIn: record
       Headers: pointer;
-      Method: SockString;
-      Data: SockString;
       DataOffset: integer;
+      URL, Method, Data: SockString;
     end;
     fOut: record
       Header, Encoding, AcceptEncoding, Data: SockString;
     end;
     fSSL: record
-      CertFile: SockString;
-      CACertFile: SockString;
-      KeyName: SockString;
-      PassPhrase: SockString;
+      CertFile, CACertFile, KeyName, PassPhrase: SockString;
     end;
     procedure InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD); override;
     procedure InternalCreateRequest(const method, aURL: SockString); override;
@@ -3501,7 +3497,7 @@ begin
   if P=nil then
     result := '' else begin
     S := P;
-    while S^>=' ' do
+    while S^>=' ' do // break on any control char
       inc(S);
     SetString(result,P,S-P);
     while (S^<>#0) and (S^<' ') do inc(S); // ignore e.g. #13 or #10
@@ -6434,7 +6430,7 @@ begin
     if s='' then
       break; // headers end with a void line
     if length(Headers)<=n then
-      SetLength(Headers,n+10);
+      SetLength(Headers,n+n shr 3+10);
     Headers[n] := s;
     inc(n);
     P := pointer(s);
@@ -6599,8 +6595,8 @@ end;
 function THttpServerSocket.GetRequest(withBody: boolean=true): boolean;
 var P: PAnsiChar;
     i, L: integer;
-    H: ^PAnsiChar;
-    pH: PAnsiChar;
+    H: ^PByteArray;
+    up: PByteArray;
     maxtix, status: cardinal;
     reason: SockString;
 begin
@@ -6622,29 +6618,34 @@ begin
     // get headers and content
     GetHeader;
     if fServer<>nil then begin // e.g. =nil from TRTSPOverHTTPServer
+      up := pointer(@NormToUpper);
       L := length(fServer.fRemoteIPHeaderUpper);
-      if L<>0 then  begin
+      if L<>0 then begin
         H := pointer(Headers);
         for i := 1 to length(Headers) do
-        if IdemPChar(H^,pointer(fServer.fRemoteIPHeaderUpper)) and (H^[L]=':') then begin
-          repeat inc(L) until H^[L]<>' ';
-          if H^[L]<>#0 then
-            fRemoteIP := H^+L;
-          break;
-        end else
-          inc(H);
+          if IdemPCharUp(H^,pointer(fServer.fRemoteIPHeaderUpper),up) and
+             (H^[L]=ord(':')) then begin
+            P := pointer(@H^[L]);
+            repeat inc(P) until P^<>' ';
+            if P^<>#0 then
+              fRemoteIP := P^;
+            break;
+          end else
+            inc(H);
       end;
       // remote connection ID
       L := length(fServer.fRemoteConnIDHeaderUpper);
-      if L<>0 then  begin
+      if L<>0 then begin
         H := pointer(Headers);
         for i := 1 to length(Headers) do
-        if IdemPChar(H^,pointer(fServer.fRemoteConnIDHeaderUpper)) and (H^[L]=':') then begin
-          pH := H^+L+1; while (pH^=' ') do inc(pH);
-          fRemoteConnectionID := GetNextItemUInt64(pH);
-          break;
-        end else
-          inc(H);
+          if IdemPCharUp(H^,pointer(fServer.fRemoteConnIDHeaderUpper),up) and
+             (H^[L]=ord(':')) then begin
+            P := pointer(@H^[L]);
+            repeat inc(P) until P^<>' ';
+            fRemoteConnectionID := GetNextItemUInt64(P);
+            break;
+          end else
+            inc(H);
       end;
     end;
     if ConnectionClose then
@@ -11326,16 +11327,16 @@ type
   );
   TCurlResult = (
     crOK, crUnsupportedProtocol, crFailedInit, crURLMalformat, crURLMalformatUser,
-    crCouldntResolveProxy, crCouldntResolveHost, crCouldntConnect,
+    crCouldNotResolveProxy, crCouldNotResolveHost, crCouldNotConnect,
     crFTPWeirdServerReply, crFTPAccessDenied, crFTPUserPasswordIncorrect,
     crFTPWeirdPassReply, crFTPWeirdUserReply, crFTPWeirdPASVReply,
-    crFTPWeird227Format, crFTPCantGetHost, crFTPCantReconnect, crFTPCouldntSetBINARY,
-    crPartialFile, crFTPCouldntRetrFile, crFTPWriteError, crFTPQuoteError,
-    crHTTPReturnedError, crWriteError, crMalFormatUser, crFTPCouldntStorFile,
+    crFTPWeird227Format, crFTPCantGetHost, crFTPCantReconnect, crFTPCouldNotSetBINARY,
+    crPartialFile, crFTPCouldNotRetrFile, crFTPWriteError, crFTPQuoteError,
+    crHTTPReturnedError, crWriteError, crMalFormatUser, crFTPCouldNotStorFile,
     crReadError, crOutOfMemory, crOperationTimeouted,
-    crFTPCouldntSetASCII, crFTPPortFailed, crFTPCouldntUseREST, crFTPCouldntGetSize,
+    crFTPCouldNotSetASCII, crFTPPortFailed, crFTPCouldNotUseREST, crFTPCouldNotGetSize,
     crHTTPRangeError, crHTTPPostError, crSSLConnectError, crBadDownloadResume,
-    crFileCouldntReadFile, crLDAPCannotBind, crLDAPSearchFailed,
+    crFileCouldNotReadFile, crLDAPCannotBind, crLDAPSearchFailed,
     crLibraryNotFound, crFunctionNotFound, crAbortedByCallback,
     crBadFunctionArgument, crBadCallingOrder, crInterfaceFailed,
     crBadPasswordEntered, crTooManyRedirects, crUnknownTelnetOption,
@@ -11539,13 +11540,12 @@ end;
 
 procedure TCurlHTTP.InternalCreateRequest(const method, aURL: SockString);
 const CERT_PEM: SockString = 'PEM';
-var url: SockString;
 begin
-  url := fRootURL+aURL;
+  fIn.URL := fRootURL+aURL;
   //curl.easy_setopt(fHandle,coTCPNoDelay,0); // disable Nagle
   if fLayer=cslUNIX then
     curl.easy_setopt(fHandle,coUnixSocketPath, pointer(fServer));
-  curl.easy_setopt(fHandle,coURL,pointer(url));
+  curl.easy_setopt(fHandle,coURL,pointer(fIn.URL));
   if fProxyName<>'' then
     curl.easy_setopt(fHandle,coProxy,pointer(fProxyName));
   if fHttps then
@@ -11569,6 +11569,8 @@ begin
   curl.easy_setopt(fHandle,coWriteFunction,@CurlWriteRawByteString);
   curl.easy_setopt(fHandle,coHeaderFunction,@CurlWriteRawByteString);
   fIn.Method := UpperCase(method);
+  if fIn.Method = '' then
+    fIn.Method := 'GET';
   if fIn.Method = 'GET' then
     fIn.Headers := nil else // disable Expect 100 continue in libcurl
     fIn.Headers := curl.slist_append(nil,'Expect:');
@@ -11603,9 +11605,7 @@ begin // see http://curl.haxx.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
   if fIn.Method='HEAD' then // the only verb what do not expect body in answer is HEAD
     curl.easy_setopt(fHandle,coNoBody,1) else
     curl.easy_setopt(fHandle,coNoBody,0);
-  if (fIn.Method='') then
-    curl.easy_setopt(fHandle,coCustomRequest,PAnsiChar('GET')) else
-    curl.easy_setopt(fHandle,coCustomRequest,pointer(fIn.Method));
+  curl.easy_setopt(fHandle,coCustomRequest,pointer(fIn.Method));
   curl.easy_setopt(fHandle,coPostFields,pointer(aData));
   curl.easy_setopt(fHandle,coPostFieldSize,length(aData));
   curl.easy_setopt(fHandle,coHTTPHeader,fIn.Headers);
@@ -11615,16 +11615,16 @@ end;
 
 const CURL_RESULT_STR: array[TCurlResult] of string = ( // mORMot rtti not accessible here
   'OK', 'UnsupportedProtocol', 'FailedInit', 'URLMalformat', 'URLMalformatUser',
-  'CouldntResolveProxy', 'CouldntResolveHost', 'CouldntConnect',
+  'CouldNotResolveProxy', 'CouldNotResolveHost', 'CouldNotConnect',
   'FTPWeirdServerReply', 'FTPAccessDenied', 'FTPUserPasswordIncorrect',
   'FTPWeirdPassReply', 'FTPWeirdUserReply', 'FTPWeirdPASVReply',
-  'FTPWeird227Format', 'FTPCantGetHost', 'FTPCantReconnect', 'FTPCouldntSetBINARY',
-  'PartialFile', 'FTPCouldntRetrFile', 'FTPWriteError', 'FTPQuoteError',
-  'HTTPReturnedError', 'WriteError', 'MalFormatUser', 'FTPCouldntStorFile',
+  'FTPWeird227Format', 'FTPCantGetHost', 'FTPCantReconnect', 'FTPCouldNotSetBINARY',
+  'PartialFile', 'FTPCouldNotRetrFile', 'FTPWriteError', 'FTPQuoteError',
+  'HTTPReturnedError', 'WriteError', 'MalFormatUser', 'FTPCouldNotStorFile',
   'ReadError', 'OutOfMemory', 'OperationTimeouted',
-  'FTPCouldntSetASCII', 'FTPPortFailed', 'FTPCouldntUseREST', 'FTPCouldntGetSize',
+  'FTPCouldNotSetASCII', 'FTPPortFailed', 'FTPCouldNotUseREST', 'FTPCouldNotGetSize',
   'HTTPRangeError', 'HTTPPostError', 'SSLConnectError', 'BadDownloadResume',
-  'FileCouldntReadFile', 'LDAPCannotBind', 'LDAPSearchFailed',
+  'FileCouldNotReadFile', 'LDAPCannotBind', 'LDAPSearchFailed',
   'LibraryNotFound', 'FunctionNotFound', 'AbortedByCallback',
   'BadFunctionArgument', 'BadCallingOrder', 'InterfaceFailed',
   'BadPasswordEntered', 'TooManyRedirects', 'UnknownTelnetOption',
@@ -11646,7 +11646,8 @@ var res: TCurlResult;
 begin
   res := curl.easy_perform(fHandle);
   if res<>crOK then
-    raise ECurlHTTP.CreateFmt('libcurl error (%d) %s', [ord(res), CURL_RESULT_STR[res]]);
+    raise ECurlHTTP.CreateFmt('libcurl error %d (%s) on %s %s',
+      [ord(res), CURL_RESULT_STR[res], fIn.Method, fIn.URL]);
   curl.easy_getinfo(fHandle,ciResponseCode,rc);
   result := rc;
   Header := Trim(fOut.Header);

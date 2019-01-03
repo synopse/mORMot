@@ -6,7 +6,7 @@ unit SynCommons;
 (*
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynCommons;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -785,7 +785,7 @@ type
     /// initialize a temporary copy of the supplied text buffer
     procedure Init(Source: pointer; SourceLen: integer); overload;
     /// initialize a new temporary buffer of a given number of bytes
-    function Init(SourceLen: integer): pointer; overload;
+    function Init(SourceLen: integer): pointer; overload; {$ifdef HASINLINE}inline;{$endif}
     /// initialize the buffer returning the internal buffer size (4095 bytes)
     // - could be used e.g. for an API call, first trying with plain temp.Init
     // and using temp.buf and temp.len safely in the call, only calling
@@ -1650,7 +1650,8 @@ function FormatUTF8(const Format: RawUTF8; const Args, Params: array of const;
 /// read and store text into values[] according to fmt specifiers
 // - %d as PInteger, %D as PInt64, %u as PCardinal, %U as PQWord, %f as PDouble,
 // %F as PCurrency, %x as 8 hexa chars to PInteger, %X as 16 hexa chars to PInt64,
-// %s as PShortString (UTF-8 encoded), %S as PRawUTF8
+// %s as PShortString (UTF-8 encoded), %S as PRawUTF8, %L as PRawUTF8 (getting
+// all text until the end of the line)
 // - optionally, specifiers and any whitespace separated identifiers may be
 // extracted and stored into the ident[] array, e.g. '%dFirstInt %s %DOneInt64'
 // will store ['dFirstInt','s','DOneInt64'] into ident
@@ -12272,6 +12273,8 @@ type
     // - e.g. append '20110325 19241502 '
     // - as called by TTextWriter.AddCurrentLogTime()
     procedure AddLogTime(WR: TTextWriter);
+    /// convert the stored time into a TDateTime
+    function ToDateTime: TDateTime;
   end;
   PSynSystemTime = ^TSynSystemTime;
 
@@ -15878,6 +15881,7 @@ type
     // - typical use is to declare a fTimeElapsed: TPrecisionTimer protected
     // member, then call fTimeElapsed.ProfileCurrentMethod at the beginning of
     // all process expecting some timing, then log/save fTimeElapsed.Stop content
+    // - FPC TIP: result should be assigned to a local variable of IUnknown type
     function ProfileCurrentMethod: IUnknown;
     /// low-level method to force values settings to allow thread safe timing
     // - by default, this timer is not thread safe: you can use this method to
@@ -18782,6 +18786,12 @@ begin
   result := buf;
 end;
 
+function TSynTempBuffer.Init(SourceLen: integer): pointer;
+begin
+  Init(nil,SourceLen);
+  result := buf;
+end;
+
 procedure TSynTempBuffer.Init(Source: pointer; SourceLen: integer);
 begin
   len := SourceLen;
@@ -18790,20 +18800,11 @@ begin
     if len<=SizeOf(tmp)-16 then
       buf := @tmp else
       GetMem(buf,len+16); // +16 for trailing #0 and for PInteger() parsing
-    MoveFast(Source^,buf^,len);
-    PPtrInt(buf+len)^ := 0; // always init last 4/8 bytes (makes valgrid happy)
+    if Source<>nil then begin
+      MoveFast(Source^,buf^,len);
+      PPtrInt(PAnsiChar(buf)+len)^ := 0; // init last 4/8 bytes (makes valgrid happy)
+    end;
   end;
-end;
-
-function TSynTempBuffer.Init(SourceLen: integer): pointer;
-begin
-  len := SourceLen;
-  if len<=0 then
-    buf := nil else
-    if len<=SizeOf(tmp)-16 then
-      buf := @tmp else
-      GetMem(buf,len+16); // +16 for trailing #0 and for PInteger() parsing
-  result := buf;
 end;
 
 function TSynTempBuffer.Init: integer;
@@ -18815,21 +18816,24 @@ end;
 
 function TSynTempBuffer.InitRandom(RandomLen: integer): pointer;
 begin
-  result := Init(RandomLen); 
+  Init(nil,RandomLen);
   if RandomLen>0 then
-    FillRandom(result,(RandomLen shr 2)+1);
+    FillRandom(buf,(RandomLen shr 2)+1);
+  result := buf;     
 end;
 
 function TSynTempBuffer.InitIncreasing(Count, Start: integer): PIntegerArray;
 begin
-  result := Init((Count-Start)*4);
-  FillIncreasing(result,Start,Count);
+  Init(nil,(Count-Start)*4);
+  FillIncreasing(buf,Start,Count);
+  result := buf;     
 end;
 
 function TSynTempBuffer.InitZero(ZeroLen: integer): pointer;
 begin
-  result := Init(ZeroLen);
-  FillCharFast(result^,ZeroLen,0);
+  Init(nil,ZeroLen-16);
+  FillCharFast(buf^,ZeroLen,0);
+  result := buf;     
 end;
 
 procedure TSynTempBuffer.Done;
@@ -24352,6 +24356,7 @@ function ScanUTF8(P: PUTF8Char; PLen: integer; const fmt: RawUTF8;
 var
   v,w: PtrInt;
   F,FEnd,PEnd: PUTF8Char;
+label next;
 begin
   result := 0;
   if (fmt='') or (P=nil) or (PLen<=0) or (high(values)<0) then
@@ -24399,6 +24404,13 @@ begin
         inc(P,w);
         while (P^<=' ') and (P^<>#0) and (P<=PEnd) do inc(P);
       end;
+      'L': begin
+        w := 0;
+        while not(P[w] in [#0,#10,#13]) and (P+w<=PEnd) do inc(w);
+        SetString(PRawUTF8(values[v])^,PAnsiChar(P),w);
+        inc(P,w);
+      end;
+      '%': goto next;
       else raise ESynException.CreateUTF8('ScanUTF8: unknown ''%'' specifier [%]',[F^,fmt]);
       end;
       inc(result);
@@ -24414,7 +24426,7 @@ begin
         exit;
       break;
     end else begin
-      while (P^<>F^) and (P<=PEnd) do inc(P);
+next: while (P^<>F^) and (P<=PEnd) do inc(P);
       inc(F);
       inc(P);
       if (F>=FEnd) or (P>=PEnd) then
@@ -32240,7 +32252,7 @@ function GetExtended(P: PUTF8Char; out err: integer): TSynExtended;
     1E-6,1E-5,1E-4,1E-3,1E-2,1E-1,1E0,1E1,1E2,1E3,1E4,1E5,1E6,1E7,1E8,1E9,1E10,
     1E11,1E12,1E13,1E14,1E15,1E16,1E17,1E18,1E19,1E20,1E21,1E22,1E23,1E24,1E25,
     1E26,1E27,1E28,1E29,1E30,1E31);
-  function IntPower(Exponent: Integer): TSynExtended;
+  function IntPower(Exponent: Integer): TSynExtended; {$ifdef HASINLINE}inline;{$endif}
   var Y: Cardinal;
       LBase: Int64;
   begin
@@ -36710,6 +36722,15 @@ begin
   WR.B := P+16;
 end;
 
+function TSynSystemTime.ToDateTime: TDateTime;
+var time: TDateTime;
+begin
+  if TryEncodeDate(Year,Month,Day,result) then
+    if TryEncodeTime(Hour,Minute,Second,MilliSecond,time) then
+      result := result+time else
+      result := 0 else
+    result := 0;
+end;
 
 { TTimeZoneData }
 
