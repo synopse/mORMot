@@ -15879,6 +15879,7 @@ type
     // - typical use is to declare a fTimeElapsed: TPrecisionTimer protected
     // member, then call fTimeElapsed.ProfileCurrentMethod at the beginning of
     // all process expecting some timing, then log/save fTimeElapsed.Stop content
+    // - FPC TIP: result should be assigned to a local variable of IUnknown type
     function ProfileCurrentMethod: IUnknown;
     /// low-level method to force values settings to allow thread safe timing
     // - by default, this timer is not thread safe: you can use this method to
