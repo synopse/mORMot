@@ -52,18 +52,7 @@ unit SynFPCLinux;
 
 interface
 
-{$MODE objfpc}
-{$inline on}
-{$h+}
-{$R-} // disable Range checking in our code
-{$S-} // disable Stack checking in our code
-
-{$ifdef ANDROID}
-  {$define LINUX}
-{$endif}
-{$ifdef BSD}
-  {$define LINUX}
-{$endif}
+{$I Synopse.inc} // set proper flags, and define LINUX for BSD and ANDROID
 
 uses
   SysUtils
@@ -86,9 +75,9 @@ procedure InitializeCriticalSection(var cs : TRTLCriticalSection); inline;
 /// compatibility function, wrapping Win32 API mutex finalization
 procedure DeleteCriticalSection(var cs : TRTLCriticalSection); inline;
 
-{$ifdef Linux}
+{$ifdef LINUX}
 
-{$ifndef BSD}
+{$ifdef LINUXNOTBSD}
 const
   CLOCK_REALTIME = 0;
   CLOCK_MONOTONIC = 1;
@@ -101,7 +90,7 @@ var
   // contains CLOCK_MONOTONIC_COARSE since kernel 2.6.32
   CLOCK_MONOTONIC_TICKCOUNT: integer = CLOCK_MONOTONIC;
 
-{$endif BSD}
+{$endif LINUXNOTBSD}
 
 /// used by TSynMonitorMemory.RetrieveMemoryInfo to compute the sizes in byte
 function getpagesize: Integer; cdecl; external 'c';
@@ -157,7 +146,7 @@ var
 // - under Linux/FPC, this API truncates the name to 16 chars
 procedure SetUnixThreadName(ThreadID: TThreadID; const Name: RawByteString);
 
-{$endif Linux}
+{$endif LINUX}
 
 /// compatibility function, to be implemented according to the running OS
 // - expect more or less the same result as the homonymous Win32 API function
@@ -175,10 +164,10 @@ procedure SleepHiRes(ms: cardinal); inline;
 
 implementation
 
-{$ifdef Linux}
+{$ifdef LINUX}
 uses
-  Classes, Unix, BaseUnix, {$ifndef BSD}linux,{$endif} dl;
-{$endif}
+  Classes, Unix, BaseUnix, {$ifdef LINUXNOTBSD}linux,{$endif} dl;
+{$endif LINUX}
 
 procedure InitializeCriticalSection(var cs : TRTLCriticalSection);
 begin
@@ -187,13 +176,13 @@ end;
 
 procedure DeleteCriticalSection(var cs : TRTLCriticalSection);
 begin
-  {$ifndef BSD}
+  {$ifdef LINUXNOTBSD}
   if cs.__m_kind<>0 then
-  {$endif}
+  {$endif LINUXNOTBSD}
     DoneCriticalSection(cs);
 end;
 
-{$ifdef Linux}
+{$ifdef LINUX}
 
 const // Date Translation - see http://en.wikipedia.org/wiki/Julian_day
   HoursPerDay = 24;
@@ -267,7 +256,7 @@ const
   C_MILLION  = Int64(C_THOUSAND * C_THOUSAND);
   C_BILLION  = Int64(C_THOUSAND * C_THOUSAND * C_THOUSAND);
 
-{$ifdef Darwin}
+{$ifdef DARWIN}
 // clock_gettime() is not implemented: http://stackoverflow.com/a/5167506/458259
 
 type
@@ -330,7 +319,7 @@ const
   CLOCK_MONOTONIC_FAST = 12; // FreeBSD specific
   CLOCK_MONOTONIC_TICKCOUNT = CLOCK_MONOTONIC;
   CLOCK_REALTIME_TICKCOUNT = CLOCK_REALTIME;
-{$endif}
+{$endif BSD}
 
 function GetTickCount64: Int64;
 var tp: timespec;
@@ -360,7 +349,7 @@ begin
   value := r.tv_nsec+r.tv_sec*C_BILLION;
 end;
 
-{$endif Darwin}
+{$endif DARWIN}
 
 function QueryPerformanceFrequency(out Value: Int64): boolean;
 begin
@@ -449,17 +438,17 @@ begin
   if fpuname(uts)=0 then begin
     P := @uts.release[0];
     KernelRevision := GetNext shl 16+GetNext shl 8+GetNext;
-    {$ifndef BSD}
+    {$ifdef LINUXNOTBSD}
     if KernelRevision>=$020620 then begin // expects kernel 2.6.32 or higher
       CLOCK_MONOTONIC_TICKCOUNT := CLOCK_MONOTONIC_COARSE;
       CLOCK_REALTIME_TICKCOUNT := CLOCK_REALTIME_COARSE;
     end;
-    {$endif BSD}
+    {$endif LINUXNOTBSD}
   end;
-  {$ifdef Darwin}
+  {$ifdef DARWIN}
   mach_timebase_info(mach_timeinfo);
   mach_timecoeff := mach_timeinfo.Numer/mach_timeinfo.Denom;
-  {$endif}
+  {$endif DARWIN}
 end;
 
 
@@ -468,9 +457,9 @@ type
     Loaded: boolean;
     {$ifdef LINUX}
     pthread: pointer;
-    {$ifndef BSD} // see https://stackoverflow.com/a/7989973/458259
+    {$ifdef LINUXNOTBSD} // see https://stackoverflow.com/a/7989973/458259
     pthread_setname_np: function(thread: pointer; name: PAnsiChar): LongInt; cdecl;
-    {$endif BSD}
+    {$endif LINUXNOTBSD}
     {$endif LINUX}
     procedure EnsureLoaded;
     procedure Done;
@@ -485,11 +474,11 @@ begin
   {$ifdef LINUX}
   pthread := dlopen({$ifdef ANDROID}'libc.so'{$else}'libpthread.so.0'{$endif}, RTLD_LAZY);
   if pthread <> nil then begin
-    {$ifndef BSD}
-    pointer(pthread_setname_np) := dlsym(pthread, 'pthread_setname_np');
-    {$endif BSD}
+    {$ifdef LINUXNOTBSD}
+    @pthread_setname_np := dlsym(pthread, 'pthread_setname_np');
+    {$endif LINUXNOTBSD}
   end;
-  {$endif}
+  {$endif LINUX}
   Loaded := true;
 end;
 
@@ -500,12 +489,12 @@ begin
   {$ifdef LINUX}
   if pthread <> nil then
     dlclose(pthread);
-  {$endif}
+  {$endif LINUX}
   Loaded := false;
 end;
 
 procedure SetUnixThreadName(ThreadID: TThreadID; const Name: RawByteString);
-var trunc: array[0..15] of AnsiChar; // truncated to 16 chars
+var trunc: array[0..15] of AnsiChar; // truncated to 16 bytes (including #0)
     i,L: integer;
 begin
   if Name = '' then
@@ -529,11 +518,11 @@ begin
   if L = 0 then
     exit;
   trunc[L] := #0;
-  {$ifndef BSD}
+  {$ifdef LINUXNOTBSD}
   ExternalLibraries.EnsureLoaded;
   if Assigned(ExternalLibraries.pthread_setname_np) then
     ExternalLibraries.pthread_setname_np(pointer(ThreadID), @trunc[0]);
-  {$endif}
+  {$endif LINUXNOTBSD}
 end;
 
 initialization
@@ -541,5 +530,5 @@ initialization
 
 finalization
   ExternalLibraries.Done;
-{$endif Linux}
+{$endif LINUX}
 end.
