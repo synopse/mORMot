@@ -12273,6 +12273,8 @@ type
     // - e.g. append '20110325 19241502 '
     // - as called by TTextWriter.AddCurrentLogTime()
     procedure AddLogTime(WR: TTextWriter);
+    /// convert the stored time into a TDateTime
+    function ToDateTime: TDateTime;
   end;
   PSynSystemTime = ^TSynSystemTime;
 
@@ -32250,7 +32252,7 @@ function GetExtended(P: PUTF8Char; out err: integer): TSynExtended;
     1E-6,1E-5,1E-4,1E-3,1E-2,1E-1,1E0,1E1,1E2,1E3,1E4,1E5,1E6,1E7,1E8,1E9,1E10,
     1E11,1E12,1E13,1E14,1E15,1E16,1E17,1E18,1E19,1E20,1E21,1E22,1E23,1E24,1E25,
     1E26,1E27,1E28,1E29,1E30,1E31);
-  function IntPower(Exponent: Integer): TSynExtended;
+  function IntPower(Exponent: Integer): TSynExtended; {$ifdef HASINLINE}inline;{$endif}
   var Y: Cardinal;
       LBase: Int64;
   begin
@@ -36720,6 +36722,15 @@ begin
   WR.B := P+16;
 end;
 
+function TSynSystemTime.ToDateTime: TDateTime;
+var time: TDateTime;
+begin
+  if TryEncodeDate(Year,Month,Day,result) then
+    if TryEncodeTime(Hour,Minute,Second,MilliSecond,time) then
+      result := result+time else
+      result := 0 else
+    result := 0;
+end;
 
 { TTimeZoneData }
 
