@@ -3497,7 +3497,7 @@ begin
   if P=nil then
     result := '' else begin
     S := P;
-    while S^>=' ' do
+    while S^>=' ' do // break on any control char
       inc(S);
     SetString(result,P,S-P);
     while (S^<>#0) and (S^<' ') do inc(S); // ignore e.g. #13 or #10
@@ -6430,7 +6430,7 @@ begin
     if s='' then
       break; // headers end with a void line
     if length(Headers)<=n then
-      SetLength(Headers,n+10);
+      SetLength(Headers,n+n shr 3+10);
     Headers[n] := s;
     inc(n);
     P := pointer(s);
@@ -6595,8 +6595,8 @@ end;
 function THttpServerSocket.GetRequest(withBody: boolean=true): boolean;
 var P: PAnsiChar;
     i, L: integer;
-    H: ^PAnsiChar;
-    pH: PAnsiChar;
+    H: ^PByteArray;
+    up: PByteArray;
     maxtix, status: cardinal;
     reason: SockString;
 begin
@@ -6618,29 +6618,34 @@ begin
     // get headers and content
     GetHeader;
     if fServer<>nil then begin // e.g. =nil from TRTSPOverHTTPServer
+      up := pointer(@NormToUpper);
       L := length(fServer.fRemoteIPHeaderUpper);
-      if L<>0 then  begin
+      if L<>0 then begin
         H := pointer(Headers);
         for i := 1 to length(Headers) do
-        if IdemPChar(H^,pointer(fServer.fRemoteIPHeaderUpper)) and (H^[L]=':') then begin
-          repeat inc(L) until H^[L]<>' ';
-          if H^[L]<>#0 then
-            fRemoteIP := H^+L;
-          break;
-        end else
-          inc(H);
+          if IdemPCharUp(H^,pointer(fServer.fRemoteIPHeaderUpper),up) and
+             (H^[L]=ord(':')) then begin
+            P := pointer(@H^[L]);
+            repeat inc(P) until P^<>' ';
+            if P^<>#0 then
+              fRemoteIP := P^;
+            break;
+          end else
+            inc(H);
       end;
       // remote connection ID
       L := length(fServer.fRemoteConnIDHeaderUpper);
-      if L<>0 then  begin
+      if L<>0 then begin
         H := pointer(Headers);
         for i := 1 to length(Headers) do
-        if IdemPChar(H^,pointer(fServer.fRemoteConnIDHeaderUpper)) and (H^[L]=':') then begin
-          pH := H^+L+1; while (pH^=' ') do inc(pH);
-          fRemoteConnectionID := GetNextItemUInt64(pH);
-          break;
-        end else
-          inc(H);
+          if IdemPCharUp(H^,pointer(fServer.fRemoteConnIDHeaderUpper),up) and
+             (H^[L]=ord(':')) then begin
+            P := pointer(@H^[L]);
+            repeat inc(P) until P^<>' ';
+            fRemoteConnectionID := GetNextItemUInt64(P);
+            break;
+          end else
+            inc(H);
       end;
     end;
     if ConnectionClose then
