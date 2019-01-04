@@ -12,7 +12,7 @@ index 8a1cf91..597fbd0 100644
  
  #endif /* js_Initialization_h */
 diff --git a/js/src/jsalloc.h b/js/src/jsalloc.h
-index dd27579..01d62e5 100644
+index 7805c5f..e0e1b48 100644
 --- a/js/src/jsalloc.h
 +++ b/js/src/jsalloc.h
 @@ -17,7 +17,7 @@
@@ -25,10 +25,10 @@ index dd27579..01d62e5 100644
  namespace js {
  
 diff --git a/js/src/jsapi.cpp b/js/src/jsapi.cpp
-index a99d089..ca7470f 100644
+index a99d089..6525f64 100644
 --- a/js/src/jsapi.cpp
 +++ b/js/src/jsapi.cpp
-@@ -6865,3 +6865,152 @@ js::GetStackFormat(JSContext* cx)
+@@ -6865,3 +6865,178 @@ js::GetStackFormat(JSContext* cx)
  {
      return cx->stackFormat();
  }
@@ -37,152 +37,178 @@ index a99d089..ca7470f 100644
 +JS_PUBLIC_API(JSObject*)
 +JS_NewDateObjectMsec(JSContext* cx, double msec)
 +{
-+	AssertHeapIsIdle(cx);
-+	CHECK_REQUEST(cx);
-+	JS::ClippedTime time = JS::TimeClip(msec);
-+	return NewDateObjectMsec(cx, time);
++    AssertHeapIsIdle(cx);
++    CHECK_REQUEST(cx);
++    JS::ClippedTime time = JS::TimeClip(msec);
++    return NewDateObjectMsec(cx, time);
 +}
 +
 +JS_PUBLIC_API(void*)
 +JS_NewRootedValue(JSContext* cx, uint64_t initial)
 +{
-+	return js_new<JS::RootedValue>(cx, JS::Value::fromRawBits(initial));
++    return js_new<JS::RootedValue>(cx, JS::Value::fromRawBits(initial));
 +}
 +
 +JS_PUBLIC_API(void)
 +JS_FreeRooteValue(void* val)
 +{
-+	js_delete(reinterpret_cast<JS::RootedValue*>(val));
++    js_delete(reinterpret_cast<JS::RootedValue*>(val));
 +}
 +
 +JS_PUBLIC_API(void*)
 +JS_NewRootedObject(JSContext* cx, JSObject* initial)
 +{
-+	return js_new<JS::RootedObject>(cx, initial);
++    return js_new<JS::RootedObject>(cx, initial);
 +}
 +
 +JS_PUBLIC_API(void)
 +JS_FreeRootedObject(void* obj)
 +{
-+	js_delete(reinterpret_cast<JS::RootedObject*>(obj));
++    js_delete(reinterpret_cast<JS::RootedObject*>(obj));
 +}
 +
 +JS_PUBLIC_API(void*)
 +JS_NewRootedString(JSContext* cx, JSString* initial)
 +{
-+	return js_new<JS::RootedString>(cx, initial);
++    return js_new<JS::RootedString>(cx, initial);
 +}
 +
 +JS_PUBLIC_API(void)
 +JS_FreeRootedString(void* str)
 +{
-+	js_delete(reinterpret_cast<JS::RootedString*>(str));
++    js_delete(reinterpret_cast<JS::RootedString*>(str));
 +}
 +
 +
 +JS_PUBLIC_API(void*)
 +JS_NewCompileOptions(JSContext* cx)
 +{
-+	return js_new<JS::CompileOptions>(cx);
++    return js_new<JS::CompileOptions>(cx);
 +}
 +
 +JS_PUBLIC_API(void)
 +JS_FreeCompileOptions(void* co)
 +{
-+	js_delete(reinterpret_cast<JS::CompileOptions*>(co));
++    js_delete(reinterpret_cast<JS::CompileOptions*>(co));
 +}
 +
 +JS_PUBLIC_API(void*)
 +JS_NewCompartmentOptions()
 +{
-+	return js_new<JS::CompartmentOptions>();
++    return js_new<JS::CompartmentOptions>();
 +}
 +
 +JS_PUBLIC_API(void)
 +JS_FreeCompartmentOptions(void* opt)
 +{
-+	js_delete(reinterpret_cast<JS::CompartmentOptions*>(opt));
++    js_delete(reinterpret_cast<JS::CompartmentOptions*>(opt));
 +}
 +
 +JS_PUBLIC_API(void*)
 +JS_NewAutoCheckCannotGC()
 +{
-+	return js_new<JS::AutoCheckCannotGC>();
++    return js_new<JS::AutoCheckCannotGC>();
 +}
 +
 +JS_PUBLIC_API(void)
 +JS_FreeAutoCheckCannotGC(void* ac)
 +{
-+	js_delete(reinterpret_cast<JS::AutoCheckCannotGC*>(ac));
++    js_delete(reinterpret_cast<JS::AutoCheckCannotGC*>(ac));
 +}
 +
 +JS_PUBLIC_API(void*)
 +JS_GetContextOptions(JSContext* cx)
 +{
-+	return &JS::ContextOptionsRef(cx);
++    return &JS::ContextOptionsRef(cx);
 +}
 +
 +JS_PUBLIC_API(bool)
 +JS_EvaluateScript(JSContext* cx, const JS::CompileOptions& options,
-+	const char* bytes, size_t length, JS::MutableHandleValue rval)
++    const char* bytes, size_t length, JS::MutableHandleValue rval)
 +{
-+	return JS::Evaluate(cx, options, bytes, length, rval);
++    return JS::Evaluate(cx, options, bytes, length, rval);
 +}
 +
 +JS_PUBLIC_API(bool)
 +JS_EvaluateUCScript(JSContext* cx, const JS::CompileOptions& options,
-+	const char16_t* chars, size_t length, JS::MutableHandleValue rval)
++    const char16_t* chars, size_t length, JS::MutableHandleValue rval)
 +{
-+	return JS::Evaluate(cx, options, chars, length, rval);
++    return JS::Evaluate(cx, options, chars, length, rval);
 +}
 +
 +JS_PUBLIC_API(JSObject*)
 +JS_NewArrayObject2(JSContext* cx, const JS::HandleValueArray& contents)
 +{
-+	return JS_NewArrayObject(cx, contents);
++    return JS_NewArrayObject(cx, contents);
 +}
 +
 +JS_PUBLIC_API(bool)
 +JS_InitModuleClasses(JSContext* cx, HandleObject obj)
 +{
-+	//return js::InitModuleClasses(cx, obj);
-+	return true;
++    //return js::InitModuleClasses(cx, obj);
++    return true;
 +}
 +
 +JS_PUBLIC_API(JSObject*)
 +JS_CompileModule(JSContext* cx, HandleObject obj, JS::CompileOptions& options,
-+	const char16_t* chars, size_t length)
++    const char16_t* chars, size_t length)
 +{
-+	SourceBufferHolder srcBuf(chars, length, SourceBufferHolder::NoOwnership);
-+	return frontend::CompileModule(cx, options, srcBuf);
++    SourceBufferHolder srcBuf(chars, length, SourceBufferHolder::NoOwnership);
++    return frontend::CompileModule(cx, options, srcBuf);
 +}
 +
 +JS_PUBLIC_API(void)
 +JS_SetModuleResolveHook(JSContext* cx, HandleFunction hook)
 +{
-+	Rooted<GlobalObject*> global(cx, cx->global());
-+	global->setModuleResolveHook(hook);
++    Rooted<GlobalObject*> global(cx, cx->global());
++    global->setModuleResolveHook(hook);
 +}
 +
 +JS_PUBLIC_API(JS::Value)
 +JS_ComputeThis(JSContext* cx, JS::Value* vp)
 +{
-+	return JS::detail::ComputeThis(cx, vp);
++    return JS::detail::ComputeThis(cx, vp);
 +}
 +
 +JS_PUBLIC_API(bool)
 +JS_Initialize(void)
 +{
-+	return JS_Init();
++    return JS_Init();
 +}
 +
 +JS_PUBLIC_API(uint64_t)
 +JS_GetReservedSlot1(JSObject* obj, uint32_t index)
 +{
-+	return obj->as<NativeObject>().getReservedSlot(index).asRawBits();
++    return obj->as<NativeObject>().getReservedSlot(index).asRawBits();
++}
++
++JS_PUBLIC_API(JS::AutoIdVector*)
++JS_EnumerateToAutoIdVector(JSContext* cx, HandleObject obj, size_t* length, jsid** data)
++{
++    AssertHeapIsIdle(cx);
++    CHECK_REQUEST(cx);
++    assertSameCompartment(cx, obj);
++
++    JS::AutoIdVector* v = new JS::AutoIdVector(cx);
++    if (!GetPropertyKeys(cx, obj, JSITER_OWNONLY, v)) {
++        delete v;
++        *length = 0;
++        *data = nullptr;
++        return nullptr;
++    }
++
++    *length = v->length();
++    *data = v->begin();
++    return v;
++}
++
++JS_PUBLIC_API(void)
++JS_DestroyAutoIdVector(JS::AutoIdVector* v)
++{
++    delete v;
 +}
 diff --git a/js/src/jsapi.h b/js/src/jsapi.h
-index d70c6cf..73afef2 100644
+index 46aa159..41c0a14 100644
 --- a/js/src/jsapi.h
 +++ b/js/src/jsapi.h
 @@ -915,41 +915,41 @@ class MOZ_STACK_CLASS SourceBufferHolder final
@@ -2070,7 +2096,7 @@ index d70c6cf..73afef2 100644
  JS_IsIdentifier(JSContext* cx, JS::HandleString str, bool* isIdentifier);
  
  /**
-@@ -6630,4 +6630,72 @@ SetGetPerformanceGroupsCallback(JSContext*, GetGroupsCallback, void*);
+@@ -6631,4 +6631,78 @@ SetGetPerformanceGroupsCallback(JSContext*, GetGroupsCallback, void*);
  } /* namespace js */
  
  
@@ -2141,6 +2167,12 @@ index d70c6cf..73afef2 100644
 +
 +extern "C" JS_PUBLIC_API(uint64_t)
 +JS_GetReservedSlot1(JSObject* obj, uint32_t index);
++
++extern "C" JS_PUBLIC_API(JS::AutoIdVector*)
++JS_EnumerateToAutoIdVector(JSContext* cx, JS::HandleObject obj, size_t* length, jsid** data);
++
++extern "C" JS_PUBLIC_API(void)
++JS_DestroyAutoIdVector(JS::AutoIdVector* v);
 +
  #endif /* jsapi_h */
 diff --git a/js/src/jsfriendapi.h b/js/src/jsfriendapi.h
