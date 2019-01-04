@@ -27475,7 +27475,7 @@ end;
 
 {$ifdef USENORMTOUPPER}
 
-function AnsiICompW(u1, u2: PWideChar): PtrInt;
+function AnsiICompW(u1, u2: PWideChar): PtrInt; {$ifdef HASINLINE}inline;{$endif}
 begin
   if u1<>u2 then
     if u1<>nil then
@@ -27767,7 +27767,7 @@ end;
 function AnsiIComp(Str1, Str2: PWinAnsiChar): integer;
 {$ifdef PUREPASCAL}
 begin
-  result := StrIComp(Str1,Str2); // fast enough
+  result := StrIComp(Str1,Str2); // fast enough, especially since inlined
 end;
 {$else}
 asm
@@ -47357,7 +47357,7 @@ end;
 function SortDynArrayString(const A,B): integer;
 begin
   {$ifdef UNICODE}
-  result := SysUtils.StrComp(PChar(A),PChar(B));
+  result := StrCompW(PWideChar(A),PWideChar(B));
   {$else}
   result := StrComp(PUTF8Char(A),PUTF8Char(B));
   {$endif}
