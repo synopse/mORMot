@@ -13179,7 +13179,7 @@ const
     '7', '7 64bit', 'Server 2008 R2', 'Server 2008 R2 64bit',
     '8', '8 64bit', 'Server 2012', 'Server 2012 64bit',
     '8.1', '8.1 64bit', 'Server 2012 R2', 'Server 2012 R2 64bit',
-    '10', '10 64bit', 'Server 2016', 'Server 2016 64bit');
+    '10', '10 64bit', 'Server 2016', 'Server 2016 64bit', 'Server 2019 64bit');
 
   /// the compiler family used
   COMP_TEXT = {$ifdef FPC}'Fpc'{$else}'Delphi'{$endif};
@@ -26833,9 +26833,13 @@ begin
     10: Vers := wTen;
   end;
   if Vers>=wVista then begin
-    if OSVersionInfo.wProductType<>VER_NT_WORKSTATION then
+
       inc(Vers,2); // e.g. wEight -> wServer2012
-    if SystemInfo.wProcessorArchitecture=PROCESSOR_ARCHITECTURE_AMD64 then
+      if OSVersionInfo.dwBuildNumber>=17763 then // https://stackoverflow.com/q/53393150
+        inc(Vers, 2); // wServer2016 -> wServer2019_64
+    end;
+    if (SystemInfo.wProcessorArchitecture=PROCESSOR_ARCHITECTURE_AMD64) and
+       (Vers < wServer2019_64) then
       inc(Vers);   // e.g. wEight -> wEight64
     OpenProcessAccess := PROCESS_QUERY_LIMITED_INFORMATION;
   end else
