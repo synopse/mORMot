@@ -1753,7 +1753,7 @@ function CompareOperator(FieldType: TSynTableFieldType; SBF, SBFEnd: PUTF8Char;
 procedure ToSBFStr(const Value: RawByteString; out Result: TSBFString);
 
 
-{ ************ low-level buffer processing functions************************* }
+{ ************ low-level buffer processing functions ************************* }
 
 type
   /// implements a thread-safe Bloom Filter storage
@@ -2160,6 +2160,127 @@ type
     /// unregister one credential for a given user
     procedure DisauthenticateUser(const aName: RawUTF8); override;
   end;
+
+
+{ ************ Expression Search Engine ************************** }
+
+type
+  /// exception type used by TExprParser
+  EExprParser = class(ESynException);
+
+  /// identify an expression search engine node type, as used by TExprParser
+  TExprNodeType = (entWord, entNot, entOr, entAnd);
+
+  TExprParserAbstract = class;
+
+  /// stores an expression search engine node, as used by TExprParser
+  TExprNode = class(TSynPersistent)
+  protected
+    fNext: TExprNode;
+    fNodeType: TExprNodeType;
+    function Append(node: TExprNode): boolean;
+  public
+    /// initialize a node for the search engine
+    constructor Create(nodeType: TExprNodeType); reintroduce;
+    /// recursively destroys the linked list of nodes (i.e. Next)
+    destructor Destroy; override;
+    /// browse all nodes until Next = nil
+    function Last: TExprNode;
+    /// points to the next node in the parsed tree
+    property Next: TExprNode read fNext;
+    /// what is actually stored in this node
+    property NodeType: TExprNodeType read fNodeType;
+  end;
+
+  /// abstract class to handle word search, as used by TExprParser
+  TExprNodeWordAbstract = class(TExprNode)
+  protected
+    fOwner: TExprParserAbstract;
+    fWord: RawUTF8;
+    /// you should override this virtual method for proper search
+    function Found: boolean; virtual; abstract;
+  public
+    /// you should override this virtual constructor for proper initialization
+    constructor Create(aOwner: TExprParserAbstract; const aWord: RawUTF8); reintroduce; virtual;
+  end;
+
+  /// class-refrence type (metaclass) for a TExprNode
+  // - allow to customize the actual searching process for entWord
+  TExprNodeWordClass = class of TExprNodeWordAbstract;
+
+  /// results returned by TExprParserAbstract.Parse method
+  TExprParserResult = (
+    eprSuccess, eprNoExpression,
+    eprMissingParenthesis, eprTooManyParenthesis, eprMissingFinalWord);
+
+  /// abstract class to parse a text expression into nodes
+  // - you should inherit this class to provide actual text search
+  // - searched expressions can use parenthesis and &=AND -=WITHOUT +=OR operators,
+  // e.g. '((w1 & w2) - w3) + w4' means ((w1 and w2) without w3) or w4
+  // - no operator is handled like a AND, e.g. 'w1 w2' = 'w1 & w2'
+  // - matching words should have no space nor & + - ( ) characters, or should
+  // be double-quotes-espaced as in SQL ('"one two" + "one ""two"" three"')
+  TExprParserAbstract = class(TSynPersistent)
+  protected
+    fWordClass: TExprNodeWordClass;
+    fExpression: RawUTF8;
+    fCurrentWord: RawUTF8;
+    fCurrent: PUTF8Char;
+    fCurrentError: TExprParserResult;
+    fFirstNode: TExprNode;
+    fWordCount: integer;
+    fFoundStack: array[byte] of boolean; // simple stack-based virtual machine
+    procedure ParseNextCurrentWord;
+    function ParseExpr: TExprNode;
+    function ParseFactor: TExprNode;
+    function ParseTerm: TExprNode;
+    // may be overriden to provide custom escaping
+    procedure ParseNextWord; virtual;
+    procedure Clear; virtual;
+    /// perform the expression search, calling virtual TExprNodeWord.Found
+    function Found: boolean;
+  public
+    /// initialize an expression parser
+    // - you should reintroduce this method to initialize properly the entWord
+    // searching class and all temporary structures needed for actual search
+    constructor Create(aWordClass: TExprNodeWordClass); reintroduce;
+    /// finalize the expression parser
+    destructor Destroy; override;
+    /// initialize the parser from a given text expression
+    function Parse(const aExpression: RawUTF8): TExprParserResult;
+    /// the associated text expression used to define the search
+    property Expression: RawUTF8 read fExpression;
+    /// how many words did appear in the search expression
+    property WordCount: integer read fWordCount;
+  end;
+
+  TExprParserMatchOne = record
+    match: TMatch;
+    matched: boolean;
+  end;
+  PExprParserMatchOne = ^TExprParserMatchOne;
+
+  /// search expression engine using TMatch for the actual searches
+  TExprParserMatch = class(TExprParserAbstract)
+  protected
+    fCaseSensitive: boolean;
+    fWord: array of TExprParserMatchOne;
+    fMatchedLastSet: integer;
+    procedure Clear; override;
+  public
+    /// initialize the search engine
+    constructor Create(aCaseSensitive: boolean = true); reintroduce;
+    /// returns TRUE if the expression is within the text buffer
+    function Search(aText: PUTF8Char; aTextLen: PtrInt): boolean; overload;
+    /// returns TRUE if the expression is within the text buffer
+    function Search(const aText: RawUTF8): boolean; overload;
+  end;
+
+const
+  /// may be used when overriding TExprParserAbstract.ParseNextWord method
+  PARSER_STOPCHAR = ['&', '+', '-', '(', ')'];
+
+function ToText(r: TExprParserResult): PShortString; overload;
 
 
 implementation
@@ -8046,6 +8167,361 @@ begin
     MoveFast(P^,PBegin^,PEnd-P); // erase content
   fStream.Seek(PBegin-P,soCurrent); // adjust current stream position
 end;
+
+
+{ ************ Expression Search Engine ************************** }
+
+function ToText(r: TExprParserResult): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TExprParserResult), ord(r));
+end;
+
+
+{ TExprNode }
+
+function TExprNode.Append(node: TExprNode): boolean;
+begin
+  result := node <> nil;
+  if result then
+    Last.fNext := node;
+end;
+
+constructor TExprNode.Create(nodeType: TExprNodeType);
+begin
+  inherited Create;
+  fNodeType := nodeType;
+end;
+
+destructor TExprNode.Destroy;
+begin
+  fNext.Free;
+  inherited Destroy;
+end;
+
+function TExprNode.Last: TExprNode;
+begin
+  result := self;
+  while result.Next <> nil do
+    result := result.Next;
+end;
+
+
+{ TExprParserAbstract }
+
+constructor TExprParserAbstract.Create(aWordClass: TExprNodeWordClass);
+begin
+  inherited Create;
+  if (aWordClass = nil) or (aWordClass = TExprNodeWordAbstract) then
+    raise EExprParser.CreateUTF8('%.Create(?)', [self]);
+  fWordClass := aWordClass;
+end;
+
+destructor TExprParserAbstract.Destroy;
+begin
+  Clear;
+  inherited Destroy;
+end;
+
+procedure TExprParserAbstract.Clear;
+begin
+  fWordCount := 0;
+  fExpression := '';
+  FreeAndNil(fFirstNode);
+end;
+
+procedure TExprParserAbstract.ParseNextCurrentWord;
+var
+  P: PUTF8Char;
+begin
+  fCurrentWord := '';
+  P := fCurrent;
+  if P = nil then
+    exit;
+  while P^ in [#1..' '] do
+    inc(P);
+  if P^ = #0 then
+    exit;
+  if P^ in PARSER_STOPCHAR then begin
+    fCurrentWord := P^;
+    fCurrent := P + 1;
+  end
+  else begin
+    fCurrent := P;
+    ParseNextWord;
+  end;
+end;
+
+
+procedure TExprParserAbstract.ParseNextWord;
+const
+  STOPCHAR = PARSER_STOPCHAR + [#0, ' '];
+var
+  P: PUTF8Char;
+begin
+  P := fCurrent;
+  if P^ = '"' then // unescape double quotes "" within text
+    P := UnQuoteSQLStringVar(P, fCurrentWord)
+  else begin
+    while not(P^ in STOPCHAR) do
+      inc(P);
+    SetString(fCurrentWord, PAnsiChar(fCurrent), P - fCurrent);
+  end;
+  fCurrent := P;
+end;
+
+function TExprParserAbstract.ParseExpr: TExprNode;
+begin
+  result := ParseFactor;
+  ParseNextCurrentWord;
+  if fCurrentWord = '' then
+    exit;
+  if length(fCurrentWord) = 1 then
+    case fCurrentWord[1] of
+      '&': begin // w1 AND w2
+        ParseNextCurrentWord;
+        if result.Append(ParseExpr) then
+          result.Append(TExprNode.Create(entAnd));
+        exit;
+      end;
+      '+': begin // w1 OR w2
+        ParseNextCurrentWord;
+        if result.Append(ParseExpr) then
+          result.Append(TExprNode.Create(entOr));
+        exit;
+      end;
+      ')':
+        exit;
+    end;
+  // 'w1 w2' = 'w1 & w2'
+  if result.Append(ParseExpr) then
+    result.Append(TExprNode.Create(entAnd));
+end;
+
+function TExprParserAbstract.ParseFactor: TExprNode;
+begin
+  if fCurrentError <> eprSuccess then
+    result := nil
+  else if fCurrentWord = '-' then begin
+    ParseNextCurrentWord;
+    result := ParseFactor;
+    result.Append(TExprNode.Create(entNot));
+  end
+  else
+    result := ParseTerm;
+end;
+
+function TExprParserAbstract.ParseTerm: TExprNode;
+begin
+  if fCurrentError <> eprSuccess then
+    result := nil
+  else if fCurrentWord = '(' then begin
+    ParseNextCurrentWord;
+    result := ParseExpr;
+    if fCurrentWord <> ')' then begin
+      FreeAndNil(result);
+      fCurrentError := eprMissingParenthesis;
+    end;
+  end
+  else if fCurrentWord = '' then begin
+    result := nil;
+    fCurrentError := eprMissingFinalWord;
+  end
+  else begin // calls meta-class overriden constructor
+    result := fWordClass.Create(self, fCurrentWord);
+    inc(fWordCount);
+  end;
+end;
+
+function TExprParserAbstract.Parse(const aExpression: RawUTF8): TExprParserResult;
+var
+  depth: integer;
+  n: TExprNode;
+begin
+  Clear;
+  fCurrentError := eprSuccess;
+  fCurrent := pointer(aExpression);
+  ParseNextCurrentWord;
+  if fCurrentWord = '' then begin
+    result := eprNoExpression;
+    exit;
+  end;
+  fFirstNode := ParseExpr;
+  result := fCurrentError;
+  if result = eprSuccess then begin
+    depth := 0;
+    n := fFirstNode;
+    while n <> nil do begin
+      case n.NodeType of
+        entWord: begin
+          inc(depth);
+          if depth > high(fFoundStack) then begin
+            result := eprTooManyParenthesis;
+            break;
+          end;
+        end;
+        entOr, entAnd:
+          dec(depth);
+      end;
+      n := n.Next;
+    end;
+  end;
+  if result = eprSuccess then
+    fExpression := aExpression
+  else
+    Clear;
+  fCurrent := nil;
+end;
+
+function TExprParserAbstract.Found: boolean;
+var
+  n: TExprNode;
+  st: PBoolean;
+begin // code below compiles very efficiently on FPC/x86-64
+  result := false;
+  n := fFirstNode;
+  if n = nil then
+    exit;
+  st := @fFoundStack;
+  repeat
+    case n.NodeType of
+      entWord: begin
+        st^ := TExprNodeWordAbstract(n).Found;
+        if st = @fFoundStack[high(fFoundStack)] then
+          exit; // avoid buffer overflow
+        inc(st);
+      end;
+      entNot:
+        PAnsiChar(st)[-1] := AnsiChar(ord(PAnsiChar(st)[-1]) xor 1);
+      entOr: begin
+        dec(st);
+        PAnsiChar(st)[-1] := AnsiChar(st^ or boolean(PAnsiChar(st)[-1]));
+      end; { TODO : optimize TExprParser OR when left member is already TRUE }
+      entAnd: begin
+        dec(st);
+        PAnsiChar(st)[-1] := AnsiChar(st^ and boolean(PAnsiChar(st)[-1]));
+      end;
+    end;
+    n := n.Next;
+  until n = nil;
+  dec(st);
+  result := st^;
+end;
+
+
+{ TExprNodeWordAbstract }
+
+constructor TExprNodeWordAbstract.Create(aOwner: TExprParserAbstract; const aWord: RawUTF8);
+begin
+  inherited Create(entWord);
+  fWord := aWord;
+  fOwner := aOwner;
+end;
+
+
+{ TExprParserMatchNode }
+
+type
+  TExprParserMatchNode = class(TExprNodeWordAbstract)
+  protected
+    fMatchIndex: integer;
+    function Found: boolean; override;
+  public
+    constructor Create(aOwner: TExprParserAbstract; const aWord: RawUTF8); override;
+  end;
+
+constructor TExprParserMatchNode.Create(aOwner: TExprParserAbstract;
+  const aWord: RawUTF8);
+var
+  m: TExprParserMatch absolute aOwner;
+begin
+  inherited Create(aOwner, aWord);
+  fMatchIndex := length(m.fWord);
+  Setlength(m.fWord, fMatchIndex + 1);
+  m.fWord[fMatchIndex].match.Prepare(fWord, m.fCaseSensitive, {reuse=}true);
+end;
+
+function TExprParserMatchNode.Found: boolean;
+begin
+  result := TExprParserMatch(fOwner).fWord[fMatchIndex].matched;
+end;
+
+
+{ TExprParserMatch }
+
+constructor TExprParserMatch.Create(aCaseSensitive: boolean);
+begin
+  inherited Create(TExprParserMatchNode);
+  fCaseSensitive := aCaseSensitive;
+end;
+
+procedure TExprParserMatch.Clear;
+begin
+  inherited Clear;
+  fWord := nil;
+end;
+
+const // rough estimation
+  IS_UTF8_WORD: TSynAnsicharSet = ['0' .. '9', 'A' .. 'Z', 'a' .. 'z', #$80 ..#$ff];
+
+procedure InitFast(m: PExprParserMatchOne; n: PtrInt);
+begin
+  repeat
+    m^.matched := false;
+    inc(m);
+    dec(n);
+  until n = 0;
+end;
+
+function SearchFast(aText: PUTF8Char; aTextLen: PtrInt;
+  m: PExprParserMatchOne; n: PtrInt): PtrInt;
+begin
+  result := 0;
+  repeat
+    if not m^.matched and m^.match.Match(aText, aTextLen) then begin
+      m^.matched := true;
+      inc(result);
+    end;
+    inc(m);
+    dec(n);
+  until n = 0;
+end;
+
+function TExprParserMatch.Search(aText: PUTF8Char; aTextLen: PtrInt): boolean;
+var
+  P, PEnd: PUTF8Char;
+  n: PtrInt;
+begin
+  result := false;
+  P := aText;
+  if (P = nil) or (fWord = nil) then
+    exit;
+  n := length(fWord);
+  if fMatchedLastSet > 0 then begin
+    InitFast(pointer(fWord), n);
+    fMatchedLastSet := 0;
+  end;
+  PEnd := P + aTextLen;
+  while (P < PEnd) and (fMatchedLastSet < n) do begin
+    while not(P^ in IS_UTF8_WORD) do begin
+      inc(P);
+      if P = PEnd then 
+        break;
+    end;
+    if P = PEnd then
+      break;
+    aText := P;
+    while (P < PEnd) and (P^ in IS_UTF8_WORD) do
+      inc(P);
+    inc(fMatchedLastSet, SearchFast(aText, P - aText, pointer(fWord), n));
+  end;
+  result := Found;
+end;
+
+function TExprParserMatch.Search(const aText: RawUTF8): boolean;
+begin
+  result := Search(pointer(aText), length(aText));
+end;
+
 
 
 initialization

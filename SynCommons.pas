@@ -26835,8 +26835,8 @@ begin
   if Vers>=wVista then begin
     if OSVersionInfo.wProductType<>VER_NT_WORKSTATION then begin // Server edition
       inc(Vers,2); // e.g. wEight -> wServer2012
-      if OSVersionInfo.dwBuildNumber>=17763 then // https://stackoverflow.com/q/53393150
-        inc(Vers, 2); // wServer2016 -> wServer2019_64
+      if (Vers=wServer2016) and (OSVersionInfo.dwBuildNumber>=17763) then
+        Vers := wServer2019_64; // https://stackoverflow.com/q/53393150
     end;
     if (SystemInfo.wProcessorArchitecture=PROCESSOR_ARCHITECTURE_AMD64) and
        (Vers < wServer2019_64) then

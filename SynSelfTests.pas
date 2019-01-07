@@ -344,6 +344,8 @@ type
     procedure _GUID;
     /// test IsMatch() function
     procedure _IsMatch;
+    /// test TExprParserMatch class
+    procedure _TExprParserMatch;
     /// the Soundex search feature (i.e. TSynSoundex and all related
     // functions)
     procedure Soundex;
@@ -3116,6 +3118,47 @@ begin
     Check(IsMatch('[A-Za-z0-9]*',V)=(i in IsWord));
     Check(IsMatch('[a-z0-9]?[A-Z0-9]',V,true)=(i in IsWord));
     Check(IsMatch('[A-Z0-9]*',V,true)=(i in IsWord));
+  end;
+end;
+
+procedure TTestLowLevelCommon._TExprParserMatch;
+var
+  s: TExprParserMatch;
+
+  procedure Test(const expression: RawUTF8; const ok, nok: array of RawUTF8);
+  var i: integer;
+  begin
+    Check(s.Parse(expression) = eprSuccess);
+    for i := 0 to high(ok) do
+      Check(s.Search(ok[i]));
+    for i := 0 to high(nok) do
+      Check(not s.Search(nok[i]));
+  end;
+  
+begin
+  s := TExprParserMatch.Create({casesensitive=}true);
+  try // &=AND -=WITHOUT +=OR 
+    check(s.Parse('') = eprNoExpression);
+    check(s.Parse('  ') = eprNoExpression);
+    check(s.Parse('1+ ') = eprMissingFinalWord);
+    Test('1', ['1', '1 2 3', '2 1'], ['2', '13', '2 3']);
+    Test('   1   ', ['1', '1 2 3', '2 1'], ['2', '13', '2 3']);
+    Test('1+4', ['1', '1 2 3', '2 1', '2 4 3'], ['2', '13', '2 3', '41']);
+    Test(' 1 + 4 ', ['1', '1 2 3', '2 1', '2 4 3'], ['2', '13', '2 3', '41']);
+    Test('1+4+5', ['1', '1 2 3', '2 1', '2 4 3'], ['2', '13', '2 3', '41']);
+    Test('1+(4+5)', ['1', '1 2 3', '2 1', '2 4 3'], ['2', '13', '2 3', '41']);
+    Test('1+4*+5', ['1', '1 2 3', '2 1', '2 4 3', '41'], ['2', '13', '2 3']);
+    Test('1+(4&5)', ['4 5 3', '5 4', '1', '1 2 3', '2 1'], ['2', '13', '2 3', '41', '4 3', '3 5']);
+    Test('1+(4 5)', ['4 5 3', '5 4', '1', '1 2 3', '2 1'], ['2', '13', '2 3', '41', '4 3', '3 5']);
+    Test('1-4', ['1', '1 2 3', '2 1', '2 1 3'], ['1 4', '4 2 1', '2', '13', '2 3', '41']);
+    Test('1-(4&5)', ['1', '1 2 3', '2 1', '1 4', '1 5'],
+       ['2', '5 2 3 4 1', '2 3', '41', '4 3', '3 5', '1 4 5']);
+    Test('1-(4&(5+6))', ['1', '1 2 3', '2 1', '1 4', '1 5', '1 6'],
+       ['2', '5 2 3 4 1', '2 3', '41', '4 3', '3 5', '1 4 5', '1 4 6']);
+    Test('1-(4&("57"+6))', ['1', '1 2 3', '2 1', '1 4', '1 57', '1 6'],
+       ['2', '57 2 3 4 1', '2 3', '41', '4 3', '3 5"7', '1 4 57', '1 4 6']);
+  finally
+    s.Free;
   end;
 end;
 
