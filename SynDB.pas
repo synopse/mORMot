@@ -6837,21 +6837,24 @@ begin
           if V.VText=pointer(tmp) then
             V.VBlobLen := length(tmp) else
             V.VBlobLen := StrLen(V.VText);
-        end;
           {$ifndef UNICODE}
           if (fConnection<>nil) and not fConnection.Properties.VariantStringAsWideString then begin
             VType := varString;
-            CurrentAnsiConvert.UTF8BufferToAnsi(V.VText,V.VBlobLen,RawByteString(VAny));
+            if (CurrentAnsiConvert.CodePage=CP_UTF8) and (V.VText=pointer(tmp)) then
+              RawByteString(VAny) := tmp else
+              CurrentAnsiConvert.UTF8BufferToAnsi(V.VText,V.VBlobLen,RawByteString(VAny));
           end else
-          {$endif}
+          {$endif UNICODE}
             UTF8ToSynUnicode(V.VText,V.VBlobLen,SynUnicode(VAny));
+        end else
+          VType := varString; // avoid obscure "Invalid variant type" in FPC
       end;
       else raise ESQLDBException.CreateUTF8(
         '%.ColumnToVariant: Invalid ColumnType(%)=%',[self,Col,ord(result)]);
     end;
   end;
 end;
-{$endif}
+{$endif LVCL}
 
 function TSQLDBStatement.ColumnTimestamp(Col: integer): TTimeLog;
 begin
