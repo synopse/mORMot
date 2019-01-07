@@ -257,7 +257,7 @@ const
   C_BILLION  = Int64(C_THOUSAND * C_THOUSAND * C_THOUSAND);
 
 {$ifdef DARWIN}
-// clock_gettime() is not implemented: http://stackoverflow.com/a/5167506/458259
+// clock_gettime() is not implemented: http://stackoverflow.com/a/5167506
 
 type
   TTimebaseInfoData = record
@@ -457,7 +457,7 @@ type
     Loaded: boolean;
     {$ifdef LINUX}
     pthread: pointer;
-    {$ifdef LINUXNOTBSD} // see https://stackoverflow.com/a/7989973/458259
+    {$ifdef LINUXNOTBSD} // see https://stackoverflow.com/a/7989973
     pthread_setname_np: function(thread: pointer; name: PAnsiChar): LongInt; cdecl;
     {$endif LINUXNOTBSD}
     {$endif LINUX}

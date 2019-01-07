@@ -170,7 +170,7 @@ type
   // - hcSynShaAes will use SHA-256/AES-256-CFB to encrypt the content (after
   // SynLZ compression), via SynCrypto.CompressShaAes() function
   // - here hcDeflate will use in fact gzip content encoding, since deflate
-  // is inconsistent between browsers: http://stackoverflow.com/a/9186091/458259
+  // is inconsistent between browsers: http://stackoverflow.com/a/9186091
   // - TSQLHttpClientGeneric.Compression default property is [hcSynLZ]
   TSQLHttpCompression = (hcSynLZ, hcDeflate, hcSynShaAes);
 

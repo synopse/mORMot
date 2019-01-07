@@ -13161,7 +13161,7 @@ type
     wSeven, wSeven_64, wServer2008_R2, wServer2008_R2_64,
     wEight, wEight_64, wServer2012, wServer2012_64,
     wEightOne, wEightOne_64, wServer2012R2, wServer2012R2_64,
-    wTen, wTen_64, wServer2016, wServer2016_64);
+    wTen, wTen_64, wServer2016, wServer2016_64, wServer2019_64);
   /// the running Operating System, encoded as a 32-bit integer
   TOperatingSystemVersion = packed record
     case os: TOperatingSystem of
@@ -17986,7 +17986,7 @@ begin
 end;
 
 // UTF-8 is AT MOST 50% bigger than UTF-16 in bytes in range U+0800..U+FFFF
-// see http://stackoverflow.com/a/7008095/458259 -> WideCharCount*3 below
+// see http://stackoverflow.com/a/7008095 -> WideCharCount*3 below
 
 procedure TSynAnsiConvert.InternalAppendUTF8(Source: PAnsiChar; SourceChars: Cardinal;
   DestTextWriter: TObject; Escape: TTextWriterKind);
@@ -26833,7 +26833,7 @@ begin
     10: Vers := wTen;
   end;
   if Vers>=wVista then begin
-
+    if OSVersionInfo.wProductType<>VER_NT_WORKSTATION then begin // Server edition
       inc(Vers,2); // e.g. wEight -> wServer2012
       if OSVersionInfo.dwBuildNumber>=17763 then // https://stackoverflow.com/q/53393150
         inc(Vers, 2); // wServer2016 -> wServer2019_64
@@ -63727,7 +63727,7 @@ end;
 
 {$ifdef KYLIX3}
 type
-  // see http://stackoverflow.com/a/3085509/458259 about this known Kylix bug
+  // see http://stackoverflow.com/a/3085509 about this known Kylix bug
   TEventHack = class(THandleObject) // should match EXACTLY SyncObjs.pas source!
   private
     FEvent: TSemaphore;

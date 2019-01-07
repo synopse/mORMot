@@ -6052,7 +6052,7 @@ begin
       SQLCached := false; // ftUTF8 values will have varying field length
     end;
     dOracle: begin // INSERT ALL INTO ... VALUES ... SELECT 1 FROM DUAL
-      AddShort('insert all'#10); // see http://stackoverflow.com/a/93724/458259
+      AddShort('insert all'#10); // see http://stackoverflow.com/a/93724
       for r := 1 to rowcount do begin
         AddShort('into ');
         AddString(TableName);
@@ -6110,7 +6110,7 @@ begin
   paramCountLimit := 0;
   case Props.fDBMS of
   // values below were done empirically, assuring < 667 (maximum :AA..:ZZ)
-  // see http://stackoverflow.com/a/6582902/458259 for theoritical high limits
+  // see http://stackoverflow.com/a/6582902 for theoritical high limits
   dSQlite:     paramCountLimit := 200;  // theoritical=999
   dMySQL:      paramCountLimit := 500;  // theoritical=60000
   dPostgreSQL: paramCountLimit := 500;  // theoritical=34000

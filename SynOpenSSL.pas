@@ -405,7 +405,7 @@ type
   // - if you work with a lot of concurrent long-living connections (e.g. when
   // implementing a server), you may dramatically reduce the memory consumption
   // (to the prive of a slight performance degradation) by setting
-  // ocoNoReleaseBuffers - see http://stackoverflow.com/a/19294527/458259
+  // ocoNoReleaseBuffers - see http://stackoverflow.com/a/19294527
   // - for security reasons (i.e. to prevent BREACH and CRIME vulnerabilities),
   // and also to reduce memory consumption, TLS compression is disabled by
   // default: set ocoEnabledCompression to enable this unsafe feature

@@ -6127,7 +6127,7 @@ begin
   if aFalsePositivePercent>100 then
     fFalsePositivePercent := 100 else
     fFalsePositivePercent := aFalsePositivePercent;
-  // see http://stackoverflow.com/a/22467497/458259
+  // see http://stackoverflow.com/a/22467497
   fBits := Round(-ln(fFalsePositivePercent/100)*aSize/(LN2*LN2));
   fHashFunctions := Round(fBits/fSize*LN2);
   if fHashFunctions=0 then
