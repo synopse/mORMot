@@ -21530,14 +21530,14 @@ var r: PAnsiChar;
     sr: PStrRec;
 begin
   if len>0 then begin
-    GetMem(r,len+(STRRECSIZE+2));
+    GetMem(r,len+(STRRECSIZE+4));
     sr := pointer(r);
     sr^.codePage := CP_UTF8;
     sr^.elemSize := 1;
     sr^.refCnt := 1;
     sr^.length := len;
     inc(sr);
-    PWord(PAnsiChar(sr)+len)^ := 0;
+    PCardinal(PAnsiChar(sr)+len)^ := 0;
     r := pointer(sr);
     if p<>nil then
       MoveFast(p^,sr^,len);
@@ -28767,12 +28767,10 @@ end;
 
 function IsCaseSensitive(const S: RawUTF8): boolean;
 var i: PtrInt;
-    up: PByteArray; // better x86-64 / PIC asm generation
 begin
-  up := @NormToUpperAnsi7Byte;
   result := true;
   for i := 0 to length(S)-1 do
-    if up[PByteArray(S)[i]]<>PByteArray(S)[i] then
+    if PByteArray(S)[i] in [ord('a')..ord('z'), ord('A')..ord('Z')] then
       exit;
   result := false;
 end;
