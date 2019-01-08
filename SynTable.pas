@@ -2218,8 +2218,6 @@ type
   // - searched expressions can use parenthesis and &=AND -=WITHOUT +=OR operators,
   // e.g. '((w1 & w2) - w3) + w4' means ((w1 and w2) without w3) or w4
   // - no operator is handled like a AND, e.g. 'w1 w2' = 'w1 & w2'
-  // - matching words should have no space nor & + - ( ) characters, or should
-  // be double-quotes-espaced as in SQL ('"one two" + "one ""two"" three"')
   TExprParserAbstract = class(TSynPersistent)
   protected
     fWordClass: TExprNodeWordClass;
@@ -2234,7 +2232,7 @@ type
     function ParseExpr: TExprNode;
     function ParseFactor: TExprNode;
     function ParseTerm: TExprNode;
-    // may be overriden to provide custom escaping
+    // may be overriden to provide custom words escaping (e.g. handle quotes) 
     procedure ParseNextWord; virtual;
     procedure Clear; virtual;
     /// perform the expression search, calling virtual TExprNodeWord.Found
@@ -8259,13 +8257,9 @@ var
   P: PUTF8Char;
 begin
   P := fCurrent;
-  if P^ = '"' then // unescape double quotes "" within text
-    P := UnQuoteSQLStringVar(P, fCurrentWord)
-  else begin
-    while not(P^ in STOPCHAR) do
-      inc(P);
-    SetString(fCurrentWord, PAnsiChar(fCurrent), P - fCurrent);
-  end;
+  while not(P^ in STOPCHAR) do
+    inc(P);
+  SetString(fCurrentWord, PAnsiChar(fCurrent), P - fCurrent);
   fCurrent := P;
 end;
 
@@ -8386,9 +8380,7 @@ begin // code below compiles very efficiently on FPC/x86-64
     case n.NodeType of
       entWord: begin
         st^ := TExprNodeWordAbstract(n).Found;
-        if st = @fFoundStack[high(fFoundStack)] then
-          exit; // avoid buffer overflow
-        inc(st);
+        inc(st); // see eprTooManyParenthesis above to avoid buffer overflow
       end;
       entNot:
         PAnsiChar(st)[-1] := AnsiChar(ord(PAnsiChar(st)[-1]) xor 1);
@@ -8463,6 +8455,11 @@ end;
 const // rough estimation
   IS_UTF8_WORD: TSynAnsicharSet = ['0' .. '9', 'A' .. 'Z', 'a' .. 'z', #$80 ..#$ff];
 
+function TExprParserMatch.Search(const aText: RawUTF8): boolean;
+begin
+  result := Search(pointer(aText), length(aText));
+end;
+
 procedure InitFast(m: PExprParserMatchOne; n: PtrInt);
 begin
   repeat
@@ -8515,11 +8512,6 @@ begin
     inc(fMatchedLastSet, SearchFast(aText, P - aText, pointer(fWord), n));
   end;
   result := Found;
-end;
-
-function TExprParserMatch.Search(const aText: RawUTF8): boolean;
-begin
-  result := Search(pointer(aText), length(aText));
 end;
 
 
