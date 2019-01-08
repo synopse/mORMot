@@ -110,7 +110,7 @@ type
   // - some common patterns ('exactmatch', 'startwith*', '*endwith', '*contained*')
   // are handled with dedicated code, optionally with case-insensitive search
   // - consider using TMatchs (or SetMatchs/TMatchDynArray) if you expect to
-  // search for several patterns
+  // search for several patterns, or even TExprParserMatch for expression search
   {$ifdef UNICODE}TMatch = record{$else}TMatch = object{$endif}
   private
     Pattern, Text: PUTF8Char;
@@ -128,9 +128,14 @@ type
     /// initialize the internal fields for a given glob search pattern
     // - note that the aPattern buffer should remain in memory, since it will
     // be pointed to by the Pattern private field of this object
-    procedure Prepare(aPattern: PUTF8Char; aPatternLen: integer; aCaseInsensitive, aReuse: boolean); overload;
+    procedure Prepare(aPattern: PUTF8Char; aPatternLen: integer;
+      aCaseInsensitive, aReuse: boolean); overload;
+    /// initialize low-level internal fields for a '*Pattern*' search
+    procedure PrepareContains(aPattern: PUTF8Char; aPatternLen: integer;
+      aCaseInsensitive: boolean); overload;
     /// initialize low-level internal fields for a custom search algorithm
-    procedure PrepareRaw(aPattern: PUTF8Char; aPatternLen: integer; aSearch: TMatchSearchFunction);
+    procedure PrepareRaw(aPattern: PUTF8Char; aPatternLen: integer;
+      aSearch: TMatchSearchFunction);
     /// returns TRUE if the supplied content matches the prepared glob pattern
     // - this method is not thread-safe
     function Match(const aText: RawUTF8): boolean; overload;
@@ -5399,7 +5404,7 @@ next: inc(t);
         break;
     end;
     for i := 8 to pmax do
-      if (t + i >= tend + 7) or (t[i] <> p[i]) then
+      if t[i] <> p[i] then
         goto next;
     result := true;
     exit;
@@ -5429,7 +5434,7 @@ next: inc(t);
         break;
     end;
     for i := 4 to pmax do
-      if (t + i >= tend + 3) or (t[i] <> p[i]) then
+      if t[i] <> p[i] then
         goto next;
     result := true;
     exit;
@@ -5458,7 +5463,7 @@ next: inc(t);
         break;
     end;
     for i := 1 to pmax do
-      if (t + i >= tend) or (t[i] <> p[i]) then
+      if t[i] <> p[i] then
        goto next;
     result := true;
     exit;
@@ -5500,20 +5505,32 @@ end;
 
 function SearchContains1(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
 begin
-  result := SimpleContains1(aText, aText + aTextLen, aMatch.Pattern, aMatch.PMax);
+  dec(aTextLen, aMatch.PMax);
+  if aTextLen > 0 then
+    result := SimpleContains1(aText, aText + aTextLen, aMatch.Pattern, aMatch.PMax)
+  else
+    result := false;
 end;
 
 function SearchContains4(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
 begin
-  result := SimpleContains4(aText, aText + aTextLen - 3, aMatch.Pattern, aMatch.PMax);
+  dec(aTextLen, aMatch.PMax);
+  if aTextLen > 0 then
+    result := SimpleContains4(aText, aText + aTextLen, aMatch.Pattern, aMatch.PMax)
+  else
+    result := false;
 end;
 
 {$ifdef CPU64}
 function SearchContains8(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
 begin // optimized e.g. to search an IP address as '*12.34.56.78*' in logs
-  result := SimpleContains8(aText, aText + aTextLen - 7, aMatch.Pattern, aMatch.PMax);
+  dec(aTextLen, aMatch.PMax);
+  if aTextLen > 0 then
+    result := SimpleContains8(aText, aText + aTextLen, aMatch.Pattern, aMatch.PMax)
+  else
+    result := false;
 end;
-{$endif}
+{$endif CPU64}
 
 function SearchStartWith(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
 begin
@@ -5546,6 +5563,8 @@ procedure TMatch.Prepare(aPattern: PUTF8Char; aPatternLen: integer;
   aCaseInsensitive, aReuse: boolean);
 const SPECIALS: PUTF8Char = '*?[';
 begin
+  if aCaseInsensitive and not IsCaseSensitive(aPattern,aPatternLen) then
+    aCaseInsensitive := false; // don't slow down e.g. number or IP search
   Pattern := aPattern;
   PMax := aPatternLen - 1; // search in Pattern[0..PMax]
   if aCaseInsensitive then
@@ -5614,6 +5633,29 @@ begin
    else
      Search := SearchAny;
  end;
+end;
+
+procedure TMatch.PrepareContains(aPattern: PUTF8Char; aPatternLen: integer;
+  aCaseInsensitive: boolean);
+begin
+  if aCaseInsensitive and not IsCaseSensitive(aPattern, aPatternLen) then
+    aCaseInsensitive := false;
+  Pattern := aPattern;
+  PMax := aPatternLen - 1;
+  if PMax < 0 then
+    Search := SearchContainsValid
+  else if aCaseInsensitive then begin
+    Upper := @NormToUpperAnsi7;
+    Search := SearchContainsU;
+  end
+  {$ifdef CPU64}
+  else if PMax >= 7 then
+    Search := SearchContains8
+  {$endif}
+  else if PMax >= 3 then
+    Search := SearchContains4
+  else
+    Search := SearchContains1;
 end;
 
 procedure TMatch.PrepareRaw(aPattern: PUTF8Char; aPatternLen: integer;

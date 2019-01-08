@@ -2787,7 +2787,11 @@ function ConvertCaseUTF8(P: PUTF8Char; const Table: TNormTableByte): PtrInt;
 
 /// check if the supplied text has some case-insentitive 'a'..'z','A'..'Z' chars
 // - will therefore be correct with true UTF-8 content, but only for 7 bit
-function IsCaseSensitive(const S: RawUTF8): boolean;
+function IsCaseSensitive(const S: RawUTF8): boolean; overload;
+
+/// check if the supplied text has some case-insentitive 'a'..'z','A'..'Z' chars
+// - will therefore be correct with true UTF-8 content, but only for 7 bit
+function IsCaseSensitive(P: PUTF8Char; PLen: integer): boolean; overload;
 
 /// fast conversion of the supplied text into uppercase
 // - this will only convert 'a'..'z' into 'A'..'Z' (no NormToUpper use), and
@@ -28766,12 +28770,20 @@ begin
 end;
 
 function IsCaseSensitive(const S: RawUTF8): boolean;
-var i: PtrInt;
+begin
+  result := IsCaseSensitive(pointer(S),length(S));
+end;
+
+function IsCaseSensitive(P: PUTF8Char; PLen: integer): boolean;
 begin
   result := true;
-  for i := 0 to length(S)-1 do
-    if PByteArray(S)[i] in [ord('a')..ord('z'), ord('A')..ord('Z')] then
-      exit;
+  if (P<>nil) and (PLen>0) then
+    repeat
+      if ord(P^) in [ord('a')..ord('z'), ord('A')..ord('Z')] then
+        exit;
+      inc(P);
+      dec(PLen);
+    until PLen=0;
   result := false;
 end;
 
