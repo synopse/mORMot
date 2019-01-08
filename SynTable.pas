@@ -2202,8 +2202,8 @@ type
   protected
     fOwner: TExprParserAbstract;
     fWord: RawUTF8;
-    /// you should override this virtual method for proper search
-    function Found: boolean; virtual; abstract;
+    /// should be set from actual text before TExprParser.Found is called
+    fFound: boolean;
   public
     /// you should override this virtual constructor for proper initialization
     constructor Create(aOwner: TExprParserAbstract; const aWord: RawUTF8); reintroduce; virtual;
@@ -2216,7 +2216,8 @@ type
   /// results returned by TExprParserAbstract.Parse method
   TExprParserResult = (
     eprSuccess, eprNoExpression,
-    eprMissingParenthesis, eprTooManyParenthesis, eprMissingFinalWord);
+    eprMissingParenthesis, eprTooManyParenthesis, eprMissingFinalWord,
+    eprInvalidExpression);
 
   /// abstract class to parse a text expression into nodes
   // - you should inherit this class to provide actual text search
@@ -2231,6 +2232,7 @@ type
     fCurrent: PUTF8Char;
     fCurrentError: TExprParserResult;
     fFirstNode: TExprNode;
+    fWords: array of TExprNodeWordAbstract;
     fWordCount: integer;
     fFoundStack: array[byte] of boolean; // simple stack-based virtual machine
     procedure ParseNextCurrentWord;
@@ -2240,7 +2242,7 @@ type
     // may be overriden to provide custom words escaping (e.g. handle quotes) 
     procedure ParseNextWord; virtual;
     procedure Clear; virtual;
-    /// perform the expression search, calling virtual TExprNodeWord.Found
+    /// perform the expression search over TExprNodeWord.fFound flags
     function Found: boolean;
   public
     /// initialize an expression parser
@@ -2257,19 +2259,11 @@ type
     property WordCount: integer read fWordCount;
   end;
 
-  TExprParserMatchOne = record
-    match: TMatch;
-    matched: boolean;
-  end;
-  PExprParserMatchOne = ^TExprParserMatchOne;
-
-  /// search expression engine using TMatch for the actual searches
+  /// search expression engine using TMatch for the actual word searches
   TExprParserMatch = class(TExprParserAbstract)
   protected
     fCaseSensitive: boolean;
-    fWord: array of TExprParserMatchOne;
     fMatchedLastSet: integer;
-    procedure Clear; override;
   public
     /// initialize the search engine
     constructor Create(aCaseSensitive: boolean = true); reintroduce;
@@ -8265,6 +8259,7 @@ end;
 procedure TExprParserAbstract.Clear;
 begin
   fWordCount := 0;
+  fWords := nil;
   fExpression := '';
   FreeAndNil(fFirstNode);
 end;
@@ -8362,10 +8357,16 @@ begin
     result := nil;
     fCurrentError := eprMissingFinalWord;
   end
-  else begin // calls meta-class overriden constructor
-    result := fWordClass.Create(self, fCurrentWord);
-    inc(fWordCount);
-  end;
+  else
+    try // calls meta-class overriden constructor
+      result := fWordClass.Create(self, fCurrentWord);
+      SetLength(fWords, fWordCount + 1);
+      fWords[fWordCount] := TExprNodeWordAbstract(result);
+      inc(fWordCount);
+    except //
+      result := nil;
+      fCurrentError := eprInvalidExpression;
+    end;
 end;
 
 function TExprParserAbstract.Parse(const aExpression: RawUTF8): TExprParserResult;
@@ -8421,7 +8422,7 @@ begin // code below compiles very efficiently on FPC/x86-64
   repeat
     case n.NodeType of
       entWord: begin
-        st^ := TExprNodeWordAbstract(n).Found;
+        st^ := TExprNodeWordAbstract(n).fFound;
         inc(st); // see eprTooManyParenthesis above to avoid buffer overflow
       end;
       entNot:
@@ -8457,26 +8458,17 @@ end;
 type
   TExprParserMatchNode = class(TExprNodeWordAbstract)
   protected
-    fMatchIndex: integer;
-    function Found: boolean; override;
+    fMatch: TMatch;
   public
     constructor Create(aOwner: TExprParserAbstract; const aWord: RawUTF8); override;
   end;
+  PExprParserMatchNode = ^TExprParserMatchNode;
 
 constructor TExprParserMatchNode.Create(aOwner: TExprParserAbstract;
   const aWord: RawUTF8);
-var
-  m: TExprParserMatch absolute aOwner;
 begin
   inherited Create(aOwner, aWord);
-  fMatchIndex := length(m.fWord);
-  Setlength(m.fWord, fMatchIndex + 1);
-  m.fWord[fMatchIndex].match.Prepare(fWord, m.fCaseSensitive, {reuse=}true);
-end;
-
-function TExprParserMatchNode.Found: boolean;
-begin
-  result := TExprParserMatch(fOwner).fWord[fMatchIndex].matched;
+  fMatch.Prepare(fWord, (fOwner as TExprParserMatch).fCaseSensitive, {reuse=}true);
 end;
 
 
@@ -8488,12 +8480,6 @@ begin
   fCaseSensitive := aCaseSensitive;
 end;
 
-procedure TExprParserMatch.Clear;
-begin
-  inherited Clear;
-  fWord := nil;
-end;
-
 const // rough estimation
   IS_UTF8_WORD: TSynAnsicharSet = ['0' .. '9', 'A' .. 'Z', 'a' .. 'z', #$80 ..#$ff];
 
@@ -8502,25 +8488,26 @@ begin
   result := Search(pointer(aText), length(aText));
 end;
 
-procedure InitFast(m: PExprParserMatchOne; n: PtrInt);
+procedure ResetFast(PP: PExprParserMatchNode; n: integer);
 begin
   repeat
-    m^.matched := false;
-    inc(m);
+    PP^.fFound := false;
+    inc(PP);
     dec(n);
   until n = 0;
 end;
 
 function SearchFast(aText: PUTF8Char; aTextLen: PtrInt;
-  m: PExprParserMatchOne; n: PtrInt): PtrInt;
+  PP: PExprParserMatchNode; n: integer): PtrInt;
 begin
   result := 0;
   repeat
-    if not m^.matched and m^.match.Match(aText, aTextLen) then begin
-      m^.matched := true;
-      inc(result);
-    end;
-    inc(m);
+    with PP^ do
+      if not fFound and fMatch.Match(aText, aTextLen) then begin
+        fFound := true;
+        inc(result);
+      end;
+    inc(PP);
     dec(n);
   until n = 0;
 end;
@@ -8528,19 +8515,17 @@ end;
 function TExprParserMatch.Search(aText: PUTF8Char; aTextLen: PtrInt): boolean;
 var
   P, PEnd: PUTF8Char;
-  n: PtrInt;
 begin
   result := false;
   P := aText;
-  if (P = nil) or (fWord = nil) then
+  if (P = nil) or (fWords = nil) then
     exit;
-  n := length(fWord);
   if fMatchedLastSet > 0 then begin
-    InitFast(pointer(fWord), n);
+    ResetFast(pointer(fWords), fWordCount);
     fMatchedLastSet := 0;
   end;
   PEnd := P + aTextLen;
-  while (P < PEnd) and (fMatchedLastSet < n) do begin
+  while (P < PEnd) and (fMatchedLastSet < fWordCount) do begin
     while not(P^ in IS_UTF8_WORD) do begin
       inc(P);
       if P = PEnd then 
@@ -8551,7 +8536,7 @@ begin
     aText := P;
     while (P < PEnd) and (P^ in IS_UTF8_WORD) do
       inc(P);
-    inc(fMatchedLastSet, SearchFast(aText, P - aText, pointer(fWord), n));
+    inc(fMatchedLastSet, SearchFast(aText, P - aText, pointer(fWords), fWordCount));
   end;
   result := Found;
 end;
