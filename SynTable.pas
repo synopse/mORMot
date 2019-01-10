@@ -2270,7 +2270,7 @@ type
     /// returns TRUE if the expression is within the text buffer
     function Search(aText: PUTF8Char; aTextLen: PtrInt): boolean; overload;
     /// returns TRUE if the expression is within the text buffer
-    function Search(const aText: RawUTF8): boolean; overload;
+    function Search(const aText: RawUTF8): boolean; overload; {$ifdef HASINLINE}inline;{$endif}
   end;
 
 const
@@ -5266,8 +5266,12 @@ end;
 var
   c: AnsiChar;
   pat, patend, txtend, txtretry, patretry: PUTF8Char;
+label
+  fin;
 begin
   pat := pointer(aMatch.Pattern);
+  if pat = nil then
+    goto fin;
   patend := pat + aMatch.PMax;
   patretry := nil;
   txtend := aText + aTextLen - 1;
@@ -5305,7 +5309,7 @@ begin
       pat := patretry;
       continue;
     end;
-    result := false;
+fin:result := false;
     exit;
   until false;
   result := true;
