@@ -17885,8 +17885,14 @@ type
     property AuthenticationSchemesCount: integer
       read GetAuthenticationSchemesCount;
     /// define if unsecure connections (i.e. not in-process or encrypted
-    // WebSockets) require a JWT for authentication
+    // WebSockets) with no session can be authenticated via JWT
     // - once set, this instance will be owned by the TSQLRestServer
+    // - by definition, such JWT authentication won't identify any mORMot user
+    // nor session (it just has to be valid), so only sicSingle, sicShared or
+    // sicPerThread interface-based services execution are possible
+    // - typical usage is for a public API, in conjunction with
+    // ServiceDefine(...).ResultAsJSONObjectWithoutResult := true on the server
+    // side and TSQLRestClientURI.ServiceDefineSharedAPI() method for the client
     // - see also JWTForUnauthenticatedRequestWhiteIP() for additional security
     property JWTForUnauthenticatedRequest: TJWTAbstract
       read fJWTForUnauthenticatedRequest write fJWTForUnauthenticatedRequest;

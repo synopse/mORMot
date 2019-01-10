@@ -8794,7 +8794,7 @@ return some static web content from a {\i mORMot} HTTP server.
 - Secure Information Exchange: a small amount of data can be stored in the JWT payload, and is digitally signed to ensure its provenance and integrity.
 See @http://jwt.io for an introduction to {\i JSON Web Tokens}.
 Our framework implements {\f1\fs20 JWT}:
-- {\f1\fs20 "HS256"} (@*HMAC-SHA256@) and {\f1\fs20 "ES256"} (256-bit @*ECDSA@) algorithms - with the addition of the {\f1\fs20 "none"} weak algo, to be used with caution;
+- {\f1\fs20 "HS256/384/512"} (@*HMAC-SHA2@-256/384/512), {\f1\fs20 "ES256"} (256-bit @*ECDSA@) standard algorithms, and {\f1\fs20 "S3256/384/512"} (for non-yet-standard @*SHA3@-256/384/512) - with the addition of the {\f1\fs20 "none"} weak algo, to be used with caution;
 - Computes and validates all JWT {\i claims}: dates, audiences, JWT ID;
 - Thread-safe and high performance (2 us for a {\f1\fs20 HS256} verification under x64), with optional in-memory cache if needed (e.g. for slower {\f1\fs20 ES256});
 - Stand-alone and cross-platform code: no external {\f1\fs20 dll}, works with @*Delphi@ or @*FPC@;
@@ -8802,15 +8802,24 @@ Our framework implements {\f1\fs20 JWT}:
 - Full integration with the framework.
 It is architectured around a set of classes, one per algorithm, following the least astonishment principle, and enhancing security:
 \graph HierTJWTNone TJWTAbstract classes hierarchy
+rankdir=LR;
 \TJWTES256\TJWTAbstract
-\TJWTHS256\TJWTAbstract
+\TJWTSynSignerAbstract\TJWTAbstract
+\TJWTHS256\TJWTSynSignerAbstract
+\TJWTHS384\TJWTSynSignerAbstract
+\TJWTHS512\TJWTSynSignerAbstract
+\TJWTS3224\TJWTSynSignerAbstract
+\TJWTS3256\TJWTSynSignerAbstract
+\TJWTS3384\TJWTSynSignerAbstract
+\TJWTS3512\TJWTSynSignerAbstract
 \TJWTNone\TJWTAbstract
 \
 In {\f1\fs20 SynCrypto.pas} and {\f1\fs20 SynEcc.pas}, you will find:
 - {\f1\fs20 TJWTAbstract} as abstract parent class for implementing JSON Web Tokens;
 - {\f1\fs20 TJWTNone} implementing the {\f1\fs20 "none"} algorithm;
-- {\f1\fs20 TJWTHS256} implementing the {\f1\fs20 "HS256"} algorithm;
-- {\f1\fs20 TJWTES256} implementing the {\f1\fs20 "ES256"} algorithm.
+- {\f1\fs20 TJWTHS256 TJWTHS384 TJWTHS512} implementing the {\f1\fs20 "HS256 HS384 HS512"} algorithms, i.e. HMAC-SHA2 over 256, 384 or 512 bits;
+- {\f1\fs20 TJWTS3256 TJWTS3384 TJWTS3512} implementing the {\f1\fs20 "S3256 S3384 S3512"} algorithms, i.e. SHA3 over 256, 384 or 512 bits;
+- {\f1\fs20 TJWTES256} implementing the {\f1\fs20 "ES256"} algorithm, i.e. ECDSA using the P-256 curve and the SHA-256 hash algorithm.
 To work with JWT, you may write for instance:
 !var j: TJWTAbstract;
 !    jwt: TJWTContent;
@@ -8853,6 +8862,7 @@ Integration with method-based services is easy, using {\f1\fs20 TSQLRestServerUR
 !    Ctxt.ReturnFileFromFolder('c:\datafolder');
 !end;
 The above method will define a method-based service returning the content of a local folder, only if a valid {\f1\fs20 JWT} is supplied within the HTTP headers of the incoming request. If {\f1\fs20 AuthenticationCheck} fails to validate the token supplied in the associated {\f1\fs20 Ctxt}, if will return {\f1\fs20 401 HTTP_UNAUTHORIZED} to the client, as expected.
+An alternative to use {\f1\fs20 JWT} for authentication may be to assign a {\f1\fs20 TJWTAbstract} inherited instance to {\f1\fs20 TSQLRestServer.JWTForUnauthenticatedRequest} - see @198@.
 \page
 : Handling errors
 When using {\f1\fs20 Ctxt.Input*[]} properties, any missing parameter will raise an {\f1\fs20 EParsingException}. It will therefore be intercepted by the server process (as any other exception), and returned to the client with an error message containing the {\f1\fs20 Exception} class name and its associated message.
@@ -13772,6 +13782,17 @@ Of course, if {\i @*Windows Authentication@} is defined (see above), this event 
 :   Authentication using AJAX
 @90@ can generate {\i @*JavaScript@} code from its IDE. Our template-based code generation make this solution perfectly integrated with our {\i mORMot} server, especially about authentication: you will find the same {\f1\fs20 TSQLRestServerAuthenticationDefault} and {\f1\fs20 TSQLRestServerAuthenticationNone} classes in our {\f1\fs20 SynCrossPlatformREST.pas} unit, ready to authenticate to the server.\line In fact, there is also a command-line compiler available (named {\f1\fs20 smsc.exe}) which can create a {\f1\fs20 .js} file from {\i @*SmartPascal@} code: you may use it to integrate the generated client to a regular HTML5 application (using e.g. {\i JQuery} or {\i AngularJS}).
 Some stand-alone working {\i JavaScript} code has been published in our forum by a framework user (thanks, "RangerX"), which implements the authentication schema as detailed above. It uses {\f1\fs20 jQuery}, and HTML 5 {\f1\fs20 LocalStorage}, not cookies, for storing session information on the Client side.\line See @http://synopse.info/forum/viewtopic.php?pid=2995#p2995
+:198  JWT Authentication
+As an alternative, you may use @192@ for authentication.
+On server side, you can assign a {\f1\fs20 TJWTAbstract} inherited instance to {\f1\fs20 TSQLRestServer.JWTForUnauthenticatedRequest} so that any client providing a valid {\f1\fs20 @*JWT@} would be allowed to execute some requests.
+!aJWTEngine := TJWTS3256.Create(aSecretKey, 60000, [jrcIssuer, jrcExpirationTime], [], aExpireMinutes);
+!aRestServer.JWTForUnauthenticatedRequest := aJWTEngine; // will be owned by aRestServer
+On mORMot client side, you can provide a valid {\f1\fs20 JWT} via:
+!aRestClientURI.SessionHttpHeader := AuthorizationBearer(aJWT);
+Any kind of JSON/HTTPS client could easily connect to such a service, by providing a valid {\f1\fs20 JWT} as {\f1\fs20 'Authorization: Bearer ####'} HTTP header. A dedicated authentication service may be used to return some {\f1\fs20 JWT} in exchange from some credential (typically a user-name/password) for your application.
+In practice, for your internal {\i MicroServices} communication, you could therefore use regular @98@ over a @150@, which are pretty stable and efficient. Then for a public API, you could use a regular {\f1\fs20 TSQLHttpServer} - see @140@ - perhaps over a nginx reverse proxy (e.g. for {\i Let's Encrypt} HTTPS certification). Since the {\i mORMot} authentication is proprietary, using a {\f1\fs20 JWT} may sound more natural for a public API service, with a more relaxed JSON encoding and no contract. That is, on the server side, you define: {\f1\fs20 ServiceDefine(...).ResultAsJSONObjectWithoutResult := true;} and on the client side, you call the {\f1\fs20 TSQLRestClientURI.ServiceDefineSharedAPI()} method to follow a similar more standard JSON layout (i.e. JSON objects as input/output and not a JSON array without any contract negotiation).
+By design, such clients won't be tied to any associated {\i mORMot} session or user. So @63@ should be only of {\f1\fs20 sicSingle}, {\f1\fs20 sicShared} or {\f1\fs20 sicPerThread} kind - see @92@.
+See also {\f1\fs20 TSQLRestServer.JWTForUnauthenticatedRequestWhiteIP} for additional security, to require the client to connect from a finite set of allowed IP addresses.
 \page
 : Authorization
 By @*authorization@, we mean the action to define an access policy to the @*REST@ful resources, for an authenticated user. Even if this user may be a a guest user (with no specific access credential), it should be identified as such, e.g. to serve public content.
