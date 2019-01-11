@@ -2189,11 +2189,13 @@ begin
       len := Length(name);
       if not LookupPrivilegeNameA(nil,tp.Privileges[i].Luid,@name[1],len) then
         if GetLastError <> ERROR_INSUFFICIENT_BUFFER then
-          raise ESynException.CreateUTF8('TSynWindowsPrivileges cannot lookup privilege name for Luid (%)', [Int64(tp.Privileges[i].Luid)])
+          raise ESynException.CreateUTF8('TSynWindowsPrivileges cannot lookup privilege name for Luid (%)',
+            [PInt64(@tp.Privileges[i].Luid)^]) // PInt64() to avoid URW699 on Delphi 6
         else begin
           SetLength(name, len);
           if not LookupPrivilegeNameA(nil,tp.Privileges[i].Luid,@name[1],len) then
-            raise ESynException.CreateUTF8('TSynWindowsPrivileges cannot lookup privilege name for Luid (%)', [Int64(tp.Privileges[i].Luid)])
+            raise ESynException.CreateUTF8('TSynWindowsPrivileges cannot lookup privilege name for Luid (%)',
+              [PInt64(@tp.Privileges[i].Luid)^])
         end;
       enumval := IdemPCharArray(@name[1], UPCASE_SE_NAMES);
       if (enumval >= ord(low(TWinSystemPrivilege))) and (enumval <= ord(high(TWinSystemPrivilege))) then begin
@@ -2221,13 +2223,13 @@ begin
   if not LookupPrivilegeValue(nil, aPrivilege, id) then
     exit;
   tp.PrivilegeCount := 1;
-  tp.Privileges[0].Luid := Int64(id);
+  tp.Privileges[0].Luid := PInt64(@id)^;
   tp.Privileges[0].Attributes := 0;
   AdjustTokenPrivileges(Token, false, tp, sizeof(TOKEN_PRIVILEGES), @tpprev, @cbprev);
   if GetLastError <> ERROR_SUCCESS then
     exit;
-  tpprev.PrivilegeCount     := 1;
-  tpprev.Privileges[0].Luid := Int64(id);
+  tpprev.PrivilegeCount := 1;
+  tpprev.Privileges[0].Luid := PInt64(@id)^;
   with tpprev.Privileges[0] do
     if aEnablePrivilege then
       Attributes := Attributes or SE_PRIVILEGE_ENABLED
