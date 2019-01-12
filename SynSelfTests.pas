@@ -2894,6 +2894,7 @@ var i: integer;
     check(match.Match('ab12er'));
     check(not match.Match('1'));
     check(not match.Match('a1'));
+    check(not match.Match('a1b2'));
     check(not match.Match('1a2'));
   end;
 
@@ -3048,6 +3049,9 @@ begin
     if reuse then begin
       cont := '12';
       match.PrepareContains(cont, false);
+      Contains;
+      cont := '12';
+      match.PrepareContains(cont, true);
       Contains;
     end;
     match.Prepare('*teSt*', true, reuse);

@@ -5383,7 +5383,7 @@ next: inc(t);
         break;
     end;
     for i := 1 to pmax do
-      if (t + i >= tend) or (up[t[i]] <> up[p[i]]) then
+      if up[t[i]] <> up[p[i]] then
         goto next;
     result := true;
     exit;
@@ -5501,7 +5501,11 @@ end;
 
 function SearchContainsU(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
 begin
-  result := SimpleContainsU(aText, aText + aTextLen, aMatch.Pattern, aMatch.PMax, aMatch.Upper);
+  dec(aTextLen, aMatch.PMax);
+  if aTextLen > 0 then
+    result := SimpleContainsU(aText, aText + aTextLen, aMatch.Pattern, aMatch.PMax, aMatch.Upper)
+  else
+    result := false;
 end;
 
 function SearchContains1(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
