@@ -130,9 +130,11 @@ type
     // be pointed to by the Pattern private field of this object
     procedure Prepare(aPattern: PUTF8Char; aPatternLen: integer;
       aCaseInsensitive, aReuse: boolean); overload;
-    /// initialize low-level internal fields for a '*Pattern*' search
-    procedure PrepareContains(aPattern: PUTF8Char; aPatternLen: integer;
-      aCaseInsensitive: boolean); overload;
+    /// initialize low-level internal fields for'*aPattern*' search
+    // - this method is faster than a regular Prepare('*' + aPattern + '*')
+    // - warning: the supplied aPattern variable may be modified in-place to be
+    // filled with some lookup buffer, for length(aPattern) in [2..31] range
+    procedure PrepareContains(var aPattern: RawUTF8; aCaseInsensitive: boolean); overload;
     /// initialize low-level internal fields for a custom search algorithm
     procedure PrepareRaw(aPattern: PUTF8Char; aPatternLen: integer;
       aSearch: TMatchSearchFunction);
@@ -2243,7 +2245,8 @@ type
     procedure ParseNextWord; virtual;
     procedure Clear; virtual;
     /// perform the expression search over TExprNodeWord.fFound flags
-    function Found: boolean;
+    // - warning: caller should check that fFirstNode<>nil (e.g. WordCount>0)
+    function Found: boolean; {$ifdef HASINLINE}inline;{$endif}
   public
     /// initialize an expression parser
     // - you should reintroduce this method to initialize properly the entWord
@@ -5633,27 +5636,85 @@ begin
  end;
 end;
 
-procedure TMatch.PrepareContains(aPattern: PUTF8Char; aPatternLen: integer;
+type // Holub and Durian (2005) SBNDM2 algorithm
+  // see http://www.cri.haifa.ac.il/events/2005/string/presentations/Holub.pdf
+  TSBNDMQ2Mask = array[AnsiChar] of cardinal;
+  PSBNDMQ2Mask = ^TSBNDMQ2Mask;
+
+function SearchSBNDMQ2ComputeMask(const Pattern: RawUTF8): RawByteString;
+var
+  i: PtrInt;
+  p: PAnsiChar absolute Pattern;
+  m: PSBNDMQ2Mask absolute result;
+  c: PCardinal;
+begin
+  SetLength(result, SizeOf(m^));
+  FillCharFast(m^, SizeOf(m^), 0);
+  for i := 0 to length(Pattern) - 1 do begin
+    c := @m^[p[i]]; // for FPC code generation
+    c^ := c^ or (1 shl i);
+  end;
+end;
+
+function SearchSBNDMQ2(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+var
+  mask: PSBNDMQ2Mask;
+  max, i, j: PtrInt;
+  state: cardinal;
+begin
+  max := aMatch^.PMax;
+  mask := pointer(aMatch^.Pattern);
+  i := max - 1;
+  dec(aTextLen);
+  if i < aTextLen then begin
+    repeat
+      state := (mask[aText[i+1]] shr 1) and mask[aText[i]];
+      if state = 0 then begin
+        inc(i, max); // Boyer-Moore-alike fast skip
+        if i >= aTextLen then
+          break;
+        continue;
+      end;
+      j := i - max;
+      repeat
+        dec(i);
+        if i < 0 then
+          break;
+        state := (state shr 1) and mask[aText[i]];
+      until state = 0;
+      if i = j then begin
+        result := true;
+        exit;
+      end;
+      inc(i, max);
+      if i >= aTextLen then
+        break;
+    until false;
+  end;
+  result := false;
+end;
+
+procedure TMatch.PrepareContains(var aPattern: RawUTF8;
   aCaseInsensitive: boolean);
 begin
-  if aCaseInsensitive and not IsCaseSensitive(aPattern, aPatternLen) then
+  PMax := length(aPattern) - 1;
+  if aCaseInsensitive and not IsCaseSensitive(pointer(aPattern), PMax + 1) then
     aCaseInsensitive := false;
-  Pattern := aPattern;
-  PMax := aPatternLen - 1;
   if PMax < 0 then
     Search := SearchContainsValid
   else if aCaseInsensitive then begin
     Upper := @NormToUpperAnsi7;
     Search := SearchContainsU;
   end
-  {$ifdef CPU64}
-  else if PMax >= 7 then
-    Search := SearchContains8
-  {$endif}
-  else if PMax >= 3 then
-    Search := SearchContains4
+  else if PMax > 30 then
+    Search := {$ifdef CPU64}SearchContains8{$else}SearchContains4{$endif}
+  else if PMax >= 1 then begin // len in [2..31] = PMax in [1..30]
+    aPattern := SearchSBNDMQ2ComputeMask(aPattern); // replaced by lookup table
+    Search := SearchSBNDMQ2;
+  end
   else
     Search := SearchContains1;
+  Pattern := pointer(aPattern);
 end;
 
 procedure TMatch.PrepareRaw(aPattern: PUTF8Char; aPatternLen: integer;
@@ -8418,11 +8479,8 @@ var
   n: TExprNode;
   st: PBoolean;
 begin // code below compiles very efficiently on FPC/x86-64
-  result := false;
-  n := fFirstNode;
-  if n = nil then
-    exit;
   st := @fFoundStack;
+  n := fFirstNode;
   repeat
     case n.NodeType of
       entWord: begin
@@ -8442,8 +8500,7 @@ begin // code below compiles very efficiently on FPC/x86-64
     end;
     n := n.Next;
   until n = nil;
-  dec(st);
-  result := st^;
+  result := boolean(PAnsiChar(st)[-1]);
 end;
 
 

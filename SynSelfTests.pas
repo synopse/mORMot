@@ -2879,9 +2879,24 @@ end;
 
 procedure TTestLowLevelCommon._IsMatch;
 var i: integer;
-    V: RawUTF8;
+    V, cont: RawUTF8;
     match: TMatch;
     reuse: boolean;
+
+  procedure Contains;
+  begin
+    check(match.Match('12'));
+    check(match.Match('12e'));
+    check(match.Match('12er'));
+    check(match.Match('a12'));
+    check(match.Match('a12e'));
+    check(match.Match('ab12'));
+    check(match.Match('ab12er'));
+    check(not match.Match('1'));
+    check(not match.Match('a1'));
+    check(not match.Match('1a2'));
+  end;
+
 begin
   Check(IsMatch('','',true));
   Check(not IsMatch('','toto',true));
@@ -3029,16 +3044,12 @@ begin
     check(not match.Match('atEst'));
     check(not match.Match('ateSTe'));
     match.Prepare('*12*', false, reuse);
-    check(match.Match('12'));
-    check(match.Match('12e'));
-    check(match.Match('12er'));
-    check(match.Match('a12'));
-    check(match.Match('a12e'));
-    check(match.Match('ab12'));
-    check(match.Match('ab12er'));
-    check(not match.Match('1'));
-    check(not match.Match('a1'));
-    check(not match.Match('1a2'));
+    Contains;
+    if reuse then begin
+      cont := '12';
+      match.PrepareContains(cont, false);
+      Contains;
+    end;
     match.Prepare('*teSt*', true, reuse);
     check(match.Match('test'));
     check(match.Match('teste'));
@@ -3148,8 +3159,8 @@ begin
     Test('1+4+5', ['1', '1 2 3', '2 1', '2 4 3'], ['2', '13', '2 3', '41']);
     Test('1+(4+5)', ['1', '1 2 3', '2 1', '2 4 3'], ['2', '13', '2 3', '41']);
     Test('1+4*+5', ['1', '1 2 3', '2 1', '2 4 3', '41'], ['2', '13', '2 3']);
-    Test('1+(4&5)', ['4 5 3', '5 4', '1', '1 2 3', '2 1'], ['2', '13', '2 3', '41', '4 3', '3 5']);
-    Test('1+(4 5)', ['4 5 3', '5 4', '1', '1 2 3', '2 1'], ['2', '13', '2 3', '41', '4 3', '3 5']);
+    Test('1+(4&555)', ['4 555 3', '555 4', '1', '1 2 3', '2 1'], ['2', '13', '2 3', '41', '4 3', '3 555']);
+    Test('1+(4 555)', ['4 555 3', '555 4', '1', '1 2 3', '2 1'], ['2', '13', '2 3', '41', '4 3', '3 555']);
     Test('1-4', ['1', '1 2 3', '2 1', '2 1 3'], ['1 4', '4 2 1', '2', '13', '2 3', '41']);
     Test('1-(4&5)', ['1', '1 2 3', '2 1', '1 4', '1 5'],
        ['2', '5 2 3 4 1', '2 3', '41', '4 3', '3 5', '1 4 5']);
