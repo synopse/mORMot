@@ -4554,7 +4554,7 @@ type
 
   {$ifdef FPC}
   /// map the Delphi/FPC dynamic array header (stored before each instance)
-  // - define globally for proper inlining
+  // - define globally for proper inlining with FPC
   TDynArrayRec = packed record
     /// dynamic array reference count (basic garbage memory mechanism)
     refCnt: PtrInt;
@@ -42647,7 +42647,7 @@ begin
 end;
 
 procedure TJSONCustomParserRTTI.ComputeFullPropertyName;
-var i: integer;
+var i: PtrInt;
 begin
   for i := 0 to high(NestedProperty) do begin
     NestedProperty[i].ComputeFullPropertyName;
@@ -42658,7 +42658,7 @@ begin
 end;
 
 procedure TJSONCustomParserRTTI.ComputeNestedDataSize;
-var i: integer;
+var i: PtrInt;
 begin
   assert(fNestedDataSize=0);
   fNestedDataSize := 0;
@@ -42681,7 +42681,7 @@ const // binary size (in bytes) of each kind of property - 0 for ptRecord/ptCust
     SizeOf(TGUID),SizeOf(Int64),SizeOf(TTimeLog),
     {$ifndef NOVARIANTS}SizeOf(Variant),{$endif}
     SizeOf(WideString),SizeOf(Word),0);
-var i: integer;
+var i: PtrInt;
 begin
   if fFullPropertyName='' then begin
     fFullPropertyName := fPropertyName;
@@ -42704,7 +42704,7 @@ begin
 end;
 
 procedure TJSONCustomParserRTTI.FinalizeNestedRecord(var Data: PByte);
-var j: integer;
+var j: PtrInt;
 begin
   for j := 0 to length(NestedProperty)-1 do begin
     case NestedProperty[j].PropertyType of
@@ -42731,7 +42731,7 @@ end;
 
 procedure TJSONCustomParserRTTI.FinalizeNestedArray(var Data: PtrUInt);
 var i: integer;
-    Rec: ^TDynArrayRec;
+    Rec: PDynArrayRec;
     ItemData: PByte;
 begin
   if Data=0 then
@@ -42739,10 +42739,14 @@ begin
   ItemData := pointer(Data);
   Rec := pointer(Data);
   dec(PtrUInt(Rec),SizeOf(TDynArrayRec));
-  for i := 0 to Rec.length-1 do
+  Data := 0;
+  if Rec^.refCnt>1 then begin
+    InterlockedDecrement(PInteger(@Rec^.refCnt)^); // FPC has refCnt: PtrInt
+    exit;
+  end;
+  for i := 1 to Rec.length do
     FinalizeNestedRecord(ItemData);
   FreeMem(Rec);
-  Data := 0;
 end;
 
 procedure TJSONCustomParserRTTI.AllocateNestedArray(var Data: PtrUInt;
