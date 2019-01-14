@@ -13151,7 +13151,7 @@ function SystemInfoJson: RawUTF8;
 
 type
   /// the recognized operating systems
-  // - it will also recognize some of the distributions
+  // - it will also recognize some Linux distributions
   TOperatingSystem = (osUnknown, osWindows, osLinux, osOSX, osBSD, osPOSIX,
     osArch, osAurox, osDebian, osFedora, osGentoo, osKnoppix, osMint, osMandrake,
     osMandriva, osNovell, osUbuntu, osSlackware, osSolaris, osSuse, osSynology,
@@ -23323,7 +23323,7 @@ function PosCharAny(Str: PUTF8Char; Characters: PAnsiChar): PUTF8Char;
 var s: PAnsiChar;
     c: AnsiChar;
 begin
-  if (Str<>nil) and (Characters<>nil) then
+  if (Str<>nil) and (Characters<>nil) and (Characters^<>#0) then
     repeat
       c := Str^;
       if c=#0 then
