@@ -2295,6 +2295,7 @@ const
   PARSER_STOPCHAR = ['&', '+', '-', '(', ')'];
 
 function ToText(r: TExprParserResult): PShortString; overload;
+function ToUTF8(r: TExprParserResult): RawUTF8; overload;
 
 
 implementation
@@ -8293,6 +8294,11 @@ begin
   result := GetEnumName(TypeInfo(TExprParserResult), ord(r));
 end;
 
+function ToUTF8(r: TExprParserResult): RawUTF8;
+begin
+  result := UnCamelCase(TrimLeftLowerCaseShort(ToText(r)));
+end;
+
 
 { TExprNode }
 
@@ -8459,7 +8465,7 @@ begin
     if res = eprSuccess then
       result := ''
     else
-      result := UnCamelCase(TrimLeftLowerCaseShort(ToText(res)));
+      result := ToUTF8(res);
   finally
     parser.Free;
   end;
@@ -8518,7 +8524,7 @@ begin
   if P^ = #0 then
     exit;
   if P^ in PARSER_STOPCHAR then begin
-    fCurrentWord := P^;
+    FastSetString(fCurrentWord, P, 1);
     fCurrent := P + 1;
   end
   else begin
