@@ -6526,7 +6526,7 @@ type
     // !   if Ctxt.AuthenticationCheck(fJWT) then
     // !     Ctxt.ReturnFileFromFolder('c:\datafolder');
     // ! end;
-    function AuthenticationCheck(jwt: TJWTAbstract): boolean;
+    function AuthenticationCheck(jwt: TJWTAbstract): boolean; virtual;
     /// identify which kind of client is actually connected
     // - the "User-Agent" HTTP will be checked for 'mORMot' substring, and
     // set ckFramework on match
