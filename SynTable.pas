@@ -8643,48 +8643,29 @@ begin
   fWordClass := TExprParserMatchNode;
 end;
 
-const // rough estimation
-  IS_UTF8_WORD: TSynAnsicharSet = ['0' .. '9', 'A' .. 'Z', 'a' .. 'z', #$80 ..#$ff];
-
 function TExprParserMatch.Search(const aText: RawUTF8): boolean;
 begin
   result := Search(pointer(aText), length(aText));
 end;
 
-procedure ResetFast(PP: PExprParserMatchNode; n: integer);
-begin
-  repeat
-    PP^.fFound := false;
-    inc(PP);
-    dec(n);
-  until n = 0;
-end;
-
-function SearchFast(aText: PUTF8Char; aTextLen: PtrInt;
-  PP: PExprParserMatchNode; n: integer): PtrInt;
-begin
-  result := 0;
-  repeat
-    with PP^ do
-      if not fFound and fMatch.Match(aText, aTextLen) then begin
-        fFound := true;
-        inc(result);
-      end;
-    inc(PP);
-    dec(n);
-  until n = 0;
-end;
-
 function TExprParserMatch.Search(aText: PUTF8Char; aTextLen: PtrInt): boolean;
+const // rough estimation
+  IS_UTF8_WORD = ['0' .. '9', 'A' .. 'Z', 'a' .. 'z', #$80 ..#$ff];
 var
   P, PEnd: PUTF8Char;
+  n: PtrInt;
 begin
-  result := false;
   P := aText;
-  if (P = nil) or (fWords = nil) then
+  if (P = nil) or (fWords = nil) then begin
+    result := false;
     exit;
+  end;
   if fMatchedLastSet > 0 then begin
-    ResetFast(pointer(fWords), fWordCount);
+    n := fWordCount;
+    repeat
+      dec(n);
+      fWords[n].fFound := false;
+    until n = 0;
     fMatchedLastSet := 0;
   end;
   PEnd := P + aTextLen;
@@ -8697,9 +8678,19 @@ begin
     if P = PEnd then
       break;
     aText := P;
-    while (P < PEnd) and (P^ in IS_UTF8_WORD) do
+    repeat
       inc(P);
-    inc(fMatchedLastSet, SearchFast(aText, P - aText, pointer(fWords), fWordCount));
+    until (P = PEnd) or not(P^ in IS_UTF8_WORD);
+    aTextLen := P - aText;
+    n := fWordCount;
+    repeat
+      dec(n);
+      with TExprParserMatchNode(fWords[n]) do
+        if not fFound and fMatch.Match(aText, aTextLen) then begin
+          fFound := true;
+          inc(fMatchedLastSet);
+        end;
+    until n = 0;
   end;
   result := Execute;
 end;
