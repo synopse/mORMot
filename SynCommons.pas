@@ -2304,11 +2304,11 @@ function GetQWord(P: PUTF8Char; var err: integer): QWord;
 // - set the err content to the index of any faulty character, 0 if conversion
 // was successful (same as the standard val function)
 function GetExtended(P: PUTF8Char; out err: integer): TSynExtended; overload;
-  {$ifdef FPC}inline;{$endif} // under Delphi XE4 64-bit compiler, it fails...
 
 /// get the extended floating point value stored in P^
 // - this overloaded version returns 0 as a result if the content of P is invalid
 function GetExtended(P: PUTF8Char): TSynExtended; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// get the WideChar stored in P^ (decode UTF-8 if necessary)
 // - any surrogate (UCS4>$ffff) will be returned as '?'
@@ -32257,6 +32257,25 @@ end;
   {$define GETEXTENDEDPASCAL}
 {$endif}
 
+function IntPower(Exponent: Integer): TSynExtended; {$ifdef HASINLINE}inline;{$endif}
+var Y: cardinal;
+    LBase: Int64;
+begin
+  Y := abs(Exponent);
+  LBase := 10;
+  result := 1.0;
+  repeat
+    while not odd(Y) do begin
+      Y := Y shr 1;
+      LBase := LBase*LBase;
+    end;
+    dec(Y);
+    result := result*LBase;
+  until Y=0;
+  if Exponent<0 then
+    result := 1.0/result;
+end;
+
 function GetExtended(P: PUTF8Char; out err: integer): TSynExtended;
 // inspired by ValExt_JOH_PAS_8_a and ValExt_JOH_IA32_8_a by John O'Harrow
 {$ifdef GETEXTENDEDPASCAL}
@@ -32266,46 +32285,28 @@ function GetExtended(P: PUTF8Char; out err: integer): TSynExtended;
     1E-6,1E-5,1E-4,1E-3,1E-2,1E-1,1E0,1E1,1E2,1E3,1E4,1E5,1E6,1E7,1E8,1E9,1E10,
     1E11,1E12,1E13,1E14,1E15,1E16,1E17,1E18,1E19,1E20,1E21,1E22,1E23,1E24,1E25,
     1E26,1E27,1E28,1E29,1E30,1E31);
-  function IntPower(Exponent: Integer): TSynExtended; {$ifdef HASINLINE}inline;{$endif}
-  var Y: Cardinal;
-      LBase: Int64;
-  begin
-    Y := abs(Exponent);
-    LBase := 10;
-    result := 1.0;
-    repeat
-      while not odd(Y) do begin
-        Y := Y shr 1;
-        LBase := LBase*LBase;
-      end;
-      dec(Y);
-      result := result*LBase;
-    until Y=0;
-    if Exponent<0 then
-      result := 1.0/result;
-  end;
 var Digits, ExpValue: PtrInt;
     Ch: cardinal;
     flags: set of (Neg, NegExp, Valid);
     U: PByte; // Delphi Win64 doesn't like if P^ is used directly
 {$ifdef CPUX86}
-const ten: double = 10.0; // fast copy on x87 stack
 begin
-  result := 0;
 {$else}
-    ten: TSynExtended; // stored in a local floating-point (e.g. xmm) register
+    ten: TSynExtended; // stored in a local floating-point (e.g. xmm2) register
 begin
   ten := 10.0;
-  PInt64(@result)^ := 0;
 {$endif}
+  result := 0;
   if P=nil then begin
     err := 1;
     exit;
   end;
   flags := [];
   U := pointer(P);
-  while U^=32 do
-    inc(U);
+  if P^=' ' then
+    repeat
+      inc(U)
+    until U^<>32;
   Ch := U^;
   if Ch=ord('+') then
     inc(U) else
@@ -32313,34 +32314,43 @@ begin
     inc(U);
     include(flags,Neg);
   end;
-  while true do begin
+  repeat
     Ch := U^;
     inc(U);
     if (Ch<ord('0')) or (Ch>ord('9')) then
       break;
     dec(Ch,ord('0'));
-    result := (result*ten)+Ch;
+    {$ifdef CPUX86}
+    result := (result*10.0)+ch;
+    {$else}
+    result := result*ten; // better FPC code generation in two steps
+    result := result+Ch;
+    {$endif}
     include(flags,Valid);
-  end;
+  until false;
   Digits := 0;
-  if Ch=ord('.') then begin
-    while true do begin
+  if Ch=ord('.') then
+    repeat
       Ch := U^;
       inc(U);
       if (Ch<ord('0')) or (Ch>ord('9')) then begin
         if not (Valid in flags) then // starts with '.'
           if Ch=0 then
-            dec(U); // U='.'
+            dec(U); // U^='.'
         break;
       end;
       dec(Ch,ord('0'));
-      result := (result*ten)+Ch;
+      {$ifdef CPUX86}
+      result := (result*10.0)+ch;
+      {$else}
+      result := result*ten;
+      result := result+Ch;
+      {$endif}
       dec(Digits);
       include(flags,Valid);
-    end;
-    end;
-  ExpValue := 0;
+    until false;
   if (Ch=ord('E')) or (Ch=ord('e')) then begin
+    ExpValue := 0;
     exclude(flags,Valid);
     Ch := U^;
     if Ch=ord('+') then
@@ -32349,7 +32359,7 @@ begin
       inc(U);
       include(flags,NegExp);
     end;
-    while true do begin
+    repeat
       Ch := U^;
       inc(U);
       if (Ch<ord('0')) or (Ch>ord('9')) then
@@ -32357,15 +32367,17 @@ begin
       dec(Ch,ord('0'));
       ExpValue := (ExpValue*10)+PtrInt(Ch);
       include(flags,Valid);
-    end;
-   if NegExp in flags then
-     ExpValue := -ExpValue;
+    until false;
+    if NegExp in flags then
+      dec(Digits,ExpValue) else
+      inc(Digits,ExpValue);
   end;
-  inc(Digits,ExpValue);
   case Digits of
   0: ;
-  low(POW10)..-1,1..high(POW10): result := result*POW10[Digits];
-  else result := result*IntPower(Digits);
+  low(POW10)..-1,1..high(POW10):
+    result := result*POW10[Digits];
+  else
+    result := result*IntPower(Digits);
   end;
   if Neg in flags then
     result := -result;
