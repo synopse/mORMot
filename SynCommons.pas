@@ -6214,21 +6214,21 @@ function PtrArrayFind(var aPtrArray; aItem: pointer): integer;
 // !   ObjArrayClear(arr); // release all items
 // ! end;
 // - return the index of the item in the dynamic array
-function ObjArrayAdd(var aObjArray; aItem: TObject): integer;
+function ObjArrayAdd(var aObjArray; aItem: TObject): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// wrapper to add items to a T*ObjArray dynamic array storage
 // - aSourceObjArray[] items will be owned by aDestObjArray[], therefore
 // aSourceObjArray is set to nil
 // - return the new number of the items in aDestObjArray
-function ObjArrayAppend(var aDestObjArray, aSourceObjArray): integer;
+function ObjArrayAppend(var aDestObjArray, aSourceObjArray): PtrInt;
 
 /// wrapper to add an item to a T*ObjArray dynamic array storage
 // - this overloaded function will use a separated variable to store the items
 // count, so will be slightly faster: but you should call SetLength() when done,
 // to have an array as expected by TJSONSerializer.RegisterObjArrayForJSON()
 // - return the index of the item in the dynamic array
-function ObjArrayAddCount(var aObjArray; aItem: TObject; var aObjArrayCount: integer): integer;
+function ObjArrayAddCount(var aObjArray; aItem: TObject; var aObjArrayCount: integer): PtrInt;
 
 /// wrapper to add once an item to a T*ObjArray dynamic array storage
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
@@ -6247,7 +6247,7 @@ procedure ObjArraySetLength(var aObjArray; aLength: integer);
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
 // - search is performed by address/reference, not by content
 // - returns -1 if the item is not found in the dynamic array
-function ObjArrayFind(const aObjArray; aItem: TObject): integer;
+function ObjArrayFind(const aObjArray; aItem: TObject): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// wrapper to count all not nil items in a T*ObjArray dynamic array storage
@@ -6257,14 +6257,14 @@ function ObjArrayCount(const aObjArray): integer;
 /// wrapper to delete an item in a T*ObjArray dynamic array storage
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
 // - do nothing if the index is out of range in the dynamic array
-procedure ObjArrayDelete(var aObjArray; aItemIndex: integer;
+procedure ObjArrayDelete(var aObjArray; aItemIndex: PtrInt;
   aContinueOnException: boolean=false); overload;
 
 /// wrapper to delete an item in a T*ObjArray dynamic array storage
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
 // - search is performed by address/reference, not by content
 // - do nothing if the item is not found in the dynamic array
-function ObjArrayDelete(var aObjArray; aItem: TObject): integer; overload;
+function ObjArrayDelete(var aObjArray; aItem: TObject): PtrInt; overload;
 
 /// wrapper to sort the items stored in a T*ObjArray dynamic array
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
@@ -6305,7 +6305,7 @@ procedure ObjArraysClear(const aObjArray: array of pointer);
 {$ifndef DELPHI5OROLDER}
 
 /// wrapper to add an item to a T*InterfaceArray dynamic array storage
-function InterfaceArrayAdd(var aInterfaceArray; const aItem: IUnknown): integer;
+function InterfaceArrayAdd(var aInterfaceArray; const aItem: IUnknown): PtrInt;
 
 /// wrapper to add once an item to a T*InterfaceArray dynamic array storage
 procedure InterfaceArrayAddOnce(var aInterfaceArray; const aItem: IUnknown);
@@ -6314,17 +6314,17 @@ procedure InterfaceArrayAddOnce(var aInterfaceArray; const aItem: IUnknown);
 // - search is performed by address/reference, not by content
 // - return -1 if the item is not found in the dynamic array, or the index of
 // the matching entry otherwise
-function InterfaceArrayFind(const aInterfaceArray; const aItem: IUnknown): integer;
+function InterfaceArrayFind(const aInterfaceArray; const aItem: IUnknown): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// wrapper to delete an item in a T*InterfaceArray dynamic array storage
 // - search is performed by address/reference, not by content
 // - do nothing if the item is not found in the dynamic array
-function InterfaceArrayDelete(var aInterfaceArray; const aItem: IUnknown): integer; overload;
+function InterfaceArrayDelete(var aInterfaceArray; const aItem: IUnknown): PtrInt; overload;
 
 /// wrapper to delete an item in a T*InterfaceArray dynamic array storage
 // - do nothing if the item is not found in the dynamic array
-procedure InterfaceArrayDelete(var aInterfaceArray; aItemIndex: integer); overload;
+procedure InterfaceArrayDelete(var aInterfaceArray; aItemIndex: PtrInt); overload;
 
 {$endif DELPHI5OROLDER}
 
@@ -50325,7 +50325,7 @@ end;
 
 { wrapper functions to T*ObjArr types }
 
-function ObjArrayAdd(var aObjArray; aItem: TObject): integer;
+function ObjArrayAdd(var aObjArray; aItem: TObject): PtrInt;
 var a: TObjectDynArray absolute aObjArray;
 begin
   result := length(a);
@@ -50333,8 +50333,8 @@ begin
   a[result] := aItem;
 end;
 
-function ObjArrayAppend(var aDestObjArray, aSourceObjArray): integer;
-var n: integer;
+function ObjArrayAppend(var aDestObjArray, aSourceObjArray): PtrInt;
+var n: PtrInt;
     s: TObjectDynArray absolute aSourceObjArray;
     d: TObjectDynArray absolute aDestObjArray;
 begin
@@ -50346,7 +50346,7 @@ begin
   inc(result,n);
 end;
 
-function ObjArrayAddCount(var aObjArray; aItem: TObject; var aObjArrayCount: integer): integer;
+function ObjArrayAddCount(var aObjArray; aItem: TObject; var aObjArrayCount: integer): PtrInt;
 var a: TObjectDynArray absolute aObjArray;
 begin
   result := aObjArrayCount;
@@ -50358,7 +50358,7 @@ end;
 
 procedure ObjArrayAddOnce(var aObjArray; aItem: TObject);
 var a: TObjectDynArray absolute aObjArray;
-    n: integer;
+    n: PtrInt;
 begin
   n := length(a);
   if not PtrUIntScanExists(pointer(a),n,PtrUInt(aItem)) then begin
@@ -50372,14 +50372,14 @@ begin
   SetLength(TObjectDynArray(aObjArray),aLength);
 end;
 
-function ObjArrayFind(const aObjArray; aItem: TObject): integer;
+function ObjArrayFind(const aObjArray; aItem: TObject): PtrInt;
 begin
   result := PtrUIntScanIndex(pointer(aObjArray),
     length(TObjectDynArray(aObjArray)),PtrUInt(aItem));
 end;
 
 function ObjArrayCount(const aObjArray): integer;
-var i: integer;
+var i: PtrInt;
     a: TObjectDynArray absolute aObjArray;
 begin
   result := 0;
@@ -50388,9 +50388,9 @@ begin
       inc(result);
 end;
 
-procedure ObjArrayDelete(var aObjArray; aItemIndex: integer;
+procedure ObjArrayDelete(var aObjArray; aItemIndex: PtrInt;
   aContinueOnException: boolean);
-var n: integer;
+var n: PtrInt;
     a: TObjectDynArray absolute aObjArray;
 begin
   n := length(a);
@@ -50408,7 +50408,7 @@ begin
   SetLength(a,n);
 end;
 
-function ObjArrayDelete(var aObjArray; aItem: TObject): integer;
+function ObjArrayDelete(var aObjArray; aItem: TObject): PtrInt;
 begin
   result := ObjArrayFind(aObjArray,aItem);
   if result>=0 then
@@ -50461,7 +50461,7 @@ begin
 end;
 
 procedure ObjArrayClear(var aObjArray; aContinueOnException: boolean);
-var n,i: integer;
+var n,i: PtrInt;
     a: TObjectDynArray absolute aObjArray;
 begin
   n := length(a);
@@ -50494,7 +50494,7 @@ end;
 
 
 procedure ObjArrayObjArrayClear(var aObjArray);
-var i: integer;
+var i: PtrInt;
     a: TPointerDynArray absolute aObjArray;
 begin
   if a<>nil then begin
@@ -50505,7 +50505,7 @@ begin
 end;
 
 procedure ObjArraysClear(const aObjArray: array of pointer);
-var i: integer;
+var i: PtrInt;
 begin
   for i := 0 to high(aObjArray) do
     if aObjArray[i]<>nil then
@@ -50514,7 +50514,7 @@ end;
 
 {$ifndef DELPHI5OROLDER}
 
-function InterfaceArrayAdd(var aInterfaceArray; const aItem: IUnknown): integer;
+function InterfaceArrayAdd(var aInterfaceArray; const aItem: IUnknown): PtrInt;
 var a: TInterfaceDynArray absolute aInterfaceArray;
 begin
   result := length(a);
@@ -50524,7 +50524,7 @@ end;
 
 procedure InterfaceArrayAddOnce(var aInterfaceArray; const aItem: IUnknown);
 var a: TInterfaceDynArray absolute aInterfaceArray;
-    n: integer;
+    n: PtrInt;
 begin
   if PtrUIntScanExists(pointer(aInterfaceArray),
      length(TInterfaceDynArray(aInterfaceArray)),PtrUInt(aItem)) then
@@ -50534,18 +50534,18 @@ begin
   a[n] := aItem;
 end;
 
-function InterfaceArrayFind(const aInterfaceArray; const aItem: IUnknown): integer;
+function InterfaceArrayFind(const aInterfaceArray; const aItem: IUnknown): PtrInt;
 begin
   result := PtrUIntScanIndex(pointer(aInterfaceArray),
     length(TInterfaceDynArray(aInterfaceArray)),PtrUInt(aItem));
 end;
 
-procedure InterfaceArrayDelete(var aInterfaceArray; aItemIndex: integer);
-var n: integer;
+procedure InterfaceArrayDelete(var aInterfaceArray; aItemIndex: PtrInt);
+var n: PtrInt;
     a: TInterfaceDynArray absolute aInterfaceArray;
 begin
   n := length(a);
-  if cardinal(aItemIndex)>=cardinal(n) then
+  if PtrUInt(aItemIndex)>=PtrUInt(n) then
     exit; // out of range
   a[aItemIndex] := nil;
   dec(n);
@@ -50555,7 +50555,7 @@ begin
   SetLength(a,n);
 end;
 
-function InterfaceArrayDelete(var aInterfaceArray; const aItem: IUnknown): integer;
+function InterfaceArrayDelete(var aInterfaceArray; const aItem: IUnknown): PtrInt;
 begin
   result := InterfaceArrayFind(aInterfaceArray,aItem);
   if result>=0 then
