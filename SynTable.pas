@@ -2210,7 +2210,7 @@ type
   protected
     fOwner: TParserAbstract;
     fWord: RawUTF8;
-    /// should be set from actual text before TExprParser.Found is called
+    /// should be set from actual data before TExprParser.Found is called
     fFound: boolean;
     function ParseWord: TExprParserResult; virtual; abstract;
   public
@@ -2225,27 +2225,25 @@ type
   /// parent class of TExprParserAbstract
   TParserAbstract = class(TSynPersistent)
   protected
-    fExpression: RawUTF8;
-    fCurrentWord, fAndWord, fOrWord, fNotWord: RawUTF8;
+    fExpression, fCurrentWord, fAndWord, fOrWord, fNotWord: RawUTF8;
     fCurrent: PUTF8Char;
     fCurrentError: TExprParserResult;
     fFirstNode: TExprNode;
     fWordClass: TExprNodeWordClass;
-    fNoWordIsAnd: boolean;
     fWords: array of TExprNodeWordAbstract;
     fWordCount: integer;
+    fNoWordIsAnd: boolean;
     fFoundStack: array[byte] of boolean; // simple stack-based virtual machine
     procedure ParseNextCurrentWord; virtual; abstract;
     function ParseExpr: TExprNode;
     function ParseFactor: TExprNode;
     function ParseTerm: TExprNode;
-    // you should reintroduce this method to initialize properly the entWord
-    // searching class and all temporary structures needed for actual search
-    procedure Initialize; virtual; abstract;
     procedure Clear; virtual;
+    // override this method to initialize fWordClass and fAnd/Or/NotWord
+    procedure Initialize; virtual; abstract;
     /// perform the expression search over TExprNodeWord.fFound flags
     // - warning: caller should check that fFirstNode<>nil (e.g. WordCount>0)
-    function Found: boolean; {$ifdef HASINLINE}inline;{$endif}
+    function Execute: boolean; {$ifdef HASINLINE}inline;{$endif}
   public
     /// initialize an expression parser
     constructor Create; override;
@@ -5661,7 +5659,7 @@ type // Holub and Durian (2005) SBNDM2 algorithm
   TSBNDMQ2Mask = array[AnsiChar] of cardinal;
   PSBNDMQ2Mask = ^TSBNDMQ2Mask;
 
-function SearchSBNDMQ2ComputeMask(const Pattern: RawUTF8): RawByteString;
+function SearchSBNDMQ2ComputeMask(const Pattern: RawUTF8; u: PNormTable): RawByteString;
 var
   i: PtrInt;
   p: PAnsiChar absolute Pattern;
@@ -5671,7 +5669,7 @@ begin
   SetLength(result, SizeOf(m^));
   FillCharFast(m^, SizeOf(m^), 0);
   for i := 0 to length(Pattern) - 1 do begin
-    c := @m^[p[i]]; // for FPC code generation
+    c := @m^[u[p[i]]]; // for FPC code generation
     c^ := c^ or (1 shl i);
   end;
 end;
@@ -5682,15 +5680,16 @@ var
   max, i, j: PtrInt;
   state: cardinal;
 begin
-  max := aMatch^.PMax;
   mask := pointer(aMatch^.Pattern);
+  max := aMatch^.PMax;
   i := max - 1;
   dec(aTextLen);
   if i < aTextLen then begin
     repeat
-      state := (mask[aText[i+1]] shr 1) and mask[aText[i]];
+      state := mask[aText[i+1]] shr 1; // in two steps for better FPC codegen
+      state := state and mask[aText[i]];
       if state = 0 then begin
-        inc(i, max); // Boyer-Moore-alike fast skip
+        inc(i, max); // fast skip
         if i >= aTextLen then
           break;
         continue;
@@ -5714,24 +5713,73 @@ begin
   result := false;
 end;
 
+function SearchSBNDMQ2U(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+var
+  u: PNormTable;
+  mask: PSBNDMQ2Mask;
+  max, i, j: PtrInt;
+  state: cardinal;
+begin
+  mask := pointer(aMatch^.Pattern);
+  max := aMatch^.PMax;
+  u := aMatch^.Upper;
+  i := max - 1;
+  dec(aTextLen);
+  if i < aTextLen then begin
+    repeat
+      state := mask[u[aText[i+1]]] shr 1;
+      state := state and mask[u[aText[i]]];
+      if state = 0 then begin
+        inc(i, max);
+        if i >= aTextLen then
+          break;
+        continue;
+      end;
+      j := i - max;
+      repeat
+        dec(i);
+        if i < 0 then
+          break;
+        state := (state shr 1) and mask[u[aText[i]]];
+      until state = 0;
+      if i = j then begin
+        result := true;
+        exit;
+      end;
+      inc(i, max);
+      if i >= aTextLen then
+        break;
+    until false;
+  end;
+  result := false;
+end;
+
 procedure TMatch.PrepareContains(var aPattern: RawUTF8;
   aCaseInsensitive: boolean);
 begin
   PMax := length(aPattern) - 1;
   if aCaseInsensitive and not IsCaseSensitive(pointer(aPattern), PMax + 1) then
     aCaseInsensitive := false;
+  if aCaseInsensitive then
+    Upper := @NormToUpperAnsi7
+  else
+    Upper := @NormToNorm;
   if PMax < 0 then
     Search := SearchContainsValid
-  else if aCaseInsensitive then begin
-    Upper := @NormToUpperAnsi7;
-    Search := SearchContainsU;
-  end
   else if PMax > 30 then
-    Search := {$ifdef CPU64}SearchContains8{$else}SearchContains4{$endif}
+    if aCaseInsensitive then
+      Search := SearchContainsU
+    else
+      Search := {$ifdef CPU64}SearchContains8{$else}SearchContains4{$endif}
   else if PMax >= 1 then begin // len in [2..31] = PMax in [1..30]
-    aPattern := SearchSBNDMQ2ComputeMask(aPattern); // replaced by lookup table
-    Search := SearchSBNDMQ2;
+    aPattern := SearchSBNDMQ2ComputeMask(aPattern, Upper); // lookup table
+    if aCaseInsensitive then
+      Search := SearchSBNDMQ2U
+    else
+      Search := SearchSBNDMQ2;
   end
+  else if aCaseInsensitive then
+    Search := SearchContainsU
   else
     Search := SearchContains1;
   Pattern := pointer(aPattern);
@@ -8478,7 +8526,7 @@ begin
   end;
 end;
 
-function TParserAbstract.Found: boolean;
+function TParserAbstract.Execute: boolean;
 var
   n: TExprNode;
   st: PBoolean;
@@ -8653,7 +8701,7 @@ begin
       inc(P);
     inc(fMatchedLastSet, SearchFast(aText, P - aText, pointer(fWords), fWordCount));
   end;
-  result := Found;
+  result := Execute;
 end;
 
 
