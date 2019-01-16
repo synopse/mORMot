@@ -4744,6 +4744,15 @@ begin
   Check(PosCharAny('ABC','aA')^='A');
   Check(PosCharAny('ABC','bB')^='B');
   Check(PosCharAny('ABC','cC')^='C');
+  Check(PosExChar('z','')=0,'ABC');
+  Check(PosExChar('z','A')=0,'ABC');
+  Check(PosExChar('z','ABC')=0,'ABC');
+  Check(PosExChar('A','A')=1,'ABC');
+  Check(PosExChar('A','AB')=1,'ABC');
+  Check(PosExChar('A','ABC')=1,'ABC');
+  Check(PosExChar('B','ABC')=2,'ABC');
+  Check(PosExChar('B','AB')=2,'ABC');
+  Check(PosExChar('C','ABC')=3,'ABC');
 end;
 {$HINTS ON}
 

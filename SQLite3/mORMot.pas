@@ -9780,7 +9780,7 @@ type
     function GetTableIndex(const SQLTableName: RawUTF8): integer; overload;
     /// get the index of a table in Tables[]
     // - expects SQLTableName to be SQL-like formatted (i.e. without TSQL[Record])
-    function GetTableIndex(SQLTableName: PUTF8Char): integer; overload;
+    function GetTableIndexPtr(SQLTableName: PUTF8Char): integer;
     /// return the UTF-8 encoded SQL source to create the table
     function GetSQLCreate(aTableIndex: integer): RawUTF8;
     /// return the UTF-8 encoded SQL source to add the corresponding field
@@ -24654,7 +24654,7 @@ function AuthURI(const URI, URIAuthenticationBearer: RawUTF8): RawUTF8;
 begin
   if URIAuthenticationBearer='' then
     result := URI else
-    if PosChar(pointer(URI),'?')=nil then
+    if PosExChar('?',URI)=0 then
       result := URI+'?authenticationbearer='+URIAuthenticationBearer else
       result := URI+'&authenticationbearer='+URIAuthenticationBearer
 end;
@@ -34364,8 +34364,8 @@ var i: integer;
 begin
   i := GetTableIndex(aTable);
   if (i<0) or (Cardinal(aFieldIndex)>=MAX_SQLFIELDS) then
-    Result := false else
-    Result := aFieldIndex in TableProps[i].Props.IsUniqueFieldsBits;
+    result := false else
+    result := aFieldIndex in TableProps[i].Props.IsUniqueFieldsBits;
 end;
 
 function GetTableNameFromSQLSelect(const SQL: RawUTF8;
@@ -34550,7 +34550,7 @@ begin
     result := -1;
 end;
 
-function TSQLModel.GetTableIndex(SQLTableName: PUTF8Char): integer;
+function TSQLModel.GetTableIndexPtr(SQLTableName: PUTF8Char): integer;
 begin
   if (self<>nil) and (SQLTableName<>nil) then begin
     // fast O(log(n)) binary search
@@ -35976,7 +35976,7 @@ begin
     with Table.RecordProps do
     if FieldNames='*' then
       result := SQLFromSelect(SQLTableName,SQLTableRetrieveAllFields,WhereClause,'') else
-    if (PosChar(pointer(FieldNames),',')=nil) and (PosChar(pointer(FieldNames),'(')=nil) and
+    if (PosExChar(',',FieldNames)=0) and (PosExChar('(',FieldNames)=0) and
        not IsFieldName(FieldNames) then
       result := '' else // prevent SQL error
       result := SQLFromSelect(SQLTableName,FieldNames,WhereClause,'');
@@ -40846,7 +40846,7 @@ end;
 procedure TSQLRestServerURIContext.InternalSetTableFromTableName(TableName: PUTF8Char);
 begin
   TableEngine := Server;
-  InternalSetTableFromTableIndex(Server.Model.GetTableIndex(TableName));
+  InternalSetTableFromTableIndex(Server.Model.GetTableIndexPtr(TableName));
   if TableIndex<0 then
     exit;
   Static := Server.GetStaticTableIndex(TableIndex,StaticKind);
@@ -44356,7 +44356,7 @@ begin
         RunTableIndex := TableIndex;
         RunTable := Table;
       end else begin                // e.g. '[...,"POST@Table",{object},...]'
-        RunTableIndex := Model.GetTableIndex(MethodTable+1);
+        RunTableIndex := Model.GetTableIndexPtr(MethodTable+1);
         if RunTableIndex<0 then
           raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Unknown %',
             [self,MethodTable]);
@@ -48132,7 +48132,7 @@ begin
       TableName := GetJSONField(P,P,@wasString);
       if not wasString or (P=nil) then
         exit;
-      t := Model.GetTableIndex(TableName);
+      t := Model.GetTableIndexPtr(TableName);
       if t<0 then
         exit;
       Data := P;
@@ -53598,7 +53598,7 @@ class procedure TSQLRestServerAuthenticationURI.ClientSessionSign(
   Sender: TSQLRestClientURI; var Call: TSQLRestURIParams);
 begin
   if (Sender<>nil) and (Sender.fSessionID<>0) and (Sender.fSessionUser<>nil) then
-    if PosChar(pointer(Call.url),'?')=nil then
+    if PosExChar('?',Call.url)=0 then
       Call.url := Call.url+'?session_signature='+Sender.fSessionIDHexa8 else
       Call.url := Call.url+'&session_signature='+Sender.fSessionIDHexa8;
 end;
@@ -53788,7 +53788,7 @@ begin
   if (Sender=nil) or (Sender.fSessionID=0) or (Sender.fSessionUser=nil) then
     exit;
   blankURI := Call.Url;
-  if PosChar(pointer(Call.url),'?')=nil then
+  if PosExChar('?',Call.url)=0 then
     Call.url := Call.Url+'?session_signature=' else
     Call.url := Call.Url+'&session_signature=';
   with Sender do begin
@@ -54400,7 +54400,7 @@ begin
         include(bits,i);
   while MethodNamesCSV<>nil do begin
     GetNextItem(MethodNamesCSV,',',method);
-    if PosChar(pointer(method),'.')=nil then begin
+    if PosExChar('.',method)=0 then begin
       for i := 0 to n-1 do
       with fListInterfaceMethod[i] do // O(n) search is fast enough here
         if (InterfaceMethodIndex>=SERVICE_PSEUDO_METHOD_COUNT) and
@@ -55807,7 +55807,7 @@ end;
 function TInterfaceFactory.FindFullMethodIndex(const aFullMethodName: RawUTF8;
   alsoSearchExactMethodName: boolean): integer;
 begin
-  if PosChar(pointer(aFullMethodName),'.')<>nil then
+  if PosExChar('.',aFullMethodName))<>0 then
     for result := 0 to fMethodsCount-1 do
       if IdemPropNameU(fMethods[result].InterfaceDotMethodName,aFullMethodName) then
         exit;

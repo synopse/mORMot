@@ -2893,6 +2893,9 @@ function PosEx(const SubStr, S: RawUTF8; Offset: PtrUInt=1): integer;
 
 {$endif PUREPASCAL}
 
+/// special version of PosEx() with search text as one AnsiChar
+function PosExChar(Chr: AnsiChar; const Str: RawUTF8): PtrInt; {$ifdef FPC}inline;{$endif}
+
 /// split a RawUTF8 string into two strings, according to SepStr separator
 // - if SepStr is not found, LeftStr=Str and RightStr=''
 // - if ToUpperCase is TRUE, then LeftStr and RightStr will be made uppercase
@@ -23148,185 +23151,6 @@ asm
 end;
 {$endif}
 
-function SplitRight(const Str: RawUTF8; SepChar: AnsiChar; LeftStr: PRawUTF8): RawUTF8;
-var i: PtrInt;
-begin
-  for i := length(Str) downto 1 do
-    if Str[i]=SepChar then begin
-      result := copy(Str,i+1,maxInt);
-      if LeftStr<>nil then
-        LeftStr^ := copy(Str,1,i-1);
-      exit;
-    end;
-  result := Str;
-  if LeftStr<>nil then
-    LeftStr^ := '';
-end;
-
-function SplitRights(const Str, SepChar: RawUTF8): RawUTF8;
-var i, j, sep: PtrInt;
-    c: AnsiChar;
-begin
-  sep := length(SepChar);
-  if sep > 0 then
-    if sep = 1 then
-      result := SplitRight(Str,SepChar[1]) else begin
-    for i := length(Str) downto 1 do begin
-      c := Str[i];
-      for j := 1 to sep do
-        if c=SepChar[j] then begin
-          result := copy(Str,i+1,maxInt);
-          exit;
-        end;
-    end;
-  end;
-  result := Str;
-end;
-
-function Split(const Str, SepStr: RawUTF8; StartPos: integer): RawUTF8;
-var i: integer;
-begin
-  i := PosEx(SepStr,Str,StartPos);
-  if i>0 then
-    result := Copy(Str,StartPos,i-StartPos) else
-    if StartPos=1 then
-      result := Str else
-      result := Copy(Str,StartPos,maxInt);
-end;
-
-procedure Split(const Str, SepStr: RawUTF8; var LeftStr, RightStr: RawUTF8; ToUpperCase: boolean);
-var i: integer;
-    tmp: RawUTF8; // may be called as Split(Str,SepStr,Str,RightStr)
-begin
-  i := PosEx(SepStr,Str);
-  if i=0 then begin
-    LeftStr := Str;
-    RightStr := '';
-  end else begin
-    tmp := copy(Str,1,i-1);
-    RightStr := copy(Str,i+length(SepStr),maxInt);
-    LeftStr := tmp;
-  end;
-  if ToUpperCase then begin
-    LeftStr := UpperCaseU(LeftStr);
-    RightStr := UpperCaseU(RightStr);
-  end;
-end;
-
-function Split(const Str, SepStr: RawUTF8; var LeftStr: RawUTF8; ToUpperCase: boolean=false): RawUTF8;
-begin
-  Split(Str,SepStr,LeftStr,result,ToUpperCase);
-end;
-
-procedure Split(const Str: RawUTF8; const SepStr: array of RawUTF8;
-  const DestPtr: array of PRawUTF8);
-var s,i,j,n: integer;
-begin
-  j := 1;
-  n := 0;
-  s := 0;
-  if high(SepStr)>=0 then
-    while n<=high(DestPtr) do begin
-      i := PosEx(SepStr[s],Str,j);
-      if i=0 then begin
-        if DestPtr[n]<>nil then
-          DestPtr[n]^ := copy(Str,j,MaxInt);
-        inc(n);
-        break;
-      end;
-      if DestPtr[n]<>nil then
-        DestPtr[n]^ := copy(Str,j,i-j);
-      inc(n);
-      if s<high(SepStr) then
-        inc(s);
-      j := i+1;
-    end;
-  for i := n to high(DestPtr) do
-    if DestPtr[i]<>nil then
-      DestPtr[i]^ := '';
-end;
-
-function StringReplaceAll(const S, OldPattern, NewPattern: RawUTF8): RawUTF8;
-
-  procedure Process(found: integer);
-  var oldlen,newlen,i,last,posCount,sharedlen: integer;
-      pos: TIntegerDynArray;
-      src,dst: PAnsiChar;
-  begin
-    oldlen := length(OldPattern);
-    newlen := length(NewPattern);
-    SetLength(pos,64);
-    pos[0] := found;
-    posCount := 1;
-    repeat
-      found := PosEx(OldPattern,S,found+oldlen);
-      if found=0 then
-        break;
-      AddInteger(pos,posCount,found);
-    until false;
-    FastSetString(result,nil,Length(S)+(newlen-oldlen)*posCount);
-    last := 1;
-    src := pointer(s);
-    dst := pointer(result);
-    for i := 0 to posCount-1 do begin
-      sharedlen := pos[i]-last;
-      MoveFast(src^,dst^,sharedlen);
-      inc(src,sharedlen+oldlen);
-      inc(dst,sharedlen);
-      MoveFast(pointer(NewPattern)^,dst^,newlen);
-      inc(dst,newlen);
-      last := pos[i]+oldlen;
-    end;
-    MoveFast(src^,dst^,length(S)-last+1);
-  end;
-
-var j: integer;
-begin
-  if (S='') or (OldPattern='') or (OldPattern=NewPattern) then
-    result := S else begin
-    j := PosEx(OldPattern, S, 1); // our PosEx() is faster than Pos()
-    if j=0 then
-      result := S else
-      Process(j);
-  end;
-end;
-
-function StringReplaceTabs(const Source,TabText: RawUTF8): RawUTF8;
-
-  procedure Process(S,D,T: PAnsiChar; TLen: integer);
-  begin
-    repeat
-      if S^=#0 then
-        break else
-      if S^<>#9 then begin
-        D^ := S^;
-        inc(D);
-        inc(S);
-      end else begin
-        MoveFast(T^,D^,TLen);
-        inc(D,TLen);
-        inc(S);
-      end;
-    until false;
-  end;
-
-var L,i,n,ttl: PtrInt;
-begin
-  ttl := length(TabText);
-  L := Length(Source);
-  n := 0;
-  if ttl<>0 then
-    for i := 1 to L do
-      if Source[i]=#9 then
-        inc(n);
-  if n=0 then begin
-    result := Source;
-    exit;
-  end;
-  SetLength(result,L+n*pred(ttl));
-  Process(pointer(Source),pointer(result),pointer(TabText),ttl);
-end;
-
 function PosCharAny(Str: PUTF8Char; Characters: PAnsiChar): PUTF8Char;
 var s: PAnsiChar;
     c: AnsiChar;
@@ -26345,6 +26169,198 @@ end;
 
 {$endif PUREPASCAL}
 
+function PosExChar(Chr: AnsiChar; const Str: RawUTF8): PtrInt;
+begin
+  {$ifdef FPC}
+  result := IndexByte(pointer(Str)^,_LStrLen(Str),byte(chr))+1;
+  {$else}
+  if Str<>'' then
+    for result := 1 to PInteger(PtrInt(Str)-sizeof(Integer))^ do
+      if Str[result]=Chr then
+        exit;
+  result := 0;
+  {$endif FPC}
+end;
+
+function SplitRight(const Str: RawUTF8; SepChar: AnsiChar; LeftStr: PRawUTF8): RawUTF8;
+var i: PtrInt;
+begin
+  for i := length(Str) downto 1 do
+    if Str[i]=SepChar then begin
+      result := copy(Str,i+1,maxInt);
+      if LeftStr<>nil then
+        LeftStr^ := copy(Str,1,i-1);
+      exit;
+    end;
+  result := Str;
+  if LeftStr<>nil then
+    LeftStr^ := '';
+end;
+
+function SplitRights(const Str, SepChar: RawUTF8): RawUTF8;
+var i, j, sep: PtrInt;
+    c: AnsiChar;
+begin
+  sep := length(SepChar);
+  if sep > 0 then
+    if sep = 1 then
+      result := SplitRight(Str,SepChar[1]) else begin
+    for i := length(Str) downto 1 do begin
+      c := Str[i];
+      for j := 1 to sep do
+        if c=SepChar[j] then begin
+          result := copy(Str,i+1,maxInt);
+          exit;
+        end;
+    end;
+  end;
+  result := Str;
+end;
+
+function Split(const Str, SepStr: RawUTF8; StartPos: integer): RawUTF8;
+var i: integer;
+begin
+  i := PosEx(SepStr,Str,StartPos);
+  if i>0 then
+    result := Copy(Str,StartPos,i-StartPos) else
+    if StartPos=1 then
+      result := Str else
+      result := Copy(Str,StartPos,maxInt);
+end;
+
+procedure Split(const Str, SepStr: RawUTF8; var LeftStr, RightStr: RawUTF8; ToUpperCase: boolean);
+var i: integer;
+    tmp: RawUTF8; // may be called as Split(Str,SepStr,Str,RightStr)
+begin
+  i := PosEx(SepStr,Str);
+  if i=0 then begin
+    LeftStr := Str;
+    RightStr := '';
+  end else begin
+    tmp := copy(Str,1,i-1);
+    RightStr := copy(Str,i+length(SepStr),maxInt);
+    LeftStr := tmp;
+  end;
+  if ToUpperCase then begin
+    LeftStr := UpperCaseU(LeftStr);
+    RightStr := UpperCaseU(RightStr);
+  end;
+end;
+
+function Split(const Str, SepStr: RawUTF8; var LeftStr: RawUTF8; ToUpperCase: boolean=false): RawUTF8;
+begin
+  Split(Str,SepStr,LeftStr,result,ToUpperCase);
+end;
+
+procedure Split(const Str: RawUTF8; const SepStr: array of RawUTF8;
+  const DestPtr: array of PRawUTF8);
+var s,i,j,n: integer;
+begin
+  j := 1;
+  n := 0;
+  s := 0;
+  if high(SepStr)>=0 then
+    while n<=high(DestPtr) do begin
+      i := PosEx(SepStr[s],Str,j);
+      if i=0 then begin
+        if DestPtr[n]<>nil then
+          DestPtr[n]^ := copy(Str,j,MaxInt);
+        inc(n);
+        break;
+      end;
+      if DestPtr[n]<>nil then
+        DestPtr[n]^ := copy(Str,j,i-j);
+      inc(n);
+      if s<high(SepStr) then
+        inc(s);
+      j := i+1;
+    end;
+  for i := n to high(DestPtr) do
+    if DestPtr[i]<>nil then
+      DestPtr[i]^ := '';
+end;
+
+function StringReplaceAll(const S, OldPattern, NewPattern: RawUTF8): RawUTF8;
+
+  procedure Process(found: integer);
+  var oldlen,newlen,i,last,posCount,sharedlen: integer;
+      pos: TIntegerDynArray;
+      src,dst: PAnsiChar;
+  begin
+    oldlen := length(OldPattern);
+    newlen := length(NewPattern);
+    SetLength(pos,64);
+    pos[0] := found;
+    posCount := 1;
+    repeat
+      found := PosEx(OldPattern,S,found+oldlen);
+      if found=0 then
+        break;
+      AddInteger(pos,posCount,found);
+    until false;
+    FastSetString(result,nil,Length(S)+(newlen-oldlen)*posCount);
+    last := 1;
+    src := pointer(s);
+    dst := pointer(result);
+    for i := 0 to posCount-1 do begin
+      sharedlen := pos[i]-last;
+      MoveFast(src^,dst^,sharedlen);
+      inc(src,sharedlen+oldlen);
+      inc(dst,sharedlen);
+      MoveFast(pointer(NewPattern)^,dst^,newlen);
+      inc(dst,newlen);
+      last := pos[i]+oldlen;
+    end;
+    MoveFast(src^,dst^,length(S)-last+1);
+  end;
+
+var j: integer;
+begin
+  if (S='') or (OldPattern='') or (OldPattern=NewPattern) then
+    result := S else begin
+    j := PosEx(OldPattern, S, 1); // our PosEx() is faster than Pos()
+    if j=0 then
+      result := S else
+      Process(j);
+  end;
+end;
+
+function StringReplaceTabs(const Source,TabText: RawUTF8): RawUTF8;
+
+  procedure Process(S,D,T: PAnsiChar; TLen: integer);
+  begin
+    repeat
+      if S^=#0 then
+        break else
+      if S^<>#9 then begin
+        D^ := S^;
+        inc(D);
+        inc(S);
+      end else begin
+        MoveFast(T^,D^,TLen);
+        inc(D,TLen);
+        inc(S);
+      end;
+    until false;
+  end;
+
+var L,i,n,ttl: PtrInt;
+begin
+  ttl := length(TabText);
+  L := Length(Source);
+  n := 0;
+  if ttl<>0 then
+    for i := 1 to L do
+      if Source[i]=#9 then
+        inc(n);
+  if n=0 then begin
+    result := Source;
+    exit;
+  end;
+  SetLength(result,L+n*pred(ttl));
+  Process(pointer(Source),pointer(result),pointer(TabText),ttl);
+end;
+
 function strspnpas(s,accept: pointer): integer;
 var p: PCardinal;
     c: AnsiChar;
@@ -27010,7 +27026,7 @@ begin
        release := StringToUTF8(SR.Name);
     release := split(release,'-');
     dist := split(trim(StringFromFile('/etc/'+SR.Name)),#10);
-    if (dist<>'') and (PosEx('=',dist)=0) and (PosEx(' ',dist)>0) then
+    if (dist<>'') and (PosExChar('=',dist)=0) and (PosExChar(' ',dist)>0) then
       SetLinuxDistrib(dist) // e.g. 'Red Hat Enterprise Linux Server release 6.7 (Santiago)'
     else
       dist := '';
@@ -51607,7 +51623,7 @@ var bits: TSynUniqueIdentifierObfuscatedBits;
     key: cardinal;
 begin
   result := false;
-  len := PosEx('.',aObfuscated);
+  len := PosExChar('.',aObfuscated);
   if len=0 then
     len := Length(aObfuscated) else
     dec(len); // trim right '.jpg'
@@ -56026,7 +56042,7 @@ begin
       if pass<>'' then
         result := TSynPersistentWithPasswordUserCrypt(pass,AppSecret,false);
     end else begin
-      i := PosEx(':',fPassword);
+      i := PosExChar(':',fPassword);
       if i>0 then
         raise ESynException.CreateUTF8('%.GetPassWordPlain unable to retrieve the '+
           'stored value: current user is "%", but password in % was encoded for "%"',
@@ -58445,15 +58461,14 @@ begin
 end;
 
 function TRawUTF8List.GetName(Index: PtrInt): RawUTF8;
-var Sep: PUTF8Char;
 begin
   result := Get(Index);
   if result='' then
     exit;
-  Sep := PosChar(pointer(result),NameValueSep);
-  if Sep=nil then
+  Index := PosExChar(NameValueSep,result);
+  if Index=0 then
     result := '' else
-    SetLength(result,Sep-pointer(result));
+    SetLength(result,Index-1);
 end;
 
 function TRawUTF8List.GetObject(Index: PtrInt): TObject;
@@ -58554,17 +58569,16 @@ begin
 end;
 
 function TRawUTF8List.GetValueAt(Index: PtrInt): RawUTF8;
-var Sep: PUTF8Char;
 begin
   if (self=nil) or (PtrUInt(Index)>=PtrUInt(fCount)) then
     result := '' else
     result := Get(Index);
   if result='' then
     exit;
-  Sep := PosChar(pointer(result),NameValueSep);
-  if Sep=nil then
+  Index := PosExChar(NameValueSep,result);
+  if Index=0 then
     result := '' else
-    result := Sep+1; // get 'Value' from 'Name=Value'
+    result := copy(result,Index+1,maxInt);
 end;
 
 function TRawUTF8List.IndexOf(const aText: RawUTF8): PtrInt;
@@ -63478,7 +63492,7 @@ begin
   fOnAdd := OnAdd;
   while (Section<>nil) and (Section^<>'[') do begin
     s := GetNextLine(Section,Section);
-    i := PosEx('=',s);
+    i := PosExChar('=',s);
     if (i>1) and not(s[1] in [';','[']) then
       if Assigned(OnTheFlyConvert) then
         Add(copy(s,1,i-1),OnTheFlyConvert(copy(s,i+1,1000))) else
