@@ -55807,7 +55807,7 @@ end;
 function TInterfaceFactory.FindFullMethodIndex(const aFullMethodName: RawUTF8;
   alsoSearchExactMethodName: boolean): integer;
 begin
-  if PosExChar('.',aFullMethodName))<>0 then
+  if PosExChar('.',aFullMethodName)<>0 then
     for result := 0 to fMethodsCount-1 do
       if IdemPropNameU(fMethods[result].InterfaceDotMethodName,aFullMethodName) then
         exit;
