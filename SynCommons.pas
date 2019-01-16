@@ -3039,8 +3039,16 @@ function IdemPCharAndGetNextItem(var source: PUTF8Char; const searchUp: RawUTF8;
 function GotoNextLine(source: PUTF8Char): PUTF8Char;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// compute the line length from a size-delimited source array of chars
+// - will use fast assembly on x86-64 CPU, and expects TextEnd to be not nil
+// - is likely to read some bytes after the TextEnd buffer, so GetLineSize()
+// may be preferred, e.g. on memory mapped files
+function BufferLineLength(Text, TextEnd: PUTF8Char): PtrInt;
+  {$ifndef CPUX64}{$ifdef FPC}inline;{$endif}{$endif}
+
 /// compute the line length from source array of chars
-// - end counting at either #0, #13 or #10
+// - if PEnd = nil, end counting at either #0, #13 or #10
+// - otherwise, end counting at either #13 or #10
 function GetLineSize(P,PEnd: PUTF8Char): PtrUInt;
 
 /// returns true if the line length from source array of chars is not less than
@@ -32956,15 +32964,131 @@ begin
 end;
 {$WARNINGS ON}
 
-function GetLineSize(P,PEnd: PUTF8Char): PtrUInt;
+function BufferLineLength(Text, TextEnd: PUTF8Char): PtrInt;
+{$ifdef CPUX64}
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .NOFRAME {$endif}
+{$ifdef MSWINDOWS} // Win64 ABI to System-V ABI
+        push    rsi
+        push    rdi
+        mov     rdi, rcx
+        mov     rsi, rdx
+{$endif}mov     r8, rsi
+        sub     r8, rdi // rdi=Text, rsi=TextEnd, r8=TextLen
+        mov     ecx, edi
+        movdqa  xmm0, [rip + @for10]
+        movdqa  xmm1, [rip + @for13]
+        and     rdi, -32
+        and     ecx, 31
+        movdqa  xmm2, [rdi]
+        movdqa  xmm3, [rdi]
+        movdqa  xmm4, [rdi + 16]
+        movdqa  xmm5, [rdi + 16]
+        pcmpeqb xmm2, xmm0
+        pcmpeqb xmm3, xmm1
+        pcmpeqb xmm4, xmm0
+        pcmpeqb xmm5, xmm1
+        por     xmm3, xmm2
+        por     xmm5, xmm4
+        pmovmskb eax, xmm3
+        pmovmskb r10d, xmm5
+        shl     r10d, 16
+        or      eax, r10d
+        shr     eax, cl
+        bsf     eax, eax
+        jz      @main
+        add     rdi, rcx
+        add     rax, rdi
+        cmp     rax, rsi
+        jae     @fail
+{$ifdef MSWINDOWS}
+        pop     rdi
+        pop     rsi
+{$endif}ret
+@main:  add     rdi, 32
+        sub     rdi, rsi
+        jnc     @fail
+        jmp     @by32
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@for10: dq      $0a0a0a0a0a0a0a0a
+        dq      $0a0a0a0a0a0a0a0a
+@for13: dq      $0d0d0d0d0d0d0d0d
+        dq      $0d0d0d0d0d0d0d0d
+@by32:  movdqa  xmm2, [rdi + rsi]
+        movdqa  xmm3, [rdi + rsi]
+        movdqa  xmm4, [rdi + rsi + 16]
+        movdqa  xmm5, [rdi + rsi + 16]
+        pcmpeqb xmm2, xmm0
+        pcmpeqb xmm3, xmm1
+        pcmpeqb xmm4, xmm0
+        pcmpeqb xmm5, xmm1
+        por     xmm3, xmm2
+        por     xmm5, xmm4
+        por     xmm5, xmm3
+        pmovmskb eax, xmm5
+        test    eax, eax
+        jne     @found
+        add     rdi, 32
+        jnc     @by32
+@fail:  mov     rax, r8 // returns TextLen if no CR/LF found
+{$ifdef MSWINDOWS}
+        pop     rdi
+        pop     rsi
+{$endif}ret
+@found: pmovmskb r10d, xmm3
+        shl     eax, 16
+        or      eax, r10d
+        bsf     eax, eax
+        add     rax, rdi
+        jc      @fail
+        add     rax, rsi
+{$ifdef MSWINDOWS}
+        pop     rdi
+        pop     rsi
+{$endif}
+end;
+{$else} {$ifdef FPC}inline;{$endif}
+var c: cardinal;
 begin
+  result := 0;
+  dec(PtrInt(TextEnd),PtrInt(Text)); // compute TextLen
+  repeat
+    c := ord(Text[result]);
+    if c>13 then begin
+      inc(result);
+      if result>=PtrInt(TextEnd) then
+        break;
+      continue;
+    end;
+    if (c=10) or (c=13) then
+      break;
+    inc(result);
+    if result>=PtrInt(TextEnd) then
+      break;
+  until false;
+end;
+{$endif CPUX64}
+
+function GetLineSize(P,PEnd: PUTF8Char): PtrUInt;
+var c: cardinal;
+begin
+  if PEnd=nil then
+    dec(PtrUInt(PEnd));
   result := PtrUInt(P);
   if P<>nil then
-    if PEnd=nil then
-      while P^ in ANSICHARNOT01310 do
-        inc(P) else
-      while (P<PEnd) and (P^ in ANSICHARNOT01310) do
+    repeat
+      c := ord(P^);
+      if c>13 then begin
         inc(P);
+        if P>=PEnd then
+          break;
+        continue;
+      end;
+      if (c=0) or (c=10) or (c=13) then
+        break;
+      inc(P);
+      if P>=PEnd then
+        break;
+    until false;
   result := PtrUInt(P)-result;
 end;
 
@@ -63031,22 +63155,22 @@ begin
   repeat // fast unrolled search
     if p>=pEnd then break;
     i := ord(p^);
-    if not (AnsiChar(i) in ANSICHARNOT01310) then break;
+    if i in [10,13] then break;
     if NormToUpperAnsi7Byte[i]=ord(up^) then goto Fnd;
     inc(p);
     if p>=pEnd then break;
     i := ord(p^);
-    if not (AnsiChar(i) in ANSICHARNOT01310) then break;
+    if i in [10,13] then break;
     if NormToUpperAnsi7Byte[i]=ord(up^) then goto Fnd;
     inc(p);
     if p>=pEnd then break;
     i := ord(p^);
-    if not (AnsiChar(i) in ANSICHARNOT01310) then break;
+    if i in [10,13] then break;
     if NormToUpperAnsi7Byte[i]=ord(up^) then goto Fnd;
     inc(p);
     if p>=pEnd then break;
     i := ord(p^);
-    if not (AnsiChar(i) in ANSICHARNOT01310) then break;
+    if i in [10,13] then break;
     if NormToUpperAnsi7Byte[i]<>ord(up^) then begin
       inc(p);
       continue;
@@ -63080,7 +63204,7 @@ end;
 function GetLineSizeSmallerThan(P,PEnd: PUTF8Char; aMinimalCount: integer): boolean;
 begin
   if P<>nil then
-    while (P<PEnd) and (P^ in ANSICHARNOT01310) do
+    while (P<PEnd) and not(P^ in [#10,#13]) do
       if aMinimalCount=0 then begin
         result := false;
         exit;
