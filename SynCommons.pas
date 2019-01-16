@@ -26172,14 +26172,15 @@ end;
 function PosExChar(Chr: AnsiChar; const Str: RawUTF8): PtrInt;
 begin
   {$ifdef FPC}
-  result := IndexByte(pointer(Str)^,_LStrLen(Str),byte(chr))+1;
+  if Str<>'' then
+    result := IndexByte(pointer(Str)^,_LStrLen(Str),byte(chr))+1 else
   {$else}
   if Str<>'' then
     for result := 1 to PInteger(PtrInt(Str)-sizeof(Integer))^ do
       if Str[result]=Chr then
         exit;
-  result := 0;
   {$endif FPC}
+    result := 0;
 end;
 
 function SplitRight(const Str: RawUTF8; SepChar: AnsiChar; LeftStr: PRawUTF8): RawUTF8;
@@ -32990,73 +32991,59 @@ function BufferLineLength(Text, TextEnd: PUTF8Char): PtrInt;
         mov     rsi, rdx
 {$endif}mov     r8, rsi
         sub     r8, rdi // rdi=Text, rsi=TextEnd, r8=TextLen
+        jz      @fail
         mov     ecx, edi
         movdqa  xmm0, [rip + @for10]
         movdqa  xmm1, [rip + @for13]
-        and     rdi, -32
-        and     ecx, 31
+        and     rdi, -16 // check first aligned 16 bytes
+        and     ecx, 15
         movdqa  xmm2, [rdi]
-        movdqa  xmm3, [rdi]
-        movdqa  xmm4, [rdi + 16]
-        movdqa  xmm5, [rdi + 16]
+        movdqa  xmm3, xmm2
         pcmpeqb xmm2, xmm0
         pcmpeqb xmm3, xmm1
-        pcmpeqb xmm4, xmm0
-        pcmpeqb xmm5, xmm1
         por     xmm3, xmm2
-        por     xmm5, xmm4
         pmovmskb eax, xmm3
-        pmovmskb r10d, xmm5
-        shl     r10d, 16
-        or      eax, r10d
         shr     eax, cl
-        bsf     eax, eax
+        test    eax, eax
         jz      @main
-        add     rdi, rcx
+        bsf     eax, eax
+        add     rax, rcx
         add     rax, rdi
-        cmp     rax, rsi
+        sub     rax, rsi
         jae     @fail
+        add     rax, r8 // rax = TextFound - TextEnd + (TextEnd - Text) = offset
 {$ifdef MSWINDOWS}
         pop     rdi
         pop     rsi
 {$endif}ret
-@main:  add     rdi, 32
+@main:  add     rdi, 16
         sub     rdi, rsi
-        jnc     @fail
-        jmp     @by32
+        jae     @fail
+        jmp     @by16
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @for10: dq      $0a0a0a0a0a0a0a0a
         dq      $0a0a0a0a0a0a0a0a
 @for13: dq      $0d0d0d0d0d0d0d0d
         dq      $0d0d0d0d0d0d0d0d
-@by32:  movdqa  xmm2, [rdi + rsi]
-        movdqa  xmm3, [rdi + rsi]
-        movdqa  xmm4, [rdi + rsi + 16]
-        movdqa  xmm5, [rdi + rsi + 16]
+@by16:  movdqa  xmm2, [rdi + rsi] // check 16 bytes per loop
+        movdqa  xmm3, xmm2
         pcmpeqb xmm2, xmm0
         pcmpeqb xmm3, xmm1
-        pcmpeqb xmm4, xmm0
-        pcmpeqb xmm5, xmm1
         por     xmm3, xmm2
-        por     xmm5, xmm4
-        por     xmm5, xmm3
-        pmovmskb eax, xmm5
+        pmovmskb eax, xmm3
         test    eax, eax
-        jne     @found
-        add     rdi, 32
-        jnc     @by32
+        jnz     @found
+        add     rdi, 16
+        jnc     @by16
 @fail:  mov     rax, r8 // returns TextLen if no CR/LF found
 {$ifdef MSWINDOWS}
         pop     rdi
         pop     rsi
 {$endif}ret
-@found: pmovmskb r10d, xmm3
-        shl     eax, 16
-        or      eax, r10d
-        bsf     eax, eax
+@found: bsf     eax, eax
         add     rax, rdi
         jc      @fail
-        add     rax, rsi
+        add     rax, r8
 {$ifdef MSWINDOWS}
         pop     rdi
         pop     rsi
@@ -33067,20 +33054,21 @@ var c: cardinal;
 begin
   result := 0;
   dec(PtrInt(TextEnd),PtrInt(Text)); // compute TextLen
-  repeat
-    c := ord(Text[result]);
-    if c>13 then begin
+  if TextEnd<>nil then
+    repeat
+      c := ord(Text[result]);
+      if c>13 then begin
+        inc(result);
+        if result>=PtrInt(TextEnd) then
+          break;
+        continue;
+      end;
+      if (c=10) or (c=13) then
+        break;
       inc(result);
       if result>=PtrInt(TextEnd) then
         break;
-      continue;
-    end;
-    if (c=10) or (c=13) then
-      break;
-    inc(result);
-    if result>=PtrInt(TextEnd) then
-      break;
-  until false;
+    until false;
 end;
 {$endif CPUX64}
 
