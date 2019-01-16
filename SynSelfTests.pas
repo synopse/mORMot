@@ -3749,24 +3749,27 @@ begin
   {$endif}
   Check(Int64ToUTF8(2119852951849248647)='2119852951849248647');
   Check(FormatUTF8(' % ',[2119852951849248647])=' 2119852951849248647 ');
-  {$ifndef DELPHI5OROLDER}
-  d := GetExtended('1234');
+  s := '1234';
+  d := GetExtended(pointer(s));
   CheckSame(d,1234);
-  d := GetExtended('1234.1');
+  s := '1234.1';
+  d := GetExtended(pointer(s));
   CheckSame(d,1234.1);
-  d := GetExtended('1234.1234567890123456789');
+  s := '1234.1234567890123456789';
+  d := GetExtended(pointer(s));
   CheckSame(d,1234.1234567890123456789);
   u := DoubleToString(40640.5028819444);
   Check(u='40640.5028819444',u);
-  GetExtended('40640.5028a819444',err);
+  s := '40640.5028a819444';
+  GetExtended(pointer(s),err);
   Check(err>0);
-  d := GetExtended('40640.5028819444',err);
+  s := '40640.5028819444';
+  d := GetExtended(pointer(s),err);
   Check(err=0);
   u := DoubleToString(d);
   Check(u='40640.5028819444',u);
   e := 40640.5028819444;
   CheckSame(d,e,1e-11);
-  {$endif}
   d := 22.99999999999997;
   a[0] := AnsiChar(ExtendedToString(a,d,DOUBLE_PRECISION));
   Check(a='23');

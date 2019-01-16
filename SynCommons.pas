@@ -32348,7 +32348,7 @@ begin
     {$ifdef CPUX86}
     result := (result*10.0)+ch;
     {$else}
-    result := result*ten; // better FPC code generation in two steps
+    result := result*ten; // better FPC+Delphi64 code generation in two steps
     result := result+Ch;
     {$endif}
     include(flags,Valid);
