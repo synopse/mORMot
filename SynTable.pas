@@ -8649,7 +8649,7 @@ begin
 end;
 
 function TExprParserMatch.Search(aText: PUTF8Char; aTextLen: PtrInt): boolean;
-const // rough estimation
+const // rough estimation of UTF-8 characters
   IS_UTF8_WORD = ['0' .. '9', 'A' .. 'Z', 'a' .. 'z', #$80 ..#$ff];
 var
   P, PEnd: PUTF8Char;

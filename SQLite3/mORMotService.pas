@@ -682,7 +682,8 @@ type
     property Settings: TSynDaemonSettings read fSettings;
   end;
 
-  {$ifdef MSWINDOWS}
+{$ifdef MSWINDOWS}
+
   /// Enum synchronized with WinAPI
   // - see https://docs.microsoft.com/en-us/windows/desktop/secauthz/privilege-constants
   TWinSystemPrivilege = (wspCreateToken, wspAssignPrimaryToken, wspLockMemory,
@@ -748,9 +749,10 @@ type
   end;
   TWinProcessInfoDynArray = array of TWinProcessInfo;
 
-  procedure GetProcessInfo(aPid: Cardinal; out aInfo: TWinProcessInfo); overload;
-  procedure GetProcessInfo(const aPidList: TCardinalDynArray; out aInfo: TWinProcessInfoDynArray); overload;
-  {$endif}
+procedure GetProcessInfo(aPid: Cardinal; out aInfo: TWinProcessInfo); overload;
+procedure GetProcessInfo(const aPidList: TCardinalDynArray; out aInfo: TWinProcessInfoDynArray); overload;
+
+{$endif MSWINDOWS}
 
 implementation
 
@@ -1662,7 +1664,7 @@ begin
   fServiceDisplayName := fServiceName;
   {$ifndef MSWINDOWS}
   fLogPath := '/var/log/';
-  {$endif}
+  {$endif MSWINDOWS}
 end;
 
 function TSynDaemonSettings.ServiceDescription: string;
@@ -2446,6 +2448,6 @@ begin
   end;
 end;
 
-{$endif}
+{$endif MSWINDOWS}
 
 end.

@@ -64921,10 +64921,11 @@ var data: TSystemUseDataDynArray;
 begin
   result := '';
   data := HistoryData(aProcessID,aDepth);
-  {$ifdef LINUXNOTBSD} // https://www.retro11.de/ouxr/211bsd/usr/src/lib/libc/gen/getloadavg.c.html
+  {$ifdef LINUXNOTBSD} // bsd: see VM_LOADAVG
+  // https://www.retro11.de/ouxr/211bsd/usr/src/lib/libc/gen/getloadavg.c.html
   if data = nil then
     result := StringFromFile('/proc/loadavg',{HasNoSize=}true) else
-  {$endif LINUX}
+  {$endif LINUXNOTBSD}
   for i := 0 to high(data) do
   with data[i] do begin
     result := FormatUTF8('%% ',[result,TruncTo2Digits(Kernel+User)]);
