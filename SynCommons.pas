@@ -12763,6 +12763,7 @@ function UnixMSTimeToDateTime(const UnixMSTime: TUnixMSTime): TDateTime;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a TDateTime into a millisecond-based c-encoded time (from Unix epoch 1/1/1970)
+// - if AValue is 0, will return 0 (since is likely to be an error constant)
 function DateTimeToUnixMSTime(const AValue: TDateTime): TUnixMSTime;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -32397,13 +32398,10 @@ begin
       dec(Digits,ExpValue) else
       inc(Digits,ExpValue);
   end;
-  case Digits of
-  0: ;
-  low(POW10)..-1,1..high(POW10):
-    result := result*POW10[Digits];
-  else
-    result := result*IntPower(Digits);
-  end;
+  if Digits<>0 then
+    if (Digits>=low(POW10)) and (Digits<=high(POW10)) then
+      result := result*POW10[Digits] else
+      result := result*IntPower(Digits);
   if Neg in flags then
     result := -result;
   if (Valid in flags) and (Ch=0) then
@@ -35859,7 +35857,9 @@ end;
 
 function DateTimeToUnixMSTime(const AValue: TDateTime): TUnixMSTime;
 begin
-  result := Round((AValue - UnixDateDelta) * MSecsPerDay);
+  if AValue=0 then
+    result := 0 else
+    result := Round((AValue - UnixDateDelta) * MSecsPerDay);
 end;
 
 function UnixMSTimeToString(const UnixMSTime: TUnixMSTime; Expanded: boolean;
