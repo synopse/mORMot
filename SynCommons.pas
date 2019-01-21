@@ -6604,6 +6604,10 @@ function RecordEquals(const RecA, RecB; TypeInfo: pointer;
 // WinAnsiString, SynUnicode or even RawUnicode/WideString
 function RecordSave(const Rec; TypeInfo: pointer): RawByteString; overload;
 
+/// save a record content into a TBytes dynamic array
+// - could be used as an alternative to RawByteString's RecordSave()
+function RecordSaveBytes(const Rec; TypeInfo: pointer): TBytes;
+
 /// save a record content into a destination memory buffer
 // - Dest must be at least RecordSaveLength() bytes long
 // - will return the Rec size, in bytes, into Len reference variable
@@ -40536,6 +40540,15 @@ var Len: integer;
 begin
   Len := RecordSaveLength(Rec,TypeInfo);
   SetString(result,nil,Len);
+  if Len<>0 then
+    RecordSave(Rec,pointer(result),TypeInfo,Len);
+end;
+
+function RecordSaveBytes(const Rec; TypeInfo: pointer): TBytes;
+var Len: integer;
+begin
+  Len := RecordSaveLength(Rec,TypeInfo);
+  SetLength(result,Len);
   if Len<>0 then
     RecordSave(Rec,pointer(result),TypeInfo,Len);
 end;
