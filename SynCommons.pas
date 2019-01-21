@@ -6641,6 +6641,10 @@ function RecordSave(const Rec; Dest: PAnsiChar; TypeInfo: pointer;
 function RecordSave(const Rec; Dest: PAnsiChar; TypeInfo: pointer): PAnsiChar; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// save a record content into a destination memory buffer
+// - caller should make Dest.Done once finished with Dest.buf/Dest.len buffer
+procedure RecordSave(const Rec; var Dest: TSynTempBuffer; TypeInfo: pointer); overload;
+
 /// save a record content into a Base-64 encoded UTF-8 text content
 // - will use RecordSave() format, with a left-sided binary CRC
 function RecordSaveBase64(const Rec; TypeInfo: pointer; UriCompatible: boolean=false): RawUTF8;
@@ -11248,6 +11252,12 @@ function Base64uriToBin(sp: PAnsiChar; len: PtrInt): RawByteString; overload;
 // - in comparison to Base64 standard encoding, will trim any right-sided '='
 // unsignificant characters, and replace '+' or '/' by '_' or '-'
 procedure Base64uriToBin(sp: PAnsiChar; len: PtrInt; var result: RawByteString); overload;
+
+/// fast conversion from Base64-URI encoded text into binary data
+// - caller should always execute temp.Done when finished with the data
+// - in comparison to Base64 standard encoding, will trim any right-sided '='
+// unsignificant characters, and replace '+' or '/' by '_' or '-'
+function Base64uriToBin(sp: PAnsiChar; len: PtrInt; var temp: TSynTempBuffer): boolean; overload;
 
 /// fast conversion from Base64-URI encoded text into binary data
 // - in comparison to Base64 standard encoding, will trim any right-sided '='
@@ -28688,6 +28698,12 @@ begin
   result := '';
 end;
 
+function Base64uriToBin(sp: PAnsiChar; len: PtrInt; var temp: TSynTempBuffer): boolean;
+begin
+  temp.Init(Base64uriToBinLength(len));
+  result := (temp.len>0) and Base64AnyDecode(ConvertBase64URIToBin,sp,temp.buf,len);
+end;
+
 function Base64uriToBin(const base64: RawByteString; bin: PAnsiChar; binlen: PtrInt): boolean;
 begin
   result := Base64uriToBin(pointer(base64),bin,length(base64),binlen);
@@ -40548,45 +40564,50 @@ function RecordSaveBytes(const Rec; TypeInfo: pointer): TBytes;
 var Len: integer;
 begin
   Len := RecordSaveLength(Rec,TypeInfo);
+  result := nil; // don't reallocate TBytes data from a previous call
   SetLength(result,Len);
   if Len<>0 then
     RecordSave(Rec,pointer(result),TypeInfo,Len);
 end;
 
+procedure RecordSave(const Rec; var Dest: TSynTempBuffer; TypeInfo: pointer);
+var dummy: integer;
+begin
+  Dest.Init(RecordSaveLength(Rec,TypeInfo));
+  RecordSave(Rec,Dest.buf,TypeInfo,dummy);
+end;
+
 function RecordSaveBase64(const Rec; TypeInfo: pointer; UriCompatible: boolean): RawUTF8;
 var len,dummy: integer;
-    data: RawByteString;
-    dat: PAnsiChar;
+    temp: TSynTempBuffer;
 begin
   result := '';
   len := RecordSaveLength(Rec,TypeInfo);
   if len=0 then
     exit;
-  SetLength(data,len+4);
-  dat := PAnsiChar(pointer(data))+4;
-  RecordSave(Rec,dat,TypeInfo,dummy);
-  PCardinal(data)^ := crc32c(0,dat,len);
-  result := BinToBase64(data);
+  temp.Init(len+4); 
+  RecordSave(Rec,PAnsiChar(temp.buf)+4,TypeInfo,dummy);
+  PCardinal(temp.buf)^ := crc32c(0,PAnsiChar(temp.buf)+4,len);
   if UriCompatible then
-    Base64ToURI(result);
+    result := BinToBase64uri(temp.buf,temp.len) else
+    result := BinToBase64(temp.buf,temp.len);
+  temp.Done;
 end;
 
 function RecordLoadBase64(Source: PAnsiChar; Len: integer; var Rec;
   TypeInfo: pointer; UriCompatible: boolean): boolean;
-var data: RawByteString;
+var temp: TSynTempBuffer;
 begin
   result := false;
   if Len<=6 then
     exit;
   if UriCompatible then
-    Base64uriToBin(Source,Len,data) else
-    Base64ToBin(Source,Len,data);
-  Len := length(data);
-  if Len<=4 then
-    exit;
-  Source := PAnsiChar(pointer(data))+4;
-  if crc32c(0,Source,Len-4)=PCardinal(data)^ then
-    result := RecordLoad(Rec,Source,TypeInfo)<>nil;
+    result := Base64uriToBin(Source,Len,temp) else
+    result := Base64ToBin(Source,Len,temp);
+  result := result and (temp.len>=4) and
+    (crc32c(0,PAnsiChar(temp.buf)+4,temp.len-4)=PCardinal(temp.buf)^) and
+    (RecordLoad(Rec,PAnsiChar(temp.buf)+4,TypeInfo)<>nil);
+  temp.Done;
 end;
 
 function RecordLoad(var Rec; Source: PAnsiChar; TypeInfo: pointer;
