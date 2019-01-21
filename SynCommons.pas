@@ -37385,8 +37385,7 @@ end;
 type
   {$ifdef UNICODE}TLecuyer = record{$else}TLecuyer = object{$endif}
   public
-    rs1, rs2, rs3: cardinal;
-    seedcount: cardinal;
+    rs1, rs2, rs3, seedcount: cardinal;
     procedure Seed(entropy: PByteArray; entropylen: integer);
     function Next: cardinal;
   end;

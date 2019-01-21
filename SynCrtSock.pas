@@ -11517,6 +11517,11 @@ begin
   if not IsAvailable then
     raise ECrtSocket.CreateFmt('No available %s',[LIBCURL_DLL]);
   fHandle := curl.easy_init;
+  ConnectionTimeOut := ConnectionTimeOut div 1000; // curl expects seconds
+  if ConnectionTimeOut=0 then
+    ConnectionTimeOut := 1;
+  curl.easy_setopt(fHandle,coConnectTimeout,ConnectionTimeOut); // default=300 !
+  // coTimeout=CURLOPT_TIMEOUT is global for the transfer, so shouldn't be used
   if fLayer=cslUNIX then
     fRootURL := 'http://localhost' else // see CURLOPT_UNIX_SOCKET_PATH doc
     fRootURL := AnsiString(Format('http%s://%s:%d',[HTTPS[fHttps],fServer,fPort]));
@@ -11544,7 +11549,7 @@ begin
   fIn.URL := fRootURL+aURL;
   //curl.easy_setopt(fHandle,coTCPNoDelay,0); // disable Nagle
   if fLayer=cslUNIX then
-    curl.easy_setopt(fHandle,coUnixSocketPath, pointer(fServer));
+    curl.easy_setopt(fHandle,coUnixSocketPath,pointer(fServer));
   curl.easy_setopt(fHandle,coURL,pointer(fIn.URL));
   if fProxyName<>'' then
     curl.easy_setopt(fHandle,coProxy,pointer(fProxyName));
