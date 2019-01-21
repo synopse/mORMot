@@ -117,10 +117,11 @@ type
     P, T, PMax, TMax: PtrInt;
     Upper: PNormTable;
     State: (sNONE, sABORT, sEND, sLITERAL, sPATTERN, sRANGE, sVALID);
-    Search: TMatchSearchFunction;
     procedure MatchAfterStar;
     procedure MatchMain;
   public
+    /// published for proper inlining
+    Search: TMatchSearchFunction;
     /// initialize the internal fields for a given glob search pattern
     // - note that the aPattern instance should remain in memory, since it will
     // be pointed to by the Pattern private field of this object
@@ -145,7 +146,7 @@ type
     /// returns TRUE if the supplied content matches the prepared glob pattern
     // - this method is not thread-safe
     function Match(aText: PUTF8Char; aTextLen: PtrInt): boolean; overload;
-      {$ifdef FPC}inline;{$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// returns TRUE if the supplied content matches the prepared glob pattern
     // - this method IS thread-safe, and won't lock
     function MatchThreadSafe(const aText: RawUTF8): boolean;
@@ -168,8 +169,8 @@ type
   TMatchStore = record
     /// access to the research criteria
     // - defined as a nested record (and not an object) to circumvent Delphi bug
-    Parent: TMatch;
-    /// Parent.Pattern PUTF8Char will point to this instance
+    Pattern: TMatch;
+    /// Pattern.Pattern PUTF8Char will point to this instance
     PatternInstance: RawUTF8;
   end;
   TMatchStoreDynArray = array of TMatchStore;
@@ -2182,7 +2183,8 @@ type
   TExprParserResult = (
     eprSuccess, eprNoExpression,
     eprMissingParenthesis, eprTooManyParenthesis, eprMissingFinalWord,
-    eprInvalidExpression, eprUnknownVariable, eprUnsupportedOperator, eprInvalidConstant);
+    eprInvalidExpression, eprUnknownVariable, eprUnsupportedOperator,
+    eprInvalidConstantOrVariable);
 
   TParserAbstract = class;
 
@@ -5498,6 +5500,11 @@ begin // here we know that len>0
   result := true;
 end;
 
+function SearchVoid(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+begin
+  result := aTextLen = 0;
+end;
+
 function SearchNoPattern(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
 begin
   result := (aMatch.PMax + 1 = aTextlen) and CompareMem(aText, aMatch.Pattern, aTextLen);
@@ -5589,69 +5596,73 @@ begin
   if aCaseInsensitive then
     Upper := @NormToUpperAnsi7 else
     Upper := @NormToNorm;
-  Search := nil;
-  if aReuse then
-    if strcspn(Pattern, SPECIALS) > PMax then
-      if aCaseInsensitive then
-        Search := SearchNoPatternU
-      else
-        Search := SearchNoPattern
-    else if PMax > 0 then begin
-      if Pattern[PMax] = '*' then begin
-        if strcspn(Pattern + 1, SPECIALS) = PMax - 1 then
-          case Pattern[0] of
-            '*': begin // *something*
-              inc(Pattern);
-              dec(PMax, 2); // trim trailing and ending *
-              if PMax < 0 then
-                Search := SearchContainsValid
-              else if aCaseInsensitive then
-                Search := SearchContainsU
-              {$ifdef CPU64}
-              else if PMax >= 7 then
-                Search := SearchContains8
-              {$endif}
-              else if PMax >= 3 then
-                Search := SearchContains4
-              else
-                Search := SearchContains1;
-            end;
-            '?':
-              if aCaseInsensitive then
-                Search := SearchNoRangeU
-              else
-                Search := SearchNoRange;
-            '[':
-              Search := SearchAny;
-            else begin
-              dec(PMax); // trim trailing *
-              if aCaseInsensitive then
-                Search := SearchStartWithU
-              else
-                Search := SearchStartWith;
-            end;
-          end;
-      end
-      else if (Pattern[0] = '*') and (strcspn(Pattern + 1, SPECIALS) >= PMax) then begin
-        inc(Pattern); // jump leading *
+  if Pattern = nil then
+    Search := SearchVoid
+  else begin
+    Search := nil;
+    if aReuse then
+      if strcspn(Pattern, SPECIALS) > PMax then
         if aCaseInsensitive then
-          Search := SearchEndWithU
+          Search := SearchNoPatternU
         else
-          Search := SearchEndWith;
-      end;
-    end else
-      if Pattern[0] in ['*','?'] then
-        Search := SearchContainsValid;
- if not Assigned(Search) then begin
-   aPattern := PosChar(Pattern, '[');
-   if (aPattern = nil) or (aPattern - Pattern > PMax) then
-     if aCaseInsensitive then
-       Search := SearchNoRangeU
-     else
-       Search := SearchNoRange
-   else
-     Search := SearchAny;
- end;
+          Search := SearchNoPattern
+      else if PMax > 0 then begin
+        if Pattern[PMax] = '*' then begin
+          if strcspn(Pattern + 1, SPECIALS) = PMax - 1 then
+            case Pattern[0] of
+              '*': begin // *something*
+                inc(Pattern);
+                dec(PMax, 2); // trim trailing and ending *
+                if PMax < 0 then
+                  Search := SearchContainsValid
+                else if aCaseInsensitive then
+                  Search := SearchContainsU
+                {$ifdef CPU64}
+                else if PMax >= 7 then
+                  Search := SearchContains8
+                {$endif}
+                else if PMax >= 3 then
+                  Search := SearchContains4
+                else
+                  Search := SearchContains1;
+              end;
+              '?':
+                if aCaseInsensitive then
+                  Search := SearchNoRangeU
+                else
+                  Search := SearchNoRange;
+              '[':
+                Search := SearchAny;
+              else begin
+                dec(PMax); // trim trailing *
+                if aCaseInsensitive then
+                  Search := SearchStartWithU
+                else
+                  Search := SearchStartWith;
+              end;
+            end;
+        end
+        else if (Pattern[0] = '*') and (strcspn(Pattern + 1, SPECIALS) >= PMax) then begin
+          inc(Pattern); // jump leading *
+          if aCaseInsensitive then
+            Search := SearchEndWithU
+          else
+            Search := SearchEndWith;
+        end;
+      end else
+        if Pattern[0] in ['*','?'] then
+          Search := SearchContainsValid;
+  end;
+  if not Assigned(Search) then begin
+    aPattern := PosChar(Pattern, '[');
+    if (aPattern = nil) or (aPattern - Pattern > PMax) then
+      if aCaseInsensitive then
+        Search := SearchNoRangeU
+      else
+        Search := SearchNoRange
+    else
+      Search := SearchAny;
+  end;
 end;
 
 type // Holub and Durian (2005) SBNDM2 algorithm
@@ -5976,7 +5987,6 @@ end;
 
 function TMatchs.Match(aText: PUTF8Char; aLen: integer): integer;
 var
-  i: integer;
   one: ^TMatchStore;
   local: TMatch; // thread-safe with no lock!
 begin
@@ -5984,20 +5994,20 @@ begin
     result := -1 // no filter by name -> allow e.g. to process everything
   else begin
     one := pointer(fMatch);
-    for i := 0 to fMatchCount - 1 do begin
-      if aLen <> 0 then begin
-        local := one^.Parent;
-        if local.Search(@local, aText, aLen) then begin
-          result := i;
+    if aLen <> 0 then begin
+      for result := 0 to fMatchCount - 1 do begin
+        local := one^.Pattern;
+        if local.Search(@local, aText, aLen) then
           exit;
-        end;
-      end
-      else if one^.Parent.PMax < 0 then begin
-        result := i;
-        exit;
+        inc(one);
       end;
-      inc(one);
-    end;
+    end
+    else
+      for result := 0 to fMatchCount - 1 do
+        if one^.Pattern.PMax < 0 then
+          exit
+        else
+          inc(one);
     result := -2;
   end;
 end;
@@ -6050,7 +6060,7 @@ begin
     if found <> nil then
       with fMatch[n] do begin
         PatternInstance := pat^; // avoid GPF if aPatterns[] is released
-        Parent.Prepare(PatternInstance, CaseInsensitive, {reuse=}true);
+        Pattern.Prepare(PatternInstance, CaseInsensitive, {reuse=}true);
         inc(n);
       end;
     inc(pat);
@@ -8429,6 +8439,8 @@ begin
   else if IdemPropNameU(fCurrentWord, fNotWord) then begin
     ParseNextCurrentWord;
     result := ParseFactor;
+    if fCurrentError <> eprSuccess then
+      exit;
     result.Append(TExprNode.Create(entNot));
   end
   else
@@ -8443,6 +8455,8 @@ begin
   if fCurrentWord = '(' then begin
     ParseNextCurrentWord;
     result := ParseExpr;
+    if fCurrentError <> eprSuccess then
+      exit;
     if fCurrentWord <> ')' then begin
       FreeAndNil(result);
       fCurrentError := eprMissingParenthesis;
