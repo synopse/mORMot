@@ -13196,6 +13196,12 @@ const
     '8', '8 64bit', 'Server 2012', 'Server 2012 64bit',
     '8.1', '8.1 64bit', 'Server 2012 R2', 'Server 2012 R2 64bit',
     '10', '10 64bit', 'Server 2016', 'Server 2016 64bit', 'Server 2019 64bit');
+  /// translate one operating system (and distribution) into a single character
+  // - may be used internally e.g. for a HTTP User-Agent header
+  OS_INITIAL: array[TOperatingSystem] of AnsiChar =
+    ('?', 'W', 'L', 'X', 'B', 'P', 'A', 'a', 'D', 'F', 'G', 'K', 'M', 'm',
+     'n', 'N', 'U', 'S', 's', 'u', 'Y', 'T', 'C', 't', 'R', 'l', 'O', 'G',
+     'c', 'd', 'x', 'Z', 'r', 'p');
 
   /// the compiler family used
   COMP_TEXT = {$ifdef FPC}'Fpc'{$else}'Delphi'{$endif};

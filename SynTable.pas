@@ -5589,70 +5589,70 @@ procedure TMatch.Prepare(aPattern: PUTF8Char; aPatternLen: integer;
   aCaseInsensitive, aReuse: boolean);
 const SPECIALS: PUTF8Char = '*?[';
 begin
-  if aCaseInsensitive and not IsCaseSensitive(aPattern,aPatternLen) then
-    aCaseInsensitive := false; // don't slow down e.g. number or IP search
   Pattern := aPattern;
   PMax := aPatternLen - 1; // search in Pattern[0..PMax]
+  if Pattern = nil then begin
+    Search := SearchVoid;
+    exit;
+  end;
+  if aCaseInsensitive and not IsCaseSensitive(aPattern,aPatternLen) then
+    aCaseInsensitive := false; // don't slow down e.g. number or IP search
   if aCaseInsensitive then
     Upper := @NormToUpperAnsi7 else
     Upper := @NormToNorm;
-  if Pattern = nil then
-    Search := SearchVoid
-  else begin
-    Search := nil;
-    if aReuse then
-      if strcspn(Pattern, SPECIALS) > PMax then
-        if aCaseInsensitive then
-          Search := SearchNoPatternU
-        else
-          Search := SearchNoPattern
-      else if PMax > 0 then begin
-        if Pattern[PMax] = '*' then begin
-          if strcspn(Pattern + 1, SPECIALS) = PMax - 1 then
-            case Pattern[0] of
-              '*': begin // *something*
-                inc(Pattern);
-                dec(PMax, 2); // trim trailing and ending *
-                if PMax < 0 then
-                  Search := SearchContainsValid
-                else if aCaseInsensitive then
-                  Search := SearchContainsU
-                {$ifdef CPU64}
-                else if PMax >= 7 then
-                  Search := SearchContains8
-                {$endif}
-                else if PMax >= 3 then
-                  Search := SearchContains4
-                else
-                  Search := SearchContains1;
-              end;
-              '?':
-                if aCaseInsensitive then
-                  Search := SearchNoRangeU
-                else
-                  Search := SearchNoRange;
-              '[':
-                Search := SearchAny;
-              else begin
-                dec(PMax); // trim trailing *
-                if aCaseInsensitive then
-                  Search := SearchStartWithU
-                else
-                  Search := SearchStartWith;
-              end;
+  Search := nil;
+  if aReuse then
+    if strcspn(Pattern, SPECIALS) > PMax then
+      if aCaseInsensitive then
+        Search := SearchNoPatternU
+      else
+        Search := SearchNoPattern
+    else if PMax > 0 then begin
+      if Pattern[PMax] = '*' then begin
+        if strcspn(Pattern + 1, SPECIALS) = PMax - 1 then
+          case Pattern[0] of
+            '*': begin // *something*
+              inc(Pattern);
+              dec(PMax, 2); // trim trailing and ending *
+              if PMax < 0 then
+                Search := SearchContainsValid
+              else if aCaseInsensitive then
+                Search := SearchContainsU
+              {$ifdef CPU64}
+              else if PMax >= 7 then
+                Search := SearchContains8
+              {$endif}
+              else if PMax >= 3 then
+                Search := SearchContains4
+              else
+                Search := SearchContains1;
             end;
-        end
-        else if (Pattern[0] = '*') and (strcspn(Pattern + 1, SPECIALS) >= PMax) then begin
-          inc(Pattern); // jump leading *
-          if aCaseInsensitive then
-            Search := SearchEndWithU
-          else
-            Search := SearchEndWith;
-        end;
-      end else
-        if Pattern[0] in ['*','?'] then
-          Search := SearchContainsValid;
-  end;
+            '?':
+              if aCaseInsensitive then
+                Search := SearchNoRangeU
+              else
+                Search := SearchNoRange;
+            '[':
+              Search := SearchAny;
+            else begin
+              dec(PMax); // trim trailing *
+              if aCaseInsensitive then
+                Search := SearchStartWithU
+              else
+                Search := SearchStartWith;
+            end;
+          end;
+      end
+      else if (Pattern[0] = '*') and (strcspn(Pattern + 1, SPECIALS) >= PMax) then begin
+        inc(Pattern); // jump leading *
+        if aCaseInsensitive then
+          Search := SearchEndWithU
+        else
+          Search := SearchEndWith;
+      end;
+    end else
+      if Pattern[0] in ['*','?'] then
+        Search := SearchContainsValid;
   if not Assigned(Search) then begin
     aPattern := PosChar(Pattern, '[');
     if (aPattern = nil) or (aPattern - Pattern > PMax) then
