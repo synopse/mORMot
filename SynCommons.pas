@@ -29440,8 +29440,6 @@ begin
     StringToUTF8(Source[i],Result[i]);
 end;
 
-/// find the position of the SEARCH] section in source
-// - return true if SEARCH] was found, and store line after it in source
 function FindSectionFirstLine(var source: PUTF8Char; search: PAnsiChar): boolean;
 {$ifdef PUREPASCAL}
 begin
@@ -29512,7 +29510,6 @@ end;
 {$ifdef USENORMTOUPPER}
 {$ifdef PUREPASCAL}
 function IdemPCharW(p: PWideChar; up: PUTF8Char): boolean;
-// if the beginning of p^ is same as up^ (ignore case - up^ must be already Upper)
 begin
   result := false;
   if (p=nil) or (up=nil) then
@@ -29527,9 +29524,7 @@ begin
 end;
 {$else}
 function IdemPCharW(p: PWideChar; up: PUTF8Char): boolean;
-// if the beginning of p^ is same as up^ (ignore case - up^ must be already Upper)
-// eax=p edx=up
-asm
+asm // eax=p edx=up
         test    eax, eax
         jz      @e // P=nil -> false
         test    edx, edx
@@ -29558,7 +29553,7 @@ asm
         pop     esi
         pop     ebx
 end;
-{$endif}
+{$endif PUREPASCAL}
 {$else}
 function IdemPCharW(p: PWideChar; up: PUTF8Char): boolean;
 // if the beginning of p^ is same as up^ (ignore case - up^ must be already Upper)
@@ -29574,7 +29569,7 @@ begin
   end;
   result := true;
 end;
-{$endif}
+{$endif USENORMTOUPPER}
 
 function FindSectionFirstLineW(var source: PWideChar; search: PUTF8Char): boolean;
 {$ifdef PUREPASCAL}
@@ -29639,7 +29634,7 @@ asm // eax=source edx=search
         ret
 @z:     pop     edx         // ignore source var, result := false
 end;
-{$endif}
+{$endif PUREPASCAL}
 
 function FindIniNameValue(P: PUTF8Char; UpperName: PAnsiChar): RawUTF8;
 var u, PBeg: PUTF8Char;
@@ -29934,7 +29929,6 @@ var P: PUTF8Char;
     i, UpperNameLength: PtrInt;
     V: RawUTF8;
     UpperSection, UpperName: array[byte] of AnsiChar;
-    // possible GPF if length(Section/Name)>255, but should be short const in code
 label Sec;
 begin
   UpperNameLength := length(Name);
