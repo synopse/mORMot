@@ -2665,6 +2665,19 @@ begin
   Check(ACities.Count=3);
   for i := 1 to high(Province.Cities) do
     Check(Province.Cities[i].Name>Province.Cities[i-1].Name);
+  Province.Cities := nil;
+  Test := RecordSave(Province,TypeInfo(TProvince));
+  RecordClear(Province,TypeInfo(TProvince));
+  Check(Province.Name='');
+  Check(Province.Comment='');
+  Check(length(Province.Cities)=0);
+  Check(ACities.Count=0);
+  Check(RecordLoad(Province,pointer(Test),TypeInfo(TProvince))^=#0);
+  Check(Province.Name='Test');
+  Check(Province.Comment='comment');
+  Check(Province.Year=1000);
+  Check(length(Province.Cities)=0);
+  Check(ACities.Count=0);
   // big array test
   ACities.Init(TypeInfo(TCityDynArray),Province.Cities);
   ACities.Clear;
