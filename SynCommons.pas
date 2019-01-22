@@ -57473,7 +57473,7 @@ begin
     if not GetMemoryInfo(info,{withalloc=}true) then
       exit;
     FMemoryLoadPercent := info.percent;
-    FPagingFileTotal.fBytes := info.memtotal;
+    FPhysicalMemoryTotal.fBytes := info.memtotal;
     FPhysicalMemoryFree.fBytes := info.memfree;
     FPagingFileTotal.fBytes := info.filetotal;
     FPagingFileFree.fBytes  := info.filefree;
