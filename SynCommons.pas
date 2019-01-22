@@ -5651,7 +5651,7 @@ type
     // for this class hierarchy: as a result, you would NOT be able to
     // implement an interface with a TSynPersistent descendent (but you should
     // not need to, but inherit from TInterfacedObject)
-    // - warning: under FPC, it won't initialize management operators
+    // - warning: under FPC, it won't initialize fields management operators
     class function NewInstance: TObject; override;
     {$ifndef FPC_OR_PUREPASCAL}
     /// optimized x86 asm finalization code
@@ -16004,11 +16004,9 @@ type
     function ByCount(Count: cardinal): RawUTF8;
   end;
 
-  {$M+}
-
   /// able to serialize any cumulative timing as raw micro-seconds number or text
   // - "cumulative" time would add each process value, e.g. SOA methods execution
-  TSynMonitorTime = class
+  TSynMonitorTime = class(TSynPersistent)
   protected
     fMicroSeconds: TSynMonitorTotalMicroSec;
     function GetAsText: TShort16;
@@ -16025,7 +16023,7 @@ type
 
   /// able to serialize any immediate timing as raw micro-seconds number or text
   // - "immediate" size won't accumulate, i.e. may be e.g. last process time
-  TSynMonitorOneTime = class
+  TSynMonitorOneTime = class(TSynPersistent)
   protected
     fMicroSeconds: TSynMonitorOneMicroSec;
     function GetAsText: TShort16;
@@ -16040,9 +16038,17 @@ type
     property Text: TShort16 read GetAsText;
   end;
 
+  TSynMonitorSizeParent = class(TSynPersistent)
+  protected
+    fTextNoSpace: boolean;
+  public
+    /// initialize the instance
+    constructor Create(aTextNoSpace: boolean); reintroduce;
+  end;
+
   /// able to serialize any cumulative size as bytes number
   // - "cumulative" time would add each process value, e.g. global IO consumption
-  TSynMonitorSize = class
+  TSynMonitorSize = class(TSynMonitorSizeParent)
   protected
     fBytes: TSynMonitorTotalBytes;
     function GetAsText: TShort16;
@@ -16056,7 +16062,7 @@ type
   /// able to serialize any immediate size as bytes number
   // - "immediate" size won't accumulate, i.e. may be e.g. computer free memory
   // at a given time
-  TSynMonitorOneSize = class
+  TSynMonitorOneSize = class(TSynMonitorSizeParent)
   protected
     fBytes: TSynMonitorOneBytes;
     function GetAsText: TShort16;
@@ -16070,7 +16076,7 @@ type
   /// able to serialize any bandwith as bytes count per second
   // - is usually associated with TSynMonitorOneSize properties,
   // e.g. to monitor IO activity
-  TSynMonitorThroughput = class
+  TSynMonitorThroughput = class(TSynMonitorSizeParent)
   protected
     fBytesPerSec: QWord;
     function GetAsText: TShort16;
@@ -16298,8 +16304,6 @@ type
     property CurrentRequestCount: integer read fCurrentRequestCount;
   end;
 
-  {$M-}
-
   /// a list of simple process statistics
   TSynMonitorObjArray = array of TSynMonitor;
 
@@ -16337,14 +16341,14 @@ type
     function GetVirtualMemoryTotal: TSynMonitorOneSize;
   public
     /// initialize the class, and its nested TSynMonitorOneSize instances
-    constructor Create; override;
+    constructor Create(aTextNoSpace: boolean); reintroduce;
     /// finalize the class, and its nested TSynMonitorOneSize instances
     destructor Destroy; override;
     /// some text corresponding to current 'free/total' memory information
     // - returns e.g. '10.3 GB / 15.6 GB'
-    class function FreeAsText: RawUTF8;
-    /// how many physical memory is currently installed, as text (e.g. '32GB');
-    class function PhysicalAsText: RawUTF8;
+    class function FreeAsText(nospace: boolean=false): ShortString;
+    /// how many physical memory is currently installed, as text (e.g. '32 GB');
+    class function PhysicalAsText(nospace: boolean=false): TShort16;
     /// returns a JSON object with the current system memory information
     // - numbers would be given in KB (Bytes shl 10)
     class function ToJSON: RawUTF8;
@@ -16468,7 +16472,7 @@ function GetDiskPartitions: TDiskPartitions;
 // - uses internally a cache unless nocache is true
 // - includes the free space if withfreespace is true - e.g. '(80 GB / 115 GB)'
 function GetDiskPartitionsText(nocache: boolean=false;
-  withfreespace: boolean=false): RawUTF8;
+  withfreespace: boolean=false; nospace: boolean=false): RawUTF8;
 
 
 { ******************* cross-cutting classes and functions ***************** }
@@ -17629,14 +17633,26 @@ type
 
 
 /// convert a size to a human readable value power-of-two metric value
-// - append EB, PB, TB, GB, MB, KB or B symbol
+// - append EB, PB, TB, GB, MB, KB or B symbol with or without preceding space
 // - for EB, PB, TB, GB, MB and KB, add one fractional digit
-procedure KB(bytes: Int64; out result: TShort16); overload;
+procedure KB(bytes: Int64; out result: TShort16; nospace: boolean); overload;
 
 /// convert a size to a human readable value
-// - append EB, PB, TB, GB, MB, KB or B symbol
+// - append EB, PB, TB, GB, MB, KB or B symbol with preceding space
 // - for EB, PB, TB, GB, MB and KB, add one fractional digit
 function KB(bytes: Int64): TShort16; overload;
+  {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
+
+/// convert a size to a human readable value
+// - append EB, PB, TB, GB, MB, KB or B symbol without preceding space
+// - for EB, PB, TB, GB, MB and KB, add one fractional digit
+function KBNoSpace(bytes: Int64): TShort16;
+  {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
+
+/// convert a size to a human readable value
+// - append EB, PB, TB, GB, MB, KB or B symbol with or without preceding space
+// - for EB, PB, TB, GB, MB and KB, add one fractional digit
+function KB(bytes: Int64; nospace: boolean): TShort16; overload;
   {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
 
 /// convert a string size to a human readable value
@@ -56456,8 +56472,9 @@ end;
 
 { ************ Unit-Testing classes and functions }
 
-procedure KB(bytes: Int64; out result: TShort16);
-const _B: array[0..5] of string[3] = (' KB',' MB',' GB',' TB',' PB',' EB');
+procedure KB(bytes: Int64; out result: TShort16; nospace: boolean);
+const _B: array[boolean, 0..5] of string[3] =
+    ((' KB',' MB',' GB',' TB',' PB',' EB'), ('KB','MB','GB','TB','PB','EB'));
 var hi,rem,b: cardinal;
 begin
   if bytes<1 shl 10-(1 shl 10) div 10 then begin
@@ -56501,24 +56518,34 @@ begin
     inc(hi); // round up as expected by an human being
   end;
   if rem<>0 then
-    FormatShort16('%.%%',[hi,rem,_B[b]],result) else
-    FormatShort16('%%',[hi,_B[b]],result);
+    FormatShort16('%.%%',[hi,rem,_B[nospace,b]],result) else
+    FormatShort16('%%',[hi,_B[nospace,b]],result);
 end;
 
 function KB(bytes: Int64): TShort16;
 begin
-  KB(bytes,result);
+  KB(bytes,result,{nospace=}false);
+end;
+
+function KBNoSpace(bytes: Int64): TShort16;
+begin
+  KB(bytes,result,{nospace=}true);
+end;
+
+function KB(bytes: Int64; nospace: boolean): TShort16;
+begin
+  KB(bytes,result,nospace);
 end;
 
 function KB(const buffer: RawByteString): TShort16;
 begin
-  KB(length(buffer), result);
+  KB(length(buffer),result,{nospace=}false);
 end;
 
 procedure KBU(bytes: Int64; var result: RawUTF8);
 var tmp: TShort16;
 begin
-  KB(bytes,tmp);
+  KB(bytes,tmp,{nospace=}false);
   FastSetString(result,@tmp[1],ord(tmp[0]));
 end;
 
@@ -56793,25 +56820,33 @@ begin
 end;
 
 
+{ TSynMonitorSizeParent }
+
+constructor TSynMonitorSizeParent.Create(aTextNoSpace: boolean);
+begin
+  inherited Create;
+  fTextNoSpace := aTextNoSpace;
+end;
+
 { TSynMonitorSize }
 
 function TSynMonitorSize.GetAsText: TShort16;
 begin
-  KB(fBytes,result);
+  KB(fBytes,result,fTextNoSpace);
 end;
 
 { TSynMonitorOneSize }
 
 function TSynMonitorOneSize.GetAsText: TShort16;
 begin
-  KB(fBytes,result);
+  KB(fBytes,result,fTextNoSpace);
 end;
 
 { TSynMonitorThroughput }
 
 function TSynMonitorThroughput.GetAsText: TShort16;
 begin
-  FormatShort16('%/s',[KB(fBytesPerSec)],result);
+  FormatShort16('%/s',[KB(fBytesPerSec,fTextNoSpace)],result);
 end;
 
 
@@ -57078,8 +57113,8 @@ end;
 constructor TSynMonitorWithSize.Create;
 begin
   inherited Create;
-  fSize := TSynMonitorSize.Create;
-  fThroughput := TSynMonitorThroughput.Create;
+  fSize := TSynMonitorSize.Create({nospace=}false);
+  fThroughput := TSynMonitorThroughput.Create({nospace=}false);
 end;
 
 destructor TSynMonitorWithSize.Destroy;
@@ -57118,10 +57153,10 @@ end;
 constructor TSynMonitorInputOutput.Create;
 begin
   inherited Create;
-  fInput := TSynMonitorSize.Create;
-  fOutput := TSynMonitorSize.Create;
-  fInputThroughput := TSynMonitorThroughput.Create;
-  fOutputThroughput := TSynMonitorThroughput.Create;
+  fInput := TSynMonitorSize.Create({nospace=}false);
+  fOutput := TSynMonitorSize.Create({nospace=}false);
+  fInputThroughput := TSynMonitorThroughput.Create({nospace=}false);
+  fOutputThroughput := TSynMonitorThroughput.Create({nospace=}false);
 end;
 
 destructor TSynMonitorInputOutput.Destroy;
@@ -57236,16 +57271,16 @@ end;
 
 { TSynMonitorMemory }
 
-constructor TSynMonitorMemory.Create;
+constructor TSynMonitorMemory.Create(aTextNoSpace: boolean);
 begin
-  FAllocatedUsed := TSynMonitorOneSize.create;
-  FAllocatedReserved := TSynMonitorOneSize.create;
-  FPhysicalMemoryFree := TSynMonitorOneSize.Create;
-  FVirtualMemoryFree := TSynMonitorOneSize.Create;
-  FPagingFileTotal := TSynMonitorOneSize.Create;
-  FPhysicalMemoryTotal := TSynMonitorOneSize.Create;
-  FVirtualMemoryTotal := TSynMonitorOneSize.Create;
-  FPagingFileFree := TSynMonitorOneSize.Create;
+  FAllocatedUsed := TSynMonitorOneSize.Create(aTextNoSpace);
+  FAllocatedReserved := TSynMonitorOneSize.Create(aTextNoSpace);
+  FPhysicalMemoryFree := TSynMonitorOneSize.Create(aTextNoSpace);
+  FVirtualMemoryFree := TSynMonitorOneSize.Create(aTextNoSpace);
+  FPagingFileTotal := TSynMonitorOneSize.Create(aTextNoSpace);
+  FPhysicalMemoryTotal := TSynMonitorOneSize.Create(aTextNoSpace);
+  FVirtualMemoryTotal := TSynMonitorOneSize.Create(aTextNoSpace);
+  FPagingFileFree := TSynMonitorOneSize.Create(aTextNoSpace);
 end;
 
 destructor TSynMonitorMemory.Destroy;
@@ -57261,24 +57296,25 @@ begin
   inherited Destroy;
 end;
 
-class function TSynMonitorMemory.FreeAsText: RawUTF8;
+class function TSynMonitorMemory.FreeAsText(nospace: boolean): ShortString;
+const F: array[boolean] of RawUTF8 = ('% / %', '%/%');
 begin
-  with TSynMonitorMemory.Create do
+  with TSynMonitorMemory.Create(nospace) do
   try
     RetrieveMemoryInfo;
-    FormatUTF8('% / %',[fPhysicalMemoryFree.Text,fPhysicalMemoryTotal.Text],result);
+    FormatShort(F[nospace],[fPhysicalMemoryFree.Text,fPhysicalMemoryTotal.Text],result);
   finally
     Free;
   end;
 end;
 
 var
-  PhysicalAsTextCache: RawUTF8; // this value doesn't change usually
+  PhysicalAsTextCache: TShort16; // this value doesn't change usually
 
-class function TSynMonitorMemory.PhysicalAsText: RawUTF8;
+class function TSynMonitorMemory.PhysicalAsText(nospace: boolean): TShort16;
 begin
   if PhysicalAsTextCache='' then
-    with TSynMonitorMemory.Create do
+    with TSynMonitorMemory.Create(nospace) do
     try
       PhysicalAsTextCache := PhysicalMemoryTotal.Text;
     finally
@@ -57289,7 +57325,7 @@ end;
 
 class function TSynMonitorMemory.ToJSON: RawUTF8;
 begin
-  with TSynMonitorMemory.Create do
+  with TSynMonitorMemory.Create(false) do
   try
     RetrieveMemoryInfo;
     FormatUTF8('{Allocated:{reserved:%,used:%},Physical:{total:%,free:%,percent:%},'+
@@ -57489,9 +57525,9 @@ end;
 
 constructor TSynMonitorDisk.Create;
 begin
-  fAvailableSize := TSynMonitorOneSize.Create;
-  fFreeSize := TSynMonitorOneSize.Create;
-  fTotalSize := TSynMonitorOneSize.Create;
+  fAvailableSize := TSynMonitorOneSize.Create({nospace=}false);
+  fFreeSize := TSynMonitorOneSize.Create({nospace=}false);
+  fTotalSize := TSynMonitorOneSize.Create({nospace=}false);
 end;
 
 destructor TSynMonitorDisk.Destroy;
@@ -57673,15 +57709,16 @@ end;
 var
   _DiskPartitions: TDiskPartitions;
 
-function GetDiskPartitionsText(nocache, withfreespace: boolean): RawUTF8;
+function GetDiskPartitionsText(nocache, withfreespace, nospace: boolean): RawUTF8;
+const F: array[boolean] of RawUTF8 = ('% % (% / %)', '% % (%/%)');
 var i: integer;
     parts: TDiskPartitions;
    function GetInfo(var p: TDiskPartition): shortstring;
    var av, fr, tot: QWord;
    begin
      if not withfreespace or not GetDiskInfo(p.mounted,av,fr,tot) then
-       FormatShort('% % (%)',[p.mounted,p.name,KB(p.size)],result) else
-       FormatShort('% % (% / %)',[p.mounted,p.name,KB(fr),KB(tot)],result);
+       FormatShort('% % (%)',[p.mounted,p.name,KB(p.size,nospace)],result) else
+       FormatShort(F[nospace],[p.mounted,p.name,KB(fr,nospace),KB(tot,nospace)],result);
    end;
 begin
   if (_DiskPartitions=nil) or nocache then

@@ -42900,14 +42900,15 @@ var cpu,mem,free: RawUTF8;
 begin // called by root/Timestamp/info REST method
   now.Value := ServerTimestamp;
   cpu := TSystemUse.Current(false).HistoryText(0,15,@mem);
-  m := TSynMonitorMemory.Create;
+  m := TSynMonitorMemory.Create({nospace=}true);
   try
-    FormatUTF8('% / %',[m.PhysicalMemoryFree.Text,m.PhysicalMemoryTotal.Text],free);
+    FormatUTF8('%/%',[m.PhysicalMemoryFree.Text,m.PhysicalMemoryTotal.Text],free);
     info.AddNameValuesToObject(['nowutc',now.Text(true,' ') , 'timestamp',now.Value,
       'exe',ExeVersion.ProgramName, 'version',ExeVersion.Version.DetailedOrVoid,
       'host',ExeVersion.Host, 'cpu',cpu, {$ifdef MSWINDOWS}'mem',mem,{$endif}
       'memused',KB(m.AllocatedUsed.Bytes), 'memfree',free,
-      'disk',GetDiskPartitionsText(false,true), 'exception',GetLastExceptions(10)]);
+      'diskfree',GetDiskPartitionsText({nocache=}false,{withfree=}true,{nospace=}true),
+      'exception',GetLastExceptions(10)]);
   finally
     m.Free;
   end;
