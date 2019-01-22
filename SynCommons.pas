@@ -1139,7 +1139,16 @@ function UTF8ToWideChar(dest: PWideChar; source: PUTF8Char;
 function Utf8ToUnicodeLength(source: PUTF8Char): PtrUInt;
 
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding
-function IsValidUTF8(source: PUTF8Char): Boolean;
+// - will stop when the buffer contains #0
+function IsValidUTF8(source: PUTF8Char): Boolean; overload;
+
+/// returns TRUE if the supplied buffer has valid UTF-8 encoding
+// - will also refuse #0 characters within the buffer
+function IsValidUTF8(source: PUTF8Char; sourcelen: PtrInt): Boolean; overload;
+
+/// returns TRUE if the supplied buffer has valid UTF-8 encoding
+// - will also refuse #0 characters within the buffer
+function IsValidUTF8(const source: RawUTF8): Boolean; overload;
 
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding with no #1..#31
 // control characters
@@ -19675,6 +19684,34 @@ begin
           inc(source); // check valid UTF-8 content
     end;
   until false;
+  result := true;
+end;
+
+function IsValidUTF8(const source: RawUTF8): Boolean;
+begin
+  result := IsValidUTF8(pointer(Source),length(Source));
+end;
+
+function IsValidUTF8(source: PUTF8Char; sourcelen: PtrInt): Boolean;
+var extra, i: integer;
+    c: cardinal;
+begin
+  result := false;
+  inc(sourcelen,PtrInt(source));
+  if source<>nil then
+    while PtrInt(source)<sourcelen do begin
+      c := byte(source^);
+      inc(source);
+      if c=0 then exit else
+      if c and $80<>0 then begin
+        extra := UTF8_EXTRABYTES[c];
+        if extra=0 then exit else // invalid leading byte
+        for i := 1 to extra do
+          if (PtrInt(source)>=sourcelen) or (byte(source^) and $c0<>$80) then
+            exit else
+            inc(source); // check valid UTF-8 content
+      end;
+    end;
   result := true;
 end;
 
