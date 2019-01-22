@@ -774,7 +774,7 @@ begin
   {$endif}
   result.Lo := fSocket.Request(SockString(url),SockString(method),
     KeepAliveMS,SockString(Header),SockString(Data),SockString(DataType),false);
-  result.Hi := GetCardinal(pointer(fSocket.HeaderValue('Server-InternalState')));
+  result.Hi := GetCardinal(pointer(fSocket.HeaderGetValue('SERVER-INTERNALSTATE')));
   Header := fSocket.HeaderGetText;
   Data := fSocket.Content;
 end;

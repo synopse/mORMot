@@ -662,7 +662,7 @@ type
     fCompressAcceptEncoding: SockString;
     /// GetHeader set index of protocol in fCompress[], from ACCEPT-ENCODING:
     fCompressHeader: THttpSocketCompressSet;
-    /// same as HeaderValue('Content-Encoding'), but retrieved during Request
+    /// same as HeaderGetValue('CONTENT-ENCODING'), but retrieved during Request
     // and mapped into the fCompress[] array
     fContentCompress: integer;
     /// cache for HeaderGetText
@@ -686,18 +686,19 @@ type
     // - 'GET /path HTTP/1.1' for a GET request with THttpServer, e.g.
     // - 'HTTP/1.0 200 OK' for a GET response after Get() e.g.
     Command: SockString;
-    /// will contain the header lines after a Request - use HeaderValue() to get one
+    /// will contain the header lines after a Request
+    // - use HeaderGetValue() to get one HTTP header item value by name
     Headers: array of SockString;
     /// will contain the data retrieved from the server, after the Request
     Content: SockString;
-    /// same as HeaderValue('Content-Length'), but retrieved during Request
+    /// same as HeaderGetValue('CONTENT-LENGTH'), but retrieved during Request
     // - is overridden with real Content length during HTTP body retrieval
     ContentLength: integer;
-    /// same as HeaderValue('Content-Type'), but retrieved during Request
+    /// same as HeaderGetValue('CONTENT-TYPE'), but retrieved during Request
     ContentType: SockString;
-    /// same as HeaderValue('Connection')='Close', but retrieved during Request
+    /// same as HeaderGetValue('CONNECTION')='Close', but retrieved during Request
     ConnectionClose: boolean;
-    /// same as HeaderValue('Connection')='Upgrade', but retrieved during Request
+    /// same as HeaderGetValue('CONNECTION')='Upgrade', but retrieved during Request
     ConnectionUpgrade: boolean;
     /// retrieve the HTTP headers into Headers[] and fill most properties below
     procedure GetHeader;
@@ -711,8 +712,9 @@ type
     /// get all Header values at once, as CRLF delimited text
     // - you can optionally specify a value to be added as 'RemoteIP: ' header
     function HeaderGetText(const aRemoteIP: SockString=''): SockString;
-    /// HeaderValue('Content-Type')='text/html', e.g.
-    function HeaderValue(aName: SockString): SockString;
+    /// HeaderGetValue('CONTENT-TYPE')='text/html', e.g.
+    // - supplied aUpperName should be already uppercased
+    function HeaderGetValue(const aUpperName: SockString): SockString;
     /// will register a compression algorithm
     // - used e.g. to compress on the fly the data, with standard gzip/deflate
     // or custom (synlzo/synlz) protocols
@@ -3402,11 +3404,13 @@ end;
 
 type
   TNormToUpper = array[byte] of byte;
+  PPByteArray = ^PByteArray;
 var
   NormToUpper: TNormToUpper;
 
-function IdemPCharUp(p: PByteArray; up: PByte; toup: PByteArray): boolean; {$ifdef HASINLINE}inline;{$endif}
-var u: cardinal;
+function IdemPCharUp(p: PByteArray; up: PByte; toup: PByteArray): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+var u: byte;
 begin
   result := false;
   dec(PtrUInt(p), PtrUInt(up));
@@ -3446,6 +3450,28 @@ begin
         inc(up);
   end;
   result := -1;
+end;
+
+function FindHeader(H: PPByteArray; HCount: integer; const upper: SockString): PAnsiChar;
+var up: PByteArray;
+begin
+  if upper<>'' then begin
+    up := @NormToUpper;
+    while HCount>0 do begin
+      dec(HCount);
+      if IdemPCharUp(H^,pointer(upper),up) then begin
+        result := pointer(@H^[length(upper)]);
+        if result^=':' then begin
+          repeat
+            inc(result);
+          until result^<>' ';
+          exit;
+        end;
+      end;
+      inc(H);
+    end;
+  end;
+  result := nil;
 end;
 
 procedure GetNextItem(var P: PAnsiChar; Sep: AnsiChar; var result: SockString);
@@ -3556,7 +3582,6 @@ begin
   end;
 end;
 
-{$ifdef HASCODEPAGE}
 // rewrite some functions to avoid unattempted ansi<->unicode conversion
 
 function Trim(const S: SockString): SockString;
@@ -3607,7 +3632,7 @@ asm  // fast implementation by John O'Harrow
 end;
 {$endif}
 
-procedure UpperMove(Source, Dest, ToUp: PByte; L: cardinal);
+procedure UpperMove(Source, Dest: PByte; ToUp: PByteArray; L: cardinal);
 begin
   repeat
     Dest^ := ToUp[Source^];
@@ -3624,11 +3649,9 @@ begin
   L := Length(S);
   if L=0 then
     exit;
-  SetLength(result, L);
+  SetLength(result,L);
   UpperMove(pointer(S),pointer(result),@NormToUpper,L);
 end;
-
-{$endif HASCODEPAGE}
 
 function GetCardinal(P: PAnsiChar): cardinal; overload;
 var c: cardinal;
@@ -6490,7 +6513,7 @@ begin
       while (P^=#13) or (P^=#10) do inc(P);
     until P^=#0;
   SetLength(Headers,n);
-  if (aForcedContentType='') or (HeaderValue('Content-Type')<>'') then
+  if (aForcedContentType='') or (HeaderGetValue('CONTENT-TYPE')<>'') then
     exit;
   SetLength(Headers,n+1);
   Headers[n] := 'Content-Type: '+aForcedContentType;
@@ -6537,16 +6560,15 @@ begin // faster than for i := 0 to Count-1 do result := result+Headers[i]+#13#10
   result := fHeaderText;
 end;
 
-function THttpSocket.HeaderValue(aName: SockString): SockString;
-var i: integer;
+function THttpSocket.HeaderGetValue(const aUpperName: SockString): SockString;
+var P: PAnsiChar;
 begin
   if Headers<>nil then begin
-    aName := UpperCase(aName)+':';
-    for i := 0 to high(Headers) do
-      if IdemPChar(pointer(Headers[i]),pointer(aName)) then begin
-        result := trim(copy(Headers[i],length(aName)+1,maxInt));
-        exit;
-      end;
+    P := FindHeader(pointer(Headers),length(Headers),aUpperName);
+    if P<>nil then begin
+      result := P;
+      exit;
+    end;
   end;
   result := '';
 end;
@@ -6594,9 +6616,6 @@ end;
 
 function THttpServerSocket.GetRequest(withBody: boolean=true): boolean;
 var P: PAnsiChar;
-    i, L: integer;
-    H: ^PByteArray;
-    up: PByteArray;
     maxtix, status: cardinal;
     reason: SockString;
 begin
@@ -6618,35 +6637,12 @@ begin
     // get headers and content
     GetHeader;
     if fServer<>nil then begin // e.g. =nil from TRTSPOverHTTPServer
-      up := pointer(@NormToUpper);
-      L := length(fServer.fRemoteIPHeaderUpper);
-      if L<>0 then begin
-        H := pointer(Headers);
-        for i := 1 to length(Headers) do
-          if IdemPCharUp(H^,pointer(fServer.fRemoteIPHeaderUpper),up) and
-             (H^[L]=ord(':')) then begin
-            P := pointer(@H^[L]);
-            repeat inc(P) until P^<>' ';
-            if P^<>#0 then
-              fRemoteIP := P^;
-            break;
-          end else
-            inc(H);
-      end;
-      // remote connection ID
-      L := length(fServer.fRemoteConnIDHeaderUpper);
-      if L<>0 then begin
-        H := pointer(Headers);
-        for i := 1 to length(Headers) do
-          if IdemPCharUp(H^,pointer(fServer.fRemoteConnIDHeaderUpper),up) and
-             (H^[L]=ord(':')) then begin
-            P := pointer(@H^[L]);
-            repeat inc(P) until P^<>' ';
-            fRemoteConnectionID := GetNextItemUInt64(P);
-            break;
-          end else
-            inc(H);
-      end;
+     P := FindHeader(pointer(Headers),length(Headers),fServer.fRemoteIPHeaderUpper);
+     if (P<>nil) and (P^<>#0) then
+       fRemoteIP := P;
+     P := FindHeader(pointer(Headers),length(Headers),fServer.fRemoteConnIDHeaderUpper);
+     if P<>nil then
+       fRemoteConnectionID := GetNextItemUInt64(P);
     end;
     if ConnectionClose then
       fKeepAliveClient := false;
