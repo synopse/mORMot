@@ -19566,7 +19566,7 @@ type
     // - you can specify an optional custom contract for the first interface
     function ServiceRegister(aInterface: PTypeInfo;
       aInstanceCreation: TServiceInstanceImplementation=sicSingle;
-      const aContractExpected: RawUTF8=''): TServiceFactory; overload;
+      const aContractExpected: RawUTF8=''; aIgnoreAnyException: boolean=true): TServiceFactory; overload;
     /// register and retrieve the sicClientDriven Service instance
     // - will return TRUE on success, filling Obj output variable with the
     // corresponding interface instance
@@ -19584,7 +19584,7 @@ type
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
     function ServiceDefine(const aInterface: TGUID;
       aInstanceCreation: TServiceInstanceImplementation=sicSingle;
-      const aContractExpected: RawUTF8=''): TServiceFactoryClient; overload;
+      const aContractExpected: RawUTF8=''; aIgnoreAnyException: boolean=true): TServiceFactoryClient; overload;
     /// register and retrieve the sicClientDriven Service instance
     // - this method expects the interface to have been registered previously:
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
@@ -38991,7 +38991,7 @@ end;
 
 function TSQLRestClientURI.ServiceRegister(aInterface: PTypeInfo;
   aInstanceCreation: TServiceInstanceImplementation;
-  const aContractExpected: RawUTF8): TServiceFactory;
+  const aContractExpected: RawUTF8; aIgnoreAnyException: boolean): TServiceFactory;
 begin
   result := nil;
   if (self=nil) or (aInterface=nil) then begin
@@ -39003,7 +39003,9 @@ begin
     result := AddInterface(aInterface,aInstanceCreation,aContractExpected);
   except
     on E: Exception do
-      SetLastException(E);
+      if aIgnoreAnyException then
+        SetLastException(E) else
+        raise;
   end;
 end;
 
@@ -39031,7 +39033,7 @@ end;
 
 function TSQLRestClientURI.ServiceDefine(const aInterface: TGUID;
   aInstanceCreation: TServiceInstanceImplementation;
-  const aContractExpected: RawUTF8): TServiceFactoryClient;
+  const aContractExpected: RawUTF8; aIgnoreAnyException: boolean): TServiceFactoryClient;
 begin
   result := TServiceFactoryClient(ServiceRegister(
     TInterfaceFactory.GUID2TypeInfo(aInterface),aInstanceCreation,aContractExpected));
@@ -39048,7 +39050,7 @@ function TSQLRestClientURI.ServiceDefineSharedAPI(const aInterface: TGUID;
   const aContractExpected: RawUTF8; aIgnoreAnyException: boolean): TServiceFactoryClient;
 begin
   try
-    result := ServiceDefine(aInterface,sicShared,aContractExpected);
+    result := ServiceDefine(aInterface,sicShared,aContractExpected,aIgnoreAnyException);
     if result<>nil then begin
       result.ParamsAsJSONObject := true; // no contract -> explicit parameters
       result.ResultAsJSONObjectWithoutResult := true;
