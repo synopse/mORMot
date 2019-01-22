@@ -39035,8 +39035,9 @@ function TSQLRestClientURI.ServiceDefine(const aInterface: TGUID;
   aInstanceCreation: TServiceInstanceImplementation;
   const aContractExpected: RawUTF8; aIgnoreAnyException: boolean): TServiceFactoryClient;
 begin
-  result := TServiceFactoryClient(ServiceRegister(
-    TInterfaceFactory.GUID2TypeInfo(aInterface),aInstanceCreation,aContractExpected));
+  result := TServiceFactoryClient(
+    ServiceRegister(TInterfaceFactory.GUID2TypeInfo(aInterface),
+     aInstanceCreation,aContractExpected,aIgnoreAnyException));
 end;
 
 function TSQLRestClientURI.ServiceDefineClientDriven(const aInterface: TGUID;
