@@ -138,6 +138,10 @@ interface
   Internet Browsers nor AJAX applications
   - not defined by default - should be set globally to the project conditionals }
 
+{.$define NOHTTPCLIENTWEBSOCKETS}
+{ if defined, TSQLHttpClientWebSockets won't be declared
+  - will avoid to link SynBidirSock and SynEcc units }
+
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 WITHLOG
 
 uses
@@ -154,7 +158,9 @@ uses
   SynZip,
   SynLZ,
   SynCrtSock,
+  {$ifndef NOHTTPCLIENTWEBSOCKETS}
   SynBidirSock, // for WebSockets
+  {$endif}
   SynCrypto,    // for hcSynShaAes
   SynCommons,
   SynLog,
@@ -288,6 +294,8 @@ type
     property Socket: THttpClientSocket read fSocket;
   end;
 
+  {$ifndef NOHTTPCLIENTWEBSOCKETS}
+
   /// HTTP/1.1 RESTful JSON mORMot Client able to upgrade to WebSockets
   // - in addition to TSQLHttpClientWinSock, this client class is able
   // to upgrade its HTTP connection to the WebSockets protocol, so that the
@@ -363,6 +371,8 @@ type
     // - will set TWebSocketProcessSettings.LoopDelay value at WebSocketsUpgrade
     property WebSocketLoopDelay: integer read fWebSocketLoopDelay write fWebSocketLoopDelay;
   end;
+
+  {$endif NOHTTPCLIENTWEBSOCKETS}
 
   /// HTTP/1.1 RESTful JSON mORMot Client abstract class using either WinINet,
   // WinHTTP or libcurl API
@@ -770,6 +780,8 @@ begin
 end;
 
 
+{$ifndef NOHTTPCLIENTWEBSOCKETS}
+
 { TSQLHttpClientWebsockets }
 
 function TSQLHttpClientWebsockets.InternalCheckOpen: boolean;
@@ -925,6 +937,8 @@ begin
       [self,Server,Port,Model.Root,result]);
 end;
 
+{$endif NOHTTPCLIENTWEBSOCKETS}
+
 
 { TSQLHttpClientRequest }
 
@@ -1063,7 +1077,9 @@ end;
 initialization
   StatusCodeToErrorMessage := StatusCodeToErrorMsgInternal; // as in mORMotHttpServer
   TSQLHttpClientWinSock.RegisterClassNameForDefinition;
+{$ifndef NOHTTPCLIENTWEBSOCKETS}
   TSQLHttpClientWebsockets.RegisterClassNameForDefinition;
+{$endif}
 {$ifdef USELIBCURL}
   TSQLHttpClientCurl.RegisterClassNameForDefinition;
 {$endif}
