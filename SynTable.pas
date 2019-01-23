@@ -2008,13 +2008,8 @@ type
   /// items as stored in a TRawByteStringGroup instance
   TRawByteStringGroupValueDynArray = array of TRawByteStringGroupValue;
 
-  /// store several RawByteString content with automatic concatenation
-  // - an optimized compaction algorithm will occur to ensure that every 512
-  // items will be compacted to at least 1MB: this reduces memory fragmentation
-  // with almost no performance impact
+  /// store several RawByteString content with optional concatenation
   {$ifdef UNICODE}TRawByteStringGroup = record{$else}TRawByteStringGroup = object{$endif}
-  private
-    procedure Compact(len: integer);
   public
     /// actual list storing the data
     Values: TRawByteStringGroupValueDynArray;
@@ -2022,8 +2017,6 @@ type
     Count: integer;
     /// the current size of data stored in Values[]
     Position: integer;
-    /// the Count when the next compaction should occur
-    NextCompact: integer;
     /// naive but efficient cache for Find()
     LastFind: integer;
     /// add a new item to Values[]
@@ -2042,6 +2035,9 @@ type
     {$endif DELPHI5OROLDER}
     /// clear any stored information
     procedure Clear;
+    // compact the Values[] array into a single item
+    // - is also used by AsText to compute a single RawByteString
+    procedure Compact;
     /// return all content as a single RawByteString
     // - will also compact the Values[] array into a single item (which is returned)
     function AsText: RawByteString;
@@ -7399,43 +7395,12 @@ end;
 
 { TRawByteStringGroup }
 
-const
-  COMPACT_COUNT = 512; // auto-compaction if 512 last items < 1MB
-  COMPACT_LEN = 1 shl 20;
-
-procedure TRawByteStringGroup.Compact(len: integer);
-var tmp: RawByteString;
-    i, L: integer;
-    P: PAnsiChar;
-begin
-  SetLength(tmp,len);
-  P := pointer(tmp);
-  for i := Count-COMPACT_COUNT to Count-1 do
-    with Values[i] do begin
-      L := length(Value);
-      MoveFast(pointer(Value)^,P^,L);
-      inc(P,L);
-      Value := '';
-    end;
-  //assert(P-pointer(tmp)=len);
-  dec(Count,COMPACT_COUNT);
-  Values[Count].Value := tmp;
-  inc(Count);
-end;
-
 procedure TRawByteStringGroup.Add(const aItem: RawByteString);
-var len: integer;
 begin
   if Values=nil then
-    Clear else
-    if Count=NextCompact then begin
-      len := Position-Values[Count-COMPACT_COUNT].Position;
-      if len<COMPACT_LEN then
-        Compact(len) else
-        inc(NextCompact); // slide the compaction window once we reached 1MB
-    end;
+    Clear; // ensure all fields are initialized, even if on stack
   if Count=Length(Values) then
-    SetLength(Values,Count+COMPACT_COUNT+Count shr 3);
+    SetLength(Values,Count+128+Count shr 3);
   with Values[Count] do begin
     Position := self.Position;
     Value := aItem;
@@ -7460,6 +7425,8 @@ var i: integer;
 begin
   if aAnother.Values=nil then
     exit;
+  if Values=nil then
+    Clear; // ensure all fields are initialized, even if on stack
   if Count+aAnother.Count>Length(Values) then
     SetLength(Values,Count+aAnother.Count);
   s := pointer(aAnother.Values);
@@ -7472,15 +7439,16 @@ begin
     inc(d);
   end;
   inc(Count,aAnother.Count);
+  LastFind := Count-1;
 end;
 
 procedure TRawByteStringGroup.RemoveLastAdd;
 begin
   if Count>0 then begin
     dec(Count);
-    LastFind := Count;
     dec(Position,Length(Values[Count].Value));
     Values[Count].Value := ''; // release memory
+    LastFind := Count-1;
   end;
 end;
 
@@ -7502,26 +7470,36 @@ begin
   Position := 0;
   Count := 0;
   LastFind := 0;
-  NextCompact := COMPACT_COUNT;
 end;
 
 function TRawByteStringGroup.AsText: RawByteString;
-var i: integer;
-    v: PRawByteStringGroupValue;
 begin
   if Values=nil then
-    result := '' else
-  if Count=1 then
-    result := Values[0].Value else begin
-    SetString(result,nil,Position);
+    result := '' else begin
+    if Count>1 then
+      Compact;
+    result := Values[0].Value;
+  end;
+end;
+
+procedure TRawByteStringGroup.Compact;
+var i: integer;
+    v: PRawByteStringGroupValue;
+    tmp: RawByteString;
+begin
+  if (Values<>nil) and (Count>1) then begin
+    SetString(tmp,nil,Position);
     v := pointer(Values);
     for i := 1 to Count do begin
-      MoveFast(pointer(v^.Value)^,PByteArray(result)[v^.Position],length(v^.Value));
+      MoveFast(pointer(v^.Value)^,PByteArray(tmp)[v^.Position],length(v^.Value));
       {$ifdef FPC}Finalize(v^.Value){$else}v^.Value := ''{$endif};
       inc(v);
     end;
-    Values[0].Value := result; // use result for absolute compaction ;)
+    Values[0].Value := tmp; // use result for absolute compaction ;)
+    if Count>128 then
+      SetLength(Values,128);
     Count := 1;
+    LastFind := 0;
   end;
 end;
 
@@ -7531,7 +7509,7 @@ begin
   result := nil;
   if Values=nil then
     exit;
-  SetLength(result, Position);
+  SetLength(result,Position);
   for i := 0 to Count-1 do
   with Values[i] do
     MoveFast(pointer(Value)^,PByteArray(result)[Position],length(Value));
