@@ -11011,6 +11011,14 @@ function LogEscape(source: PAnsiChar; sourcelen: integer; var temp: TLogEscape;
   enabled: boolean=true): PAnsiChar;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// returns a text buffer with the (hexadecimal) chars of the input binary
+// - is much slower than LogEscape/EscapeToShort, but has no size limitation
+function LogEscapeFull(source: PAnsiChar; sourcelen: integer): RawUTF8; overload;
+
+/// returns a text buffer with the (hexadecimal) chars of the input binary
+// - is much slower than LogEscape/EscapeToShort, but has no size limitation
+function LogEscapeFull(const source: RawByteString): RawUTF8; overload;
+
 /// fill a shortstring with the (hexadecimal) chars of the input text/binary
 function EscapeToShort(source: PAnsiChar; sourcelen: integer): shortstring; overload;
 
@@ -29072,6 +29080,20 @@ begin
   end else
     temp[0] := #0;
   result := @temp;
+end;
+
+function LogEscapeFull(const source: RawByteString): RawUTF8;
+begin
+  result := LogEscapeFull(pointer(source),length(source));
+end;
+
+function LogEscapeFull(source: PAnsiChar; sourcelen: integer): RawUTF8;
+begin
+  SetLength(result,sourcelen*3); // worse case
+  if sourcelen=0 then
+    exit;
+  sourcelen := EscapeBuffer(source,pointer(result),sourcelen,length(result))-pointer(result);
+  SetLength(result,sourcelen);
 end;
 
 function EscapeToShort(source: PAnsiChar; sourcelen: integer): shortstring;
@@ -62130,7 +62152,7 @@ procedure TFastReader.Read(var DA: TDynArray; NoCheckHash: boolean);
 begin
   P := DA.LoadFrom(P,nil,NoCheckHash);
   if P=nil then
-    ErrorData('TDynArray.LoadFrom %',[DA.ArrayTypeName]);
+    ErrorData('TDynArray.LoadFrom %',[DA.ArrayTypeShort^]);
 end;
 
 function TFastReader.ReadVarUInt32Array(var Values: TIntegerDynArray): PtrInt;

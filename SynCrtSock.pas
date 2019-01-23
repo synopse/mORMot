@@ -3445,7 +3445,7 @@ begin
     w := toup[ord(p[0])]+toup[ord(p[1])]shl 8;
     up := @upArray[0];
     for result := 0 to high(upArray) do
-      if (PWord(up^)^=w) and IdemPCharUp(pointer(@p[2]),pointer(@up^[2]),toup) then
+      if (PWord(up^)^=w) and IdemPCharUp(pointer(p+2),pointer(up^+2),toup) then
         exit else
         inc(up);
   end;
@@ -3554,7 +3554,7 @@ begin
       while headers[i]=' ' do inc(i);
       result := copy(headers,i,k-i);
       if deleteInHeaders then begin
-        while true do
+        while true do // delete also ending #13#10
           if (headers[k]=#0) or (headers[k]>=' ') then
             break else
             inc(k);
@@ -3784,19 +3784,7 @@ begin
 end;
 
 const
-  HexChars: array[0..15] of AnsiChar = '0123456789ABCDEF';
   HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
-
-procedure BinToHexDisplay(Bin: PByte; BinBytes: integer; var result: shortstring);
-var j: cardinal;
-begin
-  result[0] := AnsiChar(BinBytes*2);
-  for j := BinBytes-1 downto 0 do begin
-    result[j*2+1] := HexChars[Bin^ shr 4];
-    result[j*2+2] := HexChars[Bin^ and $F];
-    inc(Bin);
-  end;
-end;
 
 procedure BinToHexDisplayW(Bin: PByte; BinBytes: integer; var result: SynUnicode);
 var j: cardinal;
@@ -3805,8 +3793,8 @@ begin
   SetString(Result,nil,BinBytes*2);
   P := pointer(Result);
   for j := BinBytes-1 downto 0 do begin
-    P[j*2] := WideChar(HexChars[Bin^ shr 4]);
-    P[j*2+1] := WideChar(HexChars[Bin^ and $F]);
+    P[j*2] := WideChar(HexCharsLower[Bin^ shr 4]);
+    P[j*2+1] := WideChar(HexCharsLower[Bin^ and $F]);
     inc(Bin);
   end;
 end;
@@ -3976,7 +3964,7 @@ begin
   dwremoteIP := inet_addr(pointer(IP));
   if dwremoteIP<>0 then begin
     PhyAddrLen := 8;
-    if SendARP(dwremoteIP, 0, @pMacAddr, @PhyAddrLen)=NO_ERROR then begin
+    if SendARP(dwremoteIP,0,@pMacAddr,@PhyAddrLen)=NO_ERROR then begin
       if PhyAddrLen=6 then
         result := MacToText(@pMacAddr);
     end;
