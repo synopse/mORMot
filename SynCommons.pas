@@ -57724,12 +57724,12 @@ begin
    m := 1 shl 2;
    for drive := 3 to 26 do begin // retrieve partitions mounted as C..Z drives
      if drives and m <> 0 then begin
-       fn[1] := char(64 + drive);
+       fn[1] := char(64+drive);
        if GetDiskInfo(fn,av,fr,tot,@volume) then begin
          SetLength(result,n+1);
          StringToUTF8(volume,result[n].name);
-         result[n].mounted := fn;
          volume := '';
+         result[n].mounted := fn;
          result[n].size := tot;
          inc(n);
        end;
@@ -57745,11 +57745,12 @@ begin
     mnt := '';
     typ := '';
     ScanUTF8(GetNextLine(p,p),'%S %S %S',[@fs,@mnt,@typ]);
-    if (fs<>'') and (fs<>'rootfs') and (mnt<>'') and (mnt<>'/mnt') and (typ<>'') and
+    if (fs<>'') and (fs<>'rootfs') and (IdemPCharArray(pointer(fs),['/DEV/LOOP'])<0) and
+       (mnt<>'') and (mnt<>'/mnt') and (typ<>'') and
        (IdemPCharArray(pointer(mnt),['/PROC/','/SYS/','/RUN/'])<0) and
        (FindPropName(['autofs','proc','subfs','debugfs','devpts','fusectl','mqueue',
         'rpc-pipefs','sysfs','devfs','kernfs','ignore','none','tmpfs','securityfs',
-        'ramfs','rootfs','devtmpfs','hugetlbfs'],typ)<0) then begin
+        'ramfs','rootfs','devtmpfs','hugetlbfs','iso9660'],typ)<0) then begin
       fn := UTF8ToString(mnt);
       if GetDiskInfo(fn,av,fr,tot) and (tot>1 shl 20) then begin
         //writeln('fs=',fs,' mnt=',mnt,' typ=',typ, ' av=',KB(av),' fr=',KB(fr),' tot=',KB(tot));
@@ -57769,15 +57770,21 @@ var
   _DiskPartitions: TDiskPartitions;
 
 function GetDiskPartitionsText(nocache, withfreespace, nospace: boolean): RawUTF8;
-const F: array[boolean] of RawUTF8 = ('% % (% / %)', '% % (%/%)');
+const F: array[boolean] of RawUTF8 = ({$ifdef MSWINDOWS}'%: % (% / %)', '%: % (%/%)'
+         {$else}'% % (% / %)', '% % (%/%)'{$endif});
 var i: integer;
     parts: TDiskPartitions;
    function GetInfo(var p: TDiskPartition): shortstring;
    var av, fr, tot: QWord;
    begin
      if not withfreespace or not GetDiskInfo(p.mounted,av,fr,tot) then
+       {$ifdef MSWINDOWS}
+       FormatShort('%: % (%)',[p.mounted[1],p.name,KB(p.size,nospace)],result) else
+       FormatShort(F[nospace],[p.mounted[1],p.name,KB(p.size,nospace)],result);
+       {$else}
        FormatShort('% % (%)',[p.mounted,p.name,KB(p.size,nospace)],result) else
        FormatShort(F[nospace],[p.mounted,p.name,KB(fr,nospace),KB(tot,nospace)],result);
+       {$endif}
    end;
 begin
   if (_DiskPartitions=nil) or nocache then
