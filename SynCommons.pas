@@ -3732,8 +3732,13 @@ function TrimLeftLowerCaseShort(V: PShortString): RawUTF8;
 /// trim first lowercase chars ('otDone' will return 'Done' e.g.)
 // - return a shortstring: enumeration names are pure 7bit ANSI with Delphi 7
 // to 2007, and UTF-8 encoded with Delphi 2009+
-function TrimLeftLowerCaseToShort(V: PShortString): ShortString;
+function TrimLeftLowerCaseToShort(V: PShortString): ShortString; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
+/// trim first lowercase chars ('otDone' will return 'Done' e.g.)
+// - return a shortstring: enumeration names are pure 7bit ANSI with Delphi 7
+// to 2007, and UTF-8 encoded with Delphi 2009+
+procedure TrimLeftLowerCaseToShort(V: PShortString; out result: ShortString); overload;
 
 /// convert a CamelCase string into a space separated one
 // - 'OnLine' will return 'On line' e.g., and 'OnMyLINE' will return 'On my LINE'
@@ -13248,6 +13253,7 @@ const
     {$ifdef CPU32}'32'{$else}'64'{$endif}{$endif}{$endif};
 
 function ToText(os: TOperatingSystem): PShortString; overload;
+function ToText(const osv: TOperatingSystemVersion): ShortString; overload;
 
 var
   /// the target Operating System used for compilation, as TOperatingSystem
@@ -13262,7 +13268,7 @@ var
   CpuInfoText: RawUTF8;
   /// some textual information about the current computer hardware, from BIOS
   BiosInfoText: RawUTF8;
-  /// the running Operating System information, encoded as a 32-bit integer
+  /// the running Operating System
   OSVersion32: TOperatingSystemVersion;
   OSVersionInt32: integer absolute OSVersion32;
 
@@ -26802,6 +26808,13 @@ begin
   result := GetEnumName(TypeInfo(TOperatingSystem),ord(os));
 end;
 
+function ToText(const osv: TOperatingSystemVersion): ShortString;
+begin
+  if osv.os=osWindows then
+     FormatShort('Windows %', [WINDOWS_NAME[osv.win]], result) else
+     TrimLeftLowerCaseToShort(ToText(osv.os),result);
+end;
+
 {$ifdef MSWINDOWS}
 procedure FileTimeToInt64(const FT: TFileTime; out I64: Int64);
 begin
@@ -37795,6 +37808,11 @@ begin
 end;
 
 function TrimLeftLowerCaseToShort(V: PShortString): ShortString;
+begin
+  TrimLeftLowerCaseToShort(V,result);
+end;
+
+procedure TrimLeftLowerCaseToShort(V: PShortString; out result: ShortString);
 var P: PAnsiChar;
     L: integer;
 begin
@@ -56532,12 +56550,12 @@ end;
 { ************ Unit-Testing classes and functions }
 
 procedure KB(bytes: Int64; out result: TShort16; nospace: boolean);
-const _B: array[boolean, 0..5] of string[3] =
-    ((' KB',' MB',' GB',' TB',' PB',' EB'), ('KB','MB','GB','TB','PB','EB'));
+const _B: array[boolean, 0..6] of string[3] =
+    ((' KB',' MB',' GB',' TB',' PB',' EB','% B'), ('KB','MB','GB','TB','PB','EB','%B'));
 var hi,rem,b: cardinal;
 begin
   if bytes<1 shl 10-(1 shl 10) div 10 then begin
-    FormatShort16('% B',[integer(bytes)],result);
+    FormatShort16(_B[nospace,6],[integer(bytes)],result);
     exit;
   end;
   if bytes<1 shl 20-(1 shl 20) div 10 then begin
