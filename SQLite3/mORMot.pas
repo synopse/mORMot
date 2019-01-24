@@ -14160,8 +14160,7 @@ type
     // - if the newly created instance is a TSQLRestServer, will force the
     // supplied aServerHandleAuthentication parameter to enable authentication
     class function CreateTryFrom(aModel: TSQLModel;
-      aDefinition: TSynConnectionDefinition;
-      aServerHandleAuthentication: boolean): TSQLRest;
+      aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean): TSQLRest;
     /// create a new TSQLRest instance from its Model and JSON stored values
     // - aDefinition.Kind will define the actual class which will be instantiated
     // - you can specify a custom Key, if the default is not safe enough for you
@@ -42683,26 +42682,28 @@ end;
 function TSQLRestServer.ServiceDefine(aImplementationClass: TInterfacedClass;
   const aInterfaces: array of TGUID; aInstanceCreation: TServiceInstanceImplementation;
   const aContractExpected: RawUTF8): TServiceFactoryServer;
+var ti: PTypeInfoDynArray;
 begin
-  result := ServiceRegister(aImplementationClass,
-    TInterfaceFactory.GUID2TypeInfo(aInterfaces),aInstanceCreation,aContractExpected);
+  ti := TInterfaceFactory.GUID2TypeInfo(aInterfaces);
+  result := ServiceRegister(aImplementationClass,ti,aInstanceCreation,aContractExpected);
 end;
 
 function TSQLRestServer.ServiceDefine(aSharedImplementation: TInterfacedObject;
   const aInterfaces: array of TGUID; const aContractExpected: RawUTF8): TServiceFactoryServer;
+var ti: PTypeInfoDynArray;
 begin
-  result := ServiceRegister(aSharedImplementation,
-    TInterfaceFactory.GUID2TypeInfo(aInterfaces),aContractExpected);
+  ti := TInterfaceFactory.GUID2TypeInfo(aInterfaces);
+  result := ServiceRegister(aSharedImplementation,ti,aContractExpected);
 end;
 
 function TSQLRestServer.ServiceDefine(aClient: TSQLRest;
   const aInterfaces: array of TGUID;
   aInstanceCreation: TServiceInstanceImplementation;
   const aContractExpected: RawUTF8): boolean;
+var ti: PTypeInfoDynArray;
 begin
-  result := ServiceRegister(aClient,
-    TInterfaceFactory.GUID2TypeInfo(aInterfaces),
-    aInstanceCreation,aContractExpected);
+  ti := TInterfaceFactory.GUID2TypeInfo(aInterfaces);
+  result := ServiceRegister(aClient,ti,aInstanceCreation,aContractExpected);
 end;
 
 procedure TSQLRestServer.URI(var Call: TSQLRestURIParams);

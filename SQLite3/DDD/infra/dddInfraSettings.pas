@@ -884,7 +884,9 @@ begin
     result := TSQLRestMongoDBCreate(aModel,ORM,
       riHandleAuthentication in aOptions,aMongoDBOptions,aMongoDBIdentifier);
     {$endif}
-    {$ifndef DDDNOSYNDB}
+    {$ifdef DDDNOSYNDB}
+    result := TSQLRest.CreateTryFrom(aModel,ORM,riHandleAuthentication in aOptions);
+    {$else}
     if result=nil then // failed to use MongoDB -> try external or internal DB
       result := TSQLRestExternalDBCreate(aModel,ORM,
         riHandleAuthentication in aOptions,aExternalDBOptions);
