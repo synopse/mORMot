@@ -7907,14 +7907,12 @@ type
     procedure AddLine(const Text: shortstring);
     /// append an UTF-8 String, with no JSON escaping
     procedure AddString(const Text: RawUTF8);
-      {$ifdef HASINLINE}inline;{$endif}
     /// append several UTF-8 strings
     procedure AddStrings(const Text: array of RawUTF8); overload;
     /// append an UTF-8 string several times
     procedure AddStrings(const Text: RawUTF8; count: integer); overload;
     /// append a ShortString
     procedure AddShort(const Text: ShortString);
-      {$ifdef HASINLINE}inline;{$endif}
     /// append a sub-part of an UTF-8  String
     // - emulates AddString(copy(Text,start,len))
     procedure AddStringCopy(const Text: RawUTF8; start,len: integer);
@@ -7969,13 +7967,17 @@ type
     /// write some record content as binary, Base64 encoded with our magic prefix
     procedure WrRecord(const Rec; TypeInfo: pointer);
     /// write some #0 ended UTF-8 text, according to the specified format
+    // - if Escape is a constant, consider calling directly AddNoJSONEscape,
+    // AddJSONEscape or AddOnSameLine methods
     procedure Add(P: PUTF8Char; Escape: TTextWriterKind); overload;
     /// write some #0 ended UTF-8 text, according to the specified format
+    // - if Escape is a constant, consider calling directly AddNoJSONEscape,
+    // AddJSONEscape or AddOnSameLine methods
     procedure Add(P: PUTF8Char; Len: PtrInt; Escape: TTextWriterKind); overload;
-      {$ifdef HASINLINE}inline;{$endif}
     /// write some #0 ended Unicode text as UTF-8, according to the specified format
+    // - if Escape is a constant, consider calling directly AddNoJSONEscapeW,
+    // AddJSONEscapeW or AddOnSameLineW methods
     procedure AddW(P: PWord; Len: PtrInt; Escape: TTextWriterKind);
-      {$ifdef HASINLINE}inline;{$endif}
     /// append some UTF-8 encoded chars to the buffer, from the main AnsiString type
     // - use the current system code page for AnsiString parameter
     procedure AddAnsiString(const s: AnsiString; Escape: TTextWriterKind); overload;
@@ -13238,6 +13240,8 @@ const
     ('?', 'W', 'L', 'X', 'B', 'P', 'A', 'a', 'D', 'F', 'G', 'K', 'M', 'm',
      'n', 'N', 'U', 'S', 's', 'u', 'Y', 'T', 'C', 't', 'R', 'l', 'O', 'G',
      'c', 'd', 'x', 'Z', 'r', 'p');
+  /// the operating systems items which actually are Linux distributions
+  OS_LINUX = [osLinux, osArch .. osAlpine];
 
   /// the compiler family used
   COMP_TEXT = {$ifdef FPC}'Fpc'{$else}'Delphi'{$endif};
@@ -13254,6 +13258,7 @@ const
 
 function ToText(os: TOperatingSystem): PShortString; overload;
 function ToText(const osv: TOperatingSystemVersion): ShortString; overload;
+function ToTextOS(osint32: integer): RawUTF8;
 
 var
   /// the target Operating System used for compilation, as TOperatingSystem
@@ -26813,6 +26818,15 @@ begin
   if osv.os=osWindows then
      FormatShort('Windows %', [WINDOWS_NAME[osv.win]], result) else
      TrimLeftLowerCaseToShort(ToText(osv.os),result);
+end;
+
+function ToTextOS(osint32: integer): RawUTF8;
+var osv: TOperatingSystemVersion;
+begin
+  PInteger(@osv)^ := osint32;
+  result := ShortStringToUTF8(ToText(osv));
+  if (osv.os>=osLinux) and (osv.utsrelease[2]<>0) then
+    result := FormatUTF8('% %.%.%',[result,osv.utsrelease[2],osv.utsrelease[1],osv.utsrelease[0]]);
 end;
 
 {$ifdef MSWINDOWS}
