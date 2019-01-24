@@ -159,6 +159,10 @@
 // enable low-level logging of SQlite3 virtual table query planner costs
 // -> to be used only for internal debugging
 
+{.$define DDDNOSYNDB}
+// SynDB / external SQL DB won't be linked to the executable by dddInfraSettings
+{.$define DDDNOMONGODB}
+// Mongo DB client won't be linked to the executable by dddInfraSettings
 
 
 {$ifdef FPC}
