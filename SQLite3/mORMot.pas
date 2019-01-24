@@ -35919,36 +35919,35 @@ var T: TSQLTableJSON;
 begin
   Data := nil;
   // handle naive expressions like SELECT ID from Table where ID=10
-  if IsRowID(pointer(FieldName)) then
-    if length(WhereClause)>2 then begin
-      P := pointer(WhereClause);
-      GetNextFieldProp(P,Prop);
-      if IsRowIDShort(Prop) then // SELECT RowID from Table where RowID=10
-        case P^ of
-        '=': begin
-          P := GotoNextNotSpace(P+1);
-          if PWord(P)^=ord(':')+ord('(')shl 8 then
-            inc(P,2); // handle inlined parameters
-          SetInt64(P,V);
-          if V>0 then begin
-            SetLength(Data,1);
-            Data[0] := V;
+  if IsRowID(pointer(FieldName)) and (length(WhereClause)>2) then begin
+    P := pointer(WhereClause);
+    GetNextFieldProp(P,Prop);
+    if IsRowIDShort(Prop) and (StrPosI('AND',P)=nil) and (StrPosI('OR',P)=nil) then
+      case P^ of
+      '=': begin // SELECT RowID from Table where RowID=10
+        P := GotoNextNotSpace(P+1);
+        if PWord(P)^=ord(':')+ord('(')shl 8 then
+          inc(P,2); // handle inlined parameters
+        SetInt64(P,V);
+        if V>0 then begin
+          SetLength(Data,1);
+          Data[0] := V;
+          result := true;
+          exit;
+        end;
+      end;
+      'i','I': if P[1] in ['n','N'] then begin
+        P := GotoNextNotSpace(P+2);
+        if (P^='(') and (GotoNextNotSpace(P+1)^ in ['0'..'9']) then begin
+          CSVToInt64DynArray(P+1,Data);
+          if Data<>nil then begin
             result := true;
             exit;
           end;
         end;
-        'i','I': if P[1] in ['n','N'] then begin
-          P := GotoNextNotSpace(P+2);
-          if (P^='(') and (GotoNextNotSpace(P+1)^ in ['0'..'9']) then begin
-            CSVToInt64DynArray(P+1,Data);
-            if Data<>nil then begin
-              result := true;
-              exit;
-            end;
-          end;
-        end;
-        end;
-    end;
+      end;
+      end;
+  end;
   // retrieve the content from database
   result := false;
   T := MultiFieldValues(Table,FieldName,WhereClause);
