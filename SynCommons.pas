@@ -5057,17 +5057,19 @@ type
     /// set all content of one dynamic array to the current array
     // - both must be of the same exact type
     // - T*ObjArray will be reallocated and copied by content (using a temporary
-    // JSON serialization), unless ObjArrayByRef is true
+    // JSON serialization), unless ObjArrayByRef is true and pointers are copied
     procedure Copy(const Source: TDynArray; ObjArrayByRef: boolean=false);
     /// set all content of one dynamic array to the current array
     // - both must be of the same exact type
     // - T*ObjArray will be reallocated and copied by content (using a temporary
-    // JSON serialization), unless ObjArrayByRef is true
+    // JSON serialization), unless ObjArrayByRef is true and pointers are copied
     procedure CopyFrom(const Source; MaxElem: integer; ObjArrayByRef: boolean=false);
     /// set all content of the current dynamic array to another array variable
     // - both must be of the same exact type
+    // - resulting length(Dest) will match the exact items count, even if an
+    // external Count integer variable is used by this instance
     // - T*ObjArray will be reallocated and copied by content (using a temporary
-    // JSON serialization), unless ObjArrayByRef is true
+    // JSON serialization), unless ObjArrayByRef is true and pointers are copied
     procedure CopyTo(out Dest; ObjArrayByRef: boolean=false);
     {$endif DELPHI5OROLDER}
     /// returns a pointer to an element of the array
@@ -9517,8 +9519,9 @@ type
     {$ifndef DELPHI5OROLDER}
     /// make a copy of the stored values
     // - this method is thread-safe, since it will lock the instance during copy
+    // - resulting length(Dest) will match the exact values count
     // - T*ObjArray will be reallocated and copied by content (using a temporary
-    // JSON serialization), unless ObjArrayByRef is true
+    // JSON serialization), unless ObjArrayByRef is true and pointers are copied
     procedure CopyValues(out Dest; ObjArrayByRef: boolean=false);
     {$endif DELPHI5OROLDER}
     /// serialize the content as a "key":value JSON object
@@ -26822,11 +26825,13 @@ end;
 
 function ToTextOS(osint32: integer): RawUTF8;
 var osv: TOperatingSystemVersion;
+    ost: ShortString;
 begin
   PInteger(@osv)^ := osint32;
-  result := ShortStringToUTF8(ToText(osv));
+  ost := ToText(osv);
   if (osv.os>=osLinux) and (osv.utsrelease[2]<>0) then
-    result := FormatUTF8('% %.%.%',[result,osv.utsrelease[2],osv.utsrelease[1],osv.utsrelease[0]]);
+    result := FormatUTF8('% %.%.%',[ost,osv.utsrelease[2],osv.utsrelease[1],osv.utsrelease[0]]) else
+    result := ShortStringToUTF8(ost);
 end;
 
 {$ifdef MSWINDOWS}
