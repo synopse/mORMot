@@ -56692,9 +56692,9 @@ begin
     TwoDigitToString({$ifdef CPU32}Int64Rec(Micro).Lo{$else}Micro{$endif} div 10000,'s',result) else
   if Micro<3600000000 then
     TimeToString({$ifdef CPU32}Int64Rec(Micro).Lo{$else}Micro{$endif} div 1000000,'m',result) else
-  if Micro<86400000000 then
+  if Micro<86400000000*2 then
     TimeToString(Micro div 60000000,'h',result) else
-    FormatShort16('%d',[Micro div 1440000000],result)
+    FormatShort16('%d',[Micro div 86400000000],result)
 end;
 
 function IsInitializedCriticalSection(const CS: TRTLCriticalSection): Boolean;
