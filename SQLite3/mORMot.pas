@@ -3273,8 +3273,7 @@ type
 
   /// ORM attributes for a TSQLPropInfo definition
   TSQLPropInfoAttribute = (
-    aIsUnique,
-    aAuxiliaryRTreeField);
+    aIsUnique, aAuxiliaryRTreeField);
 
   /// set of ORM attributes for a TSQLPropInfo definition
   TSQLPropInfoAttributes = set of TSQLPropInfoAttribute;
@@ -3453,7 +3452,7 @@ type
   TSQLPropInfoListOptions = set of (
     pilRaiseEORMExceptionIfNotHandled, pilAllowIDFields,
     pilSubClassesFlattening, pilIgnoreIfGetter,
-    pilSingleHierarchyLevel);
+    pilSingleHierarchyLevel, pilAuxiliaryFields);
 
   /// parent information about a published property retrieved from RTTI
   TSQLPropInfoRTTI = class(TSQLPropInfo)
@@ -3478,7 +3477,7 @@ type
     // - should not be called directly, but with dedicated class methods like
     // class function CreateFrom()
     constructor Create(aPropInfo: PPropInfo; aPropIndex: integer;
-      aSQLFieldType: TSQLFieldType); reintroduce; virtual;
+      aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions); reintroduce; virtual;
     {$ifndef NOVARIANTS}
     /// retrieve the property value into a Variant
     // - will set the Variant type to the best matching kind according to the
@@ -3512,7 +3511,8 @@ type
     fUnsigned: boolean;
     procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: TObject); override;
   public
-    constructor Create(aPropInfo: PPropInfo; aPropIndex: integer; aSQLFieldType: TSQLFieldType); override;
+    constructor Create(aPropInfo: PPropInfo; aPropIndex: integer;
+      aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions); override;
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
       var result: RawUTF8; wasSQLString: PBoolean); override;
@@ -3532,7 +3532,8 @@ type
   protected
     fSetEnumType: PEnumType;
   public
-    constructor Create(aPropInfo: PPropInfo; aPropIndex: integer; aSQLFieldType: TSQLFieldType); override;
+    constructor Create(aPropInfo: PPropInfo; aPropIndex: integer;
+      aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions); override;
     property SetEnumType: PEnumType read fSetEnumType;
   end;
 
@@ -3542,7 +3543,8 @@ type
   protected
     fEnumType: PEnumType;
   public
-    constructor Create(aPropInfo: PPropInfo; aPropIndex: integer; aSQLFieldType: TSQLFieldType); override;
+    constructor Create(aPropInfo: PPropInfo; aPropIndex: integer;
+      aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions); override;
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
       var result: RawUTF8; wasSQLString: PBoolean); override;
@@ -3647,7 +3649,8 @@ type
     fEngine: TSynAnsiConvert;
     procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: TObject); override;
   public
-    constructor Create(aPropInfo: PPropInfo; aPropIndex: integer; aSQLFieldType: TSQLFieldType); override;
+    constructor Create(aPropInfo: PPropInfo; aPropIndex: integer;
+      aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions); override;
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
@@ -3770,7 +3773,7 @@ type
     // - should not be called directly, but with dedicated class methods like
     // class function CreateFrom()
     constructor Create(aPropInfo: PPropInfo; aPropIndex: integer;
-      aSQLFieldType: TSQLFieldType); override;
+      aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions); override;
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
       var result: RawUTF8; wasSQLString: PBoolean); override;
@@ -3813,7 +3816,7 @@ type
   public
     /// initialize the internal fields
     constructor Create(aPropInfo: PPropInfo; aPropIndex: integer;
-      aSQLFieldType: TSQLFieldType); override;
+      aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions); override;
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean); override;
     procedure SetValuePtr(Instance: TObject; Value: PUTF8Char; ValueLen: integer;
@@ -5212,7 +5215,8 @@ type
     fObjectClass: TClass;
   public
     /// will setup the corresponding ObjectClass property
-    constructor Create(aPropInfo: PPropInfo; aPropIndex: integer; aSQLFieldType: TSQLFieldType); override;
+    constructor Create(aPropInfo: PPropInfo; aPropIndex: integer;
+      aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions); override;
     /// direct access to the property class instance
     function GetInstance(Instance: TObject): TObject;
       {$ifdef HASINLINE}inline;{$endif}
@@ -5233,7 +5237,8 @@ type
   public
     /// will identify TRecordReferenceToBeDeleted kind of field, and
     // setup the corresponding CascadeDelete property
-    constructor Create(aPropInfo: PPropInfo; aPropIndex: integer; aSQLFieldType: TSQLFieldType); override;
+    constructor Create(aPropInfo: PPropInfo; aPropIndex: integer;
+      aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions); override;
     /// TRUE if this sftRecord is a TRecordReferenceToBeDeleted
     property CascadeDelete: boolean read fCascadeDelete;
   end;
@@ -5251,7 +5256,8 @@ type
     // TJSONSerializer.RegisterClassForJSON list, e.g. in TSQLModel.Create, so
     // that e.g. 'TSQLRecordClientID' type name will match TSQLRecordClient
     // - in addition, the '...ToBeDeletedID' name pattern will set CascadeDelete
-    constructor Create(aPropInfo: PPropInfo; aPropIndex: integer; aSQLFieldType: TSQLFieldType); override;
+    constructor Create(aPropInfo: PPropInfo; aPropIndex: integer;
+      aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions); override;
     /// the TSQLRecord class associated to this TID
     // - is computed from its type name - for instance, if you define:
     // ! type
@@ -5780,7 +5786,7 @@ type
     // - the [boolean] is for [ReturnFirstIfNoUnique] version
     // - contains -1 if no field matches
     MainField: array[boolean] of integer;
-    /// count of coordinate fields of a TSQLRTree, before auxiliary columns
+    /// count of coordinate fields of a TSQLRecordRTree, before auxiliary columns
     RTreeCoordBoundaryFields: integer;
   published
     /// the TSQLRecord class
@@ -10059,7 +10065,8 @@ type
   // (i.e. 11 columns, including the ID property)
   // - since SQLite version 3.24.0 (2018-06-04), R-Tree tables can have
   // auxiliary columns that store arbitrary data: such fields should appear after
-  // the boundary columns, and have their property name starting with '_' - note
+  // the boundary columns, and have their property name starting with '_' in the
+  // class definition; in both SQL and Where clause, the '_' will be trimmed - note
   // that you should better use the SynSQLite3Static unit, since an external
   // SQLite3 .dll/.so library as supplied by the system may be outdated
   // - internally, the SQlite3 R-Tree extension will be implemented as a virtual
@@ -10108,6 +10115,7 @@ type
   // ! end;
   // - since SQLite version 3.24.0, TSQLRecordRTree can have auxiliary columns
   // that store arbitrary data, having their property name starting with '_'
+  // (only in this class definition: SQL and Where clauses will trim it)
   TSQLRecordRTree = class(TSQLRecordRTreeAbstract)
   public
     /// override this class function to implement a custom SQL *_in() function
@@ -10147,6 +10155,7 @@ type
   // ! end;
   // - since SQLite version 3.24.0, TSQLRecordRTreeInteger can have auxiliary
   // columns that store arbitrary data, having their property name starting with '_'
+  // (only in this class definition: SQL and Where clauses will trim it)
   TSQLRecordRTreeInteger = class(TSQLRecordRTreeAbstract)
   public
     /// override this class function to implement a custom SQL *_in() function
@@ -21575,8 +21584,7 @@ begin
   if aName='' then
     EORMException.CreateUTF8('Void name for %.Create',[self]);
   if aAuxiliaryRTreeField in aAttributes then
-    fName := copy(aName,2,MaxInt)
-  else
+    fName := copy(aName,2,MaxInt) else
     fName := aName;
   fNameUnflattened := fName;
   fSQLFieldType := aSQLFieldType;
@@ -21892,7 +21900,7 @@ begin
   if aType^.Kind=tkVariant then begin
     aSQLFieldType := NullableTypeToSQLFieldType(aType);
     if aSQLFieldType<>sftUnknown then // handle sftNullable type
-      result := TSQLPropInfoRTTIVariant.Create(aPropInfo,aPropIndex,aSQLFieldType);
+      result := TSQLPropInfoRTTIVariant.Create(aPropInfo,aPropIndex,aSQLFieldType,aOptions);
   end;
   {$endif}
   if result=nil then begin
@@ -21967,7 +21975,7 @@ begin
       end;
     end;
     if C<>nil then
-      result := C.Create(aPropInfo,aPropIndex,aSQLFieldType);
+      result := C.Create(aPropInfo,aPropIndex,aSQLFieldType,aOptions);
   end;
   if result<>nil then begin
     if aFlattenedProps<>nil then
@@ -22008,13 +22016,13 @@ end;
 {$endif NOVARIANTS}
 
 constructor TSQLPropInfoRTTI.Create(aPropInfo: PPropInfo; aPropIndex: integer;
-  aSQLFieldType: TSQLFieldType);
+  aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions);
 var attrib: TSQLPropInfoAttributes;
 begin
   byte(attrib) := 0;
   if aPropInfo^.IsStored(nil)=AS_UNIQUE then
     Include(attrib,aIsUnique); // property MyProperty: RawUTF8 stored AS_UNIQUE;
-  if aPropInfo^.Name[1] = '_' then
+  if (pilAuxiliaryFields in aOptions) and (aPropInfo^.Name[1] = '_') then
     Include(attrib,aAuxiliaryRTreeField);
   inherited Create(ToUTF8(aPropInfo^.Name),aSQLFieldType,attrib,
     aPropInfo^.Index,aPropIndex); // property MyProperty: RawUTF8 index 10; -> FieldWidth=10
@@ -22032,9 +22040,9 @@ end;
 { TSQLPropInfoRTTIInt32 }
 
 constructor TSQLPropInfoRTTIInt32.Create(aPropInfo: PPropInfo; aPropIndex: integer;
-  aSQLFieldType: TSQLFieldType);
+  aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions);
 begin
-  inherited Create(aPropInfo,aPropIndex,aSQLFieldType);
+  inherited Create(aPropInfo,aPropIndex,aSQLFieldType,aOptions);
   fUnsigned := fPropType^.OrdType in [otUByte,otUWord,otULong];
 end;
 
@@ -22137,9 +22145,9 @@ end;
 { TSQLPropInfoRTTISet }
 
 constructor TSQLPropInfoRTTISet.Create(aPropInfo: PPropInfo; aPropIndex: integer;
-  aSQLFieldType: TSQLFieldType);
+  aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions);
 begin
-  inherited;
+  inherited Create(aPropInfo,aPropIndex,aSQLFieldType,aOptions);
   fSetEnumType := fPropType^.SetEnumType;
 end;
 
@@ -22147,9 +22155,9 @@ end;
 { TSQLPropInfoRTTIEnum }
 
 constructor TSQLPropInfoRTTIEnum.Create(aPropInfo: PPropInfo; aPropIndex: integer;
-  aSQLFieldType: TSQLFieldType);
+  aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions);
 begin
-  inherited;
+  inherited Create(aPropInfo,aPropIndex,aSQLFieldType,aOptions);
   fEnumType := fPropType^.EnumBaseType;
 end;
 
@@ -22656,9 +22664,9 @@ end;
 { TSQLPropInfoRTTIInstance }
 
 constructor TSQLPropInfoRTTIInstance.Create(aPropInfo: PPropInfo; aPropIndex: integer;
-  aSQLFieldType: TSQLFieldType);
+  aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions);
 begin
-  inherited Create(aPropInfo,aPropIndex,aSQLFieldType);
+  inherited Create(aPropInfo,aPropIndex,aSQLFieldType,aOptions);
   fObjectClass := fPropType^.ClassType^.ClassType;
 end;
 
@@ -22676,9 +22684,9 @@ end;
 { TSQLPropInfoRTTIRecordReference }
 
 constructor TSQLPropInfoRTTIRecordReference.Create(aPropInfo: PPropInfo;
-  aPropIndex: integer; aSQLFieldType: TSQLFieldType);
+  aPropIndex: integer; aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions);
 begin
-  inherited Create(aPropInfo,aPropIndex,aSQLFieldType);
+  inherited Create(aPropInfo,aPropIndex,aSQLFieldType,aOptions);
   fCascadeDelete := IdemPropName(fPropType^.Name,'TRecordReferenceToBeDeleted')
 end;
 
@@ -22686,11 +22694,11 @@ end;
 { TSQLPropInfoRTTITID }
 
 constructor TSQLPropInfoRTTITID.Create(aPropInfo: PPropInfo; aPropIndex: integer;
-  aSQLFieldType: TSQLFieldType);
+  aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions);
 var TypeName: PShortString;
     ItemClass: TClass;
 begin
-  inherited Create(aPropInfo,aPropIndex,aSQLFieldType);
+  inherited Create(aPropInfo,aPropIndex,aSQLFieldType,aOptions);
   TypeName := @fPropType^.Name;
   if IdemPropName(TypeName^,'TID') or
      (ord(TypeName^[1]) and $df<>ord('T')) or // expect T...ID pattern
@@ -22730,7 +22738,6 @@ begin
 end;
 
 
-
 { TSQLPropInfoRTTIIObject }
 
 procedure TSQLPropInfoRTTIObject.CopySameClassProp(Source: TObject;
@@ -22740,10 +22747,10 @@ begin
   // generic case: copy also class content (create instances)
   S := GetInstance(Source);
   D := TSQLPropInfoRTTIObject(DestInfo).GetInstance(Dest);
-{$ifndef LVCL}
+  {$ifndef LVCL}
   if S.InheritsFrom(TCollection) then
     CopyCollection(TCollection(S),TCollection(D)) else
-{$endif}
+  {$endif}
   if S.InheritsFrom(TStrings) and D.InheritsFrom(TStrings) then
     CopyStrings(TStrings(S),TStrings(D)) else begin
     D.Free; // release previous instance
@@ -22816,7 +22823,7 @@ end;
 { TSQLPropInfoRTTIAnsi }
 
 constructor TSQLPropInfoRTTIAnsi.Create(aPropInfo: PPropInfo; aPropIndex: integer;
-  aSQLFieldType: TSQLFieldType);
+  aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions);
 begin
   inherited;
   fEngine := TSynAnsiConvert.Engine(aPropInfo^.PropType^.AnsiStringCodePage);
@@ -23490,10 +23497,10 @@ end;
 { TSQLPropInfoRTTIDynArray }
 
 constructor TSQLPropInfoRTTIDynArray.Create(aPropInfo: PPropInfo;
-  aPropIndex: integer; aSQLFieldType: TSQLFieldType);
+  aPropIndex: integer; aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions);
 var dummy: pointer;
 begin
-  inherited Create(aPropInfo,aPropIndex,aSQLFieldType);
+  inherited Create(aPropInfo,aPropIndex,aSQLFieldType,aOptions);
   fObjArray := aPropInfo^.DynArrayIsObjArrayInstance;
   if fObjArray<>nil then
     fSQLDBFieldType := ftUTF8; // matches GetFieldSQLVar() below
@@ -23862,7 +23869,7 @@ end;
 { TSQLPropInfoRTTIVariant }
 
 constructor TSQLPropInfoRTTIVariant.Create(aPropInfo: PPropInfo; aPropIndex: integer;
-  aSQLFieldType: TSQLFieldType);
+  aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions);
 begin
   inherited;
   if aSQLFieldType=sftVariant then
@@ -24411,6 +24418,8 @@ constructor TSQLPropInfoList.Create(aTable: TClass; aOptions: TSQLPropInfoListOp
 begin
   fTable := aTable;
   fOptions := aOptions;
+  if aTable.InheritsFrom(TSQLRecordRTreeAbstract) then
+    include(fOptions,pilAuxiliaryFields);
   if pilSubClassesFlattening in fOptions then
     InternalAddParentsFirst(aTable,nil) else
     InternalAddParentsFirst(aTable);
@@ -32614,7 +32623,7 @@ begin
     rRTree, rRTreeInteger: begin
       for i := 0 to fields.Count-1 do
         with fields.List[i] do
-        if aAuxiliaryRTreeField in Attributes then // auxiliary columns for SQlite3 >= 3.24.0
+        if aAuxiliaryRTreeField in Attributes then // for SQlite3 >= 3.24.0
           result := FormatUTF8('%+% %',[result,Name,Props.Props.SQLFieldTypeToSQL(i)]) else
           result := result+Name+',';
       result[length(result)] := ')';
@@ -34039,7 +34048,7 @@ begin
         inc(Props.RTreeCoordBoundaryFields);
     if (Props.RTreeCoordBoundaryFields<2) or
        (Props.RTreeCoordBoundaryFields>RTREE_MAX_DIMENSION*2) or
-       (Props.RTreeCoordBoundaryFields mod 2<>0) then
+       (Props.RTreeCoordBoundaryFields and 1<>0) then
       raise EModelException.CreateUTF8('% has % fields: RTREE expects 2,4,6..% boundary columns',
         [Props.Table,Props.RTreeCoordBoundaryFields,RTREE_MAX_DIMENSION*2]);
   end;
