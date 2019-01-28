@@ -5587,6 +5587,9 @@ begin
         v := 0;
         check(dict.FindAndCopy(k, v));
         check(v=i);
+        k := '';
+        check(dict.FindKeyFromValue(v,k));
+        check(GetInteger(pointer(k))=i);
       end;
     end;
   finally
