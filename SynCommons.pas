@@ -9485,6 +9485,14 @@ type
     // were not found
     // - this method is thread-safe, since it will lock the instance
     function FindInArray(const aKey, aArrayValue): boolean;
+    /// search of a stored key by its associated key, and return a key local copy
+    // - won't use any hashed index but TDynArray.IndexOf over fValues,
+    // so is much slower than FindAndCopy()
+    // - will update the associated timeout value of the entry, unless
+    // aUpdateTimeOut is set to false
+    // - so this method is thread-safe
+    // - returns TRUE if aValue was found, FALSE if no match exists
+    function FindKeyFromValue(const aValue; out aKey; aUpdateTimeOut: boolean=true): boolean;
     /// add aArrayValue item within a dynamic-array value associated via aKey
     // - expect the stored value to be a dynamic array itself
     // - would search for aKey as primary key, then use TDynArray.Add
@@ -49323,22 +49331,22 @@ begin
   P := fValue^;
   if @Elem<>nil then
   if ElemType=nil then
-  case ElemSize of
-    // optimized versions for arrays of byte,word,integer,Int64,Currency,Double
-    1: for result := 0 to max do
-         if PByteArray(P)^[result]=byte(Elem) then exit;
-    2: for result := 0 to max do
-         if PWordArray(P)^[result]=word(Elem) then exit;
-    4: for result := 0 to max do // integer,single,32bitPointer
-         if PIntegerArray(P)^[result]=integer(Elem) then exit;
-    8: for result := 0 to max do // Int64,Currency,Double,64bitPointer
-         if PInt64Array(P)^[result]=Int64(Elem) then exit;
-  else // generic binary comparison (fast with our overloaded CompareMemFixed)
-    for result := 0 to max do
-      if CompareMemFixed(P,@Elem,ElemSize) then
-        exit else
-        inc(PByte(P),ElemSize);
-  end else
+    case ElemSize of
+      // optimized versions for arrays of byte,word,integer,Int64,Currency,Double
+      1: for result := 0 to max do
+           if PByteArray(P)^[result]=byte(Elem) then exit;
+      2: for result := 0 to max do
+           if PWordArray(P)^[result]=word(Elem) then exit;
+      4: for result := 0 to max do // integer,single,32bitPointer
+           if PIntegerArray(P)^[result]=integer(Elem) then exit;
+      8: for result := 0 to max do // Int64,Currency,Double,64bitPointer
+           if PInt64Array(P)^[result]=Int64(Elem) then exit;
+    else // generic binary comparison (fast with our overloaded CompareMemFixed)
+      for result := 0 to max do
+        if CompareMemFixed(P,@Elem,ElemSize) then
+          exit else
+          inc(PByte(P),ElemSize);
+    end else
   case PTypeKind(ElemType)^ of
   tkLString{$ifdef FPC},tkLStringOld{$endif}:
     for result := 0 to max do
@@ -59817,6 +59825,24 @@ end;
 function TSynDictionary.FindInArray(const aKey, aArrayValue): boolean;
 begin
   result := InArray(aKey,aArrayValue,iaFind);
+end;
+
+function TSynDictionary.FindKeyFromValue(const aValue; out aKey;
+  aUpdateTimeOut: boolean): boolean;
+var ndx: integer;
+begin
+  fSafe.Lock;
+  try
+    ndx := fValues.IndexOf(aValue);
+    result := ndx>=0;
+    if result then begin
+      fKeys.ElemCopyAt(ndx,aKey);
+      if aUpdateTimeOut then
+        SetTimeoutAtIndex(ndx);
+    end;
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 function TSynDictionary.DeleteInArray(const aKey, aArrayValue): boolean;
