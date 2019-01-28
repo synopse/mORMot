@@ -274,7 +274,7 @@ var
   mach_timeinfo: TTimebaseInfoData;
   mach_timecoeff: double;
 
-procedure QueryPerformanceCounter(var Value: Int64);
+procedure QueryPerformanceCounter(out Value: Int64);
 begin // returns time in nano second resolution
   Value := mach_absolute_time;
   if mach_timeinfo.Denom=1 then
