@@ -7667,13 +7667,13 @@ type
     // internal temporary buffer
     fTempBufSize: Integer;
     fTempBuf: PUTF8Char;
-    fHumanReadableLevel: integer;
-    fEchoBuf: RawUTF8;
-    fEchoStart: integer;
-    fEchos: array of TOnTextWriterEcho;
     fOnWriteObject: TOnTextWriterObjectProp;
     /// used by WriteObjectAsString/AddDynArrayJSONAsString methods
     fInternalJSONWriter: TTextWriter;
+    fHumanReadableLevel: integer;
+    fEchoStart: integer;
+    fEchoBuf: RawUTF8;
+    fEchos: array of TOnTextWriterEcho;
     function GetLength: cardinal;
     procedure SetStream(aStream: TStream);
     procedure SetBuffer(aBuf: pointer; aBufSize: integer);
@@ -54407,7 +54407,7 @@ constructor TTextWriter.CreateOwnedFileStream(const aFileName: TFileName;
   aBufSize: integer);
 begin
   DeleteFile(aFileName);
-  Create(TFileStream.Create(aFileName,fmCreate),aBufSize);
+  Create(TFileStream.Create(aFileName,fmCreate or fmShareDenyWrite),aBufSize);
   Include(fCustomOptions,twoStreamIsOwned);
 end;
 
