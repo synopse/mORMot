@@ -223,6 +223,9 @@ function MatchExists(const One: TMatch; const Several: TMatchDynArray): boolean;
 /// add one TMach if not already registered in the Several[] dynamic array
 function MatchAdd(const One: TMatch; var Several: TMatchDynArray): boolean;
 
+/// returns TRUE if Match=nil or if any Match[].Match(Text) is TRUE
+function MatchAny(const Match: TMatchDynArray; const Text: RawUTF8): boolean;
+
 /// apply the CSV-supplied glob patterns to an array of RawUTF8
 // - any text not maching the pattern will be deleted from the array
 procedure FilterMatchs(const CSVPattern: RawUTF8; CaseInsensitive: boolean;
@@ -5944,6 +5947,23 @@ begin
     SetLength(Several, n + 1);
     Several[n] := One;
   end;
+end;
+
+function MatchAny(const Match: TMatchDynArray; const Text: RawUTF8): boolean;
+var
+  m: PMatch;
+  i: integer;
+begin
+  result := true;
+  if Match = nil then
+    exit;
+  m := pointer(Match);
+  for i := 1 to length(Match) do
+    if m^.Match(Text) then
+      exit
+    else
+      inc(m);
+  result := false;
 end;
 
 procedure FilterMatchs(const CSVPattern: RawUTF8; CaseInsensitive: boolean;
