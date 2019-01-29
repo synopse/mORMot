@@ -15873,7 +15873,7 @@ end;
 
 procedure TTestSQLite3Engine._TSQLTableJSON;
 var J: TSQLTableJSON;
-    aR, aF, F1,F2, n: integer;
+    i1, i2, aR, aF, F1,F2, n: integer;
     Comp, Comp1,Comp2: TUTF8Compare;
     {$ifdef UNICODE}
     Peoples: TObjectList<TSQLRecordPeople>;
@@ -15885,7 +15885,7 @@ var J: TSQLTableJSON;
     lContactDataQueueDynArray: TDynArray;
     lContactDataQueueArray: TRawUTF8DynArray;
     lContactDataQueueJSON: TDocVariantData;
-    lData: RawUTF8;
+    lData, s: RawUTF8;
     lDocData: TDocVariantData;
 const
   TEST_DATA = '['+
@@ -16083,7 +16083,20 @@ begin
   check(lDocData.Count=3);
   check(Hash32(lDocData.ToJSON)=$FCF948A5);
   check(lDocData.Value[0].QUEUE_CALL=2);
-  {$endif}
+  s := TEST_DATA;
+  i1 := PosEx(',"CHANNEL":132',s);
+  i2 := PosEx('}',s,i1);
+  delete(s,i1,i2-i1); // truncate the 2nd object
+  J := TSQLTableJSON.Create('',s);
+  try
+    check(J.fieldCount=24);
+    if not checkfailed(J.rowCount=3) then
+      check(J.Get(2,J.FieldCount-1)=nil);
+    check(J.Get(J.rowCount,J.FieldCount-1)='sjentonpg@senate.gov');
+  finally
+    J.Free;
+  end;
+  {$endif NOVARIANTS}
 end;
 
 {$ifdef UNICODE}

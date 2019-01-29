@@ -28817,10 +28817,9 @@ begin
     SetLength(fJSONResults,resmax); // space for field names + 1 data row
     nrow := 0;
     repeat // let fJSONResults[] point to unescaped+zeroified JSON values
-      f := 0;
-      for i := 0 to nfield-1 do begin
+      for f := 0 to nfield-1 do begin
         if nrow=0 then // get field name from 1st Row
-          fJSONResults[i] := GetJSONPropName(P) else
+          fJSONResults[f] := GetJSONPropName(P) else
           P := GotoNextJSONItem(P);  // ignore field name for later rows
           // warning: field order if not checked, and should be as expected
         if max>=resmax then begin // check space inside loop for GPF security
@@ -28828,18 +28827,18 @@ begin
           SetLength(fJSONResults,resmax); // enough space for 256 more rows
         end;
         if P=nil then break; // normal end: no more field name
-        fJSONResults[max] := GetJSONFieldOrObjectOrArray(
-          P,@wasString,@EndOfObject,true);
+        fJSONResults[max] := GetJSONFieldOrObjectOrArray(P,@wasString,@EndOfObject,true);
         if P=nil then begin
           nfield := 0;
           break; // unexpected end
         end;
         if wasString then // mark column was "string"
           Include(fFieldParsedAsString,f);
-        inc(f);
+        if (EndOfObject='}') and (f<nfield-1) then begin
+          inc(max,nfield-f);
+          break; // allow some missing fields in the input object
+        end;
         inc(max);
-        if f=nField then
-          f := 0; // check all rows
       end;
       if P=nil then
         break; // unexpected end
