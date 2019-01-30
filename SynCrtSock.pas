@@ -6568,7 +6568,7 @@ begin
         SockSend(['Content-Encoding: ',OutContentEncoding]);
   end;
   SockSend(['Content-Length: ',length(OutContent)]); // needed even 0
-  if (OutContent<>'') and (OutContentType<>'') then
+  if (OutContent<>'') and (OutContentType<>'') and (OutContentType<>HTTP_RESP_STATICFILE) then
     SockSend(['Content-Type: ',OutContentType]);
 end;
 
