@@ -1358,7 +1358,7 @@ begin
           MS.Free;
         end;
         GetAndPrepareStatementRelease(nil, FormatUTF8('returned % as %',
-          [Plural('row',RowCount),Plural('byte',length(result))]));
+          [Plural('row',RowCount),KB(result)]));
       except
         on E: ESQLite3Exception do
           GetAndPrepareStatementRelease(E);

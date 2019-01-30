@@ -6996,6 +6996,7 @@ type
   TSQLRestBatch = class
   protected
     fRest: TSQLRest;
+    fInternalBufferSize: integer;
     fCalledWithinRest: boolean;
     fBatch: TJSONSerializer;
     fBatchFields: TSQLFieldBits;
@@ -7043,8 +7044,11 @@ type
     //   retain the transaction log file small enough for the database engine
     // - BatchOptions could be set to tune the SQL execution, e.g. force INSERT
     //   OR IGNORE on internal SQLite3 engine
+    // - InternalBufferSize could be set to some high value (e.g. 10 shl 20),
+    //   if you expect a very high number of rows in this BATCH
     constructor Create(aRest: TSQLRest; aTable: TSQLRecordClass;
-      AutomaticTransactionPerRow: cardinal=0; Options: TSQLRestBatchOptions=[]);
+      AutomaticTransactionPerRow: cardinal=0; Options: TSQLRestBatchOptions=[];
+      InternalBufferSize: cardinal=65536); virtual;
     /// finalize the BATCH instance
     destructor Destroy; override;
     /// reset the BATCH sequence so that you can re-use the same TSQLRestBatch
@@ -7155,7 +7159,8 @@ type
   public
     /// initialize the BATCH instance
     constructor Create(aRest: TSQLRest; aTable: TSQLRecordClass;
-      AutomaticTransactionPerRow: cardinal=0; Options: TSQLRestBatchOptions=[]);
+      AutomaticTransactionPerRow: cardinal=0; Options: TSQLRestBatchOptions=[];
+      InternalBufferSize: cardinal=65536); override;
     /// finalize the BATCH instance
     destructor Destroy; override;
     /// reset the BATCH sequence so that you can re-use the same TSQLRestBatch
@@ -8543,7 +8548,8 @@ type
     procedure GetJSONValues(JSON: TStream; Expand: boolean;
       RowFirst: integer=0; RowLast: integer=0; IDBinarySize: integer=0); overload;
     /// same as the overloaded method, but returning result into a RawUTF8
-    function GetJSONValues(Expand: boolean; IDBinarySize: integer=0): RawUTF8; overload;
+    function GetJSONValues(Expand: boolean; IDBinarySize: integer=0;
+      BufferSize: integer=0): RawUTF8; overload;
     /// save the table as CSV format, into a stream
     // - if Tab=TRUE, will use TAB instead of ',' between columns
     // - you can customize the ',' separator - use e.g. the global ListSeparator
@@ -9625,7 +9631,7 @@ type
     ExternalDB: TSQLRecordPropertiesMapping;
     /// will by-pass automated table and field creation for this TSQLRecord
     // - may be used e.g. when the TSQLRecord is in fact mapped into a View,
-    // and not a table
+    // or is attached as external table and not a real local table
     NoCreateMissingTable: boolean;
 
     /// initialize the ORM properties from the TSQLRecord RTTI and the supplied
@@ -26298,11 +26304,13 @@ begin
   end;
 end;
 
-function TSQLTable.GetJSONValues(Expand: boolean; IDBinarySize: integer): RawUTF8;
+function TSQLTable.GetJSONValues(Expand: boolean; IDBinarySize, BufferSize: integer): RawUTF8;
 var W: TJSONWriter;
     tmp: TTextWriterStackBuffer;
 begin
-  W := TJSONWriter.CreateOwnedStream(tmp);
+  if BufferSize<SizeOf(tmp) then
+    W := TJSONWriter.CreateOwnedStream(tmp) else
+    W := TJSONWriter.CreateOwnedStream(BufferSize);
   try
     W.Expand := Expand;
     GetJSONValues(W,0,0,IDBinarySize); // create JSON data in MS
@@ -34924,11 +34932,15 @@ end;
 { TSQLRestBatch }
 
 constructor TSQLRestBatch.Create(aRest: TSQLRest; aTable: TSQLRecordClass;
-  AutomaticTransactionPerRow: cardinal; Options: TSQLRestBatchOptions);
+  AutomaticTransactionPerRow: cardinal; Options: TSQLRestBatchOptions;
+  InternalBufferSize: cardinal);
 begin
   if aRest=nil then
     raise EORMException.CreateUTF8('%.Create(aRest=nil)',[self]);
   fRest := aRest;
+  if InternalBufferSize<4096 then
+    InternalBufferSize := 4096;
+  fInternalBufferSize := InternalBufferSize;
   Reset(aTable,AutomaticTransactionPerRow,Options);
 end;
 
@@ -34936,7 +34948,7 @@ procedure TSQLRestBatch.Reset(aTable: TSQLRecordClass;
   AutomaticTransactionPerRow: cardinal; Options: TSQLRestBatchOptions);
 begin
   fBatch.Free; // full reset for SetExpandedJSONWriter
-  fBatch := TJSONSerializer.CreateOwnedStream;
+  fBatch := TJSONSerializer.CreateOwnedStream(fInternalBufferSize);
   fBatch.Expand := true;
   FillZero(fBatchFields);
   fBatchCount := 0;
@@ -35245,7 +35257,8 @@ end;
 { TSQLRestBatchLocked }
 
 constructor TSQLRestBatchLocked.Create(aRest: TSQLRest; aTable: TSQLRecordClass;
-  AutomaticTransactionPerRow: cardinal; Options: TSQLRestBatchOptions);
+  AutomaticTransactionPerRow: cardinal; Options: TSQLRestBatchOptions;
+  InternalBufferSize: cardinal);
 begin
   inherited;
   fSafe.Init;
