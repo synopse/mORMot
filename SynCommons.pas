@@ -13165,6 +13165,9 @@ type
     // - includes FileName (without path), Detailed and BuildDateTime properties
     // - e.g. 'myprogram.exe 3.1.0.123 2016-06-14 19:07:55'
     function VersionInfo: RawUTF8;
+    /// returns a ready-to-use User-Agent header with exe name, version and OS
+    // - e.g. 'myprogram3.1.0.123W32'
+    function UserAgent: RawUTF8;
     /// returns the version information of a specified exe file as text
     // - includes FileName (without path), Detailed and BuildDateTime properties
     // - e.g. 'myprogram.exe 3.1.0.123 2016-06-14 19:07:55'
@@ -13245,6 +13248,10 @@ const
     '8', '8 64bit', 'Server 2012', 'Server 2012 64bit',
     '8.1', '8.1 64bit', 'Server 2012 R2', 'Server 2012 R2 64bit',
     '10', '10 64bit', 'Server 2016', 'Server 2016 64bit', 'Server 2019 64bit');
+  /// the recognized Windows versions which are 32-bit
+  WINDOWS_32 = [w2000, wXP, wServer2003, wServer2003_R2, wVista, wServer2008,
+    wSeven, wServer2008_R2, wEight, wServer2012, wEightOne, wServer2012R2,
+    wTen, wServer2016];
   /// translate one operating system (and distribution) into a single character
   // - may be used internally e.g. for a HTTP User-Agent header
   OS_INITIAL: array[TOperatingSystem] of AnsiChar =
@@ -39165,6 +39172,18 @@ end;
 function TFileVersion.VersionInfo: RawUTF8;
 begin
   FormatUTF8('% % %',[ExtractFileName(fFileName),fDetailed,BuildDateTimeString],result);
+end;
+
+function TFileVersion.UserAgent: RawUTF8;
+begin
+  if self=nil then
+    result := '' else
+    FormatUTF8('%%%',[GetFileNameWithoutExt(ExtractFileName(fFileName)),
+      DetailedOrVoid,OS_INITIAL[OS_KIND]],result);
+  {$ifdef MSWINDOWS}
+  if OSVersion in WINDOWS_32 then
+    result := result+'32';
+  {$endif}
 end;
 
 class function TFileVersion.GetVersionInfo(const aFileName: TFileName): RawUTF8;
