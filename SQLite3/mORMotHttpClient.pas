@@ -238,6 +238,9 @@ type
     procedure DefinitionTo(Definition: TSynConnectionDefinition); override;
     /// returns 'Server:Port' current value
     function HostName: AnsiString;
+    /// optional custom HTTP "User Agent:" header value
+    property UserAgent: SockString
+      read fExtendedOptions.UserAgent write fExtendedOptions.UserAgent;
   published
     /// the Server IP address
     property Server: AnsiString read fServer;
@@ -730,6 +733,8 @@ begin
           end;
         end;
       until fSocket<>nil;
+      if fExtendedOptions.UserAgent<>'' then
+        fSocket.UserAgent := fExtendedOptions.UserAgent;
       if fModel<>nil then
         fSocket.ProcessName := FormatUTF8('%/%',[fPort,fModel.Root]);
       if fSendTimeout>0 then

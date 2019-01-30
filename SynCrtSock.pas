@@ -2060,6 +2060,8 @@ type
       Password: SynUnicode;
       Scheme: THttpRequestAuthentication;
     end;
+    /// allow to customize the User-Agent header
+    UserAgent: SockString;
   end;
 
   {$M+} // to have existing RTTI for published properties
@@ -2074,7 +2076,6 @@ type
     fHttps: boolean;
     fLayer: TCrtSocketLayer;
     fKeepAlive: cardinal;
-    fUserAgent: SockString;
     fExtendedOptions: THttpRequestExtendedOptions;
     /// used by RegisterCompress method
     fCompress: THttpSocketCompressRecDynArray;
@@ -2196,6 +2197,9 @@ type
     /// optional Password for Authentication
     property AuthPassword: SynUnicode
       read fExtendedOptions.Auth.Password write fExtendedOptions.Auth.Password;
+    /// custom HTTP "User Agent:" header value
+    property UserAgent: SockString
+      read fExtendedOptions.UserAgent write fExtendedOptions.UserAgent;
     /// internal structure used to store extended options
     // - will be replicated by IgnoreSSLCertificateErrors and Auth* properties
     property ExtendedOptions: THttpRequestExtendedOptions
@@ -2214,10 +2218,6 @@ type
     /// the remote server optional proxy by-pass list, as specified to the class
     // constructor
     property ProxyByPass: SockString read fProxyByPass;
-    /// the HTTP "User Agent:" header value
-    // - you can customize this value from its default content
-    // (only for TCurlHTTP class)
-    property UserAgent: SockString read fUserAgent write fUserAgent;
   end;
   {$M-}
 
@@ -2456,8 +2456,8 @@ type
   protected
     fHttp: THttpClientSocket;
     fHttps: THttpRequest;
-    fBody, fHeaders: SockString;
-    fOnlyUseClientSocket: boolean;
+    fBody, fHeaders, fUserAgent: SockString;
+    fOnlyUseClientSocket, fIgnoreSSLCertificateErrors: boolean;
   public
     /// initialize the instance
     constructor Create(aOnlyUseClientSocket: boolean=false); reintroduce;
@@ -2475,6 +2475,11 @@ type
     property Body: SockString read fBody;
     /// returns the HTTP headers as returnsd by a previous call to Request()
     property Headers: SockString read fHeaders;
+    /// allows to customize the user-agent header
+    property UserAgent: SockString read fUserAgent write fUserAgent;
+    /// allows to customize HTTPS connection and allow weak certificates
+    property IgnoreSSLCertificateErrors: boolean read fIgnoreSSLCertificateErrors
+      write fIgnoreSSLCertificateErrors;
   end;
 
 
@@ -5325,7 +5330,7 @@ begin
   if aTimeOut=0 then
     aTimeOut := HTTP_DEFAULT_RECEIVETIMEOUT;
   inherited Create(aTimeOut);
-  UserAgent := DefaultUserAgent(self);
+  fUserAgent := DefaultUserAgent(self);
 end;
 
 function THttpClientSocket.Delete(const url: SockString; KeepAlive: cardinal;
@@ -10387,7 +10392,7 @@ begin
   fHttps := aHttps;
   fProxyName := aProxyName;
   fProxyByPass := aProxyByPass;
-  fUserAgent := DefaultUserAgent(self);
+  fExtendedOptions.UserAgent := DefaultUserAgent(self);
   if ConnectionTimeOut=0 then
     ConnectionTimeOut := HTTP_DEFAULT_CONNECTTIMEOUT;
   if SendTimeout=0 then
@@ -10628,7 +10633,7 @@ begin
   if fProxyName='' then
    OpenType := INTERNET_OPEN_TYPE_PRECONFIG else
    OpenType := INTERNET_OPEN_TYPE_PROXY;
-  fSession := InternetOpenA(Pointer(fUserAgent), OpenType,
+  fSession := InternetOpenA(Pointer(fExtendedOptions.UserAgent), OpenType,
     pointer(fProxyName), pointer(fProxyByPass), 0);
   if fSession=nil then
     raise EWinINet.Create;
@@ -10999,8 +11004,8 @@ begin
       OpenType := WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY else // Windows 8.1 and newer
       OpenType := WINHTTP_ACCESS_TYPE_NO_PROXY else
     OpenType := WINHTTP_ACCESS_TYPE_NAMED_PROXY;
-  fSession := WinHttpAPI.Open(pointer(Ansi7ToUnicode(fUserAgent)), OpenType,
-    pointer(Ansi7ToUnicode(fProxyName)), pointer(Ansi7ToUnicode(fProxyByPass)), 0);
+  fSession := WinHttpAPI.Open(pointer(Ansi7ToUnicode(fExtendedOptions.UserAgent)),
+    OpenType, pointer(Ansi7ToUnicode(fProxyName)), pointer(Ansi7ToUnicode(fProxyByPass)), 0);
   if fSession=nil then
     RaiseLastModuleError(winhttpdll,EWinHTTP);
   // cf. http://msdn.microsoft.com/en-us/library/windows/desktop/aa384116
@@ -11626,7 +11631,7 @@ begin
         curl.easy_setopt(fHandle,coSSLVerifyPeer,1);
       end;
     end;
-  curl.easy_setopt(fHandle,coUserAgent,pointer(fUserAgent));
+  curl.easy_setopt(fHandle,coUserAgent,pointer(fExtendedOptions.UserAgent));
   curl.easy_setopt(fHandle,coWriteFunction,@CurlWriteRawByteString);
   curl.easy_setopt(fHandle,coHeaderFunction,@CurlWriteRawByteString);
   fIn.Method := UpperCase(method);
@@ -11744,7 +11749,11 @@ begin
       if (fHttps = nil) or (fHttps.Server <> uri.Server) or
          (integer(fHttps.Port) <> uri.PortInt) then begin
         fHttps.Free; // need a new HTTPS connection
-        fHttps := MainHttpClass.Create(uri.Server, uri.Port, uri.Https);
+        fHttps := MainHttpClass.Create(uri.Server, uri.Port, uri.Https, '', '',
+          5000, 5000, 5000);
+        fHttps.IgnoreSSLCertificateErrors := fIgnoreSSLCertificateErrors;
+        if fUserAgent<>'' then
+          fHttps.UserAgent := fUserAgent;
       end;
       result := fHttps.Request(uri.Address, method, KeepAlive, header,
         data, datatype, fHeaders, fBody);
@@ -11759,6 +11768,8 @@ begin
          (fHttp.Port <> uri.Port) then begin
         fHttp.Free; // need a new HTTP connection
         fHttp := THttpClientSocket.Open(uri.Server, uri.Port, cslTCP, 5000, uri.Https);
+        if fUserAgent<>'' then
+          fHttp.UserAgent := fUserAgent;
       end;
       result := fHttp.Request(uri.Address, method, KeepAlive, header, data, datatype, true);
       fBody := fHttp.Content;
