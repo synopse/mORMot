@@ -3139,7 +3139,7 @@ type
     // - if this method is called from a single thread, you should use
     // a TSynThreadPool for any blocking process of OnRead events
     // - otherwise, this method is thread-safe, and incoming packets may be
-    // consummed from a set of threads, and call OnRead with newly received data
+    // consumed from a set of threads, and call OnRead with newly received data
     procedure ProcessRead(timeoutMS: integer);
     /// one or several threads should execute this method
     // - thread-safe handle of any outgoing packets

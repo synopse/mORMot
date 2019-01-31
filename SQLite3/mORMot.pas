@@ -475,7 +475,7 @@ unit mORMot;
     - new TSQLRestServer.SessionGetUser method to be used e.g. by any
       TSQLRestServerCallBack method implementation to retrieve the connected user
     - now the TSQLAuthUser instance retrieved during the session opening will
-      retrieve the Data BLOB field (ready to be consummed on the server side)
+      retrieve the Data BLOB field (ready to be consumed on the server side)
     - introduced TSQLRestServerSessionContext structure to include current User
       and Group ID to the execution context (in addition to the Session ID)
     - TSQLRestServerStaticInMemory binary format changed: now will store its
@@ -4203,7 +4203,7 @@ type
     /// customize TSQLRecord.GetJSONValues serialization process
     // - jwoAsJsonNotAsString will force TSQLRecord.GetJSONValues to serialize
     // nested property instances as a JSON object/array, not a JSON string:
-    // i.e. root/table/id REST will be ready-to-be-consummed from AJAX clients
+    // i.e. root/table/id REST will be ready-to-be-consumed from AJAX clients
     // (e.g. TSQLPropInfoRTTIObject.GetJSONValues as a JSON object, and
     // TSQLPropInfoRTTIDynArray.GetJSONValues as a JSON array)
     // - jwoID_str will add an "ID_str":"12345" property to the default
@@ -8206,23 +8206,49 @@ type
   TSQLRecordArray = array[0..MaxInt div SizeOf(TSQLRecord)-1] of TSQLRecord;
   PSQLRecordArray = ^TSQLRecordArray;
 
-  /// root class for defining and mapping database records with NOCASE collation
+  /// root class for defining and mapping database records with case-insensitive
+  // NOCASE collation
   // - by default, any sftUTF8Text field (RawUTF8, UnicodeString, WideString
   // properties) will use our Unicode SYSTEMNOCASE SQLite3 collation, which calls
   // UTF8ILComp() to handle most western languages, but is not standard
   // - you may inherit from this class to ensure any text field will use the
   // faster and SQLite3 built-in NOCASE collation, handling only 7-bit A-Z chars
-  // - inherit from TSQLRecordNoCase if you expect your text fields to contain
-  // only basic unaccentued ASCCI characters, and to be opened by any standard
-  // SQlite3 library or tool (outside of SynSQLite3.pas/SynDBExplorer)
+  // - inherit from TSQLRecordNoCase or TSQLRecordCaseSensitive if you expect
+  // your text fields to contain only basic (un)accentued ASCCI characters, and
+  // to be opened by any standard/ SQlite3 library or tool (outside of
+  // SynSQLite3.pas/SynDBExplorer)
   TSQLRecordNoCase = class(TSQLRecord)
   protected
     /// will call Props.SetCustomCollationForAll(sftUTF8Text,'NOCASE')
     class procedure InternalDefineModel(Props: TSQLRecordProperties); override;
   end;
 
+  /// root class for defining and mapping database records with case-sensitive
+  // BINARY collation
+  // - by default, any sftUTF8Text field (RawUTF8, UnicodeString, WideString
+  // properties) will use our Unicode SYSTEMNOCASE SQLite3 collation, which calls
+  // UTF8ILComp() to handle most western languages, but is not standard
+  // - you may inherit from this class to ensure any text field will use the
+  // faster and SQLite3 built-in BINARY collation, which is case-sensitive
+  // - inherit from TSQLRecordNoCase or TSQLRecordCaseSensitive if you expect
+  // your text fields to contain only basic (un)accentued ASCCI characters, and
+  // to be opened by any standard/ SQlite3 library or tool (outside of
+  // SynSQLite3.pas/SynDBExplorer)
+  TSQLRecordCaseSensitive = class(TSQLRecord)
+  protected
+    /// will call Props.SetCustomCollationForAll(sftUTF8Text,'BINARY')
+    class procedure InternalDefineModel(Props: TSQLRecordProperties); override;
+  end;
+
   /// database records with NOCASE collation and JSON_OPTIONS_FAST_EXTENDED variants
   TSQLRecordNoCaseExtended = class(TSQLRecordNoCase)
+  protected
+    /// will call Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
+    class procedure InternalDefineModel(Props: TSQLRecordProperties); override;
+  end;
+
+  /// database records with BINARY collation and JSON_OPTIONS_FAST_EXTENDED variants
+  TSQLRecordCaseSensitiveExtended = class(TSQLRecordCaseSensitive)
   protected
     /// will call Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
     class procedure InternalDefineModel(Props: TSQLRecordProperties); override;
@@ -8567,11 +8593,11 @@ type
     function GetCSVValues(Tab: boolean; CommaSep: AnsiChar=',';
       AddBOM: boolean=false; RowFirst: integer=0; RowLast: integer=0): RawUTF8; overload;
     /// save the table in 'schemas-microsoft-com:rowset' XML format
-    // - this format is used by ADODB.recordset, easily consummed by MS apps
+    // - this format is used by ADODB.recordset, easily consumed by MS apps
     // - see @https://synopse.info/forum/viewtopic.php?pid=11691#p11691
     procedure GetMSRowSetValues(Dest: TStream; RowFirst,RowLast: integer); overload;
     /// save the table in 'schemas-microsoft-com:rowset' XML format
-    // - this format is used by ADODB.recordset, easily consummed by MS apps
+    // - this format is used by ADODB.recordset, easily consumed by MS apps
     // - see @https://synopse.info/forum/viewtopic.php?pid=11691#p11691
     function GetMSRowSetValues: RawUTF8; overload;
     /// save the table in Open Document Spreadsheet compressed format
@@ -8912,6 +8938,16 @@ type
     // - raise an ESQLTableException if called outside valid Step() sequence
     // - similar to GetU() method, but for the current Step
     function FieldAsRawUTF8(const FieldName: RawUTF8): RawUTF8; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// read-only access to a particular field value, as VCL String
+    // - raise an ESQLTableException if called outside valid Step() sequence
+    // - similar to GetString() method, but for the current Step
+    function FieldAsString(FieldIndex: Integer): String; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// read-only access to a particular field value, as VCL String
+    // - raise an ESQLTableException if called outside valid Step() sequence
+    // - similar to GetString() method, but for the current Step
+    function FieldAsString(const FieldName: String): String; overload;
       {$ifdef HASINLINE}inline;{$endif}
     {$ifndef NOVARIANTS}
     /// read-only access to a particular field value, as a variant
@@ -27430,6 +27466,20 @@ begin
   FastSetString(result,buf,StrLen(buf));
 end;
 
+function TSQLTable.FieldAsString(FieldIndex: Integer): String;
+var buf: PUTF8Char;
+begin
+  buf := FieldBuffer(FieldIndex);
+  UTF8DecodeToString(buf,StrLen(buf),result);
+end;
+
+function TSQLTable.FieldAsString(const FieldName: String): String;
+var buf: PUTF8Char;
+begin
+  buf := FieldBuffer(FieldName);
+  UTF8DecodeToString(buf,StrLen(buf),result);
+end;
+
 {$ifndef NOVARIANTS}
 function TSQLTable.Field(FieldIndex: integer): variant;
 begin
@@ -33730,11 +33780,28 @@ begin
   Props.SetCustomCollationForAll(sftUTF8Text,'NOCASE');
 end;
 
+{ TSQLRecordCaseSensitive }
+
+class procedure TSQLRecordCaseSensitive.InternalDefineModel(
+  Props: TSQLRecordProperties);
+begin
+  Props.SetCustomCollationForAll(sftUTF8Text,'BINARY');
+end;
+
 { TSQLRecordNoCaseExtended }
 
 class procedure TSQLRecordNoCaseExtended.InternalDefineModel(Props: TSQLRecordProperties);
 begin
   inherited InternalDefineModel(Props); // set NOCASE collation
+  Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
+end;
+
+{ TSQLRecordCaseSensitiveExtended }
+
+class procedure TSQLRecordCaseSensitiveExtended.InternalDefineModel(
+  Props: TSQLRecordProperties);
+begin
+  inherited InternalDefineModel(Props); // set BINARY collation
   Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
 end;
 

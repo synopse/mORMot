@@ -566,7 +566,7 @@ type
   // so e.g. for a sicShared instance, you can safely write:
   // ! aIntegerResult := TServiceCalculator.Create(aClient).Add(10,20);
   // - as you already noted, server-side interface-based services are in fact
-  // consummed without any interface in this cross-platform unit!
+  // consumed without any interface in this cross-platform unit!
   TServiceClientAbstract = class{$ifndef ISDWS}(TInterfacedObject){$endif}
   protected
     fClient: TSQLRestClientURI;

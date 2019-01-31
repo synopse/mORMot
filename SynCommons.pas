@@ -13167,6 +13167,8 @@ type
     function VersionInfo: RawUTF8;
     /// returns a ready-to-use User-Agent header with exe name, version and OS
     // - e.g. 'myprogram3.1.0.123W32'
+    // - here OS_INITIAL[] character is used to identify the OS, with '32'
+    // appended on 32-bit Windows
     function UserAgent: RawUTF8;
     /// returns the version information of a specified exe file as text
     // - includes FileName (without path), Detailed and BuildDateTime properties
