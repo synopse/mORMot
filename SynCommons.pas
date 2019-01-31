@@ -26841,10 +26841,9 @@ begin
 end;
 
 function ToTextOS(osint32: integer): RawUTF8;
-var osv: TOperatingSystemVersion;
+var osv: TOperatingSystemVersion absolute osint32;
     ost: ShortString;
 begin
-  PInteger(@osv)^ := osint32;
   ost := ToText(osv);
   if (osv.os>=osLinux) and (osv.utsrelease[2]<>0) then
     result := FormatUTF8('% %.%.%',[ost,osv.utsrelease[2],osv.utsrelease[1],osv.utsrelease[0]]) else
@@ -54473,6 +54472,7 @@ end;
 
 procedure TTextWriter.FlushToStream;
 var i: PtrInt;
+    written: cardinal;
 begin
   if fEchos<>nil then begin
     EchoFlush;
@@ -54484,13 +54484,19 @@ begin
   fStream.WriteBuffer(fTempBuf^,i);
   inc(fTotalFileSize,i);
   if not (twoFlushToStreamNoAutoResize in fCustomOptions) and
-     not (twoBufferIsExternal in fCustomOptions) and
-     (fTempBufSize<49152) and
-     (fTotalFileSize-fInitialStreamPosition>1 shl 18) then begin
-    FreeMem(fTempBuf); // with big content (256KB) comes bigger buffer (64KB)
-    fTempBufSize := 65536;
-    GetMem(fTempBuf,65536);
-    BEnd := fTempBuf+(65536-2);
+     not (twoBufferIsExternal in fCustomOptions) then begin
+    written := fTotalFileSize-fInitialStreamPosition;
+    if (fTempBufSize<49152) and (written>1 shl 18) then // 256KB -> 64KB buffer
+      written := 65536 else
+    if (fTempBufSize<1 shl 20) and (written>40 shl 20) then // 40MB -> 1MB buffer
+      written := 1 shl 20 else
+      written := 0;
+    if written>0 then begin
+      fTempBufSize := written;
+      FreeMem(fTempBuf); // with big content comes bigger buffer
+      GetMem(fTempBuf,fTempBufSize);
+      BEnd := fTempBuf+(fTempBufSize-2);
+    end;
   end;
   B := fTempBuf-1;
 end;

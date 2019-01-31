@@ -5024,7 +5024,7 @@ var i: integer;
     W: TJSONWriter;
 begin
   result := 0;
-  W := TJSONWriter.Create(JSON,Expand,false);
+  W := TJSONWriter.Create(JSON,Expand,false,nil,{bufsize=}65536);
   try
     // prepare the SQL request
     if aSQL<>'' then // if not already prepared, reset and bound by caller

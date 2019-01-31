@@ -8947,7 +8947,7 @@ type
     /// read-only access to a particular field value, as VCL String
     // - raise an ESQLTableException if called outside valid Step() sequence
     // - similar to GetString() method, but for the current Step
-    function FieldAsString(const FieldName: String): String; overload;
+    function FieldAsString(const FieldName: RawUTF8): String; overload;
       {$ifdef HASINLINE}inline;{$endif}
     {$ifndef NOVARIANTS}
     /// read-only access to a particular field value, as a variant
@@ -27473,7 +27473,7 @@ begin
   UTF8DecodeToString(buf,StrLen(buf),result);
 end;
 
-function TSQLTable.FieldAsString(const FieldName: String): String;
+function TSQLTable.FieldAsString(const FieldName: RawUTF8): String;
 var buf: PUTF8Char;
 begin
   buf := FieldBuffer(FieldName);
@@ -32554,7 +32554,8 @@ begin
   if self=nil then
     exit;
   with RecordProps do
-    serializer := CreateJSONWriter(JSON,Expand,withID,SimpleFieldsBits[Occasion],0);
+    serializer := CreateJSONWriter(JSON,Expand,withID,
+      SimpleFieldsBits[Occasion],{knownrows=}0);
   serializer.SQLRecordOptions := SQLRecordOptions;
   GetJSONValuesAndFree(serializer);
 end;
@@ -32566,7 +32567,7 @@ var J: TRawByteStringStream;
 begin
   J := TRawByteStringStream.Create;
   try
-    serializer := RecordProps.CreateJSONWriter(J,Expand,withID,Fields,0);
+    serializer := RecordProps.CreateJSONWriter(J,Expand,withID,Fields,{knownrows=}0);
     serializer.SQLRecordOptions := SQLRecordOptions;
     GetJSONValuesAndFree(serializer);
     result := J.DataString;
@@ -41471,7 +41472,7 @@ procedure TSQLRestServerURIContext.ExecuteORMGet;
     rec := Table.CreateAndFillPrepare(Call.OutBody);
     try
       W := TableRecordProps.Props.CreateJSONWriter(
-        TRawByteStringStream.Create,true,FieldsCSV,0);
+        TRawByteStringStream.Create,true,FieldsCSV,{knownrows=}0);
       try
         include(W.fCustomOptions,twoForceJSONStandard); // force regular JSON
         W.SQLRecordOptions := Options; // will do the magic
@@ -46396,7 +46397,8 @@ begin // exact same format as TSQLTable.GetJSONValues()
       KnownRowsCount := fValue.Count else
     KnownRowsCount := 0;
   Stmt.SelectFieldBits(bits,withID);
-  W := fStoredClassRecordProps.CreateJSONWriter(Stream,Expand,withID,bits,KnownRowsCount);
+  W := fStoredClassRecordProps.CreateJSONWriter(Stream,Expand,withID,bits,
+    KnownRowsCount,{bufsize=}256 shl 10);
   if W<>nil then
   try
     rec := pointer(fValue.List);
@@ -46674,7 +46676,7 @@ begin
   try
     rec := pointer(fValue.List);
     W := fStoredClassRecordProps.CreateJSONWriter(
-      Stream,Expand,true,ALL_FIELDS,fValue.Count,65536);
+      Stream,Expand,true,ALL_FIELDS,fValue.Count,{bufsize=}256 shl 10);
     try
       if Expand then
         W.Add('[');
@@ -48727,7 +48729,7 @@ begin
     exit;
   fLogTableStorage := THeapMemoryStream.Create;
   fLogTableWriter := OneLog.RecordProps.CreateJSONWriter(
-    fLogTableStorage,false,true,ALL_ACCESS_RIGHTS,0);
+    fLogTableStorage,false,true,ALL_FIELDS,{knownrows=}0);
   fLogTableWriter.FlushToStream;
   P := pointer(aJSON);
   if not CompareMem(fLogTableStorage.Memory,P,fLogTableStorage.Position) or
@@ -48752,7 +48754,7 @@ begin
   if not Assigned(fLogTableStorage) then begin
     fLogTableStorage := THeapMemoryStream.Create;
     fLogTableWriter := OneLog.RecordProps.CreateJSONWriter(
-      fLogTableStorage,false,true,ALL_ACCESS_RIGHTS,0);
+      fLogTableStorage,false,true,ALL_FIELDS,{knownrows=}0);
     fLogTableRowCount := 1;
   end else begin
     fLogTableWriter.Add(',');
