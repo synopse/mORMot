@@ -4219,6 +4219,9 @@ procedure AddInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
   Value: integer); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// add an integer array at the end of a dynamic array of integer
+function AddInteger(var Values: TIntegerDynArray; const Another: TIntegerDynArray): PtrInt; overload;
+
 /// add an integer value at the end of a dynamic array of integers
 // - this overloaded function will use a separate Count variable (faster),
 // and would allow to search for duplicates
@@ -4229,18 +4232,21 @@ function AddInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
   Value: integer; NoDuplicates: boolean): boolean; overload;
 
 /// add a 16-bit integer value at the end of a dynamic array of integers
-function AddWord(var Values: TWordDynArray; var ValuesCount: integer; Value: Word): integer;
+function AddWord(var Values: TWordDynArray; var ValuesCount: integer; Value: Word): PtrInt;
 
 /// add a 64-bit integer value at the end of a dynamic array of integers
-function AddInt64(var Values: TInt64DynArray; var ValuesCount: integer; Value: Int64): integer; overload;
+function AddInt64(var Values: TInt64DynArray; var ValuesCount: integer; Value: Int64): PtrInt; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// add a 64-bit integer value at the end of a dynamic array of integers
-function AddInt64(var Values: TInt64DynArray; Value: Int64): integer; overload;
+/// add a 64-bit integer value at the end of a dynamic array
+function AddInt64(var Values: TInt64DynArray; Value: Int64): PtrInt; overload;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// add a 64-bit integer array at the end of a dynamic array
+function AddInt64(var Values: TInt64DynArray; const Another: TInt64DynArray): PtrInt; overload;
 
 /// if not already existing, add a 64-bit integer value to a dynamic array
-function AddInt64Once(var Values: TInt64DynArray; Value: Int64): integer;
+function AddInt64Once(var Values: TInt64DynArray; Value: Int64): PtrInt;
 
 /// if not already existing, add a 64-bit integer value to a sorted dynamic array
 procedure AddInt64Sorted(var Values: TInt64DynArray; Value: Int64);
@@ -30880,7 +30886,19 @@ begin
   result := true
 end;
 
-function AddWord(var Values: TWordDynArray; var ValuesCount: integer; Value: Word): integer;
+function AddInteger(var Values: TIntegerDynArray; const Another: TIntegerDynArray): PtrInt;
+var v,a: PtrInt;
+begin
+  v := length(Values);
+  a := length(Another);
+  if a>0 then begin
+    SetLength(Values,v+a);
+    MoveFast(Another[0],Values[v],a*SizeOf(Integer));
+  end;
+  result := v+a;
+end;
+
+function AddWord(var Values: TWordDynArray; var ValuesCount: integer; Value: Word): PtrInt;
 begin
   result := ValuesCount;
   if result=length(Values) then
@@ -30889,7 +30907,7 @@ begin
   inc(ValuesCount);
 end;
 
-function AddInt64(var Values: TInt64DynArray; var ValuesCount: integer; Value: Int64): integer;
+function AddInt64(var Values: TInt64DynArray; var ValuesCount: integer; Value: Int64): PtrInt;
 begin
   result := ValuesCount;
   if result=length(Values) then
@@ -30898,11 +30916,23 @@ begin
   inc(ValuesCount);
 end;
 
-function AddInt64(var Values: TInt64DynArray; Value: Int64): integer;
+function AddInt64(var Values: TInt64DynArray; Value: Int64): PtrInt;
 begin
   result := length(Values);
   SetLength(Values,result+1);
   Values[result] := Value;
+end;
+
+function AddInt64(var Values: TInt64DynArray; const Another: TInt64DynArray): PtrInt;
+var v,a: PtrInt;
+begin
+  v := length(Values);
+  a := length(Another);
+  if a>0 then begin
+    SetLength(Values,v+a);
+    MoveFast(Another[0],Values[v],a*SizeOf(Int64));
+  end;
+  result := v+a;
 end;
 
 procedure AddInt64Sorted(var Values: TInt64DynArray; Value: Int64);
@@ -30917,7 +30947,7 @@ begin
   end;
 end;
 
-function AddInt64Once(var Values: TInt64DynArray; Value: Int64): integer;
+function AddInt64Once(var Values: TInt64DynArray; Value: Int64): PtrInt;
 begin
   result := Int64ScanIndex(pointer(Values),length(Values),Value);
   if result<0 then
