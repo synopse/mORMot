@@ -40552,10 +40552,6 @@ begin
   info := GetTypeInfo(TypeInfo,tkRecordTypeOrSet);
   if info=nil then
     exit; // raise Exception.CreateUTF8('% is not a record',[Typ^.Name]);
-  {$ifdef FPC_NEWRTTI}
-  if Assigned(info^.RecInitInfo) then
-    info := GetTypeInfo(info^.RecInitInfo);
-  {$endif}
   if PRecSize<>nil then
     PRecSize^ := info^.recSize;
   if A=B then begin // both nil or same pointer
@@ -40605,10 +40601,6 @@ begin
     result := 0; // should have been checked before
     exit;
   end;
-  {$ifdef FPC_NEWRTTI}
-  if Assigned(info^.RecInitInfo) then
-    info := GetTypeInfo(info^.RecInitInfo);
-  {$endif}
   result := info^.recSize;
   if Len<>nil then
     Len^ := result;
@@ -40643,10 +40635,6 @@ begin
     result := nil; // should have been checked before
     exit;
   end;
-  {$ifdef FPC_NEWRTTI}
-  if Assigned(info^.RecInitInfo) then
-    info := GetTypeInfo(info^.RecInitInfo);
-  {$endif}
   Len := info^.recSize;
   offset := 0;
   for F := 1 to GetManagedFields(info,field) do begin
