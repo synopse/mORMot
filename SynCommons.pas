@@ -40552,6 +40552,10 @@ begin
   info := GetTypeInfo(TypeInfo,tkRecordTypeOrSet);
   if info=nil then
     exit; // raise Exception.CreateUTF8('% is not a record',[Typ^.Name]);
+  {$ifdef FPC_NEWRTTI}
+  if Assigned(info^.RecInitInfo) then
+    info := GetTypeInfo(info^.RecInitInfo);
+  {$endif}
   if PRecSize<>nil then
     PRecSize^ := info^.recSize;
   if A=B then begin // both nil or same pointer
@@ -40601,6 +40605,10 @@ begin
     result := 0; // should have been checked before
     exit;
   end;
+  {$ifdef FPC_NEWRTTI}
+  if Assigned(info^.RecInitInfo) then
+    info := GetTypeInfo(info^.RecInitInfo);
+  {$endif}
   result := info^.recSize;
   if Len<>nil then
     Len^ := result;
@@ -40635,6 +40643,10 @@ begin
     result := nil; // should have been checked before
     exit;
   end;
+  {$ifdef FPC_NEWRTTI}
+  if Assigned(info^.RecInitInfo) then
+    info := GetTypeInfo(info^.RecInitInfo);
+  {$endif}
   Len := info^.recSize;
   offset := 0;
   for F := 1 to GetManagedFields(info,field) do begin
@@ -40755,6 +40767,10 @@ begin
   info := GetTypeInfo(TypeInfo,tkRecordTypeOrSet);
   if (R=nil) or (info=nil) then // should have been checked before
     exit;
+  {$ifdef FPC_NEWRTTI}
+  if Assigned(info^.RecInitInfo) then
+    info := GetTypeInfo(info^.RecInitInfo);
+  {$endif}
   if Len<>nil then
     Len^ := info^.recSize;
   n := GetManagedFields(info,field);
@@ -42367,6 +42383,10 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
     if not GlobalJSONCustomParsers.RecordRTTITextHash(info,crc,result) then begin
       itemtype := GetTypeInfo(info,tkRecordTypeOrSet);
       if itemtype<>nil then begin
+        {$ifdef FPC_NEWRTTI}
+        if Assigned(itemtype^.RecInitInfo) then
+          itemtype := GetTypeInfo(itemtype^.RecInitInfo);
+        {$endif}
         unmanagedsize := itemtype^.recsize;
         for i := 1 to GetManagedFields(itemtype,field) do begin
           info := DeRef(field^.TypeInfo);
@@ -49428,6 +49448,13 @@ begin
     {$ifdef FPC}
     if not (PTypeKind(fElemType)^ in tkManagedTypes) then
       fElemType := nil; // as with Delphi
+    {$ifdef FPC_NEWRTTI}
+    if (fElemType<>nil) and (PTypeKind(fElemType)^ in [tkRecord,tkObject]) then begin
+      aTypeInfo := GetTypeInfo(fElemType)^.RecInitInfo;
+      if aTypeInfo<>nil then
+        fElemType := aTypeInfo;
+    end;
+    {$endif}
     {$endif}
   end;
   fCountP := aCountPointer;
@@ -52623,6 +52650,10 @@ begin
   info := GetTypeInfo(TypeInfo,tkRecordTypeOrSet);
   if (self=nil) or (info=nil) then
     raise ESynException.CreateUTF8('Invalid %.AddVoidRecordJSON(%)',[self,TypeInfo]);
+  {$ifdef FPC_NEWRTTI}
+  if Assigned(info^.RecInitInfo) then
+    info := GetTypeInfo(info^.RecInitInfo);
+  {$endif}
   SetLength(tmp,info^.recSize {$ifdef FPC}and $7FFFFFFF{$endif});
   AddRecordJSON(tmp[0],TypeInfo);
 end;
