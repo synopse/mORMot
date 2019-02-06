@@ -49350,7 +49350,8 @@ end;
 
 procedure TDynArray.Sort(aCompare: TDynArraySortCompare);
 begin
-  SortRange(0,Count-1,aCompare)
+  SortRange(0,Count-1,aCompare);
+  fSorted := true;
 end;
 
 procedure TDynArray.SortRange(aStart, aStop: integer; aCompare: TDynArraySortCompare);
@@ -49365,7 +49366,6 @@ begin
     Quicksort.Value := fValue^;
     Quicksort.ElemSize := ElemSize;
     Quicksort.QuickSort(aStart,aStop);
-    fSorted := true;
   end;
 end;
 
