@@ -1663,7 +1663,7 @@ begin
   fServiceName := UTF8ToString(ExeVersion.ProgramName);
   fServiceDisplayName := fServiceName;
   {$ifndef MSWINDOWS}
-  fLogPath := '/var/log/';
+  fLogPath := GetSystemPath(spLog); // /var/log or $home
   {$endif MSWINDOWS}
 end;
 
@@ -1725,7 +1725,7 @@ begin
   fSettings.LoadFromFile(fn + aSettingsExt);
   if fSettings.LogPath = '' then
     if aLogFolder = '' then
-      fSettings.LogPath := {$ifdef MSWINDOWS}fWorkFolderName{$else}'/var/log/'{$endif}
+      fSettings.LogPath := {$ifdef MSWINDOWS}fWorkFolderName{$else}GetSystemPath(spLog){$endif}
     else
       fSettings.LogPath := EnsureDirectoryExists(aLogFolder);
 end;

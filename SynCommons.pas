@@ -30677,9 +30677,9 @@ begin
   result := {$ifndef DELPHI5OROLDER}not FileIsReadOnly{$else}DirectoryExists{$endif}(Directory);
   if not result then
     exit;
-  FormatString('%%.%',[Directory,PathSep,BinToBase64uri(
+  FormatString('%%.%',[Directory,PathDelim,BinToBase64uri(
     @ExeVersion.Hash,SizeOf(ExeVersion.Hash))],fn);
-  result := FileFromString('tobedeleted',fn);
+  result := FileFromString('tobedeleted',fn); // actually try to write something
   DeleteFile(fn);
 end;
 
