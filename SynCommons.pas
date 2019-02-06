@@ -9296,6 +9296,11 @@ type
     // - returns nil if no algorithm was identified
     // - stored content is identified as TAlgoSynLZ
     class function Algo(AlgoID: byte): TAlgoCompress; overload;
+    /// quickly validate a compressed buffer content, without uncompression
+    // - extract the TAlgoCompress, and call DecompressHeader() to check the
+    // hash of the compressed data, and return then uncompressed size
+    // - returns 0 on error (e.g. unknown algorithm or incorrect hash)
+    class function UncompressedSize(const Comp: RawByteString): integer;
     /// returns the algorithm name, from its classname
     // - e.g. TAlgoSynLZ->'synlz' TAlgoLizard->'lizard' nil->'none'
     function AlgoName: TShort16;
@@ -49104,7 +49109,7 @@ begin
       end;
       if I <= J then begin
         if I<>J then
-          {$ifndef PUREPASCAL} // inlined Exchg() is OK
+          {$ifndef PUREPASCAL} // inlined Exchg() is just fine
           if ElemSize=SizeOf(pointer) then begin
             // optimized version e.g. for TRawUTF8DynArray/TObjectDynArray
             tmp := PPointer(IP)^;
@@ -62859,6 +62864,11 @@ begin
     end;
     result := nil;
   end;
+end;
+
+class function TAlgoCompress.UncompressedSize(const Comp: RawByteString): integer;
+begin
+  result := Algo(Comp).DecompressHeader(pointer(Comp),length(Comp));
 end;
 
 function TAlgoCompress.AlgoName: TShort16;
