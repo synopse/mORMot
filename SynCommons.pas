@@ -13561,7 +13561,8 @@ type
 // - will return the full path of a given kind of private or shared folder,
 // depending on the underlying operating system
 // - will use SHGetFolderPath and the corresponding CSIDL constant under Windows
-// - will return the $HOME folder (whatever kind value is given) otherwise
+// - under POSIX, will return $TMP/$TMPDIR folder for spTempFolder, ~/.cache/appname
+// for spUserData, /var/log for spLog, or the $HOME folder
 // - returned folder name contains the trailing path delimiter (\ or /)
 function GetSystemPath(kind: TSystemPath): TFileName;
 
@@ -30672,13 +30673,14 @@ begin // fast cross-platform implementation
 end;
 
 function IsDirectoryWritable(const Directory: TFileName): boolean;
-var fn: string;
+var fn: TFileName;
 begin
-  result := {$ifndef DELPHI5OROLDER}not FileIsReadOnly{$else}DirectoryExists{$endif}(Directory);
+  fn := ExcludeTrailingPathDelimiter(Directory);
+  result := {$ifndef DELPHI5OROLDER}not FileIsReadOnly{$else}DirectoryExists{$endif}(fn);
   if not result then
     exit;
-  FormatString('%%.%',[Directory,PathDelim,BinToBase64uri(
-    @ExeVersion.Hash,SizeOf(ExeVersion.Hash))],fn);
+  fn := FormatString('%%.%%',[fn,PathDelim,CardinalToHexLower(integer(GetCurrentThreadID)),
+    BinToBase64uriShort(@ExeVersion.Hash,SizeOf(ExeVersion.Hash))]);
   result := FileFromString('tobedeleted',fn); // actually try to write something
   DeleteFile(fn);
 end;
@@ -39344,7 +39346,7 @@ const
   CSIDL_COMMON_APPDATA = $0023;
   CSIDL_COMMON_DOCUMENTS = $002E;
   CSIDL: array[TSystemPath] of integer = (
-    // spCommonData, spUserData, spCommonDocuments
+    // spCommonData,       spUserData,          spCommonDocuments
     CSIDL_COMMON_APPDATA, CSIDL_LOCAL_APPDATA, CSIDL_COMMON_DOCUMENTS,
     // spUserDocuments, spTempFolder, spLog
     CSIDL_PERSONAL, 0, CSIDL_COMMON_APPDATA);
@@ -39368,7 +39370,7 @@ begin
 end;
 {$else MSWINDOWS}
 var
-  _HomePath, _TempPath, _LogPath: TFileName;
+  _HomePath, _TempPath, _UserPath, _LogPath: TFileName;
 
 function GetSystemPath(kind: TSystemPath): TFileName;
 begin
@@ -39377,8 +39379,19 @@ begin
     if _LogPath='' then
       if IsDirectoryWritable('/var/log') then
         _LogPath := '/var/log/' else // may not be writable by not root on POSIX
-        _LogPath := GetSystemPath(spUserDocuments); // fallback to HOME
+        if IsDirectoryWritable(ExeVersion.ProgramFilePath) then
+          _LogPath := ExeVersion.ProgramFilePath else
+          _LogPath := GetSystemPath(spUserData);
     result := _LogPath;
+  end;
+  spUserData: begin
+    if _UserPath='' then begin //  ~/.cache/appname
+      _UserPath := GetEnvironmentVariable('XDG_CACHE_HOME');
+      if (_UserPath='') or not IsDirectoryWritable(_UserPath) then
+        _UserPath := EnsureDirectoryExists(GetSystemPath(spUserDocuments)+'.cache');
+      _UserPath := EnsureDirectoryExists(_UserPath+UTF8ToString(ExeVersion.ProgramName));
+    end;
+    result := _UserPath;
   end;
   spTempFolder: begin
     if _TempPath='' then begin
