@@ -4872,12 +4872,18 @@ type
     /// sort the dynamic array elements, using the Compare property function
     // - it will change the dynamic array content, and exchange all elements
     // in order to be sorted in increasing order according to Compare function
-    procedure Sort(aCompare: TDynArraySortCompare=nil);
+    procedure Sort(aCompare: TDynArraySortCompare=nil); overload;
     /// sort some dynamic array elements, using the Compare property function
     // - this method allows to sort only some part of the items
     // - it will change the dynamic array content, and exchange all elements
     // in order to be sorted in increasing order according to Compare function
     procedure SortRange(aStart, aStop: integer; aCompare: TDynArraySortCompare=nil);
+    /// sort the dynamic array elements, using a Compare method (not function)
+    // - it will change the dynamic array content, and exchange all elements
+    // in order to be sorted in increasing order according to Compare function,
+    // unless aReverse is true
+    // - it won't mark the array as Sorted, since the comparer is local
+    procedure Sort(const aCompare: TEventDynArraySortCompare; aReverse: boolean=false); overload;
     /// search the elements range which match a given value in a sorted dynamic array
     // - this method will use the Compare property function for the search
     // - returns TRUE and the matching indexes, or FALSE if none found
@@ -49051,14 +49057,17 @@ type
   {$ifdef UNICODE}TDynArrayQuickSort = record{$else}TDynArrayQuickSort = object{$endif}
   public
     Compare: TDynArraySortCompare;
+    CompareEvent: TEventDynArraySortCompare;
     Pivot: pointer;
     Index: PCardinalArray;
     ElemSize: cardinal;
-    P: integer;
+    P: PtrInt;
     Value: PAnsiChar;
     IP, JP: PAnsiChar;
     procedure QuickSort(L, R: PtrInt);
     procedure QuickSortIndexed(L, R: PtrInt);
+    procedure QuickSortEvent(L, R: PtrInt);
+    procedure QuickSortEventReverse(L, R: PtrInt);
   end;
 
 procedure QuickSortIndexedPUTF8Char(Values: PPUtf8CharArray; Count: Integer;
@@ -49096,9 +49105,9 @@ begin
     I := L; J := R;
     P := (L + R) shr 1;
     repeat
-      Pivot := Value+cardinal(P)*ElemSize;
-      IP := Value+cardinal(I)*ElemSize;
-      JP := Value+cardinal(J)*ElemSize;
+      Pivot := Value+PtrUInt(P)*ElemSize;
+      IP := Value+PtrUInt(I)*ElemSize;
+      JP := Value+PtrUInt(J)*ElemSize;
       while Compare(IP^,Pivot^)<0 do begin
         inc(I);
         inc(IP,ElemSize);
@@ -49126,6 +49135,72 @@ begin
     until I > J;
     if L < J then
       QuickSort(L, J);
+    L := I;
+  until I >= R;
+end;
+
+procedure TDynArrayQuickSort.QuickSortEvent(L, R: PtrInt);
+var I, J: PtrInt;
+begin
+  if L<R then
+  repeat
+    I := L; J := R;
+    P := (L + R) shr 1;
+    repeat
+      Pivot := Value+PtrUInt(P)*ElemSize;
+      IP := Value+PtrUInt(I)*ElemSize;
+      JP := Value+PtrUInt(J)*ElemSize;
+      while CompareEvent(IP^,Pivot^)<0 do begin
+        inc(I);
+        inc(IP,ElemSize);
+      end;
+      while CompareEvent(JP^,Pivot^)>0 do begin
+        dec(J);
+        dec(JP,ElemSize);
+      end;
+      if I <= J then begin
+        if I<>J then
+          Exchg(IP,JP,ElemSize);
+        if P = I then P := J else
+        if P = J then P := I;
+        Inc(I); Dec(J);
+      end;
+    until I > J;
+    if L < J then
+      QuickSortEvent(L, J);
+    L := I;
+  until I >= R;
+end;
+
+procedure TDynArrayQuickSort.QuickSortEventReverse(L, R: PtrInt);
+var I, J: PtrInt;
+begin
+  if L<R then
+  repeat
+    I := L; J := R;
+    P := (L + R) shr 1;
+    repeat
+      Pivot := Value+PtrUInt(P)*ElemSize;
+      IP := Value+PtrUInt(I)*ElemSize;
+      JP := Value+PtrUInt(J)*ElemSize;
+      while CompareEvent(IP^,Pivot^)>0 do begin
+        inc(I);
+        inc(IP,ElemSize);
+      end;
+      while CompareEvent(JP^,Pivot^)<0 do begin
+        dec(J);
+        dec(JP,ElemSize);
+      end;
+      if I <= J then begin
+        if I<>J then
+          Exchg(IP,JP,ElemSize);
+        if P = I then P := J else
+        if P = J then P := I;
+        Inc(I); Dec(J);
+      end;
+    until I > J;
+    if L < J then
+      QuickSortEventReverse(L, J);
     L := I;
   until I >= R;
 end;
@@ -49178,6 +49253,21 @@ begin
     Quicksort.QuickSort(aStart,aStop);
     fSorted := true;
   end;
+end;
+
+procedure TDynArray.Sort(const aCompare: TEventDynArraySortCompare; aReverse: boolean);
+var QuickSort: TDynArrayQuickSort;
+    R: PtrInt;
+begin
+  if not Assigned(aCompare) or (fValue = nil) or (fValue^=nil) then
+    exit; // nothing to sort
+  Quicksort.CompareEvent := aCompare;
+  Quicksort.Value := fValue^;
+  Quicksort.ElemSize := ElemSize;
+  R := Count-1;
+  if aReverse then
+    Quicksort.QuickSortEventReverse(0,R) else
+    Quicksort.QuickSortEvent(0,R);
 end;
 
 procedure TDynArray.CreateOrderedIndex(var aIndex: TIntegerDynArray;
