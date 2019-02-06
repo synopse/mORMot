@@ -1636,6 +1636,7 @@ type
   // - such result type would avoid a string allocation on heap, so are highly
   // recommended e.g. when logging small pieces of information
   TShort16 = string[16];
+  PShort16 = ^TShort16;
 
 /// fast Format() function replacement, for UTF-8 content stored in TShort16
 // - truncate result if the text size exceeds 16 bytes
@@ -30668,7 +30669,7 @@ begin // fast cross-platform implementation
     TemporaryFileNameRandom := Random32;
   repeat // thread-safe unique file name generation
     FormatString('%%_%.tmp',[folder,ExeVersion.ProgramName,
-      CardinalToHexShort(InterlockedIncrement(TemporaryFileNameRandom))], string(result));
+      CardinalToHexShort(InterlockedIncrement(TemporaryFileNameRandom))],string(result));
   until not FileExists(result);
 end;
 
@@ -30679,7 +30680,7 @@ begin
   result := {$ifndef DELPHI5OROLDER}not FileIsReadOnly{$else}DirectoryExists{$endif}(fn);
   if not result then
     exit;
-  fn := FormatString('%%.%%',[fn,PathDelim,CardinalToHexLower(integer(GetCurrentThreadID)),
+  fn := FormatString('%%.%%',[fn,PathDelim,CardinalToHexShort(integer(GetCurrentThreadID)),
     BinToBase64uriShort(@ExeVersion.Hash,SizeOf(ExeVersion.Hash))]);
   result := FileFromString('tobedeleted',fn); // actually try to write something
   DeleteFile(fn);
@@ -31526,10 +31527,16 @@ begin
         inc(I); dec(J);
       end;
     until I > J;
-    if L < J then
-      QuickSortInteger(ID,L,J);
-    L := I;
-  until I >= R;
+    if J - L < R - I then begin // use recursion only for smaller range
+      if L < J then
+        QuickSortInteger(ID, L, J);
+      L := I;
+    end else begin
+      if I < R then
+        QuickSortInteger(ID, I, R);
+      R := J;
+    end;
+  until L >= R;
 end;
 
 procedure QuickSortInteger(var ID: TIntegerDynArray);
@@ -31556,10 +31563,16 @@ begin
         inc(I); dec(J);
       end;
     until I > J;
-    if L < J then
-      QuickSortInteger(ID,CoValues,L,J);
-    L := I;
-  until I >= R;
+    if J - L < R - I then begin // use recursion only for smaller range
+      if L < J then
+        QuickSortInteger(ID, CoValues, L, J);
+      L := I;
+    end else begin
+      if I < R then
+        QuickSortInteger(ID, CoValues, I, R);
+      R := J;
+    end;
+  until L >= R;
 end;
 
 procedure QuickSortWord(ID: PWordArray; L, R: PtrInt);
@@ -31580,10 +31593,16 @@ begin
         inc(I); dec(J);
       end;
     until I > J;
-    if L < J then
-      QuickSortWord(ID,L,J);
-    L := I;
-  until I >= R;
+    if J - L < R - I then begin // use recursion only for smaller range
+      if L < J then
+        QuickSortWord(ID, L, J);
+      L := I;
+    end else begin
+      if I < R then
+        QuickSortWord(ID, I, R);
+      R := J;
+    end;
+  until L >= R;
 end;
 
 procedure QuickSortInt64(ID: PInt64Array; L, R: PtrInt);
@@ -31609,10 +31628,16 @@ begin
         inc(I); dec(J);
       end;
     until I > J;
-    if L < J then
-      QuickSortInt64(ID,L,J);
-    L := I;
-  until I >= R;
+    if J - L < R - I then begin // use recursion only for smaller range
+      if L < J then
+        QuickSortInt64(ID, L, J);
+      L := I;
+    end else begin
+      if I < R then
+        QuickSortInt64(ID, I, R);
+      R := J;
+    end;
+  until L >= R;
 end;
 
 procedure QuickSortQWord(ID: PQWordArray; L, R: PtrInt);
@@ -31638,10 +31663,16 @@ begin
         inc(I); dec(J);
       end;
     until I > J;
-    if L < J then
-      QuickSortQWord(ID,L,J);
-    L := I;
-  until I >= R;
+    if J - L < R - I then begin // use recursion only for smaller range
+      if L < J then
+        QuickSortQWord(ID, L, J);
+      L := I;
+    end else begin
+      if I < R then
+        QuickSortQWord(ID, I, R);
+      R := J;
+    end;
+  until L >= R;
 end;
 
 procedure QuickSortInt64(ID,CoValues: PInt64Array; L, R: PtrInt);
@@ -31668,10 +31699,16 @@ begin
         inc(I); dec(J);
       end;
     until I > J;
-    if L < J then
-      QuickSortInt64(ID,L,J);
-    L := I;
-  until I >= R;
+    if J - L < R - I then begin // use recursion only for smaller range
+      if L < J then
+        QuickSortInt64(ID, CoValues, L, J);
+      L := I;
+    end else begin
+      if I < R then
+        QuickSortInt64(ID, CoValues, I, R);
+      R := J;
+    end;
+  until L >= R;
 end;
 
 procedure QuickSortPtrInt(P: PPtrIntArray; L, R: PtrInt);
@@ -38810,10 +38847,16 @@ begin
         Inc(I); Dec(J);
       end;
     until I > J;
-    if L < J then
-      Sort(L, J);
-    L := I;
-  until I >= R;
+    if J - L < R - I then begin // use recursion only for smaller range
+      if L < J then
+        Sort(L, J);
+      L := I;
+    end else begin
+      if I < R then
+        Sort(I, R);
+      R := J;
+    end;
+  until L >= R;
 end;
 
 procedure QuickSortRawUTF8(var Values: TRawUTF8DynArray; ValuesCount: integer;
@@ -39631,10 +39674,16 @@ begin
         inc(I); dec(J);
       end;
     until I > J;
-    if L < J then
-      QuickSortCompare(OnCompare,Index,L,J);
-    L := I;
-  until I >= R;
+    if J - L < R - I then begin // use recursion only for smaller range
+      if L < J then
+        QuickSortCompare(OnCompare, Index, L, J);
+      L := I;
+    end else begin
+      if I < R then
+        QuickSortCompare(OnCompare, Index, I, R);
+      R := J;
+    end;
+  until L >= R;
 end;
 
 procedure Exchg32(var A,B: integer); {$ifdef HASINLINE}inline;{$endif}
@@ -45957,10 +46006,16 @@ begin
         inc(I); dec(J);
       end;
     until I > J;
-    if L < J then
-      QuickSortDocVariant(names,values,L,J,Compare);
-    L := I;
-  until I >= R;
+    if J - L < R - I then begin // use recursion only for smaller range
+      if L < J then
+        QuickSortDocVariant(names, values, L, J, Compare);
+      L := I;
+    end else begin
+      if I < R then
+        QuickSortDocVariant(names, values, I, R, Compare);
+      R := J;
+    end;
+  until L >= R;
 end;
 
 procedure TDocVariantData.SortByName(Compare: TUTF8Compare=nil);
@@ -46011,10 +46066,16 @@ begin
         inc(I); dec(J);
       end;
     until I > J;
-    if L < J then
-      QuickSortDocVariantValues(Doc,L,J,Compare);
-    L := I;
-  until I >= R;
+    if J - L < R - I then begin // use recursion only for smaller range
+      if L < J then
+        QuickSortDocVariantValues(Doc, L, J, Compare);
+      L := I;
+    end else begin
+      if I < R then
+        QuickSortDocVariantValues(Doc, I, R, Compare);
+      R := J;
+    end;
+  until L >= R;
 end;
 
 procedure TDocVariantData.SortByValue(Compare: TVariantCompare);
@@ -49162,10 +49223,16 @@ begin
         Inc(I); Dec(J);
       end;
     until I > J;
-    if L < J then
-      QuickSort(L, J);
-    L := I;
-  until I >= R;
+    if J - L < R - I then begin // use recursion only for smaller range
+      if L < J then
+        QuickSort(L, J);
+      L := I;
+    end else begin
+      if I < R then
+        QuickSort(I, R);
+      R := J;
+    end;
+  until L >= R;
 end;
 
 procedure TDynArrayQuickSort.QuickSortEvent(L, R: PtrInt);
@@ -49195,10 +49262,16 @@ begin
         Inc(I); Dec(J);
       end;
     until I > J;
-    if L < J then
-      QuickSortEvent(L, J);
-    L := I;
-  until I >= R;
+    if J - L < R - I then begin // use recursion only for smaller range
+      if L < J then
+        QuickSortEvent(L, J);
+      L := I;
+    end else begin
+      if I < R then
+        QuickSortEvent(I, R);
+      R := J;
+    end;
+  until L >= R;
 end;
 
 procedure TDynArrayQuickSort.QuickSortEventReverse(L, R: PtrInt);
@@ -49228,10 +49301,16 @@ begin
         Inc(I); Dec(J);
       end;
     until I > J;
-    if L < J then
-      QuickSortEventReverse(L, J);
-    L := I;
-  until I >= R;
+    if J - L < R - I then begin // use recursion only for smaller range
+      if L < J then
+        QuickSortEventReverse(L, J);
+      L := I;
+    end else begin
+      if I < R then
+        QuickSortEventReverse(I, R);
+      R := J;
+    end;
+  until L >= R;
 end;
 
 procedure TDynArrayQuickSort.QuickSortIndexed(L, R: PtrInt);
@@ -49257,10 +49336,16 @@ begin
         Inc(I); Dec(J);
       end;
     until I > J;
-    if L < J then
-      QuickSortIndexed(L, J);
-    L := I;
-  until I >= R;
+    if J - L < R - I then begin // use recursion only for smaller range
+      if L < J then
+        QuickSortIndexed(L, J);
+      L := I;
+    end else begin
+      if I < R then
+        QuickSortIndexed(I, R);
+      R := J;
+    end;
+  until L >= R;
 end;
 
 procedure TDynArray.Sort(aCompare: TDynArraySortCompare);

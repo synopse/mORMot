@@ -1204,8 +1204,8 @@ type
     /// compute fLevels[] + fLogProcNatural[] for each .log line during initial reading
     procedure ProcessOneLine(LineBeg, LineEnd: PUTF8Char); override;
     /// called by LogProcSort method
-    function LogProcSortComp(A,B: Integer): integer;
-    procedure LogProcSortInternal(L,R: integer);
+    function LogProcSortComp(A,B: PtrInt): PtrInt;
+    procedure LogProcSortInternal(L,R: PtrInt);
   public
     /// initialize internal structure
     constructor Create; override;
@@ -5179,7 +5179,7 @@ begin
   Result := C1-C2;
 end;
 
-function TSynLogFile.LogProcSortComp(A, B: Integer): integer;
+function TSynLogFile.LogProcSortComp(A, B: PtrInt): PtrInt;
 begin
   case fLogProcSortInternalOrder of
     soByName: result :=
@@ -5192,7 +5192,7 @@ begin
   end;
 end;
 
-procedure TSynLogFile.LogProcSortInternal(L, R: integer);
+procedure TSynLogFile.LogProcSortInternal(L, R: PtrInt);
   procedure Exchg(var P1,P2: TSynLogFileProc);
   var c: TSynLogFileProc;
   begin
@@ -5200,7 +5200,7 @@ procedure TSynLogFile.LogProcSortInternal(L, R: integer);
     P1 := P2;
     P2 := c;
   end;
-var I,J,P: integer;
+var I,J,P: PtrInt;
 begin
   if L<R then
   repeat
@@ -5215,10 +5215,16 @@ begin
         Inc(I); Dec(J);
       end;
     until I>J;
-    if L<J then
-      LogProcSortInternal(L,J);
-     L := I;
-  until I>=R;
+    if J - L < R - I then begin // use recursion only for smaller range
+      if L < J then
+        LogProcSortInternal(L, J);
+      L := I;
+    end else begin
+      if I < R then
+        LogProcSortInternal(I, R);
+      R := J;
+    end;
+  until L >= R;
 end;
 
 procedure TSynLogFile.ProcessOneLine(LineBeg, LineEnd: PUTF8Char);

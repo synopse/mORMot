@@ -3543,10 +3543,16 @@ begin
         inc(I); dec(J);
       end;
     until I > J;
-    if L < J then
-      OrderedIndexSort(L, J);
-    L := I;
-  until I >= R;
+    if J - L < R - I then begin // use recursion only for smaller range
+      if L < J then
+        OrderedIndexSort(L, J);
+      L := I;
+    end else begin
+      if I < R then
+        OrderedIndexSort(I, R);
+      R := J;
+    end;
+  until L >= R;
 end;
 
 procedure TSynTableFieldProperties.OrderedIndexRefresh;

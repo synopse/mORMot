@@ -24563,10 +24563,16 @@ begin
         inc(I); dec(J);
       end;
     until I>J;
-    if L<J then
-      QuickSortByName(L,J);
-    L := I;
-  until I >= R;
+    if J - L < R - I then begin // use recursion only for smaller range
+      if L < J then
+        QuickSortByName(L, J);
+      L := I;
+    end else begin
+      if I < R then
+        QuickSortByName(I, R);
+      R := J;
+    end;
+  until L >= R;
 end;
 
 function TSQLPropInfoList.ByRawUTF8Name(const aName: RawUTF8): TSQLPropInfo;
@@ -27010,12 +27016,18 @@ begin
       end else
         break;
     until I>J;
-    P := I; // save I which will be overwritten by QuickSort() below
-    if L<J then
-      QuickSort(L, J);
-    I := P;
-    L := P;
-  until I>=R;
+    if J - L < R - I then begin // use recursion only for smaller range
+      P := I; // I,J will be overriden in QuickSort() call
+      if L < J then
+        QuickSort(L, J);
+      L := P;
+    end else begin
+      P := J;
+      if I < R then
+        QuickSort(I, R);
+      R := P
+    end;
+  until L >= R;
 end;
 
 procedure TSQLTable.SortFields(const FieldName: RawUTF8; Asc: boolean=true;
@@ -27161,10 +27173,16 @@ begin
         dec(J);
       end;
     until I>J;
-    if L<J then
-      QuickSort(L,J);
-    L := I;
-  until I >= R;
+    if J - L < R - I then begin // use recursion only for smaller range
+      if L < J then
+        QuickSort(L, J);
+      L := I;
+    end else begin
+      if I < R then
+        QuickSort(I, R);
+      R := J;
+    end;
+  until L >= R;
 end;
 
 procedure TSQLTable.SortFields(const Fields: array of integer;
