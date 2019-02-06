@@ -3525,6 +3525,10 @@ function DirectoryDeleteOlderFiles(const Directory: TFileName; TimePeriod: TDate
 function EnsureDirectoryExists(const Directory: TFileName;
   RaiseExceptionOnCreationFailure: boolean=false): TFileName;
 
+/// check if the directory is writable for the current user
+// - try to write a small file with a random name
+function IsDirectoryWritable(const Directory: TFileName): boolean;
+
 /// compute an unique temporary file name
 // - following 'exename_01234567.tmp' pattern, in the system temporary folder
 function TemporaryFileName: TFileName;
@@ -30667,6 +30671,18 @@ begin // fast cross-platform implementation
   until not FileExists(result);
 end;
 
+function IsDirectoryWritable(const Directory: TFileName): boolean;
+var fn: string;
+begin
+  result := {$ifndef DELPHI5OROLDER}not FileIsReadOnly{$else}DirectoryExists{$endif}(Directory);
+  if not result then
+    exit;
+  FormatString('%%.%',[Directory,PathSep,BinToBase64uri(
+    @ExeVersion.Hash,SizeOf(ExeVersion.Hash))],fn);
+  result := FileFromString('tobedeleted',fn);
+  DeleteFile(fn);
+end;
+
 {$ifdef DELPHI5OROLDER}
 
 function DirectoryExists(const Directory: string): boolean;
@@ -39359,8 +39375,8 @@ begin
   case kind of
   spLog: begin
     if _LogPath='' then
-      if DirectoryExists('/var/log') then
-        _LogPath := '/var/log/' else
+      if IsDirectoryWritable('/var/log') then
+        _LogPath := '/var/log/' else // may not be writable by not root on POSIX
         _LogPath := GetSystemPath(spUserDocuments); // fallback to HOME
     result := _LogPath;
   end;
