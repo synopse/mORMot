@@ -9619,6 +9619,7 @@ type
     fValues: TDynArray;
     fValueVar: pointer;
     fCount, fFirst, fLast: integer;
+    fWaitPopFlags: set of (wpfWaiting, wpfDestroying);
     procedure InternalGrow;
   public
     /// initialize the queue storage
@@ -9626,7 +9627,7 @@ type
     // would store the values within this TSynQueue instance
     constructor Create(aTypeInfo: pointer); reintroduce; virtual;
     /// finalize the storage
-    // - would release all internal stored values
+    // - would release all internal stored values, and call WaitPopFinalize
     destructor Destroy; override;
     /// store one item into the queue
     // - this method is thread-safe, since it will lock the instance
@@ -9643,6 +9644,15 @@ type
     // - returns false if the queue is empty
     // - this method is thread-safe, since it will lock the instance
     function Peek(out aValue): boolean;
+    /// waiting lookup of one item from the queue, as FIFO (First-In-First-Out)
+    // - returns true if aValue has been filled with a pending item within the
+    // specified aTimeoutMS time, or if WaitPopFinalize has been called
+    // - returns false if nothing was pushed into the queue in time
+    // - aWhenIdle could be assigned e.g. to VCL/LCL Application.ProcessMessages
+    function WaitPop(aTimeoutMS: integer; const aWhenIdle: TThreadMethod; out aValue): boolean;
+    /// ensure any pending or future WaitPop() returns immediately with false
+    // - could be called e.g. from an UI OnClose event to avoid any lock
+    procedure WaitPopFinalize;
     /// delete all items currently stored in this queue, and void its capacity
     procedure Clear;
     /// initialize a dynamic array with the stored queue items
@@ -13445,7 +13455,7 @@ function FileOpen(const FileName: string; Mode: LongWord): Integer;
 /// compatibility function, to be implemented according to the running OS
 // - expect more or less the same result as the homonymous Win32 API function
 // - will call the corresponding function in SynKylix.pas or SynFPCLinux.pas
-function GetTickCount64: Int64;   {$ifdef HASINLINE}inline;{$endif}
+function GetTickCount64: Int64;
 
 {$endif MSWINDOWS}
 
@@ -60425,6 +60435,7 @@ end;
 
 destructor TSynQueue.Destroy;
 begin
+  WaitPopFinalize;
   fValues.Clear;
   inherited Destroy;
 end;
@@ -60546,6 +60557,67 @@ begin
   finally
     fSafe.UnLock;
   end;
+end;
+
+function TSynQueue.WaitPop(aTimeoutMS: integer; const aWhenIdle: TThreadMethod;
+  out aValue): boolean;
+var endtix: Int64;
+begin
+  result := false;
+  endtix := GetTickCount64+aTimeoutMS;
+  repeat
+    fSafe.Lock;
+    try
+      if wpfDestroying in fWaitPopFlags then
+        exit;
+      if not(wpfWaiting in fWaitPopFlags) then begin
+        include(fWaitPopFlags,wpfWaiting); // acquire flag
+        break;
+      end;
+    finally
+      fSafe.UnLock;
+    end;
+    Sleep(1);
+    if GetTickCount64>endtix then
+      exit;
+  until false;
+  try
+    repeat
+      result := Pop(aValue);
+      if result then
+        exit;
+      Sleep(1);
+      fSafe.Lock;
+      try
+        if wpfDestroying in fWaitPopFlags then
+          exit;
+      finally
+        fSafe.UnLock;
+      end;
+      if Assigned(aWhenIdle) then
+        aWhenIdle; // e.g. Application.ProcessMessages
+    until GetTickCount64>endtix;
+  finally
+    fSafe.Lock;
+    try
+      exclude(fWaitPopFlags,wpfWaiting); // release flag
+    finally
+      fSafe.UnLock;
+    end;
+  end;
+end;
+
+procedure TSynQueue.WaitPopFinalize;
+begin
+  fSafe.Lock;
+  try
+    include(fWaitPopFlags,wpfDestroying);
+    if not(wpfWaiting in fWaitPopFlags) then
+      exit;
+  finally
+    fSafe.UnLock;
+  end;
+  Sleep(2); // ensure WaitPos() is actually finished
 end;
 
 procedure TSynQueue.Save(out aDynArrayValues; aDynArray: PDynArray);
