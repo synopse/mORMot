@@ -699,7 +699,7 @@ type
   end;
 
   /// used to maintain a list of websocket protocols (for the server side)
-  TWebSocketProtocolList = class(TSynPersistentLocked)
+  TWebSocketProtocolList = class(TSynPersistentLock)
   protected
     fProtocols: array of TWebSocketProtocol;
     // caller should make fSafe.Lock/UnLock

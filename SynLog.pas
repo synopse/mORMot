@@ -349,7 +349,7 @@ type
   TSynLogCallbackDynArray = array of TSynLogCallback;
 
   /// can manage a list of ISynLogCallback registrations
-  TSynLogCallbacks = class(TSynPersistentLocked)
+  TSynLogCallbacks = class(TSynPersistentLock)
   protected
     fCount: integer;
     fCurrentlyEchoing: boolean;

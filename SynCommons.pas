@@ -5100,7 +5100,7 @@ type
     // - do nothing if index is out of range
     procedure ElemCopyAt(index: PtrInt; var Dest); {$ifdef FPC}inline;{$endif}
     /// will move one element content from its index into another variable
-    // - will erase the internal item ater copy
+    // - will erase the internal item after copy
     // - do nothing if index is out of range
     procedure ElemMoveTo(index: PtrInt; var Dest);
     /// will copy one variable content into an indexed element
@@ -5690,7 +5690,7 @@ type
     /// optimized x86 asm finalization code
     // - warning: this version won't release either any allocated TMonitor
     // (as available since Delphi 2009) - do not use TMonitor with
-    // TSynPersistent, but rather the faster TSynPersistentLocked class
+    // TSynPersistent, but rather the faster TSynPersistentLock class
     procedure FreeInstance; override;
     {$endif}
   end;
@@ -5869,18 +5869,21 @@ type
   /// adding locking methods to a TSynPersistent with virtual constructor
   // - you may use this class instead of the RTL TCriticalSection, since it
   // would use a TSynLocker which does not suffer from CPU cache line conflit
-  TSynPersistentLocked = class(TSynPersistent)
+  TSynPersistentLock = class(TSynPersistent)
   protected
-    fSafe: TSynLocker;
+    fSafe: PSynLocker; // TSynLocker would increase inherited fields offset
   public
-    /// initialize the object instance, and its associated lock
+    /// initialize the instance, and its associated lock
     constructor Create; override;
-    /// release the instance (including the locking resource)
+    /// finalize the instance, and its associated lock
     destructor Destroy; override;
-    /// access to the locking methods of this instance
-    // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
-    property Safe: TSynLocker read fSafe;
+    /// access to the associated instance critical section
+    // - call Safe.Lock/UnLock to protect multi-thread access on this storage
+    property Safe: PSynLocker read fSafe;
   end;
+
+  /// used for backward compatibility only with existing code
+  TSynPersistentLocked = class(TSynPersistentLock);
 
   /// adding locking methods to a TInterfacedObject with virtual constructor
   TInterfacedObjectLocked = class(TInterfacedObjectWithCustomCreate)
@@ -9383,7 +9386,7 @@ type
   // - TDynArray is a wrapper which do not store anything, whereas this class
   // is able to store both keys and values, and provide convenient methods to
   // access the stored data, including JSON serialization and binary storage
-  TSynDictionary = class(TSynPersistentLocked)
+  TSynDictionary = class(TSynPersistentLock)
   protected
     fKeys: TDynArrayHashed;
     fValues: TDynArray;
@@ -9579,7 +9582,7 @@ type
     function LoadFromBinary(const binary: RawByteString): boolean;
     /// can be assigned to OnCanDeleteDeprecated to check TSynPersistentLock(aValue).Safe.IsLocked
     class function OnCanDeleteSynPersistentLock(const aKey, aValue; aIndex: integer): boolean;
-    /// can be assigned to OnCanDeleteDeprecated to check TSynPersistentLocked(aValue).Safe.IsLocked
+    /// can be assigned to OnCanDeleteDeprecated to check TSynPersistentLock(aValue).Safe.IsLocked
     class function OnCanDeleteSynPersistentLocked(const aKey, aValue; aIndex: integer): boolean;
     /// returns how many items are currently stored in this dictionary
     // - this method is thread-safe
@@ -9611,7 +9614,7 @@ type
   /// thread-safe FIFO (First-In-First-Out) in-order queue of records
   // - uses internally a dynamic array storage, with a sliding algorithm
   // (more efficient than the FPC or Delphi TQueue)
-  TSynQueue = class(TSynPersistentLocked)
+  TSynQueue = class(TSynPersistentLock)
   protected
     fValues: TDynArray;
     fValueVar: pointer;
@@ -12024,7 +12027,8 @@ type
   public
     /// initialize the thread
     // - you could define some callbacks to nest the thread execution, e.g.
-    // assigned to TSQLRestServer.BeginCurrentThread/EndCurrentThread
+    // assigned to TSQLRestServer.BeginCurrentThread/EndCurrentThread, or
+    // at least set OnAfterExecute to TSynLogFamily.OnThreadEnded
     constructor Create(const aThreadName: RawUTF8; OnBeforeExecute: TNotifyThreadEvent=nil;
       OnAfterExecute: TNotifyThreadEvent=nil; CreateSuspended: boolean=false); reintroduce;
     /// release used resources
@@ -12221,7 +12225,7 @@ type
   /// allow parallel execution of an index-based process in a thread pool
   // - will create its own thread pool, then execute any method by spliting the
   // work into each thread
-  TSynParallelProcess = class(TSynPersistentLocked)
+  TSynParallelProcess = class(TSynPersistentLock)
   protected
     fThreadName: RawUTF8;
     fPool: array of TSynParallelProcessThread;
@@ -17226,23 +17230,6 @@ type
     property Task: TSynBackgroundTimerTaskDynArray read fTask;
     /// low-level access to the internal task mutex
     property TaskLock: TSynLocker read fTaskLock;
-  end;
-
-  /// an alternative to TSynPersistentLocked, but via PSynLocker and not TSynLocker
-  // - TSynLocker will increase inherited fields offset so it may be fine if
-  // you want to avoid allocation of a PSynLocker buffer, but you may
-  // prefer this implementation for general-purpose processing class
-  TSynPersistentLock = class(TSynPersistent)
-  protected
-    fSafe: PSynLocker; // TSynLocker will increase inherited fields offset
-  public
-    /// initialize the instance, and its associated lock
-    constructor Create; override;
-    /// finalize the instance, and its associated lock
-    destructor Destroy; override;
-    /// access to the associated instance critical section
-    // - call Safe.Lock/UnLock to protect multi-thread access on this storage
-    property Safe: PSynLocker read fSafe;
   end;
 
   /// class-reference type (metaclass) of an TSynPersistentLock class
@@ -51650,21 +51637,6 @@ end;
 {$endif FPC_OR_PUREPASCAL}
 
 
-{ TSynPersistentLocked }
-
-constructor TSynPersistentLocked.Create;
-begin
-  inherited Create;
-  fSafe.Init;
-end;
-
-destructor TSynPersistentLocked.Destroy;
-begin
-  inherited Destroy;
-  fSafe.Done;
-end;
-
-
 { TSynPersistentLock }
 
 constructor TSynPersistentLock.Create;
@@ -60415,7 +60387,7 @@ end;
 class function TSynDictionary.OnCanDeleteSynPersistentLocked(const aKey, aValue;
   aIndex: integer): boolean;
 begin
-  result := not TSynPersistentLocked(aValue).Safe.IsLocked;
+  result := not TSynPersistentLock(aValue).Safe.IsLocked;
 end;
 
 function TSynDictionary.SaveToBinary(NoCompression: boolean): RawByteString;

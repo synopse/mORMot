@@ -5020,7 +5020,7 @@ type
   /// abstract class to track, compute and store TSynMonitor detailed statistics
   // - you should inherit from this class to implement proper data persistence,
   // e.g. using TSynMonitorUsageRest for ORM-based storage
-  TSynMonitorUsage = class(TSynPersistentLocked)
+  TSynMonitorUsage = class(TSynPersistentLock)
   protected
     fLog: TSynLogFamily;
     fTracked: array of TSynMonitorUsageTrack;
@@ -13832,7 +13832,7 @@ type
   TSQLRestObjArray = array of TSQLRest;
 
   /// used to store the execution parameters for a TSQLRest instance
-  TSQLRestAcquireExecution = class(TSynPersistentLocked)
+  TSQLRestAcquireExecution = class(TSynPersistentLock)
   public
     /// how read or write operations will be executed
     Mode: TSQLRestServerAcquireMode;
@@ -16623,7 +16623,7 @@ type
   // "asynchronous write"), or maintain a versioned image of the content
   // - all public methods (AddCopy/AddOwned/Update/Delete/FlushAsBatch) are
   // thread-safe, protected by a mutex lock
-  TSQLRestTempStorage = class(TSynPersistentLocked)
+  TSQLRestTempStorage = class(TSynPersistentLock)
   protected
     fStoredClass: TSQLRecordClass;
     fStoredClassRecordProps: TSQLRecordProperties;
@@ -16912,7 +16912,7 @@ type
   TServicesPublishedInterfacesDynArray = array of TServicesPublishedInterfaces;
 
   /// used e.g. by TSQLRestServer to store a list of TServicesPublishedInterfaces
-  TServicesPublishedInterfacesList = class(TSynPersistentLocked)
+  TServicesPublishedInterfacesList = class(TSynPersistentLock)
   private
     fDynArray: TDynArray;
     fDynArrayTimeoutTix: TDynArray;
@@ -19176,7 +19176,7 @@ type
   PSQLRestClientCallbackItem = ^TSQLRestClientCallbackItem;
 
   /// store the references to active interface callbacks on a REST Client
-  TSQLRestClientCallbacks = class(TSynPersistentLocked)
+  TSQLRestClientCallbacks = class(TSynPersistentLock)
   protected
     fCurrentID: integer;
     function UnRegisterByIndex(index: integer): boolean;
@@ -37266,7 +37266,7 @@ end;
 procedure TSQLRest.EndCurrentThread(Sender: TThread);
 begin // most will be done e.g. in TSQLRestServer.EndCurrentThread
   {$ifdef WITHLOG}
-  fLogClass.Add.NotifyThreadEnded;
+  fLogFamily.OnThreadEnded(Sender);
   {$endif}
 end;
 
