@@ -4682,7 +4682,8 @@ begin
   {$endif}
 end;
 
-{$HINTS OFF} // [dcc64 Hint] H2135 FOR or WHILE loop executes zero times - deleted
+{$IFDEF FPC} {$PUSH} {$ENDIF} {$HINTS OFF}
+// [dcc64 Hint] H2135 FOR or WHILE loop executes zero times - deleted
 procedure TTestLowLevelCommon._IdemPropName;
   function IPNUSL(const s1,s2: RawUTF8; len: integer): boolean;
   begin
@@ -4784,7 +4785,7 @@ begin
   Check(PosExChar('B','AB')=2,'ABC');
   Check(PosExChar('C','ABC')=3,'ABC');
 end;
-{$HINTS ON}
+{$IFDEF FPC} {$POP} {$ELSE} {$HINTS ON} {$ENDIF}
 
 procedure TTestLowLevelCommon._TSynTable;
 var T: TSynTable;

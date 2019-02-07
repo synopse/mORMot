@@ -56994,7 +56994,8 @@ begin
     result := (Count*QWord(1000*1000)) div iTime;
 end;
 
-{$HINTS OFF} // for FillZero() complain about loop executed zero times
+{$IFDEF FPC} {$PUSH} {$ENDIF} {$HINTS OFF}
+// for FillZero() complain about loop executed zero times
 procedure TPrecisionTimer.Init;
 begin
   FillZero(self,SizeOf(self));
@@ -57006,7 +57007,7 @@ begin
   QueryPerformanceCounter(iStart);
   iLast := iStart;
 end;
-{$HINTS ON}
+{$IFDEF FPC} {$POP} {$ELSE} {$HINTS ON} {$ENDIF}
 
 function TPrecisionTimer.Started: boolean;
 begin

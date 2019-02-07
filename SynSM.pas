@@ -925,9 +925,10 @@ type
   protected
   {$endif}
     VType: TVarType;
-    {$HINTS OFF} // does not complain if Filler is declared but never used
+    {$IFDEF FPC} {$PUSH} {$ENDIF} {$HINTS OFF}
+    // does not complain if Filler is declared but never used
     Filler: array[1..SizeOf(TVarData)-SizeOf(TVarType)-SizeOf(TSMObject)] of byte;
-    {$HINTS ON}
+    {$IFDEF FPC} {$POP} {$ELSE} {$HINTS ON} {$ENDIF}
     VObject: TSMObject;
   public
     /// initialize a TSMVariant structure to store a specified JavaScript object
