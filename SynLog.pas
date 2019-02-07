@@ -560,6 +560,11 @@ type
     // - will retrieve the log content for the current file, truncating the
     // text up to the specified number of KB (an up to 128 MB at most)
     function GetExistingLog(MaximumKB: cardinal): RawUTF8;
+    /// callback to notify the current logger that its thread is finished
+    // - method follows TNotifyThreadEvent signature, which can be assigned to
+    // TSynBackgroundThreadAbstract.OnAfterExecute
+    // - is called e.g. by TSQLRest.EndCurrentThread
+    procedure OnThreadEnded(Sender: TThread);
 
     /// you can add some exceptions to be ignored to this list
     // - for instance, EConvertError may be added to the list, as such:
@@ -908,7 +913,7 @@ type
     // - should be called in the thread context which is about to terminate,
     // in a situation where no other logging may occur from this thread any more
     // - it will release all thread-specific resource used by this TSynLog
-    // - is called e.g. by TSQLRest.EndCurrentThread
+    // - is called e.g. by TSQLRest.EndCurrentThread, via TSynLogFamily.OnThreadEnded
     procedure NotifyThreadEnded;
     /// handle generic method enter / auto-leave tracing
     // - this is the main method to be called within a procedure/function to trace:
@@ -3556,6 +3561,11 @@ begin
 
 end;
 
+procedure TSynLogFamily.OnThreadEnded(Sender: TThread);
+begin
+  SynLog.NotifyThreadEnded;
+end;
+
 
 { TFileStreamWithoutWriteError }
 
@@ -3740,7 +3750,7 @@ end;
 
 procedure TSynLog.NotifyThreadEnded;
 begin
-  if fThreadContextCount=0 then
+  if (self=nil) or (fThreadContextCount=0) then
     exit; // nothing to release
   LockAndGetThreadContext;
   try
