@@ -9649,11 +9649,15 @@ type
     // specified aTimeoutMS time, or if WaitPopFinalize has been called
     // - returns false if nothing was pushed into the queue in time
     // - aWhenIdle could be assigned e.g. to VCL/LCL Application.ProcessMessages
+    // - this method is thread-safe, but will lock the instance only if needed
     function WaitPop(aTimeoutMS: integer; const aWhenIdle: TThreadMethod; out aValue): boolean;
-    /// ensure any pending or future WaitPop() returns immediately with false
-    // - could be called e.g. from an UI OnClose event to avoid any lock
+    /// ensure any pending or future WaitPop() returns immediately as false
+    // - is always called by Destroy destructor
+    // - could be also called e.g. from an UI OnClose event to avoid any lock
+    // - this method is thread-safe, but will lock the instance only if needed
     procedure WaitPopFinalize;
     /// delete all items currently stored in this queue, and void its capacity
+    // - this method is thread-safe, since it will lock the instance
     procedure Clear;
     /// initialize a dynamic array with the stored queue items
     // - aDynArrayValues should be a variable defined as aTypeInfo from Create
@@ -60587,6 +60591,8 @@ begin
       if result then
         exit;
       Sleep(1);
+      if Assigned(aWhenIdle) then
+        aWhenIdle; // e.g. Application.ProcessMessages
       fSafe.Lock;
       try
         if wpfDestroying in fWaitPopFlags then
@@ -60594,8 +60600,6 @@ begin
       finally
         fSafe.UnLock;
       end;
-      if Assigned(aWhenIdle) then
-        aWhenIdle; // e.g. Application.ProcessMessages
     until GetTickCount64>endtix;
   finally
     fSafe.Lock;
@@ -60608,16 +60612,22 @@ begin
 end;
 
 procedure TSynQueue.WaitPopFinalize;
+var endtix: Int64; // never wait forever
 begin
-  fSafe.Lock;
-  try
-    include(fWaitPopFlags,wpfDestroying);
-    if not(wpfWaiting in fWaitPopFlags) then
-      exit;
-  finally
-    fSafe.UnLock;
-  end;
-  Sleep(2); // ensure WaitPos() is actually finished
+  endtix := 0;
+  repeat
+    fSafe.Lock;
+    try
+      include(fWaitPopFlags,wpfDestroying);
+      if not(wpfWaiting in fWaitPopFlags) then
+        exit;
+    finally
+      fSafe.UnLock;
+    end;
+    if endtix = 0 then
+      endtix := GetTickCount64 + 100;
+    Sleep(1); // ensure WaitPos() is actually finished
+  until GetTickCount64 > endtix;
 end;
 
 procedure TSynQueue.Save(out aDynArrayValues; aDynArray: PDynArray);
