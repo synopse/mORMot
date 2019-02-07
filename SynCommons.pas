@@ -39393,14 +39393,16 @@ const
     // spCommonData,       spUserData,          spCommonDocuments
     CSIDL_COMMON_APPDATA, CSIDL_LOCAL_APPDATA, CSIDL_COMMON_DOCUMENTS,
     // spUserDocuments, spTempFolder, spLog
-    CSIDL_PERSONAL, 0, CSIDL_COMMON_APPDATA);
+    CSIDL_PERSONAL, 0, CSIDL_LOCAL_APPDATA);
   ENV: array[TSystemPath] of TFileName = (
-    'ALLUSERSAPPDATA', 'LOCALAPPDATA', '', '', 'TEMP', 'ALLUSERSAPPDATA');
+    'ALLUSERSAPPDATA', 'LOCALAPPDATA', '', '', 'TEMP', 'LOCALAPPDATA');
 var tmp: array[0..MAX_PATH] of char;
     k: TSystemPath;
 begin
-  if _SystemPath[spCommonData]='' then begin
+  if _SystemPath[spCommonData]='' then
     for k := low(k) to high(k) do
+      if (k=spLog) and IsDirectoryWritable(ExeVersion.ProgramFilePath) then
+        _SystemPath[k] := EnsureDirectoryExists(ExeVersion.ProgramFilePath+'log') else
       if (CSIDL[k]<>0) and (SHGetFolderPath(0,CSIDL[k],0,0,@tmp)=S_OK) then
         _SystemPath[k] := IncludeTrailingPathDelimiter(tmp) else begin
         _SystemPath[k] := GetEnvironmentVariable(ENV[k]);
@@ -39408,8 +39410,6 @@ begin
           _SystemPath[k] := GetEnvironmentVariable('APPDATA');
         _SystemPath[k] := IncludeTrailingPathDelimiter(_SystemPath[k]);
       end;
-    _SystemPath[spTempFolder] := IncludeTrailingPathDelimiter(GetEnvironmentVariable('TEMP'));
-  end;
   result := _SystemPath[kind];
 end;
 {$else MSWINDOWS}
