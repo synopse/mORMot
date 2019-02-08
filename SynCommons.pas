@@ -9621,6 +9621,9 @@ type
     fCount, fFirst, fLast: integer;
     fWaitPopFlags: set of (wpfWaiting, wpfDestroying);
     procedure InternalGrow;
+    function InternalWaitNotAcquired(ms: PtrInt; out endtix: Int64): boolean;
+    function InternalWaitDone(endtix: Int64; const idle: TThreadMethod): boolean;
+    procedure InternalWaitUnlock;
   public
     /// initialize the queue storage
     // - aTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
@@ -9644,13 +9647,21 @@ type
     // - returns false if the queue is empty
     // - this method is thread-safe, since it will lock the instance
     function Peek(out aValue): boolean;
-    /// waiting lookup of one item from the queue, as FIFO (First-In-First-Out)
+    /// waiting extract of one item from the queue, as FIFO (First-In-First-Out)
     // - returns true if aValue has been filled with a pending item within the
-    // specified aTimeoutMS time, or if WaitPopFinalize has been called
-    // - returns false if nothing was pushed into the queue in time
+    // specified aTimeoutMS time
+    // - returns false if nothing was pushed into the queue in time, or if
+    // WaitPopFinalize has been called
     // - aWhenIdle could be assigned e.g. to VCL/LCL Application.ProcessMessages
     // - this method is thread-safe, but will lock the instance only if needed
     function WaitPop(aTimeoutMS: integer; const aWhenIdle: TThreadMethod; out aValue): boolean;
+    /// waiting lookup of one item from the queue, as FIFO (First-In-First-Out)
+    // - returns a pointer to a pending item within the specified aTimeoutMS
+    // time - the Safe.Lock is still there, so that caller could check its content,
+    // then call Pop() if it is the expected one, and eventually always call Safe.Unlock
+    // - returns nil if nothing was pushed into the queue in time
+    // - this method is thread-safe, but will lock the instance only if needed
+    function WaitPeekLocked(aTimeoutMS: integer; const aWhenIdle: TThreadMethod): pointer;
     /// ensure any pending or future WaitPop() returns immediately as false
     // - is always called by Destroy destructor
     // - could be also called e.g. from an UI OnClose event to avoid any lock
@@ -60564,12 +60575,10 @@ begin
   end;
 end;
 
-function TSynQueue.WaitPop(aTimeoutMS: integer; const aWhenIdle: TThreadMethod;
-  out aValue): boolean;
-var endtix: Int64;
+function TSynQueue.InternalWaitNotAcquired(ms: PtrInt; out endtix: Int64): boolean;
 begin
-  result := false;
-  endtix := GetTickCount64+aTimeoutMS;
+  result := true;
+  endtix := GetTickCount64+ms;
   repeat
     fSafe.Lock;
     try
@@ -60586,30 +60595,69 @@ begin
     if GetTickCount64>endtix then
       exit;
   until false;
+  result := false;
+end;
+
+function TSynQueue.InternalWaitDone(endtix: Int64; const idle: TThreadMethod): boolean;
+begin
+  result := true;
+  Sleep(1);
+  if Assigned(idle) then
+    idle; // e.g. Application.ProcessMessages
+  fSafe.Lock;
   try
-    repeat
-      result := Pop(aValue);
-      if result then
-        exit;
-      Sleep(1);
-      if Assigned(aWhenIdle) then
-        aWhenIdle; // e.g. Application.ProcessMessages
-      fSafe.Lock;
-      try
-        if wpfDestroying in fWaitPopFlags then
-          exit;
-      finally
-        fSafe.UnLock;
-      end;
-    until GetTickCount64>endtix;
+    if wpfDestroying in fWaitPopFlags then
+      exit;
   finally
-    fSafe.Lock;
-    try
-      exclude(fWaitPopFlags,wpfWaiting); // release flag
-    finally
-      fSafe.UnLock;
-    end;
+    fSafe.UnLock;
   end;
+  result := GetTickCount64>endtix;
+end;
+
+procedure TSynQueue.InternalWaitUnlock;
+begin
+  fSafe.Lock;
+  try
+    exclude(fWaitPopFlags,wpfWaiting); // release flag
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TSynQueue.WaitPop(aTimeoutMS: integer; const aWhenIdle: TThreadMethod;
+  out aValue): boolean;
+var endtix: Int64;
+begin
+  if InternalWaitNotAcquired(aTimeoutMS, endtix) then
+    result := false else
+    try
+      repeat
+        result := Pop(aValue);
+      until result or InternalWaitDone(endtix, aWhenIdle);
+    finally
+      InternalWaitUnlock;
+    end;
+end;
+
+function TSynQueue.WaitPeekLocked(aTimeoutMS: integer; const aWhenIdle: TThreadMethod): pointer;
+var endtix: Int64;
+begin
+  if InternalWaitNotAcquired(aTimeoutMS, endtix) then
+    result := nil else
+    try
+      repeat
+        fSafe.Lock;
+        try
+          if fFirst>=0 then
+            result := fValues.ElemPtr(fFirst);
+        finally
+          if result=nil then
+            fSafe.UnLock;
+        end;
+      until (result<>nil) or InternalWaitDone(endtix, aWhenIdle);
+    finally
+      InternalWaitUnlock;
+    end;
 end;
 
 procedure TSynQueue.WaitPopFinalize;
