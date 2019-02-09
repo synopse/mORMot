@@ -1808,7 +1808,10 @@ var CompareMemFixed: function(P1, P2: Pointer; Length: PtrInt): Boolean = Compar
 function CompareMemSmall(P1, P2: Pointer; Length: PtrInt): Boolean; {$ifdef HASINLINE}inline;{$endif}
 
 /// convert an IPv4 'x.x.x.x' text into its 32-bit value
-function IPToCardinal(const aIP: RawUTF8; out aValue: cardinal): boolean;
+function IPToCardinal(const aIP: RawUTF8; out aValue: cardinal): boolean; overload;
+
+/// convert an IPv4 'x.x.x.x' text into its 32-bit value, 0 or localhost
+function IPToCardinal(const aIP: RawUTF8): cardinal; overload;
 
 /// convert some ASCII-7 text into binary, using Emile Baudot code
 // - as used in telegraphs, covering a-z 0-9 - ' , ! : ( + ) $ ? @ . / ; charset
@@ -1980,6 +1983,14 @@ function SameValue(const A, B: Double; DoublePrec: double = 1E-12): Boolean;
 // - faster equivalent than SameValue() in Math unit
 // - if you know the precision range of A and B, it's faster to check abs(A-B)<range
 function SameValueFloat(const A, B: TSynExtended; DoublePrec: TSynExtended = 1E-12): Boolean;
+
+/// a comparison function for sorting IEEE 754 double precision values
+function CompareFloat(const A, B: double): integer;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// a comparison function for sorting 64-bit floating point values
+function CompareInt64(const A, B: Int64): integer;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the sum of values, using a running compensation for lost low-order bits
 // - a naive "Sum := Sum + Data" will be restricted to 53 bits of resolution,
@@ -9619,11 +9630,11 @@ type
     fValues: TDynArray;
     fValueVar: pointer;
     fCount, fFirst, fLast: integer;
-    fWaitPopFlags: set of (wpfWaiting, wpfDestroying);
+    fWaitPopFlags: set of (wpfDestroying);
+    fWaitPopCounter: integer;
     procedure InternalGrow;
-    function InternalWaitNotAcquired(ms: PtrInt; out endtix: Int64): boolean;
+    function InternalDestroying(incPopCounter: integer): boolean;
     function InternalWaitDone(endtix: Int64; const idle: TThreadMethod): boolean;
-    procedure InternalWaitUnlock;
   public
     /// initialize the queue storage
     // - aTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
@@ -21133,6 +21144,12 @@ begin
   result := aValue<>$0100007f;
 end;
 
+function IPToCardinal(const aIP: RawUTF8): cardinal;
+begin
+  if not IPToCardinal(aIP,result) then
+    result := 0;
+end;
+
 const
   // see https://en.wikipedia.org/wiki/Baudot_code
   Baudot2Char: array[0..63] of AnsiChar =
@@ -29456,6 +29473,24 @@ begin
   if A<B then
     result := (B-A)<=DoublePrec else
     result := (A-B)<=DoublePrec;
+end;
+
+function CompareFloat(const A, B: double): integer;
+begin
+  if A<B then
+    result := -1 else
+  if A>B then
+    result := 1 else
+    result := 0;
+end;
+
+function CompareInt64(const A, B: Int64): integer;
+begin
+  if A<B then
+    result := -1 else
+  if A>B then
+    result := 1 else
+    result := 0;
 end;
 
 procedure KahanSum(const Data: double; var Sum, Carry: double);
@@ -60575,76 +60610,48 @@ begin
   end;
 end;
 
-function TSynQueue.InternalWaitNotAcquired(ms: PtrInt; out endtix: Int64): boolean;
+function TSynQueue.InternalDestroying(incPopCounter: integer): boolean;
 begin
-  result := true;
-  endtix := GetTickCount64+ms;
-  repeat
-    fSafe.Lock;
-    try
-      if wpfDestroying in fWaitPopFlags then
-        exit;
-      if not(wpfWaiting in fWaitPopFlags) then begin
-        include(fWaitPopFlags,wpfWaiting); // acquire flag
-        break;
-      end;
-    finally
-      fSafe.UnLock;
-    end;
-    Sleep(1);
-    if GetTickCount64>endtix then
-      exit;
-  until false;
-  result := false;
+  fSafe.Lock;
+  try
+    result := wpfDestroying in fWaitPopFlags;
+    inc(fWaitPopCounter, incPopCounter);
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 function TSynQueue.InternalWaitDone(endtix: Int64; const idle: TThreadMethod): boolean;
 begin
-  result := true;
   Sleep(1);
   if Assigned(idle) then
     idle; // e.g. Application.ProcessMessages
-  fSafe.Lock;
-  try
-    if wpfDestroying in fWaitPopFlags then
-      exit;
-  finally
-    fSafe.UnLock;
-  end;
-  result := GetTickCount64>endtix;
-end;
-
-procedure TSynQueue.InternalWaitUnlock;
-begin
-  fSafe.Lock;
-  try
-    exclude(fWaitPopFlags,wpfWaiting); // release flag
-  finally
-    fSafe.UnLock;
-  end;
+  result := InternalDestroying(0) or (GetTickCount64>endtix);
 end;
 
 function TSynQueue.WaitPop(aTimeoutMS: integer; const aWhenIdle: TThreadMethod;
   out aValue): boolean;
 var endtix: Int64;
 begin
-  if InternalWaitNotAcquired(aTimeoutMS, endtix) then
-    result := false else
+  result := false;
+  if not InternalDestroying(+1) then
     try
+      endtix := GetTickCount64+aTimeoutMS;
       repeat
         result := Pop(aValue);
-      until result or InternalWaitDone(endtix, aWhenIdle);
+      until result or InternalWaitDone(endtix,aWhenIdle);
     finally
-      InternalWaitUnlock;
+      InternalDestroying(-1);
     end;
 end;
 
 function TSynQueue.WaitPeekLocked(aTimeoutMS: integer; const aWhenIdle: TThreadMethod): pointer;
 var endtix: Int64;
 begin
-  if InternalWaitNotAcquired(aTimeoutMS, endtix) then
-    result := nil else
+  result := nil;
+  if not InternalDestroying(+1) then
     try
+      endtix := GetTickCount64+aTimeoutMS;
       repeat
         fSafe.Lock;
         try
@@ -60652,31 +60659,29 @@ begin
             result := fValues.ElemPtr(fFirst);
         finally
           if result=nil then
-            fSafe.UnLock;
+            fSafe.UnLock; // caller should always Unlock once done
         end;
-      until (result<>nil) or InternalWaitDone(endtix, aWhenIdle);
+      until (result<>nil) or InternalWaitDone(endtix,aWhenIdle);
     finally
-      InternalWaitUnlock;
+      InternalDestroying(-1);
     end;
 end;
 
 procedure TSynQueue.WaitPopFinalize;
 var endtix: Int64; // never wait forever
 begin
-  endtix := 0;
+  fSafe.Lock;
+  try
+    include(fWaitPopFlags,wpfDestroying);
+    if fWaitPopCounter = 0 then
+      exit;
+  finally
+    fSafe.UnLock;
+  end;
+  endtix := GetTickCount64 + 100;
   repeat
-    fSafe.Lock;
-    try
-      include(fWaitPopFlags,wpfDestroying);
-      if not(wpfWaiting in fWaitPopFlags) then
-        exit;
-    finally
-      fSafe.UnLock;
-    end;
-    if endtix = 0 then
-      endtix := GetTickCount64 + 100;
     Sleep(1); // ensure WaitPos() is actually finished
-  until GetTickCount64 > endtix;
+  until (fWaitPopCounter=0) or (GetTickCount64>endtix);
 end;
 
 procedure TSynQueue.Save(out aDynArrayValues; aDynArray: PDynArray);
