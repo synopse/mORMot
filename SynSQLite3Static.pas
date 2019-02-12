@@ -1,4 +1,4 @@
-/// SQLite3 3.26.0 Database engine - statically linked for Windows/Linux
+/// SQLite3 3.27.1 Database engine - statically linked for Windows/Linux
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynSQLite3Static;
@@ -77,7 +77,7 @@ unit SynSQLite3Static;
 
   Version 1.18
   - initial revision, extracted from SynSQLite3.pas unit
-  - updated SQLite3 engine to latest version 3.26.0
+  - updated SQLite3 engine to latest version 3.27.1
   - now all sqlite3_*() API calls are accessible via sqlite3.*()
   - our custom file encryption is now called via sqlite3.key() - i.e. official
     SQLite Encryption Extension (SEE) sqlite3_key() API - and works for database
@@ -1135,7 +1135,7 @@ function sqlite3_trace_v2(DB: TSQLite3DB; Mask: integer; Callback: TSQLTraceCall
 
 const
   // error message if statically linked sqlite3.o(bj) does not match this
-  EXPECTED_SQLITE3_VERSION = {$ifdef ANDROID}''{$else}'3.26.0'{$endif};
+  EXPECTED_SQLITE3_VERSION = {$ifdef ANDROID}''{$else}'3.27.1'{$endif};
 
 constructor TSQLite3LibraryStatic.Create;
 var error: RawUTF8;
