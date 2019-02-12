@@ -720,9 +720,10 @@ type
     procedure UTF8BufferToAnsi(Source: PUTF8Char; SourceChars: Cardinal;
       var result: RawByteString); override;
     /// convert any UTF-8 encoded String into Ansi Text
-    // - internaly calls UTF8BufferToAnsi virtual method
+    // - directly assign the input as result, since no conversion is needed
     function UTF8ToAnsi(const UTF8: RawUTF8): RawByteString; override;
     /// convert any Ansi Text into an UTF-8 encoded String
+    // - directly assign the input as result, since no conversion is needed
     function AnsiToUTF8(const AnsiText: RawByteString): RawUTF8; override;
     /// direct conversion of a PAnsiChar buffer into a UTF-8 encoded string
     function AnsiBufferToRawUTF8(Source: PAnsiChar; SourceChars: Cardinal): RawUTF8; override;
@@ -1229,8 +1230,7 @@ function RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
 /// convert a RawUnicode UTF-16 PWideChar into a UTF-8 buffer
 // - replace system.UnicodeToUtf8 implementation, which is rather slow
 // since Delphi 2009+
-// - will append a trailing #0 to the ending PUTF8Char, unless
-// ccfNoTrailingZero is set
+// - append a trailing #0 to the ending PUTF8Char, unless ccfNoTrailingZero is set
 // - if ccfReplacementCharacterForUnmatchedSurrogate is set, this function will identify
 // unmatched surrogate pairs and replace them with EF BF BD / FFFD  Unicode
 // Replacement character - see https://en.wikipedia.org/wiki/Specials_(Unicode_block)
@@ -2900,10 +2900,8 @@ function FindIniEntryW(const Content: string; const Section, Name: RawUTF8): str
 
 {$ifdef PUREPASCAL}
 {$ifdef HASINLINE}
-function PosEx(const SubStr, S: RawUTF8; Offset: PtrUInt=1): PtrInt; inline;
-{$ifndef FPC}
 function PosExPas(pSub, p: PUTF8Char; Offset: PtrUInt): PtrInt;
-{$endif}
+function PosEx(const SubStr, S: RawUTF8; Offset: PtrUInt=1): PtrInt; inline;
 {$else}
 var PosEx: function(const SubStr, S: RawUTF8; Offset: PtrUInt=1): PtrInt;
 {$endif}
@@ -24742,18 +24740,24 @@ zero:
   result := false;
 end;
 
+{$ifdef HASINLINE} // to use directly the SubStr/S arguments registers
+function PosEx(const SubStr, S: RawUTF8; Offset: PtrUInt): PtrInt;
+begin
+  result := PosExPas(pointer(SubStr),pointer(S),Offset);
+end;
+{$endif HASINLINE}
+
 // from Aleksandr Sharahov's PosEx_Sha_Pas_2()
 function PosExPas(pSub, p: PUTF8Char; Offset: PtrUInt): PtrInt;
 var len, lenSub: PtrInt;
     ch: AnsiChar;
     pStart, pStop: PUTF8Char;
-label Loop0, Loop4, TestT, Test0, Test1, Test2, Test3, Test4,
+label Loop2, Loop6, TestT, Test0, Test1, Test2, Test3, Test4,
       AfterTestT, AfterTest0, Ret, Exit;
 begin
-  if (p=nil) or (pSub=nil) or (Offset<1) then begin
-    result := 0;
+  result := 0;
+  if (p=nil) or (pSub=nil) or (Offset<1) then
     goto Exit;
-  end;
   {$ifdef FPC}
   len := _LStrLenP(p);
   lenSub := _LStrLenP(pSub)-1;
@@ -24761,70 +24765,60 @@ begin
   len := PInteger(p-4)^;
   lenSub := PInteger(pSub-4)^-1;
   {$endif}
-  if (len<lenSub+PtrInt(Offset)) or (lenSub<0) then begin
-    result := 0;
+  if (len<lenSub+PtrInt(Offset)) or (lenSub<0) then
     goto Exit;
-  end;
   pStop := p+len;
-  p := p+lenSub;
-  pSub := pSub+lenSub;
+  inc(p,lenSub);
+  inc(pSub,lenSub);
   pStart := p;
-  p := p+Offset+3;
+  inc(p,Offset+3);
   ch := pSub[0];
   lenSub := -lenSub;
-  if p<pStop then goto Loop4;
-  p := p-4;
-  goto Loop0;
-Loop4:
+  if p<pStop then goto Loop6;
+  dec(p,4);
+  goto Loop2;
+Loop6: // check 6 chars per loop iteration
   if ch=p[-4] then goto Test4;
   if ch=p[-3] then goto Test3;
   if ch=p[-2] then goto Test2;
   if ch=p[-1] then goto Test1;
-Loop0:
+Loop2:
   if ch=p[0] then goto Test0;
 AfterTest0:
   if ch=p[1] then goto TestT;
 AfterTestT:
-  p := p+6;
-  if p<pStop then goto Loop4;
-  p := p-4;
-  if p<pStop then goto Loop0;
-  result := 0;
-  goto Exit;
-Test3: p := p-2;
-Test1: p := p-2;
+  inc(p,6);
+  if p<pStop then goto Loop6;
+  dec(p,4);
+  if p>=pStop then goto Exit;
+  goto Loop2;
+Test4: dec(p,2);
+Test2: dec(p,2);
+  goto Test0;
+Test3: dec(p,2);
+Test1: dec(p,2);
 TestT: len := lenSub;
   if lenSub<>0 then
-  repeat
-    if (psub[len]<>p[len+1]) or (psub[len+1]<>p[len+2]) then
-      goto AfterTestT;
-    len := len+2;
-  until len>=0;
-  p := p+2;
+    repeat
+      if (psub[len]<>p[len+1]) or (psub[len+1]<>p[len+2]) then
+        goto AfterTestT;
+      inc(len,2);
+    until len>=0;
+  inc(p,2);
   if p<=pStop then goto Ret;
-  result := 0;
   goto Exit;
-Test4: p := p-2;
-Test2: p := p-2;
 Test0: len := lenSub;
   if lenSub<>0 then
-  repeat
-    if (psub[len]<>p[len]) or (psub[len+1]<>p[len+1]) then
-      goto AfterTest0;
-    len := len+2;
-  until len>=0;
+    repeat
+      if (psub[len]<>p[len]) or (psub[len+1]<>p[len+1]) then
+        goto AfterTest0;
+      inc(len,2);
+    until len>=0;
   inc(p);
 Ret:
   result := p-pStart;
 Exit:
 end;
-
-{$ifdef HASINLINE} // to use directly the SubStr/S arguments registers
-function PosEx(const SubStr, S: RawUTF8; Offset: PtrUInt): PtrInt;
-begin
-  result := PosExPas(pointer(SubStr),pointer(S),Offset);
-end;
-{$endif HASINLINE}
 
 function IdemPropNameU(const P1,P2: RawUTF8): boolean;
 var L: PtrInt;
