@@ -445,13 +445,12 @@ asm
   jmp System.@_llushr
 end;
 
-function log(const val: extended): extended;
+function log(const val: double): double; cdecl; { always cdecl }
 asm
-  fld val
+  fld qword ptr val
   fldln2
   fxch
   fyl2x
-  fwait
 end;
 
 {$endif CPU32}
