@@ -13269,7 +13269,7 @@ const
 // - returns Cardinal(-1) in case of failure
 function GetFileVersion(const FileName: TFileName): cardinal;
 
-{$endif}
+{$endif DELPHI6OROLDER}
 
 /// returns a JSON object containing basic information about the computer
 // - including Host, User, CPU, OS, freemem, freedisk...
@@ -39147,13 +39147,6 @@ begin
   LastAppUserModelID := AppUserModelID;
 end;
 
-{$else}
-
-// wrapper around some low-level OS (non Windows) specific API
-
-const
-  _SC_PAGE_SIZE = $1000;
-
 {$endif MSWINDOWS}
 
 { TFileVersion }
@@ -39535,10 +39528,10 @@ begin
   if Backup<>nil then
     for i := 0 to Size-1 do // do not use Move() here
       PByteArray(Backup)^[i] := PByteArray(Old)^[i];
-  PageSize := _SC_PAGE_SIZE;
-  AlignedAddr := PtrUInt(Old) and not (PageSize - 1);
-  while PtrUInt(Old) + PtrUInt(Size) >= AlignedAddr + PageSize do
-    Inc(PageSize,_SC_PAGE_SIZE);
+  PageSize := SystemInfo.dwPageSize;
+  AlignedAddr := PtrUInt(Old) and not (PageSize-1);
+  while PtrUInt(Old)+PtrUInt(Size)>=AlignedAddr+PageSize do
+    Inc(PageSize,SystemInfo.dwPageSize);
   {$ifdef USEMPROTECT}
   if mprotect(Pointer(AlignedAddr),PageSize,PROT_READ or PROT_WRITE or PROT_EXEC)=0 then
   {$else}
@@ -60743,10 +60736,10 @@ begin
     fMap := 0;
   {$else}
   if aCustomOffset<>0 then
-    if aCustomOffset and (_SC_PAGE_SIZE-1)<>0 then
-      raise ESynException.CreateUTF8('fpmmap(aCustomOffset=%) with pagesize=%',
-        [aCustomOffset,_SC_PAGE_SIZE]) else
-      aCustomOffset := aCustomOffset div _SC_PAGE_SIZE;
+    if aCustomOffset and (SystemInfo.dwPageSize-1)<>0 then
+      raise ESynException.CreateUTF8('fpmmap(aCustomOffset=%) with SystemInfo.dwPageSize=%',
+        [aCustomOffset,SystemInfo.dwPageSize]) else
+      aCustomOffset := aCustomOffset div SystemInfo.dwPageSize;
   fBuf := {$ifdef KYLIX3}mmap{$else}fpmmap{$endif}(
     nil,fBufSize,PROT_READ,MAP_SHARED,fFile,aCustomOffset);
   if fBuf=MAP_FAILED then begin
