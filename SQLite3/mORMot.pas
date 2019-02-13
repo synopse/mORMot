@@ -33488,6 +33488,9 @@ end;
 
 {$endif NOVARIANTS}
 
+var
+  vmtAutoTableLock: TRTLCriticalSection; // atomic set of the VMT AutoTable entry
+
 function PropsCreate(aTable: TSQLRecordClass): TSQLRecordProperties;
 var PVMT: pointer;
 begin // private sub function makes the code faster in most case
@@ -33495,17 +33498,23 @@ begin // private sub function makes the code faster in most case
     result := nil; // invalid call
     exit;
   end;
-  // create the properties information from RTTI
-  result := TSQLRecordProperties.Create(aTable);
-  // store the TSQLRecordProperties instance into AutoTable unused VMT entry
-  PVMT := pointer(PtrInt(aTable)+vmtAutoTable);
-  if PPointer(PVMT)^<>nil then
-    raise ESynException.CreateUTF8('%.AutoTable VMT entry already set',[aTable]);
-  PatchCodePtrUInt(PVMT,PtrUInt(result),true); // LeaveUnprotected=true
-  // register to the internal garbage collection (avoid memory leak)
-  GarbageCollectorFreeAndNil(PVMT^,result); // set to nil at finalization
-  // overriden method may use RecordProps -> do it after the VMT is set
-  aTable.InternalDefineModel(result);
+  EnterCriticalSection(vmtAutoTableLock);
+  try
+    // TSQLRecordProperties instance is store into "AutoTable" unused VMT entry
+    PVMT := pointer(PtrInt(aTable)+vmtAutoTable);
+    result := PPointer(PVMT)^;
+    if result=nil then begin // protect from (unlikely) concurrent call
+      // create the properties information from RTTI
+      result := TSQLRecordProperties.Create(aTable);
+      PatchCodePtrUInt(PVMT,PtrUInt(result),true); // LeaveUnprotected=true
+      // register to the internal garbage collection (avoid memory leak)
+      GarbageCollectorFreeAndNil(PVMT^,result); // set to nil at finalization
+      // overriden method may use RecordProps -> do it after the VMT is set
+      aTable.InternalDefineModel(result);
+    end;
+  finally
+    LeaveCriticalSection(vmtAutoTableLock);
+  end;
 end;
 
 // since "var class" are not available in Delphi 6-7, and is inherited by
@@ -58386,6 +58395,7 @@ procedure FinalizeGlobalInterfaceResolution;
 begin
   GlobalInterfaceResolution := nil; // also cleanup Instance fields
   DeleteCriticalSection(GlobalInterfaceResolutionLock);
+  DeleteCriticalSection(vmtAutoTableLock);
 end;
 
 function TInterfaceResolverInjected.TryResolve(aInterface: PTypeInfo; out Obj): boolean;
@@ -60789,8 +60799,22 @@ begin
   until aClass=TObject;
 end;
 
-type
-  TSimpleMethodCall = procedure(self: TObject);
+function SetAutoCreateFields(PVMT: pointer; c: TClass): TAutoCreateFields;
+begin
+  EnterCriticalSection(vmtAutoTableLock); // protect from concurrent access
+  try
+    result := PPointer(PVMT)^;
+    if result=nil then begin
+      // first time access: compute RTTI cache
+      result := TAutoCreateFields.Create(c);
+      // store the RTTI cache into the AutoTable VMT entry of this class
+      PatchCodePtrUInt(pointer(PVMT),PtrUInt(result),true);
+      GarbageCollectorFreeAndNil(PVMT^,result);
+    end;
+  finally
+    LeaveCriticalSection(vmtAutoTableLock);
+  end;
+end;
 
 procedure AutoCreateFields(self: TObject);
 var fields: TAutoCreateFields;
@@ -60799,13 +60823,8 @@ var fields: TAutoCreateFields;
 begin
   PVMT := pointer(PPtrInt(self)^+vmtAutoTable);
   fields := PVMT^;
-  if fields=nil then begin
-    // first time access: compute RTTI cache
-    fields := TAutoCreateFields.Create(PClass(self)^);
-    // store the RTTI cache into the AutoTable VMT entry of this class
-    PatchCodePtrUInt(pointer(PVMT),PtrUInt(fields),true);
-    GarbageCollectorFreeAndNil(PVMT^,fields);
-  end else
+  if fields=nil then
+    fields := SetAutoCreateFields(PVMT,PClass(self)^) else
     if PClass(fields)^<>TAutoCreateFields then
       raise EModelException.CreateUTF8('%.AutoTable VMT entry already set',[self]);
   // auto-create published persistent class instances
@@ -62851,8 +62870,7 @@ begin
     if TClass(PPointer(PVMT^)^)=TSQLRecordProperties then
       GarbageCollectorFreeAndNil(  // set to nil at finalization
         TSQLRecordProperties(PVMT^).fWeakZeroClass,self) else
-      raise EORMException.CreateUTF8(
-        '%.Create: %.AutoTable VMT entry already used',[self,aClass]);
+      raise EORMException.CreateUTF8('%.Create: %.AutoTable VMT entry already used',[self,aClass]);
   InitializeCriticalSection(fLock);
   EnterCriticalSection(fLock);
   {$WARN SYMBOL_DEPRECATED OFF}
@@ -62879,6 +62897,9 @@ begin
     if CreateIfNonExisting then
       result := TSetWeakZeroClass.Create(PPointer(aObject)^);
 end;
+
+type
+  TSimpleMethodCall = procedure(self: TObject);
 
 procedure TSetWeakZeroClass.HookedFreeInstance;
 begin
@@ -63070,6 +63091,7 @@ initialization
      TypeInfo(TSQLRestServerURI),_TSQLRestServerURI]);
   SynCommons.DynArrayIsObjArray := InternalIsObjArray;
   InitializeCriticalSection(GlobalInterfaceResolutionLock);
+  InitializeCriticalSection(vmtAutoTableLock);
   TInterfaceResolverInjected.RegisterGlobal(TypeInfo(IAutoLocker),TAutoLocker);
   TInterfaceResolverInjected.RegisterGlobal(TypeInfo(ILockedDocVariant),TLockedDocVariant);
   assert(SizeOf(TServiceMethod)and 3=0,'wrong padding');
