@@ -4052,15 +4052,21 @@ begin // private sub function makes the code faster in most case
   if not InheritsFrom(TSynLog) then
     // invalid call
     result := nil else begin
-    // create the properties information from RTTI
-    result := TSynLogFamily.Create(self);
-    // store the TSynLogFamily instance into "AutoTable" unused VMT entry
-    PVMT := pointer(PtrInt(self)+vmtAutoTable);
-    if PPointer(PVMT)^<>nil then
-      raise ESynException.CreateUTF8('%.AutoTable VMT entry already set',[self]);
-    PatchCodePtrUInt(PVMT,PtrUInt(result),true); // LeaveUnprotected=true
-    // register to the internal garbage collection (avoid memory leak)
-    GarbageCollectorFreeAndNil(PVMT^,result); // set to nil at finalization
+    EnterCriticalSection(GlobalThreadLock);
+    try
+      // TSynLogFamily instance is stored into "AutoTable" unused VMT entry
+      PVMT := pointer(PtrInt(self)+vmtAutoTable);
+      result := PPointer(PVMT)^;
+      if result=nil then begin // protect from (unlikely) concurrent call
+        // create the properties information from RTTI
+        result := TSynLogFamily.Create(self);
+        PatchCodePtrUInt(PVMT,PtrUInt(result),true); // LeaveUnprotected=true
+        // register to the internal garbage collection (avoid memory leak)
+        GarbageCollectorFreeAndNil(PVMT^,result); // set to nil at finalization
+      end;
+    finally
+      LeaveCriticalSection(GlobalThreadLock);
+    end;
   end;
 end;
 
