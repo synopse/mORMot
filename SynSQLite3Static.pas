@@ -207,7 +207,7 @@ var
 
 implementation
 
-{$ifdef FPC}  // FPC expects .o linking, and only one version including FTS3
+{$ifdef FPC}  // FPC expects .o linking, and only one version including FTS
 
   {$ifdef MSWINDOWS}
     {$ifdef CPU64}
