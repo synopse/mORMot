@@ -117,9 +117,13 @@ const
   /// a text including the version and the main active conditional options
   // - usefull for low-level debugging purpose
   SYNOPSE_FRAMEWORK_FULLVERSION  = SYNOPSE_FRAMEWORK_VERSION
-    {$ifndef FPC}
+    {$ifdef FPC}
+      {$ifdef FPC_FASTMM4}+' FMM4'{$else}
+        {$ifdef FPC_SYNCMEM}+' SCMEM'{$else}
+          {$ifdef FPC_CMEM}+' CMEM'{$endif}{$endif}{$endif}
+    {$else}
       {$ifdef LVCL}+' LVCL'{$else}
-      {$ifdef ENHANCEDRTL}+' ERTL'{$endif}{$endif}
+        {$ifdef ENHANCEDRTL}+' ERTL'{$endif}{$endif}
       {$ifdef DOPATCHTRTL}+' PRTL'{$endif}
       {$ifdef FullDebugMode}+' FDM'{$endif}
     {$endif FPC};
@@ -17764,14 +17768,14 @@ function KB(const buffer: RawByteString): TShort16; overload;
 procedure KBU(bytes: Int64; var result: RawUTF8);
 
 /// convert a micro seconds elapsed time into a human readable value
-// - append 'us', 'ms' or 's' symbol
-// - for 'us' and 'ms', add two fractional digits
+// - append 'us', 'ms', 's', 'm', 'h' and 'd' symbol for the given value range,
+// with two fractional digits
 function MicroSecToString(Micro: QWord): TShort16; overload;
   {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
 
 /// convert a micro seconds elapsed time into a human readable value
-// - append 'us', 'ms' or 's' symbol
-// - for 'us' and 'ms', add two fractional digits
+// - append 'us', 'ms', 's', 'm', 'h' and 'd' symbol for the given value range,
+// with two fractional digits
 procedure MicroSecToString(Micro: QWord; out result: TShort16); overload;
 
 /// convert an integer value into its textual representation with thousands marked

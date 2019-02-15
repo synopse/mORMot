@@ -6476,8 +6476,8 @@ const
 // optimized unrolled version from Intel's sha256_sse4.asm
 //  Original code is released as Copyright (c) 2012, Intel Corporation
 var
-  K256AlignedStore: RawByteString; // movdqa + paddd do expect 16 bytes alignment
-  K256Aligned: pointer;
+  K256AlignedStore: RawByteString;
+  K256Aligned: pointer; // movdqa + paddd do expect 16 bytes alignment
 
 const
   PSHUFFLE_BYTE_FLIP_MASK: array[0..1] of QWord =
@@ -7438,7 +7438,7 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
 end;
 {$endif CPUX64}
 
-procedure sha256Compress(var Hash: TSHAHash; Data: pointer);
+procedure Sha256CompressPas(var Hash: TSHAHash; Data: pointer);
 // Actual hashing function
 var H: TSHAHash;
     W: array[0..63] of cardinal;
@@ -7447,16 +7447,6 @@ var H: TSHAHash;
     t1, t2: cardinal;
     {$endif}
 begin
-  {$ifdef CPUX64}
-  if cfSSE41 in CpuFeatures then begin
-    if K256AlignedStore='' then
-      GetMemAligned(K256AlignedStore,@K256,SizeOf(K256),K256Aligned);
-    if PtrUInt(K256ALigned) and 15=0 then begin
-      sha256_sse4(Data^,Hash,1);
-      exit;
-    end; // if K256Aligned[] is not properly aligned -> fallback to pascal
-  end;
-  {$endif CPUX64}
   // calculate "expanded message blocks"
   Sha256ExpandMessageBlocks(@W,Data);
   // assign old working hash to local variables A..H
@@ -7564,7 +7554,11 @@ end;
 
 procedure RawSha256Compress(var Hash; Data: pointer);
 begin
-  sha256Compress(TSHAHash(Hash), Data);
+  {$ifdef CPUX64}
+  if K256AlignedStore<>'' then // use optimized Intel's sha256_sse4.asm
+    sha256_sse4(Data^,Hash,1) else
+  {$endif CPUX64}
+    Sha256CompressPas(TSHAHash(Hash),Data);
 end;
 
 procedure TSHA256.Final(out Digest: TSHA256Digest; NoInit: boolean);
@@ -7576,14 +7570,14 @@ begin
   FillcharFast(Data.Buffer[Data.Index+1],63-Data.Index,0);
   // compress if more than 448 bits (no space for 64 bit length storage)
   if Data.Index>=56 then begin
-    sha256Compress(Data.Hash,@Data.Buffer);
+    RawSha256Compress(Data.Hash,@Data.Buffer);
     FillcharFast(Data.Buffer,56,0);
   end;
   // write 64 bit Buffer length into the last bits of the last block
   // (in big endian format) and do a final compress
   PInteger(@Data.Buffer[56])^ := bswap32(TQWordRec(Data.MLen).H);
   PInteger(@Data.Buffer[60])^ := bswap32(TQWordRec(Data.MLen).L);
-  sha256Compress(Data.Hash,@Data.Buffer);
+  RawSha256Compress(Data.Hash,@Data.Buffer);
   // Hash -> Digest to little endian format
   bswap256(@Data.Hash,@Digest);
   // clear Data and internally stored Digest
@@ -7638,10 +7632,10 @@ begin
     if aLen<=Len then begin
       if Data.Index<>0 then begin
         MoveFast(Buffer^,Data.Buffer[Data.Index],aLen);
-        sha256Compress(Data.Hash,@Data.Buffer);
+        RawSha256Compress(Data.Hash,@Data.Buffer);
         Data.Index := 0;
       end else
-        sha256Compress(Data.Hash,Buffer); // avoid temporary copy
+        RawSha256Compress(Data.Hash,Buffer); // avoid temporary copy
       dec(Len,aLen);
       inc(PtrInt(Buffer),aLen);
     end else begin
@@ -10118,7 +10112,7 @@ begin
     inc(PByte(p),16);
   end;
   Cod := (Cod shl 11) xor integer(Td0[cod shr 21]);
-  for i := 1 to (Count and 15)shr 2 do begin // last 4 bytes blocs
+  for i := 1 to (Count and AESBlockMod)shr 2 do begin // last 4 bytes blocs
     p^[0] := p^[0] xor Cod;
     inc(PByte(p),4);
   end;
@@ -10161,7 +10155,7 @@ begin // 1 to 3 bytes may stay unencrypted: not relevant
      P^[3] := P^[3] xor Code;
      inc(PByte(P),16);
   end;
-  for i := 0 to ((Count and 15)shr 2)-1 do // last 4 bytes blocs
+  for i := 0 to ((Count and AESBlockMod)shr 2)-1 do // last 4 bytes blocs
     P^[i] := P^[i] xor Code;
 end;
 
@@ -15112,6 +15106,14 @@ initialization
   if (cfSSE42 in CpuFeatures) and (cfAesNi in CpuFeatures) then
     crc32c := @crc32c_sse42_aesni;
 {$endif}
+{$ifdef CPUX64}
+  if cfSSE41 in CpuFeatures then begin // optimized Intel's sha256_sse4.asm ?
+    if K256AlignedStore='' then
+      GetMemAligned(K256AlignedStore,@K256,SizeOf(K256),K256Aligned);
+    if PtrUInt(K256Aligned) and 15<>0 then
+      K256AlignedStore := ''; // if not properly aligned -> fallback to pascal
+  end;
+{$endif CPUX64}
   TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TSignAlgo));
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TSynSignerParams),
     'algo:TSignAlgo secret,salt:RawUTF8 rounds:integer');
