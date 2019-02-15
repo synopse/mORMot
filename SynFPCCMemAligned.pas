@@ -1,5 +1,6 @@
-/// implements a heap manager that uses glibc, with proper 16-bytes alignment
+/// implements a Linux FPC heap manager that uses glibc, with no overhead
 // - expected to be enabled with -dFPC_NO_DEFAULT_MEMORYMANAGER -dFPC_SYNCMEM
+// - with Linux glibc, alignment is 2*SizeOf(pointer) i.e. 16 bytes under x86_64
 unit SynFPCCMemAligned;
 
 {
@@ -57,99 +58,71 @@ interface
 {$ifndef FPC}
   THIS UNIT IS FOR FPC ONLY !
 {$endif FPC}
+{$ifndef LINUXNOTBSD}
+  THIS UNIT IS FOR FPC/LINUX ONLY !
+   - requires malloc_usable_size()
+{$endif LINUXNOTBSD}
 
 implementation
 
-const
-  // default FPC's cmem unit is SizeOf(PtrUInt) which breaks memory alignment
-  CMEM_ALIGN_BYTES = 16;
-
 // low-level direct calls to the external glibc library
 
-function  malloc(size: PtrUInt): pointer; cdecl; external 'c' name 'malloc';
+function malloc(size: PtrUInt): pointer; cdecl; external 'c' name 'malloc';
+function calloc(count, size: PtrUInt): pointer; cdecl; external 'c' name 'calloc';
 procedure free(p: pointer); cdecl; external 'c' name 'free';
-function  realloc(p: pointer; size: PtrUInt): pointer; cdecl; external 'c' name 'realloc';
+function realloc(p: pointer; size: PtrUInt): pointer; cdecl; external 'c' name 'realloc';
+
+function malloc_usable_size(p: pointer): PtrUInt; cdecl; external 'c' name 'malloc_usable_size';
+// function missing on some platforms, so this unit is enabled only for LINUXNOTBSD
+// see https://www.gnu.org/software/gnulib/manual/html_node/malloc_005fusable_005fsize.html
+// = Mac OS X 10.5, FreeBSD 6.0, NetBSD 5.0, OpenBSD 3.8, Minix 3.1.8, AIX 5.1, HP-UX 11.00,
+// IRIX 6.5, OSF/1 5.1, Solaris 11.3, mingw, MSVC 14, Interix 3.5, BeOS, Android 4.1
 
 // TMemoryManager replacement
 
 function _GetMem(size: PtrUInt): pointer;
 begin
-  result := malloc(size + CMEM_ALIGN_BYTES);
-  if result <> nil then begin
-    PPtrUInt(result)^ := size;
-    inc(result, CMEM_ALIGN_BYTES);
-  end;
+  result := malloc(size);
 end;
 
 function _FreeMem(p: pointer): PtrUInt;
 begin
-  if p <> nil then begin
-    dec(p, CMEM_ALIGN_BYTES);
+  if p <> nil then
     free(p);
-  end;
   result := 0;
 end;
 
 function _FreeMemSize(p: pointer; size: PtrUInt): PtrUInt;
-begin
-  if (size <> 0) and (p <> nil) then begin
-    dec(p, CMEM_ALIGN_BYTES);
-    if size <> PPtrUInt(p)^ then
-      runerror(204)
-    else
-      free(p);
-  end;
+begin // our library won't check the "size" value
+  if p <> nil then
+    free(p);
   result := 0;
 end;
 
 function _AllocMem(size: PtrUInt): pointer;
 begin
-  result := _GetMem(size);
-  if result <> nil then
-    FillChar(result^, size, 0);
+  result := calloc(size, 1); // no need to call FillChar() e.g. from mmap
 end;
 
 function _ReAllocMem(var p: pointer; size: PtrUInt): pointer;
 begin
-  result := p;
-  if size = 0 then begin
-    if result <> nil then begin
-      dec(result, CMEM_ALIGN_BYTES);
-      free(result);
-      p := nil;
-    end;
-  end
-  else begin
-    if result = nil then
-      result := malloc(size + CMEM_ALIGN_BYTES)
-    else begin
-      dec(result, CMEM_ALIGN_BYTES);
-      result := realloc(result, size + CMEM_ALIGN_BYTES);
-    end;
-    if result <> nil then begin
-      PPtrUInt(result)^ := size;
-      inc(result, CMEM_ALIGN_BYTES);
-    end;
-    p := result;
-  end;
+  result := realloc(p, size); // is free(p) if size=0 or malloc(size) if p=nil
+  p := result;
 end;
 
 function _MemSize(p: pointer): PtrUInt;
-begin
-  if p = nil then
-    result := 0
-  else
-    result := PPtrUInt(p - CMEM_ALIGN_BYTES)^;
+begin // AFAIK used only by fpc_AnsiStr_SetLength() in RTL
+  result := malloc_usable_size(p);
 end;
 
 function _GetHeapStatus: THeapStatus;
 begin
-  fillchar(result, sizeof(result), 0);
+  FillChar(result, sizeof(result), 0);
 end;
 
 function _GetFPCHeapStatus: TFPCHeapStatus;
 begin
-  fillchar(result, sizeof(result), 0);
+  FillChar(result, sizeof(result), 0);
 end;
 
 const
