@@ -22,13 +22,12 @@ unit SynFPCCMemAligned;
 
   The Original Code is Synopse mORMot framework.
 
-  The Initial Developer of the Original Code is Alfred Glaenzer.
+  The Initial Developer of the Original Code is Arnaud Bouchez.
 
   Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
-  - Arnaud Bouchez
 
 
   Alternatively, the contents of this file may be used under the terms of

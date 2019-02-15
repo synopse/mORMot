@@ -2386,16 +2386,16 @@ function AESSelfTest(onlytables: Boolean): boolean;
 /// self test of RC4 routines
 function RC4SelfTest: boolean;
 
-/// entry point of the MD5 transform function - may be used from outside
+/// entry point of the raw MD5 transform function - may be used for low-level use
 procedure RawMd5Compress(var Hash; Data: pointer);
 
-/// entry point of the SHA-1 transform function - may be used from outside
+/// entry point of the raw SHA-1 transform function - may be used for low-level use
 procedure RawSha1Compress(var Hash; Data: pointer);
 
-/// entry point of the SHA-256 transform function - may be used from outside
+/// entry point of the raw SHA-256 transform function - may be used for low-level use
 procedure RawSha256Compress(var Hash; Data: pointer);
 
-/// entry point of the SHA-512 transform function - may be used from outside
+/// entry point of the raw SHA-512 transform function - may be used for low-level use
 procedure RawSha512Compress(var Hash; Data: pointer);
 
 // little endian fast conversion
@@ -7796,6 +7796,19 @@ procedure sha512_compress(state: PQWord; block: PByteArray); cdecl; external;
 procedure sha512_sse4(data, hash: pointer; blocks: Int64); {$ifdef FPC}cdecl;{$endif} external;
 {$endif SHA512_X64}
 
+procedure RawSha512Compress(var Hash; Data: pointer);
+begin
+  {$ifdef SHA512_X86}
+  if cfSSSE3 in CpuFeatures then
+    sha512_compress(@Hash,Data) else
+  {$endif}
+  {$ifdef SHA512_X64}
+  if cfSSE41 in CpuFeatures then
+    sha512_sse4(Data,@Hash,1) else
+  {$endif}
+    sha512_compresspas(TSHA512Hash(Hash), Data);
+end;
+
 
 { TSHA384 }
 
@@ -7804,28 +7817,12 @@ begin
   Data[Index] := $80;
   FillcharFast(Data[Index+1],127-Index,0);
   if Index>=112 then begin
-    {$ifdef SHA512_X86}
-    if cfSSSE3 in CpuFeatures then
-      sha512_compress(@Hash,@Data) else
-    {$endif}
-    {$ifdef SHA512_X64}
-    if cfSSE41 in CpuFeatures then
-      sha512_sse4(@Data,@Hash,1) else
-    {$endif}
-      sha512_compresspas(Hash,@Data);
+    RawSha512Compress(Hash,@Data);
     FillcharFast(Data,112,0);
   end;
   PQWord(@Data[112])^ := bswap64(MLen shr 61);
   PQWord(@Data[120])^ := bswap64(MLen shl 3);
-  {$ifdef SHA512_X86}
-  if cfSSSE3 in CpuFeatures then
-    sha512_compress(@Hash,@Data) else
-  {$endif}
-  {$ifdef SHA512_X64}
-  if cfSSE41 in CpuFeatures then
-    sha512_sse4(@Data,@Hash,1) else
-  {$endif}
-    sha512_compresspas(Hash,@Data);
+  RawSha512Compress(Hash,@Data);
   bswap64array(@Hash,@Digest,6);
   if not NoInit then
     Init;
@@ -7868,26 +7865,10 @@ begin
     if aLen<=Len then begin
       if Index<>0 then begin
         MoveFast(Buffer^,Data[Index],aLen);
-        {$ifdef SHA512_X86}
-        if cfSSSE3 in CpuFeatures then
-          sha512_compress(@Hash,@Data) else
-        {$endif}
-        {$ifdef SHA512_X64}
-        if cfSSE41 in CpuFeatures then
-          sha512_sse4(@Data,@Hash,1) else
-        {$endif}
-          sha512_compresspas(Hash,@Data);
+        RawSha512Compress(Hash,@Data);
         Index := 0;
       end else // avoid temporary copy
-        {$ifdef SHA512_X86}
-        if cfSSSE3 in CpuFeatures then
-          sha512_compress(@Hash,Buffer) else
-        {$endif}
-        {$ifdef SHA512_X64}
-        if cfSSE41 in CpuFeatures then
-          sha512_sse4(Buffer,@Hash,1) else
-        {$endif}
-          sha512_compresspas(Hash,Buffer);
+        RawSha512Compress(Hash,Buffer);
       dec(Len,aLen);
       inc(PByte(Buffer),aLen);
     end else begin
@@ -7911,28 +7892,12 @@ begin
   Data[Index] := $80;
   FillcharFast(Data[Index+1],127-Index,0);
   if Index>=112 then begin
-    {$ifdef SHA512_X86}
-    if cfSSSE3 in CpuFeatures then
-      sha512_compress(@Hash,@Data) else
-    {$endif}
-    {$ifdef SHA512_X64}
-    if cfSSE41 in CpuFeatures then
-      sha512_sse4(@Data,@Hash,1) else
-    {$endif}
-      sha512_compresspas(Hash,@Data);
+    RawSha512Compress(Hash,@Data);
     FillcharFast(Data,112,0);
   end;
   PQWord(@Data[112])^ := bswap64(MLen shr 61);
   PQWord(@Data[120])^ := bswap64(MLen shl 3);
-  {$ifdef SHA512_X86}
-  if cfSSSE3 in CpuFeatures then
-    sha512_compress(@Hash,@Data) else
-  {$endif}
-  {$ifdef SHA512_X64}
-  if cfSSE41 in CpuFeatures then
-    sha512_sse4(@Data,@Hash,1) else
-  {$endif}
-    sha512_compresspas(Hash,@Data);
+  RawSha512Compress(Hash,@Data);
   bswap64array(@Hash,@Digest,8);
   if not NoInit then
     Init;
@@ -7975,26 +7940,10 @@ begin
     if aLen<=Len then begin
       if Index<>0 then begin
         MoveFast(Buffer^,Data[Index],aLen);
-        {$ifdef SHA512_X86}
-        if cfSSSE3 in CpuFeatures then
-          sha512_compress(@Hash,@Data) else
-        {$endif}
-        {$ifdef SHA512_X64}
-        if cfSSE41 in CpuFeatures then
-          sha512_sse4(@Data,@Hash,1) else
-        {$endif}
-          sha512_compresspas(Hash,@Data);
+        RawSha512Compress(Hash,@Data);
         Index := 0;
       end else // avoid temporary copy
-        {$ifdef SHA512_X86}
-        if cfSSSE3 in CpuFeatures then
-          sha512_compress(@Hash,Buffer) else
-        {$endif}
-        {$ifdef SHA512_X64}
-        if cfSSE41 in CpuFeatures then
-          sha512_sse4(Buffer,@Hash,1) else
-        {$endif}
-          sha512_compresspas(Hash,Buffer);
+        RawSha512Compress(Hash,Buffer);
       dec(Len,aLen);
       inc(PByte(Buffer),aLen);
     end else begin
@@ -8003,19 +7952,6 @@ begin
       break;
     end;
   until Len<=0;
-end;
-
-procedure RawSha512Compress(var Hash; Data: pointer);
-begin
-  {$ifdef SHA512_X86}
-  if cfSSSE3 in CpuFeatures then
-    sha512_compress(@Hash,Data) else
-  {$endif}
-  {$ifdef SHA512_X64}
-  if cfSSE41 in CpuFeatures then
-    sha512_sse4(Data,@Hash,1) else
-  {$endif}
-    sha512_compresspas(TSHA512Hash(Hash), Data);
 end;
 
 procedure TSHA512.Update(const Buffer: RawByteString);
