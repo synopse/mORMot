@@ -958,6 +958,11 @@ procedure FastSetString(var s: RawUTF8; p: pointer; len: PtrInt);
 // - faster especially under FPC
 procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
 
+/// initialize a RawByteString, ensuring returned "aligned" pointer is 16-bytes aligned
+// - to be used e.g. for proper SSE process
+procedure GetMemAligned(var s: RawByteString; p: pointer; len: PtrInt;
+  out aligned: pointer);
+
 /// equivalence to @UTF8[1] expression to ensure a RawUTF8 variable is unique
 // - will ensure that the string refcount is 1, and return a pointer to the text
 // - under FPC, @UTF8[1] does not call UniqueString() as it does with Delphi
@@ -21736,6 +21741,16 @@ begin
 end;
 {$endif}
 
+procedure GetMemAligned(var s: RawByteString; p: pointer; len: PtrInt;
+  out aligned: pointer);
+begin
+  SetString(s,nil,len+16);
+  aligned := pointer(s);
+  inc(PtrUInt(aligned),PtrUInt(aligned) and 15);
+  if p<>nil then
+    MoveFast(p^,aligned^,len);
+end;
+
 function ToText(k: TTypeKind): PShortString; overload;
 begin
   result := GetEnumName(TypeInfo(TTypeKind),ord(k));
@@ -32585,12 +32600,12 @@ end;
 function GetExtended(P: PUTF8Char; out err: integer): TSynExtended;
 // inspired by ValExt_JOH_PAS_8_a and ValExt_JOH_IA32_8_a by John O'Harrow
 {$ifdef GETEXTENDEDPASCAL}
-  const POW10: array[-31..31] of TSynExtended = (
-    1E-31,1E-30,1E-29,1E-28,1E-27,1E-26,1E-25,1E-24,1E-23,1E-22,1E-21,1E-20,
-    1E-19,1E-18,1E-17,1E-16,1E-15,1E-14,1E-13,1E-12,1E-11,1E-10,1E-9,1E-8,1E-7,
-    1E-6,1E-5,1E-4,1E-3,1E-2,1E-1,1E0,1E1,1E2,1E3,1E4,1E5,1E6,1E7,1E8,1E9,1E10,
-    1E11,1E12,1E13,1E14,1E15,1E16,1E17,1E18,1E19,1E20,1E21,1E22,1E23,1E24,1E25,
-    1E26,1E27,1E28,1E29,1E30,1E31);
+const POW10: array[-31..31] of TSynExtended = (
+  1E-31,1E-30,1E-29,1E-28,1E-27,1E-26,1E-25,1E-24,1E-23,1E-22,1E-21,1E-20,
+  1E-19,1E-18,1E-17,1E-16,1E-15,1E-14,1E-13,1E-12,1E-11,1E-10,1E-9,1E-8,1E-7,
+  1E-6,1E-5,1E-4,1E-3,1E-2,1E-1,1E0,1E1,1E2,1E3,1E4,1E5,1E6,1E7,1E8,1E9,1E10,
+  1E11,1E12,1E13,1E14,1E15,1E16,1E17,1E18,1E19,1E20,1E21,1E22,1E23,1E24,1E25,
+  1E26,1E27,1E28,1E29,1E30,1E31);
 var Digits, ExpValue: PtrInt;
     Ch: cardinal;
     flags: set of (Neg, NegExp, Valid);
@@ -58546,7 +58561,7 @@ begin
   {$ifdef VER3_0_1}+' 3.0.1'{$endif}
   {$ifdef VER3_0_2}+' 3.0.2'{$endif}
   {$ifdef VER3_1_1}+' 3.1.1'{$endif}
-  {$ifdef VER3_2}+' 3.2'{$endif}
+  {$ifdef VER3_2}  +' 3.2'  {$endif}
   {$ifdef VER3_3_1}+' 3.3.1'{$endif}
 {$else}
   {$ifdef VER130} 'Delphi 5'{$endif}

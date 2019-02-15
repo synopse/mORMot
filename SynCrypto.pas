@@ -6476,7 +6476,8 @@ const
 // optimized unrolled version from Intel's sha256_sse4.asm
 //  Original code is released as Copyright (c) 2012, Intel Corporation
 var
-  K256Aligned: RawByteString; // movdqa + paddd do expect 16 bytes alignment
+  K256AlignedStore: RawByteString; // movdqa + paddd do expect 16 bytes alignment
+  K256Aligned: pointer;
 
 const
   PSHUFFLE_BYTE_FLIP_MASK: array[0..1] of QWord =
@@ -7448,9 +7449,9 @@ var H: TSHAHash;
 begin
   {$ifdef CPUX64}
   if cfSSE41 in CpuFeatures then begin
-    if K256Aligned='' then
-      SetString(K256Aligned,PAnsiChar(@K256),SizeOf(K256));
-    if PtrUInt(K256ALigned)and 15=0 then begin
+    if K256AlignedStore='' then
+      GetMemAligned(K256AlignedStore,@K256,SizeOf(K256),K256Aligned);
+    if PtrUInt(K256ALigned) and 15=0 then begin
       sha256_sse4(Data^,Hash,1);
       exit;
     end; // if K256Aligned[] is not properly aligned -> fallback to pascal
@@ -8530,7 +8531,7 @@ asm
         movq    [edx + 64], mm0
 {$else}
 {$ifdef FPC}nostackframe; assembler; asm{$else}
-// Synopse's x64 asm, optimized for both in/out-order pipelined CPUs
+// Synopse's x64 asm, optimized for both in+out-order pipelined CPUs
 asm // input: rcx=B, rdx=A, r8=C (Linux: rdi,rsi,rdx)
         .noframe
 {$endif}{$ifndef win64}
