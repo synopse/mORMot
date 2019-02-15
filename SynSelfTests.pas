@@ -344,6 +344,8 @@ type
     procedure _GUID;
     /// test IsMatch() function
     procedure _IsMatch;
+    /// test TExprParserMatch class
+    procedure _TExprParserMatch;
     /// the Soundex search feature (i.e. TSynSoundex and all related
     // functions)
     procedure Soundex;
@@ -2663,6 +2665,19 @@ begin
   Check(ACities.Count=3);
   for i := 1 to high(Province.Cities) do
     Check(Province.Cities[i].Name>Province.Cities[i-1].Name);
+  Province.Cities := nil;
+  Test := RecordSave(Province,TypeInfo(TProvince));
+  RecordClear(Province,TypeInfo(TProvince));
+  Check(Province.Name='');
+  Check(Province.Comment='');
+  Check(length(Province.Cities)=0);
+  Check(ACities.Count=0);
+  Check(RecordLoad(Province,pointer(Test),TypeInfo(TProvince))^=#0);
+  Check(Province.Name='Test');
+  Check(Province.Comment='comment');
+  Check(Province.Year=1000);
+  Check(length(Province.Cities)=0);
+  Check(ACities.Count=0);
   // big array test
   ACities.Init(TypeInfo(TCityDynArray),Province.Cities);
   ACities.Clear;
@@ -2876,11 +2891,41 @@ begin
 end;
 
 procedure TTestLowLevelCommon._IsMatch;
-var i: integer;
-    V: RawUTF8;
+var i,j: integer;
+    V, cont: RawUTF8;
     match: TMatch;
     reuse: boolean;
+
+  procedure Contains;
+  begin
+    check(match.Match('12'));
+    check(match.Match('12e'));
+    check(match.Match('12er'));
+    check(match.Match('a12'));
+    check(match.Match('a12e'));
+    check(match.Match('ab12'));
+    check(match.Match('ab12er'));
+    check(not match.Match('1'));
+    check(not match.Match('a1'));
+    check(not match.Match('a1b2'));
+    check(not match.Match('1a2'));
+  end;
+
 begin
+  V := '1234567890123456'#13'1234567890123456789';
+  for j := 1 to 16 do begin
+    for i := j to 16 do
+      Check(BufferLineLength(@V[j],@V[i])=i-j);
+    for i := 17 to 34 do
+      Check(BufferLineLength(@V[j],@V[i])=17-j);
+  end;
+  V := '12345678901234561234567890123456'#13'1234567890123456789';
+  for j := 1 to 32 do begin
+    for i := j to 32 do
+      Check(BufferLineLength(@V[j],@V[i])=i-j);
+    for i := 33 to 50 do
+      Check(BufferLineLength(@V[j],@V[i])=33-j);
+  end;
   Check(IsMatch('','',true));
   Check(not IsMatch('','toto',true));
   Check(not IsMatch('Bidule.pas','',true));
@@ -3027,16 +3072,15 @@ begin
     check(not match.Match('atEst'));
     check(not match.Match('ateSTe'));
     match.Prepare('*12*', false, reuse);
-    check(match.Match('12'));
-    check(match.Match('12e'));
-    check(match.Match('12er'));
-    check(match.Match('a12'));
-    check(match.Match('a12e'));
-    check(match.Match('ab12'));
-    check(match.Match('ab12er'));
-    check(not match.Match('1'));
-    check(not match.Match('a1'));
-    check(not match.Match('1a2'));
+    Contains;
+    if reuse then begin
+      cont := '12';
+      match.PrepareContains(cont, false);
+      Contains;
+      cont := '12';
+      match.PrepareContains(cont, true);
+      Contains;
+    end;
     match.Prepare('*teSt*', true, reuse);
     check(match.Match('test'));
     check(match.Match('teste'));
@@ -3116,6 +3160,47 @@ begin
     Check(IsMatch('[A-Za-z0-9]*',V)=(i in IsWord));
     Check(IsMatch('[a-z0-9]?[A-Z0-9]',V,true)=(i in IsWord));
     Check(IsMatch('[A-Z0-9]*',V,true)=(i in IsWord));
+  end;
+end;
+
+procedure TTestLowLevelCommon._TExprParserMatch;
+var
+  s: TExprParserMatch;
+
+  procedure Test(const expression: RawUTF8; const ok, nok: array of RawUTF8);
+  var i: integer;
+  begin
+    Check(s.Parse(expression) = eprSuccess);
+    for i := 0 to high(ok) do
+      Check(s.Search(ok[i]));
+    for i := 0 to high(nok) do
+      Check(not s.Search(nok[i]));
+  end;
+  
+begin
+  s := TExprParserMatch.Create({casesensitive=}true);
+  try // &=AND -=WITHOUT +=OR 
+    check(s.Parse('') = eprNoExpression);
+    check(s.Parse('  ') = eprNoExpression);
+    check(s.Parse('1+ ') = eprMissingFinalWord);
+    Test('1', ['1', '1 2 3', '2 1'], ['2', '13', '2 3']);
+    Test('   1   ', ['1', '1 2 3', '2 1'], ['2', '13', '2 3']);
+    Test('1+4', ['1', '1 2 3', '2 1', '2 4 3'], ['2', '13', '2 3', '41']);
+    Test(' 1 + 4 ', ['1', '1 2 3', '2 1', '2 4 3'], ['2', '13', '2 3', '41']);
+    Test('1+4+5', ['1', '1 2 3', '2 1', '2 4 3'], ['2', '13', '2 3', '41']);
+    Test('1+(4+5)', ['1', '1 2 3', '2 1', '2 4 3'], ['2', '13', '2 3', '41']);
+    Test('1+4*+5', ['1', '1 2 3', '2 1', '2 4 3', '41'], ['2', '13', '2 3']);
+    Test('1+(4&555)', ['4 555 3', '555 4', '1', '1 2 3', '2 1'], ['2', '13', '2 3', '41', '4 3', '3 555']);
+    Test('1+(4 555)', ['4 555 3', '555 4', '1', '1 2 3', '2 1'], ['2', '13', '2 3', '41', '4 3', '3 555']);
+    Test('1-4', ['1', '1 2 3', '2 1', '2 1 3'], ['1 4', '4 2 1', '2', '13', '2 3', '41']);
+    Test('1-(4&5)', ['1', '1 2 3', '2 1', '1 4', '1 5'],
+       ['2', '5 2 3 4 1', '2 3', '41', '4 3', '3 5', '1 4 5']);
+    Test('1-(4&(5+6))', ['1', '1 2 3', '2 1', '1 4', '1 5', '1 6'],
+       ['2', '5 2 3 4 1', '2 3', '41', '4 3', '3 5', '1 4 5', '1 4 6']);
+    Test('1 - ( 4 & ( 57 + 6 ) )', ['1', '1 2 3', '2 1', '1 4', '1 57', '1 6'],
+       ['2', '57 2 3 4 1', '2 3', '41', '4 3', '3 5"7', '1 4 57', '1 4 6']);
+  finally
+    s.Free;
   end;
 end;
 
@@ -3642,7 +3727,7 @@ begin
   Check(MicroSecToString(1000000)='1s');
   Check(MicroSecToString(1000001)='1s');
   Check(MicroSecToString(2030001)='2.03s');
-  Check(MicroSecToString(200000070001)='55h33');
+  Check(MicroSecToString(200000070001)='2d');
   Check(KB(-123)='-123 B');
   Check(KB(0)='0 B');
   Check(KB(123)='123 B');
@@ -3677,24 +3762,27 @@ begin
   {$endif}
   Check(Int64ToUTF8(2119852951849248647)='2119852951849248647');
   Check(FormatUTF8(' % ',[2119852951849248647])=' 2119852951849248647 ');
-  {$ifndef DELPHI5OROLDER}
-  d := GetExtended('1234');
+  s := '1234';
+  d := GetExtended(pointer(s));
   CheckSame(d,1234);
-  d := GetExtended('1234.1');
+  s := '1234.1';
+  d := GetExtended(pointer(s));
   CheckSame(d,1234.1);
-  d := GetExtended('1234.1234567890123456789');
+  s := '1234.1234567890123456789';
+  d := GetExtended(pointer(s));
   CheckSame(d,1234.1234567890123456789);
   u := DoubleToString(40640.5028819444);
   Check(u='40640.5028819444',u);
-  GetExtended('40640.5028a819444',err);
+  s := '40640.5028a819444';
+  GetExtended(pointer(s),err);
   Check(err>0);
-  d := GetExtended('40640.5028819444',err);
+  s := '40640.5028819444';
+  d := GetExtended(pointer(s),err);
   Check(err=0);
   u := DoubleToString(d);
   Check(u='40640.5028819444',u);
   e := 40640.5028819444;
   CheckSame(d,e,1e-11);
-  {$endif}
   d := 22.99999999999997;
   a[0] := AnsiChar(ExtendedToString(a,d,DOUBLE_PRECISION));
   Check(a='23');
@@ -4594,7 +4682,8 @@ begin
   {$endif}
 end;
 
-{$HINTS OFF} // [dcc64 Hint] H2135 FOR or WHILE loop executes zero times - deleted
+{$IFDEF FPC} {$PUSH} {$ENDIF} {$HINTS OFF}
+// [dcc64 Hint] H2135 FOR or WHILE loop executes zero times - deleted
 procedure TTestLowLevelCommon._IdemPropName;
   function IPNUSL(const s1,s2: RawUTF8; len: integer): boolean;
   begin
@@ -4686,8 +4775,17 @@ begin
   Check(PosCharAny('ABC','aA')^='A');
   Check(PosCharAny('ABC','bB')^='B');
   Check(PosCharAny('ABC','cC')^='C');
+  Check(PosExChar('z','')=0,'ABC');
+  Check(PosExChar('z','A')=0,'ABC');
+  Check(PosExChar('z','ABC')=0,'ABC');
+  Check(PosExChar('A','A')=1,'ABC');
+  Check(PosExChar('A','AB')=1,'ABC');
+  Check(PosExChar('A','ABC')=1,'ABC');
+  Check(PosExChar('B','ABC')=2,'ABC');
+  Check(PosExChar('B','AB')=2,'ABC');
+  Check(PosExChar('C','ABC')=3,'ABC');
 end;
-{$HINTS ON}
+{$IFDEF FPC} {$POP} {$ELSE} {$HINTS ON} {$ENDIF}
 
 procedure TTestLowLevelCommon._TSynTable;
 var T: TSynTable;
@@ -5490,6 +5588,9 @@ begin
         v := 0;
         check(dict.FindAndCopy(k, v));
         check(v=i);
+        k := '';
+        check(dict.FindKeyFromValue(v,k));
+        check(GetInteger(pointer(k))=i);
       end;
     end;
   finally
@@ -15773,7 +15874,7 @@ end;
 
 procedure TTestSQLite3Engine._TSQLTableJSON;
 var J: TSQLTableJSON;
-    aR, aF, F1,F2, n: integer;
+    i1, i2, aR, aF, F1,F2, n: integer;
     Comp, Comp1,Comp2: TUTF8Compare;
     {$ifdef UNICODE}
     Peoples: TObjectList<TSQLRecordPeople>;
@@ -15785,7 +15886,7 @@ var J: TSQLTableJSON;
     lContactDataQueueDynArray: TDynArray;
     lContactDataQueueArray: TRawUTF8DynArray;
     lContactDataQueueJSON: TDocVariantData;
-    lData: RawUTF8;
+    lData, s: RawUTF8;
     lDocData: TDocVariantData;
 const
   TEST_DATA = '['+
@@ -15983,7 +16084,20 @@ begin
   check(lDocData.Count=3);
   check(Hash32(lDocData.ToJSON)=$FCF948A5);
   check(lDocData.Value[0].QUEUE_CALL=2);
-  {$endif}
+  s := TEST_DATA;
+  i1 := PosEx(',"CHANNEL":132',s);
+  i2 := PosEx('}',s,i1);
+  delete(s,i1,i2-i1); // truncate the 2nd object
+  J := TSQLTableJSON.Create('',s);
+  try
+    check(J.fieldCount=24);
+    if not checkfailed(J.rowCount=3) then
+      check(J.Get(2,J.FieldCount-1)=nil);
+    check(J.Get(J.rowCount,J.FieldCount-1)='sjentonpg@senate.gov');
+  finally
+    J.Free;
+  end;
+  {$endif NOVARIANTS}
 end;
 
 {$ifdef UNICODE}

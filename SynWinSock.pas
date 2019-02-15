@@ -1878,7 +1878,6 @@ begin
     inc(PByte(aBuffer), templen);
     dec(pending, templen);
     trailer := Sizes.cbHeader + templen;
-    len := trailer + Sizes.cbTrailer;
     buf[0].cbBuffer := Sizes.cbHeader;
     buf[0].BufferType := SECBUFFER_STREAM_HEADER;
     buf[0].pvBuffer := @temp;
@@ -1893,6 +1892,7 @@ begin
     buf[3].pvBuffer := nil;
     if EncryptMessage(@Ctxt, 0, @desc, 0) <> SEC_E_OK then
       exit; // shutdown the connection on SChannel error
+    len := buf[0].cbBuffer + buf[1].cbBuffer + buf[2].cbBuffer;
     sent := 0;
     repeat
       s := SynWinSock.Send(aSocket, @temp[sent], len, MSG_NOSIGNAL);

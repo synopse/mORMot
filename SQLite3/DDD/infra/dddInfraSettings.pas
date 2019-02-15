@@ -53,7 +53,12 @@ unit dddInfraSettings;
 
 }
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE DDDNOSYNDB DDDNOMONGODB WITHLOG
+
+{.$define DDDNOSYNDB}
+// if defined, SynDB / external SQL DB won't be linked to the executable
+{.$define DDDNOMONGODB}
+// if defined, the Mongo DB client won't be linked to the executable
 
 interface
 
@@ -71,10 +76,14 @@ uses
   SynCrtSock,
   SynSQLite3,
   mORMotSQLite3,   // for internal SQlite3 database
+  {$ifndef DDDNOSYNDB}
   SynDB,
   mORMotDB,        // for TDDDRestSettings on external SQL database
+  {$endif}
+  {$ifndef DDDNOMONGODB}
   SynMongoDB,
   mORMotMongoDB,   // for TDDDRestSettings on external NoSQL database
+  {$endif}
   mORMotWrappers;  // for TDDDRestSettings to publish wrapper methods
 
 
@@ -332,18 +341,20 @@ type
     // URI, which will be overriden with this TDDDRestSettings.Root property
     // - will also publish /wrapper HTML page if WrapperTemplateFolder is set
     function NewRestInstance(aRootSettings: TDDDAppSettingsAbstract;
-      aModel: TSQLModel; aOptions: TDDDNewRestInstanceOptions;
-      aExternalDBOptions: TVirtualTableExternalRegisterOptions=[regDoNotRegisterUserGroupTables];
-      aMongoDBIdentifier: word=0;
-      aMongoDBOptions: TStaticMongoDBRegisterOptions=[mrDoNotRegisterUserGroupTables]): TSQLRest; overload; virtual;
+      aModel: TSQLModel; aOptions: TDDDNewRestInstanceOptions
+      {$ifndef DDDNOSYNDB}; aExternalDBOptions:
+      TVirtualTableExternalRegisterOptions=[regDoNotRegisterUserGroupTables]{$endif}
+      {$ifndef DDDNOMONGODB}; aMongoDBIdentifier: word=0; aMongoDBOptions:
+      TStaticMongoDBRegisterOptions=[mrDoNotRegisterUserGroupTables]{$endif}): TSQLRest; overload; virtual;
     /// is able to instantiate a REST instance according to the stored definition
     // - just an overloaded version which will create an owned TSQLModel with
     // the supplied TSQLRecord classes
     function NewRestInstance(aRootSettings: TDDDAppSettingsAbstract;
-      const aTables: array of TSQLRecordClass; aOptions: TDDDNewRestInstanceOptions;
-      aExternalDBOptions: TVirtualTableExternalRegisterOptions=[regDoNotRegisterUserGroupTables];
-      aMongoDBIdentifier: word=0;
-      aMongoDBOptions: TStaticMongoDBRegisterOptions=[mrDoNotRegisterUserGroupTables]): TSQLRest; overload; virtual;
+      const aTables: array of TSQLRecordClass; aOptions: TDDDNewRestInstanceOptions
+      {$ifndef DDDNOSYNDB}; aExternalDBOptions:
+      TVirtualTableExternalRegisterOptions=[regDoNotRegisterUserGroupTables]{$endif}
+      {$ifndef DDDNOMONGODB}; aMongoDBIdentifier: word=0; aMongoDBOptions:
+      TStaticMongoDBRegisterOptions=[mrDoNotRegisterUserGroupTables]{$endif}): TSQLRest; overload; virtual;
     /// initialize a stand-alone TSQLRestServerDB instance
     // - with its own database file located in DefaultDataFileName + aDBFileName
     // - will own its own TSQLModel with aModelRoot/aModelTables
@@ -804,19 +815,22 @@ end;
 { TDDDRestSettings }
 
 function TDDDRestSettings.NewRestInstance(aRootSettings: TDDDAppSettingsAbstract;
-  const aTables: array of TSQLRecordClass; aOptions: TDDDNewRestInstanceOptions;
-  aExternalDBOptions: TVirtualTableExternalRegisterOptions;
-  aMongoDBIdentifier: word; aMongoDBOptions: TStaticMongoDBRegisterOptions): TSQLRest;
+  const aTables: array of TSQLRecordClass; aOptions: TDDDNewRestInstanceOptions
+  {$ifndef DDDNOSYNDB}; aExternalDBOptions: TVirtualTableExternalRegisterOptions {$endif}
+  {$ifndef DDDNOMONGODB}; aMongoDBIdentifier: word;
+  aMongoDBOptions: TStaticMongoDBRegisterOptions{$endif}): TSQLRest;
 begin
   include(aOptions,riOwnModel);
-  result := NewRestInstance(aRootSettings,TSQLModel.Create(aTables,fRoot),aOptions,
-    aExternalDBOptions,aMongoDBIdentifier,aMongoDBOptions);
+  result := NewRestInstance(aRootSettings,TSQLModel.Create(aTables,fRoot),aOptions
+    {$ifndef DDDNOSYNDB},aExternalDBOptions{$endif}
+    {$ifndef DDDNOMONGODB},aMongoDBIdentifier,aMongoDBOptions{$endif});
 end;
 
 function TDDDRestSettings.NewRestInstance(aRootSettings: TDDDAppSettingsAbstract;
-  aModel: TSQLModel; aOptions: TDDDNewRestInstanceOptions;
-  aExternalDBOptions: TVirtualTableExternalRegisterOptions;
-  aMongoDBIdentifier: word; aMongoDBOptions: TStaticMongoDBRegisterOptions): TSQLRest;
+  aModel: TSQLModel; aOptions: TDDDNewRestInstanceOptions
+  {$ifndef DDDNOSYNDB}; aExternalDBOptions: TVirtualTableExternalRegisterOptions{$endif}
+  {$ifndef DDDNOMONGODB}; aMongoDBIdentifier: word;
+  aMongoDBOptions: TStaticMongoDBRegisterOptions{$endif}): TSQLRest;
 
   procedure ComputeDefaultORMServerName(const Ext: RawUTF8);
   var FN: RawUTF8;
@@ -866,11 +880,17 @@ begin
       if (fORM.Kind='TSQLRestServerDB') or
          (fORM.Kind='TSQLRestServerFullMemory') then
         DeleteFile(UTF8ToString(fORM.ServerName));
+    {$ifndef DDDNOMONGODB}
     result := TSQLRestMongoDBCreate(aModel,ORM,
       riHandleAuthentication in aOptions,aMongoDBOptions,aMongoDBIdentifier);
+    {$endif}
+    {$ifdef DDDNOSYNDB}
+    result := TSQLRest.CreateTryFrom(aModel,ORM,riHandleAuthentication in aOptions);
+    {$else}
     if result=nil then // failed to use MongoDB -> try external or internal DB
       result := TSQLRestExternalDBCreate(aModel,ORM,
         riHandleAuthentication in aOptions,aExternalDBOptions);
+    {$endif}
     if result=nil then
       exit; // no match or wrong parameters
     if result.InheritsFrom(TSQLRestServer) then

@@ -433,7 +433,7 @@ type
     // the associated content
     // - in most cases, this TStream is just a wrapper around the memory mapped
     // buffer in memory
-    // - the TStream must be consummed immediately, before any Pack or
+    // - the TStream must be consumed immediately, before any Pack or
     // UpdateToFile method calls
     // - the caller must Free the returned TStream instance
     // - if the data is not already memory mapped (i.e. for files >= 2 GB)
@@ -591,7 +591,7 @@ type
     // the associated content
     // - in most cases, this TStream is just a wrapper around the memory mapped
     // buffer in memory
-    // - the TStream must be consummed immediately, before any Pack or
+    // - the TStream must be consumed immediately, before any Pack or
     // UpdateToFile method calls
     // - the caller must Free the returned TStream instance
     // - if the data is not already memory mapped (i.e. for files >= 2 GB)

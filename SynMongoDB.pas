@@ -352,10 +352,11 @@ type
     /// the kind of element stored
     case VKind: TBSONElementType of
     betObjectID: (
-      {$HINTS OFF} // does not complain if Filler is declared but never used
+      {$IFDEF FPC} {$PUSH} {$ENDIF} {$HINTS OFF}
+      // does not complain if Filler is declared but never used
       VFiller: array[1..SizeOf(TVarData)-SizeOf(TVarType)-SizeOf(TBSONElementType)
         -SizeOf(TBSONObjectID)] of byte;
-      {$HINTS ON}
+      {$IFDEF FPC} {$POP} {$ELSE} {$HINTS ON} {$ENDIF}
       VObjectID: TBSONObjectID
     );
     betBinary, betDoc, betArray, betRegEx, betDeprecatedDbptr, betTimestamp,
@@ -4071,7 +4072,7 @@ end;
 const
   BSON_JSON_NEWDATE: string[8] = 'ew Date('; // circumvent Delphi XE4 Win64 bug
 
-{$HINTS OFF} // avoid hints with CompareMemFixed() inlining
+{$IFDEF FPC} {$PUSH} {$ENDIF} {$HINTS OFF} // avoid hints with CompareMemFixed() inlining
 function TBSONVariant.TryJSONToVariant(var JSON: PUTF8Char;
   var Value: variant; EndOfObject: PUTF8Char): boolean;
 var bsonvalue: TBSONVariantData absolute Value;
@@ -4243,7 +4244,7 @@ begin // here JSON does not start with " or 1..9 (obvious simple types)
   '/': TryRegExShell(JSON+1);
   end;
 end;
-{$HINTS ON}
+{$IFDEF FPC} {$POP} {$ELSE} {$HINTS ON} {$ENDIF}
 
 procedure TBSONVariant.Cast(var Dest: TVarData; const Source: TVarData);
 begin

@@ -272,7 +272,7 @@ begin
         if log<>nil then
           log.Log(sllTrace, 'ConnectionCreate received % % %', [sock.Method, sock.URL,
             sock.HeaderGetText], self);
-        cookie := sock.HeaderValue('x-sessioncookie');
+        cookie := sock.HeaderGetValue('X-SESSIONCOOKIE');
         if cookie = '' then
           exit;
         fPendingGet.Safe.Lock;

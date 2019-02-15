@@ -169,7 +169,7 @@ interface
 { if defined, will use gzip (and not deflate/zip) for content compression
   - can be set global for Client and Server applications
   - deflate/zip is just broken between browsers and client, and should be
-    avoided: see http://stackoverflow.com/a/9186091/458259
+    avoided: see http://stackoverflow.com/a/9186091
   - SynLZ is faster but only known by Delphi clients: you can enable deflate
     when the server is connected an AJAX application (not defined by default)
   - if you define both COMPRESSSYNLZ and COMPRESSDEFLATE, the server will use

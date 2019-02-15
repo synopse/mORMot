@@ -2386,16 +2386,16 @@ function AESSelfTest(onlytables: Boolean): boolean;
 /// self test of RC4 routines
 function RC4SelfTest: boolean;
 
-/// entry point of the MD5 transform function - may be used from outside
+/// entry point of the raw MD5 transform function - may be used for low-level use
 procedure RawMd5Compress(var Hash; Data: pointer);
 
-/// entry point of the SHA-1 transform function - may be used from outside
+/// entry point of the raw SHA-1 transform function - may be used for low-level use
 procedure RawSha1Compress(var Hash; Data: pointer);
 
-/// entry point of the SHA-256 transform function - may be used from outside
+/// entry point of the raw SHA-256 transform function - may be used for low-level use
 procedure RawSha256Compress(var Hash; Data: pointer);
 
-/// entry point of the SHA-512 transform function - may be used from outside
+/// entry point of the raw SHA-512 transform function - may be used for low-level use
 procedure RawSha512Compress(var Hash; Data: pointer);
 
 // little endian fast conversion
@@ -6476,7 +6476,8 @@ const
 // optimized unrolled version from Intel's sha256_sse4.asm
 //  Original code is released as Copyright (c) 2012, Intel Corporation
 var
-  K256Aligned: RawByteString; // movdqa + paddd do expect 16 bytes alignment
+  K256AlignedStore: RawByteString;
+  K256Aligned: pointer; // movdqa + paddd do expect 16 bytes alignment
 
 const
   PSHUFFLE_BYTE_FLIP_MASK: array[0..1] of QWord =
@@ -7437,7 +7438,7 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
 end;
 {$endif CPUX64}
 
-procedure sha256Compress(var Hash: TSHAHash; Data: pointer);
+procedure Sha256CompressPas(var Hash: TSHAHash; Data: pointer);
 // Actual hashing function
 var H: TSHAHash;
     W: array[0..63] of cardinal;
@@ -7446,16 +7447,6 @@ var H: TSHAHash;
     t1, t2: cardinal;
     {$endif}
 begin
-  {$ifdef CPUX64}
-  if cfSSE41 in CpuFeatures then begin
-    if K256Aligned='' then
-      SetString(K256Aligned,PAnsiChar(@K256),SizeOf(K256));
-    if PtrUInt(K256ALigned)and 15=0 then begin
-      sha256_sse4(Data^,Hash,1);
-      exit;
-    end; // if K256Aligned[] is not properly aligned -> fallback to pascal
-  end;
-  {$endif CPUX64}
   // calculate "expanded message blocks"
   Sha256ExpandMessageBlocks(@W,Data);
   // assign old working hash to local variables A..H
@@ -7563,7 +7554,11 @@ end;
 
 procedure RawSha256Compress(var Hash; Data: pointer);
 begin
-  sha256Compress(TSHAHash(Hash), Data);
+  {$ifdef CPUX64}
+  if K256AlignedStore<>'' then // use optimized Intel's sha256_sse4.asm
+    sha256_sse4(Data^,Hash,1) else
+  {$endif CPUX64}
+    Sha256CompressPas(TSHAHash(Hash),Data);
 end;
 
 procedure TSHA256.Final(out Digest: TSHA256Digest; NoInit: boolean);
@@ -7575,14 +7570,14 @@ begin
   FillcharFast(Data.Buffer[Data.Index+1],63-Data.Index,0);
   // compress if more than 448 bits (no space for 64 bit length storage)
   if Data.Index>=56 then begin
-    sha256Compress(Data.Hash,@Data.Buffer);
+    RawSha256Compress(Data.Hash,@Data.Buffer);
     FillcharFast(Data.Buffer,56,0);
   end;
   // write 64 bit Buffer length into the last bits of the last block
   // (in big endian format) and do a final compress
   PInteger(@Data.Buffer[56])^ := bswap32(TQWordRec(Data.MLen).H);
   PInteger(@Data.Buffer[60])^ := bswap32(TQWordRec(Data.MLen).L);
-  sha256Compress(Data.Hash,@Data.Buffer);
+  RawSha256Compress(Data.Hash,@Data.Buffer);
   // Hash -> Digest to little endian format
   bswap256(@Data.Hash,@Digest);
   // clear Data and internally stored Digest
@@ -7637,10 +7632,10 @@ begin
     if aLen<=Len then begin
       if Data.Index<>0 then begin
         MoveFast(Buffer^,Data.Buffer[Data.Index],aLen);
-        sha256Compress(Data.Hash,@Data.Buffer);
+        RawSha256Compress(Data.Hash,@Data.Buffer);
         Data.Index := 0;
       end else
-        sha256Compress(Data.Hash,Buffer); // avoid temporary copy
+        RawSha256Compress(Data.Hash,Buffer); // avoid temporary copy
       dec(Len,aLen);
       inc(PtrInt(Buffer),aLen);
     end else begin
@@ -7801,6 +7796,19 @@ procedure sha512_compress(state: PQWord; block: PByteArray); cdecl; external;
 procedure sha512_sse4(data, hash: pointer; blocks: Int64); {$ifdef FPC}cdecl;{$endif} external;
 {$endif SHA512_X64}
 
+procedure RawSha512Compress(var Hash; Data: pointer);
+begin
+  {$ifdef SHA512_X86}
+  if cfSSSE3 in CpuFeatures then
+    sha512_compress(@Hash,Data) else
+  {$endif}
+  {$ifdef SHA512_X64}
+  if cfSSE41 in CpuFeatures then
+    sha512_sse4(Data,@Hash,1) else
+  {$endif}
+    sha512_compresspas(TSHA512Hash(Hash), Data);
+end;
+
 
 { TSHA384 }
 
@@ -7809,28 +7817,12 @@ begin
   Data[Index] := $80;
   FillcharFast(Data[Index+1],127-Index,0);
   if Index>=112 then begin
-    {$ifdef SHA512_X86}
-    if cfSSSE3 in CpuFeatures then
-      sha512_compress(@Hash,@Data) else
-    {$endif}
-    {$ifdef SHA512_X64}
-    if cfSSE41 in CpuFeatures then
-      sha512_sse4(@Data,@Hash,1) else
-    {$endif}
-      sha512_compresspas(Hash,@Data);
+    RawSha512Compress(Hash,@Data);
     FillcharFast(Data,112,0);
   end;
   PQWord(@Data[112])^ := bswap64(MLen shr 61);
   PQWord(@Data[120])^ := bswap64(MLen shl 3);
-  {$ifdef SHA512_X86}
-  if cfSSSE3 in CpuFeatures then
-    sha512_compress(@Hash,@Data) else
-  {$endif}
-  {$ifdef SHA512_X64}
-  if cfSSE41 in CpuFeatures then
-    sha512_sse4(@Data,@Hash,1) else
-  {$endif}
-    sha512_compresspas(Hash,@Data);
+  RawSha512Compress(Hash,@Data);
   bswap64array(@Hash,@Digest,6);
   if not NoInit then
     Init;
@@ -7873,26 +7865,10 @@ begin
     if aLen<=Len then begin
       if Index<>0 then begin
         MoveFast(Buffer^,Data[Index],aLen);
-        {$ifdef SHA512_X86}
-        if cfSSSE3 in CpuFeatures then
-          sha512_compress(@Hash,@Data) else
-        {$endif}
-        {$ifdef SHA512_X64}
-        if cfSSE41 in CpuFeatures then
-          sha512_sse4(@Data,@Hash,1) else
-        {$endif}
-          sha512_compresspas(Hash,@Data);
+        RawSha512Compress(Hash,@Data);
         Index := 0;
       end else // avoid temporary copy
-        {$ifdef SHA512_X86}
-        if cfSSSE3 in CpuFeatures then
-          sha512_compress(@Hash,Buffer) else
-        {$endif}
-        {$ifdef SHA512_X64}
-        if cfSSE41 in CpuFeatures then
-          sha512_sse4(Buffer,@Hash,1) else
-        {$endif}
-          sha512_compresspas(Hash,Buffer);
+        RawSha512Compress(Hash,Buffer);
       dec(Len,aLen);
       inc(PByte(Buffer),aLen);
     end else begin
@@ -7916,28 +7892,12 @@ begin
   Data[Index] := $80;
   FillcharFast(Data[Index+1],127-Index,0);
   if Index>=112 then begin
-    {$ifdef SHA512_X86}
-    if cfSSSE3 in CpuFeatures then
-      sha512_compress(@Hash,@Data) else
-    {$endif}
-    {$ifdef SHA512_X64}
-    if cfSSE41 in CpuFeatures then
-      sha512_sse4(@Data,@Hash,1) else
-    {$endif}
-      sha512_compresspas(Hash,@Data);
+    RawSha512Compress(Hash,@Data);
     FillcharFast(Data,112,0);
   end;
   PQWord(@Data[112])^ := bswap64(MLen shr 61);
   PQWord(@Data[120])^ := bswap64(MLen shl 3);
-  {$ifdef SHA512_X86}
-  if cfSSSE3 in CpuFeatures then
-    sha512_compress(@Hash,@Data) else
-  {$endif}
-  {$ifdef SHA512_X64}
-  if cfSSE41 in CpuFeatures then
-    sha512_sse4(@Data,@Hash,1) else
-  {$endif}
-    sha512_compresspas(Hash,@Data);
+  RawSha512Compress(Hash,@Data);
   bswap64array(@Hash,@Digest,8);
   if not NoInit then
     Init;
@@ -7980,26 +7940,10 @@ begin
     if aLen<=Len then begin
       if Index<>0 then begin
         MoveFast(Buffer^,Data[Index],aLen);
-        {$ifdef SHA512_X86}
-        if cfSSSE3 in CpuFeatures then
-          sha512_compress(@Hash,@Data) else
-        {$endif}
-        {$ifdef SHA512_X64}
-        if cfSSE41 in CpuFeatures then
-          sha512_sse4(@Data,@Hash,1) else
-        {$endif}
-          sha512_compresspas(Hash,@Data);
+        RawSha512Compress(Hash,@Data);
         Index := 0;
       end else // avoid temporary copy
-        {$ifdef SHA512_X86}
-        if cfSSSE3 in CpuFeatures then
-          sha512_compress(@Hash,Buffer) else
-        {$endif}
-        {$ifdef SHA512_X64}
-        if cfSSE41 in CpuFeatures then
-          sha512_sse4(Buffer,@Hash,1) else
-        {$endif}
-          sha512_compresspas(Hash,Buffer);
+        RawSha512Compress(Hash,Buffer);
       dec(Len,aLen);
       inc(PByte(Buffer),aLen);
     end else begin
@@ -8008,19 +7952,6 @@ begin
       break;
     end;
   until Len<=0;
-end;
-
-procedure RawSha512Compress(var Hash; Data: pointer);
-begin
-  {$ifdef SHA512_X86}
-  if cfSSSE3 in CpuFeatures then
-    sha512_compress(@Hash,Data) else
-  {$endif}
-  {$ifdef SHA512_X64}
-  if cfSSE41 in CpuFeatures then
-    sha512_sse4(Data,@Hash,1) else
-  {$endif}
-    sha512_compresspas(TSHA512Hash(Hash), Data);
 end;
 
 procedure TSHA512.Update(const Buffer: RawByteString);
@@ -8530,7 +8461,7 @@ asm
         movq    [edx + 64], mm0
 {$else}
 {$ifdef FPC}nostackframe; assembler; asm{$else}
-// Synopse's x64 asm, optimized for both in/out-order pipelined CPUs
+// Synopse's x64 asm, optimized for both in+out-order pipelined CPUs
 asm // input: rcx=B, rdx=A, r8=C (Linux: rdi,rsi,rdx)
         .noframe
 {$endif}{$ifndef win64}
@@ -10117,7 +10048,7 @@ begin
     inc(PByte(p),16);
   end;
   Cod := (Cod shl 11) xor integer(Td0[cod shr 21]);
-  for i := 1 to (Count and 15)shr 2 do begin // last 4 bytes blocs
+  for i := 1 to (Count and AESBlockMod)shr 2 do begin // last 4 bytes blocs
     p^[0] := p^[0] xor Cod;
     inc(PByte(p),4);
   end;
@@ -10160,7 +10091,7 @@ begin // 1 to 3 bytes may stay unencrypted: not relevant
      P^[3] := P^[3] xor Code;
      inc(PByte(P),16);
   end;
-  for i := 0 to ((Count and 15)shr 2)-1 do // last 4 bytes blocs
+  for i := 0 to ((Count and AESBlockMod)shr 2)-1 do // last 4 bytes blocs
     P^[i] := P^[i] xor Code;
 end;
 
@@ -15111,6 +15042,14 @@ initialization
   if (cfSSE42 in CpuFeatures) and (cfAesNi in CpuFeatures) then
     crc32c := @crc32c_sse42_aesni;
 {$endif}
+{$ifdef CPUX64}
+  if cfSSE41 in CpuFeatures then begin // optimized Intel's sha256_sse4.asm ?
+    if K256AlignedStore='' then
+      GetMemAligned(K256AlignedStore,@K256,SizeOf(K256),K256Aligned);
+    if PtrUInt(K256Aligned) and 15<>0 then
+      K256AlignedStore := ''; // if not properly aligned -> fallback to pascal
+  end;
+{$endif CPUX64}
   TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TSignAlgo));
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TSynSignerParams),
     'algo:TSignAlgo secret,salt:RawUTF8 rounds:integer');

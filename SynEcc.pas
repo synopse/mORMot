@@ -1259,7 +1259,7 @@ type
   // based on JSON objects or even plain base-64 encoded JSON strings
   // - consider using TECCCertificateChainFile from mORMot.pas if you want
   // to use convenient human-readable JSON serialization in files
-  TECCCertificateChain = class(TSynPersistentLocked)
+  TECCCertificateChain = class(TSynPersistentLock)
   protected
     fItems: TECCCertificateObjArray;
     fIsValidCached: boolean;

@@ -138,6 +138,10 @@ interface
   Internet Browsers nor AJAX applications
   - not defined by default - should be set globally to the project conditionals }
 
+{.$define NOHTTPCLIENTWEBSOCKETS}
+{ if defined, TSQLHttpClientWebSockets won't be declared
+  - will avoid to link SynBidirSock and SynEcc units }
+
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 WITHLOG
 
 uses
@@ -154,7 +158,9 @@ uses
   SynZip,
   SynLZ,
   SynCrtSock,
+  {$ifndef NOHTTPCLIENTWEBSOCKETS}
   SynBidirSock, // for WebSockets
+  {$endif}
   SynCrypto,    // for hcSynShaAes
   SynCommons,
   SynLog,
@@ -170,7 +176,7 @@ type
   // - hcSynShaAes will use SHA-256/AES-256-CFB to encrypt the content (after
   // SynLZ compression), via SynCrypto.CompressShaAes() function
   // - here hcDeflate will use in fact gzip content encoding, since deflate
-  // is inconsistent between browsers: http://stackoverflow.com/a/9186091/458259
+  // is inconsistent between browsers: http://stackoverflow.com/a/9186091
   // - TSQLHttpClientGeneric.Compression default property is [hcSynLZ]
   TSQLHttpCompression = (hcSynLZ, hcDeflate, hcSynShaAes);
 
@@ -232,6 +238,9 @@ type
     procedure DefinitionTo(Definition: TSynConnectionDefinition); override;
     /// returns 'Server:Port' current value
     function HostName: AnsiString;
+    /// optional custom HTTP "User Agent:" header value
+    property UserAgent: SockString
+      read fExtendedOptions.UserAgent write fExtendedOptions.UserAgent;
   published
     /// the Server IP address
     property Server: AnsiString read fServer;
@@ -287,6 +296,8 @@ type
     // - can be used e.g. to access SendTimeout and ReceiveTimeout properties
     property Socket: THttpClientSocket read fSocket;
   end;
+
+  {$ifndef NOHTTPCLIENTWEBSOCKETS}
 
   /// HTTP/1.1 RESTful JSON mORMot Client able to upgrade to WebSockets
   // - in addition to TSQLHttpClientWinSock, this client class is able
@@ -363,6 +374,8 @@ type
     // - will set TWebSocketProcessSettings.LoopDelay value at WebSocketsUpgrade
     property WebSocketLoopDelay: integer read fWebSocketLoopDelay write fWebSocketLoopDelay;
   end;
+
+  {$endif NOHTTPCLIENTWEBSOCKETS}
 
   /// HTTP/1.1 RESTful JSON mORMot Client abstract class using either WinINet,
   // WinHTTP or libcurl API
@@ -720,6 +733,8 @@ begin
           end;
         end;
       until fSocket<>nil;
+      if fExtendedOptions.UserAgent<>'' then
+        fSocket.UserAgent := fExtendedOptions.UserAgent;
       if fModel<>nil then
         fSocket.ProcessName := FormatUTF8('%/%',[fPort,fModel.Root]);
       if fSendTimeout>0 then
@@ -764,11 +779,13 @@ begin
   {$endif}
   result.Lo := fSocket.Request(SockString(url),SockString(method),
     KeepAliveMS,SockString(Header),SockString(Data),SockString(DataType),false);
-  result.Hi := GetCardinal(pointer(fSocket.HeaderValue('Server-InternalState')));
+  result.Hi := GetCardinal(pointer(fSocket.HeaderGetValue('SERVER-INTERNALSTATE')));
   Header := fSocket.HeaderGetText;
   Data := fSocket.Content;
 end;
 
+
+{$ifndef NOHTTPCLIENTWEBSOCKETS}
 
 { TSQLHttpClientWebsockets }
 
@@ -925,6 +942,8 @@ begin
       [self,Server,Port,Model.Root,result]);
 end;
 
+{$endif NOHTTPCLIENTWEBSOCKETS}
+
 
 { TSQLHttpClientRequest }
 
@@ -1063,7 +1082,9 @@ end;
 initialization
   StatusCodeToErrorMessage := StatusCodeToErrorMsgInternal; // as in mORMotHttpServer
   TSQLHttpClientWinSock.RegisterClassNameForDefinition;
+{$ifndef NOHTTPCLIENTWEBSOCKETS}
   TSQLHttpClientWebsockets.RegisterClassNameForDefinition;
+{$endif}
 {$ifdef USELIBCURL}
   TSQLHttpClientCurl.RegisterClassNameForDefinition;
 {$endif}

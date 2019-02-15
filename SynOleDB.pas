@@ -49,13 +49,13 @@ unit SynOleDB;
   Several implementation notes about Oracle and OleDB:
   - Oracle OleDB provider by Microsoft do not handle BLOBs. Period. :(
   - Oracle OleDB provider by Oracle will handle only 3/4 BLOBs. :(
-    See http://stackoverflow.com/questions/6147274/is-oraoledb-provider-in-net-unreliable-on-clob-fields/6640101#6640101
+    See https://stackoverflow.com/a/6640101
   - Oracle OleDB provider by Oracle or Microsoft could trigger some ORA-80040e4B
     error when accessing column data with very low dates value (like 0001-01-01)
   - in all cases, that's why we wrote the SynDBOracle unit, for direct OCI
     access - and it is from 2 to 10 times faster than OleDB, with no setup issue
   - or take a look at latest patches from Oracle support, and pray it's fixed ;)
-    http://stackoverflow.com/questions/6147274/is-oraoledb-provider-in-net-unreliable-on-clob-fields/6661058#6661058
+    https://stackoverflow.com/a/6661058
 
 
   Version 1.14

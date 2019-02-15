@@ -110,17 +110,18 @@ type
   // - some common patterns ('exactmatch', 'startwith*', '*endwith', '*contained*')
   // are handled with dedicated code, optionally with case-insensitive search
   // - consider using TMatchs (or SetMatchs/TMatchDynArray) if you expect to
-  // search for several patterns
+  // search for several patterns, or even TExprParserMatch for expression search
   {$ifdef UNICODE}TMatch = record{$else}TMatch = object{$endif}
   private
     Pattern, Text: PUTF8Char;
     P, T, PMax, TMax: PtrInt;
     Upper: PNormTable;
     State: (sNONE, sABORT, sEND, sLITERAL, sPATTERN, sRANGE, sVALID);
-    Search: TMatchSearchFunction;
     procedure MatchAfterStar;
     procedure MatchMain;
   public
+    /// published for proper inlining
+    Search: TMatchSearchFunction;
     /// initialize the internal fields for a given glob search pattern
     // - note that the aPattern instance should remain in memory, since it will
     // be pointed to by the Pattern private field of this object
@@ -128,9 +129,16 @@ type
     /// initialize the internal fields for a given glob search pattern
     // - note that the aPattern buffer should remain in memory, since it will
     // be pointed to by the Pattern private field of this object
-    procedure Prepare(aPattern: PUTF8Char; aPatternLen: integer; aCaseInsensitive, aReuse: boolean); overload;
+    procedure Prepare(aPattern: PUTF8Char; aPatternLen: integer;
+      aCaseInsensitive, aReuse: boolean); overload;
+    /// initialize low-level internal fields for'*aPattern*' search
+    // - this method is faster than a regular Prepare('*' + aPattern + '*')
+    // - warning: the supplied aPattern variable may be modified in-place to be
+    // filled with some lookup buffer, for length(aPattern) in [2..31] range
+    procedure PrepareContains(var aPattern: RawUTF8; aCaseInsensitive: boolean); overload;
     /// initialize low-level internal fields for a custom search algorithm
-    procedure PrepareRaw(aPattern: PUTF8Char; aPatternLen: integer; aSearch: TMatchSearchFunction);
+    procedure PrepareRaw(aPattern: PUTF8Char; aPatternLen: integer;
+      aSearch: TMatchSearchFunction);
     /// returns TRUE if the supplied content matches the prepared glob pattern
     // - this method is not thread-safe
     function Match(const aText: RawUTF8): boolean; overload;
@@ -138,7 +146,7 @@ type
     /// returns TRUE if the supplied content matches the prepared glob pattern
     // - this method is not thread-safe
     function Match(aText: PUTF8Char; aTextLen: PtrInt): boolean; overload;
-      {$ifdef FPC}inline;{$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// returns TRUE if the supplied content matches the prepared glob pattern
     // - this method IS thread-safe, and won't lock
     function MatchThreadSafe(const aText: RawUTF8): boolean;
@@ -161,8 +169,8 @@ type
   TMatchStore = record
     /// access to the research criteria
     // - defined as a nested record (and not an object) to circumvent Delphi bug
-    Parent: TMatch;
-    /// Parent.Pattern PUTF8Char will point to this instance
+    Pattern: TMatch;
+    /// Pattern.Pattern PUTF8Char will point to this instance
     PatternInstance: RawUTF8;
   end;
   TMatchStoreDynArray = array of TMatchStore;
@@ -214,6 +222,9 @@ function MatchExists(const One: TMatch; const Several: TMatchDynArray): boolean;
 
 /// add one TMach if not already registered in the Several[] dynamic array
 function MatchAdd(const One: TMatch; var Several: TMatchDynArray): boolean;
+
+/// returns TRUE if Match=nil or if any Match[].Match(Text) is TRUE
+function MatchAny(const Match: TMatchDynArray; const Text: RawUTF8): boolean;
 
 /// apply the CSV-supplied glob patterns to an array of RawUTF8
 // - any text not maching the pattern will be deleted from the array
@@ -1753,7 +1764,7 @@ function CompareOperator(FieldType: TSynTableFieldType; SBF, SBFEnd: PUTF8Char;
 procedure ToSBFStr(const Value: RawByteString; out Result: TSBFString);
 
 
-{ ************ low-level buffer processing functions************************* }
+{ ************ low-level buffer processing functions ************************* }
 
 type
   /// implements a thread-safe Bloom Filter storage
@@ -1775,7 +1786,7 @@ type
   // - internally, several (hardware-accelerated) crc32c hash functions will be
   // used, with some random seed values, to simulate several hashing functions
   // - Insert/MayExist/Reset methods are thread-safe
-  TSynBloomFilter = class(TSynPersistentLocked)
+  TSynBloomFilter = class(TSynPersistentLock)
   private
     fSize: cardinal;
     fFalsePositivePercent: double;
@@ -2000,13 +2011,8 @@ type
   /// items as stored in a TRawByteStringGroup instance
   TRawByteStringGroupValueDynArray = array of TRawByteStringGroupValue;
 
-  /// store several RawByteString content with automatic concatenation
-  // - an optimized compaction algorithm will occur to ensure that every 512
-  // items will be compacted to at least 1MB: this reduces memory fragmentation
-  // with almost no performance impact
+  /// store several RawByteString content with optional concatenation
   {$ifdef UNICODE}TRawByteStringGroup = record{$else}TRawByteStringGroup = object{$endif}
-  private
-    procedure Compact(len: integer);
   public
     /// actual list storing the data
     Values: TRawByteStringGroupValueDynArray;
@@ -2014,8 +2020,6 @@ type
     Count: integer;
     /// the current size of data stored in Values[]
     Position: integer;
-    /// the Count when the next compaction should occur
-    NextCompact: integer;
     /// naive but efficient cache for Find()
     LastFind: integer;
     /// add a new item to Values[]
@@ -2034,6 +2038,9 @@ type
     {$endif DELPHI5OROLDER}
     /// clear any stored information
     procedure Clear;
+    // compact the Values[] array into a single item
+    // - is also used by AsText to compute a single RawByteString
+    procedure Compact;
     /// return all content as a single RawByteString
     // - will also compact the Values[] array into a single item (which is returned)
     function AsText: RawByteString;
@@ -2160,6 +2167,135 @@ type
     /// unregister one credential for a given user
     procedure DisauthenticateUser(const aName: RawUTF8); override;
   end;
+
+
+{ ************ Expression Search Engine ************************** }
+
+type
+  /// exception type used by TExprParser
+  EExprParser = class(ESynException);
+
+  /// identify an expression search engine node type, as used by TExprParser
+  TExprNodeType = (entWord, entNot, entOr, entAnd);
+
+  /// results returned by TExprParserAbstract.Parse method
+  TExprParserResult = (
+    eprSuccess, eprNoExpression,
+    eprMissingParenthesis, eprTooManyParenthesis, eprMissingFinalWord,
+    eprInvalidExpression, eprUnknownVariable, eprUnsupportedOperator,
+    eprInvalidConstantOrVariable);
+
+  TParserAbstract = class;
+
+  /// stores an expression search engine node, as used by TExprParser
+  TExprNode = class(TSynPersistent)
+  protected
+    fNext: TExprNode;
+    fNodeType: TExprNodeType;
+    function Append(node: TExprNode): boolean;
+  public
+    /// initialize a node for the search engine
+    constructor Create(nodeType: TExprNodeType); reintroduce;
+    /// recursively destroys the linked list of nodes (i.e. Next)
+    destructor Destroy; override;
+    /// browse all nodes until Next = nil
+    function Last: TExprNode;
+    /// points to the next node in the parsed tree
+    property Next: TExprNode read fNext;
+    /// what is actually stored in this node
+    property NodeType: TExprNodeType read fNodeType;
+  end;
+
+  /// abstract class to handle word search, as used by TExprParser
+  TExprNodeWordAbstract = class(TExprNode)
+  protected
+    fOwner: TParserAbstract;
+    fWord: RawUTF8;
+    /// should be set from actual data before TExprParser.Found is called
+    fFound: boolean;
+    function ParseWord: TExprParserResult; virtual; abstract;
+  public
+    /// you should override this virtual constructor for proper initialization
+    constructor Create(aOwner: TParserAbstract; const aWord: RawUTF8); reintroduce; virtual;
+  end;
+
+  /// class-reference type (metaclass) for a TExprNode
+  // - allow to customize the actual searching process for entWord
+  TExprNodeWordClass = class of TExprNodeWordAbstract;
+
+  /// parent class of TExprParserAbstract
+  TParserAbstract = class(TSynPersistent)
+  protected
+    fExpression, fCurrentWord, fAndWord, fOrWord, fNotWord: RawUTF8;
+    fCurrent: PUTF8Char;
+    fCurrentError: TExprParserResult;
+    fFirstNode: TExprNode;
+    fWordClass: TExprNodeWordClass;
+    fWords: array of TExprNodeWordAbstract;
+    fWordCount: integer;
+    fNoWordIsAnd: boolean;
+    fFoundStack: array[byte] of boolean; // simple stack-based virtual machine
+    procedure ParseNextCurrentWord; virtual; abstract;
+    function ParseExpr: TExprNode;
+    function ParseFactor: TExprNode;
+    function ParseTerm: TExprNode;
+    procedure Clear; virtual;
+    // override this method to initialize fWordClass and fAnd/Or/NotWord
+    procedure Initialize; virtual; abstract;
+    /// perform the expression search over TExprNodeWord.fFound flags
+    // - warning: caller should check that fFirstNode<>nil (e.g. WordCount>0)
+    function Execute: boolean; {$ifdef HASINLINE}inline;{$endif}
+  public
+    /// initialize an expression parser
+    constructor Create; override;
+    /// finalize the expression parser
+    destructor Destroy; override;
+    /// initialize the parser from a given text expression
+    function Parse(const aExpression: RawUTF8): TExprParserResult;
+    /// try this parser class on a given text expression
+    // - returns '' on success, or an explicit error message (e.g.
+    // 'Missing parenthesis')
+    class function ParseError(const aExpression: RawUTF8): RawUTF8;
+    /// the associated text expression used to define the search
+    property Expression: RawUTF8 read fExpression;
+    /// how many words did appear in the search expression
+    property WordCount: integer read fWordCount;
+  end;
+
+  /// abstract class to parse a text expression into nodes
+  // - you should inherit this class to provide actual text search
+  // - searched expressions can use parenthesis and &=AND -=WITHOUT +=OR operators,
+  // e.g. '((w1 & w2) - w3) + w4' means ((w1 and w2) without w3) or w4
+  // - no operator is handled like a AND, e.g. 'w1 w2' = 'w1 & w2'
+  TExprParserAbstract = class(TParserAbstract)
+  protected
+    procedure ParseNextCurrentWord; override;
+    // may be overriden to provide custom words escaping (e.g. handle quotes)
+    procedure ParseNextWord; virtual;
+    procedure Initialize; override;
+  end;
+
+  /// search expression engine using TMatch for the actual word searches
+  TExprParserMatch = class(TExprParserAbstract)
+  protected
+    fCaseSensitive: boolean;
+    fMatchedLastSet: integer;
+    procedure Initialize; override;
+  public
+    /// initialize the search engine
+    constructor Create(aCaseSensitive: boolean = true); reintroduce;
+    /// returns TRUE if the expression is within the text buffer
+    function Search(aText: PUTF8Char; aTextLen: PtrInt): boolean; overload;
+    /// returns TRUE if the expression is within the text buffer
+    function Search(const aText: RawUTF8): boolean; overload; {$ifdef HASINLINE}inline;{$endif}
+  end;
+
+const
+  /// may be used when overriding TExprParserAbstract.ParseNextWord method
+  PARSER_STOPCHAR = ['&', '+', '-', '(', ')'];
+
+function ToText(r: TExprParserResult): PShortString; overload;
+function ToUTF8(r: TExprParserResult): RawUTF8; overload;
 
 
 implementation
@@ -3407,10 +3543,16 @@ begin
         inc(I); dec(J);
       end;
     until I > J;
-    if L < J then
-      OrderedIndexSort(L, J);
-    L := I;
-  until I >= R;
+    if J - L < R - I then begin // use recursion only for smaller range
+      if L < J then
+        OrderedIndexSort(L, J);
+      L := I;
+    end else begin
+      if I < R then
+        OrderedIndexSort(I, R);
+      R := J;
+    end;
+  until L >= R;
 end;
 
 procedure TSynTableFieldProperties.OrderedIndexRefresh;
@@ -5148,8 +5290,12 @@ end;
 var
   c: AnsiChar;
   pat, patend, txtend, txtretry, patretry: PUTF8Char;
+label
+  fin;
 begin
   pat := pointer(aMatch.Pattern);
+  if pat = nil then
+    goto fin;
   patend := pat + aMatch.PMax;
   patretry := nil;
   txtend := aText + aTextLen - 1;
@@ -5187,7 +5333,7 @@ begin
       pat := patretry;
       continue;
     end;
-    result := false;
+fin:result := false;
     exit;
   until false;
   result := true;
@@ -5258,7 +5404,7 @@ next: inc(t);
         break;
     end;
     for i := 1 to pmax do
-      if (t + i >= tend) or (up[t[i]] <> up[p[i]]) then
+      if up[t[i]] <> up[p[i]] then
         goto next;
     result := true;
     exit;
@@ -5280,7 +5426,7 @@ next: inc(t);
         break;
     end;
     for i := 8 to pmax do
-      if (t + i >= tend + 7) or (t[i] <> p[i]) then
+      if t[i] <> p[i] then
         goto next;
     result := true;
     exit;
@@ -5310,7 +5456,7 @@ next: inc(t);
         break;
     end;
     for i := 4 to pmax do
-      if (t + i >= tend + 3) or (t[i] <> p[i]) then
+      if t[i] <> p[i] then
         goto next;
     result := true;
     exit;
@@ -5339,7 +5485,7 @@ next: inc(t);
         break;
     end;
     for i := 1 to pmax do
-      if (t + i >= tend) or (t[i] <> p[i]) then
+      if t[i] <> p[i] then
        goto next;
     result := true;
     exit;
@@ -5359,6 +5505,11 @@ begin // here we know that len>0
   result := true;
 end;
 
+function SearchVoid(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+begin
+  result := aTextLen = 0;
+end;
+
 function SearchNoPattern(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
 begin
   result := (aMatch.PMax + 1 = aTextlen) and CompareMem(aText, aMatch.Pattern, aTextLen);
@@ -5376,25 +5527,41 @@ end;
 
 function SearchContainsU(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
 begin
-  result := SimpleContainsU(aText, aText + aTextLen, aMatch.Pattern, aMatch.PMax, aMatch.Upper);
+  dec(aTextLen, aMatch.PMax);
+  if aTextLen > 0 then
+    result := SimpleContainsU(aText, aText + aTextLen, aMatch.Pattern, aMatch.PMax, aMatch.Upper)
+  else
+    result := false;
 end;
 
 function SearchContains1(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
 begin
-  result := SimpleContains1(aText, aText + aTextLen, aMatch.Pattern, aMatch.PMax);
+  dec(aTextLen, aMatch.PMax);
+  if aTextLen > 0 then
+    result := SimpleContains1(aText, aText + aTextLen, aMatch.Pattern, aMatch.PMax)
+  else
+    result := false;
 end;
 
 function SearchContains4(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
 begin
-  result := SimpleContains4(aText, aText + aTextLen - 3, aMatch.Pattern, aMatch.PMax);
+  dec(aTextLen, aMatch.PMax);
+  if aTextLen > 0 then
+    result := SimpleContains4(aText, aText + aTextLen, aMatch.Pattern, aMatch.PMax)
+  else
+    result := false;
 end;
 
 {$ifdef CPU64}
 function SearchContains8(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
 begin // optimized e.g. to search an IP address as '*12.34.56.78*' in logs
-  result := SimpleContains8(aText, aText + aTextLen - 7, aMatch.Pattern, aMatch.PMax);
+  dec(aTextLen, aMatch.PMax);
+  if aTextLen > 0 then
+    result := SimpleContains8(aText, aText + aTextLen, aMatch.Pattern, aMatch.PMax)
+  else
+    result := false;
 end;
-{$endif}
+{$endif CPU64}
 
 function SearchStartWith(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
 begin
@@ -5429,6 +5596,12 @@ const SPECIALS: PUTF8Char = '*?[';
 begin
   Pattern := aPattern;
   PMax := aPatternLen - 1; // search in Pattern[0..PMax]
+  if Pattern = nil then begin
+    Search := SearchVoid;
+    exit;
+  end;
+  if aCaseInsensitive and not IsCaseSensitive(aPattern,aPatternLen) then
+    aCaseInsensitive := false; // don't slow down e.g. number or IP search
   if aCaseInsensitive then
     Upper := @NormToUpperAnsi7 else
     Upper := @NormToNorm;
@@ -5485,16 +5658,147 @@ begin
     end else
       if Pattern[0] in ['*','?'] then
         Search := SearchContainsValid;
- if not Assigned(Search) then begin
-   aPattern := PosChar(Pattern, '[');
-   if (aPattern = nil) or (aPattern - Pattern > PMax) then
-     if aCaseInsensitive then
-       Search := SearchNoRangeU
-     else
-       Search := SearchNoRange
-   else
-     Search := SearchAny;
- end;
+  if not Assigned(Search) then begin
+    aPattern := PosChar(Pattern, '[');
+    if (aPattern = nil) or (aPattern - Pattern > PMax) then
+      if aCaseInsensitive then
+        Search := SearchNoRangeU
+      else
+        Search := SearchNoRange
+    else
+      Search := SearchAny;
+  end;
+end;
+
+type // Holub and Durian (2005) SBNDM2 algorithm
+  // see http://www.cri.haifa.ac.il/events/2005/string/presentations/Holub.pdf
+  TSBNDMQ2Mask = array[AnsiChar] of cardinal;
+  PSBNDMQ2Mask = ^TSBNDMQ2Mask;
+
+function SearchSBNDMQ2ComputeMask(const Pattern: RawUTF8; u: PNormTable): RawByteString;
+var
+  i: PtrInt;
+  p: PAnsiChar absolute Pattern;
+  m: PSBNDMQ2Mask absolute result;
+  c: PCardinal;
+begin
+  SetLength(result, SizeOf(m^));
+  FillCharFast(m^, SizeOf(m^), 0);
+  for i := 0 to length(Pattern) - 1 do begin
+    c := @m^[u[p[i]]]; // for FPC code generation
+    c^ := c^ or (1 shl i);
+  end;
+end;
+
+function SearchSBNDMQ2(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+var
+  mask: PSBNDMQ2Mask;
+  max, i, j: PtrInt;
+  state: cardinal;
+begin
+  mask := pointer(aMatch^.Pattern);
+  max := aMatch^.PMax;
+  i := max - 1;
+  dec(aTextLen);
+  if i < aTextLen then begin
+    repeat
+      state := mask[aText[i+1]] shr 1; // in two steps for better FPC codegen
+      state := state and mask[aText[i]];
+      if state = 0 then begin
+        inc(i, max); // fast skip
+        if i >= aTextLen then
+          break;
+        continue;
+      end;
+      j := i - max;
+      repeat
+        dec(i);
+        if i < 0 then
+          break;
+        state := (state shr 1) and mask[aText[i]];
+      until state = 0;
+      if i = j then begin
+        result := true;
+        exit;
+      end;
+      inc(i, max);
+      if i >= aTextLen then
+        break;
+    until false;
+  end;
+  result := false;
+end;
+
+function SearchSBNDMQ2U(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+var
+  u: PNormTable;
+  mask: PSBNDMQ2Mask;
+  max, i, j: PtrInt;
+  state: cardinal;
+begin
+  mask := pointer(aMatch^.Pattern);
+  max := aMatch^.PMax;
+  u := aMatch^.Upper;
+  i := max - 1;
+  dec(aTextLen);
+  if i < aTextLen then begin
+    repeat
+      state := mask[u[aText[i+1]]] shr 1;
+      state := state and mask[u[aText[i]]];
+      if state = 0 then begin
+        inc(i, max);
+        if i >= aTextLen then
+          break;
+        continue;
+      end;
+      j := i - max;
+      repeat
+        dec(i);
+        if i < 0 then
+          break;
+        state := (state shr 1) and mask[u[aText[i]]];
+      until state = 0;
+      if i = j then begin
+        result := true;
+        exit;
+      end;
+      inc(i, max);
+      if i >= aTextLen then
+        break;
+    until false;
+  end;
+  result := false;
+end;
+
+procedure TMatch.PrepareContains(var aPattern: RawUTF8;
+  aCaseInsensitive: boolean);
+begin
+  PMax := length(aPattern) - 1;
+  if aCaseInsensitive and not IsCaseSensitive(pointer(aPattern), PMax + 1) then
+    aCaseInsensitive := false;
+  if aCaseInsensitive then
+    Upper := @NormToUpperAnsi7
+  else
+    Upper := @NormToNorm;
+  if PMax < 0 then
+    Search := SearchContainsValid
+  else if PMax > 30 then
+    if aCaseInsensitive then
+      Search := SearchContainsU
+    else
+      Search := {$ifdef CPU64}SearchContains8{$else}SearchContains4{$endif}
+  else if PMax >= 1 then begin // len in [2..31] = PMax in [1..30]
+    aPattern := SearchSBNDMQ2ComputeMask(aPattern, Upper); // lookup table
+    if aCaseInsensitive then
+      Search := SearchSBNDMQ2U
+    else
+      Search := SearchSBNDMQ2;
+  end
+  else if aCaseInsensitive then
+    Search := SearchContainsU
+  else
+    Search := SearchContains1;
+  Pattern := pointer(aPattern);
 end;
 
 procedure TMatch.PrepareRaw(aPattern: PUTF8Char; aPatternLen: integer;
@@ -5556,7 +5860,7 @@ end;
 function TMatch.Equals(const aAnother{$ifndef DELPHI5OROLDER}: TMatch{$endif}): boolean;
 begin
   result := (PMax = TMatch(aAnother).PMax) and (Upper = TMatch(aAnother).Upper) and
-    CompareMemSmall(Pattern, TMatch(aAnother).Pattern, PMax + 1);
+    CompareMem(Pattern, TMatch(aAnother).Pattern, PMax + 1);
 end;
 
 function TMatch.PatternLength: integer;
@@ -5651,6 +5955,23 @@ begin
   end;
 end;
 
+function MatchAny(const Match: TMatchDynArray; const Text: RawUTF8): boolean;
+var
+  m: PMatch;
+  i: integer;
+begin
+  result := true;
+  if Match = nil then
+    exit;
+  m := pointer(Match);
+  for i := 1 to length(Match) do
+    if m^.Match(Text) then
+      exit
+    else
+      inc(m);
+  result := false;
+end;
+
 procedure FilterMatchs(const CSVPattern: RawUTF8; CaseInsensitive: boolean;
   var Values: TRawUTF8DynArray);
 var
@@ -5688,7 +6009,6 @@ end;
 
 function TMatchs.Match(aText: PUTF8Char; aLen: integer): integer;
 var
-  i: integer;
   one: ^TMatchStore;
   local: TMatch; // thread-safe with no lock!
 begin
@@ -5696,20 +6016,20 @@ begin
     result := -1 // no filter by name -> allow e.g. to process everything
   else begin
     one := pointer(fMatch);
-    for i := 0 to fMatchCount - 1 do begin
-      if aLen <> 0 then begin
-        local := one^.Parent;
-        if local.Search(@local, aText, aLen) then begin
-          result := i;
+    if aLen <> 0 then begin
+      for result := 0 to fMatchCount - 1 do begin
+        local := one^.Pattern;
+        if local.Search(@local, aText, aLen) then
           exit;
-        end;
-      end
-      else if one^.Parent.PMax < 0 then begin
-        result := i;
-        exit;
+        inc(one);
       end;
-      inc(one);
-    end;
+    end
+    else
+      for result := 0 to fMatchCount - 1 do
+        if one^.Pattern.PMax < 0 then
+          exit
+        else
+          inc(one);
     result := -2;
   end;
 end;
@@ -5762,7 +6082,7 @@ begin
     if found <> nil then
       with fMatch[n] do begin
         PatternInstance := pat^; // avoid GPF if aPatterns[] is released
-        Parent.Prepare(PatternInstance, CaseInsensitive, {reuse=}true);
+        Pattern.Prepare(PatternInstance, CaseInsensitive, {reuse=}true);
         inc(n);
       end;
     inc(pat);
@@ -6127,7 +6447,7 @@ begin
   if aFalsePositivePercent>100 then
     fFalsePositivePercent := 100 else
     fFalsePositivePercent := aFalsePositivePercent;
-  // see http://stackoverflow.com/a/22467497/458259
+  // see http://stackoverflow.com/a/22467497
   fBits := Round(-ln(fFalsePositivePercent/100)*aSize/(LN2*LN2));
   fHashFunctions := Round(fBits/fSize*LN2);
   if fHashFunctions=0 then
@@ -7101,43 +7421,12 @@ end;
 
 { TRawByteStringGroup }
 
-const
-  COMPACT_COUNT = 512; // auto-compaction if 512 last items < 1MB
-  COMPACT_LEN = 1 shl 20;
-
-procedure TRawByteStringGroup.Compact(len: integer);
-var tmp: RawByteString;
-    i, L: integer;
-    P: PAnsiChar;
-begin
-  SetLength(tmp,len);
-  P := pointer(tmp);
-  for i := Count-COMPACT_COUNT to Count-1 do
-    with Values[i] do begin
-      L := length(Value);
-      MoveFast(pointer(Value)^,P^,L);
-      inc(P,L);
-      Value := '';
-    end;
-  //assert(P-pointer(tmp)=len);
-  dec(Count,COMPACT_COUNT);
-  Values[Count].Value := tmp;
-  inc(Count);
-end;
-
 procedure TRawByteStringGroup.Add(const aItem: RawByteString);
-var len: integer;
 begin
   if Values=nil then
-    Clear else
-    if Count=NextCompact then begin
-      len := Position-Values[Count-COMPACT_COUNT].Position;
-      if len<COMPACT_LEN then
-        Compact(len) else
-        inc(NextCompact); // slide the compaction window once we reached 1MB
-    end;
+    Clear; // ensure all fields are initialized, even if on stack
   if Count=Length(Values) then
-    SetLength(Values,Count+COMPACT_COUNT+Count shr 3);
+    SetLength(Values,Count+128+Count shr 3);
   with Values[Count] do begin
     Position := self.Position;
     Value := aItem;
@@ -7162,6 +7451,8 @@ var i: integer;
 begin
   if aAnother.Values=nil then
     exit;
+  if Values=nil then
+    Clear; // ensure all fields are initialized, even if on stack
   if Count+aAnother.Count>Length(Values) then
     SetLength(Values,Count+aAnother.Count);
   s := pointer(aAnother.Values);
@@ -7174,15 +7465,16 @@ begin
     inc(d);
   end;
   inc(Count,aAnother.Count);
+  LastFind := Count-1;
 end;
 
 procedure TRawByteStringGroup.RemoveLastAdd;
 begin
   if Count>0 then begin
     dec(Count);
-    LastFind := Count;
     dec(Position,Length(Values[Count].Value));
     Values[Count].Value := ''; // release memory
+    LastFind := Count-1;
   end;
 end;
 
@@ -7204,26 +7496,36 @@ begin
   Position := 0;
   Count := 0;
   LastFind := 0;
-  NextCompact := COMPACT_COUNT;
 end;
 
 function TRawByteStringGroup.AsText: RawByteString;
-var i: integer;
-    v: PRawByteStringGroupValue;
 begin
   if Values=nil then
-    result := '' else
-  if Count=1 then
-    result := Values[0].Value else begin
-    SetString(result,nil,Position);
+    result := '' else begin
+    if Count>1 then
+      Compact;
+    result := Values[0].Value;
+  end;
+end;
+
+procedure TRawByteStringGroup.Compact;
+var i: integer;
+    v: PRawByteStringGroupValue;
+    tmp: RawByteString;
+begin
+  if (Values<>nil) and (Count>1) then begin
+    SetString(tmp,nil,Position);
     v := pointer(Values);
     for i := 1 to Count do begin
-      MoveFast(pointer(v^.Value)^,PByteArray(result)[v^.Position],length(v^.Value));
+      MoveFast(pointer(v^.Value)^,PByteArray(tmp)[v^.Position],length(v^.Value));
       {$ifdef FPC}Finalize(v^.Value){$else}v^.Value := ''{$endif};
       inc(v);
     end;
-    Values[0].Value := result; // use result for absolute compaction ;)
+    Values[0].Value := tmp; // use result for absolute compaction ;)
+    if Count>128 then
+      SetLength(Values,128);
     Count := 1;
+    LastFind := 0;
   end;
 end;
 
@@ -7233,7 +7535,7 @@ begin
   result := nil;
   if Values=nil then
     exit;
-  SetLength(result, Position);
+  SetLength(result,Position);
   for i := 0 to Count-1 do
   with Values[i] do
     MoveFast(pointer(Value)^,PByteArray(result)[Position],length(Value));
@@ -8046,6 +8348,371 @@ begin
     MoveFast(P^,PBegin^,PEnd-P); // erase content
   fStream.Seek(PBegin-P,soCurrent); // adjust current stream position
 end;
+
+
+{ ************ Expression Search Engine ************************** }
+
+function ToText(r: TExprParserResult): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TExprParserResult), ord(r));
+end;
+
+function ToUTF8(r: TExprParserResult): RawUTF8;
+begin
+  result := UnCamelCase(TrimLeftLowerCaseShort(ToText(r)));
+end;
+
+
+{ TExprNode }
+
+function TExprNode.Append(node: TExprNode): boolean;
+begin
+  result := node <> nil;
+  if result then
+    Last.fNext := node;
+end;
+
+constructor TExprNode.Create(nodeType: TExprNodeType);
+begin
+  inherited Create;
+  fNodeType := nodeType;
+end;
+
+destructor TExprNode.Destroy;
+begin
+  fNext.Free;
+  inherited Destroy;
+end;
+
+function TExprNode.Last: TExprNode;
+begin
+  result := self;
+  while result.Next <> nil do
+    result := result.Next;
+end;
+
+
+{ TParserAbstract }
+
+constructor TParserAbstract.Create;
+begin
+  inherited Create;
+  Initialize;
+end;
+
+destructor TParserAbstract.Destroy;
+begin
+  Clear;
+  inherited Destroy;
+end;
+
+procedure TParserAbstract.Clear;
+begin
+  fWordCount := 0;
+  fWords := nil;
+  fExpression := '';
+  FreeAndNil(fFirstNode);
+end;
+
+function TParserAbstract.ParseExpr: TExprNode;
+begin
+  result := ParseFactor;
+  ParseNextCurrentWord;
+  if (fCurrentWord = '') or (fCurrentWord = ')') then
+    exit;
+  if IdemPropNameU(fCurrentWord, fAndWord) then begin // w1 & w2 = w1 AND w2
+    ParseNextCurrentWord;
+    if result.Append(ParseExpr) then
+      result.Append(TExprNode.Create(entAnd));
+    exit;
+  end
+  else if IdemPropNameU(fCurrentWord, fOrWord) then begin // w1 + w2 = w1 OR w2
+    ParseNextCurrentWord;
+    if result.Append(ParseExpr) then
+      result.Append(TExprNode.Create(entOr));
+    exit;
+  end
+  else if fNoWordIsAnd and result.Append(ParseExpr) then // 'w1 w2' = 'w1 & w2'
+    result.Append(TExprNode.Create(entAnd));
+end;
+
+function TParserAbstract.ParseFactor: TExprNode;
+begin
+  if fCurrentError <> eprSuccess then
+    result := nil
+  else if IdemPropNameU(fCurrentWord, fNotWord) then begin
+    ParseNextCurrentWord;
+    result := ParseFactor;
+    if fCurrentError <> eprSuccess then
+      exit;
+    result.Append(TExprNode.Create(entNot));
+  end
+  else
+    result := ParseTerm;
+end;
+
+function TParserAbstract.ParseTerm: TExprNode;
+begin
+  result := nil;
+  if fCurrentError <> eprSuccess then
+    exit;
+  if fCurrentWord = '(' then begin
+    ParseNextCurrentWord;
+    result := ParseExpr;
+    if fCurrentError <> eprSuccess then
+      exit;
+    if fCurrentWord <> ')' then begin
+      FreeAndNil(result);
+      fCurrentError := eprMissingParenthesis;
+    end;
+  end
+  else if fCurrentWord = '' then begin
+    result := nil;
+    fCurrentError := eprMissingFinalWord;
+  end
+  else
+    try // calls meta-class overriden constructor
+      result := fWordClass.Create(self, fCurrentWord);
+      fCurrentError := TExprNodeWordAbstract(result).ParseWord;
+      if fCurrentError <> eprSuccess then begin
+        FreeAndNil(result);
+        exit;
+      end;
+      SetLength(fWords, fWordCount + 1);
+      fWords[fWordCount] := TExprNodeWordAbstract(result);
+      inc(fWordCount);
+    except
+      FreeAndNil(result);
+      fCurrentError := eprInvalidExpression;
+    end;
+end;
+
+function TParserAbstract.Parse(const aExpression: RawUTF8): TExprParserResult;
+var
+  depth: integer;
+  n: TExprNode;
+begin
+  Clear;
+  fCurrentError := eprSuccess;
+  fCurrent := pointer(aExpression);
+  ParseNextCurrentWord;
+  if fCurrentWord = '' then begin
+    result := eprNoExpression;
+    exit;
+  end;
+  fFirstNode := ParseExpr;
+  result := fCurrentError;
+  if result = eprSuccess then begin
+    depth := 0;
+    n := fFirstNode;
+    while n <> nil do begin
+      case n.NodeType of
+        entWord: begin
+          inc(depth);
+          if depth > high(fFoundStack) then begin
+            result := eprTooManyParenthesis;
+            break;
+          end;
+        end;
+        entOr, entAnd:
+          dec(depth);
+      end;
+      n := n.Next;
+    end;
+  end;
+  if result = eprSuccess then
+    fExpression := aExpression
+  else
+    Clear;
+  fCurrent := nil;
+end;
+
+class function TParserAbstract.ParseError(const aExpression: RawUTF8): RawUTF8;
+var
+  parser: TParserAbstract;
+  res: TExprParserResult;
+begin
+  parser := Create;
+  try
+    res := parser.Parse(aExpression);
+    if res = eprSuccess then
+      result := ''
+    else
+      result := ToUTF8(res);
+  finally
+    parser.Free;
+  end;
+end;
+
+function TParserAbstract.Execute: boolean;
+var
+  n: TExprNode;
+  st: PBoolean;
+begin // code below compiles very efficiently on FPC/x86-64
+  st := @fFoundStack;
+  n := fFirstNode;
+  repeat
+    case n.NodeType of
+      entWord: begin
+        st^ := TExprNodeWordAbstract(n).fFound;
+        inc(st); // see eprTooManyParenthesis above to avoid buffer overflow
+      end;
+      entNot:
+        PAnsiChar(st)[-1] := AnsiChar(ord(PAnsiChar(st)[-1]) xor 1);
+      entOr: begin
+        dec(st);
+        PAnsiChar(st)[-1] := AnsiChar(st^ or boolean(PAnsiChar(st)[-1]));
+      end; { TODO : optimize TExprParser OR when left member is already TRUE }
+      entAnd: begin
+        dec(st);
+        PAnsiChar(st)[-1] := AnsiChar(st^ and boolean(PAnsiChar(st)[-1]));
+      end;
+    end;
+    n := n.Next;
+  until n = nil;
+  result := boolean(PAnsiChar(st)[-1]);
+end;
+
+
+{ TExprParserAbstract }
+
+procedure TExprParserAbstract.Initialize;
+begin
+  fAndWord := '&';
+  fOrWord := '+';
+  fNotWord := '-';
+  fNoWordIsAnd := true;
+end;
+
+procedure TExprParserAbstract.ParseNextCurrentWord;
+var
+  P: PUTF8Char;
+begin
+  fCurrentWord := '';
+  P := fCurrent;
+  if P = nil then
+    exit;
+  while P^ in [#1..' '] do
+    inc(P);
+  if P^ = #0 then
+    exit;
+  if P^ in PARSER_STOPCHAR then begin
+    FastSetString(fCurrentWord, P, 1);
+    fCurrent := P + 1;
+  end
+  else begin
+    fCurrent := P;
+    ParseNextWord;
+  end;
+end;
+
+procedure TExprParserAbstract.ParseNextWord;
+const
+  STOPCHAR = PARSER_STOPCHAR + [#0, ' '];
+var
+  P: PUTF8Char;
+begin
+  P := fCurrent;
+  while not(P^ in STOPCHAR) do
+    inc(P);
+  FastSetString(fCurrentWord, fCurrent, P - fCurrent);
+  fCurrent := P;
+end;
+
+
+{ TExprNodeWordAbstract }
+
+constructor TExprNodeWordAbstract.Create(aOwner: TParserAbstract; const aWord: RawUTF8);
+begin
+  inherited Create(entWord);
+  fWord := aWord;
+  fOwner := aOwner;
+end;
+
+
+{ TExprParserMatchNode }
+
+type
+  TExprParserMatchNode = class(TExprNodeWordAbstract)
+  protected
+    fMatch: TMatch;
+    function ParseWord: TExprParserResult; override;
+  end;
+  PExprParserMatchNode = ^TExprParserMatchNode;
+
+function TExprParserMatchNode.ParseWord: TExprParserResult;
+begin
+  fMatch.Prepare(fWord, (fOwner as TExprParserMatch).fCaseSensitive, {reuse=}true);
+  result := eprSuccess;
+end;
+
+
+{ TExprParserMatch }
+
+constructor TExprParserMatch.Create(aCaseSensitive: boolean);
+begin
+  inherited Create;
+  fCaseSensitive := aCaseSensitive;
+end;
+
+procedure TExprParserMatch.Initialize;
+begin
+  inherited Initialize;
+  fWordClass := TExprParserMatchNode;
+end;
+
+function TExprParserMatch.Search(const aText: RawUTF8): boolean;
+begin
+  result := Search(pointer(aText), length(aText));
+end;
+
+function TExprParserMatch.Search(aText: PUTF8Char; aTextLen: PtrInt): boolean;
+const // rough estimation of UTF-8 characters
+  IS_UTF8_WORD = ['0' .. '9', 'A' .. 'Z', 'a' .. 'z', #$80 ..#$ff];
+var
+  P, PEnd: PUTF8Char;
+  n: PtrInt;
+begin
+  P := aText;
+  if (P = nil) or (fWords = nil) then begin
+    result := false;
+    exit;
+  end;
+  if fMatchedLastSet > 0 then begin
+    n := fWordCount;
+    repeat
+      dec(n);
+      fWords[n].fFound := false;
+    until n = 0;
+    fMatchedLastSet := 0;
+  end;
+  PEnd := P + aTextLen;
+  while (P < PEnd) and (fMatchedLastSet < fWordCount) do begin
+    while not(P^ in IS_UTF8_WORD) do begin
+      inc(P);
+      if P = PEnd then 
+        break;
+    end;
+    if P = PEnd then
+      break;
+    aText := P;
+    repeat
+      inc(P);
+    until (P = PEnd) or not(P^ in IS_UTF8_WORD);
+    aTextLen := P - aText;
+    n := fWordCount;
+    repeat
+      dec(n);
+      with TExprParserMatchNode(fWords[n]) do
+        if not fFound and fMatch.Match(aText, aTextLen) then begin
+          fFound := true;
+          inc(fMatchedLastSet);
+        end;
+    until n = 0;
+  end;
+  result := Execute;
+end;
+
 
 
 initialization

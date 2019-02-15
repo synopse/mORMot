@@ -6052,7 +6052,7 @@ begin
       SQLCached := false; // ftUTF8 values will have varying field length
     end;
     dOracle: begin // INSERT ALL INTO ... VALUES ... SELECT 1 FROM DUAL
-      AddShort('insert all'#10); // see http://stackoverflow.com/a/93724/458259
+      AddShort('insert all'#10); // see http://stackoverflow.com/a/93724
       for r := 1 to rowcount do begin
         AddShort('into ');
         AddString(TableName);
@@ -6110,7 +6110,7 @@ begin
   paramCountLimit := 0;
   case Props.fDBMS of
   // values below were done empirically, assuring < 667 (maximum :AA..:ZZ)
-  // see http://stackoverflow.com/a/6582902/458259 for theoritical high limits
+  // see http://stackoverflow.com/a/6582902 for theoritical high limits
   dSQlite:     paramCountLimit := 200;  // theoritical=999
   dMySQL:      paramCountLimit := 500;  // theoritical=60000
   dPostgreSQL: paramCountLimit := 500;  // theoritical=34000
@@ -6837,21 +6837,24 @@ begin
           if V.VText=pointer(tmp) then
             V.VBlobLen := length(tmp) else
             V.VBlobLen := StrLen(V.VText);
-        end;
           {$ifndef UNICODE}
           if (fConnection<>nil) and not fConnection.Properties.VariantStringAsWideString then begin
             VType := varString;
-            CurrentAnsiConvert.UTF8BufferToAnsi(V.VText,V.VBlobLen,RawByteString(VAny));
+            if (CurrentAnsiConvert.CodePage=CP_UTF8) and (V.VText=pointer(tmp)) then
+              RawByteString(VAny) := tmp else
+              CurrentAnsiConvert.UTF8BufferToAnsi(V.VText,V.VBlobLen,RawByteString(VAny));
           end else
-          {$endif}
+          {$endif UNICODE}
             UTF8ToSynUnicode(V.VText,V.VBlobLen,SynUnicode(VAny));
+        end else
+          VType := varString; // avoid obscure "Invalid variant type" in FPC
       end;
       else raise ESQLDBException.CreateUTF8(
         '%.ColumnToVariant: Invalid ColumnType(%)=%',[self,Col,ord(result)]);
     end;
   end;
 end;
-{$endif}
+{$endif LVCL}
 
 function TSQLDBStatement.ColumnTimestamp(Col: integer): TTimeLog;
 begin

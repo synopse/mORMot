@@ -699,7 +699,7 @@ type
   end;
 
   /// used to maintain a list of websocket protocols (for the server side)
-  TWebSocketProtocolList = class(TSynPersistentLocked)
+  TWebSocketProtocolList = class(TSynPersistentLock)
   protected
     fProtocols: array of TWebSocketProtocol;
     // caller should make fSafe.Lock/UnLock
@@ -1261,7 +1261,7 @@ begin
     if fCache <> nil then begin
       if fHttp <> nil then
         cache.Tag := trim(FindIniNameValue(pointer(headout),'ETAG:')) else
-        cache.Tag := fSocket.HeaderValue('ETAG');
+        cache.Tag := fSocket.HeaderGetValue('ETAG');
       if cache.Tag <> '' then begin
         cache.Content := result;
         fCache.AddOrUpdate(aAddress,cache);
@@ -2802,16 +2802,16 @@ var upgrade,uri,version,prot,subprot,key,extin,extout: RawUTF8;
     Digest: TSHA1Digest;
 begin
   result := STATUS_BADREQUEST;
-  upgrade := ClientSock.HeaderValue('Upgrade');
+  upgrade := ClientSock.HeaderGetValue('UPGRADE');
   if not IdemPropNameU(upgrade,'websocket') then
     exit;
-  version := ClientSock.HeaderValue('Sec-WebSocket-Version');
+  version := ClientSock.HeaderGetValue('SEC-WEBSOCKET-VERSION');
   if GetInteger(pointer(version))<13 then
     exit; // we expect WebSockets protocol version 13 at least
   uri := Trim(RawUTF8(ClientSock.URL));
   if (uri<>'') and (uri[1]='/') then
     Delete(uri,1,1);
-  prot := ClientSock.HeaderValue('Sec-WebSocket-Protocol');
+  prot := ClientSock.HeaderGetValue('SEC-WEBSOCKET-PROTOCOL');
   P := pointer(prot);
   if P<>nil then begin
     repeat
@@ -2830,7 +2830,7 @@ begin
     exit;
   Protocol.fRemoteIP := ClientSock.RemoteIP;
   Protocol.fRemoteLocalhost := ClientSock.RemoteIP='127.0.0.1';
-  extin := ClientSock.HeaderValue('Sec-WebSocket-Extensions');
+  extin := ClientSock.HeaderGetValue('SEC-WEBSOCKET-EXTENSIONS');
   if extin<>'' then begin
     CSVToRawUTF8DynArray(pointer(extin),extins,';',true);
     if not Protocol.ProcessHandshake(extins,extout,nil) then begin
@@ -2839,7 +2839,7 @@ begin
       exit;
     end;
   end;
-  key := ClientSock.HeaderValue('Sec-WebSocket-Key');
+  key := ClientSock.HeaderGetValue('SEC-WEBSOCKET-KEY');
   if Base64ToBinLengthSafe(pointer(key),length(key))<>16 then begin
     Protocol.Free;
     exit; // this nonce must be a Base64-encoded value of 16 bytes
@@ -3197,23 +3197,23 @@ begin
       SockSendFlush('');
       SockRecvLn(cmd);
       GetHeader;
-      prot := HeaderValue('Sec-WebSocket-Protocol');
+      prot := HeaderGetValue('SEC-WEBSOCKET-PROTOCOL');
       result := 'Invalid HTTP Upgrade Header';
       if not IdemPChar(pointer(cmd),'HTTP/1.1 101') or
          not ConnectionUpgrade or (ContentLength>0) or
-         not IdemPropNameU(HeaderValue('upgrade'),'websocket') or
+         not IdemPropNameU(HeaderGetValue('UPGRADE'),'websocket') or
          not aProtocol.SetSubprotocol(prot) then
         exit;
       aProtocol.fName := prot;
       result := 'Invalid HTTP Upgrade Accept Challenge';
       ComputeChallenge(bin1,digest1);
-      bin2 := HeaderValue('Sec-WebSocket-Accept');
+      bin2 := HeaderGetValue('SEC-WEBSOCKET-ACCEPT');
       if not Base64ToBin(pointer(bin2),@digest2,length(bin2),sizeof(digest2),false) or
          not IsEqual(digest1,digest2) then
         exit;
       if extout<>'' then begin
         result := 'Invalid HTTP Upgrade ProcessHandshake';
-        extin := HeaderValue('Sec-WebSocket-Extensions');
+        extin := HeaderGetValue('SEC-WEBSOCKET-EXTENSIONS');
         CSVToRawUTF8DynArray(pointer(extin),extins,';',true);
         if (extins=nil) or not aProtocol.ProcessHandshake(extins,extout,@result) then
           exit;

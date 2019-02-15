@@ -558,7 +558,7 @@ type
   // in addition to the main function result), it shall return a JSON object,
   // with parameter names for all var/out/result values, e.g.
   // ! '{"first":1,"second":2,"result":3}'
-  // - this allows the function result to be consummed by the JavaScript as
+  // - this allows the function result to be consumed by the JavaScript as
   // a regular JS value or object
   // - corresponds to meJSON kind of callback method
   TSMEngineMethodEventJSON = function(const This: TSMObject;
@@ -925,9 +925,10 @@ type
   protected
   {$endif}
     VType: TVarType;
-    {$HINTS OFF} // does not complain if Filler is declared but never used
+    {$IFDEF FPC} {$PUSH} {$ENDIF} {$HINTS OFF}
+    // does not complain if Filler is declared but never used
     Filler: array[1..SizeOf(TVarData)-SizeOf(TVarType)-SizeOf(TSMObject)] of byte;
-    {$HINTS ON}
+    {$IFDEF FPC} {$POP} {$ELSE} {$HINTS ON} {$ENDIF}
     VObject: TSMObject;
   public
     /// initialize a TSMVariant structure to store a specified JavaScript object
