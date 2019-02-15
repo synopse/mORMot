@@ -49787,7 +49787,6 @@ end;
 
 procedure TDynArray.InternalSetLength(NewLength: PtrUInt);
 var p: PDynArrayRec;
-    pa: PAnsiChar absolute p;
     OldLength, NeededSize, minLength: PtrUInt;
     pp: pointer;
     i: integer;
@@ -49805,13 +49804,6 @@ begin // this method is faster than default System.DynArraySetLength() function
     {$ifdef FPC}FPCDynArrayClear{$else}_DynArrayClear{$endif}(fValue^,ArrayType);
     exit;
   end;
-  // retrieve old length
-  p := fValue^;
-  if p<>nil then begin
-    dec(PtrUInt(p),SizeOf(TDynArrayRec)); // p^ = start of heap object
-    OldLength := p^.length;
-  end else
-    OldLength := 0;
   // calculate the needed size of the resulting memory structure on heap
   NeededSize := NewLength*ElemSize+SizeOf(TDynArrayRec);
   {$ifndef CPU64}
@@ -49820,29 +49812,37 @@ begin // this method is faster than default System.DynArraySetLength() function
       [ArrayTypeShort^,NewLength]);
   {$endif}
   // if not shared (refCnt=1), resize; if shared, create copy (not thread safe)
-  if (p=nil) or (p^.refCnt=1) then begin
-    if NewLength<OldLength then
-      if ElemType<>nil then
-        {$ifdef FPC}FPCFinalizeArray{$else}_FinalizeArray{$endif}(
-          pa+NeededSize,ElemType,OldLength-NewLength) else
-        if GetIsObjArray then begin // FreeAndNil() of resized objects list
-          for i := NewLength to OldLength-1 do
-            PObjectArray(fValue^)^[i].Free;
-          FillCharFast(pa[NeededSize],(OldLength-NewLength) shl POINTERSHR,0);
-        end;
-    ReallocMem(p,neededSize);
+  p := fValue^;
+  if p=nil then begin
+    p := AllocMem(NeededSize);
+    OldLength := NewLength; // no FillcharFast() below
   end else begin
-    InterlockedDecrement(PInteger(@p^.refCnt)^); // FPC has refCnt: PtrInt
-    GetMem(p,neededSize);
-    minLength := oldLength;
-    if minLength>newLength then
-      minLength := newLength;
-    if ElemType<>nil then begin
-      pp := pa+SizeOf(TDynArrayRec);
-      FillcharFast(pp^,minLength*elemSize,0);
-      CopyArray(pp,fValue^,ElemType,minLength);
-    end else
-      MoveFast(fValue^,pa[SizeOf(TDynArrayRec)],minLength*elemSize);
+    dec(PtrUInt(p),SizeOf(TDynArrayRec)); // p^ = start of heap object
+    OldLength := p^.length;
+    if p^.refCnt=1 then begin
+      if NewLength<OldLength then
+        if ElemType<>nil then
+          {$ifdef FPC}FPCFinalizeArray{$else}_FinalizeArray{$endif}(
+            PAnsiChar(p)+NeededSize,ElemType,OldLength-NewLength) else
+          if GetIsObjArray then begin // FreeAndNil() of resized objects list
+            for i := NewLength to OldLength-1 do
+              PObjectArray(fValue^)^[i].Free;
+            FillCharFast(PAnsiChar(p)[NeededSize],(OldLength-NewLength) shl POINTERSHR,0);
+          end;
+      ReallocMem(p,NeededSize);
+    end else begin
+      InterlockedDecrement(PInteger(@p^.refCnt)^); // FPC has refCnt: PtrInt
+      GetMem(p,NeededSize);
+      minLength := oldLength;
+      if minLength>newLength then
+        minLength := newLength;
+      if ElemType<>nil then begin
+        pp := PAnsiChar(p)+SizeOf(TDynArrayRec);
+        FillcharFast(pp^,minLength*elemSize,0);
+        CopyArray(pp,fValue^,ElemType,minLength);
+      end else
+        MoveFast(fValue^,PAnsiChar(p)[SizeOf(TDynArrayRec)],minLength*elemSize);
+    end;
   end;
   // set refCnt=1 and new length to the heap memory structure
   with p^ do begin
@@ -49857,7 +49857,7 @@ begin // this method is faster than default System.DynArraySetLength() function
   // reset new allocated elements content to zero
   if NewLength>OldLength then begin
     OldLength := OldLength*elemSize;
-    FillcharFast(pa[OldLength],neededSize-OldLength-SizeOf(TDynArrayRec),0);
+    FillcharFast(PAnsiChar(p)[OldLength],NeededSize-OldLength-SizeOf(TDynArrayRec),0);
   end;
   fValue^ := p;
 end;
@@ -51645,12 +51645,9 @@ end;
 
 {$ifdef FPC_OR_PUREPASCAL}
 class function TSynPersistent.NewInstance: TObject;
-var p: pointer;
 begin // bypass vmtIntfTable and vmt^.vInitTable (management operators)
-  GetMem(p, InstanceSize);
-  FillCharFast(p^, InstanceSize, 0);
-  PPointer(p)^ := pointer(self); // store VMT
-  result := p;
+  result := AllocMem(InstanceSize); // will zero memory
+  PPointer(result)^ := pointer(self); // store VMT
 end;
 {$else}
 class function TSynPersistent.NewInstance: TObject;
@@ -51708,8 +51705,7 @@ end;
 constructor TSynPersistentLock.Create;
 begin
   inherited Create;
-  GetMem(fSafe,SizeOf(TSynLocker));
-  FillCharFast(fSafe^,SizeOf(TSynLocker),0);
+  fSafe := AllocMem(SizeOf(TSynLocker));
   fSafe^.Init;
 end;
 
@@ -63839,7 +63835,7 @@ procedure TMemoryMapText.LoadFromMap(AverageLineLength: integer=32);
 var P: PUTF8Char;
 begin
   fLinesMax := fMap.fFileSize div AverageLineLength+8;
-  Getmem(fLines,fLinesMax*SizeOf(pointer));
+  GetMem(fLines,fLinesMax*SizeOf(pointer));
   P := pointer(fMap.Buffer);
   fMapEnd := P+fMap.Size;
   if TextFileKind(Map)=isUTF8 then
