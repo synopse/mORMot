@@ -11547,7 +11547,7 @@ begin
       on E: Exception do begin
         if curl.Module<>0 then
           FreeLibrary(curl.Module);
-        curl.Module := {$ifdef KYLIX3}THandle{$endif}(-1); // don't try to load any more
+        curl.Module := {$ifndef FPC}THandle{$endif}(-1); // don't try to load any more
         raise;
       end;
     end;
