@@ -1911,7 +1911,9 @@ end;
 
 procedure TSQLDBOracleConnection.Connect;
 var Log: ISynLog;
+    fake1: int64;
     Props: TSQLDBOracleConnectionProperties;
+    fake2: int64;
     mode: ub4;
     msg: RawUTF8;
 const
@@ -1921,6 +1923,10 @@ const
     type_Credential: array[boolean] of integer = (OCI_CRED_RDBMS,OCI_CRED_EXT);
 begin
   Log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Connect'{$endif});
+  // for FPCx64 compiler on both Win/Lin AV can occures during call to EnvNlsCreate
+  // fake1 & fake2 variables will protect a stack
+  // see https://synopse.info/forum/viewtopic.php?pid=28798#p28798 for details
+  fake2 := 0; fake2 := fake1;
   Disconnect; // force fTrans=fError=fServer=fContext=nil
   Props := Properties as TSQLDBOracleConnectionProperties;
   with OCI do
