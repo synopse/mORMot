@@ -119,8 +119,9 @@ const
   SYNOPSE_FRAMEWORK_FULLVERSION  = SYNOPSE_FRAMEWORK_VERSION
     {$ifdef FPC}
       {$ifdef FPC_FASTMM4}+' FMM4'{$else}
-        {$ifdef FPC_SYNCMEM}+' SCMEM'{$else}
-          {$ifdef FPC_CMEM}+' CMEM'{$endif}{$endif}{$endif}
+        {$ifdef FPC_SYNTBB}+' TBB'{$else}
+          {$ifdef FPC_SYNCMEM}+' SCMEM'{$else}
+            {$ifdef FPC_CMEM}+' CMEM'{$endif}{$endif}{$endif}{$endif}
     {$else}
       {$ifdef LVCL}+' LVCL'{$else}
         {$ifdef ENHANCEDRTL}+' ERTL'{$endif}{$endif}
