@@ -60,7 +60,7 @@ interface
 {$endif FPC}
 {$ifndef LINUXNOTBSD}
   THIS UNIT IS FOR FPC/LINUX ONLY !
-   - requires malloc_usable_size()
+   - requires malloc_usable_size() -> use regular cmem unit instead
 {$endif LINUXNOTBSD}
 
 implementation
@@ -87,14 +87,13 @@ end;
 
 function _FreeMem(p: pointer): PtrUInt;
 begin
-  if p <> nil then
-    free(p);
+  free(p); // free(nil) has no effect
   result := 0;
 end;
 
 function _FreeMemSize(p: pointer; size: PtrUInt): PtrUInt;
-begin // our library won't check the "size" value
-  if p <> nil then
+begin // our unit won't check the "size" value (not mandatory)
+  if size <> 0 then
     free(p);
   result := 0;
 end;
@@ -126,14 +125,14 @@ begin
 end;
 
 const
-  NewMM: TMemoryManager = (
+  NewMM: TMemoryManager = ( // direct call is possible under x86_64 = no cdecl
     NeedLock: false;
-    GetMem: @_Getmem;
-    FreeMem: @_FreeMem;
+    GetMem: @{$ifdef CPUX64}malloc{$else}_Getmem{$endif};
+    FreeMem: @{$ifdef CPUX64}free{$else}_FreeMem{$endif};
     FreememSize: @_FreememSize;
     AllocMem: @_AllocMem;
     ReallocMem: @_ReAllocMem;
-    MemSize: @_MemSize;
+    MemSize: @{$ifdef CPUX64}malloc_usable_size{$else}_MemSize{$endif};
     InitThread: nil;
     DoneThread: nil;
     RelocateHeap: nil;
