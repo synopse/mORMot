@@ -120,9 +120,9 @@ const
     {$ifdef FPC}
       {$ifdef FPC_FASTMM4}+' FMM4'{$else}
         {$ifdef FPC_SYNTBB}+' TBB'{$else}
-          {$ifdef FPC_SYNJEMALLOC}+' JEM'{$else}
-            {$ifdef FPC_SYNCMEM}+' SCMEM'{$else}
-              {$ifdef FPC_CMEM}+' CMEM'{$endif}{$endif}{$endif}{$endif}{$endif}
+          {$ifdef FPC_SYNJEMALLOC}+' JM'{$else}
+            {$ifdef FPC_SYNCMEM}+' GM'{$else}
+              {$ifdef FPC_CMEM}+' CM'{$endif}{$endif}{$endif}{$endif}{$endif}
     {$else}
       {$ifdef LVCL}+' LVCL'{$else}
         {$ifdef ENHANCEDRTL}+' ERTL'{$endif}{$endif}

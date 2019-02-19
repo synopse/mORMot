@@ -201,11 +201,13 @@ var
   lib: pointer;
   {$endif FPC_SYNCMEM}
 
+{.$define VERBOSE}
+
 {$I-}
 procedure InitMM;
 begin
   {$ifdef FPC_SYNCMEM}
-  //writeln('using glibc');
+  {$ifdef VERBOSE}writeln('using glibc');{$endif}
   {$else}
   {$ifdef FPC_SYNJEMALLOC} // jemalloc 3.6 seems slower, but maybe less fragmented
   lib := dlopen('libjemalloc.so.1', RTLD_LAZY);
@@ -215,7 +217,7 @@ begin
     pointer(@free)    := dlsym(lib, 'free');
     pointer(@realloc) := dlsym(lib, 'realloc');
     pointer(@msize)   := dlsym(lib, 'malloc_usable_size');
-    //writeln('using jemalloc');
+    {$ifdef VERBOSE}writeln('using jemalloc');{$endif}
   end else
     writeln(StdErr, dlerror, '  [apt-get install libjemalloc1]');
   {$else}
@@ -230,7 +232,7 @@ begin
     pointer(@free)    := dlsym(lib, 'scalable_free');
     pointer(@realloc) := dlsym(lib, 'scalable_realloc');
     pointer(@msize)   := dlsym(lib, 'scalable_msize');
-    //writeln('using Intel TBB');
+    {$ifdef VERBOSE}writeln('using Intel TBB');{$endif}
   end;
   {$endif FPC_SYNJEMALLOC}
   {$endif FPC_SYNCMEM}
