@@ -29,6 +29,7 @@ unit mORMotWrappers;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s) (for this unit and the .mustache templates):
+  - EMartin
   - Sabbiolina
   - Stefan Diestelmann
 
@@ -438,7 +439,7 @@ begin
       source := GetNextItemString(src,';');
       if (source<>'') and DirectoryExists(source) then begin
         SetLength(fSourcePath,n+1);
-        fSourcePath[n] := IncludeTrailingPathDelimiter(aSourcePath);
+        fSourcePath[n] := IncludeTrailingPathDelimiter(source);
         inc(n);
       end;
     until src=nil;
