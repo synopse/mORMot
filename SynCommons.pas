@@ -119,8 +119,10 @@ const
   SYNOPSE_FRAMEWORK_FULLVERSION  = SYNOPSE_FRAMEWORK_VERSION
     {$ifdef FPC}
       {$ifdef FPC_FASTMM4}+' FMM4'{$else}
-        {$ifdef FPC_SYNCMEM}+' SCMEM'{$else}
-          {$ifdef FPC_CMEM}+' CMEM'{$endif}{$endif}{$endif}
+        {$ifdef FPC_SYNTBB}+' TBB'{$else}
+          {$ifdef FPC_SYNJEMALLOC}+' JM'{$else}
+            {$ifdef FPC_SYNCMEM}+' GM'{$else}
+              {$ifdef FPC_CMEM}+' CM'{$endif}{$endif}{$endif}{$endif}{$endif}
     {$else}
       {$ifdef LVCL}+' LVCL'{$else}
         {$ifdef ENHANCEDRTL}+' ERTL'{$endif}{$endif}
@@ -7699,8 +7701,8 @@ type
   protected
     B, BEnd: PUTF8Char;
     fStream: TStream;
-    fInitialStreamPosition: cardinal;
-    fTotalFileSize: cardinal;
+    fInitialStreamPosition: PtrUInt;
+    fTotalFileSize: PtrUInt;
     fCustomOptions: TTextWriterOptions;
     // internal temporary buffer
     fTempBufSize: Integer;
@@ -7709,13 +7711,13 @@ type
     /// used by WriteObjectAsString/AddDynArrayJSONAsString methods
     fInternalJSONWriter: TTextWriter;
     fHumanReadableLevel: integer;
-    fEchoStart: integer;
+    fEchoStart: PtrInt;
     fEchoBuf: RawUTF8;
     fEchos: array of TOnTextWriterEcho;
-    function GetLength: cardinal;
+    function GetTextLength: PtrUInt;
     procedure SetStream(aStream: TStream);
     procedure SetBuffer(aBuf: pointer; aBufSize: integer);
-    function EchoFlush: integer;
+    function EchoFlush: PtrInt;
     procedure InternalAddFixedAnsi(Source: PAnsiChar; SourceChars: Cardinal;
       const AnsiToWide: TWordDynArray; Escape: TTextWriterKind);
     function GetEndOfLineCRLF: boolean;
@@ -7933,7 +7935,7 @@ type
     /// append an Integer Value as a 2 digits String with comma
     procedure Add2(Value: integer);
     /// append the current UTC date and time, in a log-friendly format
-    // - e.g. append '20110325 19241502 '
+    // - e.g. append '20110325 19241502'
     // - you may set LocalTime=TRUE to write the local date and time instead
     // - this method is very fast, and avoid most calculation or API calls
     procedure AddCurrentLogTime(LocalTime: boolean);
@@ -8443,7 +8445,7 @@ type
     /// how many bytes were currently written on disk
     // - excluding the bytes in the internal buffer
     // - see TextLength for the total number of bytes, on both disk and memory
-    property WrittenBytes: cardinal read fTotalFileSize;
+    property WrittenBytes: PtrUInt read fTotalFileSize;
     /// the last char appended is canceled
     procedure CancelLastChar; overload;
       {$ifdef HASINLINE}inline;{$endif}
@@ -8461,7 +8463,7 @@ type
     /// count of added bytes to the stream
     // - see PendingBytes for the number of bytes currently in the memory buffer
     // or WrittenBytes for the number of bytes already written to disk
-    property TextLength: cardinal read GetLength;
+    property TextLength: PtrUInt read GetTextLength;
     /// define how AddEndOfLine method stores its line feed characters
     // - by default (FALSE), it will append a LF (#10) char to the buffer
     // - you can set this property to TRUE, so that CR+LF (#13#10) chars will
@@ -12403,11 +12405,21 @@ type
     /// encode the stored date/time as text
     function ToText(Expanded: boolean=true; FirstTimeChar: AnsiChar='T'; const TZD: RawUTF8=''): RawUTF8;
     /// append the stored date and time, in a log-friendly format
-    // - e.g. append '20110325 19241502 '
+    // - e.g. append '20110325 19241502' - with no trailing space
     // - as called by TTextWriter.AddCurrentLogTime()
     procedure AddLogTime(WR: TTextWriter);
+    /// append the stored data and time, in apache-like format, to a TTextWriter
+    // - e.g. append '19/Feb/2019:06:18:55 ' - including a trailing space
+    procedure AddNCSAText(WR: TTextWriter);
+    /// append the stored data and time, in apache-like format, to a memory buffer
+    // - e.g. append '19/Feb/2019:06:18:55 ' - including a trailing space
+    // - returns the number of chars added to P, i.e. always 21
+    function ToNCSAText(P: PUTF8Char): PtrInt;
     /// convert the stored time into a TDateTime
     function ToDateTime: TDateTime;
+    /// add some 1..999 milliseconds to the stored time
+    // - not to be used for computation, but e.g. for fast AddLogTime generation
+    procedure IncrementMS(ms: integer);
   end;
   PSynSystemTime = ^TSynSystemTime;
 
@@ -16057,6 +16069,8 @@ type
     function PerSec(const Count: QWord): QWord;
     /// compute the time elapsed by count, with appened time resolution (us,ms,s)
     function ByCount(Count: QWord): TShort16;
+    /// returns e.g. '16.9 MB in 102.20ms i.e. 165.5 MB/s'
+    function SizePerSec(Size: QWord): shortstring;
     /// textual representation of time after counter stopped
     // - with appened time resolution (us,ms,s)
     // - not to be used in normal code, but e.g. for custom performance analysis
@@ -37155,7 +37169,7 @@ var y,d100: PtrUInt;
     P: PUTF8Char;
     tab: {$ifdef CPUX86}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
 begin
-  if WR.BEnd-WR.B<=17 then
+  if WR.BEnd-WR.B<=18 then
     WR.FlushToStream;
   {$ifndef CPUX86}tab := @TwoDigitLookupW;{$endif}
   y := Year;
@@ -37171,8 +37185,37 @@ begin
   PWord(P+13)^ := tab[Second];
   y := Millisecond;
   PWord(P+15)^ := tab[y shr 4];
-  P[17] := ' ';
-  WR.B := P+16;
+  inc(WR.B,17);
+end;
+
+function TSynSystemTime.ToNCSAText(P: PUTF8Char): PtrInt;
+var y,d100: PtrUInt;
+    tab: {$ifdef CPUX86}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
+begin
+  {$ifndef CPUX86}tab := @TwoDigitLookupW;{$endif}
+  PWord(P)^ := tab[Day];
+  P[2] := '/';
+  PCardinal(P+3)^ := PCardinal(@HTML_MONTH_NAMES[Month][1])^;
+  P[6] := '/';
+  y := Year;
+  d100 := y div 100;
+  PWord(P+7)^ := tab[d100];
+  PWord(P+9)^ := tab[y-(d100*100)];
+  P[11] := ':';
+  PWord(P+12)^ := tab[Hour];
+  P[14] := ':';
+  PWord(P+15)^ := tab[Minute];
+  P[17] := ':';
+  PWord(P+18)^ := tab[Second];
+  P[20] := ' ';
+  result := 21;
+end;
+
+procedure TSynSystemTime.AddNCSAText(WR: TTextWriter);
+begin
+  if WR.BEnd-WR.B<=21 then
+    WR.FlushToStream;
+  inc(WR.B,ToNCSAText(WR.B+1));
 end;
 
 function TSynSystemTime.ToDateTime: TDateTime;
@@ -37183,6 +37226,41 @@ begin
       result := result+time else
       result := 0 else
     result := 0;
+end;
+
+procedure TSynSystemTime.IncrementMS(ms: integer);
+begin
+  inc(MilliSecond, ms);
+  if MilliSecond >= 1000 then
+    repeat
+      dec(MilliSecond, 1000);
+      if Second < 60 then
+        inc(Second)
+      else begin
+        Second := 0;
+        if Minute < 60 then
+          inc(Minute)
+        else begin
+          Minute := 0;
+          if Hour < 24 then
+            inc(Hour)
+          else begin
+            Hour := 0;
+            if Day < MonthDays[false, Month] then
+              inc(Day)
+            else begin
+              Day := 1;
+              if Month < 12 then
+                inc(Month)
+              else begin
+                Month := 1;
+                inc(Year);
+              end;
+            end;
+          end;
+        end;
+      end;
+    until MilliSecond < 1000;
 end;
 
 { TTimeZoneData }
@@ -53507,7 +53585,7 @@ begin
 end;
 
 procedure TTextWriter.AddBinToHex(Bin: Pointer; BinBytes: integer);
-var ChunkBytes: integer;
+var ChunkBytes: PtrInt;
 begin
   if BinBytes<=0 then
     exit;
@@ -54745,7 +54823,7 @@ end;
 
 procedure TTextWriter.FlushToStream;
 var i: PtrInt;
-    written: cardinal;
+    written: PtrUInt;
 begin
   if fEchos<>nil then begin
     EchoFlush;
@@ -54786,11 +54864,11 @@ begin
     exclude(fCustomOptions,twoEndOfLineCRLF);
 end;
 
-function TTextWriter.GetLength: cardinal;
+function TTextWriter.GetTextLength: PtrUInt;
 begin
   if self=nil then
     result := 0 else
-    result := cardinal(B-fTempBuf+1)+fTotalFileSize-fInitialStreamPosition;
+    result := PtrUInt(B-fTempBuf+1)+fTotalFileSize-fInitialStreamPosition;
 end;
 
 function TTextWriter.Text: RawUTF8;
@@ -54915,8 +54993,8 @@ begin
     MultiEventRemove(fEchos,TMethod(aEcho));
 end;
 
-function TTextWriter.EchoFlush: integer;
-var L,LI: Integer;
+function TTextWriter.EchoFlush: PtrInt;
+var L,LI: PtrInt;
     P: PByteArray;
 begin
   result := B-fTempBuf+1;
@@ -57040,6 +57118,11 @@ begin
   if iTime<=0 then // avoid negative value in case of incorrect Start/Stop sequence
     result := 0 else // avoid div per 0 exception
     result := (Count*QWord(1000*1000)) div iTime;
+end;
+
+function TPrecisionTimer.SizePerSec(Size: QWord): shortstring;
+begin
+  FormatShort('% in % i.e. %/s',[KB(Size),Stop,KB(PerSec(Size))],result);
 end;
 
 {$IFDEF FPC} {$PUSH} {$ENDIF} {$HINTS OFF}
