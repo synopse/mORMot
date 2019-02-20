@@ -12142,7 +12142,7 @@ type
     procedure SetPendingProcess(State: TSynBackgroundThreadProcessStep);
     // returns  flagIdle if acquired, flagDestroying if terminated
     function AcquireThread: TSynBackgroundThreadProcessStep;
-    procedure WaitForFinished(start: Int64);
+    procedure WaitForFinished(start: Int64; const onmainthreadidle: TNotifyEvent);
     /// called by Execute method when fProcessParams<>nil and fEvent is notified
     procedure Process; virtual; abstract;
   public
@@ -12294,7 +12294,11 @@ type
     // - will split Method[0..MethodCount-1] execution over the threads
     // - in case of any exception during process, an ESynParallelProcess
     // exception would be raised by this method
-    procedure ParallelRunAndWait(Method: TSynParallelProcessMethod; MethodCount: integer);
+    // - if OnMainThreadIdle is set, the current thread (which is expected to be
+    // e.g. the main UI thread) won't process anything, but call this event
+    // during waiting for the background threads
+    procedure ParallelRunAndWait(const Method: TSynParallelProcessMethod;
+      MethodCount: integer; const OnMainThreadIdle: TNotifyEvent = nil);
   published
     /// how many threads have been activated
     property ParallelRunCount: integer read fParallelRunCount;
@@ -64816,12 +64820,17 @@ begin
     fOnIdle(self,result) ;
 end;
 
-procedure TSynBackgroundThreadMethodAbstract.WaitForFinished(start: Int64);
+procedure TSynBackgroundThreadMethodAbstract.WaitForFinished(start: Int64;
+  const onmainthreadidle: TNotifyEvent);
 var E: Exception;
 begin
-  if (self=nil) or not (fPendingProcessFlag in [flagStarted, flagFinished]) then
+  if (self=nil) or not(fPendingProcessFlag in [flagStarted, flagFinished]) then
     exit; // nothing to wait for
   try
+    if Assigned(onmainthreadidle) then begin
+      while FixedWaitFor(fCallerEvent,100)=wrTimeout do
+        onmainthreadidle(self);
+    end else
     {$ifdef MSWINDOWS} // do process the OnIdle only if UI
     if Assigned(fOnIdle) then begin
       while FixedWaitFor(fCallerEvent,100)=wrTimeout do
@@ -64876,7 +64885,7 @@ begin
   // 2. process execution in the background thread
   fParam := OpaqueParam;
   fProcessEvent.SetEvent; // notify background thread for Call pending process
-  WaitForFinished(start); // wait for flagFinished, then set flagIdle
+  WaitForFinished(start,nil); // wait for flagFinished, then set flagIdle
   result := true;
 end;
 
@@ -65645,20 +65654,24 @@ begin
   inherited;
 end;
 
-procedure TSynParallelProcess.ParallelRunAndWait(Method: TSynParallelProcessMethod;
-  MethodCount: integer);
+procedure TSynParallelProcess.ParallelRunAndWait(const Method: TSynParallelProcessMethod;
+  MethodCount: integer; const OnMainThreadIdle: TNotifyEvent);
 var use,t,n,perthread: integer;
     error: RawUTF8;
 begin
   if (MethodCount<=0) or not Assigned(Method) then
     exit;
-  if (self=nil) or (MethodCount=1) or (fThreadPoolCount=0) then begin
-    Method(0,MethodCount-1); // no need (or impossible) to use background thread
-    exit;
-  end;
+  if not Assigned(OnMainThreadIdle) then
+    if (self=nil) or (MethodCount=1) or (fThreadPoolCount=0) then begin
+      Method(0,MethodCount-1); // no need (or impossible) to use background thread
+      exit;
+    end;
   use := MethodCount;
-  if use>fThreadPoolCount+1 then // +1 to include current thread
-    use := fThreadPoolCount+1;
+  t := fThreadPoolCount;
+  if not Assigned(OnMainThreadIdle) then
+    inc(t); // include current thread
+  if use>t then
+    use := t;
   try
     // start secondary threads
     perthread := MethodCount div use;
@@ -65675,21 +65688,27 @@ begin
           break; // acquired (should always be the case)
         end;
         Sleep(1);
+        if Assigned(OnMainThreadIdle) then
+          OnMainThreadIdle(self);
       until false;
       fPool[t].Start(Method,n,n+perthread-1);
       inc(n,perthread);
       inc(fParallelRunCount);
     end;
-    // run remaining items in the current thread
+    // run remaining items in the current/last thread
     if n<MethodCount then begin
-      Method(n,MethodCount-1);
+      if Assigned(OnMainThreadIdle) then begin
+        fPool[use-1].Start(Method,n,MethodCount-1);
+        inc(use); // also wait for the last thread
+      end else
+        Method(n,MethodCount-1);
       inc(fParallelRunCount);
     end;
   finally
     // wait for the process to finish
     for t := 0 to use-2 do
     try
-      fPool[t].WaitForFinished(0);
+      fPool[t].WaitForFinished(0,OnMainThreadIdle);
     except
       on E: Exception do
         error := FormatUTF8('% % on thread % [%]',[error,E,fPool[t].fThreadName,E.Message]);
