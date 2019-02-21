@@ -268,7 +268,7 @@ begin
     sock := TProxySocket.Create(nil);
     try
       sock.InitRequest(aSocket);
-      if sock.GetRequest({withBody=}false) and (sock.URL <> '') then begin
+      if sock.GetRequest({withBody=}false, {headertix=}0) and (sock.URL <> '') then begin
         if log<>nil then
           log.Log(sllTrace, 'ConnectionCreate received % % %', [sock.Method, sock.URL,
             sock.HeaderGetText], self);

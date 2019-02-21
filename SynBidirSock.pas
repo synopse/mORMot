@@ -432,7 +432,7 @@ type
     opcode: TWebSocketFrameOpCode;
     /// what is stored in the frame data, i.e. in payload field
     content: TWebSocketFramePayloads;
-    /// internal tick count used for TWebSocketFrameList storage timeout
+    /// equals GetTickCount64 shr 10, as used for TWebSocketFrameList timeout
     tix: cardinal;
     /// the frame data itself
     // - is plain UTF-8 for focText kind of frame
@@ -739,7 +739,7 @@ type
   /// used to manage a thread-safe list of WebSockets frames
   TWebSocketFrameList = class(TSynPersistent)
   protected
-    fTimeoutSec: cardinal;
+    fTimeoutSec: PtrInt;
     procedure Delete(i: integer);
   public
     /// low-level access to the WebSocket frames list
@@ -1125,7 +1125,7 @@ type
   public
     /// common initialization of all constructors
     // - this overridden method will set the UserAgent with some default value
-    constructor Create(aTimeOut: cardinal=10000); override;
+    constructor Create(aTimeOut: PtrInt=10000); override;
     /// finalize the connection
     destructor Destroy; override;
     /// process low-level REST request, either on HTTP/1.1 or via WebSockets
@@ -3099,7 +3099,7 @@ end;
 
 { THttpClientWebSockets }
 
-constructor THttpClientWebSockets.Create(aTimeOut: cardinal);
+constructor THttpClientWebSockets.Create(aTimeOut: PtrInt);
 begin
   inherited;
   fSettings.SetDefaults;
