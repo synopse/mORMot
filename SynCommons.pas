@@ -11880,7 +11880,9 @@ type
 
 var
   /// compute CRC32C checksum on the supplied buffer
-  // - this variable will use the fastest mean available, e.g. SSE 4.2
+  // - result is not compatible with zlib's crc32() - Intel/SCSI CRC32C is not
+  // the same polynom - but will use the fastest mean available, e.g. SSE 4.2,
+  // to achieve up to 16GB/s with the optimized implementation from SynCrypto.pas
   // - you should use this function instead of crc32cfast() or crc32csse42()
   crc32c: THasher;
   /// compute CRC32C checksum on one 32-bit unsigned integer
