@@ -9319,6 +9319,11 @@ type
     /// get the TAlgoCompress instance corresponding to the AlgoID stored
     // in the supplied compressed buffer
     // - returns nil if no algorithm was identified
+    // - also identifies "stored" content in IsStored variable
+    class function Algo(Comp: PAnsiChar; CompLen: integer; out IsStored: boolean): TAlgoCompress; overload;
+    /// get the TAlgoCompress instance corresponding to the AlgoID stored
+    // in the supplied compressed buffer
+    // - returns nil if no algorithm was identified
     class function Algo(const Comp: RawByteString): TAlgoCompress; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// get the TAlgoCompress instance corresponding to the AlgoID stored
@@ -63243,10 +63248,21 @@ end;
 class function TAlgoCompress.Algo(Comp: PAnsiChar; CompLen: integer): TAlgoCompress;
 begin
   if (Comp<>nil) and (CompLen>9) then
-    if ord(Comp[4])<=1{inlinedCOMPRESS_SYNLZ} then // "stored" maps SynLZ
-      result := AlgoSynLZ else
+    if ord(Comp[4])<=1 then // inline-friendly Comp[4]<=COMPRESS_SYNLZ
+      result := AlgoSynLZ else // COMPRESS_STORED is also handled as SynLZ
       result := Algo(ord(Comp[4])) else
     result := nil;
+end;
+
+class function TAlgoCompress.Algo(Comp: PAnsiChar; CompLen: integer; out IsStored: boolean): TAlgoCompress;
+begin
+  if (Comp<>nil) and (CompLen>9) then begin
+    IsStored := Comp[4]=COMPRESS_STORED;
+    result := Algo(ord(Comp[4]));
+  end else begin
+    IsStored := false;
+    result := nil;
+  end;
 end;
 
 class function TAlgoCompress.Algo(AlgoID: byte): TAlgoCompress;
