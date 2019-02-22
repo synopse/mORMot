@@ -819,7 +819,9 @@ type
     fThreadIndex: integer;
     fStartTimestamp: Int64;
     fCurrentTimestamp: Int64;
+    {$ifndef LINUX}
     fFrequencyTimestamp: Int64;
+    {$endif}
     fStartTimestampDateTime: TDateTime;
     fStreamPositionAfterHeader: cardinal;
     fFileName: TFileName;
@@ -4287,14 +4289,18 @@ end;
 
 procedure TSynLog.LogFileInit;
 begin
+  {$ifdef LINUX}
+  QueryPerformanceCounterMicroSeconds(fStartTimestamp);
+  {$else}
+  QueryPerformanceCounter(fStartTimestamp);
   if not QueryPerformanceFrequency(fFrequencyTimestamp) then begin
     fFamily.HighResolutionTimestamp := false;
     fFrequencyTimestamp := 0;
   end else
+  {$endif LINUX}
     if (fFileRotationSize>0) or (fFileRotationNextHour<>0) then
       fFamily.HighResolutionTimestamp := false;
   fStreamPositionAfterHeader := fWriter.WrittenBytes;
-  QueryPerformanceCounter(fStartTimestamp);
   if fFamily.LocalTimestamp then
     fStartTimestampDateTime := Now else
     fStartTimestampDateTime := NowUTC;
@@ -4363,8 +4369,13 @@ begin
     AddReplace(@SystemInfo.uts.version,' ','-');
     AddShort(' Wow64=0');
     {$endif}
+    AddShort(' Freq=');
+    {$ifdef LINUX}
+    AddShort('1000000'); // taken by QueryPerformanceCounterMicroSeconds()
+    {$else}
     QueryPerformanceFrequency(fFrequencyTimestamp);
-    AddShort(' Freq='); Add(fFrequencyTimestamp);
+    Add(fFrequencyTimestamp);
+    {$endif LINUX}
     if IsLibrary then begin
       AddShort(' Instance=');
       AddNoJSONEscapeString(InstanceFileName);
@@ -4444,8 +4455,13 @@ end;
 
 procedure TSynLog.LogCurrentTime;
 begin
+  {$ifdef LINUX}
+  if fFamily.HighResolutionTimestamp then begin
+    QueryPerformanceCounterMicroSeconds(fCurrentTimestamp);
+  {$else}
   if fFamily.HighResolutionTimestamp and (fFrequencyTimestamp<>0) then begin
     QueryPerformanceCounter(fCurrentTimestamp);
+  {$endif}
     dec(fCurrentTimestamp,fStartTimestamp);
     fWriter.AddBinToHexDisplay(@fCurrentTimestamp,sizeof(fCurrentTimestamp));
   end else
@@ -4709,7 +4725,6 @@ begin
 end;
 
 procedure TSynLog.AddRecursion(aIndex: integer; aLevel: TSynLogInfo);
-var MS: cardinal;
 begin // aLevel = sllEnter,sllLeave or sllNone
   with fThreadContext^ do
   if cardinal(aIndex)<cardinal(RecursionCount) then
@@ -4732,18 +4747,17 @@ begin // aLevel = sllEnter,sllLeave or sllNone
       end {$ifndef FPC} else
         TSynMapFile.Log(fWriter,Caller,false){$endif};
     end;
-    if (aLevel<>sllNone) and (fFrequencyTimestamp<>0) then begin
-      if not fFamily.HighResolutionTimestamp then begin
-        QueryPerformanceCounter(fCurrentTimestamp);
+    if (aLevel<>sllNone) {$ifndef LINUX}and (fFrequencyTimestamp<>0){$endif} then begin
+      if not fFamily.HighResolutionTimestamp then begin // no previous TSynLog.LogCurrentTime call
+        {$ifdef LINUX}QueryPerformanceCounterMicroSeconds{$else}QueryPerformanceCounter{$endif}(fCurrentTimestamp);
         dec(fCurrentTimestamp,fStartTimestamp);
       end;
       case aLevel of
       sllEnter:
         EnterTimestamp := fCurrentTimestamp;
-      sllLeave: begin
-        MS := ((fCurrentTimestamp-EnterTimestamp)*(1000*1000))div fFrequencyTimestamp;
-        fWriter.AddMicroSec(MS);
-      end;
+      sllLeave:
+        fWriter.AddMicroSec({$ifdef LINUX}fCurrentTimestamp-EnterTimestamp{$else}
+          ((fCurrentTimestamp-EnterTimestamp)*(1000*1000))div fFrequencyTimestamp{$endif});
       end; // may be sllNone when called from LogHeaderLock()
     end;
   end;
@@ -5590,8 +5604,8 @@ begin
       previousContent := TrackedLog.GetExistingLog(ReceiveExistingKB);
       if TrackedLog.HighResolutionTimestamp and (TrackedLog.fGlobalLog<>nil) then
         with TrackedLog.fGlobalLog do
-        Callback.Log(sllNone,FormatUTF8('freq=%,%,%',
-          [fFrequencyTimestamp,double(fStartTimestampDateTime),fFileName]));
+        Callback.Log(sllNone,FormatUTF8('freq=%,%,%',[{$ifdef LINUX}1000000{$else}
+          fFrequencyTimestamp{$endif},double(fStartTimestampDateTime),fFileName]));
       Callback.Log(sllNone,previousContent);
     end;
     Reg.Levels := Levels;
