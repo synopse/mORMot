@@ -277,7 +277,7 @@ begin
           exit;
         fPendingGet.Safe.Lock;
         try
-          now := GetTickCount64 shr 10;
+          now := SynCommons.GetTickCount64 shr 10;
           for i := fPendingGet.Count - 1 downto 0 do begin
             old := fPendingGet.ObjectPtr[i];
             if now > old.fExpires then begin

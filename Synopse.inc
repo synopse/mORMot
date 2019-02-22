@@ -288,6 +288,9 @@
     {$endif}
   {$endif}
 
+  {$ifdef LINUX}
+     {$define FPCLINUX}
+  {$endif}
   {$ifdef FPC_PIC}
     {$define PUREPASCAL} // most asm code is not PIC-safe with global constants
   {$endif}

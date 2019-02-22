@@ -37920,10 +37920,10 @@ procedure TSQLRestThread.WaitForNotExecuting(maxMS: integer);
 var endtix: Int64;
 begin
   if fExecuting then begin
-    endtix := GetTickCount64+maxMS;
+    endtix := SynCommons.GetTickCount64+maxMS;
     repeat
       Sleep(1); // wait for InternalExecute to finish
-    until not fExecuting or (GetTickCount64>=endtix);
+    until not fExecuting or (SynCommons.GetTickCount64>=endtix);
   end;
 end;
 
@@ -37953,12 +37953,12 @@ begin
   result := true; // notify Terminated
   if (self = nil) or Terminated then
     exit;
-  endtix := GetTickCount64+MS;
+  endtix := SynCommons.GetTickCount64+MS;
   repeat
     FixedWaitFor(fEvent,MS);
     if Terminated then
       exit;
-  until (MS<32) or (GetTickCount64>=endtix);
+  until (MS<32) or (SynCommons.GetTickCount64>=endtix);
   result := false; // normal delay expiration
 end;
 
@@ -56847,13 +56847,13 @@ begin
   {$ifdef WITHLOG}
   log := fRest.LogClass.Enter('AsynchBatchStop(%)',[Table],self);
   {$endif}
-  timeout := GetTickCount64+5000;
+  timeout := SynCommons.GetTickCount64+5000;
   if Table=nil then begin // e.g. from TSQLRest.Destroy
     if not EnQueue(AsynchBatchExecute,'free@',true) then
       exit;
     repeat
       sleep(1); // wait for all batchs to be released
-    until (fBackgroundBatch=nil) or (GetTickCount64>timeout);
+    until (fBackgroundBatch=nil) or (SynCommons.GetTickCount64>timeout);
     result := Disable(AsynchBatchExecute);
   end else begin
     b := AsynchBatchIndex(Table);
@@ -56861,7 +56861,7 @@ begin
       exit;
     repeat
       sleep(1); // wait for all pending rows to be sent
-    until (fBackgroundBatch[b]=nil) or (GetTickCount64>timeout);
+    until (fBackgroundBatch[b]=nil) or (SynCommons.GetTickCount64>timeout);
     if ObjArrayCount(fBackgroundBatch)>0 then
       result := true else begin
       result := Disable(AsynchBatchExecute);

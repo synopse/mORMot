@@ -27359,7 +27359,7 @@ var now: Int64;
 begin
   if Interval<=0 then
     result := false else begin
-    now := GetTickCount64;
+    now := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64;
     if now-PreviousTix>Interval then begin
       PreviousTix := now;
       result := true;
@@ -36012,7 +36012,7 @@ end;
 
 function UnixTimeToDateTime(const UnixTime: TUnixTime): TDateTime;
 begin
-  result := (UnixTime / SecsPerDay + UnixDateDelta);
+  result := UnixTime / SecsPerDay + UnixDateDelta;
 end;
 
 function DateTimeToUnixTime(const AValue: TDateTime): TUnixTime;
@@ -36171,7 +36171,7 @@ end;
 
 function UnixMSTimeToDateTime(const UnixMSTime: TUnixMSTime): TDateTime;
 begin
-  result := (UnixMSTime/MSecsPerDay + UnixDateDelta);
+  result := UnixMSTime/MSecsPerDay + UnixDateDelta;
 end;
 
 function UnixMSTimePeriodToString(const UnixTime: TUnixTime; FirstTimeChar: AnsiChar): RawUTF8;
@@ -36815,7 +36815,8 @@ var tix: PtrInt;
     newtimesys: TSystemTime absolute NewTime;
 begin
   with GlobalTime[LocalTime] do begin
-    tix := GetTickCount64 {$ifndef MSWINDOWS}shr 3{$endif}; // Linux: 8ms refresh
+    tix := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64
+      {$ifndef MSWINDOWS}shr 3{$endif}; // Linux: 8ms refresh
     if clock<>tix then begin // Windows: typically in range of 10-16 ms
       clock := tix;
       NewTime.Clear;
@@ -58729,7 +58730,7 @@ begin
   if fRamUsed>fMaxRamUsed then
     Reset;
   if fTimeoutSeconds>0 then begin
-    tix := GetTickCount64 shr 10;
+    tix := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64 shr 10;
     if fTimeoutTix>tix then
       Reset;
     fTimeoutTix := tix+fTimeoutSeconds;
@@ -60018,7 +60019,7 @@ function TSynDictionary.ComputeNextTimeOut: cardinal;
 begin
   result := fSafe.Padding[DIC_TIMESEC].VInteger;
   if result<>0 then
-    result := cardinal(GetTickCount64 shr 10)+result;
+    result := cardinal({$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64 shr 10)+result;
 end;
 
 function TSynDictionary.GetCapacity: integer;
@@ -60063,7 +60064,7 @@ begin
   if (self=nil) or (fSafe.Padding[DIC_TIMECOUNT].VInteger=0) or // no entry
      (fSafe.Padding[DIC_TIMESEC].VInteger=0) then // nothing in fTimeOut[]
     exit;
-  now := GetTickCount64 shr 10;
+  now := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64 shr 10;
   if fSafe.Padding[DIC_TIMETIX].VInteger=integer(now) then
     exit; // no need to search more often than every second
   fSafe.Lock;
@@ -60283,7 +60284,7 @@ begin // caller is expected to call fSafe.Lock/Unlock
   if aUpdateTimeOut and (result>=0) then begin
     tim := fSafe.Padding[DIC_TIMESEC].VInteger;
     if tim>0 then // inlined fTimeout[result] := GetTimeout
-      fTimeout[result] := cardinal(GetTickCount64 shr 10)+tim;
+      fTimeout[result] := cardinal({$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64 shr 10)+tim;
   end;
 end;
 
@@ -60305,7 +60306,7 @@ var ndx: integer;
 begin
   tim := fSafe.Padding[DIC_TIMESEC].VInteger; // inlined tim := GetTimeout
   if tim<>0 then
-    tim := cardinal(GetTickCount64 shr 10)+tim;
+    tim := cardinal({$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64 shr 10)+tim;
   ndx := fKeys.FindHashedForAdding(aKey,added);
   if added then begin
     with fKeys{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif} do
@@ -60443,7 +60444,7 @@ begin
     exit;
   tim := fSafe.Padding[DIC_TIMESEC].VInteger;
   if tim > 0 then
-    fTimeOut[aIndex] := cardinal(GetTickCount64 shr 10)+tim;
+    fTimeOut[aIndex] := cardinal({$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64 shr 10)+tim;
 end;
 
 function TSynDictionary.Count: integer;
@@ -64069,7 +64070,7 @@ end;
 
 function TPendingTaskList.GetTimestamp: Int64;
 begin
-  result := GetTickCount64;
+  result := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64;
 end;
 
 procedure TPendingTaskList.AddTask(aMilliSecondsDelayFromNow: integer;
@@ -64845,7 +64846,7 @@ end;
 
 function TSynBackgroundThreadMethodAbstract.OnIdleProcessNotify(start: Int64): integer;
 begin
-  result := GetTickCount64-start;
+  result := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64-start;
   if result<0 then
     result := MaxInt; // should happen only under XP -> ignore
   if Assigned(fOnIdle) then
@@ -64899,7 +64900,7 @@ begin
   // 1. wait for any previous request to be finished (should not happen often)
   if Assigned(fOnIdle) then
     fOnIdle(self,0); // notify started
-  start := GetTickCount64;
+  start := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64;
   repeat
     case AcquireThread of
     flagDestroying:
@@ -65090,7 +65091,7 @@ var tix: Int64;
 begin
   if (fTask=nil) or Terminated then
     exit;
-  tix := GetTickCount64;
+  tix := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64;
   n := 0;
   fTaskLock.Lock;
   try
@@ -65180,9 +65181,12 @@ end;
 procedure TSynBackgroundTimer.WaitUntilNotProcessing(timeoutsecs: integer);
 var timeout: Int64;
 begin
+  if not Processing then
+    exit;
   timeout := GetTickCount64+timeoutsecs*1000;
-  while Processing and (GetTickcount64<timeout) do
+  repeat
     SleepHiRes(1);
+  until not Processing or (GetTickcount64>timeout);
 end;
 
 function TSynBackgroundTimer.ExecuteNow(aOnProcess: TOnSynBackgroundTimerProcess): boolean;

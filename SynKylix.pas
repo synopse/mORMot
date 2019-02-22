@@ -105,6 +105,7 @@ var
 // - this version will return the CLOCK_MONOTONIC value, with a 1 ns resolution
 procedure QueryPerformanceCounter(var Value: Int64);
 
+/// slightly faster than QueryPerformanceCounter() div 1000 - but not for Windows
 procedure QueryPerformanceCounterMicroSeconds(out Value: Int64);
 
 /// compatibility function, wrapping Win32 API high resolution timer
@@ -194,16 +195,14 @@ end;
 procedure QueryPerformanceCounterMicroSeconds(out Value: Int64);
 var r : TTimeSpec;
 begin
-  clock_gettime(CLOCK_MONOTONIC,@r);
+  clock_gettime(CLOCK_MONOTONIC,r);
   value := r.tv_nsec div 1000+r.tv_sec*C_MILLION;
 end;
 
 function QueryPerformanceFrequency(var Value: Int64): boolean;
-var r: TTimeSpec;
 begin
-  result := (clock_getres(CLOCK_MONOTONIC,r)=0) and (r.tv_nsec<>0);
-  if result then
-    value := C_BILLION div (r.tv_nsec+(r.tv_sec*C_BILLION));
+  Value := C_BILLION; // 1 second = 1e9 nanoseconds
+  result := true;
 end;
 
 function SetFilePointer(hFile: THandle; lDistanceToMove: integer;

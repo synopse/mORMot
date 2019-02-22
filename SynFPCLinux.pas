@@ -98,7 +98,7 @@ function getpagesize: Integer; cdecl; external 'c';
 /// compatibility function, wrapping Win32 API high resolution timer
 procedure QueryPerformanceCounter(out Value: Int64);
 
-/// compatibility function, wrapping Win32 API high resolution timer
+/// slightly faster than QueryPerformanceCounter() div 1000 - but not for Windows
 procedure QueryPerformanceCounterMicroSeconds(out Value: Int64);
 
 /// compatibility function, wrapping Win32 API high resolution timer
@@ -198,6 +198,7 @@ const // Date Translation - see http://en.wikipedia.org/wiki/Julian_day
   D0          = 1461;
   D1          = 146097;
   D2          = 1721119;
+  UnixDelta   = 25569;
 
 procedure JulianToGregorian(JulianDN: PtrUInt; out result: TSystemTime);
 var YYear,XYear,Temp,TempMonth: PtrUInt;
@@ -220,7 +221,7 @@ begin
   result.DayOfWeek := 0;
 end;
 
-procedure EpochToLocal(epoch: PtrUInt; out result: TSystemTime);
+procedure EpochToSystemTime(epoch: PtrUInt; out result: TSystemTime);
 var t: PtrUInt;
 begin
   t := epoch div SecsPerDay;
@@ -234,19 +235,12 @@ begin
   result.Second := epoch-t*SecsPerMin;
 end;
 
-function GetNowUTC: TDateTime;
-var SystemTime: TSystemTime;
-begin
-  GetNowUTCSystem(SystemTime);
-  result := SystemTimeToDateTime(SystemTime);
-end;
-
 procedure GetNowUTCSystem(out result: TSystemTime);
-var tz: timeval;
+var r: timespec;
 begin
-  fpgettimeofday(@tz,nil);
-  EpochToLocal(tz.tv_sec,result);
-  result.MilliSecond := tz.tv_usec div 1000;
+  clock_gettime(CLOCK_REALTIME_TICKCOUNT,@r); // faster than fpgettimeofday()
+  EpochToSystemTime(r.tv_sec,result);
+  result.MilliSecond := r.tv_nsec div 1000000;
 end;
 
 function GetTickCount: cardinal;
@@ -372,6 +366,11 @@ begin
 end;
 
 {$endif DARWIN}
+
+function GetNowUTC: TDateTime;
+begin
+  result := GetUnixMSUTC / MSecsPerDay + UnixDelta;
+end;
 
 function QueryPerformanceFrequency(out Value: Int64): boolean;
 begin
