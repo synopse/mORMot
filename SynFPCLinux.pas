@@ -96,10 +96,13 @@ var
 function getpagesize: Integer; cdecl; external 'c';
 
 /// compatibility function, wrapping Win32 API high resolution timer
-procedure QueryPerformanceCounter(out Value: Int64); inline;
+procedure QueryPerformanceCounter(out Value: Int64);
 
 /// compatibility function, wrapping Win32 API high resolution timer
-function QueryPerformanceFrequency(out Value: Int64): boolean; inline;
+procedure QueryPerformanceCounterMicroSeconds(out Value: Int64);
+
+/// compatibility function, wrapping Win32 API high resolution timer
+function QueryPerformanceFrequency(out Value: Int64): boolean;
 
 /// compatibility function, wrapping Win32 API file position change
 function SetFilePointer(hFile: cInt; lDistanceToMove: TOff;
@@ -150,7 +153,7 @@ procedure SetUnixThreadName(ThreadID: TThreadID; const Name: RawByteString);
 
 /// compatibility function, to be implemented according to the running OS
 // - expect more or less the same result as the homonymous Win32 API function
-function GetTickCount64: Int64; inline;
+function GetTickCount64: Int64;
 
 /// compatibility function, to be implemented according to the running OS
 // - expect more or less the same result as the homonymous Win32 API function
@@ -273,6 +276,7 @@ function mach_timebase_info(var TimebaseInfoData: TTimebaseInfoData): Integer;
 var
   mach_timeinfo: TTimebaseInfoData;
   mach_timecoeff: double;
+  mach_timenanosecond: boolean;
 
 procedure QueryPerformanceCounter(out Value: Int64);
 begin // returns time in nano second resolution
@@ -286,9 +290,20 @@ begin // returns time in nano second resolution
     Value := round(Value*mach_timecoeff);
 end;
 
+procedure QueryPerformanceCounterMicroSeconds(out Value: Int64);
+begin
+  if mach_timenanosecond then
+    Value := mach_absolute_time div 1000 else begin
+    QueryPerformanceCounter(Value);
+    Value := Value div 1000;
+  end;
+end;
+
 function GetTickCount64: Int64;
 begin
-  QueryPerformanceCounter(result);
+  if mach_timenanosecond then
+    result := mach_absolute_time else
+    QueryPerformanceCounter(result);
   result := result div C_MILLION; // 1 millisecond = 1e6 nanoseconds
 end;
 
@@ -347,6 +362,13 @@ var r : TTimeSpec;
 begin
   clock_gettime(CLOCK_MONOTONIC,@r);
   value := r.tv_nsec+r.tv_sec*C_BILLION;
+end;
+
+procedure QueryPerformanceCounterMicroSeconds(out Value: Int64);
+var r : TTimeSpec;
+begin
+  clock_gettime(CLOCK_MONOTONIC,@r);
+  value := r.tv_nsec div 1000+r.tv_sec*C_MILLION;
 end;
 
 {$endif DARWIN}
@@ -448,6 +470,7 @@ begin
   {$ifdef DARWIN}
   mach_timebase_info(mach_timeinfo);
   mach_timecoeff := mach_timeinfo.Numer/mach_timeinfo.Denom;
+  mach_timenanosecond := (mach_timeinfo.Numer=1) and (mach_timeinfo.Denom=1);
   {$endif DARWIN}
 end;
 

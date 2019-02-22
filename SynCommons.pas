@@ -16013,13 +16013,15 @@ type
   PPPrecisionTimer = ^PPrecisionTimer;
 
   /// high resolution timer (for accurate speed statistics)
-  // - WARNING: this record MUST be aligned to 32 bit, otherwise iFreq=0 -
-  // so you can use TLocalPrecisionTimer/ILocalPrecisionTimer if you want
-  // to alllocate a local timer instance on the stack
+  // - WARNING: under Windows, this record MUST be aligned to 32-bit, otherwise
+  // iFreq=0 - so you can use TLocalPrecisionTimer/ILocalPrecisionTimer if you
+  // want to alllocate a local timer instance on the stack
   {$ifdef UNICODE}TPrecisionTimer = record{$else}TPrecisionTimer = object{$endif}
   private
     iStart,iStop,iResume,iLast: Int64;
+    {$ifndef LINUX} // use QueryPerformanceCounterMicroSeconds() fast API
     iFreq: Int64;
+    {$endif}
     /// contains the time elapsed in micro seconds between Start and Stop
     iTime: TSynMonitorTotalMicroSec;
     /// contains the time elapsed in micro seconds between Resume and Pause
@@ -57128,7 +57130,7 @@ function TPrecisionTimer.PerSec(const Count: QWord): QWord;
 begin
   if iTime<=0 then // avoid negative value in case of incorrect Start/Stop sequence
     result := 0 else // avoid div per 0 exception
-    result := (Count*QWord(1000*1000)) div iTime;
+    result := (Count*QWord(1000000)) div iTime;
 end;
 
 function TPrecisionTimer.SizePerSec(Size: QWord): shortstring;
@@ -57146,7 +57148,7 @@ end;
 procedure TPrecisionTimer.Start;
 begin
   FillZero(self,SizeOf(self));
-  QueryPerformanceCounter(iStart);
+  {$ifdef LINUX}QueryPerformanceCounterMicroSeconds{$else}QueryPerformanceCounter{$endif}(iStart);
   iLast := iStart;
 end;
 {$IFDEF FPC} {$POP} {$ELSE} {$HINTS ON} {$ENDIF}
@@ -57158,6 +57160,11 @@ end;
 
 procedure TPrecisionTimer.ComputeTime;
 begin
+  {$ifdef LINUX}
+  QueryPerformanceCounterMicroSeconds(iStop);
+  iTime := iStop-iStart;
+  iLastTime := iStop-iLast;
+  {$else}
   QueryPerformanceCounter(iStop);
   if iFreq=0 then begin
     QueryPerformanceFrequency(iFreq);
@@ -57167,8 +57174,11 @@ begin
       exit;
     end;
   end;
-  iTime := ((iStop-iStart)*Int64(1000*1000))div iFreq;
-  iLastTime := ((iStop-iLast)*Int64(1000*1000))div iFreq;
+  iTime := (QWord(iStop-iStart)*QWord(1000000)) div QWord(iFreq);
+  if iStart=iLast then
+    iLastTime := iTime else
+    iLastTime := (QWord(iStop-iLast)*QWord(1000000)) div QWord(iFreq);
+  {$endif LINUX}
 end;
 
 procedure TPrecisionTimer.FromExternalMicroSeconds(const MicroSeconds: QWord);
@@ -57179,13 +57189,17 @@ end;
 
 function TPrecisionTimer.FromExternalQueryPerformanceCounters(const CounterDiff: QWord): QWord;
 begin // very close to ComputeTime
+  {$ifdef LINUX}
+  FromExternalMicroSeconds(CounterDiff);
+  {$else}
   if iFreq=0 then begin
     iTime := 0;
+    iLastTime := 0;
     QueryPerformanceFrequency(iFreq);
   end;
-  if iFreq=0 then
-    iLastTime := 0 else
-    FromExternalMicroSeconds((Int64(CounterDiff)*Int64(1000*1000))div iFreq);
+  if iFreq<>0 then
+    FromExternalMicroSeconds((CounterDiff*QWord(1000000))div QWord(iFreq));
+  {$endif LINUX}
   result := iLastTime;
 end;
 
@@ -57197,14 +57211,14 @@ end;
 
 procedure TPrecisionTimer.Pause;
 begin
-  QueryPerformanceCounter(iResume);
+  {$ifdef LINUX}QueryPerformanceCounterMicroSeconds{$else}QueryPerformanceCounter{$endif}(iResume);
   dec(iResume,iStart);
   inc(fPauseCount);
 end;
 
 procedure TPrecisionTimer.Resume;
 begin
-  QueryPerformanceCounter(iStart);
+  {$ifdef LINUX}QueryPerformanceCounterMicroSeconds{$else}QueryPerformanceCounter{$endif}(iStart);
   iLast := iStart;
   dec(iStart,iResume);
   iResume := 0;
@@ -57302,7 +57316,7 @@ function TSynMonitorTime.PerSecond(const Count: QWord): QWord;
 begin
   if PInt64(@fMicroSeconds)^<=0 then // avoid negative or div per 0
     result := 0 else
-    result := (Count*QWord(1000*1000)) div fMicroSeconds;
+    result := (Count*QWord(1000000)) div fMicroSeconds;
 end;
 
 
@@ -57317,7 +57331,7 @@ function TSynMonitorOneTime.PerSecond(const Count: QWord): QWord;
 begin
   if PInt64(@fMicroSeconds)^<=0 then // avoid negative or div per 0
     result := 0 else
-    result := (Count*QWord(1000*1000)) div fMicroSeconds;
+    result := (Count*QWord(1000000)) div fMicroSeconds;
 end;
 
 
