@@ -3543,6 +3543,7 @@ function DirectoryDeleteOlderFiles(const Directory: TFileName; TimePeriod: TDate
 
 /// creates a directory if not already existing
 // - returns the full expanded directory name, including trailing backslash
+// - returns '' on error, unless RaiseExceptionOnCreationFailure=true
 function EnsureDirectoryExists(const Directory: TFileName;
   RaiseExceptionOnCreationFailure: boolean=false): TFileName;
 
@@ -13100,7 +13101,8 @@ procedure LogToTextFile(Msg: RawUTF8);
 // - this version expects the filename to be specified
 // - format contains the current date and time, then the Msg on one line
 // - date and time format used is 'YYYYMMDD hh:mm:ss'
-procedure AppendToTextFile(aLine: RawUTF8; const aFileName: TFileName; aMaxSize: Int64=MAXLOGSIZE);
+procedure AppendToTextFile(aLine: RawUTF8; const aFileName: TFileName; aMaxSize: Int64=MAXLOGSIZE;
+  aUTCTimeStamp: boolean=false);
 
 
 { ************ fast low-level lookup types used by internal conversion routines }
@@ -16018,14 +16020,14 @@ type
   // want to alllocate a local timer instance on the stack
   {$ifdef UNICODE}TPrecisionTimer = record{$else}TPrecisionTimer = object{$endif}
   private
-    iStart,iStop,iResume,iLast: Int64;
+    fStart,fStop,fResume,fLast: Int64;
     {$ifndef LINUX} // use QueryPerformanceCounterMicroSeconds() fast API
-    iFreq: Int64;
+    fWinFreq: Int64;
     {$endif}
     /// contains the time elapsed in micro seconds between Start and Stop
-    iTime: TSynMonitorTotalMicroSec;
+    fTime: TSynMonitorTotalMicroSec;
     /// contains the time elapsed in micro seconds between Resume and Pause
-    iLastTime: TSynMonitorOneMicroSec;
+    fLastTime: TSynMonitorOneMicroSec;
     fPauseCount: TSynMonitorCount;
   public
     /// initialize the timer
@@ -16034,11 +16036,10 @@ type
     procedure Init;
     /// initialize and start the high resolution timer
     procedure Start;
-    /// returns TRUE if iStart is not 0
-    function Started: boolean;
-      {$ifdef HASINLINE}inline;{$endif}
+    /// returns TRUE if fStart is not 0
+    function Started: boolean; {$ifdef HASINLINE}inline;{$endif}
     /// stop the timer, setting the Time elapsed since last Start
-    procedure ComputeTime;
+    procedure ComputeTime; {$ifdef LINUX}{$ifdef HASINLINE}inline;{$endif}{$endif}
     /// stop the timer, returning the time elapsed as text with time resolution
     // (us,ms,s)
     // - is just a wrapper around ComputeTime + Time
@@ -16090,14 +16091,14 @@ type
     function Time: TShort16;
     /// time elapsed in micro seconds after counter stopped
     // - not to be used in normal code, but e.g. for custom performance analysis
-    property TimeInMicroSec: TSynMonitorTotalMicroSec read iTime write iTime;
+    property TimeInMicroSec: TSynMonitorTotalMicroSec read fTime write fTime;
     /// textual representation of last process timing after counter stopped
     // - with appened time resolution (us,ms,s)
     // - not to be used in normal code, but e.g. for custom performance analysis
     function LastTime: TShort16;
     /// timing in micro seconds of the last process
     // - not to be used in normal code, but e.g. for custom performance analysis
-    property LastTimeInMicroSec: TSynMonitorOneMicroSec read iLastTime write iLastTime;
+    property LastTimeInMicroSec: TSynMonitorOneMicroSec read fLastTime write fLastTime;
     /// how many times the Pause method was called, i.e. the number of tasks
     // processeed
     property PauseCount: TSynMonitorCount read fPauseCount;
@@ -16270,12 +16271,10 @@ type
     destructor Destroy; override;
     /// lock the instance for exclusive access
     // - needed only if you access directly the instance properties
-    procedure Lock;
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure Lock; {$ifdef HASINLINE}inline;{$endif}
     /// release the instance for exclusive access
     // - needed only if you access directly the instance properties
-    procedure UnLock;
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure UnLock; {$ifdef HASINLINE}inline;{$endif}
     /// create Count instances of this actual class in the supplied ObjArr[]
     class procedure InitializeObjArray(var ObjArr; Count: integer); virtual;
     /// should be called when the process starts, to resume the internal timer
@@ -16319,7 +16318,7 @@ type
     /// returns a TDocVariant with all published properties information
     // - thread-safe method
     function ComputeDetails: variant;
-    {$endif}
+    {$endif NOVARIANTS}
     /// used to allow thread safe timing
     // - by default, the internal TPrecisionTimer is not thread safe: you can
     // use this method to update the timing from many threads
@@ -30742,7 +30741,7 @@ begin
     if not CreateDir(result) then
       if not RaiseExceptionOnCreationFailure then
         result := '' else
-        raise ESynException.CreateUTF8('Impossible to create "%" folder',[Directory]);
+        raise ESynException.CreateUTF8('Impossible to create folder %',[result]);
 end;
 
 var
@@ -37542,7 +37541,8 @@ begin
 end;
 
 
-procedure AppendToTextFile(aLine: RawUTF8; const aFileName: TFileName; aMaxSize: Int64);
+procedure AppendToTextFile(aLine: RawUTF8; const aFileName: TFileName;
+    aMaxSize: Int64; aUTCTimeStamp: boolean);
 var F: THandle;
     Old: TFileName;
     Date: array[1..22] of AnsiChar;
@@ -37571,7 +37571,9 @@ begin
       exit;
   end;
   PWord(@Date)^ := 13+10 shl 8; // first go to next line
-  now.FromNowLocal;
+  if aUTCTimeStamp then
+    now.FromNowUTC else
+    now.FromNowLocal;
   DateToIso8601PChar(@Date[3],true,Now.Year,Now.Month,Now.Day);
   TimeToIso8601PChar(@Date[13],true,Now.Hour,Now.Minute,Now.Second,0,' ');
   Date[22] := ' ';
@@ -52648,23 +52650,29 @@ begin
   time.AddLogTime(self);
 end;
 
-procedure TTextWriter.AddMicroSec(MS: cardinal);
-function Value3Digits(V: Cardinal; P: PUTF8Char): Cardinal;
+function Value3Digits(V: PtrUInt; P: PUTF8Char; W: PWordArray): PtrUInt;
+  {$ifdef HASINLINE}inline;{$endif}
 begin
-  PWord(P+1)^ := TwoDigitLookupW[V mod 100];
-  P^ := AnsiChar((V div 100)mod 10+48);
-  result := V div 1000;
+  result := V div 100;
+  PWord(P+1)^ := W[V-result*100];
+  V := result;
+  result := result div 10;
+  P^ := AnsiChar(V-result*10+48);
 end;
+
+procedure TTextWriter.AddMicroSec(MS: cardinal);
+var W: PWordArray;
 begin // 00.000.000
   if BEnd-B<=17 then
     FlushToStream;
   B[3] := '.';
   B[7] := '.';
   inc(B);
-  MS := Value3Digits(Value3Digits(MS,B+7),B+3);
+  W := @TwoDigitLookupW;
+  MS := Value3Digits(Value3Digits(MS,B+7,W),B+3,W);
   if MS>99 then
     MS := 99;
-  PWord(B)^:= TwoDigitLookupW[MS];
+  PWord(B)^:= W[MS];
   inc(B,9);
 end;
 
@@ -57124,14 +57132,14 @@ function TPrecisionTimer.ByCount(Count: QWord): TShort16;
 begin
   if Count=0 then
     result := '0' else // avoid div per 0 exception
-    MicroSecToString(iTime div Count,result);
+    MicroSecToString(fTime div Count,result);
 end;
 
 function TPrecisionTimer.PerSec(const Count: QWord): QWord;
 begin
-  if iTime<=0 then // avoid negative value in case of incorrect Start/Stop sequence
+  if fTime<=0 then // avoid negative value in case of incorrect Start/Stop sequence
     result := 0 else // avoid div per 0 exception
-    result := (Count*QWord(1000000)) div iTime;
+    result := (Count*QWord(1000000)) div fTime;
 end;
 
 function TPrecisionTimer.SizePerSec(Size: QWord): shortstring;
@@ -57149,90 +57157,90 @@ end;
 procedure TPrecisionTimer.Start;
 begin
   FillZero(self,SizeOf(self));
-  {$ifdef LINUX}QueryPerformanceCounterMicroSeconds{$else}QueryPerformanceCounter{$endif}(iStart);
-  iLast := iStart;
+  {$ifdef LINUX}QueryPerformanceCounterMicroSeconds{$else}QueryPerformanceCounter{$endif}(fStart);
+  fLast := fStart;
 end;
 {$IFDEF FPC} {$POP} {$ELSE} {$HINTS ON} {$ENDIF}
 
 function TPrecisionTimer.Started: boolean;
 begin
-  result := iStart <> 0;
+  result := fStart <> 0;
 end;
 
 procedure TPrecisionTimer.ComputeTime;
 begin
   {$ifdef LINUX}
-  QueryPerformanceCounterMicroSeconds(iStop);
-  iTime := iStop-iStart;
-  iLastTime := iStop-iLast;
+  QueryPerformanceCounterMicroSeconds(fStop);
+  fTime := fStop-fStart;
+  fLastTime := fStop-fLast;
   {$else}
-  QueryPerformanceCounter(iStop);
-  if iFreq=0 then begin
-    QueryPerformanceFrequency(iFreq);
-    if iFreq=0 then begin
-      iTime := 0;
-      iLastTime := 0;
+  QueryPerformanceCounter(fStop);
+  if fWinFreq=0 then begin
+    QueryPerformanceFrequency(fWinFreq);
+    if fWinFreq=0 then begin
+      fTime := 0;
+      fLastTime := 0;
       exit;
     end;
   end;
-  iTime := (QWord(iStop-iStart)*QWord(1000000)) div QWord(iFreq);
-  if iStart=iLast then
-    iLastTime := iTime else
-    iLastTime := (QWord(iStop-iLast)*QWord(1000000)) div QWord(iFreq);
+  fTime := (QWord(fStop-fStart)*QWord(1000000)) div QWord(fWinFreq);
+  if fLast=fStart then
+    fLastTime := fTime else
+    fLastTime := (QWord(fStop-fLast)*QWord(1000000)) div QWord(fWinFreq);
   {$endif LINUX}
 end;
 
 procedure TPrecisionTimer.FromExternalMicroSeconds(const MicroSeconds: QWord);
 begin
-  iLastTime := MicroSeconds;
-  inc(iTime,MicroSeconds);
+  fLastTime := MicroSeconds;
+  inc(fTime,MicroSeconds);
 end;
 
 function TPrecisionTimer.FromExternalQueryPerformanceCounters(const CounterDiff: QWord): QWord;
-begin // very close to ComputeTime
+begin // mimics ComputeTime from already known elapsed time
   {$ifdef LINUX}
   FromExternalMicroSeconds(CounterDiff);
   {$else}
-  if iFreq=0 then begin
-    iTime := 0;
-    iLastTime := 0;
-    QueryPerformanceFrequency(iFreq);
+  if fWinFreq=0 then begin
+    fTime := 0;
+    fLastTime := 0;
+    QueryPerformanceFrequency(fWinFreq);
   end;
-  if iFreq<>0 then
-    FromExternalMicroSeconds((CounterDiff*QWord(1000000))div QWord(iFreq));
+  if fWinFreq<>0 then
+    FromExternalMicroSeconds((CounterDiff*QWord(1000000))div QWord(fWinFreq));
   {$endif LINUX}
-  result := iLastTime;
+  result := fLastTime;
 end;
 
 function TPrecisionTimer.Stop: TShort16;
 begin
   ComputeTime;
-  MicroSecToString(iTime,result);
+  MicroSecToString(fTime,result);
 end;
 
 procedure TPrecisionTimer.Pause;
 begin
-  {$ifdef LINUX}QueryPerformanceCounterMicroSeconds{$else}QueryPerformanceCounter{$endif}(iResume);
-  dec(iResume,iStart);
+  {$ifdef LINUX}QueryPerformanceCounterMicroSeconds{$else}QueryPerformanceCounter{$endif}(fResume);
+  dec(fResume,fStart);
   inc(fPauseCount);
 end;
 
 procedure TPrecisionTimer.Resume;
 begin
-  {$ifdef LINUX}QueryPerformanceCounterMicroSeconds{$else}QueryPerformanceCounter{$endif}(iStart);
-  iLast := iStart;
-  dec(iStart,iResume);
-  iResume := 0;
+  {$ifdef LINUX}QueryPerformanceCounterMicroSeconds{$else}QueryPerformanceCounter{$endif}(fStart);
+  fLast := fStart;
+  dec(fStart,fResume);
+  fResume := 0;
 end;
 
 function TPrecisionTimer.Time: TShort16;
 begin
-  MicroSecToString(iTime,result);
+  MicroSecToString(fTime,result);
 end;
 
 function TPrecisionTimer.LastTime: TShort16;
 begin
-  MicroSecToString(iLastTime,result);
+  MicroSecToString(fLastTime,result);
 end;
 
 
@@ -57261,7 +57269,7 @@ end;
 
 function TPrecisionTimer.ProfileCurrentMethod: IUnknown;
 begin
-  if iStart=0 then
+  if fStart=0 then
     Start else
     Resume;
   result := TPrecisionTimerProfiler.Create(@self);
