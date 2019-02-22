@@ -99,7 +99,7 @@ function getpagesize: Integer; cdecl; external 'c';
 procedure QueryPerformanceCounter(out Value: Int64);
 
 /// slightly faster than QueryPerformanceCounter() div 1000 - but not for Windows
-procedure QueryPerformanceCounterMicroSeconds(out Value: Int64);
+procedure QueryPerformanceMicroSeconds(out Value: Int64);
 
 /// compatibility function, wrapping Win32 API high resolution timer
 function QueryPerformanceFrequency(out Value: Int64): boolean;
@@ -284,7 +284,7 @@ begin // returns time in nano second resolution
     Value := round(Value*mach_timecoeff);
 end;
 
-procedure QueryPerformanceCounterMicroSeconds(out Value: Int64);
+procedure QueryPerformanceMicroSeconds(out Value: Int64);
 begin
   if mach_timenanosecond then
     Value := mach_absolute_time div 1000 else begin
@@ -358,7 +358,7 @@ begin
   value := r.tv_nsec+r.tv_sec*C_BILLION;
 end;
 
-procedure QueryPerformanceCounterMicroSeconds(out Value: Int64);
+procedure QueryPerformanceMicroSeconds(out Value: Int64);
 var r : TTimeSpec;
 begin
   clock_gettime(CLOCK_MONOTONIC,@r);

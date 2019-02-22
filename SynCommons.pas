@@ -16021,7 +16021,7 @@ type
   {$ifdef UNICODE}TPrecisionTimer = record{$else}TPrecisionTimer = object{$endif}
   private
     fStart,fStop,fResume,fLast: Int64;
-    {$ifndef LINUX} // use QueryPerformanceCounterMicroSeconds() fast API
+    {$ifndef LINUX} // use QueryPerformanceMicroSeconds() fast API
     fWinFreq: Int64;
     {$endif}
     /// contains the time elapsed in micro seconds between Start and Stop
@@ -57157,7 +57157,7 @@ end;
 procedure TPrecisionTimer.Start;
 begin
   FillZero(self,SizeOf(self));
-  {$ifdef LINUX}QueryPerformanceCounterMicroSeconds{$else}QueryPerformanceCounter{$endif}(fStart);
+  {$ifdef LINUX}QueryPerformanceMicroSeconds{$else}QueryPerformanceCounter{$endif}(fStart);
   fLast := fStart;
 end;
 {$IFDEF FPC} {$POP} {$ELSE} {$HINTS ON} {$ENDIF}
@@ -57170,7 +57170,7 @@ end;
 procedure TPrecisionTimer.ComputeTime;
 begin
   {$ifdef LINUX}
-  QueryPerformanceCounterMicroSeconds(fStop);
+  QueryPerformanceMicroSeconds(fStop);
   fTime := fStop-fStart;
   fLastTime := fStop-fLast;
   {$else}
@@ -57220,14 +57220,14 @@ end;
 
 procedure TPrecisionTimer.Pause;
 begin
-  {$ifdef LINUX}QueryPerformanceCounterMicroSeconds{$else}QueryPerformanceCounter{$endif}(fResume);
+  {$ifdef LINUX}QueryPerformanceMicroSeconds{$else}QueryPerformanceCounter{$endif}(fResume);
   dec(fResume,fStart);
   inc(fPauseCount);
 end;
 
 procedure TPrecisionTimer.Resume;
 begin
-  {$ifdef LINUX}QueryPerformanceCounterMicroSeconds{$else}QueryPerformanceCounter{$endif}(fStart);
+  {$ifdef LINUX}QueryPerformanceMicroSeconds{$else}QueryPerformanceCounter{$endif}(fStart);
   fLast := fStart;
   dec(fStart,fResume);
   fResume := 0;

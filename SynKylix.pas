@@ -106,7 +106,7 @@ var
 procedure QueryPerformanceCounter(var Value: Int64);
 
 /// slightly faster than QueryPerformanceCounter() div 1000 - but not for Windows
-procedure QueryPerformanceCounterMicroSeconds(out Value: Int64);
+procedure QueryPerformanceMicroSeconds(out Value: Int64);
 
 /// compatibility function, wrapping Win32 API high resolution timer
 function QueryPerformanceFrequency(var Value: Int64): boolean;
@@ -192,7 +192,7 @@ begin
   value := r.tv_nsec+r.tv_sec*C_BILLION;
 end;
 
-procedure QueryPerformanceCounterMicroSeconds(out Value: Int64);
+procedure QueryPerformanceMicroSeconds(out Value: Int64);
 var r : TTimeSpec;
 begin
   clock_gettime(CLOCK_MONOTONIC,r);

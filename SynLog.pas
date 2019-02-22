@@ -4290,7 +4290,7 @@ end;
 procedure TSynLog.LogFileInit;
 begin
   {$ifdef LINUX}
-  QueryPerformanceCounterMicroSeconds(fStartTimestamp);
+  QueryPerformanceMicroSeconds(fStartTimestamp);
   {$else}
   QueryPerformanceCounter(fStartTimestamp);
   if not QueryPerformanceFrequency(fFrequencyTimestamp) then begin
@@ -4371,7 +4371,7 @@ begin
     {$endif}
     AddShort(' Freq=');
     {$ifdef LINUX}
-    AddShort('1000000'); // taken by QueryPerformanceCounterMicroSeconds()
+    AddShort('1000000'); // taken by QueryPerformanceMicroSeconds()
     {$else}
     QueryPerformanceFrequency(fFrequencyTimestamp);
     Add(fFrequencyTimestamp);
@@ -4457,7 +4457,7 @@ procedure TSynLog.LogCurrentTime;
 begin
   {$ifdef LINUX}
   if fFamily.HighResolutionTimestamp then begin
-    QueryPerformanceCounterMicroSeconds(fCurrentTimestamp);
+    QueryPerformanceMicroSeconds(fCurrentTimestamp);
   {$else}
   if fFamily.HighResolutionTimestamp and (fFrequencyTimestamp<>0) then begin
     QueryPerformanceCounter(fCurrentTimestamp);
@@ -4749,7 +4749,7 @@ begin // aLevel = sllEnter,sllLeave or sllNone
     end;
     if (aLevel<>sllNone) {$ifndef LINUX}and (fFrequencyTimestamp<>0){$endif} then begin
       if not fFamily.HighResolutionTimestamp then begin // no previous TSynLog.LogCurrentTime call
-        {$ifdef LINUX}QueryPerformanceCounterMicroSeconds{$else}QueryPerformanceCounter{$endif}(fCurrentTimestamp);
+        {$ifdef LINUX}QueryPerformanceMicroSeconds{$else}QueryPerformanceCounter{$endif}(fCurrentTimestamp);
         dec(fCurrentTimestamp,fStartTimestamp);
       end;
       case aLevel of
