@@ -1016,7 +1016,9 @@ type
     fHeaderProcessed: integer;
     fBodyProcessed: integer;
     fBodyOwnThreads: integer;
+    {$ifndef USE_WINIOCP}
     function QueueLength: integer; override;
+    {$endif}
     // here aContext is a pointer(TSocket=THandle) value
     procedure Task(aCaller: TSynThread; aContext: Pointer); override;
     procedure TaskAbort(aContext: Pointer); override;
@@ -7125,12 +7127,14 @@ begin
   inherited Create(NumberOfThreads{$ifndef USE_WINIOCP},{queuepending=}true{$endif});
 end;
 
+{$ifndef USE_WINIOCP}
 function TSynThreadPoolTHttpServer.QueueLength: integer;
 begin
   if fServer=nil then
     result := 10000 else
     result := fServer.fHTTPQueueLength;
 end;
+{$endif USE_WINIOCP}
 
 procedure TSynThreadPoolTHttpServer.Task(aCaller: TSynThread; aContext: Pointer);
 var ServerSock: THttpServerSocket;
@@ -7144,7 +7148,7 @@ begin
     // get Header of incoming request in the thread pool
     headertix := fServer.HeaderRetrieveAbortDelay;
     if headertix>0 then
-      inc(headertix,GetTickCount64);
+      headertix := headertix+GetTickCount64;
     if ServerSock.GetRequest({withbody=}false,headertix) then begin
       InterlockedIncrement(fHeaderProcessed);
       // connection and header seem valid -> process request further
