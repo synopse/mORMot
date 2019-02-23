@@ -2548,7 +2548,7 @@ function HttpGetAuth(const aURI, aAuthToken: SockString; outHeaders: PSockString
 
 /// send some data to a remote web server, using the HTTP/1.1 protocol and POST method
 function HttpPost(const server, port: SockString; const url, Data, DataType: SockString;
-  outData: PSockString=nil): boolean;
+  outData: PSockString=nil; const auth: SockString=''): boolean;
 
 /// compute the 'Authorization: Bearer ####' HTTP header of a given token value
 function AuthorizationBearer(const AuthToken: SockString): SockString;
@@ -5592,14 +5592,14 @@ begin
 end;
 
 function HttpPost(const server, port: SockString; const url, Data, DataType: SockString;
-  outData: PSockString): boolean;
+  outData: PSockString; const auth: SockString): boolean;
 var Http: THttpClientSocket;
 begin
   result := false;
   Http := OpenHttp(server,port);
   if Http<>nil then
   try
-    result := Http.Post(url,Data,DataType) in
+    result := Http.Post(url,Data,DataType,0,AuthorizationBearer(auth)) in
       [STATUS_SUCCESS,STATUS_CREATED,STATUS_NOCONTENT];
     if outdata<>nil then
       outdata^ := Http.Content;
