@@ -13990,7 +13990,6 @@ type
     fServices: TServiceContainer;
     fPrivateGarbageCollector: TObjectList;
     fRoutingClass: TSQLRestServerURIContextClass;
-    fFrequencyTimestamp: Int64;
     fBackgroundTimer: TSQLRestBackgroundTimer;
     fOnDecryptBody, fOnEncryptBody: TNotifyRestBody;
     fCustomEncryptAES: TAESAbstract;
@@ -35386,7 +35385,6 @@ begin
   AcquireWriteMode := amLocked;
   AcquireWriteTimeOut := 5000; // default 5 seconds
   fRoutingClass := TSQLRestRoutingREST;
-  QueryPerformanceFrequency(fFrequencyTimestamp);
   {$ifdef WITHLOG}
   SetLogClass(SQLite3Log); // by default
   {$endif}
@@ -37920,10 +37918,10 @@ procedure TSQLRestThread.WaitForNotExecuting(maxMS: integer);
 var endtix: Int64;
 begin
   if fExecuting then begin
-    endtix := GetTickCount64+maxMS;
+    endtix := SynCommons.GetTickCount64+maxMS;
     repeat
       Sleep(1); // wait for InternalExecute to finish
-    until not fExecuting or (GetTickCount64>=endtix);
+    until not fExecuting or (SynCommons.GetTickCount64>=endtix);
   end;
 end;
 
@@ -37953,12 +37951,12 @@ begin
   result := true; // notify Terminated
   if (self = nil) or Terminated then
     exit;
-  endtix := GetTickCount64+MS;
+  endtix := SynCommons.GetTickCount64+MS;
   repeat
     FixedWaitFor(fEvent,MS);
     if Terminated then
       exit;
-  until (MS<32) or (GetTickCount64>=endtix);
+  until (MS<32) or (SynCommons.GetTickCount64>=endtix);
   result := false; // normal delay expiration
 end;
 
@@ -41269,7 +41267,7 @@ var timeStart,timeEnd: Int64;
 begin
   with Server.fPublishedMethod[MethodIndex] do begin
     if mlMethods in Server.StatLevels then begin
-      QueryPerformanceCounter(timeStart);
+      {$ifdef LINUX}QueryPerformanceMicroSeconds{$else}QueryPerformanceCounter{$endif}(timeStart);
       if Stats=nil then begin
         Server.fStats.Lock; // use this global lock
         try
@@ -41285,7 +41283,7 @@ begin
       Server.InternalLog('% %',[Name,Parameters],sllServiceCall);
     CallBack(self);
     if Stats<>nil then begin
-      QueryPerformanceCounter(timeEnd);
+      {$ifdef LINUX}QueryPerformanceMicroSeconds{$else}QueryPerformanceCounter{$endif}(timeEnd);
       dec(timeEnd,timeStart);
       StatsFromContext(Stats,timeEnd,false);
       if Server.StatUsage<>nil then
@@ -42844,7 +42842,7 @@ begin
   {$ifdef WITHLOG}
   log := fLogClass.Enter('URI % % in=%',[Call.Method,Call.Url,KB(Call.InBody)],self);
   {$endif}
-  QueryPerformanceCounter(timeStart);
+  {$ifdef LINUX}QueryPerformanceMicroSeconds{$else}QueryPerformanceCounter{$endif}(timeStart);
   fStats.AddCurrentRequestCount(1);
   if Assigned(fOnDecryptBody) then
     fOnDecryptBody(self,Call.InBody,Call.InHead,Call.Url);
@@ -42957,7 +42955,7 @@ begin
        IsInvalidHttpHeader(pointer(Call.OutHead), length(Call.OutHead)) then
       Ctxt.Error('Unsafe HTTP header rejected [%]', [EscapeToShort(Call.OutHead)], HTTP_SERVERERROR);
   finally
-    QueryPerformanceCounter(timeEnd);
+    {$ifdef LINUX}QueryPerformanceMicroSeconds{$else}QueryPerformanceCounter{$endif}(timeEnd);
     Ctxt.MicroSecondsElapsed := fStats.FromExternalQueryPerformanceCounters(timeEnd-timeStart);
     {$ifdef WITHLOG}
     InternalLog('% % % %/% %=% out=% in %',
@@ -56847,13 +56845,13 @@ begin
   {$ifdef WITHLOG}
   log := fRest.LogClass.Enter('AsynchBatchStop(%)',[Table],self);
   {$endif}
-  timeout := GetTickCount64+5000;
+  timeout := SynCommons.GetTickCount64+5000;
   if Table=nil then begin // e.g. from TSQLRest.Destroy
     if not EnQueue(AsynchBatchExecute,'free@',true) then
       exit;
     repeat
       sleep(1); // wait for all batchs to be released
-    until (fBackgroundBatch=nil) or (GetTickCount64>timeout);
+    until (fBackgroundBatch=nil) or (SynCommons.GetTickCount64>timeout);
     result := Disable(AsynchBatchExecute);
   end else begin
     b := AsynchBatchIndex(Table);
@@ -56861,7 +56859,7 @@ begin
       exit;
     repeat
       sleep(1); // wait for all pending rows to be sent
-    until (fBackgroundBatch[b]=nil) or (GetTickCount64>timeout);
+    until (fBackgroundBatch[b]=nil) or (SynCommons.GetTickCount64>timeout);
     if ObjArrayCount(fBackgroundBatch)>0 then
       result := true else begin
       result := Disable(AsynchBatchExecute);
@@ -59905,7 +59903,7 @@ var Inst: TServiceFactoryServerInstance;
 
 begin
   if mlInterfaces in TSQLRestServer(Rest).StatLevels then
-    QueryPerformanceCounter(timeStart);
+    {$ifdef LINUX}QueryPerformanceMicroSeconds{$else}QueryPerformanceCounter{$endif}(timeStart);
   // 1. initialize Inst.Instance and Inst.InstanceID
   Inst.InstanceID := 0;
   Inst.Instance := nil;
@@ -60053,7 +60051,7 @@ begin
       if InstanceCreation=sicSingle then
         Inst.SafeFreeInstance(self); // always release single shot instance
       if stats<>nil then begin
-        QueryPerformanceCounter(timeEnd);
+        {$ifdef LINUX}QueryPerformanceMicroSeconds{$else}QueryPerformanceCounter{$endif}(timeEnd);
         dec(timeEnd,timeStart);
         Ctxt.StatsFromContext(stats,timeEnd,false);
         if Ctxt.Server.StatUsage<>nil then

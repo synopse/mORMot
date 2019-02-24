@@ -432,7 +432,7 @@ type
     opcode: TWebSocketFrameOpCode;
     /// what is stored in the frame data, i.e. in payload field
     content: TWebSocketFramePayloads;
-    /// internal tick count used for TWebSocketFrameList storage timeout
+    /// equals GetTickCount64 shr 10, as used for TWebSocketFrameList timeout
     tix: cardinal;
     /// the frame data itself
     // - is plain UTF-8 for focText kind of frame
@@ -739,7 +739,7 @@ type
   /// used to manage a thread-safe list of WebSockets frames
   TWebSocketFrameList = class(TSynPersistent)
   protected
-    fTimeoutSec: cardinal;
+    fTimeoutSec: PtrInt;
     procedure Delete(i: integer);
   public
     /// low-level access to the WebSocket frames list
@@ -1125,7 +1125,7 @@ type
   public
     /// common initialization of all constructors
     // - this overridden method will set the UserAgent with some default value
-    constructor Create(aTimeOut: cardinal=10000); override;
+    constructor Create(aTimeOut: PtrInt=10000); override;
     /// finalize the connection
     destructor Destroy; override;
     /// process low-level REST request, either on HTTP/1.1 or via WebSockets
@@ -1488,7 +1488,7 @@ begin
     exit;
   if fTimeoutSec=0 then
     tix := 0 else
-    tix := GetTickCount64 shr 10;
+    tix := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64 shr 10;
   Safe.Enter;
   try
     for i := Count-1 downto 0 do begin
@@ -1517,7 +1517,8 @@ begin
       SetLength(List,Count+Count shr 3+8);
     List[Count] := frame;
     if fTimeoutSec>0 then
-      List[Count].tix := fTimeoutSec+(GetTickCount64 shr 10);
+      List[Count].tix := fTimeoutSec+
+        ({$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64 shr 10);
     inc(Count);
   finally
     Safe.Leave;
@@ -2360,7 +2361,7 @@ end;
 procedure TWebSocketProcess.HiResDelay(const start: Int64);
 var delay: cardinal;
 begin
-  case GetTickCount64-start of
+  case {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64-start of
   0..50:      delay := 0;
   51..200:    delay := 1;
   201..500:   delay := 5;
@@ -2440,7 +2441,7 @@ begin
       result := STATUS_SUCCESS;
       exit;
     end;
-    start := GetTickCount64;
+    start := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64;
     if fSettings.CallbackAnswerTimeOutMS=0 then
       max := start+30000 else // never wait for ever
     if fSettings.CallbackAnswerTimeOutMS<2000 then
@@ -2451,7 +2452,7 @@ begin
         result := STATUS_WEBSOCKETCLOSED;
         exit;
       end else
-      if GetTickCount64>max then begin
+      if {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64>max then begin
         WebSocketLog.Add.Log(sllWarning,'NotifyCallback TIMEOUT %',[head],self);
         if head='answer' then
           fIncoming.AnswerToIgnore(1); // ignore next 'answer'
@@ -2775,7 +2776,7 @@ end;
 procedure TWebCrtSocketProcess.SetLastPingTicks(invalidPing: boolean);
 begin
   fSafePing.Enter;
-  fLastSocketTicks := GetTickCount64;
+  fLastSocketTicks := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64;
   if invalidPing then begin
     inc(fInvalidPingSendCount);
     fNoConnectionCloseAtDestroy := true;
@@ -2787,7 +2788,7 @@ end;
 function TWebCrtSocketProcess.LastPingDelay: Int64;
 begin
   fSafePing.Enter;
-  result := GetTickCount64-fLastSocketTicks;
+  result := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64-fLastSocketTicks;
   fSafePing.Leave;
 end;
 
@@ -3099,7 +3100,7 @@ end;
 
 { THttpClientWebSockets }
 
-constructor THttpClientWebSockets.Create(aTimeOut: cardinal);
+constructor THttpClientWebSockets.Create(aTimeOut: PtrInt);
 begin
   inherited;
   fSettings.SetDefaults;
@@ -3408,7 +3409,7 @@ begin
   SetCurrentThreadName('% % %',[self,fOwner.fProcessName,ToText(fProcess)^]);
   fOwner.NotifyThreadStart(self);
   try
-    idletix := GetTickCount64+1000;
+    idletix := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64+1000;
     while not Terminated and (fOwner.fClients<>nil) do begin
       // implement parallel client connections for TAsynchClient
       if (fOwner.fThreadClients.Count>0) and
@@ -3420,9 +3421,9 @@ begin
         fOwner.fClients.ProcessRead(30000);
       pseWrite: begin
         fOwner.fClients.ProcessWrite(30000);
-        if GetTickCount64>=idletix then begin
+        if {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64>=idletix then begin
           fOwner.IdleEverySecond;
-          idletix := GetTickCount64+1000;
+          idletix := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64+1000;
         end;
       end;
       else

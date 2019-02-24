@@ -754,6 +754,12 @@ procedure GetProcessInfo(const aPidList: TCardinalDynArray; out aInfo: TWinProce
 
 {$endif MSWINDOWS}
 
+const
+  /// text identifier typically used before command line switches
+  // - equals '/' on Windows, and '--' on POSIX systems
+  CMDLINESWITCH = {$ifdef MSWINDOWS}'/'{$else}'--'{$endif};
+
+
 implementation
 
 {$ifdef MSWINDOWS}

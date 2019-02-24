@@ -3543,6 +3543,7 @@ function DirectoryDeleteOlderFiles(const Directory: TFileName; TimePeriod: TDate
 
 /// creates a directory if not already existing
 // - returns the full expanded directory name, including trailing backslash
+// - returns '' on error, unless RaiseExceptionOnCreationFailure=true
 function EnsureDirectoryExists(const Directory: TFileName;
   RaiseExceptionOnCreationFailure: boolean=false): TFileName;
 
@@ -9319,6 +9320,11 @@ type
     /// get the TAlgoCompress instance corresponding to the AlgoID stored
     // in the supplied compressed buffer
     // - returns nil if no algorithm was identified
+    // - also identifies "stored" content in IsStored variable
+    class function Algo(Comp: PAnsiChar; CompLen: integer; out IsStored: boolean): TAlgoCompress; overload;
+    /// get the TAlgoCompress instance corresponding to the AlgoID stored
+    // in the supplied compressed buffer
+    // - returns nil if no algorithm was identified
     class function Algo(const Comp: RawByteString): TAlgoCompress; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// get the TAlgoCompress instance corresponding to the AlgoID stored
@@ -11880,7 +11886,9 @@ type
 
 var
   /// compute CRC32C checksum on the supplied buffer
-  // - this variable will use the fastest mean available, e.g. SSE 4.2
+  // - result is not compatible with zlib's crc32() - Intel/SCSI CRC32C is not
+  // the same polynom - but will use the fastest mean available, e.g. SSE 4.2,
+  // to achieve up to 16GB/s with the optimized implementation from SynCrypto.pas
   // - you should use this function instead of crc32cfast() or crc32csse42()
   crc32c: THasher;
   /// compute CRC32C checksum on one 32-bit unsigned integer
@@ -12142,7 +12150,7 @@ type
     procedure SetPendingProcess(State: TSynBackgroundThreadProcessStep);
     // returns  flagIdle if acquired, flagDestroying if terminated
     function AcquireThread: TSynBackgroundThreadProcessStep;
-    procedure WaitForFinished(start: Int64);
+    procedure WaitForFinished(start: Int64; const onmainthreadidle: TNotifyEvent);
     /// called by Execute method when fProcessParams<>nil and fEvent is notified
     procedure Process; virtual; abstract;
   public
@@ -12294,7 +12302,11 @@ type
     // - will split Method[0..MethodCount-1] execution over the threads
     // - in case of any exception during process, an ESynParallelProcess
     // exception would be raised by this method
-    procedure ParallelRunAndWait(Method: TSynParallelProcessMethod; MethodCount: integer);
+    // - if OnMainThreadIdle is set, the current thread (which is expected to be
+    // e.g. the main UI thread) won't process anything, but call this event
+    // during waiting for the background threads
+    procedure ParallelRunAndWait(const Method: TSynParallelProcessMethod;
+      MethodCount: integer; const OnMainThreadIdle: TNotifyEvent = nil);
   published
     /// how many threads have been activated
     property ParallelRunCount: integer read fParallelRunCount;
@@ -13089,7 +13101,8 @@ procedure LogToTextFile(Msg: RawUTF8);
 // - this version expects the filename to be specified
 // - format contains the current date and time, then the Msg on one line
 // - date and time format used is 'YYYYMMDD hh:mm:ss'
-procedure AppendToTextFile(aLine: RawUTF8; const aFileName: TFileName; aMaxSize: Int64=MAXLOGSIZE);
+procedure AppendToTextFile(aLine: RawUTF8; const aFileName: TFileName; aMaxSize: Int64=MAXLOGSIZE;
+  aUTCTimeStamp: boolean=false);
 
 
 { ************ fast low-level lookup types used by internal conversion routines }
@@ -16002,17 +16015,19 @@ type
   PPPrecisionTimer = ^PPrecisionTimer;
 
   /// high resolution timer (for accurate speed statistics)
-  // - WARNING: this record MUST be aligned to 32 bit, otherwise iFreq=0 -
-  // so you can use TLocalPrecisionTimer/ILocalPrecisionTimer if you want
-  // to alllocate a local timer instance on the stack
+  // - WARNING: under Windows, this record MUST be aligned to 32-bit, otherwise
+  // iFreq=0 - so you can use TLocalPrecisionTimer/ILocalPrecisionTimer if you
+  // want to alllocate a local timer instance on the stack
   {$ifdef UNICODE}TPrecisionTimer = record{$else}TPrecisionTimer = object{$endif}
   private
-    iStart,iStop,iResume,iLast: Int64;
-    iFreq: Int64;
+    fStart,fStop,fResume,fLast: Int64;
+    {$ifndef LINUX} // use QueryPerformanceMicroSeconds() fast API
+    fWinFreq: Int64;
+    {$endif}
     /// contains the time elapsed in micro seconds between Start and Stop
-    iTime: TSynMonitorTotalMicroSec;
+    fTime: TSynMonitorTotalMicroSec;
     /// contains the time elapsed in micro seconds between Resume and Pause
-    iLastTime: TSynMonitorOneMicroSec;
+    fLastTime: TSynMonitorOneMicroSec;
     fPauseCount: TSynMonitorCount;
   public
     /// initialize the timer
@@ -16021,11 +16036,10 @@ type
     procedure Init;
     /// initialize and start the high resolution timer
     procedure Start;
-    /// returns TRUE if iStart is not 0
-    function Started: boolean;
-      {$ifdef HASINLINE}inline;{$endif}
+    /// returns TRUE if fStart is not 0
+    function Started: boolean; {$ifdef HASINLINE}inline;{$endif}
     /// stop the timer, setting the Time elapsed since last Start
-    procedure ComputeTime;
+    procedure ComputeTime; {$ifdef LINUX}{$ifdef HASINLINE}inline;{$endif}{$endif}
     /// stop the timer, returning the time elapsed as text with time resolution
     // (us,ms,s)
     // - is just a wrapper around ComputeTime + Time
@@ -16077,14 +16091,14 @@ type
     function Time: TShort16;
     /// time elapsed in micro seconds after counter stopped
     // - not to be used in normal code, but e.g. for custom performance analysis
-    property TimeInMicroSec: TSynMonitorTotalMicroSec read iTime write iTime;
+    property TimeInMicroSec: TSynMonitorTotalMicroSec read fTime write fTime;
     /// textual representation of last process timing after counter stopped
     // - with appened time resolution (us,ms,s)
     // - not to be used in normal code, but e.g. for custom performance analysis
     function LastTime: TShort16;
     /// timing in micro seconds of the last process
     // - not to be used in normal code, but e.g. for custom performance analysis
-    property LastTimeInMicroSec: TSynMonitorOneMicroSec read iLastTime write iLastTime;
+    property LastTimeInMicroSec: TSynMonitorOneMicroSec read fLastTime write fLastTime;
     /// how many times the Pause method was called, i.e. the number of tasks
     // processeed
     property PauseCount: TSynMonitorCount read fPauseCount;
@@ -16257,12 +16271,10 @@ type
     destructor Destroy; override;
     /// lock the instance for exclusive access
     // - needed only if you access directly the instance properties
-    procedure Lock;
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure Lock; {$ifdef HASINLINE}inline;{$endif}
     /// release the instance for exclusive access
     // - needed only if you access directly the instance properties
-    procedure UnLock;
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure UnLock; {$ifdef HASINLINE}inline;{$endif}
     /// create Count instances of this actual class in the supplied ObjArr[]
     class procedure InitializeObjArray(var ObjArr; Count: integer); virtual;
     /// should be called when the process starts, to resume the internal timer
@@ -16306,7 +16318,7 @@ type
     /// returns a TDocVariant with all published properties information
     // - thread-safe method
     function ComputeDetails: variant;
-    {$endif}
+    {$endif NOVARIANTS}
     /// used to allow thread safe timing
     // - by default, the internal TPrecisionTimer is not thread safe: you can
     // use this method to update the timing from many threads
@@ -27346,7 +27358,7 @@ var now: Int64;
 begin
   if Interval<=0 then
     result := false else begin
-    now := GetTickCount64;
+    now := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64;
     if now-PreviousTix>Interval then begin
       PreviousTix := now;
       result := true;
@@ -30729,7 +30741,7 @@ begin
     if not CreateDir(result) then
       if not RaiseExceptionOnCreationFailure then
         result := '' else
-        raise ESynException.CreateUTF8('Impossible to create "%" folder',[Directory]);
+        raise ESynException.CreateUTF8('Impossible to create folder %',[result]);
 end;
 
 var
@@ -35999,7 +36011,7 @@ end;
 
 function UnixTimeToDateTime(const UnixTime: TUnixTime): TDateTime;
 begin
-  result := (UnixTime / SecsPerDay + UnixDateDelta);
+  result := UnixTime / SecsPerDay + UnixDateDelta;
 end;
 
 function DateTimeToUnixTime(const AValue: TDateTime): TUnixTime;
@@ -36158,7 +36170,7 @@ end;
 
 function UnixMSTimeToDateTime(const UnixMSTime: TUnixMSTime): TDateTime;
 begin
-  result := (UnixMSTime/MSecsPerDay + UnixDateDelta);
+  result := UnixMSTime/MSecsPerDay + UnixDateDelta;
 end;
 
 function UnixMSTimePeriodToString(const UnixTime: TUnixTime; FirstTimeChar: AnsiChar): RawUTF8;
@@ -36802,7 +36814,8 @@ var tix: PtrInt;
     newtimesys: TSystemTime absolute NewTime;
 begin
   with GlobalTime[LocalTime] do begin
-    tix := GetTickCount64 {$ifndef MSWINDOWS}shr 3{$endif}; // Linux: 8ms refresh
+    tix := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64
+      {$ifndef MSWINDOWS}shr 3{$endif}; // Linux: 8ms refresh
     if clock<>tix then begin // Windows: typically in range of 10-16 ms
       clock := tix;
       NewTime.Clear;
@@ -37528,7 +37541,8 @@ begin
 end;
 
 
-procedure AppendToTextFile(aLine: RawUTF8; const aFileName: TFileName; aMaxSize: Int64);
+procedure AppendToTextFile(aLine: RawUTF8; const aFileName: TFileName;
+    aMaxSize: Int64; aUTCTimeStamp: boolean);
 var F: THandle;
     Old: TFileName;
     Date: array[1..22] of AnsiChar;
@@ -37557,7 +37571,9 @@ begin
       exit;
   end;
   PWord(@Date)^ := 13+10 shl 8; // first go to next line
-  now.FromNowLocal;
+  if aUTCTimeStamp then
+    now.FromNowUTC else
+    now.FromNowLocal;
   DateToIso8601PChar(@Date[3],true,Now.Year,Now.Month,Now.Day);
   TimeToIso8601PChar(@Date[13],true,Now.Hour,Now.Minute,Now.Second,0,' ');
   Date[22] := ' ';
@@ -52634,23 +52650,29 @@ begin
   time.AddLogTime(self);
 end;
 
-procedure TTextWriter.AddMicroSec(MS: cardinal);
-function Value3Digits(V: Cardinal; P: PUTF8Char): Cardinal;
+function Value3Digits(V: PtrUInt; P: PUTF8Char; W: PWordArray): PtrUInt;
+  {$ifdef HASINLINE}inline;{$endif}
 begin
-  PWord(P+1)^ := TwoDigitLookupW[V mod 100];
-  P^ := AnsiChar((V div 100)mod 10+48);
-  result := V div 1000;
+  result := V div 100;
+  PWord(P+1)^ := W[V-result*100];
+  V := result;
+  result := result div 10;
+  P^ := AnsiChar(V-result*10+48);
 end;
+
+procedure TTextWriter.AddMicroSec(MS: cardinal);
+var W: PWordArray;
 begin // 00.000.000
   if BEnd-B<=17 then
     FlushToStream;
   B[3] := '.';
   B[7] := '.';
   inc(B);
-  MS := Value3Digits(Value3Digits(MS,B+7),B+3);
+  W := @TwoDigitLookupW;
+  MS := Value3Digits(Value3Digits(MS,B+7,W),B+3,W);
   if MS>99 then
     MS := 99;
-  PWord(B)^:= TwoDigitLookupW[MS];
+  PWord(B)^:= W[MS];
   inc(B,9);
 end;
 
@@ -57110,14 +57132,14 @@ function TPrecisionTimer.ByCount(Count: QWord): TShort16;
 begin
   if Count=0 then
     result := '0' else // avoid div per 0 exception
-    MicroSecToString(iTime div Count,result);
+    MicroSecToString(fTime div Count,result);
 end;
 
 function TPrecisionTimer.PerSec(const Count: QWord): QWord;
 begin
-  if iTime<=0 then // avoid negative value in case of incorrect Start/Stop sequence
+  if fTime<=0 then // avoid negative value in case of incorrect Start/Stop sequence
     result := 0 else // avoid div per 0 exception
-    result := (Count*QWord(1000*1000)) div iTime;
+    result := (Count*QWord(1000000)) div fTime;
 end;
 
 function TPrecisionTimer.SizePerSec(Size: QWord): shortstring;
@@ -57135,78 +57157,90 @@ end;
 procedure TPrecisionTimer.Start;
 begin
   FillZero(self,SizeOf(self));
-  QueryPerformanceCounter(iStart);
-  iLast := iStart;
+  {$ifdef LINUX}QueryPerformanceMicroSeconds{$else}QueryPerformanceCounter{$endif}(fStart);
+  fLast := fStart;
 end;
 {$IFDEF FPC} {$POP} {$ELSE} {$HINTS ON} {$ENDIF}
 
 function TPrecisionTimer.Started: boolean;
 begin
-  result := iStart <> 0;
+  result := fStart <> 0;
 end;
 
 procedure TPrecisionTimer.ComputeTime;
 begin
-  QueryPerformanceCounter(iStop);
-  if iFreq=0 then begin
-    QueryPerformanceFrequency(iFreq);
-    if iFreq=0 then begin
-      iTime := 0;
-      iLastTime := 0;
+  {$ifdef LINUX}
+  QueryPerformanceMicroSeconds(fStop);
+  fTime := fStop-fStart;
+  fLastTime := fStop-fLast;
+  {$else}
+  QueryPerformanceCounter(fStop);
+  if fWinFreq=0 then begin
+    QueryPerformanceFrequency(fWinFreq);
+    if fWinFreq=0 then begin
+      fTime := 0;
+      fLastTime := 0;
       exit;
     end;
   end;
-  iTime := ((iStop-iStart)*Int64(1000*1000))div iFreq;
-  iLastTime := ((iStop-iLast)*Int64(1000*1000))div iFreq;
+  fTime := (QWord(fStop-fStart)*QWord(1000000)) div QWord(fWinFreq);
+  if fLast=fStart then
+    fLastTime := fTime else
+    fLastTime := (QWord(fStop-fLast)*QWord(1000000)) div QWord(fWinFreq);
+  {$endif LINUX}
 end;
 
 procedure TPrecisionTimer.FromExternalMicroSeconds(const MicroSeconds: QWord);
 begin
-  iLastTime := MicroSeconds;
-  inc(iTime,MicroSeconds);
+  fLastTime := MicroSeconds;
+  inc(fTime,MicroSeconds);
 end;
 
 function TPrecisionTimer.FromExternalQueryPerformanceCounters(const CounterDiff: QWord): QWord;
-begin // very close to ComputeTime
-  if iFreq=0 then begin
-    iTime := 0;
-    QueryPerformanceFrequency(iFreq);
+begin // mimics ComputeTime from already known elapsed time
+  {$ifdef LINUX}
+  FromExternalMicroSeconds(CounterDiff);
+  {$else}
+  if fWinFreq=0 then begin
+    fTime := 0;
+    fLastTime := 0;
+    QueryPerformanceFrequency(fWinFreq);
   end;
-  if iFreq=0 then
-    iLastTime := 0 else
-    FromExternalMicroSeconds((Int64(CounterDiff)*Int64(1000*1000))div iFreq);
-  result := iLastTime;
+  if fWinFreq<>0 then
+    FromExternalMicroSeconds((CounterDiff*QWord(1000000))div QWord(fWinFreq));
+  {$endif LINUX}
+  result := fLastTime;
 end;
 
 function TPrecisionTimer.Stop: TShort16;
 begin
   ComputeTime;
-  MicroSecToString(iTime,result);
+  MicroSecToString(fTime,result);
 end;
 
 procedure TPrecisionTimer.Pause;
 begin
-  QueryPerformanceCounter(iResume);
-  dec(iResume,iStart);
+  {$ifdef LINUX}QueryPerformanceMicroSeconds{$else}QueryPerformanceCounter{$endif}(fResume);
+  dec(fResume,fStart);
   inc(fPauseCount);
 end;
 
 procedure TPrecisionTimer.Resume;
 begin
-  QueryPerformanceCounter(iStart);
-  iLast := iStart;
-  dec(iStart,iResume);
-  iResume := 0;
+  {$ifdef LINUX}QueryPerformanceMicroSeconds{$else}QueryPerformanceCounter{$endif}(fStart);
+  fLast := fStart;
+  dec(fStart,fResume);
+  fResume := 0;
 end;
 
 function TPrecisionTimer.Time: TShort16;
 begin
-  MicroSecToString(iTime,result);
+  MicroSecToString(fTime,result);
 end;
 
 function TPrecisionTimer.LastTime: TShort16;
 begin
-  MicroSecToString(iLastTime,result);
+  MicroSecToString(fLastTime,result);
 end;
 
 
@@ -57235,7 +57269,7 @@ end;
 
 function TPrecisionTimer.ProfileCurrentMethod: IUnknown;
 begin
-  if iStart=0 then
+  if fStart=0 then
     Start else
     Resume;
   result := TPrecisionTimerProfiler.Create(@self);
@@ -57291,7 +57325,7 @@ function TSynMonitorTime.PerSecond(const Count: QWord): QWord;
 begin
   if PInt64(@fMicroSeconds)^<=0 then // avoid negative or div per 0
     result := 0 else
-    result := (Count*QWord(1000*1000)) div fMicroSeconds;
+    result := (Count*QWord(1000000)) div fMicroSeconds;
 end;
 
 
@@ -57306,7 +57340,7 @@ function TSynMonitorOneTime.PerSecond(const Count: QWord): QWord;
 begin
   if PInt64(@fMicroSeconds)^<=0 then // avoid negative or div per 0
     result := 0 else
-    result := (Count*QWord(1000*1000)) div fMicroSeconds;
+    result := (Count*QWord(1000000)) div fMicroSeconds;
 end;
 
 
@@ -58704,7 +58738,7 @@ begin
   if fRamUsed>fMaxRamUsed then
     Reset;
   if fTimeoutSeconds>0 then begin
-    tix := GetTickCount64 shr 10;
+    tix := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64 shr 10;
     if fTimeoutTix>tix then
       Reset;
     fTimeoutTix := tix+fTimeoutSeconds;
@@ -59993,7 +60027,7 @@ function TSynDictionary.ComputeNextTimeOut: cardinal;
 begin
   result := fSafe.Padding[DIC_TIMESEC].VInteger;
   if result<>0 then
-    result := cardinal(GetTickCount64 shr 10)+result;
+    result := cardinal({$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64 shr 10)+result;
 end;
 
 function TSynDictionary.GetCapacity: integer;
@@ -60038,7 +60072,7 @@ begin
   if (self=nil) or (fSafe.Padding[DIC_TIMECOUNT].VInteger=0) or // no entry
      (fSafe.Padding[DIC_TIMESEC].VInteger=0) then // nothing in fTimeOut[]
     exit;
-  now := GetTickCount64 shr 10;
+  now := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64 shr 10;
   if fSafe.Padding[DIC_TIMETIX].VInteger=integer(now) then
     exit; // no need to search more often than every second
   fSafe.Lock;
@@ -60258,7 +60292,7 @@ begin // caller is expected to call fSafe.Lock/Unlock
   if aUpdateTimeOut and (result>=0) then begin
     tim := fSafe.Padding[DIC_TIMESEC].VInteger;
     if tim>0 then // inlined fTimeout[result] := GetTimeout
-      fTimeout[result] := cardinal(GetTickCount64 shr 10)+tim;
+      fTimeout[result] := cardinal({$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64 shr 10)+tim;
   end;
 end;
 
@@ -60280,7 +60314,7 @@ var ndx: integer;
 begin
   tim := fSafe.Padding[DIC_TIMESEC].VInteger; // inlined tim := GetTimeout
   if tim<>0 then
-    tim := cardinal(GetTickCount64 shr 10)+tim;
+    tim := cardinal({$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64 shr 10)+tim;
   ndx := fKeys.FindHashedForAdding(aKey,added);
   if added then begin
     with fKeys{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif} do
@@ -60418,7 +60452,7 @@ begin
     exit;
   tim := fSafe.Padding[DIC_TIMESEC].VInteger;
   if tim > 0 then
-    fTimeOut[aIndex] := cardinal(GetTickCount64 shr 10)+tim;
+    fTimeOut[aIndex] := cardinal({$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64 shr 10)+tim;
 end;
 
 function TSynDictionary.Count: integer;
@@ -63237,10 +63271,21 @@ end;
 class function TAlgoCompress.Algo(Comp: PAnsiChar; CompLen: integer): TAlgoCompress;
 begin
   if (Comp<>nil) and (CompLen>9) then
-    if ord(Comp[4])<=1{inlinedCOMPRESS_SYNLZ} then // "stored" maps SynLZ
-      result := AlgoSynLZ else
+    if ord(Comp[4])<=1 then // inline-friendly Comp[4]<=COMPRESS_SYNLZ
+      result := AlgoSynLZ else // COMPRESS_STORED is also handled as SynLZ
       result := Algo(ord(Comp[4])) else
     result := nil;
+end;
+
+class function TAlgoCompress.Algo(Comp: PAnsiChar; CompLen: integer; out IsStored: boolean): TAlgoCompress;
+begin
+  if (Comp<>nil) and (CompLen>9) then begin
+    IsStored := Comp[4]=COMPRESS_STORED;
+    result := Algo(ord(Comp[4]));
+  end else begin
+    IsStored := false;
+    result := nil;
+  end;
 end;
 
 class function TAlgoCompress.Algo(AlgoID: byte): TAlgoCompress;
@@ -64033,7 +64078,7 @@ end;
 
 function TPendingTaskList.GetTimestamp: Int64;
 begin
-  result := GetTickCount64;
+  result := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64;
 end;
 
 procedure TPendingTaskList.AddTask(aMilliSecondsDelayFromNow: integer;
@@ -64809,19 +64854,24 @@ end;
 
 function TSynBackgroundThreadMethodAbstract.OnIdleProcessNotify(start: Int64): integer;
 begin
-  result := GetTickCount64-start;
+  result := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64-start;
   if result<0 then
     result := MaxInt; // should happen only under XP -> ignore
   if Assigned(fOnIdle) then
     fOnIdle(self,result) ;
 end;
 
-procedure TSynBackgroundThreadMethodAbstract.WaitForFinished(start: Int64);
+procedure TSynBackgroundThreadMethodAbstract.WaitForFinished(start: Int64;
+  const onmainthreadidle: TNotifyEvent);
 var E: Exception;
 begin
-  if (self=nil) or not (fPendingProcessFlag in [flagStarted, flagFinished]) then
+  if (self=nil) or not(fPendingProcessFlag in [flagStarted, flagFinished]) then
     exit; // nothing to wait for
   try
+    if Assigned(onmainthreadidle) then begin
+      while FixedWaitFor(fCallerEvent,100)=wrTimeout do
+        onmainthreadidle(self);
+    end else
     {$ifdef MSWINDOWS} // do process the OnIdle only if UI
     if Assigned(fOnIdle) then begin
       while FixedWaitFor(fCallerEvent,100)=wrTimeout do
@@ -64858,7 +64908,7 @@ begin
   // 1. wait for any previous request to be finished (should not happen often)
   if Assigned(fOnIdle) then
     fOnIdle(self,0); // notify started
-  start := GetTickCount64;
+  start := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64;
   repeat
     case AcquireThread of
     flagDestroying:
@@ -64876,7 +64926,7 @@ begin
   // 2. process execution in the background thread
   fParam := OpaqueParam;
   fProcessEvent.SetEvent; // notify background thread for Call pending process
-  WaitForFinished(start); // wait for flagFinished, then set flagIdle
+  WaitForFinished(start,nil); // wait for flagFinished, then set flagIdle
   result := true;
 end;
 
@@ -65049,7 +65099,7 @@ var tix: Int64;
 begin
   if (fTask=nil) or Terminated then
     exit;
-  tix := GetTickCount64;
+  tix := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64;
   n := 0;
   fTaskLock.Lock;
   try
@@ -65139,9 +65189,12 @@ end;
 procedure TSynBackgroundTimer.WaitUntilNotProcessing(timeoutsecs: integer);
 var timeout: Int64;
 begin
+  if not Processing then
+    exit;
   timeout := GetTickCount64+timeoutsecs*1000;
-  while Processing and (GetTickcount64<timeout) do
+  repeat
     SleepHiRes(1);
+  until not Processing or (GetTickcount64>timeout);
 end;
 
 function TSynBackgroundTimer.ExecuteNow(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
@@ -65645,20 +65698,24 @@ begin
   inherited;
 end;
 
-procedure TSynParallelProcess.ParallelRunAndWait(Method: TSynParallelProcessMethod;
-  MethodCount: integer);
+procedure TSynParallelProcess.ParallelRunAndWait(const Method: TSynParallelProcessMethod;
+  MethodCount: integer; const OnMainThreadIdle: TNotifyEvent);
 var use,t,n,perthread: integer;
     error: RawUTF8;
 begin
   if (MethodCount<=0) or not Assigned(Method) then
     exit;
-  if (self=nil) or (MethodCount=1) or (fThreadPoolCount=0) then begin
-    Method(0,MethodCount-1); // no need (or impossible) to use background thread
-    exit;
-  end;
+  if not Assigned(OnMainThreadIdle) then
+    if (self=nil) or (MethodCount=1) or (fThreadPoolCount=0) then begin
+      Method(0,MethodCount-1); // no need (or impossible) to use background thread
+      exit;
+    end;
   use := MethodCount;
-  if use>fThreadPoolCount+1 then // +1 to include current thread
-    use := fThreadPoolCount+1;
+  t := fThreadPoolCount;
+  if not Assigned(OnMainThreadIdle) then
+    inc(t); // include current thread
+  if use>t then
+    use := t;
   try
     // start secondary threads
     perthread := MethodCount div use;
@@ -65675,21 +65732,27 @@ begin
           break; // acquired (should always be the case)
         end;
         Sleep(1);
+        if Assigned(OnMainThreadIdle) then
+          OnMainThreadIdle(self);
       until false;
       fPool[t].Start(Method,n,n+perthread-1);
       inc(n,perthread);
       inc(fParallelRunCount);
     end;
-    // run remaining items in the current thread
+    // run remaining items in the current/last thread
     if n<MethodCount then begin
-      Method(n,MethodCount-1);
+      if Assigned(OnMainThreadIdle) then begin
+        fPool[use-1].Start(Method,n,MethodCount-1);
+        inc(use); // also wait for the last thread
+      end else
+        Method(n,MethodCount-1);
       inc(fParallelRunCount);
     end;
   finally
     // wait for the process to finish
     for t := 0 to use-2 do
     try
-      fPool[t].WaitForFinished(0);
+      fPool[t].WaitForFinished(0,OnMainThreadIdle);
     except
       on E: Exception do
         error := FormatUTF8('% % on thread % [%]',[error,E,fPool[t].fThreadName,E.Message]);

@@ -90,6 +90,7 @@ unit SynFPCSock;
 interface
 
 uses
+  SysUtils,
   {$ifdef FPC}
   BaseUnix,
   Unix,
@@ -109,7 +110,6 @@ uses
   {$endif}
   {$endif}
   SyncObjs,
-  SysUtils,
   Classes;
 
 const
