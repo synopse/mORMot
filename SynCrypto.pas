@@ -13744,19 +13744,11 @@ begin
 end;
 
 function TAESPRNG.RandomExt: TSynExtended;
-{$ifdef FPC_OR_UNICODE}
-const coeff: double = (1.0/$100000000)/$100000000;  // 2^-64
-{$else} // circumvent QWord bug on oldest Delphi revisions
 const coeff: double = (1.0/$80000000)/$100000000;  // 2^-63
-{$endif}
 var block: THash128Rec;
 begin
   FillRandom(block.b);
-  {$ifdef FPC_OR_UNICODE}
-  result := (block.L xor block.H)*coeff;
-  {$else}
-  result := abs(block.Lo xor block.Hi)*coeff;
-  {$endif}
+  result := ((block.Lo xor block.Hi) and $7fffffffffffffff)*coeff;
 end;
 
 function TAESPRNG.RandomPassword(Len: integer): RawUTF8;
