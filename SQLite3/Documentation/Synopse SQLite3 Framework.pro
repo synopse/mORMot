@@ -16352,6 +16352,7 @@ $ d:
 $ cd Dev
 $ git clone https://github.com/synopse/mORMot.git
 It will create a {\f1\fs20 D:\\Dev\\mORMot} local folder, which will eventually be re-synchronized with the official sources. Advantage of cloning our {\i GitHub} repository is that it contains binaries for static linking, ({\i SQLite3} and @*FPC@ specific), in a single step.
+Just take care that if you downloaded some other library from Synopse (e.g. from @https://github.com/synopse/SynPDF or @https://github.com/synopse/dmustache), you should better use the main @https://github.com/synopse/mORMot only, which contains other projects, to avoid any version confusion. We have seen a lot of installation problems reported in our forum due to source code file collision from several repositories, not in the same revision.
 :  Setup the Delphi IDE
 To let your IDE know about {\i mORMot} source code, add the following paths to your {\i Delphi} IDE (in {\i Tools/Environment/Library} or {\i Tools/Options/Language/Delphi Options/Library} menu depending on your Delphi version):
 - {\i Library path}:\line{\i (...existing path...)\f1\fs20 ;D:\\Dev\\mORMot;D:\\Dev\\mORMot\\SQLite3;D:\\Dev\\mORMot\\SynDBDataset}
@@ -16382,7 +16383,7 @@ For proper FPC compilation, ensure you have the following settings to your proje
 - {\i Other unit files (-Fu)}:\line{\i \f1\fs20 D:\\Dev\\mORMot;D:\\Dev\\mORMot\\SQLite3;D:\\Dev\\mORMot\\SQLite3\\DDD\\infra}
 - {\i Include files (-Fi)}:\line{\i \f1\fs20 $(ProjOutDir);D:\\Dev\\mORMot;D:\\Dev\\mORMot\\SQLite3}
 - {\i Libraries (-fFl)}:\line{\i \f1\fs20 D:\\Dev\\mORMot\\static\\$(TargetCPU)-$(TargetOS)}
-Replace {\f1\fs20 D:\\Dev\\mORMot} path by the absolute/relative folder where you did install the framework. In practice, a relative path (e.g. {\f1\fs20 ..\\..\\lib}) is preferred.
+Replace {\f1\fs20 D:\\Dev\\mORMot} path by the absolute/relative folder where you did install the framework. In practice, a relative path (e.g. {\f1\fs20 ..\\..\\mORMot}) is preferred.
 :203  Setup your dedicated FPC / Lazarus environment with fpcupdeluxe
 You could use a recent SVN trunk version of the FPC 2.7.1 / 3.1.1 compiler, and the corresponding {\i Lazarus} IDE.
 If you want to use @80@, ensure that your revision includes the fix for @http://mantis.freepascal.org/view.php?id=26773 bug, i.e. newer than revision 28995 from 2014-11-05T22:17:54. This bug was not fixed in 2.6.4 branch, but any newer 3.x revision should be enough.
@@ -16561,7 +16562,7 @@ There is almost no dependency: installing a {\i mORMot} server under {\i Linux} 
 If you are upgrading from an older revision of the framework, your own source code should be updated.
 For instance, some units where renamed, and some breaking changes introduced by enhanced features. As a consequence, a direct update is not possible.
 To properly upgrade to the latest revision:
-1. Erase or rename your whole previous {\f1\fs20 #\\Lib} directory.
+1. Erase or rename your whole previous {\f1\fs20 #\\mORMot} directory.
 2. Download latest 1.18 revision files as stated just above.
 3. Change your references to {\i mORMot} units:
 - Add in your uses clause {\f1\fs20 SynTests.pas} if you use testing features;
