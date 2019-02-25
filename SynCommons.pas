@@ -49501,6 +49501,40 @@ begin
   fSorted := true;
 end;
 
+procedure QuickSortPtr(L, R: PtrInt; Compare: TDynArraySortCompare; V: PPointerArray);
+var I, J, P: PtrInt;
+    tmp: pointer;
+begin
+  if L<R then
+  repeat
+    I := L; J := R;
+    P := (L + R) shr 1;
+    repeat
+      while Compare(V[I], V[P])<0 do
+        inc(I);
+      while Compare(V[J], V[P])>0 do
+        dec(J);
+      if I <= J then begin
+        tmp := V[I];
+        V[I] := V[J];
+        V[J] := tmp;
+        if P = I then P := J else
+        if P = J then P := I;
+        Inc(I); Dec(J);
+      end;
+    until I > J;
+    if J - L < R - I then begin // use recursion only for smaller range
+      if L < J then
+        QuickSortPtr(L, J, Compare, V);
+      L := I;
+    end else begin
+      if I < R then
+        QuickSortPtr(I, R, Compare, V);
+      R := J;
+    end;
+  until L >= R;
+end;
+
 procedure TDynArray.SortRange(aStart, aStop: integer; aCompare: TDynArraySortCompare);
 var QuickSort: TDynArrayQuickSort;
 begin
@@ -49509,11 +49543,13 @@ begin
   if @aCompare=nil then
     Quicksort.Compare := @fCompare else
     Quicksort.Compare := aCompare;
-  if (@Quicksort.Compare<>nil) and (fValue<>nil) and (fValue^<>nil) then begin
-    Quicksort.Value := fValue^;
-    Quicksort.ElemSize := ElemSize;
-    Quicksort.QuickSort(aStart,aStop);
-  end;
+  if (@Quicksort.Compare<>nil) and (fValue<>nil) and (fValue^<>nil) then
+    if ElemSize=SizeOf(pointer) then
+      QuickSortPtr(aStart,aStop,QuickSort.Compare,fValue^) else begin
+      Quicksort.Value := fValue^;
+      Quicksort.ElemSize := ElemSize;
+      Quicksort.QuickSort(aStart,aStop);
+    end;
 end;
 
 procedure TDynArray.Sort(const aCompare: TEventDynArraySortCompare; aReverse: boolean);
@@ -50959,14 +50995,9 @@ begin
 end;
 
 procedure TObjectDynArrayWrapper.Sort(Compare: TDynArraySortCompare);
-var QuickSort: TDynArrayQuickSort;
 begin
-  if (@Compare<>nil) and (fCount>0) then begin
-    Quicksort.Compare := @Compare;
-    Quicksort.Value := fValue^;
-    Quicksort.ElemSize := SizeOf(pointer);
-    Quicksort.QuickSort(0,fCount-1);
-  end;
+  if (@Compare<>nil) and (fCount>0) then
+    QuickSortPtr(0,fCount-1,Compare,fValue^);
 end;
 
 function PtrArrayAdd(var aPtrArray; aItem: pointer): integer;
@@ -51103,16 +51134,9 @@ begin
 end;
 
 procedure ObjArraySort(var aObjArray; Compare: TDynArraySortCompare);
-var QuickSort: TDynArrayQuickSort;
-    n: integer;
 begin
-  n := length(TObjectDynArray(aObjArray));
-  if (@Compare<>nil) and (n>0) then begin
-    Quicksort.Compare := @Compare;
-    Quicksort.Value := pointer(aObjArray);
-    Quicksort.ElemSize := SizeOf(pointer);
-    Quicksort.QuickSort(0,n-1);
-  end;
+  if @Compare<>nil then
+    QuickSortPtr(0,length(TObjectDynArray(aObjArray))-1,Compare,pointer(aObjArray));
 end;
 
 procedure RawObjectsClear(o: PObject; n: integer);
