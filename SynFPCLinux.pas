@@ -200,6 +200,11 @@ const // Date Translation - see http://en.wikipedia.org/wiki/Julian_day
   D2          = 1721119;
   UnixDelta   = 25569;
 
+  C_THOUSAND = Int64(1000);
+  C_MILLION  = Int64(C_THOUSAND * C_THOUSAND);
+  C_BILLION  = Int64(C_THOUSAND * C_THOUSAND * C_THOUSAND);
+
+
 procedure JulianToGregorian(JulianDN: PtrUInt; out result: TSystemTime);
 var YYear,XYear,Temp,TempMonth: PtrUInt;
 begin
@@ -240,18 +245,13 @@ var r: timespec;
 begin
   clock_gettime(CLOCK_REALTIME_TICKCOUNT,@r); // faster than fpgettimeofday()
   EpochToSystemTime(r.tv_sec,result);
-  result.MilliSecond := r.tv_nsec div 1000000;
+  result.MilliSecond := r.tv_nsec div C_MILLION;
 end;
 
 function GetTickCount: cardinal;
 begin
   result := cardinal(GetTickCount64);
 end;
-
-const
-  C_THOUSAND = Int64(1000);
-  C_MILLION  = Int64(C_THOUSAND * C_THOUSAND);
-  C_BILLION  = Int64(C_THOUSAND * C_THOUSAND * C_THOUSAND);
 
 {$ifdef DARWIN}
 // clock_gettime() is not implemented: http://stackoverflow.com/a/5167506
@@ -287,9 +287,9 @@ end;
 procedure QueryPerformanceMicroSeconds(out Value: Int64);
 begin
   if mach_timenanosecond then
-    Value := mach_absolute_time div 1000 else begin
+    Value := mach_absolute_time div C_THOUSAND else begin
     QueryPerformanceCounter(Value);
-    Value := Value div 1000;
+    Value := Value div C_THOUSAND;
   end;
 end;
 
@@ -312,7 +312,7 @@ function GetUnixMSUTC: Int64;
 var tz: timeval;
 begin
   fpgettimeofday(@tz,nil);
-  result := (tz.tv_sec*1000)+tz.tv_usec div 1000;
+  result := (tz.tv_sec*C_THOUSAND)+tz.tv_usec div C_THOUSAND; // in milliseconds
 end;
 
 {$else}
@@ -333,15 +333,15 @@ const
 function GetTickCount64: Int64;
 var tp: timespec;
 begin
-  clock_gettime(CLOCK_MONOTONIC_TICKCOUNT,@tp);
-  Result := (Int64(tp.tv_sec) * C_THOUSAND) + (tp.tv_nsec div 1000000); // in ms
+  clock_gettime(CLOCK_MONOTONIC_TICKCOUNT,@tp); // likely = CLOCK_MONOTONIC_COARSE
+  Result := (Int64(tp.tv_sec) * C_THOUSAND) + (tp.tv_nsec div C_MILLION); // in ms
 end;
 
 function GetUnixMSUTC: Int64;
 var r: timespec;
 begin
-  clock_gettime(CLOCK_REALTIME_TICKCOUNT,@r);
-  result := (Int64(r.tv_sec) * C_THOUSAND) + (r.tv_nsec div 1000000); // in ms
+  clock_gettime(CLOCK_REALTIME_TICKCOUNT,@r); // likely = CLOCK_REALTIME_COARSE
+  result := (Int64(r.tv_sec) * C_THOUSAND) + (r.tv_nsec div C_MILLION); // in ms
 end;
 
 function GetUnixUTC: Int64;
@@ -355,14 +355,14 @@ procedure QueryPerformanceCounter(out Value: Int64);
 var r : TTimeSpec;
 begin
   clock_gettime(CLOCK_MONOTONIC,@r);
-  value := r.tv_nsec+r.tv_sec*C_BILLION;
+  value := r.tv_nsec+r.tv_sec*C_BILLION; // returns nanoseconds resolution
 end;
 
 procedure QueryPerformanceMicroSeconds(out Value: Int64);
 var r : TTimeSpec;
 begin
   clock_gettime(CLOCK_MONOTONIC,@r);
-  value := r.tv_nsec div 1000+r.tv_sec*C_MILLION;
+  value := r.tv_nsec div C_THOUSAND+r.tv_sec*C_MILLION; // as microseconds
 end;
 
 {$endif DARWIN}

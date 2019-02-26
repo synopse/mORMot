@@ -13511,8 +13511,10 @@ function FileOpen(const FileName: string; Mode: LongWord): Integer;
 {$endif}
 
 /// compatibility function, to be implemented according to the running OS
-// - expect more or less the same result as the homonymous Win32 API function
-// - will call the corresponding function in SynKylix.pas or SynFPCLinux.pas
+// - expect more or less the same result as the homonymous Win32 API function,
+// but usually with a better resolution (Windows has only around 10-16 ms)
+// - will call the corresponding function in SynKylix.pas or SynFPCLinux.pas,
+// using the very fast CLOCK_MONOTONIC_COARSE if available on the kernel
 function GetTickCount64: Int64;
 
 {$endif MSWINDOWS}
@@ -37772,7 +37774,7 @@ var time, crc: THash128Rec;
 begin
   repeat
     QueryPerformanceCounter(time.Lo);
-    time.i2 := UnixTimeUTC;
+    time.i2 := UnixMSTimeUTC;
     time.i3 := integer(GetCurrentThreadID);
     crcblock(@crc.b,@time.b);
     crcblock(@crc.b,@ExeVersion.Hash.b);

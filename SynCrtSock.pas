@@ -11746,6 +11746,7 @@ begin
   if res<>crOK then
     raise ECurlHTTP.CreateFmt('libcurl error %d (%s) on %s %s',
       [ord(res), curl.easy_strerror(res), fIn.Method, fIn.URL]);
+  rc := 0;
   curl.easy_getinfo(fHandle,ciResponseCode,rc);
   result := rc;
   Header := Trim(fOut.Header);
