@@ -9248,11 +9248,11 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// compress a memory buffer with crc32c hashing to a RawByteString
     function Compress(const Plain: RawByteString; CompressionSizeTrigger: integer=100;
-      CheckMagicForCompressed: boolean=false): RawByteString; overload;
+      CheckMagicForCompressed: boolean=false; BufferOffset: integer=0): RawByteString; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// compress a memory buffer with crc32c hashing to a RawByteString
     function Compress(Plain: PAnsiChar; PlainLen: integer; CompressionSizeTrigger: integer=100;
-      CheckMagicForCompressed: boolean=false): RawByteString; overload;
+      CheckMagicForCompressed: boolean=false; BufferOffset: integer=0): RawByteString; overload;
     /// compress a memory buffer with crc32c hashing
     // - supplied Comp buffer should contain at least CompressDestLen(PlainLen) bytes
     function Compress(Plain, Comp: PAnsiChar; PlainLen, CompLen: integer;
@@ -9273,7 +9273,7 @@ type
       Load: TAlgoCompressLoad=aclNormal): boolean;
     /// uncompress a memory buffer with crc32c hashing
     procedure Decompress(Comp: PAnsiChar; CompLen: integer; out Result: RawByteString;
-      Load: TAlgoCompressLoad=aclNormal); overload;
+      Load: TAlgoCompressLoad=aclNormal; BufferOffset: integer=0); overload;
     /// uncompress a RawByteString memory buffer with crc32c hashing
     function Decompress(const Comp: TByteDynArray): RawByteString; overload;
       {$ifdef HASINLINE}inline;{$endif}
@@ -10074,7 +10074,9 @@ type
     // ! TFileBufferWriter.Create(TRawByteStringStream)
     // - if algo is left to its default nil, will use global AlgoSynLZ
     // - features direct compression from internal buffer, if stream was not used
-    function FlushAndCompress(nocompression: boolean=false; algo: TAlgoCompress=nil): RawByteString;
+    // - BufferOffset could be set to reserve some bytes before the compressed buffer
+    function FlushAndCompress(nocompression: boolean=false; algo: TAlgoCompress=nil;
+      BufferOffset: integer=0): RawByteString;
     /// rewind the Stream to the position when Create() was called
     // - note that this does not clear the Stream content itself, just
     // move back its writing position to its initial place
@@ -63363,40 +63365,43 @@ begin
   result := crc32c(Previous,Data,DataLen);
 end;
 
-function TAlgoCompress.Compress(const Plain: RawByteString;
-  CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean): RawByteString;
+function TAlgoCompress.Compress(const Plain: RawByteString; CompressionSizeTrigger: integer;
+  CheckMagicForCompressed: boolean; BufferOffset: integer): RawByteString;
 begin
-  result := Compress(pointer(Plain),Length(Plain),CompressionSizeTrigger,CheckMagicForCompressed);
+  result := Compress(pointer(Plain),Length(Plain),CompressionSizeTrigger,
+    CheckMagicForCompressed,BufferOffset);
 end;
 
-function TAlgoCompress.Compress(Plain: PAnsiChar; PlainLen: integer;
-  CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean): RawByteString;
+function TAlgoCompress.Compress(Plain: PAnsiChar; PlainLen: integer; CompressionSizeTrigger: integer;
+  CheckMagicForCompressed: boolean; BufferOffset: integer): RawByteString;
 var len: integer;
     R: PAnsiChar;
     crc: cardinal;
-    tmp: array[0..16383] of AnsiChar;  // will resize Result in-place
+    tmp: array[0..16383] of AnsiChar;  // big enough to resize Result in-place
 begin
   if (self=nil) or (PlainLen=0) or (Plain=nil) then
     exit;
   crc := AlgoHash(0,Plain,PlainLen);
   if (PlainLen<CompressionSizeTrigger) or
      (CheckMagicForCompressed and IsContentCompressed(Plain,PlainLen)) then begin
-    SetString(result,nil,PlainLen+9);
+    SetString(result,nil,PlainLen+BufferOffset+9);
     R := pointer(result);
+    inc(R,BufferOffset);
     PCardinal(R)^ := crc;
     R[4] := COMPRESS_STORED;
     PCardinal(R+5)^ := crc;
     MoveFast(Plain^,R[9],PlainLen);
   end else begin
-    len := CompressDestLen(PlainLen);
+    len := CompressDestLen(PlainLen)+BufferOffset;
     if len>SizeOf(tmp) then begin
       SetString(result,nil,len);
       R := pointer(result);
     end else
       R := @tmp;
+    inc(R,BufferOffset);
     PCardinal(R)^ := crc;
     len := AlgoCompress(Plain,PlainLen,R+9);
-    if len>=PlainLen then begin // store if compression not worth it
+    if len+64>=PlainLen then begin // store if compression was not worth it
       R[4] := COMPRESS_STORED;
       PCardinal(R+5)^ := crc;
       MoveFast(Plain^,R[9],PlainLen);
@@ -63406,8 +63411,8 @@ begin
       PCardinal(R+5)^ := AlgoHash(0,R+9,len);
     end;
     if R=@tmp then
-      SetString(result,tmp,len+9) else
-      SetLength(result,len+9); // resize in-place may not move any data
+      SetString(result,tmp,len+BufferOffset+9) else
+      SetLength(result,len+BufferOffset+9); // MM may not move the data
   end;
 end;
 
@@ -63493,14 +63498,16 @@ begin
 end;
 
 procedure TAlgoCompress.Decompress(Comp: PAnsiChar; CompLen: integer;
-  out Result: RawByteString; Load: TAlgoCompressLoad);
+  out Result: RawByteString; Load: TAlgoCompressLoad; BufferOffset: integer);
 var len: integer;
+    dec: PAnsiChar;
 begin
   len := DecompressHeader(Comp,CompLen,Load);
   if len=0 then
     exit;
-  SetString(result,nil,len);
-  if not DecompressBody(Comp,pointer(result),CompLen,len,Load) then
+  SetString(result,nil,len+BufferOffset);
+  dec := pointer(result);
+  if not DecompressBody(Comp,dec+BufferOffset,CompLen,len,Load) then
     result := '';
 end;
 
