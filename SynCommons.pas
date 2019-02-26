@@ -10306,6 +10306,9 @@ type
     /// retrieved cardinal values encoded with TFileBufferWriter.WriteVarUInt32Array
     // - only supports wkUInt32, wkVarInt32, wkVarUInt32 kind of encoding
     function ReadVarUInt32Array(var Values: TIntegerDynArray): PtrInt;
+    /// retrieve some TAlgoCompress buffer, appended via Write()
+    // - BufferOffset could be set to reserve some bytes before the uncompressed buffer
+    function ReadCompressed(Load: TAlgoCompressLoad=aclNormal; BufferOffset: integer=0): RawByteString;
     /// returns TRUE if the current position is the end of the input stream
     function EOF: boolean; {$ifdef HASINLINE}inline;{$endif}
     /// returns remaining length (difference between Last and P)
@@ -62765,6 +62768,15 @@ begin
   wkVarUInt32: for i := 0 to result-1 do Values[i] := VarUInt32;
   else ErrorData('ReadVarUInt32Array: unhandled kind=%', [ord(k)]);
   end;
+end;
+
+function TFastReader.ReadCompressed(Load: TAlgoCompressLoad; BufferOffset: integer): RawByteString;
+var comp: PAnsiChar;
+    complen: PtrUInt;
+begin
+  complen := VarUInt32;
+  comp := Next(complen);
+  TAlgoCompress.Algo(comp,complen).Decompress(comp,complen,result,Load,BufferOffset);
 end;
 
 
