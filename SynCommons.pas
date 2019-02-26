@@ -17402,12 +17402,13 @@ type
     // - to be retrieved later on via LoadFrom method
     // - actually call the SaveToWriter() protected virtual method for persistence
     // - you can specify ForcedAlgo if you want to override the default AlgoSynLZ
+    // - BufferOffset could be set to reserve some bytes before the compressed buffer
     procedure SaveTo(out aBuffer: RawByteString; nocompression: boolean=false;
-      BufLen: integer=65536; ForcedAlgo: TAlgoCompress=nil); overload; virtual;
+      BufLen: integer=65536; ForcedAlgo: TAlgoCompress=nil; BufferOffset: integer=0); overload; virtual;
     /// persist the content as a SynLZ-compressed binary blob
     // - just an overloaded wrapper
     function SaveTo(nocompression: boolean=false; BufLen: integer=65536;
-      ForcedAlgo: TAlgoCompress=nil): RawByteString; overload;
+      ForcedAlgo: TAlgoCompress=nil; BufferOffset: integer=0): RawByteString; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// persist the content as a SynLZ-compressed binary file
     // - to be retrieved later on via LoadFromFile method
@@ -51920,7 +51921,7 @@ begin
 end;
 
 procedure TSynPersistentStore.SaveTo(out aBuffer: RawByteString; nocompression: boolean;
-  BufLen: integer; ForcedAlgo: TAlgoCompress);
+  BufLen: integer; ForcedAlgo: TAlgoCompress; BufferOffset: integer);
 var writer: TFileBufferWriter;
     temp: array[word] of byte;
 begin
@@ -51930,16 +51931,16 @@ begin
   try
     SaveToWriter(writer);
     fSaveToLastUncompressed := writer.TotalWritten;
-    aBuffer := writer.FlushAndCompress(nocompression,ForcedAlgo);
+    aBuffer := writer.FlushAndCompress(nocompression,ForcedAlgo,BufferOffset);
   finally
     writer.Free;
   end;
 end;
 
 function TSynPersistentStore.SaveTo(nocompression: boolean; BufLen: integer;
-  ForcedAlgo: TAlgoCompress): RawByteString;
+  ForcedAlgo: TAlgoCompress; BufferOffset: integer): RawByteString;
 begin
-  SaveTo(result,nocompression,BufLen,ForcedAlgo);
+  SaveTo(result,nocompression,BufLen,ForcedAlgo,BufferOffset);
 end;
 
 function TSynPersistentStore.SaveToFile(const aFileName: TFileName;
@@ -61736,16 +61737,17 @@ begin
   until false;
 end;
 
-function TFileBufferWriter.FlushAndCompress(nocompression: boolean; algo: TAlgoCompress): RawByteString;
+function TFileBufferWriter.FlushAndCompress(nocompression: boolean; algo: TAlgoCompress;
+  BufferOffset: integer): RawByteString;
 var trig: integer;
 begin
   if algo=nil then
     algo := AlgoSynLZ;
   trig := SYNLZTRIG[nocompression];
   if fStream.Position=0 then // direct compression from internal buffer
-    result := algo.Compress(PAnsiChar(fBuffer),fPos,trig) else begin
+    result := algo.Compress(PAnsiChar(fBuffer),fPos,trig,false,BufferOffset) else begin
     Flush;
-    result := algo.Compress((fStream as TRawByteStringStream).DataString,trig);
+    result := algo.Compress((fStream as TRawByteStringStream).DataString,trig,false,BufferOffset);
   end;
 end;
 
