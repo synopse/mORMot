@@ -9265,7 +9265,8 @@ type
     function CompressToBytes(Plain: PAnsiChar; PlainLen: integer; CompressionSizeTrigger: integer=100;
       CheckMagicForCompressed: boolean=false): TByteDynArray; overload;
     /// uncompress a RawByteString memory buffer with crc32c hashing
-    function Decompress(const Comp: RawByteString; Load: TAlgoCompressLoad=aclNormal): RawByteString; overload;
+    function Decompress(const Comp: RawByteString; Load: TAlgoCompressLoad=aclNormal;
+      BufferOffset: integer=0): RawByteString; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// uncompress a RawByteString memory buffer with crc32c hashing
     // - returns TRUE on success
@@ -63360,7 +63361,7 @@ var s: PShortString;
     i: integer;
 begin
   if self=nil then
-    result := 'stored' else begin
+    result := 'none' else begin
     s := ClassNameShort(self);
     if IdemPChar(@s^[1],'TALGO') then begin
       result[0] := AnsiChar(ord(s^[0])-5);
@@ -63526,9 +63527,9 @@ begin
 end;
 
 function TAlgoCompress.Decompress(const Comp: RawByteString;
-  Load: TAlgoCompressLoad): RawByteString;
+  Load: TAlgoCompressLoad; BufferOffset: integer): RawByteString;
 begin
-  Decompress(pointer(Comp),length(Comp),result,Load);
+  Decompress(pointer(Comp),length(Comp),result,Load,BufferOffset);
 end;
 
 function TAlgoCompress.TryDecompress(const Comp: RawByteString;
