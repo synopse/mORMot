@@ -43492,18 +43492,19 @@ end;
 
 procedure TSQLRestServer.SessionDelete(aSessionIndex: integer;
   Ctxt: TSQLRestServerURIContext);
+var sess: TAuthSession;
 begin
-  if (self<>nil) and (cardinal(aSessionIndex)<cardinal(fSessions.Count)) then
-  with TAuthSession(fSessions.List[aSessionIndex]) do begin
+  if (self<>nil) and (cardinal(aSessionIndex)<cardinal(fSessions.Count)) then begin
+    sess := fSessions.List[aSessionIndex];
     if Services<>nil then
-      (Services as TServiceContainerServer).OnCloseSession(IDCardinal);
+      (Services as TServiceContainerServer).OnCloseSession(sess.IDCardinal);
     if Ctxt=nil then
-      InternalLog('Deleted session %:%/%',
-        [User.LogonName,IDCardinal,fSessions.Count],sllUserAuth) else
-      InternalLog('Deleted session %:%/% from %/%',
-        [User.LogonName,IDCardinal,fSessions.Count,RemoteIP,Ctxt.Call^.LowLevelConnectionID],sllUserAuth);
+      InternalLog('Deleted session %:%/%',[sess.User.LogonName,sess.IDCardinal,
+        fSessions.Count],sllUserAuth) else
+      InternalLog('Deleted session %:%/% from %/%',[sess.User.LogonName,sess.IDCardinal,
+        fSessions.Count,sess.RemoteIP,Ctxt.Call^.LowLevelConnectionID],sllUserAuth);
     if Assigned(OnSessionClosed) then
-      OnSessionClosed(self,fSessions.List[aSessionIndex],Ctxt);
+      OnSessionClosed(self,sess,Ctxt);
     fSessions.Delete(aSessionIndex);
     fStats.ClientDisconnect;
   end;
