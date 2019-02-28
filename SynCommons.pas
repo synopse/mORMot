@@ -13266,7 +13266,7 @@ type
     // - e.g. 'myprogram.exe 3.1.0.123 2016-06-14 19:07:55'
     function VersionInfo: RawUTF8;
     /// returns a ready-to-use User-Agent header with exe name, version and OS
-    // - e.g. 'myprogram3.1.0.123W32'
+    // - e.g. 'myprogram/3.1.0.123W32'
     // - here OS_INITIAL[] character is used to identify the OS, with '32'
     // appended on 32-bit Windows
     function UserAgent: RawUTF8;
@@ -39437,7 +39437,7 @@ function TFileVersion.UserAgent: RawUTF8;
 begin
   if self=nil then
     result := '' else
-    FormatUTF8('%%%',[GetFileNameWithoutExt(ExtractFileName(fFileName)),
+    FormatUTF8('%/%%',[GetFileNameWithoutExt(ExtractFileName(fFileName)),
       DetailedOrVoid,OS_INITIAL[OS_KIND]],result);
   {$ifdef MSWINDOWS}
   if OSVersion in WINDOWS_32 then
