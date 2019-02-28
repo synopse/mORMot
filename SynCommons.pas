@@ -63394,8 +63394,10 @@ var len: integer;
     crc: cardinal;
     tmp: array[0..16383] of AnsiChar;  // big enough to resize Result in-place
 begin
-  if (self=nil) or (PlainLen=0) or (Plain=nil) then
+  if (self=nil) or (PlainLen=0) or (Plain=nil) then begin
+    result := '';
     exit;
+  end;
   crc := AlgoHash(0,Plain,PlainLen);
   if (PlainLen<CompressionSizeTrigger) or
      (CheckMagicForCompressed and IsContentCompressed(Plain,PlainLen)) then begin
@@ -63425,15 +63427,14 @@ begin
       R[4] := AnsiChar(AlgoID);
       PCardinal(R+5)^ := AlgoHash(0,R+9,len);
     end;
-    if R=@tmp then
+    if R=@tmp[BufferOffset] then
       SetString(result,tmp,len+BufferOffset+9) else
       SetLength(result,len+BufferOffset+9); // MM may not move the data
   end;
 end;
 
-function TAlgoCompress.Compress(Plain, Comp: PAnsiChar; PlainLen,
-  CompLen: integer; CompressionSizeTrigger: integer;
-  CheckMagicForCompressed: boolean): integer;
+function TAlgoCompress.Compress(Plain, Comp: PAnsiChar; PlainLen, CompLen: integer;
+  CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean): integer;
 var len: integer;
 begin
   result := 0;
