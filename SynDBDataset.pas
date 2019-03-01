@@ -591,7 +591,7 @@ begin
           {$ifdef UNICODE}
           P.AsLargeInt := I64;
           {$else}
-          if (Int64Rec(I64).Hi=0) or (Int64Rec(I64).Hi=Cardinal(-1)) then
+          if (PInt64Rec(@I64)^.Hi=0) or (PInt64Rec(@I64)^.Hi=Cardinal(-1)) then
             P.AsInteger := I64 else
             if TSQLDBDatasetConnectionProperties(Connection.Properties).
                fForceInt64AsFloat then

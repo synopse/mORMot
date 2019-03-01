@@ -21115,8 +21115,8 @@ end;
 var c,c100: QWord;
     tab: {$ifdef CPUX86}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
 begin
-  if Int64Rec(val).Hi=0 then
-    P := StrUInt32(P,Int64Rec(val).Lo) else begin
+  if PInt64Rec(@val)^.Hi=0 then
+    P := StrUInt32(P,PCardinal(@val)^) else begin
     {$ifndef CPUX86}tab := @TwoDigitLookupW;{$endif}
     c := val;
     repeat
@@ -21149,9 +21149,9 @@ begin
       dec(P,2);
       PWord(P)^ := tab[c];
       c := c100;
-      if Int64Rec(c).Hi=0 then begin
-        if Int64Rec(c).Lo<>0 then
-          P := StrUInt32(P,Int64Rec(c).Lo);
+      if PInt64Rec(@c)^.Hi=0 then begin
+        if PCardinal(@c)^<>0 then
+          P := StrUInt32(P,PCardinal(@c)^);
         break;
       end;
     until false;
@@ -28187,8 +28187,9 @@ begin
       end;
       inc(UpperValue);
     until false;
-    // find beginning of next word
-Next:
+Next: // find beginning of next word
+    U := FindNextUTF8WordBegin(U);
+  until U=nil;
 {$else}
   // this tiny version only handles 7-bits ansi chars and ignore all UTF-8 chars
   ValueStart := UpperValue;
@@ -28218,10 +28219,10 @@ Next:
       if byte(U^)=0 then exit else
       if byte(U^) and $80<>0 then break; // 7 bits char check only
     until false;
-{$endif}
     // find beginning of next word
     U := FindNextUTF8WordBegin(U);
   until U=nil;
+{$endif}
 end;
 
 function HexDisplayToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: integer): boolean;
@@ -30503,35 +30504,36 @@ var
 begin
 {$ifdef MSWINDOWS}
   result := GetFileInformationByHandle(aFileHandle,lp);
-  if result then begin
-    LastWriteAccess := FileTimeToUnixMSTime(lp.ftLastWriteTime);
-    FileCreateDateTime := FileTimeToUnixMSTime(lp.ftCreationTime);
-    lastreadaccess := FileTimeToUnixMSTime(lp.ftLastAccessTime);
-    PInt64Rec(@FileSize).lo := lp.nFileSizeLow;
-    PInt64Rec(@FileSize).hi := lp.nFileSizeHigh;
-    PInt64Rec(@FileId).lo := lp.nFileIndexLow;
-    PInt64Rec(@FileId).hi := lp.nFileIndexHigh;
+  if not result then
+    exit;
+  LastWriteAccess := FileTimeToUnixMSTime(lp.ftLastWriteTime);
+  FileCreateDateTime := FileTimeToUnixMSTime(lp.ftCreationTime);
+  lastreadaccess := FileTimeToUnixMSTime(lp.ftLastAccessTime);
+  PInt64Rec(@FileSize).lo := lp.nFileSizeLow;
+  PInt64Rec(@FileSize).hi := lp.nFileSizeHigh;
+  PInt64Rec(@FileId).lo := lp.nFileIndexLow;
+  PInt64Rec(@FileId).hi := lp.nFileIndexHigh;
 {$else}
-    r := {$ifdef FPC}FpFStat{$else}fstat64{$endif}(aFileHandle, lp);
+  r := {$ifdef FPC}FpFStat{$else}fstat64{$endif}(aFileHandle, lp);
   result := r >= 0;
-  if result then begin
-    FileId := lp.st_ino;
-    FileSize := lp.st_size;
-    lastreadaccess := lp.st_atime * MSecsPerSec;
-    LastWriteAccess := lp.st_mtime * MSecsPerSec;
-    {$ifdef OPENBSD}
-    if (lp.st_birthtime <> 0) and (lp.st_birthtime < lp.st_ctime) then
-      lp.st_ctime:= lp.st_birthtime;
-    {$endif}
-    FileCreateDateTime := lp.st_ctime * MSecsPerSec;
+  if not result then
+    exit;
+  FileId := lp.st_ino;
+  FileSize := lp.st_size;
+  lastreadaccess := lp.st_atime * MSecsPerSec;
+  LastWriteAccess := lp.st_mtime * MSecsPerSec;
+  {$ifdef OPENBSD}
+  if (lp.st_birthtime <> 0) and (lp.st_birthtime < lp.st_ctime) then
+    lp.st_ctime:= lp.st_birthtime;
+  {$endif}
+  FileCreateDateTime := lp.st_ctime * MSecsPerSec;
 {$endif MSWINDOWS}
-    if LastWriteAccess <> 0 then
-      if (FileCreateDateTime = 0) or (FileCreateDateTime > LastWriteAccess) then
-        FileCreateDateTime:= LastWriteAccess;
-    if lastreadaccess <> 0 then
-      if (FileCreateDateTime = 0) or (FileCreateDateTime > lastreadaccess) then
-        FileCreateDateTime:= lastreadaccess;
-  end;
+  if LastWriteAccess <> 0 then
+    if (FileCreateDateTime = 0) or (FileCreateDateTime > LastWriteAccess) then
+      FileCreateDateTime:= LastWriteAccess;
+  if lastreadaccess <> 0 then
+    if (FileCreateDateTime = 0) or (FileCreateDateTime > lastreadaccess) then
+      FileCreateDateTime:= lastreadaccess;
 end;
 
 function FileAgeToDateTime(const FileName: TFileName): TDateTime;
@@ -31929,21 +31931,26 @@ begin
   if 0<=R then
     repeat
       result := (L + R) shr 1;
-      {$ifdef CPUX86} // circumvent Int64 comparison slowness
-      cmp := SortDynArrayInt64(P^[result],Value);
-      if cmp=0 then
-        exit else
-      if cmp<0 then begin
-      {$else}
+      {$ifndef CPUX86}
       if P^[result]=Value then
         exit else
       if P^[result]<Value then begin
-      {$endif}
         L := result+1;
         if L<=R then
           continue;
         break;
       end;
+      {$else} // circumvent Int64 comparison slowness
+      cmp := SortDynArrayInt64(P^[result],Value);
+      if cmp=0 then
+        exit else
+      if cmp<0 then begin
+        L := result+1;
+        if L<=R then
+          continue;
+        break;
+      end;
+      {$endif}
       R := result-1;
       if L<=R  then
         continue;
@@ -31962,21 +31969,26 @@ begin
   if 0<=R then
     repeat
       result := (L + R) shr 1;
-      {$ifdef CPUX86} // circumvent QWord comparison slowness (and bug)
-      cmp := SortDynArrayQWord(P^[result],Value);
-      if cmp=0 then
-        exit else
-      if cmp<0 then begin
-      {$else}
+      {$ifndef CPUX86}
       if P^[result]=Value then
         exit else
       if P^[result]<Value then begin
-      {$endif}
         L := result+1;
         if L<=R then
           continue;
         break;
       end;
+      {$else} // circumvent QWord comparison slowness (and bug)
+      cmp := SortDynArrayQWord(P^[result],Value);
+      if cmp=0 then
+        exit else
+      if cmp<0 then begin
+        L := result+1;
+        if L<=R then
+          continue;
+        break;
+      end;
+      {$endif}
       R := result-1;
       if L<=R  then
         continue;
@@ -32396,15 +32408,15 @@ begin
   c := byte(P^)-48;
   if c>9 then
     exit;
-  Int64Rec(result).Lo := c;
+  PCardinal(@result)^ := c;
   inc(P);
   repeat // fast 32 bit loop
     c := byte(P^)-48;
     if c>9 then
       break else
-      Int64Rec(result).Lo := Int64Rec(result).Lo*10+c;
+      PCardinal(@result)^ := PCardinal(@result)^*10+c;
     inc(P);
-    if Int64Rec(result).Lo>=high(cardinal)div 10 then begin
+    if PCardinal(@result)^>=high(cardinal)div 10 then begin
       repeat // 64 bit loop
         c := byte(P^)-48;
         if c>9 then
@@ -32439,15 +32451,15 @@ begin
   c := byte(P^)-48;
   if c>9 then
     exit;
-  Int64Rec(result).Lo := c;
+  PCardinal(@result)^ := c;
   inc(P);
   repeat // fast 32 bit loop
     c := byte(P^)-48;
     if c>9 then
       break else
-      Int64Rec(result).Lo := Int64Rec(result).Lo*10+c;
+      PCardinal(@result)^ := PCardinal(@result)^*10+c;
     inc(P);
-    if Int64Rec(result).Lo>=high(cardinal)div 10 then begin
+    if PCardinal(@result)^>=high(cardinal)div 10 then begin
       repeat // 64 bit loop
         c := byte(P^)-48;
         if c>9 then
@@ -32509,7 +32521,7 @@ begin
   c := byte(P^)-48;
   if c>9 then
     exit;
-  Int64Rec(result).Lo := c;
+  PCardinal(@result)^ := c;
   inc(P);
   repeat // fast 32 bit loop
     c := byte(P^);
@@ -32518,9 +32530,9 @@ begin
       inc(err);
       if c>9 then
         exit;
-      Int64Rec(result).Lo := Int64Rec(result).Lo*10+c;
+      PCardinal(@result)^ := PCardinal(@result)^*10+c;
       inc(P);
-      if Int64Rec(result).Lo>=high(cardinal)div 10 then begin
+      if PCardinal(@result)^>=high(cardinal)div 10 then begin
         repeat // 64 bit loop
           c := byte(P^);
           if c=0 then begin
@@ -32565,7 +32577,7 @@ begin
   c := byte(P^)-48;
   if c>9 then
     exit;
-  Int64Rec(result).Lo := c;
+  PCardinal(@result)^ := c;
   inc(P);
   repeat // fast 32 bit loop
     c := byte(P^);
@@ -32574,9 +32586,9 @@ begin
       inc(err);
       if c>9 then
         exit;
-      Int64Rec(result).Lo := Int64Rec(result).Lo*10+c;
+      PCardinal(@result)^ := PCardinal(@result)^*10+c;
       inc(P);
-      if Int64Rec(result).Lo>=high(cardinal)div 10 then begin
+      if PCardinal(@result)^>=high(cardinal)div 10 then begin
         repeat // 64 bit loop
           c := byte(P^);
           if c=0 then begin
@@ -36705,12 +36717,12 @@ end;
 procedure TTimeLogBits.Expand(out Date: TSynSystemTime);
 begin
   Date.Year := (Value shr (6+6+5+5+4)) and 4095;
-  Date.Month := 1+(Int64Rec(Value).Lo shr (6+6+5+5)) and 15;
-  Date.Day := 1+(Int64Rec(Value).Lo shr (6+6+5)) and 31;
+  Date.Month := 1+(PCardinal(@Value)^ shr (6+6+5+5)) and 15;
+  Date.Day := 1+(PCardinal(@Value)^ shr (6+6+5)) and 31;
   Date.DayOfWeek := 0;
-  Date.Hour := (Int64Rec(Value).Lo shr (6+6)) and 31;
-  Date.Minute := (Int64Rec(Value).Lo shr 6) and 63;
-  Date.Second := Int64Rec(Value).Lo and 63;
+  Date.Hour := (PCardinal(@Value)^ shr (6+6)) and 31;
+  Date.Minute := (PCardinal(@Value)^ shr 6) and 63;
+  Date.Second := PCardinal(@Value)^ and 63;
 end;
 
 procedure TTimeLogBits.From(const S: RawUTF8);
@@ -36721,12 +36733,12 @@ end;
 procedure TTimeLogBits.From(FileDate: integer);
 begin
 {$ifdef MSWINDOWS}
-  From(LongRec(FileDate).Hi shr 9+1980,
-       LongRec(FileDate).Hi shr 5 and 15,
-       LongRec(FileDate).Hi and 31,
-       LongRec(FileDate).Lo shr 11,
-       LongRec(FileDate).Lo shr 5 and 63,
-       LongRec(FileDate).Lo and 31 shl 1);
+  From(PInt64Rec(@FileDate)^.Hi shr 9+1980,
+       PInt64Rec(@FileDate)^.Hi shr 5 and 15,
+       PInt64Rec(@FileDate)^.Hi and 31,
+       PInt64Rec(@FileDate)^.Lo shr 11,
+       PInt64Rec(@FileDate)^.Lo shr 5 and 63,
+       PInt64Rec(@FileDate)^.Lo and 31 shl 1);
 {$else} // FileDate depends on the running OS
   From(FileDateToDateTime(FileDate));
 {$endif}
@@ -36864,7 +36876,7 @@ end;
 function TTimeLogBits.ToTime: TDateTime;
 var lo: PtrUInt;
 begin
-  lo := {$ifdef CPU64}Value{$else}Int64Rec(Value).Lo{$endif};
+  lo := {$ifdef CPU64}Value{$else}PCardinal(@Value)^{$endif};
   if lo and (1 shl (6+6+5)-1)=0 then
     result := 0 else
     result := EncodeTime((lo shr(6+6))and 31, (lo shr 6)and 63, lo and 63, 0);
@@ -36901,7 +36913,7 @@ begin
   Y := (lo shr (6+6+5+5+4)) and 4095;
   {$else}
   Y := (Value shr (6+6+5+5+4)) and 4095;
-  lo := Int64Rec(Value).Lo;
+  lo := PCardinal(@Value)^;
   {$endif}
   if (Y=0) or not TryEncodeDate(Y,1+(lo shr(6+6+5+5))and 15,1+(lo shr(6+6+5))and 31,result) then
     result := 0;
@@ -36916,7 +36928,7 @@ begin
   Y := (lo shr (6+6+5+5+4)) and 4095;
   {$else}
   Y := (Value shr (6+6+5+5+4)) and 4095;
-  lo := Int64Rec(Value).Lo;
+  lo := PCardinal(@Value)^;
   {$endif}
   if (Y=0) or not TryEncodeDate(Y,1+(lo shr(6+6+5+5))and 15,1+(lo shr(6+6+5))and 31,result) then
     result := 0;
@@ -36932,27 +36944,27 @@ end;
 
 function TTimeLogBits.Month: Integer;
 begin
-  result := 1+(Int64Rec(Value).Lo shr (6+6+5+5)) and 15;
+  result := 1+(PCardinal(@Value)^ shr (6+6+5+5)) and 15;
 end;
 
 function TTimeLogBits.Day: Integer;
 begin
-  result := 1+(Int64Rec(Value).Lo shr (6+6+5)) and 31;
+  result := 1+(PCardinal(@Value)^ shr (6+6+5)) and 31;
 end;
 
 function TTimeLogBits.Hour: Integer;
 begin
-  result := (Int64Rec(Value).Lo shr (6+6)) and 31;
+  result := (PCardinal(@Value)^ shr (6+6)) and 31;
 end;
 
 function TTimeLogBits.Minute: Integer;
 begin
-  result := (Int64Rec(Value).Lo shr 6) and 63;
+  result := (PCardinal(@Value)^ shr 6) and 63;
 end;
 
 function TTimeLogBits.Second: Integer;
 begin
-  result := Int64Rec(Value).Lo and 63;
+  result := PCardinal(@Value)^ and 63;
 end;
 
 function TTimeLogBits.ToUnixTime: TUnixTime;
@@ -36972,7 +36984,7 @@ begin
     result := 0;
     exit;
   end;
-  lo := {$ifdef CPU64}Value{$else}Int64Rec(Value).Lo{$endif};
+  lo := {$ifdef CPU64}Value{$else}PCardinal(@Value)^{$endif};
   if lo and (1 shl (6+6+5)-1)=0 then begin
     // no Time: just convert date
     DateToIso8601PChar(Dest, Expanded,
@@ -38011,7 +38023,7 @@ begin
   c := byte(P^)-48;
   if c>9 then
     exit;
-  Int64Rec(result).Lo := c;
+  PCardinal(@result)^ := c;
   inc(P);
   repeat
     if P^<>'.' then begin
@@ -40159,7 +40171,7 @@ end;
 function ToVarUInt64(Value: QWord; Dest: PByte): PByte;
 var c: cardinal;
 begin
-  if {$ifdef CPU32}Int64Rec(Value).Hi=0{$else}Value shr 32=0{$endif} then begin
+  if {$ifdef CPU32}PInt64Rec(@Value)^.Hi=0{$else}Value shr 32=0{$endif} then begin
     result := ToVarUInt32(Value,Dest);
     exit;
   end;
@@ -40265,7 +40277,7 @@ begin // 0=0,1=1,2=-1,3=2,4=-2...
       inc(Source);
     until false;
     result := result or (Int64(c) shl n);
-    if Int64Rec(result).Lo and 1<>0 then
+    if PCardinal(@result)^ and 1<>0 then
       // 1->1, 3->2..
       result := result shr 1+1 else
       // 0->0, 2->-1, 4->-2..
@@ -40305,7 +40317,7 @@ begin // 0=0,1=1,2=-1,3=2,4=-2...
       inc(Source);
     until false;
     result := result or (Int64(c) shl n);
-    if {$ifdef CPU64}result{$else}Int64Rec(result).Lo{$endif} and 1<>0 then
+    if {$ifdef CPU64}result{$else}PCardinal(@result)^{$endif} and 1<>0 then
       // 1->1, 3->2..
       result := result shr 1+1 else
       // 0->0, 2->-1, 4->-2..
@@ -57133,11 +57145,11 @@ begin
   if Micro<1000 then
     FormatShort16('%us',[Micro],result) else
   if Micro<1000000 then
-    TwoDigitToString({$ifdef CPU32}Int64Rec(Micro).Lo{$else}Micro{$endif} div 10,'ms',result) else
+    TwoDigitToString({$ifdef CPU32}PCardinal(@Micro)^{$else}Micro{$endif} div 10,'ms',result) else
   if Micro<60000000 then
-    TwoDigitToString({$ifdef CPU32}Int64Rec(Micro).Lo{$else}Micro{$endif} div 10000,'s',result) else
+    TwoDigitToString({$ifdef CPU32}PCardinal(@Micro)^{$else}Micro{$endif} div 10000,'s',result) else
   if Micro<QWord(3600000000) then
-    TimeToString({$ifdef CPU32}Int64Rec(Micro).Lo{$else}Micro{$endif} div 1000000,'m',result) else
+    TimeToString({$ifdef CPU32}PCardinal(@Micro)^{$else}Micro{$endif} div 1000000,'m',result) else
   if Micro<QWord(86400000000*2) then
     TimeToString(Micro div 60000000,'h',result) else
     FormatShort16('%d',[Micro div QWord(86400000000)],result)
@@ -60894,11 +60906,11 @@ begin
       fBufSize := aCustomSize;
   end;
   {$ifdef MSWINDOWS}
-  with Int64Rec(fFileSize) do
+  with PInt64Rec(@fFileSize)^ do
     fMap := CreateFileMapping(fFile,nil,PAGE_READONLY,Hi,Lo,nil);
   if fMap=0 then
     raise ESynException.Create('TMemoryMap.Map: CreateFileMapping()=0');
-  with Int64Rec(aCustomOffset) do
+  with PInt64Rec(@aCustomOffset)^ do
     fBuf := MapViewOfFile(fMap,FILE_MAP_READ,Hi,Lo,fBufSize);
   if fBuf=nil then begin
     // Windows failed to find a contiguous VA space -> fall back on direct read
