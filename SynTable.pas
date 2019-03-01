@@ -2141,10 +2141,11 @@ type
     property SessionsCount: integer read fSessionsCount;
     /// the number of registered users
     property UsersCount: integer read GetUsersCount;
-    /// to be used to compute a Hash on the client, for a given Token
+    /// to be used to compute a Hash on the client sude, for a given Token
     // - the token should have been retrieved from the server, and the client
     // should compute and return this hash value, to perform the authentication
     // challenge and create the session
+    // - internal algorithm is not cryptographic secure, but fast and safe
     class function ComputeHash(Token: Int64; const UserName,PassWord: RawUTF8): cardinal; virtual;
   end;
 
@@ -2155,7 +2156,7 @@ type
   // TSQLDBProxyConnectionPropertiesAbstract (on client side) in SynDB.pas
   TSynAuthentication = class(TSynAuthenticationAbstract)
   protected
-    fCredentials: TSynNameValue;
+    fCredentials: TSynNameValue; // store user/password pairs
     function GetPassword(const UserName: RawUTF8; out Password: RawUTF8): boolean; override;
     function GetUsersCount: integer; override;
   public
@@ -7693,6 +7694,7 @@ begin
   fSafe.Init;
   fTokenSeed := Random32;
   fSessionGenerator := abs(fTokenSeed*PPtrInt(self)^);
+  fTokenSeed := abs(fTokenSeed*Random32);
 end;
 
 destructor TSynAuthenticationAbstract.Destroy;
@@ -7703,10 +7705,9 @@ end;
 
 class function TSynAuthenticationAbstract.ComputeHash(Token: Int64;
   const UserName,PassWord: RawUTF8): cardinal;
-begin // rough authentication - better than nothing
-  result := length(UserName);
-  result := crc32c(crc32c(crc32c(result,@Token,SizeOf(Token)),
-    pointer(UserName),result),pointer(Password),length(PassWord));
+begin // rough authentication - xxHash32 is less reversible than crc32c
+  result := xxHash32(xxHash32(xxHash32(Token,@Token,SizeOf(Token)),
+    pointer(UserName),length(UserName)),pointer(Password),length(PassWord));
 end;
 
 function TSynAuthenticationAbstract.ComputeCredential(previous: boolean;
@@ -7740,7 +7741,7 @@ begin
   result := 0;
   fSafe.Lock;
   try
-    // check the credentials
+    // check the given Hash challenge, against stored credentials
     if not GetPassword(User,password) then
       exit;
     if (ComputeCredential(false,User,password)<>Hash) and
