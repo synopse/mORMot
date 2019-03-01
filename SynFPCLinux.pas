@@ -4,7 +4,7 @@ unit SynFPCLinux;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -23,7 +23,7 @@ unit SynFPCLinux;
 
   The Initial Developer of the Original Code is Alfred Glaenzer.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -52,18 +52,7 @@ unit SynFPCLinux;
 
 interface
 
-{$MODE objfpc}
-{$inline on}
-{$h+}
-{$R-} // disable Range checking in our code
-{$S-} // disable Stack checking in our code
-
-{$ifdef ANDROID}
-  {$define LINUX}
-{$endif}
-{$ifdef BSD}
-  {$define LINUX}
-{$endif}
+{$I Synopse.inc} // set proper flags, and define LINUX for BSD and ANDROID
 
 uses
   SysUtils
@@ -86,9 +75,9 @@ procedure InitializeCriticalSection(var cs : TRTLCriticalSection); inline;
 /// compatibility function, wrapping Win32 API mutex finalization
 procedure DeleteCriticalSection(var cs : TRTLCriticalSection); inline;
 
-{$ifdef Linux}
+{$ifdef LINUX}
 
-{$ifndef BSD}
+{$ifdef LINUXNOTBSD}
 const
   CLOCK_REALTIME = 0;
   CLOCK_MONOTONIC = 1;
@@ -101,16 +90,19 @@ var
   // contains CLOCK_MONOTONIC_COARSE since kernel 2.6.32
   CLOCK_MONOTONIC_TICKCOUNT: integer = CLOCK_MONOTONIC;
 
-{$endif BSD}
+{$endif LINUXNOTBSD}
 
 /// used by TSynMonitorMemory.RetrieveMemoryInfo to compute the sizes in byte
 function getpagesize: Integer; cdecl; external 'c';
 
 /// compatibility function, wrapping Win32 API high resolution timer
-procedure QueryPerformanceCounter(var Value: Int64); inline;
+procedure QueryPerformanceCounter(out Value: Int64);
+
+/// slightly faster than QueryPerformanceCounter() div 1000 - but not for Windows
+procedure QueryPerformanceMicroSeconds(out Value: Int64);
 
 /// compatibility function, wrapping Win32 API high resolution timer
-function QueryPerformanceFrequency(var Value: Int64): boolean; inline;
+function QueryPerformanceFrequency(out Value: Int64): boolean;
 
 /// compatibility function, wrapping Win32 API file position change
 function SetFilePointer(hFile: cInt; lDistanceToMove: TOff;
@@ -123,7 +115,7 @@ function GetFileSize(hFile: cInt; lpFileSizeHigh: PDWORD): DWORD;
 procedure SetEndOfFile(hFile: cInt); inline;
 
 /// compatibility function, wrapping Win32 API file flush to disk
-procedure FlushFileBuffers(hFile: cInt);
+procedure FlushFileBuffers(hFile: cInt); inline;
 
 /// compatibility function, wrapping Win32 API last error code
 function GetLastError: longint; inline;
@@ -133,20 +125,20 @@ procedure SetLastError(error: longint); inline;
 
 /// compatibility function, wrapping Win32 API text comparison
 function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pwidechar;
-  cchCount1: longint; lpString2: Pwidechar; cchCount2: longint): longint; inline;
+  cchCount1: longint; lpString2: Pwidechar; cchCount2: longint): longint;
 
 /// returns the current UTC time
 function GetNowUTC: TDateTime;
 
 /// returns the current UTC time, as Unix Epoch seconds
-function GetUnixUTC: Int64;
+function GetUnixUTC: Int64; inline;
 
 /// returns the current UTC time, as Unix Epoch milliseconds
 // - will call clock_gettime(CLOCK_REALTIME_COARSE) if available
-function GetUnixMSUTC: Int64;
+function GetUnixMSUTC: Int64; inline;
 
 /// returns the current UTC time as TSystemTime
-procedure GetNowUTCSystem(var result: TSystemTime);
+procedure GetNowUTCSystem(out result: TSystemTime);
 
 var
   /// will contain the current Linux kernel revision, as one integer
@@ -157,7 +149,7 @@ var
 // - under Linux/FPC, this API truncates the name to 16 chars
 procedure SetUnixThreadName(ThreadID: TThreadID; const Name: RawByteString);
 
-{$endif Linux}
+{$endif LINUX}
 
 /// compatibility function, to be implemented according to the running OS
 // - expect more or less the same result as the homonymous Win32 API function
@@ -175,10 +167,10 @@ procedure SleepHiRes(ms: cardinal); inline;
 
 implementation
 
-{$ifdef Linux}
+{$ifdef LINUX}
 uses
-  Classes, Unix, BaseUnix, {$ifndef BSD}linux,{$endif} dl;
-{$endif}
+  Classes, Unix, BaseUnix, {$ifdef LINUXNOTBSD}linux,{$endif} dl;
+{$endif LINUX}
 
 procedure InitializeCriticalSection(var cs : TRTLCriticalSection);
 begin
@@ -187,13 +179,13 @@ end;
 
 procedure DeleteCriticalSection(var cs : TRTLCriticalSection);
 begin
-  {$ifndef BSD}
+  {$ifdef LINUXNOTBSD}
   if cs.__m_kind<>0 then
-  {$endif}
+  {$endif LINUXNOTBSD}
     DoneCriticalSection(cs);
 end;
 
-{$ifdef Linux}
+{$ifdef LINUX}
 
 const // Date Translation - see http://en.wikipedia.org/wiki/Julian_day
   HoursPerDay = 24;
@@ -206,50 +198,54 @@ const // Date Translation - see http://en.wikipedia.org/wiki/Julian_day
   D0          = 1461;
   D1          = 146097;
   D2          = 1721119;
+  UnixDelta   = 25569;
 
-procedure JulianToGregorian(JulianDN: integer; out Year,Month,Day: Word);
-var YYear,XYear,Temp,TempMonth: integer;
+  C_THOUSAND = Int64(1000);
+  C_MILLION  = Int64(C_THOUSAND * C_THOUSAND);
+  C_BILLION  = Int64(C_THOUSAND * C_THOUSAND * C_THOUSAND);
+
+
+procedure JulianToGregorian(JulianDN: PtrUInt; out result: TSystemTime);
+var YYear,XYear,Temp,TempMonth: PtrUInt;
 begin
   Temp := ((JulianDN-D2) shl 2)-1;
   JulianDN := Temp div D1;
-  XYear := (Temp mod D1) or 3;
-  YYear := (XYear div D0);
-  Temp := ((((XYear mod D0)+4) shr 2)*5)-3;
-  Day := ((Temp mod 153)+5) div 5;
+  XYear := (Temp-(JulianDN*D1)) or 3;
+  YYear := XYear div D0;
+  Temp := (((XYear-(YYear*D0)+4) shr 2)*5)-3;
   TempMonth := Temp div 153;
+  result.Day := ((Temp-(TempMonth*153))+5) div 5;
   if TempMonth>=10 then begin
     inc(YYear);
-    dec(TempMonth,12);
-  end;
-  inc(TempMonth,3);
-  Month := TempMonth;
-  Year := YYear+(JulianDN*100);
+    dec(TempMonth,12-3);
+  end else
+    inc(TempMonth,3);
+  result.Month := TempMonth;
+  result.Year := YYear+(JulianDN*100);
+  // initialize fake dayOfWeek - as used by SynCommons.FromGlobalTime RCU128
+  result.DayOfWeek := 0;
 end;
 
-procedure EpochToLocal(epoch: cardinal; out year,month,day,hour,minute,second: Word);
+procedure EpochToSystemTime(epoch: PtrUInt; out result: TSystemTime);
+var t: PtrUInt;
 begin
-  JulianToGregorian((epoch div SecsPerDay)+C1970,year,month,day);
-  epoch := abs(epoch mod SecsPerDay);
-  Hour := epoch div SecsPerHour;
-  epoch := epoch mod SecsPerHour;
-  Minute := epoch div SecsPerMin;
-  Second := epoch mod SecsPerMin;
+  t := epoch div SecsPerDay;
+  JulianToGregorian(t+C1970,result);
+  dec(epoch,t*SecsPerDay);
+  t := epoch div SecsPerHour;
+  result.Hour := t;
+  dec(epoch,t*SecsPerHour);
+  t := epoch div SecsPerMin;
+  result.Minute := t;
+  result.Second := epoch-t*SecsPerMin;
 end;
 
-function GetNowUTC: TDateTime;
-var SystemTime: TSystemTime;
+procedure GetNowUTCSystem(out result: TSystemTime);
+var r: timespec;
 begin
-  GetNowUTCSystem(SystemTime);
-  result := SystemTimeToDateTime(SystemTime);
-end;
-
-procedure GetNowUTCSystem(var result: TSystemTime);
-var tz: timeval;
-begin
-  fpgettimeofday(@tz,nil);
-  EpochToLocal(tz.tv_sec,
-    result.year,result.month,result.day,result.hour,result.Minute,result.Second);
-  result.MilliSecond := tz.tv_usec div 1000;
+  clock_gettime(CLOCK_REALTIME_TICKCOUNT,@r); // faster than fpgettimeofday()
+  EpochToSystemTime(r.tv_sec,result);
+  result.MilliSecond := r.tv_nsec div C_MILLION;
 end;
 
 function GetTickCount: cardinal;
@@ -257,13 +253,8 @@ begin
   result := cardinal(GetTickCount64);
 end;
 
-const
-  C_THOUSAND = Int64(1000);
-  C_MILLION  = Int64(C_THOUSAND * C_THOUSAND);
-  C_BILLION  = Int64(C_THOUSAND * C_THOUSAND * C_THOUSAND);
-
-{$ifdef Darwin}
-// clock_gettime() is not implemented: http://stackoverflow.com/a/5167506/458259
+{$ifdef DARWIN}
+// clock_gettime() is not implemented: http://stackoverflow.com/a/5167506
 
 type
   TTimebaseInfoData = record
@@ -279,8 +270,9 @@ function mach_timebase_info(var TimebaseInfoData: TTimebaseInfoData): Integer;
 var
   mach_timeinfo: TTimebaseInfoData;
   mach_timecoeff: double;
+  mach_timenanosecond: boolean;
 
-procedure QueryPerformanceCounter(var Value: Int64);
+procedure QueryPerformanceCounter(out Value: Int64);
 begin // returns time in nano second resolution
   Value := mach_absolute_time;
   if mach_timeinfo.Denom=1 then
@@ -292,9 +284,20 @@ begin // returns time in nano second resolution
     Value := round(Value*mach_timecoeff);
 end;
 
+procedure QueryPerformanceMicroSeconds(out Value: Int64);
+begin
+  if mach_timenanosecond then
+    Value := mach_absolute_time div C_THOUSAND else begin
+    QueryPerformanceCounter(Value);
+    Value := Value div C_THOUSAND;
+  end;
+end;
+
 function GetTickCount64: Int64;
 begin
-  QueryPerformanceCounter(result);
+  if mach_timenanosecond then
+    result := mach_absolute_time else
+    QueryPerformanceCounter(result);
   result := result div C_MILLION; // 1 millisecond = 1e6 nanoseconds
 end;
 
@@ -309,7 +312,7 @@ function GetUnixMSUTC: Int64;
 var tz: timeval;
 begin
   fpgettimeofday(@tz,nil);
-  result := (tz.tv_sec*1000)+tz.tv_usec div 1000;
+  result := (tz.tv_sec*C_THOUSAND)+tz.tv_usec div C_THOUSAND; // in milliseconds
 end;
 
 {$else}
@@ -325,20 +328,20 @@ const
   CLOCK_MONOTONIC_FAST = 12; // FreeBSD specific
   CLOCK_MONOTONIC_TICKCOUNT = CLOCK_MONOTONIC;
   CLOCK_REALTIME_TICKCOUNT = CLOCK_REALTIME;
-{$endif}
+{$endif BSD}
 
 function GetTickCount64: Int64;
 var tp: timespec;
 begin
-  clock_gettime(CLOCK_MONOTONIC_TICKCOUNT,@tp);
-  Result := (Int64(tp.tv_sec) * C_THOUSAND) + (tp.tv_nsec div 1000000); // in ms
+  clock_gettime(CLOCK_MONOTONIC_TICKCOUNT,@tp); // likely = CLOCK_MONOTONIC_COARSE
+  Result := (Int64(tp.tv_sec) * C_THOUSAND) + (tp.tv_nsec div C_MILLION); // in ms
 end;
 
 function GetUnixMSUTC: Int64;
 var r: timespec;
 begin
-  clock_gettime(CLOCK_REALTIME_TICKCOUNT,@r);
-  result := (Int64(r.tv_sec) * C_THOUSAND) + (r.tv_nsec div 1000000); // in ms
+  clock_gettime(CLOCK_REALTIME_TICKCOUNT,@r); // likely = CLOCK_REALTIME_COARSE
+  result := (Int64(r.tv_sec) * C_THOUSAND) + (r.tv_nsec div C_MILLION); // in ms
 end;
 
 function GetUnixUTC: Int64;
@@ -348,16 +351,28 @@ begin
   result := r.tv_sec;
 end;
 
-procedure QueryPerformanceCounter(var Value: Int64);
+procedure QueryPerformanceCounter(out Value: Int64);
 var r : TTimeSpec;
 begin
   clock_gettime(CLOCK_MONOTONIC,@r);
-  value := r.tv_nsec+r.tv_sec*C_BILLION;
+  value := r.tv_nsec+r.tv_sec*C_BILLION; // returns nanoseconds resolution
 end;
 
-{$endif Darwin}
+procedure QueryPerformanceMicroSeconds(out Value: Int64);
+var r : TTimeSpec;
+begin
+  clock_gettime(CLOCK_MONOTONIC,@r);
+  value := r.tv_nsec div C_THOUSAND+r.tv_sec*C_MILLION; // as microseconds
+end;
 
-function QueryPerformanceFrequency(var Value: Int64): boolean;
+{$endif DARWIN}
+
+function GetNowUTC: TDateTime;
+begin
+  result := GetUnixMSUTC / MSecsPerDay + UnixDelta;
+end;
+
+function QueryPerformanceFrequency(out Value: Int64): boolean;
 begin
   Value := C_BILLION; // 1 second = 1e9 nanoseconds
   result := true;
@@ -399,8 +414,8 @@ end;
 
 function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pwidechar;
   cchCount1: longint; lpString2: Pwidechar; cchCount2: longint): longint;
-var W1,W2: UnicodeString; // faster than WideString under Windows
-begin
+var W1,W2: WideString;
+begin // not inlined to avoid stack unicodestring allocation
   W1 := lpString1;
   W2 := lpString2;
   if dwCmpFlags and NORM_IGNORECASE<>0 then
@@ -442,19 +457,20 @@ var uts: UtsName;
   end;
 begin
   if fpuname(uts)=0 then begin
-    P := @uts.release;
+    P := @uts.release[0];
     KernelRevision := GetNext shl 16+GetNext shl 8+GetNext;
-    {$ifndef BSD}
+    {$ifdef LINUXNOTBSD}
     if KernelRevision>=$020620 then begin // expects kernel 2.6.32 or higher
       CLOCK_MONOTONIC_TICKCOUNT := CLOCK_MONOTONIC_COARSE;
       CLOCK_REALTIME_TICKCOUNT := CLOCK_REALTIME_COARSE;
     end;
-    {$endif BSD}
+    {$endif LINUXNOTBSD}
   end;
-  {$ifdef Darwin}
+  {$ifdef DARWIN}
   mach_timebase_info(mach_timeinfo);
   mach_timecoeff := mach_timeinfo.Numer/mach_timeinfo.Denom;
-  {$endif}
+  mach_timenanosecond := (mach_timeinfo.Numer=1) and (mach_timeinfo.Denom=1);
+  {$endif DARWIN}
 end;
 
 
@@ -463,9 +479,9 @@ type
     Loaded: boolean;
     {$ifdef LINUX}
     pthread: pointer;
-    {$ifndef BSD} // see https://stackoverflow.com/a/7989973/458259
+    {$ifdef LINUXNOTBSD} // see https://stackoverflow.com/a/7989973
     pthread_setname_np: function(thread: pointer; name: PAnsiChar): LongInt; cdecl;
-    {$endif BSD}
+    {$endif LINUXNOTBSD}
     {$endif LINUX}
     procedure EnsureLoaded;
     procedure Done;
@@ -480,11 +496,11 @@ begin
   {$ifdef LINUX}
   pthread := dlopen({$ifdef ANDROID}'libc.so'{$else}'libpthread.so.0'{$endif}, RTLD_LAZY);
   if pthread <> nil then begin
-    {$ifndef BSD}
-    pointer(pthread_setname_np) := dlsym(pthread, 'pthread_setname_np');
-    {$endif BSD}
+    {$ifdef LINUXNOTBSD}
+    @pthread_setname_np := dlsym(pthread, 'pthread_setname_np');
+    {$endif LINUXNOTBSD}
   end;
-  {$endif}
+  {$endif LINUX}
   Loaded := true;
 end;
 
@@ -495,12 +511,12 @@ begin
   {$ifdef LINUX}
   if pthread <> nil then
     dlclose(pthread);
-  {$endif}
+  {$endif LINUX}
   Loaded := false;
 end;
 
 procedure SetUnixThreadName(ThreadID: TThreadID; const Name: RawByteString);
-var trunc: array[0..15] of AnsiChar; // truncated to 16 chars
+var trunc: array[0..15] of AnsiChar; // truncated to 16 bytes (including #0)
     i,L: integer;
 begin
   if Name = '' then
@@ -524,11 +540,11 @@ begin
   if L = 0 then
     exit;
   trunc[L] := #0;
-  {$ifndef BSD}
+  {$ifdef LINUXNOTBSD}
   ExternalLibraries.EnsureLoaded;
   if Assigned(ExternalLibraries.pthread_setname_np) then
-    ExternalLibraries.pthread_setname_np(pointer(ThreadID), @trunc);
-  {$endif}
+    ExternalLibraries.pthread_setname_np(pointer(ThreadID), @trunc[0]);
+  {$endif LINUXNOTBSD}
 end;
 
 initialization
@@ -536,5 +552,5 @@ initialization
 
 finalization
   ExternalLibraries.Done;
-{$endif Linux}
+{$endif LINUX}
 end.

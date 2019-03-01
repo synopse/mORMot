@@ -9,7 +9,7 @@ interface
 
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -28,7 +28,7 @@ interface
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -118,7 +118,7 @@ uses
 {$else}
   StdCtrls, ComCtrls, SynTaskDialog, Buttons, CommCtrl,
 {$endif USETMSPACK}
-  SynCommons, SynGdiPlus, SynZip,
+  SynCommons, SynTable, SynGdiPlus, SynZip,
   mORMot, mORMotReport, mORMotUI, mORMoti18n, mORMotUILogin;
 
 
@@ -127,7 +127,8 @@ type
   TFreeShortCutSet = set of ord('A')..ord('Z');
 
   /// a simple object to get one char shortcuts from caption value
-  TFreeShortCut = object
+  {$ifdef UNICODE}TFreeShortCut = record{$else}TFreeShortCut = object{$endif}
+  public
     /// bit set for already used short cut, from 'A' to 'Z'
     Values: TFreeShortCutSet;
     /// attempt to create free shortcut of one char length, from
@@ -478,7 +479,7 @@ type
   // custom buttons to a previously created one by TSQLLister.SetToolBar()
   // - simply set the associated objects via the Init() method, then call
   // AddToolBar() for every toolbar which need to be created
-  TSQLCustomToolBar = object
+  {$ifdef UNICODE}TSQLCustomToolBar = record{$else}TSQLCustomToolBar = object{$endif}
   public
     Page: TSynPage;
     ActionHints: string;

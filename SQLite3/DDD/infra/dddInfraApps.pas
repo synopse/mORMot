@@ -6,7 +6,7 @@ unit dddInfraApps;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit dddInfraApps;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -261,13 +261,14 @@ type
   protected
     fORM: TSynConnectionDefinition;
     fClient: TDDDRestClientDefinition;
-    fTimeout: integer;
+    fTimeout, fWebSocketsLoopDelay: integer;
   public
     /// set the default values for Client.Root, ORM.ServerName,
     // Client.WebSocketsPassword and ORM.Password
     procedure SetDefaults(const Root, Port, WebSocketPassword, UserPassword: RawUTF8;
       const User: RawUTF8 = 'User'; const Server: RawUTF8 = 'localhost';
-      ForceSetCredentials: boolean = false; ConnectRetrySeconds: integer = 0);
+      ForceSetCredentials: boolean = false; ConnectRetrySeconds: integer = 0;
+      WebSocketsLoopDelayMS: integer = 0);
     /// is able to instantiate a Client REST instance for the stored definition
     // - Definition.Kind is expected to specify a TSQLRestClient class to be
     // instantiated, not a TSQLRestServer instance
@@ -284,6 +285,8 @@ type
       out aPasswordHashed: boolean): boolean;
     /// you can overload here the TCP timeout delay, in seconds
     property Timeout: integer read fTimeout write fTimeout;
+    /// you can overload here the WebSockets internal loop delay, in milliseconds
+    property WebSocketsLoopDelay: integer read fWebSocketsLoopDelay write fWebSocketsLoopDelay;
   published
     /// defines a mean of access to a TSQLRest instance
     // - using Kind/ServerName/DatabaseName/User/Password properties: Kind
@@ -858,7 +861,8 @@ type
 procedure TDDDDaemon.ExecuteCommandLine(ForceRun: boolean);
 var
   name, param: RawUTF8;
-  passwords: RawByteString;
+  p: PUTF8Char;
+  passwords, exe: RawByteString;
   cmd: TExecuteCommandLineCmd;
   daemon: TDDDAdministratedDaemon;
   {$ifdef MSWINDOWS}
@@ -1005,8 +1009,11 @@ begin
       param := trim(StringToUTF8(paramstr(1)));
     if (param = '') or not (param[1] in ['/', '-']) then
       cmd := cNone
-    else
-      case NormToUpper[param[2]] of
+    else begin
+      p := @param[2];
+      if p^ = '-' then // allow e.g. --fork switch (idem to /f -f /fork -fork)
+        inc(p);
+      case NormToUpper[p^] of
         'C':
           cmd := cConsole;
         'D':
@@ -1018,18 +1025,22 @@ begin
         'K':
           cmd := cKill;
       else
-        byte(cmd) := ord(cInstall) + IdemPCharArray(@param[2],
+        byte(cmd) := ord(cInstall) + IdemPCharArray(p,
           ['INST', 'UNINST', 'START', 'STOP', 'STAT', 'VERS', 'VERB', 'HELP',
            'HARDEN', 'PLAIN']);
       end;
+    end;
     case cmd of
       cHelp:
         Syntax;
       cVersion:
         begin
+          exe := StringFromFile(ExeVersion.ProgramFileName);
           writeln(' ', ExeVersion.ProgramFileName,
-            #13#10' Size: ', FileSize(ExeVersion.ProgramFileName), ' bytes' +
-            #13#10' Build date: ', ExeVersion.Version.BuildDateTimeString);
+            #13#10' Size: ', length(exe), ' bytes (', KB(exe), ')' +
+            #13#10' Build date: ', ExeVersion.Version.BuildDateTimeString,
+            #13#10' MD5: ', MD5(exe),
+            #13#10' SHA256: ', SHA256(exe));
           if ExeVersion.Version.Version32 <> 0 then
             writeln(' Version: ', ExeVersion.Version.Detailed);
           TextColor(ccCyan);
@@ -1142,7 +1153,7 @@ begin
       RunUntilSigTerminated(self, (cmd=cFork), DoStart, DoStop
         {$ifdef WITHLOG},SQLite3Log.Add, fSettings.ServiceName{$endif});
     cKill:
-      if not RunUntilSigTerminatedForkKill then
+      if not RunUntilSigTerminatedForKill then
         raise EServiceException.Create('No forked process found to be killed');
     else
       Syntax;
@@ -1956,7 +1967,7 @@ end;
 
 procedure TDDDRestClientSettings.SetDefaults(const Root, Port, WebSocketPassword,
   UserPassword, User, Server: RawUTF8; ForceSetCredentials: boolean;
-  ConnectRetrySeconds: integer);
+  ConnectRetrySeconds, WebSocketsLoopDelayMS: integer);
 begin
   if fClient.Root = '' then
     fClient.Root := Root;
@@ -1966,14 +1977,17 @@ begin
     else
       fORM.Kind := TSQLHttpClient.ClassName;
   if ForceSetCredentials or (fORM.ServerName = '') then begin
-    if (fORM.ServerName = '') and (Port <> '') then
-      if Server = '' then
-        fORM.ServerName := 'http://localhost:' + Port else
-        if PosEx(':', Server) = 0 then
-          fORM.ServerName := 'http://' + Server + ':' + Port else
-          fORM.ServerName := Server;
+    if fORM.ServerName = '' then
+      if Port = '' then
+        fORM.ServerName := Server else
+        if Server = '' then
+          fORM.ServerName := 'http://localhost:' + Port else
+          if PosEx(':', Server) = 0 then
+            fORM.ServerName := 'http://' + Server + ':' + Port else
+            fORM.ServerName := Server;
     if fClient.WebSocketsPassword = '' then
       fClient.WebSocketsPassword := WebSocketPassword;
+    fWebSocketsLoopDelay := WebSocketsLoopDelayMS;
     fClient.ConnectRetrySeconds := ConnectRetrySeconds;
     if UserPassword <> '' then begin
       fORM.User := User;
@@ -2286,8 +2300,10 @@ begin
   fConnectRetrySeconds := aSettings.Client.ConnectRetrySeconds;
   inherited Create(u.Server, u.Port, CreateModel(aSettings), t, t, t);
   Model.Owner := self; // just allocated by CreateModel()
-  if aSettings.Client.WebSocketsPassword <> '' then
+  if aSettings.Client.WebSocketsPassword <> '' then begin
+    fWebSocketLoopDelay := aSettings.WebSocketsLoopDelay;
     WebSocketsConnect(aSettings.Client.PasswordPlain);
+  end;
   OnAuthentificationFailed := aSettings.OnAuthentificationFailed;
   if aSettings.ORM.Password = '' then
     RegisterServices // plain REST connection without authentication

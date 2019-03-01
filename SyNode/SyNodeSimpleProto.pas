@@ -5,10 +5,10 @@ unit SyNodeSimpleProto;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
-    SyNode for mORMot Copyright (C) 2018 Pavel Mashlyakovsky & Vadim Orel
+    SyNode for mORMot Copyright (C) 2019 Pavel Mashlyakovsky & Vadim Orel
       pavel.mash at gmail.com
 
     Some ideas taken from
@@ -174,7 +174,7 @@ begin
   PI := GetPropCacheForWrite(cx, vp.thisObject[cx], id, Instance).mbr;
   val := vp.argv[0];
   case PI.PropType^{$IFNDEF FPC}^{$ENDIF}.Kind of
-    tkInteger, tkEnumeration, tkSet:
+    tkInteger, tkEnumeration, tkSet{$ifdef FPC},tkBool{$endif}:
       PI.SetOrdValue(Instance^.instance,val.asInteger);
     tkInt64:
       PI.SetInt64Value(Instance^.instance, val.asInt64);

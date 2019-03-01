@@ -6,7 +6,7 @@ unit SynZipFiles;
 (*
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynZipFiles;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -121,7 +121,8 @@ type
 
   TSynCompressionAlgoClass = class of TSynCompressionAlgo;
 
-  TSynCompressionAlgos = object
+  {$ifdef UNICODE}TSynCompressionAlgos = record{$else}TSynCompressionAlgos = object{$endif}
+  public
     Values: array of record
       ID, WholeID: integer;
       func: TSynCompressionAlgoClass;
@@ -240,7 +241,7 @@ type
   // used to transfert Blob Data from/to Client without compress/uncompress:
 {$A-}
   PBlobData = ^TBlobData;
-  TBlobData = object
+  {$ifdef UNICODE}TBlobData = record{$else}TBlobData = object{$endif}
   private
     // test if algo is registered, perform crc32 check and create one instance
     function AlgoCreate(data: pointer): TSynCompressionAlgo;
@@ -264,7 +265,7 @@ const
   BLOBDATA_HEADSIZE = sizeof(TBlobData)-sizeof(AnsiChar); // databuf: AnsiChar
 
 type
-  TMemoryMap = object
+  {$ifdef UNICODE}TMemoryMap = record{$else}TMemoryMap = object{$endif}
   // use mapped files: very fast + avoid unnecessary disk access
   private
     _map: cardinal;
@@ -527,11 +528,11 @@ procedure TZipReader.GetBlobData(aIndex: integer; aStream: TStream);
 var blob: TBlobData;
 begin
   if (self=nil) or (aIndex<0) or (aIndex>=Count) or (Map.buf=nil) then
-    aStream.Write(BlobDataNull,BLOBDATA_HEADSIZE) else
+    aStream.WriteBuffer(BlobDataNull,BLOBDATA_HEADSIZE) else
     with Entry[aIndex], LocalHeader(Map.buf)^ do begin
       blob.SetFrom(fileInfo);
-      aStream.Write(blob,BLOBDATA_HEADSIZE);
-      aStream.Write(LocalData^,blob.dataSize);
+      aStream.WriteBuffer(blob,BLOBDATA_HEADSIZE);
+      aStream.WriteBuffer(LocalData^,blob.dataSize);
     end;
 end;
 
@@ -599,11 +600,11 @@ begin
           Blob.dataFullSize := L;
           Blob.dataCRC := crc32(0,tmp,L);
           Blob.dataMethod := fileInfo.AlgoID shl 4; // 0=stored + AlgoID
-          aStream.Write(Blob,BLOBDATA_HEADSIZE);
+          aStream.WriteBuffer(Blob,BLOBDATA_HEADSIZE);
         end else
         if withAlgoDataLen then
-          aStream.Write(L,4);
-        aStream.Write(tmp^,L); // write uncompressed
+          aStream.WriteBuffer(L,4);
+        aStream.WriteBuffer(tmp^,L); // write uncompressed
       finally
         freemem(tmp);
       end;
@@ -613,11 +614,11 @@ begin
         Blob.dataFullSize := FileInfo.zfullSize;
         Blob.dataCRC := FileInfo.zcrc32;
         Blob.dataMethod := 0; // stored, since will be uncompressed below
-        aStream.Write(Blob,BLOBDATA_HEADSIZE);
+        aStream.WriteBuffer(Blob,BLOBDATA_HEADSIZE);
       end;
       case fileInfo.zzipMethod of
       0: begin
-        aStream.Write(result^,fileInfo.zfullSize); // stored = direct copy
+        aStream.WriteBuffer(result^,fileInfo.zfullSize); // stored = direct copy
         if CheckCRC then
           CRC := crc32(0,result,fileInfo.zfullSize);
       end;
@@ -690,15 +691,15 @@ begin
   aName := StringToUTF8(ExtractFileName(fFileName));
   // 1. write global params
   L := length(aName);
-  aStream.Write(L,1);
-  aStream.Write(aName[1],L); // UTF-8 encoded file name
-  aStream.Write(fCount,4);
+  aStream.WriteBuffer(L,1);
+  aStream.WriteBuffer(aName[1],L); // UTF-8 encoded file name
+  aStream.WriteBuffer(fCount,4);
   // 2. write Entry[].ZipName
   for i := 0 to Count-1 do
   with Entry[i] do begin
     assert(not Header.IsFolder,'empty folders streaming is not implemented');
-    aStream.Write(Header.fileInfo,sizeof(Header.fileInfo));
-    aStream.Write(pointer(ZipName)^,Header.fileInfo.NameLen);
+    aStream.WriteBuffer(Header.fileInfo,sizeof(Header.fileInfo));
+    aStream.WriteBuffer(pointer(ZipName)^,Header.fileInfo.NameLen);
   end;
   // 3. write all uncompressed data
   for i := 0 to Count-1 do
@@ -937,7 +938,7 @@ constructor TZipCompressor.CreateAsBlobData(outStream: TStream;
 begin
   Create(outStream,CompressionLevel,Algorithm);
   fBlobDataHeaderPosition := outStream.Seek(0,soFromCurrent);
-  outStream.Write(FBufferOut,BLOBDATA_HEADSIZE); // save Bulk header
+  outStream.WriteBuffer(FBufferOut,BLOBDATA_HEADSIZE); // save Bulk header
 end;
 
 destructor TZipCompressor.Destroy;
@@ -965,7 +966,7 @@ begin
         dataMethod := fAlgorithmID shl 4; // stored + AlgoID
     end;
     fDestStream.Seek(fBlobDataHeaderPosition,soFromBeginning);
-    fDestStream.Write(blob,BLOBDATA_HEADSIZE);
+    fDestStream.WriteBuffer(blob,BLOBDATA_HEADSIZE);
     fDestStream.Seek(p,soFromBeginning);
   end;
   inherited;
@@ -976,7 +977,7 @@ begin
   if (self=nil) then exit;
   if assigned(fAlgorithm) then begin
     if assigned(fAlgorithmStream) then begin
-      fAlgorithmStream.Write(fBufferIn,fStrm.avail_in); // write pending data
+      fAlgorithmStream.WriteBuffer(fBufferIn,fStrm.avail_in); // write pending data
       fStrm.total_in := fAlgorithm.Compress( // compress whole data at once
         fAlgorithmStream.Memory,fAlgorithmStream.Seek(0,soFromCurrent),@fCRC);
     end else
@@ -1009,7 +1010,7 @@ begin
     exit;
   if FStrm.avail_out < SizeOf(FBufferOut) then begin
     Result := SizeOf(FBufferOut) - FStrm.avail_out;
-    FDestStream.Write(FBufferOut, Result);
+    FDestStream.WriteBuffer(FBufferOut, Result);
     FStrm.next_out := @FBufferOut;
     FStrm.avail_out := SizeOf(FBufferOut);
   end;
@@ -1086,7 +1087,7 @@ begin
       if Assigned(fAlgorithmStream) then begin
         // algo -> copy into fAlgorithmStream by fBufferIn[] chunks
         if cardinal(Count)+FStrm.avail_in>sizeof(fBufferIn)-1 then begin
-          fAlgorithmStream.Write(fBufferIn,fStrm.avail_in); // flush buffer
+          fAlgorithmStream.WriteBuffer(fBufferIn,fStrm.avail_in); // flush buffer
           FStrm.avail_in := 0;
           FStrm.next_in := @fBufferIn;
         end;
@@ -1094,7 +1095,7 @@ begin
           move(Buffer,fBufferIn[FStrm.avail_in],Count);
           inc(FStrm.avail_in,Count);
         end else
-          fAlgorithmStream.Write(Buffer,Count); // big block -> direct store
+          fAlgorithmStream.WriteBuffer(Buffer,Count); // big block -> direct store
       end else
       if Assigned(fAlgorithm) then begin
         // algo without fAlgorithmStream -> direct compress in fBufferIn[] chunks
@@ -1125,7 +1126,7 @@ begin
         inc(FStrm.total_in,Count);
         inc(FStrm.total_out,Count);
         fCRC := crc32(fCRC,@Buffer,Count);
-        fDestStream.Write(Buffer,Count);
+        fDestStream.WriteBuffer(Buffer,Count);
       end;
     end;
   end else
@@ -1161,15 +1162,15 @@ constructor TGzWriter.Create(const aDestStream: TStream);
 const gzheader : array [0..2] of cardinal = ($88B1F,0,0);
 begin
   outFile := aDestStream;
-  outFile.Write(gzHeader,10);
+  outFile.WriteBuffer(gzHeader,10);
   inherited Create(outFile, 6);
 end;
 
 destructor TGzWriter.Destroy;
 begin
   Finish;
-  outFile.Write(CRC,4);
-  outFile.Write(FStrm.total_in,4);
+  outFile.WriteBuffer(CRC,4);
+  outFile.WriteBuffer(FStrm.total_in,4);
   if outFileToBeFree then
     FreeAndNil(outFile);
   inherited;
@@ -1206,18 +1207,18 @@ var Map: TMemoryMap;
 begin
   if not Map.DoMap(aFileName) then begin
     if StoreLen then
-      aStream.Write(Map.Buf,4); // no file -> store len=0
+      aStream.WriteBuffer(Map.Buf,4); // no file -> store len=0
   end else
     try
       if PCardinal(Map.buf)^<>$88B1F then begin
         if StoreLen then
-          aStream.Write(Map._Size,4);
-        aStream.Write(Map.buf^,Map._size); // not a .gz -> store as is
+          aStream.WriteBuffer(Map._Size,4);
+        aStream.WriteBuffer(Map.buf^,Map._size); // not a .gz -> store as is
       end else begin
         Len := pInteger(@Map.buf[Map._size-4])^; // .gz -> uncompress
         assert(Len>=0);
         if StoreLen then
-          aStream.Write(Len,4);
+          aStream.WriteBuffer(Len,4);
         UnCompressStream(@Map.buf[10],Map._size-18,aStream,nil);
       end;
     finally
@@ -1324,7 +1325,7 @@ begin
   for i := 0 to Count-1 do
   with Entry[i],Header.fileInfo do begin
     Header.localHeadOff := outFile.Position; // position can change, as we recompress
-    sign := $04034b50; outFile.Write(sign,4); // write .zip fileinfo signature
+    sign := $04034b50; outFile.WriteBuffer(sign,4); // write .zip fileinfo signature
     aAlgo := AlgoID;
     if (aAlgo<>0) or (zzipMethod=8) then begin // reuse same compression/algo
       // special ZipCreate(), without AddEntry():
@@ -1336,8 +1337,8 @@ begin
         end;
       end;
       Zip := TZipCompressor.Create(outFile, 6, aAlgo);
-      outFile.Write(neededVersion,sizeof(Header.fileInfo)); // save bulk fileInfo
-      outFile.Write(ZipName[1],nameLen);
+      outFile.WriteBuffer(neededVersion,sizeof(Header.fileInfo)); // save bulk fileInfo
+      outFile.WriteBuffer(ZipName[1],nameLen);
       if fromMemory<>nil then begin
         Zip.WriteOnce(fromMemory[4],pInteger(fromMemory)^); // direct recompress using algo
         L := pInteger(fromMemory)^+4;
@@ -1358,8 +1359,8 @@ begin
     end else begin
       assert(zzipMethod=0);
       zzipSize := zfullSize;
-      outFile.Write(neededVersion,sizeof(Header.fileInfo)); // save new fileInfo
-      outFile.Write(ZipName[1],nameLen);
+      outFile.WriteBuffer(neededVersion,sizeof(Header.fileInfo)); // save new fileInfo
+      outFile.WriteBuffer(ZipName[1],nameLen);
       outFile.CopyFrom(fromStream,zzipSize);
     end;
   end;
@@ -1396,11 +1397,11 @@ begin
   for i := 0 to Count-1 do
   with Entry[i] do begin
     inc(lhr.headerSize, sizeOf(TFileHeader)+length(ZipName));
-    outFile.Write(Header,sizeof(TFileHeader));
-    outFile.Write(ZipName[1],length(ZipName));
+    outFile.WriteBuffer(Header,sizeof(TFileHeader));
+    outFile.WriteBuffer(ZipName[1],length(ZipName));
   end;
   // 3. write last header
-  outFile.Write(lhr,sizeof(lhr));
+  outFile.WriteBuffer(lhr,sizeof(lhr));
   // 4. truncate and close file
 {$ifdef MSWINDOWS}
   SetEndOfFile(outFile.Handle);
@@ -1450,9 +1451,9 @@ begin
     if dataCRC<>nil then
       zcrc32 := dataCRC^ else
       zcrc32 := crc32(0,data,dataSize);
-    outFile.Write(fileInfo,sizeof(fileInfo));
-    outFile.Write(aZipName[1],length(aZipName));
-    outFile.Write(data^,dataSize);
+    outFile.WriteBuffer(fileInfo,sizeof(fileInfo));
+    outFile.WriteBuffer(aZipName[1],length(aZipName));
+    outFile.WriteBuffer(data^,dataSize);
     inc(fCount);
   end else begin
     ZipCreate(aZipName,CompressionLevel,FileAge,Algorithm);
@@ -1473,9 +1474,9 @@ begin
       if Assigned(SynCompressionAlgos.Algo(p^.AlgoID)) then
         SetAlgoID(p^.AlgoID) else
         raise TZipException.CreateFmt(sZipAlgoIDNUnknownN,[p^.AlgoID,aZipName]);
-    outFile.Write(fileInfo,sizeof(fileInfo));
-    outFile.Write(aZipName[1],length(aZipName));
-    outFile.Write(p^.databuf,p^.dataSize);
+    outFile.WriteBuffer(fileInfo,sizeof(fileInfo));
+    outFile.WriteBuffer(aZipName[1],length(aZipName));
+    outFile.WriteBuffer(p^.databuf,p^.dataSize);
     inc(fCount);
   end;
 end;
@@ -1497,9 +1498,9 @@ begin
       fileInfo.nameLen := length(ZipName); // recalc length, as may be updated
       localHeadOff  := outFile.Position; // only changed data = position in file
       sign := $04034b50; outFile.Write(sign,4);
-      outFile.Write(fileInfo,sizeof(fileInfo)); // save new fileInfo
-      outFile.Write(ZipName[1],fileInfo.nameLen); // append file name
-      outFile.Write(E^.LocalHeader(aReader.Map.buf).LocalData^,fileInfo.zzipSize); // data copy
+      outFile.WriteBuffer(fileInfo,sizeof(fileInfo)); // save new fileInfo
+      outFile.WriteBuffer(ZipName[1],fileInfo.nameLen); // append file name
+      outFile.WriteBuffer(E^.LocalHeader(aReader.Map.buf).LocalData^,fileInfo.zzipSize); // data copy
     end;
   end;
   inc(fCount);
@@ -1525,7 +1526,7 @@ begin
       Header.fileInfo.zzipSize := Header.fileInfo.zfullSize;
     p := outFile.Seek(0,soFromCurrent);
     outFile.Seek(Header.localHeadOff+sizeof(dword),soBeginning);
-    outFile.Write(Header.fileInfo,sizeof(Header.fileInfo)); // save updated fileInfo
+    outFile.WriteBuffer(Header.fileInfo,sizeof(Header.fileInfo)); // save updated fileInfo
     outFile.Seek(p,soBeginning);
   end;
   FreeAndNil(Zip);
@@ -1543,8 +1544,8 @@ begin
     if CompressionLevel>=0 then
       fileInfo.zzipMethod := 8;
     Zip := TZipCompressor.Create(outFile, CompressionLevel,Algorithm);
-    outFile.Write(fileInfo,sizeof(fileInfo)); // save bulk fileInfo
-    outFile.Write(aZipName[1],length(aZipName));
+    outFile.WriteBuffer(fileInfo,sizeof(fileInfo)); // save bulk fileInfo
+    outFile.WriteBuffer(aZipName[1],length(aZipName));
     // now the caller will use Zip.Write to compress data into outFile
     // and will end compression with ZipClose
   end;
@@ -1581,7 +1582,7 @@ begin
       end;
     end;
   end;
-  sign := $04034b50; outFile.Write(sign,sizeof(dword));
+  sign := $04034b50; outFile.WriteBuffer(sign,sizeof(dword));
 end;
 
 function TZipWriter.LastCRC32Added: cardinal;
@@ -1787,9 +1788,9 @@ begin
   case DataMethod of
   16..31: begin
     tmp := Expand;
-    Stream.Write(pointer(tmp)^,length(tmp));
+    Stream.WriteBuffer(pointer(tmp)^,length(tmp));
   end;
-  0: Stream.Write(dataBuf,dataFullsize);
+  0: Stream.WriteBuffer(dataBuf,dataFullsize);
   8: UnCompressStream(@dataBuf,dataSize,Stream,nil);
   else assert(false);
   end;
@@ -1959,7 +1960,7 @@ begin
     fCompressBuf[2] := AnsiChar(result shr 16);
     inc(result,3);
   end;
-  fDestStream.Write(fCompressBuf^,result);
+  fDestStream.WriteBuffer(fCompressBuf^,result);
   if CRC<>nil then
     CRC^ := crc32(CRC^,fCompressBuf,result);
 end;
@@ -2039,7 +2040,7 @@ begin
     end else // compression was effective
       tmp[0] := #1; // mark compressed
     inc(result);
-    fDestStream.Write(tmp^,result);
+    fDestStream.WriteBuffer(tmp^,result);
     if CRC<>nil then
       CRC^ := crc32(CRC^,tmp,result);
   finally

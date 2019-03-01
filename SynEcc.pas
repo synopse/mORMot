@@ -6,7 +6,7 @@ unit SynEcc;
 (*
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynEcc;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -367,7 +367,7 @@ type
     Signature: TECCSignature;
     /// FNV-1a checksum of all previous fields
     // - we use fnv32 and not crc32c here to avoid colision with crc64c hashing
-    // - avoiding to compute slow ECDSA verification in case of corrumption,
+    // - avoiding to compute slow ECDSA verification in case of corruption,
     // due e.g. to unexpected transmission/bug/fuzzing
     // - should be the very last field in the record
     CRC: cardinal;
@@ -1259,7 +1259,7 @@ type
   // based on JSON objects or even plain base-64 encoded JSON strings
   // - consider using TECCCertificateChainFile from mORMot.pas if you want
   // to use convenient human-readable JSON serialization in files
-  TECCCertificateChain = class(TSynPersistentLocked)
+  TECCCertificateChain = class(TSynPersistentLock)
   protected
     fItems: TECCCertificateObjArray;
     fIsValidCached: boolean;
@@ -2006,25 +2006,32 @@ Delphi XE7-32 ECC_O2
   Total failed: 0 / 529,825  - ECC cryptography PASSED  17.12s
 
 Delphi XE7-64 pascal
-  - ecc_make_key: 1,000 assertions passed  1.70s
-  - ecdsa_sign: 1,000 assertions passed  1.72s
-  - ecdsa_verify: 1,000 assertions passed  2.08s
-  - ecdh_shared_secret: 2,997 assertions passed  3.51s
-  Total failed: 0 / 529,825  - ECC cryptography PASSED  12.20s
+  - ecc_make_key: 1,000 assertions passed  1.55s
+  - ecdsa_sign: 1,000 assertions passed  1.57s
+  - ecdsa_verify: 1,000 assertions passed  1.86s
+  - ecdh_shared_secret: 2,997 assertions passed  3.23s
+  Total failed: 0 / 529,825  - ECC cryptography PASSED
 
 Delphi XE7-64 ECC_O2
   - ecc_make_key: 1,000 assertions passed  729.49ms
   - ecdsa_sign: 1,000 assertions passed  740.38ms
   - ecdsa_verify: 1,000 assertions passed  914.80ms
   - ecdh_shared_secret: 2,997 assertions passed  1.55s
-  Total failed: 0 / 529,825  - ECC cryptography PASSED  6.29s
+  Total failed: 0 / 529,825  - ECC cryptography PASSED
 
 FPC Win64 pascal
-  - ecc_make_key: 1,000 assertions passed  1.66s
-  - ecdsa_sign: 1,000 assertions passed  1.73s
-  - ecdsa_verify: 1,000 assertions passed  2.05s
-  - ecdh_shared_secret: 2,997 assertions passed  3.63s
-  Total failed: 0 / 529,825  - ECC cryptography PASSED  12.80s
+  - ecc_make_key: 1,000 assertions passed  1.43s
+  - ecdsa_sign: 1,000 assertions passed  1.45s
+  - ecdsa_verify: 1,000 assertions passed  1.76s
+  - ecdh_shared_secret: 2,997 assertions passed  3.03s
+  Total failed: 0 / 529,825  - ECC cryptography PASSED
+
+FPC Linux x86-64 pascal
+  - ecc_make_key: 1,000 assertions passed  1.42s
+  - ecdsa_sign: 1,000 assertions passed  1.48s
+  - ecdsa_verify: 1,000 assertions passed  1.80s
+  - ecdh_shared_secret: 2,997 assertions passed  3.11s
+  Total failed: 0 / 529,825  - ECC cryptography PASSED
 }
 
 const
@@ -2372,6 +2379,7 @@ procedure _mult(out Output: TVLI2; const Left, Right: TVLI);
 var i, k, l_min: integer;
     Product, r01: UInt128;
     carry, prev: UInt64;
+    l, r: ^UInt64;
 begin
   r01.m_low := 0;
   r01.m_high := 0;
@@ -2381,10 +2389,12 @@ begin
     if k < NUM_ECC_DIGITS then
       l_min := 0 else
       l_min := (k + 1) - NUM_ECC_DIGITS;
+    l := @Left[l_min];
+    r := @Right[k-l_min];
     for i := l_min to k do begin
       if i >= NUM_ECC_DIGITS then
         break;
-      mul64x64(Left[i], Right[k-i], THash128Rec(Product));
+      mul64x64(l^, r^, THash128Rec(Product));
       prev := r01.m_low;
       inc(r01.m_low, Product.m_low);
       inc(r01.m_high, Product.m_high);
@@ -2392,6 +2402,8 @@ begin
         inc(r01.m_high);
       if r01.m_high < Product.m_high then
         inc(carry);
+      inc(l);
+      dec(r);
     end;
     Output[k] := r01.m_low;
     r01.m_low := r01.m_high;
@@ -4816,9 +4828,12 @@ var values: TRawUTF8DynArray;
     tmp: TSynTempBuffer; // private copy
 begin
   tmp.Init(json);
-  result := (DynArrayLoadJSON(values,tmp.buf,TypeInfo(TRawUTF8DynArray))<>nil) and
-    LoadFromArray(values);
-  tmp.Done;
+  try
+    result := (DynArrayLoadJSON(values,tmp.buf,TypeInfo(TRawUTF8DynArray))<>nil) and
+      LoadFromArray(values);
+  finally
+    tmp.Done;
+  end;
 end;
 
 function TECCCertificateChain.LoadFromArray(const values: TRawUTF8DynArray): boolean;

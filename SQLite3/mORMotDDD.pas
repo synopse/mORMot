@@ -6,7 +6,7 @@ unit mORMotDDD;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit mORMotDDD;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -937,7 +937,7 @@ type
     /// IAdministratedDaemon command to finalize the associated process
     // - and returns updated statistics as a TDocVariant
     function Stop(out Information: variant): TCQRSResult; virtual;
-    /// IAdministratedDaemon command to  Stop the associated process, then
+    /// IAdministratedDaemon command to Stop the associated process, then
     // quit the executable
     // - returning the same output information than Stop()
     function Halt(out Information: variant): TCQRSResult; virtual;

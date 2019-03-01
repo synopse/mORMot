@@ -5,7 +5,7 @@ unit SynLZ;
 {
     This file is part of Synopse SynLZ Compression.
 
-    Synopse SynLZ Compression. Copyright (C) 2018 Arnaud Bouchez
+    Synopse SynLZ Compression. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -24,7 +24,7 @@ unit SynLZ;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -259,6 +259,7 @@ function SynLZcompress2(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 // - this algorithm is a bit smaller, but slower, so the 1st method is preferred
 function SynLZdecompress2(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 
+
 implementation
 
 function SynLZcompressdestlen(in_len: integer): integer;
@@ -269,7 +270,7 @@ end;
 
 type
   {$ifndef FPC}
-  PtrUInt = {$ifdef CPUX64} NativeUInt {$else} cardinal {$endif};
+  PtrUInt = {$ifdef CPU64}NativeUInt{$else}cardinal{$endif};
   {$endif}
   {$ifdef DELPHI5OROLDER} // Delphi 5 doesn't have those base types defined :(
   PByte = ^Byte;
@@ -291,8 +292,8 @@ end;
 
 {$ifdef CPUINTEL}
 // using direct x86 jmp also circumvents Internal Error C11715 for Delphi 5
-function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 {$ifdef CPUX86}
+function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 asm
         push    ebp
         push    ebx
@@ -461,8 +462,9 @@ asm
         pop     ebx
         pop     ebp
 {$else CPUX86}
+function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 var off: TOffsets;
-    cache: array[0..4095] of cardinal; // uses 32B+16KB=48KB on stack
+    cache: array[0..4095] of cardinal; // uses 32KB+16KB=48KB on stack
 asm // rcx=src, edx=size, r8=dest
         {$ifndef win64} // Linux 64-bit ABI
         mov     r8, rdx
@@ -658,7 +660,7 @@ begin
     cached := v xor cache[h]; // o=nil if cache[h] is uninitialized
     cache[h] := v;
     if (cached and $00ffffff=0) and (o<>nil) and (src-o>2) then begin
-      CWpoint^ := CWpoint^ or (1 shl CWbit);
+      CWpoint^ := CWpoint^ or (cardinal(1) shl CWbit);
       inc(src,2);
       inc(o,2);
       t := 1;
@@ -821,9 +823,9 @@ nextCW:
 end;
 
 {$ifdef CPUINTEL}
+{$ifdef CPUX86}
 // using direct x86 jmp also circumvents Internal Error C11715 for Delphi 5
 function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
-{$ifdef CPUX86}
 asm
         push    ebp
         push    ebx
@@ -978,6 +980,7 @@ asm
         pop     ebx
         pop     ebp
 {$else CPUX86}
+function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 var off: TOffsets;
 asm // rcx=src, edx=size, r8=dest
         {$ifndef win64} // Linux 64-bit ABI
@@ -1360,7 +1363,7 @@ dotdiff:v := tdiff;
             end;
           end;
         end else begin
-          CWpoint^ := CWpoint^ or (1 shl CWbit);
+          CWpoint^ := CWpoint^ or (cardinal(1) shl CWbit);
           dec(v,9);
           if v>15 then begin
             v := 15; // v=9..24 -> h=0..15
@@ -1390,7 +1393,7 @@ dotdiff:v := tdiff;
       end;
 //      assert(PWord(o)^=PWord(src)^);
       tdiff := 0;
-      CWpoint^ := CWpoint^ or (1 shl CWbit);
+      CWpoint^ := CWpoint^ or (cardinal(1) shl CWbit);
       inc(src,2);
       inc(o,2);
       t := 0; // t=matchlen-2

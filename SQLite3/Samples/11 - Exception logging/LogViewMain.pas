@@ -34,6 +34,7 @@ uses
   {$endif}
   SynCommons,
   SynLog,
+  SynMemoEx,
   mORMotHttpServer;
 
 type
@@ -47,12 +48,12 @@ type
   TMainLogView = class(TForm)
     PanelLeft: TPanel;
     PanelThread: TPanel;
+    PanelBottom: TPanel;
     BtnBrowse: TButton;
     EventsList: TCheckListBox;
     FilterMenu: TPopupMenu;
     EditSearch: TEdit;
     BtnSearchNext: TButton;
-    MemoBottom: TMemo;
     Splitter2: TSplitter;
     Splitter3: TSplitter;
     BtnStats: TButton;
@@ -135,6 +136,7 @@ type
     procedure PanelLeftResize(Sender: TObject);
     procedure btnThreadDownClick(Sender: TObject);
     procedure btnThreadUpClick(Sender: TObject);
+    procedure PanelBottomResize(Sender: TObject);
   protected
     FLog: TSynLogFileView;
     FMainCaption: string;
@@ -153,6 +155,7 @@ type
     procedure ThreadListNameRefresh(Index: integer);
     procedure ReceivedOne(const Text: RawUTF8);
   public
+    MemoBottom: TMemoEx;
     destructor Destroy; override;
     property LogFileName: TFileName write SetLogFileName;
   end;
@@ -329,6 +332,16 @@ begin
   ProfileList.ColWidths[0] := 60;
   ProfileList.ColWidths[1] := 1000;
   ProfileList.Hide;
+  MemoBottom := TMemoEx.Create(self);
+  MemoBottom.Parent := PanelBottom;
+  MemoBottom.Align := alClient;
+  MemoBottom.Font.Height := -11;
+  if Screen.Fonts.IndexOf('Consolas') >= 0 then
+    MemoBottom.Font.Name := 'Consolas' else
+    MemoBottom.Font.Name := 'Courier New';
+  MemoBottom.ReadOnly := true;
+  MemoBottom.ScrollBars := ssVertical;
+  MemoBottom.Text := '';
 end;
 
 procedure TMainLogView.FormShow(Sender: TObject);
@@ -609,6 +622,8 @@ begin
     end;
     s := format(sTimeInfo,[Selection.Bottom-Selection.Top+1,s]);
   end;
+  if Pos(#9, s) > 0 then
+    s := StringReplace(s, #9, ' ', [rfReplaceAll]);
   MemoBottom.Text := s;
 end;
 
@@ -743,12 +758,14 @@ begin
     if FLog.EventLevel<>nil then
       Index := FLog.Selected[Index];
     s := FLog.EventString(Index,'',0,true);
+    if Pos(#9, s) > 0 then
+      s := StringReplace(s, #9, ' ', [rfReplaceAll]);
     MemoBottom.Text := s;
     if search<>'' then begin
       ss := UTF8ToString(search);
       i := Pos(ss,SysUtils.UpperCase(s));
       if i>0 then begin
-        MemoBottom.SelStart := i-1;
+        MemoBottom.SelStart := i;
         MemoBottom.SelLength := length(ss);
       end;
     end;
@@ -1056,5 +1073,13 @@ begin
   lstDays.Height := PanelLeft.ClientHeight-lstDays.Top-48;
 end;
 
+
+procedure TMainLogView.PanelBottomResize(Sender: TObject);
+var w: integer;
+begin
+  w := MemoBottom.CellRect.Width;
+  if w > 0 then
+    MemoBottom.RightMargin := (PanelBottom.ClientWidth div w) - 7;
+end;
 
 end.

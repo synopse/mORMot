@@ -6,7 +6,7 @@ unit mORMotUIEdit;
 (*
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,10 +25,12 @@ unit mORMotUIEdit;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - MartinEckes
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -102,7 +104,7 @@ uses
 {$ifdef USETMSPACK}
   TaskDialog,
 {$endif}
-  SynCommons, mORMot, mORMotUILogin, mORMotUI, mORMoti18n, mORMotToolBar,
+  SynCommons, SynTable, mORMot, mORMotUILogin, mORMotUI, mORMoti18n, mORMotToolBar,
   SynTaskDialog, StdCtrls, ExtCtrls, ImgList, ComCtrls;
 
 type
@@ -461,7 +463,7 @@ begin
             CC := TCheckBox.Create(Scroll);
             CC.Parent := Scroll; // initialize font
             CC.Font.Style := [fsBold];
-            CC.Checked := boolean(GetInteger(pointer(aValue)));
+            CC.Checked := GetBoolean(pointer(aValue));
             CC.Caption := aCaption;
           end;
           sftUTF8Text, sftAnsiText: begin
