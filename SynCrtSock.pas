@@ -3811,22 +3811,6 @@ begin
   raise Error;
 end;
 
-const
-  HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
-
-procedure BinToHexDisplayW(Bin: PByte; BinBytes: integer; var result: SynUnicode);
-var j: cardinal;
-    P: PWideChar;
-begin
-  SetString(Result,nil,BinBytes*2);
-  P := pointer(Result);
-  for j := BinBytes-1 downto 0 do begin
-    P[j*2] := WideChar(HexCharsLower[Bin^ shr 4]);
-    P[j*2+1] := WideChar(HexCharsLower[Bin^ and $F]);
-    inc(Bin);
-  end;
-end;
-
 function Ansi7ToUnicode(const Ansi: SockString): SockString;
 var n, i: integer;
 begin  // fast ANSI 7 bit conversion
@@ -3960,6 +3944,22 @@ begin
 end;
 
 {$ifdef MSWINDOWS}
+
+const
+  HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
+
+procedure BinToHexDisplayW(Bin: PByte; BinBytes: integer; var result: SynUnicode);
+var j: cardinal;
+    P: PWideChar;
+begin
+  SetString(Result,nil,BinBytes*2);
+  P := pointer(Result);
+  for j := BinBytes-1 downto 0 do begin
+    P[j*2] := WideChar(HexCharsLower[Bin^ shr 4]);
+    P[j*2+1] := WideChar(HexCharsLower[Bin^ and $F]);
+    inc(Bin);
+  end;
+end;
 
 function MacToText(pMacAddr: PByteArray): SockString;
 var P: PAnsiChar;
@@ -4885,15 +4885,26 @@ end;
 
 {$ifdef MSWINDOWS}
 var // not available before Vista -> Lazy loading
-  GetTickCount64: function: Int64; stdcall;
+  GetTick64: function: Int64; stdcall;
+  GetTickXP: Int64Rec;
 
-function GetSystemTimeMillisecondsForXP: Int64; stdcall;
-var fileTime: TFileTime;
+function GetTick64ForXP: Int64; stdcall;
+var t32: cardinal;
+    t64: Int64Rec absolute result;
+begin // warning: GetSystemTimeAsFileTime() is fast, but not monotonic!
+  t32 := Windows.GetTickCount;
+  t64 := GetTickXP; // (almost) atomic read
+  if t32<t64.Lo then
+    inc(t64.Hi); // wrap-up overflow after 49 days
+  t64.Lo := t32;
+  GetTickXP := t64; // (almost) atomic write
+end; // warning: FPC's GetTickCount64 doesn't handle 49 days wrap :(
+{$else}
+function GetTick64: Int64; {$ifdef HASINLINE}inline;{$endif}
 begin
-   GetSystemTimeAsFileTime(fileTime); // very fast, with 100 ns unit
-   result := PInt64(@fileTime)^ div 10000;
+  result := GetTickCount64; // will use SynFPCLinux/SynKylix.GetTickCount64
 end;
-{$endif MSWINDOWS} // will use SynFPCLinux/SynKylix.GetTickCount64 otherwise
+{$endif MSWINDOWS}
 
 function TCrtSocket.TrySndLow(P: pointer; Len: integer): boolean;
 var sent, err: integer;
@@ -4902,7 +4913,7 @@ begin
   result := Len=0;
   if (self=nil) or (fSock<=0) or (Len<=0) or (P=nil) then
     exit;
-  endtix := GetTickCount64+TimeOut;
+  endtix := GetTick64+TimeOut;
   repeat
     {$ifdef MSWINDOWS}
     if fSecure.Initialized then
@@ -4920,7 +4931,7 @@ begin
       if (err<>WSATRY_AGAIN) and (err<>WSAEINTR) then
         exit; // fatal socket error
     end;
-    if GetTickCount64>endtix then
+    if GetTick64>endtix then
       exit; // identify read timeout as error
     sleep(1);
   until false;
@@ -5132,7 +5143,7 @@ begin
   if (Buffer<>nil) and (Length>0) then begin
     expected := Length;
     Length := 0;
-    endtix := GetTickCount64+TimeOut;
+    endtix := GetTick64+TimeOut;
     repeat
       read := expected-Length;
       {$ifdef MSWINDOWS}
@@ -5156,7 +5167,7 @@ begin
         if (err<>WSATRY_AGAIN) and (err<>WSAEINTR) then
           exit; // fatal socket error
       end;
-      if GetTickCount64>endtix then
+      if GetTick64>endtix then
         exit; // identify read timeout as error
       sleep(1);
     until false;
@@ -5935,7 +5946,7 @@ begin
   // force Accept() to return and terminate - shutdown(Sock.Sock) is not enough
   if (Sock<>nil) and (Sock.Sock>0) and not fExecuteFinished then
     DirectShutdown(CallServer('localhost',Sock.Port,false,cslTCP,1));
-  endtix := GetTickCount64+20000;
+  endtix := GetTick64+20000;
   EnterCriticalSection(fProcessCS);
   if fInternalHttpServerRespList<>nil then begin
     for i := 0 to fInternalHttpServerRespList.Count-1 do begin
@@ -5949,7 +5960,7 @@ begin
       LeaveCriticalSection(fProcessCS);
       SleepHiRes(100);
       EnterCriticalSection(fProcessCS);
-    until GetTickCount64>endtix;
+    until GetTick64>endtix;
     FreeAndNil(fInternalHttpServerRespList);
   end;
   LeaveCriticalSection(fProcessCS);
@@ -6041,7 +6052,7 @@ begin
         ClientCrtSock.InitRequest(ClientSock);
         endtix := fHeaderRetrieveAbortDelay;
         if endtix>0 then
-          inc(endtix,GetTickCount64);
+          inc(endtix,GetTick64);
         if ClientCrtSock.GetRequest({withbody=}true,endtix) then
           Process(ClientCrtSock,0,self);
         OnDisconnect;
@@ -6062,14 +6073,14 @@ begin
           end;
           {$endif USE_WINIOCP}
           inc(fThreadPoolContentionCount);
-          tix := GetTickCount64;
+          tix := GetTick64;
           starttix := tix;
           endtix := tix+fThreadPoolContentionAbortDelay; // default 5 sec
           repeat
             if tix-starttix<50 then // wait for an available thread
               SleepHiRes(1) else
               SleepHiRes(10);
-            tix := GetTickCount64;
+            tix := GetTick64;
             if Terminated then
               break;
             if fThreadPool.Push(pointer(ClientSock)) then begin
@@ -6272,12 +6283,12 @@ begin
     if Terminated then
       exit;
   end else begin
-    endtix := GetTickCount64+MS;
+    endtix := GetTick64+MS;
     repeat
       sleep(10);
       if Terminated then
         exit;
-    until GetTickCount64>endtix;
+    until GetTick64>endtix;
   end;
   result := false; // normal delay expiration
 end;
@@ -6337,7 +6348,7 @@ procedure THttpServerResp.Execute;
     {$ifdef SYNCRTDEBUGLOW} try {$endif}
     try
       repeat
-        beforetix := GetTickCount64;
+        beforetix := GetTick64;
         keepaliveendtix := beforetix+fServer.ServerKeepAliveTimeOut;
         repeat // within this loop, break=wait for next command, exit=quit
           if (fServer=nil) or fServer.Terminated or (fServerSock=nil) then
@@ -6353,7 +6364,7 @@ procedure THttpServerResp.Execute;
           cspSocketError:
             exit; // socket error -> disconnect the client
           cspNoData: begin
-            tix := GetTickCount64;
+            tix := GetTick64;
             if tix>=keepaliveendtix then
               exit; // reached keep alive time out -> close connection
             if tix-beforetix<40 then begin
@@ -6731,7 +6742,7 @@ begin
       fKeepAliveClient := false;
     if (ContentLength<0) and (KeepAliveClient or (fMethod = 'GET')) then
       ContentLength := 0; // HTTP/1.1 and no content length -> no eof
-    if (headerMaxTix>0) and (GetTickCount64>headerMaxTix) then
+    if (headerMaxTix>0) and (GetTick64>headerMaxTix) then
         exit; // allow 10 sec for header -> DOS/TCPSYN Flood
     if fServer<>nil then begin
       if (ContentLength>0) and (fServer.MaximumAllowedContentLength>0) and
@@ -6913,8 +6924,8 @@ begin
       TaskAbort(fPendingContext[i]);
     {$endif}
     // wait for threads to finish, with 30 seconds TimeOut
-    endtix := GetTickCount64+30000;
-    while (fRunningThreads>0) and (GetTickCount64<endtix) do
+    endtix := GetTick64+30000;
+    while (fRunningThreads>0) and (GetTick64<endtix) do
       Sleep(5);
     fSubThread.Free;
   finally
@@ -7148,7 +7159,7 @@ begin
     // get Header of incoming request in the thread pool
     headertix := fServer.HeaderRetrieveAbortDelay;
     if headertix>0 then
-      headertix := headertix+GetTickCount64;
+      headertix := headertix+GetTick64;
     if ServerSock.GetRequest({withbody=}false,headertix) then begin
       InterlockedIncrement(fHeaderProcessed);
       // connection and header seem valid -> process request further
@@ -9870,7 +9881,7 @@ var elapsed: PtrInt;
 const sCloseReason = 'Closed by ellapsed ping timeout';
 begin
   if (fLastReceiveTickCount>0) and (fProtocol.fServer.fPingTimeout>0) then begin
-    elapsed := GetTickCount64-fLastReceiveTickCount;
+    elapsed := GetTick64-fLastReceiveTickCount;
     if elapsed>2*fProtocol.fServer.PingTimeout*1000 then begin
       fProtocol.RemoveConnection(fIndex);
       fState := wsClosedByGuard;
@@ -9969,7 +9980,7 @@ begin
         exit;
       end;
       WEB_SOCKET_INDICATE_RECEIVE_COMPLETE_ACTION: begin
-        fLastReceiveTickCount := GetTickCount64;
+        fLastReceiveTickCount := GetTick64;
         if BufferType = WEB_SOCKET_CLOSE_BUFFER_TYPE then begin
           if fState = wsOpen then
             fState := wsClosedByClient else
@@ -10248,7 +10259,7 @@ begin
   conn := PHttpApiWebSocketConnection(aContext);
   if conn.fState=wsConnecting then begin
     conn.fState := wsOpen;
-    conn.fLastReceiveTickCount := GetTickCount64;
+    conn.fLastReceiveTickCount := GetTick64;
     conn.DoOnConnect();
   end;
   if conn.fState in [wsOpen, wsClosing] then
@@ -12314,7 +12325,7 @@ begin
   byte(notif.events) := 0;
   if (timeoutMS<0) or fTerminated then
     exit;
-  start := GetTickCount64;
+  start := GetTick64;
   repeat
     // non-blocking search within fPollLock
     EnterCriticalSection(fPollLock);
@@ -12337,7 +12348,7 @@ begin
     // wait a little for something to happen
     if fTerminated or (timeoutMS=0) then
       exit;
-    elapsed := GetTickCount64-start; // allow multi-threaded process
+    elapsed := GetTick64-start; // allow multi-threaded process
     if elapsed>timeoutMS then
       exit else
     if elapsed>300 then
@@ -12376,13 +12387,13 @@ begin
   result := Lock;
   if result then
     exit; // we acquired the slot
-  endtix := GetTickCount64+timeoutMS; // never wait forever
+  endtix := GetTick64+timeoutMS; // never wait forever
   repeat
     sleep(1);
     result := Lock;
     if result then
       exit;
-  until GetTickCount64>=endtix;
+  until GetTick64>=endtix;
 end;
 
 
@@ -12467,12 +12478,12 @@ begin
   fWrite.Terminate;
   if waitforMS<=0 then
     exit;
-  endtix := GetTickCount64+waitforMS;
+  endtix := GetTick64+waitforMS;
   repeat
     Sleep(1);
     if fProcessing=0 then
       break;
-  until GetTickCount64>endtix;
+  until GetTick64>endtix;
 end;
 
 function TPollAsynchSockets.WriteString(connection: TObject;
@@ -12736,9 +12747,9 @@ begin
     (integer(HTTP_LOG_FIELD_TEST_SUB_STATUS)=HTTP_LOG_FIELD_SUB_STATUS));
   FillChar(WinHttpAPI, SizeOf(WinHttpAPI), 0);
   WinHttpAPIInitialize;
-  GetTickCount64 := GetProcAddress(GetModuleHandle(kernel32),'GetTickCount64');
-  if not Assigned(GetTickCount64) then // fallback before Vista
-    GetTickCount64 := @GetSystemTimeMillisecondsForXP;
+  GetTick64 := GetProcAddress(GetModuleHandle(kernel32),'GetTickCount64');
+  if not Assigned(GetTick64) then // fallback before Vista
+    GetTick64 := @GetTick64ForXP;
   {$endif MSWINDOWS}
   if InitSocketInterface then
     WSAStartup(WinsockLevel, WsaDataOnce) else

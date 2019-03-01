@@ -13471,7 +13471,9 @@ var
   /// the number of milliseconds that have elapsed since the system was started
   // - compatibility function, to be implemented according to the running OS
   // - will use the corresponding native API function under Vista+, or
-  // will emulate it for older Windows versions
+  // will emulate it for older Windows versions (XP)
+  // - warning: FPC's SysUtils.GetTickCount64 or TThread.GetTickCount64 don't
+  // handle properly 49 days wrapping under XP -> always use this safe version
   GetTickCount64: function: Int64; stdcall;
 
 /// similar to Windows sleep() API call, to be truly cross-platform
@@ -26980,17 +26982,20 @@ function GetVersionEx(var lpVersionInformation: TOSVersionInfoEx): BOOL; stdcall
   external kernel32 name 'GetVersionExA';
 {$endif}
 
-function GetSystemTimeMillisecondsForXP: Int64; stdcall;
-var fileTime: TFileTime;
-begin
-   GetSystemTimeAsFileTime(fileTime); // very fast, with 100 ns unit
-   {$ifdef CPU64} // 64 bit XP ? not very likely - but who knows :)
-   FileTimeToInt64(fileTime,result);
-   result := result div 10000;
-   {$else}
-   result := trunc(PInt64(@fileTime)^/10000); // 100 ns unit
-   {$endif}
-end;
+var
+  GetTickXP: Int64Rec;
+
+function GetTickCount64ForXP: Int64; stdcall;
+var t32: cardinal;
+    t64: Int64Rec absolute result;
+begin // warning: GetSystemTimeAsFileTime() is fast, but not monotonic!
+  t32 := Windows.GetTickCount;
+  t64 := GetTickXP; // (almost) atomic read
+  if t32<t64.Lo then
+    inc(t64.Hi); // wrap-up overflow after 49 days
+  t64.Lo := t32;
+  GetTickXP := t64; // (almost) atomic write
+end; // warning: FPC's GetTickCount64 doesn't handle 49 days wrap :(
 
 {$ifdef FPC} // oddly not defined in fpc\rtl\win
 function SwitchToThread: BOOL; stdcall; external kernel32 name 'SwitchToThread';
@@ -27049,7 +27054,7 @@ begin
   Kernel := GetModuleHandle(kernel32);
   GetTickCount64 := GetProcAddress(Kernel,'GetTickCount64');
   if not Assigned(GetTickCount64) then
-    GetTickCount64 := @GetSystemTimeMillisecondsForXP;
+    GetTickCount64 := @GetTickCount64ForXP;
   IsWow64Process := GetProcAddress(Kernel,'IsWow64Process');
   Res := false;
   IsWow64 := Assigned(IsWow64Process) and
@@ -64757,10 +64762,10 @@ procedure TSynBackgroundThreadAbstract.WaitForNotExecuting(maxMS: integer);
 var endtix: Int64;
 begin
   if fExecute = exRun then begin
-    endtix := GetTickCount64+maxMS;
+    endtix := SynCommons.GetTickCount64+maxMS;
     repeat
       Sleep(1); // wait for Execute to finish
-    until (fExecute <> exRun) or (GetTickCount64>=endtix);
+    until (fExecute <> exRun) or (SynCommons.GetTickCount64>=endtix);
   end;
 end;
 
@@ -64903,7 +64908,7 @@ end;
 
 function TSynBackgroundThreadMethodAbstract.OnIdleProcessNotify(start: Int64): integer;
 begin
-  result := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64-start;
+  result := {$ifdef FPCLINUX}SynFPCLinux.{$else}SynCommons.{$endif}GetTickCount64-start;
   if result<0 then
     result := MaxInt; // should happen only under XP -> ignore
   if Assigned(fOnIdle) then
@@ -64957,7 +64962,7 @@ begin
   // 1. wait for any previous request to be finished (should not happen often)
   if Assigned(fOnIdle) then
     fOnIdle(self,0); // notify started
-  start := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64;
+  start := {$ifdef FPCLINUX}SynFPCLinux.{$else}SynCommons.{$endif}GetTickCount64;
   repeat
     case AcquireThread of
     flagDestroying:
@@ -65148,7 +65153,7 @@ var tix: Int64;
 begin
   if (fTask=nil) or Terminated then
     exit;
-  tix := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64;
+  tix := {$ifdef FPCLINUX}SynFPCLinux.{$else}SynCommons.{$endif}GetTickCount64;
   n := 0;
   fTaskLock.Lock;
   try
@@ -65213,7 +65218,8 @@ begin
   end;
   task.OnProcess := aOnProcess;
   task.Secs := aOnProcessSecs;
-  task.NextTix := GetTickCount64+(aOnProcessSecs*1000-TIXPRECISION);
+  task.NextTix := {$ifdef FPCLINUX}SynFPCLinux.{$else}SynCommons.{$endif}GetTickCount64+
+    (aOnProcessSecs*1000-TIXPRECISION);
   fTaskLock.Lock;
   try
     found := Find(TMethod(aOnProcess));
@@ -65240,10 +65246,11 @@ var timeout: Int64;
 begin
   if not Processing then
     exit;
-  timeout := GetTickCount64+timeoutsecs*1000;
+  timeout := {$ifdef FPCLINUX}SynFPCLinux.{$else}SynCommons.{$endif}GetTickCount64+timeoutsecs*1000;
   repeat
     SleepHiRes(1);
-  until not Processing or (GetTickcount64>timeout);
+  until not Processing or
+    ({$ifdef FPCLINUX}SynFPCLinux.{$else}SynCommons.{$endif}GetTickcount64>timeout);
 end;
 
 function TSynBackgroundTimer.ExecuteNow(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
