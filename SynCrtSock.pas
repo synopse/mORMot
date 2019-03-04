@@ -11324,6 +11324,7 @@ const
   LIBCURL_DLL = {$IFDEF Darwin} 'libcurl.dylib' {$ELSE}
     {$IFDEF LINUX} 'libcurl.so' {$ELSE} 'libcurl.dll' {$ENDIF}{$ENDIF};
 
+{$Z4}
 type
   TCurlOption = (
     coPort                 = 3,
@@ -11480,6 +11481,9 @@ type
     ciEffectiveURL          = 1048577,
     ciContentType           = 1048594,
     ciPrivate               = 1048597,
+    ciRedirectURL           = 1048607,
+    ciPrimaryIP             = 1048608,
+    ciLocalIP               = 1048617,
     ciResponseCode          = 2097154,
     ciHeaderSize            = 2097163,
     ciRequestSize           = 2097164,
@@ -11491,6 +11495,8 @@ type
     ciProxyAuthAvail        = 2097176,
     ciOS_Errno              = 2097177,
     ciNumConnects           = 2097178,
+    ciPrimaryPort           = 2097192,
+    ciLocalPort             = 2097194,
     ciTotalTime             = 3145731,
     ciNameLookupTime        = 3145732,
     ciConnectTime           = 3145733,
@@ -11503,12 +11509,53 @@ type
     ciContentLengthUpload   = 3145744,
     ciStartTransferTime     = 3145745,
     ciRedirectTime          = 3145747,
+    ciAppConnectTime        = 3145761,
     ciSSLEngines            = 4194331,
-    ciCookieList            = 4194332
+    ciCookieList            = 4194332,
+    ciCertInfo              = 4194338,
+    ciSizeDownloadT         = 6291464,
+    ciTotalTimeT            = 6291506, // (6) can be used for calculation "Content download time"
+    ciNameLookupTimeT       = 6291507, // (1) DNS lookup
+    ciConnectTimeT          = 6291508, // (2) connect time
+    ciPreTransferTimeT      = 6291509, // (4)
+    ciStartTransferTimeT    = 6291510, // (5) Time to first byte
+    ciAppConnectTimeT       = 6291512  // (3) SSL handshake
   );
+  {$ifdef LIBCURLMULTI}
+  TCurlMultiCode = (
+    cmcCallMultiPerform = -1,
+    cmcOK = 0,
+    cmcBadHandle,
+    cmcBadEasyHandle,
+    cmcOutOfMemory,
+    cmcInternalError,
+    cmcBadSocket,
+    cmcUnknownOption,
+    cmcAddedAlready,
+    cmcRecursiveApiCall
+  );
+  TCurlMultiOption = (
+    cmoPipeLining               = 3,
+    cmoMaxConnects              = 6,
+    cmoMaxHostConnections       = 7,
+    cmoMaxPipelineLength        = 8,
+    cmoMaxTotalConnections      = 13,
+    cmoSocketData               = 10002,
+    cmoTimerData                = 10005,
+    cmoPipeliningSiteBL         = 10011,
+    cmoPipeliningServerBL       = 10012,
+    cmoPushData                 = 10015,
+    cmoSocketFunction           = 20001,
+    cmoTimerFunction            = 20004,
+    cmoPushFunction             = 20014,
+    cmoContentLengthPenaltySize = 30009,
+    cmoChunkLengthPenaltySize   = 30010
+  );
+  {$endif LIBCURLMULTI}
 
   TCurlVersion = (cvFirst,cvSecond,cvThird,cvFour);
   TCurlGlobalInit = set of (giSSL,giWin32);
+  TCurlMsg = (cmNone, cmDone);
   PAnsiCharArray = array[0..1023] of PAnsiChar;
 
   TCurlVersionInfo = record
@@ -11528,12 +11575,45 @@ type
   PCurlVersionInfo = ^TCurlVersionInfo;
 
   TCurl = type pointer;
-  TCurlList = type pointer;
+  TCurlSList = type pointer;
+  PCurlSList = ^TCurlSList;
+  PPCurlSListArray = ^PCurlSListArray;
+  PCurlSListArray = array[0..(MaxInt div SizeOf(PCurlSList))-1] of PCurlSList;
+  TCurlMulti = type pointer;
+  TCurlSocket = type TSocket;
+
+  PCurlCertInfo = ^TCurlCertInfo;
+  TCurlCertInfo = packed record
+    num_of_certs: integer;
+    {$ifdef CPUX64}_align: array[0..3] of byte;{$endif}
+    certinfo: PPCurlSListArray;
+  end;
+
+  PCurlMsgRec = ^TCurlMsgRec;
+  TCurlMsgRec = packed record
+    msg: TCurlMsg;
+    {$ifdef CPUX64}_align: array[0..3] of byte;{$endif}
+    easy_handle: TCurl;
+    data: packed record case byte of
+      0: (whatever: Pointer);
+      1: (result: TCurlResult);
+    end;
+  end;
+
+  PCurlWaitFD = ^TCurlWaitFD;
+  TCurlWaitFD = packed record
+    fd: TCurlSocket;
+    events: SmallInt;
+    revents: SmallInt;
+    {$ifdef CPUX64}_align: array[0..3] of byte;{$endif}
+  end;
 
   curl_write_callback = function (buffer: PAnsiChar; size,nitems: integer;
     outstream: pointer): integer; cdecl;
   curl_read_callback = function (buffer: PAnsiChar; size,nitems: integer;
     instream: pointer): integer; cdecl;
+
+{$Z1}
 
 var
   curl: packed record
@@ -11553,8 +11633,24 @@ var
     easy_duphandle: function(curl: TCurl): pointer; cdecl;
     easy_reset: procedure(curl: TCurl); cdecl;
     easy_strerror: function(code: TCurlResult): PAnsiChar; cdecl;
-    slist_append: function(list: TCurlList; s: PAnsiChar): TCurlList; cdecl;
-    slist_free_all: procedure(list: TCurlList); cdecl;
+    slist_append: function(list: TCurlSList; s: PAnsiChar): TCurlSList; cdecl;
+    slist_free_all: procedure(list: TCurlSList); cdecl;
+    {$ifdef LIBCURLMULTI} // https://curl.haxx.se/libcurl/c/libcurl-multi.html interface
+    multi_add_handle: function(mcurl: TCurlMulti; curl: TCurl): TCurlMultiCode; cdecl;
+    multi_assign: function(mcurl: TCurlMulti; socket: TCurlSocket; data: pointer): TCurlMultiCode; cdecl;
+    multi_cleanup: function(mcurl: TCurlMulti): TCurlMultiCode; cdecl;
+    multi_fdset: function(mcurl: TCurlMulti; read, write, exec: PFDSet; out max: integer): TCurlMultiCode; cdecl;
+    multi_info_read: function(mcurl: TCurlMulti; out msgsqueue: integer): PCurlMsgRec; cdecl;
+    multi_init: function: TCurlMulti; cdecl;
+    multi_perform: function(mcurl: TCurlMulti; out runningh: integer): TCurlMultiCode; cdecl;
+    multi_remove_handle: function(mcurl: TCurlMulti; curl: TCurl): TCurlMultiCode; cdecl;
+    multi_setopt: function(mcurl: TCurlMulti; option: TCurlMultiOption): TCurlMultiCode; cdecl varargs;
+    multi_socket_action: function(mcurl: TCurlMulti; socket: TCurlSocket; mask: Integer; out runningh: integer): TCurlMultiCode; cdecl;
+    multi_socket_all: function(mcurl: TCurlMulti; out runningh: integer): TCurlMultiCode; cdecl;
+    multi_strerror: function(code: TCurlMultiCode): PAnsiChar; cdecl;
+    multi_timeout: function(mcurl: TCurlMulti; out ms: integer): TCurlMultiCode; cdecl;
+    multi_wait: function(mcurl: TCurlMulti; fds: PCurlWaitFD; fdscount: cardinal; ms: integer; out ret: integer): TCurlMultiCode; cdecl;
+    {$endif LIBCURLMULTI}
     info: TCurlVersionInfo;
     infoText: string;
   end;
@@ -11562,11 +11658,16 @@ var
 procedure LibCurlInitialize;
 var P: PPointer;
     api: integer;
-const NAMES: array[0..12] of string = (
+const NAMES: array[0..{$ifdef LIBCURLMULTI}26{$else}12{$endif}] of string = (
   'global_init','global_cleanup','version_info',
   'easy_init','easy_setopt','easy_perform','easy_cleanup','easy_getinfo',
-  'easy_duphandle','easy_reset','easy_strerror',
-  'slist_append','slist_free_all');
+  'easy_duphandle','easy_reset','easy_strerror','slist_append','slist_free_all'
+  {$ifdef LIBCURLMULTI},
+  'multi_add_handle','multi_assign','multi_cleanup','multi_fdset',
+  'multi_info_read','multi_init','multi_perform','multi_remove_handle',
+  'multi_setopt','multi_socket_action','multi_socket_all','multi_strerror',
+  'multi_timeout','multi_wait'
+  {$endif LIBCURLMULTI} );
 begin
   EnterCriticalSection(SynSockCS);
   try
@@ -11575,20 +11676,20 @@ begin
       curl.Module := LoadLibrary(LIBCURL_DLL);
       {$ifdef Darwin}
       if curl.Module=0 then
-        curl.Module := LoadLibrary('libcurl.3.dylib');
-      if curl.Module=0 then
         curl.Module := LoadLibrary('libcurl.4.dylib');
+      if curl.Module=0 then
+        curl.Module := LoadLibrary('libcurl.3.dylib');
       {$else}
       {$ifdef LINUX}
       if curl.Module=0 then
-        curl.Module := LoadLibrary('libcurl.so.3');
-      if curl.Module=0 then
         curl.Module := LoadLibrary('libcurl.so.4');
+      if curl.Module=0 then
+        curl.Module := LoadLibrary('libcurl.so.3');
       // for latest Linux Mint and other similar distros
       if curl.Module=0 then
-        curl.Module := LoadLibrary('libcurl-gnutls.so.3');
-      if curl.Module=0 then
         curl.Module := LoadLibrary('libcurl-gnutls.so.4');
+      if curl.Module=0 then
+        curl.Module := LoadLibrary('libcurl-gnutls.so.3');
       {$endif}
       {$endif}
       if curl.Module=0 then
@@ -11684,6 +11785,8 @@ begin
     if IgnoreSSLCertificateErrors then begin
       curl.easy_setopt(fHandle,coSSLVerifyPeer,0);
       curl.easy_setopt(fHandle,coSSLVerifyHost,0);
+      //curl.easy_setopt(fHandle,coProxySSLVerifyPeer,0);
+      //curl.easy_setopt(fHandle,coProxySSLVerifyHost,0);
     end else begin
       // see https://curl.haxx.se/libcurl/c/simplessl.html
       if fSSL.CertFile<>'' then begin

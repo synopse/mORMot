@@ -605,12 +605,12 @@
   {$ifdef CPU64}
     {$define NOSQLITE3STATIC}
   {$endif}
-{$endif}
+{$endif FPC}
 
 {$ifdef NOSQLITE3STATIC}
   // our proprietary crypto expects a statically linked custom sqlite3.c
   {$define NOSQLITE3ENCRYPT}
-{$endif}
+{$endif NOSQLITE3STATIC}
 
 {$ifdef MSWINDOWS}
   {$define USEWININET}         // publish TWinINet/TWinHttp/TWinHttpAPI classes
@@ -623,6 +623,11 @@
     {$define USELIBCURL}
     // for Android, consider using https://github.com/gcesarmza/curl-android-ios
     // static libraries and force USELIBCURL in the project conditionals
-  {$endif}
-{$endif}
+  {$endif ANDROID}
+{$endif MSWINDOWS}
+
+{$ifdef USELIBCURL}
+  {.$define LIBCURLMULTI}
+  // enable https://curl.haxx.se/libcurl/c/libcurl-multi.html interface
+{$endif USELIBCURL}
 
