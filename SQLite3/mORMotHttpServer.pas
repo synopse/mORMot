@@ -1186,8 +1186,7 @@ constructor TSQLHttpServer.Create(aServer: TSQLRestServer;
 const AUTH: array[TSQLHttpServerRestAuthentication] of TSQLRestServerAuthenticationClass = (
   // adDefault, adHttpBasic, adWeak, adSSPI
   TSQLRestServerAuthenticationDefault, TSQLRestServerAuthenticationHttpBasic,
-  TSQLRestServerAuthenticationNone,
-  {$ifdef MSWINDOWS}TSQLRestServerAuthenticationSSPI{$else}nil{$endif});
+  TSQLRestServerAuthenticationNone,TSQLRestServerAuthenticationSSPI{may be nil});
 var a: TSQLHttpServerRestAuthentication;
     thrdCnt: integer;
     websock: TWebSocketServerRest;

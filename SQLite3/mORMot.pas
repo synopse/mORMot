@@ -20663,6 +20663,10 @@ var
   AuthUserDefaultPassword: RawUTF8 = DEFAULT_HASH_SYNOPSE;
 
 const
+  {$ifndef DOMAINAUTH} // fallback is no SSPI library was made available
+  TSQLRestServerAuthenticationSSPI = nil;
+  {$endif DOMAINAUTH}
+
   /// timer identifier which indicates we must refresh the current Page
   // - used for User Interface generation
   // - is associated with the TSQLRibbonTabParameters.AutoRefresh property,
@@ -38764,7 +38768,7 @@ end;
 {$ifdef DOMAINAUTH}
 const
   SSPI_DEFINITION_USERNAME = '***SSPI***';
-{$endif}
+{$endif DOMAINAUTH}
 
 constructor TSQLRestClientURI.RegisteredClassCreateFrom(aModel: TSQLModel;
   aDefinition: TSynConnectionDefinition);
@@ -38777,7 +38781,7 @@ begin
     {$ifdef DOMAINAUTH}
     if aDefinition.User=SSPI_DEFINITION_USERNAME then
       SetUser('',aDefinition.PasswordPlain) else
-    {$endif}
+    {$endif DOMAINAUTH}
       SetUser(aDefinition.User,aDefinition.PasswordPlain,true);
   end;
 end;
@@ -38791,7 +38795,7 @@ begin
     {$ifdef DOMAINAUTH}
     if fSessionAuthentication.InheritsFrom(TSQLRestServerAuthenticationSSPI) then
       Definition.User := SSPI_DEFINITION_USERNAME else
-    {$endif}
+    {$endif DOMAINAUTH}
        Definition.User := fSessionUser.LogonName;
      Definition.PasswordPlain := fSessionUser.fPasswordHashHexa;
   end;
@@ -38882,7 +38886,7 @@ begin
   if ((trim(aUserName)='') or (PosEx({$ifdef GSSAPIAUTH}'@'{$else}'\'{$endif},aUserName)>0)) and
     TSQLRestServerAuthenticationSSPI.ClientSetUser(self,aUserName,aPassword,passKerberosSPN) then
       exit;
-  {$endif}
+  {$endif DOMAINAUTH}
   result := TSQLRestServerAuthenticationDefault.
     ClientSetUser(self,aUserName,aPassword,HASH[aHashedPassword]);
 end;
