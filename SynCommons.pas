@@ -60103,7 +60103,7 @@ begin
 end;
 
 procedure TSynDictionary.SetTimeouts;
-var i: integer;
+var i: PtrInt;
     timeout: cardinal;
 begin
   if fSafe.Padding[DIC_TIMESEC].VInteger=0 then
@@ -60115,7 +60115,7 @@ begin
 end;
 
 function TSynDictionary.DeleteDeprecated: integer;
-var i: integer;
+var i: PtrInt;
     now: cardinal;
 begin
   result := 0;
