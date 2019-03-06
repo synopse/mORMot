@@ -189,7 +189,7 @@ procedure QueryPerformanceCounter(var Value: Int64);
 var r: TTimeSpec;
 begin
   clock_gettime(CLOCK_MONOTONIC,r);
-  value := r.tv_nsec+r.tv_sec*C_BILLION;
+  value := r.tv_nsec+r.tv_sec*C_BILLION; // nanosecond resolution
 end;
 
 procedure QueryPerformanceMicroSeconds(out Value: Int64);

@@ -100,6 +100,7 @@ type
     fStackTraceViaAPI: boolean;
     fLowLevelWebSocketsFrames: boolean;
     fDestinationPath: TFileName;
+    fCustomFileName: TFileName;
     fRotateFileCount: cardinal;
     fRotateFileSize: cardinal;
     fRotateFileAtHour: integer;
@@ -141,6 +142,8 @@ type
     property StackTraceViaAPI: boolean read FStackTraceViaAPI write FStackTraceViaAPI;
     /// allows to customize where the log files will be stored
     property DestinationPath: TFileName read FDestinationPath write FDestinationPath;
+    /// allows to customize the log file name
+    property CustomFileName: TFileName read fCustomFileName write fCustomFileName;
     /// auto-rotation of logging files
     // - set to 0 by default, meaning no rotation
     property RotateFileCount: cardinal read fRotateFileCount write fRotateFileCount;
@@ -662,6 +665,8 @@ begin
     PerThreadLog := ptIdentifiedInOnFile;
     if Log.DestinationPath<>'' then
      DestinationPath := Log.DestinationPath;
+    if Log.CustomFileName<>'' then
+      CustomFileName := Log.CustomFileName;
     RotateFileCount := Log.RotateFileCount;
     RotateFileSizeKB := Log.RotateFileSizeKB;
     RotateFileDailyAtHour := Log.RotateFileDailyAtHour;

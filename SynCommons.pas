@@ -7692,7 +7692,7 @@ type
   TTextWriterOptions = set of TTextWriterOption;
 
   /// may be used to allocate on stack a 8KB work buffer for a TTextWriter
-  // - via the CreateOwnedStream overloaded constructor
+  // - via the TTextWriter.CreateOwnedStream overloaded constructor
   TTextWriterStackBuffer = array[0..8191] of AnsiChar;
 
   /// simple writer to a Stream, specialized for the TEXT format
@@ -9248,11 +9248,11 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// compress a memory buffer with crc32c hashing to a RawByteString
     function Compress(const Plain: RawByteString; CompressionSizeTrigger: integer=100;
-      CheckMagicForCompressed: boolean=false): RawByteString; overload;
+      CheckMagicForCompressed: boolean=false; BufferOffset: integer=0): RawByteString; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// compress a memory buffer with crc32c hashing to a RawByteString
     function Compress(Plain: PAnsiChar; PlainLen: integer; CompressionSizeTrigger: integer=100;
-      CheckMagicForCompressed: boolean=false): RawByteString; overload;
+      CheckMagicForCompressed: boolean=false; BufferOffset: integer=0): RawByteString; overload;
     /// compress a memory buffer with crc32c hashing
     // - supplied Comp buffer should contain at least CompressDestLen(PlainLen) bytes
     function Compress(Plain, Comp: PAnsiChar; PlainLen, CompLen: integer;
@@ -9265,7 +9265,8 @@ type
     function CompressToBytes(Plain: PAnsiChar; PlainLen: integer; CompressionSizeTrigger: integer=100;
       CheckMagicForCompressed: boolean=false): TByteDynArray; overload;
     /// uncompress a RawByteString memory buffer with crc32c hashing
-    function Decompress(const Comp: RawByteString; Load: TAlgoCompressLoad=aclNormal): RawByteString; overload;
+    function Decompress(const Comp: RawByteString; Load: TAlgoCompressLoad=aclNormal;
+      BufferOffset: integer=0): RawByteString; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// uncompress a RawByteString memory buffer with crc32c hashing
     // - returns TRUE on success
@@ -9273,7 +9274,7 @@ type
       Load: TAlgoCompressLoad=aclNormal): boolean;
     /// uncompress a memory buffer with crc32c hashing
     procedure Decompress(Comp: PAnsiChar; CompLen: integer; out Result: RawByteString;
-      Load: TAlgoCompressLoad=aclNormal); overload;
+      Load: TAlgoCompressLoad=aclNormal; BufferOffset: integer=0); overload;
     /// uncompress a RawByteString memory buffer with crc32c hashing
     function Decompress(const Comp: TByteDynArray): RawByteString; overload;
       {$ifdef HASINLINE}inline;{$endif}
@@ -10074,7 +10075,9 @@ type
     // ! TFileBufferWriter.Create(TRawByteStringStream)
     // - if algo is left to its default nil, will use global AlgoSynLZ
     // - features direct compression from internal buffer, if stream was not used
-    function FlushAndCompress(nocompression: boolean=false; algo: TAlgoCompress=nil): RawByteString;
+    // - BufferOffset could be set to reserve some bytes before the compressed buffer
+    function FlushAndCompress(nocompression: boolean=false; algo: TAlgoCompress=nil;
+      BufferOffset: integer=0): RawByteString;
     /// rewind the Stream to the position when Create() was called
     // - note that this does not clear the Stream content itself, just
     // move back its writing position to its initial place
@@ -10304,6 +10307,9 @@ type
     /// retrieved cardinal values encoded with TFileBufferWriter.WriteVarUInt32Array
     // - only supports wkUInt32, wkVarInt32, wkVarUInt32 kind of encoding
     function ReadVarUInt32Array(var Values: TIntegerDynArray): PtrInt;
+    /// retrieve some TAlgoCompress buffer, appended via Write()
+    // - BufferOffset could be set to reserve some bytes before the uncompressed buffer
+    function ReadCompressed(Load: TAlgoCompressLoad=aclNormal; BufferOffset: integer=0): RawByteString;
     /// returns TRUE if the current position is the end of the input stream
     function EOF: boolean; {$ifdef HASINLINE}inline;{$endif}
     /// returns remaining length (difference between Last and P)
@@ -13260,7 +13266,7 @@ type
     // - e.g. 'myprogram.exe 3.1.0.123 2016-06-14 19:07:55'
     function VersionInfo: RawUTF8;
     /// returns a ready-to-use User-Agent header with exe name, version and OS
-    // - e.g. 'myprogram3.1.0.123W32'
+    // - e.g. 'myprogram/3.1.0.123W32'
     // - here OS_INITIAL[] character is used to identify the OS, with '32'
     // appended on 32-bit Windows
     function UserAgent: RawUTF8;
@@ -13465,7 +13471,9 @@ var
   /// the number of milliseconds that have elapsed since the system was started
   // - compatibility function, to be implemented according to the running OS
   // - will use the corresponding native API function under Vista+, or
-  // will emulate it for older Windows versions
+  // will emulate it for older Windows versions (XP)
+  // - warning: FPC's SysUtils.GetTickCount64 or TThread.GetTickCount64 don't
+  // handle properly 49 days wrapping under XP -> always use this safe version
   GetTickCount64: function: Int64; stdcall;
 
 /// similar to Windows sleep() API call, to be truly cross-platform
@@ -13511,8 +13519,10 @@ function FileOpen(const FileName: string; Mode: LongWord): Integer;
 {$endif}
 
 /// compatibility function, to be implemented according to the running OS
-// - expect more or less the same result as the homonymous Win32 API function
-// - will call the corresponding function in SynKylix.pas or SynFPCLinux.pas
+// - expect more or less the same result as the homonymous Win32 API function,
+// but usually with a better resolution (Windows has only around 10-16 ms)
+// - will call the corresponding function in SynKylix.pas or SynFPCLinux.pas,
+// using the very fast CLOCK_MONOTONIC_COARSE if available on the kernel
 function GetTickCount64: Int64;
 
 {$endif MSWINDOWS}
@@ -17395,12 +17405,13 @@ type
     // - to be retrieved later on via LoadFrom method
     // - actually call the SaveToWriter() protected virtual method for persistence
     // - you can specify ForcedAlgo if you want to override the default AlgoSynLZ
+    // - BufferOffset could be set to reserve some bytes before the compressed buffer
     procedure SaveTo(out aBuffer: RawByteString; nocompression: boolean=false;
-      BufLen: integer=65536; ForcedAlgo: TAlgoCompress=nil); overload; virtual;
+      BufLen: integer=65536; ForcedAlgo: TAlgoCompress=nil; BufferOffset: integer=0); overload; virtual;
     /// persist the content as a SynLZ-compressed binary blob
     // - just an overloaded wrapper
     function SaveTo(nocompression: boolean=false; BufLen: integer=65536;
-      ForcedAlgo: TAlgoCompress=nil): RawByteString; overload;
+      ForcedAlgo: TAlgoCompress=nil; BufferOffset: integer=0): RawByteString; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// persist the content as a SynLZ-compressed binary file
     // - to be retrieved later on via LoadFromFile method
@@ -21104,8 +21115,8 @@ end;
 var c,c100: QWord;
     tab: {$ifdef CPUX86}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
 begin
-  if Int64Rec(val).Hi=0 then
-    P := StrUInt32(P,Int64Rec(val).Lo) else begin
+  if PInt64Rec(@val)^.Hi=0 then
+    P := StrUInt32(P,PCardinal(@val)^) else begin
     {$ifndef CPUX86}tab := @TwoDigitLookupW;{$endif}
     c := val;
     repeat
@@ -21138,9 +21149,9 @@ begin
       dec(P,2);
       PWord(P)^ := tab[c];
       c := c100;
-      if Int64Rec(c).Hi=0 then begin
-        if Int64Rec(c).Lo<>0 then
-          P := StrUInt32(P,Int64Rec(c).Lo);
+      if PInt64Rec(@c)^.Hi=0 then begin
+        if PCardinal(@c)^<>0 then
+          P := StrUInt32(P,PCardinal(@c)^);
         break;
       end;
     until false;
@@ -26971,17 +26982,20 @@ function GetVersionEx(var lpVersionInformation: TOSVersionInfoEx): BOOL; stdcall
   external kernel32 name 'GetVersionExA';
 {$endif}
 
-function GetSystemTimeMillisecondsForXP: Int64; stdcall;
-var fileTime: TFileTime;
-begin
-   GetSystemTimeAsFileTime(fileTime); // very fast, with 100 ns unit
-   {$ifdef CPU64} // 64 bit XP ? not very likely - but who knows :)
-   FileTimeToInt64(fileTime,result);
-   result := result div 10000;
-   {$else}
-   result := trunc(PInt64(@fileTime)^/10000); // 100 ns unit
-   {$endif}
-end;
+var
+  GetTickXP: Int64Rec;
+
+function GetTickCount64ForXP: Int64; stdcall;
+var t32: cardinal;
+    t64: Int64Rec absolute result;
+begin // warning: GetSystemTimeAsFileTime() is fast, but not monotonic!
+  t32 := Windows.GetTickCount;
+  t64 := GetTickXP; // (almost) atomic read
+  if t32<t64.Lo then
+    inc(t64.Hi); // wrap-up overflow after 49 days
+  t64.Lo := t32;
+  GetTickXP := t64; // (almost) atomic write
+end; // warning: FPC's GetTickCount64 doesn't handle 49 days wrap :(
 
 {$ifdef FPC} // oddly not defined in fpc\rtl\win
 function SwitchToThread: BOOL; stdcall; external kernel32 name 'SwitchToThread';
@@ -27040,7 +27054,7 @@ begin
   Kernel := GetModuleHandle(kernel32);
   GetTickCount64 := GetProcAddress(Kernel,'GetTickCount64');
   if not Assigned(GetTickCount64) then
-    GetTickCount64 := @GetSystemTimeMillisecondsForXP;
+    GetTickCount64 := @GetTickCount64ForXP;
   IsWow64Process := GetProcAddress(Kernel,'IsWow64Process');
   Res := false;
   IsWow64 := Assigned(IsWow64Process) and
@@ -28173,8 +28187,9 @@ begin
       end;
       inc(UpperValue);
     until false;
-    // find beginning of next word
-Next:
+Next: // find beginning of next word
+    U := FindNextUTF8WordBegin(U);
+  until U=nil;
 {$else}
   // this tiny version only handles 7-bits ansi chars and ignore all UTF-8 chars
   ValueStart := UpperValue;
@@ -28204,10 +28219,10 @@ Next:
       if byte(U^)=0 then exit else
       if byte(U^) and $80<>0 then break; // 7 bits char check only
     until false;
-{$endif}
     // find beginning of next word
     U := FindNextUTF8WordBegin(U);
   until U=nil;
+{$endif}
 end;
 
 function HexDisplayToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: integer): boolean;
@@ -30489,35 +30504,36 @@ var
 begin
 {$ifdef MSWINDOWS}
   result := GetFileInformationByHandle(aFileHandle,lp);
-  if result then begin
-    LastWriteAccess := FileTimeToUnixMSTime(lp.ftLastWriteTime);
-    FileCreateDateTime := FileTimeToUnixMSTime(lp.ftCreationTime);
-    lastreadaccess := FileTimeToUnixMSTime(lp.ftLastAccessTime);
-    PInt64Rec(@FileSize).lo := lp.nFileSizeLow;
-    PInt64Rec(@FileSize).hi := lp.nFileSizeHigh;
-    PInt64Rec(@FileId).lo := lp.nFileIndexLow;
-    PInt64Rec(@FileId).hi := lp.nFileIndexHigh;
+  if not result then
+    exit;
+  LastWriteAccess := FileTimeToUnixMSTime(lp.ftLastWriteTime);
+  FileCreateDateTime := FileTimeToUnixMSTime(lp.ftCreationTime);
+  lastreadaccess := FileTimeToUnixMSTime(lp.ftLastAccessTime);
+  PInt64Rec(@FileSize).lo := lp.nFileSizeLow;
+  PInt64Rec(@FileSize).hi := lp.nFileSizeHigh;
+  PInt64Rec(@FileId).lo := lp.nFileIndexLow;
+  PInt64Rec(@FileId).hi := lp.nFileIndexHigh;
 {$else}
-    r := {$ifdef FPC}FpFStat{$else}fstat64{$endif}(aFileHandle, lp);
+  r := {$ifdef FPC}FpFStat{$else}fstat64{$endif}(aFileHandle, lp);
   result := r >= 0;
-  if result then begin
-    FileId := lp.st_ino;
-    FileSize := lp.st_size;
-    lastreadaccess := lp.st_atime * MSecsPerSec;
-    LastWriteAccess := lp.st_mtime * MSecsPerSec;
-    {$ifdef OPENBSD}
-    if (lp.st_birthtime <> 0) and (lp.st_birthtime < lp.st_ctime) then
-      lp.st_ctime:= lp.st_birthtime;
-    {$endif}
-    FileCreateDateTime := lp.st_ctime * MSecsPerSec;
+  if not result then
+    exit;
+  FileId := lp.st_ino;
+  FileSize := lp.st_size;
+  lastreadaccess := lp.st_atime * MSecsPerSec;
+  LastWriteAccess := lp.st_mtime * MSecsPerSec;
+  {$ifdef OPENBSD}
+  if (lp.st_birthtime <> 0) and (lp.st_birthtime < lp.st_ctime) then
+    lp.st_ctime:= lp.st_birthtime;
+  {$endif}
+  FileCreateDateTime := lp.st_ctime * MSecsPerSec;
 {$endif MSWINDOWS}
-    if LastWriteAccess <> 0 then
-      if (FileCreateDateTime = 0) or (FileCreateDateTime > LastWriteAccess) then
-        FileCreateDateTime:= LastWriteAccess;
-    if lastreadaccess <> 0 then
-      if (FileCreateDateTime = 0) or (FileCreateDateTime > lastreadaccess) then
-        FileCreateDateTime:= lastreadaccess;
-  end;
+  if LastWriteAccess <> 0 then
+    if (FileCreateDateTime = 0) or (FileCreateDateTime > LastWriteAccess) then
+      FileCreateDateTime:= LastWriteAccess;
+  if lastreadaccess <> 0 then
+    if (FileCreateDateTime = 0) or (FileCreateDateTime > lastreadaccess) then
+      FileCreateDateTime:= lastreadaccess;
 end;
 
 function FileAgeToDateTime(const FileName: TFileName): TDateTime;
@@ -31915,21 +31931,26 @@ begin
   if 0<=R then
     repeat
       result := (L + R) shr 1;
-      {$ifdef CPUX86} // circumvent Int64 comparison slowness
-      cmp := SortDynArrayInt64(P^[result],Value);
-      if cmp=0 then
-        exit else
-      if cmp<0 then begin
-      {$else}
+      {$ifndef CPUX86}
       if P^[result]=Value then
         exit else
       if P^[result]<Value then begin
-      {$endif}
         L := result+1;
         if L<=R then
           continue;
         break;
       end;
+      {$else} // circumvent Int64 comparison slowness
+      cmp := SortDynArrayInt64(P^[result],Value);
+      if cmp=0 then
+        exit else
+      if cmp<0 then begin
+        L := result+1;
+        if L<=R then
+          continue;
+        break;
+      end;
+      {$endif}
       R := result-1;
       if L<=R  then
         continue;
@@ -31948,21 +31969,26 @@ begin
   if 0<=R then
     repeat
       result := (L + R) shr 1;
-      {$ifdef CPUX86} // circumvent QWord comparison slowness (and bug)
-      cmp := SortDynArrayQWord(P^[result],Value);
-      if cmp=0 then
-        exit else
-      if cmp<0 then begin
-      {$else}
+      {$ifndef CPUX86}
       if P^[result]=Value then
         exit else
       if P^[result]<Value then begin
-      {$endif}
         L := result+1;
         if L<=R then
           continue;
         break;
       end;
+      {$else} // circumvent QWord comparison slowness (and bug)
+      cmp := SortDynArrayQWord(P^[result],Value);
+      if cmp=0 then
+        exit else
+      if cmp<0 then begin
+        L := result+1;
+        if L<=R then
+          continue;
+        break;
+      end;
+      {$endif}
       R := result-1;
       if L<=R  then
         continue;
@@ -32382,15 +32408,15 @@ begin
   c := byte(P^)-48;
   if c>9 then
     exit;
-  Int64Rec(result).Lo := c;
+  PCardinal(@result)^ := c;
   inc(P);
   repeat // fast 32 bit loop
     c := byte(P^)-48;
     if c>9 then
       break else
-      Int64Rec(result).Lo := Int64Rec(result).Lo*10+c;
+      PCardinal(@result)^ := PCardinal(@result)^*10+c;
     inc(P);
-    if Int64Rec(result).Lo>=high(cardinal)div 10 then begin
+    if PCardinal(@result)^>=high(cardinal)div 10 then begin
       repeat // 64 bit loop
         c := byte(P^)-48;
         if c>9 then
@@ -32425,15 +32451,15 @@ begin
   c := byte(P^)-48;
   if c>9 then
     exit;
-  Int64Rec(result).Lo := c;
+  PCardinal(@result)^ := c;
   inc(P);
   repeat // fast 32 bit loop
     c := byte(P^)-48;
     if c>9 then
       break else
-      Int64Rec(result).Lo := Int64Rec(result).Lo*10+c;
+      PCardinal(@result)^ := PCardinal(@result)^*10+c;
     inc(P);
-    if Int64Rec(result).Lo>=high(cardinal)div 10 then begin
+    if PCardinal(@result)^>=high(cardinal)div 10 then begin
       repeat // 64 bit loop
         c := byte(P^)-48;
         if c>9 then
@@ -32495,7 +32521,7 @@ begin
   c := byte(P^)-48;
   if c>9 then
     exit;
-  Int64Rec(result).Lo := c;
+  PCardinal(@result)^ := c;
   inc(P);
   repeat // fast 32 bit loop
     c := byte(P^);
@@ -32504,9 +32530,9 @@ begin
       inc(err);
       if c>9 then
         exit;
-      Int64Rec(result).Lo := Int64Rec(result).Lo*10+c;
+      PCardinal(@result)^ := PCardinal(@result)^*10+c;
       inc(P);
-      if Int64Rec(result).Lo>=high(cardinal)div 10 then begin
+      if PCardinal(@result)^>=high(cardinal)div 10 then begin
         repeat // 64 bit loop
           c := byte(P^);
           if c=0 then begin
@@ -32551,7 +32577,7 @@ begin
   c := byte(P^)-48;
   if c>9 then
     exit;
-  Int64Rec(result).Lo := c;
+  PCardinal(@result)^ := c;
   inc(P);
   repeat // fast 32 bit loop
     c := byte(P^);
@@ -32560,9 +32586,9 @@ begin
       inc(err);
       if c>9 then
         exit;
-      Int64Rec(result).Lo := Int64Rec(result).Lo*10+c;
+      PCardinal(@result)^ := PCardinal(@result)^*10+c;
       inc(P);
-      if Int64Rec(result).Lo>=high(cardinal)div 10 then begin
+      if PCardinal(@result)^>=high(cardinal)div 10 then begin
         repeat // 64 bit loop
           c := byte(P^);
           if c=0 then begin
@@ -36691,12 +36717,12 @@ end;
 procedure TTimeLogBits.Expand(out Date: TSynSystemTime);
 begin
   Date.Year := (Value shr (6+6+5+5+4)) and 4095;
-  Date.Month := 1+(Int64Rec(Value).Lo shr (6+6+5+5)) and 15;
-  Date.Day := 1+(Int64Rec(Value).Lo shr (6+6+5)) and 31;
+  Date.Month := 1+(PCardinal(@Value)^ shr (6+6+5+5)) and 15;
+  Date.Day := 1+(PCardinal(@Value)^ shr (6+6+5)) and 31;
   Date.DayOfWeek := 0;
-  Date.Hour := (Int64Rec(Value).Lo shr (6+6)) and 31;
-  Date.Minute := (Int64Rec(Value).Lo shr 6) and 63;
-  Date.Second := Int64Rec(Value).Lo and 63;
+  Date.Hour := (PCardinal(@Value)^ shr (6+6)) and 31;
+  Date.Minute := (PCardinal(@Value)^ shr 6) and 63;
+  Date.Second := PCardinal(@Value)^ and 63;
 end;
 
 procedure TTimeLogBits.From(const S: RawUTF8);
@@ -36707,12 +36733,12 @@ end;
 procedure TTimeLogBits.From(FileDate: integer);
 begin
 {$ifdef MSWINDOWS}
-  From(LongRec(FileDate).Hi shr 9+1980,
-       LongRec(FileDate).Hi shr 5 and 15,
-       LongRec(FileDate).Hi and 31,
-       LongRec(FileDate).Lo shr 11,
-       LongRec(FileDate).Lo shr 5 and 63,
-       LongRec(FileDate).Lo and 31 shl 1);
+  From(PInt64Rec(@FileDate)^.Hi shr 9+1980,
+       PInt64Rec(@FileDate)^.Hi shr 5 and 15,
+       PInt64Rec(@FileDate)^.Hi and 31,
+       PInt64Rec(@FileDate)^.Lo shr 11,
+       PInt64Rec(@FileDate)^.Lo shr 5 and 63,
+       PInt64Rec(@FileDate)^.Lo and 31 shl 1);
 {$else} // FileDate depends on the running OS
   From(FileDateToDateTime(FileDate));
 {$endif}
@@ -36850,7 +36876,7 @@ end;
 function TTimeLogBits.ToTime: TDateTime;
 var lo: PtrUInt;
 begin
-  lo := {$ifdef CPU64}Value{$else}Int64Rec(Value).Lo{$endif};
+  lo := {$ifdef CPU64}Value{$else}PCardinal(@Value)^{$endif};
   if lo and (1 shl (6+6+5)-1)=0 then
     result := 0 else
     result := EncodeTime((lo shr(6+6))and 31, (lo shr 6)and 63, lo and 63, 0);
@@ -36887,7 +36913,7 @@ begin
   Y := (lo shr (6+6+5+5+4)) and 4095;
   {$else}
   Y := (Value shr (6+6+5+5+4)) and 4095;
-  lo := Int64Rec(Value).Lo;
+  lo := PCardinal(@Value)^;
   {$endif}
   if (Y=0) or not TryEncodeDate(Y,1+(lo shr(6+6+5+5))and 15,1+(lo shr(6+6+5))and 31,result) then
     result := 0;
@@ -36902,7 +36928,7 @@ begin
   Y := (lo shr (6+6+5+5+4)) and 4095;
   {$else}
   Y := (Value shr (6+6+5+5+4)) and 4095;
-  lo := Int64Rec(Value).Lo;
+  lo := PCardinal(@Value)^;
   {$endif}
   if (Y=0) or not TryEncodeDate(Y,1+(lo shr(6+6+5+5))and 15,1+(lo shr(6+6+5))and 31,result) then
     result := 0;
@@ -36918,27 +36944,27 @@ end;
 
 function TTimeLogBits.Month: Integer;
 begin
-  result := 1+(Int64Rec(Value).Lo shr (6+6+5+5)) and 15;
+  result := 1+(PCardinal(@Value)^ shr (6+6+5+5)) and 15;
 end;
 
 function TTimeLogBits.Day: Integer;
 begin
-  result := 1+(Int64Rec(Value).Lo shr (6+6+5)) and 31;
+  result := 1+(PCardinal(@Value)^ shr (6+6+5)) and 31;
 end;
 
 function TTimeLogBits.Hour: Integer;
 begin
-  result := (Int64Rec(Value).Lo shr (6+6)) and 31;
+  result := (PCardinal(@Value)^ shr (6+6)) and 31;
 end;
 
 function TTimeLogBits.Minute: Integer;
 begin
-  result := (Int64Rec(Value).Lo shr 6) and 63;
+  result := (PCardinal(@Value)^ shr 6) and 63;
 end;
 
 function TTimeLogBits.Second: Integer;
 begin
-  result := Int64Rec(Value).Lo and 63;
+  result := PCardinal(@Value)^ and 63;
 end;
 
 function TTimeLogBits.ToUnixTime: TUnixTime;
@@ -36958,7 +36984,7 @@ begin
     result := 0;
     exit;
   end;
-  lo := {$ifdef CPU64}Value{$else}Int64Rec(Value).Lo{$endif};
+  lo := {$ifdef CPU64}Value{$else}PCardinal(@Value)^{$endif};
   if lo and (1 shl (6+6+5)-1)=0 then begin
     // no Time: just convert date
     DateToIso8601PChar(Dest, Expanded,
@@ -37772,7 +37798,7 @@ var time, crc: THash128Rec;
 begin
   repeat
     QueryPerformanceCounter(time.Lo);
-    time.i2 := UnixTimeUTC;
+    time.i2 := UnixMSTimeUTC;
     time.i3 := integer(GetCurrentThreadID);
     crcblock(@crc.b,@time.b);
     crcblock(@crc.b,@ExeVersion.Hash.b);
@@ -37997,7 +38023,7 @@ begin
   c := byte(P^)-48;
   if c>9 then
     exit;
-  Int64Rec(result).Lo := c;
+  PCardinal(@result)^ := c;
   inc(P);
   repeat
     if P^<>'.' then begin
@@ -39428,7 +39454,7 @@ function TFileVersion.UserAgent: RawUTF8;
 begin
   if self=nil then
     result := '' else
-    FormatUTF8('%%%',[GetFileNameWithoutExt(ExtractFileName(fFileName)),
+    FormatUTF8('%/%%',[GetFileNameWithoutExt(ExtractFileName(fFileName)),
       DetailedOrVoid,OS_INITIAL[OS_KIND]],result);
   {$ifdef MSWINDOWS}
   if OSVersion in WINDOWS_32 then
@@ -40145,7 +40171,7 @@ end;
 function ToVarUInt64(Value: QWord; Dest: PByte): PByte;
 var c: cardinal;
 begin
-  if {$ifdef CPU32}Int64Rec(Value).Hi=0{$else}Value shr 32=0{$endif} then begin
+  if {$ifdef CPU32}PInt64Rec(@Value)^.Hi=0{$else}Value shr 32=0{$endif} then begin
     result := ToVarUInt32(Value,Dest);
     exit;
   end;
@@ -40251,7 +40277,7 @@ begin // 0=0,1=1,2=-1,3=2,4=-2...
       inc(Source);
     until false;
     result := result or (Int64(c) shl n);
-    if Int64Rec(result).Lo and 1<>0 then
+    if PCardinal(@result)^ and 1<>0 then
       // 1->1, 3->2..
       result := result shr 1+1 else
       // 0->0, 2->-1, 4->-2..
@@ -40291,7 +40317,7 @@ begin // 0=0,1=1,2=-1,3=2,4=-2...
       inc(Source);
     until false;
     result := result or (Int64(c) shl n);
-    if {$ifdef CPU64}result{$else}Int64Rec(result).Lo{$endif} and 1<>0 then
+    if {$ifdef CPU64}result{$else}PCardinal(@result)^{$endif} and 1<>0 then
       // 1->1, 3->2..
       result := result shr 1+1 else
       // 0->0, 2->-1, 4->-2..
@@ -49501,6 +49527,40 @@ begin
   fSorted := true;
 end;
 
+procedure QuickSortPtr(L, R: PtrInt; Compare: TDynArraySortCompare; V: PPointerArray);
+var I, J, P: PtrInt;
+    tmp: pointer;
+begin
+  if L<R then
+  repeat
+    I := L; J := R;
+    P := (L + R) shr 1;
+    repeat
+      while Compare(V[I], V[P])<0 do
+        inc(I);
+      while Compare(V[J], V[P])>0 do
+        dec(J);
+      if I <= J then begin
+        tmp := V[I];
+        V[I] := V[J];
+        V[J] := tmp;
+        if P = I then P := J else
+        if P = J then P := I;
+        Inc(I); Dec(J);
+      end;
+    until I > J;
+    if J - L < R - I then begin // use recursion only for smaller range
+      if L < J then
+        QuickSortPtr(L, J, Compare, V);
+      L := I;
+    end else begin
+      if I < R then
+        QuickSortPtr(I, R, Compare, V);
+      R := J;
+    end;
+  until L >= R;
+end;
+
 procedure TDynArray.SortRange(aStart, aStop: integer; aCompare: TDynArraySortCompare);
 var QuickSort: TDynArrayQuickSort;
 begin
@@ -49509,11 +49569,13 @@ begin
   if @aCompare=nil then
     Quicksort.Compare := @fCompare else
     Quicksort.Compare := aCompare;
-  if (@Quicksort.Compare<>nil) and (fValue<>nil) and (fValue^<>nil) then begin
-    Quicksort.Value := fValue^;
-    Quicksort.ElemSize := ElemSize;
-    Quicksort.QuickSort(aStart,aStop);
-  end;
+  if (@Quicksort.Compare<>nil) and (fValue<>nil) and (fValue^<>nil) then
+    if ElemSize=SizeOf(pointer) then
+      QuickSortPtr(aStart,aStop,QuickSort.Compare,fValue^) else begin
+      Quicksort.Value := fValue^;
+      Quicksort.ElemSize := ElemSize;
+      Quicksort.QuickSort(aStart,aStop);
+    end;
 end;
 
 procedure TDynArray.Sort(const aCompare: TEventDynArraySortCompare; aReverse: boolean);
@@ -50959,14 +51021,9 @@ begin
 end;
 
 procedure TObjectDynArrayWrapper.Sort(Compare: TDynArraySortCompare);
-var QuickSort: TDynArrayQuickSort;
 begin
-  if (@Compare<>nil) and (fCount>0) then begin
-    Quicksort.Compare := @Compare;
-    Quicksort.Value := fValue^;
-    Quicksort.ElemSize := SizeOf(pointer);
-    Quicksort.QuickSort(0,fCount-1);
-  end;
+  if (@Compare<>nil) and (fCount>0) then
+    QuickSortPtr(0,fCount-1,Compare,fValue^);
 end;
 
 function PtrArrayAdd(var aPtrArray; aItem: pointer): integer;
@@ -51103,16 +51160,9 @@ begin
 end;
 
 procedure ObjArraySort(var aObjArray; Compare: TDynArraySortCompare);
-var QuickSort: TDynArrayQuickSort;
-    n: integer;
 begin
-  n := length(TObjectDynArray(aObjArray));
-  if (@Compare<>nil) and (n>0) then begin
-    Quicksort.Compare := @Compare;
-    Quicksort.Value := pointer(aObjArray);
-    Quicksort.ElemSize := SizeOf(pointer);
-    Quicksort.QuickSort(0,n-1);
-  end;
+  if @Compare<>nil then
+    QuickSortPtr(0,length(TObjectDynArray(aObjArray))-1,Compare,pointer(aObjArray));
 end;
 
 procedure RawObjectsClear(o: PObject; n: integer);
@@ -51889,7 +51939,7 @@ begin
 end;
 
 procedure TSynPersistentStore.SaveTo(out aBuffer: RawByteString; nocompression: boolean;
-  BufLen: integer; ForcedAlgo: TAlgoCompress);
+  BufLen: integer; ForcedAlgo: TAlgoCompress; BufferOffset: integer);
 var writer: TFileBufferWriter;
     temp: array[word] of byte;
 begin
@@ -51899,16 +51949,16 @@ begin
   try
     SaveToWriter(writer);
     fSaveToLastUncompressed := writer.TotalWritten;
-    aBuffer := writer.FlushAndCompress(nocompression,ForcedAlgo);
+    aBuffer := writer.FlushAndCompress(nocompression,ForcedAlgo,BufferOffset);
   finally
     writer.Free;
   end;
 end;
 
 function TSynPersistentStore.SaveTo(nocompression: boolean; BufLen: integer;
-  ForcedAlgo: TAlgoCompress): RawByteString;
+  ForcedAlgo: TAlgoCompress; BufferOffset: integer): RawByteString;
 begin
-  SaveTo(result,nocompression,BufLen,ForcedAlgo);
+  SaveTo(result,nocompression,BufLen,ForcedAlgo,BufferOffset);
 end;
 
 function TSynPersistentStore.SaveToFile(const aFileName: TFileName;
@@ -57095,11 +57145,11 @@ begin
   if Micro<1000 then
     FormatShort16('%us',[Micro],result) else
   if Micro<1000000 then
-    TwoDigitToString({$ifdef CPU32}Int64Rec(Micro).Lo{$else}Micro{$endif} div 10,'ms',result) else
+    TwoDigitToString({$ifdef CPU32}PCardinal(@Micro)^{$else}Micro{$endif} div 10,'ms',result) else
   if Micro<60000000 then
-    TwoDigitToString({$ifdef CPU32}Int64Rec(Micro).Lo{$else}Micro{$endif} div 10000,'s',result) else
+    TwoDigitToString({$ifdef CPU32}PCardinal(@Micro)^{$else}Micro{$endif} div 10000,'s',result) else
   if Micro<QWord(3600000000) then
-    TimeToString({$ifdef CPU32}Int64Rec(Micro).Lo{$else}Micro{$endif} div 1000000,'m',result) else
+    TimeToString({$ifdef CPU32}PCardinal(@Micro)^{$else}Micro{$endif} div 1000000,'m',result) else
   if Micro<QWord(86400000000*2) then
     TimeToString(Micro div 60000000,'h',result) else
     FormatShort16('%d',[Micro div QWord(86400000000)],result)
@@ -60053,7 +60103,7 @@ begin
 end;
 
 procedure TSynDictionary.SetTimeouts;
-var i: integer;
+var i: PtrInt;
     timeout: cardinal;
 begin
   if fSafe.Padding[DIC_TIMESEC].VInteger=0 then
@@ -60065,7 +60115,7 @@ begin
 end;
 
 function TSynDictionary.DeleteDeprecated: integer;
-var i: integer;
+var i: PtrInt;
     now: cardinal;
 begin
   result := 0;
@@ -60856,11 +60906,11 @@ begin
       fBufSize := aCustomSize;
   end;
   {$ifdef MSWINDOWS}
-  with Int64Rec(fFileSize) do
+  with PInt64Rec(@fFileSize)^ do
     fMap := CreateFileMapping(fFile,nil,PAGE_READONLY,Hi,Lo,nil);
   if fMap=0 then
     raise ESynException.Create('TMemoryMap.Map: CreateFileMapping()=0');
-  with Int64Rec(aCustomOffset) do
+  with PInt64Rec(@aCustomOffset)^ do
     fBuf := MapViewOfFile(fMap,FILE_MAP_READ,Hi,Lo,fBufSize);
   if fBuf=nil then begin
     // Windows failed to find a contiguous VA space -> fall back on direct read
@@ -61705,16 +61755,17 @@ begin
   until false;
 end;
 
-function TFileBufferWriter.FlushAndCompress(nocompression: boolean; algo: TAlgoCompress): RawByteString;
+function TFileBufferWriter.FlushAndCompress(nocompression: boolean; algo: TAlgoCompress;
+  BufferOffset: integer): RawByteString;
 var trig: integer;
 begin
   if algo=nil then
     algo := AlgoSynLZ;
   trig := SYNLZTRIG[nocompression];
   if fStream.Position=0 then // direct compression from internal buffer
-    result := algo.Compress(PAnsiChar(fBuffer),fPos,trig) else begin
+    result := algo.Compress(PAnsiChar(fBuffer),fPos,trig,false,BufferOffset) else begin
     Flush;
-    result := algo.Compress((fStream as TRawByteStringStream).DataString,trig);
+    result := algo.Compress((fStream as TRawByteStringStream).DataString,trig,false,BufferOffset);
   end;
 end;
 
@@ -62739,6 +62790,15 @@ begin
   end;
 end;
 
+function TFastReader.ReadCompressed(Load: TAlgoCompressLoad; BufferOffset: integer): RawByteString;
+var comp: PAnsiChar;
+    complen: PtrUInt;
+begin
+  complen := VarUInt32;
+  comp := Next(complen);
+  TAlgoCompress.Algo(comp,complen).Decompress(comp,complen,result,Load,BufferOffset);
+end;
+
 
 function PropNameValid(P: PUTF8Char): boolean;
 begin
@@ -63318,7 +63378,7 @@ var s: PShortString;
     i: integer;
 begin
   if self=nil then
-    result := 'stored' else begin
+    result := 'none' else begin
     s := ClassNameShort(self);
     if IdemPChar(@s^[1],'TALGO') then begin
       result[0] := AnsiChar(ord(s^[0])-5);
@@ -63337,40 +63397,45 @@ begin
   result := crc32c(Previous,Data,DataLen);
 end;
 
-function TAlgoCompress.Compress(const Plain: RawByteString;
-  CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean): RawByteString;
+function TAlgoCompress.Compress(const Plain: RawByteString; CompressionSizeTrigger: integer;
+  CheckMagicForCompressed: boolean; BufferOffset: integer): RawByteString;
 begin
-  result := Compress(pointer(Plain),Length(Plain),CompressionSizeTrigger,CheckMagicForCompressed);
+  result := Compress(pointer(Plain),Length(Plain),CompressionSizeTrigger,
+    CheckMagicForCompressed,BufferOffset);
 end;
 
-function TAlgoCompress.Compress(Plain: PAnsiChar; PlainLen: integer;
-  CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean): RawByteString;
+function TAlgoCompress.Compress(Plain: PAnsiChar; PlainLen: integer; CompressionSizeTrigger: integer;
+  CheckMagicForCompressed: boolean; BufferOffset: integer): RawByteString;
 var len: integer;
     R: PAnsiChar;
     crc: cardinal;
-    tmp: array[0..16383] of AnsiChar;  // will resize Result in-place
+    tmp: array[0..16383] of AnsiChar;  // big enough to resize Result in-place
 begin
-  if (self=nil) or (PlainLen=0) or (Plain=nil) then
+  if (self=nil) or (PlainLen=0) or (Plain=nil) then begin
+    result := '';
     exit;
+  end;
   crc := AlgoHash(0,Plain,PlainLen);
   if (PlainLen<CompressionSizeTrigger) or
      (CheckMagicForCompressed and IsContentCompressed(Plain,PlainLen)) then begin
-    SetString(result,nil,PlainLen+9);
+    SetString(result,nil,PlainLen+BufferOffset+9);
     R := pointer(result);
+    inc(R,BufferOffset);
     PCardinal(R)^ := crc;
     R[4] := COMPRESS_STORED;
     PCardinal(R+5)^ := crc;
     MoveFast(Plain^,R[9],PlainLen);
   end else begin
-    len := CompressDestLen(PlainLen);
+    len := CompressDestLen(PlainLen)+BufferOffset;
     if len>SizeOf(tmp) then begin
       SetString(result,nil,len);
       R := pointer(result);
     end else
       R := @tmp;
+    inc(R,BufferOffset);
     PCardinal(R)^ := crc;
     len := AlgoCompress(Plain,PlainLen,R+9);
-    if len>=PlainLen then begin // store if compression not worth it
+    if len+64>=PlainLen then begin // store if compression was not worth it
       R[4] := COMPRESS_STORED;
       PCardinal(R+5)^ := crc;
       MoveFast(Plain^,R[9],PlainLen);
@@ -63379,15 +63444,14 @@ begin
       R[4] := AnsiChar(AlgoID);
       PCardinal(R+5)^ := AlgoHash(0,R+9,len);
     end;
-    if R=@tmp then
-      SetString(result,tmp,len+9) else
-      SetLength(result,len+9); // resize in-place may not move any data
+    if R=@tmp[BufferOffset] then
+      SetString(result,tmp,len+BufferOffset+9) else
+      SetLength(result,len+BufferOffset+9); // MM may not move the data
   end;
 end;
 
-function TAlgoCompress.Compress(Plain, Comp: PAnsiChar; PlainLen,
-  CompLen: integer; CompressionSizeTrigger: integer;
-  CheckMagicForCompressed: boolean): integer;
+function TAlgoCompress.Compress(Plain, Comp: PAnsiChar; PlainLen, CompLen: integer;
+  CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean): integer;
 var len: integer;
 begin
   result := 0;
@@ -63467,21 +63531,23 @@ begin
 end;
 
 procedure TAlgoCompress.Decompress(Comp: PAnsiChar; CompLen: integer;
-  out Result: RawByteString; Load: TAlgoCompressLoad);
+  out Result: RawByteString; Load: TAlgoCompressLoad; BufferOffset: integer);
 var len: integer;
+    dec: PAnsiChar;
 begin
   len := DecompressHeader(Comp,CompLen,Load);
   if len=0 then
     exit;
-  SetString(result,nil,len);
-  if not DecompressBody(Comp,pointer(result),CompLen,len,Load) then
+  SetString(result,nil,len+BufferOffset);
+  dec := pointer(result);
+  if not DecompressBody(Comp,dec+BufferOffset,CompLen,len,Load) then
     result := '';
 end;
 
 function TAlgoCompress.Decompress(const Comp: RawByteString;
-  Load: TAlgoCompressLoad): RawByteString;
+  Load: TAlgoCompressLoad; BufferOffset: integer): RawByteString;
 begin
-  Decompress(pointer(Comp),length(Comp),result,Load);
+  Decompress(pointer(Comp),length(Comp),result,Load,BufferOffset);
 end;
 
 function TAlgoCompress.TryDecompress(const Comp: RawByteString;
@@ -64708,10 +64774,10 @@ procedure TSynBackgroundThreadAbstract.WaitForNotExecuting(maxMS: integer);
 var endtix: Int64;
 begin
   if fExecute = exRun then begin
-    endtix := GetTickCount64+maxMS;
+    endtix := SynCommons.GetTickCount64+maxMS;
     repeat
       Sleep(1); // wait for Execute to finish
-    until (fExecute <> exRun) or (GetTickCount64>=endtix);
+    until (fExecute <> exRun) or (SynCommons.GetTickCount64>=endtix);
   end;
 end;
 
@@ -64854,7 +64920,7 @@ end;
 
 function TSynBackgroundThreadMethodAbstract.OnIdleProcessNotify(start: Int64): integer;
 begin
-  result := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64-start;
+  result := {$ifdef FPCLINUX}SynFPCLinux.{$else}SynCommons.{$endif}GetTickCount64-start;
   if result<0 then
     result := MaxInt; // should happen only under XP -> ignore
   if Assigned(fOnIdle) then
@@ -64908,7 +64974,7 @@ begin
   // 1. wait for any previous request to be finished (should not happen often)
   if Assigned(fOnIdle) then
     fOnIdle(self,0); // notify started
-  start := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64;
+  start := {$ifdef FPCLINUX}SynFPCLinux.{$else}SynCommons.{$endif}GetTickCount64;
   repeat
     case AcquireThread of
     flagDestroying:
@@ -65099,7 +65165,7 @@ var tix: Int64;
 begin
   if (fTask=nil) or Terminated then
     exit;
-  tix := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64;
+  tix := {$ifdef FPCLINUX}SynFPCLinux.{$else}SynCommons.{$endif}GetTickCount64;
   n := 0;
   fTaskLock.Lock;
   try
@@ -65164,7 +65230,8 @@ begin
   end;
   task.OnProcess := aOnProcess;
   task.Secs := aOnProcessSecs;
-  task.NextTix := GetTickCount64+(aOnProcessSecs*1000-TIXPRECISION);
+  task.NextTix := {$ifdef FPCLINUX}SynFPCLinux.{$else}SynCommons.{$endif}GetTickCount64+
+    (aOnProcessSecs*1000-TIXPRECISION);
   fTaskLock.Lock;
   try
     found := Find(TMethod(aOnProcess));
@@ -65191,10 +65258,11 @@ var timeout: Int64;
 begin
   if not Processing then
     exit;
-  timeout := GetTickCount64+timeoutsecs*1000;
+  timeout := {$ifdef FPCLINUX}SynFPCLinux.{$else}SynCommons.{$endif}GetTickCount64+timeoutsecs*1000;
   repeat
     SleepHiRes(1);
-  until not Processing or (GetTickcount64>timeout);
+  until not Processing or
+    ({$ifdef FPCLINUX}SynFPCLinux.{$else}SynCommons.{$endif}GetTickcount64>timeout);
 end;
 
 function TSynBackgroundTimer.ExecuteNow(aOnProcess: TOnSynBackgroundTimerProcess): boolean;

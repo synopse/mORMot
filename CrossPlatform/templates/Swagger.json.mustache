@@ -77,7 +77,8 @@
       {{#methods}}
         "/{{uri}}/{{methodName}}": {
             "post": {
-				"tags": ["{{uri}}"],
+		"description": {{jsonQuote methodDescription}},
+		"tags": ["{{uri}}"],
                 "parameters": [{
                     "in": "body",
                     "name": "body",

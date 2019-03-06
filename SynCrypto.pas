@@ -427,7 +427,7 @@ type
   // - this class will use VIA PadLock instructions, if available
   {$endif}
   // - we defined a record instead of a class, to allow stack allocation and
-  // thread-safe reuse of one initialized instance, if needed
+  // thread-safe reuse of one initialized instance (warning: not for Padlock)
   {$ifdef UNICODE}TAES = record{$else}TAES = object{$endif}
   private
     Context: packed array[1..AESContextSize] of byte;
@@ -778,7 +778,7 @@ type
     property IVHistoryDepth: integer read fIVHistoryDec.Depth write SetIVHistory;
   end;
 
-  /// handle AES cypher/uncypher with chaining
+  /// handle AES cypher/uncypher with chaining with out own optimized code
   // - use any of the inherited implementation, corresponding to the chaining
   // mode required - TAESECB, TAESCBC, TAESCFB, TAESOFB and TAESCTR classes to
   // handle in ECB, CBC, CFB, OFB and CTR mode (including PKCS7-like padding)
@@ -790,11 +790,10 @@ type
     fIn, fOut: PAESBlock;
     fCV: TAESBlock;
     AES: TAES;
-    fCount: Cardinal;
     fAESInit: (initNone, initEncrypt, initDecrypt);
     procedure EncryptInit;
     procedure DecryptInit;
-    procedure TrailerBytes;
+    procedure TrailerBytes(count: cardinal);
   public
     /// creates a new instance with the very same values
     // - by design, our classes will use stateless context, so this method
@@ -12040,9 +12039,6 @@ end;
 
 { TAESAbstract }
 
-const
-  sAESException = 'AES engine initialization failure';
-
 var
   aesivctr: array[boolean] of TAESLocked;
 
@@ -12065,8 +12061,7 @@ end;
 constructor TAESAbstract.Create(const aKey; aKeySize: cardinal);
 begin
    if (aKeySize<>128) and (aKeySize<>192) and (aKeySize<>256) then
-    raise ESynCrypto.CreateUTF8(
-      '%.Create key size = %; should be either 128, 192 or 256',[self,aKeySize]);
+    raise ESynCrypto.CreateUTF8('%.Create(aKeySize=%): 128/192/256 required',[self,aKeySize]);
   fKeySize := aKeySize;
   fKeySizeBytes := fKeySize shr 3;
   MoveFast(aKey,fKey,fKeySizeBytes);
@@ -12467,21 +12462,18 @@ end;
 
 function TAESAbstractSyn.Clone: TAESAbstract;
 begin
-  {$ifdef USEPADLOCK}
-  if TAESContext(AES).initialized and (TAESContext(AES).ViaCtx<>nil) then begin
-    result := inherited Clone;
-    exit;
+  if (fIVHistoryDec.Count<>0) {$ifdef USEPADLOCK} or
+     TAESContext(AES).initialized and (TAESContext(AES).ViaCtx<>nil){$endif} then
+    result := inherited Clone else begin
+    result := NewInstance as TAESAbstractSyn;
+    MoveFast(pointer(self)^,pointer(result)^,InstanceSize);
   end;
-  {$endif}
-  result := NewInstance as TAESAbstractSyn;
-  MoveFast(pointer(self)^,pointer(result)^,InstanceSize);
 end;
 
 procedure TAESAbstractSyn.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
 begin
   fIn := BufIn;
   fOut := BufOut;
-  fCount := Count;
   fCV := fIV;
 end;
 
@@ -12489,14 +12481,13 @@ procedure TAESAbstractSyn.DecryptInit;
 begin
   if AES.DecryptInit(fKey,fKeySize) then
     fAESInit := initDecrypt else
-    raise ESynCrypto.Create(sAESException);
+    raise ESynCrypto.CreateUTF8('%.DecryptInit',[self]);
 end;
 
 procedure TAESAbstractSyn.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 begin
   fIn := BufIn;
   fOut := BufOut;
-  fCount := Count;
   fCV := fIV;
 end;
 
@@ -12504,15 +12495,15 @@ procedure TAESAbstractSyn.EncryptInit;
 begin
   if AES.EncryptInit(fKey,fKeySize) then
     fAESInit := initEncrypt else
-    raise ESynCrypto.Create(sAESException);
+    raise ESynCrypto.CreateUTF8('%.EncryptInit',[self]);
 end;
 
-procedure TAESAbstractSyn.TrailerBytes;
+procedure TAESAbstractSyn.TrailerBytes(count: cardinal);
 begin
   if fAESInit<>initEncrypt then
     EncryptInit;
   TAESContext(AES.Context).DoBlock(AES.Context,fCV,fCV);
-  XorMemory(pointer(fOut),pointer(fIn),@fCV,fCount);
+  XorMemory(pointer(fOut),pointer(fIn),@fCV,count);
 end;
 
 
@@ -12521,7 +12512,7 @@ end;
 procedure TAESECB.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
 var i: integer;
 begin
-  inherited; // CV := IV + set fIn,fOut,fCount
+  inherited; // CV := IV + set fIn,fOut
   if fAESInit<>initDecrypt then
     DecryptInit;
   for i := 1 to Count shr 4 do begin
@@ -12529,15 +12520,15 @@ begin
     inc(fIn);
     inc(fOut);
   end;
-  fCount := fCount and AESBlockMod;
-  if fCount<>0 then
-    TrailerBytes;
+  Count := Count and AESBlockMod;
+  if Count<>0 then
+    TrailerBytes(Count);
 end;
 
 procedure TAESECB.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var i: integer;
 begin
-  inherited; // CV := IV + set fIn,fOut,fCount
+  inherited; // CV := IV + set fIn,fOut
   if fAESInit<>initEncrypt then
     EncryptInit;
   for i := 1 to Count shr 4 do begin
@@ -12545,9 +12536,9 @@ begin
     inc(fIn);
     inc(fOut);
   end;
-  fCount := fCount and AESBlockMod;
-  if fCount<>0 then
-    TrailerBytes;
+  Count := Count and AESBlockMod;
+  if Count<>0 then
+    TrailerBytes(Count);
 end;
 
 
@@ -12557,7 +12548,7 @@ procedure TAESCBC.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
 var i: integer;
     tmp: TAESBlock;
 begin
-  inherited; // CV := IV + set fIn,fOut,fCount
+  inherited; // CV := IV + set fIn,fOut
   if Count>=sizeof(TAESBlock) then begin
     if fAESInit<>initDecrypt then
       DecryptInit;
@@ -12570,15 +12561,15 @@ begin
       inc(fOut);
     end;
   end;
-  fCount := fCount and AESBlockMod;
-  if fCount<>0 then
-    TrailerBytes;
+  Count := Count and AESBlockMod;
+  if Count<>0 then
+    TrailerBytes(Count);
 end;
 
 procedure TAESCBC.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var i: integer;
 begin
-  inherited; // CV := IV + set fIn,fOut,fCount
+  inherited; // CV := IV + set fIn,fOut
   if fAESInit<>initEncrypt then
     EncryptInit;
   for i := 1 to Count shr 4 do begin
@@ -12588,9 +12579,9 @@ begin
     inc(fIn);
     inc(fOut);
   end;
-  fCount := fCount and AESBlockMod;
-  if fCount<>0 then
-    TrailerBytes;
+  Count := Count and AESBlockMod;
+  if Count<>0 then
+    TrailerBytes(Count);
 end;
 
 { TAESAbstractEncryptOnly }
@@ -12662,7 +12653,7 @@ begin
     pxor   xmm7,xmm7 // for safety
   end else
   {$endif} begin
-    inherited; // CV := IV + set fIn,fOut,fCount
+    inherited; // CV := IV + set fIn,fOut
     for i := 1 to Count shr 4 do begin
       tmp := fIn^;
       TAESContext(AES.Context).DoBlock(AES.Context,fCV,fCV);
@@ -12671,9 +12662,9 @@ begin
       inc(fIn);
       inc(fOut);
     end;
-    fCount := fCount and AESBlockMod;
-    if fCount<>0 then
-      TrailerBytes;
+    Count := Count and AESBlockMod;
+    if Count<>0 then
+      TrailerBytes(Count);
   end;
 end;
 
@@ -12711,7 +12702,7 @@ begin
     pxor   xmm7,xmm7 // for safety
   end else
   {$endif} begin
-    inherited; // CV := IV + set fIn,fOut,fCount
+    inherited; // CV := IV + set fIn,fOut
     for i := 1 to Count shr 4 do begin
       TAESContext(AES.Context).DoBlock(AES.Context,fCV,fCV);
       XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
@@ -12719,9 +12710,9 @@ begin
       inc(fIn);
       inc(fOut);
     end;
-    fCount := fCount and AESBlockMod;
-    if fCount<>0 then
-      TrailerBytes;
+    Count := Count and AESBlockMod;
+    if Count<>0 then
+      TrailerBytes(Count);
   end;
 end;
 
@@ -12814,7 +12805,7 @@ begin
     pxor   xmm7,xmm7 // for safety
   end else
   {$endif} begin
-    inherited; // CV := IV + set fIn,fOut,fCount
+    inherited; // CV := IV + set fIn,fOut
     for i := 1 to Count shr 4 do begin
       tmp := fIn^;
       crcblock(@fMAC.encrypted,pointer(fIn)); // fIn may be = fOut
@@ -12825,11 +12816,11 @@ begin
       inc(fIn);
       inc(fOut);
     end;
-    fCount := fCount and AESBlockMod;
-    if fCount<>0 then begin
-      TrailerBytes;
+    Count := Count and AESBlockMod;
+    if Count<>0 then begin
+      TrailerBytes(Count);
       with fMAC do // includes trailing bytes to the plain crc
-        PCardinal(@plain)^ := crc32c(PCardinal(@plain)^,pointer(fOut),fCount);
+        PCardinal(@plain)^ := crc32c(PCardinal(@plain)^,pointer(fOut),Count);
     end;
   end;
 end;
@@ -12871,7 +12862,7 @@ begin
     pxor   xmm7,xmm7 // for safety
   end else
   {$endif} begin
-    inherited; // CV := IV + set fIn,fOut,fCount
+    inherited; // CV := IV + set fIn,fOut
     for i := 1 to Count shr 4 do begin
       TAESContext(AES.Context).DoBlock(AES.Context,fCV,fCV);
       crcblock(@fMAC.plain,pointer(fIn)); // fOut may be = fIn
@@ -12881,11 +12872,11 @@ begin
       inc(fIn);
       inc(fOut);
     end;
-    fCount := fCount and AESBlockMod;
-    if fCount<>0 then begin
-      TrailerBytes;
+    Count := Count and AESBlockMod;
+    if Count<>0 then begin
+      TrailerBytes(Count);
       with fMAC do // includes trailing bytes to the plain crc
-        PCardinal(@plain)^ := crc32c(PCardinal(@plain)^,pointer(fIn),fCount);
+        PCardinal(@plain)^ := crc32c(PCardinal(@plain)^,pointer(fIn),Count);
     end;
   end;
 end;
@@ -12930,7 +12921,7 @@ begin
     pxor   xmm7,xmm7 // for safety
   end else
   {$endif} begin
-    inherited Encrypt(BufIn,BufOut,Count); // CV := IV + set fIn,fOut,fCount
+    inherited Encrypt(BufIn,BufOut,Count); // CV := IV + set fIn,fOut
     for i := 1 to Count shr 4 do begin
       TAESContext(AES.Context).DoBlock(AES.Context,fCV,fCV);
       crcblock(@fMAC.encrypted,pointer(fIn)); // fOut may be = fIn
@@ -12939,11 +12930,11 @@ begin
       inc(fIn);
       inc(fOut);
     end;
-    fCount := fCount and AESBlockMod;
-    if fCount<>0 then begin
-      TrailerBytes;
+    Count := Count and AESBlockMod;
+    if Count<>0 then begin
+      TrailerBytes(Count);
       with fMAC do // includes trailing bytes to the plain crc
-        PCardinal(@plain)^ := crc32c(PCardinal(@plain)^,pointer(fOut),fCount);
+        PCardinal(@plain)^ := crc32c(PCardinal(@plain)^,pointer(fOut),Count);
     end;
   end;
 end;
@@ -12985,7 +12976,7 @@ begin
     pxor   xmm7,xmm7 // for safety
   end else
   {$endif} begin
-    inherited Encrypt(BufIn,BufOut,Count); // CV := IV + set fIn,fOut,fCount
+    inherited Encrypt(BufIn,BufOut,Count); // CV := IV + set fIn,fOut
     for i := 1 to Count shr 4 do begin
       TAESContext(AES.Context).DoBlock(AES.Context,fCV,fCV);
       crcblock(@fMAC.plain,pointer(fIn)); // fOut may be = fIn
@@ -12994,11 +12985,11 @@ begin
       inc(fIn);
       inc(fOut);
     end;
-    fCount := fCount and AESBlockMod;
-    if fCount<>0 then begin
-      TrailerBytes;
+    Count := Count and AESBlockMod;
+    if Count<>0 then begin
+      TrailerBytes(Count);
       with fMAC do // includes trailing bytes to the plain crc
-        PCardinal(@plain)^ := crc32c(PCardinal(@plain)^,pointer(fIn),fCount);
+        PCardinal(@plain)^ := crc32c(PCardinal(@plain)^,pointer(fIn),Count);
     end;
   end;
 end;
@@ -13233,16 +13224,16 @@ begin
     pxor   xmm7,xmm7 // for safety
   end else
   {$endif} begin
-    inherited; // CV := IV + set fIn,fOut,fCount
+    inherited; // CV := IV + set fIn,fOut
     for i := 1 to Count shr 4 do begin
       TAESContext(AES.Context).DoBlock(AES.Context,fCV,fCV);
       XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
       inc(fIn);
       inc(fOut);
     end;
-    fCount := fCount and AESBlockMod;
-    if fCount<>0 then
-      TrailerBytes;
+    Count := Count and AESBlockMod;
+    if Count<>0 then
+      TrailerBytes(Count);
   end;
 end;
 
@@ -13258,7 +13249,7 @@ procedure TAESCTR.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var i,j: integer;
     tmp: TAESBlock;
 begin
-  inherited; // CV := IV + set fIn,fOut,fCount
+  inherited; // CV := IV + set fIn,fOut
   for i := 1 to Count shr 4 do begin
     TAESContext(AES.Context).DoBlock(AES.Context,fCV,tmp);
     inc(fCV[7]); // counter is in the lower 64 bits, nonce in the upper 64 bits
@@ -13470,7 +13461,7 @@ end;
 
 procedure TAESCFB_API.InternalSetMode;
 begin
-  raise ESynCrypto.Create('CRYPT_MODE_CFB does not work');
+  raise ESynCrypto.CreateUTF8('%: CRYPT_MODE_CFB does not work',[self]);
   fInternalMode := CRYPT_MODE_CFB;
 end;
 
@@ -13478,7 +13469,7 @@ end;
 
 procedure TAESOFB_API.InternalSetMode;
 begin
-  raise ESynCrypto.Create('CRYPT_MODE_OFB not implemented by PROV_RSA_AES');
+  raise ESynCrypto.CreateUTF8('%: CRYPT_MODE_OFB not implemented by PROV_RSA_AES',[self]);
   fInternalMode := CRYPT_MODE_OFB;
 end;
 
@@ -13607,7 +13598,7 @@ begin
     data.i0 := integer(HInstance); // override data.d0d1/h0
     data.i1 := integer(GetCurrentThreadId);
     data.i2 := integer(MainThreadID);
-    data.i3 := integer(UnixTimeUTC);
+    data.i3 := integer(UnixMSTimeUTC);
     SleepHiRes(0); // force non deterministic time shift
     sha3update;
     sha3.Update(OSVersionText);
@@ -13744,19 +13735,11 @@ begin
 end;
 
 function TAESPRNG.RandomExt: TSynExtended;
-{$ifdef FPC_OR_UNICODE}
-const coeff: double = (1.0/$100000000)/$100000000;  // 2^-64
-{$else} // circumvent QWord bug on oldest Delphi revisions
 const coeff: double = (1.0/$80000000)/$100000000;  // 2^-63
-{$endif}
 var block: THash128Rec;
 begin
   FillRandom(block.b);
-  {$ifdef FPC_OR_UNICODE}
-  result := (block.L xor block.H)*coeff;
-  {$else}
-  result := abs(block.Lo xor block.Hi)*coeff;
-  {$endif}
+  result := ((block.Lo xor block.Hi) and $7fffffffffffffff)*coeff;
 end;
 
 function TAESPRNG.RandomPassword(Len: integer): RawUTF8;

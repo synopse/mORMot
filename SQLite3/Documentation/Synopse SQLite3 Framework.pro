@@ -16334,42 +16334,70 @@ In a {\f1\fs20 CrossPlatform} folder, some source code is available, to be used 
 |%
 See @86@ for more information.
 \page
-:113 Installation
-Download and uncompress the framework archives, including all sub-folders, into a local directory of your computer (for instance, {\f1\fs20 D:\\Dev\\Lib}).
+:113 Delphi Installation
+{\i Note: for FPC setup, see @125@.}
+To setup mORMot for {\i Delphi 6} up to {\i Delphi 10.3 Rio}, you have two ways: either download the framework from archives, or clone our {\i GitHub} repository.
+:  Manual download
+Download and uncompress the framework archives, including all sub-folders, into a local directory of your computer (for instance, {\f1\fs20 D:\\Dev\\mORMot}).
 |%70
-|{\b Snapshot of the latest source code repository}\line\tab @http://synopse.info/files/mORMotNightlyBuild.zip \line\tab into {\f1\fs20 D:\\Dev\\Lib\\} (including all sub-folders)
-|{\b Static 32-bit SQLite3 .obj files}\line\tab @http://synopse.info/files/sqlite3obj.7z \line\tab into {\f1\fs20 D:\\Dev\\Lib\\SQLite3\\}
+|{\b Snapshot of the latest source code repository}\line\tab @http://synopse.info/files/mORMotNightlyBuild.zip \line\tab into {\f1\fs20 D:\\Dev\\mORMot\\} (including all sub-folders)
+|{\b Static 32-bit SQLite3 .obj files}\line\tab @http://synopse.info/files/sqlite3obj.7z \line\tab into {\f1\fs20 D:\\Dev\\mORMot\\SQLite3\\}
 |{\b 64-bit SQlite3 library}\line\tab @http://synopse.info/files/SQLite3-64.7z \line\tab into your Win64 {\f1\fs20 .exe} folders
 |{\b 32-bit SpiderMonkey library}\line\tab @http://synopse.info/files/synsm.7z \line\tab into your {\f1\fs20 .exe} folders needing JavaScript
-|{\b for FPC only: static {\f1\fs20 .o} files for Windows or Linux}\line\tab @http://synopse.info/files/sqlite3fpc.7z \line\tab whole {\f1\fs20 static} folder into {\f1\fs20 D:\\Dev\\Lib\\}
+|{\b for FPC only: static {\f1\fs20 .o} files for Windows or Linux/BSD}\line\tab @http://synopse.info/files/sqlite3fpc.7z \line\tab whole {\f1\fs20 static} folder into {\f1\fs20 D:\\Dev\\mORMot\\}
 |%
-Please, read the {\f1\fs20 ReadMe.txt} file content supplied with the package! RTFM!
-In short, add the following paths to your {\i Delphi} IDE (in {\i Tools/Environment/Library} menu):
-- {\i Library path}:\line{\i (...existing path...)\f1\fs20 ;D:\\Dev\\Lib;D:\\Dev\\Lib\\SQLite3;D:\\Dev\\Lib\\SynDBDataset}
-- {\i Search path}:\line{\i (...existing path...)\f1\fs20 ;D:\\Dev\\Lib;D:\\Dev\\Lib\\SQLite3;D:\\Dev\\Lib\\SynDBDataset}
-For any cross-platform client, do not forget to include the {\f1\fs20 D:\\Dev\\Lib\\CrossPlatform} to the {\i Delphi} or {\i FreePascal} IDE paths of the corresponding targets.\line For {\i @*Smart Mobile Studio@}, execute {\f1\fs20 CopySynCrossPlatformUnits.bat} to set the needed units in the IDE repository.
-Note that before {\i Delphi} 2006, you will need to download and install {\i @*FastMM4@} heap memory manager - from @http://sourceforge.net/projects/fastmm or from the {\f1\fs20 D:\\Dev\\Lib\\RTL7} sub folder of our repository - for some samples to work (without it, {\i mORMot} units will work, but will be slower). Starting with {\i Delphi} 2006, {\i FastMM4} is already included within the system RTL, so you do not need to download it.
+:  Get from GitHub
+Or you may just clone our {\i @**GitHub@} repository, from @https://github.com/synopse/mORMot :
+$ d:
+$ cd Dev
+$ git clone https://github.com/synopse/mORMot.git
+It will create a {\f1\fs20 D:\\Dev\\mORMot} local folder, which will eventually be re-synchronized with the official sources. Advantage of cloning our {\i GitHub} repository is that it contains binaries for static linking, ({\i SQLite3} and @*FPC@ specific), in a single step.
+Just take care that if you downloaded some other library from Synopse (e.g. from @https://github.com/synopse/SynPDF or @https://github.com/synopse/dmustache), you should better use the main @https://github.com/synopse/mORMot only, which contains other projects, to avoid any version confusion. We have seen a lot of installation problems reported in our forum due to source code file collision from several repositories, not in the same revision.
+:  Setup the Delphi IDE
+To let your IDE know about {\i mORMot} source code, add the following paths to your {\i Delphi} IDE (in {\i Tools/Environment/Library} or {\i Tools/Options/Language/Delphi Options/Library} menu depending on your Delphi version):
+- {\i Library path}:\line{\i (...existing path...)\f1\fs20 ;D:\\Dev\\mORMot;D:\\Dev\\mORMot\\SQLite3;D:\\Dev\\mORMot\\SynDBDataset}
+- {\i Search path}:\line{\i (...existing path...)\f1\fs20 ;D:\\Dev\\mORMot;D:\\Dev\\mORMot\\SQLite3;D:\\Dev\\mORMot\\SynDBDataset}
+For any cross-platform client, do not forget to include the {\f1\fs20 D:\\Dev\\mORMot\\CrossPlatform} to the {\i Delphi} or {\i FreePascal} IDE paths of the corresponding targets.\line For {\i @*Smart Mobile Studio@}, execute {\f1\fs20 CopySynCrossPlatformUnits.bat} to set the needed units in the IDE repository.
+Note that before {\i Delphi} 2006, you will need to download and install {\i @*FastMM4@} heap memory manager - from @http://sourceforge.net/projects/fastmm or from the {\f1\fs20 D:\\Dev\\mORMot\\RTL7} sub folder of our repository - for some samples to work (without it, {\i mORMot} units will work, but will be slower). Starting with {\i Delphi} 2006, {\i FastMM4} is already included within the system RTL, so you do not need to download it.
 Open the {\f1\fs20 TestSQL3.dpr} program from the {\f1\fs20 SQLite3} sub-folder. You should be able to compile it and run all regression @*test@s on your computer.\line If you want to run the tests with the fast @*http.sys@ kernel-based HTTP server, you'll need to compile and run (as administrator) {\f1\fs20 TestSQL3Register.dpr} once before launching {\f1\fs20 TestSQL3.dpr}.
 Then open the {\f1\fs20 *.dpr} files, as available in the {\f1\fs20 SQLite3\\Samples} sub-folder. You should be able to compile all sample programs, including {\f1\fs20 SynFile.dpr} in the {\f1\fs20 MainDemo} folder.
 Enjoy!
 \page
-:125 FreePascal / Lazarus use
-You can use the {\i @**FreePascal@ Compiler} (@**FPC@) to compile the {\i mORMot} framework source code, targetting {\i Windows} and {\i Linux}.
-{\i Linux} is a premium target for cheap and efficient server @75@. Since {\i mORMot} has no dependency, installing a new {\i mORMot} server is as easy as copying its executable on a blank {\i Linux} host, then run it. No need to install any framework nor runtime. You could even use diverse operating systems (several {\i Linux} or {\i Windows Server} versions) in your {\i mORMot} servers farm, with minimal system requirements, and updates.
+:125 FreePascal / Lazarus Installation
+{\i Note: see also @113@.}
+:202  Possible targets
+You can use the {\i @**FreePascal@ Compiler} (@**FPC@) to (cross-)compile the {\i mORMot} framework source code, targeting the following CPU and OS combinations:
+- i386-win32
+- x86_64-win64
+- i386-linux
+- x86_64-linux
+- i386-freebsd
+- x86_64-freebsd
+- i386-darwin
+- x86_64-darwin
+- arm-linux
+- aarch64-linux
+32-bit and 64-bit Windows and Linux platforms are the main supported targets, used in production since years. Others may need some enhancements, and you are free to contribute! {\i mORMot} has been reported to work on a Raspberry Pi running Linux, thanks to FPC abilities - and with good performance and stability.
+{\i Linux} is a premium target for cheap and efficient server @75@. Since {\i mORMot} has no dependency, installing a new {\i mORMot} server is as easy as copying its executable on a blank {\i Linux} host, then run it. No need to install any framework nor runtime. Even the {\i SQLite3} engine will be statically linked on most platforms, as we provide up-to-date binaries in our repository. You could even use diverse operating systems (several {\i Linux} or {\i Windows Server} versions) in your {\i mORMot} servers farm, with minimal system requirements, and updates.
 For proper FPC compilation, ensure you have the following settings to your project:
-- {\i Other unit files (-Fu)}:\line{\i \f1\fs20 D:\\Dev\\Lib;D:\\Dev\\Lib\\SQLite3;D:\\Dev\\Lib\\SQLite3\\DDD\\infra}
-- {\i Include files (-Fi)}:\line{\i \f1\fs20 $(ProjOutDir);D:\\Dev\\Lib;D:\\Dev\\Lib\\SQLite3}
-- {\i Libraries (-fFl)}:\line{\i \f1\fs20 D:\\Dev\\Lib\\static\\$(TargetCPU)-$(TargetOS)}
-Replace {\f1\fs20 D:\\Dev\\Lib} path by the absolute/relative folder where you did install the framework. In practice, a relative path (e.g. {\f1\fs20 ..\\..\\lib}) is preferred.
-:  Compiler expectations
-You should better use the latest SVN trunk version of the FPC 2.7.1 / 3.1.1 compiler, and the corresponding {\i Lazarus} IDE.
-If you want to use @80@, ensure that your revision includes the fix for @http://mantis.freepascal.org/view.php?id=26773 bug, i.e. newer than revision 28995 from 2014-11-05T22:17:54. This bug has not been fixed in 2.6.4 branch.
-We recommend using the @*fpcup@ tool, as published at @http://wiki.freepascal.org/fpcup \line To compile the latest svn version of the trunk, just write:
-$fpcup.exe --fpcURL="trunk" --lazURL="trunk"
-Then ensure you downloaded and set the static {\f1\fs20 .o} files for {\i Windows} or {\i Linux} in the right folder, as stated about the @113@. Those {\f1\fs20 .o} files are needed not only for {\i SQlite3} static linking, but also for the {\f1\fs20 @*SynEcc@} linking.
-:  Creating the missing RTTI for interfaces
-Sadly, we have to face some unresolved FPC compiler-level issue, which does not supply the needed {\f1\fs20 interface} RTTI - see @http://bugs.freepascal.org/view.php?id=26774
-As a result, SOA, mock/stub and MVC features will not work directly with FPC trunk. There is a private branch including the needed RTTI, but it has not been merged to the trunk yet.\line In the meanwihle, we propose a workaround to compile such applications with FPC. You could use Delphi to generate one unit containing the needed information.
+- {\i Other unit files (-Fu)}:\line{\i \f1\fs20 D:\\Dev\\mORMot;D:\\Dev\\mORMot\\SQLite3;D:\\Dev\\mORMot\\SQLite3\\DDD\\infra}
+- {\i Include files (-Fi)}:\line{\i \f1\fs20 $(ProjOutDir);D:\\Dev\\mORMot;D:\\Dev\\mORMot\\SQLite3}
+- {\i Libraries (-fFl)}:\line{\i \f1\fs20 D:\\Dev\\mORMot\\static\\$(TargetCPU)-$(TargetOS)}
+Replace {\f1\fs20 D:\\Dev\\mORMot} path by the absolute/relative folder where you did install the framework. In practice, a relative path (e.g. {\f1\fs20 ..\\..\\mORMot}) is preferred.
+:203  Setup your dedicated FPC / Lazarus environment with fpcupdeluxe
+You could use a recent SVN trunk version of the FPC 2.7.1 / 3.1.1 compiler, and the corresponding {\i Lazarus} IDE.
+If you want to use @80@, ensure that your revision includes the fix for @http://mantis.freepascal.org/view.php?id=26773 bug, i.e. newer than revision 28995 from 2014-11-05T22:17:54. This bug was not fixed in 2.6.4 branch, but any newer 3.x revision should be enough.
+But since the FPC trunk may be unstable, we will propose to put in place a stable development environment to work with your {\i mORMot}-based projects. It may ease support and debugging.
+For this task, don't download an existing binary release of FPC / Lazarus, but use the {\i @*fpcupdeluxe@} tool, as published at @http://wiki.freepascal.org/fpcupdeluxe - it will allow to build your environment directly from the sources, and install it in a dedicated folder. Several FPC / Lazarus installations, with dedicated revision numbers, may coexist on the same computer: just ensure you run Lazarus from the shortcut created by {\i fpcupdeluxe}.
+Download the latest release of the tool from @https://github.com/LongDirtyAnimAlf/fpcupdeluxe/releases \line Unpack it in a dedicated folder, and run its executable.\line Click on the {\i "Setup +"} button, and enter the following revision numbers:
+- FPC trunk SVN {\f1\fs20 40491};
+- Lazarus trunk SVN {\f1\fs20 59757}.
+Those revisions are currently used for building our production projects, so are expected to be properly tested and supported.
+Then build the FPC and Lazarus binaries directly from the latest sources. One big advantage of {\i fpcupdeluxe} is that you can very easily install cross-compilers for the CPU / OS combinations enumerated at @202@.
+You could install {\i mORMot} using {\i fpcupdeluxe}, but we recommend you clone our @https://github.com/synopse/mORMot repository, and setup the expected project paths, as detailed above at @113@.
+:  Missing RTTI for interfaces in old FPC 2.6
+Sadly, if you use a somewhat old revision of FPC, you may have to face some long-time unresolved FPC compiler-level restriction/issue, which did not supply the needed {\f1\fs20 interface} RTTI, which was available since Delphi 6 - see @http://bugs.freepascal.org/view.php?id=26774 \line As a consequence, SOA, mock/stub and MVC framework features will not work directly with older FPC revisions.
+You could upgrade to a more recent FPC - we encourage you to @203@ - or we will propose here a workaround to compile such {\i mORMot} applications with oldest FPC. The trick is to use Delphi to generate one unit containing the needed information.
 The {\f1\fs20 mORMotWrappers.pas} unit proposes a {\f1\fs20 ComputeFPCInterfacesUnit()} function, which could be used on Delphi to generate the RTTI unit for FPC, as such:
 - Ensure that the application will use all its needed {\f1\fs20 interface}: for instance, run all your regression tests, and/or use all its SOA/MVC features if you are not confident about your test coverage;
 - Just before the application exits, add a call to {\f1\fs20 ComputeFPCInterfacesUnit()} with the proper folders, e.g. at the very end of your {\f1\fs20 .dpr} code.
@@ -16434,9 +16462,9 @@ For instance a minimal FPC project to run the regression tests may be:
 !end.
 In your user code, ensure you do not directly link to the {\f1\fs20 Windows} unit, but rely on the cross-platform classes and functions as defined in {\f1\fs20 SysUtils.pas}, {\f1\fs20 Classes.pas} and {\f1\fs20 SynCommons.pas}. You could find in {\f1\fs20 SynFPCTypInfo.pas} and {\f1\fs20 SynFPCLinux.pas} some low-level functions dedicated to FPC and {\i Linux} compilation, to be used with legacy units - your new code should better rely on higher level functions and classes.
 If you rely on {\i mORMot} classes and types, e.g. use {\f1\fs20 RawUTF8} for all your {\f1\fs20 string} process in the business logic, and do not use Delphi-specific features (like generics, or new syntax sugar), it will be very easy to let your application compile with FPC.
-In practice, we use Delphi as our main IDE, then switch to Lazarus under a small integrated {\i Linux VirtualBox}, running a low resource {\i XFCE} desktop. We defined the {\i Windows} folder containing the source as a {\i VirtualBox} shared folder, so that we are able to compile, debug and test the {\i Linux} version of any executable in native {\i Linux}, on the same computer, from the very same sources. We found out that {\i Lazarus} debugging was pretty smooth on {\i Linux} - GDB is smoother on {\i Linux} than {\i Windows}, by the way. Then switching from {\i Delphi/Windows} to {\i Lazarus/Linux} is direct and natural, especially when the {\i VirtualBox} "Integrated Desktop" feature is enabled.
-:142  Linux installation tips
-Here are a few informal notes about getting running a FPC/Lazarus virtual machine running {\i XUbuntu}, on a {\i Windows} host. They are published as a general guideline, and we will not provide any reference procedure, nor support it.
+;In practice, we use Delphi as our main IDE, then switch to Lazarus under a small integrated {\i Linux VirtualBox}, running a low resource {\i XFCE} desktop. We defined the {\i Windows} folder containing the source as a {\i VirtualBox} shared folder, so that we are able to compile, debug and test the {\i Linux} version of any executable in native {\i Linux}, on the same computer, from the very same sources. We found out that {\i Lazarus} debugging was pretty smooth on {\i Linux} - GDB is smoother on {\i Linux} than {\i Windows}, by the way. Then switching from {\i Delphi/Windows} to {\i Lazarus/Linux} is direct and natural, especially when the {\i VirtualBox} "Integrated Desktop" feature is enabled.
+:142  Linux VM installation tips
+Here are a few informal notes about getting running a FPC/Lazarus virtual machine running {\i XUbuntu}, on a {\i Windows} host. They are published as a general guideline, and we will not provide any reference procedure, nor support it. As stated in @203@, instead of using a virtual machine, you could just install the needed cross-compilers, then generate your Linux/BSD executables from your Windows Lazarus.
 - Install the latest {\i VirtualBox} version from @http://www.virtualbox.org/ to Windows;
 - Download the latest {\f1\fs20 .iso} version published at @http://xubuntu.org/ or any other place - we use XFCE since it is a very lightweight desktop, perfect to run {\i Lazarus}, and we selected an Ubuntu LTS revision (14.04 at the time of this writing), which will be the same used on Internet servers;
 - Create a new virtual machine (VM) in {\i VirtualBox}, with 1 or 2 CPUs, more than 512 MB of RAM (we use 777 MB), and an automatic-growing disk storage, with a maximal size of 15 GB; ensure that the disk storage is marked as SSD if your real host storage is a SSD;
@@ -16451,36 +16479,21 @@ $ sudo apt-get install dkms
 - Restart the VM, then select "Insert Guest Additions CD image" from the VM "Devices" menu: a virtual CD will be mounted on your system and appear on your desktop;
 - Run the following command, according to your current user name and {\i VirtualBox} version:
 $ sudo sh /media/...user.../VBOXADDITIONS_..../VBoxLinuxAdditions.run
-- Restart the VM, then add a permanent shared folder in the VM configuration, named {\f1\fs20 Lib}, and pointing to your local {\i mORMot} installation (e.g. {\f1\fs20 d:\\dev\\lib};
+- Restart the VM, then add a permanent shared folder in the VM configuration, named {\f1\fs20 Lib}, and pointing to your local {\i mORMot} installation (e.g. {\f1\fs20 d:\\Dev\\mORMot};
 - Create a void folder, e.g. in your home:
 $ mkdir lib
 - Create a launcher for the following command, to mount the shared folder as expected:
 $ sudo mount -t vboxsf lib /home/...user.../lib
-- Download the version of {\f1\fs20 fpcup} for your system, e.g. @https://bitbucket.org/reiniero/fpcup/downloads/fpcup_linux_x86
 - Execute the following commands:
 $ sudo apt-get install build-essential mingw32-binutils subversion libgtk2.0-dev
 $ sudo ln -s /usr/bin/i586-mingw32msvc-windres /usr/bin/windres
-$ ./fpcup_linux_x86 --fpcURL="trunk" --lazURL="trunk"
-- Now wait for all source to be retrieved by SVN, then the whole build to take places;
+- Then install FPC / Lazarus as detailed in @203@
 - If you have issues during SVN retrieval, go the {\f1\fs20 development/fpc} folder, then run the following before trying again the {\f1\fs20 fpcup_linux_x86} command:
 $ svn cleanup
 $ svn update
-- On success, you can create a launcher pointing to {\f1\fs20 development/lazarus/startlazarus}.
-If you followed the above steps, you should now have at least a Lazarus IDE v1.3 and the corresponding FPC 3.1.1 compiler. It is amazing seeing the whole compiler + IDE being compiled from the official sources, for free, and in a few minutes.
-For Ubuntu versions above 13.10, if you installed a 64-bit distribution, 32-bit executables may not be recognized by the system. In order to install the 32-bit libraries needed by {\i mORMot} 32-bit executables on {\i Linux}, please execute:
-$ sudo apt-get install lib32z1 lib32ncurses5 lib32bz2-1.0
-If you want {\f1\fs20 SynCrtSock.pas} to be able to handle {\f1\fs20 https://} on a 64-bit system - e.g. if you want to run the {\f1\fs20 TestSQL3} regression tests which download some {\f1\fs20 json} reference file over {\f1\fs20 https} - you will need also to install {\f1\fs20 @*libcurl@} (and {\f1\fs20 OpenSSL}) in 32-bit, as such:
-$ sudo apt-get install libcurl3:i386
-If it may be for any help, here are the static dependencies listed on a running 64-bit Ubuntu system, on a {\i FPC 3.1} compiled executable:
-$user@xubuntu:~/lib/SQLite3/fpc/i386-linux$ ldd TestSQL3
-$   linux-gate.so.1 =>  (0xb774c000)
-$   libpthread.so.0 => /lib/i386-linux-gnu/libpthread.so.0 (0xb7718000)
-$   libz.so.1 => /lib/i386-linux-gnu/libz.so.1 (0xb76fe000)
-$   libdl.so.2 => /lib/i386-linux-gnu/libdl.so.2 (0xb76f8000)
-$   libc.so.6 => /lib/i386-linux-gnu/libc.so.6 (0xb7549000)
-$   /lib/ld-linux.so.2 (0xb774d000)
-There is almost no dependency: installing a {\i mORMot} server under {\i Linux} is just as simple as copying an executable on a minimal blank {\i Linux} server. You do not need any LAMP runtime, virtual machine, installing other services, or execution environment.\line Of course, you may better add a reverse proxy like {\f1\fs20 nginx} in front of your {\i mORMot} servers when connected on the Internet, but for a @*cloud@-based solution, or a self-hosted office server, software requirements are pretty low.
+If you followed the above steps, you should now have the expected Lazarus IDE and the corresponding FPC compiler. It is amazing seeing the whole compiler + IDE being compiled from the official sources, for free, and in a few minutes.
 : CrossKylix support
+:  What is Cross-Kylix?
 The framework source code can also be cross-compiled under Delphi into a {\i @*Linux@} executable, using {\i @**CrossKylix@}.\line @https://crosskylix.untergrund.net is a free toolkit to integrate the Borland {\i Kylix} ({\i Delphi} for {\i Linux}) compiler into the Delphi Windows IDE.
 {\i CrossKylix} has indeed several known drawbacks:
 - It is a dead project, but an alive product. It still works!
@@ -16497,6 +16510,7 @@ We added {\i CrossKylix} support for several reasons:
 - If the code works with Delphi 7, it will certainly work with {\i Kylix} (since it shares the same compiler and RTL), whereas FPC is compatible, but not the same. In particular, it does not suffer from limited RTTI or other FPC limitations. So it sounds safer to be used on production than FPC, even today.
 - There is not a lot of {\f1\fs20 IFDEF}, but in {\f1\fs20 SynCommons.pas}. Then there is a {\f1\fs20 SynKylix.pas} unit for several functions. User code will be the same than Delphi and FPC.
 - There is a {\i Linux} compiler in the official {\i Embarcadero} product roadmap, but sounds like if it may be ARC-enabled, so we may have to sadly skip its support, and focus on Kylix and FPC...
+Currently, we use FPC with success for building {\f1\fs20 i386} and {\f1\fs20 x86_64} executables. FPC is therefore recommended for production work targeting {\i Linux}. See @125@.
 Once you have installed {\i CrossKylix}, and set up its search path to the same as Delphi - see @113@, you should be able to compile your project for {\i Linux}, directly from your {\i Delphi} IDE. Then you need an actual {\i Linux} system to test it - please check the @142@.
 A minimal console application which will compile for both {\i Delphi} and {\i CrossKylix}, running all our regression tests, may be:
 !program Test;
@@ -16529,11 +16543,26 @@ $       libdl.so.2 => /lib/i386-linux-gnu/libdl.so.2 (0xf7770000)
 $       libc.so.6 => /lib/i386-linux-gnu/libc.so.6 (0xf75c1000)
 $       /lib/ld-linux.so.2 (0xf77bf000)
 As you can see, there is a very few dependencies - then same as FPC's executable in fact, with the addition of the external {\f1\fs20 libsqlite3.so.0}, which is statically linked to FPC's version.
+:  Running Kylix 32-bit executables on 64-bit Linux
+For Ubuntu versions above 13.10, if you installed a 64-bit distribution, 32-bit executables - as generated by {\i CrossKylix} -  may not be recognized by the system. Of course, we recommend using FPC (cross-)compiler, and build your executable natively for the {\f1\fs20 x86_64-linux} target.
+In order to install the 32-bit libraries needed by {\i mORMot} 32-bit executables compiled by {\i Kylix} on {\i Linux}, please execute:
+$ sudo apt-get install lib32z1 lib32ncurses5 lib32bz2-1.0
+If you want {\f1\fs20 SynCrtSock.pas} to be able to handle {\f1\fs20 https://} on a 64-bit system - e.g. if you want to run the {\f1\fs20 TestSQL3} regression tests which download some {\f1\fs20 json} reference file over {\f1\fs20 https} - you will need also to install {\f1\fs20 @*libcurl@} (and {\f1\fs20 OpenSSL}) in 32-bit, as such:
+$ sudo apt-get install libcurl3:i386
+If it may be for any help, here are the static dependencies listed on a running 64-bit Ubuntu system, on a {\i FPC 3.1} compiled executable:
+$user@xubuntu:~/lib/SQLite3/fpc/i386-linux$ ldd TestSQL3
+$   linux-gate.so.1 =>  (0xb774c000)
+$   libpthread.so.0 => /lib/i386-linux-gnu/libpthread.so.0 (0xb7718000)
+$   libz.so.1 => /lib/i386-linux-gnu/libz.so.1 (0xb76fe000)
+$   libdl.so.2 => /lib/i386-linux-gnu/libdl.so.2 (0xb76f8000)
+$   libc.so.6 => /lib/i386-linux-gnu/libc.so.6 (0xb7549000)
+$   /lib/ld-linux.so.2 (0xb774d000)
+There is almost no dependency: installing a {\i mORMot} server under {\i Linux} is just as simple as copying an executable on a minimal blank {\i Linux} server. You do not need any LAMP runtime, virtual machine, installing other services, or execution environment.\line Of course, you may better add a reverse proxy like {\f1\fs20 nginx} in front of your {\i mORMot} servers when connected on the Internet, but for a @*cloud@-based solution, or a self-hosted office server, software requirements are pretty low.
 : Upgrading from a 1.17 revision
 If you are upgrading from an older revision of the framework, your own source code should be updated.
 For instance, some units where renamed, and some breaking changes introduced by enhanced features. As a consequence, a direct update is not possible.
 To properly upgrade to the latest revision:
-1. Erase or rename your whole previous {\f1\fs20 #\\Lib} directory.
+1. Erase or rename your whole previous {\f1\fs20 #\\mORMot} directory.
 2. Download latest 1.18 revision files as stated just above.
 3. Change your references to {\i mORMot} units:
 - Add in your uses clause {\f1\fs20 SynTests.pas} if you use testing features;
