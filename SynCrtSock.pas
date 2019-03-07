@@ -942,6 +942,7 @@ type
     procedure Execute; override;
   end;
 
+  {$M+}
   /// a simple Thread Pool, used e.g. for fast handling HTTP requests
   // - implemented over I/O Completion Ports under Windows, or a classical
   // Event-driven approach under Linux/POSIX
@@ -1003,6 +1004,7 @@ type
     property PendingContextCount: integer read GetPendingContextCount;
     {$endif}
   end;
+  {$M-}
 
   /// a simple Thread Pool, used for fast handling HTTP requests of a THttpServer
   // - will handle multi-connection with less overhead than creating a thread
@@ -5431,19 +5433,19 @@ end;
 function THttpClientSocket.Request(const url, method: SockString;
   KeepAlive: cardinal; const Header, Data, DataType: SockString; retry: boolean): integer;
 procedure DoRetry(Error: integer);
-begin
-  if retry then // retry once -> return error only if failed after retrial
-    result := Error else begin
-    Close; // close this connection
-    try
-      OpenBind(Server,Port,false); // then retry this request with a new socket
-      result := Request(url,method,KeepAlive,Header,Data,DataType,true);
-    except
-      on Exception do
-        result := Error;
+  begin
+    if retry then // retry once -> return error only if failed after retrial
+      result := Error else begin
+      Close; // close this connection
+      try
+        OpenBind(Server,Port,false); // then retry this request with a new socket
+        result := Request(url,method,KeepAlive,Header,Data,DataType,true);
+      except
+        on Exception do
+          result := Error;
+      end;
     end;
   end;
-end;
 var P: PAnsiChar;
     aData: SockString;
 begin

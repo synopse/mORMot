@@ -33011,14 +33011,14 @@ begin
 end;
 
 function EndWith(const text, upText: RawUTF8): boolean;
-var o: integer;
+var o: PtrInt;
 begin
   o := length(text)-length(upText);
   result := (o>=0) and IdemPChar(PUTF8Char(pointer(text))+o,pointer(upText));
 end;
 
 function EndWithArray(const text: RawUTF8; const upArray: array of RawUTF8): integer;
-var t,o: integer;
+var t,o: PtrInt;
 begin
   t := length(text);
   if t>0 then
