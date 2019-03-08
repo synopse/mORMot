@@ -13796,7 +13796,9 @@ function GetNextFieldProp(var P: PUTF8Char; var Prop: RawUTF8): boolean;
 { ************ variant-based process, including JSON/BSON document content }
 
 const
-  /// this variant type is not defined in older versions of Delphi
+  /// unsigned 64bit integer variant type
+  // - currently called varUInt64 in Delphi (not defined in older versions),
+  // and varQWord in FPC
   varWord64 = 21;
 
   /// this variant type will map the current SynUnicode type
@@ -13813,6 +13815,7 @@ const
   // !    VarClear(aVariant);
   // - equals private constant varDeepData in Delphi's Variants.pas and
   // varComplexType in FPC's variants.pp - seldom used on FPC
+  // - make some false positive to varBoolean and varError
   VTYPE_STATIC = $BFE8;
 
 /// same as Dest := TVarData(Source) for simple values
@@ -22475,7 +22478,11 @@ begin
   {$endif}
   varByte:     Value := VByte;
   varInteger:  Value := VInteger;
-  varWord64,
+  varWord64:   if VInt64>=0 then
+                 Value := VInt64 else begin
+                 result := false;
+                 exit;
+               end;
   varInt64:    Value := VInt64;
   else
     if SetVariantUnRefSimpleValue(V,tmp) then begin
@@ -50664,7 +50671,7 @@ begin
       result := Hasher(VType,@VWord,2);
     varLongWord, varInteger, varSingle:
       result := Hasher(VType,@VLongWord,4);
-    varInt64, varDouble, varDate, varCurrency:
+    varInt64, varDouble, varDate, varCurrency, varWord64:
       result := Hasher(VType,@VInt64,SizeOf(Int64));
     varString:
       if CaseInsensitive then
