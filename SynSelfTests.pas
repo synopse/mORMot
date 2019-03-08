@@ -10087,7 +10087,7 @@ begin
   Check(CompressGZip(s,false)='gzip');
   Check(s=Data,'compressGZip');
   Check(gzr.Init(M.Memory,M.Position),'TGZRead');
-  Check(gzr.uncomplen=length(data));
+  Check(gzr.uncomplen32=Cardinal(length(data)));
   Check(gzr.crc32=crc0);
   Check(gzr.ToMem=data,'ToMem');
   st := TRawByteStringStream.Create;
@@ -10098,7 +10098,7 @@ begin
   finally
     st.Free;
   end;
-  SetLength(tmp,gzr.uncomplen div 5);
+  SetLength(tmp,gzr.uncomplen32 div 5);
   Check(gzr.ZStreamStart(pointer(tmp),length(tmp)),'ZStreamStart');
   s := '';
   repeat
@@ -10108,7 +10108,7 @@ begin
     s := s+copy(tmp,1,n);
   until false;
   check(gzr.ZStreamDone,'ZStreamDone');
-  Check(gzr.uncomplen=length(s));
+  Check(gzr.uncomplen32=Cardinal(length(s)));
   check(s=Data);
   s := Data;
   Check(CompressDeflate(s,true)='deflate');
