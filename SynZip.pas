@@ -284,7 +284,7 @@ type
   ZipPtrInt = PtrInt;
 {$else}
   /// as available in FPC
-  ZipPtrUInt = {$ifdef CPU64}QWord{$else}cardinal{$endif};
+  ZipPtrUInt = {$ifdef CPU64}UInt64{$else}cardinal{$endif};
   ZipPtrInt = {$ifdef CPU64}Int64{$else}integer{$endif};
 {$endif}
 
