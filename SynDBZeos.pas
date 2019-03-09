@@ -772,10 +772,6 @@ begin
   inherited Create(aProperties);
   url := (fProperties as TSQLDBZEOSConnectionProperties).fURL;
   fDatabase := DriverManager.GetConnectionWithParams(url.URL,url.Properties);
-  fDatabase.SetReadOnly(false);
-  // about transactions, see https://synopse.info/forum/viewtopic.php?id=2209
-  fDatabase.SetAutoCommit(true);
-  fDatabase.SetTransactionIsolation(tiReadCommitted);
 end;
 
 procedure TSQLDBZEOSConnection.Connect;
@@ -788,7 +784,13 @@ begin
     Log := SynDBLog.Enter(Self,pointer(FormatUTF8('Connect to % % for % at %:%',
       [Protocol,Database,HostName,Port])),true);
   try
+    // about transactions, see https://synopse.info/forum/viewtopic.php?id=2209
+    // two statement below do not require DB to be connected, so can be before Open
+    fDatabase.SetAutoCommit(true);
+    fDatabase.SetTransactionIsolation(tiReadCommitted);
     fDatabase.Open;
+    fDatabase.SetReadOnly(false);
+
     Log.Log(sllDB,'Connected to % using % %',
       [fProperties.ServerName,fProperties.DatabaseName,fDatabase.GetClientVersion]);
     inherited Connect; // notify any re-connection
