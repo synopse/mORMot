@@ -240,14 +240,6 @@ begin
   result.Second := epoch-t*SecsPerMin;
 end;
 
-procedure GetNowUTCSystem(out result: TSystemTime);
-var r: timespec;
-begin
-  clock_gettime(CLOCK_REALTIME_TICKCOUNT,@r); // faster than fpgettimeofday()
-  EpochToSystemTime(r.tv_sec,result);
-  result.MilliSecond := r.tv_nsec div C_MILLION;
-end;
-
 function GetTickCount: cardinal;
 begin
   result := cardinal(GetTickCount64);
@@ -315,6 +307,14 @@ begin
   result := (tz.tv_sec*C_THOUSAND)+tz.tv_usec div C_THOUSAND; // in milliseconds
 end;
 
+procedure GetNowUTCSystem(out result: TSystemTime);
+var tz: timeval;
+begin
+  fpgettimeofday(@tz,nil);
+  EpochToSystemTime(tz.tv_sec,result);
+  result.MilliSecond := tz.tv_usec div C_THOUSAND;
+end;
+
 {$else}
 
 {$ifdef BSD}
@@ -363,6 +363,14 @@ var r : TTimeSpec;
 begin
   clock_gettime(CLOCK_MONOTONIC,@r);
   value := r.tv_nsec div C_THOUSAND+r.tv_sec*C_MILLION; // as microseconds
+end;
+
+procedure GetNowUTCSystem(out result: TSystemTime);
+var r: timespec;
+begin
+  clock_gettime(CLOCK_REALTIME_TICKCOUNT,@r); // faster than fpgettimeofday()
+  EpochToSystemTime(r.tv_sec,result);
+  result.MilliSecond := r.tv_nsec div C_MILLION;
 end;
 
 {$endif DARWIN}
