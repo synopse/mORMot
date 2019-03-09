@@ -11673,7 +11673,7 @@ const NAMES: array[0..{$ifdef LIBCURLMULTI}26{$else}12{$endif}] of string = (
 begin
   EnterCriticalSection(SynSockCS);
   try
-    if curl.Module=0 then
+    if curl.Module=0 then // try to load libcurl once
     try
       curl.Module := LoadLibrary(LIBCURL_DLL);
       {$ifdef Darwin}
@@ -11716,7 +11716,7 @@ begin
       on E: Exception do begin
         if curl.Module<>0 then
           FreeLibrary(curl.Module);
-        curl.Module := {$ifdef KYLIX3}THandle{$endif}(-1); // don't try to load any more
+        PtrInt(curl.Module) := -1; // <>0 so that won't try to load any more
         raise;
       end;
     end;

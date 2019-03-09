@@ -12423,7 +12423,7 @@ type
     /// encode the stored date/time as text
     function ToText(Expanded: boolean=true; FirstTimeChar: AnsiChar='T'; const TZD: RawUTF8=''): RawUTF8;
     /// append the stored date and time, in a log-friendly format
-    // - e.g. append '20110325 19241502' - with no trailing space
+    // - e.g. append '20110325 19241502' - with no trailing space nor tab
     // - as called by TTextWriter.AddCurrentLogTime()
     procedure AddLogTime(WR: TTextWriter);
     /// append the stored data and time, in apache-like format, to a TTextWriter
@@ -17624,8 +17624,10 @@ type
   /// low-level structure used to compute process memory and CPU usage
   {$ifdef UNICODE}TProcessInfo = record{$else}TProcessInfo = object{$endif}
   private
+    {$ifdef MSWINDOWS}
     fSysPrevIdle, fSysPrevKernel, fSysPrevUser,
     fDiffIdle, fDiffKernel, fDiffUser, fDiffTotal: Int64;
+    {$endif}
   public
     /// initialize the system/process resource tracking
     function Init: boolean;
