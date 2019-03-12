@@ -48,6 +48,7 @@ var
   in_argv: PjsvalVector;
   forceUTF8: boolean;
   name: String;
+  src: RawUTF8;
 begin
   forceUTF8 := true;
   result := true;
@@ -67,7 +68,10 @@ begin
       raise ESMException.Create('file does not exist');
     // implementation below dont work if called in the same time from differnt thread
     // TFileStream.Create(name, fmOpenRead).Free; // Check that file exists and can be opened;
-    vp.rval := cx.NewJSString(AnyTextFileToRawUTF8(name, forceUTF8)).ToJSVal;
+    src := AnyTextFileToRawUTF8(name, forceUTF8);
+    if not IsValidUTF8(src) then
+      raise ESMException.CreateUTF8('file % contains an incorrect byte sequence. Check it valid UTF8 or Unicode', [name]);
+    vp.rval := cx.NewJSString(src).ToJSVal;
   except
     on E: Exception do
     begin
