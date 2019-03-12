@@ -556,6 +556,7 @@ type
     function TableMaxID(Table: TSQLRecordClass): TID; override;
     /// after how many bytes a sllSQL statement log entry should be truncated
     // - default is 0, meaning no truncation
+    // - typical value is 2048 (2KB), which will avoid any heap allocation
     property StatementTruncateSQLLogLen: integer read fStatementTruncateSQLLogLen
       write fStatementTruncateSQLLogLen;
     /// executes (therefore log) the QUERY PLAN for each prepared statement

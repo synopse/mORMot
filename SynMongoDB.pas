@@ -6502,7 +6502,7 @@ begin
     Bits.hi := BSON_DECIMAL128_HI_INT64POS;
   end else begin
     Bits.lo := -value;
-    Bits.hi := BSON_DECIMAL128_HI_INT64NEG;
+    Bits.hi := QWord(BSON_DECIMAL128_HI_INT64NEG);
   end;
 end;
 
@@ -6519,7 +6519,7 @@ begin
     Bits.hi := BSON_DECIMAL128_HI_INT64POS;
   end else begin
     Bits.lo := -value;
-    Bits.hi := BSON_DECIMAL128_HI_INT64NEG;
+    Bits.hi := QWord(BSON_DECIMAL128_HI_INT64NEG);
   end;
 end;
 
@@ -6548,7 +6548,7 @@ procedure TDecimal128.FromCurr(const value: Currency);
 begin // force exactly 4 decimals
   if value<0 then begin
     Bits.lo := -PInt64(@value)^;
-    Bits.hi := BSON_DECIMAL128_HI_CURRNEG;
+    Bits.hi := QWord(BSON_DECIMAL128_HI_CURRNEG);
   end else begin
     Bits.lo := PInt64(@value)^;
     Bits.hi := BSON_DECIMAL128_HI_CURRPOS;
@@ -6622,11 +6622,11 @@ begin
   if combi shr 3=3 then
     case combi of
     30: begin
-      result := AppendRawUTF8ToBuffer(dest,DECIMAL128_SPECIAL_TEXT[dsvPosInf])-@Buffer;
+      result := AppendRawUTF8ToBuffer(dest,DECIMAL128_SPECIAL_TEXT[dsvPosInf])-PUTF8Char(@Buffer);
       exit;
     end;
     31: begin
-      result := AppendRawUTF8ToBuffer(@Buffer,DECIMAL128_SPECIAL_TEXT[dsvNan])-@Buffer;
+      result := AppendRawUTF8ToBuffer(@Buffer,DECIMAL128_SPECIAL_TEXT[dsvNan])-PUTF8Char(@Buffer);
       exit;
     end;
     else begin
@@ -6710,7 +6710,7 @@ begin
       append(dest,dig,signdig-radixpos);
     end;
   end;
-  result := dest-@Buffer;
+  result := dest-PUTF8Char(@Buffer);
 end;
 
 function TDecimal128.ToText: RawUTF8;
