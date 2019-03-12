@@ -383,7 +383,7 @@ type
         {$ifdef UNIX} // dynamically linked with new 64-bit TZStream
         type
           TZLong = ZipPtrUint;
-          TZCRC = Int64;
+          TZCRC = cardinal;
         const
           libz='z';
           {$linklib libz}
