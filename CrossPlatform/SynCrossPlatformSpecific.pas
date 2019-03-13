@@ -79,6 +79,7 @@ unit SynCrossPlatformSpecific;
       {$ifdef ISDELPHIXE8}     // use new XE8+ System.Net.HttpClient
         {$ifdef ANDROID}
           {$define USEHTTPCLIENT}
+          {.$define USEINDY}    // for debugging Indy within Android
         {$else}
           {$define USEINDY} // HttpClient has still issues with https under iOS
         {$endif ANDROID}
@@ -587,6 +588,7 @@ type
   protected
     fConnection: TIdHTTP;
     fIOHandler: TIdSSLIOHandlerSocketOpenSSL; // here due to NextGen ARC model
+    fLock : TMutex;
   public
     constructor Create(const aParameters: TSQLRestConnectionParams); override;
     procedure URI(var Call: TSQLRestURIParams; const InDataType: string;
@@ -600,6 +602,7 @@ constructor TIndyHttpConnectionClass.Create(
   const aParameters: TSQLRestConnectionParams);
 begin
   inherited;
+  fLock := TMutex.Create;
   fConnection := TIdHTTP.Create(nil);
   fOpaqueConnection := fConnection;
   fConnection.HTTPOptions := fConnection.HTTPOptions+[hoKeepOrigProtocol];
@@ -617,6 +620,7 @@ destructor TIndyHttpConnectionClass.Destroy;
 begin
   fConnection.Free;
   fIOHandler.Free;
+  fLock.Free;
   inherited;
 end;
 
@@ -626,51 +630,56 @@ var InStr, OutStr: TStream;
     OutLen,i: integer;
     Auth: string;
 begin
-  InStr := TMemoryStream.Create;
-  OutStr := TMemoryStream.Create;
+  fLock.Enter;
   try
-    fConnection.Request.RawHeaders.Text := Call.InHead;
-    Auth := fConnection.Request.RawHeaders.Values['Authorization'];
-    if (Auth<>'') and SameText(Copy(Auth,1,6),'Basic ') then begin
-      // see https://synopse.info/forum/viewtopic.php?pid=11761#p11761
-      with TIdDecoderMIME.Create do
-      try
-        Auth := DecodeString(copy(Auth,7,maxInt));
-      finally
-        Free;
+    InStr := TMemoryStream.Create;
+    OutStr := TMemoryStream.Create;
+    try
+      fConnection.Request.RawHeaders.Text := Call.InHead;
+      Auth := fConnection.Request.RawHeaders.Values['Authorization'];
+      if (Auth<>'') and SameText(Copy(Auth,1,6),'Basic ') then begin
+        // see https://synopse.info/forum/viewtopic.php?pid=11761#p11761
+        with TIdDecoderMIME.Create do
+        try
+          Auth := DecodeString(copy(Auth,7,maxInt));
+        finally
+          Free;
+        end;
+        i := Pos(':',Auth);
+        if i>0 then begin
+          fConnection.Request.BasicAuthentication := true;
+          fConnection.Request.Username := copy(Auth,1,i-1);
+          fConnection.Request.Password := Copy(Auth,i+1,maxInt);
+        end;
       end;
-      i := Pos(':',Auth);
-      if i>0 then begin
-        fConnection.Request.BasicAuthentication := true;
-        fConnection.Request.Username := copy(Auth,1,i-1);
-        fConnection.Request.Password := Copy(Auth,i+1,maxInt);
+      if Call.InBody<>nil then begin
+        InStr.Write(Call.InBody[0],length(Call.InBody));
+        InStr.Seek(0,soBeginning);
+        fConnection.Request.Source := InStr;
       end;
-    end;
-    if Call.InBody<>nil then begin
-      InStr.Write(Call.InBody[0],length(Call.InBody));
-      InStr.Seek(0,soBeginning);
-      fConnection.Request.Source := InStr;
-    end;
-    if Call.Verb='GET' then // allow 404 as valid Call.OutStatus
-      fConnection.Get(fURL+Call.Url,OutStr,[HTTP_SUCCESS,HTTP_NOTFOUND]) else
-    if Call.Verb='POST' then
-      fConnection.Post(fURL+Call.Url,InStr,OutStr) else
-    if Call.Verb='PUT' then
-      fConnection.Put(fURL+Call.Url,InStr) else
-    if Call.Verb='DELETE' then
-      fConnection.Delete(fURL+Call.Url) else
-      raise Exception.CreateFmt('Indy does not know method %s',[Call.Verb]);
-    Call.OutStatus := fConnection.Response.ResponseCode;
-    Call.OutHead := fConnection.Response.RawHeaders.Text;
-    OutLen := OutStr.Size;
-    if OutLen>0 then begin
-      SetLength(Call.OutBody,OutLen);
-      OutStr.Seek(0,soBeginning);
-      OutStr.Read(Call.OutBody[0],OutLen);
+      if Call.Verb='GET' then // allow 404 as valid Call.OutStatus
+        fConnection.Get(fURL+Call.Url,OutStr,[HTTP_SUCCESS,HTTP_NOTFOUND]) else
+      if Call.Verb='POST' then
+        fConnection.Post(fURL+Call.Url,InStr,OutStr) else
+      if Call.Verb='PUT' then
+        fConnection.Put(fURL+Call.Url,InStr) else
+      if Call.Verb='DELETE' then
+        fConnection.Delete(fURL+Call.Url) else
+        raise Exception.CreateFmt('Indy does not know method %s',[Call.Verb]);
+      Call.OutStatus := fConnection.Response.ResponseCode;
+      Call.OutHead := fConnection.Response.RawHeaders.Text;
+      OutLen := OutStr.Size;
+      if OutLen>0 then begin
+        SetLength(Call.OutBody,OutLen);
+        OutStr.Seek(0,soBeginning);
+        OutStr.Read(Call.OutBody[0],OutLen);
+      end;
+    finally
+      OutStr.Free;
+      InStr.Free;
     end;
   finally
-    OutStr.Free;
-    InStr.Free;
+    fLock.Leave;
   end;
 end;
 
