@@ -1267,8 +1267,9 @@ procedure SetMainAESPRNG;
 {$endif}
 
 /// low-level function returning some random binary using standard API
-// - will call /dev/urandom under POSIX, and CryptGenRandom API on Windows,
-// and fallback to SynCommons.FillRandom if the system is not supported
+// - will call /dev/urandom or /dev/random under POSIX, and CryptGenRandom API
+// on Windows, and fallback to SynCommons.FillRandom if the system API failed
+// or for padding if more than 32 bytes is retrieved from /dev/urandom
 // - you should not have to call this procedure, but faster and safer TAESPRNG
 procedure FillSystemRandom(Buffer: PByteArray; Len: integer; AllowBlocking: boolean);
 
@@ -13526,10 +13527,9 @@ begin
   if dev>0 then
     try
       i := Len;
-      repeat
-        dec(i,FileRead(dev,Buffer^[Len-i],i));
-      until i<=0;
-      fromos := i=0;
+      if i>32 then
+        i := 32; // up to 256 bits - see "man urandom" Usage paragraph
+      fromos := (FileRead(dev,Buffer[0],i)=i) and (Len<=32); // will XOR up to Len
     finally
       FileClose(dev);
     end;
@@ -13544,8 +13544,8 @@ begin
   if fromos then
     exit;
   i := Len;
-  repeat
-    SynCommons.FillRandom(@tmp,SizeOf(tmp) shr 2); // SynCommons as fallback
+  repeat // call Random32() (=RdRand32 or Lecuyer) as fallback/padding
+    SynCommons.FillRandom(@tmp,SizeOf(tmp) shr 2);
     if i<=SizeOf(tmp) then begin
       XorMemory(@Buffer^[Len-i],@tmp,i);
       break;
@@ -13578,7 +13578,7 @@ begin
   try
     // retrieve some initial entropy from OS
     SetLength(fromos,Len);
-    FillSystemRandom(pointer(fromos),len,true);
+    FillSystemRandom(pointer(fromos),len,{allowblocking=}true);
     if SystemOnly then begin
       result := fromos;
       fromos := '';

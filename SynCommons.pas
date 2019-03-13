@@ -801,7 +801,7 @@ type
     function Init: integer; overload; {$ifdef HASINLINE}inline;{$endif}
     /// initialize a new temporary buffer of a given number of random bytes
     // - will fill the buffer via FillRandom() calls
-    function InitRandom(RandomLen: integer): pointer;
+    function InitRandom(RandomLen: integer; forcegsl: boolean=true): pointer;
     /// initialize a new temporary buffer filled with integer increasing values
     function InitIncreasing(Count: integer; Start: integer=0): PIntegerArray;
     /// initialize a new temporary buffer of a given number of zero bytes
@@ -6539,18 +6539,18 @@ function GUIDToRawUTF8({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} gui
 function GUIDToString({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID): string;
 
 /// fast compute of some 32-bit random value
-// - will use RDRAND Intel x86/x64 opcode if available, or fast gsl_rng_taus2
-// generator by Pierre L'Ecuyer (period is 2^88, i.e. about 10^26)
-// - will fast generate some random-like 32-bit output
+// - will use (slow but) hardware-derivated RDRAND Intel x86/x64 opcode if
+// available, or fast gsl_rng_taus2 generator by Pierre L'Ecuyer (which period
+// is 2^88, i.e. about 10^26) if the CPU doesn't support it
 // - use rather TAESPRNG.Main.FillRandom() for cryptographic-level randomness
 // - thread-safe function: each thread will maintain its own gsl_rng_taus2 table
 function Random32: cardinal; overload;
 
 /// fast compute of some 32-bit random value, with a maximum (excluded) upper value
 // - i.e. returns a value in range [0..max-1]
-// - will use RDRAND Intel x86/x64 opcode if available, or fast gsl_rng_taus2
-// generator by Pierre L'Ecuyer (period is 2^88, i.e. about 10^26)
-// - will fast generate some random-like 32-bit output
+// - will use (slow but) hardware-derivated RDRAND Intel x86/x64 opcode if
+// available, or fast gsl_rng_taus2 generator by Pierre L'Ecuyer (which period
+// is 2^88, i.e. about 10^26) if the CPU doesn't support it
 // - use rather TAESPRNG.Main.FillRandom() for cryptographic-level randomness
 // - thread-safe function: each thread will maintain its own gsl_rng_taus2 table
 function Random32(max: cardinal): cardinal; overload;
@@ -6558,8 +6558,8 @@ function Random32(max: cardinal): cardinal; overload;
 /// fast compute of some 32-bit random value, using the gsl_rng_taus2 generator
 // - plain Random32 may call RDRAND opcode on Intel CPUs, wherease this function
 // will use well documented (and proven) Pierre L'Ecuyer software generator
-// - may be used if you don't want/trust RDRAND, or expect a well defined
-// cross-platform generator
+// - may be used if you don't want/trust RDRAND, if you expect a well defined
+// cross-platform generator, or have higher performance expectations
 // - use rather TAESPRNG.Main.FillRandom() for cryptographic-level randomness
 // - thread-safe function: each thread will maintain its own gsl_rng_taus2 table
 function Random32gsl: cardinal; overload;
@@ -6581,10 +6581,11 @@ procedure Random32Seed(entropy: pointer=nil; entropylen: integer=0);
 // - the destination buffer is expected to be allocated as 32 bit items
 // - use internally crc32c() with some rough entropy source, and Random32
 // gsl_rng_taus2 generator or hardware RDRAND Intel x86/x64 opcode if available
-// (and forcegsl is kept to its default false value)
+// (and ForceGsl is kept to its default false value)
 // - consider using instead the cryptographic secure TAESPRNG.Main.FillRandom()
-// method from the SynCrypto unit
-procedure FillRandom(Dest: PCardinalArray; CardinalCount: integer; forcegsl: boolean=false);
+// method from the SynCrypto unit - in particular, RDRAND could be slow
+// as reported by https://en.wikipedia.org/wiki/RdRand#Performance
+procedure FillRandom(Dest: PCardinalArray; CardinalCount: integer; ForceGsl: boolean=false);
 
 /// compute a random GUID value
 procedure RandomGUID(out result: TGUID); overload;
@@ -19009,11 +19010,11 @@ begin
   len := result;
 end;
 
-function TSynTempBuffer.InitRandom(RandomLen: integer): pointer;
+function TSynTempBuffer.InitRandom(RandomLen: integer; forcegsl: boolean): pointer;
 begin
   Init(nil,RandomLen);
   if RandomLen>0 then
-    FillRandom(buf,(RandomLen shr 2)+1);
+    FillRandom(buf,(RandomLen shr 2)+1,forcegsl);
   result := buf;     
 end;
 
@@ -37807,8 +37808,7 @@ var time, crc: THash128Rec;
 begin
   repeat
     QueryPerformanceCounter(time.Lo);
-    time.i2 := UnixMSTimeUTC;
-    time.i3 := integer(GetCurrentThreadID);
+    time.Hi := UnixMSTimeUTC xor Int64(GetCurrentThreadID);
     crcblock(@crc.b,@time.b);
     crcblock(@crc.b,@ExeVersion.Hash.b);
     if entropy<>nil then
@@ -37867,7 +37867,7 @@ begin
 end;
 
 procedure FillRandom(Dest: PCardinalArray; CardinalCount: integer; forcegsl: boolean);
-var i: integer;
+var i: PtrInt;
     c: cardinal;
     timenow: Int64;
     lecuyer: ^TLecuyer;
@@ -37878,11 +37878,11 @@ begin
   {$endif}
     lecuyer := @_Lecuyer;
   QueryPerformanceCounter(timenow);
-  c := crc32c(ExeVersion.Hash.c3,@timenow,SizeOf(timenow));
+  c := crc32cBy4(ExeVersion.Hash.c0,crc32c(ExeVersion.Hash.c3,@timenow,SizeOf(timenow)));
   {$ifdef CPUINTEL}
   if lecuyer=nil then
     for i := 0 to CardinalCount-1 do begin
-      c := c xor RdRand32 xor crc32ctab[0,(c+cardinal(i)) and 1023];
+      c := crc32cBy4(c,RdRand32);
       Dest^[i] := Dest^[i] xor c;
     end else
   {$endif}

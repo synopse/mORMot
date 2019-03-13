@@ -2663,7 +2663,7 @@ begin
       len := Length(Frame.payload);
       hdr.first := byte(Frame.opcode) or FRAME_FIN;
       if fMaskSentFrames<>0 then begin
-        hdr.mask := Random32;
+        hdr.mask := Random32gsl;
         ProcessMask(pointer(Frame.payload),hdr.mask,len);
       end;
       if len<FRAME_LEN2BYTES then begin
