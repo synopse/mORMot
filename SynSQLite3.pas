@@ -5754,30 +5754,46 @@ end;
 // due to FPC's limitation, all those functions should be declared outside the method
 function xMalloc(size: integer): pointer; cdecl;
 begin
+{$ifdef FPC} // under FPC, MemSize() returns the value expected by xSize()
+  result := GetMem(size); // no overhead needed
+{$else}
   GetMem(result,size+4);
-  PInteger(result)^ := size;
+  PInteger(result)^ := size; // we need to store the size as 4 bytes header
   inc(PInteger(result));
+{$endif FPC}
 end;
 procedure xFree(ptr: pointer); cdecl;
 begin
+{$ifdef FPC}
+  FreeMem(ptr);
+{$else}
   dec(PInteger(ptr));
   FreeMem(ptr);
+{$endif FPC}
 end;
 function xRealloc(ptr: pointer; size: integer): pointer; cdecl;
 begin
+{$ifdef FPC}
+  result := ReAllocMem(ptr,size);
+{$else}
   dec(PInteger(ptr));
   ReallocMem(ptr,size+4);
   PInteger(ptr)^ := size;
   inc(PInteger(ptr));
   result := ptr;
+{$endif FPC}
 end;
 function xSize(ptr: pointer): integer; cdecl;
 begin
+{$ifdef FPC}
+  result := MemSize(ptr);
+{$else}
   if ptr=nil then
     result := 0 else begin
     dec(PInteger(ptr));
     result := PInteger(ptr)^;
   end;
+{$endif FPC}
 end;
 function xRoundup(size: integer): integer; cdecl;
 begin
@@ -5812,10 +5828,11 @@ begin
   except
     res := SQLITE_INTERNAL;
   end;
-  if res<>SQLITE_OK then
+  if res<>SQLITE_OK then begin
     {$ifdef WITHLOG}
-    SynSQLite3Log.Add.Log(sllError,'SQLITE_CONFIG_MALLOC failed as %',[res]) else
+    SynSQLite3Log.Add.Log(sllError,'SQLITE_CONFIG_MALLOC failed as %',[res]);
     {$endif}
+  end else
     fUseInternalMM := true;
 {$endif}
 end;
