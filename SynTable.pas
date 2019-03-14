@@ -8059,8 +8059,8 @@ begin
       end else
       if (c=JSON_SQLDATE_MAGIC) and // handle ':("\uFFF112012-05-04"):' format
          IsIso8601(PUTF8Char(pointer(ParamValue))+3,L) then begin
-        ParamValue := copy(ParamValue,4,L); // return ISO-8601 text
-        ParamType := sptDateTime;           // identified as Date/Time
+        Delete(ParamValue,1,3);   // return only ISO-8601 text
+        ParamType := sptDateTime; // identified as Date/Time
       end;
     end;
   end;
@@ -8120,10 +8120,11 @@ begin
     result := SQL;
     exit;
   end;
-  FastSetString(result,pointer(SQL),length(SQL));
   // compute GenericSQL from SQL, converting :(...): into ?
-  Gen := PUTF8Char(pointer(result))+ppBeg-1; // Gen^ just before :(
-  P := PUTF8Char(pointer(SQL))+ppBeg+1; // P^ just after :(
+  FastSetString(result,pointer(SQL),length(SQL)); // private copy for unescape
+  P := pointer(result); // in-place string unescape (keep SQL untouched)
+  Gen := P+ppBeg-1; // Gen^ just before :(
+  inc(P,ppBeg+1);   // P^ just after :(
   repeat
     Gen^ := '?'; // replace :(...): by ?
     inc(Gen);
