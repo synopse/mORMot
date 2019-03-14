@@ -1361,7 +1361,7 @@ begin
         finally
           MS.Free;
         end;
-        GetAndPrepareStatementRelease(nil, FormatShort('returned % as %',
+        GetAndPrepareStatementRelease(nil, FormatToShort('returned % as %',
           [Plural('row',RowCount),KB(result)]));
       except
         on E: ESQLite3Exception do
@@ -1519,7 +1519,8 @@ begin
           fStatement^.BindBlob(1,BlobData);
         fStatement^.Bind(2,aID);
         repeat until fStatement^.Step<>SQLITE_ROW; // Execute
-        GetAndPrepareStatementRelease(nil,FormatShort('stored % in ID=%',[KB(BlobData),aID]),true);
+        GetAndPrepareStatementRelease(nil,FormatToShort('stored % in ID=%',
+          [KB(BlobData),aID]),true);
         result := true;
       except
         on E: Exception do
@@ -1657,7 +1658,8 @@ begin
           end;
           fStatement^.Bind(length(BlobFields)+1,Value.ID);
           repeat until fStatement^.Step<>SQLITE_ROW; // Execute
-          GetAndPrepareStatementRelease(nil,FormatShort('stored % in ID=%',[KB(size),Value.ID]),true);
+          GetAndPrepareStatementRelease(nil,FormatToShort('stored % in ID=%',
+            [KB(size),Value.ID]),true);
           result := true;
         except
           on E: Exception do

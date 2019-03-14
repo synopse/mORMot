@@ -1630,10 +1630,10 @@ procedure FormatUTF8(const Format: RawUTF8; const Args: array of const;
 // - shortstring allows fast stack allocation, so is perfect for small content
 // - truncate result if the text size exceeds 255 bytes
 procedure FormatShort(const Format: RawUTF8; const Args: array of const;
-  var result: shortstring); overload;
+  var result: shortstring);
 
 /// fast Format() function replacement, for UTF-8 content stored in shortstring
-function FormatShort(const Format: RawUTF8; const Args: array of const): shortstring; overload;
+function FormatToShort(const Format: RawUTF8; const Args: array of const): shortstring;
 
 /// fast Format() function replacement, tuned for small content
 // - use the same single token % (and implementation) than FormatUTF8()
@@ -24264,9 +24264,11 @@ begin
   end;
 end;
 
-function FormatShort(const Format: RawUTF8; const Args: array of const): shortstring;
-begin
-  FormatShort(Format,Args,result);
+function FormatToShort(const Format: RawUTF8; const Args: array of const): shortstring;
+var process: TFormatUTF8;
+begin // Delphi 5 has troubles compiling overloaded FormatShort()
+  process.Parse(Format,Args);
+  result[0] := AnsiChar(process.WriteMax(@result[1],255)-@result[1]);
 end;
 
 procedure FormatShort16(const Format: RawUTF8; const Args: array of const;
