@@ -1873,7 +1873,7 @@ function Pos(const substr, str: RawUTF8): Integer; overload; inline;
 // - without any slow UnicodeString=String->AnsiString conversion for Delphi 2009
 // - only useful if our Enhanced Runtime (or LVCL) library is not installed
 function Int64ToUtf8(Value: Int64): RawUTF8; overload;
-  {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fast RawUTF8 version of IntToStr(), with proper QWord conversion
 procedure UInt64ToUtf8(Value: QWord; var result: RawUTF8);
@@ -2050,6 +2050,7 @@ procedure ExtendedToStr(Value: TSynExtended; Precision: integer; var result: Raw
 
 /// convert a floating-point value to its numerical text equivalency
 function DoubleToStr(Value: Double): RawUTF8;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fast retrieve the position of a given character
 function PosChar(Str: PUTF8Char; Chr: AnsiChar): PUTF8Char;
@@ -20415,9 +20416,12 @@ procedure Int64ToUtf8(Value: Int64; var result: RawUTF8);
 var tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
 begin
+  {$ifdef CPU64}
+  if (Value>=0) and (Value<=high(SmallUInt32UTF8)) then
+  {$else} // Int64Rec gives compiler internal error C4963
   if (PCardinalArray(@Value)^[0]<=high(SmallUInt32UTF8)) and
      (PCardinalArray(@Value)^[1]=0) then
-    // Int64Rec gives compiler internal error C4963
+  {$endif}
     result := SmallUInt32UTF8[Value] else begin
     P := StrInt64(@tmp[23],Value);
     FastSetString(result,P,@tmp[23]-P);
@@ -20428,8 +20432,12 @@ procedure UInt64ToUtf8(Value: QWord; var result: RawUTF8);
 var tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
 begin
+  {$ifdef CPU64}
+  if Value<=high(SmallUInt32UTF8) then
+  {$else} // Int64Rec gives compiler internal error C4963
   if (PCardinalArray(@Value)^[0]<=high(SmallUInt32UTF8)) and
      (PCardinalArray(@Value)^[1]=0) then
+  {$endif}
     result := SmallUInt32UTF8[Value] else begin
     P := StrUInt64(@tmp[23],Value);
     FastSetString(result,P,@tmp[23]-P);
@@ -20485,10 +20493,10 @@ begin
 end;
 
 function VarRecToTempUTF8(const V: TVarRec; var Res: TTempUTF8): integer;
-{$ifndef NOVARIANTS}
 var v64: Int64;
+    {$ifndef NOVARIANTS}
     isString: boolean;
-{$endif}
+    {$endif}
 label smlu32;
 begin
   Res.TempRawUTF8 := nil; // avoid GPF
@@ -23904,16 +23912,8 @@ begin
 end;
 
 function Int64ToUtf8(Value: Int64): RawUTF8; // faster than SysUtils.IntToStr
-var tmp: array[0..23] of AnsiChar;
-    P: PAnsiChar;
 begin
-  if (PCardinalArray(@Value)^[0]<=high(SmallUInt32UTF8)) and
-     (PCardinalArray(@Value)^[1]=0) then
-    // Int64Rec gives compiler internal error C4963
-    result := SmallUInt32UTF8[Value] else begin
-    P := StrInt64(@tmp[23],Value);
-    FastSetString(result,P,@tmp[23]-P);
-  end;
+  Int64ToUtf8(Value,result);
 end;
 
 function Trim(const S: RawUTF8): RawUTF8;
@@ -24049,16 +24049,16 @@ begin
   scientificneeded := false;
   valueabs := abs(Value);
   if Precision<=SINGLE_PRECISION then begin
-    if (valueabs>1E9) or (valueabs<1E-9) then
+    if (valueabs>TSynExtended(1E9)) or (valueabs<TSynExtended(1E-9)) then
       scientificneeded := true;
   end else
   {$ifndef CPU64}
   if Precision>DOUBLE_PRECISION then begin
-    if (valueabs>1E17) or (valueabs<1E-17) then
+    if (valueabs>TSynExtended(1E17)) or (valueabs<TSynExtended(1E-17)) then
       scientificneeded := true;
   end else
   {$endif}
-    if (valueabs>1E14) or (valueabs<1E-14) then
+    if (valueabs>TSynExtended(1E14)) or (valueabs<TSynExtended(1E-14)) then
       scientificneeded := true;
   if scientificneeded then begin
     str(Value,S);
@@ -24116,28 +24116,24 @@ begin
 end;
 
 function ExtendedToStr(Value: TSynExtended; Precision: integer): RawUTF8;
-var tmp: ShortString;
 begin
-  if Value=0 then
-    result := SmallUInt32UTF8[0] else
-    FastSetString(result,@tmp[1],ExtendedToString(tmp,Value,Precision));
+  ExtendedToStr(Value,Precision,result);
 end;
 
 procedure ExtendedToStr(Value: TSynExtended; Precision: integer;
   var result: RawUTF8);
 var tmp: ShortString;
+    i64: Int64;
 begin
-  if Value=0 then
-    result := SmallUInt32UTF8[0] else
+  i64 := Trunc(Value);
+  if Value=i64 then
+    Int64ToUtf8(i64,result) else
     FastSetString(result,@tmp[1],ExtendedToString(tmp,Value,Precision));
 end;
 
 function DoubleToStr(Value: Double): RawUTF8;
-var tmp: ShortString;
 begin
-  if Value=0 then
-    result := SmallUInt32UTF8[0] else
-    FastSetString(result,@tmp[1],ExtendedToString(tmp,Value,DOUBLE_PRECISION));
+  ExtendedToStr(Value,DOUBLE_PRECISION,result);
 end;
 
 function FormatUTF8(const Format: RawUTF8; const Args: array of const): RawUTF8;
@@ -29512,20 +29508,18 @@ begin
   PWord(@result[1])^ := TwoDigitLookupW[Value];
 end;
 
-const
-  DOUBLE_RESOLUTION = 1E-12; // also for TSynExtended (FPC uses 1E-4!)
-
 function SameValue(const A, B: Double; DoublePrec: double): Boolean;
-var AbsA,AbsB: double;
+var AbsA,AbsB,Res: double;
 begin
   if PInt64(@DoublePrec)^=0 then begin // Max(Min(Abs(A),Abs(B))*1E-12,1E-12)
     AbsA := Abs(A);
     AbsB := Abs(B);
+    Res := 1E-12;
     if AbsA<AbsB then
-      DoublePrec := AbsA*DOUBLE_RESOLUTION else
-      DoublePrec := AbsB*DOUBLE_RESOLUTION;
-    if DoublePrec<DOUBLE_RESOLUTION then
-      DoublePrec := DOUBLE_RESOLUTION;
+      DoublePrec := AbsA*Res else
+      DoublePrec := AbsB*Res;
+    if DoublePrec<Res then
+      DoublePrec := Res;
   end;
   if A<B then
     result := (B-A)<=DoublePrec else
@@ -29533,16 +29527,17 @@ begin
 end;
 
 function SameValueFloat(const A, B: TSynExtended; DoublePrec: TSynExtended): Boolean;
-var AbsA,AbsB: TSynExtended;
+var AbsA,AbsB,Res: TSynExtended;
 begin
   if DoublePrec=0 then begin // Max(Min(Abs(A),Abs(B))*1E-12,1E-12)
     AbsA := Abs(A);
     AbsB := Abs(B);
+    Res := 1E-12; // also for TSynExtended (FPC uses 1E-4!)
     if AbsA<AbsB then
-      DoublePrec := AbsA*DOUBLE_RESOLUTION else
-      DoublePrec := AbsB*DOUBLE_RESOLUTION;
-    if DoublePrec<DOUBLE_RESOLUTION then
-      DoublePrec := DOUBLE_RESOLUTION;
+      DoublePrec := AbsA*Res else
+      DoublePrec := AbsB*Res;
+    if DoublePrec<Res then
+      DoublePrec := Res;
   end;
   if A<B then
     result := (B-A)<=DoublePrec else
@@ -37805,16 +37800,16 @@ type
   {$ifdef UNICODE}TLecuyer = record{$else}TLecuyer = object{$endif}
   public
     rs1, rs2, rs3, seedcount: cardinal;
-    procedure Seed(entropy: PByteArray; entropylen: integer);
+    procedure Seed(entropy: PByteArray; entropylen: PtrInt);
     function Next: cardinal;
   end;
 
 threadvar
   _Lecuyer: TLecuyer; // uses only 16 bytes per thread
 
-procedure TLecuyer.Seed(entropy: PByteArray; entropylen: integer);
+procedure TLecuyer.Seed(entropy: PByteArray; entropylen: PtrInt);
 var time, crc: THash128Rec;
-    i: integer;
+    i, j: PtrInt;
 begin
   repeat
     QueryPerformanceCounter(time.Lo);
@@ -37822,11 +37817,20 @@ begin
     crcblock(@crc.b,@time.b);
     crcblock(@crc.b,@ExeVersion.Hash.b);
     if entropy<>nil then
-      for i := 0 to entropylen-1 do
-        crc.b[i and 15] := crc.b[i and 15] xor entropy^[i];
+      for i := 0 to entropylen-1 do begin
+        j := i and 15;
+        crc.b[j] := crc.b[j] xor entropy^[i];
+      end;
     rs1 := rs1 xor crc.c0;
     rs2 := rs2 xor crc.c1;
     rs3 := rs3 xor crc.c2;
+    {$ifdef CPUINTEL}
+    if cfRAND in CpuFeatures then begin // won't hurt e.g. from Random32gsl
+      rs1 := rs1 xor RdRand32;
+      rs2 := rs2 xor RdRand32;
+      rs3 := rs3 xor RdRand32;
+    end;
+    {$endif CPUINTEL}
   until (rs1>1) and (rs2>7) and (rs3>15);
   seedcount := 1;
   for i := 1 to crc.i3 and 15 do
@@ -37879,7 +37883,7 @@ end;
 procedure FillRandom(Dest: PCardinalArray; CardinalCount: integer; forcegsl: boolean);
 var i: PtrInt;
     c: cardinal;
-    timenow: Int64;
+    seed: TQWordRec;
     lecuyer: ^TLecuyer;
 begin
   {$ifdef CPUINTEL}
@@ -37887,12 +37891,12 @@ begin
     lecuyer := nil else
   {$endif}
     lecuyer := @_Lecuyer;
-  QueryPerformanceCounter(timenow);
-  c := crc32cBy4(ExeVersion.Hash.c0,crc32c(ExeVersion.Hash.c3,@timenow,SizeOf(timenow)));
+  QueryPerformanceCounter(PInt64(@seed)^);
+  c := crc32cBy4(seed.L,seed.H);
   {$ifdef CPUINTEL}
   if lecuyer=nil then
     for i := 0 to CardinalCount-1 do begin
-      c := crc32cBy4(c,RdRand32);
+      c := crc32cBy4(c,RdRand32); // won't trust plain Intel values
       Dest^[i] := Dest^[i] xor c;
     end else
   {$endif}
