@@ -5403,7 +5403,7 @@ type
       /// one associated model
       Model: TSQLModel;
       /// the index in the Model.Tables[] array
-      TableIndex: integer;
+      TableIndex: PtrInt;
       /// associated ORM parameters
       Properties: TSQLModelRecordProperties;
     end;
@@ -34602,22 +34602,26 @@ begin
 end;
 
 function TSQLModel.GetTableIndex(aTable: TSQLRecordClass): integer;
-var i: integer;
+var i: PtrInt;
     Props: TSQLRecordProperties;
+    c: PSQLRecordClass;
 begin
   if (self<>nil) and (aTable<>nil) then begin
     Props := PPointer(PtrInt(aTable)+vmtAutoTable)^;
-    if (Props<>nil) and (Props.fModelMax>=0) and (Props.fModelMax<fTablesMax) then
+    if (Props<>nil) and (Props.fModelMax<fTablesMax) then
       // fastest O(1) search in all registered models (if worth it)
       for i := 0 to Props.fModelMax do
-        if Props.fModel[i].Model=self then begin
-          result := Props.fModel[i].TableIndex;
-          exit;
-        end;
+        with Props.fModel[i] do
+          if Model=self then begin
+            result := TableIndex; // almost always loop-free
+            exit;
+          end;
     // manual search e.g. if fModel[] is not yet set
+    c := pointer(Tables);
     for result := 0 to fTablesMax do
-      if Tables[result]=aTable then
-        exit;
+      if c^=aTable then
+        exit else
+        inc(c);
   end;
   result := -1;
 end;

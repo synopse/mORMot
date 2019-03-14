@@ -1630,7 +1630,10 @@ procedure FormatUTF8(const Format: RawUTF8; const Args: array of const;
 // - shortstring allows fast stack allocation, so is perfect for small content
 // - truncate result if the text size exceeds 255 bytes
 procedure FormatShort(const Format: RawUTF8; const Args: array of const;
-  var result: shortstring);
+  var result: shortstring); overload;
+
+/// fast Format() function replacement, for UTF-8 content stored in shortstring
+function FormatShort(const Format: RawUTF8; const Args: array of const): shortstring; overload;
 
 /// fast Format() function replacement, tuned for small content
 // - use the same single token % (and implementation) than FormatUTF8()
@@ -24259,6 +24262,11 @@ begin
     process.Parse(Format,Args);
     result[0] := AnsiChar(process.WriteMax(@result[1],255)-@result[1]);
   end;
+end;
+
+function FormatShort(const Format: RawUTF8; const Args: array of const): shortstring;
+begin
+  FormatShort(Format,Args,result);
 end;
 
 procedure FormatShort16(const Format: RawUTF8; const Args: array of const;

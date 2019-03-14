@@ -796,6 +796,9 @@ function SearchFieldIndex(var Indexes: TSQLFieldIndexDynArray; Field: integer): 
 function FieldIndexToBits(const Index: TSQLFieldIndexDynArray): TSQLFieldBits; overload;
   {$ifdef HASINLINE}inline;{$endif}
   
+/// returns the stored size of a TSQLVar database value
+// - only returns VBlobLen / StrLen(VText) size, 0 otherwise
+function SQLVarLength(const Value: TSQLVar): integer;
 
 {$ifndef NOVARIANTS}
 
@@ -887,8 +890,8 @@ function SQLParamContent(P: PUTF8Char; out ParamType: TSQLParamType; out ParamVa
   out wasNull: boolean): PUTF8Char;
 
 /// this function will extract inlined :(1234): parameters into Types[]/Values[]
-// - will return the generic SQL statement with ? instead of :(1234):
-// - call internaly SQLParamContent() function for inline parameters decoding
+// - will return the generic SQL statement with ? place holders for inlined
+// parameters and setting Values with SQLParamContent() decoded content
 // - will set maxParam=0 in case of no inlined parameters
 // - recognized types are sptInteger, sptFloat, sptDateTime ('\uFFF1...'),
 // sptUTF8Text and sptBlob ('\uFFF0...')
@@ -8146,11 +8149,22 @@ begin
     inc(P,2);
     inc(maxParam);
   until false;
-  // return the correct SQL statement, with params in Values[]
+  // return generic SQL statement, with ? place-holders and params in Values[]
   SetLength(result,Gen-pointer(result));
   inc(maxParam);
 end;
 
+function SQLVarLength(const Value: TSQLVar): integer;
+begin
+  case Value.VType of
+    ftBlob:
+      result := Value.VBlobLen;
+    ftUTF8:
+      result := StrLen(Value.VText); // fast enough for our purpose
+    else
+      result := 0; // simple/ordinal values, or ftNull
+  end;
+end;
 
 {$ifndef NOVARIANTS}
 
