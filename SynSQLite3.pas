@@ -5743,58 +5743,75 @@ constructor TSQLite3Library.Create;
 var V: PUTF8Char;
 begin
   if Assigned(libversion) then begin
-    V := libversion;        // convert into e.g. 3008003001
+    V := libversion;
     fVersionText := RawUTF8(V);
     fVersionNumber := GetNextItemCardinal(V,'.')*1000000000+
       GetNextItemCardinal(V,'.')*1000000+GetNextItemCardinal(V,'.')*1000+
-      GetNextItemCardinal(V,'.');
+      GetNextItemCardinal(V,'.'); // convert into e.g. 3008003001
   end;
 end;
 
-// due to FPC's limitation, all those functions should be declared outside the method
+{$ifndef DELPHI5OROLDER}
+
+{$ifdef FPC} // under FPC, MemSize() returns the value expected by xSize()
+
 function xMalloc(size: integer): pointer; cdecl;
 begin
-{$ifdef FPC} // under FPC, MemSize() returns the value expected by xSize()
-  result := GetMem(size); // no overhead needed
-{$else}
-  GetMem(result,size+4);
-  PInteger(result)^ := size; // we need to store the size as 4 bytes header
-  inc(PInteger(result));
-{$endif FPC}
+  result := GetMem(size);
 end;
+
 procedure xFree(ptr: pointer); cdecl;
 begin
-{$ifdef FPC}
   FreeMem(ptr);
-{$else}
-  dec(PInteger(ptr));
-  FreeMem(ptr);
-{$endif FPC}
 end;
+
 function xRealloc(ptr: pointer; size: integer): pointer; cdecl;
 begin
-{$ifdef FPC}
   result := ReAllocMem(ptr,size);
-{$else}
+end;
+
+function xSize(ptr: pointer): integer; cdecl;
+begin
+  result := MemSize(ptr);
+end;
+
+{$else} // under Delphi, we need to store the size as 4 bytes header for xSize()
+
+function xMalloc(size: integer): pointer; cdecl;
+begin
+  GetMem(result,size+4);
+  PInteger(result)^ := size;
+  inc(PInteger(result));
+end;
+
+procedure xFree(ptr: pointer); cdecl;
+begin
+  dec(PInteger(ptr));
+  FreeMem(ptr);
+end;
+
+function xRealloc(ptr: pointer; size: integer): pointer; cdecl;
+begin
   dec(PInteger(ptr));
   ReallocMem(ptr,size+4);
   PInteger(ptr)^ := size;
   inc(PInteger(ptr));
   result := ptr;
-{$endif FPC}
 end;
+
 function xSize(ptr: pointer): integer; cdecl;
 begin
-{$ifdef FPC}
-  result := MemSize(ptr);
-{$else}
   if ptr=nil then
     result := 0 else begin
     dec(PInteger(ptr));
     result := PInteger(ptr)^;
   end;
-{$endif FPC}
 end;
+
+{$endif FPC}
+
+{$endif DELPHI5OROLDER}
+
 function xRoundup(size: integer): integer; cdecl;
 begin
   result := size;
@@ -5808,8 +5825,10 @@ begin
 end;
 
 procedure TSQLite3Library.ForceToUseSharedMemoryManager;
-{$ifdef DELPHI5OROLDER} begin // varargs attribute was unknown under Delphi 5
+{$ifdef DELPHI5OROLDER}
+begin // varargs attribute was unsupported on Delphi 5
 {$else}
+// due to FPC's linker limitation, all wrapper functions should be defined outside
 var mem: TSQLite3MemMethods;
     res: integer;
 begin
@@ -5834,7 +5853,7 @@ begin
     {$endif}
   end else
     fUseInternalMM := true;
-{$endif}
+{$endif DELPHI5OROLDER}
 end;
 
 function TSQLite3Library.GetVersion: RawUTF8;

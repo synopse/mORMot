@@ -81,12 +81,15 @@ procedure DeleteCriticalSection(var cs : TRTLCriticalSection); inline;
 function getpagesize: Integer; cdecl; external 'c';
 
 /// compatibility function, wrapping Win32 API high resolution timer
+// - returns nanoseconds resolution, calling e.g. CLOCK_MONOTONIC on Linux/BSD
 procedure QueryPerformanceCounter(out Value: Int64);
 
 /// slightly faster than QueryPerformanceCounter() div 1000 - but not for Windows
+// - returns microseconds resolution, calling e.g. CLOCK_MONOTONIC on Linux/BSD
 procedure QueryPerformanceMicroSeconds(out Value: Int64); inline;
 
 /// compatibility function, wrapping Win32 API high resolution timer
+// - hardcoded to 1e9 for clock_gettime() nanoseconds resolution on Linux/BSD
 function QueryPerformanceFrequency(out Value: Int64): boolean;
 
 /// compatibility function, wrapping Win32 API file position change
@@ -109,13 +112,16 @@ function GetLastError: longint; inline;
 procedure SetLastError(error: longint); inline;
 
 /// compatibility function, wrapping Win32 API text comparison
+// - somewhat slow by using two temporary WideString - but seldom called
 function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pwidechar;
   cchCount1: longint; lpString2: Pwidechar; cchCount2: longint): longint;
 
 /// returns the current UTC time
+// - will convert from clock_gettime(CLOCK_REALTIME_COARSE) if available
 function GetNowUTC: TDateTime;
 
 /// returns the current UTC time, as Unix Epoch seconds
+// - will call clock_gettime(CLOCK_REALTIME_COARSE) if available
 function GetUnixUTC: Int64;
 
 /// returns the current UTC time, as Unix Epoch milliseconds
@@ -123,6 +129,7 @@ function GetUnixUTC: Int64;
 function GetUnixMSUTC: Int64;
 
 /// returns the current UTC time as TSystemTime
+// - will convert from clock_gettime(CLOCK_REALTIME_COARSE) if available
 procedure GetNowUTCSystem(out result: TSystemTime);
 
 var
@@ -162,15 +169,17 @@ var
 
 /// compatibility function, to be implemented according to the running OS
 // - expect more or less the same result as the homonymous Win32 API function
+// - will call clock_gettime(CLOCK_MONOTONIC_COARSE) if available
 function GetTickCount64: Int64; inline;
 
 /// compatibility function, to be implemented according to the running OS
 // - expect more or less the same result as the homonymous Win32 API function
+// - will call clock_gettime(CLOCK_MONOTONIC_COARSE) if available
 function GetTickCount: cardinal; inline;
 
 /// similar to Windows sleep() API call, to be truly cross-platform
 // - it should have a millisecond resolution, and handle ms=0 as a switch to
-// another pending thread, i.e. call sched_yield() API
+// another pending thread, i.e. ThreadSwitch/call sched_yield API
 procedure SleepHiRes(ms: cardinal); inline;
 
 
@@ -276,7 +285,7 @@ function mach_timebase_info(var TimebaseInfoData: TTimebaseInfoData): Integer;
 var
   mach_timeinfo: TTimebaseInfoData;
   mach_timecoeff: double;
-  mach_timenanosecond: boolean;
+  mach_timenanosecond: boolean; // very likely to be TRUE on Intel CPUs
 
 procedure QueryPerformanceCounter(out Value: Int64);
 begin // returns time in nano second resolution
@@ -295,7 +304,7 @@ begin
   if mach_timenanosecond then
     Value := mach_absolute_time div C_THOUSAND else begin
     QueryPerformanceCounter(Value);
-    Value := Value div C_THOUSAND;
+    Value := Value div C_THOUSAND; // ns to us
   end;
 end;
 
@@ -304,7 +313,7 @@ begin
   if mach_timenanosecond then
     result := mach_absolute_time else
     QueryPerformanceCounter(result);
-  result := result div C_MILLION; // 1 millisecond = 1e6 nanoseconds
+  result := result div C_MILLION; // ns to ms
 end;
 
 function GetUnixUTC: Int64;
@@ -431,7 +440,7 @@ end;
 function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pwidechar;
   cchCount1: longint; lpString2: Pwidechar; cchCount2: longint): longint;
 var W1,W2: WideString;
-begin // not inlined to avoid stack unicodestring allocation
+begin // not inlined to avoid try..finally WideString protection
   W1 := lpString1;
   W2 := lpString2;
   if dwCmpFlags and NORM_IGNORECASE<>0 then
@@ -451,7 +460,9 @@ end;
 
 procedure SleepHiRes(ms: cardinal);
 begin
-  SysUtils.Sleep(ms);
+  if ms=0 then
+    ThreadSwitch else
+    SysUtils.Sleep(ms);
 end;
 
 procedure GetKernelRevision;
