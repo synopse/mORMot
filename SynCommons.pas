@@ -1873,7 +1873,7 @@ function Pos(const substr, str: RawUTF8): Integer; overload; inline;
 // - without any slow UnicodeString=String->AnsiString conversion for Delphi 2009
 // - only useful if our Enhanced Runtime (or LVCL) library is not installed
 function Int64ToUtf8(Value: Int64): RawUTF8; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// fast RawUTF8 version of IntToStr(), with proper QWord conversion
 procedure UInt64ToUtf8(Value: QWord; var result: RawUTF8);
@@ -20493,10 +20493,10 @@ begin
 end;
 
 function VarRecToTempUTF8(const V: TVarRec; var Res: TTempUTF8): integer;
+{$ifndef NOVARIANTS}
 var v64: Int64;
-    {$ifndef NOVARIANTS}
     isString: boolean;
-    {$endif}
+{$endif}
 label smlu32;
 begin
   Res.TempRawUTF8 := nil; // avoid GPF
@@ -24040,6 +24040,14 @@ function ExtendedToString(var S: ShortString; Value: TSynExtended;
 {$ifdef EXTENDEDTOSTRING_USESTR}
 var scientificneeded: boolean;
     valueabs: TSynExtended;
+const SINGLE_HI: TSynExtended = 1E9; // for proper Delphi 5 compilation
+      SINGLE_LO: TSynExtended = 1E-9;
+      DOUBLE_HI: TSynExtended = 1E14;
+      DOUBLE_LO: TSynExtended = 1E-14;
+      {$ifndef CPU64}
+      EXT_HI: TSynExtended = 1E17;
+      EXT_LO: TSynExtended = 1E-17;
+      {$endif}
 begin
   if Value=0 then begin
     s[1] := '0';
@@ -24049,16 +24057,16 @@ begin
   scientificneeded := false;
   valueabs := abs(Value);
   if Precision<=SINGLE_PRECISION then begin
-    if (valueabs>TSynExtended(1E9)) or (valueabs<TSynExtended(1E-9)) then
+    if (valueabs>SINGLE_HI) or (valueabs<SINGLE_LO) then
       scientificneeded := true;
   end else
   {$ifndef CPU64}
   if Precision>DOUBLE_PRECISION then begin
-    if (valueabs>TSynExtended(1E17)) or (valueabs<TSynExtended(1E-17)) then
+    if (valueabs>EXT_HI) or (valueabs<EXT_LO) then
       scientificneeded := true;
   end else
   {$endif}
-    if (valueabs>TSynExtended(1E14)) or (valueabs<TSynExtended(1E-14)) then
+    if (valueabs>DOUBLE_HI) or (valueabs<DOUBLE_LO) then
       scientificneeded := true;
   if scientificneeded then begin
     str(Value,S);
