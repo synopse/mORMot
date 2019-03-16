@@ -6795,6 +6795,8 @@ function DynArraySave(var Value; TypeInfo: pointer): RawByteString;
 // - Value shall be set to the target dynamic array field
 // - is just a wrapper around TDynArray.LoadFromJSON(), creating a temporary
 // TDynArray wrapper on the stack
+// - return a pointer at the end of the data read from JSON, nil in case
+// of an invalid input buffer
 // - to be used e.g. for custom record JSON unserialization, within a
 // TDynArrayJSONCustomReader callback
 // - warning: the JSON buffer will be modified in-place during process - use
@@ -6990,13 +6992,10 @@ function HashByte(const Elem; Hasher: THasher): cardinal;
 /// hash one Word value - simply return the value ignore Hasher() parameter
 function HashWord(const Elem; Hasher: THasher): cardinal;
 
-/// hash one Integer value - simply return the value ignore Hasher() parameter
+/// hash one Integer/cardinal value - simply return the value ignore Hasher() parameter
 function HashInteger(const Elem; Hasher: THasher): cardinal;
 
-/// hash one Cardinal value - simply return the value ignore Hasher() parameter
-function HashCardinal(const Elem; Hasher: THasher): cardinal;
-
-/// hash one Int64 value with the suppplied Hasher() function
+/// hash one Int64/Qword value with the suppplied Hasher() function
 function HashInt64(const Elem; Hasher: THasher): cardinal;
 
 /// hash one THash128 value with the suppplied Hasher() function
@@ -7042,7 +7041,7 @@ var
   // - not to be used as such, but e.g. when inlining TDynArray methods
   DYNARRAY_HASHFIRSTFIELD: array[boolean,TDynArrayKind] of TDynArrayHashOne = (
     (nil, HashByte, HashByte, HashWord, HashInteger,
-    HashCardinal, HashCardinal, HashInt64, HashInt64, HashInt64,
+    HashInteger, HashInteger, HashInt64, HashInt64, HashInt64,
     HashInt64, HashInt64, HashInt64, HashInt64,
     HashAnsiString, HashAnsiString,
     {$ifdef UNICODE}HashUnicodeString{$else}HashAnsiString{$endif},
@@ -7050,7 +7049,7 @@ var
     Hash256, Hash512, HashPointer,
     {$ifndef NOVARIANTS}HashVariant,{$endif} nil),
     (nil, HashByte, HashByte, HashWord, HashInteger,
-    HashCardinal, HashCardinal, HashInt64, HashInt64, HashInt64,
+    HashInteger, HashInteger, HashInt64, HashInt64, HashInt64,
     HashInt64, HashInt64, HashInt64, HashInt64,
     HashAnsiStringI, HashAnsiStringI,
     {$ifdef UNICODE}HashUnicodeStringI{$else}HashAnsiStringI{$endif},
@@ -19609,7 +19608,7 @@ end;
 
 procedure ShortStringToAnsi7String(const source: shortstring; var result: RawUTF8);
 begin
-  SetString(result,PAnsiChar(@source[1]),ord(source[0]));
+  FastSetString(result,@source[1],ord(source[0]));
 end;
 
 procedure UTF8ToShortString(var dest: shortstring; source: PUTF8Char);
@@ -22169,6 +22168,23 @@ asm // eax=aTypeInfo edx=aIndex
 end;
 {$endif}
 
+{$ifdef PUREPASCAL} // for proper inlining
+function IdemPropNameUSameLen(P1,P2: PUTF8Char; P1P2Len: PtrInt): boolean;
+var i,j: PtrInt;
+begin
+  result := false;
+  j := 0;
+  for i := 1 to P1P2Len shr 2 do
+    if (PCardinalArray(P1)[j] xor PCardinalArray(P2)[j]) and $dfdfdfdf<>0 then
+      exit else
+      inc(j);
+  for i := j*4 to P1P2Len-1 do
+    if (ord(P1[i]) xor ord(P2[i])) and $df<>0 then
+      exit;
+  result := true;
+end;
+{$endif PUREPASCAL}
+
 function FindShortStringListExact(List: PShortString; MaxValue: integer;
   aValue: PUTF8Char; aValueLen: integer): integer;
 var PLen: integer;
@@ -24479,14 +24495,14 @@ begin
         while (P[w]>' ') and (P+w<=PEnd) do inc(w);
         if F^='s' then
           SetString(PShortString(values[v])^,PAnsiChar(P),w) else
-          SetString(PRawUTF8(values[v])^,PAnsiChar(P),w);
+          FastSetString(PRawUTF8(values[v])^,P,w);
         inc(P,w);
         while (P^<=' ') and (P^<>#0) and (P<=PEnd) do inc(P);
       end;
       'L': begin
         w := 0;
         while not(P[w] in [#0,#10,#13]) and (P+w<=PEnd) do inc(w);
-        SetString(PRawUTF8(values[v])^,PAnsiChar(P),w);
+        FastSetString(PRawUTF8(values[v])^,P,w);
         inc(P,w);
       end;
       '%': goto next;
@@ -24907,21 +24923,6 @@ begin
   if length(P2)=L then
     result := IdemPropNameUSameLen(pointer(P1),pointer(P2),L) else
     result := false;
-end;
-
-function IdemPropNameUSameLen(P1,P2: PUTF8Char; P1P2Len: PtrInt): boolean;
-var i,j: PtrInt;
-begin
-  result := false;
-  j := 0;
-  for i := 1 to P1P2Len shr 2 do
-    if (PCardinalArray(P1)[j] xor PCardinalArray(P2)[j]) and $dfdfdfdf<>0 then
-      exit else
-      inc(j);
-  for i := j*4 to P1P2Len-1 do
-    if (ord(P1[i]) xor ord(P2[i])) and $df<>0 then
-      exit;
-  result := true;
 end;
 
 function StrIComp(Str1, Str2: pointer): PtrInt;
@@ -50642,11 +50643,6 @@ end;
 function HashInteger(const Elem; Hasher: THasher): cardinal;
 begin
   result := Hasher(0,@Elem,SizeOf(integer));
-end;
-
-function HashCardinal(const Elem; Hasher: THasher): cardinal;
-begin
-  result := Hasher(0,@Elem,SizeOf(cardinal));
 end;
 
 function HashInt64(const Elem; Hasher: THasher): cardinal;

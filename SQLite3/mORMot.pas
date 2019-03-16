@@ -8624,9 +8624,10 @@ type
     /// get the Field indexes of several Field names
     // - could be used to speed-up field access in a TSQLTable loop, avoiding
     // a FieldIndex(aFieldName) lookup for each value
-    // - return -1 in FieldIndexes[]^ if not found, index (0..FieldCount-1) if found
-    procedure FieldIndex(const FieldNames: array of RawUTF8;
-      const FieldIndexes: array of PInteger); overload;
+    // - returns the number of matching Field names
+    // - set -1 in FieldIndexes[]^ if not found, index (0..FieldCount-1) if found
+    function FieldIndex(const FieldNames: array of RawUTF8;
+      const FieldIndexes: array of PInteger): integer; overload;
     /// get the Field indexes of several Field names
     // - raise an ESQLTableException if not found
     // - set FieldIndexes[]^ to the index (0..FieldCount-1) if found
@@ -25222,10 +25223,11 @@ begin
     raise ESQLTableException.CreateUTF8('%.FieldIndexExisting("%")',[self,FieldName]);
 end;
 
-procedure TSQLTable.FieldIndex(const FieldNames: array of RawUTF8;
-  const FieldIndexes: array of PInteger);
-var i: integer;
+function TSQLTable.FieldIndex(const FieldNames: array of RawUTF8;
+  const FieldIndexes: array of PInteger): integer;
+var i: PtrInt;
 begin
+  result := 0;
   if high(FieldNames)<0 then
     exit;
   if high(FieldNames)<>high(FieldIndexes) then
@@ -25233,13 +25235,16 @@ begin
   for i := 0 to high(FieldNames) do
     if FieldIndexes[i]=nil then
       raise ESQLTableException.CreateUTF8(
-        '%.FieldIndex() FieldIndexes["%"]=nil',[self,FieldNames[i]]) else
+        '%.FieldIndex() FieldIndexes["%"]=nil',[self,FieldNames[i]]) else begin
       FieldIndexes[i]^ := FieldIndex(pointer(FieldNames[i]));
+      if FieldIndexes[i]^>=0 then
+        inc(result);
+    end;
 end;
 
 procedure TSQLTable.FieldIndexExisting(const FieldNames: array of RawUTF8;
   const FieldIndexes: array of PInteger);
-var i: integer;
+var i: PtrInt;
 begin
   if high(FieldNames)<0 then
     exit;
