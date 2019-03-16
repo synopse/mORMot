@@ -22370,7 +22370,7 @@ begin
   varShortInt: Value := VShortInt;
   varWord:     Value := VWord;
   varLongWord:
-    if (VLongWord>=cardinal(Low(integer))) and (VLongWord<=cardinal(High(integer))) then
+    if VLongWord<=cardinal(High(integer)) then
       Value := VLongWord else begin
       result := false;
       exit;
@@ -46608,7 +46608,7 @@ begin
   found := GetVarData(aName,aSortedCompare);
   if found=nil then
     result := false else
-    result := VariantToInteger(PVariant(found)^,aValue)
+    result := VariantToInteger(PVariant(found)^,aValue);
 end;
 
 function TDocVariantData.GetAsInt64(const aName: RawUTF8; out aValue: Int64;
