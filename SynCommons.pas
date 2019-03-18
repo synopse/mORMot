@@ -2006,6 +2006,10 @@ function CompareFloat(const A, B: double): integer;
 function CompareInt64(const A, B: Int64): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// a comparison function for sorting 64-bit floating point values
+function CompareCardinal(const A, B: cardinal): integer;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// compute the sum of values, using a running compensation for lost low-order bits
 // - a naive "Sum := Sum + Data" will be restricted to 53 bits of resolution,
 // so will eventually result in an incorrect number
@@ -4801,7 +4805,11 @@ type
     /// delete one item inside the dynamic array
     // - the deleted element is finalized if necessary
     // - this method will recognize T*ObjArray types and free all instances
-    procedure Delete(aIndex: PtrInt);
+    procedure Delete(aIndex: PtrInt); overload;
+    /// delete one or several items inside the dynamic array
+    // - the deleted elements are finalized if necessary
+    // - this method will recognize T*ObjArray types and free all instances
+    procedure Delete(aIndex, aCount: PtrInt); overload;
     /// search for an element value inside the dynamic array
     // - return the index found (0..Count-1), or -1 if Elem was not found
     // - will search for all properties content of the eLement: TList.IndexOf()
@@ -29571,6 +29579,15 @@ begin
     result := 0;
 end;
 
+function CompareCardinal(const A, B: cardinal): integer;
+begin
+  if A<B then
+    result := -1 else
+  if A>B then
+    result := 1 else
+    result := 0;
+end;
+
 procedure KahanSum(const Data: double; var Sum, Carry: double);
 var y, t: double;
 begin
@@ -48342,6 +48359,41 @@ begin
       FillcharFast(P[len],ElemSize,0);
   end;
   SetCount(n);
+end;
+
+procedure TDynArray.Delete(aIndex, aCount: PtrInt);
+var n, len, i: PtrInt;
+    P: PAnsiChar;
+    zerolast: boolean;
+begin
+  if (fValue=nil) or (aCount<=1) then begin
+    if aCount=1 then
+      Delete(aIndex);
+    exit;
+  end;
+  n := GetCount;
+  if PtrUInt(aIndex)>=PtrUInt(n) then
+    exit; // out of range
+  if aIndex+aCount>=n then
+    aCount := n-aIndex; // avoid overflow
+  P := pointer(PtrUInt(fValue^)+PtrUInt(aIndex)*ElemSize);
+  if ElemType<>nil then begin
+    {$ifdef FPC}FPCFinalizeArray{$else}_FinalizeArray{$endif}(P,ElemType,aCount);
+    zerolast := true;
+  end else
+    if (fIsObjArray=oaTrue) or ((fIsObjArray=oaUnknown) and ComputeIsObjArray) then begin
+      for i := 0 to aCount-1 do
+        PObjectArray(P)^[i].Free;
+      zerolast := true;
+    end else
+    zerolast := false;
+  if n-1>aIndex then begin
+    len := PtrUInt(n-1-aIndex)*ElemSize*aCount;
+    MoveFast(P[ElemSize],P[0],len);
+    if zerolast then // avoid GPF
+      FillcharFast(P[len],ElemSize,0);
+  end;
+  SetCount(n-aCount);
 end;
 
 function TDynArray.ElemPtr(index: PtrInt): pointer;
