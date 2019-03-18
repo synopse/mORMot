@@ -1374,6 +1374,14 @@ type
   // - used in mORMot.pas unit e.g. by TDocVariantData.SortByValue
   TVariantCompare = function(const V1,V2: variant): PtrInt;
 
+/// TVariantCompare-compatible case-sensitive comparison function
+// - just a wrapper around SortDynArrayVariantComp(caseInsensitive=false)
+function VariantCompare(const V1,V2: variant): PtrInt;
+
+/// TVariantCompare-compatible case-insensitive comparison function
+// - just a wrapper around SortDynArrayVariantComp(caseInsensitive=true)
+function VariantCompareI(const V1,V2: variant): PtrInt;
+
 /// convert any Variant into UTF-8 encoded String
 // - use VariantSaveJSON() instead if you need a conversion to JSON with
 // custom parameters
@@ -15255,8 +15263,13 @@ type
     // methods for much faster O(log(n)) binary search
     procedure SortByName(Compare: TUTF8Compare=nil);
     /// sort the document object values by value
-    // - do nothing if the document is not a dvObject
-    procedure SortByValue(Compare: TVariantCompare);
+    // - work for both dvObject and dvArray documents
+    // - will sort by UTF-8 text (VariantCompare) if no custom aCompare is supplied
+    procedure SortByValue(Compare: TVariantCompare = nil);
+    /// sort the document array values by a field of some stored objet values
+    // - do nothing if the document is not a dvArray, or if the items are no dvObject
+    // - will sort by UTF-8 text (VariantCompare) if no custom aCompare is supplied
+    procedure SortArrayByField(const aItemPropName: RawUTF8; aCompare: TVariantCompare=nil);
     /// reverse the order of the document object or array items
     procedure Reverse;
     /// create a TDocVariant object, from a selection of properties of this
@@ -21379,7 +21392,7 @@ end;
 {$endif}
 
 procedure Exchg(P1,P2: PAnsiChar; count: PtrInt);
-{$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif}
 var i, c: PtrInt;
     u: AnsiChar;
 begin
@@ -46257,7 +46270,7 @@ begin
   v1^ := v;
 end;
 
-procedure ExchgNames(n1,n2: PPointer);
+procedure ExchgNames(n1,n2: PPointer); {$ifdef HASINLINE}inline;{$endif}
 var n: pointer;
 begin
   n := n2^;
@@ -46302,8 +46315,75 @@ end;
 
 procedure TDocVariantData.SortByValue(Compare: TVariantCompare);
 begin
-  if VCount>0 then
-    QuickSortDocVariantValues(self,0,VCount-1,Compare);
+  if VCount<=0 then
+    exit;
+  if not Assigned(Compare) then
+    Compare := VariantCompare;
+  QuickSortDocVariantValues(self,0,VCount-1,Compare);
+end;
+
+type
+  {$ifdef UNICODE}TQuickSortDocVariantValuesByField = record
+  {$else}TQuickSortDocVariantValuesByField = object{$endif}
+    Lookup: array of PVariant;
+    Compare: TVariantCompare;
+    Doc: PDocVariantData;
+    procedure Sort(L, R: PtrInt);
+  end;
+
+procedure TQuickSortDocVariantValuesByField.Sort(L, R: PtrInt);
+var I, J, P: PtrInt;
+    pivot: PVariant;
+begin
+  if L<R then
+  repeat
+    I := L; J := R;
+    P := (L + R) shr 1;
+    repeat
+      pivot := Lookup[P];
+      while Compare(Lookup[I]^,pivot^)<0 do Inc(I);
+      while Compare(Lookup[J]^,pivot^)>0 do Dec(J);
+      if I <= J then begin
+        if I <> J then begin
+          if Doc.VName<>nil then
+            ExchgNames(@Doc.VName[I],@Doc.VName[J]);
+          ExchgValues(@Doc.VValue[I],@Doc.VValue[J]);
+          pivot := Lookup[I];
+          Lookup[I] := Lookup[J];
+          Lookup[J] := pivot;
+        end;
+        if P = I then P := J else if P = J then P := I;
+        inc(I); dec(J);
+      end;
+    until I > J;
+    if J - L < R - I then begin // use recursion only for smaller range
+      if L < J then
+        Sort(L,J);
+      L := I;
+    end else begin
+      if I < R then
+        Sort(I,R);
+      R := J;
+    end;
+  until L >= R;
+end;
+
+procedure TDocVariantData.SortArrayByField(const aItemPropName: RawUTF8;
+  aCompare: TVariantCompare);
+var
+  QS: TQuickSortDocVariantValuesByField;
+  row: PtrInt;
+begin
+  if (VCount<=0) or (aItemPropName='') or not (dvoIsArray in VOptions) then
+    exit;
+  if not Assigned(aCompare) then
+    QS.Compare := VariantCompare else
+    QS.Compare := aCompare;
+  SetLength(QS.Lookup,VCount);
+  for row := 0 to VCount-1 do // resolve GetPVariantByName(aIdemPropName) once
+    QS.Lookup[row] := _Safe(VValue[row]).GetPVariantByName(aItemPropName);
+  QS.Doc := @self;
+  QS.Sort(0,VCount-1);
 end;
 
 procedure TDocVariantData.Reverse;
@@ -48111,6 +48191,16 @@ end;
 
 {$ifndef NOVARIANTS}
 
+function VariantCompare(const V1,V2: variant): PtrInt;
+begin
+  result := SortDynArrayVariantComp(TVarData(V1), TVarData(V2), false);
+end;
+
+function VariantCompareI(const V1,V2: variant): PtrInt;
+begin
+  result := SortDynArrayVariantComp(TVarData(V1), TVarData(V2), true);
+end;
+
 function SortDynArrayVariantCompareAsString(const A,B: variant): integer;
 var UA,UB: RawUTF8;
     wasString: boolean;
@@ -48179,6 +48269,8 @@ begin
         result := ICMP[VarCompareValue(variant(A),variant(B))] else
         result := CMP[caseInsensitive](variant(A),variant(B));
     end else
+  if (A.VType<=varNull) or (B.VType<=varNull) then
+    result := ord(A.VType>varNull)-ord(B.VType>varNull) else
   if (A.VType and VTYPE_STATIC=0) and
      (B.VType and VTYPE_STATIC=0) then
     result := ICMP[VarCompareValue(variant(A),variant(B))] else
@@ -48388,7 +48480,7 @@ begin
     end else
     zerolast := false;
   if n-1>aIndex then begin
-    len := PtrUInt(n-1-aIndex)*ElemSize*aCount;
+    len := PtrUInt(n-1-aIndex)*PtrUInt(aCount)*ElemSize;
     MoveFast(P[ElemSize],P[0],len);
     if zerolast then // avoid GPF
       FillcharFast(P[len],ElemSize,0);
