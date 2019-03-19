@@ -3568,8 +3568,11 @@ type
   /// information about an ordinal Int64 published property
   TSQLPropInfoRTTIInt64 = class(TSQLPropInfoRTTI)
   protected
+    fIsQWord: boolean;
     procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: TObject); override;
   public
+    constructor Create(aPropInfo: PPropInfo; aPropIndex: integer;
+      aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions); override;
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
       var result: RawUTF8; wasSQLString: PBoolean); override;
@@ -22319,11 +22322,17 @@ end;
 
 { TSQLPropInfoRTTIInt64 }
 
+constructor TSQLPropInfoRTTIInt64.Create(aPropInfo: PPropInfo; aPropIndex: integer;
+  aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions);
+begin
+  inherited Create(aPropInfo,aPropIndex,aSQLFieldType,aOptions);
+  fIsQWord := aPropInfo.PropType^.IsQword;
+end;
+
 procedure TSQLPropInfoRTTIInt64.CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo;
   Dest: TObject);
 begin
-  TSQLPropInfoRTTIInt64(DestInfo).fPropInfo.SetInt64Prop(Dest,
-    fPropInfo.GetInt64Prop(Source));
+  TSQLPropInfoRTTIInt64(DestInfo).fPropInfo.SetInt64Prop(Dest,fPropInfo.GetInt64Prop(Source));
 end;
 
 procedure TSQLPropInfoRTTIInt64.GetBinary(Instance: TObject;
@@ -22335,41 +22344,58 @@ begin
 end;
 
 function TSQLPropInfoRTTIInt64.GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal;
-var I64: Int64;
+var V64: TQWordRec;
 begin
   if fGetterIsFieldPropOffset<>0 then
-    I64 := PInt64(PtrUInt(Instance)+fGetterIsFieldPropOffset)^ else
-    I64 := fPropInfo.GetInt64Prop(Instance);
-  result := crc32c(0,@I64,SizeOf(I64)); // better hash distribution using crc32c
+    V64.V := PInt64(PtrUInt(Instance)+fGetterIsFieldPropOffset)^ else
+    V64.V := fPropInfo.GetInt64Prop(Instance);
+  result := crc32cBy4(V64.L,V64.H); // better hash distribution using crc32c
 end;
 
 procedure TSQLPropInfoRTTIInt64.GetJSONValues(Instance: TObject; W: TJSONSerializer);
+var V64: Int64;
 begin
   if fGetterIsFieldPropOffset<>0 then
-    W.Add(PInt64(PtrUInt(Instance)+fGetterIsFieldPropOffset)^) else
-    W.Add(fPropInfo.GetInt64Prop(Instance));
+    V64 := PInt64(PtrUInt(Instance)+fGetterIsFieldPropOffset)^ else
+    V64 := fPropInfo.GetInt64Prop(Instance);
+  if fIsQWord then
+    W.AddQ(V64) else
+    W.Add(V64);
 end;
 
 procedure TSQLPropInfoRTTIInt64.GetValueVar(Instance: TObject;
   ToSQL: boolean; var result: RawUTF8; wasSQLString: PBoolean);
+var V64: Int64;
 begin
   if wasSQLString<>nil then
     wasSQLString^ := false;
-  Int64ToUtf8(fPropInfo.GetInt64Prop(Instance),result);
+  if fGetterIsFieldPropOffset<>0 then
+    V64 := PInt64(PtrUInt(Instance)+fGetterIsFieldPropOffset)^ else
+    V64 := fPropInfo.GetInt64Prop(Instance);
+  if fIsQWord then
+    UInt64ToUtf8(V64,result) else
+    Int64ToUtf8(V64,result);
 end;
 
 procedure TSQLPropInfoRTTIInt64.NormalizeValue(var Value: RawUTF8);
 var err: integer;
-    VInt64: Int64;
+    V64: Int64;
 begin
-  VInt64 := GetInt64(pointer(Value),err);
-  if err<>0 then
-    Value := '' else
-    Int64ToUtf8(VInt64,Value);
+  if fIsQWord then begin
+    V64 := GetQWord(pointer(Value),err);
+    if err<>0 then
+      Value := '' else
+      UInt64ToUtf8(V64,Value);
+  end else begin
+    V64 := GetInt64(pointer(Value),err);
+    if err<>0 then
+      Value := '' else
+      Int64ToUtf8(V64,Value);
+  end;
 end;
 
 function TSQLPropInfoRTTIInt64.CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt;
-var res64: Int64;
+var V1,V2: Int64;
 begin
   if Item1=Item2 then
     result := 0 else
@@ -22377,15 +22403,16 @@ begin
     result := -1 else
   if Item2=nil then
     result := 1 else begin
-    if fGetterIsFieldPropOffset<>0 then
-      res64 := PInt64(PtrUInt(Item1)+fGetterIsFieldPropOffset)^-
-        PInt64(PtrUInt(Item2)+fGetterIsFieldPropOffset)^ else
-      res64 := fPropinfo.GetInt64Prop(Item1)-fPropinfo.GetInt64Prop(Item2);
-    if res64>0 then
-      result := 1 else
-    if res64<0 then
-      result := -1 else
-      result := 0;
+    if fGetterIsFieldPropOffset<>0 then begin
+      V1 := PInt64(PtrUInt(Item1)+fGetterIsFieldPropOffset)^;
+      V2 := PInt64(PtrUInt(Item2)+fGetterIsFieldPropOffset)^;
+    end else begin
+      V1 := fPropinfo.GetInt64Prop(Item1);
+      V2 := fPropinfo.GetInt64Prop(Item2);
+    end;
+    if fIsQWord then
+      result := SortDynArrayQWord(V1,V2) else
+      result := SortDynArrayInt64(V1,V2);
   end;
 end;
 
@@ -22400,8 +22427,12 @@ end;
 
 procedure TSQLPropInfoRTTIInt64.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
+var V64: Int64;
 begin
-  fPropInfo.SetInt64Prop(Instance,GetInt64(Value));
+  if fIsQWord then
+    SetQWord(Value,PQword(@V64)^) else
+    SetInt64(Value,V64);
+  fPropInfo.SetInt64Prop(Instance,V64);
 end;
 
 function TSQLPropInfoRTTIInt64.SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean;
@@ -31068,9 +31099,9 @@ begin
   {$else}
   if @self=TypeInfo(QWord) then
     result := true else
-    if Kind=tkInt64 then
+    {$ifdef UINICODE}if Kind=tkInt64 then // check MinInt64Value>MaxInt64Value
       with PHash128Rec(@Name[ord(Name[0])+1])^ do
-        result := Lo>Hi else // check MinInt64Value>MaxInt64Value: Int64
+        result := Lo>Hi else {$endif}
       result := false;
   {$endif}
 end;
@@ -42162,7 +42193,7 @@ begin
       name := fInput[ndx*2];
       if met<>nil then begin
         a := met.ArgIndex(pointer(name),length(name),{input=}true);
-        forcestring := (a>=0) and (vIsString  in met.Args[a].ValueKindAsm);
+        forcestring := (a>=0) and (vIsString in met.Args[a].ValueKindAsm);
       end else
         forcestring := false;
       GetVariantFromJSON(pointer(fInput[ndx*2+1]),forcestring,v,@Options);
@@ -49943,7 +49974,7 @@ begin
       if not(j2oIgnoreUnknownProperty in Options) or P^.WriteIsPossible then
         P^.SetInt64Prop(Value,V64);
     end else begin
-      if {$ifdef FPC}Kind=tkQWord{$else}P^.TypeInfo=TypeInfo(QWord){$endif} then
+      if P^.PropType^.IsQWord then
         V64 := GetQWord(PropValue,err) else
         V64 := GetInt64(PropValue,err);
       if err<>0 then
@@ -50274,7 +50305,7 @@ begin
     U := FindIniNameValue(From,UpperName);
     case P^.PropType^.Kind of
       tkInt64: begin
-        {$ifndef FPC}if P^.TypeInfo=TypeInfo(QWord) then
+        {$ifndef FPC}if P^.PropType^.IsQWord then
           V64 := GetQWord(pointer(U),err) else{$endif}
           V64 := GetInt64(pointer(U),err);
         if err=0 then
@@ -52318,7 +52349,7 @@ var Added: boolean;
               AddBinToHexDisplay(@V64,SizeOf(V64));
             Add('"');
           end else
-          if {$ifdef FPC}Kind=tkQWord{$else}P^.TypeInfo=TypeInfo(QWord){$endif} then
+          if {$ifdef FPC}Kind=tkQWord{$else}P^.PropType^.IsQWord{$endif} then
             AddQ(V64) else
             Add(V64);
         end;
@@ -60423,12 +60454,12 @@ begin
   result := false;
   case ValueType of
   smvBoolean..smvCurrency:
-  case SizeInStorage of
-    1: result := PByte(V)^=0;
-    2: result := PWord(V)^=0;
-    4: result := PInteger(V)^=0;
-    8: result := PInt64(V)^=0;
-  end;
+    case SizeInStorage of
+      1: result := PByte(V)^=0;
+      2: result := PWord(V)^=0;
+      4: result := PInteger(V)^=0;
+      8: result := PInt64(V)^=0;
+    end;
   smvRawUTF8..smvWideString, smvObject..smvInterface:
     result := PPointer(V)^=nil;
   smvBinary, smvRecord:
@@ -60501,7 +60532,7 @@ begin
     smvInt64:
       if vIsQword in ValueKindAsm then
         SetQWord(Val,PQWord(V)^) else
-      SetInt64(Val,PInt64(V)^);
+        SetInt64(Val,PInt64(V)^);
     smvDouble,smvDateTime:
       PDouble(V)^ := GetExtended(Val);
     smvCurrency:
@@ -60703,7 +60734,9 @@ begin
     4: if ValueType=smvInteger then
          DestValue := PInteger(V)^ else
          DestValue := PCardinal(V)^;
-    8: DestValue := PInt64(V)^;
+    8: if vIsQword in ValueKindAsm then
+         DestValue := PQWord(V)^ else
+         DestValue := PInt64(V)^;
   end;
   smvDouble, smvDateTime:
     DestValue := PDouble(V)^;
