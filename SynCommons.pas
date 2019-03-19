@@ -17844,7 +17844,7 @@ procedure MicroSecToString(Micro: QWord; out result: TShort16); overload;
 /// convert an integer value into its textual representation with thousands marked
 // - ThousandSep is the character used to separate thousands in numbers with
 // more than three digits to the left of the decimal separator
-function IntToThousandString(Value: integer; const ThousandSep: RawUTF8=','): RawUTF8;
+function IntToThousandString(Value: integer; const ThousandSep: TShort4=','): shortstring;
 
 /// return the Delphi Compiler Version
 // - returns 'Delphi 2007' or 'Delphi 2010' e.g.
@@ -57234,17 +57234,17 @@ begin
   FastSetString(result,@tmp[1],ord(tmp[0]));
 end;
 
-function IntToThousandString(Value: integer; const ThousandSep: RawUTF8): RawUTF8;
+function IntToThousandString(Value: integer; const ThousandSep: TShort4): shortstring;
 var i,L,Len: cardinal;
 begin
-  Int32ToUtf8(value,result);
-  L := length(Result);
+  str(Value,result);
+  L := length(result);
   Len := L+1;
   if Value<0 then
     dec(L,2) else // ignore '-' sign
     dec(L);
   for i := 1 to L div 3 do
-    insert(ThousandSep,Result,Len-i*3);
+    insert(ThousandSep,result,Len-i*3);
 end;
 
 function MicroSecToString(Micro: QWord): TShort16;
