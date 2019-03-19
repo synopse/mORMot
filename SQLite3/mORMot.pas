@@ -2842,6 +2842,8 @@ type
     function ClassFieldCount(onlyWithoutGetter: boolean): integer;
     /// for ordinal types, get the storage size and sign
     function OrdType: TOrdType; {$ifdef HASINLINE}inline;{$endif}
+    /// return TRUE if the property is an unsigned 64-bit field
+    function IsQWord: boolean; {$ifdef HASINLINE}inline;{$endif}
     /// for set types, get the type information of the corresponding enumeration
     function SetEnumType: PEnumType;
     /// for gloating point types, get the storage size and procision
@@ -3113,16 +3115,16 @@ type
     // - you can create a new item instance just by calling result^.CreateNew
     function DynArrayIsObjArrayInstance: PClassInstance;
       {$ifdef HASINLINE}inline;{$endif}
-    /// return TRUE if the the property has no getter but direct field read
+    /// return TRUE if the property has no getter but direct field read
     function GetterIsField: boolean;
       {$ifdef HASINLINE}inline;{$endif}
-    /// return TRUE if the the property has no setter but direct field write
+    /// return TRUE if the property has no setter but direct field write
     function SetterIsField: boolean;
       {$ifdef HASINLINE}inline;{$endif}
-    /// return TRUE if the the property has a write setter or direct field
+    /// return TRUE if the property has a write setter or direct field
     function WriteIsDefined: boolean;
       {$ifdef HASINLINE}inline;{$endif}
-    /// return TRUE if the the property has a read or write setter or direct field
+    /// return TRUE if the property has a read or write setter or direct field
     // - may be used e.g. to avoid EPropertyError when calling FPC typinfo
     function WriteIsPossible: boolean;
     /// returns the low-level field read address, if GetterIsField is TRUE
@@ -10788,7 +10790,8 @@ type
   // Information (e.g. a bank card number or a plain password), which type has
   // been previously registered via TInterfaceFactory.RegisterUnsafeSPIType
   // so that low-level logging won't include such values
-  TServiceMethodValueAsm = set of (vIsString, vPassedByReference, vIsObjArray, vIsSPI);
+  // - vIsQword is set for ValueType=smvInt64 over a QWord unsigned 64-bit value
+  TServiceMethodValueAsm = set of (vIsString, vPassedByReference, vIsObjArray, vIsSPI, vIsQword);
 
   /// describe a service provider method argument
   {$ifdef UNICODE}TServiceMethodArgument = record{$else}TServiceMethodArgument = object{$endif}
@@ -31055,6 +31058,20 @@ begin
   result := POrdType(GetFPCTypeData(@self))^;
   {$else}
   result := TOrdType(PByte(@Name[ord(Name[0])+1])^);
+  {$endif}
+end;
+
+function TTypeInfo.IsQWord: boolean;
+begin
+  {$ifdef FPC}
+  result := Kind=tkQWord;
+  {$else}
+  if @self=TypeInfo(QWord) then
+    result := true else
+    if Kind=tkInt64 then
+      with PHash128Rec(@Name[ord(Name[0])+1])^ do
+        result := Lo>Hi else // check MinInt64Value>MaxInt64Value: Int64
+      result := false;
   {$endif}
 end;
 
@@ -55745,12 +55762,13 @@ begin
          ((ValueDirection=smdResult) and (ValueType in CONST_ARGS_RESULT_BY_REF)) then
         Include(ValueKindAsm,vPassedByReference);
       case ValueType of
-      smvInteger, smvInt64:
-        if TJSONCustomParserRTTI.TypeNameToSimpleBinary(ShortStringToUTF8(ArgTypeName^),
-            SizeInBinary, SizeInStorage) then begin
+      smvInteger, smvCardinal, smvInt64:
+        if TJSONCustomParserRTTI.TypeNameToSimpleBinary(
+           ShortStringToUTF8(ArgTypeName^),SizeInBinary,SizeInStorage) then begin
           ValueType := smvBinary; // transmitted as hexa string
           Include(ValueKindAsm,vIsString);
-        end;
+        end else if ArgTypeInfo^.IsQWord then
+          Include(ValueKindAsm,vIsQword);
       smvRawUTF8..smvWideString:
         Include(ValueKindAsm,vIsString);
       smvDynArray: begin
@@ -60424,13 +60442,13 @@ end;
 function TServiceMethodArgument.FromJSON(const MethodName: RawUTF8; var R: PUTF8Char;
   V: pointer; Error: PShortString{$ifndef NOVARIANTS}; DVO: TDocVariantOptions{$endif}): boolean;
   procedure RaiseError(const msg: RawUTF8);
-  var tmp: RawUTF8;
+  var tmp: shortstring;
   begin
-    FormatUTF8('I% failed on %:% [%]',[MethodName,ParamName^,ArgTypeName^,msg],tmp);
+    FormatShort('I% failed on %:% [%]',[MethodName,ParamName^,ArgTypeName^,msg],tmp);
     if Error=nil then
       raise EInterfaceFactoryException.CreateUTF8('%',[tmp]);
     result := false;
-    SetString(Error^,PAnsiChar(pointer(tmp)),length(tmp));
+    Error^ := tmp;
   end;
 var parser: TJSONToObject; // inlined JSONToObject()
     Val: PUTF8Char;
@@ -60463,7 +60481,7 @@ begin
       if R=nil then
         RaiseError('returned RawJSON');
     end;
-  smvBoolean..smvBinary: begin
+  smvBoolean..smvWideString: begin
     Val := GetJSONField(R,R,@wasString,nil,@ValLen);
     if (Val=nil) or (wasString<>(vIsString in ValueKindAsm)) then begin
       RaiseError('missing or invalid value');
@@ -60481,6 +60499,8 @@ begin
     smvInteger:
       PInteger(V)^ := GetInteger(Val);
     smvInt64:
+      if vIsQword in ValueKindAsm then
+        SetQWord(Val,PQWord(V)^) else
       SetInt64(Val,PInt64(V)^);
     smvDouble,smvDateTime:
       PDouble(V)^ := GetExtended(Val);
@@ -60494,11 +60514,25 @@ begin
       Base64ToBin(PAnsiChar(Val),ValLen,PRawByteString(V)^);
     smvWideString:
       UTF8ToWideString(Val,ValLen,PWideString(V)^);
-    smvBinary:
-      if ValLen=SizeInStorage*2 then
-        HexDisplayToBin(PAnsiChar(Val),PByte(V),SizeInStorage);
     else RaiseError('ValueType?');
     end;
+  end;
+  smvBinary: begin
+    Val := GetJSONField(R,R,@wasString,nil,@ValLen);
+    if Val=nil then begin
+      RaiseError('missing or invalid binary value');
+      exit;
+    end;
+    if wasString then begin // decode hexadecimal string
+      if ValLen=SizeInStorage*2 then
+        HexDisplayToBin(PAnsiChar(Val),PByte(V),SizeInStorage);
+    end else // allow fallback to read plain numbers (e.g. on API upgrade)
+      case SizeInStorage of
+      1: PByte(V)^     := GetCardinal(Val);
+      2: PWord(V)^     := GetCardinal(Val);
+      4: PCardinal(V)^ := GetCardinal(Val);
+      8: SetQWord(Val,PQWord(V)^);
+      end;
   end;
   smvRecord: begin
     R := RecordLoadJSON(V^,R,ArgTypeInfo);
@@ -60539,7 +60573,9 @@ begin
     4: if ValueType=smvInteger then
          WR.Add(PInteger(V)^) else
          WR.AddU(PCardinal(V)^);
-    8: WR.Add(PInt64(V)^);
+    8: if vIsQword in ValueKindAsm then
+         WR.AddQ(PQWord(V)^) else
+         WR.Add(PInt64(V)^);
   end;
   smvDouble, smvDateTime: WR.AddDouble(PDouble(V)^);
   smvCurrency:   WR.AddCurr64(PInt64(V)^);
@@ -60585,7 +60621,9 @@ begin
     4: if ValueType=smvInteger then
          Int32ToUtf8(PInteger(V)^,DestValue) else
          UInt32ToUtf8(PCardinal(V)^,DestValue);
-    8: Int64ToUtf8(PInt64(V)^,DestValue);
+    8: if vIsQword in ValueKindAsm then
+         UInt64ToUtf8(PQword(V)^,DestValue) else
+         Int64ToUtf8(PInt64(V)^,DestValue);
   end;
   smvDouble, smvDateTime:
     ExtendedToStr(PDouble(V)^,DOUBLE_PRECISION,DestValue);
