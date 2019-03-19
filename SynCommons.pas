@@ -4813,11 +4813,7 @@ type
     /// delete one item inside the dynamic array
     // - the deleted element is finalized if necessary
     // - this method will recognize T*ObjArray types and free all instances
-    procedure Delete(aIndex: PtrInt); overload;
-    /// delete one or several items inside the dynamic array
-    // - the deleted elements are finalized if necessary
-    // - this method will recognize T*ObjArray types and free all instances
-    procedure Delete(aIndex, aCount: PtrInt); overload;
+    procedure Delete(aIndex: PtrInt);
     /// search for an element value inside the dynamic array
     // - return the index found (0..Count-1), or -1 if Elem was not found
     // - will search for all properties content of the eLement: TList.IndexOf()
@@ -48450,35 +48446,6 @@ begin
   end else
     FillcharFast(P^,ElemSize,0);
   SetCount(n);
-end;
-
-procedure TDynArray.Delete(aIndex, aCount: PtrInt);
-var n, len, i: PtrInt;
-    P: PAnsiChar;
-begin
-  if (fValue=nil) or (aCount<=1) then begin
-    if aCount=1 then
-      Delete(aIndex);
-    exit;
-  end;
-  n := GetCount;
-  if PtrUInt(aIndex)>=PtrUInt(n) then
-    exit; // out of range
-  if aIndex+aCount>=n then
-    aCount := n-aIndex; // avoid overflow
-  P := pointer(PtrUInt(fValue^)+PtrUInt(aIndex)*ElemSize);
-  if ElemType<>nil then
-    {$ifdef FPC}FPCFinalizeArray{$else}_FinalizeArray{$endif}(P,ElemType,aCount) else
-    if (fIsObjArray=oaTrue) or ((fIsObjArray=oaUnknown) and ComputeIsObjArray) then
-      for i := 0 to aCount-1 do
-        PObjectArray(P)^[i].Free;
-  if n-1>aIndex then begin
-    len := PtrUInt(n-1-aIndex)*PtrUInt(aCount)*ElemSize;
-    MoveFast(P[ElemSize],P[0],len);
-    FillcharFast(P[len],ElemSize,0); // to avoid GPF and ensure filled with 0
-  end else
-    FillcharFast(P^,ElemSize,0);
-  SetCount(n-aCount);
 end;
 
 function TDynArray.ElemPtr(index: PtrInt): pointer;
