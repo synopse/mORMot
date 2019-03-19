@@ -48431,7 +48431,6 @@ end;
 procedure TDynArray.Delete(aIndex: PtrInt);
 var n, len: PtrInt;
     P: PAnsiChar;
-    zerolast: boolean;
 begin
   if fValue=nil then
     exit; // avoid GPF if void
@@ -48440,28 +48439,22 @@ begin
     exit; // out of range
   dec(n);
   P := pointer(PtrUInt(fValue^)+PtrUInt(aIndex)*ElemSize);
-  if ElemType<>nil then begin
-    {$ifdef FPC}FPCFinalize{$else}_Finalize{$endif}(P,ElemType);
-    zerolast := true;
-  end else
-    if (fIsObjArray=oaTrue) or ((fIsObjArray=oaUnknown) and ComputeIsObjArray) then begin
+  if ElemType<>nil then
+    {$ifdef FPC}FPCFinalize{$else}_Finalize{$endif}(P,ElemType) else
+    if (fIsObjArray=oaTrue) or ((fIsObjArray=oaUnknown) and ComputeIsObjArray) then
       FreeAndNil(PObject(P)^);
-      zerolast := true;
-    end else
-    zerolast := false;
   if n>aIndex then begin
     len := PtrUInt(n-aIndex)*ElemSize;
     MoveFast(P[ElemSize],P[0],len);
-    if zerolast then // avoid GPF
-      FillcharFast(P[len],ElemSize,0);
-  end;
+    FillcharFast(P[len],ElemSize,0); // to avoid GPF and ensure filled with 0
+  end else
+    FillcharFast(P^,ElemSize,0);
   SetCount(n);
 end;
 
 procedure TDynArray.Delete(aIndex, aCount: PtrInt);
 var n, len, i: PtrInt;
     P: PAnsiChar;
-    zerolast: boolean;
 begin
   if (fValue=nil) or (aCount<=1) then begin
     if aCount=1 then
@@ -48474,22 +48467,17 @@ begin
   if aIndex+aCount>=n then
     aCount := n-aIndex; // avoid overflow
   P := pointer(PtrUInt(fValue^)+PtrUInt(aIndex)*ElemSize);
-  if ElemType<>nil then begin
-    {$ifdef FPC}FPCFinalizeArray{$else}_FinalizeArray{$endif}(P,ElemType,aCount);
-    zerolast := true;
-  end else
-    if (fIsObjArray=oaTrue) or ((fIsObjArray=oaUnknown) and ComputeIsObjArray) then begin
+  if ElemType<>nil then
+    {$ifdef FPC}FPCFinalizeArray{$else}_FinalizeArray{$endif}(P,ElemType,aCount) else
+    if (fIsObjArray=oaTrue) or ((fIsObjArray=oaUnknown) and ComputeIsObjArray) then
       for i := 0 to aCount-1 do
         PObjectArray(P)^[i].Free;
-      zerolast := true;
-    end else
-    zerolast := false;
   if n-1>aIndex then begin
     len := PtrUInt(n-1-aIndex)*PtrUInt(aCount)*ElemSize;
     MoveFast(P[ElemSize],P[0],len);
-    if zerolast then // avoid GPF
-      FillcharFast(P[len],ElemSize,0);
-  end;
+    FillcharFast(P[len],ElemSize,0); // to avoid GPF and ensure filled with 0
+  end else
+    FillcharFast(P^,ElemSize,0);
   SetCount(n-aCount);
 end;
 

@@ -22326,7 +22326,7 @@ constructor TSQLPropInfoRTTIInt64.Create(aPropInfo: PPropInfo; aPropIndex: integ
   aSQLFieldType: TSQLFieldType; aOptions: TSQLPropInfoListOptions);
 begin
   inherited Create(aPropInfo,aPropIndex,aSQLFieldType,aOptions);
-  fIsQWord := aPropInfo.PropType^.IsQword;
+  fIsQWord := fPropType^.IsQword;
 end;
 
 procedure TSQLPropInfoRTTIInt64.CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo;
