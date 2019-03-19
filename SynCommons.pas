@@ -21697,6 +21697,9 @@ type
     tkInteger: (
       IntegerType: TOrdType;
     );
+    tkInt64: (
+      MinInt64Value, MaxInt64Value: Int64;
+    );
     tkSet: (
       SetType: TOrdType;
       {$ifdef FPC}
@@ -43229,7 +43232,9 @@ begin
     {$endif}
     end;
   tkInt64:
-    {$ifndef FPC}if Info=TypeInfo(QWord) then result := ptQWord else{$endif}
+    {$ifndef FPC} if Info=TypeInfo(QWord) then result := ptQWord else
+      {$ifdef UNICODE}with GetTypeInfo(Info)^ do // detect QWord/UInt64
+      if MinInt64Value>MaxInt64Value then result := ptQWord else{$endif}{$endif}
       result := ptInt64;
   {$ifdef FPC}
   tkQWord: result := ptQWord;
