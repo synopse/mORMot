@@ -5742,6 +5742,7 @@ type
   // @http://www.delphitools.info/2011/11/30/fixing-tcriticalsection
   // - internal padding is used to safely store up to 7 values protected
   // from concurrent access with a mutex
+  // - for object-level locking, see TSynPersistentLock which owns one such instance
   {$ifdef UNICODE}TSynLocker = record{$else}TSynLocker = object{$endif}
   private
     fSection: TRTLCriticalSection;
@@ -10291,6 +10292,8 @@ type
     procedure VarNextInt(count: integer); overload;
     /// read the next byte from the buffer
     function NextByte: byte; {$ifdef HASINLINE}inline;{$endif}
+    /// read the next byte from the buffer, checking
+    function NextByteSafe(out dest): boolean; {$ifdef HASINLINE}inline;{$endif}
     /// read the next 4 bytes from the buffer as a 32-bit unsigned value
     function Next4: cardinal; {$ifdef HASINLINE}inline;{$endif}
     /// read the next 8 bytes from the buffer as a 64-bit unsigned value
@@ -25115,15 +25118,15 @@ begin
       inc(buf);
     until len=0;
     if len>=4 then
-    repeat
-      result := result xor PCardinal(buf)^;
-      inc(buf,4);
-      dec(len,4);
-      result := tab[3,ToByte(result)] xor
-                tab[2,ToByte(result shr 8)] xor
-                tab[1,ToByte(result shr 16)] xor
-                tab[0,result shr 24];
-    until len<4;
+      repeat
+        result := result xor PCardinal(buf)^;
+        inc(buf,4);
+        dec(len,4);
+        result := tab[3,ToByte(result)] xor
+                  tab[2,ToByte(result shr 8)] xor
+                  tab[1,ToByte(result shr 16)] xor
+                  tab[0,result shr 24];
+      until len<4;
     while len>0 do begin
       result := tab[0,ToByte(result xor ord(buf^))] xor (result shr 8);
       dec(len);
@@ -62499,6 +62502,16 @@ begin
   inc(P);
 end;
 
+function TFastReader.NextByteSafe(out dest): boolean;
+begin
+  if P>=Last then
+    result := false
+  else begin
+    AnsiChar(dest) := P^;
+    inc(P);
+  end;
+end;
+
 function TFastReader.Next4: cardinal;
 begin
   if P+3>=Last then
@@ -62887,11 +62900,15 @@ end;
 function TFastReader.VarUTF8Safe(out Value: RawUTF8): boolean;
 var len: cardinal;
 begin
-  if VarUInt32Safe(len) and (P+len<=Last) then begin
-    FastSetString(Value,P,len);
-    inc(P,len);
-    result := true;
-  end else
+  if VarUInt32Safe(len) then
+    if len=0 then
+      result := true else
+      if P+len<=Last then begin
+        FastSetString(Value,P,len);
+        inc(P,len);
+        result := true;
+      end else
+        result := false else
     result := false;
 end;
 
