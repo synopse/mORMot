@@ -11302,9 +11302,10 @@ end;
 type
   TBenchmark = (
     // non cryptographic hashes
-    bCRC32c, bXXHash32,
+    bCRC32c, bXXHash32, bHash32,
     // cryptographic hashes
-    bMD5, bSHA1, bHMACSHA1, bSHA256, bHMACSHA256, bSHA512, bHMACSHA512,
+    bMD5, bSHA1, bHMACSHA1, bSHA256, bHMACSHA256,
+    bSHA384, bHMACSHA384, bSHA512, bHMACSHA512,
     bSHA3_256, bSHA3_512,
     // encryption
     bRC4,
@@ -11328,6 +11329,7 @@ var b: TBenchmark;
     MD5: TMD5;
     SHA1: TSHA1;
     SHA256: TSHA256;
+    SHA384: TSHA384;
     SHA512: TSHA512;
     SHA3, SHAKE128, SHAKE256: TSHA3;
     RC4: TRC4;
@@ -11357,12 +11359,15 @@ begin
         dig.d1 := 0;
         case b of
         bXXHash32:   dig.d0 := xxHash32(0,pointer(data),SIZ[s]);
+        bHash32:     dig.d0 := Hash32(pointer(data),SIZ[s]);
         bCRC32c:     dig.d0 := crc32c(0,pointer(data),SIZ[s]);
         bMD5:        MD5.Full(pointer(data),SIZ[s],dig.h0);
-        bSHA1:       SHA1.Full(pointer(data),SIZ[s],PSHA1Digest(@dig)^);
-        bHMACSHA1:   HMAC_SHA1('secret',data,PSHA1Digest(@dig)^);
+        bSHA1:       SHA1.Full(pointer(data),SIZ[s],dig.b160);
+        bHMACSHA1:   HMAC_SHA1('secret',data,dig.b160);
         bSHA256:     SHA256.Full(pointer(data),SIZ[s],dig.Lo);
         bHMACSHA256: HMAC_SHA256('secret',data,dig.Lo);
+        bSHA384:     SHA384.Full(pointer(data),SIZ[s],dig.b384);
+        bHMACSHA384: HMAC_SHA384('secret',data,dig.b384);
         bSHA512:     SHA512.Full(pointer(data),SIZ[s],dig.b);
         bHMACSHA512: HMAC_SHA512('secret',data,dig.b);
         bSHA3_256:   SHA3.Full(pointer(data),SIZ[s],dig.Lo);
@@ -11377,7 +11382,7 @@ begin
         end;
         Check((b >= bRC4) or (dig.d0 <> 0) or (dig.d1 <> 0));
       end;
-      //NotifyTestSpeed(format('%s %s',[TXT[b],KB(SIZ[s])]),COUNT,SIZ[s]*COUNT,@timer);
+      //NotifyTestSpeed(format('%s %s',[TXT[b],SIZ[s]]),COUNT,SIZ[s]*COUNT,@timer);
       timer.ComputeTime;
       inc(time[b],timer.LastTimeInMicroSec);
       //if b in [bSHA3_512,high(b)] then AddConsole('');

@@ -11415,6 +11415,7 @@ function Base64uriToBin(const base64: RawByteString; bin: PAnsiChar; binlen: Ptr
   {$ifdef HASINLINE}inline;{$endif}
 
 /// direct low-level decoding of a Base64-URI encoded buffer
+// - the buffer is expected to be at least Base64uriToBinLength() bytes long
 // - returns true if the supplied sp[] buffer has been successfully decoded
 // into rp[] - will break at any invalid character, so is always safe to use
 // - in comparison to Base64 standard encoding, will trim any right-sided '='
@@ -11502,22 +11503,46 @@ function UInt2DigitsToShortFast(Value: byte): TShort4;
 
 
 /// compute CRC16-CCITT checkum on the supplied buffer
-// - i.e. 16-bit CRC-CCITT, with polynomial x^16 + x^12 + x^5 + 1 ($1021) and
-// $ffff as initial value
+// - i.e. 16-bit CRC-CCITT, with polynomial x^16 + x^12 + x^5 + 1 ($1021)
+// and $ffff as initial value
 // - this version is not optimized for speed, but for correctness
 function crc16(Data: PAnsiChar; Len: integer): cardinal;
 
-// our custom hash function, specialized for Text comparaison
-// - has less colision than Adler32 for short strings
-// - is faster than CRC32 or Adler32, since use DQWord (128 bytes) aligned read:
-// Hash32() is 2.5 GB/s, kr32() 0.9 GB/s, crc32c() 1.7 GB/s or 4.3 GB/s (SSE4.2)
+// our custom hash/checksum function, specialized for Text comparaison
+// - it is a checksum algorithm, not a hash function: has less colision than
+// Adler32 for short strings, but more than xxhash32 or crc32/crc32c
+// - written in simple plain pascal, with no L1 CPU cache pollution
 // - overloaded version for direct binary content hashing
+// - crc32c() has less collision - but is faster only on a SSE4.2 x86_64 CPU;
+// some numbers on FPC/Linux64, with a SSE4.2 enabled CPU:
+// $ -- 8 bytes buffers
+// $ crc32c 8B in 12us i.e. 41,666,666/s, aver. 0us, 317.8 MB/s
+// $ xxhash32 8B in 10us i.e. 50,000,000/s, aver. 0us, 381.4 MB/s
+// $ hash32 8B in 9us i.e. 55,555,555/s, aver. 0us, 423.8 MB/s
+// $ -- 50 bytes buffers
+// $ crc32c 50B in 11us i.e. 45,454,545/s, aver. 0us, 2.1 GB/s
+// $ xxhash32 50B in 14us i.e. 35,714,285/s, aver. 0us, 1.6 GB/s
+// $ hash32 50B in 10us i.e. 50,000,000/s, aver. 0us, 2.3 GB/s
+// $ -- 100 bytes buffers
+// $ crc32c 100B in 12us i.e. 41,666,666/s, aver. 0us, 3.8 GB/s
+// $ xxhash32 100B in 19us i.e. 26,315,789/s, aver. 0us, 2.4 GB/s
+// $ hash32 100B in 13us i.e. 38,461,538/s, aver. 0us, 3.5 GB/s
+// $ -- 1000 bytes buffers
+// $ crc32c 0.9KB in 37us i.e. 13,513,513/s, aver. 0us, 12.5 GB/s
+// $ xxhash32 0.9KB in 96us i.e. 5,208,333/s, aver. 0us, 4.8 GB/s
+// $ hash32 0.9KB in 62us i.e. 8,064,516/s, aver. 0us, 7.5 GB/s
+// $ -- 10000 bytes buffers
+// $ crc32c 9.7KB in 282us i.e. 1,773,049/s, aver. 0us, 16.5 GB/s
+// $ xxhash32 9.7KB in 927us i.e. 539,374/s, aver. 1us, 5 GB/s
+// $ hash32 9.7KB in 487us i.e. 1,026,694/s, aver. 0us, 9.5 GB/s
 function Hash32(Data: pointer; Len: integer): cardinal; overload;
 
-// our custom hash function, specialized for Text comparaison
-// - has less colision than Adler32 for short strings
-// - is faster than CRC32 or Adler32, since use DQWord (128 bytes) aligned read
-// - uses RawByteString for binary content hashing, whatever the codepage is
+// our custom hash/checsum function, specialized for Text comparaison
+// - it is a checksum algorithm, not a hash function: has less colision than
+// Adler32 for short strings, but more than xxhash32 or crc32/crc32c
+// - is faster than CRC32 or Adler32, since uses DQWord (128-bit) aligned read
+// - overloaded function using RawByteString for binary content hashing,
+// whatever the codepage is
 function Hash32(const Text: RawByteString): cardinal; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -11608,6 +11633,12 @@ type
   THash128 = array[0..15] of byte;
   /// pointer to a 128-bit hash value
   PHash128 = ^THash128;
+  /// store a 160-bit hash value
+  // - e.g. a SHA-1 digest
+  // - consumes 20 bytes of memory
+  THash160 = array[0..19] of byte;
+  /// pointer to a 160-bit hash value
+  PHash160 = ^THash160;
   /// store a 192-bit hash value
   // - consumes 24 bytes of memory
   THash192 = array[0..23] of byte;
@@ -11707,8 +11738,10 @@ type
   3: (i0,i1,i2,i3,i4,i5,i6,i7,i8,i9,i10,i11,i12,i13,i14,i15: integer);
   4: (c0,c1,c2,c3: TBlock128);
   5: (b: THash512);
-  6: (b3: THash384);
-  7: (w: array[0..31] of word);
+  6: (b160: THash160);
+  7: (b384: THash384);
+  8: (w: array[0..31] of word);
+  9: (c: array[0..15] of cardinal);
   end;
   /// pointer to 512-bit hash map variable record
   PHash512Rec = ^THash512Rec;
@@ -11771,6 +11804,23 @@ procedure IP6Text(ip6: PHash128; result: PShortString); overload;
 // - will combine two crc32c() calls into a single THash256 result
 // - by design, such combined hashes cannot be cascaded
 procedure crc256c(buf: PAnsiChar; len: cardinal; out crc: THash256);
+
+/// returns TRUE if all 20 bytes of this 160-bit buffer equal zero
+// - e.g. a SHA-1 digest
+function IsZero(const dig: THash160): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// returns TRUE if all 20 bytes of both 160-bit buffers do match
+// - e.g. a SHA-1 digest
+// - this function is not sensitive to any timing attack, so is designed
+// for cryptographic purpose
+function IsEqual(const A,B: THash160): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fill all 20 bytes of this 160-bit buffer with zero
+// - may be used to cleanup stack-allocated content
+// ! ... finally FillZero(digest); end;
+procedure FillZero(out dig: THash160); overload;
 
 /// returns TRUE if all 32 bytes of this 256-bit buffer equal zero
 // - e.g. a SHA-256 digest, or a TECCSignature result
@@ -34780,12 +34830,12 @@ end;
 
 function Hash32(Data: pointer; Len: integer): cardinal;
 var s1,s2: cardinal;
-    i: PtrInt;
+    i: integer;
 begin
   if Data<>nil then begin
     s1 := 0;
     s2 := 0;
-    for i := 1 to Len shr 4 do begin // 16 bytes (4 DWORD) by loop - aligned read
+    for i := 1 to Len shr 4 do begin // 16 bytes (128-bit) loop - aligned read
       inc(s1,PCardinalArray(Data)^[0]);
       inc(s2,s1);
       inc(s1,PCardinalArray(Data)^[1]);
@@ -34797,7 +34847,7 @@ begin
       inc(PByte(Data),16);
     end;
     for i := 1 to (Len shr 2)and 3 do begin // 4 bytes (DWORD) by loop
-      inc(s1,PCardinalArray(Data)^[0]);
+      inc(s1,PCardinal(Data)^);
       inc(s2,s1);
       inc(PByte(Data),4);
     end;
@@ -34813,7 +34863,8 @@ begin
 end;
 
 function GetBit(const Bits; aIndex: PtrInt): boolean;
-{$ifdef CPUINTEL}{$ifdef CPU64}{$ifdef FPC}nostackframe;assembler;asm{$else}asm .noframe{$endif}{$else}asm{$endif}
+{$ifdef CPUINTEL}
+{$ifdef CPU64}{$ifdef FPC}nostackframe;assembler;asm{$else}asm .noframe{$endif}{$else}asm{$endif}
         bt      [Bits], aIndex
         sbb     eax, eax
         and     eax, 1
@@ -35059,7 +35110,7 @@ end;
 
 {$ifdef CPUX64}
 function xxHash32(crc: cardinal; P: PAnsiChar; len: integer): cardinal;
-asm
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe{$endif}
         {$ifdef LINUX} // crc=rdi P=rsi len=rdx
         mov     r8, rdi
         mov     rcx, rsi
@@ -35865,6 +35916,27 @@ end;
 function IP6Text(ip6: PHash128): shortstring;
 begin
   IP6Text(ip6, @result);
+end;
+
+function IsZero(const dig: THash160): boolean;
+var a: TIntegerArray absolute dig;
+begin
+  result := (a[0]=0) and (a[1]=0) and (a[2]=0) and (a[3]=0) and (a[4]=0);
+end;
+
+function IsEqual(const A,B: THash160): boolean;
+var a_: TIntegerArray absolute A;
+    b_: TIntegerArray absolute B;
+begin // uses anti-forensic time constant "xor/or" pattern
+  result := ((a_[0] xor b_[0]) or (a_[1] xor b_[1]) or (a_[2] xor b_[2]) or
+    (a_[3] xor b_[3]) or (a_[4] xor b_[4]))=0;
+end;
+
+procedure FillZero(out dig: THash160);
+begin
+  PInt64Array(@dig)^[0] := 0;
+  PInt64Array(@dig)^[1] := 0;
+  PIntegerArray(@dig)^[4] := 0;
 end;
 
 procedure crc256c(buf: PAnsiChar; len: cardinal; out crc: THash256);

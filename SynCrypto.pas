@@ -1277,7 +1277,7 @@ procedure FillSystemRandom(Buffer: PByteArray; Len: integer; AllowBlocking: bool
 type
   PSHA1Digest = ^TSHA1Digest;
   /// 160 bits memory block for SHA-1 hash digest storage
-  TSHA1Digest = packed array[0..19] of byte;
+  TSHA1Digest = THash160;
 
   PSHA1 = ^TSHA1;
   /// handle SHA-1 hashing
@@ -1538,9 +1538,6 @@ type
     procedure Done;
   end;
 
-  /// 64 bytes buffer, used internally during HMAC process
-  TByte64 = array[0..15] of cardinal;
-
   TMD5In = array[0..15] of cardinal;
   PMD5In = ^TMD5In;
   /// 128 bits memory block for MD5 hash digest storage
@@ -1700,19 +1697,6 @@ type
     procedure Finish;
   end;
 
-/// overwrite a 64-byte buffer with zeros
-// - may be used to cleanup stack-allocated content
-// ! ... finally FillZero(temp); end;
-procedure FillZero(var hash: TByte64); overload;
-
-/// overwrite a SHA-1 digest buffer with zeros
-// - may be used to cleanup stack-allocated content
-// ! ... finally FillZero(temp); end;
-procedure FillZero(var hash: TSHA1Digest); overload;
-
-/// compare two SHA-1 digest buffers
-function IsEqual(const A,B: TSHA1Digest): boolean; overload;
-
 /// direct MD5 hash calculation of some data
 function MD5Buf(const Buffer; Len: Cardinal): TMD5Digest;
 
@@ -1740,7 +1724,7 @@ type
   {$ifdef UNICODE}THMAC_SHA1 = record{$else}THMAC_SHA1 = object{$endif}
   private
     sha: TSHA1;
-    step7data: TByte64;
+    step7data: THash512Rec;
   public
     /// prepare the HMAC authentication with the supplied key
     // - content of this record is stateless, so you can prepare a HMAC for a
@@ -1915,7 +1899,7 @@ type
   {$ifdef UNICODE}THMAC_SHA256 = record{$else}THMAC_SHA256 = object{$endif}
   private
     sha: TSha256;
-    step7data: TByte64;
+    step7data: THash512Rec;
   public
     /// prepare the HMAC authentication with the supplied key
     // - content of this record is stateless, so you can prepare a HMAC for a
@@ -2145,7 +2129,7 @@ type
   {$ifdef UNICODE}THMAC_CRC32C = record{$else}THMAC_CRC32C = object{$endif}
   private
     seed: cardinal;
-    step7data: TByte64;
+    step7data: THash512Rec;
   public
     /// prepare the HMAC authentication with the supplied key
     // - consider using Compute to re-use a prepared HMAC instance
@@ -3473,40 +3457,22 @@ end;
 
 { THMAC_SHA1 }
 
-procedure FillZero(var hash: TSHA1Digest); overload;
-begin
-  FillCharFast(hash,sizeof(hash),0);
-end;
-
-procedure FillZero(var hash: TByte64);
-begin
-  FillCharFast(hash,sizeof(hash),0);
-end;
-
-function IsEqual(const A,B: TSHA1Digest): boolean;
-var a_: TIntegerArray absolute A;
-    b_: TIntegerArray absolute B;
-begin // uses anti-forensic time constant "xor/or" pattern
-  result := ((a_[0] xor b_[0]) or (a_[1] xor b_[1]) or (a_[2] xor b_[2]) or
-    (a_[3] xor b_[3]) or (a_[4] xor b_[4]))=0;
-end;
-
 procedure THMAC_SHA1.Init(key: pointer; keylen: integer);
 var i: integer;
-    k0,k0xorIpad: TByte64;
+    k0,k0xorIpad: THash512Rec;
 begin
-  FillZero(k0);
+  FillZero(k0.b);
   if keylen>sizeof(k0) then
-    sha.Full(key,keylen,PSHA1Digest(@k0)^) else
+    sha.Full(key,keylen,k0.b160) else
     MoveFast(key^,k0,keylen);
   for i := 0 to 15 do
-    k0xorIpad[i] := k0[i] xor $36363636;
+    k0xorIpad.c[i] := k0.c[i] xor $36363636;
   for i := 0 to 15 do
-    step7data[i] := k0[i] xor $5c5c5c5c;
+    step7data.c[i] := k0.c[i] xor $5c5c5c5c;
   sha.Init;
   sha.Update(@k0xorIpad,sizeof(k0xorIpad));
-  FillZero(k0);
-  FillZero(k0xorIpad);
+  FillZero(k0.b);
+  FillZero(k0xorIpad.b);
 end;
 
 procedure THMAC_SHA1.Update(msg: pointer; msglen: integer);
@@ -3521,7 +3487,7 @@ begin
   sha.Update(@result,sizeof(result));
   sha.Final(result,NoInit);
   if not NoInit then
-    FillZero(step7data);
+    FillZero(step7data.b);
 end;
 
 procedure THMAC_SHA1.Done(out result: RawUTF8; NoInit: boolean);
@@ -3587,20 +3553,20 @@ end;
 
 procedure THMAC_SHA256.Init(key: pointer; keylen: integer);
 var i: integer;
-    k0,k0xorIpad: TByte64;
+    k0,k0xorIpad: THash512Rec;
 begin
-  FillZero(k0);
+  FillZero(k0.b);
   if keylen>sizeof(k0) then
-    sha.Full(key,keylen,PSHA256Digest(@k0)^) else
+    sha.Full(key,keylen,k0.Lo) else
     MoveFast(key^,k0,keylen);
   for i := 0 to 15 do
-    k0xorIpad[i] := k0[i] xor $36363636;
+    k0xorIpad.c[i] := k0.c[i] xor $36363636;
   for i := 0 to 15 do
-    step7data[i] := k0[i] xor $5c5c5c5c;
+    step7data.c[i] := k0.c[i] xor $5c5c5c5c;
   sha.Init;
   sha.Update(@k0xorIpad,sizeof(k0xorIpad));
-  FillZero(k0);
-  FillZero(k0xorIpad);
+  FillZero(k0.b);
+  FillZero(k0xorIpad.b);
 end;
 
 procedure THMAC_SHA256.Update(msg: pointer; msglen: integer);
@@ -3630,7 +3596,7 @@ begin
   sha.Update(@result,sizeof(result));
   sha.Final(result,NoInit);
   if not NoInit then
-    FillZero(step7data);
+    FillZero(step7data.b);
 end;
 
 procedure THMAC_SHA256.Done(out result: RawUTF8; NoInit: boolean);
@@ -3957,16 +3923,16 @@ end;
 procedure HMAC_CRC256C(key,msg: pointer; keylen,msglen: integer; out result: THash256);
 var i: integer;
     h1,h2: cardinal;
-    k0,k0xorIpad,step7data: TByte64;
+    k0,k0xorIpad,step7data: THash512Rec;
 begin
   FillCharFast(k0,sizeof(k0),0);
   if keylen>sizeof(k0) then
-    crc256c(key,keylen,PHash256(@k0)^) else
+    crc256c(key,keylen,k0.Lo) else
     MoveFast(key^,k0,keylen);
   for i := 0 to 15 do
-    k0xorIpad[i] := k0[i] xor $36363636;
+    k0xorIpad.c[i] := k0.c[i] xor $36363636;
   for i := 0 to 15 do
-    step7data[i] := k0[i] xor $5c5c5c5c;
+    step7data.c[i] := k0.c[i] xor $5c5c5c5c;
   h1 := crc32c(crc32c(0,@k0xorIpad,sizeof(k0xorIpad)),msg,msglen);
   h2 := crc32c(crc32c(h1,@k0xorIpad,sizeof(k0xorIpad)),msg,msglen);
   crc256cmix(h1,h2,@result);
@@ -3998,16 +3964,16 @@ end;
 
 procedure THMAC_CRC32C.Init(key: pointer; keylen: integer);
 var i: integer;
-    k0,k0xorIpad: TByte64;
+    k0,k0xorIpad: THash512Rec;
 begin
   FillCharFast(k0,sizeof(k0),0);
   if keylen>sizeof(k0) then
-    crc256c(key,keylen,PHash256(@k0)^) else
+    crc256c(key,keylen,k0.Lo) else
     MoveFast(key^,k0,keylen);
   for i := 0 to 15 do
-    k0xorIpad[i] := k0[i] xor $36363636;
+    k0xorIpad.c[i] := k0.c[i] xor $36363636;
   for i := 0 to 15 do
-    step7data[i] := k0[i] xor $5c5c5c5c;
+    step7data.c[i] := k0.c[i] xor $5c5c5c5c;
   seed := crc32c(0,@k0xorIpad,sizeof(k0xorIpad));
   FillCharFast(k0,sizeof(k0),0);
   FillCharFast(k0xorIpad,sizeof(k0xorIpad),0);
@@ -9316,9 +9282,9 @@ end;
 procedure TSynSigner.Final(out aSignature: THash512Rec; aNoInit: boolean);
 begin
   case fAlgo of
-  saSha1:   PHMAC_SHA1(@ctxt)^.Done(PSHA1Digest(@aSignature)^,aNoInit);
+  saSha1:   PHMAC_SHA1(@ctxt)^.Done(aSignature.b160,aNoInit);
   saSha256: PHMAC_SHA256(@ctxt)^.Done(aSignature.Lo,aNoInit);
-  saSha384: PHMAC_SHA384(@ctxt)^.Done(aSignature.b3,aNoInit);
+  saSha384: PHMAC_SHA384(@ctxt)^.Done(aSignature.b384,aNoInit);
   saSha512: PHMAC_SHA512(@ctxt)^.Done(aSignature.b,aNoInit);
   saSha3224..saSha3S256: PSHA3(@ctxt)^.Final(@aSignature,fSignatureSize shl 3,aNoInit);
   end;

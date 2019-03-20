@@ -1213,7 +1213,7 @@ end;
 { TMVCSessionWithCookies }
 
 constructor TMVCSessionWithCookies.Create;
-var rnd: TByte64;
+var rnd: THash512;
 begin
   inherited Create;
   fContext.CookieName := 'mORMot';
