@@ -2041,6 +2041,8 @@ type
     {$endif DELPHI5OROLDER}
     /// clear any stored information
     procedure Clear;
+    /// append stored information into another RawByteString, and clear content
+    procedure AppendTextAndClear(var aDest: RawByteString);
     // compact the Values[] array into a single item
     // - is also used by AsText to compute a single RawByteString
     procedure Compact;
@@ -7502,6 +7504,20 @@ begin
   LastFind := 0;
 end;
 
+procedure TRawByteStringGroup.AppendTextAndClear(var aDest: RawByteString);
+var d,i: integer;
+    v: PRawByteStringGroupValue;
+begin
+  d := length(aDest);
+  SetLength(aDest,d+Position);
+  v := pointer(Values);
+  for i := 1 to Count do begin
+    MoveFast(pointer(v^.Value)^,PByteArray(aDest)[d+v^.Position],length(v^.Value));
+    inc(v);
+  end;
+  Clear;
+end;
+
 function TRawByteStringGroup.AsText: RawByteString;
 begin
   if Values=nil then
@@ -7522,7 +7538,7 @@ begin
     v := pointer(Values);
     for i := 1 to Count do begin
       MoveFast(pointer(v^.Value)^,PByteArray(tmp)[v^.Position],length(v^.Value));
-      {$ifdef FPC}Finalize(v^.Value){$else}v^.Value := ''{$endif};
+      {$ifdef FPC}Finalize(v^.Value){$else}v^.Value := ''{$endif}; // free chunks
       inc(v);
     end;
     Values[0].Value := tmp; // use result for absolute compaction ;)
