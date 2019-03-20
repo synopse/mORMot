@@ -10293,7 +10293,7 @@ type
     /// read the next byte from the buffer
     function NextByte: byte; {$ifdef HASINLINE}inline;{$endif}
     /// read the next byte from the buffer, checking
-    function NextByteSafe(out dest): boolean; {$ifdef HASINLINE}inline;{$endif}
+    function NextByteSafe(dest: pointer): boolean; {$ifdef HASINLINE}inline;{$endif}
     /// read the next 4 bytes from the buffer as a 32-bit unsigned value
     function Next4: cardinal; {$ifdef HASINLINE}inline;{$endif}
     /// read the next 8 bytes from the buffer as a 64-bit unsigned value
@@ -62502,13 +62502,14 @@ begin
   inc(P);
 end;
 
-function TFastReader.NextByteSafe(out dest): boolean;
+function TFastReader.NextByteSafe(dest: pointer): boolean;
 begin
   if P>=Last then
     result := false
   else begin
-    AnsiChar(dest) := P^;
+    PAnsiChar(dest)^ := P^;
     inc(P);
+    result := true;
   end;
 end;
 
