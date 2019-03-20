@@ -2779,6 +2779,7 @@ procedure TTestLowLevelCommon.UrlEncoding;
 var i,j: integer;
     s: RawByteString;
     name,value,utf: RawUTF8;
+    str: string;
     P: PUTF8Char;
     GUID2: TGUID;
     U: TURI;
@@ -2790,6 +2791,8 @@ begin
   Check(UrlDecode(PUTF8Char(encoded))=decoded);
 end;
 begin
+  str := UTF8ToString(UrlEncode(StringToUTF8('https://test3.diavgeia.gov.gr/doc/')));
+  check(str='https%3A%2F%2Ftest3.diavgeia.gov.gr%2Fdoc%2F');
   Test('abcdef','abcdef');
   Test('abcdefyzABCDYZ01239_-.~ ','abcdefyzABCDYZ01239_-.~+');
   Test('"Aardvarks lurk, OK?"','%22Aardvarks+lurk%2C+OK%3F%22');
