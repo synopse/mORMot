@@ -15594,22 +15594,22 @@ type
   TSQLRestServerURIPagingParameters = record
     /// parameter name used to specify the request sort order
     // - default value is 'SORT='
-    Sort: PAnsiChar;
+    Sort: RawUTF8;
     /// parameter name used to specify the request sort direction
     // - default value is 'DIR='
-    Dir: PAnsiChar;
+    Dir: RawUTF8;
     /// parameter name used to specify the request starting offset
     // - default value is 'STARTINDEX='
-    StartIndex: PAnsiChar;
+    StartIndex: RawUTF8;
     /// parameter name used to specify the request the page size (LIMIT clause)
     // - default value is 'RESULTS='
-    Results: PAnsiChar;
+    Results: RawUTF8;
     /// parameter name used to specify the request field names
     // - default value is 'SELECT='
-    Select: PAnsiChar;
+    Select: RawUTF8;
     /// parameter name used to specify the request WHERE clause
     // - default value is 'WHERE='
-    Where: PAnsiChar;
+    Where: RawUTF8;
     /// returned JSON field value of optional total row counts
     // - default value is nil, i.e. no total row counts field
     // - computing total row counts can be very expensive, depending on the
@@ -41710,8 +41710,8 @@ begin
           SQLResults := 0;
           if Parameters^<>#0 then
           with Server.URIPagingParameters do begin
-            NonStandardSQLSelectParameter := StrComp(Select,PAGINGPARAMETERS_YAHOO.Select)<>0;
-            NonStandardSQLWhereParameter := StrComp(Where,PAGINGPARAMETERS_YAHOO.Where)<>0;
+            NonStandardSQLSelectParameter := Select<>PAGINGPARAMETERS_YAHOO.Select;
+            NonStandardSQLWhereParameter := Where<>PAGINGPARAMETERS_YAHOO.Where;
             repeat
               UrlDecodeValue(Parameters,Sort,SQLSort);
               UrlDecodeValue(Parameters,Dir,SQLDir);

@@ -2433,7 +2433,7 @@ function UrlDecode(U: PUTF8Char): RawUTF8; overload;
 // will return Next^='where=...' and V='*'
 // - if Upper is not found, Value is not modified, and result is FALSE
 // - if Upper is found, Value is modified with the supplied content, and result is TRUE
-function UrlDecodeValue(U: PUTF8Char; Upper: PAnsiChar; var Value: RawUTF8;
+function UrlDecodeValue(U: PUTF8Char; const Upper: RawUTF8; var Value: RawUTF8;
   Next: PPUTF8Char=nil): boolean;
 
 /// decode a specified parameter compatible with URI encoding into its original
@@ -2442,7 +2442,7 @@ function UrlDecodeValue(U: PUTF8Char; Upper: PAnsiChar; var Value: RawUTF8;
 // will return Next^='where=...' and O=20
 // - if Upper is not found, Value is not modified, and result is FALSE
 // - if Upper is found, Value is modified with the supplied content, and result is TRUE
-function UrlDecodeInteger(U: PUTF8Char; Upper: PAnsiChar;var Value: integer;
+function UrlDecodeInteger(U: PUTF8Char; const Upper: RawUTF8; var Value: integer;
   Next: PPUTF8Char=nil): boolean;
 
 /// decode a specified parameter compatible with URI encoding into its original
@@ -2451,7 +2451,7 @@ function UrlDecodeInteger(U: PUTF8Char; Upper: PAnsiChar;var Value: integer;
 // will return Next^='where=...' and O=20
 // - if Upper is not found, Value is not modified, and result is FALSE
 // - if Upper is found, Value is modified with the supplied content, and result is TRUE
-function UrlDecodeCardinal(U: PUTF8Char; Upper: PAnsiChar;var Value: Cardinal;
+function UrlDecodeCardinal(U: PUTF8Char; const Upper: RawUTF8; var Value: Cardinal;
   Next: PPUTF8Char=nil): boolean;
 
 /// decode a specified parameter compatible with URI encoding into its original
@@ -2460,7 +2460,7 @@ function UrlDecodeCardinal(U: PUTF8Char; Upper: PAnsiChar;var Value: Cardinal;
 // will return Next^='where=...' and O=20
 // - if Upper is not found, Value is not modified, and result is FALSE
 // - if Upper is found, Value is modified with the supplied content, and result is TRUE
-function UrlDecodeInt64(U: PUTF8Char; Upper: PAnsiChar;var Value: Int64;
+function UrlDecodeInt64(U: PUTF8Char; const Upper: RawUTF8; var Value: Int64;
   Next: PPUTF8Char=nil): boolean;
 
 /// decode a specified parameter compatible with URI encoding into its original
@@ -2469,7 +2469,7 @@ function UrlDecodeInt64(U: PUTF8Char; Upper: PAnsiChar;var Value: Int64;
 // will return Next^='where=...' and P=20.45
 // - if Upper is not found, Value is not modified, and result is FALSE
 // - if Upper is found, Value is modified with the supplied content, and result is TRUE
-function UrlDecodeExtended(U: PUTF8Char; Upper: PAnsiChar; var Value: TSynExtended;
+function UrlDecodeExtended(U: PUTF8Char; const Upper: RawUTF8; var Value: TSynExtended;
   Next: PPUTF8Char=nil): boolean;
 
 /// decode a specified parameter compatible with URI encoding into its original
@@ -2478,7 +2478,7 @@ function UrlDecodeExtended(U: PUTF8Char; Upper: PAnsiChar; var Value: TSynExtend
 // will return Next^='where=...' and P=20.45
 // - if Upper is not found, Value is not modified, and result is FALSE
 // - if Upper is found, Value is modified with the supplied content, and result is TRUE
-function UrlDecodeDouble(U: PUTF8Char; Upper: PAnsiChar; var Value: double;
+function UrlDecodeDouble(U: PUTF8Char; const Upper: RawUTF8; var Value: double;
   Next: PPUTF8Char=nil): boolean;
 
 /// returns TRUE if all supplied parameters do exist in the URI encoded text
@@ -33390,8 +33390,7 @@ begin
   end;
 end;
 
-{$endif}
-
+{$endif UNICODE}
 
 function IdemPCharAndGetNextItem(var source: PUTF8Char; const searchUp: RawUTF8;
   var Item: RawUTF8; Sep: AnsiChar): boolean;
@@ -34531,8 +34530,8 @@ begin
     result := U+1; // jump '&' to let decode the next name=value pair
 end;
 
-function UrlDecodeValue(U: PUTF8Char; Upper: PAnsiChar; var Value: RawUTF8;
-  Next: PPUTF8Char=nil): boolean;
+function UrlDecodeValue(U: PUTF8Char; const Upper: RawUTF8; var Value: RawUTF8;
+  Next: PPUTF8Char): boolean;
 begin
   // UrlDecodeValue('select=%2A&where=LastName%3D%27M%C3%B4net%27','SELECT=',V,@U)
   // -> U^='where=...' and V='*'
@@ -34542,9 +34541,9 @@ begin
       Next^ := U;
     exit;
   end;
-  if IdemPChar(U,Upper) then begin
+  if IdemPChar(U,pointer(Upper)) then begin
     result := true;
-    inc(U,StrLen(PUTF8Char(Upper)));
+    inc(U,length(Upper));
     U := UrlDecodeNextValue(U,Value);
   end;
   if Next=nil then
@@ -34555,8 +34554,8 @@ begin
     Next^ := U+1; // jump '&'
 end;
 
-function UrlDecodeInteger(U: PUTF8Char; Upper: PAnsiChar;
-  var Value: integer; Next: PPUTF8Char=nil): boolean;
+function UrlDecodeInteger(U: PUTF8Char; const Upper: RawUTF8;
+  var Value: integer; Next: PPUTF8Char): boolean;
 var V: PtrInt;
     SignNeg: boolean;
 begin
@@ -34568,8 +34567,8 @@ begin
       Next^ := U;
     exit;
   end;
-  if IdemPChar(U,Upper) then begin
-    inc(U,StrLen(PUTF8Char(Upper)));
+  if IdemPChar(U,pointer(Upper)) then begin
+    inc(U,length(Upper));
     if U^='-' then begin
       SignNeg := True;
       Inc(U);
@@ -34595,7 +34594,8 @@ begin
     Next^ := U+1; // jump '&'
 end;
 
-function UrlDecodeCardinal(U: PUTF8Char; Upper: PAnsiChar;var Value: Cardinal; Next: PPUTF8Char=nil): boolean;
+function UrlDecodeCardinal(U: PUTF8Char; const Upper: RawUTF8;
+  var Value: Cardinal; Next: PPUTF8Char): boolean;
 var V: PtrInt;
 begin
   // UrlDecodeInteger('offset=20&where=LastName%3D%27M%C3%B4net%27','OFFSET=',O,@Next)
@@ -34606,8 +34606,8 @@ begin
       Next^ := U;
     exit;
   end;
-  if IdemPChar(U,Upper) then begin
-    inc(U,StrLen(PUTF8Char(Upper)));
+  if IdemPChar(U,pointer(Upper)) then begin
+    inc(U,length(Upper));
     if U^ in ['0'..'9'] then begin
       V := 0;
       repeat
@@ -34626,21 +34626,21 @@ begin
     Next^ := U+1; // jump '&'
 end;
 
-function UrlDecodeInt64(U: PUTF8Char; Upper: PAnsiChar;
-  var Value: Int64; Next: PPUTF8Char=nil): boolean;
+function UrlDecodeInt64(U: PUTF8Char; const Upper: RawUTF8;
+  var Value: Int64; Next: PPUTF8Char): boolean;
 var tmp: RawUTF8;
 begin
-  result := UrlDecodeValue(U, Upper, tmp, Next);
+  result := UrlDecodeValue(U,Upper,tmp,Next);
   if result then
     SetInt64(pointer(tmp),Value);
 end;
 
-function UrlDecodeExtended(U: PUTF8Char; Upper: PAnsiChar;
+function UrlDecodeExtended(U: PUTF8Char; const Upper: RawUTF8;
   var Value: TSynExtended; Next: PPUTF8Char=nil): boolean;
 var tmp: RawUTF8;
     err: integer;
 begin
-  result := UrlDecodeValue(U, Upper, tmp, Next);
+  result := UrlDecodeValue(U,Upper,tmp,Next);
   if result then begin
     Value := GetExtended(pointer(tmp),err);
     if err<>0 then
@@ -34648,12 +34648,12 @@ begin
   end;
 end;
 
-function UrlDecodeDouble(U: PUTF8Char; Upper: PAnsiChar; var Value: double;
+function UrlDecodeDouble(U: PUTF8Char; const Upper: RawUTF8; var Value: double;
   Next: PPUTF8Char=nil): boolean;
 var tmp: RawUTF8;
     err: integer;
 begin
-  result := UrlDecodeValue(U, Upper, tmp, Next);
+  result := UrlDecodeValue(U,Upper,tmp,Next);
   if result then begin
     Value := GetExtended(pointer(tmp),err);
     if err<>0 then
