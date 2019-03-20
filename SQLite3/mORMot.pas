@@ -42688,62 +42688,63 @@ end;
 procedure TSQLRestRoutingREST.ExecuteSOAByInterface;
 var JSON: RawUTF8;
     Par: PUTF8Char;
-    a,i,iLow: Integer;
-    WR: TTextWriter;
-    argDone: boolean;
-    temp: TTextWriterStackBuffer;
+  procedure DecodeUriParametersIntoJSON(const input: TRawUTF8DynArray);
+  var a,i,iLow: Integer;
+      WR: TTextWriter;
+      argDone: boolean;
+      temp: TTextWriterStackBuffer;
+  begin
+    WR := TJSONSerializer.CreateOwnedStream(temp);
+    try // convert URI parameters into the expected ordered JSON array
+      WR.Add('[');
+      with PServiceMethod(ServiceMethod)^ do begin
+        iLow := 0;
+        for a := ArgsInFirst to ArgsInLast do
+        with Args[a] do
+        if ValueDirection<>smdOut then begin
+          argDone := false;
+          for i := iLow to high(input) shr 1 do // search argument in URI
+            if IdemPropName(ParamName^,pointer(input[i*2]),length(input[i*2])) then begin
+              AddValueJSON(WR,input[i*2+1]); // will add "" if needed
+              if i=iLow then
+                inc(iLow); // optimistic in-order search, but allow any order
+              argDone := true;
+              break;
+            end;
+          if not argDone then
+            AddDefaultJSON(WR); // allow missing argument (and add ',')
+        end;
+      end;
+      WR.CancelLastComma;
+      WR.Add(']');
+      WR.SetText(JSON);
+    finally
+      WR.Free;
+    end;
+  end;
 begin // here Ctxt.Service and ServiceMethod(Index) are set
   if (Server.Services=nil) or (Service=nil) then
     raise EServiceException.CreateUTF8('%.ExecuteSOAByInterface invalid call',[self]);
   //  URI as '/Model/Interface.Method[/ClientDrivenID]'
   if Call.InBody<>'' then
-    // parameters sent as JSON array (the Delphi/AJAX way) or single blob
+    // parameters sent as JSON array/object (the Delphi/AJAX way) or single blob
     if (ServiceMethod<>nil) and PServiceMethod(ServiceMethod)^.ArgsInputIsOctetStream and
        not Call.InBodyTypeIsJson then begin
       JSON := BinToBase64(Call.InBody,'["','"]',false);
       ServiceParameters := pointer(JSON); // as expected by InternalExecuteSOAByInterface
     end else
       ServiceParameters := pointer(Call.InBody) else begin
-    // URI-encoded parameters  (the HTML way)
+    // no body -> try URI-encoded parameters (the HTML way)
     Par := Parameters;
     if Par<>nil then begin
       while Par^='+' do inc(Par); // ignore trailing spaces
       if (Par^='[') or IdemPChar(Par,'%5B') then
-        // either as JSON array (input is e.g. '+%5B...' for ' [...')
+        // as JSON array (input is e.g. '+%5B...' for ' [...')
         JSON := UrlDecode(Parameters) else begin
         // or as a list of parameters (input is 'Param1=Value1&Param2=Value2...')
         FillInput; // fInput[0]='Param1',fInput[1]='Value1',fInput[2]='Param2'...
-        if fInput<>nil then begin
-          if ServiceMethod<>nil then begin
-            WR := TJSONSerializer.CreateOwnedStream(temp);
-            try // convert URI parameters into the expected ordered JSON array
-              WR.Add('[');
-              with PServiceMethod(ServiceMethod)^ do begin
-                iLow := 0;
-                for a := ArgsInFirst to ArgsInLast do
-                with Args[a] do
-                if ValueDirection<>smdOut then begin
-                  argDone := false;
-                  for i := iLow to high(fInput)shr 1 do // search argument in URI
-                    if IdemPropName(ParamName^,pointer(fInput[i*2]),length(fInput[i*2])) then begin
-                      AddValueJSON(WR,fInput[i*2+1]); // will add "" if needed
-                      if i=iLow then
-                        inc(iLow); // optimistic in-order search, but allow any order
-                      argDone := true;
-                      break;
-                    end;
-                  if not argDone then
-                    AddDefaultJSON(WR); // allow missing argument (and add ',')
-                end;
-              end;
-              WR.CancelLastComma;
-              WR.Add(']');
-              WR.SetText(JSON);
-            finally
-              WR.Free;
-            end;
-          end;
-        end;
+        if (fInput<>nil) and (ServiceMethod<>nil) then
+          DecodeUriParametersIntoJSON(fInput);
       end;
     end;
     ServiceParameters := pointer(JSON);
