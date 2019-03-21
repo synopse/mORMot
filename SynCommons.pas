@@ -48403,7 +48403,7 @@ begin
     MoveFast(A,B,ElemSize);
     FPCRecordAddRef(B,ElemType);
     {$else}
-    FPCRecordCopy(A,B,ElemType);
+    FPCRecordCopy(A,B,ElemType); // works for any kind of ElemTyp
     {$endif FPC_OLDRTTI}
     {$else}
     CopyArray(@B,@A,ElemType,1);
@@ -48556,7 +48556,7 @@ begin
     if ElemType=nil then
       MoveFast(p^,Dest,ElemSize) else
       {$ifdef FPC}
-      FPCRecordCopy(p^,Dest,ElemType);
+      FPCRecordCopy(p^,Dest,ElemType); // works for any kind of ElemTyp
       {$else}
       CopyArray(@Dest,p,ElemType,1);
       {$endif}
@@ -50203,12 +50203,12 @@ begin // this method is faster than default System.DynArraySetLength() function
       minLength := oldLength;
       if minLength>newLength then
         minLength := newLength;
+      pp := PAnsiChar(p)+SizeOf(TDynArrayRec);
       if ElemType<>nil then begin
-        pp := PAnsiChar(p)+SizeOf(TDynArrayRec);
         FillcharFast(pp^,minLength*elemSize,0);
         CopyArray(pp,fValue^,ElemType,minLength);
       end else
-        MoveFast(fValue^,PAnsiChar(p)[SizeOf(TDynArrayRec)],minLength*elemSize);
+        MoveFast(fValue^^,pp^,minLength*elemSize);
     end;
   end;
   // set refCnt=1 and new length to the heap memory structure
