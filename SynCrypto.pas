@@ -12841,9 +12841,9 @@ begin
     end;
     Count := Count and AESBlockMod;
     if Count<>0 then begin
-      TrailerBytes(Count);
       with fMAC do // includes trailing bytes to the plain crc
         PCardinal(@plain)^ := crc32c(PCardinal(@plain)^,pointer(fIn),Count);
+      TrailerBytes(Count);
     end;
   end;
 end;
@@ -12954,9 +12954,9 @@ begin
     end;
     Count := Count and AESBlockMod;
     if Count<>0 then begin
-      TrailerBytes(Count);
       with fMAC do // includes trailing bytes to the plain crc
         PCardinal(@plain)^ := crc32c(PCardinal(@plain)^,pointer(fIn),Count);
+      TrailerBytes(Count);
     end;
   end;
 end;
@@ -14148,7 +14148,7 @@ begin
   end else
     result := '';
 end;
-{$endif}
+{$endif MSWINDOWS}
 
 var
   __h: THash256;
