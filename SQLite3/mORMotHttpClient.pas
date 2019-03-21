@@ -212,18 +212,24 @@ type
     procedure InternalURI(var Call: TSQLRestURIParams); override;
   public
     /// connect to TSQLHttpServer on aServer:aPort
+    // - optional aProxyName may contain the name of the proxy server to use,
+    // and aProxyByPass an optional semicolon delimited list of host names or
+    // IP addresses, or both, that should not be routed through the proxy - note
+    // that proxy parameters are currently not available for TSQLHttpClientWinSock
     // - you can customize the default client timeouts by setting appropriate
     // ConnectTimeout, SendTimeout and ReceiveTimeout parameters (in ms) - if
     // you left the 0 default parameters, it would use global
     // HTTP_DEFAULT_CONNECTTIMEOUT, HTTP_DEFAULT_SENDTIMEOUT and
     // HTTP_DEFAULT_RECEIVETIMEOUT variable values
     constructor Create(const aServer, aPort: AnsiString; aModel: TSQLModel;
-      aSendTimeout: DWORD=0; aReceiveTimeout: DWORD=0; aConnectTimeout: DWORD=0); reintroduce; overload; virtual;
+      aHttps: boolean=false; const aProxyName: AnsiString='';
+      const aProxyByPass: AnsiString=''; aSendTimeout: DWORD=0;
+      aReceiveTimeout: DWORD=0; aConnectTimeout: DWORD=0); reintroduce; overload;
     /// connect to TSQLHttpServer via 'address:port/root' URI format
     // - if port is not specified, aDefaultPort is used
     // - if root is not specified, aModel.Root is used
     constructor Create(const aServer: TSQLRestServerURIString; aModel: TSQLModel;
-      aDefaultPort: integer); reintroduce; overload;
+      aDefaultPort: integer; aHttps: boolean=false); reintroduce; overload;
     /// connnect to a LogView HTTP Server for remote logging
     // - will associate the EchoCustom callback of the log class to this server
     // - the aLogClass.Family will manage this TSQLHttpClientGeneric instance
@@ -381,7 +387,6 @@ type
   // WinHTTP or libcurl API
   // - not to be called directly, but via TSQLHttpClientWinINet or (even
   // better) TSQLHttpClientWinHTTP overridden classes under Windows
-  // - consider also calling NewSQLHttpClient() global function
   TSQLHttpClientRequest = class(TSQLHttpClientGeneric)
   protected
     fRequest: THttpRequest;
@@ -397,27 +402,6 @@ type
     // - the overridden implementation should set the expected fWinAPIClass
     procedure InternalSetClass; virtual; abstract;
   public
-    /// connect to TSQLHttpServer on aServer:aPort with the default settings
-    // - you can customize the default client timeouts by setting appropriate
-    // ConnectTimeout, SendTimeout and ReceiveTimeout parameters (in ms) - if
-    // you left the 0 default parameters, it would use global
-    // HTTP_DEFAULT_CONNECTTIMEOUT, HTTP_DEFAULT_SENDTIMEOUT and
-    // HTTP_DEFAULT_RECEIVETIMEOUT variable values
-    constructor Create(const aServer, aPort: AnsiString; aModel: TSQLModel;
-      SendTimeout: DWORD=0; ReceiveTimeout: DWORD=0; ConnectTimeout: DWORD=0); overload; override;
-    /// connect to TSQLHttpServer on aServer:aPort
-    // - optional aProxyName may contain the name of the proxy server to use,
-    // and aProxyByPass an optional semicolon delimited list of host names or
-    // IP addresses, or both, that should not be routed through the proxy
-    // - you can customize the default client timeouts by setting appropriate
-    // ConnectTimeout, SendTimeout and ReceiveTimeout parameters (in ms) - if
-    // you left the 0 default parameters, it would use global
-    // HTTP_DEFAULT_CONNECTTIMEOUT, HTTP_DEFAULT_SENDTIMEOUT and
-    // HTTP_DEFAULT_RECEIVETIMEOUT variable values
-    constructor Create(const aServer, aPort: AnsiString; aModel: TSQLModel;
-      aHttps: boolean; const aProxyName: AnsiString='';
-      const aProxyByPass: AnsiString=''; SendTimeout: DWORD=0;
-      ReceiveTimeout: DWORD=0; ConnectTimeout: DWORD=0); reintroduce; overload;
     /// internal class instance used for the connection
     // - will return either a TWinINet, a TWinHTTP or a TCurlHTTP class instance
     property Request: THttpRequest read fRequest;
@@ -501,12 +485,10 @@ type
   {$else ONLYUSEHTTPSOCKET}
   /// HTTP/1.1 RESTful JSON default mORMot Client class
   // - under Windows, maps the TSQLHttpClientWinHTTP class
-  // - consider also calling NewSQLHttpClient() global function
   TSQLHttpClient = TSQLHttpClientWinHTTP;
   /// HTTP/HTTPS RESTful JSON default mORMot Client class
   // - under Windows, maps the TSQLHttpClientWinHTTP class, or TSQLHttpClientCurl
   // under Linux
-  // - consider also calling NewSQLHttpClient() global function
   TSQLHttpsClient = TSQLHttpClientWinHTTP;
   {$endif ONLYUSEHTTPSOCKET}
 
@@ -516,31 +498,7 @@ var
   HttpClientFullWebSocketsLog: Boolean;
 
 
-/// creates an instance of the best TSQLHttpClientGeneric class, according to
-// a given parsed URI
-// - will return a TSQLHttpsClient or a TSQLHttpClientWinSock
-function NewSQLHttpClient(const aURI: TURI; aModel: TSQLModel; aOwnModel: boolean = true;
-  aWeakHttps: Boolean = false; const aProxyName: RawUTF8 = ''; const aProxyByPass: RawUTF8 = ''): TSQLHttpClientGeneric;
-
-
 implementation
-
-
-function NewSQLHttpClient(const aURI: TURI; aModel: TSQLModel; aOwnModel, aWeakHttps: boolean;
-  const aProxyName, aProxyByPass: RawUTF8): TSQLHttpClientGeneric;
-begin
-  if (aURI.Https or (aProxyName <> '')) and
-     TSQLHttpsClient.InheritsFrom(TSQLHttpClientRequest) then begin
-    result := TSQLHttpClientRequest(TSQLHttpsClient).Create(aURI.Server, aURI.Port, aModel,
-      aURI.Https, AnsiString(aProxyName), AnsiString(aProxyByPass));
-    if aWeakHttps then
-      (result as TSQLHttpClientRequest).IgnoreSSLCertificateErrors := true;
-  end
-  else
-    result := TSQLHttpClientWinSock.Create(aURI.Server, aURI.Port, aModel);
-  if aOwnModel then
-    aModel.Owner := result;
-end;
 
 
 { TSQLHttpClientGeneric }
@@ -607,11 +565,13 @@ begin
 end;
 
 constructor TSQLHttpClientGeneric.Create(const aServer, aPort: AnsiString;
-  aModel: TSQLModel; aSendTimeout,aReceiveTimeout,aConnectTimeout: DWORD);
+  aModel: TSQLModel; aHttps: boolean; const aProxyName, aProxyByPass: AnsiString;
+  aSendTimeout,aReceiveTimeout,aConnectTimeout: DWORD);
 begin
   inherited Create(aModel);
   fServer := aServer;
   fPort := aPort;
+  fHttps := aHttps;
   fKeepAliveMS := 20000; // 20 seconds connection keep alive by default
   fCompression := []; // may add hcSynLZ or hcDeflate for AJAX clients
   if aConnectTimeout=0 then
@@ -623,6 +583,8 @@ begin
   if aReceiveTimeout=0 then
     fReceiveTimeout := HTTP_DEFAULT_RECEIVETIMEOUT else
     fReceiveTimeout := aReceiveTimeout;
+  fProxyName := aProxyName;
+  fProxyByPass := aProxyByPass;
 end;
 
 constructor TSQLHttpClientGeneric.CreateForRemoteLogging(const aServer: AnsiString;
@@ -632,7 +594,7 @@ begin
   if not Assigned(aLogClass) then
     raise ECommunicationException.CreateUTF8('%.CreateForRemoteLogging(LogClass=nil)',[self]);
   aModel := TSQLModel.Create([],aRoot);
-  Create(aServer,AnsiString(UInt32ToUtf8(aPort)),aModel);
+  Create(aServer,AnsiString(UInt32ToUtf8(aPort)),aModel,aPort=443);
   aModel.Owner := self;
   ServerRemoteLogStart(aLogClass,true);
   fRemoteLogClass.Log(sllTrace,
@@ -662,8 +624,7 @@ var URI: TURI;
     tmp: RawUTF8;
 begin
   URI.From(aDefinition.ServerName);
-  Create(URI.Server,URI.Port,aModel);
-  fHttps := URI.Https;
+  Create(URI.Server,URI.Port,aModel,URI.Https);
   P := Pointer(aDefinition.DataBaseName);
   while P<>nil do begin
     if UrlDecodeCardinal(P,'CONNECTTIMEOUT',V) then
@@ -683,7 +644,7 @@ begin
 end;
 
 constructor TSQLHttpClientGeneric.Create(const aServer: TSQLRestServerURIString;
-  aModel: TSQLModel; aDefaultPort: integer);
+  aModel: TSQLModel; aDefaultPort: integer; aHttps: boolean);
 var URI: TSQLRestServerURI;
 begin
   URI.URI := aServer;
@@ -691,7 +652,7 @@ begin
     aModel.Root := URI.Root;
   if URI.Port='' then
     URI.Port := Int32ToUtf8(aDefaultPort);
-  Create(SockString(URI.Address),SockString(URI.Port),aModel);
+  Create(SockString(URI.Address),SockString(URI.Port),aModel,aHttps);
 end;
 
 function TSQLHttpClientGeneric.HostName: AnsiString;
@@ -946,31 +907,6 @@ end;
 
 
 { TSQLHttpClientRequest }
-
-constructor TSQLHttpClientRequest.Create(const aServer, aPort: AnsiString;
-  aModel: TSQLModel; aHttps: boolean; const aProxyName, aProxyByPass: AnsiString;
-  SendTimeout,ReceiveTimeout,ConnectTimeout: DWORD);
-begin
-  inherited Create(aServer,aPort,aModel);
-  fHttps := aHttps;
-  fProxyName := aProxyName;
-  fProxyByPass := aProxyByPass;
-  if ConnectTimeout=0 then
-    fConnectTimeout := HTTP_DEFAULT_CONNECTTIMEOUT else
-    fConnectTimeout := ConnectTimeout;
-  if SendTimeout=0 then
-    fSendTimeout := HTTP_DEFAULT_SENDTIMEOUT else
-    fSendTimeout := SendTimeout;
-  if ReceiveTimeout=0 then
-    fReceiveTimeout := HTTP_DEFAULT_RECEIVETIMEOUT else
-    fReceiveTimeout := ReceiveTimeout;
-end;
-
-constructor TSQLHttpClientRequest.Create(const aServer,
-  aPort: AnsiString; aModel: TSQLModel; SendTimeout,ReceiveTimeout,ConnectTimeout: DWORD);
-begin
-  Create(aServer,aPort,aModel,false,'','',SendTimeout,ReceiveTimeout,ConnectTimeout);
-end;
 
 function TSQLHttpClientRequest.InternalCheckOpen: boolean;
 var timeout: Int64;
