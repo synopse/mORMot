@@ -55,8 +55,8 @@ unit mORMotHttpClient;
    - can be called by any JSON-aware AJAX application
    - can optionaly compress the returned data to optimize Internet bandwidth
    - speed is very high: more than 20MB/sec R/W localy on a 1.8GHz Sempron,
-     i.e. 400Mb/sec of duplex raw IP data, with about 200 µs only elapsed
-     by request (direct call is 50 µs, so bottle neck is the Win32 API),
+     i.e. 400Mb/sec of duplex raw IP data, with about 200 Âµs only elapsed
+     by request (direct call is 50 Âµs, so bottle neck is the Win32 API),
      i.e. 5000 requests per second, with 113 result rows (i.e. 4803 bytes
      of JSON data each)... try to find a faster JSON HTTP server! ;)
 
@@ -531,8 +531,8 @@ function NewSQLHttpClient(const aURI: TURI; aModel: TSQLModel; aOwnModel, aWeakH
 begin
   if (aURI.Https or (aProxyName <> '')) and
      TSQLHttpsClient.InheritsFrom(TSQLHttpClientRequest) then begin
-    result := TSQLHttpClientRequest(TSQLHttpsClient).Create(aURI.Server, aURI.Port, aModel,
-      aURI.Https, AnsiString(aProxyName), AnsiString(aProxyByPass));
+    result := TSQLHttpClientRequest(TSQLHttpsClient.Create(aURI.Server, aURI.Port, aModel,
+      aURI.Https, AnsiString(aProxyName), AnsiString(aProxyByPass)));
     if aWeakHttps then
       (result as TSQLHttpClientRequest).IgnoreSSLCertificateErrors := true;
   end
