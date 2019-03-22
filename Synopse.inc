@@ -278,7 +278,11 @@
     {$define LINUX} // not true, but a POSIX/BSD system
     {$ifdef DARWIN}
       {$define FPCSQLITE3STATIC} // we supply Darwin static libs
-      {$define FPC_PIC} // may have not be defined by the compiler options
+      {$ifdef CPUX86}
+        {$define FPC_PIC} // may have not be defined by the compiler options
+      {$endif}
+      {$define DISABLE_SSE42} // fails otherwise
+      {$define ABSOLUTEPASCAL} // NO asm nor redirection (until stabilized)
     {$else}
       {$define BSDNOTDARWIN}
     {$endif}
@@ -312,6 +316,9 @@
       {$define CPUINTEL}
       {$define FPC_CPUINTEL}
       {$ASMMODE INTEL} // as Delphi expects
+      {$ifndef FPC_PIC}
+        {$define CPUX86NOTPIC} // use "absolute" instead of local register
+      {$endif FPC_PIC}
     {$endif CPUX86}
   {$endif CPU64}
 

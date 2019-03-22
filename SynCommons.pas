@@ -2152,12 +2152,14 @@ function StrCompFast(Str1, Str2: pointer): PtrInt;
 var StrComp: function (Str1, Str2: pointer): PtrInt = StrCompFast;
 
 {$ifdef CPUINTEL}
+{$ifndef PUREPASCAL}
 /// SSE 4.2 version of StrComp(), to be used with PUTF8Char/PAnsiChar
 // - please note that this optimized version may read up to 15 bytes
 // beyond the string; this is rarely a problem but it may in principle
 // generate a protection violation (e.g. when used over memory mapped files) -
 // you can use the slightly slower but safe StrCompFast() function instead
 function StrCompSSE42(Str1, Str2: pointer): PtrInt;
+{$endif PUREPASCAL}
 {$endif CPUINTEL}
 
 /// pure pascal version of strspn(), to be used with PUTF8Char/PAnsiChar
@@ -21203,11 +21205,11 @@ begin // StrUInt32 aldready implemented PtrUInt=UInt64
 end;
 {$else}
 var c,c100: QWord;
-    tab: {$ifdef CPUX86}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
+    tab: {$ifdef CPUX86NOTPIC}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
 begin
   if PInt64Rec(@val)^.Hi=0 then
     P := StrUInt32(P,PCardinal(@val)^) else begin
-    {$ifndef CPUX86}tab := @TwoDigitLookupW;{$endif}
+    {$ifndef CPUX86NOTPIC}tab := @TwoDigitLookupW;{$endif}
     c := val;
     repeat
       {$ifdef PUREPASCAL}
@@ -23545,14 +23547,14 @@ end;
 
 function PosI(uppersubstr: PUTF8Char; const str: RawUTF8): PtrInt;
 var u: AnsiChar;
-    table: {$ifdef CPUX86}TNormTable absolute NormToUpperAnsi7{$else}PNormTable{$endif};
+    table: {$ifdef CPUX86NOTPIC}TNormTable absolute NormToUpperAnsi7{$else}PNormTable{$endif};
 begin
   if uppersubstr<>nil then begin
-    {$ifndef CPUX86}table := @NormToUpperAnsi7;{$endif}
+    {$ifndef CPUX86NOTPIC}table := @NormToUpperAnsi7;{$endif}
     u := uppersubstr^;
     for result := 1 to Length(str) do
       if table[str[result]]=u then
-        if {$ifdef CPUX86}IdemPChar({$else}IdemPChar2(table,{$endif}
+        if {$ifdef CPUX86NOTPIC}IdemPChar({$else}IdemPChar2(table,{$endif}
            @PUTF8Char(pointer(str))[result],PAnsiChar(uppersubstr)+1) then
           exit;
   end;
@@ -23561,15 +23563,15 @@ end;
 
 function StrPosI(uppersubstr,str: PUTF8Char): PUTF8Char;
 var u: AnsiChar;
-    table: {$ifdef CPUX86}TNormTable absolute NormToUpperAnsi7{$else}PNormTable{$endif};
+    table: {$ifdef CPUX86NOTPIC}TNormTable absolute NormToUpperAnsi7{$else}PNormTable{$endif};
 begin
   if (uppersubstr<>nil) and (str<>nil) then begin
-    {$ifndef CPUX86}table := @NormToUpperAnsi7;{$endif}
+    {$ifndef CPUX86NOTPIC}table := @NormToUpperAnsi7;{$endif}
     u := uppersubstr^;
     result := str;
     while result^<>#0 do begin
       if table[result^]=u then
-        if {$ifdef CPUX86}IdemPChar({$else}IdemPChar2(table,{$endif}
+        if {$ifdef CPUX86NOTPIC}IdemPChar({$else}IdemPChar2(table,{$endif}
            result+1,PAnsiChar(uppersubstr)+1) then
           exit;
       inc(result);
@@ -27864,17 +27866,20 @@ end;
 
 {$ifdef PUREPASCAL}
 function AnsiIComp(Str1, Str2: PWinAnsiChar): PtrInt;
+var table: PNormTableByte;
 begin
   if Str1<>Str2 then
   if Str1<>nil then
-  if Str2<>nil then
-  repeat
-    result := NormToUpperByte[ord(Str1^)]-NormToUpperByte[pByte(Str2)^];
-    if result<>0 then exit;
-    if (Str1^=#0) or (Str2^=#0) then break;
-    inc(Str1);
-    inc(Str2);
-  until false else
+  if Str2<>nil then begin
+    table := @NormToUpperByte;
+    repeat
+      result := table[ord(Str1^)]-table[pByte(Str2)^];
+      if result<>0 then exit;
+      if (Str1^=#0) or (Str2^=#0) then break;
+      inc(Str1);
+      inc(Str2);
+    until false;
+  end else
   result := 1 else  // Str2=''
   result := -1 else // Str1=''
   result := 0;      // Str1=Str2
@@ -27999,9 +28004,9 @@ end;
 
 function UTF8IComp(u1, u2: PUTF8Char): PtrInt;
 var c2: PtrInt;
-    table: {$ifdef CPUX86}TNormTableByte absolute NormToUpperByte{$else}PNormTableByte{$endif};
+    table: {$ifdef CPUX86NOTPIC}TNormTableByte absolute NormToUpperByte{$else}PNormTableByte{$endif};
 begin // fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits values
-  {$ifndef CPUX86}table := @NormToUpperByte;{$endif}
+  {$ifndef CPUX86NOTPIC}table := @NormToUpperByte;{$endif}
   if u1<>u2 then
   if u1<>nil then
   if u2<>nil then
@@ -28050,10 +28055,10 @@ end;
 function UTF8ILComp(u1, u2: PUTF8Char; L1,L2: cardinal): PtrInt;
 var c2: PtrInt;
     extra,i: integer;
-    table: {$ifdef CPUX86}TNormTableByte absolute NormToUpperByte{$else}PNormTableByte{$endif};
+    table: {$ifdef CPUX86NOTPIC}TNormTableByte absolute NormToUpperByte{$else}PNormTableByte{$endif};
 label neg,pos;
 begin // fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits values
-  {$ifndef CPUX86}table := @NormToUpperByte;{$endif}
+  {$ifndef CPUX86NOTPIC}table := @NormToUpperByte;{$endif}
   if u1<>u2 then
   if (u1<>nil) and (L1<>0) then
   if (u2<>nil) and (L2<>0) then
@@ -28325,12 +28330,12 @@ end;
 function HexDisplayToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: integer): boolean;
 var B,C: PtrUInt;
     i: integer;
-    tab: {$ifdef CPUX86}TNormTableByte absolute ConvertHexToBin{$else}PNormTableByte{$endif};
+    tab: {$ifdef CPUX86NOTPIC}TNormTableByte absolute ConvertHexToBin{$else}PNormTableByte{$endif};
 begin
   result := false; // return false if any invalid char
   if (Hex=nil) or (Bin=nil) then
     exit;
-  {$ifndef CPUX86}tab := @ConvertHexToBin;{$endif} // faster on PIC and x86_64
+  {$ifndef CPUX86NOTPIC}tab := @ConvertHexToBin;{$endif} // faster on PIC and x86_64
   inc(Bin,BinBytes-1);
   for i := 1 to BinBytes do begin
     B := tab[Ord(Hex^)];
@@ -28369,12 +28374,12 @@ end;
 function HexToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: Integer): boolean;
 var I: Integer;
     B,C: PtrUInt;
-    tab: {$ifdef CPUX86}TNormTableByte absolute ConvertHexToBin{$else}PNormTableByte{$endif};
+    tab: {$ifdef CPUX86NOTPIC}TNormTableByte absolute ConvertHexToBin{$else}PNormTableByte{$endif};
 begin
   result := false; // return false if any invalid char
   if Hex=nil then
     exit;
-  {$ifndef CPUX86}tab := @ConvertHexToBin;{$endif} // faster on PIC and x86_64
+  {$ifndef CPUX86NOTPIC}tab := @ConvertHexToBin;{$endif} // faster on PIC and x86_64
   if Bin<>nil then
     for I := 1 to BinBytes do begin
       B := tab[Ord(Hex^)];
@@ -29991,10 +29996,10 @@ end;
 function FindIniNameValue(P: PUTF8Char; UpperName: PAnsiChar): RawUTF8;
 var u, PBeg: PUTF8Char;
     by4: cardinal;
-    table: {$ifdef CPUX86}TNormTable absolute NormToUpperAnsi7{$else}PNormTable{$endif};
+    table: {$ifdef CPUX86NOTPIC}TNormTable absolute NormToUpperAnsi7{$else}PNormTable{$endif};
 begin // expect UpperName as 'NAME='
   if (P<>nil) and (P^<>'[') and (UpperName<>nil) then begin
-    {$ifndef CPUX86}table := @NormToUpperAnsi7;{$endif}
+    {$ifndef CPUX86NOTPIC}table := @NormToUpperAnsi7;{$endif}
     PBeg := nil;
     u := P;
     repeat
@@ -33074,16 +33079,16 @@ end;
 
 function IdemPCharArray(p: PUTF8Char; const upArray: array of PAnsiChar): integer;
 var w: word;
-    tab: {$ifdef CPUX86}TNormTableByte absolute NormToUpperAnsi7{$else}PNormTableByte{$endif};
+    tab: {$ifdef CPUX86NOTPIC}TNormTableByte absolute NormToUpperAnsi7{$else}PNormTableByte{$endif};
     up: ^PAnsiChar;
 begin
   if p<>nil then begin
-    {$ifndef CPUX86}tab := @NormToUpperAnsi7;{$endif} // faster on PIC and x86_64
+    {$ifndef CPUX86NOTPIC}tab := @NormToUpperAnsi7;{$endif} // faster on PIC and x86_64
     w := tab[ord(p[0])]+tab[ord(p[1])]shl 8;
     up := @upArray[0];
     for result := 0 to high(upArray) do
       if (PWord(up^)^=w) and
-        {$ifdef CPUX86}IdemPChar({$else}IdemPChar2(pointer(tab),{$endif}p+2,up^+2) then
+        {$ifdef CPUX86NOTPIC}IdemPChar({$else}IdemPChar2(pointer(tab),{$endif}p+2,up^+2) then
         exit else
         inc(up);
   end;
@@ -33175,14 +33180,14 @@ end;
 
 function UpperCopyWin255(dest: PWinAnsiChar; const source: RawUTF8): PWinAnsiChar;
 var i, L: integer;
-    tab: {$ifdef CPUX86}TNormTableByte absolute NormToUpperByte{$else}PNormTableByte{$endif};
+    tab: {$ifdef CPUX86NOTPIC}TNormTableByte absolute NormToUpperByte{$else}PNormTableByte{$endif};
 begin
   L := {$ifdef FPC}_LStrLen(source){$else}PInteger(PtrInt(source)-SizeOf(integer))^{$endif};
   if L>0 then begin
     if L>250 then
       L := 250; // avoid buffer overflow
     result := dest+L;
-    {$ifndef CPUX86}tab := @NormToUpperByte;{$endif} // faster on PIC and x86_64
+    {$ifndef CPUX86NOTPIC}tab := @NormToUpperByte;{$endif} // faster on PIC and x86_64
     for i := 0 to L-1 do
       dest[i] := AnsiChar(tab[PByteArray(source)[i]]);
   end else
@@ -34861,19 +34866,6 @@ begin
     result := 0;
 end;
 
-function GetBit(const Bits; aIndex: PtrInt): boolean;
-{$ifdef CPUINTEL}
-{$ifdef CPU64}{$ifdef FPC}nostackframe;assembler;asm{$else}asm .noframe{$endif}{$else}asm{$endif}
-        bt      [Bits], aIndex
-        sbb     eax, eax
-        and     eax, 1
-end;
-{$else}
-begin
-  result := TIntegerArray(Bits)[aIndex shr 5] and (1 shl (aIndex and 31)) <> 0;
-end;
-{$endif CPUINTEL}
-
 function GetAllBits(Bits: Cardinal; BitCount: Integer): boolean;
 begin
   if BitCount in [low(ALLBITS_CARDINAL)..high(ALLBITS_CARDINAL)] then
@@ -34881,27 +34873,54 @@ begin
     result := false;
 end;
 
-procedure SetBit(var Bits; aIndex: PtrInt);
-{$ifdef CPUINTEL}{$ifdef CPU64}{$ifdef FPC}nostackframe;assembler;asm{$else}asm .noframe{$endif}{$else}asm{$endif}
-        bts     [Bits], aIndex
+{$ifdef ABSOLUTEPASCAL}
+function GetBit(const Bits; aIndex: PtrInt): boolean;
+begin
+  result := TIntegerArray(Bits)[aIndex shr 5] and (1 shl (aIndex and 31)) <> 0;
 end;
-{$else}
+procedure SetBit(var Bits; aIndex: PtrInt);
 begin
   TIntegerArray(Bits)[aIndex shr 5] := TIntegerArray(Bits)[aIndex shr 5]
     or (1 shl (aIndex and 31));
 end;
-{$endif CPUINTEL}
-
 procedure UnSetBit(var Bits; aIndex: PtrInt);
-{$ifdef CPUINTEL}{$ifdef CPU64}{$ifdef FPC}nostackframe;assembler;asm{$else}asm .noframe{$endif}{$else}asm{$endif}
+begin
+  PIntegerArray(@Bits)^[aIndex shr 5] := PIntegerArray(@Bits)^[aIndex shr 5]
+    and not (1 shl (aIndex and 31));
+end;
+{$else}
+{$ifdef CPUINTEL}
+function GetBit(const Bits; aIndex: PtrInt): boolean;
+{$ifdef CPU64}{$ifdef FPC}nostackframe;assembler;asm{$else}asm .noframe{$endif}{$else}asm{$endif}
+        bt      [Bits], aIndex
+        sbb     eax, eax
+        and     eax, 1
+end;
+procedure SetBit(var Bits; aIndex: PtrInt);
+{$ifdef CPU64}{$ifdef FPC}nostackframe;assembler;asm{$else}asm .noframe{$endif}{$else}asm{$endif}
+        bts     [Bits], aIndex
+end;
+procedure UnSetBit(var Bits; aIndex: PtrInt);
+{$ifdef CPU64}{$ifdef FPC}nostackframe;assembler;asm{$else}asm .noframe{$endif}{$else}asm{$endif}
         btr     [Bits], aIndex
 end;
 {$else}
+function GetBit(const Bits; aIndex: PtrInt): boolean;
+begin
+  result := TIntegerArray(Bits)[aIndex shr 5] and (1 shl (aIndex and 31)) <> 0;
+end;
+procedure SetBit(var Bits; aIndex: PtrInt);
+begin
+  TIntegerArray(Bits)[aIndex shr 5] := TIntegerArray(Bits)[aIndex shr 5]
+    or (1 shl (aIndex and 31));
+end;
+procedure UnSetBit(var Bits; aIndex: PtrInt);
 begin
   PIntegerArray(@Bits)^[aIndex shr 5] := PIntegerArray(@Bits)^[aIndex shr 5]
     and not (1 shl (aIndex and 31));
 end;
 {$endif CPUINTEL}
+{$endif ABSOLUTEPASCAL}
 
 function GetBit64(const Bits: Int64; aIndex: PtrInt): boolean;
 begin
@@ -34922,12 +34941,12 @@ function GetBitsCount(const Bits; Count: PtrInt): integer;
 const POPCNTDATA: array[0..15+4] of integer = (0,1,1,2,1,2,2,3,1,2,2,3,2,3,3,4,0,1,3,7);
 var P: PByte;
     v: PtrUInt;
-{$ifdef CPUX86}tab: TIntegerArray absolute POPCNTDATA;
+{$ifdef CPUX86NOTPIC}tab: TIntegerArray absolute POPCNTDATA;
 begin // not enough registers on this CPU
 {$else}tab: PIntegerArray;
 begin
   tab := @POPCNTDATA;
-{$endif CPUX86}
+{$endif CPUX86NOTPIC}
   P := @Bits;
   result := 0;
   while Count>=8 do begin
@@ -35566,6 +35585,7 @@ end;
 
 procedure crcblocks(crc128, data128: PBlock128; count: integer);
 begin
+  {$ifndef DISABLE_SSE42}
   {$ifdef CPUX86}
   if (cfSSE42 in CpuFeatures) and (count>0) then
   asm
@@ -35588,6 +35608,7 @@ begin
         jnz     @s
   end else
   {$endif CPUX86}
+  {$endif DISABLE_SSE42}
   while count>0 do begin
     crcblock(crc128,data128);
     inc(data128);
@@ -36274,7 +36295,7 @@ end;
 
 procedure DateTimeToFileShort(const DateTime: TDateTime; out result: TShort16);
 var HH,MM,SS,MS,Y,M,D: word;
-    tab: {$ifdef CPUX86}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
+    tab: {$ifdef CPUX86NOTPIC}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
 begin // use 'YYMMDDHHMMSS' format
   if DateTime<=0 then begin
     PWord(@result[0])^ := 1+ord('0') shl 8;
@@ -36287,7 +36308,7 @@ begin // use 'YYMMDDHHMMSS' format
       Y := 99 else
     Y := 0;
   DecodeTime(DateTime,HH,MM,SS,MS);
-  {$ifndef CPUX86}tab := @TwoDigitLookupW;{$endif}
+  {$ifndef CPUX86NOTPIC}tab := @TwoDigitLookupW;{$endif}
   result[0] := #12;
   PWord(@result[1])^ := tab[Y];
   PWord(@result[3])^ := tab[M];
@@ -36462,7 +36483,7 @@ procedure Iso8601ToDateTimePUTF8CharVar(P: PUTF8Char; L: integer; var result: TD
 var B: cardinal;
     Y,M,D, H,MI,SS,MS: cardinal;
     d100: TDiv100Rec;
-    tab: {$ifdef CPUX86}TNormTableByte absolute ConvertHexToBin{$else}PNormTableByte{$endif};
+    tab: {$ifdef CPUX86NOTPIC}TNormTableByte absolute ConvertHexToBin{$else}PNormTableByte{$endif};
 // expect 'YYYYMMDDThhmmss[.sss]' format but handle also 'YYYY-MM-DDThh:mm:ss[.sss]'
 begin
   unaligned(result) := 0;
@@ -36476,7 +36497,7 @@ begin
     dec(P,8);
     inc(L,8);
   end else begin
-    {$ifndef CPUX86}tab := @ConvertHexToBin;{$endif} // faster on PIC and x86_64
+    {$ifndef CPUX86NOTPIC}tab := @ConvertHexToBin;{$endif} // faster on PIC and x86_64
     B := tab[ord(P[0])]; // first digit
     if B>9 then exit else Y := B; // fast check '0'..'9'
     B := tab[ord(P[1])];
@@ -37333,11 +37354,11 @@ end;
 procedure TSynSystemTime.AddLogTime(WR: TTextWriter);
 var y,d100: PtrUInt;
     P: PUTF8Char;
-    tab: {$ifdef CPUX86}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
+    tab: {$ifdef CPUX86NOTPIC}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
 begin
   if WR.BEnd-WR.B<=18 then
     WR.FlushToStream;
-  {$ifndef CPUX86}tab := @TwoDigitLookupW;{$endif}
+  {$ifndef CPUX86NOTPIC}tab := @TwoDigitLookupW;{$endif}
   y := Year;
   d100 := y div 100;
   P := WR.B+1;
@@ -37356,9 +37377,9 @@ end;
 
 function TSynSystemTime.ToNCSAText(P: PUTF8Char): PtrInt;
 var y,d100: PtrUInt;
-    tab: {$ifdef CPUX86}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
+    tab: {$ifdef CPUX86NOTPIC}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
 begin
-  {$ifndef CPUX86}tab := @TwoDigitLookupW;{$endif}
+  {$ifndef CPUX86NOTPIC}tab := @TwoDigitLookupW;{$endif}
   PWord(P)^ := tab[Day];
   P[2] := '/';
   PCardinal(P+3)^ := PCardinal(@HTML_MONTH_NAMES[Month][1])^;
@@ -54490,7 +54511,7 @@ end;
 
 procedure TTextWriter.AddJSONEscape(P: Pointer; Len: PtrInt);
 var i,c: PtrInt;
-    {$ifndef CPUX86}tab: ^TSynByteBoolean;{$endif}
+    {$ifndef CPUX86NOTPIC}tab: ^TSynByteBoolean;{$endif}
 label noesc;
 begin
   if P=nil then
@@ -54498,7 +54519,7 @@ begin
   if Len=0 then
     Len := MaxInt;
   i := 0;
-  {$ifdef CPUX86}
+  {$ifdef CPUX86NOTPIC}
   while i<Len do begin
     if not(PByteArray(P)[i] in JSON_ESCAPE) then begin
 noesc:c := i;
@@ -54513,7 +54534,7 @@ noesc:c := i;
       repeat
         inc(i);
       until (i>=Len) or tab^[PByteArray(P)[i]];
-  {$endif}
+  {$endif CPUX86NOTPIC}
       inc(PByte(P),c);
       dec(i,c);
       dec(Len,c);
@@ -55606,7 +55627,7 @@ function GetJSONField(P: PUTF8Char; out PDest: PUTF8Char;
   wasString: PBoolean; EndOfObject: PUTF8Char; Len: PInteger): PUTF8Char;
 var D: PUTF8Char;
     b,c4,surrogate,j: integer;
-    tab: {$ifdef CPUX86}TNormTableByte absolute ConvertHexToBin{$else}PNormTableByte{$endif};
+    tab: {$ifdef CPUX86NOTPIC}TNormTableByte absolute ConvertHexToBin{$else}PNormTableByte{$endif};
 label slash,num;
 begin
   if wasString<>nil then
@@ -55689,7 +55710,7 @@ slash:inc(P);
         'f': D^ := #$0c;
         'r': D^ := #$0d;
         'u': begin // inlined decoding of '\u0123' UTF-16 codepoint into UTF-8
-          {$ifndef CPUX86}tab := @ConvertHexToBin;{$endif} // faster on PIC and x86_64
+          {$ifndef CPUX86NOTPIC}tab := @ConvertHexToBin;{$endif} // faster on PIC and x86_64
           c4 := tab[ord(P[1])];
           if c4<=15 then begin
             b := tab[ord(P[2])];
@@ -63122,10 +63143,10 @@ end;
 
 function StrCompIL(P1,P2: PUTF8Char; L, Default: Integer): PtrInt;
 var i: PtrInt;
-    tab: {$ifdef CPUX86}TNormTable absolute NormToUpperAnsi7{$else}PNormTable{$endif};
+    tab: {$ifdef CPUX86NOTPIC}TNormTable absolute NormToUpperAnsi7{$else}PNormTable{$endif};
 begin
   i := 0;
-  {$ifndef CPUX86}tab := @NormToUpperAnsi7;{$endif} // faster on PIC and x86_64
+  {$ifndef CPUX86NOTPIC}tab := @NormToUpperAnsi7;{$endif} // faster on PIC and x86_64
   repeat
     if tab[P1[i]]=tab[P2[i]] then begin
       inc(i);
@@ -66386,8 +66407,8 @@ begin
   {$ifdef DISABLE_SSE42}
   // may be needed on Darwin x64 (as reported by alf)
   Exclude(CpuFeatures, cfSSE42);
+  Exclude(CpuFeatures, cfAESNI);
   {$endif}
-  //Exclude(CpuFeatures, cfAESNI);
 end;
 {$endif CPUINTEL}
 
@@ -66509,6 +66530,7 @@ begin
   end;
   UpperCopy255Buf := @UpperCopy255BufPas;
   DefaultHasher := @xxHash32; // faster than crc32cfast for small content
+  {$ifndef ABSOLUTEPASCAL}
   {$ifdef CPUINTEL}
   {$ifdef FPC} // done in InitRedirectCode for Delphi
   {$ifdef CPUX86}
@@ -66547,6 +66569,7 @@ begin
     DefaultHasher := crc32c;
   end;
   {$endif CPUINTEL}
+  {$endif ABSOLUTEPASCAL}
   InterningHasher := DefaultHasher;
   KINDTYPE_INFO[djRawUTF8] := TypeInfo(RawUTF8); // for TDynArray.LoadKnownType
   KINDTYPE_INFO[djWinAnsi] := TypeInfo(WinAnsiString);
