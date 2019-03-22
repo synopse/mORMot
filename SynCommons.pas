@@ -20595,14 +20595,11 @@ begin
       exit;
     end;
     vtChar: begin
-      {$ifdef FPC} // alf: to circumvent FPC issue
-      RawUnicodeToUtf8(@V.VChar,1,RawUTF8(Res.TempRawUTF8));
-      {$else}
-      Res.Text := @V.VChar;
+      Res.Temp[0] := V.VChar; // V may be on transient stack (alf: FPC)
+      Res.Text := @Res.Temp;
       Res.Len := 1;
       result := 1;
       exit;
-      {$endif}
     end;
     vtPWideChar:
       RawUnicodeToUtf8(V.VPWideChar,StrLenW(V.VPWideChar),RawUTF8(Res.TempRawUTF8));
@@ -20686,12 +20683,17 @@ smlu32: Res.Text := pointer(SmallUInt32UTF8[result]);
     end;
     {$ifndef NOVARIANTS}
     vtVariant:
-      if VariantToInt64(V.VVariant^,v64) then begin
-        Res.Text := PUTF8Char(StrInt64(@Res.Temp[23],v64));
-        Res.Len := @Res.Temp[23]-Res.Text;
-        result := Res.Len;
-        exit;
-      end else
+      if VariantToInt64(V.VVariant^,v64) then
+        if (PCardinalArray(@v64)^[0]<=high(SmallUInt32UTF8)) and
+           (PCardinalArray(@v64)^[1]=0) then begin
+          result := v64;
+          goto smlu32;
+        end else begin
+          Res.Text := PUTF8Char(StrInt64(@Res.Temp[23],v64));
+          Res.Len := @Res.Temp[23]-Res.Text;
+          result := Res.Len;
+          exit;
+        end else
         VariantToUTF8(V.VVariant^,RawUTF8(Res.TempRawUTF8),isString);
     {$endif}
     else begin
@@ -24432,9 +24434,6 @@ begin
   A := 0;
   P := 0;
   F := pointer(Format);
-  {$ifdef FPC}
-  try // alf: to circumvent FPC issues
-  {$endif}
   while F^<>#0 do begin
     if F^<>'%' then begin
       FDeb := F;
@@ -24512,11 +24511,6 @@ Txt:  len := F-FDeb;
       inc(F,2);
     end;
   end;
-  {$ifdef FPC}
-  finally
-    finalize(tmp);
-  end;
-  {$endif}
 end;
 
 function ScanUTF8(P: PUTF8Char; PLen: integer; const fmt: RawUTF8;

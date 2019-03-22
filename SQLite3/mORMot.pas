@@ -25352,10 +25352,6 @@ begin
   FillcharFast(Bits,(fRowCount shr 3)+1,0);
   for i := 0 to nSet-1 do
     SetBit(Bits,i); // slow but accurate
-  {$ifdef FPC}
-  Finalize(oldIDColumn); // alf: to circumvent FPC issues
-  Finalize(oldResults);
-  {$endif}
 end;
 
 function TSQLTable.IDColumnHide: boolean;
@@ -33244,9 +33240,6 @@ begin
   Objects[0] := self;
   ObjectsClass[0] := PSQLRecordClass(self)^;
   SetLength(fFill.fTableMapRecordManyInstances,n);  // fFill.UnMap will release memory
-  aSQLWhere := '';  // alf: to circumvent FPC issues
-  aSQLFields := '';
-  aSQLFrom := '';
   for f := 0 to n-1 do begin
     M := TSQLRecordMany(Props.ManyFields[f].GetInstance(self));
     if M=nil then
@@ -33728,7 +33721,6 @@ begin
   if (self=nil) or IsZero(aFields) then
     // avoid GPF and handle case if no field was selected
     exit;
-  Value := '';  // alf: to circumvent FPC issues
   with RecordProps do
   if Filters<>nil then
   for f := 0 to Fields.Count-1 do
@@ -47293,7 +47285,6 @@ begin
   // search indexes, then apply updates
   Where := TList.Create;
   StorageLock(true,'EngineUpdateField');
-  SetValueJson := ''; // alf: to circumvent FPC issues
   try
     // find matching Where[]
     if FindWhereEqual(WhereFieldIndex,WhereValueString,AddIntegerDynArrayEvent,Where,0,0)=0 then
@@ -52240,7 +52231,6 @@ var where: RawUTF8;
     i: integer;
     aID: TID;
 begin
-  where := ''; // alf: to circumvent FPC issues
   if (fProcessRest=nil) or (fProcessRec=nil) or (fFieldNames=nil) then
     result := true else begin
     for i := 0 to high(fFieldNames) do begin
