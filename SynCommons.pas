@@ -2151,14 +2151,14 @@ function StrCompFast(Str1, Str2: pointer): PtrInt;
 // !  StrComp := @StrCompFast;
 var StrComp: function (Str1, Str2: pointer): PtrInt = StrCompFast;
 
-{$ifndef PUREPASCAL}
+{$ifdef CPUINTEL}
 /// SSE 4.2 version of StrComp(), to be used with PUTF8Char/PAnsiChar
 // - please note that this optimized version may read up to 15 bytes
 // beyond the string; this is rarely a problem but it may in principle
 // generate a protection violation (e.g. when used over memory mapped files) -
 // you can use the slightly slower but safe StrCompFast() function instead
 function StrCompSSE42(Str1, Str2: pointer): PtrInt;
-{$endif PUREPASCAL}
+{$endif CPUINTEL}
 
 /// pure pascal version of strspn(), to be used with PUTF8Char/PAnsiChar
 // - please note that this optimized version may read up to 3 bytes beyond
@@ -18060,8 +18060,7 @@ implementation
 
 {$ifdef FPC}
 uses
-  {$ifdef Linux}
-  SynFPCLinux,
+  {$ifdef LINUX}
   Unix,
   dynlibs,
   termio,
@@ -18071,19 +18070,20 @@ uses
   {$else}
   Linux,
   SysCall,
-  {$endif}
-  {$endif}
-  {$ifndef MSWINDOWS}
-    {$ifdef FPCUSEVERSIONINFO} // should be enabled in Synopse.inc
+  {$endif BSD}
+  {$ifdef FPCUSEVERSIONINFO} // to be enabled in Synopse.inc
     fileinfo, // FPC 3.0 and up
-    winpeimagereader, // winpe exe info
-    elfreader,  // ELF executables
-    machoreader, // MACH-O executables
-    {$endif FPCUSEVERSIONINFO}
-    {$ifdef ISFPC271}
-    unixcp,
-    {$endif}
-  {$endif MSWINDOWS}
+    {$ifdef DARWIN}
+      machoreader, // MACH-O executables
+    {$else}
+      elfreader, // ELF executables
+    {$endif DARWIN}
+  {$endif FPCUSEVERSIONINFO}
+  {$ifdef ISFPC271}
+    unixcp, // for GetSystemCodePage
+  {$endif}
+  SynFPCLinux,
+  {$endif LINUX}
   SynFPCTypInfo; // small wrapper unit around FPC's TypInfo.pp
 {$endif FPC}
 
@@ -22697,9 +22697,12 @@ begin
   varLongWord:
     UInt32ToUTF8(VLongWord,result);
   {$endif}
-  varByte,
-  varBoolean:
+  varByte:
     result := SmallUInt32UTF8[VByte];
+  varBoolean:
+    if VBoolean then
+      result := SmallUInt32UTF8[1] else
+      result := SmallUInt32UTF8[0];
   varInteger:
     Int32ToUTF8(VInteger,result);
   varInt64:
@@ -46400,6 +46403,7 @@ type
     Lookup: array of PVariant;
     Compare: TVariantCompare;
     Doc: PDocVariantData;
+    Reverse: boolean;
     procedure Sort(L, R: PtrInt);
   end;
 
@@ -46820,7 +46824,8 @@ begin
   found := GetVarData(aName,aSortedCompare);
   if found=nil then
     result := false else begin
-    VariantToUTF8(PVariant(found)^,aValue,wasString);
+    if found^.VType>varNull then // default VariantToUTF8(null)='null'
+      VariantToUTF8(PVariant(found)^,aValue,wasString);
     result := true;
   end;
 end;
