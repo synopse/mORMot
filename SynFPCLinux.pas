@@ -541,8 +541,10 @@ procedure TExternalLibraries.Done;
 begin
   EnterCriticalSection(Lock);
   if Loaded then begin
-    @pthread_setname_np := nil;
     {$ifdef LINUX}
+    {$ifdef LINUXNOTBSD}
+    @pthread_setname_np := nil;
+    {$endif LINUXNOTBSD}
     if pthread <> nil then
       dlclose(pthread);
     {$endif LINUX}
