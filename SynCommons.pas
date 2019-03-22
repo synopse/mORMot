@@ -15317,8 +15317,10 @@ type
     procedure SortByValue(Compare: TVariantCompare = nil);
     /// sort the document array values by a field of some stored objet values
     // - do nothing if the document is not a dvArray, or if the items are no dvObject
-    // - will sort by UTF-8 text (VariantCompare) if no custom aCompare is supplied
-    procedure SortArrayByField(const aItemPropName: RawUTF8; aCompare: TVariantCompare=nil);
+    // - will sort by UTF-8 text (VariantCompare) if no custom aValueCompare is supplied
+    procedure SortArrayByField(const aItemPropName: RawUTF8;
+      aValueCompare: TVariantCompare=nil; aValueCompareReverse: boolean=false;
+      aNameSortedCompare: TUTF8Compare=nil);
     /// reverse the order of the document object or array items
     procedure Reverse;
     /// create a TDocVariant object, from a selection of properties of this
@@ -46411,8 +46413,14 @@ begin
     P := (L + R) shr 1;
     repeat
       pivot := Lookup[P];
-      while Compare(Lookup[I]^,pivot^)<0 do Inc(I);
-      while Compare(Lookup[J]^,pivot^)>0 do Dec(J);
+      if Reverse then begin
+        while Compare(Lookup[I]^,pivot^)<0 do Inc(I);
+        while Compare(Lookup[J]^,pivot^)>0 do Dec(J);
+      end
+      else begin
+        while Compare(Lookup[I]^,pivot^)>0 do Inc(I);
+        while Compare(Lookup[J]^,pivot^)<0 do Dec(J);
+      end;
       if I <= J then begin
         if I <> J then begin
           if Doc.VName<>nil then
@@ -46439,19 +46447,25 @@ begin
 end;
 
 procedure TDocVariantData.SortArrayByField(const aItemPropName: RawUTF8;
-  aCompare: TVariantCompare);
+  aValueCompare: TVariantCompare; aValueCompareReverse: boolean; aNameSortedCompare: TUTF8Compare);
 var
   QS: TQuickSortDocVariantValuesByField;
+  p: pointer;
   row: PtrInt;
 begin
   if (VCount<=0) or (aItemPropName='') or not (dvoIsArray in VOptions) then
     exit;
-  if not Assigned(aCompare) then
+  if not Assigned(aValueCompare) then
     QS.Compare := VariantCompare else
-    QS.Compare := aCompare;
+    QS.Compare := aValueCompare;
+  QS.Reverse := aValueCompareReverse;
   SetLength(QS.Lookup,VCount);
-  for row := 0 to VCount-1 do // resolve GetPVariantByName(aIdemPropName) once
-    QS.Lookup[row] := _Safe(VValue[row]).GetPVariantByName(aItemPropName);
+  for row := 0 to VCount-1 do begin // resolve GetPVariantByName(aIdemPropName) once
+    p := _Safe(VValue[row])^.GetVarData(aItemPropName,aNameSortedCompare);
+    if p = nil then
+      p := @NullVarData;
+    QS.Lookup[row] := p;
+  end;
   QS.Doc := @self;
   QS.Sort(0,VCount-1);
 end;
