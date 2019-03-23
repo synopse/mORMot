@@ -603,6 +603,13 @@
   {$undef HASAESNI} // AES-NI is an Intel-specific feature
 {$endif CPUINTEL}
 
+{$ifdef ABSOLUTEPASCAL}
+  {$define ABSOLUTEORPUREPASCAL}
+{$endif ABSOLUTEPASCAL}
+{$ifdef PUREPASCAL}
+  {$define ABSOLUTEORPUREPASCAL}
+{$endif PUREPASCAL}
+
 {$ifdef FPC}
   {$ifndef FPCSQLITE3STATIC} // see above about this FPC-specific conditional
     {$define NOSQLITE3STATIC}

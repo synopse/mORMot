@@ -322,11 +322,11 @@ uses
       {$ifdef MSWINDOWS}
         {$define SHA512_X86} // external sha512-x86.obj/.o
       {$endif}
-      {$ifdef FPC_PIC}
+      {$ifdef ABSOLUTEPASCAL}
         {$define AES_PASCAL} // x86 AES asm below is not PIC-safe
       {$else}
         {$define CPUX86_NOTPIC}
-      {$endif FPC_PIC}
+      {$endif ABSOLUTEPASCAL}
       {$ifdef FPC}
         {$ifdef DARWIN}
           {$define AES_PASCAL} // as reported by alf

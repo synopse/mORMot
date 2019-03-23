@@ -1605,6 +1605,7 @@ begin
   Assert(strspnpas(PAnsiChar('baabbaabbaabbabcd'),PAnsiChar('ab'))=15);
   Assert(strspnpas(PAnsiChar('baabbaabbaabbaabcd'),PAnsiChar('ab'))=16);
   Assert(strspnpas(PAnsiChar('baabbaabbaababaabcd'),PAnsiChar('ab'))=17);
+  {$ifndef ABSOLUTEPASCAL}
   {$ifdef CPUINTEL}
   if cfSSE42 in CpuFeatures then begin
     Check(strcspnsse42(PAnsiChar('ab'),PAnsiChar('a'#0))=0);
@@ -1639,6 +1640,7 @@ begin
     Check(strspnsse42(PAnsiChar('baabbaabbaababaabcd'),PAnsiChar('ab'))=17);
   end;
   {$endif CPUINTEL}
+  {$endif ABSOLUTEPASCAL}
 end;
 
 procedure TTestLowLevelCommon.IniFiles;

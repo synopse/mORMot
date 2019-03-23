@@ -26951,18 +26951,7 @@ begin
 end;
 
 procedure ExchgPtrUInt(P1,P2: PtrUInt; FieldCount: PtrUInt);
-{$ifndef CPUX86}  // CPU64 will call this version e.g.
-var B,i: PtrUInt;
-begin
-  for i := 1 to FieldCount do begin
-    B := PPtrUInt(P1)^;
-    PPtrUInt(P1)^ := PPtrUInt(P2)^;
-    PPtrUInt(P2)^ := B;
-    inc(PPtrUInt(P1));
-    inc(PPtrUInt(P2));
-  end;
-end;
-{$else}
+{$ifdef CPUX86NOTPIC}
 asm // eax=P1 edx=P2 ecx=FieldCount
         push    esi
         push    edi
@@ -26977,9 +26966,20 @@ asm // eax=P1 edx=P2 ecx=FieldCount
         pop     edi
         pop     esi
 end;
-{$endif}
+{$else}
+var B,i: PtrUInt;
+begin
+  for i := 1 to FieldCount do begin
+    B := PPtrUInt(P1)^;
+    PPtrUInt(P1)^ := PPtrUInt(P2)^;
+    PPtrUInt(P2)^ := B;
+    inc(PPtrUInt(P1));
+    inc(PPtrUInt(P2));
+  end;
+end;
+{$endif CPUX86NOTPIC}
 
-{$ifndef PUREPASCAL} // do be placed outside TUTF8QuickSort.QuickSort for FPC
+{$ifndef ABSOLUTEORPUREPASCAL} // outside TUTF8QuickSort.QuickSort for FPC
 procedure ExchgPUTF8Charx86(P: pointer; I,J: integer);
 asm // eax=P edx=I ecx=J
         push    ebx
@@ -26991,12 +26991,12 @@ asm // eax=P edx=I ecx=J
         mov     [edx], ebx
         pop     ebx
 end;
-{$endif}
+{$endif ABSOLUTEORPUREPASCAL}
 
 procedure TUTF8QuickSort.QuickSort(L, R: Integer);
 // code below is very fast and optimized
 var P: PtrInt;
-    {$ifdef PUREPASCAL}Tmp: PUTF8Char;{$endif}
+    {$ifdef ABSOLUTEORPUREPASCAL}Tmp: PUTF8Char;{$endif}
 begin
   if @Params.Comp<>nil then
   repeat
@@ -27037,7 +27037,7 @@ begin
           ExchgPtrUInt(PtrInt(CI)-FieldFirstPtr,PtrInt(CJ)-FieldFirstPtr,
             Params.FieldCount); // exchange PUTF8Char for whole I,J rows
           if Assigned(IDColumn) then begin // exchange hidden ID column also
-            {$ifdef PUREPASCAL}
+            {$ifdef ABSOLUTEORPUREPASCAL}
             Tmp := IDColumn[I];
             IDColumn[I] := IDColumn[J];
             IDColumn[J] := Tmp;
@@ -59432,6 +59432,9 @@ asm
         mov     ebp, esp
         mov     esi, Args
         // copy stack content (if any)
+        {$ifdef DARWIN} // require aligned stack
+        and     esp, -16
+        {$endif}
         mov     eax, [esi].TCallMethodArgs.StackSize
         mov     edx, dword ptr[esi].TCallMethodArgs.StackAddr
         add     edx, eax // pascal/register convention = left-to-right
@@ -61705,7 +61708,12 @@ begin
     // create the stack and register content
     {$ifdef CPUX86}
     call.StackAddr := PtrInt(@Stack[0]);
+    {$ifdef DARWIN} // require aligned stack
+    a := ArgsSizeInStack+15;
+    call.StackSize := a-(a and 15);
+    {$else}
     call.StackSize := ArgsSizeInStack;
+    {$endif}
     {$else}
     {$ifdef CPUINTEL}
     call.StackSize := ArgsSizeInStack shr 3;
@@ -61717,13 +61725,14 @@ begin
     {$else}
     // stack is filled normally (LTR)
     call.StackAddr := PtrInt(@Stack[0]);
-    call.StackSize := ArgsSizeInStack shr 2;
     {$ifdef CPUAARCH64}
     call.StackSize := ArgsSizeInStack shr 3;
     // ensure stack aligned on 16 bytes (mandatory: needed for correct low level asm)
     if call.StackSize and 1 <> 0 then
       inc(call.StackSize);
-    {$endif}
+    {$else}
+    call.StackSize := ArgsSizeInStack shr 2;
+    {$endif CPUAARCH64}
     {$endif CPUINTEL}
     {$endif CPUX86}
     for a := 1 to high(Args) do

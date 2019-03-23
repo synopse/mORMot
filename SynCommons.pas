@@ -2151,17 +2151,6 @@ function StrCompFast(Str1, Str2: pointer): PtrInt;
 // !  StrComp := @StrCompFast;
 var StrComp: function (Str1, Str2: pointer): PtrInt = StrCompFast;
 
-{$ifdef CPUINTEL}
-{$ifndef PUREPASCAL}
-/// SSE 4.2 version of StrComp(), to be used with PUTF8Char/PAnsiChar
-// - please note that this optimized version may read up to 15 bytes
-// beyond the string; this is rarely a problem but it may in principle
-// generate a protection violation (e.g. when used over memory mapped files) -
-// you can use the slightly slower but safe StrCompFast() function instead
-function StrCompSSE42(Str1, Str2: pointer): PtrInt;
-{$endif PUREPASCAL}
-{$endif CPUINTEL}
-
 /// pure pascal version of strspn(), to be used with PUTF8Char/PAnsiChar
 // - please note that this optimized version may read up to 3 bytes beyond
 // accept but never after s end, so is safe e.g. over memory mapped files
@@ -2173,18 +2162,6 @@ function strspnpas(s,accept: pointer): integer;
 // reject but never after s end, so is safe e.g. over memory mapped files
 function strcspnpas(s,reject: pointer): integer;
   {$ifdef HASINLINE}inline;{$endif}
-
-{$ifdef CPUINTEL}
-/// SSE 4.2 version of strspn(), to be used with PUTF8Char/PAnsiChar
-// - please note that this optimized version may read up to 15 bytes
-// beyond the string, so should be avoided e.g. over memory mapped files
-function strspnsse42(s,accept: pointer): integer;
-
-/// SSE 4.2 version of strcspn(), to be used with PUTF8Char/PAnsiChar
-// - please note that this optimized version may read up to 15 bytes
-// beyond the string, so should be avoided e.g. over memory mapped files
-function strcspnsse42(s,reject: pointer): integer;
-{$endif}
 
 /// fastest available version of strspn(), to be used with PUTF8Char/PAnsiChar
 // - returns how many accept chars appear in the initial segment of s, e.g.
@@ -2201,6 +2178,27 @@ var strspn: function (s,accept: pointer): integer = strspnpas;
 // - please note that this function may read some bytes beyond the s string, so
 // should be avoided e.g. over memory mapped files - use safe strcspnpas instead
 var strcspn: function (s,reject: pointer): integer = strcspnpas;
+
+{$ifndef ABSOLUTEPASCAL}
+{$ifdef CPUINTEL}
+/// SSE 4.2 version of StrComp(), to be used with PUTF8Char/PAnsiChar
+// - please note that this optimized version may read up to 15 bytes
+// beyond the string; this is rarely a problem but it may in principle
+// generate a protection violation (e.g. when used over memory mapped files) -
+// you can use the slightly slower but safe StrCompFast() function instead
+function StrCompSSE42(Str1, Str2: pointer): PtrInt;
+
+/// SSE 4.2 version of strspn(), to be used with PUTF8Char/PAnsiChar
+// - please note that this optimized version may read up to 15 bytes
+// beyond the string, so should be avoided e.g. over memory mapped files
+function strspnsse42(s,accept: pointer): integer;
+
+/// SSE 4.2 version of strcspn(), to be used with PUTF8Char/PAnsiChar
+// - please note that this optimized version may read up to 15 bytes
+// beyond the string, so should be avoided e.g. over memory mapped files
+function strcspnsse42(s,reject: pointer): integer;
+{$endif}
+{$endif ABSOLUTEPASCAL}
 
 /// use our fast version of StrIComp(), to be used with PUTF8Char/PAnsiChar
 function StrIComp(Str1, Str2: pointer): PtrInt;
@@ -11993,15 +11991,15 @@ var
 
 /// retrieve a particular bit status from a bit array
 function GetBit(const Bits; aIndex: PtrInt): boolean;
-  {$ifndef CPUINTEL}inline;{$endif}
+  {$ifdef ABSOLUTEORPUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// set a particular bit into a bit array
 procedure SetBit(var Bits; aIndex: PtrInt);
-  {$ifndef CPUINTEL}inline;{$endif}
+  {$ifdef ABSOLUTEORPUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// unset/clear a particular bit into a bit array
 procedure UnSetBit(var Bits; aIndex: PtrInt);
-  {$ifndef CPUINTEL}inline;{$endif}
+  {$ifdef ABSOLUTEORPUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// compute the number of bits set in a bit array
 // - Count is the bit count, not byte size
@@ -21091,6 +21089,33 @@ end;
 {$endif CPU64}
 {$endif PUREPASCAL}
 
+{$ifdef ABSOLUTEORPUREPASCAL}
+function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
+var c100: PtrUInt;
+    tab: PWordArray;
+begin // this code is faster than Borland's original str() or IntToStr()
+  tab := @TwoDigitLookupW;
+  repeat
+    if val<10 then begin
+      dec(P);
+      P^ := AnsiChar(val+ord('0'));
+      break;
+    end else
+    if val<100 then begin
+      dec(P,2);
+      PWord(P)^ := tab[val];
+      break;
+    end;
+    dec(P,2);
+    c100 := val div 100;
+    dec(val,c100*100);
+    PWord(P)^ := tab[val];
+    val := c100;
+    if c100=0 then break;
+  until false;
+  result := P;
+end;
+{$else}
 function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
 {$ifdef CPUX64} {$ifdef FPC}nostackframe; assembler; asm {$else}
 asm // rcx=P, rdx=val (Linux: rdi,rsi)
@@ -21133,32 +21158,6 @@ asm // rcx=P, rdx=val (Linux: rdi,rsi)
         mov     [rax], dl
 end;
 {$else}
-{$ifdef PUREPASCAL}
-var c100: PtrUInt;
-    tab: PWordArray;
-begin // this code is faster than the Borland's original str() or IntToStr()
-  tab := @TwoDigitLookupW;
-  repeat
-    if val<10 then begin
-      dec(P);
-      P^ := AnsiChar(val+ord('0'));
-      break;
-    end else
-    if val<100 then begin
-      dec(P,2);
-      PWord(P)^ := tab[val];
-      break;
-    end;
-    dec(P,2);
-    c100 := val div 100;
-    dec(val,c100*100);
-    PWord(P)^ := tab[val];
-    val := c100;
-    if c100=0 then break;
-  until false;
-  result := P;
-end;
-{$else}
 asm     // eax=P, edx=val
         cmp     edx, 10
         jb      @3  // direct process of common val=0 (or val<10)
@@ -21196,7 +21195,7 @@ asm     // eax=P, edx=val
         mov     [eax], dl
 end;
 {$endif CPU64}
-{$endif PUREPASCAL}
+{$endif ABSOLUTEORPUREPASCAL}
 
 function StrUInt64(P: PAnsiChar; const val: QWord): PAnsiChar;
 {$ifdef CPU64}
@@ -22982,8 +22981,15 @@ end;
 
 {$endif UNICODE}
 
-{$ifdef CPUX86}
 procedure bswap64array(a,b: PQWordArray; n: integer);
+{$ifdef ABSOLUTEORPUREPASCAL}
+var i: integer;
+begin
+  for i := 0 to n-1 do
+    b^[i] := SwapEndian(a^[i]);
+end;
+{$else}
+{$ifdef CPUX86}
 asm
     push  ebx
     push  esi
@@ -23025,16 +23031,9 @@ asm
     jnz @1
 end;
 {$else}
-{$ifdef FPC}
-procedure bswap64array(a,b: PQWordArray; n: integer);
-var i: integer;
-begin
-  for i := 0 to n-1 do
-    b^[i] := SwapEndian(a^[i]);
-end;
-{$endif FPC}
 {$endif CPUX64}
 {$endif CPUX86}
+{$endif ABSOLUTEORPUREPASCAL}
 
 {$ifdef FPC}
 function bswap32(a: cardinal): cardinal;
@@ -26752,6 +26751,7 @@ begin // returns size of initial segment of s which are not in reject
   until false;
 end;
 
+{$ifndef ABSOLUTEPASCAL}
 {$ifdef CPUINTEL}
 {$ifdef CPUX64}
 function strcspnsse42(s,reject: pointer): integer;
@@ -27000,6 +27000,7 @@ end;
 {$endif DELPHI5OROLDER}
 {$endif CPUX86}
 {$endif CPUINTEL}
+{$endif ABSOLUTEPASCAL}
 
 function IdemPropName(const P1,P2: shortstring): boolean;
 begin
@@ -34873,7 +34874,7 @@ begin
     result := false;
 end;
 
-{$ifdef ABSOLUTEPASCAL}
+{$ifdef ABSOLUTEORPUREPASCAL}
 function GetBit(const Bits; aIndex: PtrInt): boolean;
 begin
   result := TIntegerArray(Bits)[aIndex shr 5] and (1 shl (aIndex and 31)) <> 0;
@@ -34889,7 +34890,6 @@ begin
     and not (1 shl (aIndex and 31));
 end;
 {$else}
-{$ifdef CPUINTEL}
 function GetBit(const Bits; aIndex: PtrInt): boolean;
 {$ifdef CPU64}{$ifdef FPC}nostackframe;assembler;asm{$else}asm .noframe{$endif}{$else}asm{$endif}
         bt      [Bits], aIndex
@@ -34904,23 +34904,7 @@ procedure UnSetBit(var Bits; aIndex: PtrInt);
 {$ifdef CPU64}{$ifdef FPC}nostackframe;assembler;asm{$else}asm .noframe{$endif}{$else}asm{$endif}
         btr     [Bits], aIndex
 end;
-{$else}
-function GetBit(const Bits; aIndex: PtrInt): boolean;
-begin
-  result := TIntegerArray(Bits)[aIndex shr 5] and (1 shl (aIndex and 31)) <> 0;
-end;
-procedure SetBit(var Bits; aIndex: PtrInt);
-begin
-  TIntegerArray(Bits)[aIndex shr 5] := TIntegerArray(Bits)[aIndex shr 5]
-    or (1 shl (aIndex and 31));
-end;
-procedure UnSetBit(var Bits; aIndex: PtrInt);
-begin
-  PIntegerArray(@Bits)^[aIndex shr 5] := PIntegerArray(@Bits)^[aIndex shr 5]
-    and not (1 shl (aIndex and 31));
-end;
-{$endif CPUINTEL}
-{$endif ABSOLUTEPASCAL}
+{$endif ABSOLUTEORPUREPASCAL}
 
 function GetBit64(const Bits: Int64; aIndex: PtrInt): boolean;
 begin
@@ -52030,7 +52014,7 @@ end;
 {$ifdef FPC_OR_PUREPASCAL}
 class function TSynPersistent.NewInstance: TObject;
 begin // bypass vmtIntfTable and vmt^.vInitTable (management operators)
-  result := AllocMem(InstanceSize); // will zero memory
+  result := AllocMem(InstanceSize);   // will zero memory
   PPointer(result)^ := pointer(self); // store VMT
 end;
 {$else}
