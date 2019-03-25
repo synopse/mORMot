@@ -10826,9 +10826,9 @@ type
     RegisterIdent: integer;
     /// used to specify if a floating-point argument is passed as register
     // - contains always 0 for x86/x87
-    // - contains 1 for XMM0, 2 for XMM1 ... 4 for XMM3 for x64
-    // - contains 1 for D0, 2 D1 ... 8 for D7 for armhf
-    // - contains 1 for V0, 2 V1 ... 8 for V7 for aarch64
+    // - contains 1 for XMM0, 2 for XMM1, ..., 4 for XMM3 for x64
+    // - contains 1 for D0, 2 for D1, ..., 8 for D7 for armhf
+    // - contains 1 for V0, 2 for V1, ..., 8 for V7 for aarch64
     FPRegisterIdent: integer;
     /// size (in bytes) of this argument on the stack
     SizeInStack: integer;
@@ -55619,7 +55619,7 @@ var m,a,reg: integer;
     ErrorMsg: RawUTF8;
     dummy: pointer;
     {$ifdef HAS_FPREG}
-    ValueIsInFPR:boolean;
+    ValueIsInFPR: boolean;
     {$endif}
     {$ifdef CPUX86}
     offs: integer;
@@ -55859,7 +55859,7 @@ begin
         ((ValueIsInFPR) and (fpreg>FPREG_LAST)) or
         (not ValueIsInFPR and (reg>PARAMREG_LAST))
         {$else}
-        (reg>PARAMREG_LAST) // Win64
+        (reg>PARAMREG_LAST) // Win64: XMMs overlap regular registers
         {$endif Linux}
         {$endif CPUX86}
         {$ifdef FPC}or ((ValueType in [smvRecord]) and
@@ -59369,11 +59369,11 @@ asm
         mov     rdx, [r12].TCallMethodArgs.StackAddr
         jmp     @checkstack
 @addstack:
-        push    qword ptr[rdx]
         dec     ecx
+        push    qword ptr[rdx]
         sub     rdx, 8
 @checkstack:
-        or      ecx, ecx
+        test    ecx, ecx
         jnz     @addstack
         // fill registers and call method
         {$ifdef LINUX}
