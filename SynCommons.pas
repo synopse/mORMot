@@ -57457,10 +57457,10 @@ begin
       exit;
     end;
   end;
-  fTime := (QWord(fStop-fStart)*QWord(1000000)) div QWord(fWinFreq);
+  fTime := (QWord(fStop-fStart)*QWord(1000000)) div PQWord(@fWinFreq)^;
   if fLast=fStart then
     fLastTime := fTime else
-    fLastTime := (QWord(fStop-fLast)*QWord(1000000)) div QWord(fWinFreq);
+    fLastTime := (QWord(fStop-fLast)*QWord(1000000)) div PQWord(@fWinFreq)^;
   {$endif LINUX}
 end;
 
@@ -57481,7 +57481,7 @@ begin // mimics ComputeTime from already known elapsed time
     QueryPerformanceFrequency(fWinFreq);
   end;
   if fWinFreq<>0 then
-    FromExternalMicroSeconds((CounterDiff*QWord(1000000))div QWord(fWinFreq));
+    FromExternalMicroSeconds((CounterDiff*QWord(1000000))div PQWord(@fWinFreq)^);
   {$endif LINUX}
   result := fLastTime;
 end;
