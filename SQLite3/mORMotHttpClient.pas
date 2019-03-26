@@ -272,7 +272,8 @@ type
     /// how many seconds the client may try to connect after open socket failure
     // - is disabled to 0 by default, but you may set some seconds here e.g. to
     // let the server start properly, and let the client handle exceptions to
-    // wait 250ms and retry until the specified timeout is reached
+    // wait and retry until the specified timeout is reached
+    // - this property is used only once at startup, then flushed to 0 once connected
     property ConnectRetrySeconds: integer read fConnectRetrySeconds write fConnectRetrySeconds;
   end;
 
@@ -668,7 +669,8 @@ end;
 { TSQLHttpClientWinSock }
 
 function TSQLHttpClientWinSock.InternalCheckOpen: boolean;
-var timeout: Int64;
+var started, elapsed: Int64;
+    wait, retry: integer;
 begin
   result := fSocket<>nil;
   if result or (isDestroying in fInternalState) then
@@ -678,22 +680,34 @@ begin
     if fSocket=nil then begin
       if fSocketClass=nil then
         fSocketClass := THttpClientSocket;
-      timeout := GetTickCount64+fConnectRetrySeconds shl 10;
+      retry := 0;
+      if fConnectRetrySeconds=0 then
+        started := 0 else
+        started := GetTickCount64;
       repeat
         try
           fSocket := fSocketClass.Open(fServer,fPort,cslTCP,fConnectTimeout,fHttps);
         except
           on E: Exception do begin
             FreeAndNil(fSocket);
-            if GetTickCount64>=timeout then
+            if started=0 then
               exit;
-            fLogClass.Add.Log(sllTrace,
-              'InternalCheckOpen: % on %:% -> wait and retry up to % seconds',
-              [E.ClassType,fServer,fPort,fConnectRetrySeconds], self);
-            sleep(250);
+            elapsed := GetTickCount64-started;
+            if elapsed>=fConnectRetrySeconds shl 10 then
+              exit;
+            inc(retry);
+            if elapsed<500 then
+              wait := 100 else
+              wait := 1000; // checking every second is enough
+            fLogClass.Add.Log(sllTrace, 'InternalCheckOpen: % on %:% after %' +
+              ' -> wait % and retry #% up to % seconds',
+              [E.ClassType,fServer,fPort,MicroSecToString(elapsed*1000),
+               MicroSecToString(wait*1000),retry,fConnectRetrySeconds], self);
+            sleep(wait);
           end;
         end;
       until fSocket<>nil;
+      fConnectRetrySeconds := 0; // retry done once at startup
       if fExtendedOptions.UserAgent<>'' then
         fSocket.UserAgent := fExtendedOptions.UserAgent;
       if fModel<>nil then
