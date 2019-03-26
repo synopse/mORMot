@@ -59363,7 +59363,7 @@ asm
         mov     rbp, rsp
         // simulate .params 60 ... size for 60 parameters
         lea     rsp, [rsp - MAX_EXECSTACK]
-        // align stack
+        // align stack to 16 bytes
         and     rsp, -16
 {$else DELPHI} // ensure we use regular .params command for easier debugging
 asm

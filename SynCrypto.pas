@@ -3261,7 +3261,7 @@ type
 
 {$ifdef CPU32}
 
-procedure bswap256(s,d: PIntegerArray);
+procedure bswap256(s,d: PIntegerArray); {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
   push ebx
   mov ecx,eax // ecx=s, edx=d
@@ -3272,7 +3272,7 @@ asm
   pop ebx
 end;
 
-procedure bswap160(s,d: PIntegerArray);
+procedure bswap160(s,d: PIntegerArray); {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
   push ebx
   mov ecx,eax // ecx=s, edx=d
@@ -8086,6 +8086,7 @@ end;
 
 procedure KeccakPermutationKernel(B, A, C: Pointer);
 {$ifdef CPU32} // Eric Grange's MMX version (PIC-safe)
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         add     edx, 128
         add     eax, 128
