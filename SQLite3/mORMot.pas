@@ -63093,24 +63093,27 @@ end;
 function ObjArraySearch(const aSQLRecordObjArray; aID: TID): TSQLRecord;
 var i: integer;
     a: TSQLRecordObjArray absolute aSQLRecordObjArray;
+    r: ^TSQLRecord;
 begin
-  for i := 0 to length(a)-1 do
-    if a[i].fID=aID then begin
-      result := a[i];
+  r := pointer(a);
+  for i := 1 to length(a) do begin
+    result := r^;
+    if result.fID=aID then
       exit;
-    end;
+    inc(r);
+  end;
   result := nil;
 end;
 
 procedure ObjArrayRecordIDs(const aSQLRecordObjArray; out result: TInt64DynArray);
 var
-  i, n: integer;
+  i, n: PtrInt;
   a: TSQLRecordObjArray absolute aSQLRecordObjArray;
 begin
   n := length(a);
   SetLength(result,n);
   for i := 0 to n-1 do
-    result[i] := a[i].IDValue;
+    result[i] := a[i].fID;
 end;
 
 procedure ObjArrayCopy(const aSourceObjArray; var aDestObjArray; aDestObjArrayClear: boolean);
