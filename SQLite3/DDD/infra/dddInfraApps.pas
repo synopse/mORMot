@@ -2298,7 +2298,7 @@ begin
   log := SQLite3Log.Enter('Create(%): connect to %', [fApplicationName, aSettings.ORM.ServerName], self);
   t := aSettings.Timeout;
   fConnectRetrySeconds := aSettings.Client.ConnectRetrySeconds;
-  inherited Create(u.Server, u.Port, CreateModel(aSettings), t, t, t);
+  inherited Create(u.Server, u.Port, CreateModel(aSettings), u.Https, '', '', t, t, t);
   Model.Owner := self; // just allocated by CreateModel()
   if aSettings.Client.WebSocketsPassword <> '' then begin
     fWebSocketLoopDelay := aSettings.WebSocketsLoopDelay;

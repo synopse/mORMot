@@ -322,11 +322,11 @@ uses
       {$ifdef MSWINDOWS}
         {$define SHA512_X86} // external sha512-x86.obj/.o
       {$endif}
-      {$ifdef FPC_PIC}
+      {$ifdef ABSOLUTEPASCAL}
         {$define AES_PASCAL} // x86 AES asm below is not PIC-safe
       {$else}
         {$define CPUX86_NOTPIC}
-      {$endif FPC_PIC}
+      {$endif ABSOLUTEPASCAL}
       {$ifdef FPC}
         {$ifdef DARWIN}
           {$define AES_PASCAL} // as reported by alf
@@ -1073,13 +1073,10 @@ procedure AESIVCtrEncryptDecrypt(const BI; var BO; DoEncrypt: boolean);
 
 type
   /// thread-safe class containing a TAES encryption/decryption engine
-  TAESLocked = class(TSynPersistent)
+  TAESLocked = class(TSynPersistentLock)
   protected
     fAES: TAES;
-    fLock: TRTLCriticalSection;
   public
-    /// initialize the internal lock, but not the TAES instance
-    constructor Create; override;
     /// finalize all used memory and resources
     destructor Destroy; override;
   end;
@@ -1267,8 +1264,9 @@ procedure SetMainAESPRNG;
 {$endif}
 
 /// low-level function returning some random binary using standard API
-// - will call /dev/urandom under POSIX, and CryptGenRandom API on Windows,
-// and fallback to SynCommons.FillRandom if the system is not supported
+// - will call /dev/urandom or /dev/random under POSIX, and CryptGenRandom API
+// on Windows, and fallback to SynCommons.FillRandom if the system API failed
+// or for padding if more than 32 bytes is retrieved from /dev/urandom
 // - you should not have to call this procedure, but faster and safer TAESPRNG
 procedure FillSystemRandom(Buffer: PByteArray; Len: integer; AllowBlocking: boolean);
 
@@ -1276,7 +1274,7 @@ procedure FillSystemRandom(Buffer: PByteArray; Len: integer; AllowBlocking: bool
 type
   PSHA1Digest = ^TSHA1Digest;
   /// 160 bits memory block for SHA-1 hash digest storage
-  TSHA1Digest = packed array[0..19] of byte;
+  TSHA1Digest = THash160;
 
   PSHA1 = ^TSHA1;
   /// handle SHA-1 hashing
@@ -1537,9 +1535,6 @@ type
     procedure Done;
   end;
 
-  /// 64 bytes buffer, used internally during HMAC process
-  TByte64 = array[0..15] of cardinal;
-
   TMD5In = array[0..15] of cardinal;
   PMD5In = ^TMD5In;
   /// 128 bits memory block for MD5 hash digest storage
@@ -1699,19 +1694,6 @@ type
     procedure Finish;
   end;
 
-/// overwrite a 64-byte buffer with zeros
-// - may be used to cleanup stack-allocated content
-// ! ... finally FillZero(temp); end;
-procedure FillZero(var hash: TByte64); overload;
-
-/// overwrite a SHA-1 digest buffer with zeros
-// - may be used to cleanup stack-allocated content
-// ! ... finally FillZero(temp); end;
-procedure FillZero(var hash: TSHA1Digest); overload;
-
-/// compare two SHA-1 digest buffers
-function IsEqual(const A,B: TSHA1Digest): boolean; overload;
-
 /// direct MD5 hash calculation of some data
 function MD5Buf(const Buffer; Len: Cardinal): TMD5Digest;
 
@@ -1739,7 +1721,7 @@ type
   {$ifdef UNICODE}THMAC_SHA1 = record{$else}THMAC_SHA1 = object{$endif}
   private
     sha: TSHA1;
-    step7data: TByte64;
+    step7data: THash512Rec;
   public
     /// prepare the HMAC authentication with the supplied key
     // - content of this record is stateless, so you can prepare a HMAC for a
@@ -1914,7 +1896,7 @@ type
   {$ifdef UNICODE}THMAC_SHA256 = record{$else}THMAC_SHA256 = object{$endif}
   private
     sha: TSha256;
-    step7data: TByte64;
+    step7data: THash512Rec;
   public
     /// prepare the HMAC authentication with the supplied key
     // - content of this record is stateless, so you can prepare a HMAC for a
@@ -2144,7 +2126,7 @@ type
   {$ifdef UNICODE}THMAC_CRC32C = record{$else}THMAC_CRC32C = object{$endif}
   private
     seed: cardinal;
-    step7data: TByte64;
+    step7data: THash512Rec;
   public
     /// prepare the HMAC authentication with the supplied key
     // - consider using Compute to re-use a prepared HMAC instance
@@ -3276,7 +3258,7 @@ type
 
 {$ifdef CPU32}
 
-procedure bswap256(s,d: PIntegerArray);
+procedure bswap256(s,d: PIntegerArray); {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
   push ebx
   mov ecx,eax // ecx=s, edx=d
@@ -3287,7 +3269,7 @@ asm
   pop ebx
 end;
 
-procedure bswap160(s,d: PIntegerArray);
+procedure bswap160(s,d: PIntegerArray); {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
   push ebx
   mov ecx,eax // ecx=s, edx=d
@@ -3472,40 +3454,22 @@ end;
 
 { THMAC_SHA1 }
 
-procedure FillZero(var hash: TSHA1Digest); overload;
-begin
-  FillCharFast(hash,sizeof(hash),0);
-end;
-
-procedure FillZero(var hash: TByte64);
-begin
-  FillCharFast(hash,sizeof(hash),0);
-end;
-
-function IsEqual(const A,B: TSHA1Digest): boolean;
-var a_: TIntegerArray absolute A;
-    b_: TIntegerArray absolute B;
-begin // uses anti-forensic time constant "xor/or" pattern
-  result := ((a_[0] xor b_[0]) or (a_[1] xor b_[1]) or (a_[2] xor b_[2]) or
-    (a_[3] xor b_[3]) or (a_[4] xor b_[4]))=0;
-end;
-
 procedure THMAC_SHA1.Init(key: pointer; keylen: integer);
 var i: integer;
-    k0,k0xorIpad: TByte64;
+    k0,k0xorIpad: THash512Rec;
 begin
-  FillZero(k0);
+  FillZero(k0.b);
   if keylen>sizeof(k0) then
-    sha.Full(key,keylen,PSHA1Digest(@k0)^) else
+    sha.Full(key,keylen,k0.b160) else
     MoveFast(key^,k0,keylen);
   for i := 0 to 15 do
-    k0xorIpad[i] := k0[i] xor $36363636;
+    k0xorIpad.c[i] := k0.c[i] xor $36363636;
   for i := 0 to 15 do
-    step7data[i] := k0[i] xor $5c5c5c5c;
+    step7data.c[i] := k0.c[i] xor $5c5c5c5c;
   sha.Init;
   sha.Update(@k0xorIpad,sizeof(k0xorIpad));
-  FillZero(k0);
-  FillZero(k0xorIpad);
+  FillZero(k0.b);
+  FillZero(k0xorIpad.b);
 end;
 
 procedure THMAC_SHA1.Update(msg: pointer; msglen: integer);
@@ -3520,7 +3484,7 @@ begin
   sha.Update(@result,sizeof(result));
   sha.Final(result,NoInit);
   if not NoInit then
-    FillZero(step7data);
+    FillZero(step7data.b);
 end;
 
 procedure THMAC_SHA1.Done(out result: RawUTF8; NoInit: boolean);
@@ -3586,20 +3550,20 @@ end;
 
 procedure THMAC_SHA256.Init(key: pointer; keylen: integer);
 var i: integer;
-    k0,k0xorIpad: TByte64;
+    k0,k0xorIpad: THash512Rec;
 begin
-  FillZero(k0);
+  FillZero(k0.b);
   if keylen>sizeof(k0) then
-    sha.Full(key,keylen,PSHA256Digest(@k0)^) else
+    sha.Full(key,keylen,k0.Lo) else
     MoveFast(key^,k0,keylen);
   for i := 0 to 15 do
-    k0xorIpad[i] := k0[i] xor $36363636;
+    k0xorIpad.c[i] := k0.c[i] xor $36363636;
   for i := 0 to 15 do
-    step7data[i] := k0[i] xor $5c5c5c5c;
+    step7data.c[i] := k0.c[i] xor $5c5c5c5c;
   sha.Init;
   sha.Update(@k0xorIpad,sizeof(k0xorIpad));
-  FillZero(k0);
-  FillZero(k0xorIpad);
+  FillZero(k0.b);
+  FillZero(k0xorIpad.b);
 end;
 
 procedure THMAC_SHA256.Update(msg: pointer; msglen: integer);
@@ -3629,7 +3593,7 @@ begin
   sha.Update(@result,sizeof(result));
   sha.Final(result,NoInit);
   if not NoInit then
-    FillZero(step7data);
+    FillZero(step7data.b);
 end;
 
 procedure THMAC_SHA256.Done(out result: RawUTF8; NoInit: boolean);
@@ -3956,16 +3920,16 @@ end;
 procedure HMAC_CRC256C(key,msg: pointer; keylen,msglen: integer; out result: THash256);
 var i: integer;
     h1,h2: cardinal;
-    k0,k0xorIpad,step7data: TByte64;
+    k0,k0xorIpad,step7data: THash512Rec;
 begin
   FillCharFast(k0,sizeof(k0),0);
   if keylen>sizeof(k0) then
-    crc256c(key,keylen,PHash256(@k0)^) else
+    crc256c(key,keylen,k0.Lo) else
     MoveFast(key^,k0,keylen);
   for i := 0 to 15 do
-    k0xorIpad[i] := k0[i] xor $36363636;
+    k0xorIpad.c[i] := k0.c[i] xor $36363636;
   for i := 0 to 15 do
-    step7data[i] := k0[i] xor $5c5c5c5c;
+    step7data.c[i] := k0.c[i] xor $5c5c5c5c;
   h1 := crc32c(crc32c(0,@k0xorIpad,sizeof(k0xorIpad)),msg,msglen);
   h2 := crc32c(crc32c(h1,@k0xorIpad,sizeof(k0xorIpad)),msg,msglen);
   crc256cmix(h1,h2,@result);
@@ -3997,16 +3961,16 @@ end;
 
 procedure THMAC_CRC32C.Init(key: pointer; keylen: integer);
 var i: integer;
-    k0,k0xorIpad: TByte64;
+    k0,k0xorIpad: THash512Rec;
 begin
   FillCharFast(k0,sizeof(k0),0);
   if keylen>sizeof(k0) then
-    crc256c(key,keylen,PHash256(@k0)^) else
+    crc256c(key,keylen,k0.Lo) else
     MoveFast(key^,k0,keylen);
   for i := 0 to 15 do
-    k0xorIpad[i] := k0[i] xor $36363636;
+    k0xorIpad.c[i] := k0.c[i] xor $36363636;
   for i := 0 to 15 do
-    step7data[i] := k0[i] xor $5c5c5c5c;
+    step7data.c[i] := k0.c[i] xor $5c5c5c5c;
   seed := crc32c(0,@k0xorIpad,sizeof(k0xorIpad));
   FillCharFast(k0,sizeof(k0),0);
   FillCharFast(k0xorIpad,sizeof(k0xorIpad),0);
@@ -8119,6 +8083,7 @@ end;
 
 procedure KeccakPermutationKernel(B, A, C: Pointer);
 {$ifdef CPU32} // Eric Grange's MMX version (PIC-safe)
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         add     edx, 128
         add     eax, 128
@@ -9315,9 +9280,9 @@ end;
 procedure TSynSigner.Final(out aSignature: THash512Rec; aNoInit: boolean);
 begin
   case fAlgo of
-  saSha1:   PHMAC_SHA1(@ctxt)^.Done(PSHA1Digest(@aSignature)^,aNoInit);
+  saSha1:   PHMAC_SHA1(@ctxt)^.Done(aSignature.b160,aNoInit);
   saSha256: PHMAC_SHA256(@ctxt)^.Done(aSignature.Lo,aNoInit);
-  saSha384: PHMAC_SHA384(@ctxt)^.Done(aSignature.b3,aNoInit);
+  saSha384: PHMAC_SHA384(@ctxt)^.Done(aSignature.b384,aNoInit);
   saSha512: PHMAC_SHA512(@ctxt)^.Done(aSignature.b,aNoInit);
   saSha3224..saSha3S256: PSHA3(@ctxt)^.Final(@aSignature,fSignatureSize shl 3,aNoInit);
   end;
@@ -12052,9 +12017,9 @@ begin
         DecryptInit(AESIVCTR_KEY,128);
   end;
   with aesivctr[DoEncrypt] do begin
-    EnterCriticalSection(fLock);
+    fSafe^.Lock;
     TAESContext(fAES.Context).DoBlock(fAES.Context,BI,BO);
-    LeaveCriticalSection(fLock);
+    fSafe^.UnLock;
   end;
 end;
 
@@ -12874,9 +12839,9 @@ begin
     end;
     Count := Count and AESBlockMod;
     if Count<>0 then begin
-      TrailerBytes(Count);
       with fMAC do // includes trailing bytes to the plain crc
         PCardinal(@plain)^ := crc32c(PCardinal(@plain)^,pointer(fIn),Count);
+      TrailerBytes(Count);
     end;
   end;
 end;
@@ -12987,9 +12952,9 @@ begin
     end;
     Count := Count and AESBlockMod;
     if Count<>0 then begin
-      TrailerBytes(Count);
       with fMAC do // includes trailing bytes to the plain crc
         PCardinal(@plain)^ := crc32c(PCardinal(@plain)^,pointer(fIn),Count);
+      TrailerBytes(Count);
     end;
   end;
 end;
@@ -13480,17 +13445,10 @@ end;
 
 { TAESLocked }
 
-constructor TAESLocked.Create;
-begin
-  inherited Create;
-  InitializeCriticalSection(fLock);
-end;
-
 destructor TAESLocked.Destroy;
 begin
   inherited Destroy;
   fAES.Done; // mandatory for Padlock - also fill AES buffer with 0 for safety
-  DeleteCriticalSection(fLock);
 end;
 
 
@@ -13526,10 +13484,9 @@ begin
   if dev>0 then
     try
       i := Len;
-      repeat
-        dec(i,FileRead(dev,Buffer^[Len-i],i));
-      until i<=0;
-      fromos := i=0;
+      if i>32 then
+        i := 32; // up to 256 bits - see "man urandom" Usage paragraph
+      fromos := (FileRead(dev,Buffer[0],i)=i) and (Len<=32); // will XOR up to Len
     finally
       FileClose(dev);
     end;
@@ -13544,8 +13501,8 @@ begin
   if fromos then
     exit;
   i := Len;
-  repeat
-    SynCommons.FillRandom(@tmp,SizeOf(tmp) shr 2); // SynCommons as fallback
+  repeat // call Random32() (=RdRand32 or Lecuyer) as fallback/padding
+    SynCommons.FillRandom(@tmp,SizeOf(tmp) shr 2);
     if i<=SizeOf(tmp) then begin
       XorMemory(@Buffer^[Len-i],@tmp,i);
       break;
@@ -13578,7 +13535,7 @@ begin
   try
     // retrieve some initial entropy from OS
     SetLength(fromos,Len);
-    FillSystemRandom(pointer(fromos),len,true);
+    FillSystemRandom(pointer(fromos),len,{allowblocking=}true);
     if SystemOnly then begin
       result := fromos;
       fromos := '';
@@ -13617,11 +13574,14 @@ begin
   try
     entropy := GetEntropy(128); // 128 bytes is the HMAC_SHA512 key block size
     PBKDF2_HMAC_SHA512(entropy,ExeVersion.User,fSeedPBKDF2Rounds,key.b);
-    EnterCriticalSection(fLock);
-    fAES.EncryptInit(key.Lo,fAESKeySize);
-    crcblocks(@fCTR,@key.Hi,2);
-    fBytesSinceSeed := 0;
-    LeaveCriticalSection(fLock);
+    fSafe^.Lock;
+    try
+      fAES.EncryptInit(key.Lo,fAESKeySize);
+      crcblocks(@fCTR,@key.Hi,2);
+      fBytesSinceSeed := 0;
+    finally
+      fSafe^.UnLock;
+    end;
   finally
     FillZero(key.b); // avoid the key appear in clear on stack
     FillZero(entropy);
@@ -13651,12 +13611,12 @@ procedure TAESPRNG.FillRandom(out Block: TAESBlock);
 begin
   if fBytesSinceSeed>fSeedAfterBytes then
     Seed;
-  EnterCriticalSection(fLock);
+  fSafe^.Lock;
   TAESContext(fAES.Context).DoBlock(fAES.Context,fCTR.b,Block);
   IncrementCTR;
   inc(fBytesSinceSeed,SizeOf(Block));
   inc(fTotalBytes,SizeOf(Block));
-  LeaveCriticalSection(fLock);
+  fSafe^.UnLock;
 end;
 
 procedure TAESPRNG.FillRandom(out Buffer: THash256);
@@ -13673,7 +13633,7 @@ begin
     exit;
   if fBytesSinceSeed>fSeedAfterBytes then
     Seed;
-  EnterCriticalSection(fLock);
+  fSafe^.Lock;
   for i := 1 to Len shr 4 do begin
     TAESContext(fAES.Context).DoBlock(fAES.Context,fCTR.b,buf^);
     IncrementCTR;
@@ -13687,7 +13647,7 @@ begin
     IncrementCTR;
     MoveFast(rnd,buf^,Len);
   end;
-  LeaveCriticalSection(fLock);
+  fSafe^.UnLock;
 end;
 
 function TAESPRNG.FillRandom(Len: integer): RawByteString;
@@ -14182,7 +14142,7 @@ begin
   end else
     result := '';
 end;
-{$endif}
+{$endif MSWINDOWS}
 
 var
   __h: THash256;

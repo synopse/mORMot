@@ -77,31 +77,19 @@ procedure DeleteCriticalSection(var cs : TRTLCriticalSection); inline;
 
 {$ifdef LINUX}
 
-{$ifdef LINUXNOTBSD}
-const
-  CLOCK_REALTIME = 0;
-  CLOCK_MONOTONIC = 1;
-  CLOCK_REALTIME_COARSE = 5; // see http://lwn.net/Articles/347811
-  CLOCK_MONOTONIC_COARSE = 6;
-
-var
-  // contains CLOCK_REALTIME_COARSE since kernel 2.6.32
-  CLOCK_REALTIME_TICKCOUNT: integer = CLOCK_REALTIME;
-  // contains CLOCK_MONOTONIC_COARSE since kernel 2.6.32
-  CLOCK_MONOTONIC_TICKCOUNT: integer = CLOCK_MONOTONIC;
-
-{$endif LINUXNOTBSD}
-
 /// used by TSynMonitorMemory.RetrieveMemoryInfo to compute the sizes in byte
 function getpagesize: Integer; cdecl; external 'c';
 
 /// compatibility function, wrapping Win32 API high resolution timer
+// - returns nanoseconds resolution, calling e.g. CLOCK_MONOTONIC on Linux/BSD
 procedure QueryPerformanceCounter(out Value: Int64);
 
 /// slightly faster than QueryPerformanceCounter() div 1000 - but not for Windows
-procedure QueryPerformanceMicroSeconds(out Value: Int64);
+// - returns microseconds resolution, calling e.g. CLOCK_MONOTONIC on Linux/BSD
+procedure QueryPerformanceMicroSeconds(out Value: Int64); inline;
 
 /// compatibility function, wrapping Win32 API high resolution timer
+// - hardcoded to 1e9 for clock_gettime() nanoseconds resolution on Linux/BSD
 function QueryPerformanceFrequency(out Value: Int64): boolean;
 
 /// compatibility function, wrapping Win32 API file position change
@@ -124,20 +112,24 @@ function GetLastError: longint; inline;
 procedure SetLastError(error: longint); inline;
 
 /// compatibility function, wrapping Win32 API text comparison
+// - somewhat slow by using two temporary WideString - but seldom called
 function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pwidechar;
   cchCount1: longint; lpString2: Pwidechar; cchCount2: longint): longint;
 
 /// returns the current UTC time
+// - will convert from clock_gettime(CLOCK_REALTIME_COARSE) if available
 function GetNowUTC: TDateTime;
 
 /// returns the current UTC time, as Unix Epoch seconds
-function GetUnixUTC: Int64; inline;
+// - will call clock_gettime(CLOCK_REALTIME_COARSE) if available
+function GetUnixUTC: Int64;
 
 /// returns the current UTC time, as Unix Epoch milliseconds
 // - will call clock_gettime(CLOCK_REALTIME_COARSE) if available
-function GetUnixMSUTC: Int64; inline;
+function GetUnixMSUTC: Int64;
 
 /// returns the current UTC time as TSystemTime
+// - will convert from clock_gettime(CLOCK_REALTIME_COARSE) if available
 procedure GetNowUTCSystem(out result: TSystemTime);
 
 var
@@ -149,19 +141,45 @@ var
 // - under Linux/FPC, this API truncates the name to 16 chars
 procedure SetUnixThreadName(ThreadID: TThreadID; const Name: RawByteString);
 
+{$ifndef DARWIN} // OSX has no clock_gettime() API
+
+{$ifdef BSD}
+const // see https://github.com/freebsd/freebsd/blob/master/sys/sys/time.h
+  CLOCK_REALTIME = 0;
+  CLOCK_MONOTONIC = 4;
+  CLOCK_REALTIME_COARSE = 10; // named CLOCK_REALTIME_FAST in FreeBSD 8.1+
+  CLOCK_MONOTONIC_COARSE = 12;
+{$else}
+const
+  CLOCK_REALTIME = 0;
+  CLOCK_MONOTONIC = 1;
+  CLOCK_REALTIME_COARSE = 5; // see http://lwn.net/Articles/347811
+  CLOCK_MONOTONIC_COARSE = 6;
+{$endif BSD}
+
+var
+  // contains CLOCK_REALTIME_COARSE since kernel 2.6.32
+  CLOCK_REALTIME_FAST: integer = CLOCK_REALTIME;
+  // contains CLOCK_MONOTONIC_COARSE since kernel 2.6.32
+  CLOCK_MONOTONIC_FAST: integer = CLOCK_MONOTONIC;
+
+{$endif DARWIN}
+
 {$endif LINUX}
 
 /// compatibility function, to be implemented according to the running OS
 // - expect more or less the same result as the homonymous Win32 API function
-function GetTickCount64: Int64;
+// - will call clock_gettime(CLOCK_MONOTONIC_COARSE) if available
+function GetTickCount64: Int64; inline;
 
 /// compatibility function, to be implemented according to the running OS
 // - expect more or less the same result as the homonymous Win32 API function
+// - will call clock_gettime(CLOCK_MONOTONIC_COARSE) if available
 function GetTickCount: cardinal; inline;
 
 /// similar to Windows sleep() API call, to be truly cross-platform
 // - it should have a millisecond resolution, and handle ms=0 as a switch to
-// another pending thread, i.e. call sched_yield() API
+// another pending thread, i.e. ThreadSwitch/call sched_yield API
 procedure SleepHiRes(ms: cardinal); inline;
 
 
@@ -169,7 +187,13 @@ implementation
 
 {$ifdef LINUX}
 uses
-  Classes, Unix, BaseUnix, {$ifdef LINUXNOTBSD}linux,{$endif} dl;
+  Classes,
+  Unix,
+  BaseUnix,
+  {$ifdef LINUXNOTBSD}
+  Linux,
+  {$endif}
+  dl;
 {$endif LINUX}
 
 procedure InitializeCriticalSection(var cs : TRTLCriticalSection);
@@ -203,7 +227,6 @@ const // Date Translation - see http://en.wikipedia.org/wiki/Julian_day
   C_THOUSAND = Int64(1000);
   C_MILLION  = Int64(C_THOUSAND * C_THOUSAND);
   C_BILLION  = Int64(C_THOUSAND * C_THOUSAND * C_THOUSAND);
-
 
 procedure JulianToGregorian(JulianDN: PtrUInt; out result: TSystemTime);
 var YYear,XYear,Temp,TempMonth: PtrUInt;
@@ -240,14 +263,6 @@ begin
   result.Second := epoch-t*SecsPerMin;
 end;
 
-procedure GetNowUTCSystem(out result: TSystemTime);
-var r: timespec;
-begin
-  clock_gettime(CLOCK_REALTIME_TICKCOUNT,@r); // faster than fpgettimeofday()
-  EpochToSystemTime(r.tv_sec,result);
-  result.MilliSecond := r.tv_nsec div C_MILLION;
-end;
-
 function GetTickCount: cardinal;
 begin
   result := cardinal(GetTickCount64);
@@ -270,7 +285,7 @@ function mach_timebase_info(var TimebaseInfoData: TTimebaseInfoData): Integer;
 var
   mach_timeinfo: TTimebaseInfoData;
   mach_timecoeff: double;
-  mach_timenanosecond: boolean;
+  mach_timenanosecond: boolean; // very likely to be TRUE on Intel CPUs
 
 procedure QueryPerformanceCounter(out Value: Int64);
 begin // returns time in nano second resolution
@@ -289,7 +304,7 @@ begin
   if mach_timenanosecond then
     Value := mach_absolute_time div C_THOUSAND else begin
     QueryPerformanceCounter(Value);
-    Value := Value div C_THOUSAND;
+    Value := Value div C_THOUSAND; // ns to us
   end;
 end;
 
@@ -298,7 +313,7 @@ begin
   if mach_timenanosecond then
     result := mach_absolute_time else
     QueryPerformanceCounter(result);
-  result := result div C_MILLION; // 1 millisecond = 1e6 nanoseconds
+  result := result div C_MILLION; // ns to ms
 end;
 
 function GetUnixUTC: Int64;
@@ -315,6 +330,14 @@ begin
   result := (tz.tv_sec*C_THOUSAND)+tz.tv_usec div C_THOUSAND; // in milliseconds
 end;
 
+procedure GetNowUTCSystem(out result: TSystemTime);
+var tz: timeval;
+begin
+  fpgettimeofday(@tz,nil);
+  EpochToSystemTime(tz.tv_sec,result);
+  result.MilliSecond := tz.tv_usec div C_THOUSAND;
+end;
+
 {$else}
 
 {$ifdef BSD}
@@ -322,32 +345,26 @@ function clock_gettime(ID: cardinal; r: ptimespec): Integer;
   cdecl external 'libc.so' name 'clock_gettime';
 function clock_getres(ID: cardinal; r: ptimespec): Integer;
   cdecl external 'libc.so' name 'clock_getres';
-const
-  CLOCK_REALTIME = 0;
-  CLOCK_MONOTONIC = 4;
-  CLOCK_MONOTONIC_FAST = 12; // FreeBSD specific
-  CLOCK_MONOTONIC_TICKCOUNT = CLOCK_MONOTONIC;
-  CLOCK_REALTIME_TICKCOUNT = CLOCK_REALTIME;
 {$endif BSD}
 
 function GetTickCount64: Int64;
 var tp: timespec;
 begin
-  clock_gettime(CLOCK_MONOTONIC_TICKCOUNT,@tp); // likely = CLOCK_MONOTONIC_COARSE
+  clock_gettime(CLOCK_MONOTONIC_FAST,@tp); // likely = CLOCK_MONOTONIC_COARSE
   Result := (Int64(tp.tv_sec) * C_THOUSAND) + (tp.tv_nsec div C_MILLION); // in ms
 end;
 
 function GetUnixMSUTC: Int64;
 var r: timespec;
 begin
-  clock_gettime(CLOCK_REALTIME_TICKCOUNT,@r); // likely = CLOCK_REALTIME_COARSE
+  clock_gettime(CLOCK_REALTIME_FAST,@r); // likely = CLOCK_REALTIME_COARSE
   result := (Int64(r.tv_sec) * C_THOUSAND) + (r.tv_nsec div C_MILLION); // in ms
 end;
 
 function GetUnixUTC: Int64;
 var r: timespec;
 begin
-  clock_gettime(CLOCK_REALTIME_TICKCOUNT,@r);
+  clock_gettime(CLOCK_REALTIME_FAST,@r);
   result := r.tv_sec;
 end;
 
@@ -363,6 +380,14 @@ var r : TTimeSpec;
 begin
   clock_gettime(CLOCK_MONOTONIC,@r);
   value := r.tv_nsec div C_THOUSAND+r.tv_sec*C_MILLION; // as microseconds
+end;
+
+procedure GetNowUTCSystem(out result: TSystemTime);
+var r: timespec;
+begin
+  clock_gettime(CLOCK_REALTIME_FAST,@r); // faster than fpgettimeofday()
+  EpochToSystemTime(r.tv_sec,result);
+  result.MilliSecond := r.tv_nsec div C_MILLION;
 end;
 
 {$endif DARWIN}
@@ -415,7 +440,7 @@ end;
 function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pwidechar;
   cchCount1: longint; lpString2: Pwidechar; cchCount2: longint): longint;
 var W1,W2: WideString;
-begin // not inlined to avoid stack unicodestring allocation
+begin // not inlined to avoid try..finally WideString protection
   W1 := lpString1;
   W2 := lpString2;
   if dwCmpFlags and NORM_IGNORECASE<>0 then
@@ -435,12 +460,15 @@ end;
 
 procedure SleepHiRes(ms: cardinal);
 begin
-  SysUtils.Sleep(ms);
+  if ms=0 then
+    ThreadSwitch else
+    SysUtils.Sleep(ms);
 end;
 
 procedure GetKernelRevision;
 var uts: UtsName;
     P: PAnsiChar;
+    tp: timespec;
   function GetNext: cardinal;
   var c: cardinal;
   begin
@@ -459,23 +487,26 @@ begin
   if fpuname(uts)=0 then begin
     P := @uts.release[0];
     KernelRevision := GetNext shl 16+GetNext shl 8+GetNext;
-    {$ifdef LINUXNOTBSD}
-    if KernelRevision>=$020620 then begin // expects kernel 2.6.32 or higher
-      CLOCK_MONOTONIC_TICKCOUNT := CLOCK_MONOTONIC_COARSE;
-      CLOCK_REALTIME_TICKCOUNT := CLOCK_REALTIME_COARSE;
-    end;
-    {$endif LINUXNOTBSD}
   end;
   {$ifdef DARWIN}
   mach_timebase_info(mach_timeinfo);
   mach_timecoeff := mach_timeinfo.Numer/mach_timeinfo.Denom;
   mach_timenanosecond := (mach_timeinfo.Numer=1) and (mach_timeinfo.Denom=1);
+  {$else}
+  {$ifdef LINUX}
+  // try Linux kernel 2.6.32+ or FreeBSD 8.1+ fastest clocks
+  if clock_gettime(CLOCK_REALTIME_COARSE, @tp) = 0 then
+    CLOCK_REALTIME_FAST := CLOCK_REALTIME_COARSE;
+  if clock_gettime(CLOCK_MONOTONIC_COARSE, @tp) = 0 then
+    CLOCK_MONOTONIC_FAST := CLOCK_MONOTONIC_COARSE;
+  {$endif LINUX}
   {$endif DARWIN}
 end;
 
 
 type
   TExternalLibraries = object
+    Lock: TRTLCriticalSection;
     Loaded: boolean;
     {$ifdef LINUX}
     pthread: pointer;
@@ -491,28 +522,35 @@ var
 
 procedure TExternalLibraries.EnsureLoaded;
 begin
-  if Loaded then
-    exit;
-  {$ifdef LINUX}
-  pthread := dlopen({$ifdef ANDROID}'libc.so'{$else}'libpthread.so.0'{$endif}, RTLD_LAZY);
-  if pthread <> nil then begin
-    {$ifdef LINUXNOTBSD}
-    @pthread_setname_np := dlsym(pthread, 'pthread_setname_np');
-    {$endif LINUXNOTBSD}
+  EnterCriticalSection(Lock);
+  if not Loaded then begin
+    {$ifdef LINUX}
+    pthread := dlopen({$ifdef ANDROID}'libc.so'{$else}'libpthread.so.0'{$endif}, RTLD_LAZY);
+    if pthread <> nil then begin
+      {$ifdef LINUXNOTBSD}
+      @pthread_setname_np := dlsym(pthread, 'pthread_setname_np');
+      {$endif LINUXNOTBSD}
+    end;
+    {$endif LINUX}
+    Loaded := true;
   end;
-  {$endif LINUX}
-  Loaded := true;
+  LeaveCriticalSection(Lock);
 end;
 
 procedure TExternalLibraries.Done;
 begin
-  if not Loaded then
-    exit;
-  {$ifdef LINUX}
-  if pthread <> nil then
-    dlclose(pthread);
-  {$endif LINUX}
-  Loaded := false;
+  EnterCriticalSection(Lock);
+  if Loaded then begin
+    {$ifdef LINUX}
+    {$ifdef LINUXNOTBSD}
+    @pthread_setname_np := nil;
+    {$endif LINUXNOTBSD}
+    if pthread <> nil then
+      dlclose(pthread);
+    {$endif LINUX}
+  end;
+  LeaveCriticalSection(Lock);
+  DeleteCriticalSection(Lock);
 end;
 
 procedure SetUnixThreadName(ThreadID: TThreadID; const Name: RawByteString);
@@ -549,6 +587,7 @@ end;
 
 initialization
   GetKernelRevision;
+  InitializeCriticalSection(ExternalLibraries.Lock);
 
 finalization
   ExternalLibraries.Done;

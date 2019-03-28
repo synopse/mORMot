@@ -366,7 +366,8 @@ type
     // to be encoded as ':("\uFFF0base64encodedbinary"):'
     procedure GetAndPrepareStatement(const SQL: RawUTF8; ForceCacheStatement: boolean);
     /// free a static prepared statement on success or from except on E: Exception block
-    procedure GetAndPrepareStatementRelease(E: Exception=nil; const Msg: RawUTF8='');
+    procedure GetAndPrepareStatementRelease(E: Exception=nil; const Msg: ShortString='';
+      ForceBindReset: boolean=false);
     /// create or retrieve from the cache a TSQLRequest instance in fStatement
     // - called e.g. by GetAndPrepareStatement()
     procedure PrepareStatement(Cached: boolean);
@@ -556,6 +557,7 @@ type
     function TableMaxID(Table: TSQLRecordClass): TID; override;
     /// after how many bytes a sllSQL statement log entry should be truncated
     // - default is 0, meaning no truncation
+    // - typical value is 2048 (2KB), which will avoid any heap allocation
     property StatementTruncateSQLLogLen: integer read fStatementTruncateSQLLogLen
       write fStatementTruncateSQLLogLen;
     /// executes (therefore log) the QUERY PLAN for each prepared statement
@@ -791,25 +793,26 @@ begin
   PrepareStatement(ForceCacheStatement or (fStatementMaxParam<>0));
   // bind parameters
   if fStatementMaxParam=0 then
-    exit;
+    exit; // no valid :(...): inlined parameter found -> manual bind
   sqlite3param := sqlite3.bind_parameter_count(fStatement^.Request);
   if sqlite3param<>fStatementMaxParam then
     raise EORMException.CreateUTF8(
       '%.GetAndPrepareStatement(%) recognized % params, and % for SQLite3',
       [self,fStatementGenericSQL,fStatementMaxParam,sqlite3param]);
   for i := 0 to fStatementMaxParam-1 do
-  if i in Nulls then
-    fStatement^.BindNull(i+1) else
-    case Types[i] of
-      sptDateTime, // date/time are stored as ISO-8601 TEXT in SQLite3
-      sptText:    fStatement^.Bind(i+1,Values[i]);
-      sptBlob:    fStatement^.BindBlob(i+1,Values[i]);
-      sptInteger: fStatement^.Bind(i+1,GetInt64(pointer(Values[i])));
-      sptFloat:   fStatement^.Bind(i+1,GetExtended(pointer(Values[i])));
-    end;
+    if i in Nulls then
+      fStatement^.BindNull(i+1) else
+      case Types[i] of
+        sptDateTime, // date/time are stored as ISO-8601 TEXT in SQLite3
+        sptText:    fStatement^.Bind(i+1,Values[i]);
+        sptBlob:    fStatement^.BindBlob(i+1,Values[i]);
+        sptInteger: fStatement^.Bind(i+1,GetInt64(pointer(Values[i])));
+        sptFloat:   fStatement^.Bind(i+1,GetExtended(pointer(Values[i])));
+      end;
 end;
 
-procedure TSQLRestServerDB.GetAndPrepareStatementRelease(E: Exception; const Msg: RawUTF8);
+procedure TSQLRestServerDB.GetAndPrepareStatementRelease(E: Exception;
+  const Msg: ShortString; ForceBindReset: boolean);
 var
   tmp: TSynTempBuffer;
   P: PAnsiChar;
@@ -839,7 +842,7 @@ begin
     if fStatement<>nil then begin
       if fStatement=@fStaticStatement then
         fStaticStatement.Close else
-        if fStatementMaxParam<>0 then
+        if (fStatementMaxParam<>0) or ForceBindReset then
           fStatement^.BindReset; // release bound RawUTF8 ASAP
       fStatement := nil;
     end;
@@ -1168,8 +1171,9 @@ function TSQLRestServerDB.InternalExecute(const aSQL: RawUTF8;
   ForceCacheStatement: boolean; ValueInt: PInt64; ValueUTF8: PRawUTF8;
   ValueInts: PInt64DynArray; LastInsertedID: PInt64; LastChangeCount: PInteger): boolean;
 var ValueIntsCount, Res: Integer;
-    msg: RawUTF8;
+    msg: shortstring;
 begin
+  msg := '';
   if (self<>nil) and (DB<>nil) then
   try
     DB.Lock(aSQL);
@@ -1187,18 +1191,18 @@ begin
               AddInt64(ValueInts^,ValueIntsCount,fStatement^.FieldInt(0));
           until res=SQLITE_DONE;
           SetLength(ValueInts^,ValueIntsCount);
-          FormatUTF8('returned Int64 len=%',[ValueIntsCount],msg);
+          FormatShort('returned Int64 len=%',[ValueIntsCount],msg);
         end else
         if (ValueInt=nil) and (ValueUTF8=nil) then begin
           // default execution: loop through all rows
           repeat until fStatement^.Step<>SQLITE_ROW;
           if LastInsertedID<>nil then begin
             LastInsertedID^ := DB.LastInsertRowID;
-            FormatUTF8(' lastInsertedID=%',[LastInsertedID^],msg);
+            FormatShort(' lastInsertedID=%',[LastInsertedID^],msg);
           end;
           if LastChangeCount<>nil then begin
             LastChangeCount^ := DB.LastChangeCount;
-            FormatUTF8(' lastChangeCount=%',[LastChangeCount^],msg);
+            FormatShort(' lastChangeCount=%',[LastChangeCount^],msg);
           end;
         end else
           // get one row, and retrieve value
@@ -1206,10 +1210,10 @@ begin
             result := false else
             if ValueInt<>nil then begin
               ValueInt^ := fStatement^.FieldInt(0);
-              FormatUTF8('returned=%',[ValueInt^],msg);
+              FormatShort('returned=%',[ValueInt^],msg);
             end else begin
               ValueUTF8^ := fStatement^.FieldUTF8(0);
-              FormatUTF8('returned="%"',[ValueUTF8^],msg);
+              FormatShort('returned="%"',[ValueUTF8^],msg);
             end;
         GetAndPrepareStatementRelease(nil,msg);
       except
@@ -1243,7 +1247,7 @@ begin
   if (self<>nil) and (DB<>nil) and (aSQL<>'') and Assigned(StoredProc) then
   try
     {$ifdef WITHLOG}
-    fLogFamily.SynLog.Enter(self, 'StoredProcExecute');
+    fLogFamily.SynLog.Enter('StoredProcExecute(%)', [aSQL], self);
     {$endif}
     DB.LockAndFlushCache; // even if aSQL is SELECT, StoredProc may update data
     try
@@ -1276,7 +1280,7 @@ end;
 
 function TSQLRestServerDB.EngineExecute(const aSQL: RawUTF8): boolean;
 begin
-  result := InternalExecute(aSQL,false);
+  result := InternalExecute(aSQL,{forcecache=}false);
 end;
 
 procedure TSQLRestServerDB.InternalInfo(var info: TDocVariantData);
@@ -1349,7 +1353,7 @@ begin
       exit;
     try // Execute request if was not got from cache
       try
-        GetAndPrepareStatement(SQL,false);
+        GetAndPrepareStatement(SQL,{forcecache=}false);
         MS := TRawByteStringStream.Create;
         try
           RowCount := fStatement^.Execute(0,'',MS,ForceAJAX or not NoAJAXJSON);
@@ -1357,7 +1361,7 @@ begin
         finally
           MS.Free;
         end;
-        GetAndPrepareStatementRelease(nil, FormatUTF8('returned % as %',
+        GetAndPrepareStatementRelease(nil, FormatToShort('returned % as %',
           [Plural('row',RowCount),KB(result)]));
       except
         on E: ESQLite3Exception do
@@ -1403,12 +1407,11 @@ begin
     try
       GetAndPrepareStatement(SQL,true);
       try
-        fStatement^.Bind(1,aID);
         if (fStatement^.FieldCount=1) and (fStatement^.Step=SQLITE_ROW) then begin
           BlobData := fStatement^.FieldBlob(0);
           result := true;
         end;
-        GetAndPrepareStatementRelease(nil,FormatUTF8('returned % bytes',[length(BlobData)]));
+        GetAndPrepareStatementRelease(nil,KB(BlobData));
       except
         on E: Exception do
           GetAndPrepareStatementRelease(E);
@@ -1425,7 +1428,8 @@ end;
 function TSQLRestServerDB.RetrieveBlobFields(Value: TSQLRecord): boolean;
 var Static: TSQLRest;
     SQL: RawUTF8;
-    f: integer;
+    f: PtrInt;
+    size: Int64;
     data: TSQLVar;
 begin
   result := false;
@@ -1437,19 +1441,25 @@ begin
     if (DB<>nil) and (Value.ID>0) and (PSQLRecordClass(Value)^<>nil) then
     with Value.RecordProps do
     if BlobFields<>nil then begin
-      FormatUTF8('SELECT % FROM % WHERE ROWID=?;',
-        [SQLTableRetrieveBlobFields,Table.RecordProps.SQLTableName],SQL);
+      SQL := FormatUTF8('SELECT % FROM % WHERE ROWID=?',
+        [SQLTableRetrieveBlobFields,SQLTableName],[Value.ID]);
       DB.Lock(SQL);
       try
-        with fStatementCache.Prepare(SQL)^ do begin
-          Bind(1,Value.ID);
-          if Step<>SQLITE_ROW then
+        GetAndPrepareStatement(SQL,true);
+        try
+          if fStatement^.Step<>SQLITE_ROW then
             exit;
+          size := 0;
           for f := 0 to high(BlobFields) do begin
-            SQlite3ValueToSQLVar(FieldValue(f),data);
+            SQlite3ValueToSQLVar(fStatement^.FieldValue(f),data);
             BlobFields[f].SetFieldSQLVar(Value,data); // OK for all blobs
+            inc(size,SQLVarLength(data));
           end;
+          GetAndPrepareStatementRelease(nil,KB(size));
           result := true;
+        except
+          on E: Exception do
+            GetAndPrepareStatementRelease(E);
         end;
       finally
         DB.UnLock;
@@ -1482,7 +1492,7 @@ begin
       InternalRecordVersionHandle(
         soUpdate,TableModelIndex,decoder,Props.RecordVersionField);
     SQL := Decoder.EncodeAsSQL(true);
-    result := ExecuteFmt('UPDATE % SET % WHERE RowID=:(%):;',
+    result := ExecuteFmt('UPDATE % SET % WHERE RowID=:(%):',
       [Props.SQLTableName,SQL,ID]);
     InternalUpdateEvent(seUpdate,TableModelIndex,ID,SentData,nil);
   end;
@@ -1492,25 +1502,34 @@ function TSQLRestServerDB.MainEngineUpdateBlob(TableModelIndex: integer; aID: TI
   BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean;
 var SQL: RawUTF8;
     AffectedField: TSQLFieldBits;
+    Props: TSQLRecordProperties;
 begin
+  result := false;
   if (aID<0) or (TableModelIndex<0) or not BlobField^.IsBlob then
-    result := false else
-  with Model.TableProps[TableModelIndex].Props do
+     exit;
+  Props := Model.TableProps[TableModelIndex].Props;
   try
-    FormatUTF8('UPDATE % SET %=? WHERE RowID=?;',[SQLTableName,BlobField^.Name],SQL);
+    FormatUTF8('UPDATE % SET %=? WHERE RowID=?',[Props.SQLTableName,BlobField^.Name],SQL);
     DB.Lock(SQL); // UPDATE for a blob field -> no JSON cache flush, but UI refresh
     try
-      with fStatementCache.Prepare(SQL)^ do begin
-        BindBlob(1,BlobData);
-        Bind(2,aID);
-        repeat
-        until Step<>SQLITE_ROW; // Execute all steps of the first statement
+      GetAndPrepareStatement(SQL,true);
+      try
+        if BlobData='' then
+          fStatement^.BindNull(1) else
+          fStatement^.BindBlob(1,BlobData);
+        fStatement^.Bind(2,aID);
+        repeat until fStatement^.Step<>SQLITE_ROW; // Execute
+        GetAndPrepareStatementRelease(nil,FormatToShort('stored % in ID=%',
+          [KB(BlobData),aID]),true);
         result := true;
+      except
+        on E: Exception do
+          GetAndPrepareStatementRelease(E);
       end;
     finally
       DB.UnLock;
     end;
-    FieldBitsFromBlobField(BlobField,AffectedField);
+    Props.FieldBitsFromBlobField(BlobField,AffectedField);
     InternalUpdateEvent(seUpdateBlob,TableModelIndex,aID,'',@AffectedField);
   except
     on ESQLite3Exception do
@@ -1610,6 +1629,7 @@ var Static: TSQLRest;
     SQL: RawUTF8;
     TableModelIndex,f: integer;
     data: TSQLVar;
+    size: Int64;
     temp: RawByteString;
 begin
   result := false;
@@ -1622,20 +1642,28 @@ begin
     if (DB<>nil) and (Value.ID>0) and (PSQLRecordClass(Value)^<>nil) then
     with Model.TableProps[TableModelIndex].Props do
     if BlobFields<>nil then begin
-      FormatUTF8('UPDATE % SET % WHERE ROWID=?;',[SQLTableName,SQLTableUpdateBlobFields],SQL);
+      FormatUTF8('UPDATE % SET % WHERE ROWID=?',[SQLTableName,SQLTableUpdateBlobFields],SQL);
       DB.Lock(SQL); // UPDATE for all blob fields -> no cache flush, but UI refresh
       try
-        with fStatementCache.Prepare(SQL)^ do begin
+        GetAndPrepareStatement(SQL,true);
+        try
+          size := 0;
           for f := 1 to length(BlobFields) do begin
             BlobFields[f-1].GetFieldSQLVar(Value,data,temp); // OK for all blobs
-            if data.VType=ftBlob then
-              Bind(f,data.VBlob,data.VBlobLen) else
-              BindNull(f); // not possible (BlobFields[] are TSQLPropInfoRTTIRawBlob)
+            if data.VType=ftBlob then begin
+              fStatement^.Bind(f,data.VBlob,data.VBlobLen);
+              inc(size,data.VBlobLen);
+            end else
+              fStatement^.BindNull(f); // e.g. Value was ''
           end;
-          Bind(length(BlobFields)+1,Value.ID);
-          repeat
-          until Step<>SQLITE_ROW; // Execute all steps of the first statement
+          fStatement^.Bind(length(BlobFields)+1,Value.ID);
+          repeat until fStatement^.Step<>SQLITE_ROW; // Execute
+          GetAndPrepareStatementRelease(nil,FormatToShort('stored % in ID=%',
+            [KB(size),Value.ID]),true);
           result := true;
+        except
+          on E: Exception do
+            GetAndPrepareStatementRelease(E);
         end;
       finally
         DB.UnLock;

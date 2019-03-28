@@ -2722,7 +2722,7 @@ procedure TBSONElement.ToVariant(var result: variant;
 var res: TVarData absolute result;
     resBSON: TBSONVariantData absolute result;
 begin
-  if res.VType and VTYPE_STATIC<>0 then
+  {$ifndef FPC}if res.VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(result);
   ZeroFill(@result); // set result.VType=varEmpty and result.VAny=nil
   case Kind of
@@ -3178,7 +3178,7 @@ procedure BSONToDoc(BSON: PByte; var Result: Variant; ExpectedBSONLen: Integer;
 begin
   if Option=asBSONVariant then
     raise EBSONException.Create('BSONToDoc(option=asBSONVariant) is not allowed');
-  if TVarData(result).VType and VTYPE_STATIC<>0 then
+  {$ifndef FPC}if TVarData(result).VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(result);
   BSONParseLength(BSON,ExpectedBSONLen);
   BSONItemsToDocVariant(betDoc,BSON,TDocVariantData(Result),Option);
@@ -3933,7 +3933,7 @@ end;
 
 function TBSONObjectID.ToVariant: variant;
 begin
-  if TVarData(result).VType and VTYPE_STATIC<>0 then
+  {$ifndef FPC}if TVarData(result).VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(result);
   with TBSONVariantData(result) do begin
     VType := BSONVariantType.VarType;
@@ -4023,7 +4023,7 @@ procedure TBSONVariant.FromBinary(const Bin: RawByteString;
 var Len: integer;
 begin // "\x05" e_name int32 subtype (byte*)
   with TBSONVariantData(result) do begin
-    if VType and VTYPE_STATIC<>0 then
+    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
       VarClear(result);
     if Bin='' then begin
       VType := varNull; // stores a NULL
@@ -4044,7 +4044,7 @@ procedure TBSONVariant.FromBSONDocument(const BSONDoc: TBSONDocument;
   var result: variant; Kind: TBSONElementType);
 begin
   with TBSONVariantData(result) do begin
-    if VType and VTYPE_STATIC<>0 then
+    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
       VarClear(result);
     VType := VarType;
     VKind := Kind;
@@ -4055,7 +4055,7 @@ end;
 
 procedure TBSONVariant.FromJSON(json: PUTF8Char; var result: variant);
 begin
-  if TVarData(result).VType and VTYPE_STATIC<>0 then
+  {$ifndef FPC}if TVarData(result).VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(result);
   if json=nil then
     exit;
@@ -4259,7 +4259,7 @@ begin
   if AVarType=VarType then begin
     VariantToUTF8(Variant(Source),tmp,wasString);
     if wasString then begin
-      if Dest.VType and VTYPE_STATIC<>0 then
+      {$ifndef FPC}if Dest.VType and VTYPE_STATIC<>0 then{$endif}
         VarClear(variant(Dest));
       if TBSONVariantData(Dest).VObjectID.FromText(tmp) then begin
         Dest.VType := VarType;
@@ -4299,7 +4299,7 @@ procedure TBSONVariant.Copy(var Dest: TVarData;
 begin
   if Indirect then
     SimplisticCopy(Dest,Source,true) else begin
-    if Dest.VType and VTYPE_STATIC<>0 then
+    {$ifndef FPC}if Dest.VType and VTYPE_STATIC<>0 then{$endif}
       VarClear(variant(Dest)); // Dest may be a complex type
     Dest := Source;
     with TBSONVariantData(Dest) do
@@ -4381,7 +4381,7 @@ end;
 function JavaScript(const JS: RawUTF8): variant;
 begin
   with TBSONVariantData(result) do begin
-    if VType and VTYPE_STATIC<>0 then
+    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
       VarClear(result);
     VType := BSONVariantType.VarType;
     VKind := betJS;
@@ -4394,7 +4394,7 @@ function JavaScript(const JS: RawUTF8; const Scope: TBSONDocument): variant;
 var Len, JSLen: integer;
 begin
   with TBSONVariantData(result) do begin
-    if VType and VTYPE_STATIC<>0 then
+    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
       VarClear(result);
     VType := BSONVariantType.VarType;
     VKind := betJSScope;
@@ -6502,7 +6502,7 @@ begin
     Bits.hi := BSON_DECIMAL128_HI_INT64POS;
   end else begin
     Bits.lo := -value;
-    Bits.hi := BSON_DECIMAL128_HI_INT64NEG;
+    Bits.hi := QWord(BSON_DECIMAL128_HI_INT64NEG);
   end;
 end;
 
@@ -6519,7 +6519,7 @@ begin
     Bits.hi := BSON_DECIMAL128_HI_INT64POS;
   end else begin
     Bits.lo := -value;
-    Bits.hi := BSON_DECIMAL128_HI_INT64NEG;
+    Bits.hi := QWord(BSON_DECIMAL128_HI_INT64NEG);
   end;
 end;
 
@@ -6548,7 +6548,7 @@ procedure TDecimal128.FromCurr(const value: Currency);
 begin // force exactly 4 decimals
   if value<0 then begin
     Bits.lo := -PInt64(@value)^;
-    Bits.hi := BSON_DECIMAL128_HI_CURRNEG;
+    Bits.hi := QWord(BSON_DECIMAL128_HI_CURRNEG);
   end else begin
     Bits.lo := PInt64(@value)^;
     Bits.hi := BSON_DECIMAL128_HI_CURRPOS;
@@ -6622,11 +6622,11 @@ begin
   if combi shr 3=3 then
     case combi of
     30: begin
-      result := AppendRawUTF8ToBuffer(dest,DECIMAL128_SPECIAL_TEXT[dsvPosInf])-@Buffer;
+      result := AppendRawUTF8ToBuffer(dest,DECIMAL128_SPECIAL_TEXT[dsvPosInf])-PUTF8Char(@Buffer);
       exit;
     end;
     31: begin
-      result := AppendRawUTF8ToBuffer(@Buffer,DECIMAL128_SPECIAL_TEXT[dsvNan])-@Buffer;
+      result := AppendRawUTF8ToBuffer(@Buffer,DECIMAL128_SPECIAL_TEXT[dsvNan])-PUTF8Char(@Buffer);
       exit;
     end;
     else begin
@@ -6710,7 +6710,7 @@ begin
       append(dest,dig,signdig-radixpos);
     end;
   end;
-  result := dest-@Buffer;
+  result := dest-PUTF8Char(@Buffer);
 end;
 
 function TDecimal128.ToText: RawUTF8;
@@ -6956,6 +6956,8 @@ begin
   end;
   if (bson.VType=BSONVariantType.VarType) and (bson.VKind=betDecimal128) then
     Bits := PDecimal128(bson.VBlob)^.Bits else
+  if bson.VType=varWord64 then
+    FromQWord(TVarData(Value).VInt64) else
   if VariantToInt64(value,v64) then
     FromInt64(v64) else
   if bson.VType=varCurrency then

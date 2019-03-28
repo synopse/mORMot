@@ -1605,6 +1605,7 @@ begin
   Assert(strspnpas(PAnsiChar('baabbaabbaabbabcd'),PAnsiChar('ab'))=15);
   Assert(strspnpas(PAnsiChar('baabbaabbaabbaabcd'),PAnsiChar('ab'))=16);
   Assert(strspnpas(PAnsiChar('baabbaabbaababaabcd'),PAnsiChar('ab'))=17);
+  {$ifndef ABSOLUTEPASCAL}
   {$ifdef CPUINTEL}
   if cfSSE42 in CpuFeatures then begin
     Check(strcspnsse42(PAnsiChar('ab'),PAnsiChar('a'#0))=0);
@@ -1639,6 +1640,7 @@ begin
     Check(strspnsse42(PAnsiChar('baabbaabbaababaabcd'),PAnsiChar('ab'))=17);
   end;
   {$endif CPUINTEL}
+  {$endif ABSOLUTEPASCAL}
 end;
 
 procedure TTestLowLevelCommon.IniFiles;
@@ -2779,6 +2781,7 @@ procedure TTestLowLevelCommon.UrlEncoding;
 var i,j: integer;
     s: RawByteString;
     name,value,utf: RawUTF8;
+    str: string;
     P: PUTF8Char;
     GUID2: TGUID;
     U: TURI;
@@ -2790,6 +2793,8 @@ begin
   Check(UrlDecode(PUTF8Char(encoded))=decoded);
 end;
 begin
+  str := UTF8ToString(UrlEncode(StringToUTF8('https://test3.diavgeia.gov.gr/doc/')));
+  check(str='https%3A%2F%2Ftest3.diavgeia.gov.gr%2Fdoc%2F');
   Test('abcdef','abcdef');
   Test('abcdefyzABCDYZ01239_-.~ ','abcdefyzABCDYZ01239_-.~+');
   Test('"Aardvarks lurk, OK?"','%22Aardvarks+lurk%2C+OK%3F%22');
@@ -10087,7 +10092,7 @@ begin
   Check(CompressGZip(s,false)='gzip');
   Check(s=Data,'compressGZip');
   Check(gzr.Init(M.Memory,M.Position),'TGZRead');
-  Check(gzr.uncomplen=length(data));
+  Check(gzr.uncomplen32=Cardinal(length(data)));
   Check(gzr.crc32=crc0);
   Check(gzr.ToMem=data,'ToMem');
   st := TRawByteStringStream.Create;
@@ -10098,7 +10103,7 @@ begin
   finally
     st.Free;
   end;
-  SetLength(tmp,gzr.uncomplen div 5);
+  SetLength(tmp,gzr.uncomplen32 div 5);
   Check(gzr.ZStreamStart(pointer(tmp),length(tmp)),'ZStreamStart');
   s := '';
   repeat
@@ -10108,7 +10113,7 @@ begin
     s := s+copy(tmp,1,n);
   until false;
   check(gzr.ZStreamDone,'ZStreamDone');
-  Check(gzr.uncomplen=length(s));
+  Check(gzr.uncomplen32=Cardinal(length(s)));
   check(s=Data);
   s := Data;
   Check(CompressDeflate(s,true)='deflate');
@@ -11299,9 +11304,10 @@ end;
 type
   TBenchmark = (
     // non cryptographic hashes
-    bCRC32c, bXXHash32,
+    bCRC32c, bXXHash32, bHash32,
     // cryptographic hashes
-    bMD5, bSHA1, bHMACSHA1, bSHA256, bHMACSHA256, bSHA512, bHMACSHA512,
+    bMD5, bSHA1, bHMACSHA1, bSHA256, bHMACSHA256,
+    bSHA384, bHMACSHA384, bSHA512, bHMACSHA512,
     bSHA3_256, bSHA3_512,
     // encryption
     bRC4,
@@ -11325,6 +11331,7 @@ var b: TBenchmark;
     MD5: TMD5;
     SHA1: TSHA1;
     SHA256: TSHA256;
+    SHA384: TSHA384;
     SHA512: TSHA512;
     SHA3, SHAKE128, SHAKE256: TSHA3;
     RC4: TRC4;
@@ -11354,12 +11361,15 @@ begin
         dig.d1 := 0;
         case b of
         bXXHash32:   dig.d0 := xxHash32(0,pointer(data),SIZ[s]);
+        bHash32:     dig.d0 := Hash32(pointer(data),SIZ[s]);
         bCRC32c:     dig.d0 := crc32c(0,pointer(data),SIZ[s]);
         bMD5:        MD5.Full(pointer(data),SIZ[s],dig.h0);
-        bSHA1:       SHA1.Full(pointer(data),SIZ[s],PSHA1Digest(@dig)^);
-        bHMACSHA1:   HMAC_SHA1('secret',data,PSHA1Digest(@dig)^);
+        bSHA1:       SHA1.Full(pointer(data),SIZ[s],dig.b160);
+        bHMACSHA1:   HMAC_SHA1('secret',data,dig.b160);
         bSHA256:     SHA256.Full(pointer(data),SIZ[s],dig.Lo);
         bHMACSHA256: HMAC_SHA256('secret',data,dig.Lo);
+        bSHA384:     SHA384.Full(pointer(data),SIZ[s],dig.b384);
+        bHMACSHA384: HMAC_SHA384('secret',data,dig.b384);
         bSHA512:     SHA512.Full(pointer(data),SIZ[s],dig.b);
         bHMACSHA512: HMAC_SHA512('secret',data,dig.b);
         bSHA3_256:   SHA3.Full(pointer(data),SIZ[s],dig.Lo);
@@ -11374,7 +11384,7 @@ begin
         end;
         Check((b >= bRC4) or (dig.d0 <> 0) or (dig.d1 <> 0));
       end;
-      //NotifyTestSpeed(format('%s %s',[TXT[b],KB(SIZ[s])]),COUNT,SIZ[s]*COUNT,@timer);
+      //NotifyTestSpeed(format('%s %s',[TXT[b],SIZ[s]]),COUNT,SIZ[s]*COUNT,@timer);
       timer.ComputeTime;
       inc(time[b],timer.LastTimeInMicroSec);
       //if b in [bSHA3_512,high(b)] then AddConsole('');

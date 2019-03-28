@@ -1139,101 +1139,101 @@ const
 constructor TSQLite3LibraryStatic.Create;
 var error: RawUTF8;
 begin
-  initialize           := @sqlite3_initialize;
-  shutdown             := @sqlite3_shutdown;
-  open                 := @sqlite3_open;
-  open_v2              := @sqlite3_open_v2;
-  key                  := @sqlite3_key;
-  rekey                := @sqlite3_rekey;
-  close                := @sqlite3_close;
-  libversion           := @sqlite3_libversion;
-  errmsg               := @sqlite3_errmsg;
-  extended_errcode     := @sqlite3_extended_errcode;
-  create_function      := @sqlite3_create_function;
-  create_function_v2   := @sqlite3_create_function_v2;
+  initialize             := @sqlite3_initialize;
+  shutdown               := @sqlite3_shutdown;
+  open                   := @sqlite3_open;
+  open_v2                := @sqlite3_open_v2;
+  key                    := @sqlite3_key;
+  rekey                  := @sqlite3_rekey;
+  close                  := @sqlite3_close;
+  libversion             := @sqlite3_libversion;
+  errmsg                 := @sqlite3_errmsg;
+  extended_errcode       := @sqlite3_extended_errcode;
+  create_function        := @sqlite3_create_function;
+  create_function_v2     := @sqlite3_create_function_v2;
   create_window_function := @sqlite3_create_window_function;
-  create_collation     := @sqlite3_create_collation;
-  last_insert_rowid    := @sqlite3_last_insert_rowid;
-  busy_timeout         := @sqlite3_busy_timeout;
-  busy_handler         := @sqlite3_busy_handler;
-  prepare_v2           := @sqlite3_prepare_v2;
-  finalize             := @sqlite3_finalize;
-  next_stmt            := @sqlite3_next_stmt;
-  reset                := @sqlite3_reset;
-  stmt_readonly        := @sqlite3_stmt_readonly;
-  step                 := @sqlite3_step;
-  column_count         := @sqlite3_column_count;
-  column_type          := @sqlite3_column_type;
-  column_decltype      := @sqlite3_column_decltype;
-  column_name          := @sqlite3_column_name;
-  column_bytes         := @sqlite3_column_bytes;
-  column_value         := @sqlite3_column_value;
-  column_double        := @sqlite3_column_double;
-  column_int           := @sqlite3_column_int;
-  column_int64         := @sqlite3_column_int64;
-  column_text          := @sqlite3_column_text;
-  column_text16        := @sqlite3_column_text16;
-  column_blob          := @sqlite3_column_blob;
-  value_type           := @sqlite3_value_type;
-  value_numeric_type   := @sqlite3_value_numeric_type;
-  value_bytes          := @sqlite3_value_bytes;
-  value_double         := @sqlite3_value_double;
-  value_int64          := @sqlite3_value_int64;
-  value_text           := @sqlite3_value_text;
-  value_blob           := @sqlite3_value_blob;
-  result_null          := @sqlite3_result_null;
-  result_int64         := @sqlite3_result_int64;
-  result_double        := @sqlite3_result_double;
-  result_blob          := @sqlite3_result_blob;
-  result_text          := @sqlite3_result_text;
-  result_value         := @sqlite3_result_value;
-  result_error         := @sqlite3_result_error;
-  user_data            := @sqlite3_user_data;
-  context_db_handle    := @sqlite3_context_db_handle;
-  aggregate_context    := @sqlite3_aggregate_context;
-  bind_text            := @sqlite3_bind_text;
-  bind_blob            := @sqlite3_bind_blob;
-  bind_zeroblob        := @sqlite3_bind_zeroblob;
-  bind_double          := @sqlite3_bind_double;
-  bind_int             := @sqlite3_bind_int;
-  bind_int64           := @sqlite3_bind_int64;
-  bind_null            := @sqlite3_bind_null;
-  clear_bindings       := @sqlite3_clear_bindings;
-  bind_parameter_count := @sqlite3_bind_parameter_count;
-  blob_open            := @sqlite3_blob_open;
-  blob_reopen          := @sqlite3_blob_reopen;
-  blob_close           := @sqlite3_blob_close;
-  blob_read            := @sqlite3_blob_read;
-  blob_write           := @sqlite3_blob_write;
-  blob_bytes           := @sqlite3_blob_bytes;
-  create_module_v2     := @sqlite3_create_module_v2;
-  declare_vtab         := @sqlite3_declare_vtab;
-  set_authorizer       := @sqlite3_set_authorizer;
-  update_hook          := @sqlite3_update_hook;
-  commit_hook          := @sqlite3_commit_hook;
-  rollback_hook        := @sqlite3_rollback_hook;
-  changes              := @sqlite3_changes;
-  total_changes        := @sqlite3_total_changes;
-  malloc               := @sqlite3_malloc;
-  realloc              := @sqlite3_realloc;
-  free_                := @sqlite3_free;
-  memory_used          := @sqlite3_memory_used;
-  memory_highwater     := @sqlite3_memory_highwater;
-  trace_v2             := @sqlite3_trace_v2;
-  limit                := @sqlite3_limit;
-  backup_init          := @sqlite3_backup_init;
-  backup_step          := @sqlite3_backup_step;
-  backup_finish        := @sqlite3_backup_finish;
-  backup_remaining     := @sqlite3_backup_remaining;
-  backup_pagecount     := @sqlite3_backup_pagecount;
-  serialize            := @sqlite3_serialize;
-  deserialize          := @sqlite3_deserialize;
-  {$ifndef DELPHI5OROLDER}
-  config               := @sqlite3_config;
-  db_config            := @sqlite3_db_config;
+  create_collation       := @sqlite3_create_collation;
+  last_insert_rowid      := @sqlite3_last_insert_rowid;
+  busy_timeout           := @sqlite3_busy_timeout;
+  busy_handler           := @sqlite3_busy_handler;
+  prepare_v2             := @sqlite3_prepare_v2;
+  finalize               := @sqlite3_finalize;
+  next_stmt              := @sqlite3_next_stmt;
+  reset                  := @sqlite3_reset;
+  stmt_readonly          := @sqlite3_stmt_readonly;
+  step                   := @sqlite3_step;
+  column_count           := @sqlite3_column_count;
+  column_type            := @sqlite3_column_type;
+  column_decltype        := @sqlite3_column_decltype;
+  column_name            := @sqlite3_column_name;
+  column_bytes           := @sqlite3_column_bytes;
+  column_value           := @sqlite3_column_value;
+  column_double          := @sqlite3_column_double;
+  column_int             := @sqlite3_column_int;
+  column_int64           := @sqlite3_column_int64;
+  column_text            := @sqlite3_column_text;
+  column_text16          := @sqlite3_column_text16;
+  column_blob            := @sqlite3_column_blob;
+  value_type             := @sqlite3_value_type;
+  value_numeric_type     := @sqlite3_value_numeric_type;
+  value_bytes            := @sqlite3_value_bytes;
+  value_double           := @sqlite3_value_double;
+  value_int64            := @sqlite3_value_int64;
+  value_text             := @sqlite3_value_text;
+  value_blob             := @sqlite3_value_blob;
+  result_null            := @sqlite3_result_null;
+  result_int64           := @sqlite3_result_int64;
+  result_double          := @sqlite3_result_double;
+  result_blob            := @sqlite3_result_blob;
+  result_text            := @sqlite3_result_text;
+  result_value           := @sqlite3_result_value;
+  result_error           := @sqlite3_result_error;
+  user_data              := @sqlite3_user_data;
+  context_db_handle      := @sqlite3_context_db_handle;
+  aggregate_context      := @sqlite3_aggregate_context;
+  bind_text              := @sqlite3_bind_text;
+  bind_blob              := @sqlite3_bind_blob;
+  bind_zeroblob          := @sqlite3_bind_zeroblob;
+  bind_double            := @sqlite3_bind_double;
+  bind_int               := @sqlite3_bind_int;
+  bind_int64             := @sqlite3_bind_int64;
+  bind_null              := @sqlite3_bind_null;
+  clear_bindings         := @sqlite3_clear_bindings;
+  bind_parameter_count   := @sqlite3_bind_parameter_count;
+  blob_open              := @sqlite3_blob_open;
+  blob_reopen            := @sqlite3_blob_reopen;
+  blob_close             := @sqlite3_blob_close;
+  blob_read              := @sqlite3_blob_read;
+  blob_write             := @sqlite3_blob_write;
+  blob_bytes             := @sqlite3_blob_bytes;
+  create_module_v2       := @sqlite3_create_module_v2;
+  declare_vtab           := @sqlite3_declare_vtab;
+  set_authorizer         := @sqlite3_set_authorizer;
+  update_hook            := @sqlite3_update_hook;
+  commit_hook            := @sqlite3_commit_hook;
+  rollback_hook          := @sqlite3_rollback_hook;
+  changes                := @sqlite3_changes;
+  total_changes          := @sqlite3_total_changes;
+  malloc                 := @sqlite3_malloc;
+  realloc                := @sqlite3_realloc;
+  free_                  := @sqlite3_free;
+  memory_used            := @sqlite3_memory_used;
+  memory_highwater       := @sqlite3_memory_highwater;
+  trace_v2               := @sqlite3_trace_v2;
+  limit                  := @sqlite3_limit;
+  backup_init            := @sqlite3_backup_init;
+  backup_step            := @sqlite3_backup_step;
+  backup_finish          := @sqlite3_backup_finish;
+  backup_remaining       := @sqlite3_backup_remaining;
+  backup_pagecount       := @sqlite3_backup_pagecount;
+  serialize              := @sqlite3_serialize;
+  deserialize            := @sqlite3_deserialize;
+  {$ifndef DELPHI5OROLDER} // varargs calls
+  config                 := @sqlite3_config;
+  db_config              := @sqlite3_db_config;
   {$endif}
 
-  // sqlite3.obj is compiled with SQLITE_OMIT_AUTOINIT defined
+  // our static SQLite3 is compiled with SQLITE_OMIT_AUTOINIT defined
   {$ifdef FPC}
   ForceToUseSharedMemoryManager; // before sqlite3_initialize otherwise SQLITE_MISUSE
   {$else}
@@ -1247,7 +1247,8 @@ begin
   inherited Create; // set fVersionNumber/fVersionText
   if (EXPECTED_SQLITE3_VERSION='') or (fVersionText=EXPECTED_SQLITE3_VERSION) then
     exit;
-  FormatUTF8('Static sqlite3.obj as included within % is outdated!'#13+
+  // you should never see it if you cloned https://github.com/synopse/mORMot
+  FormatUTF8('Static SQLite3 library as included within % is outdated!'#13+
     'Linked version is % whereas the current/expected is '+EXPECTED_SQLITE3_VERSION+'.'#13#13+
     'Please download latest SQLite3 '+EXPECTED_SQLITE3_VERSION+' revision'#13+
     {$ifdef FPC}

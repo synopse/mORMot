@@ -2755,7 +2755,7 @@ type
   // - thread-safe call of all SQLite3 queries (SQLITE_THREADSAFE 0 in sqlite.c)
   // - can cache last results for SELECT statements, if property UseCache is true:
   //  this can speed up most read queries, for web server or client UI e.g.
-  TSQLDataBase = class
+  TSQLDataBase = class(TSynPersistentLock)
   protected
     fDB: TSQLite3DB;
     fFileName: TFileName;
@@ -2765,7 +2765,6 @@ type
     fIsMemory: boolean;
     fPassword: RawUTF8;
     fTransactionActive: boolean;
-    fLock: TRTLCriticalSection;
     /// if not nil, cache is used - see UseCache property
     fCache: TSynCache;
     fInternalState: PCardinal;
@@ -2805,31 +2804,31 @@ type
     function SQLShouldBeLogged(const aSQL: RawUTF8): boolean;
     function GetSQLite3Library: TSQLite3Library; // class function = bug in D2005
   public
-    /// enter the TRTLCriticalSection: called before any DB access
+    /// enter the internal mutex: called before any DB access
     // - provide the SQL statement about to be executed: handle proper caching
     // - if the SQL statement is void, assume a SELECT statement (no cache flush)
     procedure Lock(const aSQL: RawUTF8); overload;
-    /// enter the TRTLCriticalSection without any cache flush
+    /// enter the internal mutex without any cache flush
     // - same as Lock('');
     procedure Lock; overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// flush the internal statement cache, and enter the TRTLCriticalSection
+    /// flush the internal statement cache, and enter the internal mutex
     // - same as Lock('ALTER');
     procedure LockAndFlushCache;
-    /// leave the TRTLCriticalSection: called after any DB access
+    /// leave the internal mutex: called after any DB access
     procedure UnLock;
       {$ifdef HASINLINE}inline;{$endif}
-    /// enter the TRTLCriticalSection: called before any DB access
+    /// enter the internal mutex: called before any DB access
     // - provide the SQL statement about to be executed: handle proper caching
     // - if this SQL statement has an already cached JSON response, return it and
-    // don't enter the TRTLCriticalSection: no UnLockJSON() call is necessary
+    // don't enter the internal mutex: no UnLockJSON() call is necessary
     // - if this SQL statement is not a SELECT, cache is flushed and
     // the next call to UnLockJSON() won't add any value to the cache since
     // this statement is not a SELECT and doesn't have to be cached!
     // - if aResultCount does map to an integer variable, it will be filled
     // with the returned row count of data (excluding field names) in the result
     function LockJSON(const aSQL: RawUTF8; aResultCount: PPtrInt): RawUTF8;
-    /// leave the TRTLCriticalSection: called after any DB access
+    /// leave the internal mutex: called after any DB access
     // - caller must provide the JSON result for the SQL statement previously set
     //  by LockJSON()
     // - do proper caching of the JSON response for this SQL statement
@@ -2872,10 +2871,10 @@ type
     // - WIN32CASE and WIN32NOCASE collations are added (use slow but accurate Win32 CompareW)
     // - some additional SQl functions are registered: MOD, SOUNDEX/SOUNDEXFR/SOUNDEXES,
     // RANK, CONCAT
-    // - initialize a TRTLCriticalSection to ensure that all access to the database is atomic
+    // - initialize a internal mutex to ensure that all access to the database is atomic
     // - raise an ESQLite3Exception on any error
     constructor Create(const aFileName: TFileName; const aPassword: RawUTF8='';
-      aOpenV2Flags: integer=0; aDefaultCacheSize: integer=10000; aDefaultPageSize: integer=4096);
+      aOpenV2Flags: integer=0; aDefaultCacheSize: integer=10000; aDefaultPageSize: integer=4096); reintroduce;
     /// close a database and free its memory and context
     //- if TransactionBegin was called but not commited, a RollBack is performed
     destructor Destroy; override;
@@ -3950,6 +3949,7 @@ constructor TSQLDataBase.Create(const aFileName: TFileName; const aPassword: Raw
   aOpenV2Flags, aDefaultCacheSize,aDefaultPageSize: integer);
 var result: integer;
 begin
+  inherited Create; // initialize fSafe
   if sqlite3=nil then
     raise ESQLite3Exception.CreateUTF8('%.Create: No SQLite3 libray available'+
       ' - you shall either add SynSQLite3Static to your project uses clause, '+
@@ -3970,7 +3970,6 @@ begin
     raise ESQLite3Exception.CreateUTF8(
       'Your % version of SQLite3 does not support custom OpenV2Flags=%',
       [sqlite3.libversion,fOpenV2Flags]);
-  InitializeCriticalSection(fLock);
   fFileName := aFileName;
   if fFileName=SQLITE_MEMORY_DATABASE_NAME then
     fIsMemory := true else
@@ -4015,10 +4014,9 @@ begin
     DBClose;
   end;
   FillZero(fPassword);
-  DeleteCriticalSection(fLock);
   fCache.Free;
   fSQLFunctions.Free;
-  inherited;
+  inherited Destroy;
 end;
 
 function TSQLDataBase.SQLShouldBeLogged(const aSQL: RawUTF8): boolean;
@@ -4304,7 +4302,7 @@ begin
   if self=nil then
     exit; // avoid GPF in case of call from a static-only server
   if (aSQL='') or IsCacheable(aSQL) then
-    EnterCriticalSection(fLock) else // on non-concurent calls, is very fast
+    fSafe.Lock  else // on non-concurent calls, is very fast
     LockAndFlushCache; // INSERT UPDATE DELETE statements need to flush cache
 end;
 
@@ -4312,12 +4310,12 @@ procedure TSQLDataBase.LockAndFlushCache;
 begin
   if self=nil then
     exit; // avoid GPF in case of call from a static-only server
-  EnterCriticalSection(fLock); // on non-concurent calls, this API is very fast
+  fSafe.Lock; // on non-concurent calls, this API is very fast
   try
     CacheFlush;
   except
     on Exception do begin // ensure critical section is left even on error
-      LeaveCriticalSection(fLock);
+      fSafe.UnLock;
       raise;
     end;
   end;
@@ -4326,20 +4324,20 @@ end;
 procedure TSQLDataBase.Lock;
 begin
   if self<>nil then
-    EnterCriticalSection(fLock); // on non-concurent calls, this API is very fast
+    fSafe.Lock; // on non-concurent calls, this API is very fast
 end;
 
 procedure TSQLDataBase.UnLock;
 begin
   if self<>nil then
-    LeaveCriticalSection(fLock); // on non-concurent calls, this API is very fast
+    fSafe.UnLock; // on non-concurent calls, this API is very fast
 end;
 
 function TSQLDataBase.LockJSON(const aSQL: RawUTF8; aResultCount: PPtrInt): RawUTF8;
 begin
   if self=nil then
     exit; // avoid GPF in case of call from a static-only server
-  EnterCriticalSection(fLock); // cache access is also protected by fLock
+  fSafe.Lock; // cache access is also protected by fSafe
   try
     if IsCacheable(aSQL) then begin
       result := fCache.Find(aSQL,aResultCount); // try to get JSON result from cache
@@ -4350,7 +4348,7 @@ begin
           fLog.Add.Log(sllResult,result,self,fLogResultMaximumSize);
         end;
         {$endif}
-        LeaveCriticalSection(fLock); // found in cache -> leave critical section
+        fSafe.UnLock; // found in cache -> leave critical section
       end;
     end else begin
       // UPDATE, INSERT or any non SELECT statement
@@ -4359,7 +4357,7 @@ begin
     end;
   except
     on Exception do begin // ensure critical section is left even on error
-      LeaveCriticalSection(fLock);
+      fSafe.UnLock;
       raise;
     end;
   end;
@@ -4375,7 +4373,7 @@ begin
     {$endif}
     fCache.Add(aJSONResult,aResultCount); // no-op if Reset was made just before
   finally
-    LeaveCriticalSection(fLock); // on non-concurent calls, this API is very fast
+    fSafe.UnLock; // on non-concurent calls, this API is very fast
   end;
 end;
 
@@ -5743,26 +5741,53 @@ constructor TSQLite3Library.Create;
 var V: PUTF8Char;
 begin
   if Assigned(libversion) then begin
-    V := libversion;        // convert into e.g. 3008003001
+    V := libversion;
     fVersionText := RawUTF8(V);
     fVersionNumber := GetNextItemCardinal(V,'.')*1000000000+
       GetNextItemCardinal(V,'.')*1000000+GetNextItemCardinal(V,'.')*1000+
-      GetNextItemCardinal(V,'.');
+      GetNextItemCardinal(V,'.'); // convert into e.g. 3008003001
   end;
 end;
 
-// due to FPC's limitation, all those functions should be declared outside the method
+{$ifndef DELPHI5OROLDER}
+
+{$ifdef FPC} // under FPC, MemSize() returns the value expected by xSize()
+
+function xMalloc(size: integer): pointer; cdecl;
+begin
+  result := GetMem(size);
+end;
+
+procedure xFree(ptr: pointer); cdecl;
+begin
+  FreeMem(ptr);
+end;
+
+function xRealloc(ptr: pointer; size: integer): pointer; cdecl;
+begin
+  result := ReAllocMem(ptr,size);
+end;
+
+function xSize(ptr: pointer): integer; cdecl;
+begin
+  result := MemSize(ptr);
+end;
+
+{$else} // under Delphi, we need to store the size as 4 bytes header for xSize()
+
 function xMalloc(size: integer): pointer; cdecl;
 begin
   GetMem(result,size+4);
   PInteger(result)^ := size;
   inc(PInteger(result));
 end;
+
 procedure xFree(ptr: pointer); cdecl;
 begin
   dec(PInteger(ptr));
   FreeMem(ptr);
 end;
+
 function xRealloc(ptr: pointer; size: integer): pointer; cdecl;
 begin
   dec(PInteger(ptr));
@@ -5771,6 +5796,7 @@ begin
   inc(PInteger(ptr));
   result := ptr;
 end;
+
 function xSize(ptr: pointer): integer; cdecl;
 begin
   if ptr=nil then
@@ -5779,6 +5805,11 @@ begin
     result := PInteger(ptr)^;
   end;
 end;
+
+{$endif FPC}
+
+{$endif DELPHI5OROLDER}
+
 function xRoundup(size: integer): integer; cdecl;
 begin
   result := size;
@@ -5792,8 +5823,10 @@ begin
 end;
 
 procedure TSQLite3Library.ForceToUseSharedMemoryManager;
-{$ifdef DELPHI5OROLDER} begin // varargs attribute was unknown under Delphi 5
+{$ifdef DELPHI5OROLDER}
+begin // varargs attribute was unsupported on Delphi 5
 {$else}
+// due to FPC's linker limitation, all wrapper functions should be defined outside
 var mem: TSQLite3MemMethods;
     res: integer;
 begin
@@ -5812,12 +5845,13 @@ begin
   except
     res := SQLITE_INTERNAL;
   end;
-  if res<>SQLITE_OK then
+  if res<>SQLITE_OK then begin
     {$ifdef WITHLOG}
-    SynSQLite3Log.Add.Log(sllError,'SQLITE_CONFIG_MALLOC failed as %',[res]) else
+    SynSQLite3Log.Add.Log(sllError,'SQLITE_CONFIG_MALLOC failed as %',[res]);
     {$endif}
+  end else
     fUseInternalMM := true;
-{$endif}
+{$endif DELPHI5OROLDER}
 end;
 
 function TSQLite3Library.GetVersion: RawUTF8;

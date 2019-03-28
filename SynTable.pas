@@ -796,6 +796,9 @@ function SearchFieldIndex(var Indexes: TSQLFieldIndexDynArray; Field: integer): 
 function FieldIndexToBits(const Index: TSQLFieldIndexDynArray): TSQLFieldBits; overload;
   {$ifdef HASINLINE}inline;{$endif}
   
+/// returns the stored size of a TSQLVar database value
+// - only returns VBlobLen / StrLen(VText) size, 0 otherwise
+function SQLVarLength(const Value: TSQLVar): integer;
 
 {$ifndef NOVARIANTS}
 
@@ -887,8 +890,8 @@ function SQLParamContent(P: PUTF8Char; out ParamType: TSQLParamType; out ParamVa
   out wasNull: boolean): PUTF8Char;
 
 /// this function will extract inlined :(1234): parameters into Types[]/Values[]
-// - will return the generic SQL statement with ? instead of :(1234):
-// - call internaly SQLParamContent() function for inline parameters decoding
+// - will return the generic SQL statement with ? place holders for inlined
+// parameters and setting Values with SQLParamContent() decoded content
 // - will set maxParam=0 in case of no inlined parameters
 // - recognized types are sptInteger, sptFloat, sptDateTime ('\uFFF1...'),
 // sptUTF8Text and sptBlob ('\uFFF0...')
@@ -2038,6 +2041,8 @@ type
     {$endif DELPHI5OROLDER}
     /// clear any stored information
     procedure Clear;
+    /// append stored information into another RawByteString, and clear content
+    procedure AppendTextAndClear(var aDest: RawByteString);
     // compact the Values[] array into a single item
     // - is also used by AsText to compute a single RawByteString
     procedure Compact;
@@ -3219,7 +3224,7 @@ begin
   with TSynTableFieldProperties(fField.List[F]) do
     if F in AvailableFields then begin
       Len := Lens[F];
-      MoveFast(P^,Dest^,Len);
+      {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,Dest^,Len);
       inc(P,Len);
       inc(Dest,Len);
     end else begin
@@ -3863,8 +3868,8 @@ begin
     Len := {$ifdef FPC}length(Value){$else}PInteger(PtrUInt(Value)-SizeOf(integer))^{$endif};
     Head := PAnsiChar(ToVarUInt32(Len,@tmp))-tmp;
     SetLength(Result,Len+Head);
-    MoveFast(tmp,PByteArray(Result)[0],Head);
-    MoveFast(pointer(Value)^,PByteArray(Result)[Head],Len);
+    {$ifdef FPC}Move{$else}MoveFast{$endif}(tmp,PByteArray(Result)[0],Head);
+    {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(Value)^,PByteArray(Result)[Head],Len);
   end;
 end;
 
@@ -3890,8 +3895,8 @@ begin
     result := #0 else begin // inlined ToSBFStr() code
     Head := PAnsiChar(ToVarUInt32(ValueLen,@tmp))-tmp;
     SetString(Result,nil,ValueLen+Head);
-    MoveFast(tmp,PByteArray(Result)[0],Head);
-    MoveFast(Value^,PByteArray(Result)[Head],ValueLen);
+    {$ifdef FPC}Move{$else}MoveFast{$endif}(tmp,PByteArray(Result)[0],Head);
+    {$ifdef FPC}Move{$else}MoveFast{$endif}(Value^,PByteArray(Result)[Head],ValueLen);
   end;
 end;
 
@@ -4370,7 +4375,7 @@ begin
           Cmp := high(tmp) else
           Cmp := L;
         tmp[Cmp] := #0; // TSynSoundEx expect the buffer to be #0 terminated
-        MoveFast(SBF^,tmp,Cmp);
+        {$ifdef FPC}Move{$else}MoveFast{$endif}(SBF^,tmp,Cmp);
         case FieldType of
         tftWinAnsi:
           if PSynSoundEx(Value)^.Ansi(tmp) then
@@ -4951,7 +4956,7 @@ begin
   CheckVTableInitialized;
   if (aField.FieldSize>0) and (VValue<>'') then begin
     // fixed size content: fast in-place update
-    MoveFast(pointer(Value)^,VValue[aField.Offset+1],aField.FieldSize)
+    {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(Value)^,VValue[aField.Offset+1],aField.FieldSize)
     // VValue[F.Offset+1] above will call UniqueString(VValue), even under FPC
   end else begin
     // variable-length update
@@ -5684,7 +5689,7 @@ var
   c: PCardinal;
 begin
   SetLength(result, SizeOf(m^));
-  FillCharFast(m^, SizeOf(m^), 0);
+  {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(m^, SizeOf(m^), 0);
   for i := 0 to length(Pattern) - 1 do begin
     c := @m^[u[p[i]]]; // for FPC code generation
     c^ := c^ or (1 shl i);
@@ -6331,7 +6336,7 @@ begin
     InvalidTextLengthMin(MinLength,ErrorMsg) else
   if L>MaxLength then
     ErrorMsg := Format(sInvalidTextLengthMax,[MaxLength,Character01n(MaxLength)]) else begin
-    FillcharFast(Min,SizeOf(Min),0);
+    {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(Min,SizeOf(Min),0);
     L := length(value);
     for i := 1 to L do
     case value[i] of
@@ -6839,7 +6844,7 @@ begin
     Len := FromVarUInt32(P);
     if D+Len>DEnd then
       break;
-    MoveFast(P^,D^,Len);
+    {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,D^,Len);
     crc := crc32c(crc,D,Len);
     inc(P,Len);
     inc(D,Len);
@@ -6848,7 +6853,7 @@ begin
     Len := FromVarUInt32(P)+3;
     if D+Len>DEnd then
       break;
-    FillCharFast(D^,Len,0);
+    {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(D^,Len,0);
     crc := crc32c(crc,@Len,SizeOf(Len));
     inc(D,Len);
   end;
@@ -7111,7 +7116,7 @@ begin
   until false;
   // 5. write remaining bytes
   if NewBufSize>0 then begin
-    MoveFast(NewBuf^,pOut^,NewBufSize);
+    {$ifdef FPC}Move{$else}MoveFast{$endif}(NewBuf^,pOut^,NewBufSize);
     inc(pOut,NewBufSize);
     inc(newBuf,NewBufSize);
   end;
@@ -7123,7 +7128,7 @@ begin
   PInteger(OutBuf+3)^ := h;
   OutBuf[6] := AnsiChar(curofssize);
   // 7. copy commands
-  MoveFast(WorkBuf^,pOut^,h);
+  {$ifdef FPC}Move{$else}MoveFast{$endif}(WorkBuf^,pOut^,h);
   result := pOut+h;
 end;
 
@@ -7156,7 +7161,7 @@ begin
     // copy leading bytes
     leading := FromVarUInt32(PByte(P));
     if leading<>0 then begin
-      MoveFast(buf^,upd^,leading);
+      {$ifdef FPC}Move{$else}MoveFast{$endif}(buf^,upd^,leading);
       inc(buf,leading);
       inc(upd,leading);
     end;
@@ -7164,7 +7169,7 @@ begin
     if srclen<>0 then begin
       if PtrUInt(upd-src)<srclen then
         movechars(src,upd,srclen) else
-        MoveFast(src^,upd^,srclen);
+        {$ifdef FPC}Move{$else}MoveFast{$endif}(src^,upd^,srclen);
       inc(upd,srclen);
     end;
   end;
@@ -7209,7 +7214,7 @@ var HTab, HList: PHTab;
     WriteByte(d,FLAG_COPIED); // block copied flag
     db := ToVarUInt32(NewSizeSave,db);
     WriteInt(d,crc32c(0,New,NewSizeSave));
-    MoveFast(New^,d^,NewSizeSave);
+    {$ifdef FPC}Move{$else}MoveFast{$endif}(New^,d^,NewSizeSave);
     inc(d,NewSizeSave);
     result := d-Delta;
   end;
@@ -7280,7 +7285,7 @@ begin
         if BufRead=0 then
           break;
         WriteInt(d,crc32c(0,New,BufRead));
-        MoveFast(New^,d^,BufRead);
+        {$ifdef FPC}Move{$else}MoveFast{$endif}(New^,d^,BufRead);
         inc(New,BufRead);
         inc(d,BufRead);
       end else begin
@@ -7346,7 +7351,7 @@ begin
         exit;
       end;
       inc(Delta,4);
-      MoveFast(Delta^,New^,BufRead);
+      {$ifdef FPC}Move{$else}MoveFast{$endif}(Delta^,New^,BufRead);
       if BufRead>=Len then
         exit; // if Old=nil -> only copy new
       inc(Delta,BufRead);
@@ -7369,13 +7374,13 @@ begin
         exit;
       end;
       inc(Delta,4);
-      MoveFast(Old^,New^,OldRead);
+      {$ifdef FPC}Move{$else}MoveFast{$endif}(Old^,New^,OldRead);
       inc(New,OldRead);
     end;
     FLAG_END: begin // block idem end flag
       if crc32c(0,Old,OldRead)<>PCardinal(Delta)^ then
         Result := dsCrcEnd;
-      MoveFast(Old^,New^,OldRead);
+      {$ifdef FPC}Move{$else}MoveFast{$endif}(Old^,New^,OldRead);
       inc(New,OldRead);
       break;
     end;
@@ -7499,6 +7504,21 @@ begin
   LastFind := 0;
 end;
 
+procedure TRawByteStringGroup.AppendTextAndClear(var aDest: RawByteString);
+var d,i: integer;
+    v: PRawByteStringGroupValue;
+begin
+  d := length(aDest);
+  SetLength(aDest,d+Position);
+  v := pointer(Values);
+  for i := 1 to Count do begin
+    {$ifdef FPC}Move{$else}MoveFast{$endif}(
+      pointer(v^.Value)^,PByteArray(aDest)[d+v^.Position],length(v^.Value));
+    inc(v);
+  end;
+  Clear;
+end;
+
 function TRawByteStringGroup.AsText: RawByteString;
 begin
   if Values=nil then
@@ -7518,8 +7538,9 @@ begin
     SetString(tmp,nil,Position);
     v := pointer(Values);
     for i := 1 to Count do begin
-      MoveFast(pointer(v^.Value)^,PByteArray(tmp)[v^.Position],length(v^.Value));
-      {$ifdef FPC}Finalize(v^.Value){$else}v^.Value := ''{$endif};
+      {$ifdef FPC}Move{$else}MoveFast{$endif}(
+        pointer(v^.Value)^,PByteArray(tmp)[v^.Position],length(v^.Value));
+      {$ifdef FPC}Finalize(v^.Value){$else}v^.Value := ''{$endif}; // free chunks
       inc(v);
     end;
     Values[0].Value := tmp; // use result for absolute compaction ;)
@@ -7539,7 +7560,8 @@ begin
   SetLength(result,Position);
   for i := 0 to Count-1 do
   with Values[i] do
-    MoveFast(pointer(Value)^,PByteArray(result)[Position],length(Value));
+    {$ifdef FPC}Move{$else}MoveFast{$endif}(
+      pointer(Value)^,PByteArray(result)[Position],length(Value));
 end;
 
 procedure TRawByteStringGroup.Write(W: TTextWriter; Escape: TTextWriterKind);
@@ -7681,7 +7703,7 @@ var P: pointer;
 begin
   P := Find(aPosition,aLength);
   if P<>nil then
-    MoveFast(P^,aDest^,aLength);
+    {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,aDest^,aLength);
 end;
 
 
@@ -7838,6 +7860,7 @@ end;
 
 { ************ Database types and classes ************************** }
 
+{$ifdef FPC}{$push}{$endif}
 {$WARNINGS OFF} // yes, we know there will be dead code below: we rely on it ;)
 
 function IsZero(const Fields: TSQLFieldBits): boolean;
@@ -7914,10 +7937,10 @@ begin
     PInt64Array(@Fields)^[2] := 0;
     PInt64Array(@Fields)^[3] := 0;
   end else
-    FillZero(Fields,SizeOf(Fields));
+    {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(Fields,SizeOf(Fields),0);
 end;
 
-{$WARNINGS ON}
+{$ifdef FPC}{$pop}{$else}{$WARNINGS ON}{$endif}
 
 procedure FieldBitsToIndex(const Fields: TSQLFieldBits; var Index: TSQLFieldIndexDynArray;
   MaxLength,IndexStart: integer);
@@ -7959,7 +7982,7 @@ end;
 procedure FieldIndexToBits(const Index: TSQLFieldIndexDynArray; var Fields: TSQLFieldBits);
 var i: integer;
 begin
-  FillcharFast(Fields,SizeOf(Fields),0);
+  {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(Fields,SizeOf(Fields),0);
   for i := 0 to Length(Index)-1 do
     if Index[i]>=0 then
       include(Fields,Index[i]);
@@ -8056,8 +8079,8 @@ begin
       end else
       if (c=JSON_SQLDATE_MAGIC) and // handle ':("\uFFF112012-05-04"):' format
          IsIso8601(PUTF8Char(pointer(ParamValue))+3,L) then begin
-        ParamValue := copy(ParamValue,4,L); // return ISO-8601 text
-        ParamType := sptDateTime;           // identified as Date/Time
+        Delete(ParamValue,1,3);   // return only ISO-8601 text
+        ParamType := sptDateTime; // identified as Date/Time
       end;
     end;
   end;
@@ -8110,17 +8133,18 @@ var ppBeg: integer;
     wasNull: boolean;
 begin
   maxParam := 0;
-  FillcharFast(Nulls,SizeOf(Nulls),0);
+  {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(Nulls,SizeOf(Nulls),0);
   ppBeg := PosEx(RawUTF8(':('),SQL,1);
   if (ppBeg=0) or (PosEx(RawUTF8('):'),SQL,ppBeg+2)=0) then begin
     // SQL code with no valid :(...): internal parameters -> leave maxParam=0
     result := SQL;
     exit;
   end;
-  FastSetString(result,pointer(SQL),length(SQL));
   // compute GenericSQL from SQL, converting :(...): into ?
-  Gen := PUTF8Char(pointer(result))+ppBeg-1; // Gen^ just before :(
-  P := PUTF8Char(pointer(SQL))+ppBeg+1; // P^ just after :(
+  FastSetString(result,pointer(SQL),length(SQL)); // private copy for unescape
+  P := pointer(result); // in-place string unescape (keep SQL untouched)
+  Gen := P+ppBeg-1; // Gen^ just before :(
+  inc(P,ppBeg+1);   // P^ just after :(
   repeat
     Gen^ := '?'; // replace :(...): by ?
     inc(Gen);
@@ -8146,11 +8170,22 @@ begin
     inc(P,2);
     inc(maxParam);
   until false;
-  // return the correct SQL statement, with params in Values[]
+  // return generic SQL statement, with ? place-holders and params in Values[]
   SetLength(result,Gen-pointer(result));
   inc(maxParam);
 end;
 
+function SQLVarLength(const Value: TSQLVar): integer;
+begin
+  case Value.VType of
+    ftBlob:
+      result := Value.VBlobLen;
+    ftUTF8:
+      result := StrLen(Value.VText); // fast enough for our purpose
+    else
+      result := 0; // simple/ordinal values, or ftNull
+  end;
+end;
 
 {$ifndef NOVARIANTS}
 
@@ -8346,7 +8381,7 @@ begin
   if P=nil then exit; // unexpected end
   // trim first row data
   if P^<>#0 then
-    MoveFast(P^,PBegin^,PEnd-P); // erase content
+    {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,PBegin^,PEnd-P); // erase content
   fStream.Seek(PBegin-P,soCurrent); // adjust current stream position
 end;
 

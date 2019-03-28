@@ -1645,8 +1645,7 @@ begin
   varWord:
     FValue := INT_TO_JSVAL(VWord);
   varLongWord:
-    if (VLongWord>=cardinal(Low(integer))) and
-      (VLongWord<=cardinal(High(integer))) then
+    if VLongWord<=cardinal(high(Integer)) then
       FValue := INT_TO_JSVAL(VLongWord) else
       FValue := DOUBLE_TO_JSVAL(VLongWord);
   {$endif}

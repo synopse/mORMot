@@ -281,9 +281,11 @@ type
 {$endif}
 {$ifdef FPC}
   ZipPtrUInt = PtrUInt;
+  ZipPtrInt = PtrInt;
 {$else}
   /// as available in FPC
-  ZipPtrUInt = {$ifdef CPU64}NativeUInt{$else}cardinal{$endif};
+  ZipPtrUInt = {$ifdef CPU64}UInt64{$else}cardinal{$endif};
+  ZipPtrInt = {$ifdef CPU64}Int64{$else}integer{$endif};
 {$endif}
 
 /// ZLib INFLATE decompression from memory into a AnsiString (ZipString) variable
@@ -381,7 +383,7 @@ type
         {$ifdef UNIX} // dynamically linked with new 64-bit TZStream
         type
           TZLong = ZipPtrUint;
-          TZCRC = Int64;
+          TZCRC = cardinal;
         const
           libz='z';
           {$linklib libz}
@@ -599,14 +601,16 @@ type
     zssize, zscode: integer;
     zs: TZStream;
   public
-    complen, uncomplen: integer;
+    complen: ZipPtrInt;
+    uncomplen32: cardinal; // modulo 2^32 by gzip design
     crc32: cardinal;
     unixmodtime: cardinal;
     fname, fcomment, extra: PAnsiChar;
     /// read and validate the .gz header
     // - on success, return true and fill complen/uncomplen/crc32c properties
-    function Init(gz: PAnsiChar; gzLen: integer): boolean;
+    function Init(gz: PAnsiChar; gzLen: ZipPtrInt): boolean;
     /// uncompress the .gz content into a memory buffer
+    // - warning: won't work as expected if uncomplen32 was truncated to 2^32
     function ToMem: ZipString;
     /// uncompress the .gz content into a stream
     function ToStream(stream: TStream; tempBufSize: integer=0): boolean;
@@ -614,8 +618,11 @@ type
     function ToFile(const filename: TFileName; tempBufSize: integer=0): boolean;
     /// allow low level iterative decompression using an internal TZStream structure
     function ZStreamStart(dest: pointer; destsize: integer): boolean;
+    /// return true if ZStreamStart() has been successfully called
+    function ZStreamStarted: boolean; {$ifdef HASINLINE}inline;{$endif}
     /// will uncompress into dest/destsize buffer as supplied to ZStreamStart
-    // - return the number of bytes uncompressed, 0 if the input stream is finished
+    // - return the number of bytes uncompressed (<=destsize)
+    // - return 0 if the input stream is finished
     function ZStreamNext: integer;
     /// any successfull call to ZStreamStart should always run ZStreamDone
     // - return true if the crc and the uncompressed size are ok
@@ -1636,13 +1643,13 @@ type
 
 { TGZRead }
 
-function TGZRead.Init(gz: PAnsiChar; gzLen: integer): boolean;
-var offset: integer;
+function TGZRead.Init(gz: PAnsiChar; gzLen: ZipPtrInt): boolean;
+var offset: ZipPtrInt;
     flags: TGZFlags;
 begin // see https://www.ietf.org/rfc/rfc1952.txt
   comp := nil;
   complen := 0;
-  uncomplen := 0;
+  uncomplen32 := 0;
   zsdest := nil;
   result := false;
   extra := nil;
@@ -1676,9 +1683,7 @@ begin // see https://www.ietf.org/rfc/rfc1952.txt
       inc(offset,SizeOf(word));
   if offset>=gzlen-8 then
     exit;
-  uncomplen := PInteger(@gz[gzLen-4])^;
-  if uncomplen<=0 then
-    exit;
+  uncomplen32 := PCardinal(@gz[gzLen-4])^; // modulo 2^32 by design (may be 0)
   comp := gz+offset;
   complen := gzLen-offset-8;
   crc32 := PCardinal(@gz[gzLen-8])^;
@@ -1690,9 +1695,9 @@ begin
   result := '';
   if comp=nil then
     exit;
-  SetLength(result,uncomplen);
-  if (UnCompressMem(comp,pointer(result),complen,uncomplen)<>uncomplen) or
-     (SynZip.crc32(0,pointer(result),uncomplen)<>crc32) then
+  SetLength(result,uncomplen32);
+  if (UnCompressMem(comp,pointer(result),complen,uncomplen32)<>integer(uncomplen32)) or
+     (SynZip.crc32(0,pointer(result),uncomplen32)<>crc32) then
     result := ''; // invalid CRC
 end;
 
@@ -1701,7 +1706,7 @@ var crc: cardinal;
 begin
   crc := 0;
   result := (comp<>nil) and (stream<>nil) and
-    (UnCompressStream(comp,complen,stream,@crc,{zlib=}false,tempBufSize)=cardinal(uncomplen)) and
+    (UnCompressStream(comp,complen,stream,@crc,{zlib=}false,tempBufSize)=uncomplen32) and
     (crc=crc32);
 end;
 
@@ -1739,10 +1744,15 @@ begin
   end;
 end;
 
+function TGZRead.ZStreamStarted: boolean;
+begin
+  result := zsdest<>nil;
+end;
+
 function TGZRead.ZStreamNext: integer;
 begin
   result := 0;
-  if (comp=nil) or (zsdest=nil) or (integer(zs.total_out)>uncomplen) or
+  if (comp=nil) or (zsdest=nil) or
      not ((zscode=Z_OK) or (zscode=Z_STREAM_END) or (zscode=Z_BUF_ERROR)) then
     exit;
   if zscode<>Z_STREAM_END then begin
@@ -1762,7 +1772,7 @@ begin
   if (comp<>nil) and (zsdest<>nil) then begin
     inflateEnd(zs);
     zsdest := nil;
-    result := (zscrc=crc32) and (integer(zs.total_out)=uncomplen);
+    result := (zscrc=crc32) and (cardinal(zs.total_out)=uncomplen32);
   end;
 end;
 

@@ -55,7 +55,7 @@ unit SynFPCCMemAligned;
 
 (*
   Usage:
-    - for glibc, define -dFPC_NO_DEFAULT_MEMORYMANAGER -dFPC_SYNCMEM
+    - for glibc (preferred), define -dFPC_NO_DEFAULT_MEMORYMANAGER -dFPC_SYNCMEM
     - for Intel TBB, define -dFPC_SYNTBB - after "apt-get install libtbb2"
     - for jemalloc, define -dFPC_SYNJEMALLOC - after "apt-get install libjemalloc1"
 
@@ -79,6 +79,8 @@ unit SynFPCCMemAligned;
      500000 interning 8 KB in 61.96ms i.e. 8,068,810/s, aver. 0us, 123.1 MB/s
      500000 direct 7.6 MB in 36.46ms i.e. 13,711,402/s, aver. 0us, 209.2 MB/s
     for multi-threaded process, we observed best scaling with TBB on this system
+    BUT memory consumption raised to 60 more space (gblic=2.6GB vs TBB=170GB)!
+    -> so for serious server work, glibc (FPC_SYNCMEM) sounds the best candidate
 
 *)
 
