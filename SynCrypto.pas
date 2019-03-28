@@ -1073,13 +1073,10 @@ procedure AESIVCtrEncryptDecrypt(const BI; var BO; DoEncrypt: boolean);
 
 type
   /// thread-safe class containing a TAES encryption/decryption engine
-  TAESLocked = class(TSynPersistent)
+  TAESLocked = class(TSynPersistentLock)
   protected
     fAES: TAES;
-    fLock: TRTLCriticalSection;
   public
-    /// initialize the internal lock, but not the TAES instance
-    constructor Create; override;
     /// finalize all used memory and resources
     destructor Destroy; override;
   end;
@@ -12020,9 +12017,9 @@ begin
         DecryptInit(AESIVCTR_KEY,128);
   end;
   with aesivctr[DoEncrypt] do begin
-    EnterCriticalSection(fLock);
+    fSafe^.Lock;
     TAESContext(fAES.Context).DoBlock(fAES.Context,BI,BO);
-    LeaveCriticalSection(fLock);
+    fSafe^.UnLock;
   end;
 end;
 
@@ -13448,17 +13445,10 @@ end;
 
 { TAESLocked }
 
-constructor TAESLocked.Create;
-begin
-  inherited Create;
-  InitializeCriticalSection(fLock);
-end;
-
 destructor TAESLocked.Destroy;
 begin
   inherited Destroy;
   fAES.Done; // mandatory for Padlock - also fill AES buffer with 0 for safety
-  DeleteCriticalSection(fLock);
 end;
 
 
@@ -13584,11 +13574,14 @@ begin
   try
     entropy := GetEntropy(128); // 128 bytes is the HMAC_SHA512 key block size
     PBKDF2_HMAC_SHA512(entropy,ExeVersion.User,fSeedPBKDF2Rounds,key.b);
-    EnterCriticalSection(fLock);
-    fAES.EncryptInit(key.Lo,fAESKeySize);
-    crcblocks(@fCTR,@key.Hi,2);
-    fBytesSinceSeed := 0;
-    LeaveCriticalSection(fLock);
+    fSafe^.Lock;
+    try
+      fAES.EncryptInit(key.Lo,fAESKeySize);
+      crcblocks(@fCTR,@key.Hi,2);
+      fBytesSinceSeed := 0;
+    finally
+      fSafe^.UnLock;
+    end;
   finally
     FillZero(key.b); // avoid the key appear in clear on stack
     FillZero(entropy);
@@ -13618,12 +13611,12 @@ procedure TAESPRNG.FillRandom(out Block: TAESBlock);
 begin
   if fBytesSinceSeed>fSeedAfterBytes then
     Seed;
-  EnterCriticalSection(fLock);
+  fSafe^.Lock;
   TAESContext(fAES.Context).DoBlock(fAES.Context,fCTR.b,Block);
   IncrementCTR;
   inc(fBytesSinceSeed,SizeOf(Block));
   inc(fTotalBytes,SizeOf(Block));
-  LeaveCriticalSection(fLock);
+  fSafe^.UnLock;
 end;
 
 procedure TAESPRNG.FillRandom(out Buffer: THash256);
@@ -13640,7 +13633,7 @@ begin
     exit;
   if fBytesSinceSeed>fSeedAfterBytes then
     Seed;
-  EnterCriticalSection(fLock);
+  fSafe^.Lock;
   for i := 1 to Len shr 4 do begin
     TAESContext(fAES.Context).DoBlock(fAES.Context,fCTR.b,buf^);
     IncrementCTR;
@@ -13654,7 +13647,7 @@ begin
     IncrementCTR;
     MoveFast(rnd,buf^,Len);
   end;
-  LeaveCriticalSection(fLock);
+  fSafe^.UnLock;
 end;
 
 function TAESPRNG.FillRandom(Len: integer): RawByteString;

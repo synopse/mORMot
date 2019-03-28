@@ -41376,9 +41376,9 @@ begin
     end;
   end;
   with Server.fStats do begin
-    EnterCriticalSection(fLock);
+    fSafe^.Lock; // try...finally not mandatory (slow
     inc(fServiceMethod); // TSQLRestServerMonitor.Changed method is void
-    LeaveCriticalSection(fLock);
+    fSafe^.UnLock;
   end;
 end;
 
@@ -41439,13 +41439,10 @@ procedure TSQLRestServerURIContext.InternalExecuteSOAByInterface;
     if ForceServiceResultAsXMLObjectNameSpace='' then
       ForceServiceResultAsXMLObjectNameSpace := Service.ResultAsXMLObjectNameSpace;
     with Server.fStats do begin
-      EnterCriticalSection(fLock);
-      try
-        inc(fServiceInterface);
-        Changed;
-      finally
-        LeaveCriticalSection(fLock);
-      end;
+      fSafe^.Lock;
+      inc(fServiceInterface);
+      Changed;
+      fSafe^.UnLock;
     end;
     case ServiceMethodIndex of
     ord(imFree):
@@ -45510,20 +45507,20 @@ end;
 
 procedure TSQLRestServerMonitor.ProcessSuccess(IsOutcomingFile: boolean);
 begin
-  EnterCriticalSection(fLock);
+  fSafe^.Lock;
   try
     inc(fSuccess);
     if IsOutcomingFile then
       inc(fOutcomingFiles);
     Changed;
   finally
-    LeaveCriticalSection(fLock);
+    fSafe^.UnLock;
   end;
 end;
 
 procedure TSQLRestServerMonitor.NotifyORM(aMethod: TSQLURIMethod);
 begin
-  EnterCriticalSection(fLock);
+  fSafe^.Lock;
   try
     case aMethod of
     mGET,mLOCK: inc(fRead);
@@ -45533,7 +45530,7 @@ begin
     end;
     Changed;
   finally
-    LeaveCriticalSection(fLock);
+    fSafe^.UnLock;
   end;
 end;
 
@@ -45544,7 +45541,7 @@ var st: TSynMonitorWithSize;
 begin
   if TableIndex<0 then
     exit;
-  EnterCriticalSection(fLock);
+  fSafe^.Lock;
   try
     if TableIndex>=length(fPerTable[Write]) then
       // tables may have been added after Create()
@@ -45558,7 +45555,7 @@ begin
     if fServer.fStatUsage<>nil then
       fServer.fStatUsage.Modified(st,[]);
   finally
-    LeaveCriticalSection(fLock);
+    fSafe^.UnLock;
   end;
 end;
 
@@ -45566,14 +45563,14 @@ function TSQLRestServerMonitor.NotifyThreadCount(delta: integer): integer;
 begin
   if self=nil then
     result := 0 else begin
-    EnterCriticalSection(fLock);
+    fSafe^.Lock;
     try
       inc(fCurrentThreadCount,delta);
       result := fCurrentThreadCount;
       if delta<>0 then
         Changed;
     finally
-      LeaveCriticalSection(fLock);
+      fSafe^.UnLock;
     end;
   end;
 end;
@@ -63119,7 +63116,8 @@ end;
 procedure ObjArrayCopy(const aSourceObjArray; var aDestObjArray; aDestObjArrayClear: boolean);
 var s: TObjectDynArray absolute aSourceObjArray;
     d: TObjectDynArray absolute aDestObjArray;
-    slen,dlen,i: integer;
+    slen,dlen: integer;
+    i: PtrInt;
     dinst: TClassInstance;
     o: TObject;
 begin

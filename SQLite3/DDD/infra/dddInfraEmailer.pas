@@ -645,11 +645,11 @@ end;
 
 procedure TDDDEmailerDaemonStats.NewConnection;
 begin
-  EnterCriticalSection(fLock);
+  fSafe^.Lock;
   try
     inc(fConnection);
   finally
-    LeaveCriticalSection(fLock);
+    fSafe^.UnLock;
   end;
 end;
 

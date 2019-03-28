@@ -5746,6 +5746,7 @@ type
   {$ifdef UNICODE}TSynLocker = record{$else}TSynLocker = object{$endif}
   private
     fSection: TRTLCriticalSection;
+    fSectionPadding: PtrInt; // paranoid to avoid FUTEX_WAKE_PRIVATE=EAGAIN
     fLocked, fInitialized: boolean;
     {$ifndef NOVARIANTS}
     function GetVariant(Index: integer): Variant;
@@ -5926,7 +5927,7 @@ type
   /// adding locking methods to a TInterfacedObject with virtual constructor
   TInterfacedObjectLocked = class(TInterfacedObjectWithCustomCreate)
   protected
-    fSafe: TSynLocker;
+    fSafe: PSynLocker; // TSynLocker would increase inherited fields offset
   public
     /// initialize the object instance, and its associated lock
     constructor Create; override;
@@ -5934,7 +5935,7 @@ type
     destructor Destroy; override;
     /// access to the locking methods of this instance
     // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
-    property Safe: TSynLocker read fSafe;
+    property Safe: PSynLocker read fSafe;
   end;
 
   /// used to determine the exact class type of a TInterfacedObjectWithCustomCreate
@@ -5969,19 +5970,16 @@ type
   // - execution delays are not expected to be accurate, but are best guess,
   // according to NextTask call
   // - this implementation is thread-safe, thanks to the Safe internal locker
-  TPendingTaskList = class(TSynPersistent)
+  TPendingTaskList = class(TSynPersistentLock)
   protected
     fCount: Integer;
     fTask: TPendingTaskListItemDynArray;
     fTasks: TDynArray;
-    fSafe: TSynLocker;
     function GetCount: integer;
     function GetTimestamp: Int64; virtual;
   public
     /// initialize the list memory and resources
     constructor Create; override;
-    /// finaalize the list memory and resources
-    destructor Destroy; override;
     /// append a task, specifying a delay in milliseconds from current time
     procedure AddTask(aMilliSecondsDelayFromNow: integer; const aTask: RawByteString); virtual;
     /// append several tasks, specifying a delay in milliseconds between tasks
@@ -5997,7 +5995,7 @@ type
     procedure Clear; virtual;
     /// access to the locking methods of this instance
     // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
-    property Safe: TSynlocker read fSafe;
+    property Safe: PSynlocker read fSafe;
     /// access to the internal TPendingTaskListItem.Timestamp stored value
     // - corresponding to the current time
     // - default implementation is to return GetTickCount64, with a 16 ms
@@ -6024,7 +6022,7 @@ type
     Values: TDynArrayHashed;
     /// associated mutex for thread-safe process
     Safe: TSynLocker;
-    /// initialize the RawUTF8 slot
+    /// initialize the RawUTF8 slot (and its Safe mutex)
     procedure Init;
     /// finalize the RawUTF8 slot
     procedure Done;
@@ -8671,7 +8669,7 @@ type
   // - internally make use of an efficient hashing algorithm for fast response
   // (i.e. TSynNameValue will use the TDynArrayHashed wrapper mechanism)
   // - this class is thread-safe if you use properly the associated Safe lock
-  TSynCache = class
+  TSynCache = class(TSynPersistentLock)
   protected
     /// last index in fNameValue.List[] if was added by Find()
     // - contains -1 if no previous immediate call to Find()
@@ -8682,7 +8680,6 @@ type
     fMaxRamUsed: cardinal;
     fTimeoutSeconds: cardinal;
     fTimeoutTix: cardinal;
-    fSafe: TSynLocker;
     procedure ResetIfNeeded;
   public
     /// initialize the internal storage
@@ -8693,9 +8690,7 @@ type
     // - by default, there is no timeout period, but you may specify a number of
     // seconds of inactivity (i.e. no Add call) after which the cache is flushed
     constructor Create(aMaxCacheRamUsed: cardinal=16 shl 20;
-      aCaseSensitive: boolean=false; aTimeoutSeconds: cardinal=0);
-    /// finalize the internal storage
-    destructor Destroy; override;
+      aCaseSensitive: boolean=false; aTimeoutSeconds: cardinal=0); reintroduce;
     /// find a Key in the cache entries
     // - return '' if nothing found: you may call Add() just after to insert
     // the expected value in the cache
@@ -8731,7 +8726,7 @@ type
     // ! finally
     // !   cache.Safe.Unlock;
     // ! end;
-    property Safe: TSynLocker read fSafe;
+    property Safe: PSynLocker read fSafe;
     /// the current global size of Values in RAM cache, in bytes
     property RamUsed: cardinal read fRamUsed;
     /// the maximum RAM to be used for values, in bytes
@@ -16327,21 +16322,20 @@ type
   // process is to be monitored
   // - this class is thread-safe for its methods, but you should call explicitly
   // Lock/UnLock to access its individual properties
-  TSynMonitor = class(TSynPersistent)
+  TSynMonitor = class(TSynPersistentLock)
   protected
     fName: RawUTF8;
-    fProcessing: boolean;
     fTaskCount: TSynMonitorCount64;
-    fInternalErrors: TSynMonitorCount;
-    fLastInternalError: variant;
     fTotalTime: TSynMonitorTime;
     fLastTime: TSynMonitorOneTime;
     fMinimalTime: TSynMonitorOneTime;
     fAverageTime: TSynMonitorOneTime;
     fMaximalTime: TSynMonitorOneTime;
     fPerSec: QWord;
+    fInternalErrors: TSynMonitorCount;
+    fProcessing: boolean;
     fTaskStatus: (taskNotStarted,taskStarted);
-    fLock: TRTLCriticalSection;
+    fLastInternalError: variant;
     procedure LockedPerSecProperties; virtual;
     procedure LockedFromProcessTimer; virtual;
     procedure LockedSum(another: TSynMonitor); virtual;
@@ -17017,7 +17011,7 @@ type
     // - specify a time out millliseconds period after which blocking execution
     // should be handled as failure (if 0 is set, default 3000 would be used)
     // - an associated mutex shall be supplied
-    constructor Create(aTimeOutMs: integer; const aSafe: TSynLocker); reintroduce; overload; virtual;
+    constructor Create(aTimeOutMs: integer; aSafe: PSynLocker); reintroduce; overload; virtual;
     /// initialize the semaphore instance
     // - specify a time out millliseconds period after which blocking execution
     // should be handled as failure (if 0 is set, default 3000 would be used)
@@ -21855,7 +21849,7 @@ begin
     sr^.refCnt := 1;
     sr^.length := len;
     inc(sr);
-    PCardinal(PAnsiChar(sr)+len)^ := 0;
+    PCardinal(PAnsiChar(sr)+len)^ := 0; // ends with four #0
     r := pointer(sr);
     if p<>nil then
       {$ifdef FPC}Move{$else}MoveFast{$endif}(p^,sr^,len);
@@ -22195,7 +22189,7 @@ begin
         dec(aIndex);
         if aIndex=0 then
           break;
-        inc(PByte(result),ord(result^[0])+1);
+        inc(PByte(result),ord(result^[0])+1); // loop unrolled twice
         dec(aIndex);
         if aIndex=0 then
           break;
@@ -51702,6 +51696,7 @@ end;
 
 procedure TSynLocker.Init;
 begin
+  fSectionPadding := 0;
   InitializeCriticalSection(fSection);
   PaddingMaxUsedIndex := -1;
   fLocked := false;
@@ -51982,13 +51977,15 @@ end;
 constructor TInterfacedObjectLocked.Create;
 begin
   inherited Create;
-  fSafe.Init;
+  fSafe := AllocMem(SizeOf(TSynLocker));
+  fSafe^.Init;
 end;
 
 destructor TInterfacedObjectLocked.Destroy;
 begin
   inherited Destroy;
-  fSafe.Done;
+  fSafe^.Done;
+  FreeMem(fSafe);
 end;
 
 
@@ -57268,40 +57265,42 @@ end;
 { ************ Unit-Testing classes and functions }
 
 procedure KB(bytes: Int64; out result: TShort16; nospace: boolean);
-const _B: array[boolean, 0..6] of string[3] =
+type TUnits = (kb,mb,gb,tb,pb,eb,b);
+const TXT: array[boolean,TUnits] of RawUTF8 =
     ((' KB',' MB',' GB',' TB',' PB',' EB','% B'), ('KB','MB','GB','TB','PB','EB','%B'));
-var hi,rem,b: cardinal;
+var hi,rem: cardinal;
+    u: TUnits;
 begin
   if bytes<1 shl 10-(1 shl 10) div 10 then begin
-    FormatShort16(_B[nospace,6],[integer(bytes)],result);
+    FormatShort16(TXT[nospace,b],[integer(bytes)],result);
     exit;
   end;
   if bytes<1 shl 20-(1 shl 20) div 10 then begin
-    b := 0;
+    u := kb;
     rem := bytes;
     hi := bytes shr 10;
   end else
   if bytes<1 shl 30-(1 shl 30) div 10 then begin
-    b := 1;
+    u := mb;
     rem := bytes shr 10;
     hi := bytes shr 20;
   end else
   if bytes<Int64(1) shl 40-(Int64(1) shl 40) div 10 then begin
-    b := 2;
+    u := gb;
     rem := bytes shr 20;
     hi := bytes shr 30;
   end else
   if bytes<Int64(1) shl 50-(Int64(1) shl 50) div 10 then begin
-    b := 3;
+    u := tb;
     rem := bytes shr 30;
     hi := bytes shr 40;
   end else
   if bytes<Int64(1) shl 60-(Int64(1) shl 60) div 10 then begin
-    b := 4;
+    u := pb;
     rem := bytes shr 40;
     hi := bytes shr 50;
   end else begin
-    b := 5;
+    u := eb;
     rem := bytes shr 50;
     hi := bytes shr 60;
   end;
@@ -57310,11 +57309,11 @@ begin
     rem := rem div 102;
   if rem=10 then begin
     rem := 0;
-    inc(hi); // round up as expected by an human being
+    inc(hi); // round up as expected by (most) human beings
   end;
   if rem<>0 then
-    FormatShort16('%.%%',[hi,rem,_B[nospace,b]],result) else
-    FormatShort16('%%',[hi,_B[nospace,b]],result);
+    FormatShort16('%.%%',[hi,rem,TXT[nospace,u]],result) else
+    FormatShort16('%%',[hi,TXT[nospace,u]],result);
 end;
 
 function KB(bytes: Int64): TShort16;
@@ -57620,8 +57619,8 @@ end;
 
 function TSynMonitorTime.PerSecond(const Count: QWord): QWord;
 begin
-  if PInt64(@fMicroSeconds)^<=0 then // avoid negative or div per 0
-    result := 0 else
+  if {$ifdef FPC}Int64(fMicroSeconds){$else}PInt64(@fMicroSeconds)^{$endif}<=0 then
+    result := 0 else // avoid negative or div per 0
     result := (Count*QWord(1000000)) div fMicroSeconds;
 end;
 
@@ -57635,7 +57634,7 @@ end;
 
 function TSynMonitorOneTime.PerSecond(const Count: QWord): QWord;
 begin
-  if PInt64(@fMicroSeconds)^<=0 then // avoid negative or div per 0
+  if {$ifdef FPC}Int64(fMicroSeconds){$else}PInt64(@fMicroSeconds)^{$endif}<=0 then
     result := 0 else
     result := (Count*QWord(1000000)) div fMicroSeconds;
 end;
@@ -57681,7 +57680,6 @@ begin
   fMinimalTime := TSynMonitorOneTime.Create;
   fAverageTime := TSynMonitorOneTime.Create;
   fMaximalTime := TSynMonitorOneTime.Create;
-  InitializeCriticalSection(fLock);
 end;
 
 constructor TSynMonitor.Create(const aName: RawUTF8);
@@ -57697,18 +57695,17 @@ begin
   fMinimalTime.Free;
   fLastTime.Free;
   fTotalTime.Free;
-  DeleteCriticalSection(fLock);
   inherited Destroy;
 end;
 
 procedure TSynMonitor.Lock;
 begin
-  EnterCriticalSection(fLock);
+  fSafe^.Lock;
 end;
 
 procedure TSynMonitor.UnLock;
 begin
-  LeaveCriticalSection(fLock);
+  fSafe^.UnLock;
 end;
 
 procedure TSynMonitor.Changed;
@@ -57719,25 +57716,25 @@ procedure TSynMonitor.ProcessStart;
 begin
   if fProcessing then
     raise ESynException.CreateUTF8('Reentrant %.ProcessStart',[self]);
-  EnterCriticalSection(fLock);
+  fSafe^.Lock;
   try
     InternalTimer.Resume;
     fTaskStatus := taskNotStarted;
     fProcessing := true;
   finally
-    LeaveCriticalSection(fLock);
+    fSafe^.UnLock;
   end;
 end;
 
 procedure TSynMonitor.ProcessDoTask;
 begin
-  EnterCriticalSection(fLock);
+  fSafe^.Lock;
   try
     inc(fTaskCount);
     fTaskStatus := taskStarted;
     Changed;
   finally
-    LeaveCriticalSection(fLock);
+    fSafe^.UnLock;
   end;
 end;
 
@@ -57745,7 +57742,7 @@ procedure TSynMonitor.ProcessStartTask;
 begin
   if fProcessing then
     raise ESynException.CreateUTF8('Reentrant %.ProcessStart',[self]);
-  EnterCriticalSection(fLock);
+  fSafe^.Lock;
   try
     InternalTimer.Resume;
     fProcessing := true;
@@ -57753,19 +57750,19 @@ begin
     fTaskStatus := taskStarted;
     Changed;
   finally
-    LeaveCriticalSection(fLock);
+    fSafe^.UnLock;
   end;
 end;
 
 procedure TSynMonitor.ProcessEnd;
 begin
-  EnterCriticalSection(fLock);
+  fSafe^.Lock;
   try
     InternalTimer.Pause;
     InternalTimer.ComputeTime;
     LockedFromProcessTimer;
   finally
-    LeaveCriticalSection(fLock);
+    fSafe^.UnLock;
   end;
 end;
 
@@ -57788,27 +57785,27 @@ end;
 
 function TSynMonitor.FromExternalQueryPerformanceCounters(const CounterDiff: QWord): QWord;
 begin
-  EnterCriticalSection(fLock);
+  fSafe^.Lock;
   try // thread-safe ProcessStart+ProcessDoTask+ProcessEnd
     inc(fTaskCount);
     fTaskStatus := taskStarted;
     result := InternalTimer.FromExternalQueryPerformanceCounters(CounterDiff);
     LockedFromProcessTimer;
   finally
-    LeaveCriticalSection(fLock);
+    fSafe^.UnLock;
   end;
 end;
 
 procedure TSynMonitor.FromExternalMicroSeconds(const MicroSecondsElapsed: QWord);
 begin
-  EnterCriticalSection(fLock);
+  fSafe^.Lock;
   try // thread-safe ProcessStart+ProcessDoTask+ProcessEnd
     inc(fTaskCount);
     fTaskStatus := taskStarted;
     InternalTimer.FromExternalMicroSeconds(MicroSecondsElapsed);
     LockedFromProcessTimer;
   finally
-    LeaveCriticalSection(fLock);
+    fSafe^.UnLock;
   end;
 end;
 
@@ -57823,14 +57820,14 @@ end;
 
 procedure TSynMonitor.ProcessError(const info: variant);
 begin
-  EnterCriticalSection(fLock);
+  fSafe^.Lock;
   try
     if not VarIsEmptyOrNull(info) then
       inc(fInternalErrors);
     fLastInternalError := info;
     Changed;
   finally
-    LeaveCriticalSection(fLock);
+    fSafe^.UnLock;
   end;
 end;
 
@@ -57856,20 +57853,20 @@ begin
   if fTaskCount=0 then
     exit; // avoid division per zero
   fPerSec := fTotalTime.PerSecond(fTaskCount);
-  fAverageTime.MicroSec := Round(fTotalTime.MicroSec/fTaskCount);
+  fAverageTime.MicroSec := fTotalTime.MicroSec div fTaskCount;
 end;
 
 procedure TSynMonitor.Sum(another: TSynMonitor);
 begin
   if (self=nil) or (another=nil) then
     exit;
-  EnterCriticalSection(fLock);
-  EnterCriticalSection(another.fLock);
+  fSafe^.Lock;
+  another.fSafe^.Lock;
   try
     LockedSum(another);
   finally
-    LeaveCriticalSection(another.fLock);
-    LeaveCriticalSection(fLock);
+    another.fSafe^.UnLock;
+    fSafe^.UnLock;
   end;
 end;
 
@@ -57889,22 +57886,22 @@ end;
 
 procedure TSynMonitor.WriteDetailsTo(W: TTextWriter);
 begin
-  EnterCriticalSection(fLock);
+  fSafe^.Lock;
   try
     W.WriteObject(self);
   finally
-    LeaveCriticalSection(fLock);
+    fSafe^.UnLock;
   end;
 end;
 
 procedure TSynMonitor.ComputeDetailsTo(W: TTextWriter);
 begin
-  EnterCriticalSection(fLock);
+  fSafe^.Lock;
   try
     LockedPerSecProperties; // may not have been calculated after Sum()
     WriteDetailsTo(W);
   finally
-    LeaveCriticalSection(fLock);
+    fSafe^.UnLock;
   end;
 end;
 
@@ -57953,11 +57950,11 @@ end;
 
 procedure TSynMonitorWithSize.AddSize(const Bytes: QWord);
 begin
-  EnterCriticalSection(fLock);
+  fSafe^.Lock;
   try
     fSize.Bytes := fSize.Bytes+Bytes;
   finally
-    LeaveCriticalSection(fLock);
+    fSafe^.UnLock;
   end;
 end;
 
@@ -57998,12 +57995,12 @@ end;
 
 procedure TSynMonitorInputOutput.AddSize(const Incoming, Outgoing: QWord);
 begin
-  EnterCriticalSection(fLock);
+  fSafe^.Lock;
   try
     fInput.Bytes := fInput.Bytes+Incoming;
     fOutput.Bytes := fOutput.Bytes+Outgoing;
   finally
-    LeaveCriticalSection(fLock);
+    fSafe^.UnLock;
   end;
 end;
 
@@ -58023,14 +58020,14 @@ procedure TSynMonitorServer.ClientConnect;
 begin
   if self=nil then
     exit;
-  EnterCriticalSection(fLock);
+  fSafe^.Lock;
   try
     inc(fClientsCurrent);
     if fClientsCurrent>fClientsMax then
       fClientsMax := fClientsCurrent;
     Changed;
   finally
-    LeaveCriticalSection(fLock);
+    fSafe^.UnLock;
   end;
 end;
 
@@ -58038,13 +58035,13 @@ procedure TSynMonitorServer.ClientDisconnect;
 begin
   if self=nil then
     exit;
-  EnterCriticalSection(fLock);
+  fSafe^.Lock;
   try
     if fClientsCurrent>0 then
       dec(fClientsCurrent);
     Changed;
   finally
-    LeaveCriticalSection(fLock);
+    fSafe^.UnLock;
   end;
 end;
 
@@ -58052,12 +58049,12 @@ procedure TSynMonitorServer.ClientDisconnectAll;
 begin
   if self=nil then
     exit;
-  EnterCriticalSection(fLock);
+  fSafe^.Lock;
   try
     fClientsCurrent := 0;
     Changed;
   finally
-    LeaveCriticalSection(fLock);
+    fSafe^.UnLock;
   end;
 end;
 
@@ -58067,11 +58064,11 @@ begin
     result := 0;
     exit;
   end;
-  EnterCriticalSection(fLock);
+  fSafe^.Lock;
   try
     result := fClientsCurrent;
   finally
-    LeaveCriticalSection(fLock);
+    fSafe^.UnLock;
   end;
 end;
 
@@ -58081,12 +58078,12 @@ begin
     result := 0;
     exit;
   end;
-  EnterCriticalSection(fLock);
+  fSafe^.Lock;
   try
     inc(fCurrentRequestCount,diff);
     result := fCurrentRequestCount;
   finally
-    LeaveCriticalSection(fLock);
+    fSafe^.UnLock;
   end;
 end;
 
@@ -59015,18 +59012,12 @@ end;
 constructor TSynCache.Create(aMaxCacheRamUsed: cardinal; aCaseSensitive: boolean;
   aTimeoutSeconds: cardinal);
 begin
+  inherited Create;
   fNameValue.Init(aCaseSensitive);
   fNameValue.fDynArray.Capacity := 200; // some space for future cached entries
   fMaxRamUsed := aMaxCacheRamUsed;
   fFindLastAddedIndex := -1;
   fTimeoutSeconds := aTimeoutSeconds;
-  fSafe.Init;
-end;
-
-destructor TSynCache.Destroy;
-begin
-  inherited Destroy;
-  fSafe.Done;
 end;
 
 procedure TSynCache.ResetIfNeeded;
@@ -64397,14 +64388,8 @@ end;
 
 constructor TPendingTaskList.Create;
 begin
-  fSafe.Init;
+  inherited Create;
   fTasks.InitSpecific(TypeInfo(TPendingTaskListItemDynArray),fTask,djInt64,@fCount);
-end;
-
-destructor TPendingTaskList.Destroy;
-begin
-  fSafe.Done;
-  inherited Destroy;
 end;
 
 function TPendingTaskList.GetTimestamp: Int64;
@@ -66098,19 +66083,19 @@ end;
 
 { TBlockingProcess }
 
-constructor TBlockingProcess.Create(aTimeOutMs: integer; const aSafe: TSynLocker);
+constructor TBlockingProcess.Create(aTimeOutMs: integer; aSafe: PSynLocker);
 begin
   inherited Create(nil,false,false,'');
   if aTimeOutMs<=0 then
     fTimeOutMs := 3000 else // never wait for ever
     fTimeOutMs := aTimeOutMs;
-  fSafe := @aSafe;
+  fSafe := aSafe;
 end;
 
 constructor TBlockingProcess.Create(aTimeOutMs: integer);
 begin
   fOwnedSafe := TAutoLocker.Create;
-  Create(aTimeOutMS,fOwnedSafe.fSafe);
+  Create(aTimeOutMS,@fOwnedSafe.fSafe);
 end;
 
 destructor TBlockingProcess.Destroy;
