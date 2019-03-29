@@ -229,9 +229,10 @@ const // Date Translation - see http://en.wikipedia.org/wiki/Julian_day
   C_BILLION  = Int64(C_THOUSAND * C_THOUSAND * C_THOUSAND);
 
 procedure JulianToGregorian(JulianDN: PtrUInt; out result: TSystemTime);
+  {$ifdef HASINLINE}inline;{$endif}
 var YYear,XYear,Temp,TempMonth: PtrUInt;
 begin
-  Temp := ((JulianDN-D2) shl 2)-1;
+  Temp := ((JulianDN-D2)*4)-1;
   JulianDN := Temp div D1;
   XYear := (Temp-(JulianDN*D1)) or 3;
   YYear := XYear div D0;

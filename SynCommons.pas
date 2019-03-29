@@ -1944,7 +1944,7 @@ type
   TSynAnsicharSet = set of AnsiChar;
   /// used to store a set of 8-bit unsigned integers
   TSynByteSet = set of Byte;
-  /// used to store a set of 8-bit unsigned integers as 256 bytes
+  /// used to store a set of 8-bit unsigned integers as 256 booleans
   TSynByteBoolean = array[byte] of boolean;
 
 /// returns the supplied text content, without any control char
@@ -2164,7 +2164,7 @@ function strcspnpas(s,reject: pointer): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fastest available version of strspn(), to be used with PUTF8Char/PAnsiChar
-// - returns how many accept chars appear in the initial segment of s, e.g.
+// - returns size of initial segment of s which appears in accept chars, e.g.
 // ! strspn('abcdef','debca')=5
 // - will use SSE4.2 instructions on supported CPUs
 // - please note that this function may read some bytes beyond the s string, so
@@ -2172,7 +2172,7 @@ function strcspnpas(s,reject: pointer): integer;
 var strspn: function (s,accept: pointer): integer = strspnpas;
 
 /// fastest available version of strcspn(), to be used with PUTF8Char/PAnsiChar
-// - returns how many reject chars do not appear in the initial segment of s, e.g.
+// - returns size of initial segment of s which doesn't appears in reject chars, e.g.
 // ! strcspn('1234,6789',',')=4
 // - will use SSE4.2 instructions on supported CPUs
 // - please note that this function may read some bytes beyond the s string, so
@@ -3012,7 +3012,8 @@ procedure QuotedStr(Text: PUTF8Char; Quote: AnsiChar; var result: RawUTF8); over
 
 /// convert a buffered text content into a JSON string
 // - with proper escaping of the content, and surounding " characters
-procedure QuotedStrJSON(const aText: RawUTF8; var result: RawUTF8);
+procedure QuotedStrJSON(const aText: RawUTF8; var result: RawUTF8;
+  const aPrefix: RawUTF8=''; const aSuffix: RawUTF8='');
 
 /// unquote a SQL-compatible string
 // - the first character in P^ must be either ', either " then double quotes
@@ -18122,7 +18123,6 @@ function _LStrLenP(s: pointer): SizeInt; inline;
 begin // here caller ensured s<>''
   result := PSizeInt(PAnsiChar(s)-SizeOf(SizeInt))^;
 end;
-
 {$endif FPC}
 
 
@@ -18655,7 +18655,7 @@ const
      353, 8250, 339, 157, 382, 376);
 
 constructor TSynAnsiFixedWidth.Create(aCodePage: cardinal);
-var i: integer;
+var i: PtrInt;
     A256: array[0..256] of AnsiChar;
     U256: array[0..256] of WideChar; // AnsiBufferToUnicode() write a last #0
 begin
@@ -18694,7 +18694,7 @@ begin
 end;
 
 function TSynAnsiFixedWidth.IsValidAnsi(WideText: PWideChar; Length: integer): boolean;
-var i: integer;
+var i: PtrInt;
     wc: cardinal;
 begin
   result := false;
@@ -23742,26 +23742,24 @@ begin // P^=" or P^=' at function call
   result := P;
 end; // P^='"' at function return
 
-procedure QuotedStrJSON(const aText: RawUTF8; var result: RawUTF8);
-var i: integer;
-    temp: TTextWriterStackBuffer;
+procedure QuotedStrJSON(const aText: RawUTF8; var result: RawUTF8;
+   const aPrefix, aSuffix: RawUTF8);
+var temp: TTextWriterStackBuffer;
 begin
-  for i := 1 to length(aText) do
-    case aText[i] of
-    #0..#31,'\','"':
-      with TTextWriter.CreateOwnedStream(temp) do
-      try
-        Add('"');
-        AddJSONEscape(pointer(aText));
-        Add('"');
-        SetText(result);
-        exit;
-      finally
-        Free;
-      end;
-    end;
-  // if we reached here, no character needs to be escaped in this string
-  result := '"'+aText+'"';
+  if NeedsJsonEscape(aText) then
+    with TTextWriter.CreateOwnedStream(temp) do
+    try
+      AddString(aPrefix);
+      Add('"');
+      AddJSONEscape(pointer(aText));
+      Add('"');
+      AddString(aSuffix);
+      SetText(result);
+      exit;
+    finally
+      Free;
+    end else
+    result := aPrefix+'"'+aText+'"'+aSuffix;
 end;
 
 function GotoEndOfJSONString(P: PUTF8Char): PUTF8Char;
@@ -24062,7 +24060,7 @@ end;
 
 {$ifndef EXTENDEDTOSTRING_USESTR}
 var // standard FormatSettings (US)
-    SettingsUS: TFormatSettings;
+  SettingsUS: TFormatSettings;
 {$endif}
 
 function ExtendedToStringNoExp(var S: ShortString; Value: TSynExtended;
@@ -26476,7 +26474,7 @@ end;
 function PosExChar(Chr: AnsiChar; const Str: RawUTF8): PtrInt;
 begin
   {$ifdef FPC}
-  if Str<>'' then
+  if Str<>'' then // // will use fast FPC SSE version
     result := IndexByte(pointer(Str)^,_LStrLen(Str),byte(chr))+1 else
   {$else}
   if Str<>'' then
@@ -31704,7 +31702,7 @@ end;
 function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): integer;
 begin
 {$ifdef FPC}
-  result := IndexWord(P^,Count,Value);
+  result := IndexWord(P^,Count,Value); // will use fast FPC SSE version
 {$else}
   for result := 0 to Count-1 do
     if P^[result]=Value then
@@ -54394,11 +54392,15 @@ var
   JSON_ESCAPE_BYTE: TSynByteBoolean;
 
 function NeedsJsonEscape(const Text: RawUTF8): boolean;
-var i: integer;
+var tab: ^TSynByteBoolean;
+    P: PByteArray;
+    i: PtrInt;
 begin
   result := true;
-  for i := 1 to length(Text) do
-    if byte(Text[i]) in JSON_ESCAPE then
+  tab := @JSON_ESCAPE_BYTE;
+  P := pointer(Text);
+  for i := 0 to length(Text)-1 do
+    if tab[P^[i]] then
       exit;
   result := false;
 end;
@@ -54518,7 +54520,7 @@ begin
     Len := MaxInt;
   i := 0;
   {$ifdef CPUX86NOTPIC}
-  while i<Len do begin
+  repeat
     if not(PByteArray(P)[i] in JSON_ESCAPE) then begin
 noesc:c := i;
       repeat
@@ -54526,7 +54528,7 @@ noesc:c := i;
       until (i>=Len) or (PByteArray(P)[i] in JSON_ESCAPE);
   {$else}
   tab := @JSON_ESCAPE_BYTE;
-  while i<Len do begin
+  repeat
     if not tab^[PByteArray(P)[i]] then begin
 noesc:c := i;
       repeat
@@ -54542,7 +54544,7 @@ noesc:c := i;
         inc(B,i);
       end;
       if i>=Len then
-        break;
+        exit;
     end;
     repeat
       c := PByteArray(P)[i];
@@ -54569,7 +54571,7 @@ noesc:c := i;
       if i>=Len then
         exit;
     until false;
-  end;
+  until i>=Len;
 end;
 
 procedure TTextWriter.AddJSONEscapeW(P: PWord; Len: PtrInt);
