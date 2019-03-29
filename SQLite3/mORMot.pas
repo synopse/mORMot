@@ -6874,7 +6874,8 @@ type
   // TSQLAuthGroup.InitializeTable to fill the TSQLAuthGroup and TSQLAuthUser
   // tables with default records
   // - itoNoCreateMissingField will avoid to create the missing fields on a table
-  // - itoNoIndex4ID won't create the index for the main ID field
+  // - itoNoIndex4ID won't create the index for the main ID field (do nothing
+  // on SQLite3, by design - but may be used for tables on external databases)
   // - itoNoIndex4UniqueField won't create indexes for "stored AS_UNIQUE" fields
   // - itoNoIndex4NestedRecord won't create indexes for TSQLRecord fields
   // - itoNoIndex4RecordReference won't create indexes for TRecordReference fields
@@ -8213,6 +8214,7 @@ type
 
   /// root class for defining and mapping database records with case-insensitive
   // NOCASE collation
+  // - abstract ancestor, from which you may inherit your own ORM classes
   // - by default, any sftUTF8Text field (RawUTF8, UnicodeString, WideString
   // properties) will use our Unicode SYSTEMNOCASE SQLite3 collation, which calls
   // UTF8ILComp() to handle most western languages, but is not standard
@@ -8230,6 +8232,7 @@ type
 
   /// root class for defining and mapping database records with case-sensitive
   // BINARY collation
+  // - abstract ancestor, from which you may inherit your own ORM classes
   // - by default, any sftUTF8Text field (RawUTF8, UnicodeString, WideString
   // properties) will use our Unicode SYSTEMNOCASE SQLite3 collation, which calls
   // UTF8ILComp() to handle most western languages, but is not standard
@@ -8246,6 +8249,7 @@ type
   end;
 
   /// database records with NOCASE collation and JSON_OPTIONS_FAST_EXTENDED variants
+  // - abstract ancestor, from which you may inherit your own ORM classes
   TSQLRecordNoCaseExtended = class(TSQLRecordNoCase)
   protected
     /// will call Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
@@ -8253,10 +8257,21 @@ type
   end;
 
   /// database records with BINARY collation and JSON_OPTIONS_FAST_EXTENDED variants
+  // - abstract ancestor, from which you may inherit your own ORM classes
   TSQLRecordCaseSensitiveExtended = class(TSQLRecordCaseSensitive)
   protected
     /// will call Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
     class procedure InternalDefineModel(Props: TSQLRecordProperties); override;
+  end;
+
+  /// database records with NOCASE collation and JSON_OPTIONS_FAST_EXTENDED
+  // variants, and itoNoIndex4TID option to avoid indexes on TID/T*ID properties
+  // - abstract ancestor, from which you may inherit your own ORM classes
+  TSQLRecordNoCaseExtendedNoID = class(TSQLRecordNoCaseExtended)
+  public
+    /// overriden method forcing no index creation on TID/T*ID properties
+    class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
+      Options: TSQLInitializeTableOptions); override;
   end;
 
   /// allow on-the-fly translation of a TSQLTable grid value
@@ -33884,6 +33899,15 @@ class procedure TSQLRecordCaseSensitiveExtended.InternalDefineModel(
 begin
   inherited InternalDefineModel(Props); // set BINARY collation
   Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
+end;
+
+
+{ TSQLRecordNoCaseExtendedNoID }
+
+class procedure TSQLRecordNoCaseExtendedNoID.InitializeTable(Server: TSQLRestServer;
+  const FieldName: RawUTF8; Options: TSQLInitializeTableOptions);
+begin
+  inherited InitializeTable(Server, FieldName, Options + [itoNoIndex4TID]);
 end;
 
 
