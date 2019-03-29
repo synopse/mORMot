@@ -408,6 +408,7 @@
     {$define CPU32DELPHI}
     {$undef CPU64}
     {$define CPUX86} // for compatibility with older versions of Delphi
+    {$define CPUX86NOTPIC} // use "absolute" instead of local register
   {$endif CPUX64}
 
   {$IFDEF CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
