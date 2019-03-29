@@ -1611,7 +1611,7 @@ uses
   {$ifdef Linux}
   , SynFPCLinux, BaseUnix, Unix, Errors, dynlibs
   {$endif} ;
-{$endif}
+{$endif FPC}
 
 var
   LogInfoText: array[TSynLogInfo] of RawUTF8;
@@ -2404,23 +2404,17 @@ function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
   const msg, procid, msgid: RawUTF8; destbuffer: PUTF8Char; destsize: integer;
   trimmsgfromlog: boolean): integer;
   procedure PrintUSAscii(const text: RawUTF8);
-    function IsPrintUSAscii(const text: RawUTF8): boolean;
-    var i: integer;
-    begin
-      result := false;
-      if text='' then
-        exit;
-      for i := 1 to length(text) do
-        if not (ord(text[i]) in [33..126]) then
-          exit;
-      result := true;
-    end;
+  var i: PtrInt;
   begin
     destbuffer^ := ' ';
     inc(destbuffer);
-    if IsPrintUSAscii(text) then
-      destbuffer := AppendRawUTF8ToBuffer(destbuffer,text) else begin
-      destbuffer^ := '-'; // NILVALUE
+    for i := 1 to length(text) do
+      if ord(text[i]) in [33..126] then begin // only printable ASCII chars
+        destbuffer^ := text[i];
+        inc(destbuffer);
+      end;
+    if destbuffer[-1]=' ' then begin
+      destbuffer^ := '-'; // nothing appended -> NILVALUE
       inc(destbuffer);
     end;
   end;
@@ -2603,7 +2597,7 @@ end;
 procedure SynLogException(const Ctxt: TSynLogExceptionContext);
   function GetHandleExceptionSynLog: TSynLog;
   var Index: ^TSynLogFileIndex;
-      i: integer;
+      i: PtrInt;
       ndx, n: cardinal;
   begin
     result := nil;
@@ -2639,7 +2633,7 @@ procedure SynLogException(const Ctxt: TSynLogExceptionContext);
       end;
     end;
   end;
-var SynLog: TSynLog;
+var log: TSynLog;
     info: ^TSynLogExceptionInfo;
     locked: boolean;
     {$ifdef FPC}i: PtrInt;{$endif}
@@ -2653,23 +2647,23 @@ begin
     exit;
   {$endif ISDELPHIXE6}
   {$endif CPU64DELPHI}
-  SynLog := GlobalCurrentHandleExceptionSynLog;
-  if (SynLog=nil) or not SynLog.fFamily.fHandleExceptions then
-    SynLog := GetHandleExceptionSynLog;
-  if (SynLog=nil) or not (Ctxt.ELevel in SynLog.fFamily.Level) then
+  log := GlobalCurrentHandleExceptionSynLog;
+  if (log=nil) or not log.fFamily.fHandleExceptions then
+    log := GetHandleExceptionSynLog;
+  if (log=nil) or not (Ctxt.ELevel in log.fFamily.Level) then
     exit;
   if (Ctxt.EClass=ESynLogSilent) or
-     (SynLog.fFamily.ExceptionIgnore.IndexOf(Ctxt.EClass)>=0) then
+     (log.fFamily.ExceptionIgnore.IndexOf(Ctxt.EClass)>=0) then
     exit;
   locked := false;
   try
-    if Assigned(SynLog.fFamily.OnBeforeException) then begin
-      SynLog.LockAndGetThreadContext; // protect and set fThreadContext
+    if Assigned(log.fFamily.OnBeforeException) then begin
+      log.LockAndGetThreadContext; // protect and set fThreadContext
       locked := true;
-      if SynLog.fFamily.OnBeforeException(Ctxt,SynLog.fThreadContext^.ThreadName) then
+      if log.fFamily.OnBeforeException(Ctxt,log.fThreadContext^.ThreadName) then
         exit;
     end;
-    if SynLog.LogHeaderLock(Ctxt.ELevel,locked) then begin
+    if log.LogHeaderLock(Ctxt.ELevel,locked) then begin
       locked := true;
       if GlobalLastExceptionIndex=MAX_EXCEPTHISTORY then
         GlobalLastExceptionIndex := 0 else
@@ -2685,18 +2679,18 @@ begin
         info^.Message := Ctxt.EInstance.Message;
         if Ctxt.EInstance.InheritsFrom(ESynException) then begin
           ESynException(Ctxt.EInstance).RaisedAt := pointer(Ctxt.EAddr);
-          if ESynException(Ctxt.EInstance).CustomLog(SynLog.fWriter,Ctxt) then
+          if ESynException(Ctxt.EInstance).CustomLog(log.fWriter,Ctxt) then
             goto fin;
           goto adr;
         end;
       end else
         info^.Message := '';
       if Assigned(DefaultSynLogExceptionToStr) and
-         DefaultSynLogExceptionToStr(SynLog.fWriter,Ctxt) then
+         DefaultSynLogExceptionToStr(log.fWriter,Ctxt) then
         goto fin;
-adr:  SynLog.fWriter.Add(' [%] at ',[SynLog.fThreadContext^.ThreadName],twOnSameLine);
+adr:  log.fWriter.Add(' [%] at ',[log.fThreadContext^.ThreadName],twOnSameLine);
       {$ifdef FPC} // note: BackTraceStrFunc is slower than TSynMapFile.Log
-      with SynLog.fWriter do
+      with log.fWriter do
       if @BackTraceStrFunc=@SysBackTraceStr then begin // no debug information
         AddPointer(Ctxt.EAddr); // write addresses as hexa
         for i := 0 to Ctxt.EStackCount-1 do
@@ -2711,17 +2705,17 @@ adr:  SynLog.fWriter.Add(' [%] at ',[SynLog.fThreadContext^.ThreadName],twOnSame
             AddShort(BackTraceStrFunc(pointer(Ctxt.EStack[i])));
       end;
       {$else}
-      TSynMapFile.Log(SynLog.fWriter,Ctxt.EAddr,true);
+      TSynMapFile.Log(log.fWriter,Ctxt.EAddr,true);
       {$ifndef WITH_VECTOREXCEPT} // stack frame OK for RTLUnwindProc by now
-      SynLog.AddStackTrace(Ctxt.EStack);
+      log.AddStackTrace(Ctxt.EStack);
       {$endif}
       {$endif FPC}
-fin:  SynLog.fWriter.AddEndOfLine(SynLog.fCurrentLevel);
-      SynLog.fWriter.FlushToStream; // we expect exceptions to be available on disk
+fin:  log.fWriter.AddEndOfLine(log.fCurrentLevel);
+      log.fWriter.FlushToStream; // we expect exceptions to be available on disk
     end;
   finally
     if locked then begin
-      GlobalCurrentHandleExceptionSynLog := SynLog.fThreadHandleExceptionBackup;
+      GlobalCurrentHandleExceptionSynLog := log.fThreadHandleExceptionBackup;
       LeaveCriticalSection(GlobalThreadLock);
     end;
   end;
