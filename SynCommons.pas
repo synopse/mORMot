@@ -29,6 +29,7 @@ unit SynCommons;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+   - Alan Chate
    - Aleksandr (sha)
    - Alfred Glaenzer (alf)
    - ASiwon
@@ -27267,7 +27268,7 @@ begin
   mib[1] := hwid;
   FillChar(temp,SizeOf(temp),0);
   len := SizeOf(temp);
-  fpsysctl(pointer(@mib),2,@result,@len,nil,0);
+  fpsysctl(pointer(@mib),2,@temp,@len,nil,0);
   if temp[0]<>#0 then
     result := @temp else
     result := nil;

@@ -7,6 +7,7 @@ An Open Source Client-Server ORM/SOA framework
   http://mormot.net
 
 Contributors
+  Alan Chate
   Alexander (sha)
   Alexander (volax)
   AlexPirate

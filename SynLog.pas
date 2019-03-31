@@ -3975,6 +3975,7 @@ begin
         dec(aStackFrame,5); // ignore call TSynLog.Enter op codes
       {$else}
       aStackFrame := 0; // No stack trace yet under Linux64
+      { TODO : use cross-platform get_caller_addr(get_frame) under FPC }
       {$endif}
       {$else}
       {$ifdef PUREPASCAL}
