@@ -6494,7 +6494,7 @@ begin
   Safe.Lock;
   try
     for h := 0 to fHashFunctions-1 do begin
-      SetBit(pointer(fStore)^,h1 mod fBits);
+      SetBitPtr(pointer(fStore),h1 mod fBits);
       inc(h1,h2);
     end;
     inc(fInserted);
@@ -6532,7 +6532,7 @@ begin
   Safe.Lock;
   try
     for h := 0 to fHashFunctions-1 do
-      if GetBit(pointer(fStore)^,h1 mod fBits) then
+      if GetBitPtr(pointer(fStore),h1 mod fBits) then
         inc(h1,h2) else
         exit;
   finally

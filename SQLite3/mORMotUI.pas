@@ -241,7 +241,7 @@ type
     {$else}
     fOnDrawCellBackground: TDrawCellEvent;
     {$endif}
-    fMarked: array of byte;
+    fMarked: TByteDynArray;
     fMarkAllowed: boolean;
     fMouseDownMarkedValue: (markNone,markOn,markOff);
     fTruncAsHint: Boolean;
@@ -1804,8 +1804,8 @@ begin
   if length(fMarked)<n then // need to allocate/expand fMarked[] array?
     SetLength(fMarked,n);   // initializes all expanded bytes to 0
   if Value then
-    SetBit(fMarked[0],RowIndex) else
-    UnSetBit(fMarked[0],RowIndex)
+    SetBitPtr(pointer(fMarked),RowIndex) else
+    UnSetBitPtr(pointer(fMarked),RowIndex)
 end;
 
 procedure TSQLTableToGrid.SetMark(aAction: TSQLAction);

@@ -11989,15 +11989,24 @@ var
 
 /// retrieve a particular bit status from a bit array
 function GetBit(const Bits; aIndex: PtrInt): boolean;
-  {$ifdef ABSOLUTEORPUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// set a particular bit into a bit array
 procedure SetBit(var Bits; aIndex: PtrInt);
-  {$ifdef ABSOLUTEORPUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// unset/clear a particular bit into a bit array
 procedure UnSetBit(var Bits; aIndex: PtrInt);
-  {$ifdef ABSOLUTEORPUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
+
+/// retrieve a particular bit status from a bit array
+function GetBitPtr(Bits: pointer; aIndex: PtrInt): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// set a particular bit into a bit array
+procedure SetBitPtr(Bits: pointer; aIndex: PtrInt);
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// unset/clear a particular bit into a bit array
+procedure UnSetBitPtr(Bits: pointer; aIndex: PtrInt);
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the number of bits set in a bit array
 // - Count is the bit count, not byte size
@@ -12013,8 +12022,8 @@ const
     1 shl 25-1, 1 shl 26-1, 1 shl 27-1, 1 shl 28-1, 1 shl 29-1, 1 shl 30-1,
     $7fffffff, $ffffffff);
 
-/// returns TRUE if all BitCount bits are set in the input cardinal
-function GetAllBits(Bits: Cardinal; BitCount: Integer): boolean;
+/// returns TRUE if all BitCount bits are set in the input 32-bit cardinal
+function GetAllBits(Bits, BitCount: cardinal): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 type
@@ -21490,6 +21499,94 @@ asm // eax=P1, edx=P2, ecx=count
 end;
 {$endif}
 
+function GetAllBits(Bits, BitCount: Cardinal): boolean;
+begin
+  if BitCount in [low(ALLBITS_CARDINAL)..high(ALLBITS_CARDINAL)] then begin
+    BitCount := ALLBITS_CARDINAL[BitCount];
+    result := (Bits and BitCount)=BitCount;
+  end else
+    result := false;
+end;
+
+// naive code gives the best performance - bts [Bits] has an overhead
+function GetBit(const Bits; aIndex: PtrInt): boolean;
+begin
+  result := TIntegerArray(Bits)[aIndex shr 5] and (1 shl (aIndex and 31)) <> 0;
+end;
+
+procedure SetBit(var Bits; aIndex: PtrInt);
+begin
+  TIntegerArray(Bits)[aIndex shr 5] := TIntegerArray(Bits)[aIndex shr 5]
+    or (1 shl (aIndex and 31));
+end;
+
+procedure UnSetBit(var Bits; aIndex: PtrInt);
+begin
+  PIntegerArray(@Bits)^[aIndex shr 5] := PIntegerArray(@Bits)^[aIndex shr 5]
+    and not (1 shl (aIndex and 31));
+end;
+
+function GetBitPtr(Bits: pointer; aIndex: PtrInt): boolean;
+begin
+  result := PIntegerArray(Bits)[aIndex shr 5] and (1 shl (aIndex and 31)) <> 0;
+end;
+
+procedure SetBitPtr(Bits: pointer; aIndex: PtrInt);
+begin
+  PIntegerArray(Bits)[aIndex shr 5] := PIntegerArray(Bits)[aIndex shr 5]
+    or (1 shl (aIndex and 31));
+end;
+
+procedure UnSetBitPtr(Bits: pointer; aIndex: PtrInt);
+begin
+  PIntegerArray(Bits)^[aIndex shr 5] := PIntegerArray(Bits)^[aIndex shr 5]
+    and not (1 shl (aIndex and 31));
+end;
+
+function GetBit64(const Bits: Int64; aIndex: PtrInt): boolean;
+begin
+  result := aIndex in TBits64(Bits);
+end;
+
+procedure SetBit64(var Bits: Int64; aIndex: PtrInt);
+begin
+  include(PBits64(@Bits)^,aIndex);
+end;
+
+procedure UnSetBit64(var Bits: Int64; aIndex: PtrInt);
+begin
+  exclude(PBits64(@Bits)^,aIndex);
+end;
+
+function GetBitsCount(const Bits; Count: PtrInt): integer;
+const POPCNTDATA: array[0..15+4] of integer = (0,1,1,2,1,2,2,3,1,2,2,3,2,3,3,4,0,1,3,7);
+var P: PByte;
+    v: PtrUInt;
+{$ifdef CPUX86NOTPIC}tab: TIntegerArray absolute POPCNTDATA;
+begin // not enough registers on this CPU
+{$else}tab: PIntegerArray;
+begin
+  tab := @POPCNTDATA;
+{$endif CPUX86NOTPIC}
+  P := @Bits;
+  result := 0;
+  while Count>=8 do begin
+    dec(Count,8);
+    v := P^;
+    inc(result,tab[v and $f]);
+    inc(result,tab[v shr 4]);
+    inc(P);
+  end;
+  v := P^;
+  if Count>=4 then begin
+    dec(Count,4);
+    inc(result,tab[v and $f]);
+    v := v shr 4;
+  end;
+  if Count>0 then
+    inc(result,tab[v and tab[Count+16]]);
+end;
+
 {$ifdef FPC}
 
 type
@@ -22332,7 +22429,7 @@ begin
   result := '';
   if GetSetInfo(aTypeInfo,max,PS) then begin
     for i := 0 to max do begin
-      if GetBit(value,i) then
+      if GetBitPtr(@value,i) then
         result := FormatUTF8('%%,',[result,PS^]);
       inc(PByte(PS),ord(PS^[0])+1); // next short string
     end;
@@ -22366,7 +22463,7 @@ begin
   result := '';
   if GetSetInfo(aTypeInfo,max,PS) then begin
     for i := 0 to max do begin
-      if GetBit(value,i) then
+      if GetBitPtr(@value,i) then
         AppendShortComma(@PS^[1],ord(PS^[0]),result,trimlowercase);
       inc(PByte(PS),ord(PS^[0])+1); // next short string
     end;
@@ -22407,7 +22504,7 @@ begin
           if i<0 then
             i := FindShortStringListTrimLowerCase(names,MaxValue,Text,TextLen);
           if i>=0 then
-            SetBit(result,i);
+            SetBitPtr(@result,i);
           // unknown enum names (i=-1) would just be ignored
         until EndOfObject=']';
         if P=nil then
@@ -33823,14 +33920,14 @@ begin
     if bit>=cardinal(BitsCount) then
       break; // avoid GPF
     if (P=nil) or (P^=',') then
-      SetBit(Bits,bit) else
+      SetBitPtr(@Bits,bit) else
     if P^='-' then begin
       inc(P);
       last := GetNextItemCardinalStrict(P)-1; // '0' marks end of list
       if last>=Cardinal(BitsCount) then
         exit;
       while bit<=last do begin
-        SetBit(Bits,bit);
+        SetBitPtr(@Bits,bit);
         inc(bit);
       end;
     end;
@@ -33847,9 +33944,9 @@ begin
   result := '';
   i := 0;
   while i<BitsCount do
-  if GetBit(Bits,i) then begin
+  if GetBitPtr(@Bits,i) then begin
     j := i;
-    while (j+1<BitsCount) and GetBit(Bits,j+1) do
+    while (j+1<BitsCount) and GetBitPtr(@Bits,j+1) do
       inc(j);
     result := result+UInt32ToUtf8(i+1);
     if j=i then
@@ -34865,89 +34962,6 @@ begin
     result := s1 xor (s2 shl 16);
   end else
     result := 0;
-end;
-
-function GetAllBits(Bits: Cardinal; BitCount: Integer): boolean;
-begin
-  if BitCount in [low(ALLBITS_CARDINAL)..high(ALLBITS_CARDINAL)] then
-    result := (Bits and ALLBITS_CARDINAL[BitCount])=ALLBITS_CARDINAL[BitCount] else
-    result := false;
-end;
-
-{$ifdef ABSOLUTEORPUREPASCAL}
-function GetBit(const Bits; aIndex: PtrInt): boolean;
-begin
-  result := TIntegerArray(Bits)[aIndex shr 5] and (1 shl (aIndex and 31)) <> 0;
-end;
-procedure SetBit(var Bits; aIndex: PtrInt);
-begin
-  TIntegerArray(Bits)[aIndex shr 5] := TIntegerArray(Bits)[aIndex shr 5]
-    or (1 shl (aIndex and 31));
-end;
-procedure UnSetBit(var Bits; aIndex: PtrInt);
-begin
-  PIntegerArray(@Bits)^[aIndex shr 5] := PIntegerArray(@Bits)^[aIndex shr 5]
-    and not (1 shl (aIndex and 31));
-end;
-{$else}
-function GetBit(const Bits; aIndex: PtrInt): boolean;
-{$ifdef CPU64}{$ifdef FPC}nostackframe;assembler;asm{$else}asm .noframe{$endif}{$else}asm{$endif}
-        bt      [Bits], aIndex
-        sbb     eax, eax
-        and     eax, 1
-end;
-procedure SetBit(var Bits; aIndex: PtrInt);
-{$ifdef CPU64}{$ifdef FPC}nostackframe;assembler;asm{$else}asm .noframe{$endif}{$else}asm{$endif}
-        bts     [Bits], aIndex
-end;
-procedure UnSetBit(var Bits; aIndex: PtrInt);
-{$ifdef CPU64}{$ifdef FPC}nostackframe;assembler;asm{$else}asm .noframe{$endif}{$else}asm{$endif}
-        btr     [Bits], aIndex
-end;
-{$endif ABSOLUTEORPUREPASCAL}
-
-function GetBit64(const Bits: Int64; aIndex: PtrInt): boolean;
-begin
-  result := aIndex in TBits64(Bits);
-end;
-
-procedure SetBit64(var Bits: Int64; aIndex: PtrInt);
-begin
-  include(PBits64(@Bits)^,aIndex);
-end;
-
-procedure UnSetBit64(var Bits: Int64; aIndex: PtrInt);
-begin
-  exclude(PBits64(@Bits)^,aIndex);
-end;
-
-function GetBitsCount(const Bits; Count: PtrInt): integer;
-const POPCNTDATA: array[0..15+4] of integer = (0,1,1,2,1,2,2,3,1,2,2,3,2,3,3,4,0,1,3,7);
-var P: PByte;
-    v: PtrUInt;
-{$ifdef CPUX86NOTPIC}tab: TIntegerArray absolute POPCNTDATA;
-begin // not enough registers on this CPU
-{$else}tab: PIntegerArray;
-begin
-  tab := @POPCNTDATA;
-{$endif CPUX86NOTPIC}
-  P := @Bits;
-  result := 0;
-  while Count>=8 do begin
-    dec(Count,8);
-    v := P^;
-    inc(result,tab[v and $f]);
-    inc(result,tab[v shr 4]);
-    inc(P);
-  end;
-  v := P^;
-  if Count>=4 then begin
-    dec(Count,4);
-    inc(result,tab[v and $f]);
-    v := v shr 4;
-  end;
-  if Count>0 then
-    inc(result,tab[v and tab[Count+16]]);
 end;
 
 procedure OrMemory(Dest,Source: PByteArray; size: PtrInt);
@@ -52579,6 +52593,36 @@ end;
 
 { TTextWriter }
 
+procedure TTextWriter.CancelLastChar;
+begin
+  if B>=fTempBuf then // Add() methods append at B+1
+    dec(B);
+end;
+
+function TTextWriter.LastChar: AnsiChar;
+begin
+  if B>=fTempBuf then
+    result := B^ else
+    result := #0; // returns #0 if no char has been written yet
+end;
+
+procedure TTextWriter.CancelLastChar(aCharToCancel: AnsiChar);
+begin
+  if (B>=fTempBuf) and (B^=aCharToCancel) then
+    dec(B);
+end;
+
+function TTextWriter.PendingBytes: PtrUInt;
+begin
+  result := B-fTempBuf+1;
+end;
+
+procedure TTextWriter.CancelLastComma;
+begin
+  if (B>=fTempBuf) and (B^=',') then
+    dec(B);
+end;
+
 procedure TTextWriter.Add(Value: PtrInt);
 var tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
@@ -53445,7 +53489,7 @@ begin
         if twoEnumSetsAsBooleanInRecord in fCustomOptions then begin
           Add('{');
           for i := 0 to max do begin
-            AddPS(GetBit(aValue,i));
+            AddPS(GetBitPtr(@aValue,i));
             Add(',');
             inc(PByte(PS),ord(PS^[0])+1); // next short string
           end;
@@ -53458,7 +53502,7 @@ begin
              GetAllBits(cardinal(aValue),max+1) then
             AddShort('"*"') else begin
             for i := 0 to max do begin
-              if GetBit(aValue,i) then begin
+              if GetBitPtr(@aValue,i) then begin
                 AddPS;
                 Add(',');
               end;
@@ -55020,36 +55064,6 @@ begin
   if fTotalFileSize<>0 then
     fTotalFileSize := fStream.Seek(fInitialStreamPosition,soBeginning);
   B := fTempBuf-1;
-end;
-
-procedure TTextWriter.CancelLastChar;
-begin
-  if B>=fTempBuf then // Add() methods append at B+1
-    dec(B);
-end;
-
-function TTextWriter.LastChar: AnsiChar;
-begin
-  if B>=fTempBuf then
-    result := B^ else
-    result := #0; // returns #0 if no char has been written yet
-end;
-
-procedure TTextWriter.CancelLastChar(aCharToCancel: AnsiChar);
-begin
-  if (B>=fTempBuf) and (B^=aCharToCancel) then
-    dec(B);
-end;
-
-function TTextWriter.PendingBytes: PtrUInt;
-begin
-  result := B-fTempBuf+1;
-end;
-
-procedure TTextWriter.CancelLastComma;
-begin
-  if (B>=fTempBuf) and (B^=',') then
-    dec(B);
 end;
 
 procedure TTextWriter.SetBuffer(aBuf: pointer; aBufSize: integer);

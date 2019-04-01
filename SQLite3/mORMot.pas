@@ -25341,7 +25341,7 @@ begin
   R := @fResults[FieldCount];
   j := FieldCount;
   for i := 1 to fRowCount do begin
-    if GetBit(Bits,i-1) then begin
+    if GetBitPtr(@Bits,i-1) then begin
       if fIDColumn<>nil then
         fIDColumn[n] := oldIDColumn[i];
       MoveFast(oldResults[j],R^,FieldCount*SizeOf(PUTF8Char));
@@ -25354,7 +25354,7 @@ begin
   // put unmarked IDs
   j := FieldCount;
   for i := 1 to fRowCount do begin
-    if not GetBit(Bits,i-1) then begin
+    if not GetBitPtr(@Bits,i-1) then begin
       if fIDColumn<>nil then
         fIDColumn[n] := oldIDColumn[i];
       MoveFast(oldResults[j],R^,FieldCount*SizeOf(PUTF8Char));
@@ -25367,7 +25367,7 @@ begin
   // recalcultate Bits[]
   {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(Bits,(fRowCount shr 3)+1,0);
   for i := 0 to nSet-1 do
-    SetBit(Bits,i); // slow but accurate
+    SetBitPtr(@Bits,i); // slow but accurate
 end;
 
 function TSQLTable.IDColumnHide: boolean;
@@ -25437,14 +25437,14 @@ begin
   n := 0;
   if Assigned(fIDColumn) then begin
     for i := 1 to fRowCount do
-    if GetBit(Bits,i-1) then begin
+    if GetBitPtr(@Bits,i-1) then begin
       IDs[n] := GetInt64(fIDColumn[i]); // get hidden ID column UTF-8 content
       inc(n);
     end;
   end else begin
     inc(FID,FieldCount); // [i*FieldCount+FID] = [(i+1)*FieldCount+FID] below
     for i := 0 to fRowCount-1 do
-    if GetBit(Bits,i) then begin
+    if GetBitPtr(@Bits,i) then begin
       IDs[n] := GetInt64(fResults[i*FieldCount+FID]); // get ID column UTF-8 content
       inc(n);
     end;
@@ -25484,11 +25484,11 @@ var i,FID: integer;
     IDn: integer;
 //    AllID: : TIDDynArray;
 begin
-  if length(IDs)=RowCount then begin // all selected -> all bits set to 1
-    {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(Bits,(RowCount shr 3)+1,255);
+  if length(IDs)=fRowCount then begin // all selected -> all bits set to 1
+    {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(Bits,(fRowCount shr 3)+1,255);
     exit;
   end;
-  {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(Bits,(RowCount shr 3)+1,0);
+  {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(Bits,(fRowCount shr 3)+1,0);
   if IDs=nil then
     exit; // no selected -> all bits left to 0
   // we sort IDs to use FastFindIntegerSorted() and its O(log(n)) binary search
@@ -25502,14 +25502,14 @@ begin
   end else
     FID := 0; // make compiler happy
   if Assigned(fIDColumn) then begin
-    for i := 1 to RowCount do
+    for i := 1 to fRowCount do
       if FastFindInt64Sorted(ID,IDn,GetInt64(fIDColumn[i]))>=0 then
-        SetBit(Bits,i-1);
+        SetBitPtr(@Bits,i-1);
   end else begin
     U := @fResults[FID+FieldCount];  // U^ = ID column UTF-8 content
-    for i := 0 to RowCount-1 do begin
+    for i := 0 to fRowCount-1 do begin
       if FastFindInt64Sorted(ID,IDn,GetInt64(U^))>=0 then
-        SetBit(Bits,i);
+        SetBitPtr(@Bits,i);
       inc(U,FieldCount);
     end;
   end;
@@ -29208,7 +29208,7 @@ begin
       new[f] := i;
     end;
   ndx := FieldCount;
-  for i := 1 to RowCount do begin // merge data
+  for i := 1 to fRowCount do begin // merge data
     k := From.SearchFieldSorted(fResults[ndx+dk],fk);
     if k>0 then begin
       k := k*From.FieldCount;
@@ -31471,11 +31471,11 @@ var j: integer;
     PS: PShortString;
 begin
   W.Add('[');
-  if FullSetsAsStar and (MaxValue in [1..31]) and GetAllBits(Value,MaxValue+1) then
+  if FullSetsAsStar and GetAllBits(Value,MaxValue+1) then
     W.AddShort('"*"') else begin
     PS := @NameList;
     for j := MinValue to MaxValue do begin
-      if GetBit(Value,j) then begin
+      if GetBitPtr(@Value,j) then begin
         W.Add('"');
         if twoTrimLeftEnumSets in W.CustomOptions then
           W.AddTrimLeftLowerCase(PS) else
@@ -31495,11 +31495,11 @@ var j: integer;
     arr: TDocVariantData;
 begin
   arr.InitFast;
-  if FullSetsAsStar and (MaxValue in [1..31]) and GetAllBits(Value,MaxValue+1) then
+  if FullSetsAsStar and GetAllBits(Value,MaxValue+1) then
     arr.AddItem('*') else begin
     PS := @NameList;
     for j := MinValue to MaxValue do begin
-      if GetBit(Value,j) then
+      if GetBitPtr(@Value,j) then
         arr.AddItem(PS^);
       inc(PByte(PS),ord(PS^[0])+1); // next item
     end;
@@ -31674,7 +31674,7 @@ begin
     V := @NameList;
     for i := MinValue to MaxValue do begin
       if (UsedValuesBits=nil) or
-         GetBit(UsedValuesBits^,i) then begin
+         GetBitPtr(UsedValuesBits,i) then begin
         L := ord(V^[0]);
         P := @V^[1];
         while (L>0) and (P^ in ['a'..'z']) do begin // ignore left lowercase chars
@@ -36431,9 +36431,9 @@ begin
     T := MultiFieldValues(Table,FieldName,FormatSQLWhere,BoundsSQLWhere);
     if T<>nil then
     try
-      res.InitFast(T.RowCount,dvArray);
-      res.SetCount(T.RowCount);
-      for row := 1 to T.RowCount do
+      res.InitFast(T.fRowCount,dvArray);
+      res.SetCount(T.fRowCount);
+      for row := 1 to T.fRowCount do
         T.GetAsVariant(row,0,res.Values[row-1],false,false,false,JSON_OPTIONS_FAST);
     finally
       T.Free;

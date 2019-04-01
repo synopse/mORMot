@@ -750,7 +750,7 @@ begin
     if length(result)>MaxCharCount Then
       result := copy(fBindValues[Param],1,MaxCharCount) else
       result := fBindValues[Param];
-    if GetBit(pointer(fBindIsString)^,Param) then
+    if GetBitPtr(pointer(fBindIsString),Param) then
       result := QuotedStr(result);
   end;
 end;

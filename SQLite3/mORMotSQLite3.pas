@@ -2048,7 +2048,7 @@ begin
           SetLength(Values,MAX_PARAMS);
         for f := 0 to fieldCount-1 do
           if Decode.FieldTypeApproximation[f]=ftaNull then
-            SetBit(ValuesNull[0],valuesCount+f) else
+            SetBitPtr(pointer(ValuesNull),valuesCount+f) else
             Values[valuesCount+f] := Decode.FieldValues[f];
         inc(ValuesCount,fieldCount);
         inc(rowCount);
@@ -2065,7 +2065,7 @@ begin
           PrepareStatement((rowCount<5) or (valuesCount+fieldCount>MAX_PARAMS));
           prop := 0;
           for f := 0 to valuesCount-1 do begin
-            if GetBit(ValuesNull[0],f) then
+            if GetBitPtr(pointer(ValuesNull),f) then
               fStatement^.BindNull(f+1) else
               case Types[prop] of
               ftInt64:
