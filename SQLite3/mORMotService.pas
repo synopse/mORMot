@@ -590,7 +590,7 @@ var
 // SynDaemonTerminated variable, with an optional logged entry to log
 // - as called e.g. by RunUntilSigTerminated()
 // - you can call this method several times with no issue
-procedure SynDaemonIntercept(log: TSynLog);
+procedure SynDaemonIntercept(log: TSynLog=nil);
 
 {$endif MSWINDOWS}
 
