@@ -27,6 +27,7 @@ unit SynFPCLinux;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - Alan Chate
   - Arnaud Bouchez
 
 
@@ -462,7 +463,11 @@ end;
 procedure SleepHiRes(ms: cardinal);
 begin
   if ms=0 then
-    ThreadSwitch else
+    {$ifdef DARWIN} // reported as buggy by Alan
+    SysUtils.Sleep(1)
+    {$else}
+    ThreadSwitch
+    {$endif}else
     SysUtils.Sleep(ms);
 end;
 
