@@ -25756,7 +25756,7 @@ begin
   if length(fQueryTables)=1 then
     SearchInQueryTables(pointer(PropName),0)
   else begin
-    i := PosEx(RawUTF8('.'),PropName)-1;
+    i := PosExChar('.',PropName)-1;
     if i<0 then // no 'ClassName.PropertyName' format: find first exact property name
       for t := 0 to high(fQueryTables) do begin
         SearchInQueryTables(pointer(PropName),t);
@@ -38959,7 +38959,7 @@ begin
   end;
   {$ifdef DOMAINAUTH} // try Windows/GSSAPI authentication with the current logged user
   result := true;
-  if ((trim(aUserName)='') or (PosEx({$ifdef GSSAPIAUTH}'@'{$else}'\'{$endif},aUserName)>0)) and
+  if ((trim(aUserName)='') or (PosExChar({$ifdef GSSAPIAUTH}'@'{$else}'\'{$endif},aUserName)>0)) and
     TSQLRestServerAuthenticationSSPI.ClientSetUser(self,aUserName,aPassword,passKerberosSPN) then
       exit;
   {$endif DOMAINAUTH}
@@ -39566,7 +39566,7 @@ var files: TFindFilesDynArray;
     fn: TFileName;
     fs: Int64;
 begin
-  if (Param<>'*') and (PosEx(RawUTF8(':'),Param)=0) and (PosEx(PathDelim,Param)=0) then begin
+  if (Param<>'*') and (PosExChar(':',Param)=0) and (PosExChar(PathDelim,Param)=0) then begin
     fn := IncludeTrailingPathDelimiter(Folder)+UTF8ToString(Param);
     fs := FileSize(fn);
     if (fs>0) and (fs<256 shl 20) then begin // download up to 256 MB
@@ -39782,7 +39782,7 @@ var i: integer;
 begin
   if aInstance=nil then
     exit;
-  if PosEx(RawUTF8('/'),aPrefix)>0 then
+  if PosExChar('/',aPrefix)>0 then
     raise EServiceException.CreateUTF8('%.ServiceMethodRegisterPublishedMethods'+
       '("%"): prefix should not contain "/"',[self,aPrefix]);
   for i := 0 to GetPublishedMethods(aInstance,methods)-1 do
@@ -41082,7 +41082,7 @@ begin // expects 'ModelRoot[/TableName[/TableID][/URIBlobFieldName]][?param=...]
     result := False;
     exit; // bad ModelRoot -> caller can try another TSQLRestServer
   end;
-  ParametersPos := PosEx(RawUTF8('?'),Call^.url,1);
+  ParametersPos := PosExChar('?',Call^.url);
   if ParametersPos>0 then // '?select=...&where=...' or '?where=...'
     Parameters := @Call^.url[ParametersPos+1];
   if Method=mPost then begin
@@ -41098,7 +41098,7 @@ begin // expects 'ModelRoot[/TableName[/TableID][/URIBlobFieldName]][?param=...]
     URI := copy(Call^.url,i,ParametersPos-i);
   URIAfterRoot := PUTF8Char(pointer(Call^.url))+i-1;
   // compute Table, TableID and URIBlobFieldName
-  slash := PosEx(RawUTF8('/'),URI);
+  slash := PosExChar('/',URI);
   if slash>0 then begin
     URI[slash] := #0;
     Par := pointer(URI);
@@ -41110,7 +41110,7 @@ begin // expects 'ModelRoot[/TableName[/TableID][/URIBlobFieldName]][?param=...]
       TableID := -1; // URI like "ModelRoot/TableName/MethodName"
     URIBlobFieldName := Par;
     if Table<>nil then begin
-      j := PosEx(RawUTF8('/'),URIBlobFieldName);
+      j := PosExChar('/',URIBlobFieldName);
       if j>0 then begin // handle "ModelRoot/TableName/URIBlobFieldName/ID"
         TableID := GetCardinalDef(pointer(PtrInt(URIBlobFieldName)+j),cardinal(-1));
         SetLength(URIBlobFieldName,j-1);
@@ -42325,7 +42325,7 @@ begin
   aOutSetCookie := Trim(aOutSetCookie);
   if not IsValidUTF8WithoutControlChars(aOutSetCookie) then
     raise EBusinessLayerException.CreateUTF8('Unsafe %.SetOutSetCookie',[self]);
-  if PosEx(RawUTF8('='),aOutSetCookie)<2 then
+  if PosExChar('=',aOutSetCookie)<2 then
     raise EBusinessLayerException.CreateUTF8(
       '"name=value" expected for %.SetOutSetCookie("%")',[self,aOutSetCookie]);
   if StrPosI('; PATH=',pointer(aOutSetCookie))=nil then
@@ -47751,7 +47751,7 @@ begin
         raise EORMException.CreateUTF8('%.EngineAdd(%) fShardNextID',[self,fStoredClass]);
     end;
     result := fShardLastID;
-    i := PosEx(RawUTF8('{'),SentData);
+    i := PosExChar('{',SentData);
     if i=0 then
       FormatUTF8('{ID:%}',[result],data) else begin
       data := SentData;
@@ -50763,7 +50763,7 @@ begin
   result := false;
   if self=nil then
     exit;
-  i := PosEx(RawUTF8('/'),fSignature,1);
+  i := PosExChar('/',fSignature);
   if i=0 then
     exit;
   sign := ComputeSignature(copy(fSignature,1,i-1),Content);
@@ -50788,7 +50788,7 @@ var i: integer;
 begin
   if self=nil then
     i := 0 else
-    i := PosEx(RawUTF8('/'),fSignature,1);
+    i := PosExChar('/',fSignature);
   if i=0 then
     result := '' else
     result := copy(fSignature,1,i-1);
@@ -51930,7 +51930,7 @@ begin
       0..3:
         result := IsFieldName(copy(PropName,5,L-5));
       4..5:
-        result := IsFieldName(copy(PropName,9,PosEx(',',PropName)-9));
+        result := IsFieldName(copy(PropName,9,PosExChar(',',PropName)-9));
       else
         result := IsFieldName(PropName);
       end else
