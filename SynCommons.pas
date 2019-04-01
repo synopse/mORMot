@@ -2940,8 +2940,9 @@ function PosEx(const SubStr, S: RawUTF8; Offset: PtrUInt=1): integer;
 
 {$endif PUREPASCAL}
 
-/// special version of PosEx() with search text as one AnsiChar
-function PosExChar(Chr: AnsiChar; const Str: RawUTF8): PtrInt; {$ifdef FPC}inline;{$endif}
+/// optimized version of PosEx() with search text as one AnsiChar
+function PosExChar(Chr: AnsiChar; const Str: RawUTF8): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// split a RawUTF8 string into two strings, according to SepStr separator
 // - if SepStr is not found, LeftStr=Str and RightStr=''
@@ -12768,7 +12769,7 @@ function TimeToIso8601(Time: TDateTime; Expanded: boolean; FirstChar: AnsiChar='
 /// Write a Date to P^ Ansi buffer
 // - if Expanded is false, 'YYYYMMDD' date format is used
 // - if Expanded is true, 'YYYY-MM-DD' date format is used
-procedure DateToIso8601PChar(P: PUTF8Char; Expanded: boolean; Y,M,D: cardinal); overload;
+procedure DateToIso8601PChar(P: PUTF8Char; Expanded: boolean; Y,M,D: PtrUInt); overload;
 
 /// convert a date into 'YYYY-MM-DD' date format
 // - resulting text is compatible with all ISO-8601 functions
@@ -12822,7 +12823,7 @@ procedure DateTimeToIso8601StringVar(DT: TDateTime; FirstChar: AnsiChar; var res
 // - if Expanded is true, 'Thh:mm:ss' time format is used
 // - you can custom the first char in from of the resulting text time
 // - if WithMS is TRUE, will append MS as '.sss' for milliseconds resolution
-procedure TimeToIso8601PChar(P: PUTF8Char; Expanded: boolean; H,M,S,MS: cardinal;
+procedure TimeToIso8601PChar(P: PUTF8Char; Expanded: boolean; H,M,S,MS: PtrUInt;
   FirstChar: AnsiChar = 'T'; WithMS: boolean=false); overload;
 
 /// Write a Time to P^ Ansi buffer
@@ -25066,6 +25067,14 @@ begin
   PWordArray(P)[1] := tab[Y-(d100*100)];
 end;
 
+procedure YearToPChar2(tab: PWordArray; Y: PtrUInt; P: PUTF8Char); {$ifdef HASINLINE}inline;{$endif}
+var d100: PtrUInt;
+begin
+  d100 := Y div 100;
+  PWordArray(P)[0] := tab[d100];
+  PWordArray(P)[1] := tab[Y-(d100*100)];
+end;
+
 function Iso8601ToTimeLog(const S: RawByteString): TTimeLog;
 begin
   result := Iso8601ToTimeLogPUTF8Char(pointer(S),length(S));
@@ -27266,7 +27275,7 @@ var mib: array[0..1] of cint;
 begin
   mib[0] := CTL_HW;
   mib[1] := hwid;
-  FillChar(temp,SizeOf(temp),0);
+  FillChar(temp,SizeOf(temp),0); // use shortstring as temp 0-terminated buffer
   len := SizeOf(temp);
   fpsysctl(pointer(@mib),2,@temp,@len,nil,0);
   if temp[0]<>#0 then
@@ -36608,48 +36617,55 @@ begin
   result := PTimeLogBits(@Timestamp)^.ToUnixTime;
 end;
 
-procedure DateToIso8601PChar(P: PUTF8Char; Expanded: boolean; Y,M,D: cardinal);
+procedure DateToIso8601PChar(P: PUTF8Char; Expanded: boolean; Y,M,D: PtrUInt);
 // use 'YYYYMMDD' format if not Expanded, 'YYYY-MM-DD' format if Expanded
+var tab: {$ifdef CPUX86NOTPIC}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
 begin
+  {$ifdef CPUX86NOTPIC}
   YearToPChar(Y,P);
+  {$else}
+  tab := @TwoDigitLookupW;
+  YearToPChar2(tab,Y,P);
+  {$endif}
   inc(P,4);
   if Expanded then begin
     P^ := '-';
     inc(P);
   end;
-  PWord(P)^ := TwoDigitLookupW[M];
+  PWord(P)^ := tab[M];
   inc(P,2);
   if Expanded then begin
     P^ := '-';
     inc(P);
   end;
-  PWord(P)^ := TwoDigitLookupW[D];
+  PWord(P)^ := tab[D];
 end;
 
-procedure TimeToIso8601PChar(P: PUTF8Char; Expanded: boolean; H,M,S,MS: cardinal;
+procedure TimeToIso8601PChar(P: PUTF8Char; Expanded: boolean; H,M,S,MS: PtrUInt;
   FirstChar: AnsiChar; WithMS: boolean);
-// use Thhmmss[.sss] format
-begin
+var tab: {$ifdef CPUX86NOTPIC}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
+begin // use Thhmmss[.sss] format
   if FirstChar<>#0 then begin
     P^ := FirstChar;
     inc(P);
   end;
-  PWord(P)^ := TwoDigitLookupW[H];
+  {$ifndef CPUX86NOTPIC}tab := @TwoDigitLookupW;{$endif}
+  PWord(P)^ := tab[H];
   inc(P,2);
   if Expanded then begin
     P^ := ':';
     inc(P);
   end;
-  PWord(P)^ := TwoDigitLookupW[M];
+  PWord(P)^ := tab[M];
   inc(P,2);
   if Expanded then begin
     P^ := ':';
     inc(P);
   end;
-  PWord(P)^ := TwoDigitLookupW[S];
+  PWord(P)^ := tab[S];
   if WithMS then begin
     inc(P,2);
-    YearToPChar(MS,P);
+    {$ifdef CPUX86NOTPIC}YearToPChar(MS{$else}YearToPChar2(tab,MS{$endif},P);
     P^ := '.'; // override first digit
   end;
 end;
