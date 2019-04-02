@@ -54393,12 +54393,16 @@ begin
     AddNoJSONEscape(pointer(s),L); // identified as a BLOB content
     exit;
   end;
+  {$ifdef FPC}
+  CodePage := CP_UTF8;
+  {$else}
   if CodePage<0 then
     {$ifdef HASCODEPAGE}
     CodePage := StringCodePage(s);
     {$else}
     CodePage := 0; // TSynAnsiConvert.Engine(0)=CurrentAnsiConvert
     {$endif}
+  {$endif}
   AddAnyAnsiBuffer(pointer(s),L,Escape,CodePage);
 end;
 
