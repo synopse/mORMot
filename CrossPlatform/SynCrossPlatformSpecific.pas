@@ -661,52 +661,52 @@ var InStr, OutStr: TStream;
 begin
   fLock.Enter;
   try
-  InStr := TMemoryStream.Create;
-  OutStr := TMemoryStream.Create;
-  try
-    fConnection.Request.RawHeaders.Text := Call.InHead;
-    Auth := fConnection.Request.RawHeaders.Values['Authorization'];
-    if (Auth<>'') and SameText(Copy(Auth,1,6),'Basic ') then begin
-      // see https://synopse.info/forum/viewtopic.php?pid=11761#p11761
-      with TIdDecoderMIME.Create do
-      try
-        Auth := DecodeString(copy(Auth,7,maxInt));
-      finally
-        Free;
+    InStr := TMemoryStream.Create;
+    OutStr := TMemoryStream.Create;
+    try
+      fConnection.Request.RawHeaders.Text := Call.InHead;
+      Auth := fConnection.Request.RawHeaders.Values['Authorization'];
+      if (Auth<>'') and SameText(Copy(Auth,1,6),'Basic ') then begin
+        // see https://synopse.info/forum/viewtopic.php?pid=11761#p11761
+        with TIdDecoderMIME.Create do
+        try
+          Auth := DecodeString(copy(Auth,7,maxInt));
+        finally
+          Free;
+        end;
+        i := Pos(':',Auth);
+        if i>0 then begin
+          fConnection.Request.BasicAuthentication := true;
+          fConnection.Request.Username := copy(Auth,1,i-1);
+          fConnection.Request.Password := Copy(Auth,i+1,maxInt);
+        end;
       end;
-      i := Pos(':',Auth);
-      if i>0 then begin
-        fConnection.Request.BasicAuthentication := true;
-        fConnection.Request.Username := copy(Auth,1,i-1);
-        fConnection.Request.Password := Copy(Auth,i+1,maxInt);
+      if Call.InBody<>nil then begin
+        InStr.Write(Call.InBody[0],length(Call.InBody));
+        InStr.Seek(0,soBeginning);
+        fConnection.Request.Source := InStr;
       end;
+      if Call.Verb='GET' then // allow 404 as valid Call.OutStatus
+        fConnection.Get(fURL+Call.Url,OutStr,[HTTP_SUCCESS,HTTP_NOTFOUND]) else
+      if Call.Verb='POST' then
+        fConnection.Post(fURL+Call.Url,InStr,OutStr) else
+      if Call.Verb='PUT' then
+        fConnection.Put(fURL+Call.Url,InStr) else
+      if Call.Verb='DELETE' then
+        fConnection.Delete(fURL+Call.Url) else
+        raise Exception.CreateFmt('Indy does not know method %s',[Call.Verb]);
+      Call.OutStatus := fConnection.Response.ResponseCode;
+      Call.OutHead := fConnection.Response.RawHeaders.Text;
+      OutLen := OutStr.Size;
+      if OutLen>0 then begin
+        SetLength(Call.OutBody,OutLen);
+        OutStr.Seek(0,soBeginning);
+        OutStr.Read(Call.OutBody[0],OutLen);
+      end;
+    finally
+      OutStr.Free;
+      InStr.Free;
     end;
-    if Call.InBody<>nil then begin
-      InStr.Write(Call.InBody[0],length(Call.InBody));
-      InStr.Seek(0,soBeginning);
-      fConnection.Request.Source := InStr;
-    end;
-    if Call.Verb='GET' then // allow 404 as valid Call.OutStatus
-      fConnection.Get(fURL+Call.Url,OutStr,[HTTP_SUCCESS,HTTP_NOTFOUND]) else
-    if Call.Verb='POST' then
-      fConnection.Post(fURL+Call.Url,InStr,OutStr) else
-    if Call.Verb='PUT' then
-      fConnection.Put(fURL+Call.Url,InStr) else
-    if Call.Verb='DELETE' then
-      fConnection.Delete(fURL+Call.Url) else
-      raise Exception.CreateFmt('Indy does not know method %s',[Call.Verb]);
-    Call.OutStatus := fConnection.Response.ResponseCode;
-    Call.OutHead := fConnection.Response.RawHeaders.Text;
-    OutLen := OutStr.Size;
-    if OutLen>0 then begin
-      SetLength(Call.OutBody,OutLen);
-      OutStr.Seek(0,soBeginning);
-      OutStr.Read(Call.OutBody[0],OutLen);
-    end;
-  finally
-    OutStr.Free;
-    InStr.Free;
-  end;
   finally
     fLock.Leave;
   end;
@@ -1008,7 +1008,7 @@ begin //  YYYY-MM-DD   Thh:mm:ss  or  YYYY-MM-DDThh:mm:ss
     HH := ord(Value[2])*10+ord(Value[3])-(48+480);
     MI := ord(Value[5])*10+ord(Value[6])-(48+480);
     SS := ord(Value[8])*10+ord(Value[9])-(48+480);
-	TryEncodeTime(HH,MI,SS,0,result);
+    TryEncodeTime(HH,MI,SS,0,result);
   end;
   10: if (Value[5]=Value[8]) and (ord(Value[8]) in [ord('-'),ord('/')]) then begin
     Y := ord(Value[1])*1000+ord(Value[2])*100+
