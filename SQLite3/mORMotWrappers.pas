@@ -61,6 +61,7 @@ interface
 
 uses
   {$ifdef ISDELPHIXE2}System.SysUtils,{$else}SysUtils,{$endif}
+  StrUtils,		   
   Classes,
   Contnrs,
   Variants,
@@ -568,6 +569,7 @@ begin
     with meth.Args[a] do begin
       arg := ContextFromInfo(TYPES_SOA[ValueType],'',ArgTypeInfo);
       arg.argName := ParamName^;
+	  arg.argType := ArgTypeName^;							  
       arg.dir := ord(ValueDirection);
       arg.dirName := DIRTODELPHI[ValueDirection];
       arg.dirNoOut := DIRTOSMS[ValueDirection]; // no OUT in DWS/SMS -> VAR instead
@@ -803,6 +805,17 @@ begin
   end;
 end;
 
+function Get2ndPart(const WholeText: string; const Delimiter: string): string;
+var
+  A: integer;
+begin
+  A := Pos(Delimiter, WholeText);
+  if A > 0 then
+    Result := TrimLeft(AnsiRightStr(WholeText, Length(WholeText) - A))
+  else
+    Result := '';
+end;
+
 function TWrapperContext.ContextFromInfo(typ: TWrapperType; typName: RawUTF8;
   typInfo: PTypeInfo): variant;
 var typeWrapper: PShortString;
@@ -890,7 +903,11 @@ begin
   end;
   if typName='' then begin
     if typInfo<>nil then
-      TypeInfoToQualifiedName(typInfo,typName) else
+    begin
+      TypeInfoToQualifiedName(typInfo,typName);
+      if AnsiContainsStr(typName, '.') then
+        typName := Get2ndPart(typName, '.')
+    end else
       typName := TYPES_LANG[lngDelphi,typ];
   end;
   if (typ=wRecord) and IdemPropNameU(typName,'TGUID') then
