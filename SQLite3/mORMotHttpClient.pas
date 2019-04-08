@@ -699,10 +699,12 @@ begin
             if elapsed<500 then
               wait := 100 else
               wait := 1000; // checking every second is enough
+            {$ifdef WITHLOG}
             fLogClass.Add.Log(sllTrace, 'InternalCheckOpen: % on %:% after %' +
               ' -> wait % and retry #% up to % seconds',
               [E.ClassType,fServer,fPort,MicroSecToString(elapsed*1000),
                MicroSecToString(wait*1000),retry,fConnectRetrySeconds], self);
+            {$endif}
             sleep(wait);
           end;
         end;
@@ -944,9 +946,11 @@ begin
             FreeAndNil(fRequest);
             if GetTickCount64>=timeout then
               exit;
+            {$ifdef WITHLOG}
             fLogClass.Add.Log(sllTrace,
               'InternalCheckOpen: % on %:% -> wait and retry up to % seconds',
               [E.ClassType,fServer,fPort,fConnectRetrySeconds], self);
+            {$endif}
             sleep(250);
           end;
         end;

@@ -4040,8 +4040,8 @@ begin
   if SQLShouldBeLogged(aSQL) then begin
     log := fLog.Enter(self{$ifndef DELPHI5OROLDER},'ExecuteAll'{$endif});
     log.Log(sllSQL,aSQL,self,4096);
-  {$endif}
   end;
+  {$endif WITHLOG}
   LockAndFlushCache; // don't trust aSQL -> assume modify -> inc(InternalState^)
   try
     R.ExecuteAll(DB,aSQl);
