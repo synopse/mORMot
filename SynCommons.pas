@@ -960,7 +960,6 @@ var
 /// equivalence to SetString(s,nil,len) function
 // - faster especially under FPC
 procedure FastSetString(var s: RawUTF8; p: pointer; len: PtrInt);
-  {$ifdef FPC}inline;{$endif}
 
 /// equivalence to SetString(s,nil,len) function with a specific code page
 // - faster especially under FPC
@@ -21913,23 +21912,13 @@ const
   // - used to calc the beginning of memory allocation of a string
   STRRECSIZE = SizeOf(TStrRec);
 
-{$ifdef FPC} // paranoid (slower) version
-procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
-begin
-  SetString(RawByteString(s),PAnsiChar(p),len);
-  SetCodePage(RawByteString(s),codepage,{convert=}false);
-end;
-procedure FastSetString(var s: RawUTF8; p: pointer; len: PtrInt);
-begin
-  SetString(s,PAnsiChar(p),len);
-end;
-{$else}
 {$ifdef HASCODEPAGE}
 procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
 var r: PAnsiChar; // s may = p -> stand-alone variable
     sr: PStrRec; // local copy of r, to use register
 begin
-  if len>0 then begin
+  if len<=0 then
+    r := nil else begin
     GetMem(r,len+(STRRECSIZE+2));
     sr := pointer(r);
     sr^.codePage := codepage;
@@ -21941,18 +21930,17 @@ begin
     r := pointer(sr);
     if p<>nil then
       {$ifdef FPC}Move{$else}MoveFast{$endif}(p^,sr^,len);
-    {$ifdef FPC}Finalize(RawByteString(s)){$else}RawByteString(s) := ''{$endif};
-    pointer(s) := r;
-  end
-  else
-    {$ifdef FPC}Finalize(RawByteString(s)){$else}RawByteString(s) := ''{$endif};
+  end;
+  {$ifdef FPC}Finalize(RawByteString(s)){$else}RawByteString(s) := ''{$endif};
+  pointer(s) := r;
 end;
 
 procedure FastSetString(var s: RawUTF8; p: pointer; len: PtrInt);
 var r: PAnsiChar;
     sr: PStrRec;
 begin
-  if len>0 then begin
+  if len<=0 then
+    r := nil else begin
     GetMem(r,len+(STRRECSIZE+4));
     sr := pointer(r);
     sr^.codePage := CP_UTF8;
@@ -21964,11 +21952,9 @@ begin
     r := pointer(sr);
     if p<>nil then
       {$ifdef FPC}Move{$else}MoveFast{$endif}(p^,sr^,len);
-    {$ifdef FPC}Finalize(s){$else}s := ''{$endif};
-    pointer(s) := r;
-  end
-  else
-    {$ifdef FPC}Finalize(s){$else}s := ''{$endif};
+  end;
+  {$ifdef FPC}Finalize(s){$else}s := ''{$endif};
+  pointer(s) := r;
 end;
 {$else}
 procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
@@ -21980,7 +21966,6 @@ begin
   SetString(RawByteString(s),PAnsiChar(p),len);
 end;
 {$endif HASCODEPAGE}
-{$endif FPC}
 
 procedure GetMemAligned(var s: RawByteString; p: pointer; len: PtrInt;
   out aligned: pointer);
