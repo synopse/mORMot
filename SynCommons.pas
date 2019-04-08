@@ -960,6 +960,7 @@ var
 /// equivalence to SetString(s,nil,len) function
 // - faster especially under FPC
 procedure FastSetString(var s: RawUTF8; p: pointer; len: PtrInt);
+  {$ifdef FPC}inline;{$endif}
 
 /// equivalence to SetString(s,nil,len) function with a specific code page
 // - faster especially under FPC
@@ -21912,6 +21913,17 @@ const
   // - used to calc the beginning of memory allocation of a string
   STRRECSIZE = SizeOf(TStrRec);
 
+{$ifdef FPC} // paranoid (slower) version
+procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
+begin
+  SetString(RawByteString(s),PAnsiChar(p),len);
+  SetCodePage(RawByteString(s),codepage,{convert=}false);
+end;
+procedure FastSetString(var s: RawUTF8; p: pointer; len: PtrInt);
+begin
+  SetString(s,PAnsiChar(p),len);
+end;
+{$else}
 {$ifdef HASCODEPAGE}
 procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
 var r: PAnsiChar; // s may = p -> stand-alone variable
@@ -21967,7 +21979,8 @@ procedure FastSetString(var s: RawUTF8; p: pointer; len: PtrInt);
 begin
   SetString(RawByteString(s),PAnsiChar(p),len);
 end;
-{$endif}
+{$endif HASCODEPAGE}
+{$endif FPC}
 
 procedure GetMemAligned(var s: RawByteString; p: pointer; len: PtrInt;
   out aligned: pointer);
