@@ -1399,7 +1399,8 @@ function ToUTF8(const V: Variant): RawUTF8; overload;
 // - use VariantSaveJSON() instead if you need a conversion to JSON with
 // custom parameters
 // - wasString is set if the V value was a text
-// - custom variant types will be stored as JSON
+// - empty and null variants will be stored as 'null' text - as expected by JSON
+// - custom variant types (e.g. TDocVariant) will be stored as JSON
 procedure VariantToUTF8(const V: Variant; var result: RawUTF8;
   var wasString: boolean); overload;
 
@@ -1407,7 +1408,8 @@ procedure VariantToUTF8(const V: Variant; var result: RawUTF8;
 // - use VariantSaveJSON() instead if you need a conversion to JSON with
 // custom parameters
 // - returns TRUE if the V value was a text, FALSE if was not (e.g. a number)
-// - custom variant types will be stored as JSON
+// - empty and null variants will be stored as 'null' text - as expected by JSON
+// - custom variant types (e.g. TDocVariant) will be stored as JSON
 function VariantToUTF8(const V: Variant; var Text: RawUTF8): boolean; overload;
 
 /// convert any date/time Variant into a TDateTime value
@@ -45652,8 +45654,9 @@ begin
   with _Safe(DocVariantOrString)^ do
     if dvoIsArray in VOptions then
       result := ToCSV else
-    if dvoIsObject in VOptions then
-      result := '' else
+    if (dvoIsObject in VOptions) or
+       (TDocVariantData(DocVariantOrString).VType<=varNull) then
+      result := '' else // VariantToUTF8() returns 'null' for empty/null
       VariantToUTF8(DocVariantOrString,result,wasstring);
 end;
 
