@@ -2557,30 +2557,30 @@ function JsonPropNameValid(P: PUTF8Char): boolean;
 // http://www.ietf.org/rfc/rfc4627.txt
 function NeedsJsonEscape(const Text: RawUTF8): boolean;
 
-/// case unsensitive test of P1 and P2 content
+/// case insensitive comparison of ASCII identifiers
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
 function IdemPropName(const P1,P2: shortstring): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// case unsensitive test of P1 and P2 content
+/// case insensitive comparison of ASCII identifiers
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
 // - this version expects P2 to be a PAnsiChar with a specified length
 function IdemPropName(const P1: shortstring; P2: PUTF8Char; P2Len: PtrInt): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// case unsensitive test of P1 and P2 content
+/// case insensitive comparison of ASCII identifiers
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
 // - this version expects P1 and P2 to be a PAnsiChar with specified lengths
 function IdemPropName(P1,P2: PUTF8Char; P1Len,P2Len: PtrInt): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// case unsensitive test of P1 and P2 content
+/// case insensitive comparison of ASCII identifiers
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
 // - this version expects P2 to be a PAnsiChar with specified length
 function IdemPropNameU(const P1: RawUTF8; P2: PUTF8Char; P2Len: PtrInt): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// case unsensitive test of P1 and P2 content of same length
+/// case insensitive comparison of ASCII identifiers of same length
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
 // - this version expects P1 and P2 to be a PAnsiChar with an already checked
 // identical length, so may be used for a faster process, e.g. in a loop
@@ -2590,7 +2590,7 @@ function IdemPropNameU(const P1: RawUTF8; P2: PUTF8Char; P2Len: PtrInt): boolean
 function IdemPropNameUSameLen(P1,P2: PUTF8Char; P1P2Len: PtrInt): boolean;
   {$ifndef ANDROID}{$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}{$endif}
 
-/// case unsensitive test of P1 and P2 content
+/// case insensitive comparison of ASCII identifiers
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
 function IdemPropNameU(const P1,P2: RawUTF8): boolean; overload;
   {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
@@ -24109,7 +24109,7 @@ begin
 end;
 
 function Trim(const S: RawUTF8): RawUTF8;
-var I,L: Integer;
+var I,L: PtrInt;
 begin
   L := Length(S);
   I := 1;
@@ -33699,12 +33699,12 @@ var S,E: PUTF8Char;
 begin
   if (P=nil) or (Sep<=' ') then
     result := '' else begin
-    while (P^<=' ') and (P^<>#0) do inc(P);
+    while (P^<=' ') and (P^<>#0) do inc(P); // trim left
     S := P;
     while (S^<>#0) and (S^<>Sep) do
       inc(S);
     E := S;
-    while (E>P) and (E[-1] in [#1..' ']) do dec(E);
+    while (E>P) and (E[-1] in [#1..' ']) do dec(E); // trim right
     FastSetString(result,P,E-P);
     if S^<>#0 then
       P := S+1 else
@@ -45649,15 +45649,13 @@ begin
 end;
 
 function _CSV(const DocVariantOrString: variant): RawUTF8;
-var wasstring: boolean;
 begin
   with _Safe(DocVariantOrString)^ do
     if dvoIsArray in VOptions then
       result := ToCSV else
-    if (dvoIsObject in VOptions) or
-       (TDocVariantData(DocVariantOrString).VType<=varNull) then
-      result := '' else // VariantToUTF8() returns 'null' for empty/null
-      VariantToUTF8(DocVariantOrString,result,wasstring);
+    if (dvoIsObject in VOptions) or (TDocVariantData(DocVariantOrString).VType<=varNull) or
+       not VariantToUTF8(DocVariantOrString,result) then
+      result := ''; // VariantToUTF8() returns 'null' for empty/null
 end;
 
 function TDocVariantData.GetKind: TDocVariantKind;
