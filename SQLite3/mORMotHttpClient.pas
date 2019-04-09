@@ -260,14 +260,14 @@ type
     // - equals [hcSynLZ] by default, since our SynLZ algorithm provides a good
     // compression, with very low CPU use on server side
     // - you may include hcDeflate, which will have a better compression ratio,
-    // be recognized by all browsers and libraries, but would consumme much
+    // be recognized by all browsers and libraries, but would consume much
     // more CPU resources than hcSynLZ
     // - if you include hcSynShaAes, it will use SHA-256/AES-256-CFB to encrypt
     // the content (after SynLZ compression), if it is enabled on the server side:
     // ! MyServer := TSQLHttpServer.Create('888',[DataBase],'+',useHttpApi,32,secSynShaAes);
     // - for fast and safe communication between stable mORMot nodes, consider
     // using TSQLHttpClientWebSockets, leaving hcDeflate for AJAX or non mORMot
-    // clients, and hcSynLZ if you expect to use http.sys with a mORMot client
+    // clients, and hcSynLZ if you expect to have mORMot client(s)
     property Compression: TSQLHttpCompressions read fCompression write SetCompression;
     /// how many seconds the client may try to connect after open socket failure
     // - is disabled to 0 by default, but you may set some seconds here e.g. to

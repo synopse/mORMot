@@ -15788,7 +15788,8 @@ procedure _UniqueFast(var DocVariant: variant);
 // arrays were created with: to be used on a value returned as varByRef
 // (e.g. by _() pseudo-method)
 // - for huge document with a big depth of nested objects or arrays, a full
-// per-value copy may be time and resource consuming, but will be also safe
+// per-value copy may be time and resource consuming, but will be also safe -
+// consider using _ByRef() instead if a fast copy-by-reference is enough
 // - will raise an EDocVariant if the supplied variant is not a TDocVariant or
 // a varByRef pointing to a TDocVariant
 function _Copy(const DocVariant: variant): variant;
@@ -15802,7 +15803,8 @@ function _Copy(const DocVariant: variant): variant;
 // arrays were created with: to be used on a value returned as varByRef
 // (e.g. by _() pseudo-method)
 // - for huge document with a big depth of nested objects or arrays, a full
-// per-value copy may be time and resource consuming, but will be also safe
+// per-value copy may be time and resource consuming, but will be also safe -
+// consider using _ByRef() instead if a fast copy-by-reference is enough
 // - will raise an EDocVariant if the supplied variant is not a TDocVariant or
 // a varByRef pointing to a TDocVariant
 function _CopyFast(const DocVariant: variant): variant;
@@ -15810,16 +15812,23 @@ function _CopyFast(const DocVariant: variant): variant;
 
 /// copy a TDocVariant to another variable, changing the options on the fly
 // - note that the content (items or properties) is copied by reference,
-// so consider using _Copy() instead
+// so consider using _Copy() instead if you expect to safely modify its content
 // - will return null if the supplied variant is not a TDocVariant
 function _ByRef(const DocVariant: variant; Options: TDocVariantOptions): variant; overload;
 
 /// copy a TDocVariant to another variable, changing the options on the fly
 // - note that the content (items or properties) is copied by reference,
-// so consider using _Copy() instead
+// so consider using _Copy() instead if you expect to safely modify its content
 // - will return null if the supplied variant is not a TDocVariant
 procedure _ByRef(const DocVariant: variant; out Dest: variant;
   Options: TDocVariantOptions); overload;
+
+/// convert a TDocVariantData array or a string value into a CSV
+// - will call either TDocVariantData.ToCSV, or return the string
+// - returns '' if the supplied value is neither a TDocVariant or a string
+// - could be used e.g. to store either a JSON CSV string or a JSON array of
+// strings in a settings property
+function _CSV(const DocVariantOrString: variant): RawUTF8;
 
 /// will convert any TObject into a TDocVariant document instance
 // - a slightly faster alternative to Dest := _JsonFast(ObjectToJSON(Value))
@@ -21562,12 +21571,11 @@ function GetBitsCount(const Bits; Count: PtrInt): integer;
 const POPCNTDATA: array[0..15+4] of integer = (0,1,1,2,1,2,2,3,1,2,2,3,2,3,3,4,0,1,3,7);
 var P: PByte;
     v: PtrUInt;
-{$ifdef CPUX86NOTPIC}tab: TIntegerArray absolute POPCNTDATA;
-begin // not enough registers on this CPU
-{$else}tab: PIntegerArray;
+    tab: {$ifdef CPUX86NOTPIC}TIntegerArray absolute POPCNTDATA{$else}PIntegerArray{$endif};
 begin
+  {$ifndef CPUX86NOTPIC}
   tab := @POPCNTDATA;
-{$endif CPUX86NOTPIC}
+  {$endif CPUX86NOTPIC}
   P := @Bits;
   result := 0;
   while Count>=8 do begin
@@ -45636,6 +45644,17 @@ begin
   result := _Safe(DocVariant);
   if result^.Kind<>ExpectedKind then
     raise EDocVariant.CreateUTF8('_Safe(%)<>%',[ToText(result^.Kind)^,ToText(ExpectedKind)^]);
+end;
+
+function _CSV(const DocVariantOrString: variant): RawUTF8;
+var wasstring: boolean;
+begin
+  with _Safe(DocVariantOrString)^ do
+    if dvoIsArray in VOptions then
+      result := ToCSV else
+    if dvoIsObject in VOptions then
+      result := '' else
+      VariantToUTF8(DocVariantOrString,result,wasstring);
 end;
 
 function TDocVariantData.GetKind: TDocVariantKind;
