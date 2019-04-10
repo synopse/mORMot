@@ -4644,6 +4644,8 @@ type
     function LoadFromFile(const aFileName: TFileName): boolean; virtual;
     /// persist the settings as a JSON file, named from LoadFromFile() parameter
     procedure SaveIfNeeded; virtual;
+    /// optional persistence file name, as set by LoadFromFile()
+    property FileName: TFileName read fFileName;
   end;
 
   /// used by TRawUTF8ObjectCacheList to manage a list of information cache
@@ -6874,7 +6876,8 @@ type
   // TSQLAuthGroup.InitializeTable to fill the TSQLAuthGroup and TSQLAuthUser
   // tables with default records
   // - itoNoCreateMissingField will avoid to create the missing fields on a table
-  // - itoNoIndex4ID won't create the index for the main ID field
+  // - itoNoIndex4ID won't create the index for the main ID field (do nothing
+  // on SQLite3, by design - but may be used for tables on external databases)
   // - itoNoIndex4UniqueField won't create indexes for "stored AS_UNIQUE" fields
   // - itoNoIndex4NestedRecord won't create indexes for TSQLRecord fields
   // - itoNoIndex4RecordReference won't create indexes for TRecordReference fields
@@ -8213,6 +8216,7 @@ type
 
   /// root class for defining and mapping database records with case-insensitive
   // NOCASE collation
+  // - abstract ancestor, from which you may inherit your own ORM classes
   // - by default, any sftUTF8Text field (RawUTF8, UnicodeString, WideString
   // properties) will use our Unicode SYSTEMNOCASE SQLite3 collation, which calls
   // UTF8ILComp() to handle most western languages, but is not standard
@@ -8230,6 +8234,7 @@ type
 
   /// root class for defining and mapping database records with case-sensitive
   // BINARY collation
+  // - abstract ancestor, from which you may inherit your own ORM classes
   // - by default, any sftUTF8Text field (RawUTF8, UnicodeString, WideString
   // properties) will use our Unicode SYSTEMNOCASE SQLite3 collation, which calls
   // UTF8ILComp() to handle most western languages, but is not standard
@@ -8246,6 +8251,7 @@ type
   end;
 
   /// database records with NOCASE collation and JSON_OPTIONS_FAST_EXTENDED variants
+  // - abstract ancestor, from which you may inherit your own ORM classes
   TSQLRecordNoCaseExtended = class(TSQLRecordNoCase)
   protected
     /// will call Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
@@ -8253,10 +8259,21 @@ type
   end;
 
   /// database records with BINARY collation and JSON_OPTIONS_FAST_EXTENDED variants
+  // - abstract ancestor, from which you may inherit your own ORM classes
   TSQLRecordCaseSensitiveExtended = class(TSQLRecordCaseSensitive)
   protected
     /// will call Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
     class procedure InternalDefineModel(Props: TSQLRecordProperties); override;
+  end;
+
+  /// database records with NOCASE collation and JSON_OPTIONS_FAST_EXTENDED
+  // variants, and itoNoIndex4TID option to avoid indexes on TID/T*ID properties
+  // - abstract ancestor, from which you may inherit your own ORM classes
+  TSQLRecordNoCaseExtendedNoID = class(TSQLRecordNoCaseExtended)
+  public
+    /// overriden method forcing no index creation on TID/T*ID properties
+    class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
+      Options: TSQLInitializeTableOptions); override;
   end;
 
   /// allow on-the-fly translation of a TSQLTable grid value
@@ -25326,7 +25343,7 @@ begin
   R := @fResults[FieldCount];
   j := FieldCount;
   for i := 1 to fRowCount do begin
-    if GetBit(Bits,i-1) then begin
+    if GetBitPtr(@Bits,i-1) then begin
       if fIDColumn<>nil then
         fIDColumn[n] := oldIDColumn[i];
       MoveFast(oldResults[j],R^,FieldCount*SizeOf(PUTF8Char));
@@ -25339,7 +25356,7 @@ begin
   // put unmarked IDs
   j := FieldCount;
   for i := 1 to fRowCount do begin
-    if not GetBit(Bits,i-1) then begin
+    if not GetBitPtr(@Bits,i-1) then begin
       if fIDColumn<>nil then
         fIDColumn[n] := oldIDColumn[i];
       MoveFast(oldResults[j],R^,FieldCount*SizeOf(PUTF8Char));
@@ -25352,7 +25369,7 @@ begin
   // recalcultate Bits[]
   {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(Bits,(fRowCount shr 3)+1,0);
   for i := 0 to nSet-1 do
-    SetBit(Bits,i); // slow but accurate
+    SetBitPtr(@Bits,i); // slow but accurate
 end;
 
 function TSQLTable.IDColumnHide: boolean;
@@ -25422,14 +25439,14 @@ begin
   n := 0;
   if Assigned(fIDColumn) then begin
     for i := 1 to fRowCount do
-    if GetBit(Bits,i-1) then begin
+    if GetBitPtr(@Bits,i-1) then begin
       IDs[n] := GetInt64(fIDColumn[i]); // get hidden ID column UTF-8 content
       inc(n);
     end;
   end else begin
     inc(FID,FieldCount); // [i*FieldCount+FID] = [(i+1)*FieldCount+FID] below
     for i := 0 to fRowCount-1 do
-    if GetBit(Bits,i) then begin
+    if GetBitPtr(@Bits,i) then begin
       IDs[n] := GetInt64(fResults[i*FieldCount+FID]); // get ID column UTF-8 content
       inc(n);
     end;
@@ -25469,11 +25486,11 @@ var i,FID: integer;
     IDn: integer;
 //    AllID: : TIDDynArray;
 begin
-  if length(IDs)=RowCount then begin // all selected -> all bits set to 1
-    {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(Bits,(RowCount shr 3)+1,255);
+  if length(IDs)=fRowCount then begin // all selected -> all bits set to 1
+    {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(Bits,(fRowCount shr 3)+1,255);
     exit;
   end;
-  {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(Bits,(RowCount shr 3)+1,0);
+  {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(Bits,(fRowCount shr 3)+1,0);
   if IDs=nil then
     exit; // no selected -> all bits left to 0
   // we sort IDs to use FastFindIntegerSorted() and its O(log(n)) binary search
@@ -25487,14 +25504,14 @@ begin
   end else
     FID := 0; // make compiler happy
   if Assigned(fIDColumn) then begin
-    for i := 1 to RowCount do
+    for i := 1 to fRowCount do
       if FastFindInt64Sorted(ID,IDn,GetInt64(fIDColumn[i]))>=0 then
-        SetBit(Bits,i-1);
+        SetBitPtr(@Bits,i-1);
   end else begin
     U := @fResults[FID+FieldCount];  // U^ = ID column UTF-8 content
-    for i := 0 to RowCount-1 do begin
+    for i := 0 to fRowCount-1 do begin
       if FastFindInt64Sorted(ID,IDn,GetInt64(U^))>=0 then
-        SetBit(Bits,i);
+        SetBitPtr(@Bits,i);
       inc(U,FieldCount);
     end;
   end;
@@ -25741,7 +25758,7 @@ begin
   if length(fQueryTables)=1 then
     SearchInQueryTables(pointer(PropName),0)
   else begin
-    i := PosEx(RawUTF8('.'),PropName)-1;
+    i := PosExChar('.',PropName)-1;
     if i<0 then // no 'ClassName.PropertyName' format: find first exact property name
       for t := 0 to high(fQueryTables) do begin
         SearchInQueryTables(pointer(PropName),t);
@@ -28271,7 +28288,8 @@ var EndOfObject: AnsiChar;
   begin
     res := P;
     if res=nil then begin
-      FieldValues[ndx] := ''; // avoid GPF, but will return invalid SQL
+      FieldTypeApproximation[ndx] := ftaNull;
+      FieldValues[ndx] := NULL_STR_VAR;
       exit;
     end;
     while res^ in [#1..' '] do inc(res);
@@ -28337,8 +28355,10 @@ var EndOfObject: AnsiChar;
               QuotedStr(res,'''',FieldValues[ndx]);
           end;
         end else
-          if res=nil then
-            FieldValues[ndx] := '' else // avoid GPF, but will return invalid SQL
+          if res=nil then begin
+            FieldTypeApproximation[ndx] := ftaNull;
+            FieldValues[ndx] := NULL_STR_VAR;
+          end else // avoid GPF, but will return invalid SQL
           // non string params (numeric or false/true) are passed untouched
           if PInteger(res)^=FALSE_LOW then begin
             FieldValues[ndx] := SmallUInt32UTF8[0];
@@ -28363,7 +28383,7 @@ begin
   FieldCount := 0;
   DecodedRowID := 0;
   {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(
-    FieldTypeApproximation,SizeOf(FieldTypeApproximation),0);
+    FieldTypeApproximation,SizeOf(FieldTypeApproximation),ord(ftaNumber{TID}));
   InlinedParams := Params=pInlined;
   if pointer(Fields)=nil then begin
     // get "COL1"="VAL1" pairs, stopping at '}' or ']'
@@ -29193,7 +29213,7 @@ begin
       new[f] := i;
     end;
   ndx := FieldCount;
-  for i := 1 to RowCount do begin // merge data
+  for i := 1 to fRowCount do begin // merge data
     k := From.SearchFieldSorted(fResults[ndx+dk],fk);
     if k>0 then begin
       k := k*From.FieldCount;
@@ -31456,11 +31476,11 @@ var j: integer;
     PS: PShortString;
 begin
   W.Add('[');
-  if FullSetsAsStar and (MaxValue in [1..31]) and GetAllBits(Value,MaxValue+1) then
+  if FullSetsAsStar and GetAllBits(Value,MaxValue+1) then
     W.AddShort('"*"') else begin
     PS := @NameList;
     for j := MinValue to MaxValue do begin
-      if GetBit(Value,j) then begin
+      if GetBitPtr(@Value,j) then begin
         W.Add('"');
         if twoTrimLeftEnumSets in W.CustomOptions then
           W.AddTrimLeftLowerCase(PS) else
@@ -31480,11 +31500,11 @@ var j: integer;
     arr: TDocVariantData;
 begin
   arr.InitFast;
-  if FullSetsAsStar and (MaxValue in [1..31]) and GetAllBits(Value,MaxValue+1) then
+  if FullSetsAsStar and GetAllBits(Value,MaxValue+1) then
     arr.AddItem('*') else begin
     PS := @NameList;
     for j := MinValue to MaxValue do begin
-      if GetBit(Value,j) then
+      if GetBitPtr(@Value,j) then
         arr.AddItem(PS^);
       inc(PByte(PS),ord(PS^[0])+1); // next item
     end;
@@ -31659,7 +31679,7 @@ begin
     V := @NameList;
     for i := MinValue to MaxValue do begin
       if (UsedValuesBits=nil) or
-         GetBit(UsedValuesBits^,i) then begin
+         GetBitPtr(UsedValuesBits,i) then begin
         L := ord(V^[0]);
         P := @V^[1];
         while (L>0) and (P^ in ['a'..'z']) do begin // ignore left lowercase chars
@@ -33884,6 +33904,15 @@ class procedure TSQLRecordCaseSensitiveExtended.InternalDefineModel(
 begin
   inherited InternalDefineModel(Props); // set BINARY collation
   Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
+end;
+
+
+{ TSQLRecordNoCaseExtendedNoID }
+
+class procedure TSQLRecordNoCaseExtendedNoID.InitializeTable(Server: TSQLRestServer;
+  const FieldName: RawUTF8; Options: TSQLInitializeTableOptions);
+begin
+  inherited InitializeTable(Server, FieldName, Options + [itoNoIndex4TID]);
 end;
 
 
@@ -36407,9 +36436,9 @@ begin
     T := MultiFieldValues(Table,FieldName,FormatSQLWhere,BoundsSQLWhere);
     if T<>nil then
     try
-      res.InitFast(T.RowCount,dvArray);
-      res.SetCount(T.RowCount);
-      for row := 1 to T.RowCount do
+      res.InitFast(T.fRowCount,dvArray);
+      res.SetCount(T.fRowCount);
+      for row := 1 to T.fRowCount do
         T.GetAsVariant(row,0,res.Values[row-1],false,false,false,JSON_OPTIONS_FAST);
     finally
       T.Free;
@@ -38935,7 +38964,7 @@ begin
   end;
   {$ifdef DOMAINAUTH} // try Windows/GSSAPI authentication with the current logged user
   result := true;
-  if ((trim(aUserName)='') or (PosEx({$ifdef GSSAPIAUTH}'@'{$else}'\'{$endif},aUserName)>0)) and
+  if ((trim(aUserName)='') or (PosExChar({$ifdef GSSAPIAUTH}'@'{$else}'\'{$endif},aUserName)>0)) and
     TSQLRestServerAuthenticationSSPI.ClientSetUser(self,aUserName,aPassword,passKerberosSPN) then
       exit;
   {$endif DOMAINAUTH}
@@ -39542,7 +39571,7 @@ var files: TFindFilesDynArray;
     fn: TFileName;
     fs: Int64;
 begin
-  if (Param<>'*') and (PosEx(RawUTF8(':'),Param)=0) and (PosEx(PathDelim,Param)=0) then begin
+  if (Param<>'*') and (PosExChar(':',Param)=0) and (PosExChar(PathDelim,Param)=0) then begin
     fn := IncludeTrailingPathDelimiter(Folder)+UTF8ToString(Param);
     fs := FileSize(fn);
     if (fs>0) and (fs<256 shl 20) then begin // download up to 256 MB
@@ -39758,7 +39787,7 @@ var i: integer;
 begin
   if aInstance=nil then
     exit;
-  if PosEx(RawUTF8('/'),aPrefix)>0 then
+  if PosExChar('/',aPrefix)>0 then
     raise EServiceException.CreateUTF8('%.ServiceMethodRegisterPublishedMethods'+
       '("%"): prefix should not contain "/"',[self,aPrefix]);
   for i := 0 to GetPublishedMethods(aInstance,methods)-1 do
@@ -41058,7 +41087,7 @@ begin // expects 'ModelRoot[/TableName[/TableID][/URIBlobFieldName]][?param=...]
     result := False;
     exit; // bad ModelRoot -> caller can try another TSQLRestServer
   end;
-  ParametersPos := PosEx(RawUTF8('?'),Call^.url,1);
+  ParametersPos := PosExChar('?',Call^.url);
   if ParametersPos>0 then // '?select=...&where=...' or '?where=...'
     Parameters := @Call^.url[ParametersPos+1];
   if Method=mPost then begin
@@ -41074,7 +41103,7 @@ begin // expects 'ModelRoot[/TableName[/TableID][/URIBlobFieldName]][?param=...]
     URI := copy(Call^.url,i,ParametersPos-i);
   URIAfterRoot := PUTF8Char(pointer(Call^.url))+i-1;
   // compute Table, TableID and URIBlobFieldName
-  slash := PosEx(RawUTF8('/'),URI);
+  slash := PosExChar('/',URI);
   if slash>0 then begin
     URI[slash] := #0;
     Par := pointer(URI);
@@ -41086,7 +41115,7 @@ begin // expects 'ModelRoot[/TableName[/TableID][/URIBlobFieldName]][?param=...]
       TableID := -1; // URI like "ModelRoot/TableName/MethodName"
     URIBlobFieldName := Par;
     if Table<>nil then begin
-      j := PosEx(RawUTF8('/'),URIBlobFieldName);
+      j := PosExChar('/',URIBlobFieldName);
       if j>0 then begin // handle "ModelRoot/TableName/URIBlobFieldName/ID"
         TableID := GetCardinalDef(pointer(PtrInt(URIBlobFieldName)+j),cardinal(-1));
         SetLength(URIBlobFieldName,j-1);
@@ -42301,7 +42330,7 @@ begin
   aOutSetCookie := Trim(aOutSetCookie);
   if not IsValidUTF8WithoutControlChars(aOutSetCookie) then
     raise EBusinessLayerException.CreateUTF8('Unsafe %.SetOutSetCookie',[self]);
-  if PosEx(RawUTF8('='),aOutSetCookie)<2 then
+  if PosExChar('=',aOutSetCookie)<2 then
     raise EBusinessLayerException.CreateUTF8(
       '"name=value" expected for %.SetOutSetCookie("%")',[self,aOutSetCookie]);
   if StrPosI('; PATH=',pointer(aOutSetCookie))=nil then
@@ -47727,7 +47756,7 @@ begin
         raise EORMException.CreateUTF8('%.EngineAdd(%) fShardNextID',[self,fStoredClass]);
     end;
     result := fShardLastID;
-    i := PosEx(RawUTF8('{'),SentData);
+    i := PosExChar('{',SentData);
     if i=0 then
       FormatUTF8('{ID:%}',[result],data) else begin
       data := SentData;
@@ -50739,7 +50768,7 @@ begin
   result := false;
   if self=nil then
     exit;
-  i := PosEx(RawUTF8('/'),fSignature,1);
+  i := PosExChar('/',fSignature);
   if i=0 then
     exit;
   sign := ComputeSignature(copy(fSignature,1,i-1),Content);
@@ -50764,7 +50793,7 @@ var i: integer;
 begin
   if self=nil then
     i := 0 else
-    i := PosEx(RawUTF8('/'),fSignature,1);
+    i := PosExChar('/',fSignature);
   if i=0 then
     result := '' else
     result := copy(fSignature,1,i-1);
@@ -51906,7 +51935,7 @@ begin
       0..3:
         result := IsFieldName(copy(PropName,5,L-5));
       4..5:
-        result := IsFieldName(copy(PropName,9,PosEx(',',PropName)-9));
+        result := IsFieldName(copy(PropName,9,PosExChar(',',PropName)-9));
       else
         result := IsFieldName(PropName);
       end else

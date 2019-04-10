@@ -587,10 +587,10 @@ var
 
 /// enable low-level interception of executable stop signals
 // - any SIGQUIT / SIGTERM / SIGINT signal will set appropriately the global
-// SynDaemonTerminated variable
+// SynDaemonTerminated variable, with an optional logged entry to log
 // - as called e.g. by RunUntilSigTerminated()
 // - you can call this method several times with no issue
-procedure SynDaemonIntercept;
+procedure SynDaemonIntercept(log: TSynLog=nil);
 
 {$endif MSWINDOWS}
 
@@ -1458,34 +1458,65 @@ end;
 
 var
   SynDaemonIntercepted: boolean;
+  SynDaemonInterceptLog: TSynLogClass;
 
 {$ifdef FPC}
 procedure DoShutDown(Sig: Longint; Info: PSigInfo; Context: PSigContext); cdecl;
+var level: TSynLogInfo;
+    log: TSynLog;
+    si_code: integer;
+    text: TShort4;
+begin // code below has no memory (re)allocation
+  SynDaemonTerminated := Sig;
+  if SynDaemonInterceptLog = nil then
+    exit;
+  log := SynDaemonInterceptLog.Add;
+  case Sig of
+    SIGHUP:  text := 'HUP';
+    SIGQUIT: text := 'QUIT';
+    SIGTERM: text := 'TERM';
+    SIGINT:  text := 'INT';
+    SIGABRT: text := 'ABRT';
+    else text := UInt3DigitsToShort(Sig);
+  end;
+  if Sig = SIGTERM then // polite quit
+    level := sllInfo else
+    level := sllExceptionOS;
+  if Info=nil then
+    si_code := 0 else
+    si_code := Info^.si_code;
+  log.Writer.CustomOptions := log.Writer.CustomOptions + [twoFlushToStreamNoAutoResize];
+  log.Log(level, 'SynDaemonIntercepted received SIG%=% si_code=%', [text, Sig, si_code]);
+  log.Flush({flushtodisk=}Sig <> SIGTERM); // ensure all log is safely written
+end;
 {$else}
 procedure DoShutDown(Sig: integer); cdecl;
-{$endif}
 begin
   SynDaemonTerminated := Sig;
 end;
+{$endif FPC}
 
-procedure SynDaemonIntercept;
+procedure SynDaemonIntercept(log: TSynLog);
 var
   saOld, saNew: {$ifdef FPC}SigactionRec{$else}TSigAction{$endif};
 begin
   if SynDaemonIntercepted then
     exit;
   SynDaemonIntercepted := true;
+  SynDaemonInterceptLog := log.LogClass;
   FillCharFast(saNew, SizeOf(saNew), 0);
   {$ifdef FPC}
   saNew.sa_handler := @DoShutDown;
   fpSigaction(SIGQUIT, @saNew, @saOld);
   fpSigaction(SIGTERM, @saNew, @saOld);
   fpSigaction(SIGINT, @saNew, @saOld);
+  fpSigaction(SIGABRT, @saNew, @saOld);
   {$else} // Kylix
   saNew.__sigaction_handler := @DoShutDown;
   sigaction(SIGQUIT, @saNew, @saOld);
   sigaction(SIGTERM, @saNew, @saOld);
   sigaction(SIGINT, @saNew, @saOld);
+  sigaction(SIGABRT, @saNew, @saOld);
   {$endif}
 end;
 
@@ -1506,7 +1537,7 @@ begin
   if pid <= 0 then
     exit;
   {$ifdef FPC}
-  if fpkill(pid, SIGTERM) <> 0 then
+  if fpkill(pid, SIGTERM) <> 0 then // polite quit
     if fpgeterrno<>ESysESRCH then
   {$else} // Kylix
   if kill(pid, SIGTERM) <> 0 then
@@ -1552,7 +1583,7 @@ var
 const
   TXT: array[boolean] of string[4] = ('run', 'fork');
 begin
-  SynDaemonIntercept;
+  SynDaemonIntercept(log);
   if dofork then begin
     pidfilename := RunUntilSigTerminatedPidFile;
     pid := GetInteger(pointer(StringFromFile(pidfilename)));

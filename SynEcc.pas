@@ -2636,7 +2636,7 @@ begin
   _modMult_fast(X1, X1, Z1);       // t1 = x1^2 - z1^4
   _modAdd(Z1, X1, X1, Curve_P_32); // t3 = 2*(x1^2 - z1^4)
   _modAdd(X1, X1, Z1, Curve_P_32); // t1 = 3*(x1^2 - z1^4)
-  if GetBit(X1, 0) then begin
+  if GetBitPtr(@X1, 0) then begin
     carry := _add(X1, X1, Curve_P_32);
     _rshift1(X1);
     X1[NUM_ECC_DIGITS-1] := X1[NUM_ECC_DIGITS-1] or (carry shl 63);
@@ -2740,13 +2740,13 @@ begin
   Ry[1] := Point.y;
   _XYcZ_initial_double(Rx[1], Ry[1], Rx[0], Ry[0], InitialZ);
   for i := _numBits(Scalar) - 2 downto 1 do begin
-    if GetBit(Scalar, i) then
+    if GetBitPtr(@Scalar, i) then
       nb := 0 else
       nb := 1;
     _XYcZ_addC(Rx[1-nb], Ry[1-nb], Rx[nb], Ry[nb]);
     _XYcZ_add(Rx[nb], Ry[nb], Rx[1-nb], Ry[1-nb]);
   end;
-  if GetBit(Scalar, 0) then
+  if GetBitPtr(@Scalar, 0) then
     nb := 0 else
     nb := 1;
   _XYcZ_addC(Rx[1-nb], Ry[1-nb], Rx[nb], Ry[nb]);
@@ -2783,7 +2783,7 @@ begin
   _add(p1, Curve_P_32, _1); // p1 = curve_p + 1
   for i := _numBits(p1) - 1 downto 2 do begin
     _modSquare_fast(result, result, false);
-    if GetBit(p1, i) then
+    if GetBitPtr(@p1, i) then
       _modMult_fast(result, result, a);
   end;
   a := result;
@@ -2989,10 +2989,10 @@ begin
   Index := _numBits(u2);
   if Index > NumBits then
     NumBits := Index;
-  if GetBit(u1, NumBits-1) then
+  if GetBitPtr(@u1, NumBits-1) then
     Index := 1 else
     Index := 0;
-  if GetBit(u2, NumBits-1) then
+  if GetBitPtr(@u2, NumBits-1) then
     inc(Index, 2);
   Point := Points[Index];
   rx := Point.x;
@@ -3000,10 +3000,10 @@ begin
   z := _1;
   for i := NumBits - 2 downto 0 do begin
     EccPointDoubleJacobian(rx, ry, z);
-    if GetBit(u1, i) then
+    if GetBitPtr(@u1, i) then
       Index := 1 else
       Index := 0;
-    if GetBit(u2, i) then
+    if GetBitPtr(@u2, i) then
       inc(Index, 2);
     Point := Points[Index];
     if Point <> nil then begin

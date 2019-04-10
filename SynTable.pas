@@ -900,6 +900,12 @@ function ExtractInlineParameters(const SQL: RawUTF8;
   var Types: TSQLParamTypeDynArray; var Values: TRawUTF8DynArray;
   var maxParam: integer; var Nulls: TSQLFieldBits): RawUTF8;
 
+/// returns a 64-bit value as inlined ':(1234):' text
+function InlineParameter(ID: Int64): shortstring; overload;
+
+/// returns a string value as inlined ':("value"):' text
+function InlineParameter(const value: RawUTF8): RawUTF8; overload;
+
 type
   /// SQL Query comparison operators
   // - used e.g. by CompareOperator() functions in SynTable.pas or vt_BestIndex()
@@ -6488,7 +6494,7 @@ begin
   Safe.Lock;
   try
     for h := 0 to fHashFunctions-1 do begin
-      SetBit(pointer(fStore)^,h1 mod fBits);
+      SetBitPtr(pointer(fStore),h1 mod fBits);
       inc(h1,h2);
     end;
     inc(fInserted);
@@ -6526,7 +6532,7 @@ begin
   Safe.Lock;
   try
     for h := 0 to fHashFunctions-1 do
-      if GetBit(pointer(fStore)^,h1 mod fBits) then
+      if GetBitPtr(pointer(fStore),h1 mod fBits) then
         inc(h1,h2) else
         exit;
   finally
@@ -8173,6 +8179,16 @@ begin
   // return generic SQL statement, with ? place-holders and params in Values[]
   SetLength(result,Gen-pointer(result));
   inc(maxParam);
+end;
+
+function InlineParameter(ID: Int64): shortstring;
+begin
+  FormatShort(':(%):',[ID],result);
+end;
+
+function InlineParameter(const value: RawUTF8): RawUTF8;
+begin
+  QuotedStrJSON(value,result,':(','):');
 end;
 
 function SQLVarLength(const Value: TSQLVar): integer;

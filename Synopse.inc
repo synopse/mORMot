@@ -109,13 +109,6 @@
 //   to access 'VarCopyProc' from unit 'SynCommons'"
 // - shall be set at the package options level, and left untouched by default
 
-{$define WITHLOG}
-// if defined, logging will be supported via the TSQLLog family
-// - should be left defined: TSQLog.Family.Level default setting won't log
-// anything, so there won't be any noticeable performance penalty to have
-// this WITHLOG conditional defined, which is expected by high-level units
-// of the framework, like DDD or UI
-
 {.$define DOPATCHTRTL}
 // if defined, the low-level patches made to RecordCopy() low-level function
 // as defined in SynCommons.pas will be applied (if applicable to your Delphi
@@ -150,14 +143,14 @@
 {.$define WITH_ERMS}
 // you may define this to enable REP MOVSB/STOSB for Fillchar/Move if cfERMS
 // flag is available in Intel's CpuFeatures
-// -> disabled by default, since in practice it is much slower for small blocks
+// -> disabled by default, since in practice it is (much) slower for small blocks
 
 {.$define NOXPOWEREDNAME}
 // define this to avoid sending "X-Powered-By: Synopse mORMot" HTTP header
 
 {.$define SQLVIRTUALLOGS}
 // enable low-level logging of SQlite3 virtual table query planner costs
-// -> to be used only for internal debugging
+// -> to be defined only for internal debugging
 
 {.$define DDDNOSYNDB}
 // SynDB / external SQL DB won't be linked to the executable by dddInfraSettings
@@ -408,6 +401,7 @@
     {$define CPU32DELPHI}
     {$undef CPU64}
     {$define CPUX86} // for compatibility with older versions of Delphi
+    {$define CPUX86NOTPIC} // use "absolute" instead of local register
   {$endif CPUX64}
 
   {$IFDEF CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
@@ -609,6 +603,13 @@
 {$ifdef PUREPASCAL}
   {$define ABSOLUTEORPUREPASCAL}
 {$endif PUREPASCAL}
+
+{$define WITHLOG}
+// if defined, logging will be supported via the TSQLLog family
+// - should be left defined: TSQLog.Family.Level default setting won't log
+// anything, so there won't be any noticeable performance penalty to have
+// this WITHLOG conditional defined, which is expected by high-level part
+// of the framework, like DDD or UI units
 
 {$ifdef FPC}
   {$ifndef FPCSQLITE3STATIC} // see above about this FPC-specific conditional

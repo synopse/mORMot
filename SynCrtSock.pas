@@ -6687,7 +6687,7 @@ begin
         SockSend(['Content-Encoding: ',OutContentEncoding]);
   end;
   SockSend(['Content-Length: ',length(OutContent)]); // needed even 0
-  if (OutContent<>'') and (OutContentType<>'') and (OutContentType<>HTTP_RESP_STATICFILE) then
+  if (OutContentType<>'') and (OutContentType<>HTTP_RESP_STATICFILE) then
     SockSend(['Content-Type: ',OutContentType]);
 end;
 
@@ -10337,6 +10337,10 @@ procedure HTTP_RESPONSE.SetContent(var DataChunk: HTTP_DATA_CHUNK_INMEMORY;
   const Content, ContentType: SockString);
 begin
   fillchar(DataChunk,sizeof(DataChunk),0);
+  if length(ContentType) > 0 then begin
+    Headers.KnownHeaders[reqContentType].RawValueLength := length(ContentType);
+    Headers.KnownHeaders[reqContentType].pRawValue := pointer(ContentType);
+  end;
   if Content='' then
     exit;
   DataChunk.DataChunkType := hctFromMemory;
@@ -10344,8 +10348,6 @@ begin
   DataChunk.BufferLength := length(Content);
   EntityChunkCount := 1;
   pEntityChunks := @DataChunk;
-  Headers.KnownHeaders[reqContentType].RawValueLength := length(ContentType);
-  Headers.KnownHeaders[reqContentType].pRawValue := pointer(ContentType);
 end;
 
 function HTTP_RESPONSE.AddCustomHeader(P: PAnsiChar; var UnknownHeaders: HTTP_UNKNOWN_HEADERs;
