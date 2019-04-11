@@ -2029,8 +2029,8 @@ function CompareCardinal(const A, B: cardinal): integer;
 // - note that QWord(A)>QWord(B) is wrong on older versions of Delphi, so you
 // should better use this function or SortDynArrayQWord() to properly compare
 // two QWord values over CPUX86
-function CompareQWord(const A, B: QWord): integer;
-  {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
+function CompareQWord(A, B: QWord): integer;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the sum of values, using a running compensation for lost low-order bits
 // - a naive "Sum := Sum + Data" will be restricted to 53 bits of resolution,
@@ -25393,7 +25393,7 @@ begin
     result := 0;
 end;
 
-function CompareQWord(const A, B: QWord): integer;
+function CompareQWord(A, B: QWord): integer;
 begin
   if A<B then
     result := -1 else
@@ -26533,23 +26533,20 @@ asm // Delphi x86 compiler is not efficient at compiling below code
 @p:     mov     eax, 1
 end;
 
-function SortDynArrayQWord(const A,B): integer;
-asm // Delphi x86 compiler is not efficient, and oldest even incorrect
-        mov     ecx, [eax]
-        mov     eax, [eax + 4]
-        cmp     eax, [edx + 4]
-        jnz     @nz
-        cmp     ecx, [edx]
-        jz      @0
-@nz:    jnb     @p
-        or      eax, -1
-        ret
-@0:     xor     eax, eax
-        ret
-@p:     mov     eax, 1
+function CompareQWord(A, B: QWord): integer;
+begin
+  {$ifdef FPC_OR_UNICODE} // recent compilers are able to generate correct code
+  if A<B then
+    result := -1 else
+  if A>B then
+    result := 1 else
+    result := 0;
+  {$else}
+  result := SortDynArrayQWord(A,B); // use correct x86 asm version below
+  {$endif}
 end;
 
-function CompareQWord(const A, B: QWord): integer;
+function SortDynArrayQWord(const A,B): integer;
 asm // Delphi x86 compiler is not efficient, and oldest even incorrect
         mov     ecx, [eax]
         mov     eax, [eax + 4]
