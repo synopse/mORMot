@@ -4310,6 +4310,12 @@ procedure DeleteInteger(var Values: TIntegerDynArray; var ValuesCount: Integer; 
 procedure ExcludeInteger(var Values, Excluded: TIntegerDynArray;
   ExcludedSortSize: Integer=32);
 
+/// ensure some 32-bit integer from Values[] will only contain Included[]
+// - Included is declared as var, since it will be sorted in-place during process
+// if it contains more than IncludedSortSize items (i.e. if the sort is worth it)
+procedure IncludeInteger(var Values, Included: TIntegerDynArray;
+  IncludedSortSize: Integer=32);
+
 /// sort and remove any 32-bit duplicated integer from Values[]
 procedure DeduplicateInteger(var Values: TIntegerDynArray); overload;
 
@@ -4337,6 +4343,12 @@ procedure DeleteInt64(var Values: TInt64DynArray; var ValuesCount: Integer; Inde
 // if it contains more than ExcludedSortSize items (i.e. if the sort is worth it)
 procedure ExcludeInt64(var Values, Excluded: TInt64DynArray;
   ExcludedSortSize: Integer=32);
+
+/// ensure some 64-bit integer from Values[] will only contain Included[]
+// - Included is declared as var, since it will be sorted in-place during process
+// if it contains more than IncludedSortSize items (i.e. if the sort is worth it)
+procedure IncludeInt64(var Values, Included: TInt64DynArray;
+  IncludedSortSize: Integer=32);
 
 /// sort and remove any 64-bit duplicated integer from Values[]
 procedure DeduplicateInt64(var Values: TInt64DynArray); overload;
@@ -31362,7 +31374,7 @@ begin
 end;
 
 procedure ExcludeInteger(var Values, Excluded: TIntegerDynArray; ExcludedSortSize: integer);
-var i,v,x,n: integer;
+var i,v,x,n: PtrInt;
 begin
   if (Values=nil) or (Excluded=nil) then
     exit; // nothing to exclude
@@ -31389,8 +31401,39 @@ begin
     SetLength(Values,n);
 end;
 
+procedure IncludeInteger(var Values, Included: TIntegerDynArray;
+  IncludedSortSize: Integer);
+var i,v,x,n: PtrInt;
+begin
+  if (Values=nil) or (Included=nil) then begin
+    Values := nil;
+    exit;
+  end;
+  v := length(Values);
+  n := 0;
+  x := Length(Included);
+  if (x>IncludedSortSize) or (v>IncludedSortSize) then begin // sort if worth it
+    dec(x);
+    QuickSortInteger(pointer(Included),0,x);
+    for i := 0 to v-1 do
+      if FastFindIntegerSorted(pointer(Included),x,Values[i])>=0 then begin
+        if n<>i then
+          Values[n] := Values[i];
+        inc(n);
+      end;
+  end else
+    for i := 0 to v-1 do
+      if IntegerScanExists(pointer(Included),x,Values[i]) then begin
+        if n<>i then
+          Values[n] := Values[i];
+        inc(n);
+      end;
+  if n<>v then
+    SetLength(Values,n);
+end;
+
 procedure ExcludeInt64(var Values, Excluded: TInt64DynArray; ExcludedSortSize: Integer);
-var i,v,x,n: integer;
+var i,v,x,n: PtrInt;
 begin
   if (Values=nil) or (Excluded=nil) then
     exit; // nothing to exclude
@@ -31409,6 +31452,37 @@ begin
   end else
     for i := 0 to v-1 do
       if not Int64ScanExists(pointer(Excluded),x,Values[i]) then begin
+        if n<>i then
+          Values[n] := Values[i];
+        inc(n);
+      end;
+  if n<>v then
+    SetLength(Values,n);
+end;
+
+procedure IncludeInt64(var Values, Included: TInt64DynArray;
+  IncludedSortSize: integer);
+var i,v,x,n: PtrInt;
+begin
+  if (Values=nil) or (Included=nil) then begin
+    Values := nil;
+    exit;
+  end;
+  v := length(Values);
+  n := 0;
+  x := Length(Included);
+  if (x>IncludedSortSize) or (v>IncludedSortSize) then begin // sort if worth it
+    dec(x);
+    QuickSortInt64(pointer(Included),0,x);
+    for i := 0 to v-1 do
+      if FastFindInt64Sorted(pointer(Included),x,Values[i])>=0 then begin
+        if n<>i then
+          Values[n] := Values[i];
+        inc(n);
+      end;
+  end else
+    for i := 0 to v-1 do
+      if Int64ScanExists(pointer(Included),x,Values[i]) then begin
         if n<>i then
           Values[n] := Values[i];
         inc(n);
