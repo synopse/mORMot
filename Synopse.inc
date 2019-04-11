@@ -140,6 +140,16 @@
 // which will use BT[mem] opcodes, which are slow on Intel, but fast on AMD
 // (with the Delphi x86 compiler, may not be the case for LLVM or FPC)
 
+{.$define NOSTRSSE42}
+// sse4.2 string instructions may read up to 16 bytes after the actual end buffer
+// -> define this if you experiment weird random GPF in your project
+// (it will fallback to slightly slower, but safer asm version, and still use
+// crc32c fast instructions which are safe to use)
+
+{.$define DISABLE_SSE42}
+// if defined, no SSE4.2 nor AES-NI instruction will be used, i.e. includes
+// NOSTRSSE42 and also disable crc32c opcodes - is set for FPC DARWIN target
+
 {.$define WITH_ERMS}
 // you may define this to enable REP MOVSB/STOSB for Fillchar/Move if cfERMS
 // flag is available in Intel's CpuFeatures
@@ -274,7 +284,7 @@
       {$ifdef CPUX86}
         {$define FPC_PIC} // may have not be defined by the compiler options
       {$endif}
-      {$define DISABLE_SSE42} // fails otherwise
+      {$define DISABLE_SSE42}  // fails otherwise
       {$define ABSOLUTEPASCAL} // NO asm nor redirection (until stabilized)
     {$else}
       {$define BSDNOTDARWIN}
@@ -592,6 +602,9 @@
         {$define RESETFPUEXCEPTION}
       {$endif}
     {$endif}
+  {$endif}
+  {$ifdef DISABLE_SSE42}
+    {$define NOSTRSSE42}
   {$endif}
 {$else}
   {$undef HASAESNI} // AES-NI is an Intel-specific feature

@@ -2149,8 +2149,8 @@ function StrCompFast(Str1, Str2: pointer): PtrInt;
 /// fastest available version of StrComp(), to be used with PUTF8Char/PAnsiChar
 // - will use SSE4.2 instructions on supported CPUs - and potentiall read up
 // to 15 bytes beyond the string: use StrCompFast() for a safe memory read;
-// if you want to disable StrCompSSE42 for your whole project, add in the
-// initialization section of one of your units:
+// if you want to disable StrCompSSE42 for your whole project, define NOSTRSE42
+// conditional, or add in the initialization section of one of your units:
 // !  StrComp := @StrCompFast;
 var StrComp: function (Str1, Str2: pointer): PtrInt = StrCompFast;
 
@@ -2177,31 +2177,36 @@ var strspn: function (s,accept: pointer): integer = strspnpas;
 /// fastest available version of strcspn(), to be used with PUTF8Char/PAnsiChar
 // - returns size of initial segment of s which doesn't appears in reject chars, e.g.
 // ! strcspn('1234,6789',',')=4
-// - will use SSE4.2 instructions on supported CPUs
+// - will use SSE4.2 instructions on supported CPUs, unless NOSTRSSE42 is defined
 // - please note that this function may read some bytes beyond the s string, so
 // should be avoided e.g. over memory mapped files - use safe strcspnpas instead
 var strcspn: function (s,reject: pointer): integer = strcspnpas;
 
+{$ifndef NOSTRSSE42}
 {$ifndef ABSOLUTEPASCAL}
 {$ifdef CPUINTEL}
 /// SSE 4.2 version of StrComp(), to be used with PUTF8Char/PAnsiChar
 // - please note that this optimized version may read up to 15 bytes
 // beyond the string; this is rarely a problem but it may in principle
 // generate a protection violation (e.g. when used over memory mapped files) -
-// you can use the slightly slower but safe StrCompFast() function instead
+// you can use the slightly slower but safe StrCompFast() function instead;
+// if you want to disable StrCompSSE42 for your whole project, define NOSTRSSE42
 function StrCompSSE42(Str1, Str2: pointer): PtrInt;
 
 /// SSE 4.2 version of strspn(), to be used with PUTF8Char/PAnsiChar
 // - please note that this optimized version may read up to 15 bytes
-// beyond the string, so should be avoided e.g. over memory mapped files
+// beyond the string, so should be avoided e.g. over memory mapped files;
+// if you want to disable strspnsse42 for your whole project, define NOSTRSSE42
 function strspnsse42(s,accept: pointer): integer;
 
 /// SSE 4.2 version of strcspn(), to be used with PUTF8Char/PAnsiChar
 // - please note that this optimized version may read up to 15 bytes
-// beyond the string, so should be avoided e.g. over memory mapped files
+// beyond the string, so should be avoided e.g. over memory mapped files;
+// if you want to disable strcspnsse42 for your whole project, define NOSTRSSE42
 function strcspnsse42(s,reject: pointer): integer;
-{$endif}
+{$endif CPUINTEL}
 {$endif ABSOLUTEPASCAL}
+{$endif NOSTRSSE42}
 
 /// use our fast version of StrIComp(), to be used with PUTF8Char/PAnsiChar
 function StrIComp(Str1, Str2: pointer): PtrInt;
@@ -2219,9 +2224,7 @@ function StrLenPas(S: pointer): PtrInt;
 // 15 bytes before or beyond the string; this is rarely a problem but it can in
 // principle generate a protection violation (e.g. when used over memory mapped files):
 // you can use the slightly slower StrLenPas() function instead with such input;
-// if you want to disable StrLenSSE42 for your whole project, add in the
-// initialization section of one of your units:
-// !  StrLen := @StrLenPas;
+// if you want to disable StrLenSSE42 for your whole project, define NOSTRSSE42
 var StrLen: function(S: pointer): PtrInt = StrLenPas;
 
 /// our fast version of FillChar()
@@ -2721,19 +2724,20 @@ var UpperCopy255Buf: function(dest: PAnsiChar; source: PUTF8Char; sourceLen: Ptr
 // array[byte] of AnsiChar on the caller stack)
 function UpperCopy255BufPas(dest: PAnsiChar; source: PUTF8Char; sourceLen: PtrInt): PAnsiChar;
 
+{$ifndef NOSTRSSE42}
 {$ifndef PUREPASCAL}
 {$ifndef DELPHI5OROLDER}
-
 /// copy source^ into a 256 chars dest^ buffer with 7 bits upper case conversion
 // - used internally for short keys match or case-insensitive hash
 // - this version will use SSE4.2 instructions on supported CPUs - and potentiall
-// read up to 15 bytes beyond the string
+// read up to 15 bytes beyond the string: if you want to disable this function
+// for your whole project, define NOSTRSSE42 conditional
 // - you should not have to call this function, but rely on UpperCopy255Buf()
 // - returns final dest pointer
 // - will copy up to 255 AnsiChar (expect the dest buffer to be defined e.g. as
 // array[byte] of AnsiChar on the caller stack)
 function UpperCopy255BufSSE42(dest: PAnsiChar; source: PUTF8Char; sourceLen: PtrInt): PAnsiChar;
-
+{$endif}
 {$endif}
 {$endif}
 
@@ -25954,6 +25958,7 @@ asm // no branch taken in case of not equal first char
 @zero:  xor     eax, eax
 end;
 
+{$ifndef NOSTRSSE42}
 const
   EQUAL_EACH = 8;   // see https://msdn.microsoft.com/en-us/library/bb531463
   NEGATIVE_POLARITY = 16;
@@ -26049,6 +26054,7 @@ asm // warning: may read up to 15 bytes beyond the string itself
       movzx     edx, byte ptr [edx+ecx]
       sub       eax, edx
 end;
+{$endif NOSTRSSE42}
 
 procedure YearToPChar(Y: PtrUInt; P: PUTF8Char);
 asm // eax=Y, edx=P
@@ -26302,6 +26308,7 @@ asm     // adapted from fast Aleksandr Sharahov version
         not     eax
 end;
 
+{$ifndef NOSTRSSE42}
 {$ifndef DELPHI5OROLDER}
 const
   CMP_RANGES = $44; // see https://msdn.microsoft.com/en-us/library/bb531425
@@ -26352,6 +26359,7 @@ asm // eax=dest edx=source ecx=sourceLen
 @bits: db '                '         // $20 = bit to change when changing case
 end;
 {$endif DELPHI5OROLDER}
+{$endif NOSTRSSE42}
 
 function fnv32(crc: cardinal; buf: PAnsiChar; len: PtrInt): cardinal;
 asm // eax=crc, edx=buf, ecx=len
@@ -26870,6 +26878,7 @@ end;
 {$ifndef ABSOLUTEPASCAL}
 {$ifdef CPUINTEL}
 {$ifdef CPUX64}
+{$ifndef NOSTRSSE42}
 function strcspnsse42(s,reject: pointer): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else}
 asm // rcx=s, rdx=reject (Linux: rdi,rsi)
@@ -26972,8 +26981,10 @@ asm // rcx=s, rdx=accept (Linux: rdi,rsi)
         add     rcx, 16
         jmp     @1
 end;
+{$endif NOSTRSSE42}
 {$endif CPUX64}
 {$ifdef CPUX86}
+{$ifndef NOSTRSSE42}
 function strcspnsse42(s,reject: pointer): integer;
 asm // eax=s, edx=reject
         push    edi
@@ -27080,6 +27091,7 @@ asm // eax=s, edx=accept
         add     ecx, 16
         jmp     @1
 end;
+{$endif NOSTRSSE42}
 {$ifndef DELPHI5OROLDER}
 function StrLenSSE2(S: pointer): PtrInt;
 asm // from GPL strlen32.asm by Agner Fog - www.agner.org/optimize
@@ -35418,6 +35430,7 @@ asm // ecx=param, rdx=Registers (Linux: edi,rsi)
         mov     rbx, r10
 end;
 
+{$ifndef NOSTRSSE42}
 const
   CMP_RANGES = $44; // see https://msdn.microsoft.com/en-us/library/bb531425
   _UpperCopy255BufSSE42: array[0..31] of AnsiChar =
@@ -35477,6 +35490,7 @@ asm // rcx=dest, rdx=source, r8=len (Linux: rdi,rsi,rdx)
        dec     rdx
        jnz     @s
 end;
+{$endif NOSTRSSE42}
 
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$ifdef FPC}nostackframe; assembler; asm {$else}
@@ -35582,6 +35596,7 @@ asm // rcx=S (Linux: rdi)
 @null:
 end;
 
+{$ifndef NOSTRSSE42}
 const
   EQUAL_EACH = 8;   // see https://msdn.microsoft.com/en-us/library/bb531463
   NEGATIVE_POLARITY = 16;
@@ -35660,7 +35675,7 @@ asm // rcx=Str1, rdx=Str2 (Linux: rdi,rsi)
       sub       rax, rdx
 end;
 {$endif HASAESNI}
-
+{$endif NOSTRSSE42}
 {$endif CPU64}
 {$endif CPUINTEL}
 
@@ -42370,6 +42385,7 @@ asm // Dest=eax Count=edx Value=cl
 @done:
 end;
 
+{$ifndef NOSTRSSE42}
 function StrLenSSE42(S: pointer): PtrInt;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // warning: may read up to 15 bytes beyond the string itself
@@ -42398,6 +42414,7 @@ asm // warning: may read up to 15 bytes beyond the string itself
         ret
 @null:  db      $f3 // rep ret
 end;
+{$endif NOSTRSSE42}
 
 {$endif DELPHI5OROLDER}
 
@@ -42414,10 +42431,12 @@ begin
   {$else DELPHI5OROLDER}
   {$ifdef CPU64}
   {$ifdef HASAESNI}
+  {$ifndef NOSTRSSE42}
   if cfSSE42 in CpuFeatures then begin
     StrLen := @StrLenSSE42;
     StrComp := @StrCompSSE42;
   end else
+  {$endif NOSTRSSE42}
   {$endif HASAESNI}
     StrLen := @StrLenSSE2;
   {$ifdef WITH_ERMS}{$ifdef MSWINDOWS} // disabled (slower for small blocks)
@@ -42431,9 +42450,11 @@ begin
   {$else CPU64}
   {$ifdef CPUINTEL}
   if cfSSE2 in CpuFeatures then begin
+    {$ifndef NOSTRSSE42}
     if cfSSE42 in CpuFeatures then
       StrLen := @StrLenSSE42 else
       StrLen := @StrLenSSE2;
+    {$endif NOSTRSSE42}
     FillcharFast := @FillCharSSE2;
   end else begin
     StrLen := @StrLenX86;
@@ -66663,6 +66684,7 @@ begin
     crc32c := @crc32csse42;
     crc32cby4 := @crc32cby4sse42;
     crcblock := @crcblockSSE42;
+    {$ifndef NOSTRSSE42}
     strspn := @strspnSSE42;
     strcspn := @strcspnSSE42;
     {$ifdef CPU64}
@@ -66687,6 +66709,7 @@ begin
     {$endif}
     DYNARRAY_SORTFIRSTFIELDHASHONLY[true] := @SortDynArrayAnsiStringSSE42;
     {$endif PUREPASCAL}
+    {$endif NOSTRSSE42}
     DefaultHasher := crc32c;
   end;
   {$endif CPUINTEL}
