@@ -2001,7 +2001,7 @@ type
     /// number of fields decoded in FieldNames[] and FieldValues[]
     FieldCount: integer;
     /// set to TRUE if parameters are to be :(...): inlined
-    InlinedParams: boolean;
+    InlinedParams: TJSONObjectDecoderParams;
     /// internal pointer over field names to be used after Decode() call
     // - either FieldNames, either Fields[] array as defined in Decode()
     DecodedFieldNames: PRawUTF8Array;
@@ -28281,7 +28281,7 @@ procedure TJSONObjectDecoder.Decode(var P: PUTF8Char; const Fields: TRawUTF8DynA
   Params: TJSONObjectDecoderParams; const RowID: TID; ReplaceRowIDWithID: boolean);
 var EndOfObject: AnsiChar;
 
-  procedure GetSQLValue(ndx: integer);
+  procedure GetSQLValue(ndx: PtrInt);
   var wasString: boolean;
       res: PUTF8Char;
       resLen, c: integer;
@@ -28384,7 +28384,7 @@ begin
   DecodedRowID := 0;
   {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(
     FieldTypeApproximation,SizeOf(FieldTypeApproximation),ord(ftaNumber{TID}));
-  InlinedParams := Params=pInlined;
+  InlinedParams := Params;
   if pointer(Fields)=nil then begin
     // get "COL1"="VAL1" pairs, stopping at '}' or ']'
     DecodedFieldNames := @FieldNames;
@@ -28541,10 +28541,10 @@ var F: integer;
     temp: TTextWriterStackBuffer;
   procedure AddValue;
   begin
-    if InlinedParams then
+    if InlinedParams=pInlined then
       W.AddShort(':(');
     W.AddString(FieldValues[F]);
-    if InlinedParams then
+    if InlinedParams=pInlined then
       W.AddShort('):,') else
       W.Add(',');
   end;
@@ -28593,7 +28593,11 @@ begin
     W.Add('{');
     for F := 0 to FieldCount-1 do begin
       W.AddFieldName(DecodedFieldNames^[F]);
-      W.AddQuotedStringAsJSON(FieldValues[F]);
+      if FieldTypeApproximation[F] in [ftaBlob,ftaDate,ftaString] then
+        if InlinedParams=pNonQuoted then
+          W.AddJSONString(FieldValues[F]) else
+          W.AddQuotedStringAsJSON(FieldValues[F]) else
+        W.AddString(FieldValues[F]);
       W.Add(',');
     end;
     W.CancelLastComma;
