@@ -20967,7 +20967,7 @@ end;
 
 function TSQLRecordDynArrayCompare(const Item1,Item2): integer;
  begin // we assume Item1<>nil and Item2<>nil
-   result := SortDynArrayInt64(TSQLRecord(Item1).fID,TSQLRecord(Item2).fID);
+   result := CompareInt64(TSQLRecord(Item1).fID,TSQLRecord(Item2).fID);
  end;
 
 {$ifdef HASDIRECTTYPEINFO}
@@ -22428,8 +22428,8 @@ begin
       V2 := fPropinfo.GetInt64Prop(Item2);
     end;
     if fIsQWord then
-      result := SortDynArrayQWord(V1,V2) else
-      result := SortDynArrayInt64(V1,V2);
+      result := CompareQWord(V1,V2) else
+      result := CompareInt64(V1,V2);
   end;
 end;
 
@@ -46018,7 +46018,7 @@ end;
 
 function TSQLRecordCompareList(Item1,Item2: Pointer): integer;
 begin // we assume Item1<>nil and Item2<>nil in fValue[]
-  result := SortDynArrayInt64(TSQLRecord(Item1).fID,TSQLRecord(Item2).fID);
+  result := CompareInt64(TSQLRecord(Item1).fID,TSQLRecord(Item2).fID);
 end;
 
 function TSQLRestStorageInMemory.AddOne(Rec: TSQLRecord; ForceID: boolean;

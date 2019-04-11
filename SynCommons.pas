@@ -2013,13 +2013,24 @@ function SameValueFloat(const A, B: TSynExtended; DoublePrec: TSynExtended = 1E-
 function CompareFloat(const A, B: double): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// a comparison function for sorting 64-bit floating point values
+/// a comparison function for sorting 32-bit signed integer values
+function CompareInteger(const A, B: integer): integer;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// a comparison function for sorting 64-bit signed integer values
 function CompareInt64(const A, B: Int64): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// a comparison function for sorting 64-bit floating point values
+/// a comparison function for sorting 32-bit unsigned integer values
 function CompareCardinal(const A, B: cardinal): integer;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// a comparison function for sorting 64-bit unsigned integer values
+// - note that QWord(A)>QWord(B) is wrong on older versions of Delphi, so you
+// should better use this function or SortDynArrayQWord() to properly compare
+// two QWord values over CPUX86
+function CompareQWord(const A, B: QWord): integer;
+  {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// compute the sum of values, using a running compensation for lost low-order bits
 // - a naive "Sum := Sum + Data" will be restricted to 53 bits of resolution,
@@ -2145,6 +2156,7 @@ function AppendUInt32ToBuffer(Buffer: PUTF8Char; Value: cardinal): PUTF8Char;
 // - pure pascal StrComp() won't access the memory beyond the string, but this
 // function is defined for compatibility with SSE 4.2 expectations
 function StrCompFast(Str1, Str2: pointer): PtrInt;
+  {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// fastest available version of StrComp(), to be used with PUTF8Char/PAnsiChar
 // - will use SSE4.2 instructions on supported CPUs - and potentiall read up
@@ -6875,6 +6887,7 @@ function DynArrayElementTypeName(TypeInfo: pointer; ElemTypeInfo: PPointer=nil;
 // - used internally to guess the associated item type name
 function DynArrayItemTypeLen(const aDynArrayTypeName: RawUTF8): integer;
 
+
 /// compare two "array of boolean" elements
 function SortDynArrayBoolean(const A,B): integer;
 
@@ -6892,30 +6905,27 @@ function SortDynArrayWord(const A,B): integer;
 
 /// compare two "array of integer" elements
 function SortDynArrayInteger(const A,B): integer;
-  {$ifndef CPUX86}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// compare two "array of cardinal" elements
 function SortDynArrayCardinal(const A,B): integer;
 
 /// compare two "array of Int64" or "array of Currency" elements
 function SortDynArrayInt64(const A,B): integer;
-  {$ifndef CPUX86}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// compare two "array of QWord" elements
-// - note that QWordA>QWordB is wrong on older versions of Delphi, so you should
-// better use this function to properly compare two QWord values over CPUX86
+// - note that QWord(A)>QWord(B) is wrong on older versions of Delphi, so you
+// should better use this function or CompareQWord() to properly compare two
+// QWord values over CPUX86
 function SortDynArrayQWord(const A,B): integer;
-  {$ifndef CPUX86}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// compare two "array of THash128" elements
 function SortDynArray128(const A,B): integer;
-  {$ifdef FPC_OR_UNICODE}inline;{$endif} // C2096 Delphi 2007 internal error
 
 /// compare two "array of THash256" elements
-function SortDynArray256(const A,B): integer; {$ifdef FPC_OR_UNICODE}inline;{$endif}
+function SortDynArray256(const A,B): integer;
 
 /// compare two "array of THash512" elements
-function SortDynArray512(const A,B): integer; {$ifdef FPC_OR_UNICODE}inline;{$endif}
+function SortDynArray512(const A,B): integer;
 
 /// compare two "array of TObject/pointer" elements
 function SortDynArrayPointer(const A,B): integer;
@@ -6959,16 +6969,15 @@ function SortDynArrayStringI(const A,B): integer;
 /// compare two "array of TFileName" elements, as file names
 // - i.e. with no case sensitivity, and grouped by file extension
 // - the expected string type is the generic RTL string, i.e. TFileName
+// - calls internally GetFileNameWithoutExt() and AnsiCompareFileName()
 function SortDynArrayFileName(const A,B): integer;
 
 {$ifndef NOVARIANTS}
 /// compare two "array of variant" elements, with case sensitivity
 function SortDynArrayVariant(const A,B): integer;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// compare two "array of variant" elements, with no case sensitivity
 function SortDynArrayVariantI(const A,B): integer;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// compare two "array of variant" elements, with or without case sensitivity
 function SortDynArrayVariantComp(const A,B: TVarData; caseInsensitive: boolean): integer;
@@ -25160,17 +25169,20 @@ begin
 end;
 
 function StrCompFast(Str1, Str2: pointer): PtrInt;
+var c: byte;
 begin
   if Str1<>Str2 then
   if Str1<>nil then
   if Str2<>nil then begin
-    if PByte(Str1)^=PByte(Str2)^ then
+    c := PByte(Str1)^;
+    if c=PByte(Str2)^ then
       repeat
-        if PByte(Str1)^=0 then break;
+        if c=0 then break;
         inc(PByte(Str1));
         inc(PByte(Str2));
-      until PByte(Str1)^<>PByte(Str2)^;
-    result := PByte(Str1)^-PByte(Str2)^;
+        c := PByte(Str1)^;
+      until c<>PByte(Str2)^;
+    result := c-PByte(Str2)^;
     exit;
   end else
   result := 1 else  // Str2=''
@@ -25377,6 +25389,15 @@ begin
   if QWord(A)<QWord(B) then
     result := -1 else
   if QWord(A)>QWord(B) then
+    result := 1 else
+    result := 0;
+end;
+
+function CompareQWord(const A, B: QWord): integer;
+begin
+  if A<B then
+    result := -1 else
+  if A>B then
     result := 1 else
     result := 0;
 end;
@@ -26513,6 +26534,22 @@ asm // Delphi x86 compiler is not efficient at compiling below code
 end;
 
 function SortDynArrayQWord(const A,B): integer;
+asm // Delphi x86 compiler is not efficient, and oldest even incorrect
+        mov     ecx, [eax]
+        mov     eax, [eax + 4]
+        cmp     eax, [edx + 4]
+        jnz     @nz
+        cmp     ecx, [edx]
+        jz      @0
+@nz:    jnb     @p
+        or      eax, -1
+        ret
+@0:     xor     eax, eax
+        ret
+@p:     mov     eax, 1
+end;
+
+function CompareQWord(const A, B: QWord): integer;
 asm // Delphi x86 compiler is not efficient, and oldest even incorrect
         mov     ecx, [eax]
         mov     eax, [eax + 4]
@@ -29760,6 +29797,15 @@ begin
 end;
 
 function CompareFloat(const A, B: double): integer;
+begin
+  if A<B then
+    result := -1 else
+  if A>B then
+    result := 1 else
+    result := 0;
+end;
+
+function CompareInteger(const A, B: integer): integer;
 begin
   if A<B then
     result := -1 else
@@ -35408,8 +35454,7 @@ type
 {$ifdef CPU64}
 procedure GetCPUID(Param: Cardinal; var Registers: TRegisters);
 {$ifdef FPC}nostackframe; assembler; asm {$else}
-asm // ecx=param, rdx=Registers (Linux: edi,rsi)
-        .noframe
+asm .noframe // ecx=param, rdx=Registers (Linux: edi,rsi)
 {$endif FPC}
         {$ifdef win64}
         mov     eax, ecx
@@ -35438,8 +35483,7 @@ const
 
 function UpperCopy255BufSSE42(dest: PAnsiChar; source: PUTF8Char; sourceLen: PtrInt): PAnsiChar;
 {$ifdef FPC}nostackframe; assembler; asm {$else}
-asm // rcx=dest, rdx=source, r8=len (Linux: rdi,rsi,rdx)
-        .noframe
+asm .noframe // rcx=dest, rdx=source, r8=len (Linux: rdi,rsi,rdx)
 {$endif FPC}
        {$ifdef win64}
        mov     rax, rcx
@@ -35494,8 +35538,7 @@ end;
 
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$ifdef FPC}nostackframe; assembler; asm {$else}
-asm // ecx=crc, rdx=buf, r8=len (Linux: edi,rsi,rdx)
-        .noframe
+asm .noframe // ecx=crc, rdx=buf, r8=len (Linux: edi,rsi,rdx)
 {$endif FPC}
         {$ifdef win64}
         mov     eax, ecx
@@ -35550,8 +35593,7 @@ end;
 
 function StrLenSSE2(S: pointer): PtrInt;
 {$ifdef FPC}nostackframe; assembler; asm {$else}
-asm // rcx=S (Linux: rdi)
-        .noframe
+asm .noframe // rcx=S (Linux: rdi)
 {$endif FPC}
         // from GPL strlen64.asm by Agner Fog - www.agner.org/optimize
         {$ifdef win64}
@@ -35640,7 +35682,7 @@ asm // rcx=Str1, rdx=Str2 (Linux: rdi,rsi)
       {$else}
       mov       rax, rdi
       mov       rdx, rsi
-      test      rdi, rsi
+      test      rdi, rsi  // is one of Str1/Str2 nil ?
       {$endif}
       jz        @n
 @ok:  sub       rax, rdx
