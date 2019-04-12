@@ -39,6 +39,7 @@ unit mORMot;
     Goran Despalatovic (gigo)
     Jordi Tudela
     Jean-Baptiste Roussia (jbroussia)
+    Lagodny
     Maciej Izak (hnb)
     Martin Suer
     Michalis Kamburelis
@@ -25483,7 +25484,7 @@ procedure TSQLTable.IDArrayToBits(var Bits; var IDs: TIDDynArray);
 var i,FID: integer;
     U: PPUTF8Char;
     ID: Pointer;
-    IDn: integer;
+    IDmax: integer;
 //    AllID: : TIDDynArray;
 begin
   if length(IDs)=fRowCount then begin // all selected -> all bits set to 1
@@ -25495,8 +25496,8 @@ begin
     exit; // no selected -> all bits left to 0
   // we sort IDs to use FastFindIntegerSorted() and its O(log(n)) binary search
   ID := @IDs[0];
-  IDn := high(IDs);
-  QuickSortInt64(ID,0,IDn);
+  IDmax := high(IDs);
+  QuickSortInt64(ID,0,IDmax);
   if not Assigned(fIDColumn) then begin
     FID := fFieldIndexID; // get ID column field index
     if FID<0 then
@@ -25505,12 +25506,12 @@ begin
     FID := 0; // make compiler happy
   if Assigned(fIDColumn) then begin
     for i := 1 to fRowCount do
-      if FastFindInt64Sorted(ID,IDn,GetInt64(fIDColumn[i]))>=0 then
+      if FastFindInt64Sorted(ID,IDmax,GetInt64(fIDColumn[i]))>=0 then
         SetBitPtr(@Bits,i-1);
   end else begin
     U := @fResults[FID+FieldCount];  // U^ = ID column UTF-8 content
     for i := 0 to fRowCount-1 do begin
-      if FastFindInt64Sorted(ID,IDn,GetInt64(U^))>=0 then
+      if FastFindInt64Sorted(ID,IDmax,GetInt64(U^))>=0 then
         SetBitPtr(@Bits,i);
       inc(U,FieldCount);
     end;
@@ -36095,15 +36096,17 @@ begin
     SetLength(Lens,T.fRowCount);
     SepLen := length(Separator);
     Len := 0;
-    for i := 0 to T.fRowCount-1 do begin // ignore fResults[0] i.e. field name
-      Lens[i] := StrLen(T.fResults[i]);
-      inc(Len,Lens[i]+SepLen);
+    for i := 1 to T.fRowCount do begin
+      L := StrLen(T.fResults[i]); // ignore fResults[0] i.e. field name
+      inc(Len,L+SepLen);
+      Lens[i-1] := L;
     end;
     dec(Len,SepLen);
     SetLength(result,Len);
     // add row values as CSV
     P := pointer(result);
-    for i := 1 to T.fRowCount do begin
+    i := 1;
+    repeat
       L := Lens[i-1];
       if L<>0 then begin
         {$ifdef FPC}Move{$else}MoveFast{$endif}(T.fResults[i]^,P^,L);
@@ -36113,7 +36116,7 @@ begin
         break;
       {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(Separator)^,P^,SepLen);
       inc(P,SepLen);
-    end;
+    until false;
     //assert(P-pointer(result)=Len);
   finally
     T.Free;

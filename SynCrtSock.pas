@@ -253,6 +253,7 @@ uses
   SynFPCSock,
   SynFPCLinux,
   BaseUnix, // for fpgetrlimit/fpsetrlimit
+  Linux,
   {$else}
   {$ifndef DELPHI5OROLDER}
   Types,
@@ -4902,9 +4903,9 @@ begin // warning: GetSystemTimeAsFileTime() is fast, but not monotonic!
   GetTickXP := t64; // (almost) atomic write
 end; // warning: FPC's GetTickCount64 doesn't handle 49 days wrap :(
 {$else}
-function GetTick64: Int64; {$ifdef HASINLINE}inline;{$endif}
+function GetTick64: Int64;
 begin
-  result := GetTickCount64; // will use SynFPCLinux/SynKylix.GetTickCount64
+  result := {$ifdef FPC}SynFPCLinux.{$endif}GetTickCount64;
 end;
 {$endif MSWINDOWS}
 
