@@ -36116,6 +36116,7 @@ begin
         break;
       {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(Separator)^,P^,SepLen);
       inc(P,SepLen);
+      inc(i);
     until false;
     //assert(P-pointer(result)=Len);
   finally
