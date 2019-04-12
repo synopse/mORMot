@@ -173,17 +173,17 @@ type
   PtrUInt = NativeUInt;
   {$else}
   /// a CPU-dependent signed integer type cast of a pointer / register
-  // - used for 64 bits compatibility, native under Free Pascal Compiler
+  // - used for 64-bit compatibility, native under Free Pascal Compiler
   PtrInt = integer;
   /// a CPU-dependent unsigned integer type cast of a pointer / register
-  // - used for 64 bits compatibility, native under Free Pascal Compiler
+  // - used for 64-bit compatibility, native under Free Pascal Compiler
   PtrUInt = cardinal;
   {$endif}
   /// a CPU-dependent unsigned integer type cast of a pointer of pointer
-  // - used for 64 bits compatibility, native under Free Pascal Compiler
+  // - used for 64-bit compatibility, native under Free Pascal Compiler
   PPtrUInt = ^PtrUInt;
   /// a CPU-dependent signed integer type cast of a pointer of pointer
-  // - used for 64 bits compatibility, native under Free Pascal Compiler
+  // - used for 64-bit compatibility, native under Free Pascal Compiler
   PPtrInt = ^PtrInt;
 
   /// unsigned Int64 doesn't exist under older Delphi, but is defined in FPC
@@ -1465,19 +1465,19 @@ function VariantHash(const value: variant; CaseInsensitive: boolean;
 
 { note: those VariantToInteger*() functions are expected to be there }
 
-/// convert any numerical Variant into a 32 bit integer
+/// convert any numerical Variant into a 32-bit integer
 // - it will expect true numerical Variant and won't convert any string nor
 // floating-pointer Variant, which will return FALSE and won't change the
 // Value variable content
 function VariantToInteger(const V: Variant; var Value: integer): boolean;
 
-/// convert any numerical Variant into a 64 bit integer
+/// convert any numerical Variant into a 64-bit integer
 // - it will expect true numerical Variant and won't convert any string nor
 // floating-pointer Variant, which will return FALSE and won't change the
 // Value variable content
 function VariantToInt64(const V: Variant; var Value: Int64): boolean;
 
-/// convert any numerical Variant into a 64 bit integer
+/// convert any numerical Variant into a 64-bit integer
 // - it will expect true numerical Variant and won't convert any string nor
 // floating-pointer Variant, which will return the supplied DefaultValue
 function VariantToInt64Def(const V: Variant; DefaultValue: Int64): Int64;
@@ -1767,15 +1767,15 @@ type
   // - used in mORMot.pas unit during TSQLTable rows sort and by TSQLQuery
   TUTF8Compare = function(P1,P2: PUTF8Char): PtrInt;
 
-/// convert the endianness of a given unsigned 32 bit integer into BigEndian
+/// convert the endianness of a given unsigned 32-bit integer into BigEndian
 function bswap32(a: cardinal): cardinal;
   {$ifdef FPC}inline;{$endif}
 
-/// convert the endianness of a given unsigned 64 bit integer into BigEndian
+/// convert the endianness of a given unsigned 64-bit integer into BigEndian
 function bswap64(const a: QWord): QWord;
   {$ifdef FPC}inline;{$endif}
 
-/// convert the endianness of an array of unsigned 64 bit integer into BigEndian
+/// convert the endianness of an array of unsigned 64-bit integer into BigEndian
 // - n is required to be > 0
 // - warning: on x86, a should be <> b
 procedure bswap64array(a,b: PQWordArray; n: PtrInt);
@@ -2146,7 +2146,7 @@ procedure AppendBuffersToRawUTF8(var Text: RawUTF8; const Buffers: array of PUTF
 // you may encounter buffer overflows and random memory errors
 function AppendRawUTF8ToBuffer(Buffer: PUTF8Char; const Text: RawUTF8): PUTF8Char;
 
-/// fast add text conversion of a 32 bit signed integer value into a given buffer
+/// fast add text conversion of a 32-bit signed integer value into a given buffer
 // - warning: the Buffer should contain enough space to store the text, otherwise
 // you may encounter buffer overflows and random memory errors
 function AppendUInt32ToBuffer(Buffer: PUTF8Char; Value: cardinal): PUTF8Char;
@@ -3201,19 +3201,27 @@ function GetNextTChar64(var P: PUTF8Char; Sep: AnsiChar; out Buf: TChar64): PtrI
 
 /// return next CSV string as unsigned integer from P, 0 if no more
 // - if Sep is #0, it won't be searched for
-function GetNextItemCardinal(var P: PUTF8Char; Sep: AnsiChar= ','): PtrUInt;
+function GetNextItemCardinal(var P: PUTF8Char; Sep: AnsiChar=','): PtrUInt;
 
 /// return next CSV string as signed integer from P, 0 if no more
 // - if Sep is #0, it won't be searched for
-function GetNextItemInteger(var P: PUTF8Char; Sep: AnsiChar= ','): PtrInt;
+function GetNextItemInteger(var P: PUTF8Char; Sep: AnsiChar=','): PtrInt;
 
-/// return next CSV string as 64 bit signed integer from P, 0 if no more
+/// return next CSV string as 64-bit signed integer from P, 0 if no more
 // - if Sep is #0, it won't be searched for
-function GetNextItemInt64(var P: PUTF8Char; Sep: AnsiChar= ','): Int64;
+function GetNextItemInt64(var P: PUTF8Char; Sep: AnsiChar=','): Int64;
 
-/// return next CSV string as 64 bit unsigned integer from P, 0 if no more
+/// return next CSV string as 64-bit unsigned integer from P, 0 if no more
 // - if Sep is #0, it won't be searched for
-function GetNextItemQWord(var P: PUTF8Char; Sep: AnsiChar= ','): QWord;
+function GetNextItemQWord(var P: PUTF8Char; Sep: AnsiChar=','): QWord;
+
+/// return next CSV hexadecimal string as 64-bit unsigned integer from P
+// - returns 0 if no valid hexadecimal text is available in P
+// - if Sep is #0, it won't be searched for
+// - will first fill the 64-bit value with 0, then decode each two hexadecimal
+// characters available in P
+// - could be used to decode TTextWriter.AddBinToHexDisplayMinChars() output
+function GetNextItemHexa(var P: PUTF8Char; Sep: AnsiChar=','): QWord;
 
 /// return next CSV string as unsigned integer from P, 0 if no more
 // - P^ will point to the first non digit character (the item separator, e.g.
@@ -3222,31 +3230,31 @@ function GetNextItemCardinalStrict(var P: PUTF8Char): PtrUInt;
 
 /// return next CSV string as unsigned integer from P, 0 if no more
 // - this version expects P^ to point to an Unicode char array
-function GetNextItemCardinalW(var P: PWideChar; Sep: WideChar= ','): PtrUInt;
+function GetNextItemCardinalW(var P: PWideChar; Sep: WideChar=','): PtrUInt;
 
 /// return next CSV string as double from P, 0.0 if no more
 // - if Sep is #0, will return all characters until next whitespace char
-function GetNextItemDouble(var P: PUTF8Char; Sep: AnsiChar= ','): double;
+function GetNextItemDouble(var P: PUTF8Char; Sep: AnsiChar=','): double;
 
 /// return next CSV string as currency from P, 0.0 if no more
 // - if Sep is #0, will return all characters until next whitespace char
-function GetNextItemCurrency(var P: PUTF8Char; Sep: AnsiChar= ','): currency; overload;
+function GetNextItemCurrency(var P: PUTF8Char; Sep: AnsiChar=','): currency; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// return next CSV string as currency from P, 0.0 if no more
 // - if Sep is #0, will return all characters until next whitespace char
-procedure GetNextItemCurrency(var P: PUTF8Char; out result: currency; Sep: AnsiChar= ','); overload;
+procedure GetNextItemCurrency(var P: PUTF8Char; out result: currency; Sep: AnsiChar=','); overload;
 
 /// return n-th indexed CSV string in P, starting at Index=0 for first one
-function GetCSVItem(P: PUTF8Char; Index: PtrUInt; Sep: AnsiChar = ','): RawUTF8; overload;
+function GetCSVItem(P: PUTF8Char; Index: PtrUInt; Sep: AnsiChar=','): RawUTF8; overload;
 
 /// return n-th indexed CSV string (unquoted if needed) in P, starting at Index=0 for first one
-function GetUnQuoteCSVItem(P: PUTF8Char; Index: PtrUInt; Sep: AnsiChar = ','; Quote: AnsiChar=''''): RawUTF8; overload;
+function GetUnQuoteCSVItem(P: PUTF8Char; Index: PtrUInt; Sep: AnsiChar=','; Quote: AnsiChar=''''): RawUTF8; overload;
 
 /// return n-th indexed CSV string in P, starting at Index=0 for first one
 // - this function return the generic string type of the compiler, and
 // therefore can be used with ready to be displayed text (i.e. the VCL)
-function GetCSVItemString(P: PChar; Index: PtrUInt; Sep: Char = ','): string;
+function GetCSVItemString(P: PChar; Index: PtrUInt; Sep: Char=','): string;
 
 /// return last CSV string in the supplied UTF-8 content
 function GetLastCSVItem(const CSV: RawUTF8; Sep: AnsiChar=','): RawUTF8;
@@ -4100,19 +4108,19 @@ function IntegerScan(P: PCardinalArray; Count: PtrInt; Value: cardinal): PCardin
 // - return -1 if Value was not found
 function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): PtrInt;
 
-/// fast search of an integer position in a 64 bit integer array
+/// fast search of an integer position in a 64-bit integer array
 // - Count is the number of Int64 entries in P^
 // - returns P where P^=Value
 // - returns nil if Value was not found
 function Int64Scan(P: PInt64Array; Count: PtrInt; const Value: Int64): PInt64;
 
-/// fast search of an integer position in a signed 64 bit integer array
+/// fast search of an integer position in a signed 64-bit integer array
 // - Count is the number of Int64 entries in P^
 // - returns index of P^[index]=Value
 // - returns -1 if Value was not found
 function Int64ScanIndex(P: PInt64Array; Count: PtrInt; const Value: Int64): PtrInt;
 
-/// fast search of an integer position in an unsigned 64 bit integer array
+/// fast search of an integer position in an unsigned 64-bit integer array
 // - Count is the number of QWord entries in P^
 // - returns index of P^[index]=Value
 // - returns -1 if Value was not found
@@ -4124,7 +4132,7 @@ function QWordScanIndex(P: PQWordArray; Count: PtrInt; const Value: QWord): PtrI
 // - returns false if Value was not found
 function IntegerScanExists(P: PCardinalArray; Count: PtrInt; Value: cardinal): boolean;
 
-/// fast search of an integer value in a 64 bit integer array
+/// fast search of an integer value in a 64-bit integer array
 // - returns true if P^=Value within Count entries
 // - returns false if Value was not found
 function Int64ScanExists(P: PInt64Array; Count: PtrInt; const Value: Int64): boolean;
@@ -4164,15 +4172,15 @@ procedure QuickSortInteger(var ID: TIntegerDynArray); overload;
 /// sort a 16 bit unsigned Integer array, low values first
 procedure QuickSortWord(ID: PWordArray; L, R: PtrInt);
 
-/// sort a 64 bit signed Integer array, low values first
+/// sort a 64-bit signed Integer array, low values first
 procedure QuickSortInt64(ID: PInt64Array; L, R: PtrInt); overload;
 
-/// sort a 64 bit unsigned Integer array, low values first
+/// sort a 64-bit unsigned Integer array, low values first
 // - QWord comparison are implemented correctly under FPC or Delphi 2009+ -
 // older compilers will use fast and exact SortDynArrayQWord()
 procedure QuickSortQWord(ID: PQWordArray; L, R: PtrInt); overload;
 
-/// sort a 64 bit Integer array, low values first
+/// sort a 64-bit Integer array, low values first
 procedure QuickSortInt64(ID,CoValues: PInt64Array; L, R: PtrInt); overload;
 
 type
@@ -4209,13 +4217,13 @@ function FastFindIntegerSorted(const Values: TIntegerDynArray; Value: integer): 
 /// fast O(log(n)) binary search of a 16 bit unsigned integer value in a sorted array
 function FastFindWordSorted(P: PWordArray; R: PtrInt; Value: Word): PtrInt;
 
-/// fast O(log(n)) binary search of a 64 bit signed integer value in a sorted array
+/// fast O(log(n)) binary search of a 64-bit signed integer value in a sorted array
 // - R is the last index of available integer entries in P^ (i.e. Count-1)
 // - return index of P^[result]=Value
 // - return -1 if Value was not found
 function FastFindInt64Sorted(P: PInt64Array; R: PtrInt; const Value: Int64): PtrInt; overload;
 
-/// fast O(log(n)) binary search of a 64 bit unsigned integer value in a sorted array
+/// fast O(log(n)) binary search of a 64-bit unsigned integer value in a sorted array
 // - R is the last index of available integer entries in P^ (i.e. Count-1)
 // - return index of P^[result]=Value
 // - return -1 if Value was not found
@@ -6626,7 +6634,7 @@ function Random32gsl(max: cardinal): cardinal; overload;
 procedure Random32Seed(entropy: pointer=nil; entropylen: integer=0);
 
 /// fill some memory buffer with random values
-// - the destination buffer is expected to be allocated as 32 bit items
+// - the destination buffer is expected to be allocated as 32-bit items
 // - use internally crc32c() with some rough entropy source, and Random32
 // gsl_rng_taus2 generator or hardware RDRAND Intel x86/x64 opcode if available
 // (and ForceGsl is kept to its default false value)
@@ -7868,10 +7876,10 @@ type
     procedure Add(c1,c2: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
     {$ifndef CPU64} // already implemented by Add(Value: PtrInt) method
-    /// append a 64 bit signed Integer Value as text
+    /// append a 64-bit signed Integer Value as text
     procedure Add(Value: Int64); overload;
     {$endif}
-    /// append a 32 bit signed Integer Value as text
+    /// append a 32-bit signed Integer Value as text
     procedure Add(Value: PtrInt); overload;
     /// append a boolean Value as text
     // - write either 'true' or 'false'
@@ -8144,6 +8152,10 @@ type
     /// fast conversion from binary data into quoted MSB lowercase hexa chars
     // - up to the internal buffer bytes may be converted
     procedure AddBinToHexDisplayQuoted(Bin: pointer; BinBytes: integer);
+    /// append an Unsigned 64-bit Integer Value as a quoted hexadecimal String
+    // in its minimal size, i.e. excluding 00 highest bytes
+    // - use GetNextItemHexa() to decode such a text value
+    procedure AddBinToHexDisplayMinChars(Value: PQword);
     /// add the pointer into hexa chars, ready to be displayed
     procedure AddPointer(P: PtrUInt);
     /// write a byte as hexa chars
@@ -10137,7 +10149,7 @@ type
   /// this structure can be used to speed up reading from a file
   // - use internaly memory mapped files for a file up to 2 GB (Windows has
   // problems with memory mapped files bigger than this size limit - at least
-  // with 32 bit executables) - but sometimes, Windows fails to allocate
+  // with 32-bit executables) - but sometimes, Windows fails to allocate
   // more than 512 MB for a memory map, because it does lack of contiguous
   // memory space: in this case, we fall back on direct file reading
   // - maximum handled file size has no limit (but will use slower direct
@@ -11976,7 +11988,7 @@ var
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$endif CPUINTEL}
 
-/// naive symmetric encryption scheme using a 32 bit key
+/// naive symmetric encryption scheme using a 32-bit key
 // - fast, but not very secure, since uses crc32ctab[] content as master cypher
 // key: consider using SynCrypto proven AES-based algorithms instead
 procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
@@ -12063,21 +12075,21 @@ type
   // - the compiler will generate bt/btr/bts opcodes
   TBits32 = set of 0..31;
   PBits32 = ^TBits32;
-  /// fast access to Int64 bits
+  /// fast access to 64-bit integer bits
   // - the compiler will generate bt/btr/bts opcodes
   // - as used by GetBit64/SetBit64/UnSetBit64
   TBits64 = set of 0..63;
   PBits64 = ^TBits64;
 
-/// retrieve a particular bit status from a Int64 bit array (max aIndex is 63)
+/// retrieve a particular bit status from a 64-bit integer bits (max aIndex is 63)
 function GetBit64(const Bits: Int64; aIndex: PtrInt): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// set a particular bit into a Int64 bit array (max aIndex is 63)
+/// set a particular bit into a 64-bit integer bits (max aIndex is 63)
 procedure SetBit64(var Bits: Int64; aIndex: PtrInt);
   {$ifdef HASINLINE}inline;{$endif}
 
-/// unset/clear a particular bit into a Int64 bit array (max aIndex is 63)
+/// unset/clear a particular bit into a 64-bit integer bits (max aIndex is 63)
 procedure UnSetBit64(var Bits: Int64; aIndex: PtrInt);
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -13356,7 +13368,7 @@ type
     // ExeVersion global variable
     constructor Create(const aFileName: TFileName; aMajor: integer=0;
       aMinor: integer=0; aRelease: integer=0; aBuild: integer=0);
-    /// retrieve the version as a 32 bits integer with Major.Minor.Release
+    /// retrieve the version as a 32-bit integer with Major.Minor.Release
     // - following Major shl 16+Minor shl 8+Release bit pattern
     function Version32: integer;
     /// build date and time of this exe file, as plain text
@@ -13404,7 +13416,7 @@ const
   DateDelta     = 693594;
   UnixDateDelta = 25569;
 
-/// GetFileVersion returns the most significant 32 bits of a file's binary
+/// GetFileVersion returns the most significant 32-bit of a file's binary
 // version number
 // - typically, this includes the major and minor version placed
 // together in one 32-bit integer
@@ -13520,10 +13532,10 @@ var
   {$endif UNICODE}
 
 var
-  /// is set to TRUE if the current process is a 32 bit image running under WOW64
+  /// is set to TRUE if the current process is a 32-bit image running under WOW64
   // - WOW64 is the x86 emulator that allows 32-bit Windows-based applications
   // to run seamlessly on 64-bit Windows
-  // - equals always FALSE if the current executable is a 64 bit image
+  // - equals always FALSE if the current executable is a 64-bit image
   IsWow64: boolean;
   /// the current System information, as retrieved for the current process
   // - under a WOW64 process, it will use the GetNativeSystemInfo() new API
@@ -13616,7 +13628,7 @@ var
 function GetCurrentThreadID: TThreadID; cdecl;
   external 'libpthread.so.0' name 'pthread_self';
 
-/// overloaded function using open64() to allow 64 bit positions
+/// overloaded function using open64() to allow 64-bit positions
 function FileOpen(const FileName: string; Mode: LongWord): Integer;
 
 {$endif}
@@ -16254,7 +16266,7 @@ type
   end;
 
   /// reference counted high resolution timer (for accurate speed statistics)
-  // - since TPrecisionTimer shall be 32 bit aligned, you can use this class
+  // - since TPrecisionTimer shall be 32-bit aligned, you can use this class
   // to initialize a local auto-freeing ILocalPrecisionTimer variable on stack
   // - to be used as such:
   // ! var Timer: ILocalPrecisionTimer;
@@ -28194,7 +28206,7 @@ begin // fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits val
       end else begin
         result := GetHighUTF8UCS4Inlined(u1);
         if result and $ffffff00=0 then
-          result := table[result]; // 8 bits to upper, 32 bits as is
+          result := table[result]; // 8 bits to upper, 32-bit as is
       end;
     if c2<=127 then begin
       if c2=0 then exit; // u1>u2 -> return u1^
@@ -28206,7 +28218,7 @@ begin // fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits val
       c2 := GetHighUTF8UCS4Inlined(u2);
       if c2<=255 then
         dec(result,table[c2]) else // 8 bits to upper
-        dec(result,c2); // 32 bits widechar returns diff
+        dec(result,c2); // 32-bit widechar returns diff
       if result<>0 then exit;
     end;
   until false else
@@ -28256,7 +28268,7 @@ begin // fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits val
       dec(result,UTF8_EXTRA[extra].offset);
       inc(u1,extra);
       if result and $ffffff00=0 then
-        result := table[result]; // 8 bits to upper, 32 bits as is
+        result := table[result]; // 8 bits to upper, 32-bit as is
     end;
     // here result=NormToUpper[u1^]
     inc(u2);
@@ -28275,7 +28287,7 @@ begin // fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits val
       inc(u2,extra);
       if c2 and $ffffff00=0 then
         dec(result,table[c2]) else // 8 bits to upper
-        dec(result,c2); // returns 32 bits diff
+        dec(result,c2); // returns 32-bit diff
       if result<>0 then exit;
     end;
     // here we have result=NormToUpper[u2^]-NormToUpper[u1^]=0
@@ -30959,7 +30971,7 @@ begin
   {$ifdef MSWINDOWS}
   {$ifdef HASINLINE} // FPC or Delphi 2006+
   Size := F.Size;
-  {$else} // F.Size was limited to 32 bits on older Delphi
+  {$else} // F.Size was limited to 32-bit on older Delphi
   Size := F.FindData.nFileSizeLow or Int64(F.FindData.nFileSizeHigh) shl 32;
   {$endif}
   {$else}
@@ -32754,14 +32766,14 @@ begin
     exit;
   PCardinal(@result)^ := c;
   inc(P);
-  repeat // fast 32 bit loop
+  repeat // fast 32-bit loop
     c := byte(P^)-48;
     if c>9 then
       break else
       PCardinal(@result)^ := PCardinal(@result)^*10+c;
     inc(P);
     if PCardinal(@result)^>=high(cardinal)div 10 then begin
-      repeat // 64 bit loop
+      repeat // 64-bit loop
         c := byte(P^)-48;
         if c>9 then
           break;
@@ -32797,14 +32809,14 @@ begin
     exit;
   PCardinal(@result)^ := c;
   inc(P);
-  repeat // fast 32 bit loop
+  repeat // fast 32-bit loop
     c := byte(P^)-48;
     if c>9 then
       break else
       PCardinal(@result)^ := PCardinal(@result)^*10+c;
     inc(P);
     if PCardinal(@result)^>=high(cardinal)div 10 then begin
-      repeat // 64 bit loop
+      repeat // 64-bit loop
         c := byte(P^)-48;
         if c>9 then
           break;
@@ -32867,7 +32879,7 @@ begin
     exit;
   PCardinal(@result)^ := c;
   inc(P);
-  repeat // fast 32 bit loop
+  repeat // fast 32-bit loop
     c := byte(P^);
     if c<>0 then begin
       dec(c,48);
@@ -32877,7 +32889,7 @@ begin
       PCardinal(@result)^ := PCardinal(@result)^*10+c;
       inc(P);
       if PCardinal(@result)^>=high(cardinal)div 10 then begin
-        repeat // 64 bit loop
+        repeat // 64-bit loop
           c := byte(P^);
           if c=0 then begin
             err := 0; // conversion success without error
@@ -32923,7 +32935,7 @@ begin
     exit;
   PCardinal(@result)^ := c;
   inc(P);
-  repeat // fast 32 bit loop
+  repeat // fast 32-bit loop
     c := byte(P^);
     if c<>0 then begin
       dec(c,48);
@@ -32933,7 +32945,7 @@ begin
       PCardinal(@result)^ := PCardinal(@result)^*10+c;
       inc(P);
       if PCardinal(@result)^>=high(cardinal)div 10 then begin
-        repeat // 64 bit loop
+        repeat // 64-bit loop
           c := byte(P^);
           if c=0 then begin
             err := 0; // conversion success without error
@@ -34194,6 +34206,17 @@ begin
     result := 0;
 end;
 {$endif}
+
+function GetNextItemHexa(var P: PUTF8Char; Sep: AnsiChar): QWord;
+var tmp: TChar64;
+    L: integer;
+begin
+  result := 0;
+  L := GetNextTChar64(P,Sep,tmp);
+  if (L>0) and (L and 1=0) then
+    if not HexDisplayToBin(@tmp,@result,L shr 1) then
+      result := 0;
+end;
 
 function GetNextItemDouble(var P: PUTF8Char; Sep: AnsiChar): double;
 var tmp: TChar64;
@@ -35603,7 +35626,7 @@ asm .noframe // rcx=S (Linux: rdi)
         test    rdi, rdi
         {$endif}
         jz      @null                // returns 0 if S=nil
-        // rax = s,ecx = 32 bits of s
+        // rax = s,ecx = 32-bit of s
         pxor    xmm0, xmm0           // set to zero
         and     ecx, 15              // lower 4 bits indicate misalignment
         and     rax, -16             // align pointer by 16
@@ -39281,7 +39304,7 @@ begin
     {$ifdef FPC}Move{$else}MoveFast{$endif}(Pointer(Values[result]),Pointer(Values[result+1]),n);
     PtrInt(Values[result]) := 0; // avoid GPF
     if CoValues<>nil then begin
-      {$ifdef CPU64}n := n shr 1;{$endif} // 64 bit pointer size is twice an integer
+      {$ifdef CPU64}n := n shr 1;{$endif} // 64-bit pointer size is twice an integer
       {$ifdef FPC}Move{$else}MoveFast{$endif}(CoValues^[result],CoValues^[result+1],n);
     end;
   end else
@@ -39999,7 +40022,7 @@ end;
 procedure RedirectCode(Func, RedirectFunc: Pointer; Backup: PPatchCode=nil);
 var NewJump: packed record
     Code: byte;        // $e9 = jmp {relative}
-    Distance: integer; // relative jump is 32 bit even on CPU64
+    Distance: integer; // relative jump is 32-bit even on CPU64
   end;
 begin
   if (Func=nil) or (RedirectFunc=nil) then
@@ -40972,7 +40995,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
     result := DynArray.SaveToLength;
   end;
   tkInterface: begin
-    len := SizeOf(Int64); // consume 64 bits even on CPU32
+    len := SizeOf(Int64); // consume 64-bit even on CPU32
     result := SizeOf(PtrUInt);
   end;
   else
@@ -41039,7 +41062,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
   {$ifndef DELPHI5OROLDER}
   tkInterface: begin
     PIInterface(dest)^ := PIInterface(data)^; // with proper refcount
-    result := dest+SizeOf(Int64); // consume 64 bits even on CPU32
+    result := dest+SizeOf(Int64); // consume 64-bit even on CPU32
     len := SizeOf(PtrUInt);
   end;
   {$endif}
@@ -41110,7 +41133,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
   {$ifndef DELPHI5OROLDER}
   tkInterface: begin
     PIInterface(data)^ := PIInterface(source)^; // with proper refcount
-    inc(source,SizeOf(Int64)); // consume 64 bits even on CPU32
+    inc(source,SizeOf(Int64)); // consume 64-bit even on CPU32
     result := SizeOf(PtrUInt);
   end;
   {$endif}
@@ -42505,7 +42528,7 @@ begin
     MoveFast := @MoveERMSB;
     FillcharFast := @FillCharERMSB;
   end else {$endif}
-    MoveFast := @MoveX87; // SSE2 is not faster than X87 version on 32 bit CPU
+    MoveFast := @MoveX87; // SSE2 is not faster than X87 version on 32-bit CPU
   {$endif CPUINTEL}
   {$endif CPU64}
   {$endif DELPHI5OROLDER}
@@ -54104,6 +54127,18 @@ begin
   inc(B,BinBytes*2);
   B[2] := '"';
   inc(B,2);
+end;
+
+procedure TTextWriter.AddBinToHexDisplayMinChars(Value: PQword);
+var L, i: PtrInt;
+begin
+  L := 1;
+  for i := SizeOf(Value^)-1 downto 1 do
+    if PByteArray(Value)[i]<>0 then begin
+      L := i+1; // append hexa chars up to the last non zero byte
+      break;
+    end;
+  AddBinToHexDisplayLower(Value,L);
 end;
 
 procedure TTextWriter.AddBinToHex(Bin: Pointer; BinBytes: integer);

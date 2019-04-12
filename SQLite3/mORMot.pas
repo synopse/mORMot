@@ -92,9 +92,9 @@ unit mORMot;
       the UNICODE conditional will adapt the framework to these compilers
       (you shouldn't have to change any conditional define below)
     - attempt to reach Free Pascal Compiler 2.4.0 compatibility
-    - all asm code equivalence in pure pascal code for 64 bits compatibility
+    - all asm code equivalence in pure pascal code for 64-bit compatibility
       (always slower, but always portable to all CPUs)
-    - use of PtrUInt / PtrInt for 64 bits compatibility
+    - use of PtrUInt / PtrInt for 64-bit compatibility
     - in case of FPC, the typinfo.pp unit is used: so all published properties
       in any TSQLRecord descendant must have a setter (i.e. a "write fValue"
       statement); the FPC's RTTI is not the same as Delphi's: it's a shame :(
@@ -392,7 +392,7 @@ unit mORMot;
     - fixed issue in produced JSON stream using '=' instead of ':'
 
   Version 1.15
-    - unit now tested with Delphi XE2 (32 Bit)
+    - unit now tested with Delphi XE2 (32-bit)
     - new sftModTime / TModTime published field type in TSQLRecord, which will
       be set to the current server time stamp before update/adding
     - new sftCreateTime / TCreateTime published field type in TSQLRecord, which
@@ -1295,7 +1295,7 @@ uses
   Classes,
   SynZip, // use crc32 for TSQLRestClientURI.SetUser
 {$ifdef USETYPEINFO}
-  // some pure pascal version must handle the 64-bits ordinal values or
+  // some pure pascal version must handle the 64-bit ordinal values or
   // a not-Delphi RTTI layout of the underlying compiler (e.g. FPC)
   TypInfo,
   {$ifdef FPC}
@@ -1362,7 +1362,7 @@ type
   /// this is the type to be used for our ORM primary key, i.e. TSQLRecord.ID
   // - it maps the SQLite3 RowID definition
   // - when converted to plain TSQLRecord published properties, you may loose
-  // some information under Win32 when stored as a 32 bit pointer
+  // some information under Win32 when stored as a 32-bit pointer
   // - could be defined as value in a TSQLRecord property as such:
   // ! property AnotherRecord: TID read fAnotherRecord write fAnotherRecord;
   TID = type Int64;
@@ -1572,7 +1572,7 @@ type
   // pure AJAX application should fill such fields explicitely before sending)
   // - sftTID is an INTEGER field containing a TID pointing to another record;
   // since regular TSQLRecord published properties (i.e. sftID kind of field)
-  // can not be greater than 2,147,483,647 (i.e. a signed 32 bit value) under
+  // can not be greater than 2,147,483,647 (i.e. a signed 32-bit value) under
   // Win32, defining TID published properties will allow to store the ID
   // as signed 64-bit, e.g. up to 9,223,372,036,854,775,808; despite to
   // sftID kind of record, coherency is NOT ensured: after a deletion, all
@@ -2063,12 +2063,12 @@ type
     function FindFieldName(const FieldName: RawUTF8): integer;
   end;
 
-/// set the TID (=64 bits integer) value from the numerical text stored in P^
+/// set the TID (=64-bit integer) value from the numerical text stored in P^
 // - just a redirection to SynCommons.SetInt64()
 procedure SetID(P: PUTF8Char; var result: TID); overload;
   {$ifdef HASINLINENOTX86}inline;{$endif}
 
-/// set the TID (=64 bits integer) value from the numerical text stored in U
+/// set the TID (=64-bit integer) value from the numerical text stored in U
 // - just a redirection to SynCommons.SetInt64()
 procedure SetID(const U: RawByteString; var result: TID); overload;
   {$ifdef HASINLINENOTX86}inline;{$endif}
@@ -3431,7 +3431,7 @@ type
     // - this method should match the case-sensitivity of GetHash()
     // - this default implementation will call GetValueVar() for slow comparison
     function CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt; virtual;
-    /// retrieve an unsigned 32 bit hash of the corresponding property
+    /// retrieve an unsigned 32-bit hash of the corresponding property
     // - not all kind of properties are handled: only main types
     // - if CaseInsensitive is TRUE, will apply NormToUpper[] 8 bits uppercase,
     // handling RawUTF8 properties just like the SYSTEMNOCASE collation
@@ -8174,13 +8174,13 @@ type
     // ! Detail := TSQLRecordDetail.Create;
     // ! Detail.Main := Main.AsTSQLRecord; // will store Main.ID in MAIN column
     // ! Client.Add(Detail);
-    // - is especially useful on 64-bit plaform, since on 32 bit:
+    // - is especially useful on 64-bit plaform, since on 32-bit:
     // ! Detail.Main := pointer(Main.ID)
     // compiles (whereas it won't on 64-bit) and is the same than platform-independent
     // ! Detail.Main := Main.AsTSQLRecord;
     // - using Main.AsTSQLRecord will ensure that the ID is retrieved, even
     // if Main itself is not a true instance
-    // - if the stored ID is bigger than 32 bits, then it will raise an
+    // - if the stored ID is bigger than 32-bit, then it will raise an
     // EORMException: in this case, you should use a TID / T*ID kind of
     // published property, and not a TSQLRecord, which is limited to the
     // pointer size
@@ -33420,7 +33420,7 @@ begin
     {$ifndef CPU64}
     if fID>MaxInt then
       raise EORMException.CreateUTF8('%.GetIDAsPointer is storing ID=%, which '+
-        'cannot be stored in a pointer/TSQLRecord 32 bit instance: use '+
+        'cannot be stored in a pointer/TSQLRecord 32-bit instance: use '+
         'a TID/T*ID published field for 64-bit IDs',[self,fID]) else
     {$endif}
       result := pointer(fID);
@@ -56267,7 +56267,7 @@ begin
         exit else
         fpmunmap(Result,STUB_SIZE);
       {$else}
-      // are we close enough for a relative jump (32 bit signed)?
+      // are we close enough for a relative jump (32-bit signed)?
       if ((PtrUInt(Result)-Addr)<Int64($7FFFFFFF)) or (Addr-(PtrUInt(Result))<Int64($7FFFFFFF)) then
         exit else
         fpmunmap(Result,STUB_SIZE);
@@ -61803,7 +61803,7 @@ begin
             if (RegisterIdent>0) then begin
               call.ParamRegs[RegisterIdent] := PPtrInt(Value)^;
               {$ifdef CPUARM}
-              // for e.g. INT64 on 32 bit ARM systems; these are also passed in the normal registers
+              // for e.g. INT64 on 32-bit ARM systems; these are also passed in the normal registers
               if SizeInStack>PTRSIZ then
                 call.ParamRegs[RegisterIdent+1] := PPtrInt(Value+PTRSIZ)^;
               {$endif}
