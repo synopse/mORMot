@@ -38497,10 +38497,10 @@ var Space, SpaceBeg, DBeg: PUTF8Char;
     Number: boolean;
 label Next;
 begin
-  Space := D;
   DBeg := D;
-  SpaceBeg := D;
   if (D<>nil) and (P<>nil) then begin // avoid GPF
+    Space := D;
+    SpaceBeg := D;
     repeat
       CapitalCount := 0;
       Number := P^ in  ['0'..'9'];
@@ -38546,13 +38546,14 @@ begin
       D^ := ' ';
       inc(D);
     until false;
-    if (Space>DBeg) then Dec(Space); // here Space point to uninitialized memory
-  end;
-  while Space>SpaceBeg do begin
-    if Space^ in ['A'..'Z'] then
-      if not (Space[1] in ['A'..'Z',' ']) then
-        inc(Space^,32); // lowercase conversion of not last fully uppercased word
-    dec(Space);
+    if Space>DBeg then
+      dec(Space);
+    while Space>SpaceBeg do begin
+      if Space^ in ['A'..'Z'] then
+        if not (Space[1] in ['A'..'Z',' ']) then
+          inc(Space^,32); // lowercase conversion of not last fully uppercased word
+      dec(Space);
+    end;
   end;
   result := D-DBeg;
 end;
