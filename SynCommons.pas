@@ -8152,12 +8152,12 @@ type
     /// fast conversion from binary data into quoted MSB lowercase hexa chars
     // - up to the internal buffer bytes may be converted
     procedure AddBinToHexDisplayQuoted(Bin: pointer; BinBytes: integer);
-    /// append an Unsigned 64-bit Integer Value as a quoted hexadecimal String
-    // in its minimal size, i.e. excluding 00 highest bytes
+    /// append a Value as significant hexadecimal text
+    // - append its minimal size, i.e. excluding highest bytes containing 0
     // - use GetNextItemHexa() to decode such a text value
-    procedure AddBinToHexDisplayMinChars(Value: PQword);
-    /// add the pointer into hexa chars, ready to be displayed
-    procedure AddPointer(P: PtrUInt);
+    procedure AddBinToHexDisplayMinChars(Bin: pointer; BinBytes: PtrInt);
+    /// add the pointer into significant hexa chars, ready to be displayed
+    procedure AddPointer(P: PtrUInt);    {$ifdef HASINLINE}inline;{$endif}
     /// write a byte as hexa chars
     procedure AddByteToHex(Value: byte);
     /// write a Int18 value (0..262143) as 3 chars
@@ -8176,8 +8176,7 @@ type
     /// append some UTF-8 encoded chars to the buffer, from a generic string type
     // - faster than AddJSONEscape(pointer(StringToUTF8(string))
     // - escapes chars according to the JSON RFC
-    procedure AddJSONEscapeString(const s: string);
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure AddJSONEscapeString(const s: string);  {$ifdef HASINLINE}inline;{$endif}
     /// append some UTF-8 encoded chars to the buffer, from the main AnsiString type
     // - escapes chars according to the JSON RFC
     procedure AddJSONEscapeAnsiString(const s: AnsiString);
@@ -8185,8 +8184,7 @@ type
     // - faster than AddNoJSONEscape(pointer(StringToUTF8(string))
     // - don't escapes chars according to the JSON RFC
     // - will convert the Unicode chars into UTF-8
-    procedure AddNoJSONEscapeString(const s: string);
-      {$ifdef UNICODE}inline;{$endif}
+    procedure AddNoJSONEscapeString(const s: string);  {$ifdef UNICODE}inline;{$endif}
     /// append some Unicode encoded chars to the buffer
     // - if Len is 0, Len is calculated from zero-ended widechar
     // - escapes chars according to the JSON RFC
@@ -11123,7 +11121,7 @@ procedure BinToHexLower(Bin: PAnsiChar; BinBytes: integer; var result: RawUTF8);
 // enough space for at least BinBytes*2 chars
 // - using this function with Bin^ as an integer value will encode it
 // in big-endian order (most-signignifican byte first): use it for display
-procedure BinToHexDisplayLower(Bin, Hex: PAnsiChar; BinBytes: integer); overload;
+procedure BinToHexDisplayLower(Bin, Hex: PAnsiChar; BinBytes: PtrInt); overload;
 
 /// fast conversion from binary data into lowercase hexa chars
 function BinToHexDisplayLower(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
@@ -20714,7 +20712,7 @@ smlu32: Res.Text := pointer(SmallUInt32UTF8[result]);
     vtPointer,vtInterface: begin
       Res.Text := @Res.Temp;
       Res.Len := SizeOf(pointer)*2;
-      BinToHexDisplay(V.VPointer,@Res.Temp,SizeOf(Pointer));
+      BinToHexDisplayLower(V.VPointer,@Res.Temp,SizeOf(Pointer));
       result := SizeOf(pointer)*2;
       exit;
     end;
@@ -29434,15 +29432,16 @@ var
   TwoDigitsHexWBLower: array[byte] of word absolute TwoDigitsHexLower;
 
 procedure BinToHex(Bin, Hex: PAnsiChar; BinBytes: integer);
-var j: cardinal;
-    {$ifdef PUREPASCAL}tab: ^TAnsiCharToWord;{$endif}
+{$ifdef PUREPASCAL}var tab: ^TAnsiCharToWord;{$endif}
 begin
   {$ifdef PUREPASCAL}tab := @TwoDigitsHexW;{$endif}
-  for j := 1 to BinBytes do begin
-    PWord(Hex)^ := {$ifndef PUREPASCAL}TwoDigitsHexW{$else}tab{$endif}[Bin^];
-    inc(Hex,2);
-    inc(Bin);
-  end;
+  if BinBytes>0 then
+    repeat
+      PWord(Hex)^ := {$ifndef PUREPASCAL}TwoDigitsHexW{$else}tab{$endif}[Bin^];
+      inc(Bin);
+      inc(Hex,2);
+      dec(BinBytes);
+    until BinBytes=0;
 end;
 
 function BinToHex(const Bin: RawByteString): RawUTF8;
@@ -29538,14 +29537,17 @@ begin
 end;
 
 procedure BinToHexDisplay(Bin, Hex: PAnsiChar; BinBytes: integer);
-var j: integer;
-    {$ifdef PUREPASCAL}tab: ^TAnsiCharToWord;{$endif}
+{$ifdef PUREPASCAL}var tab: ^TAnsiCharToWord;{$endif}
 begin
   {$ifdef PUREPASCAL}tab := @TwoDigitsHexW;{$endif}
-  for j := BinBytes-1 downto 0 do begin
-    PWord(Hex+j*2)^ := {$ifndef PUREPASCAL}TwoDigitsHexW{$else}tab{$endif}[Bin^];
-    inc(Bin);
-  end;
+  inc(Hex,BinBytes*2);
+  if BinBytes>0 then
+    repeat
+      dec(Hex,2);
+      PWord(Hex)^ := {$ifndef PUREPASCAL}TwoDigitsHexW{$else}tab{$endif}[Bin^];
+      inc(Bin);
+      dec(BinBytes);
+    until BinBytes=0;
 end;
 
 function BinToHexDisplay(Bin: PAnsiChar; BinBytes: integer): RawUTF8;
@@ -29555,15 +29557,16 @@ begin
 end;
 
 procedure BinToHexLower(Bin, Hex: PAnsiChar; BinBytes: integer);
-var j: cardinal;
-    {$ifdef PUREPASCAL}tab: ^TAnsiCharToWord;{$endif}
+{$ifdef PUREPASCAL}var tab: ^TAnsiCharToWord;{$endif}
 begin
   {$ifdef PUREPASCAL}tab := @TwoDigitsHexWLower;{$endif}
-  for j := 1 to BinBytes do begin
-    PWord(Hex)^ := {$ifndef PUREPASCAL}TwoDigitsHexWLower{$else}tab{$endif}[Bin^];
-    inc(Hex,2);
-    inc(Bin);
-  end;
+  if BinBytes>0 then
+    repeat
+      PWord(Hex)^ := {$ifndef PUREPASCAL}TwoDigitsHexWLower{$else}tab{$endif}[Bin^];
+      inc(Bin);
+      inc(Hex,2);
+      dec(BinBytes);
+    until BinBytes=0;
 end;
 
 function BinToHexLower(const Bin: RawByteString): RawUTF8;
@@ -29582,15 +29585,18 @@ begin
   BinToHexLower(Bin,BinBytes,result);
 end;
 
-procedure BinToHexDisplayLower(Bin, Hex: PAnsiChar; BinBytes: integer);
-var j: integer;
-    {$ifdef PUREPASCAL}tab: ^TAnsiCharToWord;{$endif}
+procedure BinToHexDisplayLower(Bin, Hex: PAnsiChar; BinBytes: PtrInt);
+{$ifdef PUREPASCAL}var tab: ^TAnsiCharToWord;{$endif}
 begin
   {$ifdef PUREPASCAL}tab := @TwoDigitsHexWLower;{$endif}
-  for j := BinBytes-1 downto 0 do begin
-    PWord(Hex+j*2)^ := {$ifndef PUREPASCAL}TwoDigitsHexWLower{$else}tab{$endif}[Bin^];
-    inc(Bin);
-  end;
+  inc(Hex,BinBytes*2);
+  if BinBytes>0 then
+    repeat
+      dec(Hex,2);
+      PWord(Hex)^ := {$ifndef PUREPASCAL}TwoDigitsHexWLower{$else}tab{$endif}[Bin^];
+      inc(Bin);
+      dec(BinBytes);
+    until BinBytes=0;
 end;
 
 function BinToHexDisplayLower(Bin: PAnsiChar; BinBytes: integer): RawUTF8;
@@ -54074,28 +54080,6 @@ begin
   inc(B);
 end;
 
-procedure TTextWriter.AddPointer(P: PtrUInt);
-  procedure Pointer4ToHex(B: PWordArray; P: PtrUInt);
-  begin
-    B[3] := TwoDigitsHexWB[ToByte(P)]; P := P shr 8;
-    B[2] := TwoDigitsHexWB[ToByte(P)]; P := P shr 8;
-    B[1] := TwoDigitsHexWB[ToByte(P)]; P := P shr 8;
-    B[0] := TwoDigitsHexWB[P];
-  end;
-begin
-  if BEnd-B<=SizeOf(P)*2 then
-    FlushToStream;
-  {$ifdef CPU64} // truncate to for most heap-allocated 4 bytes pointers
-  if P and $ffffffff00000000<>0 then begin
-    BinToHexDisplay(@P,PAnsiChar(B+1),8);
-    inc(B,16);
-    exit;
-  end;
-  {$endif}
-  Pointer4ToHex(@B[1],P);
-  inc(B,8);
-end;
-
 procedure TTextWriter.AddBinToHexDisplay(Bin: pointer; BinBytes: integer);
 begin
   if cardinal(BinBytes*2-1)>=cardinal(fTempBufSize) then
@@ -54129,16 +54113,23 @@ begin
   inc(B,2);
 end;
 
-procedure TTextWriter.AddBinToHexDisplayMinChars(Value: PQword);
-var L, i: PtrInt;
+procedure TTextWriter.AddBinToHexDisplayMinChars(Bin: pointer; BinBytes: PtrInt);
 begin
-  L := 1;
-  for i := SizeOf(Value^)-1 downto 1 do
-    if PByteArray(Value)[i]<>0 then begin
-      L := i+1; // append hexa chars up to the last non zero byte
-      break;
-    end;
-  AddBinToHexDisplayLower(Value,L);
+  if (BinBytes<=0) or (cardinal(BinBytes*2-1)>=cardinal(fTempBufSize)) then
+    exit;
+  repeat // append hexa chars up to the last non zero byte
+    dec(BinBytes);
+  until (BinBytes=0) or (PByteArray(Bin)[BinBytes]<>0);
+  inc(BinBytes);
+  if BEnd-B<=BinBytes*2 then
+    FlushToStream;
+  BinToHexDisplayLower(Bin,PAnsiChar(B+1),BinBytes);
+  inc(B,BinBytes*2);
+end;
+
+procedure TTextWriter.AddPointer(P: PtrUInt);
+begin
+  AddBinToHexDisplayMinChars(@P,SizeOf(P));
 end;
 
 procedure TTextWriter.AddBinToHex(Bin: Pointer; BinBytes: integer);
@@ -54924,7 +54915,7 @@ begin
   {$endif}
   vtString:  if VString^[0]<>#0 then Add(@VString^[1],ord(VString^[0]),Escape);
   vtInterface,
-  vtPointer:      AddPointer(PtrUInt(VPointer));
+  vtPointer:      AddBinToHexDisplayMinChars(@VPointer,SizeOf(VPointer));
   vtPChar:        Add(PUTF8Char(VPChar),Escape);
   vtObject:       WriteObject(VObject,WriteObjectOptions);
   vtClass:        AddClassName(VClass);
@@ -55117,7 +55108,7 @@ begin
     AddShort('void') else
     AddShort(PShortString(PPointer(PPtrInt(Instance)^+vmtClassName)^)^);
   Add('(');
-  AddPointer(PtrUInt(Instance));
+  AddBinToHexDisplayMinChars(@Instance,SizeOf(Instance));
   Add(')','"');
   if SepChar<>#0 then
     Add(SepChar);
@@ -55129,7 +55120,7 @@ begin
   AddShort(PShortString(PPointer(PPtrInt(Instance)^+vmtClassName)^)^);
   if IncludePointer then begin
     Add('(');
-    AddPointer(PtrUInt(Instance));
+    AddBinToHexDisplayMinChars(@Instance,SizeOf(Instance));
     Add(')');
   end;
   if SepChar<>#0 then

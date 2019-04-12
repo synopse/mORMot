@@ -2254,7 +2254,7 @@ begin
     if s<0 then begin
       if u<0 then begin
         if AllowNotCodeAddr then begin
-          W.AddPointer(aAddressAbsolute);
+          W.AddBinToHexDisplayMinChars(@aAddressAbsolute,SizeOf(aAddressAbsolute));
           W.Add(' ');
         end;
         exit;
@@ -2265,7 +2265,7 @@ begin
           exit else // don't log stack trace internal to SynLog.pas :)
         if (u=fUnitSystemIndex) and (PosEx('Except',Symbols[s].Name)>0) then
           exit; // do not log stack trace of System.SysRaiseException
-    W.AddPointer(aAddressAbsolute); // display addresses inside known Delphi code
+    W.AddBinToHexDisplayMinChars(@aAddressAbsolute,SizeOf(aAddressAbsolute));
     W.Add(' ');
     if u>=0 then begin
       W.AddString(Units[u].Symbol.Name);
@@ -2282,8 +2282,8 @@ begin
       W.Add(Line);
       W.Add(')',' ');
     end;
-  end else begin
-    W.AddPointer(aAddressAbsolute); // no .map info available -> display address
+  end else begin // no .map info available -> display address
+    W.AddBinToHexDisplayMinChars(@aAddressAbsolute,SizeOf(aAddressAbsolute));
     W.Add(' ');
   end;
   {$endif FPC}
