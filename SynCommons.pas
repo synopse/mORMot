@@ -2184,6 +2184,7 @@ var strcspn: function (s,reject: pointer): integer = strcspnpas;
 
 {$ifndef ABSOLUTEPASCAL}
 {$ifdef CPUINTEL}
+{$ifdef HASAESNI}
 /// SSE 4.2 version of StrComp(), to be used with PUTF8Char/PAnsiChar
 // - please note that this optimized version may read up to 15 bytes
 // beyond the string; this is rarely a problem but it may in principle
@@ -2200,6 +2201,7 @@ function strspnsse42(s,accept: pointer): integer;
 // - please note that this optimized version may read up to 15 bytes
 // beyond the string, so should be avoided e.g. over memory mapped files
 function strcspnsse42(s,reject: pointer): integer;
+{$endif HASAESNI}
 {$endif}
 {$endif ABSOLUTEPASCAL}
 
@@ -59197,7 +59199,11 @@ begin
       capacity := length(fList);
       result := fCount;
       if result>=capacity then begin
-        inc(capacity,256+fCount shr 3);
+        if capacity > 128*1024*1024 then inc(capacity,16*1024*1024)
+        else if capacity > 8*1024*1024 then inc(capacity,capacity shr 3)
+        else if capacity > 128 then inc(capacity,capacity shr 2)
+        else if capacity > 8 then inc(capacity,16)
+        else inc(capacity,4);
         SetLength(fList,capacity);
       end;
       fList[result] := aText;
@@ -59242,7 +59248,11 @@ begin
   capacity := length(fList);
   result := fCount;
   if result>=capacity then begin
-    inc(capacity,256+fCount shr 3);
+    if capacity > 128*1024*1024 then inc(capacity,16*1024*1024)
+    else if capacity > 8*1024*1024 then inc(capacity,capacity shr 3)
+    else if capacity > 128 then inc(capacity,capacity shr 2)
+    else if capacity > 8 then inc(capacity,16)
+    else inc(capacity,4);
     SetLength(fList,capacity);
     if (fObjects<>nil) or (aObject<>nil) then
       SetLength(fObjects,capacity);
