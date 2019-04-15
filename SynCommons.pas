@@ -39997,9 +39997,9 @@ begin
       if _TempPath='' then
         _TempPath := GetEnvironmentVariable('TMP');
       if _TempPath='' then
-        if DirectoryExists('/var/tmp') then
-          _TempPath := '/var/tmp' else
-          _TempPath := '/tmp';
+        if DirectoryExists('/tmp') then
+          _TempPath := '/tmp' else
+          _TempPath := '/var/tmp';
       _TempPath := IncludeTrailingPathDelimiter(_TempPath);
     end;
     result := _TempPath;
