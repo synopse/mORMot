@@ -233,38 +233,40 @@ uses
 {$ifndef LVCL}
   Contnrs,
   SyncObjs, // for TEvent (in Classes.pas for LVCL)
-{$endif}
+{$endif LVCL}
 {$ifdef SYNCRTDEBUGLOW}
   SynCommons,
   SynLog,
-{$endif}
+{$endif SYNCRTDEBUGLOW}
 {$ifdef MSWINDOWS}
   Windows,
   SynWinSock,
   {$ifdef USEWININET}
   WinInet,
-  {$endif}
+  {$endif USEWININET}
   {$ifndef DELPHI5OROLDER}
   Types,
-  {$endif}
+  {$endif DELPHI5OROLDER}
 {$else MSWINDOWS}
   {$undef USEWININET}
   {$ifdef FPC}
   SynFPCSock,
   SynFPCLinux,
   BaseUnix, // for fpgetrlimit/fpsetrlimit
+  {$ifdef LINUXNOTBSD}
   Linux,
+  {$endif LINUXNOTBSD}
   {$else}
   {$ifndef DELPHI5OROLDER}
   Types,
-  {$endif}
-  {$endif}
+  {$endif DELPHI5OROLDER}
+  {$endif FPC}
   {$ifdef KYLIX3}
   KernelIoctl, // for IoctlSocket/ioctl FION* constants
   LibC,
   SynFPCSock,  // shared with Kylix
   SynKylix,
-  {$endif}
+  {$endif KYLIX3}
 {$endif MSWINDOWS}
   Classes;
 
