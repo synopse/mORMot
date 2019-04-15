@@ -2667,10 +2667,8 @@ begin // very fast optimized code
       if n=0 then
         break;
       inc(cap,n); // pre-allocate Doc.Names[]/Values[]
-      if cap<512 then
-        Doc.Capacity := cap else
-        if Doc.Capacity<cap then
-          Doc.Capacity := cap+cap shr 3; // faster for huge arrays
+      if Doc.Capacity<cap then
+        Doc.Capacity := NextGrow(cap); // faster for huge arrays
       for i := 0 to n-1 do begin
         if Kind=betDoc then
           if intnames<>nil then
@@ -3443,7 +3441,7 @@ end;
 procedure TBSONWriter.BSONDocumentBegin;
 begin
   if fDocumentStack>=Length(fDocumentStackOffset) then
-    SetLength(fDocumentStackOffset,fDocumentStack+fDocumentStack shr 3+16);
+    SetLength(fDocumentStackOffset,NextGrow(fDocumentStack));
   fDocumentStackOffset[fDocumentStack] := TotalWritten;
   inc(fDocumentStack);
   Write4(0);
@@ -3474,7 +3472,7 @@ begin
       raise EBSONException.CreateUTF8('Unexpected %.BSONDocumentEnd',[self]);
     dec(fDocumentStack);
     if fDocumentCount>=Length(fDocument) then
-      SetLength(fDocument,fDocumentCount+fDocumentCount shr 3+16);
+      SetLength(fDocument,NextGrow(fDocumentCount));
     with fDocument[fDocumentCount] do begin
       Offset := fDocumentStackOffset[fDocumentStack];
       Length := TotalWritten-Offset;
@@ -4577,7 +4575,7 @@ begin
         exit;
       W.ToBSONDocument(doc);
       if n>=length(docs) then
-        SetLength(docs,n+64+length(docs) shr 3);
+        SetLength(docs,NextGrow(n));
       docs[n] := doc;
       inc(n);
       W.CancelAll;

@@ -140,6 +140,17 @@
 // which will use BT[mem] opcodes, which are slow on Intel, but fast on AMD
 // (with the Delphi x86 compiler, may not be the case for LLVM or FPC)
 
+{.$define FORCE_STRSSE42}
+// sse4.2 string instructions may read up to 16 bytes after the actual end buffer
+// -> define this if you want StrLen/StrComp/strspn/strcspn to use SSE4.2 opcodes
+// but you would eventually experiment weird random GPF in your project, raising
+// unexpected SIGABRT/SIGSEGV under POSIX system: so is disabled below for our
+// LINUX conditional - and use at your own risk under Windows!
+
+{.$define DISABLE_SSE42}
+// if defined, no SSE4.2 nor AES-NI instruction will be used, i.e. disable
+// FORCE_STRSSE42 and all crc32c opcodes - is set for FPC DARWIN target
+
 {.$define WITH_ERMS}
 // you may define this to enable REP MOVSB/STOSB for Fillchar/Move if cfERMS
 // flag is available in Intel's CpuFeatures
@@ -274,7 +285,7 @@
       {$ifdef CPUX86}
         {$define FPC_PIC} // may have not be defined by the compiler options
       {$endif}
-      {$define DISABLE_SSE42} // fails otherwise
+      {$undef FORCE_STRSSE42}  // fails otherwise for sure
       {$define ABSOLUTEPASCAL} // NO asm nor redirection (until stabilized)
     {$else}
       {$define BSDNOTDARWIN}
@@ -286,6 +297,7 @@
   {$endif}
 
   {$ifdef LINUX}
+     {$undef FORCE_STRSSE42}  // avoid fatal SIGABRT/SIGSEGV on POSIX systems
      {$define FPCLINUX}
   {$endif}
   {$ifdef FPC_PIC}
@@ -593,6 +605,9 @@
       {$endif}
     {$endif}
   {$endif}
+  {$ifdef DISABLE_SSE42}
+    {$undef FORCE_STRSSE42}
+  {$endif DISABLE_SSE42}
 {$else}
   {$undef HASAESNI} // AES-NI is an Intel-specific feature
 {$endif CPUINTEL}

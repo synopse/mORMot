@@ -7201,7 +7201,7 @@ begin
         // save row position in DataRowPosition[] (if any)
         if DataRowPosition<>nil then begin
           if Length(DataRowPosition^)<=integer(result) then
-            SetLength(DataRowPosition^,result+result shr 3+256);
+            SetLength(DataRowPosition^,NextGrow(result));
           DataRowPosition^[result] := W.TotalWritten-StartPos;
         end;
         // first write null columns flags
@@ -7876,7 +7876,7 @@ begin
   for i := 0 to high(aValues) do
     with fParams[i] do begin
       if length(VArray)<=fParamsArrayCount then
-        SetLength(VArray,fParamsArrayCount+fParamsArrayCount shr 3+64);
+        SetLength(VArray,NextGrow(fParamsArrayCount));
       VInt64 := fParamsArrayCount;
       if (VType=ftDate) and (aValues[i].VType=vtExtended) then
         VArray[fParamsArrayCount] := // direct binding of TDateTime value
@@ -7906,7 +7906,7 @@ begin
     for F := 0 to fParamCount-1 do
     with fParams[F] do begin
       if length(VArray)<=fParamsArrayCount then
-        SetLength(VArray,fParamsArrayCount+fParamsArrayCount shr 3+64);
+        SetLength(VArray,NextGrow(fParamsArrayCount));
       if Rows.ColumnNull(F) then
         VArray[fParamsArrayCount] := 'null' else
       case Rows.ColumnType(F) of

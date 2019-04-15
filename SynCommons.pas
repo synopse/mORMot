@@ -173,17 +173,17 @@ type
   PtrUInt = NativeUInt;
   {$else}
   /// a CPU-dependent signed integer type cast of a pointer / register
-  // - used for 64 bits compatibility, native under Free Pascal Compiler
+  // - used for 64-bit compatibility, native under Free Pascal Compiler
   PtrInt = integer;
   /// a CPU-dependent unsigned integer type cast of a pointer / register
-  // - used for 64 bits compatibility, native under Free Pascal Compiler
+  // - used for 64-bit compatibility, native under Free Pascal Compiler
   PtrUInt = cardinal;
   {$endif}
   /// a CPU-dependent unsigned integer type cast of a pointer of pointer
-  // - used for 64 bits compatibility, native under Free Pascal Compiler
+  // - used for 64-bit compatibility, native under Free Pascal Compiler
   PPtrUInt = ^PtrUInt;
   /// a CPU-dependent signed integer type cast of a pointer of pointer
-  // - used for 64 bits compatibility, native under Free Pascal Compiler
+  // - used for 64-bit compatibility, native under Free Pascal Compiler
   PPtrInt = ^PtrInt;
 
   /// unsigned Int64 doesn't exist under older Delphi, but is defined in FPC
@@ -818,8 +818,8 @@ type
 
   /// implements a stack-based writable storage of binary content
   // - memory allocation is performed via a TSynTempBuffer
-  {$ifdef UNICODE}TSynTempWriter = record{$else}TSynTempWriter = object{$endif}
-  private
+  {$ifdef FPC_OR_UNICODE}TSynTempWriter = record private
+  {$else}TSynTempWriter = object protected{$endif}
     tmp: TSynTempBuffer;
   public
     /// the current writable position in tmp.buf
@@ -956,6 +956,11 @@ var
 
   /// can be used to avoid a memory allocation for res := 'null'
   NULL_STR_VAR: RawUTF8;
+
+/// compute the new capacity when expanding an array of items
+// - handle small, medium and large sizes properly to reduce memory usage and
+// maximize performance
+function NextGrow(capacity: integer): integer;
 
 /// equivalence to SetString(s,nil,len) function
 // - faster especially under FPC
@@ -1465,19 +1470,19 @@ function VariantHash(const value: variant; CaseInsensitive: boolean;
 
 { note: those VariantToInteger*() functions are expected to be there }
 
-/// convert any numerical Variant into a 32 bit integer
+/// convert any numerical Variant into a 32-bit integer
 // - it will expect true numerical Variant and won't convert any string nor
 // floating-pointer Variant, which will return FALSE and won't change the
 // Value variable content
 function VariantToInteger(const V: Variant; var Value: integer): boolean;
 
-/// convert any numerical Variant into a 64 bit integer
+/// convert any numerical Variant into a 64-bit integer
 // - it will expect true numerical Variant and won't convert any string nor
 // floating-pointer Variant, which will return FALSE and won't change the
 // Value variable content
 function VariantToInt64(const V: Variant; var Value: Int64): boolean;
 
-/// convert any numerical Variant into a 64 bit integer
+/// convert any numerical Variant into a 64-bit integer
 // - it will expect true numerical Variant and won't convert any string nor
 // floating-pointer Variant, which will return the supplied DefaultValue
 function VariantToInt64Def(const V: Variant; DefaultValue: Int64): Int64;
@@ -1767,15 +1772,15 @@ type
   // - used in mORMot.pas unit during TSQLTable rows sort and by TSQLQuery
   TUTF8Compare = function(P1,P2: PUTF8Char): PtrInt;
 
-/// convert the endianness of a given unsigned 32 bit integer into BigEndian
+/// convert the endianness of a given unsigned 32-bit integer into BigEndian
 function bswap32(a: cardinal): cardinal;
   {$ifdef FPC}inline;{$endif}
 
-/// convert the endianness of a given unsigned 64 bit integer into BigEndian
+/// convert the endianness of a given unsigned 64-bit integer into BigEndian
 function bswap64(const a: QWord): QWord;
   {$ifdef FPC}inline;{$endif}
 
-/// convert the endianness of an array of unsigned 64 bit integer into BigEndian
+/// convert the endianness of an array of unsigned 64-bit integer into BigEndian
 // - n is required to be > 0
 // - warning: on x86, a should be <> b
 procedure bswap64array(a,b: PQWordArray; n: PtrInt);
@@ -2013,12 +2018,23 @@ function SameValueFloat(const A, B: TSynExtended; DoublePrec: TSynExtended = 1E-
 function CompareFloat(const A, B: double): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// a comparison function for sorting 64-bit floating point values
+/// a comparison function for sorting 32-bit signed integer values
+function CompareInteger(const A, B: integer): integer;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// a comparison function for sorting 64-bit signed integer values
 function CompareInt64(const A, B: Int64): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// a comparison function for sorting 64-bit floating point values
+/// a comparison function for sorting 32-bit unsigned integer values
 function CompareCardinal(const A, B: cardinal): integer;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// a comparison function for sorting 64-bit unsigned integer values
+// - note that QWord(A)>QWord(B) is wrong on older versions of Delphi, so you
+// should better use this function or SortDynArrayQWord() to properly compare
+// two QWord values over CPUX86
+function CompareQWord(A, B: QWord): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the sum of values, using a running compensation for lost low-order bits
@@ -2135,7 +2151,7 @@ procedure AppendBuffersToRawUTF8(var Text: RawUTF8; const Buffers: array of PUTF
 // you may encounter buffer overflows and random memory errors
 function AppendRawUTF8ToBuffer(Buffer: PUTF8Char; const Text: RawUTF8): PUTF8Char;
 
-/// fast add text conversion of a 32 bit signed integer value into a given buffer
+/// fast add text conversion of a 32-bit signed integer value into a given buffer
 // - warning: the Buffer should contain enough space to store the text, otherwise
 // you may encounter buffer overflows and random memory errors
 function AppendUInt32ToBuffer(Buffer: PUTF8Char; Value: cardinal): PUTF8Char;
@@ -2145,13 +2161,12 @@ function AppendUInt32ToBuffer(Buffer: PUTF8Char; Value: cardinal): PUTF8Char;
 // - pure pascal StrComp() won't access the memory beyond the string, but this
 // function is defined for compatibility with SSE 4.2 expectations
 function StrCompFast(Str1, Str2: pointer): PtrInt;
+  {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// fastest available version of StrComp(), to be used with PUTF8Char/PAnsiChar
-// - will use SSE4.2 instructions on supported CPUs - and potentiall read up
-// to 15 bytes beyond the string: use StrCompFast() for a safe memory read;
-// if you want to disable StrCompSSE42 for your whole project, add in the
-// initialization section of one of your units:
-// !  StrComp := @StrCompFast;
+// - won't use SSE4.2 instructions on supported CPUs by default, which may read
+// some bytes beyond the s string, so should be avoided e.g. over memory mapped
+// files - call explicitely StrCompSSE42() if you are confident on your input
 var StrComp: function (Str1, Str2: pointer): PtrInt = StrCompFast;
 
 /// pure pascal version of strspn(), to be used with PUTF8Char/PAnsiChar
@@ -2169,38 +2184,54 @@ function strcspnpas(s,reject: pointer): integer;
 /// fastest available version of strspn(), to be used with PUTF8Char/PAnsiChar
 // - returns size of initial segment of s which appears in accept chars, e.g.
 // ! strspn('abcdef','debca')=5
-// - will use SSE4.2 instructions on supported CPUs
-// - please note that this function may read some bytes beyond the s string, so
-// should be avoided e.g. over memory mapped files - use safe strspnpas instead
+// - won't use SSE4.2 instructions on supported CPUs by default, which may read
+// some bytes beyond the s string, so should be avoided e.g. over memory mapped
+// files - call explicitely strspnsse42() if you are confident on your input
 var strspn: function (s,accept: pointer): integer = strspnpas;
 
 /// fastest available version of strcspn(), to be used with PUTF8Char/PAnsiChar
 // - returns size of initial segment of s which doesn't appears in reject chars, e.g.
 // ! strcspn('1234,6789',',')=4
-// - will use SSE4.2 instructions on supported CPUs
-// - please note that this function may read some bytes beyond the s string, so
-// should be avoided e.g. over memory mapped files - use safe strcspnpas instead
+// - won't use SSE4.2 instructions on supported CPUs by default, which may read
+// some bytes beyond the s string, so should be avoided e.g. over memory mapped
+// files - call explicitely strcspnsse42() if you are confident on your input
 var strcspn: function (s,reject: pointer): integer = strcspnpas;
 
 {$ifndef ABSOLUTEPASCAL}
 {$ifdef CPUINTEL}
+{$ifdef HASAESNI}
 /// SSE 4.2 version of StrComp(), to be used with PUTF8Char/PAnsiChar
 // - please note that this optimized version may read up to 15 bytes
-// beyond the string; this is rarely a problem but it may in principle
-// generate a protection violation (e.g. when used over memory mapped files) -
-// you can use the slightly slower but safe StrCompFast() function instead
+// beyond the string; this is rarely a problem but it may generate protection
+// violations, which could trigger fatal SIGABRT or SIGSEGV on Posix system
+// - could be used instead of StrComp() when you are confident about your
+// Str1/Str2 input buffers, checking if cfSSE42 in CpuFeatures
 function StrCompSSE42(Str1, Str2: pointer): PtrInt;
+
+// - please note that this optimized version may read up to 15 bytes
+// beyond the string; this is rarely a problem but it may generate protection
+// violations, which could trigger fatal SIGABRT or SIGSEGV on Posix system
+// - could be used instead of StrLen() when you are confident about your
+// S input buffers, checking if cfSSE42 in CpuFeatures
+function StrLenSSE42(S: pointer): PtrInt;
+{$endif HASAESNI}
 
 /// SSE 4.2 version of strspn(), to be used with PUTF8Char/PAnsiChar
 // - please note that this optimized version may read up to 15 bytes
-// beyond the string, so should be avoided e.g. over memory mapped files
+// beyond the string; this is rarely a problem but it may generate protection
+// violations, which could trigger fatal SIGABRT or SIGSEGV on Posix system
+// - could be used instead of strspn() when you are confident about your
+// s/accept input buffers, checking if cfSSE42 in CpuFeatures
 function strspnsse42(s,accept: pointer): integer;
 
 /// SSE 4.2 version of strcspn(), to be used with PUTF8Char/PAnsiChar
 // - please note that this optimized version may read up to 15 bytes
-// beyond the string, so should be avoided e.g. over memory mapped files
+// beyond the string; this is rarely a problem but it may generate protection
+// violations, which could trigger fatal SIGABRT or SIGSEGV on Posix system
+// - could be used instead of strcspn() when you are confident about your
+// s/reject input buffers, checking if cfSSE42 in CpuFeatures
 function strcspnsse42(s,reject: pointer): integer;
-{$endif}
+{$endif CPUINTEL}
 {$endif ABSOLUTEPASCAL}
 
 /// use our fast version of StrIComp(), to be used with PUTF8Char/PAnsiChar
@@ -2214,14 +2245,9 @@ function StrIComp(Str1, Str2: pointer): PtrInt;
 function StrLenPas(S: pointer): PtrInt;
 
 /// our fast version of StrLen(), to be used with PUTF8Char/PAnsiChar
-// - this version will use fast SSE2/SSE4.2 instructions (if available), on both
-// Win32 and Win64 platforms: please note that in this case, it may read up to
-// 15 bytes before or beyond the string; this is rarely a problem but it can in
-// principle generate a protection violation (e.g. when used over memory mapped files):
-// you can use the slightly slower StrLenPas() function instead with such input;
-// if you want to disable StrLenSSE42 for your whole project, add in the
-// initialization section of one of your units:
-// !  StrLen := @StrLenPas;
+// - won't use SSE4.2 instructions on supported CPUs by default, which may read
+// some bytes beyond the s string, so should be avoided e.g. over memory mapped
+// files - call explicitely StrLenSSE42() if you are confident on your input
 var StrLen: function(S: pointer): PtrInt = StrLenPas;
 
 /// our fast version of FillChar()
@@ -2705,11 +2731,12 @@ function UpperCopy255(dest: PAnsiChar; const source: RawUTF8): PAnsiChar; overlo
 
 /// copy source^ into a 256 chars dest^ buffer with 7 bits upper case conversion
 // - used internally for short keys match or case-insensitive hash
-// - will use SSE4.2 instructions on supported CPUs - and potentiall read up
-// to 15 bytes beyond the string: use UpperCopy255BufPas() for a safer memory read
 // - returns final dest pointer
 // - will copy up to 255 AnsiChar (expect the dest buffer to be defined e.g. as
 // array[byte] of AnsiChar on the caller stack)
+// - won't use SSE4.2 instructions on supported CPUs by default, which may read
+// some bytes beyond the s string, so should be avoided e.g. over memory mapped
+// files - call explicitely UpperCopy255BufSSE42() if you are confident on your input
 var UpperCopy255Buf: function(dest: PAnsiChar; source: PUTF8Char; sourceLen: PtrInt): PAnsiChar;
 
 /// copy source^ into a 256 chars dest^ buffer with 7 bits upper case conversion
@@ -2723,19 +2750,16 @@ function UpperCopy255BufPas(dest: PAnsiChar; source: PUTF8Char; sourceLen: PtrIn
 
 {$ifndef PUREPASCAL}
 {$ifndef DELPHI5OROLDER}
-
-/// copy source^ into a 256 chars dest^ buffer with 7 bits upper case conversion
-// - used internally for short keys match or case-insensitive hash
-// - this version will use SSE4.2 instructions on supported CPUs - and potentiall
-// read up to 15 bytes beyond the string
-// - you should not have to call this function, but rely on UpperCopy255Buf()
-// - returns final dest pointer
-// - will copy up to 255 AnsiChar (expect the dest buffer to be defined e.g. as
-// array[byte] of AnsiChar on the caller stack)
+/// SSE 4.2 version of UpperCopy255Buf()
+// - copy source^ into a 256 chars dest^ buffer with 7 bits upper case conversion
+// - please note that this optimized version may read up to 15 bytes
+// beyond the string; this is rarely a problem but it may generate protection
+// violations, which could trigger fatal SIGABRT or SIGSEGV on Posix system
+// - could be used instead of UpperCopy255Buf() when you are confident about your
+// dest/source input buffers, checking if cfSSE42 in CpuFeatures
 function UpperCopy255BufSSE42(dest: PAnsiChar; source: PUTF8Char; sourceLen: PtrInt): PAnsiChar;
-
-{$endif}
-{$endif}
+{$endif DELPHI5OROLDER}
+{$endif PUREPASCAL}
 
 /// copy source into dest^ with WinAnsi 8 bits upper case conversion
 // - used internally for short keys match or case-insensitive hash
@@ -3185,19 +3209,27 @@ function GetNextTChar64(var P: PUTF8Char; Sep: AnsiChar; out Buf: TChar64): PtrI
 
 /// return next CSV string as unsigned integer from P, 0 if no more
 // - if Sep is #0, it won't be searched for
-function GetNextItemCardinal(var P: PUTF8Char; Sep: AnsiChar= ','): PtrUInt;
+function GetNextItemCardinal(var P: PUTF8Char; Sep: AnsiChar=','): PtrUInt;
 
 /// return next CSV string as signed integer from P, 0 if no more
 // - if Sep is #0, it won't be searched for
-function GetNextItemInteger(var P: PUTF8Char; Sep: AnsiChar= ','): PtrInt;
+function GetNextItemInteger(var P: PUTF8Char; Sep: AnsiChar=','): PtrInt;
 
-/// return next CSV string as 64 bit signed integer from P, 0 if no more
+/// return next CSV string as 64-bit signed integer from P, 0 if no more
 // - if Sep is #0, it won't be searched for
-function GetNextItemInt64(var P: PUTF8Char; Sep: AnsiChar= ','): Int64;
+function GetNextItemInt64(var P: PUTF8Char; Sep: AnsiChar=','): Int64;
 
-/// return next CSV string as 64 bit unsigned integer from P, 0 if no more
+/// return next CSV string as 64-bit unsigned integer from P, 0 if no more
 // - if Sep is #0, it won't be searched for
-function GetNextItemQWord(var P: PUTF8Char; Sep: AnsiChar= ','): QWord;
+function GetNextItemQWord(var P: PUTF8Char; Sep: AnsiChar=','): QWord;
+
+/// return next CSV hexadecimal string as 64-bit unsigned integer from P
+// - returns 0 if no valid hexadecimal text is available in P
+// - if Sep is #0, it won't be searched for
+// - will first fill the 64-bit value with 0, then decode each two hexadecimal
+// characters available in P
+// - could be used to decode TTextWriter.AddBinToHexDisplayMinChars() output
+function GetNextItemHexa(var P: PUTF8Char; Sep: AnsiChar=','): QWord;
 
 /// return next CSV string as unsigned integer from P, 0 if no more
 // - P^ will point to the first non digit character (the item separator, e.g.
@@ -3206,31 +3238,31 @@ function GetNextItemCardinalStrict(var P: PUTF8Char): PtrUInt;
 
 /// return next CSV string as unsigned integer from P, 0 if no more
 // - this version expects P^ to point to an Unicode char array
-function GetNextItemCardinalW(var P: PWideChar; Sep: WideChar= ','): PtrUInt;
+function GetNextItemCardinalW(var P: PWideChar; Sep: WideChar=','): PtrUInt;
 
 /// return next CSV string as double from P, 0.0 if no more
 // - if Sep is #0, will return all characters until next whitespace char
-function GetNextItemDouble(var P: PUTF8Char; Sep: AnsiChar= ','): double;
+function GetNextItemDouble(var P: PUTF8Char; Sep: AnsiChar=','): double;
 
 /// return next CSV string as currency from P, 0.0 if no more
 // - if Sep is #0, will return all characters until next whitespace char
-function GetNextItemCurrency(var P: PUTF8Char; Sep: AnsiChar= ','): currency; overload;
+function GetNextItemCurrency(var P: PUTF8Char; Sep: AnsiChar=','): currency; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// return next CSV string as currency from P, 0.0 if no more
 // - if Sep is #0, will return all characters until next whitespace char
-procedure GetNextItemCurrency(var P: PUTF8Char; out result: currency; Sep: AnsiChar= ','); overload;
+procedure GetNextItemCurrency(var P: PUTF8Char; out result: currency; Sep: AnsiChar=','); overload;
 
 /// return n-th indexed CSV string in P, starting at Index=0 for first one
-function GetCSVItem(P: PUTF8Char; Index: PtrUInt; Sep: AnsiChar = ','): RawUTF8; overload;
+function GetCSVItem(P: PUTF8Char; Index: PtrUInt; Sep: AnsiChar=','): RawUTF8; overload;
 
 /// return n-th indexed CSV string (unquoted if needed) in P, starting at Index=0 for first one
-function GetUnQuoteCSVItem(P: PUTF8Char; Index: PtrUInt; Sep: AnsiChar = ','; Quote: AnsiChar=''''): RawUTF8; overload;
+function GetUnQuoteCSVItem(P: PUTF8Char; Index: PtrUInt; Sep: AnsiChar=','; Quote: AnsiChar=''''): RawUTF8; overload;
 
 /// return n-th indexed CSV string in P, starting at Index=0 for first one
 // - this function return the generic string type of the compiler, and
 // therefore can be used with ready to be displayed text (i.e. the VCL)
-function GetCSVItemString(P: PChar; Index: PtrUInt; Sep: Char = ','): string;
+function GetCSVItemString(P: PChar; Index: PtrUInt; Sep: Char=','): string;
 
 /// return last CSV string in the supplied UTF-8 content
 function GetLastCSVItem(const CSV: RawUTF8; Sep: AnsiChar=','): RawUTF8;
@@ -3699,8 +3731,8 @@ type
   //  in a huge text buffer
   // - this version also handles french and spanish pronunciations on request,
   //  which differs from default Soundex, i.e. English
-  {$ifdef UNICODE}TSynSoundEx = record{$else}TSynSoundEx = object{$endif}
-  private
+  {$ifdef FPC_OR_UNICODE}TSynSoundEx = record private
+  {$else}TSynSoundEx = object protected{$endif}
     Search, FirstChar: cardinal;
     fValues: PSoundExValues;
   public
@@ -4084,19 +4116,19 @@ function IntegerScan(P: PCardinalArray; Count: PtrInt; Value: cardinal): PCardin
 // - return -1 if Value was not found
 function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): PtrInt;
 
-/// fast search of an integer position in a 64 bit integer array
+/// fast search of an integer position in a 64-bit integer array
 // - Count is the number of Int64 entries in P^
 // - returns P where P^=Value
 // - returns nil if Value was not found
 function Int64Scan(P: PInt64Array; Count: PtrInt; const Value: Int64): PInt64;
 
-/// fast search of an integer position in a signed 64 bit integer array
+/// fast search of an integer position in a signed 64-bit integer array
 // - Count is the number of Int64 entries in P^
 // - returns index of P^[index]=Value
 // - returns -1 if Value was not found
 function Int64ScanIndex(P: PInt64Array; Count: PtrInt; const Value: Int64): PtrInt;
 
-/// fast search of an integer position in an unsigned 64 bit integer array
+/// fast search of an integer position in an unsigned 64-bit integer array
 // - Count is the number of QWord entries in P^
 // - returns index of P^[index]=Value
 // - returns -1 if Value was not found
@@ -4108,7 +4140,7 @@ function QWordScanIndex(P: PQWordArray; Count: PtrInt; const Value: QWord): PtrI
 // - returns false if Value was not found
 function IntegerScanExists(P: PCardinalArray; Count: PtrInt; Value: cardinal): boolean;
 
-/// fast search of an integer value in a 64 bit integer array
+/// fast search of an integer value in a 64-bit integer array
 // - returns true if P^=Value within Count entries
 // - returns false if Value was not found
 function Int64ScanExists(P: PInt64Array; Count: PtrInt; const Value: Int64): boolean;
@@ -4148,15 +4180,15 @@ procedure QuickSortInteger(var ID: TIntegerDynArray); overload;
 /// sort a 16 bit unsigned Integer array, low values first
 procedure QuickSortWord(ID: PWordArray; L, R: PtrInt);
 
-/// sort a 64 bit signed Integer array, low values first
+/// sort a 64-bit signed Integer array, low values first
 procedure QuickSortInt64(ID: PInt64Array; L, R: PtrInt); overload;
 
-/// sort a 64 bit unsigned Integer array, low values first
+/// sort a 64-bit unsigned Integer array, low values first
 // - QWord comparison are implemented correctly under FPC or Delphi 2009+ -
 // older compilers will use fast and exact SortDynArrayQWord()
 procedure QuickSortQWord(ID: PQWordArray; L, R: PtrInt); overload;
 
-/// sort a 64 bit Integer array, low values first
+/// sort a 64-bit Integer array, low values first
 procedure QuickSortInt64(ID,CoValues: PInt64Array; L, R: PtrInt); overload;
 
 type
@@ -4193,13 +4225,13 @@ function FastFindIntegerSorted(const Values: TIntegerDynArray; Value: integer): 
 /// fast O(log(n)) binary search of a 16 bit unsigned integer value in a sorted array
 function FastFindWordSorted(P: PWordArray; R: PtrInt; Value: Word): PtrInt;
 
-/// fast O(log(n)) binary search of a 64 bit signed integer value in a sorted array
+/// fast O(log(n)) binary search of a 64-bit signed integer value in a sorted array
 // - R is the last index of available integer entries in P^ (i.e. Count-1)
 // - return index of P^[result]=Value
 // - return -1 if Value was not found
 function FastFindInt64Sorted(P: PInt64Array; R: PtrInt; const Value: Int64): PtrInt; overload;
 
-/// fast O(log(n)) binary search of a 64 bit unsigned integer value in a sorted array
+/// fast O(log(n)) binary search of a 64-bit unsigned integer value in a sorted array
 // - R is the last index of available integer entries in P^ (i.e. Count-1)
 // - return index of P^[result]=Value
 // - return -1 if Value was not found
@@ -4310,6 +4342,12 @@ procedure DeleteInteger(var Values: TIntegerDynArray; var ValuesCount: Integer; 
 procedure ExcludeInteger(var Values, Excluded: TIntegerDynArray;
   ExcludedSortSize: Integer=32);
 
+/// ensure some 32-bit integer from Values[] will only contain Included[]
+// - Included is declared as var, since it will be sorted in-place during process
+// if it contains more than IncludedSortSize items (i.e. if the sort is worth it)
+procedure IncludeInteger(var Values, Included: TIntegerDynArray;
+  IncludedSortSize: Integer=32);
+
 /// sort and remove any 32-bit duplicated integer from Values[]
 procedure DeduplicateInteger(var Values: TIntegerDynArray); overload;
 
@@ -4337,6 +4375,12 @@ procedure DeleteInt64(var Values: TInt64DynArray; var ValuesCount: Integer; Inde
 // if it contains more than ExcludedSortSize items (i.e. if the sort is worth it)
 procedure ExcludeInt64(var Values, Excluded: TInt64DynArray;
   ExcludedSortSize: Integer=32);
+
+/// ensure some 64-bit integer from Values[] will only contain Included[]
+// - Included is declared as var, since it will be sorted in-place during process
+// if it contains more than IncludedSortSize items (i.e. if the sort is worth it)
+procedure IncludeInt64(var Values, Included: TInt64DynArray;
+  IncludedSortSize: Integer=32);
 
 /// sort and remove any 64-bit duplicated integer from Values[]
 procedure DeduplicateInt64(var Values: TInt64DynArray); overload;
@@ -4687,13 +4731,8 @@ type
   // - is defined either as an object either as a record, due to a bug
   // in Delphi 2009/2010 compiler (at least): this structure is not initialized
   // if defined as an object on the stack, but will be as a record :(
-  {$ifdef UNDIRECTDYNARRAY}
-  TDynArray = record
-  private
-  {$else}
-  TDynArray = object
-  protected
-  {$endif}
+  {$ifdef UNDIRECTDYNARRAY}TDynArray = record private
+  {$else}TDynArray = object protected{$endif}
     fValue: PPointer;
     fTypeInfo: pointer;
     fElemType: pointer;
@@ -5241,8 +5280,8 @@ type
   /// allows to iterate over a TDynArray.SaveTo binary buffer
   // - may be used as alternative to TDynArray.LoadFrom, if you don't want
   // to allocate all items at once, but retrieve items one by one
-  {$ifdef UNICODE}TDynArrayLoadFrom = record{$else}TDynArrayLoadFrom = object{$endif}
-  private
+  {$ifdef FPC_OR_UNICODE}TDynArrayLoadFrom = record private
+  {$else}TDynArrayLoadFrom = object protected{$endif}
     DynArray: TDynArray; // used to access RTTI
     Hash: PCardinalArray;
   public
@@ -5748,8 +5787,8 @@ type
   // - internal padding is used to safely store up to 7 values protected
   // from concurrent access with a mutex
   // - for object-level locking, see TSynPersistentLock which owns one such instance
-  {$ifdef UNICODE}TSynLocker = record{$else}TSynLocker = object{$endif}
-  private
+  {$ifdef FPC_OR_UNICODE}TSynLocker = record private
+  {$else}TSynLocker = object protected{$endif}
     fSection: TRTLCriticalSection;
     fSectionPadding: PtrInt; // paranoid to avoid FUTEX_WAKE_PRIVATE=EAGAIN
     fLocked, fInitialized: boolean;
@@ -6146,8 +6185,8 @@ type
   // - is defined either as an object either as a record, due to a bug
   // in Delphi 2009/2010 compiler (at least): this structure is not initialized
   // if defined as an object on the stack, but will be as a record :(
-  {$ifdef UNICODE}TSynNameValue = record{$else}TSynNameValue = object{$endif}
-  private
+  {$ifdef FPC_OR_UNICODE}TSynNameValue = record private
+  {$else}TSynNameValue = object protected{$endif}
     fDynArray: TDynArrayHashed;
     fOnAdd: TSynNameValueNotify;
     function GetBlobData: RawByteString;
@@ -6598,7 +6637,7 @@ function Random32gsl(max: cardinal): cardinal; overload;
 procedure Random32Seed(entropy: pointer=nil; entropylen: integer=0);
 
 /// fill some memory buffer with random values
-// - the destination buffer is expected to be allocated as 32 bit items
+// - the destination buffer is expected to be allocated as 32-bit items
 // - use internally crc32c() with some rough entropy source, and Random32
 // gsl_rng_taus2 generator or hardware RDRAND Intel x86/x64 opcode if available
 // (and ForceGsl is kept to its default false value)
@@ -6859,6 +6898,7 @@ function DynArrayElementTypeName(TypeInfo: pointer; ElemTypeInfo: PPointer=nil;
 // - used internally to guess the associated item type name
 function DynArrayItemTypeLen(const aDynArrayTypeName: RawUTF8): integer;
 
+
 /// compare two "array of boolean" elements
 function SortDynArrayBoolean(const A,B): integer;
 
@@ -6876,30 +6916,27 @@ function SortDynArrayWord(const A,B): integer;
 
 /// compare two "array of integer" elements
 function SortDynArrayInteger(const A,B): integer;
-  {$ifndef CPUX86}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// compare two "array of cardinal" elements
 function SortDynArrayCardinal(const A,B): integer;
 
 /// compare two "array of Int64" or "array of Currency" elements
 function SortDynArrayInt64(const A,B): integer;
-  {$ifndef CPUX86}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// compare two "array of QWord" elements
-// - note that QWordA>QWordB is wrong on older versions of Delphi, so you should
-// better use this function to properly compare two QWord values over CPUX86
+// - note that QWord(A)>QWord(B) is wrong on older versions of Delphi, so you
+// should better use this function or CompareQWord() to properly compare two
+// QWord values over CPUX86
 function SortDynArrayQWord(const A,B): integer;
-  {$ifndef CPUX86}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// compare two "array of THash128" elements
 function SortDynArray128(const A,B): integer;
-  {$ifdef FPC_OR_UNICODE}inline;{$endif} // C2096 Delphi 2007 internal error
 
 /// compare two "array of THash256" elements
-function SortDynArray256(const A,B): integer; {$ifdef FPC_OR_UNICODE}inline;{$endif}
+function SortDynArray256(const A,B): integer;
 
 /// compare two "array of THash512" elements
-function SortDynArray512(const A,B): integer; {$ifdef FPC_OR_UNICODE}inline;{$endif}
+function SortDynArray512(const A,B): integer;
 
 /// compare two "array of TObject/pointer" elements
 function SortDynArrayPointer(const A,B): integer;
@@ -6943,16 +6980,15 @@ function SortDynArrayStringI(const A,B): integer;
 /// compare two "array of TFileName" elements, as file names
 // - i.e. with no case sensitivity, and grouped by file extension
 // - the expected string type is the generic RTL string, i.e. TFileName
+// - calls internally GetFileNameWithoutExt() and AnsiCompareFileName()
 function SortDynArrayFileName(const A,B): integer;
 
 {$ifndef NOVARIANTS}
 /// compare two "array of variant" elements, with case sensitivity
 function SortDynArrayVariant(const A,B): integer;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// compare two "array of variant" elements, with no case sensitivity
 function SortDynArrayVariantI(const A,B): integer;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// compare two "array of variant" elements, with or without case sensitivity
 function SortDynArrayVariantComp(const A,B: TVarData; caseInsensitive: boolean): integer;
@@ -7843,10 +7879,10 @@ type
     procedure Add(c1,c2: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
     {$ifndef CPU64} // already implemented by Add(Value: PtrInt) method
-    /// append a 64 bit signed Integer Value as text
+    /// append a 64-bit signed Integer Value as text
     procedure Add(Value: Int64); overload;
     {$endif}
-    /// append a 32 bit signed Integer Value as text
+    /// append a 32-bit signed Integer Value as text
     procedure Add(Value: PtrInt); overload;
     /// append a boolean Value as text
     // - write either 'true' or 'false'
@@ -8119,8 +8155,12 @@ type
     /// fast conversion from binary data into quoted MSB lowercase hexa chars
     // - up to the internal buffer bytes may be converted
     procedure AddBinToHexDisplayQuoted(Bin: pointer; BinBytes: integer);
-    /// add the pointer into hexa chars, ready to be displayed
-    procedure AddPointer(P: PtrUInt);
+    /// append a Value as significant hexadecimal text
+    // - append its minimal size, i.e. excluding highest bytes containing 0
+    // - use GetNextItemHexa() to decode such a text value
+    procedure AddBinToHexDisplayMinChars(Bin: pointer; BinBytes: PtrInt);
+    /// add the pointer into significant hexa chars, ready to be displayed
+    procedure AddPointer(P: PtrUInt);    {$ifdef HASINLINE}inline;{$endif}
     /// write a byte as hexa chars
     procedure AddByteToHex(Value: byte);
     /// write a Int18 value (0..262143) as 3 chars
@@ -8139,8 +8179,7 @@ type
     /// append some UTF-8 encoded chars to the buffer, from a generic string type
     // - faster than AddJSONEscape(pointer(StringToUTF8(string))
     // - escapes chars according to the JSON RFC
-    procedure AddJSONEscapeString(const s: string);
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure AddJSONEscapeString(const s: string);  {$ifdef HASINLINE}inline;{$endif}
     /// append some UTF-8 encoded chars to the buffer, from the main AnsiString type
     // - escapes chars according to the JSON RFC
     procedure AddJSONEscapeAnsiString(const s: AnsiString);
@@ -8148,8 +8187,7 @@ type
     // - faster than AddNoJSONEscape(pointer(StringToUTF8(string))
     // - don't escapes chars according to the JSON RFC
     // - will convert the Unicode chars into UTF-8
-    procedure AddNoJSONEscapeString(const s: string);
-      {$ifdef UNICODE}inline;{$endif}
+    procedure AddNoJSONEscapeString(const s: string);  {$ifdef UNICODE}inline;{$endif}
     /// append some Unicode encoded chars to the buffer
     // - if Len is 0, Len is calculated from zero-ended widechar
     // - escapes chars according to the JSON RFC
@@ -9746,8 +9784,8 @@ var
 
 type
   /// handle memory mapping of a file content
-  {$ifdef UNICODE}TMemoryMap = record{$else}TMemoryMap = object{$endif}
-  private
+  {$ifdef FPC_OR_UNICODE}TMemoryMap = record private
+  {$else}TMemoryMap = object protected{$endif}
     fBuf: PAnsiChar;
     fBufSize: PtrUInt;
     fFile: THandle;
@@ -10112,7 +10150,7 @@ type
   /// this structure can be used to speed up reading from a file
   // - use internaly memory mapped files for a file up to 2 GB (Windows has
   // problems with memory mapped files bigger than this size limit - at least
-  // with 32 bit executables) - but sometimes, Windows fails to allocate
+  // with 32-bit executables) - but sometimes, Windows fails to allocate
   // more than 512 MB for a memory map, because it does lack of contiguous
   // memory space: in this case, we fall back on direct file reading
   // - maximum handled file size has no limit (but will use slower direct
@@ -10122,8 +10160,8 @@ type
   // - is defined either as an object either as a record, due to a bug
   // in Delphi 2009/2010 compiler (at least): this structure is not initialized
   // if defined as an object on the stack, but will be as a record :(
-  {$ifdef UNICODE}TFileBufferReader = record{$else}TFileBufferReader = object{$endif}
-  private
+  {$ifdef FPC_OR_UNICODE}TFileBufferReader = record private
+  {$else}TFileBufferReader = object protected{$endif}
     fCurrentPos: PtrUInt;
     fMap: TMemoryMap;
     /// get Isize + buffer from current memory map or fBufTemp into (P,PEnd)
@@ -11086,7 +11124,7 @@ procedure BinToHexLower(Bin: PAnsiChar; BinBytes: integer; var result: RawUTF8);
 // enough space for at least BinBytes*2 chars
 // - using this function with Bin^ as an integer value will encode it
 // in big-endian order (most-signignifican byte first): use it for display
-procedure BinToHexDisplayLower(Bin, Hex: PAnsiChar; BinBytes: integer); overload;
+procedure BinToHexDisplayLower(Bin, Hex: PAnsiChar; BinBytes: PtrInt); overload;
 
 /// fast conversion from binary data into lowercase hexa chars
 function BinToHexDisplayLower(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
@@ -11951,7 +11989,7 @@ var
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$endif CPUINTEL}
 
-/// naive symmetric encryption scheme using a 32 bit key
+/// naive symmetric encryption scheme using a 32-bit key
 // - fast, but not very secure, since uses crc32ctab[] content as master cypher
 // key: consider using SynCrypto proven AES-based algorithms instead
 procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
@@ -12038,21 +12076,21 @@ type
   // - the compiler will generate bt/btr/bts opcodes
   TBits32 = set of 0..31;
   PBits32 = ^TBits32;
-  /// fast access to Int64 bits
+  /// fast access to 64-bit integer bits
   // - the compiler will generate bt/btr/bts opcodes
   // - as used by GetBit64/SetBit64/UnSetBit64
   TBits64 = set of 0..63;
   PBits64 = ^TBits64;
 
-/// retrieve a particular bit status from a Int64 bit array (max aIndex is 63)
+/// retrieve a particular bit status from a 64-bit integer bits (max aIndex is 63)
 function GetBit64(const Bits: Int64; aIndex: PtrInt): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// set a particular bit into a Int64 bit array (max aIndex is 63)
+/// set a particular bit into a 64-bit integer bits (max aIndex is 63)
 procedure SetBit64(var Bits: Int64; aIndex: PtrInt);
   {$ifdef HASINLINE}inline;{$endif}
 
-/// unset/clear a particular bit into a Int64 bit array (max aIndex is 63)
+/// unset/clear a particular bit into a 64-bit integer bits (max aIndex is 63)
 procedure UnSetBit64(var Bits: Int64; aIndex: PtrInt);
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -13331,7 +13369,7 @@ type
     // ExeVersion global variable
     constructor Create(const aFileName: TFileName; aMajor: integer=0;
       aMinor: integer=0; aRelease: integer=0; aBuild: integer=0);
-    /// retrieve the version as a 32 bits integer with Major.Minor.Release
+    /// retrieve the version as a 32-bit integer with Major.Minor.Release
     // - following Major shl 16+Minor shl 8+Release bit pattern
     function Version32: integer;
     /// build date and time of this exe file, as plain text
@@ -13379,7 +13417,7 @@ const
   DateDelta     = 693594;
   UnixDateDelta = 25569;
 
-/// GetFileVersion returns the most significant 32 bits of a file's binary
+/// GetFileVersion returns the most significant 32-bit of a file's binary
 // version number
 // - typically, this includes the major and minor version placed
 // together in one 32-bit integer
@@ -13495,10 +13533,10 @@ var
   {$endif UNICODE}
 
 var
-  /// is set to TRUE if the current process is a 32 bit image running under WOW64
+  /// is set to TRUE if the current process is a 32-bit image running under WOW64
   // - WOW64 is the x86 emulator that allows 32-bit Windows-based applications
   // to run seamlessly on 64-bit Windows
-  // - equals always FALSE if the current executable is a 64 bit image
+  // - equals always FALSE if the current executable is a 64-bit image
   IsWow64: boolean;
   /// the current System information, as retrieved for the current process
   // - under a WOW64 process, it will use the GetNativeSystemInfo() new API
@@ -13591,7 +13629,7 @@ var
 function GetCurrentThreadID: TThreadID; cdecl;
   external 'libpthread.so.0' name 'pthread_self';
 
-/// overloaded function using open64() to allow 64 bit positions
+/// overloaded function using open64() to allow 64-bit positions
 function FileOpen(const FileName: string; Mode: LongWord): Integer;
 
 {$endif}
@@ -14700,8 +14738,8 @@ type
   // be a good idea to use DocVariantData(aVariant)^ or _Safe(aVariant)^ instead
   // of TDocVariantData(aVariant), if you are not sure how aVariant was allocated
   // (may be not _Obj/_Json, but retrieved as varByRef e.g. from late binding)
-  {$ifdef UNICODE}TDocVariantData = record{$else}TDocVariantData = object{$endif}
-  private
+  {$ifdef FPC_OR_UNICODE}TDocVariantData = record private
+  {$else}TDocVariantData = object protected{$endif}
     VType: TVarType;
     VOptions: TDocVariantOptions;
     (* this structure uses all TVarData available space: no filler needed!
@@ -16125,8 +16163,8 @@ type
   // - WARNING: under Windows, this record MUST be aligned to 32-bit, otherwise
   // iFreq=0 - so you can use TLocalPrecisionTimer/ILocalPrecisionTimer if you
   // want to alllocate a local timer instance on the stack
-  {$ifdef UNICODE}TPrecisionTimer = record{$else}TPrecisionTimer = object{$endif}
-  private
+  {$ifdef FPC_OR_UNICODE}TPrecisionTimer = record private
+  {$else}TPrecisionTimer = object protected{$endif}
     fStart,fStop,fResume,fLast: Int64;
     {$ifndef LINUX} // use QueryPerformanceMicroSeconds() fast API
     fWinFreq: Int64;
@@ -16229,7 +16267,7 @@ type
   end;
 
   /// reference counted high resolution timer (for accurate speed statistics)
-  // - since TPrecisionTimer shall be 32 bit aligned, you can use this class
+  // - since TPrecisionTimer shall be 32-bit aligned, you can use this class
   // to initialize a local auto-freeing ILocalPrecisionTimer variable on stack
   // - to be used as such:
   // ! var Timer: ILocalPrecisionTimer;
@@ -17715,8 +17753,8 @@ type
   TSystemUseDataDynArray = array of TSystemUseData;
 
   /// low-level structure used to compute process memory and CPU usage
-  {$ifdef UNICODE}TProcessInfo = record{$else}TProcessInfo = object{$endif}
-  private
+  {$ifdef FPC_OR_UNICODE}TProcessInfo = record private
+  {$else}TProcessInfo = object protected{$endif}
     {$ifdef MSWINDOWS}
     fSysPrevIdle, fSysPrevKernel, fSysPrevUser,
     fDiffIdle, fDiffKernel, fDiffUser, fDiffTotal: Int64;
@@ -20677,7 +20715,7 @@ smlu32: Res.Text := pointer(SmallUInt32UTF8[result]);
     vtPointer,vtInterface: begin
       Res.Text := @Res.Temp;
       Res.Len := SizeOf(pointer)*2;
-      BinToHexDisplay(V.VPointer,@Res.Temp,SizeOf(Pointer));
+      BinToHexDisplayLower(V.VPointer,@Res.Temp,SizeOf(Pointer));
       result := SizeOf(pointer)*2;
       exit;
     end;
@@ -25144,17 +25182,20 @@ begin
 end;
 
 function StrCompFast(Str1, Str2: pointer): PtrInt;
+var c: byte;
 begin
   if Str1<>Str2 then
   if Str1<>nil then
   if Str2<>nil then begin
-    if PByte(Str1)^=PByte(Str2)^ then
+    c := PByte(Str1)^;
+    if c=PByte(Str2)^ then
       repeat
-        if PByte(Str1)^=0 then break;
+        if c=0 then break;
         inc(PByte(Str1));
         inc(PByte(Str2));
-      until PByte(Str1)^<>PByte(Str2)^;
-    result := PByte(Str1)^-PByte(Str2)^;
+        c := PByte(Str1)^;
+      until c<>PByte(Str2)^;
+    result := c-PByte(Str2)^;
     exit;
   end else
   result := 1 else  // Str2=''
@@ -25365,6 +25406,15 @@ begin
     result := 0;
 end;
 
+function CompareQWord(A, B: QWord): integer;
+begin
+  if A<B then
+    result := -1 else
+  if A>B then
+    result := 1 else
+    result := 0;
+end;
+
 function SortDynArrayAnsiString(const A,B): integer;
 begin
   result := StrComp(pointer(A),pointer(B));
@@ -25411,8 +25461,7 @@ end;
 {$else PUREPASCAL}
 
 function IdemPChar(p: PUTF8Char; up: PAnsiChar): boolean;
-// if the beginning of p^ is same as up^ (ignore case - up^ must be already Upper)
-// eax=p edx=up
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         test    eax, eax
         jz      @e            // P=nil -> false
@@ -25452,6 +25501,7 @@ asm
 end;
 
 function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): PtrInt;
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         push    eax
         call    IntegerScan
@@ -25465,6 +25515,7 @@ asm
 end;
 
 function IntegerScan(P: PCardinalArray; Count: PtrInt; Value: cardinal): PCardinal;
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm // eax=P, edx=Count, Value=ecx
         test    eax, eax
         jz      @ok0 // avoid GPF
@@ -25540,6 +25591,7 @@ asm // eax=P, edx=Count, Value=ecx
 end;
 
 function IntegerScanExists(P: PCardinalArray; Count: PtrInt; Value: cardinal): boolean;
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm // eax=P, edx=Count, Value=ecx
         test    eax, eax
         jz      @z // avoid GPF
@@ -25589,6 +25641,7 @@ asm // eax=P, edx=Count, Value=ecx
 end;
 
 function PosChar(Str: PUTF8Char; Chr: AnsiChar): PUTF8Char;
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm // faster version by AB - eax=Str dl=Chr
         test    eax, eax
         jz      @z
@@ -25620,6 +25673,7 @@ asm // faster version by AB - eax=Str dl=Chr
 end;
 
 function CompareMem(P1, P2: Pointer; Length: PtrInt): Boolean;
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm     // eax=P1 edx=P2 ecx=Length
         cmp     eax, edx
         je      @0                 // P1=P2
@@ -25686,6 +25740,7 @@ asm     // eax=P1 edx=P2 ecx=Length
 end;
 
 function PosEx(const SubStr, S: RawUTF8; Offset: PtrUInt): integer;
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm     // eax=SubStr, edx=S, ecx=Offset
         push    ebx
         push    esi
@@ -25763,6 +25818,7 @@ asm     // eax=SubStr, edx=S, ecx=Offset
 end;
 
 function IdemPropNameU(const P1,P2: RawUTF8): boolean;
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm // eax=p1, edx=p2
         cmp     eax, edx
         je      @out1
@@ -25801,6 +25857,7 @@ asm // eax=p1, edx=p2
 end;
 
 function IdemPropNameUSameLen(P1,P2: PUTF8Char; P1P2Len: PtrInt): boolean;
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm // eax=p1, edx=p2, ecx=P1P2Len
         cmp     eax, edx
         je      @out2
@@ -25838,6 +25895,7 @@ asm // eax=p1, edx=p2, ecx=P1P2Len
 end;
 
 function StrIComp(Str1, Str2: pointer): PtrInt;
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm // faster version by AB, from Agner Fog's original
         mov     ecx, eax
         test    eax, edx
@@ -25890,6 +25948,7 @@ asm // faster version by AB, from Agner Fog's original
 end;
 
 function StrLenPas(S: pointer): PtrInt;
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm // slower than x86/SSE* StrLen(), but won't read any byte beyond the string
         mov     edx, eax
         test    eax, eax
@@ -25914,6 +25973,7 @@ asm // slower than x86/SSE* StrLen(), but won't read any byte beyond the string
 end;
 
 function StrCompFast(Str1, Str2: pointer): PtrInt;
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm // no branch taken in case of not equal first char
         cmp     eax, edx
         je      @zero  // same string or both nil
@@ -25992,6 +26052,7 @@ asm // warning: may read up to 15 bytes beyond the string itself
 end;
 
 function SortDynArrayAnsiStringSSE42(const A,B): integer;
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm // warning: may read up to 15 bytes beyond the string itself
       mov       eax, [eax]
       mov       edx, [edx]
@@ -26036,6 +26097,36 @@ asm // warning: may read up to 15 bytes beyond the string itself
       movzx     eax, byte ptr [eax+ecx]
       movzx     edx, byte ptr [edx+ecx]
       sub       eax, edx
+end;
+
+function StrLenSSE42(S: pointer): PtrInt;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm // warning: may read up to 15 bytes beyond the string itself
+        mov     edx, eax             // copy pointer
+        test    eax, eax
+        jz      @null                // returns 0 if S=nil
+        xor     eax, eax
+        {$ifdef HASAESNI}
+        pxor    xmm0, xmm0
+        pcmpistri xmm0, dqword[edx], EQUAL_EACH  // comparison result in ecx
+        {$else}
+        db      $66, $0F, $EF, $C0
+        db      $66, $0F, $3A, $63, $02, EQUAL_EACH
+        {$endif}
+        jnz     @loop
+        mov     eax, ecx
+        ret
+        nop   // for @loop alignment
+@loop:  add     eax, 16
+        {$ifdef HASAESNI}
+        pcmpistri xmm0, dqword[edx + eax], EQUAL_EACH  // comparison result in ecx
+        {$else}
+        db      $66, $0F, $3A, $63, $04, $10, EQUAL_EACH
+        {$endif}
+        jnz     @loop
+@ok:    add     eax, ecx
+        ret
+@null:  db      $f3 // rep ret
 end;
 
 procedure YearToPChar(Y: PtrUInt; P: PUTF8Char);
@@ -26490,6 +26581,19 @@ asm // Delphi x86 compiler is not efficient at compiling below code
         ret
 @nz:    jl      @n
 @p:     mov     eax, 1
+end;
+
+function CompareQWord(A, B: QWord): integer;
+begin
+  {$ifdef FPC_OR_UNICODE} // recent compilers are able to generate correct code
+  if A<B then
+    result := -1 else
+  if A>B then
+    result := 1 else
+    result := 0;
+  {$else}
+  result := SortDynArrayQWord(A,B); // use correct x86 asm version below
+  {$endif}
 end;
 
 function SortDynArrayQWord(const A,B): integer;
@@ -27078,6 +27182,7 @@ asm // from GPL strlen32.asm by Agner Fog - www.agner.org/optimize
         pxor    xmm0, xmm0          // set to zero
         and     ecx, 15             // lower 4 bits indicate misalignment
         and     eax, -16            // align pointer by 16
+        // will never read outside a memory page boundary, so won't trigger GPF
         movdqa  xmm1, [eax]         // read from nearest preceding boundary
         pcmpeqb xmm1, xmm0          // compare 16 bytes with zero
         pmovmskb edx, xmm1          // get one bit for each byte result
@@ -28136,7 +28241,7 @@ begin // fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits val
       end else begin
         result := GetHighUTF8UCS4Inlined(u1);
         if result and $ffffff00=0 then
-          result := table[result]; // 8 bits to upper, 32 bits as is
+          result := table[result]; // 8 bits to upper, 32-bit as is
       end;
     if c2<=127 then begin
       if c2=0 then exit; // u1>u2 -> return u1^
@@ -28148,7 +28253,7 @@ begin // fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits val
       c2 := GetHighUTF8UCS4Inlined(u2);
       if c2<=255 then
         dec(result,table[c2]) else // 8 bits to upper
-        dec(result,c2); // 32 bits widechar returns diff
+        dec(result,c2); // 32-bit widechar returns diff
       if result<>0 then exit;
     end;
   until false else
@@ -28198,7 +28303,7 @@ begin // fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits val
       dec(result,UTF8_EXTRA[extra].offset);
       inc(u1,extra);
       if result and $ffffff00=0 then
-        result := table[result]; // 8 bits to upper, 32 bits as is
+        result := table[result]; // 8 bits to upper, 32-bit as is
     end;
     // here result=NormToUpper[u1^]
     inc(u2);
@@ -28217,7 +28322,7 @@ begin // fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits val
       inc(u2,extra);
       if c2 and $ffffff00=0 then
         dec(result,table[c2]) else // 8 bits to upper
-        dec(result,c2); // returns 32 bits diff
+        dec(result,c2); // returns 32-bit diff
       if result<>0 then exit;
     end;
     // here we have result=NormToUpper[u2^]-NormToUpper[u1^]=0
@@ -29364,15 +29469,16 @@ var
   TwoDigitsHexWBLower: array[byte] of word absolute TwoDigitsHexLower;
 
 procedure BinToHex(Bin, Hex: PAnsiChar; BinBytes: integer);
-var j: cardinal;
-    {$ifdef PUREPASCAL}tab: ^TAnsiCharToWord;{$endif}
+{$ifdef PUREPASCAL}var tab: ^TAnsiCharToWord;{$endif}
 begin
   {$ifdef PUREPASCAL}tab := @TwoDigitsHexW;{$endif}
-  for j := 1 to BinBytes do begin
-    PWord(Hex)^ := {$ifndef PUREPASCAL}TwoDigitsHexW{$else}tab{$endif}[Bin^];
-    inc(Hex,2);
-    inc(Bin);
-  end;
+  if BinBytes>0 then
+    repeat
+      PWord(Hex)^ := {$ifndef PUREPASCAL}TwoDigitsHexW{$else}tab{$endif}[Bin^];
+      inc(Bin);
+      inc(Hex,2);
+      dec(BinBytes);
+    until BinBytes=0;
 end;
 
 function BinToHex(const Bin: RawByteString): RawUTF8;
@@ -29468,14 +29574,17 @@ begin
 end;
 
 procedure BinToHexDisplay(Bin, Hex: PAnsiChar; BinBytes: integer);
-var j: integer;
-    {$ifdef PUREPASCAL}tab: ^TAnsiCharToWord;{$endif}
+{$ifdef PUREPASCAL}var tab: ^TAnsiCharToWord;{$endif}
 begin
   {$ifdef PUREPASCAL}tab := @TwoDigitsHexW;{$endif}
-  for j := BinBytes-1 downto 0 do begin
-    PWord(Hex+j*2)^ := {$ifndef PUREPASCAL}TwoDigitsHexW{$else}tab{$endif}[Bin^];
-    inc(Bin);
-  end;
+  inc(Hex,BinBytes*2);
+  if BinBytes>0 then
+    repeat
+      dec(Hex,2);
+      PWord(Hex)^ := {$ifndef PUREPASCAL}TwoDigitsHexW{$else}tab{$endif}[Bin^];
+      inc(Bin);
+      dec(BinBytes);
+    until BinBytes=0;
 end;
 
 function BinToHexDisplay(Bin: PAnsiChar; BinBytes: integer): RawUTF8;
@@ -29485,15 +29594,16 @@ begin
 end;
 
 procedure BinToHexLower(Bin, Hex: PAnsiChar; BinBytes: integer);
-var j: cardinal;
-    {$ifdef PUREPASCAL}tab: ^TAnsiCharToWord;{$endif}
+{$ifdef PUREPASCAL}var tab: ^TAnsiCharToWord;{$endif}
 begin
   {$ifdef PUREPASCAL}tab := @TwoDigitsHexWLower;{$endif}
-  for j := 1 to BinBytes do begin
-    PWord(Hex)^ := {$ifndef PUREPASCAL}TwoDigitsHexWLower{$else}tab{$endif}[Bin^];
-    inc(Hex,2);
-    inc(Bin);
-  end;
+  if BinBytes>0 then
+    repeat
+      PWord(Hex)^ := {$ifndef PUREPASCAL}TwoDigitsHexWLower{$else}tab{$endif}[Bin^];
+      inc(Bin);
+      inc(Hex,2);
+      dec(BinBytes);
+    until BinBytes=0;
 end;
 
 function BinToHexLower(const Bin: RawByteString): RawUTF8;
@@ -29512,15 +29622,18 @@ begin
   BinToHexLower(Bin,BinBytes,result);
 end;
 
-procedure BinToHexDisplayLower(Bin, Hex: PAnsiChar; BinBytes: integer);
-var j: integer;
-    {$ifdef PUREPASCAL}tab: ^TAnsiCharToWord;{$endif}
+procedure BinToHexDisplayLower(Bin, Hex: PAnsiChar; BinBytes: PtrInt);
+{$ifdef PUREPASCAL}var tab: ^TAnsiCharToWord;{$endif}
 begin
   {$ifdef PUREPASCAL}tab := @TwoDigitsHexWLower;{$endif}
-  for j := BinBytes-1 downto 0 do begin
-    PWord(Hex+j*2)^ := {$ifndef PUREPASCAL}TwoDigitsHexWLower{$else}tab{$endif}[Bin^];
-    inc(Bin);
-  end;
+  inc(Hex,BinBytes*2);
+  if BinBytes>0 then
+    repeat
+      dec(Hex,2);
+      PWord(Hex)^ := {$ifndef PUREPASCAL}TwoDigitsHexWLower{$else}tab{$endif}[Bin^];
+      inc(Bin);
+      dec(BinBytes);
+    until BinBytes=0;
 end;
 
 function BinToHexDisplayLower(Bin: PAnsiChar; BinBytes: integer): RawUTF8;
@@ -29744,6 +29857,15 @@ begin
     result := 0;
 end;
 
+function CompareInteger(const A, B: integer): integer;
+begin
+  if A<B then
+    result := -1 else
+  if A>B then
+    result := 1 else
+    result := 0;
+end;
+
 function CompareInt64(const A, B: Int64): integer;
 begin
   if A<B then
@@ -29850,15 +29972,27 @@ begin
   result := true;
 end;
 
+function NextGrow(capacity: integer): integer;
+begin // similar to TFPList.Expand for the ranges algorithm
+  result := capacity;
+  if result<128 shl 20 then
+    if result<8 shl 20 then
+      if result<=128 then
+        if result>8 then
+          inc(result,16) else
+          inc(result,4) else
+        inc(result,result shr 2) else
+      inc(result,result shr 3) else
+    inc(result,16 shl 20);
+end;
+
 procedure AddRawUTF8(var Values: TRawUTF8DynArray; var ValuesCount: integer;
   const Value: RawUTF8);
 var capacity: integer;
 begin
   capacity := Length(Values);
-  if ValuesCount=capacity then begin
-    inc(capacity,32+capacity shr 3);
-    SetLength(Values,capacity);
-  end;
+  if ValuesCount=capacity then
+    SetLength(Values,NextGrow(capacity));
   Values[ValuesCount] := Value;
   inc(ValuesCount);
 end;
@@ -30892,7 +31026,7 @@ begin
   {$ifdef MSWINDOWS}
   {$ifdef HASINLINE} // FPC or Delphi 2006+
   Size := F.Size;
-  {$else} // F.Size was limited to 32 bits on older Delphi
+  {$else} // F.Size was limited to 32-bit on older Delphi
   Size := F.FindData.nFileSizeLow or Int64(F.FindData.nFileSizeHigh) shl 32;
   {$endif}
   {$else}
@@ -30938,7 +31072,7 @@ begin
         if SearchRecValidFile(F) and ((IgnoreFileName='') or
             (AnsiCompareFileName(F.Name,IgnoreFileName)<>0)) then begin
           if n=length(result) then
-            SetLength(result,n+n shr 3+8);
+            SetLength(result,NextGrow(n));
           if IncludesDir then
             result[n].FromSearchRec(Dir,F) else
             result[n].FromSearchRec('',F);
@@ -31214,7 +31348,7 @@ procedure AddInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
   Value: integer);
 begin
   if ValuesCount=length(Values) then
-    SetLength(Values,ValuesCount+256+ValuesCount shr 3);
+    SetLength(Values,NextGrow(ValuesCount));
   Values[ValuesCount] := Value;
   inc(ValuesCount);
 end;
@@ -31227,10 +31361,10 @@ begin
     exit;
   end;
   if ValuesCount=length(Values) then
-    SetLength(Values,ValuesCount+256+ValuesCount shr 3);
+    SetLength(Values,NextGrow(ValuesCount));
   Values[ValuesCount] := Value;
   inc(ValuesCount);
-  result := true
+  result := true;
 end;
 
 function AddInteger(var Values: TIntegerDynArray; const Another: TIntegerDynArray): PtrInt;
@@ -31249,7 +31383,7 @@ function AddWord(var Values: TWordDynArray; var ValuesCount: integer; Value: Wor
 begin
   result := ValuesCount;
   if result=length(Values) then
-    SetLength(Values,result+32+result shr 3);
+    SetLength(Values,NextGrow(result));
   Values[result] := Value;
   inc(ValuesCount);
 end;
@@ -31258,7 +31392,7 @@ function AddInt64(var Values: TInt64DynArray; var ValuesCount: integer; Value: I
 begin
   result := ValuesCount;
   if result=length(Values) then
-    SetLength(Values,result+256+result shr 3);
+    SetLength(Values,NextGrow(result));
   Values[result] := Value;
   inc(ValuesCount);
 end;
@@ -31362,7 +31496,7 @@ begin
 end;
 
 procedure ExcludeInteger(var Values, Excluded: TIntegerDynArray; ExcludedSortSize: integer);
-var i,v,x,n: integer;
+var i,v,x,n: PtrInt;
 begin
   if (Values=nil) or (Excluded=nil) then
     exit; // nothing to exclude
@@ -31389,8 +31523,39 @@ begin
     SetLength(Values,n);
 end;
 
+procedure IncludeInteger(var Values, Included: TIntegerDynArray;
+  IncludedSortSize: Integer);
+var i,v,x,n: PtrInt;
+begin
+  if (Values=nil) or (Included=nil) then begin
+    Values := nil;
+    exit;
+  end;
+  v := length(Values);
+  n := 0;
+  x := Length(Included);
+  if (x>IncludedSortSize) or (v>IncludedSortSize) then begin // sort if worth it
+    dec(x);
+    QuickSortInteger(pointer(Included),0,x);
+    for i := 0 to v-1 do
+      if FastFindIntegerSorted(pointer(Included),x,Values[i])>=0 then begin
+        if n<>i then
+          Values[n] := Values[i];
+        inc(n);
+      end;
+  end else
+    for i := 0 to v-1 do
+      if IntegerScanExists(pointer(Included),x,Values[i]) then begin
+        if n<>i then
+          Values[n] := Values[i];
+        inc(n);
+      end;
+  if n<>v then
+    SetLength(Values,n);
+end;
+
 procedure ExcludeInt64(var Values, Excluded: TInt64DynArray; ExcludedSortSize: Integer);
-var i,v,x,n: integer;
+var i,v,x,n: PtrInt;
 begin
   if (Values=nil) or (Excluded=nil) then
     exit; // nothing to exclude
@@ -31409,6 +31574,37 @@ begin
   end else
     for i := 0 to v-1 do
       if not Int64ScanExists(pointer(Excluded),x,Values[i]) then begin
+        if n<>i then
+          Values[n] := Values[i];
+        inc(n);
+      end;
+  if n<>v then
+    SetLength(Values,n);
+end;
+
+procedure IncludeInt64(var Values, Included: TInt64DynArray;
+  IncludedSortSize: integer);
+var i,v,x,n: PtrInt;
+begin
+  if (Values=nil) or (Included=nil) then begin
+    Values := nil;
+    exit;
+  end;
+  v := length(Values);
+  n := 0;
+  x := Length(Included);
+  if (x>IncludedSortSize) or (v>IncludedSortSize) then begin // sort if worth it
+    dec(x);
+    QuickSortInt64(pointer(Included),0,x);
+    for i := 0 to v-1 do
+      if FastFindInt64Sorted(pointer(Included),x,Values[i])>=0 then begin
+        if n<>i then
+          Values[n] := Values[i];
+        inc(n);
+      end;
+  end else
+    for i := 0 to v-1 do
+      if Int64ScanExists(pointer(Included),x,Values[i]) then begin
         if n<>i then
           Values[n] := Values[i];
         inc(n);
@@ -32261,7 +32457,7 @@ begin
   result := Index;
   n := Length(Values);
   if ValuesCount=n then begin
-    inc(n,256+n shr 3);
+    n := NextGrow(n);
     SetLength(Values,n);
     if CoValues<>nil then
       SetLength(CoValues^,n);
@@ -32625,14 +32821,14 @@ begin
     exit;
   PCardinal(@result)^ := c;
   inc(P);
-  repeat // fast 32 bit loop
+  repeat // fast 32-bit loop
     c := byte(P^)-48;
     if c>9 then
       break else
       PCardinal(@result)^ := PCardinal(@result)^*10+c;
     inc(P);
     if PCardinal(@result)^>=high(cardinal)div 10 then begin
-      repeat // 64 bit loop
+      repeat // 64-bit loop
         c := byte(P^)-48;
         if c>9 then
           break;
@@ -32668,14 +32864,14 @@ begin
     exit;
   PCardinal(@result)^ := c;
   inc(P);
-  repeat // fast 32 bit loop
+  repeat // fast 32-bit loop
     c := byte(P^)-48;
     if c>9 then
       break else
       PCardinal(@result)^ := PCardinal(@result)^*10+c;
     inc(P);
     if PCardinal(@result)^>=high(cardinal)div 10 then begin
-      repeat // 64 bit loop
+      repeat // 64-bit loop
         c := byte(P^)-48;
         if c>9 then
           break;
@@ -32738,7 +32934,7 @@ begin
     exit;
   PCardinal(@result)^ := c;
   inc(P);
-  repeat // fast 32 bit loop
+  repeat // fast 32-bit loop
     c := byte(P^);
     if c<>0 then begin
       dec(c,48);
@@ -32748,7 +32944,7 @@ begin
       PCardinal(@result)^ := PCardinal(@result)^*10+c;
       inc(P);
       if PCardinal(@result)^>=high(cardinal)div 10 then begin
-        repeat // 64 bit loop
+        repeat // 64-bit loop
           c := byte(P^);
           if c=0 then begin
             err := 0; // conversion success without error
@@ -32794,7 +32990,7 @@ begin
     exit;
   PCardinal(@result)^ := c;
   inc(P);
-  repeat // fast 32 bit loop
+  repeat // fast 32-bit loop
     c := byte(P^);
     if c<>0 then begin
       dec(c,48);
@@ -32804,7 +33000,7 @@ begin
       PCardinal(@result)^ := PCardinal(@result)^*10+c;
       inc(P);
       if PCardinal(@result)^>=high(cardinal)div 10 then begin
-        repeat // 64 bit loop
+        repeat // 64-bit loop
           c := byte(P^);
           if c=0 then begin
             err := 0; // conversion success without error
@@ -34066,6 +34262,17 @@ begin
 end;
 {$endif}
 
+function GetNextItemHexa(var P: PUTF8Char; Sep: AnsiChar): QWord;
+var tmp: TChar64;
+    L: integer;
+begin
+  result := 0;
+  L := GetNextTChar64(P,Sep,tmp);
+  if (L>0) and (L and 1=0) then
+    if not HexDisplayToBin(@tmp,@result,L shr 1) then
+      result := 0;
+end;
+
 function GetNextItemDouble(var P: PUTF8Char; Sep: AnsiChar): double;
 var tmp: TChar64;
     err: integer;
@@ -35322,8 +35529,7 @@ type
 {$ifdef CPU64}
 procedure GetCPUID(Param: Cardinal; var Registers: TRegisters);
 {$ifdef FPC}nostackframe; assembler; asm {$else}
-asm // ecx=param, rdx=Registers (Linux: edi,rsi)
-        .noframe
+asm .noframe // ecx=param, rdx=Registers (Linux: edi,rsi)
 {$endif FPC}
         {$ifdef win64}
         mov     eax, ecx
@@ -35351,8 +35557,7 @@ const
 
 function UpperCopy255BufSSE42(dest: PAnsiChar; source: PUTF8Char; sourceLen: PtrInt): PAnsiChar;
 {$ifdef FPC}nostackframe; assembler; asm {$else}
-asm // rcx=dest, rdx=source, r8=len (Linux: rdi,rsi,rdx)
-        .noframe
+asm .noframe // rcx=dest, rdx=source, r8=len (Linux: rdi,rsi,rdx)
 {$endif FPC}
        {$ifdef win64}
        mov     rax, rcx
@@ -35406,8 +35611,7 @@ end;
 
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$ifdef FPC}nostackframe; assembler; asm {$else}
-asm // ecx=crc, rdx=buf, r8=len (Linux: edi,rsi,rdx)
-        .noframe
+asm .noframe // ecx=crc, rdx=buf, r8=len (Linux: edi,rsi,rdx)
 {$endif FPC}
         {$ifdef win64}
         mov     eax, ecx
@@ -35462,10 +35666,8 @@ end;
 
 function StrLenSSE2(S: pointer): PtrInt;
 {$ifdef FPC}nostackframe; assembler; asm {$else}
-asm // rcx=S (Linux: rdi)
-        .noframe
-{$endif FPC}
-        // from GPL strlen64.asm by Agner Fog - www.agner.org/optimize
+asm .noframe // rcx=S (Linux: rdi)
+{$endif FPC} // from GPL strlen64.asm by Agner Fog - www.agner.org/optimize
         {$ifdef win64}
         mov     rax, rcx             // get pointer to string from rcx
         mov     r8,  rcx             // copy pointer
@@ -35476,10 +35678,11 @@ asm // rcx=S (Linux: rdi)
         test    rdi, rdi
         {$endif}
         jz      @null                // returns 0 if S=nil
-        // rax = s,ecx = 32 bits of s
+        // rax=s,ecx=32-bit of s
         pxor    xmm0, xmm0           // set to zero
         and     ecx, 15              // lower 4 bits indicate misalignment
         and     rax, -16             // align pointer by 16
+        // will never read outside a memory page boundary, so won't trigger GPF
         movdqa  xmm1, [rax]          // read from nearest preceding boundary
         pcmpeqb xmm1, xmm0           // compare 16 bytes with zero
         pmovmskb edx, xmm1           // get one bit for each byte result
@@ -35551,7 +35754,7 @@ asm // rcx=Str1, rdx=Str2 (Linux: rdi,rsi)
       {$else}
       mov       rax, rdi
       mov       rdx, rsi
-      test      rdi, rsi
+      test      rdi, rsi  // is one of Str1/Str2 nil ?
       {$endif}
       jz        @n
 @ok:  sub       rax, rdx
@@ -35586,41 +35789,44 @@ asm // rcx=Str1, rdx=Str2 (Linux: rdi,rsi)
       sub       rax, rdx
 end;
 {$endif HASAESNI}
-
 {$endif CPU64}
 {$endif CPUINTEL}
 
 procedure crcblocks(crc128, data128: PBlock128; count: integer);
+var oneblock: procedure(crc128, data128: PBlock128);
 begin
-  {$ifndef DISABLE_SSE42}
-  {$ifdef CPUX86}
-  if (cfSSE42 in CpuFeatures) and (count>0) then
-  asm
-        mov     ecx, crc128
-        mov     edx, data128
-@s:     mov     eax, dword ptr[ecx]
-        db      $F2, $0F, $38, $F1, $02
-        mov     dword ptr[ecx], eax
-        mov     eax, dword ptr[ecx + 4]
-        db      $F2, $0F, $38, $F1, $42, $04
-        mov     dword ptr[ecx + 4], eax
-        mov     eax, dword ptr[ecx + 8]
-        db      $F2, $0F, $38, $F1, $42, $08
-        mov     dword ptr[ecx + 8], eax
-        mov     eax, dword ptr[ecx + 12]
-        db      $F2, $0F, $38, $F1, $42, $0C
-        mov     dword ptr[ecx + 12], eax
-        add     edx, 16
-        dec     count
-        jnz     @s
-  end else
-  {$endif CPUX86}
-  {$endif DISABLE_SSE42}
-  while count>0 do begin
-    crcblock(crc128,data128);
-    inc(data128);
-    dec(count);
-  end;
+  if count>0 then
+    {$ifndef DISABLE_SSE42}
+    {$ifdef CPUX86}
+    if cfSSE42 in CpuFeatures then
+    asm
+          mov     ecx, crc128
+          mov     edx, data128
+  @s:     mov     eax, dword ptr[ecx]
+          db      $F2, $0F, $38, $F1, $02 // crc32 eax, dword ptr [edx]
+          mov     dword ptr[ecx], eax
+          mov     eax, dword ptr[ecx + 4]
+          db      $F2, $0F, $38, $F1, $42, $04 // crc32 eax, dword ptr [edx+4]
+          mov     dword ptr[ecx + 4], eax
+          mov     eax, dword ptr[ecx + 8]
+          db      $F2, $0F, $38, $F1, $42, $08 // crc32 eax, dword ptr [edx+8]
+          mov     dword ptr[ecx + 8], eax
+          mov     eax, dword ptr[ecx + 12]
+          db      $F2, $0F, $38, $F1, $42, $0C // crc32 eax, dword ptr [edx+12]
+          mov     dword ptr[ecx + 12], eax
+          add     edx, 16
+          dec     count
+          jnz     @s
+    end else
+    {$endif CPUX86}
+    {$endif DISABLE_SSE42} begin
+      oneblock := @crcblock;
+      repeat
+        oneblock(crc128,data128);
+        inc(data128);
+        dec(count);
+      until count=0;
+    end;
 end;
 
 {$ifdef CPUINTEL}
@@ -38369,10 +38575,10 @@ var Space, SpaceBeg, DBeg: PUTF8Char;
     Number: boolean;
 label Next;
 begin
-  Space := D;
   DBeg := D;
-  SpaceBeg := D;
   if (D<>nil) and (P<>nil) then begin // avoid GPF
+    Space := D;
+    SpaceBeg := D;
     repeat
       CapitalCount := 0;
       Number := P^ in  ['0'..'9'];
@@ -38418,13 +38624,14 @@ begin
       D^ := ' ';
       inc(D);
     until false;
-    if (Space>DBeg) then Dec(Space); // here Space point to uninitialized memory
-  end;
-  while Space>SpaceBeg do begin
-    if Space^ in ['A'..'Z'] then
-      if not (Space[1] in ['A'..'Z',' ']) then
-        inc(Space^,32); // lowercase conversion of not last fully uppercased word
-    dec(Space);
+    if Space>DBeg then
+      dec(Space);
+    while Space>SpaceBeg do begin
+      if Space^ in ['A'..'Z'] then
+        if not (Space[1] in ['A'..'Z',' ']) then
+          inc(Space^,32); // lowercase conversion of not last fully uppercased word
+      dec(Space);
+    end;
   end;
   result := D-DBeg;
 end;
@@ -39141,7 +39348,7 @@ begin
   end;
   n := Length(Values);
   if ValuesCount=n then begin
-    inc(n,256+n shr 3);
+    n := NextGrow(n);
     SetLength(Values,n);
     if CoValues<>nil then
       SetLength(CoValues^,n);
@@ -39152,7 +39359,7 @@ begin
     {$ifdef FPC}Move{$else}MoveFast{$endif}(Pointer(Values[result]),Pointer(Values[result+1]),n);
     PtrInt(Values[result]) := 0; // avoid GPF
     if CoValues<>nil then begin
-      {$ifdef CPU64}n := n shr 1;{$endif} // 64 bit pointer size is twice an integer
+      {$ifdef CPU64}n := n shr 1;{$endif} // 64-bit pointer size is twice an integer
       {$ifdef FPC}Move{$else}MoveFast{$endif}(CoValues^[result],CoValues^[result+1],n);
     end;
   end else
@@ -39790,9 +39997,9 @@ begin
       if _TempPath='' then
         _TempPath := GetEnvironmentVariable('TMP');
       if _TempPath='' then
-        if DirectoryExists('/var/tmp') then
-          _TempPath := '/var/tmp' else
-          _TempPath := '/tmp';
+        if DirectoryExists('/tmp') then
+          _TempPath := '/tmp' else
+          _TempPath := '/var/tmp';
       _TempPath := IncludeTrailingPathDelimiter(_TempPath);
     end;
     result := _TempPath;
@@ -39870,7 +40077,7 @@ end;
 procedure RedirectCode(Func, RedirectFunc: Pointer; Backup: PPatchCode=nil);
 var NewJump: packed record
     Code: byte;        // $e9 = jmp {relative}
-    Distance: integer; // relative jump is 32 bit even on CPU64
+    Distance: integer; // relative jump is 32-bit even on CPU64
   end;
 begin
   if (Func=nil) or (RedirectFunc=nil) then
@@ -40843,7 +41050,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
     result := DynArray.SaveToLength;
   end;
   tkInterface: begin
-    len := SizeOf(Int64); // consume 64 bits even on CPU32
+    len := SizeOf(Int64); // consume 64-bit even on CPU32
     result := SizeOf(PtrUInt);
   end;
   else
@@ -40910,7 +41117,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
   {$ifndef DELPHI5OROLDER}
   tkInterface: begin
     PIInterface(dest)^ := PIInterface(data)^; // with proper refcount
-    result := dest+SizeOf(Int64); // consume 64 bits even on CPU32
+    result := dest+SizeOf(Int64); // consume 64-bit even on CPU32
     len := SizeOf(PtrUInt);
   end;
   {$endif}
@@ -40981,7 +41188,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
   {$ifndef DELPHI5OROLDER}
   tkInterface: begin
     PIInterface(data)^ := PIInterface(source)^; // with proper refcount
-    inc(source,SizeOf(Int64)); // consume 64 bits even on CPU32
+    inc(source,SizeOf(Int64)); // consume 64-bit even on CPU32
     result := SizeOf(PtrUInt);
   end;
   {$endif}
@@ -42296,35 +42503,6 @@ asm // Dest=eax Count=edx Value=cl
 @done:
 end;
 
-function StrLenSSE42(S: pointer): PtrInt;
-{$ifdef FPC}nostackframe; assembler;{$endif}
-asm // warning: may read up to 15 bytes beyond the string itself
-        mov     edx, eax             // copy pointer
-        test    eax, eax
-        jz      @null                // returns 0 if S=nil
-        xor     eax, eax
-        pxor    xmm0, xmm0
-        {$ifdef HASAESNI}
-        pcmpistri xmm0, dqword[edx], EQUAL_EACH  // comparison result in ecx
-        {$else}
-        db      $66, $0F, $3A, $63, $02, EQUAL_EACH
-        {$endif}
-        jnz     @loop
-        mov     eax, ecx
-        ret
-        nop   // for @loop alignment
-@loop:  add     eax, 16
-        {$ifdef HASAESNI}
-        pcmpistri xmm0, dqword[edx + eax], EQUAL_EACH  // comparison result in ecx
-        {$else}
-        db      $66, $0F, $3A, $63, $04, $10, EQUAL_EACH
-        {$endif}
-        jnz     @loop
-@ok:    add     eax, ecx
-        ret
-@null:  db      $f3 // rep ret
-end;
-
 {$endif DELPHI5OROLDER}
 
 {$endif PUREPASCAL}
@@ -42340,10 +42518,12 @@ begin
   {$else DELPHI5OROLDER}
   {$ifdef CPU64}
   {$ifdef HASAESNI}
+  {$ifdef FORCE_STRSSE42}
   if cfSSE42 in CpuFeatures then begin
     StrLen := @StrLenSSE42;
     StrComp := @StrCompSSE42;
   end else
+  {$endif FORCE_STRSSE42}
   {$endif HASAESNI}
     StrLen := @StrLenSSE2;
   {$ifdef WITH_ERMS}{$ifdef MSWINDOWS} // disabled (slower for small blocks)
@@ -42357,9 +42537,11 @@ begin
   {$else CPU64}
   {$ifdef CPUINTEL}
   if cfSSE2 in CpuFeatures then begin
+    {$ifdef FORCE_STRSSE42}
     if cfSSE42 in CpuFeatures then
       StrLen := @StrLenSSE42 else
       StrLen := @StrLenSSE2;
+    {$endif FORCE_STRSSE42}
     FillcharFast := @FillCharSSE2;
   end else begin
     StrLen := @StrLenX86;
@@ -42370,7 +42552,7 @@ begin
     MoveFast := @MoveERMSB;
     FillcharFast := @FillCharERMSB;
   end else {$endif}
-    MoveFast := @MoveX87; // SSE2 is not faster than X87 version on 32 bit CPU
+    MoveFast := @MoveX87; // SSE2 is not faster than X87 version on 32-bit CPU
   {$endif CPUINTEL}
   {$endif CPU64}
   {$endif DELPHI5OROLDER}
@@ -43612,7 +43794,7 @@ var EndOfObject: AnsiChar;
         repeat
           inc(n);
           if (ArrayLen<0) and (n>ArrayCapacity) then begin
-            inc(ArrayCapacity,512+ArrayCapacity shr 3);
+            ArrayCapacity := NextGrow(ArrayCapacity);
             Prop.ReAllocateNestedArray(PPtrUInt(Data)^,ArrayCapacity);
             DynArray := PPointer(Data)^;
             inc(DynArray,pred(n)*Prop.fNestedDataSize);
@@ -46154,7 +46336,7 @@ begin
   if VValue=nil then
     SetLength(VValue,16) else
     if VCount>=length(VValue) then
-      SetLength(VValue,VCount+VCount shr 3+32);
+      SetLength(VValue,NextGrow(VCount));
   if aName<>'' then begin
     len := length(VValue);
     if Length(VName)<>len then
@@ -49920,7 +50102,7 @@ begin
     exit;
   if aIndex<>nil then begin // whole FillIncreasing(aIndex[]) for first time
     if ndx>=length(aIndex) then
-      SetLength(aIndex,ndx+ndx shr 3+64); // grow aIndex[] if needed
+      SetLength(aIndex,NextGrow(ndx)); // grow aIndex[] if needed
     aIndex[ndx] := ndx;
   end;
   CreateOrderedIndex(aIndex,aCompare);
@@ -51239,12 +51421,8 @@ function TObjectDynArrayWrapper.Add(Instance: TObject): integer;
 var cap: integer;
 begin
   cap := length(TObjectDynArray(fValue^));
-  if cap<=fCount then begin
-    if cap<256 then
-      inc(cap,64) else
-      inc(cap,256+cap shr 3);
-    SetLength(TObjectDynArray(fValue^),cap);
-  end;
+  if cap<=fCount then
+    SetLength(TObjectDynArray(fValue^),NextGrow(cap));
   result := fCount;
   TObjectDynArray(fValue^)[result] := Instance;
   inc(fCount);
@@ -51373,7 +51551,7 @@ var a: TObjectDynArray absolute aObjArray;
 begin
   result := aObjArrayCount;
   if result=length(a) then
-    SetLength(a,result+result shr 3+16);
+    SetLength(a,NextGrow(result));
   a[result] := aItem;
   inc(aObjArrayCount);
 end;
@@ -52546,7 +52724,7 @@ procedure TObjectListSorted.InsertNew(Item: TSynPersistentLock;
   Index: integer);
 begin
   if fCount=length(fObjArray) then
-    SetLength(fObjArray,fCount+256+fCount shr 3);
+    SetLength(fObjArray,NextGrow(fCount));
   if cardinal(Index)<cardinal(fCount) then
     {$ifdef FPC}Move{$else}MoveFast{$endif}(
       fObjArray[Index],fObjArray[Index+1],(fCount-Index)*SizeOf(TObject)) else
@@ -53916,28 +54094,6 @@ begin
   inc(B);
 end;
 
-procedure TTextWriter.AddPointer(P: PtrUInt);
-  procedure Pointer4ToHex(B: PWordArray; P: PtrUInt);
-  begin
-    B[3] := TwoDigitsHexWB[ToByte(P)]; P := P shr 8;
-    B[2] := TwoDigitsHexWB[ToByte(P)]; P := P shr 8;
-    B[1] := TwoDigitsHexWB[ToByte(P)]; P := P shr 8;
-    B[0] := TwoDigitsHexWB[P];
-  end;
-begin
-  if BEnd-B<=SizeOf(P)*2 then
-    FlushToStream;
-  {$ifdef CPU64} // truncate to for most heap-allocated 4 bytes pointers
-  if P and $ffffffff00000000<>0 then begin
-    BinToHexDisplay(@P,PAnsiChar(B+1),8);
-    inc(B,16);
-    exit;
-  end;
-  {$endif}
-  Pointer4ToHex(@B[1],P);
-  inc(B,8);
-end;
-
 procedure TTextWriter.AddBinToHexDisplay(Bin: pointer; BinBytes: integer);
 begin
   if cardinal(BinBytes*2-1)>=cardinal(fTempBufSize) then
@@ -53969,6 +54125,25 @@ begin
   inc(B,BinBytes*2);
   B[2] := '"';
   inc(B,2);
+end;
+
+procedure TTextWriter.AddBinToHexDisplayMinChars(Bin: pointer; BinBytes: PtrInt);
+begin
+  if (BinBytes<=0) or (cardinal(BinBytes*2-1)>=cardinal(fTempBufSize)) then
+    exit;
+  repeat // append hexa chars up to the last non zero byte
+    dec(BinBytes);
+  until (BinBytes=0) or (PByteArray(Bin)[BinBytes]<>0);
+  inc(BinBytes);
+  if BEnd-B<=BinBytes*2 then
+    FlushToStream;
+  BinToHexDisplayLower(Bin,PAnsiChar(B+1),BinBytes);
+  inc(B,BinBytes*2);
+end;
+
+procedure TTextWriter.AddPointer(P: PtrUInt);
+begin
+  AddBinToHexDisplayMinChars(@P,SizeOf(P));
 end;
 
 procedure TTextWriter.AddBinToHex(Bin: Pointer; BinBytes: integer);
@@ -54754,7 +54929,7 @@ begin
   {$endif}
   vtString:  if VString^[0]<>#0 then Add(@VString^[1],ord(VString^[0]),Escape);
   vtInterface,
-  vtPointer:      AddPointer(PtrUInt(VPointer));
+  vtPointer:      AddBinToHexDisplayMinChars(@VPointer,SizeOf(VPointer));
   vtPChar:        Add(PUTF8Char(VPChar),Escape);
   vtObject:       WriteObject(VObject,WriteObjectOptions);
   vtClass:        AddClassName(VClass);
@@ -54947,7 +55122,7 @@ begin
     AddShort('void') else
     AddShort(PShortString(PPointer(PPtrInt(Instance)^+vmtClassName)^)^);
   Add('(');
-  AddPointer(PtrUInt(Instance));
+  AddBinToHexDisplayMinChars(@Instance,SizeOf(Instance));
   Add(')','"');
   if SepChar<>#0 then
     Add(SepChar);
@@ -54959,7 +55134,7 @@ begin
   AddShort(PShortString(PPointer(PPtrInt(Instance)^+vmtClassName)^)^);
   if IncludePointer then begin
     Add('(');
-    AddPointer(PtrUInt(Instance));
+    AddBinToHexDisplayMinChars(@Instance,SizeOf(Instance));
     Add(')');
   end;
   if SepChar<>#0 then
@@ -56377,7 +56552,7 @@ begin
   if P^<>']' then
   repeat
     if max=n then begin
-      inc(max,max shr 3+16);
+      max := NextGrow(max);
       SetLength(Values,max);
     end;
     Values[n] := P;
@@ -59196,10 +59371,8 @@ begin
     if fObjects=nil then begin
       capacity := length(fList);
       result := fCount;
-      if result>=capacity then begin
-        inc(capacity,256+fCount shr 3);
-        SetLength(fList,capacity);
-      end;
+      if result>=capacity then
+        SetLength(fList,NextGrow(capacity));
       fList[result] := aText;
       inc(fCount);
       Changed;
@@ -59242,13 +59415,13 @@ begin
   capacity := length(fList);
   result := fCount;
   if result>=capacity then begin
-    inc(capacity,256+fCount shr 3);
+    capacity := NextGrow(capacity);
     SetLength(fList,capacity);
     if (fObjects<>nil) or (aObject<>nil) then
       SetLength(fObjects,capacity);
   end else
     if (aObject<>nil) and (fObjects=nil) then
-      SetLength(fObjects,capacity);
+      SetLength(fObjects,capacity); // first time we got aObject<>nil
   fList[result] := aText;
   if aObject<>nil then
     fObjects[result] := aObject;
@@ -64308,8 +64481,8 @@ end;
 procedure TMemoryMapText.ProcessOneLine(LineBeg, LineEnd: PUTF8Char);
 begin
   if fCount=fLinesMax then begin
-    inc(fLinesMax,256+fLinesMax shr 3);
-    Reallocmem(fLines,fLinesMax*SizeOf(pointer));
+    fLinesMax := NextGrow(fLinesMax);
+    ReallocMem(fLines,fLinesMax*SizeOf(pointer));
   end;
   fLines[fCount] := LineBeg;
   inc(fCount);
@@ -66586,9 +66759,10 @@ begin
     StrLen := @StrLenSSE2;
   {$endif FPC}
   if cfSSE42 in CpuFeatures then begin
-    crc32c := @crc32csse42;
+    crc32c := @crc32csse42; // seems safe on all targets
     crc32cby4 := @crc32cby4sse42;
     crcblock := @crcblockSSE42;
+    {$ifdef FORCE_STRSSE42} // disabled by default: may trigger random GPF
     strspn := @strspnSSE42;
     strcspn := @strcspnSSE42;
     {$ifdef CPU64}
@@ -66596,14 +66770,14 @@ begin
     {$ifdef HASAESNI}
     StrLen := @StrLenSSE42;
     StrComp := @StrCompSSE42;
-    {$endif}
-    {$endif}
-    {$endif}
+    {$endif HASAESNI}
+    {$endif FPC}
+    {$endif CPU64}
     {$ifndef PUREPASCAL}
     {$ifndef DELPHI5OROLDER}
     UpperCopy255Buf := @UpperCopy255BufSSE42;
-    {$endif}
-    {$endif}
+    {$endif DELPHI5OROLDER}
+    {$endif PUREPASCAL}
     {$ifndef PUREPASCAL}
     StrComp := @StrCompSSE42;
     DYNARRAY_SORTFIRSTFIELD[false,djRawUTF8] := @SortDynArrayAnsiStringSSE42;
@@ -66613,6 +66787,7 @@ begin
     {$endif}
     DYNARRAY_SORTFIRSTFIELDHASHONLY[true] := @SortDynArrayAnsiStringSSE42;
     {$endif PUREPASCAL}
+    {$endif FORCE_STRSSE42}
     DefaultHasher := crc32c;
   end;
   {$endif CPUINTEL}

@@ -1862,7 +1862,7 @@ constructor TSynMapFile.Create(const aExeName: TFileName=''; MabCreate: boolean=
         while (P<PEnd) and (P^=' ') do inc(P);
         repeat
           if Count=n then begin
-            n := Count+Count shr 3+256;
+            n := NextGrow(n);
             SetLength(U^.Line,n);
             SetLength(U^.Addr,n);
           end;
@@ -2254,7 +2254,7 @@ begin
     if s<0 then begin
       if u<0 then begin
         if AllowNotCodeAddr then begin
-          W.AddPointer(aAddressAbsolute);
+          W.AddBinToHexDisplayMinChars(@aAddressAbsolute,SizeOf(aAddressAbsolute));
           W.Add(' ');
         end;
         exit;
@@ -2265,7 +2265,7 @@ begin
           exit else // don't log stack trace internal to SynLog.pas :)
         if (u=fUnitSystemIndex) and (PosEx('Except',Symbols[s].Name)>0) then
           exit; // do not log stack trace of System.SysRaiseException
-    W.AddPointer(aAddressAbsolute); // display addresses inside known Delphi code
+    W.AddBinToHexDisplayMinChars(@aAddressAbsolute,SizeOf(aAddressAbsolute));
     W.Add(' ');
     if u>=0 then begin
       W.AddString(Units[u].Symbol.Name);
@@ -2282,8 +2282,8 @@ begin
       W.Add(Line);
       W.Add(')',' ');
     end;
-  end else begin
-    W.AddPointer(aAddressAbsolute); // no .map info available -> display address
+  end else begin // no .map info available -> display address
+    W.AddBinToHexDisplayMinChars(@aAddressAbsolute,SizeOf(aAddressAbsolute));
     W.Add(' ');
   end;
   {$endif FPC}
@@ -3977,7 +3977,7 @@ begin
     with aSynLog.fThreadContext^ do
     try
       if RecursionCount=RecursionCapacity then begin
-        inc(RecursionCapacity,4+RecursionCapacity shr 3);
+        RecursionCapacity := NextGrow(RecursionCapacity);
         SetLength(Recursion,RecursionCapacity);
       end;
       {$ifdef CPU64}
@@ -4032,7 +4032,7 @@ begin
     with aSynLog.fThreadContext^ do
     try
       if RecursionCount=RecursionCapacity then begin
-        inc(RecursionCapacity,4+RecursionCapacity shr 3);
+        RecursionCapacity := NextGrow(RecursionCapacity);
         SetLength(Recursion,RecursionCapacity);
       end;
       with Recursion[RecursionCount] do begin
@@ -5971,7 +5971,7 @@ begin
             search := maxInt;
           end;
           if fSelectedCount=length(fSelected) then
-            SetLength(fSelected,fSelectedCount+256+fSelectedCount shr 3);
+            SetLength(fSelected,NextGrow(fSelectedCount));
           fSelected[fSelectedCount] := i;
           inc(fSelectedCount);
         end;

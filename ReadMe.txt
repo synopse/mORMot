@@ -38,6 +38,7 @@ Contributors
   Joe (jokusoft)
   Johan Bontes
   Jordi Tudela
+  Lagodny
   Leon Oosthuizen
   Maciej Izak (hnb)
   Mario Moretti
