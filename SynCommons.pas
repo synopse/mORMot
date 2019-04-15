@@ -957,6 +957,11 @@ var
   /// can be used to avoid a memory allocation for res := 'null'
   NULL_STR_VAR: RawUTF8;
 
+/// compute the new capacity when expanding an array of items
+// - handle small, medium and large sizes properly to reduce memory usage and
+// maximize performance
+function NextGrow(capacity: integer): integer;
+
 /// equivalence to SetString(s,nil,len) function
 // - faster especially under FPC
 procedure FastSetString(var s: RawUTF8; p: pointer; len: PtrInt);
@@ -29967,15 +29972,27 @@ begin
   result := true;
 end;
 
+function NextGrow(capacity: integer): integer;
+begin // similar to TFPList.Expand for the ranges algorithm
+  result := capacity;
+  if result<128 shl 20 then
+    if result<8 shl 20 then
+      if result<=128 then
+        if result>8 then
+          inc(result,16) else
+          inc(result,4) else
+        inc(result,result shr 2) else
+      inc(result,result shr 3) else
+    inc(result,16 shl 20);
+end;
+
 procedure AddRawUTF8(var Values: TRawUTF8DynArray; var ValuesCount: integer;
   const Value: RawUTF8);
 var capacity: integer;
 begin
   capacity := Length(Values);
-  if ValuesCount=capacity then begin
-    inc(capacity,32+capacity shr 3);
-    SetLength(Values,capacity);
-  end;
+  if ValuesCount=capacity then
+    SetLength(Values,NextGrow(capacity));
   Values[ValuesCount] := Value;
   inc(ValuesCount);
 end;
@@ -31055,7 +31072,7 @@ begin
         if SearchRecValidFile(F) and ((IgnoreFileName='') or
             (AnsiCompareFileName(F.Name,IgnoreFileName)<>0)) then begin
           if n=length(result) then
-            SetLength(result,n+n shr 3+8);
+            SetLength(result,NextGrow(n));
           if IncludesDir then
             result[n].FromSearchRec(Dir,F) else
             result[n].FromSearchRec('',F);
@@ -31331,7 +31348,7 @@ procedure AddInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
   Value: integer);
 begin
   if ValuesCount=length(Values) then
-    SetLength(Values,ValuesCount+256+ValuesCount shr 3);
+    SetLength(Values,NextGrow(ValuesCount));
   Values[ValuesCount] := Value;
   inc(ValuesCount);
 end;
@@ -31344,10 +31361,10 @@ begin
     exit;
   end;
   if ValuesCount=length(Values) then
-    SetLength(Values,ValuesCount+256+ValuesCount shr 3);
+    SetLength(Values,NextGrow(ValuesCount));
   Values[ValuesCount] := Value;
   inc(ValuesCount);
-  result := true
+  result := true;
 end;
 
 function AddInteger(var Values: TIntegerDynArray; const Another: TIntegerDynArray): PtrInt;
@@ -31366,7 +31383,7 @@ function AddWord(var Values: TWordDynArray; var ValuesCount: integer; Value: Wor
 begin
   result := ValuesCount;
   if result=length(Values) then
-    SetLength(Values,result+32+result shr 3);
+    SetLength(Values,NextGrow(result));
   Values[result] := Value;
   inc(ValuesCount);
 end;
@@ -31375,7 +31392,7 @@ function AddInt64(var Values: TInt64DynArray; var ValuesCount: integer; Value: I
 begin
   result := ValuesCount;
   if result=length(Values) then
-    SetLength(Values,result+256+result shr 3);
+    SetLength(Values,NextGrow(result));
   Values[result] := Value;
   inc(ValuesCount);
 end;
@@ -32440,7 +32457,7 @@ begin
   result := Index;
   n := Length(Values);
   if ValuesCount=n then begin
-    inc(n,256+n shr 3);
+    n := NextGrow(n);
     SetLength(Values,n);
     if CoValues<>nil then
       SetLength(CoValues^,n);
@@ -39331,7 +39348,7 @@ begin
   end;
   n := Length(Values);
   if ValuesCount=n then begin
-    inc(n,256+n shr 3);
+    n := NextGrow(n);
     SetLength(Values,n);
     if CoValues<>nil then
       SetLength(CoValues^,n);
@@ -43777,7 +43794,7 @@ var EndOfObject: AnsiChar;
         repeat
           inc(n);
           if (ArrayLen<0) and (n>ArrayCapacity) then begin
-            inc(ArrayCapacity,512+ArrayCapacity shr 3);
+            ArrayCapacity := NextGrow(ArrayCapacity);
             Prop.ReAllocateNestedArray(PPtrUInt(Data)^,ArrayCapacity);
             DynArray := PPointer(Data)^;
             inc(DynArray,pred(n)*Prop.fNestedDataSize);
@@ -46319,7 +46336,7 @@ begin
   if VValue=nil then
     SetLength(VValue,16) else
     if VCount>=length(VValue) then
-      SetLength(VValue,VCount+VCount shr 3+32);
+      SetLength(VValue,NextGrow(VCount));
   if aName<>'' then begin
     len := length(VValue);
     if Length(VName)<>len then
@@ -50085,7 +50102,7 @@ begin
     exit;
   if aIndex<>nil then begin // whole FillIncreasing(aIndex[]) for first time
     if ndx>=length(aIndex) then
-      SetLength(aIndex,ndx+ndx shr 3+64); // grow aIndex[] if needed
+      SetLength(aIndex,NextGrow(ndx)); // grow aIndex[] if needed
     aIndex[ndx] := ndx;
   end;
   CreateOrderedIndex(aIndex,aCompare);
@@ -51404,12 +51421,8 @@ function TObjectDynArrayWrapper.Add(Instance: TObject): integer;
 var cap: integer;
 begin
   cap := length(TObjectDynArray(fValue^));
-  if cap<=fCount then begin
-    if cap<256 then
-      inc(cap,64) else
-      inc(cap,256+cap shr 3);
-    SetLength(TObjectDynArray(fValue^),cap);
-  end;
+  if cap<=fCount then
+    SetLength(TObjectDynArray(fValue^),NextGrow(cap));
   result := fCount;
   TObjectDynArray(fValue^)[result] := Instance;
   inc(fCount);
@@ -51538,7 +51551,7 @@ var a: TObjectDynArray absolute aObjArray;
 begin
   result := aObjArrayCount;
   if result=length(a) then
-    SetLength(a,result+result shr 3+16);
+    SetLength(a,NextGrow(result));
   a[result] := aItem;
   inc(aObjArrayCount);
 end;
@@ -52711,7 +52724,7 @@ procedure TObjectListSorted.InsertNew(Item: TSynPersistentLock;
   Index: integer);
 begin
   if fCount=length(fObjArray) then
-    SetLength(fObjArray,fCount+256+fCount shr 3);
+    SetLength(fObjArray,NextGrow(fCount));
   if cardinal(Index)<cardinal(fCount) then
     {$ifdef FPC}Move{$else}MoveFast{$endif}(
       fObjArray[Index],fObjArray[Index+1],(fCount-Index)*SizeOf(TObject)) else
@@ -56539,7 +56552,7 @@ begin
   if P^<>']' then
   repeat
     if max=n then begin
-      inc(max,max shr 3+16);
+      max := NextGrow(max);
       SetLength(Values,max);
     end;
     Values[n] := P;
@@ -59358,10 +59371,8 @@ begin
     if fObjects=nil then begin
       capacity := length(fList);
       result := fCount;
-      if result>=capacity then begin
-        inc(capacity,256+fCount shr 3);
-        SetLength(fList,capacity);
-      end;
+      if result>=capacity then
+        SetLength(fList,NextGrow(capacity));
       fList[result] := aText;
       inc(fCount);
       Changed;
@@ -59404,13 +59415,13 @@ begin
   capacity := length(fList);
   result := fCount;
   if result>=capacity then begin
-    inc(capacity,256+fCount shr 3);
+    capacity := NextGrow(capacity);
     SetLength(fList,capacity);
     if (fObjects<>nil) or (aObject<>nil) then
       SetLength(fObjects,capacity);
   end else
     if (aObject<>nil) and (fObjects=nil) then
-      SetLength(fObjects,capacity);
+      SetLength(fObjects,capacity); // first time we got aObject<>nil
   fList[result] := aText;
   if aObject<>nil then
     fObjects[result] := aObject;
@@ -64470,8 +64481,8 @@ end;
 procedure TMemoryMapText.ProcessOneLine(LineBeg, LineEnd: PUTF8Char);
 begin
   if fCount=fLinesMax then begin
-    inc(fLinesMax,256+fLinesMax shr 3);
-    Reallocmem(fLines,fLinesMax*SizeOf(pointer));
+    fLinesMax := NextGrow(fLinesMax);
+    ReallocMem(fLines,fLinesMax*SizeOf(pointer));
   end;
   fLines[fCount] := LineBeg;
   inc(fCount);

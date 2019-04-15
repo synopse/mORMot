@@ -4577,7 +4577,7 @@ begin
   try
     repeat
       if n=length(v) then
-        SetLength(v,n+n shr 3+8);
+        SetLength(v,NextGrow(n));
       if not GetWhereValue(v[n]) then
         exit;
       inc(n);
@@ -7438,7 +7438,7 @@ begin
   if Values=nil then
     Clear; // ensure all fields are initialized, even if on stack
   if Count=Length(Values) then
-    SetLength(Values,Count+128+Count shr 3);
+    SetLength(Values,NextGrow(Count));
   with Values[Count] do begin
     Position := self.Position;
     Value := aItem;
