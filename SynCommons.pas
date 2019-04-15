@@ -2203,14 +2203,12 @@ var strcspn: function (s,reject: pointer): integer = strcspnpas;
 // Str1/Str2 input buffers, checking if cfSSE42 in CpuFeatures
 function StrCompSSE42(Str1, Str2: pointer): PtrInt;
 
-{$ifndef DELPHI5OROLDER}
 // - please note that this optimized version may read up to 15 bytes
 // beyond the string; this is rarely a problem but it may generate protection
 // violations, which could trigger fatal SIGABRT or SIGSEGV on Posix system
 // - could be used instead of StrLen() when you are confident about your
 // S input buffers, checking if cfSSE42 in CpuFeatures
 function StrLenSSE42(S: pointer): PtrInt;
-{$endif DELPHI5OROLDER}
 {$endif HASAESNI}
 
 /// SSE 4.2 version of strspn(), to be used with PUTF8Char/PAnsiChar
@@ -26096,7 +26094,6 @@ asm // warning: may read up to 15 bytes beyond the string itself
       sub       eax, edx
 end;
 
-{$ifndef DELPHI5OROLDER}
 function StrLenSSE42(S: pointer): PtrInt;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // warning: may read up to 15 bytes beyond the string itself
@@ -26104,10 +26101,11 @@ asm // warning: may read up to 15 bytes beyond the string itself
         test    eax, eax
         jz      @null                // returns 0 if S=nil
         xor     eax, eax
-        pxor    xmm0, xmm0
         {$ifdef HASAESNI}
+        pxor    xmm0, xmm0
         pcmpistri xmm0, dqword[edx], EQUAL_EACH  // comparison result in ecx
         {$else}
+        db      $66, $0F, $EF, $C0
         db      $66, $0F, $3A, $63, $02, EQUAL_EACH
         {$endif}
         jnz     @loop
@@ -26125,7 +26123,6 @@ asm // warning: may read up to 15 bytes beyond the string itself
         ret
 @null:  db      $f3 // rep ret
 end;
-{$endif DELPHI5OROLDER}
 
 procedure YearToPChar(Y: PtrUInt; P: PUTF8Char);
 asm // eax=Y, edx=P
@@ -27180,6 +27177,7 @@ asm // from GPL strlen32.asm by Agner Fog - www.agner.org/optimize
         pxor    xmm0, xmm0          // set to zero
         and     ecx, 15             // lower 4 bits indicate misalignment
         and     eax, -16            // align pointer by 16
+        // will never read outside a memory page boundary, so won't trigger GPF
         movdqa  xmm1, [eax]         // read from nearest preceding boundary
         pcmpeqb xmm1, xmm0          // compare 16 bytes with zero
         pmovmskb edx, xmm1          // get one bit for each byte result
@@ -35778,36 +35776,40 @@ end;
 {$endif CPUINTEL}
 
 procedure crcblocks(crc128, data128: PBlock128; count: integer);
+var oneblock: procedure(crc128, data128: PBlock128);
 begin
-  {$ifndef DISABLE_SSE42}
-  {$ifdef CPUX86}
-  if (cfSSE42 in CpuFeatures) and (count>0) then
-  asm
-        mov     ecx, crc128
-        mov     edx, data128
-@s:     mov     eax, dword ptr[ecx]
-        db      $F2, $0F, $38, $F1, $02
-        mov     dword ptr[ecx], eax
-        mov     eax, dword ptr[ecx + 4]
-        db      $F2, $0F, $38, $F1, $42, $04
-        mov     dword ptr[ecx + 4], eax
-        mov     eax, dword ptr[ecx + 8]
-        db      $F2, $0F, $38, $F1, $42, $08
-        mov     dword ptr[ecx + 8], eax
-        mov     eax, dword ptr[ecx + 12]
-        db      $F2, $0F, $38, $F1, $42, $0C
-        mov     dword ptr[ecx + 12], eax
-        add     edx, 16
-        dec     count
-        jnz     @s
-  end else
-  {$endif CPUX86}
-  {$endif DISABLE_SSE42}
-  while count>0 do begin
-    crcblock(crc128,data128);
-    inc(data128);
-    dec(count);
-  end;
+  if count>0 then
+    {$ifndef DISABLE_SSE42}
+    {$ifdef CPUX86}
+    if cfSSE42 in CpuFeatures then
+    asm
+          mov     ecx, crc128
+          mov     edx, data128
+  @s:     mov     eax, dword ptr[ecx]
+          db      $F2, $0F, $38, $F1, $02 // crc32 eax, dword ptr [edx]
+          mov     dword ptr[ecx], eax
+          mov     eax, dword ptr[ecx + 4]
+          db      $F2, $0F, $38, $F1, $42, $04 // crc32 eax, dword ptr [edx+4]
+          mov     dword ptr[ecx + 4], eax
+          mov     eax, dword ptr[ecx + 8]
+          db      $F2, $0F, $38, $F1, $42, $08 // crc32 eax, dword ptr [edx+8]
+          mov     dword ptr[ecx + 8], eax
+          mov     eax, dword ptr[ecx + 12]
+          db      $F2, $0F, $38, $F1, $42, $0C // crc32 eax, dword ptr [edx+12]
+          mov     dword ptr[ecx + 12], eax
+          add     edx, 16
+          dec     count
+          jnz     @s
+    end else
+    {$endif CPUX86}
+    {$endif DISABLE_SSE42} begin
+      oneblock := @crcblock;
+      repeat
+        oneblock(crc128,data128);
+        inc(data128);
+        dec(count);
+      until count=0;
+    end;
 end;
 
 {$ifdef CPUINTEL}
