@@ -39,6 +39,7 @@ unit mORMot;
     Goran Despalatovic (gigo)
     Jordi Tudela
     Jean-Baptiste Roussia (jbroussia)
+    Lagodny
     Maciej Izak (hnb)
     Martin Suer
     Michalis Kamburelis
@@ -91,9 +92,9 @@ unit mORMot;
       the UNICODE conditional will adapt the framework to these compilers
       (you shouldn't have to change any conditional define below)
     - attempt to reach Free Pascal Compiler 2.4.0 compatibility
-    - all asm code equivalence in pure pascal code for 64 bits compatibility
+    - all asm code equivalence in pure pascal code for 64-bit compatibility
       (always slower, but always portable to all CPUs)
-    - use of PtrUInt / PtrInt for 64 bits compatibility
+    - use of PtrUInt / PtrInt for 64-bit compatibility
     - in case of FPC, the typinfo.pp unit is used: so all published properties
       in any TSQLRecord descendant must have a setter (i.e. a "write fValue"
       statement); the FPC's RTTI is not the same as Delphi's: it's a shame :(
@@ -391,7 +392,7 @@ unit mORMot;
     - fixed issue in produced JSON stream using '=' instead of ':'
 
   Version 1.15
-    - unit now tested with Delphi XE2 (32 Bit)
+    - unit now tested with Delphi XE2 (32-bit)
     - new sftModTime / TModTime published field type in TSQLRecord, which will
       be set to the current server time stamp before update/adding
     - new sftCreateTime / TCreateTime published field type in TSQLRecord, which
@@ -1294,7 +1295,7 @@ uses
   Classes,
   SynZip, // use crc32 for TSQLRestClientURI.SetUser
 {$ifdef USETYPEINFO}
-  // some pure pascal version must handle the 64-bits ordinal values or
+  // some pure pascal version must handle the 64-bit ordinal values or
   // a not-Delphi RTTI layout of the underlying compiler (e.g. FPC)
   TypInfo,
   {$ifdef FPC}
@@ -1361,7 +1362,7 @@ type
   /// this is the type to be used for our ORM primary key, i.e. TSQLRecord.ID
   // - it maps the SQLite3 RowID definition
   // - when converted to plain TSQLRecord published properties, you may loose
-  // some information under Win32 when stored as a 32 bit pointer
+  // some information under Win32 when stored as a 32-bit pointer
   // - could be defined as value in a TSQLRecord property as such:
   // ! property AnotherRecord: TID read fAnotherRecord write fAnotherRecord;
   TID = type Int64;
@@ -1571,7 +1572,7 @@ type
   // pure AJAX application should fill such fields explicitely before sending)
   // - sftTID is an INTEGER field containing a TID pointing to another record;
   // since regular TSQLRecord published properties (i.e. sftID kind of field)
-  // can not be greater than 2,147,483,647 (i.e. a signed 32 bit value) under
+  // can not be greater than 2,147,483,647 (i.e. a signed 32-bit value) under
   // Win32, defining TID published properties will allow to store the ID
   // as signed 64-bit, e.g. up to 9,223,372,036,854,775,808; despite to
   // sftID kind of record, coherency is NOT ensured: after a deletion, all
@@ -2001,7 +2002,7 @@ type
     /// number of fields decoded in FieldNames[] and FieldValues[]
     FieldCount: integer;
     /// set to TRUE if parameters are to be :(...): inlined
-    InlinedParams: boolean;
+    InlinedParams: TJSONObjectDecoderParams;
     /// internal pointer over field names to be used after Decode() call
     // - either FieldNames, either Fields[] array as defined in Decode()
     DecodedFieldNames: PRawUTF8Array;
@@ -2062,12 +2063,12 @@ type
     function FindFieldName(const FieldName: RawUTF8): integer;
   end;
 
-/// set the TID (=64 bits integer) value from the numerical text stored in P^
+/// set the TID (=64-bit integer) value from the numerical text stored in P^
 // - just a redirection to SynCommons.SetInt64()
 procedure SetID(P: PUTF8Char; var result: TID); overload;
   {$ifdef HASINLINENOTX86}inline;{$endif}
 
-/// set the TID (=64 bits integer) value from the numerical text stored in U
+/// set the TID (=64-bit integer) value from the numerical text stored in U
 // - just a redirection to SynCommons.SetInt64()
 procedure SetID(const U: RawByteString; var result: TID); overload;
   {$ifdef HASINLINENOTX86}inline;{$endif}
@@ -3430,7 +3431,7 @@ type
     // - this method should match the case-sensitivity of GetHash()
     // - this default implementation will call GetValueVar() for slow comparison
     function CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt; virtual;
-    /// retrieve an unsigned 32 bit hash of the corresponding property
+    /// retrieve an unsigned 32-bit hash of the corresponding property
     // - not all kind of properties are handled: only main types
     // - if CaseInsensitive is TRUE, will apply NormToUpper[] 8 bits uppercase,
     // handling RawUTF8 properties just like the SYSTEMNOCASE collation
@@ -4644,6 +4645,8 @@ type
     function LoadFromFile(const aFileName: TFileName): boolean; virtual;
     /// persist the settings as a JSON file, named from LoadFromFile() parameter
     procedure SaveIfNeeded; virtual;
+    /// optional persistence file name, as set by LoadFromFile()
+    property FileName: TFileName read fFileName;
   end;
 
   /// used by TRawUTF8ObjectCacheList to manage a list of information cache
@@ -8171,13 +8174,13 @@ type
     // ! Detail := TSQLRecordDetail.Create;
     // ! Detail.Main := Main.AsTSQLRecord; // will store Main.ID in MAIN column
     // ! Client.Add(Detail);
-    // - is especially useful on 64-bit plaform, since on 32 bit:
+    // - is especially useful on 64-bit plaform, since on 32-bit:
     // ! Detail.Main := pointer(Main.ID)
     // compiles (whereas it won't on 64-bit) and is the same than platform-independent
     // ! Detail.Main := Main.AsTSQLRecord;
     // - using Main.AsTSQLRecord will ensure that the ID is retrieved, even
     // if Main itself is not a true instance
-    // - if the stored ID is bigger than 32 bits, then it will raise an
+    // - if the stored ID is bigger than 32-bit, then it will raise an
     // EORMException: in this case, you should use a TID / T*ID kind of
     // published property, and not a TSQLRecord, which is limited to the
     // pointer size
@@ -20965,7 +20968,7 @@ end;
 
 function TSQLRecordDynArrayCompare(const Item1,Item2): integer;
  begin // we assume Item1<>nil and Item2<>nil
-   result := SortDynArrayInt64(TSQLRecord(Item1).fID,TSQLRecord(Item2).fID);
+   result := CompareInt64(TSQLRecord(Item1).fID,TSQLRecord(Item2).fID);
  end;
 
 {$ifdef HASDIRECTTYPEINFO}
@@ -22426,8 +22429,8 @@ begin
       V2 := fPropinfo.GetInt64Prop(Item2);
     end;
     if fIsQWord then
-      result := SortDynArrayQWord(V1,V2) else
-      result := SortDynArrayInt64(V1,V2);
+      result := CompareQWord(V1,V2) else
+      result := CompareInt64(V1,V2);
   end;
 end;
 
@@ -25481,7 +25484,7 @@ procedure TSQLTable.IDArrayToBits(var Bits; var IDs: TIDDynArray);
 var i,FID: integer;
     U: PPUTF8Char;
     ID: Pointer;
-    IDn: integer;
+    IDmax: integer;
 //    AllID: : TIDDynArray;
 begin
   if length(IDs)=fRowCount then begin // all selected -> all bits set to 1
@@ -25493,8 +25496,8 @@ begin
     exit; // no selected -> all bits left to 0
   // we sort IDs to use FastFindIntegerSorted() and its O(log(n)) binary search
   ID := @IDs[0];
-  IDn := high(IDs);
-  QuickSortInt64(ID,0,IDn);
+  IDmax := high(IDs);
+  QuickSortInt64(ID,0,IDmax);
   if not Assigned(fIDColumn) then begin
     FID := fFieldIndexID; // get ID column field index
     if FID<0 then
@@ -25503,12 +25506,12 @@ begin
     FID := 0; // make compiler happy
   if Assigned(fIDColumn) then begin
     for i := 1 to fRowCount do
-      if FastFindInt64Sorted(ID,IDn,GetInt64(fIDColumn[i]))>=0 then
+      if FastFindInt64Sorted(ID,IDmax,GetInt64(fIDColumn[i]))>=0 then
         SetBitPtr(@Bits,i-1);
   end else begin
     U := @fResults[FID+FieldCount];  // U^ = ID column UTF-8 content
     for i := 0 to fRowCount-1 do begin
-      if FastFindInt64Sorted(ID,IDn,GetInt64(U^))>=0 then
+      if FastFindInt64Sorted(ID,IDmax,GetInt64(U^))>=0 then
         SetBitPtr(@Bits,i);
       inc(U,FieldCount);
     end;
@@ -28279,14 +28282,15 @@ procedure TJSONObjectDecoder.Decode(var P: PUTF8Char; const Fields: TRawUTF8DynA
   Params: TJSONObjectDecoderParams; const RowID: TID; ReplaceRowIDWithID: boolean);
 var EndOfObject: AnsiChar;
 
-  procedure GetSQLValue(ndx: integer);
+  procedure GetSQLValue(ndx: PtrInt);
   var wasString: boolean;
       res: PUTF8Char;
       resLen, c: integer;
   begin
     res := P;
     if res=nil then begin
-      FieldValues[ndx] := ''; // avoid GPF, but will return invalid SQL
+      FieldTypeApproximation[ndx] := ftaNull;
+      FieldValues[ndx] := NULL_STR_VAR;
       exit;
     end;
     while res^ in [#1..' '] do inc(res);
@@ -28352,8 +28356,10 @@ var EndOfObject: AnsiChar;
               QuotedStr(res,'''',FieldValues[ndx]);
           end;
         end else
-          if res=nil then
-            FieldValues[ndx] := '' else // avoid GPF, but will return invalid SQL
+          if res=nil then begin
+            FieldTypeApproximation[ndx] := ftaNull;
+            FieldValues[ndx] := NULL_STR_VAR;
+          end else // avoid GPF, but will return invalid SQL
           // non string params (numeric or false/true) are passed untouched
           if PInteger(res)^=FALSE_LOW then begin
             FieldValues[ndx] := SmallUInt32UTF8[0];
@@ -28378,8 +28384,8 @@ begin
   FieldCount := 0;
   DecodedRowID := 0;
   {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(
-    FieldTypeApproximation,SizeOf(FieldTypeApproximation),0);
-  InlinedParams := Params=pInlined;
+    FieldTypeApproximation,SizeOf(FieldTypeApproximation),ord(ftaNumber{TID}));
+  InlinedParams := Params;
   if pointer(Fields)=nil then begin
     // get "COL1"="VAL1" pairs, stopping at '}' or ']'
     DecodedFieldNames := @FieldNames;
@@ -28536,10 +28542,10 @@ var F: integer;
     temp: TTextWriterStackBuffer;
   procedure AddValue;
   begin
-    if InlinedParams then
+    if InlinedParams=pInlined then
       W.AddShort(':(');
     W.AddString(FieldValues[F]);
-    if InlinedParams then
+    if InlinedParams=pInlined then
       W.AddShort('):,') else
       W.Add(',');
   end;
@@ -28588,7 +28594,11 @@ begin
     W.Add('{');
     for F := 0 to FieldCount-1 do begin
       W.AddFieldName(DecodedFieldNames^[F]);
-      W.AddQuotedStringAsJSON(FieldValues[F]);
+      if FieldTypeApproximation[F] in [ftaBlob,ftaDate,ftaString] then
+        if InlinedParams=pNonQuoted then
+          W.AddJSONString(FieldValues[F]) else
+          W.AddQuotedStringAsJSON(FieldValues[F]) else
+        W.AddString(FieldValues[F]);
       W.Add(',');
     end;
     W.CancelLastComma;
@@ -33410,7 +33420,7 @@ begin
     {$ifndef CPU64}
     if fID>MaxInt then
       raise EORMException.CreateUTF8('%.GetIDAsPointer is storing ID=%, which '+
-        'cannot be stored in a pointer/TSQLRecord 32 bit instance: use '+
+        'cannot be stored in a pointer/TSQLRecord 32-bit instance: use '+
         'a TID/T*ID published field for 64-bit IDs',[self,fID]) else
     {$endif}
       result := pointer(fID);
@@ -36086,15 +36096,17 @@ begin
     SetLength(Lens,T.fRowCount);
     SepLen := length(Separator);
     Len := 0;
-    for i := 0 to T.fRowCount-1 do begin // ignore fResults[0] i.e. field name
-      Lens[i] := StrLen(T.fResults[i]);
-      inc(Len,Lens[i]+SepLen);
+    for i := 1 to T.fRowCount do begin
+      L := StrLen(T.fResults[i]); // ignore fResults[0] i.e. field name
+      inc(Len,L+SepLen);
+      Lens[i-1] := L;
     end;
     dec(Len,SepLen);
     SetLength(result,Len);
     // add row values as CSV
     P := pointer(result);
-    for i := 1 to T.fRowCount do begin
+    i := 1;
+    repeat
       L := Lens[i-1];
       if L<>0 then begin
         {$ifdef FPC}Move{$else}MoveFast{$endif}(T.fResults[i]^,P^,L);
@@ -36104,7 +36116,8 @@ begin
         break;
       {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(Separator)^,P^,SepLen);
       inc(P,SepLen);
-    end;
+      inc(i);
+    until false;
     //assert(P-pointer(result)=Len);
   finally
     T.Free;
@@ -46009,7 +46022,7 @@ end;
 
 function TSQLRecordCompareList(Item1,Item2: Pointer): integer;
 begin // we assume Item1<>nil and Item2<>nil in fValue[]
-  result := SortDynArrayInt64(TSQLRecord(Item1).fID,TSQLRecord(Item2).fID);
+  result := CompareInt64(TSQLRecord(Item1).fID,TSQLRecord(Item2).fID);
 end;
 
 function TSQLRestStorageInMemory.AddOne(Rec: TSQLRecord; ForceID: boolean;
@@ -56254,7 +56267,7 @@ begin
         exit else
         fpmunmap(Result,STUB_SIZE);
       {$else}
-      // are we close enough for a relative jump (32 bit signed)?
+      // are we close enough for a relative jump (32-bit signed)?
       if ((PtrUInt(Result)-Addr)<Int64($7FFFFFFF)) or (Addr-(PtrUInt(Result))<Int64($7FFFFFFF)) then
         exit else
         fpmunmap(Result,STUB_SIZE);
@@ -61790,7 +61803,7 @@ begin
             if (RegisterIdent>0) then begin
               call.ParamRegs[RegisterIdent] := PPtrInt(Value)^;
               {$ifdef CPUARM}
-              // for e.g. INT64 on 32 bit ARM systems; these are also passed in the normal registers
+              // for e.g. INT64 on 32-bit ARM systems; these are also passed in the normal registers
               if SizeInStack>PTRSIZ then
                 call.ParamRegs[RegisterIdent+1] := PPtrInt(Value+PTRSIZ)^;
               {$endif}

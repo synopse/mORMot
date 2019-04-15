@@ -3562,6 +3562,63 @@ procedure TTestLowLevelCommon.Integers;
     Check(fAdd = added, 'added');
     Check(fDel = deleted, 'deleted');
   end;
+  procedure includes(const values, includes, excludes, included, excluded: RawUTF8);
+    procedure includes32;
+    var v, i, e: TIntegerDynArray;
+    begin
+      CSVToIntegerDynArray(Pointer(values),v);
+      CSVToIntegerDynArray(Pointer(excludes),e);
+      ExcludeInteger(v, e, 32); // no sort
+      Check(IntegerDynArrayToCSV(v) = excluded);
+      v := nil;
+      e := nil;
+      CSVToIntegerDynArray(Pointer(values),v);
+      CSVToIntegerDynArray(Pointer(excludes),e);
+      ExcludeInteger(v, e, 2); // sort
+      Check(IntegerDynArrayToCSV(v) = excluded);
+      v := nil;
+      e := nil;
+      CSVToIntegerDynArray(Pointer(values),v);
+      CSVToIntegerDynArray(Pointer(includes),i);
+      IncludeInteger(v, i, 32); // no sort
+      Check(IntegerDynArrayToCSV(v) = included);
+      v := nil;
+      e := nil;
+      CSVToIntegerDynArray(Pointer(values),v);
+      CSVToIntegerDynArray(Pointer(includes),i);
+      IncludeInteger(v, i, 2); // sort
+      Check(IntegerDynArrayToCSV(v) = included);
+    end;
+    procedure includes64;
+    var v, i, e: TInt64DynArray;
+    begin
+      CSVToInt64DynArray(Pointer(values),v);
+      CSVToInt64DynArray(Pointer(excludes),e);
+      ExcludeInt64(v, e, 32); // no sort
+      Check(Int64DynArrayToCSV(v) = excluded);
+      v := nil;
+      e := nil;
+      CSVToInt64DynArray(Pointer(values),v);
+      CSVToInt64DynArray(Pointer(excludes),e);
+      ExcludeInt64(v, e, 2); // sort
+      Check(Int64DynArrayToCSV(v) = excluded);
+      v := nil;
+      e := nil;
+      CSVToInt64DynArray(Pointer(values),v);
+      CSVToInt64DynArray(Pointer(includes),i);
+      IncludeInt64(v, i, 32); // no sort
+      Check(Int64DynArrayToCSV(v) = included);
+      v := nil;
+      e := nil;
+      CSVToInt64DynArray(Pointer(values),v);
+      CSVToInt64DynArray(Pointer(includes),i);
+      IncludeInt64(v, i, 2); // sort
+      Check(Int64DynArrayToCSV(v) = included);
+    end;
+  begin
+    Includes32;
+    Includes64;
+  end;
 var i32: TIntegerDynArray;
     i64: TInt64DynArray;
     i,n: integer;
@@ -3626,6 +3683,10 @@ begin
   changes('1,2,3,4','5,6','5,6','1,2,3,4');
   changes('1,2,4','1,3,5,6','3,5,6','2,4');
   changes('1,2,4','3,5,6','3,5,6','1,2,4');
+  includes('1,2,3', '2', '2', '2', '1,3');
+  includes('1,2,3', '2,3', '2,3', '2,3', '1');
+  includes('1,2,3', '1,2,3', '1,2,3', '1,2,3', '');
+  includes('1,2,3', '3,1,2', '3,1,2', '1,2,3', '');
   check(i64=nil);
   DeduplicateInt64(i64);
   check(i64=nil);

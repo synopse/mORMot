@@ -108,7 +108,7 @@ uses
   {$endif}
   SynCommons,
   SynLog,
-  SynCrypto,
+  SynCrypto, // for executable MD5/SHA256 hashes
   mORMot; // for TSynJsonFileSettings (i.e. JSON serialization)
 
 {$ifdef MSWINDOWS}
@@ -1467,27 +1467,27 @@ var level: TSynLogInfo;
     si_code: integer;
     text: TShort4;
 begin // code below has no memory (re)allocation
-  SynDaemonTerminated := Sig;
-  if SynDaemonInterceptLog = nil then
-    exit;
-  log := SynDaemonInterceptLog.Add;
-  case Sig of
-    SIGHUP:  text := 'HUP';
-    SIGQUIT: text := 'QUIT';
-    SIGTERM: text := 'TERM';
-    SIGINT:  text := 'INT';
-    SIGABRT: text := 'ABRT';
-    else text := UInt3DigitsToShort(Sig);
+  if SynDaemonInterceptLog <> nil then begin
+    log := SynDaemonInterceptLog.Add;
+    case Sig of
+      SIGQUIT: text := 'QUIT';
+      SIGTERM: text := 'TERM';
+      SIGINT:  text := 'INT';
+      SIGABRT: text := 'ABRT';
+      SIGSEGV: text := 'SEGV';
+      else text := UInt3DigitsToShort(Sig);
+    end;
+    if Sig = SIGTERM then // polite quit
+      level := sllInfo else
+      level := sllExceptionOS;
+    if Info=nil then
+      si_code := 0 else
+      si_code := Info^.si_code;
+    log.Writer.CustomOptions := log.Writer.CustomOptions + [twoFlushToStreamNoAutoResize];
+    log.Log(level, 'SynDaemonIntercepted received SIG%=% si_code=%', [text, Sig, si_code]);
+    log.Flush({flushtodisk=}Sig <> SIGTERM); // ensure all log is safely written
   end;
-  if Sig = SIGTERM then // polite quit
-    level := sllInfo else
-    level := sllExceptionOS;
-  if Info=nil then
-    si_code := 0 else
-    si_code := Info^.si_code;
-  log.Writer.CustomOptions := log.Writer.CustomOptions + [twoFlushToStreamNoAutoResize];
-  log.Log(level, 'SynDaemonIntercepted received SIG%=% si_code=%', [text, Sig, si_code]);
-  log.Flush({flushtodisk=}Sig <> SIGTERM); // ensure all log is safely written
+  SynDaemonTerminated := Sig;
 end;
 {$else}
 procedure DoShutDown(Sig: integer); cdecl;
@@ -1511,12 +1511,14 @@ begin
   fpSigaction(SIGTERM, @saNew, @saOld);
   fpSigaction(SIGINT, @saNew, @saOld);
   fpSigaction(SIGABRT, @saNew, @saOld);
+  fpSigaction(SIGSEGV, @saNew, @saOld);
   {$else} // Kylix
   saNew.__sigaction_handler := @DoShutDown;
   sigaction(SIGQUIT, @saNew, @saOld);
   sigaction(SIGTERM, @saNew, @saOld);
   sigaction(SIGINT, @saNew, @saOld);
   sigaction(SIGABRT, @saNew, @saOld);
+  sigaction(SIGSEGV, @saNew, @saOld);
   {$endif}
 end;
 
