@@ -818,8 +818,8 @@ type
 
   /// implements a stack-based writable storage of binary content
   // - memory allocation is performed via a TSynTempBuffer
-  {$ifdef UNICODE}TSynTempWriter = record{$else}TSynTempWriter = object{$endif}
-  private
+  {$ifdef FPC_OR_UNICODE}TSynTempWriter = record private
+  {$else}TSynTempWriter = object protected{$endif}
     tmp: TSynTempBuffer;
   public
     /// the current writable position in tmp.buf
@@ -2159,11 +2159,9 @@ function StrCompFast(Str1, Str2: pointer): PtrInt;
   {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// fastest available version of StrComp(), to be used with PUTF8Char/PAnsiChar
-// - will use SSE4.2 instructions on supported CPUs - and potentiall read up
-// to 15 bytes beyond the string: use StrCompFast() for a safe memory read;
-// if you want to disable StrCompSSE42 for your whole project, define NOSTRSE42
-// conditional, or add in the initialization section of one of your units:
-// !  StrComp := @StrCompFast;
+// - won't use SSE4.2 instructions on supported CPUs by default, which may read
+// some bytes beyond the s string, so should be avoided e.g. over memory mapped
+// files - call explicitely StrCompSSE42() if you are confident on your input
 var StrComp: function (Str1, Str2: pointer): PtrInt = StrCompFast;
 
 /// pure pascal version of strspn(), to be used with PUTF8Char/PAnsiChar
@@ -2181,44 +2179,57 @@ function strcspnpas(s,reject: pointer): integer;
 /// fastest available version of strspn(), to be used with PUTF8Char/PAnsiChar
 // - returns size of initial segment of s which appears in accept chars, e.g.
 // ! strspn('abcdef','debca')=5
-// - will use SSE4.2 instructions on supported CPUs
-// - please note that this function may read some bytes beyond the s string, so
-// should be avoided e.g. over memory mapped files - use safe strspnpas instead
+// - won't use SSE4.2 instructions on supported CPUs by default, which may read
+// some bytes beyond the s string, so should be avoided e.g. over memory mapped
+// files - call explicitely strspnsse42() if you are confident on your input
 var strspn: function (s,accept: pointer): integer = strspnpas;
 
 /// fastest available version of strcspn(), to be used with PUTF8Char/PAnsiChar
 // - returns size of initial segment of s which doesn't appears in reject chars, e.g.
 // ! strcspn('1234,6789',',')=4
-// - will use SSE4.2 instructions on supported CPUs, unless NOSTRSSE42 is defined
-// - please note that this function may read some bytes beyond the s string, so
-// should be avoided e.g. over memory mapped files - use safe strcspnpas instead
+// - won't use SSE4.2 instructions on supported CPUs by default, which may read
+// some bytes beyond the s string, so should be avoided e.g. over memory mapped
+// files - call explicitely strcspnsse42() if you are confident on your input
 var strcspn: function (s,reject: pointer): integer = strcspnpas;
 
-{$ifndef NOSTRSSE42}
 {$ifndef ABSOLUTEPASCAL}
 {$ifdef CPUINTEL}
+{$ifdef HASAESNI}
 /// SSE 4.2 version of StrComp(), to be used with PUTF8Char/PAnsiChar
 // - please note that this optimized version may read up to 15 bytes
-// beyond the string; this is rarely a problem but it may in principle
-// generate a protection violation (e.g. when used over memory mapped files) -
-// you can use the slightly slower but safe StrCompFast() function instead;
-// if you want to disable StrCompSSE42 for your whole project, define NOSTRSSE42
+// beyond the string; this is rarely a problem but it may generate protection
+// violations, which could trigger fatal SIGABRT or SIGSEGV on Posix system
+// - could be used instead of StrComp() when you are confident about your
+// Str1/Str2 input buffers, checking if cfSSE42 in CpuFeatures
 function StrCompSSE42(Str1, Str2: pointer): PtrInt;
+
+{$ifndef DELPHI5OROLDER}
+// - please note that this optimized version may read up to 15 bytes
+// beyond the string; this is rarely a problem but it may generate protection
+// violations, which could trigger fatal SIGABRT or SIGSEGV on Posix system
+// - could be used instead of StrLen() when you are confident about your
+// S input buffers, checking if cfSSE42 in CpuFeatures
+function StrLenSSE42(S: pointer): PtrInt;
+{$endif DELPHI5OROLDER}
+{$endif HASAESNI}
 
 /// SSE 4.2 version of strspn(), to be used with PUTF8Char/PAnsiChar
 // - please note that this optimized version may read up to 15 bytes
-// beyond the string, so should be avoided e.g. over memory mapped files;
-// if you want to disable strspnsse42 for your whole project, define NOSTRSSE42
+// beyond the string; this is rarely a problem but it may generate protection
+// violations, which could trigger fatal SIGABRT or SIGSEGV on Posix system
+// - could be used instead of strspn() when you are confident about your
+// s/accept input buffers, checking if cfSSE42 in CpuFeatures
 function strspnsse42(s,accept: pointer): integer;
 
 /// SSE 4.2 version of strcspn(), to be used with PUTF8Char/PAnsiChar
 // - please note that this optimized version may read up to 15 bytes
-// beyond the string, so should be avoided e.g. over memory mapped files;
-// if you want to disable strcspnsse42 for your whole project, define NOSTRSSE42
+// beyond the string; this is rarely a problem but it may generate protection
+// violations, which could trigger fatal SIGABRT or SIGSEGV on Posix system
+// - could be used instead of strcspn() when you are confident about your
+// s/reject input buffers, checking if cfSSE42 in CpuFeatures
 function strcspnsse42(s,reject: pointer): integer;
 {$endif CPUINTEL}
 {$endif ABSOLUTEPASCAL}
-{$endif NOSTRSSE42}
 
 /// use our fast version of StrIComp(), to be used with PUTF8Char/PAnsiChar
 function StrIComp(Str1, Str2: pointer): PtrInt;
@@ -2231,12 +2242,9 @@ function StrIComp(Str1, Str2: pointer): PtrInt;
 function StrLenPas(S: pointer): PtrInt;
 
 /// our fast version of StrLen(), to be used with PUTF8Char/PAnsiChar
-// - this version will use fast SSE2/SSE4.2 instructions (if available), on both
-// Win32 and Win64 platforms: please note that in this case, it may read up to
-// 15 bytes before or beyond the string; this is rarely a problem but it can in
-// principle generate a protection violation (e.g. when used over memory mapped files):
-// you can use the slightly slower StrLenPas() function instead with such input;
-// if you want to disable StrLenSSE42 for your whole project, define NOSTRSSE42
+// - won't use SSE4.2 instructions on supported CPUs by default, which may read
+// some bytes beyond the s string, so should be avoided e.g. over memory mapped
+// files - call explicitely StrLenSSE42() if you are confident on your input
 var StrLen: function(S: pointer): PtrInt = StrLenPas;
 
 /// our fast version of FillChar()
@@ -2720,11 +2728,12 @@ function UpperCopy255(dest: PAnsiChar; const source: RawUTF8): PAnsiChar; overlo
 
 /// copy source^ into a 256 chars dest^ buffer with 7 bits upper case conversion
 // - used internally for short keys match or case-insensitive hash
-// - will use SSE4.2 instructions on supported CPUs - and potentiall read up
-// to 15 bytes beyond the string: use UpperCopy255BufPas() for a safer memory read
 // - returns final dest pointer
 // - will copy up to 255 AnsiChar (expect the dest buffer to be defined e.g. as
 // array[byte] of AnsiChar on the caller stack)
+// - won't use SSE4.2 instructions on supported CPUs by default, which may read
+// some bytes beyond the s string, so should be avoided e.g. over memory mapped
+// files - call explicitely UpperCopy255BufSSE42() if you are confident on your input
 var UpperCopy255Buf: function(dest: PAnsiChar; source: PUTF8Char; sourceLen: PtrInt): PAnsiChar;
 
 /// copy source^ into a 256 chars dest^ buffer with 7 bits upper case conversion
@@ -2736,22 +2745,18 @@ var UpperCopy255Buf: function(dest: PAnsiChar; source: PUTF8Char; sourceLen: Ptr
 // array[byte] of AnsiChar on the caller stack)
 function UpperCopy255BufPas(dest: PAnsiChar; source: PUTF8Char; sourceLen: PtrInt): PAnsiChar;
 
-{$ifndef NOSTRSSE42}
 {$ifndef PUREPASCAL}
 {$ifndef DELPHI5OROLDER}
-/// copy source^ into a 256 chars dest^ buffer with 7 bits upper case conversion
-// - used internally for short keys match or case-insensitive hash
-// - this version will use SSE4.2 instructions on supported CPUs - and potentiall
-// read up to 15 bytes beyond the string: if you want to disable this function
-// for your whole project, define NOSTRSSE42 conditional
-// - you should not have to call this function, but rely on UpperCopy255Buf()
-// - returns final dest pointer
-// - will copy up to 255 AnsiChar (expect the dest buffer to be defined e.g. as
-// array[byte] of AnsiChar on the caller stack)
+/// SSE 4.2 version of UpperCopy255Buf()
+// - copy source^ into a 256 chars dest^ buffer with 7 bits upper case conversion
+// - please note that this optimized version may read up to 15 bytes
+// beyond the string; this is rarely a problem but it may generate protection
+// violations, which could trigger fatal SIGABRT or SIGSEGV on Posix system
+// - could be used instead of UpperCopy255Buf() when you are confident about your
+// dest/source input buffers, checking if cfSSE42 in CpuFeatures
 function UpperCopy255BufSSE42(dest: PAnsiChar; source: PUTF8Char; sourceLen: PtrInt): PAnsiChar;
-{$endif}
-{$endif}
-{$endif}
+{$endif DELPHI5OROLDER}
+{$endif PUREPASCAL}
 
 /// copy source into dest^ with WinAnsi 8 bits upper case conversion
 // - used internally for short keys match or case-insensitive hash
@@ -3723,8 +3728,8 @@ type
   //  in a huge text buffer
   // - this version also handles french and spanish pronunciations on request,
   //  which differs from default Soundex, i.e. English
-  {$ifdef UNICODE}TSynSoundEx = record{$else}TSynSoundEx = object{$endif}
-  private
+  {$ifdef FPC_OR_UNICODE}TSynSoundEx = record private
+  {$else}TSynSoundEx = object protected{$endif}
     Search, FirstChar: cardinal;
     fValues: PSoundExValues;
   public
@@ -4723,13 +4728,8 @@ type
   // - is defined either as an object either as a record, due to a bug
   // in Delphi 2009/2010 compiler (at least): this structure is not initialized
   // if defined as an object on the stack, but will be as a record :(
-  {$ifdef UNDIRECTDYNARRAY}
-  TDynArray = record
-  private
-  {$else}
-  TDynArray = object
-  protected
-  {$endif}
+  {$ifdef UNDIRECTDYNARRAY}TDynArray = record private
+  {$else}TDynArray = object protected{$endif}
     fValue: PPointer;
     fTypeInfo: pointer;
     fElemType: pointer;
@@ -5277,8 +5277,8 @@ type
   /// allows to iterate over a TDynArray.SaveTo binary buffer
   // - may be used as alternative to TDynArray.LoadFrom, if you don't want
   // to allocate all items at once, but retrieve items one by one
-  {$ifdef UNICODE}TDynArrayLoadFrom = record{$else}TDynArrayLoadFrom = object{$endif}
-  private
+  {$ifdef FPC_OR_UNICODE}TDynArrayLoadFrom = record private
+  {$else}TDynArrayLoadFrom = object protected{$endif}
     DynArray: TDynArray; // used to access RTTI
     Hash: PCardinalArray;
   public
@@ -5784,8 +5784,8 @@ type
   // - internal padding is used to safely store up to 7 values protected
   // from concurrent access with a mutex
   // - for object-level locking, see TSynPersistentLock which owns one such instance
-  {$ifdef UNICODE}TSynLocker = record{$else}TSynLocker = object{$endif}
-  private
+  {$ifdef FPC_OR_UNICODE}TSynLocker = record private
+  {$else}TSynLocker = object protected{$endif}
     fSection: TRTLCriticalSection;
     fSectionPadding: PtrInt; // paranoid to avoid FUTEX_WAKE_PRIVATE=EAGAIN
     fLocked, fInitialized: boolean;
@@ -6182,8 +6182,8 @@ type
   // - is defined either as an object either as a record, due to a bug
   // in Delphi 2009/2010 compiler (at least): this structure is not initialized
   // if defined as an object on the stack, but will be as a record :(
-  {$ifdef UNICODE}TSynNameValue = record{$else}TSynNameValue = object{$endif}
-  private
+  {$ifdef FPC_OR_UNICODE}TSynNameValue = record private
+  {$else}TSynNameValue = object protected{$endif}
     fDynArray: TDynArrayHashed;
     fOnAdd: TSynNameValueNotify;
     function GetBlobData: RawByteString;
@@ -9781,8 +9781,8 @@ var
 
 type
   /// handle memory mapping of a file content
-  {$ifdef UNICODE}TMemoryMap = record{$else}TMemoryMap = object{$endif}
-  private
+  {$ifdef FPC_OR_UNICODE}TMemoryMap = record private
+  {$else}TMemoryMap = object protected{$endif}
     fBuf: PAnsiChar;
     fBufSize: PtrUInt;
     fFile: THandle;
@@ -10157,8 +10157,8 @@ type
   // - is defined either as an object either as a record, due to a bug
   // in Delphi 2009/2010 compiler (at least): this structure is not initialized
   // if defined as an object on the stack, but will be as a record :(
-  {$ifdef UNICODE}TFileBufferReader = record{$else}TFileBufferReader = object{$endif}
-  private
+  {$ifdef FPC_OR_UNICODE}TFileBufferReader = record private
+  {$else}TFileBufferReader = object protected{$endif}
     fCurrentPos: PtrUInt;
     fMap: TMemoryMap;
     /// get Isize + buffer from current memory map or fBufTemp into (P,PEnd)
@@ -14735,8 +14735,8 @@ type
   // be a good idea to use DocVariantData(aVariant)^ or _Safe(aVariant)^ instead
   // of TDocVariantData(aVariant), if you are not sure how aVariant was allocated
   // (may be not _Obj/_Json, but retrieved as varByRef e.g. from late binding)
-  {$ifdef UNICODE}TDocVariantData = record{$else}TDocVariantData = object{$endif}
-  private
+  {$ifdef FPC_OR_UNICODE}TDocVariantData = record private
+  {$else}TDocVariantData = object protected{$endif}
     VType: TVarType;
     VOptions: TDocVariantOptions;
     (* this structure uses all TVarData available space: no filler needed!
@@ -16160,8 +16160,8 @@ type
   // - WARNING: under Windows, this record MUST be aligned to 32-bit, otherwise
   // iFreq=0 - so you can use TLocalPrecisionTimer/ILocalPrecisionTimer if you
   // want to alllocate a local timer instance on the stack
-  {$ifdef UNICODE}TPrecisionTimer = record{$else}TPrecisionTimer = object{$endif}
-  private
+  {$ifdef FPC_OR_UNICODE}TPrecisionTimer = record private
+  {$else}TPrecisionTimer = object protected{$endif}
     fStart,fStop,fResume,fLast: Int64;
     {$ifndef LINUX} // use QueryPerformanceMicroSeconds() fast API
     fWinFreq: Int64;
@@ -17750,8 +17750,8 @@ type
   TSystemUseDataDynArray = array of TSystemUseData;
 
   /// low-level structure used to compute process memory and CPU usage
-  {$ifdef UNICODE}TProcessInfo = record{$else}TProcessInfo = object{$endif}
-  private
+  {$ifdef FPC_OR_UNICODE}TProcessInfo = record private
+  {$else}TProcessInfo = object protected{$endif}
     {$ifdef MSWINDOWS}
     fSysPrevIdle, fSysPrevKernel, fSysPrevUser,
     fDiffIdle, fDiffKernel, fDiffUser, fDiffTotal: Int64;
@@ -25458,8 +25458,7 @@ end;
 {$else PUREPASCAL}
 
 function IdemPChar(p: PUTF8Char; up: PAnsiChar): boolean;
-// if the beginning of p^ is same as up^ (ignore case - up^ must be already Upper)
-// eax=p edx=up
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         test    eax, eax
         jz      @e            // P=nil -> false
@@ -25499,6 +25498,7 @@ asm
 end;
 
 function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): PtrInt;
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         push    eax
         call    IntegerScan
@@ -25512,6 +25512,7 @@ asm
 end;
 
 function IntegerScan(P: PCardinalArray; Count: PtrInt; Value: cardinal): PCardinal;
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm // eax=P, edx=Count, Value=ecx
         test    eax, eax
         jz      @ok0 // avoid GPF
@@ -25587,6 +25588,7 @@ asm // eax=P, edx=Count, Value=ecx
 end;
 
 function IntegerScanExists(P: PCardinalArray; Count: PtrInt; Value: cardinal): boolean;
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm // eax=P, edx=Count, Value=ecx
         test    eax, eax
         jz      @z // avoid GPF
@@ -25636,6 +25638,7 @@ asm // eax=P, edx=Count, Value=ecx
 end;
 
 function PosChar(Str: PUTF8Char; Chr: AnsiChar): PUTF8Char;
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm // faster version by AB - eax=Str dl=Chr
         test    eax, eax
         jz      @z
@@ -25667,6 +25670,7 @@ asm // faster version by AB - eax=Str dl=Chr
 end;
 
 function CompareMem(P1, P2: Pointer; Length: PtrInt): Boolean;
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm     // eax=P1 edx=P2 ecx=Length
         cmp     eax, edx
         je      @0                 // P1=P2
@@ -25733,6 +25737,7 @@ asm     // eax=P1 edx=P2 ecx=Length
 end;
 
 function PosEx(const SubStr, S: RawUTF8; Offset: PtrUInt): integer;
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm     // eax=SubStr, edx=S, ecx=Offset
         push    ebx
         push    esi
@@ -25810,6 +25815,7 @@ asm     // eax=SubStr, edx=S, ecx=Offset
 end;
 
 function IdemPropNameU(const P1,P2: RawUTF8): boolean;
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm // eax=p1, edx=p2
         cmp     eax, edx
         je      @out1
@@ -25848,6 +25854,7 @@ asm // eax=p1, edx=p2
 end;
 
 function IdemPropNameUSameLen(P1,P2: PUTF8Char; P1P2Len: PtrInt): boolean;
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm // eax=p1, edx=p2, ecx=P1P2Len
         cmp     eax, edx
         je      @out2
@@ -25885,6 +25892,7 @@ asm // eax=p1, edx=p2, ecx=P1P2Len
 end;
 
 function StrIComp(Str1, Str2: pointer): PtrInt;
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm // faster version by AB, from Agner Fog's original
         mov     ecx, eax
         test    eax, edx
@@ -25937,6 +25945,7 @@ asm // faster version by AB, from Agner Fog's original
 end;
 
 function StrLenPas(S: pointer): PtrInt;
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm // slower than x86/SSE* StrLen(), but won't read any byte beyond the string
         mov     edx, eax
         test    eax, eax
@@ -25961,6 +25970,7 @@ asm // slower than x86/SSE* StrLen(), but won't read any byte beyond the string
 end;
 
 function StrCompFast(Str1, Str2: pointer): PtrInt;
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm // no branch taken in case of not equal first char
         cmp     eax, edx
         je      @zero  // same string or both nil
@@ -25989,7 +25999,6 @@ asm // no branch taken in case of not equal first char
 @zero:  xor     eax, eax
 end;
 
-{$ifndef NOSTRSSE42}
 const
   EQUAL_EACH = 8;   // see https://msdn.microsoft.com/en-us/library/bb531463
   NEGATIVE_POLARITY = 16;
@@ -26040,6 +26049,7 @@ asm // warning: may read up to 15 bytes beyond the string itself
 end;
 
 function SortDynArrayAnsiStringSSE42(const A,B): integer;
+{$ifdef FPC}nostackframe; assembler;{$endif}
 asm // warning: may read up to 15 bytes beyond the string itself
       mov       eax, [eax]
       mov       edx, [edx]
@@ -26085,7 +26095,37 @@ asm // warning: may read up to 15 bytes beyond the string itself
       movzx     edx, byte ptr [edx+ecx]
       sub       eax, edx
 end;
-{$endif NOSTRSSE42}
+
+{$ifndef DELPHI5OROLDER}
+function StrLenSSE42(S: pointer): PtrInt;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm // warning: may read up to 15 bytes beyond the string itself
+        mov     edx, eax             // copy pointer
+        test    eax, eax
+        jz      @null                // returns 0 if S=nil
+        xor     eax, eax
+        pxor    xmm0, xmm0
+        {$ifdef HASAESNI}
+        pcmpistri xmm0, dqword[edx], EQUAL_EACH  // comparison result in ecx
+        {$else}
+        db      $66, $0F, $3A, $63, $02, EQUAL_EACH
+        {$endif}
+        jnz     @loop
+        mov     eax, ecx
+        ret
+        nop   // for @loop alignment
+@loop:  add     eax, 16
+        {$ifdef HASAESNI}
+        pcmpistri xmm0, dqword[edx + eax], EQUAL_EACH  // comparison result in ecx
+        {$else}
+        db      $66, $0F, $3A, $63, $04, $10, EQUAL_EACH
+        {$endif}
+        jnz     @loop
+@ok:    add     eax, ecx
+        ret
+@null:  db      $f3 // rep ret
+end;
+{$endif DELPHI5OROLDER}
 
 procedure YearToPChar(Y: PtrUInt; P: PUTF8Char);
 asm // eax=Y, edx=P
@@ -26339,7 +26379,6 @@ asm     // adapted from fast Aleksandr Sharahov version
         not     eax
 end;
 
-{$ifndef NOSTRSSE42}
 {$ifndef DELPHI5OROLDER}
 const
   CMP_RANGES = $44; // see https://msdn.microsoft.com/en-us/library/bb531425
@@ -26390,7 +26429,6 @@ asm // eax=dest edx=source ecx=sourceLen
 @bits: db '                '         // $20 = bit to change when changing case
 end;
 {$endif DELPHI5OROLDER}
-{$endif NOSTRSSE42}
 
 function fnv32(crc: cardinal; buf: PAnsiChar; len: PtrInt): cardinal;
 asm // eax=crc, edx=buf, ecx=len
@@ -26922,7 +26960,6 @@ end;
 {$ifndef ABSOLUTEPASCAL}
 {$ifdef CPUINTEL}
 {$ifdef CPUX64}
-{$ifndef NOSTRSSE42}
 function strcspnsse42(s,reject: pointer): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else}
 asm // rcx=s, rdx=reject (Linux: rdi,rsi)
@@ -27025,10 +27062,8 @@ asm // rcx=s, rdx=accept (Linux: rdi,rsi)
         add     rcx, 16
         jmp     @1
 end;
-{$endif NOSTRSSE42}
 {$endif CPUX64}
 {$ifdef CPUX86}
-{$ifndef NOSTRSSE42}
 function strcspnsse42(s,reject: pointer): integer;
 asm // eax=s, edx=reject
         push    edi
@@ -27135,7 +27170,6 @@ asm // eax=s, edx=accept
         add     ecx, 16
         jmp     @1
 end;
-{$endif NOSTRSSE42}
 {$ifndef DELPHI5OROLDER}
 function StrLenSSE2(S: pointer): PtrInt;
 asm // from GPL strlen32.asm by Agner Fog - www.agner.org/optimize
@@ -35501,7 +35535,6 @@ asm .noframe // ecx=param, rdx=Registers (Linux: edi,rsi)
         mov     rbx, r10
 end;
 
-{$ifndef NOSTRSSE42}
 const
   CMP_RANGES = $44; // see https://msdn.microsoft.com/en-us/library/bb531425
   _UpperCopy255BufSSE42: array[0..31] of AnsiChar =
@@ -35560,7 +35593,6 @@ asm .noframe // rcx=dest, rdx=source, r8=len (Linux: rdi,rsi,rdx)
        dec     rdx
        jnz     @s
 end;
-{$endif NOSTRSSE42}
 
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$ifdef FPC}nostackframe; assembler; asm {$else}
@@ -35620,8 +35652,7 @@ end;
 function StrLenSSE2(S: pointer): PtrInt;
 {$ifdef FPC}nostackframe; assembler; asm {$else}
 asm .noframe // rcx=S (Linux: rdi)
-{$endif FPC}
-        // from GPL strlen64.asm by Agner Fog - www.agner.org/optimize
+{$endif FPC} // from GPL strlen64.asm by Agner Fog - www.agner.org/optimize
         {$ifdef win64}
         mov     rax, rcx             // get pointer to string from rcx
         mov     r8,  rcx             // copy pointer
@@ -35632,10 +35663,11 @@ asm .noframe // rcx=S (Linux: rdi)
         test    rdi, rdi
         {$endif}
         jz      @null                // returns 0 if S=nil
-        // rax = s,ecx = 32-bit of s
+        // rax=s,ecx=32-bit of s
         pxor    xmm0, xmm0           // set to zero
         and     ecx, 15              // lower 4 bits indicate misalignment
         and     rax, -16             // align pointer by 16
+        // will never read outside a memory page boundary, so won't trigger GPF
         movdqa  xmm1, [rax]          // read from nearest preceding boundary
         pcmpeqb xmm1, xmm0           // compare 16 bytes with zero
         pmovmskb edx, xmm1           // get one bit for each byte result
@@ -35664,7 +35696,6 @@ asm .noframe // rcx=S (Linux: rdi)
 @null:
 end;
 
-{$ifndef NOSTRSSE42}
 const
   EQUAL_EACH = 8;   // see https://msdn.microsoft.com/en-us/library/bb531463
   NEGATIVE_POLARITY = 16;
@@ -35743,7 +35774,6 @@ asm // rcx=Str1, rdx=Str2 (Linux: rdi,rsi)
       sub       rax, rdx
 end;
 {$endif HASAESNI}
-{$endif NOSTRSSE42}
 {$endif CPU64}
 {$endif CPUINTEL}
 
@@ -42454,37 +42484,6 @@ asm // Dest=eax Count=edx Value=cl
 @done:
 end;
 
-{$ifndef NOSTRSSE42}
-function StrLenSSE42(S: pointer): PtrInt;
-{$ifdef FPC}nostackframe; assembler;{$endif}
-asm // warning: may read up to 15 bytes beyond the string itself
-        mov     edx, eax             // copy pointer
-        test    eax, eax
-        jz      @null                // returns 0 if S=nil
-        xor     eax, eax
-        pxor    xmm0, xmm0
-        {$ifdef HASAESNI}
-        pcmpistri xmm0, dqword[edx], EQUAL_EACH  // comparison result in ecx
-        {$else}
-        db      $66, $0F, $3A, $63, $02, EQUAL_EACH
-        {$endif}
-        jnz     @loop
-        mov     eax, ecx
-        ret
-        nop   // for @loop alignment
-@loop:  add     eax, 16
-        {$ifdef HASAESNI}
-        pcmpistri xmm0, dqword[edx + eax], EQUAL_EACH  // comparison result in ecx
-        {$else}
-        db      $66, $0F, $3A, $63, $04, $10, EQUAL_EACH
-        {$endif}
-        jnz     @loop
-@ok:    add     eax, ecx
-        ret
-@null:  db      $f3 // rep ret
-end;
-{$endif NOSTRSSE42}
-
 {$endif DELPHI5OROLDER}
 
 {$endif PUREPASCAL}
@@ -42500,12 +42499,12 @@ begin
   {$else DELPHI5OROLDER}
   {$ifdef CPU64}
   {$ifdef HASAESNI}
-  {$ifndef NOSTRSSE42}
+  {$ifdef FORCE_STRSSE42}
   if cfSSE42 in CpuFeatures then begin
     StrLen := @StrLenSSE42;
     StrComp := @StrCompSSE42;
   end else
-  {$endif NOSTRSSE42}
+  {$endif FORCE_STRSSE42}
   {$endif HASAESNI}
     StrLen := @StrLenSSE2;
   {$ifdef WITH_ERMS}{$ifdef MSWINDOWS} // disabled (slower for small blocks)
@@ -42519,11 +42518,11 @@ begin
   {$else CPU64}
   {$ifdef CPUINTEL}
   if cfSSE2 in CpuFeatures then begin
-    {$ifndef NOSTRSSE42}
+    {$ifdef FORCE_STRSSE42}
     if cfSSE42 in CpuFeatures then
       StrLen := @StrLenSSE42 else
       StrLen := @StrLenSSE2;
-    {$endif NOSTRSSE42}
+    {$endif FORCE_STRSSE42}
     FillcharFast := @FillCharSSE2;
   end else begin
     StrLen := @StrLenX86;
@@ -66747,10 +66746,10 @@ begin
     StrLen := @StrLenSSE2;
   {$endif FPC}
   if cfSSE42 in CpuFeatures then begin
-    crc32c := @crc32csse42;
+    crc32c := @crc32csse42; // seems safe on all targets
     crc32cby4 := @crc32cby4sse42;
     crcblock := @crcblockSSE42;
-    {$ifndef NOSTRSSE42}
+    {$ifdef FORCE_STRSSE42} // disabled by default: may trigger random GPF
     strspn := @strspnSSE42;
     strcspn := @strcspnSSE42;
     {$ifdef CPU64}
@@ -66758,14 +66757,14 @@ begin
     {$ifdef HASAESNI}
     StrLen := @StrLenSSE42;
     StrComp := @StrCompSSE42;
-    {$endif}
-    {$endif}
-    {$endif}
+    {$endif HASAESNI}
+    {$endif FPC}
+    {$endif CPU64}
     {$ifndef PUREPASCAL}
     {$ifndef DELPHI5OROLDER}
     UpperCopy255Buf := @UpperCopy255BufSSE42;
-    {$endif}
-    {$endif}
+    {$endif DELPHI5OROLDER}
+    {$endif PUREPASCAL}
     {$ifndef PUREPASCAL}
     StrComp := @StrCompSSE42;
     DYNARRAY_SORTFIRSTFIELD[false,djRawUTF8] := @SortDynArrayAnsiStringSSE42;
@@ -66775,7 +66774,7 @@ begin
     {$endif}
     DYNARRAY_SORTFIRSTFIELDHASHONLY[true] := @SortDynArrayAnsiStringSSE42;
     {$endif PUREPASCAL}
-    {$endif NOSTRSSE42}
+    {$endif FORCE_STRSSE42}
     DefaultHasher := crc32c;
   end;
   {$endif CPUINTEL}
