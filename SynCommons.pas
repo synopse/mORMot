@@ -6784,15 +6784,18 @@ function RecordSaveJSON(const Rec; TypeInfo: pointer;
 
 /// fill a record content from a memory buffer as saved by RecordSave()
 // - return nil if the Source buffer is incorrect
-// - will return the Rec size, in bytes, into Len reference variable
 // - in case of success, return the memory buffer pointer just after the
-// read content
+// read content, and set the Rec size, in bytes, into Len reference variable
 // - will use a proprietary binary format, with some variable-length encoding
 // of the string length - note that if you change the type definition, any
 // previously-serialized content will fail, maybe triggering unexpected GPF: you
 // may use TypeInfoToHash() if you share this binary data accross executables
 function RecordLoad(var Rec; Source: PAnsiChar; TypeInfo: pointer;
-  Len: PInteger=nil): PAnsiChar;
+  Len: PInteger=nil): PAnsiChar; overload;
+
+/// fill a record content from a memory buffer as saved by RecordSave()
+// - returns false if the Source buffer was incorrect, true on success
+function RecordLoad(var Res; const Source: RawByteString; TypeInfo: pointer): boolean; overload;
 
 /// read a record content from a Base-64 encoded content
 // - expects RecordSaveBase64() format, with a left-sided binary CRC
@@ -21655,7 +21658,7 @@ const
                      tkObject,tkRecord,tkDynArray,tkInterface,tkVariant];
    // maps record or object types
    tkRecordTypes = [tkObject,tkRecord];
-   tkRecordTypeOrSet = [tkObject,tkRecord];
+   tkRecordKinds = [tkObject,tkRecord];
 
 type
   // as defined in Delphi 6 and up
@@ -21691,7 +21694,7 @@ type
 const
   // maps record or object types
   tkRecordTypes = [tkRecord];
-  tkRecordTypeOrSet = tkRecord;
+  tkRecordKinds = tkRecord;
 
 {$endif}
 
@@ -21762,10 +21765,10 @@ type
   {$ifdef HASDIRECTTYPEINFO}
   PTypeInfoStored = PTypeInfo;
   {$else}
-  PTypeInfoStored = ^PTypeInfo;
+  PTypeInfoStored = ^PTypeInfo; // = TypeInfoPtr macro in FPC typinfo.pp
   {$endif}
 
-  // note: FPC TRecInitData (and TInitManagedField) are taken from typinfo.pp
+  // note: FPC TRecInitData is taken from typinfo.pp via SynFPCTypInfo
   // since this information is evolving/breaking a lot in the current FPC trunk
 
   /// map the Delphi/FPC record field RTTI
@@ -21786,7 +21789,7 @@ type
   /// map the Delphi record field enhanced RTTI (available since Delphi 2010)
   TEnhancedFieldInfo = packed record
     TypeInfo: PTypeInfoStored;
-    Offset: PtrUInt;
+    Offset: PtrUInt; // match TInitManagedField/TManagedField in FPC typinfo.pp
     {$ifdef ISDELPHI2010}
     Flags: Byte;
     NameLen: byte; // = Name[0] = length(Name)
@@ -22203,7 +22206,7 @@ end;
 function RecordTypeInfoSize(aRecordTypeInfo: pointer): integer;
 var info: PTypeInfo;
 begin
-  info := GetTypeInfo(aRecordTypeInfo,tkRecordTypeOrSet);
+  info := GetTypeInfo(aRecordTypeInfo,tkRecordKinds);
   if info=nil then
     result := 0 else
     result := info^.recSize;
@@ -41224,7 +41227,7 @@ begin
   A := @RecA;
   B := @RecB;
   result := false;
-  info := GetTypeInfo(TypeInfo,tkRecordTypeOrSet);
+  info := GetTypeInfo(TypeInfo,tkRecordKinds);
   if info=nil then
     exit; // raise Exception.CreateUTF8('% is not a record',[Typ^.Name]);
   if PRecSize<>nil then
@@ -41236,7 +41239,7 @@ begin
   offset := 0;
   for F := 1 to GetManagedFields(info,field) do begin
     fieldinfo := DeRef(field^.TypeInfo);
-    {$ifdef FPC_OLDRTTI} // FPC did include RTTI for unmanaged fields
+    {$ifdef FPC_OLDRTTI} // old FPC did include RTTI for unmanaged fields
     if not (fieldinfo^.Kind in tkManagedTypes) then begin
       inc(field);
       continue; // as with Delphi
@@ -41271,7 +41274,7 @@ var info,fieldinfo: PTypeInfo;
     R: PAnsiChar;
 begin
   R := @Rec;
-  info := GetTypeInfo(TypeInfo,tkRecordTypeOrSet);
+  info := GetTypeInfo(TypeInfo,tkRecordKinds);
   if (R=nil) or (info=nil) then begin
     result := 0; // should have been checked before
     exit;
@@ -41281,7 +41284,7 @@ begin
     Len^ := result;
   for F := 1 to GetManagedFields(info,field) do begin
     fieldinfo := DeRef(field^.TypeInfo);
-    {$ifdef FPC_OLDRTTI} // FPC did include RTTI for unmanaged fields! :)
+    {$ifdef FPC_OLDRTTI} // old FPC did include RTTI for unmanaged fields! :)
     if not (fieldinfo^.Kind in tkManagedTypes) then begin
       inc(field);
       continue; // as with Delphi
@@ -41305,7 +41308,7 @@ var info,fieldinfo: PTypeInfo;
     R: PAnsiChar;
 begin
   R := @Rec;
-  info := GetTypeInfo(TypeInfo,tkRecordTypeOrSet);
+  info := GetTypeInfo(TypeInfo,tkRecordKinds);
   if (R=nil) or (info=nil) then begin
     result := nil; // should have been checked before
     exit;
@@ -41322,7 +41325,7 @@ begin
     fieldinfo := DeRef(field^.TypeInfo);
     {$endif}
     {$endif}
-    {$ifdef FPC_OLDRTTI} // FPC did include RTTI for unmanaged fields! :)
+    {$ifdef FPC_OLDRTTI} // old FPC did include RTTI for unmanaged fields! :)
     if not (fieldinfo^.Kind in tkManagedTypes) then begin
       inc(field);
       continue; // as with Delphi
@@ -41360,22 +41363,32 @@ begin
 end;
 
 function RecordSave(const Rec; TypeInfo: pointer): RawByteString;
-var Len: integer;
+var destlen,dummylen: integer;
+    dest: PAnsiChar;
 begin
-  Len := RecordSaveLength(Rec,TypeInfo);
-  SetString(result,nil,Len);
-  if Len<>0 then
-    RecordSave(Rec,pointer(result),TypeInfo,Len);
+  destlen := RecordSaveLength(Rec,TypeInfo);
+  SetString(result,nil,destlen);
+  if destlen<>0 then begin
+    dest := RecordSave(Rec,pointer(result),TypeInfo,dummylen);
+    if (dest=nil) or (dest-pointer(result)<>destlen) then // paranoid check
+      raise ESynException.CreateUTF8('RecordSave % len=%<>%',
+        [TypeInfoToShortString(TypeInfo)^,dest-pointer(result),destlen]);
+  end;
 end;
 
 function RecordSaveBytes(const Rec; TypeInfo: pointer): TBytes;
-var Len: integer;
+var destlen,dummylen: integer;
+    dest: PAnsiChar;
 begin
-  Len := RecordSaveLength(Rec,TypeInfo);
+  destlen := RecordSaveLength(Rec,TypeInfo);
   result := nil; // don't reallocate TBytes data from a previous call
-  SetLength(result,Len);
-  if Len<>0 then
-    RecordSave(Rec,pointer(result),TypeInfo,Len);
+  SetLength(result,destlen);
+  if destlen<>0 then begin
+    dest := RecordSave(Rec,pointer(result),TypeInfo,dummylen);
+    if (dest=nil) or (dest-pointer(result)<>destlen) then // paranoid check
+      raise ESynException.CreateUTF8('RecordSave % len=%<>%',
+        [TypeInfoToShortString(TypeInfo)^,dest-pointer(result),destlen]);
+  end;
 end;
 
 procedure RecordSave(const Rec; var Dest: TSynTempBuffer; TypeInfo: pointer);
@@ -41427,7 +41440,7 @@ var info,fieldinfo: PTypeInfo;
 begin
   result := nil; // indicates error
   R := @Rec;
-  info := GetTypeInfo(TypeInfo,tkRecordTypeOrSet);
+  info := GetTypeInfo(TypeInfo,tkRecordKinds);
   if (R=nil) or (info=nil) then // should have been checked before
     exit;
   if Len<>nil then
@@ -41451,7 +41464,7 @@ begin
     fieldinfo := DeRef(field^.TypeInfo);
     {$endif}
     {$endif}
-    {$ifdef FPC_OLDRTTI} // FPC did include RTTI for unmanaged fields! :)
+    {$ifdef FPC_OLDRTTI} // old FPC did include RTTI for unmanaged fields! :)
     if not (fieldinfo^.Kind in tkManagedTypes) then begin
       inc(field);
       continue; // as with Delphi
@@ -41478,6 +41491,13 @@ begin
     result := Source+offset;
   end else
     result := Source;
+end;
+
+function RecordLoad(var Res; const Source: RawByteString; TypeInfo: pointer): boolean; overload;
+var P: PAnsiChar;
+begin
+  P := RecordLoad(Res,pointer(Source),TypeInfo,nil);
+  result := (P<>nil) and (P-pointer(Source)=length(Source));
 end;
 
 {$ifndef FPC}
@@ -42705,7 +42725,7 @@ begin
   RegRoot := TJSONCustomParserRTTI.CreateFromTypeName('',Reg.RecordTypeName);
   {$ifdef ISDELPHI2010}
   if RegRoot=nil then begin
-    info := GetTypeInfo(aRecordTypeInfo,tkRecordTypeOrSet);
+    info := GetTypeInfo(aRecordTypeInfo,tkRecordKinds);
     if info=nil then
       exit; // not enough RTTI
     inc(PByte(info),info^.ManagedCount*SizeOf(TFieldInfo)-SizeOf(TFieldInfo));
@@ -43016,12 +43036,12 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
   {$endif}
   tkRecord{$ifdef FPC},tkObject{$endif}: // first search from custom RTTI text
     if not GlobalJSONCustomParsers.RecordRTTITextHash(info,crc,result) then begin
-      itemtype := GetTypeInfo(info,tkRecordTypeOrSet);
+      itemtype := GetTypeInfo(info,tkRecordKinds);
       if itemtype<>nil then begin
         unmanagedsize := itemtype^.recsize;
         for i := 1 to GetManagedFields(itemtype,field) do begin
           info := DeRef(field^.TypeInfo);
-          {$ifdef FPC_OLDRTTI} // FPC did include RTTI for unmanaged fields
+          {$ifdef FPC_OLDRTTI} // old FPC did include RTTI for unmanaged fields
           if info^.Kind in tkManagedTypes then // as with Delphi
           {$endif}
             dec(unmanagedsize,ManagedTypeSaveRTTIHash(info,crc));
@@ -50437,8 +50457,8 @@ begin // this method is faster than default System.DynArraySetLength() function
     dec(PtrUInt(p),SizeOf(TDynArrayRec)); // p^ = start of heap object
     OldLength := p^.length;
     if p^.refCnt=1 then begin
-      if NewLength<OldLength then
-        if ElemType<>nil then
+      if NewLength<OldLength then // reduce array in-place
+        if ElemType<>nil then // release managed types in trailing items
           {$ifdef FPC}FPCFinalizeArray{$else}_FinalizeArray{$endif}(
             PAnsiChar(p)+NeededSize,ElemType,OldLength-NewLength) else
           if GetIsObjArray then begin // FreeAndNil() of resized objects list
@@ -50448,7 +50468,7 @@ begin // this method is faster than default System.DynArraySetLength() function
               PAnsiChar(p)[NeededSize],(OldLength-NewLength) shl POINTERSHR,0);
           end;
       ReallocMem(p,NeededSize);
-    end else begin
+    end else begin // make copy
       InterlockedDecrement(PInteger(@p^.refCnt)^); // FPC has refCnt: PtrInt
       GetMem(p,NeededSize);
       minLength := oldLength;
@@ -50471,12 +50491,12 @@ begin // this method is faster than default System.DynArraySetLength() function
     length := newLength;
     {$endif}
   end;
-  inc(PByte(p),SizeOf(p^));
+  inc(PByte(p),SizeOf(p^)); // p^ = start of dynamic aray items
   // reset new allocated elements content to zero
   if NewLength>OldLength then begin
     OldLength := OldLength*elemSize;
     {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(
-      PAnsiChar(p)[OldLength],NeededSize-OldLength-SizeOf(TDynArrayRec),0);
+      PAnsiChar(p)[OldLength],NewLength*ElemSize-OldLength,0);
   end;
   fValue^ := p;
 end;
@@ -50511,7 +50531,7 @@ begin
         c := PInteger(c)^;
         if capa>=c then
           exit; // no need to grow
-        inc(capa,capa shr 2); // growth factor = 1.5
+        capa := NextGrow(capa);
         if capa<c then
           aCount := c else
           aCount := capa;
@@ -53536,7 +53556,7 @@ procedure TTextWriter.AddVoidRecordJSON(TypeInfo: pointer);
 var tmp: TBytes;
     info: PTypeInfo;
 begin
-  info := GetTypeInfo(TypeInfo,tkRecordTypeOrSet);
+  info := GetTypeInfo(TypeInfo,tkRecordKinds);
   if (self=nil) or (info=nil) then
     raise ESynException.CreateUTF8('Invalid %.AddVoidRecordJSON(%)',[self,TypeInfo]);
   SetLength(tmp,info^.recSize {$ifdef FPC}and $7FFFFFFF{$endif});
