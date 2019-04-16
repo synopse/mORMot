@@ -6520,11 +6520,11 @@ procedure AppendShortComma(text: PAnsiChar; len: integer; var result: shortstrin
 
 /// fast search of an exact case-insensitive match of a RTTI's PShortString array
 function FindShortStringListExact(List: PShortString; MaxValue: integer;
-  aValue: PUTF8Char; aValueLen: integer): integer;
+  aValue: PUTF8Char; aValueLen: PtrInt): integer;
 
 /// fast search of an left-trimmed lowercase match of a RTTI's PShortString array
 function FindShortStringListTrimLowerCase(List: PShortString; MaxValue: integer;
-  aValue: PUTF8Char; aValueLen: integer): integer;
+  aValue: PUTF8Char; aValueLen: PtrInt): integer;
 
 /// retrieve the type name from its low-level RTTI
 function TypeInfoToName(aTypeInfo: pointer): RawUTF8; overload;
@@ -19338,7 +19338,7 @@ begin
       {$else}
       if PInteger(s^-8)^<=aMaxRefCount then begin
         PRawUTF8(s)^ := '';
-      {$endif}
+      {$endif FPC}
         inc(result);
       end else begin
         if s<>d then begin
@@ -22403,22 +22403,22 @@ end;
 {$endif PUREPASCAL}
 
 function FindShortStringListExact(List: PShortString; MaxValue: integer;
-  aValue: PUTF8Char; aValueLen: integer): integer;
-var PLen: integer;
+  aValue: PUTF8Char; aValueLen: PtrInt): integer;
+var PLen: PtrInt;
 begin
   if aValueLen<>0 then
   for result := 0 to MaxValue do begin
     PLen := ord(List^[0]);
     if (PLen=aValuelen) and IdemPropNameUSameLen(@List^[1],aValue,aValueLen) then
-      exit else
-      inc(PByte(List),PLen+1); // next short string
+      exit;
+    inc(PByte(List),PLen+1); // next short string
   end;
   result := -1;
 end;
 
 function FindShortStringListTrimLowerCase(List: PShortString; MaxValue: integer;
-  aValue: PUTF8Char; aValueLen: integer): integer;
-var PLen: integer;
+  aValue: PUTF8Char; aValueLen: PtrInt): integer;
+var PLen: PtrInt;
 begin
   if aValueLen<>0 then
   for result := 0 to MaxValue do begin
@@ -22431,8 +22431,8 @@ begin
       dec(PLen);
     until PLen=0;
     if (PLen=aValueLen) and IdemPropNameUSameLen(aValue,PUTF8Char(List),PLen) then
-      exit else
-      inc(PUTF8Char(List),PLen);
+      exit;
+    inc(PUTF8Char(List),PLen);
   end;
   result := -1;
 end;
@@ -46333,12 +46333,12 @@ begin
       include(VOptions,dvoIsArray);
     end;
   end;
-  if VValue=nil then
-    SetLength(VValue,16) else
-    if VCount>=length(VValue) then
-      SetLength(VValue,NextGrow(VCount));
+  len := length(VValue);
+  if VCount>=len then begin
+    len := NextGrow(VCount);
+    SetLength(VValue,len);
+  end;
   if aName<>'' then begin
-    len := length(VValue);
     if Length(VName)<>len then
       SetLength(VName,len);
     if dvoInternNames in VOptions then begin // inlined InternNames method
