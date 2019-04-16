@@ -9,10 +9,10 @@
       <Version Value="11"/>
       <PathDelim Value="\"/>
       <SearchPaths>
-        <IncludeFiles Value=".."/>
+        <IncludeFiles Value="..;$PkgIncPath(zcore)\..\..\src"/>
         <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
         <OtherUnitFiles Value=".."/>
-        <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)\"/>
+        <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
       </SearchPaths>
     </CompilerOptions>
     <Description Value="Synopse mORMot ORM/SOA/MVC framework
