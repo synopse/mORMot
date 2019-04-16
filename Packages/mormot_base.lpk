@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <Package Version="4">
+    <PathDelim Value="\"/>
+    <Name Value="mormot_base"/>
+    <Type Value="RunTimeOnly"/>
+    <Author Value="Arnaud Bouchez"/>
+    <CompilerOptions>
+      <Version Value="11"/>
+      <PathDelim Value="\"/>
+      <SearchPaths>
+        <IncludeFiles Value=".."/>
+        <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
+        <OtherUnitFiles Value=".."/>
+        <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
+      </SearchPaths>
+    </CompilerOptions>
+    <Description Value="Synopse mORMot ORM/SOA/MVC framework
+It is an Open Source Client-Server ORM SOA MVC framework for Delphi 6 up to Delphi 10.3 Rio and FPC, targeting Windows/Linux for servers, and any platform for clients (including mobile or AJAX)."/>
+    <License Value="Licensed under a disjunctive tri-license giving you the choice of one of
+the three following sets of free software/open source licensing terms:
+ - Mozilla Public License, version 1.1 or later;
+ - GNU General Public License, version 2.0 or later;
+ - GNU Lesser General Public License, version 2.1 or later.
+This allows the use of our code in as wide a variety of software projects
+as possible, while still maintaining copy-left on code we wrote."/>
+    <Version Major="1" Minor="18"/>
+    <Files Count="21">
+      <Item1>
+        <Filename Value="..\SynCommons.pas"/>
+        <UnitName Value="SynCommons"/>
+      </Item1>
+      <Item2>
+        <Filename Value="..\SynBidirSock.pas"/>
+        <UnitName Value="SynBidirSock"/>
+      </Item2>
+      <Item3>
+        <Filename Value="..\SynTable.pas"/>
+        <UnitName Value="SynTable"/>
+      </Item3>
+      <Item4>
+        <Filename Value="..\SynCrtSock.pas"/>
+        <UnitName Value="SynCrtSock"/>
+      </Item4>
+      <Item5>
+        <Filename Value="..\SynCrypto.pas"/>
+        <UnitName Value="SynCrypto"/>
+      </Item5>
+      <Item6>
+        <Filename Value="..\SynEcc.pas"/>
+        <UnitName Value="SynEcc"/>
+      </Item6>
+      <Item7>
+        <Filename Value="..\SynFPCTypInfo.pas"/>
+        <UnitName Value="SynFPCTypInfo"/>
+      </Item7>
+      <Item8>
+        <Filename Value="..\SynLog.pas"/>
+        <UnitName Value="SynLog"/>
+      </Item8>
+      <Item9>
+        <Filename Value="..\SynLZ.pas"/>
+        <UnitName Value="SynLZ"/>
+      </Item9>
+      <Item10>
+        <Filename Value="..\SynLZO.pas"/>
+        <UnitName Value="SynLZO"/>
+      </Item10>
+      <Item11>
+        <Filename Value="..\SynLizard.pas"/>
+        <UnitName Value="SynLizard"/>
+      </Item11>
+      <Item12>
+        <Filename Value="..\SynZip.pas"/>
+        <UnitName Value="SynZip"/>
+      </Item12>
+      <Item13>
+        <Filename Value="..\SynZipFiles.pas"/>
+        <UnitName Value="SynZipFiles"/>
+      </Item13>
+      <Item14>
+        <Filename Value="..\SynMustache.pas"/>
+        <UnitName Value="SynMustache"/>
+      </Item14>
+      <Item15>
+        <Filename Value="..\SynSSPI.pas"/>
+        <UnitName Value="SynSSPI"/>
+      </Item15>
+      <Item16>
+        <Filename Value="..\SynSSPIAuth.pas"/>
+        <UnitName Value="SynSSPIAuth"/>
+      </Item16>
+      <Item17>
+        <Filename Value="..\SynGSSAPI.pas"/>
+        <UnitName Value="SynGSSAPI"/>
+      </Item17>
+      <Item18>
+        <Filename Value="..\SynGSSAPIAuth.pas"/>
+        <UnitName Value="SynGSSAPIAuth"/>
+      </Item18>
+      <Item19>
+        <Filename Value="..\SynOpenSSL.pas"/>
+        <UnitName Value="SynOpenSSL"/>
+      </Item19>
+      <Item20>
+        <Filename Value="..\SynTests.pas"/>
+        <UnitName Value="SynTests"/>
+      </Item20>
+      <Item21>
+        <Filename Value="..\SynWinSock.pas"/>
+        <UnitName Value="SynWinSock"/>
+      </Item21>
+    </Files>
+    <RequiredPkgs Count="1">
+      <Item1>
+        <PackageName Value="FCL"/>
+      </Item1>
+    </RequiredPkgs>
+    <UsageOptions>
+      <UnitPath Value="$(PkgOutDir)"/>
+    </UsageOptions>
+    <PublishOptions>
+      <Version Value="2"/>
+      <UseFileFilters Value="True"/>
+    </PublishOptions>
+  </Package>
+</CONFIG>
