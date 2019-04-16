@@ -3,7 +3,7 @@
   <Package Version="4">
     <PathDelim Value="\"/>
     <Name Value="mormot_crossplatform"/>
-    <Type Value="RunAndDesignTime"/>
+    <Type Value="RunTimeOnly"/>
     <Author Value="Arnaud Bouchez"/>
     <CompilerOptions>
       <Version Value="11"/>
