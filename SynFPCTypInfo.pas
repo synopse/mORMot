@@ -78,7 +78,7 @@ function AlignTypeData(p : Pointer) : Pointer; inline;
 function GetFPCTypeData(TypeInfo: PTypeInfo): PTypeData; inline;
 function GetFPCPropInfo(AClass: TClass; const PropName: string): PPropInfo; inline;
 {$ifdef FPC_NEWRTTI}
-function GetFPCRecInitData(TypeData: Pointer): Pointer; inline;
+function GetFPCRecInitData(TypeData: Pointer): Pointer;
 {$endif}
 
 procedure FPCDynArrayClear(var a: Pointer; typeInfo: Pointer);
@@ -111,6 +111,11 @@ begin
   result := align(p,sizeof(p));
 end;
 {$endif}
+
+function GetFPCTypeData(TypeInfo: PTypeInfo): PTypeData;
+begin
+  result := PTypeData(TypInfo.AlignTypeData(PTypeData(pointer(TypeInfo)+2+PByte(pointer(TypeInfo)+1)^)));
+end;
 
 function GetFPCEnumValue(TypeInfo: PTypeInfo; const Name: string): Integer;
 var PS: PShortString;
@@ -166,11 +171,6 @@ end;
 function AlignTypeData(p: Pointer): Pointer;
 begin
   result := TypInfo.AlignTypeData(p);
-end;
-
-function GetFPCTypeData(TypeInfo: PTypeInfo): PTypeData;
-begin
-  result := PTypeData(TypInfo.AlignTypeData(PTypeData(pointer(TypeInfo)+2+PByte(pointer(TypeInfo)+1)^)));
 end;
 
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
