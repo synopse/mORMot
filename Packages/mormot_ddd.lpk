@@ -11,7 +11,7 @@
       <SearchPaths>
         <IncludeFiles Value=".."/>
         <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-        <OtherUnitFiles Value="..\SQLite3;..\SQLite3\DDD\infra"/>
+        <OtherUnitFiles Value="..\SQLite3;..\SQLite3\DDD\infra;..\SQLite3\DDD\dom;..\SQLite3\DDD\tools"/>
         <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
       </SearchPaths>
     </CompilerOptions>
