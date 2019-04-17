@@ -15,8 +15,7 @@
         <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
       </SearchPaths>
     </CompilerOptions>
-    <Description Value="Synopse mORMot ORM/SOA/MVC framework
-It is an Open Source Client-Server ORM SOA MVC framework for Delphi 6 up to Delphi 10.3 Rio and FPC, targeting Windows/Linux for servers, and any platform for clients (including mobile or AJAX)."/>
+    <Description Value="ORM over external SQL and MongoDB"/>
     <License Value="Licensed under a disjunctive tri-license giving you the choice of one of
 the three following sets of free software/open source licensing terms:
  - Mozilla Public License, version 1.1 or later;
