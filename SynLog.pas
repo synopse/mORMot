@@ -1862,7 +1862,7 @@ constructor TSynMapFile.Create(const aExeName: TFileName=''; MabCreate: boolean=
         while (P<PEnd) and (P^=' ') do inc(P);
         repeat
           if Count=n then begin
-            n := Count+Count shr 3+256;
+            n := NextGrow(n);
             SetLength(U^.Line,n);
             SetLength(U^.Addr,n);
           end;
@@ -3977,7 +3977,7 @@ begin
     with aSynLog.fThreadContext^ do
     try
       if RecursionCount=RecursionCapacity then begin
-        inc(RecursionCapacity,4+RecursionCapacity shr 3);
+        RecursionCapacity := NextGrow(RecursionCapacity);
         SetLength(Recursion,RecursionCapacity);
       end;
       {$ifdef CPU64}
@@ -4032,7 +4032,7 @@ begin
     with aSynLog.fThreadContext^ do
     try
       if RecursionCount=RecursionCapacity then begin
-        inc(RecursionCapacity,4+RecursionCapacity shr 3);
+        RecursionCapacity := NextGrow(RecursionCapacity);
         SetLength(Recursion,RecursionCapacity);
       end;
       with Recursion[RecursionCount] do begin
@@ -5971,7 +5971,7 @@ begin
             search := maxInt;
           end;
           if fSelectedCount=length(fSelected) then
-            SetLength(fSelected,fSelectedCount+256+fSelectedCount shr 3);
+            SetLength(fSelected,NextGrow(fSelectedCount));
           fSelected[fSelectedCount] := i;
           inc(fSelectedCount);
         end;

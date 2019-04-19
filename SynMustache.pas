@@ -493,7 +493,7 @@ begin
   if aEnd<=aStart then
     exit;
   if fTagCount>=length(fTemplate.fTags) then
-    SetLength(fTemplate.fTags,fTagCount+fTagCount shr 3+32);
+    SetLength(fTemplate.fTags,NextGrow(fTagCount));
   with fTemplate.fTags[fTagCount] do begin
     Kind := aKind;
     SectionOppositeIndex := -1;

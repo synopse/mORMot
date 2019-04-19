@@ -24590,7 +24590,7 @@ begin
   // add to the internal list
   result := fCount;
   if result>=length(fList) then
-    SetLength(fList,result+result shr 3+32);
+    SetLength(fList,NextGrow(result));
   inc(fCount);
   fList[result] := aItem;
   fOrderedByName := nil; // force recompute sorted name array
@@ -28967,8 +28967,8 @@ begin
           P := GotoNextJSONItem(P);  // ignore field name for later rows
           // warning: field order if not checked, and should be as expected
         if max>=resmax then begin // check space inside loop for GPF security
-          inc(resmax,resmax shr 3+nfield shl 8);
-          SetLength(fJSONResults,resmax); // enough space for 256 more rows
+          resmax := NextGrow(resmax);
+          SetLength(fJSONResults,resmax); // enough space for more rows
         end;
         if P=nil then break; // normal end: no more field name
         fJSONResults[max] := GetJSONFieldOrObjectOrArray(P,@wasString,@EndOfObject,true);
@@ -35309,7 +35309,7 @@ end;
 procedure AddID(var Values: TIDDynArray; var ValuesCount: integer; Value: TID);
 begin
   if ValuesCount=length(Values) then
-    SetLength(Values,ValuesCount+256+ValuesCount shr 3);
+    SetLength(Values,NextGrow(ValuesCount));
   Values[ValuesCount] := Value;
   inc(ValuesCount);
 end;
@@ -43490,7 +43490,7 @@ begin
   hash := ServerNonceHash; // thread-safe SHA-3 sponge reuse
   hash.Update(@ticks,SizeOf(ticks));
   hash.Final(res,true);
-  result := BinToHex(@res,SizeOf(res));
+  result := BinToHexLower(@res,SizeOf(res));
   with ServerNonceCache[Previous] do begin
     tix := ticks;
     res := result;
@@ -44694,7 +44694,7 @@ begin
           RunningBatchURIMethod := URIMethod;
         end;
         if Count>=length(Results) then
-          SetLength(Results,Count+256+Count shr 3);
+          SetLength(Results,NextGrow(Count));
       end;
       // process CRUD method operation
       OK := false;
@@ -53874,7 +53874,7 @@ begin // FPC doesn't allow to use constants for procedure of object
   suaSHA1:   result := ComputeSignatureSHA1;
   suaSHA256: result := ComputeSignatureSHA256;
   suaSHA512: result := ComputeSignatureSHA512;
-  else       result := ComputeSignatureCrc32;
+  else       result := ComputeSignatureCrc32; // default/fallback
   end;
 end;
 
@@ -53898,7 +53898,7 @@ end;
 
 class function TSQLRestServerAuthenticationSignedURI.ComputeSignatureMD5(
   privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
-var digest: array[0..(SizeOf(TMD5Digest)div 4)-1] of cardinal;
+var digest: THash128Rec;
     MD5: TMD5;
     i: integer;
 begin
@@ -53906,10 +53906,10 @@ begin
   MD5.Update(privatesalt,4);
   MD5.Update(timestamp^,8);
   MD5.Update(url^,urllen);
-  MD5.Final(TMD5Digest(digest));
-  result := digest[0];
-  for i := 1 to high(digest) do
-    result := result xor digest[i];
+  MD5.Final(digest.b);
+  result := digest.c[0];
+  for i := 1 to high(digest.c) do
+    result := result xor digest.c[i];
 end;
 
 class function TSQLRestServerAuthenticationSignedURI.ComputeSignatureSHA1(
@@ -53930,7 +53930,7 @@ end;
 
 class function TSQLRestServerAuthenticationSignedURI.ComputeSignatureSHA256(
   privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
-var digest: array[0..(SizeOf(TSHA256Digest)div 4)-1] of cardinal;
+var digest: THash256Rec;
     SHA256: TSHA256;
     i: integer;
 begin
@@ -53938,15 +53938,15 @@ begin
   SHA256.Update(@privatesalt,4);
   SHA256.Update(timestamp,8);
   SHA256.Update(url,urllen);
-  SHA256.Final(TSHA256Digest(digest));
-  result := digest[0];
-  for i := 1 to high(digest) do
-    result := result xor digest[i];
+  SHA256.Final(digest.b);
+  result := digest.c[0];
+  for i := 1 to high(digest.c) do
+    result := result xor digest.c[i];
 end;
 
 class function TSQLRestServerAuthenticationSignedURI.ComputeSignatureSHA512(
   privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
-var digest: array[0..(SizeOf(TSHA512Digest)div 4)-1] of cardinal;
+var digest: THash512Rec;
     SHA512: TSHA512;
     i: integer;
 begin
@@ -53954,10 +53954,10 @@ begin
   SHA512.Update(@privatesalt,4);
   SHA512.Update(timestamp,8);
   SHA512.Update(url,urllen);
-  SHA512.Final(TSHA512Digest(digest));
-  result := digest[0];
-  for i := 1 to high(digest) do
-    result := result xor digest[i];
+  SHA512.Final(digest.b);
+  result := digest.c[0];
+  for i := 1 to high(digest.c) do
+    result := result xor digest.c[i];
 end;
 
 function TSQLRestServerAuthenticationSignedURI.RetrieveSession(
@@ -54077,7 +54077,7 @@ begin
   if aServerNonce='' then
     exit;
   TAESPRNG.Main.FillRandom(@rnd,SizeOf(rnd));
-  aClientNonce := BinToHex(@rnd,SizeOf(rnd));
+  aClientNonce := BinToHexLower(@rnd,SizeOf(rnd));
   result := ClientGetSessionKey(Sender,User,['UserName',User.LogonName,'Password',
      Sha256(Sender.Model.Root+aServerNonce+aClientNonce+User.LogonName+User.PasswordHashHexa),
      'ClientNonce',aClientNonce]);

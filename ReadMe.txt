@@ -52,6 +52,7 @@ Contributors
   Michalis Kamburelis 
   MilesYou
   Mingda
+  Nicolas Marchand (MC)
   Nzsolt
   Oleg Tretyakov
   Ondrej (reddwarf)
