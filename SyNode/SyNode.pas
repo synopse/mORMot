@@ -81,10 +81,8 @@ unit SyNode;
 interface
 
 uses
-  {$ifdef MSWindows}
-  Windows,
-  {$endif}
   {$ifndef FPC}
+  Windows,
   ShLwApi, // for older Delphi versions download this file from JEDI library
   {$else}
   LazFileUtils, dynlibs,
@@ -810,13 +808,13 @@ procedure TSMEngine.DefineNodeProcess;
 var process: PJSRootedObject;
     env: PJSRootedObject;
     FStartupPath: TFileName;
-    {$IFDEF Unix}
+    {$IFDEF FPC}
     I, Cnt: Integer;
-    EnvStr: String;
-    Parts: TStringArray;
+    EnvStr: AnsiString;
+    Parts: array of AnsiString;
     {$ELSE}
     L: PtrInt;
-    EnvBlock, P, pEq: PWideChar;
+    EnvBlock, P, pEq: PChar;
     strName, strVal: SynUnicode;
     {$ENDIF}
 begin
@@ -835,7 +833,7 @@ begin
 
     process.ptr.defineProperty(cx, 'startupPath', cx.NewJSString(StringToSynUnicode(FStartupPath)).ToJSVal,
       JSPROP_ENUMERATE or JSPROP_PERMANENT or JSPROP_READONLY);
-    {$IFDEF Unix} // FPC return OEM env var under Windows, so better to use GetEnvironmentStringsW
+    {$IFDEF FPC}
     Cnt := GetEnvironmentVariableCount;
     for I := 1 to Cnt do begin
       EnvStr := GetEnvironmentString(I);
@@ -846,16 +844,20 @@ begin
       end
     end;
     {$ELSE}
-    EnvBlock := GetEnvironmentStringsW;
+    EnvBlock := GetEnvironmentStrings;
     try
       P := EnvBlock;
       while P^<>#0 do begin
+        {$ifdef UNICODE}
         L := StrLenW(P);
+        {$else}
+        L := StrLen(P);
+        {$endif}
         if (L>0) and (P^<>'=') then begin
           pEq := StrScan(P, '=');
           if pEq <> nil then begin
             SetString(strName, p, pEq-P);
-            SetString(strVal, pEq+1, L-(pEq+1-p));
+            SetString(strVal, pEq+1, {$ifdef UNICODE}StrLenW{$else}StrLen{$endif}(pEq+1));
             env.ptr.DefineUCProperty(cx, Pointer(strName), Length(strName), cx.NewJSString(strVal).ToJSVal,
               JSPROP_ENUMERATE or JSPROP_PERMANENT or JSPROP_READONLY, nil, nil);
           end;
@@ -863,7 +865,7 @@ begin
         inc(P,L+1);
       end;
     finally
-      FreeEnvironmentStringsW(EnvBlock);
+      FreeEnvironmentStrings(EnvBlock);
     end;
     {$ENDIF}
     process.ptr.defineProperty(cx, 'env', env.ptr.ToJSValue,
