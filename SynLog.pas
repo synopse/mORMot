@@ -4318,8 +4318,8 @@ procedure TSynLog.LogFileHeader;
 var WithinEvents: boolean;
     i: integer;
     {$ifdef MSWINDOWS}
-    Env: PAnsiChar;
-    P: PUTF8Char;
+    Env: PWideChar;
+    P: PWideChar;
     L: Integer;
     {$endif}
 
@@ -4391,17 +4391,17 @@ begin
     NewLine;
     AddShort('Environment variables=');
     if not fFamily.fNoEnvironmentVariable then begin
-      Env := GetEnvironmentStringsA;
+      Env := GetEnvironmentStringsW;
       P := pointer(Env);
       while P^<>#0 do begin
-        L := StrLen(P);
+        L := StrLenW(P);
         if (L>0) and (P^<>'=') then begin
-          AddNoJSONEscape(P,L);
+          AddNoJSONEscapeW(PWord(P),SysUtils.StrLen(P));
           Add(#9);
         end;
         inc(P,L+1);
       end;
-      FreeEnvironmentStringsA(Env);
+      FreeEnvironmentStringsW(Env);
       CancelLastChar(#9);
     end;
     {$endif}
