@@ -778,7 +778,7 @@ type
   // - all Init() methods will allocate 16 more bytes, for a trailing #0 and
   // to ensure our fast JSON parsing won't trigger any GPF (since it may read
   // up to 4 bytes ahead via its PInteger() trick) or any SSE4.2 function
-  {$ifdef UNICODE}TSynTempBuffer = record{$else}TSynTempBuffer = object{$endif}
+  {$ifdef FPC_OR_UNICODE}TSynTempBuffer = record{$else}TSynTempBuffer = object{$endif}
   public
     /// the text/binary length, in bytes, excluding the trailing #0
     len: integer;
@@ -3336,7 +3336,7 @@ procedure AddRawUTF8(var Values: TRawUTF8DynArray; var ValuesCount: integer;
 
 type
   /// simple stack-allocated type for handling a type names list
-  {$ifdef UNICODE}TPropNameList = record{$else}TPropNameList = object{$endif}
+  {$ifdef FPC_OR_UNICODE}TPropNameList = record{$else}TPropNameList = object{$endif}
   public
     Values: TRawUTF8DynArray;
     Count: Integer;
@@ -3611,7 +3611,7 @@ function TemporaryFileName: TFileName;
 type
   {$A-}
   /// file found result item, as returned by FindFiles()
-  {$ifdef UNICODE}TFindFiles = record{$else}TFindFiles = object{$endif}
+  {$ifdef FPC_OR_UNICODE}TFindFiles = record{$else}TFindFiles = object{$endif}
   public
     /// the matching file name, including its folder name
     Name: TFileName;
@@ -4488,7 +4488,7 @@ type
   // - is defined either as an object either as a record, due to a bug
   // in Delphi 2009/2010 compiler (at least): this structure is not initialized
   // if defined as an object on the stack, but will be as a record :(
-  {$ifdef UNICODE}TSortedWordArray = record{$else}TSortedWordArray = object{$endif}
+  {$ifdef FPC_OR_UNICODE}TSortedWordArray = record{$else}TSortedWordArray = object{$endif}
   public
     Values: TWordDynArray;
     Count: integer;
@@ -6058,7 +6058,7 @@ type
   end;
 
   /// used to store one list of hashed RawUTF8 in TRawUTF8Interning pool
-  {$ifdef UNICODE}TRawUTF8InterningSlot = record{$else}TRawUTF8InterningSlot = object{$endif}
+  {$ifdef FPC_OR_UNICODE}TRawUTF8InterningSlot = record{$else}TRawUTF8InterningSlot = object{$endif}
   public
     /// actual RawUTF8 storage
     Value: TRawUTF8DynArray;
@@ -10290,7 +10290,7 @@ type
   // - is also safer, since will check for reaching end of buffer
   // - raise a EFastReader exception on decoding error (e.g. if a buffer
   // overflow may occur) or call OnErrorOverflow/OnErrorData event handlers
-  {$ifdef UNICODE}TFastReader = record{$else}TFastReader = object{$endif}
+  {$ifdef FPC_OR_UNICODE}TFastReader = record{$else}TFastReader = object{$endif}
   public
     /// the current position in the memory
     P: PAnsiChar;
@@ -10469,7 +10469,7 @@ procedure JSONEncodeNameSQLValue(const Name,SQLValue: RawUTF8; var result: RawUT
 type
   /// points to one value of raw UTF-8 content, decoded from a JSON buffer
   // - used e.g. by JSONDecode() overloaded function to returns names/values
-  {$ifdef UNICODE}TValuePUTF8Char = record{$else}TValuePUTF8Char = object{$endif}
+  {$ifdef FPC_OR_UNICODE}TValuePUTF8Char = record{$else}TValuePUTF8Char = object{$endif}
   public
     /// a pointer to the actual UTF-8 text
     Value: PUTF8Char;
@@ -12542,7 +12542,7 @@ type
   /// a cross-platform and cross-compiler TSystemTime structure
   // - FPC's TSystemTime in datih.inc does NOT match Windows TSystemTime fields!
   // - also used to store a Date/Time in TSynTimeZone internal structures
-  {$ifdef UNICODE}TSynSystemTime = record{$else}TSynSystemTime = object{$endif}
+  {$ifdef FPC_OR_UNICODE}TSynSystemTime = record{$else}TSynSystemTime = object{$endif}
   public
     Year, Month, DayOfWeek, Day,
     Hour, Minute, Second, MilliSecond: word;
@@ -12608,7 +12608,7 @@ type
   // temporary conversion in such case
   // - TTimeLogBits.Value has a 38-bit precision, so features exact representation
   // as JavaScript numbers (stored in a 52-bit mantissa)
-  {$ifdef UNICODE}TTimeLogBits = record{$else}TTimeLogBits = object{$endif}
+  {$ifdef FPC_OR_UNICODE}TTimeLogBits = record{$else}TTimeLogBits = object{$endif}
   public
     /// the bit-encoded value itself, which follows an abstract "year" of 16
     // months of 32 days of 32 hours of 64 minutes of 64 seconds
@@ -13096,7 +13096,7 @@ type
   TTimeZoneID = type RawUTF8;
 
   /// used to store Time Zone information for a single area in TSynTimeZone
-  {$ifdef UNICODE}TTimeZoneData = record{$else}TTimeZoneData = object{$endif}
+  {$ifdef FPC_OR_UNICODE}TTimeZoneData = record{$else}TTimeZoneData = object{$endif}
   public
     id: TTimeZoneID;
     display: RawUTF8;
@@ -17615,7 +17615,7 @@ type
   // - bits 0..14 map a 15-bit increasing counter (collision-free)
   // - bits 15..30 map a 16-bit process identifier
   // - bits 31..63 map a 33-bit UTC time, encoded as seconds since Unix epoch
-  {$ifdef UNICODE}TSynUniqueIdentifierBits = record{$else}TSynUniqueIdentifierBits = object{$endif}
+  {$ifdef FPC_OR_UNICODE}TSynUniqueIdentifierBits = record{$else}TSynUniqueIdentifierBits = object{$endif}
   public
     /// the actual 64-bit storage value
     // - in practice, only first 63 bits are used
@@ -24403,7 +24403,7 @@ end;
 
 type
   // only supported token is %, with any const arguments
-  {$ifdef UNICODE}TFormatUTF8 = record{$else}TFormatUTF8 = object{$endif}
+  {$ifdef FPC_OR_UNICODE}TFormatUTF8 = record{$else}TFormatUTF8 = object{$endif}
   public
     b: PTempUTF8;
     L,argN: integer;
@@ -39390,7 +39390,7 @@ end;
 
 type
   /// used internaly for faster quick sort
-  {$ifdef UNICODE}TQuickSortRawUTF8 = record{$else}TQuickSortRawUTF8 = object{$endif}
+  {$ifdef FPC_OR_UNICODE}TQuickSortRawUTF8 = record{$else}TQuickSortRawUTF8 = object{$endif}
   public
     Values: PPointerArray;
     Compare: TUTF8Compare;
@@ -46669,7 +46669,7 @@ begin
 end;
 
 type
-  {$ifdef UNICODE}TQuickSortDocVariantValuesByField = record
+  {$ifdef FPC_OR_UNICODE}TQuickSortDocVariantValuesByField = record
   {$else}TQuickSortDocVariantValuesByField = object{$endif}
     Lookup: array of PVariant;
     Compare: TVariantCompare;
@@ -49814,7 +49814,7 @@ end;
 
 type
   // internal structure used to make QuickSort faster & with less stack usage
-  {$ifdef UNICODE}TDynArrayQuickSort = record{$else}TDynArrayQuickSort = object{$endif}
+  {$ifdef FPC_OR_UNICODE}TDynArrayQuickSort = record{$else}TDynArrayQuickSort = object{$endif}
   public
     Compare: TDynArraySortCompare;
     CompareEvent: TEventDynArraySortCompare;
