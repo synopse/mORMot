@@ -6597,6 +6597,25 @@ function GUIDToRawUTF8({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} gui
 // - this version is faster than the one supplied by SysUtils
 function GUIDToString({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID): string;
 
+type
+  /// low-level object implementing a 32-bit Pierre L'Ecuyer software generator
+  // - as used by RandomGsl function, and Random32 if no RDRAND hardware is available
+  // - is not thread-safe, but cross-compiler and cross-platform, still very
+  // fast with a much better distribution than Delphi system's Random() function
+  {$ifdef FPC_OR_UNICODE}TLecuyer = record{$else}TLecuyer = object{$endif}
+  public
+    rs1, rs2, rs3, seedcount: cardinal;
+    /// force an immediate seed of the generator from current system state
+    // - should be called before any call to the Next method
+    procedure Seed(entropy: PByteArray; entropylen: PtrInt);
+    /// compute the next 32-bit generated value
+    // - will automatically reseed after around 65,000 generated values
+    function Next: cardinal; overload;
+    /// compute the next 32-bit generated value, in range [0..max-1]
+    // - will automatically reseed after around 65,000 generated values
+    function Next(max: cardinal): cardinal; overload;
+  end;
+
 /// fast compute of some 32-bit random value
 // - will use (slow but) hardware-derivated RDRAND Intel x86/x64 opcode if
 // available, or fast gsl_rng_taus2 generator by Pierre L'Ecuyer (which period
@@ -38154,14 +38173,6 @@ asm
 end;
 {$endif CPUINTEL}
 
-type
-  {$ifdef UNICODE}TLecuyer = record{$else}TLecuyer = object{$endif}
-  public
-    rs1, rs2, rs3, seedcount: cardinal;
-    procedure Seed(entropy: PByteArray; entropylen: PtrInt);
-    function Next: cardinal;
-  end;
-
 threadvar
   _Lecuyer: TLecuyer; // uses only 16 bytes per thread
 
@@ -38207,6 +38218,11 @@ begin
   result := rs3;
   rs3 := ((result and -16)shl 17) xor (((result shl 3)xor result)shr 11);
   result := rs1 xor rs2 xor result;
+end;
+
+function TLecuyer.Next(max: cardinal): cardinal;
+begin
+  result := (QWord(Next)*max)shr 32;
 end;
 
 procedure Random32Seed(entropy: pointer; entropylen: integer);
