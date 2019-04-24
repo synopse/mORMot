@@ -3204,7 +3204,7 @@ uses
 { ************ some shared helper functions and classes }
 
 var
-  ReasonCache: array[1..5,0..8] of SockString; // avoid memory allocation
+  ReasonCache: array[1..5,0..13] of SockString; // avoid memory allocation
 
 function StatusCodeToReasonInternal(Code: cardinal): SockString;
 begin

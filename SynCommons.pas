@@ -1838,10 +1838,20 @@ var CompareMemFixed: function(P1, P2: Pointer; Length: PtrInt): Boolean = Compar
 function CompareMemSmall(P1, P2: Pointer; Length: PtrInt): Boolean; {$ifdef HASINLINE}inline;{$endif}
 
 /// convert an IPv4 'x.x.x.x' text into its 32-bit value
+// - returns TRUE if the text was a valid IPv4 text, FALSE on parsing error
+// - '' or '127.0.0.1' will also return false
 function IPToCardinal(const aIP: RawUTF8; out aValue: cardinal): boolean; overload;
 
+/// convert an IPv4 'x.x.x.x' text into its 32-bit value
+// - returns TRUE if the text was a valid IPv4 text, FALSE on parsing error
+// - '' or '127.0.0.1' will also return false
+function IPToCardinal(P: PUTF8Char; out aValue: cardinal): boolean; overload;
+
 /// convert an IPv4 'x.x.x.x' text into its 32-bit value, 0 or localhost
+// - returns <> 0 value if the text was a valid IPv4 text, 0 on parsing error
+// - '' or '127.0.0.1' will also return 0
 function IPToCardinal(const aIP: RawUTF8): cardinal; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert some ASCII-7 text into binary, using Emile Baudot code
 // - as used in telegraphs, covering a-z 0-9 - ' , ! : ( + ) $ ? @ . / ; charset
@@ -21337,15 +21347,13 @@ begin
   result := P;
 end;
 
-function IPToCardinal(const aIP: RawUTF8; out aValue: cardinal): boolean;
-var P: PUTF8Char;
-    i,c: cardinal;
+function IPToCardinal(P: PUTF8Char; out aValue: cardinal): boolean;
+var i,c: cardinal;
     b: array[0..3] of byte absolute aValue;
 begin
   result := false;
-  if (aIP='') or (aIP='127.0.0.1') then
+  if (P=nil) or (IdemPChar(P,'127.0.0.1') and (P[9]=#0)) then
     exit;
-  P := pointer(aIP);
   for i := 0 to 3 do begin
     c := GetNextItemCardinal(P,'.');
     if (c>255) or ((i<3) and (P=nil)) then
@@ -21355,9 +21363,14 @@ begin
   result := aValue<>$0100007f;
 end;
 
+function IPToCardinal(const aIP: RawUTF8; out aValue: cardinal): boolean;
+begin
+  result := IPToCardinal(pointer(aIP),aValue);
+end;
+
 function IPToCardinal(const aIP: RawUTF8): cardinal;
 begin
-  if not IPToCardinal(aIP,result) then
+  if not IPToCardinal(pointer(aIP),result) then
     result := 0;
 end;
 
