@@ -29995,7 +29995,7 @@ begin
 end;
 
 function NextGrow(capacity: integer): integer;
-begin // similar to TFPList.Expand for the ranges algorithm
+begin // algorithm similar to TFPList.Expand for the increasing ranges
   result := capacity;
   if result<128 shl 20 then
     if result<8 shl 20 then
@@ -39194,7 +39194,7 @@ begin
     with MultiPart[i] do begin
       if FileName='' then
         W.Add('--%'#13#10'Content-Disposition: form-data; name="%"'#13#10+
-          'Content-Type: %'#13#10#13#10'%'#10'--%'#13#10,
+          'Content-Type: %'#13#10#13#10'%'#13#10'--%'#13#10,
           [bound,Name,ContentType,Content,bound]) else begin
         // if this is the first file, create the header for files
         if filescount=0 then begin
