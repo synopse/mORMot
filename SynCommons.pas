@@ -27081,7 +27081,7 @@ asm // rcx=s, rdx=accept (Linux: rdi,rsi)
         pop     rsi
         pop     rdi
 {$endif}ret
-@4:     and     eax, edx // accumulate matches
+@4:     or      eax, edx // accumulate matches
 @5:     add     rsi, 16  // the set is more than 16 bytes
         movdqu  xmm1, [rsi]
         {$ifdef HASAESNI}
@@ -27092,7 +27092,7 @@ asm // rcx=s, rdx=accept (Linux: rdi,rsi)
         movd    edx, xmm0
         jns     @4
         mov     rsi, r8    // restore set pointer
-        and     eax, edx   // accumulate matches
+        or      eax, edx   // accumulate matches
         cmp     eax, 65535
         jne     @3
         add     rdi, 16 // first 16 chars matched, continue with next 16 chars
@@ -27187,7 +27187,7 @@ asm // eax=s, edx=accept
         pop     esi
         pop     edi
         ret
-@4:     and     eax, edx // accumulate matches
+@4:     or      eax, edx // accumulate matches
 @5:     add     esi, 16  // the set is more than 16 bytes
         {$ifdef HASAESNI}
         movdqu  xmm1, [esi]
@@ -27200,7 +27200,7 @@ asm // eax=s, edx=accept
         {$endif}
         jns     @4
         mov     esi, ebx   // restore set pointer
-        and     eax, edx   // accumulate matches
+        or      eax, edx   // accumulate matches
         cmp     eax, 65535
         jne     @3
         add     edi, 16 // first 16 chars matched, continue with next 16 chars
