@@ -1152,7 +1152,8 @@ begin
     IPList.Clear;
   if (family=AF_INET) or (family=AF_UNSPEC) then begin
     if lowercase(name)=cLocalHostStr then
-      IpList.Add(cLocalHost) else begin
+      IpList.Add(cLocalHost) else
+      if name=cAnyHost then IpList.Add(cAnyHost) else begin
       a4[1] := StrTonetAddr(name);
       if a4[1].s_addr=INADDR_ANY then
         if GetHostByName(name,he) then begin
