@@ -4520,6 +4520,7 @@ procedure Test(D: TDateTime; Expanded: boolean);
 var s,t: RawUTF8;
     E,F: TDateTime;
     I,J: TTimeLogBits;
+    st: TSynSystemTime;
 begin
   s := DateTimeToIso8601(D,Expanded);
   if Expanded then
@@ -4529,6 +4530,9 @@ begin
     Check(Iso8601CheckAndDecode(Pointer(s),length(s),E));
     Check(Abs(D-E)<(1/SecsPerDay)); // we allow 999 ms error
   end;
+  st.FromDateTime(D);
+  t := st.ToText(Expanded);
+  Check(Copy(t,1,length(s))=s);
   E := Iso8601ToDateTime(s);
   Check(Abs(D-E)<(1/SecsPerDay)); // we allow 999 ms error
   E := Iso8601ToDateTime(s+'Z');

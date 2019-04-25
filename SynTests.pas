@@ -544,7 +544,7 @@ const LEV: array[boolean] of TSynLogInfo = (sllFail, sllCustom4);
 var tix, crc: cardinal; // use a crc since strings are not thread-safe
 begin
   if condition then begin
-    crc := crc32c(0,pointer(msg),length(msg)*SizeOf(msg[1]));
+    crc := Hash32(pointer(msg),length(msg)*SizeOf(msg[1]));
     if crc=fCheckLastMsg then begin // no need to be too much verbose
       tix := GetTickCount64 shr 8; // also avoid to use a lock
       if tix=fCheckLastTix then

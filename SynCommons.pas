@@ -11605,7 +11605,7 @@ function crc16(Data: PAnsiChar; Len: integer): cardinal;
 // $ crc32c 9.7KB in 282us i.e. 1,773,049/s, aver. 0us, 16.5 GB/s
 // $ xxhash32 9.7KB in 927us i.e. 539,374/s, aver. 1us, 5 GB/s
 // $ hash32 9.7KB in 487us i.e. 1,026,694/s, aver. 0us, 9.5 GB/s
-function Hash32(Data: pointer; Len: integer): cardinal; overload;
+function Hash32(Data: PCardinalArray; Len: integer): cardinal; overload;
 
 // our custom hash/checsum function, specialized for Text comparaison
 // - it is a checksum algorithm, not a hash function: has less colision than
@@ -12551,7 +12551,8 @@ type
 
   /// a cross-platform and cross-compiler TSystemTime structure
   // - FPC's TSystemTime in datih.inc does NOT match Windows TSystemTime fields!
-  // - also used to store a Date/Time in TSynTimeZone internal structures
+  // - also used to store a Date/Time in TSynTimeZone internal structures, or
+  // for fast conversion from TDateTime to its ready-to-display members
   {$ifdef FPC_OR_UNICODE}TSynSystemTime = record{$else}TSynSystemTime = object{$endif}
   public
     Year, Month, DayOfWeek, Day,
@@ -12568,6 +12569,14 @@ type
     procedure FromNowUTC;
     /// fill fields with the current Local time, using a 8-16ms thread-safe cache
     procedure FromNowLocal;
+    /// fill fields from the given value - but not DayOfWeek
+    procedure FromDateTime(const dt: TDateTime);
+    /// fill Year/Month/Day fields from the given value - but not DayOfWeek
+    // - faster than the RTL DecodeDate() function
+    procedure FromDate(const dt: TDateTime);
+    /// fill Hour/Minute/Second/Millisecond fields from the given value
+    // - faster than the RTL DecodeTime() function
+    procedure FromTime(const dt: TDateTime);
     /// encode the stored date/time as text
     function ToText(Expanded: boolean=true; FirstTimeChar: AnsiChar='T'; const TZD: RawUTF8=''): RawUTF8;
     /// append the stored date and time, in a log-friendly format
@@ -20578,7 +20587,7 @@ begin
   {$else} // Int64Rec gives compiler internal error C4963
   if (PCardinalArray(@Value)^[0]<=high(SmallUInt32UTF8)) and
      (PCardinalArray(@Value)^[1]=0) then
-  {$endif}
+  {$endif CPU64}
     result := SmallUInt32UTF8[Value] else begin
     P := StrInt64(@tmp[23],Value);
     FastSetString(result,P,@tmp[23]-P);
@@ -20594,7 +20603,7 @@ begin
   {$else} // Int64Rec gives compiler internal error C4963
   if (PCardinalArray(@Value)^[0]<=high(SmallUInt32UTF8)) and
      (PCardinalArray(@Value)^[1]=0) then
-  {$endif}
+  {$endif CPU64}
     result := SmallUInt32UTF8[Value] else begin
     P := StrUInt64(@tmp[23],Value);
     FastSetString(result,P,@tmp[23]-P);
@@ -21058,16 +21067,16 @@ begin
 end;
 
 function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
-{$ifdef CPU64}
-{$ifdef FPC}
-begin // fallback to pure pascal version, since asm version below make GPFs for FPC
+{$ifdef ABSOLUTEPASCAL}
+begin // fallback to pure pascal version for ARM or PIC
   if val<0 then begin
     result := StrUInt32(P,PtrUInt(-val))-1;
     result^ := '-';
   end else
     result := StrUInt32(P,val);
 end;
-{$else} {$ifdef FPC}nostackframe; assembler; asm {$else}
+{$else}
+{$ifdef CPUX64} {$ifdef FPC}nostackframe; assembler; asm {$else}
 asm // rcx=P, rdx=val (Linux: rdi,rsi)
         .noframe
 {$endif FPC}
@@ -21112,16 +21121,6 @@ asm // rcx=P, rdx=val (Linux: rdi,rsi)
         mov     byte ptr[rcx - 2], '-'
         mov     [rcx - 1], dl
         lea     rax, [rcx + r10 - 1]       // includes '-' if val<0
-end;
-{$endif FPC}
-{$else}
-{$ifdef PUREPASCAL}
-begin // this code is faster than the Borland's original str() or IntToStr()
-  if val<0 then begin
-    result := StrUInt32(P,PtrUInt(-val))-1;
-    result^ := '-';
-  end else
-    result := StrUInt32(P,val);
 end;
 {$else}
 asm // eax=P, edx=val
@@ -21172,11 +21171,11 @@ asm // eax=P, edx=val
         mov     [eax], dl
         add     eax, ecx // includes '-' if val<0
 end;
-{$endif CPU64}
-{$endif PUREPASCAL}
+{$endif CPUX64}
+{$endif ABSOLUTEPASCAL}
 
-{$ifdef ABSOLUTEORPUREPASCAL}
 function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
+{$ifdef ABSOLUTEPASCAL} // fallback to pure pascal version for ARM or PIC
 var c100: PtrUInt;
     tab: PWordArray;
 begin // this code is faster than Borland's original str() or IntToStr()
@@ -21197,12 +21196,12 @@ begin // this code is faster than Borland's original str() or IntToStr()
     dec(val,c100*100);
     PWord(P)^ := tab[val];
     val := c100;
-    if c100=0 then break;
+    if c100=0 then
+      break;
   until false;
   result := P;
 end;
 {$else}
-function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
 {$ifdef CPUX64} {$ifdef FPC}nostackframe; assembler; asm {$else}
 asm // rcx=P, rdx=val (Linux: rdi,rsi)
         .noframe
@@ -21281,7 +21280,7 @@ asm     // eax=P, edx=val
         mov     [eax], dl
 end;
 {$endif CPU64}
-{$endif ABSOLUTEORPUREPASCAL}
+{$endif ABSOLUTEPASCAL}
 
 function StrUInt64(P: PAnsiChar; const val: QWord): PAnsiChar;
 {$ifdef CPU64}
@@ -26996,7 +26995,7 @@ end;
 
 {$ifndef ABSOLUTEPASCAL}
 {$ifdef CPUINTEL}
-{$ifdef CPUX64}
+{$ifdef CPUX64} // inspired by Agner Fog's strspn64.asm
 function strcspnsse42(s,reject: pointer): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else}
 asm // rcx=s, rdx=reject (Linux: rdi,rsi)
@@ -35180,7 +35179,7 @@ begin
   result := Hash32(pointer(Text),length(Text));
 end;
 
-function Hash32(Data: pointer; Len: integer): cardinal;
+function Hash32(Data: PCardinalArray; Len: integer): cardinal;
 var s1,s2: cardinal;
     i: integer;
 begin
@@ -35188,20 +35187,20 @@ begin
     s1 := 0;
     s2 := 0;
     for i := 1 to Len shr 4 do begin // 16 bytes (128-bit) loop - aligned read
-      inc(s1,PCardinalArray(Data)^[0]);
+      inc(s1,Data[0]);
       inc(s2,s1);
-      inc(s1,PCardinalArray(Data)^[1]);
+      inc(s1,Data[1]);
       inc(s2,s1);
-      inc(s1,PCardinalArray(Data)^[2]);
+      inc(s1,Data[2]);
       inc(s2,s1);
-      inc(s1,PCardinalArray(Data)^[3]);
+      inc(s1,Data[3]);
       inc(s2,s1);
-      inc(PByte(Data),16);
+      Data := @Data[4];
     end;
     for i := 1 to (Len shr 2)and 3 do begin // 4 bytes (DWORD) by loop
-      inc(s1,PCardinal(Data)^);
+      inc(s1,Data[0]);
       inc(s2,s1);
-      inc(PByte(Data),4);
+      Data := @Data[1];
     end;
     case Len and 3 of // remaining 0..3 bytes
     1: inc(s1,PByte(Data)^);
@@ -35829,6 +35828,7 @@ end;
 
 procedure crcblocks(crc128, data128: PBlock128; count: integer);
 var oneblock: procedure(crc128, data128: PBlock128);
+    i: integer;
 begin
   if count>0 then
     {$ifndef DISABLE_SSE42}
@@ -35854,13 +35854,38 @@ begin
           jnz     @s
     end else
     {$endif CPUX86}
+    {$ifdef CPUX64}
+    {$ifdef FPC} // only FPC is able to compile such inlined asm block
+    if cfSSE42 in CpuFeatures then
+    asm
+          mov     rax, data128
+          mov     rdx, crc128
+          mov     ecx, count
+          mov     r8d, dword ptr [rdx]
+          mov     r9d, dword ptr [rdx + 4]
+          mov     r10d, dword ptr [rdx + 8]
+          mov     r11d, dword ptr [rdx + 12]
+          align 8
+@s:       crc32   r8d, dword ptr [rax]
+          crc32   r9d, dword ptr [rax + 4]
+          crc32   r10d, dword ptr [rax + 8]
+          crc32   r11d, dword ptr [rax + 12]
+          add     rax, 16
+          dec     ecx
+          jnz     @s
+          mov     dword ptr [rdx], r8d
+          mov     dword ptr [rdx + 4], r9d
+          mov     dword ptr [rdx + 8], r10d
+          mov     dword ptr [rdx + 12], r11d
+    end else
+    {$endif FPC}
+    {$endif CPUX64}
     {$endif DISABLE_SSE42} begin
       oneblock := @crcblock;
-      repeat
+      for i := 1 to count do begin
         oneblock(crc128,data128);
         inc(data128);
-        dec(count);
-      until count=0;
+      end;
     end;
 end;
 
@@ -36521,51 +36546,34 @@ begin // inlined UnixTimeToDateTime
     FirstTimeChar,false);
 end;
 
-{$ifdef FPC} // faster than current RTL version
-procedure DecodeTime(dt: TDateTime; out HH, MM, SS, MS: word);
-var t, t2: cardinal;
-begin
-  t := round(abs(dt) * MSecsPerDay) mod MSecsPerDay;
-  t2 := t div 3600000;
-  HH := t2;
-  dec(t, t2 * 3600000);
-  t2 := t div 60000;
-  MM := t2;
-  dec(t, t2 * 60000);
-  t2 := t div 1000;
-  SS := t2;
-  MS := t - t2 * 1000;
-end;
-{$endif FPC}
-
 function DateTimeToFileShort(const DateTime: TDateTime): TShort16;
 begin
   DateTimeToFileShort(DateTime,result);
 end;
 
 procedure DateTimeToFileShort(const DateTime: TDateTime; out result: TShort16);
-var HH,MM,SS,MS,Y,M,D: word;
+var T: TSynSystemTime;
     tab: {$ifdef CPUX86NOTPIC}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
 begin // use 'YYMMDDHHMMSS' format
   if DateTime<=0 then begin
     PWord(@result[0])^ := 1+ord('0') shl 8;
     exit;
   end;
-  DecodeDate(DateTime,Y,M,D);
-  if Y > 1999 then
-    if Y < 2100 then
-      dec(Y,2000) else
-      Y := 99 else
-    Y := 0;
-  DecodeTime(DateTime,HH,MM,SS,MS);
+  T.FromDate(DateTime);
+  if T.Year > 1999 then
+    if T.Year < 2100 then
+      dec(T.Year,2000) else
+      T.Year := 99 else
+    T.Year := 0;
+  T.FromTime(DateTime);
   {$ifndef CPUX86NOTPIC}tab := @TwoDigitLookupW;{$endif}
   result[0] := #12;
-  PWord(@result[1])^ := tab[Y];
-  PWord(@result[3])^ := tab[M];
-  PWord(@result[5])^ := tab[D];
-  PWord(@result[7])^ := tab[HH];
-  PWord(@result[9])^ := tab[MM];
-  PWord(@result[11])^ := tab[SS];
+  PWord(@result[1])^ := tab[T.Year];
+  PWord(@result[3])^ := tab[T.Month];
+  PWord(@result[5])^ := tab[T.Day];
+  PWord(@result[7])^ := tab[T.Hour];
+  PWord(@result[9])^ := tab[T.Minute];
+  PWord(@result[11])^ := tab[T.Second];
 end;
 
 procedure UnixTimeToFileShort(const UnixTime: TUnixTime; out result: TShort16);
@@ -36934,11 +36942,10 @@ begin // use Thhmmss[.sss] format
 end;
 
 procedure DateToIso8601PChar(Date: TDateTime; P: PUTF8Char; Expanded: boolean);
-// use YYYYMMDD / YYYY-MM-DD date format
-var Y,M,D: word;
-begin
-  DecodeDate(Date,Y,M,D);
-  DateToIso8601PChar(P,Expanded,Y,M,D);
+var T: TSynSystemTime;
+begin // use YYYYMMDD / YYYY-MM-DD date format
+  T.FromDate(Date);
+  DateToIso8601PChar(P,Expanded,T.Year,T.Month,T.Day);
 end;
 
 function DateToIso8601Text(Date: TDateTime): RawUTF8;
@@ -36952,10 +36959,10 @@ end;
 
 procedure TimeToIso8601PChar(Time: TDateTime; P: PUTF8Char; Expanded: boolean;
   FirstChar: AnsiChar; WithMS: boolean);
-var H,M,S,MS: word;
+var T: TSynSystemTime;
 begin
-  DecodeTime(Time,H,M,S,MS);
-  TimeToIso8601PChar(P,Expanded,H,M,S,MS,FirstChar,WithMS);
+  T.FromTime(Time);
+  TimeToIso8601PChar(P,Expanded,T.Hour,T.Minute,T.Second,T.MilliSecond,FirstChar,WithMS);
 end;
 
 function DateTimeToIso8601(D: TDateTime; Expanded: boolean;
@@ -37150,17 +37157,17 @@ begin
 end;
 
 procedure TTimeLogBits.From(DateTime: TDateTime; DateOnly: Boolean=false);
-var HH,MM,SS,MS,Y,M,D: word;
+var T: TSynSystemTime;
     V: cardinal;
 begin
+  T.FromDate(DateTime);
   if DateOnly then
-    HH := 0 else
-    DecodeTime(DateTime,HH,MM,SS,MS);
-  DecodeDate(DateTime,Y,M,D);
-  V := HH+D shl 5+M shl 10+Y shl 14-(1 shl 5+1 shl 10);
+    T.Hour := 0 else
+    T.FromTime(DateTime);
+  V := T.Hour+T.Day shl 5+T.Month shl 10+T.Year shl 14-(1 shl 5+1 shl 10);
   if DateOnly then
     Value := Int64(V) shl 12 else
-    Value := SS+MM shl 6+Int64(V) shl 12;
+    Value := T.Second+T.Minute shl 6+Int64(V) shl 12;
 end;
 
 procedure TTimeLogBits.FromUnixTime(const UnixTime: TUnixTime);
@@ -37470,13 +37477,13 @@ const
 
 function DateTimeMSToString(DateTime: TDateTime; Expanded: boolean;
   FirstTimeChar: AnsiChar; const TZD: RawUTF8): RawUTF8;
-var HH,MM,SS,MS,Y,M,D: word;
+var T: TSynSystemTime;
 begin //  'YYYY-MM-DD hh:mm:ss.sssZ' or 'YYYYMMDD hhmmss.sssZ' format
   if DateTime=0 then
     result := '' else begin
-    DecodeDate(DateTime,Y,M,D);
-    DecodeTime(DateTime,HH,MM,SS,MS);
-    result := DateTimeMSToString(HH,MM,SS,MS,Y,M,D,Expanded,FirstTimeChar,TZD);
+    T.FromDateTime(DateTime);
+    result := DateTimeMSToString(T.Hour,T.Minute,T.Second,T.MilliSecond,
+      T.Year,T.Month,T.Day,Expanded,FirstTimeChar,TZD);
   end;
 end;
 
@@ -37495,18 +37502,17 @@ const
     ('Jan','Feb','Mar','Apr','May','Jun', 'Jul','Aug','Sep','Oct','Nov','Dec');
 
 function DateTimeToHTTPDate(UTCDateTime: TDateTime): RawUTF8;
-var HH,MM,SS,MS,Y,M,D: word;
+var T: TSynSystemTime;
 begin
   if UTCDateTime=0 then begin
     result := '';
     exit;
   end;
-  DecodeDate(UTCDateTime,Y,M,D);
-  DecodeTime(UTCDateTime,HH,MM,SS,MS);
+  T.FromDateTime(UTCDateTime);
   FormatUTF8('%, % % % %:%:% GMT', [HTML_WEEK_DAYS[DayOfWeek(UTCDateTime)],
-    UInt2DigitsToShortFast(D),HTML_MONTH_NAMES[M],UInt4DigitsToShort(Y),
-    UInt2DigitsToShortFast(HH),UInt2DigitsToShortFast(MM),
-    UInt2DigitsToShortFast(SS)], result);
+    UInt2DigitsToShortFast(T.Day),HTML_MONTH_NAMES[T.Month],UInt4DigitsToShort(T.Year),
+    UInt2DigitsToShortFast(T.Hour),UInt2DigitsToShortFast(T.Minute),
+    UInt2DigitsToShortFast(T.Second)], result);
 end;
 
 function TimeToString: RawUTF8;
@@ -37599,6 +37605,50 @@ end;
 procedure TSynSystemTime.FromNowLocal;
 begin
   FromGlobalTime(true,self);
+end;
+
+procedure TSynSystemTime.FromDateTime(const dt: TDateTime);
+begin
+  FromDate(dt);
+  FromTime(dt);
+end;
+
+procedure TSynSystemTime.FromDate(const dt: TDateTime);
+var t,t2: PtrUInt;
+begin
+  t := Trunc(dt);
+  t := (t+693900)*4-1;
+  if PtrInt(t)>=0 then begin
+    Year := t div 146097;
+    t2 := (t-146097*Year)and not 3;
+    t := (t2+3)div 1461;
+    t2 := ((t2+7-1461*t)shr 2)*5;
+    Month := (t2-3)div 153;
+    Day := (t2+2-153*Month)div 5;
+    Year := 100*Year+t;
+    if Month<10 then
+      inc(Month,3) else begin
+      dec(Month,9);
+      inc(Year);
+    end;
+    DayOfWeek := 0;
+  end else
+    PInt64(@Year)^ := 0;
+end;
+
+procedure TSynSystemTime.FromTime(const dt: TDateTime);
+var t,t2: PtrUInt;
+begin
+  t := round(abs(dt)*MSecsPerDay) mod MSecsPerDay;
+  t2 := t div 3600000;
+  Hour := t2;
+  dec(t, t2*3600000);
+  t2 := t div 60000;
+  Minute := t2;
+  dec(t, t2*60000);
+  t2 := t div 1000;
+  Second := t2;
+  MilliSecond := t-t2*1000;
 end;
 
 function TSynSystemTime.ToText(Expanded: boolean;
@@ -49047,7 +49097,7 @@ begin
     end;
   // store Hash32 checksum
   if Dest<>nil then  // may be nil if RecordSave/ManagedTypeSave failed
-    PCardinal(result-SizeOf(Cardinal))^ := Hash32(result,Dest-result);
+    PCardinal(result-SizeOf(Cardinal))^ := Hash32(pointer(result),Dest-result);
   result := Dest;
 end;
 
@@ -52983,15 +53033,15 @@ end;
 
 procedure TTextWriter.AddDateTimeMS(const Value: TDateTime; Expanded: boolean=true;
   FirstTimeChar: AnsiChar='T'; const TZD: RawUTF8='Z');
-var HH,MM,SS,MS,Y,M,D: word;
+var T: TSynSystemTime;
 begin
   if Value=0 then
     exit;
-  DecodeDate(Value,Y,M,D);
-  DecodeTime(Value,HH,MM,SS,MS);
-  Add(DTMS_FMT[Expanded], [UInt4DigitsToShort(Y),UInt2DigitsToShortFast(M),
-    UInt2DigitsToShortFast(D),FirstTimeChar,UInt2DigitsToShortFast(HH),
-    UInt2DigitsToShortFast(MM),UInt2DigitsToShortFast(SS),UInt3DigitsToShort(MS),TZD]);
+  T.FromDateTime(Value);
+  Add(DTMS_FMT[Expanded], [UInt4DigitsToShort(T.Year),
+    UInt2DigitsToShortFast(T.Month),UInt2DigitsToShortFast(T.Day),FirstTimeChar,
+    UInt2DigitsToShortFast(T.Hour),UInt2DigitsToShortFast(T.Minute),
+    UInt2DigitsToShortFast(T.Second),UInt3DigitsToShort(T.MilliSecond),TZD]);
 end;
 
 procedure TTextWriter.AddU(Value: cardinal);
@@ -63800,7 +63850,7 @@ begin
     if not stored then
       if SynLZdecompressdestlen(S)<>Head.UnCompressedSize then
         exit;
-    if Hash32(S,Head.CompressedSize)<>Head.HashCompressed then
+    if Hash32(pointer(S),Head.CompressedSize)<>Head.HashCompressed then
       exit;
     if result=nil then
       result := THeapMemoryStream.Create else begin
@@ -63818,7 +63868,7 @@ begin
       {$ifdef FPC}Move{$else}MoveFast{$endif}(S^,D^,Head.CompressedSize) else
     if SynLZDecompress1(S,Head.CompressedSize,D)<>Head.UnCompressedSize then
       FreeAndNil(result) else
-    if Hash32(D,Head.UnCompressedSize)<>Head.HashUncompressed then
+    if Hash32(pointer(D),Head.UnCompressedSize)<>Head.HashUncompressed then
       FreeAndNil(result);
   until (result=nil) or (sourcePosition>=sourceSize);
 end;
