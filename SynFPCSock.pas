@@ -1170,7 +1170,10 @@ begin
   end;
   if (family=AF_INET6) or (family=AF_UNSPEC) then begin
     if lowercase(name)=cLocalHostStr then
-      IpList.Add(c6LocalHost) else begin
+      IpList.Add(c6LocalHost)
+    else if name=c6AnyHost then
+      IpList.Add(c6LocalHost)
+    else begin
       a6[1] := StrTonetAddr6(name);
       if IN6_IS_ADDR_UNSPECIFIED(@a6[1]) then
         x := Resolvename6(name,a6) else
