@@ -1172,7 +1172,7 @@ begin
     if lowercase(name)=cLocalHostStr then
       IpList.Add(c6LocalHost)
     else if name=c6AnyHost then
-      IpList.Add(c6LocalHost)
+      IpList.Add(c6AnyHost)
     else begin
       a6[1] := StrTonetAddr6(name);
       if IN6_IS_ADDR_UNSPECIFIED(@a6[1]) then
