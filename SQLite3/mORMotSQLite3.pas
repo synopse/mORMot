@@ -1699,7 +1699,7 @@ end;
 
 function TSQLRestServerDB.TransactionBegin(aTable: TSQLRecordClass; SessionID: cardinal=1): boolean;
 begin
-  result := inherited TransactionBegin(aTable,SessionID);
+  result := not DB.TransactionActive and inherited TransactionBegin(aTable, SessionID);
   if not result then
     exit; // fTransactionActive flag was already set
   try
