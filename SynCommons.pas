@@ -33085,27 +33085,27 @@ begin
     result := 0;
 end;
 
-function IntPower(exponent: Integer): TSynExtended; {$ifdef HASINLINE}inline;{$endif}
-var e: integer;
-    pow10: TSynExtended;
+function HugePower10(exponent: integer): TSynExtended; {$ifdef HASINLINE}inline;{$endif}
+var pow10: TSynExtended;
 begin
-  e := abs(exponent);
-  if exponent<0 then
-    pow10 := 0.1 else
-    pow10 := 10;
   result := 1.0;
+  if exponent<0 then begin
+    pow10 := 0.1;
+    exponent := -exponent;
+  end else
+    pow10 := 10;
   repeat
-    while e and 1=0 do begin
-      e := e shr 1;
+    while exponent and 1=0 do begin
+      exponent := exponent shr 1;
       pow10 := sqr(pow10);
     end;
-    dec(e);
     result := result*pow10;
-  until e<=0;
+    dec(exponent);
+  until exponent=0;
 end;
 
 function GetExtended(P: PUTF8Char; out err: integer): TSynExtended;
-{$ifndef CPU32DELPHI} // inspired by ValExt_JOH_PAS_8_a by John O'Harrow
+{$ifndef CPU32DELPHI} // inspired from ValExt_JOH_PAS_8_a by John O'Harrow
 const POW10: array[-31..31] of TSynExtended = (
   1E-31,1E-30,1E-29,1E-28,1E-27,1E-26,1E-25,1E-24,1E-23,1E-22,1E-21,1E-20,
   1E-19,1E-18,1E-17,1E-16,1E-15,1E-14,1E-13,1E-12,1E-11,1E-10,1E-9,1E-8,1E-7,
@@ -33113,7 +33113,7 @@ const POW10: array[-31..31] of TSynExtended = (
   1E11,1E12,1E13,1E14,1E15,1E16,1E17,1E18,1E19,1E20,1E21,1E22,1E23,1E24,1E25,
   1E26,1E27,1E28,1E29,1E30,1E31);
 var digits, exp: PtrInt;
-    ch: {$ifdef CPUX86}byte{$else}cardinal{$endif};
+    ch: byte;
     flags: set of (fNeg, fNegExp, fValid);
     U: PByte; // Delphi Win64 doesn't like if P^ is used directly
 {$ifndef CPUX86}ten: TSynExtended;{$endif} // stored in (e.g. xmm2) register
@@ -33124,7 +33124,7 @@ begin
     err := 1;
     exit;
   end;
-  flags := [];
+  byte(flags) := 0;
   U := pointer(P);
   if P^=' ' then
     repeat
@@ -33198,7 +33198,7 @@ begin
   if digits<>0 then
     if (digits>=low(POW10)) and (digits<=high(POW10)) then
       result := result*POW10[digits] else
-      result := result*IntPower(digits);
+      result := result*HugePower10(digits);
   if fNeg in flags then
     result := -result;
   if (fValid in flags) and (ch=0) then
