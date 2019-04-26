@@ -11614,7 +11614,7 @@ function Hash32(Data: PCardinalArray; Len: integer): cardinal; overload;
 // - overloaded function using RawByteString for binary content hashing,
 // whatever the codepage is
 function Hash32(const Text: RawByteString): cardinal; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+{$ifdef HASINLINE}inline;{$endif}
 
 /// standard Kernighan & Ritchie hash from "The C programming Language", 3rd edition
 // - simple and efficient code, but too much collisions for THasher
