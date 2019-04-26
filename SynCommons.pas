@@ -33012,18 +33012,32 @@ end;
 {$endif}
 
 function GetQWord(P: PUTF8Char; var err: integer): QWord;
-var c: cardinal;
+var c: PtrUInt;
 begin
-  err := 0;
+  err := 1; // error
   result := 0;
   if P=nil then
     exit;
   while (P^<=' ') and (P^<>#0) do inc(P);
-  inc(err);
   c := byte(P^)-48;
   if c>9 then
     exit;
-  PCardinal(@result)^ := c;
+  {$ifdef CPU64}
+  result := c;
+  inc(P);
+  repeat
+    c := byte(P^);
+    if c=0 then
+      break;
+    dec(c,48);
+    if c>9 then
+      exit;
+    result := result*10+c;
+    inc(P);
+  until false;
+  err := 0; // success
+  {$else}
+  PByte(@result)^ := c;
   inc(P);
   repeat // fast 32-bit loop
     c := byte(P^);
@@ -33060,6 +33074,7 @@ begin
       break;
     end;
   until false;
+  {$endif CPU64}
 end;
 
 function GetExtended(P: PUTF8Char): TSynExtended;
@@ -33070,47 +33085,36 @@ begin
     result := 0;
 end;
 
-{$ifdef PUREPASCAL}
-  {$define GETEXTENDEDPASCAL}
-{$endif}
-{$ifdef FPC}
-  {$define GETEXTENDEDPASCAL}
-{$endif}
-{$ifdef PIC}
-  {$define GETEXTENDEDPASCAL}
-{$endif}
-
-function IntPower(Exponent: Integer): TSynExtended; {$ifdef HASINLINE}inline;{$endif}
-var Y: integer;
-    LBase: TSynExtended;
+function IntPower(exponent: Integer): TSynExtended; {$ifdef HASINLINE}inline;{$endif}
+var e: integer;
+    pow10: TSynExtended;
 begin
-  Y := abs(Exponent);
-  if Exponent<0 then
-    LBase := 0.1 else
-    LBase := 10;
+  e := abs(exponent);
+  if exponent<0 then
+    pow10 := 0.1 else
+    pow10 := 10;
   result := 1.0;
   repeat
-    while Y and 1=0 do begin
-      Y := Y shr 1;
-      LBase := sqr(LBase);
+    while e and 1=0 do begin
+      e := e shr 1;
+      pow10 := sqr(pow10);
     end;
-    dec(Y);
-    result := result*LBase;
-  until Y<=0;
+    dec(e);
+    result := result*pow10;
+  until e<=0;
 end;
 
 function GetExtended(P: PUTF8Char; out err: integer): TSynExtended;
-// inspired by ValExt_JOH_PAS_8_a and ValExt_JOH_IA32_8_a by John O'Harrow
-{$ifdef GETEXTENDEDPASCAL}
+{$ifndef CPU32DELPHI} // inspired by ValExt_JOH_PAS_8_a by John O'Harrow
 const POW10: array[-31..31] of TSynExtended = (
   1E-31,1E-30,1E-29,1E-28,1E-27,1E-26,1E-25,1E-24,1E-23,1E-22,1E-21,1E-20,
   1E-19,1E-18,1E-17,1E-16,1E-15,1E-14,1E-13,1E-12,1E-11,1E-10,1E-9,1E-8,1E-7,
   1E-6,1E-5,1E-4,1E-3,1E-2,1E-1,1E0,1E1,1E2,1E3,1E4,1E5,1E6,1E7,1E8,1E9,1E10,
   1E11,1E12,1E13,1E14,1E15,1E16,1E17,1E18,1E19,1E20,1E21,1E22,1E23,1E24,1E25,
   1E26,1E27,1E28,1E29,1E30,1E31);
-var Digits, ExpValue: PtrInt;
-    Ch: {$ifdef CPUX86}byte{$else}cardinal{$endif}; // circumvent FPC Win32 issue
-    flags: set of (Neg, NegExp, Valid);
+var digits, exp: PtrInt;
+    ch: {$ifdef CPUX86}byte{$else}cardinal{$endif};
+    flags: set of (fNeg, fNegExp, fValid);
     U: PByte; // Delphi Win64 doesn't like if P^ is used directly
 {$ifndef CPUX86}ten: TSynExtended;{$endif} // stored in (e.g. xmm2) register
 begin
@@ -33126,78 +33130,78 @@ begin
     repeat
       inc(U)
     until U^<>32; // trailing spaces
-  Ch := U^;
-  if Ch=ord('+') then
+  ch := U^;
+  if ch=ord('+') then
     inc(U) else
-  if Ch=ord('-') then begin
+  if ch=ord('-') then begin
     inc(U);
-    include(flags,Neg);
+    include(flags,fNeg);
   end;
   repeat
-    Ch := U^;
+    ch := U^;
     inc(U);
-    if (Ch<ord('0')) or (Ch>ord('9')) then
+    if (ch<ord('0')) or (ch>ord('9')) then
       break;
-    dec(Ch,ord('0'));
+    dec(ch,ord('0'));
     {$ifdef CPUX86}
-    result := (result*10.0)+Ch;
+    result := (result*10.0)+ch;
     {$else}
     result := result*ten; // better FPC+Delphi64 code generation in two steps
-    result := result+Ch;
+    result := result+ch;
     {$endif}
-    include(flags,Valid);
+    include(flags,fValid);
   until false;
-  Digits := 0;
-  if Ch=ord('.') then
+  digits := 0;
+  if ch=ord('.') then
     repeat
-      Ch := U^;
+      ch := U^;
       inc(U);
-      if (Ch<ord('0')) or (Ch>ord('9')) then begin
-        if not(Valid in flags) then // starts with '.'
-          if Ch=0 then
+      if (ch<ord('0')) or (ch>ord('9')) then begin
+        if not(fValid in flags) then // starts with '.'
+          if ch=0 then
             dec(U); // U^='.'
         break;
       end;
-      dec(Ch,ord('0'));
+      dec(ch,ord('0'));
       {$ifdef CPUX86}
-      result := (result*10.0)+Ch;
+      result := (result*10.0)+ch;
       {$else}
       result := result*ten;
-      result := result+Ch;
+      result := result+ch;
       {$endif}
-      dec(Digits);
-      include(flags,Valid);
+      dec(digits);
+      include(flags,fValid);
     until false;
-  if (Ch=ord('E')) or (Ch=ord('e')) then begin
-    ExpValue := 0;
-    exclude(flags,Valid);
-    Ch := U^;
-    if Ch=ord('+') then
+  if (ch=ord('E')) or (ch=ord('e')) then begin
+    exp := 0;
+    exclude(flags,fValid);
+    ch := U^;
+    if ch=ord('+') then
       inc(U) else
-    if Ch=ord('-') then begin
+    if ch=ord('-') then begin
       inc(U);
-      include(flags,NegExp);
+      include(flags,fNegExp);
     end;
     repeat
-      Ch := U^;
+      ch := U^;
       inc(U);
-      if (Ch<ord('0')) or (Ch>ord('9')) then
+      if (ch<ord('0')) or (ch>ord('9')) then
         break;
-      dec(Ch,ord('0'));
-      ExpValue := (ExpValue*10)+PtrInt(Ch);
-      include(flags,Valid);
+      dec(ch,ord('0'));
+      exp := (exp*10)+PtrInt(ch);
+      include(flags,fValid);
     until false;
-    if NegExp in flags then
-      dec(Digits,ExpValue) else
-      inc(Digits,ExpValue);
+    if fNegExp in flags then
+      dec(digits,exp) else
+      inc(digits,exp);
   end;
-  if Digits<>0 then
-    if (Digits>=low(POW10)) and (Digits<=high(POW10)) then
-      result := result*POW10[Digits] else
-      result := result*IntPower(Digits);
-  if Neg in flags then
+  if digits<>0 then
+    if (digits>=low(POW10)) and (digits<=high(POW10)) then
+      result := result*POW10[digits] else
+      result := result*IntPower(digits);
+  if fNeg in flags then
     result := -result;
-  if (Valid in flags) and (Ch=0) then
+  if (fValid in flags) and (ch=0) then
     err := 0 else
     err := PUTF8Char(U)-P+1;
 end;
@@ -33322,7 +33326,7 @@ asm     // in: eax=text, edx=@err  out: st(0)=result
         fchs                        // yes. negate result in fpu
         jmp     @exit               // exit setting result code
 end;
-{$endif GETEXTENDEDPASCAL}
+{$endif CPU32DELPHI}
 
 function GetUTF8Char(P: PUTF8Char): cardinal;
 begin
