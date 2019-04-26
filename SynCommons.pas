@@ -21068,7 +21068,7 @@ begin
 end;
 
 function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
-{$ifdef ABSOLUTEPASCAL}
+{$ifdef ABSOLUTEPASCALORNOTINTEL}
 begin // fallback to pure pascal version for ARM or PIC
   if val<0 then begin
     result := StrUInt32(P,PtrUInt(-val))-1;
@@ -21173,10 +21173,10 @@ asm // eax=P, edx=val
         add     eax, ecx // includes '-' if val<0
 end;
 {$endif CPUX64}
-{$endif ABSOLUTEPASCAL}
+{$endif ABSOLUTEPASCALORNOTINTEL}
 
 function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
-{$ifdef ABSOLUTEPASCAL} // fallback to pure pascal version for ARM or PIC
+{$ifdef ABSOLUTEPASCALORNOTINTEL} // fallback to pure pascal version for ARM or PIC
 var c100: PtrUInt;
     tab: PWordArray;
 begin // this code is faster than Borland's original str() or IntToStr()
@@ -21281,7 +21281,7 @@ asm     // eax=P, edx=val
         mov     [eax], dl
 end;
 {$endif CPU64}
-{$endif ABSOLUTEPASCAL}
+{$endif ABSOLUTEPASCALORNOTINTEL}
 
 function StrUInt64(P: PAnsiChar; const val: QWord): PAnsiChar;
 {$ifdef CPU64}
@@ -42640,8 +42640,8 @@ begin
     {$ifdef FORCE_STRSSE42}
     if cfSSE42 in CpuFeatures then
       StrLen := @StrLenSSE42 else
-      StrLen := @StrLenSSE2;
     {$endif FORCE_STRSSE42}
+      StrLen := @StrLenSSE2;
     FillcharFast := @FillCharSSE2;
   end else begin
     StrLen := @StrLenX86;
