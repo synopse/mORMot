@@ -2673,7 +2673,7 @@ begin // very fast optimized code
         if Kind=betDoc then
           if intnames<>nil then
             intnames.Unique(Doc.Names[i+Doc.Count],items[i].Name,items[i].NameLen) else
-            SetString(Doc.Names[i+Doc.Count],PAnsiChar(items[i].Name),items[i].NameLen);
+            FastSetString(Doc.Names[i+Doc.Count],items[i].Name,items[i].NameLen);
         items[i].ToVariant(Doc.Values[i+Doc.Count],Option);
       end;
       Doc.SetCount(Doc.Count+n);
@@ -2727,9 +2727,9 @@ begin
   betFloat:
     res.VDouble := PDouble(Element)^;
   betString:
-    SetString(RawUTF8(res.VAny),Data.Text,Data.TextLen);
+    FastSetString(RawUTF8(res.VAny),Data.Text,Data.TextLen);
   betJS, betDeprecatedSymbol:
-    SetString(RawUTF8(resBSON.VText),Data.Text,Data.TextLen);
+    FastSetString(RawUTF8(resBSON.VText),Data.Text,Data.TextLen);
   betDoc, betArray:
     if DocArrayConversion=asBSONVariant then
       SetString(TBSONDocument(resBSON.VBlob),PAnsiChar(Element),ElementBytes) else begin
@@ -2786,7 +2786,7 @@ begin
   betFloat:
     ExtendedToStr(PDouble(Element)^,DOUBLE_PRECISION,result);
   betString:
-    SetString(result,Data.Text,Data.TextLen);
+    FastSetString(result,Data.Text,Data.TextLen);
   betInt32:
     Int32ToUtf8(PInteger(Element)^,result);
   betInt64:
@@ -3155,7 +3155,7 @@ var item: TBSONElement;
 begin
   result := item.FromNext(BSON);
   if result then begin
-    SetString(name,PAnsiChar(item.Name),item.NameLen);
+    FastSetString(name,item.Name,item.NameLen);
     item.ToVariant(element,DocArrayConversion);
   end;
 end;
@@ -3970,7 +3970,7 @@ end;
 
 procedure TBSONObjectID.ToText(var result: RawUTF8);
 begin
-  SetString(result,nil,sizeof(self)*2);
+  FastSetString(result,nil,sizeof(self)*2);
   SynCommons.BinToHex(@self,pointer(result),sizeof(self));
 end;
 
@@ -6714,13 +6714,13 @@ end;
 function TDecimal128.ToText: RawUTF8;
 var tmp: TDecimal128Str;
 begin
-  SetString(result,PAnsiChar(@tmp),ToText(tmp));
+  FastSetString(result,@tmp,ToText(tmp));
 end;
 
 procedure TDecimal128.ToText(var result: RawUTF8);
 var tmp: TDecimal128Str;
 begin
-  SetString(result,PAnsiChar(@tmp),ToText(tmp));
+  FastSetString(result,@tmp,ToText(tmp));
 end;
 
 procedure TDecimal128.AddText(W: TTextWriter);
@@ -6776,8 +6776,7 @@ var P,PEnd: PUTF8Char;
     digits: array[0..BSON_DECIMAL128_MAX_DIGITS-1] of byte;
     firstnon0, digread, digstored, digcount, radixpos,
     digfirst, diglast, exp, signdig, i: PtrInt;
-    signhi, signlo: QWord;
-    biasedexp: PtrUInt;
+    signhi, signlo, biasedexp: QWord;
     sign: THash128Rec;
 begin
   for result := dsvNan to dsvNegInf do
@@ -6927,9 +6926,9 @@ begin
   end;
   biasedexp := exp+BSON_DECIMAL128_EXPONENT_BIAS;
   if (sign.H shr 49)and 1<>0 then
-    Bits.hi := (3 shl 61) or (QWord(biasedexp and $3fff)shl 47) or
+    Bits.hi := (QWord(3) shl 61) or ((biasedexp and $3fff)shl 47) or
       (sign.H and $7fffffffffff) else
-    Bits.hi := (QWord(biasedexp and $3fff)shl 49) or
+    Bits.hi := ((biasedexp and $3fff)shl 49) or
       (sign.H and $1ffffffffffff);
   Bits.lo := sign.L;
   if negative in flags then

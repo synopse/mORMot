@@ -11974,6 +11974,7 @@ procedure FillZero(var dest; count: PtrInt); overload;
 
 /// fast computation of two 64-bit unsigned integers into a 128-bit value
 procedure mul64x64(const left, right: QWord; out product: THash128Rec);
+  {$ifdef FPC}{$ifndef CPUX64}inline;{$endif CPUX64}{$endif FPC}
 
 type
   /// the potential features, retrieved from an Intel CPU
@@ -36395,7 +36396,7 @@ asm     // rcx/rdi=left, rdx/rsi=right r8/rdx=product
         mov     qword ptr [r8+8], rdx
 end;
 {$else}
-{$ifdef CPUX86} {$ifdef FPC}nostackframe; assembler;{$endif}
+{$ifdef CPU32DELPHI}
 asm // adapted from FPC compiler output, which is much better than Delphi's here
         mov     ecx, eax
         mov     eax, dword ptr [ebp+8H]
@@ -36434,7 +36435,7 @@ begin
   product.H := QWord(l.H)*r.H+t2.H+t3.H;
   product.L := t3.V shl 32 or t1.L;
 end;
-{$endif CPUX86}
+{$endif CPU32DELPHI}
 {$endif CPUX64}
 
 procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
