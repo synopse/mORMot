@@ -33081,22 +33081,22 @@ end;
 {$endif}
 
 function IntPower(Exponent: Integer): TSynExtended; {$ifdef HASINLINE}inline;{$endif}
-var Y: cardinal;
-    LBase: Int64;
+var Y: integer;
+    LBase: TSynExtended;
 begin
   Y := abs(Exponent);
-  LBase := 10;
+  if Exponent<0 then
+    LBase := 0.1 else
+    LBase := 10;
   result := 1.0;
   repeat
-    while not odd(Y) do begin
+    while Y and 1=0 do begin
       Y := Y shr 1;
-      LBase := LBase*LBase;
+      LBase := sqr(LBase);
     end;
     dec(Y);
     result := result*LBase;
-  until Y=0;
-  if Exponent<0 then
-    result := 1.0/result;
+  until Y<=0;
 end;
 
 function GetExtended(P: PUTF8Char; out err: integer): TSynExtended;
@@ -33109,16 +33109,12 @@ const POW10: array[-31..31] of TSynExtended = (
   1E11,1E12,1E13,1E14,1E15,1E16,1E17,1E18,1E19,1E20,1E21,1E22,1E23,1E24,1E25,
   1E26,1E27,1E28,1E29,1E30,1E31);
 var Digits, ExpValue: PtrInt;
-    Ch: cardinal;
+    Ch: {$ifdef CPUX86}byte{$else}cardinal{$endif}; // circumvent FPC Win32 issue
     flags: set of (Neg, NegExp, Valid);
     U: PByte; // Delphi Win64 doesn't like if P^ is used directly
-{$ifdef CPUX86}
+{$ifndef CPUX86}ten: TSynExtended;{$endif} // stored in (e.g. xmm2) register
 begin
-{$else}
-    ten: TSynExtended; // stored in a local floating-point (e.g. xmm2) register
-begin
-  ten := 10.0;
-{$endif}
+  {$ifndef CPUX86} ten := 10.0; {$endif}
   result := 0;
   if P=nil then begin
     err := 1;
@@ -33129,7 +33125,7 @@ begin
   if P^=' ' then
     repeat
       inc(U)
-    until U^<>32;
+    until U^<>32; // trailing spaces
   Ch := U^;
   if Ch=ord('+') then
     inc(U) else
@@ -33144,7 +33140,7 @@ begin
       break;
     dec(Ch,ord('0'));
     {$ifdef CPUX86}
-    result := (result*10.0)+ch;
+    result := (result*10.0)+Ch;
     {$else}
     result := result*ten; // better FPC+Delphi64 code generation in two steps
     result := result+Ch;
@@ -33157,14 +33153,14 @@ begin
       Ch := U^;
       inc(U);
       if (Ch<ord('0')) or (Ch>ord('9')) then begin
-        if not (Valid in flags) then // starts with '.'
+        if not(Valid in flags) then // starts with '.'
           if Ch=0 then
             dec(U); // U^='.'
         break;
       end;
       dec(Ch,ord('0'));
       {$ifdef CPUX86}
-      result := (result*10.0)+ch;
+      result := (result*10.0)+Ch;
       {$else}
       result := result*ten;
       result := result+Ch;
@@ -33326,7 +33322,7 @@ asm     // in: eax=text, edx=@err  out: st(0)=result
         fchs                        // yes. negate result in fpu
         jmp     @exit               // exit setting result code
 end;
-{$endif}
+{$endif GETEXTENDEDPASCAL}
 
 function GetUTF8Char(P: PUTF8Char): cardinal;
 begin
