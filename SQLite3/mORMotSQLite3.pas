@@ -616,8 +616,8 @@ type
     // without any URI() call, but with use of DB JSON cache if available
     // - other TSQLRestClientDB methods use URI() function and JSON conversion
     // of only one record properties values, which is very fast
-    function List(const Tables: array of TSQLRecordClass; const SQLSelect: RawUTF8 = 'ID';
-      const SQLWhere: RawUTF8 = ''): TSQLTableJSON; override;
+    function List(const Tables: array of TSQLRecordClass; const SQLSelect: RawUTF8='ID';
+      const SQLWhere: RawUTF8=''): TSQLTableJSON; override;
     /// associated Server
     property Server: TSQLRestServerDB read fServer;
     /// associated database
@@ -1673,7 +1673,7 @@ begin
       result := true; // as TSQLRest.UpdateblobFields()
 end;
 
-procedure TSQLRestServerDB.Commit(SessionID: cardinal=1; RaiseException: boolean=false);
+procedure TSQLRestServerDB.Commit(SessionID: cardinal; RaiseException: boolean);
 begin
   inherited Commit(SessionID,RaiseException);
   // reset fTransactionActive + write all TSQLVirtualTableJSON
@@ -1686,9 +1686,9 @@ begin
   end;
 end;
 
-procedure TSQLRestServerDB.RollBack(SessionID: cardinal=1);
+procedure TSQLRestServerDB.RollBack(SessionID: cardinal);
 begin
-  inherited; // reset TSQLRestServerDB.fTransactionActive flag
+  inherited RollBack(SessionID); // reset TSQLRestServerDB.fTransactionActive flag
   try
     DB.RollBack; // will call DB.Lock
   except
@@ -1697,9 +1697,9 @@ begin
   end;
 end;
 
-function TSQLRestServerDB.TransactionBegin(aTable: TSQLRecordClass; SessionID: cardinal=1): boolean;
+function TSQLRestServerDB.TransactionBegin(aTable: TSQLRecordClass; SessionID: cardinal): boolean;
 begin
-  result := not DB.TransactionActive and inherited TransactionBegin(aTable, SessionID);
+  result := not DB.TransactionActive and inherited TransactionBegin(aTable,SessionID);
   if not result then
     exit; // fTransactionActive flag was already set
   try
