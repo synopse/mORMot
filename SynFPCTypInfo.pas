@@ -77,9 +77,14 @@ function GetFPCEnumValue(TypeInfo: PTypeInfo; const Name: string): Integer; inli
 function AlignTypeData(p : Pointer) : Pointer; inline;
 function GetFPCTypeData(TypeInfo: PTypeInfo): PTypeData; inline;
 function GetFPCPropInfo(AClass: TClass; const PropName: string): PPropInfo; inline;
+
 {$ifdef FPC_NEWRTTI}
+type
+  /// some type definition to avoid inclusion of TypInfo in main SynCommons.pas
+  PRecInitData = TypInfo.PRecInitData;
+
 function GetFPCRecInitData(TypeData: Pointer): Pointer;
-{$endif}
+{$endif FPC_NEWRTTI}
 
 procedure FPCDynArrayClear(var a: Pointer; typeInfo: Pointer);
 procedure FPCFinalizeArray(p: Pointer; typeInfo: Pointer; elemCount: PtrUInt);
@@ -87,9 +92,6 @@ procedure FPCFinalize(Data: Pointer; TypeInfo: Pointer);
 procedure FPCRecordCopy(const Source; var Dest; TypeInfo: pointer);
 procedure FPCRecordAddRef(var Data; TypeInfo : pointer);
 
-type
-  /// some type definition to avoid inclusion of TypInfo in main SynCommons.pas
-  PRecInitData = TypInfo.PRecInitData;
 
 implementation
 
@@ -174,14 +176,12 @@ begin
 end;
 
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-
 function GetFPCAlignPtr(P: pointer): pointer;
 begin
   result := TypInfo.AlignTypeData(P+2+Length(PTypeInfo(P)^.Name));
   Dec(PtrUInt(result),SizeOf(pointer));
 end;
-
-{$endif}
+{$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
 function GetFPCPropInfo(AClass: TClass; const PropName: string): PPropInfo;
 begin
@@ -196,6 +196,6 @@ begin
   else
     result := TypInfo.AlignTypeData(pointer(PTypeData(TypeData)^.RecInitData));
 end;
-{$endif}
+{$endif FPC_NEWRTTI}
 
 end.
