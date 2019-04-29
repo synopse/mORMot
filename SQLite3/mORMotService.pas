@@ -1474,7 +1474,6 @@ begin // code below has no memory (re)allocation
       SIGTERM: text := 'TERM';
       SIGINT:  text := 'INT';
       SIGABRT: text := 'ABRT';
-      SIGSEGV: text := 'SEGV';
       else text := UInt3DigitsToShort(Sig);
     end;
     if Sig = SIGTERM then // polite quit
@@ -1499,7 +1498,7 @@ end;
 procedure SynDaemonIntercept(log: TSynLog);
 var
   saOld, saNew: {$ifdef FPC}SigactionRec{$else}TSigAction{$endif};
-begin
+begin // note: SIGFPE/SIGSEGV/SIGBUS/SIGILL are handled by the RTL
   if SynDaemonIntercepted then
     exit;
   SynDaemonIntercepted := true;
@@ -1511,14 +1510,12 @@ begin
   fpSigaction(SIGTERM, @saNew, @saOld);
   fpSigaction(SIGINT, @saNew, @saOld);
   fpSigaction(SIGABRT, @saNew, @saOld);
-  fpSigaction(SIGSEGV, @saNew, @saOld);
   {$else} // Kylix
   saNew.__sigaction_handler := @DoShutDown;
   sigaction(SIGQUIT, @saNew, @saOld);
   sigaction(SIGTERM, @saNew, @saOld);
   sigaction(SIGINT, @saNew, @saOld);
   sigaction(SIGABRT, @saNew, @saOld);
-  sigaction(SIGSEGV, @saNew, @saOld);
   {$endif}
 end;
 

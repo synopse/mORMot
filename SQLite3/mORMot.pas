@@ -4869,7 +4869,7 @@ var
 /// convert any HTTP_* constant to an integer error code and its English text
 // - see @http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
 // - will call StatusCodeToErrorMessage()
-function StatusCodeToErrorMsg(Code: integer): RawUTF8;
+function StatusCodeToErrorMsg(Code: integer): shortstring;
 
 /// returns true for successful HTTP status codes, i.e. in 200..399 range
 // - will map mainly SUCCESS (200), CREATED (201), NOCONTENT (204),
@@ -24761,10 +24761,11 @@ begin // only basic verbs here -> SynCrtSock.StatusCodeToReason() used instead
   end;
 end;
 
-function StatusCodeToErrorMsg(Code: integer): RawUTF8;
+function StatusCodeToErrorMsg(Code: integer): shortstring;
+var msg: RawUTF8;
 begin
-  StatusCodeToErrorMessage(Code,result);
-  result := FormatUTF8('HTTP Error % - %',[Code,result]);
+  StatusCodeToErrorMessage(Code,msg);
+  FormatShort('HTTP Error % - %',[Code,msg],result);
 end;
 
 function StatusCodeIsSuccess(Code: integer): boolean;
@@ -43490,7 +43491,7 @@ begin
   hash := ServerNonceHash; // thread-safe SHA-3 sponge reuse
   hash.Update(@ticks,SizeOf(ticks));
   hash.Final(res,true);
-  result := BinToHex(@res,SizeOf(res));
+  result := BinToHexLower(@res,SizeOf(res));
   with ServerNonceCache[Previous] do begin
     tix := ticks;
     res := result;
@@ -53874,7 +53875,7 @@ begin // FPC doesn't allow to use constants for procedure of object
   suaSHA1:   result := ComputeSignatureSHA1;
   suaSHA256: result := ComputeSignatureSHA256;
   suaSHA512: result := ComputeSignatureSHA512;
-  else       result := ComputeSignatureCrc32;
+  else       result := ComputeSignatureCrc32; // default/fallback
   end;
 end;
 
@@ -53898,7 +53899,7 @@ end;
 
 class function TSQLRestServerAuthenticationSignedURI.ComputeSignatureMD5(
   privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
-var digest: array[0..(SizeOf(TMD5Digest)div 4)-1] of cardinal;
+var digest: THash128Rec;
     MD5: TMD5;
     i: integer;
 begin
@@ -53906,10 +53907,10 @@ begin
   MD5.Update(privatesalt,4);
   MD5.Update(timestamp^,8);
   MD5.Update(url^,urllen);
-  MD5.Final(TMD5Digest(digest));
-  result := digest[0];
-  for i := 1 to high(digest) do
-    result := result xor digest[i];
+  MD5.Final(digest.b);
+  result := digest.c[0];
+  for i := 1 to high(digest.c) do
+    result := result xor digest.c[i];
 end;
 
 class function TSQLRestServerAuthenticationSignedURI.ComputeSignatureSHA1(
@@ -53930,7 +53931,7 @@ end;
 
 class function TSQLRestServerAuthenticationSignedURI.ComputeSignatureSHA256(
   privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
-var digest: array[0..(SizeOf(TSHA256Digest)div 4)-1] of cardinal;
+var digest: THash256Rec;
     SHA256: TSHA256;
     i: integer;
 begin
@@ -53938,15 +53939,15 @@ begin
   SHA256.Update(@privatesalt,4);
   SHA256.Update(timestamp,8);
   SHA256.Update(url,urllen);
-  SHA256.Final(TSHA256Digest(digest));
-  result := digest[0];
-  for i := 1 to high(digest) do
-    result := result xor digest[i];
+  SHA256.Final(digest.b);
+  result := digest.c[0];
+  for i := 1 to high(digest.c) do
+    result := result xor digest.c[i];
 end;
 
 class function TSQLRestServerAuthenticationSignedURI.ComputeSignatureSHA512(
   privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
-var digest: array[0..(SizeOf(TSHA512Digest)div 4)-1] of cardinal;
+var digest: THash512Rec;
     SHA512: TSHA512;
     i: integer;
 begin
@@ -53954,10 +53955,10 @@ begin
   SHA512.Update(@privatesalt,4);
   SHA512.Update(timestamp,8);
   SHA512.Update(url,urllen);
-  SHA512.Final(TSHA512Digest(digest));
-  result := digest[0];
-  for i := 1 to high(digest) do
-    result := result xor digest[i];
+  SHA512.Final(digest.b);
+  result := digest.c[0];
+  for i := 1 to high(digest.c) do
+    result := result xor digest.c[i];
 end;
 
 function TSQLRestServerAuthenticationSignedURI.RetrieveSession(
@@ -54077,7 +54078,7 @@ begin
   if aServerNonce='' then
     exit;
   TAESPRNG.Main.FillRandom(@rnd,SizeOf(rnd));
-  aClientNonce := BinToHex(@rnd,SizeOf(rnd));
+  aClientNonce := BinToHexLower(@rnd,SizeOf(rnd));
   result := ClientGetSessionKey(Sender,User,['UserName',User.LogonName,'Password',
      Sha256(Sender.Model.Root+aServerNonce+aClientNonce+User.LogonName+User.PasswordHashHexa),
      'ClientNonce',aClientNonce]);

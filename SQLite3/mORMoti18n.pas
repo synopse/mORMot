@@ -2204,7 +2204,7 @@ var
 
 function Hash32Str(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 begin
-  result := Hash32(buf,len);
+  result := Hash32(pointer(buf),len);
 end;
 
 function AddOnceDynArray(const S: WinAnsiString): integer;

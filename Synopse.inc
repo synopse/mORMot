@@ -610,10 +610,12 @@
   {$endif DISABLE_SSE42}
 {$else}
   {$undef HASAESNI} // AES-NI is an Intel-specific feature
+  {$define ABSOLUTEPASCALORNOTINTEL}
 {$endif CPUINTEL}
 
 {$ifdef ABSOLUTEPASCAL}
   {$define ABSOLUTEORPUREPASCAL}
+  {$define ABSOLUTEPASCALORNOTINTEL}
 {$endif ABSOLUTEPASCAL}
 {$ifdef PUREPASCAL}
   {$define ABSOLUTEORPUREPASCAL}

@@ -434,7 +434,7 @@ type
     constructor Create(aTimeOut: PtrInt=10000); reintroduce; virtual;
     /// connect to aServer:aPort
     // - you may ask for a TLS secured client connection (only available under
-    // Windows by now, using the SChanell API - and not fully tested)
+    // Windows by now, using the SChannel API - and not fully tested)
     constructor Open(const aServer, aPort: SockString; aLayer: TCrtSocketLayer=cslTCP;
       aTimeOut: cardinal=10000; aTLS: boolean=false);
     /// bind to a Port
@@ -446,7 +446,7 @@ type
     /// low-level internal method called by Open() and Bind() constructors
     // - raise an ECrtSocket exception on error
     // - you may ask for a TLS secured client connection (only available under
-    // Windows by now, using the SChanell API - and not fully tested)
+    // Windows by now, using the SChannel API - and not fully tested)
     procedure OpenBind(const aServer, aPort: SockString; doBind: boolean;
       aSock: integer=-1; aLayer: TCrtSocketLayer=cslTCP; aTLS: boolean=false);
     /// initialize SockIn for receiving with read[ln](SockIn^,...)
@@ -2433,7 +2433,7 @@ type
   // the 32-bit flavor of libcurl, e.g. on Ubuntu:
   // $ sudo apt-get install libcurl3:i386
   // - will use in fact libcurl.so, so either libcurl.so.3 or libcurl.so.4,
-  // depending on the default version installation on the system
+  // depending on the default version available on the system
   TCurlHTTP = class(THttpRequest)
   protected
     fHandle: pointer;
@@ -2472,7 +2472,7 @@ type
 
   /// simple wrapper around THttpClientSocket/THttpRequest instances
   // - this class will reuse the previous connection if possible, and select the
-  // best connection class available on this platform
+  // best connection class available on this platform for a given URI
   TSimpleHttpClient = class
   protected
     fHttp: THttpClientSocket;
@@ -3204,7 +3204,7 @@ uses
 { ************ some shared helper functions and classes }
 
 var
-  ReasonCache: array[1..5,0..8] of SockString; // avoid memory allocation
+  ReasonCache: array[1..5,0..13] of SockString; // avoid memory allocation
 
 function StatusCodeToReasonInternal(Code: cardinal): SockString;
 begin
@@ -4704,14 +4704,14 @@ begin
     p := '';
   end;
   {$endif}
-  OpenBind(s,p,true,-1,aLayer); // raise an ECrtSocket exception on error
+  OpenBind(s,p,{dobind=}true,-1,aLayer); // raise a ECrtSocket on error
 end;
 
 constructor TCrtSocket.Open(const aServer, aPort: SockString; aLayer: TCrtSocketLayer;
   aTimeOut: cardinal; aTLS: boolean);
 begin
   Create(aTimeOut); // default read timeout is 10 seconds
-  OpenBind(aServer,aPort,false,-1,aLayer,aTLS); // raise an ECrtSocket exception on error
+  OpenBind(aServer,aPort,{dobind=}false,-1,aLayer,aTLS); // raise an ECrtSocket on error
 end;
 
 type
@@ -4786,18 +4786,18 @@ begin
     TCPNoDelay := 1; // disable Nagle algorithm since we use our own buffers
     KeepAlive := 1; // enable TCP keepalive (even if we rely on transport layer)
     if aTLS and (aSock<0) and not doBind then
-    try
-      {$ifdef MSWINDOWS}
-      fSecure.AfterConnection(fSock,pointer(aServer));
-      {$else}
-      raise ECrtSocket.Create('Unsupported');
-      {$endif MSWINDOWS}
-      fTLS := true;
-    except
-      on E: Exception do
-        raise ECrtSocket.CreateFmt('OpenBind(%s:%s,%s): aTLS failed [%s %s]',
-          [aServer,Port,BINDTXT[doBind],E.ClassName,E.Message],-1);
-    end;
+      try
+        {$ifdef MSWINDOWS}
+        fSecure.AfterConnection(fSock,pointer(aServer));
+        {$else}
+        raise ECrtSocket.Create('Unsupported');
+        {$endif MSWINDOWS}
+        fTLS := true;
+      except
+        on E: Exception do
+          raise ECrtSocket.CreateFmt('OpenBind(%s:%s,%s): TLS failed [%s %s]',
+            [aServer,Port,BINDTXT[doBind],E.ClassName,E.Message],-1);
+      end;
   end;
 end;
 
@@ -5236,7 +5236,7 @@ begin
   result := WSAGetLastError; // retrieved directly from Sockets API
 end;
 
-procedure TCrtSocket.SockRecvLn(out Line: SockString; CROnly: boolean=false);
+procedure TCrtSocket.SockRecvLn(out Line: SockString; CROnly: boolean);
   procedure RecvLn(var Line: SockString);
   var P: PAnsiChar;
       LP, L: PtrInt;
@@ -11925,6 +11925,7 @@ begin
     try
       if (fHttps = nil) or (fHttps.Server <> uri.Server) or
          (integer(fHttps.Port) <> uri.PortInt) then begin
+        FreeAndNil(fHttp);
         fHttps.Free; // need a new HTTPS connection
         fHttps := MainHttpClass.Create(uri.Server, uri.Port, uri.Https, '', '',
           5000, 5000, 5000);
@@ -11943,12 +11944,15 @@ begin
     try
       if (fHttp = nil) or (fHttp.Server <> uri.Server) or
          (fHttp.Port <> uri.Port) then begin
+        FreeAndNil(fHttps);
         fHttp.Free; // need a new HTTP connection
         fHttp := THttpClientSocket.Open(uri.Server, uri.Port, cslTCP, 5000, uri.Https);
         if fUserAgent<>'' then
           fHttp.UserAgent := fUserAgent;
       end;
-      result := fHttp.Request(uri.Address, method, KeepAlive, header, data, datatype, true);
+      if not fHttp.SockConnected then
+        exit else
+        result := fHttp.Request(uri.Address, method, KeepAlive, header, data, datatype, true);
       fBody := fHttp.Content;
       fHeaders := fHttp.HeaderGetText;
       if KeepAlive = 0 then

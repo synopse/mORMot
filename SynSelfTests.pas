@@ -3397,7 +3397,6 @@ begin
   result := result xor (result shr 16);
 end;
 
-{$ifdef CPUINTEL}
 procedure crcblockreference(crc128, data128: PBlock128);
 var c: cardinal;
 begin
@@ -3414,7 +3413,6 @@ begin
   crc128^[3] := crc32ctab[3,byte(c)] xor crc32ctab[2,byte(c shr 8)]
             xor crc32ctab[1,byte(c shr 16)] xor crc32ctab[0,c shr 24];
 end;
-{$endif CPUINTEL}
 
 procedure TTestLowLevelCommon._crc32c;
 var crc: array[0..10000] of record
@@ -3483,11 +3481,15 @@ begin
   check(TBlock128(crc2)[1]=582109780);
   check(TBlock128(crc2)[2]=1177891908);
   check(TBlock128(crc2)[3]=4047040040);
-  {$ifdef CPUINTEL}
   FillZero(crc1);
   crcblockreference(@crc1,PBlock128(PAnsiChar('0123456789012345')));
   check(not IsZero(crc1));
   check(IsEqual(crc1,crc2));
+  FillZero(crc1);
+  crcblocks(@crc1,PBlock128(PAnsiChar('0123456789012345')),1);
+  check(not IsZero(crc1));
+  check(IsEqual(crc1,crc2),'crcblocks');
+  {$ifdef CPUINTEL}
   FillZero(crc1);
   crcblockNoSSE42(@crc1,PBlock128(PAnsiChar('0123456789012345')));
   check(not IsZero(crc1));
@@ -4041,7 +4043,7 @@ begin
     Check(SysUtils.IntToStr(j)=string(a));
     Check(format('%d',[j])=string(a));
     Check(format('%.8x',[j])=IntToHex(j,8));
-    d := Random*1E-17-Random*1E-9;
+    d := Random*1E-17-Random*1E-19;
     str(d,a);
     s := RawUTF8(a);
     e := GetExtended(Pointer(s),err);
@@ -4520,6 +4522,7 @@ procedure Test(D: TDateTime; Expanded: boolean);
 var s,t: RawUTF8;
     E,F: TDateTime;
     I,J: TTimeLogBits;
+    st, s2: TSynSystemTime;
 begin
   s := DateTimeToIso8601(D,Expanded);
   if Expanded then
@@ -4529,6 +4532,16 @@ begin
     Check(Iso8601CheckAndDecode(Pointer(s),length(s),E));
     Check(Abs(D-E)<(1/SecsPerDay)); // we allow 999 ms error
   end;
+  st.FromDateTime(D);
+  s2.Clear;
+  DecodeDate(D,s2.Year,s2.Month,s2.Day);
+  DecodeTime(D,s2.Hour,s2.Minute,s2.Second,s2.MilliSecond);
+  Check(abs(st.MilliSecond-s2.MilliSecond)<=1); // allow 1 ms rounding error
+  st.MilliSecond := 0;
+  s2.MilliSecond := 0;
+  Check(st.IsEqual(s2)); // ensure conversion matches the RTL's
+  t := st.ToText(Expanded);
+  Check(Copy(t,1,length(s))=s);
   E := Iso8601ToDateTime(s);
   Check(Abs(D-E)<(1/SecsPerDay)); // we allow 999 ms error
   E := Iso8601ToDateTime(s+'Z');
@@ -4716,7 +4729,7 @@ begin
   end;
   dt := NowUTC;
   {$ifdef FPC}
-  CheckSame(_LocalTimeToUniversal(Now(), - GetLocalTimeOffset) - dt, 0, 1E-5,
+  CheckSame(_LocalTimeToUniversal(Now(), - GetLocalTimeOffset) - dt, 0, 1E-2,
     'NowUTC should not shift or truncate time');
   {$endif}
   sleep(200);

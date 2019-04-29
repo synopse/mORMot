@@ -564,23 +564,22 @@ begin
 end;
 
 procedure TOracleDate.From(const aValue: TDateTime);
-var Y,M,D, HH,MM,SS,MS: word;
+var T: TSynSystemTime;
 begin
   PInteger(PtrInt(@self)+3)^ := 0; // set Day=Hour=Min=Sec to 0
   if aValue<=0 then begin
     PInteger(@self)^ := 0;
     exit; // supplied TDateTime value = 0 -> store as null date
   end;
-  DecodeDate(aValue,Y,M,D);
-  DecodeTime(aValue,HH,MM,SS,MS);
-  Cent := (Y div 100)+100;
-  Year := (Y mod 100)+100;
-  Month := M;
-  Day := D;
-  if (HH<>0) or (MM<>0) or (SS<>0) then begin
-    Hour := HH+1;
-    Min := MM+1;
-    Sec := SS+1;
+  T.FromDateTime(aValue);
+  Cent := (T.Year div 100)+100;
+  Year := (T.Year mod 100)+100;
+  Month := T.Month;
+  Day := T.Day;
+  if (T.Hour<>0) or (T.Minute<>0) or (T.Second<>0) then begin
+    Hour := T.Hour+1;
+    Min := T.Minute+1;
+    Sec := T.Second+1;
   end ;
 end;
 

@@ -626,11 +626,9 @@ function VirtualTableExternalRegisterAll(aModel: TSQLModel;
   aOptions: TVirtualTableExternalRegisterOptions): boolean; overload;
 var i: integer;
 begin
-  if (aModel=nil) or (aExternalDB=nil) then begin
-    result := false;
+  result := (aModel<>nil) and (aExternalDB<>nil);
+  if not result then
     exit; // avoid GPF
-  end;
-  result := true;
   for i := 0 to high(aModel.Tables) do
     if (regDoNotRegisterUserGroupTables in aOptions) and
        (aModel.Tables[i].InheritsFrom(TSQLAuthGroup) or

@@ -41,6 +41,7 @@ Contributors
   Lagodny
   Leon Oosthuizen
   Maciej Izak (hnb)
+  Marcos Douglas B. Santos (mdbs99)
   Mario Moretti
   Marius Maximus (mariuszekpl)
   Martin Eckes
@@ -52,6 +53,7 @@ Contributors
   Michalis Kamburelis 
   MilesYou
   Mingda
+  Nicolas Marchand (MC)
   Nzsolt
   Oleg Tretyakov
   Ondrej (reddwarf)
