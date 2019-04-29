@@ -429,7 +429,7 @@ type
 
   /// callback signature used by TSynLogFamilly.OnBeforeException
   // - should return false to log the exception, or true to ignore it
-  TSynLogOnBeforeException = function(aExceptionContext: TSynLogExceptionContext;
+  TSynLogOnBeforeException = function(const aExceptionContext: TSynLogExceptionContext;
     const aThreadName: RawUTF8): boolean of object;
 
   /// store simple log-related settings
@@ -3382,6 +3382,7 @@ begin
       if ArchiveAfterDays<0 then
         ArchiveAfterDays := 0;
       OldTime := DateTimeToFileDate(Now-ArchiveAfterDays);
+      aPath := '';
       repeat
         {$ifndef DELPHI5OROLDER}
         {$WARN SYMBOL_DEPRECATED OFF} // for SR.Time
