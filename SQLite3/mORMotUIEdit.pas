@@ -148,13 +148,13 @@ type
     OnComponentCreated: TOnComponentCreated;
   end;
 
-  {{ Record edition dialog, used to edit record content on the screen
-   - the window content is taken from the RTTI of the supplied record;
-     all the User Interface (fields, etc...) is created from the class definition
-     using RTTI: published properties are displayed as editing components
-   - caller must initialize some events, OnComponentCreate at least,
-    in order to supply the objects to be added on the form
-   - components creation is fully customizable by some events }
+  /// Record edition dialog, used to edit record content on the screen
+  // - the window content is taken from the RTTI of the supplied record;
+  //   all the User Interface (fields, etc...) is created from the class definition
+  //   using RTTI: published properties are displayed as editing components
+  // - caller must initialize some events, OnComponentCreate at least,
+  //  in order to supply the objects to be added on the form
+  // - components creation is fully customizable by some events
   TRecordEditForm = class(TRTTIForm)
     BottomPanel: TPanel;
     Scroll: TScrollBox;
