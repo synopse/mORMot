@@ -2243,8 +2243,10 @@ begin
     exit;
   {$ifdef FPC}
   s := BacktraceStrFunc(pointer(aAddressAbsolute));
-  if Pos('SynLog.pas',s)=0 then // don't log internal calls
+  if Pos('SynLog.pas',s)=0 then begin // don't log internal calls
     W.AddShort(s);
+    W.AddShort(#14);
+    end;
   {$else}
   with GetInstanceMapFile do
   if HasDebugInfo then begin
@@ -2287,6 +2289,7 @@ begin
     W.Add(' ');
   end;
   {$endif FPC}
+
 end;
 
 function TSynMapFile.FindLocation(aAddressAbsolute: PtrUInt): RawUTF8;
@@ -3490,11 +3493,12 @@ begin
   if fEchoRemoteClientOwned then
     try
       try
+        if assigned(fEchoRemoteEvent) then
         fEchoRemoteEvent(nil,sllClient,
           FormatUTF8('%00%    Remote Client % Disconnected',
             [NowToString(false),LOG_LEVEL_TEXT[sllClient],self]));
       finally
-        fEchoRemoteClient.Free;
+        FreeAndNil(fEchoRemoteClient);
       end;
     except
       on Exception do ;
@@ -5342,7 +5346,7 @@ begin
   if (fCount<=fLineHeaderCountToIgnore) or (LineEnd-LineBeg<24) then
     exit;
   if fLineLevelOffset=0 then begin
-    if (fCount>50) or not (LineBeg[0] in ['0'..'9']) then
+    if  not (LineBeg[0] in ['0'..'9']) then
       exit; // definitively does not sound like a .log content
     if LineBeg[8]=' ' then begin
       // YYYYMMDD HHMMSS is one char bigger than Timestamp
@@ -5682,6 +5686,7 @@ var index: integer;
     tm: cardinal;
 begin
   tm := fThreadMax;
+  fLineLevelOffset:=0;
   inherited AddInMemoryLine(aNewLine);
   index := Count-1;
   if EventLevel[index] in fEvents then
