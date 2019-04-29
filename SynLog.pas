@@ -3359,11 +3359,10 @@ end;
 
 destructor TSynLogFamily.Destroy;
 var SR: TSearchRec;
-    OldTime: integer;
-    aTime: TDateTime;
+    oldTime,aTime: TDateTime;
     Y,M,D: word;
     aOldLogFileName, aPath: TFileName;
-    tmp: array[0..11] of AnsiChar;
+    tmp: array[0..7] of AnsiChar;
 begin
   fDestroying := true;
   EchoRemoteStop;
@@ -3381,31 +3380,23 @@ begin
     try
       if ArchiveAfterDays<0 then
         ArchiveAfterDays := 0;
-      OldTime := DateTimeToFileDate(Now-ArchiveAfterDays);
-      aPath := '';
+      oldTime := Now-ArchiveAfterDays;
       repeat
-        {$ifndef DELPHI5OROLDER}
-        {$WARN SYMBOL_DEPRECATED OFF} // for SR.Time
-        {$endif}
-        if (SR.Name[1]='.') or (faDirectory and SR.Attr<>0) or
-           (SR.Time>OldTime) then
+        if (SR.Name[1]='.') or (faDirectory and SR.Attr<>0) then
           continue;
-        {$ifndef DELPHI5OROLDER}
-        {$WARN SYMBOL_DEPRECATED ON}
-        {$endif}
+        aTime := SearchRecToDateTime(SR);
+        if (aTime=0) or (aTime>oldTime) then
+          continue;
         aOldLogFileName := DestinationPath+SR.Name;
         if aPath='' then begin
-          aTime := FileAgeToDateTime(aOldLogFileName);
-          if (aTime=0) or
-             not DirectoryExists(ArchivePath+'log') and
-             not CreateDir(ArchivePath+'log') then
-            break;
+          aPath := EnsureDirectoryExists(ArchivePath+'log');
+          if aPath='' then
+            break; // impossible to create the archive folder
           DecodeDate(aTime,Y,M,D);
-          PCardinal(@tmp)^ := ord('l')+ord('o') shl 8+ord('g') shl 16+ord(PathDelim) shl 24;
-          YearToPChar(Y,@tmp[4]);
-          PWord(@tmp[8])^ := TwoDigitLookupW[M];
-          PWord(@tmp[10])^ := ord(PathDelim);
-          aPath := ArchivePath+Ansi7ToString(tmp,11);
+          YearToPChar(Y,@tmp[0]);
+          PWord(@tmp[4])^ := TwoDigitLookupW[M];
+          PWord(@tmp[6])^ := ord(PathDelim);
+          aPath := aPath+Ansi7ToString(tmp,7);
         end;
         OnArchive(aOldLogFileName,aPath);
       until FindNext(SR)<>0;
@@ -3421,7 +3412,7 @@ begin
     if AutoFlushThread<>nil then
       CloseHandle(THandle(AutoFlushThread));
     {$endif}
-    inherited;
+    inherited Destroy;
   end;
 end;
 
@@ -4397,7 +4388,7 @@ begin
       while P^<>#0 do begin
         L := StrLenW(P);
         if (L>0) and (P^<>'=') then begin
-          AddNoJSONEscapeW(PWord(P),SysUtils.StrLen(P));
+          AddNoJSONEscapeW(PWord(P),0);
           Add(#9);
         end;
         inc(P,L+1);
@@ -4405,7 +4396,7 @@ begin
       FreeEnvironmentStringsW(Env);
       CancelLastChar(#9);
     end;
-    {$endif}
+    {$endif MSWINDOWS}
     NewLine;
     AddClassName(self.ClassType);
     AddShort(' '+SYNOPSE_FRAMEWORK_FULLVERSION+' ');

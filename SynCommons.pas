@@ -19771,7 +19771,7 @@ end;
 
 function ShortStringToAnsi7String(const source: shortstring): RawByteString;
 begin
-  SetString(result,PAnsiChar(@source[1]),ord(source[0]));
+  FastSetString(RawUTF8(result),@source[1],ord(source[0]));
 end;
 
 procedure ShortStringToAnsi7String(const source: shortstring; var result: RawUTF8);
@@ -21921,7 +21921,7 @@ type
       EnumBaseType: PTypeInfoStored;
       {$ifdef FPC_ENUMHASINNER}
       end;
-      {$endif}
+      {$endif FPC_ENUMHASINNER}
       NameList: string[255];
     );
     tkInteger: (
@@ -55139,7 +55139,7 @@ procedure TTextWriter.AddNoJSONEscapeString(const s: string);
 begin
   if s<>'' then
     {$ifdef UNICODE}
-    AddNoJSONEscapeW(pointer(s),length(s));
+    AddNoJSONEscapeW(pointer(s),0);
     {$else}
     AddAnsiString(s,twNone);
     {$endif}
