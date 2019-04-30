@@ -24206,7 +24206,7 @@ begin
   P := StrInt64(@tmp[23],Value);
   FastSetString(result,P,@tmp[23]-P);
 end;
-{$endif}
+{$endif CPU64}
 
 function ToUTF8(Value: PtrInt): RawUTF8;
 {$ifdef CPU64}
