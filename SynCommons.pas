@@ -24198,16 +24198,15 @@ end;
 
 {$endif DEFINED_INT32TOUTF8}
 
-{$ifndef CPU64} // already implemented by ToUTF8(Value: PtrInt) below
-function ToUTF8(Value: Int64): RawUTF8;
+{$ifdef CPU64}
+function ToUTF8(Value: PtrInt): RawUTF8;
 var tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
 begin
   P := StrInt64(@tmp[23],Value);
   FastSetString(result,P,@tmp[23]-P);
 end;
-{$endif CPU64}
-
+{$else}
 function ToUTF8(Value: PtrInt): RawUTF8;
 var tmp: array[0..15] of AnsiChar;
     P: PAnsiChar;
@@ -24215,6 +24214,7 @@ begin
   P := StrInt32(@tmp[15],Value);
   FastSetString(result,P,@tmp[15]-P);
 end;
+{$endif}
 
 function UInt32ToUtf8(Value: cardinal): RawUTF8;
 var tmp: array[0..15] of AnsiChar;
