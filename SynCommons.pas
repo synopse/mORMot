@@ -1907,13 +1907,13 @@ procedure UInt64ToUtf8(Value: QWord; var result: RawUTF8);
 /// use our fast RawUTF8 version of IntToStr()
 // - without any slow UnicodeString=String->AnsiString conversion for Delphi 2009
 // - only useful if our Enhanced Runtime (or LVCL) library is not installed
-function Int32ToUtf8(Value: integer): RawUTF8; overload;
+function Int32ToUtf8(Value: PtrInt): RawUTF8; overload;
   {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// use our fast RawUTF8 version of IntToStr()
 // - without any slow UnicodeString=String->AnsiString conversion for Delphi 2009
 // - result as var parameter saves a local assignment and a try..finally
-procedure Int32ToUTF8(Value: integer; var result: RawUTF8); overload;
+procedure Int32ToUTF8(Value: PtrInt; var result: RawUTF8); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// use our fast RawUTF8 version of IntToStr()
@@ -1933,11 +1933,11 @@ function ToUTF8(Value: Int64): RawUTF8; overload;
 {$endif}
 
 /// optimized conversion of a cardinal into RawUTF8
-function UInt32ToUtf8(Value: cardinal): RawUTF8; overload;
+function UInt32ToUtf8(Value: PtrUInt): RawUTF8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// optimized conversion of a cardinal into RawUTF8
-procedure UInt32ToUtf8(Value: cardinal; var result: RawUTF8); overload;
+procedure UInt32ToUtf8(Value: PtrUInt; var result: RawUTF8); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// faster version than default SysUtils.IntToStr implementation
@@ -2119,19 +2119,21 @@ function PosIU(substr: PUTF8Char; const str: RawUTF8): Integer;
 // - expect the last available temporary char position in P
 // - return the last written char position (write in reverse order in P^)
 // - typical use:
-//  !function Int32ToUTF8(Value : integer): RawUTF8;
-//  !var tmp: array[0..15] of AnsiChar;
+//  !function Int32ToUTF8(Value: PtrInt): RawUTF8;
+//  !var tmp: array[0..23] of AnsiChar;
 //  !    P: PAnsiChar;
 //  !begin
-//  !  P := StrInt32(@tmp[15],Value);
-//  !  SetString(result,P,@tmp[15]-P);
+//  !  P := StrInt32(@tmp[23],Value);
+//  !  SetString(result,P,@tmp[23]-P);
 //  !end;
-// - not to be called directly: use IntToStr() instead
+// - convert the input value as PtrInt, so as Int64 on 64-bit CPUs
+// - not to be called directly: use IntToStr() or Int32ToUTF8() instead
 function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
 
 /// internal fast unsigned integer val to text conversion
 // - expect the last available temporary char position in P
 // - return the last written char position (write in reverse order in P^)
+// - convert the input value as PtrUInt, so as QWord on 64-bit CPUs
 function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
 
 /// internal fast Int64 val to text conversion
@@ -20568,14 +20570,14 @@ begin
   GUIDToText(pointer(result),@guid);
 end;
 
-procedure Int32ToUTF8(Value: integer; var result: RawUTF8);
-var tmp: array[0..15] of AnsiChar;
+procedure Int32ToUTF8(Value: PtrInt; var result: RawUTF8);
+var tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
 begin
-  if cardinal(Value)<=high(SmallUInt32UTF8) then
+  if PtrUInt(Value)<=high(SmallUInt32UTF8) then
     result := SmallUInt32UTF8[Value] else begin
-    P := StrInt32(@tmp[15],Value);
-    FastSetString(result,P,@tmp[15]-P);
+    P := StrInt32(@tmp[23],Value);
+    FastSetString(result,P,@tmp[23]-P);
   end;
 end;
 
@@ -20584,7 +20586,7 @@ var tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
 begin
   {$ifdef CPU64}
-  if (Value>=0) and (Value<=high(SmallUInt32UTF8)) then
+  if PtrUInt(Value)<=high(SmallUInt32UTF8) then
   {$else} // Int64Rec gives compiler internal error C4963
   if (PCardinalArray(@Value)^[0]<=high(SmallUInt32UTF8)) and
      (PCardinalArray(@Value)^[1]=0) then
@@ -21078,7 +21080,7 @@ begin // fallback to pure pascal version for ARM or PIC
 end;
 {$else}
 {$ifdef CPUX64} {$ifdef FPC}nostackframe; assembler; asm {$else}
-asm // rcx=P, rdx=val (Linux: rdi,rsi)
+asm // rcx=P, rdx=val (Linux: rdi,rsi) - val is QWord on 64-bit Intel CPU
         .noframe
 {$endif FPC}
         {$ifndef win64}
@@ -21177,7 +21179,7 @@ end;
 
 function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
 {$ifdef ABSOLUTEPASCALORNOTINTEL} // fallback to pure pascal version for ARM or PIC
-var c100: PtrUInt;
+var c100: PtrUInt; // val/c100 are QWord on 64-bit CPU
     tab: PWordArray;
 begin // this code is faster than Borland's original str() or IntToStr()
   tab := @TwoDigitLookupW;
@@ -21204,7 +21206,7 @@ begin // this code is faster than Borland's original str() or IntToStr()
 end;
 {$else}
 {$ifdef CPUX64} {$ifdef FPC}nostackframe; assembler; asm {$else}
-asm // rcx=P, rdx=val (Linux: rdi,rsi)
+asm // rcx=P, rdx=val (Linux: rdi,rsi) - val is QWord on Intel 64-bit CPU
         .noframe
 {$endif FPC}
         {$ifndef win64}
@@ -21285,8 +21287,8 @@ end;
 
 function StrUInt64(P: PAnsiChar; const val: QWord): PAnsiChar;
 {$ifdef CPU64}
-begin // StrUInt32 aldready implemented PtrUInt=UInt64
-  result := StrUInt32(P,val);
+begin
+  result := StrUInt32(P,val); // StrUInt32 converts PtrUInt=QWord on 64-bit CPU
 end;
 {$else}
 var c,c100: QWord;
@@ -21339,12 +21341,16 @@ end;
 
 function StrInt64(P: PAnsiChar; const val: Int64): PAnsiChar;
 begin
+  {$ifdef CPU64}
+  result := StrInt32(P,val); // StrInt32 converts PtrInt=Int64 on 64-bit CPU
+  {$else}
   if val<0 then begin
     P := StrUInt64(P,-val)-1;
     P^ := '-';
   end else
     P := StrUInt64(P,val);
   result := P;
+  {$endif CPU64}
 end;
 
 function IPToCardinal(P: PUTF8Char; out aValue: cardinal): boolean;
@@ -23069,19 +23075,19 @@ begin
 end;
 
 function IntToString(Value: integer): string;
-var tmp: array[0..15] of AnsiChar;
+var tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
 begin
-  P := StrInt32(@tmp[15],Value);
-  Ansi7ToString(PWinAnsiChar(P),@tmp[15]-P,result);
+  P := StrInt32(@tmp[23],Value);
+  Ansi7ToString(PWinAnsiChar(P),@tmp[23]-P,result);
 end;
 
 function IntToString(Value: cardinal): string;
-var tmp: array[0..15] of AnsiChar;
+var tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
 begin
-  P := StrUInt32(@tmp[15],Value);
-  Ansi7ToString(PWinAnsiChar(P),@tmp[15]-P,result);
+  P := StrUInt32(@tmp[23],Value);
+  Ansi7ToString(PWinAnsiChar(P),@tmp[23]-P,result);
 end;
 
 function IntToString(Value: Int64): string;
@@ -23111,33 +23117,42 @@ end;
 
 {$ifdef PUREPASCAL}
 function IntToString(Value: integer): string;
-var tmp: array[0..15] of AnsiChar;
+var tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
 begin
-  P := StrInt32(@tmp[15],Value);
-  SetString(result,P,@tmp[15]-P);
+  if cardinal(Value)<=high(SmallUInt32UTF8) then
+    result := SmallUInt32UTF8[Value] else begin
+    P := StrInt32(@tmp[23],Value);
+    SetString(result,P,@tmp[23]-P);
+  end;
 end;
 {$else}
 function IntToString(Value: integer): string;
 asm
   jmp Int32ToUTF8
 end;
-{$endif}
+{$endif PUREPASCAL}
 
 function IntToString(Value: cardinal): string;
-var tmp: array[0..15] of AnsiChar;
+var tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
 begin
-  P := StrUInt32(@tmp[15],Value);
-  SetString(result,P,@tmp[15]-P);
+  if Value<=high(SmallUInt32UTF8) then
+    result := SmallUInt32UTF8[Value] else begin
+    P := StrUInt32(@tmp[23],Value);
+    SetString(result,P,@tmp[23]-P);
+  end;
 end;
 
 function IntToString(Value: Int64): string;
 var tmp: array[0..31] of AnsiChar;
     P: PAnsiChar;
 begin
-  P := StrInt64(@tmp[31],Value);
-  SetString(result,P,@tmp[31]-P);
+  if (Value>=0) and (Value<=high(SmallUInt32UTF8)) then
+    result := SmallUInt32UTF8[Value] else begin
+    P := StrInt64(@tmp[31],Value);
+    SetString(result,P,@tmp[31]-P);
+  end;
 end;
 
 function DoubleToString(Value: Double): string;
@@ -23274,7 +23289,7 @@ end;
 
 {$define DEFINED_INT32TOUTF8}
 
-function Int32ToUTF8(Value : integer): RawUtf8; // 3x faster than SysUtils.IntToStr
+function Int32ToUTF8(Value : PtrInt): RawUtf8; // 3x faster than SysUtils.IntToStr
 // from IntToStr32_JOH_IA32_6_a, adapted for Delphi 2009+
 asm // eax=Value, edx=@result
         push    ebx
@@ -23819,13 +23834,13 @@ end;
 
 function AppendUInt32ToBuffer(Buffer: PUTF8Char; Value: cardinal): PUTF8Char;
 var L: integer;
-    tmp: array[0..15] of AnsiChar;
+    tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
 begin
   if Value<=high(SmallUInt32UTF8) then
     result := AppendRawUTF8ToBuffer(Buffer,SmallUInt32UTF8[Value]) else begin
-    P := StrUInt32(@tmp[15],Value);
-    L := @tmp[15]-P;
+    P := StrUInt32(@tmp[23],Value);
+    L := @tmp[23]-P;
     {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,Buffer^,L);
     result := Buffer+L;
   end;
@@ -24165,14 +24180,14 @@ end;
 
 {$ifndef DEFINED_INT32TOUTF8}
 
-function Int32ToUtf8(Value: integer): RawUTF8; // faster than SysUtils.IntToStr
-var tmp: array[0..15] of AnsiChar;
+function Int32ToUtf8(Value: PtrInt): RawUTF8; // faster than SysUtils.IntToStr
+var tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
 begin
-  if cardinal(Value)<=high(SmallUInt32UTF8) then
+  if PtrUInt(Value)<=high(SmallUInt32UTF8) then
     result := SmallUInt32UTF8[Value] else begin
-    P := StrInt32(@tmp[15],Value);
-    FastSetString(result,P,@tmp[15]-P);
+    P := StrInt32(@tmp[23],Value);
+    FastSetString(result,P,@tmp[23]-P);
   end;
 end;
 
@@ -24209,32 +24224,32 @@ end;
 {$endif CPU64}
 
 function ToUTF8(Value: PtrInt): RawUTF8;
-var tmp: array[0..15] of AnsiChar;
+var tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
 begin
-  P := StrInt32(@tmp[15],Value);
-  FastSetString(result,P,@tmp[15]-P);
+  P := StrInt32(@tmp[23],Value);
+  FastSetString(result,P,@tmp[23]-P);
 end;
 
-function UInt32ToUtf8(Value: cardinal): RawUTF8;
-var tmp: array[0..15] of AnsiChar;
+function UInt32ToUtf8(Value: PtrUInt): RawUTF8;
+var tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
 begin
   if Value<=high(SmallUInt32UTF8) then
     result := SmallUInt32UTF8[Value] else begin
-    P := StrUInt32(@tmp[15],Value);
-    FastSetString(result,P,@tmp[15]-P);
+    P := StrUInt32(@tmp[23],Value);
+    FastSetString(result,P,@tmp[23]-P);
   end;
 end;
 
-procedure UInt32ToUtf8(Value: cardinal; var result: RawUTF8);
-var tmp: array[0..15] of AnsiChar;
+procedure UInt32ToUtf8(Value: PtrUInt; var result: RawUTF8);
+var tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
 begin
   if Value<=high(SmallUInt32UTF8) then
     result := SmallUInt32UTF8[Value] else begin
-    P := StrUInt32(@tmp[15],Value);
-    FastSetString(result,P,@tmp[15]-P);
+    P := StrUInt32(@tmp[23],Value);
+    FastSetString(result,P,@tmp[23]-P);
   end;
 end;
 
@@ -53012,7 +53027,7 @@ begin
   end;
 end;
 
-procedure TTextWriter.AddDateTime(const Value: TDateTime; WithMS: boolean=false);
+procedure TTextWriter.AddDateTime(const Value: TDateTime; WithMS: boolean);
 begin
   if Value=0 then
     exit;
@@ -53032,8 +53047,8 @@ begin
   dec(B);
 end;
 
-procedure TTextWriter.AddDateTimeMS(const Value: TDateTime; Expanded: boolean=true;
-  FirstTimeChar: AnsiChar='T'; const TZD: RawUTF8='Z');
+procedure TTextWriter.AddDateTimeMS(const Value: TDateTime; Expanded: boolean;
+  FirstTimeChar: AnsiChar; const TZD: RawUTF8);
 var T: TSynSystemTime;
 begin
   if Value=0 then
@@ -53046,18 +53061,18 @@ begin
 end;
 
 procedure TTextWriter.AddU(Value: cardinal);
-var tmp: array[0..15] of AnsiChar;
+var tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
     Len: integer;
 begin
-  if BEnd-B<=16 then
+  if BEnd-B<=24 then
     FlushToStream;
   if Value<=high(SmallUInt32UTF8) then begin
     P := pointer(SmallUInt32UTF8[Value]);
     Len := {$ifdef FPC}_LStrLenP(P){$else}PInteger(P-4)^{$endif};
   end else begin
-    P := StrUInt32(@tmp[15],Value);
-    Len := @tmp[15]-P;
+    P := StrUInt32(@tmp[23],Value);
+    Len := @tmp[23]-P;
   end;
   {$ifdef FPC}Move{$else}MoveFast{$endif}(P[0],B[1],Len);
   inc(B,Len);
