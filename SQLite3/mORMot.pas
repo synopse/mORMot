@@ -3173,10 +3173,8 @@ type
   // - Win64 has one unique calling convention
   TCallingConvention = (
     ccRegister, ccCdecl, ccPascal, ccStdCall, ccSafeCall
-    {$ifdef FPC},
-    ccCppdecl, ccFar16,
-    ccOldFPCCall, ccInternProc, ccSysCall, ccSoftFloat, ccMWPascal
-    {$endif FPC});
+    {$ifdef FPC}, ccCppdecl, ccFar16, ccOldFPCCall, ccInternProc,
+    ccSysCall, ccSoftFloat, ccMWPascal{$endif FPC});
 
   /// the available kind of method parameters
   TParamFlag = (pfVar, pfConst, pfArray, pfAddress, pfReference, pfOut

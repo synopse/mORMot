@@ -4960,7 +4960,7 @@ begin
          Char2ToByte(P+15,MS) then
         Iso8601ToDateTimePUTF8CharVar(P,17,result) else
         if TryEncodeDate(Y,M,D,result) then
-          // shl 4 = 16 ms resolution in TTextWriter.AddCurrentLogTime()
+          // MS shl 4 = 16 ms resolution in TTextWriter.AddCurrentLogTime()
           result := result+EncodeTime(HH,MM,SS,MS shl 4) else
           result := 0;
     end else
@@ -5417,6 +5417,7 @@ end;
 
 function TSynLogFile.ThreadName(ThreadID, CurrentLogIndex: integer): RawUTF8;
 var i: integer;
+    lineptr: PtrUInt;
     found: pointer;
 begin
   if ThreadID=1 then
@@ -5424,17 +5425,19 @@ begin
     result := '';
     if cardinal(ThreadID)<=fThreadMax then
       with fThreadInfo[ThreadID] do
-      if SetThreadName<>nil then begin
-        found := SetThreadName[0];
-        if cardinal(CurrentLogIndex)<cardinal(fCount) then
-        for i := length(SetThreadName)-1 downto 1 do
-          if PtrUInt(fLines[CurrentLogIndex])>=PtrUInt(SetThreadName[i]) then begin
-            found := SetThreadName[i];
-            break;
+        if SetThreadName<>nil then begin
+          found := SetThreadName[0];
+          if cardinal(CurrentLogIndex)<cardinal(fCount) then begin
+            lineptr := PtrUInt(fLines[CurrentLogIndex]);
+            for i := length(SetThreadName)-1 downto 1 do
+              if lineptr>=PtrUInt(SetThreadName[i]) then begin
+                found := SetThreadName[i];
+                break;
+              end;
           end;
-        FastSetString(result,found,GetLineSize(found,fMapEnd));
-        delete(result,1,PosEx('=',result,40));
-      end;
+          FastSetString(result,found,GetLineSize(found,fMapEnd));
+          delete(result,1,PosEx('=',result,40));
+        end;
     if result='' then
       result := 'Thread';
   end;

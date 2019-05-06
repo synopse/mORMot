@@ -4799,11 +4799,7 @@ asm // input: rcx/rdi=TAESContext, rdx/rsi=source, r8/rdx=dest
         sub     r13, 1
         add     r12, 16
         lea     r14, [rip+Te0]
-        {$ifdef FPC}
-        align   16
-        {$else}
-        nop; nop; nop; nop; nop; nop
-        {$endif}
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @round: mov     esi, eax
         mov     edi, edx
         movzx   r8d, al
@@ -6505,7 +6501,7 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         pshufb  xmm7,xmm12
         mov     [rsp+8H],rcx
         mov     rcx,3
-        nop; nop; nop; nop; nop // manual align 16
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @loop1: movdqa  xmm9,[rbp]
         paddd   xmm9,xmm4
         movdqa  [rsp+10H],xmm9
@@ -13018,6 +13014,7 @@ asm // rcx=TAESOFB,rdx=source,r8=dest,r9=blockcount Linux:rdi,rsi,rdx,rcx
     movdqu xmm9,[rdi+16*8]
     movdqu xmm10,[rdi+16*9]
     movdqu xmm11,[rdi+16*10]
+    {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @s: movdqu xmm15,dqword ptr [rsi]
     pxor   xmm7,xmm0
     aesenc xmm7,xmm1
@@ -13108,6 +13105,7 @@ asm // rcx=TAESOFB,rdx=source,r8=dest,r9=blockcount Linux:rdi,rsi,rdx,rcx
     movdqu xmm13,[rdi+16*12]
     movdqu xmm14,[rdi+16*13]
     add    rdi, 16*14
+    {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @s: movdqu xmm15,[rdi]
     pxor xmm7,xmm0
     aesenc xmm7,xmm1
@@ -14934,7 +14932,7 @@ asm // rcx=crc, rdx=buf, r8=len (linux: rdi, rsi, rdx)
         ja      @intel // only call Intel code if worth it
         shr     r8, 3
         jz      @2
-        {$ifdef FPC}align 8{$endif}
+        {$ifdef FPC} align 8 {$else} .align 8 {$endif}
 @1:     {$ifdef FPC}
         crc32   rax, qword [rdx] // hash 8 bytes per opcode
         {$else}
