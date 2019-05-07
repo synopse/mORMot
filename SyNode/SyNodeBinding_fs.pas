@@ -569,7 +569,7 @@ end;
 function fs_loadFileToBuffer(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
 var
   in_argv: PjsvalVector;
-  filePath: string;
+  filePath: TFileName;
   size: Int64;
   arr_data: Puint8Vector;
   fFileStream: TFileStream;
@@ -580,7 +580,7 @@ begin
     if (argc <> 1) then
       raise ESMException.Create('usage loadFileToBuffer(pathToFile: String): ArrayBuffer');
     in_argv := vp.argv;
-    filePath := in_argv[0].asJSString.ToSynUnicode(cx);
+    filePath := in_argv[0].asJSString.ToString(cx);
     {$IFNDEF FPC}
     if IsRelativePath(filePath) then
     {$ELSE}
