@@ -655,6 +655,36 @@ type
   /// identify some items in a list of known compression algorithms
   THttpSocketCompressSet = set of 0..31;
 
+  ///HTTP Headers wrapper
+  THttpHeaders = {$ifdef UNICODE}record{$else}object{$endif}
+  private
+    fHeaderText: SockString;
+
+    procedure SetText(const aText: SockString);
+    function GetText(): SockString;
+    function GetValue(Name: SockString): SockString;
+    procedure SetValue(Name: SockString; const Value: SockString);
+    function GetCount: Integer;
+    function GetNames(Index: Integer): SockString;
+    function GetValueFromIndex(Index: Integer): SockString;
+    procedure SetValueFromIndex(Index: Integer; const Value: SockString);
+  public
+    Headers: TSockStringDynArray;
+
+    /// add an header entry, returning the just entered entry index in Headers[]
+    function Add(const aValue: SockString): integer;
+    /// get/set all Header values at once, from/as CRLF delimited text
+    property Text : SockString read GetText write SetText;
+    /// get/set Header value with Name
+    property Values[Name : SockString] : SockString read GetValue write SetValue; default;
+    /// get Headers count
+    property Count : Integer read GetCount;
+    /// get Header name with index
+    property Names[Index : Integer] : SockString read GetNames;
+    /// get/set Header value with index
+    property ValueFromIndex[Index: Integer]: SockString read GetValueFromIndex write SetValueFromIndex;
+  end;
+
   /// parent of THttpClientSocket and THttpServerSocket classes
   // - contain properties for implementing HTTP/1.1 using the Socket API
   // - handle chunking of body content
@@ -3485,7 +3515,7 @@ begin
   result := -1;
 end;
 
-function FindHeader(H: PPByteArray; HCount: integer; const upper: SockString): PAnsiChar;
+function FindHeader(H: PPByteArray; HCount: integer; const upper: SockString; idx : PInteger = nil): PAnsiChar;
 var up: PByteArray;
 begin
   if upper<>'' then begin
@@ -3498,6 +3528,8 @@ begin
           repeat
             inc(result);
           until result^<>' ';
+          if Assigned(idx) then
+            idx^  :=  HCount;
           exit;
         end;
       end;
@@ -6464,6 +6496,133 @@ begin
   end;
 end;
 
+{ THttpHeaders }
+
+function THttpHeaders.Add(const aValue: SockString): integer;
+begin
+  fHeaderText := '';
+  result := length(Headers);
+  SetLength(Headers,result+1);
+  Headers[result] := aValue;
+end;
+
+function THttpHeaders.GetCount: Integer;
+begin
+  Result  :=  Length(Headers);
+end;
+
+function THttpHeaders.GetNames(Index: Integer): SockString;
+var
+  sLeft, sRight: SockString;
+begin
+  if (Index < 0) or (Index >= Count) then
+    Result  :=  ''
+  else begin
+    Split(Headers[index], ':', sLeft, sRight);
+    Result  :=  sLeft;
+  end;
+end;
+
+function THttpHeaders.GetValueFromIndex(Index: Integer): SockString;
+var
+  sLeft, sRight: SockString;
+begin
+  if (Index < 0) or (Index >= Count) then
+    Result  :=  ''
+  else begin
+    Split(Headers[index], ':', sLeft, sRight);
+    Result  :=  Trim(sRight);
+  end;
+end;
+
+procedure THttpHeaders.SetValueFromIndex(Index: Integer; const Value: SockString);
+var
+  sLeft, sRight: SockString;
+begin
+  if (Index < 0) or (Index >= Count) then
+    raise ECrtSocket.CreateFmt('List index out of bounds (%)', [Index]);
+  fHeaderText:='';
+  Split(Headers[index], ':', sLeft, sRight);
+  Headers[Index]  :=  sLeft + ': ' + Value;
+end;
+
+function THttpHeaders.GetText(): SockString;
+var i,L,n: integer;
+    P: PAnsiChar;
+begin // faster than for i := 0 to Count-1 do result := result+Headers[i]+#13#10
+  if fHeaderText='' then begin
+    n := length(Headers);
+    L := n*2; // #13#10 size
+    dec(n);
+    for i := 0 to n do
+      inc(L,length(Headers[i]));
+    if L<>0 then begin
+      SetLength(fHeaderText,L);
+      P := pointer(fHeaderText);
+      for i := 0 to n do begin
+        L := length(Headers[i]);
+        if L>0 then begin
+          move(pointer(Headers[i])^,P^,L);
+          inc(P,L);
+        end;
+        PWord(P)^ := 13+10 shl 8;
+        inc(P,2);
+      end;
+    end;
+  end;
+  result := fHeaderText;
+end;
+
+procedure THttpHeaders.SetText(const aText: SockString);
+var P, PDeb: PAnsiChar;
+    n: integer;
+begin
+  fHeaderText := '';
+  P := pointer(aText);
+  n := 0;
+  if P<>nil then
+    repeat
+      PDeb := P;
+      while P^>#13 do inc(P);
+      if PDeb<>P then begin // add any not void line
+        if length(Headers)<=n then
+          SetLength(Headers,n+n shr 3+8);
+        SetString(Headers[n],PDeb,P-PDeb);
+        inc(n);
+      end;
+      while (P^=#13) or (P^=#10) do inc(P);
+    until P^=#0;
+  SetLength(Headers,n);
+end;
+
+function THttpHeaders.GetValue(Name: SockString): SockString;
+var P: PAnsiChar;
+begin
+  Name  :=  UpperCase(Name);
+  if Headers<>nil then begin
+    P := FindHeader(pointer(Headers),length(Headers),Name);
+    if P<>nil then begin
+      result := P;
+      exit;
+    end;
+  end;
+  result := '';
+end;
+
+procedure THttpHeaders.SetValue(Name: SockString; const Value: SockString);
+var P: PAnsiChar;idx : Integer; text : SockString;
+begin
+  fHeaderText := '';
+  text := Name + ': ' + Value;
+  if Headers<>nil then begin
+    P := FindHeader(pointer(Headers),length(Headers),UpperCase(Name), @idx);
+    if P<>nil then begin
+      Headers[idx]  :=  text;
+      exit;
+    end;
+  end;
+  Add(text);
+end;
 
 { THttpSocket }
 
