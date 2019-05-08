@@ -146,7 +146,7 @@ type
     length: integer;
     type_: integer;
     data: PAnsiChar;
-    flags: Longword;
+    flags: longint;
   end;
   PASN1_STRING = ^TASN1_STRING;
 
@@ -174,7 +174,7 @@ type
 
   TStatLockLockCallback = procedure(Mode: integer; N: integer; _file: PAnsiChar;
     Line: integer); cdecl;
-  TStatLockIDCallback = function: Longword; cdecl;
+  TStatLockIDCallback = function: longint; cdecl;
   TCryptoThreadIDCallback = procedure(ID: PCRYPTO_THREADID); cdecl;
   TDynLockCreateCallback = function(_file: PAnsiChar; Line: integer):
     PCRYPTO_dynlock_value; cdecl;
