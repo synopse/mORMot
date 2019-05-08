@@ -33806,21 +33806,21 @@ function BufferLineLength(Text, TextEnd: PUTF8Char): PtrInt;
         movdqa  xmm0, [rip + @for10]
         movdqa  xmm1, [rip + @for13]
         and     rdi, -16 // check first aligned 16 bytes
-        and     ecx, 15
+        and     ecx, 15  // lower 4 bits indicate misalignment
         movdqa  xmm2, [rdi]
         movdqa  xmm3, xmm2
         pcmpeqb xmm2, xmm0
         pcmpeqb xmm3, xmm1
         por     xmm3, xmm2
         pmovmskb eax, xmm3
-        shr     eax, cl
+        shr     eax, cl  // shift out unaligned bytes
         test    eax, eax
         jz      @main
         bsf     eax, eax
         add     rax, rcx
         add     rax, rdi
         sub     rax, rsi
-        jae     @fail
+        jae     @fail   // don't exceed TextEnd
         add     rax, r8 // rax = TextFound - TextEnd + (TextEnd - Text) = offset
 {$ifdef MSWINDOWS}
         pop     rdi

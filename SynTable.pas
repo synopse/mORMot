@@ -5708,7 +5708,7 @@ var
   max, i, j: PtrInt;
   state: cardinal;
 begin
-  mask := pointer(aMatch^.Pattern);
+  mask := pointer(aMatch^.Pattern); // was filled by SearchSBNDMQ2ComputeMask()
   max := aMatch^.PMax;
   i := max - 1;
   dec(aTextLen);
@@ -5809,7 +5809,7 @@ begin
   else if aCaseInsensitive then
     Search := SearchContainsU
   else
-    Search := SearchContains1;
+    Search := SearchContains1; // todo: use IndexByte() on FPC?
   Pattern := pointer(aPattern);
 end;
 
