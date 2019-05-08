@@ -465,6 +465,7 @@ type
     FRemoteAdmin: TDDDAdministratedDaemonRemoteAdminSettings;
     FServiceDisplayName: string;
     FServiceName: string;
+    FServiceDependencies: TStringDynArray;
     FServiceAutoStart: boolean;
     FAppUserModelID: string;
   public
@@ -472,10 +473,15 @@ type
     // - you can specify default Description and Service identifiers
     // - the service-related parameters are Windows specific, and will be
     // ignored on other platforms
-    procedure Initialize(
-      const aDescription,aServiceName,aServiceDisplayName,aAppUserModelID: string); reintroduce; virtual;
+    procedure Initialize(const aDescription,
+        aServiceName,aServiceDisplayName,aAppUserModelID: string;
+        const aServiceDependencies: TStringDynArray = nil); reintroduce; virtual;
     /// returns the folder containing .settings files - .exe folder by default
     function SettingsFolder: TFileName; virtual;
+    /// under Windows, will define optional Service internal Dependencies
+    // - not published by default: could be defined if needed, or e.g. set in
+    // overriden constructor
+    property ServiceDependencies: TStringDynArray read FServiceDependencies write FServiceDependencies;
   published
     /// define how this administrated service/daemon is accessed via REST
     property RemoteAdmin: TDDDAdministratedDaemonRemoteAdminSettings read FRemoteAdmin;
@@ -1013,13 +1019,15 @@ end;
 { TDDDAdministratedDaemonSettings }
 
 procedure TDDDAdministratedDaemonSettings.Initialize(
-  const aDescription,aServiceName,aServiceDisplayName,aAppUserModelID: string);
+  const aDescription, aServiceName, aServiceDisplayName, aAppUserModelID: string;
+  const aServiceDependencies: TStringDynArray);
 begin
   inherited Initialize(aDescription);
   if FServiceName='' then
     FServiceName := aServiceName;
   if FServiceDisplayName='' then
     FServiceDisplayName := aServiceDisplayName;
+  FServiceDependencies := aServiceDependencies;
   if FAppUserModelID='' then
     FAppUserModelID := aAppUserModelID;
 end;

@@ -285,7 +285,7 @@ type
     // - Dependencies - string containing a list with names of services, which must
     // start before (every name should be separated with #0, entire
     // list should be separated with #0#0. Or, an empty string can be
-    // passed if there are no dependances).
+    // passed if there is no dependancy).
     // - Username - login name. For service type SERVICE_WIN32_OWN_PROCESS, the
     // account name in the form of "DomainName\Username"; If the account
     // belongs to the built-in domain, ".\Username" can be specified;
@@ -381,9 +381,9 @@ type
     // - so that you can write in the main block of your .dpr:
     // !CheckParameters('MyService.exe',HTTPSERVICENAME,HTTPSERVICEDISPLAYNAME);
     // - if ExeFileName='', it will install the current executable
-    // - an optional Description text for the service may be specified
+    // - optional Description and Dependencies text may be specified
     class procedure CheckParameters(const ExeFileName: TFileName;
-      const ServiceName,DisplayName,Description: string);
+      const ServiceName,DisplayName,Description: string; const Dependencies: string='');
   end;
 
   {$M+}
@@ -612,6 +612,7 @@ type
     fLogPath: TFileName;
     fLogRotateFileCount: integer;
     fLogClass: TSynLogClass;
+    fServiceDependencies: string;
   public
     /// initialize and set the default settings
     constructor Create; override;
@@ -625,6 +626,11 @@ type
     function ServiceDescription: string;
     /// read-only access to the TSynLog class, if SetLog() has been called
     property LogClass: TSynLogClass read fLogClass;
+    /// optional service dependencies
+    // - not published by default: could be defined if needed, or e.g. set in
+    // overriden constructor
+    // - several depending services may be set by appending #0 between names
+    property ServiceDependencies: string read fServiceDependencies write fServiceDependencies;
   published
     /// the service name, as used internally by Windows or the TSynDaemon class
     // - default is the executable name
@@ -909,7 +915,7 @@ begin
 end;
 
 class procedure TServiceController.CheckParameters(const ExeFileName: TFileName;
-  const ServiceName,DisplayName,Description: string);
+  const ServiceName, DisplayName, Description, Dependencies: string);
 var param: string;
     i: integer;
 procedure ShowError(const Msg: RawUTF8);
@@ -928,7 +934,7 @@ begin
     ServiceLog.Add.Log(sllInfo,'Controling % with command "%"',[ServiceName,param]);
     if param='/install' then
      TServiceController.Install(
-       ServiceName,DisplayName,Description,true,ExeFileName) else
+       ServiceName,DisplayName,Description,true,ExeFileName,Dependencies) else
     with TServiceController.CreateOpenService('','',ServiceName) do
     try
       if State=ssErrorRetrievingState then
@@ -1976,7 +1982,7 @@ begin
       cInstall:
         with fSettings do
           Show(TServiceController.Install(ServiceName, ServiceDisplayName,
-            ServiceDescription, aAutoStart) <> ssNotInstalled);
+            ServiceDescription, aAutoStart, '', ServiceDependencies) <> ssNotInstalled);
       cStart, cStop, cUninstall, cState: begin
         ctrl := TServiceController.CreateOpenService('', '', fSettings.ServiceName);
         try
