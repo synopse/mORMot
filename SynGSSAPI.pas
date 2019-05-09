@@ -351,7 +351,7 @@ type
 implementation
 
 var
-  GSSAPILibrary: {$ifdef FPC}TLibHandle{$else}HModule{$endif};
+  GSSAPILibrary: {$ifdef FPC}TLibHandle{$else}HMODULE{$endif};
 
 /// The macros that test status codes for error conditions. Note that the
 // GSS_ERROR() macro has changed slightly from the V1 GSSAPI so that it now
