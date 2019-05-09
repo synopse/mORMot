@@ -6574,16 +6574,6 @@ begin
   result := r64;
 end;
 
-{$ifdef CPU32DELPHI}
-function x86div10(value: cardinal): cardinal;
-asm // use fast reciprocal division for Delphi (FPC knows this optimization)
-      mov   edx, 3435973837
-      mul   edx
-      shr   edx, 3
-      mov   eax, edx
-end;
-{$endif}
-
 procedure append(var dest: PUTF8Char; var dig: PByte; digits: PtrInt); {$ifdef HASINLINE}inline;{$endif}
 begin
   if digits>0 then
@@ -6653,12 +6643,19 @@ begin
       if leastdig=0 then
         continue;
       for j := 8 downto 0 do begin
-        fastdiv := leastdig;
         {$ifdef CPU32DELPHI}
-        leastdig := x86div10(leastdig); // Delphi compiler is not efficient
+        asm // Delphi compiler is not efficient about division
+          mov   eax, leastdig
+          mov   fastdiv, eax
+          mov   edx, 3435973837
+          mul   edx
+          shr   edx, 3
+          mov   leastdig, edx
+        end;
         {$else}
+        fastdiv := leastdig;
         leastdig := leastdig div 10; // FPC will use reciprocal division
-        {$endif}
+        {$endif CPU32DELPHI}
         digbuffer[k*9+j] := fastdiv-leastdig*10;
         if leastdig=0 then
           break;

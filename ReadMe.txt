@@ -31,6 +31,7 @@ Contributors
   Eric Grange
   Esmond
   Esteban Martin (EMartin)
+  Eugene Ilyin
   Eva Freimann (EVaF)
   F-Vicente
   Goran Despalatovic (gigo)

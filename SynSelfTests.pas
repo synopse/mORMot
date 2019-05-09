@@ -18435,7 +18435,7 @@ begin
   C2 := THttpServerRequest.Create(nil,0,nil);
   P2 := protocol.Clone('');
   try
-    C1.Prepare('url','POST','headers',content,contentType,'');
+    C1.Prepare('url','POST','headers',content,contentType,'',false);
     noAnswer1 := opcode=focBinary;
     noAnswer2 := not noAnswer1;
     TWebSocketProtocolRestHook(protocol).InputToFrame(C1,noAnswer1,frame,head);

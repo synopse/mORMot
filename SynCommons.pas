@@ -33806,21 +33806,21 @@ function BufferLineLength(Text, TextEnd: PUTF8Char): PtrInt;
         movdqa  xmm0, [rip + @for10]
         movdqa  xmm1, [rip + @for13]
         and     rdi, -16 // check first aligned 16 bytes
-        and     ecx, 15
+        and     ecx, 15  // lower 4 bits indicate misalignment
         movdqa  xmm2, [rdi]
         movdqa  xmm3, xmm2
         pcmpeqb xmm2, xmm0
         pcmpeqb xmm3, xmm1
         por     xmm3, xmm2
         pmovmskb eax, xmm3
-        shr     eax, cl
+        shr     eax, cl  // shift out unaligned bytes
         test    eax, eax
         jz      @main
         bsf     eax, eax
         add     rax, rcx
         add     rax, rdi
         sub     rax, rsi
-        jae     @fail
+        jae     @fail   // don't exceed TextEnd
         add     rax, r8 // rax = TextFound - TextEnd + (TextEnd - Text) = offset
 {$ifdef MSWINDOWS}
         pop     rdi
@@ -37658,10 +37658,10 @@ begin
   t := round(abs(dt)*MSecsPerDay) mod MSecsPerDay;
   t2 := t div 3600000;
   Hour := t2;
-  dec(t, t2*3600000);
+  dec(t,t2*3600000);
   t2 := t div 60000;
   Minute := t2;
-  dec(t, t2*60000);
+  dec(t,t2*60000);
   t2 := t div 1000;
   Second := t2;
   MilliSecond := t-t2*1000;

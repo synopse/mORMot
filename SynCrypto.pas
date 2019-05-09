@@ -6437,14 +6437,7 @@ const
 var
   K256AlignedStore: RawByteString;
   K256Aligned: pointer; // movdqa + paddd do expect 16 bytes alignment
-
 const
-  PSHUFFLE_BYTE_FLIP_MASK: array[0..1] of QWord =
-    (QWord($0405060700010203),QWord($0C0D0E0F08090A0B));
-  _SHUF_00BA: array[0..1] of QWord =
-    (QWord($0B0A090803020100),QWord($FFFFFFFFFFFFFFFF));
-  _SHUF_DC00: array[0..1] of QWord =
-    (QWord($FFFFFFFFFFFFFFFF),QWord($B0A090803020100));
   STACK_SIZE = 32{$ifndef LINUX}+7*16{$endif};
 
 procedure sha256_sse4(var input_data; var digest; num_blks: PtrUInt);
@@ -6487,9 +6480,9 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         mov     r9d,[rdx+14H]
         mov     r10d,[rdx+18H]
         mov     r11d,[rdx+1CH]
-        movdqu  xmm12,[rip+PSHUFFLE_BYTE_FLIP_MASK]
-        movdqu  xmm10,[rip+_SHUF_00BA]
-        movdqu  xmm11,[rip+_SHUF_DC00]
+        movdqa  xmm12,[rip+@flip]
+        movdqa  xmm10,[rip+@00BA]
+        movdqa  xmm11,[rip+@DC00]
 @loop0: mov     rbp,[rip+K256Aligned]
         movdqu  xmm4,[rcx]
         pshufb  xmm4,xmm12
@@ -6501,7 +6494,6 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         pshufb  xmm7,xmm12
         mov     [rsp+8H],rcx
         mov     rcx,3
-        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @loop1: movdqa  xmm9,[rbp]
         paddd   xmm9,xmm4
         movdqa  [rsp+10H],xmm9
@@ -7394,6 +7386,14 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         pop     rsi
         {$endif}
         pop     rbx
+        ret
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@flip:  dq      $0405060700010203
+        dq      $0C0D0E0F08090A0B
+@00BA:  dq      $0B0A090803020100
+        dq      $FFFFFFFFFFFFFFFF
+@DC00:  dq      $FFFFFFFFFFFFFFFF
+        dq      $0B0A090803020100
 end;
 {$endif CPUX64}
 
