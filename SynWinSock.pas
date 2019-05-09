@@ -950,9 +950,9 @@ implementation
 
 var
   SynSockCount: integer;
-  LibHandle: THandle;
-  Libwship6Handle: THandle;
-  LibSecurHandle: THandle;
+  LibHandle: {$ifdef FPC}TLibHandle{$else}THandle{$endif};
+  Libwship6Handle: {$ifdef FPC}TLibHandle{$else}THandle{$endif};
+  LibSecurHandle: {$ifdef FPC}TLibHandle{$else}THandle{$endif};
 
 function IN6_IS_ADDR_UNSPECIFIED(const a: PInAddr6): boolean;
 begin
