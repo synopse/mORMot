@@ -1776,13 +1776,6 @@ begin
     result := OCI_WE8MSWIN1252;
 end;
 
-{$ifndef MSWINDOWS}
-function SafeLoadLibrary(const aFileName: TFileName): HMODULE;
-begin
- result := LoadLibrary(PAnsiChar(AnsiString(aFileName)));
-end;
-{$endif}
-
 constructor TSQLDBOracleLib.Create;
 const LIBNAME = {$ifdef MSWINDOWS}'oci.dll'{$else}'libclntsh.so'{$endif};
 var P: PPointer;
