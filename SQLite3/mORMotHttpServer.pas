@@ -1154,8 +1154,8 @@ begin
       // -> checked in WebSocketsCallback/IsActiveWebSocket
       ctxt := THttpServerRequest.Create(nil,aConnectionID,nil);
       try
-        ctxt.Prepare(FormatUTF8('%/%/%',[aSender.Model.Root,
-          aInterfaceDotMethodName,aFakeCallID]),'POST','','['+aParams+']','','');
+        ctxt.Prepare(FormatUTF8('%/%/%',[aSender.Model.Root,aInterfaceDotMethodName,
+          aFakeCallID]),'POST','','['+aParams+']','','',{ssl=}false);
         status := fHttpServer.Callback(ctxt,aResult=nil);
         if status=HTTP_SUCCESS then begin
           if aResult<>nil then

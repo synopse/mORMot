@@ -37658,10 +37658,10 @@ begin
   t := round(abs(dt)*MSecsPerDay) mod MSecsPerDay;
   t2 := t div 3600000;
   Hour := t2;
-  dec(t, t2*3600000);
+  dec(t,t2*3600000);
   t2 := t div 60000;
   Minute := t2;
-  dec(t, t2*60000);
+  dec(t,t2*60000);
   t2 := t div 1000;
   Second := t2;
   MilliSecond := t-t2*1000;
