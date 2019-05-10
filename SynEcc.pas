@@ -91,19 +91,20 @@ interface
 
 uses
   {$ifdef MSWINDOWS}
-  Windows, // for CriticalSection API inling
+    Windows, // for CriticalSection API inling
   {$else}  // for GetFileSize emulated API
-  {$ifdef KYLIX3}
-  SynKylix,
-  {$endif}
-  {$ifdef FPC}
-  SynFPCLinux,
-  {$endif}
+    {$ifdef KYLIX3}
+      SynKylix,
+    {$endif}
+    {$ifdef FPC}
+      SynFPCLinux,
+    {$endif}
   {$endif MSWINDOWS}
   SysUtils,
   Classes,
   Contnrs,
   SynCommons,
+  SynTable,
   SynCrypto;
 
 

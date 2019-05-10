@@ -163,6 +163,7 @@ uses
   {$endif}
   SynCrypto,    // for hcSynShaAes
   SynCommons,
+  SynTable,
   SynLog,
   mORMot;
 

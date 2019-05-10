@@ -52,6 +52,7 @@ uses
   SysUtils,
   Classes,
   SynCommons,
+  SynTable,
   SynEcc,
   SynCrypto;
 

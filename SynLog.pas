@@ -130,7 +130,8 @@ uses
 {$endif}
   SysUtils,
   SynLZ, // needed e.g. for TSynMapFile .mab format
-  SynCommons;
+  SynCommons,
+  SynTable;
 
 
 { ************ Logging classes and functions }

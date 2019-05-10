@@ -69,6 +69,7 @@ uses
   SysUtils,
   Classes,
   SynCommons,
+  SynTable,
   SynLog,
   SynCrypto,
   mORMot,
