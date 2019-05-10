@@ -33,6 +33,7 @@ unit SynCrtSock;
   - Cybexr
   - EMartin
   - Eric Grange
+  - Eugene Ilyin
   - EvaF
   - f-vicente
   - Maciej Izak (hnb)
@@ -1078,7 +1079,7 @@ type
     // - will set input parameters URL/Method/InHeaders/InContent/InContentType
     // - will reset output parameters
     procedure Prepare(const aURL,aMethod,aInHeaders,aInContent,aInContentType,
-      aRemoteIP: SockString);
+      aRemoteIP: SockString; aUseSSL: boolean=false);
     /// append some lines to the InHeaders input parameter
     procedure AddInHeader(additionalHeader: SockString);
     /// input parameter containing the caller URI
@@ -4790,7 +4791,7 @@ begin
         {$ifdef MSWINDOWS}
         fSecure.AfterConnection(fSock,pointer(aServer));
         {$else}
-        raise ECrtSocket.Create('Unsupported');
+        raise ECrtSocket.Create('TLS is unsupported on this system');
         {$endif MSWINDOWS}
         fTLS := true;
       except
@@ -5748,8 +5749,8 @@ begin
   fConnectionThread := aConnectionThread;
 end;
 
-procedure THttpServerRequest.Prepare(const aURL, aMethod,
-  aInHeaders, aInContent, aInContentType, aRemoteIP: SockString);
+procedure THttpServerRequest.Prepare(const aURL, aMethod, aInHeaders,
+  aInContent, aInContentType, aRemoteIP: SockString; aUseSSL: boolean);
 begin
   fURL := aURL;
   fMethod := aMethod;
@@ -5763,7 +5764,7 @@ begin
   fOutContent := '';
   fOutContentType := '';
   fOutCustomHeaders := '';
-  fUseSSL := false;
+  fUseSSL := aUseSSL;
 end;
 
 procedure THttpServerRequest.AddInHeader(additionalHeader: SockString);
@@ -6223,7 +6224,7 @@ begin
   try
     respsent := false;
     with ClientSock do
-      ctxt.Prepare(URL,Method,HeaderGetText(fRemoteIP),Content,ContentType,'');
+      ctxt.Prepare(URL,Method,HeaderGetText(fRemoteIP),Content,ContentType,'',ClientSock.fTLS);
     try
       Code := DoBeforeRequest(ctxt);
       {$ifdef SYNCRTDEBUGLOW}
@@ -8788,7 +8789,7 @@ begin
   Verbs := VERB_TEXT;
   Context := THttpServerRequest.Create(self,0,self);
   try
-    // main loop
+    // main loop reusing a single Context instance for this thread
     ReqID := 0;
     Context.fServer := self;
     repeat

@@ -1683,7 +1683,7 @@ begin
       InContentType := JSON_CONTENT_TYPE_VAR;
     if Method='' then
       Method := 'POST';
-    Ctxt.Prepare(URL,Method,InHeaders,InContent,InContentType,fRemoteIP);
+    Ctxt.Prepare(URL,Method,InHeaders,InContent,InContentType,fRemoteIP,Ctxt.UseSSL);
     aNoAnswer := NoAnswer='1';
   end;
 end;
@@ -3128,7 +3128,7 @@ begin
       Ctxt := THttpServerRequest.Create(
         nil,fProcess.fOwnerConnection,fProcess.fOwnerThread);
       try
-        Ctxt.Prepare(url,method,header,data,dataType,'');
+        Ctxt.Prepare(url,method,header,data,dataType,'',fTLS);
         resthead := FindIniNameValue(Pointer(header),'SEC-WEBSOCKET-REST: ');
         if resthead='NonBlocking' then
           block := wscNonBlockWithoutAnswer else

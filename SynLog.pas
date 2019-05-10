@@ -429,7 +429,7 @@ type
 
   /// callback signature used by TSynLogFamilly.OnBeforeException
   // - should return false to log the exception, or true to ignore it
-  TSynLogOnBeforeException = function(aExceptionContext: TSynLogExceptionContext;
+  TSynLogOnBeforeException = function(const aExceptionContext: TSynLogExceptionContext;
     const aThreadName: RawUTF8): boolean of object;
 
   /// store simple log-related settings
@@ -3359,11 +3359,10 @@ end;
 
 destructor TSynLogFamily.Destroy;
 var SR: TSearchRec;
-    OldTime: integer;
-    aTime: TDateTime;
+    oldTime,aTime: TDateTime;
     Y,M,D: word;
     aOldLogFileName, aPath: TFileName;
-    tmp: array[0..11] of AnsiChar;
+    tmp: array[0..7] of AnsiChar;
 begin
   fDestroying := true;
   EchoRemoteStop;
@@ -3381,30 +3380,23 @@ begin
     try
       if ArchiveAfterDays<0 then
         ArchiveAfterDays := 0;
-      OldTime := DateTimeToFileDate(Now-ArchiveAfterDays);
+      oldTime := Now-ArchiveAfterDays;
       repeat
-        {$ifndef DELPHI5OROLDER}
-        {$WARN SYMBOL_DEPRECATED OFF} // for SR.Time
-        {$endif}
-        if (SR.Name[1]='.') or (faDirectory and SR.Attr<>0) or
-           (SR.Time>OldTime) then
+        if (SR.Name[1]='.') or (faDirectory and SR.Attr<>0) then
           continue;
-        {$ifndef DELPHI5OROLDER}
-        {$WARN SYMBOL_DEPRECATED ON}
-        {$endif}
+        aTime := SearchRecToDateTime(SR);
+        if (aTime=0) or (aTime>oldTime) then
+          continue;
         aOldLogFileName := DestinationPath+SR.Name;
         if aPath='' then begin
-          aTime := FileAgeToDateTime(aOldLogFileName);
-          if (aTime=0) or
-             not DirectoryExists(ArchivePath+'log') and
-             not CreateDir(ArchivePath+'log') then
-            break;
+          aPath := EnsureDirectoryExists(ArchivePath+'log');
+          if aPath='' then
+            break; // impossible to create the archive folder
           DecodeDate(aTime,Y,M,D);
-          PCardinal(@tmp)^ := ord('l')+ord('o') shl 8+ord('g') shl 16+ord(PathDelim) shl 24;
-          YearToPChar(Y,@tmp[4]);
-          PWord(@tmp[8])^ := TwoDigitLookupW[M];
-          PWord(@tmp[10])^ := ord(PathDelim);
-          aPath := ArchivePath+Ansi7ToString(tmp,11);
+          YearToPChar(Y,@tmp[0]);
+          PWord(@tmp[4])^ := TwoDigitLookupW[M];
+          PWord(@tmp[6])^ := ord(PathDelim);
+          aPath := aPath+Ansi7ToString(tmp,7);
         end;
         OnArchive(aOldLogFileName,aPath);
       until FindNext(SR)<>0;
@@ -3420,7 +3412,7 @@ begin
     if AutoFlushThread<>nil then
       CloseHandle(THandle(AutoFlushThread));
     {$endif}
-    inherited;
+    inherited Destroy;
   end;
 end;
 
@@ -4396,7 +4388,7 @@ begin
       while P^<>#0 do begin
         L := StrLenW(P);
         if (L>0) and (P^<>'=') then begin
-          AddNoJSONEscapeW(PWord(P),SysUtils.StrLen(P));
+          AddNoJSONEscapeW(PWord(P),0);
           Add(#9);
         end;
         inc(P,L+1);
@@ -4404,7 +4396,7 @@ begin
       FreeEnvironmentStringsW(Env);
       CancelLastChar(#9);
     end;
-    {$endif}
+    {$endif MSWINDOWS}
     NewLine;
     AddClassName(self.ClassType);
     AddShort(' '+SYNOPSE_FRAMEWORK_FULLVERSION+' ');
@@ -4968,7 +4960,7 @@ begin
          Char2ToByte(P+15,MS) then
         Iso8601ToDateTimePUTF8CharVar(P,17,result) else
         if TryEncodeDate(Y,M,D,result) then
-          // shl 4 = 16 ms resolution in TTextWriter.AddCurrentLogTime()
+          // MS shl 4 = 16 ms resolution in TTextWriter.AddCurrentLogTime()
           result := result+EncodeTime(HH,MM,SS,MS shl 4) else
           result := 0;
     end else
@@ -5425,6 +5417,7 @@ end;
 
 function TSynLogFile.ThreadName(ThreadID, CurrentLogIndex: integer): RawUTF8;
 var i: integer;
+    lineptr: PtrUInt;
     found: pointer;
 begin
   if ThreadID=1 then
@@ -5432,17 +5425,19 @@ begin
     result := '';
     if cardinal(ThreadID)<=fThreadMax then
       with fThreadInfo[ThreadID] do
-      if SetThreadName<>nil then begin
-        found := SetThreadName[0];
-        if cardinal(CurrentLogIndex)<cardinal(fCount) then
-        for i := length(SetThreadName)-1 downto 1 do
-          if PtrUInt(fLines[CurrentLogIndex])>=PtrUInt(SetThreadName[i]) then begin
-            found := SetThreadName[i];
-            break;
+        if SetThreadName<>nil then begin
+          found := SetThreadName[0];
+          if cardinal(CurrentLogIndex)<cardinal(fCount) then begin
+            lineptr := PtrUInt(fLines[CurrentLogIndex]);
+            for i := length(SetThreadName)-1 downto 1 do
+              if lineptr>=PtrUInt(SetThreadName[i]) then begin
+                found := SetThreadName[i];
+                break;
+              end;
           end;
-        FastSetString(result,found,GetLineSize(found,fMapEnd));
-        delete(result,1,PosEx('=',result,40));
-      end;
+          FastSetString(result,found,GetLineSize(found,fMapEnd));
+          delete(result,1,PosEx('=',result,40));
+        end;
     if result='' then
       result := 'Thread';
   end;

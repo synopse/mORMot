@@ -66,7 +66,7 @@ unit SynFPCSock;
   {$define LINUX} // a Linux-based system
 {$endif}
 
-// BSD definition of scoketaddr
+// BSD definition of socketaddr
 {$ifdef FREEBSD}
   {$DEFINE SOCK_HAS_SINLEN}
 {$endif}
@@ -413,7 +413,7 @@ function ResolveIPToName(const IP: string; Family,SockProtocol,SockType: integer
 function ResolvePort(const Port: string; Family,SockProtocol,SockType: integer): Word;
 
 function fpbind(s:cint; addrx: psockaddr; addrlen: tsocklen): cint; inline;
-function fplisten(s:cint; backlog : cint): cint; inline;
+function fplisten(s:cint; backlog: cint): cint; inline;
 function fprecv(s:cint; buf: pointer; len: size_t; Flags: cint): ssize_t; inline;
 function fpsend(s:cint; msg:pointer; len:size_t; flags:cint): ssize_t; inline;
 
@@ -437,11 +437,11 @@ type
           AF_INET: (sin_port: word;
                     sin_addr: TInAddr;
                     sin_zero: array[0..7] of Char);
-          AF_INET6:(sin6_port:     word;
-                    sin6_flowinfo: longword;
+          AF_INET6:(sin6_port:     word; // see sockaddr_in6
+                    sin6_flowinfo: cardinal;
       	    	      sin6_addr:     TInAddr6;
-      		          sin6_scope_id: longword);
-          AF_UNIX: (sun_path: array[0..{$ifdef SOCK_HAS_SINLEN}104{$else}107{$endif}] of Char);
+      		          sin6_scope_id: cardinal);
+          AF_UNIX: (sun_path: array[0..{$ifdef SOCK_HAS_SINLEN}103{$else}107{$endif}] of Char);
           );
   end;
 
@@ -459,11 +459,11 @@ function GetSockOpt(s: TSocket; level,optname: Integer; optval: pointer;
 function SendTo(s: TSocket; Buf: pointer; len,flags: Integer; addrto: TVarSin): Integer;
 function RecvFrom(s: TSocket; Buf: pointer; len,flags: Integer; var from: TVarSin): Integer;
 function ntohs(netshort: word): word;
-function ntohl(netlong: longword): longword;
+function ntohl(netlong: cardinal): cardinal;
 function Listen(s: TSocket; backlog: Integer): Integer;
 function IoctlSocket(s: TSocket; cmd: DWORD; var arg: integer): Integer;
 function htons(hostshort: word): word;
-function htonl(hostlong: longword): longword;
+function htonl(hostlong: cardinal): cardinal;
 function GetSockName(s: TSocket; var name: TVarSin): Integer;
 function GetPeerName(s: TSocket; var name: TVarSin): Integer;
 function Connect(s: TSocket; const name: TVarSin): Integer;
@@ -839,7 +839,7 @@ begin
   result := {$ifdef KYLIX3}LibC{$else}sockets{$endif}.ntohs(NetShort);
 end;
 
-function ntohl(netlong: longword): longword;
+function ntohl(netlong: cardinal): cardinal;
 begin
   result := {$ifdef KYLIX3}LibC{$else}sockets{$endif}.ntohl(NetLong);
 end;
@@ -862,12 +862,12 @@ end;
 
 function htons(hostshort: word): word;
 begin
-  result := {$ifdef KYLIX3}LibC{$else}sockets{$endif}.htons(Hostshort);
+  result := {$ifdef KYLIX3}LibC{$else}sockets{$endif}.htons(hostshort);
 end;
 
-function htonl(hostlong: longword): longword;
+function htonl(hostlong: cardinal): cardinal;
 begin
-  result := {$ifdef KYLIX3}LibC{$else}sockets{$endif}.htonl(HostLong);
+  result := {$ifdef KYLIX3}LibC{$else}sockets{$endif}.htonl(hostlong);
 end;
 
 function CloseSocket(s: TSocket): Integer;

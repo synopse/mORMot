@@ -799,7 +799,7 @@ type
     /// add an integer numerical value to the buffer
     function Add(Value: Integer): TPdfWrite; overload;
     /// add an integer numerical value to the buffer
-    // - add a trailing space
+    // - and append a trailing space
     function AddWithSpace(Value: Integer): TPdfWrite; overload;
     /// add an integer numerical value to the buffer
     // - with a specified fixed number of digits (left filled by '0')
@@ -4492,11 +4492,11 @@ begin
 end;
 
 function UInt32ToPDFString(Value : Cardinal): PDFString;
-var tmp: array[0..15] of AnsiChar;
+var tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
 begin
-  P := StrUInt32(@tmp[15],Value);
-  SetString(result,P,@tmp[15]-P);
+  P := StrUInt32(@tmp[23],Value);
+  SetString(result,P,@tmp[23]-P);
 end;
 
 function PdfRect(Left, Top, Right, Bottom: Single): TPdfRect;
@@ -4594,22 +4594,27 @@ begin
 end;
 
 function TPdfWrite.Add(Value: Integer): TPdfWrite;
-var t: array[0..15] of AnsiChar;
+var t: array[0..23] of AnsiChar;
     P: PAnsiChar;
 begin
-  if BEnd-B<=16 then
+  if BEnd-B<=24 then
     Save;
-  if Cardinal(Value)<10 then begin
-    B^ := AnsiChar(Value+48);
-    inc(B);
-  end else
-  if Cardinal(Value)<100 then begin
-    PWord(B)^ := TwoDigitLookupW[Value];
-    inc(B,2);
-  end else begin
-    P := StrInt32(@t[15],Value);
-    MoveFast(P^,B^,@t[15]-P);
-    inc(B,@t[15]-P);
+  if Cardinal(Value)<1000 then
+    if Cardinal(Value)<10 then begin
+      B^ := AnsiChar(Value+48);
+      inc(B);
+    end else
+    if Cardinal(Value)<100 then begin
+      PWord(B)^ := TwoDigitLookupW[Value];
+      inc(B,2);
+    end else begin
+      PCardinal(B)^ := PCardinal(SmallUInt32UTF8[Value])^;
+      inc(B,3);
+    end
+  else begin
+    P := StrInt32(@t[23],Value);
+    MoveFast(P^,B^,@t[23]-P);
+    inc(B,@t[23]-P);
   end;
   result := self;
 end;
@@ -5290,23 +5295,30 @@ begin
 end;
 
 function TPdfWrite.AddWithSpace(Value: Integer): TPdfWrite;
-var t: array[0..15] of AnsiChar;
+var t: array[0..25] of AnsiChar;
     P: PAnsiChar;
+    L: integer;
 begin
   if BEnd-B<=16 then
     Save;
-  if Cardinal(Value)<10 then begin
-    PWord(B)^ := Value+(48+32 shl 8);
-    inc(B,2);
-  end else
-  if Cardinal(Value)<100 then begin
-    PCardinal(B)^ := TwoDigitLookupW[Value]+32 shl 16;
-    inc(B,3);
-  end else begin
-    t[14] := ' ';
-    P := StrInt32(@t[14],Value);
-    MoveFast(P^,B^,@t[15]-P);
-    inc(B,@t[15]-P);
+  if Cardinal(Value)<1000 then
+    if Cardinal(Value)<10 then begin
+      PWord(B)^ := Value+(48+32 shl 8);
+      inc(B,2);
+    end else
+    if Cardinal(Value)<100 then begin
+      PCardinal(B)^ := TwoDigitLookupW[Value]+32 shl 16;
+      inc(B,3);
+    end else begin
+      PCardinal(B)^ := PCardinal(SmallUInt32UTF8[Value])^+32 shl 24;
+      inc(B,4);
+    end
+  else begin
+    t[24] := ' ';
+    P := StrInt32(@t[24],Value);
+    L := @t[25]-P;
+    MoveFast(P^,B^,L);
+    inc(B,@t[25]-P);
   end;
   result := self;
 end;
