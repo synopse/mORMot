@@ -2141,7 +2141,7 @@ type
     // inherited class should override those abstract methods
     procedure InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD); virtual; abstract;
     procedure InternalCreateRequest(const method, aURL: SockString); virtual; abstract;
-    procedure InternalSendRequest(const aData: SockString); virtual; abstract;
+    procedure InternalSendRequest(const method, aData: SockString); virtual; abstract;
     function InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding,
       Data: SockString): integer; virtual; abstract;
     procedure InternalCloseRequest; virtual; abstract;
@@ -2297,6 +2297,14 @@ type
   // to abort the download process
   TWinHttpDownload = function(Sender: TWinHttpAPI;
     CurrentSize, ContentLength, ChunkSize: DWORD; const ChunkData): boolean of object;
+  /// event callback to track upload progress, e.g. in the UI
+  // - used in TWinHttpAPI.OnUpload property
+  // - CurrentSize is the current total number of uploaded bytes
+  // - ContentLength is the size of content
+  // - implementation should return TRUE to continue the upload, or FALSE
+  // to abort the upload process
+  TWinHttpUpload = function(Sender: TWinHttpAPI;
+    CurrentSize, ContentLength: DWORD): boolean of object;
 
   /// a class to handle HTTP/1.1 request using either WinINet or WinHTTP API
   // - both APIs have a common logic, which is encapsulated by this parent class
@@ -2306,6 +2314,7 @@ type
   protected
     fOnProgress: TWinHttpProgress;
     fOnDownload: TWinHttpDownload;
+    fOnUpload : TWinHttpUpload;
     fOnDownloadChunkSize: cardinal;
     /// used for internal connection
     fSession, fConnection, fRequest: HINTERNET;
@@ -2325,6 +2334,8 @@ type
     // - if this property is set, raw TCP/IP incoming data would be supplied:
     // compression and encoding won't be handled by the class
     property OnDownload: TWinHttpDownload read fOnDownload write fOnDownload;
+    /// upload would call this method to notify progress
+    property OnUpload : TWinHttpUpload read fOnUpload write fOnUpload;
     /// how many bytes should be retrieved for each OnDownload event chunk
     // - if default 0 value is left, would use 65536, i.e. 64KB
     property OnDownloadChunkSize: cardinal
@@ -2347,7 +2358,7 @@ type
     procedure InternalCreateRequest(const method, aURL: SockString); override;
     procedure InternalCloseRequest; override;
     procedure InternalAddHeader(const hdr: SockString); override;
-    procedure InternalSendRequest(const aData: SockString); override;
+    procedure InternalSendRequest(const method, aData: SockString); override;
     function InternalGetInfo(Info: DWORD): SockString; override;
     function InternalGetInfo32(Info: DWORD): DWORD; override;
     function InternalReadData(var Data: SockString; Read: integer): cardinal; override;
@@ -2389,7 +2400,7 @@ type
     procedure InternalCreateRequest(const method, aURL: SockString); override;
     procedure InternalCloseRequest; override;
     procedure InternalAddHeader(const hdr: SockString); override;
-    procedure InternalSendRequest(const aData: SockString); override;
+    procedure InternalSendRequest(const method, aData: SockString); override;
     function InternalGetInfo(Info: DWORD): SockString; override;
     function InternalGetInfo32(Info: DWORD): DWORD; override;
     function InternalReadData(var Data: SockString; Read: integer): cardinal; override;
@@ -2413,7 +2424,7 @@ type
   protected
     function InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding,
       Data: SockString): integer; override;
-    procedure InternalSendRequest(const aData: SockString); override;
+    procedure InternalSendRequest(const method, aData: SockString); override;
   public
     /// initialize the instance
     constructor Create(const aServer, aPort: SockString; aHttps: boolean;
@@ -2482,7 +2493,7 @@ type
     end;
     procedure InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD); override;
     procedure InternalCreateRequest(const method, aURL: SockString); override;
-    procedure InternalSendRequest(const aData: SockString); override;
+    procedure InternalSendRequest(const method, aData: SockString); override;
     function InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding,
       Data: SockString): integer; override;
     procedure InternalCloseRequest; override;
@@ -10720,7 +10731,7 @@ begin
     if fCompressAcceptEncoding<>'' then
       InternalAddHeader(fCompressAcceptEncoding);
     // send request to remote server
-    InternalSendRequest(aData);
+    InternalSendRequest(method, aData);
     // retrieve status and headers
     result := InternalRetrieveAnswer(OutHeader,aDataEncoding,aAcceptEncoding,OutData);
     // handle incoming answer compression
@@ -10928,9 +10939,38 @@ begin
     raise EWinINet.Create;
 end;
 
-procedure TWinINet.InternalSendRequest(const aData: SockString);
+procedure TWinINet.InternalSendRequest(const method, aData: SockString);
+var
+  buff : TInternetBuffersA;
+  datapos, datalen, Bytes, BytesWritten : DWORD;
 begin
-  if not HttpSendRequestA(fRequest, nil, 0, pointer(aData), length(aData)) then
+  datalen :=  length(aData);
+  if (datalen > 0) and Assigned(fOnUpload) then
+  begin
+    ZeroMemory(@buff, SizeOf(TInternetBuffersA));
+    buff.dwStructSize :=  SizeOf(TInternetBuffersA);
+    buff.dwBufferTotal  :=  Length(aData);
+    if not HttpSendRequestExA(fRequest, @buff, nil, 0, 0) then
+      raise EWinINet.Create;
+
+    datapos :=  1;
+    while datapos <= datalen do
+    begin
+      Bytes := fOnDownloadChunkSize;
+      if Bytes<=0 then
+        Bytes := 65536; // 64KB seems fair enough by default
+      if Bytes > datalen - datapos + 1 then
+        Bytes :=  datalen - datapos + 1;
+      if not InternetWriteFile(fRequest, @aData[datapos], Bytes, BytesWritten) then
+        raise EWinINet.Create;
+      inc(datapos, BytesWritten);
+      if not fOnUpload(Self, datapos, datalen) then
+        raise EWinINet.CreateFmt('user canceled.', []);
+    end;
+    if not HttpEndRequest(fRequest, nil, 0, 0) then
+      raise EWinINet.Create;
+  end
+  else if not HttpSendRequestA(fRequest, nil, 0, pointer(aData), length(aData)) then
     raise EWinINet.Create;
 end;
 
@@ -11111,6 +11151,9 @@ type
     /// Receives data from a WebSocket connection.
     WebSocketReceive: function(hWebSocket: HINTERNET; pvBuffer: Pointer; dwBufferLength: DWORD;
       out dwBytesRead: DWORD; out eBufferType: WINHTTP_WEB_SOCKET_BUFFER_TYPE): DWORD; stdcall;
+    /// Writes data to a handle opened by the WinHttpOpenRequest function.
+    WriteData: function(hRequest: HINTERNET; lpBuffer: Pointer;
+      dwNumberOfBytesToWrite: DWORD; var lpdwNumberOfBytesWritten: DWORD): BOOL; stdcall;
   end;
 
 var
@@ -11122,7 +11165,7 @@ type
     hSendRequest, hReceiveResponse, hQueryHeaders,
     hReadData, hSetTimeouts, hSetOption, hSetCredentials,
     hWebSocketCompleteUpgrade, hWebSocketClose, hWebSocketQueryCloseStatus,
-    hWebSocketSend, hWebSocketReceive);
+    hWebSocketSend, hWebSocketReceive, hWriteData);
 const
   hWebSocketApiFirst = hWebSocketCompleteUpgrade;
 
@@ -11133,7 +11176,7 @@ const
     'WinHttpSendRequest', 'WinHttpReceiveResponse', 'WinHttpQueryHeaders',
     'WinHttpReadData', 'WinHttpSetTimeouts', 'WinHttpSetOption', 'WinHttpSetCredentials',
     'WinHttpWebSocketCompleteUpgrade', 'WinHttpWebSocketClose', 'WinHttpWebSocketQueryCloseStatus',
-    'WinHttpWebSocketSend', 'WinHttpWebSocketReceive');
+    'WinHttpWebSocketSend', 'WinHttpWebSocketReceive', 'WinHttpWriteData');
 
 procedure WinHttpAPIInitialize;
 var api: TWinHttpAPIs;
@@ -11344,7 +11387,36 @@ const
   WINHTTP_AUTH_SCHEME_DIGEST = $00000008;
   WINHTTP_AUTH_SCHEME_NEGOTIATE = $00000010;
 
-procedure TWinHTTP.InternalSendRequest(const aData: SockString);
+procedure TWinHTTP.InternalSendRequest(const method, aData: SockString);
+
+  function _SendRequest(L : Integer) : Boolean;
+  var Bytes, Current, BytesWritten: DWORD;
+  begin
+    if Assigned(fOnUpload) and (SameText(method, 'POST') or SameText(method, 'PUT')) then
+    begin
+      Result  :=  WinHttpAPI.SendRequest(fRequest,nil,0,nil,0,L,0);
+      if Result then
+      begin
+        Current :=  0;
+        while Current < L do
+        begin
+          Bytes := fOnDownloadChunkSize;
+          if Bytes<=0 then
+            Bytes := 65536; // 64KB seems fair enough by default
+          if Bytes > L - Current then
+            Bytes :=  L - Current;
+          if not WinHttpAPI.WriteData(fRequest, @aData[Current+1], Bytes, BytesWritten) then
+            RaiseLastModuleError(winhttpdll,EWinHTTP);
+          inc(Current, BytesWritten);
+          if not fOnUpload(Self, Current, L) then
+            raise EWinHTTP.Create('user canceled.');
+        end;
+      end;
+    end
+    else
+      Result  :=  WinHttpAPI.SendRequest(fRequest,nil,0,pointer(aData),L,L,0);
+  end;
+
 var L: integer;
     winAuth: DWORD;
 begin
@@ -11365,7 +11437,7 @@ begin
        @SECURITY_FLAT_IGNORE_CERTIFICATES, SizeOf(SECURITY_FLAT_IGNORE_CERTIFICATES)) then
       RaiseLastModuleError(winhttpdll,EWinHTTP);
   L := length(aData);
-  if not WinHttpAPI.SendRequest(fRequest,nil,0,pointer(aData),L,L,0) or
+  if not _SendRequest(L) or
      not WinHttpAPI.ReceiveResponse(fRequest,nil) then begin
     if not fHTTPS then
       RaiseLastModuleError(winhttpdll,EWinHTTP);
@@ -11377,7 +11449,7 @@ begin
       if not WinHttpAPI.SetOption(fRequest,WINHTTP_OPTION_CLIENT_CERT_CONTEXT,
          pointer(WINHTTP_NO_CLIENT_CERT_CONTEXT),0) then
         RaiseLastModuleError(winhttpdll,EWinHTTP);
-      if not WinHttpAPI.SendRequest(fRequest,nil,0,pointer(aData),L,L,0) or
+      if not _SendRequest(L) or
          not WinHttpAPI.ReceiveResponse(fRequest,nil) then
         RaiseLastModuleError(winhttpdll,EWinHTTP);
     end;
@@ -11405,7 +11477,7 @@ begin
     raise EWinHTTP.Create('Error upgrading socket');
 end;
 
-procedure TWinHTTPUpgradeable.InternalSendRequest(const aData: SockString);
+procedure TWinHTTPUpgradeable.InternalSendRequest(const method, aData: SockString);
 begin
   if not WinHttpAPI.SetOption(fRequest,WINHTTP_OPTION_UPGRADE_TO_WEB_SOCKET,nil,0) then
     raise EWinHTTP.Create('Error upgrading socket');
@@ -12002,7 +12074,7 @@ begin
   end;
 end;
 
-procedure TCurlHTTP.InternalSendRequest(const aData: SockString);
+procedure TCurlHTTP.InternalSendRequest(const method, aData: SockString);
 begin // see http://curl.haxx.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
   if fIn.Method='HEAD' then // the only verb what do not expect body in answer is HEAD
     curl.easy_setopt(fHandle,coNoBody,1) else
