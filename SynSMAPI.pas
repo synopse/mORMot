@@ -135,7 +135,7 @@ type
   /// 16 bit unsigned integer type for SMAPI
   JSUint16 = Word;
   /// 32 bit unsigned integer type for SMAPI
-  JSUInt32 = LongWord;
+  JSUInt32 = Cardinal;
   /// 64 bit signed integer type for SMAPI
   JSInt64 = Int64;
   /// 64 bit unsigned integer type for SMAPI

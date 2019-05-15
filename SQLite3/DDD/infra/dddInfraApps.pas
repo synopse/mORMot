@@ -71,6 +71,7 @@ uses
   Classes,
   Variants,
   SynCommons,
+  SynTable,
   SynLog,
   SynCrypto,
   SynEcc,
@@ -1116,11 +1117,17 @@ begin
                 Syntax;
             cInstall:
               begin
-                if (ParamCount >= 3) and SameText(ParamStr(2), '/depend') then begin
+                if ServiceDependencies <> nil then begin
+                  depend := ServiceDependencies[0];
+                  for i := 1 to high(ServiceDependencies) do
+                    depend := depend + #0 + ServiceDependencies[i];
+                end else if (ParamCount >= 3) and SameText(ParamStr(2), '/depend') then begin
                   depend := ParamStr(3);
                   for i := 4 to ParamCount do
                     depend := depend + #0 + ParamStr(i);
                 end;
+                if depend <> '' then
+                  depend := depend + #0; // ensure ends with dual #0
                 Show(TServiceController.Install(ServiceName, ServiceDisplayName,
                   Description, ServiceAutoStart, '', depend) <> ssNotInstalled);
               end;

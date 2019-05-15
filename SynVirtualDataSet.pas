@@ -729,7 +729,7 @@ type // as in FMTBcd.pas
     VType: TVarType;
     Reserved1, Reserved2, Reserved3: Word;
     VBcd: TFMTBcdData;
-    Reserved4: LongWord;
+    Reserved4: Cardinal;
   end;
 
 class procedure TSynVirtualDataSet.BcdWrite(const aWriter: TTextWriter; const aValue);

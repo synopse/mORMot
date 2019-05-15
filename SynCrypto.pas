@@ -297,7 +297,8 @@ uses
 {$endif LVCL}
   Classes,
   SynLZ, // already included in SynCommons, and used by CompressShaAes()
-  SynCommons;
+  SynCommons,
+  SynTable; // for TSynUniqueIdentifierGenerator
 
 
 {$ifdef DELPHI5OROLDER}
@@ -4799,11 +4800,7 @@ asm // input: rcx/rdi=TAESContext, rdx/rsi=source, r8/rdx=dest
         sub     r13, 1
         add     r12, 16
         lea     r14, [rip+Te0]
-        {$ifdef FPC}
-        align   16
-        {$else}
-        nop; nop; nop; nop; nop; nop
-        {$endif}
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @round: mov     esi, eax
         mov     edi, edx
         movzx   r8d, al
@@ -6441,14 +6438,7 @@ const
 var
   K256AlignedStore: RawByteString;
   K256Aligned: pointer; // movdqa + paddd do expect 16 bytes alignment
-
 const
-  PSHUFFLE_BYTE_FLIP_MASK: array[0..1] of QWord =
-    (QWord($0405060700010203),QWord($0C0D0E0F08090A0B));
-  _SHUF_00BA: array[0..1] of QWord =
-    (QWord($0B0A090803020100),QWord($FFFFFFFFFFFFFFFF));
-  _SHUF_DC00: array[0..1] of QWord =
-    (QWord($FFFFFFFFFFFFFFFF),QWord($B0A090803020100));
   STACK_SIZE = 32{$ifndef LINUX}+7*16{$endif};
 
 procedure sha256_sse4(var input_data; var digest; num_blks: PtrUInt);
@@ -6491,9 +6481,9 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         mov     r9d,[rdx+14H]
         mov     r10d,[rdx+18H]
         mov     r11d,[rdx+1CH]
-        movdqu  xmm12,[rip+PSHUFFLE_BYTE_FLIP_MASK]
-        movdqu  xmm10,[rip+_SHUF_00BA]
-        movdqu  xmm11,[rip+_SHUF_DC00]
+        movdqa  xmm12,[rip+@flip]
+        movdqa  xmm10,[rip+@00BA]
+        movdqa  xmm11,[rip+@DC00]
 @loop0: mov     rbp,[rip+K256Aligned]
         movdqu  xmm4,[rcx]
         pshufb  xmm4,xmm12
@@ -6505,7 +6495,6 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         pshufb  xmm7,xmm12
         mov     [rsp+8H],rcx
         mov     rcx,3
-        nop; nop; nop; nop; nop // manual align 16
 @loop1: movdqa  xmm9,[rbp]
         paddd   xmm9,xmm4
         movdqa  [rsp+10H],xmm9
@@ -7398,6 +7387,14 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         pop     rsi
         {$endif}
         pop     rbx
+        ret
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@flip:  dq      $0405060700010203
+        dq      $0C0D0E0F08090A0B
+@00BA:  dq      $0B0A090803020100
+        dq      $FFFFFFFFFFFFFFFF
+@DC00:  dq      $FFFFFFFFFFFFFFFF
+        dq      $0B0A090803020100
 end;
 {$endif CPUX64}
 
@@ -13018,6 +13015,7 @@ asm // rcx=TAESOFB,rdx=source,r8=dest,r9=blockcount Linux:rdi,rsi,rdx,rcx
     movdqu xmm9,[rdi+16*8]
     movdqu xmm10,[rdi+16*9]
     movdqu xmm11,[rdi+16*10]
+    {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @s: movdqu xmm15,dqword ptr [rsi]
     pxor   xmm7,xmm0
     aesenc xmm7,xmm1
@@ -13108,6 +13106,7 @@ asm // rcx=TAESOFB,rdx=source,r8=dest,r9=blockcount Linux:rdi,rsi,rdx,rcx
     movdqu xmm13,[rdi+16*12]
     movdqu xmm14,[rdi+16*13]
     add    rdi, 16*14
+    {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @s: movdqu xmm15,[rdi]
     pxor xmm7,xmm0
     aesenc xmm7,xmm1
@@ -14934,7 +14933,7 @@ asm // rcx=crc, rdx=buf, r8=len (linux: rdi, rsi, rdx)
         ja      @intel // only call Intel code if worth it
         shr     r8, 3
         jz      @2
-        {$ifdef FPC}align 8{$endif}
+        {$ifdef FPC} align 8 {$else} .align 8 {$endif}
 @1:     {$ifdef FPC}
         crc32   rax, qword [rdx] // hash 8 bytes per opcode
         {$else}

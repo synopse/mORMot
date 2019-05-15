@@ -4186,9 +4186,9 @@ end;
 /// round inverted color to white or black
 function clAlways(cl: TColor): TColor;
 begin
-  if ((GetRValue(longword(cl)) * 2) +
-      (GetGValue(longword(cl)) * 3) +
-      (GetBValue(longword(cl)) * 2)) < 600 then
+  if ((GetRValue(cardinal(cl)) * 2) +
+      (GetGValue(cardinal(cl)) * 3) +
+      (GetBValue(cardinal(cl)) * 2)) < 600 then
     result := clWhite else
     result := clBlack;
 end;

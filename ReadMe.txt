@@ -31,6 +31,7 @@ Contributors
   Eric Grange
   Esmond
   Esteban Martin (EMartin)
+  Eugene Ilyin
   Eva Freimann (EVaF)
   F-Vicente
   Goran Despalatovic (gigo)
@@ -53,6 +54,7 @@ Contributors
   Michalis Kamburelis 
   MilesYou
   Mingda
+  Mr Yang (ysair)
   Nicolas Marchand (MC)
   Nzsolt
   Oleg Tretyakov
