@@ -3042,7 +3042,11 @@ type
     // perhaps in conjunction with the BackupBackgroundWaitUntilFinished method
     function BackupBackground(const BackupFileName: TFileName;
       StepPageNumber, StepSleepMS: Integer; OnProgress: TSQLDatabaseBackupEvent;
-      SynLzCompress: boolean=false; const aPassword: RawUTF8=''): boolean;
+      SynLzCompress: boolean=false; const aPassword: RawUTF8=''): boolean; overload;
+    ///backup to opened database
+    function BackupBackground(const BackupDB: TSQLDatabase;
+      StepPageNumber, StepSleepMS: Integer; OnProgress: TSQLDatabaseBackupEvent
+      ): boolean; overload;
     /// wait until any previous BackupBackground() is finished
     // - warning: this method won't call the Windows message loop, so should not
     // be called from main thread, unless the UI may become unresponsive: you
@@ -3257,6 +3261,7 @@ type
     fOnProgress: TSQLDatabaseBackupEvent;
     fError: Exception;
     fTimer: TPrecisionTimer;
+    fOwnerDest: Boolean;
     /// main process
     procedure Execute; override;
   public
@@ -3265,7 +3270,7 @@ type
     // inherited method to run the process in blocking mode
     constructor Create(Backup: TSQLite3Backup; Source, Dest: TSQLDatabase;
       StepPageNumber,StepSleepMS: Integer; SynLzCompress: boolean;
-      OnProgress: TSQLDatabaseBackupEvent); reintroduce;
+      OnProgress: TSQLDatabaseBackupEvent; OwnerDest : Boolean = true); reintroduce;
     /// the source database of the backup process
     property SourceDB: TSQLDatabase read fSourceDB;
     /// the destination database of the backup process
@@ -4459,6 +4464,28 @@ begin
   result := true;
 end;
 
+function TSQLDataBase.BackupBackground(const BackupDB: TSQLDatabase;
+  StepPageNumber, StepSleepMS: Integer;
+  OnProgress: TSQLDatabaseBackupEvent): boolean;
+var Backup: TSQLite3Backup;
+begin
+  result := false;
+  if (self=nil) or (BackupDB=nil) or not Assigned(sqlite3.backup_init) or
+     (fBackupBackgroundInProcess<>nil) then
+    exit;
+  {$ifdef WITHLOG}
+  fLog.Add.Log(sllDB,'BackupBackground("%") started on %',
+    [BackupDB.FileName,FileNameWithoutPath],self);
+  {$endif}
+  // see https://bitbucket.org/egrange/sql3bak for proper parameters
+  Backup := sqlite3.backup_init(BackupDB.DB,'main',DB,'main');
+  if Backup=0 then
+    exit;
+  fBackupBackgroundInProcess := TSQLDatabaseBackupThread.Create(
+    Backup,self,BackupDB,StepPageNumber,StepSleepMS,false,OnProgress,false);
+  result := true;
+end;
+
 procedure TSQLDataBase.BackupBackgroundWaitUntilFinished(TimeOutSeconds: Integer);
 var i: integer;
 begin
@@ -5627,7 +5654,8 @@ end;
 
 constructor TSQLDatabaseBackupThread.Create(Backup: TSQLite3Backup;
   Source, Dest: TSQLDatabase; StepPageNumber, StepSleepMS: Integer;
-  SynLzCompress: boolean; OnProgress: TSQLDatabaseBackupEvent);
+  SynLzCompress: boolean; OnProgress: TSQLDatabaseBackupEvent;
+  OwnerDest : Boolean);
 begin
   fTimer.Start;
   fBackup := Backup;
@@ -5640,6 +5668,7 @@ begin
     fStepSleepMS := StepSleepMS;
   fOnProgress := OnProgress;
   fStepSynLzCompress := SynLzCompress;
+  fOwnerDest := OwnerDest;
   FreeOnTerminate := true;
   inherited Create(false);
 end;
@@ -5694,26 +5723,32 @@ begin
           raise ESQLite3Exception.Create('Backup process forced to terminate');
         SleepHiRes(fStepSleepMS);
       until false;
-      if fStepSynLzCompress then begin
-        sqlite3.backup_finish(fBackup);
-        FreeAndNil(fDestDB); // close destination backup database
-        NotifyProgressAndContinue(backupStepSynLz);
-        fn2 := ChangeFileExt(fn, '.db.tmp');
-        if not (RenameFile(fn,fn2) and TSQLDatabase.BackupSynLZ(fn2,fn,true)) then
-          raise ESQLite3Exception.CreateUTF8('%.Execute: BackupSynLZ(%,%) failed',
-            [self,fn,fn2]);
-        {$ifdef WITHLOG}
-        if Assigned(log) then
-          log.Log(sllTrace,'TSQLDatabase.BackupSynLZ into % %',
-            [KB(FileSize(fn)),fn],self);
-        {$endif}
+      if not IdemPChar(pointer(fn),SQLITE_MEMORY_DATABASE_NAME) then begin
+        if fStepSynLzCompress then begin
+          sqlite3.backup_finish(fBackup);
+          if fOwnerDest then
+            FreeAndNil(fDestDB) // close destination backup database
+          else
+            fDestDB :=  nil;
+          NotifyProgressAndContinue(backupStepSynLz);
+          fn2 := ChangeFileExt(fn, '.db.tmp');
+          if not (RenameFile(fn,fn2) and TSQLDatabase.BackupSynLZ(fn2,fn,true)) then
+            raise ESQLite3Exception.CreateUTF8('%.Execute: BackupSynLZ(%,%) failed',
+              [self,fn,fn2]);
+          {$ifdef WITHLOG}
+          if Assigned(log) then
+            log.Log(sllTrace,'TSQLDatabase.BackupSynLZ into % %',
+              [KB(FileSize(fn)),fn],self);
+          {$endif}
+        end;
+        fSourceDB.fBackupBackgroundLastFileName := ExtractFileName(fn);
       end;
-      fSourceDB.fBackupBackgroundLastFileName := ExtractFileName(fn);
       NotifyProgressAndContinue(backupSuccess);
     finally
       if fDestDB<>nil then begin
         sqlite3.backup_finish(fBackup);
-        fDestDB.Free; // close destination backup database if not already
+        if fOwnerDest then
+          fDestDB.Free; // close destination backup database if not already
       end;
       fSourceDB.fBackupBackgroundLastTime := fTimer.Stop;
       fSourceDB.Lock;

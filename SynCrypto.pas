@@ -297,7 +297,8 @@ uses
 {$endif LVCL}
   Classes,
   SynLZ, // already included in SynCommons, and used by CompressShaAes()
-  SynCommons;
+  SynCommons,
+  SynTable; // for TSynUniqueIdentifierGenerator
 
 
 {$ifdef DELPHI5OROLDER}
