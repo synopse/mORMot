@@ -36144,23 +36144,24 @@ begin
 end;
 
 procedure TSynSystemTime.FromDate(const dt: TDateTime);
-var t,t2: PtrUInt;
+var t,t2,t3: PtrUInt;
 begin
   t := Trunc(dt);
   t := (t+693900)*4-1;
   if PtrInt(t)>=0 then begin
-    Year := t div 146097;
-    t2 := (t-146097*Year)and not 3;
-    t := (t2+3)div 1461;
-    t2 := ((t2+7-1461*t)shr 2)*5;
-    Month := (t2-3)div 153;
-    Day := (t2+2-153*Month)div 5;
-    Year := 100*Year+t;
-    if Month<10 then
-      inc(Month,3) else begin
-      dec(Month,9);
+    t3 := t div 146097;
+    t2 := (t-t3*146097) and not 3;
+    t := PtrUInt(t2+3) div 1461; // PtrUInt() needed for FPC i386
+    Year := t3*100+t;
+    t2 := ((t2+7-t*1461)shr 2)*5;
+    t3 := PtrUInt(t2-3) div 153;
+    Day := PtrUInt(t2+2-t3*153) div 5;
+    if t3<10 then
+      inc(t3,3) else begin
+      dec(t3,9);
       inc(Year);
     end;
+    Month := t3;
     DayOfWeek := 0;
   end else
     PInt64(@Year)^ := 0;
@@ -36218,8 +36219,8 @@ var y,d100: PtrUInt;
 begin
   {$ifndef CPUX86NOTPIC}tab := @TwoDigitLookupW;{$endif}
   PWord(P)^ := tab[Day];
-  P[2] := '/';
-  PCardinal(P+3)^ := PCardinal(@HTML_MONTH_NAMES[Month][1])^;
+  PCardinal(P+2)^ := PCardinal(@HTML_MONTH_NAMES[Month])^;
+  P[2] := '/'; // overwrite HTML_MONTH_NAMES[][0]
   P[6] := '/';
   y := Year;
   d100 := y div 100;
