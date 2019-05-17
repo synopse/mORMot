@@ -3042,11 +3042,11 @@ type
     // perhaps in conjunction with the BackupBackgroundWaitUntilFinished method
     function BackupBackground(const BackupFileName: TFileName;
       StepPageNumber, StepSleepMS: Integer; OnProgress: TSQLDatabaseBackupEvent;
-      SynLzCompress: boolean=false; const aPassword: RawUTF8=''): boolean; overload;
+      SynLzCompress: boolean=false; const aPassword: RawUTF8=''): boolean; 
     ///backup to opened database
-    function BackupBackground(const BackupDB: TSQLDatabase;
+    function BackupBackgroundToDB(const BackupDB: TSQLDatabase;
       StepPageNumber, StepSleepMS: Integer; OnProgress: TSQLDatabaseBackupEvent
-      ): boolean; overload;
+      ): boolean;
     /// wait until any previous BackupBackground() is finished
     // - warning: this method won't call the Windows message loop, so should not
     // be called from main thread, unless the UI may become unresponsive: you
@@ -4464,7 +4464,7 @@ begin
   result := true;
 end;
 
-function TSQLDataBase.BackupBackground(const BackupDB: TSQLDatabase;
+function TSQLDataBase.BackupBackgroundToDB(const BackupDB: TSQLDatabase;
   StepPageNumber, StepSleepMS: Integer;
   OnProgress: TSQLDatabaseBackupEvent): boolean;
 var Backup: TSQLite3Backup;
