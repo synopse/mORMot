@@ -11768,23 +11768,29 @@ var
   InterningHasher: THasher;
 
 /// retrieve a particular bit status from a bit array
+// - this function can't be inlined, whereas GetBitPtr() function can
 function GetBit(const Bits; aIndex: PtrInt): boolean;
 
 /// set a particular bit into a bit array
+// - this function can't be inlined, whereas SetBitPtr() function can
 procedure SetBit(var Bits; aIndex: PtrInt);
 
 /// unset/clear a particular bit into a bit array
+// - this function can't be inlined, whereas UnSetBitPtr() function can
 procedure UnSetBit(var Bits; aIndex: PtrInt);
 
 /// retrieve a particular bit status from a bit array
+// - GetBit() can't be inlined, whereas this pointer-oriented function can
 function GetBitPtr(Bits: pointer; aIndex: PtrInt): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// set a particular bit into a bit array
+// - SetBit() can't be inlined, whereas this pointer-oriented function can
 procedure SetBitPtr(Bits: pointer; aIndex: PtrInt);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// unset/clear a particular bit into a bit array
+// - UnSetBit() can't be inlined, whereas this pointer-oriented function can
 procedure UnSetBitPtr(Bits: pointer; aIndex: PtrInt);
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -39276,7 +39282,10 @@ end;
 function GotoNextVarInt(Source: PByte): pointer;
 begin
   if Source<>nil then begin
-    while Source^>$7f do inc(Source);
+    if Source^>$7f then
+      repeat
+        inc(Source)
+      until Source^<=$7f;
     inc(Source);
   end;
   result := Source;
@@ -53958,7 +53967,7 @@ begin
     if not(EndOfObject in [',','}']) then
       exit; // invalid item separator
     for i := 0 to n do
-      if IdemPropNameU(Names[i],name,namelen) then begin
+      if (Values[i].Value=nil) and IdemPropNameU(Names[i],name,namelen) then begin
         Values[i].Value := value;
         Values[i].ValueLen := valuelen;
         break;

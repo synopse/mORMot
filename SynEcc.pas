@@ -2087,6 +2087,12 @@ begin
   result := (VLI[0]=0) and (VLI[1]=0) and (VLI[2]=0) and (VLI[3]=0);
 end;
 
+function _equals(const Left, Right: TVLI): boolean; {$ifdef HASINLINE}inline;{$endif}
+begin
+  result := (Left[0]=Right[0]) and (Left[1]=Right[1]) and (Left[2]=Right[2]) and
+    (Left[3]=Right[3]);
+end;
+
 // counts the number of bits required for VLI
 function _numBits(const VLI: TVLI): integer;
 var i: integer;
@@ -2814,7 +2820,7 @@ begin
     TAESPRNG.Fill(THash256(PrivateK));
     if tries >= MAX_TRIES then
       exit;
-    if _isZero(PrivateK) or (_cmp(PrivateK, _1) = 0) or (_cmp(PrivateK, _11) = 0) then
+    if _isZero(PrivateK) or _equals(PrivateK, _1) or _equals(PrivateK, _11) then
       continue;
     // Make sure the private key is in the range [1, n-1]
     // For the supported curves, n is always large enough that we only need
@@ -2931,7 +2937,7 @@ begin
     TAESPRNG.Fill(THash256(k));
     if Tries >= MAX_TRIES then
       exit;
-    if _isZero(k) or (_cmp(k, _1) = 0) or (_cmp(k, _11) = 0) then
+    if _isZero(k) or _equals(k, _1) or _equals(k, _11) then
       continue;
     if _cmp(Curve_N_32, k) <> 1 then
       _sub(k, k, Curve_N_32);

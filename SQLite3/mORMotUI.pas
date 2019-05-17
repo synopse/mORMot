@@ -1790,7 +1790,7 @@ begin
   if (self=nil) or (fMarked=nil) or
      (cardinal(RowIndex)>=cardinal(length(fMarked)shl 3)) then
     result := false else
-    result := GetBit(fMarked[0],RowIndex);
+    result := GetBitPtr(pointer(fMarked),RowIndex);
 end;
 
 procedure TSQLTableToGrid.SetMarked(RowIndex: integer;
@@ -1882,7 +1882,7 @@ begin
   if not result then
     exit;
   for i := 0 to Table.RowCount-1 do // very any bit is realy set
-    if GetBit(fMarked[0],i) then
+    if GetBitPtr(pointer(fMarked),i) then
       exit;
   result := false;
 end;
