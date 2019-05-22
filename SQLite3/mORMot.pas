@@ -7852,11 +7852,11 @@ type
     {$ifndef NOVARIANTS}
     /// retrieve the record content as a TDocVariant custom variant object
     function GetAsDocVariant(withID: boolean; const withFields: TSQLFieldBits;
-      options: PDocVariantOptions=nil): variant; overload;
+      options: PDocVariantOptions=nil; replaceRowIDWithID: boolean=false): variant; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// retrieve the record content as a TDocVariant custom variant object
     procedure GetAsDocVariant(withID: boolean; const withFields: TSQLFieldBits;
-      var result: variant; options: PDocVariantOptions=nil); overload;
+      var result: variant; options: PDocVariantOptions=nil; ReplaceRowIDWithID: boolean=false); overload;
     /// retrieve the simple record content as a TDocVariant custom variant object
     function GetSimpleFieldsAsDocVariant(withID: boolean=true;
       options: PDocVariantOptions=nil): variant;
@@ -33482,14 +33482,16 @@ end;
 
 {$ifndef NOVARIANTS}
 
-function TSQLRecord.GetAsDocVariant(withID: boolean;
-  const withFields: TSQLFieldBits; options: PDocVariantOptions): variant;
+function TSQLRecord.GetAsDocVariant(withID: boolean; const withFields: TSQLFieldBits;
+  options: PDocVariantOptions; replaceRowIDWithID: boolean): variant;
 begin
-  GetAsDocVariant(withID,withFields,result,options);
+  GetAsDocVariant(withID,withFields,result,options,replaceRowIDWithID);
 end;
 
 procedure TSQLRecord.GetAsDocVariant(withID: boolean;
-  const withFields: TSQLFieldBits; var result: variant; options: PDocVariantOptions);
+  const withFields: TSQLFieldBits; var result: variant; options: PDocVariantOptions;
+  replaceRowIDWithID: boolean);
+const _ID: array[boolean] of RawUTF8 = ('RowID','ID');
 var f,i: integer;
     Fields: TSQLPropInfoList;
     intvalues: TRawUTF8Interning;
@@ -33507,7 +33509,7 @@ begin
       intvalues := DocVariantType.InternValues;
   end;
   if withID then
-    doc.Values[doc.InternalAdd('RowID')] := fID;
+    doc.Values[doc.InternalAdd(_ID[replaceRowIDWithID])] := fID;
   for f := 0 to Fields.Count-1 do
   if f in withFields then begin
     i := doc.InternalAdd(Fields.List[f].Name);
@@ -36456,20 +36458,21 @@ begin
     with Table.RecordProps do // optimized primary key direct access
     if Cache.IsCached(Table) and (length(BoundsSQLWhere)=1) and
        VarRecToInt64(BoundsSQLWhere[0],Int64(ID)) and
-       FieldBitsFromCSV(CustomFieldsCSV,bits) then
-      if IsZero(bits) then
-        exit else
-      if bits-SimpleFieldsBits[soSelect]=[] then
-        if IdemPropNameU('RowID=?',FormatSQLWhere) or
-           IdemPropNameU('ID=?',FormatSQLWhere) then begin
-          Rec := Table.Create(self,ID);
-          try
-            Rec.GetAsDocVariant(True,bits,result);
-          finally
-            Rec.Free;
-          end;
-          exit;
+       FieldBitsFromCSV(CustomFieldsCSV,bits) and
+       (IdemPropNameU('RowID=?',FormatSQLWhere) or
+        IdemPropNameU('ID=?',FormatSQLWhere)) then begin
+      if IsZero(bits) then // get all simple fields, like MultiFieldValues()
+        bits := SimpleFieldsBits[soSelect];
+      if bits-SimpleFieldsBits[soSelect]=[] then begin
+        Rec := Table.Create(self,ID); // use the cache
+        try
+          Rec.GetAsDocVariant(true,bits,result,nil,{"id"=}true);
+        finally
+          Rec.Free;
         end;
+        exit;
+      end;
+    end;
     T := MultiFieldValues(Table,CustomFieldsCSV,FormatSQLWhere,BoundsSQLWhere);
     if T<>nil then
     try

@@ -1101,12 +1101,6 @@ type
     const FieldTypes: TSQLDBFieldTypeArray; RowCount: integer;
     const FieldValues: TRawUTF8DynArrayDynArray) of object;
 
-  /// bit set to identify columns, e.g. null columns
-  TSQLDBProxyStatementColumns = set of 0..255;
-
-  /// pointer to a bit set to identify columns, e.g. null columns
-  PSQLDBProxyStatementColumns = ^TSQLDBProxyStatementColumns;
-
   /// specify the class of TSQLDBConnectionProperties
   // - sometimes used to create connection properties instances, from a set
   // of available classes (see e.g. SynDBExplorer or sample 16)
@@ -2347,8 +2341,7 @@ type
     // - virtual method called by FetchAllToBinary()
     // - follows the format expected by TSQLDBProxyStatement
     procedure ColumnsToBinary(W: TFileBufferWriter;
-      const Null: TSQLDBProxyStatementColumns;
-      const ColTypes: TSQLDBFieldTypeDynArray); virtual;
+      Null: pointer; const ColTypes: TSQLDBFieldTypeDynArray); virtual;
   published
     /// the prepared SQL statement, as supplied to Prepare() method
     property SQL: RawUTF8 read fSQL;
@@ -2794,9 +2787,9 @@ type
     fDataRowCount: integer;
     fDataRowReaderOrigin, fDataRowReader: PByte;
     fDataRowNullSize: cardinal;
-    fDataCurrentRowNullLen: cardinal;
-    fDataCurrentRowNull: TSQLDBProxyStatementColumns;
     fDataCurrentRowIndex: integer;
+    fDataCurrentRowNullLen: cardinal;
+    fDataCurrentRowNull: TByteDynArray;
     fDataCurrentRowValues: array of pointer;
     fDataCurrentRowValuesStart: pointer;
     fDataCurrentRowValuesSize: Cardinal;
@@ -2838,8 +2831,7 @@ type
     // - virtual method called by FetchAllToBinary()
     // - follows the format expected by TSQLDBProxyStatement
     procedure ColumnsToBinary(W: TFileBufferWriter;
-      const Null: TSQLDBProxyStatementColumns;
-      const ColTypes: TSQLDBFieldTypeDynArray); override;
+      Null: pointer; const ColTypes: TSQLDBFieldTypeDynArray); override;
 
     /// read-only access to the number of data rows stored
     property DataRowCount: integer read fDataRowCount;
@@ -4861,7 +4853,7 @@ begin
       else begin  // (nested) commit/rollback
         if InterlockedDecrement(fSharedTransactions[i].RefCount)=0 then begin
           dec(n);
-          move(fSharedTransactions[i+1],fSharedTransactions[i],(n-i)*sizeof(fSharedTransactions[0]));
+          MoveFast(fSharedTransactions[i+1],fSharedTransactions[i],(n-i)*sizeof(fSharedTransactions[0]));
           SetLength(fSharedTransactions,n);
           case action of
           transCommitWithException, transCommitWithoutException:
@@ -5179,7 +5171,7 @@ var SQL: RawUTF8;
 begin
   FA.Init(TypeInfo(TSQLDBColumnDefineDynArray),Fields,@n);
   FA.Compare := SortDynArrayAnsiStringI; // FA.Find() case insensitive
-  fillchar(F,sizeof(F),0);
+  FillCharFast(F,sizeof(F),0);
   if fDBMS=dSQLite then begin // SQLite3 has a specific PRAGMA metadata query
     try
       with Execute('PRAGMA table_info(`'+aTableName+'`)',[]) do
@@ -5286,7 +5278,7 @@ var SQL: RawUTF8;
 begin
   FA.Init(TypeInfo(TSQLDBColumnDefineDynArray),Parameters,@n);
   FA.Compare := SortDynArrayAnsiStringI; // FA.Find() case insensitive
-  fillchar(F,sizeof(F),0);
+  FillcharFast(F,sizeof(F),0);
   SQL := SQLGetParameter(aProcName);
   if SQL='' then
     exit;
@@ -7121,7 +7113,7 @@ begin
 end;
 
 procedure TSQLDBStatement.ColumnsToBinary(W: TFileBufferWriter;
-  const Null: TSQLDBProxyStatementColumns; const ColTypes: TSQLDBFieldTypeDynArray);
+  Null: pointer; const ColTypes: TSQLDBFieldTypeDynArray);
 var F: integer;
     VDouble: double;
     VCurrency: currency absolute VDouble;
@@ -7129,7 +7121,7 @@ var F: integer;
     colType: TSQLDBFieldType;
 begin
   for F := 0 to length(ColTypes)-1 do
-    if not (F in Null) then begin
+    if not GetBitPtr(Null, F) then begin
       colType := ColTypes[F];
       if colType<ftInt64 then begin // ftUnknown,ftNull
         colType := ColumnType(F); // per-row column type (SQLite3 only)
@@ -7168,11 +7160,10 @@ function TSQLDBStatement.FetchAllToBinary(Dest: TStream; MaxRowCount: cardinal;
   DataRowPosition: PCardinalDynArray): cardinal;
 var F, FMax, FieldSize, NullRowSize: integer;
     StartPos: cardinal;
-    Null: TSQLDBProxyStatementColumns;
     W: TFileBufferWriter;
     ColTypes: TSQLDBFieldTypeDynArray;
+    Null: TByteDynArray;
 begin
-  FillChar(Null,sizeof(Null),0);
   result := 0;
   W := TFileBufferWriter.Create(Dest);
   try
@@ -7190,10 +7181,8 @@ begin
         W.WriteVarUInt32(FieldSize);
       end;
       // initialize null handling
-      NullRowSize := (FMax shr 3)+1;
-      if NullRowSize>sizeof(Null) then
-        raise ESQLDBException.CreateUTF8(
-          '%.FetchAllToBinary: too many columns',[self]);
+      SetLength(Null,(FMax shr 3)+1);
+      NullRowSize := 0;
       // save all data rows
       StartPos := W.TotalWritten;
       if (CurrentRow=1) or Step then // Step may already be done (e.g. TQuery.Open)
@@ -7206,19 +7195,19 @@ begin
         end;
         // first write null columns flags
         if NullRowSize>0 then begin
-          FillChar(Null,NullRowSize,0);
+          FillCharFast(Null[0],NullRowSize,0);
           NullRowSize := 0;
         end;
         for F := 0 to FMax do
           if ColumnNull(F) then begin
-            include(Null,F);
+            SetBitPtr(pointer(Null),F);
             NullRowSize := (F shr 3)+1;
           end;
         W.WriteVarUInt32(NullRowSize);
         if NullRowSize>0 then
-          W.Write(@Null,NullRowSize);
+          W.Write(pointer(Null),NullRowSize);
         // then write data values
-        ColumnsToBinary(W,Null,ColTypes);
+        ColumnsToBinary(W,pointer(Null),ColTypes);
         inc(result);
         if (MaxRowCount>0) and (result>=MaxRowCount) then
           break;
@@ -8294,6 +8283,8 @@ begin
   fDataCurrentRowValuesStart := nil;
   fDataCurrentRowValuesSize := 0;
   fDataCurrentRowIndex := -1;
+  fDataCurrentRowNull := nil;
+  fDataCurrentRowNullLen := 0;
   repeat
     if DataLen<=5 then
       break;
@@ -8314,12 +8305,12 @@ begin
     end;
     if fColumnCount=0 then
       exit; // no data returned
-    if (fColumnCount>sizeof(TSQLDBProxyStatementColumns)shl 3) or
-       (cardinal(fDataRowCount)>=cardinal(DataLen) div cardinal(fColumnCount)) then
-      break;
+    if cardinal(fDataRowCount)>=cardinal(DataLen) then
+      break; // obviously truncated
     fDataRowReaderOrigin := Data;
     fDataRowReader := Data;
     fDataRowNullSize := ((fColumnCount-1) shr 3)+1;
+    SetLength(fDataCurrentRowNull,fDataRowNullSize);
     exit;
   until false;
   fDataRowCount := 0;
@@ -8332,17 +8323,18 @@ procedure TSQLDBProxyStatementAbstract.IntFillDataCurrent(var Reader: PByte;
 var F,Len: Integer;
 begin // format match TSQLDBStatement.FetchAllToBinary()
   if fDataCurrentRowNullLen>0 then
-    FillChar(fDataCurrentRowNull,fDataCurrentRowNullLen,0);
+    FillCharFast(fDataCurrentRowNull[0],fDataCurrentRowNullLen,0);
   fDataCurrentRowNullLen := FromVarUInt32(Reader);
   if fDataCurrentRowNullLen>fDataRowNullSize then
-    raise ESQLDBException.CreateUTF8('Invalid %.IntFillDataCurrent',[self]);
+    raise ESQLDBException.CreateUTF8('Invalid %.IntFillDataCurrent %>%',
+      [self,fDataCurrentRowNullLen,fDataRowNullSize]);
   if fDataCurrentRowNullLen>0 then begin
-    Move(Reader^,fDataCurrentRowNull,fDataCurrentRowNullLen);
+    MoveFast(Reader^,fDataCurrentRowNull[0],fDataCurrentRowNullLen);
     inc(Reader,fDataCurrentRowNullLen);
   end;
   fDataCurrentRowValuesStart := Reader;
   for F := 0 to fColumnCount-1 do
-    if F in fDataCurrentRowNull then
+    if GetBitPtr(pointer(fDataCurrentRowNull),F) then
       fDataCurrentRowValues[F] := nil else begin
       fDataCurrentRowColTypes[F] := fColumns[F].ColumnType;
       if fDataCurrentRowColTypes[F]<ftInt64 then begin
@@ -8415,7 +8407,7 @@ begin
 end;
 
 procedure TSQLDBProxyStatementAbstract.ColumnsToBinary(W: TFileBufferWriter;
-  const Null: TSQLDBProxyStatementColumns; const ColTypes: TSQLDBFieldTypeDynArray);
+  Null: pointer; const ColTypes: TSQLDBFieldTypeDynArray);
 begin
   W.Write(fDataCurrentRowValuesStart,fDataCurrentRowValuesSize);
 end;
@@ -8427,10 +8419,10 @@ begin
     result := nil;
 end;
 
-function TSQLDBProxyStatementAbstract.ColumnType(Col: integer; FieldSize: PInteger=nil): TSQLDBFieldType;
+function TSQLDBProxyStatementAbstract.ColumnType(Col: integer; FieldSize: PInteger): TSQLDBFieldType;
 begin
   if (fDataRowCount>0) and (cardinal(Col)<cardinal(fColumnCount)) then
-    if Col in fDataCurrentRowNull then
+    if GetBitPtr(pointer(fDataCurrentRowNull),Col) then
       result := ftNull else
       with fColumns[Col] do begin
         if FieldSize<>nil then
@@ -8502,7 +8494,8 @@ end;
 
 function TSQLDBProxyStatementAbstract.ColumnNull(Col: integer): boolean;
 begin
-  result := Col in fDataCurrentRowNull;
+  result := (cardinal(Col)>=cardinal(fColumnCount)) or
+            GetBitPtr(pointer(fDataCurrentRowNull),Col);
 end;
 
 function TSQLDBProxyStatementAbstract.ColumnBlob(Col: integer): RawByteString;
