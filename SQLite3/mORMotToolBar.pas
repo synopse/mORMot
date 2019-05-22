@@ -1079,7 +1079,7 @@ begin
         GB := TSynToolButton(result.Components[iGB]);
         if isActionButton(GB)<>0 then begin
           img := GB.ImageIndex;
-          EN := GetBit(aActions,img+1);
+          EN := GetBitPtr(@aActions,img+1);
           GB.Enabled := EN;  // enable or disable buttons
           for iM := 0 to fMenu.Items.Count-1 do
           with fMenu.Items[iM] do
@@ -1094,7 +1094,7 @@ begin
   // no Toolbar: create one with its buttons; also create associated popup menu
   EN := false;
   for A := 0 to fActionMax do
-    if GetBit(aActions,A) then begin
+    if GetBitPtr(@aActions,A) then begin
       EN := true;
       break;
     end;
@@ -1124,10 +1124,10 @@ begin
     end;
     for iAction := fActionMax downto 0 do begin // TToolBar adds at 1st position
 {$endif}
-      if GetBit(aActions,iAction) then // is this enumerate value inside aActions?
+      if GetBitPtr(@aActions,iAction) then // is this enumerate value inside aActions?
         with result.CreateToolButton(ActionButtonClick,iAction,1,ActionNames[iAction],
            ActionHints,fShortCutUsed,60,ImageList32) do begin
-          if GetBit(ActionIsNotButton,iAction) then
+          if GetBitPtr(@ActionIsNotButton,iAction) then
             Style := bsCheck;
           // create associated sub menu entry
           if Style<>bsCheck then begin
@@ -1655,7 +1655,7 @@ begin
   AddReportMenu('-'); // separator
   P := @FReportPopupParams^.NameList;
   for i := 0 to FReportPopupParams^.MaxValue do begin
-    if GetBit(FReportPopupParamsEnabled^,i) then
+    if GetBitPtr(FReportPopupParamsEnabled,i) then
       with AddReportMenu(Table.CaptionNameFromRTTI(P)) do
         Checked := (FReportPopupValues[i]<>nil) and FReportPopupValues[i]^;
     inc(PByte(P),ord(P^[0])+1); // next enumeration item
@@ -1727,7 +1727,7 @@ begin
     result := Page.CreateToolBar else begin
     result := nil;
     for iAction := 0 to ActionsEnum^.MaxValue do
-      if GetBit(ActionsBits^,iAction) then begin
+      if GetBitPtr(ActionsBits,iAction) then begin
         result := Page.CreateToolBar;
         break;
       end;
@@ -1757,7 +1757,7 @@ begin
     end; // TToolBar adds at 1st position -> downto
     for iAction := ActionsEnum^.MaxValue downto 0 do begin
 {$endif}
-      if (ActionsBits=nil) or GetBit(ActionsBits^,iAction) then
+      if (ActionsBits=nil) or GetBitPtr(ActionsBits,iAction) then
         Buttons[iAction] := result.CreateToolButton(ButtonClick,iAction,
          ImageListFirstIndex,ActionNames[iAction],ActionHints,ShortCutUsed,
          ButtonWidth,ImageList);

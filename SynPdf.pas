@@ -8791,7 +8791,7 @@ begin
   // (from http://www.microsoft.com/typography/OTSPEC/head.htm)
   fUnitsPerEmShr := 0; // fastest integer div for width calculating
   for i := 14 downto 4 do
-    if GetBit(head^.UnitsPerEm,i) then begin
+    if GetBitPtr(@head^.UnitsPerEm,i) then begin
       fUnitsPerEmShr := i;
       break;
     end;

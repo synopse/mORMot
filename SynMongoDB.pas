@@ -3884,9 +3884,9 @@ end;
 procedure TBSONObjectID.ComputeNew;
 var now, count: cardinal;
 begin
+  now := UnixTimeUTC; // fast API call (no need of cache)
   with GlobalBSONObjectID do begin
     EnterCriticalSection(Section);
-    now := UnixTimeUTC; // fast API call (no need of cache)
     if now>LastCreateTime then begin
       LastCreateTime := now;
       count := Default.Counter; // reset

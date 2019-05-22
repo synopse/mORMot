@@ -368,7 +368,7 @@ begin
   E := aEnum^.EnumBaseType;
   assert(E^.MaxValue<64); // Value is a Int64 (i.e. max 64 actions)
   for A := 0 to E^.MaxValue do
-  if (aActionsBits=nil) or GetBit64(aActionsBits^,A) then begin
+  if (aActionsBits=nil) or GetBitPtr(aActionsBits,A) then begin
     with TCheckBox.Create(Scroll) do begin
       Parent := Scroll;
       Hint := GetCSVItemString(pointer(aActionHints),A,#13);
@@ -377,7 +377,7 @@ begin
       SetBounds(64,Scroll.Tag,W,16);
       V := aProp^.GetInt64Value(Obj);
       fAddToolbar := fAddToolbar+AnsiChar(A); // every char is a bit index
-      Checked := GetBit64(V,A);
+      Checked := GetBitPtr(@V,A);
       Tag := PtrInt(aProp);  // for BtnSaveClick() event
     end;
     Scroll.Tag := Scroll.Tag+16;

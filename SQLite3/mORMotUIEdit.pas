@@ -447,7 +447,7 @@ begin
                   Hint := aHint;
                   ShowHint := True;
                 end;
-                Checked := GetBit(Sets,j);
+                Checked := GetBitPtr(@Sets,j);
                 Enabled := Group.Enabled;
                 Tag := i+1+(j+1) shl 8;  // for BtnSaveClick() event
                 inc(PtrInt(EP),ord(EP^[0])+1); // next enumeration item
