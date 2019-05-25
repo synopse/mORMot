@@ -508,7 +508,7 @@ const
 
 type
   /// polling request data structure for poll()
-  TPollFD = packed record
+  TPollFD = {packed} record
     /// file descriptor to poll
     fd: integer;
     /// types of events poller cares about
@@ -563,7 +563,7 @@ type
   PEPollData = ^TEPollData;
 
   /// epoll descriptor data structure
-  TEPollEvent = packed record
+  TEPollEvent = {$ifdef CPU64}packed{$endif} record
     events: cardinal;
     data: TEpollData;
   end;
