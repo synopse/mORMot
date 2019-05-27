@@ -2295,6 +2295,9 @@ var
   // TSQLite3LibraryDynamic instance:
   // ! FreeAndNil(sqlite3); // release any previous instance
   // ! sqlite3 := TSQLite3LibraryDynamic.Create;
+  // - caller should free the sqlite3 instance only with
+  // ! FreeAndNil(sqlite3);
+  // to avoid issues with the automatic freeing in finalization section
   sqlite3: TSQLite3Library;
 
 
