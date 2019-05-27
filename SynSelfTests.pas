@@ -4035,9 +4035,15 @@ begin
     l := GetInt64(pointer(s),err);
     Check(err<>0);
     case i of // validate some explicit ToVarUInt32/64 boundaries
-      9997: j := $00004000;
-      9998: j := $00200000;
-      9999: j := $10000000;
+      9991: j := $00003fff;
+      9992: j := $00004000;
+      9993: j := $00004001;
+      9994: j := $001fffff;
+      9995: j := $00200000;
+      9996: j := $00200001;
+      9997: j := $0fffffff;
+      9998: j := $10000000;
+      9999: j := $10000001;
     end;
     str(j,a);
     Check(SysUtils.IntToStr(j)=string(a));

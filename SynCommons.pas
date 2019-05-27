@@ -39125,14 +39125,52 @@ begin
   result := result and $FFFFFFF or c;
 end;
 
+function ToVarInt64(Value: Int64; Dest: PByte): PByte;
+begin // 0=0,1=1,2=-1,3=2,4=-2...
+  {$ifdef CPU32}
+  if Value<=0 then
+    // 0->0, -1->2, -2->4..
+    result := ToVarUInt64((-Value) shl 1,Dest) else
+    // 1->1, 2->3..
+    result := ToVarUInt64((Value shl 1)-1,Dest);
+  {$else}
+  if Value<=0 then
+    // 0->0, -1->2, -2->4..
+    Value := (-Value) shl 1 else
+    // 1->1, 2->3..
+    Value := (Value shl 1)-1;
+  result := ToVarUInt64(Value,Dest);
+  {$endif}
+end;
+
 function ToVarUInt64(Value: QWord; Dest: PByte): PByte;
+label _1,_2,_3; // ugly but fast
 var c: cardinal;
 begin
+  c := Value;
   if {$ifdef CPU32}PInt64Rec(@Value)^.Hi=0{$else}Value shr 32=0{$endif} then begin
-    result := ToVarUInt32(Value,Dest);
+    if c>$7f then begin // inlined result := ToVarUInt32(Value,Dest);
+      if c<$80 shl 7 then goto _1 else
+        if c<$80 shl 14 then goto _2 else
+          if c<$80 shl 21 then goto _3;
+      Dest^ := (c and $7F) or $80;
+      c := c shr 7;
+      inc(Dest);
+  _3: Dest^ := (c and $7F) or $80;
+      c := c shr 7;
+      inc(Dest);
+  _2: Dest^ := (c and $7F) or $80;
+      c := c shr 7;
+      inc(Dest);
+  _1: Dest^ := (c and $7F) or $80;
+      c := c shr 7;
+      inc(Dest);
+    end;
+    Dest^ := c;
+    inc(Dest);
+    result := Dest;
     exit;
   end;
-  c := Value;
   PCardinal(Dest)^ := (c and $7F) or (((c shr 7)and $7F)shl 8) or
     (((c shr 14)and $7F)shl 16) or (((c shr 21)and $7F)shl 24) or $80808080;
   Value := Value shr 28;
@@ -39175,24 +39213,6 @@ begin
     result := p^{$endif};
   inc(p);
   Source := p;
-end;
-
-function ToVarInt64(Value: Int64; Dest: PByte): PByte;
-begin // 0=0,1=1,2=-1,3=2,4=-2...
-  {$ifdef CPU32}
-  if Value<=0 then
-    // 0->0, -1->2, -2->4..
-    result := ToVarUInt64((-Value) shl 1,Dest) else
-    // 1->1, 2->3..
-    result := ToVarUInt64((Value shl 1)-1,Dest);
-  {$else}
-  if Value<=0 then
-    // 0->0, -1->2, -2->4..
-    Value := (-Value) shl 1 else
-    // 1->1, 2->3..
-    Value := (Value shl 1)-1;
-  result := ToVarUInt64(Value,Dest);
-  {$endif}
 end;
 
 function FromVarInt64(var Source: PByte): Int64;
