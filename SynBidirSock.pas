@@ -2742,8 +2742,8 @@ begin
             break; // will close the connection
           end else begin
             elapsed := LastPingDelay;
-            if (elapsed>0) and (fOutgoing.Count>0) then
-              if not SendPendingOutgoingFrames then begin
+            if (elapsed>0) then
+              if (fOutgoing.Count>0) and not SendPendingOutgoingFrames then begin
                 fState := wpsClose;
                 break;
               end else
