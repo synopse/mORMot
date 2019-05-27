@@ -6424,6 +6424,7 @@ end;
 
 function TSQLDBConnectionPropertiesThreadSafe.CurrentThreadConnectionIndex: Integer;
 var id: TThreadID;
+    conn: TSQLDBConnectionThreadSafe;
 begin
   if self<>nil then begin
     id := GetCurrentThreadId;
@@ -6431,11 +6432,20 @@ begin
     if (result>=0) and
        (TSQLDBConnectionThreadSafe(fConnectionPool.List[result]).fThreadID=id) then
       exit;
-    for result := 0 to fConnectionPool.Count-1 do
-      if TSQLDBConnectionThreadSafe(fConnectionPool.List[result]).fThreadID=id then begin
-        fLatestConnectionRetrievedInPool := result;
-        exit;
+    result := 0;
+    while result<fConnectionPool.Count-1 do begin
+      conn := TSQLDBConnectionThreadSafe(fConnectionPool.List[result]);
+      // check first if connection is outdated because if rdbms engine was restarted this guarantee the reconnection
+      if conn.IsOutdated then
+        fConnectionPool.Delete(result)
+      else begin
+        if conn.fThreadID=id then begin
+          fLatestConnectionRetrievedInPool := result;
+          exit;
+        end;
+        inc(result);
       end;
+    end;
   end;
   result := -1;
 end;
