@@ -179,7 +179,7 @@ end;
 function GetFPCAlignPtr(P: pointer): pointer;
 begin
   result := TypInfo.AlignTypeData(P+2+Length(PTypeInfo(P)^.Name));
-  Dec(PtrUInt(result),SizeOf(pointer));
+  Dec(PtrUInt(result),2*SizeOf(pointer));
 end;
 {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
