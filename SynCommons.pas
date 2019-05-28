@@ -5798,7 +5798,8 @@ type
   // @http://www.delphitools.info/2011/11/30/fixing-tcriticalsection
   // - internal padding is used to safely store up to 7 values protected
   // from concurrent access with a mutex
-  // - for object-level locking, see TSynPersistentLock which owns one such instance
+  // - for object-level locking, see TSynPersistentLock which owns one such
+  // instance, or call low-level NewSynLocker function then DoneAndFreemem
   {$ifdef FPC_OR_UNICODE}TSynLocker = record private
   {$else}TSynLocker = object protected{$endif}
     fSection: TRTLCriticalSection;
@@ -5842,6 +5843,9 @@ type
     // the TSynLocker instance), otherwise you may encounter unexpected
     // behavior, like access violations or memory leaks
     procedure Done;
+    /// finalize the mutex, and call FreeMem() on the pointer of this instance
+    // - should have been initiazed with a NewSynLocker call
+    procedure DoneAndFreeMem;
     /// lock the instance for exclusive access
     // - use as such to avoid race condition (from a Safe: TSynLocker property):
     // ! Safe.Lock;
@@ -6259,6 +6263,11 @@ type
 
   /// a reference pointer to a Name/Value RawUTF8 pairs storage
   PSynNameValue = ^TSynNameValue;
+
+/// allocate and initialize a TSynLocker instance
+// - caller should call result^.DoneAndFreemem when not used any more
+function NewSynLocker: PSynLocker;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// wrapper to add an item to a array of pointer dynamic array storage
 function PtrArrayAdd(var aPtrArray; aItem: pointer): integer;
@@ -16290,6 +16299,8 @@ type
   // as IAutoLocker so that this class may be automatically injected
   // - you may use the inherited TAutoLockerDebug class, as defined in SynLog.pas,
   // to debug unexpected race conditions due to such critical sections
+  // - consider inherit from high-level TSynPersistentLock or call low-level
+  // fSafe := NewSynLocker / fSafe^.DoneAndFreemem instead
   TAutoLocker = class(TInterfacedObjectWithCustomCreate,IAutoLocker)
   protected
     fSafe: TSynLocker;
@@ -39114,14 +39125,52 @@ begin
   result := result and $FFFFFFF or c;
 end;
 
+function ToVarInt64(Value: Int64; Dest: PByte): PByte;
+begin // 0=0,1=1,2=-1,3=2,4=-2...
+  {$ifdef CPU32}
+  if Value<=0 then
+    // 0->0, -1->2, -2->4..
+    result := ToVarUInt64((-Value) shl 1,Dest) else
+    // 1->1, 2->3..
+    result := ToVarUInt64((Value shl 1)-1,Dest);
+  {$else}
+  if Value<=0 then
+    // 0->0, -1->2, -2->4..
+    Value := (-Value) shl 1 else
+    // 1->1, 2->3..
+    Value := (Value shl 1)-1;
+  result := ToVarUInt64(Value,Dest);
+  {$endif}
+end;
+
 function ToVarUInt64(Value: QWord; Dest: PByte): PByte;
+label _1,_2,_3; // ugly but fast
 var c: cardinal;
 begin
+  c := Value;
   if {$ifdef CPU32}PInt64Rec(@Value)^.Hi=0{$else}Value shr 32=0{$endif} then begin
-    result := ToVarUInt32(Value,Dest);
+    if c>$7f then begin // inlined result := ToVarUInt32(Value,Dest);
+      if c<$80 shl 7 then goto _1 else
+        if c<$80 shl 14 then goto _2 else
+          if c<$80 shl 21 then goto _3;
+      Dest^ := (c and $7F) or $80;
+      c := c shr 7;
+      inc(Dest);
+  _3: Dest^ := (c and $7F) or $80;
+      c := c shr 7;
+      inc(Dest);
+  _2: Dest^ := (c and $7F) or $80;
+      c := c shr 7;
+      inc(Dest);
+  _1: Dest^ := (c and $7F) or $80;
+      c := c shr 7;
+      inc(Dest);
+    end;
+    Dest^ := c;
+    inc(Dest);
+    result := Dest;
     exit;
   end;
-  c := Value;
   PCardinal(Dest)^ := (c and $7F) or (((c shr 7)and $7F)shl 8) or
     (((c shr 14)and $7F)shl 16) or (((c shr 21)and $7F)shl 24) or $80808080;
   Value := Value shr 28;
@@ -39164,24 +39213,6 @@ begin
     result := p^{$endif};
   inc(p);
   Source := p;
-end;
-
-function ToVarInt64(Value: Int64; Dest: PByte): PByte;
-begin // 0=0,1=1,2=-1,3=2,4=-2...
-  {$ifdef CPU32}
-  if Value<=0 then
-    // 0->0, -1->2, -2->4..
-    result := ToVarUInt64((-Value) shl 1,Dest) else
-    // 1->1, 2->3..
-    result := ToVarUInt64((Value shl 1)-1,Dest);
-  {$else}
-  if Value<=0 then
-    // 0->0, -1->2, -2->4..
-    Value := (-Value) shl 1 else
-    // 1->1, 2->3..
-    Value := (Value shl 1)-1;
-  result := ToVarUInt64(Value,Dest);
-  {$endif}
 end;
 
 function FromVarInt64(var Source: PByte): Int64;
@@ -50064,6 +50095,12 @@ begin
     QuickSortPtr(0,fCount-1,Compare,fValue^);
 end;
 
+function NewSynLocker: PSynLocker;
+begin
+  result := AllocMem(SizeOf(result^));
+  result^.Init;
+end;
+
 function PtrArrayAdd(var aPtrArray; aItem: pointer): integer;
 var a: TPointerDynArray absolute aPtrArray;
 begin
@@ -50521,6 +50558,12 @@ begin
   fInitialized := false;
 end;
 
+procedure TSynLocker.DoneAndFreeMem;
+begin
+  Done;
+  FreeMem(@self);
+end;
+
 procedure TSynLocker.Lock;
 begin
   EnterCriticalSection(fSection);
@@ -50785,15 +50828,13 @@ end;
 constructor TInterfacedObjectLocked.Create;
 begin
   inherited Create;
-  fSafe := AllocMem(SizeOf(TSynLocker));
-  fSafe^.Init;
+  fSafe := NewSynLocker;
 end;
 
 destructor TInterfacedObjectLocked.Destroy;
 begin
   inherited Destroy;
-  fSafe^.Done;
-  FreeMem(fSafe);
+  fSafe^.DoneAndFreeMem;
 end;
 
 
@@ -50893,14 +50934,12 @@ end;
 constructor TSynPersistentLock.Create;
 begin
   inherited Create;
-  fSafe := AllocMem(SizeOf(TSynLocker));
-  fSafe^.Init;
+  fSafe := NewSynLocker;
 end;
 
 destructor TSynPersistentLock.Destroy;
 begin
-  fSafe^.Done;
-  FreeMem(fSafe);
+  fSafe^.DoneAndFreeMem;
   inherited;
 end;
 
