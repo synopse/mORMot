@@ -4582,7 +4582,16 @@ begin
   end;
   if Assigned(sqlite3.key) and (fPassword<>'') and
      (fFileName<>SQLITE_MEMORY_DATABASE_NAME) and (fFileName<>'') then
+  begin
     sqlite3.key(fDB,pointer(fPassword),length(fPassword));
+    if not ExecuteNoException('select count(*) from SQLITE_MASTER') then
+    begin  //password error?
+      Result  :=  SQLITE_NOTADB;
+      sqlite3.close(fDB); // should always be closed, even on failure
+      fDB := 0;
+      exit;
+    end;
+  end;
   // tune up execution speed
   if not fIsMemory then begin
     if (fOpenV2Flags and SQLITE_OPEN_CREATE<>0) and (fFileDefaultPageSize<>0) then
