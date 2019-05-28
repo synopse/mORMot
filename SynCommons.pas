@@ -36934,6 +36934,9 @@ end;
 
 function StrCurr64(P: PAnsiChar; const Value: Int64): PAnsiChar;
 var c: QWord;
+    {$ifdef CPUARM}
+    d: Cardinal;
+    {$endif}
     {$ifndef CPU64}c64: Int64Rec absolute c;{$endif}
 begin
   if Value=0 then begin
@@ -36950,7 +36953,13 @@ begin
     YearToPChar(c,PUTF8Char(P)-4);
   end else begin
     result := StrUInt64(P-1,c);
+    {$ifdef CPUARM}
+    //alf: circumvent ARM quirck
+    d := PCardinal(P-5)^;
+    PCardinal(P-4)^ := d;
+    {$else}
     PCardinal(P-4)^ := PCardinal(P-5)^;
+    {$endif}
     P[-5] := '.'; // insert '.' just before last 4 decimals
   end;
   if Value<0 then begin
