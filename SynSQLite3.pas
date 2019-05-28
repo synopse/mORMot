@@ -386,6 +386,10 @@ const
   /// sqlite3.step() return code: has finished executing
   SQLITE_DONE = 101;
 
+  /// possible error codes for sqlite_exec()  and sqlite3.step()
+  // - as verified by sqlite3_check()
+  SQLITE_ERRORS = [SQLITE_ERROR..SQLITE_ROW-1];
+
   /// The database is opened in read-only mode
   // - if the database does not already exist, an error is returned
   // - Ok for sqlite3.open_v2()
@@ -2281,10 +2285,9 @@ function sqlite3_resultToErrorText(aResult: integer): RawUTF8;
 function ErrorCodeToText(err: TSQLite3ErrorCode): RawUTF8;
 
 /// test the result state of a sqlite3.*() function
-// - raise a ESQLite3Exception if the result state is an error
+// - raise a ESQLite3Exception if the result state is within SQLITE_ERRORS
 // - return the result state otherwise (SQLITE_OK,SQLITE_ROW,SQLITE_DONE e.g.)
 function sqlite3_check(DB: TSQLite3DB; aResult: integer; const SQL: RawUTF8=''): integer;
-  {$ifdef HASINLINE}inline;{$endif}
 
 var
   /// global access to linked SQLite3 library API calls
@@ -2393,8 +2396,8 @@ type
     /// Prepare a UTF-8 encoded SQL statement
     // - compile the SQL into byte-code
     // - parameters ? ?NNN :VV @VV $VV can be bound with Bind*() functions below
-    // - raise an ESQLite3Exception on any error
-    function Prepare(DB: TSQLite3DB; const SQL: RawUTF8): integer;
+    // - raise an ESQLite3Exception on any error, unless NoExcept is TRUE
+    function Prepare(DB: TSQLite3DB; const SQL: RawUTF8; NoExcept: boolean=false): integer;
     /// Prepare a WinAnsi SQL statement
     // - behave the same as Prepare()
     function PrepareAnsi(DB: TSQLite3DB; const SQL: WinAnsiString): integer;
@@ -2432,6 +2435,11 @@ type
     // - Close is always called internaly
     // - raise an ESQLite3Exception on any error
     procedure Execute(aDB: TSQLite3DB; const aSQL: RawUTF8); overload;
+    /// Execute one SQL statement in the aSQL UTF-8 encoded string
+    // - Execute the first statement in aSQL: call Prepare() then Step once
+    // - Close is always called internaly
+    // - returns TRUE on succes, and raise no ESQLite3Exception on error, but returns FALSE
+    function ExecuteNoException(aDB: TSQLite3DB; const aSQL: RawUTF8): boolean;
     /// Execute a SQL statement which return integers from the aSQL UTF-8 encoded string
     // - Execute the first statement in aSQL
     // - this statement must get (at least) one field/column result of INTEGER
@@ -3523,7 +3531,7 @@ begin
       sqlite3.result_text(Context,tmp,-1,SQLITE_TRANSIENT_VIRTUALTABLE);
     end;
     // WARNING! use pointer(integer(-1)) instead of SQLITE_TRANSIENT=pointer(-1)
-    // due to a bug in Sqlite3 current implementation of virtual tables in Win64
+    // due to a bug in SQLite3 current implementation of virtual tables in Win64
     ftUTF8:
       if Res.VText=nil then
        sqlite3.result_text(Context,@NULCHAR,0,SQLITE_STATIC) else
@@ -4134,15 +4142,23 @@ begin
 end;
 
 function TSQLDataBase.ExecuteNoException(const aSQL: RawUTF8): boolean;
+var R: TSQLRequest;
+    Timer: TPrecisionTimer;
 begin
-  if (self=nil) or (DB=0) then
-    result := false else
-    try
-      Execute(aSQL);
-      result := true;
-    except
-      result := false;
-    end;
+  if (self=nil) or (DB=0) then begin
+    result := false;
+    exit; // avoid GPF in case of call from a static-only server
+  end;
+  Timer.Start;
+  Lock(aSQL); // run one statement -> we can trust IsCacheable()
+  try
+    result := R.ExecuteNoException(DB,aSQL);
+  finally
+    UnLock;
+    {$ifdef WITHLOG}
+    fLog.Add.Log(sllSQL,'% % % = %',[Timer.Stop,FileNameWithoutPath,aSQL,BOOL_STR[result]],self);
+    {$endif}
+  end;
 end;
 
 function TSQLDataBase.ExecuteNoExceptionInt64(const aSQL: RawUTF8): Int64;
@@ -4853,8 +4869,7 @@ procedure TSQLRequest.BindS(Param: Integer; const Value: string);
 var P: PUTF8Char;
     len: integer;
 begin
-  if pointer(Value)=nil then begin
-    // avoid to bind '' as null
+  if pointer(Value)=nil then begin // avoid to bind '' as null
     sqlite3_check(RequestDB,sqlite3.bind_text(Request,Param,@NULCHAR,0,SQLITE_STATIC));
     exit;
   end;
@@ -4962,6 +4977,20 @@ begin
   finally
     Close; // always release statement, even if done normaly in Execute
   end;
+end;
+
+function TSQLRequest.ExecuteNoException(aDB: TSQLite3DB; const aSQL: RawUTF8): boolean;
+var req: integer;
+begin
+  result := false;
+  if (aDB<>0) and (aSQL<>'') then
+    try
+      if not(Prepare(aDB,aSQL,{noexcept=}true) in SQLITE_ERRORS) and (Request<>0) and
+         not(sqlite3.step(Request) in SQLITE_ERRORS) then
+        result := true;
+    finally
+      Close; // always release statement, even if done normaly in Execute
+    end;
 end;
 
 function TSQLRequest.Execute(aDB: TSQLite3DB; const aSQL: RawUTF8; var ID: TInt64DynArray): integer;
@@ -5266,7 +5295,7 @@ begin
   SetString(result,PAnsiChar(pointer(P)),StrLenW(P)*2+1);
 end;
 
-function TSQLRequest.Prepare(DB: TSQLite3DB; const SQL: RawUTF8): integer;
+function TSQLRequest.Prepare(DB: TSQLite3DB; const SQL: RawUTF8; NoExcept: boolean): integer;
 begin
   fDB := DB;
   fRequest := 0;
@@ -5281,7 +5310,8 @@ begin
     while (result=SQLITE_OK) and (Request=0) do // comment or white-space
       result := sqlite3.prepare_v2(RequestDB, fNextSQL, -1, fRequest, fNextSQL);
     fFieldCount := sqlite3.column_count(fRequest);
-    sqlite3_check(RequestDB,result,SQL);
+    if not NoExcept then
+      sqlite3_check(RequestDB,result,SQL);
   end;
 end;
 
@@ -5407,7 +5437,7 @@ end;
 
 function sqlite3_check(DB: TSQLite3DB; aResult: integer; const SQL: RawUTF8): integer;
 begin
-  if (DB=0) or (aResult in [SQLITE_ERROR..SQLITE_ROW-1]) then // possible error codes
+  if (DB=0) or (aResult in SQLITE_ERRORS) then // possible error codes
     raise ESQLite3Exception.Create(DB,aResult,SQL);
   result := aResult;
 end;
