@@ -23700,7 +23700,7 @@ begin
 end;
 {$endif HASINLINE}
 
-// from Aleksandr Sharahov's PosEx_Sha_Pas_2()
+// from Aleksandr Sharahov's PosEx_Sha_Pas_2() - refactored for cross-platform
 function PosExPas(pSub, p: PUTF8Char; Offset: PtrUInt): PtrInt;
 var len, lenSub: PtrInt;
     ch: AnsiChar;
@@ -36934,9 +36934,7 @@ end;
 
 function StrCurr64(P: PAnsiChar; const Value: Int64): PAnsiChar;
 var c: QWord;
-    {$ifdef CPUARM}
-    d: Cardinal;
-    {$endif}
+    d: cardinal;
     {$ifndef CPU64}c64: Int64Rec absolute c;{$endif}
 begin
   if Value=0 then begin
@@ -36953,13 +36951,8 @@ begin
     YearToPChar(c,PUTF8Char(P)-4);
   end else begin
     result := StrUInt64(P-1,c);
-    {$ifdef CPUARM}
-    //alf: circumvent ARM quirck
-    d := PCardinal(P-5)^;
+    d := PCardinal(P-5)^; // in two explit steps for CPUARM (alf)
     PCardinal(P-4)^ := d;
-    {$else}
-    PCardinal(P-4)^ := PCardinal(P-5)^;
-    {$endif}
     P[-5] := '.'; // insert '.' just before last 4 decimals
   end;
   if Value<0 then begin

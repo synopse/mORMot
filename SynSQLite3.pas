@@ -4552,7 +4552,7 @@ begin
   FPCLog := fLog.Enter('DBOpen %',[fFileNameWithoutPath],self);
 {$else}
 begin
-{$endif}
+{$endif WITHLOG}
   if fDB<>0 then
     raise ESQLite3Exception.Create('DBOpen called twice');
   if (sqlite3=nil) or not Assigned(sqlite3.open) then
@@ -4568,25 +4568,23 @@ begin
   {$else}
   if fOpenV2Flags<>(SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE) then
     result := sqlite3.open_v2(pointer(utf8),fDB,fOpenV2Flags,nil) else
-  {$endif}
+  {$endif LINUX}
     result := sqlite3.open(pointer(utf8),fDB);
   if result<>SQLITE_OK then begin
     {$ifdef WITHLOG}
     if FPCLog<>nil then
       FPCLog.Log(sllError,'sqlite3_open ("%") failed with error % (%): %',
         [utf8,sqlite3_resultToErrorText(result),result,sqlite3.errmsg(fDB)]);
-    {$endif}
+    {$endif WITHLOG}
     sqlite3.close(fDB); // should always be closed, even on failure
     fDB := 0;
     exit;
   end;
-  if Assigned(sqlite3.key) and (fPassword<>'') and
-     (fFileName<>SQLITE_MEMORY_DATABASE_NAME) and (fFileName<>'') then
-  begin
+  if Assigned(sqlite3.key) and (fPassword<>'') and (fFileName<>'') and
+     (fFileName<>SQLITE_MEMORY_DATABASE_NAME) then begin
     sqlite3.key(fDB,pointer(fPassword),length(fPassword));
-    if not ExecuteNoException('select count(*) from SQLITE_MASTER') then
-    begin  //password error?
-      Result  :=  SQLITE_NOTADB;
+    if not ExecuteNoException('select count(*) from SQLITE_MASTER') then begin
+      Result  :=  SQLITE_NOTADB; // likely a password error
       sqlite3.close(fDB); // should always be closed, even on failure
       fDB := 0;
       exit;
