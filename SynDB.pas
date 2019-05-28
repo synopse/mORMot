@@ -1736,7 +1736,7 @@ type
     fInternalProcessActive: integer;
     fRollbackOnDisconnect: Boolean;
     fLastAccessTicks: Int64;
-    function IsOutdated: boolean; // do not make virtual
+    function IsOutdated(tix: Int64): boolean; // do not make virtual
     function GetInTransaction: boolean; virtual;
     function GetServerTimestamp: TTimeLog;
     function GetServerDateTime: TDateTime; virtual;
@@ -4171,8 +4171,7 @@ begin
   inherited;
 end;
 
-function TSQLDBConnection.IsOutdated: boolean;
-var Ticks: Int64;
+function TSQLDBConnection.IsOutdated(tix: Int64): boolean;
 begin
   result := false;
   if (self=nil) or (fProperties.fConnectionTimeOutTicks=0) then
@@ -4181,10 +4180,9 @@ begin
     result := true;
     exit;
   end;
-  Ticks := GetTickCount64;
-  if (fLastAccessTicks=0) or (Ticks-fLastAccessTicks<fProperties.fConnectionTimeOutTicks) then
+  if (fLastAccessTicks=0) or (tix-fLastAccessTicks<fProperties.fConnectionTimeOutTicks) then
     // brand new connection, or active enough connection
-    fLastAccessTicks := Ticks else
+    fLastAccessTicks := tix else
     // notify connection is clearly outdated
     result := true;
 end;
@@ -4789,7 +4787,7 @@ end;
 
 function TSQLDBConnectionProperties.GetMainConnection: TSQLDBConnection;
 begin
-  if fMainConnection.IsOutdated then
+  if fMainConnection.IsOutdated(GetTickCount64) then
     FreeAndNil(fMainConnection);
   if fMainConnection=nil then
     fMainConnection := NewConnection;
@@ -6424,18 +6422,30 @@ end;
 
 function TSQLDBConnectionPropertiesThreadSafe.CurrentThreadConnectionIndex: Integer;
 var id: TThreadID;
-begin
+    tix: Int64;
+    conn: TSQLDBConnectionThreadSafe;
+begin // caller made EnterCriticalSection(fConnectionCS)
   if self<>nil then begin
     id := GetCurrentThreadId;
+    tix := GetTickCount64;
     result := fLatestConnectionRetrievedInPool;
-    if (result>=0) and
-       (TSQLDBConnectionThreadSafe(fConnectionPool.List[result]).fThreadID=id) then
-      exit;
-    for result := 0 to fConnectionPool.Count-1 do
-      if TSQLDBConnectionThreadSafe(fConnectionPool.List[result]).fThreadID=id then begin
-        fLatestConnectionRetrievedInPool := result;
+    if result>=0 then begin
+      conn := fConnectionPool.List[result];
+      if (conn.fThreadID=id) and not conn.IsOutdated(tix) then
         exit;
+    end;
+    result := 0;
+    while result<fConnectionPool.Count-1 do begin
+      conn := TSQLDBConnectionThreadSafe(fConnectionPool.List[result]);
+      if conn.IsOutdated(tix) then // to guarantee reconnection
+        fConnectionPool.Delete(result) else begin
+        if conn.fThreadID=id then begin
+          fLatestConnectionRetrievedInPool := result;
+          exit;
+        end;
+        inc(result);
       end;
+    end;
   end;
   result := -1;
 end;
@@ -6478,9 +6488,7 @@ begin
       i := CurrentThreadConnectionIndex;
       if i>=0 then begin
         result := fConnectionPool.List[i];
-        if result.IsOutdated then
-          fConnectionPool.Delete(i) else // release outdated connection
-          exit;
+        exit;
       end;
       result := NewConnection;
       (result as TSQLDBConnectionThreadSafe).fThreadID := GetCurrentThreadId;
@@ -8279,6 +8287,7 @@ end;
 
 procedure TSQLDBProxyStatementAbstract.IntHeaderProcess(Data: PByte; DataLen: integer);
 var Magic,F,colCount: integer;
+    p: PSQLDBColumnProperty;
 begin
   fDataCurrentRowValuesStart := nil;
   fDataCurrentRowValuesSize := 0;
@@ -8287,21 +8296,21 @@ begin
   fDataCurrentRowNullLen := 0;
   repeat
     if DataLen<=5 then
-      break;
+      break; // to raise ESQLDBException
     fDataRowCount := PInteger(PtrInt(Data)+DataLen-sizeof(Integer))^;
     Magic := FromVarUInt32(Data);
     if Magic<>FETCHALLTOBINARY_MAGIC then
-      break;
+      break; // corrupted
     colCount := FromVarUInt32(Data);
     SetLength(fDataCurrentRowColTypes,colCount);
     SetLength(fDataCurrentRowValues,colCount);
     fColumn.Capacity := colCount;
-    for F := 0 to colCount-1 do
-    with PSQLDBColumnProperty(fColumn.AddAndMakeUniqueName(FromVarString(Data)))^ do begin
-      ColumnType := TSQLDBFieldType(Data^);
-      fDataCurrentRowColTypes[F] := ColumnType;
+    for F := 0 to colCount-1 do begin
+      p := fColumn.AddAndMakeUniqueName(FromVarString(Data));
+      p^.ColumnType := TSQLDBFieldType(Data^);
       inc(Data);
-      ColumnValueDBSize := FromVarUInt32(Data);
+      p^.ColumnValueDBSize := FromVarUInt32(Data);
+      fDataCurrentRowColTypes[F] := p^.ColumnType;
     end;
     if fColumnCount=0 then
       exit; // no data returned

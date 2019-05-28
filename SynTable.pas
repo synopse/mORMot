@@ -3292,7 +3292,7 @@ type
     fTimeOutMs: integer;
     fEvent: TBlockingEvent;
     fSafe: PSynLocker;
-    fOwnedSafe: TAutoLocker;
+    fOwnedSafe: boolean;
     procedure ResetInternal; virtual; // override to reset associated params
   public
     /// initialize the semaphore instance
@@ -3463,13 +3463,12 @@ type
   // to gather low-level CPU and RAM information for the given set of processes
   // - is able to keep an history of latest sample values
   // - use Current class function to access a process-wide instance
-  TSystemUse = class(TSynPersistent)
+  TSystemUse = class(TSynPersistentLock)
   protected
     fProcess: TSystemUseProcessDynArray;
     fProcesses: TDynArray;
     fDataIndex: integer;
     fProcessInfo: TProcessInfo;
-    fSafe: TAutoLocker;
     fHistoryDepth: integer;
     fOnMeasured: TOnSystemUseMeasured;
     fTimer: TSynBackgroundTimer;
@@ -3499,8 +3498,6 @@ type
     // - you should then execute the BackgroundExecute method of this instance
     // in a VCL timer or from a TSynBackgroundTimer.Enable() registration
     constructor Create(aHistoryDepth: integer=60); reintroduce; overload; virtual;
-    /// finalize all internal data information
-    destructor Destroy; override;
     /// add a Process ID to the internal tracking list
     procedure Subscribe(aProcessID: integer);
     /// remove a Process ID from the internal tracking list
@@ -12012,13 +12009,14 @@ end;
 
 constructor TBlockingProcess.Create(aTimeOutMs: integer);
 begin
-  fOwnedSafe := TAutoLocker.Create;
-  Create(aTimeOutMS,fOwnedSafe.Safe);
+  fOwnedSafe := true;
+  Create(aTimeOutMS,NewSynLocker);
 end;
 
 destructor TBlockingProcess.Destroy;
 begin
-  fOwnedSafe.Free;
+  if fOwnedSafe then
+    fSafe^.DoneAndFreeMem;
   inherited Destroy;
 end;
 
@@ -12525,7 +12523,7 @@ begin
     exit;
   fTimer := Sender;
   now := NowUTC;
-  fSafe.Enter;
+  fSafe.Lock;
   try
     inc(fDataIndex);
     if fDataIndex>=fHistoryDepth then
@@ -12540,7 +12538,7 @@ begin
         // if GetLastError=ERROR_INVALID_PARAMETER then
         fProcesses.Delete(i);
   finally
-    fSafe.Leave;
+    fSafe.UnLock;
   end;
 end;
 
@@ -12554,7 +12552,6 @@ constructor TSystemUse.Create(const aProcessID: array of integer;
 var i: integer;
 begin
   inherited Create;
-  fSafe := TAutoLocker.Create;
   fProcesses.Init(TypeInfo(TSystemUseProcessDynArray),fProcess);
   {$ifdef MSWINDOWS}
   if not Assigned(GetSystemTimes) or not Assigned(GetProcessTimes) or
@@ -12582,12 +12579,6 @@ begin
   Create([0],aHistoryDepth);
 end;
 
-destructor TSystemUse.Destroy;
-begin
-  inherited Destroy;
-  fSafe.Free;
-end;
-
 procedure TSystemUse.Subscribe(aProcessID: integer);
 var i,n: integer;
 begin
@@ -12597,7 +12588,7 @@ begin
   if aProcessID=0 then
     aProcessID := GetCurrentProcessID;
   {$endif}
-  fSafe.Enter;
+  fSafe.Lock;
   try
     n := length(fProcess);
     for i := 0 to n-1 do
@@ -12607,7 +12598,7 @@ begin
     fProcess[n].ID := aProcessID;
     SetLength(fProcess[n].Data,fHistoryDepth);
   finally
-    fSafe.Leave;
+    fSafe.UnLock;
   end;
 end;
 
@@ -12617,7 +12608,7 @@ begin
   result := false;
   if self=nil then
     exit;
-  fSafe.Enter;
+  fSafe.Lock;
   try
     i := ProcessIndex(aProcessID);
     if i>=0 then begin
@@ -12625,7 +12616,7 @@ begin
       result := true;
     end;
   finally
-    fSafe.Leave;
+    fSafe.UnLock;
   end;
 end;
 
@@ -12647,7 +12638,7 @@ var i: integer;
 begin
   result := false;
   if self<>nil then begin
-    fSafe.Enter;
+    fSafe.Lock;
     try
       i := ProcessIndex(aProcessID);
       if i>=0 then begin
@@ -12658,7 +12649,7 @@ begin
           exit;
       end;
     finally
-      fSafe.Leave;
+      fSafe.UnLock;
     end;
   end;
   {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(aData,SizeOf(aData),0);
@@ -12702,7 +12693,7 @@ begin
   result := nil;
   if self=nil then
     exit;
-  fSafe.Enter;
+  fSafe.Lock;
   try
     i := ProcessIndex(aProcessID);
     if i>=0 then
@@ -12725,7 +12716,7 @@ begin
         end;
       end;
   finally
-    fSafe.Leave;
+    fSafe.UnLock;
   end;
 end;
 
