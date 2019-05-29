@@ -4145,10 +4145,9 @@ function TSQLDataBase.ExecuteNoException(const aSQL: RawUTF8): boolean;
 var R: TSQLRequest;
     Timer: TPrecisionTimer;
 begin
-  if (self=nil) or (DB=0) then begin
-    result := false;
+  result := false;
+  if (self=nil) or (DB=0) then
     exit; // avoid GPF in case of call from a static-only server
-  end;
   Timer.Start;
   Lock(aSQL); // run one statement -> we can trust IsCacheable()
   try
@@ -4980,7 +4979,6 @@ begin
 end;
 
 function TSQLRequest.ExecuteNoException(aDB: TSQLite3DB; const aSQL: RawUTF8): boolean;
-var req: integer;
 begin
   result := false;
   if (aDB<>0) and (aSQL<>'') then

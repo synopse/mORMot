@@ -2348,8 +2348,8 @@ type
     /// the prepared SQL statement, with all '?' changed into the supplied
     // parameter values
     property SQLWithInlinedParams: RawUTF8 read GetSQLWithInlinedParams;
-    /// the current row after Execute call, corresponding to Column*() methods
-    // - contains 0 in case of no (more) available data, or a number >=1
+    /// the current row after Execute/Step call, corresponding to Column*() methods
+    // - contains 0 before initial Step call, or a number >=1 during data retrieval
     property CurrentRow: Integer read fCurrentRow;
     /// the total number of data rows retrieved by this instance
     // - is not reset when there is no more row of available data (Step returns
@@ -3439,7 +3439,7 @@ function ToText(Field: TSQLDBFieldType): PShortString; overload;
 
 /// retrieve the ready-to-be displayed text of a given Database field
 // type enumeration
-function TSQLDBFieldTypeToString(aType: TSQLDBFieldType): string;
+function TSQLDBFieldTypeToString(aType: TSQLDBFieldType): TShort16;
 
 {$ifdef WITH_PROXY}
 /// retrieve the ready-to-be displayed text of proxy commands implemented by
@@ -3467,14 +3467,11 @@ begin
 end;
 {$endif}
 
-function TSQLDBFieldTypeToString(aType: TSQLDBFieldType): string;
-var PS: PShortString;
+function TSQLDBFieldTypeToString(aType: TSQLDBFieldType): TShort16;
 begin
-  if cardinal(aType)<=cardinal(high(aType)) then begin
-    PS := ToText(aType);
-    result := Ansi7ToString(@PS^[3],ord(PS^[0])-2);
-  end else
-    result := IntToStr(ord(aType));
+  if aType<=high(aType) then
+    result := TrimLeftLowerCaseToShort(ToText(aType)) else
+    FormatShort16('#%',[ord(aType)],result);
 end;
 
 function OracleSQLIso8601ToDate(Iso8601: RawUTF8): RawUTF8;
@@ -7126,16 +7123,16 @@ var F: integer;
     VDouble: double;
     VCurrency: currency absolute VDouble;
     VDateTime: TDateTime absolute VDouble;
-    colType: TSQLDBFieldType;
+    ft: TSQLDBFieldType;
 begin
   for F := 0 to length(ColTypes)-1 do
     if not GetBitPtr(Null, F) then begin
-      colType := ColTypes[F];
-      if colType<ftInt64 then begin // ftUnknown,ftNull
-        colType := ColumnType(F); // per-row column type (SQLite3 only)
-        W.Write1(ord(colType));
+      ft := ColTypes[F];
+      if ft<ftInt64 then begin // ftUnknown,ftNull
+        ft := ColumnType(F); // per-row column type (SQLite3 only)
+        W.Write1(ord(ft));
       end;
-      case colType of
+      case ft of
       ftInt64:
         W.WriteVarInt64(ColumnInt(F));
       ftDouble: begin
@@ -7156,7 +7153,7 @@ begin
         W.Write(ColumnBlob(F));
       else
       raise ESQLDBException.CreateUTF8('%.ColumnsToBinary: Invalid ColumnType(%)=%',
-        [self,ColumnName(F),ord(colType)]);
+        [self,ColumnName(F),ord(ft)]);
     end;
   end;
 end;
@@ -7167,8 +7164,9 @@ const
 function TSQLDBStatement.FetchAllToBinary(Dest: TStream; MaxRowCount: cardinal;
   DataRowPosition: PCardinalDynArray): cardinal;
 var F, FMax, FieldSize, NullRowSize: integer;
-    StartPos: cardinal;
+    StartPos: Int64;
     W: TFileBufferWriter;
+    ft: TSQLDBFieldType;
     ColTypes: TSQLDBFieldTypeDynArray;
     Null: TByteDynArray;
 begin
@@ -7184,8 +7182,11 @@ begin
       dec(FMax);
       for F := 0 to FMax do begin
         W.Write(ColumnName(F));
-        ColTypes[F] := ColumnType(F,@FieldSize);
-        W.Write1(ord(ColTypes[F]));
+        ft := ColumnType(F,@FieldSize);
+        if (ft=ftUnknown) and (CurrentRow=0) and Step then
+          ft := ColumnType(F,@FieldSize); // e.g. SQLite3 -> fetch and guess
+        ColTypes[F] := ft;
+        W.Write1(ord(ft));
         W.WriteVarUInt32(FieldSize);
       end;
       // initialize null handling
@@ -7211,9 +7212,11 @@ begin
             SetBitPtr(pointer(Null),F);
             NullRowSize := (F shr 3)+1;
           end;
-        W.WriteVarUInt32(NullRowSize);
-        if NullRowSize>0 then
+        if NullRowSize>0 then begin
+          W.WriteVarUInt32(NullRowSize);
           W.Write(pointer(Null),NullRowSize);
+        end else
+          W.Write1(0); // = W.WriteVarUInt32(0)
         // then write data values
         ColumnsToBinary(W,pointer(Null),ColTypes);
         inc(result);
@@ -8330,6 +8333,7 @@ end;
 procedure TSQLDBProxyStatementAbstract.IntFillDataCurrent(var Reader: PByte;
   IgnoreColumnDataSize: boolean);
 var F,Len: Integer;
+    ft: TSQLDBFieldType;
 begin // format match TSQLDBStatement.FetchAllToBinary()
   if fDataCurrentRowNullLen>0 then
     FillCharFast(fDataCurrentRowNull[0],fDataCurrentRowNullLen,0);
@@ -8345,13 +8349,14 @@ begin // format match TSQLDBStatement.FetchAllToBinary()
   for F := 0 to fColumnCount-1 do
     if GetBitPtr(pointer(fDataCurrentRowNull),F) then
       fDataCurrentRowValues[F] := nil else begin
-      fDataCurrentRowColTypes[F] := fColumns[F].ColumnType;
-      if fDataCurrentRowColTypes[F]<ftInt64 then begin
-        fDataCurrentRowColTypes[F] := TSQLDBFieldType(Reader^);
+      ft := fColumns[F].ColumnType;
+      if ft<ftInt64 then begin // per-row column type (SQLite3 only)
+        ft := TSQLDBFieldType(Reader^);
         inc(Reader);
       end;
+      fDataCurrentRowColTypes[F] := ft;
       fDataCurrentRowValues[F] := Reader;
-      case fDataCurrentRowColTypes[F] of
+      case ft of
       ftInt64:
         Reader := GotoNextVarInt(Reader);
       ftDouble, ftCurrency, ftDate:
@@ -8364,7 +8369,7 @@ begin // format match TSQLDBStatement.FetchAllToBinary()
         inc(Reader,Len); // jump string/blob content
       end;
       else raise ESQLDBException.CreateUTF8('%.IntStep: Invalid ColumnType(%)=%',
-        [self,fColumns[F].ColumnName,ord(fDataCurrentRowColTypes[F])]);
+        [self,fColumns[F].ColumnName,ord(ft)]);
       end;
     end;
   fDataCurrentRowValuesSize := PtrUInt(Reader)-PtrUInt(fDataCurrentRowValuesStart);
