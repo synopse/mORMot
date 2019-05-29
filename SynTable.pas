@@ -7341,11 +7341,14 @@ begin
   result := match.Match(Text);
 end;
 
-function IsMatchString(const Pattern, Text: string; CaseInsensitive: boolean=false): boolean;
+function IsMatchString(const Pattern, Text: string; CaseInsensitive: boolean): boolean;
 var match: TMatch;
+    pat, txt: RawUTF8;
 begin
-  match.Prepare(StringToUTF8(Pattern), CaseInsensitive, {reuse=}false);
-  result := match.Match(StringToUTF8(Text));
+  StringToUTF8(Pattern, pat); // local variable is mandatory for FPC
+  StringToUTF8(Text, txt);
+  match.Prepare(pat, CaseInsensitive, {reuse=}false);
+  result := match.Match(txt);
 end;
 
 function SetMatchs(const CSVPattern: RawUTF8; CaseInsensitive: boolean;
