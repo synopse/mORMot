@@ -446,49 +446,79 @@ begin
     Writer := TTextWriter.CreateOwnedStream;
     try
       if {$IFDEF FPC}request.&type{$ELSE}request.type{$ENDIF} = 'listAddons' then begin
-        Writer.AddShort('{"from":"root","addons":[');
+        // till 2019-06-01 SyNode represent itself as a firefor addon
+        // after latest update to VSCode FF debugger plugin addons is not supported,
+        // so now SyNode represent itself as a regular browser tab with empty HTML
+
+        //  Writer.AddShort('{"from":"root","addons":[');
+        //  fParent.fDebuggers.Safe.Lock;
+        //  try
+        //    for I := 0 to fParent.fDebuggers.Count - 1 do begin
+        //      debugger := TSMDebugger(fParent.fDebuggers[i]);
+        //      engine := fParent.fManager.EngineForThread(debugger.fSmThreadID);
+        //      if engine <> nil then begin
+        //        // Actor represent debug thread here, setting proper name with coxtext thread id
+        //        // Writer.AddShort('{"actor":"server1.conn1.addon');
+        //        // Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fIndex);
+        //        Writer.AddShort('{"actor":"');
+        //        Writer.AddShort(debugger.fDebuggerName);
+        //        Writer.AddShort('.conn1.thread_');
+        //        { TODO : check that in multithread mode this field equal thread id with js context that we debug, otherwire replace with proper assigment }
+        //        Writer.Add(debugger.fSmThreadID);
+        //        // id should be addon id, value from DoOnGetEngineName event
+        //        // Writer.AddShort('","id":"server1.conn1.addon');
+        //        // Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fIndex);
+        //        Writer.AddShort('","id":"');
+        //        Writer.AddString(debugger.fNameForDebug);
+        //        Writer.AddShort('","name":"');
+        //        Writer.AddString(debugger.fNameForDebug);
+        //        // url most likly should be addon folder in format: file:///drive:/path/
+        //        // Writer.AddShort('","url":"server1.conn1.addon');
+        //        // Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fIndex);
+        //        { TODO : replace with path generation, should be context home dir in format file:///drive:/path/ }
+        //        Writer.AddShort('","url":"file:///' + StringReplaceAll(debugger.fWebAppRootPath, '\', '/'));
+        //        Writer.AddShort('","debuggable":');
+        //        Writer.Add(debugger.fCommunicationThread = nil);
+        //        Writer.AddShort(',"consoleActor":"console');
+        //        Writer.Add(debugger.fIndex);
+        //        Writer.AddShort('"},');
+        //      end;
+        //    end;
+        //  finally
+        //    fParent.fDebuggers.Safe.UnLock;
+        //  end;
+        //  Writer.CancelLastComma;
+        //  Writer.AddShort(']}');
+        Writer.AddShort('{"from":"root","addons":[]}');
+      end else if {$IFDEF FPC}request.&type{$ELSE}request.type{$ENDIF} = 'listTabs' then begin
         fParent.fDebuggers.Safe.Lock;
         try
+          Writer.AddShort('{"from":"root","tabs":[');
           for I := 0 to fParent.fDebuggers.Count - 1 do begin
             debugger := TSMDebugger(fParent.fDebuggers[i]);
             engine := fParent.fManager.EngineForThread(debugger.fSmThreadID);
             if engine <> nil then begin
-              // Actor represent debug thread here, setting proper name with coxtext thread id
-              // Writer.AddShort('{"actor":"server1.conn1.addon');
-              // Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fIndex);
               Writer.AddShort('{"actor":"');
-              Writer.AddShort(debugger.fDebuggerName);
-              Writer.AddShort('.conn1.thread_');
-              { TODO : check that in multithread mode this field equal thread id with js context that we debug, otherwire replace with proper assigment }
-              Writer.Add(debugger.fSmThreadID);
-              // id should be addon id, value from DoOnGetEngineName event
-              // Writer.AddShort('","id":"server1.conn1.addon');
-              // Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fIndex);
-              Writer.AddShort('","id":"');
-              Writer.AddString(debugger.fNameForDebug);
-              Writer.AddShort('","name":"');
-              Writer.AddString(debugger.fNameForDebug);
-              // url most likly should be addon folder in format: file:///drive:/path/
-              // Writer.AddShort('","url":"server1.conn1.addon');
-              // Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fIndex);
-              { TODO : replace with path generation, should be context home dir in format file:///drive:/path/ }
-              Writer.AddShort('","url":"file:///' + StringReplaceAll(debugger.fWebAppRootPath, '\', '/'));
-              Writer.AddShort('","debuggable":');
+                Writer.AddShort(debugger.fDebuggerName);
+                Writer.AddShort('.conn1.thread_'); Writer.Add(debugger.fSmThreadID);
+              Writer.AddShort('","title":"'); Writer.AddString(debugger.fNameForDebug);
+              Writer.AddShort('","url":"file:///' + StringReplaceAll(debugger.fWebAppRootPath, '\', '/')); Writer.Add('"');
+              Writer.AddShort(',"debuggable":');
               Writer.Add(debugger.fCommunicationThread = nil);
               Writer.AddShort(',"consoleActor":"console');
               Writer.Add(debugger.fIndex);
               Writer.AddShort('"},');
             end;
           end;
+          Writer.CancelLastComma;
+          Writer.AddShort(']');
+          if fParent.fDebuggers.Count > 0 then
+            Writer.AddShort(',"selected":1}')
+          else
+           Writer.AddShort(',"selected":0}');
         finally
           fParent.fDebuggers.Safe.UnLock;
         end;
-        Writer.CancelLastComma;
-        Writer.AddShort(']}');
-      end else if {$IFDEF FPC}request.&type{$ELSE}request.type{$ENDIF} = 'listTabs' then begin
-        // VSCode FireFox Debug extension https://github.com/hbenl/vscode-firefox-debug
-        // require at last one tab
-        Writer.AddShort('{"from":"root","tabs":[{}],"selected":0}');
       end else
         exit;
       Send(Writer.Text);
