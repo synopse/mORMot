@@ -818,8 +818,16 @@ function SQLVarLength(const Value: TSQLVar): integer;
 procedure VariantToSQLVar(const Input: variant; var temp: RawByteString;
   var Output: TSQLVar);
 
+/// guess the correct TSQLDBFieldType from a variant type
+function VariantVTypeToSQLDBFieldType(VType: word): TSQLDBFieldType;
+
 /// guess the correct TSQLDBFieldType from a variant value
 function VariantTypeToSQLDBFieldType(const V: Variant): TSQLDBFieldType;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// guess the correct TSQLDBFieldType from the UTF-8 representation of a value
+function TextToSQLDBFieldType(json: PUTF8Char): TSQLDBFieldType;
+
 
 {$endif NOVARIANTS}
 
@@ -10697,13 +10705,9 @@ begin
   end;
 end;
 
-function VariantTypeToSQLDBFieldType(const V: Variant): TSQLDBFieldType;
-var tmp: TVarData;
+function VariantVTypeToSQLDBFieldType(VType: word): TSQLDBFieldType;
 begin
-  with TVarData(V) do
   case VType of
-  varEmpty:
-    result := ftUnknown;
   varNull:
     result := ftNull;
   {$ifndef DELPHI5OROLDER}varShortInt, varWord, varLongWord,{$endif}
@@ -10716,14 +10720,35 @@ begin
   varCurrency:
     result := ftCurrency;
   varString:
-    if (VString<>nil) and (PCardinal(VString)^ and $ffffff=JSON_BASE64_MAGIC) then
-      result := ftBlob else
-      result := ftUTF8;
-  else
-  if SetVariantUnRefSimpleValue(V,tmp) then
-    result := VariantTypeToSQLDBFieldType(variant(tmp)) else
     result := ftUTF8;
+  else
+    result := ftUnknown; // includes varEmpty
   end;
+end;
+
+function VariantTypeToSQLDBFieldType(const V: Variant): TSQLDBFieldType;
+var VD: TVarData absolute V;
+    tmp: TVarData;
+begin
+  result := VariantVTypeToSQLDBFieldType(VD.VType);
+  case result of
+    ftUnknown:
+      if VD.VType=varEmpty then
+        result := ftUnknown else
+      if SetVariantUnRefSimpleValue(V,tmp) then
+        result := VariantTypeToSQLDBFieldType(variant(tmp)) else
+        result := ftUTF8;
+    ftUTF8:
+      if (VD.VString<>nil) and (PCardinal(VD.VString)^ and $ffffff=JSON_BASE64_MAGIC) then
+        result := ftBlob;
+  end;
+end;
+
+function TextToSQLDBFieldType(json: PUTF8Char): TSQLDBFieldType;
+begin
+  if json=nil then
+    result := ftNull else
+    result := VariantVTypeToSQLDBFieldType(TextToVariantNumberType(json));
 end;
 
 {$endif NOVARIANTS}

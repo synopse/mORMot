@@ -6416,7 +6416,7 @@ procedure InterfaceArrayDelete(var aInterfaceArray; aItemIndex: PtrInt); overloa
 
 
 /// helper to retrieve the text of an enumerate item
-// - you'd better use RTTI related classes of mORMot.pas unit, e.g. TEnumType
+// - see also RTTI related classes of mORMot.pas unit, e.g. TEnumType
 function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
 
 /// helper to retrieve all texts of an enumerate
