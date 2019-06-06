@@ -4596,14 +4596,13 @@ begin
     exit;
   end;
   if Assigned(sqlite3.key) and (fPassword<>'') and (fFileName<>'') and
-     (fFileName<>SQLITE_MEMORY_DATABASE_NAME) then begin
+     (fFileName<>SQLITE_MEMORY_DATABASE_NAME) then
     sqlite3.key(fDB,pointer(fPassword),length(fPassword));
-    if not ExecuteNoException('select count(*) from SQLITE_MASTER') then begin
-      Result  :=  SQLITE_NOTADB; // likely a password error
-      sqlite3.close(fDB); // should always be closed, even on failure
-      fDB := 0;
-      exit;
-    end;
+  if not ExecuteNoException('select count(*) from SQLITE_MASTER') then begin
+    Result  :=  SQLITE_NOTADB; // likely a password error
+    sqlite3.close(fDB); // should always be closed, even on failure
+    fDB := 0;
+    exit;
   end;
   // tune up execution speed
   if not fIsMemory then begin
