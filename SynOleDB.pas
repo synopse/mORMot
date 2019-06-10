@@ -1423,16 +1423,6 @@ begin
   result^.VStatus := 0;
 end;
 
-function TSQLDBFieldTypeToString(aType: TSQLDBFieldType): string;
-var PS: PShortString;
-begin
-  if cardinal(aType)<=cardinal(high(aType)) then begin
-    PS := GetEnumName(TypeInfo(TSQLDBFieldType),ord(aType));
-    result := Ansi7ToString(@PS^[3],ord(PS^[0])-2);
-  end else
-    result := IntToStr(ord(aType));
-end;
-
 function TOleDBStatement.CheckParam(Param: Integer; NewType: TSQLDBFieldType;
   IO: TSQLDBParamInOutType; ArrayCount: integer): POleDBStatementParam;
 begin

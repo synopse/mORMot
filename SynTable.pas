@@ -818,8 +818,16 @@ function SQLVarLength(const Value: TSQLVar): integer;
 procedure VariantToSQLVar(const Input: variant; var temp: RawByteString;
   var Output: TSQLVar);
 
+/// guess the correct TSQLDBFieldType from a variant type
+function VariantVTypeToSQLDBFieldType(VType: word): TSQLDBFieldType;
+
 /// guess the correct TSQLDBFieldType from a variant value
 function VariantTypeToSQLDBFieldType(const V: Variant): TSQLDBFieldType;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// guess the correct TSQLDBFieldType from the UTF-8 representation of a value
+function TextToSQLDBFieldType(json: PUTF8Char): TSQLDBFieldType;
+
 
 {$endif NOVARIANTS}
 
@@ -3292,7 +3300,7 @@ type
     fTimeOutMs: integer;
     fEvent: TBlockingEvent;
     fSafe: PSynLocker;
-    fOwnedSafe: TAutoLocker;
+    fOwnedSafe: boolean;
     procedure ResetInternal; virtual; // override to reset associated params
   public
     /// initialize the semaphore instance
@@ -3463,13 +3471,12 @@ type
   // to gather low-level CPU and RAM information for the given set of processes
   // - is able to keep an history of latest sample values
   // - use Current class function to access a process-wide instance
-  TSystemUse = class(TSynPersistent)
+  TSystemUse = class(TSynPersistentLock)
   protected
     fProcess: TSystemUseProcessDynArray;
     fProcesses: TDynArray;
     fDataIndex: integer;
     fProcessInfo: TProcessInfo;
-    fSafe: TAutoLocker;
     fHistoryDepth: integer;
     fOnMeasured: TOnSystemUseMeasured;
     fTimer: TSynBackgroundTimer;
@@ -3499,8 +3506,6 @@ type
     // - you should then execute the BackgroundExecute method of this instance
     // in a VCL timer or from a TSynBackgroundTimer.Enable() registration
     constructor Create(aHistoryDepth: integer=60); reintroduce; overload; virtual;
-    /// finalize all internal data information
-    destructor Destroy; override;
     /// add a Process ID to the internal tracking list
     procedure Subscribe(aProcessID: integer);
     /// remove a Process ID from the internal tracking list
@@ -7344,11 +7349,14 @@ begin
   result := match.Match(Text);
 end;
 
-function IsMatchString(const Pattern, Text: string; CaseInsensitive: boolean=false): boolean;
+function IsMatchString(const Pattern, Text: string; CaseInsensitive: boolean): boolean;
 var match: TMatch;
+    pat, txt: RawUTF8;
 begin
-  match.Prepare(StringToUTF8(Pattern), CaseInsensitive, {reuse=}false);
-  result := match.Match(StringToUTF8(Text));
+  StringToUTF8(Pattern, pat); // local variable is mandatory for FPC
+  StringToUTF8(Text, txt);
+  match.Prepare(pat, CaseInsensitive, {reuse=}false);
+  result := match.Match(txt);
 end;
 
 function SetMatchs(const CSVPattern: RawUTF8; CaseInsensitive: boolean;
@@ -10697,13 +10705,9 @@ begin
   end;
 end;
 
-function VariantTypeToSQLDBFieldType(const V: Variant): TSQLDBFieldType;
-var tmp: TVarData;
+function VariantVTypeToSQLDBFieldType(VType: word): TSQLDBFieldType;
 begin
-  with TVarData(V) do
   case VType of
-  varEmpty:
-    result := ftUnknown;
   varNull:
     result := ftNull;
   {$ifndef DELPHI5OROLDER}varShortInt, varWord, varLongWord,{$endif}
@@ -10716,14 +10720,35 @@ begin
   varCurrency:
     result := ftCurrency;
   varString:
-    if (VString<>nil) and (PCardinal(VString)^ and $ffffff=JSON_BASE64_MAGIC) then
-      result := ftBlob else
-      result := ftUTF8;
-  else
-  if SetVariantUnRefSimpleValue(V,tmp) then
-    result := VariantTypeToSQLDBFieldType(variant(tmp)) else
     result := ftUTF8;
+  else
+    result := ftUnknown; // includes varEmpty
   end;
+end;
+
+function VariantTypeToSQLDBFieldType(const V: Variant): TSQLDBFieldType;
+var VD: TVarData absolute V;
+    tmp: TVarData;
+begin
+  result := VariantVTypeToSQLDBFieldType(VD.VType);
+  case result of
+    ftUnknown:
+      if VD.VType=varEmpty then
+        result := ftUnknown else
+      if SetVariantUnRefSimpleValue(V,tmp) then
+        result := VariantTypeToSQLDBFieldType(variant(tmp)) else
+        result := ftUTF8;
+    ftUTF8:
+      if (VD.VString<>nil) and (PCardinal(VD.VString)^ and $ffffff=JSON_BASE64_MAGIC) then
+        result := ftBlob;
+  end;
+end;
+
+function TextToSQLDBFieldType(json: PUTF8Char): TSQLDBFieldType;
+begin
+  if json=nil then
+    result := ftNull else
+    result := VariantVTypeToSQLDBFieldType(TextToVariantNumberType(json));
 end;
 
 {$endif NOVARIANTS}
@@ -12012,13 +12037,14 @@ end;
 
 constructor TBlockingProcess.Create(aTimeOutMs: integer);
 begin
-  fOwnedSafe := TAutoLocker.Create;
-  Create(aTimeOutMS,fOwnedSafe.Safe);
+  fOwnedSafe := true;
+  Create(aTimeOutMS,NewSynLocker);
 end;
 
 destructor TBlockingProcess.Destroy;
 begin
-  fOwnedSafe.Free;
+  if fOwnedSafe then
+    fSafe^.DoneAndFreeMem;
   inherited Destroy;
 end;
 
@@ -12525,7 +12551,7 @@ begin
     exit;
   fTimer := Sender;
   now := NowUTC;
-  fSafe.Enter;
+  fSafe.Lock;
   try
     inc(fDataIndex);
     if fDataIndex>=fHistoryDepth then
@@ -12540,7 +12566,7 @@ begin
         // if GetLastError=ERROR_INVALID_PARAMETER then
         fProcesses.Delete(i);
   finally
-    fSafe.Leave;
+    fSafe.UnLock;
   end;
 end;
 
@@ -12554,7 +12580,6 @@ constructor TSystemUse.Create(const aProcessID: array of integer;
 var i: integer;
 begin
   inherited Create;
-  fSafe := TAutoLocker.Create;
   fProcesses.Init(TypeInfo(TSystemUseProcessDynArray),fProcess);
   {$ifdef MSWINDOWS}
   if not Assigned(GetSystemTimes) or not Assigned(GetProcessTimes) or
@@ -12582,12 +12607,6 @@ begin
   Create([0],aHistoryDepth);
 end;
 
-destructor TSystemUse.Destroy;
-begin
-  inherited Destroy;
-  fSafe.Free;
-end;
-
 procedure TSystemUse.Subscribe(aProcessID: integer);
 var i,n: integer;
 begin
@@ -12597,7 +12616,7 @@ begin
   if aProcessID=0 then
     aProcessID := GetCurrentProcessID;
   {$endif}
-  fSafe.Enter;
+  fSafe.Lock;
   try
     n := length(fProcess);
     for i := 0 to n-1 do
@@ -12607,7 +12626,7 @@ begin
     fProcess[n].ID := aProcessID;
     SetLength(fProcess[n].Data,fHistoryDepth);
   finally
-    fSafe.Leave;
+    fSafe.UnLock;
   end;
 end;
 
@@ -12617,7 +12636,7 @@ begin
   result := false;
   if self=nil then
     exit;
-  fSafe.Enter;
+  fSafe.Lock;
   try
     i := ProcessIndex(aProcessID);
     if i>=0 then begin
@@ -12625,7 +12644,7 @@ begin
       result := true;
     end;
   finally
-    fSafe.Leave;
+    fSafe.UnLock;
   end;
 end;
 
@@ -12647,7 +12666,7 @@ var i: integer;
 begin
   result := false;
   if self<>nil then begin
-    fSafe.Enter;
+    fSafe.Lock;
     try
       i := ProcessIndex(aProcessID);
       if i>=0 then begin
@@ -12658,7 +12677,7 @@ begin
           exit;
       end;
     finally
-      fSafe.Leave;
+      fSafe.UnLock;
     end;
   end;
   {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(aData,SizeOf(aData),0);
@@ -12702,7 +12721,7 @@ begin
   result := nil;
   if self=nil then
     exit;
-  fSafe.Enter;
+  fSafe.Lock;
   try
     i := ProcessIndex(aProcessID);
     if i>=0 then
@@ -12725,7 +12744,7 @@ begin
         end;
       end;
   finally
-    fSafe.Leave;
+    fSafe.UnLock;
   end;
 end;
 

@@ -1736,7 +1736,7 @@ type
     fInternalProcessActive: integer;
     fRollbackOnDisconnect: Boolean;
     fLastAccessTicks: Int64;
-    function IsOutdated: boolean; // do not make virtual
+    function IsOutdated(tix: Int64): boolean; // do not make virtual
     function GetInTransaction: boolean; virtual;
     function GetServerTimestamp: TTimeLog;
     function GetServerDateTime: TDateTime; virtual;
@@ -2348,8 +2348,8 @@ type
     /// the prepared SQL statement, with all '?' changed into the supplied
     // parameter values
     property SQLWithInlinedParams: RawUTF8 read GetSQLWithInlinedParams;
-    /// the current row after Execute call, corresponding to Column*() methods
-    // - contains 0 in case of no (more) available data, or a number >=1
+    /// the current row after Execute/Step call, corresponding to Column*() methods
+    // - contains 0 before initial Step call, or a number >=1 during data retrieval
     property CurrentRow: Integer read fCurrentRow;
     /// the total number of data rows retrieved by this instance
     // - is not reset when there is no more row of available data (Step returns
@@ -3439,7 +3439,7 @@ function ToText(Field: TSQLDBFieldType): PShortString; overload;
 
 /// retrieve the ready-to-be displayed text of a given Database field
 // type enumeration
-function TSQLDBFieldTypeToString(aType: TSQLDBFieldType): string;
+function TSQLDBFieldTypeToString(aType: TSQLDBFieldType): TShort16;
 
 {$ifdef WITH_PROXY}
 /// retrieve the ready-to-be displayed text of proxy commands implemented by
@@ -3467,14 +3467,11 @@ begin
 end;
 {$endif}
 
-function TSQLDBFieldTypeToString(aType: TSQLDBFieldType): string;
-var PS: PShortString;
+function TSQLDBFieldTypeToString(aType: TSQLDBFieldType): TShort16;
 begin
-  if cardinal(aType)<=cardinal(high(aType)) then begin
-    PS := ToText(aType);
-    result := Ansi7ToString(@PS^[3],ord(PS^[0])-2);
-  end else
-    result := IntToStr(ord(aType));
+  if aType<=high(aType) then
+    result := TrimLeftLowerCaseToShort(ToText(aType)) else
+    FormatShort16('#%',[ord(aType)],result);
 end;
 
 function OracleSQLIso8601ToDate(Iso8601: RawUTF8): RawUTF8;
@@ -4171,8 +4168,7 @@ begin
   inherited;
 end;
 
-function TSQLDBConnection.IsOutdated: boolean;
-var Ticks: Int64;
+function TSQLDBConnection.IsOutdated(tix: Int64): boolean;
 begin
   result := false;
   if (self=nil) or (fProperties.fConnectionTimeOutTicks=0) then
@@ -4181,10 +4177,9 @@ begin
     result := true;
     exit;
   end;
-  Ticks := GetTickCount64;
-  if (fLastAccessTicks=0) or (Ticks-fLastAccessTicks<fProperties.fConnectionTimeOutTicks) then
+  if (fLastAccessTicks=0) or (tix-fLastAccessTicks<fProperties.fConnectionTimeOutTicks) then
     // brand new connection, or active enough connection
-    fLastAccessTicks := Ticks else
+    fLastAccessTicks := tix else
     // notify connection is clearly outdated
     result := true;
 end;
@@ -4789,7 +4784,7 @@ end;
 
 function TSQLDBConnectionProperties.GetMainConnection: TSQLDBConnection;
 begin
-  if fMainConnection.IsOutdated then
+  if fMainConnection.IsOutdated(GetTickCount64) then
     FreeAndNil(fMainConnection);
   if fMainConnection=nil then
     fMainConnection := NewConnection;
@@ -6424,18 +6419,30 @@ end;
 
 function TSQLDBConnectionPropertiesThreadSafe.CurrentThreadConnectionIndex: Integer;
 var id: TThreadID;
-begin
+    tix: Int64;
+    conn: TSQLDBConnectionThreadSafe;
+begin // caller made EnterCriticalSection(fConnectionCS)
   if self<>nil then begin
     id := GetCurrentThreadId;
+    tix := GetTickCount64;
     result := fLatestConnectionRetrievedInPool;
-    if (result>=0) and
-       (TSQLDBConnectionThreadSafe(fConnectionPool.List[result]).fThreadID=id) then
-      exit;
-    for result := 0 to fConnectionPool.Count-1 do
-      if TSQLDBConnectionThreadSafe(fConnectionPool.List[result]).fThreadID=id then begin
-        fLatestConnectionRetrievedInPool := result;
+    if result>=0 then begin
+      conn := fConnectionPool.List[result];
+      if (conn.fThreadID=id) and not conn.IsOutdated(tix) then
         exit;
+    end;
+    result := 0;
+    while result<fConnectionPool.Count-1 do begin
+      conn := TSQLDBConnectionThreadSafe(fConnectionPool.List[result]);
+      if conn.IsOutdated(tix) then // to guarantee reconnection
+        fConnectionPool.Delete(result) else begin
+        if conn.fThreadID=id then begin
+          fLatestConnectionRetrievedInPool := result;
+          exit;
+        end;
+        inc(result);
       end;
+    end;
   end;
   result := -1;
 end;
@@ -6478,9 +6485,7 @@ begin
       i := CurrentThreadConnectionIndex;
       if i>=0 then begin
         result := fConnectionPool.List[i];
-        if result.IsOutdated then
-          fConnectionPool.Delete(i) else // release outdated connection
-          exit;
+        exit;
       end;
       result := NewConnection;
       (result as TSQLDBConnectionThreadSafe).fThreadID := GetCurrentThreadId;
@@ -7118,16 +7123,16 @@ var F: integer;
     VDouble: double;
     VCurrency: currency absolute VDouble;
     VDateTime: TDateTime absolute VDouble;
-    colType: TSQLDBFieldType;
+    ft: TSQLDBFieldType;
 begin
   for F := 0 to length(ColTypes)-1 do
     if not GetBitPtr(Null, F) then begin
-      colType := ColTypes[F];
-      if colType<ftInt64 then begin // ftUnknown,ftNull
-        colType := ColumnType(F); // per-row column type (SQLite3 only)
-        W.Write1(ord(colType));
+      ft := ColTypes[F];
+      if ft<ftInt64 then begin // ftUnknown,ftNull
+        ft := ColumnType(F); // per-row column type (SQLite3 only)
+        W.Write1(ord(ft));
       end;
-      case colType of
+      case ft of
       ftInt64:
         W.WriteVarInt64(ColumnInt(F));
       ftDouble: begin
@@ -7148,7 +7153,7 @@ begin
         W.Write(ColumnBlob(F));
       else
       raise ESQLDBException.CreateUTF8('%.ColumnsToBinary: Invalid ColumnType(%)=%',
-        [self,ColumnName(F),ord(colType)]);
+        [self,ColumnName(F),ord(ft)]);
     end;
   end;
 end;
@@ -7159,8 +7164,9 @@ const
 function TSQLDBStatement.FetchAllToBinary(Dest: TStream; MaxRowCount: cardinal;
   DataRowPosition: PCardinalDynArray): cardinal;
 var F, FMax, FieldSize, NullRowSize: integer;
-    StartPos: cardinal;
+    StartPos: Int64;
     W: TFileBufferWriter;
+    ft: TSQLDBFieldType;
     ColTypes: TSQLDBFieldTypeDynArray;
     Null: TByteDynArray;
 begin
@@ -7176,8 +7182,11 @@ begin
       dec(FMax);
       for F := 0 to FMax do begin
         W.Write(ColumnName(F));
-        ColTypes[F] := ColumnType(F,@FieldSize);
-        W.Write1(ord(ColTypes[F]));
+        ft := ColumnType(F,@FieldSize);
+        if (ft=ftUnknown) and (CurrentRow=0) and Step then
+          ft := ColumnType(F,@FieldSize); // e.g. SQLite3 -> fetch and guess
+        ColTypes[F] := ft;
+        W.Write1(ord(ft));
         W.WriteVarUInt32(FieldSize);
       end;
       // initialize null handling
@@ -7203,9 +7212,11 @@ begin
             SetBitPtr(pointer(Null),F);
             NullRowSize := (F shr 3)+1;
           end;
-        W.WriteVarUInt32(NullRowSize);
-        if NullRowSize>0 then
+        if NullRowSize>0 then begin
+          W.WriteVarUInt32(NullRowSize);
           W.Write(pointer(Null),NullRowSize);
+        end else
+          W.Write1(0); // = W.WriteVarUInt32(0)
         // then write data values
         ColumnsToBinary(W,pointer(Null),ColTypes);
         inc(result);
@@ -8279,6 +8290,7 @@ end;
 
 procedure TSQLDBProxyStatementAbstract.IntHeaderProcess(Data: PByte; DataLen: integer);
 var Magic,F,colCount: integer;
+    p: PSQLDBColumnProperty;
 begin
   fDataCurrentRowValuesStart := nil;
   fDataCurrentRowValuesSize := 0;
@@ -8287,21 +8299,21 @@ begin
   fDataCurrentRowNullLen := 0;
   repeat
     if DataLen<=5 then
-      break;
+      break; // to raise ESQLDBException
     fDataRowCount := PInteger(PtrInt(Data)+DataLen-sizeof(Integer))^;
     Magic := FromVarUInt32(Data);
     if Magic<>FETCHALLTOBINARY_MAGIC then
-      break;
+      break; // corrupted
     colCount := FromVarUInt32(Data);
     SetLength(fDataCurrentRowColTypes,colCount);
     SetLength(fDataCurrentRowValues,colCount);
     fColumn.Capacity := colCount;
-    for F := 0 to colCount-1 do
-    with PSQLDBColumnProperty(fColumn.AddAndMakeUniqueName(FromVarString(Data)))^ do begin
-      ColumnType := TSQLDBFieldType(Data^);
-      fDataCurrentRowColTypes[F] := ColumnType;
+    for F := 0 to colCount-1 do begin
+      p := fColumn.AddAndMakeUniqueName(FromVarString(Data));
+      p^.ColumnType := TSQLDBFieldType(Data^);
       inc(Data);
-      ColumnValueDBSize := FromVarUInt32(Data);
+      p^.ColumnValueDBSize := FromVarUInt32(Data);
+      fDataCurrentRowColTypes[F] := p^.ColumnType;
     end;
     if fColumnCount=0 then
       exit; // no data returned
@@ -8321,6 +8333,7 @@ end;
 procedure TSQLDBProxyStatementAbstract.IntFillDataCurrent(var Reader: PByte;
   IgnoreColumnDataSize: boolean);
 var F,Len: Integer;
+    ft: TSQLDBFieldType;
 begin // format match TSQLDBStatement.FetchAllToBinary()
   if fDataCurrentRowNullLen>0 then
     FillCharFast(fDataCurrentRowNull[0],fDataCurrentRowNullLen,0);
@@ -8336,13 +8349,14 @@ begin // format match TSQLDBStatement.FetchAllToBinary()
   for F := 0 to fColumnCount-1 do
     if GetBitPtr(pointer(fDataCurrentRowNull),F) then
       fDataCurrentRowValues[F] := nil else begin
-      fDataCurrentRowColTypes[F] := fColumns[F].ColumnType;
-      if fDataCurrentRowColTypes[F]<ftInt64 then begin
-        fDataCurrentRowColTypes[F] := TSQLDBFieldType(Reader^);
+      ft := fColumns[F].ColumnType;
+      if ft<ftInt64 then begin // per-row column type (SQLite3 only)
+        ft := TSQLDBFieldType(Reader^);
         inc(Reader);
       end;
+      fDataCurrentRowColTypes[F] := ft;
       fDataCurrentRowValues[F] := Reader;
-      case fDataCurrentRowColTypes[F] of
+      case ft of
       ftInt64:
         Reader := GotoNextVarInt(Reader);
       ftDouble, ftCurrency, ftDate:
@@ -8355,7 +8369,7 @@ begin // format match TSQLDBStatement.FetchAllToBinary()
         inc(Reader,Len); // jump string/blob content
       end;
       else raise ESQLDBException.CreateUTF8('%.IntStep: Invalid ColumnType(%)=%',
-        [self,fColumns[F].ColumnName,ord(fDataCurrentRowColTypes[F])]);
+        [self,fColumns[F].ColumnName,ord(ft)]);
       end;
     end;
   fDataCurrentRowValuesSize := PtrUInt(Reader)-PtrUInt(fDataCurrentRowValuesStart);
