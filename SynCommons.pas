@@ -45508,22 +45508,22 @@ begin
 end;
 
 function TDocVariantData.DeleteByValue(const aValue: Variant;
-  CaseInsensitive: boolean=false): integer;
+  CaseInsensitive: boolean): integer;
 var ndx: integer;
 begin
   result := 0;
   if VarIsEmptyOrNull(aValue) then begin
     for ndx := VCount-1 downto 0 do
-    if VarDataIsEmptyOrNull(@VValue[ndx]) then begin
-      Delete(ndx);
-      inc(result);
-    end;
+      if VarDataIsEmptyOrNull(@VValue[ndx]) then begin
+        Delete(ndx);
+        inc(result);
+      end;
   end else
     for ndx := VCount-1 downto 0 do
-    if SortDynArrayVariantComp(TVarData(VValue[ndx]),TVarData(aValue),CaseInsensitive)=0 then begin
-      Delete(ndx);
-      inc(result);
-    end;
+      if SortDynArrayVariantComp(TVarData(VValue[ndx]),TVarData(aValue),CaseInsensitive)=0 then begin
+        Delete(ndx);
+        inc(result);
+      end;
 end;
 
 function TDocVariantData.DeleteByStartName(aStartName: PUTF8Char; aStartNameLen: integer): integer;
