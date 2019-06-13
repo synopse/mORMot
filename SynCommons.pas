@@ -4173,6 +4173,13 @@ function PtrUIntScanIndex(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): PtrI
 function PtrUIntScanExists(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// fast search of an unsigned Byte value position in a Byte array
+// - Count is the number of Byte entries in P^
+// - return index of P^[index]=Value
+// - return -1 if Value was not found
+function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: Byte): integer;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// fast search of an unsigned Word value position in a Word array
 // - Count is the number of Word entries in P^
 // - return index of P^[index]=Value
@@ -7123,7 +7130,7 @@ function DynArray(aTypeInfo: pointer; var aValue; aCountPointer: PInteger=nil): 
 // array otherwise, with the items number stored in Count and the individual
 // element size in ElemSize (e.g. 2 for a TWordDynArray)
 function SimpleDynArrayLoadFrom(Source: PAnsiChar; aTypeInfo: pointer;
-  var Count, ElemSize: integer): pointer;
+  var Count, ElemSize: integer; NoHash32Check: boolean=false): pointer;
 
 /// wrap an Integer dynamic array BLOB content as stored by TDynArray.SaveTo
 // - same as TDynArray.LoadFrom() with no memory allocation nor memory copy: so
@@ -24162,8 +24169,8 @@ function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): Pt
 asm
         push    eax
         call    IntegerScan
-        test    eax, eax
         pop     edx
+        test    eax, eax
         jnz     @e
         dec     eax // returns -1
         ret
@@ -30563,40 +30570,44 @@ end;
 function PtrUIntScanExists(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): boolean;
 {$ifdef HASINLINE}
 begin
-  {$ifdef CPU64}
-  result := Int64ScanExists(pointer(P),Count,Value);
-  {$else}
-  result := IntegerScanExists(pointer(P),Count,Value);
-  {$endif}
+  result := {$ifdef CPU64}Int64ScanExists{$else}IntegerScanExists{$endif}(pointer(P),Count,Value);
 end;
 {$else}
 asm
   jmp IntegerScanExists;
 end;
-{$endif}
+{$endif HASINLINE}
 
 function PtrUIntScanIndex(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): PtrInt;
 {$ifdef HASINLINE}
 begin
-  {$ifdef CPU64}
-  result := Int64ScanIndex(pointer(P),Count,Value);
-  {$else}
-  result := IntegerScanIndex(pointer(P),Count,Value);
-  {$endif}
+  result := {$ifdef CPU64}Int64ScanIndex{$else}IntegerScanIndex{$endif}(pointer(P),Count,Value);
 end;
 {$else}
 asm // identical to IntegerScanIndex() asm stub
         push    eax
         call    IntegerScan
-        test    eax, eax
         pop     edx
+        test    eax, eax
         jnz     @e
         dec     eax // returns -1
         ret
 @e:     sub     eax, edx
         shr     eax, 2
 end;
-{$endif}
+{$endif HASINLINE}
+
+function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: Byte): integer;
+begin
+{$ifdef FPC}
+  result := IndexByte(P^,Count,Value); // will use fast FPC SSE version
+{$else}
+  for result := 0 to Count-1 do
+    if P^[result]=Value then
+      exit;
+  result := -1;
+{$endif FPC}
+end;
 
 function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): integer;
 begin
@@ -30607,7 +30618,7 @@ begin
     if P^[result]=Value then
       exit;
   result := -1;
-{$endif}
+{$endif FPC}
 end;
 
 procedure QuickSortInteger(ID: PIntegerArray; L,R: PtrInt);
@@ -48022,7 +48033,7 @@ end;
 {$endif NOVARIANTS}
 
 function SimpleDynArrayLoadFrom(Source: PAnsiChar; aTypeInfo: pointer;
-  var Count, ElemSize: integer): pointer;
+  var Count, ElemSize: integer; NoHash32Check: boolean): pointer;
 var Hash: PCardinalArray absolute Source;
     info: PTypeInfo;
 begin
@@ -48036,8 +48047,7 @@ begin
   ElemSize := info^.elSize {$ifdef FPC}and $7FFFFFFF{$endif};
   inc(Source,2);
   Count := FromVarUInt32(PByte(Source)); // dynamic array count
-  if (Count<>0) and (Hash32(@Hash[1],
-      Count*info^.elSize {$ifdef FPC}and $7FFFFFFF{$endif})=Hash[0]) then
+  if (Count<>0) and (NoHash32Check or (Hash32(@Hash[1],Count*ElemSize)=Hash[0])) then
     result := @Hash[1]; // returns valid Source content
 end;
 
