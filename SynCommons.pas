@@ -50952,8 +50952,8 @@ end;
 
 destructor TSynPersistentLock.Destroy;
 begin
+  inherited Destroy;
   fSafe^.DoneAndFreeMem;
-  inherited;
 end;
 
 

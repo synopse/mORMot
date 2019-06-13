@@ -12043,9 +12043,9 @@ end;
 
 destructor TBlockingProcess.Destroy;
 begin
+  inherited Destroy;
   if fOwnedSafe then
     fSafe^.DoneAndFreeMem;
-  inherited Destroy;
 end;
 
 function TBlockingProcess.WaitFor: TBlockingEvent;
