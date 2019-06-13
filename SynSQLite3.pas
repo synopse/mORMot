@@ -274,7 +274,7 @@ type
   /// internaly store a SQLite3 Backup process handle
   TSQLite3Backup = type PtrUInt;
 
-  /// internaly store any array of  SQLite3 value
+  /// internaly store of SQLite3 values, as used by TSQLFunctionFunc
   TSQLite3ValueArray = array[0..63] of TSQLite3Value;
 
 const
@@ -981,9 +981,8 @@ type
     // must be prepared for attempts to delete or modify rows of the table out
     // from other existing cursors. If the virtual table cannot accommodate such
     // changes, the xUpdate() method must return an error code.
-    xUpdate: function(var pVTab: TSQLite3VTab;
-      nArg: Integer; var ppArg: TSQLite3ValueArray;
-      var pRowid: Int64): Integer; cdecl;
+    xUpdate: function(var pVTab: TSQLite3VTab; nArg: Integer;
+      var ppArg: TSQLite3ValueArray; var pRowid: Int64): Integer; cdecl;
     /// Begins a transaction on a virtual table
     // - This method is always followed by one call to either the xCommit or
     // xRollback method.
@@ -3663,6 +3662,18 @@ begin
   RawUTF8ToSQlite3Context(TimeLog.Text(True,'T'),Context,false);
 end;
 
+procedure InternalTimeLogUnix(Context: TSQLite3FunctionContext;
+  argc: integer; var argv: TSQLite3ValueArray); cdecl;
+var TimeLog: TTimeLogBits;
+begin
+  if argc<>1 then begin
+    ErrorWrongNumberOfArgs(Context);
+    exit;
+  end;
+  TimeLog.Value := sqlite3.value_int64(argv[0]);
+  sqlite3.result_int64(Context,TimeLog.ToUnixTime);
+end;
+
 procedure InternalRank(Context: TSQLite3FunctionContext;
   argc: integer; var argv: TSQLite3ValueArray); cdecl;
 // supplies the same "RANK" internal function as proposed in
@@ -4636,7 +4647,7 @@ begin
   end;
   // always try to check for proper database content (and password)
   if not ExecuteNoException('select count(*) from sqlite_master') then begin
-    Result  :=  SQLITE_NOTADB; // likely a password error
+    result :=  SQLITE_NOTADB; // likely a password error
     sqlite3.close(fDB); // should always be closed, even on failure
     fDB := 0;
     exit;
@@ -4653,6 +4664,8 @@ begin
   sqlite3.create_function(DB,'MOD',2,SQLITE_ANY,nil,InternalMod,nil,nil);
   // register TIMELOG(), returning a ISO-8601 date/time from TTimeLog value
   sqlite3.create_function(DB,'TIMELOG',1,SQLITE_ANY,nil,InternalTimeLog,nil,nil);
+  // register TIMELOGUNIX(), returning Unix Epoch seconds from TTimeLog value
+  sqlite3.create_function(DB,'TIMELOGUNIX',1,SQLITE_ANY,nil,InternalTimeLogUnix,nil,nil);
   // some user functions
   sqlite3.create_function(DB,'SOUNDEX',1,SQLITE_UTF8,nil,InternalSoundex,nil,nil);
   sqlite3.create_function(DB,'SOUNDEXFR',1,SQLITE_UTF8,nil,InternalSoundexFr,nil,nil);

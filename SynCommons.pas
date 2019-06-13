@@ -7137,8 +7137,9 @@ function SimpleDynArrayLoadFrom(Source: PAnsiChar; aTypeInfo: pointer;
 // is much faster than creating a temporary dynamic array to load the data
 // - will return nil if no or invalid data, or a pointer to the integer
 // array otherwise, with the items number stored in Count
-// - a bit faster than SimpleDynArrayLoadFrom(Source,TypeInfo(TIntegerDynArray),Count)
-function IntegerDynArrayLoadFrom(Source: PAnsiChar; var Count: integer): PIntegerArray;
+// - sligtly faster than SimpleDynArrayLoadFrom(Source,TypeInfo(TIntegerDynArray),Count)
+function IntegerDynArrayLoadFrom(Source: PAnsiChar; var Count: integer;
+  NoHash32Check: boolean=false): PIntegerArray;
 
 /// search in a RawUTF8 dynamic array BLOB content as stored by TDynArray.SaveTo
 // - same as search within TDynArray.LoadFrom() with no memory allocation nor
@@ -21032,7 +21033,7 @@ asm // eax=aTypeInfo edx=aIndex
 @z:     rep     ret
 @0:     lea     eax, NULL_SHORTSTRING
 end;
-{$endif}
+{$endif HASINLINENOTX86}
 
 {$ifdef PUREPASCAL} // for proper inlining
 function IdemPropNameUSameLen(P1,P2: PUTF8Char; P1P2Len: PtrInt): boolean;
@@ -28359,7 +28360,7 @@ asm
       mov     dword ptr [ebx].TDiv100Rec.M, ecx
       pop     ebx
 end;
-{$endif}
+{$endif HASINLINENOTX86}
 
 function UInt3DigitsToUTF8(Value: Cardinal): RawUTF8;
 begin
@@ -48051,7 +48052,8 @@ begin
     result := @Hash[1]; // returns valid Source content
 end;
 
-function IntegerDynArrayLoadFrom(Source: PAnsiChar; var Count: integer): PIntegerArray;
+function IntegerDynArrayLoadFrom(Source: PAnsiChar; var Count: integer;
+  NoHash32Check: boolean): PIntegerArray;
 var Hash: PCardinalArray absolute Source;
 begin
   result := nil;
@@ -48059,7 +48061,7 @@ begin
     exit; // invalid Source content
   inc(Source,2);
   Count := FromVarUInt32(PByte(Source)); // dynamic array count
-  if (Count<>0) and (Hash32(@Hash[1],Count*SizeOf(Integer))=Hash[0]) then
+  if (Count<>0) and (NoHash32Check or (Hash32(@Hash[1],Count*4)=Hash[0])) then
     result := @Hash[1]; // returns valid Source content
 end;
 
@@ -48075,7 +48077,7 @@ begin
   end;
   inc(Source,2);
   Count := FromVarUInt32(PByte(Source)); // dynamic array count
-  inc(Source,SizeOf(cardinal)); // ignore security checksum
+  inc(Source,SizeOf(cardinal)); // ignore Hash32 security checksum
   for result := 0 to Count-1 do begin
     Len := FromVarUInt32(PByte(Source));
     if CaseSensitive then begin
@@ -60537,7 +60539,7 @@ asm
 @1:     test    dl, dl
         setz    al
 end;
-{$endif}
+{$endif HASINLINENOTX86}
 
 function StrCompL(P1,P2: PUTF8Char; L, Default: Integer): PtrInt;
 var i: PtrInt;
