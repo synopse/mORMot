@@ -386,7 +386,7 @@ const
   /// sqlite3.step() return code: has finished executing
   SQLITE_DONE = 101;
 
-  /// possible error codes for sqlite_exec()  and sqlite3.step()
+  /// possible error codes for sqlite_exec() and sqlite3.step()
   // - as verified by sqlite3_check()
   SQLITE_ERRORS = [SQLITE_ERROR..SQLITE_ROW-1];
 
@@ -2438,7 +2438,7 @@ type
     /// Execute one SQL statement in the aSQL UTF-8 encoded string
     // - Execute the first statement in aSQL: call Prepare() then Step once
     // - Close is always called internaly
-    // - returns TRUE on succes, and raise no ESQLite3Exception on error, but returns FALSE
+    // - returns TRUE on success, and raise no ESQLite3Exception on error, but returns FALSE
     function ExecuteNoException(aDB: TSQLite3DB; const aSQL: RawUTF8): boolean;
     /// Execute a SQL statement which return integers from the aSQL UTF-8 encoded string
     // - Execute the first statement in aSQL
@@ -3458,10 +3458,10 @@ begin
     if s2Len<=0 then
       result := 0 else
       result := -1 else
-  if s2Len<=0 then
-    result := 1 else
-    result := CompareStringW(
-      LOCALE_USER_DEFAULT,0,S1,s1len shr 1,S2,s2Len shr 1)-2;
+    if s2Len<=0 then
+      result := 1 else
+      result := CompareStringW(
+        LOCALE_USER_DEFAULT,0,S1,s1len shr 1,S2,s2Len shr 1)-2;
 end;
 
 function Utf16SQLCompNoCase(CollateParam: pointer; s1Len: integer; s1: pointer;
@@ -3774,8 +3774,8 @@ begin // Byte/Word/Cardinal/Int64/CurrencyDynArrayContains(BlobField,I64)
       V := sqlite3.value_int64(argv[1]);
       sqlite3.result_int64(Context,Int64(true)); // exit will report value found
       case ElemSize of
-        1: for i := 0 to Count-1 do if PByteArray(Blob)^[i]=byte(V) then exit;
-        2: for i := 0 to Count-1 do if PWordArray(Blob)^[i]=word(V) then exit;
+        1: if ByteScanIndex(Blob,Count,byte(V))>=0 then exit;
+        2: if WordScanIndex(Blob,Count,word(V))>=0 then exit;
         4: if IntegerScanExists(Blob,Count,cardinal(V)) then exit;
         8: if Int64ScanExists(Blob,Count,V) then exit;
       end;
@@ -4595,31 +4595,32 @@ begin
     fDB := 0;
     exit;
   end;
+  // initialize optional encryption (if supported by the compiled engine)
   if Assigned(sqlite3.key) and (fPassword<>'') and (fFileName<>'') and
-     (fFileName<>SQLITE_MEMORY_DATABASE_NAME) then begin
+     (fFileName<>SQLITE_MEMORY_DATABASE_NAME) then
     sqlite3.key(fDB,pointer(fPassword),length(fPassword));
-    if not ExecuteNoException('select count(*) from SQLITE_MASTER') then begin
-      Result  :=  SQLITE_NOTADB; // likely a password error
-      sqlite3.close(fDB); // should always be closed, even on failure
-      fDB := 0;
-      exit;
-    end;
-  end;
-  // tune up execution speed
+  // tune up execution speed (before accessing the database)
   if not fIsMemory then begin
     if (fOpenV2Flags and SQLITE_OPEN_CREATE<>0) and (fFileDefaultPageSize<>0) then
       PageSize := fFileDefaultPageSize;
     if fFileDefaultCacheSize <> 0 then
       CacheSize := fFileDefaultCacheSize; // 10000 by default (i.e. 40 MB)
   end;
-  // the SQLite3 standard NOCASE collation is used for AnsiString and is very fast
-  // our custom fast UTF-8 case insensitive compare, using NormToUpper[] for all 8 bits values
+  // always try to check for proper database content (and password)
+  if not ExecuteNoException('select count(*) from sqlite_master') then begin
+    Result  :=  SQLITE_NOTADB; // likely a password error
+    sqlite3.close(fDB); // should always be closed, even on failure
+    fDB := 0;
+    exit;
+  end;
+  // our custom fast UTF-8 WinAnsi case insensitive compare, using NormToUpper[]
   sqlite3.create_collation(DB,'SYSTEMNOCASE',SQLITE_UTF8,nil,Utf8SQLCompNoCase);
   // our custom fast ISO-8601 date time encoded
   sqlite3.create_collation(DB,'ISO8601',SQLITE_UTF8,nil,Utf8SQLDateTime);
   // two slow but always accurate compare, using the Win32 Unicode API
   sqlite3.create_collation(DB,'WIN32CASE',SQLITE_UTF16,nil,Utf16SQLCompCase);
   sqlite3.create_collation(DB,'WIN32NOCASE',SQLITE_UTF16,nil,Utf16SQLCompNoCase);
+  // note: standard SQLite3 NOCASE collation is used for AnsiString
   // register the MOD() user function, similar to the standard % operator
   sqlite3.create_function(DB,'MOD',2,SQLITE_ANY,nil,InternalMod,nil,nil);
   // register TIMELOG(), returning a ISO-8601 date/time from TTimeLog value
@@ -4964,7 +4965,7 @@ begin
     Prepare(aDB,aSQL); // will raise an ESQLite3Exception on error
     ExecuteAll;
   finally
-    Close; // always release statement, even if done normaly in EngineExecuteAll
+    Close; // always release statement, even if done normally in EngineExecuteAll
   end;
 end;
 
@@ -4974,12 +4975,12 @@ begin
     Prepare(aDB,aSQL); // will raise an ESQLite3Exception on error
     Execute;
   finally
-    Close; // always release statement, even if done normaly in Execute
+    Close; // always release statement, even if done normally in Execute
   end;
 end;
 
 function TSQLRequest.ExecuteNoException(aDB: TSQLite3DB; const aSQL: RawUTF8): boolean;
-begin
+begin // avoid sqlite3_check() calls for no ESQLite3Exception
   result := false;
   if (aDB<>0) and (aSQL<>'') then
     try
@@ -4987,7 +4988,7 @@ begin
          not(sqlite3.step(Request) in SQLITE_ERRORS) then
         result := true;
     finally
-      Close; // always release statement, even if done normaly in Execute
+      Close; // always release statement, even if done normally in Execute
     end;
 end;
 
