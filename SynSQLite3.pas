@@ -3053,11 +3053,13 @@ type
     // perhaps in conjunction with the BackupBackgroundWaitUntilFinished method
     function BackupBackground(const BackupFileName: TFileName;
       StepPageNumber, StepSleepMS: Integer; OnProgress: TSQLDatabaseBackupEvent;
-      SynLzCompress: boolean=false; const aPassword: RawUTF8=''): boolean; 
-    ///backup to opened database
-    function BackupBackgroundToDB(const BackupDB: TSQLDatabase;
-      StepPageNumber, StepSleepMS: Integer; OnProgress: TSQLDatabaseBackupEvent
-      ): boolean;
+      SynLzCompress: boolean=false; const aPassword: RawUTF8=''): boolean;
+    /// background backup to another opened database instance
+    // - in respect to BackupBackground method, it will use an existing database
+    // the actual process
+    // - by design, SynLZCompress or aPassword parameters are unavailable
+    function BackupBackgroundToDB(BackupDB: TSQLDatabase;
+      StepPageNumber, StepSleepMS: Integer; OnProgress: TSQLDatabaseBackupEvent): boolean;
     /// wait until any previous BackupBackground() is finished
     // - warning: this method won't call the Windows message loop, so should not
     // be called from main thread, unless the UI may become unresponsive: you
@@ -3272,7 +3274,7 @@ type
     fOnProgress: TSQLDatabaseBackupEvent;
     fError: Exception;
     fTimer: TPrecisionTimer;
-    fOwnerDest: Boolean;
+    fOwnerDest: boolean;
     /// main process
     procedure Execute; override;
   public
@@ -3281,7 +3283,7 @@ type
     // inherited method to run the process in blocking mode
     constructor Create(Backup: TSQLite3Backup; Source, Dest: TSQLDatabase;
       StepPageNumber,StepSleepMS: Integer; SynLzCompress: boolean;
-      OnProgress: TSQLDatabaseBackupEvent; OwnerDest : Boolean = true); reintroduce;
+      OnProgress: TSQLDatabaseBackupEvent; OwnerDest: boolean=true); reintroduce;
     /// the source database of the backup process
     property SourceDB: TSQLDatabase read fSourceDB;
     /// the destination database of the backup process
@@ -3766,7 +3768,7 @@ end;
 procedure InternalSimpleInt64DynArray(Context: TSQLite3FunctionContext;
   argc: integer; var argv: TSQLite3ValueArray); cdecl;
 var Blob: pointer;
-    Count, ElemSize, i: integer;
+    Count, ElemSize: integer;
     V: Int64;
 begin // Byte/Word/Cardinal/Int64/CurrencyDynArrayContains(BlobField,I64)
   // for currency, expect I64 value = aCurrency*10000 = PInt64(@aCurrency)^
@@ -3774,7 +3776,7 @@ begin // Byte/Word/Cardinal/Int64/CurrencyDynArrayContains(BlobField,I64)
     exit;
   Blob := sqlite3.value_blob(argv[0]);
   if Blob<>nil then begin // search into direct in-memory mapping (no allocation)
-    Blob := SimpleDynArrayLoadFrom(Blob,sqlite3.user_data(Context),Count,ElemSize);
+    Blob := SimpleDynArrayLoadFrom(Blob,sqlite3.user_data(Context),Count,ElemSize,{nohash32=}true);
     if Blob<>nil then begin
       V := sqlite3.value_int64(argv[1]);
       sqlite3.result_int64(Context,Int64(true)); // exit will report value found
@@ -4482,9 +4484,8 @@ begin
   result := true;
 end;
 
-function TSQLDataBase.BackupBackgroundToDB(const BackupDB: TSQLDatabase;
-  StepPageNumber, StepSleepMS: Integer;
-  OnProgress: TSQLDatabaseBackupEvent): boolean;
+function TSQLDataBase.BackupBackgroundToDB(BackupDB: TSQLDatabase;
+  StepPageNumber, StepSleepMS: Integer; OnProgress: TSQLDatabaseBackupEvent): boolean;
 var Backup: TSQLite3Backup;
 begin
   result := false;
@@ -4492,10 +4493,9 @@ begin
      (fBackupBackgroundInProcess<>nil) then
     exit;
   {$ifdef WITHLOG}
-  fLog.Add.Log(sllDB,'BackupBackground("%") started on %',
+  fLog.Add.Log(sllDB,'BackupBackgroundToDB("%") started on %',
     [BackupDB.FileName,FileNameWithoutPath],self);
   {$endif}
-  // see https://bitbucket.org/egrange/sql3bak for proper parameters
   Backup := sqlite3.backup_init(BackupDB.DB,'main',DB,'main');
   if Backup=0 then
     exit;
@@ -4597,6 +4597,7 @@ begin
 {$endif WITHLOG}
   if fDB<>0 then
     raise ESQLite3Exception.Create('DBOpen called twice');
+  // open the database with the proper API call
   if (sqlite3=nil) or not Assigned(sqlite3.open) then
     raise ESQLite3Exception.Create('DBOpen called with no sqlite3 global');
   utf8 := StringToUTF8(fFileName);
@@ -4626,11 +4627,11 @@ begin
   if Assigned(sqlite3.key) and (fPassword<>'') and (fFileName<>'') and
      (fFileName<>SQLITE_MEMORY_DATABASE_NAME) then
     sqlite3.key(fDB,pointer(fPassword),length(fPassword));
-  // tune up execution speed (before accessing the database)
+  // tune up execution context (before accessing the database)
   if not fIsMemory then begin
     if (fOpenV2Flags and SQLITE_OPEN_CREATE<>0) and (fFileDefaultPageSize<>0) then
       PageSize := fFileDefaultPageSize;
-    if fFileDefaultCacheSize <> 0 then
+    if fFileDefaultCacheSize<>0 then
       CacheSize := fFileDefaultCacheSize; // 10000 by default (i.e. 40 MB)
   end;
   // always try to check for proper database content (and password)
@@ -5693,8 +5694,7 @@ end;
 
 constructor TSQLDatabaseBackupThread.Create(Backup: TSQLite3Backup;
   Source, Dest: TSQLDatabase; StepPageNumber, StepSleepMS: Integer;
-  SynLzCompress: boolean; OnProgress: TSQLDatabaseBackupEvent;
-  OwnerDest : Boolean);
+  SynLzCompress: boolean; OnProgress: TSQLDatabaseBackupEvent; OwnerDest: boolean);
 begin
   fTimer.Start;
   fBackup := Backup;
@@ -5766,8 +5766,7 @@ begin
         if fStepSynLzCompress then begin
           sqlite3.backup_finish(fBackup);
           if fOwnerDest then
-            FreeAndNil(fDestDB) // close destination backup database
-          else
+            FreeAndNil(fDestDB) else // close destination backup database
             fDestDB :=  nil;
           NotifyProgressAndContinue(backupStepSynLz);
           fn2 := ChangeFileExt(fn, '.db.tmp');
