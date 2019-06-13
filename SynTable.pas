@@ -1224,7 +1224,7 @@ type
     /// options of this field
     Options: TSynTableFieldOptions;
     /// contains the offset of this field, in case of fixed-length field
-    // - normaly, fixed-length fields are stored in the beginning of the record
+    // - normally, fixed-length fields are stored in the beginning of the record
     // storage: in this case, a value >= 0 will point to the position of the
     // field value of this field
     // - if the value is < 0, its absolute will be the field number to be counted

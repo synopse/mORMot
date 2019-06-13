@@ -18064,7 +18064,7 @@ type
     // instance, for better speed for most used RESTful operations; but complex
     // SQL requests (e.g. joined SELECT) will rely on the main SQL engine
     // - if set to false, will use the main SQLite3 engine for all statements
-    // (should not to be used normaly, because it will add unnecessary overhead)
+    // (should not to be used normally, because it will add unnecessary overhead)
     property StaticVirtualTableDirect: boolean read fVirtualTableDirect
       write fVirtualTableDirect;
     /// the class inheriting from TSQLRecordTableDeleted, as defined in the model

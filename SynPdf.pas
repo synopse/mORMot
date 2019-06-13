@@ -1098,7 +1098,7 @@ type
     /// the associated PDF Object Manager
     property ObjectMgr: TPdfObjectMgr read FObjectMgr;
     /// direct access to the internal TList instance
-    // - not to be used normaly
+    // - not to be used normally
     property List: TList read FArray;
   end;
 
@@ -1197,7 +1197,7 @@ type
     /// retrieve the type of the pdfdictionary object, i.e. the 'Type' property name
     property TypeOf: PDFString read getTypeOf;
     /// direct access to the internal TList instance
-    // - not to be used normaly
+    // - not to be used normally
     property List: TList read FArray;
   end;
 
