@@ -113,7 +113,8 @@ function GetLastError: longint; inline;
 procedure SetLastError(error: longint); inline;
 
 /// compatibility function, wrapping Win32 API text comparison
-// - somewhat slow by using two temporary WideString - but seldom called
+// - somewhat slow by using two temporary WideString - but seldom called, unless
+// our private WIN32CASE collation is used in SynSQLite3
 function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pwidechar;
   cchCount1: longint; lpString2: Pwidechar; cchCount2: longint): longint;
 
@@ -170,7 +171,6 @@ var
   CLOCK_MONOTONIC_FAST: integer = CLOCK_MONOTONIC;
 
 {$endif DARWIN}
-
 {$endif LINUX}
 
 /// compatibility function, to be implemented according to the running OS
@@ -183,9 +183,15 @@ function GetTickCount64: Int64; inline;
 // - will call clock_gettime(CLOCK_MONOTONIC_COARSE) if available
 function GetTickCount: cardinal; inline;
 
+var
+  /// could be set to TRUE to force SleepHiRes(0) to call the sched_yield API
+  SleepHiRes0Yield: boolean = false;
+
 /// similar to Windows sleep() API call, to be truly cross-platform
 // - it should have a millisecond resolution, and handle ms=0 as a switch to
-// another pending thread, i.e. ThreadSwitch/call sched_yield API
+// another pending thread, i.e. ThreadSwitch on Windows (sched_yield API is
+// not called on LINUX/POSIX since it was reported to fail on some systems -
+// you can force SleepHiRes0Yield=true to change this behavior)
 procedure SleepHiRes(ms: cardinal); inline;
 
 
@@ -497,11 +503,13 @@ end;
 procedure SleepHiRes(ms: cardinal);
 begin
   if ms=0 then
-    {$ifdef DARWIN} // reported as buggy by Alan
-    SysUtils.Sleep(1)
-    {$else}
+    {$ifdef MSWINDOWS}
     ThreadSwitch
-    {$endif}else
+    {$else}
+    if SleepHiRes0Yield then // reported as buggy by Alan on non-Windows targets
+      ThreadSwitch else // call e.g. pthread's sched_yield API
+      SysUtils.Sleep(1)
+    {$endif} else
     SysUtils.Sleep(ms);
 end;
 
