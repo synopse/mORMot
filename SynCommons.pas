@@ -198,7 +198,7 @@ type
   {$ifdef UNICODE}
   QWord = UInt64;
   {$else}
-  QWord = type Int64;
+  QWord = {$ifndef DELPHI5OROLDER}type{$endif} Int64;
   {$endif}
   /// points to an unsigned Int64
   PQWord = ^QWord;
@@ -24050,9 +24050,15 @@ end;
 
 function SortDynArrayQWord(const A,B): integer;
 begin
+  {$ifdef CPU64}
   if QWord(A)<QWord(B) then
     result := -1 else
   if QWord(A)>QWord(B) then
+  {$else}
+  if PQWord(@A)<PQWord(@B) then
+    result := -1 else
+  if PQWord(@A)>PQWord(@B) then
+  {$endif CPU64}
     result := 1 else
     result := 0;
 end;
@@ -29608,7 +29614,8 @@ begin
   {$ifdef HASINLINE} // FPC or Delphi 2006+
   Size := F.Size;
   {$else} // F.Size was limited to 32-bit on older Delphi
-  Size := F.FindData.nFileSizeLow or Int64(F.FindData.nFileSizeHigh) shl 32;
+  PInt64Rec(@Size)^.Lo := F.FindData.nFileSizeLow;
+  PInt64Rec(@Size)^.Hi := F.FindData.nFileSizeHigh;
   {$endif}
   {$else}
   Size := F.Size;
@@ -35703,18 +35710,21 @@ begin
 {$endif}
 end;
 
-procedure TTimeLogBits.From(DateTime: TDateTime; DateOnly: Boolean=false);
+procedure TTimeLogBits.From(DateTime: TDateTime; DateOnly: Boolean);
 var T: TSynSystemTime;
-    V: cardinal;
+    V: PtrInt;
 begin
   T.FromDate(DateTime);
   if DateOnly then
     T.Hour := 0 else
     T.FromTime(DateTime);
-  V := T.Hour+T.Day shl 5+T.Month shl 10+T.Year shl 14-(1 shl 5+1 shl 10);
-  if DateOnly then
-    Value := Int64(V) shl 12 else
-    Value := T.Second+T.Minute shl 6+Int64(V) shl 12;
+  V := T.Day shl 5+T.Month shl 10+T.Year shl 14-(1 shl 5+1 shl 10);
+  Value := V; // circumvent C1093 error on Delphi 5
+  Value := Value shl 12;
+  if not DateOnly then begin
+    V := T.Second+T.Minute shl 6+T.Hour shl 12;
+    Value := Value+V;
+  end;
 end;
 
 procedure TTimeLogBits.FromUnixTime(const UnixTime: TUnixTime);
@@ -35728,11 +35738,12 @@ begin
 end;
 
 procedure TTimeLogBits.From(Time: PSynSystemTime);
-var V: PtrUInt;
+var V: PtrInt;
 begin
-  V := PtrUInt(Time.Year) shl 14+PtrUInt(Time.Month) shl 10+PtrUInt(Time.Day) shl 5+
-    PtrUInt(Time.Hour)-(1 shl 5+1 shl 10);
-  Value := PtrUInt(Time.Minute) shl 6+PtrUInt(Time.Second)+QWord(V) shl 12;
+  V := Time^.Hour+Time^.Day shl 5+Time^.Month shl 10+Time^.Year shl 14-(1 shl 5+1 shl 10);
+  Value := V; // circumvent C1093 error on Delphi 5
+  V := Time^.Second+Time^.Minute shl 6;
+  Value := (Value shl 12)+V;
 end;
 
 var // GlobalTime[LocalTime] cache protected using RCU128()
@@ -45508,22 +45519,22 @@ begin
 end;
 
 function TDocVariantData.DeleteByValue(const aValue: Variant;
-  CaseInsensitive: boolean=false): integer;
+  CaseInsensitive: boolean): integer;
 var ndx: integer;
 begin
   result := 0;
   if VarIsEmptyOrNull(aValue) then begin
     for ndx := VCount-1 downto 0 do
-    if VarDataIsEmptyOrNull(@VValue[ndx]) then begin
-      Delete(ndx);
-      inc(result);
-    end;
+      if VarDataIsEmptyOrNull(@VValue[ndx]) then begin
+        Delete(ndx);
+        inc(result);
+      end;
   end else
     for ndx := VCount-1 downto 0 do
-    if SortDynArrayVariantComp(TVarData(VValue[ndx]),TVarData(aValue),CaseInsensitive)=0 then begin
-      Delete(ndx);
-      inc(result);
-    end;
+      if SortDynArrayVariantComp(TVarData(VValue[ndx]),TVarData(aValue),CaseInsensitive)=0 then begin
+        Delete(ndx);
+        inc(result);
+      end;
 end;
 
 function TDocVariantData.DeleteByStartName(aStartName: PUTF8Char; aStartNameLen: integer): integer;
@@ -55785,7 +55796,7 @@ function TPrecisionTimer.PerSec(const Count: QWord): QWord;
 begin
   if fTime<=0 then // avoid negative value in case of incorrect Start/Stop sequence
     result := 0 else // avoid div per 0 exception
-    result := (Count*QWord(1000000)) div fTime;
+    result := (Count*1000000) div fTime;
 end;
 
 function TPrecisionTimer.SizePerSec(Size: QWord): shortstring;
@@ -55859,7 +55870,7 @@ begin // mimics ComputeTime from already known elapsed time
     QueryPerformanceFrequency(fWinFreq);
   end;
   if fWinFreq<>0 then
-    FromExternalMicroSeconds((CounterDiff*QWord(1000000))div PQWord(@fWinFreq)^);
+    FromExternalMicroSeconds((CounterDiff*1000000)div PQWord(@fWinFreq)^);
   {$endif LINUX}
   result := fLastTime;
 end;
@@ -55977,7 +55988,7 @@ function TSynMonitorTime.PerSecond(const Count: QWord): QWord;
 begin
   if {$ifdef FPC}Int64(fMicroSeconds){$else}PInt64(@fMicroSeconds)^{$endif}<=0 then
     result := 0 else // avoid negative or div per 0
-    result := (Count*QWord(1000000)) div fMicroSeconds;
+    result := (Count*1000000) div fMicroSeconds;
 end;
 
 
@@ -60861,8 +60872,7 @@ end;
 
 function StreamUnSynLZ(Source: TStream; Magic: cardinal): TMemoryStream;
 var S,D: PAnsiChar;
-    sourcePosition,resultSize: PtrInt;
-    sourceSize: Int64;
+    sourcePosition,resultSize,sourceSize: Int64;
     Head: TSynLZHead;
     Trailer: TSynLZTrailer;
     buf: RawByteString;
@@ -60923,11 +60933,11 @@ begin
     if result=nil then
       result := THeapMemoryStream.Create else begin
       {$ifndef CPU64}
-      if Int64(resultSize)+Head.UnCompressedSize>maxInt then begin
+      if resultSize+Head.UnCompressedSize>maxInt then begin
         FreeAndNil(result); // result TMemoryStream should stay in memory!
         break;
       end;
-      {$endif}
+      {$endif CPU64}
     end;
     result.Size := resultSize+Head.UnCompressedSize;
     D := PAnsiChar(result.Memory)+resultSize;

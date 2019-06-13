@@ -6432,7 +6432,7 @@ begin // caller made EnterCriticalSection(fConnectionCS)
         exit;
     end;
     result := 0;
-    while result<fConnectionPool.Count-1 do begin
+    while result<fConnectionPool.Count do begin
       conn := TSQLDBConnectionThreadSafe(fConnectionPool.List[result]);
       if conn.IsOutdated(tix) then // to guarantee reconnection
         fConnectionPool.Delete(result) else begin
