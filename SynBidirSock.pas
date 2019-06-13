@@ -2523,8 +2523,8 @@ end;
 
 destructor TWebCrtSocketProcess.Destroy;
 begin
-  fSafePing.DoneAndFreeMem;
   inherited Destroy;
+  fSafePing.DoneAndFreeMem;
 end;
 
 function TWebCrtSocketProcess.GetFrame(out Frame: TWebSocketFrame;
