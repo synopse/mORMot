@@ -30843,12 +30843,13 @@ function TTypeInfo.ClassType: PClassType;
 {$ifdef HASINLINENOTX86}
 begin
   result := AlignTypeData(@Name[ord(Name[0])+1]);
+end;
 {$else}
 asm // very fast code
         movzx   edx, byte ptr[eax].TTypeInfo.Name
         lea     eax, [eax + edx].TTypeInfo.Name[1]
-{$endif}
 end;
+{$endif}
 
 function TTypeInfo.ClassCreate: TObject;
 var instance: TClassInstance;
@@ -30861,12 +30862,13 @@ function TTypeInfo.RecordType: PRecordType;
 {$ifdef HASINLINENOTX86}
 begin
   result := AlignTypeData(@Name[ord(Name[0])+1]);
+end;
 {$else}
 asm // very fast code
         movzx   edx, byte ptr[eax].TTypeInfo.Name
         lea     eax, [eax + edx].TTypeInfo.Name[1]
-{$endif}
 end;
+{$endif}
 
 function TTypeInfo.ClassFieldCount(onlyWithoutGetter: boolean): integer;
 begin
@@ -31129,11 +31131,13 @@ begin
   base := result^.BaseType;
   if (base<>nil) and (base<>@self) then // no redirection if already the base type
     result := PEnumType(GetFPCTypeData(pointer(DeRef(base))));
+end;
 {$else}
 {$ifdef HASINLINENOTX86}
 begin
   with PEnumType(@Name[ord(Name[0])+1])^.BaseType^^ do
     result := @Name[ord(Name[0])+1];
+end;
 {$else}
 asm     // very fast code
         movzx   edx, byte ptr[eax].TTypeInfo.Name
@@ -31141,9 +31145,9 @@ asm     // very fast code
         mov     eax, [eax]
         movzx   edx, byte ptr[eax].TTypeInfo.Name
         lea     eax, [eax + edx].TTypeInfo.Name[1]
+end;
 {$endif}
 {$endif FPC}
-end;
 
 function TTypeInfo.SetEnumType: PEnumType;
 begin
@@ -43377,11 +43381,11 @@ begin
 end;
 
 procedure TSQLRestServer.Timestamp(Ctxt: TSQLRestServerURIContext);
-{$ifdef NOVARIANTS}
-begin
-{$else}
+{$ifndef NOVARIANTS}
 var info: TDocVariantData;
+{$endif}
 begin
+{$ifndef NOVARIANTS}
   if IdemPropNameU(Ctxt.URIBlobFieldName,'info') and
      not (rsoTimestampInfoURIDisable in fOptions) then begin
     info.InitFast;
@@ -49712,7 +49716,7 @@ end;
 
 type
   /// wrapper class to ease JSONToObject() maintainability
-  TJSONToObject = {$ifdef UNICODE}record{$else}object{$endif}
+  {$ifdef UNICODE}TJSONToObject = record{$else}TJSONToObject = object{$endif}
   public
     // input parameters
     From: PUTF8Char;
@@ -50451,14 +50455,14 @@ begin
     if C<>TInterfacedCollection then
     if C<>TCollection then
     if C<>TCollectionItem then
-    {$endif}
+    {$endif LVCL}
     {$ifdef FPC}
     if C.ClassParent<>nil then begin
       C := C.ClassParent;
     {$else}
     if PPointer(PtrInt(C)+vmtParent)^<>nil then begin
       C := PPointer(PPointer(PtrInt(C)+vmtParent)^)^;
-    {$endif}
+    {$endif FPC}
       if C<>nil then
         continue else begin
         ItemCreate := cicTObject;
@@ -50484,7 +50488,7 @@ begin
       ItemCreate := cicTInterfacedCollection;
       exit;
     end else
-    {$endif}
+    {$endif LVCL}
     begin
       ItemCreate := cicTComponent;
       exit;
