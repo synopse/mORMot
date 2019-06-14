@@ -1760,6 +1760,7 @@ begin
   fn := aSettingsFolder;
   if fn = '' then
     fn := {$ifdef MSWINDOWS}fWorkFolderName{$else}'/etc/'{$endif};
+  fn :=  EnsureDirectoryExists(fn);
   if aSettingsName = '' then
     fn := fn + UTF8ToString(ExeVersion.ProgramName)
   else
