@@ -274,7 +274,7 @@ type
   /// internaly store a SQLite3 Backup process handle
   TSQLite3Backup = type PtrUInt;
 
-  /// internaly store any array of  SQLite3 value
+  /// internaly store of SQLite3 values, as used by TSQLFunctionFunc
   TSQLite3ValueArray = array[0..63] of TSQLite3Value;
 
 const
@@ -386,7 +386,7 @@ const
   /// sqlite3.step() return code: has finished executing
   SQLITE_DONE = 101;
 
-  /// possible error codes for sqlite_exec()  and sqlite3.step()
+  /// possible error codes for sqlite_exec() and sqlite3.step()
   // - as verified by sqlite3_check()
   SQLITE_ERRORS = [SQLITE_ERROR..SQLITE_ROW-1];
 
@@ -981,9 +981,8 @@ type
     // must be prepared for attempts to delete or modify rows of the table out
     // from other existing cursors. If the virtual table cannot accommodate such
     // changes, the xUpdate() method must return an error code.
-    xUpdate: function(var pVTab: TSQLite3VTab;
-      nArg: Integer; var ppArg: TSQLite3ValueArray;
-      var pRowid: Int64): Integer; cdecl;
+    xUpdate: function(var pVTab: TSQLite3VTab; nArg: Integer;
+      var ppArg: TSQLite3ValueArray; var pRowid: Int64): Integer; cdecl;
     /// Begins a transaction on a virtual table
     // - This method is always followed by one call to either the xCommit or
     // xRollback method.
@@ -2438,7 +2437,7 @@ type
     /// Execute one SQL statement in the aSQL UTF-8 encoded string
     // - Execute the first statement in aSQL: call Prepare() then Step once
     // - Close is always called internaly
-    // - returns TRUE on succes, and raise no ESQLite3Exception on error, but returns FALSE
+    // - returns TRUE on success, and raise no ESQLite3Exception on error, but returns FALSE
     function ExecuteNoException(aDB: TSQLite3DB; const aSQL: RawUTF8): boolean;
     /// Execute a SQL statement which return integers from the aSQL UTF-8 encoded string
     // - Execute the first statement in aSQL
@@ -3054,6 +3053,12 @@ type
     function BackupBackground(const BackupFileName: TFileName;
       StepPageNumber, StepSleepMS: Integer; OnProgress: TSQLDatabaseBackupEvent;
       SynLzCompress: boolean=false; const aPassword: RawUTF8=''): boolean;
+    /// background backup to another opened database instance
+    // - in respect to BackupBackground method, it will use an existing database
+    // the actual process
+    // - by design, SynLZCompress or aPassword parameters are unavailable
+    function BackupBackgroundToDB(BackupDB: TSQLDatabase;
+      StepPageNumber, StepSleepMS: Integer; OnProgress: TSQLDatabaseBackupEvent): boolean;
     /// wait until any previous BackupBackground() is finished
     // - warning: this method won't call the Windows message loop, so should not
     // be called from main thread, unless the UI may become unresponsive: you
@@ -3268,6 +3273,7 @@ type
     fOnProgress: TSQLDatabaseBackupEvent;
     fError: Exception;
     fTimer: TPrecisionTimer;
+    fOwnerDest: boolean;
     /// main process
     procedure Execute; override;
   public
@@ -3276,7 +3282,7 @@ type
     // inherited method to run the process in blocking mode
     constructor Create(Backup: TSQLite3Backup; Source, Dest: TSQLDatabase;
       StepPageNumber,StepSleepMS: Integer; SynLzCompress: boolean;
-      OnProgress: TSQLDatabaseBackupEvent); reintroduce;
+      OnProgress: TSQLDatabaseBackupEvent; OwnerDest: boolean=true); reintroduce;
     /// the source database of the backup process
     property SourceDB: TSQLDatabase read fSourceDB;
     /// the destination database of the backup process
@@ -3458,10 +3464,10 @@ begin
     if s2Len<=0 then
       result := 0 else
       result := -1 else
-  if s2Len<=0 then
-    result := 1 else
-    result := CompareStringW(
-      LOCALE_USER_DEFAULT,0,S1,s1len shr 1,S2,s2Len shr 1)-2;
+    if s2Len<=0 then
+      result := 1 else
+      result := CompareStringW(
+        LOCALE_USER_DEFAULT,0,S1,s1len shr 1,S2,s2Len shr 1)-2;
 end;
 
 function Utf16SQLCompNoCase(CollateParam: pointer; s1Len: integer; s1: pointer;
@@ -3656,6 +3662,18 @@ begin
   RawUTF8ToSQlite3Context(TimeLog.Text(True,'T'),Context,false);
 end;
 
+procedure InternalTimeLogUnix(Context: TSQLite3FunctionContext;
+  argc: integer; var argv: TSQLite3ValueArray); cdecl;
+var TimeLog: TTimeLogBits;
+begin
+  if argc<>1 then begin
+    ErrorWrongNumberOfArgs(Context);
+    exit;
+  end;
+  TimeLog.Value := sqlite3.value_int64(argv[0]);
+  sqlite3.result_int64(Context,TimeLog.ToUnixTime);
+end;
+
 procedure InternalRank(Context: TSQLite3FunctionContext;
   argc: integer; var argv: TSQLite3ValueArray); cdecl;
 // supplies the same "RANK" internal function as proposed in
@@ -3761,7 +3779,7 @@ end;
 procedure InternalSimpleInt64DynArray(Context: TSQLite3FunctionContext;
   argc: integer; var argv: TSQLite3ValueArray); cdecl;
 var Blob: pointer;
-    Count, ElemSize, i: integer;
+    Count, ElemSize: integer;
     V: Int64;
 begin // Byte/Word/Cardinal/Int64/CurrencyDynArrayContains(BlobField,I64)
   // for currency, expect I64 value = aCurrency*10000 = PInt64(@aCurrency)^
@@ -3769,13 +3787,13 @@ begin // Byte/Word/Cardinal/Int64/CurrencyDynArrayContains(BlobField,I64)
     exit;
   Blob := sqlite3.value_blob(argv[0]);
   if Blob<>nil then begin // search into direct in-memory mapping (no allocation)
-    Blob := SimpleDynArrayLoadFrom(Blob,sqlite3.user_data(Context),Count,ElemSize);
+    Blob := SimpleDynArrayLoadFrom(Blob,sqlite3.user_data(Context),Count,ElemSize,{nohash32=}true);
     if Blob<>nil then begin
       V := sqlite3.value_int64(argv[1]);
       sqlite3.result_int64(Context,Int64(true)); // exit will report value found
       case ElemSize of
-        1: for i := 0 to Count-1 do if PByteArray(Blob)^[i]=byte(V) then exit;
-        2: for i := 0 to Count-1 do if PWordArray(Blob)^[i]=word(V) then exit;
+        1: if ByteScanIndex(Blob,Count,byte(V))>=0 then exit;
+        2: if WordScanIndex(Blob,Count,word(V))>=0 then exit;
         4: if IntegerScanExists(Blob,Count,cardinal(V)) then exit;
         8: if Int64ScanExists(Blob,Count,V) then exit;
       end;
@@ -4477,6 +4495,26 @@ begin
   result := true;
 end;
 
+function TSQLDataBase.BackupBackgroundToDB(BackupDB: TSQLDatabase;
+  StepPageNumber, StepSleepMS: Integer; OnProgress: TSQLDatabaseBackupEvent): boolean;
+var Backup: TSQLite3Backup;
+begin
+  result := false;
+  if (self=nil) or (BackupDB=nil) or not Assigned(sqlite3.backup_init) or
+     (fBackupBackgroundInProcess<>nil) then
+    exit;
+  {$ifdef WITHLOG}
+  fLog.Add.Log(sllDB,'BackupBackgroundToDB("%") started on %',
+    [BackupDB.FileName,FileNameWithoutPath],self);
+  {$endif}
+  Backup := sqlite3.backup_init(BackupDB.DB,'main',DB,'main');
+  if Backup=0 then
+    exit;
+  fBackupBackgroundInProcess := TSQLDatabaseBackupThread.Create(
+    Backup,self,BackupDB,StepPageNumber,StepSleepMS,false,OnProgress,false);
+  result := true;
+end;
+
 procedure TSQLDataBase.BackupBackgroundWaitUntilFinished(TimeOutSeconds: Integer);
 var i: integer;
 begin
@@ -4570,6 +4608,7 @@ begin
 {$endif WITHLOG}
   if fDB<>0 then
     raise ESQLite3Exception.Create('DBOpen called twice');
+  // open the database with the proper API call
   if (sqlite3=nil) or not Assigned(sqlite3.open) then
     raise ESQLite3Exception.Create('DBOpen called with no sqlite3 global');
   utf8 := StringToUTF8(fFileName);
@@ -4595,35 +4634,38 @@ begin
     fDB := 0;
     exit;
   end;
+  // initialize optional encryption (if supported by the compiled engine)
   if Assigned(sqlite3.key) and (fPassword<>'') and (fFileName<>'') and
-     (fFileName<>SQLITE_MEMORY_DATABASE_NAME) then begin
+     (fFileName<>SQLITE_MEMORY_DATABASE_NAME) then
     sqlite3.key(fDB,pointer(fPassword),length(fPassword));
-    if not ExecuteNoException('select count(*) from SQLITE_MASTER') then begin
-      Result  :=  SQLITE_NOTADB; // likely a password error
-      sqlite3.close(fDB); // should always be closed, even on failure
-      fDB := 0;
-      exit;
-    end;
-  end;
-  // tune up execution speed
+  // tune up execution context (before accessing the database)
   if not fIsMemory then begin
     if (fOpenV2Flags and SQLITE_OPEN_CREATE<>0) and (fFileDefaultPageSize<>0) then
       PageSize := fFileDefaultPageSize;
-    if fFileDefaultCacheSize <> 0 then
+    if fFileDefaultCacheSize<>0 then
       CacheSize := fFileDefaultCacheSize; // 10000 by default (i.e. 40 MB)
   end;
-  // the SQLite3 standard NOCASE collation is used for AnsiString and is very fast
-  // our custom fast UTF-8 case insensitive compare, using NormToUpper[] for all 8 bits values
+  // always try to check for proper database content (and password)
+  if not ExecuteNoException('select count(*) from sqlite_master') then begin
+    result :=  SQLITE_NOTADB; // likely a password error
+    sqlite3.close(fDB); // should always be closed, even on failure
+    fDB := 0;
+    exit;
+  end;
+  // our custom fast UTF-8 WinAnsi case insensitive compare, using NormToUpper[]
   sqlite3.create_collation(DB,'SYSTEMNOCASE',SQLITE_UTF8,nil,Utf8SQLCompNoCase);
   // our custom fast ISO-8601 date time encoded
   sqlite3.create_collation(DB,'ISO8601',SQLITE_UTF8,nil,Utf8SQLDateTime);
   // two slow but always accurate compare, using the Win32 Unicode API
   sqlite3.create_collation(DB,'WIN32CASE',SQLITE_UTF16,nil,Utf16SQLCompCase);
   sqlite3.create_collation(DB,'WIN32NOCASE',SQLITE_UTF16,nil,Utf16SQLCompNoCase);
+  // note: standard SQLite3 NOCASE collation is used for AnsiString
   // register the MOD() user function, similar to the standard % operator
   sqlite3.create_function(DB,'MOD',2,SQLITE_ANY,nil,InternalMod,nil,nil);
   // register TIMELOG(), returning a ISO-8601 date/time from TTimeLog value
   sqlite3.create_function(DB,'TIMELOG',1,SQLITE_ANY,nil,InternalTimeLog,nil,nil);
+  // register TIMELOGUNIX(), returning Unix Epoch seconds from TTimeLog value
+  sqlite3.create_function(DB,'TIMELOGUNIX',1,SQLITE_ANY,nil,InternalTimeLogUnix,nil,nil);
   // some user functions
   sqlite3.create_function(DB,'SOUNDEX',1,SQLITE_UTF8,nil,InternalSoundex,nil,nil);
   sqlite3.create_function(DB,'SOUNDEXFR',1,SQLITE_UTF8,nil,InternalSoundexFr,nil,nil);
@@ -4964,7 +5006,7 @@ begin
     Prepare(aDB,aSQL); // will raise an ESQLite3Exception on error
     ExecuteAll;
   finally
-    Close; // always release statement, even if done normaly in EngineExecuteAll
+    Close; // always release statement, even if done normally in EngineExecuteAll
   end;
 end;
 
@@ -4974,12 +5016,12 @@ begin
     Prepare(aDB,aSQL); // will raise an ESQLite3Exception on error
     Execute;
   finally
-    Close; // always release statement, even if done normaly in Execute
+    Close; // always release statement, even if done normally in Execute
   end;
 end;
 
 function TSQLRequest.ExecuteNoException(aDB: TSQLite3DB; const aSQL: RawUTF8): boolean;
-begin
+begin // avoid sqlite3_check() calls for no ESQLite3Exception
   result := false;
   if (aDB<>0) and (aSQL<>'') then
     try
@@ -4987,7 +5029,7 @@ begin
          not(sqlite3.step(Request) in SQLITE_ERRORS) then
         result := true;
     finally
-      Close; // always release statement, even if done normaly in Execute
+      Close; // always release statement, even if done normally in Execute
     end;
 end;
 
@@ -5665,7 +5707,7 @@ end;
 
 constructor TSQLDatabaseBackupThread.Create(Backup: TSQLite3Backup;
   Source, Dest: TSQLDatabase; StepPageNumber, StepSleepMS: Integer;
-  SynLzCompress: boolean; OnProgress: TSQLDatabaseBackupEvent);
+  SynLzCompress: boolean; OnProgress: TSQLDatabaseBackupEvent; OwnerDest: boolean);
 begin
   fTimer.Start;
   fBackup := Backup;
@@ -5678,6 +5720,7 @@ begin
     fStepSleepMS := StepSleepMS;
   fOnProgress := OnProgress;
   fStepSynLzCompress := SynLzCompress;
+  fOwnerDest := OwnerDest;
   FreeOnTerminate := true;
   inherited Create(false);
 end;
@@ -5732,26 +5775,31 @@ begin
           raise ESQLite3Exception.Create('Backup process forced to terminate');
         SleepHiRes(fStepSleepMS);
       until false;
-      if fStepSynLzCompress then begin
-        sqlite3.backup_finish(fBackup);
-        FreeAndNil(fDestDB); // close destination backup database
-        NotifyProgressAndContinue(backupStepSynLz);
-        fn2 := ChangeFileExt(fn, '.db.tmp');
-        if not (RenameFile(fn,fn2) and TSQLDatabase.BackupSynLZ(fn2,fn,true)) then
-          raise ESQLite3Exception.CreateUTF8('%.Execute: BackupSynLZ(%,%) failed',
-            [self,fn,fn2]);
-        {$ifdef WITHLOG}
-        if Assigned(log) then
-          log.Log(sllTrace,'TSQLDatabase.BackupSynLZ into % %',
-            [KB(FileSize(fn)),fn],self);
-        {$endif}
+      if not IdemPChar(pointer(fn),SQLITE_MEMORY_DATABASE_NAME) then begin
+        if fStepSynLzCompress then begin
+          sqlite3.backup_finish(fBackup);
+          if fOwnerDest then
+            FreeAndNil(fDestDB) else // close destination backup database
+            fDestDB :=  nil;
+          NotifyProgressAndContinue(backupStepSynLz);
+          fn2 := ChangeFileExt(fn, '.db.tmp');
+          if not (RenameFile(fn,fn2) and TSQLDatabase.BackupSynLZ(fn2,fn,true)) then
+            raise ESQLite3Exception.CreateUTF8('%.Execute: BackupSynLZ(%,%) failed',
+              [self,fn,fn2]);
+          {$ifdef WITHLOG}
+          if Assigned(log) then
+            log.Log(sllTrace,'TSQLDatabase.BackupSynLZ into % %',
+              [KB(FileSize(fn)),fn],self);
+          {$endif}
+        end;
+        fSourceDB.fBackupBackgroundLastFileName := ExtractFileName(fn);
       end;
-      fSourceDB.fBackupBackgroundLastFileName := ExtractFileName(fn);
       NotifyProgressAndContinue(backupSuccess);
     finally
       if fDestDB<>nil then begin
         sqlite3.backup_finish(fBackup);
-        fDestDB.Free; // close destination backup database if not already
+        if fOwnerDest then
+          fDestDB.Free; // close destination backup database if not already
       end;
       fSourceDB.fBackupBackgroundLastTime := fTimer.Stop;
       fSourceDB.Lock;
