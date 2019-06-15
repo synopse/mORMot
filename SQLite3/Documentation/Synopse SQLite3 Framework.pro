@@ -24,13 +24,13 @@ NoConfidential=Yes
 ; so that no "Confidential" text will appear in page footer - seems convenient for a GPL document ;)
 HeaderWithLogo=Yes
 ; custom page header with the synopse logo
-HtmlSideBar=Overview/Meet the mORMot:SOURCE,Download/How to install:TITL_113,API Reference/Units and classes:SIDE_MORMOT_FRAMEWORK,FAQ/Frequently Asked Questions:TITL_123,Forum/Get support:http://synopse.info/forum,TimeLine/Open Source:http://synopse.info/fossil/timeline,Blog/Latest News:http://blog.synopse.info,Donate/Adopt a mORMot!:http://synopse.info/fossil/wiki?name=HelpDonate,Licence Terms/Either MPL, LGPL or GPL:TITL_34
+HtmlSideBar=Overview/Meet the mORMot:SOURCE,Download/How to install:TITL_113,API Reference/Units and classes:SIDE_MORMOT_FRAMEWORK,FAQ/Frequently Asked Questions:TITL_123,Forum/Get support:https://synopse.info/forum,TimeLine/Open Source:https://synopse.info/fossil/timeline,Blog/Latest News:http://blog.synopse.info,Donate/Adopt a mORMot!:https://synopse.info/fossil/wiki?name=HelpDonate,Licence Terms/Either MPL, LGPL or GPL:TITL_34
 ; the sidebar first links, for html export
 
 {\b Document License}
-{\i Synopse mORMot Framework Documentation}.\line Copyright (C) 2008-2019 Arnaud Bouchez.\line Synopse Informatique - @http://synopse.info
+{\i Synopse mORMot Framework Documentation}.\line Copyright (C) 2008-2019 Arnaud Bouchez.\line Synopse Informatique - @https://synopse.info
 The {\i Synopse mORMot Framework Source Code} is licensed under GPL / LGPL / MPL licensing terms, free to be included in any application.
-;This documentation has been generated using {\i Synopse SynProject} - @http://synopse.info/fossil/wiki?name=SynProject
+;This documentation has been generated using {\i Synopse SynProject} - @https://synopse.info/fossil/wiki?name=SynProject
 ;This document is a free document; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 3 of the License, or (at your option) any later version.
 The {\i Synopse mORMot Framework Documentation} is a free document, released under a GPL 3.0 License, distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 ;You should have received a copy of the GNU General Public License along with this documentation. If not, see @http://www.gnu.org/licenses
@@ -268,7 +268,7 @@ A summary explanation is indicated, together with the names of those who made ea
 \risk
 : Responsibilities
 - Synopse will try to correct any identified issue;
-- The Open Source community will create tickets in a public Tracker web site located at @http://synopse.info/fossil ;
+- The Open Source community will create tickets in a public Tracker web site located at @https://synopse.info/fossil ;
 - Synopse work on the framework is distributed without any warranty, according to the chosen license terms;
 - This documentation is released under the GPL (GNU General Public License) terms, without any warranty of any kind.
 \page
@@ -354,7 +354,7 @@ A summary explanation is indicated, together with the names of those who made ea
 \risk
 : Responsibilities
 - Synopse will try to correct any identified issue;
-- The Open Source community will create tickets in a public Tracker web site located at @http://synopse.info/fossil ;
+- The Open Source community will create tickets in a public Tracker web site located at @https://synopse.info/fossil ;
 - Synopse work on the framework is distributed without any warranty, according to the chosen license terms;
 - This documentation is released under the GPL (GNU General Public License) terms, without any warranty of any kind.
 
@@ -556,8 +556,8 @@ After a deep presentation of the framework architecture and main features, each 
 The {\i SynFile} main demo is presented on its own, and can be used as a general {\i User Guide} of its basic ORM features and User Interface generation - see @50@.
 At the end of this document, @SRS@ items are linked directly to the class or function involved with the @SDD@, from the source code.
 : Responsibilities
-- Support is available in the project forum - @http://synopse.info/forum - from the {\i mORMot} Open Source community;
-- Tickets can be created in a public Tracker web site located at @http://synopse.info/fossil , which publishes also the latest version of the project source code;
+- Support is available in the project forum - @https://synopse.info/forum - from the {\i mORMot} Open Source community;
+- Tickets can be created in a public Tracker web site located at @https://synopse.info/fossil , which publishes also the latest version of the project source code;
 - Synopse can provide additional support, expertise or enhancements, on request;
 - Synopse work on the framework is distributed without any warranty, according to the chosen license terms - see @34@;
 - This documentation is released under the GPL ({\i GNU @*General Public License@}) terms, without any warranty of any kind.
@@ -742,7 +742,7 @@ Do not forget that {\i Synopse}, as a company, is able to offer dedicated audit 
 :123 FAQ
 Before you start going any further, we propose here below a simple @**FAQ@ containing the most frequent questions we received on our forums.
 First of all, take a look at the {\i keyword index} available at the very beginning of this document. The underlined entries target the main article(s) about a given concept or technical term.
-Feel free to give your feedback at @http://synopse.info/forum asking new questions or improving answers!
+Feel free to give your feedback at @https://synopse.info/forum asking new questions or improving answers!
 {\b Your SAD doc is too long to read through in a short period.}\line Too much documentation can kill the documentation! But you do not need to read the whole document: most of it is a detailed description of every unit, object, or class. But the first part is worth reading, otherwise you are very likely to miss some main concepts or patterns. It just takes 15-30 minutes! Consider also the  slides available at @https://drive.google.com/folderview?id=0B0r8u-FwvxWdeVJVZnBhSEpKYkE
 {\b Where should I start?}\line Take a look at the {\i Architecture principles} @40@, then download and install the sources and compile and run the {\f1\fs20 TestSQL3.dpr} program as stated @113@. Check about @*ORM@ @3@, @*SOA@ @63@ and @*MVC@ @108@, then test the various samples (from the {\f1\fs20 SQLite3\\Samples} folder), especially 01, 02, 04, 11, 12, 14, 17, 26, 28, 30 and the {\f1\fs20 MainDemo}.
 {\b So far, I can see your {\i mORMot} fits most of the requirement, but seems only for Database Client-Server apps.}\line First of all, the framework is a {\i set of bricks}, so you can use it e.g. to build interface based services, even with no database at all. We tried to make its main features modular and uncoupled.
@@ -758,7 +758,7 @@ Feel free to give your feedback at @http://synopse.info/forum asking new questio
 {\b I know you have joined the {\i DataSnap} performance discussion and your performance won good reputation there. If I want to use your framework to replace my old project of DataSnap, how easy will it be?}\line If you used {\i DataSnap} to build method-based services, translation into {\i mORMot} will be just a matter of code refactoring. And you will benefit of new features like {\i Interface-based services} - see @63@ - which is much more advanced than the method-based pattern, and will avoid generating the client class via a wizard, and offers additional features - see @77@ or @72@.
 {\b What is the SMS? Do you know any advantage compared to JQuery or AngularJS?}\line {\i @*Smart Mobile Studio@} is an IDE and some source runtime able to develop and compile an Object-Pascal project into a {\i @*HTML 5@ / @*CSS 3@ / @*JavaScript@} {\i embedded} application, i.e. able to work stand alone with no remote server. When used with {\i mORMot} on the server side, you can use the very same object pascal language on both server and client sides, with strong typing and true @*OOP@ design. Then you feature secure authentication and JSON communication, with connected or off-line mode. Your {\i SmartPascal} client code can be generated by your {\i mORMot} server, as stated @90@.
 {\b I am trying to search a substitute solution to WebSnap. Do you have any sample or doc to describe how to build a robust web Server?}\line You can indeed easily create a modern @*MVC@ / @*MVVM@ scaling @*Web Application@. Your {\i mORMot} server can easily publish its ORM / SOA business logic as {\i Model}, use {\i @*Mustache@} logic-less templates rendering - see @81@ - for {\i Views}, and defining the {\i ViewModel} / {\i Controller} as regular Delphi methods. See @108@ for more details, and discovering a sample "blog" application.
-{\b Have you considered using a popular source coding host like @*Github@ or BitBucket?}\line We love to host our own source code repository, and find fossil a perfect match for our needs, with a friendly approach. But we created a parallel repository on {\i GitHub}, so that you may be able to monitor or fork our projects - see @http://github.com/synopse/mORMot \line Note that you can get a daily snapshot of our official source code repository directly from\line @http://synopse.info/files/mORMotNightlyBuild.zip
+{\b Have you considered using a popular source coding host like @*Github@ or BitBucket?}\line We love to host our own source code repository, and find fossil a perfect match for our needs, with a friendly approach. But we created a parallel repository on {\i GitHub}, so that you may be able to monitor or fork our projects - see @https://github.com/synopse/mORMot \line Note that you can get a daily snapshot of our official source code repository directly from\line @https://synopse.info/files/mORMotNightlyBuild.zip
 {\b Why is this framework named {\i mORMot}?}\line - Because its initial identifier was "{\i Synopse SQLite3 database framework}", which may induce a {\i SQLite3}-only library, whereas the framework is now able to connect to any database engine;\line - Because we like mountains, and those large ground rodents;\line - Because marmots do hibernate, just like our precious objects;\line - Because marmots are highly social and use loud whistles to communicate with one another, just like our applications are designed not to be isolated;\line - Because even if they eat greens, they use to fight at Spring for their realm;\line - Because it may be an acronym for "Manage Object Relational Mapping Over Territory", or whatever you may think of...
 \page
 :40Architecture principles
@@ -3966,7 +3966,7 @@ The whole query is made in one line, with no {\f1\fs20 SELECT} statement to writ
 For a particular ID range, you may have written, with a specific WHERE clause using a @*prepared@ statement:
 !!  GlobalClients.OneFieldValues(TSQLDrives,'drive',
 !!    'ID>=? AND ID<=?',[],[aFirstID,aLastID],aList);
-It is certainly worth reading all the (verbose) interface part of the {\f1\fs20 mORMot.pas} unit, e.g. the {\f1\fs20 TSQLRest} class, to make your own idea about all the high-level methods available. In the following pages, you'll find all needed documentation about this particular unit. Since our framework is used in real applications, most useful methods should already have been made available. If you need additional high-level features, feel free to ask for them, if possible with source code sample, in our forum, freely available at @http://synopse.info
+It is certainly worth reading all the (verbose) interface part of the {\f1\fs20 mORMot.pas} unit, e.g. the {\f1\fs20 TSQLRest} class, to make your own idea about all the high-level methods available. In the following pages, you'll find all needed documentation about this particular unit. Since our framework is used in real applications, most useful methods should already have been made available. If you need additional high-level features, feel free to ask for them, if possible with source code sample, in our forum, freely available at @https://synopse.info
 :  Think multi-tier
 And do not forget the framework is able to have several level of objects, thanks to our @*Client-Server@ architecture - see @6@. Such usage is not only possible, but strongly encouraged.
 You should have business-logic level objects at the Client side. Then both business-logic and DB objects at the Server side.
@@ -9161,11 +9161,11 @@ Conformance to this open/closed principle is what yields the greatest benefit of
 Following this principle will make your code far away from a regular RAD style. But benefits will be huge.
 :   Applied to our framework units
 When designing our ORM/SOA set of units, we tried to follow this principle. In fact, you should not have to modify its implementation. You should define your own units and classes, without the need to {\i hack} the framework source code.
-Even if {\i Open Source} paradigm allows you to modify the supplied code, this shall not be done unless you are either fixing a bug or adding a new common feature. This is in fact the purpose of our @http://synopse.info web site, and most of the framework enhancements have come from user requests.
+Even if {\i Open Source} paradigm allows you to modify the supplied code, this shall not be done unless you are either fixing a bug or adding a new common feature. This is in fact the purpose of our @https://synopse.info web site, and most of the framework enhancements have come from user requests.
 The framework Open Source @*license@ - see @34@ - may encourage user contributions in order to fulfill the Open/closed design principle:
 - Your application code extends the {\i Synopse mORMot Framework} by defining your own classes or event handlers - this is how it is {\i open for extension};
 - The main framework units shall remain inviolate, and common to all users - this illustrates the {\i closed for modification} design.
-As a beneficial side effect, this principle will ensure that your code will be ready to follow the framework updates (which are quite regular). When a new version of {\i mORMot} is available, you should be able to retrieve it for free from our web site, replace your files locally, then build a new enhanced version of your application, with the benefit of all included fixes and optimizations. Even the source code repository is available - at @http://synopse.info/fossil or from @https://github.com/synopse/mORMot - and allows you to follow the current step of evolvment of the framework.
+As a beneficial side effect, this principle will ensure that your code will be ready to follow the framework updates (which are quite regular). When a new version of {\i mORMot} is available, you should be able to retrieve it for free from our web site, replace your files locally, then build a new enhanced version of your application, with the benefit of all included fixes and optimizations. Even the source code repository is available - at @https://synopse.info/fossil or from @https://github.com/synopse/mORMot - and allows you to follow the current step of evolvment of the framework.
 In short, abstraction is the key to peace of mind. All your code shall not depend on a particular implementation.
 :   Open/Closed in practice
 In order to implement this principle, several conventions could be envisaged:
@@ -13797,7 +13797,7 @@ Then an event handled can be associated to the {\f1\fs20 TSQLRestClientURI. OnAu
 Of course, if {\i @*Windows Authentication@} is defined (see above), this event handler shall be adapted as expected. For instance, you may add a custom notification to register the corresponding user to the {\f1\fs20 TSQLAuthUser} table.
 :   Authentication using AJAX
 @90@ can generate {\i @*JavaScript@} code from its IDE. Our template-based code generation make this solution perfectly integrated with our {\i mORMot} server, especially about authentication: you will find the same {\f1\fs20 TSQLRestServerAuthenticationDefault} and {\f1\fs20 TSQLRestServerAuthenticationNone} classes in our {\f1\fs20 SynCrossPlatformREST.pas} unit, ready to authenticate to the server.\line In fact, there is also a command-line compiler available (named {\f1\fs20 smsc.exe}) which can create a {\f1\fs20 .js} file from {\i @*SmartPascal@} code: you may use it to integrate the generated client to a regular HTML5 application (using e.g. {\i JQuery} or {\i AngularJS}).
-Some stand-alone working {\i JavaScript} code has been published in our forum by a framework user (thanks, "RangerX"), which implements the authentication schema as detailed above. It uses {\f1\fs20 jQuery}, and HTML 5 {\f1\fs20 LocalStorage}, not cookies, for storing session information on the Client side.\line See @http://synopse.info/forum/viewtopic.php?pid=2995#p2995
+Some stand-alone working {\i JavaScript} code has been published in our forum by a framework user (thanks, "RangerX"), which implements the authentication schema as detailed above. It uses {\f1\fs20 jQuery}, and HTML 5 {\f1\fs20 LocalStorage}, not cookies, for storing session information on the Client side.\line See @https://synopse.info/forum/viewtopic.php?pid=2995#p2995
 :198  JWT Authentication
 As an alternative, you may use @192@ for authentication.
 On server side, you can assign a {\f1\fs20 TJWTAbstract} inherited instance to {\f1\fs20 TSQLRestServer.JWTForUnauthenticatedRequest} so that any client providing a valid {\f1\fs20 @*JWT@} would be allowed to execute some requests.
@@ -14253,7 +14253,7 @@ The very same {\f1\fs20 SynEcc.pas} unit defines some high-level classes and str
 - Innovative {\f1\fs20 .cheat} files generation, for safe storage of private keys passwords, encrypted from a master {\f1\fs20 cheat.public} key and its master password.
 You are free to use those classes, in your programs, whenever some advanced cryptography is needed - and it will eventually be the case, trust me! A command-line {\f1\fs20 ECC} tool has also been developed, for convenient operation on files.
 :  ECC command line tool
-You will find in the {\f1\fs20 SQLite3\\Samples\\33 - ECC} folder the source code of the {\f1\fs20 @*ECC@.dpr} console project. Just compile it into an executable, accessible from your command line prompt. Or download an already compiled version from @http://synopse.info/files/ecc.7z
+You will find in the {\f1\fs20 SQLite3\\Samples\\33 - ECC} folder the source code of the {\f1\fs20 @*ECC@.dpr} console project. Just compile it into an executable, accessible from your command line prompt. Or download an already compiled version from @https://synopse.info/files/ecc.7z
 It works with no problem under @*Windows@, or @*Linux@, with no external dependency (e.g. no {\i OpenSSL} needed), so could be used in an automated server infrastructure. No need to deploy a complex @*PKI@ system, just manage your certificates, encryption and signature details, via a single command line tool.
 If you run it without argument, you will get simple help information (here is the list at the time of this writing, your own version may differ):
 $>ecc
@@ -16170,15 +16170,15 @@ Of course, this interactive console refresh slows down the process a lot. It is 
 =[License]
 \page
 : Availability
-As a true {\i Open Source} project, all source code of the framework is available, and latest version can be retrieved from our online repository at @http://synopse.info/fossil
+As a true {\i Open Source} project, all source code of the framework is available, and latest version can be retrieved from our online repository at @https://synopse.info/fossil
 As an alternative, you can monitor or fork our projects from our @*GitHub@ repository, at @http://github.com/synopse/mORMot
 The source has been commented following the scheme used by our {\i @*SynProject@} documentation tool. That is all interface definition of the units have special comments, which were extracted then incorporated into this @SAD@, in the following pages.
 :  Obtaining the Source Code
-Each official release of the framework is available in a dedicated {\f1\fs20 SynopseSQLite3.zip} archive from the official @http://synopse.info web site, but you may want to use the latest version available.
-The easiest is to download a nightly-generated archive of the latest version of the trunk, from @http://synopse.info/files/mORMotNightlyBuild.zip
+Each official release of the framework is available in a dedicated {\f1\fs20 SynopseSQLite3.zip} archive from the official @https://synopse.info web site, but you may want to use the latest version available.
+The easiest is to download a nightly-generated archive of the latest version of the trunk, from @https://synopse.info/files/mORMotNightlyBuild.zip
 As an alternative, you can manually obtain a {\f1\fs20 .zip} archive containing a snapshot of the latest version of the whole source code tree directly from this repository.
 Follow these steps:
-- Pointer your web browser at @http://synopse.info/fossil
+- Pointer your web browser at @https://synopse.info/fossil
 - Click on the "{\i Login}" menu button.
 - Log in as anonymous. The password is shown on screen. Just click on the "{\i Fill out captcha}" button then on the "{\i Login}" button. The reason for requiring this login is to prevent spiders from walking the entire website, downloading ZIP archives of every historical version, and thereby soaking up all our bandwidth.
 - Click on the {\i Timeline} or {\i Leaves} link at the top of the page. Preferred way is {\i Leaves} which will give you the latest available version.
@@ -16199,15 +16199,15 @@ For HTML5 and Mobile clients, our main platform is {\i Smart Mobile Studio}, whi
 The latest versions of the {\i FreePascal Compiler} together with its great {\i Lazarus} IDE, are now very stable and easy to work with. I've tried for instance the {\i CodeTyphon} release (which is not the stable branch, but the latest version of both FPC and {\i Lazarus}) - see @http://www.pilotlogic.com - and found it to be impressive. This is amazing to build the whole set of compilers and IDE, with a lot of components, for several platforms (this is a cross-platform project), just from the sources. I like {\i Lazarus} stability and speed much more than {\i Delphi} (did you ever tried to browse and debug {\i included} {\f1\fs20 $I ...} files in the {\i Delphi} IDE? with Lazarus, it is painless), even if the compiler is slower than {\i Delphi}'s, and if the debugger is less integrated and even more unstable than {\i Delphi}'s under Windows (yes, it is possible!). At least, it works, and works pretty well. Official {\i @*Linux@} / {\i FPC} support is available for {\i mORMot} servers - thanks to Alfred! - but this platform is brand new to the framework, so less stable and not yet feature complete.
 :  32-bit sqlite3*.obj and 64-bit SQLite3 dll
 In order to maintain the source code repository in a decent size, we excluded the {\f1\fs20 sqlite3*.obj} storage in it, but provide the full source code of the {\i @*SQlite3@} engine in the corresponding {\f1\fs20 sqlite3.c} file, ready to be compiled with all conditional defined as expected by {\f1\fs20 SynSQlite3Static.pas}.
-Therefore, {\f1\fs20 sqlite3.obj} and {\f1\fs20 sqlite3fts.obj} files are available as a separated download, from @http://synopse.info/files/sqlite3obj.7z
+Therefore, {\f1\fs20 sqlite3.obj} and {\f1\fs20 sqlite3fts.obj} files are available as a separated download, from @https://synopse.info/files/sqlite3obj.7z
 Please download the latest compiled version of these {\f1\fs20 .obj} files from this link. You can also use the supplied {\f1\fs20 c.bat} file to compile from the original {\f1\fs20 sqlite3.c} file available in the repository, if you have the {\f1\fs20 bcc32} C command-line compiler installed.
 The free version works and was used to create both {\f1\fs20 .obj} files, i.e. {\i C++Builder Compiler (bcc compiler) free download} - as available from {\i Embarcadero} web site.
-For native {\i Windows} @*64-bit@ applications (since {\i Delphi} XE2), an external {\f1\fs20 .dll} file is needed. Since there is no official {\i SQLite3} download for {\i Win64} yet, you can use the one we supply at @http://synopse.info/files/SQLite3-64.7z
-For FPC, you need to download static {\f1\fs20 .o} files from @http://synopse.info/files/sqlite3fpc.7z then uncompress the embedded {\f1\fs20 static} folder and its sub-folders at the {\i mORMot} root folder (i.e. where {\f1\fs20 Synopse.inc} and {\f1\fs20 SynCommons.pas} stay). Those {\f1\fs20 static} files have been patched to support optional encryption of the {\i SQLite3} database file. Then enable the {\f1\fs20 FPCSQLITE3STATIC} conditional in your project, or directly modify {\f1\fs20 Synopse.inc} to include it, so that those {\f1\fs20 .o} files will be statically linked to the executable.
+For native {\i Windows} @*64-bit@ applications (since {\i Delphi} XE2), an external {\f1\fs20 .dll} file is needed. Since there is no official {\i SQLite3} download for {\i Win64} yet, you can use the one we supply at @https://synopse.info/files/SQLite3-64.7z
+For FPC, you need to download static {\f1\fs20 .o} files from @https://synopse.info/files/sqlite3fpc.7z then uncompress the embedded {\f1\fs20 static} folder and its sub-folders at the {\i mORMot} root folder (i.e. where {\f1\fs20 Synopse.inc} and {\f1\fs20 SynCommons.pas} stay). Those {\f1\fs20 static} files have been patched to support optional encryption of the {\i SQLite3} database file. Then enable the {\f1\fs20 FPCSQLITE3STATIC} conditional in your project, or directly modify {\f1\fs20 Synopse.inc} to include it, so that those {\f1\fs20 .o} files will be statically linked to the executable.
 You could also compile the static libraries from the {\f1\fs20 sqlite3.c} source, to run with FPC - do not forget to enable the {\f1\fs20 FPCSQLITE3STATIC} conditional in this case also.\line Under {\i Windows}, ensure the {\i MinGW} compiler is installed, then execute {\f1\fs20 c-fpcmingw.bat} from the {\i SQLite3} folder. It will create the {\f1\fs20 sqlite3.o} and {\f1\fs20 sqlite3fts.o} files, as expected by FPC.\line Under {\i @*Linux@}, Use the {\f1\fs20 c-fpcgcclin.sh} bash script.
 :  SpiderMonkey library
 To enable {\i @*JavaScript@} support in {\i mORmot}, we rely on our version of the {\i @*SpiderMonkey@} library. See @79@.
-You can download the needed files from @http://synopse.info/files/synsm.7z
+You can download the needed files from @https://synopse.info/files/synsm.7z
 Do not forget to copy both files in the executable folder. For instance, put both {\f1\fs20 mozjs.dll} and {\f1\fs20 nspr4.dll} files with your {\f1\fs20 JSHttpApiServer.exe}.
 By now, this library will work only under {\i Win32}, with {\i Delphi} as compiler - it has not yet been tested nor ported to FPC and other platforms.
 :  Folder layout
@@ -16340,11 +16340,11 @@ To setup mORMot for {\i Delphi 6} up to {\i Delphi 10.3 Rio}, you have two ways:
 :  Manual download
 Download and uncompress the framework archives, including all sub-folders, into a local directory of your computer (for instance, {\f1\fs20 D:\\Dev\\mORMot}).
 |%70
-|{\b Snapshot of the latest source code repository}\line\tab @http://synopse.info/files/mORMotNightlyBuild.zip \line\tab into {\f1\fs20 D:\\Dev\\mORMot\\} (including all sub-folders)
-|{\b Static 32-bit SQLite3 .obj files}\line\tab @http://synopse.info/files/sqlite3obj.7z \line\tab into {\f1\fs20 D:\\Dev\\mORMot\\SQLite3\\}
-|{\b 64-bit SQlite3 library}\line\tab @http://synopse.info/files/SQLite3-64.7z \line\tab into your Win64 {\f1\fs20 .exe} folders
-|{\b 32-bit SpiderMonkey library}\line\tab @http://synopse.info/files/synsm.7z \line\tab into your {\f1\fs20 .exe} folders needing JavaScript
-|{\b for FPC only: static {\f1\fs20 .o} files for Windows or Linux/BSD}\line\tab @http://synopse.info/files/sqlite3fpc.7z \line\tab whole {\f1\fs20 static} folder into {\f1\fs20 D:\\Dev\\mORMot\\}
+|{\b Snapshot of the latest source code repository}\line\tab @https://synopse.info/files/mORMotNightlyBuild.zip \line\tab into {\f1\fs20 D:\\Dev\\mORMot\\} (including all sub-folders)
+|{\b Static 32-bit SQLite3 .obj files}\line\tab @https://synopse.info/files/sqlite3obj.7z \line\tab into {\f1\fs20 D:\\Dev\\mORMot\\SQLite3\\}
+|{\b 64-bit SQlite3 library}\line\tab @https://synopse.info/files/SQLite3-64.7z \line\tab into your Win64 {\f1\fs20 .exe} folders
+|{\b 32-bit SpiderMonkey library}\line\tab @https://synopse.info/files/synsm.7z \line\tab into your {\f1\fs20 .exe} folders needing JavaScript
+|{\b for FPC only: static {\f1\fs20 .o} files for Windows or Linux/BSD}\line\tab @https://synopse.info/files/sqlite3fpc.7z \line\tab whole {\f1\fs20 static} folder into {\f1\fs20 D:\\Dev\\mORMot\\}
 |%
 :  Get from GitHub
 Or you may just clone our {\i @**GitHub@} repository, from @https://github.com/synopse/mORMot :
@@ -16958,7 +16958,7 @@ The report is cleared, and {\f1\fs20 BeginDoc} method is called to start creatin
 !    Font.Size := 9;
 !    AddPagesToFooterAt(sPageN,LeftMargin);
 !    TextAlign := taRight;
-!    AddTextToFooterAt('SynFile  http://synopse.info - '+Caption,RightMarginPos);
+!    AddTextToFooterAt('SynFile  https://synopse.info - '+Caption,RightMarginPos);
 !    RestoreSavedLayout;
 Page footer are set by using two methods:
 - {\f1\fs20 AddPagesToFooterAt} to add the current page number at a given position (here the left margin);
@@ -17028,7 +17028,7 @@ Then the report content is appended, according to the record class type:
 - {\f1\fs20 DrawText}, {\f1\fs20 DrawTextU} and {\f1\fs20 DrawTextFmt} are able to add a paragraph of text to the report, with the current alignment - in this case, the font is set to '{\i Courier New}' so that it will be displayed with fixed width;
 - {\f1\fs20 GetMimeContentType} is used to retrieve the exact type of the data stored in this record.
 !    // set custom report parameters
-!    ExportPDFApplication := 'SynFile  http://synopse.info';
+!    ExportPDFApplication := 'SynFile  https://synopse.info';
 !    ExportPDFForceJPEGCompression := 80;
 !  end;
 !end;
@@ -17406,7 +17406,7 @@ The hash is computed from an internal {\f1\fs20 W[]} array, which is filled with
 Then the SHA-256 algorithm is performed in its most simple rolled version. An un-rolled version is not mandatory here, in our managed {\i JavaScript} runtime environment.
 The only non obvious part of the above code is the use of {\f1\fs20 ... shr 0} to enforce only positive 32-bit integers (aka {\f1\fs20 cardinal}) are used during the computation.
 
-To illustrate that, here is some interesting question published in our forum - see @http://synopse.info/forum/viewtopic.php?id=1011 - from a customer:
+To illustrate that, here is some interesting question published in our forum - see @https://synopse.info/forum/viewtopic.php?id=1011 - from a customer:
 {\i I have written a test server (using {\f1\fs20 TSQLRestServerDB}), which has a service that provides basic access to the database as follows:}
 !  TDatabaseRecord=record
 !    Name: string;
@@ -17472,7 +17472,7 @@ This document is divided into the main parts of the Software implementation:
 Inside this sections, source code or User Interface modifications are detailed for every @SRS@ item.
 : Responsibilities
 - Synopse will try to correct any identified issue;
-- The Open Source community will create tickets in a public Tracker web site located at @http://synopse.info/fossil ;
+- The Open Source community will create tickets in a public Tracker web site located at @https://synopse.info/fossil ;
 - Synopse work on the framework is distributed without any warranty, according to the chosen license terms;
 - This documentation is released under the GPL (GNU General Public License) terms, without any warranty of any kind.
 =[GPL]
@@ -18468,11 +18468,11 @@ In short:
 : Publish modifications and credit for the library
 In all cases, any modification made to this source code {\b should} be published by any mean (e.g. a download link), even in case of MPL. If you need any additional feature, use the forums and we may introduce a patch to the main framework trunk.
 You do not have to pay any fee for using our MPL/GPL/LGPL libraries.
-But please do not forget to put somewhere in your credit window or documentation, a link to @http://synopse.info if you use any of the units published under this tri-license.
+But please do not forget to put somewhere in your credit window or documentation, a link to @https://synopse.info if you use any of the units published under this tri-license.
 For instance, if you select the MPL license, here are the requirements:
 - You accept the license terms with no restriction - see @http://www.mozilla.org/MPL/2.0/FAQ.html for additional information;
 - You have to publish any modified unit (e.g. {\f1\fs20 SynTaskDialog.pas}) in a public web site (e.g. {\f1\fs20 http://SoftwareCompany.com/MPL}), with a description of applied modifications, and no removal of the original license header in source code;
-- You make appear some notice available in the program (About box, documentation, online help), stating e.g.\line {\i This software uses some third-party code of the Synopse mORMot framework (C) 2019 Arnaud Bouchez - {\f1\fs20 http://synopse.info} - under Mozilla Public License 1.1; modified source code is available at {\f1\fs20 http://SoftwareCompany.com/MPL}.}
+- You make appear some notice available in the program (About box, documentation, online help), stating e.g.\line {\i This software uses some third-party code of the Synopse mORMot framework (C) 2019 Arnaud Bouchez - {\f1\fs20 https://synopse.info} - under Mozilla Public License 1.1; modified source code is available at {\f1\fs20 http://SoftwareCompany.com/MPL}.}
 : Derivate Open Source works
 If you want to include part of the framework source code in your own open-source project, you may publish it with a comment similar to this one (as included in the great {\i DelphiWebScript} project by Eric Grange - @http://code.google.com/p/dwscript ):
 ${
@@ -18486,7 +18486,7 @@ $    Sample based on official mORMot's sample
 $    "SQLite3\Samples\09 - HttpApi web server\HttpApiServer.dpr"
 $
 $    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
-$      Synopse Informatique - http://synopse.info
+$      Synopse Informatique - https://synopse.info
 $
 $    Original tri-license: MPL 1.1/GPL 2.0/LGPL 2.1
 $
@@ -18498,7 +18498,7 @@ $    - SynLZ.pas
 $    - SynZip.pas
 $    - SynCrtSock.pas
 $    - SynWinWock.pas
-$    http://synopse.info/fossil/wiki?name=Downloads
+$    https://synopse.info/fossil/wiki?name=Downloads
 $
 $}
 Note that this documentation is under GPL license only, as stated in this document front page.
