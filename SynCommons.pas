@@ -5846,7 +5846,7 @@ type
     // behavior, like access violations or memory leaks
     procedure Init;
     /// finalize the mutex
-    // - calling this method is mandatory (e.g. in the class constructor owning
+    // - calling this method is mandatory (e.g. in the class destructor owning
     // the TSynLocker instance), otherwise you may encounter unexpected
     // behavior, like access violations or memory leaks
     procedure Done;
