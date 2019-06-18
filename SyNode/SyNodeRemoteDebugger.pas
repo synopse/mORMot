@@ -5,10 +5,10 @@ unit SyNodeRemoteDebugger;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
-    SyNode for mORMot Copyright (C) 2019 Pavel Mashlyakovsky & Vadim Orel
+    SyNode for mORMot Copyright (C) 2018 Pavel Mashlyakovsky & Vadim Orel
       pavel.mash at gmail.com
 
     Some ideas taken from
@@ -63,7 +63,7 @@ interface
 {$I Synopse.inc} // define BRANCH_WIN_WEB_SOCKET
 
 uses
-  Classes, SynCrtSock, SynTable {for TJSONWriter},
+  Classes, SynCrtSock,
   SynCommons, SyNode, SpiderMonkey;
 
 type
@@ -141,8 +141,8 @@ type
   private
     fIndex: Integer;
     fIsPaused: boolean;
-    fMessagesQueue: TRawUTF8ListLocked;
-    fLogQueue: TRawUTF8ListLocked;
+    fMessagesQueue: TRawUTF8ListHashedLocked;
+    fLogQueue: TRawUTF8ListHashedLocked;
     {$IFNDEF SM52}
     fOldInterruptCallback: JSInterruptCallback;
     {$ENDIF}
@@ -155,9 +155,6 @@ type
     /// Debugger create his own compartmnet (his own global object & scripting context)
     // Here we initialize a new compartment
     procedure InitializeDebuggerCompartment(aEng: TSMEngine; aNeedPauseOnFirstStep: boolean);
-  protected
-    // writer for serialize outgiong JSON's
-    fJsonWriter: TJSONWriter;
   public
     constructor Create(aParent: TSMRemoteDebuggerThread; aEng: TSMEngine);
     destructor Destroy; override;
@@ -221,7 +218,7 @@ begin
   eng := fManager.EngineForThread(curThreadID);
   if eng<>nil then begin
     Debugger := eng.PrivateDataForDebugger;
-    Debugger.fLogQueue.SafePush(Text);
+    Debugger.fLogQueue.LockedAdd(Text);
 
     if eng.cx.IsRunning then
 {$IFDEF SM52}
@@ -441,7 +438,6 @@ var
   data: RawUTF8;
   i: integer;
   debuggerIndex: integer;
-  debugger: TSMDebugger;
   Writer: TTextWriter;
   engine: TSMEngine;
 begin
@@ -453,33 +449,32 @@ begin
         fParent.fDebuggers.Safe.Lock;
         try
           for I := 0 to fParent.fDebuggers.Count - 1 do begin
-            debugger := TSMDebugger(fParent.fDebuggers[i]);
-            engine := fParent.fManager.EngineForThread(debugger.fSmThreadID);
+            engine := fParent.fManager.EngineForThread(TSMDebugger(fParent.fDebuggers[i]).fSmThreadID);
             if engine <> nil then begin
               // Actor represent debug thread here, setting proper name with coxtext thread id
               // Writer.AddShort('{"actor":"server1.conn1.addon');
               // Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fIndex);
               Writer.AddShort('{"actor":"');
-              Writer.AddShort(debugger.fDebuggerName);
+              Writer.AddShort(TSMDebugger(fParent.fDebuggers[i]).fDebuggerName);
               Writer.AddShort('.conn1.thread_');
               { TODO : check that in multithread mode this field equal thread id with js context that we debug, otherwire replace with proper assigment }
-              Writer.Add(debugger.fSmThreadID);
+              Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fSmThreadID);
               // id should be addon id, value from DoOnGetEngineName event
               // Writer.AddShort('","id":"server1.conn1.addon');
               // Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fIndex);
               Writer.AddShort('","id":"');
-              Writer.AddString(debugger.fNameForDebug);
+              Writer.AddString(TSMDebugger(fParent.fDebuggers[i]).fNameForDebug);
               Writer.AddShort('","name":"');
-              Writer.AddString(debugger.fNameForDebug);
+              Writer.AddString(TSMDebugger(fParent.fDebuggers[i]).fNameForDebug);
               // url most likly should be addon folder in format: file:///drive:/path/
               // Writer.AddShort('","url":"server1.conn1.addon');
               // Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fIndex);
               { TODO : replace with path generation, should be context home dir in format file:///drive:/path/ }
-              Writer.AddShort('","url":"file:///' + StringReplaceAll(debugger.fWebAppRootPath, '\', '/'));
+              Writer.AddShort('","url":"file:///' + StringReplaceAll(TSMDebugger(fParent.fDebuggers[i]).fWebAppRootPath, '\', '/'));
               Writer.AddShort('","debuggable":');
-              Writer.Add(debugger.fCommunicationThread = nil);
+              Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fCommunicationThread = nil);
               Writer.AddShort(',"consoleActor":"console');
-              Writer.Add(debugger.fIndex);
+              Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fIndex);
               Writer.AddShort('"},');
             end;
           end;
@@ -522,7 +517,7 @@ begin
 
     engine := fParent.fManager.EngineForThread(fDebugger.fSmThreadID);
     if (engine <> nil) then begin
-      fDebugger.fMessagesQueue.SafePush(VariantToUTF8(request));
+      fDebugger.fMessagesQueue.LockedAdd(VariantToUTF8(request));
       if not fDebugger.fIsPaused then begin
         if (not engine.cx.IsRunning) then begin
           if not Assigned(engine.doInteruptInOwnThread) then
@@ -579,7 +574,7 @@ begin
   fCommunicationSock.SockSend(@tmp[1], length(tmp));
   fCommunicationSock.SockSend(@sep[1], length(sep));
   fCommunicationSock.SockSend(@packet[1], length(packet));
-  fCommunicationSock.SockSendFlush('');
+  fCommunicationSock.SockSendFlush;
 end;
 
 procedure TSMRemoteDebuggerCommunicationThread.startListening(socket: TCrtSocket);
@@ -599,8 +594,18 @@ end;
 procedure TSMDebugger.attach(aThread: TSMRemoteDebuggerCommunicationThread);
 begin
   fCommunicationThread := aThread;
-  fMessagesQueue.SafeClear;
-  fLogQueue.SafeClear;
+  fMessagesQueue.Safe.Lock;
+  try
+    fMessagesQueue.Clear;
+  finally
+    fMessagesQueue.Safe.UnLock;
+  end;
+  fLogQueue.Safe.Lock;
+  try
+    fLogQueue.Clear;
+  finally
+    fLogQueue.Safe.UnLock;
+  end;
 end;
 
 constructor TSMDebugger.Create(aParent: TSMRemoteDebuggerThread; aEng: TSMEngine);
@@ -617,12 +622,11 @@ begin
 
   fSmThreadID := GetCurrentThreadId;
 
-  fMessagesQueue := TRawUTF8ListLocked.Create();
-  fLogQueue := TRawUTF8ListLocked.Create();
+  fMessagesQueue := TRawUTF8ListHashedLocked.Create();
+  fLogQueue := TRawUTF8ListHashedLocked.Create();
   fNameForDebug := aEng.nameForDebug;
   fDebuggerName := 'synode_debPort_' + aParent.fPort;
   fWebAppRootPath := aEng.webAppRootDir;
-  fJsonWriter := TJSONWriter.CreateOwnedStream(1024*50);
 
   InitializeDebuggerCompartment(aEng, aParent.FNeedPauseOnFirstStep);
 end;
@@ -636,7 +640,6 @@ begin
   fMessagesQueue := nil;
   fLogQueue.Free;
   fLogQueue := nil;
-  fJsonWriter.Free;
   inherited;
 end;
 
@@ -680,8 +683,18 @@ var
   dbgObject: PJSRootedObject;
   res: Boolean;
 begin
-  fMessagesQueue.SafeClear;
-  fLogQueue.SafeClear;
+  fMessagesQueue.Safe.Lock;
+  try
+    fMessagesQueue.Clear;
+  finally
+    fMessagesQueue.Safe.UnLock;
+  end;
+  fLogQueue.Safe.Lock;
+  try
+    fLogQueue.Clear;
+  finally
+    fLogQueue.Safe.UnLock;
+  end;
 
   cx := aEng.cx;
   cmpDbg := cx.EnterCompartment(aEng.GlobalObjectDbg.ptr);
@@ -739,11 +752,8 @@ begin
   val := vp.argv[0];
   if val.isString then
     msg := val.asJSString.ToUTF8(cx)
-  else begin
-    debugger.fJsonWriter.CancelAll;
-    val.AddJSON(cx,debugger.fJsonWriter);
-    debugger.fJsonWriter.SetText(msg);
-  end;
+  else
+    msg := val.asJson[cx];
   debugger.Send(msg);
 end;
 
@@ -765,7 +775,7 @@ function debugger_read(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean; 
 var
   debugger: TSMDebugger;
   msg: RawUTF8;
-  Queue: TRawUTF8ListLocked;
+  Queue: TRawUTF8ListHashedLocked;
 begin
   debugger := TSMEngine(cx.PrivateData).PrivateDataForDebugger;
   if (argc = 0) or vp.argv[0].asBoolean then
@@ -773,13 +783,12 @@ begin
   else
     Queue := debugger.fLogQueue;
   msg := '';
-  while ((Queue <> nil) and (debugger.fCommunicationThread <> nil) and
-    (not Queue.SafePop(msg))) and (argc = 0) do
+  while ((Queue <> nil) and (not Queue.PopFirst(msg))) and (argc = 0) do
     SleepHiRes(10);
-  result := true;
-  if (Queue <> nil) and (debugger.fCommunicationThread <> nil) then
+  result :=  Queue <> nil;
+  if Result then
     vp.rval := SimpleVariantToJSval(cx, msg)
-  else // debugger.js will detach current debugee if msg === null
+  else
     vp.rval := JSVAL_NULL;
 end;
 

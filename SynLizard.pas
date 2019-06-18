@@ -5,7 +5,7 @@ unit SynLizard;
 {
     This file is part of Synopse Lizard Compression.
 
-    Synopse Lizard Compression. Copyright (C) 2019 Arnaud Bouchez
+    Synopse Lizard Compression. Copyright (C) 2018 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -24,7 +24,7 @@ unit SynLizard;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2018
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -78,7 +78,7 @@ unit SynLizard;
 
   Revision history
 
-  Version 1.18
+  Version 1.8
   - first release, associated with the main Synopse mORMot framework
 
   Some numbers, for a 53MB log file (taken from a production server):
@@ -139,12 +139,12 @@ interface
 {$endif FPC}
 
 {.$define LIZARD_STANDALONE}
-// used only with lizard.dpr
-// if not defined (by default), register Lizard as TAlgoCompress.AlgoID=4/5/6
+/// if not defined (by default), register Lizard as TAlgoCompress.AlgoID=4/5/6
 
-{$ifndef LIZARD_STANDALONE}
 uses
+  {$ifndef LIZARD_STANDALONE}
   SynCommons,
+  {$endif LIZARD_STANDALONE}
   {$ifdef MSWINDOWS}
   Windows,
   {$endif}
@@ -156,7 +156,6 @@ uses
   {$endif BSDNOTDARWIN}
   {$endif FPC}
   SysUtils;
-{$endif LIZARD_STANDALONE}
 
 const
   /// default compression level for TSynLizard.compress
@@ -173,32 +172,19 @@ const
   /// maximum compression level for TSynLizard.compress
   LIZARD_MAX_CLEVEL = 49;
 
-{$ifdef LIZARD_STANDALONE}
-
-function Lizard_versionNumber: integer; cdecl;
-function Lizard_compressBound(inputSize: integer): integer; cdecl;
-function Lizard_compress(src, dst: pointer; srcSize, maxDstSize, compressionLevel: integer): integer; cdecl;
-function Lizard_sizeofState(compressionLevel: integer): integer; cdecl;
-function Lizard_compress_extState(state: pointer;
-  src, dst: pointer; srcSize, maxDstSize, compressionLevel: integer): integer; cdecl;
-function Lizard_decompress_safe(src, dst: pointer; srcSize, maxDstSize: integer): integer; cdecl;
-function Lizard_decompress_safe_partial(src, dst: pointer; srcSize, targetDstSize, maxDstSize: integer): integer; cdecl;
-
-{$else LIZARD_STANDALONE}
-const
-  {$ifdef Win32}
+{$ifdef Win32}
   /// default TSynLizardDynamic file name
   // - mainly for Delphi, since FPC will use static linked .o files under
   // Windows and Linux Intel 32/64 bits
   // - to be downloaded from from https://synopse.info/files/SynLizardLibs.7z
   LIZARD_LIB_NAME = 'Lizard1-32.dll';
-  {$endif Win32}
-  {$ifdef Win64}
+{$endif Win32}
+{$ifdef Win64}
   LIZARD_LIB_NAME = 'Lizard1-64.dll';
-  {$endif Win64}
-  {$ifdef Linux}
+{$endif Win64}
+{$ifdef Linux}
   LIZARD_LIB_NAME = 'liblizard.so.1';
-  {$endif Linux}
+{$endif Linux}
 
 type
   /// Lizard (formerly LZ5) lossless compression algorithm
@@ -252,7 +238,7 @@ type
     // - returns number of bytes written to dst (<= maxDstSize), or <=0 on failure
     // - number can be <targetDstSize should the compressed block to decode be smaller
     // - this function is protected against buffer overflow exploits
-    decompress_safe_partial: function(src, dst: pointer; srcSize, targetDstSize, maxDstSize: integer): integer; cdecl;
+    decompress_safe_partial: function(src, dst: pointer; srcSize, targetDstSize: integer): integer; cdecl;
   end;
 
 var
@@ -296,6 +282,16 @@ type
     property LibraryName: TFileName read fLibraryName;
   end;
 
+{$ifdef LIZARD_STANDALONE}
+function Lizard_versionNumber: integer; cdecl;
+function Lizard_compressBound(inputSize: integer): integer; cdecl;
+function Lizard_compress(src, dst: pointer; srcSize, maxDstSize, compressionLevel: integer): integer; cdecl;
+function Lizard_sizeofState(compressionLevel: integer): integer; cdecl;
+function Lizard_compress_extState(state: pointer;
+  src, dst: pointer; srcSize, maxDstSize, compressionLevel: integer): integer; cdecl;
+function Lizard_decompress_safe(src, dst: pointer; srcSize, maxDstSize: integer): integer; cdecl;
+function Lizard_decompress_safe_partial(src, dst: pointer; srcSize, targetDstSize: integer): integer; cdecl;
+{$else}
 var
   /// implement Lizard compression in level 17 (LIZARD_DEFAULT_CLEVEL) as AlgoID=4
   // - is set by TSynLizard.Create, so available e.g. if library is statically
@@ -309,7 +305,6 @@ var
   // - is set by TSynLizard.Create, so available e.g. if library is statically
   // linked, or once TSynLizardDynamic.Create has been successfully called
   AlgoLizardHuffman: TAlgoCompress;
-
 {$endif LIZARD_STANDALONE}
 
 
@@ -333,7 +328,7 @@ function Lizard_compress_continue(streamPtr: pointer; src, dst: pointer; srcSize
 function Lizard_saveDict(streamPtr, safeBuffer: pointer; dictSize: integer): integer; cdecl; external;
 }
 function Lizard_decompress_safe(src, dst: pointer; srcSize, maxDstSize: integer): integer; cdecl; external;
-function Lizard_decompress_safe_partial(src, dst: pointer; srcSize, targetDstSize, maxDstSize: integer): integer; cdecl; external;
+function Lizard_decompress_safe_partial(src, dst: pointer; srcSize, targetDstSize: integer): integer; cdecl; external;
 {
 function Lizard_createStreamDecode: pointer; cdecl; external;
 function Lizard_freeStreamDecode(streamDec: pointer): integer; cdecl; external;
@@ -347,21 +342,25 @@ function Lizard_decompress_safe_usingDict(src, dst: pointer; srcSize, maxDstSize
     {$ifdef MSWINDOWS}
     {$L static\x86_64-win64\lizard_compress.o}
     {$L static\x86_64-win64\lizard_decompress.o}
+    {$L static\x86_64-win64\lizard_frame.o}
     {$L static\x86_64-win64\huf_compress.o}
     {$L static\x86_64-win64\huf_decompress.o}
     {$L static\x86_64-win64\fse_compress.o}
     {$L static\x86_64-win64\fse_decompress.o}
     {$L static\x86_64-win64\entropy_common.o}
+    {$L static\x86_64-win64\xxhash.o}
     {$linklib static\x86_64-win64\libgcc.a}
     {$linklib static\x86_64-win64\libmsvcrt.a}
     {$else MSWINDOWS}
     {$L static/x86_64-linux/lizard_compress.o}
     {$L static/x86_64-linux/lizard_decompress.o}
+    {$L static/x86_64-linux/lizard_frame.o}
     {$L static/x86_64-linux/huf_compress.o}
     {$L static/x86_64-linux/huf_decompress.o}
     {$L static/x86_64-linux/fse_compress.o}
     {$L static/x86_64-linux/fse_decompress.o}
     {$L static/x86_64-linux/entropy_common.o}
+    {$L static/x86_64-linux/xxhash.o}
     {$endif MSWINDOWS}
   {$endif FPC}
 {$endif CPUX64}
@@ -371,34 +370,36 @@ function Lizard_decompress_safe_usingDict(src, dst: pointer; srcSize, maxDstSize
     {$ifdef MSWINDOWS}
     {$L static\i386-win32\lizard_compress.o}
     {$L static\i386-win32\lizard_decompress.o}
+    {$L static\i386-win32\lizard_frame.o}
     {$L static\i386-win32\huf_compress.o}
     {$L static\i386-win32\huf_decompress.o}
     {$L static\i386-win32\fse_compress.o}
     {$L static\i386-win32\fse_decompress.o}
     {$L static\i386-win32\entropy_common.o}
+    {$L static\i386-win32\xxhash.o}
     {$linklib static\i386-win32\libgcc.a}
     {$linklib static\i386-win32\libmsvcrt.a}
     {$else MSWINDOWS}
     {$L static/i386-linux/lizard_compress.o}
     {$L static/i386-linux/lizard_decompress.o}
+    {$L static/i386-linux/lizard_frame.o}
     {$L static/i386-linux/huf_compress.o}
     {$L static/i386-linux/huf_decompress.o}
     {$L static/i386-linux/fse_compress.o}
     {$L static/i386-linux/fse_decompress.o}
     {$L static/i386-linux/entropy_common.o}
+    {$L static/i386-linux/xxhash.o}
     {$linklib static/i386-linux\libgcc.a}
     {$endif MSWINDOWS}
   {$endif FPC}
 {$endif CPUX86}
-
-{$ifndef LIZARD_STANDALONE}
 
 { TSynLizardStatic }
 
 type
   TSynLizardStatic = class(TSynLizard)
   public
-    constructor Create; override;
+    constructor Create;
   end;
 
 constructor TSynLizardStatic.Create;
@@ -413,8 +414,6 @@ begin
   inherited Create; // register AlgoLizard/AlgoLizardFast/AlgoLizardHuff
 end;
 
-{$endif LIZARD_STANDALONE}
-
 {$endif LIZARD_EXTERNALONLY}
 
 
@@ -423,7 +422,7 @@ type
   TAlgoLizard = class(TAlgoCompressWithNoDestLen)
   protected
     fCompressionLevel: integer;
-    function RawProcess(src,dst: pointer; srcLen,dstLen,dstMax: integer;
+    function RawProcess(src,dst: pointer; srcLen,dstLen: integer;
       process: TAlgoCompressWithNoDestLenProcess): integer;  override;
   public
     constructor Create; override;
@@ -464,7 +463,7 @@ begin
     result := Lizard.compressBound(PlainLen);
 end;
 
-function TAlgoLizard.RawProcess(src, dst: pointer; srcLen, dstLen, dstMax: integer;
+function TAlgoLizard.RawProcess(src, dst: pointer; srcLen, dstLen: integer;
   process: TAlgoCompressWithNoDestLenProcess): integer;
 begin
   if Lizard = nil then
@@ -476,7 +475,7 @@ begin
   doUnCompress:
     result := Lizard.decompress_safe(src,dst,srcLen,dstLen);
   doUncompressPartial:
-    result := Lizard.decompress_safe_partial(src,dst,srcLen,dstLen,dstMax);
+    result := Lizard.decompress_safe_partial(src,dst,srcLen,dstLen);
   else
     result := 0;
   end;
@@ -510,6 +509,8 @@ begin
   result := 6;
 end;
 
+
+{$endif LIZARD_STANDALONE}
 
 { TSynLizard }
 
@@ -579,7 +580,7 @@ begin
     else
       raise Exception.CreateFmt('%s has unexpected versionNumber=%d',
         [fLibraryName, versionNumber]);
-  inherited Create; // register AlgoLizard/AlgoLizardFast/AlgoLizardHuffman
+  inherited Create; // register AlgoLizard/AlgoLizardFast
   fLoaded := true;
 end;
 
@@ -619,6 +620,5 @@ initialization
 finalization
   Lizard.Free;
 
-{$endif LIZARD_STANDALONE}
-
 end.
+

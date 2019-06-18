@@ -5,7 +5,7 @@ unit SynBz;
 {
     This file is part of Synopse BZ2 Compression.
 
-    Synopse Synopse BZ2 Compression. Copyright (C) 2019 Arnaud Bouchez
+    Synopse Synopse BZ2 Compression. Copyright (C) 2018 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -24,7 +24,7 @@ unit SynBz;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2018
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -94,7 +94,7 @@ interface
 
 uses
   SysUtils, Types, Classes,
-{$ifdef MSWINDOWS}
+{$ifdef WIN32}
   Windows;
 {$else}
   LibC;
@@ -176,7 +176,7 @@ function BZ2_bzDecompress(var strm: TBZStreamRec): Integer; cdecl;
 function BZ2_bzDecompressEnd(var strm: TBZStreamRec): Integer; cdecl;
 {$endif}
 
-{$ifdef MSWINDOWS}
+{$ifdef Win32}
 function BZCompressorInit: boolean;
 {$ifdef USEBZAASM}
 const BZDeCompressorInit = true;
@@ -186,7 +186,7 @@ function BZDeCompressorInit: boolean;
 {$endif}
 
 var
-{$ifdef MSWINDOWS}
+{$ifdef Win32}
   BZ2_bzCompressInit: function(var strm: TBZStreamRec;
     blockSize100k, verbosity, workFactor: Integer): Integer; stdcall = nil;
   BZ2_bzCompress: function(var strm: TBZStreamRec;
@@ -257,7 +257,7 @@ const
 {$I bunzipasm.inc} // all asm code extracted from bunzip.dll :)
 {$endif}
 
-{$ifdef MSWINDOWS}
+{$ifdef Win32}
 var BZCompressModule:   HMODULE = 0;
     BZDecompressModule: HMODULE = 0;
 
@@ -326,7 +326,7 @@ begin
   raise Exception.CreateFmt(SBzlibInternalErrorN, [Code]);
 end;
 
-{$ifdef MSWINDOWS}
+{$ifdef Win32}
 function BZCompressorInit: boolean;
 var F: string;
 begin
@@ -354,7 +354,7 @@ end;
 
 constructor TBZCompressor.Create(outStream: TStream; CompressionLevel: Integer);
 begin
-{$ifdef MSWINDOWS}
+{$ifdef Win32}
   BZCompressorInit;
   if @BZ2_bzCompressInit=nil then
     CompressionLevel := -1; // <0 -> direct copy (no compression)
@@ -481,9 +481,9 @@ begin
 end;
 
 procedure TBZCompressor.WriteDest(const Buffer; Count: Integer);
-begin
+begin
   inc(DestLen,Count);
-  FDestStream.WriteBuffer(Buffer, Count);
+  FDestStream.Write(Buffer, Count);
 end;
 
 { TBZDecompressor }
@@ -630,13 +630,13 @@ end;
 procedure TBZStreamRec.Init;
 begin
   FillChar(self, SizeOf(self), 0);
-{$ifdef MSWINDOWS}  // use LibC Alloc/Free on Linux
+{$ifdef Win32}  // use LibC Alloc/Free on Linux
   zalloc := BZAllocMem;
   zfree := BZFreeMem;
 {$endif}
 end;
 
-{$ifdef MSWINDOWS}
+{$ifdef Win32}
 initialization
 finalization
   if BZCompressModule<>0 then

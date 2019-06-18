@@ -9,7 +9,7 @@ unit SynGdiPlus;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -28,7 +28,7 @@ unit SynGdiPlus;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2018
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -1531,7 +1531,7 @@ begin
   try
     fStream.Read(tmp,Len,nil);
     fStream := nil; // release ASAP
-    Stream.WriteBuffer(tmp^,Len);
+    Stream.Write(tmp^,Len);
   finally
     Freemem(tmp);
   end;
@@ -1546,7 +1546,7 @@ begin
   if (fGlobal<>0) and not fAssignedFromBitmap then begin
     // e.g. for a true .jpg file -> just save as it was loaded :)
     P := GlobalLock(fGlobal);
-    Stream.WriteBuffer(P^,fGlobalLen);
+    Stream.Write(P^,fGlobalLen);
     GlobalUnLock(fGlobal);
   end else begin
     // should come from a bitmap -> save in the expected format
@@ -1584,12 +1584,7 @@ begin
     result.PixelFormat := pf24bit; // create as DIB (device-independent bitmap)
     result.Width := Width;
     result.Height := Height;
-    result.Canvas.Lock;
-    try
-      result.Canvas.Draw(0,0,self);
-    finally
-      result.Canvas.Unlock;
-    end;
+    result.Canvas.Draw(0,0,self);
   end;
 end;
 
@@ -1694,12 +1689,7 @@ begin
           R := Pic.RectNotBiggerThan(MaxPixelsForBiggestSide);
           Bmp.Width := R.Right;
           Bmp.Height := R.Bottom;
-          Bmp.Canvas.Lock;
-          try
-            Pic.Draw(Bmp.Canvas,R);
-          finally
-            Bmp.Canvas.Unlock;
-          end;
+          Pic.Draw(Bmp.Canvas,R);
           SynGdiPlus.SaveAs(Bmp,Stream,Format,CompressionQuality,0,BitmapSetResolution);
         finally
           Bmp.Free;

@@ -6,7 +6,7 @@ unit SynFPCSock;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -27,7 +27,7 @@ unit SynFPCSock;
   Portions created by Lukas Gebauer are Copyright (C) 2003.
   All Rights Reserved.
 
-  Portions created by Arnaud Bouchez are Copyright (C) 2019 Arnaud Bouchez.
+  Portions created by Arnaud Bouchez are Copyright (C) 2018 Arnaud Bouchez.
   All Rights Reserved.
 
   Contributor(s):
@@ -90,7 +90,6 @@ unit SynFPCSock;
 interface
 
 uses
-  SysUtils,
   {$ifdef FPC}
   BaseUnix,
   Unix,
@@ -99,7 +98,7 @@ uses
   {$endif}
   termio,
   netdb,
-  Sockets, // most definitions are inlined in SynFPCSock to avoid Lazarus problems with Sockets.pp
+  Sockets,
   SynFPCLinux,
   {$else}
   {$ifdef KYLIX3}
@@ -110,6 +109,7 @@ uses
   {$endif}
   {$endif}
   SyncObjs,
+  SysUtils,
   Classes;
 
 const
@@ -150,9 +150,6 @@ type
   PSockAddrIn6 = ^TSockAddrIn6;
   TSockAddrIn6 = sockets.TInetSockAddr6;
 
-  TSockAddr = sockets.TSockAddr;
-  PSockAddr = sockets.PSockAddr;
-
 const
   FIONREAD        = termio.FIONREAD;
   FIONBIO         = termio.FIONBIO;
@@ -169,10 +166,6 @@ const
   IP_MULTICAST_LOOP  = sockets.IP_MULTICAST_LOOP;  { i_char; set/get IP multicast loopback }
   IP_ADD_MEMBERSHIP  = sockets.IP_ADD_MEMBERSHIP;  { ip_mreq; add an IP group membership }
   IP_DROP_MEMBERSHIP = sockets.IP_DROP_MEMBERSHIP; { ip_mreq; drop an IP group membership }
-
-  SHUT_RD         = sockets.SHUT_RD;
-  SHUT_WR         = sockets.SHUT_WR;
-  SHUT_RDWR       = sockets.SHUT_RDWR;
 
   SOL_SOCKET    = sockets.SOL_SOCKET;
 
@@ -222,9 +215,7 @@ const
 
   { Address families. }
   AF_UNSPEC       = 0;               { unspecified }
-  AF_LOCAL        = 1;
   AF_INET         = 2;               { internetwork: UDP, TCP, etc. }
-  AF_UNIX         = AF_LOCAL;
   AF_MAX          = 24;
 
   { Protocol families, same as address families for now. }
@@ -402,7 +393,7 @@ procedure SET_LOOPBACK_ADDR6 (const a: PInAddr6);
 var
   in6addr_any, in6addr_loopback : TInAddr6;
 
-{$ifdef FPC} // some functions inlined redirection to Sockets.pp
+{$ifdef FPC}
 
 procedure FD_CLR(Socket: TSocket; var FDSet: TFDSet); inline;
 function FD_ISSET(Socket: TSocket; var FDSet: TFDSet): Boolean; inline;
@@ -412,15 +403,10 @@ procedure FD_ZERO(var FDSet: TFDSet); inline;
 function ResolveIPToName(const IP: string; Family,SockProtocol,SockType: integer): string;
 function ResolvePort(const Port: string; Family,SockProtocol,SockType: integer): Word;
 
-function fpbind(s:cint; addrx: psockaddr; addrlen: tsocklen): cint; inline;
-function fplisten(s:cint; backlog : cint): cint; inline;
-function fprecv(s:cint; buf: pointer; len: size_t; Flags: cint): ssize_t; inline;
-function fpsend(s:cint; msg:pointer; len:size_t; flags:cint): ssize_t; inline;
-
 {$endif FPC}
 
 const
-  // we assume that the Posix OS has IP6 compatibility
+  // we assume that the OS has IP6 compatibility
   SockEnhancedApi = true;
   SockWship6Api = true;
 
@@ -441,7 +427,6 @@ type
                     sin6_flowinfo: longword;
       	    	      sin6_addr:     TInAddr6;
       		          sin6_scope_id: longword);
-          AF_UNIX: (sun_path: array[0..{$ifdef SOCK_HAS_SINLEN}104{$else}107{$endif}] of Char);
           );
   end;
 
@@ -684,26 +669,6 @@ begin
   fpFD_ZERO(fdset);
 end;
 
-function fpbind(s:cint; addrx: psockaddr; addrlen: tsocklen): cint;
-begin
-  result := sockets.fpbind(s, addrx, addrlen);
-end;
-
-function fplisten(s:cint; backlog : cint): cint;
-begin
-  result := sockets.fplisten(s, backlog);
-end;
-
-function fprecv(s:cint; buf: pointer; len: size_t; Flags: cint): ssize_t;
-begin
-  result := sockets.fprecv(s, buf, len, Flags);
-end;
-
-function fpsend(s:cint; msg:pointer; len:size_t; flags:cint): ssize_t;
-begin
-  result := sockets.fpsend(s, msg, len, flags);
-end;
-
 {$endif FPC}
 
 function SizeOfVarSin(sin: TVarSin): integer;
@@ -711,7 +676,6 @@ begin
   case sin.sin_family of
     AF_INET:  result := SizeOf(TSockAddrIn);
     AF_INET6: result := SizeOf(TSockAddrIn6);
-    AF_UNIX:  result := SizeOf(sockaddr_un);
   else        result := 0;
   end;
 end;
@@ -1107,11 +1071,6 @@ var TwoPass: boolean;
 begin
   result := 0;
   FillChar(Sin,Sizeof(Sin),0);
-  if (Family=AF_UNIX) then begin
-    Sin.AddressFamily := AF_UNIX;
-    Move(IP[1],Sin.sun_path,length(IP));
-    exit;
-  end;
   Sin.sin_port := Resolveport(port,family,SockProtocol,SockType);
   TwoPass := false;
   if Family=AF_UNSPEC then begin

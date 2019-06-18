@@ -6,7 +6,7 @@ unit SynOpenSSL;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynOpenSSL;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2018
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -254,10 +254,10 @@ type
     EVP_sha512: function: PEVP_MD; cdecl;
     EVP_PKEY_size: function(key: PEVP_PKEY): integer; cdecl;
     EVP_DigestSignInit: function(aCtx: PEVP_MD_CTX; aPCtx: PEVP_PKEY_CTX; aType: PEVP_MD; aEngine: ENGINE; aKey: PEVP_PKEY): integer; cdecl;
-    EVP_DigestUpdate: function(ctx: PEVP_MD_CTX; d: pointer; cnt: size_t): integer; cdecl;
-    EVP_DigestSignFinal: function(ctx: PEVP_MD_CTX; d: PByte; var cnt: size_t): integer; cdecl;
+    EVP_DigestUpdate: function(ctx: PEVP_MD_CTX; d: pointer; cnt: cardinal): integer; cdecl;
+    EVP_DigestSignFinal: function(ctx: PEVP_MD_CTX; d: PByte; var cnt: cardinal): integer; cdecl;
     EVP_DigestVerifyInit: function(aCtx: PEVP_MD_CTX; aPCtx: PEVP_PKEY_CTX; aType: PEVP_MD; aEngine: ENGINE; aKey: pEVP_PKEY): integer; cdecl;
-    EVP_DigestVerifyFinal: function(ctx: pEVP_MD_CTX; d: PByte; cnt: size_t): integer; cdecl;
+    EVP_DigestVerifyFinal: function(ctx: pEVP_MD_CTX; d: PByte; cnt: cardinal): integer; cdecl;
     CRYPTO_malloc: function(aLength: longint; f: PAnsiChar; aLine: integer): pointer; cdecl;
     CRYPTO_free: procedure(str: pointer); cdecl;
     SSLeay_version: function(t: integer): PAnsiChar; cdecl;
@@ -301,7 +301,7 @@ type
     SSL_get0_alpn_selected: procedure(s: PSSL; out data: PAnsiChar; out len: integer); cdecl;
     SSL_clear: function(s: PSSL): integer; cdecl;
     // aliases
-    EVP_DigestVerifyUpdate: function(ctx: PEVP_MD_CTX; d: pointer; cnt: size_t): integer; cdecl;
+    EVP_DigestVerifyUpdate: function(ctx: PEVP_MD_CTX; d: pointer; cnt: cardinal): integer; cdecl;
     sk_ASN1_OBJECT_num: function(stack: PSTACK): integer; cdecl;  // = sk_num
     sk_GENERAL_NAME_num: function(stack: PSTACK): integer; cdecl; // = sk_num
     sk_GENERAL_NAME_pop: function(stack: PSTACK): pointer; cdecl; // = sk_pop
@@ -405,7 +405,7 @@ type
   // - if you work with a lot of concurrent long-living connections (e.g. when
   // implementing a server), you may dramatically reduce the memory consumption
   // (to the prive of a slight performance degradation) by setting
-  // ocoNoReleaseBuffers - see http://stackoverflow.com/a/19294527
+  // ocoNoReleaseBuffers - see http://stackoverflow.com/a/19294527/458259
   // - for security reasons (i.e. to prevent BREACH and CRIME vulnerabilities),
   // and also to reduce memory consumption, TLS compression is disabled by
   // default: set ocoEnabledCompression to enable this unsafe feature
@@ -755,7 +755,7 @@ var
   priv: PBIO;
   pkey: PEVP_PKEY;
   ctx: PEVP_MD_CTX;
-  size: size_t;
+  size: cardinal;
 begin
   result := '';
   if (privkey = nil) or (privkeylen = 0) then begin

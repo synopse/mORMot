@@ -6,7 +6,7 @@ unit SynCrossPlatformREST;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2018 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynCrossPlatformREST;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2018
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -566,7 +566,7 @@ type
   // so e.g. for a sicShared instance, you can safely write:
   // ! aIntegerResult := TServiceCalculator.Create(aClient).Add(10,20);
   // - as you already noted, server-side interface-based services are in fact
-  // consumed without any interface in this cross-platform unit!
+  // consummed without any interface in this cross-platform unit!
   TServiceClientAbstract = class{$ifndef ISDWS}(TInterfacedObject){$endif}
   protected
     fClient: TSQLRestClientURI;

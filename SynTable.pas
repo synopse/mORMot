@@ -5,7 +5,7 @@ unit SynTable;
 (*
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -24,7 +24,7 @@ unit SynTable;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2018
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -96,81 +96,44 @@ function IsValidIP4Address(P: PUTF8Char): boolean;
 // - consider using TMatch or TMatchs if you expect to reuse the pattern
 function IsMatch(const Pattern, Text: RawUTF8; CaseInsensitive: boolean=false): boolean;
 
-/// return TRUE if the supplied content matchs a glob pattern, using VCL strings
-// - is a wrapper around IsMatch() with fast UTF-8 conversion
-function IsMatchString(const Pattern, Text: string; CaseInsensitive: boolean=false): boolean;
-
 type
-  PMatch = ^TMatch;
-  TMatchSearchFunction = function(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
-
-  /// low-level structure used by IsMatch() for actual glob search
+  /// low-level structure used by IsMatch() for actual blog search
   // - you can use this object to prepare a given pattern, e.g. in a loop
   // - implemented as a fast brute-force state-machine without any heap allocation
-  // - some common patterns ('exactmatch', 'startwith*', '*endwith', '*contained*')
-  // are handled with dedicated code, optionally with case-insensitive search
-  // - consider using TMatchs (or SetMatchs/TMatchDynArray) if you expect to
-  // search for several patterns, or even TExprParserMatch for expression search
-  {$ifdef UNICODE}TMatch = record{$else}TMatch = object{$endif}
+  // - some common patterns ('exactmatch', 'startwith*', '*contained*') are
+  // handled with dedicated code, optionally with case-insensitive search
+  TMatch = {$ifdef UNICODE}record{$else}object{$endif}
   private
     Pattern, Text: PUTF8Char;
     P, T, PMax, TMax: PtrInt;
     Upper: PNormTable;
     State: (sNONE, sABORT, sEND, sLITERAL, sPATTERN, sRANGE, sVALID);
+    Direct: (dNone, dNoPattern, dNoPatternU,
+      dContainsValid, dContainsU, dContains1, dContains4, dContains8,
+      dStartWith, dStartWithU);
     procedure MatchAfterStar;
     procedure MatchMain;
   public
-    /// published for proper inlining
-    Search: TMatchSearchFunction;
-    /// initialize the internal fields for a given glob search pattern
-    // - note that the aPattern instance should remain in memory, since it will
-    // be pointed to by the Pattern private field of this object
-    procedure Prepare(const aPattern: RawUTF8; aCaseInsensitive, aReuse: boolean); overload;
-    /// initialize the internal fields for a given glob search pattern
-    // - note that the aPattern buffer should remain in memory, since it will
-    // be pointed to by the Pattern private field of this object
-    procedure Prepare(aPattern: PUTF8Char; aPatternLen: integer;
-      aCaseInsensitive, aReuse: boolean); overload;
-    /// initialize low-level internal fields for'*aPattern*' search
-    // - this method is faster than a regular Prepare('*' + aPattern + '*')
-    // - warning: the supplied aPattern variable may be modified in-place to be
-    // filled with some lookup buffer, for length(aPattern) in [2..31] range
-    procedure PrepareContains(var aPattern: RawUTF8; aCaseInsensitive: boolean); overload;
-    /// initialize low-level internal fields for a custom search algorithm
-    procedure PrepareRaw(aPattern: PUTF8Char; aPatternLen: integer;
-      aSearch: TMatchSearchFunction);
-    /// returns TRUE if the supplied content matches the prepared glob pattern
+    /// initialize the internal fields for a given grep-like search pattern
+    procedure Prepare(const aPattern: RawUTF8; aCaseInsensitive, aReuse: boolean);
+    /// returns TRUE if the supplied content matches a grep-like pattern
     // - this method is not thread-safe
     function Match(const aText: RawUTF8): boolean; overload;
-      {$ifdef FPC}inline;{$endif}
-    /// returns TRUE if the supplied content matches the prepared glob pattern
+    /// returns TRUE if the supplied content matches a grep-like pattern
     // - this method is not thread-safe
     function Match(aText: PUTF8Char; aTextLen: PtrInt): boolean; overload;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// returns TRUE if the supplied content matches the prepared glob pattern
+    /// returns TRUE if the supplied content matches a grep-like pattern
     // - this method IS thread-safe, and won't lock
     function MatchThreadSafe(const aText: RawUTF8): boolean;
-    /// returns TRUE if the supplied VCL/LCL content matches the prepared glob pattern
-    // - this method IS thread-safe, will use stack to UTF-8 temporary conversion
-    // if possible, and won't lock
-    function MatchString(const aText: string): boolean;
-    /// returns TRUE if this search pattern matches another
-    function Equals(const aAnother{$ifndef DELPHI5OROLDER}: TMatch{$endif}): boolean;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// access to the pattern length as stored in PMax + 1
-    function PatternLength: integer; {$ifdef HASINLINE}inline;{$endif}
-    /// access to the pattern text as stored in Pattern
-    function PatternText: PUTF8Char; {$ifdef HASINLINE}inline;{$endif}
   end;
-  /// use SetMatchs() to initialize such an array from a CSV pattern text
   TMatchDynArray = array of TMatch;
 
   /// TMatch descendant owning a copy of the Pattern string to avoid GPF issues
   TMatchStore = record
     /// access to the research criteria
     // - defined as a nested record (and not an object) to circumvent Delphi bug
-    Pattern: TMatch;
-    /// Pattern.Pattern PUTF8Char will point to this instance
+    Parent: TMatch;
+    /// Parent.Pattern PUTF8Char will point to this instance
     PatternInstance: RawUTF8;
   end;
   TMatchStoreDynArray = array of TMatchStore;
@@ -179,58 +142,23 @@ type
   TMatchs = class(TSynPersistent)
   protected
     fMatch: TMatchStoreDynArray;
-    fMatchCount: integer;
   public
-    /// add once some glob patterns to the internal TMach list
+    /// add once some grep-like patterns to the internal TMach list
     // - aPatterns[] follows the IsMatch() syntax
-    constructor Create(const aPatterns: TRawUTF8DynArray; CaseInsensitive: Boolean); reintroduce; overload;
-    /// add once some glob patterns to the internal TMach list
+    constructor Create(const aPatterns: TRawUTF8DynArray; CaseInsensitive: Boolean); reintroduce; overload;  
+    /// add once some grep-like patterns to the internal TMach list
     // - aPatterns[] follows the IsMatch() syntax
-    procedure Subscribe(const aPatterns: TRawUTF8DynArray; CaseInsensitive: Boolean); overload; virtual;
-    /// add once some glob patterns to the internal TMach list
+    procedure Subscribe(const aPatterns: TRawUTF8DynArray; CaseInsensitive: Boolean); overload; virtual; 
+    /// add once some grep-like patterns to the internal TMach list
     // - each CSV item in aPatterns follows the IsMatch() syntax
     procedure Subscribe(const aPatternsCSV: RawUTF8; CaseInsensitive: Boolean); overload;
-    /// search patterns in the supplied UTF-8 text
+    /// search patterns in the supplied text
     // - returns -1 if no filter has been subscribed
     // - returns -2 if there is no match on any previous pattern subscription
     // - returns fMatch[] index, i.e. >= 0 number on first matching pattern
     // - this method is thread-safe
-    function Match(const aText: RawUTF8): integer; overload; {$ifdef HASINLINE}inline;{$endif}
-    /// search patterns in the supplied UTF-8 text buffer
-    function Match(aText: PUTF8Char; aLen: integer): integer; overload;
-    /// search patterns in the supplied VCL/LCL text
-    // - could be used on a TFileName for instance
-    // - will avoid any memory allocation if aText is small enough
-    function MatchString(const aText: string): integer;
+    function Match(const aText: RawUTF8): integer;
   end;
-
-/// fill the Match[] dynamic array with all glob patterns supplied as CSV
-// - returns how many patterns have been set in Match[|]
-// - note that the CSVPattern instance should remain in memory, since it will
-// be pointed to by the Match[].Pattern private field
-function SetMatchs(const CSVPattern: RawUTF8; CaseInsensitive: boolean;
-  out Match: TMatchDynArray): integer; overload;
-
-/// fill the Match[0..MatchMax] static array with all glob patterns supplied as CSV
-// - note that the CSVPattern instance should remain in memory, since it will
-// be pointed to by the Match[].Pattern private field
-function SetMatchs(CSVPattern: PUTF8Char; CaseInsensitive: boolean;
-  Match: PMatch; MatchMax: integer): integer; overload;
-
-/// search if one TMach is already registered in the Several[] dynamic array
-function MatchExists(const One: TMatch; const Several: TMatchDynArray): boolean;
-
-/// add one TMach if not already registered in the Several[] dynamic array
-function MatchAdd(const One: TMatch; var Several: TMatchDynArray): boolean;
-
-/// returns TRUE if Match=nil or if any Match[].Match(Text) is TRUE
-function MatchAny(const Match: TMatchDynArray; const Text: RawUTF8): boolean;
-
-/// apply the CSV-supplied glob patterns to an array of RawUTF8
-// - any text not maching the pattern will be deleted from the array
-procedure FilterMatchs(const CSVPattern: RawUTF8; CaseInsensitive: boolean;
-  var Values: TRawUTF8DynArray);
-
 
 type
   TSynFilterOrValidate = class;
@@ -345,8 +273,8 @@ type
     property ForbiddenDomains: RawUTF8 read fForbiddenDomains write fForbiddenDomains;
   end;
 
-  /// glob case-sensitive pattern validation of a Record field content
-  // - parameter is NOT JSON encoded, but is some basic TMatch glob pattern
+  /// grep-like case-sensitive pattern validation of a Record field content
+  // - parameter is NOT JSON encoded, but is some basic grep-like pattern
   // - ?	   	Matches any single characer
   // - *	   	Matches any contiguous characters
   // - [abc]  Matches a or b or c at that position
@@ -373,9 +301,9 @@ type
       var ErrorMsg: string): boolean; override;
   end;
 
-  /// glob case-insensitive pattern validation of a text field content
+  /// grep-like case-insensitive pattern validation of a text field content
   // (typicaly a TSQLRecord)
-  // - parameter is NOT JSON encoded, but is some basic TMatch glob pattern
+  // - parameter is NOT JSON encoded, but is some basic grep-like pattern
   // - same as TSynValidatePattern, but is NOT case sensitive
   TSynValidatePatternI = class(TSynValidatePattern);
 
@@ -593,345 +521,14 @@ type
   end;
 
 
-{ ************ Database types and classes ************************** }
 
-type
-  /// handled field/parameter/column types for abstract database access
-  // - this will map JSON-compatible low-level database-level access types, not
-  // high-level Delphi types as TSQLFieldType defined in mORMot.pas
-  // - it does not map either all potential types as defined in DB.pas (which
-  // are there for compatibility with old RDBMS, and are not abstract enough)
-  // - those types can be mapped to standard SQLite3 generic types, i.e.
-  // NULL, INTEGER, REAL, TEXT, BLOB (with the addition of a ftCurrency and
-  // ftDate type, for better support of most DB engines)
-  // see @http://www.sqlite.org/datatype3.html
-  // - the only string type handled here uses UTF-8 encoding (implemented
-  // using our RawUTF8 type), for cross-Delphi true Unicode process
-  TSQLDBFieldType =
-    (ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency, ftDate, ftUTF8, ftBlob);
-
-  /// set of field/parameter/column types for abstract database access
-  TSQLDBFieldTypes = set of TSQLDBFieldType;
-
-  /// array of field/parameter/column types for abstract database access
-  TSQLDBFieldTypeDynArray = array of TSQLDBFieldType;
-
-  /// array of field/parameter/column types for abstract database access
-  // - this array as a fixed size, ready to handle up to MAX_SQLFIELDS items
-  TSQLDBFieldTypeArray = array[0..MAX_SQLFIELDS-1] of TSQLDBFieldType;
-
-  /// how TSQLVar may be processed
-  // - by default, ftDate will use seconds resolution unless svoDateWithMS is set
-  TSQLVarOption = (svoDateWithMS);
-
-  /// defines how TSQLVar may be processed
-  TSQLVarOptions = set of TSQLVarOption;
-
-  /// memory structure used for database values by reference storage
-  // - used mainly by SynDB, mORMot, mORMotDB and mORMotSQLite3 units
-  // - defines only TSQLDBFieldType data types (similar to those handled by
-  // SQLite3, with the addition of ftCurrency and ftDate)
-  // - cleaner/lighter dedicated type than TValue or variant/TVarData, strong
-  // enough to be marshalled as JSON content
-  // - variable-length data (e.g. UTF-8 text or binary BLOB) are never stored
-  // within this record, but VText/VBlob will point to an external (temporary)
-  // memory buffer
-  // - date/time is stored as ISO-8601 text (with milliseconds if svoDateWithMS
-  // option is set and the database supports it), and currency as double or BCD
-  // in most databases
-  TSQLVar = record
-    /// how this value should be processed
-    Options: TSQLVarOptions;
-    /// the type of the value stored
-    case VType: TSQLDBFieldType of
-    ftInt64: (
-      VInt64: Int64);
-    ftDouble: (
-      VDouble: double);
-    ftDate: (
-      VDateTime: TDateTime);
-    ftCurrency: (
-      VCurrency: Currency);
-    ftUTF8: (
-      VText: PUTF8Char);
-    ftBlob: (
-      VBlob: pointer;
-      VBlobLen: Integer)
-  end;
-
-  /// dynamic array of database values by reference storage
-  TSQLVarDynArray = array of TSQLVar;
-
-  /// used to store bit set for all available fields in a Table
-  // - with current MAX_SQLFIELDS value, 64 bits uses 8 bytes of memory
-  // - see also IsZero() and IsEqual() functions
-  // - you can also use ALL_FIELDS as defined in mORMot.pas
-  TSQLFieldBits = set of 0..MAX_SQLFIELDS-1;
-
-  /// used to store a field index in a Table
-  // - note that -1 is commonly used for the ID/RowID field so the values should
-  // be signed
-  // - even if ShortInt (-128..127) may have been enough, we define a 16 bit
-  // safe unsigned integer to let the source compile with Delphi 5
-  TSQLFieldIndex = SmallInt; // -32768..32767
-
-  /// used to store field indexes in a Table
-  // - same as TSQLFieldBits, but allowing to store the proper order
-  TSQLFieldIndexDynArray = array of TSQLFieldIndex;
-
-  /// points to a bit set used for all available fields in a Table
-  PSQLFieldBits = ^TSQLFieldBits;
-
-  /// generic parameter types, as recognized by SQLParamContent() and
-  // ExtractInlineParameters() functions
-  TSQLParamType = (sptUnknown, sptInteger, sptFloat, sptText, sptBlob, sptDateTime);
-
-  /// array of parameter types, as recognized by SQLParamContent() and
-  // ExtractInlineParameters() functions
-  TSQLParamTypeDynArray = array of TSQLParamType;
-
-  /// simple writer to a Stream, specialized for the JSON format and SQL export
-  // - use an internal buffer, faster than string+string
-  TJSONWriter = class(TTextWriter)
-  protected
-    /// used to store output format
-    fExpand: boolean;
-    /// used to store output format for TSQLRecord.GetJSONValues()
-    fWithID: boolean;
-    /// used to store field for TSQLRecord.GetJSONValues()
-    fFields: TSQLFieldIndexDynArray;
-    /// if not Expanded format, contains the Stream position of the first
-    // useful Row of data; i.e. ',val11' position in:
-    // & { "fieldCount":1,"values":["col1","col2",val11,"val12",val21,..] }
-    fStartDataPosition: integer;
-  public
-    /// used internally to store column names and count for AddColumns
-    ColNames: TRawUTF8DynArray;
-    /// the data will be written to the specified Stream
-    // - if no Stream is supplied, a temporary memory stream will be created
-    // (it's faster to supply one, e.g. any TSQLRest.TempMemoryStream)
-    constructor Create(aStream: TStream; Expand, withID: boolean;
-      const Fields: TSQLFieldBits; aBufSize: integer=8192); overload;
-    /// the data will be written to the specified Stream
-    // - if no Stream is supplied, a temporary memory stream will be created
-    // (it's faster to supply one, e.g. any TSQLRest.TempMemoryStream)
-    constructor Create(aStream: TStream; Expand, withID: boolean;
-      const Fields: TSQLFieldIndexDynArray=nil; aBufSize: integer=8192); overload;
-    /// rewind the Stream position and write void JSON object
-    procedure CancelAllVoid;
-    /// write or init field names for appropriate JSON Expand later use
-    // - ColNames[] must have been initialized before calling this procedure
-    // - if aKnownRowsCount is not null, a "rowCount":... item will be added
-    // to the generated JSON stream (for faster unserialization of huge content)
-    procedure AddColumns(aKnownRowsCount: integer=0);
-    /// allow to change on the fly an expanded format column layout
-    // - by definition, a non expanded format will raise a ESynException
-    // - caller should then set ColNames[] and run AddColumns()
-    procedure ChangeExpandedFields(aWithID: boolean; const aFields: TSQLFieldIndexDynArray); overload;
-    /// end the serialized JSON object
-    // - cancel last ','
-    // - close the JSON object ']' or ']}'
-    // - write non expanded postlog (,"rowcount":...), if needed
-    // - flush the internal buffer content if aFlushFinal=true
-    procedure EndJSONObject(aKnownRowsCount,aRowsCount: integer; aFlushFinal: boolean=true);
-      {$ifdef HASINLINE}inline;{$endif}
-    /// the first data row is erased from the content
-    // - only works if the associated storage stream is TMemoryStream
-    // - expect not Expanded format
-    procedure TrimFirstRow;
-    /// is set to TRUE in case of Expanded format
-    property Expand: boolean read fExpand write fExpand;
-    /// is set to TRUE if the ID field must be appended to the resulting JSON
-    // - this field is used only by TSQLRecord.GetJSONValues
-    // - this field is ignored by TSQLTable.GetJSONValues
-    property WithID: boolean read fWithID;
-    /// Read-Only access to the field bits set for each column to be stored
-    property Fields: TSQLFieldIndexDynArray read fFields;
-    /// if not Expanded format, contains the Stream position of the first
-    // useful Row of data; i.e. ',val11' position in:
-    // & { "fieldCount":1,"values":["col1","col2",val11,"val12",val21,..] }
-    property StartDataPosition: integer read fStartDataPosition;
-  end;
-
-/// returns TRUE if no bit inside this TSQLFieldBits is set
-// - is optimized for 64, 128, 192 and 256 max bits count (i.e. MAX_SQLFIELDS)
-// - will work also with any other value
-function IsZero(const Fields: TSQLFieldBits): boolean; overload;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// fast comparison of two TSQLFieldBits values
-// - is optimized for 64, 128, 192 and 256 max bits count (i.e. MAX_SQLFIELDS)
-// - will work also with any other value
-function IsEqual(const A,B: TSQLFieldBits): boolean; overload;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// fast initialize a TSQLFieldBits with 0
-// - is optimized for 64, 128, 192 and 256 max bits count (i.e. MAX_SQLFIELDS)
-// - will work also with any other value
-procedure FillZero(var Fields: TSQLFieldBits); overload;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// convert a TSQLFieldBits set of bits into an array of integers
-procedure FieldBitsToIndex(const Fields: TSQLFieldBits;
-  var Index: TSQLFieldIndexDynArray; MaxLength: integer=MAX_SQLFIELDS;
-  IndexStart: integer=0); overload;
-
-/// convert a TSQLFieldBits set of bits into an array of integers
-function FieldBitsToIndex(const Fields: TSQLFieldBits;
-  MaxLength: integer=MAX_SQLFIELDS): TSQLFieldIndexDynArray; overload;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// add a field index to an array of field indexes
-// - returns the index in Indexes[] of the newly appended Field value
-function AddFieldIndex(var Indexes: TSQLFieldIndexDynArray; Field: integer): integer;
-
-/// convert an array of field indexes into a TSQLFieldBits set of bits
-procedure FieldIndexToBits(const Index: TSQLFieldIndexDynArray; var Fields: TSQLFieldBits); overload;
-
-// search a field index in an array of field indexes
-// - returns the index in Indexes[] of the given Field value, -1 if not found
-function SearchFieldIndex(var Indexes: TSQLFieldIndexDynArray; Field: integer): integer;
-
-/// convert an array of field indexes into a TSQLFieldBits set of bits
-function FieldIndexToBits(const Index: TSQLFieldIndexDynArray): TSQLFieldBits; overload;
-  {$ifdef HASINLINE}inline;{$endif}
-  
-
-{$ifndef NOVARIANTS}
-
-/// convert any Variant into a database value
-// - ftBlob kind won't be handled by this function
-// - complex variant types would be converted into ftUTF8 JSON object/array
-procedure VariantToSQLVar(const Input: variant; var temp: RawByteString;
-  var Output: TSQLVar);
-
-/// guess the correct TSQLDBFieldType from a variant value
-function VariantTypeToSQLDBFieldType(const V: Variant): TSQLDBFieldType;
-
-{$endif NOVARIANTS}
-
-  /// convert a date to a ISO-8601 string format for SQL '?' inlined parameters
-// - will return the date encoded as '\uFFF1YYYY-MM-DD' - therefore
-// ':("\uFFF12012-05-04"):' pattern will be recognized as a sftDateTime
-// inline parameter in  SQLParamContent() / ExtractInlineParameters() functions
-// (JSON_SQLDATE_MAGIC will be used as prefix to create '\uFFF1...' pattern)
-// - to be used e.g. as in:
-// ! aRec.CreateAndFillPrepare(Client,'Datum=?',[DateToSQL(EncodeDate(2012,5,4))]);
-function DateToSQL(Date: TDateTime): RawUTF8; overload;
-
-/// convert a date to a ISO-8601 string format for SQL '?' inlined parameters
-// - will return the date encoded as '\uFFF1YYYY-MM-DD' - therefore
-// ':("\uFFF12012-05-04"):' pattern will be recognized as a sftDateTime
-// inline parameter in  SQLParamContent() / ExtractInlineParameters() functions
-// (JSON_SQLDATE_MAGIC will be used as prefix to create '\uFFF1...' pattern)
-// - to be used e.g. as in:
-// ! aRec.CreateAndFillPrepare(Client,'Datum=?',[DateToSQL(2012,5,4)]);
-function DateToSQL(Year,Month,Day: cardinal): RawUTF8; overload;
-
-/// convert a date/time to a ISO-8601 string format for SQL '?' inlined parameters
-// - if DT=0, returns ''
-// - if DT contains only a date, returns the date encoded as '\uFFF1YYYY-MM-DD'
-// - if DT contains only a time, returns the time encoded as '\uFFF1Thh:mm:ss'
-// - otherwise, returns the ISO-8601 date and time encoded as '\uFFF1YYYY-MM-DDThh:mm:ss'
-// (JSON_SQLDATE_MAGIC will be used as prefix to create '\uFFF1...' pattern)
-// - if WithMS is TRUE, will append '.sss' for milliseconds resolution
-// - to be used e.g. as in:
-// ! aRec.CreateAndFillPrepare(Client,'Datum<=?',[DateTimeToSQL(Now)]);
-// - see TimeLogToSQL() if you are using TTimeLog/TModTime/TCreateTime values
-function DateTimeToSQL(DT: TDateTime; WithMS: boolean=false): RawUTF8;
-
-/// decode a SQL '?' inlined parameter (i.e. with JSON_SQLDATE_MAGIC prefix)
-// - as generated by DateToSQL/DateTimeToSQL/TimeLogToSQL functions
-function SQLToDateTime(const ParamValueWithMagic: RawUTF8): TDateTime;
-
-/// convert a TTimeLog value into a ISO-8601 string format for SQL '?' inlined
-// parameters
-// - handle TTimeLog bit-encoded Int64 format
-// - follows the same pattern as DateToSQL or DateTimeToSQL functions, i.e.
-// will return the date or time encoded as '\uFFF1YYYY-MM-DDThh:mm:ss' -
-// therefore ':("\uFFF12012-05-04T20:12:13"):' pattern will be recognized as a
-// sftDateTime inline parameter in  SQLParamContent() / ExtractInlineParameters()
-// (JSON_SQLDATE_MAGIC will be used as prefix to create '\uFFF1...' pattern)
-// - to be used e.g. as in:
-// ! aRec.CreateAndFillPrepare(Client,'Datum<=?',[TimeLogToSQL(TimeLogNow)]);
-function TimeLogToSQL(const Timestamp: TTimeLog): RawUTF8;
-
-/// convert a Iso8601 encoded string into a ISO-8601 string format for SQL
-// '?' inlined parameters
-// - follows the same pattern as DateToSQL or DateTimeToSQL functions, i.e.
-// will return the date or time encoded as '\uFFF1YYYY-MM-DDThh:mm:ss' -
-// therefore ':("\uFFF12012-05-04T20:12:13"):' pattern will be recognized as a
-// sftDateTime inline parameter in  SQLParamContent() / ExtractInlineParameters()
-// (JSON_SQLDATE_MAGIC will be used as prefix to create '\uFFF1...' pattern)
-// - in practice, just append the JSON_SQLDATE_MAGIC prefix to the supplied text
-function Iso8601ToSQL(const S: RawByteString): RawUTF8;
-
-
-/// guess the content type of an UTF-8 SQL value, in :(....): format
-// - will be used e.g. by ExtractInlineParameters() to un-inline a SQL statement
-// - sftInteger is returned for an INTEGER value, e.g. :(1234):
-// - sftFloat is returned for any floating point value (i.e. some digits
-// separated by a '.' character), e.g. :(12.34): or :(12E-34):
-// - sftUTF8Text is returned for :("text"): or :('text'):, with double quoting
-// inside the value
-// - sftBlob will be recognized from the ':("\uFFF0base64encodedbinary"):'
-// pattern, and return raw binary (for direct blob parameter assignment)
-// - sftDateTime will be recognized from ':(\uFFF1"2012-05-04"):' pattern,
-// i.e. JSON_SQLDATE_MAGIC-prefixed string as returned by DateToSQL() or
-// DateTimeToSQL() functions
-// - sftUnknown is returned on invalid content, or if wasNull is set to TRUE
-// - if ParamValue is not nil, the pointing RawUTF8 string is set with the
-// value inside :(...): without double quoting in case of sftUTF8Text
-// - wasNull is set to TRUE if P was ':(null):' and ParamType is sftUnknwown
-function SQLParamContent(P: PUTF8Char; out ParamType: TSQLParamType; out ParamValue: RawUTF8;
-  out wasNull: boolean): PUTF8Char;
-
-/// this function will extract inlined :(1234): parameters into Types[]/Values[]
-// - will return the generic SQL statement with ? instead of :(1234):
-// - call internaly SQLParamContent() function for inline parameters decoding
-// - will set maxParam=0 in case of no inlined parameters
-// - recognized types are sptInteger, sptFloat, sptDateTime ('\uFFF1...'),
-// sptUTF8Text and sptBlob ('\uFFF0...')
-// - sptUnknown is returned on invalid content
-function ExtractInlineParameters(const SQL: RawUTF8;
-  var Types: TSQLParamTypeDynArray; var Values: TRawUTF8DynArray;
-  var maxParam: integer; var Nulls: TSQLFieldBits): RawUTF8;
-
-type
-  /// SQL Query comparison operators
-  // - used e.g. by CompareOperator() functions in SynTable.pas or vt_BestIndex()
-  // in mORMotSQLite3.pas
-  TCompareOperator = (
-     soEqualTo,
-     soNotEqualTo,
-     soLessThan,
-     soLessThanOrEqualTo,
-     soGreaterThan,
-     soGreaterThanOrEqualTo,
-     soBeginWith,
-     soContains,
-     soSoundsLikeEnglish,
-     soSoundsLikeFrench,
-     soSoundsLikeSpanish);
-
-const
-  /// convert identified field types into high-level ORM types
-  // - as will be implemented in unit mORMot.pas
-  SQLDBFIELDTYPE_TO_DELPHITYPE: array[TSQLDBFieldType] of RawUTF8 = (
-    '???','???', 'Int64', 'Double', 'Currency', 'TDateTime', 'RawUTF8', 'TSQLRawBlob');
-
-
-
-{ ************ TSynTable types and classes ************************** }
+{ ************ TSynTable generic types and classes ************************** }
 
 {$define SORTCOMPAREMETHOD}
 { if defined, the field content comparison will use a method instead of fixed
   functions - could be mandatory for tftArray field kind }
 
 type
-  /// exception raised by all TSynTable related code
-  ETableDataException = class(ESynException);
-
   /// the available types for any TSynTable field property
   // - this is used in our so-called SBF compact binary format
   // (similar to BSON or Protocol Buffers)
@@ -1382,8 +979,13 @@ type
   // - is defined either as an object either as a record, due to a bug
   // in Delphi 2009/2010 compiler (at least): this structure is not initialized
   // if defined as an object on the stack, but will be as a record :(
-  {$ifdef UNICODE}TSynTableData = record{$else}TSynTableData = object{$endif UNICODE}
-  {$ifdef UNICODE}private{$else}protected{$endif UNICODE}
+  {$ifdef UNICODE}
+  TSynTableData = record
+  private
+  {$else}
+  TSynTableData = object
+  protected
+  {$endif UNICODE}
     VType: TVarType;
     Filler: array[1..SizeOf(TVarData)-SizeOf(TVarType)-SizeOf(pointer)*2-4] of byte;
     VID: integer;
@@ -1764,7 +1366,7 @@ function CompareOperator(FieldType: TSynTableFieldType; SBF, SBFEnd: PUTF8Char;
 procedure ToSBFStr(const Value: RawByteString; out Result: TSBFString);
 
 
-{ ************ low-level buffer processing functions ************************* }
+{ ************ low-level buffer processing functions************************* }
 
 type
   /// implements a thread-safe Bloom Filter storage
@@ -1786,7 +1388,7 @@ type
   // - internally, several (hardware-accelerated) crc32c hash functions will be
   // used, with some random seed values, to simulate several hashing functions
   // - Insert/MayExist/Reset methods are thread-safe
-  TSynBloomFilter = class(TSynPersistentLock)
+  TSynBloomFilter = class(TSynPersistentLocked)
   private
     fSize: cardinal;
     fFalsePositivePercent: double;
@@ -1998,304 +1600,8 @@ function DeltaExtract(const Delta,Old: RawByteString; out New: RawByteString): T
 // - return dsSuccess if was uncompressed to aOutUpd as expected
 function DeltaExtract(Delta,Old,New: PAnsiChar): TDeltaError; overload;
 
+
 function ToText(err: TDeltaError): PShortString; overload;
-
-
-type
-  /// item as stored in a TRawByteStringGroup instance
-  TRawByteStringGroupValue = record
-    Position: integer;
-    Value: RawByteString;
-  end;
-  PRawByteStringGroupValue = ^TRawByteStringGroupValue;
-  /// items as stored in a TRawByteStringGroup instance
-  TRawByteStringGroupValueDynArray = array of TRawByteStringGroupValue;
-
-  /// store several RawByteString content with optional concatenation
-  {$ifdef UNICODE}TRawByteStringGroup = record{$else}TRawByteStringGroup = object{$endif}
-  public
-    /// actual list storing the data
-    Values: TRawByteStringGroupValueDynArray;
-    /// how many items are currently stored in Values[]
-    Count: integer;
-    /// the current size of data stored in Values[]
-    Position: integer;
-    /// naive but efficient cache for Find()
-    LastFind: integer;
-    /// add a new item to Values[]
-    procedure Add(const aItem: RawByteString); overload;
-    /// add a new item to Values[]
-    procedure Add(aItem: pointer; aItemLen: integer); overload;
-    {$ifndef DELPHI5OROLDER}
-    /// add another TRawByteStringGroup to Values[]
-    procedure Add(const aAnother: TRawByteStringGroup); overload;
-    /// low-level method to abort the latest Add() call
-    // - warning: will work only once, if an Add() has actually been just called:
-    // otherwise, the behavior is unexpected, and may wrongly truncate data
-    procedure RemoveLastAdd;
-    /// compare two TRawByteStringGroup instance stored text
-    function Equals(const aAnother: TRawByteStringGroup): boolean;
-    {$endif DELPHI5OROLDER}
-    /// clear any stored information
-    procedure Clear;
-    // compact the Values[] array into a single item
-    // - is also used by AsText to compute a single RawByteString
-    procedure Compact;
-    /// return all content as a single RawByteString
-    // - will also compact the Values[] array into a single item (which is returned)
-    function AsText: RawByteString;
-    /// return all content as a single TByteDynArray
-    function AsBytes: TByteDynArray;
-    /// save all content into a TTextWriter instance
-    procedure Write(W: TTextWriter; Escape: TTextWriterKind=twJSONEscape); overload;
-    /// save all content into a TFileBufferWriter instance
-    procedure WriteBinary(W: TFileBufferWriter); overload;
-    /// save all content as a string into a TFileBufferWriter instance
-    // - storing the length as WriteVarUInt32() prefix
-    procedure WriteString(W: TFileBufferWriter);
-    /// add another TRawByteStringGroup previously serialized via WriteString()
-    procedure AddFromReader(var aReader: TFastReader);
-    /// returns a pointer to Values[] containing a given position
-    // - returns nil if not found
-    function Find(aPosition: integer): PRawByteStringGroupValue; overload;
-    /// returns a pointer to Values[].Value containing a given position and length
-    // - returns nil if not found
-    function Find(aPosition, aLength: integer): pointer; overload;
-    /// returns the text at a given position in Values[]
-    // - text should be in a single Values[] entry
-    procedure FindAsText(aPosition, aLength: integer; out aText: RawByteString); overload;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// returns the text at a given position in Values[]
-    // - text should be in a single Values[] entry
-    function FindAsText(aPosition, aLength: integer): RawByteString; overload;
-      {$ifdef HASINLINE}inline;{$endif}
-    {$ifndef NOVARIANTS}
-    /// returns the text at a given position in Values[]
-    // - text should be in a single Values[] entry
-    // - explicitly returns null if the supplied text was not found
-    procedure FindAsVariant(aPosition, aLength: integer; out aDest: variant);
-      {$ifdef HASINLINE}inline;{$endif}
-    {$endif}
-    /// append the text at a given position in Values[], JSON escaped by default
-    // - text should be in a single Values[] entry
-    procedure FindWrite(aPosition, aLength: integer; W: TTextWriter;
-      Escape: TTextWriterKind=twJSONEscape; TrailingCharsToIgnore: integer=0);
-      {$ifdef HASINLINE}inline;{$endif}
-    /// append the blob at a given position in Values[], base-64 encoded
-    // - text should be in a single Values[] entry
-    procedure FindWriteBase64(aPosition, aLength: integer; W: TTextWriter;
-      withMagic: boolean);
-      {$ifdef HASINLINE}inline;{$endif}
-    /// copy the text at a given position in Values[]
-    // - text should be in a single Values[] entry
-    procedure FindMove(aPosition, aLength: integer; aDest: pointer);
-  end;
-  /// pointer reference to a TRawByteStringGroup
-  PRawByteStringGroup = ^TRawByteStringGroup;
-
-
-{ ************  Security and Identifier classes ************************** }
-
-type
-  /// class-reference type (metaclass) of an authentication class
-  TSynAuthenticationClass = class of TSynAuthenticationAbstract;
-
-  /// abstract authentication class, implementing safe token/challenge security
-  // and a list of active sessions
-  // - do not use this class, but plain TSynAuthentication
-  TSynAuthenticationAbstract = class
-  protected
-    fSessions: TIntegerDynArray;
-    fSessionsCount: Integer;
-    fSessionGenerator: integer;
-    fTokenSeed: Int64;
-    fSafe: TSynLocker;
-    function ComputeCredential(previous: boolean; const UserName,PassWord: RawUTF8): cardinal; virtual;
-    function GetPassword(const UserName: RawUTF8; out Password: RawUTF8): boolean; virtual; abstract;
-    function GetUsersCount: integer; virtual; abstract;
-  public
-    /// initialize the authentication scheme
-    constructor Create;
-    /// finalize the authentation
-    destructor Destroy; override;
-    /// register one credential for a given user
-    // - this abstract method will raise an exception: inherited classes should
-    // implement them as expected
-    procedure AuthenticateUser(const aName, aPassword: RawUTF8); virtual;
-    /// unregister one credential for a given user
-    // - this abstract method will raise an exception: inherited classes should
-    // implement them as expected
-    procedure DisauthenticateUser(const aName: RawUTF8); virtual;
-    /// create a new session
-    // - should return 0 on authentication error, or an integer session ID
-    // - this method will check the User name and password, and create a new session
-    function CreateSession(const User: RawUTF8; Hash: cardinal): integer; virtual;
-    /// check if the session exists in the internal list
-    function SessionExists(aID: integer): boolean;
-    /// delete a session
-    procedure RemoveSession(aID: integer);
-    /// returns the current identification token
-    // - to be sent to the client for its authentication challenge
-    function CurrentToken: Int64;
-    /// the number of current opened sessions
-    property SessionsCount: integer read fSessionsCount;
-    /// the number of registered users
-    property UsersCount: integer read GetUsersCount;
-    /// to be used to compute a Hash on the client, for a given Token
-    // - the token should have been retrieved from the server, and the client
-    // should compute and return this hash value, to perform the authentication
-    // challenge and create the session
-    class function ComputeHash(Token: Int64; const UserName,PassWord: RawUTF8): cardinal; virtual;
-  end;
-
-  /// simple authentication class, implementing safe token/challenge security
-  // - maintain a list of user / name credential pairs, and a list of sessions
-  // - is not meant to handle authorization, just plain user access validation
-  // - used e.g. by TSQLDBConnection.RemoteProcessMessage (on server side) and
-  // TSQLDBProxyConnectionPropertiesAbstract (on client side) in SynDB.pas
-  TSynAuthentication = class(TSynAuthenticationAbstract)
-  protected
-    fCredentials: TSynNameValue;
-    function GetPassword(const UserName: RawUTF8; out Password: RawUTF8): boolean; override;
-    function GetUsersCount: integer; override;
-  public
-    /// initialize the authentication scheme
-    // - you can optionally register one user credential
-    constructor Create(const aUserName: RawUTF8=''; const aPassword: RawUTF8=''); reintroduce;
-    /// register one credential for a given user
-    procedure AuthenticateUser(const aName, aPassword: RawUTF8); override;
-    /// unregister one credential for a given user
-    procedure DisauthenticateUser(const aName: RawUTF8); override;
-  end;
-
-
-{ ************ Expression Search Engine ************************** }
-
-type
-  /// exception type used by TExprParser
-  EExprParser = class(ESynException);
-
-  /// identify an expression search engine node type, as used by TExprParser
-  TExprNodeType = (entWord, entNot, entOr, entAnd);
-
-  /// results returned by TExprParserAbstract.Parse method
-  TExprParserResult = (
-    eprSuccess, eprNoExpression,
-    eprMissingParenthesis, eprTooManyParenthesis, eprMissingFinalWord,
-    eprInvalidExpression, eprUnknownVariable, eprUnsupportedOperator,
-    eprInvalidConstantOrVariable);
-
-  TParserAbstract = class;
-
-  /// stores an expression search engine node, as used by TExprParser
-  TExprNode = class(TSynPersistent)
-  protected
-    fNext: TExprNode;
-    fNodeType: TExprNodeType;
-    function Append(node: TExprNode): boolean;
-  public
-    /// initialize a node for the search engine
-    constructor Create(nodeType: TExprNodeType); reintroduce;
-    /// recursively destroys the linked list of nodes (i.e. Next)
-    destructor Destroy; override;
-    /// browse all nodes until Next = nil
-    function Last: TExprNode;
-    /// points to the next node in the parsed tree
-    property Next: TExprNode read fNext;
-    /// what is actually stored in this node
-    property NodeType: TExprNodeType read fNodeType;
-  end;
-
-  /// abstract class to handle word search, as used by TExprParser
-  TExprNodeWordAbstract = class(TExprNode)
-  protected
-    fOwner: TParserAbstract;
-    fWord: RawUTF8;
-    /// should be set from actual data before TExprParser.Found is called
-    fFound: boolean;
-    function ParseWord: TExprParserResult; virtual; abstract;
-  public
-    /// you should override this virtual constructor for proper initialization
-    constructor Create(aOwner: TParserAbstract; const aWord: RawUTF8); reintroduce; virtual;
-  end;
-
-  /// class-reference type (metaclass) for a TExprNode
-  // - allow to customize the actual searching process for entWord
-  TExprNodeWordClass = class of TExprNodeWordAbstract;
-
-  /// parent class of TExprParserAbstract
-  TParserAbstract = class(TSynPersistent)
-  protected
-    fExpression, fCurrentWord, fAndWord, fOrWord, fNotWord: RawUTF8;
-    fCurrent: PUTF8Char;
-    fCurrentError: TExprParserResult;
-    fFirstNode: TExprNode;
-    fWordClass: TExprNodeWordClass;
-    fWords: array of TExprNodeWordAbstract;
-    fWordCount: integer;
-    fNoWordIsAnd: boolean;
-    fFoundStack: array[byte] of boolean; // simple stack-based virtual machine
-    procedure ParseNextCurrentWord; virtual; abstract;
-    function ParseExpr: TExprNode;
-    function ParseFactor: TExprNode;
-    function ParseTerm: TExprNode;
-    procedure Clear; virtual;
-    // override this method to initialize fWordClass and fAnd/Or/NotWord
-    procedure Initialize; virtual; abstract;
-    /// perform the expression search over TExprNodeWord.fFound flags
-    // - warning: caller should check that fFirstNode<>nil (e.g. WordCount>0)
-    function Execute: boolean; {$ifdef HASINLINE}inline;{$endif}
-  public
-    /// initialize an expression parser
-    constructor Create; override;
-    /// finalize the expression parser
-    destructor Destroy; override;
-    /// initialize the parser from a given text expression
-    function Parse(const aExpression: RawUTF8): TExprParserResult;
-    /// try this parser class on a given text expression
-    // - returns '' on success, or an explicit error message (e.g.
-    // 'Missing parenthesis')
-    class function ParseError(const aExpression: RawUTF8): RawUTF8;
-    /// the associated text expression used to define the search
-    property Expression: RawUTF8 read fExpression;
-    /// how many words did appear in the search expression
-    property WordCount: integer read fWordCount;
-  end;
-
-  /// abstract class to parse a text expression into nodes
-  // - you should inherit this class to provide actual text search
-  // - searched expressions can use parenthesis and &=AND -=WITHOUT +=OR operators,
-  // e.g. '((w1 & w2) - w3) + w4' means ((w1 and w2) without w3) or w4
-  // - no operator is handled like a AND, e.g. 'w1 w2' = 'w1 & w2'
-  TExprParserAbstract = class(TParserAbstract)
-  protected
-    procedure ParseNextCurrentWord; override;
-    // may be overriden to provide custom words escaping (e.g. handle quotes)
-    procedure ParseNextWord; virtual;
-    procedure Initialize; override;
-  end;
-
-  /// search expression engine using TMatch for the actual word searches
-  TExprParserMatch = class(TExprParserAbstract)
-  protected
-    fCaseSensitive: boolean;
-    fMatchedLastSet: integer;
-    procedure Initialize; override;
-  public
-    /// initialize the search engine
-    constructor Create(aCaseSensitive: boolean = true); reintroduce;
-    /// returns TRUE if the expression is within the text buffer
-    function Search(aText: PUTF8Char; aTextLen: PtrInt): boolean; overload;
-    /// returns TRUE if the expression is within the text buffer
-    function Search(const aText: RawUTF8): boolean; overload; {$ifdef HASINLINE}inline;{$endif}
-  end;
-
-const
-  /// may be used when overriding TExprParserAbstract.ParseNextWord method
-  PARSER_STOPCHAR = ['&', '+', '-', '(', ')'];
-
-function ToText(r: TExprParserResult): PShortString; overload;
-function ToUTF8(r: TExprParserResult): RawUTF8; overload;
 
 
 implementation
@@ -3543,16 +2849,10 @@ begin
         inc(I); dec(J);
       end;
     until I > J;
-    if J - L < R - I then begin // use recursion only for smaller range
-      if L < J then
-        OrderedIndexSort(L, J);
-      L := I;
-    end else begin
-      if I < R then
-        OrderedIndexSort(I, R);
-      R := J;
-    end;
-  until L >= R;
+    if L < J then
+      OrderedIndexSort(L, J);
+    L := I;
+  until I >= R;
 end;
 
 procedure TSynTableFieldProperties.OrderedIndexRefresh;
@@ -4691,15 +3991,12 @@ begin
     exit; // no SQL statement
   if P^='*' then begin // all simple (not TSQLRawBlob/TSQLRecordMany) fields
     inc(P);
-    len := GetBitsCount(SimpleFieldsBits,MAX_SQLFIELDS)+1;
-    SetLength(fSelect,len);
+    SetLength(fSelect,GetBitsCount(SimpleFieldsBits,MAX_SQLFIELDS)+1);
     selectCount := 1; // Select[0].Field := 0 -> ID
     for ndx := 0 to MAX_SQLFIELDS-1 do
       if ndx in SimpleFieldsBits then begin
         fSelect[selectCount].Field := ndx+1;
         inc(selectCount);
-        if selectCount=len then
-          break;
       end;
     GetNextFieldProp(P,Prop);
   end else
@@ -5093,6 +4390,7 @@ begin
   result := (State = STATE_SUBDOMAIN) and (subdomains >= 2);
 end;
 
+
 // code below adapted from ZMatchPattern.pas - http://www.zeoslib.sourceforge.net
 
 procedure TMatch.MatchMain;
@@ -5226,170 +4524,62 @@ begin
   until State <> sNONE;
 end;
 
-function SearchAny(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+procedure TMatch.Prepare(const aPattern: RawUTF8; aCaseInsensitive, aReuse: boolean);
+var i: integer;
+const SPECIALS: PUTF8Char = '*?[';
 begin
-  aMatch.State := sNONE;
-  aMatch.P := 0;
-  aMatch.T := 0;
-  aMatch.Text := aText;
-  aMatch.TMax := aTextLen - 1;
-  aMatch.MatchMain;
-  result := aMatch.State = sVALID;
-end;
-
-// faster alternative (without recursion) for only * ? (but not [...])
-
-function SearchNoRange(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
-{$ifdef CPUX86}
-var
-  c: AnsiChar;
-  pat, txt: PtrInt; // use local registers
-begin
-  aMatch.T := 0; // aMatch.P/T are used for retry positions after *
-  aMatch.Text := aText;
-  aMatch.TMax := aTextLen - 1;
-  pat := 0;
-  txt := 0;
-  repeat
-    if pat <= aMatch.PMax then begin
-      c := aMatch.Pattern[pat];
-      case c of
-        '?':
-          if txt <= aMatch.TMax then begin
-            inc(pat);
-            inc(txt);
-            continue;
-          end;
-        '*': begin
-          aMatch.P := pat;
-          aMatch.T := txt + 1;
-          inc(pat);
-          continue;
+  Pattern := pointer(aPattern);
+  PMax := length(aPattern) - 1; // search in Pattern[0..PMax]
+  if aCaseInsensitive then
+    Upper := @NormToUpperAnsi7 else
+    Upper := @NormToNorm;
+  if aReuse then
+    if strcspn(Pattern,SPECIALS)>PMax then
+      if aCaseInsensitive then
+        Direct := dNoPatternU
+      else
+        Direct := dNoPattern
+    else if (PMax > 0) and (Pattern[PMax] = '*') then begin
+      for i := 1 to PMax - 1 do
+        if Pattern[i] in ['*', '?', '['] then begin
+          Direct := dNone;
+          exit;
         end;
-        else if (txt <= aMatch.TMax) and (c = aMatch.Text[txt]) then begin
-          inc(pat);
-          inc(txt);
-          continue;
+      case Pattern[0] of
+        '*': begin
+          inc(Pattern);
+          dec(PMax, 2); // trim trailing and ending *
+          if PMax <= 0 then
+            Direct := dContainsValid
+          else if aCaseInsensitive then
+            Direct := dContainsU
+          {$ifdef CPU64}
+          else if PMax >= 7 then
+            Direct := dContains8
+          {$endif}
+          else if PMax >= 3 then
+            Direct := dContains4
+          else
+            Direct := dContains1;
+        end;
+        '?', '[':
+          Direct := dNone;
+        else begin
+          dec(PMax); // trim trailing *
+          if aCaseInsensitive then
+            Direct := dStartWithU
+          else
+            Direct := dStartWith;
         end;
       end;
     end
-    else if txt > aMatch.TMax then
-      break;
-    txt := aMatch.T;
-    if (txt > 0) and (txt <= aMatch.TMax + 1) then begin
-      inc(aMatch.T);
-      pat := aMatch.P+1;
-      continue;
-    end;
-    result := false;
-    exit;
-  until false;
-  result := true;
-end;
-{$else} // optimized for x86_64/ARM with more registers
-var
-  c: AnsiChar;
-  pat, patend, txtend, txtretry, patretry: PUTF8Char;
-label
-  fin;
-begin
-  pat := pointer(aMatch.Pattern);
-  if pat = nil then
-    goto fin;
-  patend := pat + aMatch.PMax;
-  patretry := nil;
-  txtend := aText + aTextLen - 1;
-  txtretry := nil;
-  repeat
-    if pat <= patend then begin
-      c := pat^;
-      if c <> '*' then
-        if c <> '?' then begin
-          if (aText <= txtend) and (c = aText^) then begin
-            inc(pat);
-            inc(aText);
-            continue;
-          end;
-        end
-        else begin // '?'
-          if aText <= txtend then begin
-            inc(pat);
-            inc(aText);
-            continue;
-          end;
-        end
-        else begin // '*'
-          inc(pat);
-          txtretry := aText + 1;
-          patretry := pat;
-          continue;
-        end;
-    end
-    else if aText > txtend then
-      break;
-    if (PtrInt(txtretry)> 0) and (txtretry <= txtend + 1) then begin
-      aText := txtretry;
-      inc(txtretry);
-      pat := patretry;
-      continue;
-    end;
-fin:result := false;
-    exit;
-  until false;
-  result := true;
-end;
-{$endif CPUX86}
-
-function SearchNoRangeU(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
-var
-  c: AnsiChar;
-  pat, txt: PtrInt;
-begin
-  aMatch.T := 0;
-  aMatch.Text := aText;
-  aMatch.TMax := aTextLen - 1;
-  pat := 0;
-  txt := 0;
-  repeat
-    if pat <= aMatch.PMax then begin
-      c := aMatch.Pattern[pat];
-      case c of
-        '?':
-          if txt <= aMatch.TMax then begin
-            inc(pat);
-            inc(txt);
-            continue;
-          end;
-        '*': begin
-          aMatch.P := pat;
-          aMatch.T := txt + 1;
-          inc(pat);
-          continue;
-        end;
-        else if (txt <= aMatch.TMax) and
-           (aMatch.Upper[c] = aMatch.Upper[aMatch.Text[txt]]) then begin
-          inc(pat);
-          inc(txt);
-          continue;
-        end;
-      end;
-    end
-    else if txt > aMatch.TMax then
-      break;
-    txt := aMatch.T;
-    if (txt > 0) and (txt <= aMatch.TMax + 1) then begin
-      inc(aMatch.T);
-      pat := aMatch.P+1;
-      continue;
-    end;
-    result := false;
-    exit;
-  until false;
-  result := true;
+    else
+      Direct := dNone
+  else
+    Direct := dNone;
 end;
 
 function SimpleContainsU(t, tend, p: PUTF8Char; pmax: PtrInt; up: PNormTable): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
 // brute force case-insensitive search p[0..pmax] in t..tend-1
 var first: AnsiChar;
     i: PtrInt;
@@ -5404,7 +4594,7 @@ next: inc(t);
         break;
     end;
     for i := 1 to pmax do
-      if up[t[i]] <> up[p[i]] then
+      if (t + i >= tend) or (up[t[i]] <> up[p[i]]) then
         goto next;
     result := true;
     exit;
@@ -5413,7 +4603,7 @@ next: inc(t);
 end;
 
 {$ifdef CPU64} // naive but very efficient code generation on FPC x86-64
-function SimpleContains8(t, tend, p: PUTF8Char; pmax: PtrInt): boolean; inline;
+function SimpleContains8(t, tend, p: PUTF8Char; pmax: PtrInt): boolean;
 label next;
 var i, first: PtrInt;
 begin
@@ -5426,7 +4616,7 @@ next: inc(t);
         break;
     end;
     for i := 8 to pmax do
-      if t[i] <> p[i] then
+      if (t + i >= tend + 7) or (t[i] <> p[i]) then
         goto next;
     result := true;
     exit;
@@ -5436,7 +4626,6 @@ end;
 {$endif CPU64}
 
 function SimpleContains4(t, tend, p: PUTF8Char; pmax: PtrInt): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
 label next;
 var i: PtrInt;
 {$ifdef CPUX86} // circumvent lack of registers for this CPU
@@ -5456,7 +4645,7 @@ next: inc(t);
         break;
     end;
     for i := 4 to pmax do
-      if t[i] <> p[i] then
+      if (t + i >= tend + 3) or (t[i] <> p[i]) then
         goto next;
     result := true;
     exit;
@@ -5465,7 +4654,6 @@ next: inc(t);
 end;
 
 function SimpleContains1(t, tend, p: PUTF8Char; pmax: PtrInt): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
 label next;
 var i: PtrInt;
 {$ifdef CPUX86}
@@ -5485,7 +4673,7 @@ next: inc(t);
         break;
     end;
     for i := 1 to pmax do
-      if t[i] <> p[i] then
+      if (t + i >= tend) or (t[i] <> p[i]) then
        goto next;
     result := true;
     exit;
@@ -5494,7 +4682,6 @@ next: inc(t);
 end;
 
 function CompareMemU(P1, P2: PUTF8Char; len: PtrInt; U: PNormTable): Boolean;
-  {$ifdef FPC}inline;{$endif}
 begin // here we know that len>0
   result := false;
   repeat
@@ -5505,492 +4692,61 @@ begin // here we know that len>0
   result := true;
 end;
 
-function SearchVoid(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
-begin
-  result := aTextLen = 0;
-end;
-
-function SearchNoPattern(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
-begin
-  result := (aMatch.PMax + 1 = aTextlen) and CompareMem(aText, aMatch.Pattern, aTextLen);
-end;
-
-function SearchNoPatternU(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
-begin
-  result := (aMatch.PMax + 1 = aTextlen) and CompareMemU(aText, aMatch.Pattern, aTextLen, aMatch.Upper);
-end;
-
-function SearchContainsValid(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
-begin
-  result := true;
-end;
-
-function SearchContainsU(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
-begin
-  dec(aTextLen, aMatch.PMax);
-  if aTextLen > 0 then
-    result := SimpleContainsU(aText, aText + aTextLen, aMatch.Pattern, aMatch.PMax, aMatch.Upper)
-  else
-    result := false;
-end;
-
-function SearchContains1(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
-begin
-  dec(aTextLen, aMatch.PMax);
-  if aTextLen > 0 then
-    result := SimpleContains1(aText, aText + aTextLen, aMatch.Pattern, aMatch.PMax)
-  else
-    result := false;
-end;
-
-function SearchContains4(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
-begin
-  dec(aTextLen, aMatch.PMax);
-  if aTextLen > 0 then
-    result := SimpleContains4(aText, aText + aTextLen, aMatch.Pattern, aMatch.PMax)
-  else
-    result := false;
-end;
-
-{$ifdef CPU64}
-function SearchContains8(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
-begin // optimized e.g. to search an IP address as '*12.34.56.78*' in logs
-  dec(aTextLen, aMatch.PMax);
-  if aTextLen > 0 then
-    result := SimpleContains8(aText, aText + aTextLen, aMatch.Pattern, aMatch.PMax)
-  else
-    result := false;
-end;
-{$endif CPU64}
-
-function SearchStartWith(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
-begin
-  result := (aMatch.PMax < aTextlen) and CompareMem(aText, aMatch.Pattern, aMatch.PMax + 1);
-end;
-
-function SearchStartWithU(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
-begin
-  result := (aMatch.PMax < aTextlen) and CompareMemU(aText, aMatch.Pattern, aMatch.PMax + 1, aMatch.Upper);
-end;
-
-function SearchEndWith(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
-begin
-  dec(aTextLen, aMatch.PMax);
-  result := (aTextlen >= 0) and CompareMem(aText + aTextLen, aMatch.Pattern, aMatch.PMax);
-end;
-
-function SearchEndWithU(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
-begin
-  dec(aTextLen, aMatch.PMax);
-  result := (aTextlen >= 0) and CompareMemU(aText + aTextLen, aMatch.Pattern, aMatch.PMax, aMatch.Upper);
-end;
-
-procedure TMatch.Prepare(const aPattern: RawUTF8; aCaseInsensitive, aReuse: boolean);
-begin
-  Prepare(pointer(aPattern), length(aPattern), aCaseInsensitive, aReuse);
-end;
-
-procedure TMatch.Prepare(aPattern: PUTF8Char; aPatternLen: integer;
-  aCaseInsensitive, aReuse: boolean);
-const SPECIALS: PUTF8Char = '*?[';
-begin
-  Pattern := aPattern;
-  PMax := aPatternLen - 1; // search in Pattern[0..PMax]
-  if Pattern = nil then begin
-    Search := SearchVoid;
-    exit;
-  end;
-  if aCaseInsensitive and not IsCaseSensitive(aPattern,aPatternLen) then
-    aCaseInsensitive := false; // don't slow down e.g. number or IP search
-  if aCaseInsensitive then
-    Upper := @NormToUpperAnsi7 else
-    Upper := @NormToNorm;
-  Search := nil;
-  if aReuse then
-    if strcspn(Pattern, SPECIALS) > PMax then
-      if aCaseInsensitive then
-        Search := SearchNoPatternU
-      else
-        Search := SearchNoPattern
-    else if PMax > 0 then begin
-      if Pattern[PMax] = '*' then begin
-        if strcspn(Pattern + 1, SPECIALS) = PMax - 1 then
-          case Pattern[0] of
-            '*': begin // *something*
-              inc(Pattern);
-              dec(PMax, 2); // trim trailing and ending *
-              if PMax < 0 then
-                Search := SearchContainsValid
-              else if aCaseInsensitive then
-                Search := SearchContainsU
-              {$ifdef CPU64}
-              else if PMax >= 7 then
-                Search := SearchContains8
-              {$endif}
-              else if PMax >= 3 then
-                Search := SearchContains4
-              else
-                Search := SearchContains1;
-            end;
-            '?':
-              if aCaseInsensitive then
-                Search := SearchNoRangeU
-              else
-                Search := SearchNoRange;
-            '[':
-              Search := SearchAny;
-            else begin
-              dec(PMax); // trim trailing *
-              if aCaseInsensitive then
-                Search := SearchStartWithU
-              else
-                Search := SearchStartWith;
-            end;
-          end;
-      end
-      else if (Pattern[0] = '*') and (strcspn(Pattern + 1, SPECIALS) >= PMax) then begin
-        inc(Pattern); // jump leading *
-        if aCaseInsensitive then
-          Search := SearchEndWithU
-        else
-          Search := SearchEndWith;
-      end;
-    end else
-      if Pattern[0] in ['*','?'] then
-        Search := SearchContainsValid;
-  if not Assigned(Search) then begin
-    aPattern := PosChar(Pattern, '[');
-    if (aPattern = nil) or (aPattern - Pattern > PMax) then
-      if aCaseInsensitive then
-        Search := SearchNoRangeU
-      else
-        Search := SearchNoRange
-    else
-      Search := SearchAny;
-  end;
-end;
-
-type // Holub and Durian (2005) SBNDM2 algorithm
-  // see http://www.cri.haifa.ac.il/events/2005/string/presentations/Holub.pdf
-  TSBNDMQ2Mask = array[AnsiChar] of cardinal;
-  PSBNDMQ2Mask = ^TSBNDMQ2Mask;
-
-function SearchSBNDMQ2ComputeMask(const Pattern: RawUTF8; u: PNormTable): RawByteString;
-var
-  i: PtrInt;
-  p: PAnsiChar absolute Pattern;
-  m: PSBNDMQ2Mask absolute result;
-  c: PCardinal;
-begin
-  SetLength(result, SizeOf(m^));
-  FillCharFast(m^, SizeOf(m^), 0);
-  for i := 0 to length(Pattern) - 1 do begin
-    c := @m^[u[p[i]]]; // for FPC code generation
-    c^ := c^ or (1 shl i);
-  end;
-end;
-
-function SearchSBNDMQ2(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
-var
-  mask: PSBNDMQ2Mask;
-  max, i, j: PtrInt;
-  state: cardinal;
-begin
-  mask := pointer(aMatch^.Pattern);
-  max := aMatch^.PMax;
-  i := max - 1;
-  dec(aTextLen);
-  if i < aTextLen then begin
-    repeat
-      state := mask[aText[i+1]] shr 1; // in two steps for better FPC codegen
-      state := state and mask[aText[i]];
-      if state = 0 then begin
-        inc(i, max); // fast skip
-        if i >= aTextLen then
-          break;
-        continue;
-      end;
-      j := i - max;
-      repeat
-        dec(i);
-        if i < 0 then
-          break;
-        state := (state shr 1) and mask[aText[i]];
-      until state = 0;
-      if i = j then begin
-        result := true;
-        exit;
-      end;
-      inc(i, max);
-      if i >= aTextLen then
-        break;
-    until false;
-  end;
-  result := false;
-end;
-
-function SearchSBNDMQ2U(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
-var
-  u: PNormTable;
-  mask: PSBNDMQ2Mask;
-  max, i, j: PtrInt;
-  state: cardinal;
-begin
-  mask := pointer(aMatch^.Pattern);
-  max := aMatch^.PMax;
-  u := aMatch^.Upper;
-  i := max - 1;
-  dec(aTextLen);
-  if i < aTextLen then begin
-    repeat
-      state := mask[u[aText[i+1]]] shr 1;
-      state := state and mask[u[aText[i]]];
-      if state = 0 then begin
-        inc(i, max);
-        if i >= aTextLen then
-          break;
-        continue;
-      end;
-      j := i - max;
-      repeat
-        dec(i);
-        if i < 0 then
-          break;
-        state := (state shr 1) and mask[u[aText[i]]];
-      until state = 0;
-      if i = j then begin
-        result := true;
-        exit;
-      end;
-      inc(i, max);
-      if i >= aTextLen then
-        break;
-    until false;
-  end;
-  result := false;
-end;
-
-procedure TMatch.PrepareContains(var aPattern: RawUTF8;
-  aCaseInsensitive: boolean);
-begin
-  PMax := length(aPattern) - 1;
-  if aCaseInsensitive and not IsCaseSensitive(pointer(aPattern), PMax + 1) then
-    aCaseInsensitive := false;
-  if aCaseInsensitive then
-    Upper := @NormToUpperAnsi7
-  else
-    Upper := @NormToNorm;
-  if PMax < 0 then
-    Search := SearchContainsValid
-  else if PMax > 30 then
-    if aCaseInsensitive then
-      Search := SearchContainsU
-    else
-      Search := {$ifdef CPU64}SearchContains8{$else}SearchContains4{$endif}
-  else if PMax >= 1 then begin // len in [2..31] = PMax in [1..30]
-    aPattern := SearchSBNDMQ2ComputeMask(aPattern, Upper); // lookup table
-    if aCaseInsensitive then
-      Search := SearchSBNDMQ2U
-    else
-      Search := SearchSBNDMQ2;
-  end
-  else if aCaseInsensitive then
-    Search := SearchContainsU
-  else
-    Search := SearchContains1;
-  Pattern := pointer(aPattern);
-end;
-
-procedure TMatch.PrepareRaw(aPattern: PUTF8Char; aPatternLen: integer;
-  aSearch: TMatchSearchFunction);
-begin
-  Pattern := aPattern;
-  PMax := aPatternLen - 1; // search in Pattern[0..PMax]
-  Search := aSearch;
-end;
-
 function TMatch.Match(const aText: RawUTF8): boolean;
 begin
-  if aText <> '' then
-    result := Search(@self, pointer(aText), length(aText))
-  else
-    result := PMax < 0;
+  result := Match(pointer(aText), length(aText));
 end;
 
 function TMatch.Match(aText: PUTF8Char; aTextLen: PtrInt): boolean;
 begin
   if (aText <> nil) and (aTextLen > 0) then
-    result := Search(@self, aText, aTextLen)
+  case Direct of
+    dNone: begin
+      State := sNONE;
+      P := 0;
+      T := 0;
+      Text := aText;
+      TMax := length(aText) - 1;
+      MatchMain;
+      result := State = sVALID;
+    end;
+    dNoPattern:
+      result := (PMax + 1 = aTextlen) and CompareMem(aText, Pattern, aTextLen);
+    dNoPatternU:
+      result := (PMax + 1 = aTextlen) and CompareMemU(aText, Pattern, aTextLen, Upper);
+    dStartWith:
+      result := (PMax < aTextlen) and CompareMem(aText, Pattern, PMax + 1);
+    dStartWithU:
+      result := (PMax < aTextlen) and CompareMemU(aText, Pattern, PMax + 1, Upper);
+    dContainsValid:
+      result := true;
+    dContainsU:
+      result := SimpleContainsU(aText, aText + aTextLen, Pattern, PMax, Upper);
+    dContains1:
+      result := SimpleContains1(aText, aText + aTextLen, Pattern, PMax);
+    {$ifdef CPU64}
+    dContains8: // optimized e.g. to search an IP address as '*12.34.56.78*' in logs
+      result := SimpleContains8(aText, aText + aTextLen - 7, Pattern, PMax);
+    {$endif}
+    else
+      result := SimpleContains4(aText, aText + aTextLen - 3, Pattern, PMax);
+  end
   else
-    result := PMax < 0;
+    result := PMax < 0
 end;
 
 function TMatch.MatchThreadSafe(const aText: RawUTF8): boolean;
 var local: TMatch; // thread-safe with no lock!
 begin
   local := self;
-  if aText <> '' then
-    result := local.Search(@local, pointer(aText), length(aText))
-  else
-    result := local.PMax < 0;
-end;
-
-function TMatch.MatchString(const aText: string): boolean;
-var
-  local: TMatch; // thread-safe with no lock!
-  temp: TSynTempBuffer;
-  len: integer;
-begin
-  if aText = '' then begin
-    result := PMax < 0;
-    exit;
-  end;
-  len := length(aText);
-  temp.Init(len * 3);
-  {$ifdef UNICODE}
-  len := RawUnicodeToUtf8(temp.buf, temp.len + 1, pointer(aText), len, [ccfNoTrailingZero]);
-  {$else}
-  len := CurrentAnsiConvert.AnsiBufferToUTF8(temp.buf, pointer(aText), len) - temp.buf;
-  {$endif}
-  local := self;
-  result := local.Search(@local, temp.buf, len);
-  temp.Done;
-end;
-
-function TMatch.Equals(const aAnother{$ifndef DELPHI5OROLDER}: TMatch{$endif}): boolean;
-begin
-  result := (PMax = TMatch(aAnother).PMax) and (Upper = TMatch(aAnother).Upper) and
-    CompareMem(Pattern, TMatch(aAnother).Pattern, PMax + 1);
-end;
-
-function TMatch.PatternLength: integer;
-begin
-  result := PMax + 1;
-end;
-
-function TMatch.PatternText: PUTF8Char;
-begin
-  result := Pattern;
+  result := local.Match(pointer(aText), length(aText));
 end;
 
 function IsMatch(const Pattern, Text: RawUTF8; CaseInsensitive: boolean): boolean;
 var match: TMatch;
 begin
-  match.Prepare(Pattern, CaseInsensitive, {reuse=}false);
+  match.Prepare(Pattern, CaseInsensitive, false);
   result := match.Match(Text);
-end;
-
-function IsMatchString(const Pattern, Text: string; CaseInsensitive: boolean=false): boolean;
-var match: TMatch;
-begin
-  match.Prepare(StringToUTF8(Pattern), CaseInsensitive, {reuse=}false);
-  result := match.Match(StringToUTF8(Text));
-end;
-
-function SetMatchs(const CSVPattern: RawUTF8; CaseInsensitive: boolean;
-  out Match: TMatchDynArray): integer;
-var P, S: PUTF8Char;
-begin
-  result := 0;
-  P := pointer(CSVPattern);
-  if P <> nil then
-    repeat
-      S := P;
-      while not (P^ in [#0, ',']) do
-        inc(P);
-      if P <> S then begin
-        SetLength(Match, result + 1);
-        Match[result].Prepare(S, P - S, CaseInsensitive, {reuse=}true);
-        inc(result);
-      end;
-      if P^ = #0 then
-        break;
-      inc(P);
-    until false;
-end;
-
-function SetMatchs(CSVPattern: PUTF8Char; CaseInsensitive: boolean;
-  Match: PMatch; MatchMax: integer): integer;
-var S: PUTF8Char;
-begin
-  result := 0;
-  if (CSVPattern <> nil) and (MatchMax >= 0) then
-    repeat
-      S := CSVPattern;
-      while not (CSVPattern^ in [#0, ',']) do
-        inc(CSVPattern);
-      if CSVPattern <> S then begin
-        Match^.Prepare(S, CSVPattern - S, CaseInsensitive, {reuse=}true);
-        inc(result);
-        if result > MatchMax then
-          break;
-        inc(Match);
-      end;
-      if CSVPattern^ = #0 then
-        break;
-      inc(CSVPattern);
-    until false;
-end;
-
-function MatchExists(const One: TMatch; const Several: TMatchDynArray): boolean;
-var
-  i: integer;
-begin
-  result := true;
-  for i := 0 to high(Several) do
-    if Several[i].Equals(One) then
-      exit;
-  result := false;
-end;
-
-function MatchAdd(const One: TMatch; var Several: TMatchDynArray): boolean;
-var
-  n: integer;
-begin
-  result := not MatchExists(One, Several);
-  if result then begin
-    n := length(Several);
-    SetLength(Several, n + 1);
-    Several[n] := One;
-  end;
-end;
-
-function MatchAny(const Match: TMatchDynArray; const Text: RawUTF8): boolean;
-var
-  m: PMatch;
-  i: integer;
-begin
-  result := true;
-  if Match = nil then
-    exit;
-  m := pointer(Match);
-  for i := 1 to length(Match) do
-    if m^.Match(Text) then
-      exit
-    else
-      inc(m);
-  result := false;
-end;
-
-procedure FilterMatchs(const CSVPattern: RawUTF8; CaseInsensitive: boolean;
-  var Values: TRawUTF8DynArray);
-var
-  match: TMatchDynArray;
-  m, n, i: integer;
-begin
-  if SetMatchs(CSVPattern, CaseInsensitive, match) = 0 then
-    exit;
-  n := 0;
-  for i := 0 to high(Values) do
-    for m := 0 to high(match) do
-      if match[m].Match(Values[i]) then begin
-        if i <> n then
-          Values[n] := Values[i];
-        inc(n);
-        break;
-      end;
-  if n <> length(Values) then
-    SetLength(Values, n);
 end;
 
 
@@ -6003,51 +4759,19 @@ begin
 end;
 
 function TMatchs.Match(const aText: RawUTF8): integer;
-begin
-  result := Match(pointer(aText), length(aText));
-end;
-
-function TMatchs.Match(aText: PUTF8Char; aLen: integer): integer;
 var
-  one: ^TMatchStore;
-  local: TMatch; // thread-safe with no lock!
+  i: integer;
 begin
   if (self = nil) or (fMatch = nil) then
     result := -1 // no filter by name -> allow e.g. to process everything
   else begin
-    one := pointer(fMatch);
-    if aLen <> 0 then begin
-      for result := 0 to fMatchCount - 1 do begin
-        local := one^.Pattern;
-        if local.Search(@local, aText, aLen) then
-          exit;
-        inc(one);
-      end;
-    end
-    else
-      for result := 0 to fMatchCount - 1 do
-        if one^.Pattern.PMax < 0 then
-          exit
-        else
-          inc(one);
     result := -2;
+    for i := 0 to length(fMatch) - 1 do
+      if fMatch[i].Parent.MatchThreadSafe(aText) then begin
+        result := i;
+        break;
+      end;
   end;
-end;
-
-function TMatchs.MatchString(const aText: string): integer;
-var
-  temp: TSynTempBuffer;
-  len: integer;
-begin
-  len := length(aText);
-  temp.Init(len * 3);
-  {$ifdef UNICODE}
-  len := RawUnicodeToUtf8(temp.buf, temp.len + 1, pointer(aText), len, [ccfNoTrailingZero]);
-  {$else}
-  len := CurrentAnsiConvert.AnsiBufferToUTF8(temp.buf, pointer(aText), len, true) - temp.buf;
-  {$endif}
-  result := Match(temp.buf, len);
-  temp.Done;
 end;
 
 procedure TMatchs.Subscribe(const aPatternsCSV: RawUTF8; CaseInsensitive: Boolean);
@@ -6067,7 +4791,7 @@ begin
   m := length(aPatterns);
   if m = 0 then
     exit;
-  n := fMatchCount;
+  n := length(fMatch);
   SetLength(fMatch, n + m);
   pat := pointer(aPatterns);
   for i := 1 to m do begin
@@ -6076,18 +4800,16 @@ begin
       if StrComp(pointer(found^.PatternInstance), pointer(pat^)) = 0 then begin
         found := nil;
         break;
-      end
-      else
-        inc(found);
+      end else
+      inc(found);
     if found <> nil then
       with fMatch[n] do begin
         PatternInstance := pat^; // avoid GPF if aPatterns[] is released
-        Pattern.Prepare(PatternInstance, CaseInsensitive, {reuse=}true);
+        Parent.Prepare(PatternInstance, CaseInsensitive, true);
         inc(n);
       end;
     inc(pat);
   end;
-  fMatchCount := n;
   if n <> length(fMatch) then
     SetLength(fMatch, n);
 end;
@@ -6174,13 +4896,13 @@ end;
 { TSynFilterTruncate}
 
 procedure TSynFilterTruncate.SetParameters(const value: RawUTF8);
-var V: array[0..1] of TValuePUTF8Char;
+var V: TPUtf8CharDynArray;
     tmp: TSynTempBuffer;
 begin
   tmp.Init(value);
-  JSONDecode(tmp.buf,['MaxLength','UTF8Length'],@V);
-  fMaxLength := GetCardinalDef(V[0].Value,0);
-  fUTF8Length := V[1].Idem('1') or V[1].Idem('true');
+  JSONDecode(tmp.buf,['MaxLength','UTF8Length'],V);
+  fMaxLength := GetCardinalDef(V[0],0);
+  fUTF8Length := IdemPChar(V[1],'1') or IdemPChar(V[1],'TRUE');
   tmp.Done;
 end;
 
@@ -6241,16 +4963,16 @@ begin
 end;
 
 procedure TSynValidateEmail.SetParameters(const value: RawUTF8);
-var V: array[0..3] of TValuePUTF8Char;
+var V: TPUtf8CharDynArray;
     tmp: TSynTempBuffer;
 begin
   inherited;
   tmp.Init(value);
-  JSONDecode(tmp.buf,['AllowedTLD','ForbiddenTLD','ForbiddenDomains','AnyTLD'],@V);
-  LowerCaseCopy(V[0].Value,V[0].ValueLen,fAllowedTLD);
-  LowerCaseCopy(V[1].Value,V[1].ValueLen,fForbiddenTLD);
-  LowerCaseCopy(V[2].Value,V[2].ValueLen,fForbiddenDomains);
-  AnyTLD := V[3].Idem('1') or V[3].Idem('true');
+  JSONDecode(tmp.buf,['AllowedTLD','ForbiddenTLD','ForbiddenDomains','AnyTLD'],V);
+  LowerCaseCopy(V[0],StrLen(V[0]),fAllowedTLD);
+  LowerCaseCopy(V[1],StrLen(V[1]),fForbiddenTLD);
+  LowerCaseCopy(V[2],StrLen(V[2]),fForbiddenDomains);
+  AnyTLD := IdemPChar(V[3],'1') or IdemPChar(V[3],'TRUE');
   tmp.Done;
 end;
 
@@ -6260,7 +4982,7 @@ end;
 procedure TSynValidatePattern.SetParameters(const Value: RawUTF8);
 begin
   inherited SetParameters(Value);
-  fMatch.Prepare(Value, ClassType=TSynValidatePatternI, {reuse=}true);
+  fMatch.Prepare(Value, ClassType=TSynValidatePatternI, true);
 end;
 
 function TSynValidatePattern.Process(aFieldIndex: integer; const value: RawUTF8;
@@ -6384,7 +5106,7 @@ begin
 end;
 
 procedure TSynValidateText.SetParameters(const value: RawUTF8);
-var V: array[0..high(TSynValidateTextProps)+1] of TValuePUTF8Char;
+var V: TPUtf8CharDynArray;
     i: integer;
     tmp: TSynTempBuffer;
 const DEFAULT: TSynValidateTextProps = (
@@ -6403,11 +5125,13 @@ begin
       'MaxLeftTrimCount','MaxRightTrimCount',
       'MaxAlphaCount','MaxDigitCount','MaxPunctCount',
       'MaxLowerCount','MaxUpperCount','MaxSpaceCount',
-      'UTF8Length'],@V);
+      'UTF8Length'],V);
+    if length(V)<>length(fProps)+1 then
+      exit;
     for i := 0 to high(fProps) do
-      fProps[i] := GetCardinalDef(V[i].Value,fProps[i]);
-    with V[high(V)] do
-      fUTF8Length := Idem('1') or Idem('true');
+      fProps[i] := GetCardinalDef(V[i],fProps[i]);
+    fUTF8Length := IdemPChar(V[length(fProps)],'1') or
+                   IdemPChar(V[length(fProps)],'TRUE');
   finally
     tmp.Done;
   end;
@@ -6447,7 +5171,7 @@ begin
   if aFalsePositivePercent>100 then
     fFalsePositivePercent := 100 else
     fFalsePositivePercent := aFalsePositivePercent;
-  // see http://stackoverflow.com/a/22467497
+  // see http://stackoverflow.com/a/22467497/458259
   fBits := Round(-ln(fFalsePositivePercent/100)*aSize/(LN2*LN2));
   fHashFunctions := Round(fBits/fSize*LN2);
   if fHashFunctions=0 then
@@ -7418,1303 +6142,6 @@ begin
 end;
 
 
-
-{ TRawByteStringGroup }
-
-procedure TRawByteStringGroup.Add(const aItem: RawByteString);
-begin
-  if Values=nil then
-    Clear; // ensure all fields are initialized, even if on stack
-  if Count=Length(Values) then
-    SetLength(Values,Count+128+Count shr 3);
-  with Values[Count] do begin
-    Position := self.Position;
-    Value := aItem;
-  end;
-  LastFind := Count;
-  inc(Count);
-  inc(Position,Length(aItem));
-end;
-
-procedure TRawByteStringGroup.Add(aItem: pointer; aItemLen: integer);
-var tmp: RawByteString;
-begin
-  SetString(tmp,PAnsiChar(aItem),aItemLen);
-  Add(tmp);
-end;
-
-{$ifndef DELPHI5OROLDER} // circumvent Delphi 5 compiler bug
-
-procedure TRawByteStringGroup.Add(const aAnother: TRawByteStringGroup);
-var i: integer;
-    s,d: PRawByteStringGroupValue;
-begin
-  if aAnother.Values=nil then
-    exit;
-  if Values=nil then
-    Clear; // ensure all fields are initialized, even if on stack
-  if Count+aAnother.Count>Length(Values) then
-    SetLength(Values,Count+aAnother.Count);
-  s := pointer(aAnother.Values);
-  d := @Values[Count];
-  for i := 1 to aAnother.Count do begin
-    d^.Position := Position;
-    d^.Value := s^.Value;
-    inc(Position,length(s^.Value));
-    inc(s);
-    inc(d);
-  end;
-  inc(Count,aAnother.Count);
-  LastFind := Count-1;
-end;
-
-procedure TRawByteStringGroup.RemoveLastAdd;
-begin
-  if Count>0 then begin
-    dec(Count);
-    dec(Position,Length(Values[Count].Value));
-    Values[Count].Value := ''; // release memory
-    LastFind := Count-1;
-  end;
-end;
-
-function TRawByteStringGroup.Equals(const aAnother: TRawByteStringGroup): boolean;
-begin
-  if ((Values=nil) and (aAnother.Values<>nil)) or ((Values<>nil) and (aAnother.Values=nil)) or
-     (Position<>aAnother.Position) then
-    result := false else
-    if (Count<>1) or (aAnother.Count<>1) or (Values[0].Value<>aAnother.Values[0].Value) then
-      result := AsText=aAnother.AsText else
-      result := true;
-end;
-
-{$endif DELPHI5OROLDER}
-
-procedure TRawByteStringGroup.Clear;
-begin
-  Values := nil;
-  Position := 0;
-  Count := 0;
-  LastFind := 0;
-end;
-
-function TRawByteStringGroup.AsText: RawByteString;
-begin
-  if Values=nil then
-    result := '' else begin
-    if Count>1 then
-      Compact;
-    result := Values[0].Value;
-  end;
-end;
-
-procedure TRawByteStringGroup.Compact;
-var i: integer;
-    v: PRawByteStringGroupValue;
-    tmp: RawByteString;
-begin
-  if (Values<>nil) and (Count>1) then begin
-    SetString(tmp,nil,Position);
-    v := pointer(Values);
-    for i := 1 to Count do begin
-      MoveFast(pointer(v^.Value)^,PByteArray(tmp)[v^.Position],length(v^.Value));
-      {$ifdef FPC}Finalize(v^.Value){$else}v^.Value := ''{$endif};
-      inc(v);
-    end;
-    Values[0].Value := tmp; // use result for absolute compaction ;)
-    if Count>128 then
-      SetLength(Values,128);
-    Count := 1;
-    LastFind := 0;
-  end;
-end;
-
-function TRawByteStringGroup.AsBytes: TByteDynArray;
-var i: integer;
-begin
-  result := nil;
-  if Values=nil then
-    exit;
-  SetLength(result,Position);
-  for i := 0 to Count-1 do
-  with Values[i] do
-    MoveFast(pointer(Value)^,PByteArray(result)[Position],length(Value));
-end;
-
-procedure TRawByteStringGroup.Write(W: TTextWriter; Escape: TTextWriterKind);
-var i: integer;
-begin
-  if Values<>nil then
-    for i := 0 to Count-1 do
-    with Values[i] do
-      W.Add(PUTF8Char(pointer(Value)),length(Value),Escape);
-end;
-
-procedure TRawByteStringGroup.WriteBinary(W: TFileBufferWriter);
-var i: integer;
-begin
-  if Values<>nil then
-    for i := 0 to Count-1 do
-      W.WriteBinary(Values[i].Value);
-end;
-
-procedure TRawByteStringGroup.WriteString(W: TFileBufferWriter);
-begin
-  if Values=nil then begin
-    W.Write1(0);
-    exit;
-  end;
-  W.WriteVarUInt32(Position);
-  WriteBinary(W);
-end;
-
-procedure TRawByteStringGroup.AddFromReader(var aReader: TFastReader);
-var complexsize: integer;
-begin
-  complexsize := aReader.VarUInt32;
-  if complexsize>0 then // directly create a RawByteString from aReader buffer
-    Add(aReader.Next(complexsize),complexsize);
-end;
-
-function TRawByteStringGroup.Find(aPosition: integer): PRawByteStringGroupValue;
-var i: integer;
-begin
-  if (pointer(Values)<>nil) and (cardinal(aPosition)<cardinal(Position)) then begin
-    result := @Values[LastFind]; // this cache is very efficient in practice
-    if (aPosition>=result^.Position) and (aPosition<result^.Position+length(result^.Value)) then
-      exit;
-    result := @Values[1]; // seldom O(n) brute force search (in CPU L1 cache)
-    for i := 0 to Count-2 do
-      if result^.Position>aPosition then begin
-        dec(result);
-        LastFind := i;
-        exit;
-      end else
-        inc(result);
-    dec(result);
-    LastFind := Count-1;
-  end
-  else
-    result := nil;
-end;
-
-function TRawByteStringGroup.Find(aPosition, aLength: integer): pointer;
-var P: PRawByteStringGroupValue;
-    i: integer;
-label found;
-begin
-  if (pointer(Values)<>nil) and (cardinal(aPosition)<cardinal(Position)) then begin
-    P := @Values[LastFind]; // this cache is very efficient in practice
-    i := aPosition-P^.Position;
-    if (i>=0) and (i+aLength<length(P^.Value)) then begin
-      result := @PByteArray(P^.Value)[i];
-      exit;
-    end;
-    P := @Values[1]; // seldom O(n) brute force search (in CPU L1 cache)
-    for i := 0 to Count-2 do
-      if P^.Position>aPosition then begin
-        LastFind := i;
-found:  dec(P);
-        dec(aPosition,P^.Position);
-        if aLength-aPosition<=length(P^.Value) then
-          result := @PByteArray(P^.Value)[aPosition] else
-          result := nil;
-        exit;
-      end else
-        inc(P);
-    LastFind := Count-1;
-    goto found;
-  end
-  else
-    result := nil;
-end;
-
-procedure TRawByteStringGroup.FindAsText(aPosition, aLength: integer; out aText: RawByteString);
-var P: PRawByteStringGroupValue;
-begin
-  P := Find(aPosition);
-  if P=nil then
-    exit;
-  dec(aPosition,P^.Position);
-  if (aPosition=0) and (length(P^.Value)=aLength) then
-    aText := P^.Value else // direct return if not yet compacted
-    if aLength-aPosition<=length(P^.Value) then
-      SetString(aText,PAnsiChar(@PByteArray(P^.Value)[aPosition]),aLength);
-end;
-
-function TRawByteStringGroup.FindAsText(aPosition, aLength: integer): RawByteString;
-begin
-  FindAsText(aPosition,aLength,result);
-end;
-
-{$ifndef NOVARIANTS}
-procedure TRawByteStringGroup.FindAsVariant(aPosition, aLength: integer; out aDest: variant);
-var tmp: RawByteString;
-begin
-  tmp := FindAsText(aPosition,aLength);
-  if tmp <> '' then
-    RawUTF8ToVariant(tmp,aDest);
-end;
-{$endif NOVARIANTS}
-
-procedure TRawByteStringGroup.FindWrite(aPosition, aLength: integer;
-  W: TTextWriter; Escape: TTextWriterKind; TrailingCharsToIgnore: integer);
-var P: pointer;
-begin
-  P := Find(aPosition,aLength);
-  if P<>nil then
-    W.Add(PUTF8Char(P)+TrailingCharsToIgnore,aLength-TrailingCharsToIgnore,Escape);
-end;
-
-procedure TRawByteStringGroup.FindWriteBase64(aPosition, aLength: integer;
-  W: TTextWriter; withMagic: boolean);
-var P: pointer;
-begin
-  P := Find(aPosition,aLength);
-  if P<>nil then
-    W.WrBase64(P,aLength,withMagic);
-end;
-
-procedure TRawByteStringGroup.FindMove(aPosition, aLength: integer; aDest: pointer);
-var P: pointer;
-begin
-  P := Find(aPosition,aLength);
-  if P<>nil then
-    MoveFast(P^,aDest^,aLength);
-end;
-
-
-{ ************  Security classes ************************** }
-
-{ TSynAuthenticationAbstract }
-
-constructor TSynAuthenticationAbstract.Create;
-begin
-  fSafe.Init;
-  fTokenSeed := Random32;
-  fSessionGenerator := abs(fTokenSeed*PPtrInt(self)^);
-end;
-
-destructor TSynAuthenticationAbstract.Destroy;
-begin
-  fSafe.Done;
-  inherited;
-end;
-
-class function TSynAuthenticationAbstract.ComputeHash(Token: Int64;
-  const UserName,PassWord: RawUTF8): cardinal;
-begin // rough authentication - better than nothing
-  result := length(UserName);
-  result := crc32c(crc32c(crc32c(result,@Token,SizeOf(Token)),
-    pointer(UserName),result),pointer(Password),length(PassWord));
-end;
-
-function TSynAuthenticationAbstract.ComputeCredential(previous: boolean;
-  const UserName,PassWord: RawUTF8): cardinal;
-var tok: Int64;
-begin
-  tok := GetTickCount64 div 10000;
-  if previous then
-    dec(tok);
-  result := ComputeHash(tok xor fTokenSeed,UserName,PassWord);
-end;
-
-function TSynAuthenticationAbstract.CurrentToken: Int64;
-begin
-  result := (GetTickCount64 div 10000) xor fTokenSeed;
-end;
-
-procedure TSynAuthenticationAbstract.AuthenticateUser(const aName, aPassword: RawUTF8);
-begin
-  raise ESynException.CreateFmt('%.AuthenticateUser() is not implemented',[self]);
-end;
-
-procedure TSynAuthenticationAbstract.DisauthenticateUser(const aName: RawUTF8);
-begin
-  raise ESynException.CreateFmt('%.DisauthenticateUser() is not implemented',[self]);
-end;
-
-function TSynAuthenticationAbstract.CreateSession(const User: RawUTF8; Hash: cardinal): integer;
-var password: RawUTF8;
-begin
-  result := 0;
-  fSafe.Lock;
-  try
-    // check the credentials
-    if not GetPassword(User,password) then
-      exit;
-    if (ComputeCredential(false,User,password)<>Hash) and
-       (ComputeCredential(true,User,password)<>Hash) then
-      exit;
-    // create the new session
-    repeat
-      result := fSessionGenerator;
-      inc(fSessionGenerator);
-    until result<>0;
-    AddSortedInteger(fSessions,fSessionsCount,result);
-  finally
-    fSafe.UnLock;
-  end;
-end;
-
-function TSynAuthenticationAbstract.SessionExists(aID: integer): boolean;
-begin
-  fSafe.Lock;
-  try
-    result := FastFindIntegerSorted(pointer(fSessions),fSessionsCount-1,aID)>=0;
-  finally
-    fSafe.UnLock;
-  end;
-end;
-
-procedure TSynAuthenticationAbstract.RemoveSession(aID: integer);
-var i: integer;
-begin
-  fSafe.Lock;
-  try
-    i := FastFindIntegerSorted(pointer(fSessions),fSessionsCount-1,aID);
-    if i>=0 then
-      DeleteInteger(fSessions,fSessionsCount,i);
-  finally
-    fSafe.UnLock;
-  end;
-end;
-
-
-{ TSynAuthentication }
-
-constructor TSynAuthentication.Create(const aUserName,aPassword: RawUTF8);
-begin
-  inherited Create;
-  fCredentials.Init(true);
-  if aUserName<>'' then
-    AuthenticateUser(aUserName,aPassword);
-end;
-
-function TSynAuthentication.GetPassword(const UserName: RawUTF8;
-  out Password: RawUTF8): boolean;
-var i: integer;
-begin // caller did protect this method via fSafe.Lock
-  i := fCredentials.Find(UserName);
-  if i<0 then begin
-    result := false;
-    exit;
-  end;
-  password := fCredentials.List[i].Value;
-  result := true;
-end;
-
-function TSynAuthentication.GetUsersCount: integer;
-begin
-  fSafe.Lock;
-  try
-    result := fCredentials.Count;
-  finally
-    fSafe.UnLock;
-  end;
-end;
-
-procedure TSynAuthentication.AuthenticateUser(const aName, aPassword: RawUTF8);
-begin
-  fSafe.Lock;
-  try
-    fCredentials.Add(aName,aPassword);
-  finally
-    fSafe.UnLock;
-  end;
-end;
-
-procedure TSynAuthentication.DisauthenticateUser(const aName: RawUTF8);
-begin
-  fSafe.Lock;
-  try
-    fCredentials.Delete(aName);
-  finally
-    fSafe.UnLock;
-  end;
-end;
-
-
-{ ************ Database types and classes ************************** }
-
-{$WARNINGS OFF} // yes, we know there will be dead code below: we rely on it ;)
-
-function IsZero(const Fields: TSQLFieldBits): boolean;
-var f: TPtrIntArray absolute Fields;
-begin
-  {$ifdef CPU64}
-  if MAX_SQLFIELDS=64 then
-    result := (f[0]=0) else
-  if MAX_SQLFields=128 then
-    result := (f[0]=0) and (f[1]=0) else
-  if MAX_SQLFields=192 then
-    result := (f[0]=0) and (f[1]=0) and (f[2]=0) else
-  if MAX_SQLFields=256 then
-    result := (f[0]=0) and (f[1]=0) and (f[2]=0) and (f[3]=0) else
-  {$else}
-  if MAX_SQLFIELDS=64 then
-    result := (f[0]=0) and (f[1]=0) else
-  if MAX_SQLFields=128 then
-    result := (f[0]=0) and (f[1]=0) and (f[2]=0) and (f[3]=0) else
-  if MAX_SQLFields=192 then
-    result := (f[0]=0) and (f[1]=0) and (f[2]=0) and (f[3]=0)
-          and (f[4]=0) and (f[5]=0) else
-  if MAX_SQLFields=256 then
-    result := (f[0]=0) and (f[1]=0) and (f[2]=0) and (f[3]=0)
-          and (f[4]=0) and (f[5]=0) and (f[6]=0) and (f[7]=0) else
-  {$endif}
-    result := IsZero(@Fields,SizeOf(Fields))
-end;
-
-function IsEqual(const A,B: TSQLFieldBits): boolean;
-var a_: TPtrIntArray absolute A;
-    b_: TPtrIntArray absolute B;
-begin
-  {$ifdef CPU64}
-  if MAX_SQLFIELDS=64 then
-    result := (a_[0]=b_[0]) else
-  if MAX_SQLFields=128 then
-    result := (a_[0]=b_[0]) and (a_[1]=b_[1]) else
-  if MAX_SQLFields=192 then
-    result := (a_[0]=b_[0]) and (a_[1]=b_[1]) and (a_[2]=b_[2]) else
-  if MAX_SQLFields=256 then
-    result := (a_[0]=b_[0]) and (a_[1]=b_[1]) and (a_[2]=b_[2]) and (a_[3]=b_[3]) else
-  {$else}
-  if MAX_SQLFIELDS=64 then
-    result := (a_[0]=b_[0]) and (a_[1]=b_[1]) else
-  if MAX_SQLFields=128 then
-    result := (a_[0]=b_[0]) and (a_[1]=b_[1]) and (a_[2]=b_[2]) and (a_[3]=b_[3]) else
-  if MAX_SQLFields=192 then
-    result := (a_[0]=b_[0]) and (a_[1]=b_[1]) and (a_[2]=b_[2]) and (a_[3]=b_[3])
-          and (a_[4]=b_[4]) and (a_[5]=b_[5]) else
-  if MAX_SQLFields=256 then
-    result := (a_[0]=b_[0]) and (a_[1]=b_[1]) and (a_[2]=b_[2]) and (a_[3]=b_[3])
-          and (a_[4]=b_[4]) and (a_[5]=b_[5]) and (a_[6]=b_[6]) and (a_[7]=b_[7]) else
-  {$endif}
-    result := CompareMemFixed(@A,@B,SizeOf(TSQLFieldBits))
-end;
-
-procedure FillZero(var Fields: TSQLFieldBits);
-begin
-  if MAX_SQLFIELDS=64 then
-    PInt64(@Fields)^ := 0 else
-  if MAX_SQLFields=128 then begin
-    PInt64Array(@Fields)^[0] := 0;
-    PInt64Array(@Fields)^[1] := 0;
-  end else
-  if MAX_SQLFields=192 then begin
-    PInt64Array(@Fields)^[0] := 0;
-    PInt64Array(@Fields)^[1] := 0;
-    PInt64Array(@Fields)^[2] := 0;
-  end else
-  if MAX_SQLFields=256 then begin
-    PInt64Array(@Fields)^[0] := 0;
-    PInt64Array(@Fields)^[1] := 0;
-    PInt64Array(@Fields)^[2] := 0;
-    PInt64Array(@Fields)^[3] := 0;
-  end else
-    FillZero(Fields,SizeOf(Fields));
-end;
-
-{$WARNINGS ON}
-
-procedure FieldBitsToIndex(const Fields: TSQLFieldBits; var Index: TSQLFieldIndexDynArray;
-  MaxLength,IndexStart: integer);
-var i,n: integer;
-    sets: array[0..MAX_SQLFIELDS-1] of TSQLFieldIndex; // to avoid memory reallocation
-begin
-  n := 0;
-  for i := 0 to MaxLength-1 do
-    if i in Fields then begin
-      sets[n] := i;
-      inc(n);
-    end;
-  SetLength(Index,IndexStart+n);
-  for i := 0 to n-1 do
-    Index[IndexStart+i] := sets[i];
-end;
-
-function FieldBitsToIndex(const Fields: TSQLFieldBits;
-  MaxLength: integer): TSQLFieldIndexDynArray;
-begin
-  FieldBitsToIndex(Fields,result,MaxLength);
-end;
-
-function AddFieldIndex(var Indexes: TSQLFieldIndexDynArray; Field: integer): integer;
-begin
-  result := length(Indexes);
-  SetLength(Indexes,result+1);
-  Indexes[result] := Field;
-end;
-
-function SearchFieldIndex(var Indexes: TSQLFieldIndexDynArray; Field: integer): integer;
-begin
-  for result := 0 to length(Indexes)-1 do
-    if Indexes[result]=Field then
-      exit;
-  result := -1;
-end;
-
-procedure FieldIndexToBits(const Index: TSQLFieldIndexDynArray; var Fields: TSQLFieldBits);
-var i: integer;
-begin
-  FillcharFast(Fields,SizeOf(Fields),0);
-  for i := 0 to Length(Index)-1 do
-    if Index[i]>=0 then
-      include(Fields,Index[i]);
-end;
-
-function FieldIndexToBits(const Index: TSQLFieldIndexDynArray): TSQLFieldBits;
-begin
-  FieldIndexToBits(Index,result);
-end;
-
-function DateToSQL(Date: TDateTime): RawUTF8;
-begin
-  if Date<=0 then
-    result := '' else begin
-    SetLength(result,13);
-    PCardinal(pointer(result))^ := JSON_SQLDATE_MAGIC;
-    DateToIso8601PChar(Date,PUTF8Char(pointer(result))+3,True);
-  end;
-end;
-
-function DateToSQL(Year,Month,Day: Cardinal): RawUTF8;
-begin
-  if (Year=0) or (Month-1>11) or (Day-1>30) then
-    result := '' else begin
-    SetLength(result,13);
-    PCardinal(pointer(result))^ := JSON_SQLDATE_MAGIC;
-    DateToIso8601PChar(PUTF8Char(pointer(result))+3,True,Year,Month,Day);
-  end;
-end;
-
-var
-  JSON_SQLDATE_MAGIC_TEXT: RawUTF8;
-
-function DateTimeToSQL(DT: TDateTime; WithMS: boolean): RawUTF8;
-begin
-  if DT<=0 then
-    result := '' else begin
-    if frac(DT)=0 then
-      result := JSON_SQLDATE_MAGIC_TEXT+DateToIso8601(DT,true) else
-    if trunc(DT)=0 then
-      result := JSON_SQLDATE_MAGIC_TEXT+TimeToIso8601(DT,true,'T',WithMS) else
-      result := JSON_SQLDATE_MAGIC_TEXT+DateTimeToIso8601(DT,true,'T',WithMS);
-  end;
-end;
-
-function TimeLogToSQL(const Timestamp: TTimeLog): RawUTF8;
-begin
-  if Timestamp=0 then
-    result := '' else
-    result := JSON_SQLDATE_MAGIC_TEXT+PTimeLogBits(@Timestamp)^.Text(true);
-end;
-
-function Iso8601ToSQL(const S: RawByteString): RawUTF8;
-begin
-  if IsIso8601(pointer(S),length(S)) then
-    result := JSON_SQLDATE_MAGIC_TEXT+S else
-    result := '';
-end;
-
-function SQLToDateTime(const ParamValueWithMagic: RawUTF8): TDateTime;
-begin
-  result := Iso8601ToDateTimePUTF8Char(PUTF8Char(pointer(ParamValueWithMagic))+3,
-    length(ParamValueWithMagic)-3);
-end;
-
-const
-  NULL_LOW  = ord('n')+ord('u')shl 8+ord('l')shl 16+ord('l')shl 24;
-
-function SQLParamContent(P: PUTF8Char; out ParamType: TSQLParamType; out ParamValue: RawUTF8;
-  out wasNull: boolean): PUTF8Char;
-var PBeg: PAnsiChar;
-    L: integer;
-    c: cardinal;
-begin
-  ParamType := sptUnknown;
-  wasNull := false;
-  result := nil;
-  if P=nil then
-    exit;
-  while (P^<=' ') and (P^<>#0) do inc(P);
-  case P^ of
-  '''','"': begin
-    P := UnQuoteSQLStringVar(P,ParamValue);
-    if P=nil then
-      exit; // not a valid quoted string (e.g. unexpected end in middle of it)
-    ParamType := sptText;
-    L := length(ParamValue)-3;
-    if L>0 then begin
-      c := PInteger(ParamValue)^ and $00ffffff;
-      if c=JSON_BASE64_MAGIC then begin
-        // ':("\uFFF0base64encodedbinary"):' format -> decode
-        Base64MagicDecode(ParamValue); // wrapper function to avoid temp. string
-        ParamType := sptBlob;
-      end else
-      if (c=JSON_SQLDATE_MAGIC) and // handle ':("\uFFF112012-05-04"):' format
-         IsIso8601(PUTF8Char(pointer(ParamValue))+3,L) then begin
-        ParamValue := copy(ParamValue,4,L); // return ISO-8601 text
-        ParamType := sptDateTime;           // identified as Date/Time
-      end;
-    end;
-  end;
-  '-','+','0'..'9': begin // allow 0 or + in SQL
-    // check if P^ is a true numerical value
-    PBeg := pointer(P);
-    ParamType := sptInteger;
-    repeat inc(P) until not (P^ in ['0'..'9']); // check digits
-    if P^='.' then begin
-      inc(P);
-      if P^ in ['0'..'9'] then begin
-        ParamType := sptFloat;
-        repeat inc(P) until not (P^ in ['0'..'9']); // check fractional digits
-      end else begin
-        ParamType := sptUnknown; // invalid '23023.' value
-        exit;
-      end;
-    end;
-    if byte(P^) and $DF=ord('E') then begin
-      ParamType := sptFloat;
-      inc(P);
-      if P^='+' then inc(P) else
-      if P^='-' then inc(P);
-      while P^ in ['0'..'9'] do inc(P);
-    end;
-    FastSetString(ParamValue,PBeg,P-PBeg);
-  end;
-  'n':
-  if PInteger(P)^=NULL_LOW then begin
-    inc(P,4);
-    wasNull := true;
-  end else
-    exit; // invalid content (only :(null): expected)
-  else
-    exit; // invalid content
-  end;
-  while (P^<=' ') and (P^<>#0) do inc(P);
-  if PWord(P)^<>Ord(')')+Ord(':')shl 8 then
-    // we expect finishing with P^ pointing at '):'
-    ParamType := sptUnknown else
-    // result<>nil only if value content in P^
-    result := P+2;
-end;
-
-function ExtractInlineParameters(const SQL: RawUTF8;
-  var Types: TSQLParamTypeDynArray; var Values: TRawUTF8DynArray;
-  var maxParam: integer; var Nulls: TSQLFieldBits): RawUTF8;
-var ppBeg: integer;
-    P, Gen: PUTF8Char;
-    wasNull: boolean;
-begin
-  maxParam := 0;
-  FillcharFast(Nulls,SizeOf(Nulls),0);
-  ppBeg := PosEx(RawUTF8(':('),SQL,1);
-  if (ppBeg=0) or (PosEx(RawUTF8('):'),SQL,ppBeg+2)=0) then begin
-    // SQL code with no valid :(...): internal parameters -> leave maxParam=0
-    result := SQL;
-    exit;
-  end;
-  FastSetString(result,pointer(SQL),length(SQL));
-  // compute GenericSQL from SQL, converting :(...): into ?
-  Gen := PUTF8Char(pointer(result))+ppBeg-1; // Gen^ just before :(
-  P := PUTF8Char(pointer(SQL))+ppBeg+1; // P^ just after :(
-  repeat
-    Gen^ := '?'; // replace :(...): by ?
-    inc(Gen);
-    if length(Values)<=maxParam then
-      SetLength(Values,maxParam+16);
-    if length(Types)<=maxParam then
-      SetLength(Types,maxParam+64);
-    P := SQLParamContent(P,Types[maxParam],Values[maxParam],wasNull);
-    if P=nil then begin
-      maxParam := 0;
-      result := SQL;
-      exit; // any invalid parameter -> try direct SQL
-    end;
-    if wasNull then
-      include(Nulls,maxParam);
-    while (P^<>#0) and (PWord(P)^<>Ord(':')+Ord('(')shl 8) do begin
-      Gen^ := P^;
-      inc(Gen);
-      inc(P);
-    end;
-    if P^=#0 then
-      Break;
-    inc(P,2);
-    inc(maxParam);
-  until false;
-  // return the correct SQL statement, with params in Values[]
-  SetLength(result,Gen-pointer(result));
-  inc(maxParam);
-end;
-
-
-{$ifndef NOVARIANTS}
-
-procedure VariantToSQLVar(const Input: variant; var temp: RawByteString;
-  var Output: TSQLVar);
-var wasString: boolean;
-begin
-  Output.Options := [];
-  with TVarData(Input) do
-  if VType=varVariant or varByRef then
-    VariantToSQLVar(PVariant(VPointer)^,temp,Output) else
-  case VType of
-  varEmpty, varNull:
-    Output.VType := ftNull;
-  varByte: begin
-    Output.VType := ftInt64;
-    Output.VInt64 := VByte;
-  end;
-  varInteger: begin
-    Output.VType := ftInt64;
-    Output.VInt64 := VInteger;
-  end;
-  {$ifndef DELPHI5OROLDER}
-  varLongWord: begin
-    Output.VType := ftInt64;
-    Output.VInt64 := VLongWord;
-  end;
-  {$endif}
-  varWord64, varInt64: begin
-    Output.VType := ftInt64;
-    Output.VInt64 := VInt64;
-  end;
-  varSingle: begin
-    Output.VType := ftDouble;
-    Output.VDouble := VSingle;
-  end;
-  varDouble: begin // varDate would be converted into ISO8601 by VariantToUTF8()
-    Output.VType := ftDouble;
-    Output.VDouble := VDouble;
-  end;
-  varCurrency: begin
-    Output.VType := ftCurrency;
-    Output.VInt64 := VInt64;
-  end;
-  varString: begin // assume RawUTF8
-    Output.VType := ftUTF8;
-    Output.VText := VPointer;
-  end;
-  else // handle less current cases
-    if VariantToInt64(Input,Output.VInt64) then
-      Output.VType := ftInt64 else begin
-      VariantToUTF8(Input,RawUTF8(temp),wasString);
-      if wasString then begin
-        Output.VType := ftUTF8;
-        Output.VText := pointer(temp);
-      end else
-        Output.VType := ftNull;
-    end;
-  end;
-end;
-
-function VariantTypeToSQLDBFieldType(const V: Variant): TSQLDBFieldType;
-var tmp: TVarData;
-begin
-  with TVarData(V) do
-  case VType of
-  varEmpty:
-    result := ftUnknown;
-  varNull:
-    result := ftNull;
-  {$ifndef DELPHI5OROLDER}varShortInt, varWord, varLongWord,{$endif}
-  varSmallInt, varByte, varBoolean, varInteger, varInt64, varWord64:
-    result := ftInt64;
-  varSingle,varDouble:
-    result := ftDouble;
-  varDate:
-    result := ftDate;
-  varCurrency:
-    result := ftCurrency;
-  varString:
-    if (VString<>nil) and (PCardinal(VString)^ and $ffffff=JSON_BASE64_MAGIC) then
-      result := ftBlob else
-      result := ftUTF8;
-  else
-  if SetVariantUnRefSimpleValue(V,tmp) then
-    result := VariantTypeToSQLDBFieldType(variant(tmp)) else
-    result := ftUTF8;
-  end;
-end;
-
-{$endif NOVARIANTS}
-
-{ TJSONWriter }
-
-procedure TJSONWriter.CancelAllVoid;
-const VOIDARRAY: PAnsiChar = '[]'#10;
-      VOIDFIELD: PAnsiChar = '{"FieldCount":0}';
-begin
-  CancelAll; // rewind JSON
-  if fExpand then // same as sqlite3_get_table()
-    inc(fTotalFileSize,fStream.Write(VOIDARRAY^,3)) else
-    inc(fTotalFileSize,fStream.Write(VOIDFIELD^,16));
-end;
-
-constructor TJSONWriter.Create(aStream: TStream; Expand, withID: boolean;
-  const Fields: TSQLFieldBits; aBufSize: integer);
-begin
-  Create(aStream,Expand,withID,FieldBitsToIndex(Fields),aBufSize);
-end;
-
-constructor TJSONWriter.Create(aStream: TStream; Expand, withID: boolean;
-  const Fields: TSQLFieldIndexDynArray; aBufSize: integer);
-begin
-  if aStream=nil then
-    CreateOwnedStream else
-    inherited Create(aStream,aBufSize);
-  fExpand := Expand;
-  fWithID := withID;
-  fFields := Fields;
-end;
-
-procedure TJSONWriter.AddColumns(aKnownRowsCount: integer);
-var i: integer;
-begin
-  if fExpand then begin
-    if twoForceJSONExtended in CustomOptions then
-      for i := 0 to High(ColNames) do
-        ColNames[i] := ColNames[i]+':' else
-      for i := 0 to High(ColNames) do
-        ColNames[i] := '"'+ColNames[i]+'":';
-  end else begin
-    AddShort('{"fieldCount":');
-    Add(length(ColNames));
-    if aKnownRowsCount>0 then begin
-      AddShort(',"rowCount":');
-      Add(aKnownRowsCount);
-    end;
-    AddShort(',"values":["');
-    // first row is FieldNames
-    for i := 0 to High(ColNames) do begin
-      AddString(ColNames[i]);
-      AddNoJSONEscape(PAnsiChar('","'),3);
-    end;
-    CancelLastChar('"');
-    fStartDataPosition := fStream.Position+(B-fTempBuf);
-     // B := buf-1 at startup -> need ',val11' position in
-     // "values":["col1","col2",val11,' i.e. current pos without the ','
-  end;
-end;
-
-procedure TJSONWriter.ChangeExpandedFields(aWithID: boolean;
-  const aFields: TSQLFieldIndexDynArray);
-begin
-  if not Expand then
-    raise ESynException.CreateUTF8(
-      '%.ChangeExpandedFields() called with Expanded=false',[self]);
-  fWithID := aWithID;
-  fFields := aFields;
-end;
-
-procedure TJSONWriter.EndJSONObject(aKnownRowsCount,aRowsCount: integer;
-  aFlushFinal: boolean);
-begin
-  CancelLastComma; // cancel last ','
-  Add(']');
-  if not fExpand then begin
-    if aKnownRowsCount=0 then begin
-      AddShort(',"rowCount":');
-      Add(aRowsCount);
-    end;
-    Add('}');
-  end;
-  Add(#10);
-  if aFlushFinal then
-    FlushFinal;
-end;
-
-procedure TJSONWriter.TrimFirstRow;
-var P, PBegin, PEnd: PUTF8Char;
-begin
-  if (self=nil) or not fStream.InheritsFrom(TMemoryStream) or
-     fExpand or (fStartDataPosition=0) then
-    exit;
-  // go to begin of first row
-  FlushToStream; // we need the data to be in fStream memory
-  // PBegin^=val11 in { "fieldCount":1,"values":["col1","col2",val11,"val12",val21,..] }
-  PBegin := TMemoryStream(fStream).Memory;
-  PEnd := PBegin+fStream.Position;
-  PEnd^ := #0; // mark end of current values
-  inc(PBegin,fStartDataPosition+1); // +1 to include ',' of ',val11'
-  // jump to end of first row
-  P := GotoNextJSONItem(PBegin,length(ColNames));
-  if P=nil then exit; // unexpected end
-  // trim first row data
-  if P^<>#0 then
-    MoveFast(P^,PBegin^,PEnd-P); // erase content
-  fStream.Seek(PBegin-P,soCurrent); // adjust current stream position
-end;
-
-
-{ ************ Expression Search Engine ************************** }
-
-function ToText(r: TExprParserResult): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TExprParserResult), ord(r));
-end;
-
-function ToUTF8(r: TExprParserResult): RawUTF8;
-begin
-  result := UnCamelCase(TrimLeftLowerCaseShort(ToText(r)));
-end;
-
-
-{ TExprNode }
-
-function TExprNode.Append(node: TExprNode): boolean;
-begin
-  result := node <> nil;
-  if result then
-    Last.fNext := node;
-end;
-
-constructor TExprNode.Create(nodeType: TExprNodeType);
-begin
-  inherited Create;
-  fNodeType := nodeType;
-end;
-
-destructor TExprNode.Destroy;
-begin
-  fNext.Free;
-  inherited Destroy;
-end;
-
-function TExprNode.Last: TExprNode;
-begin
-  result := self;
-  while result.Next <> nil do
-    result := result.Next;
-end;
-
-
-{ TParserAbstract }
-
-constructor TParserAbstract.Create;
-begin
-  inherited Create;
-  Initialize;
-end;
-
-destructor TParserAbstract.Destroy;
-begin
-  Clear;
-  inherited Destroy;
-end;
-
-procedure TParserAbstract.Clear;
-begin
-  fWordCount := 0;
-  fWords := nil;
-  fExpression := '';
-  FreeAndNil(fFirstNode);
-end;
-
-function TParserAbstract.ParseExpr: TExprNode;
-begin
-  result := ParseFactor;
-  ParseNextCurrentWord;
-  if (fCurrentWord = '') or (fCurrentWord = ')') then
-    exit;
-  if IdemPropNameU(fCurrentWord, fAndWord) then begin // w1 & w2 = w1 AND w2
-    ParseNextCurrentWord;
-    if result.Append(ParseExpr) then
-      result.Append(TExprNode.Create(entAnd));
-    exit;
-  end
-  else if IdemPropNameU(fCurrentWord, fOrWord) then begin // w1 + w2 = w1 OR w2
-    ParseNextCurrentWord;
-    if result.Append(ParseExpr) then
-      result.Append(TExprNode.Create(entOr));
-    exit;
-  end
-  else if fNoWordIsAnd and result.Append(ParseExpr) then // 'w1 w2' = 'w1 & w2'
-    result.Append(TExprNode.Create(entAnd));
-end;
-
-function TParserAbstract.ParseFactor: TExprNode;
-begin
-  if fCurrentError <> eprSuccess then
-    result := nil
-  else if IdemPropNameU(fCurrentWord, fNotWord) then begin
-    ParseNextCurrentWord;
-    result := ParseFactor;
-    if fCurrentError <> eprSuccess then
-      exit;
-    result.Append(TExprNode.Create(entNot));
-  end
-  else
-    result := ParseTerm;
-end;
-
-function TParserAbstract.ParseTerm: TExprNode;
-begin
-  result := nil;
-  if fCurrentError <> eprSuccess then
-    exit;
-  if fCurrentWord = '(' then begin
-    ParseNextCurrentWord;
-    result := ParseExpr;
-    if fCurrentError <> eprSuccess then
-      exit;
-    if fCurrentWord <> ')' then begin
-      FreeAndNil(result);
-      fCurrentError := eprMissingParenthesis;
-    end;
-  end
-  else if fCurrentWord = '' then begin
-    result := nil;
-    fCurrentError := eprMissingFinalWord;
-  end
-  else
-    try // calls meta-class overriden constructor
-      result := fWordClass.Create(self, fCurrentWord);
-      fCurrentError := TExprNodeWordAbstract(result).ParseWord;
-      if fCurrentError <> eprSuccess then begin
-        FreeAndNil(result);
-        exit;
-      end;
-      SetLength(fWords, fWordCount + 1);
-      fWords[fWordCount] := TExprNodeWordAbstract(result);
-      inc(fWordCount);
-    except
-      FreeAndNil(result);
-      fCurrentError := eprInvalidExpression;
-    end;
-end;
-
-function TParserAbstract.Parse(const aExpression: RawUTF8): TExprParserResult;
-var
-  depth: integer;
-  n: TExprNode;
-begin
-  Clear;
-  fCurrentError := eprSuccess;
-  fCurrent := pointer(aExpression);
-  ParseNextCurrentWord;
-  if fCurrentWord = '' then begin
-    result := eprNoExpression;
-    exit;
-  end;
-  fFirstNode := ParseExpr;
-  result := fCurrentError;
-  if result = eprSuccess then begin
-    depth := 0;
-    n := fFirstNode;
-    while n <> nil do begin
-      case n.NodeType of
-        entWord: begin
-          inc(depth);
-          if depth > high(fFoundStack) then begin
-            result := eprTooManyParenthesis;
-            break;
-          end;
-        end;
-        entOr, entAnd:
-          dec(depth);
-      end;
-      n := n.Next;
-    end;
-  end;
-  if result = eprSuccess then
-    fExpression := aExpression
-  else
-    Clear;
-  fCurrent := nil;
-end;
-
-class function TParserAbstract.ParseError(const aExpression: RawUTF8): RawUTF8;
-var
-  parser: TParserAbstract;
-  res: TExprParserResult;
-begin
-  parser := Create;
-  try
-    res := parser.Parse(aExpression);
-    if res = eprSuccess then
-      result := ''
-    else
-      result := ToUTF8(res);
-  finally
-    parser.Free;
-  end;
-end;
-
-function TParserAbstract.Execute: boolean;
-var
-  n: TExprNode;
-  st: PBoolean;
-begin // code below compiles very efficiently on FPC/x86-64
-  st := @fFoundStack;
-  n := fFirstNode;
-  repeat
-    case n.NodeType of
-      entWord: begin
-        st^ := TExprNodeWordAbstract(n).fFound;
-        inc(st); // see eprTooManyParenthesis above to avoid buffer overflow
-      end;
-      entNot:
-        PAnsiChar(st)[-1] := AnsiChar(ord(PAnsiChar(st)[-1]) xor 1);
-      entOr: begin
-        dec(st);
-        PAnsiChar(st)[-1] := AnsiChar(st^ or boolean(PAnsiChar(st)[-1]));
-      end; { TODO : optimize TExprParser OR when left member is already TRUE }
-      entAnd: begin
-        dec(st);
-        PAnsiChar(st)[-1] := AnsiChar(st^ and boolean(PAnsiChar(st)[-1]));
-      end;
-    end;
-    n := n.Next;
-  until n = nil;
-  result := boolean(PAnsiChar(st)[-1]);
-end;
-
-
-{ TExprParserAbstract }
-
-procedure TExprParserAbstract.Initialize;
-begin
-  fAndWord := '&';
-  fOrWord := '+';
-  fNotWord := '-';
-  fNoWordIsAnd := true;
-end;
-
-procedure TExprParserAbstract.ParseNextCurrentWord;
-var
-  P: PUTF8Char;
-begin
-  fCurrentWord := '';
-  P := fCurrent;
-  if P = nil then
-    exit;
-  while P^ in [#1..' '] do
-    inc(P);
-  if P^ = #0 then
-    exit;
-  if P^ in PARSER_STOPCHAR then begin
-    FastSetString(fCurrentWord, P, 1);
-    fCurrent := P + 1;
-  end
-  else begin
-    fCurrent := P;
-    ParseNextWord;
-  end;
-end;
-
-procedure TExprParserAbstract.ParseNextWord;
-const
-  STOPCHAR = PARSER_STOPCHAR + [#0, ' '];
-var
-  P: PUTF8Char;
-begin
-  P := fCurrent;
-  while not(P^ in STOPCHAR) do
-    inc(P);
-  FastSetString(fCurrentWord, fCurrent, P - fCurrent);
-  fCurrent := P;
-end;
-
-
-{ TExprNodeWordAbstract }
-
-constructor TExprNodeWordAbstract.Create(aOwner: TParserAbstract; const aWord: RawUTF8);
-begin
-  inherited Create(entWord);
-  fWord := aWord;
-  fOwner := aOwner;
-end;
-
-
-{ TExprParserMatchNode }
-
-type
-  TExprParserMatchNode = class(TExprNodeWordAbstract)
-  protected
-    fMatch: TMatch;
-    function ParseWord: TExprParserResult; override;
-  end;
-  PExprParserMatchNode = ^TExprParserMatchNode;
-
-function TExprParserMatchNode.ParseWord: TExprParserResult;
-begin
-  fMatch.Prepare(fWord, (fOwner as TExprParserMatch).fCaseSensitive, {reuse=}true);
-  result := eprSuccess;
-end;
-
-
-{ TExprParserMatch }
-
-constructor TExprParserMatch.Create(aCaseSensitive: boolean);
-begin
-  inherited Create;
-  fCaseSensitive := aCaseSensitive;
-end;
-
-procedure TExprParserMatch.Initialize;
-begin
-  inherited Initialize;
-  fWordClass := TExprParserMatchNode;
-end;
-
-function TExprParserMatch.Search(const aText: RawUTF8): boolean;
-begin
-  result := Search(pointer(aText), length(aText));
-end;
-
-function TExprParserMatch.Search(aText: PUTF8Char; aTextLen: PtrInt): boolean;
-const // rough estimation of UTF-8 characters
-  IS_UTF8_WORD = ['0' .. '9', 'A' .. 'Z', 'a' .. 'z', #$80 ..#$ff];
-var
-  P, PEnd: PUTF8Char;
-  n: PtrInt;
-begin
-  P := aText;
-  if (P = nil) or (fWords = nil) then begin
-    result := false;
-    exit;
-  end;
-  if fMatchedLastSet > 0 then begin
-    n := fWordCount;
-    repeat
-      dec(n);
-      fWords[n].fFound := false;
-    until n = 0;
-    fMatchedLastSet := 0;
-  end;
-  PEnd := P + aTextLen;
-  while (P < PEnd) and (fMatchedLastSet < fWordCount) do begin
-    while not(P^ in IS_UTF8_WORD) do begin
-      inc(P);
-      if P = PEnd then 
-        break;
-    end;
-    if P = PEnd then
-      break;
-    aText := P;
-    repeat
-      inc(P);
-    until (P = PEnd) or not(P^ in IS_UTF8_WORD);
-    aTextLen := P - aText;
-    n := fWordCount;
-    repeat
-      dec(n);
-      with TExprParserMatchNode(fWords[n]) do
-        if not fFound and fMatch.Match(aText, aTextLen) then begin
-          fFound := true;
-          inc(fMatchedLastSet);
-        end;
-    until n = 0;
-  end;
-  result := Execute;
-end;
-
-
-
 initialization
   Assert(SizeOf(TSynTableFieldType)=1); // as expected by TSynTableFieldProperties
   Assert(SizeOf(TSynTableFieldOptions)=1);
@@ -8722,9 +6149,5 @@ initialization
   Assert(SizeOf(TSynTableData)=SizeOf(TVarData));
   {$endif NOVARIANTS}
   Assert(SizeOf(THTab)=$40000*3); // 786,432 bytes
-  Assert(SizeOf(TSynUniqueIdentifierBits)=SizeOf(TSynUniqueIdentifier));
-  
-  SetLength(JSON_SQLDATE_MAGIC_TEXT,3);
-  PCardinal(pointer(JSON_SQLDATE_MAGIC_TEXT))^ := JSON_SQLDATE_MAGIC;
 end.
 

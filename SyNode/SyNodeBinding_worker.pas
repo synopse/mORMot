@@ -261,9 +261,8 @@ begin
         Suspended := True;
     end;
     try
-      if not fSMManager.WorkersManager.FIsInDestroyState
-        and fModuleObj.ptr.HasProperty(cx, 'onterminate') then
-          FEng.CallObjectFunction(fModuleObj, 'onterminate', []);
+      if not fSMManager.WorkersManager.FIsInDestroyState then
+        FEng.CallObjectFunction(fModuleObj, 'onterminate', []);
     except
       ;
     end;

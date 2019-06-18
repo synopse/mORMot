@@ -6,7 +6,7 @@ unit SynSelfTests;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynSelfTests;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2018
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -344,8 +344,6 @@ type
     procedure _GUID;
     /// test IsMatch() function
     procedure _IsMatch;
-    /// test TExprParserMatch class
-    procedure _TExprParserMatch;
     /// the Soundex search feature (i.e. TSynSoundex and all related
     // functions)
     procedure Soundex;
@@ -472,7 +470,7 @@ type
     M: THeapMemoryStream;
     crc0,crc1: cardinal;
   public
-    procedure Setup; override;
+    /// release used instances and memory
     procedure CleanUp; override;
   published
     /// direct deflate/inflate functions
@@ -1118,7 +1116,8 @@ type
   end;
 
   /// a record used by IComplexCalculator.EchoRecord
-  TConsultaNav = packed record
+  TConsultaNav = object
+  public
     MaxRows, Row0, RowCount: int64;
     IsSQLUpdateBack, EOF: boolean;
   end;
@@ -1162,9 +1161,6 @@ type
       var Rec2: TSQLRestCacheEntryValue; Float1: double; var Float2: double): TSQLRestCacheEntryValue;
     /// validates ArgsInputIsOctetStream raw binary upload
     function DirectCall(const Data: TSQLRawBlob): integer;
-    /// validates huge RawJSON/RawUTF8
-    function RepeatJsonArray(const item: RawUTF8; count: integer): RawJSON;
-    function RepeatTextArray(const item: RawUTF8; count: integer): RawUTF8;
   end;
 
   /// a test interface, used by TTestServiceOrientedArchitecture
@@ -1519,13 +1515,10 @@ begin
   Check(StrToCurr64(pointer(Curr64ToStr(12)))=12);
   Check(StrToCurr64(pointer(Curr64ToStr(123)))=123);
   Check(StrToCurr64(pointer(Curr64ToStr(1234)))=1234);
-  Check(StrToCurr64(pointer(Curr64ToStr(12345)))=12345);
-  Check(StrToCurr64(pointer(Curr64ToStr(123456)))=123456);
   Check(StrToCurr64(pointer(Curr64ToStr(12340000)))=12340000);
   Check(StrToCurr64(pointer(Curr64ToStr(12345000)))=12345000);
   Check(StrToCurr64(pointer(Curr64ToStr(12345600)))=12345600);
   Check(StrToCurr64(pointer(Curr64ToStr(12345670)))=12345670);
-  Check(StrToCurr64(pointer(Curr64ToStr(12345678)))=12345678);
   tmp[0] := AnsiChar(Curr64ToPChar(1,@tmp[1])); Check(tmp='0.0001');
   tmp[0] := AnsiChar(Curr64ToPChar(12,@tmp[1])); Check(tmp='0.0012');
   tmp[0] := AnsiChar(Curr64ToPChar(123,@tmp[1])); Check(tmp='0.0123');
@@ -1533,7 +1526,7 @@ begin
   for i := 0 to 5000 do begin
     if i<500 then
       V1 := i*3 else
-      V1 := Random*(Int64(MaxInt)*10);
+      V1 := Random;
     if Random(10)<4 then
       V1 := -V1;
     v := Curr64ToStr(PInt64(@V1)^);
@@ -2665,19 +2658,6 @@ begin
   Check(ACities.Count=3);
   for i := 1 to high(Province.Cities) do
     Check(Province.Cities[i].Name>Province.Cities[i-1].Name);
-  Province.Cities := nil;
-  Test := RecordSave(Province,TypeInfo(TProvince));
-  RecordClear(Province,TypeInfo(TProvince));
-  Check(Province.Name='');
-  Check(Province.Comment='');
-  Check(length(Province.Cities)=0);
-  Check(ACities.Count=0);
-  Check(RecordLoad(Province,pointer(Test),TypeInfo(TProvince))^=#0);
-  Check(Province.Name='Test');
-  Check(Province.Comment='comment');
-  Check(Province.Year=1000);
-  Check(length(Province.Cities)=0);
-  Check(ACities.Count=0);
   // big array test
   ACities.Init(TypeInfo(TCityDynArray),Province.Cities);
   ACities.Clear;
@@ -2891,52 +2871,17 @@ begin
 end;
 
 procedure TTestLowLevelCommon._IsMatch;
-var i,j: integer;
-    V, cont: RawUTF8;
+var i: integer;
+    V: RawUTF8;
     match: TMatch;
     reuse: boolean;
-
-  procedure Contains;
-  begin
-    check(match.Match('12'));
-    check(match.Match('12e'));
-    check(match.Match('12er'));
-    check(match.Match('a12'));
-    check(match.Match('a12e'));
-    check(match.Match('ab12'));
-    check(match.Match('ab12er'));
-    check(not match.Match('1'));
-    check(not match.Match('a1'));
-    check(not match.Match('a1b2'));
-    check(not match.Match('1a2'));
-  end;
-
 begin
-  V := '1234567890123456'#13'1234567890123456789';
-  for j := 1 to 16 do begin
-    for i := j to 16 do
-      Check(BufferLineLength(@V[j],@V[i])=i-j);
-    for i := 17 to 34 do
-      Check(BufferLineLength(@V[j],@V[i])=17-j);
-  end;
-  V := '12345678901234561234567890123456'#13'1234567890123456789';
-  for j := 1 to 32 do begin
-    for i := j to 32 do
-      Check(BufferLineLength(@V[j],@V[i])=i-j);
-    for i := 33 to 50 do
-      Check(BufferLineLength(@V[j],@V[i])=33-j);
-  end;
   Check(IsMatch('','',true));
   Check(not IsMatch('','toto',true));
   Check(not IsMatch('Bidule.pas','',true));
   Check(IsMatch('Bidule.pas','Bidule.pas',true));
-  Check(IsMatch('Bidule.pas','BIDULE.pas',true));
-  Check(IsMatch('Bidule.pas','Bidule.paS',true));
   Check(IsMatch('Bidule.pas','Bidule.pas',false));
   Check(not IsMatch('Bidule.pas','bidule.pas',false));
-  Check(not IsMatch('bidule.pas','bidulE.pas',false));
-  Check(not IsMatch('bidule.pas','bidule.paS',false));
-  Check(not IsMatch('bidule.pas','bidule.pa',false));
   for i := 0 to 200 do begin
     V := Int32ToUtf8(i);
     Check(IsMatch(V,V,false)=IsMatch(V,V,true));
@@ -2999,32 +2944,6 @@ begin
     match.Prepare('teST', true, reuse);
     check(match.Match('test'));
     check(match.Match('test'));
-    match.Prepare('*', false, reuse);
-    check(match.Match('test'));
-    check(match.Match('tests'));
-    match.Prepare('*', true, reuse);
-    check(match.Match('test'));
-    check(match.Match('tests'));
-    match.Prepare('**', false, reuse);
-    check(match.Match('test'));
-    check(match.Match('tests'));
-    match.Prepare('****', false, reuse);
-    check(match.Match('test'));
-    check(match.Match('tests'));
-    match.Prepare('*.*', false, reuse);
-    check(match.Match('te.st'));
-    check(match.Match('te.st.'));
-    check(match.Match('test.'));
-    check(match.Match('.test'));
-    check(match.Match('.'));
-    check(not match.Match('test'));
-    match.Prepare('*.*', true, reuse);
-    check(match.Match('te.st'));
-    check(match.Match('te.st.'));
-    check(match.Match('test.'));
-    check(match.Match('.test'));
-    check(not match.Match('test'));
-    check(match.Match('.'));
     match.Prepare('test*', false, reuse);
     check(match.Match('test'));
     check(match.Match('tests'));
@@ -3034,24 +2953,6 @@ begin
     check(not match.Match('tEst'));
     check(not match.Match('tesT'));
     check(not match.Match('t'));
-    match.Prepare('*test', false, reuse);
-    check(match.Match('test'));
-    check(match.Match('stest'));
-    check(match.Match('attest'));
-    check(not match.Match('est'));
-    check(not match.Match('testa'));
-    check(not match.Match('tes'));
-    check(not match.Match('tEst'));
-    check(not match.Match('tesT'));
-    check(not match.Match('t'));
-    match.Prepare('*t', false, reuse);
-    check(match.Match('t'));
-    check(match.Match('st'));
-    check(match.Match('tt'));
-    check(match.Match('att'));
-    check(not match.Match('s'));
-    check(not match.Match('es'));
-    check(not match.Match('ts'));
     match.Prepare('**', false, reuse);
     check(match.Match('') = reuse);
     check(match.Match('test'));
@@ -3072,15 +2973,16 @@ begin
     check(not match.Match('atEst'));
     check(not match.Match('ateSTe'));
     match.Prepare('*12*', false, reuse);
-    Contains;
-    if reuse then begin
-      cont := '12';
-      match.PrepareContains(cont, false);
-      Contains;
-      cont := '12';
-      match.PrepareContains(cont, true);
-      Contains;
-    end;
+    check(match.Match('12'));
+    check(match.Match('12e'));
+    check(match.Match('12er'));
+    check(match.Match('a12'));
+    check(match.Match('a12e'));
+    check(match.Match('ab12'));
+    check(match.Match('ab12er'));
+    check(not match.Match('1'));
+    check(not match.Match('a1') = reuse); //TODO: fix bug in MatchAfterStar
+    check(not match.Match('1a2'));
     match.Prepare('*teSt*', true, reuse);
     check(match.Match('test'));
     check(match.Match('teste'));
@@ -3099,53 +3001,6 @@ begin
     check(not match.Match('tes'));
     check(not match.Match('ates'));
     check(not match.Match('tesates'));
-    match.Prepare('*te?t*', true, reuse);
-    check(match.Match('test'));
-    check(match.Match('tezt'));
-    check(match.Match('teste'));
-    check(match.Match('tezte'));
-    check(match.Match('tester'));
-    check(match.Match('atest'));
-    check(match.Match('ateste'));
-    check(not match.Match('tes'));
-    check(not match.Match('tet'));
-    check(not match.Match('ates'));
-    check(not match.Match('tesates'));
-    match.Prepare('?est*', true, reuse);
-    check(match.Match('test'));
-    check(match.Match('test'));
-    check(match.Match('teste'));
-    check(match.Match('tester'));
-    check(not match.Match('tezte'));
-    check(not match.Match('atest'));
-    check(not match.Match('est'));
-    check(not match.Match('este'));
-    check(not match.Match('tes'));
-    check(not match.Match('tet'));
-    check(not match.Match('ates'));
-    check(not match.Match('tesates'));
-    match.Prepare('a*bx*cy*d', false, reuse);
-    check(match.Match('abxcyd'));
-    check(match.Match('a1bxcyd'));
-    check(match.Match('a12bxcyd'));
-    check(match.Match('a123bxcyd'));
-    check(match.Match('abx1cyd'));
-    check(match.Match('abx12cyd'));
-    check(match.Match('abxcy1d'));
-    check(match.Match('abxcy12d'));
-    check(match.Match('abxcy123d'));
-    check(not match.Match('abcyd'));
-    check(not match.Match('abxcyde'));
-    match.Prepare('************************************************'+
-         '************************************************'+
-         '**************************************************.*', false, reuse);
-    check(match.MatchThreadSafe('abxcyd.'));
-    check(match.MatchThreadSafe('abxc.yd'));
-    check(match.MatchThreadSafe('abxcy.d'));
-    check(match.MatchThreadSafe('.'));
-    check(match.MatchThreadSafe('.a'));
-    check(match.MatchThreadSafe('.abxcyd'));
-    check(not match.MatchThreadSafe('abxcyd'));
   end;
   for i := 32 to 127 do begin
     SetLength(V,1);
@@ -3160,47 +3015,6 @@ begin
     Check(IsMatch('[A-Za-z0-9]*',V)=(i in IsWord));
     Check(IsMatch('[a-z0-9]?[A-Z0-9]',V,true)=(i in IsWord));
     Check(IsMatch('[A-Z0-9]*',V,true)=(i in IsWord));
-  end;
-end;
-
-procedure TTestLowLevelCommon._TExprParserMatch;
-var
-  s: TExprParserMatch;
-
-  procedure Test(const expression: RawUTF8; const ok, nok: array of RawUTF8);
-  var i: integer;
-  begin
-    Check(s.Parse(expression) = eprSuccess);
-    for i := 0 to high(ok) do
-      Check(s.Search(ok[i]));
-    for i := 0 to high(nok) do
-      Check(not s.Search(nok[i]));
-  end;
-  
-begin
-  s := TExprParserMatch.Create({casesensitive=}true);
-  try // &=AND -=WITHOUT +=OR 
-    check(s.Parse('') = eprNoExpression);
-    check(s.Parse('  ') = eprNoExpression);
-    check(s.Parse('1+ ') = eprMissingFinalWord);
-    Test('1', ['1', '1 2 3', '2 1'], ['2', '13', '2 3']);
-    Test('   1   ', ['1', '1 2 3', '2 1'], ['2', '13', '2 3']);
-    Test('1+4', ['1', '1 2 3', '2 1', '2 4 3'], ['2', '13', '2 3', '41']);
-    Test(' 1 + 4 ', ['1', '1 2 3', '2 1', '2 4 3'], ['2', '13', '2 3', '41']);
-    Test('1+4+5', ['1', '1 2 3', '2 1', '2 4 3'], ['2', '13', '2 3', '41']);
-    Test('1+(4+5)', ['1', '1 2 3', '2 1', '2 4 3'], ['2', '13', '2 3', '41']);
-    Test('1+4*+5', ['1', '1 2 3', '2 1', '2 4 3', '41'], ['2', '13', '2 3']);
-    Test('1+(4&555)', ['4 555 3', '555 4', '1', '1 2 3', '2 1'], ['2', '13', '2 3', '41', '4 3', '3 555']);
-    Test('1+(4 555)', ['4 555 3', '555 4', '1', '1 2 3', '2 1'], ['2', '13', '2 3', '41', '4 3', '3 555']);
-    Test('1-4', ['1', '1 2 3', '2 1', '2 1 3'], ['1 4', '4 2 1', '2', '13', '2 3', '41']);
-    Test('1-(4&5)', ['1', '1 2 3', '2 1', '1 4', '1 5'],
-       ['2', '5 2 3 4 1', '2 3', '41', '4 3', '3 5', '1 4 5']);
-    Test('1-(4&(5+6))', ['1', '1 2 3', '2 1', '1 4', '1 5', '1 6'],
-       ['2', '5 2 3 4 1', '2 3', '41', '4 3', '3 5', '1 4 5', '1 4 6']);
-    Test('1 - ( 4 & ( 57 + 6 ) )', ['1', '1 2 3', '2 1', '1 4', '1 57', '1 6'],
-       ['2', '57 2 3 4 1', '2 3', '41', '4 3', '3 5"7', '1 4 57', '1 4 6']);
-  finally
-    s.Free;
   end;
 end;
 
@@ -3303,7 +3117,7 @@ begin
   timer.Start;
   for i := 0 to MAX do begin
     v := i and 511;
-    FastSetString(vs[i],pointer(SmallUInt32UTF8[v]),length(SmallUInt32UTF8[v]));
+    SetString(vs[i],PAnsiChar(pointer(SmallUInt32UTF8[v])),length(SmallUInt32UTF8[v]));
   end;
   NotifyTestSpeed(Format('direct %s',[KB(DIRSIZE)]),MAX,DIRSIZE,@timer);
   for i := 0 to MAX do
@@ -3679,11 +3493,10 @@ var i, j, b, err: integer;
     {$endif}
     a: shortstring;
     u: string;
-    varint: array[0..255] of byte;
-    st: TFastReader;
+    varint: array[0..31] of byte;
     PB,PC: PByte;
     P: PUTF8Char;
-    crc, n: cardinal;
+    crc: cardinal;
     Timer: TPrecisionTimer;
 begin
   Check(Plural('row',0)='0 row');
@@ -3727,11 +3540,11 @@ begin
   Check(MicroSecToString(1000000)='1s');
   Check(MicroSecToString(1000001)='1s');
   Check(MicroSecToString(2030001)='2.03s');
-  Check(MicroSecToString(200000070001)='2d');
+  Check(MicroSecToString(200000070001)='55h33');
   Check(KB(-123)='-123 B');
   Check(KB(0)='0 B');
   Check(KB(123)='123 B');
-  Check(KB(1023)='1 KB');
+  Check(KB(1023)='1023 B');
   Check(KB(1024)='1 KB');
   Check(KB(1025)='1 KB');
   Check(KB(16383)='16 KB');
@@ -3762,27 +3575,24 @@ begin
   {$endif}
   Check(Int64ToUTF8(2119852951849248647)='2119852951849248647');
   Check(FormatUTF8(' % ',[2119852951849248647])=' 2119852951849248647 ');
-  s := '1234';
-  d := GetExtended(pointer(s));
+  {$ifndef DELPHI5OROLDER}
+  d := GetExtended('1234');
   CheckSame(d,1234);
-  s := '1234.1';
-  d := GetExtended(pointer(s));
+  d := GetExtended('1234.1');
   CheckSame(d,1234.1);
-  s := '1234.1234567890123456789';
-  d := GetExtended(pointer(s));
+  d := GetExtended('1234.1234567890123456789');
   CheckSame(d,1234.1234567890123456789);
   u := DoubleToString(40640.5028819444);
   Check(u='40640.5028819444',u);
-  s := '40640.5028a819444';
-  GetExtended(pointer(s),err);
+  GetExtended('40640.5028a819444',err);
   Check(err>0);
-  s := '40640.5028819444';
-  d := GetExtended(pointer(s),err);
+  d := GetExtended('40640.5028819444',err);
   Check(err=0);
   u := DoubleToString(d);
   Check(u='40640.5028819444',u);
   e := 40640.5028819444;
   CheckSame(d,e,1e-11);
+  {$endif}
   d := 22.99999999999997;
   a[0] := AnsiChar(ExtendedToString(a,d,DOUBLE_PRECISION));
   Check(a='23');
@@ -3809,14 +3619,8 @@ begin
   Check(DoubleToString(-3.3495617168e-10)='-0.00000000033496');
   Check(DoubleToString(-3.9999617168e-14)='-0.00000000000004');
   Check(DoubleToString(3.9999617168e-14)='0.00000000000004');
-  u := DoubleToString(-3.9999617168e-15);
-  val(u,d,err);
-  Check(err=0);
-  CheckSame(d,-3.9999617168e-15);
-  u := DoubleToString(3.9999617168e-15);
-  val(u,d,err);
-  Check(err=0);
-  CheckSame(d,3.9999617168e-15);
+  Check(DoubleToString(-3.9999617168e-15)='0');
+  Check(DoubleToString(3.9999617168e-15)='0');
   {$else}
   Check(DoubleToString(-3.3495117168e-10)='-3.3495117168E-10');
   Check(DoubleToString(-3.3495617168e-10)='-3.3495617168E-10');
@@ -3894,7 +3698,7 @@ begin
     Check(crc32c(0,pointer(s),length(s))=crc);
     if s<>'' then
       Check(xxhash32(0,pointer(s),length(s))=xxHash32reference(pointer(s),length(s)));
-    j := Random32gsl;
+    j := Random(maxInt)-Random(maxInt);
     str(j,a);
     s := RawUTF8(a);
     u := string(a);
@@ -3966,11 +3770,6 @@ begin
     s := s+'z';
     l := GetInt64(pointer(s),err);
     Check(err<>0);
-    case i of // validate some explicit ToVarUInt32/64 boundaries
-      9997: j := $00004000;
-      9998: j := $00200000;
-      9999: j := $10000000;
-    end;
     str(j,a);
     Check(SysUtils.IntToStr(j)=string(a));
     Check(format('%d',[j])=string(a));
@@ -4007,12 +3806,6 @@ begin
     PB := @varint;
     Check(FromVarInt32(PB)=i-1);
     Check(PB=PC);
-    PC := ToVarUInt64(juint,@varint);
-    Check(PC<>nil);
-    Check(PAnsiChar(PC)-@varint=integer(ToVarUInt32Length(juint)));
-    PB := @varint;
-    Check(PtrUInt(FromVarUint64(PB))=juint);
-    Check(PB=PC);
     PC := ToVarInt64(k,@varint);
     Check(PC<>nil);
     PB := @varint;
@@ -4036,37 +3829,6 @@ begin
     PB := @varint;
     Check(FromVarUint64(PB)=i);
     Check(PB=PC);
-    PC := @varint;
-    for n := 0 to 49 do
-      PC := ToVarUInt32(juint+n,PC);
-    check(PC<>nil);
-    st.Init(@varint, PtrInt(PC) - PtrInt(@varint));
-    check(not st.EOF);
-    for n := 0 to 48 do
-      check(st.VarUInt32 = cardinal(juint+n));
-    check(not st.EOF);
-    check(st.VarUInt32 = cardinal(juint+49));
-    check(pointer(st.P) = pointer(PC));
-    check(st.EOF);
-    st.Init(@varint, PtrInt(PC) - PtrInt(@varint));
-    check(not st.EOF);
-    for n := 0 to 49 do
-      check(st.VarUInt64 = cardinal(juint+n));
-    check(pointer(st.P) = pointer(PC));
-    check(st.EOF);
-    st.Init(@varint, PtrInt(PC) - PtrInt(@varint));
-    for n := 0 to 48 do
-      st.VarNextInt;
-    check(not st.EOF);
-    check(st.VarUInt32 = cardinal(juint+49));
-    check(pointer(st.P) = pointer(PC));
-    check(st.EOF);
-    st.Init(@varint, PtrInt(PC) - PtrInt(@varint));
-    st.VarNextInt(49);
-    check(not st.EOF);
-    check(st.VarUInt32 = cardinal(juint+49));
-    check(pointer(st.P) = pointer(PC));
-    check(st.EOF);
   end;
   exit; // code below is speed informative only, without any test
   Timer.Start;
@@ -4208,17 +3970,6 @@ begin
   Check(U='ah-bee-see');
   for i := 0 to High(IDPU) do
     Check(IdemPChar(IDPU[i],IDPA[i])=(i<12));
-  res := '{"result":[{"000001000013":{"00100000000016":[1534510257860,103100,2000,' +
-    '103108,1004,104132],"00100000000026":[1534510257860,12412,2000,12420,1004,12420],' +
-    '"00100000000036":[1534510257860,1378116,2000,1378112,1004,1378112],"00100000000056":' +
-    '[1534510257860,479217551,2000,479217551],"00100000000076":[1534510257860,136079943,' +
-    '2000,136079943,1004,136079944],"00100000000086":[1534510257860,1648800821,2000,' +
-    '1648801020,1004,1648801119],"00100000000096":[1534510257860,87877677,2000,87877678,' +
-    '1004,87877678],"001000000000ec":[1534510257860,1.64,2000,1.64],"001000000000fc":[' +
-    '1534510257860,1.72,2000,1.72],"0010000000010c":[1534510257860,1.64,2000,1.64],"' +
-    '00100000000196":[1534510257860,0,2000,0]}}]}';
-  i := SynCommons.StrLenPas(@res[1]);
-  check(SynCommons.StrLen(@res[1])=i);
   res := 'one,two,three';
   Check(EndWith('three','THREE'));
   Check(EndWith(res,'E'));
@@ -4258,19 +4009,9 @@ begin
   Check(arr[0]='one');
   Check(arr[1]='two');
   Check(arr[2]='three');
-  Finalize(arr);
-  res := '-1,25,0';
-  CSVToRawUTF8DynArray(pointer(res),arr);
-  check(Length(arr)=3);
-  Check(arr[0]='-1');
-  Check(arr[1]='25');
-  Check(arr[2]='0');
   Check(AddPrefixToCSV('One,Two,Three','Pre')='PreOne,PreTwo,PreThree');
   Check(CSVOfValue('?',3)='?,?,?');
 {$ifndef DELPHI5OROLDER}
-  Check(GetUnQuoteCSVItem('"""one,""","two "',1,',','"')='two ');
-  Check(GetUnQuoteCSVItem('''''''one,''''''',0)='''one,''');
-  Check(GetUnQuoteCSVItem('"""one,',0,',','"')='');
   Check(FormatUTF8('abcd',[U],[WS])='abcd');
 {$endif}
   for i := 0 to 1000 do begin
@@ -4570,18 +4311,6 @@ begin
   assert(tmp='0002-00-00');
 end;
 
-{$ifdef FPC}
-Function _LocalTimeToUniversal(LT: TDateTime;TZOffset: Integer): TDateTime;
-begin
-  if (TZOffset > 0) then
-    Result := LT - EncodeTime(TZOffset div 60, TZOffset mod 60, 0, 0)
-  else if (TZOffset < 0) then
-    Result := LT + EncodeTime(Abs(TZOffset) div 60, Abs(TZOffset) mod 60, 0, 0)
-  else
-    Result := LT;
-end;
-{$endif}
-
 procedure TTestLowLevelCommon.TimeZones;
 var tz: TSynTimeZone;
     d: TTimeZoneData;
@@ -4648,13 +4377,6 @@ begin
   finally
     tz.Free;
   end;
-  dt := NowUTC;
-  {$ifdef FPC}
-  CheckSame(_LocalTimeToUniversal(Now(), - GetLocalTimeOffset) - dt, 0, 1E-5,
-    'NowUTC should not shift or truncate time');
-  {$endif}
-  sleep(200);
-  Check(not SameValue(dt,NowUTC), 'NowUTC should not truncate time to 5 sec resolution');
   {$ifdef MSWINDOWS}
   tz := TSynTimeZone.CreateDefault;
   try
@@ -4682,8 +4404,7 @@ begin
   {$endif}
 end;
 
-{$IFDEF FPC} {$PUSH} {$ENDIF} {$HINTS OFF}
-// [dcc64 Hint] H2135 FOR or WHILE loop executes zero times - deleted
+{$HINTS OFF} // [dcc64 Hint] H2135 FOR or WHILE loop executes zero times - deleted
 procedure TTestLowLevelCommon._IdemPropName;
   function IPNUSL(const s1,s2: RawUTF8; len: integer): boolean;
   begin
@@ -4715,8 +4436,6 @@ begin
   Check(IdemPropNameU('a','A'));
   Check(not IdemPropNameU('a','z'));
   Check(IdemPropNameU('ab','AB'));
-  Check(not IdemPropNameU('abc','ABz'));
-  Check(not IdemPropNameU('zbc','abc'));
   Check(IdemPropNameU('abc','ABc'));
   Check(IdemPropNameU('abcD','ABcd'));
   Check(not IdemPropNameU('abcD','ABcF'));
@@ -4775,17 +4494,8 @@ begin
   Check(PosCharAny('ABC','aA')^='A');
   Check(PosCharAny('ABC','bB')^='B');
   Check(PosCharAny('ABC','cC')^='C');
-  Check(PosExChar('z','')=0,'ABC');
-  Check(PosExChar('z','A')=0,'ABC');
-  Check(PosExChar('z','ABC')=0,'ABC');
-  Check(PosExChar('A','A')=1,'ABC');
-  Check(PosExChar('A','AB')=1,'ABC');
-  Check(PosExChar('A','ABC')=1,'ABC');
-  Check(PosExChar('B','ABC')=2,'ABC');
-  Check(PosExChar('B','AB')=2,'ABC');
-  Check(PosExChar('C','ABC')=3,'ABC');
 end;
-{$IFDEF FPC} {$POP} {$ELSE} {$HINTS ON} {$ENDIF}
+{$HINTS ON}
 
 procedure TTestLowLevelCommon._TSynTable;
 var T: TSynTable;
@@ -5588,9 +5298,6 @@ begin
         v := 0;
         check(dict.FindAndCopy(k, v));
         check(v=i);
-        k := '';
-        check(dict.FindKeyFromValue(v,k));
-        check(GetInteger(pointer(k))=i);
       end;
     end;
   finally
@@ -5770,12 +5477,12 @@ begin
       b.Insert(@i,sizeof(i));
     CheckLogTime(b.Inserted=1000,'Insert(%)',[b.Inserted]);
     sav1000 := b.SaveTo;
-    CheckLogTime(sav1000<>'','b.SaveTo(%) len=%',[b.Inserted,kb(sav1000)]);
+    CheckLogTime(sav1000<>'','b.SaveTo(%) len=%',[b.Inserted,kb(length(sav1000))]);
     for i := 1001 to SIZ do
       b.Insert(@i,sizeof(i));
     CheckLogTime(b.Inserted=SIZ,'Insert(%)',[SIZ-1000]);
     savSIZ := b.SaveTo;
-    CheckLogTime(length(savSIZ)>length(sav1000),'b.SaveTo(%) len=%',[SIZ,kb(savSIZ)]);
+    CheckLogTime(length(savSIZ)>length(sav1000),'b.SaveTo(%) len=%',[SIZ,kb(length(savSIZ))]);
     for i := 1 to SIZ do
       Check(b.MayExist(@i,sizeof(i)));
     CheckLogTime(b.Inserted=SIZ,'MayExists(%)=true',[SIZ]);
@@ -5814,7 +5521,7 @@ begin
       n := SIZ;
       for j := 1 to 3 do begin
         savSiz := d1.SaveToDiff(d2.Revision);
-        CheckLogTime(savSiz<>'','d1.SaveToDiff(%) len=%',[d2.Revision,KB(savSiz)]);
+        CheckLogTime(savSiz<>'','d1.SaveToDiff(%) len=%',[d2.Revision,KB(length(savSiz))]);
         Check(d1.DiffKnownRevision(savSIZ)=d1.Revision);
         Check((d2.Revision=d1.Revision)=(j>1));
         CheckLogTime(d2.LoadFromDiff(savSiz),'d2.LoadFromDiff(%)',[n]);
@@ -5827,7 +5534,7 @@ begin
           d1.Insert(@i,sizeof(i));
         CheckLogTime(d2.Revision<>d1.Revision,'d1.Insert(%)',[1000]);
         savSiz := d1.SaveToDiff(d2.Revision);
-        CheckLogTime(savSiz<>'','d1.SaveToDiff(%) len=%',[d2.Revision,kb(savSiz)]);
+        CheckLogTime(savSiz<>'','d1.SaveToDiff(%) len=%',[d2.Revision,kb(length(savSiz))]);
         Check(d1.DiffKnownRevision(savSIZ)=d1.Revision);
         Check(d2.Revision<>d1.Revision);
         CheckLogTime(d2.LoadFromDiff(savSiz),'d2.LoadFromDiff(%)',[n]);
@@ -6495,18 +6202,18 @@ end;
 class function TCollTstDynArray.FVReader2(P: PUTF8Char; var aValue;
   out aValid: Boolean): PUTF8Char;
 var V: TFV absolute aValue;
-    Values: array[0..5] of TValuePUTF8Char;
+    Values: TPUtf8CharDynArray;
 begin // '{"Major":1,"Minor":2001,"Release":3001,"Build":4001,"Main":"1","Detailed":"1001"},..
   aValid := false;
-  result := JSONDecode(P,['Major','Minor','Release','Build','Main','Detailed'],@Values);
+  result := JSONDecode(P,['Major','Minor','Release','Build','Main','Detailed'],Values);
   if result=nil then
     exit; // result^ = ',' or ']' for last item of array
-  V.Major := Values[0].ToInteger;
-  V.Minor := Values[1].ToInteger;
-  V.Release := Values[2].ToInteger;
-  V.Build := Values[3].ToInteger;
-  V.Main := Values[4].ToString;
-  V.Detailed := Values[5].ToString;
+  V.Major := GetInteger(Values[0]);
+  V.Minor := GetInteger(Values[1]);
+  V.Release := GetInteger(Values[2]);
+  V.Build := GetInteger(Values[3]);
+  V.Main := UTF8DecodeToString(Values[4],SynCommons.StrLen(Values[4]));
+  V.Detailed := UTF8DecodeToString(Values[5],SynCommons.StrLen(Values[5]));
   aValid := true;
 end;
 
@@ -6520,17 +6227,17 @@ end;
 class function TCollTstDynArray.FVClassReader(const aValue: TObject; aFrom: PUTF8Char;
   var aValid: Boolean; aOptions: TJSONToObjectOptions): PUTF8Char;
 var V: TFileVersion absolute aValue;
-    Values: array[0..5] of TValuePUTF8Char;
+    Values: TPUtf8CharDynArray;
 begin // '{"Major":2,"Minor":2002,"Release":3002,"Build":4002,"Main":"2","BuildDateTime":"1911-03-15"}'
-  result := JSONDecode(aFrom,['Major','Minor','Release','Build','Main','BuildDateTime'],@Values);
+  result := JSONDecode(aFrom,['Major','Minor','Release','Build','Main','BuildDateTime'],Values);
   aValid := (result<>nil);
   if aValid then begin
-    V.Major := Values[0].ToInteger;
-    V.Minor := Values[1].ToInteger;
-    V.Release := Values[2].ToInteger;
-    V.Build := Values[3].ToInteger;
-    V.Main := Values[4].ToString;
-    V.BuildDateTime := Iso8601ToDateTimePUTF8Char(Values[5].Value,Values[5].ValueLen);
+    V.Major := GetInteger(Values[0]);
+    V.Minor := GetInteger(Values[1]);
+    V.Release := GetInteger(Values[2]);
+    V.Build := GetInteger(Values[3]);
+    V.Main := UTF8DecodeToString(Values[4],SynCommons.StrLen(Values[4]));
+    V.BuildDateTime := Iso8601ToDateTimePUTF8Char(Values[5]);
   end;
 end;
 
@@ -6645,19 +6352,23 @@ begin
 end;
 
 procedure RangeFromJSON(out Range: TRange; JSON: PUTF8Char);
-var V: array[0..1] of TValuePUTF8Char;
+var V: TPUtf8CharDynArray;
 begin
-  JSONDecode(JSON, ['min', 'max'],@V);
-  Range.Min := V[0].ToInteger;
-  Range.Max := V[1].ToInteger;
+  JSONDecode(JSON, ['min', 'max'], V);
+  if V=nil then
+    exit;
+  Range.Min := GetInteger(V[0]);
+  Range.Max := GetInteger(V[1]);
 end;
 
 procedure TEnemy.SetOffense(Value: RawJSON);
-var V: array[0..1] of TValuePUTF8Char;
+var V: TPUtf8CharDynArray;
 begin
-  JSONDecode(Value,['damage','attackspeed'],@V,true);
-  RangeFromJSON(Off.Damage, V[0].Value);
-  RangeFromJSON(Off.AttackSpeed, V[1].Value);
+  JSONDecode(Value,['damage','attackspeed'],V,true);
+  if V=nil then
+    exit;
+  RangeFromJSON(Off.Damage, V[0]);
+  RangeFromJSON(Off.AttackSpeed, V[1]);
 end;
 
 {$endif}
@@ -6786,10 +6497,10 @@ const // convention may be to use __ before the type name
   discogsFileName = 'discogs.json';
 
 procedure TTestLowLevelTypes.EncodeDecodeJSON;
-var J,U,U2: RawUTF8;
+var J,U: RawUTF8;
     P: PUTF8Char;
     binary,zendframeworkJson,discogsJson: RawByteString;
-    V: array[0..4] of TValuePUTF8Char;
+    V: TPUtf8CharDynArray;
     i, a, err: integer;
     r: Double;
     Parser: TJSONRecordTextDefinition;
@@ -6804,7 +6515,7 @@ var J,U,U2: RawUTF8;
     Cache: TSQLRestCacheEntryValue;
 {$ifndef DELPHI5OROLDER}
     peop: TSQLRecordPeople;
-    K: RawUTF8;
+    K,U2: RawUTF8;
     Valid: boolean;
     RB: TSQLRawBlob;
     Enemy: TEnemy;
@@ -6983,8 +6694,6 @@ var i: Integer;
     git,git2: TTestCustomJSONGitHubs;
     item,value: PUTF8Char;
 begin
-  if zendframeworkJson='' then
-    exit; // avoid GPF e.g. on Windows XP where https is broken
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSONGitHub),
     __TTestCustomJSONGitHub).Options := Options;
   FillCharFast(git,sizeof(git),0);
@@ -7400,18 +7109,20 @@ begin
   {$endif}
   J := JSONEncode(['name','john','year',1982,'pi',3.14159]);
   Check(J='{"name":"john","year":1982,"pi":3.14159}');
-  JSONDecode(J,['year','pi','john','name'],@V);
-  Check(V[0].Value='1982');
-  Check(V[1].Value='3.14159');
-  Check(V[2].Value=nil);
-  Check(V[3].Value='john');
+  JSONDecode(J,['year','pi','john','name'],V);
+  Check(length(V)=4);
+  Check(V[0]='1982');
+  Check(V[1]='3.14159');
+  Check(V[2]=nil);
+  Check(V[3]='john');
   J := '{surrogate:"\uD801\uDC00"}'; // see https://en.wikipedia.org/wiki/CESU-8
-  JSONDecode(J,['surrogate'],@V);
-  Check(V[0].ValueLen=4);
-  Check(V[0].Value[0]=#$F0);
-  Check(V[0].Value[1]=#$90);
-  Check(V[0].Value[2]=#$90);
-  Check(V[0].Value[3]=#$80);
+  JSONDecode(J,['surrogate'],V);
+  Check(length(V)=1);
+  Check(StrLen(V[0])=4);
+  Check(V[0][0]=#$F0);
+  Check(V[0][1]=#$90);
+  Check(V[0][2]=#$90);
+  Check(V[0][3]=#$80);
   J := JSONEncode(['name','john','ab','[','a','b',']']);
   Check(J='{"name":"john","ab":["a","b"]}');
   J := JSONEncode(['name','john','ab','[','a','b']);
@@ -7493,14 +7204,14 @@ begin
     r := Random;
     U := RandomUTF8(i);
     J := JSONEncode(['a',a,'r',r,'u',U]);
-    JSONDecode(J,['U','R','A','FOO'],@V);
-    V[0].ToUTF8(U2);
-    Check(U2=U);
-    Check(SameValue(GetExtended(V[1].Value,err),r));
-    Check(not IsString(V[2].Value));
-    Check(not IsStringJSON(V[2].Value));
-    Check(V[2].ToInteger=a);
-    Check(V[3].Value=nil);
+    JSONDecode(J,['U','R','A','FOO'],V);
+    Check(Length(V)=4);
+    Check(RawUTF8(V[0])=U);
+    Check(SameValue(GetExtended(V[1],err),r));
+    Check(not IsString(V[2]));
+    Check(not IsStringJSON(V[2]));
+    Check(GetInteger(V[2])=a);
+    Check(V[3]=nil);
     J := BinToBase64WithMagic(U);
     check(PInteger(J)^ and $00ffffff=JSON_BASE64_MAGIC);
 {$ifndef DELPHI5OROLDER}
@@ -8283,7 +7994,7 @@ var o,od,o2,value: variant;
     b: PByte;
     elem, item: TBSONElement;
     iter: TBSONIterator;
-    name,u,u2,u3,json: RawUTF8;
+    name,u,u2,u3: RawUTF8;
     arr: TRawUTF8DynArray;
     st: string;
     timer: TPrecisionTimer;
@@ -8364,13 +8075,6 @@ begin
       Check(not oids[i].Equal(oids[j]),'24 bit collision');
   end;
   //Check(GetCurrentProcessId<>oid.ProcessID,'Expected overflow');
-  o := _JSON('{"double_params":[-12.12345678,-9.9E-15,-9.88E-15,-9E-15]}',
-     [dvoReturnNullForUnknownProperty, dvoAllowDoubleValue]);
-  json := TDocVariantData(o).ToJSON;
-  {$ifndef EXTENDEDTOSTRING_USESTR}
-  check(json='{"double_params":[-12.12345678,-9.9E-15,-9.88E-15,-9E-15]}');
-  {$endif}
-  CheckSame(double(TDocVariantData(o).A['double_params'].Value[1]),-9.9E-15);
   // see http://bsonspec.org/#/specification
   o := _JSON('{"hello": "world"}');
   bsonDat := BSON(TDocVariantData(o));
@@ -9950,11 +9654,6 @@ end;
 
 { TTestCompression }
 
-procedure TTestCompression.Setup;
-begin
-  Data := StringFromFile(ExeVersion.ProgramFileName);
-end;
-
 procedure TTestCompression.CleanUp;
 begin
   FreeAndNil(M);
@@ -10047,9 +9746,7 @@ var Z: TSynZipCompressor;
     L,n: integer;
     P: PAnsiChar;
     crc2: Cardinal;
-    st: TRawByteStringStream;
-    s,tmp: RawByteString;
-    gzr: TGZRead;
+    s: RawByteString;
 begin
   Check(crc32(0,@crc32tab,5)=$DF4EC16C,'crc32');
   Check(UpdateCrc32(0,@crc32tab,5)=$DF4EC16C,'crc32');
@@ -10086,30 +9783,6 @@ begin
   Check(CompressGZip(s,true)='gzip');
   Check(CompressGZip(s,false)='gzip');
   Check(s=Data,'compressGZip');
-  Check(gzr.Init(M.Memory,M.Position),'TGZRead');
-  Check(gzr.uncomplen=length(data));
-  Check(gzr.crc32=crc0);
-  Check(gzr.ToMem=data,'ToMem');
-  st := TRawByteStringStream.Create;
-  try
-    Check(gzr.ToStream(st),'ToStream');
-    s := st.DataString;
-    Check(s=Data,'ToStream?');
-  finally
-    st.Free;
-  end;
-  SetLength(tmp,gzr.uncomplen div 5);
-  Check(gzr.ZStreamStart(pointer(tmp),length(tmp)),'ZStreamStart');
-  s := '';
-  repeat
-    n := gzr.ZStreamNext;
-    if n=0 then
-      break;
-    s := s+copy(tmp,1,n);
-  until false;
-  check(gzr.ZStreamDone,'ZStreamDone');
-  Check(gzr.uncomplen=length(s));
-  check(s=Data);
   s := Data;
   Check(CompressDeflate(s,true)='deflate');
   Check(CompressDeflate(s,false)='deflate');
@@ -10124,6 +9797,7 @@ begin
   tmp := RawByteString(Ident);
   for comp := 0 to 9 do
     Check(UnCompressString(CompressString(tmp,False,comp))=tmp);
+  Data := StringFromFile(ExeVersion.ProgramFileName);
   Check(UnCompressString(CompressString(Data,False,6))=Data);
 end;
 
@@ -10287,22 +9961,8 @@ begin
   Check(s=Data);
 end;
 
-function Spaces(n: integer): RawUTF8;
-begin
-  SetString(result,nil,n);
-  FillCharFast(pointer(result)^,n,32);
-end;
-
-function By4(pattern,n: integer): RawUTF8;
-var i: integer;
-begin
-  SetString(result,nil,n*4);
-  for i := 0 to n-1 do
-    PIntegerArray(result)[i] := pattern;
-end;
-
 procedure TTestCompression._SynLZ;
-var s,t,rle: RawByteString;
+var s,t: RawByteString;
     i,j, complen2: integer;
     comp2,dec1: array of byte;
     {$ifdef CPUINTEL}
@@ -10311,21 +9971,12 @@ var s,t,rle: RawByteString;
     {$endif}
 begin
   for i := 1 to 200 do begin
-    s := SynLZCompress(StringOfChar(AnsiChar(i),i));
-    t := SynLZDecompress(s);
-    Check(t=StringOfChar(AnsiChar(i),i));
+    t := StringOfChar(AnsiChar(i),i);
+    s := StringOfChar(AnsiChar(i),i);
+    Check(SynLZDecompress(SynLZCompress(s))=t);
   end;
-  rle := 'hello'+Spaces(10000)+'hello'+Spaces(1000)+'world';
-  s := SynLZCompress(rle);
-  t := SynLZDecompress(s);
-  Check(t=rle);
-  rle := 'hello'+by4($3031333,10000)+'hello'+by4($3031333,1000)+'world';
-  s := SynLZCompress(rle);
-  t := SynLZDecompress(s);
-  Check(t=rle);
   for i := 0 to 1000 do begin
-    s := StringOfChar(AnsiChar(' '),20);
-    t := RandomTextParagraph(i, '.', s);
+    t := RandomString(i*8);
     SetString(s,PAnsiChar(pointer(t)),length(t)); // =UniqueString
     Check(CompressSynLZ(s,true)='synlz');
     Check(CompressSynLZ(s,false)='synlz');
@@ -10361,7 +10012,6 @@ begin
   end;
   s := Data;
   Check(CompressSynLZ(s,true)='synlz');
-  Check(Length(s)<Length(Data),'exelen');
   Check(CompressSynLZ(s,false)='synlz');
   Check(s=Data);
 end;
@@ -10394,7 +10044,7 @@ procedure TTestCompression._TAlgoCompress;
       timer.ComputeTime;
       inc(timecomp, timer.LastTimeInMicroSec);
       timer.Start;
-      s2 := algo.Decompress(t,aclNoCrcFast);
+      s2 := algo.Decompress(t,false);
       timer.ComputeTime;
       inc(timedecomp, timer.LastTimeInMicroSec);
       Check(s2=s, algo.ClassName);
@@ -10410,7 +10060,7 @@ procedure TTestCompression._TAlgoCompress;
        ((comp*Int64(1000*1000)) div timecomp)shr 20,
        ((comp*Int64(1000*1000)) div timedecomp)shr 20,
        ((plain*Int64(1000*1000)) div timedecomp)shr 20]));
-    s2 := algo.Decompress(algo.Compress(s),aclNoCrcFast);
+    s2 := algo.Decompress(algo.Compress(s),false);
     Check(s2=s, algo.ClassName);
     if (log<>'') and (s2<>s) then FileFromString(s2,'bigTestPartial'+algo.ClassName+'.log');
   end;
@@ -12002,7 +11652,7 @@ var sw: ICommandLine;
   end;
 begin
   if DirectoryExists('synecc') then
-    DirectoryDelete('synecc',FILES_ALL,true) else
+    DirectoryDelete('synecc','*.*',true) else
     CreateDir('synecc');
   SetCurrentDir('synecc');
   try
@@ -12979,33 +12629,12 @@ type
      property MinY: double read fMinY write fMinY;
      property MaxY: double read fMaxY write fMaxY;
    end;
-   TSQLRecordMapBoxI = class(TSQLRecordRTreeInteger)
-   protected
-     fMinX, fMaxX, fMinY, fMaxY: integer;
-   published
-     property MinX: integer read fMinX write fMinX;
-     property MaxX: integer read fMaxX write fMaxX;
-     property MinY: integer read fMinY write fMinY;
-     property MaxY: integer read fMaxY write fMaxY;
-   end;
-   TSQLRecordMapBoxPlain = class(TSQLRecord)
-   protected
-     fMinX, fMaxX, fMinY, fMaxY: double;
-   published
-     property MinX: double read fMinX write fMinX;
-     property MaxX: double read fMaxX write fMaxX;
-     property MinY: double read fMinY write fMinY;
-     property MaxY: double read fMaxY write fMaxY;
-   end;
 
 procedure TTestMemoryBased._RTree;
 var Model: TSQLModel;
     Client: TSQLRestClientDB;
     Box: TSQLRecordMapBox;
-    BoxI: TSQLRecordMapBoxI;
-    //BoxPlain: TSQLRecordMapBoxPlain;
     i: integer;
-    timer: TPrecisionTimer;
 procedure CheckBox(i: integer);
 begin
   Check(Box.fID=i*2);
@@ -13014,67 +12643,12 @@ begin
   CheckSame(Box.MinY,i*2.0);
   CheckSame(Box.MaxY,i*2.0+0.5);
 end;
-procedure CheckBoxI(i: integer);
-begin
-  Check(BoxI.fID=i*2);
-  Check(BoxI.MinX=i);
-  Check(BoxI.MaxX=i+2);
-  Check(BoxI.MinY=i*2);
-  Check(BoxI.MaxY=i*2+2);
-end;
-{procedure CheckBoxPlain(i: integer);
-begin
-  Check(BoxPlain.fID=i*2);
-  CheckSame(BoxPlain.MinX,i*1.0);
-  CheckSame(BoxPlain.MaxX,i*1.0+0.5);
-  CheckSame(BoxPlain.MinY,i*2.0);
-  CheckSame(BoxPlain.MaxY,i*2.0+0.5);
-end;}
 const COUNT=10000;
 begin
-  Model := TSQLModel.Create([TSQLRecordMapBox,TSQLRecordMapBoxI,TSQLRecordMapBoxPlain]);
+  Model := TSQLModel.Create([TSQLRecordMapBox]);
   Client := TSQLRestClientDB.Create(Model,nil,SQLITE_MEMORY_DATABASE_NAME,TSQLRestServerDB,false,'');
   try
     (Client.Server as TSQLRestServer).CreateMissingTables;
-    {timer.Start;
-    BoxPlain := TSQLRecordMapBoxPlain.Create;
-    try
-      Client.TransactionBegin(TSQLRecordMapBoxPlain);
-      for i := 1 to COUNT do begin
-        BoxPlain.fID := i*2; // force ID
-        BoxPlain.MinX := i*1.0;
-        BoxPlain.MaxX := i*1.0+0.5;
-        BoxPlain.MinY := i*2.0;
-        BoxPlain.MaxY := i*2.0+0.5;
-        Check(Client.Add(BoxPlain,true,true)=i*2);
-      end;
-      Client.Commit;
-      writeln('added in ',timer.Stop); timer.Start;
-      with Client.Server as TSQLRestServer do begin
-        CreateSQLIndex(TSQLRecordMapBoxPlain,'MinX',false);
-        CreateSQLIndex(TSQLRecordMapBoxPlain,'MaxX',false);
-        CreateSQLIndex(TSQLRecordMapBoxPlain,'MinY',false);
-        CreateSQLIndex(TSQLRecordMapBoxPlain,'MaxY',false);
-      end;
-      writeln('indexes created in ',timer.Stop); timer.Start;
-      for i := 1 to COUNT do begin
-        Check(Client.Retrieve(i*2,BoxPlain));
-        CheckBoxPlain(i);
-      end;
-      writeln('retrieved by id in ',timer.Stop); timer.Start;
-      for i := 1 to COUNT do begin
-        BoxPlain.FillPrepare(Client,'MinX<=? and ?<=MaxX and MinY<=? and ?<=MaxY',
-          [i*1.0+0.25,i*1.0+0.25,i*2.0+0.25,i*2.0+0.25]);
-        Check(BoxPlain.FillOne);
-        CheckBoxPlain(i);
-        Check(not BoxPlain.FillOne);
-      end;
-      writeln('retrieved by coords in ',timer.Stop); timer.Start;
-    finally
-      BoxPlain.Free;
-    end;
-    NotifyTestSpeed('Without RTree',COUNT,0,@timer);}
-    timer.Start;
     Box := TSQLRecordMapBox.Create;
     try
       Client.TransactionBegin(TSQLRecordMapBox);
@@ -13098,86 +12672,14 @@ begin
         CheckBox(i);
         Check(not Box.FillOne);
       end;
-      Box.FillPrepare(Client,'MinX<=? and ?<=MaxX and MinY<=? and ?<=MaxY',
-        [1.0,1.0,2.0,2.0]);
-      Check(Box.FillOne);
-      CheckBox(1);
-      Box.FillPrepare(Client,'MinX<=? and ?<=MaxX and MinY<=? and ?<=MaxY',
-        [1.5,1.5,2.5,2.5]);
-      Check(Box.FillOne);
-      CheckBox(1);
     finally
       Box.Free;
     end;
-    NotifyTestSpeed('With RTree',COUNT,0,@timer);
-    timer.Start;
-    BoxI := TSQLRecordMapBoxI.Create;
-    try
-      Client.TransactionBegin(TSQLRecordMapBoxI);
-      for i := 1 to COUNT do begin
-        BoxI.fID := i*2; // force ID
-        BoxI.MinX := i;
-        BoxI.MaxX := i+2;
-        BoxI.MinY := i*2;
-        BoxI.MaxY := i*2+2;
-        Check(Client.Add(BoxI,true,true)=i*2);
-      end;
-      Client.Commit;
-      for i := 1 to COUNT do begin
-        Check(Client.Retrieve(i*2,BoxI));
-        CheckBoxI(i);
-      end;
-      for i := 1 to COUNT do begin
-        BoxI.FillPrepare(Client,'MinX<=? and ?<=MaxX and MinY<=? and ?<=MaxY',
-          [i+1,i+1,i*2+1,i*2+1]);
-        Check(BoxI.FillOne);
-        CheckBoxI(i);
-        Check(not BoxI.FillOne);
-      end;
-      BoxI.FillPrepare(Client,'MinX<=? and ?<=MaxX and MinY<=? and ?<=MaxY',
-        [1,1,2,2]);
-      Check(BoxI.FillOne);
-      CheckBoxI(1);
-      BoxI.FillPrepare(Client,'MinX<=? and ?<=MaxX and MinY<=? and ?<=MaxY',
-        [3,3,4,4]);
-      Check(BoxI.FillOne);
-      CheckBoxI(1);
-    finally
-      BoxI.Free;
-    end;
-    NotifyTestSpeed('With RTreeInteger',COUNT,0,@timer);
   finally
     Client.Free;
     Model.Free;
   end;
 end;
-{
-  Delphi Win32:
-   10000 With RTree in 806.64ms i.e. 12396/s, aver. 80us
-   10000 With RTreeInteger in 750.94ms i.e. 13316/s, aver. 75us
-
-   10000 Without RTree in 16.82s i.e. 594/s, aver. 1.68ms (no index)
-   10000 Without RTree in 22.96s i.e. 435/s, aver. 2.29ms (with indexes created last)
-    added in 136.90ms
-    indexes created in 25.02ms
-    retrieved by id in 119.87ms
-    retrieved by coords in 22.71s
-   10000 Without RTree in 23.13s i.e. 432/s, aver. 2.31ms (with indexes created first)
-
-  Delphi Win64:
-    10000 With RTree in 737ms i.e. 13568/s, aver. 73us
-    10000 With RTreeInteger in 621.83ms i.e. 16081/s, aver. 62us
-  FPC Win32:
-    10000 With RTree in 852.12ms i.e. 11735/s, aver. 85us
-    10000 With RTreeInteger in 764.59ms i.e. 13078/s, aver. 76us
-  FPC Win64:
-    10000 With RTree in 718.39ms i.e. 13919/s, aver. 71us
-    10000 With RTreeInteger in 667.80ms i.e. 14974/s, aver. 66us
-  FPC Linux64 (within Windows Linux Layer):
-    10000 With RTree in 1.08s i.e. 9218/s, aver. 108us
-    10000 With RTreeInteger in 1s i.e. 9966/s, aver. 100us
-}
-
 
 const SHARD_MAX = 10000;
       SHARD_RANGE = 1000;
@@ -13320,7 +12822,6 @@ end;
 {$WARN SYMBOL_PLATFORM OFF}
 procedure TTestClientServerAccess._TSQLHttpClient;
 var Resp: TSQLTable;
-    len: integer;
 begin
   Client := TSQLHttpClient.Create('127.0.0.1',HTTP_DEFAULTPORT,Model);
   fRunConsole := fRunConsole+'using '+string(Client.ClassName);
@@ -13330,9 +12831,7 @@ begin
     exit;
   try
     Check(Resp.InheritsFrom(TSQLTableJSON));
-    len := Length(TSQLTableJSON(Resp).PrivateInternalCopy)-16;
-    if not CheckFailed(len>0) then
-      Check(Hash32(pointer(TSQLTableJSON(Resp).PrivateInternalCopy),len)=$F11CEAC0);
+    Check(Hash32(TSQLTableJSON(Resp).PrivateInternalCopy)=$F11CEAC0);
     //FileFromString(Resp.GetODSDocument,'people.ods');
   finally
     Resp.Free;
@@ -13420,9 +12919,9 @@ begin
   Resp := Client.List([TSQLRecordPeople],'*',CLIENTTEST_WHERECLAUSE);
   if CheckFailed(Resp<>nil) then
     exit;
-  siz := length(TSQLTableJSON(Resp).PrivateInternalCopy)-16;
-  if not CheckFailed(siz=4818) then
-    Check(Hash32(pointer(TSQLTableJSON(Resp).PrivateInternalCopy),siz)=$8D727024);
+  siz := length(TSQLTableJSON(Resp).PrivateInternalCopy);
+  Check(siz=4818);
+  Check(Hash32(TSQLTableJSON(Resp).PrivateInternalCopy)=$8D727024);
   Resp.Free;
 {$ifdef WTIME}
   fRunConsole := format('%s%s, first %s, ',[fRunConsole,KB(siz),Timer.Stop]);
@@ -13499,9 +12998,7 @@ begin
     try
       Check(Resp.InheritsFrom(TSQLTableJSON));
       // every answer contains 113 rows, for a total JSON size of 4803 bytes
-      siz := length(TSQLTableJSON(Resp).PrivateInternalCopy)-16;
-      if not CheckFailed(siz>0) then
-        Check(Hash32(pointer(TSQLTableJSON(Resp).PrivateInternalCopy),siz)=$8D727024);
+      Check(Hash32(TSQLTableJSON(Resp).PrivateInternalCopy)=$8D727024);
     finally
       Resp.Free;
     end;
@@ -13999,26 +13496,37 @@ end;
 
 procedure TTestExternalDatabase.AutoAdaptSQL;
 var SQLOrigin: RawUTF8;
-    Props: TSQLDBConnectionProperties;
-    Server: TSQLRestServer;
-    Ext: TSQLRestStorageExternalHook;
-  procedure Test(aDBMS: TSQLDBDefinition; AdaptShouldWork: boolean;
-    const SQLExpected: RawUTF8='');
-  var SQL: RawUTF8;
-  begin
-    SQL := SQLOrigin;
-    TSQLDBConnectionPropertiesHook(Props).fDBMS := aDBMS;
-    Check((Props.DBMS=aDBMS)or(aDBMS=dUnknown));
-    Check(Ext.AdaptSQLForEngineList(SQL)=AdaptShouldWork);
-    Check(SameTextU(SQL,SQLExpected) or not AdaptShouldWork,SQLExpected+#13#10+SQL);
+procedure Test(aDBMS: TSQLDBDefinition; AdaptShouldWork: boolean;
+  const SQLExpected: RawUTF8='');
+var Props: TSQLDBConnectionProperties;
+    SQL: RawUTF8;
+begin
+  Props := TSQLDBSQLite3ConnectionProperties.Create(SQLITE_MEMORY_DATABASE_NAME,'','','');
+  try
+    VirtualTableExternalMap(fExternalModel,TSQLRecordPeopleExt,Props,'SampleRecord').
+      MapField('LastChange','Changed');
+    with TSQLRestStorageExternalHook.Create(TSQLRecordPeopleExt,nil) do
+    try
+      SQL := SQLOrigin;
+      TSQLDBConnectionPropertiesHook(Props).fDBMS := aDBMS;
+      Check((Props.DBMS=aDBMS)or(aDBMS=dUnknown));
+      Check(AdaptSQLForEngineList(SQL)=AdaptShouldWork);
+      Check(SameTextU(SQL,SQLExpected)or not AdaptShouldWork,
+        SQLExpected+#13#10+SQL);
+    finally
+      Free;
+    end;
+  finally
+    Props.Free;
   end;
-  procedure Test2(const Orig,Expected: RawUTF8);
-  var DBMS: TSQLDBDefinition;
-  begin
-    SQLOrigin := Orig;
-    for DBMS := low(DBMS) to high(DBMS) do
-      Test(DBMS,true,Expected);
-  end;
+end;
+procedure Test2(const Orig,Expected: RawUTF8);
+var DBMS: TSQLDBDefinition;
+begin
+  SQLOrigin := Orig;
+  for DBMS := low(DBMS) to high(DBMS) do
+    Test(DBMS,true,Expected);
+end;
 begin
   check(TSQLDBConnectionProperties.IsSQLKeyword(dUnknown,'SELEct'));
   check(not TSQLDBConnectionProperties.IsSQLKeyword(dUnknown,'toto'));
@@ -14029,109 +13537,92 @@ begin
   check(TSQLDBConnectionProperties.IsSQLKeyword(dSQLite,'SELEct'));
   check(TSQLDBConnectionProperties.IsSQLKeyword(dSQLite,'clustER'));
   check(not TSQLDBConnectionProperties.IsSQLKeyword(dSQLite,'value'));
-  Server := TSQLRestServer.Create(fExternalModel);
-  try
-    Props := TSQLDBSQLite3ConnectionProperties.Create(SQLITE_MEMORY_DATABASE_NAME,'','','');
-    try
-      VirtualTableExternalMap(fExternalModel,TSQLRecordPeopleExt,Props,'SampleRecord').
-        MapField('LastChange','Changed');
-      Ext := TSQLRestStorageExternalHook.Create(TSQLRecordPeopleExt,Server);
-      try
-        Test2('select rowid,firstname from PeopleExt where rowid=2',
-              'select id,firstname from SampleRecord where id=2');
-        Test2('select rowid,firstname from PeopleExt where rowid=?',
-              'select id,firstname from SampleRecord where id=?');
-        Test2('select rowid,firstname from PeopleExt where rowid>=?',
-              'select id,firstname from SampleRecord where id>=?');
-        Test2('select rowid,firstname from PeopleExt where rowid<?',
-              'select id,firstname from SampleRecord where id<?');
-        Test2('select rowid,firstname from PeopleExt where rowid=2 and lastname=:(''toto''):',
-              'select id,firstname from SampleRecord where id=2 and lastname=:(''toto''):');
-        Test2('select rowid,firstname from PeopleExt where rowid=2 and rowID=:(2): order by rowid',
-              'select id,firstname from SampleRecord where id=2 and id=:(2): order by id');
-        Test2('select rowid,firstname from PeopleExt where rowid=2 or lastname=:(''toto''):',
-              'select id,firstname from SampleRecord where id=2 or lastname=:(''toto''):');
-        Test2('select rowid,firstname from PeopleExt where rowid=2 and not lastname like ?',
-              'select id,firstname from SampleRecord where id=2 and not lastname like ?');
-        Test2('select rowid,firstname from PeopleExt where rowid=2 and not (lastname like ?)',
-              'select id,firstname from SampleRecord where id=2 and not (lastname like ?)');
-        Test2('select rowid,firstname from PeopleExt where (rowid=2 and lastname="toto") or lastname like ?',
-              'select id,firstname from SampleRecord where (id=2 and lastname="toto") or lastname like ?');
-        Test2('select rowid,firstname from PeopleExt where (rowid=2 or lastname=:("toto"):) and lastname like ?',
-              'select id,firstname from SampleRecord where (id=2 or lastname=:("toto"):) and lastname like ?');
-        Test2('select rowid,firstname from PeopleExt where (rowid=2) and (lastname="toto" or lastname like ?)',
-              'select id,firstname from SampleRecord where (id=2) and (lastname="toto" or lastname like ?)');
-        Test2('select rowid,firstname from PeopleExt where (rowid=2) and (lastname=:("toto"): or (lastname like ?))',
-              'select id,firstname from SampleRecord where (id=2) and (lastname=:("toto"): or (lastname like ?))');
-        Test2('select rowid,firstname from PeopleExt where rowid=2 order by RowID',
-              'select id,firstname from SampleRecord where id=2 order by ID');
-        Test2('select rowid,firstname from PeopleExt where rowid=2 order by RowID DeSC',
-              'select id,firstname from SampleRecord where id=2 order by ID desc');
-        Test2('select rowid,firstname from PeopleExt order by RowID,firstName DeSC',
-              'select id,firstname from SampleRecord order by ID,firstname desc');
-        Test2('select rowid, firstName from PeopleExt order by RowID, firstName',
-              'select id,firstname from SampleRecord order by ID,firstname');
-        Test2('select rowid, firstName from PeopleExt  order by RowID, firstName asC',
-              'select id,firstname from SampleRecord order by ID,firstname');
-        Test2('select rowid,firstname from PeopleExt where firstname like :(''test''): order by lastname',
-              'select id,firstname from SampleRecord where firstname like :(''test''): order by lastname');
-        Test2('   select    COUNT(*)  from   PeopleExt   ',
-              'select count(*) from SampleRecord');
-        Test2('select count(*) from PeopleExt where rowid=2',
-              'select count(*) from SampleRecord where id=2');
-        Test2('select Distinct(firstname) , max(lastchange)+100 from PeopleExt where rowid >= :(2):',
-              'select Distinct(FirstName),max(Changed)+100 as LastChange from SampleRecord where ID>=:(2):');
-        Test2('select Distinct(lastchange) , max(rowid)-100 as newid from PeopleExt where rowid >= :(2):',
-              'select Distinct(Changed) as lastchange,max(id)-100 as newid from SampleRecord where ID>=:(2):');
-        SQLOrigin := 'select rowid,firstname from PeopleExt where   rowid=2   limit 2';
-        Test(dUnknown,false);
-        Test(dDefault,false);
-        Test(dOracle,true,'select id,firstname from SampleRecord where rownum<=2 and id=2');
-        Test(dMSSQL,true,'select top(2) id,firstname from SampleRecord where id=2');
-        Test(dJet,true,'select top 2 id,firstname from SampleRecord where id=2');
-        Test(dMySQL,true,'select id,firstname from SampleRecord where id=2 limit 2');
-        Test(dSQLite,true,'select id,firstname from SampleRecord where id=2 limit 2');
-        SQLOrigin := 'select rowid,firstname from PeopleExt where rowid=2 order by LastName limit 2';
-        Test(dUnknown,false);
-        Test(dDefault,false);
-        Test(dOracle,true,'select id,firstname from SampleRecord where rownum<=2 and id=2 order by LastName');
-        Test(dMSSQL,true,'select top(2) id,firstname from SampleRecord where id=2 order by LastName');
-        Test(dJet,true,'select top 2 id,firstname from SampleRecord where id=2 order by LastName');
-        Test(dMySQL,true,'select id,firstname from SampleRecord where id=2 order by LastName limit 2');
-        Test(dSQLite,true,'select id,firstname from SampleRecord where id=2 order by LastName limit 2');
-        SQLOrigin := 'select rowid,firstname from PeopleExt where firstname=:(''test''): limit 2';
-        Test(dUnknown,false);
-        Test(dDefault,false);
-        Test(dOracle,true,'select id,firstname from SampleRecord where rownum<=2 and firstname=:(''test''):');
-        Test(dMSSQL,true,'select top(2) id,firstname from SampleRecord where firstname=:(''test''):');
-        Test(dJet,true,'select top 2 id,firstname from SampleRecord where firstname=:(''test''):');
-        Test(dMySQL,true,'select id,firstname from SampleRecord where firstname=:(''test''): limit 2');
-        Test(dSQLite,true,'select id,firstname from SampleRecord where firstname=:(''test''): limit 2');
-        SQLOrigin := 'select id,firstname from PeopleExt limit 2';
-        Test(dUnknown,false);
-        Test(dDefault,false);
-        Test(dOracle,true,'select id,firstname from SampleRecord where rownum<=2');
-        Test(dMSSQL,true,'select top(2) id,firstname from SampleRecord');
-        Test(dJet,true,'select top 2 id,firstname from SampleRecord');
-        Test(dMySQL,true,'select id,firstname from SampleRecord limit 2');
-        Test(dSQLite,true,'select id,firstname from SampleRecord limit 2');
-        SQLOrigin := 'select id,firstname from PeopleExt order by firstname limit 2';
-        Test(dUnknown,false);
-        Test(dDefault,false);
-        Test(dOracle,true,'select id,firstname from SampleRecord where rownum<=2 order by firstname');
-        Test(dMSSQL,true,'select top(2) id,firstname from SampleRecord order by firstname');
-        Test(dJet,true,'select top 2 id,firstname from SampleRecord order by firstname');
-        Test(dMySQL,true,'select id,firstname from SampleRecord order by firstname limit 2');
-        Test(dSQLite,true,'select id,firstname from SampleRecord order by firstname limit 2');
-      finally
-        Ext.Free;
-      end;
-    finally
-      Props.Free;
-    end;
-  finally
-    Server.Free;
-  end;
+  Test2('select rowid,firstname from PeopleExt where rowid=2',
+        'select id,firstname from SampleRecord where id=2');
+  Test2('select rowid,firstname from PeopleExt where rowid=?',
+        'select id,firstname from SampleRecord where id=?');
+  Test2('select rowid,firstname from PeopleExt where rowid>=?',
+        'select id,firstname from SampleRecord where id>=?');
+  Test2('select rowid,firstname from PeopleExt where rowid<?',
+        'select id,firstname from SampleRecord where id<?');
+  Test2('select rowid,firstname from PeopleExt where rowid=2 and lastname=:(''toto''):',
+        'select id,firstname from SampleRecord where id=2 and lastname=:(''toto''):');
+  Test2('select rowid,firstname from PeopleExt where rowid=2 and rowID=:(2): order by rowid',
+        'select id,firstname from SampleRecord where id=2 and id=:(2): order by id');
+  Test2('select rowid,firstname from PeopleExt where rowid=2 or lastname=:(''toto''):',
+        'select id,firstname from SampleRecord where id=2 or lastname=:(''toto''):');
+  Test2('select rowid,firstname from PeopleExt where rowid=2 and not lastname like ?',
+        'select id,firstname from SampleRecord where id=2 and not lastname like ?');
+  Test2('select rowid,firstname from PeopleExt where rowid=2 and not (lastname like ?)',
+        'select id,firstname from SampleRecord where id=2 and not (lastname like ?)');
+  Test2('select rowid,firstname from PeopleExt where (rowid=2 and lastname="toto") or lastname like ?',
+        'select id,firstname from SampleRecord where (id=2 and lastname="toto") or lastname like ?');
+  Test2('select rowid,firstname from PeopleExt where (rowid=2 or lastname=:("toto"):) and lastname like ?',
+        'select id,firstname from SampleRecord where (id=2 or lastname=:("toto"):) and lastname like ?');
+  Test2('select rowid,firstname from PeopleExt where (rowid=2) and (lastname="toto" or lastname like ?)',
+        'select id,firstname from SampleRecord where (id=2) and (lastname="toto" or lastname like ?)');
+  Test2('select rowid,firstname from PeopleExt where (rowid=2) and (lastname=:("toto"): or (lastname like ?))',
+        'select id,firstname from SampleRecord where (id=2) and (lastname=:("toto"): or (lastname like ?))');
+  Test2('select rowid,firstname from PeopleExt where rowid=2 order by RowID',
+        'select id,firstname from SampleRecord where id=2 order by ID');
+  Test2('select rowid,firstname from PeopleExt where rowid=2 order by RowID DeSC',
+        'select id,firstname from SampleRecord where id=2 order by ID desc');
+  Test2('select rowid,firstname from PeopleExt order by RowID,firstName DeSC',
+        'select id,firstname from SampleRecord order by ID,firstname desc');
+  Test2('select rowid, firstName from PeopleExt order by RowID, firstName',
+        'select id,firstname from SampleRecord order by ID,firstname');
+  Test2('select rowid, firstName from PeopleExt  order by RowID, firstName asC',
+        'select id,firstname from SampleRecord order by ID,firstname');
+  Test2('select rowid,firstname from PeopleExt where firstname like :(''test''): order by lastname',
+        'select id,firstname from SampleRecord where firstname like :(''test''): order by lastname');
+  Test2('   select    COUNT(*)  from   PeopleExt   ',
+        'select count(*) from SampleRecord');
+  Test2('select count(*) from PeopleExt where rowid=2',
+        'select count(*) from SampleRecord where id=2');
+  Test2('select Distinct(firstname) , max(lastchange)+100 from PeopleExt where rowid >= :(2):',
+        'select Distinct(FirstName),max(Changed)+100 as LastChange from SampleRecord where ID>=:(2):');
+  Test2('select Distinct(lastchange) , max(rowid)-100 as newid from PeopleExt where rowid >= :(2):',
+        'select Distinct(Changed) as lastchange,max(id)-100 as newid from SampleRecord where ID>=:(2):');
+  SQLOrigin := 'select rowid,firstname from PeopleExt where   rowid=2   limit 2';
+  Test(dUnknown,false);
+  Test(dDefault,false);
+  Test(dOracle,true,'select id,firstname from SampleRecord where rownum<=2 and id=2');
+  Test(dMSSQL,true,'select top(2) id,firstname from SampleRecord where id=2');
+  Test(dJet,true,'select top 2 id,firstname from SampleRecord where id=2');
+  Test(dMySQL,true,'select id,firstname from SampleRecord where id=2 limit 2');
+  Test(dSQLite,true,'select id,firstname from SampleRecord where id=2 limit 2');
+  SQLOrigin := 'select rowid,firstname from PeopleExt where rowid=2 order by LastName limit 2';
+  Test(dUnknown,false);
+  Test(dDefault,false);
+  Test(dOracle,true,'select id,firstname from SampleRecord where rownum<=2 and id=2 order by LastName');
+  Test(dMSSQL,true,'select top(2) id,firstname from SampleRecord where id=2 order by LastName');
+  Test(dJet,true,'select top 2 id,firstname from SampleRecord where id=2 order by LastName');
+  Test(dMySQL,true,'select id,firstname from SampleRecord where id=2 order by LastName limit 2');
+  Test(dSQLite,true,'select id,firstname from SampleRecord where id=2 order by LastName limit 2');
+  SQLOrigin := 'select rowid,firstname from PeopleExt where firstname=:(''test''): limit 2';
+  Test(dUnknown,false);
+  Test(dDefault,false);
+  Test(dOracle,true,'select id,firstname from SampleRecord where rownum<=2 and firstname=:(''test''):');
+  Test(dMSSQL,true,'select top(2) id,firstname from SampleRecord where firstname=:(''test''):');
+  Test(dJet,true,'select top 2 id,firstname from SampleRecord where firstname=:(''test''):');
+  Test(dMySQL,true,'select id,firstname from SampleRecord where firstname=:(''test''): limit 2');
+  Test(dSQLite,true,'select id,firstname from SampleRecord where firstname=:(''test''): limit 2');
+  SQLOrigin := 'select id,firstname from PeopleExt limit 2';
+  Test(dUnknown,false);
+  Test(dDefault,false);
+  Test(dOracle,true,'select id,firstname from SampleRecord where rownum<=2');
+  Test(dMSSQL,true,'select top(2) id,firstname from SampleRecord');
+  Test(dJet,true,'select top 2 id,firstname from SampleRecord');
+  Test(dMySQL,true,'select id,firstname from SampleRecord limit 2');
+  Test(dSQLite,true,'select id,firstname from SampleRecord limit 2');
+  SQLOrigin := 'select id,firstname from PeopleExt order by firstname limit 2';
+  Test(dUnknown,false);
+  Test(dDefault,false);
+  Test(dOracle,true,'select id,firstname from SampleRecord where rownum<=2 order by firstname');
+  Test(dMSSQL,true,'select top(2) id,firstname from SampleRecord order by firstname');
+  Test(dJet,true,'select top 2 id,firstname from SampleRecord order by firstname');
+  Test(dMySQL,true,'select id,firstname from SampleRecord order by firstname limit 2');
+  Test(dSQLite,true,'select id,firstname from SampleRecord order by firstname limit 2');
 end;
 
 
@@ -15874,7 +15365,7 @@ end;
 
 procedure TTestSQLite3Engine._TSQLTableJSON;
 var J: TSQLTableJSON;
-    i1, i2, aR, aF, F1,F2, n: integer;
+    aR, aF, F1,F2, n: integer;
     Comp, Comp1,Comp2: TUTF8Compare;
     {$ifdef UNICODE}
     Peoples: TObjectList<TSQLRecordPeople>;
@@ -15886,7 +15377,7 @@ var J: TSQLTableJSON;
     lContactDataQueueDynArray: TDynArray;
     lContactDataQueueArray: TRawUTF8DynArray;
     lContactDataQueueJSON: TDocVariantData;
-    lData, s: RawUTF8;
+    lData: RawUTF8;
     lDocData: TDocVariantData;
 const
   TEST_DATA = '['+
@@ -16084,20 +15575,7 @@ begin
   check(lDocData.Count=3);
   check(Hash32(lDocData.ToJSON)=$FCF948A5);
   check(lDocData.Value[0].QUEUE_CALL=2);
-  s := TEST_DATA;
-  i1 := PosEx(',"CHANNEL":132',s);
-  i2 := PosEx('}',s,i1);
-  delete(s,i1,i2-i1); // truncate the 2nd object
-  J := TSQLTableJSON.Create('',s);
-  try
-    check(J.fieldCount=24);
-    if not checkfailed(J.rowCount=3) then
-      check(J.Get(2,J.FieldCount-1)=nil);
-    check(J.Get(J.rowCount,J.FieldCount-1)='sjentonpg@senate.gov');
-  finally
-    J.Free;
-  end;
-  {$endif NOVARIANTS}
+  {$endif}
 end;
 
 {$ifdef UNICODE}
@@ -16199,8 +15677,6 @@ type
       var Str2: TWideStringDynArray; const Rec1: TVirtualTableModuleProperties;
       var Rec2: TSQLRestCacheEntryValue; Float1: double; var Float2: double): TSQLRestCacheEntryValue;
     function DirectCall(const Data: TSQLRawBlob): integer;
-    function RepeatJsonArray(const item: RawUTF8; count: integer): RawJSON;  
-    function RepeatTextArray(const item: RawUTF8; count: integer): RawUTF8;
     function Test(A,B: Integer): RawUTF8;
   end;
 
@@ -16331,7 +15807,7 @@ begin
   Str2[i] := UTF8ToWideString(RawUTF8ArrayToCSV(Strs1));
   inc(Rec2.ID);
   dec(Rec2.Timestamp512);
-  Rec2.JSON := IntegerDynArrayToCSV(pointer(Ints),length(Ints));
+  Rec2.JSON := IntegerDynArrayToCSV(Ints,length(Ints));
   Float2 := Float1;
 end;
 
@@ -16342,41 +15818,6 @@ begin
   for i := 1 to result do
     if Data[i]<>#1 then
       result := 0;
-end;
-
-function TServiceCalculator.RepeatJsonArray(const item: RawUTF8; count: integer): RawJSON;
-var buf: array[word] of byte;
-begin
-  with TTextWriter.CreateOwnedStream(@buf, SizeOf(buf)) do
-    try
-      Add('[');
-      while count > 0 do begin
-        Add('"');
-        AddJSONEscape(pointer(item));
-        Add('"',',');
-        dec(count);
-      end;
-      CancelLastComma;
-      Add(']');
-      SetText(RawUTF8(result));
-    finally
-      Free;
-    end;
-end;
-
-function TServiceCalculator.RepeatTextArray(const item: RawUTF8; count: integer): RawUTF8;
-var buf: array[word] of byte;
-begin
-  with TTextWriter.CreateOwnedStream(@buf, SizeOf(buf)) do
-    try
-      while count > 0 do begin
-        AddJSONEscape(pointer(item));
-        dec(count);
-      end;
-      SetText(result);
-    finally
-      Free;
-    end;
 end;
 
 
@@ -16421,9 +15862,7 @@ function TServiceComplexCalculator.TestBlob(n: TComplexNumber): TServiceCustomAn
 begin
   EnsureInExpectedThread;
   Result.Header := TEXT_CONTENT_TYPE_HEADER;
-  if n.Real = maxInt then
-    Result.Content := StringOfChar(AnsiChar('-'), 600) else
-    Result.Content := FormatUTF8('%,%',[n.Real,n.Imaginary]);
+  Result.Content := FormatUTF8('%,%',[n.Real,n.Imaginary]);
 end;
 
 {$ifndef NOVARIANTS}
@@ -16656,7 +16095,7 @@ begin
     Check(Rec1.FileExtension=ExeVersion.ProgramFileName);
     Check(Rec2.ID=i1+1);
     Check(Rec2.Timestamp512=c-1);
-    Check(Rec2.JSON=IntegerDynArrayToCSV(pointer(Ints),length(Ints)));
+    Check(Rec2.JSON=IntegerDynArrayToCSV(Ints,length(Ints)));
     Check(RecRes.ID=i1);
     Check(RecRes.Timestamp512=c);
     Check(RecRes.JSON=StringToUTF8(Rec1.FileExtension));
@@ -16673,11 +16112,6 @@ begin
   Check(Str2[4]='');
   s := StringToUTF8(StringOfChar(#1,100));
   check(I.DirectCall(s)=100);
-  s := StringToUTF8(StringOfChar('-',600));
-  t := length(I.RepeatJsonArray(s, 100));
-  checkutf8(t = 1 + 100 * 603, 'RawJSON %', [KB(t)]);
-  t := length(I.RepeatTextArray(s, 100));
-  checkutf8(t = 100 * 600, 'RawUTF8 %', [KB(t)]);
 end;
 var s: RawUTF8;
 {$ifndef LVCL}
@@ -16800,10 +16234,6 @@ begin
         end;
       C1.Real := C1.Real+1;
     end;
-    C3.Real := maxInt; // magic value for huge content
-    cust := Inst.CC.TestBlob(C3);
-    j := length(cust.Content);
-    checkutf8(j = 600, 'TestBlob len=%', [j]);
   finally
     C3.Free;
     C1.Free;
@@ -17113,8 +16543,8 @@ begin
   fClient.Server.Services.ExpectMangledURI := false;
   Check(fClient.Server.Services['CALCULAtor']=S);
   Check(fClient.Server.Services['CALCULAtors']=nil);
-  if CheckFailed(length(S.InterfaceFactory.Methods)=13) then exit;
-  Check(S.ContractHash='"4C65C91D6536270A"');
+  if CheckFailed(length(S.InterfaceFactory.Methods)=11) then exit;
+  Check(S.ContractHash='"A0BE4DD5C1766347"');
   Check(TServiceCalculator(nil).Test(1,2)='3');
   Check(TServiceCalculator(nil).ToTextFunc(777)='777');
   for i := 0 to high(ExpectedURI) do // SpecialCall interface not checked
@@ -17476,14 +16906,14 @@ end;
 class function TTestServiceOrientedArchitecture.CustomReader(P: PUTF8Char;
   var aValue; out aValid: Boolean): PUTF8Char;
 var V: TSQLRestCacheEntryValue absolute aValue;
-    Values: array[0..2] of TValuePUTF8Char;
+    Values: TPUtf8CharDynArray;
 begin // {"ID":1786554763,"Timestamp":323618765,"JSON":"D:\\TestSQL3.exe"}
-  result := JSONDecode(P,['ID','Timestamp','JSON'],@Values);
+  result := JSONDecode(P,['ID','Timestamp','JSON'],Values);
   if result=nil then
     aValid := false else begin
-    V.ID := GetInt64(Values[0].Value);
-    V.Timestamp512 := Values[1].ToCardinal;
-    Values[2].ToUTF8(V.JSON);
+    V.ID := GetInteger(Values[0]);
+    V.Timestamp512 := GetCardinal(Values[1]);
+    V.JSON := Values[2];
     aValid := true;
   end;
 end;

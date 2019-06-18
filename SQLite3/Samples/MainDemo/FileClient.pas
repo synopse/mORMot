@@ -166,7 +166,7 @@ begin
           s := U2S(GetMimeContentType(Pointer(Data),Length(Data),TFileName(Rec.fName)));
       if s<>'' then
         DrawTextFmt(sContentTypeN,[s]);
-      DrawTextFmt(sSizeN,[U2S(KB(Data))]);
+      DrawTextFmt(sSizeN,[U2S(KB(Length(Data)))]);
       NewHalfLine;
       DrawText(sDataContent);
     end;

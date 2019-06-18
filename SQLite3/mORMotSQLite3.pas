@@ -6,7 +6,7 @@ unit mORMotSQLite3;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2018 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit mORMotSQLite3;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2018
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -204,7 +204,7 @@ unit mORMotSQLite3;
 
     Version 1.18
     - unit SQLite3.pas renamed mORMotSQLite3.pas
-    - updated SQLite3 engine to latest version 3.27.2
+    - updated SQLite3 engine to latest version 3.23.0
     - BATCH adding in TSQLRestServerDB will now perform SQLite3 multi-INSERT
       statements: performance boost is from 2x (mem with transaction) to 60x
       (full w/out transaction) - faster than SQlite3 as external DB
@@ -276,7 +276,6 @@ uses
   SynCommons,
   SynLog,
   SynSQLite3,
-  SynTable,
   mORMot;
 
 {.$define WITHUNSAFEBACKUP}
@@ -337,7 +336,6 @@ type
     fStatementMaxParam: integer;
     fStatementLastException: RawUTF8;
     fStatementTruncateSQLLogLen: integer;
-    fStatementPreparedSelectQueryPlan: boolean;
     /// check if a VACUUM statement is possible
     // - VACUUM in fact DISCONNECT all virtual modules (sounds like a SQLite3
     // design problem), so calling it during process could break the engine
@@ -469,9 +467,7 @@ type
     procedure AdministrationExecute(const DatabaseName,SQL: RawUTF8;
       var result: TServiceCustomAnswer); override;
     /// retrieves the per-statement detailed timing, as a TDocVariantData
-    procedure ComputeDBStats(out result: variant); overload;
-    /// retrieves the per-statement detailed timing, as a TDocVariantData
-    function ComputeDBStats: variant; overload;
+    procedure ComputeDBStats(out result: variant);
 
     /// initialize the associated DB connection
     // - called by Create and on Backup/Restore just after DB.DBOpen
@@ -558,9 +554,6 @@ type
     // - default is 0, meaning no truncation
     property StatementTruncateSQLLogLen: integer read fStatementTruncateSQLLogLen
       write fStatementTruncateSQLLogLen;
-    /// executes (therefore log) the QUERY PLAN for each prepared statement
-    property StatementPreparedSelectQueryPlan: boolean
-      read fStatementPreparedSelectQueryPlan write fStatementPreparedSelectQueryPlan;
   published
     /// associated database
     property DB: TSQLDataBase read fDB;
@@ -764,13 +757,9 @@ begin
     timer := @fStatementTimer else
     timer := nil;
   fStatement := fStatementCache.Prepare(fStatementGenericSQL,@wasPrepared,timer,@fStatementMonitor);
-  if wasPrepared then begin
-    InternalLog('prepared % % %', [fStaticStatementTimer.Stop,
-      DB.FileNameWithoutPath,fStatementGenericSQL],sllDB);
-    if fStatementPreparedSelectQueryPlan then
-      DB.ExecuteJSON('explain query plan '+
-        StringReplaceChars(fStatementGenericSQL,'?','1'), {expand=}true);
-  end;
+  if wasPrepared then
+    InternalLog('prepared % % %',
+      [fStaticStatementTimer.Stop,DB.FileNameWithoutPath,fStatementGenericSQL],sllDB);
   if timer=nil then begin
     fStaticStatementTimer.Start;
     fStatementTimer := @fStaticStatementTimer;
@@ -977,7 +966,7 @@ var i: integer;
 begin
   for i := 0 to high(Model.TableProps) do
     case Model.TableProps[i].Kind of
-    rRTree, rRTreeInteger: // register all *_in() SQL functions
+    rRTree: // register all *_in() SQL functions
       sqlite3_check(DB.DB,sqlite3.create_function_v2(DB.DB,
         pointer(TSQLRecordRTreeClass(Model.Tables[i]).RTreeSQLFunctionName),
         2,SQLITE_ANY,Model.Tables[i],InternalRTreeIn,nil,nil,nil));
@@ -1111,7 +1100,7 @@ begin
        IdemPChar(pointer(SQLWhere),'ORDER BY ') then
       // LIMIT is not handled by SQLite3 when built from amalgamation
       // see http://www.sqlite.org/compile.html#enable_update_delete_limit
-      aSQLWhere := Int64DynArrayToCSV(pointer(IDs),length(IDs),'RowID IN (',')') else
+      aSQLWhere := Int64DynArrayToCSV(TInt64DynArray(IDs),length(IDs),'RowID IN (',')') else
       aSQLWhere := SQLWhere;
     result := ExecuteFmt('DELETE FROM %%',
       [fModel.TableProps[TableModelIndex].Props.SQLTableName,SQLFromWhere(aSQLWhere)]);
@@ -1315,8 +1304,6 @@ var i: integer;
     ndx: TIntegerDynArray;
     doc: TDocVariantData absolute result;
 begin
-  if self=nil then
-    exit;
   doc.Init(JSON_OPTIONS_FAST_EXTENDED,dvObject);
   DB.Lock;
   try
@@ -1330,11 +1317,6 @@ begin
   end;
 end;
 
-function TSQLRestServerDB.ComputeDBStats: variant;
-begin
-  ComputeDBStats(result);
-end;
-
 function TSQLRestServerDB.MainEngineList(const SQL: RawUTF8; ForceAJAX: Boolean;
   ReturnedRowCount: PPtrInt): RawUTF8;
 var MS: TRawByteStringStream;
@@ -1345,9 +1327,8 @@ begin
   if (self<>nil) and (DB<>nil) and (SQL<>'') then begin
     // need a SQL request for R.Execute() to prepare a statement
     result := DB.LockJSON(SQL,ReturnedRowCount); // lock and try from cache
-    if result<>'' then
-      exit;
-    try // Execute request if was not got from cache
+    if result='' then // Execute request if was not got from cache
+    try
       try
         GetAndPrepareStatement(SQL,false);
         MS := TRawByteStringStream.Create;
@@ -1358,7 +1339,7 @@ begin
           MS.Free;
         end;
         GetAndPrepareStatementRelease(nil, FormatUTF8('returned % as %',
-          [Plural('row',RowCount),KB(result)]));
+          [Plural('row',RowCount),Plural('byte',length(result))]));
       except
         on E: ESQLite3Exception do
           GetAndPrepareStatementRelease(E);
@@ -1583,7 +1564,7 @@ begin
         result := ExecuteFmt('UPDATE % SET %=:(%):,%=:(%): WHERE RowID=:(%):',
           [Props.SQLTableName,SetFieldName,SetValue,
            Props.RecordVersionField.Name,RecordVersionCompute,ID[0]]) else begin
-      IDs := Int64DynArrayToCSV(pointer(ID),length(ID));
+      IDs := Int64DynArrayToCSV(TInt64DynArray(ID),length(ID));
       if Props.RecordVersionField=nil then
         result := ExecuteFmt('UPDATE % SET %=% WHERE RowID IN (%)',
           [Props.SQLTableName,SetFieldName,SetValue,IDs]) else begin
@@ -1697,37 +1678,37 @@ begin
   result := false;
   if (Self=nil) or (DB=nil) then
     exit;
+  fStatementCache.ReleaseAllDBStatements;
   user_version := DB.user_version;
   DB.LockAndFlushCache;
   try
+  try
+    // perform a VACCUM to recreate the database content
+    EngineExecute('VACUUM');
+    Closed := false;
     try
-      fStatementCache.ReleaseAllDBStatements;
-      // perform a VACCUM to recreate the database content
-      EngineExecute('VACUUM');
-      Closed := false;
+      Closed := DB.DBClose=SQLITE_OK;
+      // compress the database content file
+      Source := FileStreamSequentialRead(DB.FileName);
       try
-        Closed := DB.DBClose=SQLITE_OK;
-        // compress the database content file
-        Source := FileStreamSequentialRead(DB.FileName);
-        try
-          Dest.CopyFrom(Source,0);  // Count=0 for whole stream copy
-          result := true;
-        finally
-          Source.Free;
-        end;
+        Dest.CopyFrom(Source,0);  // Count=0 for whole stream copy
+        result := true;
       finally
-        if Closed then begin
-          // reopen the database if was previously closed
-          DB.DBOpen;
-          // register functions and modules
-          InitializeEngine;
-          // register virtual tables
-          CreateMissingTables(user_version,fCreateMissingTablesOptions);
-        end;
+        Source.Free;
       end;
     finally
-      DB.UnLock;
+      if Closed then begin
+        // reopen the database if was previously closed
+        DB.DBOpen;
+        // register functions and modules
+        InitializeEngine;
+        // register virtual tables
+        CreateMissingTables(user_version,fCreateMissingTablesOptions);
+      end;
     end;
+  finally
+    DB.UnLock;
+  end;
   except
     on E: Exception do
       result := false;

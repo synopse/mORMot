@@ -106,14 +106,10 @@ begin
 end;
 
 procedure TMainForm.ReadStatus;
-var status: RawUTF8;
 begin
   ExecAndWait(fBatPath + 'FossilStatus.bat "' + fBatPath + 'status.txt"',
     fFossilRepository, SW_HIDE, 10000);
-  status := StringFromFile(fBatPath + 'status.txt');
-  if PosEx(#13#10, status) = 0 then
-    status := StringReplaceAll(status, #10, #13#10);
-  mmoStatus.Text := UTF8ToString(status);
+  mmoStatus.Text := StringFromFile(fBatPath + 'status.txt');
 end;
 
 procedure TMainForm.FormCreate(Sender: TObject);
@@ -175,7 +171,7 @@ begin
     exit;
   end;
   if chkFossilPull.Checked then
-    ExecAndWait(FormatString('%FossilUpdate.bat "%" %',
+    ExecAndWait(format('%sFossilUpdate.bat "%s" %d',
       [fBatPath, DescFile, Integer(chkFossilPush.Checked)]),
       fFossilRepository, SW_SHOWNORMAL, INFINITE);
   VersionText := UnQuoteSQLString(StringFromFile(fDevPath + '\SynopseCommit.inc'));
@@ -187,7 +183,7 @@ begin
   FileFromString(VersionText, fFossilRepository + '\SynopseCommit.inc');
   DescFile := fBatPath + 'desc.txt';
   FileFromString('{' + IntToStr(VersionNumber) + '} ' + Desc, DescFile);
-  ExecAndWait(FormatString('%FossilCommit.bat "%" %', [fBatPath, DescFile,
+  ExecAndWait(format('%sFossilCommit.bat "%s" %d', [fBatPath, DescFile,
     Integer(chkFossilPush.Checked)]),
     fFossilRepository, SW_SHOWNORMAL, INFINITE);
   btnRefreshStatus.Click;
@@ -253,7 +249,7 @@ begin
     BatchFile := 'GitCommitLVCL.bat'
   else
     BatchFile := 'GitCommit.bat';
-  ExecAndWait(FormatString('%% "%" "%" "%" "%" "%"', [fBatPath, BatchFile,
+  ExecAndWait(format('%s%s "%s" "%s" "%s" "%s" "%s"', [fBatPath, BatchFile,
     fFossilRepository, fGitRepository, fGitExe, DescFile, fDevPath]),
     fGitRepository, SW_SHOWNORMAL, INFINITE);
   mmoDescription.SetFocus; // ReadStatus not necessary if git only
@@ -268,7 +264,7 @@ end;
 
 procedure TMainForm.btnGitShellClick(Sender: TObject);
 begin
-  ExecAndWait(FormatString('%GitShell.bat  "%"', [fBatPath, ExtractFilePath(fGitExe)]),
+  ExecAndWait(format('%sGitShell.bat  "%s"', [fBatPath, ExtractFilePath(fGitExe)]),
     fGitRepository, SW_SHOWNORMAL, INFINITE);
 end;
 

@@ -5,10 +5,10 @@ unit SyNodeProto;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
-    SyNode for mORMot Copyright (C) 2019 Pavel Mashlyakovsky & Vadim Orel
+    SyNode for mORMot Copyright (C) 2018 Pavel Mashlyakovsky & Vadim Orel
       pavel.mash at gmail.com
 
     Some ideas taken from
@@ -552,11 +552,8 @@ begin
     protoObj := cx.NewRootedObject(global.ptr.ReservedSlot[proto.fSlotIndex].asObject);
     jsobj := cx.NewRootedObject(cx.NewObjectWithGivenProto(@proto.FJSClass, protoObj.ptr));
     try
-      // premature optimization is the root of evil
-      // as shown by valgrind profiler better to not redefine props in object
-      // but let's JS engine to use it from prototype
-      //if Length(AProto.FJSProps)>0 then
-      //  jsobj.ptr.DefineProperties(cx,@AProto.FJSProps[0]);
+      if Length(AProto.FJSProps)>0 then
+        jsobj.ptr.DefineProperties(cx,@AProto.FJSProps[0]);
 
       Instance := AInstance;
       new(ObjRec);

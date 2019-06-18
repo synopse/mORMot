@@ -6,7 +6,7 @@ unit SynWinSock;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -27,7 +27,7 @@ unit SynWinSock;
   Portions created by Lukas Gebauer are Copyright (C) 2003.
   All Rights Reserved.
 
-  Portions created by Arnaud Bouchez are Copyright (C) 2019 Arnaud Bouchez.
+  Portions created by Arnaud Bouchez are Copyright (C) 2018 Arnaud Bouchez.
   All Rights Reserved.
 
   Contributor(s):
@@ -847,7 +847,7 @@ type
   PSecPkgContextStreamSizes = ^TSecPkgContextStreamSizes;
 
   ESChannel = class(Exception);
-  {$ifdef UNICODE}TSChannelClient = record{$else}TSChannelClient = object{$endif}
+  TSChannelClient = object
   private
     Cred: TCredHandle;
     Ctxt: TCtxtHandle;
@@ -1455,12 +1455,12 @@ end;
 function InitSocketInterface(const Stack: TFileName = ''): Boolean;
 begin
   result := False;
+  SockEnhancedApi := False;
+  SockSChannelApi := False;
   EnterCriticalSection(SynSockCS);
   try
     if SynSockCount = 0 then begin
-      SockEnhancedApi := false;
-      SockSChannelApi := false;
-      SockWship6Api := false;
+      SockWship6Api := False;
       if Stack = '' then
         LibHandle := LoadLibrary(DLLStackName)
       else
@@ -1659,8 +1659,7 @@ const
   TLSRECMAXSIZE = 19000; // stack buffers for TSChannelClient.Receive/Send
 
 type
-  {$ifdef UNICODE}THandshakeBuf = record{$else}THandshakeBuf = object{$endif}
-  public
+  THandshakeBuf = object
     buf: array[0..2] of TSecBuffer;
     input, output: TSecBufferDesc;
     procedure Init;
@@ -1878,6 +1877,7 @@ begin
     inc(PByte(aBuffer), templen);
     dec(pending, templen);
     trailer := Sizes.cbHeader + templen;
+    len := trailer + Sizes.cbTrailer;
     buf[0].cbBuffer := Sizes.cbHeader;
     buf[0].BufferType := SECBUFFER_STREAM_HEADER;
     buf[0].pvBuffer := @temp;
@@ -1892,7 +1892,6 @@ begin
     buf[3].pvBuffer := nil;
     if EncryptMessage(@Ctxt, 0, @desc, 0) <> SEC_E_OK then
       exit; // shutdown the connection on SChannel error
-    len := buf[0].cbBuffer + buf[1].cbBuffer + buf[2].cbBuffer;
     sent := 0;
     repeat
       s := SynWinSock.Send(aSocket, @temp[sent], len, MSG_NOSIGNAL);

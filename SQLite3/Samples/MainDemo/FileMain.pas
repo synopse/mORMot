@@ -14,7 +14,7 @@ uses
   AdvToolBar, AdvPreviewMenu, AdvShapeButton, AdvOfficePager,
 {$endif}
   ImgList, ShellApi,
-  SynCommons, SynTable, SynGdiPlus, mORMot, mORMotHttpClient,
+  SynCommons, SynGdiPlus, mORMot, mORMotHttpClient,
   mORMotToolBar, mORMotUI, mORMotUILogin, mORMoti18n,
 {$ifdef DEBUGINTERNALSERVER}
   FileServer,
@@ -256,7 +256,7 @@ resourcestring
 
 procedure TMainForm.HelpClick(Sender: TObject);
 begin
-  mORMotUILogin.ShowMessage(format(sHelpN,[Caption,ExeVersion.Version.Detailed])+
+  ShowMessage(format(sHelpN,[Caption,ExeVersion.Version.Detailed])+
     '\n\nSynopse mORMot '+SYNOPSE_FRAMEWORK_VERSION+
     ' - https://synopse.info');
 end;

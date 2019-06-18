@@ -6,7 +6,7 @@ unit SynDBZeos;
 {
   This file is part of Synopse framework.
 
-  Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+  Synopse framework. Copyright (C) 2018 Arnaud Bouchez
   Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynDBZeos;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2018
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -172,7 +172,6 @@ uses
   ZCompatibility, ZVariant, ZURL, ZDbcIntfs, ZDbcResultSet,
   // mORMot units after ZDBC due to some name conflicts (e.g. UTF8ToString)
   SynCommons,
-  SynTable,
   SynLog,
   SynDB;
 
@@ -215,12 +214,6 @@ type
     // ! aExternalDBProperties.ThreadingMode := tmMainConnection;
     // or by adding 'syndb_singleconnection=true' as URI property
     constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUTF8); override;
-    /// initialize raw properties to connect to the ZEOS engine
-    // - using Zeos' TZURL detailed class - see: src\core\ZURL.pas
-    // - this gives all possibilities to add Properties before a connection is opened
-    // - you can define the protocol by hand eg. "odbc_w"/"OleDB" and define TSQLDBDefinition
-    // to describe the server syntax SynDB and the ORM use behind the abstract driver
-    constructor CreateWithZURL(const aURL: TZURL; aDBMS: TSQLDBDefinition; aOwnsURL: Boolean); virtual;
     /// finalize properties internal structures
     destructor Destroy; override;
     /// create a new connection
@@ -429,30 +422,7 @@ begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
     fURL.Password := UTF8ToString(aPassWord);
   if fDBMSName = '' then
     StringToUTF8(fURL.Protocol,fDBMSName);
-  CreateWithZURL(fURL, TYPES[IdemPCharArray(pointer(fDBMSName),PCHARS)], true);
-end;
-
-procedure TSQLDBZEOSConnectionProperties.GetForeignKeys;
-begin
-  { TODO : get FOREIGN KEYS from ZEOS metadata ? }
-end;
-
-function TSQLDBZEOSConnectionProperties.NewConnection: TSQLDBConnection;
-begin
-  result := TSQLDBZEOSConnection.Create(self);
-end;
-
-constructor TSQLDBZEOSConnectionProperties.CreateWithZURL(const aURL: TZURL;
-  aDBMS: TSQLDBDefinition; aOwnsURL: Boolean);
-{$IFDEF ZEOS73UP}var protocol: RawUTF8;{$endif}
-begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
-  if aOwnsURL then 
-    fURL := aURL else 
-    fURL := TZURL.Create(aURL);
-  fDBMS := aDBMS;
-  {$IFNDEF UNICODE}
-  fURL.Properties.Values['controls_cp'] := 'CP_UTF8';
-  {$ENDIF}
+  fDBMS := TYPES[IdemPCharArray(pointer(fDBMSName),PCHARS)];
   { Implementation/Enhancements Notes About settings below (from Michael):
     ConnectionProperties:
     Make it possible to Assign Parameters on the fly e.g.:
@@ -485,28 +455,16 @@ begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
        this value will be send to OCI and indicates Oracle which
        row_prefetch_size you allow to execute a query
   }
-  {$IFDEF ZEOS73UP}
-  if fDBMS = dMSSQL then begin
-    protocol := LowerCase(StringToUTF8(FURL.Protocol));
-    //EH: switch off tds support in any kind -> deprecated and our 64bit lib isn't compiled with libiconv support
-    //users permanently run into the encoding issues which can't be resolved using the dblib tds-types:
-    //tdsNVarchar/tdsNText is defined but will never be used by DBLIB + SQLServer)
-    if {$IFDEF MSWINDOWS}(protocol <> 'ado') and (protocol <> 'oledb') and {$ENDIF}
-       (protocol <> 'odbc_w') and (protocol <> 'odbc_a') then
-      {$IFDEF MSWINDOWS}
-      FURL.Protocol := 'OleDB';
-      {$ELSE}
-      FURL.Protocol := 'odbc_w'
-      {$ENDIF}
-  end;
-  {$ENDIF}
-  inherited Create(StringToUTF8(FURL.HostName),StringToUTF8(FURL.Database),StringToUTF8(FURL.UserName),StringToUTF8(FURL.Password));
+  inherited Create(aServerName,aDatabaseName,aUserID,aPassWord);
   if StrToBoolDef(fURL.Properties.Values['syndb_singleconnection'],false) then
     ThreadingMode := tmMainConnection;
-  fUseCache := {$ifdef ZEOS72UP}true{$ELSE}false{$ENDIF}; // caching disabled by default - enabled if stable enough
+  fURL.Properties.Add('controls_cp=CP_UTF8');
+  fUseCache := false; // caching disabled by default - enabled if stable enough
   case fDBMS of
   dSQLite: begin
-    {$ifndef ZEOS72UP}
+    {$ifdef ZEOS72UP}
+    fUseCache := true; // statement cache has been fixed in 7.2 branch
+    {$else}
     fSQLCreateField[ftInt64] := ' BIGINT'; // SQLite3 INTEGER = 32bit for ZDBC!
     {$endif}
   end;
@@ -520,19 +478,33 @@ begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
     end;
     fURL.Properties.Add('codepage=UTF8');
     fUseCache := true; // caching rocks with Firebird ZDBC provider :)
+    if Assigned(OnBatchInsert) then begin
+      // ZDBC: MultipleValuesInsertFirebird is buggy, MultipleValuesInsert slower
+      fBatchSendingAbilities := [];
+      OnBatchInsert := nil;
+    end;
   end;
   dOracle, dPostgreSQL, dMySQL: begin
     fURL.Properties.Add('codepage=UTF8');
     fUseCache := true;
   end;
   end;
+  {$ifdef ZEOS72UP} // new since 7.2up
+  with (MainConnection as TSQLDBZEOSConnection).Database do
+  if UseMetadata then
+    if GetMetadata.GetDatabaseInfo.SupportsArrayBindings then begin
+      fBatchSendingAbilities := [cCreate, cUpdate, cDelete];
+      OnBatchInsert := nil;
+      fSupportsArrayBindings := true;
+    end;
+  {$endif}
   fStatementParams := TStringList.Create;
   case fDBMS of
   dOracle: begin
     {$ifndef ZEOS72UP} // fixed since 7.2up
     // sets OCI_ATTR_PREFETCH_ROWS on prepare a fetch
     // default = 100 on 7.1down
-    fStatementParams.Add('prefetch_count=1000');
+    fStatementParams.Add('prefetch_count=100000');
     {$ELSE}
     //max mem in bytes which OCI(Server) can use for a result on Server-Side
     //fStatementParams.Add('row_prefetch_size=131072');
@@ -551,12 +523,6 @@ begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
     // actually it's not realy faster.. just a hint:
     // http://dev.mysql.com/doc/refman/5.0/en/c-api-prepared-statement-problems.html
     //fStatementParams.Add('preferprepared=True');
-    // https://mariadb.com/kb/en/library/bulk-insert-row-wise-binding/
-    // https://mariadb.com/kb/en/library/bulk-insert-column-wise-binding/
-    // if you run into some mysql known issues,
-    // since 7.3 you've to explicit unset real_prepared by
-    //fStatementParams.Add('emulate_prepares=True'); or
-    //fStatementParams.Add('MinExecCountBeforePrepare=-1');
   end;
   dPostgreSQL: begin
     // see https://synopse.info/forum/viewtopic.php?pid=13260#p13260
@@ -583,24 +549,16 @@ begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
     fStatementParams.Add('cachedlob=false'); //default = False
     {$endif}
   end;
-  // ZEOS_PREVENT_CONN will prevent unexpected connection creation inside ConnectionProperties.Create
-  // TODO - rethink code below to prevent create connection inside this fucntion
-  // Reasons: on the moment Properties are created (usually during server startup)
-  // 1) actual database may not exists (multitenancy server what create DB's in runtime)
-  // 2) in case of several connection props inside one process some of them may be used
-  // occasiously or not used at all, so creating connection during server startup of overhead
-  {$ifndef ZEOS_PREVENT_CONN}
-  {$ifdef ZEOS72UP} // new since 7.2up
-  with (MainConnection as TSQLDBZEOSConnection).Database do
-  // ZDBC: MultipleValuesInsertFirebird is buggy, MultipleValuesInsert slower
-  if UseMetadata and not (fDBMS = dFirebird) then
-    if GetMetadata.GetDatabaseInfo.SupportsArrayBindings then begin
-      fBatchSendingAbilities := [cCreate, cUpdate, cDelete];
-      OnBatchInsert := nil;
-      fSupportsArrayBindings := true;
-    end;
-  {$endif}
-  {$endif}
+end;
+
+procedure TSQLDBZEOSConnectionProperties.GetForeignKeys;
+begin
+  { TODO : get FOREIGN KEYS from ZEOS metadata ? }
+end;
+
+function TSQLDBZEOSConnectionProperties.NewConnection: TSQLDBConnection;
+begin
+  result := TSQLDBZEOSConnection.Create(self);
 end;
 
 destructor TSQLDBZEOSConnectionProperties.Destroy;
@@ -676,8 +634,7 @@ begin
   if GetDatabaseMetadata(meta) then begin
     SQLSplitTableName(aTableName, Schema,TableName);
     sSchema := UTF8ToString(Schema);
-    //sTableName := meta.GetIdentifierConvertor.Quote(UTF8ToString(TableName));
-    sTableName := UTF8ToString(TableName);
+    sTableName := meta.GetIdentifierConvertor.Quote(UTF8ToString(TableName));
     res := meta.GetColumns('',sSchema,sTableName,'');
     FA.InitSpecific(TypeInfo(TSQLDBColumnDefineDynArray),Fields,djRawUTF8,@n,true);
     FillChar(F,sizeof(F),0);
@@ -725,7 +682,7 @@ begin
       result := ftCurrency;
     stDate, stTime, stTimestamp:
       result := ftDate;
-    stString, stUnicodeString, {$ifdef ZEOS72UP}stGUID, {$endif} stAsciiStream, stUnicodeStream:
+    stString, stUnicodeString, stAsciiStream, stUnicodeStream:
       result := ftUTF8;
     stBytes, stBinaryStream:
       result := ftBlob;
@@ -767,11 +724,10 @@ end;
 { TSQLDBZEOSConnection }
 
 constructor TSQLDBZEOSConnection.Create(aProperties: TSQLDBConnectionProperties);
-var url: TZURL;
 begin
   inherited Create(aProperties);
-  url := (fProperties as TSQLDBZEOSConnectionProperties).fURL;
-  fDatabase := DriverManager.GetConnectionWithParams(url.URL,url.Properties);
+  fDatabase := DriverManager.GetConnectionWithParams(
+    (fProperties as TSQLDBZEOSConnectionProperties).fURL.URL,nil);
   fDatabase.SetReadOnly(false);
   // about transactions, see https://synopse.info/forum/viewtopic.php?id=2209
   fDatabase.SetAutoCommit(true);
@@ -859,7 +815,7 @@ begin
     raise ESQLDBZEOS.CreateUTF8('%.Prepare() shall be called once',[self]);
   inherited Prepare(aSQL,ExpectResults); // connect if necessary
   fStatement := (fConnection as TSQLDBZEOSConnection).fDatabase.
-    PrepareStatementWithParams({$ifdef UNICODE}UTF8ToString(fSQL){$else}fSQL{$endif}, // see controls_cp=CP_UTF8
+    PrepareStatementWithParams(UTF8ToString(fSQL),
     (fConnection.Properties as TSQLDBZEOSConnectionProperties).fStatementParams);
 end;
 
@@ -979,52 +935,89 @@ end;
 /// Convert array of RawUTF8 to PostgreSQL ARRAY
 // ['one', 't"wo'] -> '{"one","t\"wo"}'
 // ['1', '2', '3'] -> '{1,2,3}'
-procedure UTF8Array2PostgreArray(const Values: array of RawUTF8; out postgreArray: RawByteString);
-var i, j, k, n, L: Integer;
-    P: PUTF8Char;
+function UTF8Array2PostgreArray(const Values: array of RawUTF8): RawUTF8;
+var i, j, k, len, seplen, startlen, finlen, dQuoteRepllen, L: Integer;
+    P: PAnsiChar;
+    isStr: boolean;
+const
+  start: RawUTF8= '{';
+  fin: RawUTF8= '}';
+  Sep: RawUTF8= ',';
+  dQuoteRepl: RawUTF8= '\"';
 begin
-  if high(Values)<0 then 
-    exit;
-  L := 2; // '{}'
-  inc(L,high(Values)); // , after each element
+  result := '';
+  if high(Values)<0 then exit;
+  seplen := length(Sep);
+  startlen := length(start);
+  finlen := length(fin);
+  dQuoteRepllen := length(dQuoteRepl);
+  len := seplen*high(Values);
   for i := 0 to high(Values) do begin
-    inc(L,length(Values[i]));
+    inc(len,length(Values[i]));
     for j := 2 to length(Values[i])-1 do
-      if Values[i][j] = '"' then 
-        inc(L); // \ before "
+    case Values[i][j] of
+      '"': inc(len);
+    end;
   end;
-  SetLength(postgreArray,L);
-  P := pointer(postgreArray);
-  P[0] := '{'; 
-  i := 1;
-  for n := 0 to high(Values) do begin
-    if length(Values[n]) = 0 then continue;
-    if Values[n][1] = '''' then begin
-      P[i] := '"'; 
-      inc(i);
-      for k := 2 to length(Values[n])-1 do begin // skip first and last "
-        if Values[n][k] = '"' then begin
-          p[i] := '\';
-          inc(i);
+  inc(len,startlen+finlen);//add { and }
+  SetLength(result,len);
+  P := pointer(result);
+
+  if startlen>0 then begin
+    MoveFast(pointer(start)^,P^,startlen);
+    inc(P,startlen);
+  end;
+
+  i := 0;
+  repeat
+    L := length(Values[i]);
+    if L>0 then begin
+      isStr := (Values[i][1] = '''') and ((Values[i][l] = ''''));
+      if isStr then begin
+        P^ := '"';
+        inc(p);
+        k := 2;
+        while k<l-1 do begin
+          j := 0;
+          while k+j<l do begin
+            case Values[i][k+j] of
+              '"': break;
+              else inc(j);
+            end;
+          end;
+          MoveFast(pointer(@Values[i][k])^,P^,j);
+          inc(P,j);
+          inc(k,j);
+          case Values[i][k] of
+            '"': begin
+              MoveFast(pointer(dQuoteRepl)^,P^,dQuoteRepllen);
+              inc(P,dQuoteRepllen);
+              inc(k);
+            end;
+          end;
         end;
-        p[i] := Values[n][k];
-        inc(i);
+        P^ := '"';
+        inc(p);
+      end else begin
+        MoveFast(pointer(Values[i])^,P^,L);
+        inc(P,L);
       end;
-      P[i] := '"'; 
-      inc(i);
-    end else
-      for k := 1 to length(Values[n]) do begin
-        p[i] := Values[n][k];
-        inc(i);
-      end;
-    p[i] := ','; 
+    end;
+
+    if i=high(Values) then
+      Break;
+    if seplen>0 then begin
+      MoveFast(pointer(Sep)^,P^,seplen);
+      inc(P,seplen);
+    end;
     inc(i);
+  until false;
+
+  if finlen>0 then begin
+    MoveFast(pointer(fin)^,P^,finlen);
+    inc(P,finlen);
   end;
-  if (i > 1) then begin
-    p[i-1] := '}';
-    SetLength(postgreArray,i);
-  end else
-    p[i] := '}';
+  Assert(P-pointer(result)=len);
 end;
 
 procedure TSQLDBZEOSStatement.ExecutePrepared;
@@ -1049,14 +1042,13 @@ begin
   {$ENDIF}
   // 1. bind parameters in fParams[] to fQuery.Params
   {$ifdef ZEOS72UP}
-  arrayBinding := nil;
   if fParamsArrayCount>0 then
     with (fConnection.Properties as TSQLDBZEOSConnectionProperties) do
     if fSupportsArrayBindings then
       arrayBinding := TZeosArrayBinding.Create(self) else
-      if not fExpectResults then
-        raise ESQLDBZEOS.CreateUTF8(
-          '%.BindArray() not supported by % provider',[self,DBMSName]);
+      raise ESQLDBZEOS.CreateUTF8(
+        '%.BindArray() not supported by % provider',[self,DBMSName]) else
+    arrayBinding := nil;
   try
     if arrayBinding=nil then
   {$else}
@@ -1066,9 +1058,10 @@ begin
     for i := 0 to fParamCount-1 do
     with fParams[i] do begin
       if (Length(VArray)>0) and (fConnection.Properties.DBMS = dPostgreSQL) then begin
-        if VType in [ftInt64, ftUTF8] then
-          UTF8Array2PostgreArray(VArray, VData) else
-          raise ESQLDBZEOS.CreateUTF8('%.ExecutePrepared: Invalid array type on bound parameter #%', [Self,i]);
+        case VType of
+        ftInt64, ftUTF8: VData := UTF8Array2PostgreArray(VArray);
+        else raise ESQLDBZEOS.CreateUTF8('%.ExecutePrepared: Invalid array type on bound parameter #%', [Self,i]);
+        end;
         VType := ftUTF8;
       end;
       case VType of
@@ -1242,7 +1235,7 @@ procedure TSQLDBZEOSStatement.ColumnsToJSON(WR: TJSONWriter);
 {$if not (defined(ZEOS73UP) and defined(USE_SYNCOMMONS))}
 var col: integer;
     P: PAnsiChar;
-    Len: NativeUInt; // required by Zeos for GetPAnsiChar out param (not PtrUInt)
+    Len: NativeUInt;
 procedure WriteIZBlob;
 var blob: IZBlob;
 begin
@@ -1252,7 +1245,7 @@ end;
 {$IFEND}
 begin // take care of the layout of internal ZDBC buffers for each provider
   {$if defined(ZEOS73UP) and defined(USE_SYNCOMMONS)}
-  fResultSet.ColumnsToJSON(WR,true);
+  fResultSet.ColumnsToJSON(WR);
   {$ELSE}
   if WR.Expand then
     WR.Add('{');

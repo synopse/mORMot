@@ -83,7 +83,7 @@ begin
     ptInt: result := val.isInteger;
     ptStr: result := val.isString;
     ptObj: result := val.isObject;
-    ptBuffer: result := val.isObject and (val.asObject.IsArrayBufferObject or val.asObject.IsArrayBufferViewObject);
+    ptBuffer: result := val.isObject and val.asObject.IsArrayBufferObject;
     ptAny: result := True;
     else result := false;
   end;
@@ -126,7 +126,7 @@ begin
     end;
 
     if not IsCalled then
-      raise ESMException.CreateUTF8('There is no overloaded function "%" with such a list of arguments', [calleeObj.GetFunctionId().ToSynUnicode(cx)]);
+      raise ESMException.Create('invalid usage');
 
     Result := True;
   except

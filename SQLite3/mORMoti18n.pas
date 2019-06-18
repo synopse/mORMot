@@ -6,7 +6,7 @@ unit mORMoti18n;
 (*
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2018 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit mORMoti18n;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2018
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -293,8 +293,7 @@ var
 
 type
   /// a common record to identify a language
-  {$ifdef UNICODE}TLanguage = record{$else}TLanguage = object{$endif}
-  public
+  TLanguage = object
     /// as in LanguageAbr[index], LANGUAGE_NONE before first SetLanguageLocal()
     Index: TLanguages;
     /// the corresponding Char Set

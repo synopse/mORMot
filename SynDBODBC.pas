@@ -6,7 +6,7 @@ unit SynDBODBC;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2018 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynDBODBC;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2018
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -103,7 +103,6 @@ uses
   Classes,
   SynCommons,
   SynLog,
-  SynTable,
   SynDB;
 
 
@@ -1239,14 +1238,13 @@ begin
 end;
 
 procedure TODBCConnection.Disconnect;
-var log: ISynLog;
 begin
   try
     inherited Disconnect; // flush any cached statement
   finally
     if (ODBC<>nil) and (fDbc<>nil) then
     with ODBC do begin
-      log := SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Disconnect'{$endif});
+      SynDBLog.Enter(self{$ifndef DELPHI5OROLDER},'Disconnect'{$endif});
       Disconnect(fDbc);
       FreeHandle(SQL_HANDLE_DBC,fDbc);
       fDbc := nil;

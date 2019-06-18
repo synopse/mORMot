@@ -6,7 +6,7 @@ unit SynSQLite3RegEx;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2018 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynSQLite3RegEx;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2018
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -76,7 +76,6 @@ uses
   // download from http://www.regular-expressions.info/download/TPerlRegEx.zip
   PCRE,
 {$endif}
-  { TODO : use FLRE as pure pascal fast alernative }
   SysUtils,
   SynCommons,
   SynSQLite3;
@@ -98,41 +97,26 @@ type
   TPCREcaches = array of TPCREcache;
   PPCREcaches = ^TPCREcaches;
 
-{$ifdef ISDELPHI103}
-  {$define PCRE16}
-  // System.RegularExpressionsAPI changed from a UTF-8 to UTF-16 calls :(
-{$endif ISDELPHI103}
-
-
 const
   // small regex compilation cache is enough in practice
   MAX_PCRECACHE = 16;
 
+
 procedure InternalRegExp(Context: TSQLite3FunctionContext;
   argc: integer; var argv: TSQLite3ValueArray); cdecl;
 var regexp, text: PUTF8Char;
-    errMsg: PAnsiChar; // even for PCRE16 :)
+    errMsg: PAnsiChar;
     errPos: integer;
     found, result: boolean;
     i, n: integer;
     reg: PPCRE;
     cache: PPCREcaches;
     c: array[1..sizeof(TPCREcache)] of byte; // bulk mem block to avoid ref count
-    {$ifdef PCRE16}
-    temp: TSynTempBuffer;
-    function ToUTF16(p: PUTF8Char; var temp: TSynTempBuffer): integer; inline;
-    var len: integer;
-    begin
-      len := StrLen(p);
-      temp.Init(len*2+2);
-      result := UTF8ToWideChar(temp.buf,p,len);
-    end;
-    {$endif PCRE16}
-  procedure CompileError;
-  begin // sub procedure to avoid temp RawUTF8
-    sqlite3.result_error(Context,pointer(FormatUTF8(
-      'REGEXP "%": % at pos %',[regexp,errMsg,errPos])));
-  end;
+procedure CompileError;
+begin // sub procedure to avoid temp RawUTF8
+  sqlite3.result_error(Context,pointer(FormatUTF8(
+    'REGEXP "%": % at pos %',[regexp,errMsg,errPos])));
+end;
 begin
   if argc<>2 then begin
     ErrorWrongNumberOfArgs(Context);
@@ -161,13 +145,7 @@ begin
       break;
     end;
   if not found then begin
-    {$ifdef PCRE16}
-    ToUTF16(regexp,temp);
-    reg := pcre_compile(temp.buf,0,@errMsg,@errPos,nil);
-    temp.Done;
-    {$else}
     reg := pcre_compile(pointer(regexp),0,@errMsg,@errPos,nil);
-    {$endif PCRE16}
     if reg=nil then begin
       CompileError;
       exit;
@@ -187,15 +165,8 @@ begin
       extra := pcre_study(compiled,0,@errMsg);
     end;
   end;
-  with cache^[0] do begin
-    {$ifdef PCRE16}
-    i := ToUTF16(text,temp);
-    result := pcre_exec(compiled,extra,temp.buf,i,0,PCRE_NO_UTF16_CHECK,nil,0)>=0;
-    temp.Done;
-    {$else}
+  with cache^[0] do
     result := pcre_exec(compiled,extra,pointer(text),StrLen(text),0,PCRE_NO_UTF8_CHECK,nil,0)>=0;
-    {$endif PCRE16}
-  end;
     // (faster with PCRE_NO_UTF8_CHECK option)
   sqlite3.result_int64(Context,ord(result));
 end;

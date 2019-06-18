@@ -6,7 +6,7 @@ unit SynRestVCL;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynRestVCL;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2018
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -75,9 +75,7 @@ uses
   mORMotHttpClient,
   SynCrtSock, // remover una vez implementado TSQLHttpClient
   SynCommons,
-  SynTable,
-  SynDB,
-  SynDBVCL,
+  SynDB, SynDBVCL,
   DB,
   {$ifdef FPC}
   BufDataset
@@ -176,7 +174,7 @@ procedure JSONColumnsToBinary(const aTable: TSQLTableJSON; W: TFileBufferWriter;
   const ColTypes: TSQLDBFieldTypeDynArray);
 // convert to binary from a TSQLTableJSON, is not ideal because this code is a almost repeated code.
 function JSONToBinary(const aTable: TSQLTableJSON; Dest: TStream; MaxRowCount: cardinal=0; DataRowPosition: PCardinalDynArray=nil;
-                      const DefaultDataType: TSQLDBFieldType = SynTable.ftUTF8; const DefaultFieldSize: Integer = 255): cardinal;
+                      const DefaultDataType: TSQLDBFieldType = SynCommons.ftUTF8; const DefaultFieldSize: Integer = 255): cardinal;
 
 implementation
 
@@ -188,37 +186,37 @@ const
   FETCHALLTOBINARY_MAGIC = 1;
 
   SQLFIELDTYPETODBFIELDTYPE: array[TSQLFieldType] of TSQLDBFieldType =
-    (SynTable.ftUnknown,   // sftUnknown
-     SynTable.ftUTF8,      // sftAnsiText
-     SynTable.ftUTF8,      // sftUTF8Text
-     SynTable.ftInt64,     // sftEnumerate
-     SynTable.ftInt64,     // sftSet
-     SynTable.ftInt64,     // sftInteger
-     SynTable.ftInt64,     // sftID = TSQLRecord(aID)
-     SynTable.ftInt64,     // sftRecord = TRecordReference
-     SynTable.ftInt64,     // sftBoolean
-     SynTable.ftDouble,    // sftFloat
-     SynTable.ftDate,      // sftDateTime
-     SynTable.ftInt64,     // sftTimeLog
-     SynTable.ftCurrency,  // sftCurrency
-     SynTable.ftUTF8,      // sftObject
+    (SynCommons.ftUnknown,   // sftUnknown
+     SynCommons.ftUTF8,      // sftAnsiText
+     SynCommons.ftUTF8,      // sftUTF8Text
+     SynCommons.ftInt64,     // sftEnumerate
+     SynCommons.ftInt64,     // sftSet
+     SynCommons.ftInt64,     // sftInteger
+     SynCommons.ftInt64,     // sftID = TSQLRecord(aID)
+     SynCommons.ftInt64,     // sftRecord = TRecordReference
+     SynCommons.ftInt64,     // sftBoolean
+     SynCommons.ftDouble,    // sftFloat
+     SynCommons.ftDate,      // sftDateTime
+     SynCommons.ftInt64,     // sftTimeLog
+     SynCommons.ftCurrency,  // sftCurrency
+     SynCommons.ftUTF8,      // sftObject
 {$ifndef NOVARIANTS}
-     SynTable.ftUTF8,      // sftVariant
-     SynTable.ftUTF8,      // sftNullable
+     SynCommons.ftUTF8,      // sftVariant
+     SynCommons.ftUTF8,      // sftNullable
 {$endif}
-     SynTable.ftBlob,      // sftBlob
-     SynTable.ftBlob,      // sftBlobDynArray
-     SynTable.ftBlob,      // sftBlobCustom
-     SynTable.ftUTF8,      // sftUTF8Custom
-     SynTable.ftUnknown,   // sftMany
-     SynTable.ftInt64,     // sftModTime
-     SynTable.ftInt64,     // sftCreateTime
-     SynTable.ftInt64,     // sftTID
-     SynTable.ftInt64,     // sftRecordVersion = TRecordVersion
-     SynTable.ftInt64,     // sftSessionUserID
-     SynTable.ftDate,      // sftDateTimeMS
-     SynTable.ftInt64,     // sftUnixTime
-     SynTable.ftInt64);    // sftUnixMSTime
+     SynCommons.ftBlob,      // sftBlob
+     SynCommons.ftBlob,      // sftBlobDynArray
+     SynCommons.ftBlob,      // sftBlobCustom
+     SynCommons.ftUTF8,      // sftUTF8Custom
+     SynCommons.ftUnknown,   // sftMany
+     SynCommons.ftInt64,     // sftModTime
+     SynCommons.ftInt64,     // sftCreateTime
+     SynCommons.ftInt64,     // sftTID
+     SynCommons.ftInt64,     // sftRecordVersion = TRecordVersion
+     SynCommons.ftInt64,     // sftSessionUserID
+     SynCommons.ftDate,      // sftDateTimeMS
+     SynCommons.ftInt64,     // sftUnixTime
+     SynCommons.ftInt64);    // sftUnixMSTime
 
   SQLFieldTypeToVCLDB: array[TSQLFieldType] of TFieldType =
     (DB.ftUnknown,           // sftUnknown
@@ -308,19 +306,19 @@ begin
         VDouble := aTable.FieldAsFloat(F);
         W.Write(@VDouble,sizeof(VDouble));
       end;
-      SynTable.ftCurrency: begin
+      SynCommons.ftCurrency: begin
         VCurrency := aTable.Field(F);
         W.Write(@VCurrency,sizeof(VCurrency));
       end;
-      SynTable.ftDate: begin
+      SynCommons.ftDate: begin
         VDateTime := aTable.Field(F);
         W.Write(@VDateTime,sizeof(VDateTime));
       end;
-      SynTable.ftUTF8:
+      SynCommons.ftUTF8:
       begin
         W.Write(aTable.FieldBuffer(F));
       end;
-      SynTable.ftBlob:
+      SynCommons.ftBlob:
       begin
         W.Write(aTable.FieldBuffer(F));
       end;
@@ -332,7 +330,7 @@ begin
 end;
 
 function JSONToBinary(const aTable: TSQLTableJSON; Dest: TStream; MaxRowCount: cardinal=0; DataRowPosition: PCardinalDynArray=nil;
-                      const DefaultDataType: TSQLDBFieldType = SynTable.ftUTF8; const DefaultFieldSize: Integer = 255): cardinal;
+                      const DefaultDataType: TSQLDBFieldType = SynCommons.ftUTF8; const DefaultFieldSize: Integer = 255): cardinal;
 var F, FMax, FieldSize, NullRowSize: integer;
     StartPos: cardinal;
     Null: TSQLDBProxyStatementColumns;
@@ -354,7 +352,7 @@ begin
       for F := 0 to FMax do begin
         W.Write(aTable.Get(0, F));
         FieldType := SQLFIELDTYPETODBFIELDTYPE[aTable.FieldType(F)];
-        if (FieldType = SynTable.ftUnknown) and (DefaultDataType <> SynTable.ftUnknown) then
+        if (FieldType = SynCommons.ftUnknown) and (DefaultDataType <> SynCommons.ftUnknown) then
           FieldType := DefaultDataType;
         ColTypes[F] := FieldType;
         FieldSize := aTable.FieldLengthMax(F);

@@ -5,7 +5,7 @@ interface
 uses
   Windows, Messages, SysUtils, CheckLst, Controls, StdCtrls, Classes, Types,
   Graphics, Forms, Clipbrd,
-  SynDB, SynCommons, SynTable, Menus;
+  SynDB, SynCommons, Menus;
 
 type
   TDBQueryTable = object

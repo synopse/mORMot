@@ -9,7 +9,6 @@ uses
   SysUtils,
   Classes,
   SynCommons,
-  SynTable,
   mORMot,
   mORMoti18n,
   mORMotHttpServer,

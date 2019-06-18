@@ -6,7 +6,7 @@ unit SynMongoDB;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynMongoDB;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2018
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -352,11 +352,10 @@ type
     /// the kind of element stored
     case VKind: TBSONElementType of
     betObjectID: (
-      {$IFDEF FPC} {$PUSH} {$ENDIF} {$HINTS OFF}
-      // does not complain if Filler is declared but never used
+      {$HINTS OFF} // does not complain if Filler is declared but never used
       VFiller: array[1..SizeOf(TVarData)-SizeOf(TVarType)-SizeOf(TBSONElementType)
         -SizeOf(TBSONObjectID)] of byte;
-      {$IFDEF FPC} {$POP} {$ELSE} {$HINTS ON} {$ENDIF}
+      {$HINTS ON}
       VObjectID: TBSONObjectID
     );
     betBinary, betDoc, betArray, betRegEx, betDeprecatedDbptr, betTimestamp,
@@ -1360,8 +1359,6 @@ type
     // - FullCollectionName is e.g. 'dbname.collectionname'
     // - JSONDocuments is an array of JSON objects
     // - there is no response to an opInsert message
-    // - warning: JSONDocuments[] buffer will be modified in-place during
-    // parsing, so a private copy may have to be made by the caller
     constructor Create(const FullCollectionName: RawUTF8;
       const JSONDocuments: array of PUTF8Char; Flags: TMongoInsertFlags=[]); reintroduce; overload;
   end;
@@ -4072,7 +4069,7 @@ end;
 const
   BSON_JSON_NEWDATE: string[8] = 'ew Date('; // circumvent Delphi XE4 Win64 bug
 
-{$IFDEF FPC} {$PUSH} {$ENDIF} {$HINTS OFF} // avoid hints with CompareMemFixed() inlining
+{$HINTS OFF} // avoid hints with CompareMemFixed() inlining
 function TBSONVariant.TryJSONToVariant(var JSON: PUTF8Char;
   var Value: variant; EndOfObject: PUTF8Char): boolean;
 var bsonvalue: TBSONVariantData absolute Value;
@@ -4244,7 +4241,7 @@ begin // here JSON does not start with " or 1..9 (obvious simple types)
   '/': TryRegExShell(JSON+1);
   end;
 end;
-{$IFDEF FPC} {$POP} {$ELSE} {$HINTS ON} {$ENDIF}
+{$HINTS ON}
 
 procedure TBSONVariant.Cast(var Dest: TVarData; const Source: TVarData);
 begin
@@ -6055,19 +6052,10 @@ function TMongoCollection.AggregateCallFromJson(const pipelineJSON: RawUTF8;
 begin // see http://docs.mongodb.org/manual/reference/command/aggregate
   if fDatabase.Client.ServerBuildInfoNumber<2020000 then
     raise EMongoException.Create('Aggregation needs MongoDB 2.2 or later');
-  if fDatabase.Client.ServerBuildInfoNumber>=3060000 then begin
-    // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}],cursor:{}})
-    Database.RunCommand(BSONVariant('{aggregate:"%",pipeline:[%],cursor:{}}',[Name,pipelineJSON],[]),reply);
-    // {"cursor":{"firstBatch":[{"_id":null,"max":1510}],"id":0,"ns":"db.test"},"ok":1}
-    res := reply.cursor;
-    if not VarIsNull(res) then
-      res := res.firstBatch;
-  end else begin
-    // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}]})
-    Database.RunCommand(BSONVariant('{aggregate:"%",pipeline:[%]}',[Name,pipelineJSON],[]),reply);
-    // { "result" : [ { "_id" : null, "max" : 1250 } ], "ok" : 1 }
-    res := reply.result;
-  end;
+  // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}]})
+  Database.RunCommand(BSONVariant('{aggregate:"%",pipeline:[%]}',[Name,pipelineJSON],[]),reply);
+  // { "result" : [ { "_id" : null, "max" : 1250 } ], "ok" : 1 }
+  res := reply.result;
   result := not VarIsNull(res);
 end;
 
@@ -6087,19 +6075,10 @@ function TMongoCollection.AggregateCallFromVariant(const pipelineArray: variant;
 begin // see http://docs.mongodb.org/manual/reference/command/aggregate
   if fDatabase.Client.ServerBuildInfoNumber<2020000 then
     raise EMongoException.Create('Aggregation needs MongoDB 2.2 or later');
-  if fDatabase.Client.ServerBuildInfoNumber>=3060000 then begin
-    // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}],cursor:{}})
-    Database.RunCommand(BSONVariant(['aggregate',name,'pipeline',pipelineArray,'cursor','{}']),reply);
-    // {"cursor":{"firstBatch":[{"_id":null,"max":1510}],"id":0,"ns":"db.test"},"ok":1}
-    res := reply.cursor;
-    if not VarIsNull(res) then
-      res := res.firstBatch;
-  end else begin
-    // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}]})
-    Database.RunCommand(BSONVariant(['aggregate',name,'pipeline',pipelineArray]),reply);
-    // { "result" : [ { "_id" : null, "max" : 1250 } ], "ok" : 1 }
-    res := reply.result;
-  end;
+  // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}]})
+  Database.RunCommand(BSONVariant(['aggregate',name,'pipeline',pipelineArray]),reply);
+  // { "result" : [ { "_id" : null, "max" : 1250 } ], "ok" : 1 }
+  res := reply.result;
   result := not VarIsNull(res);
 end;
 
@@ -6560,9 +6539,9 @@ begin
   result := (Bits.lo=other.Bits.lo) and (Bits.hi=other.Bits.hi);
 end;
 
-function div128bits9digits(var value: THash128Rec): PtrUInt;
+function div128bits9digits(var value: THash128Rec): cardinal;
 var r64: QWord;
-    i: PtrInt;
+    i: integer;
 begin
   r64 := 0;
   for i := 0 to high(value.c) do begin
@@ -6586,27 +6565,23 @@ asm // use fast reciprocal division for Delphi (FPC knows this optimization)
 end;
 {$endif}
 
-procedure append(var dest: PUTF8Char; var dig: PByte; digits: PtrInt); {$ifdef HASINLINE}inline;{$endif}
-begin
-  if digits>0 then
-    repeat
+function TDecimal128.ToText(out Buffer: TDecimal128Str): integer;
+var dest: PUTF8Char;
+    exp, sciexp, signdig, radixpos: integer;
+    combi, biasedexp, signmsb, leastdig, fastdiv: cardinal;
+    digbuffer: array[0..35] of byte;
+    dig: PByte;
+    _128: THash128Rec;
+    j, k: integer;
+  procedure append(digits: integer);
+  var i: integer;
+  begin
+    for i := 0 to digits-1 do begin
       dest^ := AnsiChar(dig^+ord('0'));
       inc(dig);
       inc(dest);
-      dec(digits);
-      if digits=0 then
-        break;
-    until false;
-end;
-
-function TDecimal128.ToText(out Buffer: TDecimal128Str): integer;
-var dest: PUTF8Char;
-    dig: PByte;
-    exp, sciexp, signdig, radixpos, j, k: PtrInt;
-    combi, biasedexp, signmsb: PtrUInt;
-    leastdig, fastdiv: cardinal;
-    digbuffer: array[0..35] of byte;
-    _128: THash128Rec;
+    end;
+  end;
 begin
   dest := @Buffer;
   if Int64(Bits.hi)<0 then begin
@@ -6681,7 +6656,7 @@ begin
     if signdig<>0 then begin
       dest^ := '.';
       inc(dest);
-      append(dest,dig,signdig);
+      append(signdig);
     end;
     if sciexp>0 then
       PWord(dest)^ := ord('E')+ord('+')shl 8 else begin
@@ -6691,11 +6666,11 @@ begin
     dest := AppendUInt32ToBuffer(dest+2,sciexp)
   end else begin
     if exp>=0 then // regular format with no decimal place
-      append(dest,dig,signdig)
+      append(signdig)
     else begin
       radixpos := signdig+exp;
       if radixpos>0 then // non-zero digits before radix
-        append(dest,dig,radixpos)
+        append(radixpos)
       else begin
         dest^ := '0'; // leading zero before radix point
         inc(dest);
@@ -6707,7 +6682,7 @@ begin
         inc(dest);
         inc(radixpos);
       end;
-      append(dest,dig,signdig-radixpos);
+      append(signdig-radixpos);
     end;
   end;
   result := dest-@Buffer;
@@ -6777,9 +6752,9 @@ var P,PEnd: PUTF8Char;
     flags: set of (negative, signed, radix, nonzero);
     digits: array[0..BSON_DECIMAL128_MAX_DIGITS-1] of byte;
     firstnon0, digread, digstored, digcount, radixpos,
-    digfirst, diglast, exp, signdig, i: PtrInt;
+    digfirst, diglast, exp, signdig, i: integer;
     signhi, signlo: QWord;
-    biasedexp: PtrUInt;
+    biasedexp: cardinal;
     sign: THash128Rec;
 begin
   for result := dsvNan to dsvNegInf do

@@ -442,7 +442,7 @@ begin
     drwgrdResult.Show;
     mmoResult.OnGetLineAttr := mmoResult.JSONLineAttr;
     mmoResult.Text := Format(#13#10' Returned %d row(s), as %s in %s',
-      [table.RowCount, KB(fJson), execTime]);
+      [table.RowCount, KB(Length(fJson)), execTime]);
   end;
   if Sender <> nil then begin
     mmoSQL.SelStart := SelStart;

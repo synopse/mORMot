@@ -172,7 +172,7 @@ begin
         State.version := fClient.SessionVersion;
       State.mem := State.raw.U['memused'];
       if State.mem = '' then
-        KBU(state.Raw.O['SystemMemory'].O['Allocated'].I['Used'] shl 10, State.mem);
+        State.mem := KB(state.Raw.O['SystemMemory'].O['Allocated'].I['Used'] shl 10);
       State.clients := State.raw.I['clients'];
       State.raw.GetAsDocVariantSafe('exception')^.ToRawUTF8DynArray(State.exceptions);
       State.raw.AddValue('remoteip', fClient.Server + ':' + fClient.Port);

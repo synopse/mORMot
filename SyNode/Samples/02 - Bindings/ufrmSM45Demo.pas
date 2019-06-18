@@ -17,8 +17,6 @@ const
   WM_DEBUG_INTERRUPT = WM_USER + 1;
 type
 
-  { TfrmSM45Demo }
-
   TfrmSM45Demo = class(TForm)
     mSource: TMemo;
     mResult: TMemo;
@@ -55,13 +53,11 @@ implementation
 {$R *.dfm}
 {$I Synopse.inc}
 {$I SynSM.inc}   // define SM_DEBUG JS_THREADSAFE CONSIDER_TIME_IN_Z
-{$I SyNode.inc}   // define SM_DEBUG CONSIDER_TIME_IN_Z
 
 procedure TfrmSM45Demo.FormCreate(Sender: TObject);
 begin
   // create a JavaScript angine manager
-  FSMManager := TSMEngineManager.Create(
-    {$IFDEF CORE_MODULES_IN_RES}''{$ELSE}StringToUTF8(RelToAbs(ExeVersion.ProgramFilePath, '../../core_modules')){$ENDIF});
+  FSMManager := TSMEngineManager.Create(StringToUTF8(RelToAbs(ExeVersion.ProgramFilePath, '../../core_modules')));
   // optionaly increase a max engine memory
   FSMManager.MaxPerEngineMemory := 512 * 1024 * 1024;
   // add a handler called every time new engine is created
@@ -165,13 +161,13 @@ end;
 
 procedure TfrmSM45Demo.DoOnJSDebuggerInit(const aEngine: TSMEngine);
 begin
-//  aEngine.EvaluateModule(
-//  {$IFDEF MSWINDOWS}
-//    '..\..\..\..\DebuggerInit.js'
-//  {$ELSE}
-//    '../../../../DebuggerInit.js'
-//  {$ENDIF}
-//  );
+  aEngine.EvaluateModule(
+  {$IFDEF MSWINDOWS}
+    '..\..\..\..\DebuggerInit.js'
+  {$ELSE}
+    '../../../../DebuggerInit.js'
+  {$ENDIF}
+  );
 end;
 
 { TStringsProto }

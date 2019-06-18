@@ -226,6 +226,8 @@ object MainForm: TMainForm
     Height = 17
     Anchors = [akLeft, akBottom]
     Caption = 'and copy link'
+    Checked = True
+    State = cbChecked
     TabOrder = 15
   end
   object chkFossilPush: TCheckBox
@@ -244,6 +246,8 @@ object MainForm: TMainForm
     Height = 17
     Anchors = [akLeft, akBottom]
     Caption = 'and pull'
+    Checked = True
+    State = cbChecked
     TabOrder = 17
   end
 end

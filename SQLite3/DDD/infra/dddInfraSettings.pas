@@ -6,7 +6,7 @@ unit dddInfraSettings;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2018 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit dddInfraSettings;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2019
+  Portions created by the Initial Developer are Copyright (C) 2018
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -53,12 +53,7 @@ unit dddInfraSettings;
 
 }
 
-{$I Synopse.inc} // define HASINLINE DDDNOSYNDB DDDNOMONGODB WITHLOG
-
-{.$define DDDNOSYNDB}
-// if defined, SynDB / external SQL DB won't be linked to the executable
-{.$define DDDNOMONGODB}
-// if defined, the Mongo DB client won't be linked to the executable
+{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
 
 interface
 
@@ -76,14 +71,10 @@ uses
   SynCrtSock,
   SynSQLite3,
   mORMotSQLite3,   // for internal SQlite3 database
-  {$ifndef DDDNOSYNDB}
   SynDB,
   mORMotDB,        // for TDDDRestSettings on external SQL database
-  {$endif}
-  {$ifndef DDDNOMONGODB}
   SynMongoDB,
   mORMotMongoDB,   // for TDDDRestSettings on external NoSQL database
-  {$endif}
   mORMotWrappers;  // for TDDDRestSettings to publish wrapper methods
 
 
@@ -100,7 +91,6 @@ type
     fStackTraceViaAPI: boolean;
     fLowLevelWebSocketsFrames: boolean;
     fDestinationPath: TFileName;
-    fCustomFileName: TFileName;
     fRotateFileCount: cardinal;
     fRotateFileSize: cardinal;
     fRotateFileAtHour: integer;
@@ -142,8 +132,6 @@ type
     property StackTraceViaAPI: boolean read FStackTraceViaAPI write FStackTraceViaAPI;
     /// allows to customize where the log files will be stored
     property DestinationPath: TFileName read FDestinationPath write FDestinationPath;
-    /// allows to customize the log file name
-    property CustomFileName: TFileName read fCustomFileName write fCustomFileName;
     /// auto-rotation of logging files
     // - set to 0 by default, meaning no rotation
     property RotateFileCount: cardinal read fRotateFileCount write fRotateFileCount;
@@ -285,9 +273,7 @@ type
      optSQlite3FileSafeSlowMode,
      optSQlite3FileSafeNonExclusive,
      optNoSystemUse,
-     optSQlite3File4MBCacheSize,
-     optForceAjaxJson,
-     optSQLite3LogQueryPlan);
+     optSQlite3File4MBCacheSize);
 
   /// define options to be used for TDDDRestSettings
   TDDDRestSettingsOptions = set of TDDDRestSettingsOption;
@@ -304,16 +290,13 @@ type
   // - riCreateMissingTables will call RestInstance.CreateMissingTables
   // - riRaiseExceptionIfNoRest will raise an EDDDInfraException if
   // TDDDRestSettings.NewRestInstance would return nil
-  // - riWithInternalState will enable 'Server-InternalState:' header transmission
-  // i.e. disable rsoNoInternalState for TSQLRestServer.Options
   TDDDNewRestInstanceOptions = set of (
     riOwnModel, riCreateVoidModelIfNone,
     riHandleAuthentication,
     riDefaultLocalSQlite3IfNone, riDefaultInMemorySQLite3IfNone,
     riDefaultFullMemoryIfNone, riDefaultLocalBinaryFullMemoryIfNone,
     riCreateMissingTables,
-    riRaiseExceptionIfNoRest,
-    riWithInternalState);
+    riRaiseExceptionIfNoRest);
 
   /// storage class for initializing an ORM REST class
   // - this class will contain some generic properties to initialize a TSQLRest
@@ -344,20 +327,18 @@ type
     // URI, which will be overriden with this TDDDRestSettings.Root property
     // - will also publish /wrapper HTML page if WrapperTemplateFolder is set
     function NewRestInstance(aRootSettings: TDDDAppSettingsAbstract;
-      aModel: TSQLModel; aOptions: TDDDNewRestInstanceOptions
-      {$ifndef DDDNOSYNDB}; aExternalDBOptions:
-      TVirtualTableExternalRegisterOptions=[regDoNotRegisterUserGroupTables]{$endif}
-      {$ifndef DDDNOMONGODB}; aMongoDBIdentifier: word=0; aMongoDBOptions:
-      TStaticMongoDBRegisterOptions=[mrDoNotRegisterUserGroupTables]{$endif}): TSQLRest; overload; virtual;
+      aModel: TSQLModel; aOptions: TDDDNewRestInstanceOptions;
+      aExternalDBOptions: TVirtualTableExternalRegisterOptions=[regDoNotRegisterUserGroupTables];
+      aMongoDBIdentifier: word=0;
+      aMongoDBOptions: TStaticMongoDBRegisterOptions=[mrDoNotRegisterUserGroupTables]): TSQLRest; overload; virtual;
     /// is able to instantiate a REST instance according to the stored definition
     // - just an overloaded version which will create an owned TSQLModel with
     // the supplied TSQLRecord classes
     function NewRestInstance(aRootSettings: TDDDAppSettingsAbstract;
-      const aTables: array of TSQLRecordClass; aOptions: TDDDNewRestInstanceOptions
-      {$ifndef DDDNOSYNDB}; aExternalDBOptions:
-      TVirtualTableExternalRegisterOptions=[regDoNotRegisterUserGroupTables]{$endif}
-      {$ifndef DDDNOMONGODB}; aMongoDBIdentifier: word=0; aMongoDBOptions:
-      TStaticMongoDBRegisterOptions=[mrDoNotRegisterUserGroupTables]{$endif}): TSQLRest; overload; virtual;
+      const aTables: array of TSQLRecordClass; aOptions: TDDDNewRestInstanceOptions;
+      aExternalDBOptions: TVirtualTableExternalRegisterOptions=[regDoNotRegisterUserGroupTables];
+      aMongoDBIdentifier: word=0;
+      aMongoDBOptions: TStaticMongoDBRegisterOptions=[mrDoNotRegisterUserGroupTables]): TSQLRest; overload; virtual;
     /// initialize a stand-alone TSQLRestServerDB instance
     // - with its own database file located in DefaultDataFileName + aDBFileName
     // - will own its own TSQLModel with aModelRoot/aModelTables
@@ -665,8 +646,6 @@ begin
     PerThreadLog := ptIdentifiedInOnFile;
     if Log.DestinationPath<>'' then
      DestinationPath := Log.DestinationPath;
-    if Log.CustomFileName<>'' then
-      CustomFileName := Log.CustomFileName;
     RotateFileCount := Log.RotateFileCount;
     RotateFileSizeKB := Log.RotateFileSizeKB;
     RotateFileDailyAtHour := Log.RotateFileDailyAtHour;
@@ -820,22 +799,19 @@ end;
 { TDDDRestSettings }
 
 function TDDDRestSettings.NewRestInstance(aRootSettings: TDDDAppSettingsAbstract;
-  const aTables: array of TSQLRecordClass; aOptions: TDDDNewRestInstanceOptions
-  {$ifndef DDDNOSYNDB}; aExternalDBOptions: TVirtualTableExternalRegisterOptions {$endif}
-  {$ifndef DDDNOMONGODB}; aMongoDBIdentifier: word;
-  aMongoDBOptions: TStaticMongoDBRegisterOptions{$endif}): TSQLRest;
+  const aTables: array of TSQLRecordClass; aOptions: TDDDNewRestInstanceOptions;
+  aExternalDBOptions: TVirtualTableExternalRegisterOptions;
+  aMongoDBIdentifier: word; aMongoDBOptions: TStaticMongoDBRegisterOptions): TSQLRest;
 begin
   include(aOptions,riOwnModel);
-  result := NewRestInstance(aRootSettings,TSQLModel.Create(aTables,fRoot),aOptions
-    {$ifndef DDDNOSYNDB},aExternalDBOptions{$endif}
-    {$ifndef DDDNOMONGODB},aMongoDBIdentifier,aMongoDBOptions{$endif});
+  result := NewRestInstance(aRootSettings,TSQLModel.Create(aTables,fRoot),aOptions,
+    aExternalDBOptions,aMongoDBIdentifier,aMongoDBOptions);
 end;
 
 function TDDDRestSettings.NewRestInstance(aRootSettings: TDDDAppSettingsAbstract;
-  aModel: TSQLModel; aOptions: TDDDNewRestInstanceOptions
-  {$ifndef DDDNOSYNDB}; aExternalDBOptions: TVirtualTableExternalRegisterOptions{$endif}
-  {$ifndef DDDNOMONGODB}; aMongoDBIdentifier: word;
-  aMongoDBOptions: TStaticMongoDBRegisterOptions{$endif}): TSQLRest;
+  aModel: TSQLModel; aOptions: TDDDNewRestInstanceOptions;
+  aExternalDBOptions: TVirtualTableExternalRegisterOptions;
+  aMongoDBIdentifier: word; aMongoDBOptions: TStaticMongoDBRegisterOptions): TSQLRest;
 
   procedure ComputeDefaultORMServerName(const Ext: RawUTF8);
   var FN: RawUTF8;
@@ -885,17 +861,11 @@ begin
       if (fORM.Kind='TSQLRestServerDB') or
          (fORM.Kind='TSQLRestServerFullMemory') then
         DeleteFile(UTF8ToString(fORM.ServerName));
-    {$ifndef DDDNOMONGODB}
     result := TSQLRestMongoDBCreate(aModel,ORM,
       riHandleAuthentication in aOptions,aMongoDBOptions,aMongoDBIdentifier);
-    {$endif}
-    {$ifdef DDDNOSYNDB}
-    result := TSQLRest.CreateTryFrom(aModel,ORM,riHandleAuthentication in aOptions);
-    {$else}
     if result=nil then // failed to use MongoDB -> try external or internal DB
       result := TSQLRestExternalDBCreate(aModel,ORM,
         riHandleAuthentication in aOptions,aExternalDBOptions);
-    {$endif}
     if result=nil then
       exit; // no match or wrong parameters
     if result.InheritsFrom(TSQLRestServer) then
@@ -904,8 +874,6 @@ begin
         AddToServerWrapperMethod(TSQLRestServer(result),[WrapperTemplateFolderFixed],
           WrapperSourceFolderFixed);
       RestServerDBSetOptions(TSQLRestServer(result), Options);
-      if not (riWithInternalState in aOptions) then
-        TSQLRestServer(result).Options := TSQLRestServer(result).Options+[rsoNoInternalState];
       if riCreateMissingTables in aOptions then
         TSQLRestServer(result).CreateMissingTables;
     except
@@ -928,24 +896,19 @@ end;
 class procedure TDDDRestSettings.RestServerDBSetOptions(DB: TSQLRestServer;
   Options: TDDDRestSettingsOptions);
 begin
-  if DB = nil then
-    exit;
-  if DB.InheritsFrom(TSQLRestServerDB) then
-    with TSQLRestServerDB(DB).DB do begin // tune internal SQlite3 engine
-      if optEraseDBFileAtStartup in Options then
-        DeleteFile(FileName);
-      if optSQlite3FileSafeNonExclusive in Options then
-        LockingMode := lmNormal else
-        LockingMode := lmExclusive;
-      if optSQlite3FileSafeSlowMode in Options then
-        Synchronous := smNormal else
-        Synchronous := smOff;
-      if optSQlite3File4MBCacheSize in Options then
-        CacheSize := (4 shl 20) div PageSize;
-      if optSQLite3LogQueryPlan in Options then
-        TSQLRestServerDB(DB).StatementPreparedSelectQueryPlan := true;
-    end;
-  DB.NoAJAXJSON := not (optForceAjaxJson in Options);
+  if (DB <> nil) and DB.InheritsFrom(TSQLRestServerDB) then
+  with TSQLRestServerDB(DB).DB do begin // tune internal SQlite3 engine
+    if optEraseDBFileAtStartup in Options then
+      DeleteFile(FileName);
+    if optSQlite3FileSafeNonExclusive in Options then
+      LockingMode := lmNormal else
+      LockingMode := lmExclusive;
+    if optSQlite3FileSafeSlowMode in Options then
+      Synchronous := smNormal else
+      Synchronous := smOff;
+    if optSQlite3File4MBCacheSize in Options then
+      CacheSize := (4 shl 20) div PageSize;
+  end;
 end;
 
 function TDDDRestSettings.NewRestServerDB(const aDBFileName: TFileName;
@@ -955,7 +918,6 @@ begin
   result := TSQLRestServerDB.CreateWithOwnModel(aModelTables, DefaultDataFolder +
     UTF8ToString(DefaultDataFileName) + aDBFileName, false, aModelRoot, '', aCacheSize);
   RestServerDBSetOptions(result, Options); // tune internal SQlite3 engine
-  result.Options := result.Options+[rsoNoInternalState];
   result.CreateMissingTables;
 end;
 
@@ -1141,14 +1103,12 @@ end;
 { TDDDAppSettingsStorageFile }
 
 constructor TDDDAppSettingsStorageFile.Create(const aSettingsJsonFileName: TFileName);
-var content: RawUTF8;
 begin
   if aSettingsJsonFileName<>'' then
     fSettingsJsonFileName := aSettingsJsonFileName else
     fSettingsJsonFileName := ChangeFileExt(ExeVersion.ProgramFileName,'.settings');
   fSettingsJsonFileName := ExpandFileName(fSettingsJsonFileName);
-  content := AnyTextFileToRawUTF8(fSettingsJsonFileName,true);
-  inherited Create(content);
+  inherited Create(AnyTextFileToRawUTF8(fSettingsJsonFileName,true));
 end;
 
 function TDDDAppSettingsStorageFile.FileNameRelativeToSettingsFile(
