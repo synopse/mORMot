@@ -889,6 +889,7 @@ begin
     result.OnCallbackRequestProcess := CallbackRequest;
   if not Assigned(result.OnWebSocketsClosed) then
     result.OnWebSocketsClosed := OnWebSocketsClosed;
+  result.Settings^ := fDefaultWebSocketProcessSettings;
 end;
 
 function TSQLHttpClientWebsockets.WebSocketsUpgrade(
@@ -905,8 +906,7 @@ begin
   sockets := WebSockets;
   if sockets=nil then
     result := 'Impossible to connect to the Server' 
-  else begin
-    sockets.Settings^ := fDefaultWebSocketProcessSettings;
+  else begin    
     if fWebSocketLoopDelay>0 then
       sockets.Settings^.LoopDelay := fWebSocketLoopDelay;
     result := sockets.WebSocketsUpgrade(Model.Root,
