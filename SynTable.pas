@@ -5,7 +5,7 @@ unit SynTable;
 (*
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -24,7 +24,7 @@ unit SynTable;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -60,10 +60,20 @@ interface
 uses
   {$ifdef MSWINDOWS}
     Windows,
-  {$endif}
+  {$else}
+    {$ifdef KYLIX3}
+      Types,
+      LibC,
+      SynKylix,
+    {$endif KYLIX3}
+    {$ifdef FPC}
+      Unix,
+    {$endif FPC}
+  {$endif MSWINDOWS}
   SysUtils,
   Classes,
   {$ifndef LVCL}
+    SyncObjs, // for TEvent and TCriticalSection
     Contnrs,  // for TObjectList
   {$endif}
   {$ifndef NOVARIANTS}
@@ -96,44 +106,81 @@ function IsValidIP4Address(P: PUTF8Char): boolean;
 // - consider using TMatch or TMatchs if you expect to reuse the pattern
 function IsMatch(const Pattern, Text: RawUTF8; CaseInsensitive: boolean=false): boolean;
 
+/// return TRUE if the supplied content matchs a glob pattern, using VCL strings
+// - is a wrapper around IsMatch() with fast UTF-8 conversion
+function IsMatchString(const Pattern, Text: string; CaseInsensitive: boolean=false): boolean;
+
 type
-  /// low-level structure used by IsMatch() for actual blog search
+  PMatch = ^TMatch;
+  TMatchSearchFunction = function(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+
+  /// low-level structure used by IsMatch() for actual glob search
   // - you can use this object to prepare a given pattern, e.g. in a loop
   // - implemented as a fast brute-force state-machine without any heap allocation
-  // - some common patterns ('exactmatch', 'startwith*', '*contained*') are
-  // handled with dedicated code, optionally with case-insensitive search
-  TMatch = {$ifdef UNICODE}record{$else}object{$endif}
+  // - some common patterns ('exactmatch', 'startwith*', '*endwith', '*contained*')
+  // are handled with dedicated code, optionally with case-insensitive search
+  // - consider using TMatchs (or SetMatchs/TMatchDynArray) if you expect to
+  // search for several patterns, or even TExprParserMatch for expression search
+  {$ifdef UNICODE}TMatch = record{$else}TMatch = object{$endif}
   private
     Pattern, Text: PUTF8Char;
     P, T, PMax, TMax: PtrInt;
     Upper: PNormTable;
     State: (sNONE, sABORT, sEND, sLITERAL, sPATTERN, sRANGE, sVALID);
-    Direct: (dNone, dNoPattern, dNoPatternU,
-      dContainsValid, dContainsU, dContains1, dContains4, dContains8,
-      dStartWith, dStartWithU);
     procedure MatchAfterStar;
     procedure MatchMain;
   public
-    /// initialize the internal fields for a given grep-like search pattern
-    procedure Prepare(const aPattern: RawUTF8; aCaseInsensitive, aReuse: boolean);
-    /// returns TRUE if the supplied content matches a grep-like pattern
+    /// published for proper inlining
+    Search: TMatchSearchFunction;
+    /// initialize the internal fields for a given glob search pattern
+    // - note that the aPattern instance should remain in memory, since it will
+    // be pointed to by the Pattern private field of this object
+    procedure Prepare(const aPattern: RawUTF8; aCaseInsensitive, aReuse: boolean); overload;
+    /// initialize the internal fields for a given glob search pattern
+    // - note that the aPattern buffer should remain in memory, since it will
+    // be pointed to by the Pattern private field of this object
+    procedure Prepare(aPattern: PUTF8Char; aPatternLen: integer;
+      aCaseInsensitive, aReuse: boolean); overload;
+    /// initialize low-level internal fields for'*aPattern*' search
+    // - this method is faster than a regular Prepare('*' + aPattern + '*')
+    // - warning: the supplied aPattern variable may be modified in-place to be
+    // filled with some lookup buffer, for length(aPattern) in [2..31] range
+    procedure PrepareContains(var aPattern: RawUTF8; aCaseInsensitive: boolean); overload;
+    /// initialize low-level internal fields for a custom search algorithm
+    procedure PrepareRaw(aPattern: PUTF8Char; aPatternLen: integer;
+      aSearch: TMatchSearchFunction);
+    /// returns TRUE if the supplied content matches the prepared glob pattern
     // - this method is not thread-safe
     function Match(const aText: RawUTF8): boolean; overload;
-    /// returns TRUE if the supplied content matches a grep-like pattern
+      {$ifdef FPC}inline;{$endif}
+    /// returns TRUE if the supplied content matches the prepared glob pattern
     // - this method is not thread-safe
     function Match(aText: PUTF8Char; aTextLen: PtrInt): boolean; overload;
-    /// returns TRUE if the supplied content matches a grep-like pattern
+      {$ifdef HASINLINE}inline;{$endif}
+    /// returns TRUE if the supplied content matches the prepared glob pattern
     // - this method IS thread-safe, and won't lock
     function MatchThreadSafe(const aText: RawUTF8): boolean;
+    /// returns TRUE if the supplied VCL/LCL content matches the prepared glob pattern
+    // - this method IS thread-safe, will use stack to UTF-8 temporary conversion
+    // if possible, and won't lock
+    function MatchString(const aText: string): boolean;
+    /// returns TRUE if this search pattern matches another
+    function Equals(const aAnother{$ifndef DELPHI5OROLDER}: TMatch{$endif}): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// access to the pattern length as stored in PMax + 1
+    function PatternLength: integer; {$ifdef HASINLINE}inline;{$endif}
+    /// access to the pattern text as stored in Pattern
+    function PatternText: PUTF8Char; {$ifdef HASINLINE}inline;{$endif}
   end;
+  /// use SetMatchs() to initialize such an array from a CSV pattern text
   TMatchDynArray = array of TMatch;
 
   /// TMatch descendant owning a copy of the Pattern string to avoid GPF issues
   TMatchStore = record
     /// access to the research criteria
     // - defined as a nested record (and not an object) to circumvent Delphi bug
-    Parent: TMatch;
-    /// Parent.Pattern PUTF8Char will point to this instance
+    Pattern: TMatch;
+    /// Pattern.Pattern PUTF8Char will point to this instance
     PatternInstance: RawUTF8;
   end;
   TMatchStoreDynArray = array of TMatchStore;
@@ -142,23 +189,58 @@ type
   TMatchs = class(TSynPersistent)
   protected
     fMatch: TMatchStoreDynArray;
+    fMatchCount: integer;
   public
-    /// add once some grep-like patterns to the internal TMach list
+    /// add once some glob patterns to the internal TMach list
     // - aPatterns[] follows the IsMatch() syntax
-    constructor Create(const aPatterns: TRawUTF8DynArray; CaseInsensitive: Boolean); reintroduce; overload;  
-    /// add once some grep-like patterns to the internal TMach list
+    constructor Create(const aPatterns: TRawUTF8DynArray; CaseInsensitive: Boolean); reintroduce; overload;
+    /// add once some glob patterns to the internal TMach list
     // - aPatterns[] follows the IsMatch() syntax
-    procedure Subscribe(const aPatterns: TRawUTF8DynArray; CaseInsensitive: Boolean); overload; virtual; 
-    /// add once some grep-like patterns to the internal TMach list
+    procedure Subscribe(const aPatterns: TRawUTF8DynArray; CaseInsensitive: Boolean); overload; virtual;
+    /// add once some glob patterns to the internal TMach list
     // - each CSV item in aPatterns follows the IsMatch() syntax
     procedure Subscribe(const aPatternsCSV: RawUTF8; CaseInsensitive: Boolean); overload;
-    /// search patterns in the supplied text
+    /// search patterns in the supplied UTF-8 text
     // - returns -1 if no filter has been subscribed
     // - returns -2 if there is no match on any previous pattern subscription
     // - returns fMatch[] index, i.e. >= 0 number on first matching pattern
     // - this method is thread-safe
-    function Match(const aText: RawUTF8): integer;
+    function Match(const aText: RawUTF8): integer; overload; {$ifdef HASINLINE}inline;{$endif}
+    /// search patterns in the supplied UTF-8 text buffer
+    function Match(aText: PUTF8Char; aLen: integer): integer; overload;
+    /// search patterns in the supplied VCL/LCL text
+    // - could be used on a TFileName for instance
+    // - will avoid any memory allocation if aText is small enough
+    function MatchString(const aText: string): integer;
   end;
+
+/// fill the Match[] dynamic array with all glob patterns supplied as CSV
+// - returns how many patterns have been set in Match[|]
+// - note that the CSVPattern instance should remain in memory, since it will
+// be pointed to by the Match[].Pattern private field
+function SetMatchs(const CSVPattern: RawUTF8; CaseInsensitive: boolean;
+  out Match: TMatchDynArray): integer; overload;
+
+/// fill the Match[0..MatchMax] static array with all glob patterns supplied as CSV
+// - note that the CSVPattern instance should remain in memory, since it will
+// be pointed to by the Match[].Pattern private field
+function SetMatchs(CSVPattern: PUTF8Char; CaseInsensitive: boolean;
+  Match: PMatch; MatchMax: integer): integer; overload;
+
+/// search if one TMach is already registered in the Several[] dynamic array
+function MatchExists(const One: TMatch; const Several: TMatchDynArray): boolean;
+
+/// add one TMach if not already registered in the Several[] dynamic array
+function MatchAdd(const One: TMatch; var Several: TMatchDynArray): boolean;
+
+/// returns TRUE if Match=nil or if any Match[].Match(Text) is TRUE
+function MatchAny(const Match: TMatchDynArray; const Text: RawUTF8): boolean;
+
+/// apply the CSV-supplied glob patterns to an array of RawUTF8
+// - any text not maching the pattern will be deleted from the array
+procedure FilterMatchs(const CSVPattern: RawUTF8; CaseInsensitive: boolean;
+  var Values: TRawUTF8DynArray);
+
 
 type
   TSynFilterOrValidate = class;
@@ -273,8 +355,8 @@ type
     property ForbiddenDomains: RawUTF8 read fForbiddenDomains write fForbiddenDomains;
   end;
 
-  /// grep-like case-sensitive pattern validation of a Record field content
-  // - parameter is NOT JSON encoded, but is some basic grep-like pattern
+  /// glob case-sensitive pattern validation of a Record field content
+  // - parameter is NOT JSON encoded, but is some basic TMatch glob pattern
   // - ?	   	Matches any single characer
   // - *	   	Matches any contiguous characters
   // - [abc]  Matches a or b or c at that position
@@ -301,9 +383,9 @@ type
       var ErrorMsg: string): boolean; override;
   end;
 
-  /// grep-like case-insensitive pattern validation of a text field content
+  /// glob case-insensitive pattern validation of a text field content
   // (typicaly a TSQLRecord)
-  // - parameter is NOT JSON encoded, but is some basic grep-like pattern
+  // - parameter is NOT JSON encoded, but is some basic TMatch glob pattern
   // - same as TSynValidatePattern, but is NOT case sensitive
   TSynValidatePatternI = class(TSynValidatePattern);
 
@@ -521,14 +603,362 @@ type
   end;
 
 
+{ ************ Database types and classes ************************** }
 
-{ ************ TSynTable generic types and classes ************************** }
+type
+  /// handled field/parameter/column types for abstract database access
+  // - this will map JSON-compatible low-level database-level access types, not
+  // high-level Delphi types as TSQLFieldType defined in mORMot.pas
+  // - it does not map either all potential types as defined in DB.pas (which
+  // are there for compatibility with old RDBMS, and are not abstract enough)
+  // - those types can be mapped to standard SQLite3 generic types, i.e.
+  // NULL, INTEGER, REAL, TEXT, BLOB (with the addition of a ftCurrency and
+  // ftDate type, for better support of most DB engines)
+  // see @http://www.sqlite.org/datatype3.html
+  // - the only string type handled here uses UTF-8 encoding (implemented
+  // using our RawUTF8 type), for cross-Delphi true Unicode process
+  TSQLDBFieldType =
+    (ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency, ftDate, ftUTF8, ftBlob);
+
+  /// set of field/parameter/column types for abstract database access
+  TSQLDBFieldTypes = set of TSQLDBFieldType;
+
+  /// array of field/parameter/column types for abstract database access
+  TSQLDBFieldTypeDynArray = array of TSQLDBFieldType;
+
+  /// array of field/parameter/column types for abstract database access
+  // - this array as a fixed size, ready to handle up to MAX_SQLFIELDS items
+  TSQLDBFieldTypeArray = array[0..MAX_SQLFIELDS-1] of TSQLDBFieldType;
+
+  /// how TSQLVar may be processed
+  // - by default, ftDate will use seconds resolution unless svoDateWithMS is set
+  TSQLVarOption = (svoDateWithMS);
+
+  /// defines how TSQLVar may be processed
+  TSQLVarOptions = set of TSQLVarOption;
+
+  /// memory structure used for database values by reference storage
+  // - used mainly by SynDB, mORMot, mORMotDB and mORMotSQLite3 units
+  // - defines only TSQLDBFieldType data types (similar to those handled by
+  // SQLite3, with the addition of ftCurrency and ftDate)
+  // - cleaner/lighter dedicated type than TValue or variant/TVarData, strong
+  // enough to be marshalled as JSON content
+  // - variable-length data (e.g. UTF-8 text or binary BLOB) are never stored
+  // within this record, but VText/VBlob will point to an external (temporary)
+  // memory buffer
+  // - date/time is stored as ISO-8601 text (with milliseconds if svoDateWithMS
+  // option is set and the database supports it), and currency as double or BCD
+  // in most databases
+  TSQLVar = record
+    /// how this value should be processed
+    Options: TSQLVarOptions;
+    /// the type of the value stored
+    case VType: TSQLDBFieldType of
+    ftInt64: (
+      VInt64: Int64);
+    ftDouble: (
+      VDouble: double);
+    ftDate: (
+      VDateTime: TDateTime);
+    ftCurrency: (
+      VCurrency: Currency);
+    ftUTF8: (
+      VText: PUTF8Char);
+    ftBlob: (
+      VBlob: pointer;
+      VBlobLen: Integer)
+  end;
+
+  /// dynamic array of database values by reference storage
+  TSQLVarDynArray = array of TSQLVar;
+
+  /// used to store bit set for all available fields in a Table
+  // - with current MAX_SQLFIELDS value, 64 bits uses 8 bytes of memory
+  // - see also IsZero() and IsEqual() functions
+  // - you can also use ALL_FIELDS as defined in mORMot.pas
+  TSQLFieldBits = set of 0..MAX_SQLFIELDS-1;
+
+  /// used to store a field index in a Table
+  // - note that -1 is commonly used for the ID/RowID field so the values should
+  // be signed
+  // - even if ShortInt (-128..127) may have been enough, we define a 16 bit
+  // safe unsigned integer to let the source compile with Delphi 5
+  TSQLFieldIndex = SmallInt; // -32768..32767
+
+  /// used to store field indexes in a Table
+  // - same as TSQLFieldBits, but allowing to store the proper order
+  TSQLFieldIndexDynArray = array of TSQLFieldIndex;
+
+  /// points to a bit set used for all available fields in a Table
+  PSQLFieldBits = ^TSQLFieldBits;
+
+  /// generic parameter types, as recognized by SQLParamContent() and
+  // ExtractInlineParameters() functions
+  TSQLParamType = (sptUnknown, sptInteger, sptFloat, sptText, sptBlob, sptDateTime);
+
+  /// array of parameter types, as recognized by SQLParamContent() and
+  // ExtractInlineParameters() functions
+  TSQLParamTypeDynArray = array of TSQLParamType;
+
+  /// simple writer to a Stream, specialized for the JSON format and SQL export
+  // - use an internal buffer, faster than string+string
+  TJSONWriter = class(TTextWriter)
+  protected
+    /// used to store output format
+    fExpand: boolean;
+    /// used to store output format for TSQLRecord.GetJSONValues()
+    fWithID: boolean;
+    /// used to store field for TSQLRecord.GetJSONValues()
+    fFields: TSQLFieldIndexDynArray;
+    /// if not Expanded format, contains the Stream position of the first
+    // useful Row of data; i.e. ',val11' position in:
+    // & { "fieldCount":1,"values":["col1","col2",val11,"val12",val21,..] }
+    fStartDataPosition: integer;
+  public
+    /// used internally to store column names and count for AddColumns
+    ColNames: TRawUTF8DynArray;
+    /// the data will be written to the specified Stream
+    // - if no Stream is supplied, a temporary memory stream will be created
+    // (it's faster to supply one, e.g. any TSQLRest.TempMemoryStream)
+    constructor Create(aStream: TStream; Expand, withID: boolean;
+      const Fields: TSQLFieldBits; aBufSize: integer=8192); overload;
+    /// the data will be written to the specified Stream
+    // - if no Stream is supplied, a temporary memory stream will be created
+    // (it's faster to supply one, e.g. any TSQLRest.TempMemoryStream)
+    constructor Create(aStream: TStream; Expand, withID: boolean;
+      const Fields: TSQLFieldIndexDynArray=nil; aBufSize: integer=8192); overload;
+    /// rewind the Stream position and write void JSON object
+    procedure CancelAllVoid;
+    /// write or init field names for appropriate JSON Expand later use
+    // - ColNames[] must have been initialized before calling this procedure
+    // - if aKnownRowsCount is not null, a "rowCount":... item will be added
+    // to the generated JSON stream (for faster unserialization of huge content)
+    procedure AddColumns(aKnownRowsCount: integer=0);
+    /// allow to change on the fly an expanded format column layout
+    // - by definition, a non expanded format will raise a ESynException
+    // - caller should then set ColNames[] and run AddColumns()
+    procedure ChangeExpandedFields(aWithID: boolean; const aFields: TSQLFieldIndexDynArray); overload;
+    /// end the serialized JSON object
+    // - cancel last ','
+    // - close the JSON object ']' or ']}'
+    // - write non expanded postlog (,"rowcount":...), if needed
+    // - flush the internal buffer content if aFlushFinal=true
+    procedure EndJSONObject(aKnownRowsCount,aRowsCount: integer; aFlushFinal: boolean=true);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// the first data row is erased from the content
+    // - only works if the associated storage stream is TMemoryStream
+    // - expect not Expanded format
+    procedure TrimFirstRow;
+    /// is set to TRUE in case of Expanded format
+    property Expand: boolean read fExpand write fExpand;
+    /// is set to TRUE if the ID field must be appended to the resulting JSON
+    // - this field is used only by TSQLRecord.GetJSONValues
+    // - this field is ignored by TSQLTable.GetJSONValues
+    property WithID: boolean read fWithID;
+    /// Read-Only access to the field bits set for each column to be stored
+    property Fields: TSQLFieldIndexDynArray read fFields;
+    /// if not Expanded format, contains the Stream position of the first
+    // useful Row of data; i.e. ',val11' position in:
+    // & { "fieldCount":1,"values":["col1","col2",val11,"val12",val21,..] }
+    property StartDataPosition: integer read fStartDataPosition;
+  end;
+
+/// returns TRUE if no bit inside this TSQLFieldBits is set
+// - is optimized for 64, 128, 192 and 256 max bits count (i.e. MAX_SQLFIELDS)
+// - will work also with any other value
+function IsZero(const Fields: TSQLFieldBits): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fast comparison of two TSQLFieldBits values
+// - is optimized for 64, 128, 192 and 256 max bits count (i.e. MAX_SQLFIELDS)
+// - will work also with any other value
+function IsEqual(const A,B: TSQLFieldBits): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fast initialize a TSQLFieldBits with 0
+// - is optimized for 64, 128, 192 and 256 max bits count (i.e. MAX_SQLFIELDS)
+// - will work also with any other value
+procedure FillZero(var Fields: TSQLFieldBits); overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// convert a TSQLFieldBits set of bits into an array of integers
+procedure FieldBitsToIndex(const Fields: TSQLFieldBits;
+  var Index: TSQLFieldIndexDynArray; MaxLength: integer=MAX_SQLFIELDS;
+  IndexStart: integer=0); overload;
+
+/// convert a TSQLFieldBits set of bits into an array of integers
+function FieldBitsToIndex(const Fields: TSQLFieldBits;
+  MaxLength: integer=MAX_SQLFIELDS): TSQLFieldIndexDynArray; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// add a field index to an array of field indexes
+// - returns the index in Indexes[] of the newly appended Field value
+function AddFieldIndex(var Indexes: TSQLFieldIndexDynArray; Field: integer): integer;
+
+/// convert an array of field indexes into a TSQLFieldBits set of bits
+procedure FieldIndexToBits(const Index: TSQLFieldIndexDynArray; var Fields: TSQLFieldBits); overload;
+
+// search a field index in an array of field indexes
+// - returns the index in Indexes[] of the given Field value, -1 if not found
+function SearchFieldIndex(var Indexes: TSQLFieldIndexDynArray; Field: integer): integer;
+
+/// convert an array of field indexes into a TSQLFieldBits set of bits
+function FieldIndexToBits(const Index: TSQLFieldIndexDynArray): TSQLFieldBits; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+  
+/// returns the stored size of a TSQLVar database value
+// - only returns VBlobLen / StrLen(VText) size, 0 otherwise
+function SQLVarLength(const Value: TSQLVar): integer;
+
+{$ifndef NOVARIANTS}
+
+/// convert any Variant into a database value
+// - ftBlob kind won't be handled by this function
+// - complex variant types would be converted into ftUTF8 JSON object/array
+procedure VariantToSQLVar(const Input: variant; var temp: RawByteString;
+  var Output: TSQLVar);
+
+/// guess the correct TSQLDBFieldType from a variant type
+function VariantVTypeToSQLDBFieldType(VType: word): TSQLDBFieldType;
+
+/// guess the correct TSQLDBFieldType from a variant value
+function VariantTypeToSQLDBFieldType(const V: Variant): TSQLDBFieldType;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// guess the correct TSQLDBFieldType from the UTF-8 representation of a value
+function TextToSQLDBFieldType(json: PUTF8Char): TSQLDBFieldType;
+
+
+{$endif NOVARIANTS}
+
+  /// convert a date to a ISO-8601 string format for SQL '?' inlined parameters
+// - will return the date encoded as '\uFFF1YYYY-MM-DD' - therefore
+// ':("\uFFF12012-05-04"):' pattern will be recognized as a sftDateTime
+// inline parameter in  SQLParamContent() / ExtractInlineParameters() functions
+// (JSON_SQLDATE_MAGIC will be used as prefix to create '\uFFF1...' pattern)
+// - to be used e.g. as in:
+// ! aRec.CreateAndFillPrepare(Client,'Datum=?',[DateToSQL(EncodeDate(2012,5,4))]);
+function DateToSQL(Date: TDateTime): RawUTF8; overload;
+
+/// convert a date to a ISO-8601 string format for SQL '?' inlined parameters
+// - will return the date encoded as '\uFFF1YYYY-MM-DD' - therefore
+// ':("\uFFF12012-05-04"):' pattern will be recognized as a sftDateTime
+// inline parameter in  SQLParamContent() / ExtractInlineParameters() functions
+// (JSON_SQLDATE_MAGIC will be used as prefix to create '\uFFF1...' pattern)
+// - to be used e.g. as in:
+// ! aRec.CreateAndFillPrepare(Client,'Datum=?',[DateToSQL(2012,5,4)]);
+function DateToSQL(Year,Month,Day: cardinal): RawUTF8; overload;
+
+/// convert a date/time to a ISO-8601 string format for SQL '?' inlined parameters
+// - if DT=0, returns ''
+// - if DT contains only a date, returns the date encoded as '\uFFF1YYYY-MM-DD'
+// - if DT contains only a time, returns the time encoded as '\uFFF1Thh:mm:ss'
+// - otherwise, returns the ISO-8601 date and time encoded as '\uFFF1YYYY-MM-DDThh:mm:ss'
+// (JSON_SQLDATE_MAGIC will be used as prefix to create '\uFFF1...' pattern)
+// - if WithMS is TRUE, will append '.sss' for milliseconds resolution
+// - to be used e.g. as in:
+// ! aRec.CreateAndFillPrepare(Client,'Datum<=?',[DateTimeToSQL(Now)]);
+// - see TimeLogToSQL() if you are using TTimeLog/TModTime/TCreateTime values
+function DateTimeToSQL(DT: TDateTime; WithMS: boolean=false): RawUTF8;
+
+/// decode a SQL '?' inlined parameter (i.e. with JSON_SQLDATE_MAGIC prefix)
+// - as generated by DateToSQL/DateTimeToSQL/TimeLogToSQL functions
+function SQLToDateTime(const ParamValueWithMagic: RawUTF8): TDateTime;
+
+/// convert a TTimeLog value into a ISO-8601 string format for SQL '?' inlined
+// parameters
+// - handle TTimeLog bit-encoded Int64 format
+// - follows the same pattern as DateToSQL or DateTimeToSQL functions, i.e.
+// will return the date or time encoded as '\uFFF1YYYY-MM-DDThh:mm:ss' -
+// therefore ':("\uFFF12012-05-04T20:12:13"):' pattern will be recognized as a
+// sftDateTime inline parameter in  SQLParamContent() / ExtractInlineParameters()
+// (JSON_SQLDATE_MAGIC will be used as prefix to create '\uFFF1...' pattern)
+// - to be used e.g. as in:
+// ! aRec.CreateAndFillPrepare(Client,'Datum<=?',[TimeLogToSQL(TimeLogNow)]);
+function TimeLogToSQL(const Timestamp: TTimeLog): RawUTF8;
+
+/// convert a Iso8601 encoded string into a ISO-8601 string format for SQL
+// '?' inlined parameters
+// - follows the same pattern as DateToSQL or DateTimeToSQL functions, i.e.
+// will return the date or time encoded as '\uFFF1YYYY-MM-DDThh:mm:ss' -
+// therefore ':("\uFFF12012-05-04T20:12:13"):' pattern will be recognized as a
+// sftDateTime inline parameter in  SQLParamContent() / ExtractInlineParameters()
+// (JSON_SQLDATE_MAGIC will be used as prefix to create '\uFFF1...' pattern)
+// - in practice, just append the JSON_SQLDATE_MAGIC prefix to the supplied text
+function Iso8601ToSQL(const S: RawByteString): RawUTF8;
+
+
+/// guess the content type of an UTF-8 SQL value, in :(....): format
+// - will be used e.g. by ExtractInlineParameters() to un-inline a SQL statement
+// - sftInteger is returned for an INTEGER value, e.g. :(1234):
+// - sftFloat is returned for any floating point value (i.e. some digits
+// separated by a '.' character), e.g. :(12.34): or :(12E-34):
+// - sftUTF8Text is returned for :("text"): or :('text'):, with double quoting
+// inside the value
+// - sftBlob will be recognized from the ':("\uFFF0base64encodedbinary"):'
+// pattern, and return raw binary (for direct blob parameter assignment)
+// - sftDateTime will be recognized from ':(\uFFF1"2012-05-04"):' pattern,
+// i.e. JSON_SQLDATE_MAGIC-prefixed string as returned by DateToSQL() or
+// DateTimeToSQL() functions
+// - sftUnknown is returned on invalid content, or if wasNull is set to TRUE
+// - if ParamValue is not nil, the pointing RawUTF8 string is set with the
+// value inside :(...): without double quoting in case of sftUTF8Text
+// - wasNull is set to TRUE if P was ':(null):' and ParamType is sftUnknwown
+function SQLParamContent(P: PUTF8Char; out ParamType: TSQLParamType; out ParamValue: RawUTF8;
+  out wasNull: boolean): PUTF8Char;
+
+/// this function will extract inlined :(1234): parameters into Types[]/Values[]
+// - will return the generic SQL statement with ? place holders for inlined
+// parameters and setting Values with SQLParamContent() decoded content
+// - will set maxParam=0 in case of no inlined parameters
+// - recognized types are sptInteger, sptFloat, sptDateTime ('\uFFF1...'),
+// sptUTF8Text and sptBlob ('\uFFF0...')
+// - sptUnknown is returned on invalid content
+function ExtractInlineParameters(const SQL: RawUTF8;
+  var Types: TSQLParamTypeDynArray; var Values: TRawUTF8DynArray;
+  var maxParam: integer; var Nulls: TSQLFieldBits): RawUTF8;
+
+/// returns a 64-bit value as inlined ':(1234):' text
+function InlineParameter(ID: Int64): shortstring; overload;
+
+/// returns a string value as inlined ':("value"):' text
+function InlineParameter(const value: RawUTF8): RawUTF8; overload;
+
+type
+  /// SQL Query comparison operators
+  // - used e.g. by CompareOperator() functions in SynTable.pas or vt_BestIndex()
+  // in mORMotSQLite3.pas
+  TCompareOperator = (
+     soEqualTo,
+     soNotEqualTo,
+     soLessThan,
+     soLessThanOrEqualTo,
+     soGreaterThan,
+     soGreaterThanOrEqualTo,
+     soBeginWith,
+     soContains,
+     soSoundsLikeEnglish,
+     soSoundsLikeFrench,
+     soSoundsLikeSpanish);
+
+const
+  /// convert identified field types into high-level ORM types
+  // - as will be implemented in unit mORMot.pas
+  SQLDBFIELDTYPE_TO_DELPHITYPE: array[TSQLDBFieldType] of RawUTF8 = (
+    '???','???', 'Int64', 'Double', 'Currency', 'TDateTime', 'RawUTF8', 'TSQLRawBlob');
+
+
+
+{ ************ TSynTable types and classes ************************** }
 
 {$define SORTCOMPAREMETHOD}
 { if defined, the field content comparison will use a method instead of fixed
   functions - could be mandatory for tftArray field kind }
 
 type
+  /// exception raised by all TSynTable related code
+  ETableDataException = class(ESynException);
+
   /// the available types for any TSynTable field property
   // - this is used in our so-called SBF compact binary format
   // (similar to BSON or Protocol Buffers)
@@ -794,7 +1224,7 @@ type
     /// options of this field
     Options: TSynTableFieldOptions;
     /// contains the offset of this field, in case of fixed-length field
-    // - normaly, fixed-length fields are stored in the beginning of the record
+    // - normally, fixed-length fields are stored in the beginning of the record
     // storage: in this case, a value >= 0 will point to the position of the
     // field value of this field
     // - if the value is < 0, its absolute will be the field number to be counted
@@ -979,13 +1409,8 @@ type
   // - is defined either as an object either as a record, due to a bug
   // in Delphi 2009/2010 compiler (at least): this structure is not initialized
   // if defined as an object on the stack, but will be as a record :(
-  {$ifdef UNICODE}
-  TSynTableData = record
-  private
-  {$else}
-  TSynTableData = object
-  protected
-  {$endif UNICODE}
+  {$ifdef UNICODE}TSynTableData = record{$else}TSynTableData = object{$endif UNICODE}
+  {$ifdef UNICODE}private{$else}protected{$endif UNICODE}
     VType: TVarType;
     Filler: array[1..SizeOf(TVarData)-SizeOf(TVarType)-SizeOf(pointer)*2-4] of byte;
     VID: integer;
@@ -1366,7 +1791,7 @@ function CompareOperator(FieldType: TSynTableFieldType; SBF, SBFEnd: PUTF8Char;
 procedure ToSBFStr(const Value: RawByteString; out Result: TSBFString);
 
 
-{ ************ low-level buffer processing functions************************* }
+{ ************ low-level buffer processing functions ************************* }
 
 type
   /// implements a thread-safe Bloom Filter storage
@@ -1388,7 +1813,7 @@ type
   // - internally, several (hardware-accelerated) crc32c hash functions will be
   // used, with some random seed values, to simulate several hashing functions
   // - Insert/MayExist/Reset methods are thread-safe
-  TSynBloomFilter = class(TSynPersistentLocked)
+  TSynBloomFilter = class(TSynPersistentLock)
   private
     fSize: cardinal;
     fFalsePositivePercent: double;
@@ -1600,11 +2025,1749 @@ function DeltaExtract(const Delta,Old: RawByteString; out New: RawByteString): T
 // - return dsSuccess if was uncompressed to aOutUpd as expected
 function DeltaExtract(Delta,Old,New: PAnsiChar): TDeltaError; overload;
 
-
 function ToText(err: TDeltaError): PShortString; overload;
 
 
+type
+  /// safe decoding of a TFileBufferWriter content
+  // - similar to TFileBufferReader, but faster and only for in-memory buffer
+  // - is also safer, since will check for reaching end of buffer
+  // - raise a EFastReader exception on decoding error (e.g. if a buffer
+  // overflow may occur) or call OnErrorOverflow/OnErrorData event handlers
+  {$ifdef FPC_OR_UNICODE}TFastReader = record{$else}TFastReader = object{$endif}
+  public
+    /// the current position in the memory
+    P: PAnsiChar;
+    /// the last position in the buffer
+    Last: PAnsiChar;
+    /// use this event to customize the ErrorOverflow process
+    OnErrorOverflow: procedure of object;
+    /// use this event to customize the ErrorData process
+    OnErrorData: procedure(const fmt: RawUTF8; const args: array of const) of object;
+    /// some opaque value, which may be a version number to define the binary layout
+    Tag: PtrInt;
+    /// initialize the reader from a memory block
+    procedure Init(Buffer: pointer; Len: integer); overload;
+    /// initialize the reader from a RawByteString content
+    procedure Init(const Buffer: RawByteString); overload;
+    /// raise a EFastReader with an "overflow" error message
+    procedure ErrorOverflow;
+    /// raise a EFastReader with an "incorrect data" error message
+    procedure ErrorData(const fmt: RawUTF8; const args: array of const);
+    /// read the next 32-bit signed value from the buffer
+    function VarInt32: integer;    {$ifdef HASINLINE}inline;{$endif}
+    /// read the next 32-bit unsigned value from the buffer
+    function VarUInt32: cardinal;
+    /// try to read the next 32-bit signed value from the buffer
+    // - don't change the current position
+    function PeekVarInt32(out value: PtrInt): boolean; {$ifdef HASINLINE}inline;{$endif}
+    /// try to read the next 32-bit unsigned value from the buffer
+    // - don't change the current position
+    function PeekVarUInt32(out value: PtrUInt): boolean;
+    /// read the next 32-bit unsigned value from the buffer
+    // - this version won't call ErrorOverflow, but return false on error
+    // - returns true on read success
+    function VarUInt32Safe(out Value: cardinal): boolean;
+    /// read the next 64-bit signed value from the buffer
+    function VarInt64: Int64; {$ifdef HASINLINE}inline;{$endif}
+    /// read the next 64-bit unsigned value from the buffer
+    function VarUInt64: QWord;
+    /// read the next RawUTF8 value from the buffer
+    function VarUTF8: RawUTF8; overload;
+    /// read the next RawUTF8 value from the buffer
+    procedure VarUTF8(out result: RawUTF8); overload;
+    /// read the next RawUTF8 value from the buffer
+    // - this version won't call ErrorOverflow, but return false on error
+    // - returns true on read success
+    function VarUTF8Safe(out Value: RawUTF8): boolean;
+    /// read the next RawByteString value from the buffer
+    function VarString: RawByteString; {$ifdef HASINLINE}inline;{$endif}
+    /// read the next pointer and length value from the buffer
+    procedure VarBlob(out result: TValueResult); overload; {$ifdef HASINLINE}inline;{$endif}
+    /// read the next pointer and length value from the buffer
+    function VarBlob: TValueResult; overload;  {$ifdef HASINLINE}inline;{$endif}
+    /// read the next ShortString value from the buffer
+    function VarShortString: shortstring; {$ifdef HASINLINE}inline;{$endif}
+    /// fast ignore the next VarUInt32/VarInt32/VarUInt64/VarInt64 value
+    // - don't raise any exception, so caller could check explicitly for any EOF
+    procedure VarNextInt; overload; {$ifdef HASINLINE}inline;{$endif}
+    /// fast ignore the next count VarUInt32/VarInt32/VarUInt64/VarInt64 values
+    // - don't raise any exception, so caller could check explicitly for any EOF
+    procedure VarNextInt(count: integer); overload;
+    /// read the next byte from the buffer
+    function NextByte: byte; {$ifdef HASINLINE}inline;{$endif}
+    /// read the next byte from the buffer, checking
+    function NextByteSafe(dest: pointer): boolean; {$ifdef HASINLINE}inline;{$endif}
+    /// read the next 4 bytes from the buffer as a 32-bit unsigned value
+    function Next4: cardinal; {$ifdef HASINLINE}inline;{$endif}
+    /// read the next 8 bytes from the buffer as a 64-bit unsigned value
+    function Next8: Qword; {$ifdef HASINLINE}inline;{$endif}
+    /// consumes the next byte from the buffer, if matches a given value
+    function NextByteEquals(Value: byte): boolean; {$ifdef HASINLINE}inline;{$endif}
+    /// returns the current position, and move ahead the specified bytes
+    function Next(DataLen: PtrInt): pointer;   {$ifdef HASINLINE}inline;{$endif}
+    /// returns the current position, and move ahead the specified bytes
+    function NextSafe(out Data: Pointer; DataLen: PtrInt): boolean; {$ifdef HASINLINE}inline;{$endif}
+    {$ifndef NOVARIANTS}
+    /// read the next variant from the buffer
+    // - is a wrapper around VariantLoad(), so may suffer from buffer overflow
+    procedure NextVariant(var Value: variant; CustomVariantOptions: pointer);
+    /// read the JSON-serialized TDocVariant from the buffer
+    // - matches TFileBufferWriter.WriteDocVariantData format
+    procedure NextDocVariantData(out Value: variant; CustomVariantOptions: pointer);
+    {$endif NOVARIANTS}
+    /// copy data from the current position, and move ahead the specified bytes
+    procedure Copy(out Dest; DataLen: PtrInt); {$ifdef HASINLINE}inline;{$endif}
+    /// copy data from the current position, and move ahead the specified bytes
+    // - this version won't call ErrorOverflow, but return false on error
+    // - returns true on read success
+    function CopySafe(out Dest; DataLen: PtrInt): boolean;
+    /// apply TDynArray.LoadFrom on the buffer
+    // - will unserialize a previously appended dynamic array, e.g. as
+    // ! aWriter.WriteDynArray(DA);
+    procedure Read(var DA: TDynArray; NoCheckHash: boolean=false);
+    /// retrieved cardinal values encoded with TFileBufferWriter.WriteVarUInt32Array
+    // - only supports wkUInt32, wkVarInt32, wkVarUInt32 kind of encoding
+    function ReadVarUInt32Array(var Values: TIntegerDynArray): PtrInt;
+    /// retrieve some TAlgoCompress buffer, appended via Write()
+    // - BufferOffset could be set to reserve some bytes before the uncompressed buffer
+    function ReadCompressed(Load: TAlgoCompressLoad=aclNormal; BufferOffset: integer=0): RawByteString;
+    /// returns TRUE if the current position is the end of the input stream
+    function EOF: boolean; {$ifdef HASINLINE}inline;{$endif}
+    /// returns remaining length (difference between Last and P)
+    function RemainingLength: PtrUInt; {$ifdef HASINLINE}inline;{$endif}
+  end;
+
+  /// abstract high-level handling of (SynLZ-)compressed persisted storage
+  // - LoadFromReader/SaveToWriter abstract methods should be overriden
+  // with proper binary persistence implementation
+  TSynPersistentStore = class(TSynPersistentLock)
+  protected
+    fName: RawUTF8;
+    fReader: TFastReader;
+    fReaderTemp: PRawByteString;
+    fLoadFromLastUncompressed, fSaveToLastUncompressed: integer;
+    fLoadFromLastAlgo: TAlgoCompress;
+    /// low-level virtual methods implementing the persistence reading
+    procedure LoadFromReader; virtual;
+    procedure SaveToWriter(aWriter: TFileBufferWriter); virtual;
+  public
+    /// initialize a void storage with the supplied name
+    constructor Create(const aName: RawUTF8); reintroduce; overload; virtual;
+    /// initialize a storage from a SaveTo persisted buffer
+    // - raise a EFastReader exception on decoding error
+    constructor CreateFrom(const aBuffer: RawByteString;
+      aLoad: TAlgoCompressLoad = aclNormal);
+    /// initialize a storage from a SaveTo persisted buffer
+    // - raise a EFastReader exception on decoding error
+    constructor CreateFromBuffer(aBuffer: pointer; aBufferLen: integer;
+      aLoad: TAlgoCompressLoad = aclNormal);
+    /// initialize a storage from a SaveTo persisted buffer
+    // - raise a EFastReader exception on decoding error
+    constructor CreateFromFile(const aFileName: TFileName;
+      aLoad: TAlgoCompressLoad = aclNormal);
+    /// fill the storage from a SaveTo persisted buffer
+    // - actually call the LoadFromReader() virtual method for persistence
+    // - raise a EFastReader exception on decoding error
+    procedure LoadFrom(const aBuffer: RawByteString;
+      aLoad: TAlgoCompressLoad = aclNormal); overload;
+    /// initialize the storage from a SaveTo persisted buffer
+    // - actually call the LoadFromReader() virtual method for persistence
+    // - raise a EFastReader exception on decoding error
+    procedure LoadFrom(aBuffer: pointer; aBufferLen: integer;
+       aLoad: TAlgoCompressLoad = aclNormal); overload; virtual;
+    /// initialize the storage from a SaveToFile content
+    // - actually call the LoadFromReader() virtual method for persistence
+    // - returns false if the file is not found, true if the file was loaded
+    // without any problem, or raise a EFastReader exception on decoding error
+    function LoadFromFile(const aFileName: TFileName;
+      aLoad: TAlgoCompressLoad = aclNormal): boolean;
+    /// persist the content as a SynLZ-compressed binary blob
+    // - to be retrieved later on via LoadFrom method
+    // - actually call the SaveToWriter() protected virtual method for persistence
+    // - you can specify ForcedAlgo if you want to override the default AlgoSynLZ
+    // - BufferOffset could be set to reserve some bytes before the compressed buffer
+    procedure SaveTo(out aBuffer: RawByteString; nocompression: boolean=false;
+      BufLen: integer=65536; ForcedAlgo: TAlgoCompress=nil; BufferOffset: integer=0); overload; virtual;
+    /// persist the content as a SynLZ-compressed binary blob
+    // - just an overloaded wrapper
+    function SaveTo(nocompression: boolean=false; BufLen: integer=65536;
+      ForcedAlgo: TAlgoCompress=nil; BufferOffset: integer=0): RawByteString; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// persist the content as a SynLZ-compressed binary file
+    // - to be retrieved later on via LoadFromFile method
+    // - returns the number of bytes of the resulting file
+    // - actually call the SaveTo method for persistence
+    function SaveToFile(const aFileName: TFileName; nocompression: boolean=false;
+      BufLen: integer=65536; ForcedAlgo: TAlgoCompress=nil): PtrUInt;
+    /// one optional text associated with this storage
+    // - you can define this field as published to serialize its value in log/JSON
+    property Name: RawUTF8 read fName;
+    /// after a LoadFrom(), contains the uncompressed data size read
+    property LoadFromLastUncompressed: integer read fLoadFromLastUncompressed;
+    /// after a SaveTo(), contains the uncompressed data size written
+    property SaveToLastUncompressed: integer read fSaveToLastUncompressed;
+  end;
+
+  /// implement binary persistence and JSON serialization (not deserialization)
+  TSynPersistentStoreJson = class(TSynPersistentStore)
+  protected
+    // append "name" -> inherited should add properties to the JSON object
+    procedure AddJSON(W: TTextWriter); virtual;
+  public
+    /// serialize this instance as a JSON object
+    function SaveToJSON(reformat: TTextWriterJSONFormat = jsonCompact): RawUTF8;
+  end;
+
+
+type
+  /// item as stored in a TRawByteStringGroup instance
+  TRawByteStringGroupValue = record
+    Position: integer;
+    Value: RawByteString;
+  end;
+  PRawByteStringGroupValue = ^TRawByteStringGroupValue;
+  /// items as stored in a TRawByteStringGroup instance
+  TRawByteStringGroupValueDynArray = array of TRawByteStringGroupValue;
+
+  /// store several RawByteString content with optional concatenation
+  {$ifdef UNICODE}TRawByteStringGroup = record{$else}TRawByteStringGroup = object{$endif}
+  public
+    /// actual list storing the data
+    Values: TRawByteStringGroupValueDynArray;
+    /// how many items are currently stored in Values[]
+    Count: integer;
+    /// the current size of data stored in Values[]
+    Position: integer;
+    /// naive but efficient cache for Find()
+    LastFind: integer;
+    /// add a new item to Values[]
+    procedure Add(const aItem: RawByteString); overload;
+    /// add a new item to Values[]
+    procedure Add(aItem: pointer; aItemLen: integer); overload;
+    {$ifndef DELPHI5OROLDER}
+    /// add another TRawByteStringGroup to Values[]
+    procedure Add(const aAnother: TRawByteStringGroup); overload;
+    /// low-level method to abort the latest Add() call
+    // - warning: will work only once, if an Add() has actually been just called:
+    // otherwise, the behavior is unexpected, and may wrongly truncate data
+    procedure RemoveLastAdd;
+    /// compare two TRawByteStringGroup instance stored text
+    function Equals(const aAnother: TRawByteStringGroup): boolean;
+    {$endif DELPHI5OROLDER}
+    /// clear any stored information
+    procedure Clear;
+    /// append stored information into another RawByteString, and clear content
+    procedure AppendTextAndClear(var aDest: RawByteString);
+    // compact the Values[] array into a single item
+    // - is also used by AsText to compute a single RawByteString
+    procedure Compact;
+    /// return all content as a single RawByteString
+    // - will also compact the Values[] array into a single item (which is returned)
+    function AsText: RawByteString;
+    /// return all content as a single TByteDynArray
+    function AsBytes: TByteDynArray;
+    /// save all content into a TTextWriter instance
+    procedure Write(W: TTextWriter; Escape: TTextWriterKind=twJSONEscape); overload;
+    /// save all content into a TFileBufferWriter instance
+    procedure WriteBinary(W: TFileBufferWriter); overload;
+    /// save all content as a string into a TFileBufferWriter instance
+    // - storing the length as WriteVarUInt32() prefix
+    procedure WriteString(W: TFileBufferWriter);
+    /// add another TRawByteStringGroup previously serialized via WriteString()
+    procedure AddFromReader(var aReader: TFastReader);
+    /// returns a pointer to Values[] containing a given position
+    // - returns nil if not found
+    function Find(aPosition: integer): PRawByteStringGroupValue; overload;
+    /// returns a pointer to Values[].Value containing a given position and length
+    // - returns nil if not found
+    function Find(aPosition, aLength: integer): pointer; overload;
+    /// returns the text at a given position in Values[]
+    // - text should be in a single Values[] entry
+    procedure FindAsText(aPosition, aLength: integer; out aText: RawByteString); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// returns the text at a given position in Values[]
+    // - text should be in a single Values[] entry
+    function FindAsText(aPosition, aLength: integer): RawByteString; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    {$ifndef NOVARIANTS}
+    /// returns the text at a given position in Values[]
+    // - text should be in a single Values[] entry
+    // - explicitly returns null if the supplied text was not found
+    procedure FindAsVariant(aPosition, aLength: integer; out aDest: variant);
+      {$ifdef HASINLINE}inline;{$endif}
+    {$endif}
+    /// append the text at a given position in Values[], JSON escaped by default
+    // - text should be in a single Values[] entry
+    procedure FindWrite(aPosition, aLength: integer; W: TTextWriter;
+      Escape: TTextWriterKind=twJSONEscape; TrailingCharsToIgnore: integer=0);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// append the blob at a given position in Values[], base-64 encoded
+    // - text should be in a single Values[] entry
+    procedure FindWriteBase64(aPosition, aLength: integer; W: TTextWriter;
+      withMagic: boolean);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// copy the text at a given position in Values[]
+    // - text should be in a single Values[] entry
+    procedure FindMove(aPosition, aLength: integer; aDest: pointer);
+  end;
+  /// pointer reference to a TRawByteStringGroup
+  PRawByteStringGroup = ^TRawByteStringGroup;
+
+
+{ ************  Security and Identifier classes ************************** }
+
+type
+  /// 64-bit integer unique identifier, as computed by TSynUniqueIdentifierGenerator
+  // - they are increasing over time (so are much easier to store/shard/balance
+  // than UUID/GUID), and contain generation time and a 16-bit process ID
+  // - mapped by TSynUniqueIdentifierBits memory structure
+  // - may be used on client side for something similar to a MongoDB ObjectID,
+  // but compatible with TSQLRecord.ID: TID properties
+  TSynUniqueIdentifier = type Int64;
+
+  /// 16-bit unique process identifier, used to compute TSynUniqueIdentifier
+  // - each TSynUniqueIdentifierGenerator instance is expected to have
+  // its own unique process identifier, stored as a 16 bit integer 1..65535 value
+  TSynUniqueIdentifierProcess = type word;
+
+  {$A-}
+  /// map 64-bit integer unique identifier internal memory structure
+  // - as stored in TSynUniqueIdentifier = Int64 values, and computed by
+  // TSynUniqueIdentifierGenerator
+  // - bits 0..14 map a 15-bit increasing counter (collision-free)
+  // - bits 15..30 map a 16-bit process identifier
+  // - bits 31..63 map a 33-bit UTC time, encoded as seconds since Unix epoch
+  {$ifdef FPC_OR_UNICODE}TSynUniqueIdentifierBits = record{$else}TSynUniqueIdentifierBits = object{$endif}
+  public
+    /// the actual 64-bit storage value
+    // - in practice, only first 63 bits are used
+    Value: TSynUniqueIdentifier;
+    /// 15-bit counter (0..32767), starting with a random value
+    function Counter: word;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// 16-bit unique process identifier
+    // - as specified to TSynUniqueIdentifierGenerator constructor
+    function ProcessID: TSynUniqueIdentifierProcess;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// low-endian 4-byte value representing the seconds since the Unix epoch
+    // - time is expressed in Coordinated Universal Time (UTC), not local time
+    // - it uses in fact a 33-bit resolution, so is "Year 2038" bug-free
+    function CreateTimeUnix: TUnixTime;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// fill this unique identifier structure from its TSynUniqueIdentifier value
+    // - is just a wrapper around PInt64(@self)^
+    procedure From(const AID: TSynUniqueIdentifier);
+      {$ifdef HASINLINE}inline;{$endif}
+    {$ifndef NOVARIANTS}
+    /// convert this identifier as an explicit TDocVariant JSON object
+    // - returns e.g.
+    // ! {"Created":"2016-04-19T15:27:58","Identifier":1,"Counter":1,
+    // ! "Value":3137644716930138113,"Hex":"2B8B273F00008001"}
+    function AsVariant: variant; {$ifdef HASINLINE}inline;{$endif}
+    /// convert this identifier to an explicit TDocVariant JSON object
+    // - returns e.g.
+    // ! {"Created":"2016-04-19T15:27:58","Identifier":1,"Counter":1,
+    // ! "Value":3137644716930138113,"Hex":"2B8B273F00008001"}
+    procedure ToVariant(out result: variant);
+    {$endif NOVARIANTS}
+    /// extract the UTC generation timestamp from the identifier as TDateTime
+    // - time is expressed in Coordinated Universal Time (UTC), not local time
+    function CreateDateTime: TDateTime;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// extract the UTC generation timestamp from the identifier
+    // - time is expressed in Coordinated Universal Time (UTC), not local time
+    function CreateTimeLog: TTimeLog;
+    {$ifndef DELPHI5OROLDER}
+    /// compare two Identifiers
+    function Equal(const Another: TSynUniqueIdentifierBits): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
+    {$endif DELPHI5OROLDER}
+    /// convert the identifier into a 16 chars hexadecimal string
+    function ToHexa: RawUTF8;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// fill this unique identifier back from a 16 chars hexadecimal string
+    // - returns TRUE if the supplied hexadecimal is on the expected format
+    // - returns FALSE if the supplied text is invalid
+    function FromHexa(const hexa: RawUTF8): boolean;
+    /// fill this unique identifier with a fake value corresponding to a given
+    // timestamp
+    // - may be used e.g. to limit database queries on a particular time range
+    // - bits 0..30 would be 0, i.e. would set Counter = 0 and ProcessID = 0
+    procedure FromDateTime(const aDateTime: TDateTime);
+    /// fill this unique identifier with a fake value corresponding to a given
+    // timestamp
+    // - may be used e.g. to limit database queries on a particular time range
+    // - bits 0..30 would be 0, i.e. would set Counter = 0 and ProcessID = 0
+    procedure FromUnixTime(const aUnixTime: TUnixTime);
+  end;
+  {$A+}
+
+  /// points to a 64-bit integer identifier, as computed by TSynUniqueIdentifierGenerator
+  // - may be used to access the identifier internals, from its stored
+  // Int64 or TSynUniqueIdentifier value
+  PSynUniqueIdentifierBits = ^TSynUniqueIdentifierBits;
+
+  /// a 24 chars cyphered hexadecimal string, mapping a TSynUniqueIdentifier
+  // - has handled by TSynUniqueIdentifierGenerator.ToObfuscated/FromObfuscated
+  TSynUniqueIdentifierObfuscated = type RawUTF8;
+
+  /// thread-safe 64-bit integer unique identifier computation
+  // - may be used on client side for something similar to a MongoDB ObjectID,
+  // but compatible with TSQLRecord.ID: TID properties, since it will contain
+  // a 63-bit unsigned integer, following our ORM expectations
+  // - each identifier would contain a 16-bit process identifier, which is
+  // supplied by the application, and should be unique for this process at a
+  // given time
+  // - identifiers may be obfuscated as hexadecimal text, using both encryption
+  // and digital signature
+  TSynUniqueIdentifierGenerator = class(TSynPersistent)
+  protected
+    fUnixCreateTime: cardinal;
+    fLatestCounterOverflowUnixCreateTime: cardinal;
+    fIdentifier: TSynUniqueIdentifierProcess;
+    fIdentifierShifted: cardinal;
+    fLastCounter: cardinal;
+    fCrypto: array[0..7] of cardinal; // only fCrypto[6..7] are used in practice
+    fCryptoCRC: cardinal;
+    fSafe: TSynLocker;
+    function GetComputedCount: Int64;
+  public
+    /// initialize the generator for the given 16-bit process identifier
+    // - you can supply an obfuscation key, which should be shared for the
+    // whole system, so that you may use FromObfuscated/ToObfuscated methods
+    constructor Create(aIdentifier: TSynUniqueIdentifierProcess;
+      const aSharedObfuscationKey: RawUTF8=''); reintroduce;
+    /// finalize the generator structure
+    destructor Destroy; override;
+    /// return a new unique ID
+    // - this method is very optimized, and would use very little CPU
+    procedure ComputeNew(out result: TSynUniqueIdentifierBits); overload;
+    /// return a new unique ID, type-casted to an Int64
+    function ComputeNew: Int64; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// return an unique ID matching this generator pattern, at a given timestamp
+    // - may be used e.g. to limit database queries on a particular time range
+    procedure ComputeFromDateTime(const aDateTime: TDateTime; out result: TSynUniqueIdentifierBits);
+    /// return an unique ID matching this generator pattern, at a given timestamp
+    // - may be used e.g. to limit database queries on a particular time range
+    procedure ComputeFromUnixTime(const aUnixTime: TUnixTime; out result: TSynUniqueIdentifierBits);
+    /// map a TSynUniqueIdentifier as 24 chars cyphered hexadecimal text
+    // - cyphering includes simple key-based encryption and a CRC-32 digital signature
+    function ToObfuscated(const aIdentifier: TSynUniqueIdentifier): TSynUniqueIdentifierObfuscated;
+    /// retrieve a TSynUniqueIdentifier from 24 chars cyphered hexadecimal text
+    // - any file extension (e.g. '.jpeg') would be first deleted from the
+    // supplied obfuscated text
+    // - returns true if the supplied obfuscated text has the expected layout
+    // and a valid digital signature
+    // - returns false if the supplied obfuscated text is invalid
+    function FromObfuscated(const aObfuscated: TSynUniqueIdentifierObfuscated;
+      out aIdentifier: TSynUniqueIdentifier): boolean;
+    /// some 32-bit value, derivated from aSharedObfuscationKey as supplied
+    // to the class constructor
+    // - FromObfuscated and ToObfuscated methods will validate their hexadecimal
+    // content with this value to secure the associated CRC
+    // - may be used e.g. as system-depending salt
+    property CryptoCRC: cardinal read fCryptoCRC;
+    /// direct access to the associated mutex
+    property Safe: TSynLocker read fSafe;
+  published
+    /// the process identifier, associated with this generator
+    property Identifier: TSynUniqueIdentifierProcess read fIdentifier;
+    /// how many times ComputeNew method has been called
+    property ComputedCount: Int64 read GetComputedCount;
+  end;
+
+type
+  /// abstract TSynPersistent class allowing safe storage of a password
+  // - the associated Password, e.g. for storage or transmission encryption
+  // will be persisted encrypted with a private key (which can be customized)
+  // - if default simple symmetric encryption is not enough, you may define
+  // a custom TSynPersistentWithPasswordUserCrypt callback, e.g. to
+  // SynCrypto's CryptDataForCurrentUser, for hardened password storage
+  // - a published property should be defined as such in inherited class:
+  // ! property PasswordPropertyName: RawUTF8 read fPassword write fPassword;
+  // - use the PassWordPlain property to access to its uncyphered value
+  TSynPersistentWithPassword = class(TSynPersistent)
+  protected
+    fPassWord: RawUTF8;
+    fKey: cardinal;
+    function GetKey: cardinal;
+      {$ifdef HASINLINE}inline;{$endif}
+    function GetPassWordPlain: RawUTF8;
+    function GetPassWordPlainInternal(AppSecret: RawUTF8): RawUTF8;
+    procedure SetPassWordPlain(const Value: RawUTF8);
+  public
+    /// finalize the instance
+    destructor Destroy; override;
+    /// this class method could be used to compute the encrypted password,
+    // ready to be stored as JSON, according to a given private key
+    class function ComputePassword(const PlainPassword: RawUTF8;
+      CustomKey: cardinal=0): RawUTF8; overload;
+    /// this class method could be used to compute the encrypted password from
+    // a binary digest, ready to be stored as JSON, according to a given private key
+    // - just a wrapper around ComputePassword(BinToBase64URI())
+    class function ComputePassword(PlainPassword: pointer; PlainPasswordLen: integer;
+      CustomKey: cardinal=0): RawUTF8; overload;
+    /// this class method could be used to decrypt a password, stored as JSON,
+    // according to a given private key
+    // - may trigger a ESynException if the password was stored using a custom
+    // TSynPersistentWithPasswordUserCrypt callback, and the current user
+    // doesn't match the expected user stored in the field
+    class function ComputePlainPassword(const CypheredPassword: RawUTF8;
+      CustomKey: cardinal=0; const AppSecret: RawUTF8=''): RawUTF8;
+    /// low-level function used to identify if a given field is a Password
+    // - this method is used e.g. by TJSONSerializer.WriteObject to identify the
+    // password field, since its published name is set by the inherited classes
+    function GetPasswordFieldAddress: pointer;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// the private key used to cypher the password storage on serialization
+    // - application can override the default 0 value at runtime
+    property Key: cardinal read GetKey write fKey;
+    /// access to the associated unencrypted Password value
+    // - read may trigger a ESynException if the password was stored using a
+    // custom TSynPersistentWithPasswordUserCrypt callback, and the current user
+    // doesn't match the expected user stored in the field
+    property PasswordPlain: RawUTF8 read GetPassWordPlain write SetPassWordPlain;
+  end;
+
+var
+  /// function prototype to customize TSynPersistent class password storage
+  // - is called when 'user1:base64pass1,user2:base64pass2' layout is found,
+  // and the current user logged on the system is user1 or user2
+  // - you should not call this low-level method, but assign e.g. from SynCrypto:
+  // $ TSynPersistentWithPasswordUserCrypt := CryptDataForCurrentUser;
+  TSynPersistentWithPasswordUserCrypt:
+    function(const Data,AppServer: RawByteString; Encrypt: boolean): RawByteString;
+
+type
+  /// could be used to store a credential pair, as user name and password
+  // - password will be stored with TSynPersistentWithPassword encryption
+  TSynUserPassword = class(TSynPersistentWithPassword)
+  protected
+    fUserName: RawUTF8;
+  published
+    /// the associated user name
+    property UserName: RawUTF8 read FUserName write FUserName;
+    /// the associated encrypted password
+    // - use the PasswordPlain public property to access to the uncrypted password
+    property Password: RawUTF8 read FPassword write FPassword;
+  end;
+
+  /// handle safe storage of any connection properties
+  // - would be used by SynDB.pas to serialize TSQLDBConnectionProperties, or
+  // by mORMot.pas to serialize TSQLRest instances
+  // - the password will be stored as Base64, after a simple encryption as
+  // defined by TSynPersistentWithPassword
+  // - typical content could be:
+  // $ {
+  // $	"Kind": "TSQLDBSQLite3ConnectionProperties",
+  // $	"ServerName": "server",
+  // $	"DatabaseName": "",
+  // $	"User": "",
+  // $	"Password": "PtvlPA=="
+  // $ }
+  // - the "Kind" value will be used to let the corresponding TSQLRest or
+  // TSQLDBConnectionProperties NewInstance*() class methods create the
+  // actual instance, from its class name
+  TSynConnectionDefinition = class(TSynPersistentWithPassword)
+  protected
+    fKind: string;
+    fServerName: RawUTF8;
+    fDatabaseName: RawUTF8;
+    fUser: RawUTF8;
+  public
+    /// unserialize the database definition from JSON
+    // - as previously serialized with the SaveToJSON method
+    // - you can specify a custom Key used for password encryption, if the
+    // default value is not safe enough for you
+    // - this method won't use JSONToObject() so avoid any dependency to mORMot.pas
+    constructor CreateFromJSON(const JSON: RawUTF8; Key: cardinal=0); virtual;
+    /// serialize the database definition as JSON
+    // - this method won't use ObjectToJSON() so avoid any dependency to mORMot.pas
+    function SaveToJSON: RawUTF8; virtual;
+  published
+    /// the class name implementing the connection or TSQLRest instance
+    // - will be used to instantiate the expected class type
+    property Kind: string read fKind write fKind;
+    /// the associated server name (or file, for SQLite3) to be connected to
+    property ServerName: RawUTF8 read fServerName write fServerName;
+    /// the associated database name (if any), or additional options
+    property DatabaseName: RawUTF8 read fDatabaseName write fDatabaseName;
+    /// the associated User Identifier (if any)
+    property User: RawUTF8 read fUser write fUser;
+    /// the associated Password, e.g. for storage or transmission encryption
+    // - will be persisted encrypted with a private key
+    // - use the PassWordPlain property to access to its uncyphered value
+    property Password: RawUTF8 read fPassword write fPassword;
+  end;
+
+
+type
+  /// class-reference type (metaclass) of an authentication class
+  TSynAuthenticationClass = class of TSynAuthenticationAbstract;
+
+  /// abstract authentication class, implementing safe token/challenge security
+  // and a list of active sessions
+  // - do not use this class, but plain TSynAuthentication
+  TSynAuthenticationAbstract = class
+  protected
+    fSessions: TIntegerDynArray;
+    fSessionsCount: Integer;
+    fSessionGenerator: integer;
+    fTokenSeed: Int64;
+    fSafe: TSynLocker;
+    function ComputeCredential(previous: boolean; const UserName,PassWord: RawUTF8): cardinal; virtual;
+    function GetPassword(const UserName: RawUTF8; out Password: RawUTF8): boolean; virtual; abstract;
+    function GetUsersCount: integer; virtual; abstract;
+  public
+    /// initialize the authentication scheme
+    constructor Create;
+    /// finalize the authentation
+    destructor Destroy; override;
+    /// register one credential for a given user
+    // - this abstract method will raise an exception: inherited classes should
+    // implement them as expected
+    procedure AuthenticateUser(const aName, aPassword: RawUTF8); virtual;
+    /// unregister one credential for a given user
+    // - this abstract method will raise an exception: inherited classes should
+    // implement them as expected
+    procedure DisauthenticateUser(const aName: RawUTF8); virtual;
+    /// create a new session
+    // - should return 0 on authentication error, or an integer session ID
+    // - this method will check the User name and password, and create a new session
+    function CreateSession(const User: RawUTF8; Hash: cardinal): integer; virtual;
+    /// check if the session exists in the internal list
+    function SessionExists(aID: integer): boolean;
+    /// delete a session
+    procedure RemoveSession(aID: integer);
+    /// returns the current identification token
+    // - to be sent to the client for its authentication challenge
+    function CurrentToken: Int64;
+    /// the number of current opened sessions
+    property SessionsCount: integer read fSessionsCount;
+    /// the number of registered users
+    property UsersCount: integer read GetUsersCount;
+    /// to be used to compute a Hash on the client sude, for a given Token
+    // - the token should have been retrieved from the server, and the client
+    // should compute and return this hash value, to perform the authentication
+    // challenge and create the session
+    // - internal algorithm is not cryptographic secure, but fast and safe
+    class function ComputeHash(Token: Int64; const UserName,PassWord: RawUTF8): cardinal; virtual;
+  end;
+
+  /// simple authentication class, implementing safe token/challenge security
+  // - maintain a list of user / name credential pairs, and a list of sessions
+  // - is not meant to handle authorization, just plain user access validation
+  // - used e.g. by TSQLDBConnection.RemoteProcessMessage (on server side) and
+  // TSQLDBProxyConnectionPropertiesAbstract (on client side) in SynDB.pas
+  TSynAuthentication = class(TSynAuthenticationAbstract)
+  protected
+    fCredentials: TSynNameValue; // store user/password pairs
+    function GetPassword(const UserName: RawUTF8; out Password: RawUTF8): boolean; override;
+    function GetUsersCount: integer; override;
+  public
+    /// initialize the authentication scheme
+    // - you can optionally register one user credential
+    constructor Create(const aUserName: RawUTF8=''; const aPassword: RawUTF8=''); reintroduce;
+    /// register one credential for a given user
+    procedure AuthenticateUser(const aName, aPassword: RawUTF8); override;
+    /// unregister one credential for a given user
+    procedure DisauthenticateUser(const aName: RawUTF8); override;
+  end;
+
+
+{ ************ Expression Search Engine ************************** }
+
+type
+  /// exception type used by TExprParser
+  EExprParser = class(ESynException);
+
+  /// identify an expression search engine node type, as used by TExprParser
+  TExprNodeType = (entWord, entNot, entOr, entAnd);
+
+  /// results returned by TExprParserAbstract.Parse method
+  TExprParserResult = (
+    eprSuccess, eprNoExpression,
+    eprMissingParenthesis, eprTooManyParenthesis, eprMissingFinalWord,
+    eprInvalidExpression, eprUnknownVariable, eprUnsupportedOperator,
+    eprInvalidConstantOrVariable);
+
+  TParserAbstract = class;
+
+  /// stores an expression search engine node, as used by TExprParser
+  TExprNode = class(TSynPersistent)
+  protected
+    fNext: TExprNode;
+    fNodeType: TExprNodeType;
+    function Append(node: TExprNode): boolean;
+  public
+    /// initialize a node for the search engine
+    constructor Create(nodeType: TExprNodeType); reintroduce;
+    /// recursively destroys the linked list of nodes (i.e. Next)
+    destructor Destroy; override;
+    /// browse all nodes until Next = nil
+    function Last: TExprNode;
+    /// points to the next node in the parsed tree
+    property Next: TExprNode read fNext;
+    /// what is actually stored in this node
+    property NodeType: TExprNodeType read fNodeType;
+  end;
+
+  /// abstract class to handle word search, as used by TExprParser
+  TExprNodeWordAbstract = class(TExprNode)
+  protected
+    fOwner: TParserAbstract;
+    fWord: RawUTF8;
+    /// should be set from actual data before TExprParser.Found is called
+    fFound: boolean;
+    function ParseWord: TExprParserResult; virtual; abstract;
+  public
+    /// you should override this virtual constructor for proper initialization
+    constructor Create(aOwner: TParserAbstract; const aWord: RawUTF8); reintroduce; virtual;
+  end;
+
+  /// class-reference type (metaclass) for a TExprNode
+  // - allow to customize the actual searching process for entWord
+  TExprNodeWordClass = class of TExprNodeWordAbstract;
+
+  /// parent class of TExprParserAbstract
+  TParserAbstract = class(TSynPersistent)
+  protected
+    fExpression, fCurrentWord, fAndWord, fOrWord, fNotWord: RawUTF8;
+    fCurrent: PUTF8Char;
+    fCurrentError: TExprParserResult;
+    fFirstNode: TExprNode;
+    fWordClass: TExprNodeWordClass;
+    fWords: array of TExprNodeWordAbstract;
+    fWordCount: integer;
+    fNoWordIsAnd: boolean;
+    fFoundStack: array[byte] of boolean; // simple stack-based virtual machine
+    procedure ParseNextCurrentWord; virtual; abstract;
+    function ParseExpr: TExprNode;
+    function ParseFactor: TExprNode;
+    function ParseTerm: TExprNode;
+    procedure Clear; virtual;
+    // override this method to initialize fWordClass and fAnd/Or/NotWord
+    procedure Initialize; virtual; abstract;
+    /// perform the expression search over TExprNodeWord.fFound flags
+    // - warning: caller should check that fFirstNode<>nil (e.g. WordCount>0)
+    function Execute: boolean; {$ifdef HASINLINE}inline;{$endif}
+  public
+    /// initialize an expression parser
+    constructor Create; override;
+    /// finalize the expression parser
+    destructor Destroy; override;
+    /// initialize the parser from a given text expression
+    function Parse(const aExpression: RawUTF8): TExprParserResult;
+    /// try this parser class on a given text expression
+    // - returns '' on success, or an explicit error message (e.g.
+    // 'Missing parenthesis')
+    class function ParseError(const aExpression: RawUTF8): RawUTF8;
+    /// the associated text expression used to define the search
+    property Expression: RawUTF8 read fExpression;
+    /// how many words did appear in the search expression
+    property WordCount: integer read fWordCount;
+  end;
+
+  /// abstract class to parse a text expression into nodes
+  // - you should inherit this class to provide actual text search
+  // - searched expressions can use parenthesis and &=AND -=WITHOUT +=OR operators,
+  // e.g. '((w1 & w2) - w3) + w4' means ((w1 and w2) without w3) or w4
+  // - no operator is handled like a AND, e.g. 'w1 w2' = 'w1 & w2'
+  TExprParserAbstract = class(TParserAbstract)
+  protected
+    procedure ParseNextCurrentWord; override;
+    // may be overriden to provide custom words escaping (e.g. handle quotes)
+    procedure ParseNextWord; virtual;
+    procedure Initialize; override;
+  end;
+
+  /// search expression engine using TMatch for the actual word searches
+  TExprParserMatch = class(TExprParserAbstract)
+  protected
+    fCaseSensitive: boolean;
+    fMatchedLastSet: integer;
+    procedure Initialize; override;
+  public
+    /// initialize the search engine
+    constructor Create(aCaseSensitive: boolean = true); reintroduce;
+    /// returns TRUE if the expression is within the text buffer
+    function Search(aText: PUTF8Char; aTextLen: PtrInt): boolean; overload;
+    /// returns TRUE if the expression is within the text buffer
+    function Search(const aText: RawUTF8): boolean; overload; {$ifdef HASINLINE}inline;{$endif}
+  end;
+
+const
+  /// may be used when overriding TExprParserAbstract.ParseNextWord method
+  PARSER_STOPCHAR = ['&', '+', '-', '(', ')'];
+
+function ToText(r: TExprParserResult): PShortString; overload;
+function ToUTF8(r: TExprParserResult): RawUTF8; overload;
+
+
+{ ************ Multi-Threading classes ************************** }
+
+type
+  /// internal item definition, used by TPendingTaskList storage
+  TPendingTaskListItem = packed record
+    /// the task should be executed when TPendingTaskList.GetTimestamp reaches
+    // this value
+    Timestamp: Int64;
+    /// the associated task, stored by representation as raw binary
+    Task: RawByteString;
+  end;
+  /// internal list definition, used by TPendingTaskList storage
+  TPendingTaskListItemDynArray = array of TPendingTaskListItem;
+
+  /// handle a list of tasks, stored as RawByteString, with a time stamp
+  // - internal time stamps would be GetTickCount64 by default, so have a
+  // resolution of about 16 ms under Windows
+  // - you can add tasks to the internal list, to be executed after a given
+  // delay, using a post/peek like algorithm
+  // - execution delays are not expected to be accurate, but are best guess,
+  // according to NextTask call
+  // - this implementation is thread-safe, thanks to the Safe internal locker
+  TPendingTaskList = class(TSynPersistentLock)
+  protected
+    fCount: Integer;
+    fTask: TPendingTaskListItemDynArray;
+    fTasks: TDynArray;
+    function GetCount: integer;
+    function GetTimestamp: Int64; virtual;
+  public
+    /// initialize the list memory and resources
+    constructor Create; override;
+    /// append a task, specifying a delay in milliseconds from current time
+    procedure AddTask(aMilliSecondsDelayFromNow: integer; const aTask: RawByteString); virtual;
+    /// append several tasks, specifying a delay in milliseconds between tasks
+    // - first supplied delay would be computed from the current time, then
+    // it would specify how much time to wait between the next supplied task
+    procedure AddTasks(const aMilliSecondsDelays: array of integer;
+      const aTasks: array of RawByteString);
+    /// retrieve the next pending task
+    // - returns '' if there is no scheduled task available at the current time
+    // - returns the next stack as defined corresponding to its specified delay
+    function NextPendingTask: RawByteString; virtual;
+    /// flush all pending tasks
+    procedure Clear; virtual;
+    /// access to the locking methods of this instance
+    // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
+    property Safe: PSynlocker read fSafe;
+    /// access to the internal TPendingTaskListItem.Timestamp stored value
+    // - corresponding to the current time
+    // - default implementation is to return GetTickCount64, with a 16 ms
+    // typical resolution under Windows
+    property Timestamp: Int64 read GetTimestamp;
+    /// how many pending tasks are currently defined
+    property Count: integer read GetCount;
+    /// direct low-level access to the internal task list
+    // - warning: this dynamic array length is the list capacity: use Count
+    // property to retrieve the exact number of stored items
+    // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block for
+    // thread-safe access to this array
+    // - items are stored in increasing Timestamp, i.e. the first item is
+    // the next one which would be returned by the NextPendingTask method
+    property Task: TPendingTaskListItemDynArray read fTask;
+  end;
+
+{$ifndef LVCL} // LVCL does not implement TEvent
+
+type
+  {$M+}
+  TSynBackgroundThreadAbstract = class;
+  TSynBackgroundThreadEvent = class;
+  {$M-}
+
+  /// idle method called by TSynBackgroundThreadAbstract in the caller thread
+  // during remote blocking process in a background thread
+  // - typical use is to run Application.ProcessMessages, e.g. for
+  // TSQLRestClientURI.URI() to provide a responsive UI even in case of slow
+  // blocking remote access
+  // - provide the time elapsed (in milliseconds) from the request start (can be
+  // used e.g. to popup a temporary message to wait)
+  // - is call once with ElapsedMS=0 at request start
+  // - is call once with ElapsedMS=-1 at request ending
+  // - see TLoginForm.OnIdleProcess and OnIdleProcessForm in mORMotUILogin.pas
+  TOnIdleSynBackgroundThread = procedure(Sender: TSynBackgroundThreadAbstract;
+    ElapsedMS: Integer) of object;
+
+  /// event prototype used e.g. by TSynBackgroundThreadAbstract callbacks
+  // - a similar signature is defined in SynCrtSock and LVCL.Classes
+  TNotifyThreadEvent = procedure(Sender: TThread) of object;
+
+  /// abstract TThread with its own execution content
+  // - you should not use this class directly, but use either
+  // TSynBackgroundThreadMethodAbstract / TSynBackgroundThreadEvent /
+  // TSynBackgroundThreadMethod and provide a much more convenient callback
+  TSynBackgroundThreadAbstract = class(TThread)
+  protected
+    fProcessEvent: TEvent;
+    fOnBeforeExecute: TNotifyThreadEvent;
+    fOnAfterExecute: TNotifyThreadEvent;
+    fThreadName: RawUTF8;
+    fExecute: (exCreated,exRun,exFinished);
+    fExecuteLoopPause: boolean;
+    procedure SetExecuteLoopPause(dopause: boolean);
+    /// where the main process takes place
+    procedure Execute; override;
+    procedure ExecuteLoop; virtual; abstract;
+  public
+    /// initialize the thread
+    // - you could define some callbacks to nest the thread execution, e.g.
+    // assigned to TSQLRestServer.BeginCurrentThread/EndCurrentThread, or
+    // at least set OnAfterExecute to TSynLogFamily.OnThreadEnded
+    constructor Create(const aThreadName: RawUTF8; OnBeforeExecute: TNotifyThreadEvent=nil;
+      OnAfterExecute: TNotifyThreadEvent=nil; CreateSuspended: boolean=false); reintroduce;
+    /// release used resources
+    destructor Destroy; override;
+    {$ifndef HASTTHREADSTART}
+    /// method to be called to start the thread
+    // - Resume is deprecated in the newest RTL, since some OS - e.g. Linux -
+    // do not implement this pause/resume feature; we define here this method
+    // for older versions of Delphi
+    procedure Start;
+    {$endif}
+    {$ifdef HASTTHREADTERMINATESET}
+    /// properly terminate the thread
+    // - called by TThread.Terminate
+    procedure TerminatedSet; override;
+    {$else}
+    /// properly terminate the thread
+    // - called by reintroduced Terminate
+    procedure TerminatedSet; virtual;
+    /// reintroduced to call TeminatedSet
+    procedure Terminate; reintroduce;
+    {$endif}
+    /// wait for Execute/ExecuteLoop to be ended (i.e. fExecute<>exRun)
+    procedure WaitForNotExecuting(maxMS: integer=500);
+    /// temporary stop the execution of ExecuteLoop, until set back to false
+    // - may be used e.g. by TSynBackgroundTimer to delay the process of
+    // background tasks
+    property Pause: boolean read fExecuteLoopPause write SetExecuteLoopPause;
+    /// access to the low-level associated event used to notify task execution
+    // to the background thread
+    // - you may call ProcessEvent.SetEvent to trigger the internal process loop
+    property ProcessEvent: TEvent read fProcessEvent;
+    /// defined as public since may be used to terminate the processing methods
+    property Terminated;
+  end;
+
+  /// state machine status of the TSynBackgroundThreadAbstract process
+  TSynBackgroundThreadProcessStep = (
+    flagIdle, flagStarted, flagFinished, flagDestroying);
+
+  /// state machine statuses of the TSynBackgroundThreadAbstract process
+  TSynBackgroundThreadProcessSteps = set of TSynBackgroundThreadProcessStep;
+
+  /// abstract TThread able to run a method in its own execution content
+  // - typical use is a background thread for processing data or remote access,
+  // while the UI will be still responsive by running OnIdle event in loop: see
+  // e.g. how TSQLRestClientURI.OnIdle handle this in mORMot.pas unit
+  // - you should not use this class directly, but inherit from it and override
+  // the Process method, or use either TSynBackgroundThreadEvent /
+  // TSynBackgroundThreadMethod and provide a much more convenient callback
+  TSynBackgroundThreadMethodAbstract = class(TSynBackgroundThreadAbstract)
+  protected
+    fCallerEvent: TEvent;
+    fParam: pointer;
+    fCallerThreadID: TThreadID;
+    fBackgroundException: Exception;
+    fOnIdle: TOnIdleSynBackgroundThread;
+    fOnBeforeProcess: TNotifyThreadEvent;
+    fOnAfterProcess: TNotifyThreadEvent;
+    fPendingProcessFlag: TSynBackgroundThreadProcessStep;
+    fPendingProcessLock: TSynLocker;
+    procedure ExecuteLoop; override;
+    function OnIdleProcessNotify(start: Int64): integer;
+    function GetOnIdleBackgroundThreadActive: boolean;
+    function GetPendingProcess: TSynBackgroundThreadProcessStep;
+    procedure SetPendingProcess(State: TSynBackgroundThreadProcessStep);
+    // returns  flagIdle if acquired, flagDestroying if terminated
+    function AcquireThread: TSynBackgroundThreadProcessStep;
+    procedure WaitForFinished(start: Int64; const onmainthreadidle: TNotifyEvent);
+    /// called by Execute method when fProcessParams<>nil and fEvent is notified
+    procedure Process; virtual; abstract;
+  public
+    /// initialize the thread
+    // - if aOnIdle is not set (i.e. equals nil), it will simply wait for
+    // the background process to finish until RunAndWait() will return
+    // - you could define some callbacks to nest the thread execution, e.g.
+    // assigned to TSQLRestServer.BeginCurrentThread/EndCurrentThread
+    constructor Create(aOnIdle: TOnIdleSynBackgroundThread;
+      const aThreadName: RawUTF8; OnBeforeExecute: TNotifyThreadEvent=nil;
+      OnAfterExecute: TNotifyThreadEvent=nil); reintroduce;
+    /// finalize the thread
+    destructor Destroy; override;
+    /// launch Process abstract method asynchronously in the background thread
+    // - wait until process is finished, calling OnIdle() callback in
+    // the meanwhile
+    // - any exception raised in background thread will be translated in the
+    // caller thread
+    // - returns false if self is not set, or if called from the same thread
+    // as it is currently processing (to avoid race condition from OnIdle()
+    // callback)
+    // - returns true when the background process is finished
+    // - OpaqueParam will be used to specify a thread-safe content for the
+    // background process
+    // - this method is thread-safe, that is it will wait for any started process
+    // already launch by another thread: you may call this method from any
+    // thread, even if its main purpose is to be called from the main UI thread
+    function RunAndWait(OpaqueParam: pointer): boolean;
+    /// set a callback event to be executed in loop during remote blocking
+    // process, e.g. to refresh the UI during a somewhat long request
+    // - you can assign a callback to this property, calling for instance
+    // Application.ProcessMessages, to execute the remote request in a
+    // background thread, but let the UI still be reactive: the
+    // TLoginForm.OnIdleProcess and OnIdleProcessForm methods of
+    // mORMotUILogin.pas will match this property expectations
+    // - if OnIdle is not set (i.e. equals nil), it will simply wait for
+    // the background process to finish until RunAndWait() will return
+    property OnIdle: TOnIdleSynBackgroundThread read fOnIdle write fOnIdle;
+    /// TRUE if the background thread is active, and OnIdle event is called
+    // during process
+    // - to be used e.g. to ensure no re-entrance from User Interface messages
+    property OnIdleBackgroundThreadActive: Boolean read GetOnIdleBackgroundThreadActive;
+    /// optional callback event triggered in Execute before each Process
+    property OnBeforeProcess: TNotifyThreadEvent read fOnBeforeProcess write fOnBeforeProcess;
+    /// optional callback event triggered in Execute after each Process
+    property OnAfterProcess: TNotifyThreadEvent read fOnAfterProcess write fOnAfterProcess;
+  end;
+
+  /// background process method called by TSynBackgroundThreadEvent
+  // - will supply the OpaqueParam parameter as provided to RunAndWait()
+  // method when the Process virtual method will be executed
+  TOnProcessSynBackgroundThread = procedure(Sender: TSynBackgroundThreadEvent;
+    ProcessOpaqueParam: pointer) of object;
+
+  /// allow background thread process of a method callback
+  TSynBackgroundThreadEvent = class(TSynBackgroundThreadMethodAbstract)
+  protected
+    fOnProcess: TOnProcessSynBackgroundThread;
+    /// just call the OnProcess handler
+    procedure Process; override;
+  public
+    /// initialize the thread
+    // - if aOnIdle is not set (i.e. equals nil), it will simply wait for
+    // the background process to finish until RunAndWait() will return
+    constructor Create(aOnProcess: TOnProcessSynBackgroundThread;
+      aOnIdle: TOnIdleSynBackgroundThread; const aThreadName: RawUTF8); reintroduce;
+    /// provide a method handler to be execute in the background thread
+    // - triggered by RunAndWait() method - which will wait until finished
+    // - the OpaqueParam as specified to RunAndWait() will be supplied here
+    property OnProcess: TOnProcessSynBackgroundThread read fOnProcess write fOnProcess;
+  end;
+
+  /// allow background thread process of a variable TThreadMethod callback
+  TSynBackgroundThreadMethod = class(TSynBackgroundThreadMethodAbstract)
+  protected
+    /// just call the TThreadMethod, as supplied to RunAndWait()
+    procedure Process; override;
+  public
+    /// run once the supplied TThreadMethod callback
+    // - use this method, and not the inherited RunAndWait()
+    procedure RunAndWait(Method: TThreadMethod); reintroduce;
+  end;
+
+  /// background process procedure called by TSynBackgroundThreadProcedure
+  // - will supply the OpaqueParam parameter as provided to RunAndWait()
+  // method when the Process virtual method will be executed
+  TOnProcessSynBackgroundThreadProc = procedure(ProcessOpaqueParam: pointer);
+
+  /// allow background thread process of a procedure callback
+  TSynBackgroundThreadProcedure = class(TSynBackgroundThreadMethodAbstract)
+  protected
+    fOnProcess: TOnProcessSynBackgroundThreadProc;
+    /// just call the OnProcess handler
+    procedure Process; override;
+  public
+    /// initialize the thread
+    // - if aOnIdle is not set (i.e. equals nil), it will simply wait for
+    // the background process to finish until RunAndWait() will return
+    constructor Create(aOnProcess: TOnProcessSynBackgroundThreadProc;
+      aOnIdle: TOnIdleSynBackgroundThread; const aThreadName: RawUTF8); reintroduce;
+    /// provide a procedure handler to be execute in the background thread
+    // - triggered by RunAndWait() method - which will wait until finished
+    // - the OpaqueParam as specified to RunAndWait() will be supplied here
+    property OnProcess: TOnProcessSynBackgroundThreadProc read fOnProcess write fOnProcess;
+  end;
+
+  /// an exception which would be raised by TSynParallelProcess
+  ESynParallelProcess = class(ESynException);
+
+  /// callback implementing some parallelized process for TSynParallelProcess
+  // - if 0<=IndexStart<=IndexStop, it should execute some process
+  TSynParallelProcessMethod = procedure(IndexStart, IndexStop: integer) of object;
+
+  /// thread executing process for TSynParallelProcess
+  TSynParallelProcessThread = class(TSynBackgroundThreadMethodAbstract)
+  protected
+    fMethod: TSynParallelProcessMethod;
+    fIndexStart, fIndexStop: integer;
+    procedure Start(Method: TSynParallelProcessMethod; IndexStart,IndexStop: integer);
+    /// executes fMethod(fIndexStart,fIndexStop)
+    procedure Process; override;
+  public
+  end;
+
+  /// allow parallel execution of an index-based process in a thread pool
+  // - will create its own thread pool, then execute any method by spliting the
+  // work into each thread
+  TSynParallelProcess = class(TSynPersistentLock)
+  protected
+    fThreadName: RawUTF8;
+    fPool: array of TSynParallelProcessThread;
+    fThreadPoolCount: integer;
+    fParallelRunCount: integer;
+  public
+    /// initialize the thread pool
+    // - you could define some callbacks to nest the thread execution, e.g.
+    // assigned to TSQLRestServer.BeginCurrentThread/EndCurrentThread
+    // - up to MaxThreadPoolCount=32 threads could be setup (you may allow a
+    // bigger value, but interrest of this thread pool is to have its process
+    // saturating each CPU core)
+    // - if ThreadPoolCount is 0, no thread would be created, and process
+    // would take place in the current thread
+    constructor Create(ThreadPoolCount: integer; const ThreadName: RawUTF8;
+      OnBeforeExecute: TNotifyThreadEvent=nil; OnAfterExecute: TNotifyThreadEvent=nil;
+      MaxThreadPoolCount: integer = 32); reintroduce; virtual;
+    /// finalize the thread pool
+    destructor Destroy; override;
+    /// run a method in parallel, and wait for the execution to finish
+    // - will split Method[0..MethodCount-1] execution over the threads
+    // - in case of any exception during process, an ESynParallelProcess
+    // exception would be raised by this method
+    // - if OnMainThreadIdle is set, the current thread (which is expected to be
+    // e.g. the main UI thread) won't process anything, but call this event
+    // during waiting for the background threads
+    procedure ParallelRunAndWait(const Method: TSynParallelProcessMethod;
+      MethodCount: integer; const OnMainThreadIdle: TNotifyEvent = nil);
+  published
+    /// how many threads have been activated
+    property ParallelRunCount: integer read fParallelRunCount;
+    /// how many threads are currently in this instance thread pool
+    property ThreadPoolCount: integer read fThreadPoolCount;
+    /// some text identifier, used to distinguish each owned thread
+    property ThreadName: RawUTF8 read fThreadName;
+  end;
+
+  TSynBackgroundThreadProcess = class;
+
+  /// event callback executed periodically by TSynBackgroundThreadProcess
+  // - Event is wrTimeout after the OnProcessMS waiting period
+  // - Event is wrSignaled if ProcessEvent.SetEvent has been called
+  TOnSynBackgroundThreadProcess = procedure(Sender: TSynBackgroundThreadProcess;
+    Event: TWaitResult) of object;
+
+  /// TThread able to run a method at a given periodic pace
+  TSynBackgroundThreadProcess = class(TSynBackgroundThreadAbstract)
+  protected
+    fOnProcess: TOnSynBackgroundThreadProcess;
+    fOnException: TNotifyEvent;
+    fOnProcessMS: cardinal;
+    fStats: TSynMonitor;
+    procedure ExecuteLoop; override;
+  public
+    /// initialize the thread for a periodic task processing
+    // - aOnProcess would be called when ProcessEvent.SetEvent is called or
+    // aOnProcessMS milliseconds period was elapse since last process
+    // - if aOnProcessMS is 0, will wait until ProcessEvent.SetEvent is called
+    // - you could define some callbacks to nest the thread execution, e.g.
+    // assigned to TSQLRestServer.BeginCurrentThread/EndCurrentThread
+    constructor Create(const aThreadName: RawUTF8;
+      aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
+      aOnBeforeExecute: TNotifyThreadEvent=nil;
+      aOnAfterExecute: TNotifyThreadEvent=nil;
+      aStats: TSynMonitorClass=nil; CreateSuspended: boolean=false); reintroduce; virtual;
+    /// finalize the thread
+    destructor Destroy; override;
+    /// access to the implementation event of the periodic task
+    property OnProcess: TOnSynBackgroundThreadProcess read fOnProcess;
+    /// event callback executed when OnProcess did raise an exception
+    // - supplied Sender parameter is the raised Exception instance
+    property OnException: TNotifyEvent read fOnException write fOnException;
+  published
+    /// access to the delay, in milliseconds, of the periodic task processing
+    property OnProcessMS: cardinal read fOnProcessMS write fOnProcessMS;
+    /// processing statistics
+    // - may be nil if aStats was nil in the class constructor
+    property Stats: TSynMonitor read fStats;
+  end;
+
+  TSynBackgroundTimer = class;
+
+  /// event callback executed periodically by TSynBackgroundThreadProcess
+  // - Event is wrTimeout after the OnProcessMS waiting period
+  // - Event is wrSignaled if ProcessEvent.SetEvent has been called
+  // - Msg is '' if there is no pending message in this task FIFO
+  // - Msg is set for each pending message in this task FIFO
+  TOnSynBackgroundTimerProcess = procedure(Sender: TSynBackgroundTimer;
+    Event: TWaitResult; const Msg: RawUTF8) of object;
+
+  /// used by TSynBackgroundTimer internal registration list
+  TSynBackgroundTimerTask = record
+    OnProcess: TOnSynBackgroundTimerProcess;
+    Secs: cardinal;
+    NextTix: Int64;
+    FIFO: TRawUTF8DynArray;
+  end;
+  /// stores TSynBackgroundTimer internal registration list
+  TSynBackgroundTimerTaskDynArray = array of TSynBackgroundTimerTask;
+
+  /// TThread able to run one or several tasks at a periodic pace in a
+  // background thread
+  // - as used e.g. by TSQLRest.TimerEnable/TimerDisable methods, via the
+  // inherited TSQLRestBackgroundTimer
+  // - each process can have its own FIFO of text messages
+  // - if you expect to update some GUI, you should rather use a TTimer
+  // component (with a period of e.g. 200ms), since TSynBackgroundTimer will
+  // use its own separated thread
+  TSynBackgroundTimer = class(TSynBackgroundThreadProcess)
+  protected
+    fTask: TSynBackgroundTimerTaskDynArray;
+    fTasks: TDynArray;
+    fTaskLock: TSynLocker;
+    procedure EverySecond(Sender: TSynBackgroundThreadProcess; Event: TWaitResult);
+    function Find(const aProcess: TMethod): integer;
+    function Add(aOnProcess: TOnSynBackgroundTimerProcess;
+      const aMsg: RawUTF8; aExecuteNow: boolean): boolean;
+  public
+    /// initialize the thread for a periodic task processing
+    // - you could define some callbacks to nest the thread execution, e.g.
+    // assigned to TSQLRestServer.BeginCurrentThread/EndCurrentThread, as
+    // made by TSQLRestBackgroundTimer.Create
+    constructor Create(const aThreadName: RawUTF8;
+      aOnBeforeExecute: TNotifyThreadEvent=nil; aOnAfterExecute: TNotifyThreadEvent=nil;
+      aStats: TSynMonitorClass=nil); reintroduce; virtual;
+    /// finalize the thread
+    destructor Destroy; override;
+    /// define a process method for a task running on a periodic number of seconds
+    // - for background process on a mORMot service, consider using TSQLRest
+    // TimerEnable/TimerDisable methods, and its associated BackgroundTimer thread
+    procedure Enable(aOnProcess: TOnSynBackgroundTimerProcess; aOnProcessSecs: cardinal);
+    /// undefine a task running on a periodic number of seconds
+    // - aOnProcess should have been registered by a previous call to Enable() method
+    // - returns true on success, false if the supplied task was not registered
+    // - for background process on a mORMot service, consider using TSQLRestServer
+    // TimerEnable/TimerDisable methods, and their TSynBackgroundTimer thread
+    function Disable(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+    /// add a message to be processed during the next execution of a task
+    // - supplied message will be added to the internal FIFO list associated
+    // with aOnProcess, then supplied to as aMsg parameter for each call
+    // - if aExecuteNow is true, won't wait for the next aOnProcessSecs occurence
+    // - aOnProcess should have been registered by a previous call to Enable() method
+    // - returns true on success, false if the supplied task was not registered
+    function EnQueue(aOnProcess: TOnSynBackgroundTimerProcess;
+      const aMsg: RawUTF8; aExecuteNow: boolean=false): boolean; overload;
+    /// add a message to be processed during the next execution of a task
+    // - supplied message will be added to the internal FIFO list associated
+    // with aOnProcess, then supplied to as aMsg parameter for each call
+    // - if aExecuteNow is true, won't wait for the next aOnProcessSecs occurence
+    // - aOnProcess should have been registered by a previous call to Enable() method
+    // - returns true on success, false if the supplied task was not registered
+    function EnQueue(aOnProcess: TOnSynBackgroundTimerProcess;
+      const aMsgFmt: RawUTF8; const Args: array of const; aExecuteNow: boolean=false): boolean; overload;
+    /// remove a message from the processing list
+    // - supplied message will be searched in the internal FIFO list associated
+    // with aOnProcess, then removed from the list if found
+    // - aOnProcess should have been registered by a previous call to Enable() method
+    // - returns true on success, false if the supplied message was not registered
+    function DeQueue(aOnProcess: TOnSynBackgroundTimerProcess; const aMsg: RawUTF8): boolean;
+    /// execute a task without waiting for the next aOnProcessSecs occurence
+    // - aOnProcess should have been registered by a previous call to Enable() method
+    // - returns true on success, false if the supplied task was not registered
+    function ExecuteNow(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+    /// returns true if there is currenly one task processed
+    function Processing: boolean;
+    /// wait until no background task is processed
+    procedure WaitUntilNotProcessing(timeoutsecs: integer=10);
+    /// low-level access to the internal task list
+    property Task: TSynBackgroundTimerTaskDynArray read fTask;
+    /// low-level access to the internal task mutex
+    property TaskLock: TSynLocker read fTaskLock;
+  end;
+
+  /// the current state of a TBlockingProcess instance
+  TBlockingEvent = (evNone,evWaiting,evTimeOut,evRaised);
+
+  {$M+}
+  /// a semaphore used to wait for some process to be finished
+  // - used e.g. by TBlockingCallback in mORMot.pas
+  // - once created, process would block via a WaitFor call, which would be
+  // released when NotifyFinished is called by the process background thread
+  TBlockingProcess = class(TEvent)
+  protected
+    fTimeOutMs: integer;
+    fEvent: TBlockingEvent;
+    fSafe: PSynLocker;
+    fOwnedSafe: boolean;
+    procedure ResetInternal; virtual; // override to reset associated params
+  public
+    /// initialize the semaphore instance
+    // - specify a time out millliseconds period after which blocking execution
+    // should be handled as failure (if 0 is set, default 3000 would be used)
+    // - an associated mutex shall be supplied
+    constructor Create(aTimeOutMs: integer; aSafe: PSynLocker); reintroduce; overload; virtual;
+    /// initialize the semaphore instance
+    // - specify a time out millliseconds period after which blocking execution
+    // should be handled as failure (if 0 is set, default 3000 would be used)
+    // - an associated mutex would be created and owned by this instance
+    constructor Create(aTimeOutMs: integer); reintroduce; overload; virtual;
+    /// finalize the instance
+    destructor Destroy; override;
+    /// called to wait for NotifyFinished() to be called, or trigger timeout
+    // - returns the final state of the process, i.e. evRaised or evTimeOut
+    function WaitFor: TBlockingEvent; reintroduce; overload; virtual;
+    /// called to wait for NotifyFinished() to be called, or trigger timeout
+    // - returns the final state of the process, i.e. evRaised or evTimeOut
+    function WaitFor(TimeOutMS: integer): TBlockingEvent; reintroduce; overload;
+    /// should be called by the background process when it is finished
+    // - the caller would then let its WaitFor method return
+    // - returns TRUE on success (i.e. status was not evRaised or evTimeout)
+    // - if the instance is already locked (e.g. when retrieved from
+    // TBlockingProcessPool.FromCallLocked), you may set alreadyLocked=TRUE
+    function NotifyFinished(alreadyLocked: boolean=false): boolean; virtual;
+    /// just a wrapper to reset the internal Event state to evNone
+    // - may be used to re-use the same TBlockingProcess instance, after
+    // a successfull WaitFor/NotifyFinished process
+    // - returns TRUE on success (i.e. status was not evWaiting), setting
+    // the current state to evNone, and the Call property to 0
+    // - if there is a WaitFor currently in progress, returns FALSE
+    function Reset: boolean; virtual;
+    /// just a wrapper around fSafe^.Lock
+    procedure Lock;
+    /// just a wrapper around fSafe^.Unlock
+    procedure Unlock;
+  published
+    /// the current state of process
+    // - use Reset method to re-use this instance after a WaitFor process
+    property Event: TBlockingEvent read fEvent;
+    /// the time out period, in ms, as defined at constructor level
+    property TimeOutMs: integer read fTimeOutMS;
+  end;
+  {$M-}
+
+  /// used to identify each TBlockingProcessPool call
+  // - allow to match a given TBlockingProcessPoolItem semaphore
+  TBlockingProcessPoolCall = type integer;
+
+  /// a semaphore used in the TBlockingProcessPool
+  // - such semaphore have a Call field to identify each execution
+  TBlockingProcessPoolItem = class(TBlockingProcess)
+  protected
+    fCall: TBlockingProcessPoolCall;
+    procedure ResetInternal; override;
+  published
+    /// an unique identifier, when owned by a TBlockingProcessPool
+    // - Reset would restore this field to its 0 default value
+    property Call: TBlockingProcessPoolCall read fCall;
+  end;
+
+  /// class-reference type (metaclass) of a TBlockingProcess
+  TBlockingProcessPoolItemClass = class of TBlockingProcessPoolItem;
+
+  /// manage a pool of TBlockingProcessPoolItem instances
+  // - each call will be identified via a TBlockingProcessPoolCall unique value
+  // - to be used to emulate e.g. blocking execution from an asynchronous
+  // event-driven DDD process
+  // - it would also allow to re-use TEvent system resources
+  TBlockingProcessPool = class(TSynPersistent)
+  protected
+    fClass: TBlockingProcessPoolItemClass;
+    fPool: TObjectListLocked;
+    fCallCounter: TBlockingProcessPoolCall; // set TBlockingProcessPoolItem.Call
+  public
+    /// initialize the pool, for a given implementation class
+    constructor Create(aClass: TBlockingProcessPoolItemClass=nil); reintroduce;
+    /// finalize the pool
+    // - would also force all pending WaitFor to trigger a evTimeOut
+    destructor Destroy; override;
+    /// book a TBlockingProcess from the internal pool
+    // - returns nil on error (e.g. the instance is destroying)
+    // - or returns the blocking process instance corresponding to this call;
+    // its Call property would identify the call for the asynchronous callback,
+    // then after WaitFor, the Reset method should be run to release the mutex
+    // for the pool
+    function NewProcess(aTimeOutMs: integer): TBlockingProcessPoolItem; virtual;
+    /// retrieve a TBlockingProcess from its call identifier
+    // - may be used e.g. from the callback of the asynchronous process
+    // to set some additional parameters to the inherited TBlockingProcess,
+    // then call NotifyFinished to release the caller WaitFor
+    // - if leavelocked is TRUE, the returned instance would be locked: caller
+    // should execute result.Unlock or NotifyFinished(true) after use
+    function FromCall(call: TBlockingProcessPoolCall;
+      locked: boolean=false): TBlockingProcessPoolItem; virtual;
+  end;
+
+/// allow to fix TEvent.WaitFor() method for Kylix
+// - under Windows or with FPC, will call original TEvent.WaitFor() method
+function FixedWaitFor(Event: TEvent; Timeout: LongWord): TWaitResult;
+
+/// allow to fix TEvent.WaitFor(Event,INFINITE) method for Kylix
+// - under Windows or with FPC, will call original TEvent.WaitFor() method
+procedure FixedWaitForever(Event: TEvent);
+
+{$endif LVCL} // LVCL does not implement TEvent
+
+
+{ ************ System Analysis types and classes ************************** }
+
+type
+  /// store CPU and RAM usage for a given process
+  // - as used by TSystemUse class
+  TSystemUseData = packed record
+    /// when the data has been sampled
+    Timestamp: TDateTime;
+    /// percent of current Kernel-space CPU usage for this process
+    Kernel: single;
+    /// percent of current User-space CPU usage for this process
+    User: single;
+    /// how many KB of working memory are used by this process
+    WorkKB: cardinal;
+    /// how many KB of virtual memory are used by this process
+    VirtualKB: cardinal;
+  end;
+  /// store CPU and RAM usage history for a given process
+  // - as returned by TSystemUse.History
+  TSystemUseDataDynArray = array of TSystemUseData;
+
+  /// low-level structure used to compute process memory and CPU usage
+  {$ifdef FPC_OR_UNICODE}TProcessInfo = record private
+  {$else}TProcessInfo = object protected{$endif}
+    {$ifdef MSWINDOWS}
+    fSysPrevIdle, fSysPrevKernel, fSysPrevUser,
+    fDiffIdle, fDiffKernel, fDiffUser, fDiffTotal: Int64;
+    {$endif}
+  public
+    /// initialize the system/process resource tracking
+    function Init: boolean;
+    /// to be called before PerSystem() or PerProcess() iteration
+    function Start: boolean;
+    /// percent of current Idle/Kernel/User CPU usage for all processes
+    function PerSystem(out Idle,Kernel,User: currency): boolean;
+    /// retrieve CPU and RAM usage for a given process
+    function PerProcess(PID: cardinal; Now: PDateTime; out Data: TSystemUseData;
+      var PrevKernel, PrevUser: Int64): boolean;
+  end;
+
+  /// event handler which may be executed by TSystemUse.BackgroundExecute
+  // - called just after the measurement of each process CPU and RAM consumption
+  // - run from the background thread, so should not directly make VCL calls,
+  // unless BackgroundExecute is run from a VCL timer
+  TOnSystemUseMeasured = procedure(ProcessID: integer; const Data: TSystemUseData) of object;
+
+  /// internal storage of CPU and RAM usage for one process
+  TSystemUseProcess = record
+    ID: integer;
+    Data: TSystemUseDataDynArray;
+    PrevKernel: Int64;
+    PrevUser: Int64;
+  end;
+  /// internal storage of CPU and RAM usage for a set of processes
+  TSystemUseProcessDynArray = array of TSystemUseProcess;
+
+  /// monitor CPU and RAM usage of one or several processes
+  // - you should execute BackgroundExecute on a regular pace (e.g. every second)
+  // to gather low-level CPU and RAM information for the given set of processes
+  // - is able to keep an history of latest sample values
+  // - use Current class function to access a process-wide instance
+  TSystemUse = class(TSynPersistentLock)
+  protected
+    fProcess: TSystemUseProcessDynArray;
+    fProcesses: TDynArray;
+    fDataIndex: integer;
+    fProcessInfo: TProcessInfo;
+    fHistoryDepth: integer;
+    fOnMeasured: TOnSystemUseMeasured;
+    fTimer: TSynBackgroundTimer;
+    fUnsubscribeProcessOnAccessError: boolean;
+    function ProcessIndex(aProcessID: integer): integer;
+  public
+    /// a TSynBackgroundThreadProcess compatible event
+    // - matches TOnSynBackgroundTimerProcess callback signature
+    // - to be supplied e.g. to a TSynBackgroundTimer.Enable method so that it
+    // will run every few seconds and retrieve the CPU and RAM use
+    procedure BackgroundExecute(Sender: TSynBackgroundTimer;
+      Event: TWaitResult; const Msg: RawUTF8);
+    /// a VCL's TTimer.OnTimer compatible event
+    // - to be run every few seconds and retrieve the CPU and RAM use:
+    // ! tmrSystemUse.Interval := 10000; // every 10 seconds
+    // ! tmrSystemUse.OnTimer := TSystemUse.Current.OnTimerExecute;
+    procedure OnTimerExecute(Sender: TObject);
+    /// track the CPU and RAM usage of the supplied set of Process ID
+    // - any aProcessID[]=0 will be replaced by the current process ID
+    // - you can specify the number of sample values for the History() method
+    // - you should then execute the BackgroundExecute method of this instance
+    // in a VCL timer or from a TSynBackgroundTimer.Enable() registration
+    constructor Create(const aProcessID: array of integer;
+      aHistoryDepth: integer=60); reintroduce; overload; virtual;
+    /// track the CPU and RAM usage of the current process
+    // - you can specify the number of sample values for the History() method
+    // - you should then execute the BackgroundExecute method of this instance
+    // in a VCL timer or from a TSynBackgroundTimer.Enable() registration
+    constructor Create(aHistoryDepth: integer=60); reintroduce; overload; virtual;
+    /// add a Process ID to the internal tracking list
+    procedure Subscribe(aProcessID: integer);
+    /// remove a Process ID from the internal tracking list
+    function Unsubscribe(aProcessID: integer): boolean;
+    /// returns the total (Kernel+User) CPU usage percent of the supplied process
+    // - aProcessID=0 will return information from the current process
+    // - returns -1 if the Process ID was not registered via Create/Subscribe
+    function Percent(aProcessID: integer=0): single; overload;
+    /// returns the Kernel-space CPU usage percent of the supplied process
+    // - aProcessID=0 will return information from the current process
+    // - returns -1 if the Process ID was not registered via Create/Subscribe
+    function PercentKernel(aProcessID: integer=0): single; overload;
+    /// returns the User-space CPU usage percent of the supplied process
+    // - aProcessID=0 will return information from the current process
+    // - returns -1 if the Process ID was not registered via Create/Subscribe
+    function PercentUser(aProcessID: integer=0): single; overload;
+    /// returns the total (Work+Paged) RAM use of the supplied process, in KB
+    // - aProcessID=0 will return information from the current process
+    // - returns 0 if the Process ID was not registered via Create/Subscribe
+    function KB(aProcessID: integer=0): cardinal; overload;
+    /// percent of current Idle/Kernel/User CPU usage for all processes
+    function PercentSystem(out Idle,Kernel,User: currency): boolean;
+    /// returns the detailed CPU and RAM usage percent of the supplied process
+    // - aProcessID=0 will return information from the current process
+    // - returns -1 if the Process ID was not registered via Create/Subscribe
+    function Data(out aData: TSystemUseData; aProcessID: integer=0): boolean; overload;
+    /// returns the detailed CPU and RAM usage percent of the supplied process
+    // - aProcessID=0 will return information from the current process
+    // - returns Timestamp=0 if the Process ID was not registered via Create/Subscribe
+    function Data(aProcessID: integer=0): TSystemUseData; overload;
+    /// returns total (Kernel+User) CPU usage percent history of the supplied process
+    // - aProcessID=0 will return information from the current process
+    // - returns nil if the Process ID was not registered via Create/Subscribe
+    // - returns the sample values as an array, starting from the last to the oldest
+    // - you can customize the maximum depth, with aDepth < HistoryDepth
+    function History(aProcessID: integer=0; aDepth: integer=0): TSingleDynArray; overload;
+    /// returns total (Kernel+User) CPU usage percent history of the supplied
+    // process, as a string of two digits values
+    // - aProcessID=0 will return information from the current process
+    // - returns '' if the Process ID was not registered via Create/Subscribe
+    // - you can customize the maximum depth, with aDepth < HistoryDepth
+    // - the memory history (in MB) can be optionally returned in aDestMemoryMB
+    function HistoryText(aProcessID: integer=0; aDepth: integer=0;
+      aDestMemoryMB: PRawUTF8=nil): RawUTF8;
+    {$ifndef NOVARIANTS}
+    /// returns total (Kernel+User) CPU usage percent history of the supplied process
+    // - aProcessID=0 will return information from the current process
+    // - returns null if the Process ID was not registered via Create/Subscribe
+    // - returns the sample values as a TDocVariant array, starting from the
+    // last to the oldest, with two digits precision (as currency values)
+    // - you can customize the maximum depth, with aDepth < HistoryDepth
+    function HistoryVariant(aProcessID: integer=0; aDepth: integer=0): variant;
+    {$endif}
+    /// access to a global instance, corresponding to the current process
+    // - its HistoryDepth will be of 60 items
+    class function Current(aCreateIfNone: boolean=true): TSystemUse;
+    /// returns detailed CPU and RAM usage history of the supplied process
+    // - aProcessID=0 will return information from the current process
+    // - returns nil if the Process ID was not registered via Create/Subscribe
+    // - returns the sample values as an array, starting from the last to the oldest
+    // - you can customize the maximum depth, with aDepth < HistoryDepth
+    function HistoryData(aProcessID: integer=0; aDepth: integer=0): TSystemUseDataDynArray; overload;
+    /// if any unexisting (e.g. closed/killed) process should be unregistered
+    // - e.g. if OpenProcess() API call fails
+    property UnsubscribeProcessOnAccessError: boolean
+      read fUnsubscribeProcessOnAccessError write fUnsubscribeProcessOnAccessError;
+    /// how many items are stored internally, and returned by the History() method
+    property HistoryDepth: integer read fHistoryDepth;
+    /// executed when TSystemUse.BackgroundExecute finished its measurement
+    property OnMeasured: TOnSystemUseMeasured read fOnMeasured write fOnMeasured;
+    /// low-level access to the associated timer running BackgroundExecute
+    // - equals nil if has been associated to no timer
+    property Timer: TSynBackgroundTimer read fTimer write fTimer;
+  end;
+
+  /// stores information about a disk partition
+  TDiskPartition = packed record
+    /// the name of this partition
+    // - is the Volume name under Windows, or the Device name under POSIX
+    name: RawUTF8;
+    /// where this partition has been mounted
+    // - e.g. 'C:' or '/home'
+    // - you can use GetDiskInfo(mounted) to retrieve current space information
+    mounted: TFileName;
+    /// total size (in bytes) of this partition
+    size: QWord;
+  end;
+  /// stores information about several disk partitions
+  TDiskPartitions = array of TDiskPartition;
+
+  /// value object able to gather information about the current system memory
+  TSynMonitorMemory = class(TSynPersistent)
+  protected
+    FAllocatedUsed: TSynMonitorOneSize;
+    FAllocatedReserved: TSynMonitorOneSize;
+    FMemoryLoadPercent: integer;
+    FPhysicalMemoryFree: TSynMonitorOneSize;
+    FVirtualMemoryFree: TSynMonitorOneSize;
+    FPagingFileTotal: TSynMonitorOneSize;
+    FPhysicalMemoryTotal: TSynMonitorOneSize;
+    FVirtualMemoryTotal: TSynMonitorOneSize;
+    FPagingFileFree: TSynMonitorOneSize;
+    fLastMemoryInfoRetrievedTix: cardinal;
+    procedure RetrieveMemoryInfo; virtual;
+    function GetAllocatedUsed: TSynMonitorOneSize;
+    function GetAllocatedReserved: TSynMonitorOneSize;
+    function GetMemoryLoadPercent: integer;
+    function GetPagingFileFree: TSynMonitorOneSize;
+    function GetPagingFileTotal: TSynMonitorOneSize;
+    function GetPhysicalMemoryFree: TSynMonitorOneSize;
+    function GetPhysicalMemoryTotal: TSynMonitorOneSize;
+    function GetVirtualMemoryFree: TSynMonitorOneSize;
+    function GetVirtualMemoryTotal: TSynMonitorOneSize;
+  public
+    /// initialize the class, and its nested TSynMonitorOneSize instances
+    constructor Create(aTextNoSpace: boolean); reintroduce;
+    /// finalize the class, and its nested TSynMonitorOneSize instances
+    destructor Destroy; override;
+    /// some text corresponding to current 'free/total' memory information
+    // - returns e.g. '10.3 GB / 15.6 GB'
+    class function FreeAsText(nospace: boolean=false): ShortString;
+    /// how many physical memory is currently installed, as text (e.g. '32 GB');
+    class function PhysicalAsText(nospace: boolean=false): TShort16;
+    /// returns a JSON object with the current system memory information
+    // - numbers would be given in KB (Bytes shl 10)
+    class function ToJSON: RawUTF8;
+    {$ifndef NOVARIANTS}
+    /// fill a TDocVariant with the current system memory information
+    // - numbers would be given in KB (Bytes shl 10)
+    class function ToVariant: variant;
+    {$endif}
+  published
+    /// Total of allocated memory used by the program
+    property AllocatedUsed: TSynMonitorOneSize read GetAllocatedUsed;
+    /// Total of allocated memory reserved by the program
+    property AllocatedReserved: TSynMonitorOneSize read GetAllocatedReserved;
+    /// Percent of memory in use for the system
+    property MemoryLoadPercent: integer read GetMemoryLoadPercent;
+    /// Total of physical memory for the system
+    property PhysicalMemoryTotal: TSynMonitorOneSize read GetPhysicalMemoryTotal;
+    /// Free of physical memory for the system
+    property PhysicalMemoryFree: TSynMonitorOneSize read GetPhysicalMemoryFree;
+    /// Total of paging file for the system
+    property PagingFileTotal: TSynMonitorOneSize read GetPagingFileTotal;
+    /// Free of paging file for the system
+    property PagingFileFree: TSynMonitorOneSize read GetPagingFileFree;
+    {$ifdef MSWINDOWS}
+    /// Total of virtual memory for the system
+    // - property not defined under Linux, since not applying to this OS
+    property VirtualMemoryTotal: TSynMonitorOneSize read GetVirtualMemoryTotal;
+    /// Free of virtual memory for the system
+    // - property not defined under Linux, since not applying to this OS
+    property VirtualMemoryFree: TSynMonitorOneSize read GetVirtualMemoryFree;
+    {$endif}
+  end;
+
+  /// value object able to gather information about a system drive
+  TSynMonitorDisk = class(TSynPersistent)
+  protected
+    fName: TFileName;
+    {$ifdef MSWINDOWS}
+    fVolumeName: TFileName;
+    {$endif}
+    fAvailableSize: TSynMonitorOneSize;
+    fFreeSize: TSynMonitorOneSize;
+    fTotalSize: TSynMonitorOneSize;
+    fLastDiskInfoRetrievedTix: cardinal;
+    procedure RetrieveDiskInfo; virtual;
+    function GetName: TFileName;
+    function GetAvailable: TSynMonitorOneSize;
+    function GetFree: TSynMonitorOneSize;
+    function GetTotal: TSynMonitorOneSize;
+  public
+    /// initialize the class, and its nested TSynMonitorOneSize instances
+    constructor Create; override;
+    /// finalize the class, and its nested TSynMonitorOneSize instances
+    destructor Destroy; override;
+    /// some text corresponding to current 'free/total' disk information
+    // - could return e.g. 'D: 64.4 GB / 213.4 GB'
+    class function FreeAsText: RawUTF8;
+  published
+    /// the disk name
+    property Name: TFileName read GetName;
+    {$ifdef MSWINDOWS}
+    /// the volume name (only available on Windows)
+    property VolumeName: TFileName read fVolumeName write fVolumeName;
+    /// space currently available on this disk for the current user
+    // - may be less then FreeSize, if user quotas are specified (only taken
+    // into account under Windows)
+    property AvailableSize: TSynMonitorOneSize read GetAvailable;
+    {$endif MSWINDOWS}
+    /// free space currently available on this disk
+    property FreeSize: TSynMonitorOneSize read GetFree;
+    /// total space
+    property TotalSize: TSynMonitorOneSize read GetTotal;
+  end;
+
+  /// hold low-level information about current memory usage
+  // - as filled by GetMemoryInfo()
+  TMemoryInfo = record
+    memtotal, memfree, filetotal, filefree, vmtotal, vmfree,
+    allocreserved, allocused: QWord;
+    percent: integer;
+  end;
+
+
+/// retrieve low-level information about all mounted disk partitions of the system
+// - returned partitions array is sorted by "mounted" ascending order
+function GetDiskPartitions: TDiskPartitions;
+
+/// retrieve low-level information about all mounted disk partitions as text
+// - returns e.g. under Linux
+// '/ /dev/sda3 (19 GB), /boot /dev/sda2 (486.8 MB), /home /dev/sda4 (0.9 TB)'
+// or under Windows 'C:\ System (115 GB), D:\ Data (99.3 GB)'
+// - uses internally a cache unless nocache is true
+// - includes the free space if withfreespace is true - e.g. '(80 GB / 115 GB)'
+function GetDiskPartitionsText(nocache: boolean=false;
+  withfreespace: boolean=false; nospace: boolean=false): RawUTF8;
+
+/// returns a JSON object containing basic information about the computer
+// - including Host, User, CPU, OS, freemem, freedisk...
+function SystemInfoJson: RawUTF8;
+
+{$ifdef MSWINDOWS}
+
+/// a wrapper around EnumProcesses() PsAPI call
+function EnumAllProcesses(out Count: Cardinal): TCardinalDynArray;
+
+/// a wrapper around QueryFullProcessImageNameW/GetModuleFileNameEx PsAPI call
+function EnumProcessName(PID: Cardinal): RawUTF8;
+
+{$endif MSWINDOWS}
+
+
+/// retrieve low-level information about current memory usage
+// - as used by TSynMonitorMemory
+// - under BSD, only memtotal/memfree/percent are properly returned
+// - allocreserved and allocused are set only if withalloc is TRUE
+function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
+
+/// retrieve low-level information about a given disk partition
+// - as used by TSynMonitorDisk and GetDiskPartitionsText()
+// - only under Windows the Quotas are applied separately to aAvailableBytes
+// in respect to global aFreeBytes
+function GetDiskInfo(var aDriveFolderOrFile: TFileName;
+  out aAvailableBytes, aFreeBytes, aTotalBytes: QWord
+  {$ifdef MSWINDOWS}; aVolumeName: PFileName = nil{$endif}): boolean;
+
+
 implementation
+
+{$ifdef FPCLINUX}
+uses
+  {$ifdef BSD}
+  ctypes,
+  sysctl,
+  {$else}
+  Linux,
+  {$endif BSD}
+  SynFPCLinux;
+{$endif FPCLINUX}
+
 
 { ************ TSynTable generic types and classes ************************** }
 
@@ -2524,7 +4687,7 @@ begin
   with TSynTableFieldProperties(fField.List[F]) do
     if F in AvailableFields then begin
       Len := Lens[F];
-      MoveFast(P^,Dest^,Len);
+      {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,Dest^,Len);
       inc(P,Len);
       inc(Dest,Len);
     end else begin
@@ -2849,10 +5012,16 @@ begin
         inc(I); dec(J);
       end;
     until I > J;
-    if L < J then
-      OrderedIndexSort(L, J);
-    L := I;
-  until I >= R;
+    if J - L < R - I then begin // use recursion only for smaller range
+      if L < J then
+        OrderedIndexSort(L, J);
+      L := I;
+    end else begin
+      if I < R then
+        OrderedIndexSort(I, R);
+      R := J;
+    end;
+  until L >= R;
 end;
 
 procedure TSynTableFieldProperties.OrderedIndexRefresh;
@@ -3162,8 +5331,8 @@ begin
     Len := {$ifdef FPC}length(Value){$else}PInteger(PtrUInt(Value)-SizeOf(integer))^{$endif};
     Head := PAnsiChar(ToVarUInt32(Len,@tmp))-tmp;
     SetLength(Result,Len+Head);
-    MoveFast(tmp,PByteArray(Result)[0],Head);
-    MoveFast(pointer(Value)^,PByteArray(Result)[Head],Len);
+    {$ifdef FPC}Move{$else}MoveFast{$endif}(tmp,PByteArray(Result)[0],Head);
+    {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(Value)^,PByteArray(Result)[Head],Len);
   end;
 end;
 
@@ -3189,8 +5358,8 @@ begin
     result := #0 else begin // inlined ToSBFStr() code
     Head := PAnsiChar(ToVarUInt32(ValueLen,@tmp))-tmp;
     SetString(Result,nil,ValueLen+Head);
-    MoveFast(tmp,PByteArray(Result)[0],Head);
-    MoveFast(Value^,PByteArray(Result)[Head],ValueLen);
+    {$ifdef FPC}Move{$else}MoveFast{$endif}(tmp,PByteArray(Result)[0],Head);
+    {$ifdef FPC}Move{$else}MoveFast{$endif}(Value^,PByteArray(Result)[Head],ValueLen);
   end;
 end;
 
@@ -3669,7 +5838,7 @@ begin
           Cmp := high(tmp) else
           Cmp := L;
         tmp[Cmp] := #0; // TSynSoundEx expect the buffer to be #0 terminated
-        MoveFast(SBF^,tmp,Cmp);
+        {$ifdef FPC}Move{$else}MoveFast{$endif}(SBF^,tmp,Cmp);
         case FieldType of
         tftWinAnsi:
           if PSynSoundEx(Value)^.Ansi(tmp) then
@@ -3865,7 +6034,7 @@ begin
   try
     repeat
       if n=length(v) then
-        SetLength(v,n+n shr 3+8);
+        SetLength(v,NextGrow(n));
       if not GetWhereValue(v[n]) then
         exit;
       inc(n);
@@ -3991,12 +6160,15 @@ begin
     exit; // no SQL statement
   if P^='*' then begin // all simple (not TSQLRawBlob/TSQLRecordMany) fields
     inc(P);
-    SetLength(fSelect,GetBitsCount(SimpleFieldsBits,MAX_SQLFIELDS)+1);
+    len := GetBitsCount(SimpleFieldsBits,MAX_SQLFIELDS)+1;
+    SetLength(fSelect,len);
     selectCount := 1; // Select[0].Field := 0 -> ID
     for ndx := 0 to MAX_SQLFIELDS-1 do
       if ndx in SimpleFieldsBits then begin
         fSelect[selectCount].Field := ndx+1;
         inc(selectCount);
+        if selectCount=len then
+          break;
       end;
     GetNextFieldProp(P,Prop);
   end else
@@ -4247,7 +6419,7 @@ begin
   CheckVTableInitialized;
   if (aField.FieldSize>0) and (VValue<>'') then begin
     // fixed size content: fast in-place update
-    MoveFast(pointer(Value)^,VValue[aField.Offset+1],aField.FieldSize)
+    {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(Value)^,VValue[aField.Offset+1],aField.FieldSize)
     // VValue[F.Offset+1] above will call UniqueString(VValue), even under FPC
   end else begin
     // variable-length update
@@ -4390,7 +6562,6 @@ begin
   result := (State = STATE_SUBDOMAIN) and (subdomains >= 2);
 end;
 
-
 // code below adapted from ZMatchPattern.pas - http://www.zeoslib.sourceforge.net
 
 procedure TMatch.MatchMain;
@@ -4524,62 +6695,170 @@ begin
   until State <> sNONE;
 end;
 
-procedure TMatch.Prepare(const aPattern: RawUTF8; aCaseInsensitive, aReuse: boolean);
-var i: integer;
-const SPECIALS: PUTF8Char = '*?[';
+function SearchAny(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
 begin
-  Pattern := pointer(aPattern);
-  PMax := length(aPattern) - 1; // search in Pattern[0..PMax]
-  if aCaseInsensitive then
-    Upper := @NormToUpperAnsi7 else
-    Upper := @NormToNorm;
-  if aReuse then
-    if strcspn(Pattern,SPECIALS)>PMax then
-      if aCaseInsensitive then
-        Direct := dNoPatternU
-      else
-        Direct := dNoPattern
-    else if (PMax > 0) and (Pattern[PMax] = '*') then begin
-      for i := 1 to PMax - 1 do
-        if Pattern[i] in ['*', '?', '['] then begin
-          Direct := dNone;
-          exit;
-        end;
-      case Pattern[0] of
+  aMatch.State := sNONE;
+  aMatch.P := 0;
+  aMatch.T := 0;
+  aMatch.Text := aText;
+  aMatch.TMax := aTextLen - 1;
+  aMatch.MatchMain;
+  result := aMatch.State = sVALID;
+end;
+
+// faster alternative (without recursion) for only * ? (but not [...])
+
+function SearchNoRange(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+{$ifdef CPUX86}
+var
+  c: AnsiChar;
+  pat, txt: PtrInt; // use local registers
+begin
+  aMatch.T := 0; // aMatch.P/T are used for retry positions after *
+  aMatch.Text := aText;
+  aMatch.TMax := aTextLen - 1;
+  pat := 0;
+  txt := 0;
+  repeat
+    if pat <= aMatch.PMax then begin
+      c := aMatch.Pattern[pat];
+      case c of
+        '?':
+          if txt <= aMatch.TMax then begin
+            inc(pat);
+            inc(txt);
+            continue;
+          end;
         '*': begin
-          inc(Pattern);
-          dec(PMax, 2); // trim trailing and ending *
-          if PMax <= 0 then
-            Direct := dContainsValid
-          else if aCaseInsensitive then
-            Direct := dContainsU
-          {$ifdef CPU64}
-          else if PMax >= 7 then
-            Direct := dContains8
-          {$endif}
-          else if PMax >= 3 then
-            Direct := dContains4
-          else
-            Direct := dContains1;
+          aMatch.P := pat;
+          aMatch.T := txt + 1;
+          inc(pat);
+          continue;
         end;
-        '?', '[':
-          Direct := dNone;
-        else begin
-          dec(PMax); // trim trailing *
-          if aCaseInsensitive then
-            Direct := dStartWithU
-          else
-            Direct := dStartWith;
+        else if (txt <= aMatch.TMax) and (c = aMatch.Text[txt]) then begin
+          inc(pat);
+          inc(txt);
+          continue;
         end;
       end;
     end
-    else
-      Direct := dNone
-  else
-    Direct := dNone;
+    else if txt > aMatch.TMax then
+      break;
+    txt := aMatch.T;
+    if (txt > 0) and (txt <= aMatch.TMax + 1) then begin
+      inc(aMatch.T);
+      pat := aMatch.P+1;
+      continue;
+    end;
+    result := false;
+    exit;
+  until false;
+  result := true;
+end;
+{$else} // optimized for x86_64/ARM with more registers
+var
+  c: AnsiChar;
+  pat, patend, txtend, txtretry, patretry: PUTF8Char;
+label
+  fin;
+begin
+  pat := pointer(aMatch.Pattern);
+  if pat = nil then
+    goto fin;
+  patend := pat + aMatch.PMax;
+  patretry := nil;
+  txtend := aText + aTextLen - 1;
+  txtretry := nil;
+  repeat
+    if pat <= patend then begin
+      c := pat^;
+      if c <> '*' then
+        if c <> '?' then begin
+          if (aText <= txtend) and (c = aText^) then begin
+            inc(pat);
+            inc(aText);
+            continue;
+          end;
+        end
+        else begin // '?'
+          if aText <= txtend then begin
+            inc(pat);
+            inc(aText);
+            continue;
+          end;
+        end
+        else begin // '*'
+          inc(pat);
+          txtretry := aText + 1;
+          patretry := pat;
+          continue;
+        end;
+    end
+    else if aText > txtend then
+      break;
+    if (PtrInt(txtretry)> 0) and (txtretry <= txtend + 1) then begin
+      aText := txtretry;
+      inc(txtretry);
+      pat := patretry;
+      continue;
+    end;
+fin:result := false;
+    exit;
+  until false;
+  result := true;
+end;
+{$endif CPUX86}
+
+function SearchNoRangeU(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+var
+  c: AnsiChar;
+  pat, txt: PtrInt;
+begin
+  aMatch.T := 0;
+  aMatch.Text := aText;
+  aMatch.TMax := aTextLen - 1;
+  pat := 0;
+  txt := 0;
+  repeat
+    if pat <= aMatch.PMax then begin
+      c := aMatch.Pattern[pat];
+      case c of
+        '?':
+          if txt <= aMatch.TMax then begin
+            inc(pat);
+            inc(txt);
+            continue;
+          end;
+        '*': begin
+          aMatch.P := pat;
+          aMatch.T := txt + 1;
+          inc(pat);
+          continue;
+        end;
+        else if (txt <= aMatch.TMax) and
+           (aMatch.Upper[c] = aMatch.Upper[aMatch.Text[txt]]) then begin
+          inc(pat);
+          inc(txt);
+          continue;
+        end;
+      end;
+    end
+    else if txt > aMatch.TMax then
+      break;
+    txt := aMatch.T;
+    if (txt > 0) and (txt <= aMatch.TMax + 1) then begin
+      inc(aMatch.T);
+      pat := aMatch.P+1;
+      continue;
+    end;
+    result := false;
+    exit;
+  until false;
+  result := true;
 end;
 
 function SimpleContainsU(t, tend, p: PUTF8Char; pmax: PtrInt; up: PNormTable): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 // brute force case-insensitive search p[0..pmax] in t..tend-1
 var first: AnsiChar;
     i: PtrInt;
@@ -4594,7 +6873,7 @@ next: inc(t);
         break;
     end;
     for i := 1 to pmax do
-      if (t + i >= tend) or (up[t[i]] <> up[p[i]]) then
+      if up[t[i]] <> up[p[i]] then
         goto next;
     result := true;
     exit;
@@ -4603,7 +6882,7 @@ next: inc(t);
 end;
 
 {$ifdef CPU64} // naive but very efficient code generation on FPC x86-64
-function SimpleContains8(t, tend, p: PUTF8Char; pmax: PtrInt): boolean;
+function SimpleContains8(t, tend, p: PUTF8Char; pmax: PtrInt): boolean; inline;
 label next;
 var i, first: PtrInt;
 begin
@@ -4616,7 +6895,7 @@ next: inc(t);
         break;
     end;
     for i := 8 to pmax do
-      if (t + i >= tend + 7) or (t[i] <> p[i]) then
+      if t[i] <> p[i] then
         goto next;
     result := true;
     exit;
@@ -4626,6 +6905,7 @@ end;
 {$endif CPU64}
 
 function SimpleContains4(t, tend, p: PUTF8Char; pmax: PtrInt): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 label next;
 var i: PtrInt;
 {$ifdef CPUX86} // circumvent lack of registers for this CPU
@@ -4645,7 +6925,7 @@ next: inc(t);
         break;
     end;
     for i := 4 to pmax do
-      if (t + i >= tend + 3) or (t[i] <> p[i]) then
+      if t[i] <> p[i] then
         goto next;
     result := true;
     exit;
@@ -4654,6 +6934,7 @@ next: inc(t);
 end;
 
 function SimpleContains1(t, tend, p: PUTF8Char; pmax: PtrInt): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 label next;
 var i: PtrInt;
 {$ifdef CPUX86}
@@ -4673,7 +6954,7 @@ next: inc(t);
         break;
     end;
     for i := 1 to pmax do
-      if (t + i >= tend) or (t[i] <> p[i]) then
+      if t[i] <> p[i] then
        goto next;
     result := true;
     exit;
@@ -4682,6 +6963,7 @@ next: inc(t);
 end;
 
 function CompareMemU(P1, P2: PUTF8Char; len: PtrInt; U: PNormTable): Boolean;
+  {$ifdef FPC}inline;{$endif}
 begin // here we know that len>0
   result := false;
   repeat
@@ -4692,61 +6974,495 @@ begin // here we know that len>0
   result := true;
 end;
 
+function SearchVoid(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+begin
+  result := aTextLen = 0;
+end;
+
+function SearchNoPattern(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+begin
+  result := (aMatch.PMax + 1 = aTextlen) and CompareMem(aText, aMatch.Pattern, aTextLen);
+end;
+
+function SearchNoPatternU(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+begin
+  result := (aMatch.PMax + 1 = aTextlen) and CompareMemU(aText, aMatch.Pattern, aTextLen, aMatch.Upper);
+end;
+
+function SearchContainsValid(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+begin
+  result := true;
+end;
+
+function SearchContainsU(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+begin
+  dec(aTextLen, aMatch.PMax);
+  if aTextLen > 0 then
+    result := SimpleContainsU(aText, aText + aTextLen, aMatch.Pattern, aMatch.PMax, aMatch.Upper)
+  else
+    result := false;
+end;
+
+function SearchContains1(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+begin
+  dec(aTextLen, aMatch.PMax);
+  if aTextLen > 0 then
+    result := SimpleContains1(aText, aText + aTextLen, aMatch.Pattern, aMatch.PMax)
+  else
+    result := false;
+end;
+
+function SearchContains4(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+begin
+  dec(aTextLen, aMatch.PMax);
+  if aTextLen > 0 then
+    result := SimpleContains4(aText, aText + aTextLen, aMatch.Pattern, aMatch.PMax)
+  else
+    result := false;
+end;
+
+{$ifdef CPU64}
+function SearchContains8(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+begin // optimized e.g. to search an IP address as '*12.34.56.78*' in logs
+  dec(aTextLen, aMatch.PMax);
+  if aTextLen > 0 then
+    result := SimpleContains8(aText, aText + aTextLen, aMatch.Pattern, aMatch.PMax)
+  else
+    result := false;
+end;
+{$endif CPU64}
+
+function SearchStartWith(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+begin
+  result := (aMatch.PMax < aTextlen) and CompareMem(aText, aMatch.Pattern, aMatch.PMax + 1);
+end;
+
+function SearchStartWithU(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+begin
+  result := (aMatch.PMax < aTextlen) and CompareMemU(aText, aMatch.Pattern, aMatch.PMax + 1, aMatch.Upper);
+end;
+
+function SearchEndWith(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+begin
+  dec(aTextLen, aMatch.PMax);
+  result := (aTextlen >= 0) and CompareMem(aText + aTextLen, aMatch.Pattern, aMatch.PMax);
+end;
+
+function SearchEndWithU(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+begin
+  dec(aTextLen, aMatch.PMax);
+  result := (aTextlen >= 0) and CompareMemU(aText + aTextLen, aMatch.Pattern, aMatch.PMax, aMatch.Upper);
+end;
+
+procedure TMatch.Prepare(const aPattern: RawUTF8; aCaseInsensitive, aReuse: boolean);
+begin
+  Prepare(pointer(aPattern), length(aPattern), aCaseInsensitive, aReuse);
+end;
+
+procedure TMatch.Prepare(aPattern: PUTF8Char; aPatternLen: integer;
+  aCaseInsensitive, aReuse: boolean);
+const SPECIALS: PUTF8Char = '*?[';
+begin
+  Pattern := aPattern;
+  PMax := aPatternLen - 1; // search in Pattern[0..PMax]
+  if Pattern = nil then begin
+    Search := SearchVoid;
+    exit;
+  end;
+  if aCaseInsensitive and not IsCaseSensitive(aPattern,aPatternLen) then
+    aCaseInsensitive := false; // don't slow down e.g. number or IP search
+  if aCaseInsensitive then
+    Upper := @NormToUpperAnsi7 else
+    Upper := @NormToNorm;
+  Search := nil;
+  if aReuse then
+    if strcspn(Pattern, SPECIALS) > PMax then
+      if aCaseInsensitive then
+        Search := SearchNoPatternU
+      else
+        Search := SearchNoPattern
+    else if PMax > 0 then begin
+      if Pattern[PMax] = '*' then begin
+        if strcspn(Pattern + 1, SPECIALS) = PMax - 1 then
+          case Pattern[0] of
+            '*': begin // *something*
+              inc(Pattern);
+              dec(PMax, 2); // trim trailing and ending *
+              if PMax < 0 then
+                Search := SearchContainsValid
+              else if aCaseInsensitive then
+                Search := SearchContainsU
+              {$ifdef CPU64}
+              else if PMax >= 7 then
+                Search := SearchContains8
+              {$endif}
+              else if PMax >= 3 then
+                Search := SearchContains4
+              else
+                Search := SearchContains1;
+            end;
+            '?':
+              if aCaseInsensitive then
+                Search := SearchNoRangeU
+              else
+                Search := SearchNoRange;
+            '[':
+              Search := SearchAny;
+            else begin
+              dec(PMax); // trim trailing *
+              if aCaseInsensitive then
+                Search := SearchStartWithU
+              else
+                Search := SearchStartWith;
+            end;
+          end;
+      end
+      else if (Pattern[0] = '*') and (strcspn(Pattern + 1, SPECIALS) >= PMax) then begin
+        inc(Pattern); // jump leading *
+        if aCaseInsensitive then
+          Search := SearchEndWithU
+        else
+          Search := SearchEndWith;
+      end;
+    end else
+      if Pattern[0] in ['*','?'] then
+        Search := SearchContainsValid;
+  if not Assigned(Search) then begin
+    aPattern := PosChar(Pattern, '[');
+    if (aPattern = nil) or (aPattern - Pattern > PMax) then
+      if aCaseInsensitive then
+        Search := SearchNoRangeU
+      else
+        Search := SearchNoRange
+    else
+      Search := SearchAny;
+  end;
+end;
+
+type // Holub and Durian (2005) SBNDM2 algorithm
+  // see http://www.cri.haifa.ac.il/events/2005/string/presentations/Holub.pdf
+  TSBNDMQ2Mask = array[AnsiChar] of cardinal;
+  PSBNDMQ2Mask = ^TSBNDMQ2Mask;
+
+function SearchSBNDMQ2ComputeMask(const Pattern: RawUTF8; u: PNormTable): RawByteString;
+var
+  i: PtrInt;
+  p: PAnsiChar absolute Pattern;
+  m: PSBNDMQ2Mask absolute result;
+  c: PCardinal;
+begin
+  SetLength(result, SizeOf(m^));
+  {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(m^, SizeOf(m^), 0);
+  for i := 0 to length(Pattern) - 1 do begin
+    c := @m^[u[p[i]]]; // for FPC code generation
+    c^ := c^ or (1 shl i);
+  end;
+end;
+
+function SearchSBNDMQ2(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+var
+  mask: PSBNDMQ2Mask;
+  max, i, j: PtrInt;
+  state: cardinal;
+begin
+  mask := pointer(aMatch^.Pattern); // was filled by SearchSBNDMQ2ComputeMask()
+  max := aMatch^.PMax;
+  i := max - 1;
+  dec(aTextLen);
+  if i < aTextLen then begin
+    repeat
+      state := mask[aText[i+1]] shr 1; // in two steps for better FPC codegen
+      state := state and mask[aText[i]];
+      if state = 0 then begin
+        inc(i, max); // fast skip
+        if i >= aTextLen then
+          break;
+        continue;
+      end;
+      j := i - max;
+      repeat
+        dec(i);
+        if i < 0 then
+          break;
+        state := (state shr 1) and mask[aText[i]];
+      until state = 0;
+      if i = j then begin
+        result := true;
+        exit;
+      end;
+      inc(i, max);
+      if i >= aTextLen then
+        break;
+    until false;
+  end;
+  result := false;
+end;
+
+function SearchSBNDMQ2U(aMatch: PMatch; aText: PUTF8Char; aTextLen: PtrInt): boolean;
+var
+  u: PNormTable;
+  mask: PSBNDMQ2Mask;
+  max, i, j: PtrInt;
+  state: cardinal;
+begin
+  mask := pointer(aMatch^.Pattern);
+  max := aMatch^.PMax;
+  u := aMatch^.Upper;
+  i := max - 1;
+  dec(aTextLen);
+  if i < aTextLen then begin
+    repeat
+      state := mask[u[aText[i+1]]] shr 1;
+      state := state and mask[u[aText[i]]];
+      if state = 0 then begin
+        inc(i, max);
+        if i >= aTextLen then
+          break;
+        continue;
+      end;
+      j := i - max;
+      repeat
+        dec(i);
+        if i < 0 then
+          break;
+        state := (state shr 1) and mask[u[aText[i]]];
+      until state = 0;
+      if i = j then begin
+        result := true;
+        exit;
+      end;
+      inc(i, max);
+      if i >= aTextLen then
+        break;
+    until false;
+  end;
+  result := false;
+end;
+
+procedure TMatch.PrepareContains(var aPattern: RawUTF8;
+  aCaseInsensitive: boolean);
+begin
+  PMax := length(aPattern) - 1;
+  if aCaseInsensitive and not IsCaseSensitive(pointer(aPattern), PMax + 1) then
+    aCaseInsensitive := false;
+  if aCaseInsensitive then
+    Upper := @NormToUpperAnsi7
+  else
+    Upper := @NormToNorm;
+  if PMax < 0 then
+    Search := SearchContainsValid
+  else if PMax > 30 then
+    if aCaseInsensitive then
+      Search := SearchContainsU
+    else
+      Search := {$ifdef CPU64}SearchContains8{$else}SearchContains4{$endif}
+  else if PMax >= 1 then begin // len in [2..31] = PMax in [1..30]
+    aPattern := SearchSBNDMQ2ComputeMask(aPattern, Upper); // lookup table
+    if aCaseInsensitive then
+      Search := SearchSBNDMQ2U
+    else
+      Search := SearchSBNDMQ2;
+  end
+  else if aCaseInsensitive then
+    Search := SearchContainsU
+  else
+    Search := SearchContains1; // todo: use IndexByte() on FPC?
+  Pattern := pointer(aPattern);
+end;
+
+procedure TMatch.PrepareRaw(aPattern: PUTF8Char; aPatternLen: integer;
+  aSearch: TMatchSearchFunction);
+begin
+  Pattern := aPattern;
+  PMax := aPatternLen - 1; // search in Pattern[0..PMax]
+  Search := aSearch;
+end;
+
 function TMatch.Match(const aText: RawUTF8): boolean;
 begin
-  result := Match(pointer(aText), length(aText));
+  if aText <> '' then
+    result := Search(@self, pointer(aText), length(aText))
+  else
+    result := PMax < 0;
 end;
 
 function TMatch.Match(aText: PUTF8Char; aTextLen: PtrInt): boolean;
 begin
   if (aText <> nil) and (aTextLen > 0) then
-  case Direct of
-    dNone: begin
-      State := sNONE;
-      P := 0;
-      T := 0;
-      Text := aText;
-      TMax := length(aText) - 1;
-      MatchMain;
-      result := State = sVALID;
-    end;
-    dNoPattern:
-      result := (PMax + 1 = aTextlen) and CompareMem(aText, Pattern, aTextLen);
-    dNoPatternU:
-      result := (PMax + 1 = aTextlen) and CompareMemU(aText, Pattern, aTextLen, Upper);
-    dStartWith:
-      result := (PMax < aTextlen) and CompareMem(aText, Pattern, PMax + 1);
-    dStartWithU:
-      result := (PMax < aTextlen) and CompareMemU(aText, Pattern, PMax + 1, Upper);
-    dContainsValid:
-      result := true;
-    dContainsU:
-      result := SimpleContainsU(aText, aText + aTextLen, Pattern, PMax, Upper);
-    dContains1:
-      result := SimpleContains1(aText, aText + aTextLen, Pattern, PMax);
-    {$ifdef CPU64}
-    dContains8: // optimized e.g. to search an IP address as '*12.34.56.78*' in logs
-      result := SimpleContains8(aText, aText + aTextLen - 7, Pattern, PMax);
-    {$endif}
-    else
-      result := SimpleContains4(aText, aText + aTextLen - 3, Pattern, PMax);
-  end
+    result := Search(@self, aText, aTextLen)
   else
-    result := PMax < 0
+    result := PMax < 0;
 end;
 
 function TMatch.MatchThreadSafe(const aText: RawUTF8): boolean;
 var local: TMatch; // thread-safe with no lock!
 begin
   local := self;
-  result := local.Match(pointer(aText), length(aText));
+  if aText <> '' then
+    result := local.Search(@local, pointer(aText), length(aText))
+  else
+    result := local.PMax < 0;
+end;
+
+function TMatch.MatchString(const aText: string): boolean;
+var
+  local: TMatch; // thread-safe with no lock!
+  temp: TSynTempBuffer;
+  len: integer;
+begin
+  if aText = '' then begin
+    result := PMax < 0;
+    exit;
+  end;
+  len := length(aText);
+  temp.Init(len * 3);
+  {$ifdef UNICODE}
+  len := RawUnicodeToUtf8(temp.buf, temp.len + 1, pointer(aText), len, [ccfNoTrailingZero]);
+  {$else}
+  len := CurrentAnsiConvert.AnsiBufferToUTF8(temp.buf, pointer(aText), len) - temp.buf;
+  {$endif}
+  local := self;
+  result := local.Search(@local, temp.buf, len);
+  temp.Done;
+end;
+
+function TMatch.Equals(const aAnother{$ifndef DELPHI5OROLDER}: TMatch{$endif}): boolean;
+begin
+  result := (PMax = TMatch(aAnother).PMax) and (Upper = TMatch(aAnother).Upper) and
+    CompareMem(Pattern, TMatch(aAnother).Pattern, PMax + 1);
+end;
+
+function TMatch.PatternLength: integer;
+begin
+  result := PMax + 1;
+end;
+
+function TMatch.PatternText: PUTF8Char;
+begin
+  result := Pattern;
 end;
 
 function IsMatch(const Pattern, Text: RawUTF8; CaseInsensitive: boolean): boolean;
 var match: TMatch;
 begin
-  match.Prepare(Pattern, CaseInsensitive, false);
+  match.Prepare(Pattern, CaseInsensitive, {reuse=}false);
   result := match.Match(Text);
+end;
+
+function IsMatchString(const Pattern, Text: string; CaseInsensitive: boolean): boolean;
+var match: TMatch;
+    pat, txt: RawUTF8;
+begin
+  StringToUTF8(Pattern, pat); // local variable is mandatory for FPC
+  StringToUTF8(Text, txt);
+  match.Prepare(pat, CaseInsensitive, {reuse=}false);
+  result := match.Match(txt);
+end;
+
+function SetMatchs(const CSVPattern: RawUTF8; CaseInsensitive: boolean;
+  out Match: TMatchDynArray): integer;
+var P, S: PUTF8Char;
+begin
+  result := 0;
+  P := pointer(CSVPattern);
+  if P <> nil then
+    repeat
+      S := P;
+      while not (P^ in [#0, ',']) do
+        inc(P);
+      if P <> S then begin
+        SetLength(Match, result + 1);
+        Match[result].Prepare(S, P - S, CaseInsensitive, {reuse=}true);
+        inc(result);
+      end;
+      if P^ = #0 then
+        break;
+      inc(P);
+    until false;
+end;
+
+function SetMatchs(CSVPattern: PUTF8Char; CaseInsensitive: boolean;
+  Match: PMatch; MatchMax: integer): integer;
+var S: PUTF8Char;
+begin
+  result := 0;
+  if (CSVPattern <> nil) and (MatchMax >= 0) then
+    repeat
+      S := CSVPattern;
+      while not (CSVPattern^ in [#0, ',']) do
+        inc(CSVPattern);
+      if CSVPattern <> S then begin
+        Match^.Prepare(S, CSVPattern - S, CaseInsensitive, {reuse=}true);
+        inc(result);
+        if result > MatchMax then
+          break;
+        inc(Match);
+      end;
+      if CSVPattern^ = #0 then
+        break;
+      inc(CSVPattern);
+    until false;
+end;
+
+function MatchExists(const One: TMatch; const Several: TMatchDynArray): boolean;
+var
+  i: integer;
+begin
+  result := true;
+  for i := 0 to high(Several) do
+    if Several[i].Equals(One) then
+      exit;
+  result := false;
+end;
+
+function MatchAdd(const One: TMatch; var Several: TMatchDynArray): boolean;
+var
+  n: integer;
+begin
+  result := not MatchExists(One, Several);
+  if result then begin
+    n := length(Several);
+    SetLength(Several, n + 1);
+    Several[n] := One;
+  end;
+end;
+
+function MatchAny(const Match: TMatchDynArray; const Text: RawUTF8): boolean;
+var
+  m: PMatch;
+  i: integer;
+begin
+  result := true;
+  if Match = nil then
+    exit;
+  m := pointer(Match);
+  for i := 1 to length(Match) do
+    if m^.Match(Text) then
+      exit
+    else
+      inc(m);
+  result := false;
+end;
+
+procedure FilterMatchs(const CSVPattern: RawUTF8; CaseInsensitive: boolean;
+  var Values: TRawUTF8DynArray);
+var
+  match: TMatchDynArray;
+  m, n, i: integer;
+begin
+  if SetMatchs(CSVPattern, CaseInsensitive, match) = 0 then
+    exit;
+  n := 0;
+  for i := 0 to high(Values) do
+    for m := 0 to high(match) do
+      if match[m].Match(Values[i]) then begin
+        if i <> n then
+          Values[n] := Values[i];
+        inc(n);
+        break;
+      end;
+  if n <> length(Values) then
+    SetLength(Values, n);
 end;
 
 
@@ -4759,19 +7475,51 @@ begin
 end;
 
 function TMatchs.Match(const aText: RawUTF8): integer;
+begin
+  result := Match(pointer(aText), length(aText));
+end;
+
+function TMatchs.Match(aText: PUTF8Char; aLen: integer): integer;
 var
-  i: integer;
+  one: ^TMatchStore;
+  local: TMatch; // thread-safe with no lock!
 begin
   if (self = nil) or (fMatch = nil) then
     result := -1 // no filter by name -> allow e.g. to process everything
   else begin
-    result := -2;
-    for i := 0 to length(fMatch) - 1 do
-      if fMatch[i].Parent.MatchThreadSafe(aText) then begin
-        result := i;
-        break;
+    one := pointer(fMatch);
+    if aLen <> 0 then begin
+      for result := 0 to fMatchCount - 1 do begin
+        local := one^.Pattern;
+        if local.Search(@local, aText, aLen) then
+          exit;
+        inc(one);
       end;
+    end
+    else
+      for result := 0 to fMatchCount - 1 do
+        if one^.Pattern.PMax < 0 then
+          exit
+        else
+          inc(one);
+    result := -2;
   end;
+end;
+
+function TMatchs.MatchString(const aText: string): integer;
+var
+  temp: TSynTempBuffer;
+  len: integer;
+begin
+  len := length(aText);
+  temp.Init(len * 3);
+  {$ifdef UNICODE}
+  len := RawUnicodeToUtf8(temp.buf, temp.len + 1, pointer(aText), len, [ccfNoTrailingZero]);
+  {$else}
+  len := CurrentAnsiConvert.AnsiBufferToUTF8(temp.buf, pointer(aText), len, true) - temp.buf;
+  {$endif}
+  result := Match(temp.buf, len);
+  temp.Done;
 end;
 
 procedure TMatchs.Subscribe(const aPatternsCSV: RawUTF8; CaseInsensitive: Boolean);
@@ -4791,7 +7539,7 @@ begin
   m := length(aPatterns);
   if m = 0 then
     exit;
-  n := length(fMatch);
+  n := fMatchCount;
   SetLength(fMatch, n + m);
   pat := pointer(aPatterns);
   for i := 1 to m do begin
@@ -4800,16 +7548,18 @@ begin
       if StrComp(pointer(found^.PatternInstance), pointer(pat^)) = 0 then begin
         found := nil;
         break;
-      end else
-      inc(found);
+      end
+      else
+        inc(found);
     if found <> nil then
       with fMatch[n] do begin
         PatternInstance := pat^; // avoid GPF if aPatterns[] is released
-        Parent.Prepare(PatternInstance, CaseInsensitive, true);
+        Pattern.Prepare(PatternInstance, CaseInsensitive, {reuse=}true);
         inc(n);
       end;
     inc(pat);
   end;
+  fMatchCount := n;
   if n <> length(fMatch) then
     SetLength(fMatch, n);
 end;
@@ -4896,13 +7646,13 @@ end;
 { TSynFilterTruncate}
 
 procedure TSynFilterTruncate.SetParameters(const value: RawUTF8);
-var V: TPUtf8CharDynArray;
+var V: array[0..1] of TValuePUTF8Char;
     tmp: TSynTempBuffer;
 begin
   tmp.Init(value);
-  JSONDecode(tmp.buf,['MaxLength','UTF8Length'],V);
-  fMaxLength := GetCardinalDef(V[0],0);
-  fUTF8Length := IdemPChar(V[1],'1') or IdemPChar(V[1],'TRUE');
+  JSONDecode(tmp.buf,['MaxLength','UTF8Length'],@V);
+  fMaxLength := GetCardinalDef(V[0].Value,0);
+  fUTF8Length := V[1].Idem('1') or V[1].Idem('true');
   tmp.Done;
 end;
 
@@ -4963,16 +7713,16 @@ begin
 end;
 
 procedure TSynValidateEmail.SetParameters(const value: RawUTF8);
-var V: TPUtf8CharDynArray;
+var V: array[0..3] of TValuePUTF8Char;
     tmp: TSynTempBuffer;
 begin
   inherited;
   tmp.Init(value);
-  JSONDecode(tmp.buf,['AllowedTLD','ForbiddenTLD','ForbiddenDomains','AnyTLD'],V);
-  LowerCaseCopy(V[0],StrLen(V[0]),fAllowedTLD);
-  LowerCaseCopy(V[1],StrLen(V[1]),fForbiddenTLD);
-  LowerCaseCopy(V[2],StrLen(V[2]),fForbiddenDomains);
-  AnyTLD := IdemPChar(V[3],'1') or IdemPChar(V[3],'TRUE');
+  JSONDecode(tmp.buf,['AllowedTLD','ForbiddenTLD','ForbiddenDomains','AnyTLD'],@V);
+  LowerCaseCopy(V[0].Value,V[0].ValueLen,fAllowedTLD);
+  LowerCaseCopy(V[1].Value,V[1].ValueLen,fForbiddenTLD);
+  LowerCaseCopy(V[2].Value,V[2].ValueLen,fForbiddenDomains);
+  AnyTLD := V[3].Idem('1') or V[3].Idem('true');
   tmp.Done;
 end;
 
@@ -4982,7 +7732,7 @@ end;
 procedure TSynValidatePattern.SetParameters(const Value: RawUTF8);
 begin
   inherited SetParameters(Value);
-  fMatch.Prepare(Value, ClassType=TSynValidatePatternI, true);
+  fMatch.Prepare(Value, ClassType=TSynValidatePatternI, {reuse=}true);
 end;
 
 function TSynValidatePattern.Process(aFieldIndex: integer; const value: RawUTF8;
@@ -5052,7 +7802,7 @@ begin
     InvalidTextLengthMin(MinLength,ErrorMsg) else
   if L>MaxLength then
     ErrorMsg := Format(sInvalidTextLengthMax,[MaxLength,Character01n(MaxLength)]) else begin
-    FillcharFast(Min,SizeOf(Min),0);
+    {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(Min,SizeOf(Min),0);
     L := length(value);
     for i := 1 to L do
     case value[i] of
@@ -5106,7 +7856,7 @@ begin
 end;
 
 procedure TSynValidateText.SetParameters(const value: RawUTF8);
-var V: TPUtf8CharDynArray;
+var V: array[0..high(TSynValidateTextProps)+1] of TValuePUTF8Char;
     i: integer;
     tmp: TSynTempBuffer;
 const DEFAULT: TSynValidateTextProps = (
@@ -5125,13 +7875,11 @@ begin
       'MaxLeftTrimCount','MaxRightTrimCount',
       'MaxAlphaCount','MaxDigitCount','MaxPunctCount',
       'MaxLowerCount','MaxUpperCount','MaxSpaceCount',
-      'UTF8Length'],V);
-    if length(V)<>length(fProps)+1 then
-      exit;
+      'UTF8Length'],@V);
     for i := 0 to high(fProps) do
-      fProps[i] := GetCardinalDef(V[i],fProps[i]);
-    fUTF8Length := IdemPChar(V[length(fProps)],'1') or
-                   IdemPChar(V[length(fProps)],'TRUE');
+      fProps[i] := GetCardinalDef(V[i].Value,fProps[i]);
+    with V[high(V)] do
+      fUTF8Length := Idem('1') or Idem('true');
   finally
     tmp.Done;
   end;
@@ -5171,7 +7919,7 @@ begin
   if aFalsePositivePercent>100 then
     fFalsePositivePercent := 100 else
     fFalsePositivePercent := aFalsePositivePercent;
-  // see http://stackoverflow.com/a/22467497/458259
+  // see http://stackoverflow.com/a/22467497
   fBits := Round(-ln(fFalsePositivePercent/100)*aSize/(LN2*LN2));
   fHashFunctions := Round(fBits/fSize*LN2);
   if fHashFunctions=0 then
@@ -5206,7 +7954,7 @@ begin
   Safe.Lock;
   try
     for h := 0 to fHashFunctions-1 do begin
-      SetBit(pointer(fStore)^,h1 mod fBits);
+      SetBitPtr(pointer(fStore),h1 mod fBits);
       inc(h1,h2);
     end;
     inc(fInserted);
@@ -5244,7 +7992,7 @@ begin
   Safe.Lock;
   try
     for h := 0 to fHashFunctions-1 do
-      if GetBit(pointer(fStore)^,h1 mod fBits) then
+      if GetBitPtr(pointer(fStore),h1 mod fBits) then
         inc(h1,h2) else
         exit;
   finally
@@ -5562,7 +8310,7 @@ begin
     Len := FromVarUInt32(P);
     if D+Len>DEnd then
       break;
-    MoveFast(P^,D^,Len);
+    {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,D^,Len);
     crc := crc32c(crc,D,Len);
     inc(P,Len);
     inc(D,Len);
@@ -5571,7 +8319,7 @@ begin
     Len := FromVarUInt32(P)+3;
     if D+Len>DEnd then
       break;
-    FillCharFast(D^,Len,0);
+    {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(D^,Len,0);
     crc := crc32c(crc,@Len,SizeOf(Len));
     inc(D,Len);
   end;
@@ -5834,7 +8582,7 @@ begin
   until false;
   // 5. write remaining bytes
   if NewBufSize>0 then begin
-    MoveFast(NewBuf^,pOut^,NewBufSize);
+    {$ifdef FPC}Move{$else}MoveFast{$endif}(NewBuf^,pOut^,NewBufSize);
     inc(pOut,NewBufSize);
     inc(newBuf,NewBufSize);
   end;
@@ -5846,7 +8594,7 @@ begin
   PInteger(OutBuf+3)^ := h;
   OutBuf[6] := AnsiChar(curofssize);
   // 7. copy commands
-  MoveFast(WorkBuf^,pOut^,h);
+  {$ifdef FPC}Move{$else}MoveFast{$endif}(WorkBuf^,pOut^,h);
   result := pOut+h;
 end;
 
@@ -5879,7 +8627,7 @@ begin
     // copy leading bytes
     leading := FromVarUInt32(PByte(P));
     if leading<>0 then begin
-      MoveFast(buf^,upd^,leading);
+      {$ifdef FPC}Move{$else}MoveFast{$endif}(buf^,upd^,leading);
       inc(buf,leading);
       inc(upd,leading);
     end;
@@ -5887,7 +8635,7 @@ begin
     if srclen<>0 then begin
       if PtrUInt(upd-src)<srclen then
         movechars(src,upd,srclen) else
-        MoveFast(src^,upd^,srclen);
+        {$ifdef FPC}Move{$else}MoveFast{$endif}(src^,upd^,srclen);
       inc(upd,srclen);
     end;
   end;
@@ -5932,7 +8680,7 @@ var HTab, HList: PHTab;
     WriteByte(d,FLAG_COPIED); // block copied flag
     db := ToVarUInt32(NewSizeSave,db);
     WriteInt(d,crc32c(0,New,NewSizeSave));
-    MoveFast(New^,d^,NewSizeSave);
+    {$ifdef FPC}Move{$else}MoveFast{$endif}(New^,d^,NewSizeSave);
     inc(d,NewSizeSave);
     result := d-Delta;
   end;
@@ -6003,7 +8751,7 @@ begin
         if BufRead=0 then
           break;
         WriteInt(d,crc32c(0,New,BufRead));
-        MoveFast(New^,d^,BufRead);
+        {$ifdef FPC}Move{$else}MoveFast{$endif}(New^,d^,BufRead);
         inc(New,BufRead);
         inc(d,BufRead);
       end else begin
@@ -6069,7 +8817,7 @@ begin
         exit;
       end;
       inc(Delta,4);
-      MoveFast(Delta^,New^,BufRead);
+      {$ifdef FPC}Move{$else}MoveFast{$endif}(Delta^,New^,BufRead);
       if BufRead>=Len then
         exit; // if Old=nil -> only copy new
       inc(Delta,BufRead);
@@ -6092,13 +8840,13 @@ begin
         exit;
       end;
       inc(Delta,4);
-      MoveFast(Old^,New^,OldRead);
+      {$ifdef FPC}Move{$else}MoveFast{$endif}(Old^,New^,OldRead);
       inc(New,OldRead);
     end;
     FLAG_END: begin // block idem end flag
       if crc32c(0,Old,OldRead)<>PCardinal(Delta)^ then
         Result := dsCrcEnd;
-      MoveFast(Old^,New^,OldRead);
+      {$ifdef FPC}Move{$else}MoveFast{$endif}(Old^,New^,OldRead);
       inc(New,OldRead);
       break;
     end;
@@ -6142,6 +8890,4392 @@ begin
 end;
 
 
+{ TFastReader }
+
+procedure TFastReader.Init(Buffer: pointer; Len: integer);
+begin
+  P := Buffer;
+  Last := P+Len;
+  OnErrorOverflow := nil;
+  OnErrorData := nil;
+  Tag := 0;
+end;
+
+procedure TFastReader.Init(const Buffer: RawByteString);
+begin
+  Init(pointer(Buffer),length(Buffer));
+end;
+
+procedure TFastReader.ErrorOverflow;
+begin
+  if Assigned(OnErrorOverflow) then
+    OnErrorOverflow else
+    raise EFastReader.Create('Reached End of Input');
+end;
+
+procedure TFastReader.ErrorData(const fmt: RawUTF8; const args: array of const);
+begin
+  if Assigned(OnErrorData) then
+    OnErrorData(fmt,args) else
+    raise EFastReader.CreateUTF8('Incorrect Data: '+fmt,args);
+end;
+
+function TFastReader.EOF: boolean;
+begin
+  result := P>=Last;
+end;
+
+function TFastReader.RemainingLength: PtrUInt;
+begin
+  result := PtrUInt(Last)-PtrUInt(P);
+end;
+
+function TFastReader.NextByte: byte;
+begin
+  if P>=Last then
+    ErrorOverflow;
+  result := ord(P^);
+  inc(P);
+end;
+
+function TFastReader.NextByteSafe(dest: pointer): boolean;
+begin
+  if P>=Last then
+    result := false
+  else begin
+    PAnsiChar(dest)^ := P^;
+    inc(P);
+    result := true;
+  end;
+end;
+
+function TFastReader.Next4: cardinal;
+begin
+  if P+3>=Last then
+    ErrorOverflow;
+  result := PCardinal(P)^;
+  inc(P,4);
+end;
+
+function TFastReader.Next8: QWord;
+begin
+  if P+7>=Last then
+    ErrorOverflow;
+  result := PQWord(P)^;
+  inc(P,8);
+end;
+
+function TFastReader.NextByteEquals(Value: byte): boolean;
+begin
+  if P>=Last then
+    ErrorOverflow;
+  if ord(P^) = Value then begin
+    inc(P);
+    result := true;
+  end else
+    result := false;
+end;
+
+function TFastReader.Next(DataLen: PtrInt): pointer;
+begin
+  if P+DataLen>Last then
+    ErrorOverflow;
+  result := P;
+  inc(P,DataLen);
+end;
+
+function TFastReader.NextSafe(out Data: Pointer; DataLen: PtrInt): boolean;
+begin
+  if P+DataLen>Last then
+    result := false else begin
+    Data := P;
+    inc(P,DataLen);
+    result := true;
+  end;
+end;
+
+procedure TFastReader.Copy(out Dest; DataLen: PtrInt);
+begin
+  if P+DataLen>Last then
+    ErrorOverflow;
+  {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,Dest,DataLen);
+  inc(P,DataLen);
+end;
+
+function TFastReader.CopySafe(out Dest; DataLen: PtrInt): boolean;
+begin
+  if P+DataLen>Last then
+    result := false else begin
+    {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,Dest,DataLen);
+    inc(P,DataLen);
+    result := true;
+  end;
+end;
+
+procedure TFastReader.VarBlob(out result: TValueResult);
+begin
+  result.Len := VarUInt32;
+  if P+result.Len>Last then
+    ErrorOverflow;
+  result.Ptr := P;
+  inc(P,result.Len);
+end;
+
+function TFastReader.VarBlob: TValueResult;
+begin
+  result.Len := VarUInt32;
+  if P+result.Len>Last then
+    ErrorOverflow;
+  result.Ptr := P;
+  inc(P,result.Len);
+end;
+
+{$ifndef NOVARIANTS}
+procedure TFastReader.NextVariant(var Value: variant; CustomVariantOptions: pointer);
+begin
+  P := VariantLoad(Value,P,CustomVariantOptions);
+  if P=nil then
+    ErrorData('VariantLoad=nil',[]) else
+  if P>Last then
+    ErrorOverFlow;
+end;
+
+procedure TFastReader.NextDocVariantData(out Value: variant; CustomVariantOptions: pointer);
+var json: TValueResult;
+    temp: TSynTempBuffer;
+begin
+  VarBlob(json);
+  if json.Len<=0 then
+    exit;
+  temp.Init(json.Ptr,json.Len); // parsing will modify input buffer in-place
+  try
+    if CustomVariantOptions=nil then
+      CustomVariantOptions := @JSON_OPTIONS[true];
+    TDocVariantData(Value).InitJSONInPlace(temp.buf,PDocVariantOptions(CustomVariantOptions)^);
+  finally
+    temp.Done;
+  end;
+end;
+{$endif NOVARIANTS}
+
+function TFastReader.VarInt32: integer;
+begin
+  result := VarUInt32;
+  if result and 1<>0 then
+    // 1->1, 3->2..
+    result := result shr 1+1 else
+    // 0->0, 2->-1, 4->-2..
+    result := -(result shr 1);
+end;
+
+function TFastReader.VarInt64: Int64;
+begin
+  result := VarUInt64;
+  if result and 1<>0 then
+    // 1->1, 3->2..
+    result := result shr 1+1 else
+    // 0->0, 2->-1, 4->-2..
+    result := -(result shr 1);
+end;
+
+function TFastReader.VarUInt32: cardinal;
+var c: cardinal;
+{$ifdef CPUX86} // not enough CPU registers
+label err;
+begin
+  result := ord(P^);
+  if P>=Last then
+    goto err;
+  inc(P);
+  if result<=$7f then
+    exit;
+  if P>=Last then
+    goto err;
+  c := ord(P^) shl 7;
+  inc(P);
+  result := result and $7F or c;
+  if c<=$7f shl 7 then
+    exit; // Values between 128 and 16256
+  if P>=Last then
+    goto err;
+  c := ord(P^) shl 14;
+  inc(P);
+  result := result and $3FFF or c;
+  if c<=$7f shl 14 then
+    exit; // Values between 16257 and 2080768
+  if P>=Last then
+    goto err;
+  c := ord(P^) shl 21;
+  inc(P);
+  result := result and $1FFFFF or c;
+  if c<=$7f shl 21 then
+    exit; // Values between 2080769 and 266338304
+  if P>=Last then
+err:ErrorOverflow;
+  c := ord(P^) shl 28;
+  inc(P);
+  result := result and $FFFFFFF or c;
+{$else}
+    s,l: PByte;
+label err,fin;
+begin
+  s := pointer(P);
+  l := pointer(Last);
+  result := s^;
+  if PAnsiChar(s)>=PAnsiChar(l) then
+    goto err;
+  inc(s);
+  if result<=$7f then
+    goto fin;
+  if PAnsiChar(s)>=PAnsiChar(l) then
+    goto err;
+  c := s^ shl 7;
+  inc(s);
+  result := result and $7F or c;
+  if c<=$7f shl 7 then
+    goto fin; // Values between 128 and 16256
+  if PAnsiChar(s)>=PAnsiChar(l) then
+    goto err;
+  c := s^ shl 14;
+  inc(s);
+  result := result and $3FFF or c;
+  if c<=$7f shl 14 then
+    goto fin; // Values between 16257 and 2080768
+  if PAnsiChar(s)>=PAnsiChar(l) then
+    goto err;
+  c := s^ shl 21;
+  inc(s);
+  result := result and $1FFFFF or c;
+  if c<=$7f shl 21 then
+    goto fin; // Values between 2080769 and 266338304
+  if PAnsiChar(s)>=PAnsiChar(l) then
+err:ErrorOverflow;
+  c := s^ shl 28;
+  inc(s);
+  result := result and $FFFFFFF or c;
+fin:
+  P := pointer(s);
+{$endif}
+end;
+
+procedure TFastReader.VarNextInt;
+{$ifdef CPUX86} // not enough CPU registers
+begin
+  repeat
+    if P>=Last then
+      break;  // reached end of input
+    if P^<=#$7f then
+      break; // reached end of VarUInt32/VarUInt64
+    inc(P);
+  until false;
+  inc(P);
+{$else}
+var s: PAnsiChar;
+begin
+  s := P;
+  repeat
+    if s>=Last then
+      break;  // reached end of input
+    if s^<=#$7f then
+      break; // reached end of VarUInt32/VarUInt64
+    inc(s);
+  until false;
+  P := s+1;
+{$endif CPUX86}
+end;
+
+procedure TFastReader.VarNextInt(count: integer);
+{$ifdef CPUX86} // not enough CPU registers
+begin
+  if count=0 then
+    exit;
+  repeat
+    if P>=Last then
+      break;  // reached end of input
+    if P^>#$7f then begin
+      inc(P);
+      continue; // didn't reach end of VarUInt32/VarUInt64
+    end;
+    inc(P);
+    dec(count);
+    if count=0 then
+      break;
+  until false;
+{$else}
+var s, max: PAnsiChar;
+begin
+  if count=0 then
+    exit;
+  s := P;
+  max := Last;
+  repeat
+    if s>=max then
+      break;  // reached end of input
+    if s^>#$7f then begin
+      inc(s);
+      continue; // didn't reach end of VarUInt32/VarUInt64
+    end;
+    inc(s);
+    dec(count);
+    if count=0 then
+      break;
+  until false;
+  P := s;
+{$endif CPUX86}
+end;
+
+function TFastReader.PeekVarInt32(out value: PtrInt): boolean;
+begin
+  result := PeekVarUInt32(PtrUInt(value));
+  if result then
+    if value and 1<>0 then
+      // 1->1, 3->2..
+      value := value shr 1+1 else
+      // 0->0, 2->-1, 4->-2..
+      value := -(value shr 1);
+end;
+
+function TFastReader.PeekVarUInt32(out value: PtrUInt): boolean;
+var s: PAnsiChar;
+begin
+  result := false;
+  s := P;
+  repeat
+    if s>=Last then
+      exit;  // reached end of input -> returns false
+    if s^<=#$7f then
+      break; // reached end of VarUInt32
+    inc(s);
+  until false;
+  s := P;
+  value := VarUInt32; // fast value decode
+  P := s; // rewind
+  result := true;
+end;
+
+function TFastReader.VarUInt32Safe(out Value: cardinal): boolean;
+var c, n, v: cardinal;
+begin
+  result := false;
+  if P>=Last then
+    exit;
+  v := ord(P^);
+  inc(P);
+  if v>$7f then begin
+    n := 0;
+    v := v and $7F;
+    repeat
+      if P>=Last then
+        exit;
+      c := ord(P^);
+      inc(P);
+      inc(n,7);
+      if c<=$7f then break;
+      v := v or ((c and $7f) shl n);
+    until false;
+    v := v or (c shl n);
+  end;
+  Value := v;
+  result := true; // success
+end;
+
+function TFastReader.VarUInt64: QWord;
+label err;
+var c, n: PtrUInt;
+begin
+  if P>=Last then
+err: ErrorOverflow;
+  c := ord(P^);
+  inc(P);
+  if c>$7f then begin
+    result := c and $7F;
+    n := 0;
+    repeat
+      if P>=Last then
+        goto err;
+      c := ord(P^);
+      inc(P);
+      inc(n,7);
+      if c<=$7f then break;
+      result := result or (QWord(c and $7f) shl n);
+    until false;
+    result := result or (QWord(c) shl n);
+  end else
+    result := c;
+end;
+
+function TFastReader.VarString: RawByteString;
+begin
+  with VarBlob do
+    SetString(result,Ptr,Len);
+end;
+
+procedure TFastReader.VarUTF8(out result: RawUTF8);
+begin
+  with VarBlob do
+    FastSetString(result,Ptr,Len);
+end;
+
+function TFastReader.VarUTF8: RawUTF8;
+begin
+  with VarBlob do
+    FastSetString(result,Ptr,Len);
+end;
+
+function TFastReader.VarShortString: shortstring;
+begin
+  with VarBlob do
+    SetString(result,Ptr,Len);
+end;
+
+function TFastReader.VarUTF8Safe(out Value: RawUTF8): boolean;
+var len: cardinal;
+begin
+  if VarUInt32Safe(len) then
+    if len=0 then
+      result := true else
+      if P+len<=Last then begin
+        FastSetString(Value,P,len);
+        inc(P,len);
+        result := true;
+      end else
+        result := false else
+    result := false;
+end;
+
+procedure TFastReader.Read(var DA: TDynArray; NoCheckHash: boolean);
+begin
+  P := DA.LoadFrom(P,nil,NoCheckHash);
+  if P=nil then
+    ErrorData('TDynArray.LoadFrom %',[DA.ArrayTypeShort^]);
+end;
+
+function TFastReader.ReadVarUInt32Array(var Values: TIntegerDynArray): PtrInt;
+var i: integer;
+    k: TFileBufferWriterKind;
+begin
+  result := VarUInt32;
+  SetLength(Values,result);
+  Copy(k,1);
+  if k=wkUInt32 then begin
+    Copy(Values[0],result*4);
+    exit;
+  end;
+  Next(4); // format: Isize+varUInt32s
+  case k of
+  wkVarInt32:  for i := 0 to result-1 do Values[i] := VarInt32;
+  wkVarUInt32: for i := 0 to result-1 do Values[i] := VarUInt32;
+  else ErrorData('ReadVarUInt32Array: unhandled kind=%', [ord(k)]);
+  end;
+end;
+
+function TFastReader.ReadCompressed(Load: TAlgoCompressLoad; BufferOffset: integer): RawByteString;
+var comp: PAnsiChar;
+    complen: PtrUInt;
+begin
+  complen := VarUInt32;
+  comp := Next(complen);
+  TAlgoCompress.Algo(comp,complen).Decompress(comp,complen,result,Load,BufferOffset);
+end;
+
+
+{ TSynPersistentStore }
+
+constructor TSynPersistentStore.Create(const aName: RawUTF8);
+begin
+  Create;
+  fName := aName;
+end;
+
+constructor TSynPersistentStore.CreateFrom(const aBuffer: RawByteString;
+  aLoad: TAlgoCompressLoad);
+begin
+  CreateFromBuffer(pointer(aBuffer),length(aBuffer),aLoad);
+end;
+
+constructor TSynPersistentStore.CreateFromBuffer(
+  aBuffer: pointer; aBufferLen: integer; aLoad: TAlgoCompressLoad);
+begin
+  Create('');
+  LoadFrom(aBuffer,aBufferLen,aLoad);
+end;
+
+constructor TSynPersistentStore.CreateFromFile(const aFileName: TFileName;
+  aLoad: TAlgoCompressLoad);
+begin
+  Create('');
+  LoadFromFile(aFileName,aLoad);
+end;
+
+procedure TSynPersistentStore.LoadFromReader;
+begin
+  fReader.VarUTF8(fName);
+end;
+
+procedure TSynPersistentStore.SaveToWriter(aWriter: TFileBufferWriter);
+begin
+  aWriter.Write(fName);
+end;
+
+procedure TSynPersistentStore.LoadFrom(const aBuffer: RawByteString;
+  aLoad: TAlgoCompressLoad);
+begin
+  if aBuffer <> '' then
+    LoadFrom(pointer(aBuffer),length(aBuffer),aLoad);
+end;
+
+procedure TSynPersistentStore.LoadFrom(aBuffer: pointer; aBufferLen: integer;
+  aLoad: TAlgoCompressLoad);
+var localtemp: RawByteString;
+    p: pointer;
+    temp: PRawByteString;
+begin
+  if (aBuffer=nil) or (aBufferLen<=0) then
+    exit; // nothing to load
+  fLoadFromLastAlgo := TAlgoCompress.Algo(aBuffer,aBufferLen);
+  if fLoadFromLastAlgo = nil then
+    fReader.ErrorData('%.LoadFrom unknown TAlgoCompress AlgoID=%',
+      [self,PByteArray(aBuffer)[4]]);
+  temp := fReaderTemp;
+  if temp=nil then
+    temp := @localtemp;
+  p := fLoadFromLastAlgo.Decompress(aBuffer,aBufferLen,fLoadFromLastUncompressed,temp^,aLoad);
+  if p=nil then
+    fReader.ErrorData('%.LoadFrom %.Decompress failed',[self,fLoadFromLastAlgo]);
+  fReader.Init(p,fLoadFromLastUncompressed);
+  LoadFromReader;
+end;
+
+function TSynPersistentStore.LoadFromFile(const aFileName: TFileName;
+  aLoad: TAlgoCompressLoad): boolean;
+var temp: RawByteString;
+begin
+  temp := StringFromFile(aFileName);
+  result := temp<>'';
+  if result then
+    LoadFrom(temp,aLoad);
+end;
+
+procedure TSynPersistentStore.SaveTo(out aBuffer: RawByteString; nocompression: boolean;
+  BufLen: integer; ForcedAlgo: TAlgoCompress; BufferOffset: integer);
+var writer: TFileBufferWriter;
+    temp: array[word] of byte;
+begin
+  if BufLen<=SizeOf(temp) then
+    writer := TFileBufferWriter.Create(TRawByteStringStream,@temp,SizeOf(temp)) else
+    writer := TFileBufferWriter.Create(TRawByteStringStream,BufLen);
+  try
+    SaveToWriter(writer);
+    fSaveToLastUncompressed := writer.TotalWritten;
+    aBuffer := writer.FlushAndCompress(nocompression,ForcedAlgo,BufferOffset);
+  finally
+    writer.Free;
+  end;
+end;
+
+function TSynPersistentStore.SaveTo(nocompression: boolean; BufLen: integer;
+  ForcedAlgo: TAlgoCompress; BufferOffset: integer): RawByteString;
+begin
+  SaveTo(result,nocompression,BufLen,ForcedAlgo,BufferOffset);
+end;
+
+function TSynPersistentStore.SaveToFile(const aFileName: TFileName;
+  nocompression: boolean; BufLen: integer; ForcedAlgo: TAlgoCompress): PtrUInt;
+var temp: RawByteString;
+begin
+  SaveTo(temp,nocompression,BufLen,ForcedAlgo);
+  if FileFromString(temp,aFileName) then
+    result := length(temp) else
+    result := 0;
+end;
+
+
+{ TSynPersistentStoreJson }
+
+procedure TSynPersistentStoreJson.AddJSON(W: TTextWriter);
+begin
+  W.AddPropJSONString('name', fName);
+end;
+
+function TSynPersistentStoreJson.SaveToJSON(reformat: TTextWriterJSONFormat): RawUTF8;
+var
+  W: TTextWriter;
+begin
+  W := TTextWriter.CreateOwnedStream(65536);
+  try
+    W.Add('{');
+    AddJSON(W);
+    W.CancelLastComma;
+    W.Add('}');
+    W.SetText(result, reformat);
+  finally
+    W.Free;
+  end;
+end;
+
+
+{ TRawByteStringGroup }
+
+procedure TRawByteStringGroup.Add(const aItem: RawByteString);
+begin
+  if Values=nil then
+    Clear; // ensure all fields are initialized, even if on stack
+  if Count=Length(Values) then
+    SetLength(Values,NextGrow(Count));
+  with Values[Count] do begin
+    Position := self.Position;
+    Value := aItem;
+  end;
+  LastFind := Count;
+  inc(Count);
+  inc(Position,Length(aItem));
+end;
+
+procedure TRawByteStringGroup.Add(aItem: pointer; aItemLen: integer);
+var tmp: RawByteString;
+begin
+  SetString(tmp,PAnsiChar(aItem),aItemLen);
+  Add(tmp);
+end;
+
+{$ifndef DELPHI5OROLDER} // circumvent Delphi 5 compiler bug
+
+procedure TRawByteStringGroup.Add(const aAnother: TRawByteStringGroup);
+var i: integer;
+    s,d: PRawByteStringGroupValue;
+begin
+  if aAnother.Values=nil then
+    exit;
+  if Values=nil then
+    Clear; // ensure all fields are initialized, even if on stack
+  if Count+aAnother.Count>Length(Values) then
+    SetLength(Values,Count+aAnother.Count);
+  s := pointer(aAnother.Values);
+  d := @Values[Count];
+  for i := 1 to aAnother.Count do begin
+    d^.Position := Position;
+    d^.Value := s^.Value;
+    inc(Position,length(s^.Value));
+    inc(s);
+    inc(d);
+  end;
+  inc(Count,aAnother.Count);
+  LastFind := Count-1;
+end;
+
+procedure TRawByteStringGroup.RemoveLastAdd;
+begin
+  if Count>0 then begin
+    dec(Count);
+    dec(Position,Length(Values[Count].Value));
+    Values[Count].Value := ''; // release memory
+    LastFind := Count-1;
+  end;
+end;
+
+function TRawByteStringGroup.Equals(const aAnother: TRawByteStringGroup): boolean;
+begin
+  if ((Values=nil) and (aAnother.Values<>nil)) or ((Values<>nil) and (aAnother.Values=nil)) or
+     (Position<>aAnother.Position) then
+    result := false else
+    if (Count<>1) or (aAnother.Count<>1) or (Values[0].Value<>aAnother.Values[0].Value) then
+      result := AsText=aAnother.AsText else
+      result := true;
+end;
+
+{$endif DELPHI5OROLDER}
+
+procedure TRawByteStringGroup.Clear;
+begin
+  Values := nil;
+  Position := 0;
+  Count := 0;
+  LastFind := 0;
+end;
+
+procedure TRawByteStringGroup.AppendTextAndClear(var aDest: RawByteString);
+var d,i: integer;
+    v: PRawByteStringGroupValue;
+begin
+  d := length(aDest);
+  SetLength(aDest,d+Position);
+  v := pointer(Values);
+  for i := 1 to Count do begin
+    {$ifdef FPC}Move{$else}MoveFast{$endif}(
+      pointer(v^.Value)^,PByteArray(aDest)[d+v^.Position],length(v^.Value));
+    inc(v);
+  end;
+  Clear;
+end;
+
+function TRawByteStringGroup.AsText: RawByteString;
+begin
+  if Values=nil then
+    result := '' else begin
+    if Count>1 then
+      Compact;
+    result := Values[0].Value;
+  end;
+end;
+
+procedure TRawByteStringGroup.Compact;
+var i: integer;
+    v: PRawByteStringGroupValue;
+    tmp: RawByteString;
+begin
+  if (Values<>nil) and (Count>1) then begin
+    SetString(tmp,nil,Position);
+    v := pointer(Values);
+    for i := 1 to Count do begin
+      {$ifdef FPC}Move{$else}MoveFast{$endif}(
+        pointer(v^.Value)^,PByteArray(tmp)[v^.Position],length(v^.Value));
+      {$ifdef FPC}Finalize(v^.Value){$else}v^.Value := ''{$endif}; // free chunks
+      inc(v);
+    end;
+    Values[0].Value := tmp; // use result for absolute compaction ;)
+    if Count>128 then
+      SetLength(Values,128);
+    Count := 1;
+    LastFind := 0;
+  end;
+end;
+
+function TRawByteStringGroup.AsBytes: TByteDynArray;
+var i: integer;
+begin
+  result := nil;
+  if Values=nil then
+    exit;
+  SetLength(result,Position);
+  for i := 0 to Count-1 do
+  with Values[i] do
+    {$ifdef FPC}Move{$else}MoveFast{$endif}(
+      pointer(Value)^,PByteArray(result)[Position],length(Value));
+end;
+
+procedure TRawByteStringGroup.Write(W: TTextWriter; Escape: TTextWriterKind);
+var i: integer;
+begin
+  if Values<>nil then
+    for i := 0 to Count-1 do
+    with Values[i] do
+      W.Add(PUTF8Char(pointer(Value)),length(Value),Escape);
+end;
+
+procedure TRawByteStringGroup.WriteBinary(W: TFileBufferWriter);
+var i: integer;
+begin
+  if Values<>nil then
+    for i := 0 to Count-1 do
+      W.WriteBinary(Values[i].Value);
+end;
+
+procedure TRawByteStringGroup.WriteString(W: TFileBufferWriter);
+begin
+  if Values=nil then begin
+    W.Write1(0);
+    exit;
+  end;
+  W.WriteVarUInt32(Position);
+  WriteBinary(W);
+end;
+
+procedure TRawByteStringGroup.AddFromReader(var aReader: TFastReader);
+var complexsize: integer;
+begin
+  complexsize := aReader.VarUInt32;
+  if complexsize>0 then // directly create a RawByteString from aReader buffer
+    Add(aReader.Next(complexsize),complexsize);
+end;
+
+function TRawByteStringGroup.Find(aPosition: integer): PRawByteStringGroupValue;
+var i: integer;
+begin
+  if (pointer(Values)<>nil) and (cardinal(aPosition)<cardinal(Position)) then begin
+    result := @Values[LastFind]; // this cache is very efficient in practice
+    if (aPosition>=result^.Position) and (aPosition<result^.Position+length(result^.Value)) then
+      exit;
+    result := @Values[1]; // seldom O(n) brute force search (in CPU L1 cache)
+    for i := 0 to Count-2 do
+      if result^.Position>aPosition then begin
+        dec(result);
+        LastFind := i;
+        exit;
+      end else
+        inc(result);
+    dec(result);
+    LastFind := Count-1;
+  end
+  else
+    result := nil;
+end;
+
+function TRawByteStringGroup.Find(aPosition, aLength: integer): pointer;
+var P: PRawByteStringGroupValue;
+    i: integer;
+label found;
+begin
+  if (pointer(Values)<>nil) and (cardinal(aPosition)<cardinal(Position)) then begin
+    P := @Values[LastFind]; // this cache is very efficient in practice
+    i := aPosition-P^.Position;
+    if (i>=0) and (i+aLength<length(P^.Value)) then begin
+      result := @PByteArray(P^.Value)[i];
+      exit;
+    end;
+    P := @Values[1]; // seldom O(n) brute force search (in CPU L1 cache)
+    for i := 0 to Count-2 do
+      if P^.Position>aPosition then begin
+        LastFind := i;
+found:  dec(P);
+        dec(aPosition,P^.Position);
+        if aLength-aPosition<=length(P^.Value) then
+          result := @PByteArray(P^.Value)[aPosition] else
+          result := nil;
+        exit;
+      end else
+        inc(P);
+    LastFind := Count-1;
+    goto found;
+  end
+  else
+    result := nil;
+end;
+
+procedure TRawByteStringGroup.FindAsText(aPosition, aLength: integer; out aText: RawByteString);
+var P: PRawByteStringGroupValue;
+begin
+  P := Find(aPosition);
+  if P=nil then
+    exit;
+  dec(aPosition,P^.Position);
+  if (aPosition=0) and (length(P^.Value)=aLength) then
+    aText := P^.Value else // direct return if not yet compacted
+    if aLength-aPosition<=length(P^.Value) then
+      SetString(aText,PAnsiChar(@PByteArray(P^.Value)[aPosition]),aLength);
+end;
+
+function TRawByteStringGroup.FindAsText(aPosition, aLength: integer): RawByteString;
+begin
+  FindAsText(aPosition,aLength,result);
+end;
+
+{$ifndef NOVARIANTS}
+procedure TRawByteStringGroup.FindAsVariant(aPosition, aLength: integer; out aDest: variant);
+var tmp: RawByteString;
+begin
+  tmp := FindAsText(aPosition,aLength);
+  if tmp <> '' then
+    RawUTF8ToVariant(tmp,aDest);
+end;
+{$endif NOVARIANTS}
+
+procedure TRawByteStringGroup.FindWrite(aPosition, aLength: integer;
+  W: TTextWriter; Escape: TTextWriterKind; TrailingCharsToIgnore: integer);
+var P: pointer;
+begin
+  P := Find(aPosition,aLength);
+  if P<>nil then
+    W.Add(PUTF8Char(P)+TrailingCharsToIgnore,aLength-TrailingCharsToIgnore,Escape);
+end;
+
+procedure TRawByteStringGroup.FindWriteBase64(aPosition, aLength: integer;
+  W: TTextWriter; withMagic: boolean);
+var P: pointer;
+begin
+  P := Find(aPosition,aLength);
+  if P<>nil then
+    W.WrBase64(P,aLength,withMagic);
+end;
+
+procedure TRawByteStringGroup.FindMove(aPosition, aLength: integer; aDest: pointer);
+var P: pointer;
+begin
+  P := Find(aPosition,aLength);
+  if P<>nil then
+    {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,aDest^,aLength);
+end;
+
+
+{ ************  Security and Identifiers classes ************************** }
+
+{ TSynUniqueIdentifierBits }
+
+function TSynUniqueIdentifierBits.Counter: word;
+begin
+  result := PWord(@Value)^ and $7fff;
+end;
+
+function TSynUniqueIdentifierBits.ProcessID: TSynUniqueIdentifierProcess;
+begin
+  result := (PCardinal(@Value)^ shr 15) and $ffff;
+end;
+
+function TSynUniqueIdentifierBits.CreateTimeUnix: TUnixTime;
+begin
+  result := Value shr 31;
+end;
+
+{$ifndef NOVARIANTS}
+function TSynUniqueIdentifierBits.AsVariant: variant;
+begin
+  ToVariant(result);
+end;
+
+procedure TSynUniqueIdentifierBits.ToVariant(out result: variant);
+begin
+  TDocVariantData(result).InitObject(['Created',DateTimeToIso8601Text(CreateDateTime),
+    'Identifier',ProcessID,'Counter',Counter,'Value',Value,
+    'Hex',Int64ToHex(Value)],JSON_OPTIONS_FAST);
+end;
+{$endif NOVARIANTS}
+
+{$ifndef DELPHI5OROLDER}
+function TSynUniqueIdentifierBits.Equal(const Another: TSynUniqueIdentifierBits): boolean;
+begin
+  result := Value=Another.Value;
+end;
+{$endif}
+
+procedure TSynUniqueIdentifierBits.From(const AID: TSynUniqueIdentifier);
+begin
+  Value := AID;
+end;
+
+function TSynUniqueIdentifierBits.CreateTimeLog: TTimeLog;
+begin
+  PTimeLogBits(@result)^.From(UnixTimeToDateTime(Value shr 31));
+end;
+
+function TSynUniqueIdentifierBits.CreateDateTime: TDateTime;
+begin
+  result := UnixTimeToDateTime(Value shr 31);
+end;
+
+function TSynUniqueIdentifierBits.ToHexa: RawUTF8;
+begin
+  Int64ToHex(Value,result);
+end;
+
+function TSynUniqueIdentifierBits.FromHexa(const hexa: RawUTF8): boolean;
+begin
+  result := (Length(hexa)=16) and HexDisplayToBin(pointer(hexa),@Value,SizeOf(Value));
+end;
+
+procedure TSynUniqueIdentifierBits.FromDateTime(const aDateTime: TDateTime);
+begin
+  Value := DateTimeToUnixTime(aDateTime) shl 31;
+end;
+
+procedure TSynUniqueIdentifierBits.FromUnixTime(const aUnixTime: TUnixTime);
+begin
+  Value := aUnixTime shl 31;
+end;
+
+
+{ TSynUniqueIdentifierGenerator }
+
+const // fSafe.Padding[] slots
+  SYNUNIQUEGEN_COMPUTECOUNT = 0;
+
+procedure TSynUniqueIdentifierGenerator.ComputeNew(
+  out result: TSynUniqueIdentifierBits);
+var currentTime: cardinal;
+begin
+  currentTime := UnixTimeUTC; // fast API (under Windows, faster than GetTickCount64)
+  fSafe.Lock;
+  try
+    if currentTime>fUnixCreateTime then begin
+      fUnixCreateTime := currentTime;
+      fLastCounter := 0; // reset
+    end;
+    if fLastCounter=$7fff then begin // collision (unlikely) -> cheat on timestamp
+      inc(fUnixCreateTime);
+      fLastCounter := 0;
+    end else
+      inc(fLastCounter);
+    result.Value := Int64(fLastCounter or fIdentifierShifted) or
+                    (Int64(fUnixCreateTime) shl 31);
+    inc(fSafe.Padding[SYNUNIQUEGEN_COMPUTECOUNT].VInt64);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TSynUniqueIdentifierGenerator.ComputeNew: Int64;
+begin
+  ComputeNew(PSynUniqueIdentifierBits(@result)^);
+end;
+
+function TSynUniqueIdentifierGenerator.GetComputedCount: Int64;
+begin
+  {$ifdef NOVARIANTS}
+  fSafe.Lock;
+  result := fSafe.Padding[SYNUNIQUEGEN_COMPUTECOUNT].VInt64;
+  fSafe.Unlock;
+  {$else}
+  result := fSafe.LockedInt64[SYNUNIQUEGEN_COMPUTECOUNT];
+  {$endif}
+end;
+
+procedure TSynUniqueIdentifierGenerator.ComputeFromDateTime(const aDateTime: TDateTime;
+  out result: TSynUniqueIdentifierBits);
+begin // assume fLastCounter=0
+  ComputeFromUnixTime(DateTimeToUnixTime(aDateTime),result);
+end;
+
+procedure TSynUniqueIdentifierGenerator.ComputeFromUnixTime(const aUnixTime: TUnixTime;
+  out result: TSynUniqueIdentifierBits);
+begin // assume fLastCounter=0
+  result.Value := aUnixTime shl 31;
+  if self<>nil then
+    result.Value := result.Value or fIdentifierShifted;
+end;
+
+constructor TSynUniqueIdentifierGenerator.Create(aIdentifier: TSynUniqueIdentifierProcess;
+  const aSharedObfuscationKey: RawUTF8);
+var i, len: integer;
+    crc: cardinal;
+begin
+  fIdentifier := aIdentifier;
+  fIdentifierShifted := aIdentifier shl 15;
+  fSafe.Init;
+  {$ifdef NOVARIANTS}
+  variant(fSafe.Padding[SYNUNIQUEGEN_COMPUTECOUNT]) := 0;
+  {$else}
+  fSafe.LockedInt64[SYNUNIQUEGEN_COMPUTECOUNT] := 0;
+  {$endif}
+  // compute obfuscation key using hash diffusion of the supplied text
+  len := length(aSharedObfuscationKey);
+  crc := crc32ctab[0,len and 1023];
+  for i := 0 to high(fCrypto)+1 do begin
+    crc := crc32ctab[0,crc and 1023] xor crc32ctab[3,i] xor
+           kr32(crc,pointer(aSharedObfuscationKey),len) xor
+           crc32c(crc,pointer(aSharedObfuscationKey),len) xor
+           fnv32(crc,pointer(aSharedObfuscationKey),len);
+    // do not modify those hashes above or you will break obfuscation pattern!
+    if i<=high(fCrypto) then
+      fCrypto[i] := crc else
+      fCryptoCRC := crc;
+  end;
+  // due to the weakness of the hash algorithms used, this approach is a bit
+  // naive and would be broken easily with brute force - but point here is to
+  // hide/obfuscate public values at end-user level (e.g. when publishing URIs),
+  // not implement strong security, so it sounds good enough for our purpose
+end;
+
+destructor TSynUniqueIdentifierGenerator.Destroy;
+begin
+  fSafe.Done;
+  {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(fCrypto,SizeOf(fCrypto),0);
+  fCryptoCRC := 0;
+  inherited Destroy;
+end;
+
+type // compute a 24 hexadecimal chars (96 bits) obfuscated pseudo file name
+  TSynUniqueIdentifierObfuscatedBits = packed record
+    crc: cardinal;
+    id: TSynUniqueIdentifierBits;
+  end;
+
+function TSynUniqueIdentifierGenerator.ToObfuscated(
+  const aIdentifier: TSynUniqueIdentifier): TSynUniqueIdentifierObfuscated;
+var bits: TSynUniqueIdentifierObfuscatedBits;
+    key: cardinal;
+begin
+  result := '';
+  if aIdentifier=0 then
+    exit;
+  bits.id.Value := aIdentifier;
+  if self=nil then
+    key := 0 else
+    key := crc32ctab[0,bits.id.ProcessID and 1023] xor fCryptoCRC;
+  bits.crc := crc32c(bits.id.ProcessID,@bits.id,SizeOf(bits.id)) xor key;
+  if self<>nil then
+    bits.id.Value := bits.id.Value xor PInt64(@fCrypto[high(fCrypto)-1])^;
+  result := BinToHex(@bits,SizeOf(bits));
+end;
+
+function TSynUniqueIdentifierGenerator.FromObfuscated(
+  const aObfuscated: TSynUniqueIdentifierObfuscated;
+  out aIdentifier: TSynUniqueIdentifier): boolean;
+var bits: TSynUniqueIdentifierObfuscatedBits;
+    len: integer;
+    key: cardinal;
+begin
+  result := false;
+  len := PosExChar('.',aObfuscated);
+  if len=0 then
+    len := Length(aObfuscated) else
+    dec(len); // trim right '.jpg'
+  if (len<>SizeOf(bits)*2) or
+     not SynCommons.HexToBin(pointer(aObfuscated),@bits,SizeOf(bits)) then
+    exit;
+  if self=nil then
+    key := 0 else begin
+    bits.id.Value := bits.id.Value xor PInt64(@fCrypto[high(fCrypto)-1])^;
+    key := crc32ctab[0,bits.id.ProcessID and 1023] xor fCryptoCRC;
+  end;
+  if crc32c(bits.id.ProcessID,@bits.id,SizeOf(bits.id)) xor key=bits.crc then begin
+    aIdentifier := bits.id.Value;
+    result := true;
+  end;
+end;
+
+
+{ TSynPersistentWithPassword }
+
+destructor TSynPersistentWithPassword.Destroy;
+begin
+  UniqueRawUTF8(fPassword);
+  FillZero(fPassword);
+  inherited Destroy;
+end;
+
+class function TSynPersistentWithPassword.ComputePassword(const PlainPassword: RawUTF8;
+  CustomKey: cardinal): RawUTF8;
+var instance: TSynPersistentWithPassword;
+begin
+  instance := TSynPersistentWithPassword.Create;
+  try
+    instance.Key := CustomKey;
+    instance.SetPassWordPlain(PlainPassword);
+    result := instance.fPassWord;
+  finally
+    instance.Free;
+  end;
+end;
+
+class function TSynPersistentWithPassword.ComputePassword(PlainPassword: pointer;
+  PlainPasswordLen: integer; CustomKey: cardinal): RawUTF8;
+begin
+  result := ComputePassword(BinToBase64uri(PlainPassword,PlainPasswordLen));
+end;
+
+class function TSynPersistentWithPassword.ComputePlainPassword(const CypheredPassword: RawUTF8;
+  CustomKey: cardinal; const AppSecret: RawUTF8): RawUTF8;
+var instance: TSynPersistentWithPassword;
+begin
+  instance := TSynPersistentWithPassword.Create;
+  try
+    instance.Key := CustomKey;
+    instance.fPassWord := CypheredPassword;
+    result := instance.GetPassWordPlainInternal(AppSecret);
+  finally
+    instance.Free;
+  end;
+end;
+
+function TSynPersistentWithPassword.GetPasswordFieldAddress: pointer;
+begin
+  result := @fPassword;
+end;
+
+function TSynPersistentWithPassword.GetKey: cardinal;
+begin
+  if self=nil then
+    result := 0 else
+    result := fKey xor $A5abba5A;
+end;
+
+function TSynPersistentWithPassword.GetPassWordPlain: RawUTF8;
+begin
+  result := GetPassWordPlainInternal('');
+end;
+
+function TSynPersistentWithPassword.GetPassWordPlainInternal(AppSecret: RawUTF8): RawUTF8;
+var value,pass: RawByteString;
+    usr: RawUTF8;
+    i,j: integer;
+begin
+  result := '';
+  if (self=nil) or (fPassWord='') then
+    exit;
+  if Assigned(TSynPersistentWithPasswordUserCrypt) then begin
+    if AppSecret='' then
+      ToText(ClassType,AppSecret);
+    usr := ExeVersion.User+':';
+    i := PosEx(usr,fPassword);
+    if (i=1) or ((i>0) and (fPassword[i-1]=',')) then begin
+      inc(i,length(usr));
+      j := PosEx(',',fPassword,i);
+      if j=0 then
+        j := length(fPassword)+1;
+      Base64ToBin(@fPassword[i],j-i,pass);
+      if pass<>'' then
+        result := TSynPersistentWithPasswordUserCrypt(pass,AppSecret,false);
+    end else begin
+      i := PosExChar(':',fPassword);
+      if i>0 then
+        raise ESynException.CreateUTF8('%.GetPassWordPlain unable to retrieve the '+
+          'stored value: current user is "%", but password in % was encoded for "%"',
+          [self,ExeVersion.User,AppSecret,copy(fPassword,1,i-1)]);
+    end;
+  end;
+  if result='' then begin
+    value := Base64ToBin(fPassWord);
+    SymmetricEncrypt(GetKey,value);
+    result := value;
+  end;
+end;
+
+procedure TSynPersistentWithPassword.SetPassWordPlain(const value: RawUTF8);
+var tmp: RawByteString;
+begin
+  if self=nil then
+    exit;
+  if value='' then begin
+    fPassWord := '';
+    exit;
+  end;
+  SetString(tmp,PAnsiChar(value),Length(value)); // private copy
+  SymmetricEncrypt(GetKey,tmp);
+  fPassWord := BinToBase64(tmp);
+end;
+
+
+{ TSynConnectionDefinition }
+
+constructor TSynConnectionDefinition.CreateFromJSON(const JSON: RawUTF8;
+  Key: cardinal);
+var privateCopy: RawUTF8;
+    values: array[0..4] of TValuePUTF8Char;
+begin
+  fKey := Key;
+  privateCopy := JSON;
+  JSONDecode(privateCopy,['Kind','ServerName','DatabaseName','User','Password'],@values);
+  fKind := values[0].ToString;
+  values[1].ToUTF8(fServerName);
+  values[2].ToUTF8(fDatabaseName);
+  values[3].ToUTF8(fUser);
+  values[4].ToUTF8(fPassWord);
+end;
+
+function TSynConnectionDefinition.SaveToJSON: RawUTF8;
+begin
+  result := JSONEncode(['Kind',fKind,'ServerName',fServerName,
+    'DatabaseName',fDatabaseName,'User',fUser,'Password',fPassword]);
+end;
+
+
+{ TSynAuthenticationAbstract }
+
+constructor TSynAuthenticationAbstract.Create;
+begin
+  fSafe.Init;
+  fTokenSeed := Random32;
+  fSessionGenerator := abs(fTokenSeed*PPtrInt(self)^);
+  fTokenSeed := abs(fTokenSeed*Random32);
+end;
+
+destructor TSynAuthenticationAbstract.Destroy;
+begin
+  fSafe.Done;
+  inherited;
+end;
+
+class function TSynAuthenticationAbstract.ComputeHash(Token: Int64;
+  const UserName,PassWord: RawUTF8): cardinal;
+begin // rough authentication - xxHash32 is less reversible than crc32c
+  result := xxHash32(xxHash32(xxHash32(Token,@Token,SizeOf(Token)),
+    pointer(UserName),length(UserName)),pointer(Password),length(PassWord));
+end;
+
+function TSynAuthenticationAbstract.ComputeCredential(previous: boolean;
+  const UserName,PassWord: RawUTF8): cardinal;
+var tok: Int64;
+begin
+  tok := GetTickCount64 div 10000;
+  if previous then
+    dec(tok);
+  result := ComputeHash(tok xor fTokenSeed,UserName,PassWord);
+end;
+
+function TSynAuthenticationAbstract.CurrentToken: Int64;
+begin
+  result := (GetTickCount64 div 10000) xor fTokenSeed;
+end;
+
+procedure TSynAuthenticationAbstract.AuthenticateUser(const aName, aPassword: RawUTF8);
+begin
+  raise ESynException.CreateFmt('%.AuthenticateUser() is not implemented',[self]);
+end;
+
+procedure TSynAuthenticationAbstract.DisauthenticateUser(const aName: RawUTF8);
+begin
+  raise ESynException.CreateFmt('%.DisauthenticateUser() is not implemented',[self]);
+end;
+
+function TSynAuthenticationAbstract.CreateSession(const User: RawUTF8; Hash: cardinal): integer;
+var password: RawUTF8;
+begin
+  result := 0;
+  fSafe.Lock;
+  try
+    // check the given Hash challenge, against stored credentials
+    if not GetPassword(User,password) then
+      exit;
+    if (ComputeCredential(false,User,password)<>Hash) and
+       (ComputeCredential(true,User,password)<>Hash) then
+      exit;
+    // create the new session
+    repeat
+      result := fSessionGenerator;
+      inc(fSessionGenerator);
+    until result<>0;
+    AddSortedInteger(fSessions,fSessionsCount,result);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TSynAuthenticationAbstract.SessionExists(aID: integer): boolean;
+begin
+  fSafe.Lock;
+  try
+    result := FastFindIntegerSorted(pointer(fSessions),fSessionsCount-1,aID)>=0;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure TSynAuthenticationAbstract.RemoveSession(aID: integer);
+var i: integer;
+begin
+  fSafe.Lock;
+  try
+    i := FastFindIntegerSorted(pointer(fSessions),fSessionsCount-1,aID);
+    if i>=0 then
+      DeleteInteger(fSessions,fSessionsCount,i);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+
+{ TSynAuthentication }
+
+constructor TSynAuthentication.Create(const aUserName,aPassword: RawUTF8);
+begin
+  inherited Create;
+  fCredentials.Init(true);
+  if aUserName<>'' then
+    AuthenticateUser(aUserName,aPassword);
+end;
+
+function TSynAuthentication.GetPassword(const UserName: RawUTF8;
+  out Password: RawUTF8): boolean;
+var i: integer;
+begin // caller did protect this method via fSafe.Lock
+  i := fCredentials.Find(UserName);
+  if i<0 then begin
+    result := false;
+    exit;
+  end;
+  password := fCredentials.List[i].Value;
+  result := true;
+end;
+
+function TSynAuthentication.GetUsersCount: integer;
+begin
+  fSafe.Lock;
+  try
+    result := fCredentials.Count;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure TSynAuthentication.AuthenticateUser(const aName, aPassword: RawUTF8);
+begin
+  fSafe.Lock;
+  try
+    fCredentials.Add(aName,aPassword);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure TSynAuthentication.DisauthenticateUser(const aName: RawUTF8);
+begin
+  fSafe.Lock;
+  try
+    fCredentials.Delete(aName);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+
+{ ************ Database types and classes ************************** }
+
+{$ifdef FPC}{$push}{$endif}
+{$WARNINGS OFF} // yes, we know there will be dead code below: we rely on it ;)
+
+function IsZero(const Fields: TSQLFieldBits): boolean;
+var f: TPtrIntArray absolute Fields;
+begin
+  {$ifdef CPU64}
+  if MAX_SQLFIELDS=64 then
+    result := (f[0]=0) else
+  if MAX_SQLFields=128 then
+    result := (f[0]=0) and (f[1]=0) else
+  if MAX_SQLFields=192 then
+    result := (f[0]=0) and (f[1]=0) and (f[2]=0) else
+  if MAX_SQLFields=256 then
+    result := (f[0]=0) and (f[1]=0) and (f[2]=0) and (f[3]=0) else
+  {$else}
+  if MAX_SQLFIELDS=64 then
+    result := (f[0]=0) and (f[1]=0) else
+  if MAX_SQLFields=128 then
+    result := (f[0]=0) and (f[1]=0) and (f[2]=0) and (f[3]=0) else
+  if MAX_SQLFields=192 then
+    result := (f[0]=0) and (f[1]=0) and (f[2]=0) and (f[3]=0)
+          and (f[4]=0) and (f[5]=0) else
+  if MAX_SQLFields=256 then
+    result := (f[0]=0) and (f[1]=0) and (f[2]=0) and (f[3]=0)
+          and (f[4]=0) and (f[5]=0) and (f[6]=0) and (f[7]=0) else
+  {$endif}
+    result := IsZero(@Fields,SizeOf(Fields))
+end;
+
+function IsEqual(const A,B: TSQLFieldBits): boolean;
+var a_: TPtrIntArray absolute A;
+    b_: TPtrIntArray absolute B;
+begin
+  {$ifdef CPU64}
+  if MAX_SQLFIELDS=64 then
+    result := (a_[0]=b_[0]) else
+  if MAX_SQLFields=128 then
+    result := (a_[0]=b_[0]) and (a_[1]=b_[1]) else
+  if MAX_SQLFields=192 then
+    result := (a_[0]=b_[0]) and (a_[1]=b_[1]) and (a_[2]=b_[2]) else
+  if MAX_SQLFields=256 then
+    result := (a_[0]=b_[0]) and (a_[1]=b_[1]) and (a_[2]=b_[2]) and (a_[3]=b_[3]) else
+  {$else}
+  if MAX_SQLFIELDS=64 then
+    result := (a_[0]=b_[0]) and (a_[1]=b_[1]) else
+  if MAX_SQLFields=128 then
+    result := (a_[0]=b_[0]) and (a_[1]=b_[1]) and (a_[2]=b_[2]) and (a_[3]=b_[3]) else
+  if MAX_SQLFields=192 then
+    result := (a_[0]=b_[0]) and (a_[1]=b_[1]) and (a_[2]=b_[2]) and (a_[3]=b_[3])
+          and (a_[4]=b_[4]) and (a_[5]=b_[5]) else
+  if MAX_SQLFields=256 then
+    result := (a_[0]=b_[0]) and (a_[1]=b_[1]) and (a_[2]=b_[2]) and (a_[3]=b_[3])
+          and (a_[4]=b_[4]) and (a_[5]=b_[5]) and (a_[6]=b_[6]) and (a_[7]=b_[7]) else
+  {$endif}
+    result := CompareMemFixed(@A,@B,SizeOf(TSQLFieldBits))
+end;
+
+procedure FillZero(var Fields: TSQLFieldBits);
+begin
+  if MAX_SQLFIELDS=64 then
+    PInt64(@Fields)^ := 0 else
+  if MAX_SQLFields=128 then begin
+    PInt64Array(@Fields)^[0] := 0;
+    PInt64Array(@Fields)^[1] := 0;
+  end else
+  if MAX_SQLFields=192 then begin
+    PInt64Array(@Fields)^[0] := 0;
+    PInt64Array(@Fields)^[1] := 0;
+    PInt64Array(@Fields)^[2] := 0;
+  end else
+  if MAX_SQLFields=256 then begin
+    PInt64Array(@Fields)^[0] := 0;
+    PInt64Array(@Fields)^[1] := 0;
+    PInt64Array(@Fields)^[2] := 0;
+    PInt64Array(@Fields)^[3] := 0;
+  end else
+    {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(Fields,SizeOf(Fields),0);
+end;
+
+{$ifdef FPC}{$pop}{$else}{$WARNINGS ON}{$endif}
+
+procedure FieldBitsToIndex(const Fields: TSQLFieldBits; var Index: TSQLFieldIndexDynArray;
+  MaxLength,IndexStart: integer);
+var i,n: integer;
+    sets: array[0..MAX_SQLFIELDS-1] of TSQLFieldIndex; // to avoid memory reallocation
+begin
+  n := 0;
+  for i := 0 to MaxLength-1 do
+    if i in Fields then begin
+      sets[n] := i;
+      inc(n);
+    end;
+  SetLength(Index,IndexStart+n);
+  for i := 0 to n-1 do
+    Index[IndexStart+i] := sets[i];
+end;
+
+function FieldBitsToIndex(const Fields: TSQLFieldBits;
+  MaxLength: integer): TSQLFieldIndexDynArray;
+begin
+  FieldBitsToIndex(Fields,result,MaxLength);
+end;
+
+function AddFieldIndex(var Indexes: TSQLFieldIndexDynArray; Field: integer): integer;
+begin
+  result := length(Indexes);
+  SetLength(Indexes,result+1);
+  Indexes[result] := Field;
+end;
+
+function SearchFieldIndex(var Indexes: TSQLFieldIndexDynArray; Field: integer): integer;
+begin
+  for result := 0 to length(Indexes)-1 do
+    if Indexes[result]=Field then
+      exit;
+  result := -1;
+end;
+
+procedure FieldIndexToBits(const Index: TSQLFieldIndexDynArray; var Fields: TSQLFieldBits);
+var i: integer;
+begin
+  {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(Fields,SizeOf(Fields),0);
+  for i := 0 to Length(Index)-1 do
+    if Index[i]>=0 then
+      include(Fields,Index[i]);
+end;
+
+function FieldIndexToBits(const Index: TSQLFieldIndexDynArray): TSQLFieldBits;
+begin
+  FieldIndexToBits(Index,result);
+end;
+
+function DateToSQL(Date: TDateTime): RawUTF8;
+begin
+  if Date<=0 then
+    result := '' else begin
+    SetLength(result,13);
+    PCardinal(pointer(result))^ := JSON_SQLDATE_MAGIC;
+    DateToIso8601PChar(Date,PUTF8Char(pointer(result))+3,True);
+  end;
+end;
+
+function DateToSQL(Year,Month,Day: Cardinal): RawUTF8;
+begin
+  if (Year=0) or (Month-1>11) or (Day-1>30) then
+    result := '' else begin
+    SetLength(result,13);
+    PCardinal(pointer(result))^ := JSON_SQLDATE_MAGIC;
+    DateToIso8601PChar(PUTF8Char(pointer(result))+3,True,Year,Month,Day);
+  end;
+end;
+
+var
+  JSON_SQLDATE_MAGIC_TEXT: RawUTF8;
+
+function DateTimeToSQL(DT: TDateTime; WithMS: boolean): RawUTF8;
+begin
+  if DT<=0 then
+    result := '' else begin
+    if frac(DT)=0 then
+      result := JSON_SQLDATE_MAGIC_TEXT+DateToIso8601(DT,true) else
+    if trunc(DT)=0 then
+      result := JSON_SQLDATE_MAGIC_TEXT+TimeToIso8601(DT,true,'T',WithMS) else
+      result := JSON_SQLDATE_MAGIC_TEXT+DateTimeToIso8601(DT,true,'T',WithMS);
+  end;
+end;
+
+function TimeLogToSQL(const Timestamp: TTimeLog): RawUTF8;
+begin
+  if Timestamp=0 then
+    result := '' else
+    result := JSON_SQLDATE_MAGIC_TEXT+PTimeLogBits(@Timestamp)^.Text(true);
+end;
+
+function Iso8601ToSQL(const S: RawByteString): RawUTF8;
+begin
+  if IsIso8601(pointer(S),length(S)) then
+    result := JSON_SQLDATE_MAGIC_TEXT+S else
+    result := '';
+end;
+
+function SQLToDateTime(const ParamValueWithMagic: RawUTF8): TDateTime;
+begin
+  result := Iso8601ToDateTimePUTF8Char(PUTF8Char(pointer(ParamValueWithMagic))+3,
+    length(ParamValueWithMagic)-3);
+end;
+
+const
+  NULL_LOW  = ord('n')+ord('u')shl 8+ord('l')shl 16+ord('l')shl 24;
+
+function SQLParamContent(P: PUTF8Char; out ParamType: TSQLParamType; out ParamValue: RawUTF8;
+  out wasNull: boolean): PUTF8Char;
+var PBeg: PAnsiChar;
+    L: integer;
+    c: cardinal;
+begin
+  ParamType := sptUnknown;
+  wasNull := false;
+  result := nil;
+  if P=nil then
+    exit;
+  while (P^<=' ') and (P^<>#0) do inc(P);
+  case P^ of
+  '''','"': begin
+    P := UnQuoteSQLStringVar(P,ParamValue);
+    if P=nil then
+      exit; // not a valid quoted string (e.g. unexpected end in middle of it)
+    ParamType := sptText;
+    L := length(ParamValue)-3;
+    if L>0 then begin
+      c := PInteger(ParamValue)^ and $00ffffff;
+      if c=JSON_BASE64_MAGIC then begin
+        // ':("\uFFF0base64encodedbinary"):' format -> decode
+        Base64MagicDecode(ParamValue); // wrapper function to avoid temp. string
+        ParamType := sptBlob;
+      end else
+      if (c=JSON_SQLDATE_MAGIC) and // handle ':("\uFFF112012-05-04"):' format
+         IsIso8601(PUTF8Char(pointer(ParamValue))+3,L) then begin
+        Delete(ParamValue,1,3);   // return only ISO-8601 text
+        ParamType := sptDateTime; // identified as Date/Time
+      end;
+    end;
+  end;
+  '-','+','0'..'9': begin // allow 0 or + in SQL
+    // check if P^ is a true numerical value
+    PBeg := pointer(P);
+    ParamType := sptInteger;
+    repeat inc(P) until not (P^ in ['0'..'9']); // check digits
+    if P^='.' then begin
+      inc(P);
+      if P^ in ['0'..'9'] then begin
+        ParamType := sptFloat;
+        repeat inc(P) until not (P^ in ['0'..'9']); // check fractional digits
+      end else begin
+        ParamType := sptUnknown; // invalid '23023.' value
+        exit;
+      end;
+    end;
+    if byte(P^) and $DF=ord('E') then begin
+      ParamType := sptFloat;
+      inc(P);
+      if P^='+' then inc(P) else
+      if P^='-' then inc(P);
+      while P^ in ['0'..'9'] do inc(P);
+    end;
+    FastSetString(ParamValue,PBeg,P-PBeg);
+  end;
+  'n':
+  if PInteger(P)^=NULL_LOW then begin
+    inc(P,4);
+    wasNull := true;
+  end else
+    exit; // invalid content (only :(null): expected)
+  else
+    exit; // invalid content
+  end;
+  while (P^<=' ') and (P^<>#0) do inc(P);
+  if PWord(P)^<>Ord(')')+Ord(':')shl 8 then
+    // we expect finishing with P^ pointing at '):'
+    ParamType := sptUnknown else
+    // result<>nil only if value content in P^
+    result := P+2;
+end;
+
+function ExtractInlineParameters(const SQL: RawUTF8;
+  var Types: TSQLParamTypeDynArray; var Values: TRawUTF8DynArray;
+  var maxParam: integer; var Nulls: TSQLFieldBits): RawUTF8;
+var ppBeg: integer;
+    P, Gen: PUTF8Char;
+    wasNull: boolean;
+begin
+  maxParam := 0;
+  {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(Nulls,SizeOf(Nulls),0);
+  ppBeg := PosEx(RawUTF8(':('),SQL,1);
+  if (ppBeg=0) or (PosEx(RawUTF8('):'),SQL,ppBeg+2)=0) then begin
+    // SQL code with no valid :(...): internal parameters -> leave maxParam=0
+    result := SQL;
+    exit;
+  end;
+  // compute GenericSQL from SQL, converting :(...): into ?
+  FastSetString(result,pointer(SQL),length(SQL)); // private copy for unescape
+  P := pointer(result); // in-place string unescape (keep SQL untouched)
+  Gen := P+ppBeg-1; // Gen^ just before :(
+  inc(P,ppBeg+1);   // P^ just after :(
+  repeat
+    Gen^ := '?'; // replace :(...): by ?
+    inc(Gen);
+    if length(Values)<=maxParam then
+      SetLength(Values,maxParam+16);
+    if length(Types)<=maxParam then
+      SetLength(Types,maxParam+64);
+    P := SQLParamContent(P,Types[maxParam],Values[maxParam],wasNull);
+    if P=nil then begin
+      maxParam := 0;
+      result := SQL;
+      exit; // any invalid parameter -> try direct SQL
+    end;
+    if wasNull then
+      include(Nulls,maxParam);
+    while (P^<>#0) and (PWord(P)^<>Ord(':')+Ord('(')shl 8) do begin
+      Gen^ := P^;
+      inc(Gen);
+      inc(P);
+    end;
+    if P^=#0 then
+      Break;
+    inc(P,2);
+    inc(maxParam);
+  until false;
+  // return generic SQL statement, with ? place-holders and params in Values[]
+  SetLength(result,Gen-pointer(result));
+  inc(maxParam);
+end;
+
+function InlineParameter(ID: Int64): shortstring;
+begin
+  FormatShort(':(%):',[ID],result);
+end;
+
+function InlineParameter(const value: RawUTF8): RawUTF8;
+begin
+  QuotedStrJSON(value,result,':(','):');
+end;
+
+function SQLVarLength(const Value: TSQLVar): integer;
+begin
+  case Value.VType of
+    ftBlob:
+      result := Value.VBlobLen;
+    ftUTF8:
+      result := StrLen(Value.VText); // fast enough for our purpose
+    else
+      result := 0; // simple/ordinal values, or ftNull
+  end;
+end;
+
+{$ifndef NOVARIANTS}
+
+procedure VariantToSQLVar(const Input: variant; var temp: RawByteString;
+  var Output: TSQLVar);
+var wasString: boolean;
+begin
+  Output.Options := [];
+  with TVarData(Input) do
+  if VType=varVariant or varByRef then
+    VariantToSQLVar(PVariant(VPointer)^,temp,Output) else
+  case VType of
+  varEmpty, varNull:
+    Output.VType := ftNull;
+  varByte: begin
+    Output.VType := ftInt64;
+    Output.VInt64 := VByte;
+  end;
+  varInteger: begin
+    Output.VType := ftInt64;
+    Output.VInt64 := VInteger;
+  end;
+  {$ifndef DELPHI5OROLDER}
+  varLongWord: begin
+    Output.VType := ftInt64;
+    Output.VInt64 := VLongWord;
+  end;
+  {$endif}
+  varWord64, varInt64: begin
+    Output.VType := ftInt64;
+    Output.VInt64 := VInt64;
+  end;
+  varSingle: begin
+    Output.VType := ftDouble;
+    Output.VDouble := VSingle;
+  end;
+  varDouble: begin // varDate would be converted into ISO8601 by VariantToUTF8()
+    Output.VType := ftDouble;
+    Output.VDouble := VDouble;
+  end;
+  varCurrency: begin
+    Output.VType := ftCurrency;
+    Output.VInt64 := VInt64;
+  end;
+  varString: begin // assume RawUTF8
+    Output.VType := ftUTF8;
+    Output.VText := VPointer;
+  end;
+  else // handle less current cases
+    if VariantToInt64(Input,Output.VInt64) then
+      Output.VType := ftInt64 else begin
+      VariantToUTF8(Input,RawUTF8(temp),wasString);
+      if wasString then begin
+        Output.VType := ftUTF8;
+        Output.VText := pointer(temp);
+      end else
+        Output.VType := ftNull;
+    end;
+  end;
+end;
+
+function VariantVTypeToSQLDBFieldType(VType: word): TSQLDBFieldType;
+begin
+  case VType of
+  varNull:
+    result := ftNull;
+  {$ifndef DELPHI5OROLDER}varShortInt, varWord, varLongWord,{$endif}
+  varSmallInt, varByte, varBoolean, varInteger, varInt64, varWord64:
+    result := ftInt64;
+  varSingle,varDouble:
+    result := ftDouble;
+  varDate:
+    result := ftDate;
+  varCurrency:
+    result := ftCurrency;
+  varString:
+    result := ftUTF8;
+  else
+    result := ftUnknown; // includes varEmpty
+  end;
+end;
+
+function VariantTypeToSQLDBFieldType(const V: Variant): TSQLDBFieldType;
+var VD: TVarData absolute V;
+    tmp: TVarData;
+begin
+  result := VariantVTypeToSQLDBFieldType(VD.VType);
+  case result of
+    ftUnknown:
+      if VD.VType=varEmpty then
+        result := ftUnknown else
+      if SetVariantUnRefSimpleValue(V,tmp) then
+        result := VariantTypeToSQLDBFieldType(variant(tmp)) else
+        result := ftUTF8;
+    ftUTF8:
+      if (VD.VString<>nil) and (PCardinal(VD.VString)^ and $ffffff=JSON_BASE64_MAGIC) then
+        result := ftBlob;
+  end;
+end;
+
+function TextToSQLDBFieldType(json: PUTF8Char): TSQLDBFieldType;
+begin
+  if json=nil then
+    result := ftNull else
+    result := VariantVTypeToSQLDBFieldType(TextToVariantNumberType(json));
+end;
+
+{$endif NOVARIANTS}
+
+{ TJSONWriter }
+
+procedure TJSONWriter.CancelAllVoid;
+const VOIDARRAY: PAnsiChar = '[]'#10;
+      VOIDFIELD: PAnsiChar = '{"FieldCount":0}';
+begin
+  CancelAll; // rewind JSON
+  if fExpand then // same as sqlite3_get_table()
+    inc(fTotalFileSize,fStream.Write(VOIDARRAY^,3)) else
+    inc(fTotalFileSize,fStream.Write(VOIDFIELD^,16));
+end;
+
+constructor TJSONWriter.Create(aStream: TStream; Expand, withID: boolean;
+  const Fields: TSQLFieldBits; aBufSize: integer);
+begin
+  Create(aStream,Expand,withID,FieldBitsToIndex(Fields),aBufSize);
+end;
+
+constructor TJSONWriter.Create(aStream: TStream; Expand, withID: boolean;
+  const Fields: TSQLFieldIndexDynArray; aBufSize: integer);
+begin
+  if aStream=nil then
+    CreateOwnedStream else
+    inherited Create(aStream,aBufSize);
+  fExpand := Expand;
+  fWithID := withID;
+  fFields := Fields;
+end;
+
+procedure TJSONWriter.AddColumns(aKnownRowsCount: integer);
+var i: integer;
+begin
+  if fExpand then begin
+    if twoForceJSONExtended in CustomOptions then
+      for i := 0 to High(ColNames) do
+        ColNames[i] := ColNames[i]+':' else
+      for i := 0 to High(ColNames) do
+        ColNames[i] := '"'+ColNames[i]+'":';
+  end else begin
+    AddShort('{"fieldCount":');
+    Add(length(ColNames));
+    if aKnownRowsCount>0 then begin
+      AddShort(',"rowCount":');
+      Add(aKnownRowsCount);
+    end;
+    AddShort(',"values":["');
+    // first row is FieldNames
+    for i := 0 to High(ColNames) do begin
+      AddString(ColNames[i]);
+      AddNoJSONEscape(PAnsiChar('","'),3);
+    end;
+    CancelLastChar('"');
+    fStartDataPosition := fStream.Position+(B-fTempBuf);
+     // B := buf-1 at startup -> need ',val11' position in
+     // "values":["col1","col2",val11,' i.e. current pos without the ','
+  end;
+end;
+
+procedure TJSONWriter.ChangeExpandedFields(aWithID: boolean;
+  const aFields: TSQLFieldIndexDynArray);
+begin
+  if not Expand then
+    raise ESynException.CreateUTF8(
+      '%.ChangeExpandedFields() called with Expanded=false',[self]);
+  fWithID := aWithID;
+  fFields := aFields;
+end;
+
+procedure TJSONWriter.EndJSONObject(aKnownRowsCount,aRowsCount: integer;
+  aFlushFinal: boolean);
+begin
+  CancelLastComma; // cancel last ','
+  Add(']');
+  if not fExpand then begin
+    if aKnownRowsCount=0 then begin
+      AddShort(',"rowCount":');
+      Add(aRowsCount);
+    end;
+    Add('}');
+  end;
+  Add(#10);
+  if aFlushFinal then
+    FlushFinal;
+end;
+
+procedure TJSONWriter.TrimFirstRow;
+var P, PBegin, PEnd: PUTF8Char;
+begin
+  if (self=nil) or not fStream.InheritsFrom(TMemoryStream) or
+     fExpand or (fStartDataPosition=0) then
+    exit;
+  // go to begin of first row
+  FlushToStream; // we need the data to be in fStream memory
+  // PBegin^=val11 in { "fieldCount":1,"values":["col1","col2",val11,"val12",val21,..] }
+  PBegin := TMemoryStream(fStream).Memory;
+  PEnd := PBegin+fStream.Position;
+  PEnd^ := #0; // mark end of current values
+  inc(PBegin,fStartDataPosition+1); // +1 to include ',' of ',val11'
+  // jump to end of first row
+  P := GotoNextJSONItem(PBegin,length(ColNames));
+  if P=nil then exit; // unexpected end
+  // trim first row data
+  if P^<>#0 then
+    {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,PBegin^,PEnd-P); // erase content
+  fStream.Seek(PBegin-P,soCurrent); // adjust current stream position
+end;
+
+
+{ ************ Expression Search Engine ************************** }
+
+function ToText(r: TExprParserResult): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TExprParserResult), ord(r));
+end;
+
+function ToUTF8(r: TExprParserResult): RawUTF8;
+begin
+  result := UnCamelCase(TrimLeftLowerCaseShort(ToText(r)));
+end;
+
+
+{ TExprNode }
+
+function TExprNode.Append(node: TExprNode): boolean;
+begin
+  result := node <> nil;
+  if result then
+    Last.fNext := node;
+end;
+
+constructor TExprNode.Create(nodeType: TExprNodeType);
+begin
+  inherited Create;
+  fNodeType := nodeType;
+end;
+
+destructor TExprNode.Destroy;
+begin
+  fNext.Free;
+  inherited Destroy;
+end;
+
+function TExprNode.Last: TExprNode;
+begin
+  result := self;
+  while result.Next <> nil do
+    result := result.Next;
+end;
+
+
+{ TParserAbstract }
+
+constructor TParserAbstract.Create;
+begin
+  inherited Create;
+  Initialize;
+end;
+
+destructor TParserAbstract.Destroy;
+begin
+  Clear;
+  inherited Destroy;
+end;
+
+procedure TParserAbstract.Clear;
+begin
+  fWordCount := 0;
+  fWords := nil;
+  fExpression := '';
+  FreeAndNil(fFirstNode);
+end;
+
+function TParserAbstract.ParseExpr: TExprNode;
+begin
+  result := ParseFactor;
+  ParseNextCurrentWord;
+  if (fCurrentWord = '') or (fCurrentWord = ')') then
+    exit;
+  if IdemPropNameU(fCurrentWord, fAndWord) then begin // w1 & w2 = w1 AND w2
+    ParseNextCurrentWord;
+    if result.Append(ParseExpr) then
+      result.Append(TExprNode.Create(entAnd));
+    exit;
+  end
+  else if IdemPropNameU(fCurrentWord, fOrWord) then begin // w1 + w2 = w1 OR w2
+    ParseNextCurrentWord;
+    if result.Append(ParseExpr) then
+      result.Append(TExprNode.Create(entOr));
+    exit;
+  end
+  else if fNoWordIsAnd and result.Append(ParseExpr) then // 'w1 w2' = 'w1 & w2'
+    result.Append(TExprNode.Create(entAnd));
+end;
+
+function TParserAbstract.ParseFactor: TExprNode;
+begin
+  if fCurrentError <> eprSuccess then
+    result := nil
+  else if IdemPropNameU(fCurrentWord, fNotWord) then begin
+    ParseNextCurrentWord;
+    result := ParseFactor;
+    if fCurrentError <> eprSuccess then
+      exit;
+    result.Append(TExprNode.Create(entNot));
+  end
+  else
+    result := ParseTerm;
+end;
+
+function TParserAbstract.ParseTerm: TExprNode;
+begin
+  result := nil;
+  if fCurrentError <> eprSuccess then
+    exit;
+  if fCurrentWord = '(' then begin
+    ParseNextCurrentWord;
+    result := ParseExpr;
+    if fCurrentError <> eprSuccess then
+      exit;
+    if fCurrentWord <> ')' then begin
+      FreeAndNil(result);
+      fCurrentError := eprMissingParenthesis;
+    end;
+  end
+  else if fCurrentWord = '' then begin
+    result := nil;
+    fCurrentError := eprMissingFinalWord;
+  end
+  else
+    try // calls meta-class overriden constructor
+      result := fWordClass.Create(self, fCurrentWord);
+      fCurrentError := TExprNodeWordAbstract(result).ParseWord;
+      if fCurrentError <> eprSuccess then begin
+        FreeAndNil(result);
+        exit;
+      end;
+      SetLength(fWords, fWordCount + 1);
+      fWords[fWordCount] := TExprNodeWordAbstract(result);
+      inc(fWordCount);
+    except
+      FreeAndNil(result);
+      fCurrentError := eprInvalidExpression;
+    end;
+end;
+
+function TParserAbstract.Parse(const aExpression: RawUTF8): TExprParserResult;
+var
+  depth: integer;
+  n: TExprNode;
+begin
+  Clear;
+  fCurrentError := eprSuccess;
+  fCurrent := pointer(aExpression);
+  ParseNextCurrentWord;
+  if fCurrentWord = '' then begin
+    result := eprNoExpression;
+    exit;
+  end;
+  fFirstNode := ParseExpr;
+  result := fCurrentError;
+  if result = eprSuccess then begin
+    depth := 0;
+    n := fFirstNode;
+    while n <> nil do begin
+      case n.NodeType of
+        entWord: begin
+          inc(depth);
+          if depth > high(fFoundStack) then begin
+            result := eprTooManyParenthesis;
+            break;
+          end;
+        end;
+        entOr, entAnd:
+          dec(depth);
+      end;
+      n := n.Next;
+    end;
+  end;
+  if result = eprSuccess then
+    fExpression := aExpression
+  else
+    Clear;
+  fCurrent := nil;
+end;
+
+class function TParserAbstract.ParseError(const aExpression: RawUTF8): RawUTF8;
+var
+  parser: TParserAbstract;
+  res: TExprParserResult;
+begin
+  parser := Create;
+  try
+    res := parser.Parse(aExpression);
+    if res = eprSuccess then
+      result := ''
+    else
+      result := ToUTF8(res);
+  finally
+    parser.Free;
+  end;
+end;
+
+function TParserAbstract.Execute: boolean;
+var
+  n: TExprNode;
+  st: PBoolean;
+begin // code below compiles very efficiently on FPC/x86-64
+  st := @fFoundStack;
+  n := fFirstNode;
+  repeat
+    case n.NodeType of
+      entWord: begin
+        st^ := TExprNodeWordAbstract(n).fFound;
+        inc(st); // see eprTooManyParenthesis above to avoid buffer overflow
+      end;
+      entNot:
+        PAnsiChar(st)[-1] := AnsiChar(ord(PAnsiChar(st)[-1]) xor 1);
+      entOr: begin
+        dec(st);
+        PAnsiChar(st)[-1] := AnsiChar(st^ or boolean(PAnsiChar(st)[-1]));
+      end; { TODO : optimize TExprParser OR when left member is already TRUE }
+      entAnd: begin
+        dec(st);
+        PAnsiChar(st)[-1] := AnsiChar(st^ and boolean(PAnsiChar(st)[-1]));
+      end;
+    end;
+    n := n.Next;
+  until n = nil;
+  result := boolean(PAnsiChar(st)[-1]);
+end;
+
+
+{ TExprParserAbstract }
+
+procedure TExprParserAbstract.Initialize;
+begin
+  fAndWord := '&';
+  fOrWord := '+';
+  fNotWord := '-';
+  fNoWordIsAnd := true;
+end;
+
+procedure TExprParserAbstract.ParseNextCurrentWord;
+var
+  P: PUTF8Char;
+begin
+  fCurrentWord := '';
+  P := fCurrent;
+  if P = nil then
+    exit;
+  while P^ in [#1..' '] do
+    inc(P);
+  if P^ = #0 then
+    exit;
+  if P^ in PARSER_STOPCHAR then begin
+    FastSetString(fCurrentWord, P, 1);
+    fCurrent := P + 1;
+  end
+  else begin
+    fCurrent := P;
+    ParseNextWord;
+  end;
+end;
+
+procedure TExprParserAbstract.ParseNextWord;
+const
+  STOPCHAR = PARSER_STOPCHAR + [#0, ' '];
+var
+  P: PUTF8Char;
+begin
+  P := fCurrent;
+  while not(P^ in STOPCHAR) do
+    inc(P);
+  FastSetString(fCurrentWord, fCurrent, P - fCurrent);
+  fCurrent := P;
+end;
+
+
+{ TExprNodeWordAbstract }
+
+constructor TExprNodeWordAbstract.Create(aOwner: TParserAbstract; const aWord: RawUTF8);
+begin
+  inherited Create(entWord);
+  fWord := aWord;
+  fOwner := aOwner;
+end;
+
+
+{ TExprParserMatchNode }
+
+type
+  TExprParserMatchNode = class(TExprNodeWordAbstract)
+  protected
+    fMatch: TMatch;
+    function ParseWord: TExprParserResult; override;
+  end;
+  PExprParserMatchNode = ^TExprParserMatchNode;
+
+function TExprParserMatchNode.ParseWord: TExprParserResult;
+begin
+  fMatch.Prepare(fWord, (fOwner as TExprParserMatch).fCaseSensitive, {reuse=}true);
+  result := eprSuccess;
+end;
+
+
+{ TExprParserMatch }
+
+constructor TExprParserMatch.Create(aCaseSensitive: boolean);
+begin
+  inherited Create;
+  fCaseSensitive := aCaseSensitive;
+end;
+
+procedure TExprParserMatch.Initialize;
+begin
+  inherited Initialize;
+  fWordClass := TExprParserMatchNode;
+end;
+
+function TExprParserMatch.Search(const aText: RawUTF8): boolean;
+begin
+  result := Search(pointer(aText), length(aText));
+end;
+
+function TExprParserMatch.Search(aText: PUTF8Char; aTextLen: PtrInt): boolean;
+const // rough estimation of UTF-8 characters
+  IS_UTF8_WORD = ['0' .. '9', 'A' .. 'Z', 'a' .. 'z', #$80 ..#$ff];
+var
+  P, PEnd: PUTF8Char;
+  n: PtrInt;
+begin
+  P := aText;
+  if (P = nil) or (fWords = nil) then begin
+    result := false;
+    exit;
+  end;
+  if fMatchedLastSet > 0 then begin
+    n := fWordCount;
+    repeat
+      dec(n);
+      fWords[n].fFound := false;
+    until n = 0;
+    fMatchedLastSet := 0;
+  end;
+  PEnd := P + aTextLen;
+  while (P < PEnd) and (fMatchedLastSet < fWordCount) do begin
+    while not(P^ in IS_UTF8_WORD) do begin
+      inc(P);
+      if P = PEnd then 
+        break;
+    end;
+    if P = PEnd then
+      break;
+    aText := P;
+    repeat
+      inc(P);
+    until (P = PEnd) or not(P^ in IS_UTF8_WORD);
+    aTextLen := P - aText;
+    n := fWordCount;
+    repeat
+      dec(n);
+      with TExprParserMatchNode(fWords[n]) do
+        if not fFound and fMatch.Match(aText, aTextLen) then begin
+          fFound := true;
+          inc(fMatchedLastSet);
+        end;
+    until n = 0;
+  end;
+  result := Execute;
+end;
+
+
+{ ************ Multi-Threading classes ************************** }
+
+{ TPendingTaskList }
+
+constructor TPendingTaskList.Create;
+begin
+  inherited Create;
+  fTasks.InitSpecific(TypeInfo(TPendingTaskListItemDynArray),fTask,djInt64,@fCount);
+end;
+
+function TPendingTaskList.GetTimestamp: Int64;
+begin
+  result := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64;
+end;
+
+procedure TPendingTaskList.AddTask(aMilliSecondsDelayFromNow: integer;
+  const aTask: RawByteString);
+var item: TPendingTaskListItem;
+    ndx: integer;
+begin
+  item.Timestamp := GetTimestamp+aMilliSecondsDelayFromNow;
+  item.Task := aTask;
+  fSafe.Lock;
+  try
+    if fTasks.FastLocateSorted(item,ndx) then
+      inc(ndx); // always insert just after any existing timestamp
+    fTasks.FastAddSorted(ndx,item);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure TPendingTaskList.AddTasks(
+  const aMilliSecondsDelays: array of integer;
+  const aTasks: array of RawByteString);
+var item: TPendingTaskListItem;
+    i,ndx: integer;
+begin
+  if length(aTasks)<>length(aMilliSecondsDelays) then
+    exit;
+  item.Timestamp := GetTimestamp;
+  fSafe.Lock;
+  try
+    for i := 0 to High(aTasks) do begin
+      inc(item.Timestamp,aMilliSecondsDelays[i]);
+      item.Task := aTasks[i];
+      if fTasks.FastLocateSorted(item,ndx) then
+        inc(ndx); // always insert just after any existing timestamp
+      fTasks.FastAddSorted(ndx,item);
+    end;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TPendingTaskList.GetCount: integer;
+begin
+  if self=nil then
+    result := 0 else begin
+    fSafe.Lock;
+    try
+      result := fCount;
+    finally
+      fSafe.UnLock;
+    end;
+  end;
+end;
+
+function TPendingTaskList.NextPendingTask: RawByteString;
+begin
+  result := '';
+  if (self=nil) or (fCount=0) then
+    exit;
+  fSafe.Lock;
+  try
+    if fCount>0 then
+      if GetTimestamp>=fTask[0].Timestamp then begin
+        result := fTask[0].Task;
+        fTasks.FastDeleteSorted(0);
+      end;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure TPendingTaskList.Clear;
+begin
+  if (self=nil) or (fCount=0) then
+    exit;
+  fSafe.Lock;
+  try
+    fTasks.Clear;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+
+{$ifndef LVCL} // LVCL does not implement TEvent
+
+{ TSynBackgroundThreadAbstract }
+
+constructor TSynBackgroundThreadAbstract.Create(const aThreadName: RawUTF8;
+  OnBeforeExecute,OnAfterExecute: TNotifyThreadEvent; CreateSuspended: boolean);
+begin
+  fProcessEvent := TEvent.Create(nil,false,false,'');
+  fThreadName := aThreadName;
+  fOnBeforeExecute := OnBeforeExecute;
+  fOnAfterExecute := OnAfterExecute;
+  inherited Create(CreateSuspended{$ifdef FPC},512*1024{$endif}); // DefaultStackSize=512KB
+end;
+
+{$ifndef HASTTHREADSTART}
+procedure TSynBackgroundThreadAbstract.Start;
+begin
+  Resume;
+end;
+{$endif}
+
+{$ifndef HASTTHREADTERMINATESET}
+procedure TSynBackgroundThreadAbstract.Terminate;
+begin
+  inherited Terminate; // FTerminated := True
+  TerminatedSet;
+end;
+{$endif}
+
+procedure TSynBackgroundThreadAbstract.TerminatedSet;
+begin
+  fProcessEvent.SetEvent; // ExecuteLoop should handle Terminated flag
+end;
+
+procedure TSynBackgroundThreadAbstract.WaitForNotExecuting(maxMS: integer);
+var endtix: Int64;
+begin
+  if fExecute = exRun then begin
+    endtix := SynCommons.GetTickCount64+maxMS;
+    repeat
+      Sleep(1); // wait for Execute to finish
+    until (fExecute <> exRun) or (SynCommons.GetTickCount64>=endtix);
+  end;
+end;
+
+destructor TSynBackgroundThreadAbstract.Destroy;
+begin
+  if fExecute = exRun then begin
+    Terminate;
+    WaitForNotExecuting(100);
+  end;
+  inherited Destroy;
+  FreeAndNil(fProcessEvent);
+end;
+
+procedure TSynBackgroundThreadAbstract.SetExecuteLoopPause(dopause: boolean);
+begin
+  if Terminated or (dopause=fExecuteLoopPause) or (fExecute=exFinished) then
+    exit;
+  fExecuteLoopPause := dopause;
+  fProcessEvent.SetEvent; // notify Execute main loop
+end;
+
+procedure TSynBackgroundThreadAbstract.Execute;
+begin
+  try
+    if fThreadName='' then
+      SetCurrentThreadName('%(%)',[self,pointer(self)]) else
+      SetCurrentThreadName('%',[fThreadName]);
+    if Assigned(fOnBeforeExecute) then
+      fOnBeforeExecute(self);
+    try
+      fExecute := exRun;
+      while not Terminated do
+        if fExecuteLoopPause then
+          FixedWaitFor(fProcessEvent,100) else
+          ExecuteLoop;
+    finally
+      if Assigned(fOnAfterExecute) then
+        fOnAfterExecute(self);
+    end;
+  finally
+    fExecute := exFinished;
+  end;
+end;
+
+{ TSynBackgroundThreadMethodAbstract }
+
+constructor TSynBackgroundThreadMethodAbstract.Create(aOnIdle: TOnIdleSynBackgroundThread;
+  const aThreadName: RawUTF8; OnBeforeExecute,OnAfterExecute: TNotifyThreadEvent);
+begin
+  fOnIdle := aOnIdle; // cross-platform may run Execute as soon as Create is called
+  fCallerEvent := TEvent.Create(nil,false,false,'');
+  fPendingProcessLock.Init;
+  inherited Create(aThreadName,OnBeforeExecute,OnAfterExecute);
+end;
+
+destructor TSynBackgroundThreadMethodAbstract.Destroy;
+begin
+  SetPendingProcess(flagDestroying);
+  fProcessEvent.SetEvent;  // notify terminated
+  FixedWaitForever(fCallerEvent); // wait for actual termination
+  FreeAndNil(fCallerEvent);
+  inherited Destroy;
+  fPendingProcessLock.Done;
+end;
+
+function TSynBackgroundThreadMethodAbstract.GetPendingProcess: TSynBackgroundThreadProcessStep;
+begin
+  fPendingProcessLock.Lock;
+  result := fPendingProcessFlag;
+  fPendingProcessLock.UnLock;
+end;
+
+procedure TSynBackgroundThreadMethodAbstract.SetPendingProcess(State: TSynBackgroundThreadProcessStep);
+begin
+  fPendingProcessLock.Lock;
+  fPendingProcessFlag := State;
+  fPendingProcessLock.UnLock;
+end;
+
+procedure TSynBackgroundThreadMethodAbstract.ExecuteLoop;
+{$ifndef DELPHI5OROLDER}
+var E: TObject;
+{$endif}
+begin
+  case FixedWaitFor(fProcessEvent,INFINITE) of
+    wrSignaled:
+      case GetPendingProcess of
+      flagDestroying: begin
+        fCallerEvent.SetEvent; // abort caller thread process
+        Terminate; // forces Execute loop ending
+        exit;
+      end;
+      flagStarted:
+        if not Terminated then
+          if fExecuteLoopPause then // pause -> try again later
+            fProcessEvent.SetEvent else
+            try
+              fBackgroundException := nil;
+              try
+                if Assigned(fOnBeforeProcess) then
+                  fOnBeforeProcess(self);
+                try
+                  Process;
+                finally
+                  if Assigned(fOnAfterProcess) then
+                    fOnAfterProcess(self);
+                end;
+              except
+                {$ifdef DELPHI5OROLDER}
+                on E: Exception do
+                  fBackgroundException := ESynException.CreateUTF8(
+                    'Redirected %: "%"',[E,E.Message]);
+                {$else}
+                E := AcquireExceptionObject;
+                if E.InheritsFrom(Exception) then
+                  fBackgroundException := Exception(E);
+                {$endif}
+              end;
+            finally
+              SetPendingProcess(flagFinished);
+              fCallerEvent.SetEvent;
+            end;
+     end;
+  end;
+end;
+
+function TSynBackgroundThreadMethodAbstract.AcquireThread: TSynBackgroundThreadProcessStep;
+begin
+  fPendingProcessLock.Lock;
+  try
+    result := fPendingProcessFlag;
+    if result=flagIdle then begin // we just acquired the thread! congrats!
+      fPendingProcessFlag := flagStarted; // atomic set "started" flag
+      fCallerThreadID := ThreadID;
+    end;
+  finally
+    fPendingProcessLock.UnLock;
+  end;
+end;
+
+function TSynBackgroundThreadMethodAbstract.OnIdleProcessNotify(start: Int64): integer;
+begin
+  result := {$ifdef FPCLINUX}SynFPCLinux.{$else}SynCommons.{$endif}GetTickCount64-start;
+  if result<0 then
+    result := MaxInt; // should happen only under XP -> ignore
+  if Assigned(fOnIdle) then
+    fOnIdle(self,result) ;
+end;
+
+procedure TSynBackgroundThreadMethodAbstract.WaitForFinished(start: Int64;
+  const onmainthreadidle: TNotifyEvent);
+var E: Exception;
+begin
+  if (self=nil) or not(fPendingProcessFlag in [flagStarted, flagFinished]) then
+    exit; // nothing to wait for
+  try
+    if Assigned(onmainthreadidle) then begin
+      while FixedWaitFor(fCallerEvent,100)=wrTimeout do
+        onmainthreadidle(self);
+    end else
+    {$ifdef MSWINDOWS} // do process the OnIdle only if UI
+    if Assigned(fOnIdle) then begin
+      while FixedWaitFor(fCallerEvent,100)=wrTimeout do
+        OnIdleProcessNotify(start);
+    end else
+    {$endif}
+      FixedWaitForever(fCallerEvent);
+    if fPendingProcessFlag<>flagFinished then
+      ESynException.CreateUTF8('%.WaitForFinished: flagFinished?',[self]);
+    if fBackgroundException<>nil then begin
+      E := fBackgroundException;
+      fBackgroundException := nil;
+      raise E; // raise background exception in the calling scope
+    end;
+  finally
+    fParam := nil;
+    fCallerThreadID := 0;
+    FreeAndNil(fBackgroundException);
+    SetPendingProcess(flagIdle);
+    if Assigned(fOnIdle) then
+      fOnIdle(self,-1); // notify finished
+  end;
+end;
+
+function TSynBackgroundThreadMethodAbstract.RunAndWait(OpaqueParam: pointer): boolean;
+var start: Int64;
+    ThreadID: TThreadID;
+begin
+  result := false;
+  ThreadID := GetCurrentThreadId;
+  if (self=nil) or (ThreadID=fCallerThreadID) then
+    // avoid endless loop when waiting in same thread (e.g. UI + OnIdle)
+    exit;
+  // 1. wait for any previous request to be finished (should not happen often)
+  if Assigned(fOnIdle) then
+    fOnIdle(self,0); // notify started
+  start := {$ifdef FPCLINUX}SynFPCLinux.{$else}SynCommons.{$endif}GetTickCount64;
+  repeat
+    case AcquireThread of
+    flagDestroying:
+      exit;
+    flagIdle:
+      break; // we acquired the background thread
+    end;
+    case OnIdleProcessNotify(start) of // Windows.GetTickCount64 res is 10-16 ms
+    0..20:    SleepHiRes(0);
+    21..100:  SleepHiRes(1);
+    101..900: SleepHiRes(5);
+    else      SleepHiRes(50);
+    end;
+  until false;
+  // 2. process execution in the background thread
+  fParam := OpaqueParam;
+  fProcessEvent.SetEvent; // notify background thread for Call pending process
+  WaitForFinished(start,nil); // wait for flagFinished, then set flagIdle
+  result := true;
+end;
+
+function TSynBackgroundThreadMethodAbstract.GetOnIdleBackgroundThreadActive: boolean;
+begin
+  result := (self<>nil) and Assigned(fOnIdle) and (GetPendingProcess<>flagIdle);
+end;
+
+
+{ TSynBackgroundThreadEvent }
+
+constructor TSynBackgroundThreadEvent.Create(aOnProcess: TOnProcessSynBackgroundThread;
+  aOnIdle: TOnIdleSynBackgroundThread; const aThreadName: RawUTF8);
+begin
+  inherited Create(aOnIdle,aThreadName);
+  fOnProcess := aOnProcess;
+end;
+
+procedure TSynBackgroundThreadEvent.Process;
+begin
+  if not Assigned(fOnProcess) then
+    raise ESynException.CreateUTF8('Invalid %.RunAndWait() call',[self]);
+  fOnProcess(self,fParam);
+end;
+
+
+{ TSynBackgroundThreadMethod }
+
+procedure TSynBackgroundThreadMethod.Process;
+var Method: ^TThreadMethod;
+begin
+  if fParam=nil then
+    raise ESynException.CreateUTF8('Invalid %.RunAndWait() call',[self]);
+  Method := fParam;
+  Method^();
+end;
+
+procedure TSynBackgroundThreadMethod.RunAndWait(Method: TThreadMethod);
+var Met: TMethod absolute Method;
+begin
+  inherited RunAndWait(@Met);
+end;
+
+
+{ TSynBackgroundThreadProcedure }
+
+constructor TSynBackgroundThreadProcedure.Create(aOnProcess: TOnProcessSynBackgroundThreadProc;
+  aOnIdle: TOnIdleSynBackgroundThread; const aThreadName: RawUTF8);
+begin
+  inherited Create(aOnIdle,aThreadName);
+  fOnProcess := aOnProcess;
+end;
+
+procedure TSynBackgroundThreadProcedure.Process;
+begin
+  if not Assigned(fOnProcess) then
+    raise ESynException.CreateUTF8('Invalid %.RunAndWait() call',[self]);
+  fOnProcess(fParam);
+end;
+
+
+{ TSynParallelProcessThread }
+
+procedure TSynParallelProcessThread.Process;
+begin
+  if not Assigned(fMethod) then
+    exit;
+  fMethod(fIndexStart,fIndexStop);
+  fMethod := nil;
+end;
+
+procedure TSynParallelProcessThread.Start(
+  Method: TSynParallelProcessMethod; IndexStart, IndexStop: integer);
+begin
+  fMethod := Method;
+  fIndexStart := IndexStart;
+  fIndexStop := IndexStop;
+  fProcessEvent.SetEvent; // notify execution
+end;
+
+
+{ TSynBackgroundThreadProcess }
+
+constructor TSynBackgroundThreadProcess.Create(const aThreadName: RawUTF8;
+  aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
+  aOnBeforeExecute, aOnAfterExecute: TNotifyThreadEvent;
+  aStats: TSynMonitorClass; CreateSuspended: boolean);
+begin
+  if not Assigned(aOnProcess) then
+    raise ESynException.CreateUTF8('%.Create(aOnProcess=nil)',[self]);
+  if aStats<>nil then
+    fStats := aStats.Create(aThreadName);
+  fOnProcess := aOnProcess;
+  fOnProcessMS := aOnProcessMS;
+  if fOnProcessMS=0 then
+    fOnProcessMS := INFINITE; // wait until ProcessEvent.SetEvent or Terminated
+  inherited Create(aThreadName,aOnBeforeExecute,aOnAfterExecute,CreateSuspended);
+end;
+
+destructor TSynBackgroundThreadProcess.Destroy;
+begin
+  if fExecute=exRun then begin
+    Terminate;
+    WaitForNotExecuting(10000); // expect the background task to be finished
+  end;
+  inherited Destroy;
+  fStats.Free;
+end;
+
+procedure TSynBackgroundThreadProcess.ExecuteLoop;
+var wait: TWaitResult;
+begin
+  wait := FixedWaitFor(fProcessEvent,fOnProcessMS);
+  if not Terminated and (wait in [wrSignaled,wrTimeout]) then
+    if fExecuteLoopPause then // pause -> try again later
+      fProcessEvent.SetEvent else
+      try
+        if fStats<>nil then
+          fStats.ProcessStartTask;
+        try
+          fOnProcess(self,wait);
+        finally
+          if fStats<>nil then
+            fStats.ProcessEnd;
+        end;
+      except
+        on E: Exception do begin
+          if fStats<>nil then
+            fStats.ProcessErrorRaised(E);
+          if Assigned(fOnException) then
+            fOnException(E);
+        end;
+      end;
+end;
+
+
+{ TSynBackgroundTimer }
+
+var
+  ProcessSystemUse: TSystemUse;
+
+constructor TSynBackgroundTimer.Create(const aThreadName: RawUTF8;
+  aOnBeforeExecute, aOnAfterExecute: TNotifyThreadEvent; aStats: TSynMonitorClass);
+begin
+  fTasks.Init(TypeInfo(TSynBackgroundTimerTaskDynArray),fTask);
+  fTaskLock.Init;
+  {$ifndef NOVARIANTS}
+  fTaskLock.LockedBool[0] := false;
+  {$endif}
+  inherited Create(aThreadName,EverySecond,1000,aOnBeforeExecute,aOnAfterExecute,aStats);
+end;
+
+destructor TSynBackgroundTimer.Destroy;
+begin
+  if (ProcessSystemUse<>nil) and (ProcessSystemUse.fTimer=self) then
+    ProcessSystemUse.fTimer := nil; // allows processing by another background timer
+  inherited Destroy;
+  fTaskLock.Done;
+end;
+
+const
+  TIXPRECISION = 32; // GetTickCount64 resolution (for aOnProcessSecs=1)
+
+procedure TSynBackgroundTimer.EverySecond(
+  Sender: TSynBackgroundThreadProcess; Event: TWaitResult);
+var tix: Int64;
+    i,f,n: integer;
+    t: ^TSynBackgroundTimerTask;
+    todo: TSynBackgroundTimerTaskDynArray; // avoid lock contention
+begin
+  if (fTask=nil) or Terminated then
+    exit;
+  tix := {$ifdef FPCLINUX}SynFPCLinux.{$else}SynCommons.{$endif}GetTickCount64;
+  n := 0;
+  fTaskLock.Lock;
+  try
+    variant(fTaskLock.Padding[0]) := true;
+    try
+      for i := 0 to length(fTask)-1 do begin
+        t := @fTask[i];
+        if tix>=t^.NextTix then begin
+          SetLength(todo,n+1);
+          todo[n] := t^;
+          inc(n);
+          t^.FIFO := nil; // now owned by todo[n].FIFO
+          t^.NextTix := tix+((t^.Secs*1000)-TIXPRECISION);
+        end;
+      end;
+    finally
+      fTaskLock.UnLock;
+    end;
+    for i := 0 to n-1 do
+      with todo[i] do
+        if FIFO<>nil then
+          for f := 0 to length(FIFO)-1 do
+          try
+            OnProcess(self,Event,FIFO[f]);
+          except
+          end
+        else
+          try
+            OnProcess(self,Event,'');
+          except
+          end;
+  finally
+    {$ifdef NOVARIANTS}
+    fTaskLock.Lock;
+    variant(fTaskLock.Padding[0]) := false;
+    fTaskLock.UnLock;
+    {$else}
+    fTaskLock.LockedBool[0] := false;
+    {$endif}
+  end;
+end;
+
+function TSynBackgroundTimer.Find(const aProcess: TMethod): integer;
+begin // caller should have made fTaskLock.Lock;
+  for result := length(fTask)-1 downto 0 do
+    with TMethod(fTask[result].OnProcess) do
+      if (Code=aProcess.Code) and (Data=aProcess.Data) then
+        exit;
+  result := -1;
+end;
+
+procedure TSynBackgroundTimer.Enable(
+  aOnProcess: TOnSynBackgroundTimerProcess; aOnProcessSecs: cardinal);
+var task: TSynBackgroundTimerTask;
+    found: integer;
+begin
+  if (self=nil) or Terminated or not Assigned(aOnProcess) then
+    exit;
+  if aOnProcessSecs=0 then begin
+    Disable(aOnProcess);
+    exit;
+  end;
+  task.OnProcess := aOnProcess;
+  task.Secs := aOnProcessSecs;
+  task.NextTix := {$ifdef FPCLINUX}SynFPCLinux.{$else}SynCommons.{$endif}GetTickCount64+
+    (aOnProcessSecs*1000-TIXPRECISION);
+  fTaskLock.Lock;
+  try
+    found := Find(TMethod(aOnProcess));
+    if found>=0 then
+      fTask[found] := task else
+      fTasks.Add(task);
+  finally
+    fTaskLock.UnLock;
+  end;
+end;
+
+function TSynBackgroundTimer.Processing: boolean;
+begin
+  {$ifdef NOVARIANTS}
+  with fTaskLock.Padding[0] do
+    result := (VType=varBoolean) and VBoolean;
+  {$else}
+  result := fTaskLock.LockedBool[0];
+  {$endif}
+end;
+
+procedure TSynBackgroundTimer.WaitUntilNotProcessing(timeoutsecs: integer);
+var timeout: Int64;
+begin
+  if not Processing then
+    exit;
+  timeout := {$ifdef FPCLINUX}SynFPCLinux.{$else}SynCommons.{$endif}GetTickCount64+timeoutsecs*1000;
+  repeat
+    SleepHiRes(1);
+  until not Processing or
+    ({$ifdef FPCLINUX}SynFPCLinux.{$else}SynCommons.{$endif}GetTickcount64>timeout);
+end;
+
+function TSynBackgroundTimer.ExecuteNow(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+begin
+  result := Add(aOnProcess,#0,true);
+end;
+
+function TSynBackgroundTimer.EnQueue(aOnProcess: TOnSynBackgroundTimerProcess;
+  const aMsg: RawUTF8; aExecuteNow: boolean): boolean;
+begin
+  result := Add(aOnProcess,aMsg,aExecuteNow);
+end;
+
+function TSynBackgroundTimer.EnQueue(aOnProcess: TOnSynBackgroundTimerProcess;
+  const aMsgFmt: RawUTF8; const Args: array of const; aExecuteNow: boolean): boolean;
+var msg: RawUTF8;
+begin
+  FormatUTF8(aMsgFmt,Args,msg);
+  result := Add(aOnProcess,msg,aExecuteNow);
+end;
+
+function TSynBackgroundTimer.Add(aOnProcess: TOnSynBackgroundTimerProcess;
+  const aMsg: RawUTF8; aExecuteNow: boolean): boolean;
+var found: integer;
+begin
+  result := false;
+  if (self=nil) or Terminated or not Assigned(aOnProcess) then
+    exit;
+  fTaskLock.Lock;
+  try
+    found := Find(TMethod(aOnProcess));
+    if found>=0 then begin
+      with fTask[found] do begin
+        if aExecuteNow then
+          NextTix := 0;
+        if aMsg<>#0 then
+          AddRawUTF8(FIFO,aMsg);
+      end;
+      if aExecuteNow then
+        ProcessEvent.SetEvent;
+      result := true;
+    end;
+  finally
+    fTaskLock.UnLock;
+  end;
+end;
+
+function TSynBackgroundTimer.DeQueue(aOnProcess: TOnSynBackgroundTimerProcess;
+  const aMsg: RawUTF8): boolean;
+var found: integer;
+begin
+  result := false;
+  if (self=nil) or Terminated or not Assigned(aOnProcess) then
+    exit;
+  fTaskLock.Lock;
+  try
+    found := Find(TMethod(aOnProcess));
+    if found>=0 then
+      with fTask[found] do
+        result := DeleteRawUTF8(FIFO,FindRawUTF8(FIFO,aMsg));
+  finally
+    fTaskLock.UnLock;
+  end;
+end;
+
+function TSynBackgroundTimer.Disable(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+var found: integer;
+begin
+  result := false;
+  if (self=nil) or Terminated or not Assigned(aOnProcess) then
+    exit;
+  fTaskLock.Lock;
+  try
+    found := Find(TMethod(aOnProcess));
+    if found>=0 then begin
+      fTasks.Delete(found);
+      result := true;
+    end;
+  finally
+    fTaskLock.UnLock;
+  end;
+end;
+
+{ TSynParallelProcess }
+
+constructor TSynParallelProcess.Create(ThreadPoolCount: integer; const ThreadName: RawUTF8;
+  OnBeforeExecute, OnAfterExecute: TNotifyThreadEvent;
+  MaxThreadPoolCount: integer);
+var i: integer;
+begin
+  inherited Create;
+  if ThreadPoolCount<0 then
+    raise ESynParallelProcess.CreateUTF8('%.Create(%,%)',[Self,ThreadPoolCount,ThreadName]);
+  if ThreadPoolCount>MaxThreadPoolCount then
+    ThreadPoolCount := MaxThreadPoolCount;
+  fThreadPoolCount := ThreadPoolCount;
+  fThreadName := ThreadName;
+  SetLength(fPool,fThreadPoolCount);
+  for i := 0 to fThreadPoolCount-1 do
+    fPool[i] := TSynParallelProcessThread.Create(nil,FormatUTF8('%#%/%',
+      [fThreadName,i+1,fThreadPoolCount]),OnBeforeExecute,OnAfterExecute);
+end;
+
+destructor TSynParallelProcess.Destroy;
+begin
+  ObjArrayClear(fPool);
+  inherited;
+end;
+
+procedure TSynParallelProcess.ParallelRunAndWait(const Method: TSynParallelProcessMethod;
+  MethodCount: integer; const OnMainThreadIdle: TNotifyEvent);
+var use,t,n,perthread: integer;
+    error: RawUTF8;
+begin
+  if (MethodCount<=0) or not Assigned(Method) then
+    exit;
+  if not Assigned(OnMainThreadIdle) then
+    if (self=nil) or (MethodCount=1) or (fThreadPoolCount=0) then begin
+      Method(0,MethodCount-1); // no need (or impossible) to use background thread
+      exit;
+    end;
+  use := MethodCount;
+  t := fThreadPoolCount;
+  if not Assigned(OnMainThreadIdle) then
+    inc(t); // include current thread
+  if use>t then
+    use := t;
+  try
+    // start secondary threads
+    perthread := MethodCount div use;
+    if perthread=0 then
+      use := 1;
+    n := 0;
+    for t := 0 to use-2 do begin
+      repeat
+        case fPool[t].AcquireThread of
+        flagDestroying: // should not happen
+          raise ESynParallelProcess.CreateUTF8(
+            '%.ParallelRunAndWait [%] destroying',[self,fPool[t].fThreadName]);
+        flagIdle:
+          break; // acquired (should always be the case)
+        end;
+        Sleep(1);
+        if Assigned(OnMainThreadIdle) then
+          OnMainThreadIdle(self);
+      until false;
+      fPool[t].Start(Method,n,n+perthread-1);
+      inc(n,perthread);
+      inc(fParallelRunCount);
+    end;
+    // run remaining items in the current/last thread
+    if n<MethodCount then begin
+      if Assigned(OnMainThreadIdle) then begin
+        fPool[use-1].Start(Method,n,MethodCount-1);
+        inc(use); // also wait for the last thread
+      end else
+        Method(n,MethodCount-1);
+      inc(fParallelRunCount);
+    end;
+  finally
+    // wait for the process to finish
+    for t := 0 to use-2 do
+    try
+      fPool[t].WaitForFinished(0,OnMainThreadIdle);
+    except
+      on E: Exception do
+        error := FormatUTF8('% % on thread % [%]',[error,E,fPool[t].fThreadName,E.Message]);
+    end;
+    if error<>'' then
+      raise ESynParallelProcess.CreateUTF8('%.ParallelRunAndWait: %',[self,error]);
+  end;
+end;
+
+
+{ TBlockingProcess }
+
+constructor TBlockingProcess.Create(aTimeOutMs: integer; aSafe: PSynLocker);
+begin
+  inherited Create(nil,false,false,'');
+  if aTimeOutMs<=0 then
+    fTimeOutMs := 3000 else // never wait for ever
+    fTimeOutMs := aTimeOutMs;
+  fSafe := aSafe;
+end;
+
+constructor TBlockingProcess.Create(aTimeOutMs: integer);
+begin
+  fOwnedSafe := true;
+  Create(aTimeOutMS,NewSynLocker);
+end;
+
+destructor TBlockingProcess.Destroy;
+begin
+  inherited Destroy;
+  if fOwnedSafe then
+    fSafe^.DoneAndFreeMem;
+end;
+
+function TBlockingProcess.WaitFor: TBlockingEvent;
+begin
+  fSafe^.Lock;
+  try
+    result := fEvent;
+    if fEvent in [evRaised,evTimeOut] then
+      exit;
+    fEvent := evWaiting;
+  finally
+    fSafe^.UnLock;
+  end;
+  FixedWaitFor(self,fTimeOutMs);
+  fSafe^.Lock;
+  try
+    if fEvent<>evRaised then
+      fEvent := evTimeOut;
+    result := fEvent;
+  finally
+    fSafe^.UnLock;
+  end;
+end;
+
+function TBlockingProcess.WaitFor(TimeOutMS: integer): TBlockingEvent;
+begin
+  if TimeOutMS <= 0 then
+    fTimeOutMs := 3000 // never wait for ever
+  else
+    fTimeOutMs := TimeOutMS;
+  result := WaitFor;
+end;
+
+function TBlockingProcess.NotifyFinished(alreadyLocked: boolean): boolean;
+begin
+  result := false;
+  if not alreadyLocked then
+    fSafe^.Lock;
+  try
+    if fEvent in [evRaised,evTimeOut] then
+      exit; // ignore if already notified
+    fEvent := evRaised;
+    SetEvent; // notify caller to unlock "WaitFor" method
+    result := true;
+  finally
+    fSafe^.UnLock;
+  end;
+end;
+
+procedure TBlockingProcess.ResetInternal;
+begin
+  ResetEvent;
+  fEvent := evNone;
+end;
+
+function TBlockingProcess.Reset: boolean;
+begin
+  fSafe^.Lock;
+  try
+    result := fEvent<>evWaiting;
+    if result then
+      ResetInternal;
+  finally
+    fSafe^.UnLock;
+  end;
+end;
+
+procedure TBlockingProcess.Lock;
+begin
+  fSafe^.Lock;
+end;
+
+procedure TBlockingProcess.Unlock;
+begin
+  fSafe^.Unlock;
+end;
+
+
+{ TBlockingProcessPoolItem }
+
+procedure TBlockingProcessPoolItem.ResetInternal;
+begin
+  inherited ResetInternal; // set fEvent := evNone
+  fCall := 0;
+end;
+
+
+{ TBlockingProcessPool }
+
+constructor TBlockingProcessPool.Create(aClass: TBlockingProcessPoolItemClass);
+begin
+  inherited Create;
+  if aClass=nil then
+    fClass := TBlockingProcessPoolItem else
+    fClass := aClass;
+  fPool := TObjectListLocked.Create(true);
+end;
+
+const
+  CALL_DESTROYING = -1;
+
+destructor TBlockingProcessPool.Destroy;
+var i: integer;
+    someWaiting: boolean;
+begin
+  fCallCounter := CALL_DESTROYING;
+  someWaiting := false;
+  for i := 0 to fPool.Count-1 do
+    with TBlockingProcessPoolItem(fPool.List[i]) do
+    if Event=evWaiting then begin
+      SetEvent; // release WaitFor (with evTimeOut)
+      someWaiting := true;
+    end;
+  if someWaiting then
+    sleep(10); // propagate the pending evTimeOut to the WaitFor threads
+  fPool.Free;
+  inherited;
+end;
+
+function TBlockingProcessPool.NewProcess(aTimeOutMs: integer): TBlockingProcessPoolItem;
+var i: integer;
+    p: ^TBlockingProcessPoolItem;
+begin
+  result := nil;
+  if fCallCounter=CALL_DESTROYING then
+    exit;
+  if aTimeOutMs<=0 then
+    aTimeOutMs := 3000; // never wait for ever
+  fPool.Safe.Lock;
+  try
+    p := pointer(fPool.List);
+    for i := 1 to fPool.Count do
+      if p^.Call=0 then begin
+        result := p^; // found a non-used entry
+        result.fTimeOutMs := aTimeOutMS;
+        break;
+      end else
+        inc(p);
+    if result=nil then begin
+      result := fClass.Create(aTimeOutMS);
+      fPool.Add(result);
+    end;
+    inc(fCallCounter); // 1,2,3,...
+    result.fCall := fCallCounter;
+  finally
+    fPool.Safe.UnLock;
+  end;
+end;
+
+function TBlockingProcessPool.FromCall(call: TBlockingProcessPoolCall;
+  locked: boolean): TBlockingProcessPoolItem;
+var i: integer;
+    p: ^TBlockingProcessPoolItem;
+begin
+  result := nil;
+  if (fCallCounter=CALL_DESTROYING) or (call<=0) then
+    exit;
+  fPool.Safe.Lock;
+  try
+    p := pointer(fPool.List);
+    for i := 1 to fPool.Count do
+      if p^.Call=call then begin
+        result := p^;
+        if locked then
+          result.Lock;
+        exit;
+      end else
+        inc(p);
+  finally
+    fPool.Safe.UnLock;
+  end;
+end;
+
+{$ifdef KYLIX3}
+type
+  // see http://stackoverflow.com/a/3085509 about this known Kylix bug
+  TEventHack = class(THandleObject) // should match EXACTLY SyncObjs.pas source!
+  private
+    FEvent: TSemaphore;
+    FManualReset: Boolean;
+  end;
+
+function FixedWaitFor(Event: TEvent; Timeout: LongWord): TWaitResult;
+var E: TEventHack absolute Event;
+  procedure SetResult(res: integer);
+  begin
+    if res=0 then
+      result := wrSignaled else
+    if errno in [EAGAIN,ETIMEDOUT] then
+      result := wrTimeOut else begin
+      write(TimeOut,':',errno,' ');
+      result := wrError;
+    end;
+  end;
+{.$define USESEMTRYWAIT}
+// sem_timedwait() is slower than sem_trywait(), but consuming much less CPU
+{$ifdef USESEMTRYWAIT}
+var time: timespec;
+{$else}
+var start,current: Int64;
+    elapsed: LongWord;
+{$endif}
+begin
+  if Timeout=INFINITE then begin
+    SetResult(sem_wait(E.FEvent));
+    exit;
+  end;
+  if TimeOut=0 then begin
+    SetResult(sem_trywait(E.FEvent));
+    exit;
+  end;
+  {$ifdef USESEMTRYWAIT}
+  clock_gettime(CLOCK_REALTIME,time);
+  inc(time.tv_sec,TimeOut div 1000);
+  inc(time.tv_nsec,(TimeOut mod 1000)*1000000);
+  while time.tv_nsec>1000000000 do begin
+    inc(time.tv_sec);
+    dec(time.tv_nsec,1000000000);
+  end;
+  SetResult(sem_timedwait(E.FEvent,time));
+  {$else}
+  start := GetTickCount64;
+  repeat
+     if sem_trywait(E.FEvent)=0 then begin
+       result := wrSignaled;
+       break;
+     end;
+     current := GetTickCount64;
+     elapsed := current-start;
+     if elapsed=0 then
+       sched_yield else
+     if elapsed>TimeOut then begin
+       result := wrTimeOut;
+       break;
+     end else
+     if elapsed<5 then
+       usleep(50) else
+       usleep(1000);
+  until false;
+  {$endif}
+  if E.FManualReset then begin
+    repeat until sem_trywait(E.FEvent)<>0; // reset semaphore state
+    sem_post(E.FEvent);
+  end;
+end;
+
+{$else KYLIX3} // original FPC or Windows implementation is OK
+
+function FixedWaitFor(Event: TEvent; Timeout: LongWord): TWaitResult;
+begin
+  result := Event.WaitFor(TimeOut);
+end;
+
+{$endif KYLIX3}
+
+procedure FixedWaitForever(Event: TEvent);
+begin
+  FixedWaitFor(Event,INFINITE);
+end;
+
+{$endif LVCL} // LVCL does not implement TEvent
+
+
+{ ************ System Analysis types and classes ************************** }
+
+
+function SystemInfoJson: RawUTF8;
+var cpu,mem: RawUTF8;
+begin
+  cpu := TSystemUse.Current(false).HistoryText(0,15,@mem);
+  with SystemInfo do
+    result := JSONEncode([
+      'host',ExeVersion.Host,'user',ExeVersion.User,'os',OSVersionText,
+      'cpu',CpuInfoText,'bios',BiosInfoText,
+      {$ifdef MSWINDOWS}{$ifndef CPU64}'wow64',IsWow64,{$endif}{$endif MSWINDOWS}
+      {$ifdef CPUINTEL}'cpufeatures', LowerCase(ToText(CpuFeatures, ' ')),{$endif}
+      'processcpu',cpu,'processmem',mem,
+      'freemem',TSynMonitorMemory.FreeAsText,
+      'disk',GetDiskPartitionsText(false,true)]);
+end;
+
+
+{ TProcessInfo }
+
+{$ifdef MSWINDOWS}
+type
+  TProcessMemoryCounters = record
+    cb: DWORD;
+    PageFaultCount: DWORD;
+    PeakWorkingSetSize: PtrUInt;
+    WorkingSetSize: PtrUInt;
+    QuotaPeakPagedPoolUsage: PtrUInt;
+    QuotaPagedPoolUsage: PtrUInt;
+    QuotaPeakNonPagedPoolUsage: PtrUInt;
+    QuotaNonPagedPoolUsage: PtrUInt;
+    PagefileUsage: PtrUInt;
+    PeakPagefileUsage: PtrUInt;
+  end;
+const
+  PROCESS_QUERY_LIMITED_INFORMATION = $1000;
+var
+  // PROCESS_QUERY_INFORMATION or PROCESS_QUERY_LIMITED_INFORMATION
+  OpenProcessAccess: DWORD;
+  // late-binding of Windows version specific API entries
+  GetSystemTimes: function(var lpIdleTime, lpKernelTime, lpUserTime: TFileTime): BOOL; stdcall;
+  GetProcessTimes: function(hProcess: THandle;
+    var lpCreationTime, lpExitTime, lpKernelTime, lpUserTime: TFileTime): BOOL; stdcall;
+  GetProcessMemoryInfo: function(Process: THandle;
+    var ppsmemCounters: TProcessMemoryCounters; cb: DWORD): BOOL; stdcall;
+  EnumProcessModules: function (hProcess: THandle; var lphModule: HMODULE; cb: DWORD;
+    var lpcbNeeded: DWORD): BOOL; stdcall;
+  EnumProcesses: function(lpidProcess: PDWORD; cb: DWORD; var cbNeeded: DWORD): BOOL; stdcall;
+  GetModuleFileNameExW: function(hProcess: THandle; hModule: HMODULE;
+    lpBaseName: PWideChar; nSize: DWORD): DWORD; stdcall;
+  // Vista+/WS2008+ (use GetModuleFileNameEx on XP)
+  QueryFullProcessImageNameW: function(hProcess: THandle; dwFlags: DWORD;
+    lpExeName: PWideChar; lpdwSize: PDWORD): BOOL; stdcall;
+
+procedure InitWindowsAPI;
+var Kernel, Psapi: THandle;
+begin
+  if OSVersion>=wVista then
+    OpenProcessAccess := PROCESS_QUERY_LIMITED_INFORMATION else
+    OpenProcessAccess := PROCESS_QUERY_INFORMATION or PROCESS_VM_READ;
+  Kernel := GetModuleHandle(kernel32);
+  @GetSystemTimes := GetProcAddress(Kernel,'GetSystemTimes');
+  @GetProcessTimes := GetProcAddress(Kernel,'GetProcessTimes');
+  @QueryFullProcessImageNameW := GetProcAddress(Kernel,'QueryFullProcessImageNameW');
+  Psapi := LoadLibrary('Psapi.dll');
+  if Psapi>=32 then begin
+    @EnumProcesses := GetProcAddress(Psapi,'EnumProcesses');
+    @GetModuleFileNameExW := GetProcAddress(Psapi,'GetModuleFileNameExW');
+    @EnumProcessModules := GetProcAddress(Psapi, 'EnumProcessModules');
+    @GetProcessMemoryInfo := GetProcAddress(Psapi,'GetProcessMemoryInfo');
+  end;
+end;
+
+function EnumAllProcesses(out Count: Cardinal): TCardinalDynArray;
+var n: cardinal;
+begin
+  n := 2048;
+  repeat
+    SetLength(result, n);
+    if EnumProcesses(pointer(result), n * 4, Count) then
+      Count := Count shr 2 else
+      Count := 0;
+    if Count < n then begin
+      if Count = 0 then
+        result := nil;
+      exit;
+    end;
+    inc(n, 1024); // (very unlikely) too small buffer
+  until n>8192;
+end;
+
+function EnumProcessName(PID: Cardinal): RawUTF8;
+var h: THandle;
+    len: DWORD;
+    name: array[0..4095] of WideChar;
+begin
+  result := '';
+  if PID = 0 then
+    exit;
+  h := OpenProcess(OpenProcessAccess, false, PID);
+  if h <> 0 then
+    try
+      if Assigned(QueryFullProcessImageNameW) then begin
+        len := high(name);
+        if QueryFullProcessImageNameW(h, 0, name, @len) then
+          RawUnicodeToUtf8(name, len, result);
+      end else
+        if GetModuleFileNameExW(h,0,name,high(name))<>0 then
+          RawUnicodeToUtf8(name, StrLenW(name), result);
+    finally
+      CloseHandle(h);
+    end;
+end;
+
+function TProcessInfo.Init: boolean;
+begin
+  {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(self,SizeOf(self),0);
+  result := Assigned(GetSystemTimes) and Assigned(GetProcessTimes) and
+    Assigned(GetProcessMemoryInfo); // no monitoring API under oldest Windows
+end;
+
+function TProcessInfo.Start: boolean;
+var ftidl,ftkrn,ftusr: TFileTime;
+    sidl,skrn,susr: Int64;
+begin
+  result := Assigned(GetSystemTimes) and GetSystemTimes(ftidl,ftkrn,ftusr);
+  if not result then
+    exit;
+  FileTimeToInt64(ftidl,sidl);
+  FileTimeToInt64(ftkrn,skrn);
+  FileTimeToInt64(ftusr,susr);
+  fDiffIdle := sidl-fSysPrevIdle;
+  fDiffKernel := skrn-fSysPrevKernel;
+  fDiffUser := susr-fSysPrevUser;
+  fDiffTotal := fDiffKernel+fDiffUser; // kernel time also includes idle time
+  dec(fDiffKernel, fDiffIdle);
+  fSysPrevIdle := sidl;
+  fSysPrevKernel := skrn;
+  fSysPrevUser := susr;
+end;
+
+function TProcessInfo.PerProcess(PID: cardinal; Now: PDateTime;
+  out Data: TSystemUseData; var PrevKernel, PrevUser: Int64): boolean;
+var
+  h: THandle;
+  ftkrn,ftusr,ftp,fte: TFileTime;
+  pkrn,pusr: Int64;
+  mem: TProcessMemoryCounters;
+begin
+  result := false;
+  {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(Data,SizeOf(Data),0);
+  h := OpenProcess(OpenProcessAccess,false,PID);
+  if h<>0 then
+    try
+      if GetProcessTimes(h,ftp,fte,ftkrn,ftusr) then begin
+        if Now<>nil then
+          Data.Timestamp := Now^;
+        FileTimeToInt64(ftkrn,pkrn);
+        FileTimeToInt64(ftusr,pusr);
+        if (PrevKernel<>0) and (fDiffTotal>0) then begin
+          Data.Kernel := ((pkrn-PrevKernel)*100)/fDiffTotal;
+          Data.User := ((pusr-PrevUser)*100)/fDiffTotal;
+        end;
+        PrevKernel := pkrn;
+        PrevUser := pusr;
+        {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(mem,SizeOf(mem),0);
+        mem.cb := SizeOf(mem);
+        if GetProcessMemoryInfo(h,mem,SizeOf(mem)) then begin
+          Data.WorkKB := mem.WorkingSetSize shr 10;
+          Data.VirtualKB := mem.PagefileUsage shr 10;
+        end;
+        result := true;
+      end;
+    finally
+      CloseHandle(h);
+    end;
+end;
+
+function TProcessInfo.PerSystem(out Idle,Kernel,User: currency): boolean;
+begin
+  if fDiffTotal<=0 then begin
+    Idle := 0;
+    Kernel := 0;
+    User := 0;
+    result := false;
+  end else begin
+    Kernel := SimpleRoundTo2Digits((fDiffKernel*100)/fDiffTotal);
+    User := SimpleRoundTo2Digits((fDiffUser*100)/fDiffTotal);
+    Idle := 100-Kernel-User; // ensure sum is always 100%
+    result := true;
+  end;
+end;
+{$else} // not implemented yet (use /proc ?)
+function TProcessInfo.Init: boolean;
+begin
+  {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(self,SizeOf(self),0);
+  result := false;
+end;
+
+function TProcessInfo.Start: boolean;
+begin
+  result := false;
+end;
+
+function TProcessInfo.PerProcess(PID: cardinal; Now: PDateTime;
+  out Data: TSystemUseData; var PrevKernel, PrevUser: Int64): boolean;
+begin
+  result := false;
+end;
+
+function TProcessInfo.PerSystem(out Idle,Kernel,User: currency): boolean;
+var P: PUTF8Char;
+    U, K, I, S: cardinal;
+begin // see http://www.linuxhowtos.org/System/procstat.htm
+  result := false;
+  P := pointer(StringFromFile('/proc/stat', {nosize=}true));
+  if P=nil then
+    exit;
+  U := GetNextItemCardinal(P,' '){=user}+GetNextItemCardinal(P,' '){=nice};
+  K := GetNextItemCardinal(P,' '){=system};
+  I := GetNextItemCardinal(P,' '){=idle};
+  S := U+K+I;
+  Kernel := SimpleRoundTo2Digits((K*100)/S);
+  User := SimpleRoundTo2Digits((U*100)/S);
+  Idle := 100-Kernel-User; // ensure sum is always 100%
+  result := S<>0;
+end; { TODO : use a diff approach for TProcessInfo.PerSystem on Linux }
+{$endif MSWINDOWS}
+
+
+{ TSystemUse }
+
+procedure TSystemUse.BackgroundExecute(Sender: TSynBackgroundTimer;
+  Event: TWaitResult; const Msg: RawUTF8);
+var i: integer;
+    now: TDateTime;
+begin
+  if (fProcess=nil) or (fHistoryDepth=0) or not fProcessInfo.Start then
+    exit;
+  fTimer := Sender;
+  now := NowUTC;
+  fSafe.Lock;
+  try
+    inc(fDataIndex);
+    if fDataIndex>=fHistoryDepth then
+      fDataIndex := 0;
+    for i := high(fProcess) downto 0 do // backwards for fProcesses.Delete(i)
+      with fProcess[i] do
+      if fProcessInfo.PerProcess(ID,@now,Data[fDataIndex],PrevKernel,PrevUser) then begin
+        if Assigned(fOnMeasured) then
+          fOnMeasured(ID,Data[fDataIndex]);
+      end else
+      if UnsubscribeProcessOnAccessError then
+        // if GetLastError=ERROR_INVALID_PARAMETER then
+        fProcesses.Delete(i);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure TSystemUse.OnTimerExecute(Sender: TObject);
+begin
+  BackgroundExecute(nil,wrSignaled,'');
+end;
+
+constructor TSystemUse.Create(const aProcessID: array of integer;
+  aHistoryDepth: integer);
+var i: integer;
+begin
+  inherited Create;
+  fProcesses.Init(TypeInfo(TSystemUseProcessDynArray),fProcess);
+  {$ifdef MSWINDOWS}
+  if not Assigned(GetSystemTimes) or not Assigned(GetProcessTimes) or
+     not Assigned(GetProcessMemoryInfo) then
+    exit; // no system monitoring API under oldest Windows
+  {$else}
+  exit; // not implemented yet
+  {$endif}
+  if aHistoryDepth<=0 then
+    aHistoryDepth := 1;
+  fHistoryDepth := aHistoryDepth;
+  SetLength(fProcess,length(aProcessID));
+  for i := 0 to high(aProcessID) do begin
+    {$ifdef MSWINDOWS}
+    if aProcessID[i]=0 then
+      fProcess[i].ID := GetCurrentProcessID else
+    {$endif}
+      fProcess[i].ID := aProcessID[i];
+    SetLength(fProcess[i].Data,fHistoryDepth);
+  end;
+end;
+
+constructor TSystemUse.Create(aHistoryDepth: integer);
+begin
+  Create([0],aHistoryDepth);
+end;
+
+procedure TSystemUse.Subscribe(aProcessID: integer);
+var i,n: integer;
+begin
+  if self=nil then
+    exit;
+  {$ifdef MSWINDOWS}
+  if aProcessID=0 then
+    aProcessID := GetCurrentProcessID;
+  {$endif}
+  fSafe.Lock;
+  try
+    n := length(fProcess);
+    for i := 0 to n-1 do
+      if fProcess[i].ID=aProcessID then
+        exit; // already subscribed
+    SetLength(fProcess,n+1);
+    fProcess[n].ID := aProcessID;
+    SetLength(fProcess[n].Data,fHistoryDepth);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TSystemUse.Unsubscribe(aProcessID: integer): boolean;
+var i: integer;
+begin
+  result := false;
+  if self=nil then
+    exit;
+  fSafe.Lock;
+  try
+    i := ProcessIndex(aProcessID);
+    if i>=0 then begin
+      fProcesses.Delete(i);
+      result := true;
+    end;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TSystemUse.ProcessIndex(aProcessID: integer): integer;
+begin // caller should have made fSafe.Enter
+  {$ifdef MSWINDOWS}
+  if aProcessID=0 then
+    aProcessID := GetCurrentProcessID;
+  {$endif}
+  if self<>nil then
+    for result := 0 to high(fProcess) do
+      if fProcess[result].ID=aProcessID then
+        exit;
+  result := -1;
+end;
+
+function TSystemUse.Data(out aData: TSystemUseData; aProcessID: integer=0): boolean;
+var i: integer;
+begin
+  result := false;
+  if self<>nil then begin
+    fSafe.Lock;
+    try
+      i := ProcessIndex(aProcessID);
+      if i>=0 then begin
+        with fProcess[i] do
+          aData := Data[fDataIndex];
+        result := aData.Timestamp<>0;
+        if result then
+          exit;
+      end;
+    finally
+      fSafe.UnLock;
+    end;
+  end;
+  {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(aData,SizeOf(aData),0);
+end;
+
+function TSystemUse.Data(aProcessID: integer): TSystemUseData;
+begin
+  Data(result,aProcessID);
+end;
+
+function TSystemUse.KB(aProcessID: integer=0): cardinal;
+begin
+  with Data(aProcessID) do
+    result := WorkKB+VirtualKB;
+end;
+
+function TSystemUse.Percent(aProcessID: integer): single;
+begin
+  with Data(aProcessID) do
+    result := Kernel+User;
+end;
+
+function TSystemUse.PercentKernel(aProcessID: integer): single;
+begin
+  result := Data(aProcessID).Kernel;
+end;
+
+function TSystemUse.PercentUser(aProcessID: integer): single;
+begin
+  result := Data(aProcessID).User;
+end;
+
+function TSystemUse.PercentSystem(out Idle,Kernel,User: currency): boolean;
+begin
+  result := fProcessInfo.PerSystem(Idle,Kernel,User);
+end;
+
+function TSystemUse.HistoryData(aProcessID,aDepth: integer): TSystemUseDataDynArray;
+var i,n,last: integer;
+begin
+  result := nil;
+  if self=nil then
+    exit;
+  fSafe.Lock;
+  try
+    i := ProcessIndex(aProcessID);
+    if i>=0 then
+      with fProcess[i] do begin
+        n := length(Data);
+        last := n-1;
+        if (aDepth>0) and (n>aDepth) then
+          n := aDepth;
+        SetLength(result,n); // make ordered copy
+        for i := 0 to n-1 do begin
+          if i<=fDataIndex then
+            result[i] := Data[fDataIndex-i] else begin
+            result[i] := Data[last];
+            dec(last);
+          end;
+          if PInt64(@result[i].Timestamp)^=0 then begin
+            SetLength(result,i); // truncate to latest available sample
+            break;
+          end;
+        end;
+      end;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TSystemUse.History(aProcessID,aDepth: integer): TSingleDynArray;
+var i,n: integer;
+    data: TSystemUseDataDynArray;
+begin
+  data := HistoryData(aProcessID,aDepth);
+  n := length(data);
+  SetLength(result,n);
+  for i := 0 to n-1 do
+    result[i] := data[i].Kernel+data[i].User;
+end;
+
+class function TSystemUse.Current(aCreateIfNone: boolean): TSystemUse;
+begin
+  if (ProcessSystemUse=nil) and aCreateIfNone then
+    GarbageCollectorFreeAndNil(ProcessSystemUse,TSystemUse.Create(60));
+  result := ProcessSystemUse;
+end;
+
+function TSystemUse.HistoryText(aProcessID,aDepth: integer;
+  aDestMemoryMB: PRawUTF8): RawUTF8;
+var data: TSystemUseDataDynArray;
+    mem: RawUTF8;
+    i: integer;
+begin
+  result := '';
+  data := HistoryData(aProcessID,aDepth);
+  {$ifdef LINUXNOTBSD} // bsd: see VM_LOADAVG
+  // https://www.retro11.de/ouxr/211bsd/usr/src/lib/libc/gen/getloadavg.c.html
+  if data = nil then
+    result := StringFromFile('/proc/loadavg',{HasNoSize=}true) else
+  {$endif LINUXNOTBSD}
+  for i := 0 to high(data) do
+  with data[i] do begin
+    result := FormatUTF8('%% ',[result,TruncTo2Digits(Kernel+User)]);
+    if aDestMemoryMB<>nil then
+      mem := FormatUTF8('%% ',[mem,TruncTo2Digits(WorkKB/1024)]);
+  end;
+  result := trim(result);
+  if aDestMemoryMB<>nil then
+    aDestMemoryMB^ := trim(mem);
+end;
+
+{$ifndef NOVARIANTS}
+
+function TSystemUse.HistoryVariant(aProcessID,aDepth: integer): variant;
+var res: TDocVariantData absolute result;
+    data: TSystemUseDataDynArray;
+    i: integer;
+begin
+  VarClear(result);
+  data := HistoryData(aProcessID,aDepth);
+  res.InitFast(length(data),dvArray);
+  for i := 0 to high(data) do
+    res.AddItem(TruncTo2Digits(data[i].Kernel+data[i].User));
+end;
+
+{$endif NOVARIANTS}
+
+function SortDynArrayDiskPartitions(const A,B): integer;
+begin
+  result := SortDynArrayString(TDiskPartition(A).mounted,TDiskPartition(B).mounted);
+end;
+
+function GetDiskPartitions: TDiskPartitions;
+{$ifdef MSWINDOWS} // DeviceIoControl(IOCTL_DISK_GET_PARTITION_INFO) requires root
+var drives, drive, m, n: integer;
+    fn, volume: TFileName;
+{$else}
+var mounts, fs, mnt, typ: RawUTF8;
+    p: PUTF8Char;
+    fn: TFileName;
+    n: integer;
+{$endif}
+    av, fr, tot: QWord;
+begin
+  result := nil;
+  n := 0;
+{$ifdef MSWINDOWS}
+   fn := '#:\';
+   drives := GetLogicalDrives;
+   m := 1 shl 2;
+   for drive := 3 to 26 do begin // retrieve partitions mounted as C..Z drives
+     if drives and m <> 0 then begin
+       fn[1] := char(64+drive);
+       if GetDiskInfo(fn,av,fr,tot,@volume) then begin
+         SetLength(result,n+1);
+         StringToUTF8(volume,result[n].name);
+         volume := '';
+         result[n].mounted := fn;
+         result[n].size := tot;
+         inc(n);
+       end;
+     end;
+     m := m shl 1;
+   end;
+{$else} // see https://github.com/gagern/gnulib/blob/master/lib/mountlist.c
+  mounts := StringFromFile({$ifdef BSD}'/etc/mtab'{$else}'/proc/self/mounts'{$endif},
+    {hasnosize=}true);
+  p := pointer(mounts);
+  repeat
+    fs := '';
+    mnt := '';
+    typ := '';
+    ScanUTF8(GetNextLine(p,p),'%S %S %S',[@fs,@mnt,@typ]);
+    if (fs<>'') and (fs<>'rootfs') and (IdemPCharArray(pointer(fs),['/DEV/LOOP'])<0) and
+       (mnt<>'') and (mnt<>'/mnt') and (typ<>'') and
+       (IdemPCharArray(pointer(mnt),['/PROC/','/SYS/','/RUN/'])<0) and
+       (FindPropName(['autofs','proc','subfs','debugfs','devpts','fusectl','mqueue',
+        'rpc-pipefs','sysfs','devfs','kernfs','ignore','none','tmpfs','securityfs',
+        'ramfs','rootfs','devtmpfs','hugetlbfs','iso9660'],typ)<0) then begin
+      fn := UTF8ToString(mnt);
+      if GetDiskInfo(fn,av,fr,tot) and (tot>1 shl 20) then begin
+        //writeln('fs=',fs,' mnt=',mnt,' typ=',typ, ' av=',KB(av),' fr=',KB(fr),' tot=',KB(tot));
+        SetLength(result,n+1);
+        result[n].name := fs;
+        result[n].mounted := fn;
+        result[n].size := tot;
+        inc(n);
+      end;
+    end;
+  until p=nil;
+  DynArray(TypeInfo(TDiskPartitions),result).Sort(SortDynArrayDiskPartitions);
+  {$endif}
+end;
+
+var
+  _DiskPartitions: TDiskPartitions;
+
+function GetDiskPartitionsText(nocache, withfreespace, nospace: boolean): RawUTF8;
+const F: array[boolean] of RawUTF8 = ({$ifdef MSWINDOWS}'%: % (% / %)', '%: % (%/%)'
+         {$else}'% % (% / %)', '% % (%/%)'{$endif});
+var i: integer;
+    parts: TDiskPartitions;
+   function GetInfo(var p: TDiskPartition): shortstring;
+   var av, fr, tot: QWord;
+   begin
+     if not withfreespace or not GetDiskInfo(p.mounted,av,fr,tot) then
+       {$ifdef MSWINDOWS}
+       FormatShort('%: % (%)',[p.mounted[1],p.name,KB(p.size,nospace)],result) else
+       FormatShort(F[nospace],[p.mounted[1],p.name,KB(p.size,nospace)],result);
+       {$else}
+       FormatShort('% % (%)',[p.mounted,p.name,KB(p.size,nospace)],result) else
+       FormatShort(F[nospace],[p.mounted,p.name,KB(fr,nospace),KB(tot,nospace)],result);
+       {$endif}
+   end;
+begin
+  if (_DiskPartitions=nil) or nocache then
+    _DiskPartitions := GetDiskPartitions;
+  parts := _DiskPartitions;
+  if parts=nil then
+    result := '' else
+    ShortStringToAnsi7String(GetInfo(parts[0]),result);
+  for i := 1 to high(parts) do
+    result := FormatUTF8('%, %',[result,GetInfo(parts[i])]);
+end;
+
+{ TSynMonitorMemory }
+
+constructor TSynMonitorMemory.Create(aTextNoSpace: boolean);
+begin
+  FAllocatedUsed := TSynMonitorOneSize.Create(aTextNoSpace);
+  FAllocatedReserved := TSynMonitorOneSize.Create(aTextNoSpace);
+  FPhysicalMemoryFree := TSynMonitorOneSize.Create(aTextNoSpace);
+  FVirtualMemoryFree := TSynMonitorOneSize.Create(aTextNoSpace);
+  FPagingFileTotal := TSynMonitorOneSize.Create(aTextNoSpace);
+  FPhysicalMemoryTotal := TSynMonitorOneSize.Create(aTextNoSpace);
+  FVirtualMemoryTotal := TSynMonitorOneSize.Create(aTextNoSpace);
+  FPagingFileFree := TSynMonitorOneSize.Create(aTextNoSpace);
+end;
+
+destructor TSynMonitorMemory.Destroy;
+begin
+  FAllocatedReserved.Free;
+  FAllocatedUsed.Free;
+  FPhysicalMemoryFree.Free;
+  FVirtualMemoryFree.Free;
+  FPagingFileTotal.Free;
+  FPhysicalMemoryTotal.Free;
+  FVirtualMemoryTotal.Free;
+  FPagingFileFree.Free;
+  inherited Destroy;
+end;
+
+class function TSynMonitorMemory.FreeAsText(nospace: boolean): ShortString;
+const F: array[boolean] of RawUTF8 = ('% / %', '%/%');
+begin
+  with TSynMonitorMemory.Create(nospace) do
+  try
+    RetrieveMemoryInfo;
+    FormatShort(F[nospace],[fPhysicalMemoryFree.Text,fPhysicalMemoryTotal.Text],result);
+  finally
+    Free;
+  end;
+end;
+
+var
+  PhysicalAsTextCache: TShort16; // this value doesn't change usually
+
+class function TSynMonitorMemory.PhysicalAsText(nospace: boolean): TShort16;
+begin
+  if PhysicalAsTextCache='' then
+    with TSynMonitorMemory.Create(nospace) do
+    try
+      PhysicalAsTextCache := PhysicalMemoryTotal.Text;
+    finally
+      Free;
+    end;
+  result := PhysicalAsTextCache;
+end;
+
+class function TSynMonitorMemory.ToJSON: RawUTF8;
+begin
+  with TSynMonitorMemory.Create(false) do
+  try
+    RetrieveMemoryInfo;
+    FormatUTF8('{Allocated:{reserved:%,used:%},Physical:{total:%,free:%,percent:%},'+
+      {$ifdef MSWINDOWS}'Virtual:{total:%,free:%},'+{$endif}'Paged:{total:%,free:%}}',
+      [fAllocatedReserved.Bytes shr 10,fAllocatedUsed.Bytes shr 10,
+       fPhysicalMemoryTotal.Bytes shr 10,fPhysicalMemoryFree.Bytes shr 10, fMemoryLoadPercent,
+       {$ifdef MSWINDOWS}fVirtualMemoryTotal.Bytes shr 10,fVirtualMemoryFree.Bytes shr 10,{$endif}
+       fPagingFileTotal.Bytes shr 10,fPagingFileFree.Bytes shr 10],result);
+  finally
+    Free;
+  end;
+end;
+
+{$ifndef NOVARIANTS}
+class function TSynMonitorMemory.ToVariant: variant;
+begin
+  result := _JsonFast(ToJSON);
+end;
+{$endif}
+
+function TSynMonitorMemory.GetAllocatedUsed: TSynMonitorOneSize;
+begin
+  RetrieveMemoryInfo;
+  result := FAllocatedUsed;
+end;
+
+function TSynMonitorMemory.GetAllocatedReserved: TSynMonitorOneSize;
+begin
+  RetrieveMemoryInfo;
+  result := FAllocatedReserved;
+end;
+
+function TSynMonitorMemory.GetMemoryLoadPercent: integer;
+begin
+  RetrieveMemoryInfo;
+  result := FMemoryLoadPercent;
+end;
+
+function TSynMonitorMemory.GetPagingFileFree: TSynMonitorOneSize;
+begin
+  RetrieveMemoryInfo;
+  result := FPagingFileFree;
+end;
+
+function TSynMonitorMemory.GetPagingFileTotal: TSynMonitorOneSize;
+begin
+  RetrieveMemoryInfo;
+  result := FPagingFileTotal;
+end;
+
+function TSynMonitorMemory.GetPhysicalMemoryFree: TSynMonitorOneSize;
+begin
+  RetrieveMemoryInfo;
+  result := FPhysicalMemoryFree;
+end;
+
+function TSynMonitorMemory.GetPhysicalMemoryTotal: TSynMonitorOneSize;
+begin
+  RetrieveMemoryInfo;
+  result := FPhysicalMemoryTotal;
+end;
+
+function TSynMonitorMemory.GetVirtualMemoryFree: TSynMonitorOneSize;
+begin
+  RetrieveMemoryInfo;
+  result := FVirtualMemoryFree;
+end;
+
+function TSynMonitorMemory.GetVirtualMemoryTotal: TSynMonitorOneSize;
+begin
+  RetrieveMemoryInfo;
+  result := FVirtualMemoryTotal;
+end;
+
+{$ifdef MSWINDOWS}
+{$ifndef UNICODE} // missing API for oldest Delphi
+type
+  DWORDLONG = Int64;
+  TMemoryStatusEx = record
+    dwLength: DWORD;
+    dwMemoryLoad: DWORD;
+    ullTotalPhys: DWORDLONG;
+    ullAvailPhys: DWORDLONG;
+    ullTotalPageFile: DWORDLONG;
+    ullAvailPageFile: DWORDLONG;
+    ullTotalVirtual: DWORDLONG;
+    ullAvailVirtual: DWORDLONG;
+    ullAvailExtendedVirtual: DWORDLONG;
+  end;
+
+// information about the system's current usage of both physical and virtual memory
+function GlobalMemoryStatusEx(var lpBuffer: TMemoryStatusEx): BOOL;
+  stdcall; external kernel32;
+{$endif}
+{$endif}
+
+function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
+{$ifdef WITH_FASTMM4STATS}
+var Heap: TMemoryManagerState;
+    sb: integer;
+{$endif}
+{$ifdef MSWINDOWS}
+var global: TMemoryStatusEx;
+    {$ifdef FPC}mem: TProcessMemoryCounters;{$endif}
+begin
+  FillCharFast(global,SizeOf(global),0);
+  global.dwLength := SizeOf(global);
+  result := GlobalMemoryStatusEx(global);
+  info.percent := global.dwMemoryLoad;
+  info.memtotal := global.ullTotalPhys;
+  info.memfree := global.ullAvailPhys;
+  info.filetotal := global.ullTotalPageFile;
+  info.filefree := global.ullAvailPageFile;
+  info.vmtotal := global.ullTotalVirtual;
+  info.vmfree := global.ullAvailVirtual;
+  {$ifdef FPC} // GetHeapStatus is only about current thread -> use WinAPI
+  if withalloc and Assigned(GetProcessMemoryInfo) then begin
+    FillcharFast(mem,SizeOf(mem),0);
+    mem.cb := SizeOf(mem);
+    GetProcessMemoryInfo(GetCurrentProcess,mem,SizeOf(mem));
+    info.allocreserved := mem.PeakWorkingSetSize;
+    info.allocused := mem.WorkingSetSize;
+  end;
+  {$endif FPC}
+{$else}
+{$ifdef BSD}
+begin
+  {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(info,SizeOf(info),0);
+  info.memtotal := fpsysctlhwint({$ifdef DARWIN}HW_MEMSIZE{$else}HW_PHYSMEM{$endif});
+  info.memfree := info.memtotal-fpsysctlhwint(HW_USERMEM);
+  if info.memtotal<>0 then // avoid div per 0 exception
+    info.percent := ((info.memtotal-info.memfree)*100)div info.memtotal;
+{$else}
+var si: TSysInfo; // Linuxism
+    P: PUTF8Char;
+    {$ifdef FPC}mu: cardinal{$else}const mu=1{$endif};
+begin
+  FillCharFast(info,SizeOf(info),0);
+  {$ifdef FPC}
+  result := SysInfo(@si)=0;
+  mu := si.mem_unit;
+  {$else}
+  result := SysInfo(si)=0; // some missing fields in Kylix' Libc
+  {$endif}
+  if si.totalram<>0 then // avoid div per 0 exception
+    info.percent := ((si.totalram-si.freeram)*100)div si.totalram;
+  info.memtotal := si.totalram*mu;
+  info.memfree := si.freeram*mu;
+  info.filetotal := si.totalswap*mu;
+  info.filefree := si.freeswap*mu;
+  if withalloc then begin
+    // virtual memory information is not available under Linux
+    P := pointer(StringFromFile('/proc/self/statm',{hasnosize=}true));
+    info.allocreserved := GetNextItemCardinal(P,' ')*SystemInfo.dwPageSize; // VmSize
+    info.allocused := GetNextItemCardinal(P,' ')*SystemInfo.dwPageSize;     // VmRSS
+  end;
+  // GetHeapStatus is only about current thread -> use /proc/[pid]/statm
+{$endif BSD}
+{$endif MSWINDOWS}
+{$ifdef WITH_FASTMM4STATS} // override OS information by actual FastMM4
+  if withalloc then begin
+    GetMemoryManagerState(Heap); // direct raw FastMM4 access
+    info.allocused := Heap.TotalAllocatedMediumBlockSize+Heap.TotalAllocatedLargeBlockSize;
+    info.allocreserved := Heap.ReservedMediumBlockAddressSpace+Heap.ReservedLargeBlockAddressSpace;
+    for sb := 0 to high(Heap.SmallBlockTypeStates) do
+      with Heap.SmallBlockTypeStates[sb] do begin
+        inc(info.allocused,UseableBlockSize*AllocatedBlockCount);
+        inc(info.allocreserved,ReservedAddressSpace);
+      end;
+  end;
+{$endif WITH_FASTMM4STATS}
+end;
+
+procedure TSynMonitorMemory.RetrieveMemoryInfo;
+var tix: cardinal;
+    info: TMemoryInfo;
+begin
+  tix := GetTickCount64 shr 7; // allow 128 ms resolution for updates
+  if fLastMemoryInfoRetrievedTix<>tix then begin
+    fLastMemoryInfoRetrievedTix := tix;
+    if not GetMemoryInfo(info,{withalloc=}true) then
+      exit;
+    FMemoryLoadPercent := info.percent;
+    FPhysicalMemoryTotal.Bytes := info.memtotal;
+    FPhysicalMemoryFree.Bytes := info.memfree;
+    FPagingFileTotal.Bytes := info.filetotal;
+    FPagingFileFree.Bytes  := info.filefree;
+    FVirtualMemoryTotal.Bytes := info.vmtotal;
+    FVirtualMemoryFree.Bytes := info.vmfree;
+    FAllocatedReserved.Bytes := info.allocreserved;
+    FAllocatedUsed.Bytes := info.allocused;
+  end;
+end;
+
+
+{ TSynMonitorDisk }
+
+constructor TSynMonitorDisk.Create;
+begin
+  fAvailableSize := TSynMonitorOneSize.Create({nospace=}false);
+  fFreeSize := TSynMonitorOneSize.Create({nospace=}false);
+  fTotalSize := TSynMonitorOneSize.Create({nospace=}false);
+end;
+
+destructor TSynMonitorDisk.Destroy;
+begin
+  fAvailableSize.Free;
+  fFreeSize.Free;
+  fTotalSize.Free;
+  inherited;
+end;
+
+function TSynMonitorDisk.GetName: TFileName;
+begin
+  RetrieveDiskInfo;
+  result := fName;
+end;
+
+function TSynMonitorDisk.GetAvailable: TSynMonitorOneSize;
+begin
+  RetrieveDiskInfo;
+  result := fAvailableSize;
+end;
+
+function TSynMonitorDisk.GetFree: TSynMonitorOneSize;
+begin
+  RetrieveDiskInfo;
+  result := fFreeSize;
+end;
+
+function TSynMonitorDisk.GetTotal: TSynMonitorOneSize;
+begin
+  RetrieveDiskInfo;
+  result := fTotalSize;
+end;
+
+class function TSynMonitorDisk.FreeAsText: RawUTF8;
+var name: TFileName;
+    avail,free,total: QWord;
+begin
+  GetDiskInfo(name,avail,free,total);
+  FormatUTF8('% % / %',[name, KB(free),KB(total)],result);
+end;
+
+{$ifdef MSWINDOWS}
+function GetDiskFreeSpaceExA(lpDirectoryName: PAnsiChar;
+  var lpFreeBytesAvailableToCaller, lpTotalNumberOfBytes,
+      lpTotalNumberOfFreeBytes: QWord): LongBool; stdcall; external kernel32;
+function GetDiskFreeSpaceExW(lpDirectoryName: PWideChar;
+  var lpFreeBytesAvailableToCaller, lpTotalNumberOfBytes,
+      lpTotalNumberOfFreeBytes: QWord): LongBool; stdcall; external kernel32;
+function DeviceIoControl(hDevice: THandle; dwIoControlCode: DWORD; lpInBuffer: Pointer;
+  nInBufferSize: DWORD; lpOutBuffer: Pointer; nOutBufferSize: DWORD;
+  var lpBytesReturned: DWORD; lpOverlapped: POverlapped): BOOL; stdcall; external kernel32;
+{$endif}
+
+function GetDiskInfo(var aDriveFolderOrFile: TFileName;
+  out aAvailableBytes, aFreeBytes, aTotalBytes: QWord
+  {$ifdef MSWINDOWS}; aVolumeName: PFileName = nil{$endif}): boolean;
+{$ifdef MSWINDOWS}
+var tmp: array[0..MAX_PATH-1] of Char;
+    dummy,flags: DWORD;
+    dn: TFileName;
+begin
+  if aDriveFolderOrFile='' then
+    aDriveFolderOrFile := SysUtils.UpperCase(ExtractFileDrive(ExeVersion.ProgramFilePath));
+  dn := aDriveFolderOrFile;
+  if (dn<>'') and (dn[2]=':') and (dn[3]=#0) then
+    dn := dn+'\';
+  if (aVolumeName<>nil) and (aVolumeName^='') then begin
+    tmp[0] := #0;
+    GetVolumeInformation(pointer(dn),tmp,MAX_PATH,nil,dummy,flags,nil,0);
+    aVolumeName^ := tmp;
+  end;
+  result := {$ifdef UNICODE}GetDiskFreeSpaceExW{$else}GetDiskFreeSpaceExA{$endif}(
+    pointer(dn),aAvailableBytes,aTotalBytes,aFreeBytes);
+{$else}
+{$ifdef KYLIX3}
+var fs: TStatFs64;
+    h: THandle;
+begin
+  if aDriveFolderOrFile='' then
+    aDriveFolderOrFile := '.';
+  h := FileOpen(aDriveFolderOrFile,fmShareDenyNone);
+  result := fstatfs64(h,fs)=0;
+  FileClose(h);
+  aAvailableBytes := fs.f_bavail*fs.f_bsize;
+  aFreeBytes := aAvailableBytes;
+  aTotalBytes := fs.f_blocks*fs.f_bsize;
+{$endif}
+{$ifdef FPC}
+var fs: tstatfs;
+begin
+  if aDriveFolderOrFile='' then
+    aDriveFolderOrFile := '.';
+  result := fpStatFS(aDriveFolderOrFile,@fs)=0;
+  aAvailableBytes := QWord(fs.bavail)*QWord(fs.bsize);
+  aFreeBytes := aAvailableBytes; // no user Quota involved here
+  aTotalBytes := QWord(fs.blocks)*QWord(fs.bsize);
+{$endif FPC}
+{$endif MSWINDOWS}
+end;
+
+procedure TSynMonitorDisk.RetrieveDiskInfo;
+var tix: cardinal;
+begin
+  tix := GetTickCount64 shr 7; // allow 128 ms resolution for updates
+  if fLastDiskInfoRetrievedTix<>tix then begin
+    fLastDiskInfoRetrievedTix := tix;
+    GetDiskInfo(fName,PQWord(@fAvailableSize.Bytes)^,PQWord(@fFreeSize.Bytes)^,
+      PQWord(@fTotalSize.Bytes)^{$ifdef MSWINDOWS},@fVolumeName{$endif});
+  end;
+end;
+
+
 initialization
   Assert(SizeOf(TSynTableFieldType)=1); // as expected by TSynTableFieldProperties
   Assert(SizeOf(TSynTableFieldOptions)=1);
@@ -6149,5 +13283,16 @@ initialization
   Assert(SizeOf(TSynTableData)=SizeOf(TVarData));
   {$endif NOVARIANTS}
   Assert(SizeOf(THTab)=$40000*3); // 786,432 bytes
+  Assert(SizeOf(TSynUniqueIdentifierBits)=SizeOf(TSynUniqueIdentifier));
+  SetLength(JSON_SQLDATE_MAGIC_TEXT,3);
+  PCardinal(pointer(JSON_SQLDATE_MAGIC_TEXT))^ := JSON_SQLDATE_MAGIC;
+  {$ifdef MSWINDOWS}
+  InitWindowsAPI;
+  {$endif MSWINDOWS}
+  TTextWriter.RegisterCustomJSONSerializerFromText([
+    TypeInfo(TDiskPartitions),
+     'name:RawUTF8 mounted:string size:QWord',
+    TypeInfo(TSystemUseDataDynArray),
+     'Timestamp:TDateTime Kernel,User:single WorkDB,VirtualKB:cardinal']);
 end.
 

@@ -5,7 +5,7 @@ interface
 uses
   Windows, Messages, SysUtils, CheckLst, Controls, StdCtrls, Classes, Graphics,
   Forms, ExtCtrls, mORMotUILogin,
-  SynZip, SynCommons, SynDB, SynDBSQLite3;
+  SynZip, SynCommons, SynDB, SynTable, SynDBSQLite3;
 
 type
   TDBExportTablesForm = class(TForm)

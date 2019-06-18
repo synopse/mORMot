@@ -3,7 +3,7 @@
 unit SynBigTable;
 
 (*
-    Synopse Big Table. Copyright (C) 2018 Arnaud Bouchez
+    Synopse Big Table. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -22,7 +22,7 @@ unit SynBigTable;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -433,7 +433,7 @@ type
     // the associated content
     // - in most cases, this TStream is just a wrapper around the memory mapped
     // buffer in memory
-    // - the TStream must be consummed immediately, before any Pack or
+    // - the TStream must be consumed immediately, before any Pack or
     // UpdateToFile method calls
     // - the caller must Free the returned TStream instance
     // - if the data is not already memory mapped (i.e. for files >= 2 GB)
@@ -591,7 +591,7 @@ type
     // the associated content
     // - in most cases, this TStream is just a wrapper around the memory mapped
     // buffer in memory
-    // - the TStream must be consummed immediately, before any Pack or
+    // - the TStream must be consumed immediately, before any Pack or
     // UpdateToFile method calls
     // - the caller must Free the returned TStream instance
     // - if the data is not already memory mapped (i.e. for files >= 2 GB)

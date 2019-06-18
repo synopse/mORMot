@@ -4,7 +4,7 @@ unit SynFPCTypInfo;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -23,7 +23,7 @@ unit SynFPCTypInfo;
 
   The Initial Developer of the Original Code is Alfred Glaenzer.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -74,17 +74,22 @@ type
 
 function GetFPCEnumName(TypeInfo: PTypeInfo; Value: Integer): PShortString; inline;
 function GetFPCEnumValue(TypeInfo: PTypeInfo; const Name: string): Integer; inline;
-function AlignTypeData(p : Pointer) : Pointer;
+function AlignTypeData(p : Pointer) : Pointer; inline;
 function GetFPCTypeData(TypeInfo: PTypeInfo): PTypeData; inline;
 function GetFPCPropInfo(AClass: TClass; const PropName: string): PPropInfo; inline;
+
 {$ifdef FPC_NEWRTTI}
-function GetFPCRecInitData(TypeData: Pointer): Pointer; inline;
-{$endif}
+type
+  /// some type definition to avoid inclusion of TypInfo in main SynCommons.pas
+  PRecInitData = TypInfo.PRecInitData;
+
+function GetFPCRecInitData(TypeData: Pointer): Pointer;
+{$endif FPC_NEWRTTI}
 
 procedure FPCDynArrayClear(var a: Pointer; typeInfo: Pointer);
 procedure FPCFinalizeArray(p: Pointer; typeInfo: Pointer; elemCount: PtrUInt);
 procedure FPCFinalize(Data: Pointer; TypeInfo: Pointer);
-procedure FPCRecordCopy(var Dest; const Source; TypeInfo: pointer);
+procedure FPCRecordCopy(const Source; var Dest; TypeInfo: pointer);
 procedure FPCRecordAddRef(var Data; TypeInfo : pointer);
 
 
@@ -96,7 +101,7 @@ procedure FPCFinalizeArray(p: Pointer; typeInfo: Pointer; elemCount: PtrUInt);
   [external name 'FPC_FINALIZE_ARRAY'];
 procedure FPCFinalize(Data: Pointer; TypeInfo: Pointer);
   [external name 'FPC_FINALIZE'];
-procedure FPCRecordCopy(var Dest; const Source; TypeInfo: pointer);
+procedure FPCRecordCopy(const Source; var Dest; TypeInfo: pointer);
   [external name 'FPC_COPY'];
 procedure FPCRecordAddRef(var Data; TypeInfo : pointer);
   [external name 'FPC_ADDREF'];
@@ -108,6 +113,11 @@ begin
   result := align(p,sizeof(p));
 end;
 {$endif}
+
+function GetFPCTypeData(TypeInfo: PTypeInfo): PTypeData;
+begin
+  result := PTypeData(TypInfo.AlignTypeData(PTypeData(pointer(TypeInfo)+2+PByte(pointer(TypeInfo)+1)^)));
+end;
 
 function GetFPCEnumValue(TypeInfo: PTypeInfo; const Name: string): Integer;
 var PS: PShortString;
@@ -121,7 +131,6 @@ begin
   PT := GetFPCTypeData(TypeInfo);
   Count := 0;
   result := -1;
-
   if TypeInfo^.Kind=tkBool then begin
     if CompareText(BooleanIdents[false],Name)=0 then
       result := 0 else
@@ -161,41 +170,18 @@ begin
   end;
 end;
 
-function AlignTypeData(p : Pointer) : Pointer;
-{$push}
-{$packrecords c}
-  type
-    TAlignCheck = record
-      b : byte;
-      q : qword;
-    end;
-{$pop}
+function AlignTypeData(p: Pointer): Pointer;
 begin
-{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-{$ifdef VER3_0}
-  result := Pointer(align(p,SizeOf(Pointer)));
-{$else VER3_0}
-  result := Pointer(align(p,PtrInt(@TAlignCheck(nil^).q)))
-{$endif VER3_0}
-{$else FPC_REQUIRES_PROPER_ALIGNMENT}
-  result := p;
-{$endif FPC_REQUIRES_PROPER_ALIGNMENT}
-end;
-
-function GetFPCTypeData(TypeInfo: PTypeInfo): PTypeData;
-begin
-  result := PTypeData(AlignTypeData(PTypeData(pointer(TypeInfo)+2+PByte(pointer(TypeInfo)+1)^)));
+  result := TypInfo.AlignTypeData(p);
 end;
 
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-
 function GetFPCAlignPtr(P: pointer): pointer;
 begin
-  result := AlignTypeData(P+2+Length(PTypeInfo(P)^.Name));
-  Dec(PtrUInt(result),SizeOf(pointer));
+  result := TypInfo.AlignTypeData(P+2+Length(PTypeInfo(P)^.Name));
+  Dec(PtrUInt(result),2*SizeOf(pointer));
 end;
-
-{$endif}
+{$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
 function GetFPCPropInfo(AClass: TClass; const PropName: string): PPropInfo;
 begin
@@ -208,8 +194,8 @@ begin
   if PTypeData(TypeData)^.RecInitInfo = nil then
     result := TypeData
   else
-    result := AlignTypeData(pointer(PTypeData(TypeData)^.RecInitData));
+    result := TypInfo.AlignTypeData(pointer(PTypeData(TypeData)^.RecInitData));
 end;
-{$endif}
+{$endif FPC_NEWRTTI}
 
 end.

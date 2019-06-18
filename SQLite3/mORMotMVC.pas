@@ -6,7 +6,7 @@ unit mORMotMVC;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit mORMotMVC;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -1213,7 +1213,7 @@ end;
 { TMVCSessionWithCookies }
 
 constructor TMVCSessionWithCookies.Create;
-var rnd: TByte64;
+var rnd: THash512;
 begin
   inherited Create;
   fContext.CookieName := 'mORMot';
@@ -1521,6 +1521,7 @@ var action: TMVCAction;
     WR: TTextWriter;
     methodOutput: RawUTF8;
     renderContext: variant;
+    err: shortstring;
     tmp: TTextWriterStackBuffer;
 begin
   action.ReturnedStatus := HTTP_SUCCESS;
@@ -1537,10 +1538,13 @@ begin
             try
               exec.Options := [optVariantCopiedByReference];
               exec.ServiceCustomAnswerStatus := action.ReturnedStatus;
-              if not exec.ExecuteJson([fApplication.fFactoryEntry],pointer(fInput),WR,true) then
+              err := '';
+              if not exec.ExecuteJson([fApplication.fFactoryEntry],pointer(fInput),WR,@err,true) then
+                if err<>'' then
+                  raise EMVCException.CreateUTF8('%.CommandRunMethod: %',[self,err]) else
                 with fApplication.fFactory do
-                raise EMVCException.CreateUTF8('%.CommandRunMethod: %.%() execution error',
-                  [Self,InterfaceTypeInfo^.Name,Methods[fMethodIndex].URI]);
+                  raise EMVCException.CreateUTF8('%.CommandRunMethod: %.%() execution error',
+                    [self,InterfaceTypeInfo^.Name,Methods[fMethodIndex].URI]);
               action.RedirectToMethodName := exec.ServiceCustomAnswerHead;
               action.ReturnedStatus := exec.ServiceCustomAnswerStatus;
             finally
@@ -1818,15 +1822,14 @@ begin
       if Ctxt.Method in [mGET,mPOST] then begin
         methodIndex := fApplication.fFactory.FindMethodIndex(rawMethodName);
         if methodIndex>=0 then begin
-          inputContext := Ctxt.InputAsTDocVariant;
+          method := @fApplication.fFactory.Methods[methodIndex];
+          inputContext := Ctxt.GetInputAsTDocVariant(JSON_OPTIONS_FAST_EXTENDED,method);
           if not VarIsEmpty(inputContext) then
           with _Safe(inputContext)^ do begin
-            if (Kind=dvObject) and (Count>0) then begin
+            if (Kind=dvObject) and (Count>0) then
               // try {"p.a1":5,"p.a2":"dfasdfa"} -> {"p":{"a1":5,"a2":"dfasdfa"}}
-              method := @fViews.fFactory.Methods[methodIndex];
               if method^.ArgsInputValuesCount=1 then
                 FlattenAsNestedObject(RawUTF8(method^.Args[method^.ArgsInFirst].ParamName^));
-            end;
             renderer.fInput := ToJSON;
           end;
         end;

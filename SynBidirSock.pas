@@ -6,7 +6,7 @@ unit SynBidirSock;
 {
     This file is part of the Synopse framework.
 
-    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,12 +25,13 @@ unit SynBidirSock;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
   - Alfred (alf)
   - f-vicente
+  - nortg
 
 
   Alternatively, the contents of this file may be used under the terms of
@@ -94,15 +95,6 @@ uses
   SynCrypto,
   SynEcc;
 
-{$ifndef DELPHI5OROLDER}
-  {$ifdef USELOCKERDEBUG}
-    {.$define WSLOCKERDEBUGLIST}
-    {.$define WSLOCKERDEBUGPROCESS}
-  {$endif}
-{$endif}
-
-
-
 
 { -------------- high-level SynCrtSock classes depending on SynCommons }
 
@@ -131,7 +123,8 @@ type
     // - once set, you can change the request URI using the Address property
     // - aKeepAliveSeconds = 0 will force "Connection: Close" HTTP/1.0 requests
     // - an internal cache will be maintained, and entries will be flushed after
-    // aTimeoutSeconds - i.e. 15 minutes per default
+    // aTimeoutSeconds - i.e. 15 minutes per default - setting 0 will disable
+    // the client-side cache content
     // - aToken is an optional token which will be transmitted as HTTP header:
     // $ Authorization: Bearer <aToken>
     // - TWinHttp will be used by default under Windows, unless you specify
@@ -431,7 +424,7 @@ type
     opcode: TWebSocketFrameOpCode;
     /// what is stored in the frame data, i.e. in payload field
     content: TWebSocketFramePayloads;
-    /// internal tick count used for TWebSocketFrameList storage timeout
+    /// equals GetTickCount64 shr 10, as used for TWebSocketFrameList timeout
     tix: cardinal;
     /// the frame data itself
     // - is plain UTF-8 for focText kind of frame
@@ -553,7 +546,7 @@ type
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
       var request: TWebSocketFrame; const info: RawUTF8); override;
   public
-    /// initialize the chat protocol with an incoming frame callback 
+    /// initialize the chat protocol with an incoming frame callback
     constructor Create(const aName,aURI: RawUTF8;
       const aOnIncomingFrame: TOnWebSocketProtocolChatIncomingFrame); overload;
     /// compute a new instance of the WebSockets protocol, with same parameters
@@ -698,7 +691,7 @@ type
   end;
 
   /// used to maintain a list of websocket protocols (for the server side)
-  TWebSocketProtocolList = class(TSynPersistentLocked)
+  TWebSocketProtocolList = class(TSynPersistentLock)
   protected
     fProtocols: array of TWebSocketProtocol;
     // caller should make fSafe.Lock/UnLock
@@ -736,22 +729,17 @@ type
     wscBlockWithAnswer, wscBlockWithoutAnswer, wscNonBlockWithoutAnswer);
 
   /// used to manage a thread-safe list of WebSockets frames
-  TWebSocketFrameList = class(TSynPersistent)
+  TWebSocketFrameList = class(TSynPersistentLock)
   protected
-    fTimeoutSec: cardinal;
+    fTimeoutSec: PtrInt;
     procedure Delete(i: integer);
   public
     /// low-level access to the WebSocket frames list
     List: TWebSocketFrameDynArray;
     /// current number of WebSocket frames in the list
     Count: integer;
-    /// the mutex associated with this resource
-    // - here we use TAutoLocker and not IAutoLocker for Delphi 5 compatibility
-    Safe: TAutoLocker;
     /// initialize the list
-    constructor Create(const identifier: RawUTF8; timeoutsec: integer); reintroduce;
-    /// finalize the list
-    destructor Destroy; override;
+    constructor Create(timeoutsec: integer); reintroduce;
     /// add a WebSocket frame in the list
     // - this method is thread-safe
     procedure Push(const frame: TWebSocketFrame);
@@ -770,7 +758,8 @@ type
   end;
 
   /// parameters to be used for WebSockets process
-  TWebSocketProcessSettings = object
+  {$ifdef UNICODE}TWebSocketProcessSettings = record{$else}TWebSocketProcessSettings = object{$endif}
+  public
     /// time in milli seconds between each focPing commands sent to the other end
     // - default is 0, i.e. no automatic ping sending on client side, and
     // 20000, i.e. 20 seconds, on server side
@@ -839,8 +828,9 @@ type
     fMaskSentFrames: byte;
     fSettings: TWebSocketProcessSettings;
     fProcessCount: integer;
+    fProcessEnded: boolean;
     fNoConnectionCloseAtDestroy: boolean;
-    fSafeIn, fSafeOut: TAutoLocker; // not IAutoLocker for Delphi5
+    fSafeIn, fSafeOut: PSynLocker;
     /// methods run e.g. by TWebSocketServerRest.WebSocketProcessLoop
     procedure ProcessStart; virtual;
     procedure ProcessStop; virtual;
@@ -884,11 +874,14 @@ type
     // jumboframe gathering (if supported by the protocol)
     property Outgoing: TWebSocketFrameList read fOutgoing;
     /// the associated low-level processing thread
-    property  OwnerThread: TSynThread read fOwnerThread;
+    property OwnerThread: TSynThread read fOwnerThread;
     /// the associated low-level WebSocket connection opaque identifier
     property OwnerConnection: Int64 read fOwnerConnection;
     /// how many frames are currently processed by this connection
     property ProcessCount: integer read fProcessCount;
+    /// may be set to TRUE before Destroy to force raw socket disconnection
+    property NoConnectionCloseAtDestroy: boolean
+        read fNoConnectionCloseAtDestroy write fNoConnectionCloseAtDestroy;
   published
     /// the Sec-WebSocket-Protocol application protocol currently involved
     // - TWebSocketProtocolJSON or TWebSocketProtocolBinary in the mORMot context
@@ -905,7 +898,7 @@ type
     fSocket: TCrtSocket;
     fLastSocketTicks: Int64;
     fInvalidPingSendCount: cardinal;
-    fSafePing: TAutoLocker; // not IAutoLocker for Delphi5
+    fSafePing: PSynLocker;
     function LastPingDelay: Int64;
     procedure SetLastPingTicks(invalidPing: boolean=false);
     // called by the thread handling the TCrtSocket processing
@@ -1119,7 +1112,7 @@ type
   public
     /// common initialization of all constructors
     // - this overridden method will set the UserAgent with some default value
-    constructor Create(aTimeOut: cardinal=10000); override;
+    constructor Create(aTimeOut: PtrInt=10000); override;
     /// finalize the connection
     destructor Destroy; override;
     /// process low-level REST request, either on HTTP/1.1 or via WebSockets
@@ -1202,8 +1195,9 @@ constructor THttpRequestCached.Create(const aURI: RawUTF8;
 begin
   inherited Create;
   fKeepAlive := aKeepAliveSeconds*1000;
-  fCache := TSynDictionary.Create(TypeInfo(TRawUTF8DynArray),
-    TypeInfo(THttpRequestCacheDynArray),true,aTimeoutSeconds);
+  if aTimeoutSeconds > 0 then // 0 means no cache
+    fCache := TSynDictionary.Create(TypeInfo(TRawUTF8DynArray),
+      TypeInfo(THttpRequestCacheDynArray),true,aTimeoutSeconds);
   if not LoadFromURI(aURI,aToken,aHttpClass) then
     raise ESynException.CreateUTF8('%.Create: invalid aURI=%',[self,aURI]);
 end;
@@ -1212,7 +1206,8 @@ procedure THttpRequestCached.Clear;
 begin
   FreeAndNil(fHttp); // either fHttp or fSocket is used
   FreeAndNil(fSocket);
-  fCache.DeleteAll;
+  if fCache <> nil then
+    fCache.DeleteAll;
   fURI.Clear;
   fTokenHeader := '';
 end;
@@ -1235,29 +1230,30 @@ begin
   result := '';
   if (fHttp=nil) and (fSocket=nil) then // either fHttp or fSocket is used
     exit;
-  if fCache.FindAndCopy(aAddress,cache) then
+  if (fCache <> nil) and fCache.FindAndCopy(aAddress,cache) then
     FormatUTF8('If-None-Match: %',[cache.Tag],RawUTF8(headin));
   if fTokenHeader<>'' then begin
     if headin<>'' then
       headin := headin+#13#10;
     headin := headin+fTokenHeader;
   end;
-  if fSocket<>nil then
-    status := fSocket.Get(aAddress,fKeepAlive,headin) else
+  if fSocket<>nil then begin
+    status := fSocket.Get(aAddress,fKeepAlive,headin);
+    result := fSocket.Content;
+  end else
     status := fHttp.Request(aAddress,'GET',fKeepAlive,headin,'','',headout,result);
   modified := true;
   case status of
-  STATUS_SUCCESS: begin
-    if fHttp<>nil then
-      cache.Tag := trim(FindIniNameValue(pointer(headout),'ETAG:')) else begin
-      cache.Tag := fSocket.HeaderValue('ETAG');
-      result := fSocket.Content;
+  STATUS_SUCCESS:
+    if fCache <> nil then begin
+      if fHttp <> nil then
+        cache.Tag := trim(FindIniNameValue(pointer(headout),'ETAG:')) else
+        cache.Tag := fSocket.HeaderGetValue('ETAG');
+      if cache.Tag <> '' then begin
+        cache.Content := result;
+        fCache.AddOrUpdate(aAddress,cache);
+      end;
     end;
-    if cache.Tag <> '' then begin
-      cache.Content := result;
-      fCache.AddOrUpdate(aAddress,cache);
-    end;
-  end;
   STATUS_NOTMODIFIED: begin
     result := cache.Content;
     modified := false;
@@ -1295,7 +1291,9 @@ end;
 
 function THttpRequestCached.Flush(const aAddress: SockString): boolean;
 begin
-  result := fCache.Delete(aAddress)>=0;
+  if fCache <> nil then
+    result := fCache.Delete(aAddress)>=0 else
+    result := true;
 end;
 
 
@@ -1440,30 +1438,19 @@ end;
 
 { TWebSocketFrameList }
 
-constructor TWebSocketFrameList.Create(const identifier: RawUTF8; timeoutsec: integer);
+constructor TWebSocketFrameList.Create(timeoutsec: integer);
 begin
   inherited Create;
-  {$ifdef WSLOCKERDEBUGLIST}
-  Safe := TAutoLockerDebug.Create(WebSocketLog,identifier); // more verbose
-  {$else}
-  Safe := TAutoLocker.Create;
-  {$endif}
   fTimeoutSec := timeoutsec;
-end;
-
-destructor TWebSocketFrameList.Destroy;
-begin
-  inherited;
-  Safe.Free;
 end;
 
 function TWebSocketFrameList.AnswerToIgnore(incr: integer): integer;
 begin
-  Safe.Enter;
+  Safe^.Lock;
   if incr<>0 then
-    inc(Safe.Safe^.Padding[0].VInteger,incr);
-  result := Safe.Locker.Padding[0].VInteger;
-  Safe.Leave;
+    inc(Safe^.Padding[0].VInteger,incr);
+  result := Safe^.Padding[0].VInteger;
+  Safe^.UnLock;
 end;
 
 function TWebSocketFrameList.Pop(protocol: TWebSocketProtocol; const head: RawUTF8;
@@ -1477,8 +1464,8 @@ begin
     exit;
   if fTimeoutSec=0 then
     tix := 0 else
-    tix := GetTickCount64 shr 10;
-  Safe.Enter;
+    tix := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64 shr 10;
+  Safe.Lock;
   try
     for i := Count-1 downto 0 do begin
       item := @List[i];
@@ -1492,7 +1479,7 @@ begin
         Delete(i);
     end;
   finally
-    Safe.Leave;
+    Safe.UnLock;
   end;
 end;
 
@@ -1500,16 +1487,17 @@ procedure TWebSocketFrameList.Push(const frame: TWebSocketFrame);
 begin
   if self=nil then
     exit;
-  Safe.Enter;
+  Safe.Lock;
   try
     if Count>=length(List) then
       SetLength(List,Count+Count shr 3+8);
     List[Count] := frame;
     if fTimeoutSec>0 then
-      List[Count].tix := fTimeoutSec+(GetTickCount64 shr 10);
+      List[Count].tix := fTimeoutSec+
+        ({$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64 shr 10);
     inc(Count);
   finally
-    Safe.Leave;
+    Safe.UnLock;
   end;
 end;
 
@@ -1671,7 +1659,7 @@ begin
       InContentType := JSON_CONTENT_TYPE_VAR;
     if Method='' then
       Method := 'POST';
-    Ctxt.Prepare(URL,Method,InHeaders,InContent,InContentType,fRemoteIP);
+    Ctxt.Prepare(URL,Method,InHeaders,InContent,InContentType,fRemoteIP,Ctxt.UseSSL);
     aNoAnswer := NoAnswer='1';
   end;
 end;
@@ -2274,15 +2262,10 @@ begin
   fOwnerConnection := aOwnerConnection;
   fOwnerThread := aOwnerThread;
   fSettings := aSettings;
-  fIncoming := TWebSocketFrameList.Create('ws in list',30*60);
-  fOutgoing := TWebSocketFrameList.Create('ws out list',0);
-  {$ifdef WSLOCKERDEBUGPROCESS}
-  fSafeIn := TAutoLockerDebug.Create(WebSocketLog,'ws in process');
-  fSafeOut := TAutoLockerDebug.Create(WebSocketLog,'ws out process');
-  {$else}
-  fSafeIn := TAutoLocker.Create;
-  fSafeOut := TAutoLocker.Create;
-  {$endif}
+  fIncoming := TWebSocketFrameList.Create(30*60);
+  fOutgoing := TWebSocketFrameList.Create(0);
+  fSafeIn := NewSynLocker;
+  fSafeOut := NewSynLocker;
 end;
 
 destructor TWebSocketProcess.Destroy;
@@ -2305,19 +2288,19 @@ begin
       InterlockedDecrement(fProcessCount);
     end else
       fState := wpsDestroy;
-  if fProcessCount>0 then begin
+  if (fProcessCount>0) or not fProcessEnded then begin
     if log<>nil then
-      log.Log(sllDebug,'fProcessCount=%',[fProcessCount],self);
+      log.Log(sllDebug,'Destroy: wait for shutdown (fProcessCount=%)',[fProcessCount],self);
     timeOut := GetTickCount64+5000;
     repeat
       SleepHiRes(2);
-    until (fProcessCount=0) or (GetTickCount64>timeOut);
+    until ((fProcessCount=0) and fProcessEnded) or (GetTickCount64>timeOut);
   end;
   fProtocol.Free;
   fOutgoing.Free;
   fIncoming.Free;
-  fSafeIn.Free;
-  fSafeOut.Free;
+  fSafeIn.DoneAndFreeMem;
+  fSafeOut.DoneAndFreeMem;
   inherited Destroy;
 end;
 
@@ -2336,19 +2319,20 @@ end;
 procedure TWebSocketProcess.ProcessStop;
 var frame: TWebSocketFrame; // notify e.g. TOnWebSocketProtocolChatIncomingFrame
 begin
-  frame.opcode := focConnectionClose;
-  fProtocol.ProcessIncomingFrame(self,frame,'');
-  if Assigned(fSettings.OnClientDisconnected) then
   try
-    fSettings.OnClientDisconnected(Self);
+    frame.opcode := focConnectionClose;
+    fProtocol.ProcessIncomingFrame(self,frame,'');
+    if Assigned(fSettings.OnClientDisconnected) then
+      fSettings.OnClientDisconnected(Self);
   except
   end;
+  fProcessEnded := true;
 end;
 
 procedure TWebSocketProcess.HiResDelay(const start: Int64);
 var delay: cardinal;
 begin
-  case GetTickCount64-start of
+  case {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64-start of
   0..50:      delay := 0;
   51..200:    delay := 1;
   201..500:   delay := 5;
@@ -2428,7 +2412,7 @@ begin
       result := STATUS_SUCCESS;
       exit;
     end;
-    start := GetTickCount64;
+    start := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64;
     if fSettings.CallbackAnswerTimeOutMS=0 then
       max := start+30000 else // never wait for ever
     if fSettings.CallbackAnswerTimeOutMS<2000 then
@@ -2439,7 +2423,7 @@ begin
         result := STATUS_WEBSOCKETCLOSED;
         exit;
       end else
-      if GetTickCount64>max then begin
+      if {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64>max then begin
         WebSocketLog.Add.Log(sllWarning,'NotifyCallback TIMEOUT %',[head],self);
         if head='answer' then
           fIncoming.AnswerToIgnore(1); // ignore next 'answer'
@@ -2455,13 +2439,13 @@ end;
 function TWebSocketProcess.SendPendingOutgoingFrames: boolean;
 begin
   result := false;
-  fOutgoing.Safe.Enter;
+  fOutgoing.Safe.Lock;
   try
     if fProtocol.SendFrames(self,fOutgoing.List,fOutgoing.Count) then
       result := true else
       WebSocketLog.Add.Log(sllInfo,'SendPendingOutgoingFrames: SendFrames failed',self);
   finally
-    fOutgoing.Safe.Leave;
+    fOutgoing.Safe.UnLock;
   end;
 end;
 
@@ -2534,13 +2518,13 @@ constructor TWebCrtSocketProcess.Create(aSocket: TCrtSocket;
 begin
   inherited Create(aProtocol,aOwnerConnection,aOwnerThread,aSettings,aProcessName);
   fSocket := aSocket;
-  fSafePing := TAutoLocker.Create;
+  fSafePing := NewSynLocker;
 end;
 
 destructor TWebCrtSocketProcess.Destroy;
 begin
   inherited Destroy;
-  fSafePing.Free;
+  fSafePing.DoneAndFreeMem; // to be done lately to avoid GPF in above Destroy
 end;
 
 function TWebCrtSocketProcess.GetFrame(out Frame: TWebSocketFrame;
@@ -2567,7 +2551,7 @@ var hdr: TFrameHeader;
       fSocket.SockInRead(@hdr.len32,8,false);
       if hdr.len32<>0 then // size is more than 32 bits -> reject
         hdr.len32 := maxInt else
-        hdr.len32 := bswap32(hdr.len64);
+        hdr.len32 := {$ifdef FPC}SwapEndian{$else}bswap32{$endif}(hdr.len64);
       if hdr.len32>WebSocketsMaxFrameMB shl 20 then
         raise EWebSockets.CreateUTF8('%.GetFrame: length should be < % MB',
           [self,WebSocketsMaxFrameMB]);
@@ -2590,7 +2574,7 @@ begin
   if ErrorWithoutException<>nil then
     ErrorWithoutException^ := 0;
   result := false;
-  fSafeIn.Enter;
+  fSafeIn.Lock;
   try
     pending := fSocket.SockInPending(TimeOut,false);
     if pending<0 then
@@ -2632,7 +2616,7 @@ begin
     SetLastPingTicks;
     result := true;
   finally
-    fSafeIn.Leave;
+    fSafeIn.UnLock;
   end;
 end;
 
@@ -2640,7 +2624,7 @@ function TWebCrtSocketProcess.SendFrame(var Frame: TWebSocketFrame): boolean;
 var hdr: TFrameHeader;
     len: cardinal;
 begin
-  fSafeOut.Enter;
+  fSafeOut.Lock;
   try
     Log(frame,'SendFrame',sllTrace,true);
     try
@@ -2650,7 +2634,7 @@ begin
       len := Length(Frame.payload);
       hdr.first := byte(Frame.opcode) or FRAME_FIN;
       if fMaskSentFrames<>0 then begin
-        hdr.mask := Random32;
+        hdr.mask := Random32gsl;
         ProcessMask(pointer(Frame.payload),hdr.mask,len);
       end;
       if len<FRAME_LEN2BYTES then begin
@@ -2663,12 +2647,12 @@ begin
         fSocket.SockSend(@hdr,4);
       end else begin
         hdr.len8 := FRAME_LEN8BYTES or fMaskSentFrames;
-        hdr.len64 := bswap32(len);
+        hdr.len64 := {$ifdef FPC}SwapEndian{$else}bswap32{$endif}(len);
         hdr.len32 := 0;
         // huge payload sent outside TCrtSock buffers
         if not fSocket.TrySndLow(@hdr,10+fMaskSentFrames shr 5) or
            not fSocket.TrySndLow(pointer(Frame.payload),len) then
-          result := false; 
+          result := false;
         SetLastPingTicks(not result);
         exit;
       end;
@@ -2682,7 +2666,7 @@ begin
       result := false;
     end;
   finally
-    fSafeOut.Leave;
+    fSafeOut.UnLock;
   end;
 end;
 
@@ -2694,86 +2678,98 @@ begin
   if fProtocol=nil then
     exit;
   ProcessStart; // any exception will close the socket
-  SetLastPingTicks;
-  fState := wpsRun;
-  while (fState<>wpsDestroy) and not fOwnerThread.Terminated do
-    try
-      InterlockedIncrement(fProcessCount);
+  try
+    SetLastPingTicks;
+    fState := wpsRun;
+    while (fState<>wpsDestroy) and not fOwnerThread.Terminated do
       try
-        if GetFrame(request,1,@sockerror) then begin
-          case request.opcode of
-          focPing: begin
-            request.opcode := focPong;
-            SendFrame(request);
-          end;
-          focPong:
-            continue;
-          focText,focBinary:
-            fProtocol.ProcessIncomingFrame(self,request,'');
-          focConnectionClose: begin
-            if fState=wpsRun then begin
-              fState := wpsClose;
+        InterlockedIncrement(fProcessCount);
+        try
+          if GetFrame(request,1,@sockerror) then begin
+            case request.opcode of
+            focPing: begin
+              request.opcode := focPong;
               SendFrame(request);
             end;
-            break; // will close the connection
-          end;
-          end;
-        end else
-        if fOwnerThread.Terminated then
-          break else
-        if sockerror<>0 then begin
-          WebSocketLog.Add.Log(sllInfo,'GetFrame SockInPending error % on %',
-            [sockerror,fProtocol],self);
-          fState := wpsClose;
-          break; // will close the connection
-        end else begin
-          elapsed := LastPingDelay;
-          if (elapsed>0) and (fOutgoing.Count>0) then
-            if not SendPendingOutgoingFrames then begin
-              fState := wpsClose;
-              break;
-            end else
-          if (fSettings.HeartbeatDelay<>0) and
-             (elapsed>fSettings.HeartbeatDelay) then begin
-            request.opcode := focPing;
-            if not SendFrame(request) then
-              if (fSettings.DisconnectAfterInvalidHeartbeatCount<>0) and
-                 (fInvalidPingSendCount>=fSettings.DisconnectAfterInvalidHeartbeatCount) then begin
+            focPong:
+              continue;
+            focText,focBinary:
+              fProtocol.ProcessIncomingFrame(self,request,'');
+            focConnectionClose: begin
+              if fState=wpsRun then begin
                 fState := wpsClose;
-                break; // will close the connection
+                SendFrame(request);
+              end;
+              break; // will close the connection
+            end;
+            end;
+          end else
+          if fOwnerThread.Terminated then
+            break else
+          if sockerror<>0 then begin
+            WebSocketLog.Add.Log(sllInfo,'GetFrame SockInPending error % on %',
+              [sockerror,fProtocol],self);
+            fState := wpsClose;
+            break; // will close the connection
+          end else begin
+            elapsed := LastPingDelay;
+            if elapsed>0 then
+              if (fOutgoing.Count>0) and not SendPendingOutgoingFrames then begin
+                fState := wpsClose;
+                break; // and close
               end else
-                SetLastPingTicks(true); // mark invalid, and avoid immediate retry
+              if (fSettings.HeartbeatDelay<>0) and
+                 (elapsed>fSettings.HeartbeatDelay) then begin
+                request.opcode := focPing;
+                if not SendFrame(request) then
+                  if (fSettings.DisconnectAfterInvalidHeartbeatCount<>0) and
+                     (fInvalidPingSendCount>=fSettings.DisconnectAfterInvalidHeartbeatCount) then begin
+                    fState := wpsClose;
+                    break; // and close
+                  end else
+                    SetLastPingTicks(true); // mark invalid, and avoid immediate retry
+              end;
           end;
+        finally
+          request.payload := '';
+          InterlockedDecrement(fProcessCount);
         end;
-      finally
-        request.payload := '';
-        InterlockedDecrement(fProcessCount);
+        HiResDelay(fLastSocketTicks);
+      except
+        fState := wpsClose;
+        break; // don't be optimistic: abort and close connection
       end;
-      HiResDelay(fLastSocketTicks);
-    except
-      fState := wpsClose;
-      break; // don't be optimistic: abort and close connection
-    end;
-  ProcessStop;
+  finally
+    ProcessStop;
+  end;
 end;
 
 procedure TWebCrtSocketProcess.SetLastPingTicks(invalidPing: boolean);
+var tix: Int64;
 begin
-  fSafePing.Enter;
-  fLastSocketTicks := GetTickCount64;
-  if invalidPing then begin
-    inc(fInvalidPingSendCount);
-    fNoConnectionCloseAtDestroy := true;
-  end else
-    fInvalidPingSendCount := 0;
-  fSafePing.Leave;
+  tix := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64;
+  fSafePing.Lock;
+  try
+    fLastSocketTicks := tix;
+    if invalidPing then begin
+      inc(fInvalidPingSendCount);
+      fNoConnectionCloseAtDestroy := true;
+    end else
+      fInvalidPingSendCount := 0;
+  finally
+    fSafePing.UnLock;
+  end;
 end;
 
 function TWebCrtSocketProcess.LastPingDelay: Int64;
 begin
-  fSafePing.Enter;
-  result := GetTickCount64-fLastSocketTicks;
-  fSafePing.Leave;
+  result := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64;
+  fSafePing.Lock;
+  try
+    dec(result,fLastSocketTicks);
+  finally
+    fSafePing.UnLock;
+  end;
 end;
 
 
@@ -2787,16 +2783,16 @@ var upgrade,uri,version,prot,subprot,key,extin,extout: RawUTF8;
     Digest: TSHA1Digest;
 begin
   result := STATUS_BADREQUEST;
-  upgrade := ClientSock.HeaderValue('Upgrade');
+  upgrade := ClientSock.HeaderGetValue('UPGRADE');
   if not IdemPropNameU(upgrade,'websocket') then
     exit;
-  version := ClientSock.HeaderValue('Sec-WebSocket-Version');
+  version := ClientSock.HeaderGetValue('SEC-WEBSOCKET-VERSION');
   if GetInteger(pointer(version))<13 then
     exit; // we expect WebSockets protocol version 13 at least
   uri := Trim(RawUTF8(ClientSock.URL));
   if (uri<>'') and (uri[1]='/') then
     Delete(uri,1,1);
-  prot := ClientSock.HeaderValue('Sec-WebSocket-Protocol');
+  prot := ClientSock.HeaderGetValue('SEC-WEBSOCKET-PROTOCOL');
   P := pointer(prot);
   if P<>nil then begin
     repeat
@@ -2815,7 +2811,7 @@ begin
     exit;
   Protocol.fRemoteIP := ClientSock.RemoteIP;
   Protocol.fRemoteLocalhost := ClientSock.RemoteIP='127.0.0.1';
-  extin := ClientSock.HeaderValue('Sec-WebSocket-Extensions');
+  extin := ClientSock.HeaderGetValue('SEC-WEBSOCKET-EXTENSIONS');
   if extin<>'' then begin
     CSVToRawUTF8DynArray(pointer(extin),extins,';',true);
     if not Protocol.ProcessHandshake(extins,extout,nil) then begin
@@ -2824,7 +2820,7 @@ begin
       exit;
     end;
   end;
-  key := ClientSock.HeaderValue('Sec-WebSocket-Key');
+  key := ClientSock.HeaderGetValue('SEC-WEBSOCKET-KEY');
   if Base64ToBinLengthSafe(pointer(key),length(key))<>16 then begin
     Protocol.Free;
     exit; // this nonce must be a Base64-encoded value of 16 bytes
@@ -2837,7 +2833,7 @@ begin
   if extout<>'' then
     ClientSock.SockSend(['Sec-WebSocket-Extensions: ',extout]);
   ClientSock.SockSend;
-  ClientSock.SockSendFlush;
+  ClientSock.SockSendFlush('');
   result := STATUS_SUCCESS; // connection upgraded: never back to HTTP/1.1
 end;
 
@@ -2887,7 +2883,7 @@ begin
     if err<>STATUS_SUCCESS then begin
       ClientSock.SockSend(['HTTP/1.0 ',err,' WebSocket Upgrade Error'#13#10+
         'Connection: Close'#13#10]);
-      ClientSock.SockSendFlush;
+      ClientSock.SockSendFlush('');
       ClientSock.KeepAliveClient := false;
     end;
   end else
@@ -3084,7 +3080,7 @@ end;
 
 { THttpClientWebSockets }
 
-constructor THttpClientWebSockets.Create(aTimeOut: cardinal);
+constructor THttpClientWebSockets.Create(aTimeOut: PtrInt);
 begin
   inherited;
   fSettings.SetDefaults;
@@ -3112,7 +3108,7 @@ begin
       Ctxt := THttpServerRequest.Create(
         nil,fProcess.fOwnerConnection,fProcess.fOwnerThread);
       try
-        Ctxt.Prepare(url,method,header,data,dataType,'');
+        Ctxt.Prepare(url,method,header,data,dataType,'',fTLS);
         resthead := FindIniNameValue(Pointer(header),'SEC-WEBSOCKET-REST: ');
         if resthead='NonBlocking' then
           block := wscNonBlockWithoutAnswer else
@@ -3178,27 +3174,27 @@ begin
         'Sec-WebSocket-Version: 13']);
       if aProtocol.ProcessHandshake(nil,extout,nil) and (extout<>'') then
         SockSend(['Sec-WebSocket-Extensions: ',extout]);
-      SockSend;
-      SockSendFlush;
+      SockSend; // CRLF
+      SockSendFlush('');
       SockRecvLn(cmd);
       GetHeader;
-      prot := HeaderValue('Sec-WebSocket-Protocol');
+      prot := HeaderGetValue('SEC-WEBSOCKET-PROTOCOL');
       result := 'Invalid HTTP Upgrade Header';
       if not IdemPChar(pointer(cmd),'HTTP/1.1 101') or
          not ConnectionUpgrade or (ContentLength>0) or
-         not IdemPropNameU(HeaderValue('upgrade'),'websocket') or
+         not IdemPropNameU(HeaderGetValue('UPGRADE'),'websocket') or
          not aProtocol.SetSubprotocol(prot) then
         exit;
       aProtocol.fName := prot;
       result := 'Invalid HTTP Upgrade Accept Challenge';
       ComputeChallenge(bin1,digest1);
-      bin2 := HeaderValue('Sec-WebSocket-Accept');
+      bin2 := HeaderGetValue('SEC-WEBSOCKET-ACCEPT');
       if not Base64ToBin(pointer(bin2),@digest2,length(bin2),sizeof(digest2),false) or
          not IsEqual(digest1,digest2) then
         exit;
       if extout<>'' then begin
         result := 'Invalid HTTP Upgrade ProcessHandshake';
-        extin := HeaderValue('Sec-WebSocket-Extensions');
+        extin := HeaderGetValue('SEC-WEBSOCKET-EXTENSIONS');
         CSVToRawUTF8DynArray(pointer(extin),extins,';',true);
         if (extins=nil) or not aProtocol.ProcessHandshake(extins,extout,@result) then
           exit;
@@ -3393,7 +3389,7 @@ begin
   SetCurrentThreadName('% % %',[self,fOwner.fProcessName,ToText(fProcess)^]);
   fOwner.NotifyThreadStart(self);
   try
-    idletix := GetTickCount64+1000;
+    idletix := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64+1000;
     while not Terminated and (fOwner.fClients<>nil) do begin
       // implement parallel client connections for TAsynchClient
       if (fOwner.fThreadClients.Count>0) and
@@ -3405,9 +3401,9 @@ begin
         fOwner.fClients.ProcessRead(30000);
       pseWrite: begin
         fOwner.fClients.ProcessWrite(30000);
-        if GetTickCount64>=idletix then begin
+        if {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64>=idletix then begin
           fOwner.IdleEverySecond;
-          idletix := GetTickCount64+1000;
+          idletix := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64+1000;
         end;
       end;
       else
@@ -3434,8 +3430,9 @@ constructor TAsynchConnections.Create(OnStart, OnStop: TNotifyThreadEvent;
   aStreamClass: TAsynchConnectionClass; const ProcessName: SockString;
   aLog: TSynLogClass; aOptions: TAsynchConnectionsOptions; aThreadPoolCount: integer);
 var i: integer;
+    log: ISynLog;
 begin
-  aLog.Enter('Create(%,%,%)',[aStreamClass,ProcessName,aThreadPoolCount],self);
+  log := aLog.Enter('Create(%,%,%)',[aStreamClass,ProcessName,aThreadPoolCount],self);
   if (aStreamClass=TAsynchConnection) or (aStreamClass=nil) then
     raise EAsynchConnections.CreateUTF8('%.Create(%)',[self,aStreamClass]);
   if aThreadPoolCount<=0 then

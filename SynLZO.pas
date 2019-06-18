@@ -5,7 +5,7 @@ unit SynLZO;
 {
     This file is part of Synopse LZO Compression.
 
-    Synopse LZO Compression. Copyright (C) 2018 Arnaud Bouchez
+    Synopse LZO Compression. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -24,7 +24,7 @@ unit SynLZO;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -179,7 +179,7 @@ function CompressSynLZO(var Data: AnsiString; Compress: boolean): AnsiString;
 
 {$ifdef LZOFILE}
 
-{$ifdef WIN32}
+{$ifdef MSWINDOWS}
 // file compression functions using fast SynLZO library (up to 2GB file size)
 // - if you are dealing directly with file compression, this is where to begin
 // - SynLZO compressed files read/write is faster than copying plain files :)
@@ -1322,7 +1322,7 @@ end;
 
 
 {$ifdef LZOFILE}
-{$ifdef WIN32}
+{$ifdef MSWINDOWS}
 
 function adler32(adler: cardinal; buf: pointer; len: cardinal): cardinal;
 {$ifdef USEASM}
@@ -1796,7 +1796,7 @@ begin
     SetLastError(err);
 end;
 
-{$endif WIN32}
+{$endif MSWINDOWS}
 {$endif LZOFILE}
 
 function Hash32(P: PIntegerArray; L: integer): cardinal;
@@ -1845,7 +1845,7 @@ begin
     SetString(result,nil,len);
     P := pointer(result);
     PCardinal(P)^ := Hash32(pointer(Data),DataLen);
-    len := lzopas_compress(pointer(Data),DataLen,P+8);
+    len := lzopas_compress(pointer(Data),DataLen,pointer(P+8));
     PCardinal(P+4)^ := Hash32(pointer(P+8),len);
     SetString(Data,P,len+8);
   end else begin
@@ -1853,9 +1853,9 @@ begin
     P := pointer(Data);
     if (DataLen<=8) or (Hash32(pointer(P+8),DataLen-8)<>PCardinal(P+4)^) then
       exit;
-    len := lzopas_decompressdestlen(P+8);
+    len := lzopas_decompressdestlen(pointer(P+8));
     SetLength(result,len);
-    if (len<>0) and ((lzopas_decompress(P+8,DataLen-8,pointer(result))<>len) or
+    if (len<>0) and ((lzopas_decompress(pointer(P+8),DataLen-8,pointer(result))<>len) or
        (Hash32(pointer(result),len)<>PCardinal(P)^)) then begin
       result := '';
       exit;

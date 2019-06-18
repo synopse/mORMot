@@ -6,7 +6,7 @@ unit SynMongoDB;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynMongoDB;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -352,10 +352,11 @@ type
     /// the kind of element stored
     case VKind: TBSONElementType of
     betObjectID: (
-      {$HINTS OFF} // does not complain if Filler is declared but never used
+      {$IFDEF FPC} {$PUSH} {$ENDIF} {$HINTS OFF}
+      // does not complain if Filler is declared but never used
       VFiller: array[1..SizeOf(TVarData)-SizeOf(TVarType)-SizeOf(TBSONElementType)
         -SizeOf(TBSONObjectID)] of byte;
-      {$HINTS ON}
+      {$IFDEF FPC} {$POP} {$ELSE} {$HINTS ON} {$ENDIF}
       VObjectID: TBSONObjectID
     );
     betBinary, betDoc, betArray, betRegEx, betDeprecatedDbptr, betTimestamp,
@@ -1359,6 +1360,8 @@ type
     // - FullCollectionName is e.g. 'dbname.collectionname'
     // - JSONDocuments is an array of JSON objects
     // - there is no response to an opInsert message
+    // - warning: JSONDocuments[] buffer will be modified in-place during
+    // parsing, so a private copy may have to be made by the caller
     constructor Create(const FullCollectionName: RawUTF8;
       const JSONDocuments: array of PUTF8Char; Flags: TMongoInsertFlags=[]); reintroduce; overload;
   end;
@@ -2664,15 +2667,13 @@ begin // very fast optimized code
       if n=0 then
         break;
       inc(cap,n); // pre-allocate Doc.Names[]/Values[]
-      if cap<512 then
-        Doc.Capacity := cap else
-        if Doc.Capacity<cap then
-          Doc.Capacity := cap+cap shr 3; // faster for huge arrays
+      if Doc.Capacity<cap then
+        Doc.Capacity := NextGrow(cap); // faster for huge arrays
       for i := 0 to n-1 do begin
         if Kind=betDoc then
           if intnames<>nil then
             intnames.Unique(Doc.Names[i+Doc.Count],items[i].Name,items[i].NameLen) else
-            SetString(Doc.Names[i+Doc.Count],PAnsiChar(items[i].Name),items[i].NameLen);
+            FastSetString(Doc.Names[i+Doc.Count],items[i].Name,items[i].NameLen);
         items[i].ToVariant(Doc.Values[i+Doc.Count],Option);
       end;
       Doc.SetCount(Doc.Count+n);
@@ -2719,16 +2720,16 @@ procedure TBSONElement.ToVariant(var result: variant;
 var res: TVarData absolute result;
     resBSON: TBSONVariantData absolute result;
 begin
-  if res.VType and VTYPE_STATIC<>0 then
+  {$ifndef FPC}if res.VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(result);
   ZeroFill(@result); // set result.VType=varEmpty and result.VAny=nil
   case Kind of
   betFloat:
     res.VDouble := PDouble(Element)^;
   betString:
-    SetString(RawUTF8(res.VAny),Data.Text,Data.TextLen);
+    FastSetString(RawUTF8(res.VAny),Data.Text,Data.TextLen);
   betJS, betDeprecatedSymbol:
-    SetString(RawUTF8(resBSON.VText),Data.Text,Data.TextLen);
+    FastSetString(RawUTF8(resBSON.VText),Data.Text,Data.TextLen);
   betDoc, betArray:
     if DocArrayConversion=asBSONVariant then
       SetString(TBSONDocument(resBSON.VBlob),PAnsiChar(Element),ElementBytes) else begin
@@ -2785,7 +2786,7 @@ begin
   betFloat:
     ExtendedToStr(PDouble(Element)^,DOUBLE_PRECISION,result);
   betString:
-    SetString(result,Data.Text,Data.TextLen);
+    FastSetString(result,Data.Text,Data.TextLen);
   betInt32:
     Int32ToUtf8(PInteger(Element)^,result);
   betInt64:
@@ -3154,7 +3155,7 @@ var item: TBSONElement;
 begin
   result := item.FromNext(BSON);
   if result then begin
-    SetString(name,PAnsiChar(item.Name),item.NameLen);
+    FastSetString(name,item.Name,item.NameLen);
     item.ToVariant(element,DocArrayConversion);
   end;
 end;
@@ -3175,7 +3176,7 @@ procedure BSONToDoc(BSON: PByte; var Result: Variant; ExpectedBSONLen: Integer;
 begin
   if Option=asBSONVariant then
     raise EBSONException.Create('BSONToDoc(option=asBSONVariant) is not allowed');
-  if TVarData(result).VType and VTYPE_STATIC<>0 then
+  {$ifndef FPC}if TVarData(result).VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(result);
   BSONParseLength(BSON,ExpectedBSONLen);
   BSONItemsToDocVariant(betDoc,BSON,TDocVariantData(Result),Option);
@@ -3440,7 +3441,7 @@ end;
 procedure TBSONWriter.BSONDocumentBegin;
 begin
   if fDocumentStack>=Length(fDocumentStackOffset) then
-    SetLength(fDocumentStackOffset,fDocumentStack+fDocumentStack shr 3+16);
+    SetLength(fDocumentStackOffset,NextGrow(fDocumentStack));
   fDocumentStackOffset[fDocumentStack] := TotalWritten;
   inc(fDocumentStack);
   Write4(0);
@@ -3471,7 +3472,7 @@ begin
       raise EBSONException.CreateUTF8('Unexpected %.BSONDocumentEnd',[self]);
     dec(fDocumentStack);
     if fDocumentCount>=Length(fDocument) then
-      SetLength(fDocument,fDocumentCount+fDocumentCount shr 3+16);
+      SetLength(fDocument,NextGrow(fDocumentCount));
     with fDocument[fDocumentCount] do begin
       Offset := fDocumentStackOffset[fDocumentStack];
       Length := TotalWritten-Offset;
@@ -3883,9 +3884,9 @@ end;
 procedure TBSONObjectID.ComputeNew;
 var now, count: cardinal;
 begin
+  now := UnixTimeUTC; // fast API call (no need of cache)
   with GlobalBSONObjectID do begin
     EnterCriticalSection(Section);
-    now := UnixTimeUTC; // fast API call (no need of cache)
     if now>LastCreateTime then begin
       LastCreateTime := now;
       count := Default.Counter; // reset
@@ -3900,7 +3901,7 @@ begin
     Counter.b2 := count shr 8;
     Counter.b3 := count;
     LastCounter := count;
-    UnixCreateTime := bswap32(LastCreateTime);
+    UnixCreateTime := {$ifdef FPC}SwapEndian{$else}bswap32{$endif}(LastCreateTime);
     MachineID := Default.MachineID;
     ProcessID := Default.ProcessID;
     LeaveCriticalSection(Section);
@@ -3920,7 +3921,7 @@ end;
 
 function TBSONObjectID.CreateDateTime: TDateTime;
 begin
-  result := UnixTimeToDateTime(bswap32(UnixCreateTime));
+  result := UnixTimeToDateTime({$ifdef FPC}SwapEndian{$else}bswap32{$endif}(UnixCreateTime));
 end;
 
 function TBSONObjectID.ToText: RawUTF8;
@@ -3930,7 +3931,7 @@ end;
 
 function TBSONObjectID.ToVariant: variant;
 begin
-  if TVarData(result).VType and VTYPE_STATIC<>0 then
+  {$ifndef FPC}if TVarData(result).VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(result);
   with TBSONVariantData(result) do begin
     VType := BSONVariantType.VarType;
@@ -3969,7 +3970,7 @@ end;
 
 procedure TBSONObjectID.ToText(var result: RawUTF8);
 begin
-  SetString(result,nil,sizeof(self)*2);
+  FastSetString(result,nil,sizeof(self)*2);
   SynCommons.BinToHex(@self,pointer(result),sizeof(self));
 end;
 
@@ -4020,7 +4021,7 @@ procedure TBSONVariant.FromBinary(const Bin: RawByteString;
 var Len: integer;
 begin // "\x05" e_name int32 subtype (byte*)
   with TBSONVariantData(result) do begin
-    if VType and VTYPE_STATIC<>0 then
+    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
       VarClear(result);
     if Bin='' then begin
       VType := varNull; // stores a NULL
@@ -4041,7 +4042,7 @@ procedure TBSONVariant.FromBSONDocument(const BSONDoc: TBSONDocument;
   var result: variant; Kind: TBSONElementType);
 begin
   with TBSONVariantData(result) do begin
-    if VType and VTYPE_STATIC<>0 then
+    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
       VarClear(result);
     VType := VarType;
     VKind := Kind;
@@ -4052,7 +4053,7 @@ end;
 
 procedure TBSONVariant.FromJSON(json: PUTF8Char; var result: variant);
 begin
-  if TVarData(result).VType and VTYPE_STATIC<>0 then
+  {$ifndef FPC}if TVarData(result).VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(result);
   if json=nil then
     exit;
@@ -4069,7 +4070,7 @@ end;
 const
   BSON_JSON_NEWDATE: string[8] = 'ew Date('; // circumvent Delphi XE4 Win64 bug
 
-{$HINTS OFF} // avoid hints with CompareMemFixed() inlining
+{$IFDEF FPC} {$PUSH} {$ENDIF} {$HINTS OFF} // avoid hints with CompareMemFixed() inlining
 function TBSONVariant.TryJSONToVariant(var JSON: PUTF8Char;
   var Value: variant; EndOfObject: PUTF8Char): boolean;
 var bsonvalue: TBSONVariantData absolute Value;
@@ -4241,7 +4242,7 @@ begin // here JSON does not start with " or 1..9 (obvious simple types)
   '/': TryRegExShell(JSON+1);
   end;
 end;
-{$HINTS ON}
+{$IFDEF FPC} {$POP} {$ELSE} {$HINTS ON} {$ENDIF}
 
 procedure TBSONVariant.Cast(var Dest: TVarData; const Source: TVarData);
 begin
@@ -4256,7 +4257,7 @@ begin
   if AVarType=VarType then begin
     VariantToUTF8(Variant(Source),tmp,wasString);
     if wasString then begin
-      if Dest.VType and VTYPE_STATIC<>0 then
+      {$ifndef FPC}if Dest.VType and VTYPE_STATIC<>0 then{$endif}
         VarClear(variant(Dest));
       if TBSONVariantData(Dest).VObjectID.FromText(tmp) then begin
         Dest.VType := VarType;
@@ -4296,7 +4297,7 @@ procedure TBSONVariant.Copy(var Dest: TVarData;
 begin
   if Indirect then
     SimplisticCopy(Dest,Source,true) else begin
-    if Dest.VType and VTYPE_STATIC<>0 then
+    {$ifndef FPC}if Dest.VType and VTYPE_STATIC<>0 then{$endif}
       VarClear(variant(Dest)); // Dest may be a complex type
     Dest := Source;
     with TBSONVariantData(Dest) do
@@ -4378,7 +4379,7 @@ end;
 function JavaScript(const JS: RawUTF8): variant;
 begin
   with TBSONVariantData(result) do begin
-    if VType and VTYPE_STATIC<>0 then
+    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
       VarClear(result);
     VType := BSONVariantType.VarType;
     VKind := betJS;
@@ -4391,7 +4392,7 @@ function JavaScript(const JS: RawUTF8; const Scope: TBSONDocument): variant;
 var Len, JSLen: integer;
 begin
   with TBSONVariantData(result) do begin
-    if VType and VTYPE_STATIC<>0 then
+    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
       VarClear(result);
     VType := BSONVariantType.VarType;
     VKind := betJSScope;
@@ -4574,7 +4575,7 @@ begin
         exit;
       W.ToBSONDocument(doc);
       if n>=length(docs) then
-        SetLength(docs,n+64+length(docs) shr 3);
+        SetLength(docs,NextGrow(n));
       docs[n] := doc;
       inc(n);
       W.CancelAll;
@@ -6052,10 +6053,19 @@ function TMongoCollection.AggregateCallFromJson(const pipelineJSON: RawUTF8;
 begin // see http://docs.mongodb.org/manual/reference/command/aggregate
   if fDatabase.Client.ServerBuildInfoNumber<2020000 then
     raise EMongoException.Create('Aggregation needs MongoDB 2.2 or later');
-  // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}]})
-  Database.RunCommand(BSONVariant('{aggregate:"%",pipeline:[%]}',[Name,pipelineJSON],[]),reply);
-  // { "result" : [ { "_id" : null, "max" : 1250 } ], "ok" : 1 }
-  res := reply.result;
+  if fDatabase.Client.ServerBuildInfoNumber>=3060000 then begin
+    // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}],cursor:{}})
+    Database.RunCommand(BSONVariant('{aggregate:"%",pipeline:[%],cursor:{}}',[Name,pipelineJSON],[]),reply);
+    // {"cursor":{"firstBatch":[{"_id":null,"max":1510}],"id":0,"ns":"db.test"},"ok":1}
+    res := reply.cursor;
+    if not VarIsNull(res) then
+      res := res.firstBatch;
+  end else begin
+    // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}]})
+    Database.RunCommand(BSONVariant('{aggregate:"%",pipeline:[%]}',[Name,pipelineJSON],[]),reply);
+    // { "result" : [ { "_id" : null, "max" : 1250 } ], "ok" : 1 }
+    res := reply.result;
+  end;
   result := not VarIsNull(res);
 end;
 
@@ -6075,10 +6085,19 @@ function TMongoCollection.AggregateCallFromVariant(const pipelineArray: variant;
 begin // see http://docs.mongodb.org/manual/reference/command/aggregate
   if fDatabase.Client.ServerBuildInfoNumber<2020000 then
     raise EMongoException.Create('Aggregation needs MongoDB 2.2 or later');
-  // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}]})
-  Database.RunCommand(BSONVariant(['aggregate',name,'pipeline',pipelineArray]),reply);
-  // { "result" : [ { "_id" : null, "max" : 1250 } ], "ok" : 1 }
-  res := reply.result;
+  if fDatabase.Client.ServerBuildInfoNumber>=3060000 then begin
+    // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}],cursor:{}})
+    Database.RunCommand(BSONVariant(['aggregate',name,'pipeline',pipelineArray,'cursor','{}']),reply);
+    // {"cursor":{"firstBatch":[{"_id":null,"max":1510}],"id":0,"ns":"db.test"},"ok":1}
+    res := reply.cursor;
+    if not VarIsNull(res) then
+      res := res.firstBatch;
+  end else begin
+    // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}]})
+    Database.RunCommand(BSONVariant(['aggregate',name,'pipeline',pipelineArray]),reply);
+    // { "result" : [ { "_id" : null, "max" : 1250 } ], "ok" : 1 }
+    res := reply.result;
+  end;
   result := not VarIsNull(res);
 end;
 
@@ -6481,7 +6500,7 @@ begin
     Bits.hi := BSON_DECIMAL128_HI_INT64POS;
   end else begin
     Bits.lo := -value;
-    Bits.hi := BSON_DECIMAL128_HI_INT64NEG;
+    Bits.hi := QWord(BSON_DECIMAL128_HI_INT64NEG);
   end;
 end;
 
@@ -6498,7 +6517,7 @@ begin
     Bits.hi := BSON_DECIMAL128_HI_INT64POS;
   end else begin
     Bits.lo := -value;
-    Bits.hi := BSON_DECIMAL128_HI_INT64NEG;
+    Bits.hi := QWord(BSON_DECIMAL128_HI_INT64NEG);
   end;
 end;
 
@@ -6527,7 +6546,7 @@ procedure TDecimal128.FromCurr(const value: Currency);
 begin // force exactly 4 decimals
   if value<0 then begin
     Bits.lo := -PInt64(@value)^;
-    Bits.hi := BSON_DECIMAL128_HI_CURRNEG;
+    Bits.hi := QWord(BSON_DECIMAL128_HI_CURRNEG);
   end else begin
     Bits.lo := PInt64(@value)^;
     Bits.hi := BSON_DECIMAL128_HI_CURRPOS;
@@ -6539,9 +6558,9 @@ begin
   result := (Bits.lo=other.Bits.lo) and (Bits.hi=other.Bits.hi);
 end;
 
-function div128bits9digits(var value: THash128Rec): cardinal;
+function div128bits9digits(var value: THash128Rec): PtrUInt;
 var r64: QWord;
-    i: integer;
+    i: PtrInt;
 begin
   r64 := 0;
   for i := 0 to high(value.c) do begin
@@ -6555,33 +6574,27 @@ begin
   result := r64;
 end;
 
-{$ifdef CPU32DELPHI}
-function x86div10(value: cardinal): cardinal;
-asm // use fast reciprocal division for Delphi (FPC knows this optimization)
-      mov   edx, 3435973837
-      mul   edx
-      shr   edx, 3
-      mov   eax, edx
-end;
-{$endif}
-
-function TDecimal128.ToText(out Buffer: TDecimal128Str): integer;
-var dest: PUTF8Char;
-    exp, sciexp, signdig, radixpos: integer;
-    combi, biasedexp, signmsb, leastdig, fastdiv: cardinal;
-    digbuffer: array[0..35] of byte;
-    dig: PByte;
-    _128: THash128Rec;
-    j, k: integer;
-  procedure append(digits: integer);
-  var i: integer;
-  begin
-    for i := 0 to digits-1 do begin
+procedure append(var dest: PUTF8Char; var dig: PByte; digits: PtrInt); {$ifdef HASINLINE}inline;{$endif}
+begin
+  if digits>0 then
+    repeat
       dest^ := AnsiChar(dig^+ord('0'));
       inc(dig);
       inc(dest);
-    end;
-  end;
+      dec(digits);
+      if digits=0 then
+        break;
+    until false;
+end;
+
+function TDecimal128.ToText(out Buffer: TDecimal128Str): integer;
+var dest: PUTF8Char;
+    dig: PByte;
+    exp, sciexp, signdig, radixpos, j, k: PtrInt;
+    combi, biasedexp, signmsb: PtrUInt;
+    leastdig, fastdiv: cardinal;
+    digbuffer: array[0..35] of byte;
+    _128: THash128Rec;
 begin
   dest := @Buffer;
   if Int64(Bits.hi)<0 then begin
@@ -6597,11 +6610,11 @@ begin
   if combi shr 3=3 then
     case combi of
     30: begin
-      result := AppendRawUTF8ToBuffer(dest,DECIMAL128_SPECIAL_TEXT[dsvPosInf])-@Buffer;
+      result := AppendRawUTF8ToBuffer(dest,DECIMAL128_SPECIAL_TEXT[dsvPosInf])-PUTF8Char(@Buffer);
       exit;
     end;
     31: begin
-      result := AppendRawUTF8ToBuffer(@Buffer,DECIMAL128_SPECIAL_TEXT[dsvNan])-@Buffer;
+      result := AppendRawUTF8ToBuffer(@Buffer,DECIMAL128_SPECIAL_TEXT[dsvNan])-PUTF8Char(@Buffer);
       exit;
     end;
     else begin
@@ -6630,12 +6643,19 @@ begin
       if leastdig=0 then
         continue;
       for j := 8 downto 0 do begin
-        fastdiv := leastdig;
         {$ifdef CPU32DELPHI}
-        leastdig := x86div10(leastdig); // Delphi compiler is not efficient
+        asm // Delphi compiler is not efficient about division
+          mov   eax, leastdig
+          mov   fastdiv, eax
+          mov   edx, 3435973837
+          mul   edx
+          shr   edx, 3
+          mov   leastdig, edx
+        end;
         {$else}
+        fastdiv := leastdig;
         leastdig := leastdig div 10; // FPC will use reciprocal division
-        {$endif}
+        {$endif CPU32DELPHI}
         digbuffer[k*9+j] := fastdiv-leastdig*10;
         if leastdig=0 then
           break;
@@ -6656,7 +6676,7 @@ begin
     if signdig<>0 then begin
       dest^ := '.';
       inc(dest);
-      append(signdig);
+      append(dest,dig,signdig);
     end;
     if sciexp>0 then
       PWord(dest)^ := ord('E')+ord('+')shl 8 else begin
@@ -6666,11 +6686,11 @@ begin
     dest := AppendUInt32ToBuffer(dest+2,sciexp)
   end else begin
     if exp>=0 then // regular format with no decimal place
-      append(signdig)
+      append(dest,dig,signdig)
     else begin
       radixpos := signdig+exp;
       if radixpos>0 then // non-zero digits before radix
-        append(radixpos)
+        append(dest,dig,radixpos)
       else begin
         dest^ := '0'; // leading zero before radix point
         inc(dest);
@@ -6682,22 +6702,22 @@ begin
         inc(dest);
         inc(radixpos);
       end;
-      append(signdig-radixpos);
+      append(dest,dig,signdig-radixpos);
     end;
   end;
-  result := dest-@Buffer;
+  result := dest-PUTF8Char(@Buffer);
 end;
 
 function TDecimal128.ToText: RawUTF8;
 var tmp: TDecimal128Str;
 begin
-  SetString(result,PAnsiChar(@tmp),ToText(tmp));
+  FastSetString(result,@tmp,ToText(tmp));
 end;
 
 procedure TDecimal128.ToText(var result: RawUTF8);
 var tmp: TDecimal128Str;
 begin
-  SetString(result,PAnsiChar(@tmp),ToText(tmp));
+  FastSetString(result,@tmp,ToText(tmp));
 end;
 
 procedure TDecimal128.AddText(W: TTextWriter);
@@ -6752,9 +6772,8 @@ var P,PEnd: PUTF8Char;
     flags: set of (negative, signed, radix, nonzero);
     digits: array[0..BSON_DECIMAL128_MAX_DIGITS-1] of byte;
     firstnon0, digread, digstored, digcount, radixpos,
-    digfirst, diglast, exp, signdig, i: integer;
-    signhi, signlo: QWord;
-    biasedexp: cardinal;
+    digfirst, diglast, exp, signdig, i: PtrInt;
+    signhi, signlo, biasedexp: QWord;
     sign: THash128Rec;
 begin
   for result := dsvNan to dsvNegInf do
@@ -6904,9 +6923,9 @@ begin
   end;
   biasedexp := exp+BSON_DECIMAL128_EXPONENT_BIAS;
   if (sign.H shr 49)and 1<>0 then
-    Bits.hi := (3 shl 61) or (QWord(biasedexp and $3fff)shl 47) or
+    Bits.hi := (QWord(3) shl 61) or ((biasedexp and $3fff)shl 47) or
       (sign.H and $7fffffffffff) else
-    Bits.hi := (QWord(biasedexp and $3fff)shl 49) or
+    Bits.hi := ((biasedexp and $3fff)shl 49) or
       (sign.H and $1ffffffffffff);
   Bits.lo := sign.L;
   if negative in flags then
@@ -6931,6 +6950,8 @@ begin
   end;
   if (bson.VType=BSONVariantType.VarType) and (bson.VKind=betDecimal128) then
     Bits := PDecimal128(bson.VBlob)^.Bits else
+  if bson.VType=varWord64 then
+    FromQWord(TVarData(Value).VInt64) else
   if VariantToInt64(value,v64) then
     FromInt64(v64) else
   if bson.VType=varCurrency then

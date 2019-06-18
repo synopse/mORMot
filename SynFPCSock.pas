@@ -6,7 +6,7 @@ unit SynFPCSock;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -27,7 +27,7 @@ unit SynFPCSock;
   Portions created by Lukas Gebauer are Copyright (C) 2003.
   All Rights Reserved.
 
-  Portions created by Arnaud Bouchez are Copyright (C) 2018 Arnaud Bouchez.
+  Portions created by Arnaud Bouchez are Copyright (C) 2019 Arnaud Bouchez.
   All Rights Reserved.
 
   Contributor(s):
@@ -66,7 +66,7 @@ unit SynFPCSock;
   {$define LINUX} // a Linux-based system
 {$endif}
 
-// BSD definition of scoketaddr
+// BSD definition of socketaddr
 {$ifdef FREEBSD}
   {$DEFINE SOCK_HAS_SINLEN}
 {$endif}
@@ -90,6 +90,7 @@ unit SynFPCSock;
 interface
 
 uses
+  SysUtils,
   {$ifdef FPC}
   BaseUnix,
   Unix,
@@ -98,7 +99,7 @@ uses
   {$endif}
   termio,
   netdb,
-  Sockets,
+  Sockets, // most definitions are inlined in SynFPCSock to avoid Lazarus problems with Sockets.pp
   SynFPCLinux,
   {$else}
   {$ifdef KYLIX3}
@@ -109,7 +110,6 @@ uses
   {$endif}
   {$endif}
   SyncObjs,
-  SysUtils,
   Classes;
 
 const
@@ -150,6 +150,9 @@ type
   PSockAddrIn6 = ^TSockAddrIn6;
   TSockAddrIn6 = sockets.TInetSockAddr6;
 
+  TSockAddr = sockets.TSockAddr;
+  PSockAddr = sockets.PSockAddr;
+
 const
   FIONREAD        = termio.FIONREAD;
   FIONBIO         = termio.FIONBIO;
@@ -166,6 +169,10 @@ const
   IP_MULTICAST_LOOP  = sockets.IP_MULTICAST_LOOP;  { i_char; set/get IP multicast loopback }
   IP_ADD_MEMBERSHIP  = sockets.IP_ADD_MEMBERSHIP;  { ip_mreq; add an IP group membership }
   IP_DROP_MEMBERSHIP = sockets.IP_DROP_MEMBERSHIP; { ip_mreq; drop an IP group membership }
+
+  SHUT_RD         = sockets.SHUT_RD;
+  SHUT_WR         = sockets.SHUT_WR;
+  SHUT_RDWR       = sockets.SHUT_RDWR;
 
   SOL_SOCKET    = sockets.SOL_SOCKET;
 
@@ -215,7 +222,9 @@ const
 
   { Address families. }
   AF_UNSPEC       = 0;               { unspecified }
+  AF_LOCAL        = 1;
   AF_INET         = 2;               { internetwork: UDP, TCP, etc. }
+  AF_UNIX         = AF_LOCAL;
   AF_MAX          = 24;
 
   { Protocol families, same as address families for now. }
@@ -393,7 +402,7 @@ procedure SET_LOOPBACK_ADDR6 (const a: PInAddr6);
 var
   in6addr_any, in6addr_loopback : TInAddr6;
 
-{$ifdef FPC}
+{$ifdef FPC} // some functions inlined redirection to Sockets.pp
 
 procedure FD_CLR(Socket: TSocket; var FDSet: TFDSet); inline;
 function FD_ISSET(Socket: TSocket; var FDSet: TFDSet): Boolean; inline;
@@ -403,10 +412,15 @@ procedure FD_ZERO(var FDSet: TFDSet); inline;
 function ResolveIPToName(const IP: string; Family,SockProtocol,SockType: integer): string;
 function ResolvePort(const Port: string; Family,SockProtocol,SockType: integer): Word;
 
+function fpbind(s:cint; addrx: psockaddr; addrlen: tsocklen): cint; inline;
+function fplisten(s:cint; backlog: cint): cint; inline;
+function fprecv(s:cint; buf: pointer; len: size_t; Flags: cint): ssize_t; inline;
+function fpsend(s:cint; msg:pointer; len:size_t; flags:cint): ssize_t; inline;
+
 {$endif FPC}
 
 const
-  // we assume that the OS has IP6 compatibility
+  // we assume that the Posix OS has IP6 compatibility
   SockEnhancedApi = true;
   SockWship6Api = true;
 
@@ -423,10 +437,11 @@ type
           AF_INET: (sin_port: word;
                     sin_addr: TInAddr;
                     sin_zero: array[0..7] of Char);
-          AF_INET6:(sin6_port:     word;
-                    sin6_flowinfo: longword;
+          AF_INET6:(sin6_port:     word; // see sockaddr_in6
+                    sin6_flowinfo: cardinal;
       	    	      sin6_addr:     TInAddr6;
-      		          sin6_scope_id: longword);
+      		          sin6_scope_id: cardinal);
+          AF_UNIX: (sun_path: array[0..{$ifdef SOCK_HAS_SINLEN}103{$else}107{$endif}] of Char);
           );
   end;
 
@@ -444,11 +459,11 @@ function GetSockOpt(s: TSocket; level,optname: Integer; optval: pointer;
 function SendTo(s: TSocket; Buf: pointer; len,flags: Integer; addrto: TVarSin): Integer;
 function RecvFrom(s: TSocket; Buf: pointer; len,flags: Integer; var from: TVarSin): Integer;
 function ntohs(netshort: word): word;
-function ntohl(netlong: longword): longword;
+function ntohl(netlong: cardinal): cardinal;
 function Listen(s: TSocket; backlog: Integer): Integer;
 function IoctlSocket(s: TSocket; cmd: DWORD; var arg: integer): Integer;
 function htons(hostshort: word): word;
-function htonl(hostlong: longword): longword;
+function htonl(hostlong: cardinal): cardinal;
 function GetSockName(s: TSocket; var name: TVarSin): Integer;
 function GetPeerName(s: TSocket; var name: TVarSin): Integer;
 function Connect(s: TSocket; const name: TVarSin): Integer;
@@ -493,7 +508,7 @@ const
 
 type
   /// polling request data structure for poll()
-  TPollFD = packed record
+  TPollFD = {packed} record
     /// file descriptor to poll
     fd: integer;
     /// types of events poller cares about
@@ -548,7 +563,7 @@ type
   PEPollData = ^TEPollData;
 
   /// epoll descriptor data structure
-  TEPollEvent = packed record
+  TEPollEvent = {$ifdef CPU64}packed{$endif} record
     events: cardinal;
     data: TEpollData;
   end;
@@ -669,6 +684,26 @@ begin
   fpFD_ZERO(fdset);
 end;
 
+function fpbind(s:cint; addrx: psockaddr; addrlen: tsocklen): cint;
+begin
+  result := sockets.fpbind(s, addrx, addrlen);
+end;
+
+function fplisten(s:cint; backlog : cint): cint;
+begin
+  result := sockets.fplisten(s, backlog);
+end;
+
+function fprecv(s:cint; buf: pointer; len: size_t; Flags: cint): ssize_t;
+begin
+  result := sockets.fprecv(s, buf, len, Flags);
+end;
+
+function fpsend(s:cint; msg:pointer; len:size_t; flags:cint): ssize_t;
+begin
+  result := sockets.fpsend(s, msg, len, flags);
+end;
+
 {$endif FPC}
 
 function SizeOfVarSin(sin: TVarSin): integer;
@@ -676,6 +711,7 @@ begin
   case sin.sin_family of
     AF_INET:  result := SizeOf(TSockAddrIn);
     AF_INET6: result := SizeOf(TSockAddrIn6);
+    AF_UNIX:  result := SizeOf(sockaddr_un);
   else        result := 0;
   end;
 end;
@@ -803,7 +839,7 @@ begin
   result := {$ifdef KYLIX3}LibC{$else}sockets{$endif}.ntohs(NetShort);
 end;
 
-function ntohl(netlong: longword): longword;
+function ntohl(netlong: cardinal): cardinal;
 begin
   result := {$ifdef KYLIX3}LibC{$else}sockets{$endif}.ntohl(NetLong);
 end;
@@ -826,12 +862,12 @@ end;
 
 function htons(hostshort: word): word;
 begin
-  result := {$ifdef KYLIX3}LibC{$else}sockets{$endif}.htons(Hostshort);
+  result := {$ifdef KYLIX3}LibC{$else}sockets{$endif}.htons(hostshort);
 end;
 
-function htonl(hostlong: longword): longword;
+function htonl(hostlong: cardinal): cardinal;
 begin
-  result := {$ifdef KYLIX3}LibC{$else}sockets{$endif}.htonl(HostLong);
+  result := {$ifdef KYLIX3}LibC{$else}sockets{$endif}.htonl(hostlong);
 end;
 
 function CloseSocket(s: TSocket): Integer;
@@ -1071,6 +1107,11 @@ var TwoPass: boolean;
 begin
   result := 0;
   FillChar(Sin,Sizeof(Sin),0);
+  if (Family=AF_UNIX) then begin
+    Sin.AddressFamily := AF_UNIX;
+    Move(IP[1],Sin.sun_path,length(IP));
+    exit;
+  end;
   Sin.sin_port := Resolveport(port,family,SockProtocol,SockType);
   TwoPass := false;
   if Family=AF_UNSPEC then begin
@@ -1111,7 +1152,10 @@ begin
     IPList.Clear;
   if (family=AF_INET) or (family=AF_UNSPEC) then begin
     if lowercase(name)=cLocalHostStr then
-      IpList.Add(cLocalHost) else begin
+      IpList.Add(cLocalHost)
+    else if name=cAnyHost then
+      IpList.Add(cAnyHost)
+    else begin
       a4[1] := StrTonetAddr(name);
       if a4[1].s_addr=INADDR_ANY then
         if GetHostByName(name,he) then begin
@@ -1126,7 +1170,10 @@ begin
   end;
   if (family=AF_INET6) or (family=AF_UNSPEC) then begin
     if lowercase(name)=cLocalHostStr then
-      IpList.Add(c6LocalHost) else begin
+      IpList.Add(c6LocalHost)
+    else if name=c6AnyHost then
+      IpList.Add(c6AnyHost)
+    else begin
       a6[1] := StrTonetAddr6(name);
       if IN6_IS_ADDR_UNSPECIFIED(@a6[1]) then
         x := Resolvename6(name,a6) else

@@ -6,7 +6,7 @@ unit mORMotSelfTests;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit mORMotSelfTests;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -119,7 +119,7 @@ type
 
 function TTestSynopsemORMotFramework.Run: boolean;
 begin
-  CustomVersions := format(#13#10#13#10'Run on: %s - codepage=%d'#13#10 +
+  CustomVersions := format(#13#10#13#10'%s (cp%d)'#13#10 +
     '    %s'#13#10'Using mORMot %s'#13#10'    %s %s',
     [OSVersionText, GetACP, CpuInfoText, SYNOPSE_FRAMEWORK_FULLVERSION,
      sqlite3.ClassName, sqlite3.Version]);

@@ -6,7 +6,7 @@ unit SynDBVCL;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynDBVCL;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -69,6 +69,7 @@ uses
   Classes,
   Contnrs,
   SynCommons,
+  SynTable,
   SynDB,
   DB,
   DBCommon,
@@ -280,16 +281,21 @@ begin
   for F := 0 to fDataAccess.ColumnCount-1 do
     with fDataAccess.Columns[F] do begin
     case ColumnType of
-    SynCommons.ftInt64: DBType := ftLargeint;
-    SynCommons.ftDate:  DBType := ftDateTime;
-    SynCommons.ftUTF8:
+    SynTable.ftInt64:
+      DBType := ftLargeint;
+    SynTable.ftDate:
+      DBType := ftDateTime;
+    SynTable.ftUTF8:
       if ColumnDataSize=0 then
         DBType := ftDefaultMemo else
         DBType := ftWideString; // means UnicodeString for Delphi 2009+
-    SynCommons.ftBlob:  DBType := ftBlob;
-    SynCommons.ftDouble, SynCommons.ftCurrency: DBType := ftFloat;
-    else raise EDatabaseError.CreateFmt(
-      'GetFieldData ColumnType=%s',[TSQLDBFieldTypeToString(ColumnType)]);
+    SynTable.ftBlob:
+      DBType := ftBlob;
+    SynTable.ftDouble, SynTable.ftCurrency:
+      DBType := ftFloat;                  
+    else
+      raise EDatabaseError.CreateFmt(
+        'GetFieldData ColumnType=%s',[TSQLDBFieldTypeToString(ColumnType)]);
     end;
     FieldDefs.Add(UTF8ToString(ColumnName),DBType,ColumnDataSize);
   end;
@@ -306,15 +312,15 @@ begin
   result := fDataAccess.ColumnData(F);
   if (result<>nil) and not OnlyCheckNull then
     case fDataAccess.Columns[F].ColumnType of
-    SynCommons.ftInt64: begin
+    SynTable.ftInt64: begin
       fTemp64 := FromVarInt64(PByte(result));
       result := @fTemp64;
     end;
-    SynCommons.ftCurrency: begin // ftFloat expects a DOUBLE value
+    SynTable.ftCurrency: begin // ftFloat expects a DOUBLE value
       PDouble(@fTemp64)^ := PCurrency(result)^;
       result := @fTemp64;
     end;
-    SynCommons.ftUTF8, SynCommons.ftBlob:
+    SynTable.ftUTF8, SynTable.ftBlob:
       resultLen := FromVarUInt32(PByte(result));
     end; // other ColumnTypes are already in the expected format
 end;

@@ -6,7 +6,7 @@ unit SynCrossPlatformJSON;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynCrossPlatformJSON;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -80,15 +80,17 @@ type
   TByteDynArray = array of byte;
   PByteDynArray = ^TByteDynArray;
 
-  {$ifndef UNICODE}
   {$ifdef FPC}
   NativeInt = PtrInt;
   NativeUInt = PtrUInt;
   {$else}
+  {$ifndef ISDELPHI2010} // Delphi 2009 NativeUInt is buggy
   NativeInt = integer;
   NativeUInt = cardinal;
   {$endif}
+  {$ifndef UNICODE}
   RawByteString = AnsiString;
+  {$endif}
   {$endif}
 
   // this type will store UTF-8 encoded buffer (also on NextGen platform)
@@ -423,7 +425,7 @@ procedure GetPropsInfo(TypeInfo: TRTTITypeInfo; var PropNames: TStringDynArray;
   var PropRTTI: TRTTIPropInfoDynArray);
 
 /// retrieve the value of a published property as variant
-function GetInstanceProp(Instance: TObject; PropInfo: TRTTIPropInfo): variant;
+function GetInstanceProp(Instance: TObject; PropInfo: TRTTIPropInfo; StoreClassName: boolean = False): variant;
 
 /// set the value of a published property from a variant
 procedure SetInstanceProp(Instance: TObject; PropInfo: TRTTIPropInfo;
@@ -1341,7 +1343,7 @@ begin
     (NativeUInt(PropInfo^.GetProc){$ifndef FPC} and $00FFFFFF{$endif}));
 end;
 
-function GetInstanceProp(Instance: TObject; PropInfo: TRTTIPropInfo): variant;
+function GetInstanceProp(Instance: TObject; PropInfo: TRTTIPropInfo; StoreClassName: boolean): variant;
 var obj: TObject;
 begin
   VarClear(result);
@@ -1375,7 +1377,7 @@ begin
     obj := TObject(NativeInt(GetOrdProp(Instance,PropInfo)));
     if obj=nil then
       result := null else
-      TJSONVariantData(result).Init(ObjectToJSON(obj));
+      TJSONVariantData(result).Init(ObjectToJSON(obj, StoreClassName));
   end;
   tkDynArray:
     if IsBlob(PropInfo) then
@@ -1576,7 +1578,7 @@ begin
       for i := 0 to PropCount-1 do begin
         PropInfo := PropList^[i];
         result := result+StringToJSON(ShortStringToString(@PropInfo^.Name))+':'+
-          ValueToJSON(GetInstanceProp(Instance,PropInfo))+',';
+          ValueToJSON(GetInstanceProp(Instance,PropInfo,StoreClassName))+',';
       end;
       result[length(result)] := '}';
     finally
