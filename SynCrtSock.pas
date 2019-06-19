@@ -2572,7 +2572,7 @@ function HttpPost(const server, port: SockString; const url, Data, DataType: Soc
 function AuthorizationBearer(const AuthToken: SockString): SockString;
 
 /// compute the '1.2.3.4' text representation of a raw IP4 binary
-procedure IP4Text(const ip4addr; var result: SockString);
+procedure IP4Text(const ip4addr; var result: SockString); overload;
 
 const
   /// the layout of TSMTPConnection.FromText method

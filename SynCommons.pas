@@ -11585,6 +11585,10 @@ procedure FillZero(out dig: THash128); overload;
 /// fast O(n) search of a 128-bit item in an array of such values
 function HashFound(P: PHash128Rec; Count: integer; const h: THash128Rec): boolean;
 
+/// convert a 32-bit integer (storing a IP6 address) into its full notation
+// - returns e.g. '1.2.3.4'
+function IP4Text(ip4: cardinal): shortstring; overload;
+
 /// convert a 128-bit buffer (storing an IP6 address) into its full notation
 // - returns e.g. '2001:0db8:0a0b:12f0:0000:0000:0000:0001'
 function IP6Text(ip6: PHash128): shortstring; overload; {$ifdef HASINLINE}inline;{$endif}
@@ -34753,6 +34757,14 @@ begin // fast O(n) brute force search
         inc(P);
   end;
   result := false;
+end;
+
+function IP4Text(ip4: cardinal): shortstring;
+var b: array[0..3] of byte absolute ip4;
+begin
+  if ip4=0 then
+    result := '' else
+    FormatShort('%.%.%.%',[b[0],b[1],b[2],b[3]],result);
 end;
 
 procedure IP6Text(ip6: PHash128; result: PShortString);
