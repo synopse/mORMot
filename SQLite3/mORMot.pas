@@ -3396,6 +3396,8 @@ type
       var temp: RawByteString); virtual;
     /// set a field value from a TSQLVar value
     function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; virtual;
+    /// returns TRUE if value is 0 or ''
+    function IsValueVoid(Instance: TObject): boolean;
     /// append the property value into a binary buffer
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); virtual; abstract;
     /// read the property value from a binary buffer
@@ -7691,6 +7693,8 @@ type
     /// this method create a clone of the current record, with same ID and properties
     // - overloaded method to copy the specified properties
     function CreateCopy(const CustomFields: TSQLFieldBits): TSQLRecord; overload;
+    /// set the bits corresponding to non-void (0,'') copiable fields
+    function GetNonVoidFields: TSQLFieldBits;
     /// release the associated memory
     // - in particular, release all TSQLRecordMany instance created by the
     // constructor of this TSQLRecord
@@ -8087,7 +8091,8 @@ type
     procedure FillFrom(aRecord: TSQLRecord); overload;
     /// fill the specified properties of this object from another object
     // - source object must be a parent or of the same class as the current record
-    // - copy the fields, as specified by their bit index in the source record
+    // - copy the fields, as specified by their bit index in the source record;
+    // you may use aRecord.GetNonVoidFields if you want to update some fields
     procedure FillFrom(aRecord: TSQLRecord; const aRecordFieldBits: TSQLFieldBits); overload;
     {$ifndef NOVARIANTS}
     /// fill all published properties of this object from a supplied TDocVariant
@@ -21735,6 +21740,16 @@ begin
   end;
 end;
 
+function TSQLPropInfo.IsValueVoid(Instance: TObject): boolean;
+var temp: RawUTF8;
+    wasString: boolean;
+begin
+  GetValueVar(Instance,true,temp,@wasString);
+  if wasString then
+    result := temp='' else
+    result := GetInt64(pointer(temp))=0;
+end;
+
 function TSQLPropInfo.SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean;
 begin
   case aValue.VType of
@@ -32068,9 +32083,18 @@ begin
   result.fID := fID;
   with RecordProps do
     for f := 0 to Fields.Count-1 do
-    with Fields.List[f] do
-      if (f in CustomFields) and (SQLFieldType in COPIABLE_FIELDS) then
-        CopyValue(self,result);
+      if (f in CustomFields) and (f in CopiableFieldsBits) then
+        Fields.List[f].CopyValue(self,result);
+end;
+
+function TSQLRecord.GetNonVoidFields: TSQLFieldBits;
+var f: integer;
+begin
+  FillZero(result);
+  with RecordProps do
+    for f := 0 to Fields.Count-1 do
+      if (f in CopiableFieldsBits) and not Fields.List[f].IsValueVoid(self) then
+        include(result,f);
 end;
 
 constructor TSQLRecord.Create(aClient: TSQLRest; aID: TID; ForUpdate: boolean=false);
@@ -32155,33 +32179,9 @@ begin // is not part of TSQLRecordProperties because has been declared as virtua
 end;
 
 procedure TSQLRecord.FillFrom(aRecord: TSQLRecord);
-var i, f: integer;
-    S, D: TSQLRecordProperties;
-    SP: TSQLPropInfo;
-    wasString: boolean;
-    tmp: RawUTF8;
 begin
-  if (self=nil) or (aRecord=nil) then
-    exit;
-  D := RecordProps;
-  if PSQLRecordClass(aRecord)^.InheritsFrom(PSQLRecordClass(self)^) then begin
-    if PSQLRecordClass(aRecord)^=PSQLRecordClass(self)^ then
-      fID := aRecord.fID; // same class -> ID values will match
-    for f := 0 to high(D.CopiableFields) do
-      D.CopiableFields[f].CopyValue(aRecord,self);
-    exit;
-  end;
-  S := aRecord.RecordProps; // two diverse tables -> don't copy ID
-  for i := 0 to high(S.CopiableFields) do begin
-    SP := S.CopiableFields[i];
-    if D.Fields.List[SP.PropertyIndex].Name=SP.Name then // optimistic match
-      f := SP.PropertyIndex else
-      f := D.Fields.IndexByName(S.CopiableFields[i].Name);
-    if f>=0 then begin
-      SP.GetValueVar(aRecord,False,tmp,@wasString);
-      D.Fields.List[f].SetValueVar(Self,tmp,wasString);
-    end;
-  end;
+  if (self<>nil) and (aRecord<>nil) then
+    FillFrom(aRecord, aRecord.RecordProps.CopiableFieldsBits);
 end;
 
 procedure TSQLRecord.FillFrom(aRecord: TSQLRecord; const aRecordFieldBits: TSQLFieldBits);
@@ -32204,16 +32204,16 @@ begin
   end;
   S := aRecord.RecordProps; // two diverse tables -> don't copy ID
   for i := 0 to S.Fields.Count-1 do
-  if i in aRecordFieldBits then begin
-    SP := S.Fields.List[i];
-    if D.Fields.List[i].Name=SP.Name then // optimistic match
-      f := i else
-      f := D.Fields.IndexByName(SP.Name);
-    if f>=0 then begin
-      SP.GetValueVar(aRecord,False,tmp,@wasString);
-      D.Fields.List[f].SetValueVar(Self,tmp,wasString);
+    if i in aRecordFieldBits then begin
+      SP := S.Fields.List[i];
+      if D.Fields.List[i].Name=SP.Name then // optimistic match
+        f := i else
+        f := D.Fields.IndexByName(SP.Name);
+      if f>=0 then begin
+        SP.GetValueVar(aRecord,False,tmp,@wasString);
+        D.Fields.List[f].SetValueVar(Self,tmp,wasString);
+      end;
     end;
-  end;
 end;
 
 procedure TSQLRecord.FillFrom(Table: TSQLTable; Row: integer);
