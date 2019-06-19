@@ -12540,7 +12540,7 @@ function UnixMSTimeToFileShort(const UnixMSTime: TUnixMSTime): TShort16;
 // as time or date elapsed period
 // - this function won't add the Unix epoch 1/1/1970 offset to the timestamp
 // - returns 'Thh:mm:ss' or 'YYYY-MM-DD' format, depending on the supplied value
-function UnixMSTimePeriodToString(const UnixTime: TUnixTime; FirstTimeChar: AnsiChar='T'): RawUTF8;
+function UnixMSTimePeriodToString(const UnixMSTime: TUnixMSTime; FirstTimeChar: AnsiChar='T'): RawUTF8;
 
 /// returns the current UTC system date and time
 // - SysUtils.Now returns local time: this function returns the system time
@@ -35171,11 +35171,11 @@ begin
   result := UnixMSTime/MSecsPerDay + UnixDateDelta;
 end;
 
-function UnixMSTimePeriodToString(const UnixTime: TUnixTime; FirstTimeChar: AnsiChar): RawUTF8;
+function UnixMSTimePeriodToString(const UnixMSTime: TUnixMSTime; FirstTimeChar: AnsiChar): RawUTF8;
 begin
-  if UnixTime<MSecsPerDay then
-    result := TimeToIso8601(UnixTime/MSecsPerDay,true,FirstTimeChar,UnixTime<1000) else
-    result := DaysToIso8601(UnixTime div MSecsPerDay,true);
+  if UnixMSTime<MSecsPerDay then
+    result := TimeToIso8601(UnixMSTime/MSecsPerDay,true,FirstTimeChar,UnixMSTime<1000) else
+    result := DaysToIso8601(UnixMSTime div MSecsPerDay,true);
 end;
 
 function DateTimeToUnixMSTime(const AValue: TDateTime): TUnixMSTime;
