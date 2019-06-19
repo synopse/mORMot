@@ -7161,8 +7161,8 @@ const
   // MAX_SQLFIELDS_256 conditional directives for your project
   // - this constant is used internaly to optimize memory usage in the
   // generated asm code, and statically allocate some arrays for better speed
-  // - note that due to Delphi compiler restriction, 256 is the maximum value
-  // (this is the maximum number of items in a Delphi set)
+  // - note that due to compiler restriction, 256 is the maximum value
+  // (this is the maximum number of items in a Delphi/FPC set)
   {$ifdef MAX_SQLFIELDS_128}
   MAX_SQLFIELDS = 128;
   {$else}
@@ -11585,8 +11585,8 @@ procedure FillZero(out dig: THash128); overload;
 /// fast O(n) search of a 128-bit item in an array of such values
 function HashFound(P: PHash128Rec; Count: integer; const h: THash128Rec): boolean;
 
-/// convert a 32-bit integer (storing a IP6 address) into its full notation
-// - returns e.g. '1.2.3.4'
+/// convert a 32-bit integer (storing a IP4 address) into its full notation
+// - returns e.g. '1.2.3.4' for any valid address, or '' if ip4=0
 function IP4Text(ip4: cardinal): shortstring; overload;
 
 /// convert a 128-bit buffer (storing an IP6 address) into its full notation
@@ -16614,8 +16614,8 @@ procedure MicroSecToString(Micro: QWord; out result: TShort16); overload;
 // more than three digits to the left of the decimal separator
 function IntToThousandString(Value: integer; const ThousandSep: TShort4=','): shortstring;
 
-/// return the Delphi Compiler Version
-// - returns 'Delphi 2007' or 'Delphi 2010' e.g.
+/// return the Delphi/FPC Compiler Version
+// - returns 'Delphi 2007', 'Delphi 2010' or 'Free Pascal 3.3.1' e.g.
 function GetDelphiCompilerVersion: RawUTF8;
 
 /// returns TRUE if the supplied mutex has been initialized

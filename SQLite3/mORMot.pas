@@ -32191,7 +32191,7 @@ var i, f: integer;
     wasString: boolean;
     tmp: RawUTF8;
 begin
-  if (self=nil) or (aRecord=nil) then
+  if (self=nil) or (aRecord=nil) or IsZero(aRecordFieldBits) then
     exit;
   D := RecordProps;
   if PSQLRecordClass(aRecord)^.InheritsFrom(PSQLRecordClass(self)^) then begin
