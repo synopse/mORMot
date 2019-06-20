@@ -19968,18 +19968,22 @@ end;
 
 function IPToCardinal(P: PUTF8Char; out aValue: cardinal): boolean;
 var i,c: cardinal;
-    b: array[0..3] of byte absolute aValue;
+    b: array[0..3] of byte;
 begin
+  aValue := 0;
   result := false;
   if (P=nil) or (IdemPChar(P,'127.0.0.1') and (P[9]=#0)) then
     exit;
   for i := 0 to 3 do begin
     c := GetNextItemCardinal(P,'.');
-    if (c>255) or ((i<3) and (P=nil)) then
+    if (c>255) or ((P=nil) and (i<3)) then
       exit;
     b[i] := c;
   end;
-  result := aValue<>$0100007f;
+  if PCardinal(@b)^<>$0100007f then begin
+    aValue := PCardinal(@b)^;
+    result := true;
+  end;
 end;
 
 function IPToCardinal(const aIP: RawUTF8; out aValue: cardinal): boolean;
@@ -19989,8 +19993,7 @@ end;
 
 function IPToCardinal(const aIP: RawUTF8): cardinal;
 begin
-  if not IPToCardinal(pointer(aIP),result) then
-    result := 0;
+  IPToCardinal(pointer(aIP),result);
 end;
 
 const

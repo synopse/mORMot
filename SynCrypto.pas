@@ -410,6 +410,7 @@ type
     /// how many THash128 values are currently stored
     Count: integer;
     /// initialize the storage for a given history depth
+    // - if Count reaches Depth, then older items will be removed
     procedure Init(size, maxsize: integer);
     /// O(n) fast search of a hash value in the stored entries
     // - returns true if the hash was found, or false if it did not appear
@@ -14086,7 +14087,7 @@ begin
   if Index>=length(Previous) then
     if Index=Depth then
       Index := 0 else begin
-      n := Index+Index shr 3;
+      n := NextGrow(Index);
       if n>=Depth then
         n := Depth;
       SetLength(Previous,n);

@@ -3589,6 +3589,10 @@ type
     procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
   end;
 
+  /// information about a PtrInt published property, according to the native CPU
+  // - not a real stand-alone class, but a convenient wrapper type
+  TSQLPropInfoRTTIPtrInt = {$ifdef CPU64}TSQLPropInfoRTTIInt64{$else}TSQLPropInfoRTTIInt32{$endif};
+
   /// information about a TTimeLog published property
   // - stored as an Int64, but with a specific class
   TSQLPropInfoRTTITimeLog = class(TSQLPropInfoRTTIInt64);
@@ -5208,18 +5212,13 @@ type
   /// exception dedicated to interface based service implementation
   EServiceException = class(EORMException);
 
-
   /// information about a TSQLRecord class property
   // - sftID for TSQLRecord properties, which are pointer(RecordID), not
   // any true class instance
   // - sftMany for TSQLRecordMany properties, for which no data is
   // stored in the table itself, but in a pivot table
   // - sftObject for e.g. TStrings TRawUTF8List TCollection instances
-  {$ifdef CPU64}
-  TSQLPropInfoRTTIInstance = class(TSQLPropInfoRTTIInt64)
-  {$else}
-  TSQLPropInfoRTTIInstance = class(TSQLPropInfoRTTIInt32)
-  {$endif}
+  TSQLPropInfoRTTIInstance = class(TSQLPropInfoRTTIPtrInt)
   protected
     fObjectClass: TClass;
   public
