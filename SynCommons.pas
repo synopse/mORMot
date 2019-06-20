@@ -1838,14 +1838,17 @@ var CompareMemFixed: function(P1, P2: Pointer; Length: PtrInt): Boolean = Compar
 function CompareMemSmall(P1, P2: Pointer; Length: PtrInt): Boolean; {$ifdef HASINLINE}inline;{$endif}
 
 /// convert an IPv4 'x.x.x.x' text into its 32-bit value
-// - returns TRUE if the text was a valid IPv4 text, FALSE on parsing error
-// - '' or '127.0.0.1' will also return false
-function IPToCardinal(const aIP: RawUTF8; out aValue: cardinal): boolean; overload;
-
-/// convert an IPv4 'x.x.x.x' text into its 32-bit value
-// - returns TRUE if the text was a valid IPv4 text, FALSE on parsing error
+// - returns TRUE if the text was a valid IPv4 text, unserialized as 32-bit aValue
+// - returns FALSE on parsing error, also setting aValue=0
 // - '' or '127.0.0.1' will also return false
 function IPToCardinal(P: PUTF8Char; out aValue: cardinal): boolean; overload;
+
+/// convert an IPv4 'x.x.x.x' text into its 32-bit value
+// - returns TRUE if the text was a valid IPv4 text, unserialized as 32-bit aValue
+// - returns FALSE on parsing error, also setting aValue=0
+// - '' or '127.0.0.1' will also return false
+function IPToCardinal(const aIP: RawUTF8; out aValue: cardinal): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert an IPv4 'x.x.x.x' text into its 32-bit value, 0 or localhost
 // - returns <> 0 value if the text was a valid IPv4 text, 0 on parsing error
@@ -1854,8 +1857,8 @@ function IPToCardinal(const aIP: RawUTF8): cardinal; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert some ASCII-7 text into binary, using Emile Baudot code
-// - as used in telegraphs, covering a-z 0-9 - ' , ! : ( + ) $ ? @ . / ; charset
-// - also #13 and #10 control chars will be transcoded
+// - as used in telegraphs, covering #10 #13 #32 a-z 0-9 - ' , ! : ( + ) $ ? @ . / ;
+// charset, following a custom static-huffman-like encoding with 5-bit masks
 // - any upper case char will be converted into lowercase during encoding
 // - other characters (e.g. UTF-8 accents, or controls chars) will be ignored
 // - resulting binary will consume 5 (or 10) bits per character
@@ -1864,8 +1867,8 @@ function IPToCardinal(const aIP: RawUTF8): cardinal; overload;
 function AsciiToBaudot(P: PAnsiChar; len: integer): RawByteString; overload;
 
 /// convert some ASCII-7 text into binary, using Emile Baudot code
-// - as used in telegraphs, covering a-z 0-9 - ' , ! : ( + ) $ ? @ . / ; charset
-// - also ' ' (#32) and #13 / #10 control chars will be transcoded
+// - as used in telegraphs, covering #10 #13 #32 a-z 0-9 - ' , ! : ( + ) $ ? @ . / ;
+// charset, following a custom static-huffman-like encoding with 5-bit masks
 // - any upper case char will be converted into lowercase during encoding
 // - other characters (e.g. UTF-8 accents, or controls chars) will be ignored
 // - resulting binary will consume 5 (or 10) bits per character
