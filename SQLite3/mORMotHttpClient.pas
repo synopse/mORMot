@@ -55,8 +55,8 @@ unit mORMotHttpClient;
    - can be called by any JSON-aware AJAX application
    - can optionaly compress the returned data to optimize Internet bandwidth
    - speed is very high: more than 20MB/sec R/W localy on a 1.8GHz Sempron,
-     i.e. 400Mb/sec of duplex raw IP data, with about 200 µs only elapsed
-     by request (direct call is 50 µs, so bottle neck is the Win32 API),
+     i.e. 400Mb/sec of duplex raw IP data, with about 200 us only elapsed
+     by request (direct call is 50 us, so bottle neck is the Win32 API),
      i.e. 5000 requests per second, with 113 result rows (i.e. 4803 bytes
      of JSON data each)... try to find a faster JSON HTTP server! ;)
 
@@ -333,7 +333,9 @@ type
       FakeCallbackID: integer; Instance: pointer): boolean; override;
     function CallbackRequest(Ctxt: THttpServerRequest): cardinal; virtual;
   public
-      constructor Create(const aServer, aPort: AnsiString; aModel: TSQLModel;
+    /// connect to TSQLHttpServer on aServer:aPort
+    // - this overriden method will handle properly WebSockets settings
+    constructor Create(const aServer, aPort: AnsiString; aModel: TSQLModel;
       aHttps: boolean=false; const aProxyName: AnsiString='';
       const aProxyByPass: AnsiString=''; aSendTimeout: DWORD=0;
       aReceiveTimeout: DWORD=0; aConnectTimeout: DWORD=0); override;
@@ -387,7 +389,7 @@ type
     // - will set TWebSocketProcessSettings.LoopDelay value at WebSocketsUpgrade
     // - will override LoopDelay from DefaultWebSocketProcessSettings
     property WebSocketLoopDelay: integer read fWebSocketLoopDelay write fWebSocketLoopDelay;
-    /// Customize default settings for every new WebSocket process
+    /// returns a reference to default settings for every new WebSocket process
     function DefaultWebSocketProcessSettings: PWebSocketProcessSettings; {$ifdef HASINLINE}inline;{$endif}
   end;
 
@@ -787,13 +789,12 @@ begin
       if fSocketClass=nil then
         fSocketClass := THttpClientWebSockets;
       result := inherited InternalCheckOpen;
-      if result then
-	    begin
-        Include(fInternalState,isOpened);
-          with fWebSocketParams do
+      if result then begin
+        include(fInternalState,isOpened);
+        with fWebSocketParams do
           if AutoUpgrade then
             result := WebSocketsUpgrade(Key,Ajax,Compression)='';
-	    end;
+      end;
     except
       result := false;
     end;
@@ -852,9 +853,8 @@ begin
 end;
 
 constructor TSQLHttpClientWebsockets.Create(const aServer, aPort: AnsiString;
-  aModel: TSQLModel; aHttps: boolean; const aProxyName,
-  aProxyByPass: AnsiString; aSendTimeout, aReceiveTimeout,
-  aConnectTimeout: DWORD);
+  aModel: TSQLModel; aHttps: boolean; const aProxyName, aProxyByPass: AnsiString;
+  aSendTimeout, aReceiveTimeout,aConnectTimeout: DWORD);
 begin
   inherited;
   fDefaultWebSocketProcessSettings.SetDefaults;
@@ -862,7 +862,9 @@ end;
 
 function TSQLHttpClientWebsockets.DefaultWebSocketProcessSettings: PWebSocketProcessSettings;
 begin
-  result := @fDefaultWebSocketProcessSettings;
+  if self=nil then
+    result := nil else
+    result := @fDefaultWebSocketProcessSettings;
 end;
 
 function TSQLHttpClientWebsockets.WebSocketsConnected: boolean;
@@ -905,7 +907,7 @@ begin
 {$endif}
   sockets := WebSockets;
   if sockets=nil then
-    result := 'Impossible to connect to the Server' 
+    result := 'Impossible to connect to the Server'
   else begin    
     if fWebSocketLoopDelay>0 then
       sockets.Settings^.LoopDelay := fWebSocketLoopDelay;
