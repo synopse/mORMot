@@ -59,6 +59,7 @@ unit SyNodeSimpleProto;
 }
 
 {$I Synopse.inc}
+{$I SyNode.inc}
 
 interface
 

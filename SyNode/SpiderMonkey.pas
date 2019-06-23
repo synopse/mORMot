@@ -231,8 +231,76 @@ type
     DontFireOnNewGlobalHook
   );
 /// Dense index into cached prototypes and class atoms for standard objects.
-{$IFDEF SM52}
   JSProtoKey = (
+{$IF DEFINED(SM60)}
+  JSProto_Null = 0,
+  JSProto_Object,
+  JSProto_Function,
+  JSProto_Array,
+  JSProto_Boolean,
+  JSProto_JSON,
+  JSProto_Date,
+  JSProto_Math,
+  JSProto_Number,
+  JSProto_String,
+  JSProto_RegExp,
+  JSProto_Error,
+  JSProto_InternalError,
+  JSProto_EvalError,
+  JSProto_RangeError,
+  JSProto_ReferenceError,
+  JSProto_SyntaxError,
+  JSProto_TypeError,
+  JSProto_URIError,
+  JSProto_DebuggeeWouldRun,
+  JSProto_CompileError,
+  JSProto_LinkError,
+  JSProto_RuntimeError,
+  JSProto_Iterator,
+  JSProto_ArrayBuffer,
+  JSProto_Int8Array,
+  JSProto_Uint8Array,
+  JSProto_Int16Array,
+  JSProto_Uint16Array,
+  JSProto_Int32Array,
+  JSProto_Uint32Array,
+  JSProto_Float32Array,
+  JSProto_Float64Array,
+  JSProto_Uint8ClampedArray,
+  JSProto_Proxy,
+  JSProto_WeakMap,
+  JSProto_Map,
+  JSProto_Set,
+  JSProto_DataView,
+  JSProto_Symbol,
+  JSProto_SharedArrayBuffer,
+  JSProto_Intl,
+  JSProto_TypedObject,
+  JSProto_Reflect,
+  JSProto_SIMD,
+  JSProto_WeakSet,
+  JSProto_TypedArray,
+  JSProto_Atomics,
+  JSProto_SavedFrame,
+  JSProto_Promise,
+  JSProto_ReadableStream,
+  JSProto_ReadableStreamDefaultReader,
+  JSProto_ReadableStreamBYOBReader,
+  JSProto_ReadableStreamDefaultController,
+  JSProto_ReadableByteStreamController,
+  JSProto_ReadableStreamBYOBRequest,
+  JSProto_WritableStream,
+  JSProto_WritableStreamDefaultWriter,
+  JSProto_WritableStreamDefaultController,
+  JSProto_ByteLengthQueuingStrategy,
+  JSProto_CountQueuingStrategy,
+  JSProto_WebAssembly,
+  JSProto_WasmModule,
+  JSProto_WasmInstance,
+  JSProto_WasmMemory,
+  JSProto_WasmTable,
+  JSProto_WasmGlobal,
+{$ELSEIF DEFINED(SM52)}
   JSProto_Null = 0,
   JSProto_Object,
   JSProto_Function,
@@ -288,10 +356,7 @@ type
   JSProto_WasmMemory,
   JSProto_WasmTable,
   JSProto_Promise,
-  JSProto_LIMIT
-  );
 {$ELSE}
-  JSProtoKey = (
   JSProto_Null = 0,
   JSProto_Object,
   JSProto_Function,
@@ -338,30 +403,48 @@ type
   JSProto_TypedArray,
   JSProto_Atomics,
   JSProto_SavedFrame,
+{$ENDIF}
   JSProto_LIMIT
   );
-{$ENDIF}
 {$Z1}
 /// Type of JSValue
   JSValueType = (
-    JSVAL_TYPE_DOUBLE   = $00,
-    JSVAL_TYPE_INT32    = $01,
-    JSVAL_TYPE_UNDEFINED= $02,
-    JSVAL_TYPE_BOOLEAN  = $03,
-    JSVAL_TYPE_MAGIC    = $04,
-    JSVAL_TYPE_STRING   = $05,
-    JSVAL_TYPE_SYMBOL   = $06,
+{$IFDEF SM60}
+    JSVAL_TYPE_DOUBLE    = $00,
+    JSVAL_TYPE_INT32     = $01,
+    JSVAL_TYPE_BOOLEAN   = $02,
+    JSVAL_TYPE_UNDEFINED = $03,
+    JSVAL_TYPE_NULL      = $04,
+    JSVAL_TYPE_MAGIC     = $05,
+    JSVAL_TYPE_STRING    = $06,
+    JSVAL_TYPE_SYMBOL    = $07,
+    JSVAL_TYPE_PRIVATE_GCTHING = $08,
+    JSVAL_TYPE_OBJECT    = $0C,
+
+    // These never appear in a jsval; they are only provided as an out-of-band
+    // value.
+    JSVAL_TYPE_UNKNOWN   = $20,
+    JSVAL_TYPE_MISSING   = $21
+{$ELSE}
+    JSVAL_TYPE_DOUBLE    = $00,
+    JSVAL_TYPE_INT32     = $01,
+    JSVAL_TYPE_UNDEFINED = $02,
+    JSVAL_TYPE_BOOLEAN   = $03,
+    JSVAL_TYPE_MAGIC     = $04,
+    JSVAL_TYPE_STRING    = $05,
+    JSVAL_TYPE_SYMBOL    = $06,
     {$IFDEF SM52}
     JSVAL_TYPE_PRIVATE_GCTHING = $07,
-    JSVAL_TYPE_NULL     = $08,
-    JSVAL_TYPE_OBJECT   = $0C,
+    JSVAL_TYPE_NULL      = $08,
+    JSVAL_TYPE_OBJECT    = $0C,
     {$ELSE}
-    JSVAL_TYPE_NULL     = $07,
-    JSVAL_TYPE_OBJECT   = $08,
+    JSVAL_TYPE_NULL      = $07,
+    JSVAL_TYPE_OBJECT    = $08,
     {$ENDIF}
     // These never appear in a jsval; they are only provided as an out-of-band value.
-    JSVAL_TYPE_UNKNOWN  = $20,
-    JSVAL_TYPE_MISSING  = $21
+    JSVAL_TYPE_UNKNOWN   = $20,
+    JSVAL_TYPE_MISSING   = $21
+{$ENDIF}
   );
 
 {$ifndef CPU64}
@@ -450,8 +533,8 @@ type
     jsabTYPE_MAXTYPEDARRAYVIEWTYPE,
     jsabTYPE_FLOAT32x4,
     jsabTYPE_INT32x4
+  );
 
-);
 const
   nullPtr: pointer = nil;
   /// Run-time version enumeration corresponding to the latest available
@@ -740,78 +823,110 @@ type
 {$ENDIF}
   JSStringFinalizerOp = procedure(fin: PJSStringFinalizer; chars: PCChar16);  cdecl;
 
-// Add or get a property named by id in obj.  Note the jsid id type -- id may
-// be a string (Unicode property identifier) or an int (element index).  The
-// *vp out parameter, on success, is the new property value after the action.
+// JSClass operation signatures.
+
+  // Get a property named by id in obj.  Note the jsid id type -- id may
+  // be a string (Unicode property identifier) or an int (element index).  The
+  // *vp out parameter, on success, is the new property value after the action.
+  JSGetterOp = function(cx: PJSContext; var obj: PJSObject; var id: jsid;
+    out vp: jsval):Boolean; cdecl;
+
+  // Add or get a property named by id in obj.  Note the jsid id type -- id may
+  // be a string (Unicode property identifier) or an int (element index).  The
+  // *vp out parameter, on success, is the new property value after the action.
   JSAddPropertyOp = function(cx: PJSContext; var obj: PJSObject; var id: jsid;
     out vp: jsval): Boolean; cdecl;
-// Delete a property named by id in obj.
-// - If an error occurred, return false as per normal JSAPI error practice.
-// - If no error occurred, but the deletion attempt wasn't allowed (perhaps
-// because the property was non-configurable), set *succeeded to false and
-// return true.  This will cause |delete obj[id]| to evaluate to false in
-// non-strict mode code, and to throw a TypeError in strict mode code.
-// - If no error occurred and the deletion wasn't disallowed (this is *not* the
-// same as saying that a deletion actually occurred -- deleting a non-existent
-// property, or an inherited property, is allowed -- it's just pointless),
-// set *succeeded to true and return true.
-  JSDeletePropertyOp = function(cx: PJSContext; var obj: PJSObject; var id: jsid;
-    out res: JS_ObjectOpResult):Boolean; cdecl;
-// Get a property named by id in obj.  Note the jsid id type -- id may
-// be a string (Unicode property identifier) or an int (element index).  The
-// *vp out parameter, on success, is the new property value after the action.
-  JSGetterOp = function(cx: PJSContext; var obj: PJSObject; var id: jsid; out vp: jsval):Boolean; cdecl;
-// Set a property named by id in obj, treating the assignment as strict
-// mode code if strict is true. Note the jsid id type -- id may be a string
-// (Unicode property identifier) or an int (element index). The *vp out
-// parameter, on success, is the new property value after the
-// set.
+
+  // Set a property named by id in obj, treating the assignment as strict
+  // mode code if strict is true. Note the jsid id type -- id may be a string
+  // (Unicode property identifier) or an int (element index). The *vp out
+  // parameter, on success, is the new property value after the set.
   JSSetterOp  = function(cx: PJSContext; var obj: PJSObject; var id: jsid;
     var vp: jsval; out res: JS_ObjectOpResult):Boolean; cdecl;
-// The old-style JSClass.enumerate op should define all lazy properties not
-// yet reflected in obj.
+
+  // Delete a property named by id in obj.
+  // - If an error occurred, return false as per normal JSAPI error practice.
+  // - If no error occurred, but the deletion attempt wasn't allowed (perhaps
+  // because the property was non-configurable), set *succeeded to false and
+  // return true.  This will cause |delete obj[id]| to evaluate to false in
+  // non-strict mode code, and to throw a TypeError in strict mode code.
+  // - If no error occurred and the deletion wasn't disallowed (this is *not* the
+  // same as saying that a deletion actually occurred -- deleting a non-existent
+  // property, or an inherited property, is allowed -- it's just pointless),
+  // set *succeeded to true and return true.
+  JSDeletePropertyOp = function(cx: PJSContext; var obj: PJSObject; var id: jsid;
+    out res: JS_ObjectOpResult):Boolean; cdecl;
+
+  // The type of ObjectOps::enumerate. This callback overrides a portion of
+  // SpiderMonkey's default [[Enumerate]] internal method. When an ordinary object
+  // is enumerated, that object and each object on its prototype chain is tested
+  // for an enumerate op, and those ops are called in order. The properties each
+  // op adds to the 'properties' vector are added to the set of values the for-in
+  // loop will iterate over. All of this is nonstandard.
+  // - An object is "enumerated" when it's the target of a for-in loop or
+  // JS_Enumerate(). The callback's job is to populate 'properties' with the
+  // object's property keys. If `enumerableOnly` is true, the callback should only
+  // add enumerable properties.
+  JSNewEnumerateOp = function (cx: PJSContext; var obj: PJSObject;
+    properties: PjsidVector; enumerableOnly: Boolean): Boolean; cdecl;
+
+  // The old-style JSClass.enumerate op should define all lazy properties not
+  // yet reflected in obj.
   JSEnumerateOp = function(cx: PJSContext; var obj: PJSObject): Boolean; cdecl;
-// Resolve a lazy property named by id in obj by defining it directly in obj.
-// Lazy properties are those reflected from some peer native property space
-// (e.g., the DOM attributes for a given node reflected as obj) on demand.
-// - JS looks for a property in an object, and if not found, tries to resolve
-// the given id. *resolvedp should be set to true iff the property was
-// was defined on |obj|.
-  JSResolveOp = function(cx: PJSContext; var obj: PJSObject; var id: jsid; out resolved: Boolean): Boolean; cdecl;
-// A class with a resolve hook can optionally have a mayResolve hook. This hook
-// must have no side effects and must return true for a given id if the resolve
-// hook may resolve this id. This is useful when we're doing a "pure" lookup: if
-// mayResolve returns false, we know we don't have to call the effectful resolve
-// hook.
-//
-// maybeObj, if non-null, is the object on which we're doing the lookup. This
-// can be nullptr: during JIT compilation we sometimes know the Class but not
-// the object.
-  JSMayResolveOp = function(names: PJSAtomState; id: jsid; maybeObj: PJSObject): Boolean; cdecl;
+
+  // Resolve a lazy property named by id in obj by defining it directly in obj.
+  // Lazy properties are those reflected from some peer native property space
+  // (e.g., the DOM attributes for a given node reflected as obj) on demand.
+  // - JS looks for a property in an object, and if not found, tries to resolve
+  // the given id. *resolvedp should be set to true iff the property was
+  // was defined on |obj|.
+  JSResolveOp = function(cx: PJSContext; var obj: PJSObject; var id: jsid;
+    out resolved: Boolean): Boolean; cdecl;
+
+ // A class with a resolve hook can optionally have a mayResolve hook. This hook
+ // must have no side effects and must return true for a given id if the resolve
+ // hook may resolve this id. This is useful when we're doing a "pure" lookup: if
+ // mayResolve returns false, we know we don't have to call the effectful resolve
+ // hook.
+ //
+ // maybeObj, if non-null, is the object on which we're doing the lookup. This
+ // can be nullptr: during JIT compilation we sometimes know the Class but not
+ // the object.
+   JSMayResolveOp = function(names: PJSAtomState; id: jsid;
+     maybeObj: PJSObject): Boolean; cdecl;
+
+  // Finalize obj, which the garbage collector has determined to be unreachable
+  // from other live objects or from GC roots.  Obviously, finalizers must never
+  // store a reference to obj.
 {$IFDEF SM52}
   JSFinalizeOp = procedure(var fop: JSFreeOp; obj: PJSObject); cdecl;
 {$ELSE}
   JSFinalizeOp = procedure(var rt: PJSRuntime; obj: PJSObject); cdecl;
 {$ENDIF}
-// Check whether v is an instance of obj.  Return false on error or exception,
-// true on success with true in *bp if v is an instance of obj, false in
-// *bp otherwise.
-  JSHasInstanceOp = function(cx: PJSContext; var obj: PJSObject; var vp: jsval; out b: Boolean): Boolean; cdecl;
-// Typedef for native functions called by the JS VM.
-  JSNative = function(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean; cdecl;
-// Function type for trace operation of the class called to enumerate all
-// traceable things reachable from obj's private data structure. For each such
-// thing, a trace implementation must call one of the JS_Call*Tracer variants
-// on the thing.
-//
-// JSTraceOp implementation can assume that no other threads mutates object
-// state. It must not change state of the object or corresponding native
-// structures. The only exception for this rule is the case when the embedding
-// needs a tight integration with GC. In that case the embedding can check if
-// the traversal is a part of the marking phase through calling
-// JS_IsGCMarkingTracer and apply a special code like emptying caches or
-// marking its native structures.
-  JSTraceOp = JSUnknown;
+
+  // Check whether v is an instance of obj.  Return false on error or exception,
+  // true on success with true in *bp if v is an instance of obj, false in
+  // *bp otherwise.
+  JSHasInstanceOp = function(cx: PJSContext; var obj: PJSObject;
+    var vp: jsval; out b: Boolean): Boolean; cdecl;
+
+
+  // Typedef for native functions called by the JS VM.
+  JSNative = function(cx: PJSContext; argc: uintN;
+    var vp: JSArgRec): Boolean; cdecl;
+
+  // Function type for trace operation of the class called to enumerate all
+  // traceable things reachable from obj's private data structure. For each such
+  // thing, a trace implementation must call JS::TraceEdge on the thing's
+  // location.
+  // - JSTraceOp implementation can assume that no other threads mutates object
+  // state. It must not change state of the object or corresponding native
+  // structures. The only exception for this rule is the case when the embedding
+  // needs a tight integration with GC. In that case the embedding can check if
+  // the traversal is a part of the marking phase through calling
+  // JS_IsGCMarkingTracer and apply a special code like emptying caches or
+  // marking its native structures.
+  JSTraceOp = procedure(trc: Pointer{PJSTracer}; obj: PJSObject);
 
 {$IFNDEF SM52}
   /// JavaScript execution runtime
@@ -1789,6 +1904,19 @@ type
   end;
 {$IFDEF SM52}
   JSClassOps = record
+    {$IFDEF SM60}
+    addProperty:  JSAddPropertyOp;
+    delProperty:  JSDeletePropertyOp;
+    enumerate:    JSEnumerateOp;
+    newEnumerate: JSNewEnumerateOp;
+    resolve:      JSResolveOp;
+    mayResolve:   JSMayResolveOp;
+    finalize:     JSFinalizeOp;
+    call:         JSNative;
+    hasInstance:  JSHasInstanceOp;
+    construct:    JSNative;
+    trace:        JSTraceOp;
+    {$ELSE}
     addProperty:        JSAddPropertyOp;
     delProperty:        JSDeletePropertyOp;
     getProperty:        JSGetterOp;
@@ -1801,6 +1929,7 @@ type
     hasInstance:        JSHasInstanceOp;
     construct:          JSNative;
     trace:              JSTraceOp;
+    {$ENDIF}
   end;
   PJSClassOps = ^JSClassOps;
 {$ENDIF}
@@ -2232,7 +2361,9 @@ const
 function SimpleVariantToJSval(cx: PJSContext; val: Variant): jsval;
 
 const
-{$IFDEF SM52}
+{$IF DEFINED(SM60)}
+  SpiderMonkeyLib = 'synmozjs60'{$IFDEF MSWINDOWS} + '.dll'{$ENDIF};
+{$ELSEIF DEFINED(SM52)}
   SpiderMonkeyLib = 'synmozjs52'{$IFDEF MSWINDOWS} + '.dll'{$ENDIF};
 {$ELSE}
   SpiderMonkeyLib = 'mozjs-45'{$IFDEF MSWINDOWS} + '.dll'{$ENDIF};
@@ -2509,19 +2640,49 @@ function JS_SetPrototype(cx: PJSContext; var obj: PJSObject; var proto: PJSObjec
 
 /// Create a new property on an object.
 // Name indentifies by ID
+{$IFDEF SM60}
 function JS_DefinePropertyById(cx: PJSContext; var obj: PJSObject; var id: jsid;
-  var value: jsval; attrs: uint32; getter: JSNative; setter: JSNative): boolean;
+    var value: jsval; attrs: uint32): boolean;
     cdecl; external SpiderMonkeyLib;
+function JS_DefinePropertyByIdNative(cx: PJSContext; var obj: PJSObject; var id: jsid;
+    getter: JSNative; setter: JSNative; attrs: uint32): boolean;
+    cdecl; external SpiderMonkeyLib;
+{$ELSE}
+function JS_DefinePropertyById(cx: PJSContext; var obj: PJSObject; var id: jsid;
+    var value: jsval; attrs: uint32;
+    getter: JSNative; setter: JSNative): boolean;
+    cdecl; external SpiderMonkeyLib;
+{$ENDIF}
 /// Create a new property on an object.
 // Name indentifies by ansi string
+{$IFDEF SM60}
 function JS_DefineProperty(cx: PJSContext; var obj: PJSObject; const name: PCChar;
-    var value: jsval; attrs: uint32; getter: JSNative; setter: JSNative): boolean;
+    var value: jsval; attrs: uint32): boolean;
     cdecl; external SpiderMonkeyLib;
+function JS_DefinePropertyNative(cx: PJSContext; var obj: PJSObject; const name: PCChar;
+    getter: JSNative; setter: JSNative; attrs: uint32): boolean;
+    cdecl; external SpiderMonkeyLib;
+{$ELSE}
+function JS_DefineProperty(cx: PJSContext; var obj: PJSObject; const name: PCChar;
+    var value: jsval; attrs: uint32;
+    getter: JSNative; setter: JSNative): boolean;
+    cdecl; external SpiderMonkeyLib;
+{$ENDIF}
 /// Create a new property on an object.
 // Name indentifies by unicode string
+{$IFDEF SM60}
 function JS_DefineUCProperty(cx: PJSContext; var obj: PJSObject; const name: PCChar16;
-    namelen: size_t; var value: jsval; attrs: uint32; getter: JSNative; setter: JSNative): Boolean;
+    namelen: size_t; var value: jsval; attrs: uint32): Boolean;
     cdecl; external SpiderMonkeyLib;
+function JS_DefineUCPropertyNative(cx: PJSContext; var obj: PJSObject; const name: PCChar16;
+    namelen: size_t; getter: JSNative; setter: JSNative; attrs: uint32): Boolean;
+    cdecl; external SpiderMonkeyLib;
+{$ELSE}
+function JS_DefineUCProperty(cx: PJSContext; var obj: PJSObject; const name: PCChar16;
+    namelen: size_t; var value: jsval; attrs: uint32;
+    getter: JSNative; setter: JSNative): Boolean;
+    cdecl; external SpiderMonkeyLib;
+{$ENDIF}
 
 /// Determine whether a JavaScript object has a specified property.
 // Name indentifies by ansi string
@@ -4744,7 +4905,14 @@ function JSObject.DefineProperty(cx: PJSContext; const name: PCChar;
 var obj: PJSObject;
 begin
   obj := @Self;
+  {$IFDEF SM60}
+  if Assigned(getter) or Assigned(setter) then
+    result := JS_DefinePropertyNative(cx, obj, name, getter, setter, attrs)
+  else
+    result := JS_DefineProperty(cx, obj, name, pjsval(@value)^, attrs)
+  {$ELSE}
   result := JS_DefineProperty(cx, obj, name, pjsval(@value)^, attrs, getter, setter)
+  {$ENDIF}
 end;
 
 function JSObject.DefinePropertyById(cx: PJSContext; var id: jsid;
@@ -4752,7 +4920,14 @@ function JSObject.DefinePropertyById(cx: PJSContext; var id: jsid;
 var obj: PJSObject;
 begin
   obj := @Self;
+  {$IFDEF SM60}
+  if Assigned(getter) or Assigned(setter) then
+    result := JS_DefinePropertyByIdNative(cx, obj, id, getter, setter, attrs)
+  else
+    result := JS_DefinePropertyById(cx, obj, id, pjsval(@value)^, attrs)
+  {$ELSE}
   result := JS_DefinePropertyById(cx, obj, id, pjsval(@value)^, attrs, getter, setter)
+  {$ENDIF}
 end;
 
 function JSObject.DefineUCFunction(cx: PJSContext; name: PCChar16;
@@ -4768,7 +4943,14 @@ function JSObject.DefineUCProperty(cx: PJSContext; const name: SynUnicode;
 var obj: PJSObject;
 begin
   obj := @Self;
+  {$IFDEF SM60}
+  if Assigned(getter) or Assigned(setter) then
+    result := JS_DefineUCPropertyNative(cx, obj, Pointer(name), Length(name), getter, setter, attrs)
+  else
+    result := JS_DefineUCProperty(cx, obj, Pointer(name), Length(name), pjsval(@value)^, attrs)
+  {$ELSE}
   result := JS_DefineUCProperty(cx, obj, Pointer(name), Length(name), pjsval(@value)^, attrs, getter, setter)
+  {$ENDIF}
 end;
 
 function JSObject.DefineUCProperty(cx: PJSContext; const name: PCChar16;
@@ -4777,7 +4959,14 @@ function JSObject.DefineUCProperty(cx: PJSContext; const name: PCChar16;
 var obj: PJSObject;
 begin
   obj := @Self;
+  {$IFDEF SM60}
+  if Assigned(getter) or Assigned(setter) then
+    result := JS_DefineUCPropertyNative(cx, obj, name, namelen, getter, setter, attrs)
+  else
+    result := JS_DefineUCProperty(cx, obj, name, namelen, pjsval(@value)^, attrs)
+  {$ELSE}
   result := JS_DefineUCProperty(cx, obj, name, namelen, pjsval(@value)^, attrs, getter, setter)
+  {$ENDIF}
 end;
 
 function JSObject.DeleteElement(cx: PJSContext; index: uint32;
@@ -5317,7 +5506,7 @@ end;
 function jsval.getIsNull: Boolean;
 begin
   {$ifdef CPU64}
-  Result := _l.asBits  = JSVAL_SHIFTED_TAG_NULL;
+  Result := _l.asBits and JSVAL_TAG_MASK = JSVAL_SHIFTED_TAG_NULL;
   {$else}
   Result := _l.s.tag = JSVAL_TAG_NULL;
   {$endif}

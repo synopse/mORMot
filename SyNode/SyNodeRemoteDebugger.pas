@@ -61,6 +61,7 @@ unit SyNodeRemoteDebugger;
 
 interface
 {$I Synopse.inc} // define BRANCH_WIN_WEB_SOCKET
+{$I SyNode.inc}
 
 uses
   Classes, SynCrtSock, SynTable {for TJSONWriter},

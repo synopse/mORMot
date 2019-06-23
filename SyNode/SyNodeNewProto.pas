@@ -64,6 +64,8 @@ unit SyNodeNewProto;
 
 interface
 
+{$I SyNode.inc}
+
 uses
   SyNodeProto,
   SynCommons,

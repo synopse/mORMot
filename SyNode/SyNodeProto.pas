@@ -260,6 +260,19 @@ const
   SMObjectRecordMagic: Word = 43857;
 {$IFDEF SM52}
   jsdef_classOpts: JSClassOps = (
+  {$IFDEF SM60}
+    addProperty:        nil;
+    delProperty:        nil;
+    enumerate:          nil;
+    newEnumerate:       nil;
+    resolve:            nil;
+    mayResolve:         nil;
+    finalize:           SMCustomObjectDestroy;
+    call:               nil;
+    hasInstance:        nil;
+    construct:          SMCustomObjectConstruct;
+    trace:              nil;
+  {$ELSE}
     addProperty:        nil;
     delProperty:        nil;
     getProperty:        nil;
@@ -272,6 +285,7 @@ const
     hasInstance:        nil;
     construct:          SMCustomObjectConstruct;
     trace:              nil;
+  {$ENDIF}
   );
   jsdef_class: JSClass = (
     name: '';
@@ -640,6 +654,9 @@ begin
       SetLength(FJSProps, Length(FJSProps) + 1); // must be null terminate!!
       obj := aParent.ptr.InitClass(cx ,nullObj , @FJSClassProto, nil, 0, @FJSProps[0] , nil, nil, nil);
     end;
+    new(ObjRec);
+    ObjRec.init(otProto,self);
+    obj.PrivateData := ObjRec;
     obj.ReservedSlot[fFirstDeterministicSlotIndex] := aParent.ptr.ToJSValue;
     //define JS methods
     if FMethodsDA.Count > 0 then
@@ -648,9 +665,6 @@ begin
         obj.DefineUCFunction(cx, PCChar16(ujsName),
           Length(ujsName), call, nargs, uint32(flags)).ToJSValue;
       end;
-    new(ObjRec);
-    ObjRec.init(otProto,self);
-    obj.PrivateData := ObjRec;
     global.ReservedSlot[fSlotIndex] := obj.ToJSValue;
   finally
     cx.EndRequest;
