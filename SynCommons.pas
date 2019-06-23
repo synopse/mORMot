@@ -23453,8 +23453,11 @@ begin
   if HResInfo=0 then
     exit;
   HGlobal := LoadResource(Instance,HResInfo);
-  if HGlobal<>0 then
+  if HGlobal<>0 then begin
     SetString(buf,PAnsiChar(LockResource(HGlobal)),SizeofResource(Instance,HResInfo));
+    UnlockResource(HGlobal); // only needed outside of Windows
+    FreeResource(HGlobal);
+  end;
 end;
 
 procedure ResourceSynLZToRawByteString(const ResName: string;
@@ -23469,7 +23472,12 @@ begin
     exit;
   HGlobal := LoadResource(Instance,HResInfo);
   if HGlobal<>0 then // direct decompression from memory mapped .exe content
-    SynLZDecompress(LockResource(HGlobal),SizeofResource(Instance,HResInfo),buf);
+    try
+      AlgoSynLZ.Decompress(LockResource(HGlobal),SizeofResource(Instance,HResInfo),buf);
+    finally
+      UnlockResource(HGlobal); // only needed outside of Windows
+      FreeResource(HGlobal);
+    end;
 end;
 
 function StrLenW(S: PWideChar): PtrInt;
@@ -36425,7 +36433,7 @@ end;
 
 procedure TSynTimeZone.LoadFromBuffer(const Buffer: RawByteString);
 begin
-  fZones.LoadFrom(pointer(SynLZDecompress(Buffer)));
+  fZones.LoadFrom(pointer(AlgoSynLZ.Decompress(Buffer)));
   fZones.ReHash(false);
   FreeAndNil(fIds);
   FreeAndNil(fDisplays);
@@ -62199,7 +62207,6 @@ begin
     SetUnixThreadName(ThreadID, Name); // call pthread_setname_np()
   {$endif}
 {$else}
-begin
 {$ifndef NOSETTHREADNAME}
 var s: RawByteString;
     {$ifndef ISDELPHIXE2}
