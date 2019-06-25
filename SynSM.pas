@@ -412,6 +412,13 @@ type
       attrs: TJSPropertyAttrs); overload;
       {$ifdef HASINLINE}inline;{$endif}
 
+    /// define an TSMObject with delphi object property
+    // for example
+    //   SMEngine.GlobalObject.DefinePropertyWithObject('test', test{delphi obj})
+    // use in JavaScript:
+    //   test.prop = ...
+    function DefinePropertyWithObject(const name: SynUnicode; const AObj : TObject) : TSMObject;
+
     /// add JSNative compatible function into JS object
     // - here the method name is specified as SynUnicode
     // - func  if reference to function with JSNative signature
@@ -449,6 +456,13 @@ type
     function DefineNativeMethod(const methodName: AnsiString;
       func: JSNative; nargs: uintN; attrs: TJSPropertyAttrs): PJSFunction; overload;
 
+    /// add all Delphi object method into JS object
+    // for example
+    //   SMEngine.GlobalObject.DefinePropertyWithObject('test', test).DefineMethodWithObject(test);
+    // use in JavaScript:
+    //   test.proc(...)
+    procedure DefineMethodWithObject(AObj : TObject);
+
     /// check object property does exist (including prototype chain lookup)
     function HasProperty(const propName: SynUnicode): Boolean;
     /// Determine whether a property is physically present on a object
@@ -466,6 +480,8 @@ type
     // ! obj[name]
     // - returns null if object does not have such property
     function GetPropVariant(const propName: SynUnicode): variant;
+    /// get object property as TSMObject
+    function GetPropObject(const propName: SynUnicode) : TSMObject;
 
     /// read/write access to the object properties as variant
     property Properties[const propName: SynUnicode]: variant
@@ -525,6 +541,11 @@ type
     function Engine: TSMEngine;
       {$ifdef HASINLINE}inline;{$endif}
 
+    /// add all Delphi object propertys to JS object property
+    procedure FromObject(AObj : TObject);
+    /// extract JS object propertys to Delphi object
+    procedure ToObject(AObj : TObject);
+
     /// access to the default attributes when accessing any properties
     property DefaultPropertyAttrs: TJSPropertyAttrs read FDefaultPropertyAttrs write SetDefaultPropertyAttrs;
   end;
@@ -564,11 +585,14 @@ type
   TSMEngineMethodEventJSON = function(const This: TSMObject;
     const Args: RawUTF8): RawUTF8 of object;
 
+  TSMEngineMethodEventMethod = function(const methodName : SynUnicode; const This: variant;
+    const Args: array of variant): variant of object;
+
   /// pointer to our wrapper around JavaScript Object
   PSMObject = ^TSMObject;
 
   /// kinds of callback methods available for TSMEngine.RegisterMethod()
-  TSMEngineMethodEventKind = (meVariant, meJSON);
+  TSMEngineMethodEventKind = (meVariant, meJSON, meMethod);
 
   /// used to store one registered method event
   TSMEngineMethodEvent = record
@@ -576,6 +600,7 @@ type
     case EventKind: TSMEngineMethodEventKind of
       meVariant: (CallbackVariant: TSMEngineMethodEventVariant);
       meJSON:    (CallbackJSON:    TSMEngineMethodEventJSON);
+      meMethod:  (CallbackMethod:  TSMEngineMethodEventMethod);
   end;
   /// used to store the registered method events
   TSMEngineMethodEventDynArray = array of TSMEngineMethodEvent;
@@ -617,6 +642,10 @@ type
     //  when it executes too long
     function DoProcessOperationCallback: JSBool; virtual;
     procedure CancelExecution;
+    /// Delphi object method callback
+    // see TSMObject.DefineMethodWithObject
+    function MethodEventCallback(const methodName : SynUnicode; const This: variant;
+      const Args: array of variant): variant;
   private
     FDefaultPropertyAttrs: TJSPropertyAttrs;
     procedure SetDefaultPropertyAttrs(const Value: TJSPropertyAttrs);
@@ -993,7 +1022,13 @@ var
 implementation
 
 uses
-  Math;
+  Math
+  {$IFDEF UNICODE}
+  ,Rtti
+  {$ELSE}
+  ,ObjAutoX  //http://cc.embarcadero.com/item/26122
+  {$ENDIF}
+  , TypInfo;
 
 const
   jsglobal_class: JSClass = (name: 'global';
@@ -1008,6 +1043,8 @@ const
     //in source it marked as Mandatory, but it doesn't
     //use in tests and there is no exported function JS_FinalizeStub
     );
+
+  Delphi_Self = '__Delphi_Self'; //property name of self, save delphi object pointer
 
 /// handle errors from JavaScript. Just call DoProcessJSError of corresponding TSMEngine
 // to set TSMEngine error properties
@@ -1194,6 +1231,139 @@ begin
   JS_MaybeGC(cx);
 end;
 
+function TSMEngine.MethodEventCallback(const methodName: SynUnicode;
+  const This: variant; const Args: array of variant): variant;
+{$IFDEF UNICODE}
+var
+  obj : TObject;
+  rttictx: TRttiContext;
+  rttiType: TRttiType;
+  method: TRttiMethod;
+  parameters: TArray<TRttiParameter>;
+  parameter: TRttiParameter;
+  ParamType: TRttiType;
+  i, nParams: Integer;
+  values: TArray<TValue>;
+  ReturnValue: TValue;
+begin
+  obj := Pointer(TSMVariantData(This).VObject.GetPropValue(Delphi_Self).AsInt64);
+  if not Assigned(obj) then
+    raise ESMException.CreateUTF8('%.MethodEventCallback',[self]);
+
+  rttictx := TRttiContext.Create;
+  rttiType := rttictx.GetType(obj.ClassType);
+  method  :=  rttiType.GetMethod(methodName);
+  if not Assigned(method) then
+    raise ESMException.CreateUTF8('%.MethodEventCallback',[self]);
+
+  parameters := method.GetParameters;
+  nParams := Length(parameters);
+
+  if nParams <> length(Args) then
+    raise ESMException.CreateUTF8('%.MethodEventCallback',[self]);
+
+  SetLength(values, nParams);
+
+  for i := 0 to nParams - 1 do
+  begin
+    parameter := parameters[i];
+    ParamType := parameter.ParamType;
+    case ParamType.TypeKind of
+      tkInteger: values[i] := TValue.From(integer(args[i]));
+      tkFloat: values[i] := TValue.From(Double(args[i]));
+      tkString, tkLString, tkWString, tkUString, tkVariant: values[i] := TValue.From(VarToStr(args[i]));
+      tkInt64: values[i] := TValue.From(Int64(args[i]));
+      else
+        raise ESMException.CreateUTF8('%.MethodEventCallback',[self]);
+    end;
+  end;
+
+  ReturnValue := method.Invoke(obj, values);
+
+  if Assigned(method.ReturnType) then
+  begin
+    case method.ReturnType.TypeKind of
+      tkInteger: Result :=  ReturnValue.AsInteger;
+      tkFloat: Result :=  ReturnValue.AsExtended;
+      tkString, tkLString, tkWString, tkUString : Result  :=  ReturnValue.AsString;
+      tkInt64: Result :=  ReturnValue.AsExtended;
+      tkVariant : Result  :=  ReturnValue.AsVariant;
+    end;
+  end
+  else
+    Result  :=  NULL;
+end;
+{$ELSE}
+var
+  obj: TObject;
+  methods: TMethodInfoArray;
+  method: PMethodInfoHeader;
+  parameters: TParamInfoArray;
+  parameter: PParamInfo;
+  ParamType: PTypeInfo;
+  i, nParams: Integer;
+  paramindexs : array of Integer;
+  values: array of Variant;
+  ReturnValue: Variant;
+  returnInfo : PReturnInfo;
+begin
+  obj := Pointer(TSMVariantData(This).VObject.GetPropValue(Delphi_Self).AsInt64);
+  if not Assigned(obj) then
+    raise ESMException.CreateUTF8('%.MethodEventCallback',[self]);
+
+  method := nil;
+  methods :=  GetMethods(obj.ClassType);
+  for i := Low(methods) to High(methods) do
+    if SameText(methods[i].Name, methodName) then
+    begin
+      method  := methods[i];
+      Break;
+    end;
+  if not Assigned(method) then
+    raise ESMException.CreateUTF8('%.MethodEventCallback',[self]);
+
+  parameters := GetParams(obj, method.Name);
+  if (Length(parameters) > 0) and (pfResult in parameters[Length(parameters) - 1].Flags) then
+    SetLength(parameters, Length(parameters) - 1);
+  nParams := Length(parameters);
+
+  if nParams-1 <> Length(Args) then
+     raise ESMException.CreateUTF8('%.MethodEventCallback',[self]);
+
+  SetLength(paramindexs, nParams);
+  SetLength(values, nParams);
+
+  values[0] :=  Integer(Pointer(obj));
+  for i := 1 to nParams - 1 do
+  begin
+    paramindexs[i]  :=  i;
+    parameter := parameters[i];
+    ParamType := parameter.ParamType^;
+    case ParamType.Kind of
+      tkInteger: values[i] := integer(args[i-1]);
+      tkFloat: values[i] := Double(args[i-1]);
+      tkString, tkLString, tkWString, tkVariant: values[i] := VarToStr(args[i-1]);
+      tkInt64: values[i] := integer(args[i-1]);
+      else
+        raise ESMException.CreateUTF8('%.MethodEventCallback',[self]);
+    end;
+  end;
+
+  ReturnValue := ObjectInvoke(obj, method, paramindexs, values);
+
+  returnInfo  :=  GetReturnInfo(obj, method.Name);
+  if Assigned(returnInfo) and Assigned(returnInfo.ReturnType) then
+    case returnInfo.ReturnType^.Kind of
+      tkString, tkLString  :
+        Result  :=  StringToSynUnicode(VarToStr(ReturnValue)); //convert to unicode
+      else
+        Result  :=  ReturnValue
+    end
+  else
+    Result  :=  NULL;
+end;
+{$ENDIF}
+
 procedure TSMEngine.NewObject(out newobj: TSMObject);
 begin
   newobj.fCx := cx;
@@ -1315,6 +1485,16 @@ var engine: TSMEngine;
       W.Free;
     end;
   end;
+  procedure RunAsMethod(const CallbackMethod: TSMEngineMethodEventMethod);
+  var a: integer;
+      Args: TVariantDynArray;
+  begin
+    SetLength(Args,argc);
+    for a := 0 to argc-1 do
+      argv^[a].ToVariant(cx,Args[a]);
+    res.SetVariant(cx, CallbackMethod(UTF8ToSynUnicode(
+        callee.ToNativeFunctionName(cx)),Variant(instance),Args));
+  end;
   procedure RunError(E: Exception);
   begin // avoid temporary allocation of strings on the stack
     JSError(cx, E, FormatUTF8(' for function %()',
@@ -1339,6 +1519,7 @@ begin
       case EventKind of
       meVariant: RunAsVariant(CallbackVariant);
       meJSON:    RunAsJson(CallbackJSON);
+      meMethod:  RunAsMethod(CallbackMethod);
       else raise ESMException.CreateUTF8('nsm_methodDelphi: Unknown EventKind=%',
         [ord(EventKind)]);
       end;
@@ -2014,6 +2195,14 @@ begin
   DefineProperty(name, value, FDefaultPropertyAttrs);
 end;
 
+function TSMObject.DefinePropertyWithObject(const name: SynUnicode;
+  const AObj: TObject) : TSMObject;
+begin
+  Engine.NewObject(Result);
+  Result.FromObject(AObj);
+  DefineProperty(name, Result.AsSMValue);
+end;
+
 procedure TSMObject.SetPropVariant(const propName: SynUnicode;
   const Value: variant);
 begin
@@ -2046,6 +2235,11 @@ var res: TSMValue; // need a temp. var to compile with latest Delphi! :(
 begin
   res := GetPropValue(propName);
   res.ToVariant(cx,result);
+end;
+
+function TSMObject.GetPropObject(const propName: SynUnicode): TSMObject;
+begin
+  Engine.MakeObject(GetPropValue(propName), Result);
 end;
 
 procedure TSMObject.Evaluate(const script: SynUnicode; const scriptName: RawUTF8;
@@ -2153,6 +2347,53 @@ begin
   result := DefineNativeMethod(methodName, func, nargs, DefaultPropertyAttrs);
 end;
 
+procedure TSMObject.DefineMethodWithObject(AObj: TObject);
+{$IFDEF UNICODE}
+var
+  rttictx: TRttiContext;
+  rttiType: TRttiType;
+  methods: TArray<TRttiMethod>;
+  method: TRttiMethod;
+  em : TSMEngineMethodEventMethod;
+begin
+  rttictx := TRttiContext.Create;
+  rttiType := rttictx.GetType(AObj.ClassType);
+  methods := rttiType.GetDeclaredMethods;
+  em  :=  Engine.MethodEventCallback;
+  DefineProperty(Delphi_Self, Integer(AObj)); //save object pointer
+  for method in methods do
+    if method.MethodKind in [mkProcedure, mkFunction, mkOperatorOverload] then
+    begin
+      Engine.InternalRegisterMethod(obj,method.Name,
+        TMethod(em),meMethod,Length(method.GetParameters));
+    end;
+end;
+{$ELSE}
+var
+  em : TSMEngineMethodEventMethod;
+  methods : TMethodInfoArray;
+  i : Integer;
+  parameters: TParamInfoArray;
+  nParams : Integer;
+begin
+  em  :=  Engine.MethodEventCallback;
+  DefineProperty(Delphi_Self, Integer(AObj)); //save object pointer
+  methods :=  GetMethods(AObj.ClassType);
+  for i := Low(methods) to High(methods) do
+  begin
+    parameters := GetParams(AObj, methods[i].Name);
+    nParams := Length(parameters);
+    if nParams = 0 then Continue;
+    if pfResult in parameters[Length(parameters) - 1].Flags then
+      Dec(nParams);
+    Dec(nParams); //self param
+
+    Engine.InternalRegisterMethod(obj,methods[i].Name,
+      TMethod(em),meMethod,nParams);
+  end;
+end;
+{$ENDIF}
+
 procedure TSMObject.DefineProperty(const name: SynUnicode;
   const value: TSMValue);
 begin
@@ -2173,6 +2414,69 @@ begin
   if obj=nil then
     result.fObj := nil else
     JS_GetPrototype(cx, obj, result.fObj);
+end;
+
+procedure TSMObject.FromObject(AObj: TObject);
+var
+  PropList : PPropList;
+  PropLen : Integer;
+  idx : Integer;
+  propName : SynUnicode;
+begin
+  PropLen  :=  GetPropList(AObj.ClassInfo, tkProperties -
+      [tkArray, tkDynArray, tkRecord, tkMethod, tkInterface], nil);
+  GetMem(PropList, PropLen * SizeOf(Pointer));
+  try
+    for idx :=  0 to PropLen - 1 do
+    begin
+      propName  :=  StringToSynUnicode(string(PropList[idx].Name));
+      case PropList[idx].PropType^.Kind of
+        tkInt64{$ifdef FPC}, tkQWord{$endif}:
+          SetPropVariant(propName, GetInt64Prop(AObj, PropList[idx]));
+        {$ifdef FPC}tkBool,{$endif} tkEnumeration, tkSet, tkInteger:
+          SetPropVariant(propName, GetOrdProp(AObj, PropList[idx]));
+        tkFloat :
+          SetPropVariant(propName, GetFloatProp(AObj, PropList[idx]));
+        {$ifdef HASVARUSTRING}tkUString,{$endif} {$ifdef FPC}tkAString,{$endif}
+        tkLString, tkWString:
+          SetPropVariant(propName, GetStrProp(AObj, PropList[idx]));
+      end;
+    end;
+  finally
+    FreeMem(PropList, PropLen * SizeOf(Pointer));
+  end;
+end;
+
+procedure TSMObject.ToObject(AObj: TObject);
+var
+  PropList : PPropList;
+  PropLen : Integer;
+  idx : Integer;
+  propName : SynUnicode;
+begin
+  PropLen  :=  GetPropList(AObj.ClassInfo, tkProperties -
+      [tkArray, tkDynArray, tkRecord, tkMethod, tkInterface], nil);
+  GetMem(PropList, PropLen * SizeOf(Pointer));
+  try
+    for idx :=  0 to PropLen - 1 do
+    begin
+      propName  :=  StringToSynUnicode(string(PropList[idx].Name));
+      if Assigned(PropList[idx].SetProc) and HasProperty(propName) then
+        case PropList[idx].PropType^.Kind of
+          tkInt64{$ifdef FPC}, tkQWord{$endif}:
+            SetInt64Prop(AObj, PropList[idx], GetPropValue(propName).AsInt64);
+          {$ifdef FPC}tkBool,{$endif} tkEnumeration, tkSet, tkInteger:
+            SetOrdProp(AObj, PropList[idx], GetPropValue(propName).AsInteger);
+          tkFloat :
+            SetFloatProp(AObj, PropList[idx], GetPropValue(propName).AsDouble);
+          {$ifdef HASVARUSTRING}tkUString,{$endif} {$ifdef FPC}tkAString,{$endif}
+          tkLString, tkWString:
+            SetStrProp(AObj, PropList[idx], GetPropValue(propName).ToWideString(cx));
+        end;
+    end;
+  finally
+    FreeMem(PropList, PropLen * SizeOf(Pointer));
+  end;
 end;
 
 function TSMEngine.DoProcessOperationCallback: JSBool;
