@@ -6436,7 +6436,10 @@ procedure GetEnumNames(aTypeInfo: pointer; aDest: PPShortString);
 
 /// helper to retrieve all trimmed texts of an enumerate
 // - may be used as cache to retrieve UTF-8 text without lowercase 'a'..'z' chars
-procedure GetEnumTrimmedNames(aTypeInfo: pointer; aDest: PRawUTF8);
+procedure GetEnumTrimmedNames(aTypeInfo: pointer; aDest: PRawUTF8); overload;
+
+/// helper to retrieve all trimmed texts of an enumerate as UTF-8 strings
+function GetEnumTrimmedNames(aTypeInfo: pointer): TRawUTF8DynArray; overload;
 
 /// helper to retrieve all (translated) caption texts of an enumerate
 // - may be used as cache for overloaded ToCaption() content
@@ -20956,6 +20959,21 @@ begin
       inc(PByte(res),ord(res^[0])+1); // next short string
       inc(aDest);
     end;
+end;
+
+function GetEnumTrimmedNames(aTypeInfo: pointer): TRawUTF8DynArray;
+var MaxValue, i: integer;
+    res: PShortString;
+begin
+  res := GetEnumInfo(aTypeInfo,MaxValue);
+  if res=nil then
+    result := nil else begin
+    SetLength(result,MaxValue+1);
+    for i := 0 to MaxValue do begin
+      result[i] := TrimLeftLowerCaseShort(res);
+      inc(PByte(res),ord(res^[0])+1); // next short string
+    end;
+  end;
 end;
 
 procedure GetCaptionFromTrimmed(PS: PShortString; var result: string);
