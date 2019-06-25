@@ -158,10 +158,26 @@ type
     procedure RunMustacheTemplate;
     procedure RunTechempowerTemplate;
     procedure ArrayBufferSupport;
+    procedure ObjectMapping;
 
     procedure AbortOnTimeout;
   end;
 
+  {$TYPEINFO ON}
+  {$METHODINFO ON}
+  TTestObj = class  // object mapping test
+  private
+    FI: Integer;
+    FD: Double;
+    FS: string;
+  published
+    property I : Integer read FI write FI;
+    property D : Double read FD write FD;
+    property S : string read FS write FS;
+  public
+    function  Func1(a,b : Double) : Double;
+    function  Func2(a,b : string) : string;
+  end;
 
 threadvar
   strFinalizerCircles: Cardinal;
@@ -1718,6 +1734,32 @@ begin
 
 end;
 
+procedure TTestSynSM.ObjectMapping;
+var
+  engine: TSMEngine;
+  test : TTestObj;
+begin
+  engine := FManager.ThreadSafeEngine;
+  check(engine <> nil);
+
+  test  :=  TTestObj.Create;
+  try
+    test.I :=  123;
+    test.D :=  222.333;
+    test.S :=  'abc';
+    engine.GlobalObject.DefinePropertyWithObject('test', test).DefineMethodWithObject(test);
+    engine.Evaluate('test.I=321;test.S="中文";test.D=0.444;');
+    engine.Evaluate('test.D=test.Func1(test.I,test.D);');
+    engine.Evaluate('test.S=test.Func2(test.S,"字符");');
+    engine.GlobalObject.GetPropObject('test').ToObject(test);
+    Check(test.I = 321);
+    Check(CompareValue(test.D, 321.444) = 0);
+    Check(test.S = '中文.字符');
+  finally
+    test.Free;
+  end;
+end;
+
 procedure TTestSynSM.ScriptEvaluation;
 var
   engine: TSMEngine;
@@ -1928,6 +1970,18 @@ destructor TTestSynSM.Destroy;
 begin
   FManager.Free;
   inherited;
+end;
+
+{ TTestObj }
+
+function TTestObj.Func1(a, b: Double): Double;
+begin
+  Result  :=  a + b;
+end;
+
+function TTestObj.Func2(a, b: string): string;
+begin
+  Result  :=  a + '.' + b;
 end;
 
 end.
