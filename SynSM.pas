@@ -1026,9 +1026,17 @@ uses
   {$IFDEF UNICODE}
   ,Rtti
   {$ELSE}
-  ,ObjAutoX  //http://cc.embarcadero.com/item/26122
+  ,ObjAuto
   {$ENDIF}
   , TypInfo;
+
+{$IFNDEF UNICODE}
+type
+  TMethodInfoArray = array of PMethodInfoHeader;
+  TParamInfoArray  = array of PParamInfo;
+const
+  SHORT_LEN = SizeOf(ShortString) - 1;
+{$ENDIF}
 
 const
   jsglobal_class: JSClass = (name: 'global';
@@ -1068,6 +1076,88 @@ begin
   Result := TSMEngine(cx.PrivateData).DoProcessOperationCallback;
 end;
 
+{$IFNDEF UNICODE}
+//http://cc.embarcadero.com/item/26122   ObjAutoX.pas
+function GetMethods(ClassType: TClass): TMethodInfoArray;
+var
+  VMT:        Pointer;
+  MethodInfo: Pointer;
+  Count:      Integer;
+  I:          Integer;
+begin
+  Count := 0;
+  VMT   := ClassType;
+  repeat
+    MethodInfo := PPointer(Integer(VMT) + vmtMethodTable)^;
+    if MethodInfo <> nil then
+      Inc(Count, PWord(MethodInfo)^);
+    // Find the parent VMT
+    VMT := PPointer(Integer(VMT) + vmtParent)^;
+    if VMT = nil then
+      Break;
+    VMT := PPointer(VMT)^;
+  until False;
+  SetLength(Result, Count);
+  I   := 0;
+  VMT := ClassType;
+  repeat
+    MethodInfo := PPointer(Integer(VMT) + vmtMethodTable)^;
+    if MethodInfo <> nil then
+    begin
+      Count := PWord(MethodInfo)^;
+      Inc(Integer(MethodInfo), SizeOf(Word));
+      while Count > 0 do
+      begin
+        Result[I] := MethodInfo;
+        Inc(I);
+        Inc(Integer(MethodInfo), PMethodInfoHeader(MethodInfo)^.Len);
+        Dec(Count);
+      end;
+    end;
+    // Find the parent VMT
+    VMT := PPointer(Integer(VMT) + vmtParent)^;
+    if VMT = nil then
+      Exit;
+    VMT := PPointer(VMT)^;
+  until False;
+end;
+
+function GetParams(aObj: TObject; aMethodName: string): TParamInfoArray;
+var
+  mi:    PMethodInfoHeader;
+  miEnd: Pointer;
+  param: PParamInfo;
+  Count: integer;
+begin
+  SetLength(Result, 0);
+  mi := GetMethodInfo(aObj, ShortString(aMethodName));
+  if mi.Len <= SizeOf(TMethodInfoHeader) + Length(mi.Name) - SHORT_LEN then
+    Exit;
+  miEnd := Pointer(integer(mi) + mi.Len);
+  param := PParamInfo(integer(mi) + SizeOf(TMethodInfoHeader) + Length(mi.Name) - SHORT_LEN + SizeOf(TReturnInfo));
+  Count := 0;
+  while integer(param) < integer(miEnd) do
+  begin
+    Inc(Count);
+    SetLength(Result, Count);
+    Result[Count - 1] := param;
+    param             := PParamInfo(integer(param) + SizeOf(TParamInfo) + Length(param.Name) - SHORT_LEN);
+  end;
+end;
+
+function GetReturnInfo(aObj: TObject; aMethodName: string): PReturnInfo;
+var
+  mi: PMethodInfoHeader;
+begin
+  mi := GetMethodInfo(aObj, ShortString(aMethodName));
+  if mi.Len <= SizeOf(TMethodInfoHeader) + Length(mi.Name) - SHORT_LEN then
+  begin
+    Result := nil;
+    Exit;
+  end;
+  Result := PReturnInfo(integer(mi) + SizeOf(TMethodInfoHeader) + Length(mi.Name) - SHORT_LEN);
+end;
+{$ENDIF}
 
 { TSMEngine }
 
