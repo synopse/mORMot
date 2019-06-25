@@ -35,6 +35,7 @@ unit SynCommons;
    - ASiwon
    - Chaa
    - BigStar
+   - Eugene Ilyin
    - f-vicente
    - itSDS
    - Johan Bontes
@@ -26132,7 +26133,6 @@ var modname, beg: PUTF8Char;
     {$endif BSD}
 begin
   modname := nil;
-  SystemInfo.dwPageSize := getpagesize; // use libc for this value
   {$ifdef BSD}
   fpuname(SystemInfo.uts);
   SystemInfo.dwNumberOfProcessors := fpsysctlhwint(HW_NCPU);
@@ -62555,6 +62555,11 @@ initialization
   GarbageCollectorFreeAndNilList := TList.Create;
   GarbageCollectorFreeAndNil(GarbageCollector,TObjectList.Create);
   InitializeCriticalSection(GlobalCriticalSection);
+  {$ifndef MSWINDOWS} // should be set ASAP (RetrieveSystemInfo is too late)
+  SystemInfo.dwPageSize := getpagesize; // use libc for this value
+  if SystemInfo.dwPageSize = 0 then
+    SystemInfo.dwPageSize := 4096;
+  {$endif MSWINDOWS}
   {$ifdef CPUINTEL}
   TestIntelCpuFeatures;
   {$endif}
