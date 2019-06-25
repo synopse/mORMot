@@ -1,4 +1,4 @@
-/// service to generate mORMot cross-platform clients code from the server
+/// generate cross-platform clients code and documentation from a mORMot server
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit mORMotWrappers;
@@ -421,10 +421,10 @@ type
     function ContextArgsFromMethod(const meth: TServiceMethod): variant;
     procedure AddUnit(const aUnitName: ShortString; addAsProperty: PVariant);
   public
-    constructor Create(const aDescriptions: TFileName='');
+    constructor Create(const aDescriptions: TFileName);
     constructor CreateFromModel(aServer: TSQLRestServer; const aSourcePath: TFileName;
-      const aDescriptions: TFileName='');
-    constructor CreateFromUsedInterfaces(const aDescriptions: TFileName='');
+      const aDescriptions: TFileName);
+    constructor CreateFromUsedInterfaces(const aDescriptions: TFileName);
     function Context: variant;
   end;
 
@@ -1313,7 +1313,7 @@ begin
     DestFileName := 'mORMotInterfaces.pas' else
     if DestFileName[1]=PathDelim then
       DestFileName := ExtractFilePath(TemplateName)+DestFileName;
-  with TWrapperContext.CreateFromUsedInterfaces do
+  with TWrapperContext.CreateFromUsedInterfaces('') do
   try
     ctxt := Context;
   finally

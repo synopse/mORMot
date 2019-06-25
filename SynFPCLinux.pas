@@ -78,7 +78,7 @@ procedure DeleteCriticalSection(var cs : TRTLCriticalSection); inline;
 
 {$ifdef LINUX}
 
-/// used by TSynMonitorMemory.RetrieveMemoryInfo to compute the sizes in byte
+/// used by SynCommons to compute the sizes in byte
 function getpagesize: Integer; cdecl; external 'c';
 
 /// compatibility function, wrapping Win32 API high resolution timer

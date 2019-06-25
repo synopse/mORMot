@@ -2052,6 +2052,7 @@ type
     // - e.g. 'http://unix:/path/to/socket.sock:/url/path'
     Layer: TCrtSocketLayer;
     /// fill the members from a supplied URI
+    // - returns TRUE is at least the Server has been extracted, FALSE on error
     function From(aURI: SockString; const DefaultPort: SockString=''): boolean;
     /// compute the whole normalized URI
     function URI: SockString;
