@@ -1738,6 +1738,8 @@ procedure TTestSynSM.ObjectMapping;
 var
   engine: TSMEngine;
   test : TTestObj;
+  funcArr : TJSFunctionArray;
+  i : Integer;
 begin
   engine := FManager.ThreadSafeEngine;
   check(engine <> nil);
@@ -1747,7 +1749,7 @@ begin
     test.I :=  123;
     test.D :=  222.333;
     test.S :=  'abc';
-    engine.GlobalObject.DefinePropertyWithObject('test', test).DefineMethodWithObject(test);
+    funcArr := engine.GlobalObject.DefinePropertyWithObject('test', test).DefineMethodsWithObject(test);
     engine.Evaluate('test.I=321;test.S="中文";test.D=0.444;');
     engine.Evaluate('test.D=test.Func1(test.I,test.D);');
     engine.Evaluate('test.S=test.Func2(test.S,"字符");');
@@ -1755,6 +1757,9 @@ begin
     Check(test.I = 321);
     Check(CompareValue(test.D, 321.444) = 0);
     Check(test.S = '中文.字符');
+    //free methods
+    for i := low(funcArr) to High(funcArr) do
+      engine.UnRegisterMethod(funcArr[i]);
   finally
     test.Free;
   end;

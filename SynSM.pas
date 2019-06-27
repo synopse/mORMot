@@ -304,6 +304,9 @@ type
   /// a dynamic array of jsval wrappers
   SMValArray = array of TSMValue;
 
+  /// dynamic array of PJSFunction
+  TJSFunctionArray = array of PJSFunction;
+
   /// just a wrapper around JavaScript Object API type, to be used with other
   // values wrappers
   // - SpiderMonkey object type can NOT be directly casted to this type via
@@ -458,10 +461,10 @@ type
 
     /// add all Delphi object method into JS object
     // for example
-    //   SMEngine.GlobalObject.DefinePropertyWithObject('test', test).DefineMethodWithObject(test);
+    //   SMEngine.GlobalObject.DefinePropertyWithObject('test', test).DefineMethodsWithObject(test);
     // use in JavaScript:
     //   test.proc(...)
-    procedure DefineMethodWithObject(AObj : TObject);
+    function DefineMethodsWithObject(AObj : TObject) : TJSFunctionArray;
 
     /// check object property does exist (including prototype chain lookup)
     function HasProperty(const propName: SynUnicode): Boolean;
@@ -1488,8 +1491,8 @@ var engine: TSMEngine;
   procedure RunAsMethod(const CallbackMethod: TSMEngineMethodEventMethod);
   var a: integer;
       Args: TVariantDynArray;
-  begin
-    SetLength(Args,argc);
+  begin                                         
+    SetLength(Args,argc);              
     for a := 0 to argc-1 do
       argv^[a].ToVariant(cx,Args[a]);
     res.SetVariant(cx, CallbackMethod(UTF8ToSynUnicode(
@@ -2347,7 +2350,7 @@ begin
   result := DefineNativeMethod(methodName, func, nargs, DefaultPropertyAttrs);
 end;
 
-procedure TSMObject.DefineMethodWithObject(AObj: TObject);
+function TSMObject.DefineMethodsWithObject(AObj: TObject) : TJSFunctionArray;
 {$IFDEF UNICODE}
 var
   rttictx: TRttiContext;
@@ -2355,17 +2358,21 @@ var
   methods: TArray<TRttiMethod>;
   method: TRttiMethod;
   em : TSMEngineMethodEventMethod;
+  DA: TDynArray;
+  func : PJSFunction;
 begin
   rttictx := TRttiContext.Create;
   rttiType := rttictx.GetType(AObj.ClassType);
   methods := rttiType.GetDeclaredMethods;
   em  :=  Engine.MethodEventCallback;
   DefineProperty(Delphi_Self, Integer(AObj)); //save object pointer
+  DA.Init(TypeInfo(TJSFunctionArray), Result);
   for method in methods do
     if method.MethodKind in [mkProcedure, mkFunction, mkOperatorOverload] then
     begin
-      Engine.InternalRegisterMethod(obj,method.Name,
+      func  :=  Engine.InternalRegisterMethod(obj,method.Name,
         TMethod(em),meMethod,Length(method.GetParameters));
+      DA.Add(func);
     end;
 end;
 {$ELSE}
@@ -2375,10 +2382,13 @@ var
   i : Integer;
   parameters: TParamInfoArray;
   nParams : Integer;
+  DA: TDynArray;
+  func : PJSFunction;
 begin
   em  :=  Engine.MethodEventCallback;
   DefineProperty(Delphi_Self, Integer(AObj)); //save object pointer
   methods :=  GetMethods(AObj.ClassType);
+  DA.Init(TypeInfo(TJSFunctionArray), Result);
   for i := Low(methods) to High(methods) do
   begin
     parameters := GetParams(AObj, methods[i].Name);
@@ -2388,8 +2398,9 @@ begin
       Dec(nParams);
     Dec(nParams); //self param
 
-    Engine.InternalRegisterMethod(obj,methods[i].Name,
+    func := Engine.InternalRegisterMethod(obj,methods[i].Name,
       TMethod(em),meMethod,nParams);
+    DA.Add(func);
   end;
 end;
 {$ENDIF}
