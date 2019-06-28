@@ -3654,7 +3654,7 @@ type
 // - you may specify several masks in Mask, e.g. as '*.jpg;*.jpeg'
 function FindFiles(const Directory,Mask: TFileName;
   const IgnoreFileName: TFileName=''; SortByName: boolean=false;
-  IncludesDir: boolean=true): TFindFilesDynArray;
+  IncludesDir: boolean=true; SubFolder: Boolean=false): TFindFilesDynArray;
 
 /// convert a result list, as returned by FindFiles(), into an array of Files[].Name
 function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray): TFileNameDynArray;
@@ -29674,16 +29674,42 @@ begin
 end;
 
 function FindFiles(const Directory,Mask,IgnoreFileName: TFileName;
-  SortByName, IncludesDir: boolean): TFindFilesDynArray;
-var F: TSearchRec;
-    n: integer;
+  SortByName, IncludesDir, SubFolder: boolean): TFindFilesDynArray;
+var n: integer;
     Dir: TFileName;
     da: TDynArray;
     masks: TRawUTF8DynArray;
     masked: TFindFilesDynArray;
+  procedure _DoSearchFolder(ADirectory : TFileName);
+  var
+    F: TSearchRec;
+    ff : TFindFiles;
+  begin
+    if FindFirst(Dir+ADirectory+Mask,faAnyfile-faDirectory,F)=0 then begin
+      repeat
+        if SearchRecValidFile(F) and ((IgnoreFileName='') or
+            (AnsiCompareFileName(F.Name,IgnoreFileName)<>0)) then begin
+          if IncludesDir then
+            ff.FromSearchRec(Dir+ADirectory,F) else
+            ff.FromSearchRec(ADirectory,F);
+          da.Add(ff);
+        end;
+      until FindNext(F)<>0;
+      FindClose(F);
+    end;
+    if SubFolder then
+      if FindFirst(Dir+ADirectory+'*',faDirectory,F)=0 then begin
+        repeat
+          if (F.Name<>'.') and (F.Name<>'..') and ((IgnoreFileName='') or
+              (AnsiCompareFileName(F.Name,IgnoreFileName)<>0)) then begin
+            _DoSearchFolder(IncludeTrailingPathDelimiter(ADirectory + F.Name));
+          end;
+        until FindNext(F)<>0;
+        FindClose(F);
+      end;
+  end;
 begin
   result := nil;
-  n := 0;
   da.Init(TypeInfo(TFindFilesDynArray),result);
   if Pos(';',Mask)>0 then
     CSVToRawUTF8DynArray(pointer(StringToUTF8(Mask)),masks,';');
@@ -29699,24 +29725,8 @@ begin
   end else begin
     if Directory<>'' then
       Dir := IncludeTrailingPathDelimiter(Directory);
-    if FindFirst(Dir+Mask,faAnyfile-faDirectory,F)=0 then begin
-      repeat
-        if SearchRecValidFile(F) and ((IgnoreFileName='') or
-            (AnsiCompareFileName(F.Name,IgnoreFileName)<>0)) then begin
-          if n=length(result) then
-            SetLength(result,NextGrow(n));
-          if IncludesDir then
-            result[n].FromSearchRec(Dir,F) else
-            result[n].FromSearchRec('',F);
-          inc(n);
-        end;
-      until FindNext(F)<>0;
-      FindClose(F);
-      if n=0 then
-        exit;
-      SetLength(result,n);
-    end;
-    if SortByName and (n>0) then
+    _DoSearchFolder('');
+    if SortByName and (da.Count>0) then
       da.Sort(SortDynArrayFileName);
   end;
 end;
