@@ -2052,6 +2052,7 @@ type
     // - e.g. 'http://unix:/path/to/socket.sock:/url/path'
     Layer: TCrtSocketLayer;
     /// fill the members from a supplied URI
+    // - returns TRUE is at least the Server has been extracted, FALSE on error
     function From(aURI: SockString; const DefaultPort: SockString=''): boolean;
     /// compute the whole normalized URI
     function URI: SockString;
@@ -2572,7 +2573,7 @@ function HttpPost(const server, port: SockString; const url, Data, DataType: Soc
 function AuthorizationBearer(const AuthToken: SockString): SockString;
 
 /// compute the '1.2.3.4' text representation of a raw IP4 binary
-procedure IP4Text(const ip4addr; var result: SockString);
+procedure IP4Text(const ip4addr; var result: SockString); overload;
 
 const
   /// the layout of TSMTPConnection.FromText method

@@ -55,8 +55,8 @@ unit mORMotHttpClient;
    - can be called by any JSON-aware AJAX application
    - can optionaly compress the returned data to optimize Internet bandwidth
    - speed is very high: more than 20MB/sec R/W localy on a 1.8GHz Sempron,
-     i.e. 400Mb/sec of duplex raw IP data, with about 200 µs only elapsed
-     by request (direct call is 50 µs, so bottle neck is the Win32 API),
+     i.e. 400Mb/sec of duplex raw IP data, with about 200 us only elapsed
+     by request (direct call is 50 us, so bottle neck is the Win32 API),
      i.e. 5000 requests per second, with 113 result rows (i.e. 4803 bytes
      of JSON data each)... try to find a faster JSON HTTP server! ;)
 
@@ -225,7 +225,7 @@ type
     constructor Create(const aServer, aPort: AnsiString; aModel: TSQLModel;
       aHttps: boolean=false; const aProxyName: AnsiString='';
       const aProxyByPass: AnsiString=''; aSendTimeout: DWORD=0;
-      aReceiveTimeout: DWORD=0; aConnectTimeout: DWORD=0); reintroduce; overload;
+      aReceiveTimeout: DWORD=0; aConnectTimeout: DWORD=0); reintroduce; overload; virtual;
     /// connect to TSQLHttpServer via 'address:port/root' URI format
     // - if port is not specified, aDefaultPort is used
     // - if root is not specified, aModel.Root is used
@@ -324,6 +324,7 @@ type
     fOnWebSocketsUpgraded: TOnRestClientNotify;
     fOnWebSocketsClosed: TNotifyEvent;
     fWebSocketLoopDelay: integer;
+    fDefaultWebSocketProcessSettings : TWebSocketProcessSettings;
     function InternalCheckOpen: boolean; override;
     function FakeCallbackRegister(Sender: TServiceFactoryClient;
       const Method: TServiceMethod; const ParamInfo: TServiceMethodArgument;
@@ -332,6 +333,12 @@ type
       FakeCallbackID: integer; Instance: pointer): boolean; override;
     function CallbackRequest(Ctxt: THttpServerRequest): cardinal; virtual;
   public
+    /// connect to TSQLHttpServer on aServer:aPort
+    // - this overriden method will handle properly WebSockets settings
+    constructor Create(const aServer, aPort: AnsiString; aModel: TSQLModel;
+      aHttps: boolean=false; const aProxyName: AnsiString='';
+      const aProxyByPass: AnsiString=''; aSendTimeout: DWORD=0;
+      aReceiveTimeout: DWORD=0; aConnectTimeout: DWORD=0); override;
     /// upgrade the HTTP client connection to a specified WebSockets protocol
     // - the Model.Root URI will be used for upgrade
     // - if aWebSocketsAJAX equals default FALSE, it will use 'synopsebinary'
@@ -380,7 +387,10 @@ type
     /// customize the internal REST loop delay
     // - to be defined before WebSocketsUpdate/WebSocketsConnect
     // - will set TWebSocketProcessSettings.LoopDelay value at WebSocketsUpgrade
+    // - will override LoopDelay from DefaultWebSocketProcessSettings
     property WebSocketLoopDelay: integer read fWebSocketLoopDelay write fWebSocketLoopDelay;
+    /// returns a reference to default settings for every new WebSocket process
+    function DefaultWebSocketProcessSettings: PWebSocketProcessSettings; {$ifdef HASINLINE}inline;{$endif}
   end;
 
   {$endif NOHTTPCLIENTWEBSOCKETS}
@@ -779,10 +789,12 @@ begin
       if fSocketClass=nil then
         fSocketClass := THttpClientWebSockets;
       result := inherited InternalCheckOpen;
-      if result then
+      if result then begin
+        include(fInternalState,isOpened);
         with fWebSocketParams do
-        if AutoUpgrade then
-          result := WebSocketsUpgrade(Key,Ajax,Compression)='';
+          if AutoUpgrade then
+            result := WebSocketsUpgrade(Key,Ajax,Compression)='';
+      end;
     except
       result := false;
     end;
@@ -840,6 +852,21 @@ begin
   result := params.OutStatus;
 end;
 
+constructor TSQLHttpClientWebsockets.Create(const aServer, aPort: AnsiString;
+  aModel: TSQLModel; aHttps: boolean; const aProxyName, aProxyByPass: AnsiString;
+  aSendTimeout, aReceiveTimeout,aConnectTimeout: DWORD);
+begin
+  inherited;
+  fDefaultWebSocketProcessSettings.SetDefaults;
+end;
+
+function TSQLHttpClientWebsockets.DefaultWebSocketProcessSettings: PWebSocketProcessSettings;
+begin
+  if self=nil then
+    result := nil else
+    result := @fDefaultWebSocketProcessSettings;
+end;
+
 function TSQLHttpClientWebsockets.WebSocketsConnected: boolean;
 begin
   result := (self<>nil) and (fSocket<>nil) and
@@ -864,6 +891,7 @@ begin
     result.OnCallbackRequestProcess := CallbackRequest;
   if not Assigned(result.OnWebSocketsClosed) then
     result.OnWebSocketsClosed := OnWebSocketsClosed;
+  result.Settings^ := fDefaultWebSocketProcessSettings;
 end;
 
 function TSQLHttpClientWebsockets.WebSocketsUpgrade(
@@ -879,7 +907,8 @@ begin
 {$endif}
   sockets := WebSockets;
   if sockets=nil then
-    result := 'Impossible to connect to the Server' else begin
+    result := 'Impossible to connect to the Server'
+  else begin    
     if fWebSocketLoopDelay>0 then
       sockets.Settings^.LoopDelay := fWebSocketLoopDelay;
     result := sockets.WebSocketsUpgrade(Model.Root,

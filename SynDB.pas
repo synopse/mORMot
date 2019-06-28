@@ -737,7 +737,7 @@ type
     // ! var Row: Variant;
     // ! (...)
     // !  with MyConnProps.Execute('select * from table where name=?',[aName]) do begin
-    // !    Row := RowDaa;
+    // !    Row := RowData;
     // !    while Step do
     // !      writeln(Row.FirstName,Row.BirthDate);
     // !  end;

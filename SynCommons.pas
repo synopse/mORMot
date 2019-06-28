@@ -35,6 +35,7 @@ unit SynCommons;
    - ASiwon
    - Chaa
    - BigStar
+   - Eugene Ilyin
    - f-vicente
    - itSDS
    - Johan Bontes
@@ -1838,14 +1839,17 @@ var CompareMemFixed: function(P1, P2: Pointer; Length: PtrInt): Boolean = Compar
 function CompareMemSmall(P1, P2: Pointer; Length: PtrInt): Boolean; {$ifdef HASINLINE}inline;{$endif}
 
 /// convert an IPv4 'x.x.x.x' text into its 32-bit value
-// - returns TRUE if the text was a valid IPv4 text, FALSE on parsing error
-// - '' or '127.0.0.1' will also return false
-function IPToCardinal(const aIP: RawUTF8; out aValue: cardinal): boolean; overload;
-
-/// convert an IPv4 'x.x.x.x' text into its 32-bit value
-// - returns TRUE if the text was a valid IPv4 text, FALSE on parsing error
+// - returns TRUE if the text was a valid IPv4 text, unserialized as 32-bit aValue
+// - returns FALSE on parsing error, also setting aValue=0
 // - '' or '127.0.0.1' will also return false
 function IPToCardinal(P: PUTF8Char; out aValue: cardinal): boolean; overload;
+
+/// convert an IPv4 'x.x.x.x' text into its 32-bit value
+// - returns TRUE if the text was a valid IPv4 text, unserialized as 32-bit aValue
+// - returns FALSE on parsing error, also setting aValue=0
+// - '' or '127.0.0.1' will also return false
+function IPToCardinal(const aIP: RawUTF8; out aValue: cardinal): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert an IPv4 'x.x.x.x' text into its 32-bit value, 0 or localhost
 // - returns <> 0 value if the text was a valid IPv4 text, 0 on parsing error
@@ -1854,8 +1858,8 @@ function IPToCardinal(const aIP: RawUTF8): cardinal; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert some ASCII-7 text into binary, using Emile Baudot code
-// - as used in telegraphs, covering a-z 0-9 - ' , ! : ( + ) $ ? @ . / ; charset
-// - also #13 and #10 control chars will be transcoded
+// - as used in telegraphs, covering #10 #13 #32 a-z 0-9 - ' , ! : ( + ) $ ? @ . / ;
+// charset, following a custom static-huffman-like encoding with 5-bit masks
 // - any upper case char will be converted into lowercase during encoding
 // - other characters (e.g. UTF-8 accents, or controls chars) will be ignored
 // - resulting binary will consume 5 (or 10) bits per character
@@ -1864,8 +1868,8 @@ function IPToCardinal(const aIP: RawUTF8): cardinal; overload;
 function AsciiToBaudot(P: PAnsiChar; len: integer): RawByteString; overload;
 
 /// convert some ASCII-7 text into binary, using Emile Baudot code
-// - as used in telegraphs, covering a-z 0-9 - ' , ! : ( + ) $ ? @ . / ; charset
-// - also ' ' (#32) and #13 / #10 control chars will be transcoded
+// - as used in telegraphs, covering #10 #13 #32 a-z 0-9 - ' , ! : ( + ) $ ? @ . / ;
+// charset, following a custom static-huffman-like encoding with 5-bit masks
 // - any upper case char will be converted into lowercase during encoding
 // - other characters (e.g. UTF-8 accents, or controls chars) will be ignored
 // - resulting binary will consume 5 (or 10) bits per character
@@ -3650,7 +3654,7 @@ type
 // - you may specify several masks in Mask, e.g. as '*.jpg;*.jpeg'
 function FindFiles(const Directory,Mask: TFileName;
   const IgnoreFileName: TFileName=''; SortByName: boolean=false;
-  IncludesDir: boolean=true): TFindFilesDynArray;
+  IncludesDir: boolean=true; SubFolder: Boolean=false): TFindFilesDynArray;
 
 /// convert a result list, as returned by FindFiles(), into an array of Files[].Name
 function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray): TFileNameDynArray;
@@ -5846,7 +5850,7 @@ type
     // behavior, like access violations or memory leaks
     procedure Init;
     /// finalize the mutex
-    // - calling this method is mandatory (e.g. in the class constructor owning
+    // - calling this method is mandatory (e.g. in the class destructor owning
     // the TSynLocker instance), otherwise you may encounter unexpected
     // behavior, like access violations or memory leaks
     procedure Done;
@@ -6432,7 +6436,10 @@ procedure GetEnumNames(aTypeInfo: pointer; aDest: PPShortString);
 
 /// helper to retrieve all trimmed texts of an enumerate
 // - may be used as cache to retrieve UTF-8 text without lowercase 'a'..'z' chars
-procedure GetEnumTrimmedNames(aTypeInfo: pointer; aDest: PRawUTF8);
+procedure GetEnumTrimmedNames(aTypeInfo: pointer; aDest: PRawUTF8); overload;
+
+/// helper to retrieve all trimmed texts of an enumerate as UTF-8 strings
+function GetEnumTrimmedNames(aTypeInfo: pointer): TRawUTF8DynArray; overload;
 
 /// helper to retrieve all (translated) caption texts of an enumerate
 // - may be used as cache for overloaded ToCaption() content
@@ -7161,8 +7168,8 @@ const
   // MAX_SQLFIELDS_256 conditional directives for your project
   // - this constant is used internaly to optimize memory usage in the
   // generated asm code, and statically allocate some arrays for better speed
-  // - note that due to Delphi compiler restriction, 256 is the maximum value
-  // (this is the maximum number of items in a Delphi set)
+  // - note that due to compiler restriction, 256 is the maximum value
+  // (this is the maximum number of items in a Delphi/FPC set)
   {$ifdef MAX_SQLFIELDS_128}
   MAX_SQLFIELDS = 128;
   {$else}
@@ -11585,6 +11592,10 @@ procedure FillZero(out dig: THash128); overload;
 /// fast O(n) search of a 128-bit item in an array of such values
 function HashFound(P: PHash128Rec; Count: integer; const h: THash128Rec): boolean;
 
+/// convert a 32-bit integer (storing a IP4 address) into its full notation
+// - returns e.g. '1.2.3.4' for any valid address, or '' if ip4=0
+function IP4Text(ip4: cardinal): shortstring; overload;
+
 /// convert a 128-bit buffer (storing an IP6 address) into its full notation
 // - returns e.g. '2001:0db8:0a0b:12f0:0000:0000:0000:0001'
 function IP6Text(ip6: PHash128): shortstring; overload; {$ifdef HASINLINE}inline;{$endif}
@@ -12540,7 +12551,7 @@ function UnixMSTimeToFileShort(const UnixMSTime: TUnixMSTime): TShort16;
 // as time or date elapsed period
 // - this function won't add the Unix epoch 1/1/1970 offset to the timestamp
 // - returns 'Thh:mm:ss' or 'YYYY-MM-DD' format, depending on the supplied value
-function UnixMSTimePeriodToString(const UnixTime: TUnixTime; FirstTimeChar: AnsiChar='T'): RawUTF8;
+function UnixMSTimePeriodToString(const UnixMSTime: TUnixMSTime; FirstTimeChar: AnsiChar='T'): RawUTF8;
 
 /// returns the current UTC system date and time
 // - SysUtils.Now returns local time: this function returns the system time
@@ -16610,8 +16621,8 @@ procedure MicroSecToString(Micro: QWord; out result: TShort16); overload;
 // more than three digits to the left of the decimal separator
 function IntToThousandString(Value: integer; const ThousandSep: TShort4=','): shortstring;
 
-/// return the Delphi Compiler Version
-// - returns 'Delphi 2007' or 'Delphi 2010' e.g.
+/// return the Delphi/FPC Compiler Version
+// - returns 'Delphi 2007', 'Delphi 2010' or 'Free Pascal 3.3.1' e.g.
 function GetDelphiCompilerVersion: RawUTF8;
 
 /// returns TRUE if the supplied mutex has been initialized
@@ -19964,18 +19975,22 @@ end;
 
 function IPToCardinal(P: PUTF8Char; out aValue: cardinal): boolean;
 var i,c: cardinal;
-    b: array[0..3] of byte absolute aValue;
+    b: array[0..3] of byte;
 begin
+  aValue := 0;
   result := false;
   if (P=nil) or (IdemPChar(P,'127.0.0.1') and (P[9]=#0)) then
     exit;
   for i := 0 to 3 do begin
     c := GetNextItemCardinal(P,'.');
-    if (c>255) or ((i<3) and (P=nil)) then
+    if (c>255) or ((P=nil) and (i<3)) then
       exit;
     b[i] := c;
   end;
-  result := aValue<>$0100007f;
+  if PCardinal(@b)^<>$0100007f then begin
+    aValue := PCardinal(@b)^;
+    result := true;
+  end;
 end;
 
 function IPToCardinal(const aIP: RawUTF8; out aValue: cardinal): boolean;
@@ -19985,8 +20000,7 @@ end;
 
 function IPToCardinal(const aIP: RawUTF8): cardinal;
 begin
-  if not IPToCardinal(pointer(aIP),result) then
-    result := 0;
+  IPToCardinal(pointer(aIP),result);
 end;
 
 const
@@ -20945,6 +20959,21 @@ begin
       inc(PByte(res),ord(res^[0])+1); // next short string
       inc(aDest);
     end;
+end;
+
+function GetEnumTrimmedNames(aTypeInfo: pointer): TRawUTF8DynArray;
+var MaxValue, i: integer;
+    res: PShortString;
+begin
+  res := GetEnumInfo(aTypeInfo,MaxValue);
+  if res=nil then
+    result := nil else begin
+    SetLength(result,MaxValue+1);
+    for i := 0 to MaxValue do begin
+      result[i] := TrimLeftLowerCaseShort(res);
+      inc(PByte(res),ord(res^[0])+1); // next short string
+    end;
+  end;
 end;
 
 procedure GetCaptionFromTrimmed(PS: PShortString; var result: string);
@@ -23443,8 +23472,11 @@ begin
   if HResInfo=0 then
     exit;
   HGlobal := LoadResource(Instance,HResInfo);
-  if HGlobal<>0 then
+  if HGlobal<>0 then begin
     SetString(buf,PAnsiChar(LockResource(HGlobal)),SizeofResource(Instance,HResInfo));
+    UnlockResource(HGlobal); // only needed outside of Windows
+    FreeResource(HGlobal);
+  end;
 end;
 
 procedure ResourceSynLZToRawByteString(const ResName: string;
@@ -23459,7 +23491,12 @@ begin
     exit;
   HGlobal := LoadResource(Instance,HResInfo);
   if HGlobal<>0 then // direct decompression from memory mapped .exe content
-    SynLZDecompress(LockResource(HGlobal),SizeofResource(Instance,HResInfo),buf);
+    try
+      AlgoSynLZ.Decompress(LockResource(HGlobal),SizeofResource(Instance,HResInfo),buf);
+    finally
+      UnlockResource(HGlobal); // only needed outside of Windows
+      FreeResource(HGlobal);
+    end;
 end;
 
 function StrLenW(S: PWideChar): PtrInt;
@@ -26114,7 +26151,6 @@ var modname, beg: PUTF8Char;
     {$endif BSD}
 begin
   modname := nil;
-  SystemInfo.dwPageSize := getpagesize; // use libc for this value
   {$ifdef BSD}
   fpuname(SystemInfo.uts);
   SystemInfo.dwNumberOfProcessors := fpsysctlhwint(HW_NCPU);
@@ -29638,16 +29674,42 @@ begin
 end;
 
 function FindFiles(const Directory,Mask,IgnoreFileName: TFileName;
-  SortByName, IncludesDir: boolean): TFindFilesDynArray;
-var F: TSearchRec;
-    n: integer;
+  SortByName, IncludesDir, SubFolder: boolean): TFindFilesDynArray;
+var n: integer;
     Dir: TFileName;
     da: TDynArray;
     masks: TRawUTF8DynArray;
     masked: TFindFilesDynArray;
+  procedure _DoSearchFolder(ADirectory : TFileName);
+  var
+    F: TSearchRec;
+    ff : TFindFiles;
+  begin
+    if FindFirst(Dir+ADirectory+Mask,faAnyfile-faDirectory,F)=0 then begin
+      repeat
+        if SearchRecValidFile(F) and ((IgnoreFileName='') or
+            (AnsiCompareFileName(F.Name,IgnoreFileName)<>0)) then begin
+          if IncludesDir then
+            ff.FromSearchRec(Dir+ADirectory,F) else
+            ff.FromSearchRec(ADirectory,F);
+          da.Add(ff);
+        end;
+      until FindNext(F)<>0;
+      FindClose(F);
+    end;
+    if SubFolder then
+      if FindFirst(Dir+ADirectory+'*',faDirectory,F)=0 then begin
+        repeat
+          if (F.Name<>'.') and (F.Name<>'..') and ((IgnoreFileName='') or
+              (AnsiCompareFileName(F.Name,IgnoreFileName)<>0)) then begin
+            _DoSearchFolder(IncludeTrailingPathDelimiter(ADirectory + F.Name));
+          end;
+        until FindNext(F)<>0;
+        FindClose(F);
+      end;
+  end;
 begin
   result := nil;
-  n := 0;
   da.Init(TypeInfo(TFindFilesDynArray),result);
   if Pos(';',Mask)>0 then
     CSVToRawUTF8DynArray(pointer(StringToUTF8(Mask)),masks,';');
@@ -29663,24 +29725,8 @@ begin
   end else begin
     if Directory<>'' then
       Dir := IncludeTrailingPathDelimiter(Directory);
-    if FindFirst(Dir+Mask,faAnyfile-faDirectory,F)=0 then begin
-      repeat
-        if SearchRecValidFile(F) and ((IgnoreFileName='') or
-            (AnsiCompareFileName(F.Name,IgnoreFileName)<>0)) then begin
-          if n=length(result) then
-            SetLength(result,NextGrow(n));
-          if IncludesDir then
-            result[n].FromSearchRec(Dir,F) else
-            result[n].FromSearchRec('',F);
-          inc(n);
-        end;
-      until FindNext(F)<>0;
-      FindClose(F);
-      if n=0 then
-        exit;
-      SetLength(result,n);
-    end;
-    if SortByName and (n>0) then
+    _DoSearchFolder('');
+    if SortByName and (da.Count>0) then
       da.Sort(SortDynArrayFileName);
   end;
 end;
@@ -34755,6 +34801,14 @@ begin // fast O(n) brute force search
   result := false;
 end;
 
+function IP4Text(ip4: cardinal): shortstring;
+var b: array[0..3] of byte absolute ip4;
+begin
+  if ip4=0 then
+    result := '' else
+    FormatShort('%.%.%.%',[b[0],b[1],b[2],b[3]],result);
+end;
+
 procedure IP6Text(ip6: PHash128; result: PShortString);
 var i: integer;
     p: PByte;
@@ -35171,11 +35225,11 @@ begin
   result := UnixMSTime/MSecsPerDay + UnixDateDelta;
 end;
 
-function UnixMSTimePeriodToString(const UnixTime: TUnixTime; FirstTimeChar: AnsiChar): RawUTF8;
+function UnixMSTimePeriodToString(const UnixMSTime: TUnixMSTime; FirstTimeChar: AnsiChar): RawUTF8;
 begin
-  if UnixTime<MSecsPerDay then
-    result := TimeToIso8601(UnixTime/MSecsPerDay,true,FirstTimeChar,UnixTime<1000) else
-    result := DaysToIso8601(UnixTime div MSecsPerDay,true);
+  if UnixMSTime<MSecsPerDay then
+    result := TimeToIso8601(UnixMSTime/MSecsPerDay,true,FirstTimeChar,UnixMSTime<1000) else
+    result := DaysToIso8601(UnixMSTime div MSecsPerDay,true);
 end;
 
 function DateTimeToUnixMSTime(const AValue: TDateTime): TUnixMSTime;
@@ -36407,7 +36461,7 @@ end;
 
 procedure TSynTimeZone.LoadFromBuffer(const Buffer: RawByteString);
 begin
-  fZones.LoadFrom(pointer(SynLZDecompress(Buffer)));
+  fZones.LoadFrom(pointer(AlgoSynLZ.Decompress(Buffer)));
   fZones.ReHash(false);
   FreeAndNil(fIds);
   FreeAndNil(fDisplays);
@@ -62181,7 +62235,6 @@ begin
     SetUnixThreadName(ThreadID, Name); // call pthread_setname_np()
   {$endif}
 {$else}
-begin
 {$ifndef NOSETTHREADNAME}
 var s: RawByteString;
     {$ifndef ISDELPHIXE2}
@@ -62530,6 +62583,11 @@ initialization
   GarbageCollectorFreeAndNilList := TList.Create;
   GarbageCollectorFreeAndNil(GarbageCollector,TObjectList.Create);
   InitializeCriticalSection(GlobalCriticalSection);
+  {$ifndef MSWINDOWS} // should be set ASAP (RetrieveSystemInfo is too late)
+  SystemInfo.dwPageSize := getpagesize; // use libc for this value
+  if SystemInfo.dwPageSize = 0 then
+    SystemInfo.dwPageSize := 4096;
+  {$endif MSWINDOWS}
   {$ifdef CPUINTEL}
   TestIntelCpuFeatures;
   {$endif}
