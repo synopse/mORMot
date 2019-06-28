@@ -29670,12 +29670,12 @@ end;
 
 function TFindFiles.ToText: shortstring;
 begin
-  FormatShort('% % %', [Name, KB(Size), DateTimeToFileShort(Timestamp)], result);
+  FormatShort('% % %',[Name,KB(Size),DateTimeToFileShort(Timestamp)],result);
 end;
 
 function FindFiles(const Directory,Mask,IgnoreFileName: TFileName;
-  SortByName, IncludesDir, SubFolder: boolean): TFindFilesDynArray;
-var n: integer;
+  SortByName,IncludesDir,SubFolder: boolean): TFindFilesDynArray;
+var m,count: integer;
     Dir: TFileName;
     da: TDynArray;
     masks: TRawUTF8DynArray;
@@ -29697,29 +29697,26 @@ var n: integer;
       until FindNext(F)<>0;
       FindClose(F);
     end;
-    if SubFolder then
-      if FindFirst(Dir+ADirectory+'*',faDirectory,F)=0 then begin
-        repeat
-          if (F.Name<>'.') and (F.Name<>'..') and ((IgnoreFileName='') or
-              (AnsiCompareFileName(F.Name,IgnoreFileName)<>0)) then begin
-            _DoSearchFolder(IncludeTrailingPathDelimiter(ADirectory + F.Name));
-          end;
-        until FindNext(F)<>0;
-        FindClose(F);
-      end;
+    if SubFolder and (FindFirst(Dir+ADirectory+'*',faDirectory,F)=0) then begin
+      repeat
+        if (F.Name<>'.') and (F.Name<>'..') and ((IgnoreFileName='') or
+            (AnsiCompareFileName(F.Name,IgnoreFileName)<>0)) then
+          _DoSearchFolder(IncludeTrailingPathDelimiter(ADirectory+F.Name));
+      until FindNext(F)<>0;
+      FindClose(F);
+    end;
   end;
 begin
   result := nil;
-  da.Init(TypeInfo(TFindFilesDynArray),result);
+  da.Init(TypeInfo(TFindFilesDynArray),result,@count);
   if Pos(';',Mask)>0 then
     CSVToRawUTF8DynArray(pointer(StringToUTF8(Mask)),masks,';');
   if masks<>nil then begin
     if SortByName then
-      QuickSortRawUTF8(masks,length(masks),nil,
-        {$ifdef MSWINDOWS}@StrIComp{$else}@StrComp{$endif});
-    for n := 0 to high(masks) do begin
-      masked := FindFiles(Directory,UTF8ToString(masks[n]),
-        IgnoreFileName,SortByName,IncludesDir);
+      QuickSortRawUTF8(masks,length(masks),nil,{$ifdef MSWINDOWS}@StrIComp{$else}@StrComp{$endif});
+    for m := 0 to high(masks) do begin // masks[] recursion
+      masked := FindFiles(Directory,UTF8ToString(masks[m]),
+        IgnoreFileName,SortByName,IncludesDir,SubFolder);
       da.AddArray(masked);
     end;
   end else begin
@@ -29729,6 +29726,7 @@ begin
     if SortByName and (da.Count>0) then
       da.Sort(SortDynArrayFileName);
   end;
+  da.Capacity := count; // trim result[]
 end;
 
 function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray): TFileNameDynArray;
