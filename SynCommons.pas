@@ -49099,7 +49099,7 @@ var p: PDynArrayRec;
     pp: pointer;
     i: integer;
 begin // this method is faster than default System.DynArraySetLength() function
-  // check that new array length is not just a hidden finalize
+  // check that new array length is not just a finalize in disguise
   if NewLength=0 then begin
     {$ifndef NOVARIANTS} // faster clear of custom variant uniformous array
     if ArrayType=TypeInfo(TVariantDynArray) then begin
@@ -49107,7 +49107,7 @@ begin // this method is faster than default System.DynArraySetLength() function
       exit;
     end;
     {$endif}
-    if IsObjArray then
+    if GetIsObjArray then
       ObjArrayClear(fValue^);
     {$ifdef FPC}FPCDynArrayClear{$else}_DynArrayClear{$endif}(fValue^,ArrayType);
     exit;
@@ -49127,6 +49127,8 @@ begin // this method is faster than default System.DynArraySetLength() function
   end else begin
     dec(PtrUInt(p),SizeOf(TDynArrayRec)); // p^ = start of heap object
     OldLength := p^.length;
+    if OldLength=NewLength then
+      exit; // nothing to resize
     if p^.refCnt=1 then begin
       if NewLength<OldLength then // reduce array in-place
         if ElemType<>nil then // release managed types in trailing items
@@ -49163,13 +49165,13 @@ begin // this method is faster than default System.DynArraySetLength() function
     {$endif}
   end;
   inc(PByte(p),SizeOf(p^)); // p^ = start of dynamic aray items
+  fValue^ := p;
   // reset new allocated elements content to zero
   if NewLength>OldLength then begin
     OldLength := OldLength*elemSize;
     {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(
       PAnsiChar(p)[OldLength],NewLength*ElemSize-OldLength,0);
   end;
-  fValue^ := p;
 end;
 
 procedure TDynArray.SetCount(aCount: integer);
