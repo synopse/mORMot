@@ -29680,28 +29680,28 @@ var m,count: integer;
     da: TDynArray;
     masks: TRawUTF8DynArray;
     masked: TFindFilesDynArray;
-  procedure _DoSearchFolder(ADirectory : TFileName);
+  procedure SearchFolder(const folder : TFileName);
   var
     F: TSearchRec;
-    ff : TFindFiles;
+    ff: TFindFiles;
   begin
-    if FindFirst(Dir+ADirectory+Mask,faAnyfile-faDirectory,F)=0 then begin
+    if FindFirst(Dir+folder+Mask,faAnyfile-faDirectory,F)=0 then begin
       repeat
         if SearchRecValidFile(F) and ((IgnoreFileName='') or
             (AnsiCompareFileName(F.Name,IgnoreFileName)<>0)) then begin
           if IncludesDir then
-            ff.FromSearchRec(Dir+ADirectory,F) else
-            ff.FromSearchRec(ADirectory,F);
+            ff.FromSearchRec(Dir+folder,F) else
+            ff.FromSearchRec(folder,F);
           da.Add(ff);
         end;
       until FindNext(F)<>0;
       FindClose(F);
     end;
-    if SubFolder and (FindFirst(Dir+ADirectory+'*',faDirectory,F)=0) then begin
+    if SubFolder and (FindFirst(Dir+folder+'*',faDirectory,F)=0) then begin
       repeat
         if (F.Name<>'.') and (F.Name<>'..') and ((IgnoreFileName='') or
             (AnsiCompareFileName(F.Name,IgnoreFileName)<>0)) then
-          _DoSearchFolder(IncludeTrailingPathDelimiter(ADirectory+F.Name));
+          SearchFolder(IncludeTrailingPathDelimiter(folder+F.Name));
       until FindNext(F)<>0;
       FindClose(F);
     end;
@@ -29722,7 +29722,7 @@ begin
   end else begin
     if Directory<>'' then
       Dir := IncludeTrailingPathDelimiter(Directory);
-    _DoSearchFolder('');
+    SearchFolder('');
     if SortByName and (da.Count>0) then
       da.Sort(SortDynArrayFileName);
   end;
