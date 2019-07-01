@@ -62266,6 +62266,8 @@ begin
   except {ignore} end;
   {$endif MSWINDOWS}
   {$endif ISDELPHIXE2}
+{$else}
+begin
 {$endif NOSETTHREADNAME}
 {$endif FPC}
 end;
