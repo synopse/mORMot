@@ -29670,12 +29670,12 @@ end;
 
 function TFindFiles.ToText: shortstring;
 begin
-  FormatShort('% % %', [Name, KB(Size), DateTimeToFileShort(Timestamp)], result);
+  FormatShort('% % %',[Name,KB(Size),DateTimeToFileShort(Timestamp)],result);
 end;
 
 function FindFiles(const Directory,Mask,IgnoreFileName: TFileName;
-  SortByName, IncludesDir, SubFolder: boolean): TFindFilesDynArray;
-var n: integer;
+  SortByName,IncludesDir,SubFolder: boolean): TFindFilesDynArray;
+var m,count: integer;
     Dir: TFileName;
     da: TDynArray;
     masks: TRawUTF8DynArray;
@@ -29697,29 +29697,26 @@ var n: integer;
       until FindNext(F)<>0;
       FindClose(F);
     end;
-    if SubFolder then
-      if FindFirst(Dir+ADirectory+'*',faDirectory,F)=0 then begin
-        repeat
-          if (F.Name<>'.') and (F.Name<>'..') and ((IgnoreFileName='') or
-              (AnsiCompareFileName(F.Name,IgnoreFileName)<>0)) then begin
-            _DoSearchFolder(IncludeTrailingPathDelimiter(ADirectory + F.Name));
-          end;
-        until FindNext(F)<>0;
-        FindClose(F);
-      end;
+    if SubFolder and (FindFirst(Dir+ADirectory+'*',faDirectory,F)=0) then begin
+      repeat
+        if (F.Name<>'.') and (F.Name<>'..') and ((IgnoreFileName='') or
+            (AnsiCompareFileName(F.Name,IgnoreFileName)<>0)) then
+          _DoSearchFolder(IncludeTrailingPathDelimiter(ADirectory+F.Name));
+      until FindNext(F)<>0;
+      FindClose(F);
+    end;
   end;
 begin
   result := nil;
-  da.Init(TypeInfo(TFindFilesDynArray),result);
+  da.Init(TypeInfo(TFindFilesDynArray),result,@count);
   if Pos(';',Mask)>0 then
     CSVToRawUTF8DynArray(pointer(StringToUTF8(Mask)),masks,';');
   if masks<>nil then begin
     if SortByName then
-      QuickSortRawUTF8(masks,length(masks),nil,
-        {$ifdef MSWINDOWS}@StrIComp{$else}@StrComp{$endif});
-    for n := 0 to high(masks) do begin
-      masked := FindFiles(Directory,UTF8ToString(masks[n]),
-        IgnoreFileName,SortByName,IncludesDir);
+      QuickSortRawUTF8(masks,length(masks),nil,{$ifdef MSWINDOWS}@StrIComp{$else}@StrComp{$endif});
+    for m := 0 to high(masks) do begin // masks[] recursion
+      masked := FindFiles(Directory,UTF8ToString(masks[m]),
+        IgnoreFileName,SortByName,IncludesDir,SubFolder);
       da.AddArray(masked);
     end;
   end else begin
@@ -29729,6 +29726,7 @@ begin
     if SortByName and (da.Count>0) then
       da.Sort(SortDynArrayFileName);
   end;
+  da.Capacity := count; // trim result[]
 end;
 
 function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray): TFileNameDynArray;
@@ -49101,7 +49099,7 @@ var p: PDynArrayRec;
     pp: pointer;
     i: integer;
 begin // this method is faster than default System.DynArraySetLength() function
-  // check that new array length is not just a hidden finalize
+  // check that new array length is not just a finalize in disguise
   if NewLength=0 then begin
     {$ifndef NOVARIANTS} // faster clear of custom variant uniformous array
     if ArrayType=TypeInfo(TVariantDynArray) then begin
@@ -49109,7 +49107,7 @@ begin // this method is faster than default System.DynArraySetLength() function
       exit;
     end;
     {$endif}
-    if IsObjArray then
+    if GetIsObjArray then
       ObjArrayClear(fValue^);
     {$ifdef FPC}FPCDynArrayClear{$else}_DynArrayClear{$endif}(fValue^,ArrayType);
     exit;
@@ -49129,6 +49127,8 @@ begin // this method is faster than default System.DynArraySetLength() function
   end else begin
     dec(PtrUInt(p),SizeOf(TDynArrayRec)); // p^ = start of heap object
     OldLength := p^.length;
+    if OldLength=NewLength then
+      exit; // nothing to resize
     if p^.refCnt=1 then begin
       if NewLength<OldLength then // reduce array in-place
         if ElemType<>nil then // release managed types in trailing items
@@ -49165,13 +49165,13 @@ begin // this method is faster than default System.DynArraySetLength() function
     {$endif}
   end;
   inc(PByte(p),SizeOf(p^)); // p^ = start of dynamic aray items
+  fValue^ := p;
   // reset new allocated elements content to zero
   if NewLength>OldLength then begin
     OldLength := OldLength*elemSize;
     {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(
       PAnsiChar(p)[OldLength],NewLength*ElemSize-OldLength,0);
   end;
-  fValue^ := p;
 end;
 
 procedure TDynArray.SetCount(aCount: integer);
