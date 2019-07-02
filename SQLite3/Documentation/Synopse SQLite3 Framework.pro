@@ -7418,10 +7418,11 @@ In practice, for your project, you will have several possibilities to create a C
 |ORM REST|Tests or internal use|Security/design flows
 |%
 In a nutshell,
-- {\i SOA Interfaces} - see @63@ - is the preferred way to build both public and private services: both client and server code will be defined from {\f1\fs20 interface} types, including sessions management, stubing/mocking, documentation generation, and security features.
+- {\i SOA Interfaces} - see @63@ - is the preferred way to build both public and private services: both client and server code will be defined from {\f1\fs20 interface} types, including sessions management, stubbing/mocking, documentation generation, and security features.
 - {\i SOA Methods} - see @49@ - will open full access to REST/HTTP details of each request, so may be needed to conform to a more REST, less RPC implementation - but the client side will need to be written by hand, and the server side could be more verbose to implement.
 - {\i MVC Web} - see @108@ - is the way to go if you expect to develop mostly dynamic web pages, and sometimes consume some {\f1\fs20 JSON} content from {\f1\fs20 JavaScript} if needed, by accessing its {\f1\fs20 url/json} sub path.
 - {\i ORM REST} - see @114@ - exposes all data automatically, but should better not be used on production for public APIs for architecture and security reasons, since it is directly tied to the datastore. It could be exposed internally, or for debugging/testing.
+- remember that {\i any combination of the four previous framework features} could be defined in the same {\f1\fs20 @*TSQLRestServer@} instance, so you can just pickup what fits best your needs.
 We will now present all those communication features, but you may focus on {\i SOA Interfaces}, and its associated samples, when implementing your project, and go back to other details of this exhaustive documentation, only if needed.
 : Protocols
 The {\i mORMot} framework can be used either @*stand-alone@, or in a @*Client-Server@ model, via several communication layers:
