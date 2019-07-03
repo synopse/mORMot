@@ -11245,7 +11245,7 @@ procedure TWinHTTP.InternalSendRequest(const aMethod,aData: SockString);
           Max := L-Current;
           if Bytes>Max then
             Bytes := Max;
-          if not WinHttpAPI.WriteData(fRequest, @PByteArray(aData)[Current+1],Bytes,BytesWritten) then
+          if not WinHttpAPI.WriteData(fRequest, @PByteArray(aData)[Current],Bytes,BytesWritten) then
             RaiseLastModuleError(winhttpdll,EWinHTTP);
           inc(Current,BytesWritten);
           if not fOnUpload(Self,Current,L) then
