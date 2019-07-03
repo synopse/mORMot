@@ -10794,12 +10794,12 @@ begin
     buff.dwBufferTotal := Length(aData);
     if not HttpSendRequestExA(fRequest,@buff,nil,0,0) then
       raise EWinINet.Create;
-    datapos := 1;
-    while datapos<=datalen do begin
+    datapos := 0;
+    while datapos<datalen do begin
       Bytes := fOnDownloadChunkSize;
       if Bytes<=0 then
         Bytes := 65536; // 64KB seems fair enough by default
-      max := datalen-datapos+1;
+      max := datalen-datapos;
       if Bytes>max then
         Bytes := max;
       if not InternetWriteFile(fRequest,@PByteArray(aData)[datapos],Bytes,BytesWritten) then
