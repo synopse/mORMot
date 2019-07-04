@@ -1,4 +1,4 @@
-/// wrapper for Windows functions translated to Linux for FPC
+/// wrapper of some Windows-like functions translated to Linux/BSD for FPC
 unit SynFPCLinux;
 
 {
@@ -56,10 +56,10 @@ interface
 {$I Synopse.inc} // set proper flags, and define LINUX for BSD and ANDROID
 
 uses
-  SysUtils
-  {$ifdef Linux}
-  ,UnixType
-  {$endif};
+  {$ifdef LINUX}
+  UnixType,
+  {$endif LINUX}
+  SysUtils;
 
 const
   { HRESULT codes, delphi-like }
@@ -78,7 +78,7 @@ procedure DeleteCriticalSection(var cs : TRTLCriticalSection); inline;
 
 {$ifdef LINUX}
 
-/// used by TSynMonitorMemory.RetrieveMemoryInfo to compute the sizes in byte
+/// used by SynCommons to compute the sizes in byte
 function getpagesize: Integer; cdecl; external 'c';
 
 /// compatibility function, wrapping Win32 API high resolution timer
@@ -113,7 +113,8 @@ function GetLastError: longint; inline;
 procedure SetLastError(error: longint); inline;
 
 /// compatibility function, wrapping Win32 API text comparison
-// - somewhat slow by using two temporary WideString - but seldom called
+// - somewhat slow by using two temporary WideString - but seldom called, unless
+// our private WIN32CASE collation is used in SynSQLite3
 function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pwidechar;
   cchCount1: longint; lpString2: Pwidechar; cchCount2: longint): longint;
 
@@ -142,6 +143,11 @@ var
 // - under Linux/FPC, this API truncates the name to 16 chars
 procedure SetUnixThreadName(ThreadID: TThreadID; const Name: RawByteString);
 
+{$ifdef BSD}
+function fpsysctlhwint(hwid: cint): Int64;
+function fpsysctlhwstr(hwid: cint; var temp: shortstring): pointer;
+{$endif BSD}
+
 {$ifndef DARWIN} // OSX has no clock_gettime() API
 
 {$ifdef BSD}
@@ -165,7 +171,6 @@ var
   CLOCK_MONOTONIC_FAST: integer = CLOCK_MONOTONIC;
 
 {$endif DARWIN}
-
 {$endif LINUX}
 
 /// compatibility function, to be implemented according to the running OS
@@ -178,9 +183,15 @@ function GetTickCount64: Int64; inline;
 // - will call clock_gettime(CLOCK_MONOTONIC_COARSE) if available
 function GetTickCount: cardinal; inline;
 
+var
+  /// could be set to TRUE to force SleepHiRes(0) to call the sched_yield API
+  SleepHiRes0Yield: boolean = false;
+
 /// similar to Windows sleep() API call, to be truly cross-platform
 // - it should have a millisecond resolution, and handle ms=0 as a switch to
-// another pending thread, i.e. ThreadSwitch/call sched_yield API
+// another pending thread, i.e. ThreadSwitch on Windows (sched_yield API is
+// not called on LINUX/POSIX since it was reported to fail on some systems -
+// you can force SleepHiRes0Yield=true to change this behavior)
 procedure SleepHiRes(ms: cardinal); inline;
 
 
@@ -191,9 +202,11 @@ uses
   Classes,
   Unix,
   BaseUnix,
-  {$ifdef LINUXNOTBSD}
+  {$ifdef BSD}
+  sysctl,
+  {$else}
   Linux,
-  {$endif}
+  {$endif BSD}
   dl;
 {$endif LINUX}
 
@@ -394,6 +407,33 @@ end;
 
 {$endif DARWIN}
 
+{$ifdef BSD}
+function fpsysctlhwint(hwid: cint): Int64;
+var mib: array[0..1] of cint;
+    len: cint;
+begin
+  result := 0;
+  mib[0] := CTL_HW;
+  mib[1] := hwid;
+  len := SizeOf(result);
+  fpsysctl(pointer(@mib),2,@result,@len,nil,0);
+end;
+
+function fpsysctlhwstr(hwid: cint; var temp: shortstring): pointer;
+var mib: array[0..1] of cint;
+    len: cint;
+begin
+  mib[0] := CTL_HW;
+  mib[1] := hwid;
+  FillChar(temp,SizeOf(temp),0); // use shortstring as temp 0-terminated buffer
+  len := SizeOf(temp);
+  fpsysctl(pointer(@mib),2,@temp,@len,nil,0);
+  if temp[0]<>#0 then
+    result := @temp else
+    result := nil;
+end;
+{$endif BSD}
+
 function GetNowUTC: TDateTime;
 begin
   result := GetUnixMSUTC / MSecsPerDay + UnixDelta;
@@ -463,11 +503,13 @@ end;
 procedure SleepHiRes(ms: cardinal);
 begin
   if ms=0 then
-    {$ifdef DARWIN} // reported as buggy by Alan
-    SysUtils.Sleep(1)
-    {$else}
+    {$ifdef MSWINDOWS}
     ThreadSwitch
-    {$endif}else
+    {$else}
+    if SleepHiRes0Yield then // reported as buggy by Alan on non-Windows targets
+      ThreadSwitch else // call e.g. pthread's sched_yield API
+      SysUtils.Sleep(1)
+    {$endif} else
     SysUtils.Sleep(ms);
 end;
 

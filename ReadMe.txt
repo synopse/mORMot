@@ -54,7 +54,9 @@ Contributors
   Michalis Kamburelis 
   MilesYou
   Mingda
+  Mr Yang (ysair)
   Nicolas Marchand (MC)
+  Nortg
   Nzsolt
   Oleg Tretyakov
   Ondrej (reddwarf)

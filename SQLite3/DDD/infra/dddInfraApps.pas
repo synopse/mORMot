@@ -71,6 +71,7 @@ uses
   Classes,
   Variants,
   SynCommons,
+  SynTable,
   SynLog,
   SynCrypto,
   SynEcc,

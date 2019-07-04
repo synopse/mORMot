@@ -74,7 +74,9 @@ uses
   mORMot,
   mORMotHttpClient,
   SynCommons,
-  SynDB, SynRestVCL,
+  SynTable,
+  SynDB,
+  SynRestVCL,
   DB,
   {$ifdef FPC}
   BufDataset

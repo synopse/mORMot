@@ -1098,7 +1098,7 @@ type
     /// the associated PDF Object Manager
     property ObjectMgr: TPdfObjectMgr read FObjectMgr;
     /// direct access to the internal TList instance
-    // - not to be used normaly
+    // - not to be used normally
     property List: TList read FArray;
   end;
 
@@ -1197,7 +1197,7 @@ type
     /// retrieve the type of the pdfdictionary object, i.e. the 'Type' property name
     property TypeOf: PDFString read getTypeOf;
     /// direct access to the internal TList instance
-    // - not to be used normaly
+    // - not to be used normally
     property List: TList read FArray;
   end;
 
@@ -8791,7 +8791,7 @@ begin
   // (from http://www.microsoft.com/typography/OTSPEC/head.htm)
   fUnitsPerEmShr := 0; // fastest integer div for width calculating
   for i := 14 downto 4 do
-    if GetBit(head^.UnitsPerEm,i) then begin
+    if GetBitPtr(@head^.UnitsPerEm,i) then begin
       fUnitsPerEmShr := i;
       break;
     end;

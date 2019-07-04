@@ -281,16 +281,21 @@ begin
   for F := 0 to fDataAccess.ColumnCount-1 do
     with fDataAccess.Columns[F] do begin
     case ColumnType of
-    SynTable.ftInt64: DBType := ftLargeint;
-    SynTable.ftDate:  DBType := ftDateTime;
+    SynTable.ftInt64:
+      DBType := ftLargeint;
+    SynTable.ftDate:
+      DBType := ftDateTime;
     SynTable.ftUTF8:
       if ColumnDataSize=0 then
         DBType := ftDefaultMemo else
         DBType := ftWideString; // means UnicodeString for Delphi 2009+
-    SynTable.ftBlob:  DBType := ftBlob;
-    SynTable.ftDouble, SynTable.ftCurrency: DBType := ftFloat;
-    else raise EDatabaseError.CreateFmt(
-      'GetFieldData ColumnType=%s',[TSQLDBFieldTypeToString(ColumnType)]);
+    SynTable.ftBlob:
+      DBType := ftBlob;
+    SynTable.ftDouble, SynTable.ftCurrency:
+      DBType := ftFloat;                  
+    else
+      raise EDatabaseError.CreateFmt(
+        'GetFieldData ColumnType=%s',[TSQLDBFieldTypeToString(ColumnType)]);
     end;
     FieldDefs.Add(UTF8ToString(ColumnName),DBType,ColumnDataSize);
   end;

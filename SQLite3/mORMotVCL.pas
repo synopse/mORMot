@@ -221,7 +221,7 @@ end;
 
 function JSONTableToDataSet(aOwner: TComponent; const aJSON: RawUTF8;
   const Tables: array of TSQLRecordClass
-  {$ifndef UNICODE}; aForceWideString: boolean=false{$endif}): TSynSQLTableDataSet;
+  {$ifndef UNICODE}; aForceWideString: boolean{$endif}): TSynSQLTableDataSet;
 begin
   result := TSynSQLTableDataSet.CreateFromJSON(
     aOwner,aJSON,Tables{$ifndef UNICODE},aForceWideString{$endif});
@@ -248,11 +248,11 @@ constructor TSynSQLTableDataSet.CreateOwnedTable(Owner: TComponent; Table: TSQLT
 begin
   Create(Owner,Table{$ifndef UNICODE},ForceWideString{$endif});
   if Table<>nil then
-    TableShouldBeFreed := true;
+    fTableShouldBeFreed := true;
 end;
 
 constructor TSynSQLTableDataSet.CreateFromJSON(Owner: TComponent; const JSON: RawUTF8
-  {$ifndef UNICODE}; ForceWideString: boolean=false{$endif});
+  {$ifndef UNICODE}; ForceWideString: boolean{$endif});
 var T: TSQLTable;
 begin
   T := TSQLTableJSON.Create('',JSON);
@@ -266,7 +266,7 @@ end;
 
 constructor TSynSQLTableDataSet.CreateFromJSON(Owner: TComponent; const JSON: RawUTF8;
   const ColumnTypes: array of TSQLFieldType
-  {$ifndef UNICODE}; ForceWideString: boolean=false{$endif});
+  {$ifndef UNICODE}; ForceWideString: boolean{$endif});
 var T: TSQLTable;
 begin
   T := TSQLTableJSON.CreateWithColumnTypes(ColumnTypes,'',JSON);
@@ -280,7 +280,7 @@ end;
 
 constructor TSynSQLTableDataSet.CreateFromJSON(Owner: TComponent; const JSON: RawUTF8;
   const Tables: array of TSQLRecordClass
-  {$ifndef UNICODE}; ForceWideString: boolean=false{$endif});
+  {$ifndef UNICODE}; ForceWideString: boolean{$endif});
 var T: TSQLTable;
 begin
   T := TSQLTableJSON.CreateFromTables(Tables,'',JSON);
@@ -412,7 +412,7 @@ begin
 end;
 
 procedure GetDBFieldDef(aTable: TSQLTable; aField: integer;
-  out DBFieldDef: TDBFieldDef{$ifndef UNICODE}; aForceWideString: boolean=false{$endif});
+  out DBFieldDef: TDBFieldDef{$ifndef UNICODE}; aForceWideString: boolean{$endif});
 begin
   with DBFieldDef do begin
     DBSize := 0;

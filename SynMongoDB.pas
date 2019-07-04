@@ -3884,9 +3884,9 @@ end;
 procedure TBSONObjectID.ComputeNew;
 var now, count: cardinal;
 begin
+  now := UnixTimeUTC; // fast API call (no need of cache)
   with GlobalBSONObjectID do begin
     EnterCriticalSection(Section);
-    now := UnixTimeUTC; // fast API call (no need of cache)
     if now>LastCreateTime then begin
       LastCreateTime := now;
       count := Default.Counter; // reset
@@ -3901,7 +3901,7 @@ begin
     Counter.b2 := count shr 8;
     Counter.b3 := count;
     LastCounter := count;
-    UnixCreateTime := bswap32(LastCreateTime);
+    UnixCreateTime := {$ifdef FPC}SwapEndian{$else}bswap32{$endif}(LastCreateTime);
     MachineID := Default.MachineID;
     ProcessID := Default.ProcessID;
     LeaveCriticalSection(Section);
@@ -3921,7 +3921,7 @@ end;
 
 function TBSONObjectID.CreateDateTime: TDateTime;
 begin
-  result := UnixTimeToDateTime(bswap32(UnixCreateTime));
+  result := UnixTimeToDateTime({$ifdef FPC}SwapEndian{$else}bswap32{$endif}(UnixCreateTime));
 end;
 
 function TBSONObjectID.ToText: RawUTF8;

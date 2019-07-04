@@ -3396,6 +3396,8 @@ type
       var temp: RawByteString); virtual;
     /// set a field value from a TSQLVar value
     function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; virtual;
+    /// returns TRUE if value is 0 or ''
+    function IsValueVoid(Instance: TObject): boolean;
     /// append the property value into a binary buffer
     procedure GetBinary(Instance: TObject; W: TFileBufferWriter); virtual; abstract;
     /// read the property value from a binary buffer
@@ -3586,6 +3588,10 @@ type
     procedure NormalizeValue(var Value: RawUTF8); override;
     procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
   end;
+
+  /// information about a PtrInt published property, according to the native CPU
+  // - not a real stand-alone class, but a convenient wrapper type
+  TSQLPropInfoRTTIPtrInt = {$ifdef CPU64}TSQLPropInfoRTTIInt64{$else}TSQLPropInfoRTTIInt32{$endif};
 
   /// information about a TTimeLog published property
   // - stored as an Int64, but with a specific class
@@ -5206,18 +5212,13 @@ type
   /// exception dedicated to interface based service implementation
   EServiceException = class(EORMException);
 
-
   /// information about a TSQLRecord class property
   // - sftID for TSQLRecord properties, which are pointer(RecordID), not
   // any true class instance
   // - sftMany for TSQLRecordMany properties, for which no data is
   // stored in the table itself, but in a pivot table
   // - sftObject for e.g. TStrings TRawUTF8List TCollection instances
-  {$ifdef CPU64}
-  TSQLPropInfoRTTIInstance = class(TSQLPropInfoRTTIInt64)
-  {$else}
-  TSQLPropInfoRTTIInstance = class(TSQLPropInfoRTTIInt32)
-  {$endif}
+  TSQLPropInfoRTTIInstance = class(TSQLPropInfoRTTIPtrInt)
   protected
     fObjectClass: TClass;
   public
@@ -7691,6 +7692,8 @@ type
     /// this method create a clone of the current record, with same ID and properties
     // - overloaded method to copy the specified properties
     function CreateCopy(const CustomFields: TSQLFieldBits): TSQLRecord; overload;
+    /// set the bits corresponding to non-void (0,'') copiable fields
+    function GetNonVoidFields: TSQLFieldBits;
     /// release the associated memory
     // - in particular, release all TSQLRecordMany instance created by the
     // constructor of this TSQLRecord
@@ -7852,11 +7855,11 @@ type
     {$ifndef NOVARIANTS}
     /// retrieve the record content as a TDocVariant custom variant object
     function GetAsDocVariant(withID: boolean; const withFields: TSQLFieldBits;
-      options: PDocVariantOptions=nil): variant; overload;
+      options: PDocVariantOptions=nil; replaceRowIDWithID: boolean=false): variant; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// retrieve the record content as a TDocVariant custom variant object
     procedure GetAsDocVariant(withID: boolean; const withFields: TSQLFieldBits;
-      var result: variant; options: PDocVariantOptions=nil); overload;
+      var result: variant; options: PDocVariantOptions=nil; ReplaceRowIDWithID: boolean=false); overload;
     /// retrieve the simple record content as a TDocVariant custom variant object
     function GetSimpleFieldsAsDocVariant(withID: boolean=true;
       options: PDocVariantOptions=nil): variant;
@@ -8087,7 +8090,8 @@ type
     procedure FillFrom(aRecord: TSQLRecord); overload;
     /// fill the specified properties of this object from another object
     // - source object must be a parent or of the same class as the current record
-    // - copy the fields, as specified by their bit index in the source record
+    // - copy the fields, as specified by their bit index in the source record;
+    // you may use aRecord.GetNonVoidFields if you want to update some fields
     procedure FillFrom(aRecord: TSQLRecord; const aRecordFieldBits: TSQLFieldBits); overload;
     {$ifndef NOVARIANTS}
     /// fill all published properties of this object from a supplied TDocVariant
@@ -11262,8 +11266,8 @@ type
   // (via POST), to retrieve some custom content
   TServiceCustomAnswer = record
     /// mandatory response type, as encoded in the HTTP header
-    // - useful to set the response mime-type - see e.g. the
-    // TEXT_CONTENT_TYPE_HEADER or HTTP_CONTENT_TYPE_HEADER constants or
+    // - useful to set the response mime-type - see e.g. JSON_CONTENT_TYPE_HEADER_VAR
+    // TEXT_CONTENT_TYPE_HEADER or BINARY_CONTENT_TYPE_HEADER constants or
     // GetMimeContentType() function
     // - in order to be handled as expected, this field SHALL be set to NOT ''
     // (otherwise TServiceCustomAnswer will be transmitted as raw JSON)
@@ -18064,7 +18068,7 @@ type
     // instance, for better speed for most used RESTful operations; but complex
     // SQL requests (e.g. joined SELECT) will rely on the main SQL engine
     // - if set to false, will use the main SQLite3 engine for all statements
-    // (should not to be used normaly, because it will add unnecessary overhead)
+    // (should not to be used normally, because it will add unnecessary overhead)
     property StaticVirtualTableDirect: boolean read fVirtualTableDirect
       write fVirtualTableDirect;
     /// the class inheriting from TSQLRecordTableDeleted, as defined in the model
@@ -21733,6 +21737,16 @@ begin
     else
       aValue.VInt64 := 0;
   end;
+end;
+
+function TSQLPropInfo.IsValueVoid(Instance: TObject): boolean;
+var temp: RawUTF8;
+    wasString: boolean;
+begin
+  GetValueVar(Instance,true,temp,@wasString);
+  if wasString then
+    result := temp='' else
+    result := GetInt64(pointer(temp))=0;
 end;
 
 function TSQLPropInfo.SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean;
@@ -30843,12 +30857,13 @@ function TTypeInfo.ClassType: PClassType;
 {$ifdef HASINLINENOTX86}
 begin
   result := AlignTypeData(@Name[ord(Name[0])+1]);
+end;
 {$else}
 asm // very fast code
         movzx   edx, byte ptr[eax].TTypeInfo.Name
         lea     eax, [eax + edx].TTypeInfo.Name[1]
-{$endif}
 end;
+{$endif}
 
 function TTypeInfo.ClassCreate: TObject;
 var instance: TClassInstance;
@@ -30861,12 +30876,13 @@ function TTypeInfo.RecordType: PRecordType;
 {$ifdef HASINLINENOTX86}
 begin
   result := AlignTypeData(@Name[ord(Name[0])+1]);
+end;
 {$else}
 asm // very fast code
         movzx   edx, byte ptr[eax].TTypeInfo.Name
         lea     eax, [eax + edx].TTypeInfo.Name[1]
-{$endif}
 end;
+{$endif}
 
 function TTypeInfo.ClassFieldCount(onlyWithoutGetter: boolean): integer;
 begin
@@ -31129,11 +31145,13 @@ begin
   base := result^.BaseType;
   if (base<>nil) and (base<>@self) then // no redirection if already the base type
     result := PEnumType(GetFPCTypeData(pointer(DeRef(base))));
+end;
 {$else}
 {$ifdef HASINLINENOTX86}
 begin
   with PEnumType(@Name[ord(Name[0])+1])^.BaseType^^ do
     result := @Name[ord(Name[0])+1];
+end;
 {$else}
 asm     // very fast code
         movzx   edx, byte ptr[eax].TTypeInfo.Name
@@ -31141,9 +31159,9 @@ asm     // very fast code
         mov     eax, [eax]
         movzx   edx, byte ptr[eax].TTypeInfo.Name
         lea     eax, [eax + edx].TTypeInfo.Name[1]
+end;
 {$endif}
 {$endif FPC}
-end;
 
 function TTypeInfo.SetEnumType: PEnumType;
 begin
@@ -32064,9 +32082,18 @@ begin
   result.fID := fID;
   with RecordProps do
     for f := 0 to Fields.Count-1 do
-    with Fields.List[f] do
-      if (f in CustomFields) and (SQLFieldType in COPIABLE_FIELDS) then
-        CopyValue(self,result);
+      if (f in CustomFields) and (f in CopiableFieldsBits) then
+        Fields.List[f].CopyValue(self,result);
+end;
+
+function TSQLRecord.GetNonVoidFields: TSQLFieldBits;
+var f: integer;
+begin
+  FillZero(result);
+  with RecordProps do
+    for f := 0 to Fields.Count-1 do
+      if (f in CopiableFieldsBits) and not Fields.List[f].IsValueVoid(self) then
+        include(result,f);
 end;
 
 constructor TSQLRecord.Create(aClient: TSQLRest; aID: TID; ForUpdate: boolean=false);
@@ -32151,33 +32178,9 @@ begin // is not part of TSQLRecordProperties because has been declared as virtua
 end;
 
 procedure TSQLRecord.FillFrom(aRecord: TSQLRecord);
-var i, f: integer;
-    S, D: TSQLRecordProperties;
-    SP: TSQLPropInfo;
-    wasString: boolean;
-    tmp: RawUTF8;
 begin
-  if (self=nil) or (aRecord=nil) then
-    exit;
-  D := RecordProps;
-  if PSQLRecordClass(aRecord)^.InheritsFrom(PSQLRecordClass(self)^) then begin
-    if PSQLRecordClass(aRecord)^=PSQLRecordClass(self)^ then
-      fID := aRecord.fID; // same class -> ID values will match
-    for f := 0 to high(D.CopiableFields) do
-      D.CopiableFields[f].CopyValue(aRecord,self);
-    exit;
-  end;
-  S := aRecord.RecordProps; // two diverse tables -> don't copy ID
-  for i := 0 to high(S.CopiableFields) do begin
-    SP := S.CopiableFields[i];
-    if D.Fields.List[SP.PropertyIndex].Name=SP.Name then // optimistic match
-      f := SP.PropertyIndex else
-      f := D.Fields.IndexByName(S.CopiableFields[i].Name);
-    if f>=0 then begin
-      SP.GetValueVar(aRecord,False,tmp,@wasString);
-      D.Fields.List[f].SetValueVar(Self,tmp,wasString);
-    end;
-  end;
+  if (self<>nil) and (aRecord<>nil) then
+    FillFrom(aRecord, aRecord.RecordProps.CopiableFieldsBits);
 end;
 
 procedure TSQLRecord.FillFrom(aRecord: TSQLRecord; const aRecordFieldBits: TSQLFieldBits);
@@ -32187,7 +32190,7 @@ var i, f: integer;
     wasString: boolean;
     tmp: RawUTF8;
 begin
-  if (self=nil) or (aRecord=nil) then
+  if (self=nil) or (aRecord=nil) or IsZero(aRecordFieldBits) then
     exit;
   D := RecordProps;
   if PSQLRecordClass(aRecord)^.InheritsFrom(PSQLRecordClass(self)^) then begin
@@ -32200,16 +32203,16 @@ begin
   end;
   S := aRecord.RecordProps; // two diverse tables -> don't copy ID
   for i := 0 to S.Fields.Count-1 do
-  if i in aRecordFieldBits then begin
-    SP := S.Fields.List[i];
-    if D.Fields.List[i].Name=SP.Name then // optimistic match
-      f := i else
-      f := D.Fields.IndexByName(SP.Name);
-    if f>=0 then begin
-      SP.GetValueVar(aRecord,False,tmp,@wasString);
-      D.Fields.List[f].SetValueVar(Self,tmp,wasString);
+    if i in aRecordFieldBits then begin
+      SP := S.Fields.List[i];
+      if D.Fields.List[i].Name=SP.Name then // optimistic match
+        f := i else
+        f := D.Fields.IndexByName(SP.Name);
+      if f>=0 then begin
+        SP.GetValueVar(aRecord,False,tmp,@wasString);
+        D.Fields.List[f].SetValueVar(Self,tmp,wasString);
+      end;
     end;
-  end;
 end;
 
 procedure TSQLRecord.FillFrom(Table: TSQLTable; Row: integer);
@@ -33482,14 +33485,16 @@ end;
 
 {$ifndef NOVARIANTS}
 
-function TSQLRecord.GetAsDocVariant(withID: boolean;
-  const withFields: TSQLFieldBits; options: PDocVariantOptions): variant;
+function TSQLRecord.GetAsDocVariant(withID: boolean; const withFields: TSQLFieldBits;
+  options: PDocVariantOptions; replaceRowIDWithID: boolean): variant;
 begin
-  GetAsDocVariant(withID,withFields,result,options);
+  GetAsDocVariant(withID,withFields,result,options,replaceRowIDWithID);
 end;
 
 procedure TSQLRecord.GetAsDocVariant(withID: boolean;
-  const withFields: TSQLFieldBits; var result: variant; options: PDocVariantOptions);
+  const withFields: TSQLFieldBits; var result: variant; options: PDocVariantOptions;
+  replaceRowIDWithID: boolean);
+const _ID: array[boolean] of RawUTF8 = ('RowID','ID');
 var f,i: integer;
     Fields: TSQLPropInfoList;
     intvalues: TRawUTF8Interning;
@@ -33507,7 +33512,7 @@ begin
       intvalues := DocVariantType.InternValues;
   end;
   if withID then
-    doc.Values[doc.InternalAdd('RowID')] := fID;
+    doc.Values[doc.InternalAdd(_ID[replaceRowIDWithID])] := fID;
   for f := 0 to Fields.Count-1 do
   if f in withFields then begin
     i := doc.InternalAdd(Fields.List[f].Name);
@@ -36456,20 +36461,21 @@ begin
     with Table.RecordProps do // optimized primary key direct access
     if Cache.IsCached(Table) and (length(BoundsSQLWhere)=1) and
        VarRecToInt64(BoundsSQLWhere[0],Int64(ID)) and
-       FieldBitsFromCSV(CustomFieldsCSV,bits) then
-      if IsZero(bits) then
-        exit else
-      if bits-SimpleFieldsBits[soSelect]=[] then
-        if IdemPropNameU('RowID=?',FormatSQLWhere) or
-           IdemPropNameU('ID=?',FormatSQLWhere) then begin
-          Rec := Table.Create(self,ID);
-          try
-            Rec.GetAsDocVariant(True,bits,result);
-          finally
-            Rec.Free;
-          end;
-          exit;
+       FieldBitsFromCSV(CustomFieldsCSV,bits) and
+       (IdemPropNameU('RowID=?',FormatSQLWhere) or
+        IdemPropNameU('ID=?',FormatSQLWhere)) then begin
+      if IsZero(bits) then // get all simple fields, like MultiFieldValues()
+        bits := SimpleFieldsBits[soSelect];
+      if bits-SimpleFieldsBits[soSelect]=[] then begin
+        Rec := Table.Create(self,ID); // use the cache
+        try
+          Rec.GetAsDocVariant(true,bits,result,nil,{"id"=}true);
+        finally
+          Rec.Free;
         end;
+        exit;
+      end;
+    end;
     T := MultiFieldValues(Table,CustomFieldsCSV,FormatSQLWhere,BoundsSQLWhere);
     if T<>nil then
     try
@@ -43374,11 +43380,11 @@ begin
 end;
 
 procedure TSQLRestServer.Timestamp(Ctxt: TSQLRestServerURIContext);
-{$ifdef NOVARIANTS}
-begin
-{$else}
+{$ifndef NOVARIANTS}
 var info: TDocVariantData;
+{$endif}
 begin
+{$ifndef NOVARIANTS}
   if IdemPropNameU(Ctxt.URIBlobFieldName,'info') and
      not (rsoTimestampInfoURIDisable in fOptions) then begin
     info.InitFast;
@@ -49709,7 +49715,7 @@ end;
 
 type
   /// wrapper class to ease JSONToObject() maintainability
-  TJSONToObject = {$ifdef UNICODE}record{$else}object{$endif}
+  {$ifdef UNICODE}TJSONToObject = record{$else}TJSONToObject = object{$endif}
   public
     // input parameters
     From: PUTF8Char;
@@ -50448,14 +50454,14 @@ begin
     if C<>TInterfacedCollection then
     if C<>TCollection then
     if C<>TCollectionItem then
-    {$endif}
+    {$endif LVCL}
     {$ifdef FPC}
     if C.ClassParent<>nil then begin
       C := C.ClassParent;
     {$else}
     if PPointer(PtrInt(C)+vmtParent)^<>nil then begin
       C := PPointer(PPointer(PtrInt(C)+vmtParent)^)^;
-    {$endif}
+    {$endif FPC}
       if C<>nil then
         continue else begin
         ItemCreate := cicTObject;
@@ -50481,7 +50487,7 @@ begin
       ItemCreate := cicTInterfacedCollection;
       exit;
     end else
-    {$endif}
+    {$endif LVCL}
     begin
       ItemCreate := cicTComponent;
       exit;
