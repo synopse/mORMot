@@ -2103,7 +2103,6 @@ end;
 destructor TOleDBStatement.Destroy;
 begin
   try
-    SynDBLog.Add.Log(sllDB,'Rows = %',[self,TotalRowsRetrieved],self);
     CloseRowSet;
   finally
     fCommand := nil;
