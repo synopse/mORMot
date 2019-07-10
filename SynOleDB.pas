@@ -1334,7 +1334,7 @@ procedure TOleDBStatement.BindTextS(Param: Integer; const Value: string;
 begin
   if (Value='') and fConnection.Properties.StoreVoidStringAsNull then
     CheckParam(Param,ftNull,IO) else
-    CheckParam(Param,ftUTF8,IO)^.VText := Value; // let Delphi do the work
+    CheckParam(Param,ftUTF8,IO)^.VText := StringToSynUnicode(Value);
 end;
 
 procedure TOleDBStatement.BindTextW(Param: Integer;

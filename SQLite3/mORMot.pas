@@ -2962,11 +2962,11 @@ type
     /// the type definition of this property
     PropType: PPTypeInfo;
     /// contains the offset of a field, or the getter method set by 'read' Delphi declaration
-    GetProc: PtrInt;
+    GetProc: PtrUInt;
     /// contains the offset of a field, or the setter method set by 'write' Delphi declaration
     // - if this field is nil (no 'write' was specified), SetValue() use GetProc to
     // get the field memory address to save into
-    SetProc: PtrInt;
+    SetProc: PtrUInt;
     /// contains the 'stored' boolean value/method (used in TPersistent saving)
     // - either integer(True) - the default, integer(False), reference to a Boolean
     // field, or reference to a parameterless method that returns a Boolean value
@@ -8520,7 +8520,6 @@ type
     // - expect SQLite3 TEXT field in ISO 8601 'YYYYMMDD hhmmss' or
     // 'YYYY-MM-DD hh:mm:ss' format
     function GetDateTime(Row,Field: integer): TDateTime;
-      {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
     /// read-only access to a particular TTimeLog field value
     // - return the result as TTimeLogBits.Text() Iso-8601 encoded text
     function GetTimeLog(Row,Field: integer; Expanded: boolean; FirstTimeChar: AnsiChar = 'T'): RawUTF8;
@@ -21034,7 +21033,7 @@ begin
   Pointer(Obj) := nil;
   if Entry<>nil then
     if Entry^.IOffset <> 0 then begin
-      Pointer(Obj) := Pointer(PtrInt(Instance)+Entry^.IOffset);
+      Pointer(Obj) := Pointer(PtrInt(PtrUInt(Instance))+Entry^.IOffset);
       if Pointer(Obj)<>nil then
         IInterface(Obj)._AddRef;
     end
@@ -21049,7 +21048,7 @@ function InternalMethodInfo(aClassType: TClass; const aMethodName: ShortString):
 var Count, i: integer;
 begin
   while aClassType<>nil do begin
-    result := PPointer(PtrInt(aClassType)+vmtMethodTable)^;
+    result := PPointer(PtrInt(PtrUInt(aClassType))+vmtMethodTable)^;
     if result<>nil then begin
       {$ifdef FPC}
       Count := PCardinal(result)^;
@@ -21068,7 +21067,7 @@ begin
         {$endif}
     end;
     {$ifdef FPC}
-    aClassType := aClassType.ClassParent;
+    aClassType := aClassType.ClassParent; // vmtParent slot is reference on FPC
     if aClassType=nil then
     {$else}
     if PPointer(PtrInt(aClassType)+vmtParent)^<>nil then
@@ -23035,7 +23034,7 @@ var tmp: RawByteString;
 begin
   W.Add('"');
   fPropInfo.GetLongStrProp(Instance,tmp);
-  if PtrUInt(tmp)<>0 then
+  if tmp<>'' then
     W.AddAnyAnsiString(tmp,twJSONEscape,fEngine.CodePage);
   W.Add('"');
 end;
@@ -26237,19 +26236,10 @@ begin
   result := BlobToStream(Get(Row,Field));
 end;
 
-{$ifdef PUREPASCAL}
 function TSQLTable.GetDateTime(Row, Field: integer): TDateTime;
 begin
   result := Iso8601ToDateTimePUTF8Char(Get(Row,Field),0)
 end;
-{$else}
-function TSQLTable.GetDateTime(Row, Field: integer): TDateTime;
-asm
-        call    TSQLTable.Get
-        xor     edx, edx // L=0 -> will call strlen()
-        jmp     Iso8601ToDateTimePUTF8Char
-end;
-{$endif}
 
 function TSQLTable.GetRowValues(Field: integer; out Values: TRawUTF8DynArray): integer;
 var i: integer;
@@ -26787,7 +26777,6 @@ end;
 function UTF8CompareRecord(P1,P2: PUTF8Char): PtrInt;
 var V1,V2: Int64;
     T1,T2: cardinal;
-label er;
 begin
   if P1=P2 then begin
     result := 0;
@@ -26925,7 +26914,7 @@ type
     Params: TSQLTableSortParams;
     CurrentRow: PtrInt;
     // avoid multiplications to calculate data memory position from index
-    FieldCountNextPtr, FieldFirstPtr, FieldIDPtr: PtrInt;
+    FieldCountNextPtr, FieldFirstPtr, FieldIDPtr: PtrUInt;
     // temp vars (avoid stack usage):
     PID: Int64;
     PP, CI, CJ: PPUTF8Char;
@@ -26948,7 +26937,7 @@ begin
   // PID must be updated every time PP is modified
   if Assigned(IDColumn) then
     SetInt64(IDColumn[aP],PID) else
-    SetInt64(PPUTF8Char(PtrInt(aPP)-FieldIDPtr)^,PID);
+    SetInt64(PPUTF8Char(PtrUInt(aPP)-FieldIDPtr)^,PID);
 end;
 
 function TUTF8QuickSort.CompI: integer;
@@ -26959,7 +26948,7 @@ begin
     // same value -> sort by ID
     if Assigned(IDColumn) then
       SetInt64(IDColumn[I],i64) else
-      SetInt64(PPUTF8Char(PtrInt(CI)-FieldIDPtr)^,i64);
+      SetInt64(PPUTF8Char(PtrUInt(CI)-FieldIDPtr)^,i64);
     if i64<PID then
       result := -1 else
     if i64<>PID then
@@ -26975,7 +26964,7 @@ begin
     // same value -> sort by ID
     if Assigned(IDColumn) then
       SetInt64(IDColumn[J],i64) else
-      SetInt64(PPUTF8Char(PtrInt(CJ)-FieldIDPtr)^,i64);
+      SetInt64(PPUTF8Char(PtrUInt(CJ)-FieldIDPtr)^,i64);
     if i64<PID then
       result := -1 else
     if i64<>PID then
@@ -27067,7 +27056,7 @@ begin
           if CurrentRow=I then
             CurrentRow := J;
           // full row exchange
-          ExchgPtrUInt(PtrInt(CI)-FieldFirstPtr,PtrInt(CJ)-FieldFirstPtr,
+          ExchgPtrUInt(PtrUInt(CI)-FieldFirstPtr,PtrUInt(CJ)-FieldFirstPtr,
             Params.FieldCount); // exchange PUTF8Char for whole I,J rows
           if Assigned(IDColumn) then begin // exchange hidden ID column also
             {$ifdef ABSOLUTEORPUREPASCAL}
@@ -30034,7 +30023,7 @@ end;
 function TPropInfo.GetterAddr(Instance: pointer): pointer;
 {$ifdef HASINLINENOTX86}
 begin
-  result := Pointer(PtrInt(Instance)+GetProc{$ifndef FPC} and $00FFFFFF{$endif});
+  result := Pointer(PtrUInt(Instance)+GetProc{$ifndef FPC} and $00FFFFFF{$endif});
 end;
 {$else}
 asm
@@ -30046,7 +30035,7 @@ end;
 
 function TPropInfo.SetterAddr(Instance: pointer): pointer;
 begin
-  result := Pointer(PtrInt(Instance)+SetProc{$ifndef FPC} and $00FFFFFF{$endif});
+  result := Pointer(PtrUInt(Instance)+SetProc{$ifndef FPC} and $00FFFFFF{$endif});
 end;
 
 function TPropInfo.TypeInfo: PTypeInfo;
@@ -30123,7 +30112,7 @@ function TPropInfo.GetObjProp(Instance: TObject): TObject;
 begin
   if GetterIsField then
     result := PObject(GetterAddr(Instance))^ else
-    result := pointer(TypInfo.GetOrdProp(Instance,@self));
+    result := pointer(PtrUInt(TypInfo.GetOrdProp(Instance,@self)));
 end;
 
 function TPropInfo.GetOrdProp(Instance: TObject): PtrInt;
@@ -30322,9 +30311,9 @@ begin
       result := 0;
       exit;
     end else // we only allow setting if we know the field address
-      P := Pointer(PtrInt(Instance)+SetProc and $00FFFFFF) else
+      P := Pointer(PtrUInt(Instance)+SetProc and $00FFFFFF) else
     if PropWrap(GetProc).Kind=$FF then
-      P := Pointer(PtrInt(Instance)+GetProc and $00FFFFFF) else begin
+      P := Pointer(PtrUInt(Instance)+GetProc and $00FFFFFF) else begin
       if PropWrap(GetProc).Kind=$FE then
         Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(GetProc))^ else
         Call.Code := Pointer(GetProc);
@@ -30358,9 +30347,9 @@ begin
   if SetProc=0 then  // no write attribute -> use read offset
     if PropWrap(GetProc).Kind<>$FF then
       exit else // we only allow setting if we know the field address
-      P := Pointer(PtrInt(Instance)+GetProc and $00FFFFFF) else
+      P := Pointer(PtrUInt(Instance)+GetProc and $00FFFFFF) else
     if PropWrap(SetProc).Kind=$FF then
-      P := Pointer(PtrInt(Instance)+SetProc and $00FFFFFF) else begin
+      P := Pointer(PtrUInt(Instance)+SetProc and $00FFFFFF) else begin
       if PropWrap(SetProc).Kind=$FE then
         Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(SetProc))^ else
         Call.Code := Pointer(SetProc);
@@ -30398,7 +30387,7 @@ var Call: TMethod;
 begin
   if PropWrap(GetProc).Kind=$FF then
     // field - Getter is the field offset in the instance data
-    result := PInt64(PtrInt(Instance)+GetProc and $00FFFFFF)^
+    result := PInt64(PtrUInt(Instance)+GetProc and $00FFFFFF)^
   else begin
     if PropWrap(GetProc).Kind=$FE then
       Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(GetProc))^ else
@@ -30419,9 +30408,9 @@ begin
   if SetProc=0 then  // no write attribute -> use read offset
     if PropWrap(GetProc).Kind<>$FF then
       exit else // we only allow setting if we know the field address
-      PInt64(PtrInt(Instance)+GetProc and $00FFFFFF)^ := Value else
+      PInt64(PtrUInt(Instance)+GetProc and $00FFFFFF)^ := Value else
     if PropWrap(SetProc).Kind=$FF then
-      PInt64(PtrInt(Instance)+SetProc and $00FFFFFF)^ := Value else begin
+      PInt64(PtrUInt(Instance)+SetProc and $00FFFFFF)^ := Value else begin
       if PropWrap(SetProc).Kind=$FE then
         Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(SetProc))^ else
         Call.Code := Pointer(SetProc);
@@ -30452,7 +30441,7 @@ end;
 begin // caller must check that PropType^.Kind = tkWString
   if PropWrap(GetProc).Kind=$FF then
     // field - Getter is the field offset in the instance data
-    Value := PRawByteString(PtrInt(Instance)+GetProc and $00FFFFFF)^ else
+    Value := PRawByteString(PtrUInt(Instance)+GetProc and $00FFFFFF)^ else
     CallMethod(Instance,Value);
 end;
 
@@ -30465,10 +30454,10 @@ begin // caller must check that PropType^.Kind = tkLString
   if SetProc=0 then  // no setter ?
     if PropWrap(GetProc).Kind<>$FF then
       exit else  // we only allow setting if we know the field address
-      PRawByteString(PtrInt(Instance)+GetProc and $00FFFFFF)^ := Value else
+      PRawByteString(PtrUInt(Instance)+GetProc and $00FFFFFF)^ := Value else
   if PropWrap(SetProc).Kind=$FF then
     // field - Setter is the field offset in the instance data
-    PRawByteString(PtrInt(Instance)+SetProc and $00FFFFFF)^ := Value else begin
+    PRawByteString(PtrUInt(Instance)+SetProc and $00FFFFFF)^ := Value else begin
       if PropWrap(SetProc).Kind=$FE then
         Call.Code := PPointer(PPtrInt(Instance)^+SmallInt(SetProc))^ else
         Call.Code := Pointer(SetProc);
@@ -30499,7 +30488,7 @@ end;
 begin // caller must check that PropType^.Kind = tkString/tkSString
   if PropWrap(GetProc).Kind=$FF then
     // field - Getter is the field offset in the instance data
-    Value := ShortStringToAnsi7String(PShortString(PtrInt(Instance)+GetProc and $00FFFFFF)^) else
+    Value := ShortStringToAnsi7String(PShortString(PtrUInt(Instance)+GetProc and $00FFFFFF)^) else
     CallMethod(Instance,Value);
 end; // no SetShortStrProp() by now
 
@@ -30511,7 +30500,7 @@ var M: TMethod;
 begin // caller must check that PropType^.Kind = tkWString
   if PropWrap(GetProc).Kind=$FF then
     // field - Getter is the field offset in the instance data
-    Value := PWideString(PtrInt(Instance)+GetProc and $00FFFFFF)^
+    Value := PWideString(PtrUInt(Instance)+GetProc and $00FFFFFF)^
   else begin
     if PropWrap(GetProc).Kind=$FE then
       // virtual method  - Getter is a signed 2 byte integer VMT offset
@@ -30534,12 +30523,12 @@ begin // caller must check that PropType^.Kind = tkWString
   if SetProc=0 then  // no setter ?
     if PropWrap(GetProc).Kind<>$FF then
       exit else begin  // we only allow setting if we know the field address
-      PWideString(PtrInt(Instance)+GetProc and $00FFFFFF)^ := Value;
+      PWideString(PtrUInt(Instance)+GetProc and $00FFFFFF)^ := Value;
       exit;
     end;
   if PropWrap(SetProc).Kind=$FF then
     // field - Setter is the field offset in the instance data
-    PWideString(PtrInt(Instance)+SetProc and $00FFFFFF)^ := Value else begin
+    PWideString(PtrUInt(Instance)+SetProc and $00FFFFFF)^ := Value else begin
     if PropWrap(SetProc).Kind=$FE then
       // virtual method  - Setter is a signed 2 byte integer VMT offset
       M.Code := PPointer(PPtrInt(Instance)^+SmallInt(SetProc))^ else
@@ -30561,7 +30550,7 @@ var M: TMethod;
 begin // caller must check that PropType^.Kind = tkUString
   if PropWrap(GetProc).Kind=$FF then
     // field - Getter is the field offset in the instance data
-    result := PUnicodeString(PtrInt(Instance)+GetProc and $00FFFFFF)^
+    result := PUnicodeString(PtrUInt(Instance)+GetProc and $00FFFFFF)^
   else begin
     if PropWrap(GetProc).Kind=$FE then
       // virtual method  - Getter is a signed 2 byte integer VMT offset
@@ -30584,12 +30573,12 @@ begin // caller must check that PropType^.Kind = tkUString
   if SetProc=0 then  // no setter ?
     if PropWrap(GetProc).Kind<>$FF then
       exit else begin  // we only allow setting if we know the field address
-      PUnicodeString(PtrInt(Instance)+GetProc and $00FFFFFF)^ := Value;
+      PUnicodeString(PtrUInt(Instance)+GetProc and $00FFFFFF)^ := Value;
       exit;
     end;
   if PropWrap(SetProc).Kind=$FF then
     // field - Setter is the field offset in the instance data
-    PUnicodeString(PtrInt(Instance)+SetProc and $00FFFFFF)^ := Value else begin
+    PUnicodeString(PtrUInt(Instance)+SetProc and $00FFFFFF)^ := Value else begin
     if PropWrap(SetProc).Kind=$FE then
       // virtual method  - Setter is a signed 2 byte integer VMT offset
       M.Code := PPointer(PPtrInt(Instance)^+SmallInt(SetProc))^ else
@@ -30612,7 +30601,7 @@ var P: Pointer;
 begin // faster code by AB
   if PropWrap(GetProc).Kind=$FF then begin
     // field - GetProc is the field offset in the instance data
-    P := Pointer(PtrInt(Instance)+GetProc and $00FFFFFF);
+    P := Pointer(PtrUInt(Instance)+GetProc and $00FFFFFF);
     Result := PCurrency(P)^;
   end
   else begin
@@ -30644,7 +30633,7 @@ var P: Pointer;
 begin // faster code by AB
   if PropWrap(GetProc).Kind=$FF then begin
     // field - GetProc is the field offset in the instance data
-    P := Pointer(PtrInt(Instance)+GetProc and $00FFFFFF);
+    P := Pointer(PtrUInt(Instance)+GetProc and $00FFFFFF);
     Result := PDouble(P)^;
   end
   else begin
@@ -30676,7 +30665,7 @@ var P: Pointer;
 begin // faster code by AB
   if PropWrap(GetProc).Kind=$FF then begin
     // field - GetProc is the field offset in the instance data
-    P := Pointer(PtrInt(Instance)+GetProc and $00FFFFFF);
+    P := Pointer(PtrUInt(Instance)+GetProc and $00FFFFFF);
     case PropType^.FloatType of
       ftSingle:    Result := PSingle(P)^;
       ftDoub:      Result := PDouble(P)^;
@@ -30713,12 +30702,12 @@ begin
   if SetProc=0 then  // no setter ?
     if PropWrap(GetProc).Kind<>$FF then
       exit else begin  // we only allow setting if we know the field address
-      P := Pointer(PtrInt(Instance)+GetProc and $00FFFFFF);
+      P := Pointer(PtrUInt(Instance)+GetProc and $00FFFFFF);
       goto St;  // use the field address to set its value
     end;
   if PropWrap(SetProc).Kind=$FF then begin
     // field - SetProc is the field offset in the instance data
-    P := Pointer(PtrInt(Instance)+SetProc and $00FFFFFF);
+    P := Pointer(PtrUInt(Instance)+SetProc and $00FFFFFF);
 St: case PropType^^.FloatType of
       ftSingle:    PSingle(P)^ := Value;
       ftDoub:      PDouble(P)^ := Value;
@@ -30763,7 +30752,7 @@ procedure TPropInfo.GetVariantProp(Instance: TObject; var result: Variant);
 begin
   if PropWrap(GetProc).Kind=$FF then
     // field - Getter is the field offset in the instance data
-    SetVariantByValue(PVariant(PtrInt(Instance)+GetProc and $00FFFFFF)^,result) else
+    SetVariantByValue(PVariant(PtrUInt(Instance)+GetProc and $00FFFFFF)^,result) else
     ByMethod;
 end;
 
@@ -30786,9 +30775,9 @@ begin
   if SetProc=0 then  // no write attribute -> use read offset
     if PropWrap(GetProc).Kind<>$FF then
       exit else // we only allow setting if we know the field address
-      PVariant(PtrInt(Instance)+GetProc and $00FFFFFF)^ := Value else
+      PVariant(PtrUInt(Instance)+GetProc and $00FFFFFF)^ := Value else
     if PropWrap(SetProc).Kind=$FF then
-      PVariant(PtrInt(Instance)+SetProc and $00FFFFFF)^ := Value else
+      PVariant(PtrUInt(Instance)+SetProc and $00FFFFFF)^ := Value else
       ByMethod;
 end;
 {$endif}
@@ -31667,7 +31656,7 @@ begin
 end;
 
 procedure TEnumType.AddCaptionStrings(Strings: TStrings; UsedValuesBits: Pointer=nil);
-var i, L: integer;
+var i, L: PtrInt;
     Line: array[byte] of AnsiChar;
     P: PAnsiChar;
     V: PShortString;
@@ -33391,7 +33380,7 @@ begin
   except
     result := PtrUInt(self);
   end;
-  {$endif}
+  {$endif MSWINDOWS}
 end;
 
 function TSQLRecord.GetIDAsPointer: pointer;
@@ -33407,17 +33396,17 @@ begin
       raise EORMException.CreateUTF8('%.GetIDAsPointer is storing ID=%, which '+
         'cannot be stored in a pointer/TSQLRecord 32-bit instance: use '+
         'a TID/T*ID published field for 64-bit IDs',[self,fID]) else
-    {$endif}
-      result := pointer(fID);
+    {$endif CPU64}
+      result := pointer(PtrInt(fID));
   {$else}
   if PtrUInt(self)<$100000 then // rough estimation, but works in practice
     result := self else
   try
-    result := pointer(fID);
+    result := pointer(PtrInt(fID));
   except
     result := self;
   end;
-  {$endif}
+  {$endif MSWINDOWS}
 end;
 
 class procedure TSQLRecord.InternalRegisterCustomProperties(Props: TSQLRecordProperties);
@@ -33567,7 +33556,7 @@ begin // private sub function makes the code faster in most case
   EnterCriticalSection(vmtAutoTableLock);
   try
     // TSQLRecordProperties instance is store into "AutoTable" unused VMT entry
-    PVMT := pointer(PtrInt(aTable)+vmtAutoTable);
+    PVMT := pointer(PtrInt(PtrUInt(aTable))+vmtAutoTable);
     result := PPointer(PVMT)^;
     if result=nil then begin // protect from (unlikely) concurrent call
       // create the properties information from RTTI
@@ -33594,7 +33583,7 @@ end;
 class function TSQLRecord.RecordProps: TSQLRecordProperties;
 begin
   if Self<>nil then begin
-    result := PPointer(PtrInt(Self)+vmtAutoTable)^;
+    result := PPointer(PtrInt(PtrUInt(Self))+vmtAutoTable)^;
     if result=nil then
       result := PropsCreate(self);
   end else
@@ -34675,7 +34664,7 @@ var i: PtrInt;
     c: PSQLRecordClass;
 begin
   if (self<>nil) and (aTable<>nil) then begin
-    Props := PPointer(PtrInt(aTable)+vmtAutoTable)^;
+    Props := PPointer(PtrInt(PtrUInt(aTable))+vmtAutoTable)^;
     if (Props<>nil) and (Props.fModelMax<fTablesMax) then
       // fastest O(1) search in all registered models (if worth it)
       for i := 0 to Props.fModelMax do
@@ -34725,7 +34714,7 @@ begin
     if IdemPropName(
        // new TObject.ClassName is UnicodeString (Delphi 20009) -> inline code
        // using vmtClassName = UTF-8 encoded text stored as shortstring
-       PShortString(PPointer(PtrInt(Tables[result])+vmtClassName)^)^,
+       PShortString(PPointer(PtrInt(PtrUInt(Tables[result]))+vmtClassName)^)^,
        pointer(TableName),L) then
       exit;  // case insensitive search
   end;
@@ -36046,7 +36035,7 @@ begin
       if (T.FieldCount=2) and (T.fRowCount>0) then begin
         for Row := 1 to T.fRowCount do begin // ignore Row 0 i.e. field names
           aID := GetInt64(T.Get(Row,0));
-          Strings.AddObject(T.GetString(Row,1),pointer(aID));
+          Strings.AddObject(T.GetString(Row,1),pointer(PtrInt(aID)));
           if (IDToIndex<>nil) and (aID=IDToIndex^) then begin
             IDToIndex^ := Row-1;
             IDToIndex := nil; // set once
@@ -37311,7 +37300,7 @@ end;
 function TSQLRest.GetServerTimestamp: TTimeLog;
 var Tix: cardinal;
 begin
-  Tix := GetTickCount shr 9; // resolution change 1 ms -> 512 ms
+  Tix := GetTickCount64 shr 9; // resolution change 1 ms -> 512 ms
   if fServerTimestampCacheTix=Tix then
     result := fServerTimestampCacheValue.Value else begin
     fServerTimestampCacheTix := Tix;
@@ -47317,7 +47306,7 @@ begin
     // check that all records can be updated
     for i := 0 to Where.Count-1 do
       if not RecordCanBeUpdated(fStoredClass,
-         TSQLRecord(fValue.List[PtrInt(Where.List[i])]).fID,seUpdate) then
+         TSQLRecord(fValue.List[PtrUInt(Where.List[i])]).fID,seUpdate) then
         exit; // one record update fails -> abort all
     if fUniqueFields<>nil then
       for i := 0 to fUniqueFields.Count-1 do
@@ -47327,12 +47316,12 @@ begin
             exit else begin
             SetField.SetValueVar(fSearchRec,SetValueString,false);
             ndx := Find(fSearchRec);
-            if (ndx>=0) and (ndx<>PtrInt(Where.List[0])) then
+            if (ndx>=0) and (PtrUInt(ndx)<>PtrUInt(Where.List[0])) then
               exit; // duplicated entry error
           end;
     // update field value
     for i := 0 to Where.Count-1 do begin
-      Rec := fValue.List[PtrInt(Where.List[i])];
+      Rec := fValue.List[PtrUInt(Where.List[i])];
       SetField.SetValueVar(Rec,SetValueString,SetValueWasString);
       fModified := true;
       if Owner<>nil then begin
@@ -49335,7 +49324,7 @@ begin
           exit;
         end;
         {$ifdef FPC}
-        aClassType := aClassType.ClassParent;
+        aClassType := aClassType.ClassParent; // vmtParent slot is reference on FPC
         {$else}
         if PPointer(PtrInt(aClassType)+vmtParent)^<>nil then
           aClassType := PPointer(PPointer(PtrInt(aClassType)+vmtParent)^)^ else
@@ -49471,7 +49460,7 @@ begin // at input, JSON^='{'
   fSafe.Lock;
   try
     if (fLastClass<>nil) and
-       IdemPropName(PShortString(PPointer(PtrInt(fLastClass)+vmtClassName)^)^,
+       IdemPropName(PShortString(PPointer(PtrInt(PtrUInt(fLastClass))+vmtClassName)^)^,
        ClassNameValue,ClassNameLen) then begin
       result := fLastClass; // for speed-up e.g. within a loop
       exit;
@@ -49511,8 +49500,8 @@ begin
     for i := 0 to Count-1 do
       // new TObject.ClassName is UnicodeString (since Delphi 20009) -> inline code
       // with vmtClassName = UTF-8 encoded text stored in a shortstring = -44
-      if IdemPropName(PShortString(PPointer(PtrInt(List[i])+vmtClassName)^)^,
-         aClassName,aClassNameLen) then begin
+      if IdemPropName(PShortString(PPointer(PtrInt(PtrUInt(List[i]))+vmtClassName)^)^,
+          aClassName,aClassNameLen) then begin
         result := List[i];
         exit;
       end;
@@ -49573,8 +49562,8 @@ begin
     for i := 0 to (Count shr 1)-1 do
       // new TObject.ClassName is UnicodeString (since Delphi 20009) -> inline code
       // with vmtClassName = UTF-8 encoded text stored in a shortstring = -44
-      if IdemPropName(PShortString(PPointer(PtrInt(List[i*2])+vmtClassName)^)^,
-         aCollClassName,aCollClassNameLen) then begin
+      if IdemPropName(PShortString(PPointer(PtrInt(PtrUInt(List[i*2]))+vmtClassName)^)^,
+          aCollClassName,aCollClassNameLen) then begin
         result := List[i*2+1];
         exit;
       end;
@@ -50355,7 +50344,7 @@ begin
          P^.SetWideStrProp(Value,UTF8ToWideString(U));
       {$ifdef HASVARUSTRING}
       tkUString:
-         P^.SetUnicodeStrProp(Value,UTF8ToString(U));
+         P^.SetUnicodeStrProp(Value,UTF8DecodeToUnicodeString(U));
       {$endif}
       tkDynArray:
         P^.GetDynArray(Value).LoadFrom(pointer(BlobToTSQLRawBlob(U)));
@@ -50455,21 +50444,19 @@ begin
     if C<>TCollection then
     if C<>TCollectionItem then
     {$endif LVCL}
-    {$ifdef FPC}
-    if C.ClassParent<>nil then begin
-      C := C.ClassParent;
-    {$else}
-    if PPointer(PtrInt(C)+vmtParent)^<>nil then begin
-      C := PPointer(PPointer(PtrInt(C)+vmtParent)^)^;
-    {$endif FPC}
+    begin
+      {$ifdef FPC}
+      C := C.ClassParent; // vmtParent slot is reference on FPC
+      {$else}
+      C := PPointer(PtrInt(C)+vmtParent)^;
+      if C<>nil then
+        C := PPointer(C)^;
+      {$endif FPC}
       if C<>nil then
         continue else begin
         ItemCreate := cicTObject;
         exit;
       end;
-    end else begin
-      ItemCreate := cicTObject;
-      exit;
     end else
     {$ifndef LVCL}
     begin
@@ -52592,7 +52579,6 @@ var i, c: integer;
     parser: PJSONCustomParser;
     aClassType: TClass;
     UtfP: PPUtf8CharArray;
-label next;
 begin
   if not (woHumanReadable in Options) or (fHumanReadableLevel<0) then
     fHumanReadableLevel := 0;
@@ -55011,7 +54997,7 @@ end;
 function TInterfacedObjectFake.SelfFromInterface: TInterfacedObjectFake;
 {$ifdef HASINLINE}
 begin
-  result := pointer(PtrInt(self)-PtrInt(@TInterfacedObjectFake(nil).fVTable));
+  result := pointer(PtrUInt(self)-PtrUInt(@TInterfacedObjectFake(nil).fVTable));
 end;
 {$else}
 asm
@@ -56150,14 +56136,13 @@ end;
 {$endif}
 
 {$ifdef CPUX64}
-// note: x64 code below uses movlpd for reg,reg/mem,reg and movsd for reg,mem
 procedure x64FakeStub;
 var
   smetndx,
   {$ifdef Linux}
   sxmm7, sxmm6, sxmm5, sxmm4,
   {$endif}
-  sxmm3, sxmm2, sxmm1, sxmm0: pointer;
+  sxmm3, sxmm2, sxmm1, sxmm0: double;
   {$ifdef Linux}
   sr9, sr8, srcx, srdx, srsi, srdi: pointer;
   {$endif}
@@ -56169,7 +56154,8 @@ asm // caller = mov ax,{MethodIndex}; jmp x64FakeStub
        .params 2
         {$endif}
         and     rax, $ffff
-        movlpd  sxmm0, xmm0
+        mov     smetndx, rax
+        movlpd  sxmm0, xmm0 // movlpd to ignore upper 64-bit of 128-bit xmm reg
         movlpd  sxmm1, xmm1
         movlpd  sxmm2, xmm2
         movlpd  sxmm3, xmm3
@@ -56184,9 +56170,6 @@ asm // caller = mov ax,{MethodIndex}; jmp x64FakeStub
         mov     srdx, rdx
         mov     srsi, rsi
         mov     srdi, rdi
-        {$endif LINUX}
-        mov     smetndx, rax
-        {$ifdef LINUX}
         lea     rsi, srdi // TFakeCallStack address as 2nd parameter
         {$else}
         {$ifndef FPC}
@@ -56205,7 +56188,7 @@ asm // caller = mov ax,{MethodIndex}; jmp x64FakeStub
         call    TInterfacedObjectFake.FakeCall
         // FakeCall should set Int64 result in method result,
         //and float in aCall.FPRegs["XMM0"]
-        movsd   xmm0, sxmm0
+        movsd   xmm0, qword ptr sxmm0 // movsd for zero extension
 end;
 {$endif CPUX64}
 
@@ -56214,58 +56197,48 @@ const
 
 {$ifdef FPC} // alf: multi platforms support
 {$ifndef MSWINDOWS}
-function AddrAllocMem(const Size, flProtect: DWORD): Pointer;
-var P, Q: UInt64;
-    PP: Pointer;
-    Addr: UInt64;
+var
+  StubCallAllocMemLastStart: PtrUInt; // avoid unneeded fpmmap() calls
+
+function StubCallAllocMem(const Size, flProtect: DWORD): pointer;
+{$ifdef CPUARM}
+const
+  STUB_RELJMP = {$ifdef CPUARM}$7fffff{$else}$7fffffff{$endif}; // relative jmp
+  STUB_INTERV = STUB_RELJMP+1; // try to reserve in closed stub interval
+  STUB_ALIGN = QWord($ffffffffffff0000); // align to STUB_SIZE
+var start,stop,stub: PtrUInt;
 begin
-  Addr := 0;
-  {$ifdef CPUX64}
-  Addr := UInt64(@x64FakeStub);
-  {$endif}
-  {$ifdef CPUARM}
-  Addr := UInt64(@TInterfacedObjectFake.ArmFakeStub);
-  {$endif}
-  {$ifdef CPUAARCH64}
-  Addr := UInt64(@TInterfacedObjectFake.AArch64FakeStub);
-  {$endif}
-  Result := nil;
-  if Addr = 0 then begin
-    Result := fpmmap(nil,STUB_SIZE,flProtect,MAP_PRIVATE OR MAP_ANONYMOUS,-1,0);
-    Exit;
+  stub := PtrUInt(@TInterfacedObjectFake.ArmFakeStub);
+  if StubCallAllocMemLastStart<>0 then
+    start := StubCallAllocMemLastStart else begin
+    start := stub-STUB_INTERV;
+    if start>stub then
+      start := 0; // avoid range overflow
+    start := start and STUB_ALIGN;
   end;
-  P := UInt64(Addr);
-  Q := UInt64(Addr);
-  { Interval = [2GB ..P.. 2GB] = 4GB }
-  if Int64(P - (High(DWORD) div 2)) < 0 then
-    P := 1 else
-    P := UInt64(P - (High(DWORD) div 2)); // -2GB .
-  if UInt64(Q + (High(DWORD) div 2)) > High( {$IFDEF CPU64}UInt64{$ELSE}DWORD{$ENDIF} ) then
-    Q := High( {$IFDEF CPU64}UInt64{$ELSE}DWORD{$ENDIF} ) else
-    Q := Q + (High(DWORD) div 2); // + 2GB
-  P := P and $FFFFFFFFFFFF0000; //AND QWORD(-(STUB_SIZE-1));
-  Q := Q and $FFFFFFFFFFFF0000;
-  while P < Q do begin
-    P := P + STUB_SIZE;
-    PP := Pointer(P);
-    Result := fpmmap(PP,STUB_SIZE,flProtect,MAP_PRIVATE or MAP_ANONYMOUS,-1,0);
-    if (Result <> MAP_FAILED) then begin
-      {$ifdef CPUARM}
-      // are we close enough for a relative jump (24 bit signed)?
-      if ((PtrUInt(Result)-Addr)<DWORD($7FFFFF)) or (Addr-(PtrUInt(Result))<DWORD($7FFFFF)) then
-        exit else
-        fpmunmap(Result,STUB_SIZE);
-      {$else}
-      // are we close enough for a relative jump (32-bit signed)?
-      if ((PtrUInt(Result)-Addr)<Int64($7FFFFFFF)) or (Addr-(PtrUInt(Result))<Int64($7FFFFFFF)) then
-        exit else
-        fpmunmap(Result,STUB_SIZE);
-      {$endif}
-    end;
+  stop := stub+STUB_INTERV;
+  if stop<stub then
+    stop := high(PtrUInt);
+  stop := stop and STUB_ALIGN;
+  while start<stop do begin // try whole -STUB_INTERV..+STUB_INTERV range
+    inc(start,STUB_SIZE);
+    result := fpmmap(pointer(start),STUB_SIZE,flProtect,MAP_PRIVATE or MAP_ANONYMOUS,-1,0);
+    if result<>MAP_FAILED then // close enough for a 24/32-bit relative jump?
+      if (PtrUInt(result)-stub<STUB_RELJMP) or (stub-PtrUInt(result)<STUB_RELJMP) then begin
+        StubCallAllocMemLastStart := start;
+        exit;
+      end else
+        fpmunmap(result,STUB_SIZE);
   end;
+  result := nil; // error
 end;
-{$endif}
-{$endif}
+{$else} // other platforms (Intel+Arm64) use absolute call
+begin
+  result := fpmmap(nil,STUB_SIZE,flProtect,MAP_PRIVATE OR MAP_ANONYMOUS,-1,0);
+end;
+{$endif CPUARM}
+{$endif MSWINDOWS}
+{$endif FPC}
 
 type
   // internal memory buffer created with PAGE_EXECUTE_READWRITE flags
@@ -56291,9 +56264,11 @@ begin
   {$ifdef KYLIX3}
   fStub := mmap(nil,STUB_SIZE,PROT_READ OR PROT_WRITE OR PROT_EXEC,MAP_PRIVATE OR MAP_ANONYMOUS,-1,0);
   {$else}
-  fStub := AddrAllocMem(STUB_SIZE,PROT_READ OR PROT_WRITE OR PROT_EXEC);
-  {$endif}
+  fStub := StubCallAllocMem(STUB_SIZE,PROT_READ OR PROT_WRITE OR PROT_EXEC);
+  {$endif KYLIX3}
   {$endif MSWINDOWS}
+  if fStub=nil then
+    raise EServiceException.CreateUTF8('%.Create: OS allocation failed',[self]);
 end;
 
 destructor TFakeStubBuffer.Destroy;
@@ -56329,6 +56304,7 @@ end;
 function TInterfaceFactory.GetMethodsVirtualTable: pointer;
 var i, tmp: cardinal;
     P: PCardinal;
+    {$ifdef CPUAARCH64}stub: PtrUInt;{$endif}
 begin
   if fFakeVTable=nil then begin
     InterfaceFactoryCache.Safe.Lock;
@@ -56371,16 +56347,17 @@ begin
           P^ := ($d280 shl 16)+(i shl 5)+$09; inc(P);  // mov x9 ,{MethodIndex}
           // we are using a register branch here
           // fill register x10 with address
-          tmp := (PtrUInt(@TInterfacedObjectFake.AArch64FakeStub) shr 0) AND $FFFF;
-          P^ := ($d280 shl 16)+(tmp shl 5)+$0A; inc(P);
-          tmp := (PtrUInt(@TInterfacedObjectFake.AArch64FakeStub) shr 16) AND $FFFF;
-          P^ := ($f2a0 shl 16)+(tmp shl 5)+$0A; inc(P);
-          tmp := (PtrUInt(@TInterfacedObjectFake.AArch64FakeStub) shr 32) AND $FFFF;
-          P^ := ($f2c0 shl 16)+(tmp shl 5)+$0A; inc(P);
-          tmp := (PtrUInt(@TInterfacedObjectFake.AArch64FakeStub) shr 48) AND $FFFF;
-          P^ := ($f2e0 shl 16)+(tmp shl 5)+$0A; inc(P);
+          stub := PtrUInt(@TInterfacedObjectFake.AArch64FakeStub);
+          tmp := (stub shr 0) and $ffff;
+          P^ := ($d280 shl 16)+(tmp shl 5)+$0a; inc(P);
+          tmp := (stub shr 16) and $ffff;
+          P^ := ($f2a0 shl 16)+(tmp shl 5)+$0a; inc(P);
+          tmp := (stub shr 32) and $ffff;
+          P^ := ($f2c0 shl 16)+(tmp shl 5)+$0a; inc(P);
+          tmp := (stub shr 48) and $ffff;
+          P^ := ($f2e0 shl 16)+(tmp shl 5)+$0a; inc(P);
           // branch to address in x10 register
-          P^ := ($d61f0140); inc(P);
+          P^ := $d61f0140; inc(P);
           P^ := $d503201f; inc(P);
           {$endif CPUAARCH64}
           {$ifdef CPUX86}
@@ -56390,11 +56367,11 @@ begin
           PByte(P)^ := $e8; inc(PByte(P));         // call FakeCall
           P^ := PtrUInt(@TInterfacedObjectFake.FakeCall)-PtrUInt(P)-4; inc(P);
           P^ := $c25dec89; inc(P);                 // mov esp,ebp; pop ebp
-          {$ifdef Darwin}
+          {$ifdef DARWIN}
           P^ := $900000;  // ret; nop
           {$else}
           P^ := fMethods[i].ArgsSizeInStack or $900000;  // ret {StackSize}; nop
-          {$endif}
+          {$endif DARWIN}
           inc(PByte(P),3);
           {$endif CPUX86}
         end;
@@ -59030,7 +59007,7 @@ begin
           inc(Ctxt.ServiceMethodIndex,SERVICE_PSEUDO_METHOD_COUNT);
           fake._AddRef; // IInvokable=pointer in Ctxt.ExecuteCallback
           Ctxt.ServiceParameters := pointer(FormatUTF8('[%,"%"]',
-              [PtrInt(fake.fFakeInterface),Values[0].Name]));
+              [PtrInt(PtrUInt(fake.fFakeInterface)),Values[0].Name]));
           fake.fService.ExecuteMethod(Ctxt);
           if withLog then
             fRest.InternalLog('I%() returned %',[PServiceMethod(Ctxt.ServiceMethod)^.
@@ -59443,6 +59420,7 @@ asm
         cmp     cl, smvCurrency
         jne     @e
 @d:     movlpd  qword ptr[r12].TCallMethodArgs.res64, xmm0
+        // movlpd to ignore upper 64-bit of 128-bit xmm0 reg
 @e:     {$ifdef FPC}
         mov     rsp, rbp
         pop     r12
@@ -62979,7 +62957,7 @@ var PVMT: ^TObject;
     P: PPtrUInt;
 begin
   inherited Create(@WeakZeroClassSubProp);
-  PVMT := pointer(PtrInt(aClass)+vmtAutoTable);
+  PVMT := pointer(PtrInt(PtrUInt(aClass))+vmtAutoTable);
   if PVMT^=nil then begin
     PatchCodePtrUInt(pointer(PVMT),PtrUInt(self),true); // LeaveUnprotected=true
     GarbageCollectorFreeAndNil(PVMT^,self); // set to nil at finalization
@@ -62991,7 +62969,7 @@ begin
   InitializeCriticalSection(fLock);
   EnterCriticalSection(fLock);
   {$WARN SYMBOL_DEPRECATED OFF}
-  P := pointer(PtrInt(aClass)+vmtFreeInstance);
+  P := pointer(PtrInt(PtrUInt(aClass))+vmtFreeInstance);
   {$WARN SYMBOL_DEPRECATED ON}
   fHookedFreeInstance := P^;
   PatchCodePtrUInt(P,PtrUInt(@TSetWeakZeroClass.HookedFreeInstance));

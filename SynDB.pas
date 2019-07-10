@@ -3648,9 +3648,9 @@ begin
     varDate:     result := Ansi7ToString(DateTimeToIso8601Text(VDate,' '));
     varString:   result := UTF8ToString(RawUTF8(VAny));
     {$ifdef HASVARUSTRING}
-    varUString:  result := UnicodeString(VAny);
-    {$endif}
-    varOleStr:   result := WideString(VAny);
+    varUString:  result := string(UnicodeString(VAny));
+    {$endif HASVARUSTRING}
+    varOleStr:   result := string(WideString(VAny));
     else result := fValue;
   end;
 end;
@@ -8300,7 +8300,7 @@ begin
   repeat
     if DataLen<=5 then
       break; // to raise ESQLDBException
-    fDataRowCount := PInteger(PtrInt(Data)+DataLen-sizeof(Integer))^;
+    fDataRowCount := PInteger(PtrUInt(Data)+PtrUInt(DataLen)-sizeof(Integer))^;
     Magic := FromVarUInt32(Data);
     if Magic<>FETCHALLTOBINARY_MAGIC then
       break; // corrupted

@@ -1384,10 +1384,12 @@ type
 /// TVariantCompare-compatible case-sensitive comparison function
 // - just a wrapper around SortDynArrayVariantComp(caseInsensitive=false)
 function VariantCompare(const V1,V2: variant): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// TVariantCompare-compatible case-insensitive comparison function
 // - just a wrapper around SortDynArrayVariantComp(caseInsensitive=true)
 function VariantCompareI(const V1,V2: variant): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert any Variant into UTF-8 encoded String
 // - use VariantSaveJSON() instead if you need a conversion to JSON with
@@ -18627,7 +18629,7 @@ begin
   result := false;
   inc(sourcelen,PtrInt(source));
   if source<>nil then
-    while PtrInt(source)<sourcelen do begin
+    while PtrInt(PtrUInt(source))<sourcelen do begin
       c := byte(source^);
       inc(source);
       if c=0 then exit else
@@ -18635,7 +18637,7 @@ begin
         extra := UTF8_EXTRABYTES[c];
         if extra=0 then exit else // invalid leading byte
         for i := 1 to extra do
-          if (PtrInt(source)>=sourcelen) or (byte(source^) and $c0<>$80) then
+          if (PtrInt(PtrUInt(source))>=sourcelen) or (byte(source^) and $c0<>$80) then
             exit else
             inc(source); // check valid UTF-8 content
       end;
@@ -18858,9 +18860,9 @@ begin
   inc(DestLen,PtrInt(Dest));
   if (Source<>nil) and (Dest<>nil) then begin
     // first handle 7 bit ASCII WideChars, by pairs (Sha optimization)
-    SourceLen := SourceLen*2+PtrInt(Source);
+    SourceLen := SourceLen*2+PtrInt(PtrUInt(Source));
     Tail := PWideChar(SourceLen)-2;
-    if (PtrInt(Dest)<DestLen) and (Source<=Tail) then
+    if (PtrInt(PtrUInt(Dest))<DestLen) and (Source<=Tail) then
       repeat
         c := PCardinal(Source)^;
         if c and $ff80ff80<>0 then
@@ -18869,9 +18871,9 @@ begin
         c := c shr 8 or c;
         PWord(Dest)^ := c;
         inc(Dest,2);
-      until (Source>Tail) or (PtrInt(Dest)>=DestLen);
+      until (Source>Tail) or (PtrInt(PtrUInt(Dest))>=DestLen);
     // generic loop, handling one UCS4 char per iteration
-    if (PtrInt(Dest)<DestLen) and (PtrInt(Source)<SourceLen) then
+    if (PtrInt(PtrUInt(Dest))<DestLen) and (PtrInt(PtrUInt(Source))<SourceLen) then
     repeat
       // inlined UTF16CharToUtf8() with bufferoverlow check and $FFFD on unmatch
       c := cardinal(Source^);
@@ -18880,24 +18882,26 @@ begin
       0..$7f: begin
         Dest^ := AnsiChar(c);
         inc(Dest);
-        if (PtrInt(Dest)<DestLen) and (PtrInt(Source)<SourceLen) then continue else break;
+        if (PtrInt(PtrUInt(Dest))<DestLen) and (PtrInt(PtrUInt(Source))<SourceLen) then
+          continue else break;
       end;
       UTF16_HISURROGATE_MIN..UTF16_HISURROGATE_MAX:
-        if (PtrInt(Source)>=SourceLen) or
+        if (PtrInt(PtrUInt(Source))>=SourceLen) or
            ((cardinal(Source^)<UTF16_LOSURROGATE_MIN) or (cardinal(Source^)>UTF16_LOSURROGATE_MAX)) then begin
-unmatch:  if (PtrInt(@Dest[3])>DestLen) or
+unmatch:  if (PtrInt(PtrUInt(@Dest[3]))>DestLen) or
              not (ccfReplacementCharacterForUnmatchedSurrogate in Flags) then
             break;
           PWord(Dest)^ := $BFEF;
           Dest[2] := AnsiChar($BD);
           inc(Dest,3);
-          if (PtrInt(Dest)<DestLen) and (PtrInt(Source)<SourceLen) then continue else break;
+          if (PtrInt(PtrUInt(Dest))<DestLen) and (PtrInt(PtrUInt(Source))<SourceLen) then
+            continue else break;
         end else begin
           c := ((c-$D7C0)shl 10)+(cardinal(Source^) xor UTF16_LOSURROGATE_MIN);
           inc(Source);
         end;
       UTF16_LOSURROGATE_MIN..UTF16_LOSURROGATE_MAX:
-        if (PtrInt(Source)>=SourceLen) or
+        if (PtrInt(PtrUInt(Source))>=SourceLen) or
            ((cardinal(Source^)<UTF16_HISURROGATE_MIN) or (cardinal(Source^)>UTF16_HISURROGATE_MAX)) then
           goto unmatch else begin
           c := ((cardinal(Source^)-$D7C0)shl 10)+(c xor UTF16_LOSURROGATE_MIN);
@@ -18911,7 +18915,7 @@ unmatch:  if (PtrInt(@Dest[3])>DestLen) or
       $200000..$3FFFFFF: i := 5;
       else i := 6;
       end;
-      if PtrInt(Dest)+i>DestLen then
+      if PtrInt(PtrUInt(Dest))+i>DestLen then
         break;
       for j := i-1 downto 1 do begin
         Dest[j] := AnsiChar((c and $3f)+$80);
@@ -18919,12 +18923,13 @@ unmatch:  if (PtrInt(@Dest[3])>DestLen) or
       end;
       Dest^ := AnsiChar(Byte(c) or UTF8_FIRSTBYTE[i]);
       inc(Dest,i);
-      if (PtrInt(Dest)<DestLen) and (PtrInt(Source)<SourceLen) then continue else break;
+      if (PtrInt(PtrUInt(Dest))<DestLen) and (PtrInt(PtrUInt(Source))<SourceLen) then
+        continue else break;
     until false;
     if not (ccfNoTrailingZero in Flags) then
       Dest^ := #0;
   end;
-  result := PtrInt(Dest)-result;
+  result := PtrInt(PtrUInt(Dest))-result;
 end;
 
 procedure RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
@@ -19385,7 +19390,7 @@ smlu32: Res.Text := pointer(SmallUInt32UTF8[result]);
     end;
     vtClass: begin
       if V.VClass<>nil then begin
-        Res.Text := PPUTF8Char(PtrInt(V.VClass)+vmtClassName)^+1;
+        Res.Text := PPUTF8Char(PtrInt(PtrUInt(V.VClass))+vmtClassName)^+1;
         Res.Len := ord(Res.Text[-1]);
       end else
         Res.Len := 0;
@@ -23551,13 +23556,13 @@ begin
   if p=nil then
     exit;
   if up<>nil then begin
-    dec(PtrInt(p),PtrInt(up));
+    dec(PtrUInt(p),PtrUInt(up));
     table := @NormToUpperAnsi7;
     repeat
       u := up^;
       if u=#0 then
         break;
-      if u<>table^[up[PtrInt(p)]] then
+      if u<>table^[up[PtrUInt(p)]] then
         exit;
       inc(up);
     until false;
@@ -23682,34 +23687,34 @@ end;
 function CompareMem(P1, P2: Pointer; Length: PtrInt): Boolean;
 label zero;
 begin // this code compiles well under FPC and Delphi on both 32-bit and 64-bit
-  inc(Length,PtrInt(P1)-SizeOf(PtrInt)*2);
-  if Length>=PtrInt(P1) then begin
-    if PPtrInt(P1)^<>PPtrInt(P2)^ then
+  inc(Length,PtrInt(PtrUInt(P1))-SizeOf(PtrInt)*2);
+  if Length>=PtrInt(PtrUInt(P1)) then begin
+    if PPtrInt(PtrUInt(P1))^<>PPtrInt(P2)^ then
       goto zero;
-    inc(PtrInt(P1),SizeOf(PtrInt));
+    inc(PtrInt(PtrUInt(P1)),SizeOf(PtrInt));
     inc(PtrInt(P2),SizeOf(PtrInt));
-    dec(PtrInt(P2),PtrInt(P1));
-    PtrInt(P1) := PtrInt(P1) and -SizeOf(PtrInt);
-    inc(PtrInt(P2),PtrInt(P1));
-    if Length>=PtrInt(P1) then
+    dec(PtrInt(P2),PtrInt(PtrUInt(P1)));
+    PtrInt(PtrUInt(P1)) := PtrInt(PtrUInt(P1)) and -SizeOf(PtrInt);
+    inc(PtrInt(P2),PtrInt(PtrUInt(P1)));
+    if Length>=PtrInt(PtrUInt(P1)) then
       repeat // compare 4 aligned PtrInt per loop
-        if (PPtrInt(P1)^<>PPtrInt(P2)^) or (PPtrIntArray(P1)[1]<>PPtrIntArray(P2)[1]) then
+        if (PPtrInt(PtrUInt(P1))^<>PPtrInt(P2)^) or (PPtrIntArray(P1)[1]<>PPtrIntArray(P2)[1]) then
           goto zero;
-        inc(PtrInt(P1),SizeOf(PtrInt)*2);
+        inc(PtrInt(PtrUInt(P1)),SizeOf(PtrInt)*2);
         inc(PtrInt(P2),SizeOf(PtrInt)*2);
-        if Length<PtrInt(P1) then
+        if Length<PtrInt(PtrUInt(P1)) then
           break;
-        if (PPtrInt(P1)^<>PPtrInt(P2)^) or (PPtrIntArray(P1)[1]<>PPtrIntArray(P2)[1]) then
+        if (PPtrInt(PtrUInt(P1))^<>PPtrInt(P2)^) or (PPtrIntArray(P1)[1]<>PPtrIntArray(P2)[1]) then
           goto zero;
-        inc(PtrInt(P1),SizeOf(PtrInt)*2);
+        inc(PtrInt(PtrUInt(P1)),SizeOf(PtrInt)*2);
         inc(PtrInt(P2),SizeOf(PtrInt)*2);
-      until Length<PtrInt(P1);
+      until Length<PtrInt(PtrUInt(P1));
   end;
-  inc(Length,SizeOf(PtrInt)*2-PtrInt(P1));
+  inc(Length,SizeOf(PtrInt)*2-PtrInt(PtrUInt(P1)));
   if Length>=SizeOf(PtrInt) then begin
-    if PPtrInt(P1)^<>PPtrInt(P2)^ then
+    if PPtrInt(PtrUInt(P1))^<>PPtrInt(P2)^ then
       goto zero;
-    inc(PtrInt(P1),SizeOf(PtrInt));
+    inc(PtrInt(PtrUInt(P1)),SizeOf(PtrInt));
     inc(PtrInt(P2),SizeOf(PtrInt));
     dec(Length,SizeOf(PtrInt));
   end;
@@ -23717,7 +23722,7 @@ begin // this code compiles well under FPC and Delphi on both 32-bit and 64-bit
   if Length>=4 then begin
     if PCardinal(P1)^<>PCardinal(P2)^ then
       goto zero;
-    inc(PtrInt(P1),4);
+    inc(PtrInt(PtrUInt(P1)),4);
     inc(PtrInt(P2),4);
     dec(Length,4);
   end;
@@ -23725,7 +23730,7 @@ begin // this code compiles well under FPC and Delphi on both 32-bit and 64-bit
   if Length>=2 then begin
     if PWord(P1)^<>PWord(P2)^ then
       goto zero;
-    inc(PtrInt(P1),2);
+    inc(PtrInt(PtrUInt(P1)),2);
     inc(PtrInt(P2),2);
     dec(Length,2);
   end;
@@ -23831,7 +23836,7 @@ function StrIComp(Str1, Str2: pointer): PtrInt;
 var C1,C2: PtrInt;
     lookupper: PByteArray; // better x86-64 / PIC asm generation
 begin
-  result := PtrInt(Str2)-PtrInt(Str1);
+  result := PtrInt(PtrUInt(Str2))-PtrInt(PtrUInt(Str1));
   if result<>0 then
     if Str1<>nil then
       if Str2<>nil then begin
@@ -24136,8 +24141,8 @@ begin // we can't use StrComp() since a RawByteString may contain #0
   if p1<>p2 then
     if p1<>nil then
       if p2<>nil then begin
-        l1 := PStrRec(Pointer(PtrInt(p1)-STRRECSIZE))^.length;
-        l2 := PStrRec(Pointer(PtrInt(p2)-STRRECSIZE))^.length;
+        l1 := PStrRec(Pointer(PtrUInt(p1)-STRRECSIZE))^.length;
+        l2 := PStrRec(Pointer(PtrUInt(p2)-STRRECSIZE))^.length;
         l := l1;
         if l2<l1 then
           l := l2;
@@ -29289,9 +29294,9 @@ begin
       UTF8ToSynUnicode(PUTF8Char(Map.Buffer),Map.Size,Result) else
     case TextFileKind(Map) of
     isUnicode:
-      SetString(result,PWideChar(PtrInt(Map.Buffer)+2),(Map.Size-2) shr 1);
+      SetString(result,PWideChar(PtrUInt(Map.Buffer)+2),(Map.Size-2) shr 1);
     isUTF8:
-      UTF8ToSynUnicode(PUTF8Char(pointer(PtrInt(Map.Buffer)+3)),Map.Size-3,Result);
+      UTF8ToSynUnicode(PUTF8Char(pointer(PtrUInt(Map.Buffer)+3)),Map.Size-3,Result);
     isAnsi:
       result := CurrentAnsiConvert.AnsiToUnicodeString(Map.Buffer, Map.Size);
     end;
@@ -29308,9 +29313,9 @@ begin
   try
     case TextFileKind(Map) of
     isUnicode:
-      RawUnicodeToUtf8(PWideChar(PtrInt(Map.Buffer)+2),(Map.Size-2) shr 1,Result);
+      RawUnicodeToUtf8(PWideChar(PtrUInt(Map.Buffer)+2),(Map.Size-2) shr 1,Result);
     isUTF8:
-      FastSetString(result,pointer(PtrInt(Map.Buffer)+3),Map.Size-3);
+      FastSetString(result,pointer(PtrUInt(Map.Buffer)+3),Map.Size-3);
     isAnsi:
       if AssumeUTF8IfNoBOM then
         FastSetString(result,Map.Buffer,Map.Size) else
@@ -29335,16 +29340,16 @@ begin
     case TextFileKind(Map) of
 {$ifdef UNICODE}
     isUnicode:
-      SetString(result,PWideChar(PtrInt(Map.Buffer)+2),(Map.Size-2) shr 1);
+      SetString(result,PWideChar(PtrUInt(Map.Buffer)+2),(Map.Size-2) shr 1);
     isUTF8:
-      UTF8DecodeToString(pointer(PtrInt(Map.Buffer)+3),Map.Size-3,result);
+      UTF8DecodeToString(pointer(PtrUInt(Map.Buffer)+3),Map.Size-3,result);
     isAnsi:
       result := CurrentAnsiConvert.AnsiToUnicodeString(Map.Buffer,Map.Size);
 {$else}
     isUnicode:
-      result := CurrentAnsiConvert.UnicodeBufferToAnsi(PWideChar(PtrInt(Map.Buffer)+2),(Map.Size-2) shr 1);
+      result := CurrentAnsiConvert.UnicodeBufferToAnsi(PWideChar(PtrUInt(Map.Buffer)+2),(Map.Size-2) shr 1);
     isUTF8:
-      result := CurrentAnsiConvert.UTF8BufferToAnsi(pointer(PtrInt(Map.Buffer)+3),Map.Size-3);
+      result := CurrentAnsiConvert.UTF8BufferToAnsi(pointer(PtrUInt(Map.Buffer)+3),Map.Size-3);
     isAnsi:
       SetString(result,PAnsiChar(Map.Buffer),Map.Size);
 {$endif}
@@ -32101,7 +32106,7 @@ begin
       sourceLen := 248; // avoid buffer overflow
     // we allow to copy up to 3/7 more chars in Dest^ since its size is 255
     {$ifdef CPU64} // unbranched uppercase conversion of 8 chars blocks
-    _80 := $8080808080808080; // use registers for constants
+    _80 := PtrUInt($8080808080808080); // use registers for constants
     _61 := $6161616161616161;
     _7b := $7b7b7b7b7b7b7b7b;
     for i := 0 to sourceLen shr 3 do begin
@@ -32463,14 +32468,14 @@ begin
       c := ord(Text[result]);
       if c>13 then begin
         inc(result);
-        if result>=PtrInt(TextEnd) then
+        if result>=PtrInt(PtrUInt(TextEnd)) then
           break;
         continue;
       end;
       if (c=10) or (c=13) then
         break;
       inc(result);
-      if result>=PtrInt(TextEnd) then
+      if result>=PtrInt(PtrUInt(TextEnd)) then
         break;
     until false;
 end;
@@ -36868,7 +36873,7 @@ var time, crc: THash128Rec;
 begin
   repeat
     QueryPerformanceCounter(time.Lo);
-    time.Hi := UnixMSTimeUTC xor Int64(GetCurrentThreadID);
+    time.Hi := UnixMSTimeUTC xor PtrUInt(GetCurrentThreadID);
     crcblock(@crc.b,@time.b);
     crcblock(@crc.b,@ExeVersion.Hash.b);
     if entropy<>nil then

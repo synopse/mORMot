@@ -6796,7 +6796,7 @@ begin
     end
     else if aText > txtend then
       break;
-    if (PtrInt(txtretry)> 0) and (txtretry <= txtend + 1) then begin
+    if (PtrInt(PtrUInt(txtretry))> 0) and (txtretry <= txtend + 1) then begin
       aText := txtretry;
       inc(txtretry);
       pat := patretry;
