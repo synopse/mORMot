@@ -719,8 +719,13 @@ type
 // unserialized from JSON into aContent object instance
 // - user@host.* files are searched in the executable folder if aSearchFolder='',
 // but you may specify a custom location, e.g. use ECCKeyFileFolder
-// - will use the supplied parameters to restrict this authorization to
-// a specific product, using dedicated applock.public/.private keys pair
+// - aSecretPass could be entered by the end-user, to authenticate its identity;
+// you may specify a string constant if local applock.public/.private key files
+// is enough secure for your application
+// - will use the supplied aDPAPI/aDecryptSalt parameters to restrict
+// this authorization to a specific product (i.e. isolate the execution context
+// to reduce forensic scope), for dedicated applock.public/.private keys pair -
+// just pass some application-specific string constant to those parameters
 // - aSecretInfo^ could be set to retrieve the user@host.secret information
 // (e.g. validity dates), and aLocalFile^ the'<fullpath>user@host' file prefix 
 function ECCAuthorize(aContent: TObject; aSecretDays: integer; const aSecretPass,
@@ -2195,7 +2200,7 @@ begin
 end;
 
 function ECCAuthorize(aContent: TObject; aSecretDays: integer; const aSecretPass,
- aDPAPI, aDecryptSalt, aAppLockPublic64: RawUTF8; const aSearchFolder: TFileName;
+  aDPAPI, aDecryptSalt, aAppLockPublic64: RawUTF8; const aSearchFolder: TFileName;
   aSecretInfo: PECCCertificateSigned; aLocalFile: PFileName): TECCAuthorize;
 var
   fileroot, fileunlock, filesecret, filepublic: TFileName;
