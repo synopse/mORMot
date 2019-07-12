@@ -1527,7 +1527,7 @@ end;
 
 function RunUntilSigTerminatedPidFile: TFileName;
 begin
-  result := format('%s.%s.pid', [ExeVersion.ProgramFilePath, ExeVersion.ProgramName]);
+  result := FormatString('%.%.pid', [ExeVersion.ProgramFilePath, ExeVersion.ProgramName]);
 end;
 
 function RunUntilSigTerminatedForKill(waitseconds: integer): boolean;
@@ -1719,7 +1719,7 @@ begin
     if versionnumber <> '' then
       result := result + ' ' + versionnumber;
     if CompanyName <> '' then
-      result := format('%s - (c)%d %s', [result, BuildYear, CompanyName]);
+      result := FormatString('% - (c)% %', [result, BuildYear, CompanyName]);
   end;
 end;
 

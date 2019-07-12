@@ -1622,7 +1622,7 @@ begin
   if Driver[0] = #0 then
     if not GetDriverForPrinter(Device, Driver) then
       exit;  // oops !
-  DefaultPrinter := format('%s,%s,%s',[Device, Driver, Port]);
+  DefaultPrinter := FormatString('%,%,%',[Device, Driver, Port]);
   WriteProfileString( 'windows', 'device', pointer(DefaultPrinter) );
   Device := 'windows';
   SendMessage(HWND_BROADCAST, WM_WININICHANGE, 0, PtrInt(@Device));
@@ -1673,7 +1673,7 @@ begin
       end;
     end;
     if result = '' then
-      result := format('Custom (%d x %dmm)',[cx, cy]);
+      result := FormatString('Custom (% x %mm)',[cx, cy]);
   end;
 end;
 

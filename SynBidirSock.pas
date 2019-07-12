@@ -1613,7 +1613,7 @@ begin
     end;
   except
     on E: Exception do
-      fLastError := Format('%s [%s]',[E.ClassName,E.Message]);
+      FormatString('% [%]',[E.ClassName,E.Message],fLastError);
   end else
   if (Sender.fIncoming.AnswerToIgnore>0) and (FrameData(request,'answer')<>nil) then begin
     Sender.fIncoming.AnswerToIgnore(-1);

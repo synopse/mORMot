@@ -33782,7 +33782,7 @@ begin
   if aErrorMessage='' then
     result := true else begin
     if invalidField>=0 then
-      aErrorMessage := Format('"%s": %s',
+      aErrorMessage := FormatString('"%": %',
         [RecordProps.Fields.List[invalidField].GetNameDisplay,aErrorMessage]);
     result := false;
   end;

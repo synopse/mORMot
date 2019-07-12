@@ -827,7 +827,7 @@ begin
     FormatString('% % in % i.e. %/s, aver. %', [ItemCount,ItemName,Temp.Stop,
       IntToThousandString(Temp.PerSec(ItemCount)),Temp.ByCount(ItemCount)], msg);
   if SizeInBytes>0 then
-    msg := format('%s, %s/s',[msg,KB(Temp.PerSec(SizeInBytes))]);
+    msg := FormatString('%, %/s',[msg,KB(Temp.PerSec(SizeInBytes))]);
   AddConsole(msg);
 end;
 

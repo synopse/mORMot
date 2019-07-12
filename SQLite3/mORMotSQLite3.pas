@@ -1286,7 +1286,7 @@ end;
 procedure TSQLRestServerDB.InternalInfo(var info: TDocVariantData);
 begin
   inherited InternalInfo(info);
-  info.AddValue('db', Format('%s %s', [ExtractFileName(DB.FileName), KB(DB.FileSize)]));
+  info.AddValue('db', FormatString('% %', [ExtractFileName(DB.FileName), KB(DB.FileSize)]));
 end;
 
 procedure TSQLRestServerDB.InternalStat(Ctxt: TSQLRestServerURIContext; W: TTextWriter);

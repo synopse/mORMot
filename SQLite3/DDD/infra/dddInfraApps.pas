@@ -894,7 +894,7 @@ var
       B := pointer(GetNextLine(P,P));
       if B=nil then
         exit;
-      fn := format('%s%s.settings', [folder, GetNextItem(B, '=')]);
+      FormatString('%%.settings', [folder, GetNextItem(B, '=')], fn);
       doc.InitJSONFromFile(fn, JSON_OPTIONS_FAST, true);
       modified := false;
       if doc.Count > 0 then
@@ -1842,7 +1842,7 @@ begin
     exit;
   fExceptionActions := [];
   if fExceptionMessage = '' then
-    fExceptionMessage := Format('Mocked Exception for %s', [ToText(Action)^]);
+    FormatString('Mocked Exception for %', [ToText(Action)^], fExceptionMessage);
   if fExceptionClass = nil then
     fExceptionClass := EDDDMockedSocket;
   raise fExceptionClass.Create(fExceptionMessage);
@@ -2210,7 +2210,7 @@ var
   privok, jsonok: boolean;
 begin
   with ExeVersion do
-    fileroot := SysUtils.LowerCase(format('%s@%s', [User, Host]));
+    fileroot := SysUtils.LowerCase(FormatString('%@%', [User, Host]));
   if aSearchFolder = '' then
     fileroot := ExeVersion.ProgramFilePath + fileroot else
     fileroot := IncludeTrailingPathDelimiter(aSearchFolder) + fileroot;
