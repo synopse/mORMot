@@ -899,7 +899,7 @@ var
       B := pointer(GetNextLine(P,P));
       if B=nil then
         exit;
-      FormatString('%%.settings', [folder, GetNextItem(B, '=')], fn);
+      fn := FormatString('%%.settings', [folder, GetNextItem(B, '=')]);
       doc.InitJSONFromFile(fn, JSON_OPTIONS_FAST, true);
       modified := false;
       if doc.Count > 0 then
