@@ -2,7 +2,7 @@
 <CONFIG>
   <Package Version="4">
     <PathDelim Value="\"/>
-    <Name Value="mormot_crossplatform"/>
+    <Name Value="mormot_cross"/>
     <Type Value="RunTimeOnly"/>
     <Author Value="Arnaud Bouchez"/>
     <CompilerOptions>
