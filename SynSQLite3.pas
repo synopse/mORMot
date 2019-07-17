@@ -48,7 +48,7 @@ unit SynSQLite3;
   ***** END LICENSE BLOCK *****
 
 
-       SQLite3 3.28 database engine
+       SQLite3 3.29 database engine
       ********************************
 
      Brand new SQLite3 library to be used with Delphi
@@ -135,7 +135,7 @@ unit SynSQLite3;
   - moved all static .obj code into new SynSQLite3Static unit
   - allow either static .obj use via SynSQLite3Static or external .dll linking
     using TSQLite3LibraryDynamic to bind all APIs to the global sqlite3 variable
-  - updated SQLite3 engine to latest version 3.28
+  - updated SQLite3 engine to latest version 3.29
   - fixed: internal result cache is now case-sensitive for its SQL key values
   - raise an ESQLite3Exception if DBOpen method is called twice
   - added TSQLite3ErrorCode enumeration and sqlite3_resultToErrorCode()
@@ -1289,7 +1289,7 @@ type
     close: function(DB: TSQLite3DB): integer; cdecl;
 
     /// Return the version of the SQLite database engine, in ascii format
-    // - currently returns '3.28.0', when used with our SynSQLite3Static unit
+    // - currently returns '3.29.0', when used with our SynSQLite3Static unit
     // - if an external SQLite3 library is used, version may vary
     // - you may use the VersionText property (or Version for full details) instead
     libversion: function: PUTF8Char; cdecl;
@@ -2880,7 +2880,8 @@ type
     // - ISO8601 collation is added (TDateTime stored as ISO-8601 encoded TEXT)
     // - WIN32CASE and WIN32NOCASE collations are added (use slow but accurate Win32 CompareW)
     // - some additional SQl functions are registered: MOD, SOUNDEX/SOUNDEXFR/SOUNDEXES,
-    // RANK, CONCAT
+    // RANK, CONCAT, TIMELOG, TIMELOGUNIX, JSONGET/JSONHAS/JSONSET and TDynArray-Blob
+    // Byte/Word/Integer/Cardinal/Int64/Currency/RawUTF8DynArrayContains
     // - initialize a internal mutex to ensure that all access to the database is atomic
     // - raise an ESQLite3Exception on any error
     constructor Create(const aFileName: TFileName; const aPassword: RawUTF8='';

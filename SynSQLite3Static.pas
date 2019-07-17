@@ -1,4 +1,4 @@
-/// SQLite3 3.28 Database engine - statically linked for Windows/Linux
+/// SQLite3 3.29 Database engine - statically linked for Windows/Linux
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynSQLite3Static;
@@ -77,7 +77,7 @@ unit SynSQLite3Static;
 
   Version 1.18
   - initial revision, extracted from SynSQLite3.pas unit
-  - updated SQLite3 engine to latest version 3.28
+  - updated SQLite3 engine to latest version 3.29
   - now all sqlite3_*() API calls are accessible via sqlite3.*()
   - our custom file encryption is now called via sqlite3.key() - i.e. official
     SQLite Encryption Extension (SEE) sqlite3_key() API - and works for database
@@ -369,6 +369,20 @@ end;
 
 {$ifdef MSWINDOWS}
 {$ifdef CPU32}
+
+(* WARNING: with current 3.29+ version, the following sqlite3.c patch is needed:
+
+SQLITE_PRIVATE int sqlite3RealSameAsInt(double r1, sqlite3_int64 i){
+  double r2 = (double)i;
+  return r1==0.0
+      || (memcmp(&r1, &r2, sizeof(r1))==0
+#if defined(__BORLANDC__) // avoid weird Borland C++ compiler limitation
+          );
+#else
+          && i >= -2251799813685248LL && i < 2251799813685248LL);
+#endif
+}
+*)
 
 // we then implement all needed Borland C++ runtime functions in pure pascal:
 
@@ -1134,7 +1148,7 @@ function sqlite3_trace_v2(DB: TSQLite3DB; Mask: integer; Callback: TSQLTraceCall
 
 const
   // error message if statically linked sqlite3.o(bj) does not match this
-  EXPECTED_SQLITE3_VERSION = {$ifdef ANDROID}''{$else}'3.28.0'{$endif};
+  EXPECTED_SQLITE3_VERSION = {$ifdef ANDROID}''{$else}'3.29.0'{$endif};
 
 constructor TSQLite3LibraryStatic.Create;
 var error: RawUTF8;
