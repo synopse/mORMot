@@ -115,6 +115,9 @@ end;
 
 *)
 
+/// define in `mormot_base` Custom Options
+{$ifdef USEZEOS}
+
 {$I Zeos.inc} // define conditionals like ZEOS72UP and ENABLE_*
 // for best performance: tune your project options or Zeos.inc to define USE_SYNCOMMONS
 
@@ -1321,4 +1324,11 @@ end;
 
 initialization
   TSQLDBZEOSConnectionProperties.RegisterClassNameForDefinition;
+
+{$else}
+interface
+
+implementation
+
+{$endif USEZEOS}
 end.
