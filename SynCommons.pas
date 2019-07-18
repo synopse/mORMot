@@ -4760,7 +4760,7 @@ type
   {$else}TDynArray = object protected{$endif}
     fValue: PPointer;
     fTypeInfo: pointer;
-    fElemType: pointer;
+    fElemType, fElemType2: pointer;
     fCountP: PInteger;
     fCompare: TDynArraySortCompare;
     fElemSize: cardinal;
@@ -4769,8 +4769,8 @@ type
     fSorted: boolean;
     fKnownType: TDynArrayKind;
     fIsObjArray: TDynArrayObjArray;
-    function GetCount: integer; {$ifdef HASINLINE}inline;{$endif}
-    procedure SetCount(aCount: integer);
+    function GetCount: PtrInt; {$ifdef HASINLINE}inline;{$endif}
+    procedure SetCount(aCount: PtrInt);
     function GetCapacity: integer;
     procedure SetCapacity(aCapacity: integer);
     procedure SetCompare(const aCompare: TDynArraySortCompare); {$ifdef HASINLINE}inline;{$endif}
@@ -5256,7 +5256,7 @@ type
     // - same as length(DynArray) or SetLength(DynArray)
     // - this property will recognize T*ObjArray types, so will free any stored
     // instance if the array is sized down
-    property Count: integer read GetCount write SetCount;
+    property Count: PtrInt read GetCount write SetCount;
     /// the internal buffer capacity
     // - if no external Count pointer was set with Init, is the same as Count
     // - if an external Count pointer is set, you can set a value to this
@@ -5379,8 +5379,8 @@ type
   TDynArrayHashed = record
   // pseudo inheritance for most used methods
   private
-    function GetCount: Integer;                 inline;
-    procedure SetCount(aCount: integer);        inline;
+    function GetCount: PtrInt;                  inline;
+    procedure SetCount(aCount: PtrInt) ;        inline;
     procedure SetCapacity(aCapacity: Integer);  inline;
     function GetCapacity: Integer;              inline;
   public
@@ -5404,7 +5404,7 @@ type
     function LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char=nil): PUTF8Char; inline;
     function SaveToLength: integer; inline;
     function LoadFrom(Source: PAnsiChar): PAnsiChar;  inline;
-    property Count: integer read GetCount write SetCount;
+    property Count: PtrInt read GetCount write SetCount;
     property Capacity: integer read GetCapacity write SetCapacity;
   private
   {$else UNDIRECTDYNARRAY}
@@ -6154,7 +6154,6 @@ type
   // if defined as an object on the stack, but will be as a record :(
   {$ifdef FPC_OR_UNICODE}TSynNameValue = record private
   {$else}TSynNameValue = object protected{$endif}
-    fDynArray: TDynArrayHashed;
     fOnAdd: TSynNameValueNotify;
     function GetBlobData: RawByteString;
     procedure SetBlobData(const aValue: RawByteString);
@@ -6166,6 +6165,8 @@ type
     List: TSynNameValueItemDynArray;
     /// the number of Name/Value pairs
     Count: integer;
+    /// low-level access to the internal storage hasher
+    DynArray: TDynArrayHashed;
     /// initialize the storage
     // - will also reset the internal List[] and the internal hash array
     procedure Init(aCaseSensitive: boolean);
@@ -7266,8 +7267,8 @@ type
     ptArray, ptBoolean, ptByte, ptCardinal, ptCurrency, ptDouble, ptExtended,
     ptInt64, ptInteger, ptQWord, ptRawByteString, ptRawJSON, ptRawUTF8, ptRecord,
     ptSingle, ptString, ptSynUnicode, ptDateTime, ptDateTimeMS, ptGUID,
-    ptID, ptTimeLog, {$ifndef NOVARIANTS} ptVariant, {$endif}
-    ptWideString, ptWord, ptCustom);
+    ptID, ptTimeLog, {$ifdef HASVARUSTRING} ptUnicodeString, {$endif}
+    {$ifndef NOVARIANTS} ptVariant, {$endif} ptWideString, ptWord, ptCustom);
 
   /// how TJSONCustomParser would serialize/unserialize JSON content
   TJSONCustomParserSerializationOption = (
@@ -7335,20 +7336,24 @@ type
       aCustomRecordTypeName: RawUTF8): TJSONCustomParserRTTI;
     /// recognize a simple type from a supplied type name
     // - will return ptCustom for any unknown type
+    // - see also TypeInfoToRttiType() function
     class function TypeNameToSimpleRTTIType(
       const TypeName: RawUTF8): TJSONCustomParserRTTIType; overload;
     /// recognize a simple type from a supplied type name
     // - will return ptCustom for any unknown type
+    // - see also TypeInfoToRttiType() function
     class function TypeNameToSimpleRTTIType(
       TypeName: PShortString): TJSONCustomParserRTTIType; overload;
     /// recognize a simple type from a supplied type name
     // - will return ptCustom for any unknown type
+    // - see also TypeInfoToRttiType() function
     class function TypeNameToSimpleRTTIType(TypeName: PUTF8Char; TypeNameLen: Integer;
-      var ItemTypeName: RawUTF8): TJSONCustomParserRTTIType; overload;
+      ItemTypeName: PRawUTF8): TJSONCustomParserRTTIType; overload;
     /// recognize a simple type from a supplied type information
     // - to be called if TypeNameToSimpleRTTIType() did fail, i.e. return ptCustom
     // - will return ptCustom for any unknown type
-    class function TypeInfoToSimpleRTTIType(Info: pointer; ItemSize: integer): TJSONCustomParserRTTIType;
+    // - see also TypeInfoToRttiType() function
+    class function TypeInfoToSimpleRTTIType(Info: pointer): TJSONCustomParserRTTIType;
     /// recognize a ktBinary simple type from a supplied type name
     // - as registered by TTextWriter.RegisterCustomJSONSerializerFromTextBinaryType
     class function TypeNameToSimpleBinary(const aTypeName: RawUTF8;
@@ -8540,6 +8545,13 @@ type
     // - allows to override e.g. AddRecordJSON() and AddDynArrayJSON() behavior
     property CustomOptions: TTextWriterOptions read fCustomOptions write fCustomOptions;
   end;
+
+
+/// recognize a simple type from a supplied type information
+// - first try by name via TJSONCustomParserRTTI.TypeNameToSimpleRTTIType,
+// then from RTTI via TJSONCustomParserRTTI.TypeInfoToSimpleRTTIType
+// - will return ptCustom for any unknown type
+function TypeInfoToRttiType(aTypeInfo: pointer): TJSONCustomParserRTTIType;
 
 /// serialize most kind of content as JSON, using its RTTI
 // - is just a wrapper around TTextWriter.AddTypedJSON()
@@ -42059,17 +42071,17 @@ begin
 end;
 
 class function TJSONCustomParserRTTI.TypeNameToSimpleRTTIType(TypeName: PUTF8Char;
-  TypeNameLen: Integer; var ItemTypeName: RawUTF8): TJSONCustomParserRTTIType;
+  TypeNameLen: Integer; ItemTypeName: PRawUTF8): TJSONCustomParserRTTIType;
 const
-  SORTEDMAX = {$ifdef NOVARIANTS}32{$else}33{$endif};
+  SORTEDMAX = {$ifdef NOVARIANTS}32{$else}33{$endif}{$ifdef HASVARUSTRING}+1{$endif};
   SORTEDNAMES: array[0..SORTEDMAX] of PUTF8Char =
     ('ARRAY','BOOLEAN','BYTE','CARDINAL','CURRENCY',
      'DOUBLE','EXTENDED','INT64','INTEGER','PTRINT','PTRUINT','QWORD',
      'RAWBYTESTRING','RAWJSON','RAWUTF8','RECORD','SINGLE',
      'STRING','SYNUNICODE','TCREATETIME','TDATETIME','TDATETIMEMS','TGUID',
      'TID','TMODTIME','TRECORDREFERENCE','TRECORDREFERENCETOBEDELETED',
-     'TRECORDVERSION','TSQLRAWBLOB','TTIMELOG','UTF8STRING',
-     {$ifndef NOVARIANTS}'VARIANT',{$endif}
+     'TRECORDVERSION','TSQLRAWBLOB','TTIMELOG',{$ifdef HASVARUSTRING}'UNICODESTRING',{$endif}
+     'UTF8STRING',{$ifndef NOVARIANTS}'VARIANT',{$endif}
      'WIDESTRING','WORD');
    // warning: recognized types should match at binary storage level!
    SORTEDTYPES: array[0..SORTEDMAX] of TJSONCustomParserRTTIType =
@@ -42077,15 +42089,23 @@ const
       ptDouble,ptExtended,ptInt64,ptInteger,ptPtrInt,ptPtrUInt,ptQWord,
       ptRawByteString,ptRawJSON,ptRawUTF8,ptRecord,ptSingle,
       ptString,ptSynUnicode,ptTimeLog,ptDateTime,ptDateTimeMS,ptGUID,
-      ptID,ptTimeLog,ptInt64,ptInt64,
-      ptInt64,ptRawByteString,ptTimeLog,ptRawUTF8,
+      ptID,ptTimeLog,ptInt64,ptInt64,ptInt64,ptRawByteString,ptTimeLog,
+      {$ifdef HASVARUSTRING}ptUnicodeString,{$endif}ptRawUTF8,
       {$ifndef NOVARIANTS}ptVariant,{$endif}
       ptWideString,ptWord);
 var ndx: integer;
+    up: PUTF8Char;
+    tmp: array[byte] of AnsiChar; // avoid unneeded memory allocation
 begin
-  UpperCaseCopy(TypeName,TypeNameLen,ItemTypeName);
+  if ItemTypeName<>nil then begin
+    UpperCaseCopy(TypeName,TypeNameLen,ItemTypeName^);
+    up := pointer(ItemTypeName^);
+  end else begin
+    UpperCopy255Buf(@tmp,TypeName,TypeNameLen);
+    up := @tmp;
+  end;
 //for ndx := 1 to SORTEDMAX do assert(StrComp(SORTEDNAMES[ndx],SORTEDNAMES[ndx-1])>0,SORTEDNAMES[ndx]);
-  ndx := FastFindPUTF8CharSorted(@SORTEDNAMES,SORTEDMAX,pointer(ItemTypeName));
+  ndx := FastFindPUTF8CharSorted(@SORTEDNAMES,SORTEDMAX,up);
   if ndx>=0 then
     result := SORTEDTYPES[ndx] else
     result := ptCustom;
@@ -42093,24 +42113,21 @@ end;
 
 class function TJSONCustomParserRTTI.TypeNameToSimpleRTTIType(
   const TypeName: RawUTF8): TJSONCustomParserRTTIType;
-var ItemTypeName: RawUTF8;
 begin
   if TypeName='' then
     result := ptCustom else
-    result := TypeNameToSimpleRTTIType(Pointer(TypeName),length(TypeName),ItemTypeName);
+    result := TypeNameToSimpleRTTIType(Pointer(TypeName),length(TypeName),nil);
 end;
 
 class function TJSONCustomParserRTTI.TypeNameToSimpleRTTIType(
   TypeName: PShortString): TJSONCustomParserRTTIType;
-var ItemTypeName: RawUTF8;
 begin
   if TypeName=nil then
     result := ptCustom else
-    result := TypeNameToSimpleRTTIType(@TypeName^[1],Ord(TypeName^[0]),ItemTypeName);
+    result := TypeNameToSimpleRTTIType(@TypeName^[1],ord(TypeName^[0]),nil);
 end;
 
-class function TJSONCustomParserRTTI.TypeInfoToSimpleRTTIType(Info: pointer;
-  ItemSize: integer): TJSONCustomParserRTTIType;
+class function TJSONCustomParserRTTI.TypeInfoToSimpleRTTIType(Info: pointer): TJSONCustomParserRTTIType;
 begin
   result := ptCustom;
   if Info=nil then
@@ -42118,16 +42135,9 @@ begin
   case PTypeKind(Info)^ of
   tkLString{$ifdef FPC},tkLStringOld{$endif}: result := ptRawUTF8;
   tkWString: result := ptWideString;
-  {$ifdef UNICODE}
-  tkUString: result := ptSynUnicode;
-  tkClassRef, tkPointer, tkProcedure:
-    case ItemSize of
-    1: result := ptByte;
-    2: result := ptWord;
-    4: result := ptCardinal;
-    8: result := ptQWord;
-    else result := ptPtrInt;
-    end;
+  {$ifdef HASVARUSTRING}tkUString: result := ptUnicodeString;{$endif}
+  {$ifdef FPC_OR_UNICODE}
+  tkClassRef, tkPointer {$ifdef UNICODE},tkProcedure{$endif}: result := ptPtrInt;
   {$endif}
   {$ifndef NOVARIANTS}
   tkVariant: result := ptVariant;
@@ -42172,6 +42182,14 @@ begin
   end;
 end;
 
+function TypeInfoToRttiType(aTypeInfo: pointer): TJSONCustomParserRTTIType;
+begin // first by known name, then from RTTI
+  result := TJSONCustomParserRTTI.TypeNameToSimpleRTTIType(
+    PUTF8Char(@PTypeInfo(aTypeInfo)^.NameLen)+1,PTypeInfo(aTypeInfo)^.NameLen,nil);
+  if result=ptCustom then
+    result := TJSONCustomParserRTTI.TypeInfoToSimpleRTTIType(aTypeInfo);
+end;
+
 class function TJSONCustomParserRTTI.TypeNameToSimpleBinary(const aTypeName: RawUTF8;
   out aDataSize, aFieldSize: integer): boolean;
 var simple: ^TJSONSerializerFromTextSimple;
@@ -42194,9 +42212,9 @@ var Item: PTypeInfo absolute Info;
 begin
   if Item=nil then // no RTTI -> stored as hexa string
     result := TJSONCustomParserCustomSimple.CreateFixedArray(PropertyName,ItemSize) else begin
-    ItemType := TypeNameToSimpleRTTIType(PUTF8Char(@Item.NameLen)+1,Item.NameLen,ItemTypeName);
+    ItemType := TypeNameToSimpleRTTIType(PUTF8Char(@Item.NameLen)+1,Item.NameLen,@ItemTypeName);
     if ItemType=ptCustom then
-      ItemType := TypeInfoToSimpleRTTIType(Info,ItemSize);
+      ItemType := TypeInfoToSimpleRTTIType(Info);
     if ItemType=ptCustom then
       if Item^.kind in [tkEnumeration,tkArray,tkDynArray,tkSet] then
         result := TJSONCustomParserCustomSimple.Create(
@@ -42267,6 +42285,7 @@ const // binary size (in bytes) of each kind of property - 0 for ptRecord/ptCust
     SizeOf(RawByteString),SizeOf(RawJSON),SizeOf(RawUTF8),0,SizeOf(Single),
     SizeOf(String),SizeOf(SynUnicode),SizeOf(TDateTime),SizeOf(TDateTimeMS),
     SizeOf(TGUID),SizeOf(Int64),SizeOf(TTimeLog),
+    {$ifdef HASVARUSTRING}SizeOf(UnicodeString),{$endif}
     {$ifndef NOVARIANTS}SizeOf(Variant),{$endif}
     SizeOf(WideString),SizeOf(Word),0);
 var i: PtrInt;
@@ -42301,6 +42320,9 @@ begin
     ptRawUTF8: {$ifdef FPC}Finalize(PRawByteString(Data)^){$else}PRawByteString(Data)^ := ''{$endif};
     ptString:     PString(Data)^ := '';
     ptSynUnicode: PSynUnicode(Data)^ := '';
+    {$ifdef HASVARUSTRING}
+    ptUnicodeString: PUnicodeString(Data)^ := '';
+    {$endif}
     ptWideString: PWideString(Data)^ := '';
     ptArray:      NestedProperty[j].FinalizeNestedArray(PPtrUInt(Data)^);
     {$ifndef NOVARIANTS}
@@ -42485,8 +42507,9 @@ Error:      Prop.FinalizeNestedArray(PPtrUInt(Data)^);
     else begin
       PropValue := GetJSONField(P,ptr,@wasString,@EndOfObject,@PropValueLen);
       if (PropValue<>nil) and // PropValue=nil for null
-         (wasString<>(Prop.PropertyType in [ptRawUTF8,ptString,
-           ptSynUnicode,ptDateTime,ptDateTimeMS,ptGUID,ptWideString])) then
+         (wasString<>(Prop.PropertyType in [ptRawUTF8,ptString,ptSynUnicode,
+           {$ifdef HASVARUSTRING}ptUnicodeString,{$endif}
+           ptDateTime,ptDateTimeMS,ptGUID,ptWideString])) then
          exit;
       P := ptr;
       case Prop.PropertyType of
@@ -42503,6 +42526,9 @@ Error:      Prop.FinalizeNestedArray(PPtrUInt(Data)^);
       ptRawUTF8:   FastSetString(PRawUTF8(Data)^,PropValue,PropValueLen);
       ptString:    UTF8DecodeToString(PropValue,PropValueLen,PString(Data)^);
       ptSynUnicode:UTF8ToSynUnicode(PropValue,PropValueLen,PSynUnicode(Data)^);
+      {$ifdef HASVARUSTRING}
+      ptUnicodeString:UTF8DecodeToUnicodeString(PropValue,PropValueLen,PUnicodeString(Data)^);
+      {$endif}
       ptDateTime, ptDateTimeMS:  Iso8601ToDateTimePUTF8CharVar(
                     PropValue,PropValueLen,PDateTime(Data)^);
       ptWideString:UTF8ToWideString(PropValue,PropValueLen,PWideString(Data)^);
@@ -42640,7 +42666,8 @@ begin
     {$ifndef NOVARIANTS}
     ptVariant:   result := PVarData(Value)^.VType<=varNull;
     {$endif}
-    ptRawJSON,ptRawByteString,ptRawUTF8,ptString,ptSynUnicode,ptWideString,ptArray:
+    ptRawJSON,ptRawByteString,ptRawUTF8,ptString,ptSynUnicode,ptWideString,
+    {$ifdef HASVARUSTRING}ptUnicodeString,{$endif}ptArray:
                  result := PPointer(Value)^=nil;
     ptGUID:      result := IsNullGUID(PGUID(Value)^);
     ptRecord:    result := IsZero(Value,fDataSize);
@@ -42674,13 +42701,13 @@ begin
   ptRawJSON:   aWriter.AddRawJSON(PRawJSON(Value)^);
   ptRawByteString:
     aWriter.WrBase64(PPointer(Value)^,length(PRawByteString(Value)^),{withMagic=}true);
-  ptRawUTF8, ptString, ptSynUnicode,
+  ptRawUTF8, ptString, ptSynUnicode,{$ifdef HASVARUSTRING}ptUnicodeString,{$endif}
   ptDateTime, ptDateTimeMS, ptGUID, ptWideString: begin
     aWriter.Add('"');
     case PropertyType of
     ptRawUTF8:       aWriter.AddJSONEscape(PPointer(Value)^);
     ptString:        aWriter.AddJSONEscapeString(PString(Value)^);
-    ptSynUnicode,
+    ptSynUnicode,{$ifdef HASVARUSTRING}ptUnicodeString,{$endif}
     ptWideString:    aWriter.AddJSONEscapeW(PPointer(Value)^);
     ptDateTime:      aWriter.AddDateTime(unaligned(PDateTime(Value)^),false);
     ptDateTimeMS:    aWriter.AddDateTime(unaligned(PDateTime(Value)^),true);
@@ -42872,7 +42899,7 @@ procedure TJSONRecordTextDefinition.Parse(Props: TJSONCustomParserRTTI;
   begin
     if GetNextFieldProp(P,TypIdent) then
       result := TJSONCustomParserRTTI.TypeNameToSimpleRTTIType(
-        pointer(TypIdent),length(TypIdent),TypIdent) else
+        pointer(TypIdent),length(TypIdent),@TypIdent) else
       raise ESynException.CreateUTF8('%.Parse: missing field type',[self]);
   end;
 var PropsName: TRawUTF8DynArray;
@@ -42933,7 +42960,7 @@ begin
           len := DynArrayItemTypeLen(TypIdent);
           if len>0 then begin
             ArrayTyp := TJSONCustomParserRTTI.TypeNameToSimpleRTTIType(
-              @PByteArray(TypIdent)[1],len-1,ArrayTypIdent); // TByteDynArray -> byte
+              @PByteArray(TypIdent)[1],len-1,@ArrayTypIdent); // TByteDynArray -> byte
             if ArrayTyp=ptCustom then begin // TMyTypeDynArray/TMyTypes -> TMyType
               FastSetString(ArrayTypIdent,pointer(TypIdent),len);
               if GlobalCustomJSONSerializerFromTextSimpleType.Find(ArrayTypIdent)>=0 then
@@ -47711,6 +47738,13 @@ begin
 end;
 
 function TDynArray.ToKnownType(exactType: boolean): TDynArrayKind;
+const
+  RTTI: array[TJSONCustomParserRTTIType] of TDynArrayKind = (
+    djNone, djBoolean, djByte, djCardinal, djCurrency, djDouble, djNone, djInt64,
+    djInteger, djQWord, djRawByteString, djNone, djRawUTF8, djNone, djSingle,
+    djString, djSynUnicode, djDateTime, djDateTimeMS, djHash128, djInt64, djTimeLog,
+    {$ifdef HASVARUSTRING} {$ifdef UNICODE}djSynUnicode{$else}djNone{$endif}, {$endif}
+    {$ifndef NOVARIANTS} djVariant, {$endif} djWideString, djWord, djNone);
 var nested: PTypeInfo;
     field: PFieldInfo;
 label Bin, Rec;
@@ -47718,7 +47752,7 @@ begin
   result := fKnownType;
   if result<>djNone then
     exit;
-  case ElemSize of
+  case ElemSize of // very fast guess of most known exact dynarray types
   1: if fTypeInfo=TypeInfo(TBooleanDynArray) then
        result := djBoolean;
   4: if fTypeInfo=TypeInfo(TCardinalDynArray) then
@@ -47755,6 +47789,8 @@ begin
      if fTypeInfo=TypeInfo(TDateTimeMSDynArray) then
        result := djDateTimeMS;
   end;
+  if (result=djNone) and (fElemType2<>nil) then // try from extended RTTI
+    result := RTTI[TJSONCustomParserRTTI.TypeInfoToSimpleRTTIType(fElemType2)];
   if result=djNone then begin
     fKnownSize := 0;
     if ElemType=nil then
@@ -48945,11 +48981,13 @@ begin
     // or in your project's options
     fElemType := PPointer(fElemType)^; // inlined DeRef()
     {$endif}
+    fElemType2 := fElemType;
     {$ifdef FPC}
     if not (PTypeKind(fElemType)^ in tkManagedTypes) then
       fElemType := nil; // as with Delphi
     {$endif}
-  end;
+  end else
+    fElemType2 := {$ifdef ISDELPHI2010_OR_FPC}PTypeInfo(aTypeInfo)^.elType2{$else}nil{$endif};
   fCountP := aCountPointer;
   if fCountP<>nil then
     fCountP^ := 0;
@@ -49094,7 +49132,7 @@ begin // this method is faster than default System.DynArraySetLength() function
   end;
 end;
 
-procedure TDynArray.SetCount(aCount: integer);
+procedure TDynArray.SetCount(aCount: PtrInt);
 const MINIMUM_SIZE = 64;
 var c, v, capa, delta: PtrInt;
 begin
@@ -49303,11 +49341,11 @@ const
 
 {$ifdef UNDIRECTDYNARRAY}
 
-function TDynArrayHashed.GetCount: Integer;
+function TDynArrayHashed.GetCount: PtrInt;
 begin
   result := InternalDynArray.GetCount;
 end;
-procedure TDynArrayHashed.SetCount(aCount: integer);
+procedure TDynArrayHashed.SetCount(aCount: PtrInt);
 begin
   InternalDynArray.SetCount(aCount);
 end;
@@ -49973,6 +50011,7 @@ var i, n, cap, ndx: integer;
 begin
   result := false;
   fHashs := nil;
+  fHashFindCount := 0;
   fHashsCount := 0;
   n := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}GetCount;
   if not forAdd and ((n=0) or (n<fHashCountTrigger)) then
@@ -61648,7 +61687,7 @@ procedure TSynNameValue.Add(const aName, aValue: RawUTF8; aTag: PtrInt);
 var added: boolean;
     i: Integer;
 begin
-  i := fDynArray.FindHashedForAdding(aName,added);
+  i := DynArray.FindHashedForAdding(aName,added);
   with List[i] do begin
     if added then
       Name := aName;
@@ -61697,7 +61736,7 @@ begin
   Init(false);
   if high(Names)<>high(Values) then
     exit;
-  fDynArray.SetCapacity(length(Names));
+  DynArray.SetCapacity(length(Names));
   for i := 0 to high(Names) do
     Add(Names[i],Values[i]);
 end;
@@ -61719,7 +61758,7 @@ begin
   c := JSONObjectPropCount(JSON);
   if c<=0 then
     exit;
-  fDynArray.SetCapacity(c);
+  DynArray.SetCapacity(c);
   repeat
     N := GetJSONPropName(JSON,@Nlen);
     if N=nil then
@@ -61738,16 +61777,16 @@ procedure TSynNameValue.Init(aCaseSensitive: boolean);
 begin
   // release dynamic arrays memory before FillcharFast()
   List := nil;
-  fDynArray.HashInvalidate;
+  DynArray.HashInvalidate;
   // initialize hashed storage
   {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(self,SizeOf(self),0);
-  fDynArray.InitSpecific(TypeInfo(TSynNameValueItemDynArray),List,
+  DynArray.InitSpecific(TypeInfo(TSynNameValueItemDynArray),List,
     djRawUTF8,@Count,not aCaseSensitive);
 end;
 
 function TSynNameValue.Find(const aName: RawUTF8): integer;
 begin
-  result := fDynArray.FindHashed(aName);
+  result := DynArray.FindHashed(aName);
 end;
 
 function TSynNameValue.FindStart(const aUpperName: RawUTF8): integer;
@@ -61769,10 +61808,10 @@ end;
 function TSynNameValue.Delete(const aName: RawUTF8): boolean;
 var ndx: integer;
 begin
-  ndx := fDynArray.FindHashed(aName);
+  ndx := DynArray.FindHashed(aName);
   if ndx>=0 then begin
-    fDynArray.Delete(ndx);
-    fDynArray.ReHash;
+    DynArray.Delete(ndx);
+    DynArray.ReHash;
     result := true;
   end else
     result := false;
@@ -61786,13 +61825,13 @@ begin
     exit;
   for ndx := Count-1 downto 0 do
     if List[ndx].Value=aValue then begin
-      fDynArray.Delete(ndx);
+      DynArray.Delete(ndx);
       inc(result);
       if result>=Limit then
         break;
     end;
   if result>0 then
-    fDynArray.ReHash;
+    DynArray.ReHash;
 end;
 
 function TSynNameValue.Value(const aName: RawUTF8; const aDefaultValue: RawUTF8): RawUTF8;
@@ -61800,7 +61839,7 @@ var i: integer;
 begin
   if @self=nil then
     i := -1 else
-    i := fDynArray.FindHashed(aName);
+    i := DynArray.FindHashed(aName);
   if i<0 then
     result := aDefaultValue else
     result := List[i].Value;
@@ -61809,7 +61848,7 @@ end;
 function TSynNameValue.ValueInt(const aName: RawUTF8; const aDefaultValue: Int64): Int64;
 var i,err: integer;
 begin
-  i := fDynArray.FindHashed(aName);
+  i := DynArray.FindHashed(aName);
   if i<0 then
     result := aDefaultValue else begin
     result := GetInt64(pointer(List[i].Value),err);
@@ -61844,18 +61883,18 @@ end;
 
 function TSynNameValue.Initialized: boolean;
 begin
-  result := fDynArray.Value=@List;
+  result := DynArray.Value=@List;
 end;
 
 function TSynNameValue.GetBlobData: RawByteString;
 begin
-  result := fDynArray.SaveTo;
+  result := DynArray.SaveTo;
 end;
 
 procedure TSynNameValue.SetBlobDataPtr(aValue: pointer);
 begin
-  fDynArray.LoadFrom(aValue);
-  fDynArray.ReHash;
+  DynArray.LoadFrom(aValue);
+  DynArray.ReHash;
 end;
 
 procedure TSynNameValue.SetBlobData(const aValue: RawByteString);

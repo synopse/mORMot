@@ -357,6 +357,7 @@
     {$define DELPHI_OR_FPC_OLDRTTI}
     {$define FPC_OLDRTTI}
   {$endif}
+  {$define ISDELPHI2010_OR_FPC} // eltype2 field
 
   {$ifdef FPC_HAS_CPSTRING}
     // see http://wiki.freepascal.org/FPC_Unicode_support
@@ -481,13 +482,13 @@
         {$define FPC_OR_UNICODE}
       {$ifend}
       {$if CompilerVersion >= 21.0}
-        // Delphi 2010/XE: Reduce EXE size by disabling much RTTI
         {$define ISDELPHI2010}
+        {$define ISDELPHI2010_OR_FPC} // eltype2 field
         {$define ISDELPHI2010_OR_FPC_NEWRTTI}
         {$define FPC_OR_UNICODE}
         {$define HASTTHREADSTART}
         {$define HASINTERFACEASTOBJECT}
-        {$ifdef NEWRTTINOTUSED}
+        {$ifdef NEWRTTINOTUSED} // option reduce EXE size by disabling much RTTI
           {$WEAKLINKRTTI ON}
           {$RTTI EXPLICIT METHODS([]) PROPERTIES([]) FIELDS([])}
         {$endif NEWRTTINOTUSED}

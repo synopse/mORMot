@@ -50090,8 +50090,7 @@ begin
     exit;
   end;
   if PInteger(From)^=NULL_LOW then begin
-    if (IsObj=oCustomReaderWriter) and
-       Assigned(parser^.Reader) then
+    if (IsObj=oCustomReaderWriter) and Assigned(parser^.Reader) then
       // custom JSON reader expects to be executed even if value is null
       Dest := parser^.Reader(Value,From,Valid,Options) else begin
       FreeAndNil(Value);
