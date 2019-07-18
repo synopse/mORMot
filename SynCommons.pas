@@ -1777,11 +1777,11 @@ type
 
 /// convert the endianness of a given unsigned 32-bit integer into BigEndian
 function bswap32(a: cardinal): cardinal;
-  {$ifdef FPC}inline;{$endif}
+  {$ifndef CPUINTEL}inline;{$endif}
 
 /// convert the endianness of a given unsigned 64-bit integer into BigEndian
 function bswap64(const a: QWord): QWord;
-  {$ifdef FPC}inline;{$endif}
+  {$ifndef CPUINTEL}inline;{$endif}
 
 /// convert the endianness of an array of unsigned 64-bit integer into BigEndian
 // - n is required to be > 0
@@ -21787,21 +21787,11 @@ end;
 {$endif CPUX64}
 {$endif CPUX86}
 
-{$ifdef FPC}
-function bswap32(a: cardinal): cardinal;
-begin
-  result := SwapEndian(a); // use fast platform-specific function
-end;
-
-function bswap64(const a: QWord): QWord;
-begin
-  result := SwapEndian(a); // use fast platform-specific function
-end;
-{$else}
 {$ifdef CPUX64}
-function bswap32(a: cardinal): cardinal;
+function bswap32(a: cardinal): cardinal; {$ifdef FPC}nostackframe; assembler; asm {$else}
 asm
-  .NOFRAME // ecx=a (Linux: edi)
+  .noframe // ecx=a (Linux: edi)
+{$endif FPC}
   {$ifdef win64}
   mov eax, ecx
   {$else}
@@ -21810,9 +21800,10 @@ asm
   bswap eax
 end;
 
-function bswap64(const a: QWord): QWord;
+function bswap64(const a: QWord): QWord; {$ifdef FPC}nostackframe; assembler; asm {$else}
 asm
-  .NOFRAME // rcx=a (Linux: rdi)
+  .noframe // rcx=a (Linux: rdi)
+{$endif FPC}
   {$ifdef win64}
   mov rax, rcx
   {$else}
@@ -21835,6 +21826,17 @@ asm
   bswap eax
 end;
 {$else}
+{$ifdef FPC}
+function bswap32(a: cardinal): cardinal;
+begin
+  result := SwapEndian(a); // use fast platform-specific function
+end;
+
+function bswap64(const a: QWord): QWord;
+begin
+  result := SwapEndian(a); // use fast platform-specific function
+end;
+{$else}
 function bswap32(a: cardinal): cardinal;
 begin
   result := ((a and $ff)shl 24)or((a and $ff00)shl 8)or
@@ -21846,9 +21848,9 @@ begin
   TQWordRec(result).L := bswap32(TQWordRec(a).H);
   TQWordRec(result).H := bswap32(TQWordRec(a).L);
 end;
+{$endif FPC}
 {$endif CPUX86}
 {$endif CPUX64}
-{$endif FPC}
 
 {$ifndef PUREPASCAL} { these functions are implemented in asm }
 {$ifndef LVCL}       { don't define these functions twice }
