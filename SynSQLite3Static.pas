@@ -93,6 +93,19 @@ unit SynSQLite3Static;
 
 }
 
+(* WARNING: with current 3.29+ version, the following sqlite3.c patch is needed:
+
+SQLITE_PRIVATE int sqlite3RealSameAsInt(double r1, sqlite3_int64 i){
+  double r2 = (double)i;
+#if defined(__BORLANDC__) // avoid weird Borland C++ compiler limitation
+  return r1==r2; // safe and fast with x87 FPU
+#else // faster version without any memcmp() call (not an intrinsic on GCC)
+  return *( sqlite3_int64* )(&r1) == *( sqlite3_int64* )(&r2)
+          && i >= -2251799813685248LL && i < 2251799813685248LL;
+#endif
+}
+*)
+
 {$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 interface
@@ -368,21 +381,7 @@ begin
 end;
 
 {$ifdef MSWINDOWS}
-{$ifdef CPU32}
-
-(* WARNING: with current 3.29+ version, the following sqlite3.c patch is needed:
-
-SQLITE_PRIVATE int sqlite3RealSameAsInt(double r1, sqlite3_int64 i){
-  double r2 = (double)i;
-  return r1==0.0
-      || (memcmp(&r1, &r2, sizeof(r1))==0
-#if defined(__BORLANDC__) // avoid weird Borland C++ compiler limitation
-          );
-#else
-          && i >= -2251799813685248LL && i < 2251799813685248LL);
-#endif
-}
-*)
+{$ifdef CPU32} // Delphi Win32 will link static Borland C++ sqlite3.obj
 
 // we then implement all needed Borland C++ runtime functions in pure pascal:
 
@@ -532,20 +531,21 @@ begin
   result := CompareByte(p1,p2,Size); // use FPC
 end;
 {$else}
-// a fast full pascal version of the standard C library function
-begin
+begin // full pascal version of the standard C library function
   if (p1<>p2) and (Size<>0) then
     if p1<>nil then
       if p2<>nil then begin
         repeat
-          if p1^<>p2^ then begin
-            result := p1^-p2^;
-            exit;
+          if p1^=p2^ then begin
+            inc(p1);
+            inc(p2);
+            dec(Size);
+            if Size<>0 then
+              continue else break;
           end;
-          dec(Size);
-          inc(p1);
-          inc(p2);
-        until Size=0;
+          result := p1^-p2^;
+          exit;
+        until false;
         result := 0;
       end else
       result := 1 else
@@ -1265,11 +1265,7 @@ begin
   FormatUTF8('Static SQLite3 library as included within % is outdated!'#13+
     'Linked version is % whereas the current/expected is '+EXPECTED_SQLITE3_VERSION+'.'#13#13+
     'Please download latest SQLite3 '+EXPECTED_SQLITE3_VERSION+' revision'#13+
-    {$ifdef FPC}
-    'from https://synopse.info/files/sqlite3fpc.7z',
-    {$else}
-    'from https://synopse.info/files/sqlite3obj.7z',
-    {$endif}
+    'from https://synopse.info/files/sqlite3'+{$ifdef FPC}'fpc'{$else}'obj'{$endif}+'.7z',
     [ExeVersion.ProgramName,fVersionText],error);
   LogToTextFile(error); // annoyning enough on all platforms
   // SynSQLite3Log.Add.Log() would do nothing: we are in .exe initialization
