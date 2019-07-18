@@ -16,10 +16,9 @@
         <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
       </SearchPaths>
       <Other>
-        <CustomOptions Value="-dHASPACKAGES"/>
-        <OtherDefines Count="2">
-          <Define0 Value="HASPACKAGES"/>
-          <Define1 Value="USEZEOS"/>
+        <CustomOptions Value="-dNOSYNDBZEOS"/>
+        <OtherDefines Count="1">
+          <Define0 Value="NOSYNDBZEOS"/>
         </OtherDefines>
       </Other>
     </CompilerOptions>

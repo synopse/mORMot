@@ -115,12 +115,12 @@ end;
 
 *)
 
-{$ifndef HASPACKAGES}
-  {$define USEZEOS} // ensure unit can be used as standalone
-{$endif}
+{$ifdef NOSYNDBZEOS} /// defined in `mormot_base` package > Custom Options > Defines
 
-/// define in `mormot_base` Custom Options
-{$ifdef USEZEOS}
+interface
+implementation
+
+{$else}
 
 {$I Zeos.inc} // define conditionals like ZEOS72UP and ENABLE_*
 // for best performance: tune your project options or Zeos.inc to define USE_SYNCOMMONS
@@ -1329,10 +1329,5 @@ end;
 initialization
   TSQLDBZEOSConnectionProperties.RegisterClassNameForDefinition;
 
-{$else}
-interface
-
-implementation
-
-{$endif USEZEOS}
+{$endif NOSYNDBZEOS}
 end.
