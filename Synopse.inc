@@ -163,6 +163,9 @@
 // enable low-level logging of SQlite3 virtual table query planner costs
 // -> to be defined only for internal debugging
 
+{.$define NOSYNDBZEOS}
+// made SynDBZeos.pas a "void" unit - defined for FPC/Lazarus packages only
+
 {.$define DDDNOSYNDB}
 // SynDB / external SQL DB won't be linked to the executable by dddInfraSettings
 {.$define DDDNOMONGODB}

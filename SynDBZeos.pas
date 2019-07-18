@@ -56,6 +56,7 @@ unit SynDBZeos;
      SELECT usr.ID, usr.name FROM user usr WHERE usr.ID = ANY(?)
      work with all ZEOS versions
 }
+
 (*
   Note:
   - if you want to work as expected with SQlite3 backend (but how would need to
@@ -115,7 +116,7 @@ end;
 
 *)
 
-{$ifdef NOSYNDBZEOS} /// defined in `mormot_base` package > Custom Options > Defines
+{$ifdef NOSYNDBZEOS} // defined in mormot_base.lpk Lazarus package > Custom Options > Defines
 
 interface
 implementation
