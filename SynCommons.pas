@@ -8581,82 +8581,6 @@ function ObjectsToJSON(const Names: array of RawUTF8; const Values: array of TOb
 
 
 type
-  /// implement a cache of some key/value pairs, e.g. to improve reading speed
-  // - used e.g. by TSQLDataBase for caching the SELECT statements results in an
-  // internal JSON format (which is faster than a query to the SQLite3 engine)
-  // - internally make use of an efficient hashing algorithm for fast response
-  // (i.e. TSynNameValue will use the TDynArrayHashed wrapper mechanism)
-  // - this class is thread-safe if you use properly the associated Safe lock
-  TSynCache = class(TSynPersistentLock)
-  protected
-    /// last index in fNameValue.List[] if was added by Find()
-    // - contains -1 if no previous immediate call to Find()
-    fFindLastAddedIndex: integer;
-    fFindLastKey: RawUTF8;
-    fNameValue: TSynNameValue;
-    fRamUsed: cardinal;
-    fMaxRamUsed: cardinal;
-    fTimeoutSeconds: cardinal;
-    fTimeoutTix: cardinal;
-    procedure ResetIfNeeded;
-  public
-    /// initialize the internal storage
-    // - aMaxCacheRamUsed can set the maximum RAM to be used for values, in bytes
-    // (default is 16 MB), after which the cache is flushed
-    // - by default, key search is done case-insensitively, but you can specify
-    // another option here
-    // - by default, there is no timeout period, but you may specify a number of
-    // seconds of inactivity (i.e. no Add call) after which the cache is flushed
-    constructor Create(aMaxCacheRamUsed: cardinal=16 shl 20;
-      aCaseSensitive: boolean=false; aTimeoutSeconds: cardinal=0); reintroduce;
-    /// find a Key in the cache entries
-    // - return '' if nothing found: you may call Add() just after to insert
-    // the expected value in the cache
-    // - return the associated Value otherwise, and the associated integer tag
-    // if aResultTag address is supplied
-    // - this method is not thread-safe, unless you call Safe.Lock before
-    // calling Find(), and Safe.Unlock after calling Add()
-    function Find(const aKey: RawUTF8; aResultTag: PPtrInt=nil): RawUTF8;
-    /// add a Key and its associated value (and tag) to the cache entries
-    // - you MUST always call Find() with the associated Key first
-    // - this method is not thread-safe, unless you call Safe.Lock before
-    // calling Find(), and Safe.Unlock after calling Add()
-    procedure Add(const aValue: RawUTF8; aTag: PtrInt);
-    /// add a Key/Value pair in the cache entries
-    // - returns true if aKey was not existing yet, and aValue has been stored
-    // - returns false if aKey did already exist in the internal cache, and
-    // its entry has been updated with the supplied aValue/aTag
-    // - this method is thread-safe, using the Safe locker of this instance
-    function AddOrUpdate(const aKey, aValue: RawUTF8; aTag: PtrInt): boolean;
-    /// called after a write access to the database to flush the cache
-    // - set Count to 0
-    // - release all cache memory
-    // - returns TRUE if was flushed, i.e. if there was something in cache
-    // - this method is thread-safe, using the Safe locker of this instance
-    function Reset: boolean;
-    /// number of entries in the cache
-    function Count: integer;
-    /// access to the internal locker, for thread-safe process
-    // - Find/Add methods calls should be protected as such:
-    // ! cache.Safe.Lock;
-    // ! try
-    // !   ... cache.Find/cache.Add ...
-    // ! finally
-    // !   cache.Safe.Unlock;
-    // ! end;
-    property Safe: PSynLocker read fSafe;
-    /// the current global size of Values in RAM cache, in bytes
-    property RamUsed: cardinal read fRamUsed;
-    /// the maximum RAM to be used for values, in bytes
-    // - the cache is flushed when ValueSize reaches this limit
-    // - default is 16 MB (16 shl 20)
-    property MaxRamUsed: cardinal read fMaxRamUsed;
-    /// after how many seconds betwen Add() calls the cache should be flushed
-    // - equals 0 by default, meaning no time out
-    property TimeoutSeconds: cardinal read fTimeoutSeconds;
-  end;
-
-
   /// abstract ancestor to manage a dynamic array of TObject
   // - do not use this abstract class directly, but rather the inherited
   // TObjectListHashed and TObjectListPropertyHashed
@@ -47314,28 +47238,22 @@ end;
 
 { TDynArray }
 
-function TDynArray.GetCount: integer;
-var v: PtrUInt;
+function TDynArray.GetCount: PtrInt;
 begin
-  v := PtrUInt(fCountP);
-  if v<>0 then begin
-    result := PInteger(v)^;
-    exit;
-  end else begin
-    v := PtrUInt(fValue);
-    if v<>0 then begin
-      v := PPtrUInt(v)^;
-      if v<>0 then begin
+  result := PtrUInt(fCountP);
+  if result<>0 then
+    result := PInteger(result)^ else begin
+    result := PtrUInt(fValue);
+    if result<>0 then begin
+      result := PPtrUInt(result)^;
+      if result<>0 then begin
         {$ifdef FPC}
-        result := PDynArrayRec(v-SizeOf(TDynArrayRec))^.high+1;
+        result := PDynArrayRec(result-SizeOf(TDynArrayRec))^.high+1;
         {$else}
-        result := PInteger(v-SizeOf(PtrInt))^;
+        result := PInteger(result-SizeOf(PtrInt))^;
         {$endif}
-        exit;
       end;
     end;
-    result := 0; // avoid GPF if void
-    exit;
   end;
 end;
 
@@ -47537,9 +47455,10 @@ begin
 end;
 
 procedure TDynArray.Reverse;
-var siz, n, tmp: integer;
+var n, siz: PtrInt;
     P1, P2: PAnsiChar;
     c: AnsiChar;
+    i32: integer;
     i64: Int64;
 begin
   n := GetCount-1;
@@ -47547,8 +47466,7 @@ begin
     siz := ElemSize;
     P1 := fValue^;
     case siz of
-    1: begin
-      // optimized version for TByteDynArray and such
+    1: begin // optimized version for TByteDynArray and such
       P2 := P1+n;
       while P1<P2 do begin
         c := P1^;
@@ -47558,19 +47476,17 @@ begin
         dec(P2);
       end;
     end;
-    4: begin
-      // optimized version for TIntegerDynArray and such
+    4: begin // optimized version for TIntegerDynArray and such
       P2 := P1+n*SizeOf(Integer);
       while P1<P2 do begin
-        tmp := PInteger(P1)^;
+        i32 := PInteger(P1)^;
         PInteger(P1)^ := PInteger(P2)^;
-        PInteger(P2)^ := tmp;
+        PInteger(P2)^ := i32;
         inc(P1,4);
         dec(P2,4);
       end;
     end;
-    8: begin
-      // optimized version for TInt64DynArray + TDoubleDynArray and such
+    8: begin // optimized version for TInt64DynArray + TDoubleDynArray and such
       P2 := P1+n*SizeOf(Int64);
       while P1<P2 do begin
         i64 := PInt64(P1)^;
@@ -47580,8 +47496,7 @@ begin
         dec(P2,8);
       end;
     end;
-    16: begin
-      // optimized version for TVariantDynArray and such
+    16: begin // optimized version for 32-bit TVariantDynArray and such
       P2 := P1+n*16;
       while P1<P2 do begin
         Exchg16(Pointer(P1),Pointer(P2));
@@ -47589,8 +47504,7 @@ begin
         dec(P2,16);
       end;
     end;
-    else begin
-      // generic version
+    else begin // generic version
       P2 := P1+n*siz;
       while P1<P2 do begin
         Exchg(P1,P2,siz);
@@ -47648,7 +47562,7 @@ begin
     result := Dest;
     exit; // avoid GPF if void
   end;
-  // first store the element size+type to check for the format (name='' mostly)
+  // store the element size+type to check for the format (name='' mostly)
   Dest := PAnsiChar(ToVarUInt32(ElemSize,pointer(Dest)));
   if ElemType=nil then
     Dest^ := #0 else
@@ -47658,7 +47572,7 @@ begin
     Dest^ := PAnsiChar(ElemType)^;
     {$endif}
   inc(Dest);
-  // then store dynamic array count
+  // store dynamic array count
   n := GetCount;
   Dest := PAnsiChar(ToVarUInt32(n,pointer(Dest)));
   if n=0 then begin
@@ -47673,8 +47587,7 @@ begin
     if GetIsObjArray then
       raise ESynException.CreateUTF8('TDynArray.SaveTo(%) is a T*ObjArray',
         [ArrayTypeShort^]) else begin
-      // binary types: store as once
-      n := n*integer(ElemSize);
+      n := n*integer(ElemSize); // binary types: store as one
       {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,Dest^,n);
       inc(Dest,n);
     end else
@@ -56973,134 +56886,6 @@ begin
   {$endif CONDITIONALEXPRESSIONS}
 {$endif FPC}
 {$ifdef CPU64} +' 64 bit' {$else} +' 32 bit' {$endif}
-end;
-
-
-{ TSynCache }
-
-constructor TSynCache.Create(aMaxCacheRamUsed: cardinal; aCaseSensitive: boolean;
-  aTimeoutSeconds: cardinal);
-begin
-  inherited Create;
-  fNameValue.Init(aCaseSensitive);
-  fNameValue.fDynArray.Capacity := 200; // some space for future cached entries
-  fMaxRamUsed := aMaxCacheRamUsed;
-  fFindLastAddedIndex := -1;
-  fTimeoutSeconds := aTimeoutSeconds;
-end;
-
-procedure TSynCache.ResetIfNeeded;
-var tix: cardinal;
-begin
-  if fRamUsed>fMaxRamUsed then
-    Reset;
-  if fTimeoutSeconds>0 then begin
-    tix := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64 shr 10;
-    if fTimeoutTix>tix then
-      Reset;
-    fTimeoutTix := tix+fTimeoutSeconds;
-  end;
-end;
-
-procedure TSynCache.Add(const aValue: RawUTF8; aTag: PtrInt);
-begin
-  if (self=nil) or (fFindLastAddedIndex<0) or (fFindLastKey='') then
-    // fFindLastAddedIndex should have been set by a previous call to Find()
-    exit;
-  ResetIfNeeded;
-  inc(fRamUsed,length(aValue));
-  if fFindLastAddedIndex<0 then // Reset occurred in ResetIfNeeded
-    fNameValue.Add(fFindLastKey,aValue,aTag) else
-    with fNameValue.List[fFindLastAddedIndex] do begin // at Find() position
-      Name := fFindLastKey;
-      Value := aValue;
-      Tag := aTag;
-      fFindLastAddedIndex := -1;
-      fFindLastKey := '';
-    end;
-end;
-
-function TSynCache.Find(const aKey: RawUTF8; aResultTag: PPtrInt): RawUTF8;
-var added: boolean;
-begin
-  result := '';
-  if self=nil then
-    exit;
-  if aKey='' then
-    fFindLastAddedIndex := -1 else begin
-    fFindLastAddedIndex := fNameValue.fDynArray.FindHashedForAdding(aKey,added);
-    if added then
-      // expect a further call to Add()
-      fFindLastKey := aKey else
-      // match key found
-      with fNameValue.List[fFindLastAddedIndex] do begin
-        result := Value;
-        if aResultTag<>nil then
-          aResultTag^ := Tag;
-        fFindLastAddedIndex := -1;
-      end;
-  end;
-end;
-
-function TSynCache.AddOrUpdate(const aKey, aValue: RawUTF8; aTag: PtrInt): boolean;
-var ndx: integer;
-begin
-  result := false;
-  if self=nil then
-    exit; // avoid GPF
-  fSafe.Lock;
-  try
-    ResetIfNeeded;
-    ndx := fNameValue.fDynArray.FindHashedForAdding(aKey,result);
-    with fNameValue.List[ndx] do begin
-      Name := aKey;
-      dec(fRamUsed,length(Value));
-      Value := aValue;
-      inc(fRamUsed,length(Value));
-      Tag := aTag;
-    end;
-  finally
-    fSafe.Unlock;
-  end;
-end;
-
-function TSynCache.Reset: boolean;
-begin
-  result := false;
-  if self=nil then
-    exit; // avoid GPF
-  fSafe.Lock;
-  try
-    if Count<>0 then begin
-      if fRamUsed<131072 then // no capacity change for small cache content
-        fNameValue.Count := 0 else
-        with fNameValue.fDynArray{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif} do begin
-          Capacity := 0;   // force free all fNameValue.List[] key/value pairs
-          Capacity := 200; // then reserve some space for future cached entries
-        end;
-      fNameValue.fDynArray.HashInvalidate;
-      result := true; // mark something was flushed
-    end;
-    fFindLastAddedIndex := -1; // fFindLastKey should remain untouched for Add()
-    fRamUsed := 0;
-    fTimeoutTix := 0;
-  finally
-    fSafe.Unlock;
-  end;
-end;
-
-function TSynCache.Count: integer;
-begin
-  if self=nil then begin
-    result := 0;
-    exit;
-  end;
-  fSafe.Lock;
-  try
-    result := fNameValue.Count;
-  finally
-    fSafe.Unlock;
-  end;
 end;
 
 
