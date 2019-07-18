@@ -115,6 +115,10 @@ end;
 
 *)
 
+{$ifndef HASPACKAGES}
+  {$define USEZEOS} // ensure unit can be used as standalone
+{$endif}
+
 /// define in `mormot_base` Custom Options
 {$ifdef USEZEOS}
 
