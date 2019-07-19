@@ -4,19 +4,23 @@
     <PathDelim Value="\"/>
     <Name Value="mormot_base"/>
     <Type Value="RunTimeOnly"/>
-    <AddToProjectUsesSection Value="True"/>
     <Author Value="Arnaud Bouchez"/>
     <CompilerOptions>
       <Version Value="11"/>
       <PathDelim Value="\"/>
       <SearchPaths>
-        <IncludeFiles Value="$(ProjOutDir);$PkgIncPath(zcore)\..\..\src;..;..\SQLite3"/>
+        <IncludeFiles Value="..;..\SQLite3"/>
         <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-        <OtherUnitFiles Value="$PkgIncPath(zcore)\..\..\packages\lazarus\lib\zcore\$(TargetCPU)-$(TargetOS);$PkgIncPath(zcore)\..\..\packages\lazarus\lib\zdbc\$(TargetCPU)-$(TargetOS);$PkgIncPath(zcore)\..\..\packages\lazarus\lib\zparsesql\$(TargetCPU)-$(TargetOS);$PkgIncPath(zcore)\..\..\packages\lazarus\lib\zplain\$(TargetCPU)-$(TargetOS);..;..\SQLite3;..\SQLite3\DDD\infra"/>
+        <OtherUnitFiles Value="..;..\SQLite3;..\SQLite3\DDD\infra"/>
         <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
       </SearchPaths>
+      <Conditionals Value="// ZeosLib paths
+if undefined(NOSYNDBZEOS) then
+begin
+  UnitPath += ';$PkgOutDir(zcore);$PkgOutDir(zdbc);$PkgOutDir(zparsesql);$PkgOutDir(zplain)';
+  IncPath += ';$(ProjOutDir);$PkgDir(zcore)\..\..\src';
+end;"/>
       <Other>
-        <CustomOptions Value="-dNOSYNDBZEOS"/>
         <OtherDefines Count="1">
           <Define0 Value="NOSYNDBZEOS"/>
         </OtherDefines>
@@ -203,6 +207,9 @@ as possible, while still maintaining copy-left on code we wrote."/>
       </Item1>
     </RequiredPkgs>
     <UsageOptions>
+      <IncludePath Value="$(PkgIncPath)"/>
+      <LibraryPath Value="$(PkgDir)\..\static\$(TargetCPU)-$(TargetOS)"/>
+      <ObjectPath Value="$(PkgDir)\.."/>
       <UnitPath Value="$(PkgOutDir)"/>
     </UsageOptions>
     <PublishOptions>
