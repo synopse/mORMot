@@ -3900,7 +3900,7 @@ begin
     Counter.b2 := count shr 8;
     Counter.b3 := count;
     LastCounter := count;
-    UnixCreateTime := {$ifdef FPC}SwapEndian{$else}bswap32{$endif}(LastCreateTime);
+    UnixCreateTime := {$ifdef CPUINTEL}bswap32{$else}SwapEndian{$endif}(LastCreateTime);
     MachineID := Default.MachineID;
     ProcessID := Default.ProcessID;
     LeaveCriticalSection(Section);
@@ -3920,7 +3920,7 @@ end;
 
 function TBSONObjectID.CreateDateTime: TDateTime;
 begin
-  result := UnixTimeToDateTime({$ifdef FPC}SwapEndian{$else}bswap32{$endif}(UnixCreateTime));
+  result := UnixTimeToDateTime(bswap32(UnixCreateTime));
 end;
 
 function TBSONObjectID.ToText: RawUTF8;

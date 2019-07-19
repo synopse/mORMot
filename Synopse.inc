@@ -313,6 +313,7 @@
     {$ifdef CPUX64}
       {$define CPUINTEL}
       {$define FPC_CPUINTEL}
+      {$define FPC_X64}
       {$ASMMODE INTEL} // as Delphi expects
     {$endif CPUX64}
   {$else}
@@ -323,6 +324,7 @@
     {$ifdef CPUX86}
       {$define CPUINTEL}
       {$define FPC_CPUINTEL}
+      {$define FPC_X86}
       {$ASMMODE INTEL} // as Delphi expects
       {$ifndef FPC_PIC}
         {$define CPUX86NOTPIC} // use "absolute" instead of local register

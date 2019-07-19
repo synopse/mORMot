@@ -29,10 +29,10 @@ unit SynDBZeos;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - alexpirate
   - Daniel Kuettner
   - delphinium
   - EgonHugeist (Michael)
-  - alexpirate
   - Joe (jokussoftware)
 
 
@@ -139,7 +139,8 @@ uses
   {$IFNDEF DELPHI5OROLDER}
   Variants,
   {$ENDIF}
-  Classes, Contnrs,
+  Classes,
+  Contnrs,
   // load physical providers as defined by ENABLE_* in Zeos.inc
   // -> you can patch your local Zeos.inc and comment these defines to
   // exclude database engines you don't need
@@ -177,7 +178,11 @@ uses
   ZDbcODBCCon,
   {$ENDIF}
   // main ZDBC units
-  ZCompatibility, ZVariant, ZURL, ZDbcIntfs, ZDbcResultSet,
+  ZCompatibility,
+  ZVariant,
+  ZURL,
+  ZDbcIntfs,
+  ZDbcResultSet,
   // mORMot units after ZDBC due to some name conflicts (e.g. UTF8ToString)
   SynCommons,
   SynTable,
@@ -1008,7 +1013,7 @@ begin
   P[0] := '{'; 
   i := 1;
   for n := 0 to high(Values) do begin
-    if length(Values[n]) = 0 then continue;
+    if Values[n] = '' then continue;
     if Values[n][1] = '''' then begin
       P[i] := '"'; 
       inc(i);

@@ -1780,7 +1780,7 @@ function bswap32(a: cardinal): cardinal;
   {$ifndef CPUINTEL}inline;{$endif}
 
 /// convert the endianness of a given unsigned 64-bit integer into BigEndian
-function bswap64(const a: QWord): QWord;
+function bswap64({$ifdef FPC_X86}constref{$else}const{$endif} a: QWord): QWord;
   {$ifndef CPUINTEL}inline;{$endif}
 
 /// convert the endianness of an array of unsigned 64-bit integer into BigEndian
@@ -19641,8 +19641,7 @@ begin // fallback to pure pascal version for ARM or PIC
 end;
 {$else}
 {$ifdef CPUX64} {$ifdef FPC}nostackframe; assembler; asm {$else}
-asm // rcx=P, rdx=val (Linux: rdi,rsi) - val is QWord on 64-bit Intel CPU
-        .noframe
+asm .noframe // rcx=P, rdx=val (Linux: rdi,rsi) - val is QWord on CPUX64
 {$endif FPC}
         {$ifndef win64}
         mov     rcx, rdi
@@ -19767,8 +19766,7 @@ begin // this code is faster than Borland's original str() or IntToStr()
 end;
 {$else}
 {$ifdef CPUX64} {$ifdef FPC}nostackframe; assembler; asm {$else}
-asm // rcx=P, rdx=val (Linux: rdi,rsi) - val is QWord on Intel 64-bit CPU
-        .noframe
+asm .noframe // rcx=P, rdx=val (Linux: rdi,rsi) - val is QWord on CPUX64
 {$endif FPC}
         {$ifndef win64}
         mov     rcx, rdi
@@ -21770,8 +21768,7 @@ end;
 {$else}
 {$ifdef CPUX64}
 {$ifdef FPC}nostackframe; assembler; asm {$else}
-asm
-    .noframe // rcx=@a rdx=@b r8=n (Linux: rdi,rsi,rdx)
+asm .noframe // rcx=@a rdx=@b r8=n (Linux: rdi,rsi,rdx)
 {$endif FPC}
 @1: {$ifdef win64}
     mov   rax, qword ptr[rcx]
@@ -21801,8 +21798,7 @@ end;
 
 {$ifdef CPUX64}
 function bswap32(a: cardinal): cardinal; {$ifdef FPC}nostackframe; assembler; asm {$else}
-asm
-  .noframe // ecx=a (Linux: edi)
+asm .noframe // ecx=a (Linux: edi)
 {$endif FPC}
   {$ifdef win64}
   mov eax, ecx
@@ -21813,8 +21809,7 @@ asm
 end;
 
 function bswap64(const a: QWord): QWord; {$ifdef FPC}nostackframe; assembler; asm {$else}
-asm
-  .noframe // rcx=a (Linux: rdi)
+asm .noframe // rcx=a (Linux: rdi)
 {$endif FPC}
   {$ifdef win64}
   mov rax, rcx
@@ -21830,10 +21825,10 @@ asm
   bswap eax
 end;
 
-function bswap64(const a: QWord): QWord;
+function bswap64({$ifdef FPC_X86}constref{$else}const{$endif} a: QWord): QWord;
 asm
-  mov edx, a.TQWordRec.L
-  mov eax, a.TQWordRec.H
+  mov edx, dword ptr[eax]
+  mov eax, dword ptr[eax + 4]
   bswap edx
   bswap eax
 end;
@@ -25609,8 +25604,7 @@ end;
 {$ifdef CPUX64} // inspired by Agner Fog's strspn64.asm
 function strcspnsse42(s,reject: pointer): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else}
-asm // rcx=s, rdx=reject (Linux: rdi,rsi)
-        .noframe
+asm .noframe // rcx=s, rdx=reject (Linux: rdi,rsi)
 {$endif FPC}
 {$ifdef win64}
         push    rdi
@@ -25660,8 +25654,7 @@ asm // rcx=s, rdx=reject (Linux: rdi,rsi)
 end;
 function strspnsse42(s,accept: pointer): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else}
-asm // rcx=s, rdx=accept (Linux: rdi,rsi)
-        .noframe
+asm .noframe // rcx=s, rdx=accept (Linux: rdi,rsi)
 {$endif FPC}
 {$ifdef win64}
         push    rdi
@@ -32330,7 +32323,7 @@ end;
 
 function BufferLineLength(Text, TextEnd: PUTF8Char): PtrInt;
 {$ifdef CPUX64}
-{$ifdef FPC} nostackframe; assembler; asm {$else} asm .NOFRAME {$endif}
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
 {$ifdef MSWINDOWS} // Win64 ABI to System-V ABI
         push    rsi
         push    rdi
@@ -34305,8 +34298,7 @@ const
 {$ifdef HASAESNI}
 function StrLenSSE42(S: pointer): PtrInt;
 {$ifdef FPC}nostackframe; assembler; asm {$else}
-asm // rcx=S (Linux: rdi)
-        .noframe
+asm .noframe // rcx=S (Linux: rdi)
 {$endif FPC}
         xor     rax, rax
         {$ifdef win64}
@@ -34332,8 +34324,7 @@ end;
 
 function StrCompSSE42(Str1, Str2: pointer): PtrInt;
 {$ifdef FPC}nostackframe; assembler; asm {$else}
-asm // rcx=Str1, rdx=Str2 (Linux: rdi,rsi)
-        .noframe
+asm .noframe // rcx=Str1, rdx=Str2 (Linux: rdi,rsi)
 {$endif FPC}
       {$ifdef win64}
       mov       rax, rcx
@@ -34445,8 +34436,7 @@ end;
 {$ifdef CPUINTEL}
 function crc32cBy4SSE42(crc, value: cardinal): cardinal;
 {$ifdef CPU64} {$ifdef FPC}nostackframe; assembler; asm {$else}
-asm // rcx=crc, rdx=value(Linux: rdi,rsi)
-        .noframe
+asm .noframe // rcx=crc, rdx=value(Linux: rdi,rsi)
 {$endif FPC}
         {$ifdef Linux}
         mov     eax, edi
@@ -34468,8 +34458,7 @@ end;
 
 procedure crcblockSSE42(crc128, data128: PBlock128);
 {$ifdef CPU64} {$ifdef FPC}nostackframe; assembler; asm {$else}
-asm // rcx=crc128, rdx=data128 (Linux: rdi,rsi)
-        .noframe
+asm .noframe // rcx=crc128, rdx=data128 (Linux: rdi,rsi)
 {$endif FPC}
         {$ifdef Linux}
         mov     eax, dword ptr[rdi]
@@ -34944,8 +34933,7 @@ end;
 
 procedure mul64x64(const left, right: QWord; out product: THash128Rec);
 {$ifdef CPUX64} {$ifdef FPC}nostackframe; assembler; asm {$else}
-asm     // rcx/rdi=left, rdx/rsi=right r8/rdx=product
-        .noframe
+asm .noframe // rcx/rdi=left, rdx/rsi=right r8/rdx=product
 {$endif}{$ifdef WIN64}
         mov     rax, rcx
         mul     rdx // uses built-in 64-bit -> 128-bit multiplication
@@ -36792,8 +36780,7 @@ end;
 {$ifdef CPUINTEL} /// NIST SP 800-90A compliant RDRAND Intel x86/x64 opcode
 function RdRand32: cardinal;
 {$ifdef CPU64}{$ifdef FPC}nostackframe; assembler; asm{$else}
-asm
-  .noframe {$endif FPC} {$else}
+asm .noframe {$endif FPC} {$else}
 {$ifdef FPC}nostackframe; assembler;{$endif} asm
 {$endif}
   // rdrand eax: same opcodes for x86 and x64
@@ -39025,22 +39012,22 @@ begin
   p := Source;
   result := p^;
   inc(p);
-  if result>$7f then begin
+  if result>$7f then begin // Values between 128 and 16256
     c := p^;
     c := c shl 7;
     result := result and $7F or c;
     inc(p);
-    if c>$7f shl 7 then begin // Values between 128 and 16256
+    if c>$7f shl 7 then begin // Values between 16257 and 2080768
       c := p^;
       c := c shl 14;
       inc(p);
       result := result and $3FFF or c;
-      if c>$7f shl 14 then begin // Values between 16257 and 2080768
+      if c>$7f shl 14 then begin // Values between 2080769 and 266338304
         c := p^;
         c := c shl 21;
         inc(p);
         result := result and $1FFFFF or c;
-        if c>$7f shl 21 then begin // Values between 2080769 and 266338304
+        if c>$7f shl 21 then begin
           c := p^;
           c := c shl 28;
           inc(p);
@@ -39055,21 +39042,21 @@ end;
 function FromVarUInt32Up128(var Source: PByte): cardinal;
 var c: cardinal;
     p: PByte;
-begin
+begin // Values above 128
   p := Source;
   result := p^ shl 7;
   inc(p);
-  if result>$7f shl 7 then begin // Values between 128 and 16256
+  if result>$7f shl 7 then begin // Values above 16257
     c := p^;
     c := c shl 14;
     inc(p);
     result := result and $3FFF or c;
-    if c>$7f shl 14 then begin // Values between 16257 and 2080768
+    if c>$7f shl 14 then begin
       c := p^;
       c := c shl 21;
       inc(p);
       result := result and $1FFFFF or c;
-      if c>$7f shl 21 then begin // Values between 2080769 and 266338304
+      if c>$7f shl 21 then begin
         c := p^;
         c := c shl 28;
         inc(p);
@@ -39083,7 +39070,7 @@ end;
 function FromVarInt32(var Source: PByte): integer;
 var c: cardinal;
     p: PByte;
-begin // faster as stand-alone function with inlined FromVarUInt32
+begin // fast stand-alone function with no FromVarUInt32 call
   p := Source;
   result := p^;
   inc(p);
@@ -39092,17 +39079,17 @@ begin // faster as stand-alone function with inlined FromVarUInt32
     c := c shl 7;
     result := result and $7F or integer(c);
     inc(p);
-    if c>$7f shl 7 then begin // Values between 128 and 16256
+    if c>$7f shl 7 then begin
       c := p^;
       c := c shl 14;
       inc(p);
       result := result and $3FFF or integer(c);
-      if c>$7f shl 14 then begin // Values between 16257 and 2080768
+      if c>$7f shl 14 then begin
         c := p^;
         c := c shl 21;
         inc(p);
         result := result and $1FFFFF or integer(c);
-        if c>$7f shl 21 then begin // Values between 2080769 and 266338304
+        if c>$7f shl 21 then begin
           c := p^;
           c := c shl 28;
           inc(p);
@@ -39129,17 +39116,17 @@ begin
   inc(Source);
   result := result and $7F or c;
   if c<=$7f shl 7 then
-    exit; // Values between 128 and 16256
+    exit;
   c := Source^ shl 14;
   inc(Source);
   result := result and $3FFF or c;
   if c<=$7f shl 14 then
-    exit; // Values between 16257 and 2080768
+    exit;
   c := Source^ shl 21;
   inc(Source);
   result := result and $1FFFFF or c;
   if c<=$7f shl 21 then
-    exit; // Values between 2080769 and 266338304
+    exit;
   c := Source^ shl 28;
   inc(Source);
   result := result and $FFFFFFF or c;
@@ -39449,7 +39436,7 @@ end;
 procedure CopyArray(dest, source, typeInfo: Pointer; cnt: PtrUInt);
 asm
 {$ifdef CPU64}
-        .NOFRAME
+        .noframe
         jmp     System.@CopyArray
 {$else} push    dword ptr[EBP + 8]
         call    System.@CopyArray // RTL is fast enough for this
@@ -39459,7 +39446,7 @@ end;
 procedure _DynArrayClear(var a: Pointer; typeInfo: Pointer);
 asm
   {$ifdef CPU64}
-  .NOFRAME
+  .noframe
   {$endif}
   jmp System.@DynArrayClear
 end;
@@ -39467,7 +39454,7 @@ end;
 procedure _FinalizeArray(p: Pointer; typeInfo: Pointer; elemCount: PtrUInt);
 asm
   {$ifdef CPU64}
-  .NOFRAME
+  .noframe
   {$endif}
   jmp System.@FinalizeArray
 end;
@@ -39475,7 +39462,7 @@ end;
 procedure _Finalize(Data: Pointer; TypeInfo: Pointer);
 asm
 {$ifdef CPU64}
-        .NOFRAME
+        .noframe
         mov     r8, 1 // rcx=p rdx=typeInfo r8=ElemCount
         jmp     System.@FinalizeArray
 {$else} // much faster than FinalizeArray(Data,TypeInfo,1)
@@ -40133,7 +40120,7 @@ end;
 procedure RecordCopy(var Dest; const Source; TypeInfo: pointer);
 asm // same params than _CopyRecord{ dest, source, typeInfo: Pointer }
   {$ifdef CPU64}
-  .NOFRAME
+  .noframe
   {$endif}
   jmp System.@CopyRecord
 end;
@@ -40141,7 +40128,7 @@ end;
 procedure RecordClear(var Dest; TypeInfo: pointer);
 asm
   {$ifdef CPU64}
-  .NOFRAME
+  .noframe
   {$endif}
   jmp System.@FinalizeRecord
 end;
@@ -40501,8 +40488,7 @@ end;
     By-passing the cache should enhance move() speed of big memory blocks. }
 
 procedure Movex64; // A. Bouchez' version
-asm // rcx=Source, rdx=Dest, r8=Count
-        .noframe
+asm .noframe // rcx=Source, rdx=Dest, r8=Count
         mov     rax, r8
         sub     rcx, rdx
         je      @11
@@ -40696,8 +40682,7 @@ asm // rcx=Source, rdx=Dest, r8=Count
 end;
 
 procedure FillCharx64; // A. Bouchez' version
-asm  // rcx=Dest rdx=Count r8=Value
-        .noframe
+asm .noframe // rcx=Dest rdx=Count r8=Value
         mov     rax, r8
         cmp     rdx, 32
         jle     @small
@@ -40799,8 +40784,7 @@ end;
 
 {$ifdef WITH_ERMS} // x64 version only for Windows ABI
 procedure MoveERMSB; // Ivy Bridge+ Enhanced REP MOVSB/STOSB CPUs
-asm // rcx=Source, rdx=Dest, r8=Count
-        .noframe
+asm .noframe // rcx=Source, rdx=Dest, r8=Count
         test    r8, r8
         jle     @none
         cld
@@ -40826,8 +40810,7 @@ asm // rcx=Source, rdx=Dest, r8=Count
 end;
 
 procedure FillCharERMSB; // Ivy Bridge+ Enhanced REP MOVSB/STOSB CPUs
-asm // rcx=Dest, rdx=Count, r8b=Value
-        .noframe
+asm .noframe // rcx=Dest, rdx=Count, r8b=Value
         test    rdx, rdx
         jle     @none
         cld
@@ -59239,7 +59222,7 @@ end;
 
 procedure TFileBufferWriter.Write4BigEndian(Data: integer);
 begin
-  Write4({$ifdef FPC}SwapEndian{$else}bswap32{$endif}(Data));
+  Write4(bswap32(Data));
 end;
 
 procedure TFileBufferWriter.Write8(const Data8Bytes);
