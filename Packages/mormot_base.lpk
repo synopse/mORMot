@@ -4,7 +4,6 @@
     <PathDelim Value="\"/>
     <Name Value="mormot_base"/>
     <Type Value="RunTimeOnly"/>
-    <AddToProjectUsesSection Value="True"/>
     <Author Value="Arnaud Bouchez"/>
     <CompilerOptions>
       <Version Value="11"/>
