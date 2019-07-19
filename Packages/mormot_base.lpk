@@ -21,6 +21,7 @@ begin
   IncPath += ';$(ProjOutDir);$PkgDir(zcore)\..\..\src';
 end;"/>
       <Other>
+        <CustomOptions Value="-dNOSYNDBZEOS"/>
         <OtherDefines Count="1">
           <Define0 Value="NOSYNDBZEOS"/>
         </OtherDefines>
