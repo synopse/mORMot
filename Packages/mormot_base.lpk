@@ -203,6 +203,9 @@ as possible, while still maintaining copy-left on code we wrote."/>
       </Item1>
     </RequiredPkgs>
     <UsageOptions>
+      <IncludePath Value="$(PkgIncPath)"/>
+      <LibraryPath Value="$(PkgDir)\..\static\$(TargetCPU)-$(TargetOS)"/>
+      <ObjectPath Value="$(PkgDir)\.."/>
       <UnitPath Value="$(PkgOutDir)"/>
     </UsageOptions>
     <PublishOptions>
