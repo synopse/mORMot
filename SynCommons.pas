@@ -11647,7 +11647,7 @@ procedure FillZero(var dest; count: PtrInt); overload;
 
 /// fast computation of two 64-bit unsigned integers into a 128-bit value
 procedure mul64x64(const left, right: QWord; out product: THash128Rec);
-  {$ifdef FPC}{$ifndef CPUX64}inline;{$endif CPUX64}{$endif FPC}
+  {$ifndef CPUINTEL}inline;{$endif}
 
 type
   /// the potential features, retrieved from an Intel CPU
@@ -32049,9 +32049,9 @@ begin
     {$else} // unbranched uppercase conversion of 4 chars blocks
     for i := 0 to sourceLen shr 2 do begin
       c := PPtrUIntArray(source)^[i];
-      d := c or $80808080;
-      PPtrUIntArray(dest)^[i] := c-((d-$61616161) and not(d-$7b7b7b7b)) and
-        ((not c) and $80808080)shr 2;
+      d := c or PtrUInt($80808080);
+      PPtrUIntArray(dest)^[i] := c-((d-PtrUInt($61616161)) and not(d-PtrUInt($7b7b7b7b))) and
+        ((not c) and PtrUInt($80808080))shr 2;
     end;
     {$endif}
     result := dest+sourceLen; // but we always return the exact size
@@ -34944,7 +34944,7 @@ asm .noframe // rcx/rdi=left, rdx/rsi=right r8/rdx=product
         mov     qword ptr [r8+8], rdx
 end;
 {$else}
-{$ifdef CPU32DELPHI}
+{$ifdef CPUX86}
 asm // adapted from FPC compiler output, which is much better than Delphi's here
         mov     ecx, eax
         mov     eax, dword ptr [ebp+8H]
@@ -34983,7 +34983,7 @@ begin
   product.H := QWord(l.H)*r.H+t2.H+t3.H;
   product.L := t3.V shl 32 or t1.L;
 end;
-{$endif CPU32DELPHI}
+{$endif CPUX86}
 {$endif CPUX64}
 
 procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
