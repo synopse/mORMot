@@ -22,8 +22,9 @@ If you want to use *ZeosLib*, you must setup the package before compile it, foll
 2. Click on Options
 3. In "Compile Options", click on "Custom Options"
 4. Click on "Defines" and uncheck `NOSYNDBZEOS` conditional
-5. Save and return to Package
-6. Compile
+5. Add `zcomponent` package from *ZeosLib* into it.
+6. Save and return to Package
+7. Compile
 
 If you have compiled without using this option before, follow the steps above, but using "More > Recompile Clean" option to recompile the package.
 
