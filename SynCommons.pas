@@ -21827,8 +21827,13 @@ end;
 
 function bswap64({$ifdef FPC_X86}constref{$else}const{$endif} a: QWord): QWord;
 asm
+  {$ifdef FPC_X86}
   mov edx, dword ptr[eax]
   mov eax, dword ptr[eax + 4]
+  {$else}
+  mov edx, a.TQWordRec.L
+  mov eax, a.TQWordRec.H
+  {$endif FPC_X86}
   bswap edx
   bswap eax
 end;
@@ -21850,7 +21855,7 @@ begin
             ((a and $ff0000)shr 8)or((a and $ff000000)shr 24);
 end;
 
-function bswap64(const a: QWord): QWord;
+function bswap64(a: QWord): QWord;
 begin
   TQWordRec(result).L := bswap32(TQWordRec(a).H);
   TQWordRec(result).H := bswap32(TQWordRec(a).L);
