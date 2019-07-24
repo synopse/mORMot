@@ -27318,9 +27318,9 @@ end;
 function Base64EncodeMain(rp, sp: PAnsiChar; len: cardinal): integer;
 var i: integer;
     c: cardinal;
-    enc: TBase64Enc; // a local stack copy makes the loop slightly faster
+    enc: ^TBase64Enc; // use local register
 begin
-  enc := b64enc;
+  enc := @b64enc;
   result := len div 3;
   for i := 1 to result do begin
     c := ord(sp[0]) shl 16 + ord(sp[1]) shl 8 + ord(sp[2]);
@@ -27491,16 +27491,18 @@ end;
 
 function IsBase64(sp: PAnsiChar; len: PtrInt): boolean;
 var i: PtrInt;
+    dec: ^TBase64Dec;
 begin
   result := false;
   if (len=0) or (len and 3<>0) then
     exit;
+  dec := @ConvertBase64ToBin;
   for i := 0 to len-5 do
-    if ConvertBase64ToBin[sp[i]]<0 then
+    if dec[sp[i]]<0 then
       exit;
   inc(sp,len-4);
-  if (ConvertBase64ToBin[sp[0]]=-1) or (ConvertBase64ToBin[sp[1]]=-1) or
-     (ConvertBase64ToBin[sp[2]]=-1) or (ConvertBase64ToBin[sp[3]]=-1) then
+  if (dec[sp[0]]=-1) or (dec[sp[1]]=-1) or
+     (dec[sp[2]]=-1) or (dec[sp[3]]=-1) then
       exit;
   result := true; // layout seems correct
 end;
@@ -27604,9 +27606,9 @@ end;
 {$ifdef PUREPASCAL}
 procedure Base64uriEncode(rp, sp: PAnsiChar; len: cardinal);
 var i, main, c: cardinal;
-    enc: TBase64Enc; // a local stack copy makes the loop slightly faster
+    enc: ^TBase64Enc; // slightly faster
 begin
-  enc := b64URIenc;
+  enc := @b64URIenc;
   main := len div 3;
   for i := 1 to main do begin
     c := ord(sp[0]) shl 16 + ord(sp[1]) shl 8 + ord(sp[2]);
@@ -58063,8 +58065,8 @@ end;
 function TSynDictionary.KeyFullCompare(const A,B): integer;
 var i: integer;
 begin
-  for i := 0 to fKeys.ElemSize - 1 do begin
-    result := TByteArray(A)[i] - TByteArray(B)[i];
+  for i := 0 to fKeys.ElemSize-1 do begin
+    result := TByteArray(A)[i]-TByteArray(B)[i];
     if result<>0 then
       exit;
   end;
