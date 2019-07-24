@@ -4760,7 +4760,7 @@ type
   {$else}TDynArray = object protected{$endif}
     fValue: PPointer;
     fTypeInfo: pointer;
-    fElemType, fElemType2: pointer;
+    fElemType{$ifdef ISDELPHI2010}, fElemType2{$endif}: pointer;
     fCountP: PInteger;
     fCompare: TDynArraySortCompare;
     fElemSize: cardinal;
@@ -20430,7 +20430,7 @@ type
       varType: Integer;
       // also unmanaged field
       elType2: PTypeInfoStored;
-      {$endif}
+      {$endif FPC}
     );
     tkArray: (
       {$ifdef FPC}
@@ -20442,7 +20442,7 @@ type
       arraySize: Integer;
       // product of lengths of all dimensions
       elCount: Integer;
-      {$endif}
+      {$endif FPC}
       arrayType: PTypeInfoStored;
       dimCount: Byte;
       dims: array[0..255 {DimCount-1}] of PTypeInfoStored;
@@ -20459,7 +20459,7 @@ type
       {$else}
       ManagedCount: longint;
       // note: FPC for 3.0.x and previous generates RTTI for unmanaged fields (as in TEnhancedFieldInfo)
-      {$endif}
+      {$endif FPC_NEWRTTI}
     {$else}
     tkRecord: (
       recSize: cardinal;
@@ -20469,7 +20469,7 @@ type
       ManagedFields: array[0..0] of TFieldInfo;
     {$else}
       AllFields: array[0..0] of TEnhancedFieldInfo;
-    {$endif}
+    {$endif DELPHI_OR_FPC_OLDRTTI}
       {$ifdef ISDELPHI2010} // enhanced RTTI containing info about all fields
       NumOps: Byte;
       //RecOps: array[0..0] of Pointer;
@@ -20482,19 +20482,13 @@ type
       {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
       tkEnumerationAlignment:DWORD; // needed for correct alignment !!??
       {$endif}
-      {$ifdef FPC_ENUMHASINNER}
-      inner:
-      {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
-      packed
-      {$endif}
-      record
-      {$endif}
+      {$ifdef FPC_ENUMHASINNER} inner:
+      {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT} packed {$endif} record
+      {$endif FPC_ENUMHASINNER}
       MinValue: longint;
       MaxValue: longint;
       EnumBaseType: PTypeInfoStored;
-      {$ifdef FPC_ENUMHASINNER}
-      end;
-      {$endif FPC_ENUMHASINNER}
+      {$ifdef FPC_ENUMHASINNER} end; {$endif FPC_ENUMHASINNER}
       NameList: string[255];
     );
     tkInteger: (
@@ -47731,13 +47725,13 @@ begin
 end;
 
 function TDynArray.ToKnownType(exactType: boolean): TDynArrayKind;
-const
+{$ifdef ISDELPHI2010} const
   RTTI: array[TJSONCustomParserRTTIType] of TDynArrayKind = (
     djNone, djBoolean, djByte, djCardinal, djCurrency, djDouble, djNone, djInt64,
     djInteger, djQWord, djRawByteString, djNone, djRawUTF8, djNone, djSingle,
     djString, djSynUnicode, djDateTime, djDateTimeMS, djHash128, djInt64, djTimeLog,
     {$ifdef HASVARUSTRING} {$ifdef UNICODE}djSynUnicode{$else}djNone{$endif}, {$endif}
-    {$ifndef NOVARIANTS} djVariant, {$endif} djWideString, djWord, djNone);
+    {$ifndef NOVARIANTS} djVariant, {$endif} djWideString, djWord, djNone); {$endif}
 var nested: PTypeInfo;
     field: PFieldInfo;
 label Bin, Rec;
@@ -47782,8 +47776,10 @@ begin
      if fTypeInfo=TypeInfo(TDateTimeMSDynArray) then
        result := djDateTimeMS;
   end;
+  {$ifdef ISDELPHI2010} // seems inconsistent with FPC - only for Delphi 2010+
   if (result=djNone) and (fElemType2<>nil) then // try from extended RTTI
     result := RTTI[TJSONCustomParserRTTI.TypeInfoToSimpleRTTIType(fElemType2)];
+  {$endif}
   if result=djNone then begin
     fKnownSize := 0;
     if ElemType=nil then
@@ -48963,7 +48959,7 @@ begin
   aTypeInfo := GetFPCAlignPtr(aTypeInfo);
   {$else}
   inc(PByte(aTypeInfo),PTypeInfo(aTypeInfo)^.NameLen);
-  {$endif}
+  {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
   fElemSize := PTypeInfo(aTypeInfo)^.elSize {$ifdef FPC}and $7FFFFFFF{$endif};
   fElemType := PTypeInfo(aTypeInfo)^.elType;
   if fElemType<>nil then begin
@@ -48973,14 +48969,15 @@ begin
     // -> enable HASDIRECTTYPEINFO conditional below $ifdef VER3_1 in Synopse.inc
     // or in your project's options
     fElemType := PPointer(fElemType)^; // inlined DeRef()
-    {$endif}
-    fElemType2 := fElemType;
+    {$endif HASDIRECTTYPEINFO}
     {$ifdef FPC}
     if not (PTypeKind(fElemType)^ in tkManagedTypes) then
       fElemType := nil; // as with Delphi
-    {$endif}
-  end else
-    fElemType2 := {$ifdef ISDELPHI2010_OR_FPC}PTypeInfo(aTypeInfo)^.elType2{$else}nil{$endif};
+    {$endif FPC}
+  end;
+  {$ifdef ISDELPHI2010} // seems inconsistent with FPC - only for Delphi 2010+
+  fElemType2 := PTypeInfo(aTypeInfo)^.elType2;
+  {$endif ISDELPHI2010}
   fCountP := aCountPointer;
   if fCountP<>nil then
     fCountP^ := 0;
