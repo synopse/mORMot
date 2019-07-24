@@ -4233,7 +4233,7 @@ begin
         inc(p);
       until j = L;
       Name[j] := #0; // make ASCIIZ
-      inc(PtrUInt(H), sizeof(H^) + info^.NameLen + H^.fileInfo.extraLen + H^.commentLen);
+      inc(PByte(H), sizeof(H^) + info^.NameLen + H^.fileInfo.extraLen + H^.commentLen);
       if (info^.zZipMethod in [0, 8]) and (Name[j - 1] <> '\') then
         inc(Count); // known methods: stored + deflate
     end;

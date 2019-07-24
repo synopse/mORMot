@@ -4570,15 +4570,15 @@ begin
       if i in fFieldIsVarString then begin
         // inlined result := GotoNextVarString(result);
         if PByte(result)^<=$7f then
-          inc(PtrUInt(result),PByte(result)^+1) else begin
+          inc(PByte(result),PByte(result)^+1) else begin
           PB := result;
-          inc(PtrUInt(result),FromVarUInt32High(PB)+PtrUInt(PB)-PtrUInt(result));
+          inc(PByte(result),FromVarUInt32High(PB)+PtrUInt(PB)-PtrUInt(result));
         end;
       end else
       if not (i in fFieldIsExternal) then begin
         // inlined result := GotoNextVarInt(result)
-        while PByte(result)^>$7f do inc(PtrUInt(result));
-        inc(PtrUInt(result));
+        while PByte(result)^>$7f do inc(PByte(result));
+        inc(PByte(result));
       end;
   end;
 end;
@@ -4724,7 +4724,7 @@ begin // in practice, this data processing is very fast (thanks to WR speed)
       // add previous field content: will handle any field offset change in record
       aSize := Getlength(Data);
       WR.Write(Data,aSize);
-      inc(PtrUInt(Data),aSize);
+      inc(PByte(Data),aSize);
     end else
       // add default field content for a newly added field
       WR.Write(Pointer(fDefaultFieldData),fDefaultFieldLength);

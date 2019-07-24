@@ -124,7 +124,7 @@ begin
   CWbit := 1;
   CWpoint := pointer(dst);
   PCardinal(dst)^ := 0;
-  inc(PtrUInt(dst),sizeof(CWpoint^));
+  inc(PByte(dst),sizeof(CWpoint^));
   fillchar(offset,sizeof(offset),0); // fast 16KB reset to 0
   // 1. main loop to search using hash[]
   if PtrUInt(src)<=src_endmatch then
@@ -145,7 +145,7 @@ begin
         tmax := (255+16);
       while (PBytes(o)[t]=PBytes(src)[t]) and (t<tmax) do
         inc(t);
-      inc(PtrUInt(src),t);
+      inc(PByte(src),t);
       h := h shl 4;
       // here we have always t>0
       if t<=15 then begin // mark 2 to 17 bytes -> size=1..15
@@ -155,7 +155,7 @@ begin
         dec(t,16);
         PWord(dst)^ := h; // size=0
         PByte(PtrUInt(dst)+2)^ := t;
-        inc(PtrUInt(dst),3);
+        inc(PByte(dst),3);
       end;
     end else begin
       PByte(dst)^ := PByte(src)^;
@@ -250,7 +250,7 @@ nextCW:
         v := PCardinal(last_hashed)^;
         offset[((v shr 12) xor v) and 4095] := last_hashed;
       end;
-      inc(PtrUInt(dst),t);
+      inc(PByte(dst),t);
       last_hashed := PtrUInt(dst)-1;
       CWbit := CWbit shl 1;
       if CWbit<>0 then
