@@ -21855,7 +21855,7 @@ begin
             ((a and $ff0000)shr 8)or((a and $ff000000)shr 24);
 end;
 
-function bswap64(a: QWord): QWord;
+function bswap64(const a: QWord): QWord;
 begin
   TQWordRec(result).L := bswap32(TQWordRec(a).H);
   TQWordRec(result).H := bswap32(TQWordRec(a).L);

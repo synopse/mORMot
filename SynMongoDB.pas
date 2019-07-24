@@ -6892,14 +6892,15 @@ begin
   signlo := 0;
   if signdig<>0 then // if not zero
     if diglast-digfirst<17 then
-      for i := digfirst to diglast do
       {$ifdef CPU32DELPHI} // use "shl" under x86 to avoid slower "call _llmul"
+      for i := digfirst to diglast do
         inc(signlo,signlo+signlo shl 3+digits[i]) else begin
       for i := digfirst to diglast-17 do
         inc(signhi,signhi+signhi shl 3+digits[i]);
       for i := diglast-16 to diglast do
         inc(signlo,signlo+signlo shl 3+digits[i]);
       {$else}
+      for i := digfirst to diglast do
         signlo := signlo*10+digits[i] else begin
       for i := digfirst to diglast-17 do
         signhi := signhi*10+digits[i];
