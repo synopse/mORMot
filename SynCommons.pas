@@ -9879,6 +9879,11 @@ type
     // - matches TFastReader.NextDocVariantData format
     procedure WriteDocVariantData(const Value: variant);
     {$endif}
+    /// append some record at the current position, with binary serialization
+    // - will use the binary serialization as for:
+    // ! aWriter.WriteBinary(RecordSave(Rec,RecTypeInfo));
+    // but writing directly into the buffer, if possible
+    procedure WriteRecord(const Rec; RecTypeInfo: pointer);
     /// append some dynamic array at the current position
     // - will use the binary serialization as for:
     // ! aWriter.WriteBinary(DA.SaveTo);
@@ -9927,11 +9932,11 @@ type
     procedure WriteStream(aStream: TCustomMemoryStream; aStreamSize: Integer=-1);
     /// allows to write directly to a memory buffer
     // - caller should specify the maximum possible number of bytes to be written
-    // - then write the data to the returned pointer, and call WriteDirectEnd
-    function WriteDirectStart(maxSize: integer; const TooBigMessage: RawUTF8=''): PByte;
+    // - then write the data to the returned pointer, and call DirectWriteFlush
+    function DirectWritePrepare(len: integer; out tmp: RawByteString): PAnsiChar;
     /// finalize a direct write to a memory buffer
     // - by specifying the number of bytes written to the buffer
-    procedure WriteDirectEnd(realSize: integer);
+    procedure DirectWriteFlush(len: integer; const tmp: RawByteString);
     /// write any pending data in the internal buffer to the file
     // - after a Flush, it's possible to call FileSeek64(aFile,....)
     // - returns the number of bytes written between two FLush method calls
@@ -20623,7 +20628,7 @@ procedure GetMemAligned(var s: RawByteString; p: pointer; len: PtrInt;
 begin
   SetString(s,nil,len+16);
   aligned := pointer(s);
-  inc(PtrUInt(aligned),PtrUInt(aligned) and 15);
+  inc(PByte(aligned),PtrUInt(aligned) and 15);
   if p<>nil then
     {$ifdef FPC}Move{$else}MoveFast{$endif}(p^,aligned^,len);
 end;
@@ -59192,7 +59197,7 @@ begin
   end;
 end;
 
-procedure TFileBufferWriter.Write1(Data: byte);
+procedure TFileBufferWriter.Write1(Data: Byte);
 begin
   if fPos+1>fBufLen then begin
     fStream.WriteBuffer(fBuffer^,fPos);
@@ -59203,7 +59208,7 @@ begin
   inc(fTotalWritten);
 end;
 
-procedure TFileBufferWriter.Write2(Data: word);
+procedure TFileBufferWriter.Write2(Data: Word);
 begin
   if fPos+2>fBufLen then begin
     fStream.WriteBuffer(fBuffer^,fPos);
@@ -59268,23 +59273,21 @@ begin
   Write(pointer(Data),Length(Data));
 end;
 
-procedure TFileBufferWriter.WriteDynArray(const DA: TDynArray);
-var len: integer;
-    tmp: RawByteString;
-    P: PAnsiChar;
+function TFileBufferWriter.DirectWritePrepare(len: integer; out tmp: RawByteString): PAnsiChar;
 begin
-  len := DA.SaveToLength;
   if (len<=fBufLen) and (fPos+len>fBufLen) then begin
     fStream.WriteBuffer(fBuffer^,fPos);
     fPos := 0;
   end;
   if fPos+len>fBufLen then begin
     SetLength(tmp,len);
-    P := pointer(tmp);
+    result := pointer(tmp);
   end else
-    P := @fBuffer^[fPos]; // write directly into the buffer
-  if DA.SaveTo(P)-P<>len then
-    raise ESynException.CreateUTF8('%.WriteDynArray DA.SaveTo?',[self]);
+    result := @fBuffer^[fPos]; // write directly into the buffer
+end;
+
+procedure TFileBufferWriter.DirectWriteFlush(len: integer; const tmp: RawByteString);
+begin
   if tmp='' then begin
     inc(fPos,len);
     inc(fTotalWritten,len);
@@ -59292,44 +59295,51 @@ begin
     Write(pointer(tmp),len);
 end;
 
+procedure TFileBufferWriter.WriteRecord(const Rec; RecTypeInfo: pointer);
+var len: integer;
+    tmp: RawByteString;
+    P: PAnsiChar;
+begin
+  len := RecordSaveLength(Rec,RecTypeInfo);
+  P := DirectWritePrepare(len,tmp);
+  if RecordSave(Rec,P,RecTypeInfo)-P<>len then
+    raise ESynException.CreateUTF8('%.WriteRecord: RecordSave?',[self]);
+  DirectWriteFlush(len,tmp);
+end;
+
+procedure TFileBufferWriter.WriteDynArray(const DA: TDynArray);
+var len: integer;
+    tmp: RawByteString;
+    P: PAnsiChar;
+begin
+  len := DA.SaveToLength;
+  P := DirectWritePrepare(len,tmp);
+  if DA.SaveTo(P)-P<>len then
+    raise ESynException.CreateUTF8('%.WriteDynArray: DA.SaveTo?',[self]);
+  DirectWriteFlush(len,tmp);
+end;
+
 {$ifndef NOVARIANTS}
 procedure TFileBufferWriter.Write(const Value: variant);
-  procedure CustomType; // same code as VariantSave/VariantSaveLen
-  begin
-    Write(@TVarData(Value).VType,SizeOf(TVarData(Value).VType));
-    Write(VariantSaveJSON(Value));
-  end;
-var tmp,buf: PAnsiChar;
+var buf: PAnsiChar;
     len: integer;
+    tmp: RawByteString;
 begin
-  if TVarData(Value).VType>varAny then begin
-    CustomType; // faster process without calling VariantSaveLength() for JSON
+  if TVarData(Value).VType>varAny then begin // avoid VariantSaveLength() call
+    Write(@TVarData(Value).VType,SizeOf(TVarData(Value).VType));
+    tmp := VariantSaveJSON(Value);
+    Write(tmp);
     exit;
   end;
-  tmp := nil;
   len := VariantSaveLength(Value);
   if len=0 then
     raise ESynException.CreateUTF8('%.Write(VType=%) VariantSaveLength=0',
       [self,TVarData(Value).VType]);
-  if fPos+len>fBufLen then begin
-    fStream.WriteBuffer(fBuffer^,fPos);
-    fPos := 0;
-    if len>fBufLen then begin
-      GetMem(tmp,len);
-      buf := tmp;
-    end else
-      buf := pointer(fBuffer);
-  end else
-    buf := @fBuffer^[fPos];
+  buf := DirectWritePrepare(len,tmp);
   if VariantSave(Value,buf)=nil then
     raise ESynException.CreateUTF8('%.Write(VType=%) VariantSave=nil',
       [self,TVarData(Value).VType]);
-  inc(fTotalWritten,len);
-  if tmp=nil then
-    inc(fPos,len) else begin
-    fStream.WriteBuffer(tmp^,len);
-    FreeMem(tmp);
-  end;
+  DirectWriteFlush(len,tmp);
 end;
 
 procedure TFileBufferWriter.WriteDocVariantData(const Value: variant);
@@ -59339,6 +59349,7 @@ begin
       Write1(0) else
       Write(ToJSON);
 end;
+
 {$endif NOVARIANTS}
 
 procedure TFileBufferWriter.WriteXor(New,Old: PAnsiChar; Len: integer; crc: PCardinal);
@@ -59789,35 +59800,6 @@ begin
     Flush;
     result := algo.Compress((fStream as TRawByteStringStream).DataString,trig,false,BufferOffset);
   end;
-end;
-
-function TFileBufferWriter.WriteDirectStart(maxSize: integer;
-  const TooBigMessage: RawUTF8): PByte;
-begin
-  inc(maxSize,fPos);
-  if maxSize>fBufLen then begin
-    fTotalWritten := Flush;
-    if maxSize>fBufLen then begin
-      if maxSize>100 shl 20 then
-        raise ESynException.CreateUTF8('%.WriteDirectStart: too big % - '+
-          'we allow up to 100 MB block',[self,TooBigMessage]);
-      if fBufInternal='' then
-        raise ESynException.CreateUTF8('%.WriteDirectStart: no internal buffer', [self]);
-      fBufLen := maxSize+1024;
-      SetString(fBufInternal,nil,fBufLen);
-      fBuffer := pointer(fBufInternal);
-    end;
-  end;
-  result := @fBuffer^[fPos];
-end;
-
-procedure TFileBufferWriter.WriteDirectEnd(realSize: integer);
-begin
-  if fPos+realSize>fBufLen then
-    raise ESynException.CreateUTF8(
-      '%.WriteDirectEnd: too big %',[self,realSize]);
-  inc(fPos,realSize);
-  inc(fTotalWritten,realSize);
 end;
 
 
@@ -60924,7 +60906,7 @@ begin
     s := ClassNameShort(self);
     if IdemPChar(@s^[1],'TALGO') then begin
       result[0] := AnsiChar(ord(s^[0])-5);
-      inc(PtrUInt(s),5);
+      inc(PByte(s),5);
     end else
       result[0] := s^[0];
     if result[0]>#16 then

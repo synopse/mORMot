@@ -1721,7 +1721,7 @@ begin
     L := FromVarUInt32(P); // inlined R.Read(S^.Name)
     FastSetString(S^.Name,P,L);
     inc(P,L);
-    inc(PtrUInt(S),A.ElemSize); // may be TSynMapSymbol or TSynMapUnit
+    inc(PByte(S),A.ElemSize); // may be TSynMapSymbol or TSynMapUnit
   end;
   S := A.Value^;
   Addr := FromVarUInt32(P);
@@ -1729,11 +1729,11 @@ begin
   for i := 1 to n-1 do begin
     inc(Addr,FromVarUInt32(P));
     S^.Stop := Addr-1;
-    inc(PtrUInt(S),A.ElemSize);
+    inc(PByte(S),A.ElemSize);
     S^.Start := Addr;
   end;
   S^.Stop := Addr+FromVarUInt32(P);
-  R.Seek(PtrUInt(P)-PtrUInt(R.MappedBuffer));
+  R.Seek(P-PByte(R.MappedBuffer));
 end;
 
 const
@@ -2019,8 +2019,8 @@ procedure WriteSymbol(var W: TFileBufferWriter; const A: TDynArray);
 var i, n: integer;
     Diff: integer;
     S: PSynMapSymbol;
-    P: PByte;
-    Beg: PtrUInt;
+    P,Beg: PByte;
+    tmp: RawByteString;
 begin
   n := A.Count;
   W.WriteVarUInt32(n);
@@ -2028,20 +2028,20 @@ begin
   S := A.Value^;
   for i := 0 to n-1 do begin
     W.Write(S^.Name);
-    inc(PtrUInt(S),A.ElemSize); // may be TSynMapSymbol or TSynMapUnit
+    inc(PByte(S),A.ElemSize); // may be TSynMapSymbol or TSynMapUnit
   end;
   S := A.Value^;
   Diff := S^.Start;
   W.WriteVarUInt32(Diff);
-  P := W.WriteDirectStart(n*5,A.ArrayTypeName);
-  Beg := PtrUInt(P);
+  P := pointer(W.DirectWritePrepare(n*5,tmp));
+  Beg := P;
   for i := 1 to n-1 do begin
-    inc(PtrUInt(S),A.ElemSize);
+    inc(PByte(S),A.ElemSize);
     P := ToVarUInt32(S^.Start-Diff,P);
     Diff := S^.Start;
   end;
   P := ToVarUInt32(S^.Stop-Diff,P);
-  W.WriteDirectEnd(PtrUInt(P)-Beg);
+  W.DirectWriteFlush(P-Beg,tmp);
 end;
 
 procedure TSynMapFile.SaveToStream(aStream: TStream);
