@@ -9817,6 +9817,7 @@ type
     fTag: PtrInt;
     fBuffer: PByteArray;
     fBufInternal: RawByteString;
+    procedure InternalFlush;
   public
     /// initialize the buffer, and specify a file handle to use for writing
     // - use an internal buffer of the specified size
@@ -20470,12 +20471,12 @@ type
     {$else}
       AllFields: array[0..0] of TEnhancedFieldInfo;
     {$endif DELPHI_OR_FPC_OLDRTTI}
-      {$ifdef ISDELPHI2010} // enhanced RTTI containing info about all fields
+    {$ifdef ISDELPHI2010} // enhanced RTTI containing info about all fields
       NumOps: Byte;
       //RecOps: array[0..0] of Pointer;
       AllCount: Integer; // !!!! may need $RTTI EXPLICIT FIELDS([vcPublic])
       AllFields: array[0..0] of TEnhancedFieldInfo;
-      {$endif ISDELPHI2010}
+    {$endif ISDELPHI2010}
     );
     tkEnumeration: (
       EnumType: TOrdType;
@@ -49624,7 +49625,7 @@ end;
 function HashAnsiString(const Elem; Hasher: THasher): cardinal;
 begin
   if PtrUInt(Elem)<>0 then
-    result := Hasher(0,Pointer(PtrUInt(Elem)),{$ifdef FPC}_LStrLenP(pointer(Elem))
+    result := Hasher(0,Pointer(Elem),{$ifdef FPC}_LStrLenP(pointer(Elem))
       {$else}PInteger(PtrUInt(Elem)-SizeOf(integer))^{$endif}) else
     result := HASH_ONVOIDCOLISION;
 end;
@@ -59138,12 +59139,16 @@ begin
   inherited;
 end;
 
+procedure TFileBufferWriter.InternalFlush;
+begin
+  fStream.WriteBuffer(fBuffer^,fPos);
+  fPos := 0;
+end;
+
 function TFileBufferWriter.Flush: Int64;
 begin
-  if fPos>0 then begin
-    fStream.WriteBuffer(fBuffer^,fPos);
-    fPos := 0;
-  end;
+  if fPos>0 then
+    InternalFlush;
   result := fTotalWritten;
   fTotalWritten := 0;
 end;
@@ -59163,10 +59168,8 @@ begin
     exit;
   inc(fTotalWritten,DataLen);
   if fPos+DataLen>fBufLen then begin
-    if fPos>0 then begin
-      fStream.WriteBuffer(fBuffer^,fPos);
-      fPos := 0;
-    end;
+    if fPos>0 then
+      InternalFlush;
     if DataLen>fBufLen then begin
       fStream.WriteBuffer(Data^,DataLen);
       exit;
@@ -59184,10 +59187,8 @@ begin
     if Count>fBufLen then
       len := fBufLen else
       len := Count;
-    if fPos+len>fBufLen then begin
-      fStream.WriteBuffer(fBuffer^,fPos);
-      fPos := 0;
-    end;
+    if fPos+len>fBufLen then
+      InternalFlush;
     {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(fBuffer^[fPos],len,Data);
     inc(fPos,len);
     dec(Count,len);
@@ -59196,10 +59197,8 @@ end;
 
 procedure TFileBufferWriter.Write1(Data: Byte);
 begin
-  if fPos+1>fBufLen then begin
-    fStream.WriteBuffer(fBuffer^,fPos);
-    fPos := 0;
-  end;
+  if fPos+1>fBufLen then
+    InternalFlush;
   fBuffer^[fPos] := Data;
   inc(fPos);
   inc(fTotalWritten);
@@ -59207,10 +59206,8 @@ end;
 
 procedure TFileBufferWriter.Write2(Data: Word);
 begin
-  if fPos+2>fBufLen then begin
-    fStream.WriteBuffer(fBuffer^,fPos);
-    fPos := 0;
-  end;
+  if fPos+2>fBufLen then
+    InternalFlush;
   PWord(@fBuffer^[fPos])^ := Data;
   inc(fPos,SizeOf(Word));
   inc(fTotalWritten,SizeOf(Word));
@@ -59218,10 +59215,8 @@ end;
 
 procedure TFileBufferWriter.Write4(Data: integer);
 begin
-  if fPos+SizeOf(integer)>fBufLen then begin
-    fStream.WriteBuffer(fBuffer^,fPos);
-    fPos := 0;
-  end;
+  if fPos+SizeOf(integer)>fBufLen then
+    InternalFlush;
   PInteger(@fBuffer^[fPos])^ := Data;
   inc(fPos,SizeOf(integer));
   inc(fTotalWritten,SizeOf(integer));
@@ -59234,10 +59229,8 @@ end;
 
 procedure TFileBufferWriter.Write8(const Data8Bytes);
 begin
-  if fPos+SizeOf(Int64)>fBufLen then begin
-    fStream.WriteBuffer(fBuffer^,fPos);
-    fPos := 0;
-  end;
+  if fPos+SizeOf(Int64)>fBufLen then
+    InternalFlush;
   PInt64(@fBuffer^[fPos])^ := Int64(Data8Bytes);
   inc(fPos,SizeOf(Int64));
   inc(fTotalWritten,SizeOf(Int64));
@@ -59272,10 +59265,8 @@ end;
 
 function TFileBufferWriter.DirectWritePrepare(len: integer; out tmp: RawByteString): PAnsiChar;
 begin
-  if (len<=fBufLen) and (fPos+len>fBufLen) then begin
-    fStream.WriteBuffer(fBuffer^,fPos);
-    fPos := 0;
-  end;
+  if (len<=fBufLen) and (fPos+len>fBufLen) then
+    InternalFlush;
   if fPos+len>fBufLen then begin
     SetLength(tmp,len);
     result := pointer(tmp);
@@ -59358,10 +59349,8 @@ begin
   inc(fTotalWritten,Len);
   while Len>0 do begin
     Dest := pointer(fBuffer);
-    if fPos+Len>fBufLen then begin
-      fStream.WriteBuffer(fBuffer^,fPos);
-      fPos := 0;
-    end else
+    if fPos+Len>fBufLen then
+      InternalFlush else
       inc(Dest,fPos);
     if Len>fBufLen then
       L := fBufLen else
@@ -59441,8 +59430,7 @@ begin
       if ValuesCount=0 then
         break;
     end;
-    fStream.WriteBuffer(fBuffer^,fPos);
-    fPos := 0;
+    InternalFlush;
   until false;
 end;
 
@@ -59487,10 +59475,8 @@ end;
 procedure TFileBufferWriter.WriteVarUInt32(Value: PtrUInt);
 var pos: integer;
 begin
-  if fPos+16>fBufLen then begin
-    fStream.WriteBuffer(fBuffer^,fPos);
-    fPos := 0;
-  end;
+  if fPos+16>fBufLen then
+    InternalFlush;
   pos := fPos;
   fPos := PtrUInt(ToVarUInt32(Value,@fBuffer^[fPos]))-PtrUInt(fBuffer);
   inc(fTotalWritten,PtrUInt(fPos-Pos));
@@ -59499,10 +59485,8 @@ end;
 procedure TFileBufferWriter.WriteVarInt64(Value: Int64);
 var pos: integer;
 begin
-  if fPos+48>fBufLen then begin
-    fStream.WriteBuffer(fBuffer^,fPos);
-    fPos := 0;
-  end;
+  if fPos+48>fBufLen then
+    InternalFlush;
   pos := fPos;
   fPos := PtrUInt(ToVarInt64(Value,@fBuffer^[fPos]))-PtrUInt(fBuffer);
   inc(fTotalWritten,PtrUInt(fPos-Pos));
@@ -59511,10 +59495,8 @@ end;
 procedure TFileBufferWriter.WriteVarUInt64(Value: QWord);
 var pos: integer;
 begin
-  if fPos+48>fBufLen then begin
-    fStream.WriteBuffer(fBuffer^,fPos);
-    fPos := 0;
-  end;
+  if fPos+48>fBufLen then
+    InternalFlush;
   pos := fPos;
   fPos := PtrUInt(ToVarUInt64(Value,@fBuffer^[fPos]))-PtrUInt(fBuffer);
   inc(fTotalWritten,PtrUInt(fPos-Pos));
@@ -59702,8 +59684,7 @@ begin
       if ValuesCount=0 then
         break;
     end;
-    fStream.WriteBuffer(fBuffer^,fPos);
-    fPos := 0;
+    InternalFlush;
   until false;
 end;
 
@@ -59780,8 +59761,7 @@ begin
       if ValuesCount=0 then
         break;
     end;
-    fStream.WriteBuffer(fBuffer^,fPos);
-    fPos := 0;
+    InternalFlush;
   until false;
 end;
 
