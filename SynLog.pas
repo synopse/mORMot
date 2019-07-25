@@ -1733,7 +1733,7 @@ begin
     S^.Start := Addr;
   end;
   S^.Stop := Addr+FromVarUInt32(P);
-  R.Seek(P-PByte(R.MappedBuffer));
+  R.Seek(PtrUInt(P)-PtrUInt(R.MappedBuffer));
 end;
 
 const
@@ -2041,7 +2041,7 @@ begin
     Diff := S^.Start;
   end;
   P := ToVarUInt32(S^.Stop-Diff,P);
-  W.DirectWriteFlush(P-Beg,tmp);
+  W.DirectWriteFlush(PtrUInt(P)-PtrUInt(Beg),tmp);
 end;
 
 procedure TSynMapFile.SaveToStream(aStream: TStream);
