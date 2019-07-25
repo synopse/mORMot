@@ -27240,6 +27240,7 @@ end;
 
 type
   TBase64Enc = array[0..63] of AnsiChar;
+  PBase64Enc = ^TBase64Enc;
   TBase64Dec = array[AnsiChar] of shortint;
 const
   b64enc: TBase64Enc =
@@ -27318,7 +27319,7 @@ end;
 function Base64EncodeMain(rp, sp: PAnsiChar; len: cardinal): integer;
 var i: integer;
     c: cardinal;
-    enc: ^TBase64Enc; // use local register
+    enc: PBase64Enc; // use local register
 begin
   enc := @b64enc;
   result := len div 3;
@@ -27393,20 +27394,21 @@ end;
 procedure Base64EncodeTrailing(rp, sp: PAnsiChar; len: cardinal);
   {$ifdef HASINLINE}inline;{$endif}
 var c: cardinal;
+    enc: PBase64Enc; // use local register
 begin
+  enc := @b64enc;
   case len of
     1: begin
       c := ord(sp[0]) shl 4;
-      rp[0] := b64enc[(c shr 6) and $3f];
-      rp[1] := b64enc[c and $3f];
-      rp[2] := '=';
-      rp[3] := '=';
+      rp[0] := enc[(c shr 6) and $3f];
+      rp[1] := enc[c and $3f];
+      PWord(rp+2)^ := ord('=')+ord('=') shl 8;
     end;
     2: begin
       c := ord(sp[0]) shl 10 + ord(sp[1]) shl 2;
-      rp[0] := b64enc[(c shr 12) and $3f];
-      rp[1] := b64enc[(c shr 6) and $3f];
-      rp[2] := b64enc[c and $3f];
+      rp[0] := enc[(c shr 12) and $3f];
+      rp[1] := enc[(c shr 6) and $3f];
+      rp[2] := enc[c and $3f];
       rp[3] := '=';
     end;
   end;
@@ -27606,7 +27608,7 @@ end;
 {$ifdef PUREPASCAL}
 procedure Base64uriEncode(rp, sp: PAnsiChar; len: cardinal);
 var i, main, c: cardinal;
-    enc: ^TBase64Enc; // slightly faster
+    enc: PBase64Enc; // slightly faster
 begin
   enc := @b64URIenc;
   main := len div 3;
