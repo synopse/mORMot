@@ -3793,9 +3793,7 @@ end;
 
 procedure TPdfBoolean.InternalWriteTo(W: TPdfWrite);
 begin
-  if Value then
-    W.Add('true') else
-    W.Add('false');
+  W.Add(BOOL_UTF8[Value]);
 end;
 
 constructor TPdfBoolean.Create(AValue: Boolean);

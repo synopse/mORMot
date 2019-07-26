@@ -513,7 +513,6 @@ var
 
 implementation
 
-
 { TSQLHttpClientGeneric }
 
 procedure TSQLHttpClientGeneric.InternalURI(var Call: TSQLRestURIParams);
