@@ -2280,6 +2280,7 @@ function CryptDataForCurrentUserDPAPI(const Data,AppSecret: RawByteString; Encry
 // !  end;
 function CryptDataForCurrentUser(const Data,AppSecret: RawByteString; Encrypt: boolean): RawByteString;
 
+
 const
   SHA1DIGESTSTRLEN = sizeof(TSHA1Digest)*2;
   SHA256DIGESTSTRLEN = sizeof(TSHA256Digest)*2;
@@ -3171,7 +3172,7 @@ type
     {$ifdef USEPADLOCK}
     ViaCtx: pointer; // padlock_*() context
     {$endif}
-    DoBlock: procedure(const ctxt, source, dest);
+    DoBlock: procedure(const ctxt, source, dest); // main AES function
     {$ifdef USEAESNI32}AesNi32: pointer;{$endif}
     Initialized: boolean;
     Rounds: byte;    // Number of rounds
@@ -14980,12 +14981,12 @@ initialization
   ComputeAesStaticTables;
 {$ifdef USEPADLOCK}
   PadlockInit;
-{$endif}
-{$ifdef CRC32C_X64} // use SSE4.2+pclmulqdq instructions
-  if (cfSSE42 in CpuFeatures) and (cfAesNi in CpuFeatures) then
-    crc32c := @crc32c_sse42_aesni;
-{$endif}
+{$endif USEPADLOCK}
 {$ifdef CPUX64}
+  {$ifdef CRC32C_X64} // use SSE4.2+pclmulqdq instructions
+    if (cfSSE42 in CpuFeatures) and (cfAesNi in CpuFeatures) then
+      crc32c := @crc32c_sse42_aesni;
+  {$endif CRC32C_X64}
   if cfSSE41 in CpuFeatures then begin // optimized Intel's sha256_sse4.asm ?
     if K256AlignedStore='' then
       GetMemAligned(K256AlignedStore,@K256,SizeOf(K256),K256Aligned);
@@ -15017,15 +15018,15 @@ finalization
 {$ifdef USEPADLOCKDLL}
   if PadLockLibHandle<>0 then
     FreeLibrary(PadLockLibHandle); // same on Win+Linux, thanks to SysUtils
-{$endif}
+{$endif USEPADLOCKDLL}
   FillZero(__h);
 {$ifdef MSWINDOWS}
   if CryptoAPI.Handle<>0 then begin
     {$ifdef USE_PROV_RSA_AES}
     if (CryptoAPIAESProvider<>nil) and (CryptoAPIAESProvider<>HCRYPTPROV_NOTTESTED) then
       CryptoAPI.ReleaseContext(CryptoAPIAESProvider,0);
-    {$endif}
+    {$endif USE_PROV_RSA_AES}
     FreeLibrary(CryptoAPI.Handle);
   end;
-{$endif}
+{$endif MSWINDOWS}
 end.

@@ -2571,8 +2571,7 @@ type
   protected
     fPassWord: RawUTF8;
     fKey: cardinal;
-    function GetKey: cardinal;
-      {$ifdef HASINLINE}inline;{$endif}
+    function GetKey: cardinal; {$ifdef HASINLINE}inline;{$endif}
     function GetPassWordPlain: RawUTF8;
     function GetPassWordPlainInternal(AppSecret: RawUTF8): RawUTF8;
     procedure SetPassWordPlain(const Value: RawUTF8);
@@ -2598,8 +2597,7 @@ type
     /// low-level function used to identify if a given field is a Password
     // - this method is used e.g. by TJSONSerializer.WriteObject to identify the
     // password field, since its published name is set by the inherited classes
-    function GetPasswordFieldAddress: pointer;
-      {$ifdef HASINLINE}inline;{$endif}
+    function GetPasswordFieldAddress: pointer; {$ifdef HASINLINE}inline;{$endif}
     /// the private key used to cypher the password storage on serialization
     // - application can override the default 0 value at runtime
     property Key: cardinal read GetKey write fKey;
@@ -4992,7 +4990,7 @@ begin
   case FieldType of
   // fixed-sized field value
   tftBoolean:
-    JSONBoolean(PBoolean(FieldBuffer)^,result);
+    result := BOOL_UTF8[PBoolean(FieldBuffer)^];
   tftUInt8:
     UInt32ToUtf8(PB^,result);
   tftUInt16:

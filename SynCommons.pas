@@ -959,8 +959,8 @@ var
   NULL_STR_VAR: RawUTF8;
 
 /// compute the new capacity when expanding an array of items
-// - handle small, medium and large sizes properly to reduce memory usage and
-// maximize performance
+// - handle tiny, small, medium, large and huge sizes properly to reduce
+// memory usage and maximize performance
 function NextGrow(capacity: integer): integer;
 
 /// equivalence to SetString(s,nil,len) function
@@ -7889,8 +7889,7 @@ type
     procedure Add(Value: PtrInt); overload;
     /// append a boolean Value as text
     // - write either 'true' or 'false'
-    procedure Add(Value: boolean); overload;
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure Add(Value: boolean); overload; {$ifdef HASINLINE}inline;{$endif}
     /// append a Currency from its Int64 in-memory representation
     procedure AddCurr64(const Value: Int64); overload;
     /// append a Currency from its Int64 in-memory representation
@@ -13048,7 +13047,7 @@ function FileTimeToUnixMSTime(const FT: TFileTime): TUnixMSTime;
 var
   /// emulate only some used fields of Windows' TSystemInfo
   SystemInfo: record
-    // retrieved from libc's getpagesize()
+    // retrieved from libc's getpagesize() - is expected to not be 0
     dwPageSize: cardinal;
     // retrieved from HW_NCPU (BSD) or /proc/cpuinfo (Linux)
     dwNumberOfProcessors: cardinal;
@@ -13301,13 +13300,14 @@ procedure GlobalLock;
 procedure GlobalUnLock;
 
 
-/// JSON compatible representation of a boolean value
-// - returns either 'true' or 'false'
-procedure JSONBoolean(value: boolean; var result: RawUTF8);
-  {$ifdef HASINLINE}inline;{$endif} overload;
+var
+  /// JSON compatible representation of a boolean value
+  // - can be used when a RawUTF8 string is expected
+  BOOL_UTF8: array[boolean] of RawUTF8;
 
 const
-  /// can be used e.g. in logs
+  /// JSON compatible representation of a boolean value
+  // - can be used e.g. in logs, or anything accepting a shortstring
   BOOL_STR: array[boolean] of string[7] = ('false','true');
 
   /// can be used to append to most English nouns to form a plural
@@ -15335,18 +15335,26 @@ var
   stdoutIsTTY: boolean;
 {$endif}{$endif}
 
-/// change the Windows console text writing color
+/// change the console text writing color
 // - you should call this procedure to initialize StdOut global variable, if
 // you manually initialized the Windows console, e.g. via the following code:
 // ! AllocConsole;
 // ! TextColor(ccLightGray); // initialize internal console context
 procedure TextColor(Color: TConsoleColor);
 
-/// change the Windows console text background color
+/// write some text to the console using a given color
+procedure ConsoleWrite(const Text: RawUTF8; Color: TConsoleColor=ccDarkGray;
+  NoLineFeed: boolean=false); overload;
+
+/// write some text to the console using a given color
+procedure ConsoleWrite(const Fmt: RawUTF8; const Args: array of const;
+  Color: TConsoleColor=ccDarkGray; NoLineFeed: boolean=false); overload;
+
+/// change the console text background color
 procedure TextBackground(Color: TConsoleColor);
 
-/// will wait for the ENTER key to be pressed, processing the internal
-// Windows Message loop and any Synchronize() pending notification
+/// will wait for the ENTER key to be pressed, processing Synchronize() pending
+// notifications, and the internal Windows Message loop (on this OS)
 // - to be used e.g. for proper work of console applications with interface-based
 // service implemented as optExecInMainThread
 procedure ConsoleWaitForEnterKey;
@@ -19374,7 +19382,7 @@ smlu32: Res.Text := pointer(SmallUInt32UTF8[result]);
   result := Res.Len;
 end;
 
-procedure VarRecToUTF8(const V: TVarRec; var result: RawUTF8; wasString: PBoolean=nil);
+procedure VarRecToUTF8(const V: TVarRec; var result: RawUTF8; wasString: PBoolean);
 var isString: boolean;
 begin
   isString := not (V.VType in [
@@ -38065,7 +38073,7 @@ begin
 end;
 
 procedure QuickSortRawUTF8(var Values: TRawUTF8DynArray; ValuesCount: integer;
-  CoValues: PIntegerDynArray=nil; Compare: TUTF8Compare=nil);
+  CoValues: PIntegerDynArray; Compare: TUTF8Compare);
 var QS: TQuickSortRawUTF8;
 begin
   QS.Values := pointer(Values);
@@ -38607,13 +38615,13 @@ function mprotect(Addr: Pointer; Len: size_t; Prot: Integer): Integer;
   {$ifdef Darwin} cdecl external 'libc.dylib' name 'mprotect';
   {$else} cdecl external 'libc.so' name 'mprotect'; {$endif}
   {$define USEMPROTECT}
-{$endif}
+{$endif BSD}
 {$ifdef KYLIX3}
   {$define USEMPROTECT}
-{$endif}
+{$endif KYLIX3}
 
-procedure PatchCode(Old,New: pointer; Size: integer; Backup: pointer=nil;
-  LeaveUnprotected: boolean=false);
+procedure PatchCode(Old,New: pointer; Size: integer; Backup: pointer;
+  LeaveUnprotected: boolean);
 {$ifdef MSWINDOWS}
 var RestoreProtection, Ignore: DWORD;
     i: integer;
@@ -38647,14 +38655,14 @@ begin
   if mprotect(Pointer(AlignedAddr),PageSize,PROT_READ or PROT_WRITE or PROT_EXEC)=0 then
   {$else}
   Do_SysCall(syscall_nr_mprotect,PtrUInt(AlignedAddr),PageSize,PROT_READ or PROT_WRITE or PROT_EXEC);
-  {$endif}
+  {$endif USEMPROTECT}
     try
       for i := 0 to Size-1 do // do not use Move() here
         PByteArray(Old)^[i] := PByteArray(New)^[i];
     except
     end;
 end;
-{$endif}
+{$endif MSWINDOWS}
 
 procedure PatchCodePtrUInt(Code: PPtrUInt; Value: PtrUInt;
   LeaveUnprotected: boolean=false);
@@ -38664,7 +38672,7 @@ end;
 
 {$ifdef CPUINTEL}
 
-procedure RedirectCode(Func, RedirectFunc: Pointer; Backup: PPatchCode=nil);
+procedure RedirectCode(Func, RedirectFunc: Pointer; Backup: PPatchCode);
 var NewJump: packed record
     Code: byte;        // $e9 = jmp {relative}
     Distance: integer; // relative jump is 32-bit even on CPU64
@@ -42621,13 +42629,6 @@ begin
   result := true;
 end;
 
-procedure JSONBoolean(value: boolean; var result: RawUTF8);
-begin // defined as a function and not an array[boolean] of RawUTF8 for FPC
-  if value then
-    result := 'true' else
-    result := 'false';
-end;
-
 function Plural(const itemname: shortstring; itemcount: cardinal): shortstring;
 var len: integer;
 begin
@@ -45204,7 +45205,7 @@ begin
   until L >= R;
 end;
 
-procedure TDocVariantData.SortByName(Compare: TUTF8Compare=nil);
+procedure TDocVariantData.SortByName(Compare: TUTF8Compare);
 begin
   if not(dvoIsObject in VOptions) or (VCount=0) then
     exit;
@@ -48953,7 +48954,7 @@ begin
   result := -1;
 end;
 
-procedure TDynArray.Init(aTypeInfo: pointer; var aValue; aCountPointer: PInteger=nil);
+procedure TDynArray.Init(aTypeInfo: pointer; var aValue; aCountPointer: PInteger);
 begin
   fValue := @aValue;
   fTypeInfo := aTypeInfo;
@@ -51346,9 +51347,7 @@ end;
 
 procedure TTextWriter.Add(Value: boolean);
 begin
-  if Value then
-    AddShort('true') else
-    AddShort('false');
+  AddShort(BOOL_STR[Value]);
 end;
 
 procedure TTextWriter.AddFloatStr(P: PUTF8Char);
@@ -55316,6 +55315,7 @@ end;
 var
   TextAttr: integer = ord(ccDarkGray);
 
+{$I-}
 {$ifdef MSWINDOWS}
 
 procedure InitConsole;
@@ -55393,11 +55393,15 @@ begin
 end;
 {$endif DELPHI5OROLDER}
 
+function Utf8ToConsole(const S: RawUTF8): RawByteString;
+begin
+  result := TSynAnsiConvert.Engine(CP_OEMCP).UTF8ToAnsi(S);
+end;
+
 {$else MSWINDOWS}
 
-// we by-pass crt.pp since this unit cancels the SIGINT signal
+// we bypass crt.pp since this unit cancels the SIGINT signal
 
-{$I-}
 procedure TextColor(Color: TConsoleColor);
 const AnsiTbl : string[8]='04261537';
 begin
@@ -55413,45 +55417,66 @@ begin
     write(#27'[0;3',AnsiTbl[(ord(color) and 7)+1],'m');
   ioresult;
 end;
-{$I+}
 
 procedure TextBackground(Color: TConsoleColor);
 begin // not implemented yet - but not needed either
 end;
 
 procedure ConsoleWaitForEnterKey;
+var c: AnsiChar;
 begin
-  Readln;
+  {$ifdef FPC}
+  if IsMultiThread and (GetCurrentThreadID=MainThreadID) then
+    repeat
+      CheckSynchronize(100);
+      if UnixKeyPending then
+        repeat
+          c := #0;
+          if FpRead(StdInputHandle,c,1)<>1 then
+            break;
+          if c in [#10,#13] then
+            exit;
+        until false;
+    until false else
+  {$endif FPC}
+    ReadLn;
 end;
-
-{$endif MSWINDOWS}
 
 function Utf8ToConsole(const S: RawUTF8): RawByteString;
 begin
-  {$ifdef MSWINDOWS}
-  result := TSynAnsiConvert.Engine(CP_OEMCP).UTF8ToAnsi(S);
-  {$else}
-  result := S; // expect a UTF-8 console under Linux
-  {$endif}
+  result := S; // expect a UTF-8 console under Linux/BSD
 end;
+
+{$endif MSWINDOWS}
 
 function StringToConsole(const S: string): RawByteString;
 begin
   result := Utf8ToConsole(StringToUTF8(S));
 end;
 
-{$I-}
+procedure ConsoleWrite(const Text: RawUTF8; Color: TConsoleColor; NoLineFeed: boolean);
+begin
+  TextColor(Color);
+  write(Utf8ToConsole(Text));
+  if not NoLineFeed then
+    writeln;
+  ioresult;
+end;
+
+procedure ConsoleWrite(const Fmt: RawUTF8; const Args: array of const;
+  Color: TConsoleColor; NoLineFeed: boolean);
+var tmp: RawUTF8;
+begin
+  FormatUTF8(Fmt,Args,tmp);
+  ConsoleWrite(tmp,Color,NoLineFeed);
+end;
+
 procedure ConsoleShowFatalException(E: Exception; WaitForEnterKey: boolean);
 begin
-  ioresult;
-  TextColor(ccLightRed);
-  write(#13#10'Fatal exception ');
-  TextColor(ccWhite);
-  write(E.ClassName);
-  TextColor(ccLightRed);
-  Writeln(' raised with message:');
-  TextColor(ccLightMagenta);
-  Writeln(' ',StringToConsole(E.Message));
+  ConsoleWrite(#13#10'Fatal exception ',cclightRed,false);
+  ConsoleWrite('%',[E.ClassName],ccWhite,false);
+  ConsoleWrite(' raised with message: ',ccLightRed,false);
+  ConsoleWrite('%',[E.Message],ccLightMagenta);
   TextColor(ccLightGray);
   if WaitForEnterKey then begin
     writeln(#13#10'Program will now abort');
@@ -62209,6 +62234,8 @@ begin
   JSON_CONTENT_TYPE_VAR := JSON_CONTENT_TYPE;
   JSON_CONTENT_TYPE_HEADER_VAR := JSON_CONTENT_TYPE_HEADER;
   NULL_STR_VAR := 'null';
+  BOOL_UTF8[false] := 'false';
+  BOOL_UTF8[true] := 'true';
   {$ifdef FPC}
   {$ifdef ISFPC27}
   {$ifndef MSWINDOWS}
@@ -62369,7 +62396,7 @@ initialization
   InitializeCriticalSection(GlobalCriticalSection);
   {$ifndef MSWINDOWS} // should be set ASAP (RetrieveSystemInfo is too late)
   SystemInfo.dwPageSize := getpagesize; // use libc for this value
-  if SystemInfo.dwPageSize = 0 then
+  if SystemInfo.dwPageSize=0 then // should not be 0
     SystemInfo.dwPageSize := 4096;
   {$endif MSWINDOWS}
   {$ifdef CPUINTEL}

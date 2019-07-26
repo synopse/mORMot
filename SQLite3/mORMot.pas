@@ -22272,7 +22272,7 @@ begin
     wasSQLString^ := false;
   i := fPropInfo.GetOrdProp(Instance);
   if (fSQLFieldType=sftBoolean) and not ToSQL then
-    JSONBoolean(i<>0,result) else
+    result := BOOL_UTF8[i<>0] else
     UInt32ToUtf8(i,result);
 end;
 
@@ -26426,8 +26426,8 @@ begin
   end;
 end;
 
-procedure TSQLTable.GetCSVValues(Dest: TStream; Tab: boolean; CommaSep: AnsiChar=',';
-  AddBOM: boolean=false; RowFirst: integer=0; RowLast: integer=0);
+procedure TSQLTable.GetCSVValues(Dest: TStream; Tab: boolean; CommaSep: AnsiChar;
+  AddBOM: boolean; RowFirst,RowLast: integer);
 var U: PPUTF8Char;
     F,R,FMax: integer;
     W: TTextWriter;
@@ -26468,8 +26468,8 @@ begin
   end;
 end;
 
-function TSQLTable.GetCSVValues(Tab: boolean; CommaSep: AnsiChar=',';
-  AddBOM: boolean=false; RowFirst: integer=0; RowLast: integer=0): RawUTF8;
+function TSQLTable.GetCSVValues(Tab: boolean; CommaSep: AnsiChar;
+  AddBOM: boolean; RowFirst,RowLast: integer): RawUTF8;
 var MS: TRawByteStringStream;
 begin
   MS := TRawByteStringStream.Create;
@@ -27389,7 +27389,7 @@ begin
 end;
 {$endif}
 
-procedure TSQLTable.ToObjectList(DestList: TObjectList; RecordType: TSQLRecordClass=nil);
+procedure TSQLTable.ToObjectList(DestList: TObjectList; RecordType: TSQLRecordClass);
 var R: TSQLRecord;
     row: PPUtf8Char;
     rec: ^TSQLRecord;
@@ -31655,7 +31655,7 @@ begin
   end;
 end;
 
-procedure TEnumType.AddCaptionStrings(Strings: TStrings; UsedValuesBits: Pointer=nil);
+procedure TEnumType.AddCaptionStrings(Strings: TStrings; UsedValuesBits: Pointer);
 var i, L: PtrInt;
     Line: array[byte] of AnsiChar;
     P: PAnsiChar;
@@ -52175,9 +52175,8 @@ end;
 
 procedure TSQLRecordProperties.RegisterCustomRTTIRecordProperty(aTable: TClass;
   aRecordInfo: PTypeInfo; const aName: RawUTF8;  aPropertyPointer: pointer;
-  aAttributes: TSQLPropInfoAttributes=[]; aFieldWidth: integer=0;
-  aData2Text: TOnSQLPropInfoRecord2Text=nil;
-  aText2Data: TOnSQLPropInfoRecord2Data=nil);
+  aAttributes: TSQLPropInfoAttributes; aFieldWidth: integer;
+  aData2Text: TOnSQLPropInfoRecord2Text; aText2Data: TOnSQLPropInfoRecord2Data);
 begin
   Fields.Add(TSQLPropInfoRecordRTTI.Create(aRecordInfo,aName,Fields.Count,
     aPropertyPointer,aAttributes,aFieldWidth,aData2Text,aText2Data));
@@ -52185,7 +52184,7 @@ end;
 
 procedure TSQLRecordProperties.RegisterCustomPropertyFromRTTI(aTable: TClass;
   aTypeInfo: PTypeInfo; const aName: RawUTF8; aPropertyPointer: pointer;
-  aAttributes: TSQLPropInfoAttributes=[]; aFieldWidth: integer=0);
+  aAttributes: TSQLPropInfoAttributes; aFieldWidth: integer);
 begin
   Fields.Add(TSQLPropInfoCustomJSON.Create(aTypeInfo,aName,Fields.Count,
     aPropertyPointer,aAttributes,aFieldWidth));
@@ -52193,7 +52192,7 @@ end;
 
 procedure TSQLRecordProperties.RegisterCustomPropertyFromTypeName(aTable: TClass;
   const aTypeName, aName: RawUTF8; aPropertyPointer: pointer;
-  aAttributes: TSQLPropInfoAttributes=[]; aFieldWidth: integer=0);
+  aAttributes: TSQLPropInfoAttributes; aFieldWidth: integer);
 begin
   Fields.Add(TSQLPropInfoCustomJSON.Create(aTypeName,aName,Fields.Count,
     aPropertyPointer,aAttributes,aFieldWidth));
@@ -52423,8 +52422,7 @@ var Added: boolean;
             HR(P);
             Add('"');
             if (IsObj=oSynPersistentWithPassword) and (codepage=CP_UTF8) and
-               ((woHideSynPersistentPassword in Options) or
-                (woFullExpand in Options)) and
+               ((woHideSynPersistentPassword in Options) or (woFullExpand in Options)) and
                P^.GetterIsField and (P^.GetterAddr(Value)=
                  TSynPersistentWithPassword(Value).GetPasswordFieldAddress) then begin
               if tmp<>'' then
@@ -60641,7 +60639,7 @@ var W: TTextWriter;
 begin
   case ValueType of // some direct conversion of simple types
   smvBoolean:
-    JSONBoolean(PBoolean(V)^,DestValue);
+    DestValue := BOOL_UTF8[PBoolean(V)^];
   smvEnum..smvInt64:
   case SizeInStorage of
     1: UInt32ToUtf8(PByte(V)^,DestValue);

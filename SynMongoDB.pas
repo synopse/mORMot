@@ -5847,7 +5847,7 @@ begin // caller should have made fConnections[0].Open
     resp.Clear;
     CheckPayload;
     if (err='') and (resp.U['v']<>BinToBase64(@server,SizeOf(server))) then
-        err := 'Server returned an invalid signature';
+      err := 'Server returned an invalid signature';
     if err<>'' then
       raise EMongoException.CreateUTF8('%.OpenAuthSCRAM("%") step2: % - res=%',
         [self,DatabaseName,err,res]);
