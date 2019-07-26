@@ -1334,7 +1334,7 @@ procedure TOleDBStatement.BindTextS(Param: Integer; const Value: string;
 begin
   if (Value='') and fConnection.Properties.StoreVoidStringAsNull then
     CheckParam(Param,ftNull,IO) else
-    CheckParam(Param,ftUTF8,IO)^.VText := Value; // let Delphi do the work
+    CheckParam(Param,ftUTF8,IO)^.VText := StringToSynUnicode(Value);
 end;
 
 procedure TOleDBStatement.BindTextW(Param: Integer;
@@ -1662,7 +1662,7 @@ begin // dedicated version to avoid as much memory allocation than possible
     result := ftNull else
     result := C^.ColumnType;
   with TVarData(Value) do begin
-    if VType and VTYPE_STATIC<>0 then
+    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
       VarClear(Value);
     VType := MAP_FIELDTYPE2VARTYPE[result];
     case result of
@@ -2445,9 +2445,9 @@ begin // get OleDB specific error information
   for i := 0 to high(aStatus) do
     if TOleDBBindStatus(aStatus[i])<>bsOK then begin
       if aStatus[i]<=cardinal(high(TOleDBBindStatus)) then
-        s := Format('%s Status[%d]="%s"',[s,i,
+        s := FormatString('% Status[%]="%"',[s,i,
           GetCaptionFromEnum(TypeInfo(TOleDBBindStatus),aStatus[i])]) else
-        s := Format('%s Status[%d]=%d',[s,i,aStatus[i]]);
+        s := FormatString('% Status[%]=%',[s,i,aStatus[i]]);
 
     end;
   if s<>'' then
@@ -2888,7 +2888,7 @@ begin
         if pwszProcedure<>nil then
           tmp := UnicodeBufferToString(pwszProcedure) else
           tmp := 'Error '+IntToStr(lNative);
-        Connection.fOleDBErrorMessage := Format('%s %s (line %d): %s',
+        Connection.fOleDBErrorMessage := FormatString('% % (line %): %',
           [Connection.fOleDBErrorMessage,tmp,wLineNumber,msg]);
       end;
     finally

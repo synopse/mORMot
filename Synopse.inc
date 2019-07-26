@@ -163,6 +163,9 @@
 // enable low-level logging of SQlite3 virtual table query planner costs
 // -> to be defined only for internal debugging
 
+{.$define NOSYNDBZEOS}
+// made SynDBZeos.pas a "void" unit - defined for FPC/Lazarus packages only
+
 {.$define DDDNOSYNDB}
 // SynDB / external SQL DB won't be linked to the executable by dddInfraSettings
 {.$define DDDNOMONGODB}
@@ -310,6 +313,7 @@
     {$ifdef CPUX64}
       {$define CPUINTEL}
       {$define FPC_CPUINTEL}
+      {$define FPC_X64}
       {$ASMMODE INTEL} // as Delphi expects
     {$endif CPUX64}
   {$else}
@@ -320,6 +324,7 @@
     {$ifdef CPUX86}
       {$define CPUINTEL}
       {$define FPC_CPUINTEL}
+      {$define FPC_X86}
       {$ASMMODE INTEL} // as Delphi expects
       {$ifndef FPC_PIC}
         {$define CPUX86NOTPIC} // use "absolute" instead of local register
@@ -357,6 +362,7 @@
     {$define DELPHI_OR_FPC_OLDRTTI}
     {$define FPC_OLDRTTI}
   {$endif}
+  {$define ISDELPHI2010_OR_FPC} // eltype2 field
 
   {$ifdef FPC_HAS_CPSTRING}
     // see http://wiki.freepascal.org/FPC_Unicode_support
@@ -481,13 +487,13 @@
         {$define FPC_OR_UNICODE}
       {$ifend}
       {$if CompilerVersion >= 21.0}
-        // Delphi 2010/XE: Reduce EXE size by disabling much RTTI
         {$define ISDELPHI2010}
+        {$define ISDELPHI2010_OR_FPC} // eltype2 field
         {$define ISDELPHI2010_OR_FPC_NEWRTTI}
         {$define FPC_OR_UNICODE}
         {$define HASTTHREADSTART}
         {$define HASINTERFACEASTOBJECT}
-        {$ifdef NEWRTTINOTUSED}
+        {$ifdef NEWRTTINOTUSED} // option reduce EXE size by disabling much RTTI
           {$WEAKLINKRTTI ON}
           {$RTTI EXPLICIT METHODS([]) PROPERTIES([]) FIELDS([])}
         {$endif NEWRTTINOTUSED}

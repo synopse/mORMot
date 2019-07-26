@@ -6082,7 +6082,7 @@ begin
       {$else}
       if Assigned(fThreadPool) then begin
         // use thread pool to process the request header, and probably its body
-        if not fThreadPool.Push(pointer(ClientSock)) then begin
+        if not fThreadPool.Push(pointer(PtrUInt(ClientSock))) then begin
           // returned false if there is no idle thread in the pool, and queue is full
           {$ifndef USE_WINIOCP}
           if fThreadPool.QueueIsFull then begin // too many connection limit reached?
@@ -6102,7 +6102,7 @@ begin
             tix := GetTick64;
             if Terminated then
               break;
-            if fThreadPool.Push(pointer(ClientSock)) then begin
+            if fThreadPool.Push(pointer(PtrUInt(ClientSock))) then begin
               endtix := 0; // thread pool acquired the client sock
               break;
             end;
@@ -7174,7 +7174,7 @@ begin
     exit;
   ServerSock := THttpServerSocket.Create(fServer);
   try
-    ServerSock.InitRequest(TSocket(aContext));
+    ServerSock.InitRequest(TSocket(PtrUInt(aContext)));
     // get Header of incoming request in the thread pool
     headertix := fServer.HeaderRetrieveAbortDelay;
     if headertix>0 then
@@ -7209,7 +7209,7 @@ end;
 
 procedure TSynThreadPoolTHttpServer.TaskAbort(aContext: Pointer);
 begin
-  DirectShutdown(TSocket(aContext));
+  DirectShutdown(TSocket(PtrUInt(aContext)));
 end;
 
 
@@ -10794,12 +10794,12 @@ begin
     buff.dwBufferTotal := Length(aData);
     if not HttpSendRequestExA(fRequest,@buff,nil,0,0) then
       raise EWinINet.Create;
-    datapos := 1;
-    while datapos<=datalen do begin
+    datapos := 0;
+    while datapos<datalen do begin
       Bytes := fOnDownloadChunkSize;
       if Bytes<=0 then
         Bytes := 65536; // 64KB seems fair enough by default
-      max := datalen-datapos+1;
+      max := datalen-datapos;
       if Bytes>max then
         Bytes := max;
       if not InternetWriteFile(fRequest,@PByteArray(aData)[datapos],Bytes,BytesWritten) then
@@ -11245,7 +11245,7 @@ procedure TWinHTTP.InternalSendRequest(const aMethod,aData: SockString);
           Max := L-Current;
           if Bytes>Max then
             Bytes := Max;
-          if not WinHttpAPI.WriteData(fRequest, @PByteArray(aData)[Current+1],Bytes,BytesWritten) then
+          if not WinHttpAPI.WriteData(fRequest, @PByteArray(aData)[Current],Bytes,BytesWritten) then
             RaiseLastModuleError(winhttpdll,EWinHTTP);
           inc(Current,BytesWritten);
           if not fOnUpload(Self,Current,L) then
@@ -12936,9 +12936,9 @@ begin
   if not Assigned(GetTick64) then // fallback before Vista
     GetTick64 := @GetTick64ForXP;
   {$endif MSWINDOWS}
+  FillChar(WsaDataOnce,sizeof(WsaDataOnce),0);
   if InitSocketInterface then
-    WSAStartup(WinsockLevel, WsaDataOnce) else
-    fillchar(WsaDataOnce,sizeof(WsaDataOnce),0);
+    WSAStartup(WinsockLevel, WsaDataOnce);
 end;
 
 initialization

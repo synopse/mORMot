@@ -1613,7 +1613,7 @@ begin
     end;
   except
     on E: Exception do
-      fLastError := Format('%s [%s]',[E.ClassName,E.Message]);
+      FormatString('% [%]',[E.ClassName,E.Message],fLastError);
   end else
   if (Sender.fIncoming.AnswerToIgnore>0) and (FrameData(request,'answer')<>nil) then begin
     Sender.fIncoming.AnswerToIgnore(-1);
@@ -2551,7 +2551,7 @@ var hdr: TFrameHeader;
       fSocket.SockInRead(@hdr.len32,8,false);
       if hdr.len32<>0 then // size is more than 32 bits -> reject
         hdr.len32 := maxInt else
-        hdr.len32 := {$ifdef FPC}SwapEndian{$else}bswap32{$endif}(hdr.len64);
+        hdr.len32 := bswap32(hdr.len64);
       if hdr.len32>WebSocketsMaxFrameMB shl 20 then
         raise EWebSockets.CreateUTF8('%.GetFrame: length should be < % MB',
           [self,WebSocketsMaxFrameMB]);
@@ -2647,7 +2647,7 @@ begin
         fSocket.SockSend(@hdr,4);
       end else begin
         hdr.len8 := FRAME_LEN8BYTES or fMaskSentFrames;
-        hdr.len64 := {$ifdef FPC}SwapEndian{$else}bswap32{$endif}(len);
+        hdr.len64 := bswap32(len);
         hdr.len32 := 0;
         // huge payload sent outside TCrtSock buffers
         if not fSocket.TrySndLow(@hdr,10+fMaskSentFrames shr 5) or

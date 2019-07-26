@@ -8913,16 +8913,17 @@ begin
   Doc.Clear;
   Doc.InitArray(['one',2,3.0]);
   Check(variant(Doc)._kind=ord(dvArray));
-  Check(Doc.Count=3);
   Check(variant(Doc)._count=3);
-  Check(Doc.Values[0]='one');
-  Check(Doc.Values[1]=2);
-  Check(Doc.Values[2]=3.0);
-  Check(Doc.Value[0]='one');
-  Check(Doc.Value[1]=2);
-  Check(Doc.Value[2]=3.0);
-  for i := 0 to Doc.Count-1 do
-    Check(Doc.Values[i]=Doc.Value[i]);
+  if not CheckFailed(Doc.Count=3) then begin
+    Check(Doc.Values[0]='one');
+    Check(Doc.Values[1]=2);
+    Check(Doc.Values[2]=3.0);
+    Check(Doc.Value[0]='one');
+    Check(Doc.Value[1]=2);
+    Check(Doc.Value[2]=3.0);
+    for i := 0 to Doc.Count-1 do
+      Check(VariantCompare(Doc.Values[i],Doc.Value[i])=0);
+  end;
   Check(Doc.ToJSON='["one",2,3]');
   Check(Variant(Doc)._JSON='["one",2,3]');
   Doc.ToArrayOfConst(vr);

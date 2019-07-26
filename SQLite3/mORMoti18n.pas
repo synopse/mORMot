@@ -1386,7 +1386,7 @@ begin
       continue;
     if index=CurrentLanguage.Index then
       result := List.Count; // current language selection
-    List.AddObject(format('%s (%s)',[LanguageName(index),LanguageAbr[index]]),
+    List.AddObject(FormatString('% (%)',[LanguageName(index),LanguageAbr[index]]),
       pointer(index));
   end;
 end;

@@ -516,7 +516,7 @@ implementation
 
 function TOracleDate.ToDateTime: TDateTime;
 begin
-  if (PInteger(@self)^=0) and (PInteger(PtrInt(@self)+3)^=0) then
+  if (PInteger(@self)^=0) and (PInteger(PtrUInt(@self)+3)^=0) then
     // Cent=Year=Month=Day=Hour=Main=Sec=0 -> returns 0
     result := 0 else begin
     if Cent<=100 then // avoid TDateTime values < 0 (generates wrong DecodeTime)
@@ -530,7 +530,7 @@ end;
 procedure TOracleDate.ToIso8601(var aIso8601: RawByteString);
 var tmp: array[0..23] of AnsiChar;
 begin
-  if (PInteger(@self)^=0) and (PInteger(PtrInt(@self)+3)^=0) then
+  if (PInteger(@self)^=0) and (PInteger(PtrUInt(@self)+3)^=0) then
     // Cent=Year=Month=Day=Hour=Main=Sec=0 -> stored as ""
     aIso8601 := '' else begin
     DateToIso8601PChar(tmp,true,(Cent-100)*100+Year-100,Month,Day);
@@ -546,7 +546,7 @@ function TOracleDate.ToIso8601(Dest: PUTF8Char): integer;
 var Y: cardinal;
 begin
   Dest^ := '"';
-  if (PInteger(@self)^=0) and (PInteger(PtrInt(@self)+3)^=0) then
+  if (PInteger(@self)^=0) and (PInteger(PtrUInt(@self)+3)^=0) then
     // Cent=Year=Month=Day=Hour=Main=Sec=0 -> stored as ""
     result := 2 else begin
     Y := (Cent-100)*100+Year-100;
@@ -566,7 +566,7 @@ end;
 procedure TOracleDate.From(const aValue: TDateTime);
 var T: TSynSystemTime;
 begin
-  PInteger(PtrInt(@self)+3)^ := 0; // set Day=Hour=Min=Sec to 0
+  PInteger(PtrUInt(@self)+3)^ := 0; // set Day=Hour=Min=Sec to 0
   if aValue<=0 then begin
     PInteger(@self)^ := 0;
     exit; // supplied TDateTime value = 0 -> store as null date
@@ -594,7 +594,7 @@ var Value: QWord;
     Y: cardinal;
     NoTime: boolean;
 begin
-  PInteger(PtrInt(@self)+3)^ := 0; // set Day=Hour=Min=Sec to 0
+  PInteger(PtrUInt(@self)+3)^ := 0; // set Day=Hour=Min=Sec to 0
   Value := Iso8601ToTimeLogPUTF8Char(aIso8601,Length,@NoTime);
   if Value=0 then begin
     PInteger(@self)^ := 0;
@@ -2408,7 +2408,7 @@ begin // dedicated version to avoid as much memory allocation than possible
     result := ftNull else
     result := C^.ColumnType;
   with TVarData(Value) do begin
-    if VType and VTYPE_STATIC<>0 then
+    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
       VarClear(Value);
     VType := MAP_FIELDTYPE2VARTYPE[result];
     case result of

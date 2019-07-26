@@ -1146,7 +1146,7 @@ begin
         raise EServiceException.CreateUTF8('Cannot allocate memory for service jump gate: %',
           [fSName]);
       AfterCallAddr := Pointer(PtrUInt(fJumper)+5);
-      Offset :=  PtrInt(@JumpToService)-PtrInt(AfterCallAddr);
+      Offset := PtrUInt(@JumpToService)-PtrUInt(AfterCallAddr);
       fJumper[0] := $E8; // call opcode
       PInteger(@fJumper[1])^ := Offset;       // points to JumpToService
       PPtrUInt(@fJumper[5])^ := PtrUInt(self); // will be set as EAX=self
@@ -1527,7 +1527,7 @@ end;
 
 function RunUntilSigTerminatedPidFile: TFileName;
 begin
-  result := format('%s.%s.pid', [ExeVersion.ProgramFilePath, ExeVersion.ProgramName]);
+  result := FormatString('%.%.pid', [ExeVersion.ProgramFilePath, ExeVersion.ProgramName]);
 end;
 
 function RunUntilSigTerminatedForKill(waitseconds: integer): boolean;
@@ -1719,7 +1719,7 @@ begin
     if versionnumber <> '' then
       result := result + ' ' + versionnumber;
     if CompanyName <> '' then
-      result := format('%s - (c)%d %s', [result, BuildYear, CompanyName]);
+      result := FormatString('% - (c)% %', [result, BuildYear, CompanyName]);
   end;
 end;
 

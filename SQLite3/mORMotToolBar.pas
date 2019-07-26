@@ -3001,8 +3001,7 @@ begin
       if (aID>0) and (Caption='') then
         Caption := U2S(Client.MainFieldValue(aTable,aID,true));
       Font.Size := 9;
-      AddPagesToFooterAt(
-        format('%s - %s %s',[sPageN,aTable.CaptionName,Caption]),LeftMargin);
+      AddPagesToFooterAt(FormatString('% - % %',[sPageN,aTable.CaptionName,Caption]),LeftMargin);
       Font.Size := 10;
       P := GetPage(aTable);
       if (P<0) or (aID<=0) then

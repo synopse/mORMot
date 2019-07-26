@@ -3746,7 +3746,6 @@ var tmp: variant;
     ValueDateTime: TDateTime absolute VDouble;
     VInt64: Int64 absolute VDouble;
     Kind: TBSONElementType;
-label dbl;
 begin
   if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
   if not DoNotTryExtendedMongoSyntax and
@@ -3901,7 +3900,7 @@ begin
     Counter.b2 := count shr 8;
     Counter.b3 := count;
     LastCounter := count;
-    UnixCreateTime := {$ifdef FPC}SwapEndian{$else}bswap32{$endif}(LastCreateTime);
+    UnixCreateTime := {$ifdef CPUINTEL}bswap32{$else}SwapEndian{$endif}(LastCreateTime);
     MachineID := Default.MachineID;
     ProcessID := Default.ProcessID;
     LeaveCriticalSection(Section);
@@ -3921,7 +3920,7 @@ end;
 
 function TBSONObjectID.CreateDateTime: TDateTime;
 begin
-  result := UnixTimeToDateTime({$ifdef FPC}SwapEndian{$else}bswap32{$endif}(UnixCreateTime));
+  result := UnixTimeToDateTime(bswap32(UnixCreateTime));
 end;
 
 function TBSONObjectID.ToText: RawUTF8;
@@ -6475,9 +6474,10 @@ end;
 const
   D128: array[TDecimal128SpecialValue] of TDecimal128Bits = (
     // dsvError, dsvValue, dsvNan, dsvZero, dsvPosInf, dsvNegInf, dsvMin, dsvMax
-    (hi:BSON_DECIMAL128_HI_NAN), (hi:BSON_DECIMAL128_HI_NAN), (hi:BSON_DECIMAL128_HI_NAN),
-    (hi:BSON_DECIMAL128_HI_INT64POS), (hi:$7800000000000000),
-    (hi:QWord($f800000000000000)), (lo:$378d8e63ffffffff; hi:QWord($dfffed09bead87c0)),
+    (lo:0; hi:BSON_DECIMAL128_HI_NAN), (lo:0; hi:BSON_DECIMAL128_HI_NAN),
+    (lo:0; hi:BSON_DECIMAL128_HI_NAN), (lo:0; hi:BSON_DECIMAL128_HI_INT64POS),
+    (lo:0; hi:$7800000000000000), (lo:0; hi:QWord($f800000000000000)),
+    (lo:$378d8e63ffffffff; hi:QWord($dfffed09bead87c0)),
     (lo:$378d8e63ffffffff; hi:$5fffed09bead87c0) );
 
 procedure TDecimal128.SetSpecial(special: TDecimal128SpecialValue);
@@ -6757,7 +6757,7 @@ procedure TDecimal128.ToCurr(out result: currency);
 var tmp: TDecimal128Str;
     res64: Int64 absolute result;
 begin
-  if Bits.hi=BSON_DECIMAL128_HI_CURRNEG then // fast direct conversion e.g. FromCurr
+  if Bits.hi=QWord(BSON_DECIMAL128_HI_CURRNEG) then // was e.g. FromCurr
     res64 := -Bits.lo else
   if Bits.hi=BSON_DECIMAL128_HI_CURRPOS then
     res64 := Bits.lo else begin
@@ -6892,14 +6892,15 @@ begin
   signlo := 0;
   if signdig<>0 then // if not zero
     if diglast-digfirst<17 then
-      for i := digfirst to diglast do
       {$ifdef CPU32DELPHI} // use "shl" under x86 to avoid slower "call _llmul"
+      for i := digfirst to diglast do
         inc(signlo,signlo+signlo shl 3+digits[i]) else begin
       for i := digfirst to diglast-17 do
         inc(signhi,signhi+signhi shl 3+digits[i]);
       for i := diglast-16 to diglast do
         inc(signlo,signlo+signlo shl 3+digits[i]);
       {$else}
+      for i := digfirst to diglast do
         signlo := signlo*10+digits[i] else begin
       for i := digfirst to diglast-17 do
         signhi := signhi*10+digits[i];

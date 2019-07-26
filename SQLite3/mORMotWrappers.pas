@@ -383,8 +383,8 @@ const
     wInt64,  wInteger,  wQWord,  wBlob,           wRawJSON,  wRawUTF8,  wRecord,
   //ptSingle, ptString, ptSynUnicode, ptDateTime, ptDateTimeMS,
     wSingle,  wString,  wRawUTF8,     wDateTime,  wDateTime,
-  //ptGUID, ptID, ptTimeLog,
-    wGUID,  wID, wTimeLog,
+  //ptGUID, ptID, ptTimeLog, ptUnicodeString,
+    wGUID,  wID, wTimeLog,   {$ifdef HASVARUSTRING} wRawUTF8, {$endif}
   //ptVariant, ptWideString, ptWord, ptCustom
     wVariant,  wRawUTF8,     wWord,  wUnknown);
 
@@ -393,14 +393,6 @@ const
     wDouble,wDateTime,wCurrency,wRawUTF8,wString,wRawUTF8,wRawUTF8,wRawUTF8,
     wRecord,wVariant,wObject,wRawJSON,wArray,
     wUnknown); // integers are wUnknown to force best type
-
-
-function NULL_OR_CARDINAL(Value: Integer): RawUTF8;
-begin
-  if Value>0 then
-    UInt32ToUtf8(Value,result) else
-    result := 'null';
-end;
 
 type
   EWrapperContext = class(ESynException);
@@ -888,16 +880,16 @@ begin
       raise EWrapperContext.CreateUTF8('No RTTI nor typ for "%"',[typName]);
     typ := TYPES_ORM[typInfo.GetSQLFieldType];
     if typ=wUnknown then begin
-      typ := TYPES_SIMPLE[TJSONCustomParserRTTI.TypeInfoToSimpleRTTIType(typInfo,0)];
+      typ := TYPES_SIMPLE[TJSONCustomParserRTTI.TypeInfoToSimpleRTTIType(typInfo)];
       if typ=wUnknown then
-      case typInfo^.Kind of
-      tkRecord{$ifdef FPC},tkObject{$endif}:
-        typ := wRecord;
-      tkInterface:
-        typ := wInterface;
-      else
-        raise EWrapperContext.CreateUTF8('Not enough RTTI for "%"',[typInfo^.Name]);
-      end;
+        case typInfo^.Kind of
+        tkRecord{$ifdef FPC},tkObject{$endif}:
+          typ := wRecord;
+        tkInterface:
+          typ := wInterface;
+        else
+          raise EWrapperContext.CreateUTF8('Not enough RTTI for "%"',[typInfo^.Name]);
+        end;
     end;
   end;
   if typName='' then begin

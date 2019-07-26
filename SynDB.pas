@@ -3648,9 +3648,9 @@ begin
     varDate:     result := Ansi7ToString(DateTimeToIso8601Text(VDate,' '));
     varString:   result := UTF8ToString(RawUTF8(VAny));
     {$ifdef HASVARUSTRING}
-    varUString:  result := UnicodeString(VAny);
-    {$endif}
-    varOleStr:   result := WideString(VAny);
+    varUString:  result := string(UnicodeString(VAny));
+    {$endif HASVARUSTRING}
+    varOleStr:   result := string(WideString(VAny));
     else result := fValue;
   end;
 end;
@@ -3745,7 +3745,7 @@ begin
   fValue := aValue;
   {$else}
   with TVarData(fValue) do begin
-    if VType and VTYPE_STATIC<>0 then
+    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
       VarClear(fValue);
     VType := varString;
     VAny := nil; // avoid GPF below when assigning a string variable to VAny
@@ -6812,7 +6812,7 @@ begin
   ColumnToSQLVar(Col,V,tmp);
   result := V.VType;
   with TVarData(Value) do begin
-    if VType and VTYPE_STATIC<>0 then
+    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
       VarClear(Value);
     VType := MAP_FIELDTYPE2VARTYPE[V.VType];
     case result of
@@ -7498,7 +7498,7 @@ begin
   if SQLDBRowVariantType=nil then
     SQLDBRowVariantType := SynRegisterCustomVariantType(TSQLDBRowVariantType);
   with TVarData(result) do begin
-    if VType and VTYPE_STATIC<>0 then
+    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
       VarClear(result);
     VType := SQLDBRowVariantType.VarType;
     VPointer := self;
@@ -8300,7 +8300,7 @@ begin
   repeat
     if DataLen<=5 then
       break; // to raise ESQLDBException
-    fDataRowCount := PInteger(PtrInt(Data)+DataLen-sizeof(Integer))^;
+    fDataRowCount := PInteger(PtrUInt(Data)+PtrUInt(DataLen)-sizeof(Integer))^;
     Magic := FromVarUInt32(Data);
     if Magic<>FETCHALLTOBINARY_MAGIC then
       break; // corrupted

@@ -490,7 +490,7 @@ begin
       ZipName := StringReplaceChars(ZipName,'/','\');
       Header := H^;
     end; // next entry is after the ZipNname and some extra/comment
-    inc(PtrUInt(H),sizeof(H^)+fileInfo.nameLen+fileInfo.extraLen+commentLen);
+    inc(PByte(H),sizeof(H^)+fileInfo.nameLen+fileInfo.extraLen+commentLen);
   end;
 end;
 

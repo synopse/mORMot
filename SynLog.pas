@@ -1721,7 +1721,7 @@ begin
     L := FromVarUInt32(P); // inlined R.Read(S^.Name)
     FastSetString(S^.Name,P,L);
     inc(P,L);
-    inc(PtrUInt(S),A.ElemSize); // may be TSynMapSymbol or TSynMapUnit
+    inc(PByte(S),A.ElemSize); // may be TSynMapSymbol or TSynMapUnit
   end;
   S := A.Value^;
   Addr := FromVarUInt32(P);
@@ -1729,7 +1729,7 @@ begin
   for i := 1 to n-1 do begin
     inc(Addr,FromVarUInt32(P));
     S^.Stop := Addr-1;
-    inc(PtrUInt(S),A.ElemSize);
+    inc(PByte(S),A.ElemSize);
     S^.Start := Addr;
   end;
   S^.Stop := Addr+FromVarUInt32(P);
@@ -2019,8 +2019,8 @@ procedure WriteSymbol(var W: TFileBufferWriter; const A: TDynArray);
 var i, n: integer;
     Diff: integer;
     S: PSynMapSymbol;
-    P: PByte;
-    Beg: PtrUInt;
+    P,Beg: PByte;
+    tmp: RawByteString;
 begin
   n := A.Count;
   W.WriteVarUInt32(n);
@@ -2028,20 +2028,20 @@ begin
   S := A.Value^;
   for i := 0 to n-1 do begin
     W.Write(S^.Name);
-    inc(PtrUInt(S),A.ElemSize); // may be TSynMapSymbol or TSynMapUnit
+    inc(PByte(S),A.ElemSize); // may be TSynMapSymbol or TSynMapUnit
   end;
   S := A.Value^;
   Diff := S^.Start;
   W.WriteVarUInt32(Diff);
-  P := W.WriteDirectStart(n*5,A.ArrayTypeName);
-  Beg := PtrUInt(P);
+  P := pointer(W.DirectWritePrepare(n*5,tmp));
+  Beg := P;
   for i := 1 to n-1 do begin
-    inc(PtrUInt(S),A.ElemSize);
+    inc(PByte(S),A.ElemSize);
     P := ToVarUInt32(S^.Start-Diff,P);
     Diff := S^.Start;
   end;
   P := ToVarUInt32(S^.Stop-Diff,P);
-  W.WriteDirectEnd(PtrUInt(P)-Beg);
+  W.DirectWriteFlush(PtrUInt(P)-PtrUInt(Beg),tmp);
 end;
 
 procedure TSynMapFile.SaveToStream(aStream: TStream);
@@ -3587,7 +3587,7 @@ class function TSynLog.Family: TSynLogFamily;
 begin
   result := pointer(Self);
   if result<>nil then begin
-    result := PPointer(PtrInt(result)+vmtAutoTable)^;
+    result := PPointer(PtrInt(PtrUInt(result))+vmtAutoTable)^;
     if result=nil then
       result := FamilyCreate;
   end;
@@ -3597,7 +3597,7 @@ class function TSynLog.Add: TSynLog;
 begin
   result := pointer(Self);
   if result<>nil then begin // inlined TSynLog.Family (Add is already inlined)
-    result := PPointer(PtrInt(result)+vmtAutoTable)^;
+    result := PPointer(PtrInt(PtrUInt(result))+vmtAutoTable)^;
     if result=nil then
       TSynLogFamily(pointer(result)) := FamilyCreate;
     result := TSynLogFamily(pointer(result)).SynLog;
@@ -3960,7 +3960,7 @@ begin
     result := nil;
     exit;
   end;
-  aSynLog := PPointer(PtrInt(aSynLog)+vmtAutoTable)^;
+  aSynLog := PPointer(PtrInt(PtrUInt(aSynLog))+vmtAutoTable)^;
   if aSynLog=nil then
     TSynLogFamily(pointer(aSynLog)) := FamilyCreate;
   aSynLog := TSynLogFamily(pointer(aSynLog)).SynLog;
@@ -4057,7 +4057,7 @@ begin // private sub function makes the code faster in most case
     EnterCriticalSection(GlobalThreadLock);
     try
       // TSynLogFamily instance is stored into "AutoTable" unused VMT entry
-      PVMT := pointer(PtrInt(self)+vmtAutoTable);
+      PVMT := pointer(PtrInt(PtrUInt(self))+vmtAutoTable);
       result := PPointer(PVMT)^;
       if result=nil then begin // protect from (unlikely) concurrent call
         // create the properties information from RTTI
@@ -4925,7 +4925,7 @@ begin
   P := PtrInt(IntegerScan(@fLogLevelsTextMap[succ(sllNone)],
     ord(high(TSynLogInfo)),PCardinal(LineBeg+fLineLevelOffset)^));
   if P<>0 then
-    result := TSynLogInfo((P-PtrInt(@fLogLevelsTextMap[succ(sllNone)]))shr 2+1) else
+    result := TSynLogInfo((P-PtrInt(PtrUInt(@fLogLevelsTextMap[succ(sllNone)])))shr 2+1) else
     result := sllNone;
 end;
 
@@ -5119,7 +5119,7 @@ begin
        LineSizeSmallerThan(fHeaderLinesCount,16) then
       exit;
     if fHeaderLinesCount<>4 then
-      FastSetString(fHeaders,fLines[2],PtrInt(fLines[fHeaderLinesCount-2])-PtrInt(fLines[2]));
+      FastSetString(fHeaders,fLines[2],PtrUInt(fLines[fHeaderLinesCount-2])-PtrUInt(fLines[2]));
     if PWord(fLines[fHeaderLinesCount])^<>ord('0')+ord('0')shl 8 then // YYYYMMDD -> 20101225 e.g.
       fFreq := 0 else // =0 if date time, >0 if high-resolution time stamp
       fFreqPerDay := fFreq*SecsPerDay;
@@ -5714,7 +5714,7 @@ begin
         DateTimeToString(tim,TIME_FORMAT,elapsed);
         result := tim+'.'+result;
       end;
-      result := format('%d lines - time elapsed: %s',[aBottom-aTop+1,result]);
+      result := FormatString('% lines - time elapsed: %',[aBottom-aTop+1,result]);
     end;
   end;
 end;
@@ -5727,8 +5727,8 @@ begin
     aRow := fSelected[aRow];
   if cardinal(aRow)<cardinal(fCount) then begin
     dt := EventDateTime(aRow);
-    result := Format('%s %s'#9'%s'#9,[DateToStr(dt),FormatDateTime(TIME_FORMAT,dt),
-      LogInfoCaption[EventLevel[aRow]]]);
+    FormatString('% %'#9'%'#9,[DateToStr(dt),FormatDateTime(TIME_FORMAT,dt),
+      LogInfoCaption[EventLevel[aRow]]],result);
     if fThreads<>nil then
       result := result+IntToString(cardinal(fThreads[aRow]))+#9;
     result := result+EventString(aRow,'   ');

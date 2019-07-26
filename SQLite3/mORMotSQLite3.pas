@@ -204,7 +204,7 @@ unit mORMotSQLite3;
 
     Version 1.18
     - unit SQLite3.pas renamed mORMotSQLite3.pas
-    - updated SQLite3 engine to latest version 3.28
+    - updated SQLite3 engine to latest version 3.29
     - BATCH adding in TSQLRestServerDB will now perform SQLite3 multi-INSERT
       statements: performance boost is from 2x (mem with transaction) to 60x
       (full w/out transaction) - faster than SQlite3 as external DB
@@ -1286,7 +1286,7 @@ end;
 procedure TSQLRestServerDB.InternalInfo(var info: TDocVariantData);
 begin
   inherited InternalInfo(info);
-  info.AddValue('db', Format('%s %s', [ExtractFileName(DB.FileName), KB(DB.FileSize)]));
+  info.AddValue('db', FormatString('% %', [ExtractFileName(DB.FileName), KB(DB.FileSize)]));
 end;
 
 procedure TSQLRestServerDB.InternalStat(Ctxt: TSQLRestServerURIContext; W: TTextWriter);

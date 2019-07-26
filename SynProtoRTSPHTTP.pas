@@ -83,8 +83,6 @@ uses
   SynLog,
   SynTests;
 
-{$I Synopse.inc}
-
 type
   /// holds a HTTP POST connection for RTSP proxy
   // - as used by the TRTSPOverHTTPServer class

@@ -29,10 +29,10 @@ unit SynDBZeos;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - alexpirate
   - Daniel Kuettner
   - delphinium
   - EgonHugeist (Michael)
-  - alexpirate
   - Joe (jokussoftware)
 
 
@@ -56,6 +56,7 @@ unit SynDBZeos;
      SELECT usr.ID, usr.name FROM user usr WHERE usr.ID = ANY(?)
      work with all ZEOS versions
 }
+
 (*
   Note:
   - if you want to work as expected with SQlite3 backend (but how would need to
@@ -115,6 +116,13 @@ end;
 
 *)
 
+{$ifdef NOSYNDBZEOS} // defined in mormot_base.lpk Lazarus package > Custom Options > Defines
+
+interface
+implementation
+
+{$else}
+
 {$I Zeos.inc} // define conditionals like ZEOS72UP and ENABLE_*
 // for best performance: tune your project options or Zeos.inc to define USE_SYNCOMMONS
 
@@ -131,7 +139,8 @@ uses
   {$IFNDEF DELPHI5OROLDER}
   Variants,
   {$ENDIF}
-  Classes, Contnrs,
+  Classes,
+  Contnrs,
   // load physical providers as defined by ENABLE_* in Zeos.inc
   // -> you can patch your local Zeos.inc and comment these defines to
   // exclude database engines you don't need
@@ -169,7 +178,11 @@ uses
   ZDbcODBCCon,
   {$ENDIF}
   // main ZDBC units
-  ZCompatibility, ZVariant, ZURL, ZDbcIntfs, ZDbcResultSet,
+  ZCompatibility,
+  ZVariant,
+  ZURL,
+  ZDbcIntfs,
+  ZDbcResultSet,
   // mORMot units after ZDBC due to some name conflicts (e.g. UTF8ToString)
   SynCommons,
   SynTable,
@@ -1000,7 +1013,7 @@ begin
   P[0] := '{'; 
   i := 1;
   for n := 0 to high(Values) do begin
-    if length(Values[n]) = 0 then continue;
+    if Values[n] = '' then continue;
     if Values[n][1] = '''' then begin
       P[i] := '"'; 
       inc(i);
@@ -1321,4 +1334,6 @@ end;
 
 initialization
   TSQLDBZEOSConnectionProperties.RegisterClassNameForDefinition;
+
+{$endif NOSYNDBZEOS}
 end.

@@ -2,20 +2,20 @@
 <CONFIG>
   <Package Version="4">
     <PathDelim Value="\"/>
-    <Name Value="mormot_zeos"/>
-    <Type Value="RunAndDesignTime"/>
+    <Name Value="mormot_cross"/>
+    <Type Value="RunTimeOnly"/>
     <Author Value="Arnaud Bouchez"/>
     <CompilerOptions>
       <Version Value="11"/>
       <PathDelim Value="\"/>
       <SearchPaths>
-        <IncludeFiles Value="..;$PkgIncPath(zcore)\..\..\src"/>
+        <IncludeFiles Value="..;..\CrossPlatform"/>
         <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-        <OtherUnitFiles Value=".."/>
+        <OtherUnitFiles Value="..\CrossPlatform"/>
         <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
       </SearchPaths>
     </CompilerOptions>
-    <Description Value="ORM over Zeos SQL connection"/>
+    <Description Value="Stand-alone package, client-side only, but should be running on all FPC targets"/>
     <License Value="Licensed under a disjunctive tri-license giving you the choice of one of
 the three following sets of free software/open source licensing terms:
  - Mozilla Public License, version 1.1 or later;
@@ -24,22 +24,32 @@ the three following sets of free software/open source licensing terms:
 This allows the use of our code in as wide a variety of software projects
 as possible, while still maintaining copy-left on code we wrote."/>
     <Version Major="1" Minor="18"/>
-    <Files Count="1">
+    <Files Count="5">
       <Item1>
-        <Filename Value="..\SynDBZeos.pas"/>
-        <UnitName Value="SynDBZeos"/>
-      </Item1>
-    </Files>
-    <RequiredPkgs Count="3">
-      <Item1>
-        <PackageName Value="zdbc"/>
+        <Filename Value="..\CrossPlatform\SynCrossPlatformCrypto.pas"/>
+        <UnitName Value="SynCrossPlatformCrypto"/>
       </Item1>
       <Item2>
-        <PackageName Value="mormot_ext"/>
+        <Filename Value="..\CrossPlatform\SynCrossPlatformJSON.pas"/>
+        <UnitName Value="SynCrossPlatformJSON"/>
       </Item2>
       <Item3>
-        <PackageName Value="FCL"/>
+        <Filename Value="..\CrossPlatform\SynCrossPlatformREST.pas"/>
+        <UnitName Value="SynCrossPlatformREST"/>
       </Item3>
+      <Item4>
+        <Filename Value="..\CrossPlatform\SynCrossPlatformSpecific.pas"/>
+        <UnitName Value="SynCrossPlatformSpecific"/>
+      </Item4>
+      <Item5>
+        <Filename Value="..\CrossPlatform\SynCrossPlatformSynLZ.pas"/>
+        <UnitName Value="SynCrossPlatformSynLZ"/>
+      </Item5>
+    </Files>
+    <RequiredPkgs Count="1">
+      <Item1>
+        <PackageName Value="FCL"/>
+      </Item1>
     </RequiredPkgs>
     <UsageOptions>
       <UnitPath Value="$(PkgOutDir)"/>
