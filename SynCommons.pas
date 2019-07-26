@@ -13301,13 +13301,14 @@ procedure GlobalLock;
 procedure GlobalUnLock;
 
 
+var
 /// JSON compatible representation of a boolean value
-// - returns either 'true' or 'false'
-procedure JSONBoolean(value: boolean; var result: RawUTF8);
-  {$ifdef HASINLINE}inline;{$endif} overload;
+  // - can be used when a RawUTF8 string is expected
+  BOOL_UTF8: array[boolean] of RawUTF8;
 
 const
-  /// can be used e.g. in logs
+  /// JSON compatible representation of a boolean value
+  // - can be used e.g. in logs, or anything accepting a shortstring
   BOOL_STR: array[boolean] of string[7] = ('false','true');
 
   /// can be used to append to most English nouns to form a plural
@@ -42621,13 +42622,6 @@ begin
   result := true;
 end;
 
-procedure JSONBoolean(value: boolean; var result: RawUTF8);
-begin // defined as a function and not an array[boolean] of RawUTF8 for FPC
-  if value then
-    result := 'true' else
-    result := 'false';
-end;
-
 function Plural(const itemname: shortstring; itemcount: cardinal): shortstring;
 var len: integer;
 begin
@@ -51346,9 +51340,7 @@ end;
 
 procedure TTextWriter.Add(Value: boolean);
 begin
-  if Value then
-    AddShort('true') else
-    AddShort('false');
+  AddShort(BOOL_STR[Value]);
 end;
 
 procedure TTextWriter.AddFloatStr(P: PUTF8Char);
@@ -62209,6 +62201,8 @@ begin
   JSON_CONTENT_TYPE_VAR := JSON_CONTENT_TYPE;
   JSON_CONTENT_TYPE_HEADER_VAR := JSON_CONTENT_TYPE_HEADER;
   NULL_STR_VAR := 'null';
+  BOOL_UTF8[false] := 'false';
+  BOOL_UTF8[true] := 'true';
   {$ifdef FPC}
   {$ifdef ISFPC27}
   {$ifndef MSWINDOWS}
