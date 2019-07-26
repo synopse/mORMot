@@ -15346,8 +15346,9 @@ procedure TextColor(Color: TConsoleColor);
 /// change the Windows console text background color
 procedure TextBackground(Color: TConsoleColor);
 
-/// will wait for the ENTER key to be pressed, processing the internal
-// Windows Message loop and any Synchronize() pending notification
+/// will wait for the ENTER key to be pressed, processing Synchronize() pending
+// notifications, and the internal Windows Message loop (on this OS)
+
 // - to be used e.g. for proper work of console applications with interface-based
 // service implemented as optExecInMainThread
 procedure ConsoleWaitForEnterKey;
@@ -55412,8 +55413,23 @@ begin // not implemented yet - but not needed either
 end;
 
 procedure ConsoleWaitForEnterKey;
+var c: AnsiChar;
 begin
-  Readln;
+  {$ifdef FPC}
+  if IsMultiThread and (GetCurrentThreadID=MainThreadID) then
+    repeat
+      CheckSynchronize(100);
+      if UnixKeyPending then
+        repeat
+          c := #0;
+          if FpRead(StdInputHandle,c,1)<>1 then
+            break;
+          if c in [#10,#13] then
+            exit;
+        until false;
+    until false else
+  {$endif FPC}
+    ReadLn;
 end;
 
 {$endif MSWINDOWS}

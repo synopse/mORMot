@@ -194,6 +194,9 @@ var
 // you can force SleepHiRes0Yield=true to change this behavior)
 procedure SleepHiRes(ms: cardinal); inline;
 
+/// check if any char is pending from StdInputHandle file descriptor
+function UnixKeyPending: boolean;
+
 
 implementation
 
@@ -221,6 +224,15 @@ begin
   if cs.__m_kind<>0 then
   {$endif LINUXNOTBSD}
     DoneCriticalSection(cs);
+end;
+
+function UnixKeyPending: boolean;
+var
+  fdsin: tfdSet;
+begin
+  fpFD_ZERO(fdsin);
+  fpFD_SET(StdInputHandle,fdsin);
+  result := fpSelect(StdInputHandle+1,@fdsin,nil,nil,0)>0;
 end;
 
 {$ifdef LINUX}
