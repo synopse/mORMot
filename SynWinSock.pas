@@ -938,6 +938,7 @@ const
   SEC_E_OK = 0;
   SEC_I_CONTINUE_NEEDED = $00090312;
   SEC_I_RENEGOTIATE = $00090321;
+  SEC_I_CONTEXT_EXPIRED	= $00090317;
   SEC_E_INCOMPLETE_MESSAGE = $80090318;
   SEC_E_INVALID_TOKEN = $80090308;
 
@@ -1802,6 +1803,24 @@ var
   buf: array[0..3] of TSecBuffer;
   res: cardinal;
   read, i: integer;
+  needsRenegotiate: Boolean;
+
+  function DecryptInput: cardinal;
+  begin
+    buf[0].cbBuffer := InputCount;
+    buf[0].BufferType := SECBUFFER_DATA;
+    buf[0].pvBuffer := pointer(Input);
+    buf[1].cbBuffer := 0;
+    buf[1].BufferType := SECBUFFER_EMPTY;
+    buf[1].pvBuffer := nil;
+    buf[2].cbBuffer := 0;
+    buf[2].BufferType := SECBUFFER_EMPTY;
+    buf[2].pvBuffer := nil;
+    buf[3].cbBuffer := 0;
+    buf[3].BufferType := SECBUFFER_EMPTY;
+    buf[3].pvBuffer := nil;
+    Result := DecryptMessage(@Ctxt, @desc, 0, nil);
+  end;
 begin
   if not Initialized then begin // use plain socket API
     result := Recv(aSocket, aBuffer, aLength, MSG_NOSIGNAL);
@@ -1821,27 +1840,31 @@ begin
         exit;
       end;
       inc(InputCount, read);
-      buf[0].cbBuffer := InputCount;
-      buf[0].BufferType := SECBUFFER_DATA;
-      buf[0].pvBuffer := pointer(Input);
-      buf[1].cbBuffer := 0;
-      buf[1].BufferType := SECBUFFER_EMPTY;
-      buf[1].pvBuffer := nil;
-      buf[2].cbBuffer := 0;
-      buf[2].BufferType := SECBUFFER_EMPTY;
-      buf[2].pvBuffer := nil;
-      buf[3].cbBuffer := 0;
-      buf[3].BufferType := SECBUFFER_EMPTY;
-      buf[3].pvBuffer := nil;
-      res := DecryptMessage(@Ctxt, @desc, 0, nil);
+      res := DecryptInput;
     until res <> SEC_E_INCOMPLETE_MESSAGE;
-    InputCount := 0;
-    if res <> SEC_I_RENEGOTIATE then // handle data, even with renegotiation
-      CheckSEC_E_OK(res);
-    for i := 1 to 3 do
-      if buf[i].BufferType in [SECBUFFER_DATA, SECBUFFER_EXTRA] then
-        AppendData(buf[i]);
-    if res = SEC_I_RENEGOTIATE then
+
+    needsRenegotiate := False;
+    repeat
+      case res of
+        SEC_I_RENEGOTIATE: needsRenegotiate := True;
+        SEC_I_CONTEXT_EXPIRED: exit;
+        SEC_E_INCOMPLETE_MESSAGE: break;
+        else CheckSEC_E_OK(res);
+      end;
+
+      InputCount := 0;
+      for i := 1 to 3 do
+        case buf[i].BufferType of
+          SECBUFFER_DATA: AppendData(buf[i]);
+          SECBUFFER_EXTRA:
+          begin
+            Move(buf[i].pvBuffer^, PByteArray(Input)[0], buf[i].cbBuffer);
+            InputCount := buf[i].cbBuffer;
+          end;
+        end;
+      res := DecryptInput;
+    until InputCount = 0;
+    if needsRenegotiate then
       HandshakeLoop(aSocket);
   except
     exit; // shutdown the connection on ESChannel fatal error
