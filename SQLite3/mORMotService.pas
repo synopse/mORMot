@@ -6,7 +6,7 @@ unit mORMotService;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit mORMotService;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -108,7 +108,7 @@ uses
   {$endif}
   SynCommons,
   SynLog,
-  SynCrypto,
+  SynCrypto, // for executable MD5/SHA256 hashes
   mORMot; // for TSynJsonFileSettings (i.e. JSON serialization)
 
 {$ifdef MSWINDOWS}
@@ -184,6 +184,7 @@ const
 type
   PServiceStatus = ^TServiceStatus;
   TServiceStatus = object
+  public
     dwServiceType: DWORD;
     dwCurrentState: DWORD;
     dwControlsAccepted: DWORD;
@@ -195,6 +196,7 @@ type
 
   PServiceStatusProcess = ^TServiceStatusProcess;
   TServiceStatusProcess = object(TServiceStatus)
+  public
     dwProcessId: DWORD;
     dwServiceFlags: DWORD;
   end;
@@ -283,7 +285,7 @@ type
     // - Dependencies - string containing a list with names of services, which must
     // start before (every name should be separated with #0, entire
     // list should be separated with #0#0. Or, an empty string can be
-    // passed if there are no dependances).
+    // passed if there is no dependancy).
     // - Username - login name. For service type SERVICE_WIN32_OWN_PROCESS, the
     // account name in the form of "DomainName\Username"; If the account
     // belongs to the built-in domain, ".\Username" can be specified;
@@ -379,9 +381,9 @@ type
     // - so that you can write in the main block of your .dpr:
     // !CheckParameters('MyService.exe',HTTPSERVICENAME,HTTPSERVICEDISPLAYNAME);
     // - if ExeFileName='', it will install the current executable
-    // - an optional Description text for the service may be specified
+    // - optional Description and Dependencies text may be specified
     class procedure CheckParameters(const ExeFileName: TFileName;
-      const ServiceName,DisplayName,Description: string);
+      const ServiceName,DisplayName,Description: string; const Dependencies: string='');
   end;
 
   {$M+}
@@ -578,6 +580,18 @@ function RunUntilSigTerminatedForKill(waitseconds: integer = 30): boolean;
 /// local .pid file name as created by RunUntilSigTerminated(dofork=true)
 function RunUntilSigTerminatedPidFile: TFileName;
 
+var
+  /// once SynDaemonIntercept has been called, this global variable
+  // contains the SIGQUIT / SIGTERM / SIGINT received signal
+  SynDaemonTerminated: integer;
+
+/// enable low-level interception of executable stop signals
+// - any SIGQUIT / SIGTERM / SIGINT signal will set appropriately the global
+// SynDaemonTerminated variable, with an optional logged entry to log
+// - as called e.g. by RunUntilSigTerminated()
+// - you can call this method several times with no issue
+procedure SynDaemonIntercept(log: TSynLog=nil);
+
 {$endif MSWINDOWS}
 
 /// like SysUtils.ExecuteProcess, but allowing not to wait for the process to finish
@@ -598,6 +612,7 @@ type
     fLogPath: TFileName;
     fLogRotateFileCount: integer;
     fLogClass: TSynLogClass;
+    fServiceDependencies: string;
   public
     /// initialize and set the default settings
     constructor Create; override;
@@ -611,6 +626,11 @@ type
     function ServiceDescription: string;
     /// read-only access to the TSynLog class, if SetLog() has been called
     property LogClass: TSynLogClass read fLogClass;
+    /// optional service dependencies
+    // - not published by default: could be defined if needed, or e.g. set in
+    // overriden constructor
+    // - several depending services may be set by appending #0 between names
+    property ServiceDependencies: string read fServiceDependencies write fServiceDependencies;
   published
     /// the service name, as used internally by Windows or the TSynDaemon class
     // - default is the executable name
@@ -633,6 +653,7 @@ type
   // - you may consider using TDDDAdministratedDaemon from dddInfraApps
   TSynDaemon = class(TSynPersistent)
   protected
+    fConsoleMode: boolean;
     fWorkFolderName: TFileName;
     fSettings: TSynDaemonSettings;
     function CustomCommandLineSyntax: string; virtual;
@@ -660,12 +681,15 @@ type
     /// call Stop, finalize the instance, and its settings
     destructor Destroy; override;
   published
+    /// if this instance was run as /console or /verb
+    property ConsoleMode: boolean read fConsoleMode;
     /// the settings associated with this daemon
     // - will be allocated in Create constructor, and released in Destroy
     property Settings: TSynDaemonSettings read fSettings;
   end;
 
-  {$ifdef MSWINDOWS}
+{$ifdef MSWINDOWS}
+
   /// Enum synchronized with WinAPI
   // - see https://docs.microsoft.com/en-us/windows/desktop/secauthz/privilege-constants
   TWinSystemPrivilege = (wspCreateToken, wspAssignPrimaryToken, wspLockMemory,
@@ -713,7 +737,34 @@ type
     /// set of enabled privileges for current process/thread
     property Enabled: TWinSystemPrivileges read fEnabled;
   end;
-  {$endif}
+
+  TWinProcessAvailableInfos = set of (wpaiPID, wpaiBasic, wpaiPEB, wpaiCommandLine, wpaiImagePath);
+  PWinProcessInfo = ^TWinProcessInfo;
+  TWinProcessInfo = record
+    AvailableInfo: TWinProcessAvailableInfos;
+    PID: Cardinal;
+    ParentPID: Cardinal;
+    SessionID: Cardinal;
+    PEBBaseAddress: Pointer;
+    AffinityMask: Cardinal;
+    BasePriority: LongInt;
+    ExitStatus: LongInt;
+    BeingDebugged: Byte;
+    ImagePath: SynUnicode;
+    CommandLine: SynUnicode;
+  end;
+  TWinProcessInfoDynArray = array of TWinProcessInfo;
+
+procedure GetProcessInfo(aPid: Cardinal; out aInfo: TWinProcessInfo); overload;
+procedure GetProcessInfo(const aPidList: TCardinalDynArray; out aInfo: TWinProcessInfoDynArray); overload;
+
+{$endif MSWINDOWS}
+
+const
+  /// text identifier typically used before command line switches
+  // - equals '/' on Windows, and '--' on POSIX systems
+  CMDLINESWITCH = {$ifdef MSWINDOWS}'/'{$else}'--'{$endif};
+
 
 implementation
 
@@ -864,7 +915,7 @@ begin
 end;
 
 class procedure TServiceController.CheckParameters(const ExeFileName: TFileName;
-  const ServiceName,DisplayName,Description: string);
+  const ServiceName, DisplayName, Description, Dependencies: string);
 var param: string;
     i: integer;
 procedure ShowError(const Msg: RawUTF8);
@@ -883,7 +934,7 @@ begin
     ServiceLog.Add.Log(sllInfo,'Controling % with command "%"',[ServiceName,param]);
     if param='/install' then
      TServiceController.Install(
-       ServiceName,DisplayName,Description,true,ExeFileName) else
+       ServiceName,DisplayName,Description,true,ExeFileName,Dependencies) else
     with TServiceController.CreateOpenService('','',ServiceName) do
     try
       if State=ssErrorRetrievingState then
@@ -1095,7 +1146,7 @@ begin
         raise EServiceException.CreateUTF8('Cannot allocate memory for service jump gate: %',
           [fSName]);
       AfterCallAddr := Pointer(PtrUInt(fJumper)+5);
-      Offset :=  PtrInt(@JumpToService)-PtrInt(AfterCallAddr);
+      Offset := PtrUInt(@JumpToService)-PtrUInt(AfterCallAddr);
       fJumper[0] := $E8; // call opcode
       PInteger(@fJumper[1])^ := Offset;       // points to JumpToService
       PPtrUInt(@fJumper[5])^ := PtrUInt(self); // will be set as EAX=self
@@ -1412,42 +1463,71 @@ end;
 {$else} // Linux/POSIX signal interception
 
 var
-  SynDaemonTerminated: integer;
+  SynDaemonIntercepted: boolean;
+  SynDaemonInterceptLog: TSynLogClass;
 
 {$ifdef FPC}
 procedure DoShutDown(Sig: Longint; Info: PSigInfo; Context: PSigContext); cdecl;
+var level: TSynLogInfo;
+    log: TSynLog;
+    si_code: integer;
+    text: TShort4;
+begin // code below has no memory (re)allocation
+  if SynDaemonInterceptLog <> nil then begin
+    log := SynDaemonInterceptLog.Add;
+    case Sig of
+      SIGQUIT: text := 'QUIT';
+      SIGTERM: text := 'TERM';
+      SIGINT:  text := 'INT';
+      SIGABRT: text := 'ABRT';
+      else text := UInt3DigitsToShort(Sig);
+    end;
+    if Sig = SIGTERM then // polite quit
+      level := sllInfo else
+      level := sllExceptionOS;
+    if Info=nil then
+      si_code := 0 else
+      si_code := Info^.si_code;
+    log.Writer.CustomOptions := log.Writer.CustomOptions + [twoFlushToStreamNoAutoResize];
+    log.Log(level, 'SynDaemonIntercepted received SIG%=% si_code=%', [text, Sig, si_code]);
+    log.Flush({flushtodisk=}Sig <> SIGTERM); // ensure all log is safely written
+  end;
+  SynDaemonTerminated := Sig;
+end;
 {$else}
 procedure DoShutDown(Sig: integer); cdecl;
-{$endif}
 begin
   SynDaemonTerminated := Sig;
 end;
+{$endif FPC}
 
-procedure SigIntercept;
-{$ifdef FPC}
+procedure SynDaemonIntercept(log: TSynLog);
 var
-  saOld, saNew: SigactionRec;
-begin
+  saOld, saNew: {$ifdef FPC}SigactionRec{$else}TSigAction{$endif};
+begin // note: SIGFPE/SIGSEGV/SIGBUS/SIGILL are handled by the RTL
+  if SynDaemonIntercepted then
+    exit;
+  SynDaemonIntercepted := true;
+  SynDaemonInterceptLog := log.LogClass;
   FillCharFast(saNew, SizeOf(saNew), 0);
+  {$ifdef FPC}
   saNew.sa_handler := @DoShutDown;
   fpSigaction(SIGQUIT, @saNew, @saOld);
   fpSigaction(SIGTERM, @saNew, @saOld);
   fpSigaction(SIGINT, @saNew, @saOld);
-{$else} // Kylix
-var
-  saOld, saNew: TSigAction;
-begin
-  FillCharFast(saNew, SizeOf(saNew), 0);
+  fpSigaction(SIGABRT, @saNew, @saOld);
+  {$else} // Kylix
   saNew.__sigaction_handler := @DoShutDown;
   sigaction(SIGQUIT, @saNew, @saOld);
   sigaction(SIGTERM, @saNew, @saOld);
   sigaction(SIGINT, @saNew, @saOld);
-{$endif}
+  sigaction(SIGABRT, @saNew, @saOld);
+  {$endif}
 end;
 
 function RunUntilSigTerminatedPidFile: TFileName;
 begin
-  result := format('%s.%s.pid', [ExeVersion.ProgramFilePath, ExeVersion.ProgramName]);
+  result := FormatString('%.%.pid', [ExeVersion.ProgramFilePath, ExeVersion.ProgramName]);
 end;
 
 function RunUntilSigTerminatedForKill(waitseconds: integer): boolean;
@@ -1462,7 +1542,7 @@ begin
   if pid <= 0 then
     exit;
   {$ifdef FPC}
-  if fpkill(pid, SIGTERM) <> 0 then
+  if fpkill(pid, SIGTERM) <> 0 then // polite quit
     if fpgeterrno<>ESysESRCH then
   {$else} // Kylix
   if kill(pid, SIGTERM) <> 0 then
@@ -1508,7 +1588,7 @@ var
 const
   TXT: array[boolean] of string[4] = ('run', 'fork');
 begin
-  SigIntercept;
+  SynDaemonIntercept(log);
   if dofork then begin
     pidfilename := RunUntilSigTerminatedPidFile;
     pid := GetInteger(pointer(StringFromFile(pidfilename)));
@@ -1625,8 +1705,8 @@ begin
   fServiceName := UTF8ToString(ExeVersion.ProgramName);
   fServiceDisplayName := fServiceName;
   {$ifndef MSWINDOWS}
-  fLogPath := '/var/log/';
-  {$endif}
+  fLogPath := GetSystemPath(spLog); // /var/log or $home
+  {$endif MSWINDOWS}
 end;
 
 function TSynDaemonSettings.ServiceDescription: string;
@@ -1639,7 +1719,7 @@ begin
     if versionnumber <> '' then
       result := result + ' ' + versionnumber;
     if CompanyName <> '' then
-      result := format('%s - (c)%d %s', [result, BuildYear, CompanyName]);
+      result := FormatString('% - (c)% %', [result, BuildYear, CompanyName]);
   end;
 end;
 
@@ -1680,6 +1760,7 @@ begin
   fn := aSettingsFolder;
   if fn = '' then
     fn := {$ifdef MSWINDOWS}fWorkFolderName{$else}'/etc/'{$endif};
+  fn :=  EnsureDirectoryExists(fn);
   if aSettingsName = '' then
     fn := fn + UTF8ToString(ExeVersion.ProgramName)
   else
@@ -1687,7 +1768,7 @@ begin
   fSettings.LoadFromFile(fn + aSettingsExt);
   if fSettings.LogPath = '' then
     if aLogFolder = '' then
-      fSettings.LogPath := {$ifdef MSWINDOWS}fWorkFolderName{$else}'/var/log/'{$endif}
+      fSettings.LogPath := {$ifdef MSWINDOWS}fWorkFolderName{$else}GetSystemPath(spLog){$endif}
     else
       fSettings.LogPath := EnsureDirectoryExists(aLogFolder);
 end;
@@ -1857,6 +1938,7 @@ begin
         try
           log.Log(sllNewRun, 'Start % /% %', [fSettings.ServiceName,cmdText,
             ExeVersion.Version.DetailedOrVoid], self);
+          fConsoleMode := true;
           Start;
           writeln('Press [Enter] to quit');
           ioresult;
@@ -1901,7 +1983,7 @@ begin
       cInstall:
         with fSettings do
           Show(TServiceController.Install(ServiceName, ServiceDisplayName,
-            ServiceDescription, aAutoStart) <> ssNotInstalled);
+            ServiceDescription, aAutoStart, '', ServiceDependencies) <> ssNotInstalled);
       cStart, cStop, cUninstall, cState: begin
         ctrl := TServiceController.CreateOpenService('', '', fSettings.ServiceName);
         try
@@ -2152,11 +2234,13 @@ begin
       len := Length(name);
       if not LookupPrivilegeNameA(nil,tp.Privileges[i].Luid,@name[1],len) then
         if GetLastError <> ERROR_INSUFFICIENT_BUFFER then
-          raise ESynException.CreateUTF8('TSynWindowsPrivileges cannot lookup privilege name for Luid (%)', [Int64(tp.Privileges[i].Luid)])
+          raise ESynException.CreateUTF8('TSynWindowsPrivileges cannot lookup privilege name for Luid (%)',
+            [PInt64(@tp.Privileges[i].Luid)^]) // PInt64() to avoid URW699 on Delphi 6
         else begin
           SetLength(name, len);
           if not LookupPrivilegeNameA(nil,tp.Privileges[i].Luid,@name[1],len) then
-            raise ESynException.CreateUTF8('TSynWindowsPrivileges cannot lookup privilege name for Luid (%)', [Int64(tp.Privileges[i].Luid)])
+            raise ESynException.CreateUTF8('TSynWindowsPrivileges cannot lookup privilege name for Luid (%)',
+              [PInt64(@tp.Privileges[i].Luid)^])
         end;
       enumval := IdemPCharArray(@name[1], UPCASE_SE_NAMES);
       if (enumval >= ord(low(TWinSystemPrivilege))) and (enumval <= ord(high(TWinSystemPrivilege))) then begin
@@ -2184,13 +2268,13 @@ begin
   if not LookupPrivilegeValue(nil, aPrivilege, id) then
     exit;
   tp.PrivilegeCount := 1;
-  tp.Privileges[0].Luid := Int64(id);
+  tp.Privileges[0].Luid := PInt64(@id)^;
   tp.Privileges[0].Attributes := 0;
   AdjustTokenPrivileges(Token, false, tp, sizeof(TOKEN_PRIVILEGES), @tpprev, @cbprev);
   if GetLastError <> ERROR_SUCCESS then
     exit;
-  tpprev.PrivilegeCount     := 1;
-  tpprev.Privileges[0].Luid := Int64(id);
+  tpprev.PrivilegeCount := 1;
+  tpprev.Privileges[0].Luid := PInt64(@id)^;
   with tpprev.Privileges[0] do
     if aEnablePrivilege then
       Attributes := Attributes or SE_PRIVILEGE_ENABLED
@@ -2201,6 +2285,212 @@ begin
     exit;
   result := true;
 end;
-{$endif}
+
+const
+  ntdll = 'NTDLL.DLL';
+
+type
+  _PPS_POST_PROCESS_INIT_ROUTINE = ULONG;
+
+  PUNICODE_STRING = ^UNICODE_STRING;
+  UNICODE_STRING = packed record
+    Length: word;
+    MaximumLength: word;
+    {$ifdef CPUX64}
+    _align: array[0..3] of byte;
+    {$endif}
+    Buffer: PWideChar;
+  end;
+
+  PMS_PEB_LDR_DATA = ^MS_PEB_LDR_DATA;
+  MS_PEB_LDR_DATA = packed record
+    Reserved1: array[0..7] of BYTE;
+    Reserved2: array[0..2] of pointer;
+    InMemoryOrderModuleList: LIST_ENTRY;
+  end;
+
+  PMS_RTL_USER_PROCESS_PARAMETERS = ^MS_RTL_USER_PROCESS_PARAMETERS;
+  MS_RTL_USER_PROCESS_PARAMETERS = packed record
+    Reserved1: array[0..15] of BYTE;
+    Reserved2: array[0..9] of pointer;
+    ImagePathName: UNICODE_STRING;
+    CommandLine: UNICODE_STRING ;
+  end;
+
+  PMS_PEB = ^MS_PEB;
+  MS_PEB = packed record
+    Reserved1: array[0..1] of BYTE;
+    BeingDebugged: BYTE;
+    Reserved2: array[0..0] of BYTE;
+    {$ifdef CPUX64}
+    _align1: array[0..3] of byte;
+    {$endif}
+    Reserved3: array[0..1] of pointer;
+    Ldr: PMS_PEB_LDR_DATA;
+    ProcessParameters: PMS_RTL_USER_PROCESS_PARAMETERS;
+    Reserved4: array[0..103] of BYTE;
+    Reserved5: array[0..51] of pointer;
+    PostProcessInitRoutine: _PPS_POST_PROCESS_INIT_ROUTINE; // for sure not pointer, otherwise SessionId is broken
+    Reserved6: array[0..127] of BYTE;
+    {$ifdef CPUX64}
+    _align2: array[0..3] of byte;
+    {$endif}
+    Reserved7: array[0..0] of pointer;
+    SessionId: ULONG;
+    {$ifdef CPUX64}
+    _align3: array[0..3] of byte;
+    {$endif}
+  end;
+
+  PMS_PROCESS_BASIC_INFORMATION = ^MS_PROCESS_BASIC_INFORMATION;
+  MS_PROCESS_BASIC_INFORMATION = packed record
+    ExitStatus: Longint;
+    {$ifdef CPUX64}
+    _align1: array[0..3] of byte;
+    {$endif}
+    PebBaseAddress: PMS_PEB;
+    AffinityMask: PtrUInt;
+    BasePriority: Longint;
+    {$ifdef CPUX64}
+    _align2: array[0..3] of byte;
+    {$endif}
+    UniqueProcessId: PtrUInt;
+    InheritedFromUniqueProcessId: PtrUInt;
+  end;
+
+  {$Z4}
+  PROCESSINFOCLASS = (ProcessBasicInformation = 0, ProcessDebugPort = 7,
+    ProcessWow64Information = 26, ProcessImageFileName = 27,
+    ProcessBreakOnTermination = 29, ProcessSubsystemInformation = 75);
+  {$Z1}
+
+  NTSTATUS = LongInt;
+
+function NtQueryInformationProcess(ProcessHandle: THandle;
+  ProcessInformationClass: PROCESSINFOCLASS; ProcessInformation: pointer;
+  ProcessInformationLength: ULONG; ReturnLength: PULONG): NTSTATUS; stdcall;
+  external ntdll name 'NtQueryInformationProcess';
+function ReadProcessMemory(hProcess: THandle; const lpBaseAddress: Pointer; lpBuffer: Pointer;
+  nSize: PTRUINT; var lpNumberOfBytesRead: PTRUINT): BOOL; external 'kernel32' name 'ReadProcessMemory';
+
+function InternalGetProcessInfo(aPID: DWORD; out aInfo: TWinProcessInfo): boolean;
+var
+  bytesread: PtrUInt;
+  sizeneeded: DWORD;
+  pbi: PMS_PROCESS_BASIC_INFORMATION;
+  peb: MS_PEB;
+  peb_upp: MS_RTL_USER_PROCESS_PARAMETERS;
+  prochandle: THandle;
+  buf: TSynTempBuffer;
+begin
+  result := false;
+  with aInfo do begin
+    AvailableInfo := [];
+    PID := 0;
+    ParentPID := 0;
+    SessionID := 0;
+    PEBBaseAddress := nil;
+    AffinityMask := 0;
+    BasePriority := 0;
+    ExitStatus := 0;
+    BeingDebugged := 0;
+    ImagePath := '';
+    CommandLine := '';
+  end;
+  if APID = 0 then
+    exit;
+  prochandle := OpenProcess(PROCESS_QUERY_INFORMATION or PROCESS_VM_READ, FALSE, aPid);
+  if prochandle = INVALID_HANDLE_VALUE then
+    exit;
+  Include(aInfo.AvailableInfo, wpaiPID);
+  aInfo.PID := aPid;
+  buf.InitZero(SizeOf(MS_PROCESS_BASIC_INFORMATION));
+  try
+    sizeneeded := 0;
+    if NtQueryInformationProcess(prochandle, ProcessBasicInformation, buf.buf, buf.len, @sizeneeded) < 0 then
+      exit;
+    if buf.len < integer(sizeneeded) then begin
+      buf.Done;
+      buf.InitZero(sizeneeded);
+      if NtQueryInformationProcess(prochandle, ProcessBasicInformation, buf.buf, buf.len, @sizeneeded) < 0 then
+        exit;
+    end;
+    Include(aInfo.AvailableInfo, wpaiBasic);
+    pbi := buf.buf;
+    with aInfo do begin
+      PID := pbi^.UniqueProcessId;
+      ParentPID := pbi^.InheritedFromUniqueProcessId;
+      BasePriority := pbi^.BasePriority;
+      ExitStatus := pbi^.ExitStatus;
+      PEBBaseAddress := pbi^.PebBaseAddress;
+      AffinityMask := pbi^.AffinityMask;
+    end;
+    // read PEB (Process Environment Block)
+    if not Assigned(pbi.PebBaseAddress) then
+      exit;
+    bytesread := 0;
+    FillCharFast(peb, sizeof(MS_PEB), 0);
+    if not ReadProcessMemory(prochandle, pbi.PebBaseAddress, @peb, sizeof(MS_PEB), bytesread) then
+      exit;
+    Include(aInfo.AvailableInfo, wpaiPEB);
+    aInfo.SessionID := peb.SessionId;
+    aInfo.BeingDebugged := peb.BeingDebugged;
+    FillCharFast(peb_upp, sizeof(MS_RTL_USER_PROCESS_PARAMETERS), 0);
+    bytesread := 0;
+    if not ReadProcessMemory(prochandle, peb.ProcessParameters, @peb_upp, sizeof(MS_RTL_USER_PROCESS_PARAMETERS), bytesread) then
+      exit;
+    // command line info
+    if peb_upp.CommandLine.Length > 0 then begin
+      SetLength(aInfo.CommandLine, peb_upp.CommandLine.Length div 2);
+      bytesread := 0;
+      if not ReadProcessMemory(prochandle, peb_upp.CommandLine.Buffer, @aInfo.CommandLine[1], peb_upp.CommandLine.Length, bytesread) then
+        exit;
+      Include(aInfo.AvailableInfo, wpaiCommandLine);
+    end;
+    // image info
+    if(peb_upp.ImagePathName.Length > 0) then begin
+      SetLength(aInfo.ImagePath, peb_upp.ImagePathName.Length div 2);
+      bytesread := 0;
+      if not ReadProcessMemory(prochandle, peb_upp.ImagePathName.Buffer, @aInfo.ImagePath[1], peb_upp.ImagePathName.Length, bytesread) then
+        exit;
+      Include(aInfo.AvailableInfo, wpaiImagePath);
+    end;
+    result := true;
+  finally
+    CloseHandle(prochandle);
+    buf.Done;
+  end;
+end;
+
+procedure GetProcessInfo(aPid: Cardinal; out aInfo: TWinProcessInfo);
+var
+  privileges: TSynWindowsPrivileges;
+begin
+  privileges.Init(pttThread);
+  try
+    privileges.Enable(wspDebug);
+    InternalGetProcessInfo(aPid, aInfo);
+  finally
+    privileges.Done;
+  end;
+end;
+
+procedure GetProcessInfo(const aPidList: TCardinalDynArray; out aInfo: TWinProcessInfoDynArray);
+var
+  privileges: TSynWindowsPrivileges;
+  i: integer;
+begin
+  SetLength(aInfo, Length(aPidList));
+  privileges.Init(pttThread);
+  try
+    privileges.Enable(wspDebug);
+    for i := 0 to High(aPidList) do
+      InternalGetProcessInfo(aPidList[i], aInfo[i]);
+  finally
+    privileges.Done;
+  end;
+end;
+
+{$endif MSWINDOWS}
 
 end.

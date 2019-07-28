@@ -6,7 +6,7 @@ unit dddInfraSettings;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit dddInfraSettings;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -53,7 +53,12 @@ unit dddInfraSettings;
 
 }
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE DDDNOSYNDB DDDNOMONGODB WITHLOG
+
+{.$define DDDNOSYNDB}
+// if defined, SynDB / external SQL DB won't be linked to the executable
+{.$define DDDNOMONGODB}
+// if defined, the Mongo DB client won't be linked to the executable
 
 interface
 
@@ -64,6 +69,7 @@ uses
   SysUtils,
   Classes,
   SynCommons,
+  SynTable,
   SynLog,
   SynCrypto,
   mORMot,
@@ -71,10 +77,14 @@ uses
   SynCrtSock,
   SynSQLite3,
   mORMotSQLite3,   // for internal SQlite3 database
+  {$ifndef DDDNOSYNDB}
   SynDB,
   mORMotDB,        // for TDDDRestSettings on external SQL database
+  {$endif}
+  {$ifndef DDDNOMONGODB}
   SynMongoDB,
   mORMotMongoDB,   // for TDDDRestSettings on external NoSQL database
+  {$endif}
   mORMotWrappers;  // for TDDDRestSettings to publish wrapper methods
 
 
@@ -91,6 +101,7 @@ type
     fStackTraceViaAPI: boolean;
     fLowLevelWebSocketsFrames: boolean;
     fDestinationPath: TFileName;
+    fCustomFileName: TFileName;
     fRotateFileCount: cardinal;
     fRotateFileSize: cardinal;
     fRotateFileAtHour: integer;
@@ -132,6 +143,8 @@ type
     property StackTraceViaAPI: boolean read FStackTraceViaAPI write FStackTraceViaAPI;
     /// allows to customize where the log files will be stored
     property DestinationPath: TFileName read FDestinationPath write FDestinationPath;
+    /// allows to customize the log file name
+    property CustomFileName: TFileName read fCustomFileName write fCustomFileName;
     /// auto-rotation of logging files
     // - set to 0 by default, meaning no rotation
     property RotateFileCount: cardinal read fRotateFileCount write fRotateFileCount;
@@ -332,18 +345,20 @@ type
     // URI, which will be overriden with this TDDDRestSettings.Root property
     // - will also publish /wrapper HTML page if WrapperTemplateFolder is set
     function NewRestInstance(aRootSettings: TDDDAppSettingsAbstract;
-      aModel: TSQLModel; aOptions: TDDDNewRestInstanceOptions;
-      aExternalDBOptions: TVirtualTableExternalRegisterOptions=[regDoNotRegisterUserGroupTables];
-      aMongoDBIdentifier: word=0;
-      aMongoDBOptions: TStaticMongoDBRegisterOptions=[mrDoNotRegisterUserGroupTables]): TSQLRest; overload; virtual;
+      aModel: TSQLModel; aOptions: TDDDNewRestInstanceOptions
+      {$ifndef DDDNOSYNDB}; aExternalDBOptions:
+      TVirtualTableExternalRegisterOptions=[regDoNotRegisterUserGroupTables]{$endif}
+      {$ifndef DDDNOMONGODB}; aMongoDBIdentifier: word=0; aMongoDBOptions:
+      TStaticMongoDBRegisterOptions=[mrDoNotRegisterUserGroupTables]{$endif}): TSQLRest; overload; virtual;
     /// is able to instantiate a REST instance according to the stored definition
     // - just an overloaded version which will create an owned TSQLModel with
     // the supplied TSQLRecord classes
     function NewRestInstance(aRootSettings: TDDDAppSettingsAbstract;
-      const aTables: array of TSQLRecordClass; aOptions: TDDDNewRestInstanceOptions;
-      aExternalDBOptions: TVirtualTableExternalRegisterOptions=[regDoNotRegisterUserGroupTables];
-      aMongoDBIdentifier: word=0;
-      aMongoDBOptions: TStaticMongoDBRegisterOptions=[mrDoNotRegisterUserGroupTables]): TSQLRest; overload; virtual;
+      const aTables: array of TSQLRecordClass; aOptions: TDDDNewRestInstanceOptions
+      {$ifndef DDDNOSYNDB}; aExternalDBOptions:
+      TVirtualTableExternalRegisterOptions=[regDoNotRegisterUserGroupTables]{$endif}
+      {$ifndef DDDNOMONGODB}; aMongoDBIdentifier: word=0; aMongoDBOptions:
+      TStaticMongoDBRegisterOptions=[mrDoNotRegisterUserGroupTables]{$endif}): TSQLRest; overload; virtual;
     /// initialize a stand-alone TSQLRestServerDB instance
     // - with its own database file located in DefaultDataFileName + aDBFileName
     // - will own its own TSQLModel with aModelRoot/aModelTables
@@ -451,6 +466,7 @@ type
     FRemoteAdmin: TDDDAdministratedDaemonRemoteAdminSettings;
     FServiceDisplayName: string;
     FServiceName: string;
+    FServiceDependencies: TStringDynArray;
     FServiceAutoStart: boolean;
     FAppUserModelID: string;
   public
@@ -458,10 +474,15 @@ type
     // - you can specify default Description and Service identifiers
     // - the service-related parameters are Windows specific, and will be
     // ignored on other platforms
-    procedure Initialize(
-      const aDescription,aServiceName,aServiceDisplayName,aAppUserModelID: string); reintroduce; virtual;
+    procedure Initialize(const aDescription,
+        aServiceName,aServiceDisplayName,aAppUserModelID: string;
+        const aServiceDependencies: TStringDynArray = nil); reintroduce; virtual;
     /// returns the folder containing .settings files - .exe folder by default
     function SettingsFolder: TFileName; virtual;
+    /// under Windows, will define optional Service internal Dependencies
+    // - not published by default: could be defined if needed, or e.g. set in
+    // overriden constructor
+    property ServiceDependencies: TStringDynArray read FServiceDependencies write FServiceDependencies;
   published
     /// define how this administrated service/daemon is accessed via REST
     property RemoteAdmin: TDDDAdministratedDaemonRemoteAdminSettings read FRemoteAdmin;
@@ -651,6 +672,8 @@ begin
     PerThreadLog := ptIdentifiedInOnFile;
     if Log.DestinationPath<>'' then
      DestinationPath := Log.DestinationPath;
+    if Log.CustomFileName<>'' then
+      CustomFileName := Log.CustomFileName;
     RotateFileCount := Log.RotateFileCount;
     RotateFileSizeKB := Log.RotateFileSizeKB;
     RotateFileDailyAtHour := Log.RotateFileDailyAtHour;
@@ -804,19 +827,22 @@ end;
 { TDDDRestSettings }
 
 function TDDDRestSettings.NewRestInstance(aRootSettings: TDDDAppSettingsAbstract;
-  const aTables: array of TSQLRecordClass; aOptions: TDDDNewRestInstanceOptions;
-  aExternalDBOptions: TVirtualTableExternalRegisterOptions;
-  aMongoDBIdentifier: word; aMongoDBOptions: TStaticMongoDBRegisterOptions): TSQLRest;
+  const aTables: array of TSQLRecordClass; aOptions: TDDDNewRestInstanceOptions
+  {$ifndef DDDNOSYNDB}; aExternalDBOptions: TVirtualTableExternalRegisterOptions {$endif}
+  {$ifndef DDDNOMONGODB}; aMongoDBIdentifier: word;
+  aMongoDBOptions: TStaticMongoDBRegisterOptions{$endif}): TSQLRest;
 begin
   include(aOptions,riOwnModel);
-  result := NewRestInstance(aRootSettings,TSQLModel.Create(aTables,fRoot),aOptions,
-    aExternalDBOptions,aMongoDBIdentifier,aMongoDBOptions);
+  result := NewRestInstance(aRootSettings,TSQLModel.Create(aTables,fRoot),aOptions
+    {$ifndef DDDNOSYNDB},aExternalDBOptions{$endif}
+    {$ifndef DDDNOMONGODB},aMongoDBIdentifier,aMongoDBOptions{$endif});
 end;
 
 function TDDDRestSettings.NewRestInstance(aRootSettings: TDDDAppSettingsAbstract;
-  aModel: TSQLModel; aOptions: TDDDNewRestInstanceOptions;
-  aExternalDBOptions: TVirtualTableExternalRegisterOptions;
-  aMongoDBIdentifier: word; aMongoDBOptions: TStaticMongoDBRegisterOptions): TSQLRest;
+  aModel: TSQLModel; aOptions: TDDDNewRestInstanceOptions
+  {$ifndef DDDNOSYNDB}; aExternalDBOptions: TVirtualTableExternalRegisterOptions{$endif}
+  {$ifndef DDDNOMONGODB}; aMongoDBIdentifier: word;
+  aMongoDBOptions: TStaticMongoDBRegisterOptions{$endif}): TSQLRest;
 
   procedure ComputeDefaultORMServerName(const Ext: RawUTF8);
   var FN: RawUTF8;
@@ -866,11 +892,17 @@ begin
       if (fORM.Kind='TSQLRestServerDB') or
          (fORM.Kind='TSQLRestServerFullMemory') then
         DeleteFile(UTF8ToString(fORM.ServerName));
+    {$ifndef DDDNOMONGODB}
     result := TSQLRestMongoDBCreate(aModel,ORM,
       riHandleAuthentication in aOptions,aMongoDBOptions,aMongoDBIdentifier);
+    {$endif}
+    {$ifdef DDDNOSYNDB}
+    result := TSQLRest.CreateTryFrom(aModel,ORM,riHandleAuthentication in aOptions);
+    {$else}
     if result=nil then // failed to use MongoDB -> try external or internal DB
       result := TSQLRestExternalDBCreate(aModel,ORM,
         riHandleAuthentication in aOptions,aExternalDBOptions);
+    {$endif}
     if result=nil then
       exit; // no match or wrong parameters
     if result.InheritsFrom(TSQLRestServer) then
@@ -988,13 +1020,15 @@ end;
 { TDDDAdministratedDaemonSettings }
 
 procedure TDDDAdministratedDaemonSettings.Initialize(
-  const aDescription,aServiceName,aServiceDisplayName,aAppUserModelID: string);
+  const aDescription, aServiceName, aServiceDisplayName, aAppUserModelID: string;
+  const aServiceDependencies: TStringDynArray);
 begin
   inherited Initialize(aDescription);
   if FServiceName='' then
     FServiceName := aServiceName;
   if FServiceDisplayName='' then
     FServiceDisplayName := aServiceDisplayName;
+  FServiceDependencies := aServiceDependencies;
   if FAppUserModelID='' then
     FAppUserModelID := aAppUserModelID;
 end;

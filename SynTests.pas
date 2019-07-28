@@ -6,7 +6,7 @@ unit SynTests;
 (*
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynTests;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -254,7 +254,7 @@ type
     /// create a temporary string, containing some fake text, with paragraphs
     class function RandomTextParagraph(WordCount: Integer;
       LastPunctuation: AnsiChar='.'; const RandomInclude: RawUTF8=''): RawUTF8;
-    /// add containing some fake text, with paragraphs
+    /// add containing some "bla bli blo blu" fake text, with paragraphs
     class procedure AddRandomTextParagraph(WR: TTextWriter; WordCount: Integer;
       LastPunctuation: AnsiChar='.'; const RandomInclude: RawUTF8=''; NoLineFeed: boolean=false);
     /// this method is triggered internaly - e.g. by Check() - when a test failed
@@ -544,7 +544,7 @@ const LEV: array[boolean] of TSynLogInfo = (sllFail, sllCustom4);
 var tix, crc: cardinal; // use a crc since strings are not thread-safe
 begin
   if condition then begin
-    crc := crc32c(0,pointer(msg),length(msg)*SizeOf(msg[1]));
+    crc := Hash32(pointer(msg),length(msg)*SizeOf(msg[1]));
     if crc=fCheckLastMsg then begin // no need to be too much verbose
       tix := GetTickCount64 shr 8; // also avoid to use a lock
       if tix=fCheckLastTix then
@@ -738,7 +738,7 @@ end;
 class procedure TSynTestCase.AddRandomTextParagraph(WR: TTextWriter; WordCount: Integer;
   LastPunctuation: AnsiChar; const RandomInclude: RawUTF8; NoLineFeed: boolean);
 type TKind = (space, comma, dot, question, paragraph);
-const bla: array[0..4] of string[3]=('bla','ble','bli','blo','blu');
+const bla: array[0..7] of string[3]=('bla','ble','bli','blo','blu','bla','bli','blo');
       endKind = [dot,paragraph,question];
 var n: integer;
     s: string[3];
@@ -747,31 +747,33 @@ var n: integer;
 begin
   last := paragraph;
   while WordCount>0 do begin
-    rnd := Random32gsl;
-    for n := 0 to rnd mod 4 do begin
+    rnd := Random32gsl; // get 32-bit of randomness
+    for n := 0 to rnd and 3 do begin // consume up to 20-bit from rnd
+      rnd := rnd shr 2;
+      s := bla[rnd and 7];
       rnd := rnd shr 3;
-      s := bla[rnd mod 5];
-      if last in endKind then
-        s[1] := upcase(s[1]);
+      if last in endKind then begin
+        last := space;
+        s[1] := NormToUpper[s[1]];
+      end;
       WR.AddShort(s);
       WR.Add(' ');
       dec(WordCount);
-      last := space;
     end;
     WR.CancelLastChar(' ');
-    case (rnd shr 3) mod 100 of
-    0..2: begin
+    case rnd and 127 of // consume 7-bit
+    0..4: begin
       if RandomInclude<>'' then begin
         WR.Add(' ');
         WR.AddString(RandomInclude);
       end;
       last := space;
     end;
-    3..40:  last := space;
-    41..70: last := comma;
-    71..85: last := dot;
-    86..90: last := question;
-    91..99: if NoLineFeed then last := dot else last := paragraph;
+    5..65:  last := space;
+    66..90: last := comma;
+    91..105: last := dot;
+    106..115: last := question;
+    116..127: if NoLineFeed then last := dot else last := paragraph;
     end;
     case last of
     space: WR.Add(' ');
@@ -781,10 +783,9 @@ begin
     paragraph: WR.AddShort('.'#13#10);
     end;
   end;
-  if not (last in endKind) then begin
+  if not(last in endKind) and (LastPunctuation<>' ') then begin
     WR.AddShort('bla');
-    if LastPunctuation<>' ' then
-      WR.Add(LastPunctuation);
+    WR.Add(LastPunctuation);
   end;
 end;
 
@@ -824,9 +825,9 @@ begin
   if ItemCount <= 1 then
     FormatString('% in %', [ItemName,Temp.Stop], msg) else
     FormatString('% % in % i.e. %/s, aver. %', [ItemCount,ItemName,Temp.Stop,
-      Temp.PerSec(ItemCount),Temp.ByCount(ItemCount)], msg);
+      IntToThousandString(Temp.PerSec(ItemCount)),Temp.ByCount(ItemCount)], msg);
   if SizeInBytes>0 then
-    msg := format('%s, %s/s',[msg,KB(Temp.PerSec(SizeInBytes))]);
+    msg := FormatString('%, %/s',[msg,KB(Temp.PerSec(SizeInBytes))]);
   AddConsole(msg);
 end;
 

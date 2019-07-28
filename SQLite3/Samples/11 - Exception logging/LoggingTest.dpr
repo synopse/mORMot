@@ -79,6 +79,7 @@ begin
   ILog.Log(sllInfo,'TestLevel',TypeInfo(TSynLogInfo),TestLevel,nil);
   ILog.Log(sllInfo,'set',TypeInfo(TSynLogInfos),S,nil);
   ILog.Log(sllDebug,ILog.Instance);
+  ILog.Log(sllExceptionOS, 'Some error with stacktrace from %', [ExeVersion.ProgramName], self);
   if TestLevel=low(TestLevel) then
     TTestLogClass(nil).ClassName; // will raise an access violation
   dec(TestLevel);

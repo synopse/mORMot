@@ -1,12 +1,22 @@
 /// minimal REST server for a list of Persons stored in SQlite3
 program RESTBenchmark;
 
+{
+  run the Server executable then e.g.
+  - ab -n 1000 -c 100 http://localhost:8888/root/abc
+      for latency measure (return the current timestamp as a few bytes)
+  - ab -n 1000 -c 100 http://localhost:8888/root/xyz
+      for bandwidth measure (returns some ORM query as 77KB of JSON)
+}
+{$ifndef UNIX}
 {$APPTYPE CONSOLE}
+{$endif}
 
 uses
   {$I SynDprUses.inc}  // use FastMM4 on older Delphi, or set FPC threads
   SysUtils,
   SynCommons,          // framework core
+  SynCrtSock,          // direct access to HTTP server
   SynLog,              // logging features
   mORMot,              // RESTful server & ORM
   mORMotSQLite3,       // SQLite3 engine as ORM core
@@ -91,7 +101,7 @@ begin
   ctxt.Returns(s);
 end;
 
-procedure DoTest;
+procedure DoTest(const url: AnsiString; keepAlive: boolean);
 var
   aRestServer: TSQLRestServerDB;
   aHttpServer: TSQLHttpServer;
@@ -106,10 +116,15 @@ begin
     aServices := TMyServices.Create(aRestServer);
     try
       // serve aRestServer data over HTTP
-      aHttpServer := TSQLHttpServer.Create('8888',[aRestServer]);
+      aHttpServer := TSQLHttpServer.Create(url,[aRestServer]);
+      if not keepAlive and (aHttpServer.HttpServer is THttpServer) then
+        THttpServer(aHttpServer.HttpServer).ServerKeepAliveTimeOut := 0;
       try
         aHttpServer.AccessControlAllowOrigin := '*'; // allow cross-site AJAX queries
-        writeln('Background server is running.'#10);
+        write('Background server is running on ', url, ' keepAlive ');
+        if (keepAlive) then
+          writeLn('is enabled') else
+          writeLn('is disabled');
         write('Press [Enter] to close the server.');
         readln;
       finally
@@ -123,12 +138,30 @@ begin
   end;
 end;
 
+const
+  UNIX_SOCK_PATH = '/tmp/rest-bench.socket';
+
+var
+  url: AnsiString;
+  keepAlive: boolean;
 
 begin
   // set logging abilities
   SQLite3Log.Family.Level := LOG_VERBOSE;
   //SQLite3Log.Family.EchoToConsole := LOG_VERBOSE;
   SQLite3Log.Family.PerThreadLog := ptIdentifiedInOnFile;
-  DoTest;
+  SQLite3Log.Family.NoFile := true; // do not create log files for benchmark
+  {$ifdef UNIX}
+  if (ParamCount>0) and (ParamStr(1)='unix') then begin
+    url := 'unix:' + UNIX_SOCK_PATH;
+    if FileExists(UNIX_SOCK_PATH) then
+      DeleteFile(UNIX_SOCK_PATH); // remove socket file
+  end else
+  {$endif}
+    url := '8888';
+  if (ParamCount>1) and (ParamStr(2)='false') then
+    keepAlive := false else
+    keepAlive := true;
+  DoTest(url, keepAlive);
 end.
 

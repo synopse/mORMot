@@ -20,12 +20,12 @@
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
    Alfred Glaenzer (alf)
-  
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -107,14 +107,7 @@
 // define this if you compile the unit within a Delphi package
 // - it will avoid error like "[DCC Error] E2201 Need imported data reference ($G)
 //   to access 'VarCopyProc' from unit 'SynCommons'"
-// - shall be set at the package options level, and left untouched by default 
-
-{$define WITHLOG}
-// if defined, logging will be supported via the TSQLLog family
-// - should be left defined: TSQLog.Family.Level default setting won't log
-// anything, so there won't be any noticeable performance penalty to have
-// this WITHLOG conditional defined, which is expected by high-level units
-// of the framework, like DDD or UI
+// - shall be set at the package options level, and left untouched by default
 
 {.$define DOPATCHTRTL}
 // if defined, the low-level patches made to RecordCopy() low-level function
@@ -127,7 +120,7 @@
 // be affected (unless you use the enhanced RTTI for record/dynamic array JSON
 // serialization) - left undefined by default to ensure minimal impact
 
-{$define NOSETTHREADNAME}
+{.$define NOSETTHREADNAME}
 // if defined, SetThreadName() would not raise the exception used to set the
 // thread name: to be defined if you have issues when debugging your application
 
@@ -147,18 +140,36 @@
 // which will use BT[mem] opcodes, which are slow on Intel, but fast on AMD
 // (with the Delphi x86 compiler, may not be the case for LLVM or FPC)
 
+{.$define FORCE_STRSSE42}
+// sse4.2 string instructions may read up to 16 bytes after the actual end buffer
+// -> define this if you want StrLen/StrComp/strspn/strcspn to use SSE4.2 opcodes
+// but you would eventually experiment weird random GPF in your project, raising
+// unexpected SIGABRT/SIGSEGV under POSIX system: so is disabled below for our
+// LINUX conditional - and use at your own risk under Windows!
+
+{.$define DISABLE_SSE42}
+// if defined, no SSE4.2 nor AES-NI instruction will be used, i.e. disable
+// FORCE_STRSSE42 and all crc32c opcodes - is set for FPC DARWIN target
+
 {.$define WITH_ERMS}
 // you may define this to enable REP MOVSB/STOSB for Fillchar/Move if cfERMS
-// flag is available in Intel's CpuFeatures 
-// -> disabled by default, since in practice it is much slower for small blocks
+// flag is available in Intel's CpuFeatures
+// -> disabled by default, since in practice it is (much) slower for small blocks
 
 {.$define NOXPOWEREDNAME}
 // define this to avoid sending "X-Powered-By: Synopse mORMot" HTTP header
 
 {.$define SQLVIRTUALLOGS}
 // enable low-level logging of SQlite3 virtual table query planner costs
-// -> to be used only for internal debugging
+// -> to be defined only for internal debugging
 
+{.$define NOSYNDBZEOS}
+// made SynDBZeos.pas a "void" unit - defined for FPC/Lazarus packages only
+
+{.$define DDDNOSYNDB}
+// SynDB / external SQL DB won't be linked to the executable by dddInfraSettings
+{.$define DDDNOMONGODB}
+// Mongo DB client won't be linked to the executable by dddInfraSettings
 
 
 {$ifdef FPC}
@@ -200,7 +211,7 @@
   {$define HASUINT64}
   {$define HASINLINENOTX86}
   {$define NODELPHIASM}   // ignore low-level System.@LStrFromPCharLen calls
-  {$define HASAESNI}
+  {$define HASAESNI} // should be commented to test project with valgrind
   {$define HASTTHREADSTART}
   {$define HASINTERFACEASTOBJECT}
   {$define EXTENDEDTOSTRING_USESTR} // FloatToText uses str() in FPC
@@ -274,7 +285,11 @@
     {$define LINUX} // not true, but a POSIX/BSD system
     {$ifdef DARWIN}
       {$define FPCSQLITE3STATIC} // we supply Darwin static libs
-      {$define FPC_PIC} // may have not be defined by the compiler options
+      {$ifdef CPUX86}
+        {$define FPC_PIC} // may have not be defined by the compiler options
+      {$endif}
+      {$undef FORCE_STRSSE42}  // fails otherwise for sure
+      {$define ABSOLUTEPASCAL} // NO asm nor redirection (until stabilized)
     {$else}
       {$define BSDNOTDARWIN}
     {$endif}
@@ -284,6 +299,10 @@
     {$endif}
   {$endif}
 
+  {$ifdef LINUX}
+     {$undef FORCE_STRSSE42}  // avoid fatal SIGABRT/SIGSEGV on POSIX systems
+     {$define FPCLINUX}
+  {$endif}
   {$ifdef FPC_PIC}
     {$define PUREPASCAL} // most asm code is not PIC-safe with global constants
   {$endif}
@@ -294,6 +313,7 @@
     {$ifdef CPUX64}
       {$define CPUINTEL}
       {$define FPC_CPUINTEL}
+      {$define FPC_X64}
       {$ASMMODE INTEL} // as Delphi expects
     {$endif CPUX64}
   {$else}
@@ -304,7 +324,11 @@
     {$ifdef CPUX86}
       {$define CPUINTEL}
       {$define FPC_CPUINTEL}
+      {$define FPC_X86}
       {$ASMMODE INTEL} // as Delphi expects
+      {$ifndef FPC_PIC}
+        {$define CPUX86NOTPIC} // use "absolute" instead of local register
+      {$endif FPC_PIC}
     {$endif CPUX86}
   {$endif CPU64}
 
@@ -338,6 +362,7 @@
     {$define DELPHI_OR_FPC_OLDRTTI}
     {$define FPC_OLDRTTI}
   {$endif}
+  {$define ISDELPHI2010_OR_FPC} // eltype2 field
 
   {$ifdef FPC_HAS_CPSTRING}
     // see http://wiki.freepascal.org/FPC_Unicode_support
@@ -394,6 +419,7 @@
     {$define CPU32DELPHI}
     {$undef CPU64}
     {$define CPUX86} // for compatibility with older versions of Delphi
+    {$define CPUX86NOTPIC} // use "absolute" instead of local register
   {$endif CPUX64}
 
   {$IFDEF CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
@@ -442,6 +468,9 @@
         {$define HASINLINENOTX86}
         {$define HASREGION}
         {$define HASFASTMM4}
+        // you can define this so that GetMemoryInfo/TSynMonitorMemory returns
+        // low-level FastMM4 information
+        {.$define WITH_FASTMM4STATS}
       {$ifend}
       {$ifdef VER180}
         {$define ISDELPHI20062007} // to circumvent some specific bugs
@@ -458,13 +487,13 @@
         {$define FPC_OR_UNICODE}
       {$ifend}
       {$if CompilerVersion >= 21.0}
-        // Delphi 2010/XE: Reduce EXE size by disabling much RTTI
         {$define ISDELPHI2010}
+        {$define ISDELPHI2010_OR_FPC} // eltype2 field
         {$define ISDELPHI2010_OR_FPC_NEWRTTI}
         {$define FPC_OR_UNICODE}
         {$define HASTTHREADSTART}
         {$define HASINTERFACEASTOBJECT}
-        {$ifdef NEWRTTINOTUSED}
+        {$ifdef NEWRTTINOTUSED} // option reduce EXE size by disabling much RTTI
           {$WEAKLINKRTTI ON}
           {$RTTI EXPLICIT METHODS([]) PROPERTIES([]) FIELDS([])}
         {$endif NEWRTTINOTUSED}
@@ -490,7 +519,7 @@
         {$define ISDELPHIXE5}
         {$define PUBLISHRECORD}
         // if defined, will handle RTTI available only since Delphi XE5 for
-        // record published properties 
+        // record published properties
       {$ifend}
       {$if CompilerVersion >= 27.0}
         {$define ISDELPHIXE6}
@@ -516,6 +545,9 @@
           {$define HASINLINENOTX86}
         {$endif}
         {$endif}
+      {$ifend}
+      {$if CompilerVersion >= 33.0}
+        {$define ISDELPHI103}
       {$ifend}
     {$ifend CompilerVersion >= 17}
     {$ifopt O-} // if we don't expect fast code, don't optimize the framework
@@ -579,9 +611,28 @@
       {$endif}
     {$endif}
   {$endif}
+  {$ifdef DISABLE_SSE42}
+    {$undef FORCE_STRSSE42}
+  {$endif DISABLE_SSE42}
 {$else}
   {$undef HASAESNI} // AES-NI is an Intel-specific feature
+  {$define ABSOLUTEPASCALORNOTINTEL}
 {$endif CPUINTEL}
+
+{$ifdef ABSOLUTEPASCAL}
+  {$define ABSOLUTEORPUREPASCAL}
+  {$define ABSOLUTEPASCALORNOTINTEL}
+{$endif ABSOLUTEPASCAL}
+{$ifdef PUREPASCAL}
+  {$define ABSOLUTEORPUREPASCAL}
+{$endif PUREPASCAL}
+
+{$define WITHLOG}
+// if defined, logging will be supported via the TSQLLog family
+// - should be left defined: TSQLog.Family.Level default setting won't log
+// anything, so there won't be any noticeable performance penalty to have
+// this WITHLOG conditional defined, which is expected by high-level part
+// of the framework, like DDD or UI units
 
 {$ifdef FPC}
   {$ifndef FPCSQLITE3STATIC} // see above about this FPC-specific conditional
@@ -592,12 +643,12 @@
   {$ifdef CPU64}
     {$define NOSQLITE3STATIC}
   {$endif}
-{$endif}
+{$endif FPC}
 
 {$ifdef NOSQLITE3STATIC}
-  // our proprietary crypto expects a statically linked custom sqlite3.c 
+  // our proprietary crypto expects a statically linked custom sqlite3.c
   {$define NOSQLITE3ENCRYPT}
-{$endif}
+{$endif NOSQLITE3STATIC}
 
 {$ifdef MSWINDOWS}
   {$define USEWININET}         // publish TWinINet/TWinHttp/TWinHttpAPI classes
@@ -610,7 +661,11 @@
     {$define USELIBCURL}
     // for Android, consider using https://github.com/gcesarmza/curl-android-ios
     // static libraries and force USELIBCURL in the project conditionals
-  {$endif}
-{$endif}
+  {$endif ANDROID}
+{$endif MSWINDOWS}
 
+{$ifdef USELIBCURL}
+  {.$define LIBCURLMULTI}
+  // enable https://curl.haxx.se/libcurl/c/libcurl-multi.html interface
+{$endif USELIBCURL}
 

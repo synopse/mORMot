@@ -6,7 +6,7 @@ unit SynRestVCL;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynRestVCL;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -172,11 +172,10 @@ type
 
 // JSON columns to binary from a TSQLTableJSON, is not ideal because this code is a almost repeated code.
 procedure JSONColumnsToBinary(const aTable: TSQLTableJSON; W: TFileBufferWriter;
-  const Null: TSQLDBProxyStatementColumns;
-  const ColTypes: TSQLDBFieldTypeDynArray);
+  Null: pointer; const ColTypes: TSQLDBFieldTypeDynArray);
 // convert to binary from a TSQLTableJSON, is not ideal because this code is a almost repeated code.
 function JSONToBinary(const aTable: TSQLTableJSON; Dest: TStream; MaxRowCount: cardinal=0; DataRowPosition: PCardinalDynArray=nil;
-                      const DefaultDataType: TSQLDBFieldType = SynTable.ftUTF8; const DefaultFieldSize: Integer = 255): cardinal;
+  const DefaultDataType: TSQLDBFieldType = SynTable.ftUTF8; const DefaultFieldSize: Integer = 255): cardinal;
 
 implementation
 
@@ -285,7 +284,7 @@ const
 
 
 procedure JSONColumnsToBinary(const aTable: TSQLTableJSON; W: TFileBufferWriter;
-  const Null: TSQLDBProxyStatementColumns; const ColTypes: TSQLDBFieldTypeDynArray);
+  Null: pointer; const ColTypes: TSQLDBFieldTypeDynArray);
 var F: integer;
     VDouble: double;
     VCurrency: currency absolute VDouble;
@@ -293,7 +292,7 @@ var F: integer;
     colType: TSQLDBFieldType;
 begin
   for F := 0 to length(ColTypes)-1 do
-    if not (F in Null) then begin
+    if not GetBitPtr(Null,F) then begin
       colType := ColTypes[F];
       if colType<ftInt64 then begin // ftUnknown,ftNull
         colType := SQLFIELDTYPETODBFIELDTYPE[aTable.FieldType(F)]; // per-row column type (SQLite3 only)
@@ -335,12 +334,11 @@ function JSONToBinary(const aTable: TSQLTableJSON; Dest: TStream; MaxRowCount: c
                       const DefaultDataType: TSQLDBFieldType = SynTable.ftUTF8; const DefaultFieldSize: Integer = 255): cardinal;
 var F, FMax, FieldSize, NullRowSize: integer;
     StartPos: cardinal;
-    Null: TSQLDBProxyStatementColumns;
+    Null: TByteDynArray;
     W: TFileBufferWriter;
     ColTypes: TSQLDBFieldTypeDynArray;
     FieldType: TSQLDBFieldType;
 begin
-  FillChar(Null,sizeof(Null),0);
   result := 0;
   W := TFileBufferWriter.Create(Dest);
   try
@@ -364,10 +362,8 @@ begin
         W.WriteVarUInt32(FieldSize);
       end;
       // initialize null handling
-      NullRowSize := (FMax shr 3)+1;
-      if NullRowSize>sizeof(Null) then
-        raise ESQLDBException.CreateUTF8(
-          'JSONToBinary: too many columns', []);
+      SetLength(Null,(FMax shr 3)+1);
+      NullRowSize := 0;
       // save all data rows
       StartPos := W.TotalWritten;
       if aTable.Step or (aTable.RowCount=1) then // Need step first or error is raised in Table.Field function.
@@ -380,19 +376,19 @@ begin
         end;
         // first write null columns flags
         if NullRowSize>0 then begin
-          FillChar(Null,NullRowSize,0);
+          FillChar(Null[0],NullRowSize,0);
           NullRowSize := 0;
         end;
         for F := 0 to FMax do
         begin
           if VarIsNull(aTable.Field(F)) then begin
-            include(Null,F);
+            SetBitPtr(pointer(Null),F);
             NullRowSize := (F shr 3)+1;
           end;
         end;
         W.WriteVarUInt32(NullRowSize);
         if NullRowSize>0 then
-          W.Write(@Null,NullRowSize);
+          W.Write(Null,NullRowSize);
         // then write data values
         JSONColumnsToBinary(aTable, W,Null,ColTypes);
         inc(result);

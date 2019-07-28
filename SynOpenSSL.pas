@@ -6,7 +6,7 @@ unit SynOpenSSL;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynOpenSSL;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -146,7 +146,7 @@ type
     length: integer;
     type_: integer;
     data: PAnsiChar;
-    flags: Longword;
+    flags: longint;
   end;
   PASN1_STRING = ^TASN1_STRING;
 
@@ -174,7 +174,7 @@ type
 
   TStatLockLockCallback = procedure(Mode: integer; N: integer; _file: PAnsiChar;
     Line: integer); cdecl;
-  TStatLockIDCallback = function: Longword; cdecl;
+  TStatLockIDCallback = function: longint; cdecl;
   TCryptoThreadIDCallback = procedure(ID: PCRYPTO_THREADID); cdecl;
   TDynLockCreateCallback = function(_file: PAnsiChar; Line: integer):
     PCRYPTO_dynlock_value; cdecl;
@@ -405,7 +405,7 @@ type
   // - if you work with a lot of concurrent long-living connections (e.g. when
   // implementing a server), you may dramatically reduce the memory consumption
   // (to the prive of a slight performance degradation) by setting
-  // ocoNoReleaseBuffers - see http://stackoverflow.com/a/19294527/458259
+  // ocoNoReleaseBuffers - see http://stackoverflow.com/a/19294527
   // - for security reasons (i.e. to prevent BREACH and CRIME vulnerabilities),
   // and also to reduce memory consumption, TLS compression is disabled by
   // default: set ocoEnabledCompression to enable this unsafe feature

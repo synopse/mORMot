@@ -1,4 +1,4 @@
-/// SQLite3 3.25.2 Database engine - statically linked for Windows/Linux
+/// SQLite3 3.29 Database engine - statically linked for Windows/Linux
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynSQLite3Static;
@@ -6,7 +6,7 @@ unit SynSQLite3Static;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynSQLite3Static;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -77,7 +77,7 @@ unit SynSQLite3Static;
 
   Version 1.18
   - initial revision, extracted from SynSQLite3.pas unit
-  - updated SQLite3 engine to latest version 3.25.2
+  - updated SQLite3 engine to latest version 3.29
   - now all sqlite3_*() API calls are accessible via sqlite3.*()
   - our custom file encryption is now called via sqlite3.key() - i.e. official
     SQLite Encryption Extension (SEE) sqlite3_key() API - and works for database
@@ -92,6 +92,19 @@ unit SynSQLite3Static;
   - added FPC cross-platform support, statically linked for Win32/Win64
 
 }
+
+(* WARNING: with current 3.29+ version, the following sqlite3.c patch is needed:
+
+SQLITE_PRIVATE int sqlite3RealSameAsInt(double r1, sqlite3_int64 i){
+  double r2 = (double)i;
+#if defined(__BORLANDC__) // avoid weird Borland C++ compiler limitation
+  return r1==r2; // safe and fast with x87 FPU
+#else // faster version without any memcmp() call (not an intrinsic on GCC)
+  return *( sqlite3_int64* )(&r1) == *( sqlite3_int64* )(&r2)
+          && i >= -2251799813685248LL && i < 2251799813685248LL;
+#endif
+}
+*)
 
 {$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
@@ -207,7 +220,7 @@ var
 
 implementation
 
-{$ifdef FPC}  // FPC expects .o linking, and only one version including FTS3
+{$ifdef FPC}  // FPC expects .o linking, and only one version including FTS
 
   {$ifdef MSWINDOWS}
     {$ifdef CPU64}
@@ -368,7 +381,7 @@ begin
 end;
 
 {$ifdef MSWINDOWS}
-{$ifdef CPU32}
+{$ifdef CPU32} // Delphi Win32 will link static Borland C++ sqlite3.obj
 
 // we then implement all needed Borland C++ runtime functions in pure pascal:
 
@@ -445,13 +458,12 @@ asm
   jmp System.@_llushr
 end;
 
-function log(const val: extended): extended;
+function log(const val: double): double; cdecl; { always cdecl }
 asm
-  fld val
+  fld qword ptr val
   fldln2
   fxch
   fyl2x
-  fwait
 end;
 
 {$endif CPU32}
@@ -500,6 +512,18 @@ begin // called e.g. during LIKE process
   result := SynCommons.strcspn(str,reject); // use SSE4.2 if available
 end;
 
+function strrchr(s: PAnsiChar; c: AnsiChar): PAnsiChar; cdecl;
+  {$ifdef FPC}public name{$ifdef CPU64}'strrchr'{$else}'_strrchr'{$endif};{$endif}
+begin // simple full pascal version of the standard C library function
+  result := nil;
+  if s<>nil then
+    while s^<>#0 do begin
+      if s^=c then
+        result := s;
+      inc(s);
+    end;
+end;
+
 function memcmp(p1, p2: pByte; Size: integer): integer; cdecl; { always cdecl }
 {$ifdef FPC}
   public name{$ifdef CPU64}'memcmp'{$else}'_memcmp'{$endif};
@@ -507,20 +531,21 @@ begin
   result := CompareByte(p1,p2,Size); // use FPC
 end;
 {$else}
-// a fast full pascal version of the standard C library function
-begin
+begin // full pascal version of the standard C library function
   if (p1<>p2) and (Size<>0) then
     if p1<>nil then
       if p2<>nil then begin
         repeat
-          if p1^<>p2^ then begin
-            result := p1^-p2^;
-            exit;
+          if p1^=p2^ then begin
+            inc(p1);
+            inc(p2);
+            dec(Size);
+            if Size<>0 then
+              continue else break;
           end;
-          dec(Size);
-          inc(p1);
-          inc(p2);
-        until Size=0;
+          result := p1^-p2^;
+          exit;
+        until false;
         result := 0;
       end else
       result := 1 else
@@ -531,9 +556,8 @@ end;
 
 function strncmp(p1, p2: PByte; Size: integer): integer; cdecl; { always cdecl }
   {$ifdef FPC}public name{$ifdef CPU64}'strncmp'{$else}'_strncmp'{$endif};{$endif}
-// a fast full pascal version of the standard C library function
 var i: integer;
-begin
+begin // a fast full pascal version of the standard C library function
   for i := 1 to Size do begin
     result := p1^-p2^;
     if (result<>0) or (p1^=0) then
@@ -1124,106 +1148,106 @@ function sqlite3_trace_v2(DB: TSQLite3DB; Mask: integer; Callback: TSQLTraceCall
 
 const
   // error message if statically linked sqlite3.o(bj) does not match this
-  EXPECTED_SQLITE3_VERSION = {$ifdef ANDROID}''{$else}'3.25.2'{$endif};
+  EXPECTED_SQLITE3_VERSION = {$ifdef ANDROID}''{$else}'3.29.0'{$endif};
 
 constructor TSQLite3LibraryStatic.Create;
 var error: RawUTF8;
 begin
-  initialize           := @sqlite3_initialize;
-  shutdown             := @sqlite3_shutdown;
-  open                 := @sqlite3_open;
-  open_v2              := @sqlite3_open_v2;
-  key                  := @sqlite3_key;
-  rekey                := @sqlite3_rekey;
-  close                := @sqlite3_close;
-  libversion           := @sqlite3_libversion;
-  errmsg               := @sqlite3_errmsg;
-  extended_errcode     := @sqlite3_extended_errcode;
-  create_function      := @sqlite3_create_function;
-  create_function_v2   := @sqlite3_create_function_v2;
+  initialize             := @sqlite3_initialize;
+  shutdown               := @sqlite3_shutdown;
+  open                   := @sqlite3_open;
+  open_v2                := @sqlite3_open_v2;
+  key                    := @sqlite3_key;
+  rekey                  := @sqlite3_rekey;
+  close                  := @sqlite3_close;
+  libversion             := @sqlite3_libversion;
+  errmsg                 := @sqlite3_errmsg;
+  extended_errcode       := @sqlite3_extended_errcode;
+  create_function        := @sqlite3_create_function;
+  create_function_v2     := @sqlite3_create_function_v2;
   create_window_function := @sqlite3_create_window_function;
-  create_collation     := @sqlite3_create_collation;
-  last_insert_rowid    := @sqlite3_last_insert_rowid;
-  busy_timeout         := @sqlite3_busy_timeout;
-  busy_handler         := @sqlite3_busy_handler;
-  prepare_v2           := @sqlite3_prepare_v2;
-  finalize             := @sqlite3_finalize;
-  next_stmt            := @sqlite3_next_stmt;
-  reset                := @sqlite3_reset;
-  stmt_readonly        := @sqlite3_stmt_readonly;
-  step                 := @sqlite3_step;
-  column_count         := @sqlite3_column_count;
-  column_type          := @sqlite3_column_type;
-  column_decltype      := @sqlite3_column_decltype;
-  column_name          := @sqlite3_column_name;
-  column_bytes         := @sqlite3_column_bytes;
-  column_value         := @sqlite3_column_value;
-  column_double        := @sqlite3_column_double;
-  column_int           := @sqlite3_column_int;
-  column_int64         := @sqlite3_column_int64;
-  column_text          := @sqlite3_column_text;
-  column_text16        := @sqlite3_column_text16;
-  column_blob          := @sqlite3_column_blob;
-  value_type           := @sqlite3_value_type;
-  value_numeric_type   := @sqlite3_value_numeric_type;
-  value_bytes          := @sqlite3_value_bytes;
-  value_double         := @sqlite3_value_double;
-  value_int64          := @sqlite3_value_int64;
-  value_text           := @sqlite3_value_text;
-  value_blob           := @sqlite3_value_blob;
-  result_null          := @sqlite3_result_null;
-  result_int64         := @sqlite3_result_int64;
-  result_double        := @sqlite3_result_double;
-  result_blob          := @sqlite3_result_blob;
-  result_text          := @sqlite3_result_text;
-  result_value         := @sqlite3_result_value;
-  result_error         := @sqlite3_result_error;
-  user_data            := @sqlite3_user_data;
-  context_db_handle    := @sqlite3_context_db_handle;
-  aggregate_context    := @sqlite3_aggregate_context;
-  bind_text            := @sqlite3_bind_text;
-  bind_blob            := @sqlite3_bind_blob;
-  bind_zeroblob        := @sqlite3_bind_zeroblob;
-  bind_double          := @sqlite3_bind_double;
-  bind_int             := @sqlite3_bind_int;
-  bind_int64           := @sqlite3_bind_int64;
-  bind_null            := @sqlite3_bind_null;
-  clear_bindings       := @sqlite3_clear_bindings;
-  bind_parameter_count := @sqlite3_bind_parameter_count;
-  blob_open            := @sqlite3_blob_open;
-  blob_reopen          := @sqlite3_blob_reopen;
-  blob_close           := @sqlite3_blob_close;
-  blob_read            := @sqlite3_blob_read;
-  blob_write           := @sqlite3_blob_write;
-  blob_bytes           := @sqlite3_blob_bytes;
-  create_module_v2     := @sqlite3_create_module_v2;
-  declare_vtab         := @sqlite3_declare_vtab;
-  set_authorizer       := @sqlite3_set_authorizer;
-  update_hook          := @sqlite3_update_hook;
-  commit_hook          := @sqlite3_commit_hook;
-  rollback_hook        := @sqlite3_rollback_hook;
-  changes              := @sqlite3_changes;
-  total_changes        := @sqlite3_total_changes;
-  malloc               := @sqlite3_malloc;
-  realloc              := @sqlite3_realloc;
-  free_                := @sqlite3_free;
-  memory_used          := @sqlite3_memory_used;
-  memory_highwater     := @sqlite3_memory_highwater;
-  trace_v2             := @sqlite3_trace_v2;
-  limit                := @sqlite3_limit;
-  backup_init          := @sqlite3_backup_init;
-  backup_step          := @sqlite3_backup_step;
-  backup_finish        := @sqlite3_backup_finish;
-  backup_remaining     := @sqlite3_backup_remaining;
-  backup_pagecount     := @sqlite3_backup_pagecount;
-  serialize            := @sqlite3_serialize;
-  deserialize          := @sqlite3_deserialize;
-  {$ifndef DELPHI5OROLDER}
-  config               := @sqlite3_config;
-  db_config            := @sqlite3_db_config;
+  create_collation       := @sqlite3_create_collation;
+  last_insert_rowid      := @sqlite3_last_insert_rowid;
+  busy_timeout           := @sqlite3_busy_timeout;
+  busy_handler           := @sqlite3_busy_handler;
+  prepare_v2             := @sqlite3_prepare_v2;
+  finalize               := @sqlite3_finalize;
+  next_stmt              := @sqlite3_next_stmt;
+  reset                  := @sqlite3_reset;
+  stmt_readonly          := @sqlite3_stmt_readonly;
+  step                   := @sqlite3_step;
+  column_count           := @sqlite3_column_count;
+  column_type            := @sqlite3_column_type;
+  column_decltype        := @sqlite3_column_decltype;
+  column_name            := @sqlite3_column_name;
+  column_bytes           := @sqlite3_column_bytes;
+  column_value           := @sqlite3_column_value;
+  column_double          := @sqlite3_column_double;
+  column_int             := @sqlite3_column_int;
+  column_int64           := @sqlite3_column_int64;
+  column_text            := @sqlite3_column_text;
+  column_text16          := @sqlite3_column_text16;
+  column_blob            := @sqlite3_column_blob;
+  value_type             := @sqlite3_value_type;
+  value_numeric_type     := @sqlite3_value_numeric_type;
+  value_bytes            := @sqlite3_value_bytes;
+  value_double           := @sqlite3_value_double;
+  value_int64            := @sqlite3_value_int64;
+  value_text             := @sqlite3_value_text;
+  value_blob             := @sqlite3_value_blob;
+  result_null            := @sqlite3_result_null;
+  result_int64           := @sqlite3_result_int64;
+  result_double          := @sqlite3_result_double;
+  result_blob            := @sqlite3_result_blob;
+  result_text            := @sqlite3_result_text;
+  result_value           := @sqlite3_result_value;
+  result_error           := @sqlite3_result_error;
+  user_data              := @sqlite3_user_data;
+  context_db_handle      := @sqlite3_context_db_handle;
+  aggregate_context      := @sqlite3_aggregate_context;
+  bind_text              := @sqlite3_bind_text;
+  bind_blob              := @sqlite3_bind_blob;
+  bind_zeroblob          := @sqlite3_bind_zeroblob;
+  bind_double            := @sqlite3_bind_double;
+  bind_int               := @sqlite3_bind_int;
+  bind_int64             := @sqlite3_bind_int64;
+  bind_null              := @sqlite3_bind_null;
+  clear_bindings         := @sqlite3_clear_bindings;
+  bind_parameter_count   := @sqlite3_bind_parameter_count;
+  blob_open              := @sqlite3_blob_open;
+  blob_reopen            := @sqlite3_blob_reopen;
+  blob_close             := @sqlite3_blob_close;
+  blob_read              := @sqlite3_blob_read;
+  blob_write             := @sqlite3_blob_write;
+  blob_bytes             := @sqlite3_blob_bytes;
+  create_module_v2       := @sqlite3_create_module_v2;
+  declare_vtab           := @sqlite3_declare_vtab;
+  set_authorizer         := @sqlite3_set_authorizer;
+  update_hook            := @sqlite3_update_hook;
+  commit_hook            := @sqlite3_commit_hook;
+  rollback_hook          := @sqlite3_rollback_hook;
+  changes                := @sqlite3_changes;
+  total_changes          := @sqlite3_total_changes;
+  malloc                 := @sqlite3_malloc;
+  realloc                := @sqlite3_realloc;
+  free_                  := @sqlite3_free;
+  memory_used            := @sqlite3_memory_used;
+  memory_highwater       := @sqlite3_memory_highwater;
+  trace_v2               := @sqlite3_trace_v2;
+  limit                  := @sqlite3_limit;
+  backup_init            := @sqlite3_backup_init;
+  backup_step            := @sqlite3_backup_step;
+  backup_finish          := @sqlite3_backup_finish;
+  backup_remaining       := @sqlite3_backup_remaining;
+  backup_pagecount       := @sqlite3_backup_pagecount;
+  serialize              := @sqlite3_serialize;
+  deserialize            := @sqlite3_deserialize;
+  {$ifndef DELPHI5OROLDER} // varargs calls
+  config                 := @sqlite3_config;
+  db_config              := @sqlite3_db_config;
   {$endif}
 
-  // sqlite3.obj is compiled with SQLITE_OMIT_AUTOINIT defined
+  // our static SQLite3 is compiled with SQLITE_OMIT_AUTOINIT defined
   {$ifdef FPC}
   ForceToUseSharedMemoryManager; // before sqlite3_initialize otherwise SQLITE_MISUSE
   {$else}
@@ -1237,14 +1261,11 @@ begin
   inherited Create; // set fVersionNumber/fVersionText
   if (EXPECTED_SQLITE3_VERSION='') or (fVersionText=EXPECTED_SQLITE3_VERSION) then
     exit;
-  FormatUTF8('Static sqlite3.obj as included within % is outdated!'#13+
+  // you should never see it if you cloned https://github.com/synopse/mORMot
+  FormatUTF8('Static SQLite3 library as included within % is outdated!'#13+
     'Linked version is % whereas the current/expected is '+EXPECTED_SQLITE3_VERSION+'.'#13#13+
     'Please download latest SQLite3 '+EXPECTED_SQLITE3_VERSION+' revision'#13+
-    {$ifdef FPC}
-    'from https://synopse.info/files/sqlite3fpc.7z',
-    {$else}
-    'from https://synopse.info/files/sqlite3obj.7z',
-    {$endif}
+    'from https://synopse.info/files/sqlite3'+{$ifdef FPC}'fpc'{$else}'obj'{$endif}+'.7z',
     [ExeVersion.ProgramName,fVersionText],error);
   LogToTextFile(error); // annoyning enough on all platforms
   // SynSQLite3Log.Add.Log() would do nothing: we are in .exe initialization

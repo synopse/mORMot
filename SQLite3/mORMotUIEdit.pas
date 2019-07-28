@@ -6,7 +6,7 @@ unit mORMotUIEdit;
 (*
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit mORMotUIEdit;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -148,13 +148,13 @@ type
     OnComponentCreated: TOnComponentCreated;
   end;
 
-  {{ Record edition dialog, used to edit record content on the screen
-   - the window content is taken from the RTTI of the supplied record;
-     all the User Interface (fields, etc...) is created from the class definition
-     using RTTI: published properties are displayed as editing components
-   - caller must initialize some events, OnComponentCreate at least,
-    in order to supply the objects to be added on the form
-   - components creation is fully customizable by some events }
+  /// Record edition dialog, used to edit record content on the screen
+  // - the window content is taken from the RTTI of the supplied record;
+  //   all the User Interface (fields, etc...) is created from the class definition
+  //   using RTTI: published properties are displayed as editing components
+  // - caller must initialize some events, OnComponentCreate at least,
+  //  in order to supply the objects to be added on the form
+  // - components creation is fully customizable by some events
   TRecordEditForm = class(TRTTIForm)
     BottomPanel: TPanel;
     Scroll: TScrollBox;
@@ -447,7 +447,7 @@ begin
                   Hint := aHint;
                   ShowHint := True;
                 end;
-                Checked := GetBit(Sets,j);
+                Checked := GetBitPtr(@Sets,j);
                 Enabled := Group.Enabled;
                 Tag := i+1+(j+1) shl 8;  // for BtnSaveClick() event
                 inc(PtrInt(EP),ord(EP^[0])+1); // next enumeration item

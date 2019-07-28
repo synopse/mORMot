@@ -6,7 +6,7 @@ unit SynSelfTests;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynSelfTests;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -344,6 +344,8 @@ type
     procedure _GUID;
     /// test IsMatch() function
     procedure _IsMatch;
+    /// test TExprParserMatch class
+    procedure _TExprParserMatch;
     /// the Soundex search feature (i.e. TSynSoundex and all related
     // functions)
     procedure Soundex;
@@ -1116,8 +1118,7 @@ type
   end;
 
   /// a record used by IComplexCalculator.EchoRecord
-  TConsultaNav = object
-  public
+  TConsultaNav = packed record
     MaxRows, Row0, RowCount: int64;
     IsSQLUpdateBack, EOF: boolean;
   end;
@@ -1604,6 +1605,7 @@ begin
   Assert(strspnpas(PAnsiChar('baabbaabbaabbabcd'),PAnsiChar('ab'))=15);
   Assert(strspnpas(PAnsiChar('baabbaabbaabbaabcd'),PAnsiChar('ab'))=16);
   Assert(strspnpas(PAnsiChar('baabbaabbaababaabcd'),PAnsiChar('ab'))=17);
+  {$ifndef ABSOLUTEPASCAL}
   {$ifdef CPUINTEL}
   if cfSSE42 in CpuFeatures then begin
     Check(strcspnsse42(PAnsiChar('ab'),PAnsiChar('a'#0))=0);
@@ -1638,6 +1640,7 @@ begin
     Check(strspnsse42(PAnsiChar('baabbaabbaababaabcd'),PAnsiChar('ab'))=17);
   end;
   {$endif CPUINTEL}
+  {$endif ABSOLUTEPASCAL}
 end;
 
 procedure TTestLowLevelCommon.IniFiles;
@@ -2664,6 +2667,19 @@ begin
   Check(ACities.Count=3);
   for i := 1 to high(Province.Cities) do
     Check(Province.Cities[i].Name>Province.Cities[i-1].Name);
+  Province.Cities := nil;
+  Test := RecordSave(Province,TypeInfo(TProvince));
+  RecordClear(Province,TypeInfo(TProvince));
+  Check(Province.Name='');
+  Check(Province.Comment='');
+  Check(length(Province.Cities)=0);
+  Check(ACities.Count=0);
+  Check(RecordLoad(Province,pointer(Test),TypeInfo(TProvince))^=#0);
+  Check(Province.Name='Test');
+  Check(Province.Comment='comment');
+  Check(Province.Year=1000);
+  Check(length(Province.Cities)=0);
+  Check(ACities.Count=0);
   // big array test
   ACities.Init(TypeInfo(TCityDynArray),Province.Cities);
   ACities.Clear;
@@ -2765,6 +2781,7 @@ procedure TTestLowLevelCommon.UrlEncoding;
 var i,j: integer;
     s: RawByteString;
     name,value,utf: RawUTF8;
+    str: string;
     P: PUTF8Char;
     GUID2: TGUID;
     U: TURI;
@@ -2776,6 +2793,8 @@ begin
   Check(UrlDecode(PUTF8Char(encoded))=decoded);
 end;
 begin
+  str := UTF8ToString(UrlEncode(StringToUTF8('https://test3.diavgeia.gov.gr/doc/')));
+  check(str='https%3A%2F%2Ftest3.diavgeia.gov.gr%2Fdoc%2F');
   Test('abcdef','abcdef');
   Test('abcdefyzABCDYZ01239_-.~ ','abcdefyzABCDYZ01239_-.~+');
   Test('"Aardvarks lurk, OK?"','%22Aardvarks+lurk%2C+OK%3F%22');
@@ -2877,11 +2896,41 @@ begin
 end;
 
 procedure TTestLowLevelCommon._IsMatch;
-var i: integer;
-    V: RawUTF8;
+var i,j: integer;
+    V, cont: RawUTF8;
     match: TMatch;
     reuse: boolean;
+
+  procedure Contains;
+  begin
+    check(match.Match('12'));
+    check(match.Match('12e'));
+    check(match.Match('12er'));
+    check(match.Match('a12'));
+    check(match.Match('a12e'));
+    check(match.Match('ab12'));
+    check(match.Match('ab12er'));
+    check(not match.Match('1'));
+    check(not match.Match('a1'));
+    check(not match.Match('a1b2'));
+    check(not match.Match('1a2'));
+  end;
+
 begin
+  V := '1234567890123456'#13'1234567890123456789';
+  for j := 1 to 16 do begin
+    for i := j to 16 do
+      Check(BufferLineLength(@V[j],@V[i])=i-j);
+    for i := 17 to 34 do
+      Check(BufferLineLength(@V[j],@V[i])=17-j);
+  end;
+  V := '12345678901234561234567890123456'#13'1234567890123456789';
+  for j := 1 to 32 do begin
+    for i := j to 32 do
+      Check(BufferLineLength(@V[j],@V[i])=i-j);
+    for i := 33 to 50 do
+      Check(BufferLineLength(@V[j],@V[i])=33-j);
+  end;
   Check(IsMatch('','',true));
   Check(not IsMatch('','toto',true));
   Check(not IsMatch('Bidule.pas','',true));
@@ -3028,16 +3077,15 @@ begin
     check(not match.Match('atEst'));
     check(not match.Match('ateSTe'));
     match.Prepare('*12*', false, reuse);
-    check(match.Match('12'));
-    check(match.Match('12e'));
-    check(match.Match('12er'));
-    check(match.Match('a12'));
-    check(match.Match('a12e'));
-    check(match.Match('ab12'));
-    check(match.Match('ab12er'));
-    check(not match.Match('1'));
-    check(not match.Match('a1'));
-    check(not match.Match('1a2'));
+    Contains;
+    if reuse then begin
+      cont := '12';
+      match.PrepareContains(cont, false);
+      Contains;
+      cont := '12';
+      match.PrepareContains(cont, true);
+      Contains;
+    end;
     match.Prepare('*teSt*', true, reuse);
     check(match.Match('test'));
     check(match.Match('teste'));
@@ -3117,6 +3165,47 @@ begin
     Check(IsMatch('[A-Za-z0-9]*',V)=(i in IsWord));
     Check(IsMatch('[a-z0-9]?[A-Z0-9]',V,true)=(i in IsWord));
     Check(IsMatch('[A-Z0-9]*',V,true)=(i in IsWord));
+  end;
+end;
+
+procedure TTestLowLevelCommon._TExprParserMatch;
+var
+  s: TExprParserMatch;
+
+  procedure Test(const expression: RawUTF8; const ok, nok: array of RawUTF8);
+  var i: integer;
+  begin
+    Check(s.Parse(expression) = eprSuccess);
+    for i := 0 to high(ok) do
+      Check(s.Search(ok[i]));
+    for i := 0 to high(nok) do
+      Check(not s.Search(nok[i]));
+  end;
+  
+begin
+  s := TExprParserMatch.Create({casesensitive=}true);
+  try // &=AND -=WITHOUT +=OR 
+    check(s.Parse('') = eprNoExpression);
+    check(s.Parse('  ') = eprNoExpression);
+    check(s.Parse('1+ ') = eprMissingFinalWord);
+    Test('1', ['1', '1 2 3', '2 1'], ['2', '13', '2 3']);
+    Test('   1   ', ['1', '1 2 3', '2 1'], ['2', '13', '2 3']);
+    Test('1+4', ['1', '1 2 3', '2 1', '2 4 3'], ['2', '13', '2 3', '41']);
+    Test(' 1 + 4 ', ['1', '1 2 3', '2 1', '2 4 3'], ['2', '13', '2 3', '41']);
+    Test('1+4+5', ['1', '1 2 3', '2 1', '2 4 3'], ['2', '13', '2 3', '41']);
+    Test('1+(4+5)', ['1', '1 2 3', '2 1', '2 4 3'], ['2', '13', '2 3', '41']);
+    Test('1+4*+5', ['1', '1 2 3', '2 1', '2 4 3', '41'], ['2', '13', '2 3']);
+    Test('1+(4&555)', ['4 555 3', '555 4', '1', '1 2 3', '2 1'], ['2', '13', '2 3', '41', '4 3', '3 555']);
+    Test('1+(4 555)', ['4 555 3', '555 4', '1', '1 2 3', '2 1'], ['2', '13', '2 3', '41', '4 3', '3 555']);
+    Test('1-4', ['1', '1 2 3', '2 1', '2 1 3'], ['1 4', '4 2 1', '2', '13', '2 3', '41']);
+    Test('1-(4&5)', ['1', '1 2 3', '2 1', '1 4', '1 5'],
+       ['2', '5 2 3 4 1', '2 3', '41', '4 3', '3 5', '1 4 5']);
+    Test('1-(4&(5+6))', ['1', '1 2 3', '2 1', '1 4', '1 5', '1 6'],
+       ['2', '5 2 3 4 1', '2 3', '41', '4 3', '3 5', '1 4 5', '1 4 6']);
+    Test('1 - ( 4 & ( 57 + 6 ) )', ['1', '1 2 3', '2 1', '1 4', '1 57', '1 6'],
+       ['2', '57 2 3 4 1', '2 3', '41', '4 3', '3 5"7', '1 4 57', '1 4 6']);
+  finally
+    s.Free;
   end;
 end;
 
@@ -3308,7 +3397,6 @@ begin
   result := result xor (result shr 16);
 end;
 
-{$ifdef CPUINTEL}
 procedure crcblockreference(crc128, data128: PBlock128);
 var c: cardinal;
 begin
@@ -3325,7 +3413,6 @@ begin
   crc128^[3] := crc32ctab[3,byte(c)] xor crc32ctab[2,byte(c shr 8)]
             xor crc32ctab[1,byte(c shr 16)] xor crc32ctab[0,c shr 24];
 end;
-{$endif CPUINTEL}
 
 procedure TTestLowLevelCommon._crc32c;
 var crc: array[0..10000] of record
@@ -3394,11 +3481,15 @@ begin
   check(TBlock128(crc2)[1]=582109780);
   check(TBlock128(crc2)[2]=1177891908);
   check(TBlock128(crc2)[3]=4047040040);
-  {$ifdef CPUINTEL}
   FillZero(crc1);
   crcblockreference(@crc1,PBlock128(PAnsiChar('0123456789012345')));
   check(not IsZero(crc1));
   check(IsEqual(crc1,crc2));
+  FillZero(crc1);
+  crcblocks(@crc1,PBlock128(PAnsiChar('0123456789012345')),1);
+  check(not IsZero(crc1));
+  check(IsEqual(crc1,crc2),'crcblocks');
+  {$ifdef CPUINTEL}
   FillZero(crc1);
   crcblockNoSSE42(@crc1,PBlock128(PAnsiChar('0123456789012345')));
   check(not IsZero(crc1));
@@ -3473,6 +3564,63 @@ procedure TTestLowLevelCommon.Integers;
     Check(fAdd = added, 'added');
     Check(fDel = deleted, 'deleted');
   end;
+  procedure includes(const values, includes, excludes, included, excluded: RawUTF8);
+    procedure includes32;
+    var v, i, e: TIntegerDynArray;
+    begin
+      CSVToIntegerDynArray(Pointer(values),v);
+      CSVToIntegerDynArray(Pointer(excludes),e);
+      ExcludeInteger(v, e, 32); // no sort
+      Check(IntegerDynArrayToCSV(v) = excluded);
+      v := nil;
+      e := nil;
+      CSVToIntegerDynArray(Pointer(values),v);
+      CSVToIntegerDynArray(Pointer(excludes),e);
+      ExcludeInteger(v, e, 2); // sort
+      Check(IntegerDynArrayToCSV(v) = excluded);
+      v := nil;
+      e := nil;
+      CSVToIntegerDynArray(Pointer(values),v);
+      CSVToIntegerDynArray(Pointer(includes),i);
+      IncludeInteger(v, i, 32); // no sort
+      Check(IntegerDynArrayToCSV(v) = included);
+      v := nil;
+      e := nil;
+      CSVToIntegerDynArray(Pointer(values),v);
+      CSVToIntegerDynArray(Pointer(includes),i);
+      IncludeInteger(v, i, 2); // sort
+      Check(IntegerDynArrayToCSV(v) = included);
+    end;
+    procedure includes64;
+    var v, i, e: TInt64DynArray;
+    begin
+      CSVToInt64DynArray(Pointer(values),v);
+      CSVToInt64DynArray(Pointer(excludes),e);
+      ExcludeInt64(v, e, 32); // no sort
+      Check(Int64DynArrayToCSV(v) = excluded);
+      v := nil;
+      e := nil;
+      CSVToInt64DynArray(Pointer(values),v);
+      CSVToInt64DynArray(Pointer(excludes),e);
+      ExcludeInt64(v, e, 2); // sort
+      Check(Int64DynArrayToCSV(v) = excluded);
+      v := nil;
+      e := nil;
+      CSVToInt64DynArray(Pointer(values),v);
+      CSVToInt64DynArray(Pointer(includes),i);
+      IncludeInt64(v, i, 32); // no sort
+      Check(Int64DynArrayToCSV(v) = included);
+      v := nil;
+      e := nil;
+      CSVToInt64DynArray(Pointer(values),v);
+      CSVToInt64DynArray(Pointer(includes),i);
+      IncludeInt64(v, i, 2); // sort
+      Check(Int64DynArrayToCSV(v) = included);
+    end;
+  begin
+    Includes32;
+    Includes64;
+  end;
 var i32: TIntegerDynArray;
     i64: TInt64DynArray;
     i,n: integer;
@@ -3537,6 +3685,10 @@ begin
   changes('1,2,3,4','5,6','5,6','1,2,3,4');
   changes('1,2,4','1,3,5,6','3,5,6','2,4');
   changes('1,2,4','3,5,6','3,5,6','1,2,4');
+  includes('1,2,3', '2', '2', '2', '1,3');
+  includes('1,2,3', '2,3', '2,3', '2,3', '1');
+  includes('1,2,3', '1,2,3', '1,2,3', '1,2,3', '');
+  includes('1,2,3', '3,1,2', '3,1,2', '1,2,3', '');
   check(i64=nil);
   DeduplicateInt64(i64);
   check(i64=nil);
@@ -3643,7 +3795,7 @@ begin
   Check(MicroSecToString(1000000)='1s');
   Check(MicroSecToString(1000001)='1s');
   Check(MicroSecToString(2030001)='2.03s');
-  Check(MicroSecToString(200000070001)='55h33');
+  Check(MicroSecToString(200000070001)='2d');
   Check(KB(-123)='-123 B');
   Check(KB(0)='0 B');
   Check(KB(123)='123 B');
@@ -3678,24 +3830,27 @@ begin
   {$endif}
   Check(Int64ToUTF8(2119852951849248647)='2119852951849248647');
   Check(FormatUTF8(' % ',[2119852951849248647])=' 2119852951849248647 ');
-  {$ifndef DELPHI5OROLDER}
-  d := GetExtended('1234');
+  s := '1234';
+  d := GetExtended(pointer(s));
   CheckSame(d,1234);
-  d := GetExtended('1234.1');
+  s := '1234.1';
+  d := GetExtended(pointer(s));
   CheckSame(d,1234.1);
-  d := GetExtended('1234.1234567890123456789');
+  s := '1234.1234567890123456789';
+  d := GetExtended(pointer(s));
   CheckSame(d,1234.1234567890123456789);
   u := DoubleToString(40640.5028819444);
   Check(u='40640.5028819444',u);
-  GetExtended('40640.5028a819444',err);
+  s := '40640.5028a819444';
+  GetExtended(pointer(s),err);
   Check(err>0);
-  d := GetExtended('40640.5028819444',err);
+  s := '40640.5028819444';
+  d := GetExtended(pointer(s),err);
   Check(err=0);
   u := DoubleToString(d);
   Check(u='40640.5028819444',u);
   e := 40640.5028819444;
   CheckSame(d,e,1e-11);
-  {$endif}
   d := 22.99999999999997;
   a[0] := AnsiChar(ExtendedToString(a,d,DOUBLE_PRECISION));
   Check(a='23');
@@ -3880,15 +4035,21 @@ begin
     l := GetInt64(pointer(s),err);
     Check(err<>0);
     case i of // validate some explicit ToVarUInt32/64 boundaries
-      9997: j := $00004000;
-      9998: j := $00200000;
-      9999: j := $10000000;
+      9991: j := $00003fff;
+      9992: j := $00004000;
+      9993: j := $00004001;
+      9994: j := $001fffff;
+      9995: j := $00200000;
+      9996: j := $00200001;
+      9997: j := $0fffffff;
+      9998: j := $10000000;
+      9999: j := $10000001;
     end;
     str(j,a);
     Check(SysUtils.IntToStr(j)=string(a));
     Check(format('%d',[j])=string(a));
     Check(format('%.8x',[j])=IntToHex(j,8));
-    d := Random*1E-17-Random*1E-9;
+    d := Random*1E-17-Random*1E-19;
     str(d,a);
     s := RawUTF8(a);
     e := GetExtended(Pointer(s),err);
@@ -4181,6 +4342,9 @@ begin
   Check(AddPrefixToCSV('One,Two,Three','Pre')='PreOne,PreTwo,PreThree');
   Check(CSVOfValue('?',3)='?,?,?');
 {$ifndef DELPHI5OROLDER}
+  Check(GetUnQuoteCSVItem('"""one,""","two "',1,',','"')='two ');
+  Check(GetUnQuoteCSVItem('''''''one,''''''',0)='''one,''');
+  Check(GetUnQuoteCSVItem('"""one,',0,',','"')='');
   Check(FormatUTF8('abcd',[U],[WS])='abcd');
 {$endif}
   for i := 0 to 1000 do begin
@@ -4364,6 +4528,7 @@ procedure Test(D: TDateTime; Expanded: boolean);
 var s,t: RawUTF8;
     E,F: TDateTime;
     I,J: TTimeLogBits;
+    st, s2: TSynSystemTime;
 begin
   s := DateTimeToIso8601(D,Expanded);
   if Expanded then
@@ -4373,6 +4538,16 @@ begin
     Check(Iso8601CheckAndDecode(Pointer(s),length(s),E));
     Check(Abs(D-E)<(1/SecsPerDay)); // we allow 999 ms error
   end;
+  st.FromDateTime(D);
+  s2.Clear;
+  DecodeDate(D,s2.Year,s2.Month,s2.Day);
+  DecodeTime(D,s2.Hour,s2.Minute,s2.Second,s2.MilliSecond);
+  Check(abs(st.MilliSecond-s2.MilliSecond)<=1); // allow 1 ms rounding error
+  st.MilliSecond := 0;
+  s2.MilliSecond := 0;
+  Check(st.IsEqual(s2)); // ensure conversion matches the RTL's
+  t := st.ToText(Expanded);
+  Check(Copy(t,1,length(s))=s);
   E := Iso8601ToDateTime(s);
   Check(Abs(D-E)<(1/SecsPerDay)); // we allow 999 ms error
   E := Iso8601ToDateTime(s+'Z');
@@ -4560,8 +4735,8 @@ begin
   end;
   dt := NowUTC;
   {$ifdef FPC}
-  local := _LocalTimeToUniversal(Now(), - GetLocalTimeOffset);
-  CheckSame(local - dt, 0, 1E-5, 'NowUTC should not shift or truncate time');
+  CheckSame(_LocalTimeToUniversal(Now(), - GetLocalTimeOffset) - dt, 0, 1E-2,
+    'NowUTC should not shift or truncate time');
   {$endif}
   sleep(200);
   Check(not SameValue(dt,NowUTC), 'NowUTC should not truncate time to 5 sec resolution');
@@ -4592,7 +4767,8 @@ begin
   {$endif}
 end;
 
-{$HINTS OFF} // [dcc64 Hint] H2135 FOR or WHILE loop executes zero times - deleted
+{$IFDEF FPC} {$PUSH} {$ENDIF} {$HINTS OFF}
+// [dcc64 Hint] H2135 FOR or WHILE loop executes zero times - deleted
 procedure TTestLowLevelCommon._IdemPropName;
   function IPNUSL(const s1,s2: RawUTF8; len: integer): boolean;
   begin
@@ -4684,8 +4860,17 @@ begin
   Check(PosCharAny('ABC','aA')^='A');
   Check(PosCharAny('ABC','bB')^='B');
   Check(PosCharAny('ABC','cC')^='C');
+  Check(PosExChar('z','')=0,'ABC');
+  Check(PosExChar('z','A')=0,'ABC');
+  Check(PosExChar('z','ABC')=0,'ABC');
+  Check(PosExChar('A','A')=1,'ABC');
+  Check(PosExChar('A','AB')=1,'ABC');
+  Check(PosExChar('A','ABC')=1,'ABC');
+  Check(PosExChar('B','ABC')=2,'ABC');
+  Check(PosExChar('B','AB')=2,'ABC');
+  Check(PosExChar('C','ABC')=3,'ABC');
 end;
-{$HINTS ON}
+{$IFDEF FPC} {$POP} {$ELSE} {$HINTS ON} {$ENDIF}
 
 procedure TTestLowLevelCommon._TSynTable;
 var T: TSynTable;
@@ -5488,6 +5673,9 @@ begin
         v := 0;
         check(dict.FindAndCopy(k, v));
         check(v=i);
+        k := '';
+        check(dict.FindKeyFromValue(v,k));
+        check(GetInteger(pointer(k))=i);
       end;
     end;
   finally
@@ -8725,16 +8913,17 @@ begin
   Doc.Clear;
   Doc.InitArray(['one',2,3.0]);
   Check(variant(Doc)._kind=ord(dvArray));
-  Check(Doc.Count=3);
   Check(variant(Doc)._count=3);
-  Check(Doc.Values[0]='one');
-  Check(Doc.Values[1]=2);
-  Check(Doc.Values[2]=3.0);
-  Check(Doc.Value[0]='one');
-  Check(Doc.Value[1]=2);
-  Check(Doc.Value[2]=3.0);
-  for i := 0 to Doc.Count-1 do
-    Check(Doc.Values[i]=Doc.Value[i]);
+  if not CheckFailed(Doc.Count=3) then begin
+    Check(Doc.Values[0]='one');
+    Check(Doc.Values[1]=2);
+    Check(Doc.Values[2]=3.0);
+    Check(Doc.Value[0]='one');
+    Check(Doc.Value[1]=2);
+    Check(Doc.Value[2]=3.0);
+    for i := 0 to Doc.Count-1 do
+      Check(VariantCompare(Doc.Values[i],Doc.Value[i])=0);
+  end;
   Check(Doc.ToJSON='["one",2,3]');
   Check(Variant(Doc)._JSON='["one",2,3]');
   Doc.ToArrayOfConst(vr);
@@ -9984,7 +10173,7 @@ begin
   Check(CompressGZip(s,false)='gzip');
   Check(s=Data,'compressGZip');
   Check(gzr.Init(M.Memory,M.Position),'TGZRead');
-  Check(gzr.uncomplen=length(data));
+  Check(gzr.uncomplen32=Cardinal(length(data)));
   Check(gzr.crc32=crc0);
   Check(gzr.ToMem=data,'ToMem');
   st := TRawByteStringStream.Create;
@@ -9995,7 +10184,7 @@ begin
   finally
     st.Free;
   end;
-  SetLength(tmp,gzr.uncomplen div 5);
+  SetLength(tmp,gzr.uncomplen32 div 5);
   Check(gzr.ZStreamStart(pointer(tmp),length(tmp)),'ZStreamStart');
   s := '';
   repeat
@@ -10005,7 +10194,7 @@ begin
     s := s+copy(tmp,1,n);
   until false;
   check(gzr.ZStreamDone,'ZStreamDone');
-  Check(gzr.uncomplen=length(s));
+  Check(gzr.uncomplen32=Cardinal(length(s)));
   check(s=Data);
   s := Data;
   Check(CompressDeflate(s,true)='deflate');
@@ -11196,9 +11385,10 @@ end;
 type
   TBenchmark = (
     // non cryptographic hashes
-    bCRC32c, bXXHash32,
+    bCRC32c, bXXHash32, bHash32,
     // cryptographic hashes
-    bMD5, bSHA1, bHMACSHA1, bSHA256, bHMACSHA256, bSHA512, bHMACSHA512,
+    bMD5, bSHA1, bHMACSHA1, bSHA256, bHMACSHA256,
+    bSHA384, bHMACSHA384, bSHA512, bHMACSHA512,
     bSHA3_256, bSHA3_512,
     // encryption
     bRC4,
@@ -11222,6 +11412,7 @@ var b: TBenchmark;
     MD5: TMD5;
     SHA1: TSHA1;
     SHA256: TSHA256;
+    SHA384: TSHA384;
     SHA512: TSHA512;
     SHA3, SHAKE128, SHAKE256: TSHA3;
     RC4: TRC4;
@@ -11251,12 +11442,15 @@ begin
         dig.d1 := 0;
         case b of
         bXXHash32:   dig.d0 := xxHash32(0,pointer(data),SIZ[s]);
+        bHash32:     dig.d0 := Hash32(pointer(data),SIZ[s]);
         bCRC32c:     dig.d0 := crc32c(0,pointer(data),SIZ[s]);
         bMD5:        MD5.Full(pointer(data),SIZ[s],dig.h0);
-        bSHA1:       SHA1.Full(pointer(data),SIZ[s],PSHA1Digest(@dig)^);
-        bHMACSHA1:   HMAC_SHA1('secret',data,PSHA1Digest(@dig)^);
+        bSHA1:       SHA1.Full(pointer(data),SIZ[s],dig.b160);
+        bHMACSHA1:   HMAC_SHA1('secret',data,dig.b160);
         bSHA256:     SHA256.Full(pointer(data),SIZ[s],dig.Lo);
         bHMACSHA256: HMAC_SHA256('secret',data,dig.Lo);
+        bSHA384:     SHA384.Full(pointer(data),SIZ[s],dig.b384);
+        bHMACSHA384: HMAC_SHA384('secret',data,dig.b384);
         bSHA512:     SHA512.Full(pointer(data),SIZ[s],dig.b);
         bHMACSHA512: HMAC_SHA512('secret',data,dig.b);
         bSHA3_256:   SHA3.Full(pointer(data),SIZ[s],dig.Lo);
@@ -11271,7 +11465,7 @@ begin
         end;
         Check((b >= bRC4) or (dig.d0 <> 0) or (dig.d1 <> 0));
       end;
-      //NotifyTestSpeed(format('%s %s',[TXT[b],KB(SIZ[s])]),COUNT,SIZ[s]*COUNT,@timer);
+      //NotifyTestSpeed(format('%s %s',[TXT[b],SIZ[s]]),COUNT,SIZ[s]*COUNT,@timer);
       timer.ComputeTime;
       inc(time[b],timer.LastTimeInMicroSec);
       //if b in [bSHA3_512,high(b)] then AddConsole('');
@@ -11899,7 +12093,7 @@ var sw: ICommandLine;
   end;
 begin
   if DirectoryExists('synecc') then
-    DirectoryDelete('synecc','*.*',true) else
+    DirectoryDelete('synecc',FILES_ALL,true) else
     CreateDir('synecc');
   SetCurrentDir('synecc');
   try
@@ -13217,6 +13411,7 @@ end;
 {$WARN SYMBOL_PLATFORM OFF}
 procedure TTestClientServerAccess._TSQLHttpClient;
 var Resp: TSQLTable;
+    len: integer;
 begin
   Client := TSQLHttpClient.Create('127.0.0.1',HTTP_DEFAULTPORT,Model);
   fRunConsole := fRunConsole+'using '+string(Client.ClassName);
@@ -13226,7 +13421,9 @@ begin
     exit;
   try
     Check(Resp.InheritsFrom(TSQLTableJSON));
-    Check(Hash32(TSQLTableJSON(Resp).PrivateInternalCopy)=$F11CEAC0);
+    len := Length(TSQLTableJSON(Resp).PrivateInternalCopy)-16;
+    if not CheckFailed(len>0) then
+      Check(Hash32(pointer(TSQLTableJSON(Resp).PrivateInternalCopy),len)=$F11CEAC0);
     //FileFromString(Resp.GetODSDocument,'people.ods');
   finally
     Resp.Free;
@@ -13314,9 +13511,9 @@ begin
   Resp := Client.List([TSQLRecordPeople],'*',CLIENTTEST_WHERECLAUSE);
   if CheckFailed(Resp<>nil) then
     exit;
-  siz := length(TSQLTableJSON(Resp).PrivateInternalCopy);
-  Check(siz=4818);
-  Check(Hash32(TSQLTableJSON(Resp).PrivateInternalCopy)=$8D727024);
+  siz := length(TSQLTableJSON(Resp).PrivateInternalCopy)-16;
+  if not CheckFailed(siz=4818) then
+    Check(Hash32(pointer(TSQLTableJSON(Resp).PrivateInternalCopy),siz)=$8D727024);
   Resp.Free;
 {$ifdef WTIME}
   fRunConsole := format('%s%s, first %s, ',[fRunConsole,KB(siz),Timer.Stop]);
@@ -13393,7 +13590,9 @@ begin
     try
       Check(Resp.InheritsFrom(TSQLTableJSON));
       // every answer contains 113 rows, for a total JSON size of 4803 bytes
-      Check(Hash32(TSQLTableJSON(Resp).PrivateInternalCopy)=$8D727024);
+      siz := length(TSQLTableJSON(Resp).PrivateInternalCopy)-16;
+      if not CheckFailed(siz>0) then
+        Check(Hash32(pointer(TSQLTableJSON(Resp).PrivateInternalCopy),siz)=$8D727024);
     finally
       Resp.Free;
     end;
@@ -13891,37 +14090,26 @@ end;
 
 procedure TTestExternalDatabase.AutoAdaptSQL;
 var SQLOrigin: RawUTF8;
-procedure Test(aDBMS: TSQLDBDefinition; AdaptShouldWork: boolean;
-  const SQLExpected: RawUTF8='');
-var Props: TSQLDBConnectionProperties;
-    SQL: RawUTF8;
-begin
-  Props := TSQLDBSQLite3ConnectionProperties.Create(SQLITE_MEMORY_DATABASE_NAME,'','','');
-  try
-    VirtualTableExternalMap(fExternalModel,TSQLRecordPeopleExt,Props,'SampleRecord').
-      MapField('LastChange','Changed');
-    with TSQLRestStorageExternalHook.Create(TSQLRecordPeopleExt,nil) do
-    try
-      SQL := SQLOrigin;
-      TSQLDBConnectionPropertiesHook(Props).fDBMS := aDBMS;
-      Check((Props.DBMS=aDBMS)or(aDBMS=dUnknown));
-      Check(AdaptSQLForEngineList(SQL)=AdaptShouldWork);
-      Check(SameTextU(SQL,SQLExpected)or not AdaptShouldWork,
-        SQLExpected+#13#10+SQL);
-    finally
-      Free;
-    end;
-  finally
-    Props.Free;
+    Props: TSQLDBConnectionProperties;
+    Server: TSQLRestServer;
+    Ext: TSQLRestStorageExternalHook;
+  procedure Test(aDBMS: TSQLDBDefinition; AdaptShouldWork: boolean;
+    const SQLExpected: RawUTF8='');
+  var SQL: RawUTF8;
+  begin
+    SQL := SQLOrigin;
+    TSQLDBConnectionPropertiesHook(Props).fDBMS := aDBMS;
+    Check((Props.DBMS=aDBMS)or(aDBMS=dUnknown));
+    Check(Ext.AdaptSQLForEngineList(SQL)=AdaptShouldWork);
+    Check(SameTextU(SQL,SQLExpected) or not AdaptShouldWork,SQLExpected+#13#10+SQL);
   end;
-end;
-procedure Test2(const Orig,Expected: RawUTF8);
-var DBMS: TSQLDBDefinition;
-begin
-  SQLOrigin := Orig;
-  for DBMS := low(DBMS) to high(DBMS) do
-    Test(DBMS,true,Expected);
-end;
+  procedure Test2(const Orig,Expected: RawUTF8);
+  var DBMS: TSQLDBDefinition;
+  begin
+    SQLOrigin := Orig;
+    for DBMS := low(DBMS) to high(DBMS) do
+      Test(DBMS,true,Expected);
+  end;
 begin
   check(TSQLDBConnectionProperties.IsSQLKeyword(dUnknown,'SELEct'));
   check(not TSQLDBConnectionProperties.IsSQLKeyword(dUnknown,'toto'));
@@ -13932,92 +14120,109 @@ begin
   check(TSQLDBConnectionProperties.IsSQLKeyword(dSQLite,'SELEct'));
   check(TSQLDBConnectionProperties.IsSQLKeyword(dSQLite,'clustER'));
   check(not TSQLDBConnectionProperties.IsSQLKeyword(dSQLite,'value'));
-  Test2('select rowid,firstname from PeopleExt where rowid=2',
-        'select id,firstname from SampleRecord where id=2');
-  Test2('select rowid,firstname from PeopleExt where rowid=?',
-        'select id,firstname from SampleRecord where id=?');
-  Test2('select rowid,firstname from PeopleExt where rowid>=?',
-        'select id,firstname from SampleRecord where id>=?');
-  Test2('select rowid,firstname from PeopleExt where rowid<?',
-        'select id,firstname from SampleRecord where id<?');
-  Test2('select rowid,firstname from PeopleExt where rowid=2 and lastname=:(''toto''):',
-        'select id,firstname from SampleRecord where id=2 and lastname=:(''toto''):');
-  Test2('select rowid,firstname from PeopleExt where rowid=2 and rowID=:(2): order by rowid',
-        'select id,firstname from SampleRecord where id=2 and id=:(2): order by id');
-  Test2('select rowid,firstname from PeopleExt where rowid=2 or lastname=:(''toto''):',
-        'select id,firstname from SampleRecord where id=2 or lastname=:(''toto''):');
-  Test2('select rowid,firstname from PeopleExt where rowid=2 and not lastname like ?',
-        'select id,firstname from SampleRecord where id=2 and not lastname like ?');
-  Test2('select rowid,firstname from PeopleExt where rowid=2 and not (lastname like ?)',
-        'select id,firstname from SampleRecord where id=2 and not (lastname like ?)');
-  Test2('select rowid,firstname from PeopleExt where (rowid=2 and lastname="toto") or lastname like ?',
-        'select id,firstname from SampleRecord where (id=2 and lastname="toto") or lastname like ?');
-  Test2('select rowid,firstname from PeopleExt where (rowid=2 or lastname=:("toto"):) and lastname like ?',
-        'select id,firstname from SampleRecord where (id=2 or lastname=:("toto"):) and lastname like ?');
-  Test2('select rowid,firstname from PeopleExt where (rowid=2) and (lastname="toto" or lastname like ?)',
-        'select id,firstname from SampleRecord where (id=2) and (lastname="toto" or lastname like ?)');
-  Test2('select rowid,firstname from PeopleExt where (rowid=2) and (lastname=:("toto"): or (lastname like ?))',
-        'select id,firstname from SampleRecord where (id=2) and (lastname=:("toto"): or (lastname like ?))');
-  Test2('select rowid,firstname from PeopleExt where rowid=2 order by RowID',
-        'select id,firstname from SampleRecord where id=2 order by ID');
-  Test2('select rowid,firstname from PeopleExt where rowid=2 order by RowID DeSC',
-        'select id,firstname from SampleRecord where id=2 order by ID desc');
-  Test2('select rowid,firstname from PeopleExt order by RowID,firstName DeSC',
-        'select id,firstname from SampleRecord order by ID,firstname desc');
-  Test2('select rowid, firstName from PeopleExt order by RowID, firstName',
-        'select id,firstname from SampleRecord order by ID,firstname');
-  Test2('select rowid, firstName from PeopleExt  order by RowID, firstName asC',
-        'select id,firstname from SampleRecord order by ID,firstname');
-  Test2('select rowid,firstname from PeopleExt where firstname like :(''test''): order by lastname',
-        'select id,firstname from SampleRecord where firstname like :(''test''): order by lastname');
-  Test2('   select    COUNT(*)  from   PeopleExt   ',
-        'select count(*) from SampleRecord');
-  Test2('select count(*) from PeopleExt where rowid=2',
-        'select count(*) from SampleRecord where id=2');
-  Test2('select Distinct(firstname) , max(lastchange)+100 from PeopleExt where rowid >= :(2):',
-        'select Distinct(FirstName),max(Changed)+100 as LastChange from SampleRecord where ID>=:(2):');
-  Test2('select Distinct(lastchange) , max(rowid)-100 as newid from PeopleExt where rowid >= :(2):',
-        'select Distinct(Changed) as lastchange,max(id)-100 as newid from SampleRecord where ID>=:(2):');
-  SQLOrigin := 'select rowid,firstname from PeopleExt where   rowid=2   limit 2';
-  Test(dUnknown,false);
-  Test(dDefault,false);
-  Test(dOracle,true,'select id,firstname from SampleRecord where rownum<=2 and id=2');
-  Test(dMSSQL,true,'select top(2) id,firstname from SampleRecord where id=2');
-  Test(dJet,true,'select top 2 id,firstname from SampleRecord where id=2');
-  Test(dMySQL,true,'select id,firstname from SampleRecord where id=2 limit 2');
-  Test(dSQLite,true,'select id,firstname from SampleRecord where id=2 limit 2');
-  SQLOrigin := 'select rowid,firstname from PeopleExt where rowid=2 order by LastName limit 2';
-  Test(dUnknown,false);
-  Test(dDefault,false);
-  Test(dOracle,true,'select id,firstname from SampleRecord where rownum<=2 and id=2 order by LastName');
-  Test(dMSSQL,true,'select top(2) id,firstname from SampleRecord where id=2 order by LastName');
-  Test(dJet,true,'select top 2 id,firstname from SampleRecord where id=2 order by LastName');
-  Test(dMySQL,true,'select id,firstname from SampleRecord where id=2 order by LastName limit 2');
-  Test(dSQLite,true,'select id,firstname from SampleRecord where id=2 order by LastName limit 2');
-  SQLOrigin := 'select rowid,firstname from PeopleExt where firstname=:(''test''): limit 2';
-  Test(dUnknown,false);
-  Test(dDefault,false);
-  Test(dOracle,true,'select id,firstname from SampleRecord where rownum<=2 and firstname=:(''test''):');
-  Test(dMSSQL,true,'select top(2) id,firstname from SampleRecord where firstname=:(''test''):');
-  Test(dJet,true,'select top 2 id,firstname from SampleRecord where firstname=:(''test''):');
-  Test(dMySQL,true,'select id,firstname from SampleRecord where firstname=:(''test''): limit 2');
-  Test(dSQLite,true,'select id,firstname from SampleRecord where firstname=:(''test''): limit 2');
-  SQLOrigin := 'select id,firstname from PeopleExt limit 2';
-  Test(dUnknown,false);
-  Test(dDefault,false);
-  Test(dOracle,true,'select id,firstname from SampleRecord where rownum<=2');
-  Test(dMSSQL,true,'select top(2) id,firstname from SampleRecord');
-  Test(dJet,true,'select top 2 id,firstname from SampleRecord');
-  Test(dMySQL,true,'select id,firstname from SampleRecord limit 2');
-  Test(dSQLite,true,'select id,firstname from SampleRecord limit 2');
-  SQLOrigin := 'select id,firstname from PeopleExt order by firstname limit 2';
-  Test(dUnknown,false);
-  Test(dDefault,false);
-  Test(dOracle,true,'select id,firstname from SampleRecord where rownum<=2 order by firstname');
-  Test(dMSSQL,true,'select top(2) id,firstname from SampleRecord order by firstname');
-  Test(dJet,true,'select top 2 id,firstname from SampleRecord order by firstname');
-  Test(dMySQL,true,'select id,firstname from SampleRecord order by firstname limit 2');
-  Test(dSQLite,true,'select id,firstname from SampleRecord order by firstname limit 2');
+  Server := TSQLRestServer.Create(fExternalModel);
+  try
+    Props := TSQLDBSQLite3ConnectionProperties.Create(SQLITE_MEMORY_DATABASE_NAME,'','','');
+    try
+      VirtualTableExternalMap(fExternalModel,TSQLRecordPeopleExt,Props,'SampleRecord').
+        MapField('LastChange','Changed');
+      Ext := TSQLRestStorageExternalHook.Create(TSQLRecordPeopleExt,Server);
+      try
+        Test2('select rowid,firstname from PeopleExt where rowid=2',
+              'select id,firstname from SampleRecord where id=2');
+        Test2('select rowid,firstname from PeopleExt where rowid=?',
+              'select id,firstname from SampleRecord where id=?');
+        Test2('select rowid,firstname from PeopleExt where rowid>=?',
+              'select id,firstname from SampleRecord where id>=?');
+        Test2('select rowid,firstname from PeopleExt where rowid<?',
+              'select id,firstname from SampleRecord where id<?');
+        Test2('select rowid,firstname from PeopleExt where rowid=2 and lastname=:(''toto''):',
+              'select id,firstname from SampleRecord where id=2 and lastname=:(''toto''):');
+        Test2('select rowid,firstname from PeopleExt where rowid=2 and rowID=:(2): order by rowid',
+              'select id,firstname from SampleRecord where id=2 and id=:(2): order by id');
+        Test2('select rowid,firstname from PeopleExt where rowid=2 or lastname=:(''toto''):',
+              'select id,firstname from SampleRecord where id=2 or lastname=:(''toto''):');
+        Test2('select rowid,firstname from PeopleExt where rowid=2 and not lastname like ?',
+              'select id,firstname from SampleRecord where id=2 and not lastname like ?');
+        Test2('select rowid,firstname from PeopleExt where rowid=2 and not (lastname like ?)',
+              'select id,firstname from SampleRecord where id=2 and not (lastname like ?)');
+        Test2('select rowid,firstname from PeopleExt where (rowid=2 and lastname="toto") or lastname like ?',
+              'select id,firstname from SampleRecord where (id=2 and lastname="toto") or lastname like ?');
+        Test2('select rowid,firstname from PeopleExt where (rowid=2 or lastname=:("toto"):) and lastname like ?',
+              'select id,firstname from SampleRecord where (id=2 or lastname=:("toto"):) and lastname like ?');
+        Test2('select rowid,firstname from PeopleExt where (rowid=2) and (lastname="toto" or lastname like ?)',
+              'select id,firstname from SampleRecord where (id=2) and (lastname="toto" or lastname like ?)');
+        Test2('select rowid,firstname from PeopleExt where (rowid=2) and (lastname=:("toto"): or (lastname like ?))',
+              'select id,firstname from SampleRecord where (id=2) and (lastname=:("toto"): or (lastname like ?))');
+        Test2('select rowid,firstname from PeopleExt where rowid=2 order by RowID',
+              'select id,firstname from SampleRecord where id=2 order by ID');
+        Test2('select rowid,firstname from PeopleExt where rowid=2 order by RowID DeSC',
+              'select id,firstname from SampleRecord where id=2 order by ID desc');
+        Test2('select rowid,firstname from PeopleExt order by RowID,firstName DeSC',
+              'select id,firstname from SampleRecord order by ID,firstname desc');
+        Test2('select rowid, firstName from PeopleExt order by RowID, firstName',
+              'select id,firstname from SampleRecord order by ID,firstname');
+        Test2('select rowid, firstName from PeopleExt  order by RowID, firstName asC',
+              'select id,firstname from SampleRecord order by ID,firstname');
+        Test2('select rowid,firstname from PeopleExt where firstname like :(''test''): order by lastname',
+              'select id,firstname from SampleRecord where firstname like :(''test''): order by lastname');
+        Test2('   select    COUNT(*)  from   PeopleExt   ',
+              'select count(*) from SampleRecord');
+        Test2('select count(*) from PeopleExt where rowid=2',
+              'select count(*) from SampleRecord where id=2');
+        Test2('select Distinct(firstname) , max(lastchange)+100 from PeopleExt where rowid >= :(2):',
+              'select Distinct(FirstName),max(Changed)+100 as LastChange from SampleRecord where ID>=:(2):');
+        Test2('select Distinct(lastchange) , max(rowid)-100 as newid from PeopleExt where rowid >= :(2):',
+              'select Distinct(Changed) as lastchange,max(id)-100 as newid from SampleRecord where ID>=:(2):');
+        SQLOrigin := 'select rowid,firstname from PeopleExt where   rowid=2   limit 2';
+        Test(dUnknown,false);
+        Test(dDefault,false);
+        Test(dOracle,true,'select id,firstname from SampleRecord where rownum<=2 and id=2');
+        Test(dMSSQL,true,'select top(2) id,firstname from SampleRecord where id=2');
+        Test(dJet,true,'select top 2 id,firstname from SampleRecord where id=2');
+        Test(dMySQL,true,'select id,firstname from SampleRecord where id=2 limit 2');
+        Test(dSQLite,true,'select id,firstname from SampleRecord where id=2 limit 2');
+        SQLOrigin := 'select rowid,firstname from PeopleExt where rowid=2 order by LastName limit 2';
+        Test(dUnknown,false);
+        Test(dDefault,false);
+        Test(dOracle,true,'select id,firstname from SampleRecord where rownum<=2 and id=2 order by LastName');
+        Test(dMSSQL,true,'select top(2) id,firstname from SampleRecord where id=2 order by LastName');
+        Test(dJet,true,'select top 2 id,firstname from SampleRecord where id=2 order by LastName');
+        Test(dMySQL,true,'select id,firstname from SampleRecord where id=2 order by LastName limit 2');
+        Test(dSQLite,true,'select id,firstname from SampleRecord where id=2 order by LastName limit 2');
+        SQLOrigin := 'select rowid,firstname from PeopleExt where firstname=:(''test''): limit 2';
+        Test(dUnknown,false);
+        Test(dDefault,false);
+        Test(dOracle,true,'select id,firstname from SampleRecord where rownum<=2 and firstname=:(''test''):');
+        Test(dMSSQL,true,'select top(2) id,firstname from SampleRecord where firstname=:(''test''):');
+        Test(dJet,true,'select top 2 id,firstname from SampleRecord where firstname=:(''test''):');
+        Test(dMySQL,true,'select id,firstname from SampleRecord where firstname=:(''test''): limit 2');
+        Test(dSQLite,true,'select id,firstname from SampleRecord where firstname=:(''test''): limit 2');
+        SQLOrigin := 'select id,firstname from PeopleExt limit 2';
+        Test(dUnknown,false);
+        Test(dDefault,false);
+        Test(dOracle,true,'select id,firstname from SampleRecord where rownum<=2');
+        Test(dMSSQL,true,'select top(2) id,firstname from SampleRecord');
+        Test(dJet,true,'select top 2 id,firstname from SampleRecord');
+        Test(dMySQL,true,'select id,firstname from SampleRecord limit 2');
+        Test(dSQLite,true,'select id,firstname from SampleRecord limit 2');
+        SQLOrigin := 'select id,firstname from PeopleExt order by firstname limit 2';
+        Test(dUnknown,false);
+        Test(dDefault,false);
+        Test(dOracle,true,'select id,firstname from SampleRecord where rownum<=2 order by firstname');
+        Test(dMSSQL,true,'select top(2) id,firstname from SampleRecord order by firstname');
+        Test(dJet,true,'select top 2 id,firstname from SampleRecord order by firstname');
+        Test(dMySQL,true,'select id,firstname from SampleRecord order by firstname limit 2');
+        Test(dSQLite,true,'select id,firstname from SampleRecord order by firstname limit 2');
+      finally
+        Ext.Free;
+      end;
+    finally
+      Props.Free;
+    end;
+  finally
+    Server.Free;
+  end;
 end;
 
 
@@ -15760,7 +15965,7 @@ end;
 
 procedure TTestSQLite3Engine._TSQLTableJSON;
 var J: TSQLTableJSON;
-    aR, aF, F1,F2, n: integer;
+    i1, i2, aR, aF, F1,F2, n: integer;
     Comp, Comp1,Comp2: TUTF8Compare;
     {$ifdef UNICODE}
     Peoples: TObjectList<TSQLRecordPeople>;
@@ -15772,7 +15977,7 @@ var J: TSQLTableJSON;
     lContactDataQueueDynArray: TDynArray;
     lContactDataQueueArray: TRawUTF8DynArray;
     lContactDataQueueJSON: TDocVariantData;
-    lData: RawUTF8;
+    lData, s: RawUTF8;
     lDocData: TDocVariantData;
 const
   TEST_DATA = '['+
@@ -15970,7 +16175,20 @@ begin
   check(lDocData.Count=3);
   check(Hash32(lDocData.ToJSON)=$FCF948A5);
   check(lDocData.Value[0].QUEUE_CALL=2);
-  {$endif}
+  s := TEST_DATA;
+  i1 := PosEx(',"CHANNEL":132',s);
+  i2 := PosEx('}',s,i1);
+  delete(s,i1,i2-i1); // truncate the 2nd object
+  J := TSQLTableJSON.Create('',s);
+  try
+    check(J.fieldCount=24);
+    if not checkfailed(J.rowCount=3) then
+      check(J.Get(2,J.FieldCount-1)=nil);
+    check(J.Get(J.rowCount,J.FieldCount-1)='sjentonpg@senate.gov');
+  finally
+    J.Free;
+  end;
+  {$endif NOVARIANTS}
 end;
 
 {$ifdef UNICODE}
@@ -18224,7 +18442,7 @@ begin
   C2 := THttpServerRequest.Create(nil,0,nil);
   P2 := protocol.Clone('');
   try
-    C1.Prepare('url','POST','headers',content,contentType,'');
+    C1.Prepare('url','POST','headers',content,contentType,'',false);
     noAnswer1 := opcode=focBinary;
     noAnswer2 := not noAnswer1;
     TWebSocketProtocolRestHook(protocol).InputToFrame(C1,noAnswer1,frame,head);

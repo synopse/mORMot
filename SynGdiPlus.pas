@@ -9,7 +9,7 @@ unit SynGdiPlus;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -28,7 +28,7 @@ unit SynGdiPlus;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -1531,7 +1531,7 @@ begin
   try
     fStream.Read(tmp,Len,nil);
     fStream := nil; // release ASAP
-    Stream.Write(tmp^,Len);
+    Stream.WriteBuffer(tmp^,Len);
   finally
     Freemem(tmp);
   end;
@@ -1546,7 +1546,7 @@ begin
   if (fGlobal<>0) and not fAssignedFromBitmap then begin
     // e.g. for a true .jpg file -> just save as it was loaded :)
     P := GlobalLock(fGlobal);
-    Stream.Write(P^,fGlobalLen);
+    Stream.WriteBuffer(P^,fGlobalLen);
     GlobalUnLock(fGlobal);
   end else begin
     // should come from a bitmap -> save in the expected format

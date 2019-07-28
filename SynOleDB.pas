@@ -6,7 +6,7 @@ unit SynOleDB;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynOleDB;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -49,13 +49,13 @@ unit SynOleDB;
   Several implementation notes about Oracle and OleDB:
   - Oracle OleDB provider by Microsoft do not handle BLOBs. Period. :(
   - Oracle OleDB provider by Oracle will handle only 3/4 BLOBs. :(
-    See http://stackoverflow.com/questions/6147274/is-oraoledb-provider-in-net-unreliable-on-clob-fields/6640101#6640101
+    See https://stackoverflow.com/a/6640101
   - Oracle OleDB provider by Oracle or Microsoft could trigger some ORA-80040e4B
     error when accessing column data with very low dates value (like 0001-01-01)
   - in all cases, that's why we wrote the SynDBOracle unit, for direct OCI
     access - and it is from 2 to 10 times faster than OleDB, with no setup issue
   - or take a look at latest patches from Oracle support, and pray it's fixed ;)
-    http://stackoverflow.com/questions/6147274/is-oraoledb-provider-in-net-unreliable-on-clob-fields/6661058#6661058
+    https://stackoverflow.com/a/6661058
 
 
   Version 1.14
@@ -1334,7 +1334,7 @@ procedure TOleDBStatement.BindTextS(Param: Integer; const Value: string;
 begin
   if (Value='') and fConnection.Properties.StoreVoidStringAsNull then
     CheckParam(Param,ftNull,IO) else
-    CheckParam(Param,ftUTF8,IO)^.VText := Value; // let Delphi do the work
+    CheckParam(Param,ftUTF8,IO)^.VText := StringToSynUnicode(Value);
 end;
 
 procedure TOleDBStatement.BindTextW(Param: Integer;
@@ -1421,16 +1421,6 @@ begin
   result^.VType := NewType;
   result^.VInOut := IO;
   result^.VStatus := 0;
-end;
-
-function TSQLDBFieldTypeToString(aType: TSQLDBFieldType): string;
-var PS: PShortString;
-begin
-  if cardinal(aType)<=cardinal(high(aType)) then begin
-    PS := GetEnumName(TypeInfo(TSQLDBFieldType),ord(aType));
-    result := Ansi7ToString(@PS^[3],ord(PS^[0])-2);
-  end else
-    result := IntToStr(ord(aType));
 end;
 
 function TOleDBStatement.CheckParam(Param: Integer; NewType: TSQLDBFieldType;
@@ -1672,7 +1662,7 @@ begin // dedicated version to avoid as much memory allocation than possible
     result := ftNull else
     result := C^.ColumnType;
   with TVarData(Value) do begin
-    if VType and VTYPE_STATIC<>0 then
+    {$ifndef FPC}if VType and VTYPE_STATIC<>0 then{$endif}
       VarClear(Value);
     VType := MAP_FIELDTYPE2VARTYPE[result];
     case result of
@@ -2113,7 +2103,6 @@ end;
 destructor TOleDBStatement.Destroy;
 begin
   try
-    SynDBLog.Add.Log(sllDB,'Rows = %',[self,TotalRowsRetrieved],self);
     CloseRowSet;
   finally
     fCommand := nil;
@@ -2456,9 +2445,9 @@ begin // get OleDB specific error information
   for i := 0 to high(aStatus) do
     if TOleDBBindStatus(aStatus[i])<>bsOK then begin
       if aStatus[i]<=cardinal(high(TOleDBBindStatus)) then
-        s := Format('%s Status[%d]="%s"',[s,i,
+        s := FormatString('% Status[%]="%"',[s,i,
           GetCaptionFromEnum(TypeInfo(TOleDBBindStatus),aStatus[i])]) else
-        s := Format('%s Status[%d]=%d',[s,i,aStatus[i]]);
+        s := FormatString('% Status[%]=%',[s,i,aStatus[i]]);
 
     end;
   if s<>'' then
@@ -2899,7 +2888,7 @@ begin
         if pwszProcedure<>nil then
           tmp := UnicodeBufferToString(pwszProcedure) else
           tmp := 'Error '+IntToStr(lNative);
-        Connection.fOleDBErrorMessage := Format('%s %s (line %d): %s',
+        Connection.fOleDBErrorMessage := FormatString('% % (line %): %',
           [Connection.fOleDBErrorMessage,tmp,wLineNumber,msg]);
       end;
     finally

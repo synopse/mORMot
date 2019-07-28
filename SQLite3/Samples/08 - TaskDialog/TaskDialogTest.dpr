@@ -102,9 +102,9 @@ begin
   TaskEx.DialogIcon := tiQuestion;
   TaskEx.OnButtonClicked := TCallBack.TaskDialogButtonClicked;
   TaskEx.Execute;
-  ShowMessage(Format('User=%s Password=%s',[aUserName,aPassword]),
+  ShowMessage(FormatString('User=% Password=%',[aUserName,aPassword]),
     not TLoginForm.Login('Title','Please login',aUserName,aPassWord,true,''));
-  ShowMessage(Format('User=%s Password=%s',[aUserName,aPassword]),
+  ShowMessage(FormatString('User=% Password=%',[aUserName,aPassword]),
     not TLoginForm.Login('Title','Please login again',aUserName,aPassWord,true,''));
 end;
 

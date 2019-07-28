@@ -6,7 +6,7 @@ unit SynVirtualDataSet;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynVirtualDataSet;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -729,7 +729,7 @@ type // as in FMTBcd.pas
     VType: TVarType;
     Reserved1, Reserved2, Reserved3: Word;
     VBcd: TFMTBcdData;
-    Reserved4: LongWord;
+    Reserved4: Cardinal;
   end;
 
 class procedure TSynVirtualDataSet.BcdWrite(const aWriter: TTextWriter; const aValue);

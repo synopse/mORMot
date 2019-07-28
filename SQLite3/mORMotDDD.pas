@@ -6,7 +6,7 @@ unit mORMotDDD;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit mORMotDDD;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -493,6 +493,7 @@ type
     procedure TablePropToAggregate(
       aRecord: TSQLRecord; aRecordProp: TSQLPropInfo;
       aAggregate: TObject; aAggregateProp: TSQLPropInfo); virtual;
+    function GetAggregateRTTIOptions: TSQLPropInfoListOptions; virtual;
     // main IoC/DI method, returning a TDDDRepositoryRest instance
     function CreateInstance: TInterfacedObject; override;
   public
@@ -1292,8 +1293,7 @@ begin
   fPropsMapping.Init(aTable,RawUTF8(aAggregate.ClassName),aRest,false);
   fPropsMapping.MapFields(['ID','####']); // no ID/RowID for our aggregates
   fPropsMapping.MapFields(TableAggregatePairs);
-  fAggregateRTTI := TSQLPropInfoList.Create(aAggregate,
-    [pilAllowIDFields,pilSubClassesFlattening,pilIgnoreIfGetter]);
+  fAggregateRTTI := TSQLPropInfoList.Create(aAggregate, GetAggregateRTTIOptions);
   SetLength(fAggregateToTable,fAggregateRTTI.Count);
   SetLength(fAggregateProp,fAggregateRTTI.Count);
   ComputeMapping;
@@ -1309,6 +1309,11 @@ constructor TDDDRepositoryRestFactory.Create(const aInterface: TGUID;
   aOwner: TDDDRepositoryRestManager);
 begin
   Create(aInterface,aImplementation,aAggregate,aRest,aTable,[],aOwner);
+end;
+
+function TDDDRepositoryRestFactory.GetAggregateRTTIOptions: TSQLPropInfoListOptions;
+begin
+  Result := [pilAllowIDFields,pilSubClassesFlattening,pilIgnoreIfGetter];
 end;
 
 destructor TDDDRepositoryRestFactory.Destroy;

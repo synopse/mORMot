@@ -6,7 +6,7 @@ unit SynEcc;
 (*
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynEcc;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -91,19 +91,20 @@ interface
 
 uses
   {$ifdef MSWINDOWS}
-  Windows, // for CriticalSection API inling
+    Windows, // for CriticalSection API inling
   {$else}  // for GetFileSize emulated API
-  {$ifdef KYLIX3}
-  SynKylix,
-  {$endif}
-  {$ifdef FPC}
-  SynFPCLinux,
-  {$endif}
+    {$ifdef KYLIX3}
+      SynKylix,
+    {$endif}
+    {$ifdef FPC}
+      SynFPCLinux,
+    {$endif}
   {$endif MSWINDOWS}
   SysUtils,
   Classes,
   Contnrs,
   SynCommons,
+  SynTable,
   SynCrypto;
 
 
@@ -1259,7 +1260,7 @@ type
   // based on JSON objects or even plain base-64 encoded JSON strings
   // - consider using TECCCertificateChainFile from mORMot.pas if you want
   // to use convenient human-readable JSON serialization in files
-  TECCCertificateChain = class(TSynPersistentLocked)
+  TECCCertificateChain = class(TSynPersistentLock)
   protected
     fItems: TECCCertificateObjArray;
     fIsValidCached: boolean;
@@ -2086,6 +2087,12 @@ begin
   result := (VLI[0]=0) and (VLI[1]=0) and (VLI[2]=0) and (VLI[3]=0);
 end;
 
+function _equals(const Left, Right: TVLI): boolean; {$ifdef HASINLINE}inline;{$endif}
+begin
+  result := (Left[0]=Right[0]) and (Left[1]=Right[1]) and (Left[2]=Right[2]) and
+    (Left[3]=Right[3]);
+end;
+
 // counts the number of bits required for VLI
 function _numBits(const VLI: TVLI): integer;
 var i: integer;
@@ -2636,7 +2643,7 @@ begin
   _modMult_fast(X1, X1, Z1);       // t1 = x1^2 - z1^4
   _modAdd(Z1, X1, X1, Curve_P_32); // t3 = 2*(x1^2 - z1^4)
   _modAdd(X1, X1, Z1, Curve_P_32); // t1 = 3*(x1^2 - z1^4)
-  if GetBit(X1, 0) then begin
+  if GetBitPtr(@X1, 0) then begin
     carry := _add(X1, X1, Curve_P_32);
     _rshift1(X1);
     X1[NUM_ECC_DIGITS-1] := X1[NUM_ECC_DIGITS-1] or (carry shl 63);
@@ -2740,13 +2747,13 @@ begin
   Ry[1] := Point.y;
   _XYcZ_initial_double(Rx[1], Ry[1], Rx[0], Ry[0], InitialZ);
   for i := _numBits(Scalar) - 2 downto 1 do begin
-    if GetBit(Scalar, i) then
+    if GetBitPtr(@Scalar, i) then
       nb := 0 else
       nb := 1;
     _XYcZ_addC(Rx[1-nb], Ry[1-nb], Rx[nb], Ry[nb]);
     _XYcZ_add(Rx[nb], Ry[nb], Rx[1-nb], Ry[1-nb]);
   end;
-  if GetBit(Scalar, 0) then
+  if GetBitPtr(@Scalar, 0) then
     nb := 0 else
     nb := 1;
   _XYcZ_addC(Rx[1-nb], Ry[1-nb], Rx[nb], Ry[nb]);
@@ -2783,7 +2790,7 @@ begin
   _add(p1, Curve_P_32, _1); // p1 = curve_p + 1
   for i := _numBits(p1) - 1 downto 2 do begin
     _modSquare_fast(result, result, false);
-    if GetBit(p1, i) then
+    if GetBitPtr(@p1, i) then
       _modMult_fast(result, result, a);
   end;
   a := result;
@@ -2813,7 +2820,7 @@ begin
     TAESPRNG.Fill(THash256(PrivateK));
     if tries >= MAX_TRIES then
       exit;
-    if _isZero(PrivateK) or (_cmp(PrivateK, _1) = 0) or (_cmp(PrivateK, _11) = 0) then
+    if _isZero(PrivateK) or _equals(PrivateK, _1) or _equals(PrivateK, _11) then
       continue;
     // Make sure the private key is in the range [1, n-1]
     // For the supported curves, n is always large enough that we only need
@@ -2930,7 +2937,7 @@ begin
     TAESPRNG.Fill(THash256(k));
     if Tries >= MAX_TRIES then
       exit;
-    if _isZero(k) or (_cmp(k, _1) = 0) or (_cmp(k, _11) = 0) then
+    if _isZero(k) or _equals(k, _1) or _equals(k, _11) then
       continue;
     if _cmp(Curve_N_32, k) <> 1 then
       _sub(k, k, Curve_N_32);
@@ -2989,10 +2996,10 @@ begin
   Index := _numBits(u2);
   if Index > NumBits then
     NumBits := Index;
-  if GetBit(u1, NumBits-1) then
+  if GetBitPtr(@u1, NumBits-1) then
     Index := 1 else
     Index := 0;
-  if GetBit(u2, NumBits-1) then
+  if GetBitPtr(@u2, NumBits-1) then
     inc(Index, 2);
   Point := Points[Index];
   rx := Point.x;
@@ -3000,10 +3007,10 @@ begin
   z := _1;
   for i := NumBits - 2 downto 0 do begin
     EccPointDoubleJacobian(rx, ry, z);
-    if GetBit(u1, i) then
+    if GetBitPtr(@u1, i) then
       Index := 1 else
       Index := 0;
-    if GetBit(u2, i) then
+    if GetBitPtr(@u2, i) then
       inc(Index, 2);
     Point := Points[Index];
     if Point <> nil then begin
@@ -3705,7 +3712,7 @@ begin
   finally
     FillZero(aeskey);
     FillZero(mackey);
-    FillcharFast(rndpriv,sizeof(rndpriv),0);
+    {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(rndpriv,sizeof(rndpriv),0);
     if dec<>Plain then
       FillZero(dec);
     if content<>Plain then
@@ -4828,9 +4835,12 @@ var values: TRawUTF8DynArray;
     tmp: TSynTempBuffer; // private copy
 begin
   tmp.Init(json);
-  result := (DynArrayLoadJSON(values,tmp.buf,TypeInfo(TRawUTF8DynArray))<>nil) and
-    LoadFromArray(values);
-  tmp.Done;
+  try
+    result := (DynArrayLoadJSON(values,tmp.buf,TypeInfo(TRawUTF8DynArray))<>nil) and
+      LoadFromArray(values);
+  finally
+    tmp.Done;
+  end;
 end;
 
 function TECCCertificateChain.LoadFromArray(const values: TRawUTF8DynArray): boolean;
@@ -5318,7 +5328,7 @@ procedure TECDHEProtocolClient.ComputeHandshake(out aClient: TECDHEFrameClient);
 begin
   if fAES[false]<>nil then
     raise EECCException.CreateUTF8('%.ComputeHandshake already called',[self]);
-  FillCharFast(aClient,sizeof(aClient),0);
+  {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(aClient,sizeof(aClient),0);
   aClient.algo := fAlgo;
   TAESPRNG.Main.FillRandom(fRndA);
   aClient.RndA := fRndA;
@@ -5417,7 +5427,7 @@ begin
   if fAlgo.auth<>authServer then
     if not Verify(@aClient,sizeof(aClient),aClient.QCA,result) then
       exit;
-  FillCharFast(aServer,sizeof(aServer),0);
+  {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(aServer,sizeof(aServer),0);
   aServer.algo := fAlgo;
   aServer.RndA := fRndA;
   TAESPRNG.Main.FillRandom(fRndB);

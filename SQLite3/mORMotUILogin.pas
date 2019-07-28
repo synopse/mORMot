@@ -6,7 +6,7 @@ unit mORMotUILogin;
 (*
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit mORMotUILogin;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -86,29 +86,42 @@ interface
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64
 
 uses
-  {$IFDEF FPC}
-  //LCLProc, LCLIntf, LCLType,
-  LCLType, LCLIntf,
-  {$ENDIF}
-  {$IFDEF MSWINDOWS}
-  Windows, CommCtrl,
-  {$ENDIF}
-  {$ifdef FPC}
-  LResources,
-  {$else}
-  Consts, PsAPI,
+  {$ifdef MSWINDOWS}
+    Windows,
+    CommCtrl,
   {$endif}
-  Messages, SysUtils, Classes, Graphics,
-  Controls, Forms, StdCtrls, ExtCtrls, Buttons,
-{$ifdef USETMSPACK}
-  AdvGlowButton, TaskDialog, TaskDialogEx, AdvToolBarStylers, AdvToolBar,
-{$endif USETMSPACK}
   {$ifdef FPC}
-  SynTaskDialog in '.\Samples\ThirdPartyDemos\Ondrej\SynTaskDialog4Lazarus\SynTaskDialog.pas',
+    //LCLProc, LCLIntf, LCLType,
+    LCLType,
+    LCLIntf,
+    LResources,
+    SynTaskDialog in '.\Samples\ThirdPartyDemos\Ondrej\SynTaskDialog4Lazarus\SynTaskDialog.pas',
   {$else}
-  SynTaskDialog,
-  {$endif}
-  SynGdiPlus, SynCommons, mORMot, mORMotUI;
+    Consts,
+    PsAPI,
+    SynTaskDialog,
+  {$endif FPC}
+  Messages,
+  SysUtils,
+  Classes,
+  Graphics,
+  Controls,
+  Forms,
+  StdCtrls,
+  ExtCtrls,
+  Buttons,
+  {$ifdef USETMSPACK}
+    AdvGlowButton,
+    TaskDialog,
+    TaskDialogEx,
+    AdvToolBarStylers,
+    AdvToolBar,
+  {$endif USETMSPACK}
+  SynGdiPlus,
+  SynCommons,
+  SynTable,
+  mORMot,
+  mORMotUI;
 
 type
   /// Form used to Log User and enter its password

@@ -12,7 +12,7 @@ object frmSM45Demo: TfrmSM45Demo
   Font.Name = 'Tahoma'
   OnCreate = FormCreate
   OnDestroy = FormDestroy
-  LCLVersion = '1.9.0.0'
+  LCLVersion = '2.0.0.2'
   object mSource: TMemo
     Left = 16
     Height = 414
@@ -35,16 +35,16 @@ object frmSM45Demo: TfrmSM45Demo
       ''
       'const fs = require(''fs'');'
       'const path = require(''path'');'
-      'let content = fs.readFileSync(path.join(process.cwd(), ''ExtendDebuggerConsole.js''), 'utf8');'
+      'let content = fs.readFileSync(path.join(process.cwd(), ''ExtendDebuggerConsole.js''), ''utf8'');'
       'mainForm.toLog(content);'
-      '/* '
+      '/*'
       ' * You can evaluate script below if you compiled math-module sample'
-      ' * to SyNode\Samples\01 - Dll Modules\math-module\build\mathModule.dl'
-      ' */ '
+      ' * to SyNode\Samples\01 - Dll Modules\math-module\build\mathModule.dll'
+      ' */'
       ''
       '/*'
-      'const mathModule = require(''../../Samples/01 - Dll Modules/math-module'');'
-      'mainForm.toLog(''PI='' + mathModule.pi);'
+      'const mathModule = require(''''../../Samples/01 - Dll Modules/math-module'''');'
+      'mainForm.toLog(''''PI='''' + mathModule.pi);'
       'mainForm.toLog(`(1+ 2)=${mathModule.add(1, 2)}`);'
       'mainForm.toLog(`16/3=${mathModule.div(16, 3)}`);'
       '*/'
@@ -52,10 +52,10 @@ object frmSM45Demo: TfrmSM45Demo
       'const http = require(''http'');'
       'const assert = require(''assert'');'
       '// set global proxy settings if client is behind a proxy'
-      '// http.setGlobalProxyConfiguration(''proxy.main:3249'', ''localhost'');'
+      '// http.setGlobalProxyConfiguration(''''proxy.main:3249'''', ''''localhost'''');'
       'let resp = http.get(''https://synopse.info/fossil/wiki/Synopse+OpenSource'');'
       '// check we are actually behind a proxy'
-      '// assert.ok(resp.headers(''via'').startsWith(''1.1 proxy.main''), ''proxy used'');'
+      '// assert.ok(resp.headers(''''via'''').startsWith(''''1.1 proxy.main''''), ''''proxy used'''');'
       'let index = resp.read();'
       'mainForm.toLog(index);'
     )

@@ -6,7 +6,7 @@ unit mORMotUI;
 (*
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit mORMotUI;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -241,7 +241,7 @@ type
     {$else}
     fOnDrawCellBackground: TDrawCellEvent;
     {$endif}
-    fMarked: array of byte;
+    fMarked: TByteDynArray;
     fMarkAllowed: boolean;
     fMouseDownMarkedValue: (markNone,markOn,markOff);
     fTruncAsHint: Boolean;
@@ -1790,7 +1790,7 @@ begin
   if (self=nil) or (fMarked=nil) or
      (cardinal(RowIndex)>=cardinal(length(fMarked)shl 3)) then
     result := false else
-    result := GetBit(fMarked[0],RowIndex);
+    result := GetBitPtr(pointer(fMarked),RowIndex);
 end;
 
 procedure TSQLTableToGrid.SetMarked(RowIndex: integer;
@@ -1804,8 +1804,8 @@ begin
   if length(fMarked)<n then // need to allocate/expand fMarked[] array?
     SetLength(fMarked,n);   // initializes all expanded bytes to 0
   if Value then
-    SetBit(fMarked[0],RowIndex) else
-    UnSetBit(fMarked[0],RowIndex)
+    SetBitPtr(pointer(fMarked),RowIndex) else
+    UnSetBitPtr(pointer(fMarked),RowIndex)
 end;
 
 procedure TSQLTableToGrid.SetMark(aAction: TSQLAction);
@@ -1882,7 +1882,7 @@ begin
   if not result then
     exit;
   for i := 0 to Table.RowCount-1 do // very any bit is realy set
-    if GetBit(fMarked[0],i) then
+    if GetBitPtr(pointer(fMarked),i) then
       exit;
   result := false;
 end;

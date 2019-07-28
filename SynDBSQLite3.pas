@@ -6,7 +6,7 @@ unit SynDBSQLite3;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2018 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2019 Arnaud Bouchez
       Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynDBSQLite3;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2018
+  Portions created by the Initial Developer are Copyright (C) 2019
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -750,7 +750,7 @@ begin
     if length(result)>MaxCharCount Then
       result := copy(fBindValues[Param],1,MaxCharCount) else
       result := fBindValues[Param];
-    if GetBit(pointer(fBindIsString)^,Param) then
+    if GetBitPtr(pointer(fBindIsString),Param) then
       result := QuotedStr(result);
   end;
 end;

@@ -109,8 +109,8 @@ var
 begin
   result := false;
   if Definition.ORM.User = '' then
-    if TLoginForm.Login(Application.Mainform.Caption, Format('Credentials for %s',
-      [Definition.ORM.ServerName]), U, P, true, '') then begin
+    if TLoginForm.Login(Application.Mainform.Caption, FormatString(
+       'Credentials for %', [Definition.ORM.ServerName]), U, P, true, '') then begin
       Definition.ORM.User := StringToUTF8(U);
       Definition.ORM.PasswordPlain := StringToUTF8(P);
     end
@@ -346,7 +346,7 @@ begin
   n := length(fDBFrame);
   SetLength(fDBFrame, n + 1);
   result := aClass.Create(self);
-  result.Name := format('DBFrame%s', [aCaption]);
+  result.Name := FormatString('DBFrame%', [aCaption]);
   result.Parent := page;
   result.Align := alClient;
   result.Client := fClient;
@@ -444,7 +444,7 @@ begin
     end;
     if PropNameValid(pointer(db.GridLastTableName)) then
       name := db.GridLastTableName;
-    fDlgSave.FileName := SysUtils.Trim(Format('%s %s %s',
+    fDlgSave.FileName := SysUtils.Trim(FormatString('% % %',
       [ContextName, name, NowToString(false)]));
     if not fDlgSave.Execute then
       exit;
@@ -487,7 +487,7 @@ procedure TAdminForm.FormCreate(Sender: TObject);
 begin
   DefaultFont.Name := 'Tahoma';
   DefaultFont.Size := 9;
-  Caption := Format('%s %s', [ExeVersion.ProgramName, ExeVersion.Version.Detailed]);
+  Caption := FormatString('% %', [ExeVersion.ProgramName, ExeVersion.Version.Detailed]);
   fFrame := TAdminControl.Create(self);
   fFrame.Parent := self;
   fFrame.Align := alClient;
@@ -497,7 +497,7 @@ end;
 procedure TAdminForm.FormShow(Sender: TObject);
 begin
   fFrame.Show;
-  Caption := Format('%s - %s %s via %s', [ExeVersion.ProgramName,
+  Caption := FormatString('% - % % via %', [ExeVersion.ProgramName,
     fFrame.State.daemon, fFrame.State.version, fFrame.fDefinition.ORM.ServerName]);
 end;
 
