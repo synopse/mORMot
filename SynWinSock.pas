@@ -1852,7 +1852,7 @@ begin
         case buf[i].BufferType of
           SECBUFFER_DATA: AppendData(buf[i]);
           SECBUFFER_EXTRA: begin
-            Move(buf[i].pvBuffer^, pointer(Input), buf[i].cbBuffer);
+            Move(buf[i].pvBuffer^, pointer(Input)^, buf[i].cbBuffer);
             InputCount := buf[i].cbBuffer;
           end;
         end;
