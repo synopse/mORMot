@@ -3291,9 +3291,7 @@ type
     property DestDB: TSQLDatabase read fDestDB;
     /// the raised exception in case of backupFailure notification
     property FailureError: Exception read fError;
-    /// the backup target database file name. we need this property because we need
-    /// to know the target db file name in the TSQLDatabaseBackupEvent event handler
-    /// but in the backupSuccess stage the DestDB will be no longer available
+    /// the backup target database file name
     property BackupDestFile: RawUTF8 read fBackupDestFile;
   published
     /// the current state of the backup process
