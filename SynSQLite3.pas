@@ -3291,6 +3291,9 @@ type
     property DestDB: TSQLDatabase read fDestDB;
     /// the raised exception in case of backupFailure notification
     property FailureError: Exception read fError;
+    // the backup target database file name. we need this property because we need
+    // to know the target db file name in the TSQLDatabaseBackupEvent event handler
+    // but in the backupSuccess stage the DestDB will be no longer available
     property BackupDestFile: RawUTF8 read fBackupDestFile;
   published
     /// the current state of the backup process
@@ -5779,7 +5782,6 @@ begin
           raise ESQLite3Exception.Create('Backup process forced to terminate');
         SleepHiRes(fStepSleepMS);
       until false;
-
       if fDestDB<>nil then begin
         sqlite3.backup_finish(fBackup);
         // close destination backup database
@@ -5787,7 +5789,6 @@ begin
           FreeAndNil(fDestDB);
         fDestDB :=  nil;
       end;
-
       if not IdemPChar(pointer(fn),SQLITE_MEMORY_DATABASE_NAME) then begin
         if fStepSynLzCompress then begin
           NotifyProgressAndContinue(backupStepSynLz);
