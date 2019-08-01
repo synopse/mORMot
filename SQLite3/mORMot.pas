@@ -55668,8 +55668,8 @@ begin
       '%.Create: % has no GUID',[self,aInterface^.Name]);
   fInterfaceName := ToUTF8(fInterfaceTypeInfo^.Name);
   fInterfaceURI := fInterfaceName;
-  if fInterfaceName[1] in ['i','I'] then
-    delete(fInterfaceName,1,1);
+  if fInterfaceURI[1] in ['i','I'] then
+    delete(fInterfaceURI,1,1);
   // retrieve all interface methods (recursively including ancestors)
   fMethod.InitSpecific(TypeInfo(TServiceMethodDynArray),fMethods,djRawUTF8,
     @fMethodsCount,true);
