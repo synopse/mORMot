@@ -11610,6 +11610,7 @@ type
     // contains e.g. [{"method":"Add","arguments":[...]},{"method":"...}]
     fContract: RawUTF8;
     fInterfaceName: RawUTF8;
+    fInterfaceURI: RawUTF8;
     {$ifndef NOVARIANTS}
     fDocVariantOptions: TDocVariantOptions;
     {$endif}
@@ -11727,6 +11728,9 @@ type
     property InterfaceTypeInfo: PTypeInfo read fInterfaceTypeInfo;
     /// the registered Interface GUID
     property InterfaceIID: TGUID read fInterfaceIID;
+    /// the interface name, without its initial 'I'
+    // - e.g. ICalculator -> 'Calculator'
+    property InterfaceURI: RawUTF8 read fInterfaceURI write fInterfaceURI;
     {$ifndef NOVARIANTS}
     /// how this interface will work with variants (including TDocVariant)
     // - by default, contains JSON_OPTIONS_FAST for best performance - i.e.
@@ -55632,14 +55636,14 @@ var m,a,reg: integer;
     dummy: pointer;
     {$ifdef HAS_FPREG}
     ValueIsInFPR: boolean;
-    {$endif}
+    {$endif HAS_FPREG}
     {$ifdef CPUX86}
     offs: integer;
     {$else}
     {$ifdef Linux} // not used for Win64
     fpreg: integer;
-    {$endif}
-    {$endif}
+    {$endif Linux}
+    {$endif CPUX86}
   procedure RaiseError(const Args: array of const);
   begin
     raise EInterfaceFactoryException.CreateUTF8(
@@ -55653,16 +55657,19 @@ begin
       '%.Create(%): % is not an interface',[self,aInterface^.Name,aInterface^.Name]);
   {$ifndef NOVARIANTS}
   fDocVariantOptions := JSON_OPTIONS_FAST;
-  {$endif}
+  {$endif NOVARIANTS}
   {$ifdef CPUAARCH64}
   fDetectX0ResultMagic := $AAAAAAAA; // alf: see comment above
-  {$endif}
+  {$endif CPUAARCH64}
   fInterfaceTypeInfo := aInterface;
   fInterfaceIID := aInterface^.InterfaceGUID^;
   if IsNullGUID(fInterfaceIID) then
     raise EInterfaceFactoryException.CreateUTF8(
       '%.Create: % has no GUID',[self,aInterface^.Name]);
   fInterfaceName := ToUTF8(fInterfaceTypeInfo^.Name);
+  fInterfaceURI := fInterfaceName;
+  if fInterfaceName[1] in ['i','I'] then
+    delete(fInterfaceName,1,1);
   // retrieve all interface methods (recursively including ancestors)
   fMethod.InitSpecific(TypeInfo(TServiceMethodDynArray),fMethods,djRawUTF8,
     @fMethodsCount,true);
@@ -55786,7 +55793,7 @@ begin
       {$ifdef HAS_FPREG}
       FPRegisterIdent := 0;
       ValueIsInFPR := false;
-      {$endif}
+      {$endif HAS_FPREG}
       ValueVar := CONST_ARGS_TO_VAR[ValueType];
       IndexVar := ArgsUsedCount[ValueVar];
       inc(ArgsUsedCount[ValueVar]);
@@ -55815,7 +55822,7 @@ begin
       {$ifdef HAS_FPREG}
       smvDouble,smvDateTime:
         ValueIsInFPR := not (vPassedByReference in ValueKindAsm);
-      {$endif}
+      {$endif HAS_FPREG}
       end;
       case ValueType of
         smvBoolean:
@@ -55858,7 +55865,7 @@ begin
         if ValueType=smvBinary then
           SizeInStack := SizeInBinary else
           SizeInStack := CONST_ARGS_IN_STACK_SIZE[ValueType] else
-      {$endif}
+      {$endif CPU32}
         SizeInStack := PTRSIZ; // always aligned to 8 bytes boundaries for 64-bit
       if{$ifndef CPUARM}
         // on ARM, ordinals>PTRSIZ can also be placed in the normal registers !!
@@ -55888,7 +55895,7 @@ begin
            (Args[ArgsResultIndex].ValueType in CONST_ARGS_RESULT_BY_REF) then begin
           inc(reg); // this register is reserved for method result pointer
         end;
-       {$endif}
+       {$endif CPUX86}
         {$ifdef HAS_FPREG}
         if ValueIsInFPR then begin
           // put in a floating-point register
@@ -55901,7 +55908,7 @@ begin
           {$endif Linux}
         end
         else
-        {$endif} begin
+        {$endif HAS_FPREG} begin
           // put in an integer register
           {$ifdef CPUARM}
           // on 32-bit ARM, ordinals>PTRSIZ are also placed in normal registers
@@ -55976,7 +55983,7 @@ begin
     {$ifdef SOA_DEBUG}
     JSONReformatToFile(fContract,TFileName(fInterfaceName+
       '-'+COMP_TEXT+OS_TEXT+CPU_ARCH_TEXT+'.json'));
-    {$endif}
+    {$endif SOA_DEBUG}
   finally
     WR.Free;
   end;
