@@ -3264,7 +3264,7 @@ type
   /// background thread used for TSQLDatabase.BackupBackground() process
   TSQLDatabaseBackupThread = class(TThread)
   protected
-    fBackupDestFile: RawUTF8;
+    fBackupDestFile: TFileName;
     fSourceDB: TSQLDatabase;
     fDestDB: TSQLDatabase;
     fStepPageNumber, fStepSleepMS: Integer;
@@ -3292,7 +3292,7 @@ type
     /// the raised exception in case of backupFailure notification
     property FailureError: Exception read fError;
     /// the backup target database file name
-    property BackupDestFile: RawUTF8 read fBackupDestFile;
+    property BackupDestFile: TFileName read fBackupDestFile;
   published
     /// the current state of the backup process
     // - only set before a call to TSQLDatabaseBackupEvent
@@ -5717,7 +5717,7 @@ begin
   fBackup := Backup;
   fSourceDB := Source;
   fDestDB := Dest;
-  fBackupDestFile := fDestDB.fFileName;
+  fBackupDestFile := Dest.fFileName;
   if StepPageNumber=0 then
     fStepPageNumber := 1 else
     fStepPageNumber := StepPageNumber;
