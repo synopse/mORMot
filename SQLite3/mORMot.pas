@@ -31953,7 +31953,7 @@ begin
       with fTableMap[f] do
         if DestField=nil then
           SetID(aTableRow[TableIndex],Dest.fID) else
-          DestField.SetValue(Dest,aTableRow[TableIndex],false);
+          DestField.SetValue(Dest,aTableRow[TableIndex],TableIndex in fTable.fFieldParsedAsString);
 end;
 
 procedure TSQLRecordFill.Fill(aTableRow: PPUtf8CharArray; aDest: TSQLRecord);
@@ -31964,7 +31964,7 @@ begin
     with fTableMap[f] do
       if DestField=nil then
         SetID(aTableRow[TableIndex],aDest.fID) else
-        DestField.SetValue(aDest,aTableRow[TableIndex],false);
+        DestField.SetValue(aDest,aTableRow[TableIndex],TableIndex in fTable.fFieldParsedAsString);
 end;
 
 procedure TSQLRecordFill.ComputeSetUpdatedFieldBits(Props: TSQLRecordProperties;
