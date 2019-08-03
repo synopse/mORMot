@@ -21321,6 +21321,8 @@ begin
     Value := TVarData(V).VBoolean;
   varInteger: // coming e.g. from GetJsonField()
     Value := TVarData(V).VInteger=1;
+  varString, varUString: // handles "true"/"false" values in JSON
+    Value := SameTextU(VariantToUTF8(V), BOOL_UTF8[True]);
   else
     if SetVariantUnRefSimpleValue(V,tmp) then
       if tmp.VType=varBoolean then
