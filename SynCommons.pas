@@ -21321,8 +21321,18 @@ begin
     Value := TVarData(V).VBoolean;
   varInteger: // coming e.g. from GetJsonField()
     Value := TVarData(V).VInteger=1;
-  varString, varUString: // handles "true"/"false" values in JSON
-    Value := SameTextU(VariantToUTF8(V), BOOL_UTF8[True]);
+  varString: begin// handles "true"/"false" values in JSON
+    {$ifdef HASCODEPAGE}
+    Value := SameTextU(AnyAnsiToUTF8(RawByteString(TVarData(V).VString)), BOOL_UTF8[True]);
+    {$else}
+    Value := SameTextU(RawUTF8(TVarData(V).VString), BOOL_UTF8[True]);
+    {$endif}
+  end;
+  {$ifdef HASVARUSTRING}
+  varUString: begin// handles "true"/"false" values in JSON
+    Value := SameTextU(RawUnicodeToUtf8(TVarData(V).VAny, length(UnicodeString(TVarData(V).VAny))), BOOL_UTF8[True]);
+  end;
+  {$endif}
   else
     if SetVariantUnRefSimpleValue(V,tmp) then
       if tmp.VType=varBoolean then
