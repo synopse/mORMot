@@ -1500,6 +1500,7 @@ function VariantToDoubleDef(const V: Variant; const default: double=0): double;
 function VariantToCurrency(const V: Variant; var Value: currency): boolean;
 
 /// convert any numerical Variant into a boolean value
+// - text content will return true after case-insensitive 'true' comparison
 function VariantToBoolean(const V: Variant; var Value: Boolean): boolean;
 
 /// convert any numerical Variant into an integer
@@ -13301,12 +13302,12 @@ procedure GlobalUnLock;
 
 
 var
-  /// JSON compatible representation of a boolean value
+  /// JSON compatible representation of a boolean value, i.e. 'false' and 'true'
   // - can be used when a RawUTF8 string is expected
   BOOL_UTF8: array[boolean] of RawUTF8;
 
 const
-  /// JSON compatible representation of a boolean value
+  /// JSON compatible representation of a boolean value, i.e. 'false' and 'true'
   // - can be used e.g. in logs, or anything accepting a shortstring
   BOOL_STR: array[boolean] of string[7] = ('false','true');
 
@@ -21321,6 +21322,14 @@ begin
     Value := TVarData(V).VBoolean;
   varInteger: // coming e.g. from GetJsonField()
     Value := TVarData(V).VInteger=1;
+  varString:
+    Value := IdemPropNameU(RawUTF8(TVarData(V).VAny),BOOL_UTF8[true]);
+  varOleStr:
+    Value := WideCompareText(WideString(TVarData(V).VAny),'true')=0;
+  {$ifdef HASVARUSTRING}
+  varUString: Value := {$ifdef FPC}UnicodeCompareText{$else}CompareText{$endif}(
+    UnicodeString(TVarData(V).VAny),'true')=0;
+  {$endif HASVARUSTRING}
   else
     if SetVariantUnRefSimpleValue(V,tmp) then
       if tmp.VType=varBoolean then
