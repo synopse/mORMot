@@ -6897,6 +6897,10 @@ function DynArrayElementTypeName(TypeInfo: pointer; ElemTypeInfo: PPointer=nil;
 // - used internally to guess the associated item type name
 function DynArrayItemTypeLen(const aDynArrayTypeName: RawUTF8): integer;
 
+/// was dynamic array item after RegisterCustomJSONSerializerFromTextBinaryType()
+// - calls DynArrayItemTypeLen() to guess the internal type name
+function DynArrayItemTypeIsSimpleBinary(const aDynArrayTypeName: RawUTF8): boolean;
+
 
 /// compare two "array of boolean" elements
 function SortDynArrayBoolean(const A,B): integer;
@@ -15344,12 +15348,12 @@ var
 procedure TextColor(Color: TConsoleColor);
 
 /// write some text to the console using a given color
-procedure ConsoleWrite(const Text: RawUTF8; Color: TConsoleColor=ccDarkGray;
-  NoLineFeed: boolean=false); overload;
+procedure ConsoleWrite(const Text: RawUTF8; Color: TConsoleColor=ccLightGray;
+  NoLineFeed: boolean=false; NoColor: boolean=false); overload;
 
 /// write some text to the console using a given color
 procedure ConsoleWrite(const Fmt: RawUTF8; const Args: array of const;
-  Color: TConsoleColor=ccDarkGray; NoLineFeed: boolean=false); overload;
+  Color: TConsoleColor=ccLightGray; NoLineFeed: boolean=false); overload;
 
 /// change the console text background color
 procedure TextBackground(Color: TConsoleColor);
@@ -15359,6 +15363,11 @@ procedure TextBackground(Color: TConsoleColor);
 // - to be used e.g. for proper work of console applications with interface-based
 // service implemented as optExecInMainThread
 procedure ConsoleWaitForEnterKey;
+
+/// read all available content from stdin
+// - could be used to retrieve some file piped to the command line
+// - the content is not converted, so will follow the encoding used for storage
+function ConsoleReadBody: RawByteString;
 
 {$ifdef MSWINDOWS}
 /// low-level access to the keyboard state of a given key
@@ -31116,7 +31125,7 @@ begin
     result[i] := Values[i];
 end;
 
-function TQwordDynArrayFrom(const Values: TCardinalDynArray): TQwordDynArray;
+function TQWordDynArrayFrom(const Values: TCardinalDynArray): TQWordDynArray;
 var i: integer;
 begin
   SetLength(result,length(Values));
@@ -42894,6 +42903,14 @@ begin
     result := 0;
 end;
 
+function DynArrayItemTypeIsSimpleBinary(const aDynArrayTypeName: RawUTF8): boolean;
+var itemLen,dataSize,fieldSize: integer;
+begin
+  itemLen := DynArrayItemTypeLen(aDynArrayTypeName);
+  result := (itemLen>0) and TJSONCustomParserRTTI.TypeNameToSimpleBinary(
+    copy(aDynArrayTypeName,1,itemLen),dataSize,fieldSize);
+end;
+
 procedure TJSONRecordTextDefinition.Parse(Props: TJSONCustomParserRTTI;
   var P: PUTF8Char; PEnd: TJSONCustomParserRTTIExpectedEnd);
   function GetNextFieldType(var P: PUTF8Char;
@@ -54535,9 +54552,9 @@ begin
       wasString^ := wStr;
     if not wStr and NormalizeBoolean and (result<>nil) then begin
       if PInteger(result)^=TRUE_LOW then
-        result := '1' else   // normalize true -> 1
+        result := pointer(SmallUInt32UTF8[1]) else   // normalize true -> 1
       if PInteger(result)^=FALSE_LOW then
-        result := '0' else   // normalize false -> 0
+        result := pointer(SmallUInt32UTF8[0]) else   // normalize false -> 0
         exit;
       if Len<>nil then
         Len^ := 1;
@@ -54624,8 +54641,7 @@ begin
     if P=nil then
       exit;
     while (P^<=' ') and (P^<>#0) do inc(P);
-    if P^<>#0 then
-      result := P;
+    result := P;
     exit;
   end;
   end;
@@ -55458,14 +55474,40 @@ end;
 
 {$endif MSWINDOWS}
 
+function ConsoleReadBody: RawByteString;
+var len, n: integer;
+    P: PByte;
+    {$ifndef FPC}StdInputHandle: THandle;{$endif}
+begin
+  {$ifdef MSWINDOWS}
+  {$ifndef FPC}StdInputHandle := GetStdHandle(STD_INPUT_HANDLE);{$endif}
+  if not PeekNamedPipe(StdInputHandle,nil,0,nil,@len,nil) then
+  {$else}
+  if fpioctl(StdInputHandle,FIONREAD,@len)<0 then
+  {$endif}
+    len := 0;
+  SetLength(result,len);
+  P := pointer(result);
+  while len>0 do begin
+    n := FileRead(StdInputHandle,P^,len);
+    if n<=0 then begin
+      result := ''; // read error
+      break;
+    end;
+    dec(len,n);
+    inc(P,n);
+  end;
+end;
+
 function StringToConsole(const S: string): RawByteString;
 begin
   result := Utf8ToConsole(StringToUTF8(S));
 end;
 
-procedure ConsoleWrite(const Text: RawUTF8; Color: TConsoleColor; NoLineFeed: boolean);
+procedure ConsoleWrite(const Text: RawUTF8; Color: TConsoleColor; NoLineFeed, NoColor: boolean);
 begin
-  TextColor(Color);
+  if not NoColor then
+    TextColor(Color);
   write(Utf8ToConsole(Text));
   if not NoLineFeed then
     writeln;
@@ -55482,9 +55524,9 @@ end;
 
 procedure ConsoleShowFatalException(E: Exception; WaitForEnterKey: boolean);
 begin
-  ConsoleWrite(#13#10'Fatal exception ',cclightRed,false);
-  ConsoleWrite('%',[E.ClassName],ccWhite,false);
-  ConsoleWrite(' raised with message: ',ccLightRed,false);
+  ConsoleWrite(#13#10'Fatal exception ',cclightRed,true);
+  ConsoleWrite('%',[E.ClassName],ccWhite,true);
+  ConsoleWrite(' raised with message ',ccLightRed,true);
   ConsoleWrite('%',[E.Message],ccLightMagenta);
   TextColor(ccLightGray);
   if WaitForEnterKey then begin
