@@ -1615,7 +1615,7 @@ begin
     ftCurrency: result := Curr64ToStr(V^.Int64);
     ftDouble:
       if V^.Int64=0 then
-        result := '0' else
+        result := SmallUInt32UTF8[0] else
         result := DoubleToStr(V^.Double);
     end;
 end;

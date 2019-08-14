@@ -1706,6 +1706,11 @@ const
   // - i.e. will match RawUTF8, string, UnicodeString, WideString properties
   RAWTEXT_FIELDS: TSQLFieldTypes = [sftAnsiText,sftUTF8Text];
 
+  /// kind of fields which will be stored as TEXT values
+  // - i.e. RAWTEXT_FIELDS and TDateTime/TDateTimeMS
+  STRING_FIELDS: TSQLFieldTypes = [sftAnsiText,sftUTF8Text,sftUTF8Custom,
+    sftDateTime,sftDateTimeMS];
+
 {$ifndef NOVARIANTS}
 type
   /// define a variant published property as a nullable integer
@@ -2767,7 +2772,7 @@ type
     /// get the corresponding enumeration ordinal value, from its name without
     // its first lowercase chars ('Done' will find otDone e.g.)
     // - return -1 if not found (don't use directly this value to avoid any GPF)
-    function GetEnumNameTrimedValue(Value: PUTF8Char): Integer; overload;
+    function GetEnumNameTrimedValue(Value: PUTF8Char; ValueLen: integer=0): Integer; overload;
     /// compute how many bytes this type will use to be stored as a enumerate
     function SizeInStorageAsEnum: Integer;
     /// compute how many bytes this type will use to be stored as a set
@@ -2863,6 +2868,8 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// get the dynamic array size (in bytes) of the stored item
     function DynArrayItemSize: integer; {$ifdef HASINLINENOTX86}inline;{$endif}
+    /// get the SQL type of the items of a dynamic array
+    function DynArraySQLFieldType: TSQLFieldType;
     /// recognize most used string types, returning their code page
     // - will recognize TSQLRawBlob as the fake CP_SQLRAWBLOB code page
     // - will return the exact code page since Delphi 2009, from RTTI
@@ -5885,6 +5892,9 @@ type
     /// retrieve the "Content-Type" value from OutHead
     // - if GuessJSONIfNoneSet is TRUE, returns JSON if none was set in headers
     function OutBodyType(GuessJSONIfNoneSet: boolean=True): RawUTF8;
+    /// check if the "Content-Type" value from OutHead is JSON
+    // - if GuessJSONIfNoneSet is TRUE, assume JSON is used
+    function OutBodyTypeIsJson(GuessJSONIfNoneSet: boolean=True): boolean;
     /// just a wrapper around FindIniNameValue(pointer(InHead),UpperName)
     // - use e.g. as
     // ! Call.Header(HEADER_REMOTEIP_UPPER) or Call.Header(HEADER_BEARER_UPPER)
@@ -10814,7 +10824,9 @@ type
   // been previously registered via TInterfaceFactory.RegisterUnsafeSPIType
   // so that low-level logging won't include such values
   // - vIsQword is set for ValueType=smvInt64 over a QWord unsigned 64-bit value
-  TServiceMethodValueAsm = set of (vIsString, vPassedByReference, vIsObjArray, vIsSPI, vIsQword);
+  // - vIsDynArrayString is set for ValueType=smvDynArray of string values
+  TServiceMethodValueAsm = set of (vIsString, vPassedByReference,
+    vIsObjArray, vIsSPI, vIsQword, vIsDynArrayString);
 
   /// describe a service provider method argument
   {$ifdef UNICODE}TServiceMethodArgument = record{$else}TServiceMethodArgument = object{$endif}
@@ -10914,6 +10926,9 @@ type
     procedure FixValueAndAddToObject(const Value: variant; var DestDoc: TDocVariantData);
     {$endif}
   end;
+
+  /// pointer to a service provider method argument
+  PServiceMethodArgument = ^TServiceMethodArgument;
 
   /// describe a service provider method arguments
   TServiceMethodArgumentDynArray = array of TServiceMethodArgument;
@@ -11023,6 +11038,14 @@ type
     // - if Input is TRUE, will handle const / var arguments
     // - if Input is FALSE, will handle var / out / result arguments
     function ArgsArrayToObject(P: PUTF8Char; Input: boolean): RawUTF8;
+    /// convert parameters encoded as name=value or name='"value"' or name='{somejson}'
+    // into a JSON object
+    // - on Windows, use double-quotes ("") anywhere you expect single-quotes (")
+    // - as expected e.g. from a command line tool
+    // - if Input is TRUE, will handle const / var arguments
+    // - if Input is FALSE, will handle var / out / result arguments
+    function ArgsCommandLineToObject(P: PUTF8Char; Input: boolean;
+      RaiseExceptionOnUnknownParam: boolean=false): RawUTF8;
     /// returns a dynamic array list of all parameter names
     // - if Input is TRUE, will handle const / var arguments
     // - if Input is FALSE, will handle var / out / result arguments
@@ -11672,6 +11695,10 @@ type
     // - if aMethodName does not have an exact method match, it will try with a
     // trailing underscore, so that e.g. /service/start will match IService._Start()
     function FindMethodIndex(const aMethodName: RawUTF8): integer;
+    /// find a particular method in internal Methods[] list
+    // - just a wrapper around FindMethodIndex() returing a PServiceMethod
+    // - will return nil if the method is not known
+    function FindMethod(const aMethodName: RawUTF8): PServiceMethod;
     /// find the index of a particular interface.method in internal Methods[] list
     // - will search for a match against Methods[].InterfaceDotMethodName property
     // - won't find the default AddRef/Release/QueryInterface methods
@@ -31186,16 +31213,28 @@ begin
     DynArrayTypeInfoToRecordInfo(@self,@result);
 end;
 
+function TTypeInfo.DynArraySQLFieldType: TSQLFieldType;
+var item: mORMot.PTypeInfo;
+begin
+  if @self=nil then
+    result := sftUnknown else begin
+    item := DynArrayTypeInfoToRecordInfo(@self);
+    if item=nil then
+      result := sftUnknown else
+      result := item^.GetSQLFieldType;
+  end;
+end;
+
 function TTypeInfo.AnsiStringCodePage: integer;
 begin
   {$ifdef HASCODEPAGE}
   if @self=TypeInfo(TSQLRawBlob) then
     result := CP_SQLRAWBLOB else
-    if Kind in [{$ifdef FPC}tkAString,{$endif} tkLString] then
+    if Kind in [{$ifdef FPC}tkAString,{$endif} tkLString] then // from RTTI
       {$ifdef FPC}
       result := PWord(GetFPCTypeData(@self))^ else
       {$else}
-      result := PWord(@Name[ord(Name[0])+1])^ else // from RTTI
+      result := PWord(@Name[ord(Name[0])+1])^ else
       {$endif}
   {$else}
   if @self=TypeInfo(RawUTF8) then
@@ -31714,17 +31753,15 @@ end;
 
 function TEnumType.GetEnumNameTrimedValue(const EnumName: ShortString): Integer;
 begin
-  result := FindShortStringListTrimLowerCase(@NameList,MaxValue,@EnumName[1],ord(EnumName[0]));
-  if result<0 then
-    result := FindShortStringListExact(@NameList,MaxValue,@EnumName[1],ord(EnumName[0]));
+  result := GetEnumNameTrimedValue(@EnumName[1],ord(EnumName[0]));
 end;
 
-function TEnumType.GetEnumNameTrimedValue(Value: PUTF8Char): Integer;
-var ValueLen: integer;
+function TEnumType.GetEnumNameTrimedValue(Value: PUTF8Char; ValueLen: integer): Integer;
 begin
   if Value=nil then
     result := -1 else begin
-    ValueLen := StrLen(Value);
+    if ValueLen=0 then
+      ValueLen := StrLen(Value);
     result := FindShortStringListTrimLowerCase(@NameList,MaxValue,Value,ValueLen);
     if result<0 then
       result := FindShortStringListExact(@NameList,MaxValue,Value,ValueLen);
@@ -38118,6 +38155,11 @@ begin
   result := FindIniNameValue(pointer(OutHead),HEADER_CONTENT_TYPE_UPPER);
   if GuessJSONIfNoneSet and (result='') then
     result := JSON_CONTENT_TYPE_VAR;
+end;
+
+function TSQLRestURIParams.OutBodyTypeIsJson(GuessJSONIfNoneSet: boolean): boolean;
+begin
+  result := IdemPChar(pointer(OutBodyType(GuessJSONIfNoneSet)),JSON_CONTENT_TYPE_UPPER);
 end;
 
 function TSQLRestURIParams.Header(UpperName: PAnsiChar): RawUTF8;
@@ -55669,7 +55711,7 @@ begin
   fInterfaceName := ToUTF8(fInterfaceTypeInfo^.Name);
   fInterfaceURI := fInterfaceName;
   if fInterfaceURI[1] in ['i','I'] then
-    delete(fInterfaceURI,1,1);
+    delete(fInterfaceURI,1,1);  // as in TServiceFactory.Create
   // retrieve all interface methods (recursively including ancestors)
   fMethod.InitSpecific(TypeInfo(TServiceMethodDynArray),fMethods,djRawUTF8,
     @fMethodsCount,true);
@@ -55687,9 +55729,7 @@ begin
   // compute additional information for each method
   for m := 0 to fMethodsCount-1 do
   with fMethods[m] do begin
-    InterfaceDotMethodName := fInterfaceName+'.'+URI;
-    if InterfaceDotMethodName[1] in ['I','i'] then
-      delete(InterfaceDotMethodName,1,1); // as in TServiceFactory.Create
+    InterfaceDotMethodName := fInterfaceURI+'.'+URI;
     IsInherited := HierarchyLevel<>fAddMethodsLevel;
     ExecutionMethodIndex := m+RESERVED_VTABLE_SLOTS;
     ArgsInFirst := -1;
@@ -55776,6 +55816,24 @@ begin
              IdemPropNameU(URI,'CallbackReleased') then
             fMethodIndexCallbackReleased := m;
       end;
+    if ArgsResultIndex>=0 then
+      with Args[ArgsResultIndex] do
+      case ValueType of
+      smvNone, smvObject, smvInterface:
+        raise EInterfaceFactoryException.CreateUTF8('%.Create: I% unexpected result type %',
+          [self,InterfaceDotMethodName,ArgTypeName^]);
+      smvRecord:
+        if ArgTypeInfo=System.TypeInfo(TServiceCustomAnswer) then begin
+          for a := ArgsOutFirst to ArgsOutLast do
+            if Args[a].ValueDirection in [smdVar,smdOut] then
+              raise EInterfaceFactoryException.CreateUTF8('%.Create: I% '+
+                'var/out parameter "%" not allowed with TServiceCustomAnswer result',
+                [self,InterfaceDotMethodName,Args[a].ParamName^]);
+          ArgsResultIsServiceCustomAnswer := true;
+        end;
+      end;
+      if (ArgsInputValuesCount=1) and (Args[1].ValueType=smvRawByteString) then
+        ArgsInputIsOctetStream := true;
   end;
   // compute asm low-level layout of the parameters for each method
   for m := 0 to fMethodsCount-1 do
@@ -55814,7 +55872,10 @@ begin
         Include(ValueKindAsm,vIsString);
       smvDynArray: begin
         if ObjArraySerializers.Find(ArgTypeInfo)<>nil then
-          Include(ValueKindAsm,vIsObjArray);
+          Include(ValueKindAsm,vIsObjArray) else
+          if (ArgTypeInfo^.DynArraySQLFieldType in STRING_FIELDS) or
+             DynArrayItemTypeIsSimpleBinary(ShortStringToUTF8(ArgTypeName^)) then
+            Include(ValueKindAsm,vIsDynArrayString);
         DynArrayWrapper.Init(ArgTypeInfo,dummy);
         DynArrayWrapper.IsObjArray := vIsObjArray in ValueKindAsm;
         DynArrayWrapper.HasCustomJSONParser;
@@ -56003,6 +56064,15 @@ begin
     if (result<0) and (aMethodName[1]<>'_') then
       result := FindMethodIndex('_'+aMethodName);
   end;
+end;
+
+function TInterfaceFactory.FindMethod(const aMethodName: RawUTF8): PServiceMethod;
+var i: integer;
+begin
+  i := FindMethodIndex(aMethodName);
+  if i < 0 then
+    result := nil else
+    result := @fMethods[i];
 end;
 
 function TInterfaceFactory.FindFullMethodIndex(const aFullMethodName: RawUTF8;
@@ -58742,27 +58812,6 @@ begin
   if fRest.Model.GetTableIndex(fInterfaceURI)>=0 then
     raise EServiceException.CreateUTF8('%.Create: "%" interface name '+
       'is already used by a SQL table name',[self,fInterfaceURI]);
-  for m := 0 to fInterface.fMethodsCount-1 do
-  with fInterface.fMethods[m] do begin
-    if ArgsResultIndex>=0 then
-    with Args[ArgsResultIndex] do
-    case ValueType of
-    smvNone, smvObject, smvInterface:
-      raise EServiceException.CreateUTF8('%.Create: %.% unexpected result type %',
-        [self,fInterface.fInterfaceName,URI,ArgTypeName^]);
-    smvRecord:
-      if ArgTypeInfo=System.TypeInfo(TServiceCustomAnswer) then begin
-        for j := ArgsOutFirst to ArgsOutLast do
-          if Args[j].ValueDirection in [smdVar,smdOut] then
-            raise EServiceException.CreateUTF8('%.Create: %.% '+
-              'var/out parameter "%" not allowed with TServiceCustomAnswer result',
-              [self,fInterface.fInterfaceName,URI,Args[j].ParamName^]);
-        ArgsResultIsServiceCustomAnswer := true;
-      end;
-    end;
-    if (ArgsInputValuesCount=1) and (Args[1].ValueType=smvRawByteString) then
-      ArgsInputIsOctetStream := true;
-  end;
   SetLength(fExecution,fInterface.fMethodsCount);
   // compute interface signature (aka "contract"), serialized as a JSON object
   FormatUTF8('{"contract":"%","implementation":"%","methods":%}',
@@ -59838,8 +59887,7 @@ begin
     if not TSQLRestServer(Rest).Services.
        TryResolveInternal(fInterface.fInterfaceTypeInfo,dummyObj) then
       raise EInterfaceFactoryException.CreateUTF8(
-        'ickFromInjectedResolver: TryResolveInternal(%)=false',
-        [fInterface.fInterfaceName]);
+        'ickFromInjectedResolver: TryResolveInternal(%)=false',[fInterface.fInterfaceName]);
     result := TInterfacedObject(ObjectFromInterface(IInterface(dummyObj)));
     if AndIncreaseRefCount then // RefCount=1 after TryResolveInternal()
       AndIncreaseRefCount := false else
@@ -60488,6 +60536,7 @@ var parser: TJSONToObject; // inlined JSONToObject()
     ValLen: integer;
     wasString: boolean;
     wrapper: TDynArray;
+label doint;
 begin
   result := true;
   case ValueType of
@@ -60521,13 +60570,14 @@ begin
       exit;
     end;
     if (ValueType=smvBoolean) and (PInteger(Val)^=TRUE_LOW) then
-      Val := '1'; // handle also BOOL with SizeInStorage=2
+      Val := pointer(SmallUInt32UTF8[1]); // normalize
     case ValueType of
     smvBoolean, smvEnum, smvSet, smvCardinal:
-      case SizeInStorage of
+doint:case SizeInStorage of
       1: PByte(V)^     := GetCardinal(Val);
       2: PWord(V)^     := GetCardinal(Val);
       4: PCardinal(V)^ := GetCardinal(Val);
+      8: SetQWord(Val,PQWord(V)^);
       end;
     smvInteger:
       PInteger(V)^ := GetInteger(Val);
@@ -60560,12 +60610,7 @@ begin
       if ValLen=SizeInStorage*2 then
         HexDisplayToBin(PAnsiChar(Val),PByte(V),SizeInStorage);
     end else // allow fallback to read plain numbers (e.g. on API upgrade)
-      case SizeInStorage of
-      1: PByte(V)^     := GetCardinal(Val);
-      2: PWord(V)^     := GetCardinal(Val);
-      4: PCardinal(V)^ := GetCardinal(Val);
-      8: SetQWord(Val,PQWord(V)^);
-      end;
+      goto doint;
   end;
   smvRecord: begin
     R := RecordLoadJSON(V^,R,ArgTypeInfo);
@@ -60621,7 +60666,7 @@ begin
                  {$endif}
   smvRawByteString: WR.WrBase64(PPointer(V)^,length(PRawBytestring(V)^),false);
   smvWideString: WR.AddJSONEscapeW(PPointer(V)^);
-  smvBinary:     if not IsZero(V,SizeInStorage) then
+  smvBinary:     if not IsZero(V,SizeInStorage) then // leave "" for zero
                    WR.AddBinToHexDisplayLower(V,SizeInStorage);
   smvObject:     WR.WriteObject(PPointer(V)^,ObjectOptions);
   smvInterface:  WR.AddShort('null'); // or written by InterfaceWrite()
@@ -61472,6 +61517,65 @@ begin
           inc(P); // include ending ','
         W.AddNoJsonEscape(Value,P-Value);
       end;
+    W.CancelLastComma;
+    W.Add('}');
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
+
+function TServiceMethod.ArgsCommandLineToObject(P: PUTF8Char;
+  Input, RaiseExceptionOnUnknownParam: boolean): RawUTF8;
+var i: integer;
+    W: TTextWriter;
+    B: PUTF8Char;
+    arginfo: PServiceMethodArgument;
+    arg, value: RawUTF8;
+    ok: boolean;
+    temp: TTextWriterStackBuffer;
+begin
+  W := TTextWriter.CreateOwnedStream(temp);
+  try
+    W.Add('{');
+    while (P<>nil) and GetNextFieldProp(P,arg) and (P<>nil) and (arg<>'') do begin
+      ok := true;
+      i := ArgIndex(pointer(arg),length(arg),Input);
+      if i<0 then
+        if RaiseExceptionOnUnknownParam then
+          raise EServiceException.CreateUTF8('Unexpected "%" parameter for %',
+            [arg,InterfaceDotMethodName]) else
+          ok := false;
+      arginfo := @Args[i];
+      if ok then
+        W.AddPropName(arginfo^.ParamName^);
+      if not (P^ in [':','=']) then
+        raise EServiceException.CreateUTF8('"%" parameter has no = for %',
+          [arg,InterfaceDotMethodName]);
+      P := GotoNextNotSpace(P+1);
+      if P^ in ['"','[','{'] then begin // name='"value"' or name='{somejson}'
+        B := P;
+        P := GotoEndJSONItem(P);
+        if P = nil then
+          raise EServiceException.CreateUTF8('%= parameter has invalid content for %',
+            [arg,InterfaceDotMethodName]);
+        if not ok then
+          continue;
+        W.AddNoJSONEscape(B,P-B);
+      end else begin // name=value
+        GetNextItem(P,' ',value);
+        if not ok then
+          continue;
+        if arginfo^.ValueType=smvDynArray then // write [value] or ["value"]
+          W.Add('[');
+        if arginfo^.ValueKindAsm*[vIsString,vIsDynArrayString]<>[] then
+          W.AddJSONString(value) else
+          W.AddNoJSONEscape(pointer(value),length(value));
+        if arginfo^.ValueType=smvDynArray then
+          W.Add(']');
+      end;
+      W.Add(',');
+    end;
     W.CancelLastComma;
     W.Add('}');
     W.SetText(result);
