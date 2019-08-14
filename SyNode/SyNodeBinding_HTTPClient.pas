@@ -76,7 +76,7 @@ function THTTPClient.initialize(cx: PJSContext; argc: uintN; var vp: JSArgRec): 
 var
   in_argv: PjsvalVector;
   aServer, aPort: AnsiString;
-  aHttps: boolean;
+  aHttps, aStrictSSL: boolean;
   aProxyName, aProxyByPass: RawUTF8;
 begin
   in_argv := vp.argv;
@@ -119,13 +119,18 @@ begin
     else
       fReceiveTimeout := HTTP_DEFAULT_RECEIVETIMEOUT;
 
+    if (argc > 9) and (in_argv[9].isBoolean)  then
+      aStrictSSL := in_argv[9].asBoolean
+    else
+      aStrictSSL := false;
+
     fClient := {$IFDEF MSWINDOWS}TWinHTTP{$ELSE}TCurlHTTP{$ENDIF}
       .Create(aServer, aPort, aHttps, aProxyName, aProxyByPass, fConnectTimeout, fSendTimeout, fReceiveTimeout);
 
     if (argc > 3) and (in_argv[3].isBoolean)  then
       fClient.RegisterCompress(CompressGZip);
 
-    if aHttps then
+    if aHttps and not aStrictSSL then
       fClient.IgnoreSSLCertificateErrors := true;
   except
     on E: Exception do begin
