@@ -58796,7 +58796,6 @@ end;
 constructor TServiceFactory.Create(aRest: TSQLRest;
   aInterface: PTypeInfo; aInstanceCreation: TServiceInstanceImplementation;
   const aContractExpected: RawUTF8);
-var m,j: integer;
 begin
   // check supplied interface
   if (aRest=nil) or (aInterface=nil) then
