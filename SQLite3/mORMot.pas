@@ -20684,7 +20684,10 @@ const
   /// special TSQLFieldBits value containing all field bits set to 1
   ALL_FIELDS: TSQLFieldBits = [0..MAX_SQLFIELDS-1];
 
-  // contains TSQLAuthUser.ComputeHashedPassword('synopse')
+  /// default hashed password set by TSQLAuthGroup.InitializeTable for all users
+  // - contains TSQLAuthUser.ComputeHashedPassword('synopse')
+  // - override AuthAdminDefaultPassword, AuthSupervisorDefaultPassword and
+  // AuthUserDefaultPassword values to follow your own application expectations
   DEFAULT_HASH_SYNOPSE = '67aeea294e1cb515236fd7829c55ec820ef888e8e221814d24d83b3dc4d825dd';
 
   /// the Server-side instance implementation patterns without any ID
@@ -55832,8 +55835,8 @@ begin
           ArgsResultIsServiceCustomAnswer := true;
         end;
       end;
-      if (ArgsInputValuesCount=1) and (Args[1].ValueType=smvRawByteString) then
-        ArgsInputIsOctetStream := true;
+    if (ArgsInputValuesCount=1) and (Args[1].ValueType=smvRawByteString) then
+      ArgsInputIsOctetStream := true;
   end;
   // compute asm low-level layout of the parameters for each method
   for m := 0 to fMethodsCount-1 do
