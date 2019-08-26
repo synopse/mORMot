@@ -3197,6 +3197,7 @@ type
     fResultCount: integer;
     fParam: TDynArrayHashed;
     fParamCount: Integer;
+    fTag: PtrInt;
     function GetIsEmpty: Boolean;
     function GetActive: Boolean;
     function GetFieldCount: integer;
@@ -3289,6 +3290,9 @@ type
     /// non VCL property to access the internal SynDB prepared statement
     // - is nil if the TQuery is not prepared (e.g. after Close)
     property PreparedSQLDBStatement: ISQLDBStatement read fPrepared;
+    /// user-customizable number attached to this instance
+    // - for compatibility with TComponent
+    property Tag: PtrInt read fTag write fTag;
   end;
 
 {$endif EMULATES_TQUERY}
