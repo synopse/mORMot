@@ -9626,6 +9626,8 @@ type
     property Buffer: PAnsiChar read fBuf;
     /// retrieve the buffer size
     property Size: PtrUInt read fBufSize;
+    /// access to the low-level associated File handle (if any)
+    property FileHandle: THandle read fFile;
   end;
 
   {$M+}
@@ -21333,8 +21335,10 @@ begin
     Value := TVarData(V).VInteger=1;
   varString:
     Value := IdemPropNameU(RawUTF8(TVarData(V).VAny),BOOL_UTF8[true]);
+  {$ifndef DELPHI5OROLDER} // WideCompareText() not defined on this old RTL
   varOleStr:
     Value := WideCompareText(WideString(TVarData(V).VAny),'true')=0;
+  {$endif DELPHI5OROLDER}
   {$ifdef HASVARUSTRING}
   varUString: Value := {$ifdef FPC}UnicodeCompareText{$else}CompareText{$endif}(
     UnicodeString(TVarData(V).VAny),'true')=0;
