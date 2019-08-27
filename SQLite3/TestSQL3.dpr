@@ -138,6 +138,7 @@ uses
           dddInfraEmailer in 'DDD\infra\dddInfraEmailer.pas',
           dddInfraRepoUser in 'DDD\infra\dddInfraRepoUser.pas',
         {$endif NOVARIANTS}
+        SynZipFiles in '..\SynZipFiles.pas',
       {$endif LVCL}
       {$ifdef MSWINDOWS}
         {$ifndef CPU64}
@@ -146,9 +147,6 @@ uses
         {$endif CPU64}
         SynTable in '..\SynTable.pas',
         SynBigTable in '..\SynBigTable.pas',
-        {$ifndef LVCL}
-          SynZipFiles in '..\SynZipFiles.pas',
-        {$endif}
       {$endif MSWINDOWS}
       SynSQLite3 in '..\SynSQLite3.pas',
       SynSQLite3Static in '..\SynSQLite3Static.pas',
