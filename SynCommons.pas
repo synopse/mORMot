@@ -4761,7 +4761,7 @@ type
   {$else}TDynArray = object protected{$endif}
     fValue: PPointer;
     fTypeInfo: pointer;
-    fElemType{$ifdef ISDELPHI2010}, fElemType2{$endif}: pointer;
+    fElemType{$ifdef DYNARRAYELEMTYPE2}, fElemType2{$endif}: pointer;
     fCountP: PInteger;
     fCompare: TDynArraySortCompare;
     fElemSize: cardinal;
@@ -48984,9 +48984,9 @@ begin
       fElemType := nil; // as with Delphi
     {$endif FPC}
   end;
-  {$ifdef ISDELPHI2010} // seems inconsistent with FPC - only for Delphi 2010+
+  {$ifdef DYNARRAYELEMTYPE2} // disabled not to break backward compatibility
   fElemType2 := PTypeInfo(aTypeInfo)^.elType2;
-  {$endif ISDELPHI2010}
+  {$endif}
   fCountP := aCountPointer;
   if fCountP<>nil then
     fCountP^ := 0;
