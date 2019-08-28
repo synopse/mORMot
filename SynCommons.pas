@@ -51788,7 +51788,7 @@ var i: integer;
 begin
   result := true;
   for i := 0 to high(aTypeInfo) do
-    if not RegisterCustomJSONSerializerSetOptions(aTypeInfo[i],aOptions) then
+    if not RegisterCustomJSONSerializerSetOptions(aTypeInfo[i],aOptions,aAddIfNotExisting) then
       result := false;
 end;
 
