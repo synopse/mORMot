@@ -6871,7 +6871,7 @@ begin
     end
     else if aText > txtend then
       break;
-    if (PtrInt(PtrUInt(txtretry))> 0) and (txtretry <= txtend + 1) then begin
+    if (PtrInt(PtrUInt(txtretry)) > 0) and (txtretry <= txtend + 1) then begin
       aText := txtretry;
       inc(txtretry);
       pat := patretry;
@@ -7176,7 +7176,7 @@ begin
               else
                 Search := SearchContains1;
             end;
-            '?':
+            '?': // ?something*
               if aCaseInsensitive then
                 Search := SearchNoRangeU
               else
@@ -11416,7 +11416,7 @@ begin
     repeat
       inc(P);
     until (P = PEnd) or not(P^ in IS_UTF8_WORD);
-    aTextLen := P - aText;
+    aTextLen := P - aText; // now aText/aTextLen point to a word
     n := fWordCount;
     repeat
       dec(n);

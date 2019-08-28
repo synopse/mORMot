@@ -32,6 +32,7 @@ unit SynGdiPlus;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - Andre Heider (dhewg)
   - Pierre le Riche
   - sllimr7139
 
@@ -314,7 +315,6 @@ type
     constructor Create; overload;
     constructor Create(clone: TImageAttributes); overload;
     destructor Destroy; override;
-
     function SetToIdentity(adjusttype: TColorAdjustType = ColorAdjustTypeDefault): TGdipStatus;
     function Reset(adjusttype: TColorAdjustType = ColorAdjustTypeDefault): TGdipStatus;
     function SetColorMatrix(const colormatrix: TColorMatrix; flags: TColorMatrixFlags = ColorMatrixFlagsDefault; adjusttype: TColorAdjustType = ColorAdjustTypeDefault): TGdipStatus;
@@ -718,8 +718,7 @@ type
       aTextRendering: TTextRenderingHint=trhClearTypeGridFit); overload; override;
     procedure DrawAntiAliased(Source: TMetafile; Dest: HDC;
       const dst, src: TRect; attributes: TImageAttributes=nil; u: TUnit=uPixel;
-      aSmoothing: TSmoothingMode=smAntiAlias; aTextRendering:
-      TTextRenderingHint=trhClearTypeGridFit); overload;
+      aSmoothing: TSmoothingMode=smAntiAlias; aTextRendering: TTextRenderingHint=trhClearTypeGridFit); overload;
     /// convert a supplied EMF metafile into a EMF+ (i.e. GDI+ metafile)
     // - i.e. allows antialiased drawing of the EMF metafile
     // - if GDI+ is not available or conversion failed, return 0
@@ -1033,102 +1032,102 @@ end;
 
 function TImageAttributes.SetToIdentity(adjusttype: TColorAdjustType): TGdipStatus;
 begin
-  Result:= Gdip.SetImageAttributesToIdentity(fAttr, adjusttype);
+  result := Gdip.SetImageAttributesToIdentity(fAttr, adjusttype);
 end;
 
 function TImageAttributes.Reset(adjusttype: TColorAdjustType): TGdipStatus;
 begin
-  Result:= Gdip.ResetImageAttributes(fAttr, adjusttype);
+  result := Gdip.ResetImageAttributes(fAttr, adjusttype);
 end;
 
 function TImageAttributes.SetColorMatrix(const colormatrix: TColorMatrix; flags: TColorMatrixFlags; adjusttype: TColorAdjustType): TGdipStatus;
 begin
-  Result:= Gdip.SetImageAttributesColorMatrix(fAttr, adjusttype, true, @colormatrix, nil, flags);
+  result := Gdip.SetImageAttributesColorMatrix(fAttr, adjusttype, true, @colormatrix, nil, flags);
 end;
 
 function TImageAttributes.ClearColorMatrix(adjusttype: TColorAdjustType): TGdipStatus;
 begin
-  Result:= Gdip.SetImageAttributesColorMatrix(fAttr, adjusttype, false, nil, nil, ColorMatrixFlagsDefault);
+  result := Gdip.SetImageAttributesColorMatrix(fAttr, adjusttype, false, nil, nil, ColorMatrixFlagsDefault);
 end;
 
 function TImageAttributes.SetThreshold(threshold: Single; adjusttype: TColorAdjustType): TGdipStatus;
 begin
-  Result:= Gdip.SetImageAttributesThreshold(fAttr, adjusttype, true, threshold);
+  result := Gdip.SetImageAttributesThreshold(fAttr, adjusttype, true, threshold);
 end;
 
 function TImageAttributes.ClearThreshold(adjusttype: TColorAdjustType): TGdipStatus;
 begin
-  Result:= Gdip.SetImageAttributesThreshold(fAttr, adjusttype, false, 0.0);
+  result := Gdip.SetImageAttributesThreshold(fAttr, adjusttype, false, 0.0);
 end;
 
 function TImageAttributes.SetGamma(gamma: Single; adjusttype: TColorAdjustType): TGdipStatus;
 begin
-  Result:= Gdip.SetImageAttributesGamma(fAttr, adjusttype, true, gamma);
+  result := Gdip.SetImageAttributesGamma(fAttr, adjusttype, true, gamma);
 end;
 
 function TImageAttributes.ClearGamma(adjusttype: TColorAdjustType): TGdipStatus;
 begin
-  Result:= Gdip.SetImageAttributesGamma(fAttr, adjusttype, false, 0.0);
+  result := Gdip.SetImageAttributesGamma(fAttr, adjusttype, false, 0.0);
 end;
 
 function TImageAttributes.SetNoOp(adjusttype: TColorAdjustType): TGdipStatus;
 begin
-  Result:= Gdip.SetImageAttributesNoOp(fAttr, adjusttype, true);
+  result := Gdip.SetImageAttributesNoOp(fAttr, adjusttype, true);
 end;
 
 function TImageAttributes.ClearNoOp(adjusttype: TColorAdjustType): TGdipStatus;
 begin
-  Result:= Gdip.SetImageAttributesNoOp(fAttr, adjusttype, false);
+  result := Gdip.SetImageAttributesNoOp(fAttr, adjusttype, false);
 end;
 
 function TImageAttributes.SetColorKey(colorLow, colorHigh: Cardinal; adjusttype: TColorAdjustType): TGdipStatus;
 begin
-  Result:= Gdip.SetImageAttributesColorKeys(fAttr, adjusttype, true, colorLow, colorHigh);
+  result := Gdip.SetImageAttributesColorKeys(fAttr, adjusttype, true, colorLow, colorHigh);
 end;
 
 function TImageAttributes.ClearColorKey(adjusttype: TColorAdjustType): TGdipStatus;
 begin
-  Result:= Gdip.SetImageAttributesColorKeys(fAttr, adjusttype, false, 0, 0);
+  result := Gdip.SetImageAttributesColorKeys(fAttr, adjusttype, false, 0, 0);
 end;
 
 function TImageAttributes.SetOutputChannel(channelFlags: TColorChannelFlags; adjusttype: TColorAdjustType): TGdipStatus;
 begin
-  Result:= Gdip.SetImageAttributesOutputChannel(fAttr, adjusttype, true, channelFlags);
+  result := Gdip.SetImageAttributesOutputChannel(fAttr, adjusttype, true, channelFlags);
 end;
 
 function TImageAttributes.ClearOutputChannel(adjusttype: TColorAdjustType): TGdipStatus;
 begin
-  Result:= Gdip.SetImageAttributesOutputChannel(fAttr, adjusttype, false, ColorChannelFlagsLast);
+  result := Gdip.SetImageAttributesOutputChannel(fAttr, adjusttype, false, ColorChannelFlagsLast);
 end;
 
 function TImageAttributes.SetOutputChannelColorProfile(const colorProfileName: PWideChar; adjusttype: TColorAdjustType): TGdipStatus;
 begin
-  Result:= Gdip.SetImageAttributesOutputChannelColorProfile(fAttr, adjusttype, true, colorProfileName);
+  result := Gdip.SetImageAttributesOutputChannelColorProfile(fAttr, adjusttype, true, colorProfileName);
 end;
 
 function TImageAttributes.ClearOutputChannelColorProfile(adjusttype: TColorAdjustType): TGdipStatus;
 begin
-  Result:= Gdip.SetImageAttributesOutputChannelColorProfile(fAttr, adjusttype, false, nil);
+  result := Gdip.SetImageAttributesOutputChannelColorProfile(fAttr, adjusttype, false, nil);
 end;
 
 function TImageAttributes.SetRemapTable(mapSize: Cardinal; map: PColorMap; adjusttype: TColorAdjustType): TGdipStatus;
 begin
-  Result:= Gdip.SetImageAttributesRemapTable(fAttr, adjusttype, true, mapSize, map);
+  result := Gdip.SetImageAttributesRemapTable(fAttr, adjusttype, true, mapSize, map);
 end;
 
 function TImageAttributes.ClearRemapTable(adjusttype: TColorAdjustType): TGdipStatus;
 begin
-  Result:= Gdip.SetImageAttributesRemapTable(fAttr, adjusttype, false, 0, nil);
+  result := Gdip.SetImageAttributesRemapTable(fAttr, adjusttype, false, 0, nil);
 end;
 
 function TImageAttributes.SetWrapMode(wrap: TWrapMode; color: Cardinal; clamp: Boolean): TGdipStatus;
 begin
-  Result:= Gdip.SetImageAttributesWrapMode(fAttr, wrap, color, clamp);
+  result := Gdip.SetImageAttributesWrapMode(fAttr, wrap, color, clamp);
 end;
 
 function TImageAttributes.GetAdjustedPalette(colorPalette: PColorPalette; colortype: TColorAdjustType): TGdipStatus;
 begin
-  Result:= Gdip.GetImageAttributesAdjustedPalette(fAttr, colorPalette, colortype);
+  result := Gdip.GetImageAttributesAdjustedPalette(fAttr, colorPalette, colortype);
 end;
 
 
@@ -1484,19 +1483,16 @@ procedure TSynPicture.Draw(ACanvas: TCanvas; const dst, src: TRect; attributes: 
 var graphics: THandle;
     ia: TGpipImageAttributes;
 begin
-  if (self=nil) or not fHasContent or (fImage=0) or (ACanvas=nil) or
-     not Gdip.Exists then
+  if (self=nil) or not fHasContent or (fImage=0) or (ACanvas=nil) or not Gdip.Exists then
     exit;
   if Assigned(attributes) then
-    ia:= attributes.fAttr
-  else
-    ia:= nil;
+    ia := attributes.fAttr else
+    ia := nil;
   if (Gdip.CreateFromHDC(ACanvas.Handle,graphics)=stOk) and (graphics<>0) then
   try
     Gdip.DrawImageRectRect(graphics, fImage,
       dst.Left, dst.Top, dst.Right - dst.Left, dst.Bottom - dst.Top,
-      src.Left, src.Top, src.Right - src.Left, src.Bottom - src.Top,
-      u, ia);
+      src.Left, src.Top, src.Right - src.Left, src.Bottom - src.Top, u, ia);
   finally
     Gdip.DeleteGraphics(graphics);
   end;
@@ -2216,13 +2212,13 @@ var Size, typ: DWORD;
     tmp: array[byte] of char;
     k: HKey;
 begin
-  Result := '';
+  result := '';
   if RegOpenKeyEx(Key, pointer(Path), 0, KEY_QUERY_VALUE, k)=ERROR_SUCCESS then
   try
     Size := 250;
     typ := REG_SZ;
     if RegQueryValueEx(k, pointer(Value), nil, @typ, @tmp, @Size)=ERROR_SUCCESS then
-      Result := tmp;
+      result := tmp;
   finally
     RegCloseKey(k);
   end;
@@ -2237,7 +2233,7 @@ var FileName: string;
     FI: PVSFixedFileInfo;
     VerSize: cardinal;
 begin
-  Result := Cardinal(-1);
+  result := Cardinal(-1);
   // GetFileVersionInfo modifies the filename parameter data while parsing.
   // Copy the string const into a local variable to create a writeable copy.
   FileName := AFileName;
@@ -2249,7 +2245,7 @@ begin
     try
       if GetFileVersionInfo(PChar(FileName), Wnd, InfoSize, VerBuf) then
         if VerQueryValue(VerBuf, '\', Pointer(FI), VerSize) then
-          Result:= FI.dwFileVersionMS;
+          result := FI.dwFileVersionMS;
     finally
       FreeMem(VerBuf);
     end;
@@ -2738,15 +2734,13 @@ begin
   if Img=0 then
     inherited else begin
     if Assigned(attributes) then
-      ia:= attributes.fAttr
-    else
+      ia := attributes.fAttr else
       ia:= nil;
     try
       CreateFromHDC(Dest,graphics);
       DrawImageRectRect(graphics,Img,
         dst.Left,dst.top,dst.Right-dst.Left,dst.Bottom-dst.Top,
-        src.Left,src.top,src.Right-src.Left,src.Bottom-src.Top,
-        u, ia);
+        src.Left,src.top,src.Right-src.Left,src.Bottom-src.Top, u, ia);
     finally
       DeleteGraphics(graphics);
       DisposeImage(Img);
