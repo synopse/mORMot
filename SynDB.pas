@@ -3787,8 +3787,8 @@ begin
   fConnection := aConnection;
   fSQL := TStringList.Create;
   fSQL.OnChange := OnSQLChange;
-  fParam.Init(TypeInfo(TQueryValueDynArray),fParams,nil,nil,nil,@fParamCount,true);
-  fResult.Init(TypeInfo(TQueryValueDynArray),fResults,nil,nil,nil,@fResultCount,true);
+  fParam.InitSpecific(TypeInfo(TQueryValueDynArray),fParams,djString,@fParamCount,true);
+  fResult.InitSpecific(TypeInfo(TQueryValueDynArray),fResults,djString,@fResultCount,true);
 end;
 
 destructor TQuery.Destroy;
@@ -7972,7 +7972,7 @@ end;
 constructor TSQLDBStatementWithParamsAndColumns.Create(aConnection: TSQLDBConnection);
 begin
   inherited Create(aConnection);
-  fColumn.Init(TypeInfo(TSQLDBColumnPropertyDynArray),fColumns,nil,nil,nil,@fColumnCount,True);
+  fColumn.InitSpecific(TypeInfo(TSQLDBColumnPropertyDynArray),fColumns,djRawUTF8,@fColumnCount,True);
 end;
 
 

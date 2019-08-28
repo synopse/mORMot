@@ -7356,7 +7356,7 @@ type
       ItemTypeName: PRawUTF8): TJSONCustomParserRTTIType; overload;
     /// recognize a simple type from a supplied type information
     // - to be called if TypeNameToSimpleRTTIType() did fail, i.e. return ptCustom
-    // - will return ptCustom for any unknown type
+    // - will return ptCustom for any complex type (e.g. a record)
     // - see also TypeInfoToRttiType() function
     class function TypeInfoToSimpleRTTIType(Info: pointer): TJSONCustomParserRTTIType;
     /// recognize a ktBinary simple type from a supplied type name
@@ -42151,15 +42151,15 @@ end;
 
 class function TJSONCustomParserRTTI.TypeInfoToSimpleRTTIType(Info: pointer): TJSONCustomParserRTTIType;
 begin
-  result := ptCustom;
+  result := ptCustom; // e.g. for tkRecord
   if Info=nil then
     exit;
-  case PTypeKind(Info)^ of
+  case PTypeKind(Info)^ of // FPC and Delphi will use a fast jmp table
   tkLString{$ifdef FPC},tkLStringOld{$endif}: result := ptRawUTF8;
   tkWString: result := ptWideString;
   {$ifdef HASVARUSTRING}tkUString: result := ptUnicodeString;{$endif}
   {$ifdef FPC_OR_UNICODE}
-  tkClassRef, tkPointer {$ifdef UNICODE},tkProcedure{$endif}: result := ptPtrInt;
+  tkClassRef,tkPointer{$ifdef UNICODE},tkProcedure{$endif}: result := ptPtrInt;
   {$endif}
   {$ifndef NOVARIANTS}
   tkVariant: result := ptVariant;
@@ -42188,10 +42188,9 @@ begin
   tkQWord: result := ptQWord;
   tkBool:  result := ptBoolean;
   {$else}
-  tkEnumeration:
+  tkEnumeration: // other enumerates (or tkSet) use TJSONCustomParserCustomSimple
     if Info=TypeInfo(boolean) then
       result := ptBoolean;
-      // other enumerates (or tkSet) will use TJSONCustomParserCustomSimple
   {$endif}
   tkFloat:
     case GetTypeInfo(Info)^.FloatType of
@@ -47643,20 +47642,17 @@ begin
       {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,Dest^,n);
       inc(Dest,n);
     end else
-    case PTypeKind(ElemType)^ of
-    tkRecord{$ifdef FPC},tkObject{$endif}:
+    if PTypeKind(ElemType)^ in tkRecordTypes then
       for i := 1 to n do begin
         Dest := RecordSave(P^,Dest,ElemType,LenBytes);
         inc(P,LenBytes);
-      end;
-    else
+      end else
       for i := 1 to n do begin
         Dest := ManagedTypeSave(P,Dest,ElemType,LenBytes);
         if Dest=nil then
           break;
         inc(P,LenBytes);
       end;
-    end;
   // store Hash32 checksum
   if Dest<>nil then  // may be nil if RecordSave/ManagedTypeSave failed
     PCardinal(result-SizeOf(Cardinal))^ := Hash32(pointer(result),Dest-result);
@@ -47761,65 +47757,67 @@ begin
 end;
 
 function TDynArray.ToKnownType(exactType: boolean): TDynArrayKind;
-{$ifdef ISDELPHI2010} const
+const
   RTTI: array[TJSONCustomParserRTTIType] of TDynArrayKind = (
     djNone, djBoolean, djByte, djCardinal, djCurrency, djDouble, djNone, djInt64,
     djInteger, djQWord, djRawByteString, djNone, djRawUTF8, djNone, djSingle,
     djString, djSynUnicode, djDateTime, djDateTimeMS, djHash128, djInt64, djTimeLog,
     {$ifdef HASVARUSTRING} {$ifdef UNICODE}djSynUnicode{$else}djNone{$endif}, {$endif}
-    {$ifndef NOVARIANTS} djVariant, {$endif} djWideString, djWord, djNone); {$endif}
-var nested: PTypeInfo;
+    {$ifndef NOVARIANTS} djVariant, {$endif} djWideString, djWord, djNone);
+var info: PTypeInfo;
     field: PFieldInfo;
 label Bin, Rec;
 begin
   result := fKnownType;
   if result<>djNone then
     exit;
+  info := fTypeInfo;
   case ElemSize of // very fast guess of most known exact dynarray types
-  1: if fTypeInfo=TypeInfo(TBooleanDynArray) then
+  1: if info=TypeInfo(TBooleanDynArray) then
        result := djBoolean;
-  4: if fTypeInfo=TypeInfo(TCardinalDynArray) then
+  4: if info=TypeInfo(TCardinalDynArray) then
        result := djCardinal else
-     if fTypeInfo=TypeInfo(TSingleDynArray) then
+     if info=TypeInfo(TSingleDynArray) then
        result := djSingle
   {$ifdef CPU64} ; 8: {$else} else {$endif}
-    if fTypeInfo=TypeInfo(TRawUTF8DynArray) then
+    if info=TypeInfo(TRawUTF8DynArray) then
       result := djRawUTF8 else
-    if fTypeInfo=TypeInfo(TStringDynArray) then
+    if info=TypeInfo(TStringDynArray) then
       result := djString else
-    if fTypeInfo=TypeInfo(TWinAnsiDynArray) then
+    if info=TypeInfo(TWinAnsiDynArray) then
       result := djWinAnsi else
-    if fTypeInfo=TypeInfo(TRawByteStringDynArray) then
+    if info=TypeInfo(TRawByteStringDynArray) then
       result := djRawByteString else
-    if fTypeInfo=TypeInfo(TSynUnicodeDynArray) then
+    if info=TypeInfo(TSynUnicodeDynArray) then
       result := djSynUnicode else
-    if (fTypeInfo=TypeInfo(TClassDynArray)) or
-       (fTypeInfo=TypeInfo(TPointerDynArray)) then
+    if (info=TypeInfo(TClassDynArray)) or
+       (info=TypeInfo(TPointerDynArray)) then
       result := djPointer else
     {$ifndef DELPHI5OROLDER}
-    if fTypeInfo=TypeInfo(TInterfaceDynArray) then
+    if info=TypeInfo(TInterfaceDynArray) then
       result := djInterface
     {$endif DELPHI5OROLDER}
   {$ifdef CPU64} else {$else} ; 8: {$endif}
-     if fTypeInfo=TypeInfo(TDoubleDynArray) then
+     if info=TypeInfo(TDoubleDynArray) then
        result := djDouble else
-     if fTypeInfo=TypeInfo(TCurrencyDynArray) then
+     if info=TypeInfo(TCurrencyDynArray) then
        result := djCurrency else
-     if fTypeInfo=TypeInfo(TTimeLogDynArray) then
+     if info=TypeInfo(TTimeLogDynArray) then
        result := djTimeLog else
-     if fTypeInfo=TypeInfo(TDateTimeDynArray) then
+     if info=TypeInfo(TDateTimeDynArray) then
        result := djDateTime else
-     if fTypeInfo=TypeInfo(TDateTimeMSDynArray) then
+     if info=TypeInfo(TDateTimeMSDynArray) then
        result := djDateTimeMS;
   end;
-  {$ifdef ISDELPHI2010} // seems inconsistent with FPC - only for Delphi 2010+
-  if (result=djNone) and (fElemType2<>nil) then // try from extended RTTI
-    result := RTTI[TJSONCustomParserRTTI.TypeInfoToSimpleRTTIType(fElemType2)];
-  {$endif}
-  if result=djNone then begin
+  if result=djNone then begin // guess from RTTU
     fKnownSize := 0;
-    if ElemType=nil then
-Bin:  case ElemSize of
+    if fElemType=nil then begin
+      {$ifdef DYNARRAYELEMTYPE2} // not backward compatible - disabled
+      if fElemType2<>nil then // try if a simple type known by extended RTTI
+        result := RTTI[TJSONCustomParserRTTI.TypeInfoToSimpleRTTIType(fElemType2)];
+      if result=djNone then
+      {$endif}
+Bin:  case fElemSize of
       1: result := djByte;
       2: result := djWord;
       4: result := djInteger;
@@ -47827,67 +47825,45 @@ Bin:  case ElemSize of
       16: result := djHash128;
       32: result := djHash256;
       64: result := djHash512;
-      else fKnownSize := ElemSize;
-      end else
-      case PTypeKind(ElemType)^ of
-        tkLString{$ifdef FPC},tkLStringOld{$endif}: result := djRawUTF8;
-        tkWString: result := djWideString;
-        {$ifdef UNICODE}
-        tkUString: result := djString;
-        {$else}
-        {$ifdef FPC_HAS_FEATURE_UNICODESTRINGS}
-        tkUString: result := djSynUnicode;
-        {$endif FPC_HAS_FEATURE_UNICODESTRINGS}
-        {$endif}
-        {$ifndef NOVARIANTS}
-        tkVariant: result := djVariant;
-        {$endif}
-        tkInterface: result := djInterface;
-        tkRecord{$ifdef FPC},tkObject{$endif}: if not exacttype then begin
-          nested := ElemType; // inlined GetTypeInfo()
-          {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  rec:    nested := GetFPCAlignPtr(nested);
-          {$else}
-  rec:    inc(PByte(nested),nested^.NameLen);
-          {$endif}
-          {$ifdef FPC_OLDRTTI}
-          field := OldRTTIFirstManagedField(nested);
-          if field=nil then
-          {$else FPC_OLDRTTI}
-          if GetManagedFields(nested,field)=0 then // only binary content
-          {$endif FPC_OLDRTTI}
-            goto Bin;
-          case field^.Offset of
-          0: case DeRef(field^.TypeInfo)^.Kind of
-             tkLString{$ifdef FPC},tkLStringOld{$endif}: result := djRawUTF8;
-             tkWString: result := djWideString;
-             {$ifdef UNICODE}
-             tkUString: result := djString;
-             {$else}
-             {$ifdef FPC_HAS_FEATURE_UNICODESTRINGS}
-             tkUString: result := djSynUnicode;
-             {$endif FPC_HAS_FEATURE_UNICODESTRINGS}
-             {$endif}
-             tkRecord{$ifdef FPC},tkObject{$endif}: begin
-               nested := DeRef(field^.TypeInfo);
-               goto Rec;
-             end;
-             {$ifndef NOVARIANTS}
-             tkVariant: result := djVariant;
-             {$endif}
-             else goto bin;
-             end;
-          1: result := djByte;
-          2: result := djWord;
-          4: result := djInteger;
-          8: result := djInt64;
-          16: result := djHash128;
-          32: result := djHash256;
-          64: result := djHash512;
-          else fKnownSize := field^.Offset;
-          end;
-        end;
+      else fKnownSize := fElemSize;
       end;
+    end else
+    if not exacttype and (PTypeKind(fElemType)^ in tkRecordTypes) then begin
+      info := fElemType; // inlined GetTypeInfo()
+      {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+rec:  info := GetFPCAlignPtr(info);
+      {$else}
+rec:  inc(PByte(info),info^.NameLen);
+      {$endif}
+      {$ifdef FPC_OLDRTTI}
+      field := OldRTTIFirstManagedField(info);
+      if field=nil then
+      {$else FPC_OLDRTTI}
+      if GetManagedFields(info,field)=0 then // only binary content
+      {$endif FPC_OLDRTTI}
+        goto Bin;
+      case field^.Offset of
+      0: begin
+        info := DeRef(field^.TypeInfo);
+        if info=nil then // paranoid check
+          goto Bin else
+        if info^.kind in tkRecordTypes then
+          goto Rec;
+        result := RTTI[TJSONCustomParserRTTI.TypeInfoToSimpleRTTIType(info)];
+        if result=djNone then
+          goto Bin;
+      end;
+      1:  result := djByte;
+      2:  result := djWord;
+      4:  result := djInteger;
+      8:  result := djInt64;
+      16: result := djHash128;
+      32: result := djHash256;
+      64: result := djHash512;
+      else fKnownSize := field^.Offset;
+      end;
+    end else
+    result := RTTI[TJSONCustomParserRTTI.TypeInfoToSimpleRTTIType(fElemType)];
   end;
   if KNOWNTYPE_SIZE[result]<>0 then
     fKnownSize := KNOWNTYPE_SIZE[result];
@@ -48225,15 +48201,13 @@ begin
       {$ifdef FPC}Move{$else}MoveFast{$endif}(Source^,P^,n);
       inc(Source,n);
     end else
-    case PTypeKind(ElemType)^ of
-    tkRecord{$ifdef FPC},tkObject{$endif}:
+    if PTypeKind(ElemType)^ in tkRecordTypes then
       for i := 1 to n do begin
         Source := RecordLoad(P^,Source,ElemType);
         if Assigned(AfterEach) then
           AfterEach(P^);
         inc(P,ElemSize);
-      end;
-    else
+      end else
       for i := 1 to n do begin
         ManagedTypeLoad(P,Source,ElemType);
         if Source=nil then
@@ -48242,7 +48216,6 @@ begin
           AfterEach(P^);
         inc(P,ElemSize);
       end;
-    end;
   // check security checksum
   if NoCheckHash or (Source=nil) or
      (Hash32(@Hash[1],Source-PAnsiChar(@Hash[1]))=Hash[0]) then
@@ -49846,7 +49819,7 @@ end;
 procedure TDynArrayHashed.Init(aTypeInfo: pointer; var aValue;
   aHashElement: TDynArrayHashOne; aCompare: TDynArraySortCompare;
   aHasher: THasher; aCountPointer: PInteger; aCaseInsensitive: boolean);
-var aKind: TDynArrayKind;
+var k: TDynArrayKind;
 begin
   {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$else}inherited{$endif}
     Init(aTypeInfo,aValue,aCountPointer);
@@ -49856,12 +49829,12 @@ begin
     fHasher := DefaultHasher else
     fHasher := aHasher;
   if (@aHashElement=nil) or (@aCompare=nil) then begin
-    // it's faster to retrieve now the hashing/compare function than in HashOne
-    aKind := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}ToKnownType;
+    // it's faster to retrieve now the hashing/compare function once here
+    k := {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}ToKnownType;
     if @aHashElement=nil then
-      aHashElement := DYNARRAY_HASHFIRSTFIELD[aCaseInsensitive,aKind];
+      aHashElement := DYNARRAY_HASHFIRSTFIELD[aCaseInsensitive,k];
     if @aCompare=nil then
-      aCompare := DYNARRAY_SORTFIRSTFIELD[aCaseInsensitive,aKind];
+      aCompare := DYNARRAY_SORTFIRSTFIELD[aCaseInsensitive,k];
   end;
   fHashElement := aHashElement;
   {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare := aCompare;
