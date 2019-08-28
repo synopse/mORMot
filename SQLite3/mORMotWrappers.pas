@@ -1525,6 +1525,7 @@ end;
 
 procedure TServiceClientCommandLine.ShowHelp;
 begin
+  ToConsole('% %'#13#10, [fExe, ExeVersion.Version.DetailedOrVoid], ccLightGreen);
   ToConsole(EXECUTEFROMCOMMANDLINEHELP, [fExe, fExe, fExe, fExe]);
 end;
 
