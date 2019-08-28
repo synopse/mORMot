@@ -1443,7 +1443,7 @@ begin
   inherited Create(aConnection);
   fOleDBConnection := TOleDBConnection(aConnection);
   fParam.Init(TypeInfo(TOleDBStatementParamDynArray),fParams,@fParamCount);
-  fColumn.Init(TypeInfo(TSQLDBColumnPropertyDynArray),fColumns,nil,nil,nil,@fColumnCount,True);
+  fColumn.InitSpecific(TypeInfo(TSQLDBColumnPropertyDynArray),fColumns,djRawUTF8,@fColumnCount,True);
   fRowBufferSize := 16384;
   fAlignBuffer := true;
 end;
@@ -1615,7 +1615,7 @@ begin
     ftCurrency: result := Curr64ToStr(V^.Int64);
     ftDouble:
       if V^.Int64=0 then
-        result := '0' else
+        result := SmallUInt32UTF8[0] else
         result := DoubleToStr(V^.Double);
     end;
 end;

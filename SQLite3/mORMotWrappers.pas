@@ -245,6 +245,41 @@ function GenerateAsynchServices(const services: array of TGUID;
   DefaultDelay: integer; const CustomDelays: array of const): RawUTF8;
 
 
+type
+  /// event handler to let ExecuteFromCommandLine call a remote server
+  // - before call, aParams.InBody will be set with the expected JSON content
+  TOnCommandLineCall = procedure(const aService: TInterfaceFactory; aMethod: PServiceMethod;
+    var aParams: TSQLRestURIParams) of object;
+
+const
+  /// help information displayed by ExecuteFromCommandLine() with no command
+  EXECUTEFROMCOMMANDLINEHELP =
+   ' % help  -> show all services (interfaces)'#13#10 +
+   ' % [service] [help]  -> show all methods of a given service'#13#10 +
+   ' % [service] [method] help -> show parameters of a given method'#13#10 +
+   ' % [options] [service] [method] [parameters] -> call a given method ' +
+   {$ifdef MSWINDOWS}
+   'with [parameters] being name=value or name=""value with spaces"" or ' +
+   'name:={""some"":""json""}' +
+   ' and [options] as /nocolor /pipe /headers /verbose /noexpand /nobody';
+   {$else}
+   'with [parameters] being name=value or name=''"value with spaces"'' or ' +
+   'name:=''{"some":"json"}''' +
+   ' and [options] as --nocolor --pipe --headers --verbose --noexpand --nobody';
+   {$endif MSWINDOWS}
+
+/// command-line SOA remote access to mORMot interface-based services
+// - supports the following EXECUTEFROMCOMMANDLINEHELP commands
+// - you shall have registered the aServices interface(s) by a previous call to
+// the overloaded Get(TypeInfo(IMyInterface)) method or RegisterInterfaces()
+// - you may specify an optional description file, as previously generated
+// by mORMotWrappers' FillDescriptionFromSource function - a local
+// 'WrappersDescription' resource will also be checked
+// - to actually call the remote server, aOnGetClient should be supplied
+procedure ExecuteFromCommandLine(const aServices: array of TGUID;
+  const aOnCall: TOnCommandLineCall; const aDescriptions: TFileName = '');
+
+
 implementation
 
 type
@@ -821,7 +856,7 @@ end;
 procedure RegisterType(var list: TDocVariantData);
 var info: variant;
     item: PTypeInfo;
-    itemSize, itemLen,dataSize,fieldSize: integer;
+    itemSize: integer;
     objArray: PClassInstance;
     objArrayType: TWrapperType;
     parser: TJSONRecordAbstract;
@@ -856,12 +891,8 @@ begin
           _ObjAddProps(['isObjArray',true],info);
         end;
       end;
-      if VarIsEmptyOrNull(info) then begin
-        itemLen := DynArrayItemTypeLen(typName);
-        if (itemLen>0) and TJSONCustomParserRTTI.TypeNameToSimpleBinary(
-          copy(typName,1,itemLen),dataSize,fieldSize) then
-            info := ContextFromInfo(wRawUTF8);
-      end;
+      if VarIsEmptyOrNull(info) and DynArrayItemTypeIsSimpleBinary(typName) then
+        info := ContextFromInfo(wRawUTF8);
       if VarIsEmptyOrNull(info) then
         info := ContextFromInfo(TYPES_SIZE[itemSize]);
     end else
@@ -1392,6 +1423,323 @@ end;
 {$ifdef ISDELPHI20062007}
   {$WARNINGS ON} // circument Delphi 2007 false positive warning
 {$endif}
+
+{ TServiceClientCommandLine }
+
+type
+  TServiceClientCommandLineOptions = set of (
+    cloNoColor, cloPipe, cloHeaders, cloVerbose, cloNoExpand, cloNoBody);
+
+  /// a class implementing ExecuteFromCommandLine()
+  TServiceClientCommandLine = class(TSynPersistent)
+  protected
+    fExe: RawUTF8;
+    fOptions: TServiceClientCommandLineOptions;
+    fServices: array of TInterfaceFactory;
+    fDescriptions: TDocVariantData;
+    fOnCall: TOnCommandLineCall;
+    procedure ToConsole(const Fmt: RawUTF8; const Args: array of const;
+      Color: TConsoleColor = ccLightGray; NoLineFeed: boolean = false);
+    function Find(const name: RawUTF8; out service: TInterfaceFactory): boolean;
+    procedure WriteDescription(desc: RawUTF8; color: TConsoleColor; firstline: boolean);
+    procedure ShowHelp;
+    procedure ShowAllServices;
+    procedure ShowService(service: TInterfaceFactory);
+    procedure ShowMethod(service: TInterfaceFactory; method: PServiceMethod);
+    procedure ExecuteMethod(service: TInterfaceFactory; method: PServiceMethod;
+      firstparam: integer);
+  public
+    constructor Create(const aServices: array of TGUID;
+      const aOnCall: TOnCommandLineCall;
+  const aDescriptions: TFileName); reintroduce;
+    procedure Execute;
+    destructor Destroy; override;
+  end;
+
+{$I-}
+
+procedure TServiceClientCommandLine.ToConsole(const Fmt: RawUTF8;
+  const Args: array of const; Color: TConsoleColor; NoLineFeed: boolean);
+begin
+  ConsoleWrite(FormatUTF8(Fmt, Args), Color, NoLineFeed, cloNoColor in fOptions);
+end;
+
+function TServiceClientCommandLine.Find(const name: RawUTF8;
+  out service: TInterfaceFactory): boolean;
+var
+  s: integer;
+begin
+  for s := 0 to high(fServices) do
+    if IdemPropNameU(fServices[s].InterfaceURI, name) then begin
+      service := fServices[s];
+      result := true;
+      exit;
+    end;
+  result := false;
+end;
+
+procedure TServiceClientCommandLine.WriteDescription(desc: RawUTF8;
+  color: TConsoleColor; firstline: boolean);
+var
+  line: RawUTF8;
+  P: PUTF8Char;
+  i, j, k, l: integer;
+begin
+  if not(cloNoColor in fOptions) then
+    TextColor(color);
+  if firstline then
+    SetLength(desc, PosExChar(#13, desc) - 1);
+  if desc = '' then
+    exit;
+  P := pointer(desc);
+  repeat
+    line := GetNextLine(P,P);
+    if line = '' then
+      continue;
+    if line = '----' then begin
+      if not(cloNoColor in fOptions) then
+        TextColor(ccBrown);
+    end
+    else begin
+      line := StringReplaceAll(StringReplaceAll(StringReplaceAll(
+        line, '`', ''),'<<', ''), '>>', '');
+      i := 1;
+      repeat
+        j := PosEx('[', line, i);
+        if j = 0 then
+          break;
+        k := PosEx('](', line, j + 1);
+        if k = 0 then
+          break;
+        l := PosEx(')', line, k + 2);
+        if l = 0 then
+          break;
+        delete(line, k, l - k + 1);
+        delete(line, j, 1);
+        i := k;
+      until false;
+      writeln(line);
+    end;
+  until P = nil;
+end;
+
+procedure TServiceClientCommandLine.ShowHelp;
+begin
+  ToConsole('% %'#13#10, [fExe, ExeVersion.Version.DetailedOrVoid], ccLightGreen);
+  ToConsole(EXECUTEFROMCOMMANDLINEHELP, [fExe, fExe, fExe, fExe]);
+end;
+
+procedure TServiceClientCommandLine.ShowAllServices;
+var
+  i: integer;
+begin
+  for i := 0 to high(fServices) do begin
+    ToConsole('% %', [fExe, fServices[i].InterfaceURI], ccWhite);
+    WriteDescription(fDescriptions.U[fServices[i].InterfaceName], ccLightGray, true);
+  end;
+end;
+
+procedure TServiceClientCommandLine.ShowService(service: TInterfaceFactory);
+var
+  m: integer;
+begin
+  ToConsole('% %', [fExe, service.InterfaceURI], ccWhite);
+  WriteDescription(fDescriptions.U[service.InterfaceName], ccLightGray, false);
+  for m := 0 to service.MethodsCount - 1 do
+    with service.Methods[m] do begin
+      ToConsole('% % % [parameters]', [fExe, service.InterfaceURI, URI], ccWhite);
+      WriteDescription(fDescriptions.U[InterfaceDotMethodName], ccLightGray, true);
+    end;
+end;
+
+procedure TServiceClientCommandLine.ShowMethod(service: TInterfaceFactory;
+  method: PServiceMethod);
+
+  procedure Arguments(input: boolean);
+  const IN_OUT: array[boolean] of RawUTF8 = ('OUT', ' IN');
+  var
+    i: integer;
+    line, typ: RawUTF8;
+  begin
+    ToConsole('%', [IN_OUT[input]], ccDarkGray, {nolinefeed=}true);
+    if not input and method^.ArgsResultIsServiceCustomAnswer then
+      line := ' is undefined'
+    else begin
+      line := ' { ';
+      i := 0;
+      while method^.ArgNext(i, input) do
+        with method^.Args[i] do begin
+          typ := TYPES_LANG[lngCS, TYPES_SOA[ValueType]];
+          if typ = '' then
+            ShortStringToAnsi7String(ArgTypeName^, typ);
+          line := FormatUTF8('%"%":%, ', [line, ParamName^,  typ]);
+        end;
+      i := length(line);
+      line[i - 1] := ' ';
+      line[i] := '}';
+    end;
+    ToConsole('%', [line], ccDarkGray);
+  end;
+
+begin
+  ToConsole('% % % [parameters]', [fExe, service.InterfaceURI, method.URI], ccWhite);
+  WriteDescription(fDescriptions.U[method.InterfaceDotMethodName], ccLightGray, false);
+  if method.ArgsInputValuesCount <> 0 then
+    Arguments({input=}true);
+  if method.ArgsOutputValuesCount <> 0 then
+    Arguments({input=}false);
+end;
+
+procedure TServiceClientCommandLine.ExecuteMethod(service: TInterfaceFactory;
+  method: PServiceMethod; firstparam: integer);
+var
+  params, result: RawUTF8;
+  i: integer;
+  cc: TConsoleColor;
+  call: TSQLRestURIParams;
+begin
+  call.Init;
+  if cloPipe in fOptions then
+    call.InBody := ConsoleReadBody
+  else begin
+    for i := firstparam to ParamCount do
+      params := FormatUTF8('% %', [params, ParamStr(i)]);
+    //writeln(params); // for debugging
+    call.InBody := method^.ArgsCommandLineToObject(pointer(params), {input=}true, true);
+  end;
+  // writeln(call.InBody); exit;
+  if [cloVerbose, cloHeaders] * fOptions <> [] then
+    ToConsole('POST %', [method.InterfaceDotMethodName], ccLightGray);
+  if cloVerbose in fOptions then
+    ToConsole('%', [call.InBody], ccLightBlue);
+  if not Assigned(fOnCall) then
+    raise EServiceException.CreateUTF8('No Client available to call %',
+      [method.InterfaceDotMethodName]);
+  fOnCall(service, method, call); // will set URI + Bearer
+  if [cloVerbose, cloHeaders] * fOptions <> [] then
+    ToConsole('HTTP %'#13#10'%', [call.OutStatus, call.OutHead], ccLightGray);
+  if (call.OutBody <> '') and (call.OutBody[1] = '[') then
+    call.OutBody := method^.ArgsArrayToObject(pointer(call.OutBody), false);
+  if cloNoBody in fOptions then
+    FormatUTF8('% bytes received', [length(call.OutBody)], result)
+  else if (cloNoExpand in fOptions) or not call.OutBodyTypeIsJson then
+    result := call.OutBody
+  else
+    JSONBufferReformat(pointer(call.OutBody), result);
+  cc := ccWhite;
+  if not StatusCodeIsSuccess(call.OutStatus) then
+    cc := ccLightRed;
+  ToConsole('%', [result], cc, {nofeed=}true);
+end;
+
+constructor TServiceClientCommandLine.Create(const aServices: array of TGUID;
+  const aOnCall: TOnCommandLineCall; const aDescriptions: TFileName);
+var
+  desc: RawByteString;
+  n, s, i: integer;
+begin
+  inherited Create;
+  fExe := {$ifndef MSWINDOWS}'./' + {$endif} ExeVersion.ProgramName;
+  n := length(aServices);
+  SetLength(fServices, n);
+  s := 0;
+  for i := 0 to n - 1 do begin
+    fServices[s] := TInterfaceFactory.Get(aServices[i]);
+    if fServices[s] <> nil then
+      inc(s);
+  end;
+  if s = 0 then
+    raise EServiceException.Create('ExecuteFromCommandLine: no service - did you call RegisterInterfaces()?');
+  if s <> n then
+    SetLength(fServices, s);
+  fOnCall := aOnCall;
+  TDocVariant.NewFast([@fDescriptions]);
+  if aDescriptions <> '' then
+    desc := StringFromFile(aDescriptions);
+  if desc = '' then
+    ResourceSynLZToRawByteString(WRAPPER_RESOURCENAME, desc);
+  if desc <> '' then
+    fDescriptions.InitJSONInPlace(pointer(desc), JSON_OPTIONS_FAST);
+end;
+
+procedure TServiceClientCommandLine.Execute;
+var
+  p: array[0..3] of RawUTF8;
+  a: PUTF8Char;
+  i, j, n, first: integer;
+  s: TInterfaceFactory;
+  m: PServiceMethod;
+begin
+  first := 3;
+  n := 0;
+  for i := 1 to ParamCount do begin
+    StringToUTF8(ParamStr(i), p[n]);
+    a := pointer(p[n]);
+    if a^ in ['-', '/'] then begin
+      inc(a);
+      if a^ = '-' then
+        inc(a);
+      j := PTypeInfo(TypeInfo(TServiceClientCommandLineOptions))^.SetEnumType^.
+        GetEnumNameTrimedValue(a);
+      if j >= 0 then begin
+        SetBitPtr(@fOptions, j);
+        if n < high(p) then
+          inc(first);
+        continue;
+      end;
+      raise EServiceException.CreateUTF8('%.Execute: unknown option "%"', [self, p[n]]);
+    end;
+    if n < high(p) then
+      inc(n);
+  end;
+  case n of
+  0:
+    ShowHelp;
+  1:
+    if Find(p[0], s) then
+      ShowService(s)
+    else
+      ShowAllServices;
+  else
+    if Find(p[0], s) then begin
+      m := s.FindMethod(p[1]);
+      if m = nil then
+        ShowService(s)
+      else
+        if IdemPropNameU(p[2], 'help') or
+            ((m^.ArgsInputValuesCount <> 0) and (PosExChar('=', p[2]) = 0)) then
+          ShowMethod(s, m)
+        else
+          ExecuteMethod(s, m, first);
+    end
+    else
+      ShowAllServices;
+  end;
+  ToConsole('', [], ccDarkGray);
+end;
+
+destructor TServiceClientCommandLine.Destroy;
+begin
+  inherited Destroy;
+end;
+
+{$I+}
+
+procedure ExecuteFromCommandLine(const aServices: array of TGUID;
+  const aOnCall: TOnCommandLineCall; const aDescriptions: TFileName);
+begin
+  with TServiceClientCommandLine.Create(aServices, aOnCall, aDescriptions) do
+    try
+      try
+        Execute;
+      except
+        on E: Exception do
+          ConsoleShowFatalException(E, {waitforkey=}false);
+      end;
+    finally
+      Free;
+    end;
+end;
 
 end.
 

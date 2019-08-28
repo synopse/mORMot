@@ -5642,7 +5642,7 @@ end;
 
 procedure TSQLStatementCached.Init(aDB: TSQLite3DB);
 begin
-  Caches.Init(TypeInfo(TSQLStatementCacheDynArray),Cache,nil,nil,nil,@Count);
+  Caches.InitSpecific(TypeInfo(TSQLStatementCacheDynArray),Cache,djRawUTF8,@Count);
   DB := aDB;
 end;
 

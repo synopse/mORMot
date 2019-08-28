@@ -3197,6 +3197,7 @@ type
     fResultCount: integer;
     fParam: TDynArrayHashed;
     fParamCount: Integer;
+    fTag: PtrInt;
     function GetIsEmpty: Boolean;
     function GetActive: Boolean;
     function GetFieldCount: integer;
@@ -3289,6 +3290,9 @@ type
     /// non VCL property to access the internal SynDB prepared statement
     // - is nil if the TQuery is not prepared (e.g. after Close)
     property PreparedSQLDBStatement: ISQLDBStatement read fPrepared;
+    /// user-customizable number attached to this instance
+    // - for compatibility with TComponent
+    property Tag: PtrInt read fTag write fTag;
   end;
 
 {$endif EMULATES_TQUERY}
@@ -3783,8 +3787,8 @@ begin
   fConnection := aConnection;
   fSQL := TStringList.Create;
   fSQL.OnChange := OnSQLChange;
-  fParam.Init(TypeInfo(TQueryValueDynArray),fParams,nil,nil,nil,@fParamCount,true);
-  fResult.Init(TypeInfo(TQueryValueDynArray),fResults,nil,nil,nil,@fResultCount,true);
+  fParam.InitSpecific(TypeInfo(TQueryValueDynArray),fParams,djString,@fParamCount,true);
+  fResult.InitSpecific(TypeInfo(TQueryValueDynArray),fResults,djString,@fResultCount,true);
 end;
 
 destructor TQuery.Destroy;
@@ -7968,7 +7972,7 @@ end;
 constructor TSQLDBStatementWithParamsAndColumns.Create(aConnection: TSQLDBConnection);
 begin
   inherited Create(aConnection);
-  fColumn.Init(TypeInfo(TSQLDBColumnPropertyDynArray),fColumns,nil,nil,nil,@fColumnCount,True);
+  fColumn.InitSpecific(TypeInfo(TSQLDBColumnPropertyDynArray),fColumns,djRawUTF8,@fColumnCount,True);
 end;
 
 

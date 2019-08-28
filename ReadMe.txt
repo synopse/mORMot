@@ -12,6 +12,7 @@ Contributors
   Alexander (volax)
   AlexPirate
   Alfred Glaenzer (alf)
+  Andre Heider (dhewg)
   Arnaud Bouchez
   ASiwon
   Aweste

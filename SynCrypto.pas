@@ -1,6 +1,6 @@
 /// fast cryptographic routines (hashing and cypher)
 // - implements AES,XOR,ADLER32,MD5,RC4,SHA1,SHA256,SHA384,SHA512,SHA3 and JWT
-// - optimized for speed (tuned assembler and AES-NI / PADLOCK support)
+// - optimized for speed (tuned assembler and SSE3/SSE4/AES-NI/PADLOCK support)
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynCrypto;
