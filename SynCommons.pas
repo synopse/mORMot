@@ -19407,7 +19407,7 @@ begin
       result := RawUTF8(VAnsiString); // expect UTF-8 content
     {$ifdef HASVARUSTRING}
     vtUnicodeString:
-      result := UnicodeStringToUtf8(UnicodeString(VUnicodeString));
+      RawUnicodeToUtf8(VUnicodeString,length(UnicodeString(VUnicodeString)),result);
     {$endif}
     vtWideString:
       RawUnicodeToUtf8(VWideString,length(WideString(VWideString)),result);
