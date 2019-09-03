@@ -408,41 +408,73 @@ var
   // setup this global instance before using any of its internal functions
   // - see also https://curl.haxx.se/libcurl/c/libcurl-multi.html interface
   curl: packed record
+    /// hold a reference to the loaded library
+    // - PtrInt(Module)=0 before initialization, or PtrInt(Module) = -1
+    // on initialization failure, or PtrInt(Module)>0 if loaded
     {$ifdef FPC}
     Module: TLibHandle;
     {$else}
     Module: THandle;
     {$endif FPC}
+    /// initialize the library
     global_init: function(flags: TCurlGlobalInit): TCurlResult; cdecl;
+    /// finalize the library
     global_cleanup: procedure; cdecl;
+    /// returns run-time libcurl version info
     version_info: function(age: TCurlVersion): PCurlVersionInfo; cdecl;
+    // start a libcurl easy session
     easy_init: function: pointer; cdecl;
+    /// set options for a curl easy handle
     easy_setopt: function(curl: TCurl; option: TCurlOption): TCurlResult; cdecl varargs;
+    /// perform a blocking file transfer
     easy_perform: function(curl: TCurl): TCurlResult; cdecl;
+    /// end a libcurl easy handle
     easy_cleanup: procedure(curl: TCurl); cdecl;
+    /// extract information from a curl handle
     easy_getinfo: function(curl: TCurl; info: TCurlInfo; out value): TCurlResult; cdecl;
+    /// clone a libcurl session handle
     easy_duphandle: function(curl: TCurl): pointer; cdecl;
+    /// reset all options of a libcurl session handle
     easy_reset: procedure(curl: TCurl); cdecl;
+    /// return string describing error code
     easy_strerror: function(code: TCurlResult): PAnsiChar; cdecl;
+    /// add a string to an slist
     slist_append: function(list: TCurlSList; s: PAnsiChar): TCurlSList; cdecl;
+    /// free an entire slist
     slist_free_all: procedure(list: TCurlSList); cdecl;
     {$ifdef LIBCURLMULTI}
+    /// add an easy handle to a multi session
     multi_add_handle: function(mcurl: TCurlMulti; curl: TCurl): TCurlMultiCode; cdecl;
+    /// set data to associate with an internal socket
     multi_assign: function(mcurl: TCurlMulti; socket: TCurlSocket; data: pointer): TCurlMultiCode; cdecl;
+    /// close down a multi session
     multi_cleanup: function(mcurl: TCurlMulti): TCurlMultiCode; cdecl;
+    /// extracts file descriptor information from a multi handle
     multi_fdset: function(mcurl: TCurlMulti; read, write, exec: PFDSet; out max: integer): TCurlMultiCode; cdecl;
+    /// read multi stack informationals
     multi_info_read: function(mcurl: TCurlMulti; out msgsqueue: integer): PCurlMsgRec; cdecl;
+    /// create a multi handle
     multi_init: function: TCurlMulti; cdecl;
+    /// reads/writes available data from each easy handle
     multi_perform: function(mcurl: TCurlMulti; out runningh: integer): TCurlMultiCode; cdecl;
+    /// remove an easy handle from a multi session
     multi_remove_handle: function(mcurl: TCurlMulti; curl: TCurl): TCurlMultiCode; cdecl;
+    /// set options for a curl multi handle
     multi_setopt: function(mcurl: TCurlMulti; option: TCurlMultiOption): TCurlMultiCode; cdecl varargs;
+    /// reads/writes available data given an action
     multi_socket_action: function(mcurl: TCurlMulti; socket: TCurlSocket; mask: Integer; out runningh: integer): TCurlMultiCode; cdecl;
+    /// reads/writes available data - deprecated call
     multi_socket_all: function(mcurl: TCurlMulti; out runningh: integer): TCurlMultiCode; cdecl;
+    /// return string describing error code
     multi_strerror: function(code: TCurlMultiCode): PAnsiChar; cdecl;
+    /// retrieve how long to wait for action before proceeding
     multi_timeout: function(mcurl: TCurlMulti; out ms: integer): TCurlMultiCode; cdecl;
+    /// polls on all easy handles in a multi handle
     multi_wait: function(mcurl: TCurlMulti; fds: PCurlWaitFD; fdscount: cardinal; ms: integer; out ret: integer): TCurlMultiCode; cdecl;
     {$endif LIBCURLMULTI}
+    /// contains numerical information about the initialized libcurl instance
     info: TCurlVersionInfo;
+    /// contains textual information about the initialized libcurl instance
     infoText: string;
   end;
 
