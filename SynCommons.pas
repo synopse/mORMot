@@ -47,7 +47,7 @@ unit SynCommons;
    - PBa
    - RalfS
    - Sanyin
-   - Pavel (mpv)
+   - Pavel Mashlyakovskii (mpv)
    - Wloochacz
    - zed
 
