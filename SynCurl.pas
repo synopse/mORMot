@@ -79,8 +79,10 @@ uses
 
 const
   /// low-level libcurl library file name, depending on the running OS
-  LIBCURL_DLL = {$ifdef Darwin} 'libcurl.dylib' {$else}
-    {$ifdef Linux} 'libcurl.so' {$else} 'libcurl-x64.dll' {$endif}{$endif};
+  LIBCURL_DLL = {$ifdef Darwin} 'libcurl.dylib'   {$else}
+                {$ifdef Linux}  'libcurl.so'      {$else}
+                {$ifdef CPU64}  'libcurl-x64.dll' {$else}
+                                'libcurl.dll' {$endif}{$endif}{$endif};
 
 {$Z4}
 type
