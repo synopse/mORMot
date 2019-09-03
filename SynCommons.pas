@@ -21047,7 +21047,7 @@ begin
   if aValueLen<>0 then
   for result := 0 to MaxValue do begin
     PLen := ord(List^[0]);
-    if (PLen=aValuelen) and IdemPropNameUSameLen(@List^[1],aValue,aValueLen) then
+    if (PLen=aValuelen) and IdemPropNameUSameLen(@List^[1],aValue,PLen) then
       exit;
     inc(PByte(List),PLen+1); // next short string
   end;
@@ -39822,7 +39822,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
     source := VariantLoad(PVariant(data)^,source,@JSON_OPTIONS[true]);
     result := SizeOf(Variant); // size of tkVariant in record
   end;
-  {$endif}
+  {$endif NOVARIANTS}
   tkDynArray: begin
     DynArray.Init(info,data^);
     source := DynArray.LoadFrom(source);
@@ -39834,7 +39834,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
     inc(source,SizeOf(Int64)); // consume 64-bit even on CPU32
     result := SizeOf(PtrUInt);
   end;
-  {$endif}
+  {$endif DELPHI5OROLDER}
   else begin
     source := nil;
     result := 0;
@@ -39854,7 +39854,7 @@ begin
 begin
   firstfield := @info^.ManagedFields[0];
   result := info^.ManagedCount;
-{$endif}
+{$endif FPC_NEWRTTI}
 end;
 
 function RecordEquals(const RecA, RecB; TypeInfo: pointer;
