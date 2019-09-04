@@ -4916,7 +4916,7 @@ type
   TSQLURIMethods = set of TSQLURIMethod;
 
 /// convert a string HTTP verb into its TSQLURIMethod enumerate
-function StringToMethod(const method: RawUTF8): TSQLURIMethod;
+function ToMethod(const method: RawUTF8): TSQLURIMethod;
 
 var
   /// the options used by TSynJsonFileSettings.SaveIfNeeded
@@ -24828,18 +24828,21 @@ begin
       result := URI+'&authenticationbearer='+URIAuthenticationBearer
 end;
 
-function StringToMethod(const method: RawUTF8): TSQLURIMethod;
-const NAME: array[mGET..high(TSQLURIMethod)] of string[11] = ( // sorted by occurence
+function ToMethod(const method: RawUTF8): TSQLURIMethod;
+const NAME: array[mGET..high(TSQLURIMethod)] of string[10] = ( // sorted by occurence
   'GET','POST','PUT','DELETE','HEAD','BEGIN','END','ABORT','LOCK','UNLOCK','STATE',
   'OPTIONS','PROPFIND','PROPPATCH','TRACE','COPY','MKCOL','MOVE','PURGE','REPORT',
   'MKACTIVITY','MKCALENDAR','CHECKOUT','MERGE','NOTIFY','PATCH','SEARCH','CONNECT');
-var URIMethodUp: string[11];
+var L: PtrInt;
+    N: PShortString;
 begin
-  if Length(method)<11 then begin
-    URIMethodUp[0] := AnsiChar(UpperCopy(@URIMethodUp[1],method)-@URIMethodUp[1]);
+  L := Length(method);
+  if L<11 then begin
+    N := @NAME;
     for result := low(NAME) to high(NAME) do
-      if URIMethodUp=NAME[result] then
-        exit;
+      if (L=ord(N^[0])) and IdemPropNameUSameLen(@N^[1],pointer(method),L) then
+        exit else
+        inc(PByte(N),11);
   end;
   result := mNone;
 end;
