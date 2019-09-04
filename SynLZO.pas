@@ -52,7 +52,7 @@ unit SynLZO;
       written in optimized pascal code for Delphi 3 up to Delphi 2009
       with a tuned asm version available
     * offers *extremely* fast compression and decompression
-      with good compression rate, in comparaison with its speed
+      with good compression rate, in comparison with its speed
     * original LZO written in ANSI C - pascal+asm conversion by A.Bouchez
     * simple but very fast direct file compression:
       SynLZO compressed files read/write is faster than copying plain files!
