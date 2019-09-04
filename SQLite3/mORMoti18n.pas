@@ -1315,7 +1315,7 @@ begin
       (LanguageCharSet[LCIDToLanguage(GetUserDefaultLCID)]=CharSet) then begin
       // NormToUpper/Lower[] was filled with LOCALE_USER_DEFAULT values
       // -> OK if same CHARSET, and not multi-byte
-      i18nCompareStr := // not MBCS strict comparison is always valid
+      i18nCompareStr := // not MBCS strict comparaison is always valid
         {$ifdef ENHANCEDRTL}CompareStr{$else}i18nInnerCompareStr{$endif};
       // CompareText in SysUtils.pas uses NormToUpper[], this uses i18nToUpper[]:
       i18nCompareText := i18nInnerCompareText;

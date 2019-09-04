@@ -1377,7 +1377,7 @@ function ToUTF8({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUI
 {$ifndef NOVARIANTS}
 
 type
-  /// function prototype used internally for variant comparison
+  /// function prototype used internally for variant comparaison
   // - used in mORMot.pas unit e.g. by TDocVariantData.SortByValue
   TVariantCompare = function(const V1,V2: variant): PtrInt;
 
@@ -1772,7 +1772,7 @@ function VarRecAsChar(const V: TVarRec): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
 type
-  /// function prototype used internally for UTF-8 buffer comparison
+  /// function prototype used internally for UTF-8 buffer comparaison
   // - used in mORMot.pas unit during TSQLTable rows sort and by TSQLQuery
   TUTF8Compare = function(P1,P2: PUTF8Char): PtrInt;
 
@@ -2814,7 +2814,7 @@ function UpperCopyShort(dest: PAnsiChar; const source: shortstring): PAnsiChar;
 
 {$ifdef USENORMTOUPPER}
 
-/// fast UTF-8 comparison using the NormToUpper[] array for all 8 bits values
+/// fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits values
 // - this version expects u1 and u2 to be zero-terminated
 // - this version will decode each UTF-8 glyph before using NormToUpper[]
 // - current implementation handles UTF-16 surrogates
@@ -2834,7 +2834,7 @@ function UTF8UpperCopy(Dest, Source: PUTF8Char; SourceChars: Cardinal): PUTF8Cha
 function UTF8UpperCopy255(dest: PAnsiChar; const source: RawUTF8): PUTF8Char;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// fast UTF-8 comparison using the NormToUpper[] array for all 8 bits values
+/// fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits values
 // - this version expects u1 and u2 not to be necessary zero-terminated, but
 // uses L1 and L2 as length for u1 and u2 respectively
 // - use this function for SQLite3 collation (TSQLCollateFunc)
@@ -2842,7 +2842,7 @@ function UTF8UpperCopy255(dest: PAnsiChar; const source: RawUTF8): PUTF8Char;
 // - current implementation handles UTF-16 surrogates
 function UTF8ILComp(u1, u2: PUTF8Char; L1,L2: cardinal): PtrInt;
 
-/// fast case-insensitive Unicode comparison
+/// fast case-insensitive Unicode comparaison
 // - use the NormToUpperAnsi7Byte[] array, i.e. compare 'a'..'z' as 'A'..'Z'
 // - this version expects u1 and u2 to be zero-terminated
 function AnsiICompW(u1, u2: PWideChar): PtrInt;
@@ -2944,7 +2944,7 @@ function TrimLeft(const S: RawUTF8): RawUTF8;
 // newline, space, and tab characters
 function TrimRight(const S: RawUTF8): RawUTF8;
 
-/// fast WinAnsi comparison using the NormToUpper[] array for all 8 bits values
+/// fast WinAnsi comparaison using the NormToUpper[] array for all 8 bits values
 function AnsiIComp(Str1, Str2: PWinAnsiChar): PtrInt;
   {$ifndef USENORMTOUPPER} {$ifdef PUREPASCAL}
   {$ifdef HASINLINE}inline;{$endif} {$endif} {$endif}
@@ -11259,7 +11259,7 @@ function UInt2DigitsToShortFast(Value: byte): TShort4;
 // - this version is not optimized for speed, but for correctness
 function crc16(Data: PAnsiChar; Len: integer): cardinal;
 
-// our custom hash/checksum function, specialized for Text comparison
+// our custom hash/checksum function, specialized for Text comparaison
 // - it is a checksum algorithm, not a hash function: has less colision than
 // Adler32 for short strings, but more than xxhash32 or crc32/crc32c
 // - written in simple plain pascal, with no L1 CPU cache pollution
@@ -11288,7 +11288,7 @@ function crc16(Data: PAnsiChar; Len: integer): cardinal;
 // $ hash32 9.7KB in 487us i.e. 1,026,694/s, aver. 0us, 9.5 GB/s
 function Hash32(Data: PCardinalArray; Len: integer): cardinal; overload;
 
-// our custom hash/checsum function, specialized for Text comparison
+// our custom hash/checsum function, specialized for Text comparaison
 // - it is a checksum algorithm, not a hash function: has less colision than
 // Adler32 for short strings, but more than xxhash32 or crc32/crc32c
 // - is faster than CRC32 or Adler32, since uses DQWord (128-bit) aligned read
@@ -12152,7 +12152,7 @@ function TimeLogToUnixTime(const Timestamp: TTimeLog): TUnixTime;
 
 /// convert a Iso8601 encoded string into a TTimeLog value
 // - handle TTimeLog bit-encoded Int64 format
-// - use this function only for fast comparison between two Iso8601 date/time
+// - use this function only for fast comparaison between two Iso8601 date/time
 // - conversion is faster than Iso8601ToDateTime: use only binary integer math
 // - ContainsNoTime optional pointer can be set to a boolean, which will be
 // set according to the layout in P (e.g. TRUE for '2012-05-26')
@@ -12161,7 +12161,7 @@ function Iso8601ToTimeLogPUTF8Char(P: PUTF8Char; L: integer; ContainsNoTime: PBo
 
 /// convert a Iso8601 encoded string into a TTimeLog value
 // - handle TTimeLog bit-encoded Int64 format
-// - use this function only for fast comparison between two Iso8601 date/time
+// - use this function only for fast comparaison between two Iso8601 date/time
 // - conversion is faster than Iso8601ToDateTime: use only binary integer math
 function Iso8601ToTimeLog(const S: RawByteString): TTimeLog;
   {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
@@ -23897,18 +23897,21 @@ end;
 
 function UpperCopy(dest: PAnsiChar; const source: RawUTF8): PAnsiChar;
 var s: PAnsiChar;
-    c: cardinal;
+    c: PtrInt;
+    lookupper: PByteArray; // better x86-64 / PIC asm generation
 begin
   s := pointer(source);
-  if s<>nil then
+  if s<>nil then begin
+    lookupper := @NormToUpperAnsi7Byte;
     repeat
       c := ord(s^);
       if c=0 then
         break else
-        dest^ := AnsiChar(NormToUpperAnsi7Byte[c]);
+        dest^ := AnsiChar(lookupper[c]);
       inc(s);
       inc(dest);
     until false;
+  end;
   result := dest;
 end;
 
@@ -25367,11 +25370,10 @@ end;
 
 function PosExChar(Chr: AnsiChar; const Str: RawUTF8): PtrInt;
 begin
-  {$ifdef FPC}
-  if Str<>'' then // // will use fast FPC SSE version
+  if Str<>'' then
+  {$ifdef FPC} // will use fast FPC SSE version
     result := IndexByte(pointer(Str)^,_LStrLen(Str),byte(chr))+1 else
   {$else}
-  if Str<>'' then
     for result := 1 to PInteger(PtrInt(Str)-sizeof(Integer))^ do
       if Str[result]=Chr then
         exit;
@@ -25515,7 +25517,7 @@ var j: integer;
 begin
   if (S='') or (OldPattern='') or (OldPattern=NewPattern) then
     result := S else begin
-    j := PosEx(OldPattern, S, 1); // our PosEx() is faster than Pos()
+    j := PosEx(OldPattern,S,1); // our PosEx() is faster than Pos()
     if j=0 then
       result := S else
       Process(j);
@@ -26698,7 +26700,7 @@ begin
 end;
 {$else}
 function AnsiIComp(Str1, Str2: PWinAnsiChar): PtrInt;
-asm // fast 8 bits WinAnsi comparison using the NormToUpper[] array
+asm // fast 8 bits WinAnsi comparaison using the NormToUpper[] array
         cmp     eax, edx
         je      @2
         test    eax, edx // is either of the strings perhaps nil?
@@ -26817,7 +26819,7 @@ end;
 function UTF8IComp(u1, u2: PUTF8Char): PtrInt;
 var c2: PtrInt;
     table: {$ifdef CPUX86NOTPIC}TNormTableByte absolute NormToUpperByte{$else}PNormTableByte{$endif};
-begin // fast UTF-8 comparison using the NormToUpper[] array for all 8 bits values
+begin // fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits values
   {$ifndef CPUX86NOTPIC}table := @NormToUpperByte;{$endif}
   if u1<>u2 then
   if u1<>nil then
@@ -26869,7 +26871,7 @@ var c2: PtrInt;
     extra,i: integer;
     table: {$ifdef CPUX86NOTPIC}TNormTableByte absolute NormToUpperByte{$else}PNormTableByte{$endif};
 label neg,pos;
-begin // fast UTF-8 comparison using the NormToUpper[] array for all 8 bits values
+begin // fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits values
   {$ifndef CPUX86NOTPIC}table := @NormToUpperByte;{$endif}
   if u1<>u2 then
   if (u1<>nil) and (L1<>0) then
@@ -32102,16 +32104,16 @@ function UpperCopyWin255(dest: PWinAnsiChar; const source: RawUTF8): PWinAnsiCha
 var i, L: integer;
     tab: {$ifdef CPUX86NOTPIC}TNormTableByte absolute NormToUpperByte{$else}PNormTableByte{$endif};
 begin
-  L := {$ifdef FPC}_LStrLen(source){$else}PInteger(PtrInt(source)-SizeOf(integer))^{$endif};
-  if L>0 then begin
+  if source='' then
+    result := dest else begin
+    L := {$ifdef FPC}_LStrLen(source){$else}PInteger(PtrInt(source)-SizeOf(integer))^{$endif};
     if L>250 then
       L := 250; // avoid buffer overflow
     result := dest+L;
     {$ifndef CPUX86NOTPIC}tab := @NormToUpperByte;{$endif} // faster on PIC and x86_64
     for i := 0 to L-1 do
       dest[i] := AnsiChar(tab[PByteArray(source)[i]]);
-  end else
-    result := dest;
+  end;
 end;
 
 function UTF8UpperCopy(Dest, Source: PUTF8Char; SourceChars: Cardinal): PUTF8Char;
