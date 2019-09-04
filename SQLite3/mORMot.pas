@@ -7715,7 +7715,7 @@ type
     // SQLite3 RowID)
     // - AnsiString are created as TEXT COLLATE NOCASE (fast SQLite3 7bits compare)
     // - RawUnicode and RawUTF8 are created as TEXT COLLATE SYSTEMNOCASE
-    // (i.e. use our fast UTF8IComp() for comparaison)
+    // (i.e. use our fast UTF8IComp() for comparison)
     // - TDateTime are created as TEXT COLLATE ISO8601
     // (which calls our very fast ISO TEXT to Int64 conversion routine)
     // - an individual bit set in UniqueField forces the corresponding field to
@@ -8122,7 +8122,7 @@ type
     // the published properties of this object
     // - instances must be of the same class type
     // - only simple fields (i.e. not TSQLRawBlob/TSQLRecordMany) are compared
-    // - comparaison is much faster than SameValues() below
+    // - comparison is much faster than SameValues() below
     function SameRecord(Reference: TSQLRecord): boolean;
     /// return true if all published properties values in Other are identical to
     // the published properties of this object
@@ -8689,7 +8689,7 @@ type
     // - you can specify a Row index to be updated during the sort in PCurrentRow
     // - sort is very fast, even for huge tables (more faster than any indexed
     // SQL query): 500,000 rows are sorted instantly
-    // - this optimized sort implementation does the comparaison first by the
+    // - this optimized sort implementation does the comparison first by the
     // designed field, and, if the field value is identical, the ID value is
     // used (it will therefore sort by time all identical values)
     procedure SortFields(Field: integer; Asc: boolean=true;
@@ -8728,7 +8728,7 @@ type
     // (X'53514C697465' e.g.)
     // - since TSQLTable data is PUTF8Char, string type is sftUTF8Text only
     function FieldType(Field: integer; out FieldTypeInfo: PSQLTableFieldType): TSQLFieldType; overload;
-    /// get the appropriate Sort comparaison function for a field,
+    /// get the appropriate Sort comparison function for a field,
     // nil if not available (bad field index or field is blob)
     // - field type is guessed from first data row
     function SortCompare(Field: integer): TUTF8Compare;
@@ -20588,32 +20588,32 @@ type
   // ! Model.VirtualTableRegister(TSQLRecordDali1,TSQLVirtualTableJSON);
   TSQLRecordVirtualTableAutoID = class(TSQLRecordVirtual);
 
-/// special comparaison function for sorting ftRecord (TRecordReference/RecordRef)
+/// special comparison function for sorting ftRecord (TRecordReference/RecordRef)
 // UTF-8 encoded values in the SQLite3 database or JSON content
 function UTF8CompareRecord(P1,P2: PUTF8Char): PtrInt;
 
-/// special comparaison function for sorting sftBoolean
+/// special comparison function for sorting sftBoolean
 // UTF-8 encoded values in the SQLite3 database or JSON content
 function UTF8CompareBoolean(P1,P2: PUTF8Char): PtrInt;
 
-/// special comparaison function for sorting sftEnumerate, sftSet or sftID
+/// special comparison function for sorting sftEnumerate, sftSet or sftID
 // UTF-8 encoded values in the SQLite3 database or JSON content
 function UTF8CompareUInt32(P1,P2: PUTF8Char): PtrInt;
 
-/// special comparaison function for sorting sftInteger, sftTID, sftRecordVersion
+/// special comparison function for sorting sftInteger, sftTID, sftRecordVersion
 // sftTimeLog/sftModTime/sftCreateTime or sftUnixTime/sftUnixMSTime UTF-8 encoded
 // values in the SQLite3 database or JSON content
 function UTF8CompareInt64(P1,P2: PUTF8Char): PtrInt;
 
-/// special comparaison function for sorting sftCurrency
+/// special comparison function for sorting sftCurrency
 // UTF-8 encoded values in the SQLite3 database or JSON content
 function UTF8CompareCurr64(P1,P2: PUTF8Char): PtrInt;
 
-/// special comparaison function for sorting sftFloat
+/// special comparison function for sorting sftFloat
 // UTF-8 encoded values in the SQLite3 database or JSON content
 function UTF8CompareDouble(P1,P2: PUTF8Char): PtrInt;
 
-/// special comparaison function for sorting sftDateTime or sftDateTimeMS
+/// special comparison function for sorting sftDateTime or sftDateTimeMS
 // UTF-8 encoded values in the SQLite3 database or JSON content
 function UTF8CompareISO8601(P1,P2: PUTF8Char): PtrInt;
 
@@ -26934,7 +26934,7 @@ var
 
 type
   /// a static object is used for smaller recursive stack size and faster code
-  // - these special sort implementation do the comparaison first by the
+  // - these special sort implementation do the comparison first by the
   // designed field, and, if the field value is identical, the ID value is
   // used (it will therefore sort by time all identical values)
   // - code generated is very optimized: stack and memory usage, CPU registers
@@ -27064,7 +27064,7 @@ begin
     SetPP(@Results[P*Params.FieldCount+Params.FieldIndex],P);
     repeat
       // this loop has no multiplication -> most of the time is spent in compIJ
-      if Params.Asc then begin // ascending order comparaison
+      if Params.Asc then begin // ascending order comparison
         while compI<0 do begin
           inc(I);
           inc(PByte(CI),FieldCountNextPtr); // next row
@@ -27073,7 +27073,7 @@ begin
           dec(J);
           dec(PByte(CJ),FieldCountNextPtr); // previous row
         end;
-      end else begin // descending order comparaison
+      end else begin // descending order comparison
         while compI>0 do begin
           inc(I);
           inc(PByte(CI),FieldCountNextPtr); // next row
@@ -32924,7 +32924,7 @@ begin
         if CompareValue(self,Reference,false)<>0 then
           exit; // properties don't have the same value
   end else begin
-    // comparaison of all properties of Reference against self
+    // comparison of all properties of Reference against self
     This := RecordProps;
     Ref := Reference.RecordProps;
     for i := 0 to high(Ref.SimpleFields) do

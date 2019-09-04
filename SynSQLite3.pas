@@ -525,8 +525,8 @@ type
   // TObject(p).Free
   TSQLDestroyPtr = procedure(p: pointer); cdecl;
 
-  /// SQLite3 collation (i.e. sort and comparaison) function prototype
-  // - this function MUST use s1Len and s2Len parameters during the comparaison:
+  /// SQLite3 collation (i.e. sort and comparison) function prototype
+  // - this function MUST use s1Len and s2Len parameters during the comparison:
   // s1 and s2 are not zero-terminated
   // - used by sqlite3.create_collation low-level function
   TSQLCollateFunc = function(CollateParam: pointer; s1Len: integer; s1: pointer;
