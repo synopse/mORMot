@@ -2356,7 +2356,7 @@ You can optionally specify the associated table, using a custom {\f1\fs20 TID} t
 !   property OrderedByCascade: TSQLRecordClientToBeDeletedID
 !     read fOrderedByCascade write fOrderedByCascade;
 !   ...
-Those three published fields will be able to store a {\f1\fs20 Int64} foreign key, and the ORM will ensure a corresponding {\i index} is created on the database, to speedup search on their values.\line But their type - {\f1\fs20 TID}, {\f1\fs20 TSQLRecordClientID}, or TSQLRecordClientToBeDeletedID - will define how the deletion process will be processed.
+Those three published fields will be able to store a {\f1\fs20 Int64} foreign key, and the ORM will ensure a corresponding {\i index} is created on the database, to speedup search on their values.\line But their type - {\f1\fs20 TID}, {\f1\fs20 TSQLRecordClientID}, or {\f1\fs20 TSQLRecordClientToBeDeletedID} - will define how the deletion process will be processed.
 By using the generic {\f1\fs20 TID} type, the first {\f1\fs20 Client} property won't have any reference to any table, so no deletion tracking will take place.
 On the other hand, {\i following the type naming convention}, the others {\f1\fs20 OrderedBy} and {\f1\fs20 OrderedByCascade} properties will be associated with the {\f1\fs20 TSQLRecordClient} table of the data model.\line In fact, the ORM will retrieve the {\f1\fs20 'TSQLRecordClientID'} or {\f1\fs20 'TSQLRecordClientToBeDeletedID'}  type names, and search for a {\f1\fs20 TSQLRecord} associated by trimming {\f1\fs20 *[ToBeDeleted]ID}, which is {\f1\fs20 TSQLRecordClient} in this case.\line As a result, the ORM will be able to track any {\f1\fs20 TSQLRecordClient} deletion: for any row pointing to the deleted record, it will ensure that this {\f1\fs20 OrderedBy} property will be reset to 0, or that the row containing the {\f1\fs20 OrderedByCascade} property will be deleted. Note that the framework won't define a {\f1\fs20 ON DELETE SET DEFAULT} or {\f1\fs20 ON DELETE CASCADE} foreign key via SQL, but emulate them {\i at ORM level}.
 :148  TRecordReference and TRecordReferenceToBeDeleted
@@ -13969,7 +13969,7 @@ Of course, you can use so-called {\i Promises} and some nice libraries - mainly 
 #      console.error("Error with the twitterverse:", error);
 #    }
 #  );
-Taken from @http://domenic.me/2012/10/14/youre-missing-the-point-of-promises
+Taken from @https://blog.domenic.me/youre-missing-the-point-of-promises/
 This kind of code will be perfectly readable for a {\i JavaScript} daily user, or someone fluent with functional languages.
 But the following blocking/synchronous code may sound much more familiar, safer and less verbose, to most {\i Delphi} / Java / C# programmer:
 #try {
