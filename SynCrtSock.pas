@@ -39,7 +39,7 @@ unit SynCrtSock;
   - Maciej Izak (hnb)
   - Marius Maximus
   - Mr Yang (ysair)
-  - Pavel (mpv)
+  - Pavel Mashlyakovskii (mpv)
   - Willo vd Merwe
 
   Alternatively, the contents of this file may be used under the terms of
@@ -223,7 +223,7 @@ unit SynCrtSock;
 
 }
 
-{$I Synopse.inc} // define HASINLINE CPU32 CPU64 ONLYUSEHTTPSOCKET
+{$I Synopse.inc} // define HASINLINE ONLYUSEHTTPSOCKET USELIBCURL SYNCRTDEBUGLOW
 
 {.$define SYNCRTDEBUGLOW}
 // internal use: enable some low-level log messages for HTTP socket debugging
@@ -240,6 +240,12 @@ uses
   SynCommons,
   SynLog,
 {$endif SYNCRTDEBUGLOW}
+{$ifdef USELIBCURL}
+  SynCurl,
+{$endif USELIBCURL}
+{$ifdef FPC}
+  dynlibs,
+{$endif FPC}
 {$ifdef MSWINDOWS}
   Windows,
   SynWinSock,
@@ -3208,16 +3214,8 @@ type
 function WinHTTP_WebSocketEnabled: boolean;
 {$endif}
 
-implementation
 
-uses
-  {$ifdef USELIBCURL}
-  SynCurl,
-  {$endif}
-  {$ifdef FPC}
-  dynlibs
-  {$endif}
-  ;
+implementation
 
 { ************ some shared helper functions and classes }
 
@@ -5712,7 +5710,7 @@ begin
       GetNextItem(P,',',rec);
       rec := Trim(rec);
       if rec='' then continue;
-      if pos({$ifdef HASCODEPAGE}SockString{$endif}('<'),rec)=0 then
+      if Pos({$ifdef HASCODEPAGE}SockString{$endif}('<'),rec)=0 then
         rec := '<'+rec+'>';
       Exec('RCPT TO:'+rec,'25');
       if ToList='' then

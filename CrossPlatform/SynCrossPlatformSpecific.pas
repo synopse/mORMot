@@ -97,7 +97,6 @@ uses
   SmartCL.System,
   System.Types,
   ECMA.Date,
-  System.Date,
   ECMA.Json;
 {$else}
 uses
@@ -111,7 +110,16 @@ uses
 
 type
   {$ifdef ISDWS}
-
+  JDateHelper = helper for JDate
+  private
+    function GetAsDateTime : TDateTime;
+    function GetAsLocalDateTime : TDateTime;
+    procedure SetAsDateTime(dt : TDateTime);
+    procedure SetAsLocalDateTime(dt : TDateTime);
+  public
+    property AsDateTime : TDateTime read GetAsDateTime write SetAsDateTime;
+    property AsLocalDateTime : TDateTime read GetAsLocalDateTime write SetAsLocalDateTime;
+  end;
   // HTTP body may not match the string type, and could be binary
   THttpBody = string;
 
@@ -346,7 +354,7 @@ function StartWithPropName(const PropName1,PropName2: string): boolean;
 function VarRecToValue(const VarRec: variant; var tmpIsString: boolean): string;
 procedure DecodeTime(Value: TDateTime; var HH,MM,SS,MS: word);
 procedure DecodeDate(Value: TDateTime; var Y,M,D: word);
-function TryEncodeDate(Y,M,D: integer; var Value: TDateTime): boolean;
+function TryEncodeDate(Y,M,D: integer; UTC: DateTimeZone; var Value: TDateTime): boolean;
 function TryEncodeTime(HH,MM,SS,MS: integer; var Value: TDateTIme): boolean;
 function NowToIso8601: string;
 function DateTimeToIso8601(Value: TDateTime): string;
@@ -426,6 +434,27 @@ uses
   System.Net.HttpClient;
 {$endif}
 
+{$ifdef ISDWS}
+function JDateHelper.GetAsDateTime : TDateTime;
+begin
+  Result := Self.getTime / 864e5 + 25569;
+end;
+
+procedure JDateHelper.SetAsDateTime(dt : TDateTime);
+begin
+  Self.setTime(round((dt - 25569) * 864e5));
+end;
+
+function JDateHelper.GetAsLocalDateTime: TDateTime;
+begin
+  Result := (Self.getTime - 60000 * Self.getTimezoneOffset) / 864e5 + 25569;
+end;
+
+procedure JDateHelper.SetAsLocalDateTime(dt: TDateTime);
+begin
+  Self.setTime(round((dt - 25569) * 864e5) + 60000 * Self.getTimezoneOffset);
+end;
+{$endif}
 
 function TextToHttpBody(const Text: string): THttpBody;
 {$ifdef ISSMS}
@@ -906,10 +935,10 @@ begin
   D := date.getUTCDate;
 end;
 
-function TryEncodeDate(Y,M,D: integer; var Value: TDateTime): boolean;
+function TryEncodeDate(Y,M,D: integer; UTC: DateTimeZone; var Value: TDateTime): boolean;
 begin
   try
-    Value := EncodeDate(Y,M,D);
+    Value := EncodeDate(Y,M,D, DateTimeZone.UTC);
     result := true
   except
     result := false;
@@ -963,10 +992,10 @@ begin // e.g. YYYY-MM-DD Thh:mm:ss or YYYY-MM-DDThh:mm:ss
   if Value<=0 then
     result := '' else
   if frac(Value)=0 then
-    result := FormatDateTime('yyyy-mm-dd',Value) else
+    result := FormatDateTime('yyyy-mm-dd',Value,DateTimeZone.UTC) else
   if trunc(Value)=0 then
-    result := FormatDateTime('Thh:nn:ss',Value) else
-    result := FormatDateTime('yyyy-mm-ddThh:nn:ss',Value);
+    result := FormatDateTime('Thh:nn:ss',Value,DateTimeZone.UTC) else
+    result := FormatDateTime('yyyy-mm-ddThh:nn:ss',Value,DateTimeZone.UTC);
 end;
 
 function Iso8601ToDateTime(const Value: string): TDateTime;
@@ -986,7 +1015,7 @@ begin //  YYYY-MM-DD   Thh:mm:ss  or  YYYY-MM-DDThh:mm:ss
          ord(Value[3])*10+ord(Value[4])-(48+480+4800+48000);
     M := ord(Value[6])*10+ord(Value[7])-(48+480);
     D := ord(Value[9])*10+ord(Value[10])-(48+480);
-    TryEncodeDate(Y,M,D,result);
+    TryEncodeDate(Y,M,D,DateTimeZone.UTC,result);
   end;
   19: if (Value[5]=Value[8]) and (ord(Value[8]) in [ord('-'),ord('/')]) and
          (ord(Value[11]) in [ord(' '),ord('T')]) and (Value[14]=':') and (Value[17]=':') then begin
@@ -999,7 +1028,7 @@ begin //  YYYY-MM-DD   Thh:mm:ss  or  YYYY-MM-DDThh:mm:ss
     SS := ord(Value[18])*10+ord(Value[19])-(48+480);
     if (Y<=9999) and ((M-1)<12) and ((D-1)<31) and
        (HH<24) and (MI<60) and (SS<60) then
-      result := EncodeDate(Y,M,D)+EncodeTime(HH,MI,SS,0);
+      result := EncodeDate(Y,M,D,DateTimeZone.UTC)+EncodeTime(HH,MI,SS,0);
   end;
   end;
 end;

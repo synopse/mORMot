@@ -607,6 +607,7 @@ begin
     with meth.Args[a] do begin
       arg := ContextFromInfo(TYPES_SOA[ValueType],'',ArgTypeInfo);
       arg.argName := ParamName^;
+      arg.argType := ArgTypeName^;							  
       arg.dir := ord(ValueDirection);
       arg.dirName := DIRTODELPHI[ValueDirection];
       arg.dirNoOut := DIRTOSMS[ValueDirection]; // no OUT in DWS/SMS -> VAR instead
@@ -903,7 +904,7 @@ begin
   if not VarIsEmptyOrNull(info) then // null e.g. for a record without custom text definition
     list.AddItem(info);
 end;
-var siz: integer;
+var siz, i: integer;
     enum: PEnumType;
 begin
   if typ=wUnknown then begin
@@ -924,8 +925,12 @@ begin
     end;
   end;
   if typName='' then begin
-    if typInfo<>nil then
-      TypeInfoToQualifiedName(typInfo,typName) else
+    if typInfo<>nil then begin
+      TypeInfoToQualifiedName(typInfo,typName);
+      i := PosExChar('.',typName);
+      if i>0 then
+        typName := trim(copy(typName,i+1,maxInt)); // trim unit name
+    end else
       typName := TYPES_LANG[lngDelphi,typ];
   end;
   if (typ=wRecord) and IdemPropNameU(typName,'TGUID') then

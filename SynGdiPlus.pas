@@ -2732,7 +2732,7 @@ var Img, graphics: THandle;
 begin
   Img := ConvertToEmfPlus(Source,Dest,aSmoothing,aTextRendering);
   if Img=0 then
-    inherited else begin
+    inherited DrawAntiAliased(Source,Dest,dst,aSmoothing,aTextRendering) else begin
     if Assigned(attributes) then
       ia := attributes.fAttr else
       ia:= nil;

@@ -115,6 +115,9 @@ uses
     SynEcc in '..\SynEcc.pas',
     SynCrtSock in '..\SynCrtSock.pas',
     SynBidirSock in '..\SynBiDirSock.pas',
+    {$ifdef USELIBCURL}
+      SynCurl,
+    {$endif USELIBCURL}
     //SynOpenSSL,
     SynCommons in '..\SynCommons.pas',
     SynLog in '..\SynLog.pas',

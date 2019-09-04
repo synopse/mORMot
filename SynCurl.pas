@@ -29,7 +29,8 @@ unit SynCurl;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
-    - Pavel Mashlyakovskii (mpv)
+  - Marcos Douglas B. Santos (mdbs99)
+  - Pavel Mashlyakovskii (mpv)
 
 
   Alternatively, the contents of this file may be used under the terms of
@@ -64,27 +65,31 @@ uses
   dynlibs,
   SynFPCSock,
   SynFPCLinux,
-  {$endif}
+  {$endif FPC}
   {$ifdef KYLIX3}
   LibC,
   SynFPCSock,  // shared with Kylix
   SynKylix,
-  {$endif}
-  {$endif}
+  {$endif KYLIX3}
+  {$endif MSWINDOWS}
   SysUtils,
   Classes;
 
 { -------------- curl library low-level interfaces, constants and types }
 
 const
-  LIBCURL_DLL = {$IFDEF Darwin} 'libcurl.dylib' {$ELSE}
-    {$IFDEF LINUX} 'libcurl.so' {$ELSE} 'libcurl-x64.dll' {$ENDIF}{$ENDIF};
+  /// low-level libcurl library file name, depending on the running OS
+  LIBCURL_DLL = {$ifdef Darwin} 'libcurl.dylib'   {$else}
+                {$ifdef Linux}  'libcurl.so'      {$else}
+                {$ifdef CPU64}  'libcurl-x64.dll' {$else}
+                                'libcurl.dll' {$endif}{$endif}{$endif};
 
 {$Z4}
 type
-  /// low-level exception raised during OpenSSL library access
+  /// low-level exception raised during libcurl library access
   ECurl = class(Exception);
 
+  /// low-level options for libcurl library API calls
   TCurlOption = (
     coPort                 = 3,
     coTimeout              = 13,
@@ -212,6 +217,8 @@ type
     coMaxFileSizeLarge     = 30117,
     coPostFieldSizeLarge   = 30120
   );
+
+  /// low-level result codes for libcurl library API calls
   TCurlResult = (
     crOK, crUnsupportedProtocol, crFailedInit, crURLMalformat, crURLMalformatUser,
     crCouldNotResolveProxy, crCouldNotResolveHost, crCouldNotConnect,
@@ -234,6 +241,8 @@ type
     crSSLEngineInitFailed, crLoginDenied, crTFTPNotFound, crTFTPPerm,
     crTFTPDiskFull, crTFTPIllegal, crTFTPUnknownID, crTFTPExists, crTFTPNoSuchUser
   );
+
+  /// low-level information enumeration for libcurl library API calls
   TCurlInfo = (
     ciNone,
     ciLastOne               = 28,
@@ -281,6 +290,7 @@ type
     ciAppConnectTimeT       = 6291512  // (3) SSL handshake
   );
   {$ifdef LIBCURLMULTI}
+  /// low-level result codes for libcurl library API calls in "multi" mode
   TCurlMultiCode = (
     cmcCallMultiPerform = -1,
     cmcOK = 0,
@@ -293,6 +303,8 @@ type
     cmcAddedAlready,
     cmcRecursiveApiCall
   );
+
+  /// low-level options for libcurl library API calls in "multi" mode
   TCurlMultiOption = (
     cmoPipeLining               = 3,
     cmoMaxConnects              = 6,
@@ -312,11 +324,17 @@ type
   );
   {$endif LIBCURLMULTI}
 
+  /// low-level version identifier of the libcurl library
   TCurlVersion = (cvFirst,cvSecond,cvThird,cvFour);
+  /// low-level initialization option for libcurl library API
+  // - currently, only giSSL is set, since giWin32 is redundant with WinHTTP
   TCurlGlobalInit = set of (giSSL,giWin32);
+  /// low-level message state for libcurl library API
   TCurlMsg = (cmNone, cmDone);
-  PAnsiCharArray = array[0..1023] of PAnsiChar;
 
+  PAnsiCharArray = array[0..(MaxInt div SizeOf(PAnsiChar))-1] of PAnsiChar;
+
+  /// low-level version information for libcurl library
   TCurlVersionInfo = record
     age: TCurlVersion;
     version: PAnsiChar;
@@ -333,22 +351,27 @@ type
   end;
   PCurlVersionInfo = ^TCurlVersionInfo;
 
+  /// low-level access to the libcurl library instance
   TCurl = type pointer;
+  /// low-level string list type for libcurl library API
   TCurlSList = type pointer;
   PCurlSList = ^TCurlSList;
   PPCurlSListArray = ^PCurlSListArray;
   PCurlSListArray = array[0..(MaxInt div SizeOf(PCurlSList))-1] of PCurlSList;
+  /// low-level access to the libcurl library instance in "multi" mode
   TCurlMulti = type pointer;
+  /// low-level access to one libcurl library socket instance
   TCurlSocket = type TSocket;
 
-  PCurlCertInfo = ^TCurlCertInfo;
+  /// low-level certificate information for libcurl library API
   TCurlCertInfo = packed record
     num_of_certs: integer;
     {$ifdef CPUX64}_align: array[0..3] of byte;{$endif}
     certinfo: PPCurlSListArray;
   end;
+  PCurlCertInfo = ^TCurlCertInfo;
 
-  PCurlMsgRec = ^TCurlMsgRec;
+  /// low-level message information for libcurl library API
   TCurlMsgRec = packed record
     msg: TCurlMsg;
     {$ifdef CPUX64}_align: array[0..3] of byte;{$endif}
@@ -358,17 +381,21 @@ type
       1: (result: TCurlResult);
     end;
   end;
+  PCurlMsgRec = ^TCurlMsgRec;
 
-  PCurlWaitFD = ^TCurlWaitFD;
+  /// low-level file description event handler for libcurl library API
   TCurlWaitFD = packed record
     fd: TCurlSocket;
     events: SmallInt;
     revents: SmallInt;
     {$ifdef CPUX64}_align: array[0..3] of byte;{$endif}
   end;
+  PCurlWaitFD = ^TCurlWaitFD;
 
+  /// low-level write callback function signature for libcurl library API
   curl_write_callback = function (buffer: PAnsiChar; size,nitems: integer;
     outstream: pointer): integer; cdecl;
+  /// low-level read callback function signature for libcurl library API
   curl_read_callback = function (buffer: PAnsiChar; size,nitems: integer;
     instream: pointer): integer; cdecl;
 
@@ -376,70 +403,107 @@ type
 
 
 var
+  /// low-level late binding functions access to the libcurl library API
+  // - ensure you called LibCurlInitialize or CurlIsAvailable functions to
+  // setup this global instance before using any of its internal functions
+  // - see also https://curl.haxx.se/libcurl/c/libcurl-multi.html interface
   curl: packed record
+    /// hold a reference to the loaded library
+    // - PtrInt(Module)=0 before initialization, or PtrInt(Module) = -1
+    // on initialization failure, or PtrInt(Module)>0 if loaded
     {$ifdef FPC}
     Module: TLibHandle;
     {$else}
     Module: THandle;
-    {$endif}
+    {$endif FPC}
+    /// initialize the library
     global_init: function(flags: TCurlGlobalInit): TCurlResult; cdecl;
+    /// finalize the library
     global_cleanup: procedure; cdecl;
+    /// returns run-time libcurl version info
     version_info: function(age: TCurlVersion): PCurlVersionInfo; cdecl;
+    // start a libcurl easy session
     easy_init: function: pointer; cdecl;
+    /// set options for a curl easy handle
     easy_setopt: function(curl: TCurl; option: TCurlOption): TCurlResult; cdecl varargs;
+    /// perform a blocking file transfer
     easy_perform: function(curl: TCurl): TCurlResult; cdecl;
+    /// end a libcurl easy handle
     easy_cleanup: procedure(curl: TCurl); cdecl;
+    /// extract information from a curl handle
     easy_getinfo: function(curl: TCurl; info: TCurlInfo; out value): TCurlResult; cdecl;
+    /// clone a libcurl session handle
     easy_duphandle: function(curl: TCurl): pointer; cdecl;
+    /// reset all options of a libcurl session handle
     easy_reset: procedure(curl: TCurl); cdecl;
+    /// return string describing error code
     easy_strerror: function(code: TCurlResult): PAnsiChar; cdecl;
+    /// add a string to an slist
     slist_append: function(list: TCurlSList; s: PAnsiChar): TCurlSList; cdecl;
+    /// free an entire slist
     slist_free_all: procedure(list: TCurlSList); cdecl;
-    {$ifdef LIBCURLMULTI} // https://curl.haxx.se/libcurl/c/libcurl-multi.html interface
+    {$ifdef LIBCURLMULTI}
+    /// add an easy handle to a multi session
     multi_add_handle: function(mcurl: TCurlMulti; curl: TCurl): TCurlMultiCode; cdecl;
+    /// set data to associate with an internal socket
     multi_assign: function(mcurl: TCurlMulti; socket: TCurlSocket; data: pointer): TCurlMultiCode; cdecl;
+    /// close down a multi session
     multi_cleanup: function(mcurl: TCurlMulti): TCurlMultiCode; cdecl;
+    /// extracts file descriptor information from a multi handle
     multi_fdset: function(mcurl: TCurlMulti; read, write, exec: PFDSet; out max: integer): TCurlMultiCode; cdecl;
+    /// read multi stack informationals
     multi_info_read: function(mcurl: TCurlMulti; out msgsqueue: integer): PCurlMsgRec; cdecl;
+    /// create a multi handle
     multi_init: function: TCurlMulti; cdecl;
+    /// reads/writes available data from each easy handle
     multi_perform: function(mcurl: TCurlMulti; out runningh: integer): TCurlMultiCode; cdecl;
+    /// remove an easy handle from a multi session
     multi_remove_handle: function(mcurl: TCurlMulti; curl: TCurl): TCurlMultiCode; cdecl;
+    /// set options for a curl multi handle
     multi_setopt: function(mcurl: TCurlMulti; option: TCurlMultiOption): TCurlMultiCode; cdecl varargs;
+    /// reads/writes available data given an action
     multi_socket_action: function(mcurl: TCurlMulti; socket: TCurlSocket; mask: Integer; out runningh: integer): TCurlMultiCode; cdecl;
+    /// reads/writes available data - deprecated call
     multi_socket_all: function(mcurl: TCurlMulti; out runningh: integer): TCurlMultiCode; cdecl;
+    /// return string describing error code
     multi_strerror: function(code: TCurlMultiCode): PAnsiChar; cdecl;
+    /// retrieve how long to wait for action before proceeding
     multi_timeout: function(mcurl: TCurlMulti; out ms: integer): TCurlMultiCode; cdecl;
+    /// polls on all easy handles in a multi handle
     multi_wait: function(mcurl: TCurlMulti; fds: PCurlWaitFD; fdscount: cardinal; ms: integer; out ret: integer): TCurlMultiCode; cdecl;
     {$endif LIBCURLMULTI}
+    /// contains numerical information about the initialized libcurl instance
     info: TCurlVersionInfo;
+    /// contains textual information about the initialized libcurl instance
     infoText: string;
   end;
 
-procedure LibCurlInitialize;
+/// initialize the libcurl API, accessible via the curl global variable
+// - do nothing if the library has already been loaded
+// - will raise ECurl exception on any loading issue
+procedure LibCurlInitialize(engines: TCurlGlobalInit=[giSSL]);
+
 /// return TRUE if a curl library is available
-// - will load and initialize it, if necessary
+// - will load and initialize it, calling LibCurlInitialize if necessary,
+// catching any exception during the process
 function CurlIsAvailable: boolean;
+
 /// Callback used by libcurl to write data; Usage:
 // curl.easy_setopt(fHandle,coWriteFunction,@CurlWriteRawByteString);
 // curl.easy_setopt(curlHandle,coFile,@curlRespBody);
-// where curlRespBody: RawByteString;
+// where curlRespBody should be a generic AnsiString/RawByteString, i.e.
+// in practice a SockString or a RawByteString
 function CurlWriteRawByteString(buffer: PAnsiChar; size,nitems: integer;
   opaque: pointer): integer; cdecl;
+
 
 implementation
 
 type
-{$ifdef UNICODE}
-  /// define a raw 8-bit storage string type, used for data buffer management
-  SockString = type RawByteString;
-{$else}
-  {$ifdef HASCODEPAGE} // FPC may expect a CP, e.g. to compare two string constants
-  SockString = type RawByteString;
-  {$else}
-  /// define a 8-bit raw storage string type, used for data buffer management
-  SockString = type AnsiString;
-  {$endif}
-{$endif}
+  // some internal cross-compiler array of bytes string definition
+  SockString = {$ifdef HASCODEPAGE}RawByteString{$else}AnsiString{$endif};
+  // some internal cross-compiler PtrInt definition
+  {$ifndef FPC} PtrInt = {$ifdef CPU64}Int64{$else}integer{$endif}; {$endif}
 
 function CurlWriteRawByteString(buffer: PAnsiChar; size,nitems: integer;
   opaque: pointer): integer; cdecl;
@@ -466,7 +530,7 @@ begin
  end;
 end;
 
-procedure LibCurlInitialize;
+procedure LibCurlInitialize(engines: TCurlGlobalInit);
 var P: PPointer;
     api: integer;
 const NAMES: array[0..{$ifdef LIBCURLMULTI}26{$else}12{$endif}] of string = (
@@ -485,36 +549,36 @@ begin
     if curl.Module=0 then // try to load libcurl once
     try
       curl.Module := LoadLibrary(LIBCURL_DLL);
-      {$ifdef Darwin}
+      {$ifdef Darwin} // another common names on MacOS
       if curl.Module=0 then
         curl.Module := LoadLibrary('libcurl.4.dylib');
       if curl.Module=0 then
         curl.Module := LoadLibrary('libcurl.3.dylib');
       {$else}
-      {$ifdef LINUX}
+      {$ifdef Linux} // another common names on POSIX
       if curl.Module=0 then
         curl.Module := LoadLibrary('libcurl.so.4');
       if curl.Module=0 then
         curl.Module := LoadLibrary('libcurl.so.3');
-      // for latest Linux Mint and other similar distros
+      // for latest Linux Mint and other similar distros using gnutls
       if curl.Module=0 then
         curl.Module := LoadLibrary('libcurl-gnutls.so.4');
       if curl.Module=0 then
         curl.Module := LoadLibrary('libcurl-gnutls.so.3');
-      {$endif}
-      {$endif}
+      {$endif Linux}
+      {$endif Darwin}
       if curl.Module=0 then
-        raise ECurl.CreateFmt('Unable to find %s'{$ifdef LINUX}+
+        raise ECurl.CreateFmt('Unable to find %s'{$ifdef Linux}+
           ': try e.g. sudo apt-get install libcurl3'{$ifdef CPUX86}+':i386'{$endif}
-          {$endif LINUX},[LIBCURL_DLL]);
+          {$endif Linux},[LIBCURL_DLL]);
       P := @@curl.global_init;
       for api := low(NAMES) to high(NAMES) do begin
-        P^ := GetProcAddress(curl.Module,{.$ifndef FPC}PChar{.$endif}('curl_'+NAMES[api]));
+        P^ := GetProcAddress(curl.Module,{$ifndef FPC}PChar{$endif}('curl_'+NAMES[api]));
         if P^=nil then
           raise ECurl.CreateFmt('Unable to find %s() in %s',[NAMES[api],LIBCURL_DLL]);
         inc(P);
       end;
-      curl.global_init([giSSL]);
+      curl.global_init(engines);
       curl.info := curl.version_info(cvFour)^;
       curl.infoText := format('%s version %s',[LIBCURL_DLL,curl.info.version]);
       if curl.info.ssl_version<>nil then

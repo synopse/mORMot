@@ -45,7 +45,7 @@ unit mORMot;
     Michalis Kamburelis
     MilesYou
     Ondrej
-    Pavel (mpv)
+    Pavel Mashlyakovskii (mpv)
     Sabbiolina
     Transmogrifix
     Vadim Orel
