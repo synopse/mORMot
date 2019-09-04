@@ -573,7 +573,7 @@ begin
           {$endif Linux},[LIBCURL_DLL]);
       P := @@curl.global_init;
       for api := low(NAMES) to high(NAMES) do begin
-        P^ := GetProcAddress(curl.Module,{$ifndef FPC}PChar{$endif}('curl_'+NAMES[api]));
+        P^ := GetProcAddress(curl.Module,PChar('curl_'+NAMES[api]));
         if P^=nil then
           raise ECurl.CreateFmt('Unable to find %s() in %s',[NAMES[api],LIBCURL_DLL]);
         inc(P);
