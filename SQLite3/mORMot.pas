@@ -8120,18 +8120,18 @@ type
 
     /// return true if all published properties values in Other are identical to
     // the published properties of this object
+    // - instances must be of the same class type
+    // - only simple fields (i.e. not TSQLRawBlob/TSQLRecordMany) are compared
+    // - comparaison is much faster than SameValues() below
+    function SameRecord(Reference: TSQLRecord): boolean;
+    /// return true if all published properties values in Other are identical to
+    // the published properties of this object
     // - work with different classes: Reference properties name must just be
     // present in the calling object
     // - only simple fields (i.e. not TSQLRawBlob/TSQLRecordMany) are compared
     // - compare the text representation of the values: fields may be of different
     // type, encoding or precision, but still have same values
     function SameValues(Reference: TSQLRecord): boolean;
-    /// return true if all published properties values in Other are identical to
-    // the published properties of this object
-    // - instances must be of the same class type
-    // - only simple fields (i.e. not TSQLRawBlob/TSQLRecordMany) are compared
-    // - comparaison is much faster than SameValues() above
-    function SameRecord(Reference: TSQLRecord): boolean;
     /// clear the values of all published properties, and also the ID property
     procedure ClearProperties; overload;
     /// clear the values of specified published properties
@@ -32889,6 +32889,22 @@ begin
   end;
 end;
 
+function TSQLRecord.SameRecord(Reference: TSQLRecord): boolean;
+var i: integer;
+begin
+  result := false;
+  if (self=nil) or (Reference=nil) or
+     (PSQLRecordClass(Reference)^<>PSQLRecordClass(Self)^) or (Reference.fID<>fID) then
+    exit;
+  with RecordProps do
+    for i := 0 to high(SimpleFields) do
+      // compare not TSQLRawBlob/TSQLRecordMany fields
+      with SimpleFields[i] do
+        if CompareValue(self,Reference,false)<>0 then
+          exit; // properties don't have the same value
+  result := true;
+end;
+
 function TSQLRecord.SameValues(Reference: TSQLRecord): boolean;
 var O: TSQLPropInfo;
     i: integer;
@@ -32921,22 +32937,6 @@ begin
         exit; // properties don't have the same value
     end;
   end;
-  result := true;
-end;
-
-function TSQLRecord.SameRecord(Reference: TSQLRecord): boolean;
-var i: integer;
-begin
-  result := false;
-  if (self=nil) or (Reference=nil) or
-     (PSQLRecordClass(Reference)^<>PSQLRecordClass(Self)^) or (Reference.fID<>fID) then
-    exit;
-  with RecordProps do
-    for i := 0 to high(SimpleFields) do
-      // compare not TSQLRawBlob/TSQLRecordMany fields
-      with SimpleFields[i] do
-        if CompareValue(self,Reference,false)<>0 then
-          exit; // properties don't have the same value
   result := true;
 end;
 
