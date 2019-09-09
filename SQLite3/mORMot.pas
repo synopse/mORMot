@@ -39035,13 +39035,16 @@ begin
   if Call=nil then
     exit;
   InternalURI(Call^);
-  if OnIdleBackgroundThreadActive and not(isDestroying in fInternalState) then
+  if ((Sender=nil) or OnIdleBackgroundThreadActive) and
+      not(isDestroying in fInternalState) then
     if (Call^.OutStatus=HTTP_NOTIMPLEMENTED) and (isOpened in fInternalState) then begin
-      // InternalCheckOpen failed -> force recreate connection
-      InternalClose;
+      InternalClose; // force recreate connection
       Exclude(fInternalState,isOpened);
-      if OnIdleBackgroundThreadActive then
+      if ((Sender=nil) or OnIdleBackgroundThreadActive) then begin
         InternalURI(Call^); // try request again
+        if Call^.OutStatus<>HTTP_NOTIMPLEMENTED then
+          Include(fInternalState,isOpened);
+      end;
     end else
       Include(fInternalState,isOpened);
 end;
@@ -39082,12 +39085,14 @@ var retry: Integer;
 
   procedure CallInternalURI;
   begin
-    Call.Url := url;
+    Call.Url := url; // reset to allow proper re-sign
     if fSessionAuthentication<>nil then
       fSessionAuthentication.ClientSessionSign(Self,Call);
     Call.Method := method;
     if SendData<>nil then
       Call.InBody := SendData^;
+    if Assigned(fOnEncryptBody) then
+      fOnEncryptBody(self,Call.InBody,Call.InHead,Call.Url);
     {$ifndef LVCL}
     if Assigned(fOnIdle) then begin
       if fBackgroundThread=nil then
@@ -39097,20 +39102,9 @@ var retry: Integer;
         Call.OutStatus := HTTP_UNAVAILABLE;
     end else
     {$endif}
-    begin
-      if Assigned(fOnEncryptBody) then
-        fOnEncryptBody(self,Call.InBody,Call.InHead,Call.Url);
-      InternalURI(Call);
-      if not(isDestroying in fInternalState) then
-        if (Call.OutStatus=HTTP_NOTIMPLEMENTED) and (isOpened in fInternalState) then begin
-          InternalClose;     // force recreate connection
-          Exclude(fInternalState,isOpened);
-          InternalURI(Call); // try request again
-        end else
-          Include(fInternalState,isOpened);
-      if Assigned(fOnDecryptBody) then
-        fOnDecryptBody(self,Call.OutBody,Call.OutHead,Call.Url);
-    end;
+      OnBackgroundProcess({SenderThread=}nil,@Call);
+    if Assigned(fOnDecryptBody) then
+      fOnDecryptBody(self,Call.OutBody,Call.OutHead,Call.Url);
     result.Lo := Call.OutStatus;
     result.Hi := Call.OutInternalState;
     if Head<>nil then
@@ -56150,9 +56144,10 @@ end;
 {$ifdef FPC}
 {$ifdef CPUARM}
 procedure TInterfacedObjectFake.ArmFakeStub;
-var smetndx: pointer;
-    sd7, sd6, sd5, sd4, sd3, sd2, sd1, sd0: double;
-    sr3,sr2,sr1,sr0: pointer;
+var // warning: exact local variables order should match TFakeCallStack
+  smetndx: pointer;
+  sd7, sd6, sd5, sd4, sd3, sd2, sd1, sd0: double;
+  sr3,sr2,sr1,sr0: pointer;
 asm
   // get method index
   str  v1,smetndx
@@ -56180,9 +56175,10 @@ end;
 {$endif}
 {$ifdef CPUAARCH64}
 procedure TInterfacedObjectFake.AArch64FakeStub;
-var sx0, sx1, sx2, sx3, sx4, sx5, sx6, sx7: pointer;
-    sd0, sd1, sd2, sd3, sd4, sd5, sd6, sd7: double;
-    smetndx:pointer;
+var // warning: exact local variables order should match TFakeCallStack
+  sx0, sx1, sx2, sx3, sx4, sx5, sx6, sx7: pointer;
+  sd0, sd1, sd2, sd3, sd4, sd5, sd6, sd7: double;
+  smetndx:pointer;
 asm
   // get method index
   str  x9,smetndx
@@ -56217,7 +56213,7 @@ end;
 
 {$ifdef CPUX64}
 procedure x64FakeStub;
-var
+var // warning: exact local variables order should match TFakeCallStack
   smetndx,
   {$ifdef Linux}
   sxmm7, sxmm6, sxmm5, sxmm4,
@@ -59408,8 +59404,7 @@ end;
 {$endif CPUAARCH64}
 
 {$ifdef CPUX64} assembler;
-{$ifdef FPC}
-  nostackframe;
+{$ifdef FPC} nostackframe;
 asm
         push    rbp
         push    r12
