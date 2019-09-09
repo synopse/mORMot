@@ -2057,17 +2057,19 @@ end;
 function TWebSocketProtocolBinary.GetFramesInCompression: integer;
 begin
   if (self=nil) or (fFramesInBytes=0) then
-    result := 0 else
-    result := (fFramesInBytesSocket*100) div fFramesInBytes;
-  result := 100-result;
+    result := 100 else
+    if not fCompressed or (fFramesInBytesSocket<fFramesInBytes) then
+      result := 0 else
+      result := 100-(fFramesInBytesSocket*100) div fFramesInBytes;
 end;
 
 function TWebSocketProtocolBinary.GetFramesOutCompression: integer;
 begin
   if (self=nil) or (fFramesOutBytes=0) then
-    result := 0 else
-    result := (fFramesOutBytesSocket*100) div fFramesOutBytes;
-  result := 100-result;
+    result := 100 else
+    if not fCompressed or (fFramesOutBytesSocket<=fFramesOutBytes) then
+      result := 0 else
+      result := 100-(fFramesOutBytesSocket*100) div fFramesOutBytes;
 end;
 
 function TWebSocketProtocolBinary.ProcessHandshake(const ExtIn: TRawUTF8DynArray;
