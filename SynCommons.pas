@@ -12833,9 +12833,9 @@ type
     // - e.g. 'myprogram.exe 3.1.0.123 2016-06-14 19:07:55'
     function VersionInfo: RawUTF8;
     /// returns a ready-to-use User-Agent header with exe name, version and OS
-    // - e.g. 'myprogram/3.1.0.123W32'
+    // - e.g. 'myprogram/3.1.0.123W32' for myprogram running on Win32
     // - here OS_INITIAL[] character is used to identify the OS, with '32'
-    // appended on 32-bit Windows
+    // appended on Win32 only (e.g. 'myprogram/3.1.0.2W', is for Win64)
     function UserAgent: RawUTF8;
     /// returns the version information of a specified exe file as text
     // - includes FileName (without path), Detailed and BuildDateTime properties
@@ -12918,7 +12918,8 @@ const
     wSeven, wServer2008_R2, wEight, wServer2012, wEightOne, wServer2012R2,
     wTen, wServer2016];
   /// translate one operating system (and distribution) into a single character
-  // - may be used internally e.g. for a HTTP User-Agent header
+  // - may be used internally e.g. for a HTTP User-Agent header, as with
+  // TFileVersion.UserAgent
   OS_INITIAL: array[TOperatingSystem] of AnsiChar =
     ('?', 'W', 'L', 'X', 'B', 'P', 'A', 'a', 'D', 'F', 'G', 'K', 'M', 'm',
      'n', 'N', 'U', 'S', 's', 'u', 'Y', 'T', 'C', 't', 'R', 'l', 'O', 'G',
@@ -38463,7 +38464,7 @@ begin
   {$ifdef MSWINDOWS}
   if OSVersion in WINDOWS_32 then
     result := result+'32';
-  {$endif}
+  {$endif MSWINDOWS}
 end;
 
 class function TFileVersion.GetVersionInfo(const aFileName: TFileName): RawUTF8;
