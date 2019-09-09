@@ -9512,10 +9512,12 @@ type
   // to circumvent some specific DB provider or case sensitivity issue on fields
   // - by default, check of missing field name will be case insensitive, unless
   // the rpmMissingFieldNameCaseSensitive option is set
+  // - rpmQuoteFieldName will quote the field names - to be used e.g. with
+  // FireBird in its Dialect 3
   TSQLRecordPropertiesMappingOptions = set of (
     rpmAutoMapKeywordFields,
     rpmNoCreateMissingTable, rpmNoCreateMissingField,
-    rpmMissingFieldNameCaseSensitive);
+    rpmMissingFieldNameCaseSensitive, rpmQuoteFieldName);
 
   /// pointer to external database properties for ORM
   // - is used e.g. to allow a "fluent" interface for MapField() method
@@ -9662,6 +9664,10 @@ type
     /// the external field names, following fProps.Props.Field[] order
     // - excluding ID/RowID field, which is stored in RowIDFieldName
     property ExtFieldNames: TRawUTF8DynArray read fExtFieldNames;
+    /// the unquoted external field names, following fProps.Props.Field[] order
+    // - excluding ID/RowID field, which is stored in RowIDFieldName
+    // - in respect to ExtFieldNames[], this array will never quote the field name
+    property ExtFieldNamesUnQuotedSQL: TRawUTF8DynArray read fExtFieldNamesUnQuotedSQL;
     /// each bit set, following fProps.Props.Field[]+1 order (i.e. 0=ID,
     // 1=Field[0], ...), indicates that this external field name
     // has not been mapped
