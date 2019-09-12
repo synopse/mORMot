@@ -4741,6 +4741,9 @@ const
   tkOrdinalTypes =
     [tkInteger, tkChar, tkWChar, tkEnumeration, tkSet, tkInt64
      {$ifdef FPC},tkBool,tkQWord{$endif}];
+  /// quick retrieve how many bytes an ordinal consist in
+  ORDTYPE_SIZE: array[TOrdType] of byte =
+    (1,1,2,2,4,4{$ifdef FPC_NEWRTTI},8,8{$endif});
 
 type
   PTypeKind = ^TTypeKind;
@@ -41857,14 +41860,7 @@ begin
     if info<>nil then
     case kind of
     tkEnumeration, tkSet: begin
-      case info^.EnumType of
-        otSByte,otUByte: fDataSize := 1;
-        otSWord,otUWord: fDataSize := 2;
-        otSLong,otULong: fDataSize := 4;
-        {$ifdef FPC_NEWRTTI}
-        otSQWord,otUQWord: fDataSize := 8;
-        {$endif}
-      end;
+      fDataSize := ORDTYPE_SIZE[info^.EnumType];
       if kind=tkEnumeration then
         fKnownType := ktEnumeration else
         fKnownType := ktSet;

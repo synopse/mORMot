@@ -3163,8 +3163,7 @@ type
     Name: ShortString;
     /// get the next parameter information
     // - no range check: use TReturnInfo.ParamCount to determine the appropriate count
-    function Next: PParamInfo;
-      {$ifdef HASINLINE}inline;{$endif}
+    function Next: PParamInfo; {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// a wrapper around a method definition
@@ -21112,16 +21111,10 @@ begin
     result := GetterAddr(Instance);
 end;
 
-{$ifdef FPC_OR_PUREPASCAL}
-function TPropInfo.Next: PPropInfo;
-begin
-  result := AlignToPtr(@Name[ord(Name[0])+1]);
-end;
-{$else}
 {$ifdef HASINLINENOTX86}
 function TPropInfo.Next: PPropInfo;
 begin
-  result := @Name[ord(Name[0])+1];
+  result := AlignToPtr(@Name[ord(Name[0])+1]);
 end;
 {$else}
 function TPropInfo.Next: PPropInfo;
@@ -21130,7 +21123,6 @@ asm     // very fast code
         lea     eax, [eax + edx].TPropInfo.Name[1]
 end;
 {$endif HASINLINENOTX86}
-{$endif FPC_OR_PUREPASCAL}
 
 function TPropInfo.WriteIsDefined: boolean;
 begin
@@ -27957,7 +27949,6 @@ begin
          ((Lang=sndxNone) and FindUTF8(pointer(EnumValue),Search)) then
         include(EnumValues,i);
       inc(PByte(P),ord(P^[0])+1);
-      // {$ifdef FPC}P := AlignToPtr(P);{$endif} enum values seem to be not aligned
     end;
     // then search directly from the INTEGER value
     if Int64(EnumValues)<>0 then
@@ -30110,6 +30101,31 @@ begin
   result := (@self<>nil) and (TypeInfo=system.TypeInfo(TSQLRawBlob));
 end;
 
+function FromOrdType(o: TOrdType; P: pointer): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  case o of
+  otSByte: result := PShortInt(P)^;
+  otSWord: result := PSmallInt(P)^;
+  otSLong: result := PInteger(P)^;
+  otUByte: result := PByte(P)^;
+  otUWord: result := PWord(P)^;
+  otULong: result := PCardinal(P)^;
+  {$ifdef FPC_NEWRTTI}otSQWord, otUQWord: result := PInt64(P)^;{$endif}
+  else result := 0; // should not happen
+  end;
+end;
+
+procedure ToOrdType(o: TOrdType; P: pointer; Value: PtrInt);
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  case o of
+  otUByte,otSByte: PByte(P)^ := Value;
+  otUWord,otSWord: PWord(P)^ := Value;
+  otULong,otSLong: PCardinal(P)^ := Value;
+  {$ifdef FPC_NEWRTTI}otSQWord, otUQWord: PInt64(P)^ := Value;{$endif}
+  end;
+end;
 
 {$ifdef USETYPEINFO}
 
@@ -30122,12 +30138,7 @@ function TPropInfo.RetrieveFieldSize: integer;
 begin
   case PropType^.Kind of
   tkInteger,tkEnumeration,tkSet,tkChar,tkWChar{$ifdef FPC},tkBool{$endif}:
-    case PropType^.OrdType of
-    otSByte, otUByte: result := 1;
-    otSWord, otUWord: result := 2;
-    {$ifdef FPC_NEWRTTI}otSQWord, otUQWord: result := 8;{$endif}
-    else result := 4;
-    end;
+    result := ORDTYPE_SIZE[PropType^.OrdType];
   tkFloat:
     case PropType^.FloatType of
     ftSingle:   result := 4;
@@ -30150,8 +30161,15 @@ begin
 end;
 
 function TPropInfo.GetOrdProp(Instance: TObject): PtrInt;
+var P: pointer;
 begin
-  result := SynFPCTypInfo.GetOrdProp(Instance,@self);
+  if GetterIsField then begin
+    P := GetterAddr(Instance);
+    if PropType^.Kind=tkClass then
+      result := PPtrInt(P)^ else
+      result := FromOrdType(PropType^.OrdType,P);
+  end else
+    result := SynFPCTypInfo.GetOrdProp(Instance,@self);
 end;
 
 procedure TPropInfo.SetOrdProp(Instance: TObject; Value: PtrInt);
@@ -30166,12 +30184,7 @@ begin
   end;
   if PropType^.Kind=tkClass then
     PPTrInt(P)^ := Value else
-    case PropType^.OrdType of
-    otUByte,otSByte: PByte(P)^ := Value;
-    otUWord,otSWord: PWord(P)^ := Value;
-    otULong,otSLong: PCardinal(P)^ := Value;
-    {$ifdef FPC_NEWRTTI}otSQWord, otUQWord: PInt64(P)^ := Value;{$endif}
-    end;
+    ToOrdType(PropType^.OrdType,P,Value);
 end;
 
 function TPropInfo.GetInt64Prop(Instance: TObject): Int64;
@@ -30360,15 +30373,7 @@ begin
   with TypeInfo^ do
   if Kind in [tkClass,tkInterface,tkDynArray] then
     result := PPtrInt(P)^ else
-    case TOrdType(PByte(AlignToPtr(@Name[ord(Name[0])+1]))^) of // OrdType of
-    otSByte: result := PShortInt(P)^;
-    otSWord: result := PSmallInt(P)^;
-    otSLong: result := PInteger(P)^;
-    otUByte: result := PByte(P)^;
-    otUWord: result := PWord(P)^;
-    otULong: result := PCardinal(P)^;
-    else result := 0; // should not happen
-    end;
+    result := FromOrdType(POrdType(@Name[ord(Name[0])+1])^,P);
 end;
 
 procedure TPropInfo.SetOrdProp(Instance: TObject; Value: PtrInt);
@@ -30396,14 +30401,7 @@ begin
   with PropType^^ do
   if Kind in [tkClass,tkInterface,tkDynArray] then
     PPtrInt(P)^ := Value else
-    case TOrdType(PByte(AlignToPtr(@Name[ord(Name[0])+1]))^) of // OrdType of
-    otSByte: PShortInt(P)^ := Value;
-    otSWord: PSmallInt(P)^ := Value;
-    otSLong: PInteger(P)^ := Value;
-    otUByte: PByte(P)^ := Value;
-    otUWord: PWord(P)^ := Value;
-    otULong: PCardinal(P)^ := Value;
-    end;
+    ToOrdType(POrdType(@Name[ord(Name[0])+1])^,P,Value);
 end;
 
 function TPropInfo.GetObjProp(Instance: TObject): TObject;
@@ -30839,14 +30837,8 @@ end;
 {$endif FPC_ENUMHASINNER}
 
 function TEnumType.GetEnumName(const Value): PShortString;
-var Ordinal: integer;
 begin
-  case OrdType of // MaxValue does not work e.g. with WordBool
-  otSByte, otUByte: Ordinal := byte(Value);
-  otSWord, otUWord: Ordinal := word(Value);
-  else              Ordinal := integer(Value);
-  end;
-  result := GetEnumNameOrd(Ordinal);
+  result := GetEnumNameOrd(FromOrdType(OrdType,@Value));
 end;
 
 function TEnumType.GetEnumNameOrd(Value: Integer): PShortString;
@@ -31140,22 +31132,12 @@ end;
 
 function TEnumType.SizeInStorageAsEnum: Integer;
 begin
-  case OrdType of // MaxValue does not work e.g. with WordBool
-  otSByte, otUByte: result := 1;
-  otSWord, otUWord: result := 2;
-  {$ifdef FPC_NEWRTTI}otSQWord, otUQWord: result := 8;{$endif}
-  else              result := 4;
-  end;
+  result := ORDTYPE_SIZE[OrdType]; // MaxValue does not work e.g. with WordBool
 end;
 
 procedure TEnumType.SetEnumFromOrdinal(out Value; Ordinal: Integer);
 begin
-  case OrdType of // MaxValue does not work e.g. with WordBool
-  otSByte, otUByte: byte(Value) := Ordinal;
-  otSWord, otUWord: word(Value) := Ordinal;
-  {$ifdef FPC_NEWRTTI}otSQWord, otUQWord: Int64(Value) := Ordinal;{$endif}
-  else              integer(Value) := Ordinal;
-  end;
+  ToOrdType(OrdType,@Value,Ordinal);  // MaxValue does not work e.g. with WordBool
 end;
 
 function TEnumType.SizeInStorageAsSet: Integer;
@@ -56365,13 +56347,12 @@ begin
   if (PW^=$ffff) or (n=0) then
     exit; // no RTTI or no method at this level of interface
   {$else}
-  P := AlignToPtr(@PI^.IntfUnit[ord(PI^.IntfUnit[0])+1]);
+  P := @PI^.IntfUnit[ord(PI^.IntfUnit[0])+1];
   n := PW^;
   inc(PW);
   if (PW^=$ffff) or (n=0) then
     exit; // no RTTI or no method at this level of interface
   inc(PW);
-  p := aligntoptr(p);
   {$endif FPC}
   for m := 0 to n-1 do begin
     // retrieve method name, and add to the methods list (with hashing)
@@ -56385,7 +56366,7 @@ begin
       [fInterfaceTypeInfo^.Name,aURI,self]);
     sm^.HierarchyLevel := fAddMethodsLevel;
     {$ifndef FPC}
-    PS := AlignToPtr(@PS^[ord(PS^[0])+1]); // skip method name in Delphi
+    PS := @PS^[ord(PS^[0])+1]; // skip method name in Delphi
     {$endif FPC}
     Kind := mORMot.TMethodKind(PME^.Kind);
     if TCallingConvention(PME^.CC)<>DEFCC then
@@ -56472,7 +56453,7 @@ begin
       if ValueDirection<>smdConst then
         sm^.ArgsOutNotResultLast := paramcounter;
       ParamName := PS;
-      PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
+      PS := @PS^[ord(PS^[0])+1];
       SetFromRTTI(PB);
       {$ifdef ISDELPHIXE}
       inc(PB,PW^); // skip custom attributes
@@ -60280,7 +60261,7 @@ var PS: PShortString absolute P;
     PP: ^PPTypeInfo absolute P;
 begin
   ArgTypeName := PS;
-  PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
+  P := @PS^[ord(PS^[0])+1];
   if PP^=nil then
     {$ifndef ISDELPHI2010}
     if IdemPropName(ArgTypeName^,'TGUID') then
