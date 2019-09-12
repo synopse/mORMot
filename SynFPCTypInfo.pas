@@ -1,4 +1,6 @@
 /// wrapper around FPC typinfo.pp unit for SynCommons.pas and mORMot.pas
+// - this unit is a part of the freeware Synopse mORMot framework,
+// licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynFPCTypInfo;
 
 {
@@ -47,6 +49,8 @@ unit SynFPCTypInfo;
 
   Version 1.18
   - initial revision
+  - unit created to avoid polluting the SynCommons.pas/mORMot.pas namespace
+    with overloaded typinfo.pp types
 
 }
 
@@ -66,7 +70,6 @@ const
 
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
 function AlignToPtr(p: pointer): pointer; inline;
-function GetFPCAlignPtr(p: pointer): pointer; inline;
 function AlignTypeData(p : Pointer): pointer; inline;
 {$else FPC_REQUIRES_PROPER_ALIGNMENT}
 type
@@ -74,15 +77,31 @@ type
   AlignTypeData = pointer;
 {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
-function GetFPCEnumName(TypeInfo: PTypeInfo; Value: Integer): PShortString; inline;
-function GetFPCEnumValue(TypeInfo: PTypeInfo; const Name: string): Integer; inline;
-function GetFPCTypeData(TypeInfo: PTypeInfo): PTypeData; inline;
 function GetFPCPropInfo(AClass: TClass; const PropName: string): PPropInfo; inline;
+function IsStoredProp(Instance: TObject; PropInfo: pointer): boolean; inline;
+function GetOrdProp(Instance: TObject; PropInfo: pointer): Int64; inline;
+procedure SetOrdProp(Instance: TObject; PropInfo: pointer; Value: Int64); inline;
+function GetFloatProp(Instance: TObject; PropInfo: pointer): Extended; inline;
+procedure SetFloatProp(Instance: TObject; PropInfo: pointer; const Value: Extended); inline;
+function GetStrProp(Instance: TObject; PropInfo: pointer): string; inline;
+procedure SetStrProp(Instance: TObject; PropInfo: pointer; const Value: string); inline;
+function GetWideStrProp(Instance: TObject; PropInfo: pointer): WideString; inline;
+procedure SetWideStrProp(Instance: TObject; PropInfo: pointer; const Value: WideString); inline;
+{$ifdef HASVARUSTRING}
+function GetUnicodeStrProp(Instance: TObject; PropInfo: pointer): UnicodeString; inline;
+procedure SetUnicodeStrProp(Instance: TObject; PropInfo: pointer; const Value: UnicodeString); inline;
+{$endif HASVARUSTRING}
+function GetVariantProp(Instance: TObject; PropInfo: pointer): Variant; inline;
+procedure SetVariantProp(Instance: TObject; PropInfo: pointer; const Value: Variant); inline;
 
-{$ifdef FPC_NEWRTTI}
 type
-  /// some type definition to avoid inclusion of TypInfo in main SynCommons.pas
-  PRecInitData = TypInfo.PRecInitData;
+  /// some type definition to avoid inclusion of TypInfo in SynCommons/mORMot.pas
+  PFPCInterfaceData = TypInfo.PInterfaceData;
+  PFPCVmtMethodParam = TypInfo.PVmtMethodParam;
+  PFPCIntfMethodTable = TypInfo.PIntfMethodTable;
+  PFPCIntfMethodEntry = TypInfo.PIntfMethodEntry;
+{$ifdef FPC_NEWRTTI}
+  PFPCRecInitData = TypInfo.PRecInitData;
 
 function GetFPCRecInitData(TypeData: Pointer): Pointer;
 {$endif FPC_NEWRTTI}
@@ -118,8 +137,8 @@ function AlignTypeData(p: pointer): pointer;
 {$packrecords c}
   type
     TAlignCheck = record
-      b : byte;
-      q : qword;
+      b : byte;    // = TTypeKind
+      q : qword;   // = this is where the PTypeData begins
     end;
 {$packrecords default}
 begin
@@ -129,74 +148,11 @@ begin
   result := Pointer(align(p,PtrInt(@TAlignCheck(nil^).q)))
 {$endif VER3_0}
 end;
-
-function GetFPCAlignPtr(P: pointer): pointer;
-begin
-  result := AlignTypeData(P+2+Length(PTypeInfo(P)^.Name));
-  Dec(PtrUInt(result),2*SizeOf(pointer));
-end;
 {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
-
-function GetFPCTypeData(TypeInfo: PTypeInfo): PTypeData;
-begin
-  result := PTypeData({$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}AlignTypeData{$endif}
-    (PTypeData(pointer(TypeInfo)+2+PByte(pointer(TypeInfo)+1)^)));
-end;
-
-function GetFPCEnumValue(TypeInfo: PTypeInfo; const Name: string): Integer;
-var PS: PShortString;
-    PT: PTypeData;
-    Count: longint;
-    sName: shortstring;
-begin
-  if Length(Name)=0 then
-    exit(-1);
-  sName := Name;
-  PT := GetFPCTypeData(TypeInfo);
-  Count := 0;
-  result := -1;
-  if TypeInfo^.Kind=tkBool then begin
-    if CompareText(BooleanIdents[false],Name)=0 then
-      result := 0 else
-    if CompareText(BooleanIdents[true],Name)=0 then
-      result := 1;
-  end else
-  begin
-    PS := @PT^.NameList;
-    while (result=-1) and (PByte(PS)^<>0) do begin
-        if ShortCompareText(PS^, sName) = 0 then
-          result := Count+PT^.MinValue;
-        PS := PShortString(pointer(PS)+PByte(PS)^+1);
-        Inc(Count);
-      end;
-  end;
-end;
-
-function GetFPCEnumName(TypeInfo: PTypeInfo; Value: Integer): PShortString;
-const NULL_SHORTSTRING: string[1] = '';
-Var PS: PShortString;
-    PT: PTypeData;
-begin
-  PT := GetFPCTypeData(TypeInfo);
-  if TypeInfo^.Kind=tkBool then begin
-    case Value of
-      0,1: result := @BooleanIdents[Boolean(Value)];
-      else result := @NULL_SHORTSTRING;
-    end;
-  end else begin
-    PS := @PT^.NameList;
-    dec(Value,PT^.MinValue);
-    while Value>0 do begin
-      PS := PShortString(pointer(PS)+PByte(PS)^+1);
-      Dec(Value);
-    end;
-    result := PS;
-  end;
-end;
 
 function GetFPCPropInfo(AClass: TClass; const PropName: string): PPropInfo;
 begin
-  result := typinfo.GetPropInfo(AClass,PropName);
+  result := TypInfo.GetPropInfo(AClass,PropName);
 end;
 
 {$ifdef FPC_NEWRTTI}
@@ -207,5 +163,72 @@ begin
     result := AlignTypeData(pointer(PTypeData(TypeData)^.RecInitData));
 end;
 {$endif FPC_NEWRTTI}
+
+function IsStoredProp(Instance: TObject; PropInfo: pointer): boolean;
+begin
+  result := TypInfo.IsStoredProp(Instance,PropInfo);
+end;
+
+function GetOrdProp(Instance: TObject; PropInfo: pointer): Int64;
+begin
+  result := TypInfo.GetOrdProp(Instance,PropInfo);
+end;
+
+procedure SetOrdProp(Instance: TObject; PropInfo: pointer; Value: Int64);
+begin
+  TypInfo.SetOrdProp(Instance,PropInfo,Value);
+end;
+
+function GetFloatProp(Instance: TObject; PropInfo: pointer): Extended;
+begin
+  result := TypInfo.GetFloatProp(Instance,PropInfo);
+end;
+
+procedure SetFloatProp(Instance: TObject; PropInfo: pointer; const Value: Extended);
+begin
+  TypInfo.SetFloatProp(Instance,PropInfo,Value);
+end;
+
+function GetVariantProp(Instance: TObject; PropInfo: pointer): Variant;
+begin
+  result := TypInfo.GetVariantProp(Instance,PropInfo);
+end;
+
+procedure SetVariantProp(Instance: TObject; PropInfo: pointer; const Value: Variant);
+begin
+  TypInfo.SetVariantProp(Instance,PropInfo,Value);
+end;
+
+function GetStrProp(Instance: TObject; PropInfo: pointer): string;
+begin
+  result := TypInfo.GetStrProp(Instance,PropInfo);
+end;
+
+procedure SetStrProp(Instance: TObject; PropInfo: pointer; const Value: string);
+begin
+  TypInfo.SetStrProp(Instance,PropInfo,Value);
+end;
+
+function GetWideStrProp(Instance: TObject; PropInfo: pointer): WideString;
+begin
+  result := TypInfo.GetWideStrProp(Instance,PropInfo);
+end;
+
+procedure SetWideStrProp(Instance: TObject; PropInfo: pointer; const Value: WideString);
+begin
+  TypInfo.SetWideStrProp(Instance,PropInfo,Value);
+end;
+
+{$ifdef HASVARUSTRING}
+function GetUnicodeStrProp(Instance: TObject; PropInfo: pointer): UnicodeString;
+begin
+  result := TypInfo.GetUnicodeStrProp(Instance,PropInfo);
+end;
+
+procedure SetUnicodeStrProp(Instance: TObject; PropInfo: pointer; const Value: UnicodeString);
+begin
+  TypInfo.SetUnicodeStrProp(Instance,PropInfo,Value);
+end;
+{$endif HASVARUSTRING}
 
 end.

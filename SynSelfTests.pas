@@ -4062,7 +4062,7 @@ begin
     Check(Ansi7ToString(s)=u,u);
     PC := ToVarUInt32(juint,@varint);
     Check(PC<>nil);
-    Check(PAnsiChar(PC)-@varint=integer(ToVarUInt32Length(juint)));
+    Check(PtrInt(PC)-PtrInt(@varint)=integer(ToVarUInt32Length(juint)));
     PB := @varint;
     Check(PtrUInt(FromVarUint32(PB))=juint);
     Check(PB=PC);
@@ -4083,7 +4083,7 @@ begin
     Check(PB=PC);
     PC := ToVarUInt64(juint,@varint);
     Check(PC<>nil);
-    Check(PAnsiChar(PC)-@varint=integer(ToVarUInt32Length(juint)));
+    Check(PtrInt(PC)-PtrInt(@varint)=integer(ToVarUInt32Length(juint)));
     PB := @varint;
     Check(PtrUInt(FromVarUint64(PB))=juint);
     Check(PB=PC);

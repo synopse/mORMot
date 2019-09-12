@@ -966,10 +966,12 @@ function NextGrow(capacity: integer): integer;
 /// equivalence to SetString(s,nil,len) function
 // - faster especially under FPC
 procedure FastSetString(var s: RawUTF8; p: pointer; len: PtrInt);
+  {$ifndef HASCODEPAGE} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
 /// equivalence to SetString(s,nil,len) function with a specific code page
 // - faster especially under FPC
 procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
+  {$ifndef HASCODEPAGE} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
 /// initialize a RawByteString, ensuring returned "aligned" pointer is 16-bytes aligned
 // - to be used e.g. for proper SSE process
@@ -4655,6 +4657,100 @@ function FromVarBlob(Data: PByte): TValueResult; {$ifdef HASINLINE}inline;{$endi
 { ************ low-level RTTI types and conversion routines ***************** }
 
 type
+  /// specify ordinal (tkInteger and tkEnumeration) storage size and sign
+  // - note: Int64 is stored as its own TTypeKind, not as tkInteger
+  TOrdType = (otSByte,otUByte,otSWord,otUWord,otSLong,otULong
+    {$ifdef FPC_NEWRTTI},otSQWord,otUQWord{$endif});
+
+  /// specify floating point (ftFloat) storage size and precision
+  // - here ftDouble is renamed ftDoub to avoid confusion with TSQLDBFieldType
+  TFloatType = (ftSingle,ftDoub,ftExtended,ftComp,ftCurr);
+
+{$ifdef FPC}
+  /// available type families for FPC RTTI values
+  // - values differs from Delphi, and are taken from FPC typinfo.pp unit
+  // - here below, we defined tkLString instead of tkAString to match Delphi -
+  // see https://lists.freepascal.org/pipermail/fpc-devel/2013-June/032360.html
+  // "Compiler uses internally some LongStrings which is not possible to use
+  // for variable declarations" so tkLStringOld seems never used in practice
+  TTypeKind = (tkUnknown,tkInteger,tkChar,tkEnumeration,tkFloat,
+    tkSet,tkMethod,tkSString,tkLStringOld{=tkLString},tkLString{=tkAString},
+    tkWString,tkVariant,tkArray,tkRecord,tkInterface,
+    tkClass,tkObject,tkWChar,tkBool,tkInt64,tkQWord,
+    tkDynArray,tkInterfaceRaw,tkProcVar,tkUString,tkUChar,
+    tkHelper,tkFile,tkClassRef,tkPointer);
+
+const
+  /// potentially managed types in TTypeKind RTTI enumerate
+  // - should match ManagedType*() functions
+  tkManagedTypes = [tkLStringOld,tkLString,tkWstring,tkUstring,tkArray,
+                    tkObject,tkRecord,tkDynArray,tkInterface,tkVariant];
+  /// maps record or object in TTypeKind RTTI enumerate
+  tkRecordTypes = [tkObject,tkRecord];
+  /// maps record or object in TTypeKind RTTI enumerate
+  tkRecordKinds = [tkObject,tkRecord];
+
+type
+  ///  TTypeKind RTTI enumerate as defined in Delphi 6 and up
+  TDelphiTypeKind = (dkUnknown, dkInteger, dkChar, dkEnumeration, dkFloat,
+    dkString, dkSet, dkClass, dkMethod, dkWChar, dkLString, dkWString,
+    dkVariant, dkArray, dkRecord, dkInterface, dkInt64, dkDynArray,
+    dkUString, dkClassRef, dkPointer, dkProcedure);
+
+const
+  /// convert FPC's TTypeKind to Delphi's RTTI enumerate
+  // - used internally for cross-compiler TDynArray binary serialization
+  FPCTODELPHI: array[TTypeKind] of TDelphiTypeKind = (
+    dkUnknown,dkInteger,dkChar,dkEnumeration,dkFloat,
+    dkSet,dkMethod,dkString,dkLString,dkLString,
+    dkWString,dkVariant,dkArray,dkRecord,dkInterface,
+    dkClass,dkRecord,dkWChar,dkEnumeration,dkInt64,dkInt64,
+    dkDynArray,dkInterface,dkProcedure,dkUString,dkWChar,
+    dkPointer,dkPointer,dkClassRef,dkPointer);
+
+  /// convert Delphi's TTypeKind to FPC's RTTI enumerate
+  DELPHITOFPC: array[TDelphiTypeKind] of TTypeKind = (
+    tkUnknown, tkInteger, tkChar, tkEnumeration, tkFloat,
+    tkSString, tkSet, tkClass, tkMethod, tkWChar, tkLString, tkWString,
+    tkVariant, tkArray, tkRecord, tkInterface, tkInt64, tkDynArray,
+    tkUString, tkClassRef, tkPointer, tkProcVar);
+
+{$else}
+  /// available type families for Delphi 6 and up, similar to typinfo.pas
+  // - redefined here to be shared between SynCommons.pas and mORMot.pas,
+  // also leveraging FPC compatibility as much as possible (FPC's typinfo.pp
+  // is not convenient to share code with Delphi - see e.g. its tkLString)
+  TTypeKind = (tkUnknown, tkInteger, tkChar, tkEnumeration, tkFloat,
+    tkString, tkSet, tkClass, tkMethod, tkWChar, tkLString, tkWString,
+    tkVariant, tkArray, tkRecord, tkInterface, tkInt64, tkDynArray
+    {$ifdef UNICODE}, tkUString, tkClassRef, tkPointer, tkProcedure{$endif});
+
+const
+  /// maps record or object in TTypeKind RTTI enumerate
+  tkRecordTypes = [tkRecord];
+  /// maps record or object in TTypeKind RTTI enumerate
+  tkRecordKinds = tkRecord;
+
+{$endif FPC}
+
+  /// maps long string in TTypeKind RTTI enumerate
+  tkStringTypes =
+    [tkLString, {$ifdef FPC}tkLStringOld,{$endif} tkWString
+     {$ifdef HASVARUSTRING}, tkUString{$endif}];
+  /// maps 1, 8, 16, 32 and 64-bit ordinal in TTypeKind RTTI enumerate
+  tkOrdinalTypes =
+    [tkInteger, tkChar, tkWChar, tkEnumeration, tkSet, tkInt64
+     {$ifdef FPC},tkBool,tkQWord{$endif}];
+
+type
+  PTypeKind = ^TTypeKind;
+  TTypeKinds = set of TTypeKind;
+  POrdType = ^TOrdType;
+  PFloatType = ^TFloatType;
+
+function ToText(k: TTypeKind): PShortString; overload;
+
+type
   /// function prototype to be used for TDynArray Sort and Find method
   // - common functions exist for base types: see e.g. SortDynArrayBoolean,
   // SortDynArrayByte, SortDynArrayWord, SortDynArrayInteger, SortDynArrayCardinal,
@@ -6490,6 +6586,9 @@ function GetSetName(aTypeInfo: pointer; const value): RawUTF8;
 // - you'd better use RTTI related classes of mORMot.pas unit, e.g. TEnumType
 procedure GetSetNameShort(aTypeInfo: pointer; const value; out result: ShortString;
   trimlowercase: boolean=false);
+
+/// low-level helper to retrive the base enumeration RTTI of a given set
+function GetSetBaseEnum(aTypeInfo: pointer): pointer;
 
 /// fast append some UTF-8 text into a shortstring
 procedure AppendShortComma(text: PAnsiChar; len: integer; var result: shortstring;
@@ -20265,73 +20364,7 @@ begin
     inc(result,tab[v and tab[Count+16]]);
 end;
 
-{$ifdef FPC}
-
 type
-  /// available type families for Free Pascal RTTI values
-  // - values differs from Delphi, and are taken from FPC typinfo.pp unit
-  // - here below, we defined tkLString instead of FPC tkAString to match
-  // Delphi - see http://lists.freepascal.org/fpc-devel/2013-June/032233.html
-  TTypeKind = (tkUnknown,tkInteger,tkChar,tkEnumeration,tkFloat,
-    tkSet,tkMethod,tkSString,tkLStringOld,tkLString,
-    tkWString,tkVariant,tkArray,tkRecord,tkInterface,
-    tkClass,tkObject,tkWChar,tkBool,tkInt64,tkQWord,
-    tkDynArray,tkInterfaceRaw,tkProcVar,tkUString,tkUChar,
-    tkHelper,tkFile,tkClassRef,tkPointer);
-
-const
-   // all potentially managed types - should match ManagedType*() functions
-   tkManagedTypes = [tkLStringOld,tkLString,tkWstring,tkUstring,tkArray,
-                     tkObject,tkRecord,tkDynArray,tkInterface,tkVariant];
-   // maps record or object types
-   tkRecordTypes = [tkObject,tkRecord];
-   tkRecordKinds = [tkObject,tkRecord];
-
-type
-  // as defined in Delphi 6 and up
-  TDelphiTypeKind = (dkUnknown, dkInteger, dkChar, dkEnumeration, dkFloat,
-    dkString, dkSet, dkClass, dkMethod, dkWChar, dkLString, dkWString,
-    dkVariant, dkArray, dkRecord, dkInterface, dkInt64, dkDynArray,
-    dkUString, dkClassRef, dkPointer, dkProcedure);
-
-const
-  FPCTODELPHI: array[TTypeKind] of TDelphiTypeKind = (
-    dkUnknown,dkInteger,dkChar,dkEnumeration,dkFloat,
-    dkSet,dkMethod,dkString,dkLString,dkLString,
-    dkWString,dkVariant,dkArray,dkRecord,dkInterface,
-    dkClass,dkRecord,dkWChar,dkEnumeration,dkInt64,dkInt64,
-    dkDynArray,dkInterface,dkProcedure,dkUString,dkWChar,
-    dkPointer,dkPointer,dkClassRef,dkPointer);
-
-  DELPHITOFPC: array[TDelphiTypeKind] of TTypeKind = (
-    tkUnknown, tkInteger, tkChar, tkEnumeration, tkFloat,
-    tkSString, tkSet, tkClass, tkMethod, tkWChar, tkLString, tkWString,
-    tkVariant, tkArray, tkRecord, tkInterface, tkInt64, tkDynArray,
-    tkUString, tkClassRef, tkPointer, tkProcVar);
-
-{$else FPC}
-
-type
-  /// available type families for Delphi 6 and up, similar to typinfo.pas
-  TTypeKind = (tkUnknown, tkInteger, tkChar, tkEnumeration, tkFloat,
-    tkString, tkSet, tkClass, tkMethod, tkWChar, tkLString, tkWString,
-    tkVariant, tkArray, tkRecord, tkInterface, tkInt64, tkDynArray
-    {$ifdef UNICODE}, tkUString, tkClassRef, tkPointer, tkProcedure{$endif});
-
-const
-  // maps record or object types
-  tkRecordTypes = [tkRecord];
-  tkRecordKinds = tkRecord;
-
-{$endif}
-
-type
-  PTypeKind = ^TTypeKind;
-  TOrdType = (otSByte,otUByte,otSWord,otUWord,otSLong,otULong
-    {$ifdef FPC_NEWRTTI},otSQWord,otUQWord{$endif});
-  TFloatType = (ftSingle,ftDoub,ftExtended,ftComp,ftCurr);
-  TTypeKinds = set of TTypeKind;
-
   PStrRec = ^TStrRec;
   /// map the Delphi/FPC string header, as defined in System.pas
 {$ifdef FPC} // see TAnsiRec in astrings.inc
@@ -20384,9 +20417,9 @@ type
 {$endif FPC}
   end;
 
-  {$ifdef FPC}
-    {$PACKRECORDS C}
-  {$endif FPC}
+{$ifdef FPC}
+  {$PACKRECORDS C}
+{$endif FPC}
 
   PTypeInfo = ^TTypeInfo;
   {$ifdef HASDIRECTTYPEINFO}
@@ -20501,15 +20534,12 @@ type
     );
     tkEnumeration: (
       EnumType: TOrdType;
-      {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-      tkEnumerationAlignment:DWORD; // needed for correct alignment !!??
-      {$endif}
       {$ifdef FPC_ENUMHASINNER} inner:
       {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT} packed {$endif} record
       {$endif FPC_ENUMHASINNER}
       MinValue: longint;
       MaxValue: longint;
-      EnumBaseType: PTypeInfoStored;
+      EnumBaseType: PTypeInfoStored; // BaseTypeRef in FPC TypInfo.pp
       {$ifdef FPC_ENUMHASINNER} end; {$endif FPC_ENUMHASINNER}
       NameList: string[255];
     );
@@ -20522,21 +20552,18 @@ type
     tkSet: (
       SetType: TOrdType;
       {$ifdef FPC}
-      {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-      tkSetAlignment: DWORD; // needed for correct alignment !!??
-      {$endif}
       {$ifndef VER3_0}
       SetSize: SizeInt;
       {$endif VER3_0}
       {$endif FPC}
-      SetBaseType: PTypeInfoStored;
+      SetBaseType: PTypeInfoStored; // CompTypeRef in FPC TypInfo.pp
     );
     tkFloat: (
       FloatType: TFloatType;
     );
     tkClass: (
-      ClassType: PAnsiChar; // TClass;
-      ParentInfo: PTypeInfoStored;
+      ClassType: TClass;
+      ParentInfo: PTypeInfoStored; // ParentInfoRef in FPC TypInfo.pp
       PropCount: SmallInt;
       UnitNameLen: byte;
     );
@@ -20649,7 +20676,7 @@ begin
     {$ifdef FPC}Move{$else}MoveFast{$endif}(p^,aligned^,len);
 end;
 
-function ToText(k: TTypeKind): PShortString; overload;
+function ToText(k: TTypeKind): PShortString;
 begin
   result := GetEnumName(TypeInfo(TTypeKind),ord(k));
 end;
@@ -20704,12 +20731,20 @@ begin
   end;
 end;
 
+{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+function FPCTypeInfoOverName(P: pointer): pointer; inline;
+begin // aligned result := @PAnsiChar(info)[info^.NameLen]
+  result := AlignTypeData(P+2+PTypeInfo(P)^.NameLen);
+  dec(PtrUInt(result),2*SizeOf(pointer)); // -2 to point on PTypeInfo^.kind
+end;
+{$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+
 function GetTypeInfo(aTypeInfo: pointer; aExpectedKind: TTypeKind): PTypeInfo; overload;
 {$ifdef HASINLINE} inline;
 begin
   if (aTypeInfo<>nil) and (PTypeKind(aTypeInfo)^=aExpectedKind) then begin
     {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-    result := GetFPCAlignPtr(aTypeInfo);
+    result := FPCTypeInfoOverName(aTypeInfo);
     {$else}
     result := aTypeInfo;
     inc(PByte(result),result^.NameLen);
@@ -20737,7 +20772,7 @@ begin
   if result<>nil then
     if result^.Kind in aExpectedKind then
       {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-      result := GetFPCAlignPtr(result)
+      result := FPCTypeInfoOverName(result)
       {$else}
       inc(PByte(result),result^.NameLen)
       {$endif}
@@ -20762,7 +20797,7 @@ function GetTypeInfo(aTypeInfo: pointer): PTypeInfo; overload;
 {$ifdef HASINLINE} inline;
 begin
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  result := GetFPCAlignPtr(aTypeInfo);
+  result := FPCTypeInfoOverName(aTypeInfo);
   {$else}
   result := @PAnsiChar(aTypeInfo)[PTypeInfo(aTypeInfo)^.NameLen];
   {$endif}
@@ -20868,6 +20903,13 @@ asm // eax=aTypeInfo edx=@MaxValue
 @n:     xor     eax, eax
 end;
 {$endif HASINLINE}
+
+function GetSetBaseEnum(aTypeInfo: pointer): pointer;
+begin
+  result := GetTypeInfo(aTypeInfo,tkSet);
+  if result<>nil then
+    result := Deref(PTypeInfo(result)^.SetBaseType);
+end;
 
 function GetSetInfo(aTypeInfo: pointer; out MaxValue: Integer;
   out Names: PShortString): boolean;
@@ -31733,7 +31775,7 @@ begin
     {$ifdef CPUX86}
     result := (result*10.0)+ch;
     {$else}
-    result := result*ten; // better FPC+Delphi64 code generation in two steps
+    result := result*ten; // better SSE code generation in two steps
     result := result+ch;
     {$endif}
     include(flags,fValid);
@@ -39556,7 +39598,7 @@ function ArrayItemType(var info: PTypeInfo; out len: integer): PTypeInfo;
   {$ifdef HASINLINE}inline;{$endif}
 begin
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT} // inlined info := GetTypeInfo(info)
-  info := GetFPCAlignPtr(info);
+  info := FPCTypeInfoOverName(info);
   {$else}
   info := @PAnsiChar(info)[info^.NameLen];
   {$endif}
@@ -39781,8 +39823,8 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
   case info^.Kind of
   tkLString: begin // most used type of string
     itemsize := FromVarUInt32(PByte(source));
-    FastSetStringCP(data^,source,itemsize,PWord({$ifdef FPC}
-      GetFPCTypeData(pointer(info)){$else}PtrUInt(info)+info^.NameLen+2{$endif})^);
+    FastSetStringCP(data^,source,itemsize,PWord({$ifdef FPC}AlignTypeData{$endif}
+      (pointer(PtrUInt(info)+info^.NameLen+2)))^);
     inc(source,itemsize);
     result := SizeOf(PtrUInt); // size of tkLString
   end;
@@ -39848,7 +39890,7 @@ end;
 function GetManagedFields(info: PTypeInfo; out firstfield: PFieldInfo): integer;
   {$ifdef HASINLINE}inline;{$endif}
 {$ifdef FPC_NEWRTTI}
-var recInitData: PRecInitData; // low-level structure from typinfo.pp
+var recInitData: PFPCRecInitData; // low-level type redirected from SynFPCTypInfo
 begin
   recInitData := GetFPCRecInitData(AlignTypeData(PByte(info)+2));
   firstfield := pointer(PtrUInt(recInitData)+SizeOf(recInitData^)); // =ManagedFields[0]
@@ -47834,7 +47876,7 @@ Bin:  case fElemSize of
     if not exacttype and (PTypeKind(fElemType)^ in tkRecordTypes) then begin
       info := fElemType; // inlined GetTypeInfo()
       {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-rec:  info := GetFPCAlignPtr(info);
+rec:  info := FPCTypeInfoOverName(info);
       {$else}
 rec:  inc(PByte(info),info^.NameLen);
       {$endif}
@@ -48968,7 +49010,7 @@ begin
     raise ESynException.CreateUTF8('TDynArray.Init: % is %, expected tkDynArray',
       [PShortString(@PTypeInfo(aTypeInfo)^.NameLen)^,ToText(PTypeKind(aTypeInfo)^)^]);
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  aTypeInfo := GetFPCAlignPtr(aTypeInfo);
+  aTypeInfo := FPCTypeInfoOverName(aTypeInfo);
   {$else}
   inc(PByte(aTypeInfo),PTypeInfo(aTypeInfo)^.NameLen);
   {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
