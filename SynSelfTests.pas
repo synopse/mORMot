@@ -1,4 +1,4 @@
-/// automated tests for common units of the Synopse mORMot Framework
+﻿/// automated tests for common units of the Synopse mORMot Framework
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynSelfTests;
@@ -975,6 +975,8 @@ type
     ['{0984A2DA-FD1F-49D6-ACFE-4D45CF08CA1B}']
     function TestRest(a,b: integer; out c: RawUTF8): variant;
     function TestRestCustom(a: integer): TServiceCustomAnswer;
+    function TestRestParameterSequence1(const a: TArray<Integer>; const b: TGUID): boolean;
+    function TestRestParameterSequence2(const a: TGUID; const b: TArray<Integer>): boolean;
     function TestCallback(d: Integer; const callback: IBidirCallback): boolean;
     procedure LaunchAsynchCallback(a: integer);
     procedure RemoveCallback;
@@ -985,6 +987,8 @@ type
     fCallback: IBidirCallback;
     function TestRest(a,b: integer; out c: RawUTF8): variant;
     function TestRestCustom(a: integer): TServiceCustomAnswer;
+    function TestRestParameterSequence1(const a: TArray<Integer>; const b: TGUID): boolean;
+    function TestRestParameterSequence2(const a: TGUID; const b: TArray<Integer>): boolean;
     function TestCallback(d: Integer; const callback: IBidirCallback): boolean;
     procedure LaunchAsynchCallback(a: integer);
     procedure RemoveCallback;
@@ -18512,6 +18516,16 @@ begin
   result.Status := HTTP_SUCCESS;
 end;
 
+function TBidirServer.TestRestParameterSequence1(const a: TArray<Integer>; const b: TGUID): boolean;
+begin
+  result := true;
+end;
+
+function TBidirServer.TestRestParameterSequence2(const a: TGUID; const b: TArray<Integer>): boolean;
+begin
+  result := true;
+end;
+
 function TBidirServer.TestCallback(d: Integer; const callback: IBidirCallback): boolean;
 begin
   fCallback := callback;
@@ -18599,6 +18613,8 @@ begin
     check(GetInteger(pointer(res.Content))=a);
     check(res.Content[Length(res.Content)]=#1);
   end;
+  check(I.TestRestParameterSequence1([],TGUID.NewGuid));
+  check(I.TestRestParameterSequence2(TGUID.NewGuid,[]));
 end;
 
 procedure TTestBidirectionalRemoteConnection.TestCallback(Rest: TSQLRest);
