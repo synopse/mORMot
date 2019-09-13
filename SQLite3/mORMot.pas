@@ -4340,7 +4340,7 @@ function GetObjectComponent(Obj: TPersistent; const ComponentName: shortstring;
 
 /// retrieve the class property RTTI information for a specific class
 function InternalClassProp(ClassType: TClass): PClassProp;
-  {$ifdef HASINLINENOTX86}inline;{$endif}
+  {$ifdef FPC}inline;{$else}{$ifdef HASINLINENOTX86}inline;{$endif}{$endif}
 
 /// retrieve the class property RTTI information for a specific class
 // - will return the number of published properties
@@ -10747,8 +10747,9 @@ type
   // so that low-level logging won't include such values
   // - vIsQword is set for ValueType=smvInt64 over a QWord unsigned 64-bit value
   // - vIsDynArrayString is set for ValueType=smvDynArray of string values
+  // - vIsDateTimeMS is set for ValueType=smvDateTime and TDateTimeMS value
   TServiceMethodValueAsm = set of (vIsString, vPassedByReference,
-    vIsObjArray, vIsSPI, vIsQword, vIsDynArrayString);
+    vIsObjArray, vIsSPI, vIsQword, vIsDynArrayString, vIsDateTimeMS);
 
   /// describe a service provider method argument
   {$ifdef UNICODE}TServiceMethodArgument = record{$else}TServiceMethodArgument = object{$endif}
@@ -21225,7 +21226,7 @@ begin // see http://hallvards.blogspot.fr/2006/09/extended-class-rtti.html
     result := pointer(PAnsiChar(@Name[1])+ord(Name[0]));
     if PtrUInt(result)-PtrUInt(@self)=Len then
       result := nil; // no method details available
-    {$endif}
+    {$endif FPC}
   end else
       result := @self;
 end;
@@ -21246,7 +21247,7 @@ end;
 function InternalClassProp(ClassType: TClass): PClassProp;
 {$ifdef FPC}
 begin
-  with PTypeInfo(ClassType.ClassInfo)^.ClassType^ do
+  with PTypeInfo(PPointer(PtrUInt(ClassType)+vmtTypeInfo)^)^.ClassType^ do
     result := AlignToPtr(PAnsiChar(@UnitName[1])+ord(UnitName[0]));
 {$else}
 {$ifdef HASINLINENOTX86}
@@ -21268,7 +21269,7 @@ asm // this code is the fastest possible
         lea     eax, [eax + edx].TClassType.UnitName[1].TClassProp
 @z:
 {$endif HASINLINENOTX86}
-{$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+{$endif FPC}
 end;
 
 function InternalClassPropInfo(ClassType: TClass; out PropInfo: PPropInfo): integer;
@@ -21289,7 +21290,7 @@ begin
         PClassProp(@UnitName[ord(UnitName[0])+1])^ do begin
       PropInfo := @PropList;
       result := PropCount;
-    {$endif}
+    {$endif FPC}
       exit;
     end;
   end;
@@ -55232,10 +55233,10 @@ begin
   tkFloat:
     if (P=TypeInfo(TDateTime)) or (P=TypeInfo(TDateTimeMS)) then
       result := smvDateTime else
-    case P^.FloatType of
-      ftCurr: result := smvCurrency;
-      ftDoub: result := smvDouble;
-    end;
+      case P^.FloatType of
+        ftCurr: result := smvCurrency;
+        ftDoub: result := smvDouble;
+      end;
   {$ifdef FPC}tkLStringOld,{$endif} tkLString:
     if P=TypeInfo(RawJSON) then
       result := smvRawJSON else
@@ -55630,6 +55631,16 @@ begin
           Include(ValueKindAsm,vIsString);
         end else if ArgTypeInfo^.IsQWord then
           Include(ValueKindAsm,vIsQword);
+      smvDouble,smvDateTime: begin
+        {$ifdef HAS_FPREG}
+        ValueIsInFPR := not (vPassedByReference in ValueKindAsm);
+        {$endif HAS_FPREG}
+        if ValueType=smvDateTime then begin
+          include(ValueKindAsm,vIsString);
+          if ArgTypeInfo=System.TypeInfo(TDateTimeMS) then
+            include(ValueKindAsm,vIsDateTimeMS);
+        end;
+      end;
       smvRawUTF8..smvWideString:
         Include(ValueKindAsm,vIsString);
       smvDynArray: begin
@@ -55642,10 +55653,6 @@ begin
         DynArrayWrapper.IsObjArray := vIsObjArray in ValueKindAsm;
         DynArrayWrapper.HasCustomJSONParser;
       end;
-      {$ifdef HAS_FPREG}
-      smvDouble,smvDateTime:
-        ValueIsInFPR := not (vPassedByReference in ValueKindAsm);
-      {$endif HAS_FPREG}
       end;
       case ValueType of
         smvBoolean:
@@ -56299,7 +56306,7 @@ begin
   {$ifdef FPC}
   PI := P;
   if PI^.Parent<>nil then
-    Ancestor := Deref(mORMot.PPTypeInfo(PI^.Parent)) else
+    Ancestor := Deref(pointer(PI^.Parent)) else
   {$else}
   if PI^.IntfParent<>nil then
     Ancestor := Deref(PI^.IntfParent) else
@@ -60296,7 +60303,9 @@ begin
     end;
   smvRawUTF8..smvWideString, smvObject..smvInterface:
     result := PPointer(V)^=nil;
-  smvBinary, smvRecord:
+  smvBinary:
+    result := IsZeroSmall(V,SizeInStorage);
+  smvRecord:
     result := IsZero(V,SizeInStorage);
   {$ifndef NOVARIANTS}
   smvVariant: result := PVarData(V)^.vtype<=varNull;
@@ -60347,14 +60356,22 @@ begin
       if R=nil then
         RaiseError('returned RawJSON');
     end;
-  smvBoolean..smvWideString: begin
+  smvDateTime: begin
+    Val := GetJSONField(R,R,@wasString,nil,@ValLen);
+    if (Val=nil) or (ValLen=0) then
+      PInt64(V)^ := 0 else
+      if wasString then
+        Iso8601ToDateTimePUTF8CharVar(Val,ValLen,PDateTime(V)^) else
+        PDouble(V)^ := GetExtended(Val); // allow JSON number decoding
+  end;
+  smvBoolean..smvDouble, smvCurrency..smvWideString: begin
     Val := GetJSONField(R,R,@wasString,nil,@ValLen);
     if (Val=nil) or (wasString<>(vIsString in ValueKindAsm)) then begin
       RaiseError('missing or invalid value');
       exit;
     end;
     if (ValueType=smvBoolean) and (PInteger(Val)^=TRUE_LOW) then
-      Val := pointer(SmallUInt32UTF8[1]); // normalize
+      Val := pointer(SmallUInt32UTF8[1]); // normalize 'true' to '1'
     case ValueType of
     smvBoolean, smvEnum, smvSet, smvCardinal:
 doint:case SizeInStorage of
@@ -60369,7 +60386,7 @@ doint:case SizeInStorage of
       if vIsQword in ValueKindAsm then
         SetQWord(Val,PQWord(V)^) else
         SetInt64(Val,PInt64(V)^);
-    smvDouble,smvDateTime:
+    smvDouble:
       PDouble(V)^ := GetExtended(Val);
     smvCurrency:
       PInt64(V)^ := StrToCurr64(Val);
@@ -60427,7 +60444,6 @@ begin
   if vIsString in ValueKindAsm then
     WR.Add('"');
   case ValueType of
-  smvBoolean:   WR.Add(PBoolean(V)^);
   smvEnum..smvInt64:
   case SizeInStorage of
     1: WR.Add(PByte(V)^);
@@ -60439,7 +60455,9 @@ begin
          WR.AddQ(PQWord(V)^) else
          WR.Add(PInt64(V)^);
   end;
-  smvDouble, smvDateTime: WR.AddDouble(PDouble(V)^);
+  smvBoolean:    WR.Add(PBoolean(V)^);
+  smvDouble:     WR.AddDouble(PDouble(V)^);
+  smvDateTime:   WR.AddDateTime(PDateTime(V)^,vIsDateTimeMS in ValueKindAsm);
   smvCurrency:   WR.AddCurr64(PInt64(V)^);
   smvRawUTF8:    WR.AddJSONEscape(PPointer(V)^);
   smvRawJSON:    WR.AddRawJSON(PRawJSON(V)^);
@@ -60450,7 +60468,7 @@ begin
                  {$endif}
   smvRawByteString: WR.WrBase64(PPointer(V)^,length(PRawBytestring(V)^),false);
   smvWideString: WR.AddJSONEscapeW(PPointer(V)^);
-  smvBinary:     if not IsZero(V,SizeInStorage) then // leave "" for zero
+  smvBinary:     if not IsZeroSmall(V,SizeInStorage) then // leave "" for zero
                    WR.AddBinToHexDisplayLower(V,SizeInStorage);
   smvObject:     WR.WriteObject(PPointer(V)^,ObjectOptions);
   smvInterface:  WR.AddShort('null'); // or written by InterfaceWrite()
@@ -60487,13 +60505,13 @@ begin
          UInt64ToUtf8(PQword(V)^,DestValue) else
          Int64ToUtf8(PInt64(V)^,DestValue);
   end;
-  smvDouble, smvDateTime:
+  smvDouble:
     ExtendedToStr(PDouble(V)^,DOUBLE_PRECISION,DestValue);
   smvCurrency:
     Curr64ToStr(PInt64(V)^,DestValue);
   smvRawJSON:
     DestValue := PRawUTF8(V)^;
-  else begin // use generic AddJSON() method
+  else begin // use generic AddJSON() method for complex "..." content
     W := TJSONSerializer.CreateOwnedStream(temp);
     try
       AddJSON(W,V);

@@ -8018,9 +8018,9 @@ type
       WithMS: boolean=false); overload;
     /// append a TDateTime value, expanded as Iso-8601 encoded text
     // - use 'YYYY-MM-DDThh:mm:ss' format
+    // - append nothing if Value=0
     // - if WithMS is TRUE, will append '.sss' for milliseconds resolution
-    procedure AddDateTime(const Value: TDateTime;
-      WithMS: boolean=false); overload;
+    procedure AddDateTime(const Value: TDateTime; WithMS: boolean=false); overload;
     /// append a TDateTime value, expanded as Iso-8601 text with milliseconds
     // and Time Zone designator
     // - i.e. 'YYYY-MM-DDThh:mm:ss.sssZ' format
@@ -20203,7 +20203,7 @@ begin
           P[n] := text[j];
           inc(n);
         end;
-      SetLength(result, n);
+      SetLength(result,n); // truncate
       exit;
     end;
   result := text; // no control char found
@@ -22449,7 +22449,7 @@ procedure AppendCharToRawUTF8(var Text: RawUTF8; Ch: AnsiChar);
 var L: integer;
 begin
   L := length(Text);
-  SetLength(Text,L+1);
+  SetLength(Text,L+1); // reallocate
   PByteArray(Text)[L] := ord(Ch);
 end;
 
@@ -23196,7 +23196,7 @@ begin
     VarRecToUTF8(Args[0],result) else begin
     process.Parse(Format,Args);
     if process.L<>0 then begin
-      SetLength(result,process.L);
+      FastSetString(result,nil,process.L);
       process.Write(pointer(result));
     end;
   end;
@@ -25610,7 +25610,7 @@ begin
     result := Source;
     exit;
   end;
-  SetLength(result,L+n*pred(ttl));
+  FastSetString(result,nil,L+n*pred(ttl));
   Process(pointer(Source),pointer(result),pointer(TabText),ttl);
 end;
 
@@ -27519,7 +27519,7 @@ begin
   len := length(s);
   if len=0 then
     exit;
-  SetLength(result,BinToBase64Length(len));
+  FastSetString(result,nil,BinToBase64Length(len));
   Base64Encode(pointer(result),pointer(s),len);
 end;
 
@@ -35607,7 +35607,7 @@ function DateToIso8601Text(Date: TDateTime): RawUTF8;
 begin // into 'YYYY-MM-DD' date format
   if Date=0 then
     result := '' else begin
-    SetLength(result,10);
+    FastSetString(result,nil,10);
     DateToIso8601PChar(Date,pointer(result),True);
   end;
 end;
