@@ -11949,6 +11949,11 @@ procedure AndMemory(Dest,Source: PByteArray; size: PtrInt);
 /// returns TRUE if all bytes equal zero
 function IsZero(P: pointer; Length: integer): boolean; overload;
 
+/// returns TRUE if all of a few bytes equal zero
+// - to be called instead of IsZero() e.g. for 1..8 bytes
+function IsZeroSmall(P: pointer; Length: PtrInt): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// returns TRUE if Value is nil or all supplied Values[] equal ''
 function IsZero(const Values: TRawUTF8DynArray): boolean; overload;
 
@@ -33748,6 +33753,17 @@ begin
   result := true;
 end;
 
+function IsZeroSmall(P: pointer; Length: PtrInt): boolean;
+begin
+  result := false;
+  repeat
+    dec(Length);
+    if PByteArray(P)^[Length]<>0 then
+      exit;
+  until Length=0;
+  result := true;
+end;
+
 function IsZero(const Values: TRawUTF8DynArray): boolean;
 var i: integer;
 begin
@@ -42767,7 +42783,7 @@ begin
     ptString:        aWriter.AddJSONEscapeString(PString(Value)^);
     ptSynUnicode,{$ifdef HASVARUSTRING}ptUnicodeString,{$endif}
     ptWideString:    aWriter.AddJSONEscapeW(PPointer(Value)^);
-    ptDateTime:      aWriter.AddDateTime(unaligned(PDateTime(Value)^),false);
+    ptDateTime:      aWriter.AddDateTime(unaligned(PDateTime(Value)^),{withms=}false);
     ptDateTimeMS:    aWriter.AddDateTime(unaligned(PDateTime(Value)^),true);
     ptGUID:          aWriter.Add(PGUID(Value)^);
     end;
