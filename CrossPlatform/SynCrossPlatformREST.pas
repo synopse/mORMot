@@ -1414,7 +1414,7 @@ begin
   Y := (Value shr (6+6+5+5+4)) and 4095;
   {$endif}
   if (Y=0) or not TryEncodeDate(Y,1+(Value shr (6+6+5+5)) and 15,
-       1+(Value shr (6+6+5)) and 31,DateTimeZone.UTC,result) then
+       1+(Value shr (6+6+5)) and 31{$ifdef ISSMS},DateTimeZone.UTC{$endif},result) then
     result := 0;
   if (Value and (1 shl (6+6+5)-1)<>0) and
      TryEncodeTime((Value shr (6+6)) and 31,
