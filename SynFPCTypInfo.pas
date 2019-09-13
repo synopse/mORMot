@@ -70,7 +70,7 @@ const
 
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
 function AlignToPtr(p: pointer): pointer; inline;
-function AlignTypeData(p : Pointer): pointer; inline;
+function AlignTypeData(p : pointer): pointer; inline;
 {$else FPC_REQUIRES_PROPER_ALIGNMENT}
 type
   AlignToPtr = pointer;
@@ -128,7 +128,7 @@ procedure FPCRecordAddRef(var Data; TypeInfo : pointer);
 
 
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT} // copied from latest typinfo.pp
-function AlignToPtr(p : pointer): pointer; inline;
+function AlignToPtr(p: pointer): pointer;
 begin
   result := align(p,sizeof(p));
 end;
@@ -136,7 +136,7 @@ end;
 function AlignTypeData(p: pointer): pointer;
 {$packrecords c}
   type
-    TAlignCheck = record
+    TAlignCheck = record // match RTTI TTypeInfo definition
       b : byte;    // = TTypeKind
       q : qword;   // = this is where the PTypeData begins
     end;

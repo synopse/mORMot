@@ -4802,9 +4802,11 @@ type
   {$ifdef FPC}
   /// map the Delphi/FPC dynamic array header (stored before each instance)
   // - define globally for proper inlining with FPC
+  // - match tdynarray type definition in dynarr.inc
   TDynArrayRec = packed record
     /// dynamic array reference count (basic garbage memory mechanism)
     refCnt: PtrInt;
+    /// equals length-1
     high: tdynarrayindex;
     function GetLength: sizeint; inline;
     procedure SetLength(len: sizeint); inline;
@@ -6135,7 +6137,7 @@ type
     Safe: TSynLocker;
     /// initialize the RawUTF8 slot (and its Safe mutex)
     procedure Init;
-    /// finalize the RawUTF8 slot
+    /// finalize the RawUTF8 slot - mainly its associated Safe mutex
     procedure Done;
     /// returns the interned RawUTF8 value
     procedure Unique(var aResult: RawUTF8; const aText: RawUTF8; aTextHash: cardinal);
@@ -18103,7 +18105,8 @@ begin
         fPool[i].Init;
       exit;
     end;
-  raise ESynException.CreateUTF8('%.Create(%) not allowed',[self,aHashTables]);
+  raise ESynException.CreateUTF8('%.Create(%) not allowed: should be a power of 2',
+    [self,aHashTables]);
 end;
 
 destructor TRawUTF8Interning.Destroy;
@@ -20364,30 +20367,32 @@ begin
     v := v shr 4;
   end;
   if Count>0 then
-    inc(result,tab[v and tab[Count+16]]);
+    inc(result,tab[v and tab[Count+16]]); // 0..3 -> bitmap with 0,1,3,7
 end;
 
 type
-  PStrRec = ^TStrRec;
-  /// map the Delphi/FPC string header, as defined in System.pas
-{$ifdef FPC} // see TAnsiRec in astrings.inc
-  TStrRec = record
+{$ifdef FPC}
+  {$packrecords c} // as expected by FPC's RTTI record definitions
+
+  TStrRec = packed record // see TAnsiRec in astrings.inc
   {$ifdef ISFPC27}
-    codePage: TSystemCodePage;
+    codePage: TSystemCodePage; // =Word
     elemSize: Word;
-  {$endif}
-  {$ifdef CPU64}
-    _Padding: DWord;
+    {$ifdef CPU64}
+    _PaddingToQWord: DWord;
+    {$endif}
   {$endif}
     refCnt: SizeInt;
     length: SizeInt;
+  end;
 {$else FPC}
   /// map the Delphi/FPC dynamic array header (stored before each instance)
   TDynArrayRec = packed record
-    /// dynamic array reference count (basic garbage memory mechanism)
     {$ifdef CPUX64}
-    _Padding: LongInt; // Delphi/FPC XE2+ expects 16 byte alignment
+    /// padding bytes for 16 byte alignment of the header
+    _Padding: LongInt;
     {$endif}
+    /// dynamic array reference count (basic garbage memory mechanism)
     refCnt: Longint;
     /// length in element count
     // - size in bytes = length*ElemSize
@@ -20395,6 +20400,7 @@ type
   end;
   PDynArrayRec = ^TDynArrayRec;
 
+  /// map the Delphi/FPC string header (stored before each instance)
   TStrRec = packed record
  {$ifdef UNICODE}
     {$ifdef CPU64}
@@ -20417,12 +20423,9 @@ type
     /// length in characters
     // - size in bytes = length*elemSize
     length: Longint;
-{$endif FPC}
   end;
-
-{$ifdef FPC}
-  {$PACKRECORDS C}
 {$endif FPC}
+  PStrRec = ^TStrRec;
 
   PTypeInfo = ^TTypeInfo;
   {$ifdef HASDIRECTTYPEINFO}
@@ -47791,7 +47794,7 @@ begin
 end;
 
 function TDynArray.GetArrayTypeShort: PShortString;
-begin
+begin // not inlined since PTypeInfo is private to implementation section
   if fTypeInfo=nil then
     result := @NULCHAR else
     result := PShortString(@PTypeInfo(fTypeInfo).NameLen);
@@ -47875,7 +47878,7 @@ Bin:  case fElemSize of
 rec:  info := FPCTypeInfoOverName(info);
       {$else}
 rec:  inc(PByte(info),info^.NameLen);
-      {$endif}
+      {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
       {$ifdef FPC_OLDRTTI}
       field := OldRTTIFirstManagedField(info);
       if field=nil then
@@ -49004,7 +49007,7 @@ begin
   fTypeInfo := aTypeInfo;
   if PTypeKind(aTypeInfo)^<>tkDynArray then // inlined GetTypeInfo()
     raise ESynException.CreateUTF8('TDynArray.Init: % is %, expected tkDynArray',
-      [PShortString(@PTypeInfo(aTypeInfo)^.NameLen)^,ToText(PTypeKind(aTypeInfo)^)^]);
+      [ArrayTypeShort^,ToText(PTypeKind(aTypeInfo)^)^]);
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
   aTypeInfo := FPCTypeInfoOverName(aTypeInfo);
   {$else}
@@ -49047,7 +49050,7 @@ begin
   Comp := DYNARRAY_SORTFIRSTFIELD[aCaseInsensitive,aKind];
   if @Comp=nil then
     raise ESynException.CreateUTF8('TDynArray.InitSpecific(%) wrong aKind=%',
-      [PShortString(@PTypeInfo(aTypeInfo)^.NameLen)^,ToText(aKind)^]);
+      [ArrayTypeShort^,ToText(aKind)^]);
   fCompare := Comp;
   fKnownType := aKind;
   fKnownSize := KNOWNTYPE_SIZE[aKind];
@@ -53469,7 +53472,15 @@ end;
 
 procedure TTextWriter.AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
   IncludeUnitName, IncludePointer: boolean);
+var info: PTypeInfo;
 begin
+  if IncludeUnitName then begin
+    info := PPointer(PPtrInt(Instance)^+vmtTypeInfo)^;
+    if info<>nil then begin // avoid GPF if no RTTI for this class
+      AddShort(PShortString(@GetTypeInfo(info)^.UnitNameLen)^);
+      Add('.');
+    end;
+  end;
   AddShort(PShortString(PPointer(PPtrInt(Instance)^+vmtClassName)^)^);
   if IncludePointer then begin
     Add('(');

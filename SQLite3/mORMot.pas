@@ -4134,9 +4134,6 @@ type
     // - function ObjectToJSON() is just a wrapper over this method
     procedure WriteObject(Value: TObject;
       Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]); override;
-    /// override method, handling IncludeUnitName option
-    procedure AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
-      IncludeUnitName, IncludePointer: boolean); override;
     /// customize TSQLRecord.GetJSONValues serialization process
     // - jwoAsJsonNotAsString will force TSQLRecord.GetJSONValues to serialize
     // nested property instances as a JSON object/array, not a JSON string:
@@ -20983,10 +20980,15 @@ const
 
 { some inlined methods }
 
+function GetTypeData(const info: TTypeInfo): pointer; {$ifdef HASINLINE}inline;{$endif}
+begin
+  result := AlignTypeData(PAnsiChar(@info.Name[1])+ord(info.Name[0]));
+end;
+
 function TTypeInfo.ClassType: PClassType;
 {$ifdef HASINLINENOTX86}
 begin
-  result := AlignTypeData(@Name[ord(Name[0])+1]);
+  result := GetTypeData(self);
 end;
 {$else}
 asm // very fast code
@@ -20998,7 +21000,7 @@ end;
 function TTypeInfo.RecordType: PRecordType;
 {$ifdef HASINLINENOTX86}
 begin
-  result := AlignTypeData(@Name[ord(Name[0])+1]);
+  result := GetTypeData(self);
 end;
 {$else}
 asm // very fast code
@@ -21010,7 +21012,7 @@ end;
 function TTypeInfo.InterfaceType: PInterfaceTypeData;
 {$ifdef HASINLINENOTX86}
 begin
-  result := AlignTypeData(@Name[ord(Name[0])+1]);
+  result := GetTypeData(self);
 end;
 {$else}
 asm // very fast code
@@ -21021,12 +21023,12 @@ end;
 
 function TTypeInfo.FloatType: TFloatType;
 begin
-  result := PFloatType(AlignTypeData(@Name[ord(Name[0])+1]))^;
+  result := PFloatType(GetTypeData(self))^;
 end;
 
 function TTypeInfo.OrdType: TOrdType;
 begin
-  result := POrdType(AlignTypeData(@Name[ord(Name[0])+1]))^;
+  result := POrdType(GetTypeData(self))^;
 end;
 
 function TTypeInfo.IsQWord: boolean;
@@ -21037,9 +21039,9 @@ begin
   if @self=TypeInfo(QWord) then
     result := true else
     {$ifdef UINICODE}if Kind=tkInt64 then // check MinInt64Value>MaxInt64Value
-      with PHash128Rec(@Name[ord(Name[0])+1])^ do
+      with PHash128Rec(PAnsiChar(@Name[1])+ord(Name[0]))^ do
         result := Lo>Hi else {$endif}
-      result := false;
+        result := false;
   {$endif}
 end;
 
@@ -21114,7 +21116,7 @@ end;
 {$ifdef HASINLINENOTX86}
 function TPropInfo.Next: PPropInfo;
 begin
-  result := AlignToPtr(@Name[ord(Name[0])+1]);
+  result := AlignToPtr(PAnsiChar(@Name[1])+ord(Name[0]));
 end;
 {$else}
 function TPropInfo.Next: PPropInfo;
@@ -21220,7 +21222,7 @@ begin // see http://hallvards.blogspot.fr/2006/09/extended-class-rtti.html
     {$ifdef FPC}
     result := pointer(PtrUInt(@Addr)+SizeOf(Pointer));
     {$else}
-    result := @Name[ord(Name[0])+1];
+    result := pointer(PAnsiChar(@Name[1])+ord(Name[0]));
     if PtrUInt(result)-PtrUInt(@self)=Len then
       result := nil; // no method details available
     {$endif}
@@ -21235,7 +21237,7 @@ end;
 
 function TParamInfo.Next: PParamInfo;
 begin
-  result := AlignToPtr(@Name[ord(Name[0])+1]);
+  result := AlignToPtr(PAnsiChar(@Name[1])+ord(Name[0]));
   {$ifdef ISDELPHI2010}
   inc(PByte(result),PWord(result)^); // ignore optional attributes
   {$endif}
@@ -21245,7 +21247,7 @@ function InternalClassProp(ClassType: TClass): PClassProp;
 {$ifdef FPC}
 begin
   with PTypeInfo(ClassType.ClassInfo)^.ClassType^ do
-    result := AlignToPtr(@UnitName[ord(UnitName[0])+1]);
+    result := AlignToPtr(PAnsiChar(@UnitName[1])+ord(UnitName[0]));
 {$else}
 {$ifdef HASINLINENOTX86}
 var PTI: PTypeInfo;
@@ -21369,11 +21371,7 @@ begin
           result[n] := P;
           inc(n);
         end;
-        {$ifdef HASINLINE}
-        P := P^.Next;
-        {$else}
-        with P^ do P := @Name[ord(Name[0])+1];
-        {$endif}
+        P := AlignToPtr(PAnsiChar(@P^.Name[1])+ord(P^.Name[0])); // := P^.Next
       end;
     end;
     ClassType := ClassType.ClassParent;
@@ -21417,11 +21415,7 @@ begin
       if (result^.Name[0]=PropName[0]) and
          IdemPropNameUSameLen(@result^.Name[1],@PropName[1],ord(PropName[0])) then
         exit else
-        {$ifdef HASINLINE}
-        result := result^.Next;
-        {$else}
-        with result^ do result := @Name[ord(Name[0])+1];
-        {$endif}
+        result := AlignToPtr(PAnsiChar(@result^.Name[1])+ord(result^.Name[0]));
     aClassType := aClassType.ClassParent;
   end;
   result := nil;
@@ -31169,7 +31163,7 @@ function TTypeInfo.ClassSQLFieldType: TSQLFieldType;
 var CT: PClassType;
     C: TClass;
 begin
-  CT := AlignTypeData(@Name[ord(Name[0])+1]); // inlined ClassType
+  CT := AlignTypeData(PAnsiChar(@Name[1])+ord(Name[0])); // inlined ClassType
   C := CT^.ClassType;
   result := sftUnknown;
   while true do // unrolled several InheritsFrom() calls
@@ -31184,8 +31178,8 @@ begin
         with PTypeInfo(CT^.ParentInfo)^ do
         {$else} // circumvent weird Delphi inlining compiler random bug
         with CT^.ParentInfo^^ do
-        {$endif}
-          CT := AlignTypeData(@Name[ord(Name[0])+1]); // get parent ClassType
+        {$endif} // get parent ClassType
+          CT := AlignTypeData(PAnsiChar(@Name[1])+ord(Name[0]));
         C := CT^.ClassType;
         if C<>TObject then
           continue else
@@ -31383,12 +31377,12 @@ function TTypeInfo.EnumBaseType: PEnumType;
 {$ifdef FPC}
 var base: PTypeInfo;
 begin
-  result := AlignTypeData(@Name[ord(Name[0])+1]);
+  result := GetTypeData(self);
   if Kind=tkBool then
     exit; // circumvent diverse RTTI encoding
   base := DeRef(result^.BaseType);
   if (base<>nil) and (base<>@self) then // no redirection if already the base type
-    result := AlignTypeData(@base^.Name[ord(base^.Name[0])+1]);
+    result := GetTypeData(base^);
 end;
 {$else}
 {$ifdef HASINLINENOTX86}
@@ -31450,7 +31444,7 @@ begin
   if @self=TypeInfo(TSQLRawBlob) then
     result := CP_SQLRAWBLOB else
   if Kind=tkLString then // has tkLStringOld any codepage? -> UTF-8
-    result := PWord(AlignTypeData(@Name[ord(Name[0])+1]))^ else
+    result := PWord(GetTypeData(self))^ else
   {$else}
   if @self=TypeInfo(RawUTF8) then
     result := CP_UTF8 else
@@ -31545,11 +31539,7 @@ end;
 function TClassType.ClassProp: PClassProp;
 begin
   if pointer(@self)<>nil then
-    {$ifdef FPC}
     result := AlignToPtr(@UnitName[ord(UnitName[0])+1]) else
-    {$else}
-    result := pointer(@UnitName[ord(UnitName[0])+1]) else
-    {$endif}
     result := nil; // avoid GPF
 end;
 
@@ -50251,11 +50241,7 @@ begin
   repeat
     for i := 1 to InternalClassPropInfo(c,p) do begin
       p^.SetDefaultValue(Value,FreeAndNilNestedObjects);
-      {$ifdef HASINLINE}
-      p := p^.Next;
-      {$else}
-      with p^ do p := @Name[ord(Name[0])+1];
-      {$endif}
+      p := AlignToPtr(PAnsiChar(@p^.Name[1])+ord(p^.Name[0])); // p := p^.Next
     end;
     c := c.ClassParent;
   until c=nil;
@@ -52554,21 +52540,6 @@ begin
   Add('}');
   if woFullExpand in Options then
     Add('}');
-end;
-
-procedure TJSONSerializer.AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
-  IncludeUnitName, IncludePointer: boolean);
-var info: PTypeInfo;
-begin
-  if IncludeUnitName then begin
-    info := PPointer(PPtrInt(Instance)^+vmtTypeInfo)^;
-    if info<>nil then begin // avoid GPF if not RTTI for this class
-      with info^ do
-        AddShort(PClassType(AlignTypeData(@Name[ord(Name[0])+1]))^.UnitName);
-      Add('.');
-    end;
-  end;
-  inherited AddInstancePointer(Instance,SepChar,IncludeUnitName,IncludePointer);
 end;
 
 procedure TJSONSerializer.SetSQLRecordOptions(Value: TJSONSerializerSQLRecordOptions);
