@@ -59273,6 +59273,8 @@ asm
 end;
 {$endif CPUX64}
 
+{$ifndef FPC}{$WARN COMPARING_SIGNED_UNSIGNED OFF}{$endif} // W1023 FPC_STACKALIGNMENT
+
 {$ifdef CPUX86} {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         push    esi
@@ -59280,9 +59282,13 @@ asm
         mov     ebp, esp
         mov     esi, Args
         // copy stack content (if any)
-        {$ifdef DARWIN} // require aligned stack
+        {$ifdef DARWIN} // always require aligned stack
         and     esp, -16
-        {$endif}
+        {$else} // https://github.com/graemeg/freepascal/commit/6be6e04eb4
+        {$if defined(FPC_STACKALIGNMENT) and (FPC_STACKALIGNMENT=16)}
+        and     esp, -16
+        {$ifend} // https://www.mail-archive.com/fpc-devel@lists.freepascal.org/msg38885.html
+        {$endif DARWIN}
         mov     eax, [esi].TCallMethodArgs.StackSize
         mov     edx, dword ptr[esi].TCallMethodArgs.StackAddr
         add     edx, eax // pascal/register convention = left-to-right
@@ -59317,6 +59323,8 @@ asm
         pop     esi
 end;
 {$endif CPUX86}
+
+{$ifndef FPC}{$WARN COMPARING_SIGNED_UNSIGNED ON}{$endif}
 
 procedure BackgroundExecuteProc(Call: pointer);
 var synch: PBackgroundLauncher absolute Call;
