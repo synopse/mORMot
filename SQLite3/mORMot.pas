@@ -21424,16 +21424,8 @@ end;
 
 function ClassFieldPropWithParentsFromUTF8(aClassType: TClass; PropName: PUTF8Char;
   PropNameLen: integer): PPropInfo;
-{$ifdef FPC}
-var name: AnsiString;
-{$else}
 var i: integer;
-{$endif}
 begin
-  {$ifdef FPC}
-  SetString(name,PAnsiChar(PropName),PropNameLen);
-  result := pointer(GetFPCPropInfo(aClassType,name));
-  {$else}
   while (PropNameLen<>0) and (aClassType<>nil) do begin
     for i := 1 to InternalClassPropInfo(aClassType,result) do
       if IdemPropName(result^.Name,PropName,PropNameLen) then
@@ -21442,7 +21434,6 @@ begin
     aClassType := aClassType.ClassParent;
   end;
   result := nil;
-  {$endif}
 end;
 
 function ClassFieldPropWithParentsFromClassType(aClassType,aSearchedClassType: TClass): PPropInfo;
