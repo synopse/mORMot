@@ -2864,33 +2864,50 @@ type
   // of WideString and UnicodeString) - in fact, the generic string type is handled
   {$ifdef UNICODE}TPropInfo = record{$else}TPropInfo = object{$endif}
   public
-    {$ifdef USETYPEINFO}
-    function RetrieveFieldSize: integer;
-    {$endif}
+    /// unsafe retrieval of tkInteger,tkEnumeration,tkSet,tkChar,tkWChar,tkBool
     function GetOrdProp(Instance: TObject): PtrInt;
-     {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
+     /// unsafe retrieval of tkClass
     function GetObjProp(Instance: TObject): TObject;
+    /// unsafe assignment of tkInteger,tkEnumeration,tkSet,tkChar,tkWChar,tkBool
     procedure SetOrdProp(Instance: TObject; Value: PtrInt);
+    /// unsafe retrieval of tkInt64,tkQWord
     function GetInt64Prop(Instance: TObject): Int64;
+    /// unsafe assignment of tkInt64,tkQWord
     procedure SetInt64Prop(Instance: TObject; const Value: Int64);
+    /// unsafe retrieval of tkLString
     procedure GetLongStrProp(Instance: TObject; var Value: RawByteString);
+    /// unsafe assignment of tkLString
     procedure SetLongStrProp(Instance: TObject; const Value: RawByteString);
+    /// unsafe direct copy of tkLString
     procedure CopyLongStrProp(Source,Dest: TObject);
+    /// unsafe retrieval of tkString into an Ansi7String
     procedure GetShortStrProp(Instance: TObject; var Value: RawByteString);
+    /// unsafe retrieval of tkWString
     procedure GetWideStrProp(Instance: TObject; var Value: WideString);
+    /// unsafe assignment of tkWString
     procedure SetWideStrProp(Instance: TObject; const Value: WideString);
     {$ifdef HASVARUSTRING}
+    /// unsafe retrieval of tkUString
     function GetUnicodeStrProp(Instance: TObject): UnicodeString;
+    /// unsafe assignment of tkUString
     procedure SetUnicodeStrProp(Instance: TObject; const Value: UnicodeString);
     {$endif HASVARUSTRING}
+    /// unsafe retrieval of tkFloat/currency
     function GetCurrencyProp(Instance: TObject): currency;
+    /// unsafe assignment of tkFloat/currency
     procedure SetCurrencyProp(Instance: TObject; const Value: Currency);
+    /// unsafe retrieval of tkFloat/double
     function GetDoubleProp(Instance: TObject): double;
+    /// unsafe assignment of tkFloat/double
     procedure SetDoubleProp(Instance: TObject; Value: Double);
+    /// unsafe retrieval of tkFloat
     function GetFloatProp(Instance: TObject): double;
+    /// unsafe assignment of tkFloat
     procedure SetFloatProp(Instance: TObject; Value: TSynExtended);
     {$ifndef NOVARIANTS}
+    /// unsafe retrieval of tkVariant
     procedure GetVariantProp(Instance: TObject; var result: Variant);
+    /// unsafe assignment of tkVariant
     procedure SetVariantProp(Instance: TObject; const Value: Variant);
     {$endif}
   public
@@ -2964,6 +2981,8 @@ type
     /// return true if this property is a BLOB (TSQLRawBlob)
     function IsBlob: boolean;
       {$ifdef HASINLINE}inline;{$endif}
+    /// compute in how many bytes this property is stored
+    function RetrieveFieldSize: integer;
     /// low-level getter of the ordinal property value of a given instance
     // - this method will check if the corresponding property is ordinal
     // - return -1 on any error
@@ -3029,7 +3048,7 @@ type
     /// low-level getter of the Unicode string property value of a given instance
     // - this method will check if the corresponding property is a Unicode String
     function GetUnicodeStrValue(Instance: TObject): UnicodeString;
-    {$endif}
+    {$endif HASVARUSTRING}
     /// low-level getter of a dynamic array wrapper
     // - this method will NOT check if the property is a dynamic array: caller
     // must have already checked that PropType^^.Kind=tkDynArray
@@ -3081,6 +3100,9 @@ type
     procedure SetDefaultValue(Instance: TObject; FreeAndNilNestedObjects: boolean=true);
     {$ifndef NOVARIANTS}
     /// low-level setter of the property value from a supplied variant
+    // - will optionally make some conversion if the property type doesn't
+    // match the variant type, e.g. a text variant could be converted to integer
+    // when setting a tkInteger kind of property
     procedure SetFromVariant(Instance: TObject; const Value: variant);
     /// low-level getter of the property value into a variant value
     procedure GetVariant(Instance: TObject; var Dest: variant);
@@ -30089,6 +30111,25 @@ begin
   result := (@self<>nil) and (TypeInfo=system.TypeInfo(TSQLRawBlob));
 end;
 
+function TPropInfo.RetrieveFieldSize: integer;
+begin
+  case PropType^.Kind of
+  tkInteger,tkEnumeration,tkSet,tkChar,tkWChar{$ifdef FPC},tkBool{$endif}:
+    result := ORDTYPE_SIZE[PropType^.OrdType];
+  tkFloat:
+    case PropType^.FloatType of
+    ftSingle:   result := 4;
+    ftExtended: result := 10;
+    else result := 8;
+    end;
+  tkLString,{$ifdef FPC}tkLStringOld,{$endif}tkWString,tkClass,tkInterface,tkDynArray:
+    result := SizeOf(pointer);
+  tkInt64{$ifdef FPC},tkQWord{$endif}: result := 8;
+  tkVariant: result := SizeOf(variant);
+  else result := 0;
+  end;
+end;
+
 function FromOrdType(o: TOrdType; P: pointer): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 begin
@@ -30120,25 +30161,6 @@ end;
 function TPropInfo.IsStored(Instance: TObject): boolean;
 begin
   result := SynFPCTypInfo.IsStoredProp(Instance,@self);
-end;
-
-function TPropInfo.RetrieveFieldSize: integer;
-begin
-  case PropType^.Kind of
-  tkInteger,tkEnumeration,tkSet,tkChar,tkWChar{$ifdef FPC},tkBool{$endif}:
-    result := ORDTYPE_SIZE[PropType^.OrdType];
-  tkFloat:
-    case PropType^.FloatType of
-    ftSingle:   result := 4;
-    ftExtended: result := 10;
-    else result := 8;
-    end;
-  tkLString,{$ifdef FPC}tkLStringOld,{$endif}tkWString,tkClass,tkInterface,tkDynArray:
-    result := SizeOf(pointer);
-  tkInt64{$ifdef FPC},tkQWord{$endif}: result := 8;
-  tkVariant: result := SizeOf(variant);
-  else result := 0;
-  end;
 end;
 
 function TPropInfo.GetObjProp(Instance: TObject): TObject;
@@ -59282,7 +59304,7 @@ asm
         and     esp, -16
         {$else} // https://github.com/graemeg/freepascal/commit/6be6e04eb4
         {$if defined(FPC_STACKALIGNMENT) and (FPC_STACKALIGNMENT=16)}
-        and     esp, -16
+        and     esp, -16  // e.g. on i386-linux since r43005 to 43014
         {$ifend} // https://www.mail-archive.com/fpc-devel@lists.freepascal.org/msg38885.html
         {$endif DARWIN}
         mov     eax, [esi].TCallMethodArgs.StackSize
