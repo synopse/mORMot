@@ -29677,20 +29677,22 @@ begin
   tkInteger,tkEnumeration,tkSet,tkChar,tkWChar{$ifdef FPC},tkBool{$endif}:
     if VariantToInteger(Value,i) then
       SetOrdProp(Instance,i) else
-    if (PropType^.Kind=tkEnumeration) and VariantToUTF8(Value,u) then begin
-      i := PropType^.EnumBaseType^.GetEnumNameValue(pointer(u),length(u));
+    if VariantToUTF8(Value,u) then begin
+      if PropType^.Kind=tkEnumeration then
+        i := PropType^.EnumBaseType^.GetEnumNameValue(pointer(u),length(u)) else
+        i := UTF8ToInteger(u,-1);
       if i>=0 then
         SetOrdProp(Instance,i)
     end;
   tkInt64{$ifdef FPC},tkQWord{$endif}:
-    if VariantToInt64(Value,i64) then
+    if VariantToInt64(Value,i64) or (VariantToUTF8(Value,u) and ToInt64(u,i64)) then
       SetInt64Prop(Instance,i64);
   {$ifdef HASVARUSTRING}tkUString,{$endif}
   tkLString, tkWString {$ifdef FPC},tkLStringOld{$endif}:
     if VariantToUTF8(Value,u) then
       SetLongStrValue(Instance,u);
   tkFloat:
-    if VariantToDouble(Value,d) then
+    if VariantToDouble(Value,d) or (VariantToUTF8(Value,u) and ToDouble(u,d)) then
       SetFloatProp(Instance,d);
   tkVariant:
     SetVariantProp(Instance,Value);
