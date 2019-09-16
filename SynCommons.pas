@@ -2444,6 +2444,11 @@ function ToCardinal(const text: RawUTF8; out value: cardinal; minimal: cardinal=
 function ToInt64(const text: RawUTF8; out value: Int64): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// get a 64-bit floating-point value stored in a RawUTF8 string
+// - returns TRUE if the supplied text was successfully converted into a double
+function ToDouble(const text: RawUTF8; out value: double): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// get the signed 64-bit integer value stored in a RawUTF8 string
 // - returns the default value if the supplied text was not successfully
 // converted into an Int64
@@ -7098,6 +7103,8 @@ function SortDynArrayVariant(const A,B): integer;
 function SortDynArrayVariantI(const A,B): integer;
 
 /// compare two "array of variant" elements, with or without case sensitivity
+// - this low-level function is called by SortDynArrayVariant/VariantCompare
+// - more optimized than the RTL function if A and B share the same type
 function SortDynArrayVariantComp(const A,B: TVarData; caseInsensitive: boolean): integer;
 {$endif NOVARIANTS}
 
@@ -21314,24 +21321,23 @@ end;
 function VariantToDouble(const V: Variant; var Value: double): boolean;
 var tmp: TVarData;
 begin
-  with TVarData(V) do
-  if VType=varVariant or varByRef then
-    result := VariantToDouble(PVariant(VPointer)^,Value) else
+  if TVarData(V).VType=varVariant or varByRef then
+    result := VariantToDouble(PVariant(TVarData(V).VPointer)^,Value) else
   if VariantToInt64(V,tmp.VInt64) then begin // also handle varEmpty,varNull
     Value := tmp.VInt64;
     result := true;
   end else
-  case VType of
+  case TVarData(V).VType of
   varDouble,varDate: begin
-    Value := VDouble;
+    Value := TVarData(V).VDouble;
     result := true;
   end;
   varSingle: begin
-    Value := VSingle;
+    Value := TVarData(V).VSingle;
     result := true;
   end;
   varCurrency: begin
-    Value := VCurrency;
+    Value := TVarData(V).VCurrency;
     result := true;
   end else
     if SetVariantUnRefSimpleValue(V,tmp) then
@@ -31378,6 +31384,13 @@ function ToInt64(const text: RawUTF8; out value: Int64): boolean;
 var err: integer;
 begin
   value := GetInt64(pointer(text),err);
+  result := err=0;
+end;
+
+function ToDouble(const text: RawUTF8; out value: double): boolean;
+var err: integer;
+begin
+  value := GetExtended(pointer(text),err);
   result := err=0;
 end;
 
