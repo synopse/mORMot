@@ -30151,13 +30151,16 @@ end;
 function TPropInfo.GetOrdProp(Instance: TObject): PtrInt;
 var P: pointer;
 begin
-  if GetterIsField then begin
-    P := GetterAddr(Instance);
-    if PropType^.Kind=tkClass then
-      result := PPtrInt(P)^ else
-      result := FromOrdType(PropType^.OrdType,P);
-  end else
+  if GetterIsField then
+    P := GetterAddr(Instance) else
+  if (GetProc=0) and SetterIsField then
+    P := SetterAddr(Instance) else begin
     result := SynFPCTypInfo.GetOrdProp(Instance,@self);
+    exit;
+  end;
+  if PropType^.Kind=tkClass then
+    result := PPtrInt(P)^ else
+    result := FromOrdType(PropType^.OrdType,P);
 end;
 
 procedure TPropInfo.SetOrdProp(Instance: TObject; Value: PtrInt);
