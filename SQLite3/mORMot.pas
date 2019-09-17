@@ -4112,16 +4112,18 @@ type
   // - resulting content will be UTF-8 encoded
   // - use an internal buffer, faster than string+string
   TINIWriter = class(TTextWriter)
-    /// write the published integer, Int64, floating point values, (wide)string,
-    // enumerates (e.g. boolean), variant properties of the object
-    // - won't handle shortstring properties
+    /// write the published properties of the object in INI text format
+    // - i.e. append PropertyName=PropertyValue lines
     // - add a new INI-like section with [Value.ClassName] if WithSection is true
-    // - the object must have been compiled with the $M+ define, i.e. must
-    // inherit from TPersistent or TSQLRecord
+    // - use internally TPropInfo.GetToText for the conversion to text
+    // - Value object must have been compiled with the $M+ define, i.e. must
+    // inherit from TPersistent, TSynPersistent or TSQLRecord
     // - the enumerates properties are stored with their integer index value
+    // - dynamic arrays will be serialized as JSON, unless RawUTF8DynArrayAsCSV
+    // is set, and a TRawUTF8DynArray property will be stored as CSV
     // - content can be read back using overloaded procedures ReadObject()
     procedure WriteObject(Value: TObject; const SubCompName: RawUTF8='';
-      WithSection: boolean=true); reintroduce;
+      WithSection: boolean=true; RawUTF8DynArrayAsCSV: boolean=false); reintroduce;
   end;
 
   /// method prototype to be used for custom serialization of a class
@@ -21474,12 +21476,12 @@ var i: integer;
 begin
   if PropNameLen<>0 then
     while aClassType<>nil do begin
-    for i := 1 to InternalClassPropInfo(aClassType,result) do
-      if IdemPropName(result^.Name,PropName,PropNameLen) then
-        exit else
-        result := result^.Next;
+      for i := 1 to InternalClassPropInfo(aClassType,result) do
+        if IdemPropName(result^.Name,PropName,PropNameLen) then
+          exit else
+          result := result^.Next;
       aClassType := GetClassParent(aClassType);
-  end;
+    end;
   result := nil;
 end;
 
@@ -29401,66 +29403,33 @@ end;
 { TINIWriter }
 
 procedure TINIWriter.WriteObject(Value: TObject; const SubCompName: RawUTF8;
-  WithSection: boolean);
-var P: PPropInfo;
-    i, V: integer;
-    VT: shortstring; // for str()
+  WithSection, RawUTF8DynArrayAsCSV: boolean);
+var CT: TClass;
+    P: PPropInfo;
     Obj: TObject;
-    tmp: RawUTF8;
-    arr: TDynArray;
-    {$ifndef NOVARIANTS}
-    VV: Variant;
-    {$endif}
+    i: integer;
 begin
   if Value<>nil then begin
     if WithSection then
       // new TObject.ClassName is UnicodeString (Delphi 20009) -> inline code with
       // vmtClassName = UTF-8 encoded text stored in a shortstring = -44
       Add(#13#10'[%]'#13#10,[ClassNameShort(Value)^]);
-    for i := 1 to InternalClassPropInfo(Value.ClassType,P) do begin
-      case P^.PropType^.Kind of
-        tkInt64{$ifdef FPC}, tkQWord{$endif}:
-          Add('%%=%'#13#10,[SubCompName,P^.Name,P^.GetInt64Prop(Value)]);
-        {$ifdef FPC}tkBool,{$endif}
-        tkEnumeration, tkInteger, tkSet: begin
-          V := P^.GetOrdProp(Value);
-          if V<>P^.Default then
-            Add('%%=%'#13#10,[SubCompName,P^.Name,V]);
-        end;
-        {$ifdef FPC}tkLStringOld,{$endif} tkLString, tkWString
-        {$ifdef HASVARUSTRING},tkUString{$endif}: begin
-          P^.GetLongStrValue(Value,tmp);
-          Add('%%=%'#13#10,[SubCompName,P^.Name,tmp]);
-        end;
-        tkFloat: begin
-          VT[0] := AnsiChar(ExtendedToString(VT,P^.GetFloatProp(Value),DOUBLE_PRECISION));
-          Add('%%=%'#13#10,[SubCompName,P^.Name,VT]);
-        end;
-        tkDynArray: begin
-          Add('%%=%'#13#10,[SubCompName,P^.Name]);
-          P^.GetDynArray(Value,arr);
-          AddDynArrayJSON(arr);
-          AddCR;
-        end;
-        {$ifdef PUBLISHRECORD}
-        tkRecord{$ifdef FPC},tkObject{$endif}:
-          Add('%%=%'#13#10,[SubCompName,P^.Name,BinToBase64WithMagic(
-            RecordSave(P^.GetFieldAddr(Value)^,P^.PropType^))]);
-        {$endif}
-        tkClass: begin
+    CT := Value.ClassType;
+    repeat
+      for i := 1 to InternalClassPropInfo(CT,P) do begin
+        if P^.PropType^.Kind=tkClass then begin // recursive serialization
           Obj := P^.GetObjProp(Value);
           if (Obj<>nil) and ClassHasPublishedFields(PPointer(Obj)^) then
-             WriteObject(Obj,SubCompName+ToUTF8(P^.Name)+'.',false);
+            WriteObject(Obj,SubCompName+ToUTF8(P^.Name)+'.',false);
+        end else begin // regular properties
+          Add('%%=%'#13#10,[SubCompName,P^.Name]);
+          P^.GetToText(Value,self,RawUTF8DynArrayAsCSV,twNone);
+          AddCR;
         end;
-        {$ifndef NOVARIANTS}
-        tkVariant: begin // stored as JSON, e.g. '1.234' or '"text"'
-          P^.GetVariantProp(Value,VV);
-          Add('%%=%'#13#10,[SubCompName,P^.Name,VariantSaveJSON(VV)]);
-        end;
-        {$endif}
-      end; // tkString (shortstring) and tkInterface is not handled
-      P := P^.Next;
-    end;
+        P := P^.Next;
+      end;
+      CT := GetClassParent(CT);
+    until CT=TObject;
   end;
 end;
 
@@ -30459,7 +30428,7 @@ end;
 
 {$ifndef NOVARIANTS}
 procedure TPropInfo.GetVariantProp(Instance: TObject; var result: Variant);
-begin
+var P: PVariant;
 begin
   if GetterIsField then
     P := GetterAddr(Instance) else
@@ -49141,39 +49110,45 @@ end;
 
 procedure WriteObject(Value: TObject; var IniContent: RawUTF8; const Section: RawUTF8;
   const SubCompName: RawUTF8);
-var P: PPropInfo;
+var CT: TClass;
+    P: PPropInfo;
     i, V: integer;
     Obj: TObject;
-    tmp: RawUTF8;
+    tmp,field: RawUTF8;
 begin
   if Value=nil then
     exit;
-  for i := 1 to InternalClassPropInfo(Value.ClassType,P) do begin
-    case P^.PropType^.Kind of
-      tkInt64{$ifdef FPC}, tkQWord{$endif}:
-        UpdateIniEntry(IniContent,Section,SubCompName+ToUTF8(P^.Name),
-          Int64ToUtf8(P^.GetInt64Prop(Value)));
-      {$ifdef FPC}tkBool,{$endif} tkEnumeration, tkSet, tkInteger: begin
-        V := P^.GetOrdProp(Value);
-        //if V<>P^.Default then NO DEFAULT: update INI -> must override previous
-        UpdateIniEntry(IniContent,Section,SubCompName+ToUTF8(P^.Name),
-          Int32ToUtf8(V));
+  CT := Value.ClassType;
+  repeat
+    for i := 1 to InternalClassPropInfo(CT,P) do begin
+      field := SubCompName+ToUTF8(P^.Name);
+      case P^.PropType^.Kind of
+        tkInt64{$ifdef FPC}, tkQWord{$endif}:
+          UpdateIniEntry(IniContent,Section,field,
+            Int64ToUtf8(P^.GetInt64Prop(Value)));
+        {$ifdef FPC}tkBool,{$endif} tkEnumeration, tkSet, tkInteger: begin
+          V := P^.GetOrdProp(Value);
+          //if V<>P^.Default then NO DEFAULT: update INI -> must override previous
+          UpdateIniEntry(IniContent,Section,field,
+            Int32ToUtf8(V));
+        end;
+        {$ifdef HASVARUSTRING}tkUString,{$endif} {$ifdef FPC}tkLStringOld,{$endif}
+        tkLString, tkWString: begin
+          P^.GetLongStrValue(Value,tmp);
+          UpdateIniEntry(IniContent,Section,field,tmp);
+        end;
+        tkClass:
+        if Section='' then begin // recursive call works only as plain object
+          Obj := P^.GetObjProp(Value);
+          if (Obj<>nil) and Obj.InheritsFrom(TPersistent) then
+            WriteObject(Value,IniContent,Section,field+'.');
+        end;
+        // tkString (shortstring) and tkInterface are not handled
       end;
-      {$ifdef HASVARUSTRING}tkUString,{$endif} {$ifdef FPC}tkLStringOld,{$endif}
-      tkLString, tkWString: begin
-        P^.GetLongStrValue(Value,tmp);
-        UpdateIniEntry(IniContent,Section,SubCompName+ToUTF8(P^.Name),tmp);
-      end;
-      tkClass:
-      if Section='' then begin // recursive call works only as plain object
-        Obj := P^.GetObjProp(Value);
-        if (Obj<>nil) and Obj.InheritsFrom(TPersistent) then
-          WriteObject(Value,IniContent,Section,SubCompName+ToUTF8(P^.Name)+'.');
-      end;
-      // tkString (shortstring) and tkInterface are not handled
+      P := P^.Next;
     end;
-    P := P^.Next;
-  end;
+    CT := GetClassParent(CT);
+  until CT=TObject;
 end;
 
 function WriteObject(Value: TObject): RawUTF8;
@@ -50274,80 +50249,30 @@ begin
 end;
 
 procedure ReadObject(Value: TObject; From: PUTF8Char; const SubCompName: RawUTF8);
-var P: PPropInfo;
-    i, V, err: integer;
-    V64: Int64;
-    E: TSynExtended;
+var CT: TClass;
+    P: PPropInfo;
+    i: integer;
     Obj: TObject;
-    UpperName: array[byte] of AnsiChar;
     U: RawUTF8;
-    {$ifndef NOVARIANTS}
-    VVariant: variant;
-    {$endif}
+    UpperName: array[byte] of AnsiChar;
 begin
   if Value=nil then // allow From=nil -> default values
     exit;
-  for i := 1 to InternalClassPropInfo(Value.ClassType,P) do begin
-    PWord(UpperCopyShort(UpperCopy255(UpperName,SubCompName),P^.Name))^ := ord('=');
-    U := FindIniNameValue(From,UpperName);
-    case P^.PropType^.Kind of
-      tkInt64: begin
-        {$ifndef FPC}if P^.PropType^.IsQWord then
-          V64 := GetQWord(pointer(U),err) else{$endif}
-          V64 := GetInt64(pointer(U),err);
-        if err=0 then
-          P^.SetInt64Prop(Value,V64); // pointer() to call typinfo
-      end;
-      {$ifdef FPC}tkQWord: begin
-        V64 := GetQWord(pointer(U),err);
-        if err=0 then
-          P^.SetInt64Prop(Value,V64); // pointer() to call typinfo
-      end;
-      {$endif}
-      {$ifdef FPC}tkBool,{$endif} tkEnumeration, tkSet, tkInteger: begin
-        V := GetInteger(pointer(U),err);
-        if err=0 then
-          P^.SetOrdProp(Value,V) else // pointer() to call typinfo
-          if P^.Default<>longint($80000000) then
-            P^.SetOrdProp(Value,P^.Default);
-      end;
-      tkFloat:
-      if U<>'' then
-        if (P^.TypeInfo=TypeInfo(Currency)) and P^.SetterIsField then
-          PInt64(P^.SetterAddr(Value))^ := StrToCurr64(pointer(U)) else begin
-          E := GetExtended(pointer(U),err);
-          if err=0 then
-            P^.SetFloatProp(Value,E);
-        end;
-      {$ifdef FPC}tkLStringOld,{$endif} tkLString:
-        P^.SetLongStrValue(Value,U);
-      tkWString:
-         P^.SetWideStrProp(Value,UTF8ToWideString(U));
-      {$ifdef HASVARUSTRING}
-      tkUString:
-         P^.SetUnicodeStrProp(Value,UTF8DecodeToUnicodeString(U));
-      {$endif}
-      tkDynArray:
-        P^.GetDynArray(Value).LoadFrom(pointer(BlobToTSQLRawBlob(U)));
-{$ifdef PUBLISHRECORD}
-      tkRecord{$ifdef FPC},tkObject{$endif}:
-        RecordLoadJSON(P^.GetFieldAddr(Value)^,pointer(U),P^.PropType^);
-{$endif PUBLISHRECORD}
-      tkClass: begin
+  CT := Value.ClassType;
+  repeat
+    for i := 1 to InternalClassPropInfo(CT,P) do begin
+      PWord(UpperCopyShort(UpperCopy255(UpperName,SubCompName),P^.Name))^ := ord('=');
+      U := FindIniNameValue(From,UpperName);
+      if P^.PropType^.Kind=tkClass then begin // recursive unserialization
         Obj := P^.GetObjProp(Value);
-        if {$ifdef MSWINDOWS}(PtrUInt(Obj)>=PtrUInt(SystemInfo.lpMinimumApplicationAddress)) and{$endif}
-           Obj.InheritsFrom(TPersistent) then
+        if (Obj<>nil) and ClassHasPublishedFields(PPointer(Obj)^)  then
           ReadObject(Obj,From,SubCompName+ToUTF8(P^.Name)+'.');
-      end;
-{$ifndef NOVARIANTS}
-      tkVariant: begin
-        VariantLoadJSON(VVariant,pointer(U));
-        P^.SetVariantProp(Value,VVariant);
-      end;
-{$endif} // tkString (shortstring) and tkInterface is not handled
+      end else
+        P^.SetFromText(Value,U,@JSON_OPTIONS[true],{allowdouble=}true);
+      P := P^.Next;
     end;
-    P := P^.Next;
-  end;
+    CT := GetClassParent(CT);
+  until CT=TObject;
 end;
 
 procedure ReadObject(Value: TObject; const FromContent,SubCompName: RawUTF8);
