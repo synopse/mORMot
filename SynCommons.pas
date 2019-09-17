@@ -14529,6 +14529,8 @@ type
     // directly within the Values[]/Names[] arrays, using e.g.
     // InitFast(InitialCapacity) to initialize the document
     // - if aName='', append a dvArray item, otherwise append a dvObject field
+    // - warning: FPC optimizer is confused by Values[InternalAdd(name)] so
+    // you should call InternalAdd() in an explicit previous step
     function InternalAdd(const aName: RawUTF8): integer;
 
     /// save a document as UTF-8 encoded JSON
@@ -43371,37 +43373,40 @@ begin
 end;
 
 procedure SetVariantByValue(const Source: Variant; var Dest: Variant);
-var s: TVarData absolute Source;
+var s: PVarData;
     d: TVarData absolute Dest;
 begin
+  s := @Source;
+  if s^.VType=varVariant or varByRef then
+    s := s^.VPointer;
   {$ifndef FPC}if d.VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(Dest);
-  case s.VType of
+  case s^.VType of
   varEmpty..varDate,varBoolean,varShortInt..varWord64: begin
-    d.VType := s.VType;
-    d.VInt64 := s.VInt64;
+    d.VType := s^.VType;
+    d.VInt64 := s^.VInt64;
   end;
   varString: begin
     d.VType := varString;
     d.VAny := nil;
-    RawByteString(d.VAny) := RawByteString(s.VAny);
+    RawByteString(d.VAny) := RawByteString(s^.VAny);
   end;
-  varVariant or varByRef:
-    Dest := PVariant(s.VPointer)^;
   varByRef or varString: begin
     d.VType := varString;
     d.VAny := nil;
-    RawByteString(d.VAny) := PRawByteString(s.VAny)^;
+    RawByteString(d.VAny) := PRawByteString(s^.VAny)^;
   end;
   {$ifdef HASVARUSTRING} varUString, varByRef or varUString, {$endif}
   varOleStr, varByRef or varOleStr: begin
     d.VType := varString;
     d.VAny := nil;
-    VariantToUTF8(Source,RawUTF8(d.VAny)); // store a RawUTF8 instance
+    VariantToUTF8(PVariant(s)^,RawUTF8(d.VAny)); // store a RawUTF8 instance
   end;
   else
-    if not SetVariantUnRefSimpleValue(Source,d) then
-      Dest := Source;
+    if not SetVariantUnRefSimpleValue(PVariant(s)^,d) then
+      if s^.VType=DocVariantVType then
+        DocVariantType.CopyByValue(d,s^) else
+        Dest := PVariant(s)^;
   end;
 end;
 
@@ -44529,35 +44534,39 @@ end;
 { TDocVariantData }
 
 function TDocVariantData.GetKind: TDocVariantKind;
+var o: TDocVariantOptions;
 begin
-  if dvoIsArray in VOptions then
+  o := VOptions;
+  if dvoIsArray in o then
     result := dvArray else
-  if dvoIsObject in VOptions then
+  if dvoIsObject in o then
     result := dvObject else
     result := dvUndefined;
 end;
 
 function DocVariantData(const DocVariant: variant): PDocVariantData;
 begin
-  with TVarData(DocVariant) do
-    if VType=word(DocVariantVType) then
-      result := @DocVariant else
-    if VType=varByRef or varVariant then
-      result := DocVariantData(PVariant(VPointer)^) else
-    raise EDocVariant.CreateUTF8('DocVariantType.Data(%<>TDocVariant)',[VType]);
+  result := @DocVariant;
+  if result^.VType=varByRef or varVariant then
+    result := PVarData(result)^.VPointer;
+  if result^.VType<>word(DocVariantVType) then
+    raise EDocVariant.CreateUTF8('DocVariantType.Data(%<>TDocVariant)',[result^.VType]);
 end;
 
 function _Safe(const DocVariant: variant): PDocVariantData;
 {$ifdef FPC_OR_PUREPASCAL}
-var docv: word;
+var docv: integer;
 begin
   result := @DocVariant;
   docv := DocVariantVType;
-  if result.VType<>docv then
-    if (result.VType=varByRef or varVariant) and
-       (PVarData(PVarData(result)^.VPointer).VType=docv) then
-      result := pointer(PVarData(result)^.VPointer) else
-      result := @DocVariantDataFake;
+  if result^.VType=docv then
+    exit else
+  if result^.VType=varByRef or varVariant then begin
+    result := PVarData(result)^.VPointer;
+    if result^.VType=docv then
+      exit;
+  end;
+  result := @DocVariantDataFake;
 end;
 {$else}
 asm
@@ -44578,10 +44587,16 @@ end;
 {$endif}
 
 function _Safe(const DocVariant: variant; ExpectedKind: TDocVariantKind): PDocVariantData;
+var o: TDocVariantOptions;
 begin
   result := _Safe(DocVariant);
-  if result^.Kind<>ExpectedKind then
-    raise EDocVariant.CreateUTF8('_Safe(%)<>%',[ToText(result^.Kind)^,ToText(ExpectedKind)^]);
+  o := result^.VOptions;
+  if dvoIsArray in o then begin
+    if ExpectedKind=dvArray then
+      exit;
+  end else if (dvoIsObject in o) and (ExpectedKind=dvObject) then
+    exit;
+  raise EDocVariant.CreateUTF8('_Safe(%)?',[ToText(ExpectedKind)^]);
 end;
 
 function _CSV(const DocVariantOrString: variant): RawUTF8;
@@ -44595,9 +44610,11 @@ begin
 end;
 
 function TDocVariantData.GetValueIndex(const aName: RawUTF8): integer;
+var o: TDocVariantOptions;
 begin
+  o := VOptions;
   {$ifndef HASINLINE}
-  if not(dvoNameCaseSensitive in VOptions) and (dvoIsObject in VOptions) and
+  if not(dvoNameCaseSensitive in o) and (dvoIsObject in o) and
      (VType=DocVariantVType) then begin
     for result := 0 to VCount-1 do
       if IdemPropNameU(VName[result],aName) then
@@ -44605,7 +44622,7 @@ begin
     result := -1;
   end else
   {$endif}
-  result := GetValueIndex(Pointer(aName),Length(aName),dvoNameCaseSensitive in VOptions);
+  result := GetValueIndex(Pointer(aName),Length(aName),dvoNameCaseSensitive in o);
 end;
 
 function TDocVariantData.GetCapacity: integer;
@@ -44634,13 +44651,14 @@ end;
 
 procedure TDocVariantData.Init(aOptions: TDocVariantOptions; aKind: TDocVariantKind);
 begin
+  aOptions := aOptions-[dvoIsArray,dvoIsObject];
+  case aKind of
+    dvArray:  include(aOptions,dvoIsArray);
+    dvObject: include(aOptions,dvoIsObject);
+  end;
   ZeroFill(@self);
   VType := DocVariantVType;
-  VOptions := aOptions-[dvoIsArray,dvoIsObject];
-  case aKind of
-    dvArray:  include(VOptions,dvoIsArray);
-    dvObject: include(VOptions,dvoIsObject);
-  end;
+  VOptions := aOptions;
 end;
 
 procedure TDocVariantData.InitFast;
@@ -44735,7 +44753,7 @@ begin
   if high(Items)>=0 then begin
     VCount := length(Items);
     SetLength(VValue,VCount);
-    if dvoValueCopiedByReference in aOptions then
+    if dvoValueCopiedByReference in VOptions then
       for arg := 0 to high(Items) do
         VarRecToVariant(Items[arg],VValue[arg]) else
       for arg := 0 to high(Items) do begin
@@ -44773,7 +44791,8 @@ begin
   end;
 end;
 
-procedure TDocVariantData.InitArrayFrom(const Items: TRawUTF8DynArray; aOptions: TDocVariantOptions);
+procedure TDocVariantData.InitArrayFrom(const Items: TRawUTF8DynArray;
+  aOptions: TDocVariantOptions);
 var ndx: integer;
 begin
   if Items=nil then
@@ -44786,7 +44805,8 @@ begin
   end;
 end;
 
-procedure TDocVariantData.InitArrayFrom(const Items: TIntegerDynArray; aOptions: TDocVariantOptions);
+procedure TDocVariantData.InitArrayFrom(const Items: TIntegerDynArray;
+  aOptions: TDocVariantOptions);
 var ndx: integer;
 begin
   if Items=nil then
@@ -44799,7 +44819,8 @@ begin
   end;
 end;
 
-procedure TDocVariantData.InitArrayFrom(const Items: TInt64DynArray; aOptions: TDocVariantOptions);
+procedure TDocVariantData.InitArrayFrom(const Items: TInt64DynArray;
+  aOptions: TDocVariantOptions);
 var ndx: integer;
 begin
   if Items=nil then
@@ -44821,7 +44842,7 @@ begin
 end;
 
 procedure TDocVariantData.InitObjectFromVariants(const aNames: TRawUTF8DynArray;
-  const aValues: TVariantDynArray; aOptions: TDocVariantOptions=[]);
+  const aValues: TVariantDynArray; aOptions: TDocVariantOptions);
 begin
   if (aNames=nil) or (aValues=nil) or (length(aNames)<>length(aValues)) then
     VType := varNull else begin
@@ -44833,7 +44854,7 @@ begin
 end;
 
 procedure TDocVariantData.InitObjectFromPath(const aPath: RawUTF8; const aValue: variant;
-  aOptions: TDocVariantOptions=[]);
+  aOptions: TDocVariantOptions);
 var right: RawUTF8;
 begin
   if aPath='' then
@@ -45015,19 +45036,20 @@ begin
     VCount := Source^.VCount;
     pointer(VName) := nil;  // avoid GPF
     pointer(VValue) := nil;
-    VOptions := aOptions-[dvoIsArray,dvoIsObject]; // may not be same as Source
+    aOptions := aOptions-[dvoIsArray,dvoIsObject]; // may not be same as Source
     if dvoIsArray in Source^.VOptions then
-      include(VOptions,dvoIsArray) else
+      include(aOptions,dvoIsArray) else
     if dvoIsObject in Source^.VOptions then begin
-      include(VOptions,dvoIsObject);
+      include(aOptions,dvoIsObject);
       SetLength(VName,VCount);
       for ndx := 0 to VCount-1 do
         VName[ndx] := Source^.VName[ndx]; // manual copy is needed
-      if dvoInternNames in VOptions then
+      if dvoInternNames in aOptions then
         with DocVariantType.InternNames do
           for ndx := 0 to VCount-1 do
             UniqueText(VName[ndx]);
     end;
+    VOptions := aOptions;
   end else begin
     SetOptions(aOptions);
     VariantDynArrayClear(VValue); // force re-create full copy of all values
@@ -45042,7 +45064,7 @@ begin
       if t<=varNativeString then // simple string/number types copy
         VValue[ndx] := variant(v^) else
       if t=VType then // direct recursive copy for TDocVariant
-        TDocVariantData(VValue[ndx]).InitCopy(variant(v^),aOptions) else
+        TDocVariantData(VValue[ndx]).InitCopy(variant(v^),VOptions) else
       if FindCustomVariantType(t,Handler) then
         if Handler.InheritsFrom(TSynInvokeableVariantType) then
           TSynInvokeableVariantType(Handler).CopyByValue(
@@ -45144,7 +45166,7 @@ begin
     if result>=0 then
       raise EDocVariant.CreateUTF8('Duplicated "%" name',[aName]);
   end;
-  result := InternalAdd(aName); // FPC does not allow VValue[InternalAdd(aName)]
+  result := InternalAdd(aName);
   SetVariantByValue(aValue,VValue[result]);
   if dvoInternValues in VOptions then
     DocVariantType.InternValues.UniqueVariant(VValue[result]);
@@ -45226,7 +45248,7 @@ end;
 
 function TDocVariantData.AddItem(const aValue: variant): integer;
 begin
-  result := InternalAdd(''); // FPC does not allow VValue[InternalAdd(aName)]
+  result := InternalAdd('');
   SetVariantByValue(aValue,VValue[result]);
   if dvoInternValues in VOptions then
     DocVariantType.InternValues.UniqueVariant(VValue[result]);
@@ -45235,7 +45257,7 @@ end;
 function TDocVariantData.AddItemFromText(const aValue: RawUTF8;
   AllowVarDouble: boolean): integer;
 begin
-  result := InternalAdd(''); // FPC does not allow VValue[InternalAdd(aName)]
+  result := InternalAdd('');
   if not GetNumericVariantFromJSON(pointer(aValue),TVarData(VValue[result]),AllowVarDouble) then
     if dvoInternValues in VOptions then
       DocVariantType.InternValues.UniqueVariant(VValue[result],aValue) else
@@ -45244,7 +45266,7 @@ end;
 
 function TDocVariantData.AddItemText(const aValue: RawUTF8): integer;
 begin
-  result := InternalAdd(''); // FPC does not allow VValue[InternalAdd(aName)]
+  result := InternalAdd('');
   if dvoInternValues in VOptions then
     DocVariantType.InternValues.UniqueVariant(VValue[result],aValue) else
     RawUTF8ToVariant(aValue,VValue[result]);
@@ -45254,7 +45276,7 @@ procedure TDocVariantData.AddItems(const aValue: array of const);
 var ndx,added: integer;
 begin
   for ndx := 0 to high(aValue) do begin
-    added := InternalAdd(''); // FPC does not allow VValue[InternalAdd(aName)]
+    added := InternalAdd('');
     VarRecToVariant(aValue[ndx],VValue[added]);
     if dvoInternValues in VOptions then
       DocVariantType.InternValues.UniqueVariant(VValue[added]);
@@ -46521,7 +46543,7 @@ var ndx: Integer;
     Data: TDocVariantData absolute V;
 begin
   if (dvoIsArray in Data.VOptions) and (PWord(Name)^=ord('_')) then begin
-    ndx := Data.InternalAdd(''); // FPC does not allow VValue[InternalAdd(aName)]
+    ndx := Data.InternalAdd('');
     SetVariantByValue(variant(Value),Data.VValue[ndx]);
     if dvoInternValues in Data.VOptions then
       DocVariantType.InternValues.UniqueVariant(Data.VValue[ndx]);
@@ -46572,7 +46594,7 @@ begin
       exit;
     end;
   1:if SameText(Name,'Add') then begin
-      ndx := Data^.InternalAdd(''); // FPC does not allow VValue[InternalAdd(aName)]
+      ndx := Data^.InternalAdd('');
       SetVariantByValue(variant(Arguments[0]),Data^.VValue[ndx]);
       if dvoInternValues in Data^.VOptions then
         DocVariantType.InternValues.UniqueVariant(Data^.VValue[ndx]);
@@ -46612,7 +46634,7 @@ begin
     end;
   2:if SameText(Name,'Add') then begin
       SetTempFromFirstArgument;
-      ndx := Data^.InternalAdd(temp); // FPC does not allow VValue[InternalAdd(aName)]
+      ndx := Data^.InternalAdd(temp);
       SetVariantByValue(variant(Arguments[1]),Data^.VValue[ndx]);
       if dvoInternValues in Data^.VOptions then
         DocVariantType.InternValues.UniqueVariant(Data^.VValue[ndx]);
