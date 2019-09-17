@@ -3909,6 +3909,11 @@ function ClassNameShort(C: TClass): PShortString; overload;
 function ClassNameShort(Instance: TObject): PShortString; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// just a wrapper around vmtParent to avoid a function call
+// - slightly faster than TClass.ClassParent thanks to proper inlining
+function GetClassParent(C: TClass): TClass;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// just a wrapper around vmtClassName to avoid a string/RawUTF8 conversion
 function ToText(C: TClass): RawUTF8; overload;
   {$ifdef HASINLINE}inline;{$endif}
@@ -19316,6 +19321,15 @@ begin
     P := StrUInt64(@tmp[23],Value);
     FastSetString(result,P,@tmp[23]-P);
   end;
+end;
+
+function GetClassParent(C: TClass): TClass;
+begin
+  result := PPointer(PtrInt(PtrUInt(C))+vmtParent)^;
+  {$ifndef HASDIRECTTYPEINFO} // e.g. for Delphi and newer FPC
+  if result<>nil then
+    result := PPointer(result)^;
+  {$endif HASDIRECTTYPEINFO}
 end;
 
 function VarRecAsChar(const V: TVarRec): integer;

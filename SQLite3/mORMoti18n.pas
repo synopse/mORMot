@@ -1707,7 +1707,7 @@ var Section: PUTF8Char; {$endif}
           end;
           P := P^.Next;
         end;
-        CL := CL.ClassParent; // translate parent published properties
+        CL := GetClassParent(CL); // translate parent published properties
       end;
     end;
 
@@ -2459,7 +2459,7 @@ var F: Text;
     if (C=nil) or (ClassList.IndexOf(C)>=0) then
       exit; // already done or no RTTI information (e.g. reached TObject level)
     ClassList.Add(C);
-    AddClass(C.ClassParent); // add parent properties first
+    AddClass(GetClassParent(C)); // add parent properties first
     for i := 1 to InternalClassPropInfo(C,P) do begin // add all field names
       AddOnceDynArray(StringToWinAnsi(TSQLRecord.CaptionNameFromRTTI(@P^.Name)));
       // for Delphi 2009 and up/XE: CaptionName converted into a WinAnsiString
@@ -2506,7 +2506,7 @@ begin
               AddOnceDynArray(StringToWinAnsi(CaptionNameFromRTTI(@P^.Name)));
               P := P^.Next;
             end;
-            CT := CT.ClassParent;
+            CT := GetClassParent(CT);
           until CT=nil;
         end;
       end else

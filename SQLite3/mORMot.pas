@@ -4378,7 +4378,7 @@ function InternalClassProp(ClassType: TClass): PClassProp;
 //  !        // use P^
 //  !        P := P^.Next;
 //  !      end;
-//  !      CT := CT.ClassParent;
+//  !      CT := GetClassParent(CT);
 //  !    until CT=nil;
 //  !  end;
 // such a loop is much faster than using the RTL's TypeInfo or RTTI units
@@ -21213,7 +21213,7 @@ begin
       {$endif}
       for i := 0 to Count-1 do
       if IdemPropName(result^.Name{$ifdef FPC}^{$endif},aMethodName) then
-        Exit else
+        exit else
         {$ifdef FPC}
         inc(result);
         {$else}
@@ -21221,7 +21221,7 @@ begin
         {$endif}
     end;
     {$ifdef FPC}
-    aClassType := aClassType.ClassParent; // vmtParent slot is reference on FPC
+    aClassType := GetClassParent(aClassType); // vmtParent slot is reference on FPC
     if aClassType=nil then
     {$else}
     if PPointer(PtrInt(aClassType)+vmtParent)^<>nil then
@@ -21339,22 +21339,21 @@ begin
       end;
     end else
       inc(result,CP^.PropCount);
-    ClassType := ClassType.ClassParent;
+    ClassType := GetClassParent(ClassType);
   end;
 end;
 
 function ClassHasPublishedFields(ClassType: TClass): boolean;
 var CP: PClassProp;
 begin
+  result := true;
   while ClassType<>nil do begin
     CP := InternalClassProp(ClassType);
     if CP=nil then
       break; // no RTTI information (e.g. reached TObject level)
-    if CP^.PropCount>0 then begin
-      result := true;
+    if CP^.PropCount>0 then
       exit;
-    end;
-    ClassType := ClassType.ClassParent;
+    ClassType := GetClassParent(ClassType);
   end;
   result := false;
 end;
@@ -21365,7 +21364,7 @@ var P: PClassProp;
 begin
   if C=nil then
     exit;
-  InternalAdd(C.ClassParent,list);
+  InternalAdd(GetClassParent(C),list);
   P := InternalClassProp(C);
   if (P<>nil) and (P^.PropCount>0) then
     ObjArrayAdd(list,pointer(C));
@@ -21397,7 +21396,7 @@ begin
         P := AlignToPtr(PAnsiChar(@P^.Name[1])+ord(P^.Name[0])); // := P^.Next
       end;
     end;
-    ClassType := ClassType.ClassParent;
+    ClassType := GetClassParent(ClassType);
   end;
   SetLength(result,n);
 end;
@@ -21438,8 +21437,8 @@ begin
       if (result^.Name[0]=PropName[0]) and
          IdemPropNameUSameLen(@result^.Name[1],@PropName[1],ord(PropName[0])) then
         exit else
-        result := AlignToPtr(PAnsiChar(@result^.Name[1])+ord(result^.Name[0]));
-    aClassType := aClassType.ClassParent;
+        result := result^.Next;
+    aClassType := GetClassParent(aClassType);
   end;
   result := nil;
 end;
@@ -21448,12 +21447,13 @@ function ClassFieldPropWithParentsFromUTF8(aClassType: TClass; PropName: PUTF8Ch
   PropNameLen: integer): PPropInfo;
 var i: integer;
 begin
-  while (PropNameLen<>0) and (aClassType<>nil) do begin
+  if PropNameLen<>0 then
+    while aClassType<>nil do begin
     for i := 1 to InternalClassPropInfo(aClassType,result) do
       if IdemPropName(result^.Name,PropName,PropNameLen) then
         exit else
         result := result^.Next;
-    aClassType := aClassType.ClassParent;
+      aClassType := GetClassParent(aClassType);
   end;
   result := nil;
 end;
@@ -21468,7 +21468,7 @@ begin
            (result^.PropType^.ClassType^.ClassType=aSearchedClassType) then
           exit else
           result := result^.Next;
-      aClassType := aClassType.ClassParent;
+      aClassType := GetClassParent(aClassType);
     end;
   result := nil;
 end;
@@ -21483,7 +21483,7 @@ begin
            (result^.PropType^.InheritsFrom(aSearchedClassType)) then
           exit else
           result := result^.Next;
-      aClassType := aClassType.ClassParent;
+      aClassType := GetClassParent(aClassType);
     end;
   result := nil;
 end;
@@ -21497,7 +21497,7 @@ begin
         if result^.GetFieldAddr(nil)=aSearchedOffset then
           exit else
           result := result^.Next;
-      aClassType := aClassType.ClassParent;
+      aClassType := GetClassParent(aClassType);
     end;
   result := nil;
 end;
@@ -24692,7 +24692,7 @@ begin
   if aClassType=nil then
     exit; // no RTTI information (e.g. reached TObject level)
   if not (pilSingleHierarchyLevel in fOptions) then
-    InternalAddParentsFirst(aClassType.ClassParent,aFlattenedProps);
+    InternalAddParentsFirst(GetClassParent(aClassType),aFlattenedProps);
   for i := 1 to InternalClassPropInfo(aClassType,P) do begin
     if (P^.PropType^.Kind=tkClass) and
        (P^.PropType^.ClassSQLFieldType in [sftObject,sftUnknown]) then begin
@@ -24713,7 +24713,7 @@ begin
   if aClassType=nil then
     exit; // no RTTI information (e.g. reached TObject level)
   if not (pilSingleHierarchyLevel in fOptions) then
-    InternalAddParentsFirst(aClassType.ClassParent);
+    InternalAddParentsFirst(GetClassParent(aClassType));
   for i := 1 to InternalClassPropInfo(aClassType,P) do begin
     Add(TSQLPropInfoRTTI.CreateFrom(P,Count,fOptions,nil));
     P := P^.Next;
@@ -24997,11 +24997,11 @@ function TSynMonitorUsage.Track(Instance: TObject; const Name: RawUTF8): integer
       k: TSynMonitorType;
       g: TSynMonitorUsageGranularity;
       p: PSynMonitorUsageTrackProp;
-      parent: TClass;
+      ctp: TClass;
   begin
     n := length(Props);
     while ClassType<>nil do begin
-      parent := ClassType.ClassParent;
+      ctp := GetClassParent(ClassType);
       for i := 1 to InternalClassPropInfo(ClassType,nfo) do begin
         k := MonitorPropUsageValue(nfo);
         if k<>smvUndefined then begin
@@ -25010,8 +25010,8 @@ function TSynMonitorUsage.Track(Instance: TObject; const Name: RawUTF8): integer
           p^.Info := nfo;
           p^.Kind := k;
           ShortStringToAnsi7String(nfo^.Name,p^.Name);
-          if (parent<>nil) and (FindPropName(['Bytes','MicroSec'],p^.Name)>=0) then
-            ToText(parent,p^.Name); // meaningful property name
+          if (ctp<>nil) and (FindPropName(['Bytes','MicroSec'],p^.Name)>=0) then
+            ToText(ctp,p^.Name); // meaningful property name = parent name
           for g := low(p^.Values) to high(p^.Values) do
             SetLength(p^.Values[g],USAGE_VALUE_LEN[g]);
           p^.ValueLast := nfo^.GetInt64Value(Instance);
@@ -25019,7 +25019,7 @@ function TSynMonitorUsage.Track(Instance: TObject; const Name: RawUTF8): integer
         end;
         nfo := nfo^.Next;
       end;
-      ClassType := parent;
+      ClassType := ctp;
     end;
   end;
 
@@ -29860,7 +29860,8 @@ function TPropInfo.GetUnicodeStrValue(Instance: TObject): UnicodeString;
 begin
   if (Instance<>nil) and (@self<>nil) and
      (PropType^.Kind=tkUString) then
-    result := GetUnicodeStrProp(Instance);
+    result := GetUnicodeStrProp(Instance) else
+    result := '';
 end;
 
 procedure TPropInfo.SetUnicodeStrValue(Instance: TObject; const Value: UnicodeString);
@@ -30024,8 +30025,7 @@ begin
   kS := PropType^.Kind;
   kD := DestInfo^.PropType^.Kind;
   case kS of
-    {$ifdef FPC}tkBool,{$endif}
-    tkEnumeration, tkInteger, tkSet, tkChar, tkWChar:
+    {$ifdef FPC}tkBool,{$endif} tkEnumeration, tkInteger, tkSet, tkChar, tkWChar:
 int:  if DestInfo=@Self then
         SetOrdProp(Dest,GetOrdProp(Source)) else
 dst:  if kD in tkOrdinalTypes then // use Int64 to handle e.g. cardinal
@@ -31252,8 +31252,8 @@ function TTypeInfo.GetSQLFieldType: TSQLFieldType;
 begin // very fast, thanks to the TypeInfo() compiler-generated function
   case Kind of
     tkInteger: begin
-      result := sftInteger;
-      exit; // direct exit is faster in generated asm code (Delphi 7 at least)
+      result := sftInteger; // works also for otSQWord,otUQWord
+      exit; // direct exit is faster in generated asm code
     end;
     tkInt64:
       if (@self=TypeInfo(TRecordReference)) or
@@ -31310,7 +31310,7 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
       result := sftInteger;
       exit;
     end;
-    {$endif}
+    {$endif FPC}
     tkSet: begin
       result := sftSet;
       exit;
@@ -31321,7 +31321,7 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
         result := sftBoolean;
         exit;
       end else
-      {$endif}
+      {$endif FPC}
       if @self=TypeInfo(WordBool) then begin // circumvent a Delphi RTTI bug
         result := sftBoolean;
         exit;
@@ -32602,7 +32602,7 @@ begin
             tokenizer := copy(cname,15,100); // e.g. TSQLRecordFTS3Porter -> 'Porter'
           break;
         end;
-        c := c.ClassParent;
+        c := GetClassParent(c);
       until c=TSQLRecord;
       result := FormatUTF8('% tokenize=%)',[result,LowerCaseU(tokenizer)]);
     end;
@@ -48908,7 +48908,7 @@ end;
 procedure CopyObject(aFrom, aTo: TObject);
 var P,P2: PPropInfo;
     i: integer;
-    C,C2: TClass;
+
 begin
   if (aFrom=nil) or (aTo=nil) then
     exit;
@@ -48923,33 +48923,30 @@ begin
       CopyStrings(TStrings(aFrom),TStrings(aTo));
     exit;
   end;
-  C := aFrom.ClassType;
-  C2 := aTo.ClassType;
-  if C2.InheritsFrom(C) then
-    repeat // fast process of inherited PPropInfo
-      for i := 1 to InternalClassPropInfo(C,P) do begin
-        P^.CopyValue(aFrom,aTo);
-        P := P^.Next;
-      end;
-      C := C.ClassParent;
-    until C=TObject else
-  if C.InheritsFrom(C2) then
-    repeat // fast process of inherited PPropInfo
-      for i := 1 to InternalClassPropInfo(C2,P) do begin
-        P^.CopyValue(aFrom,aTo);
-        P := P^.Next;
-      end;
-      C2 := C2.ClassParent;
-    until C2=TObject else
-    repeat // slower lookup by property name
-      for i := 1 to InternalClassPropInfo(C,P) do begin
-        P2 := ClassFieldPropWithParents(C2,P^.Name);
+  Cfrom := aFrom.ClassType;
+  Cto := aTo.ClassType;
+  if Cto.InheritsFrom(Cfrom) then // C = most common hierarchy level
+    C := Cfrom else
+  if Cfrom.InheritsFrom(Cto) then
+    C := Cto else begin
+    repeat // no common inheritance -> slower lookup by property name
+      for i := 1 to InternalClassPropInfo(Cfrom,P) do begin
+        P2 := ClassFieldPropWithParents(Cto,P^.Name);
         if P2<>nil then
           P^.CopyValue(aFrom,aTo,P2);
         P := P^.Next;
       end;
-      C := C.ClassParent;
-    until C=TObject;
+      Cfrom := GetClassParent(Cfrom);
+    until Cfrom=TObject;
+    exit;
+  end;
+  repeat // fast process of inherited PPropInfo
+    for i := 1 to InternalClassPropInfo(C,P) do begin
+      P^.CopyValue(aFrom,aTo);
+      P := P^.Next;
+    end;
+    C := GetClassParent(C);
+  until C=TObject;
 end;
 
 function CopyObject(aFrom: TObject): TObject;
@@ -49072,7 +49069,7 @@ begin
               exit;
         P1 := P1^.Next;
       end;
-      C1 := C1.ClassParent;
+      C1 := GetClassParent(C1);
     until C1=TObject;
     result := true;
   end;
@@ -49169,13 +49166,7 @@ begin
           aParser^.Kind := result; // default serialization from RTTI
           exit;
         end;
-        {$ifdef FPC}
-        aClassType := aClassType.ClassParent; // vmtParent slot is reference on FPC
-        {$else}
-        if PPointer(PtrInt(aClassType)+vmtParent)^<>nil then
-          aClassType := PPointer(PPointer(PtrInt(aClassType)+vmtParent)^)^ else
-          break;
-        {$endif}
+        aClassType := GetClassParent(aClassType); // vmtParent slot is reference on FPC
         P := JSONCustomParsers.FindValue(aClassType);
         if (P<>nil) and (P^.Kind in [oCustomReaderWriter,oCustomPropName]) then begin
           aParser^ := P^; // copy from parent
@@ -50245,7 +50236,7 @@ begin
       end;
       p := p^.Next;
     end;
-    c := c.ClassParent;
+    c := GetClassParent(c);
   until c=nil;
 end;
 
@@ -50260,10 +50251,10 @@ begin
   repeat
     for i := 1 to InternalClassPropInfo(c,p) do begin
       p^.SetDefaultValue(Value,FreeAndNilNestedObjects);
-      p := AlignToPtr(PAnsiChar(@p^.Name[1])+ord(p^.Name[0])); // p := p^.Next
+      p := p^.Next;
     end;
-    c := c.ClassParent;
-  until c=nil;
+    c := GetClassParent(c);
+  until c=TObject;
 end;
 
 
@@ -50287,7 +50278,7 @@ begin
     {$endif LVCL}
     begin
       {$ifdef FPC}
-      C := C.ClassParent; // vmtParent slot is reference on FPC
+      C := GetClassParent(C);
       {$else}
       C := PPointer(PtrInt(C)+vmtParent)^;
       if C<>nil then
@@ -52403,8 +52394,8 @@ var Added: boolean;
       end;
       if woDontStoreInherited in Options then
         break;
-      aClassType := aClassType.ClassParent;
-    until aClassType=nil;
+      aClassType := GetClassParent(aClassType);
+    until aClassType=TObject;
   end;
 
 var i, c: integer;
@@ -58563,7 +58554,7 @@ begin
             [self,P^.Name,P^.PropType^.Name]);
       P := P^.Next;
     end;
-    CT := CT.ClassParent;
+    CT := GetClassParent(CT);
   until CT=TInjectableObject;
 end;
 
@@ -58717,7 +58708,7 @@ begin
               UID[j] := nil; // mark TGUID found
               break;
             end;
-      C := C.ClassParent;
+      C := GetClassParent(C);
     until C=nil;
   end;
   for j := 0 to high(aInterfaces) do
@@ -60329,10 +60320,8 @@ begin
     end;
   smvRawUTF8..smvWideString, smvObject..smvInterface:
     result := PPointer(V)^=nil;
-  smvBinary:
+  smvBinary, smvRecord:
     result := IsZeroSmall(V,SizeInStorage);
-  smvRecord:
-    result := IsZero(V,SizeInStorage);
   {$ifndef NOVARIANTS}
   smvVariant: result := PVarData(V)^.vtype<=varNull;
   {$endif}
@@ -60756,7 +60745,7 @@ begin
       end;
       P := P^.Next;
     end;
-    aClass := aClass.ClassParent;
+    aClass := GetClassParent(aClass);
   until aClass=TObject;
 end;
 
