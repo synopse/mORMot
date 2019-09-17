@@ -30422,8 +30422,21 @@ begin
 end;
 
 function TPropInfo.GetFloatProp(Instance: TObject): double;
+var P: pointer;
 begin
-  result := SynFPCTypInfo.GetFloatProp(Instance,@self);
+  if GetterIsField then
+    P := GetterAddr(Instance) else
+  if (GetProc=0) and SetterIsField then
+    P := SetterAddr(Instance) else begin
+    result := SynFPCTypInfo.GetFloatProp(Instance,@self);
+    exit;
+  end;
+  case PropType^.FloatType of
+    ftSingle:    result := PSingle(P)^;
+    ftDoub:      result := PDouble(P)^;
+    ftExtended:  result := PExtended(P)^;
+    ftCurr:      result := PCurrency(P)^;
+  end;
 end;
 
 procedure TPropInfo.SetFloatProp(Instance: TObject; Value: TSynExtended);
@@ -30447,13 +30460,21 @@ end;
 {$ifndef NOVARIANTS}
 procedure TPropInfo.GetVariantProp(Instance: TObject; var result: Variant);
 begin
+begin
   if GetterIsField then
-    SetVariantByValue(PVariant(GetterAddr(Instance))^,result) else
+    P := GetterAddr(Instance) else
+  if (GetProc=0) and SetterIsField then
+    P := SetterAddr(Instance) else begin
     result := SynFPCTypInfo.GetVariantProp(Instance,@self);
+    exit;
+  end;
+  SetVariantByValue(P^,result);
 end;
 
 procedure TPropInfo.SetVariantProp(Instance: TObject; const Value: Variant);
 begin
+  if SetterIsField then
+    PVariant(SetterAddr(Instance))^ := Value else
   if (SetProc=0) and GetterIsField then
     PVariant(GetterAddr(Instance))^ := Value else
     SynFPCTypInfo.SetVariantProp(Instance,@self,Value);
@@ -49032,7 +49053,7 @@ end;
 procedure CopyObject(aFrom, aTo: TObject);
 var P,P2: PPropInfo;
     i: integer;
-
+    Cfrom,Cto,C: TClass;
 begin
   if (aFrom=nil) or (aTo=nil) then
     exit;
@@ -50353,7 +50374,7 @@ begin
     for i := 1 to InternalClassPropInfo(Value.ClassType,p) do begin
       case p^.PropType^.Kind of
         {$ifdef FPC}tkBool,{$endif} tkEnumeration, tkSet, tkInteger:
-          if p^.Default<>longint($80000000) then
+          if p^.Default<>NO_DEFAULT then
             p^.SetOrdProp(Value,p^.Default);
         tkClass:
           SetDefaultValuesObject(p^.GetObjProp(Value));
