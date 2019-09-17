@@ -59353,7 +59353,7 @@ asm
 end;
 {$endif CPUX64}
 
-{$ifndef FPC}{$WARN COMPARING_SIGNED_UNSIGNED OFF}{$endif} // W1023 FPC_STACKALIGNMENT
+{$ifdef ISDELPHI7ANDUP}{$WARN COMPARING_SIGNED_UNSIGNED OFF}{$endif} // W1023 FPC_STACKALIGNMENT
 
 {$ifdef CPUX86} {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
@@ -59404,7 +59404,7 @@ asm
 end;
 {$endif CPUX86}
 
-{$ifndef FPC}{$WARN COMPARING_SIGNED_UNSIGNED ON}{$endif}
+{$ifdef ISDELPHI7ANDUP}{$WARN COMPARING_SIGNED_UNSIGNED ON}{$endif}
 
 procedure BackgroundExecuteProc(Call: pointer);
 var synch: PBackgroundLauncher absolute Call;

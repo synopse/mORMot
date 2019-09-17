@@ -44534,12 +44534,12 @@ end;
 { TDocVariantData }
 
 function TDocVariantData.GetKind: TDocVariantKind;
-var o: TDocVariantOptions;
+var opt: TDocVariantOptions;
 begin
-  o := VOptions;
-  if dvoIsArray in o then
+  opt := VOptions;
+  if dvoIsArray in opt then
     result := dvArray else
-  if dvoIsObject in o then
+  if dvoIsObject in opt then
     result := dvObject else
     result := dvUndefined;
 end;
@@ -44610,11 +44610,9 @@ begin
 end;
 
 function TDocVariantData.GetValueIndex(const aName: RawUTF8): integer;
-var o: TDocVariantOptions;
 begin
-  o := VOptions;
   {$ifndef HASINLINE}
-  if not(dvoNameCaseSensitive in o) and (dvoIsObject in o) and
+  if not(dvoNameCaseSensitive in VOptions) and (dvoIsObject in VOptions) and
      (VType=DocVariantVType) then begin
     for result := 0 to VCount-1 do
       if IdemPropNameU(VName[result],aName) then
@@ -44622,7 +44620,7 @@ begin
     result := -1;
   end else
   {$endif}
-  result := GetValueIndex(Pointer(aName),Length(aName),dvoNameCaseSensitive in o);
+  result := GetValueIndex(Pointer(aName),Length(aName),dvoNameCaseSensitive in VOptions);
 end;
 
 function TDocVariantData.GetCapacity: integer;
