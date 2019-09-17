@@ -9075,13 +9075,16 @@ begin
   v1.Add(vd);
   Check(VariantSaveJSON(v1)='[1.23456,1.234567]');
   v2 := _obj(['id',1]);
-  v1.Add(v2);
+  Check(VariantSaveJSON(v2)='{"id":1}');
+  {$ifdef FPC}_Safe(v1)^.AddItem(v2); // FPC does not accept v1.Add(v2)
+  {$else}v1.Add(v2);{$endif}
   Check(VariantSaveJSON(v1)='[1.23456,1.234567,{"id":1}]');
   s := 'abc';
-  v1.Add(s); // FPC does not accept v1.Add('abc') on ARM
+  {$ifdef FPC}_Safe(v1)^.AddItem(s); // FPC does not accept v1.Add(s)
+  {$else}v1.Add(s);{$endif}
   Check(VariantSaveJSON(v1)='[1.23456,1.234567,{"id":1},"abc"]');
   RawUTF8ToVariant('def',v2);
-  v1.Add(v2);
+  {$ifdef FPC}_Safe(v1)^.AddItem{$else}v1.Add{$endif}(v2);
   Check(VariantSaveJSON(v1)='[1.23456,1.234567,{"id":1},"abc","def"]');
   Doc.Clear;
   Doc.InitObjectFromPath('name','toto');
