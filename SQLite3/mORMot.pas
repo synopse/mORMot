@@ -12494,10 +12494,11 @@ type
   TInterfaceMockSpy = class(TInterfaceMock)
   protected
     procedure IntSetOptions(Options: TInterfaceStubOptions); override;
+  public
     /// this will set and force imoLogMethodCallsAndResults option as needed
+    // - you should not call this method, but the overloaded alternatives
     constructor Create(aFactory: TInterfaceFactory;
       const aInterfaceName: RawUTF8); override;
-  public
     /// check that a method has been called a specify number of times
     procedure Verify(const aMethodName: RawUTF8;
       aOperator: TSQLQueryOperator=qoGreaterThan; aCount: cardinal=0); overload;

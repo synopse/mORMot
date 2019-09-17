@@ -43573,31 +43573,31 @@ begin // match VariantSave() storage
     end;
   case TVarData(Value).VType of
   varEmpty, varNull:
-    result := SizeOf(TVarData.VType);
+    result := SizeOf(tmp.VType);
   varShortInt, varByte:
-    result := SizeOf(TVarData.VByte)+SizeOf(TVarData.VType);
+    result := SizeOf(tmp.VByte)+SizeOf(tmp.VType);
   varSmallint, varWord, varBoolean:
-    result := SizeOf(TVarData.VSmallint)+SizeOf(TVarData.VType);
+    result := SizeOf(tmp.VSmallint)+SizeOf(tmp.VType);
   varSingle, varLongWord, varInteger:
-    result := SizeOf(TVarData.VInteger)+SizeOf(TVarData.VType);
+    result := SizeOf(tmp.VInteger)+SizeOf(tmp.VType);
   varInt64, varWord64, varDouble, varDate, varCurrency:
-    result := SizeOf(TVarData.VInt64)+SizeOf(TVarData.VType);
+    result := SizeOf(tmp.VInt64)+SizeOf(tmp.VType);
   varString, varOleStr:
     if PtrUInt(TVarData(Value).VAny)=0 then
-      result := 1+SizeOf(TVarData.VType) else
+      result := 1+SizeOf(tmp.VType) else
       result := ToVarUInt32LengthWithData(
         PStrRec(Pointer(PtrUInt(TVarData(Value).VAny)-STRRECSIZE))^.length)
-        +SizeOf(TVarData.VType);
+        +SizeOf(tmp.VType);
   {$ifdef HASVARUSTRING}
   varUString:
     if PtrUInt(TVarData(Value).VAny)=0 then // stored length is in bytes, not (wide)chars
-      result := 1+SizeOf(TVarData.VType) else
+      result := 1+SizeOf(tmp.VType) else
       result := ToVarUInt32LengthWithData(PStrRec(Pointer(PtrUInt(TVarData(Value).VAny)-STRRECSIZE))^.length*2)
-        +SizeOf(TVarData.VType);
+        +SizeOf(tmp.VType);
   {$endif}
   else
     try // complex types will be stored as JSON
-      result := ToVarUInt32LengthWithData(VariantSaveJSONLength(Value))+SizeOf(TVarData.VType);
+      result := ToVarUInt32LengthWithData(VariantSaveJSONLength(Value))+SizeOf(tmp.VType);
     except
       on Exception do
         result := 0; // notify invalid/unhandled variant content
@@ -43629,7 +43629,7 @@ begin
   {$ifndef FPC}if TVarData(Value).VType and VTYPE_STATIC<>0 then{$endif}
     VarClear(Value);
   TVarData(Value).VType := PWord(Source)^;
-  inc(Source,SizeOf(TVarData.VType));
+  inc(Source,SizeOf(TVarData(Value).VType));
   case TVarData(Value).VType of
   varNull, varEmpty: ;
   varShortInt, varByte: begin
