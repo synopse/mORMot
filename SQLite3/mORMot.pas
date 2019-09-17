@@ -2624,6 +2624,8 @@ type
     BaseType: PPTypeInfo;
     {$endif FPC_ENUMHASINNER}
     /// a concatenation of shortstrings, containing the enumeration names
+    // - those shortstrings are not aligned whatsoever (even if
+    // FPC_REQUIRES_PROPER_ALIGNMENT is set)
     NameList: string[255];
     {$ifdef FPC_ENUMHASINNER}
     function MinValue: Longint; inline;
@@ -2936,6 +2938,7 @@ type
     Index: Integer;
     /// contains the default value (2147483648=$80000000 indicates nodefault)
     // when an ordinal or set property is saved as TPersistent
+    // - see DefaultOr0 for easy use
     Default: Longint;
     /// index of the property in the current inherited class definition
     // - first name index at a given class level is 0
@@ -2979,8 +2982,9 @@ type
     /// compare two published properties
     function SameValue(Source: TObject; DestInfo: PPropInfo; Dest: TObject): boolean;
     /// return true if this property is a BLOB (TSQLRawBlob)
-    function IsBlob: boolean;
-      {$ifdef HASINLINE}inline;{$endif}
+    function IsBlob: boolean;     {$ifdef HASINLINE}inline;{$endif}
+    /// return the Default RTTI value defined for this property, or 0 if not set
+    function DefaultOr0: integer; {$ifdef HASINLINE}inline;{$endif}
     /// compute in how many bytes this property is stored
     function RetrieveFieldSize: integer;
     /// low-level getter of the ordinal property value of a given instance
@@ -3103,10 +3107,30 @@ type
     // - will optionally make some conversion if the property type doesn't
     // match the variant type, e.g. a text variant could be converted to integer
     // when setting a tkInteger kind of property
+    // - a tkDynArray property is expected to be a T*ObjArray and will be
+    // converted from a TDocVariant using a newly allocated T*ObjArray
     procedure SetFromVariant(Instance: TObject; const Value: variant);
     /// low-level getter of the property value into a variant value
+    // - a tkDynArray property is expected to be a T*ObjArray and will be
+    // converted into a TDocVariant using a temporary JSON serialization
     procedure GetVariant(Instance: TObject; var Dest: variant);
     {$endif NOVARIANTS}
+    /// low-level setter of the property value from its text representation
+    /// - handle published integer, Int64, floating point values, (wide)string,
+    // enumerates (e.g. boolean), variant properties of the object
+    // - for variant properties, could unserialize the Text as JSON into a
+    // TDocVariantData if TryCustomVariants (and AllowDouble) are set
+    // - dynamic arrays are unserialized from JSON [...], unless a
+    // TRawUTF8DynArray property has been stored as CSV
+    procedure SetFromText(Instance: TObject; const Text: RawUTF8;
+      TryCustomVariants: PDocVariantOptions=nil; AllowDouble: boolean=false);
+    /// low-level appender of the property value to a text buffer
+    // - write the published integer, Int64, floating point values, (wide)string,
+    // enumerates (e.g. boolean), variant properties of the object
+    // - dynamic arrays will be serialized as JSON, unless RawUTF8DynArrayAsCSV
+    // is set, and a TRawUTF8DynArray property will be stored as CSV
+    procedure GetToText(Instance: TObject; WR: TTextWriter; RawUTF8DynArrayAsCSV: boolean=false;
+      Escape: TTextWriterKind=twNone);
     /// read an TObject published property, as saved by ObjectToJSON() function
     // - will use direct in-memory reference to the object, or call the corresponding
     // setter method (if any), creating a temporary instance via TTypeInfo.ClassCreate
@@ -3217,6 +3241,10 @@ type
 {$else}
   {$A+}
 {$endif FPC}
+
+const
+  NO_INDEX = longint($80000000);
+  NO_DEFAULT = longint($80000000);
 
 type
   TJSONSerializer = class;
@@ -12128,10 +12156,11 @@ type
       aScope: TInterfaceStubLogLayouts; SepChar: AnsiChar): RawUTF8;
     function GetLogHash: cardinal;
     procedure OnExecuteToLog(Ctxt: TOnInterfaceStubExecuteParamsVariant);
+  public
     /// low-level internal constructor
+    // - you should not call this method, but the overloaded alternatives
     constructor Create(aFactory: TInterfaceFactory;
       const aInterfaceName: RawUTF8); reintroduce; overload; virtual;
-  public
     /// initialize an interface stub from TypeInfo(IMyInterface)
     // - assign the fake class instance to a stubbed interface variable:
     // !var I: ICalculator;
@@ -20995,11 +21024,7 @@ type
   AlignTypeData = pointer;
   UnalignToDouble = Double;
 
-const
-  NO_INDEX = Integer($80000000);
-
 {$endif FPC}
-
 
 { some inlined methods }
 
@@ -29753,7 +29778,7 @@ begin
       if TypeInfo=system.TypeInfo(boolean) then
         Dest := boolean(i) else
         Dest := i;
-    {$endif}
+    {$endif FPC}
     end;
   end;
   tkInt64{$ifdef FPC},tkQWord{$endif}:
@@ -29772,10 +29797,102 @@ begin
   else VarClear(Dest);
   end;
 end;
+
 {$endif NOVARIANTS}
 
+procedure TPropInfo.SetFromText(Instance: TObject; const Text: RawUTF8;
+  TryCustomVariants: PDocVariantOptions; AllowDouble: boolean);
+{$ifndef NOVARIANTS}var tmp: variant;{$endif}
+begin
+  if (Instance<>nil) and (@self<>nil) then
+  case PropType^.Kind of
+  tkChar,tkWChar:
+    if Text<>'' then
+     SetOrdProp(Instance,ord(Text[1]));
+  tkInteger,tkEnumeration,tkSet{$ifdef FPC},tkBool{$endif}:
+    SetOrdProp(Instance,GetIntegerDef(pointer(Text),DefaultOr0));
+  tkInt64{$ifdef FPC},tkQWord{$endif}:
+    SetInt64Prop(Instance,GetInt64(pointer(Text)));
+  tkLString,{$ifdef FPC}tkLStringOld,{$endif}
+  {$ifdef HASVARUSTRING}tkUString,{$endif}tkWString:
+    SetLongStrValue(Instance,Text);
+  tkFloat:
+    if PropType^.FloatType=ftCurr then
+      SetCurrencyProp(Instance,StrToCurrency(pointer(Text))) else
+      SetFloatProp(Instance,GetExtended(pointer(Text)));
+  {$ifndef NOVARIANTS}
+  tkVariant: begin
+    if TryCustomVariants<>nil then
+      GetVariantFromJSON(pointer(Text),TextToVariantNumberType(pointer(Text))=varString,
+        tmp,TryCustomVariants,{allowdouble=}true) else
+      RawUTF8ToVariant(Text,tmp);
+    SetVariantProp(Instance,tmp);
+  end;
+  {$endif NOVARIANTS}
+  tkDynArray:
+    if Text<>'' then
+      if (TypeInfo=system.TypeInfo(TRawUTF8DynArray)) and (Text[1]<>'[') then
+        CSVToRawUTF8DynArray(pointer(Text),PRawUTF8DynArray(GetFieldAddr(Instance))^) else
+        with GetDynArray(Instance) do
+          LoadFromJSON(pointer(Text));
+  end;
+end;
+
+procedure TPropInfo.GetToText(Instance: TObject; WR: TTextWriter;
+  RawUTF8DynArrayAsCSV: boolean; Escape: TTextWriterKind);
+var i: integer;
+    tmp: RawUTF8;
+    a: PRawUTF8DynArray;
+    da: TDynArray;
+    {$ifndef NOVARIANTS}v: variant;{$endif}
+begin
+  if (Instance<>nil) and (@self<>nil) and (WR<>nil) then
+  case PropType^.Kind of
+  tkInteger,tkEnumeration,tkSet,tkChar,tkWChar{$ifdef FPC},tkBool{$endif}: begin
+    i := GetOrdProp(Instance);
+    case PropType^.Kind of
+    tkChar:  WR.Add(AnsiChar(i));
+    tkWChar: WR.AddNoJSONEscapeW(@i,1);
+    else     WR.Add(i);
+    end;
+  end;
+  tkInt64{$ifdef FPC},tkQWord{$endif}:
+    WR.Add(GetInt64Prop(Instance));
+  tkLString,{$ifdef FPC}tkLStringOld,{$endif}
+  {$ifdef HASVARUSTRING}tkUString,{$endif}tkWString: begin
+    GetLongStrValue(Instance,tmp);
+    WR.Add(pointer(tmp),length(tmp),Escape);
+  end;
+  tkFloat:
+    if PropType^.FloatType=ftCurr then
+      WR.AddCurr64(GetCurrencyProp(Instance)) else
+      WR.AddDouble(GetFloatProp(Instance));
+  {$ifndef NOVARIANTS}
+  tkVariant: begin
+    GetVariantProp(Instance,v);
+    WR.AddVariant(v,Escape);
+  end;
+  {$endif NOVARIANTS}
+  tkDynArray: begin
+    if RawUTF8DynArrayAsCSV and (TypeInfo=system.TypeInfo(TRawUTF8DynArray)) then begin
+      a := GetFieldAddr(Instance);
+      if (a<>nil) and (a^<>nil) then begin
+        for i := 0 to length(a^)-1 do begin
+          WR.AddString(a^[i]);
+          WR.Add(',');
+        end;
+        WR.CancelLastComma;
+      end;
+    end else begin
+      GetDynArray(Instance,da);
+      WR.AddDynArrayJSON(da);
+    end;
+  end;
+  end;
+end;
+
 procedure TPropInfo.SetDefaultValue(Instance: TObject; FreeAndNilNestedObjects: boolean);
-var Item: TObject;
+var obj: TObject;
     da: TDynArray;
     {$ifdef PUBLISHRECORD}
     addr: pointer;
@@ -29784,7 +29901,7 @@ begin
   if (Instance<>nil) and (@self<>nil) then
   case PropType^.Kind of
   tkInteger,tkEnumeration,tkSet,tkChar,tkWChar{$ifdef FPC},tkBool{$endif}:
-    SetOrdProp(Instance,0);
+    SetOrdProp(Instance,DefaultOr0);
   tkInt64{$ifdef FPC},tkQWord{$endif}:
     SetInt64Prop(Instance,0);
   tkLString{$ifdef FPC},tkLStringOld{$endif}:
@@ -29801,15 +29918,14 @@ begin
   tkVariant:
     SetVariantProp(Instance,SynCommons.Null);
   {$endif}
-  tkClass:
-  begin
-    Item := GetObjProp(Instance);
-    if Item<>nil then
+  tkClass: begin
+    obj := GetObjProp(Instance);
+    if obj<>nil then
       if FreeAndNilNestedObjects then begin
         SetOrdProp(Instance,0); // mimic FreeAndNil()
-        Item.Free;
+        obj.Free;
       end else
-        ClearObject(Item,false);
+        ClearObject(obj,false);
   end;
   tkDynArray: begin
     GetDynArray(Instance,da);
@@ -29838,7 +29954,8 @@ begin
       {$ifdef HASVARUSTRING}
       tkUString:
         result := string(GetUnicodeStrProp(Instance));
-      {$endif}else result := '';
+      {$endif}
+      else result := '';
      end;
 end;
 
@@ -30109,6 +30226,13 @@ end;
 function TPropInfo.IsBlob: boolean;
 begin
   result := (@self<>nil) and (TypeInfo=system.TypeInfo(TSQLRawBlob));
+end;
+
+function TPropInfo.DefaultOr0: integer;
+begin
+  if Default=NO_DEFAULT then
+    result := 0 else
+    result := Default;
 end;
 
 function TPropInfo.RetrieveFieldSize: integer;
