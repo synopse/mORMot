@@ -2958,7 +2958,7 @@ function AnsiIComp(Str1, Str2: PWinAnsiChar): PtrInt;
 
 /// extract a line from source array of chars
 // - next will contain the beginning of next line, or nil if source if ended
-function GetNextLine(source: PUTF8Char; out next: PUTF8Char): RawUTF8;
+function GetNextLine(source: PUTF8Char; out next: PUTF8Char; andtrim: boolean=false): RawUTF8;
 
 {$ifdef UNICODE}
 /// extract a line from source array of chars
@@ -32352,7 +32352,7 @@ begin
     result := dest;
 end;
 
-function GetNextLine(source: PUTF8Char; out next: PUTF8Char): RawUTF8;
+function GetNextLine(source: PUTF8Char; out next: PUTF8Char; andtrim: boolean): RawUTF8;
 var beg: PUTF8Char;
 begin
   if source=nil then begin
@@ -32360,13 +32360,15 @@ begin
     next := source;
     exit;
   end;
+  if andtrim then // optional trim left
+    while source^ in [#9,' '] do inc(source);
   beg := source;
-  repeat
+  repeat // just here to avoid a goto
     if source[0]>#13 then
       if source[1]>#13 then
         if source[2]>#13 then
           if source[3]>#13 then begin
-            inc(source,4);
+            inc(source,4); // fast process 4 chars per loop
             continue;
           end else
           inc(source,3) else
@@ -32381,6 +32383,8 @@ begin
         continue;
       end;
     end;
+    if andtrim then // optional trim right
+      while (source>beg) and (source[-1] in [#9,' ']) do dec(source);
     FastSetString(result,beg,source-beg);
     exit;
   until false;
@@ -43288,11 +43292,6 @@ end;
 
 {$endif LVCL}
 
-function VarIsEmptyOrNull(const V: Variant): Boolean;
-begin
-  result := VarDataIsEmptyOrNull(@V);
-end;
-
 function VarDataIsEmptyOrNull(VarData: pointer): Boolean;
 begin
   repeat
@@ -43306,6 +43305,11 @@ begin
   until false;
   result := (PVarData(VarData)^.VType<=varNull) or
             (PVarData(VarData)^.VType=varNull or varByRef);
+end;
+
+function VarIsEmptyOrNull(const V: Variant): Boolean;
+begin
+  result := VarDataIsEmptyOrNull(@V);
 end;
 
 function VarIs(const V: Variant; const VTypes: TVarDataTypes): Boolean;
