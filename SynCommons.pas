@@ -13491,6 +13491,11 @@ const
   // - make some false positive to varBoolean and varError
   VTYPE_STATIC = $BFE8;
 
+{$ifdef FPC}
+/// overwritten function which can be properly inlined
+procedure VarClear(var v: variant); inline;
+{$endif FPC}
+
 /// same as Dest := TVarData(Source) for simple values
 // - will return TRUE for all simple values after varByRef unreference, and
 // copying the unreferenced Source value into Dest raw storage
@@ -20071,6 +20076,17 @@ begin
   FastSetString(aResult,aText,aTextLen);
   UniqueText(aResult);
 end;
+
+{$ifdef FPC}
+procedure VarClear(var v: variant); // defined here for proper inlining
+var p: pointer; // more efficient generated asm with an explicit temp variable
+begin
+  p := @v;
+  if PVarData(p)^.VType and VTYPE_STATIC=0 then
+    PPtrInt(p)^ := 0 else
+    VarClearProc(PVarData(p)^);
+end;
+{$endif FPC}
 
 {$ifndef NOVARIANTS}
 
@@ -43424,7 +43440,7 @@ begin // slightly faster than FillChar(Value,SizeOf(Value),0);
   {$endif}
 end;
 
-procedure FillZero(var value: variant); overload;
+procedure FillZero(var value: variant);
 begin
   with TVarData(Value) do
     case VType of
