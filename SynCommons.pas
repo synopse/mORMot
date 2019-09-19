@@ -16939,6 +16939,15 @@ function _LStrLenP(s: pointer): SizeInt; inline;
 begin // here caller ensured s<>''
   result := PSizeInt(PAnsiChar(s)-SizeOf(SizeInt))^;
 end;
+
+procedure VarClear(var v: variant); // defined here for proper inlining
+var p: pointer; // more efficient generated asm with an explicit temp variable
+begin
+  p := @v;
+  if PVarData(p)^.VType and VTYPE_STATIC=0 then
+    PPtrInt(p)^ := 0 else
+    VarClearProc(PVarData(p)^);
+end;
 {$endif FPC}
 
 
@@ -20076,17 +20085,6 @@ begin
   FastSetString(aResult,aText,aTextLen);
   UniqueText(aResult);
 end;
-
-{$ifdef FPC}
-procedure VarClear(var v: variant); // defined here for proper inlining
-var p: pointer; // more efficient generated asm with an explicit temp variable
-begin
-  p := @v;
-  if PVarData(p)^.VType and VTYPE_STATIC=0 then
-    PPtrInt(p)^ := 0 else
-    VarClearProc(PVarData(p)^);
-end;
-{$endif FPC}
 
 {$ifndef NOVARIANTS}
 
@@ -23871,7 +23869,7 @@ begin
   {$else}
   len := PInteger(p-4)^;
   lenSub := PInteger(pSub-4)^-1;
-  {$endif}
+  {$endif FPC}
   if (len<lenSub+PtrInt(Offset)) or (lenSub<0) then
     goto Exit;
   pStop := p+len;

@@ -23054,7 +23054,7 @@ var valid: boolean;
 begin
   tmp.Init(Value); // private copy since the buffer will be modified
   try
-    PropInfo^.ClassFromJSON(Instance,tmp.buf,valid);
+    PropInfo^.ClassFromJSON(Instance,tmp.buf,valid,JSONTOOBJECT_TOLERANTOPTIONS);
   finally
     tmp.Done;
   end;
@@ -23081,7 +23081,7 @@ begin
   // unserialize object from JSON UTF-8 TEXT - not fast, but works
   FromVarString(PByte(P),tmp);
   try
-    PropInfo^.ClassFromJSON(Instance,tmp.buf,valid);
+    PropInfo^.ClassFromJSON(Instance,tmp.buf,valid,JSONTOOBJECT_TOLERANTOPTIONS);
   finally
     tmp.Done;
   end;
