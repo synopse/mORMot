@@ -2985,6 +2985,8 @@ type
     function IsBlob: boolean;     {$ifdef HASINLINE}inline;{$endif}
     /// return the Default RTTI value defined for this property, or 0 if not set
     function DefaultOr0: integer; {$ifdef HASINLINE}inline;{$endif}
+    /// return TRUE if the property has its Default RTTI value, or is 0/""/nil
+    function IsDefaultOrVoid(Instance: TObject): boolean;
     /// compute in how many bytes this property is stored
     function RetrieveFieldSize: integer;
     /// low-level getter of the ordinal property value of a given instance
@@ -29739,7 +29741,7 @@ end;
 procedure TPropInfo.GetVariant(Instance: TObject; var Dest: variant);
 var i: PtrInt;
     U: RawUTF8;
-    p: Pointer;
+    p: PPointer;
 begin
   if (Instance<>nil) and (@self<>nil) then
   case PropType^.Kind of
@@ -29770,8 +29772,9 @@ begin
   tkVariant: GetVariantProp(Instance,Dest);
   tkClass: ObjectToVariant(GetObjProp(Instance),Dest);
   tkDynArray: begin
-    p := pointer(GetOrdProp(Instance));
-    TDocVariantData(Dest).InitArrayFromObjArray(p,JSON_OPTIONS_FAST);
+    p := GetFieldAddr(Instance);
+    if p<>nil then
+      TDocVariantData(Dest).InitArrayFromObjArray(p^,JSON_OPTIONS_FAST);
   end
   else VarClear(Dest);
   end;
@@ -29792,8 +29795,7 @@ begin
     SetOrdProp(Instance,GetIntegerDef(pointer(Text),DefaultOr0));
   tkInt64{$ifdef FPC},tkQWord{$endif}:
     SetInt64Prop(Instance,GetInt64(pointer(Text)));
-  tkLString,{$ifdef FPC}tkLStringOld,{$endif}
-  {$ifdef HASVARUSTRING}tkUString,{$endif}tkWString:
+  tkLString,{$ifdef FPC}tkLStringOld,{$endif}{$ifdef HASVARUSTRING}tkUString,{$endif}tkWString:
     SetLongStrValue(Instance,Text);
   tkFloat:
     if PropType^.FloatType=ftCurr then
@@ -29837,8 +29839,7 @@ begin
   end;
   tkInt64{$ifdef FPC},tkQWord{$endif}:
     WR.Add(GetInt64Prop(Instance));
-  tkLString,{$ifdef FPC}tkLStringOld,{$endif}
-  {$ifdef HASVARUSTRING}tkUString,{$endif}tkWString: begin
+  tkLString,{$ifdef FPC}tkLStringOld,{$endif}{$ifdef HASVARUSTRING}tkUString,{$endif}tkWString: begin
     GetLongStrValue(Instance,tmp);
     WR.Add(pointer(tmp),length(tmp),Escape);
   end;
@@ -30214,6 +30215,28 @@ begin
     result := Default;
 end;
 
+function TPropInfo.IsDefaultOrVoid(Instance: TObject): boolean;
+var p: PPointer;
+begin
+  case PropType^.Kind of
+  tkInteger,tkEnumeration,tkSet,tkChar,tkWChar{$ifdef FPC},tkBool{$endif}:
+    result := GetOrdProp(Instance)=DefaultOr0;
+  tkFloat:
+    result := GetFloatProp(Instance)=0;
+  tkInt64{$ifdef FPC},tkQWord{$endif}:
+    result := GetInt64Prop(Instance)=0;
+  tkLString,{$ifdef HASVARUSTRING}tkUString,{$endif}{$ifdef FPC}tkLStringOld,{$endif}tkWString,tkDynArray,tkClass,tkInterface: begin
+    p := GetFieldAddr(Instance);
+    result := (p<>nil) and (p^=nil);
+  end;
+  tkVariant: begin
+    p := GetFieldAddr(Instance);
+    result := (p<>nil) and VarDataIsEmptyOrNull(p^);
+  end;
+  else result := false;
+  end;
+end;
+
 function TPropInfo.RetrieveFieldSize: integer;
 begin
   case PropType^.Kind of
@@ -30225,7 +30248,7 @@ begin
     ftExtended: result := 10;
     else result := 8;
     end;
-  tkLString,{$ifdef FPC}tkLStringOld,{$endif}tkWString,tkClass,tkInterface,tkDynArray:
+  tkLString,{$ifdef HASVARUSTRING}tkUString,{$endif}{$ifdef FPC}tkLStringOld,{$endif}tkWString,tkClass,tkInterface,tkDynArray:
     result := SizeOf(pointer);
   tkInt64{$ifdef FPC},tkQWord{$endif}: result := 8;
   tkVariant: result := SizeOf(variant);
@@ -30283,7 +30306,7 @@ begin
     result := SynFPCTypInfo.GetOrdProp(Instance,@self);
     exit;
   end;
-  if PropType^.Kind=tkClass then
+  if PropType^.Kind in [tkClass,tkDynArray] then
     result := PPtrInt(P)^ else
     result := FromOrdType(PropType^.OrdType,P);
 end;
@@ -50308,7 +50331,7 @@ begin
   repeat
     for i := 1 to InternalClassPropInfo(Value.ClassType,p) do begin
       case p^.PropType^.Kind of
-        {$ifdef FPC}tkBool,{$endif} tkEnumeration, tkSet, tkInteger:
+        tkEnumeration,tkSet,tkInteger,tkChar,tkWChar{$ifdef FPC},tkBool{$endif}:
           if p^.Default<>NO_DEFAULT then
             p^.SetOrdProp(Value,p^.Default);
         tkClass:
@@ -50317,7 +50340,7 @@ begin
       p := p^.Next;
     end;
     c := GetClassParent(c);
-  until c=nil;
+  until c=TObject;
 end;
 
 procedure ClearObject(Value: TObject; FreeAndNilNestedObjects: boolean=false);
