@@ -4307,7 +4307,8 @@ function ClassFieldProp(ClassType: TClass; const PropName: shortstring): PPropIn
 
 /// retrieve a Field property RTTI information from a Property Name
 // - this special version also search into parent properties (default is only current)
-function ClassFieldPropWithParents(aClassType: TClass; const PropName: shortstring): PPropInfo;
+function ClassFieldPropWithParents(aClassType: TClass; const aPropName: shortstring;
+  aCaseSensitive: boolean=false): PPropInfo;
 
 /// retrieve an integer/Int64 Field propery value from a Property Name
 // - this version also search into parent properties
@@ -21457,15 +21458,23 @@ begin
     result := nil;
 end;
 
-function ClassFieldPropWithParents(aClassType: TClass; const PropName: shortstring): PPropInfo;
-var i: integer;
+function ClassFieldPropWithParents(aClassType: TClass; const aPropName: shortstring;
+  aCaseSensitive: boolean): PPropInfo;
+var n, i: integer;
 begin
   while aClassType<>nil do begin
-    for i := 1 to InternalClassPropInfo(aClassType,result) do
-      if (result^.Name[0]=PropName[0]) and
-         IdemPropNameUSameLen(@result^.Name[1],@PropName[1],ord(PropName[0])) then
-        exit else
-        result := result^.Next;
+    n := InternalClassPropInfo(aClassType,result);
+    if n<>0 then
+      if aCaseSensitive then
+        for i := 1 to n do
+          if result^.Name=aPropName then
+            exit else
+            result := result^.Next else
+        for i := 1 to n do
+          if (result^.Name[0]=aPropName[0]) and
+             IdemPropNameUSameLen(@result^.Name[1],@aPropName[1],ord(aPropName[0])) then
+            exit else
+            result := result^.Next;
     aClassType := GetClassParent(aClassType);
   end;
   result := nil;
