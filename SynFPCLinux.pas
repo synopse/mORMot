@@ -135,7 +135,7 @@ function GetUnixMSUTC: Int64;
 procedure GetNowUTCSystem(out result: TSystemTime);
 
 var
-  /// will contain the current Linux kernel revision, as one integer
+  /// will contain the current Linux kernel revision, as one 24-bit integer
   // - e.g. $030d02 for 3.13.2, or $020620 for 2.6.32
   KernelRevision: cardinal;
 

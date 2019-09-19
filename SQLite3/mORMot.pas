@@ -49319,7 +49319,7 @@ begin
           aParser^.Kind := result; // default serialization from RTTI
           exit;
         end;
-        aClassType := GetClassParent(aClassType); // vmtParent slot is reference on FPC
+        aClassType := GetClassParent(aClassType);
         P := JSONCustomParsers.FindValue(aClassType);
         if (P<>nil) and (P^.Kind in [oCustomReaderWriter,oCustomPropName]) then begin
           aParser^ := P^; // copy from parent
@@ -49677,9 +49677,8 @@ begin
 end;
 
 function PropIsIDTypeCastedField(Prop: PPropInfo; IsObj: TJSONObject;
-  Value: TObject): boolean; // see [22ce911c715]
-begin
-  if (Value<>nil) and (Prop^.PropType^.ClassSQLFieldType=sftID) then
+  Value: TObject): boolean;
+begin // see [22ce911c715]
   case IsObj of
   oSQLMany:
     if IdemPropName(Prop^.Name,'source') or IdemPropName(Prop^.Name,'dest') then
@@ -49687,9 +49686,8 @@ begin
       result := not TSQLRecord(Value).fFill.JoinedFields;
   oSQLRecord:
     result := not TSQLRecord(Value).fFill.JoinedFields;
-  else result := false;
-  end else
-    result := false; // assume true instance by default
+  else result := false; // real instance for regular classes
+  end;
 end;
 
 type
@@ -52464,21 +52462,12 @@ var Added: boolean;
       {$endif}
       tkClass: begin
         Obj := P^.GetObjProp(Value);
-        case IsObj of
-        oSQLRecord,oSQLMany: // TSQLRecord or inherited
-          if PropIsIDTypeCastedField(P,IsObj,Value) then begin
-            HR(P);
-            Add(PtrInt(Obj)); // not true instances, but ID
-          end else
-          if Obj<>nil then begin
-            HR(P);
-            WriteObject(Obj,Options);
-          end;
-        else // TPersistent or any class defined with $M+
-          if Obj<>nil then begin
-            HR(P);
-            WriteObject(Obj,Options);
-          end;
+        if PropIsIDTypeCastedField(P,IsObj,Value) then begin
+          HR(P);
+          Add(PtrInt(Obj)); // not true instances, but ID
+        end else if Obj<>nil then begin
+          HR(P); // TPersistent or any class defined with $M+
+          WriteObject(Obj,Options);
         end;
       end;
       // tkString (shortstring) and tkInterface is not handled

@@ -13069,6 +13069,7 @@ function ToTextOS(osint32: integer): RawUTF8;
 
 var
   /// the target Operating System used for compilation, as TOperatingSystem
+  // - a specific Linux distribution may be detected instead of plain osLinux
   OS_KIND: TOperatingSystem = {$ifdef MSWINDOWS}osWindows{$else}{$ifdef DARWIN}osOSX{$else}
   {$ifdef BSD}osBSD{$else}{$ifdef LINUX}osLinux{$else}osPOSIX
   {$endif}{$endif}{$endif}{$endif};
