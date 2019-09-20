@@ -48035,14 +48035,21 @@ begin // code below must match TTextWriter.AddDynArrayJSON()
   result := nil;
   if (P=nil) or (fValue=nil) then
     exit;
-  if not NextNotSpaceCharIs(P,'[') then
+  P := GotoNextNotSpace(P);
+  if P^<>'[' then begin
+    if (PInteger(P)^=NULL_LOW) and (P[4] in EndOfJSONValueField) then begin
+      SetCount(0);
+      result := P+4; // handle 'null' as void array
+    end;
     exit;
+  end;
+  inc(P);
   n := JSONArrayCount(P);
   if n<0 then
     exit; // invalid array content
   if n=0 then begin
     if NextNotSpaceCharIs(P,']') then begin
-      Clear;
+      SetCount(0);
       result := P;
     end;
     exit; // handle '[]' array
