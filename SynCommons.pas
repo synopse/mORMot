@@ -71,7 +71,7 @@ unit SynCommons;
 *)
 
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 interface
 
@@ -2953,8 +2953,7 @@ function TrimRight(const S: RawUTF8): RawUTF8;
 
 /// fast WinAnsi comparison using the NormToUpper[] array for all 8 bits values
 function AnsiIComp(Str1, Str2: PWinAnsiChar): PtrInt;
-  {$ifndef USENORMTOUPPER} {$ifdef PUREPASCAL}
-  {$ifdef HASINLINE}inline;{$endif} {$endif} {$endif}
+  {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
 /// extract a line from source array of chars
 // - next will contain the beginning of next line, or nil if source if ended
@@ -11187,7 +11186,6 @@ function Base64MagicCheckAndDecode(Value: PUTF8Char; var Blob: TSynTempBuffer): 
 
 /// check if the supplied text is a valid Base64 encoded stream
 function IsBase64(const s: RawByteString): boolean; overload;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// check if the supplied text is a valid Base64 encoded stream
 function IsBase64(sp: PAnsiChar; len: PtrInt): boolean; overload;
@@ -27405,6 +27403,7 @@ type
   TBase64Enc = array[0..63] of AnsiChar;
   PBase64Enc = ^TBase64Enc;
   TBase64Dec = array[AnsiChar] of shortint;
+  PBase64Dec = ^TBase64Dec;
 const
   b64enc: TBase64Enc =
     'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
@@ -27469,13 +27468,15 @@ begin
 end;
 
 function Base64Decode(sp,rp: PAnsiChar; len: PtrInt): boolean; {$ifdef FPC}inline;{$endif}
+var tab: PBase64Dec; // use local register
 begin
+  tab := @ConvertBase64ToBin;
   len := len shl 2; // len was the number of 4 chars chunks in sp
-  if (len>0) and (ConvertBase64ToBin[sp[len-2]]>=0) then
-    if ConvertBase64ToBin[sp[len-1]]>=0 then else
+  if (len>0) and (tab[sp[len-2]]>=0) then
+    if tab[sp[len-1]]>=0 then else
       dec(len) else
       dec(len,2); // Base64AnyDecode() algorithm ignores the trailing '='
-  result := Base64AnyDecode(ConvertBase64ToBin,sp,rp,len);
+  result := Base64AnyDecode(tab^,sp,rp,len);
 end;
 
 {$ifdef PUREPASCAL}
@@ -27654,14 +27655,12 @@ begin
   Base64Encode(PAnsiChar(pointer(result))+3,Data,DataLen);
 end;
 
-function IsBase64(sp: PAnsiChar; len: PtrInt): boolean;
+function IsBase64Internal(sp: PAnsiChar; len: PtrInt; dec: PBase64Dec): boolean;
 var i: PtrInt;
-    dec: ^TBase64Dec;
 begin
   result := false;
   if (len=0) or (len and 3<>0) then
     exit;
-  dec := @ConvertBase64ToBin;
   for i := 0 to len-5 do
     if dec[sp[i]]<0 then
       exit;
@@ -27672,16 +27671,23 @@ begin
   result := true; // layout seems correct
 end;
 
+function IsBase64(sp: PAnsiChar; len: PtrInt): boolean;
+begin
+  result := IsBase64Internal(sp,len,@ConvertBase64ToBin);
+end;
+
 function IsBase64(const s: RawByteString): boolean;
 begin
-  result := IsBase64(pointer(s),length(s));
+  result := IsBase64Internal(pointer(s),length(s),@ConvertBase64ToBin);
 end;
 
 function Base64ToBinLengthSafe(sp: PAnsiChar; len: PtrInt): PtrInt;
+var dec: PBase64Dec;
 begin
-  if IsBase64(sp,len) then begin
-    if ConvertBase64ToBin[sp[len-2]]>=0 then
-      if ConvertBase64ToBin[sp[len-1]]>=0 then
+  dec := @ConvertBase64ToBin;
+  if IsBase64Internal(sp,len,dec) then begin
+    if dec[sp[len-2]]>=0 then
+      if dec[sp[len-1]]>=0 then
         result := 0 else
         result := 1 else
         result := 2;
@@ -27691,12 +27697,14 @@ begin
 end;
 
 function Base64ToBinLength(sp: PAnsiChar; len: PtrInt): PtrInt;
+var dec: PBase64Dec;
 begin
   result := 0;
   if (len=0) or (len and 3<>0) then
     exit;
-  if ConvertBase64ToBin[sp[len-2]]>=0 then
-    if ConvertBase64ToBin[sp[len-1]]>=0 then
+  dec := @ConvertBase64ToBin;
+  if dec[sp[len-2]]>=0 then
+    if dec[sp[len-1]]>=0 then
       result := 0 else
       result := 1 else
       result := 2;
@@ -32239,7 +32247,7 @@ begin
 end;
 
 function UpperCopyWin255(dest: PWinAnsiChar; const source: RawUTF8): PWinAnsiChar;
-var i, L: integer;
+var i, L: PtrInt;
     tab: {$ifdef CPUX86NOTPIC}TNormTableByte absolute NormToUpperByte{$else}PNormTableByte{$endif};
 begin
   if source='' then
@@ -47129,7 +47137,7 @@ begin
       end;
      end;
   finally
-    DynArray.Clear;
+    DynArray.SetCount(0);
   end;
 end;
 
@@ -48283,7 +48291,7 @@ begin
   // check context
   result := nil;
   if Source=nil then begin
-    Clear;
+    SetCount(0);
     exit;
   end;
   if fValue=nil then
@@ -49505,7 +49513,7 @@ begin
 end;
 procedure TDynArrayHashed.Clear;
 begin
-  InternalDynArray.Clear;
+  InternalDynArray.SetCount(0);
 end;
 function TDynArrayHashed.Add(const Elem): integer;
 begin
