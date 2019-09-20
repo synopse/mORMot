@@ -85,7 +85,7 @@ program TestSQL3;
   {$endif}
 {$endif}
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 USELIBCURL
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 USELIBCURL
 
 {.$define ForceFastMM4}
 // for debug/tests purposes

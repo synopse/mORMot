@@ -178,7 +178,7 @@ unit mORMoti18n;
 
 *)
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 interface
 
@@ -1667,7 +1667,7 @@ var Section: PUTF8Char; {$endif}
             TranslateOneProp(P,O,CName) else
           // class properties
           if P^.PropType^^.Kind=tkClass then begin
-            Obj := pointer(P^.GetOrdValue(O));
+            Obj := P^.GetObjProp(O);
             if Obj<>nil then
     {$ifndef LVCL} // doesn't allow to change Font during the run
             if Obj.InheritsFrom(TFont) then

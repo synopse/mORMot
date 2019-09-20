@@ -234,7 +234,7 @@ interface
   // Black&White and Duplex printing are only available with our Enhanced RTL
 {$endif}
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 uses
   SynCommons, SynLZ,

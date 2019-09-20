@@ -2,7 +2,7 @@ unit TestMustacheUnit;
 
 interface
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
