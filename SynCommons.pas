@@ -23936,7 +23936,7 @@ begin
 end;
 
 function StrIComp(Str1, Str2: pointer): PtrInt;
-var C1,C2: PtrInt;
+var C1,C2: byte; // integer/PtrInt are actually slower on FPC
     lookupper: PByteArray; // better x86-64 / PIC asm generation
 begin
   result := PtrInt(PtrUInt(Str2))-PtrInt(PtrUInt(Str1));
@@ -23945,18 +23945,10 @@ begin
       if Str2<>nil then begin
         lookupper := @NormToUpperAnsi7Byte;
         repeat
-          C1 := PByteArray(Str1)[0];
-          C2 := PByteArray(Str1)[result];
+          C1 := lookupper[PByteArray(Str1)[0]];
+          C2 := lookupper[PByteArray(Str1)[result]];
           inc(PByte(Str1));
-          if C1=0 then
-            break;
-          if C1=C2 then
-            continue; // fast optimistic loop for exact chars match
-          C1 := lookupper[C1];
-          C2 := lookupper[C2];
-          if C1<>C2 then
-            break;   // no branch taken if first chars differ
-        until false; // slower "continue" above if "until C1<>C2"
+        until (C1=0) or (C1<>C2);
         result := C1-C2;
       end else
       result := 1 else  // Str2=''
@@ -24032,17 +24024,17 @@ end;
 
 function UpperCopy(dest: PAnsiChar; const source: RawUTF8): PAnsiChar;
 var s: PAnsiChar;
-    c: PtrInt;
+    c: byte;
     lookupper: PByteArray; // better x86-64 / PIC asm generation
 begin
   s := pointer(source);
   if s<>nil then begin
     lookupper := @NormToUpperAnsi7Byte;
     repeat
-      c := ord(s^);
+      c := lookupper[ord(s^)];
       if c=0 then
-        break else
-        dest^ := AnsiChar(lookupper[c]);
+        break;
+      dest^ := AnsiChar(c);
       inc(s);
       inc(dest);
     until false;
@@ -24051,10 +24043,14 @@ begin
 end;
 
 function UpperCopyShort(dest: PAnsiChar; const source: shortstring): PAnsiChar;
-var i: PtrInt;
+var s: PByteArray;
+    i: PtrInt;
+    lookupper: PByteArray; // better x86-64 / PIC asm generation
 begin
-  for i := 1 to ord(source[0]) do begin
-    dest^ := AnsiChar(NormToUpperAnsi7Byte[ord(source[i])]);
+  s := @source;
+  lookupper := @NormToUpperAnsi7Byte;
+  for i := 1 to s[0] do begin
+    dest^ := AnsiChar(lookupper[s[i]]);
     inc(dest);
   end;
   result := dest;
@@ -26815,23 +26811,23 @@ end;
 
 {$ifdef PUREPASCAL}
 function AnsiIComp(Str1, Str2: PWinAnsiChar): PtrInt;
-var table: PNormTableByte;
+var C1,C2: byte; // integer/PtrInt are actually slower on FPC
+    lookupper: PByteArray; // better x86-64 / PIC asm generation
 begin
-  if Str1<>Str2 then
-  if Str1<>nil then
-  if Str2<>nil then begin
-    table := @NormToUpperByte;
-    repeat
-      result := table[ord(Str1^)]-table[pByte(Str2)^];
-      if result<>0 then exit;
-      if (Str1^=#0) or (Str2^=#0) then break;
-      inc(Str1);
-      inc(Str2);
-    until false;
-  end else
-  result := 1 else  // Str2=''
-  result := -1 else // Str1=''
-  result := 0;      // Str1=Str2
+  result := PtrInt(PtrUInt(Str2))-PtrInt(PtrUInt(Str1));
+  if result<>0 then
+    if Str1<>nil then
+      if Str2<>nil then begin
+        lookupper := @NormToUpperByte;
+        repeat
+          C1 := lookupper[PByteArray(Str1)[0]];
+          C2 := lookupper[PByteArray(Str1)[result]];
+          inc(PByte(Str1));
+        until (C1=0) or (C1<>C2);
+        result := C1-C2;
+      end else
+      result := 1 else  // Str2=''
+    result := -1;     // Str1=''
 end;
 {$else}
 function AnsiIComp(Str1, Str2: PWinAnsiChar): PtrInt;
@@ -32259,8 +32255,8 @@ begin
 end;
 
 function UTF8UpperCopy(Dest, Source: PUTF8Char; SourceChars: Cardinal): PUTF8Char;
-var c: PtrUInt;
-    endSource, endSourceBy4, S: PUTF8Char;
+var c: cardinal;
+    endSource, endSourceBy4, up: PUTF8Char;
     extra,i: PtrInt;
 label By1, By4, set1; // ugly but faster
 begin
@@ -32268,25 +32264,26 @@ begin
     // first handle trailing 7 bit ASCII chars, by quad (Sha optimization)
     endSource := Source+SourceChars;
     endSourceBy4 := endSource-4;
+    up := @NormToUpper;
     if (PtrUInt(Source) and 3=0) and (Source<=endSourceBy4) then
-    repeat
-  By4:c := PCardinal(Source)^;
-      if c and $80808080<>0 then
-        goto By1; // break on first non ASCII quad
-      inc(Source,4);
-      Dest[0] := AnsiChar(NormToUpperByte[ToByte(c)]);
-      Dest[1] := AnsiChar(NormToUpperByte[ToByte(c shr 8)]);
-      Dest[2] := AnsiChar(NormToUpperByte[ToByte(c shr 16)]);
-      Dest[3] := AnsiChar(NormToUpperByte[c shr 24]);
-      inc(Dest,4);
-    until Source>endSourceBy4;
+      repeat
+    By4:c := PCardinal(Source)^;
+        if c and $80808080<>0 then
+          goto By1; // break on first non ASCII quad
+        inc(Source,4);
+        Dest[0] := up[ToByte(c)];
+        Dest[1] := up[ToByte(c shr 8)];
+        Dest[2] := up[ToByte(c shr 16)];
+        Dest[3] := up[c shr 24];
+        inc(Dest,4);
+      until Source>endSourceBy4;
     // generic loop, handling one UCS4 char per iteration
     if Source<endSource then
     repeat
   By1:c := byte(Source^);
       inc(Source);
       if c<=127 then begin
-        Dest^ := AnsiChar(NormToUpperByte[c]);
+        Dest^ := up[c];
 Set1:   inc(Dest);
         if (PtrUInt(Source) and 3=0) and (Source<EndSourceBy4) then goto By4 else
         if Source<endSource then continue else break;
@@ -32300,18 +32297,20 @@ Set1:   inc(Dest);
           if c<minimum then
             break; // invalid input content
         end;
-        if (c<=255) and (NormToUpperByte[c]<=127) then begin
-          Dest^ := AnsiChar(NormToUpperByte[c]);
+        if (c<=255) and (up[c]<=#127) then begin
+          Dest^ := up[c];
           inc(Source,extra);
           goto set1;
         end;
-        S := Source-1; // leave UTF-8 encoding untouched
-        inc(Source,extra);
-        inc(extra);
-        {$ifdef FPC}Move{$else}MoveFast{$endif}(S^,Dest^,extra);
-        inc(Dest,extra);
-        if (PtrUInt(Source) and 3=0) and (Source<EndSourceBy4) then goto By4 else
-        if Source<endSource then continue else break;
+        Dest^ := Source[-1];
+        repeat // here we now extra>0 - just copy UTF-8 input untouched
+          inc(Dest);
+          Dest^ := Source^;
+          inc(Source);
+          dec(extra);
+          if extra=0 then
+            goto Set1;
+        until false;
       end;
     until false;
   end;
