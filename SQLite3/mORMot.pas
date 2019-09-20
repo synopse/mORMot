@@ -2775,7 +2775,7 @@ type
     function ClassCreate: TObject;
     /// get the SQL type of this Delphi class type
     // - returns either sftObject, sftID, sftMany or sftUnknown
-    function ClassSQLFieldType: TSQLFieldType; {$ifdef HASINLINE}inline;{$endif}
+    function ClassSQLFieldType: TSQLFieldType;
     /// get the number of published properties in this class
     // - you can count the plain fields without any getter function, if you
     // do need only the published properties corresponding to some value
@@ -31326,17 +31326,21 @@ begin
 end;
 
 function TTypeInfo.ClassSQLFieldType: TSQLFieldType;
+const T_: array[0..5{$ifndef LVCL}+1{$endif}] of TClass = (
+        TSQLRecordMany,TSQLRecord,TRawUTF8List,TStrings,TObjectList,TObject
+        {$ifndef LVCL},TCollection{$endif});
 var CT: PClassType;
     C: TClass;
+    T: PClassArray;
 begin
   CT := AlignTypeData(PAnsiChar(@Name[1])+ord(Name[0])); // inlined ClassType
   C := CT^.ClassType;
+  T := @T_;
   result := sftUnknown;
   while true do // unrolled several InheritsFrom() calls
-    if C<>TSQLRecordMany then
-    if C<>TSQLRecord then
-    if (C<>TRawUTF8List) and (C<>TStrings) and
-       (C<>TObjectList) {$ifndef LVCL}and (C<>TCollection){$endif} then
+    if C<>T[0] then
+    if C<>T[1] then
+    if (C<>T[2]) and (C<>T[3]) and (C<>T[4]){$ifndef LVCL}and (C<>T[6]){$endif} then
       if CT^.ParentInfo<>nil then begin
         if CT^.PropCount>0 then
           result := sftObject; // identify any class with published properties
@@ -31347,7 +31351,7 @@ begin
         {$endif} // get parent ClassType
           CT := AlignTypeData(PAnsiChar(@Name[1])+ord(Name[0]));
         C := CT^.ClassType;
-        if C<>TObject then
+        if C<>T[5] then
           continue else
           break;
       end else break
