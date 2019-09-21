@@ -158,7 +158,7 @@ unit SynZip;
 
 }
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64
 
 {.$define USEZLIBSSE}
 // if defined (only FPC+Win64), will link static\x86_64-win64sse\*.o static libraries

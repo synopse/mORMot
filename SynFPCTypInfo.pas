@@ -56,17 +56,11 @@ unit SynFPCTypInfo;
 
 interface
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 uses
   SysUtils,
   TypInfo;
-
-const
-  ptField = 0;
-  ptStatic = 1;
-  ptVirtual = 2;
-  ptConst = 3;
 
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
 function AlignToPtr(p: pointer): pointer; inline;
@@ -76,23 +70,6 @@ type
   AlignToPtr = pointer;
   AlignTypeData = pointer;
 {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
-
-function GetFPCPropInfo(AClass: TClass; const PropName: string): PPropInfo; inline;
-function IsStoredProp(Instance: TObject; PropInfo: pointer): boolean; inline;
-function GetOrdProp(Instance: TObject; PropInfo: pointer): Int64; inline;
-procedure SetOrdProp(Instance: TObject; PropInfo: pointer; Value: Int64); inline;
-function GetFloatProp(Instance: TObject; PropInfo: pointer): Extended; inline;
-procedure SetFloatProp(Instance: TObject; PropInfo: pointer; const Value: Extended); inline;
-function GetStrProp(Instance: TObject; PropInfo: pointer): string; inline;
-procedure SetStrProp(Instance: TObject; PropInfo: pointer; const Value: string); inline;
-function GetWideStrProp(Instance: TObject; PropInfo: pointer): WideString; inline;
-procedure SetWideStrProp(Instance: TObject; PropInfo: pointer; const Value: WideString); inline;
-{$ifdef HASVARUSTRING}
-function GetUnicodeStrProp(Instance: TObject; PropInfo: pointer): UnicodeString; inline;
-procedure SetUnicodeStrProp(Instance: TObject; PropInfo: pointer; const Value: UnicodeString); inline;
-{$endif HASVARUSTRING}
-function GetVariantProp(Instance: TObject; PropInfo: pointer): Variant; inline;
-procedure SetVariantProp(Instance: TObject; PropInfo: pointer; const Value: Variant); inline;
 
 type
   /// some type definition to avoid inclusion of TypInfo in SynCommons/mORMot.pas
@@ -126,7 +103,6 @@ procedure FPCRecordCopy(const Source; var Dest; TypeInfo: pointer);
 procedure FPCRecordAddRef(var Data; TypeInfo : pointer);
   [external name 'FPC_ADDREF'];
 
-
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT} // copied from latest typinfo.pp
 function AlignToPtr(p: pointer): pointer;
 begin
@@ -150,11 +126,6 @@ begin
 end;
 {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
-function GetFPCPropInfo(AClass: TClass; const PropName: string): PPropInfo;
-begin
-  result := TypInfo.GetPropInfo(AClass,PropName);
-end;
-
 {$ifdef FPC_NEWRTTI}
 function GetFPCRecInitData(TypeData: Pointer): Pointer;
 begin
@@ -164,71 +135,5 @@ begin
 end;
 {$endif FPC_NEWRTTI}
 
-function IsStoredProp(Instance: TObject; PropInfo: pointer): boolean;
-begin
-  result := TypInfo.IsStoredProp(Instance,PropInfo);
-end;
-
-function GetOrdProp(Instance: TObject; PropInfo: pointer): Int64;
-begin
-  result := TypInfo.GetOrdProp(Instance,PropInfo);
-end;
-
-procedure SetOrdProp(Instance: TObject; PropInfo: pointer; Value: Int64);
-begin
-  TypInfo.SetOrdProp(Instance,PropInfo,Value);
-end;
-
-function GetFloatProp(Instance: TObject; PropInfo: pointer): Extended;
-begin
-  result := TypInfo.GetFloatProp(Instance,PropInfo);
-end;
-
-procedure SetFloatProp(Instance: TObject; PropInfo: pointer; const Value: Extended);
-begin
-  TypInfo.SetFloatProp(Instance,PropInfo,Value);
-end;
-
-function GetVariantProp(Instance: TObject; PropInfo: pointer): Variant;
-begin
-  result := TypInfo.GetVariantProp(Instance,PropInfo);
-end;
-
-procedure SetVariantProp(Instance: TObject; PropInfo: pointer; const Value: Variant);
-begin
-  TypInfo.SetVariantProp(Instance,PropInfo,Value);
-end;
-
-function GetStrProp(Instance: TObject; PropInfo: pointer): string;
-begin
-  result := TypInfo.GetStrProp(Instance,PropInfo);
-end;
-
-procedure SetStrProp(Instance: TObject; PropInfo: pointer; const Value: string);
-begin
-  TypInfo.SetStrProp(Instance,PropInfo,Value);
-end;
-
-function GetWideStrProp(Instance: TObject; PropInfo: pointer): WideString;
-begin
-  result := TypInfo.GetWideStrProp(Instance,PropInfo);
-end;
-
-procedure SetWideStrProp(Instance: TObject; PropInfo: pointer; const Value: WideString);
-begin
-  TypInfo.SetWideStrProp(Instance,PropInfo,Value);
-end;
-
-{$ifdef HASVARUSTRING}
-function GetUnicodeStrProp(Instance: TObject; PropInfo: pointer): UnicodeString;
-begin
-  result := TypInfo.GetUnicodeStrProp(Instance,PropInfo);
-end;
-
-procedure SetUnicodeStrProp(Instance: TObject; PropInfo: pointer; const Value: UnicodeString);
-begin
-  TypInfo.SetUnicodeStrProp(Instance,PropInfo,Value);
-end;
-{$endif HASVARUSTRING}
 
 end.

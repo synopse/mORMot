@@ -218,7 +218,7 @@ unit SynBigTable;
 
 interface
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64
 
 {$ifndef LVCL}
 {.$define THREADSAFE}

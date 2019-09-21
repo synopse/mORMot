@@ -21034,7 +21034,7 @@ begin
   if res<>nil then
     for i := 0 to MaxValue do begin
       aDest^ := res;
-      inc(PByte(res),ord(res^[0])+1); // next short string
+      inc(PByte(res),PByte(res)^+1); // next
       inc(aDest);
     end;
 end;
@@ -21047,7 +21047,7 @@ begin
   if res<>nil then
     for i := 0 to MaxValue do begin
       aDest^ := TrimLeftLowerCaseShort(res);
-      inc(PByte(res),ord(res^[0])+1); // next short string
+      inc(PByte(res),PByte(res)^+1); // next
       inc(aDest);
     end;
 end;
@@ -21062,7 +21062,7 @@ begin
     SetLength(result,MaxValue+1);
     for i := 0 to MaxValue do begin
       result[i] := TrimLeftLowerCaseShort(res);
-      inc(PByte(res),ord(res^[0])+1); // next short string
+      inc(PByte(res),PByte(res)^+1); // next
     end;
   end;
 end;
@@ -21087,7 +21087,7 @@ begin
   if res<>nil then
     for i := 0 to MaxValue do begin
       GetCaptionFromTrimmed(res,aDest^);
-      inc(PByte(res),ord(res^[0])+1); // next short string
+      inc(PByte(res),PByte(res)^+1); // next
       inc(aDest);
     end;
 end;
@@ -21100,15 +21100,13 @@ begin
   if (result<>nil) and (cardinal(aIndex)<=cardinal(MaxValue)) then begin
     if aIndex>0 then
       repeat
-        inc(PByte(result),ord(result^[0])+1); // next short string
+        inc(PByte(result),PByte(result)^+1); // next
         dec(aIndex);
         if aIndex=0 then
           break;
-        inc(PByte(result),ord(result^[0])+1); // loop unrolled twice
+        inc(PByte(result),PByte(result)^+1); // loop unrolled twice
         dec(aIndex);
-        if aIndex=0 then
-          break;
-      until false;
+      until aIndex=0;
   end else
     result := @NULL_SHORTSTRING;
 end;
@@ -21147,7 +21145,7 @@ asm // eax=aTypeInfo edx=aIndex
 @1:     pop     edx
 @s:     movzx   ecx, byte ptr[eax]
         dec     edx
-        lea     eax, [eax + ecx + 1] // next short string
+        lea     eax, [eax + ecx + 1] // next
         jnz     @s
         ret
 @z:     rep     ret
@@ -21178,10 +21176,10 @@ var PLen: PtrInt;
 begin
   if aValueLen<>0 then
   for result := 0 to MaxValue do begin
-    PLen := ord(List^[0]);
+    PLen := PByte(List)^;
     if (PLen=aValuelen) and IdemPropNameUSameLen(@List^[1],aValue,PLen) then
       exit;
-    inc(PByte(List),PLen+1); // next short string
+    inc(PByte(List),PLen+1); // next
   end;
   result := -1;
 end;
@@ -21247,7 +21245,7 @@ begin
     for i := 0 to max do begin
       if GetBitPtr(@value,i) then
         result := FormatUTF8('%%,',[result,PS^]);
-      inc(PByte(PS),ord(PS^[0])+1); // next short string
+      inc(PByte(PS),PByte(PS)^+1); // next
     end;
   end;
   if result<>'' then
@@ -21281,7 +21279,7 @@ begin
     for i := 0 to max do begin
       if GetBitPtr(@value,i) then
         AppendShortComma(@PS^[1],ord(PS^[0]),result,trimlowercase);
-      inc(PByte(PS),ord(PS^[0])+1); // next short string
+      inc(PByte(PS),PByte(PS)^+1); // next
     end;
   end;
   if result[ord(result[0])]=',' then
@@ -38300,7 +38298,7 @@ begin
           result := result+Sep;
         result := result+RawUTF8(copy(List^,3,10));
       end;
-      inc(PByte(List),ord(List^[0])+1); // next short string
+      inc(PByte(List),PByte(List)^+1); // next
     end;
 end;
 
@@ -52112,7 +52110,7 @@ begin
           for i := 0 to max do begin
             AddPS(GetBitPtr(@aValue,i));
             Add(',');
-            inc(PByte(PS),ord(PS^[0])+1); // next short string
+            inc(PByte(PS),PByte(PS)^+1); // next
           end;
           CancelLastComma;
           Add('}');
@@ -52127,7 +52125,7 @@ begin
                 AddPS;
                 Add(',');
               end;
-              inc(PByte(PS),ord(PS^[0])+1); // next short string
+              inc(PByte(PS),PByte(PS)^+1); // next
             end;
             CancelLastComma;
           end;

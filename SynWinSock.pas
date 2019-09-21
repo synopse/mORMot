@@ -72,7 +72,7 @@ you can install an update from microsoft}
 for name resolution. If you leave this directive inactive, then the new API
 is used, when running system allows it. For IPv6 support you must have the new API! }
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 interface
 

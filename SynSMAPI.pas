@@ -71,7 +71,7 @@ unit SynSMAPI;
 
 }
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 {$I SynSM.inc}   //define JS_THREADSAFE WITHASSERT
 
 interface

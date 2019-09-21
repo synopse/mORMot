@@ -64,7 +64,7 @@ end. // put as reference all deprecated code below
 
 *)
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64
 
 interface
 

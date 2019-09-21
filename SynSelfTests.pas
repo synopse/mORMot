@@ -107,7 +107,7 @@ unit SynSelfTests;
 
 interface
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64
 
 {$ifdef ISDELPHIXE}
   // since Delphi XE, we have unit System.RegularExpressionsAPI available
