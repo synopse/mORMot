@@ -61,7 +61,8 @@ unit SynSQLite3Static;
   (but compile).
 
   To compile our patched SQlite3.c version, available in this source folder:
-  - Run c.bat to compile the sqlite3*.obj for Win32/Delphi
+  - Run c.bat to compile the sqlite3.obj for Win32/Delphi
+  - Run c64.bat to compile the sqlite3.o for Win64/Delphi
   - Run c-fpcmingw.bat to compile sqlite3.o for Win32/FPC
   - Run c-fpcmingw64.bat to compile sqlite3.o and sqlite3-64.dll for Win64 (Delphi/FPC)
   - Run c-fpcgcclin.sh to compile sqlite3.o for Linux32/FPC
@@ -83,8 +84,6 @@ unit SynSQLite3Static;
     SQLite Encryption Extension (SEE) sqlite3_key() API - and works for database
     files of any size without touching the main sqlite.c amalgamation file
   - Memory-Mapped I/O support - see http://www.sqlite.org/mmap.html
-  - under Win64, expects an external sqlite3-64.dll file to be available, which
-    may be downloaded from https://synopse.info/files/SQLite3-64.7z
   - added sqlite3.backup_*() Online Backup API functions
   - added missing function sqlite3_column_text16() - fixed ticket [25d8d1f47a]
   - added sqlite3.db_config() support
@@ -336,15 +335,15 @@ end;
 
 {$else FPC}
 
-  // Delphi has a more complex linking strategy, since $linklib doesn't exist :(
+  // Delphi has a diverse linking strategy, since $linklib doesn't exist :(
   {$ifdef MSWINDOWS}
     {$ifdef CPU64}
-      {$L static\x86_64-win64\sqlite3.o} // compiled with gcc for FPC ...
+      {$L sqlite3.o}    // compiled with XE7's bcc64
     {$else}
-      {$L sqlite3.obj}       // link SQlite3 database engine
+      {$L sqlite3.obj}  // compiled with free Borland C++ Compiler 5.5
     {$endif}
   {$else}
-  {$ifdef KYLIX3} // in practice, failed to compile SQLite3 with gcc 2 :(
+  {$ifdef KYLIX3} // in practice, we failed to compile SQLite3 with gcc 2 :(
     {$L kylix/sqlite3/sqlite3.o}
     {$L kylix/sqlite3/_divdi3.o}
     {$L kylix/sqlite3/_moddi3.o}
@@ -354,7 +353,7 @@ end;
   {$endif KYLIX3}
   {$endif MSWINDOWS}
 
-// those functions will be called only under Delphi + Win32
+// those functions will be called only under Delphi + Win32/Win64
 
 function malloc(size: cardinal): Pointer; cdecl; { always cdecl }
 begin
@@ -573,7 +572,7 @@ type
   // this function type is defined for calling termDataCmp() in sqlite3.c
   qsort_compare_func = function(P1,P2: pointer): integer; cdecl; { always cdecl }
 
-procedure QuickSort4(base: PPointerArray; L, R: Integer; comparF: qsort_compare_func);
+procedure QuickSortPtr(base: PPointerArray; L, R: Integer; comparF: qsort_compare_func);
 var I, J, P: Integer;
     PP, C: PAnsiChar;
 begin
@@ -597,7 +596,7 @@ begin
       end;
     until I>J;
     if L<J then
-      QuickSort4(base, L, J, comparF);
+      QuickSortPtr(base, L, J, comparF);
     L := I;
   until I>=R;
 end;
@@ -652,7 +651,7 @@ procedure qsort(baseP: pointer; NElem, Width: integer; comparF: pointer); cdecl;
 begin
   if (cardinal(NElem)>1) and (Width>0) then
     if Width=sizeof(pointer) then
-      QuickSort4(baseP, 0, NElem-1, qsort_compare_func(comparF)) else
+      QuickSortPtr(baseP, 0, NElem-1, qsort_compare_func(comparF)) else
       QuickSort(baseP, Width, 0, NElem-1, qsort_compare_func(comparF));
 end;
 
@@ -726,22 +725,8 @@ procedure _endthreadex(exitcode: dword); cdecl; external msvcrt;
 
 {$ifdef CPU64}
 
-// first try for static on Win64 with Delphi
-function __imp__beginthreadex(security: pointer; stksize: dword;
-  start,arg: pointer; flags: dword; var threadid: dword): THandle; cdecl; external msvcrt name '_beginthreadex';
-procedure __imp__endthreadex(exitcode: dword); cdecl; external msvcrt name '_endthreadex';
+// Delphi Win64 will link its own static sqlite3.o (diverse from FPC's)
 
-function __imp_TryEnterCriticalSection(lpCriticalSection:pointer): BOOL; cdecl; external kernel name 'TryEnterCriticalSection';
-procedure __imp_LeaveCriticalSection(lpCriticalSection:pointer); cdecl; external kernel name 'LeaveCriticalSection';
-procedure __imp_EnterCriticalSection(lpCriticalSection:pointer); cdecl; external kernel name 'EnterCriticalSection';
-procedure __imp_DeleteCriticalSection(lpCriticalSection:pointer); cdecl; external kernel name 'DeleteCriticalSection';
-procedure __imp_InitializeCriticalSection(lpCriticalSection:pointer); cdecl; external kernel name 'InitializeCriticalSection';
-function __imp_GetCurrentThreadId:dword; cdecl; external kernel name 'GetCurrentThreadId';
-function __imp_CloseHandle(hObject:THandle): BOOL; cdecl; external kernel name 'CloseHandle';
-function __imp__localtime64(t: PCardinal): pointer; cdecl;
-begin
-  result := localtime64(t^);
-end;
 function log(x: double): double; cdecl; export;
 begin
   result := ln(x);

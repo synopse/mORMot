@@ -206,7 +206,6 @@
 
   {$undef ENHANCEDRTL}    // there is no version of our Enhanced RTL for FPC
   {$undef DOPATCHTRTL}
-  {$define USETYPEINFO}  // will use SynFPCTypInfo.pas wrapper
   {$define HASINLINE}
   {$define HASUINT64}
   {$define HASINLINENOTX86}
@@ -639,8 +638,8 @@
     {$define NOSQLITE3STATIC}
   {$endif}
 {$else}
-  // Only Win32+Linux32 do support static linked library yet with Delphi/Kylix
-  {$ifdef CPU64}
+  // only Win32+Win64 are supported yet with Delphi anyway
+  {$ifndef MSWINDOWS}
     {$define NOSQLITE3STATIC}
   {$endif}
 {$endif FPC}
