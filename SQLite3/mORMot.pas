@@ -2834,6 +2834,10 @@ type
     procedure InterfaceAncestors(out Ancestors: PTypeInfoDynArray;
       OnlyImplementedBy: TInterfacedObjectClass;
       out AncestorsImplementedEntry: TPointerDynArray);
+    {$ifdef FPC_PROVIDE_ATTR_TABLE}
+    /// type attributes, introduced since SVN 42356-42411 (2019/07)
+    function AttributeTable: PFPCAttributeTable; inline;
+    {$endif FPC_PROVIDE_ATTR_TABLE}
   end;
 
   /// how a RTTI property definition access its value
@@ -2928,9 +2932,9 @@ type
     // - is used by a dynamic array property for fast usage of the
     // TSQLRecord.DynArray(DynArrayFieldIndex) method
     Index: Integer;
-    /// contains the default value (2147483648=$80000000 indicates nodefault)
+    /// contains the default value (NO_DEFAULT=$80000000 indicates none set)
     // when an ordinal or set property is saved as TPersistent
-    // - see DefaultOr0 for easy use
+    // - see DefaultOr0/DefaultOrVoid for easy use
     Default: Longint;
     /// index of the property in the current inherited class definition
     // - first name index at a given class level is 0
@@ -2942,7 +2946,11 @@ type
     //       2..3 SetProc     e.g. (PropProcs shr 2) and 3=ptField
     //       4..5 StoredProc
     //       6 : true, constant index property
-    PropProcs : Byte;
+    PropProcs: Byte;
+    {$ifdef FPC_PROVIDE_ATTR_TABLE}
+    /// property attributes, introduced since SVN 42356-42411 (2019/07)
+    AttributeTable: PFPCAttributeTable;
+    {$endif FPC_PROVIDE_ATTR_TABLE}
     {$endif FPC}
     /// the property definition Name
     Name: ShortString;
@@ -31414,6 +31422,14 @@ begin
   until false;
 end;
 
+{$ifdef FPC_PROVIDE_ATTR_TABLE}
+function TTypeInfo.AttributeTable: PFPCAttributeTable;
+begin
+  result := GetTypeData(self);
+  dec(result); // re-adjust after SynFPCTypInfo.AlignTypeData() in GetTypeData()
+end;
+{$endif FPC_PROVIDE_ATTR_TABLE}
+
 
 { TClassProp }
 
@@ -46021,7 +46037,7 @@ function TSQLRestStorageInMemory.FindWhereEqual(WhereField: integer;
   const WhereValue: RawUTF8; OnFind: TFindWhereEqualEvent; Dest: pointer;
   FoundLimit,FoundOffset: PtrInt; CaseInsensitive: boolean): PtrInt;
 var i, last, currentRow, found: PtrInt;
-    v64: Int64;
+    v: Int64;
     err: integer;
     P: TSQLPropInfo;
     nfo: PPropInfo;
@@ -46055,9 +46071,9 @@ begin
     FoundLimit := maxInt;
   if WhereField=SYNTABLESTATEMENTWHEREID then begin
     if FoundOffset<=0 then begin // omit first FoundOffset rows
-      v64 := GetInt64(pointer(WhereValue),err);
-      if (err=0) and (v64>0) then begin
-        i := IDToIndex(v64); // use fast O(log(n)) binary search
+      v := GetInt64(pointer(WhereValue),err);
+      if (err=0) and (v>0) then begin
+        i := IDToIndex(v); // use fast O(log(n)) binary search
         if i>=0 then begin
           if Assigned(OnFind) then
             OnFind(Dest,TSQLRecord(rec[i]),i);
@@ -46093,7 +46109,7 @@ begin
   last := fValue.Count-1;
   if P.InheritsFrom(TSQLPropInfoRTTIInt32) and (TSQLPropInfoRTTIInt32(P).PropInfo^.
      PropType^.Kind in [tkInteger,tkEnumeration,tkSet]) then begin // 8/16/32-bit
-    v64 := GetInt64(pointer(WhereValue),err); // 64-bit for cardinal
+    v := GetInt64(pointer(WhereValue),err); // 64-bit for cardinal
     if err<>0 then
       exit;
     nfo := TSQLPropInfoRTTI(P).PropInfo;
@@ -46102,30 +46118,30 @@ begin
       ot := nfo^.PropType^.OrdType;
       if ot in [otSLong,otULong] then begin // handle very common 32-bit Integer field
         for i := 0 to last do
-          if (PCardinal(rec[i]+offs)^=PCardinal(@v64)^) and FoundOneAndReachedLimit then
+          if (PCardinal(rec[i]+offs)^=PCardinal(@v)^) and FoundOneAndReachedLimit then
             break;
       end else // inlined GetOrdProp() for 8-bit or 16-bit values
         for i := 0 to last do
-          if (FromOrdType(ot,pointer(rec[i]+offs))=v64) and FoundOneAndReachedLimit then
+          if (FromOrdType(ot,pointer(rec[i]+offs))=v) and FoundOneAndReachedLimit then
             break;
     end else // has getter -> use GetOrdProp()
     for i := 0 to last do
-      if (nfo^.GetOrdProp(TSQLRecord(rec[i]))=v64) and FoundOneAndReachedLimit then
+      if (nfo^.GetOrdProp(TSQLRecord(rec[i]))=v) and FoundOneAndReachedLimit then
         break;
   end else
   if P.InheritsFrom(TSQLPropInfoRTTIInt64) then begin // 64-bit integer
-    v64 := GetInt64(pointer(WhereValue),err);
+    v := GetInt64(pointer(WhereValue),err);
     if err<>0 then
       exit;
     nfo := TSQLPropInfoRTTI(P).PropInfo;
     offs := TSQLPropInfoRTTI(P).fGetterIsFieldPropOffset;
     if offs<>0 then begin // plain field with no getter
       for i := 0 to last do
-        if (PInt64(rec[i]+offs)^=v64) and FoundOneAndReachedLimit then
+        if (PInt64(rec[i]+offs)^=v) and FoundOneAndReachedLimit then
           break;
     end else // handle getter
     for i := 0 to last do
-      if (nfo^.GetInt64Prop(TSQLRecord(rec[i]))=v64) and FoundOneAndReachedLimit then
+      if (nfo^.GetInt64Prop(TSQLRecord(rec[i]))=v) and FoundOneAndReachedLimit then
         break;
   end else begin // generic search using fast CompareValue() overridden methods
     P.SetValueVar(fSearchRec,WhereValue,false); // compare to private fSearchRec
@@ -56109,7 +56125,7 @@ var P: Pointer;
     m: integer;
     paramcounter: word;
     sm: PServiceMethod;
-    n: cardinal;
+    n,na: cardinal;
     aURI: RawUTF8;
 
   procedure RaiseError(const Format: RawUTF8; const Args: array of const);
@@ -56120,8 +56136,11 @@ var P: Pointer;
 
 begin
   // handle interface inheritance via recursive calls
-  P := aInterface^.ClassType;
+  P := GetTypeData(aInterface^);
   {$ifdef FPC}
+  {$ifdef FPC_PROVIDE_ATTR_TABLE}
+  dec(PFPCAttributeTable(P)); // re-adjust our GetTypeData() to match TypInfo.pp
+  {$endif FPC_PROVIDE_ATTR_TABLE}
   PI := P;
   if PI^.Parent<>nil then
     Ancestor := Deref(pointer(PI^.Parent)) else
@@ -56171,13 +56190,14 @@ begin
     // retrieve method call arguments from RTTI
     n := PME^.ParamCount;
     {$ifndef FPC}
-    inc(PME); // skip ParamCount in Delphi
+    inc(PME); // PF now points to parameter flags for Delphi
     {$endif FPC}
+    na := n;
     if Kind=mkFunction then
-      SetLength(sm^.Args,n+1) else
-      SetLength(sm^.Args,n);
-    if length(sm^.Args)>MAX_METHOD_ARGS then
-       RaiseError('method has too many parameters: %>%',[Length(sm^.Args),MAX_METHOD_ARGS]);
+      inc(na); // function result is an addition output parameter
+    if na>MAX_METHOD_ARGS then
+       RaiseError('method has too many parameters: %>%',[na,MAX_METHOD_ARGS]);
+    SetLength(sm^.Args,na);
     {$ifdef FPC}
     aResultType := Deref(pointer(PME^.ResultType));
     if aResultType<>nil then
@@ -58852,11 +58872,9 @@ type
   {$PACKRECORDS DEFAULT}
   {$endif}
 
-procedure CallMethod(var Args: TCallMethodArgs);
-
 // ARM/AARCH64 code below provided by ALF, greatly inspired by pascalscript
 {$ifdef CPUARM}
-assembler; nostackframe;
+procedure CallMethod(var Args: TCallMethodArgs); assembler; nostackframe;
 label stack_loop,load_regs,asmcall_end,float_result;
 asm
    //name  r#(normally, darwin can differ)
@@ -58935,7 +58953,7 @@ end;
 {$endif CPUARM}
 
 {$ifdef CPUAARCH64}
-assembler; nostackframe;
+procedure CallMethod(var Args: TCallMethodArgs); assembler; nostackframe;
 label stack_loop,load_regs,asmcall_end,float_result;
 asm
    // inspired by pascal script
@@ -59012,7 +59030,8 @@ asmcall_end:
 end;
 {$endif CPUAARCH64}
 
-{$ifdef CPUX64} assembler;
+{$ifdef CPUX64}
+procedure CallMethod(var Args: TCallMethodArgs); assembler;
 {$ifdef FPC} nostackframe;
 asm
         push    rbp
@@ -59093,20 +59112,27 @@ end;
 
 {$ifdef ISDELPHI7ANDUP}{$WARN COMPARING_SIGNED_UNSIGNED OFF}{$endif} // W1023 FPC_STACKALIGNMENT
 
-{$ifdef CPUX86} {$ifdef FPC}nostackframe; assembler;{$endif}
+{$ifdef CPUX86}
+
+{$ifdef DARWIN}
+  {$define REQUIREX86ALIGNEDSTACK16} // always require aligned stack on OSX
+{$else}
+  {$if defined(FPC_STACKALIGNMENT) and (FPC_STACKALIGNMENT=16)}
+  {$define REQUIREX86ALIGNEDSTACK16} // e.g. on i386-linux since SVN 43005-43014
+  {$ifend} // https://www.mail-archive.com/fpc-devel@lists.freepascal.org/msg38885.html
+{$endif DARWIN}
+
+procedure CallMethod(var Args: TCallMethodArgs); {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         push    esi
         push    ebp
         mov     ebp, esp
         mov     esi, Args
         // copy stack content (if any)
-        {$ifdef DARWIN} // always require aligned stack
+        {$ifdef REQUIREX86ALIGNEDSTACK16}
+        add     esp, 16
         and     esp, -16
-        {$else} // https://github.com/graemeg/freepascal/commit/6be6e04eb4
-        {$if defined(FPC_STACKALIGNMENT) and (FPC_STACKALIGNMENT=16)}
-        and     esp, -16  // e.g. on i386-linux since r43005 to 43014
-        {$ifend} // https://www.mail-archive.com/fpc-devel@lists.freepascal.org/msg38885.html
-        {$endif DARWIN}
+        {$endif REQUIREX86ALIGNEDSTACK16}
         mov     eax, [esi].TCallMethodArgs.StackSize
         mov     edx, dword ptr[esi].TCallMethodArgs.StackAddr
         add     edx, eax // pascal/register convention = left-to-right

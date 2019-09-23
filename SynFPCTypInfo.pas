@@ -62,13 +62,26 @@ uses
   SysUtils,
   TypInfo;
 
+{$ifdef FPC_PROVIDE_ATTR_TABLE}
+type
+  // if you have a compilation error here, your FPC trunk is too old
+  // - TTypeData.AttributeTable was introduced in SVN 42356-42411 (2019/07)
+  // -> undefine FPC_PROVIDE_ATTR_TABLE in Synopse.inc and recompile
+  PFPCAttributeTable = TypInfo.PAttributeTable;
+{$endif FPC_PROVIDE_ATTR_TABLE}
+
+{$ifdef HASALIGNTYPEDATA}
+function AlignTypeData(p: pointer): pointer; inline;
+{$else}
+type
+  AlignTypeData = pointer;
+{$endif HASALIGNTYPEDATA}
+
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
 function AlignToPtr(p: pointer): pointer; inline;
-function AlignTypeData(p : pointer): pointer; inline;
 {$else FPC_REQUIRES_PROPER_ALIGNMENT}
 type
   AlignToPtr = pointer;
-  AlignTypeData = pointer;
 {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
 type
@@ -80,11 +93,11 @@ type
 {$ifdef FPC_NEWRTTI}
   PFPCRecInitData = TypInfo.PRecInitData;
 
-function GetFPCRecInitData(TypeData: Pointer): Pointer;
+function GetFPCRecInitData(TypeData: Pointer): PFPCRecInitData;
 {$endif FPC_NEWRTTI}
 
-procedure FPCDynArrayClear(var a: Pointer; typeInfo: Pointer);
-procedure FPCFinalizeArray(p: Pointer; typeInfo: Pointer; elemCount: PtrUInt);
+procedure FPCDynArrayClear(var a: Pointer; TypeInfo: Pointer);
+procedure FPCFinalizeArray(p: Pointer; TypeInfo: Pointer; elemCount: PtrUInt);
 procedure FPCFinalize(Data: Pointer; TypeInfo: Pointer);
 procedure FPCRecordCopy(const Source; var Dest; TypeInfo: pointer);
 procedure FPCRecordAddRef(var Data; TypeInfo : pointer);
@@ -92,9 +105,9 @@ procedure FPCRecordAddRef(var Data; TypeInfo : pointer);
 
 implementation
 
-procedure FPCDynArrayClear(var a: Pointer; typeInfo: Pointer);
+procedure FPCDynArrayClear(var a: Pointer; TypeInfo: Pointer);
   [external name 'FPC_DYNARRAY_CLEAR'];
-procedure FPCFinalizeArray(p: Pointer; typeInfo: Pointer; elemCount: PtrUInt);
+procedure FPCFinalizeArray(p: Pointer; TypeInfo: Pointer; elemCount: PtrUInt);
   [external name 'FPC_FINALIZE_ARRAY'];
 procedure FPCFinalize(Data: Pointer; TypeInfo: Pointer);
   [external name 'FPC_FINALIZE'];
@@ -123,15 +136,26 @@ begin
 {$else VER3_0}
   result := Pointer(align(p,PtrInt(@TAlignCheck(nil^).q)))
 {$endif VER3_0}
+  {$ifdef FPC_PROVIDE_ATTR_TABLE}
+  inc(PFPCAttributeTable(result)); // ignore attributes table
+  {$endif FPC_PROVIDE_ATTR_TABLE}
 end;
+{$else}
+{$ifdef FPC_PROVIDE_ATTR_TABLE}
+function AlignTypeData(p: pointer): pointer;
+begin
+  result := p;
+  inc(PFPCAttributeTable(result)); // ignore attributes table
+end;
+{$endif FPC_PROVIDE_ATTR_TABLE}
 {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
 {$ifdef FPC_NEWRTTI}
-function GetFPCRecInitData(TypeData: Pointer): Pointer;
+function GetFPCRecInitData(TypeData: Pointer): PFPCRecInitData;
 begin
-  if PTypeData(TypeData)^.RecInitInfo = nil then
+  if TypInfo.PTypeData(TypeData)^.RecInitInfo=nil then // RTTI is following
     result := TypeData else
-    result := AlignTypeData(pointer(PTypeData(TypeData)^.RecInitData));
+    result := TypInfo.PTypeData(TypeData)^.RecInitData;
 end;
 {$endif FPC_NEWRTTI}
 

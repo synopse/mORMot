@@ -20594,32 +20594,25 @@ type
     {$ifdef FPC}
     tkRecord, tkObject:(
       {$ifdef FPC_NEWRTTI}
-      RecInitInfo: Pointer;
-      {$endif}
+      RecInitInfo: Pointer; // call GetManagedFields() to use FPC's TypInfo.pp
       recSize: longint;
-      {$ifdef FPC_NEWRTTI}
-      TotalFieldCount: longint;
-      // note: for FPC 3.1.x and newer ManagedCount is deprecated
       {$else}
       ManagedCount: longint;
+      ManagedFields: array[0..0] of TFieldInfo;
       // note: FPC for 3.0.x and previous generates RTTI for unmanaged fields (as in TEnhancedFieldInfo)
       {$endif FPC_NEWRTTI}
     {$else}
     tkRecord: (
       recSize: cardinal;
       ManagedCount: integer;
-    {$endif FPC}
-    {$ifdef DELPHI_OR_FPC_OLDRTTI}
       ManagedFields: array[0..0] of TFieldInfo;
-    {$else}
-      AllFields: array[0..0] of TEnhancedFieldInfo;
-    {$endif DELPHI_OR_FPC_OLDRTTI}
     {$ifdef ISDELPHI2010} // enhanced RTTI containing info about all fields
       NumOps: Byte;
       //RecOps: array[0..0] of Pointer;
       AllCount: Integer; // !!!! may need $RTTI EXPLICIT FIELDS([vcPublic])
       AllFields: array[0..0] of TEnhancedFieldInfo;
     {$endif ISDELPHI2010}
+    {$endif FPC}
     );
     tkEnumeration: (
       EnumType: TOrdType;
@@ -20820,19 +20813,19 @@ begin
   end;
 end;
 
-{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+{$ifdef HASALIGNTYPEDATA}
 function FPCTypeInfoOverName(P: pointer): pointer; inline;
 begin // aligned result := @PAnsiChar(info)[info^.NameLen]
   result := AlignTypeData(P+2+PTypeInfo(P)^.NameLen);
-  dec(PtrUInt(result),2*SizeOf(pointer)); // -2 to point on PTypeInfo^.kind
+  dec(PtrUInt(result),2*SizeOf(pointer)); // -2 pointers to point on PTypeInfo^.kind
 end;
-{$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+{$endif HASALIGNTYPEDATA}
 
 function GetTypeInfo(aTypeInfo: pointer; aExpectedKind: TTypeKind): PTypeInfo; overload;
 {$ifdef HASINLINE} inline;
 begin
   if (aTypeInfo<>nil) and (PTypeKind(aTypeInfo)^=aExpectedKind) then begin
-    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+    {$ifdef HASALIGNTYPEDATA}
     result := FPCTypeInfoOverName(aTypeInfo);
     {$else}
     result := aTypeInfo;
@@ -20860,7 +20853,7 @@ begin
   result := aTypeInfo;
   if result<>nil then
     if result^.Kind in aExpectedKind then
-      {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+      {$ifdef HASALIGNTYPEDATA}
       result := FPCTypeInfoOverName(result)
       {$else}
       inc(PByte(result),result^.NameLen)
@@ -20885,7 +20878,7 @@ end;
 function GetTypeInfo(aTypeInfo: pointer): PTypeInfo; overload;
 {$ifdef HASINLINE} inline;
 begin
-  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+  {$ifdef HASALIGNTYPEDATA}
   result := FPCTypeInfoOverName(aTypeInfo);
   {$else}
   result := @PAnsiChar(aTypeInfo)[PTypeInfo(aTypeInfo)^.NameLen];
@@ -39687,7 +39680,7 @@ end;
 function ArrayItemType(var info: PTypeInfo; out len: integer): PTypeInfo;
   {$ifdef HASINLINE}inline;{$endif}
 begin
-  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT} // inlined info := GetTypeInfo(info)
+  {$ifdef HASALIGNTYPEDATA} // inlined info := GetTypeInfo(info)
   info := FPCTypeInfoOverName(info);
   {$else}
   info := @PAnsiChar(info)[info^.NameLen];
@@ -39982,7 +39975,7 @@ function GetManagedFields(info: PTypeInfo; out firstfield: PFieldInfo): integer;
 {$ifdef FPC_NEWRTTI}
 var recInitData: PFPCRecInitData; // low-level type redirected from SynFPCTypInfo
 begin
-  recInitData := GetFPCRecInitData(AlignTypeData(PByte(info)+2));
+  recInitData := GetFPCRecInitData(AlignTypeData(PByte(info)+2)); // +2=Kind+NameLen
   firstfield := pointer(PtrUInt(recInitData)+SizeOf(recInitData^)); // =ManagedFields[0]
   result := recInitData^.ManagedFieldCount;
 {$else}
@@ -47948,17 +47941,17 @@ Bin:  case fElemSize of
     end else
     if not exacttype and (PTypeKind(fElemType)^ in tkRecordTypes) then begin
       info := fElemType; // inlined GetTypeInfo()
-      {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+      {$ifdef HASALIGNTYPEDATA}
 rec:  info := FPCTypeInfoOverName(info);
       {$else}
 rec:  inc(PByte(info),info^.NameLen);
-      {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+      {$endif}
       {$ifdef FPC_OLDRTTI}
       field := OldRTTIFirstManagedField(info);
       if field=nil then
-      {$else FPC_OLDRTTI}
+      {$else}
       if GetManagedFields(info,field)=0 then // only binary content
-      {$endif FPC_OLDRTTI}
+      {$endif}
         goto Bin;
       case field^.Offset of
       0: begin
@@ -49089,11 +49082,11 @@ begin
   if PTypeKind(aTypeInfo)^<>tkDynArray then // inlined GetTypeInfo()
     raise ESynException.CreateUTF8('TDynArray.Init: % is %, expected tkDynArray',
       [ArrayTypeShort^,ToText(PTypeKind(aTypeInfo)^)^]);
-  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+  {$ifdef HASALIGNTYPEDATA}
   aTypeInfo := FPCTypeInfoOverName(aTypeInfo);
   {$else}
   inc(PByte(aTypeInfo),PTypeInfo(aTypeInfo)^.NameLen);
-  {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+  {$endif}
   fElemSize := PTypeInfo(aTypeInfo)^.elSize {$ifdef FPC}and $7FFFFFFF{$endif};
   fElemType := PTypeInfo(aTypeInfo)^.elType;
   if fElemType<>nil then begin
