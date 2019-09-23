@@ -2526,6 +2526,9 @@ type
   PTypeInfoDynArray = array of PTypeInfo;
   PPropInfo = ^TPropInfo;
   PMethodInfo = ^TMethodInfo;
+  {$ifndef FPC_OR_UNICODE} // not defined on older Delphi versions
+  PMethod = ^TMethod;
+  {$endif}
   TClassArray = array[0..MaxInt div SizeOf(TClass)-1] of TClass;
   PClassArray = ^TClassArray;
 
