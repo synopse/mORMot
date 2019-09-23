@@ -22846,7 +22846,7 @@ begin
     result := 1 else begin
     V1 := fPropInfo.GetCurrencyProp(Item1);
     V2 := fPropInfo.GetCurrencyProp(Item2);
-    Result := PInt64(@V1)^-PInt64(@V2)^;
+    result := CompareInt64(PInt64(@V1)^,PInt64(@V2)^);
   end;
 end;
 
@@ -23346,7 +23346,6 @@ end;
 
 function TSQLPropInfoRTTIRawUTF8.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): PtrInt;
-
   function CompareWithLocalTempCopy: PtrInt;
   var tmp1,tmp2: RawByteString;
   begin
@@ -23356,7 +23355,6 @@ function TSQLPropInfoRTTIRawUTF8.CompareValue(Item1, Item2: TObject;
       result := UTF8IComp(pointer(tmp1),pointer(tmp2)) else
       result := StrComp(pointer(tmp1),pointer(tmp2));
   end;
-
 var
   offs: PtrUInt;
   p1,p2: pointer;
@@ -46090,14 +46088,15 @@ begin
     exit;
   end;
   // full scan optimized search for a specified value
-  nfo := TSQLPropInfoRTTI(P).PropInfo;
   found := 0;
   currentRow := 0;
   last := fValue.Count-1;
-  if nfo^.PropType^.Kind in [tkInteger,tkEnumeration,tkSet] then begin // 8/16/32-bit
+  if P.InheritsFrom(TSQLPropInfoRTTIInt32) and (TSQLPropInfoRTTIInt32(P).PropInfo^.
+     PropType^.Kind in [tkInteger,tkEnumeration,tkSet]) then begin // 8/16/32-bit
     v64 := GetInt64(pointer(WhereValue),err); // 64-bit for cardinal
     if err<>0 then
       exit;
+    nfo := TSQLPropInfoRTTI(P).PropInfo;
     offs := TSQLPropInfoRTTI(P).fGetterIsFieldPropOffset;
     if offs<>0 then begin // plain field with no getter
       ot := nfo^.PropType^.OrdType;
@@ -46118,12 +46117,13 @@ begin
     v64 := GetInt64(pointer(WhereValue),err);
     if err<>0 then
       exit;
+    nfo := TSQLPropInfoRTTI(P).PropInfo;
     offs := TSQLPropInfoRTTI(P).fGetterIsFieldPropOffset;
-    if offs<>0 then begin
+    if offs<>0 then begin // plain field with no getter
       for i := 0 to last do
         if (PInt64(rec[i]+offs)^=v64) and FoundOneAndReachedLimit then
           break;
-    end else
+    end else // handle getter
     for i := 0 to last do
       if (nfo^.GetInt64Prop(TSQLRecord(rec[i]))=v64) and FoundOneAndReachedLimit then
         break;
@@ -46180,7 +46180,7 @@ end;
 
 procedure TSQLRestStorageInMemory.ForEach(WillModifyContent: boolean;
   OnEachProcess: TFindWhereEqualEvent; Dest: pointer);
-var i: integer;
+var i: PtrInt;
     rec: PSQLRecordArray;
 begin
   if (self=nil) or (fValue.Count=0) or not Assigned(OnEachProcess) then
