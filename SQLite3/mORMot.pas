@@ -21105,7 +21105,7 @@ begin
   end;
   ptVirtual: // GetProc is an offset to the class VMT
     Call.Code := PPointer(PPtrUInt(Instance)^+{$ifndef FPC}word{$endif}(GetProc))^;
-  {$ifdef FPC} ptConst: exit(picNone); {$endif}
+  {$ifdef FPC} ptConst: exit(picNone); {$endif} // never happen on properties?
   else // ptStatic: GetProc is the method code itself
     Call.Code := pointer(GetProc);
   end;
@@ -46020,13 +46020,14 @@ function TSQLRestStorageInMemory.FindWhereEqual(WhereField: integer;
   const WhereValue: RawUTF8; OnFind: TFindWhereEqualEvent; Dest: pointer;
   FoundLimit,FoundOffset: PtrInt; CaseInsensitive: boolean): PtrInt;
 var i, last, currentRow, found: PtrInt;
-    i32, err: integer;
-    i64: Int64;
+    v64: Int64;
+    err: integer;
     P: TSQLPropInfo;
     nfo: PPropInfo;
     rec: PPtrUIntArray;
     Hash: TListFieldHash;
     offs: PtrUInt;
+    ot: TOrdType;
 
   function FoundOneAndReachedLimit: boolean;
   begin
@@ -46053,9 +46054,9 @@ begin
     FoundLimit := maxInt;
   if WhereField=SYNTABLESTATEMENTWHEREID then begin
     if FoundOffset<=0 then begin // omit first FoundOffset rows
-      i64 := GetInt64(pointer(WhereValue),err);
-      if (err=0) and (i64>0) then begin
-        i := IDToIndex(i64); // use fast O(log(n)) binary search
+      v64 := GetInt64(pointer(WhereValue),err);
+      if (err=0) and (v64>0) then begin
+        i := IDToIndex(v64); // use fast O(log(n)) binary search
         if i>=0 then begin
           if Assigned(OnFind) then
             OnFind(Dest,TSQLRecord(rec[i]),i);
@@ -46075,7 +46076,7 @@ begin
   Hash := UniqueFieldHash(WhereField);
   if Hash<>nil then begin
     if FoundOffset<=0 then begin // omit first FoundOffset rows, for ID unique field
-      P.SetValueVar(fSearchRec,WhereValue,false);
+      P.SetValueVar(fSearchRec,WhereValue,false); // find private fSearchRec value
       i := Hash.Find(fSearchRec);
       if i>=0 then begin
         if Assigned(OnFind) then
@@ -46086,46 +46087,45 @@ begin
     exit;
   end;
   // full scan optimized search for a specified value
+  nfo := TSQLPropInfoRTTI(P).PropInfo;
   found := 0;
   currentRow := 0;
   last := fValue.Count-1;
-  if P.InheritsFrom(TSQLPropInfoRTTIInt32) then begin
-    // optimized search for 8/16/32-bit Integer values
-    i32 := GetInteger(pointer(WhereValue),err);
+  if nfo^.PropType^.Kind in [tkInteger,tkEnumeration,tkSet] then begin // 8/16/32-bit
+    v64 := GetInt64(pointer(WhereValue),err); // 64-bit for cardinal
     if err<>0 then
       exit;
-    nfo := TSQLPropInfoRTTI(P).PropInfo;
     offs := TSQLPropInfoRTTI(P).fGetterIsFieldPropOffset;
-    if (offs<>0) and {$ifndef CPU64}(nfo^.PropType^.Kind=tkClass) or{$endif}
-       ((nfo^.PropType^.Kind=tkInteger)and(nfo^.PropType^.OrdType=otSLong)) then begin
-      // optimized version for fast retrieval of signed 32-bit Integer field value
-      for i := 0 to last do
-        if (PInteger(rec[i]+offs)^=i32) and FoundOneAndReachedLimit then
-          break;
-    end else
-    // 8-bit or 16-bit value, or there is a getter procedure -> use GetOrdProp()
+    if offs<>0 then begin // plain field with no getter
+      ot := nfo^.PropType^.OrdType;
+      if ot in [otSLong,otULong] then begin // handle very common 32-bit Integer field
+        for i := 0 to last do
+          if (PCardinal(rec[i]+offs)^=PCardinal(@v64)^) and FoundOneAndReachedLimit then
+            break;
+      end else // inlined GetOrdProp() for 8-bit or 16-bit values
+        for i := 0 to last do
+          if (FromOrdType(ot,pointer(rec[i]+offs))=v64) and FoundOneAndReachedLimit then
+            break;
+    end else // has getter -> use GetOrdProp()
     for i := 0 to last do
-      if (nfo^.GetOrdProp(TSQLRecord(rec[i]))=i32) and FoundOneAndReachedLimit then
+      if (nfo^.GetOrdProp(TSQLRecord(rec[i]))=v64) and FoundOneAndReachedLimit then
         break;
   end else
-  if P.InheritsFrom(TSQLPropInfoRTTIInt64) then begin
-    // stored as one 64-bit Integer value -> optimized search
-    i64 := GetInt64(pointer(WhereValue),err);
+  if P.InheritsFrom(TSQLPropInfoRTTIInt64) then begin // 64-bit integer
+    v64 := GetInt64(pointer(WhereValue),err);
     if err<>0 then
       exit;
-    nfo := TSQLPropInfoRTTI(P).PropInfo;
     offs := TSQLPropInfoRTTI(P).fGetterIsFieldPropOffset;
     if offs<>0 then begin
       for i := 0 to last do
-        if (PInt64(rec[i]+offs)^=i64) and FoundOneAndReachedLimit then
+        if (PInt64(rec[i]+offs)^=v64) and FoundOneAndReachedLimit then
           break;
     end else
     for i := 0 to last do
-      if (nfo^.GetInt64Prop(TSQLRecord(rec[i]))=i64) and FoundOneAndReachedLimit then
+      if (nfo^.GetInt64Prop(TSQLRecord(rec[i]))=v64) and FoundOneAndReachedLimit then
         break;
-  end else begin
-    // generic search of any value, using fast CompareValue() overridden method
-    P.SetValueVar(fSearchRec,WhereValue,false);
+  end else begin // generic search using fast CompareValue() overridden methods
+    P.SetValueVar(fSearchRec,WhereValue,false); // compare to private fSearchRec
     for i := 0 to last do
       if (P.CompareValue(TSQLRecord(rec[i]),fSearchRec,CaseInsensitive)=0) and
          FoundOneAndReachedLimit then
