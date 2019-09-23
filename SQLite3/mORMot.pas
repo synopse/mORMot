@@ -58007,7 +58007,9 @@ function TInterfaceResolverForSingleInterface.GetImplementationName: string;
 begin
   if self=nil then
     result := '' else
-    result := string(fImplementation.ItemClass.ClassName);
+    if fImplementation.ItemClass=nil then
+      result := '' else
+      result := string(fImplementation.ItemClass.ClassName);
 end;
 
 function TInterfaceResolverForSingleInterface.GetOneInstance(out Obj): boolean;
