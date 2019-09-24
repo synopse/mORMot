@@ -40578,8 +40578,12 @@ begin
   if (self=nil) or (fSessionAuthentication=nil) then
     exit;
   fSessions.Safe.Lock;
-  ObjArrayClear(fSessionAuthentication);
-  fSessions.Safe.UnLock;
+  try
+    ObjArrayClear(fSessionAuthentication);
+    fHandleAuthentication := false;
+  finally
+    fSessions.Safe.UnLock;
+  end;
 end;
 
 function TSQLRestServer.ServiceMethodByPassAuthentication(const aMethodName: RawUTF8): integer;
@@ -43386,25 +43390,29 @@ end;
 
 function TSQLRestServer.SessionsAsJson: RawJSON;
 var i: integer;
+    W: TJSONSerializer;
     temp: TTextWriterStackBuffer;
 begin
   result := '';
   if (self=nil) or (fSessions.Count=0) then
     exit;
-  fSessions.Safe.Lock;
-  with TJSONSerializer.CreateOwnedStream(temp) do
+  W := TJSONSerializer.CreateOwnedStream(temp);
   try
-    Add('[');
-    for i := 0 to fSessions.Count-1 do begin
-      WriteObject(fSessions.List[i]);
-      Add(',');
+    fSessions.Safe.Lock;
+    try
+      W.Add('[');
+      for i := 0 to fSessions.Count-1 do begin
+        W.WriteObject(fSessions.List[i]);
+        W.Add(',');
+      end;
+      W.CancelLastComma;
+      W.Add(']');
+      W.SetText(RawUTF8(result));
+    finally
+      fSessions.Safe.UnLock;
     end;
-    CancelLastComma;
-    Add(']');
-    SetText(RawUTF8(result));
   finally
-    fSessions.Safe.UnLock;
-    Free;
+    W.Free;
   end;
 end;
 

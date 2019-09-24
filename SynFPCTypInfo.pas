@@ -153,8 +153,8 @@ end;
 {$ifdef FPC_NEWRTTI}
 function GetFPCRecInitData(TypeData: Pointer): PFPCRecInitData;
 begin
-  if TypInfo.PTypeData(TypeData)^.RecInitInfo=nil then // RTTI is following
-    result := TypeData else
+  if TypInfo.PTypeData(TypeData)^.RecInitInfo=nil then
+    result := TypeData else // no RecInitData, but regular list of fields
     result := TypInfo.PTypeData(TypeData)^.RecInitData;
 end;
 {$endif FPC_NEWRTTI}
