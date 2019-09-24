@@ -3331,6 +3331,11 @@ function RenameInCSV(const OldValue, NewValue: RawUTF8; var CSV: RawUTF8;
 // ! MyArray := TRawUTF8DynArrayFrom(['a','b','c']);
 function TRawUTF8DynArrayFrom(const Values: array of RawUTF8): TRawUTF8DynArray;
 
+/// check if the TypeInfo() points to an "array of RawUTF8"
+// - e.g. returns true for TypeInfo(TRawUTF8DynArray) or other sub-types
+// defined as "type aNewType = type TRawUTF8DynArray"
+function IsRawUTF8DynArray(typeinfo: pointer): boolean;
+
 /// append one or several values to a local "array of const" variable
 procedure AddArrayOfConst(var Dest: TTVarRecDynArray; const Values: array of const);
 
@@ -33256,6 +33261,29 @@ begin
     result[i] := Values[i];
 end;
 
+{$ifdef HASCODEPAGE}
+function LStringCodePage(info: PTypeInfo): integer; inline;
+begin // caller checked that info^.kind=tkLString
+  result := PWord({$ifdef FPC}AlignTypeData{$endif}(pointer(PtrUInt(info)+info^.NameLen+2)))^;
+end;
+{$endif HASCODEPAGE}
+
+function IsRawUTF8DynArray(typeinfo: pointer): boolean;
+var nfo: PTypeInfo;
+begin
+  if typeinfo=System.TypeInfo(TRawUTF8DynArray) then
+    result := true else begin
+    nfo := GetTypeInfo(typeinfo,tkDynArray);
+    if (nfo<>nil) and (nfo^.elSize=SizeOf(pointer)) and
+       (nfo^.elType<>nil) then begin
+      nfo := DeRef(nfo^.elType);
+      result := (nfo^.kind=tkLString)
+        {$ifdef HASCODEPAGE}and (LStringCodePage(nfo)=CP_UTF8){$endif};
+    end else
+      result := false;
+  end;
+end;
+
 procedure AddArrayOfConst(var Dest: TTVarRecDynArray; const Values: array of const);
 var i,n: Integer;
 begin
@@ -39906,8 +39934,11 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
   case info^.Kind of
   tkLString: begin // most used type of string
     itemsize := FromVarUInt32(PByte(source));
-    FastSetStringCP(data^,source,itemsize,PWord({$ifdef FPC}AlignTypeData{$endif}
-      (pointer(PtrUInt(info)+info^.NameLen+2)))^);
+    {$ifdef HASCODEPAGE}
+    FastSetStringCP(data^,source,itemsize,LStringCodePage(info));
+    {$else}
+    SetString(PRawUTF8(data)^,source,itemsize);
+    {$endif HASCODEPAGE}
     inc(source,itemsize);
     result := SizeOf(PtrUInt); // size of tkLString
   end;
@@ -47877,7 +47908,7 @@ const
     {$ifndef NOVARIANTS} djVariant, {$endif} djWideString, djWord, djNone);
 var info: PTypeInfo;
     field: PFieldInfo;
-label Bin, Rec;
+label bin, rec;
 begin
   result := fKnownType;
   if result<>djNone then
@@ -47928,7 +47959,7 @@ begin
         result := RTTI[TJSONCustomParserRTTI.TypeInfoToSimpleRTTIType(fElemType2)];
       if result=djNone then
       {$endif}
-Bin:  case fElemSize of
+bin:  case fElemSize of
       1: result := djByte;
       2: result := djWord;
       4: result := djInteger;
@@ -47938,13 +47969,13 @@ Bin:  case fElemSize of
       64: result := djHash512;
       else fKnownSize := fElemSize;
       end;
-    end else
+    end else // try to guess from 1st record/object field
     if not exacttype and (PTypeKind(fElemType)^ in tkRecordTypes) then begin
       info := fElemType; // inlined GetTypeInfo()
-      {$ifdef HASALIGNTYPEDATA}
-rec:  info := FPCTypeInfoOverName(info);
+rec:  {$ifdef HASALIGNTYPEDATA}
+      info := FPCTypeInfoOverName(info);
       {$else}
-rec:  inc(PByte(info),info^.NameLen);
+      inc(PByte(info),info^.NameLen);
       {$endif}
       {$ifdef FPC_OLDRTTI}
       field := OldRTTIFirstManagedField(info);
@@ -47957,9 +47988,9 @@ rec:  inc(PByte(info),info^.NameLen);
       0: begin
         info := DeRef(field^.TypeInfo);
         if info=nil then // paranoid check
-          goto Bin else
+          goto bin else
         if info^.kind in tkRecordTypes then
-          goto Rec;
+          goto rec; // nested records
         result := RTTI[TJSONCustomParserRTTI.TypeInfoToSimpleRTTIType(info)];
         if result=djNone then
           goto Bin;
@@ -47974,6 +48005,7 @@ rec:  inc(PByte(info),info^.NameLen);
       else fKnownSize := field^.Offset;
       end;
     end else
+    // will recognize simple arrays from PTypeKind(fElemType)^
     result := RTTI[TJSONCustomParserRTTI.TypeInfoToSimpleRTTIType(fElemType)];
   end;
   if KNOWNTYPE_SIZE[result]<>0 then

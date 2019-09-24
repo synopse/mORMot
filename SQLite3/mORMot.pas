@@ -29862,7 +29862,7 @@ begin
   {$endif NOVARIANTS}
   tkDynArray:
     if Text<>'' then
-      if (TypeInfo=system.TypeInfo(TRawUTF8DynArray)) and (Text[1]<>'[') then
+      if IsRawUTF8DynArray(TypeInfo) and (Text[1]<>'[') then
         CSVToRawUTF8DynArray(pointer(Text),PRawUTF8DynArray(GetFieldAddr(Instance))^) else
         GetDynArray(Instance).LoadFromJSON(pointer(Text)); // T*ObjArray and records
   end;
@@ -29903,7 +29903,7 @@ begin
   end;
   {$endif NOVARIANTS}
   tkDynArray: begin
-    if RawUTF8DynArrayAsCSV and (TypeInfo=system.TypeInfo(TRawUTF8DynArray)) then begin
+    if RawUTF8DynArrayAsCSV and IsRawUTF8DynArray(TypeInfo) then begin
       a := GetFieldAddr(Instance);
       if (a<>nil) and (a^<>nil) then begin
         for i := 0 to length(a^)-1 do begin
