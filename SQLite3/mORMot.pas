@@ -58013,16 +58013,14 @@ end;
 
 function TInterfaceResolverForSingleInterface.GetImplementationName: string;
 begin
-  if self=nil then
+  if (self=nil) or (fImplementation.ItemClass=nil) then
     result := '' else
-    if fImplementation.ItemClass=nil then
-      result := '' else
-      result := string(fImplementation.ItemClass.ClassName);
+    result := string(fImplementation.ItemClass.ClassName);
 end;
 
 function TInterfaceResolverForSingleInterface.GetOneInstance(out Obj): boolean;
 begin
-  if self=nil then
+  if (self=nil) or (fImplementation.ItemClass=nil) then
     result := false else
     // here we now that CreateInstance will implement the interface
     result := GetInterfaceFromEntry(CreateInstance,fImplementationEntry,Obj);
@@ -58032,6 +58030,8 @@ function TInterfaceResolverForSingleInterface.TryResolve(
   aInterface: PTypeInfo; out Obj): boolean;
 var i: integer;
 begin
+  if fImplementation.ItemClass=nil then
+    result := false else
   if fInterfaceTypeInfo=aInterface then
     result := GetInterfaceFromEntry(
       CreateInstance,fImplementationEntry,Obj) else begin
@@ -58050,16 +58050,13 @@ end;
 function TInterfaceResolverForSingleInterface.Implements(aInterface: PTypeInfo): boolean;
 var i: integer;
 begin
+  result := true;
   if fInterfaceTypeInfo=aInterface then
-    result := true else begin
-    // if not found exact interface, try any parent/ancestor interface
-    for i := 0 to length(fInterfaceAncestors)-1 do
-      if fInterfaceAncestors[i]=aInterface then begin
-        result := true;
-        exit;
-      end;
-    result := false;
-  end;
+    exit; // found exact interface
+  for i := 0 to length(fInterfaceAncestors)-1 do
+    if fInterfaceAncestors[i]=aInterface then
+      exit; // found any parent/ancestor interface
+  result := false;
 end;
 
 
