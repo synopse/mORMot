@@ -52,7 +52,6 @@ unit SynLog;
     should UPGRADE to at least revision 1.18.1351, fixing a long-standing bug
   - all logged timestamps are now in much less error-prone UTC by default,
     unless the TSynLogFamily.LocalTimestamp property is defined
-  - Delphi XE4/XE5/XE6/XE7/XE8/10/10.1 compatibility (Windows target platforms)
   - unit fixed and tested with Delphi XE2 (and up) 64-bit compiler under Windows
   - compatibility with (Cross)Kylix 3 and FPC 3.1 under Linux (and Darwin)
   - Exception logging and Stack trace do work now on Linux with Kylix/CrossKylix

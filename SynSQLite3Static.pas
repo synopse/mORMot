@@ -338,7 +338,7 @@ end;
   // Delphi has a diverse linking strategy, since $linklib doesn't exist :(
   {$ifdef MSWINDOWS}
     {$ifdef CPU64}
-      {$L sqlite3.o}    // compiled with XE7's bcc64
+      {$L sqlite3.o}  // compiled with C++ Builder 10.3 Community Edition bcc64
     {$else}
       {$L sqlite3.obj}  // compiled with free Borland C++ Compiler 5.5
     {$endif}
@@ -727,7 +727,7 @@ procedure _endthreadex(exitcode: dword); cdecl; external msvcrt;
 
 // Delphi Win64 will link its own static sqlite3.o (diverse from FPC's)
 
-function log(x: double): double; cdecl; export;
+function _log(x: double): double; cdecl; export;
 begin
   result := ln(x);
 end;
@@ -744,7 +744,7 @@ asm
 end;
 
 var
-  _fltused: byte; // not used, but needed for linking
+  _finf: double = 1.0 / 0.0; // compiles to some double infinity constant
 
 {$endif CPU64}
 

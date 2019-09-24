@@ -3,10 +3,9 @@
 attrib -r sqlite3.o 
 del sqlite3.o
 
-rem set bcc=\dev\bcc\XE7
-set bcc=c:\progs\Embarcadero\XE7
+set bcc=d:\Dev\bcc64ce
 
-%bcc%\bin\bcc64 -6 -O2 -c -d -u- -DWIN64 sqlite3.c
+%bcc%\bin\bcc64 -isystem "%bcc%\include" -isystem "%bcc%\include\windows\sdk" -isystem "%bcc%\include\dinkumware64" -isystem "%bcc%\include\windows\crtl" -O2 -c -DWIN64 sqlite3.c
 
 attrib +r sqlite3.o
 
