@@ -153,6 +153,9 @@ end;
 {$ifdef FPC_NEWRTTI}
 function GetFPCRecInitData(TypeData: Pointer): PFPCRecInitData;
 begin
+  {$ifdef FPC_PROVIDE_ATTR_TABLE}
+  dec(PFPCAttributeTable(TypeData)); // un-adjust AlignTypeData() above
+  {$endif FPC_PROVIDE_ATTR_TABLE}
   if TypInfo.PTypeData(TypeData)^.RecInitInfo=nil then
     result := TypeData else // no RecInitData, but regular list of fields
     result := TypInfo.PTypeData(TypeData)^.RecInitData;
