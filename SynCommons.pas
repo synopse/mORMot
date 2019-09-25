@@ -39894,6 +39894,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
   end;
   tkWString: begin
     itemsize := length(PWideString(P)^)*2; // PStrRec doesn't match on FPC
+    result := pointer(ToVarUInt32(itemsize,pointer(dest)));
     {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(P^)^,result^,itemsize);
     inc(result,itemsize);
     len := SizeOf(PtrUInt);
