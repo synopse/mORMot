@@ -20462,7 +20462,7 @@ type
 {$ifdef FPC}
   {$packrecords c} // as expected by FPC's RTTI record definitions
 
-  TStrRec = packed record // see TAnsiRec in astrings.inc
+  TStrRec = packed record // see TAnsiRec/TUnicodeRec in astrings/ustrings.inc
   {$ifdef ISFPC27}
     codePage: TSystemCodePage; // =Word
     elemSize: Word;
@@ -39811,11 +39811,15 @@ var DynArray: TDynArray;
     P: PPtrUInt absolute data;
 begin // info is expected to come from a DeRef() if retrieved from RTTI
   case info^.Kind of // should match tkManagedTypes
-  tkLString,tkWString{$ifdef FPC},tkLStringOld{$endif}: begin
-    len := SizeOf(pointer); // length stored within WideString is in bytes
+  tkLString{$ifdef FPC},tkLStringOld{$endif}: begin
+    len := SizeOf(pointer);
     if P^=0 then
       result := 1 else
       result := ToVarUInt32LengthWithData(PStrRec(Pointer(P^-STRRECSIZE))^.length);
+  end;
+  tkWString: begin // PStrRec doesn't match on Widestring for FPC
+    len := SizeOf(pointer);
+    result := ToVarUInt32LengthWithData(length(PWideString(P)^)*2);
   end;
   {$ifdef HASVARUSTRING}
   tkUString: begin
@@ -39872,23 +39876,28 @@ var DynArray: TDynArray;
     P: PPtrUInt absolute data;
 begin // info is expected to come from a DeRef() if retrieved from RTTI
   case info^.Kind of
-  tkLString, tkWString {$ifdef HASVARUSTRING}, tkUString{$endif}
-  {$ifdef FPC}, tkLStringOld{$endif}:
+  tkLString {$ifdef HASVARUSTRING},tkUString{$endif} {$ifdef FPC},tkLStringOld{$endif}: begin
     if P^=0 then begin
       dest^ := #0;
       result := dest+1;
-      len := SizeOf(PtrUInt); // size of tkLString+tkWString+tkUString in record
     end else begin
       itemsize := PStrRec(Pointer(P^-STRRECSIZE))^.length;
-      {$ifdef HASVARUSTRING} // WideString has length in bytes, UnicodeString in WideChars
+      {$ifdef HASVARUSTRING} // UnicodeString length in WideChars
       if info^.Kind=tkUString then
         itemsize := itemsize*2;
       {$endif}
       result := pointer(ToVarUInt32(itemsize,pointer(dest)));
       {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(P^)^,result^,itemsize);
       inc(result,itemsize);
-      len := SizeOf(PtrUInt); // size of tkLString+tkWString+tkUString in record
     end;
+    len := SizeOf(PtrUInt); // size of tkLString/tkUString in record
+  end;
+  tkWString: begin
+    itemsize := length(PWideString(P)^)*2; // PStrRec doesn't match on FPC
+    {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(P^)^,result^,itemsize);
+    inc(result,itemsize);
+    len := SizeOf(PtrUInt);
+  end;
   tkRecord{$ifdef FPC},tkObject{$endif}:
     result := RecordSave(data^,dest,info,len);
   tkArray: begin
@@ -39938,7 +39947,7 @@ var DynArray: TDynArray;
     itemsize,i: integer;
 begin // info is expected to come from a DeRef() if retrieved from RTTI
   case info^.Kind of
-  tkLString: begin // most used type of string
+  tkLString{$ifdef FPC}, tkLStringOld{$endif}: begin
     itemsize := FromVarUInt32(PByte(source));
     {$ifdef HASCODEPAGE}
     FastSetStringCP(data^,source,itemsize,LStringCodePage(info));
@@ -39948,24 +39957,20 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
     inc(source,itemsize);
     result := SizeOf(PtrUInt); // size of tkLString
   end;
-  tkWString {$ifdef HASVARUSTRING}, tkUString{$endif}
-  {$ifdef FPC}, tkLStringOld{$endif}: begin
-    itemsize := FromVarUInt32(PByte(source));
-    case info^.Kind of
-      {$ifdef FPC}
-      tkLStringOld:
-        SetString(PRawByteString(data)^,source,itemsize);
-      {$endif}
-      tkWString:
-        SetString(PWideString(data)^,PWideChar(source),itemsize shr 1);
-      {$ifdef HASVARUSTRING}
-      tkUString:
-        SetString(PUnicodeString(data)^,PWideChar(source),itemsize shr 1);
-      {$endif}
-    end;
+  tkWString: begin
+    itemsize := FromVarUInt32(PByte(source)); // in bytes
+    SetString(PWideString(data)^,PWideChar(source),itemsize shr 1);
     inc(source,itemsize);
-    result := SizeOf(PtrUInt); // size of tkWString+tkUString in record
+    result := SizeOf(PtrUInt); // size of tkWString
   end;
+  {$ifdef HASVARUSTRING}
+  tkUString: begin
+    itemsize := FromVarUInt32(PByte(source));
+    SetString(PUnicodeString(data)^,PWideChar(source),itemsize shr 1);
+    inc(source,itemsize);
+    result := SizeOf(PtrUInt); // size of tkUString
+  end;
+  {$endif}
   tkRecord{$ifdef FPC},tkObject{$endif}:
     source := RecordLoad(data^,source,info,@result);
   tkArray: begin
@@ -43057,9 +43062,10 @@ end;
 function DynArrayItemTypeLen(const aDynArrayTypeName: RawUTF8): integer;
 begin
   result := length(aDynArrayTypeName);
-  if (result>12) and IdemPropName('DynArray',@PByteArray(aDynArrayTypeName)[result-8],8) then
+  if (result>12) and
+     IdemPropNameUSameLen('DynArray',@PByteArray(aDynArrayTypeName)[result-8],8) then
     dec(result,8) else
-  if (result>3) and (NormToUpperAnsi7[aDynArrayTypeName[result]]='S') then
+  if (result>3) and (aDynArrayTypeName[result] in ['s','S']) then
     dec(result) else
     result := 0;
 end;
@@ -47292,7 +47298,7 @@ begin // code below is not very fast, but is correct ;)
 end;
 
 function SortDynArrayUnicodeString(const A,B): integer;
-begin
+begin // works for tkWString and tkUString
   result := StrCompW(PWideChar(A),PWideChar(B));
 end;
 
@@ -47826,7 +47832,7 @@ begin
       inc(result,integer(ElemSize)*n) else begin
     P := fValue^;
     case PTypeKind(ElemType)^ of // inlined the most used kind of items
-    tkLString,tkWString{$ifdef FPC},tkLStringOld{$endif}:
+    tkLString{$ifdef FPC},tkLStringOld{$endif}:
       for i := 1 to n do begin
         if PPtrUInt(P)^=0 then
           inc(result) else
