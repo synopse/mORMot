@@ -26782,21 +26782,27 @@ end;
 {$ifdef USENORMTOUPPER}
 
 function AnsiICompW(u1, u2: PWideChar): PtrInt; {$ifdef HASINLINE}inline;{$endif}
+var C1,C2: PtrInt;
+    table: {$ifdef CPUX86NOTPIC}TNormTableByte absolute NormToUpperAnsi7Byte{$else}PNormTableByte{$endif};
 begin
   if u1<>u2 then
     if u1<>nil then
-      if u2<>nil then
+      if u2<>nil then begin
+        {$ifndef CPUX86NOTPIC}table := @NormToUpperAnsi7Byte;{$endif}
         repeat
-          result := PtrInt(u1^)-PtrInt(u2^);
+          C1 := PtrInt(u1^);
+          C2 := PtrInt(u2^);
+          result := C1-C2;
           if result<>0 then begin
-            if (PtrInt(u1^)>255) or (PtrInt(u2^)>255) then exit;
-            result := NormToUpperAnsi7Byte[PtrInt(u1^)]-NormToUpperAnsi7Byte[PtrInt(u2^)];
+            if (C1>255) or (C2>255) then exit;
+            result := table[C1]-table[C2];
             if result<>0 then exit;
           end;
-          if (u1^=#0) or (u2^=#0) then break;
+          if (C1=0) or (C2=0) then break;
           inc(u1);
           inc(u2);
-        until false else
+        until false;
+    end else
         result := 1 else  // u2=''
       result := -1 else // u1=''
     result := 0;      // u1=u2
