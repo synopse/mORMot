@@ -727,11 +727,15 @@ procedure _endthreadex(exitcode: dword); cdecl; external msvcrt;
 
 // Delphi Win64 will link its own static sqlite3.o (diverse from FPC's)
 
-function _log(x: double): double; cdecl; export;
+function _log(x: double): double; export; // to link LLVM bcc64 compiler
 begin
   result := ln(x);
 end;
-// try ends here
+
+function log(x: double): double; export; // to link old non-LLVM bcc64 compiler
+begin
+  result := ln(x);
+end;
 
 procedure __chkstk;
 begin
@@ -745,6 +749,7 @@ end;
 
 var
   _finf: double = 1.0 / 0.0; // compiles to some double infinity constant
+  _fltused: Int64 = 0; // to link old non-LLVM bcc64 compiler
 
 {$endif CPU64}
 
