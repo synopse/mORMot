@@ -13465,9 +13465,16 @@ function IsRowID(FieldName: PUTF8Char; FieldLen: integer): boolean;
 function IsRowIDShort(const FieldName: shortstring): boolean;
   {$ifdef HASINLINE}inline;{$endif} overload;
 
-/// retrieve the next identifier within the UTF-8 buffer
+/// retrieve the next SQL-like identifier within the UTF-8 buffer
+// - will also trim any space (or line feeds) and trailing ';'
 // - returns true if something was set to Prop
 function GetNextFieldProp(var P: PUTF8Char; var Prop: RawUTF8): boolean;
+
+/// retrieve the next identifier within the UTF-8 buffer on the same line
+// - GetNextFieldProp() will just handle line feeds (and ';') as spaces - which
+// is fine e.g. for SQL, but not for regular config files with name/value pairs
+// - returns true if something was set to Prop
+function GetNextFieldPropSameLine(var P: PUTF8Char; var Prop: ShortString): boolean;
 
 
 { ************ variant-based process, including JSON/BSON document content }
@@ -60685,6 +60692,17 @@ begin
   while ord(P^) in IsIdentifier do inc(P); // go to end of field name
   FastSetString(Prop,B,P-B);
   while P^ in [#1..' ',';'] do inc(P);
+  result := Prop<>'';
+end;
+
+function GetNextFieldPropSameLine(var P: PUTF8Char; var Prop: ShortString): boolean;
+var B: PUTF8Char;
+begin
+  while P^ in [#1..#9,#11,#12,#14..' '] do inc(P);
+  B := P;
+  while ord(P^) in IsIdentifier do inc(P); // go to end of field name
+  SetString(Prop,PAnsiChar(B),P-B);
+  while P^ in [#1..#9,#11,#12,#14..' '] do inc(P);
   result := Prop<>'';
 end;
 
