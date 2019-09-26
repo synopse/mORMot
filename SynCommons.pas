@@ -20829,15 +20829,16 @@ end;
 function GetTypeInfo(aTypeInfo: pointer; aExpectedKind: TTypeKind): PTypeInfo; overload;
 {$ifdef HASINLINE} inline;
 begin
-  if (aTypeInfo<>nil) and (PTypeKind(aTypeInfo)^=aExpectedKind) then begin
-    {$ifdef HASALIGNTYPEDATA}
-    result := FPCTypeInfoOverName(aTypeInfo);
-    {$else}
-    result := aTypeInfo;
-    inc(PByte(result),result^.NameLen);
-    {$endif}
-  end else
-    result := nil;
+  result := aTypeInfo;
+  if result<>nil then
+    if result^.Kind=aExpectedKind then
+      {$ifdef HASALIGNTYPEDATA}
+      result := FPCTypeInfoOverName(result)
+      {$else}
+      inc(PByte(result),result^.NameLen)
+      {$endif}
+    else
+      result := nil;
 end;
 {$else}
 asm

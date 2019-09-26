@@ -1984,6 +1984,9 @@ type
   end;
   TDataItems = array of TDataItem;
 
+  TRawUTF8DynArray1 = type TRawUTF8DynArray;
+  TRawUTF8DynArray2 = array of RawUTF8;
+
 function FVSort(const A,B): integer;
 begin
   result := SysUtils.StrComp(PChar(pointer(TFV(A).Detailed)),PChar(pointer(TFV(B).Detailed)));
@@ -2083,6 +2086,14 @@ begin
   Check(h=$887ED692,'TypeInfoToHash(TAmountCollection)');
   h := TypeInfoToHash(TypeInfo(TAmountICollection));
   Check(h=$4051BAC,'TypeInfoToHash(TAmountICollection)');
+  Check(not IsRawUTF8DynArray(nil),'IsRawUTF8DynArray0');
+  Check(IsRawUTF8DynArray(TypeInfo(TRawUTF8DynArray)),'IsRawUTF8DynArray1');
+  Check(IsRawUTF8DynArray(TypeInfo(TRawUTF8DynArray1)),'IsRawUTF8DynArray11');
+  Check(IsRawUTF8DynArray(TypeInfo(TRawUTF8DynArray2)),'IsRawUTF8DynArray12');
+  Check(not IsRawUTF8DynArray(TypeInfo(TAmount)),'IsRawUTF8DynArray2');
+  Check(not IsRawUTF8DynArray(TypeInfo(TIntegerDynArray)),'IsRawUTF8DynArray2');
+  Check(not IsRawUTF8DynArray(TypeInfo(TPointerDynArray)),'IsRawUTF8DynArray3');
+  Check(not IsRawUTF8DynArray(TypeInfo(TAmountCollection)),'IsRawUTF8DynArray4');
   W := TTextWriter.CreateOwnedStream;
   // validate TBooleanDynArray
   dyn1.Init(TypeInfo(TBooleanDynArray),AB);

@@ -93,7 +93,7 @@ type
 {$ifdef FPC_NEWRTTI}
   PFPCRecInitData = TypInfo.PRecInitData;
 
-function GetFPCRecInitData(TypeData: Pointer): PFPCRecInitData;
+function GetFPCRecInitData(AlignedTypeData: Pointer): PFPCRecInitData;
 {$endif FPC_NEWRTTI}
 
 procedure FPCDynArrayClear(var a: Pointer; TypeInfo: Pointer);
@@ -151,14 +151,14 @@ end;
 {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
 {$ifdef FPC_NEWRTTI}
-function GetFPCRecInitData(TypeData: Pointer): PFPCRecInitData;
+function GetFPCRecInitData(AlignedTypeData: Pointer): PFPCRecInitData;
 begin
   {$ifdef FPC_PROVIDE_ATTR_TABLE}
-  dec(PFPCAttributeTable(TypeData)); // un-adjust AlignTypeData() above
+  dec(PFPCAttributeTable(AlignedTypeData)); // un-adjust AlignTypeData() above
   {$endif FPC_PROVIDE_ATTR_TABLE}
-  if TypInfo.PTypeData(TypeData)^.RecInitInfo=nil then
-    result := TypeData else // no RecInitData, but regular list of fields
-    result := TypInfo.PTypeData(TypeData)^.RecInitData;
+  if TypInfo.PTypeData(AlignedTypeData)^.RecInitInfo=nil then
+    result := AlignedTypeData else // no RecInitData, but regular list of fields
+    result := TypInfo.PTypeData(AlignedTypeData)^.RecInitData;
 end;
 {$endif FPC_NEWRTTI}
 
