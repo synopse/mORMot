@@ -4341,7 +4341,7 @@ function ClassFieldInstance(Instance: TObject; const PropName: shortstring;
 /// retrieve a Field property RTTI information from a Property Name
 // - this special version also search into parent properties (default is only current)
 function ClassFieldPropWithParentsFromUTF8(aClassType: TClass; PropName: PUTF8Char;
-  PropNameLen: integer): PPropInfo;
+  PropNameLen: integer; aCaseSensitive: boolean=false): PPropInfo;
 
 /// retrieve a Field property RTTI information searching for an exact Property class type
 // - this special version also search into parent properties
@@ -21520,15 +21520,23 @@ begin
 end;
 
 function ClassFieldPropWithParentsFromUTF8(aClassType: TClass; PropName: PUTF8Char;
-  PropNameLen: integer): PPropInfo;
-var i: integer;
+  PropNameLen: integer; aCaseSensitive: boolean): PPropInfo;
+var n, i: integer;
 begin
   if PropNameLen<>0 then
     while aClassType<>nil do begin
-      for i := 1 to InternalClassPropInfo(aClassType,result) do
-        if IdemPropName(result^.Name,PropName,PropNameLen) then
-          exit else
-          result := result^.Next;
+      n := InternalClassPropInfo(aClassType,result);
+      if n<>0 then
+        if aCaseSensitive then
+          for i := 1 to n do
+            if (result^.Name[0]=AnsiChar(PropNameLen)) and
+               CompareMemSmall(@result^.Name[1],PropName,PropNameLen) then
+              exit else
+              result := result^.Next else
+        for i := 1 to n do
+          if IdemPropName(result^.Name,PropName,PropNameLen) then
+            exit else
+            result := result^.Next;
       aClassType := GetClassParent(aClassType);
     end;
   result := nil;
@@ -31361,8 +31369,8 @@ begin
     result := CP_SQLRAWBLOB else
   if @self=TypeInfo(RawByteString) then
     result := CP_RAWBYTESTRING else
-  if (@self=TypeInfo(AnsiString)) or IdemPropName(Name,'TCaption') then
-    result := 0 else
+  if @self=TypeInfo(AnsiString) then
+    result := CP_ACP else
   {$endif HASCODEPAGE}
     result := CP_UTF8; // default is UTF-8
 end;
