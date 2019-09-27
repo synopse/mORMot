@@ -1640,7 +1640,6 @@ function StringToWinAnsi(const Text: string): WinAnsiString;
 // type-casted to Int64() (otherwise the integer mapped value will be converted)
 // - any supplied TObject instance will be written as their class name
 function FormatUTF8(const Format: RawUTF8; const Args: array of const): RawUTF8; overload;
-  {$ifdef FPC}inline;{$endif}
 
 /// fast Format() function replacement, optimized for RawUTF8
 // - overloaded function, which avoid a temporary RawUTF8 instance on stack
@@ -1703,7 +1702,6 @@ function FormatUTF8(const Format: RawUTF8; const Args, Params: array of const;
 // will store ['dFirstInt','s','DOneInt64'] into ident
 function ScanUTF8(const text, fmt: RawUTF8; const values: array of pointer;
   ident: PRawUTF8DynArray=nil): integer; overload;
-  {$ifdef FPC}inline;{$endif}
 
 /// read text from P/PLen and store it into values[] according to fmt specifiers
 function ScanUTF8(P: PUTF8Char; PLen: integer; const fmt: RawUTF8;
@@ -4813,7 +4811,7 @@ type
   /// internal set to specify some standard Delphi arrays
   TDynArrayKinds = set of TDynArrayKind;
 
-  {$ifdef FPC}
+{$ifdef FPC}
   /// map the Delphi/FPC dynamic array header (stored before each instance)
   // - define globally for proper inlining with FPC
   // - match tdynarray type definition in dynarr.inc
@@ -4827,7 +4825,10 @@ type
     property length: sizeint read GetLength write SetLength;
   end;
   PDynArrayRec = ^TDynArrayRec;
-  {$endif FPC}
+
+function _LStrLen(const s: RawByteString): SizeInt; inline;
+function _LStrLenP(s: pointer): SizeInt; inline;
+{$endif FPC}
 
 function ToText(k: TDynArrayKind): PShortString; overload;
 
@@ -8001,11 +8002,9 @@ type
     procedure EchoReset;
 
     /// append one ASCII char to the buffer
-    procedure Add(c: AnsiChar); overload;
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure Add(c: AnsiChar); overload; {$ifdef HASINLINE}inline;{$endif}
     /// append two chars to the buffer
-    procedure Add(c1,c2: AnsiChar); overload;
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure Add(c1,c2: AnsiChar); overload; {$ifdef HASINLINE}inline;{$endif}
     {$ifndef CPU64} // already implemented by Add(Value: PtrInt) method
     /// append a 64-bit signed Integer Value as text
     procedure Add(Value: Int64); overload;
@@ -8018,8 +8017,7 @@ type
     /// append a Currency from its Int64 in-memory representation
     procedure AddCurr64(const Value: Int64); overload;
     /// append a Currency from its Int64 in-memory representation
-    procedure AddCurr64(const Value: currency); overload;
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure AddCurr64(const Value: currency); overload; {$ifdef HASINLINE}inline;{$endif}
     /// append a TTimeLog value, expanded as Iso-8601 encoded text
     procedure AddTimeLog(Value: PInt64);
     /// append a TUnixTime value, expanded as Iso-8601 encoded text
@@ -8048,8 +8046,7 @@ type
     /// append an Unsigned 64-bit Integer Value as a String
     procedure AddQ(Value: QWord);
     /// append an Unsigned 64-bit Integer Value as a quoted hexadecimal String
-    procedure AddQHex(Value: Qword);
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure AddQHex(Value: Qword); {$ifdef HASINLINE}inline;{$endif}
     /// append a GUID value, encoded as text without any {}
     // - will store e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
     procedure Add({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID); overload;
@@ -8057,14 +8054,12 @@ type
     // - write "Infinity", "-Infinity", and "NaN" for corresponding IEEE values
     // - noexp=true will call ExtendedToStringNoExp() to avoid any scientific
     // notation in the resulting text
-    procedure AddDouble(Value: double; noexp: boolean=false);
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure AddDouble(Value: double; noexp: boolean=false); {$ifdef HASINLINE}inline;{$endif}
     /// append a floating-point Value as a String
     // - write "Infinity", "-Infinity", and "NaN" for corresponding IEEE values
     // - noexp=true will call ExtendedToStringNoExp() to avoid any scientific
     // notation in the resulting text
-    procedure AddSingle(Value: single; noexp: boolean=false);
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure AddSingle(Value: single; noexp: boolean=false); {$ifdef HASINLINE}inline;{$endif}
     /// append a floating-point Value as a String
     // - write "Infinity", "-Infinity", and "NaN" for corresponding IEEE values
     // - noexp=true will call ExtendedToStringNoExp() to avoid any scientific
@@ -8633,14 +8628,11 @@ type
     // - see TextLength for the total number of bytes, on both disk and memory
     property WrittenBytes: PtrUInt read fTotalFileSize;
     /// the last char appended is canceled
-    procedure CancelLastChar; overload;
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure CancelLastChar; overload; {$ifdef HASINLINE}inline;{$endif}
     /// the last char appended is canceled, if match the supplied one
-    procedure CancelLastChar(aCharToCancel: AnsiChar); overload;
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure CancelLastChar(aCharToCancel: AnsiChar); overload; {$ifdef HASINLINE}inline;{$endif}
     /// the last char appended is canceled if it was a ','
-    procedure CancelLastComma;
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure CancelLastComma; {$ifdef HASINLINE}inline;{$endif}
     /// rewind the Stream to the position when Create() was called
     // - note that this does not clear the Stream content itself, just
     // move back its writing position to its initial place
@@ -13813,8 +13805,7 @@ procedure SetVariantByValue(const Source: Variant; var Dest: Variant);
 // - so can be used for TVarData or Variant
 // - it will set V.VType := varEmpty, so Value will be Unassigned
 // - it won't call VarClear(variant(Value)): it should have been cleaned before
-procedure ZeroFill(Value: PVarData);
-  {$ifdef HASINLINE}inline;{$endif}
+procedure ZeroFill(Value: PVarData); {$ifdef HASINLINE}inline;{$endif}
 
 /// fill all bytes of the value's memory buffer with zeros, i.e. 'toto' -> #0#0#0#0
 // - may be used to cleanup stack-allocated content
@@ -13825,8 +13816,7 @@ procedure FillZero(var value: variant); overload;
 // - how custom type variants are created can be defined via CustomVariantOptions
 // - is just a wrapper around VariantLoad()
 procedure FromVarVariant(var Source: PByte; var Value: variant;
-  CustomVariantOptions: PDocVariantOptions=nil);
-  {$ifdef HASINLINE}inline;{$endif}
+  CustomVariantOptions: PDocVariantOptions=nil); {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the number of bytes needed to save a Variant content
 // using the VariantSave() function
@@ -51260,6 +51250,23 @@ end;
 
 { TTextWriter }
 
+procedure TTextWriter.Add(c: AnsiChar);
+begin
+  if B>=BEnd then
+    FlushToStream;
+  B[1] := c;
+  inc(B);
+end;
+
+procedure TTextWriter.Add(c1, c2: AnsiChar);
+begin
+  if BEnd-B<=1 then
+    FlushToStream;
+  B[1] := c1;
+  B[2] := c2;
+  inc(B,2);
+end;
+
 procedure TTextWriter.CancelLastChar;
 begin
   if B>=fTempBuf then // Add() methods append at B+1
@@ -51546,23 +51553,6 @@ begin
     {$ifdef FPC}Move{$else}MoveFast{$endif}(P^,B^,L);
     inc(B,L-1);
   end;
-end;
-
-procedure TTextWriter.Add(c: AnsiChar);
-begin
-  if B>=BEnd then
-    FlushToStream;
-  B[1] := c;
-  inc(B);
-end;
-
-procedure TTextWriter.Add(c1, c2: AnsiChar);
-begin
-  if BEnd-B<=1 then
-    FlushToStream;
-  B[1] := c1;
-  B[2] := c2;
-  inc(B,2);
 end;
 
 procedure TTextWriter.Add({$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} guid: TGUID);

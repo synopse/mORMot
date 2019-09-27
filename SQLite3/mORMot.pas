@@ -2841,6 +2841,7 @@ type
   end;
 
   /// how a RTTI property definition access its value
+  // - as returned by TPropInfo.Getter/Setter methods
   TPropInfoCall = (
     picNone, picField, picMethod, picIndexed);
 
@@ -2908,14 +2909,17 @@ type
     {$endif NOVARIANTS}
   public
     /// the type definition of this property
+    // - call TPropInfo.TypeInfo for cross-compiler access to this information
     PropType: PPTypeInfo;
     /// contains the offset of a field, or the getter method set by 'read' declaration
     // - if this field is 0 (no 'read' was specified), raw access methods will
     // use SetProc to get the field memory address to read from
+    // - call TPropInfo.Getter for cross-compiler access to this information
     GetProc: PtrUInt;
     /// contains the offset of a field, or the setter method set by 'write' declaration
     // - if this field is 0 (no 'write' was specified), raw access methods will
     // use GetProc to get the field memory address to save into
+    // - call TPropInfo.Setter for cross-compiler access to this information
     SetProc: PtrUInt;
     /// contains the 'stored' boolean value/method (used in TPersistent saving)
     // - either integer(True) - the default, integer(False), reference to a Boolean
@@ -2923,6 +2927,7 @@ type
     // - if a property is marked as "stored AS_UNIQUE" (i.e. "stored false"),
     // it is created as UNIQUE in the SQL database and its bit is set in
     // Model.fIsUnique[]
+    // - call TPropInfo.IsStored for cross-compiler access to this information
     StoredProc: PtrUInt;
     /// contains the index value of an indexed class data property
     // - outside SQLite3, this can be used to define a VARCHAR() length value
@@ -2934,7 +2939,7 @@ type
     Index: Integer;
     /// contains the default value (NO_DEFAULT=$80000000 indicates none set)
     // when an ordinal or set property is saved as TPersistent
-    // - see DefaultOr0/DefaultOrVoid for easy use
+    // - see TPropInfo.DefaultOr0/DefaultOrVoid for easy use
     Default: Longint;
     /// index of the property in the current inherited class definition
     // - first name index at a given class level is 0
@@ -2946,9 +2951,10 @@ type
     //       2..3 SetProc     e.g. (PropProcs shr 2) and 3=ptField
     //       4..5 StoredProc
     //       6 : true, constant index property
+    // - rather call TPropInfo.Getter/Setter for cross-compiler access
     PropProcs: Byte;
     {$ifdef FPC_PROVIDE_ATTR_TABLE}
-    /// property attributes, introduced since SVN 42356-42411 (2019/07)
+    /// property attributes, introduced since FPC SVN 42356-42411 (2019/07)
     AttributeTable: PFPCAttributeTable;
     {$endif FPC_PROVIDE_ATTR_TABLE}
     {$endif FPC}
@@ -2957,13 +2963,11 @@ type
 
     /// the type information of this property
     // - will de-reference the PropType pointer on Delphi and newer FPC compilers
-    function TypeInfo: PTypeInfo;
-      {$ifdef HASINLINENOTX86}inline;{$endif}
+    function TypeInfo: PTypeInfo; {$ifdef HASINLINENOTX86}inline;{$endif}
     /// get the next property information
     // - no range check: use ClassProp()^.PropCount to determine the properties count
     // - get the first PPropInfo with ClassProp()^.PropList
-    function Next: PPropInfo;
-      {$ifdef FPC}inline;{$else}{$ifdef HASINLINENOTX86}inline;{$endif} {$endif}
+    function Next: PPropInfo; {$ifdef HASINLINENOTX86}inline;{$endif}
     /// return FALSE (AS_UNIQUE) if was marked as "stored AS_UNIQUE"
     //  (i.e. "stored false"), or TRUE by default
     // - if Instance=nil, will work only at RTTI level, not with field or method
@@ -3087,15 +3091,12 @@ type
     function WriteIsDefined: boolean;
       {$ifdef HASINLINE}inline;{$endif}
     /// returns the low-level field read address, if GetterIsField is TRUE
-    function GetterAddr(Instance: pointer): pointer;
-      {$ifdef HASINLINENOTX86}inline;{$endif}
+    function GetterAddr(Instance: pointer): pointer; {$ifdef HASINLINENOTX86}inline;{$endif}
     /// returns the low-level field write address, if SetterIsField is TRUE
-    function SetterAddr(Instance: pointer): pointer;
-      {$ifdef HASINLINE}inline;{$endif}
+    function SetterAddr(Instance: pointer): pointer; {$ifdef HASINLINE}inline;{$endif}
     /// low-level getter of the field value memory pointer
     // - return NIL if both getter and setter are methods
-    function GetFieldAddr(Instance: TObject): pointer;
-      {$ifdef HASINLINE}inline;{$endif}
+    function GetFieldAddr(Instance: TObject): pointer; {$ifdef HASINLINE}inline;{$endif}
     /// low-level setter of the property value as its default
     // - this method will check the property type, e.g. setting '' for strings,
     // and 0 for numbers, or running FreeAndNil() on any nested object (unless
@@ -30452,7 +30453,7 @@ begin
 end; // no SetShortStrProp() by now
 
 procedure TPropInfo.GetLongStrProp(Instance: TObject; var Value: RawByteString);
-  procedure SubProc(pic: TPropInfoCall; const call: TMethod); // avoid try..finally
+  procedure SubProc(pic: TPropInfoCall; const call: TMethod);
   type
     TGetProc = function: RawByteString of object;
     TGetIndexed = function(Index: Integer): RawByteString of object;
@@ -30469,7 +30470,7 @@ begin
   pic := Getter(Instance,@call);
   if pic=picField then
     value := PRawByteString(call.Data)^ else
-    SubProc(pic,call);
+    SubProc(pic,call); // avoid try..finally
 end;
 
 procedure TPropInfo.SetLongStrProp(Instance: TObject; const Value: RawByteString);
@@ -46924,7 +46925,7 @@ begin
     if i<0 then
       exit;
     // get result blob directly from RTTI property description
-    BlobField.GetLongStrProp(fValue.List[i],RawByteString(BlobData));
+    BlobField.GetLongStrProp(TSQLRecord(fValue.List[i]),RawByteString(BlobData));
     result := true;
   finally
     StorageUnLock;
