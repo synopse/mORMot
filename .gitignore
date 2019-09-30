@@ -85,3 +85,4 @@ _FOSSIL_
 
 backup/
 .idea/
+sqlite3.obj
