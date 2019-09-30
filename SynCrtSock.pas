@@ -1157,6 +1157,12 @@ type
   // contain the proper 'Content-type: ....'
   TOnHttpServerRequest = function(Ctxt: THttpServerRequest): cardinal of object;
 
+  /// event handler used by THttpServerGeneric.OnAfterResponse property
+  // - Ctxt defines both input and output parameters
+  // - Code defines the HTTP response code the (200 if OK, e.g.)
+  TOnHttpServerAfterResponse = procedure(Ctxt: THttpServerRequest;
+    const Code: cardinal) of object;
+
   /// event handler used by THttpServerGeneric.OnBeforeBody property
   // - if defined, is called just before the body is retrieved from the client
   // - supplied parameters reflect the current input state
@@ -1193,7 +1199,7 @@ type
     fOnBeforeBody: TOnHttpServerBeforeBody;
     fOnBeforeRequest: TOnHttpServerRequest;
     fOnAfterRequest: TOnHttpServerRequest;
-    fOnAfterResponse: TOnHttpServerRequest;
+    fOnAfterResponse: TOnHttpServerAfterResponse;
     fMaximumAllowedContentLength: cardinal;
     /// list of all registered compression algorithms
     fCompress: THttpSocketCompressRecDynArray;
@@ -1210,7 +1216,7 @@ type
     procedure SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody); virtual;
     procedure SetOnBeforeRequest(const aEvent: TOnHttpServerRequest); virtual;
     procedure SetOnAfterRequest(const aEvent: TOnHttpServerRequest); virtual;
-    procedure SetOnAfterResponse(const aEvent: TOnHttpServerRequest); virtual;
+    procedure SetOnAfterResponse(const aEvent: TOnHttpServerAfterResponse); virtual;
     procedure SetMaximumAllowedContentLength(aMax: cardinal); virtual;
     procedure SetRemoteIPHeader(const aHeader: SockString); virtual;
     procedure SetRemoteConnIDHeader(const aHeader: SockString); virtual;
@@ -1218,7 +1224,8 @@ type
     procedure SetHTTPQueueLength(aValue: Cardinal); virtual; abstract;
     function DoBeforeRequest(Ctxt: THttpServerRequest): cardinal;
     function DoAfterRequest(Ctxt: THttpServerRequest): cardinal;
-    procedure DoAfterResponse(Ctxt: THttpServerRequest); virtual;
+    procedure DoAfterResponse(Ctxt: THttpServerRequest;
+      const Code: cardinal); virtual;
     function NextConnectionID: integer;
   public
     /// initialize the server instance, in non suspended state
@@ -1287,6 +1294,11 @@ type
     // - warning: this handler must be thread-safe (can be called by several
     // threads simultaneously)
     property OnAfterRequest: TOnHttpServerRequest  read fOnAfterRequest write SetOnAfterRequest;
+    /// event handler called after response is sent back to client
+    // - main purpose is to apply post-response analysis, logging, etc.
+    // - warning: this handler must be thread-safe (can be called by several
+    // threads simultaneously)
+    property OnAfterResponse: TOnHttpServerAfterResponse read fOnAfterResponse write SetOnAfterResponse;
     /// event handler called after each working Thread is just initiated
     // - called in the thread context at first place in THttpServerGeneric.Execute
     property OnHttpThreadStart: TNotifyThreadEvent
@@ -1457,7 +1469,7 @@ type
     procedure SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody); override;
     procedure SetOnBeforeRequest(const aEvent: TOnHttpServerRequest); override;
     procedure SetOnAfterRequest(const aEvent: TOnHttpServerRequest); override;
-    procedure SetOnAfterResponse(const aEvent: TOnHttpServerRequest); override;
+    procedure SetOnAfterResponse(const aEvent: TOnHttpServerAfterResponse); override;
     procedure SetMaximumAllowedContentLength(aMax: cardinal); override;
     procedure SetRemoteIPHeader(const aHeader: SockString); override;
     procedure SetRemoteConnIDHeader(const aHeader: SockString); override;
@@ -1812,7 +1824,8 @@ type
     procedure SetOnWSThreadStart(const Value: TNotifyThreadEvent);
   protected
     function UpgradeToWebSocket(Ctxt: THttpServerRequest): cardinal;
-    procedure DoAfterResponse(Ctxt: THttpServerRequest); override;
+    procedure DoAfterResponse(Ctxt: THttpServerRequest;
+      const Code: cardinal); override;
     function GetSendResponseFlags(Ctxt: THttpServerRequest): Integer; override;
     constructor CreateClone(From: THttpApiServer); override;
     procedure DestroyMainThread; override;
@@ -5882,7 +5895,8 @@ begin
   fOnAfterRequest := aEvent;
 end;
 
-procedure THttpServerGeneric.SetOnAfterResponse(const aEvent: TOnHttpServerRequest);
+procedure THttpServerGeneric.SetOnAfterResponse(
+  const aEvent: TOnHttpServerAfterResponse);
 begin
   fOnAfterResponse := aEvent;
 end;
@@ -5901,10 +5915,11 @@ begin
     result := 0;
 end;
 
-procedure THttpServerGeneric.DoAfterResponse(Ctxt: THttpServerRequest);
+procedure THttpServerGeneric.DoAfterResponse(Ctxt: THttpServerRequest;
+  const Code: cardinal);
 begin
   if Assigned(fOnAfterResponse) then
-    fOnAfterResponse(Ctxt);
+    fOnAfterResponse(Ctxt, Code);
 end;
 
 procedure THttpServerGeneric.SetMaximumAllowedContentLength(aMax: cardinal);
@@ -6256,7 +6271,7 @@ begin
       if afterCode>0 then
         Code := afterCode;
       if respsent or SendResponse then
-        DoAfterResponse(ctxt);
+        DoAfterResponse(ctxt, Code);
       {$ifdef SYNCRTDEBUGLOW}
       TSynLog.Add.Log(sllCustom1, 'DoAfterResponse respsent=% ErrorMsg=%', [respsent,ErrorMsg], self);
       {$endif}
@@ -8938,7 +8953,7 @@ begin
           if not RespSent then
             if not SendResponse then
               continue;
-          DoAfterResponse(Context);
+          DoAfterResponse(Context, OutStatusCode);
         except
           on E: Exception do
             // handle any exception raised during process: show must go on!
@@ -9232,7 +9247,7 @@ begin
       THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetOnAfterRequest(aEvent);
 end;
 
-procedure THttpApiServer.SetOnAfterResponse(const aEvent: TOnHttpServerRequest);
+procedure THttpApiServer.SetOnAfterResponse(const aEvent: TOnHttpServerAfterResponse);
 var i: integer;
 begin
   inherited SetOnAfterResponse(aEvent);
@@ -10110,12 +10125,13 @@ begin
   inherited;
 end;
 
-procedure THttpApiWebSocketServer.DoAfterResponse(Ctxt: THttpServerRequest);
+procedure THttpApiWebSocketServer.DoAfterResponse(Ctxt: THttpServerRequest;
+  const Code: cardinal);
 begin
   if Assigned(fLastConnection) then
     PostQueuedCompletionStatus(fThreadPoolServer.FRequestQueue, 0, 0,
       @fLastConnection.fOverlapped);
-  inherited DoAfterResponse(Ctxt);
+  inherited DoAfterResponse(Ctxt, Code);
 end;
 
 function THttpApiWebSocketServer.GetProtocol(index: integer): THttpApiWebSocketServerProtocol;
