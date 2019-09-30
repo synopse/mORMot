@@ -9235,7 +9235,7 @@ end;
 procedure THttpApiServer.SetOnAfterResponse(const aEvent: TOnHttpServerRequest);
 var i: integer;
 begin
-  inherited SetOnAfterRequest(aEvent);
+  inherited SetOnAfterResponse(aEvent);
   if fClones<>nil then // event is shared by all clones
     for i := 0 to fClones.Count-1 do
       THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetOnAfterResponse(aEvent);
