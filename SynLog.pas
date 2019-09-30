@@ -4385,9 +4385,9 @@ begin
       AddNoJSONEscapeString(InstanceFileName);
     end;
     {$ifdef MSWINDOWS}
-    NewLine;
-    AddShort('Environment variables=');
     if not fFamily.fNoEnvironmentVariable then begin
+      NewLine;
+      AddShort('Environment variables=');
       Env := GetEnvironmentStringsW;
       P := pointer(Env);
       while P^<>#0 do begin
