@@ -2517,18 +2517,18 @@ type
 {$endif FPC}
 
 type
+  {$ifndef FPC}
+  PMethod = ^TMethod; // not defined on older Delphi revisions
+  {$endif FPC}
   PTypeInfo = ^TTypeInfo;
-  {$ifdef HASDIRECTTYPEINFO}
+  {$ifdef HASDIRECTTYPEINFO} // you should use inlined Deref() function below
   PPTypeInfo = PTypeInfo;
   {$else}
   PPTypeInfo = ^PTypeInfo;
-  {$endif}
+  {$endif HASDIRECTTYPEINFO}
   PTypeInfoDynArray = array of PTypeInfo;
   PPropInfo = ^TPropInfo;
   PMethodInfo = ^TMethodInfo;
-  {$ifndef FPC_OR_UNICODE} // not defined on older Delphi versions
-  PMethod = ^TMethod;
-  {$endif}
   TClassArray = array[0..MaxInt div SizeOf(TClass)-1] of TClass;
   PClassArray = ^TClassArray;
 

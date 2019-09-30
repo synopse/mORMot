@@ -6610,7 +6610,7 @@ procedure GetSetNameShort(aTypeInfo: pointer; const value; out result: ShortStri
 /// low-level helper to retrive the base enumeration RTTI of a given set
 function GetSetBaseEnum(aTypeInfo: pointer): pointer;
 
-/// fast append some UTF-8 text into a shortstring
+/// fast append some UTF-8 text into a shortstring, with an ending ','
 procedure AppendShortComma(text: PAnsiChar; len: integer; var result: shortstring;
   trimlowercase: boolean);
 
