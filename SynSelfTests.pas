@@ -4540,6 +4540,8 @@ var s,t: RawUTF8;
     E,F: TDateTime;
     I,J: TTimeLogBits;
     st, s2: TSynSystemTime;
+    P: PUTF8Char;
+    d1, d2: TSynDate;
 begin
   s := DateTimeToIso8601(D,Expanded);
   if Expanded then
@@ -4559,6 +4561,42 @@ begin
   Check(st.IsEqual(s2)); // ensure conversion matches the RTL's
   t := st.ToText(Expanded);
   Check(Copy(t,1,length(s))=s);
+  d1.Clear;
+  check(d1.IsZero);
+  d2.SetMax;
+  check(not d2.IsZero);
+  check(not d1.IsEqual(d2));
+  check(d1.Compare(d2)<0);
+  check(d2.Compare(d1)>0);
+  t := d2.ToText(false);
+  check(t='99991231');
+  check(d2.ToText(true)='9999-12-31');
+  d2.Clear;
+  check(d1.IsEqual(d2));
+  check(d1.Compare(d2)=0);
+  check(d2.Compare(d1)=0);
+  P := pointer(s);
+  check(d1.ParseFromText(P));
+  check(P<>nil);
+  check(not d1.IsZero);
+  check(st.IsDateEqual(d1));
+  t := d1.ToText(Expanded);
+  check(copy(s,1,length(t))=t);
+  d2.Clear;
+  check(d2.IsZero);
+  check(not d1.IsEqual(d2));
+  check(d1.Compare(d2)>0);
+  check(d2.Compare(d1)<0);
+  check(d2.ToText(Expanded)='');
+  d2.SetMax;
+  check(not d2.IsZero);
+  check(not d1.IsEqual(d2));
+  check(d1.Compare(d2)<0);
+  check(d2.Compare(d1)>0);
+  d2 := d1;
+  check(d1.IsEqual(d2));
+  check(d1.Compare(d2)=0);
+  check(d2.Compare(d1)=0);
   E := Iso8601ToDateTime(s);
   Check(Abs(D-E)<(1/SecsPerDay)); // we allow 999 ms error
   E := Iso8601ToDateTime(s+'Z');

@@ -438,6 +438,14 @@ type
   TShortStringDynArray = array of ShortString;
   TDateTimeDynArray = array of TDateTime;
   PDateTimeDynArray = ^TDateTimeDynArray;
+  {$ifndef FPC_OR_UNICODE}
+  TDate = type TDateTime;
+  TTime = type TDateTime;
+  {$endif FPC_OR_UNICODE}
+  TDateDynArray = array of TDate;
+  PDateDynArray = ^TDateDynArray;
+  TTimeDynArray = array of TTime;
+  PTimeDynArray = ^TTimeDynArray;
   TWideStringDynArray = array of WideString;
   PWideStringDynArray = ^TWideStringDynArray;
   TSynUnicodeDynArray = array of SynUnicode;
@@ -3096,6 +3104,10 @@ function GotoEndOfJSONString(P: PUTF8Char): PUTF8Char;
 
 /// get the next character not in [#1..' ']
 function GotoNextNotSpace(P: PUTF8Char): PUTF8Char;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// get the next character not in [#9,' ']
+function GotoNextNotSpaceSameLine(P: PUTF8Char): PUTF8Char;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// get the next character in [#1..' ']
@@ -12077,6 +12089,42 @@ type
   TDateTimeMSDynArray = array of TDateTimeMS;
   PDateTimeMSDynArray = ^TDateTimeMSDynArray;
 
+  /// a simple way to store a date as Year/Month/Day
+  // - with no needed computation as with TDate/TUnixTime values
+  // - consider using TSynSystemTime if you need to handle both Date and Time
+  // - match the first 4 fields of TSynSystemTime
+  // - DayOfWeek field is not handled by its methods, but could be used to store
+  // some custom information - it will also make this record 64-bit long
+  {$ifdef FPC_OR_UNICODE}TSynDate = record{$else}TSynDate = object{$endif}
+    Year, Month, DayOfWeek, Day: word;
+    /// set all fields to 0
+    procedure Clear; {$ifdef HASINLINE}inline;{$endif}
+    /// set internal date to 9999-12-31
+    procedure SetMax; {$ifdef HASINLINE}inline;{$endif}
+    /// returns true if all fields are zero
+    function IsZero: boolean; {$ifdef HASINLINE}inline;{$endif}
+    /// try to parse a YYYY-MM-DD or YYYYMMDD ISO-8601 date from the supplied buffer
+    // - on success, move P^ just after the date, and return TRUE
+    function ParseFromText(var P: PUTF8Char): boolean; {$ifdef HASINLINE}inline;{$endif}
+    /// fill fields with the current UTC/local date, using a 8-16ms thread-safe cache
+    procedure FromNow(localtime: boolean=false);
+    /// returns true if all fields do match - ignoring DayOfWeek field value
+    function IsEqual({$ifdef FPC}constref{$else}const{$endif} another{$ifndef DELPHI5OROLDER}: TSynDate{$endif}): boolean;
+    /// compare the stored value to a supplied value
+    // - returns <0 if the stored value is smaller than the supplied value,
+    // 0 if both are equals, and >0 if the stored value is bigger
+    // - DayOfWeek field value is not compared
+    function Compare({$ifdef FPC}constref{$else}const{$endif} another{$ifndef DELPHI5OROLDER}: TSynDate{$endif}): integer;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// convert the stored date into a Delphi TDate floating-point value
+    function ToDate: TDate; {$ifdef HASINLINE}inline;{$endif}
+    /// encode the stored date as ISO-8601 text
+    // - returns '' if the stored date is 0 (i.e. after Clear)
+    function ToText(Expanded: boolean=true): RawUTF8;
+  end;
+  /// store several dates as Year/Month/Day
+  TSynDateDynArray = array of TSynDate;
+
   /// a cross-platform and cross-compiler TSystemTime structure
   // - FPC's TSystemTime in datih.inc does NOT match Windows TSystemTime fields!
   // - also used to store a Date/Time in TSynTimeZone internal structures, or
@@ -12091,6 +12139,8 @@ type
     function IsZero: boolean; {$ifdef HASINLINE}inline;{$endif}
     /// returns true if all fields do match
     function IsEqual(const another{$ifndef DELPHI5OROLDER}: TSynSystemTime{$endif}): boolean;
+    /// returns true if date fields do match (ignoring DayOfWeek)
+    function IsDateEqual(const date{$ifndef DELPHI5OROLDER}: TSynDate{$endif}): boolean;
     /// used by TSynTimeZone
     function EncodeForTimeChange(const aYear: word): TDateTime;
     /// fill fields with the current UTC time, using a 8-16ms thread-safe cache
@@ -12105,7 +12155,7 @@ type
     /// fill Hour/Minute/Second/Millisecond fields from the given value
     // - faster than the RTL DecodeTime() function
     procedure FromTime(const dt: TDateTime);
-    /// encode the stored date/time as text
+    /// encode the stored date/time as ISO-8601 text
     function ToText(Expanded: boolean=true; FirstTimeChar: AnsiChar='T'; const TZD: RawUTF8=''): RawUTF8;
     /// append the stored date and time, in a log-friendly format
     // - e.g. append '20110325 19241502' - with no trailing space nor tab
@@ -12330,10 +12380,15 @@ function Iso8601ToTimePUTF8Char(P: PUTF8Char; L: integer=0): TDateTime; overload
 procedure Iso8601ToTimePUTF8CharVar(P: PUTF8Char; L: integer; var result: TDateTime);
 
 /// Time conversion from ISO-8601 (with no Date part)
-// - regnozie 'hhmmss' and 'hh:mm:ss' format into H,M,S variables
+// - recognize 'hhmmss' and 'hh:mm:ss' format into H,M,S variables
 // - will also recognize '.sss' milliseconds suffix, if any, into MS
 // - if L is left to default 0, it will be computed from StrLen(P)
 function Iso8601ToTimePUTF8Char(P: PUTF8Char; L: integer; var H,M,S,MS: cardinal): boolean; overload;
+
+/// Date conversion from ISO-8601 (with no Time part)
+// - recognize 'YYYY-MM-DD' and 'YYYYMMDD' format into Y,M,D variables
+// - if L is left to default 0, it will be computed from StrLen(P)
+function Iso8601ToDatePUTF8Char(P: PUTF8Char; L: integer; var Y,M,D: cardinal): boolean;
 
 /// Interval date/time conversion from simple text
 // - expected format does not match ISO-8601 Time intervals format, but Oracle
@@ -16949,6 +17004,7 @@ begin
     PPtrInt(p)^ := 0 else
     VarClearProc(PVarData(p)^);
 end;
+
 {$endif FPC}
 
 
@@ -22724,6 +22780,12 @@ begin
       inc(P)
     until not(P^ in [#1..' ']);
   {$endif}
+  result := P;
+end;
+
+function GotoNextNotSpaceSameLine(P: PUTF8Char): PUTF8Char;
+begin
+  while P^ in [#9,' '] do inc(P);
   result := P;
 end;
 
@@ -35591,7 +35653,7 @@ begin
               MI*(SecsPerMin*MSecsPerSec)+SS*MSecsPerSec+MS)/MSecsPerDay;
 end;
 
-function Iso8601ToTimePUTF8Char(P: PUTF8Char; L: integer=0): TDateTime;
+function Iso8601ToTimePUTF8Char(P: PUTF8Char; L: integer): TDateTime;
 begin
   Iso8601ToTimePUTF8CharVar(P,L,result);
 end;
@@ -35627,6 +35689,29 @@ begin
   end else
     MS := 0;
   if (H<24) and (M<60) and (S<60) and (MS<1000) then
+    result := true;
+end;
+
+function Iso8601ToDatePUTF8Char(P: PUTF8Char; L: integer; var Y,M,D: cardinal): boolean;
+begin
+  result := false; // error
+  if P=nil then
+    exit;
+  if L=0 then
+    L := StrLen(P);
+  if (L<8) or not (P[0] in ['0'..'9']) or not (P[1] in ['0'..'9']) or
+              not (P[2] in ['0'..'9']) or not (P[3] in ['0'..'9']) then
+    exit; // we need 'YYYYMMDD' at least
+  Y := ord(P[0])*1000+ord(P[1])*100+ord(P[2])*10+ord(P[3])-(48+480+4800+48000);
+  if (Y<1000) or (Y>2999) then
+    exit;
+  if P[4] in ['-','/'] then inc(P); // allow YYYY-MM-DD
+  M := ord(P[4])*10+ord(P[5])-(48+480);
+  if (M=0) or (M>12) then
+    exit;
+  if P[6] in ['-','/'] then inc(P);
+  D := ord(P[6])*10+ord(P[7])-(48+480);
+  if (D<>0) and (D<=MonthDays[true][M]) then
     result := true;
 end;
 
@@ -36327,6 +36412,79 @@ begin
 end;
 
 
+{ TSynDate }
+
+procedure TSynDate.Clear;
+begin
+  PInt64(@self)^ := 0;
+end;
+
+procedure TSynDate.SetMax;
+begin
+  PInt64(@self)^ := $001F0000000C270F; // 9999 + 12 shl 16 + 31 shl 48
+end;
+
+function TSynDate.IsZero: boolean;
+begin
+  result := PInt64(@self)^=0;
+end;
+
+function TSynDate.ParseFromText(var P: PUTF8Char): boolean;
+var L: PtrInt;
+    Y,M,D: cardinal;
+begin
+  result := false;
+  if P=nil then
+    exit;
+  while P^ in [#9,' '] do inc(P);
+  L := 0;
+  while P[L] in ['0'..'9','-','/'] do inc(L);
+  if not Iso8601ToDatePUTF8Char(P,L,Y,M,D) then
+    exit;
+  Year := Y;
+  Month := M;
+  DayOfWeek := 0;
+  Day := D;
+  inc(P,L); // move P^ just after the date
+  result := true;
+end;
+
+procedure TSynDate.FromNow(localtime: boolean);
+var dt: TSynSystemTime;
+begin
+  FromGlobalTime(localtime,dt);
+  PInt64(@self)^ := PInt64(@dt)^; // 4 first fields of TSynSystemTime do match
+end;
+
+function TSynDate.IsEqual({$ifdef FPC}constref{$else}const{$endif}  another{$ifndef DELPHI5OROLDER}: TSynDate{$endif}): boolean;
+begin
+  result := (PCardinal(@Year)^=PCardinal(@another.Year)^) and (Day=another.Day);
+end;
+
+function TSynDate.Compare({$ifdef FPC}constref{$else}const{$endif} another{$ifndef DELPHI5OROLDER}: TSynDate{$endif}): integer;
+begin
+  result := Year-another.Year;
+  if result=0 then begin
+    result := Month-another.Month;
+    if result=0 then
+      result := Day-another.Day;
+  end;
+end;
+
+function TSynDate.ToDate: TDate;
+begin
+  if not TryEncodeDate(Year,Month,Day,PDateTime(@result)^) then
+    result := 0;
+end;
+
+function TSynDate.ToText(Expanded: boolean): RawUTF8;
+begin
+  if PInt64(@self)^=0 then
+    result := '' else
+    result := DateToIso8601(Year,Month,Day,Expanded);
+end;
+
+
 { TSynSystemTime }
 
 function TryEncodeDayOfWeekInMonth(AYear, AMonth, ANthDayOfWeek, ADayOfWeek: integer;
@@ -36379,6 +36537,11 @@ function TSynSystemTime.IsEqual(const another{$ifndef DELPHI5OROLDER}: TSynSyste
 begin
   result := (PInt64Array(@self)[0]=PInt64Array(@another)[0]) and
             (PInt64Array(@self)[1]=PInt64Array(@another)[1]);
+end;
+
+function TSynSystemTime.IsDateEqual(const date{$ifndef DELPHI5OROLDER}: TSynDate{$endif}): boolean;
+begin
+  result := (PCardinal(@Year)^=PCardinal(@date.Year)^) and (Day=date.Day);
 end;
 
 procedure TSynSystemTime.FromNowUTC;
