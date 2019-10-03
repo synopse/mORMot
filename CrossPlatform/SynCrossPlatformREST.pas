@@ -1673,7 +1673,7 @@ constructor TSQLRecord.Create(aClient: TSQLRest; aID: TID;
   ForUpdate: boolean=false);
 begin
   Create;
-  if aClient<>nil then
+  if Assigned(aClient) then
     aClient.Retrieve(aID,self,ForUpdate);
 end;
 
@@ -1681,7 +1681,7 @@ constructor TSQLRecord.Create(aClient: TSQLRest;
   const FieldNames, SQLWhere: string; const BoundsSQLWhere: array of const);
 begin
   Create;
-  if aClient<>nil then
+  if Assigned(aClient) then
     aClient.Retrieve(FieldNames,SQLWhere,BoundsSQLWhere,self);
 end;
 
@@ -2651,7 +2651,7 @@ begin
   fLogLevel := [];
   fOnLog := nil;
   {$ifdef ISSMS}
-  if fLogClient<>nil then begin
+  if Assigned(fLogClient) then begin
     fLogClient.CallAsynchText; // send NOW any pending log
     fLogClient.Free;
     fLogClient := nil;
@@ -2974,8 +2974,9 @@ begin
             onError(self);
       if fAsynchCount>0 then
         dec(fAsynchCount);
-      if fAsynchCount=0 then
-        CallAsynchText; // send any pending asynchronous task
+      if fAsynchCount=0 then 
+        if Assigned(self) then
+          CallAsynchText; // send any pending asynchronous task
     end;
   end;
   Call.OnError :=
@@ -2999,6 +3000,11 @@ end;
 procedure TSQLRestClientURI.CallAsynchText;
 var Call: TSQLRestURIParams;
 begin
+  {$ifdef ISSMS}
+  asm
+    if (!@fAsynchPendingText) return;
+  end;
+  {$endif}
   if length(fAsynchPendingText)=0 then
     exit; // nothing to send
   Call.Init(getURICallBack('RemoteLog',nil,0),'PUT',
@@ -3286,8 +3292,10 @@ end;
 destructor TSQLRestClientHTTP.Destroy;
 begin
   inherited;
-  fAuthentication.Free;
-  fConnection.Free;
+  if Assigned(fAuthentication) then
+    fAuthentication.Free;
+  if Assigned(fConnection) then
+    fConnection.Free;
 end;
 
 procedure TSQLRestClientHTTP.InternalURI(var Call: TSQLRestURIParams);

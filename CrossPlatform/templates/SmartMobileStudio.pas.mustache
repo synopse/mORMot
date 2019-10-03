@@ -235,7 +235,7 @@ function Variant2{{name}}(const _variant: variant): {{name}};
 var tmp: {{typeSource}};
 begin
   if VariantType(_variant)=jvArray then
-    for var i := 0 to integer(_variant.Length)-1 do begin
+    for var i := 0 to integer(_variant.length)-1 do begin
       tmp := {{#fromVariant}}{{fromVariant}}{{/fromVariant}}(_variant[i]);
       result.Add(tmp);
     end;
