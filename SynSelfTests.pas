@@ -4535,110 +4535,110 @@ begin
 end;
 
 procedure TTestLowLevelCommon.Iso8601DateAndTime;
-procedure Test(D: TDateTime; Expanded: boolean);
-var s,t: RawUTF8;
-    E,F: TDateTime;
-    I,J: TTimeLogBits;
-    st, s2: TSynSystemTime;
-    P: PUTF8Char;
-    d1, d2: TSynDate;
-begin
-  s := DateTimeToIso8601(D,Expanded);
-  if Expanded then
-    Check(length(s)=19) else
-    Check(length(s)=15);
-  if Expanded then begin
-    Check(Iso8601CheckAndDecode(Pointer(s),length(s),E));
+  procedure Test(D: TDateTime; Expanded: boolean);
+  var s,t: RawUTF8;
+      E,F: TDateTime;
+      I,J: TTimeLogBits;
+      st, s2: TSynSystemTime;
+      P: PUTF8Char;
+      d1, d2: TSynDate;
+  begin
+    s := DateTimeToIso8601(D,Expanded);
+    if Expanded then
+      Check(length(s)=19) else
+      Check(length(s)=15);
+    if Expanded then begin
+      Check(Iso8601CheckAndDecode(Pointer(s),length(s),E));
+      Check(Abs(D-E)<(1/SecsPerDay)); // we allow 999 ms error
+    end;
+    st.FromDateTime(D);
+    s2.Clear;
+    DecodeDate(D,s2.Year,s2.Month,s2.Day);
+    DecodeTime(D,s2.Hour,s2.Minute,s2.Second,s2.MilliSecond);
+    Check(abs(st.MilliSecond-s2.MilliSecond)<=1); // allow 1 ms rounding error
+    st.MilliSecond := 0;
+    s2.MilliSecond := 0;
+    Check(st.IsEqual(s2)); // ensure conversion matches the RTL's
+    t := st.ToText(Expanded);
+    Check(Copy(t,1,length(s))=s);
+    d1.Clear;
+    check(d1.IsZero);
+    d2.SetMax;
+    check(not d2.IsZero);
+    check(not d1.IsEqual(d2));
+    check(d1.Compare(d2)<0);
+    check(d2.Compare(d1)>0);
+    t := d2.ToText(false);
+    check(t='99991231');
+    check(d2.ToText(true)='9999-12-31');
+    d2.Clear;
+    check(d1.IsEqual(d2));
+    check(d1.Compare(d2)=0);
+    check(d2.Compare(d1)=0);
+    P := pointer(s);
+    check(d1.ParseFromText(P));
+    check(P<>nil);
+    check(not d1.IsZero);
+    check(st.IsDateEqual(d1));
+    t := d1.ToText(Expanded);
+    check(copy(s,1,length(t))=t);
+    d2.Clear;
+    check(d2.IsZero);
+    check(not d1.IsEqual(d2));
+    check(d1.Compare(d2)>0);
+    check(d2.Compare(d1)<0);
+    check(d2.ToText(Expanded)='');
+    d2.SetMax;
+    check(not d2.IsZero);
+    check(not d1.IsEqual(d2));
+    check(d1.Compare(d2)<0);
+    check(d2.Compare(d1)>0);
+    d2 := d1;
+    check(d1.IsEqual(d2));
+    check(d1.Compare(d2)=0);
+    check(d2.Compare(d1)=0);
+    E := Iso8601ToDateTime(s);
     Check(Abs(D-E)<(1/SecsPerDay)); // we allow 999 ms error
+    E := Iso8601ToDateTime(s+'Z');
+    Check(Abs(D-E)<(1/SecsPerDay)); // we allow 999 ms error
+    I.From(D);
+    Check(Iso8601ToTimeLog(s)=I.Value);
+    I.From(s);
+    t := I.Text(Expanded);
+    if t<>s then // we allow error on time = 00:00:00 -> I.Text = just date
+      Check(I.Value and (1 shl (6+6+5)-1)=0) else
+      Check(true);
+    J.From(E);
+    Check(Int64(I)=Int64(J));
+    s := TimeToIso8601(D,Expanded);
+    Check(PosEx('.',s)=0);
+    Check(abs(frac(D)-Iso8601ToDateTime(s))<1/SecsPerDay);
+    s := TimeToIso8601(D,Expanded,'T',true);
+    Check(PosEx('.',s)>0);
+    F := Iso8601ToDateTime(s);
+    Check(abs(frac(D)-F)<1/MSecsPerDay,'withms1');
+    s := DateToIso8601(D,Expanded);
+    Check(trunc(D)=trunc(Iso8601ToDateTime(s)));
+    Check(Abs(D-I.ToDateTime)<(1/SecsPerDay));
+    E := TimeLogToDateTime(I.Value);
+    Check(Abs(D-E)<(1/SecsPerDay));
+    s := DateTimeToIso8601(D,Expanded,#0);
+    if Expanded then
+      Check(length(s)=18) else
+      Check(length(s)=14);
+    s := DateTimeToIso8601(D,Expanded,'T',true);
+    Check(PosEx('.',s)>0);
+    if Expanded then
+      Check(length(s)=23) else
+      Check(length(s)=19);
+    F := Iso8601ToDateTime(s);
+    Check(abs(D-F)<1/MSecsPerDay,'withms2');
+    if Expanded then begin
+      F := 0;
+      Check(Iso8601CheckAndDecode(pointer(s),length(s),F));
+      Check(abs(D-F)<1/MSecsPerDay,'withms3');
+    end;
   end;
-  st.FromDateTime(D);
-  s2.Clear;
-  DecodeDate(D,s2.Year,s2.Month,s2.Day);
-  DecodeTime(D,s2.Hour,s2.Minute,s2.Second,s2.MilliSecond);
-  Check(abs(st.MilliSecond-s2.MilliSecond)<=1); // allow 1 ms rounding error
-  st.MilliSecond := 0;
-  s2.MilliSecond := 0;
-  Check(st.IsEqual(s2)); // ensure conversion matches the RTL's
-  t := st.ToText(Expanded);
-  Check(Copy(t,1,length(s))=s);
-  d1.Clear;
-  check(d1.IsZero);
-  d2.SetMax;
-  check(not d2.IsZero);
-  check(not d1.IsEqual(d2));
-  check(d1.Compare(d2)<0);
-  check(d2.Compare(d1)>0);
-  t := d2.ToText(false);
-  check(t='99991231');
-  check(d2.ToText(true)='9999-12-31');
-  d2.Clear;
-  check(d1.IsEqual(d2));
-  check(d1.Compare(d2)=0);
-  check(d2.Compare(d1)=0);
-  P := pointer(s);
-  check(d1.ParseFromText(P));
-  check(P<>nil);
-  check(not d1.IsZero);
-  check(st.IsDateEqual(d1));
-  t := d1.ToText(Expanded);
-  check(copy(s,1,length(t))=t);
-  d2.Clear;
-  check(d2.IsZero);
-  check(not d1.IsEqual(d2));
-  check(d1.Compare(d2)>0);
-  check(d2.Compare(d1)<0);
-  check(d2.ToText(Expanded)='');
-  d2.SetMax;
-  check(not d2.IsZero);
-  check(not d1.IsEqual(d2));
-  check(d1.Compare(d2)<0);
-  check(d2.Compare(d1)>0);
-  d2 := d1;
-  check(d1.IsEqual(d2));
-  check(d1.Compare(d2)=0);
-  check(d2.Compare(d1)=0);
-  E := Iso8601ToDateTime(s);
-  Check(Abs(D-E)<(1/SecsPerDay)); // we allow 999 ms error
-  E := Iso8601ToDateTime(s+'Z');
-  Check(Abs(D-E)<(1/SecsPerDay)); // we allow 999 ms error
-  I.From(D);
-  Check(Iso8601ToTimeLog(s)=I.Value);
-  I.From(s);
-  t := I.Text(Expanded);
-  if t<>s then // we allow error on time = 00:00:00 -> I.Text = just date
-    Check(I.Value and (1 shl (6+6+5)-1)=0) else
-    Check(true);
-  J.From(E);
-  Check(Int64(I)=Int64(J));
-  s := TimeToIso8601(D,Expanded);
-  Check(PosEx('.',s)=0);
-  Check(abs(frac(D)-Iso8601ToDateTime(s))<1/SecsPerDay);
-  s := TimeToIso8601(D,Expanded,'T',true);
-  Check(PosEx('.',s)>0);
-  F := Iso8601ToDateTime(s);
-  Check(abs(frac(D)-F)<1/MSecsPerDay,'withms1');
-  s := DateToIso8601(D,Expanded);
-  Check(trunc(D)=trunc(Iso8601ToDateTime(s)));
-  Check(Abs(D-I.ToDateTime)<(1/SecsPerDay));
-  E := TimeLogToDateTime(I.Value);
-  Check(Abs(D-E)<(1/SecsPerDay));
-  s := DateTimeToIso8601(D,Expanded,#0);
-  if Expanded then
-    Check(length(s)=18) else
-    Check(length(s)=14);
-  s := DateTimeToIso8601(D,Expanded,'T',true);
-  Check(PosEx('.',s)>0);
-  if Expanded then
-    Check(length(s)=23) else
-    Check(length(s)=19);
-  F := Iso8601ToDateTime(s);
-  Check(abs(D-F)<1/MSecsPerDay,'withms2');
-  if Expanded then begin
-    F := 0;
-    Check(Iso8601CheckAndDecode(pointer(s),length(s),F));
-    Check(abs(D-F)<1/MSecsPerDay,'withms3');
-  end;
-end;
 var i: integer;
     D: TDateTime;
     tmp: RawUTF8;

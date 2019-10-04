@@ -12093,8 +12093,8 @@ type
   // - with no needed computation as with TDate/TUnixTime values
   // - consider using TSynSystemTime if you need to handle both Date and Time
   // - match the first 4 fields of TSynSystemTime
-  // - DayOfWeek field is not handled by its methods, but could be used to store
-  // some custom information - it will also make this record 64-bit long
+  // - DayOfWeek field is not handled by its methods by default, but could be
+  // filled on demand via ComputeDayOfWeek - making this record 64-bit long
   {$ifdef FPC_OR_UNICODE}TSynDate = record{$else}TSynDate = object{$endif}
     Year, Month, DayOfWeek, Day: word;
     /// set all fields to 0
@@ -12108,6 +12108,8 @@ type
     function ParseFromText(var P: PUTF8Char): boolean; {$ifdef HASINLINE}inline;{$endif}
     /// fill fields with the current UTC/local date, using a 8-16ms thread-safe cache
     procedure FromNow(localtime: boolean=false);
+    /// fill fields with the supplied date
+    procedure FromDate(date: TDate);
     /// returns true if all fields do match - ignoring DayOfWeek field value
     function IsEqual({$ifdef FPC}constref{$else}const{$endif} another{$ifndef DELPHI5OROLDER}: TSynDate{$endif}): boolean;
     /// compare the stored value to a supplied value
@@ -12116,6 +12118,9 @@ type
     // - DayOfWeek field value is not compared
     function Compare({$ifdef FPC}constref{$else}const{$endif} another{$ifndef DELPHI5OROLDER}: TSynDate{$endif}): integer;
       {$ifdef HASINLINE}inline;{$endif}
+    /// fill the DayOfWeek field from the stored Year/Month/Day
+    // - sunday is DayOfWeek 1, saturday is 7
+    procedure ComputeDayOfWeek;
     /// convert the stored date into a Delphi TDate floating-point value
     function ToDate: TDate; {$ifdef HASINLINE}inline;{$endif}
     /// encode the stored date as ISO-8601 text
@@ -12170,6 +12175,8 @@ type
     function ToNCSAText(P: PUTF8Char): PtrInt;
     /// convert the stored time into a TDateTime
     function ToDateTime: TDateTime;
+    /// copy Year/Month/DayOfWeek/Day fields to a TSynDate
+    procedure ToSynDate(out date: TSynDate); {$ifdef HASINLINE}inline;{$endif}
     /// add some 1..999 milliseconds to the stored time
     // - not to be used for computation, but e.g. for fast AddLogTime generation
     procedure IncrementMS(ms: integer);
@@ -36456,6 +36463,13 @@ begin
   PInt64(@self)^ := PInt64(@dt)^; // 4 first fields of TSynSystemTime do match
 end;
 
+procedure TSynDate.FromDate(date: TDate);
+var dt: TSynSystemTime;
+begin
+  dt.FromDate(date); // faster than DecodeDate
+  PInt64(@self)^ := PInt64(@dt)^;
+end;
+
 function TSynDate.IsEqual({$ifdef FPC}constref{$else}const{$endif}  another{$ifndef DELPHI5OROLDER}: TSynDate{$endif}): boolean;
 begin
   result := (PCardinal(@Year)^=PCardinal(@another.Year)^) and (Day=another.Day);
@@ -36469,6 +36483,20 @@ begin
     if result=0 then
       result := Day-another.Day;
   end;
+end;
+
+procedure TSynDate.ComputeDayOfWeek;
+var d: TDateTime;
+    i: PtrInt;
+begin
+  if not TryEncodeDate(Year,Month,Day,d) then begin
+    DayOfWeek := 0;
+    exit;
+  end;
+  i := ((trunc(d)-1) mod 7)+1; // sunday is day 1
+  if i<=0 then
+    DayOfWeek := i+7 else
+    DayOfWeek := i;
 end;
 
 function TSynDate.ToDate: TDate;
@@ -36579,7 +36607,7 @@ begin
       inc(Year);
     end;
     Month := t3;
-    DayOfWeek := 0;
+    DayOfWeek := 0; // not set by default
   end else
     PInt64(@Year)^ := 0;
 end;
@@ -36670,6 +36698,11 @@ begin
     result := 0;
 end;
 
+procedure TSynSystemTime.ToSynDate(out date: TSynDate);
+begin
+  PInt64(@date)^ := PInt64(@self)^; // first 4 fields do match
+end;
+
 procedure TSynSystemTime.IncrementMS(ms: integer);
 begin
   inc(MilliSecond, ms);
@@ -36708,7 +36741,7 @@ end;
 { TTimeZoneData }
 
 function TTimeZoneData.GetTziFor(year: integer): PTimeZoneInfo;
-var i,last: integer;
+var i,last: PtrInt;
 begin
   if dyn=nil then
     result := @tzi else
@@ -36881,7 +36914,7 @@ end;
 function TSynTimeZone.GetBiasForDateTime(const Value: TDateTime;
   const TzId: TTimeZoneID; out Bias: integer; out HaveDaylight: boolean): boolean;
 var ndx: integer;
-    y,m,d: word;
+    d: TSynSystemTime;
     tzi: PTimeZoneInfo;
     std,dlt: TDateTime;
 begin
@@ -36899,15 +36932,15 @@ begin
     result := false;
     exit;
   end;
-  DecodeDate(Value,y,m,d);
-  tzi := fZone[ndx].GetTziFor(y);
+  d.FromDate(Value); // faster than DecodeDate
+  tzi := fZone[ndx].GetTziFor(d.Year);
   if tzi.change_time_std.IsZero then begin
     HaveDaylight := false;
     Bias := tzi.Bias+tzi.bias_std;
   end else begin
     HaveDaylight := true;
-    std := tzi.change_time_std.EncodeForTimeChange(y);
-    dlt := tzi.change_time_dlt.EncodeForTimeChange(y);
+    std := tzi.change_time_std.EncodeForTimeChange(d.Year);
+    dlt := tzi.change_time_dlt.EncodeForTimeChange(d.Year);
     if std<dlt then
       if (std<=Value) and (Value<dlt) then
         Bias := tzi.Bias+tzi.bias_std else
