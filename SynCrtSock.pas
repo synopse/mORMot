@@ -3227,6 +3227,15 @@ type
 function WinHTTP_WebSocketEnabled: boolean;
 {$endif}
 
+var
+  /// Queue length for completely established sockets waiting to be accepted,
+  // a backlog parameter for listen() function. If queue overflows client
+  // got ECONNREFUSED error for connect() call
+  // - for windows default is taken from SynWinSock ($7fffffff) and should
+  // not be modified. Actual limit is 200;
+  // - for Unix default is taken from SynFPCSock (128 as in linux cernel >2.2),
+  // but actual value is min(DefaultListenBacklog, /proc/sys/net/core/somaxconn)
+  DefaultListenBacklog: integer = SOMAXCONN;
 
 implementation
 
@@ -4596,7 +4605,7 @@ begin
     SetInt32Option(result,SO_LINGER,5);
     // bind and listen to this port
     if (Bind(result,sin)<>0) or
-       ((aLayer<>cslUDP) and (Listen(result,SOMAXCONN)<>0)) then begin
+       ((aLayer<>cslUDP) and (Listen(result,DefaultListenBacklog)<>0)) then begin
       CloseSocket(result);
       result := -1;
     end;
