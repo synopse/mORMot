@@ -31304,7 +31304,7 @@ begin
 end;
 
 function TIntegerDynArrayFrom(const Values: array of integer): TIntegerDynArray;
-var i: integer;
+var i: PtrInt;
 begin
   SetLength(result,length(Values));
   for i := 0 to high(Values) do
@@ -31313,7 +31313,7 @@ end;
 
 function TIntegerDynArrayFrom64(const Values: TInt64DynArray;
   raiseExceptionOnOverflow: boolean=true): TIntegerDynArray;
-var i: integer;
+var i: PtrInt;
 const MinInt = -MaxInt-1;
 begin
   SetLength(result,length(Values));
@@ -31332,7 +31332,7 @@ begin
 end;
 
 function TInt64DynArrayFrom(const Values: TIntegerDynArray): TInt64DynArray;
-var i: integer;
+var i: PtrInt;
 begin
   SetLength(result,length(Values));
   for i := 0 to high(Values) do
@@ -31340,7 +31340,7 @@ begin
 end;
 
 function TQWordDynArrayFrom(const Values: TCardinalDynArray): TQWordDynArray;
-var i: integer;
+var i: PtrInt;
 begin
   SetLength(result,length(Values));
   for i := 0 to high(Values) do
@@ -31348,7 +31348,7 @@ begin
 end;
 
 function FromI32(const Values: array of integer): TIntegerDynArray;
-var i: integer;
+var i: PtrInt;
 begin
   SetLength(result,length(Values));
   for i := 0 to high(Values) do
@@ -31356,7 +31356,7 @@ begin
 end;
 
 function FromU32(const Values: array of cardinal): TCardinalDynArray;
-var i: integer;
+var i: PtrInt;
 begin
   SetLength(result,length(Values));
   for i := 0 to high(Values) do
@@ -31364,7 +31364,7 @@ begin
 end;
 
 function FromI64(const Values: array of Int64): TInt64DynArray;
-var i: integer;
+var i: PtrInt;
 begin
   SetLength(result,length(Values));
   for i := 0 to high(Values) do
@@ -31372,7 +31372,7 @@ begin
 end;
 
 function FromU64(const Values: array of QWord): TQWordDynArray;
-var i: integer;
+var i: PtrInt;
 begin
   SetLength(result,length(Values));
   for i := 0 to high(Values) do
@@ -36470,18 +36470,18 @@ begin
   PInt64(@self)^ := PInt64(@dt)^;
 end;
 
-function TSynDate.IsEqual({$ifdef FPC}constref{$else}const{$endif}  another{$ifndef DELPHI5OROLDER}: TSynDate{$endif}): boolean;
+function TSynDate.IsEqual({$ifdef FPC}constref{$else}const{$endif} another{$ifndef DELPHI5OROLDER}: TSynDate{$endif}): boolean;
 begin
-  result := (PCardinal(@Year)^=PCardinal(@another.Year)^) and (Day=another.Day);
+  result := (PCardinal(@Year)^=PCardinal(@TSynDate(another).Year)^) and (Day=TSynDate(another).Day);
 end;
 
 function TSynDate.Compare({$ifdef FPC}constref{$else}const{$endif} another{$ifndef DELPHI5OROLDER}: TSynDate{$endif}): integer;
 begin
-  result := Year-another.Year;
+  result := Year-TSynDate(another).Year;
   if result=0 then begin
-    result := Month-another.Month;
+    result := Month-TSynDate(another).Month;
     if result=0 then
-      result := Day-another.Day;
+      result := Day-TSynDate(another).Day;
   end;
 end;
 
@@ -36569,7 +36569,8 @@ end;
 
 function TSynSystemTime.IsDateEqual(const date{$ifndef DELPHI5OROLDER}: TSynDate{$endif}): boolean;
 begin
-  result := (PCardinal(@Year)^=PCardinal(@date.Year)^) and (Day=date.Day);
+  result := (PCardinal(@Year)^=PCardinal(@TSynDate(date).Year)^) and
+            (Day=TSynDate(date).Day);
 end;
 
 procedure TSynSystemTime.FromNowUTC;
