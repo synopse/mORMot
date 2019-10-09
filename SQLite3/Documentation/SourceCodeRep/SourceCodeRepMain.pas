@@ -129,10 +129,15 @@ begin
     path := fBatPath + exe + SHELL
   else
     path := exe;
-  result := RunProcess(q(path), q(arg1),
-    {wait=}true, q(arg2), q(arg3), q(arg4), q(arg5)) = 0;
-  if bak <> '' then
-    SetCurrentDir(bak);
+  screen.Cursor := crHourGlass;
+  try
+    result := RunProcess(q(path), q(arg1),
+      {wait=}true, q(arg2), q(arg3), q(arg4), q(arg5)) = 0;
+  finally
+    if bak <> '' then
+      SetCurrentDir(bak);
+    screen.Cursor := crDefault;
+  end;
 end;
 
 procedure TMainForm.ReadStatus;
