@@ -43295,8 +43295,12 @@ begin
   PropsMax := 0;
   while (P<>nil) and (P^<>#0) do begin
     // fill Props[]
-    if not GetNextFieldProp(P,PropsName[PropsMax]) then
+    if P^='"' then begin // use JSON string to customize the name
+      if not GetJSONItemAsRawUTF8(P,PropsName[PropsMax]) then
       break;
+    end else // regular object pascal identifier (i.e. 0..9,a..z,A..Z,_)
+      if not GetNextFieldProp(P,PropsName[PropsMax]) then
+        break;
     case P^ of
     ',': begin
       inc(P);
