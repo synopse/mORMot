@@ -196,7 +196,7 @@ uses
   {$endif KYLIX3}
 
 {$ifdef MSWINDOWS}
-  {$R ..\Vista.res} // includes manifest to identify Windows 10 OS
+  {$R ..\vista.RES} // includes Win10 manifest - use .RES for linux cross-compilation
 {$endif}
 
 begin

@@ -16423,6 +16423,7 @@ For this task, don't download an existing binary release of FPC / Lazarus, but u
 Download the latest release of the tool from @https://github.com/LongDirtyAnimAlf/fpcupdeluxe/releases \line Unpack it in a dedicated folder, and run its executable.\line Click on the {\i "Setup +"} button, and enter the following revision numbers:
 - FPC trunk SVN {\f1\fs20 40491};
 - Lazarus trunk SVN {\f1\fs20 59757}.
+Don't forget to select the {\i trunk} versions for both FPC and Lazarus versions list, otherwise the exact SVN revisions you entered in {\i "Setup +"} won't be used.
 Those revisions are currently used for building our production projects, so are expected to be properly tested and supported.
 Then build the FPC and Lazarus binaries directly from the latest sources. One big advantage of {\i fpcupdeluxe} is that you can very easily install cross-compilers for the CPU / OS combinations enumerated at @202@.
 You could install {\i mORMot} using {\i fpcupdeluxe}, but we recommend you clone our @https://github.com/synopse/mORMot repository, and setup the expected project paths, as detailed above at @113@.

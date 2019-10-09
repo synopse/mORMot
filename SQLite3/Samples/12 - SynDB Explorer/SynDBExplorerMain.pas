@@ -100,7 +100,7 @@ uses
 
 
 {$ifndef HASINLINE}
-  {$R Vista.res}
+  {$R vista.RES} // includes Win10 manifest - use .RES for linux cross-compilation
 {$endif}
 
 {$R *.dfm}
