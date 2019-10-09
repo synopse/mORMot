@@ -595,7 +595,9 @@ procedure SynDaemonIntercept(log: TSynLog=nil);
 {$endif MSWINDOWS}
 
 /// like SysUtils.ExecuteProcess, but allowing not to wait for the process to finish
-function RunProcess(const path, arg1: TFileName; waitfor: boolean): integer;
+function RunProcess(const path, arg1: TFileName; waitfor: boolean;
+  const arg2: TFileName=''; const arg3: TFileName=''; const arg4: TFileName='';
+  const arg5: TFileName=''): integer;
 
 
 { *** cross-plaform high-level services/daemons }
@@ -1420,7 +1422,8 @@ function CreateProcessW(lpApplicationName: PWideChar; lpCommandLine: PWideChar;
 function GetExitCodeProcess(hProcess: THandle; out lpExitCode: DWORD): BOOL; stdcall;
   external kernel32;
 
-function RunProcess(const path, arg1: TFileName; waitfor: boolean): integer;
+function RunProcess(const path, arg1: TFileName; waitfor: boolean;
+  const arg2,arg3,arg4,arg5: TFileName): integer;
 var
   startupinfo: TStartupInfo; // _STARTUPINFOW or _STARTUPINFOA is equal here
   processinfo: TProcessInformation;
@@ -1429,9 +1432,7 @@ var
   exitcode: DWORD;
 begin
   // https://support.microsoft.com/en-us/help/175986/info-understanding-createprocess-and-command-line-arguments
-  cmdline := '"' + path + '"';
-  if arg1 <> '' then
-    cmdline := cmdline + ' ' + arg1;
+  FormatString('"%" % % % % %', [path, arg1, arg2, arg3, arg4, arg5], cmdline);
   // CreateProcess can alter the strings so do the copy!
   wcmdline := StringToSynUnicode(cmdline);
   runpath := ExtractFilePath(path);
@@ -1650,10 +1651,11 @@ begin
 end;
 {$endif FPC}
 
-function RunProcess(const path, arg1: TFileName; waitfor: boolean): integer;
+function RunProcess(const path, arg1: TFileName; waitfor: boolean;
+  const arg2,arg3,arg4,arg5: TFileName): integer;
 var
   pid: {$ifdef FPC}TPID{$else}pid_t{$endif};
-  a: array[0..2] of PAnsiChar; // assume no UNICODE on BSD, i.e. TFileName is
+  a: array[0..6] of PAnsiChar; // assume no UNICODE on BSD, i.e. TFileName is
 begin
   {$ifdef FPC}
   {$if (defined(BSD) or defined(SUNOS)) and defined(FPC_USE_LIBC)}
@@ -1672,8 +1674,12 @@ begin
     if not waitfor then
       CleanAfterFork; // don't share the same console
     a[0] := pointer(path);
-    a[1] := pointer(arg1); // expect a single (may be quoted) argument
-    a[2] := nil;
+    a[1] := pointer(arg1); // some (may be quoted) arguments
+    a[2] := pointer(arg2);
+    a[3] := pointer(arg3);
+    a[4] := pointer(arg4);
+    a[5] := pointer(arg5);
+    a[6] := nil;
     {$ifdef FPC}
     FpExecV(a[0], @a);
     FpExit(127);
