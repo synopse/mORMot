@@ -1432,7 +1432,7 @@ var
   exitcode: DWORD;
 begin
   // https://support.microsoft.com/en-us/help/175986/info-understanding-createprocess-and-command-line-arguments
-  FormatString('"%" % % % % %', [path, arg1, arg2, arg3, arg4, arg5], cmdline);
+  cmdline := FormatString('"%" % % % % %', [path, arg1, arg2, arg3, arg4, arg5]);
   // CreateProcess can alter the strings so do the copy!
   wcmdline := StringToSynUnicode(cmdline);
   runpath := ExtractFilePath(path);
