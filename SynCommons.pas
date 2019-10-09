@@ -3075,7 +3075,7 @@ procedure QuotedStrJSON(const aText: RawUTF8; var result: RawUTF8;
   const aPrefix: RawUTF8=''; const aSuffix: RawUTF8='');
 
 /// unquote a SQL-compatible string
-// - the first character in P^ must be either ', either " then double quotes
+// - the first character in P^ must be either ' or " then internal double quotes
 // are transformed into single quotes
 // - 'text '' end'   -> text ' end
 // - "text "" end"   -> text " end
@@ -22818,7 +22818,7 @@ end;
 function UnQuoteSQLStringVar(P: PUTF8Char; out Value: RawUTF8): PUTF8Char;
 var quote: AnsiChar;
     PBeg, PS: PUTF8Char;
-    n: PtrInt;
+    internalquote: PtrInt;
 begin
   if P=nil then begin
     result := nil;
@@ -22828,7 +22828,7 @@ begin
   inc(P);
   // compute unquoted string length
   PBeg := P;
-  n := 0;
+  internalquote := 0;
   repeat
     if P^=#0 then
       break;
@@ -22836,7 +22836,7 @@ begin
       inc(P) else
       if P[1]=quote then begin
         inc(P,2); // allow double quotes inside string
-        inc(n);
+        inc(internalquote);
       end else
         break; // end quote
   until false;
@@ -22845,11 +22845,11 @@ begin
     exit;
   end;
   // create unquoted string
-  if n=0 then
+  if internalquote=0 then
     // no quote within
     FastSetString(Value,PBeg,P-PBeg) else begin
     // unescape internal quotes
-    SetLength(Value,P-PBeg-n);
+    SetLength(Value,P-PBeg-internalquote);
     P := PBeg;
     PS := Pointer(Value);
     repeat
@@ -43295,9 +43295,10 @@ begin
   PropsMax := 0;
   while (P<>nil) and (P^<>#0) do begin
     // fill Props[]
-    if P^='"' then begin // use JSON string to customize the name
-      if not GetJSONItemAsRawUTF8(P,PropsName[PropsMax]) then
-      break;
+    if P^ in ['''','"'] then begin // parse identifier as SQL string (e.g. "@field0")
+      P := UnQuoteSQLStringVar(P,PropsName[PropsMax]);
+      if P=nil then
+        break;
     end else // regular object pascal identifier (i.e. 0..9,a..z,A..Z,_)
       if not GetNextFieldProp(P,PropsName[PropsMax]) then
         break;
