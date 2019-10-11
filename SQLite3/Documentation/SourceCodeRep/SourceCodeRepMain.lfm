@@ -211,7 +211,7 @@ object MainForm: TMainForm
     Left = 496
     Height = 23
     Top = 480
-    Width = 101
+    Width = 113
     Anchors = [akLeft, akBottom]
     Caption = 'and copy link'
     TabOrder = 15
@@ -220,7 +220,7 @@ object MainForm: TMainForm
     Left = 168
     Height = 23
     Top = 452
-    Width = 78
+    Width = 86
     Anchors = [akLeft, akBottom]
     Caption = 'and push'
     TabOrder = 16
@@ -229,7 +229,7 @@ object MainForm: TMainForm
     Left = 230
     Height = 23
     Top = 452
-    Width = 71
+    Width = 79
     Anchors = [akLeft, akBottom]
     Caption = 'and pull'
     TabOrder = 17

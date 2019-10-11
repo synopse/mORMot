@@ -89,18 +89,18 @@ uses
 {$ENDIF}
 
 {$ifdef MSWINDOWS}
-  {$R vista.res} // includes Win10 manifest - use .RES for linux cross-compilation
+  {$R ..\..\..\vista.RES} // includes Win10 manifest - use .RES for linux cross-compilation
 const
   SHELL = '.bat';
   SHELLEXE = 'cmd.exe';
   GITDEF = 'git.exe';
-  REPFOSSIL = 'c:\progs\fossil\lib';
+  REPFOSSIL = 'd:\dev\fossil\lib';
   REPLIB = 'd:\dev\lib';
   REPGITHUB = 'd:\dev\github\';
 {$else}
 const
   SHELL = '.sh';
-  SHELLEXE = 'bash';
+  SHELLEXE = '/usr/bin/gnome-terminal';
   GITDEF = '/usr/bin/git';
 var
   REPFOSSIL: TFileName;
@@ -141,10 +141,16 @@ begin
 end;
 
 procedure TMainForm.ReadStatus;
-var status: RawUTF8;
+var
+  statusfile: TFileName;
+  status: RawUTF8;
 begin
-  Exec(fFossilRepository, 'FossilStatus', fBatPath + 'status.txt', '', '', '', '');
-  status := StringFromFile(fBatPath + 'status.txt');
+  statusfile := fBatPath + 'status.txt';
+  DeleteFile(statusfile);
+  if not Exec(fFossilRepository, 'FossilStatus', statusfile, '', '', '', '') then
+    status := 'error executing FossilStatus script'
+  else
+    status := StringFromFile(statusfile);
   {$ifdef MSWINDOWS}
   if PosEx(#13#10, status) = 0 then
     status := StringReplaceAll(status, #10, #13#10);
@@ -165,6 +171,8 @@ begin
   REPGITHUB := dev + 'github/';
 {$endif}
   fBatPath := ExeVersion.ProgramFilePath;
+  if not FileExists(fBatPath + 'FossilStatus' + SHELL) then // from exe sub-folder?
+    fBatPath := ExtractFilePath(ExcludeTrailingPathDelimiter(fBatPath));
   if not FileExists(fBatPath + 'FossilStatus' + SHELL) then // from exe sub-folder?
     fBatPath := ExtractFilePath(ExcludeTrailingPathDelimiter(fBatPath));
   if not FileExists(fBatPath + 'FossilStatus' + SHELL) then
