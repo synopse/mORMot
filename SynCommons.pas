@@ -36023,14 +36023,16 @@ begin
 end;
 
 procedure TTimeLogBits.Expand(out Date: TSynSystemTime);
+var V: PtrUInt;
 begin
-  Date.Year := (Value shr (6+6+5+5+4)) and 4095;
-  Date.Month := 1+(PCardinal(@Value)^ shr (6+6+5+5)) and 15;
-  Date.Day := 1+(PCardinal(@Value)^ shr (6+6+5)) and 31;
+  V := PPtrUint(@Value)^;
+  Date.Year := ({$ifdef CPU32}Value{$else}V{$endif} shr (6+6+5+5+4)) and 4095;
+  Date.Month := 1+(V shr (6+6+5+5)) and 15;
   Date.DayOfWeek := 0;
-  Date.Hour := (PCardinal(@Value)^ shr (6+6)) and 31;
-  Date.Minute := (PCardinal(@Value)^ shr 6) and 63;
-  Date.Second := PCardinal(@Value)^ and 63;
+  Date.Day := 1+(V shr (6+6+5)) and 31;
+  Date.Hour := (V shr (6+6)) and 31;
+  Date.Minute := (V shr 6) and 63;
+  Date.Second := V and 63;
 end;
 
 procedure TTimeLogBits.From(const S: RawUTF8);
@@ -36658,7 +36660,7 @@ begin
   t.From(iso);
   if t.Value=0 then
     result := false else begin
-    t.Expand(self); // much faster than FromDateTime
+    t.Expand(self); // TTimeLogBits is faster than FromDateTime()
     result := true;
   end;
 end;
