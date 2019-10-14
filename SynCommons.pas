@@ -12166,6 +12166,9 @@ type
     /// fill Hour/Minute/Second/Millisecond fields from the given value
     // - faster than the RTL DecodeTime() function
     procedure FromTime(const dt: TDateTime);
+    /// fill Year/Month/Day and Hour/Minute/Second fields from the given ISO-8601 text
+    // - returns true on success
+    function FromText(const iso: RawUTF8): boolean;
     /// encode the stored date/time as ISO-8601 text
     function ToText(Expanded: boolean=true; FirstTimeChar: AnsiChar='T'; const TZD: RawUTF8=''): RawUTF8;
     /// append the stored date and time, in a log-friendly format
@@ -35932,7 +35935,7 @@ function Iso8601ToTimeLogPUTF8Char(P: PUTF8Char; L: integer; ContainsNoTime: PBo
 // bits: S=0..5 M=6..11 H=12..16 D=17..21 M=22..25 Y=26..38
 // i.e. S<64 M<64 H<32 D<32 M<16 Y<4096: power of 2 -> use fast shl/shr
 var V,B: PtrUInt;
-    i: integer;
+    tab: {$ifdef CPUX86NOTPIC}TNormTableByte absolute ConvertHexToBin{$else}PNormTableByte{$endif};
 begin
   result := 0;
   if P=nil then
@@ -35943,9 +35946,15 @@ begin
     exit; // we need 'YYYY' at least
   if P[0]='T' then
     dec(P,8) else begin // 'YYYY' -> year decode
-    V := ConvertHexToBin[ord(P[0])]; if V>9 then exit;
-    for i := 1 to 3 do begin
-      B := ConvertHexToBin[ord(P[i])]; if B>9 then exit else V := V*10+B; end;
+    {$ifndef CPUX86NOTPIC}tab := @ConvertHexToBin;{$endif} // faster on PIC/x86_64
+    V := tab[ord(P[0])];
+    if V>9 then exit;
+    B := tab[ord(P[1])];
+    if B>9 then exit else V := V*10+B;
+    B := tab[ord(P[2])];
+    if B>9 then exit else V := V*10+B;
+    B := tab[ord(P[3])];
+    if B>9 then exit else V := V*10+B;
     result := Int64(V) shl 26;  // store YYYY
     if P[4] in ['-','/'] then begin inc(P); dec(L); end; // allow YYYY-MM-DD
     if L>=6 then begin // YYYYMM
@@ -36026,7 +36035,7 @@ end;
 
 procedure TTimeLogBits.From(const S: RawUTF8);
 begin
-  Value := Iso8601ToTimeLog(S);
+  Value := Iso8601ToTimeLogPUTF8Char(pointer(S),length(S));
 end;
 
 procedure TTimeLogBits.From(FileDate: integer);
@@ -36641,6 +36650,17 @@ begin
   t2 := t div 1000;
   Second := t2;
   MilliSecond := t-t2*1000;
+end;
+
+function TSynSystemTime.FromText(const iso: RawUTF8): boolean;
+var t: TTimeLogBits;
+begin
+  t.From(iso);
+  if t.Value=0 then
+    result := false else begin
+    t.Expand(self); // much faster than FromDateTime
+    result := true;
+  end;
 end;
 
 function TSynSystemTime.ToText(Expanded: boolean;
