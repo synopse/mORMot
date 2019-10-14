@@ -1654,6 +1654,12 @@ function FormatUTF8(const Format: RawUTF8; const Args: array of const): RawUTF8;
 procedure FormatUTF8(const Format: RawUTF8; const Args: array of const;
   out result: RawUTF8); overload;
 
+/// fast Format() function replacement, tuned for direct memory buffer write
+// - use the same single token % (and implementation) than FormatUTF8()
+// - returns the number of UTF-8 bytes appended to Dest^
+function FormatBuffer(const Format: RawUTF8; const Args: array of const;
+  Dest: pointer; DestLen: integer): PtrInt;
+
 /// fast Format() function replacement, for UTF-8 content stored in shortstring
 // - use the same single token % (and implementation) than FormatUTF8()
 // - shortstring allows fast stack allocation, so is perfect for small content
@@ -23308,6 +23314,7 @@ var d: PTempUTF8;
 begin
   inc(Max,PtrUInt(Dest));
   d := @blocks;
+  if Dest<>nil then
   repeat
     if PtrUInt(Dest)+PtrUInt(d^.Len)>Max then begin // avoid buffer overflow
       {$ifdef FPC}Move{$else}MoveFast{$endif}(d^.Text^,Dest^,Max-PtrUInt(Dest));
@@ -23353,6 +23360,14 @@ begin
     process.Parse(Format,Args);
     result[0] := AnsiChar(process.WriteMax(@result[1],255)-@result[1]);
   end;
+end;
+
+function FormatBuffer(const Format: RawUTF8; const Args: array of const;
+  Dest: pointer; DestLen: integer): PtrInt;
+var process: TFormatUTF8;
+begin
+  process.Parse(Format,Args);
+  result := PtrInt(process.WriteMax(Dest,DestLen))-PtrInt(Dest);
 end;
 
 function FormatToShort(const Format: RawUTF8; const Args: array of const): shortstring;
