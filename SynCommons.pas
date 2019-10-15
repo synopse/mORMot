@@ -8131,11 +8131,16 @@ type
     procedure AddChars(aChar: AnsiChar; aCount: integer);
     /// append an Integer Value as a 2 digits String with comma
     procedure Add2(Value: integer);
-    /// append the current UTC date and time, in a log-friendly format
-    // - e.g. append '20110325 19241502'
+    /// append the current UTC date and time, in our log-friendly format
+    // - e.g. append '20110325 19241502' - with no trailing space nor tab
     // - you may set LocalTime=TRUE to write the local date and time instead
     // - this method is very fast, and avoid most calculation or API calls
     procedure AddCurrentLogTime(LocalTime: boolean);
+    /// append the current UTC date and time, in our log-friendly format
+    // - e.g. append '19/Feb/2019:06:18:55 ' - including a trailing space
+    // - you may set LocalTime=TRUE to write the local date and time instead
+    // - this method is very fast, and avoid most calculation or API calls
+    procedure AddCurrentNCSALogTime(LocalTime: boolean);
     /// append a time period, specified in micro seconds
     procedure AddMicroSec(MS: cardinal);
     /// append an Integer Value as a 4 digits String with comma
@@ -12098,7 +12103,8 @@ type
   /// a simple way to store a date as Year/Month/Day
   // - with no needed computation as with TDate/TUnixTime values
   // - consider using TSynSystemTime if you need to handle both Date and Time
-  // - match the first 4 fields of TSynSystemTime
+  // - match the first 4 fields of TSynSystemTime - so PSynDate(@aSynSystemTime)^
+  // is safe to be used
   // - DayOfWeek field is not handled by its methods by default, but could be
   // filled on demand via ComputeDayOfWeek - making this record 64-bit long
   {$ifdef FPC_OR_UNICODE}TSynDate = record{$else}TSynDate = object{$endif}
@@ -12135,11 +12141,15 @@ type
   end;
   /// store several dates as Year/Month/Day
   TSynDateDynArray = array of TSynDate;
+  /// a pointer to a TSynDate instance
+  PSynDate = ^TSynDate;
 
-  /// a cross-platform and cross-compiler TSystemTime structure
+  /// a cross-platform and cross-compiler TSystemTime 128-bit structure
   // - FPC's TSystemTime in datih.inc does NOT match Windows TSystemTime fields!
   // - also used to store a Date/Time in TSynTimeZone internal structures, or
   // for fast conversion from TDateTime to its ready-to-display members
+  // - DayOfWeek field is not handled by most methods by default, but could be
+  // filled on demand via ComputeDayOfWeek
   {$ifdef FPC_OR_UNICODE}TSynSystemTime = record{$else}TSynSystemTime = object{$endif}
   public
     Year, Month, DayOfWeek, Day,
@@ -12186,6 +12196,10 @@ type
     function ToDateTime: TDateTime;
     /// copy Year/Month/DayOfWeek/Day fields to a TSynDate
     procedure ToSynDate(out date: TSynDate); {$ifdef HASINLINE}inline;{$endif}
+    /// fill the DayOfWeek field from the stored Year/Month/Day
+    // - by default, most methods won't compute the DayOfWeek field
+    // - sunday is DayOfWeek 1, saturday is 7
+    procedure ComputeDayOfWeek; {$ifdef HASINLINE}inline;{$endif}
     /// add some 1..999 milliseconds to the stored time
     // - not to be used for computation, but e.g. for fast AddLogTime generation
     procedure IncrementMS(ms: integer);
@@ -32876,7 +32890,7 @@ begin
   FillCharFast(Bin^,BinBytes,0);
   if P=nil then
     exit;
-  if P^ = ' ' then repeat inc(P) until P^ <> ' ';
+  if P^=' ' then repeat inc(P) until P^<>' ';
   S := P;
   if Sep=#0 then
     while S^>' ' do
@@ -32905,7 +32919,7 @@ begin
     result := 0;
     exit;
   end;
-  if P^ = ' ' then repeat inc(P) until P^ <> ' ';
+  if P^=' ' then repeat inc(P) until P^<>' ';
   c := byte(P^)-48;
   if c>9 then
     result := 0 else begin
@@ -33059,6 +33073,7 @@ begin
     result := 0;
     exit;
   end;
+  if P^=' ' then repeat inc(P) until P^<>' ';
   if (P^ in ['+','-']) then begin
     minus := P^='-';
     inc(P);
@@ -36486,14 +36501,14 @@ procedure TSynDate.FromNow(localtime: boolean);
 var dt: TSynSystemTime;
 begin
   FromGlobalTime(localtime,dt);
-  PInt64(@self)^ := PInt64(@dt)^; // 4 first fields of TSynSystemTime do match
+  self := PSynDate(@dt)^; // 4 first fields of TSynSystemTime do match
 end;
 
 procedure TSynDate.FromDate(date: TDate);
 var dt: TSynSystemTime;
 begin
   dt.FromDate(date); // faster than DecodeDate
-  PInt64(@self)^ := PInt64(@dt)^;
+  self := PSynDate(@dt)^;
 end;
 
 function TSynDate.IsEqual({$ifdef FPC}constref{$else}const{$endif} another{$ifndef DELPHI5OROLDER}: TSynDate{$endif}): boolean;
@@ -36738,7 +36753,12 @@ end;
 
 procedure TSynSystemTime.ToSynDate(out date: TSynDate);
 begin
-  PInt64(@date)^ := PInt64(@self)^; // first 4 fields do match
+  date := PSynDate(@self)^; // first 4 fields do match
+end;
+
+procedure TSynSystemTime.ComputeDayOfWeek;
+begin
+  PSynDate(@self)^.ComputeDayOfWeek; // first 4 fields do match
 end;
 
 procedure TSynSystemTime.IncrementMS(ms: integer);
@@ -51889,6 +51909,15 @@ var time: TSynSystemTime;
 begin
   FromGlobalTime(LocalTime,time);
   time.AddLogTime(self);
+end;
+
+procedure TTextWriter.AddCurrentNCSALogTime(LocalTime: boolean);
+var time: TSynSystemTime;
+begin
+  FromGlobalTime(LocalTime,time);
+  if BEnd-B<=21 then
+    FlushToStream;
+  inc(B,time.ToNCSAText(B+1));
 end;
 
 function Value3Digits(V: PtrUInt; P: PUTF8Char; W: PWordArray): PtrUInt;
