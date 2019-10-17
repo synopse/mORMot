@@ -28215,7 +28215,7 @@ begin
   CharUpperBuffW(pointer(tmp),TmpLen);
   RawUnicodeToUtf8(pointer(tmp),TmpLen,result);
 {$endif}
-{$ifdef POSIX}
+{$ifdef LINUX}
   result := WideStringToUTF8(WideUpperCase(UTF8ToWideString(S)));
 {$endif}
 end;
@@ -28232,7 +28232,7 @@ begin
   CharLowerBuffW(pointer(tmp),TmpLen);
   RawUnicodeToUtf8(pointer(tmp),TmpLen,result);
 {$endif}
-{$ifdef POSIX}
+{$ifdef LINUX}
   result := WideStringToUTF8(WideLowerCase(UTF8ToWideString(S)));
 {$endif}
 end;
