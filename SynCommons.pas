@@ -28209,13 +28209,12 @@ var tmp: RawUnicode;
     TmpLen: integer;
 {$endif}
 begin
-{$ifdef MSWINDOWS}
+{$ifdef MSWINDOWS} // no temporary WideString involved
   tmp := Utf8DecodeToRawUnicodeUI(S,@TmpLen);
   TmpLen := TmpLen shr 1;
   CharUpperBuffW(pointer(tmp),TmpLen);
   RawUnicodeToUtf8(pointer(tmp),TmpLen,result);
-{$endif}
-{$ifdef LINUX}
+{$else}
   result := WideStringToUTF8(WideUpperCase(UTF8ToWideString(S)));
 {$endif}
 end;
@@ -28226,13 +28225,12 @@ var tmp: RawUnicode;
     TmpLen: integer;
 {$endif}
 begin
-{$ifdef MSWINDOWS}
+{$ifdef MSWINDOWS} // no temporary WideString involved
   tmp := Utf8DecodeToRawUnicodeUI(S,@TmpLen);
   TmpLen := TmpLen shr 1;
   CharLowerBuffW(pointer(tmp),TmpLen);
   RawUnicodeToUtf8(pointer(tmp),TmpLen,result);
-{$endif}
-{$ifdef LINUX}
+{$else}
   result := WideStringToUTF8(WideLowerCase(UTF8ToWideString(S)));
 {$endif}
 end;
@@ -36970,31 +36968,32 @@ begin
     for i := 0 to Keys.Count-1 do begin
       Finalize(item);
       FillcharFast(item.tzi,SizeOf(item.tzi),0);
-      if Reg.OpenKeyReadOnly(REGKEY+Keys[i]) then
-      try
-        StringToUTF8(Keys[i],RawUTF8(item.id));
-        StringToUTF8(Reg.ReadString('Display'),item.Display);
-        Reg.ReadBinaryData('TZI', item.tzi, SizeOf(item.tzi));
-      finally
-        Reg.CloseKey;
-      end;
-      if Reg.OpenKeyReadOnly(REGKEY+Keys[i]+'\Dynamic DST') then
-      try
-        first := Reg.ReadInteger('FirstEntry');
-        last := Reg.ReadInteger('LastEntry');
-        n := 0;
-        SetLength(item.dyn,last-first+1);
-        for year := first to last do
-        if Reg.ReadBinaryData(IntToStr(year),item.dyn[n].tzi,
-            SizeOf(TTimeZoneInfo))=SizeOf(TTimeZoneInfo) then begin
-          item.dyn[n].year := year;
-          inc(n);
+      if Reg.OpenKeyReadOnly(REGKEY+Keys[i]) then begin
+        try
+          StringToUTF8(Keys[i],RawUTF8(item.id));
+          StringToUTF8(Reg.ReadString('Display'),item.Display);
+          Reg.ReadBinaryData('TZI', item.tzi, SizeOf(item.tzi));
+        finally
+          Reg.CloseKey;
         end;
-        SetLength(item.dyn,n);
-      finally
-        Reg.CloseKey;
+        if Reg.OpenKeyReadOnly(REGKEY+Keys[i]+'\Dynamic DST') then
+          try // warning: not available on XP/2003 by default
+            first := Reg.ReadInteger('FirstEntry');
+            last := Reg.ReadInteger('LastEntry');
+            n := 0;
+            SetLength(item.dyn,last-first+1);
+            for year := first to last do
+            if Reg.ReadBinaryData(IntToStr(year),item.dyn[n].tzi,
+                SizeOf(TTimeZoneInfo))=SizeOf(TTimeZoneInfo) then begin
+              item.dyn[n].year := year;
+              inc(n);
+            end;
+            SetLength(item.dyn,n);
+          finally
+            Reg.CloseKey;
+          end;
+        fZones.Add(item);
       end;
-      fZones.Add(item);
     end;
   finally
     Reg.Free;
@@ -37014,7 +37013,9 @@ begin
     ndx := -1 else
     ndx := fZones.FindHashed(TzID);
   if ndx<0 then
-    result := '' else
+    if TzID='UTC' then // e.g. on XP
+      result := TzID else
+      result := '' else
     result := fZone[ndx].display;
 end;
 
@@ -37036,7 +37037,7 @@ begin
   if ndx<0 then begin
     Bias := 0;
     HaveDayLight := false;
-    result := false;
+    result := TzID='UTC'; // e.g. on XP
     exit;
   end;
   d.FromDate(Value); // faster than DecodeDate
