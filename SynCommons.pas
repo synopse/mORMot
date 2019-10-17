@@ -671,7 +671,7 @@ type
     /// return TRUE if the supplied unicode buffer only contains characters of
     // the corresponding Ansi code page
     // - i.e. if the text can be displayed using this code page
-    function IsValidAnsi(WideText: PWideChar; Length: integer): boolean; overload;
+    function IsValidAnsi(WideText: PWideChar; Length: PtrInt): boolean; overload;
     /// return TRUE if the supplied unicode buffer only contains characters of
     // the corresponding Ansi code page
     // - i.e. if the text can be displayed using this code page
@@ -17102,7 +17102,7 @@ end;
 
 function TSynTempBuffer.InitRandom(RandomLen: integer; forcegsl: boolean): pointer;
 begin
-  Init(nil,RandomLen);
+  Init(RandomLen);
   if RandomLen>0 then
     FillRandom(buf,(RandomLen shr 2)+1,forcegsl);
   result := buf;
@@ -17110,14 +17110,14 @@ end;
 
 function TSynTempBuffer.InitIncreasing(Count, Start: integer): PIntegerArray;
 begin
-  Init(nil,(Count-Start)*4);
+  Init((Count-Start)*4);
   FillIncreasing(buf,Start,Count);
   result := buf;
 end;
 
 function TSynTempBuffer.InitZero(ZeroLen: integer): pointer;
 begin
-  Init(nil,ZeroLen-16);
+  Init(ZeroLen-16);
   {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(buf^,ZeroLen,0);
   result := buf;
 end;
@@ -17224,7 +17224,7 @@ end;
 
 function TSynAnsiConvert.AnsiBufferToUTF8(Dest: PUTF8Char;
   Source: PAnsiChar; SourceChars: Cardinal; NoTrailingZero: boolean): PUTF8Char;
-var tmp: array[0..256*6] of WideChar;
+var tmp: TSynTempBuffer;
     c: cardinal;
     U: PWideChar;
 begin
@@ -17248,29 +17248,24 @@ begin
     until (SourceChars=0) or (ord(Source^)>=128);
   // rely on the Operating System for all remaining ASCII characters
   if SourceChars=0 then
-    result := Dest else
-    if SourceChars<SizeOf(tmp)div 3 then
-      result := Dest+RawUnicodeToUTF8(Dest,SourceChars*3,tmp,
-        (PtrUInt(AnsiBufferToUnicode(tmp,Source,SourceChars))-PtrUInt(@tmp))shr 1,
-        [ccfNoTrailingZero]) else begin
-      GetMem(U,SourceChars*3+2);
-      result := Dest+RawUnicodeToUtf8(Dest,SourceChars*3,U,
-        AnsiBufferToUnicode(U,Source,SourceChars)-U,[ccfNoTrailingZero]);
-      FreeMem(U);
-    end;
+    result := Dest else begin
+    U := AnsiBufferToUnicode(tmp.Init(SourceChars*3),Source,SourceChars);
+    result := Dest+RawUnicodeToUtf8(Dest,SourceChars*3,tmp.buf,(PtrUInt(U)-PtrUInt(tmp.buf))shr 1,[ccfNoTrailingZero]);
+    tmp.Done;
+  end;
   if not NoTrailingZero then
     result^ := #0;
 end;
 
 // UTF-8 is AT MOST 50% bigger than UTF-16 in bytes in range U+0800..U+FFFF
-// see http://stackoverflow.com/a/7008095 -> WideCharCount*3 below
+// see http://stackoverflow.com/a/7008095 -> bytes=WideCharCount*3 below
 
 procedure TSynAnsiConvert.InternalAppendUTF8(Source: PAnsiChar; SourceChars: Cardinal;
   DestTextWriter: TObject; Escape: TTextWriterKind);
 var W: TTextWriter absolute DestTextWriter;
     tmp: TSynTempBuffer;
 begin // rely on explicit conversion
-  SourceChars := AnsiBufferToUTF8(tmp.Init(SourceChars*3+1),Source,SourceChars)-tmp.buf;
+  SourceChars := AnsiBufferToUTF8(tmp.Init(SourceChars*3+1),Source,SourceChars)-PUTF8Char(tmp.buf);
   W.Add(tmp.buf,SourceChars,Escape);
   tmp.Done;
 end;
@@ -17298,8 +17293,7 @@ var tmp: TSynTempBuffer;
 begin
   if SourceChars=0 then
     result := '' else begin
-    tmp.Init(SourceChars*2+1); // max dest size in bytes (including trailing #0 widechar)
-    U := AnsiBufferToUnicode(tmp.buf,Source,SourceChars);
+    U := AnsiBufferToUnicode(tmp.Init(SourceChars*2+1),Source,SourceChars);
     SetString(result,PWideChar(tmp.buf),(PtrUInt(U)-PtrUInt(tmp.buf))shr 1);
     tmp.Done;
   end;
@@ -17450,14 +17444,13 @@ end;
 
 function TSynAnsiConvert.UTF8BufferToAnsi(Dest: PAnsiChar;
   Source: PUTF8Char; SourceChars: Cardinal): PAnsiChar;
-var tmp: array[0..256*6] of WideChar;
-    U: PWideChar;
+var tmp: TSynTempBuffer;
 begin
-  if SourceChars<SizeOf(tmp)div 3 then
-    result := UnicodeBufferToAnsi(Dest,tmp,UTF8ToWideChar(tmp,Source,SourceChars) shr 1) else begin
-    Getmem(U,SourceChars*3+2);
-    result := UnicodeBufferToAnsi(Dest,U,UTF8ToWideChar(U,Source,SourceChars) shr 1);
-    Freemem(U);
+  if (Source=nil) or (SourceChars=0) then
+    result := Dest else begin
+    tmp.Init((SourceChars+1) shl fAnsiCharShift);
+    result := UnicodeBufferToAnsi(Dest,tmp.buf,UTF8ToWideChar(tmp.buf,Source,SourceChars) shr 1);
+    tmp.Done;
   end;
 end;
 
@@ -17475,7 +17468,7 @@ begin
     result := '' else begin
     tmp.Init((SourceChars+1) shl fAnsiCharShift);
     FastSetStringCP(result,tmp.buf,
-      Utf8BufferToAnsi(tmp.buf,Source,SourceChars)-tmp.buf,fCodePage);
+      Utf8BufferToAnsi(tmp.buf,Source,SourceChars)-PAnsiChar(tmp.buf),fCodePage);
     tmp.Done;
   end;
 end;
@@ -17512,7 +17505,7 @@ begin
     result := '' else begin
     tmp.Init((SourceChars+1) shl fAnsiCharShift);
     FastSetStringCP(result,tmp.buf,
-      UnicodeBufferToAnsi(tmp.buf,Source,SourceChars)-tmp.buf,fCodePage);
+      UnicodeBufferToAnsi(tmp.buf,Source,SourceChars)-PAnsiChar(tmp.buf),fCodePage);
     tmp.Done;
   end;
 end;
@@ -17705,14 +17698,14 @@ begin
   fAnsiCharShift := 0;
 end;
 
-function TSynAnsiFixedWidth.IsValidAnsi(WideText: PWideChar; Length: integer): boolean;
+function TSynAnsiFixedWidth.IsValidAnsi(WideText: PWideChar; Length: PtrInt): boolean;
 var i: PtrInt;
-    wc: cardinal;
+    wc: PtrUInt;
 begin
   result := false;
   if WideText<>nil then
     for i := 0 to Length-1 do begin
-      wc := cardinal(WideText[i]);
+      wc := PtrUInt(WideText[i]);
       if wc=0 then
         break else
       if wc<256 then
@@ -17727,12 +17720,12 @@ begin
 end;
 
 function TSynAnsiFixedWidth.IsValidAnsi(WideText: PWideChar): boolean;
-var wc: cardinal;
+var wc: PtrUInt;
 begin
   result := false;
   if WideText<>nil then
     repeat
-      wc := cardinal(WideText^);
+      wc := PtrUInt(WideText^);
       inc(WideText);
       if wc=0 then
         break else
@@ -17960,7 +17953,7 @@ begin
     result := '' else begin
     tmp.Init(SourceChars*3+1);
     FastSetStringCP(result,tmp.buf,UnicodeBufferToUTF8(tmp.buf,
-      SourceChars*3,Source,SourceChars)-tmp.buf,fCodePage);
+      SourceChars*3,Source,SourceChars)-PAnsiChar(tmp.buf),fCodePage);
     tmp.Done;
   end;
 end;
@@ -18066,19 +18059,19 @@ end;
 
 function TSynTempWriter.AsBinary: RawByteString;
 begin
-  FastSetStringCP(result,PAnsiChar(tmp.buf),pos-tmp.buf,CP_RAWBYTESTRING);
+  FastSetStringCP(result,tmp.buf,pos-PAnsiChar(tmp.buf),CP_RAWBYTESTRING);
 end;
 
 function TSynTempWriter.Position: integer;
 begin
-  result := pos-tmp.buf;
+  result := pos-PAnsiChar(tmp.buf);
 end;
 
 procedure TSynTempWriter.wr(const val; len: integer);
 begin
   if len<=0 then
     exit;
-  if pos-tmp.buf+len>tmp.len then
+  if pos-PAnsiChar(tmp.buf)+len>tmp.len then
      raise ESynException.CreateUTF8('TSynTempWriter(%) overflow',[tmp.len]);
   MoveSmall(@val,pos,len);
   inc(pos,len);
@@ -18116,7 +18109,7 @@ end;
 
 function TSynTempWriter.wrfillchar(count: integer; value: byte): PAnsiChar;
 begin
-  if pos-tmp.buf+count>tmp.len then
+  if pos-PAnsiChar(tmp.buf)+count>tmp.len then
      raise ESynException.CreateUTF8('TSynTempWriter(%) overflow',[tmp.len]);
   {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(pos^,count,value);
   result := pos;
@@ -18550,7 +18543,7 @@ By1:  c := byte(Source^); inc(Source);
       if Source>=endSource then break;
     until false;
 Quit:
-  result := PtrUInt(dest)-PtrUInt(begd); // dest-begd return char length
+  result := PtrUInt(dest)-PtrUInt(begd); // dest-begd returns bytes length
 NoSource:
   if not NoTrailingZero then
     dest^ := #0; // always append a WideChar(0) to the end of the buffer
@@ -18766,8 +18759,7 @@ begin
 end;
 
 function Utf8DecodeToRawUnicode(P: PUTF8Char; L: integer): RawUnicode;
-var short: array[0..256*6] of WideChar;
-    U: PWideChar;
+var tmp: TSynTempBuffer;
 begin
   result := ''; // somewhat faster if result is freed before any SetLength()
   if L=0 then
@@ -18775,12 +18767,9 @@ begin
   if L=0 then
     exit;
   // +1 below is for #0 ending -> true WideChar(#0) ending
-  if L<SizeOf(short)div 3 then // mostly avoid tmp memory allocation on heap
-    SetString(result,PAnsiChar(@short),UTF8ToWideChar(short,P,L)+1) else begin
-    GetMem(U,L*3+2); // maximum posible unicode size (if all <#128)
-    SetString(result,PAnsiChar(U),UTF8ToWideChar(U,P,L)+1);
-    FreeMem(U);
-  end;
+  tmp.Init(L*3); // maximum posible unicode size (if all <#128)
+  SetString(result,PAnsiChar(tmp.buf),UTF8ToWideChar(tmp.buf,P,L)+1);
+  tmp.Done;
 end;
 
 function Utf8DecodeToRawUnicode(const S: RawUTF8): RawUnicode;
@@ -19121,16 +19110,13 @@ begin
 end;
 
 procedure UTF8DecodeToUnicodeString(P: PUTF8Char; L: integer; var result: UnicodeString);
-var short: array[byte] of WideChar;
-    U: PWideChar;
+var tmp: TSynTempBuffer;
 begin
   if (P=nil) or (L=0) then
-    result := '' else
-  if L<SizeOf(short)div 3 then
-    SetString(result,short,UTF8ToWideChar(short,P,L) shr 1) else begin
-    GetMem(U,L*3+2); // maximum posible unicode size (if all <#128)
-    SetString(result,U,UTF8ToWideChar(U,P,L) shr 1);
-    FreeMem(U);
+    result := '' else begin
+    tmp.Init(L*3); // maximum posible unicode size (if all <#128)
+    SetString(result,PWideChar(tmp.buf),UTF8ToWideChar(tmp.buf,P,L) shr 1);
+    tmp.Done;
   end;
 end;
 
@@ -19939,16 +19925,13 @@ begin
 end;
 
 procedure UTF8ToWideString(Text: PUTF8Char; Len: integer; var result: WideString);
-var short: array[0..256*6] of WideChar;
-    U: PWideChar;
+var tmp: TSynTempBuffer;
 begin
   if (Text=nil) or (Len=0) then
-    result := '' else
-  if Len<SizeOf(short)div 3 then
-    SetString(result,short,UTF8ToWideChar(short,Text,Len) shr 1) else begin
-    GetMem(U,Len*3+2); // maximum posible unicode size (if all <#128)
-    SetString(result,U,UTF8ToWideChar(U,Text,Len) shr 1);
-    FreeMem(U);
+    result := '' else begin
+    tmp.Init(Len*3); // maximum posible unicode size (if all <#128)
+    SetString(result,PWideChar(tmp.buf),UTF8ToWideChar(tmp.buf,Text,Len) shr 1);
+    tmp.Done;
   end;
 end;
 
@@ -19968,16 +19951,13 @@ begin
 end;
 
 procedure UTF8ToSynUnicode(Text: PUTF8Char; Len: integer; var result: SynUnicode);
-var short: array[byte] of WideChar;
-    U: PWideChar;
+var tmp: TSynTempBuffer;
 begin
   if (Text=nil) or (Len=0) then
-    result := '' else
-  if Len<SizeOf(short)div 3 then
-    SetString(result,short,UTF8ToWideChar(short,Text,Len) shr 1) else begin
-    GetMem(U,Len*3+2); // maximum posible unicode size (if all <#128)
-    SetString(result,U,UTF8ToWideChar(U,Text,Len) shr 1);
-    FreeMem(U);
+    result := '' else begin
+    tmp.Init(Len*3); // maximum posible unicode size (if all <#128)
+    SetString(result,PWideChar(tmp.buf),UTF8ToWideChar(tmp.buf,Text,Len) shr 1);
+    tmp.Done;
   end;
 end;
 
@@ -42246,7 +42226,7 @@ end;
 function RecordLoadJSON(var Rec; const JSON: RawUTF8; TypeInfo: pointer): boolean;
 var tmp: TSynTempBuffer;
 begin
-  tmp.Init(JSON);
+  tmp.Init(JSON); // make private copy before in-place decoding
   try
     result := RecordLoadJSON(Rec,tmp.buf,TypeInfo)<>nil;
   finally
@@ -44100,7 +44080,7 @@ procedure VariantLoadJSON(var Value: Variant; const JSON: RawUTF8;
   TryCustomVariants: PDocVariantOptions; AllowDouble: boolean);
 var tmp: TSynTempBuffer;
 begin
-  tmp.Init(JSON);
+  tmp.Init(JSON); // temp copy before in-place decoding
   try
     VariantLoadJSON(Value,tmp.buf,nil,TryCustomVariants,AllowDouble);
   finally
@@ -59226,7 +59206,7 @@ begin
     if fSafe.Padding[DIC_KEYCOUNT].VInteger = 0 then
       exit;
     tmp.Init(fKeys.SaveToLength+fValues.SaveToLength);
-    if fValues.SaveTo(fKeys.SaveTo(tmp.buf))-tmp.buf=tmp.len then begin
+    if fValues.SaveTo(fKeys.SaveTo(tmp.buf))-PAnsiChar(tmp.buf)=tmp.len then begin
       if NoCompression then
         trigger := maxInt else
         trigger := 128;
