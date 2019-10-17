@@ -8890,7 +8890,7 @@ type
     // - use the specified TSQLRecord class or create instances
     // of the first associated record class (from internal QueryTables[])
     procedure ToObjectList(DestList: TObjectList; RecordType: TSQLRecordClass=nil); overload;
-    {$ifdef ISDELPHI2010} // Delphi 2009 generics are buggy
+    {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics are buggy
     /// create a TObjectList<TSQLRecord> with TSQLRecord instances corresponding
     // to this TSQLTable result set
     // - use the specified TSQLRecord class or create instances
@@ -15115,7 +15115,7 @@ type
     // Results: TIDDynArray parameter
     function BatchSend(Batch: TSQLRestBatch): integer; overload;
 
-    {$ifdef ISDELPHI2010} // Delphi 2009 generics support is buggy :(
+    {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics support is buggy :(
     /// get an instance of one interface-based service
     // - may return nil if this service interface is not available
     function Service<T: IInterface>: T;
@@ -15157,7 +15157,7 @@ type
     function RetrieveList<T: TSQLRecord>(const FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const;
       const aCustomFieldsCSV: RawUTF8=''): TObjectList<T>; overload;
-    {$endif ISDELPHI2010}
+    {$endif ISDELPHIXE}
 
     /// you can call this method in TThread.Execute to ensure that
     // the thread will be taken into account during process
@@ -27584,7 +27584,7 @@ begin
   fOwnedRecords.Add(result);
 end;
 
-{$ifdef ISDELPHI2010} // Delphi 2009 generics are buggy
+{$ifdef ISDELPHI2010} // Delphi 2009/2010 generics are buggy
 function TSQLTable.ToObjectList<T>: TObjectList<T>;
 var R,Item: TSQLRecord;
     row: PPUtf8Char;
@@ -31978,11 +31978,14 @@ var Table: TSQLTableJSON;
     tmp: TSynTempBuffer; // work on a private copy
 begin
   tmp.Init(JSONTable);
-  Table := TSQLTableJSON.Create('',tmp.buf,tmp.len);
   try
-    FillFrom(Table,Row);
+    Table := TSQLTableJSON.Create('',tmp.buf,tmp.len);
+    try
+      FillFrom(Table,Row);
+    finally
+      Table.Free;
+    end;
   finally
-    Table.Free;
     tmp.Done;
   end;
 end;
@@ -37153,7 +37156,7 @@ begin
   raise EORMException.CreateUTF8('BATCH not supported by %',[self]);
 end;
 
-{$ifdef ISDELPHI2010} // Delphi 2009 generics support is buggy :(
+{$ifdef ISDELPHI2010} // Delphi 2009/2010 generics support is buggy :(
 
 function TSQLRest.Service<T>: T;
 var service: TServiceFactory;
@@ -42231,8 +42234,11 @@ begin
   VariantSaveJSON(Value,Escape,json);
   if MakeHumanReadable and (json<>'') and (json[1] in ['{','[']) then begin
     tmp.Init(json);
-    JSONBufferReformat(tmp.buf,json);
-    tmp.Done;
+    try
+      JSONBufferReformat(tmp.buf,json);
+    finally
+      tmp.Done;
+    end;
   end;
   Returns(json,Status,CustomHeader,Handle304NotModified);
 end;
