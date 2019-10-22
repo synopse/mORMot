@@ -481,7 +481,8 @@ var
 /// initialize the libcurl API, accessible via the curl global variable
 // - do nothing if the library has already been loaded
 // - will raise ECurl exception on any loading issue
-procedure LibCurlInitialize(engines: TCurlGlobalInit=[giSSL]);
+procedure LibCurlInitialize(engines: TCurlGlobalInit=[giSSL];
+  const dllname: string = LIBCURL_DLL);
 
 /// return TRUE if a curl library is available
 // - will load and initialize it, calling LibCurlInitialize if necessary,
@@ -530,7 +531,7 @@ begin
  end;
 end;
 
-procedure LibCurlInitialize(engines: TCurlGlobalInit);
+procedure LibCurlInitialize(engines: TCurlGlobalInit; const dllname: string);
 var P: PPointer;
     api: integer;
     h: {$ifdef FPC}TLibHandle{$else}THandle{$endif FPC};
@@ -550,7 +551,7 @@ begin
     h := 0;
     if curl.Module=0 then // try to load libcurl once
     try
-      h := LoadLibrary(LIBCURL_DLL);
+      h := LoadLibrary(PChar(dllname));
       {$ifdef Darwin} // another common names on MacOS
       if h=0 then
         h := LoadLibrary('libcurl.4.dylib');
