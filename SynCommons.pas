@@ -28492,15 +28492,16 @@ end;
 procedure BinToHexDisplayLower(Bin, Hex: PAnsiChar; BinBytes: PtrInt);
 {$ifdef PUREPASCAL}var tab: ^TAnsiCharToWord;{$endif}
 begin
+  if (Bin=nil) or (Hex=nil) or (BinBytes<=0) then
+    exit;
   {$ifdef PUREPASCAL}tab := @TwoDigitsHexWLower;{$endif}
   inc(Hex,BinBytes*2);
-  if BinBytes>0 then
-    repeat
-      dec(Hex,2);
-      PWord(Hex)^ := {$ifndef PUREPASCAL}TwoDigitsHexWLower{$else}tab{$endif}[Bin^];
-      inc(Bin);
-      dec(BinBytes);
-    until BinBytes=0;
+  repeat
+    dec(Hex,2);
+    PWord(Hex)^ := {$ifdef PUREPASCAL}tab{$else}TwoDigitsHexWLower{$endif}[Bin^];
+    inc(Bin);
+    dec(BinBytes);
+  until BinBytes=0;
 end;
 
 function BinToHexDisplayLower(Bin: PAnsiChar; BinBytes: integer): RawUTF8;
@@ -28539,7 +28540,7 @@ begin
   SetString(result,nil,BinBytes*2);
   BinToHexDisplayLower(Bin,pointer(result),BinBytes);
 end;
-{$endif}
+{$endif UNICODE}
 
 procedure PointerToHex(aPointer: Pointer; var result: RawUTF8);
 begin
@@ -28820,7 +28821,7 @@ begin
       exit;
   result := -1;
 end;
-{$endif}
+{$endif HASINLINE}
 
 function AddRawUTF8(var Values: TRawUTF8DynArray; const Value: RawUTF8;
   NoDuplicates: boolean=false; CaseSensitive: boolean=true): boolean;
@@ -28968,7 +28969,7 @@ asm // eax=source edx=search
         ret
 @z:     pop     edx         // ignore source var, result := false
 end;
-{$endif}
+{$endif PUREPASCAL}
 
 {$ifdef USENORMTOUPPER}
 {$ifdef PUREPASCAL}
@@ -29498,7 +29499,7 @@ begin
   FileClose(F);
   if FileDate<>0 then
     FileSetDate(FileName,DateTimeToFileDate(FileDate));
-  {$endif}
+  {$endif MSWINDOWS}
   result := true;
 end;
 
@@ -29583,7 +29584,7 @@ begin
       result := CurrentAnsiConvert.UTF8BufferToAnsi(pointer(PtrUInt(Map.Buffer)+3),Map.Size-3);
     isAnsi:
       SetString(result,PAnsiChar(Map.Buffer),Map.Size);
-{$endif}
+{$endif UNICODE}
     end;
   finally
     Map.UnMap;
@@ -29636,7 +29637,7 @@ begin
     result := (S.Write(L,4)=4) and (S.Write(pointer(Text)^,L)=L);
     {$else}
     result := S.Write(pointer(PtrInt(Text)-SizeOf(integer))^,L+4)=L+4;
-    {$endif}
+    {$endif FPC}
 end;
 
 function GetFileNameWithoutExt(const FileName: TFileName;
@@ -29697,7 +29698,7 @@ begin
     FileClose(f);
   end;
 end;
-{$endif}
+{$endif MSWINDOWS}
 
 function FileSize(F: THandle): Int64;
 var res: Int64Rec absolute result;

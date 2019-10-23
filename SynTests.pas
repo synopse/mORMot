@@ -213,11 +213,28 @@ type
     function CheckNot(condition: Boolean; const msg: string = ''): Boolean;
       {$ifdef HASINLINE}inline;{$endif}
     /// used by the published methods to run test assertion against integers
-    // - if a<>b, will include '#<>#' text before the supplied msg
-    function CheckEquals(a,b: Int64; const msg: RawUTF8 = ''): Boolean; overload;
+    // - if a<>b, will fail and include '#<>#' text before the supplied msg
+    function IsEqual(a,b: Int64; const msg: RawUTF8 = ''): Boolean; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// used by the published methods to run test assertion against UTF-8 strings
-    function CheckEquals(const a,b: RawUTF8; const msg: RawUTF8 = ''): Boolean; overload;
+    // - if a<>b, will fail and include '#<>#' text before the supplied msg
+    function IsEqual(const a,b: RawUTF8; const msg: RawUTF8 = ''): Boolean; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// used by the published methods to run test assertion against pointers/classes
+    // - if a<>b, will fail and include '#<>#' text before the supplied msg
+    function IsEqual(a,b: pointer; const msg: RawUTF8 = ''): Boolean; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// used by the published methods to run test assertion against integers
+    // - if a=b, will fail and include '#=#' text before the supplied msg
+    function NotEqual(a,b: Int64; const msg: RawUTF8 = ''): Boolean; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// used by the published methods to run test assertion against UTF-8 strings
+    // - if a=b, will fail and include '#=#' text before the supplied msg
+    function NotEqual(const a,b: RawUTF8; const msg: RawUTF8 = ''): Boolean; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// used by the published methods to run test assertion against pointers/classes
+    // - if a=b, will fail and include '#=#' text before the supplied msg
+    function NotEqual(a,b: pointer; const msg: RawUTF8 = ''): Boolean; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// used by the published methods to run a test assertion about two double values
     // - includes some optional precision argument
@@ -599,25 +616,50 @@ begin
 end;
 
 const
-  EQUALS_STR = '%<>% %';
+  EQUAL_MSG = '%<>% %';
+  NOTEQUAL_MSG = '%=% %';
 
-function TSynTestCase.CheckEquals(a,b: Int64; const msg: RawUTF8): Boolean;
+function TSynTestCase.IsEqual(a,b: Int64; const msg: RawUTF8): Boolean;
 begin
   result := a=b;
-  CheckUTF8(result,EQUALS_STR,[a,b,msg]);
+  CheckUTF8(result,EQUAL_MSG,[a,b,msg]);
 end;
 
-function TSynTestCase.CheckEquals(const a,b,msg: RawUTF8): Boolean;
+function TSynTestCase.IsEqual(const a,b,msg: RawUTF8): Boolean;
 begin
   result := a=b;
-  CheckUTF8(result,EQUALS_STR,[a,b,msg]);
+  CheckUTF8(result,EQUAL_MSG,[a,b,msg]);
+end;
+
+function TSynTestCase.IsEqual(a,b: pointer; const msg: RawUTF8): Boolean;
+begin
+  result := a=b;
+  CheckUTF8(result,EQUAL_MSG,[a,b,msg]);
+end;
+
+function TSynTestCase.NotEqual(a,b: Int64; const msg: RawUTF8): Boolean;
+begin
+  result := a<>b;
+  CheckUTF8(result,NOTEQUAL_MSG,[a,b,msg]);
+end;
+
+function TSynTestCase.NotEqual(const a,b,msg: RawUTF8): Boolean;
+begin
+  result := a<>b;
+  CheckUTF8(result,NOTEQUAL_MSG,[a,b,msg]);
+end;
+
+function TSynTestCase.NotEqual(a,b: pointer; const msg: RawUTF8): Boolean;
+begin
+  result := a<>b;
+  CheckUTF8(result,NOTEQUAL_MSG,[a,b,msg]);
 end;
 
 function TSynTestCase.CheckSame(const Value1, Value2: double;
   const Precision: double; const msg: string): Boolean;
 begin
   result := SameValue(Value1,Value2,Precision);
-  CheckUTF8(result,EQUALS_STR,[Value1,Value2,msg]);
+  CheckUTF8(result,EQUAL_MSG,[Value1,Value2,msg]);
 end;
 
 function TSynTestCase.CheckMatchAny(const Value: RawUTF8;
