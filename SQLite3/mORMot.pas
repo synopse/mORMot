@@ -62415,6 +62415,8 @@ begin
           error := GetErrorMessage(status);
           if error<>'' then
             error := ' - '+error;
+          if (optNoLogInput in fExecution[m].Options) or ([smdConst,smdVar]*service^.HasSPIParams<>[]) then
+            sent := '';
           aErrorMsg^ := FormatUTF8('URI % % returned status ''%'' (%%)',
             [uri,sent,resp,status,error]);
         end else
