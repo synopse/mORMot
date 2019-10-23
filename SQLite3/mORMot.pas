@@ -62349,6 +62349,7 @@ var baseuri,uri,sent,resp,clientDrivenID,head,error,ct: RawUTF8;
     status,m: integer;
     service: PServiceMethod;
     ctxt: TSQLRestServerURIContextClientInvoke;
+    withinput: boolean;
     {$ifdef WITHLOG}
     log: ISynLog; // for Enter auto-leave to work with FPC
     p: RawUTF8;
@@ -62379,10 +62380,11 @@ begin
   if m<0 then
     service := nil else
     service := @fInterface.Methods[m];
+  withinput := ((service=nil) or ([smdConst,smdVar]*service^.HasSPIParams=[])) and
+    not(optNoLogInput in fExecution[m].Options);
   {$ifdef WITHLOG}
-  if (service=nil) or not((optNoLogInput in fExecution[m].Options) or
-     ([smdConst,smdVar]*service^.HasSPIParams<>[])) then
-    p := aParams;
+  if withinput then
+    p := aParams; // include non-sensitive input in log
   log := fRest.LogClass.Enter('InternalInvoke I%.%(%) %',
     [fInterfaceURI,aMethod,p,clientDrivenID],self);
   {$endif}
@@ -62415,8 +62417,8 @@ begin
           error := GetErrorMessage(status);
           if error<>'' then
             error := ' - '+error;
-          if (optNoLogInput in fExecution[m].Options) or ([smdConst,smdVar]*service^.HasSPIParams<>[]) then
-            sent := '';
+          if not withinput then
+            sent := ''; // exclude sensitive input in error text
           aErrorMsg^ := FormatUTF8('URI % % returned status ''%'' (%%)',
             [uri,sent,resp,status,error]);
         end else
@@ -62426,8 +62428,8 @@ begin
     end;
     // decode JSON object
     {$ifdef WITHLOG}
-    if (service=nil) or not((optNoLogOutput in fExecution[m].Options) or
-       ([smdVar,smdOut,smdResult]*service^.HasSPIParams<>[])) then
+    if ((service=nil) or ([smdConst,smdVar]*service^.HasSPIParams=[])) and
+       not(optNoLogOutput in fExecution[m].Options) then
       with fRest.fLogFamily do
         if (sllServiceReturn in Level) and (resp<>'') then
           SynLog.Log(sllServiceReturn,resp,self,MAX_SIZE_RESPONSE_LOG);
