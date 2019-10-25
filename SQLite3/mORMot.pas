@@ -2600,7 +2600,7 @@ type
     // - is prefered to MaxValue to identify the number of stored bytes
     OrdType: TOrdType;
     {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-    Dummy: DWORD; // needed on ARM for correct alignment !!??
+    EnumDummy: DWORD; // needed on ARM for correct alignment !!??
     {$endif}
     { this seemingly extraneous inner record is here for alignment purposes, so
     that its data gets aligned properly (if FPC_REQUIRES_PROPER_ALIGNMENT is set) }
@@ -21035,7 +21035,7 @@ type
 
 function GetTypeData(const info: TTypeInfo): pointer; {$ifdef HASINLINE}inline;{$endif}
 begin
-  result := AlignTypeData(PAnsiChar(@info.Name[1])+ord(info.Name[0]));
+  result := AlignTypeData(pointer(@info)+2+PByte(pointer(@info)+1)^);
 end;
 
 function TTypeInfo.ClassType: PClassType;
@@ -31380,7 +31380,7 @@ function TTypeInfo.InterfaceGUID: PGUID;
 begin
   if (@self=nil) or (Kind<>tkInterface) then
     result := nil else
-    result := @InterfaceType.IntfGuid;
+    result := @InterfaceType^.IntfGuid;
 end;
 
 function TTypeInfo.InterfaceUnitName: PShortString;
