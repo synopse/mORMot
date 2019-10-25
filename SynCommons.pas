@@ -40,6 +40,7 @@ unit SynCommons;
    - itSDS
    - Johan Bontes
    - kevinday
+   - Kevin Chen
    - Maciej Izak (hnb)
    - Marius Maximus (mariuszekpl)
    - mazinsw
@@ -51847,7 +51848,7 @@ begin
       B^ := '0'; // '.5' -> '0.5'
       inc(B);
     end;
-    MoveSmall(P,B+1,L);
+    MoveSmall(P,B,L);
     inc(B,L-1);
   end;
 end;
