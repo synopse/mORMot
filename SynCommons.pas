@@ -6460,6 +6460,11 @@ function ObjArrayAdd(var aObjArray; aItem: TObject): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// wrapper to add items to a T*ObjArray dynamic array storage
+// - aSourceObjArray[] items are just copied to aDestObjArray, which remains untouched
+// - return the new number of the items in aDestObjArray
+function ObjArrayAddFrom(var aDestObjArray; const aSourceObjArray): PtrInt;
+
+/// wrapper to add and move items to a T*ObjArray dynamic array storage
 // - aSourceObjArray[] items will be owned by aDestObjArray[], therefore
 // aSourceObjArray is set to nil
 // - return the new number of the items in aDestObjArray
@@ -6478,6 +6483,11 @@ function ObjArrayAddCount(var aObjArray; aItem: TObject; var aObjArrayCount: int
 // not by content), return its current index in the dynamic array
 // - if the object does not appear in the array, add it at the end
 procedure ObjArrayAddOnce(var aObjArray; aItem: TObject);
+
+// - aSourceObjArray[] items are just copied to aDestObjArray, which remains untouched
+// - will first check if aSourceObjArray[] items are not already in aDestObjArray
+// - return the new number of the items in aDestObjArray
+function ObjArrayAddOnceFrom(var aDestObjArray; const aSourceObjArray): PtrInt;
 
 /// wrapper to set the length of a T*ObjArray dynamic array storage
 // - could be used as an alternative to SetLength() when you do not
@@ -50649,7 +50659,7 @@ begin
   a[result] := aItem;
 end;
 
-function ObjArrayAppend(var aDestObjArray, aSourceObjArray): PtrInt;
+function ObjArrayAddFrom(var aDestObjArray; const aSourceObjArray): PtrInt;
 var n: PtrInt;
     s: TObjectDynArray absolute aSourceObjArray;
     d: TObjectDynArray absolute aDestObjArray;
@@ -50658,8 +50668,13 @@ begin
   n := length(s);
   SetLength(d,result+n);
   {$ifdef FPC}Move{$else}MoveFast{$endif}(s[0],d[result],n*SizeOf(pointer));
-  s := nil; // s[] will be owned by d[]
   inc(result,n);
+end;
+
+function ObjArrayAppend(var aDestObjArray, aSourceObjArray): PtrInt;
+begin
+  result := ObjArrayAddFrom(aDestObjArray,aSourceObjArray);
+  TObjectDynArray(aSourceObjArray) := nil; // aSourceObjArray[] changed ownership
 end;
 
 function ObjArrayAddCount(var aObjArray; aItem: TObject; var aObjArrayCount: integer): PtrInt;
@@ -50681,6 +50696,25 @@ begin
     SetLength(a,n+1);
     a[n] := aItem;
   end;
+end;
+
+function ObjArrayAddOnceFrom(var aDestObjArray; const aSourceObjArray): PtrInt;
+var n, i: PtrInt;
+    s: TObjectDynArray absolute aSourceObjArray;
+    d: TObjectDynArray absolute aDestObjArray;
+begin
+  result := length(d);
+  n := length(s);
+  if n=0 then
+    exit;
+  SetLength(d,result+n);
+  for i := 0 to n-1 do
+    if not PtrUIntScanExists(pointer(d),result,PtrUInt(s[i])) then begin
+      d[result] := s[i];
+      inc(result);
+    end;
+  if result<>length(d) then
+    SetLength(d,result);
 end;
 
 procedure ObjArraySetLength(var aObjArray; aLength: integer);
