@@ -3049,8 +3049,13 @@ function SplitRight(const Str: RawUTF8; SepChar: AnsiChar; LeftStr: PRawUTF8=nil
 // - if SepChar doesn't appear, will return Str, e.g. SplitRight('123','/')='123'
 function SplitRights(const Str, SepChar: RawUTF8): RawUTF8;
 
+/// actual replacement function called by StringReplaceAll() on first match
+function StringReplaceAllProcess(const S, OldPattern, NewPattern: RawUTF8;
+  found: integer): RawUTF8;
+
 /// fast version of StringReplace(S, OldPattern, NewPattern,[rfReplaceAll]);
 function StringReplaceAll(const S, OldPattern, NewPattern: RawUTF8): RawUTF8;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fast replace of a specified char by a given string
 function StringReplaceChars(const Source: RawUTF8; OldChar, NewChar: AnsiChar): RawUTF8;
@@ -25729,50 +25734,50 @@ begin
       DestPtr[i]^ := '';
 end;
 
-function StringReplaceAll(const S, OldPattern, NewPattern: RawUTF8): RawUTF8;
-
-  procedure Process(found: integer);
-  var oldlen,newlen,i,last,posCount,sharedlen: integer;
-      pos: TIntegerDynArray;
-      src,dst: PAnsiChar;
-  begin
-    oldlen := length(OldPattern);
-    newlen := length(NewPattern);
-    SetLength(pos,64);
-    pos[0] := found;
-    posCount := 1;
-    repeat
-      found := PosEx(OldPattern,S,found+oldlen);
-      if found=0 then
-        break;
-      AddInteger(pos,posCount,found);
-    until false;
-    FastSetString(result,nil,Length(S)+(newlen-oldlen)*posCount);
-    last := 1;
-    src := pointer(s);
-    dst := pointer(result);
-    for i := 0 to posCount-1 do begin
-      sharedlen := pos[i]-last;
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(src^,dst^,sharedlen);
-      inc(src,sharedlen+oldlen);
-      inc(dst,sharedlen);
-      if newlen>0 then begin
-        MoveSmall(pointer(NewPattern),dst,newlen);
-        inc(dst,newlen);
-      end;
-      last := pos[i]+oldlen;
+function StringReplaceAllProcess(const S, OldPattern, NewPattern: RawUTF8;
+  found: integer): RawUTF8;
+var oldlen,newlen,i,last,posCount,sharedlen: integer;
+    pos: TIntegerDynArray;
+    src,dst: PAnsiChar;
+begin
+  oldlen := length(OldPattern);
+  newlen := length(NewPattern);
+  SetLength(pos,64);
+  pos[0] := found;
+  posCount := 1;
+  repeat
+    found := PosEx(OldPattern,S,found+oldlen);
+    if found=0 then
+      break;
+    AddInteger(pos,posCount,found);
+  until false;
+  FastSetString(result,nil,Length(S)+(newlen-oldlen)*posCount);
+  last := 1;
+  src := pointer(s);
+  dst := pointer(result);
+  for i := 0 to posCount-1 do begin
+    sharedlen := pos[i]-last;
+    {$ifdef FPC}Move{$else}MoveFast{$endif}(src^,dst^,sharedlen);
+    inc(src,sharedlen+oldlen);
+    inc(dst,sharedlen);
+    if newlen>0 then begin
+      MoveSmall(pointer(NewPattern),dst,newlen);
+      inc(dst,newlen);
     end;
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(src^,dst^,length(S)-last+1);
+    last := pos[i]+oldlen;
   end;
+  {$ifdef FPC}Move{$else}MoveFast{$endif}(src^,dst^,length(S)-last+1);
+end;
 
-var j: integer;
+function StringReplaceAll(const S, OldPattern, NewPattern: RawUTF8): RawUTF8;
+var found: integer;
 begin
   if (S='') or (OldPattern='') or (OldPattern=NewPattern) then
     result := S else begin
-    j := PosEx(OldPattern,S,1); // our PosEx() is faster than Pos()
-    if j=0 then
+    found := PosEx(OldPattern,S,1); // our PosEx() is faster than Pos()
+    if found=0 then
       result := S else
-      Process(j);
+      result := StringReplaceAllProcess(S,OldPattern,NewPattern,found);
   end;
 end;
 
