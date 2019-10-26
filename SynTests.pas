@@ -481,6 +481,11 @@ type
   end;
 
 
+const
+  EQUAL_MSG = '%<>% %';
+  NOTEQUAL_MSG = '%=% %';
+
+
 implementation
 
 {$ifdef FPC}
@@ -614,10 +619,6 @@ function TSynTestCase.CheckNot(condition: Boolean; const msg: string): Boolean;
 begin
   result := CheckFailed(not condition, msg);
 end;
-
-const
-  EQUAL_MSG = '%<>% %';
-  NOTEQUAL_MSG = '%=% %';
 
 function TSynTestCase.CheckEqual(a,b: Int64; const msg: RawUTF8): Boolean;
 begin
