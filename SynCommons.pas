@@ -6621,9 +6621,16 @@ function GetEnumNameValue(aTypeInfo: pointer; aValue: PUTF8Char; aValueLen: inte
   AlsoTrimLowerCase: boolean=false): Integer; overload;
 
 /// retrieve the index of an enumerate item from its left-trimmed text
+// - text comparison is case-insensitive for A-Z characters
 // - will trim the lowercase 'a'..'z' chars on left side of the supplied aValue text
 // - returns -1 if aValue was not found
 function GetEnumNameValueTrimmed(aTypeInfo: pointer; aValue: PUTF8Char; aValueLen: integer): integer;
+
+/// retrieve the index of an enumerate item from its left-trimmed text
+// - text comparison is case-sensitive for A-Z characters
+// - will trim the lowercase 'a'..'z' chars on left side of the supplied aValue text
+// - returns -1 if aValue was not found
+function GetEnumNameValueTrimmedExact(aTypeInfo: pointer; aValue: PUTF8Char; aValueLen: integer): integer;
 
 /// helper to retrieve the index of an enumerate item from its text
 function GetEnumNameValue(aTypeInfo: pointer; const aValue: RawUTF8;
@@ -6658,8 +6665,14 @@ procedure AppendShortComma(text: PAnsiChar; len: integer; var result: shortstrin
 function FindShortStringListExact(List: PShortString; MaxValue: integer;
   aValue: PUTF8Char; aValueLen: PtrInt): integer;
 
-/// fast search of an left-trimmed lowercase match of a RTTI's PShortString array
+/// fast case-insensitive search of a left-trimmed lowercase match
+// of a RTTI's PShortString array
 function FindShortStringListTrimLowerCase(List: PShortString; MaxValue: integer;
+  aValue: PUTF8Char; aValueLen: PtrInt): integer;
+
+/// fast case-sensitive search of a left-trimmed lowercase match
+// of a RTTI's PShortString array
+function FindShortStringListTrimLowerCaseExact(List: PShortString; MaxValue: integer;
   aValue: PUTF8Char; aValueLen: PtrInt): integer;
 
 /// retrieve the type name from its low-level RTTI
@@ -21301,7 +21314,7 @@ begin
   for result := 0 to MaxValue do begin
     PLen := ord(List^[0]);
     inc(PUTF8Char(List));
-    repeat
+    repeat // trim lower case
       if not(PUTF8Char(List)^ in ['a'..'z']) then
         break;
       inc(PUTF8Char(List));
@@ -21341,6 +21354,27 @@ zero:
 end;
 {$endif HASINLINE}
 
+function FindShortStringListTrimLowerCaseExact(List: PShortString; MaxValue: integer;
+  aValue: PUTF8Char; aValueLen: PtrInt): integer;
+var PLen: PtrInt;
+begin
+  if aValueLen<>0 then
+  for result := 0 to MaxValue do begin
+    PLen := ord(List^[0]);
+    inc(PUTF8Char(List));
+    repeat
+      if not(PUTF8Char(List)^ in ['a'..'z']) then
+        break;
+      inc(PUTF8Char(List));
+      dec(PLen);
+    until PLen=0;
+    if (PLen=aValueLen) and CompareMemFixed(aValue,List,PLen) then
+      exit;
+    inc(PUTF8Char(List),PLen);
+  end;
+  result := -1;
+end;
+
 function GetEnumNameValue(aTypeInfo: pointer; aValue: PUTF8Char; aValueLen: integer;
   AlsoTrimLowerCase: boolean): Integer;
 var List: PShortString;
@@ -21362,6 +21396,16 @@ begin
   List := GetEnumInfo(aTypeInfo,MaxValue);
   if (aValueLen<>0) and (List<>nil) then
     result := FindShortStringListTrimLowerCase(List,MaxValue,aValue,aValueLen) else
+    result := -1;
+end;
+
+function GetEnumNameValueTrimmedExact(aTypeInfo: pointer; aValue: PUTF8Char; aValueLen: integer): integer;
+var List: PShortString;
+    MaxValue: integer;
+begin
+  List := GetEnumInfo(aTypeInfo,MaxValue);
+  if (aValueLen<>0) and (List<>nil) then
+    result := FindShortStringListTrimLowerCaseExact(List,MaxValue,aValue,aValueLen) else
     result := -1;
 end;
 
@@ -23926,51 +23970,51 @@ end;
 function CompareMem(P1, P2: Pointer; Length: PtrInt): Boolean;
 label zero;
 begin // this code compiles well under FPC and Delphi on both 32-bit and 64-bit
-  inc(Length,PtrInt(PtrUInt(P1))-SizeOf(PtrInt)*2);
+  inc(Length,PtrInt(PtrUInt(P1))-SizeOf(PtrInt)*2); // Length = 2*PtrInt end
   if Length>=PtrInt(PtrUInt(P1)) then begin
-    if PPtrInt(PtrUInt(P1))^<>PPtrInt(P2)^ then
+    if PPtrInt(PtrUInt(P1))^<>PPtrInt(P2)^ then // compare first PtrInt bytes
       goto zero;
-    inc(PtrInt(PtrUInt(P1)),SizeOf(PtrInt));
-    inc(PtrInt(P2),SizeOf(PtrInt));
+    inc(PPtrInt(P1));
+    inc(PPtrInt(P2));
     dec(PtrInt(P2),PtrInt(PtrUInt(P1)));
-    PtrInt(PtrUInt(P1)) := PtrInt(PtrUInt(P1)) and -SizeOf(PtrInt);
+    PtrInt(PtrUInt(P1)) := PtrInt(PtrUInt(P1)) and -SizeOf(PtrInt); // align
     inc(PtrInt(P2),PtrInt(PtrUInt(P1)));
     if Length>=PtrInt(PtrUInt(P1)) then
       repeat // compare 4 aligned PtrInt per loop
         if (PPtrInt(PtrUInt(P1))^<>PPtrInt(P2)^) or (PPtrIntArray(P1)[1]<>PPtrIntArray(P2)[1]) then
           goto zero;
-        inc(PtrInt(PtrUInt(P1)),SizeOf(PtrInt)*2);
-        inc(PtrInt(P2),SizeOf(PtrInt)*2);
+        inc(PByte(P1),SizeOf(PtrInt)*2);
+        inc(PByte(P2),SizeOf(PtrInt)*2);
         if Length<PtrInt(PtrUInt(P1)) then
           break;
         if (PPtrInt(PtrUInt(P1))^<>PPtrInt(P2)^) or (PPtrIntArray(P1)[1]<>PPtrIntArray(P2)[1]) then
           goto zero;
-        inc(PtrInt(PtrUInt(P1)),SizeOf(PtrInt)*2);
-        inc(PtrInt(P2),SizeOf(PtrInt)*2);
+        inc(PByte(P1),SizeOf(PtrInt)*2);
+        inc(PByte(P2),SizeOf(PtrInt)*2);
       until Length<PtrInt(PtrUInt(P1));
   end;
-  inc(Length,SizeOf(PtrInt)*2-PtrInt(PtrUInt(P1)));
+  dec(Length,PtrInt(PtrUInt(P1))-SizeOf(PtrInt)*2); // back to real length
   if Length>=SizeOf(PtrInt) then begin
     if PPtrInt(PtrUInt(P1))^<>PPtrInt(P2)^ then
       goto zero;
-    inc(PtrInt(PtrUInt(P1)),SizeOf(PtrInt));
-    inc(PtrInt(P2),SizeOf(PtrInt));
+    inc(PPtrInt(P1));
+    inc(PPtrInt(P2));
     dec(Length,SizeOf(PtrInt));
   end;
   {$ifdef CPU64}
   if Length>=4 then begin
     if PCardinal(P1)^<>PCardinal(P2)^ then
       goto zero;
-    inc(PtrInt(PtrUInt(P1)),4);
-    inc(PtrInt(P2),4);
+    inc(PCardinal(P1));
+    inc(PCardinal(P2));
     dec(Length,4);
   end;
   {$endif}
   if Length>=2 then begin
     if PWord(P1)^<>PWord(P2)^ then
       goto zero;
-    inc(PtrInt(PtrUInt(P1)),2);
-    inc(PtrInt(P2),2);
+    inc(PWord(P1));
+    inc(PWord(P2));
     dec(Length,2);
   end;
   if Length>=1 then
