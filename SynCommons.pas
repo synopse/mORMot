@@ -20584,7 +20584,8 @@ type
 {$ifdef FPC}
   {$packrecords c} // as expected by FPC's RTTI record definitions
 
-  TStrRec = packed record // see TAnsiRec/TUnicodeRec in astrings/ustrings.inc
+  TStrRec =
+  record // see TAnsiRec/TUnicodeRec in astrings/ustrings.inc
   {$ifdef ISFPC27}
     codePage: TSystemCodePage; // =Word
     elemSize: Word;
@@ -20663,7 +20664,11 @@ type
   PFieldInfo = ^TFieldInfo;
   {$ifdef ISDELPHI2010_OR_FPC_NEWRTTI}
   /// map the Delphi record field enhanced RTTI (available since Delphi 2010)
-  TEnhancedFieldInfo = packed record
+  TEnhancedFieldInfo =
+    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
+    packed
+    {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+    record
     TypeInfo: PTypeInfoStored;
     Offset: PtrUInt; // match TInitManagedField/TManagedField in FPC typinfo.pp
     {$ifdef ISDELPHI2010}
@@ -20784,6 +20789,8 @@ type
     );
   end;
 
+  {$push}
+  {$PACKRECORDS 1}
   TPropInfo = packed record
     PropType: PTypeInfoStored;
     GetProc: PtrInt;
@@ -20797,6 +20804,8 @@ type
     {$endif}
     NameLen: byte;
   end;
+  {$pop}
+
   PPropInfo = ^TPropInfo;
 
 {$ifdef HASDIRECTTYPEINFO}

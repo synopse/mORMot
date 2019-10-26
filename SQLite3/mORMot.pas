@@ -2764,6 +2764,8 @@ type
   // & type NewType = OldType;
   // - user types defined as new types have this type information:
   // & type NewType = type OldType;
+  {$push}
+  {$PACKRECORDS 1}
   {$ifdef UNICODE}TTypeInfo = record{$else}TTypeInfo = object{$endif}
   public
     /// the value type family
@@ -2839,6 +2841,7 @@ type
     function AttributeTable: PFPCAttributeTable; inline;
     {$endif FPC_PROVIDE_ATTR_TABLE}
   end;
+  {$pop}
 
   /// how a RTTI property definition access its value
   // - as returned by TPropInfo.Getter/Setter methods
@@ -2847,7 +2850,9 @@ type
 
   /// a wrapper containing a RTTI property definition
   // - used for direct Delphi / UTF-8 SQL type mapping/conversion
-  {$ifdef UNICODE}TPropInfo = record{$else}TPropInfo = object{$endif}
+  {$push}
+  {$PACKRECORDS 1}
+  {$ifdef UNICODE}TPropInfo = record{$else}TPropInfo = packed object{$endif}
   public
     /// raw retrieval of the property read access definition
     // - note: 'var Call' generated incorrect code on Delphi XE4 -> use PMethod
@@ -3142,7 +3147,7 @@ type
     function ClassFromJSON(Instance: TObject; From: PUTF8Char; var Valid: boolean;
       Options: TJSONToObjectOptions=[]): PUTF8Char;
   end;
-
+  {$pop}
   /// the available methods calling conventions
   // - this is by design only relevant to the x86 model
   // - Win64 has one unique calling convention
@@ -21219,7 +21224,8 @@ end;
 {$ifdef HASINLINENOTX86}
 function TPropInfo.Next: PPropInfo;
 begin
-  result := AlignToPtr(PAnsiChar(@Name[1])+ord(Name[0]));
+  //result := AlignToPtr(PAnsiChar(@Name[1])+ord(Name[0]));
+  result := AlignToPtr(PByte(@Name[0]) + SizeOf(Name[0]) + Length(Name));
 end;
 {$else}
 function TPropInfo.Next: PPropInfo;
@@ -31387,14 +31393,14 @@ function TTypeInfo.InterfaceUnitName: PShortString;
 begin
   if (@self=nil) or (Kind<>tkInterface) then
     result := @NULL_SHORTSTRING else
-    result := @InterfaceType.IntfUnit;
+    result := @InterfaceType^.IntfUnit;
 end;
 
 function TTypeInfo.InterfaceAncestor: PTypeInfo;
 begin
   if (@self=nil) or (Kind<>tkInterface) then
     result := nil else
-    result := Deref(InterfaceType.IntfParent);
+    result := Deref(InterfaceType^.IntfParent);
 end;
 
 procedure TTypeInfo.InterfaceAncestors(out Ancestors: PTypeInfoDynArray;
