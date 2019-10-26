@@ -2766,9 +2766,17 @@ begin
     Check(B.Bulk[i]=i);
   for i := 0 to High(B.Bulk) do
     Check(CompareMem(@A.Bulk,@B.Bulk,i));
+  for i := 0 to High(B.Bulk) do
+    Check(CompareMemSmall(@A.Bulk,@B.Bulk,i));
+  for i := 0 to High(B.Bulk) do
+    Check(CompareMemFixed(@A.Bulk,@B.Bulk,i));
   FillCharFast(A.Bulk,sizeof(A.Bulk),255);
   for i := 0 to High(B.Bulk) do
     Check(CompareMem(@A.Bulk,@B.Bulk,i)=(i=0));
+  for i := 0 to High(B.Bulk) do
+    Check(CompareMemSmall(@A.Bulk,@B.Bulk,i)=(i=0));
+  for i := 0 to High(B.Bulk) do
+    Check(CompareMemFixed(@A.Bulk,@B.Bulk,i)=(i=0));
   B.Three := 3;
   B.Dyn[0] := 10;
   C := B;

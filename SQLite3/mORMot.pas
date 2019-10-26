@@ -21531,7 +21531,7 @@ begin
         if aCaseSensitive then
           for i := 1 to n do
             if (result^.Name[0]=AnsiChar(PropNameLen)) and
-               CompareMemSmall(@result^.Name[1],PropName,PropNameLen) then
+               CompareMemFixed(@result^.Name[1],PropName,PropNameLen) then
               exit else
               result := result^.Next else
         for i := 1 to n do
