@@ -12563,12 +12563,6 @@ initialization
   Initialize;
 
 finalization
-  {$ifdef USELIBCURL}
-  if PtrInt(curl.Module)>0 then begin
-    curl.global_cleanup;
-    FreeLibrary(curl.Module);
-  end;
-  {$endif USELIBCURL}
   if WsaDataOnce.wVersion<>0 then
   try
     {$ifdef MSWINDOWS}
