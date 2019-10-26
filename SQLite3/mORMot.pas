@@ -49451,15 +49451,17 @@ end;
 function PropIsIDTypeCastedField(Prop: PPropInfo; IsObj: TJSONObject;
   Value: TObject): boolean;
 begin // see [22ce911c715]
-  case IsObj of
-  oSQLMany:
-    if IdemPropName(Prop^.Name,'source') or IdemPropName(Prop^.Name,'dest') then
-      result := true else
+  if (Value<>nil) and (Prop^.PropType^.ClassSQLFieldType=sftID) then
+    case IsObj of
+    oSQLMany:
+      if IdemPropName(Prop^.Name,'source') or IdemPropName(Prop^.Name,'dest') then
+        result := true else
+        result := not TSQLRecord(Value).fFill.JoinedFields;
+    oSQLRecord:
       result := not TSQLRecord(Value).fFill.JoinedFields;
-  oSQLRecord:
-    result := not TSQLRecord(Value).fFill.JoinedFields;
-  else result := false; // real instance for regular classes
-  end;
+    else result := false; // real instance for regular classes
+    end else
+    result := false; // assume real instance by default
 end;
 
 type
