@@ -21159,7 +21159,7 @@ end;
 function TPropInfo.GetterAddr(Instance: pointer): pointer;
 {$ifdef HASINLINENOTX86}
 begin
-  result := Pointer(PtrUInt(Instance)+GetProc{$ifndef FPC} and $00FFFFFF{$endif});
+  result := Pointer(PtrUInt(Instance)+GetProc{$ifndef FPC} and $00ffffff{$endif});
 end;
 {$else}
 asm
@@ -21171,7 +21171,7 @@ end;
 
 function TPropInfo.SetterAddr(Instance: pointer): pointer;
 begin
-  result := Pointer(PtrUInt(Instance)+SetProc{$ifndef FPC} and $00FFFFFF{$endif});
+  result := Pointer(PtrUInt(Instance)+SetProc{$ifndef FPC} and $00ffffff{$endif});
 end;
 
 function TPropInfo.TypeInfo: PTypeInfo;
@@ -21262,7 +21262,7 @@ begin
     end
   {$ifndef FPC} else
     if PropWrap(Entry^.ImplGetter).Kind=ptField then
-      IInterface(Obj) := IInterface(PPointer(PtrUInt(Instance)+PtrUInt(Entry^.ImplGetter and $00FFFFFF))^) else
+      IInterface(Obj) := IInterface(PPointer(PtrUInt(Instance)+PtrUInt(Entry^.ImplGetter and $00ffffff))^) else
       UseImplGetter(Instance,Entry^.ImplGetter,IInterface(Obj)){$endif};
   Result := Pointer(Obj)<>nil;
 end;
@@ -21531,7 +21531,7 @@ begin
         if aCaseSensitive then
           for i := 1 to n do
             if (result^.Name[0]=AnsiChar(PropNameLen)) and
-               CompareMemSmall(@result^.Name[1],PropName,PropNameLen) then
+               CompareMemFixed(@result^.Name[1],PropName,PropNameLen) then
               exit else
               result := result^.Next else
         for i := 1 to n do
@@ -22336,7 +22336,7 @@ begin
   fPropInfo := aPropInfo;
   fPropType := aPropInfo^.TypeInfo;
   if aPropInfo.GetterIsField then begin
-    fGetterIsFieldPropOffset := aPropInfo.GetProc{$ifndef FPC} and $00FFFFFF{$endif};
+    fGetterIsFieldPropOffset := aPropInfo.GetProc{$ifndef FPC} and $00ffffff{$endif};
     if (aPropInfo.SetProc=0) or (aPropInfo.SetProc=fPropInfo.GetProc) then
       fInPlaceCopySameClassPropOffset := fGetterIsFieldPropOffset;
   end;
@@ -56039,7 +56039,7 @@ begin
           {$ifdef CPUARM}
           P^ := ($e3a040 shl 8)+i;  inc(P); // mov r4 (v1),{MethodIndex} : store method index in register
           tmp := ((PtrUInt(@TInterfacedObjectFake.ArmFakeStub)-PtrUInt(P)) shr 2)-2;
-          P^ := ($ea shl 24) + (tmp and $00FFFFFF); // branch ArmFakeStub (24bit relative, word aligned)
+          P^ := ($ea shl 24) + (tmp and $00ffffff); // branch ArmFakeStub (24bit relative, word aligned)
           inc(P);
           P^ := $e320f000; inc(P);
           {$endif CPUARM}

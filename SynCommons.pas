@@ -40,6 +40,7 @@ unit SynCommons;
    - itSDS
    - Johan Bontes
    - kevinday
+   - Kevin Chen
    - Maciej Izak (hnb)
    - Marius Maximus (mariuszekpl)
    - mazinsw
@@ -3048,8 +3049,13 @@ function SplitRight(const Str: RawUTF8; SepChar: AnsiChar; LeftStr: PRawUTF8=nil
 // - if SepChar doesn't appear, will return Str, e.g. SplitRight('123','/')='123'
 function SplitRights(const Str, SepChar: RawUTF8): RawUTF8;
 
+/// actual replacement function called by StringReplaceAll() on first match
+function StringReplaceAllProcess(const S, OldPattern, NewPattern: RawUTF8;
+  found: integer): RawUTF8;
+
 /// fast version of StringReplace(S, OldPattern, NewPattern,[rfReplaceAll]);
 function StringReplaceAll(const S, OldPattern, NewPattern: RawUTF8): RawUTF8;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fast replace of a specified char by a given string
 function StringReplaceChars(const Source: RawUTF8; OldChar, NewChar: AnsiChar): RawUTF8;
@@ -6459,6 +6465,11 @@ function ObjArrayAdd(var aObjArray; aItem: TObject): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// wrapper to add items to a T*ObjArray dynamic array storage
+// - aSourceObjArray[] items are just copied to aDestObjArray, which remains untouched
+// - return the new number of the items in aDestObjArray
+function ObjArrayAddFrom(var aDestObjArray; const aSourceObjArray): PtrInt;
+
+/// wrapper to add and move items to a T*ObjArray dynamic array storage
 // - aSourceObjArray[] items will be owned by aDestObjArray[], therefore
 // aSourceObjArray is set to nil
 // - return the new number of the items in aDestObjArray
@@ -6477,6 +6488,11 @@ function ObjArrayAddCount(var aObjArray; aItem: TObject; var aObjArrayCount: int
 // not by content), return its current index in the dynamic array
 // - if the object does not appear in the array, add it at the end
 procedure ObjArrayAddOnce(var aObjArray; aItem: TObject);
+
+// - aSourceObjArray[] items are just copied to aDestObjArray, which remains untouched
+// - will first check if aSourceObjArray[] items are not already in aDestObjArray
+// - return the new number of the items in aDestObjArray
+function ObjArrayAddOnceFrom(var aDestObjArray; const aSourceObjArray): PtrInt;
 
 /// wrapper to set the length of a T*ObjArray dynamic array storage
 // - could be used as an alternative to SetLength() when you do not
@@ -6605,9 +6621,16 @@ function GetEnumNameValue(aTypeInfo: pointer; aValue: PUTF8Char; aValueLen: inte
   AlsoTrimLowerCase: boolean=false): Integer; overload;
 
 /// retrieve the index of an enumerate item from its left-trimmed text
+// - text comparison is case-insensitive for A-Z characters
 // - will trim the lowercase 'a'..'z' chars on left side of the supplied aValue text
 // - returns -1 if aValue was not found
 function GetEnumNameValueTrimmed(aTypeInfo: pointer; aValue: PUTF8Char; aValueLen: integer): integer;
+
+/// retrieve the index of an enumerate item from its left-trimmed text
+// - text comparison is case-sensitive for A-Z characters
+// - will trim the lowercase 'a'..'z' chars on left side of the supplied aValue text
+// - returns -1 if aValue was not found
+function GetEnumNameValueTrimmedExact(aTypeInfo: pointer; aValue: PUTF8Char; aValueLen: integer): integer;
 
 /// helper to retrieve the index of an enumerate item from its text
 function GetEnumNameValue(aTypeInfo: pointer; const aValue: RawUTF8;
@@ -6642,8 +6665,14 @@ procedure AppendShortComma(text: PAnsiChar; len: integer; var result: shortstrin
 function FindShortStringListExact(List: PShortString; MaxValue: integer;
   aValue: PUTF8Char; aValueLen: PtrInt): integer;
 
-/// fast search of an left-trimmed lowercase match of a RTTI's PShortString array
+/// fast case-insensitive search of a left-trimmed lowercase match
+// of a RTTI's PShortString array
 function FindShortStringListTrimLowerCase(List: PShortString; MaxValue: integer;
+  aValue: PUTF8Char; aValueLen: PtrInt): integer;
+
+/// fast case-sensitive search of a left-trimmed lowercase match
+// of a RTTI's PShortString array
+function FindShortStringListTrimLowerCaseExact(List: PShortString; MaxValue: integer;
   aValue: PUTF8Char; aValueLen: PtrInt): integer;
 
 /// retrieve the type name from its low-level RTTI
@@ -10873,6 +10902,12 @@ function TruncTo2Digits(Value: Currency): Currency;
 procedure TruncTo2DigitsCurr64(var Value: Int64);
   {$ifdef HASINLINE}inline;{$endif}
 
+/// truncate a Currency value, stored as Int64, to only 2 digits
+// - implementation will use fast Int64 math to avoid any precision loss due to
+// temporary floating-point conversion
+function TruncTo2Digits64(Value: Int64): Int64;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// simple, no banker rounding of a Currency value to only 2 digits
 // - #.##51 will round to #.##+0.01 and #.##50 will be truncated to #.##
 // - implementation will use fast Int64 math to avoid any precision loss due to
@@ -12179,7 +12214,13 @@ type
     /// fill Year/Month/Day fields from the given value - but not DayOfWeek
     // - faster than the RTL DecodeDate() function
     procedure FromDate(const dt: TDateTime);
-    /// fill Hour/Minute/Second/Millisecond fields from the given value
+    /// fill Hour/Minute/Second/Millisecond fields from the given number of milliseconds
+    // - faster than the RTL DecodeTime() function
+    procedure FromMS(ms: PtrUInt);
+    /// fill Hour/Minute/Second/Millisecond fields from the given number of seconds
+    // - faster than the RTL DecodeTime() function
+    procedure FromSec(s: PtrUInt);
+    /// fill Hour/Minute/Second/Millisecond fields from the given TDateTime value
     // - faster than the RTL DecodeTime() function
     procedure FromTime(const dt: TDateTime);
     /// fill Year/Month/Day and Hour/Minute/Second fields from the given ISO-8601 text
@@ -19447,7 +19488,7 @@ begin
      (PCardinalArray(@Value)^[1]=0) then
   {$endif CPU64}
     result := SmallUInt32UTF8[Value] else begin
-    P := StrInt64(@tmp[23],Value);
+    P := {$ifdef CPU64}StrInt32{$else}StrInt64{$endif}(@tmp[23],Value);
     FastSetString(result,P,@tmp[23]-P);
   end;
 end;
@@ -19463,7 +19504,7 @@ begin
      (PCardinalArray(@Value)^[1]=0) then
   {$endif CPU64}
     result := SmallUInt32UTF8[Value] else begin
-    P := StrUInt64(@tmp[23],Value);
+    P := {$ifdef CPU64}StrUInt32{$else}StrUInt64{$endif}(@tmp[23],Value);
     FastSetString(result,P,@tmp[23]-P);
   end;
 end;
@@ -21279,13 +21320,61 @@ begin
   for result := 0 to MaxValue do begin
     PLen := ord(List^[0]);
     inc(PUTF8Char(List));
-    repeat
+    repeat // trim lower case
       if not(PUTF8Char(List)^ in ['a'..'z']) then
         break;
       inc(PUTF8Char(List));
       dec(PLen);
     until PLen=0;
     if (PLen=aValueLen) and IdemPropNameUSameLen(aValue,PUTF8Char(List),PLen) then
+      exit;
+    inc(PUTF8Char(List),PLen);
+  end;
+  result := -1;
+end;
+
+{$ifdef HASINLINE}
+function CompareMemFixed(P1, P2: Pointer; Length: PtrInt): Boolean;
+label zero;
+begin // cut-down version of our pure pascal CompareMem() function
+  inc(Length,PtrInt(PtrUInt(P1))-SizeOf(PtrInt));
+  if Length>=PtrInt(PtrUInt(P1)) then
+    repeat // compare one PtrInt per loop
+      if PPtrInt(P1)^<>PPtrInt(P2)^ then
+        goto zero;
+      inc(PPtrInt(P1));
+      inc(PPtrInt(P2));
+    until Length<PtrInt(PtrUInt(P1));
+  inc(Length,SizeOf(PtrInt));
+  if PtrInt(PtrUInt(P1))<Length then
+    repeat
+      if PByte(P1)^<>PByte(P2)^ then
+        goto zero;
+      inc(PByte(P1));
+      inc(PByte(P2));
+    until PtrInt(PtrUInt(P1))>=Length;
+  result := true;
+  exit;
+zero:
+  result := false;
+end;
+{$endif HASINLINE}
+
+function FindShortStringListTrimLowerCaseExact(List: PShortString; MaxValue: integer;
+  aValue: PUTF8Char; aValueLen: PtrInt): integer;
+var PLen: PtrInt;
+begin
+  if aValueLen<>0 then
+  for result := 0 to MaxValue do begin
+    PLen := ord(List^[0]);
+    inc(PUTF8Char(List));
+    repeat
+      if not(PUTF8Char(List)^ in ['a'..'z']) then
+        break;
+      inc(PUTF8Char(List));
+      dec(PLen);
+    until PLen=0;
+    if (PLen=aValueLen) and CompareMemFixed(aValue,List,PLen) then
       exit;
     inc(PUTF8Char(List),PLen);
   end;
@@ -21313,6 +21402,16 @@ begin
   List := GetEnumInfo(aTypeInfo,MaxValue);
   if (aValueLen<>0) and (List<>nil) then
     result := FindShortStringListTrimLowerCase(List,MaxValue,aValue,aValueLen) else
+    result := -1;
+end;
+
+function GetEnumNameValueTrimmedExact(aTypeInfo: pointer; aValue: PUTF8Char; aValueLen: integer): integer;
+var List: PShortString;
+    MaxValue: integer;
+begin
+  List := GetEnumInfo(aTypeInfo,MaxValue);
+  if (aValueLen<>0) and (List<>nil) then
+    result := FindShortStringListTrimLowerCaseExact(List,MaxValue,aValue,aValueLen) else
     result := -1;
 end;
 
@@ -22465,21 +22564,6 @@ end;
 {$endif LVCL}
 {$endif PUREPASCAL}
 
-{$ifdef HASINLINE}
-function CompareMemFixed(P1, P2: Pointer; Length: PtrInt): Boolean;
-var i: PtrInt;
-begin
-  result := false;
-  for i := 0 to (Length shr POINTERSHR)-1 do
-    if PPtrIntArray(P1)[i]<>PPtrIntArray(P2)[i] then
-      exit;
-  for i := Length-(Length and POINTERAND) to Length-1 do
-    if PByteArray(P1)[i]<>PByteArray(P2)[i] then
-      exit;
-  result := true;
-end;
-{$endif HASINLINE}
-
 function CompareMemSmall(P1, P2: Pointer; Length: PtrInt): Boolean;
 var i: PtrInt;
 begin
@@ -23054,31 +23138,14 @@ end;
 
 {$ifndef CPU64} // already implemented by ToUTF8(Value: PtrInt) below
 function ToUTF8(Value: Int64): RawUTF8;
-var tmp: array[0..23] of AnsiChar;
-    P: PAnsiChar;
 begin
-  P := StrInt64(@tmp[23],Value);
-  FastSetString(result,P,@tmp[23]-P);
+  Int64ToUTF8(Value,result);
 end;
 {$endif CPU64}
 
 function ToUTF8(Value: PtrInt): RawUTF8;
-var tmp: array[0..23] of AnsiChar;
-    P: PAnsiChar;
 begin
-  P := StrInt32(@tmp[23],Value);
-  FastSetString(result,P,@tmp[23]-P);
-end;
-
-function UInt32ToUtf8(Value: PtrUInt): RawUTF8;
-var tmp: array[0..23] of AnsiChar;
-    P: PAnsiChar;
-begin
-  if Value<=high(SmallUInt32UTF8) then
-    result := SmallUInt32UTF8[Value] else begin
-    P := StrUInt32(@tmp[23],Value);
-    FastSetString(result,P,@tmp[23]-P);
-  end;
+  Int32ToUTF8(Value,result);
 end;
 
 procedure UInt32ToUtf8(Value: PtrUInt; var result: RawUTF8);
@@ -23090,6 +23157,11 @@ begin
     P := StrUInt32(@tmp[23],Value);
     FastSetString(result,P,@tmp[23]-P);
   end;
+end;
+
+function UInt32ToUtf8(Value: PtrUInt): RawUTF8;
+begin
+  UInt32ToUTF8(Value,result);
 end;
 
 {$ifndef EXTENDEDTOSTRING_USESTR}
@@ -23904,51 +23976,51 @@ end;
 function CompareMem(P1, P2: Pointer; Length: PtrInt): Boolean;
 label zero;
 begin // this code compiles well under FPC and Delphi on both 32-bit and 64-bit
-  inc(Length,PtrInt(PtrUInt(P1))-SizeOf(PtrInt)*2);
+  inc(Length,PtrInt(PtrUInt(P1))-SizeOf(PtrInt)*2); // Length = 2*PtrInt end
   if Length>=PtrInt(PtrUInt(P1)) then begin
-    if PPtrInt(PtrUInt(P1))^<>PPtrInt(P2)^ then
+    if PPtrInt(PtrUInt(P1))^<>PPtrInt(P2)^ then // compare first PtrInt bytes
       goto zero;
-    inc(PtrInt(PtrUInt(P1)),SizeOf(PtrInt));
-    inc(PtrInt(P2),SizeOf(PtrInt));
+    inc(PPtrInt(P1));
+    inc(PPtrInt(P2));
     dec(PtrInt(P2),PtrInt(PtrUInt(P1)));
-    PtrInt(PtrUInt(P1)) := PtrInt(PtrUInt(P1)) and -SizeOf(PtrInt);
+    PtrInt(PtrUInt(P1)) := PtrInt(PtrUInt(P1)) and -SizeOf(PtrInt); // align
     inc(PtrInt(P2),PtrInt(PtrUInt(P1)));
     if Length>=PtrInt(PtrUInt(P1)) then
       repeat // compare 4 aligned PtrInt per loop
         if (PPtrInt(PtrUInt(P1))^<>PPtrInt(P2)^) or (PPtrIntArray(P1)[1]<>PPtrIntArray(P2)[1]) then
           goto zero;
-        inc(PtrInt(PtrUInt(P1)),SizeOf(PtrInt)*2);
-        inc(PtrInt(P2),SizeOf(PtrInt)*2);
+        inc(PByte(P1),SizeOf(PtrInt)*2);
+        inc(PByte(P2),SizeOf(PtrInt)*2);
         if Length<PtrInt(PtrUInt(P1)) then
           break;
         if (PPtrInt(PtrUInt(P1))^<>PPtrInt(P2)^) or (PPtrIntArray(P1)[1]<>PPtrIntArray(P2)[1]) then
           goto zero;
-        inc(PtrInt(PtrUInt(P1)),SizeOf(PtrInt)*2);
-        inc(PtrInt(P2),SizeOf(PtrInt)*2);
+        inc(PByte(P1),SizeOf(PtrInt)*2);
+        inc(PByte(P2),SizeOf(PtrInt)*2);
       until Length<PtrInt(PtrUInt(P1));
   end;
-  inc(Length,SizeOf(PtrInt)*2-PtrInt(PtrUInt(P1)));
+  dec(Length,PtrInt(PtrUInt(P1))-SizeOf(PtrInt)*2); // back to real length
   if Length>=SizeOf(PtrInt) then begin
     if PPtrInt(PtrUInt(P1))^<>PPtrInt(P2)^ then
       goto zero;
-    inc(PtrInt(PtrUInt(P1)),SizeOf(PtrInt));
-    inc(PtrInt(P2),SizeOf(PtrInt));
+    inc(PPtrInt(P1));
+    inc(PPtrInt(P2));
     dec(Length,SizeOf(PtrInt));
   end;
   {$ifdef CPU64}
   if Length>=4 then begin
     if PCardinal(P1)^<>PCardinal(P2)^ then
       goto zero;
-    inc(PtrInt(PtrUInt(P1)),4);
-    inc(PtrInt(P2),4);
+    inc(PCardinal(P1));
+    inc(PCardinal(P2));
     dec(Length,4);
   end;
   {$endif}
   if Length>=2 then begin
     if PWord(P1)^<>PWord(P2)^ then
       goto zero;
-    inc(PtrInt(PtrUInt(P1)),2);
-    inc(PtrInt(P2),2);
+    inc(PWord(P1));
+    inc(PWord(P2));
     dec(Length,2);
   end;
   if Length>=1 then
@@ -25724,50 +25796,50 @@ begin
       DestPtr[i]^ := '';
 end;
 
-function StringReplaceAll(const S, OldPattern, NewPattern: RawUTF8): RawUTF8;
-
-  procedure Process(found: integer);
-  var oldlen,newlen,i,last,posCount,sharedlen: integer;
-      pos: TIntegerDynArray;
-      src,dst: PAnsiChar;
-  begin
-    oldlen := length(OldPattern);
-    newlen := length(NewPattern);
-    SetLength(pos,64);
-    pos[0] := found;
-    posCount := 1;
-    repeat
-      found := PosEx(OldPattern,S,found+oldlen);
-      if found=0 then
-        break;
-      AddInteger(pos,posCount,found);
-    until false;
-    FastSetString(result,nil,Length(S)+(newlen-oldlen)*posCount);
-    last := 1;
-    src := pointer(s);
-    dst := pointer(result);
-    for i := 0 to posCount-1 do begin
-      sharedlen := pos[i]-last;
-      {$ifdef FPC}Move{$else}MoveFast{$endif}(src^,dst^,sharedlen);
-      inc(src,sharedlen+oldlen);
-      inc(dst,sharedlen);
-      if newlen>0 then begin
-        MoveSmall(pointer(NewPattern),dst,newlen);
-        inc(dst,newlen);
-      end;
-      last := pos[i]+oldlen;
+function StringReplaceAllProcess(const S, OldPattern, NewPattern: RawUTF8;
+  found: integer): RawUTF8;
+var oldlen,newlen,i,last,posCount,sharedlen: integer;
+    pos: TIntegerDynArray;
+    src,dst: PAnsiChar;
+begin
+  oldlen := length(OldPattern);
+  newlen := length(NewPattern);
+  SetLength(pos,64);
+  pos[0] := found;
+  posCount := 1;
+  repeat
+    found := PosEx(OldPattern,S,found+oldlen);
+    if found=0 then
+      break;
+    AddInteger(pos,posCount,found);
+  until false;
+  FastSetString(result,nil,Length(S)+(newlen-oldlen)*posCount);
+  last := 1;
+  src := pointer(s);
+  dst := pointer(result);
+  for i := 0 to posCount-1 do begin
+    sharedlen := pos[i]-last;
+    {$ifdef FPC}Move{$else}MoveFast{$endif}(src^,dst^,sharedlen);
+    inc(src,sharedlen+oldlen);
+    inc(dst,sharedlen);
+    if newlen>0 then begin
+      MoveSmall(pointer(NewPattern),dst,newlen);
+      inc(dst,newlen);
     end;
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(src^,dst^,length(S)-last+1);
+    last := pos[i]+oldlen;
   end;
+  {$ifdef FPC}Move{$else}MoveFast{$endif}(src^,dst^,length(S)-last+1);
+end;
 
-var j: integer;
+function StringReplaceAll(const S, OldPattern, NewPattern: RawUTF8): RawUTF8;
+var found: integer;
 begin
   if (S='') or (OldPattern='') or (OldPattern=NewPattern) then
     result := S else begin
-    j := PosEx(OldPattern,S,1); // our PosEx() is faster than Pos()
-    if j=0 then
+    found := PosEx(OldPattern,S,1); // our PosEx() is faster than Pos()
+    if found=0 then
       result := S else
-      Process(j);
+      result := StringReplaceAllProcess(S,OldPattern,NewPattern,found);
   end;
 end;
 
@@ -36689,18 +36761,36 @@ begin
 end;
 
 procedure TSynSystemTime.FromTime(const dt: TDateTime);
-var t,t2: PtrUInt;
 begin
-  t := round(abs(dt)*MSecsPerDay) mod MSecsPerDay;
-  t2 := t div 3600000;
-  Hour := t2;
-  dec(t,t2*3600000);
-  t2 := t div 60000;
-  Minute := t2;
-  dec(t,t2*60000);
-  t2 := t div 1000;
-  Second := t2;
-  MilliSecond := t-t2*1000;
+  FromMS(QWord(round(abs(dt)*MSecsPerDay)) mod MSecsPerDay);
+end;
+
+procedure TSynSystemTime.FromMS(ms: PtrUInt);
+var t: PtrUInt;
+begin
+  t := ms div 3600000;
+  Hour := t;
+  dec(ms,t*3600000);
+  t := ms div 60000;
+  Minute := t;
+  dec(ms,t*60000);
+  t := ms div 1000;
+  Second := t;
+  dec(ms,t*1000);
+  MilliSecond := ms;
+end;
+
+procedure TSynSystemTime.FromSec(s: PtrUInt);
+var t: PtrUInt;
+begin
+  t := s div 3600;
+  Hour := t;
+  dec(s,t*3600);
+  t := s div 60;
+  Minute := t;
+  dec(s,t*60);
+  Second := s;
+  MilliSecond := 0;
 end;
 
 function TSynSystemTime.FromText(const iso: RawUTF8): boolean;
@@ -37623,6 +37713,11 @@ end;
 procedure TruncTo2DigitsCurr64(var Value: Int64);
 begin
   dec(Value,Value mod 100);
+end;
+
+function TruncTo2Digits64(Value: Int64): Int64;
+begin
+  result := Value-Value mod 100;
 end;
 
 function SimpleRoundTo2Digits(Value: Currency): Currency;
@@ -50654,7 +50749,7 @@ begin
   a[result] := aItem;
 end;
 
-function ObjArrayAppend(var aDestObjArray, aSourceObjArray): PtrInt;
+function ObjArrayAddFrom(var aDestObjArray; const aSourceObjArray): PtrInt;
 var n: PtrInt;
     s: TObjectDynArray absolute aSourceObjArray;
     d: TObjectDynArray absolute aDestObjArray;
@@ -50663,8 +50758,13 @@ begin
   n := length(s);
   SetLength(d,result+n);
   {$ifdef FPC}Move{$else}MoveFast{$endif}(s[0],d[result],n*SizeOf(pointer));
-  s := nil; // s[] will be owned by d[]
   inc(result,n);
+end;
+
+function ObjArrayAppend(var aDestObjArray, aSourceObjArray): PtrInt;
+begin
+  result := ObjArrayAddFrom(aDestObjArray,aSourceObjArray);
+  TObjectDynArray(aSourceObjArray) := nil; // aSourceObjArray[] changed ownership
 end;
 
 function ObjArrayAddCount(var aObjArray; aItem: TObject; var aObjArrayCount: integer): PtrInt;
@@ -50686,6 +50786,25 @@ begin
     SetLength(a,n+1);
     a[n] := aItem;
   end;
+end;
+
+function ObjArrayAddOnceFrom(var aDestObjArray; const aSourceObjArray): PtrInt;
+var n, i: PtrInt;
+    s: TObjectDynArray absolute aSourceObjArray;
+    d: TObjectDynArray absolute aDestObjArray;
+begin
+  result := length(d);
+  n := length(s);
+  if n=0 then
+    exit;
+  SetLength(d,result+n);
+  for i := 0 to n-1 do
+    if not PtrUIntScanExists(pointer(d),result,PtrUInt(s[i])) then begin
+      d[result] := s[i];
+      inc(result);
+    end;
+  if result<>length(d) then
+    SetLength(d,result);
 end;
 
 procedure ObjArraySetLength(var aObjArray; aLength: integer);
@@ -51853,7 +51972,7 @@ begin
       B^ := '0'; // '.5' -> '0.5'
       inc(B);
     end;
-    MoveSmall(P,B+1,L);
+    MoveSmall(P,B,L);
     inc(B,L-1);
   end;
 end;
