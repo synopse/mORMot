@@ -10889,6 +10889,12 @@ function TruncTo2Digits(Value: Currency): Currency;
 procedure TruncTo2DigitsCurr64(var Value: Int64);
   {$ifdef HASINLINE}inline;{$endif}
 
+/// truncate a Currency value, stored as Int64, to only 2 digits
+// - implementation will use fast Int64 math to avoid any precision loss due to
+// temporary floating-point conversion
+function TruncTo2Digits64(Value: Int64): Int64;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// simple, no banker rounding of a Currency value to only 2 digits
 // - #.##51 will round to #.##+0.01 and #.##50 will be truncated to #.##
 // - implementation will use fast Int64 math to avoid any precision loss due to
@@ -12195,7 +12201,13 @@ type
     /// fill Year/Month/Day fields from the given value - but not DayOfWeek
     // - faster than the RTL DecodeDate() function
     procedure FromDate(const dt: TDateTime);
-    /// fill Hour/Minute/Second/Millisecond fields from the given value
+    /// fill Hour/Minute/Second/Millisecond fields from the given number of milliseconds
+    // - faster than the RTL DecodeTime() function
+    procedure FromMS(ms: PtrUInt);
+    /// fill Hour/Minute/Second/Millisecond fields from the given number of seconds
+    // - faster than the RTL DecodeTime() function
+    procedure FromSec(s: PtrUInt);
+    /// fill Hour/Minute/Second/Millisecond fields from the given TDateTime value
     // - faster than the RTL DecodeTime() function
     procedure FromTime(const dt: TDateTime);
     /// fill Year/Month/Day and Hour/Minute/Second fields from the given ISO-8601 text
@@ -19463,7 +19475,7 @@ begin
      (PCardinalArray(@Value)^[1]=0) then
   {$endif CPU64}
     result := SmallUInt32UTF8[Value] else begin
-    P := StrInt64(@tmp[23],Value);
+    P := {$ifdef CPU64}StrInt32{$else}StrInt64{$endif}(@tmp[23],Value);
     FastSetString(result,P,@tmp[23]-P);
   end;
 end;
@@ -19479,7 +19491,7 @@ begin
      (PCardinalArray(@Value)^[1]=0) then
   {$endif CPU64}
     result := SmallUInt32UTF8[Value] else begin
-    P := StrUInt64(@tmp[23],Value);
+    P := {$ifdef CPU64}StrUInt32{$else}StrUInt64{$endif}(@tmp[23],Value);
     FastSetString(result,P,@tmp[23]-P);
   end;
 end;
@@ -21302,6 +21314,33 @@ begin
   result := -1;
 end;
 
+{$ifdef HASINLINE}
+function CompareMemFixed(P1, P2: Pointer; Length: PtrInt): Boolean;
+label zero;
+begin // cut-down version of our pure pascal CompareMem() function
+  inc(Length,PtrInt(PtrUInt(P1))-SizeOf(PtrInt));
+  if Length>=PtrInt(PtrUInt(P1)) then
+    repeat // compare one PtrInt per loop
+      if PPtrInt(P1)^<>PPtrInt(P2)^ then
+        goto zero;
+      inc(PPtrInt(P1));
+      inc(PPtrInt(P2));
+    until Length<PtrInt(PtrUInt(P1));
+  inc(Length,SizeOf(PtrInt));
+  if PtrInt(PtrUInt(P1))<Length then
+    repeat
+      if PByte(P1)^<>PByte(P2)^ then
+        goto zero;
+      inc(PByte(P1));
+      inc(PByte(P2));
+    until PtrInt(PtrUInt(P1))>=Length;
+  result := true;
+  exit;
+zero:
+  result := false;
+end;
+{$endif HASINLINE}
+
 function GetEnumNameValue(aTypeInfo: pointer; aValue: PUTF8Char; aValueLen: integer;
   AlsoTrimLowerCase: boolean): Integer;
 var List: PShortString;
@@ -22475,21 +22514,6 @@ end;
 {$endif LVCL}
 {$endif PUREPASCAL}
 
-{$ifdef HASINLINE}
-function CompareMemFixed(P1, P2: Pointer; Length: PtrInt): Boolean;
-var i: PtrInt;
-begin
-  result := false;
-  for i := 0 to (Length shr POINTERSHR)-1 do
-    if PPtrIntArray(P1)[i]<>PPtrIntArray(P2)[i] then
-      exit;
-  for i := Length-(Length and POINTERAND) to Length-1 do
-    if PByteArray(P1)[i]<>PByteArray(P2)[i] then
-      exit;
-  result := true;
-end;
-{$endif HASINLINE}
-
 function CompareMemSmall(P1, P2: Pointer; Length: PtrInt): Boolean;
 var i: PtrInt;
 begin
@@ -23064,31 +23088,14 @@ end;
 
 {$ifndef CPU64} // already implemented by ToUTF8(Value: PtrInt) below
 function ToUTF8(Value: Int64): RawUTF8;
-var tmp: array[0..23] of AnsiChar;
-    P: PAnsiChar;
 begin
-  P := StrInt64(@tmp[23],Value);
-  FastSetString(result,P,@tmp[23]-P);
+  Int64ToUTF8(Value,result);
 end;
 {$endif CPU64}
 
 function ToUTF8(Value: PtrInt): RawUTF8;
-var tmp: array[0..23] of AnsiChar;
-    P: PAnsiChar;
 begin
-  P := StrInt32(@tmp[23],Value);
-  FastSetString(result,P,@tmp[23]-P);
-end;
-
-function UInt32ToUtf8(Value: PtrUInt): RawUTF8;
-var tmp: array[0..23] of AnsiChar;
-    P: PAnsiChar;
-begin
-  if Value<=high(SmallUInt32UTF8) then
-    result := SmallUInt32UTF8[Value] else begin
-    P := StrUInt32(@tmp[23],Value);
-    FastSetString(result,P,@tmp[23]-P);
-  end;
+  Int32ToUTF8(Value,result);
 end;
 
 procedure UInt32ToUtf8(Value: PtrUInt; var result: RawUTF8);
@@ -23100,6 +23107,11 @@ begin
     P := StrUInt32(@tmp[23],Value);
     FastSetString(result,P,@tmp[23]-P);
   end;
+end;
+
+function UInt32ToUtf8(Value: PtrUInt): RawUTF8;
+begin
+  UInt32ToUTF8(Value,result);
 end;
 
 {$ifndef EXTENDEDTOSTRING_USESTR}
@@ -36699,18 +36711,36 @@ begin
 end;
 
 procedure TSynSystemTime.FromTime(const dt: TDateTime);
-var t,t2: PtrUInt;
 begin
-  t := round(abs(dt)*MSecsPerDay) mod MSecsPerDay;
-  t2 := t div 3600000;
-  Hour := t2;
-  dec(t,t2*3600000);
-  t2 := t div 60000;
-  Minute := t2;
-  dec(t,t2*60000);
-  t2 := t div 1000;
-  Second := t2;
-  MilliSecond := t-t2*1000;
+  FromMS(QWord(round(abs(dt)*MSecsPerDay)) mod MSecsPerDay);
+end;
+
+procedure TSynSystemTime.FromMS(ms: PtrUInt);
+var t: PtrUInt;
+begin
+  t := ms div 3600000;
+  Hour := t;
+  dec(ms,t*3600000);
+  t := ms div 60000;
+  Minute := t;
+  dec(ms,t*60000);
+  t := ms div 1000;
+  Second := t;
+  dec(ms,t*1000);
+  MilliSecond := ms;
+end;
+
+procedure TSynSystemTime.FromSec(s: PtrUInt);
+var t: PtrUInt;
+begin
+  t := s div 3600;
+  Hour := t;
+  dec(s,t*3600);
+  t := s div 60;
+  Minute := t;
+  dec(s,t*60);
+  Second := s;
+  MilliSecond := 0;
 end;
 
 function TSynSystemTime.FromText(const iso: RawUTF8): boolean;
@@ -37633,6 +37663,11 @@ end;
 procedure TruncTo2DigitsCurr64(var Value: Int64);
 begin
   dec(Value,Value mod 100);
+end;
+
+function TruncTo2Digits64(Value: Int64): Int64;
+begin
+  result := Value-Value mod 100;
 end;
 
 function SimpleRoundTo2Digits(Value: Currency): Currency;
