@@ -606,4 +606,10 @@ begin
   end;
 end;
 
+finalization
+  if PtrInt(curl.Module)>0 then begin
+    curl.global_cleanup;
+    FreeLibrary(curl.Module);
+  end;
+
 end.
