@@ -327,19 +327,19 @@ begin
   sftBoolean, sftInteger, sftID, sftTID:
     SetInt64(P,fTemp64);
   sftFloat, sftCurrency:
-    PDouble(@fTemp64)^ := GetExtended(P);
+    unaligned(PDouble(@fTemp64)^) := GetExtended(P);
   sftEnumerate, sftSet:
     if info^.ContentTypeInfo=nil then
       SetInt64(P,fTemp64) else
       goto Txt;
   sftDateTime, sftDateTimeMS:
-    PDouble(@fTemp64)^ := Iso8601ToDateTimePUTF8Char(P,0);
+    unaligned(PDouble(@fTemp64)^) := Iso8601ToDateTimePUTF8Char(P,0);
   sftTimeLog, sftModTime, sftCreateTime:
-    PDouble(@fTemp64)^ := TimeLogToDateTime(GetInt64(P));
+    unaligned(PDouble(@fTemp64)^) := TimeLogToDateTime(GetInt64(P));
   sftUnixTime:
-    PDouble(@fTemp64)^ := UnixTimeToDateTime(GetInt64(P));
+    unaligned(PDouble(@fTemp64)^) := UnixTimeToDateTime(GetInt64(P));
   sftUnixMSTime:
-    PDouble(@fTemp64)^ := UnixMSTimeToDateTime(GetInt64(P));
+    unaligned(PDouble(@fTemp64)^) := UnixMSTimeToDateTime(GetInt64(P));
   sftBlob: begin
     fTempBlob := BlobToTSQLRawBlob(P);
     result := pointer(fTempBlob);

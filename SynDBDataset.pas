@@ -602,7 +602,7 @@ begin
         SynTable.ftDouble:
           if aArrayIndex>=0 then
             P.AsFloat := GetExtended(pointer(VArray[aArrayIndex])) else
-            P.AsFloat := PDouble(@VInt64)^;
+            P.AsFloat := unaligned(PDouble(@VInt64)^);
         SynTable.ftCurrency:
           if aArrayIndex>=0 then
             P.AsCurrency := StrToCurrency(pointer(VArray[aArrayIndex])) else
@@ -661,7 +661,7 @@ begin
       {$else}
       aParam.VInt64 := trunc(Par.AsFloat);
       {$endif}
-    SynTable.ftDouble:  PDouble(@aParam.VInt64)^ := Par.AsFloat;
+    SynTable.ftDouble:  unaligned(PDouble(@aParam.VInt64)^) := Par.AsFloat;
     SynTable.ftCurrency:PCurrency(@aParam.VInt64)^ := Par.AsCurrency;
     SynTable.ftDate:    PDateTime(@aParam.VInt64)^ := Par.AsDateTime;
     SynTable.ftUTF8:    aParam.VData := StringToUTF8(Par.AsString);

@@ -23677,7 +23677,7 @@ begin
       'D': PInt64(values[v])^ := GetNextItemInt64(P,#0);
       'u': PCardinal(values[v])^ := GetNextItemCardinal(P,#0);
       'U': PQword(values[v])^ := GetNextItemQword(P,#0);
-      'f': PDouble(values[v])^ := GetNextItemDouble(P,#0);
+      'f': unaligned(PDouble(values[v])^) := GetNextItemDouble(P,#0);
       'F': GetNextItemCurrency(P,PCurrency(values[v])^,#0);
       'x': if not GetNextItemHexDisplayToBin(P,values[v],4,#0) then
              exit;
@@ -43096,7 +43096,7 @@ Error:      Prop.FinalizeNestedArray(PPtrUInt(Data)^);
       ptByte:      PByte(Data)^ := GetCardinal(PropValue);
       ptCardinal:  PCardinal(Data)^ := GetCardinal(PropValue);
       ptCurrency:  PInt64(Data)^ := StrToCurr64(PropValue);
-      ptDouble:    PDouble(Data)^ := GetExtended(PropValue);
+      ptDouble:    unaligned(PDouble(Data)^) := GetExtended(PropValue);
       ptExtended:  PExtended(Data)^ := GetExtended(PropValue);
       ptInt64,ptID,ptTimeLog: SetInt64(PropValue,PInt64(Data)^);
       ptQWord:     SetQWord(PropValue,PQWord(Data)^);

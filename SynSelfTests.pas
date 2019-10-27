@@ -8627,7 +8627,7 @@ begin
   CheckSame(value,1.2);
   elem.FromVariant(name,value,Temp);
   Check(elem.name='one');
-  CheckSame(PDouble(elem.Element)^,1.2);
+  CheckSame(unaligned(PDouble(elem.Element)^),1.2);
   Check(not BSONParseNextElement(b,name,value));
   Check(BSONToJSON(pointer(bsonDat),betDoc,length(bsonDat))=u);
   elem.FromVariant('test',o,Temp);

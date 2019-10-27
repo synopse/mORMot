@@ -30591,7 +30591,7 @@ type
 var call: TMethod;
 begin
   case Getter(Instance,@call) of
-    picField:   result := PDouble(call.Data)^;
+    picField:   result := unaligned(PDouble(call.Data)^);
     picMethod:  result := TGetProc(call);
     picIndexed: result := TGetIndexed(call)(Index);
     else result := 0;
@@ -30605,7 +30605,7 @@ type
 var call: TMethod;
 begin
   case Setter(Instance,@call) of
-    picField:   PDouble(call.Data)^ := Value;
+    picField:   unaligned(PDouble(call.Data)^) := Value;
     picMethod:  TSetProc(call)(Value);
     picIndexed: TSetIndexed(call)(Index,Value);
   end;
@@ -30631,7 +30631,7 @@ begin
     picField:
       case ft of
         ftSingle:    result := PSingle(call.Data)^;
-        ftDoub:      result := PDouble(call.Data)^;
+        ftDoub:      result := unaligned(PDouble(call.Data)^);
         ftExtended:  result := PExtended(call.Data)^;
         ftCurr:      result := PCurrency(call.Data)^;
       end;
@@ -30671,7 +30671,7 @@ begin
     picField:
       case ft of
         ftSingle:    PSingle(call.Data)^ := Value;
-        ftDoub:      PDouble(call.Data)^ := Value;
+        ftDoub:      unaligned(PDouble(call.Data)^) := Value;
         ftExtended:  PExtended(call.Data)^ := Value;
         ftCurr:      PCurrency(call.Data)^ := Value;
       end;
@@ -54907,7 +54907,7 @@ begin
   InternalProcess; // use an inner proc to ensure direct fld/fild FPU ops
   case resultType of // al/ax/eax/eax:edx/rax already in result
   {$ifdef HAS_FPREG}
-  smvDouble,smvDateTime: aCall.FPRegs[FPREG_FIRST] := PDouble(@result)^;
+  smvDouble,smvDateTime: aCall.FPRegs[FPREG_FIRST] := unaligned(PDouble(@result)^);
   {$else}
   smvDouble,smvDateTime: asm fld  qword ptr [result] end;  // in st(0)
   smvCurrency:           asm fild qword ptr [result] end;  // in st(0)
@@ -58891,6 +58891,7 @@ end;
 type
   PCallMethodArgs = ^TCallMethodArgs;
   {$ifdef FPC}
+  {$push}
   {$PACKRECORDS 16}
   {$endif}
   TCallMethodArgs = record
@@ -58904,7 +58905,7 @@ type
     resKind: TServiceMethodValueType;
   end;
   {$ifdef FPC}
-  {$PACKRECORDS DEFAULT}
+  {$pop}
   {$endif}
 
 // ARM/AARCH64 code below provided by ALF, greatly inspired by pascalscript
@@ -60247,7 +60248,7 @@ begin
       PInt64(V)^ := 0 else
       if wasString then
         Iso8601ToDateTimePUTF8CharVar(Val,ValLen,PDateTime(V)^) else
-        PDouble(V)^ := GetExtended(Val); // allow JSON number decoding
+        unaligned(PDouble(V)^) := GetExtended(Val); // allow JSON number decoding
   end;
   smvBoolean..smvDouble, smvCurrency..smvWideString: begin
     Val := GetJSONField(R,R,@wasString,nil,@ValLen);
@@ -60272,7 +60273,7 @@ doint:case SizeInStorage of
         SetQWord(Val,PQWord(V)^) else
         SetInt64(Val,PInt64(V)^);
     smvDouble:
-      PDouble(V)^ := GetExtended(Val);
+      unaligned(PDouble(V)^) := GetExtended(Val);
     smvCurrency:
       PInt64(V)^ := StrToCurr64(Val);
     smvRawUTF8:
@@ -60341,7 +60342,7 @@ begin
          WR.Add(PInt64(V)^);
   end;
   smvBoolean:    WR.Add(PBoolean(V)^);
-  smvDouble:     WR.AddDouble(PDouble(V)^);
+  smvDouble:     WR.AddDouble(unaligned(PDouble(V)^));
   smvDateTime:   WR.AddDateTime(PDateTime(V)^,vIsDateTimeMS in ValueKindAsm);
   smvCurrency:   WR.AddCurr64(PInt64(V)^);
   smvRawUTF8:    WR.AddJSONEscape(PPointer(V)^);
@@ -60391,7 +60392,7 @@ begin
          Int64ToUtf8(PInt64(V)^,DestValue);
   end;
   smvDouble:
-    ExtendedToStr(PDouble(V)^,DOUBLE_PRECISION,DestValue);
+    ExtendedToStr(unaligned(PDouble(V)^),DOUBLE_PRECISION,DestValue);
   smvCurrency:
     Curr64ToStr(PInt64(V)^,DestValue);
   smvRawJSON:
@@ -60473,7 +60474,7 @@ begin
          DestValue := PInt64(V)^;
   end;
   smvDouble, smvDateTime:
-    DestValue := PDouble(V)^;
+    DestValue := unaligned(PDouble(V)^);
   smvCurrency:
     DestValue := PCurrency(V)^;
   smvRawUTF8:
@@ -61567,7 +61568,7 @@ begin
             end;
             {$ifndef CPUX86}
             if FPRegisterIdent>0 then
-              call.FPRegs[FPRegisterIdent] := PDouble(Value)^;
+              call.FPRegs[FPRegisterIdent] := unaligned(PDouble(Value)^);
             {$endif}
             if (RegisterIdent>0) and (FPRegisterIdent>0) then
               raise EInterfaceFactoryException.CreateUTF8('Unexpected % reg=% FP=%',

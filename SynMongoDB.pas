@@ -2725,7 +2725,7 @@ begin
   ZeroFill(@result); // set result.VType=varEmpty and result.VAny=nil
   case Kind of
   betFloat:
-    res.VDouble := PDouble(Element)^;
+    res.VDouble := unaligned(PDouble(Element)^);
   betString:
     FastSetString(RawUTF8(res.VAny),Data.Text,Data.TextLen);
   betJS, betDeprecatedSymbol:
@@ -2763,7 +2763,7 @@ begin
   betBoolean:
     result := PByte(Element)^;
   betFloat:
-    result := Trunc(PDouble(Element)^);
+    result := Trunc(unaligned(PDouble(Element)^));
   betInt32:
     result := PInteger(Element)^;
   betInt64:
@@ -2784,7 +2784,7 @@ end;
 begin
   case Kind of
   betFloat:
-    ExtendedToStr(PDouble(Element)^,DOUBLE_PRECISION,result);
+    ExtendedToStr(unaligned(PDouble(Element)^),DOUBLE_PRECISION,result);
   betString:
     FastSetString(result,Data.Text,Data.TextLen);
   betInt32:
@@ -2829,7 +2829,7 @@ label bin,regex;
 begin
   case Kind of
   betFloat:
-    W.AddDouble(PDouble(Element)^);
+    W.AddDouble(unaligned(PDouble(Element)^));
   betString, betJS, betDeprecatedSymbol: begin
     W.Add('"');
     W.AddJSONEscape(Data.Text,Data.TextLen);
@@ -2942,7 +2942,7 @@ begin
     Kind := ELEMKIND[aVarData.VType];
     case Kind of
     betFloat:
-      PDouble(Element)^ := double(aValue);
+      unaligned(PDouble(Element)^) := double(aValue);
     betDateTime:
       PUnixMSTime(Element)^ := DateTimeToUnixMSTime(aVarData.VDate);
     betBoolean:
