@@ -606,6 +606,9 @@ begin
   end;
 end;
 
+
+initialization
+
 finalization
   if PtrInt(curl.Module)>0 then begin
     curl.global_cleanup;
