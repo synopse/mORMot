@@ -20584,7 +20584,8 @@ type
 {$ifdef FPC}
   {$packrecords c} // as expected by FPC's RTTI record definitions
 
-  TStrRec = packed record // see TAnsiRec/TUnicodeRec in astrings/ustrings.inc
+  TStrRec =
+  record // see TAnsiRec/TUnicodeRec in astrings/ustrings.inc
   {$ifdef ISFPC27}
     codePage: TSystemCodePage; // =Word
     elemSize: Word;
@@ -20663,7 +20664,11 @@ type
   PFieldInfo = ^TFieldInfo;
   {$ifdef ISDELPHI2010_OR_FPC_NEWRTTI}
   /// map the Delphi record field enhanced RTTI (available since Delphi 2010)
-  TEnhancedFieldInfo = packed record
+  TEnhancedFieldInfo =
+    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
+    packed
+    {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+    record
     TypeInfo: PTypeInfoStored;
     Offset: PtrUInt; // match TInitManagedField/TManagedField in FPC typinfo.pp
     {$ifdef ISDELPHI2010}
@@ -20743,6 +20748,9 @@ type
     );
     tkEnumeration: (
       EnumType: TOrdType;
+      {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+      EnumDummy: DWORD; // needed on ARM for correct alignment !!??
+      {$endif}
       {$ifdef FPC_ENUMHASINNER} inner:
       {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT} packed {$endif} record
       {$endif FPC_ENUMHASINNER}
@@ -20760,6 +20768,9 @@ type
     );
     tkSet: (
       SetType: TOrdType;
+      {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+      SetDummy: DWORD; // needed on ARM for correct alignment !!??
+      {$endif}
       {$ifdef FPC}
       {$ifndef VER3_0}
       SetSize: SizeInt;
@@ -20944,7 +20955,7 @@ end;
 function FPCTypeInfoOverName(P: pointer): pointer; inline;
 begin // aligned result := @PAnsiChar(info)[info^.NameLen]
   result := AlignTypeData(P+2+PTypeInfo(P)^.NameLen);
-  dec(PtrUInt(result),2*SizeOf(pointer)); // -2 pointers to point on PTypeInfo^.kind
+  dec(PByte(result),2*SizeOf(pointer)); // -2 pointers to point on PTypeInfo^.kind
 end;
 {$endif HASALIGNTYPEDATA}
 
@@ -21087,11 +21098,11 @@ begin
     info := GetTypeInfo(aTypeInfo);
     base := info^.{$ifdef FPC_ENUMHASINNER}inner.{$endif}EnumBaseType;
     {$ifdef FPC} // no redirection if aTypeInfo is already the base type
-    if (base<>nil) and (base<>aTypeInfo) then
+    if (base<>nil) and (base{$ifndef HASDIRECTTYPEINFO}^{$endif}<>aTypeInfo) then
     {$endif}
       info := GetTypeInfo(base{$ifndef HASDIRECTTYPEINFO}^{$endif});
     MaxValue := info^.{$ifdef FPC_ENUMHASINNER}inner.{$endif}MaxValue;
-    result := @info.NameList;
+    result := @info^.NameList;
   end else
     result := nil;
 end;
@@ -40400,6 +40411,7 @@ function GetManagedFields(info: PTypeInfo; out firstfield: PFieldInfo): integer;
 {$ifdef FPC_NEWRTTI}
 var recInitData: PFPCRecInitData; // low-level type redirected from SynFPCTypInfo
 begin
+  //recInitData := GetFPCRecInitData(info^.RecInitInfo);
   recInitData := GetFPCRecInitData(AlignTypeData(PByte(info)+2)); // +2=Kind+NameLen
   firstfield := pointer(PtrUInt(recInitData)+SizeOf(recInitData^)); // =ManagedFields[0]
   result := recInitData^.ManagedFieldCount;

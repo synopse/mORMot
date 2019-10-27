@@ -158,7 +158,12 @@ begin
   {$endif FPC_PROVIDE_ATTR_TABLE}
   if TypInfo.PTypeData(AlignedTypeData)^.RecInitInfo=nil then
     result := AlignedTypeData else // no RecInitData, but regular list of fields
+    begin
     result := TypInfo.PTypeData(AlignedTypeData)^.RecInitData;
+      {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+      result := PFPCRecInitData(AlignTypeData(pointer(result)));
+      {$endif}
+    end;
 end;
 {$endif FPC_NEWRTTI}
 

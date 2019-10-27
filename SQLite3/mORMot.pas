@@ -2600,7 +2600,7 @@ type
     // - is prefered to MaxValue to identify the number of stored bytes
     OrdType: TOrdType;
     {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-    Dummy: DWORD; // needed on ARM for correct alignment !!??
+    EnumDummy: DWORD; // needed on ARM for correct alignment !!??
     {$endif}
     { this seemingly extraneous inner record is here for alignment purposes, so
     that its data gets aligned properly (if FPC_REQUIRES_PROPER_ALIGNMENT is set) }
@@ -2764,6 +2764,10 @@ type
   // & type NewType = OldType;
   // - user types defined as new types have this type information:
   // & type NewType = type OldType;
+  {$ifdef FPC}
+    {$push}
+    {$PACKRECORDS 1}
+  {$endif}
   {$ifdef UNICODE}TTypeInfo = record{$else}TTypeInfo = object{$endif}
   public
     /// the value type family
@@ -2839,6 +2843,9 @@ type
     function AttributeTable: PFPCAttributeTable; inline;
     {$endif FPC_PROVIDE_ATTR_TABLE}
   end;
+  {$ifdef FPC}
+    {$pop}
+  {$endif}
 
   /// how a RTTI property definition access its value
   // - as returned by TPropInfo.Getter/Setter methods
@@ -2847,7 +2854,7 @@ type
 
   /// a wrapper containing a RTTI property definition
   // - used for direct Delphi / UTF-8 SQL type mapping/conversion
-  {$ifdef UNICODE}TPropInfo = record{$else}TPropInfo = object{$endif}
+  {$ifdef UNICODE}TPropInfo = packed record{$else}TPropInfo = packed object{$endif}
   public
     /// raw retrieval of the property read access definition
     // - note: 'var Call' generated incorrect code on Delphi XE4 -> use PMethod
@@ -21035,7 +21042,7 @@ type
 
 function GetTypeData(const info: TTypeInfo): pointer; {$ifdef HASINLINE}inline;{$endif}
 begin
-  result := AlignTypeData(PAnsiChar(@info.Name[1])+ord(info.Name[0]));
+  result := AlignTypeData(pointer(@info)+2+PByte(pointer(@info)+1)^);
 end;
 
 function TTypeInfo.ClassType: PClassType;
@@ -21219,7 +21226,8 @@ end;
 {$ifdef HASINLINENOTX86}
 function TPropInfo.Next: PPropInfo;
 begin
-  result := AlignToPtr(PAnsiChar(@Name[1])+ord(Name[0]));
+  //result := AlignToPtr(PAnsiChar(@Name[1])+ord(Name[0]));
+  result := AlignToPtr(PByte(@Name[0]) + SizeOf(Name[0]) + Length(Name));
 end;
 {$else}
 function TPropInfo.Next: PPropInfo;
@@ -31380,21 +31388,21 @@ function TTypeInfo.InterfaceGUID: PGUID;
 begin
   if (@self=nil) or (Kind<>tkInterface) then
     result := nil else
-    result := @InterfaceType.IntfGuid;
+    result := @InterfaceType^.IntfGuid;
 end;
 
 function TTypeInfo.InterfaceUnitName: PShortString;
 begin
   if (@self=nil) or (Kind<>tkInterface) then
     result := @NULL_SHORTSTRING else
-    result := @InterfaceType.IntfUnit;
+    result := @InterfaceType^.IntfUnit;
 end;
 
 function TTypeInfo.InterfaceAncestor: PTypeInfo;
 begin
   if (@self=nil) or (Kind<>tkInterface) then
     result := nil else
-    result := Deref(InterfaceType.IntfParent);
+    result := Deref(InterfaceType^.IntfParent);
 end;
 
 procedure TTypeInfo.InterfaceAncestors(out Ancestors: PTypeInfoDynArray;
@@ -55910,7 +55918,7 @@ const
   STUB_RELJMP = {$ifdef CPUARM}$7fffff{$else}$7fffffff{$endif}; // relative jmp
   STUB_INTERV = STUB_RELJMP+1; // try to reserve in closed stub interval
   STUB_ALIGN = QWord($ffffffffffff0000); // align to STUB_SIZE
-var start,stop,stub: PtrUInt;
+var start,stop,stub,dist: PtrUInt;
 begin
   stub := PtrUInt(@TInterfacedObjectFake.ArmFakeStub);
   if StubCallAllocMemLastStart<>0 then
@@ -55928,11 +55936,14 @@ begin
     inc(start,STUB_SIZE);
     result := fpmmap(pointer(start),STUB_SIZE,flProtect,MAP_PRIVATE or MAP_ANONYMOUS,-1,0);
     if result<>MAP_FAILED then // close enough for a 24/32-bit relative jump?
-      if (PtrUInt(result)-stub<STUB_RELJMP) or (stub-PtrUInt(result)<STUB_RELJMP) then begin
+    begin
+      dist:= abs(stub-PtrUInt(result));
+      if (dist<STUB_RELJMP) then begin
         StubCallAllocMemLastStart := start;
         exit;
       end else
         fpmunmap(result,STUB_SIZE);
+    end;
   end;
   result := nil; // error
 end;

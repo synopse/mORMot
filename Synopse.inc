@@ -392,6 +392,7 @@
     {$define HASALIGNTYPEDATA} // to ignore attributes RTTI table
   {$endif FPC_PROVIDE_ATTR_TABLE}
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+    //{$define FPC_CMEM}
     {$define FPC_ENUMHASINNER}
     {$define HASALIGNTYPEDATA} // to ensure proper RTTI alignment
   {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
