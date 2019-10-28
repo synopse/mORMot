@@ -55,7 +55,7 @@ unit SynTable;
 
 interface
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64
 
 uses
   {$ifdef MSWINDOWS}
@@ -11962,7 +11962,7 @@ begin
   n := 0;
   fTaskLock.Lock;
   try
-    variant(fTaskLock.Padding[0]) := true;
+    variant(fTaskLock.Padding[0]) := true; // = fTaskLock.LockedBool[0]
     try
       for i := 0 to length(fTask)-1 do begin
         t := @fTask[i];

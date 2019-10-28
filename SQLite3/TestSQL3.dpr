@@ -85,7 +85,7 @@ program TestSQL3;
   {$endif}
 {$endif}
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 USELIBCURL
 
 {.$define ForceFastMM4}
 // for debug/tests purposes
@@ -116,7 +116,7 @@ uses
     SynCrtSock in '..\SynCrtSock.pas',
     SynBidirSock in '..\SynBiDirSock.pas',
     {$ifdef USELIBCURL}
-      SynCurl,
+      SynCurl in '..\SynCurl.pas',
     {$endif USELIBCURL}
     //SynOpenSSL,
     SynCommons in '..\SynCommons.pas',
@@ -196,7 +196,7 @@ uses
   {$endif KYLIX3}
 
 {$ifdef MSWINDOWS}
-  {$R ..\Vista.res} // includes manifest to identify Windows 10 OS
+  {$R ..\vista.RES} // includes Win10 manifest - use .RES for linux cross-compilation
 {$endif}
 
 begin

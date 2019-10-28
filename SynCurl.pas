@@ -52,7 +52,7 @@ unit SynCurl;
 
 }
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 interface
 
@@ -151,6 +151,7 @@ type
     coIgnoreContentLength  = 136,
     coFTPSkipPasvIp        = 137,
     coFile                 = 10001,
+    coWriteData            = coFile,
     coURL                  = 10002,
     coProxy                = 10004,
     coUserPwd              = 10005,
@@ -175,6 +176,7 @@ type
     coPostQuote            = 10039,
     coWriteInfo            = 10040,
     coProgressData         = 10057,
+    coXferInfoData         = coProgressData,
     coInterface            = 10062,
     coKRB4Level            = 10063,
     coCAInfo               = 10065,
@@ -192,6 +194,7 @@ type
     coCAPath               = 10097,
     coShare                = 10100,
     coEncoding             = 10102,
+    coAcceptEncoding       = coEncoding,
     coPrivate              = 10103,
     coHTTP200Aliases       = 10104,
     coSSLCtxData           = 10109,
@@ -212,6 +215,7 @@ type
     coDebugFunction        = 20094,
     coSSLCtxtFunction      = 20108,
     coIOCTLFunction        = 20130,
+    coXferInfoFunction     = 20219,
     coInFileSizeLarge      = 30115,
     coResumeFromLarge      = 30116,
     coMaxFileSizeLarge     = 30117,
@@ -481,7 +485,8 @@ var
 /// initialize the libcurl API, accessible via the curl global variable
 // - do nothing if the library has already been loaded
 // - will raise ECurl exception on any loading issue
-procedure LibCurlInitialize(engines: TCurlGlobalInit=[giSSL]);
+procedure LibCurlInitialize(engines: TCurlGlobalInit=[giSSL];
+  const dllname: TFileName= LIBCURL_DLL);
 
 /// return TRUE if a curl library is available
 // - will load and initialize it, calling LibCurlInitialize if necessary,
@@ -530,9 +535,10 @@ begin
  end;
 end;
 
-procedure LibCurlInitialize(engines: TCurlGlobalInit);
+procedure LibCurlInitialize(engines: TCurlGlobalInit; const dllname: TFileName);
 var P: PPointer;
     api: integer;
+    h: {$ifdef FPC}TLibHandle{$else}THandle{$endif FPC};
 const NAMES: array[0..{$ifdef LIBCURLMULTI}26{$else}12{$endif}] of string = (
   'global_init','global_cleanup','version_info',
   'easy_init','easy_setopt','easy_perform','easy_cleanup','easy_getinfo',
@@ -546,34 +552,35 @@ const NAMES: array[0..{$ifdef LIBCURLMULTI}26{$else}12{$endif}] of string = (
 begin
   EnterCriticalSection(SynSockCS);
   try
+    h := 0;
     if curl.Module=0 then // try to load libcurl once
     try
-      curl.Module := LoadLibrary(LIBCURL_DLL);
+      h := LoadLibrary({$ifdef MSWINDOWS}PChar{$endif}(dllname));
       {$ifdef Darwin} // another common names on MacOS
-      if curl.Module=0 then
-        curl.Module := LoadLibrary('libcurl.4.dylib');
-      if curl.Module=0 then
-        curl.Module := LoadLibrary('libcurl.3.dylib');
+      if h=0 then
+        h := LoadLibrary('libcurl.4.dylib');
+      if h=0 then
+        h := LoadLibrary('libcurl.3.dylib');
       {$else}
       {$ifdef Linux} // another common names on POSIX
-      if curl.Module=0 then
-        curl.Module := LoadLibrary('libcurl.so.4');
-      if curl.Module=0 then
-        curl.Module := LoadLibrary('libcurl.so.3');
+      if h=0 then
+        h := LoadLibrary('libcurl.so.4');
+      if h=0 then
+        h := LoadLibrary('libcurl.so.3');
       // for latest Linux Mint and other similar distros using gnutls
-      if curl.Module=0 then
-        curl.Module := LoadLibrary('libcurl-gnutls.so.4');
-      if curl.Module=0 then
-        curl.Module := LoadLibrary('libcurl-gnutls.so.3');
+      if h=0 then
+        h := LoadLibrary('libcurl-gnutls.so.4');
+      if h=0 then
+        h := LoadLibrary('libcurl-gnutls.so.3');
       {$endif Linux}
       {$endif Darwin}
-      if curl.Module=0 then
+      if h=0 then
         raise ECurl.CreateFmt('Unable to find %s'{$ifdef Linux}+
           ': try e.g. sudo apt-get install libcurl3'{$ifdef CPUX86}+':i386'{$endif}
-          {$endif Linux},[LIBCURL_DLL]);
+          {$endif Linux},[dllname]);
       P := @@curl.global_init;
       for api := low(NAMES) to high(NAMES) do begin
-        P^ := GetProcAddress(curl.Module,PChar('curl_'+NAMES[api]));
+        P^ := GetProcAddress(h,PChar('curl_'+NAMES[api]));
         if P^=nil then
           raise ECurl.CreateFmt('Unable to find %s() in %s',[NAMES[api],LIBCURL_DLL]);
         inc(P);
@@ -585,10 +592,11 @@ begin
         curl.infoText := format('%s using %s',[curl.infoText,curl.info.ssl_version]);
   //   api := 0; with curl.info do while protocols[api]<>nil do begin
   //     write(protocols[api], ' '); inc(api); end; writeln(#13#10,curl.infoText);
+      curl.Module := h;
     except
       on E: Exception do begin
-        if curl.Module<>0 then
-          FreeLibrary(curl.Module);
+        if h<>0 then
+          FreeLibrary(h);
         PtrInt(curl.Module) := -1; // <>0 so that won't try to load any more
         raise;
       end;
@@ -597,5 +605,14 @@ begin
     LeaveCriticalSection(SynSockCS);
   end;
 end;
+
+
+initialization
+
+finalization
+  if PtrInt(curl.Module)>0 then begin
+    curl.global_cleanup;
+    FreeLibrary(curl.Module);
+  end;
 
 end.

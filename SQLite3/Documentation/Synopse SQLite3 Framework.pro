@@ -1695,6 +1695,17 @@ You can also allocate directly the {\f1\fs20 TDocVariantData} instance on stack,
 !  Doc2.I['birthyear'] := 1982;
 !  writeln(Doc2.ToJSON);         // will write '{"name":"Paul","birthyear":1982}'
 You do not need to protect the stack-allocated {\f1\fs20 TDocVariantData} instances with a {\f1\fs20 try..finally}, since the compiler will do it for your. Take a look at all the methods and properties of {\f1\fs20 TDocVariantData}.
+:   FPC restrictions
+You should be warning that with the {\i @*FreePascal@} compiler, calling late-binding functions with arguments (like {\f1\fs20 Add} or {\f1\fs20 Delete}) would most probably fail to work as expected.\line We have found out that the following code may trigger some random access violations:
+!  doc.Add('text');
+!  doc.Add(anotherdocvariant);
+So you should access instead directly the underlying :
+!  TDocVariantData(doc).AddItem('text');
+!  TDocVariantData(doc).AddItem(anotherdocvariant);
+Or using {\f1\fs20 _Safe()}:
+!  DocVariantData(doc)^.AddItem('text');
+In fact, late-binding functions arguments seem to work only for simple values (like {\f1\fs20 integer} or {\f1\fs20 double}), but not complex types (like {\f1\fs20 string} or other {\f1\fs20 TDocVariantData}), which generate some random GPF, especially when {\f1\fs20 heaptrc} paranoid memory checks are enabled.
+As a result, direct access to {\f1\fs20 TJSONVariantData} instances - preferably via {\f1\fs20 _Safe()}, and not a {\f1\fs20 variant} variable, will be faster and less error-prone when using FPC.
 :   Variant array documents
 With {\f1\fs20 _Arr()}, an {\i array} {\f1\fs20 variant} instance will be initialized with data supplied as a list of {\i Value1,Value2,...}, e.g.
 !var V1,V2: variant; // stored as any variant
@@ -4076,8 +4087,8 @@ From the technical point of view, here are the current compilation options used 
 - User @*authentication@ handling ({\i SQLite3} is user-free designed);
 - {\i SQLite3} source code was compiled without thread mutex: the caller has to be @*thread-safe@ aware; this is faster on most configurations, since mutex has to be acquired once): low level {\f1\fs20 sqlite3_*()} functions are not thread-safe, as {\f1\fs20 TSQLRequest} and {\f1\fs20 TSQLBlobStream} which just wrap them; but {\f1\fs20 TSQLDataBase} is thread-safe, as {\f1\fs20 TSQLTableDB}/{\f1\fs20 @*TSQLRestServerDB@}/{\f1\fs20 TSQLRestClientDB} which call {\f1\fs20 TSQLDataBase};
 - Compiled with {\f1\fs20 SQLITE_OMIT_SHARED_CACHE} define, since with the new @*Client-Server@ approach of this framework, no concurrent access could happen, and an internal efficient caching algorithm is added, avoiding most call of the {\i SQLite3} engine in multi-user environment (any @*AJAX@ usage should benefit of it);
-- The embedded {\i SQLite3} database engine can be easily updated from the official {\i SQLite3} source code available at @http://sqlite.org - use the amalgamation C file with a few minor changes (documented in the {\f1\fs20 SynSQLite3Static.pas} unit) - the resulting C source code delivered as {\f1\fs20 .obj} is also available in the official {\i Synopse} source code repository.
-The overhead of including {\i SQlite3} in your server application will be worth it: just some KB to the executable, but with so many nice features, even if only external databases are used.
+- The embedded {\i SQLite3} database engine can be easily updated from the official {\i SQLite3} source code available at @https://sqlite.org - use the amalgamation C file with a few minor changes (documented in the {\f1\fs20 SynSQLite3Static.pas} unit) - the resulting C source code delivered as {\f1\fs20 .obj/.o} is also available in the official {\i Synopse} source code repository.
+The overhead of including {\i SQlite3} in your server application will be worth it: just around 1 MB to the executable, but with so many nice features, even if only external databases are used.
 :  Extended by SQLite3 virtual tables
 Since the framework is truly object oriented, another database engine could be used instead of the framework. You could easily write your own {\f1\fs20 TSQLRestServer} descendant (as an example, we included a fast in-memory database engine as {\f1\fs20 @*TSQLRestServerFullMemory@}) and link to a another engine (like {\i @*FireBird@}, or a private one). You can even use our framework without any link to the {\i @*SQLite3@} engine itself, via our provided very fast in memory dataset (which can be made persistent by writing and reading @*JSON@ files on disk). The {\i SQLite3} engine is implemented in a separate unit, named {\f1\fs20 SynSQLite3.pas}, and the main unit of the framework is {\f1\fs20 mORMot.pas}. A bridge between the two units is made with {\f1\fs20 mORMotSQLite3.pas}, which will found our ORM framework using {\i SQLite3} as its core.
 The framework ORM is able to access any database class (internal or external), via the powerful {\i SQLite3} Virtual Table mechanisms - see @20@. For instance, any external database (via @*OleDB@ / @*ODBC@ / @*ZDBC@ providers or direct {\i @*Oracle@} connection) can be accessed via our {\f1\fs20 @*SynDB@.pas}-based dedicated units, as stated @27@.
@@ -4317,11 +4328,11 @@ There are two implementation classes:
 \
 |%32%32%36
 |\b Class|Unit|Purpose\b0
-|{\f1\fs20 TSQLite3LibraryStatic}|{\f1\fs20 SynSQLite3Static.pas}|Statically linked engine ({\f1\fs20 .obj} within the {\f1\fs20 .exe})
+|{\f1\fs20 TSQLite3LibraryStatic}|{\f1\fs20 SynSQLite3Static.pas}|Statically linked engine ({\f1\fs20 sqlite3.obj}/{\f1\fs20 sqlite3.o} within the {\f1\fs20 .exe})
 |{\f1\fs20 TSQLite3LibraryDynamic}|{\f1\fs20 SynSQLite3.pas}|Instantiate an external {\f1\fs20 sqlite3.dll} instance
 |%
-Referring to {\f1\fs20 SynSQLite3Static.pas} in the {\f1\fs20 uses} clause of your project is enough to link the {\f1\fs20 .obj} engine into your executable.
-{\i Warning - breaking change}: before version 1.18 of the framework, link of static {\f1\fs20 .obj} was forced - so you must add a reference to {\f1\fs20 SynSQLite3Static} in your project {\f1\fs20 uses} clause to work as expected.
+Referring to {\f1\fs20 SynSQLite3Static.pas} in the {\f1\fs20 uses} clause of your project is enough to link the {\f1\fs20 .obj/.o} engine into your executable.
+{\i Warning - breaking change}: before version 1.18 of the framework, link of static {\f1\fs20 .obj} was forced - so you must now add a reference to {\f1\fs20 SynSQLite3Static} in your project {\f1\fs20 uses} clause to work as expected.
 In order to use an external {\f1\fs20 sqlite3.dll} library, you have to set the global {\f1\fs20 sqlite3} variable as such:
 ! FreeAndNil(sqlite3); // release any previous instance (e.g. static)
 !! sqlite3 := TSQLite3LibraryDynamic.Create;
@@ -4466,7 +4477,7 @@ The {\f1\fs20 MapBox_in} @*SQL function@ is registered in {\f1\fs20 @*TSQLRestSe
 :8  FTS3/FTS4/FTS5
 @**FTS@3/FTS4/FTS5 are {\i @*SQLite3@} @*virtual table@ modules that allow users to perform full-text searches on a set of documents. The most common (and effective) way to describe full-text searches is "what Google, Yahoo and Altavista do with documents placed on the World Wide Web". Users input a term, or series of terms, perhaps connected by a binary operator or grouped together into a phrase, and the full-text query system finds the set of documents that best matches those terms considering the operators and groupings the user has specified.
 See @http://www.sqlite.org/fts3.html as reference material about FTS3/FTS4 usage in {\i SQLite3}, and @https://www.sqlite.org/fts5.html about FTS5. In short, FTS5 is a new version of FTS4 that includes various fixes and solutions for problems that could not be fixed in FTS4 without sacrificing backwards compatibility.
-Since recent versions of the framework, the {\f1\fs20 sqlite3.obj} static file available with the distribution includes the FTS3/FTS4/FTS5 engines (also on other platforms with {\f1\fs20 FPC}).
+Since recent versions of the framework, the {\f1\fs20 sqlite3.obj/.o} static file available with the distribution includes the FTS3/FTS4/FTS5 engines (also on other platforms with {\f1\fs20 FPC}).
 :   Dedicated FTS3/FTS4/FTS5 record type
 In order to allow easy use of the @*FTS@ feature, some types have been defined:
 - {\f1\fs20 TSQLRecordFTS3} to create a FTS3 table with default "simple" stemming;
@@ -9920,9 +9931,10 @@ Handled types of parameters are:
 |%30%70
 |\b Delphi type|Remarks\b0
 |{\f1\fs20 boolean}|Transmitted as @*JSON@ true/false
-|{\f1\fs20 integer cardinal Int64 double currency @*TDateTime@ @*TDateTimeMS@}|Transmitted as JSON numbers
+|{\f1\fs20 integer cardinal Int64 double currency}|Transmitted as JSON numbers
 |enumerations|Transmitted as JSON number
 |set|Transmitted as JSON number - one bit per element (up to 32 elements)
+|{\f1\fs20 @*TDateTime@ @*TDateTimeMS@}|Transmitted as @*ISO 8601@ JSON text
 |{\f1\fs20 @*RawUTF8@ @*WideString@ @*SynUnicode@}|Transmitted as JSON text (@*UTF-8@ encoded)
 |{\f1\fs20 string}|Transmitted as UTF-8 JSON text, but prior to {\i Delphi} 2009, the framework will ensure that both client and server sides use the same ANSI code page - so you should better use {\f1\fs20 RawUTF8} everywhere
 |{\f1\fs20 @*RawJSON@}|UTF-8 buffer transmitted with no serialization (wheras a {\f1\fs20 RawUTF8} will be escaped as a JSON string) - expects to contain valid JSON content, e.g. for TSQLTableJSON requests
@@ -11801,15 +11813,15 @@ Feedback is needed for the mobile targets, via FMX.\line In fact, we rely for ou
 :   FreePascal clients
 {\f1\fs20 SynCrossPlatform*} units support the {\i @**FreePascal@} Compiler, in its 2.7.1 / 3.1.1 branches.\line Most of the code is shared with {\i Delphi}, including RTTI support and all supported types.
 Some restrictions apply, though.
-Due to a bug in {\i FreePascal} implementation of {\f1\fs20 variant} late binding, the following code won't work as expected:
+Due to a bug in {\i FreePascal} implementation of {\f1\fs20 variant} late binding, the following code won't work as expected on older revisions of FPC:
 !  doc.name2 := 3.1415926;
 !  doc.name := 'John';
-Under {\i FreePascal}, you have to write:
+Under oldest {\i FreePascal}, you have to write:
 !  TJSONVariantData(doc)['name2'] := 3.1415926;
 !  TJSONVariantData(doc)['name'] := 'John';
-In fact, the way late-binding properties are implemented in the {\i FreePascal} RTL forbid to modify the content of the associated {\f1\fs20 variant}. A private copy of the {\f1\fs20 variant} is made, which is not only slower, but disallows modification of its stored value.\line Any feedback and help from the {\i FreePascal} maintainers may be welcome!
-As a result, direct access to {\f1\fs20 TJSONVariantData} instances, and not a {\f1\fs20 variant} variable, will be faster and less error-prone when using this compiler, until the issue is fixed.
-In the Lazarus IDE, we also observed that the debugger is not able to handle our custom {\f1\fs20 variant} type. If you look at any {\f1\fs20 TJSONVariantData} instance with the debugger, an error message "{\i unsupported variant type}" will appear. As far as we found out, this is a Lazarus bug. Delphi, on its side, is able to display any custom {\f1\fs20 variant} type in its debugger, after conversion to {\f1\fs20 string}, i.e. its JSON representation.
+In fact, the way late-binding properties are implemented in the {\i FreePascal} in some fully compatible with {\i Delphi} expectations. The {\i FreePascal} maintainers did some initial fix (the {\f1\fs20 variant} instance is now passed by reference), so above code seems to work on current FPC trunk.
+As a result, direct access to {\f1\fs20 TJSONVariantData} instances, and not a {\f1\fs20 variant} variable, may be both safer and faster when using FPC.
+In the Lazarus IDE, we also observed that the debugger is not able to handle our custom {\f1\fs20 variant} type. If you look at any {\f1\fs20 TJSONVariantData} instance with the debugger, an error message "{\i unsupported variant type}" will appear. As far as we found out, this is a Lazarus limitation. Delphi, on its side, is able to display any custom {\f1\fs20 variant} type in its debugger, after conversion to {\f1\fs20 string}, i.e. its JSON representation.
 Another issue with the 2.7.1 / 3.1.1 revisions is how the new {\f1\fs20 string} type is implemented.\line In fact, if you use a string variable containing an @*UTF-8@ encoded text, then the following line will reset the result code page to the system code page:
 !function StringToJSON(const Text: string): string;
 !  ...
@@ -16215,12 +16227,13 @@ If you want to compile {\i mORMot} unit into @*packages@, to avoid an obfuscated
 The framework source code implementation and design tried to be as cross-platform and cross-compiler as possible, since the beginning. It is a lot of work to maintain compatibility towards so many tools and platforms, but we think it is always worth it - especially if you try not depend on {\i Delphi} only, which as shown some backward compatibility issues during its lifetime.
 For HTML5 and Mobile clients, our main platform is {\i Smart Mobile Studio}, which is a great combination of ease of use, a powerful {\i SmartPascal} dialect, small applications (much smaller than FMX), with potential packaging as native iOS or {\i Android} applications (via {\i @*PhoneGap@}).
 The latest versions of the {\i FreePascal Compiler} together with its great {\i Lazarus} IDE, are now very stable and easy to work with. We don't support {\i CodeTyphon}, since we found some licensing issue with some part of it (e.g. {\i Orca} GUI library origin is doubtful). So we recommend using {\i @*fpcupdeluxe@} - see @203@ - which is maintained by Alfred, a {\i mORMot} contributor. This is amazing to build the whole set of compilers and IDE, with a lot of components, for several platforms (this is a cross-platform project), just from the sources. I like {\i Lazarus} stability and speed much more than {\i Delphi} (did you ever tried to browse and debug {\i included} {\f1\fs20 $I ...} files in the {\i Delphi} IDE? with Lazarus, it is painless), even if the compiler is slower than {\i Delphi}'s, and if the debugger is less integrated and even more unstable than {\i Delphi}'s under Windows (yes, it is possible!). At least, it works, and the {\i Lazarus} IDE is small and efficient. Official {\i @*Linux@} support is available for {\i mORMot} servers, with full features in the {\i FPC} 3.1.x branch - we use it on producing on {\i Linux} 64-bit since years.
-:  32-bit sqlite3*.obj and 64-bit SQLite3 dll
-In order to maintain the source code repository in a decent size, we excluded the {\f1\fs20 sqlite3*.obj} storage in it, but provide the full source code of the {\i @*SQlite3@} engine in the corresponding {\f1\fs20 sqlite3.c} file, ready to be compiled with all conditional defined as expected by {\f1\fs20 SynSQlite3Static.pas}.
-Therefore, {\f1\fs20 sqlite3.obj} and {\f1\fs20 sqlite3fts.obj} files are available for {\i Delphi}, as a separated download, from @https://synopse.info/files/sqlite3obj.7z
-Please download the latest compiled version of these {\f1\fs20 .obj} files from this link. You can also use the supplied {\f1\fs20 c.bat} file to compile from the original {\f1\fs20 sqlite3.c} file available in the repository, if you have the {\f1\fs20 bcc32} C command-line compiler installed.
-The free version works and was used to create both {\f1\fs20 .obj} files, i.e. {\i C++Builder Compiler (bcc compiler) free download} - as available from {\i Embarcadero} web site.
-For native {\i Windows} @*64-bit@ applications (since {\i Delphi} XE2), an external {\f1\fs20 .dll} file is needed. Since there is no official {\i SQLite3} download for {\i Win64} yet, you can use the one we supply at @https://synopse.info/files/SQLite3-64.7z
+:  SQLite3 static linking for Delphi and FPC
+{\i Preliminary note}: if you retrieved the source code from @https://github.com/synopse/mORMot you will have all the needed {\f1\fs20 .obj/.o} static files available in the expected folders. Just ignore this chapter.
+In order to maintain our @https://synopse.info/fossil/timeline source code repository in a decent size, we excluded the {\f1\fs20 sqlite3.obj/.o} storage in it, but provide the full source code of the {\i @*SQlite3@} engine in a custom {\f1\fs20 sqlite3.c} file, ready to be compiled with all conditional defined as expected by {\f1\fs20 SynSQlite3Static.pas}. You need to add the official {\i SQlite3} amalgamation file from @https://www.sqlite.org/download.html and put its content into a {\f1\fs20 SQLite3\\amalgamation} sub-folder, for proper compilation. Our custom {\f1\fs20 sqlite3.c} file will add encryption feature to the engine. Also look into {\f1\fs20 SynSQlite3Static.pas} comments if there is any manual patch needed for proper compilation of the amalgamation sourece.
+Of course, you are not required to do the compilation: {\f1\fs20 sqlite3.obj} (for {\i Delphi Win32}) and {\f1\fs20 sqlite3.o} files (for {\i Delphi Win64}) are available for {\i Delphi}, as a separated download, from @https://synopse.info/files/sqlite3obj.7z
+For Delphi, please download the latest compiled version of these {\f1\fs20 .obj/.o} files from this link. You can also use the supplied {\f1\fs20 c.bat} and {\f1\fs20 c64.bat} files to compile from the original {\f1\fs20 sqlite3.c} file available in the repository, if you have the {\f1\fs20 bcc32}/{\f1\fs20 bcc64} C command-line compiler(s) installed.
+For {\i Win32}, the free version works and was used to create the {\f1\fs20 .obj} file, i.e. {\i C++Builder Compiler (bcc compiler) free download} - as available from {\i Embarcadero} web site.
+For native {\i Windows} @*64-bit@ applications (since {\i Delphi} XE2), a {\f1\fs20 sqlilte3.o} static file is also available from the same archive. If you need an external dynamic {\f1\fs20 .dll} for Win64, since there is no official {\i SQLite3} download for {\i Win64} yet, you can use the one we supply at @https://synopse.info/files/SQLite3-64.7z
 For FPC, you need to download static {\f1\fs20 .o} files from @https://synopse.info/files/sqlite3fpc.7z then uncompress the embedded {\f1\fs20 static} folder and its sub-folders at the {\i mORMot} root folder (i.e. where {\f1\fs20 Synopse.inc} and {\f1\fs20 SynCommons.pas} stay). If you retrieved the source code from our @*GitHub@ repository at @https://github.com/synopse/mORMot you already got the {\f1\fs20 static} sub-folder as expected by the framework. Those {\f1\fs20 static} files have been patched to support optional encryption of the {\i SQLite3} database file. Then enable the {\f1\fs20 FPCSQLITE3STATIC} conditional in your project, or directly modify {\f1\fs20 Synopse.inc} to include it, so that those {\f1\fs20 .o} files will be statically linked to the executable.
 You could also compile the static libraries from the {\f1\fs20 sqlite3.c} source, to run with FPC - do not forget to enable the {\f1\fs20 FPCSQLITE3STATIC} conditional in this case also.\line Under {\i Windows}, ensure the {\i MinGW} compiler is installed, then execute {\f1\fs20 c-fpcmingw.bat} from the {\i SQLite3} folder. It will create the {\f1\fs20 sqlite3.o} and {\f1\fs20 sqlite3fts.o} files, as expected by FPC.\line Under {\i @*Linux@}, Use the {\f1\fs20 c-fpcgcclin.sh} bash script.
 :  SpiderMonkey library
@@ -16278,7 +16291,7 @@ In the {\i Root folder}, some common files are defined:
 |{\f1\fs20 SynSMAPI.pas}|{\i SpiderMonkey} JavaScript engine API definition
 |{\f1\fs20 SynSM.pas}|{\i SpiderMonkey} JavaScript engine higher level classes
 |{\f1\fs20 SynSQLite3.pas}|{\i @*SQLite3@} embedded Database engine
-|{\f1\fs20 SynSQLite3Static.pas}|statically linked @*SQLite3@ engine (for Win32)
+|{\f1\fs20 SynSQLite3Static.pas}|statically linked @*SQLite3@ engine (with associated {\f1\fs20 .obj/.o})
 |{\f1\fs20 SynSSPIAuth.pas}|low level access to Windows Authentication
 |{\f1\fs20 SynTaskDialog.*}|implement TaskDialog window\line (native on Vista/Seven, emulated on XP)
 |{\f1\fs20 SynTests.pas}|cross-compiler unitary tests functions
@@ -16359,10 +16372,10 @@ To setup mORMot for {\i Delphi 6} up to {\i Delphi 10.3 Rio}, you have two ways:
 Download and uncompress the framework archives, including all sub-folders, into a local directory of your computer (for instance, {\f1\fs20 D:\\Dev\\mORMot}).
 |%70
 |{\b Snapshot of the latest source code repository}\line\tab @https://synopse.info/files/mORMotNightlyBuild.zip \line\tab into {\f1\fs20 D:\\Dev\\mORMot\\} (including all sub-folders)
-|{\b Static 32-bit SQLite3 .obj files}\line\tab @https://synopse.info/files/sqlite3obj.7z \line\tab into {\f1\fs20 D:\\Dev\\mORMot\\SQLite3\\}
-|{\b 64-bit SQlite3 library}\line\tab @https://synopse.info/files/SQLite3-64.7z \line\tab into your Win64 {\f1\fs20 .exe} folders
+|{\b for Delphi: static SQLite3 {\f1\fs20 .obj/.o} files}\line\tab @https://synopse.info/files/sqlite3obj.7z \line\tab into {\f1\fs20 D:\\Dev\\mORMot\\SQLite3\\}
+|{\b for FPC: static {\f1\fs20 .o} files for Windows or Linux/BSD}\line\tab @https://synopse.info/files/sqlite3fpc.7z \line\tab whole {\f1\fs20 static} folder into {\f1\fs20 D:\\Dev\\mORMot\\}
+|{\b optional 64-bit SQlite3 external library}\line\tab @https://synopse.info/files/SQLite3-64.7z \line\tab into your Win64 {\f1\fs20 .exe} folders
 |{\b 32-bit SpiderMonkey library}\line\tab @https://synopse.info/files/synsm.7z \line\tab into your {\f1\fs20 .exe} folders needing JavaScript
-|{\b for FPC only: static {\f1\fs20 .o} files for Windows or Linux/BSD}\line\tab @https://synopse.info/files/sqlite3fpc.7z \line\tab whole {\f1\fs20 static} folder into {\f1\fs20 D:\\Dev\\mORMot\\}
 |%
 :  Get from GitHub
 Or you may just clone our {\i @**GitHub@} repository, from @https://github.com/synopse/mORMot e.g. via:
@@ -16410,6 +16423,7 @@ For this task, don't download an existing binary release of FPC / Lazarus, but u
 Download the latest release of the tool from @https://github.com/LongDirtyAnimAlf/fpcupdeluxe/releases \line Unpack it in a dedicated folder, and run its executable.\line Click on the {\i "Setup +"} button, and enter the following revision numbers:
 - FPC trunk SVN {\f1\fs20 40491};
 - Lazarus trunk SVN {\f1\fs20 59757}.
+Don't forget to select the {\i trunk} versions for both FPC and Lazarus versions list, otherwise the exact SVN revisions you entered in {\i "Setup +"} won't be used.
 Those revisions are currently used for building our production projects, so are expected to be properly tested and supported.
 Then build the FPC and Lazarus binaries directly from the latest sources. One big advantage of {\i fpcupdeluxe} is that you can very easily install cross-compilers for the CPU / OS combinations enumerated at @202@.
 You could install {\i mORMot} using {\i fpcupdeluxe}, but we recommend you clone our @https://github.com/synopse/mORMot repository, and setup the expected project paths, as detailed above at @113@.
@@ -17953,61 +17967,6 @@ The {\i SQLite3} engine is accessed at two levels:
 - A high-level access, implementing a Client-Side or Server-Side native {\f1\fs20 TSQLRest} descendant using the {\i SQLite3} library for ORM data persistence, in @!TSQLRestServerDB,TSQLRestClientDB!Lib\SQLite3\mORMotSQLite3.pas@.
 In addition to those two units, the @!TSQLDBSQLite3Connection,TSQLDBSQLite3Statement,TSQLDBSQLite3ConnectionProperties!Lib\SynDBSQLite3.pas@ unit publishes all features of the {\i SQlite3} database engine to its internal {\f1\fs20 SynDB.pas} fast database access classes, which can be used uncoupled from the rest of the framework (i.e. without ORM).
 : Low-Level access to the library
-:  Compilation of the SQLite3 engine
-First of all, the original source code of the library, which is retrieved from the official {\i SQLite3} web site in the form of the optimized Amalgamation file - see @http://www.sqlite.org/amalgamation.html - is compiled using the free Borland C++ command-line compiler.
-&Here are the defines used for this compilation:
-&//#define SQLITE_ENABLE_FTS3
-&//  this unit is FTS3-ready, but not compiled with it by default
-&//  if you don't use FTS3, dont define this conditional: you'll spare 50KB of code
-&//  this conditional is defined at compile time, in order to create sqlite3fts3.obj
-&#define SQLITE_DEFAULT_MEMSTATUS 0
-&//  don't need any debug here
-&#define SQLITE_THREADSAFE 2
-&//  assuming multi-thread safety is made by caller - in our framework, there is
-&// only one thread using the database connection at the same time, but there could
-&// be multiple database connection at the same time (previous was 0 could be unsafe)
-&#define SQLITE_OMIT_SHARED_CACHE 1
-&// no need of shared cache in a threadsafe calling model
-&#define SQLITE_OMIT_AUTOINIT 1
-&//  sqlite3_.initialize() is done in initialization section below -> no AUTOINIT
-&#define SQLITE_OMIT_DEPRECATED 1
-&//  spare some code size
-&#define SQLITE_OMIT_TRACE 1
-&// we don't need sqlite3_profile() and sqlite3_trace() interfaces
-&#define SQLITE_OMIT_LOAD_EXTENSION 1
-&// we don't need extension in an embedded engine
-&#define SQLITE_OMIT_COMPILEOPTION_DIAGS 1
-&// we don't need Compilation Options Diagnostics in our embedded engine
-&#define SQLITE_OMIT_PROGRESS_CALLBACK 1
-&// we don't need sqlite3_progress_handler() API function
-&#define SQLITE_ENABLE_RTREE 1
-&// the RTREE extension is now (from v.1.8/3.7) compiled into the engine
-&//#define SQLITE_OMIT_LOOKASIDE
-&// since we use FastMM4, LookAside is not needed but seems mandatory in c source
-The only code modification made to the official {\i SQLite3} engine source code is to make {\f1\fs20 winRead} and {\f1\fs20 winWrite} function external, which will be coded in pure pascal code, in order to implement our on-the-fly encryption of the database file:
-&extern int winRead(
-&  sqlite3_file *id,          /* File to read from */
-&  void *pBuf,                /* Write content into this buffer */
-&  int amt,                   /* Number of bytes to read */
-&  sqlite3_int64 offset       /* Begin reading at this offset */
-&);
-&extern int winWrite(
-&  sqlite3_file *id,         /* File to write into */
-&  const void *pBuf,         /* The bytes to be written */
-&  int amt,                  /* Number of bytes to write */
-&  sqlite3_int64 offset      /* Offset into the file to begin writing at */
-&);
-Two {\f1\fs20 .obj} files are created, named {\f1\fs20 sqlite3.obj} and {\f1\fs20 sqlite3fts3.obj}, using the following batch command (named {\f1\fs20 c.bat} in the source code repository):
-$\\dev\\bcc\\bin\\bcc32 -6 -O2 -c -d -DSQLITE_ENABLE_FTS3 -u- sqlite3.c
-$copy sqlite3.obj sqlite3fts3.obj
-$\\dev\\bcc\\bin\\bcc32 -6 -O2 -c -d -u- sqlite3.c
-The {\f1\fs20 sqlite3.obj} file won't include FTS3/FTS4, whereas {\f1\fs20 sqlite3fts3.obj} will include the FTS3/FTS4 module: the code size is a bit bigger. The {\f1\fs20 INCLUDE_FTS3} conditional must be defined for the whole application, to embed this module, as stated by the following code extracted from {\f1\fs20 SynSQLite3Static.pas}:
-!{$ifdef INCLUDE_FTS3}
-!{$L sqlite3fts3.obj}   // link SQlite3 database engine with FTS3
-!{$else}
-!{$L sqlite3.obj}       // link SQlite3 database engine
-!{$endif}
-Some low-level functions, necessary for linking to the {\i Borland C++} generated {\f1\fs20 .obj} files, are coded in asm. These runtime functions will call {\i Delphi} equivalences, which are indeed close from the {\f1\fs20 BCC32} need - see for instance {\f1\fs20 _ftol() _ftoul() malloc() free() memset() memmove() atol() _lldiv() strlen()} and such. Even higher-level functions - like {\f1\fs20 localtime()} or {\f1\fs20 qsort()} - are coded in pure {\i Delphi} code.
 :  SQLite3 API access
 Some types are defined in @!TSQLite3Blob,TSQLite3DB,TSQLite3FunctionContext,TSQLite3Statement,TSQLite3Value,TSQLite3ValueArray,TSQLite3Library!Lib\SynSQLite3.pas@ to map the types used by {\i SQLite3}: {\f1\fs20 TSQLite3DB, TSQLite3Statement, TSQLite3Blob, TSQLite3Value, TSQLite3FunctionContext}, which are mapped to a {\f1\fs20 PtrUInt}, i.e. an unsigned integer matching the current pointer size. This is the {\i handle} type exposed by the {\i SQLite} API.
 Then most C-language interface to {\i SQLite} has been converted into pure {\i Delphi} external {\f1\fs20 function} or {\f1\fs20 procedure} calls (see @http://www.sqlite.org/c3ref/intro.html for a complete reference). The conversion rule was to match the API name (all {\f1\fs20 sqlite3: TSQLite3Library} identifiers), then provide the most {\i Delphi}-standard access to the parameters: for instance, we use standard Integer/Int64/PUTF8Char types, or a {\f1\fs20 var} declaration instead of a C pointer.

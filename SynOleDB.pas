@@ -116,7 +116,7 @@ unit SynOleDB;
   - added TOleDBInformixConnectionProperties - by EMartin
 }
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 interface
 
@@ -2596,7 +2596,7 @@ begin
       end;
     SynDBLog.Add.Log(sllDB,'CreateDatabase for "%" returned %',[ConnectionString,ord(result)]);
   finally
-    VarClear(DB);
+    DB := null;
     Catalog := nil;
     CoUninit;
   end;

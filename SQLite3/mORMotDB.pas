@@ -142,7 +142,7 @@ unit mORMotDB;
 
 }
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 interface
 
@@ -805,7 +805,8 @@ begin
           fStoredClassProps.ExternalDB.MapField(nfo.Name,SQL+'_');
         end else
           log.Log(sllWarning,'-> you should better use MapAutoKeywordFields',self);
-      end;
+      end else if rpmQuoteFieldName in options then
+        fStoredClassProps.ExternalDB.MapField(nfo.Name,'"'+SQL+'"');
     end;
   end;
   // create corresponding external table if necessary, and retrieve its fields info
@@ -847,7 +848,7 @@ begin
     for f := 0 to Fields.Count-1 do
       if Fields.List[f].SQLFieldType in COPIABLE_FIELDS then // ignore sftMany
       /// real database columns exist for Simple + Blob fields (not Many)
-      if FieldsExternalIndexOf(fStoredClassProps.ExternalDB.ExtFieldNames[f])<0 then begin
+      if FieldsExternalIndexOf(fStoredClassProps.ExternalDB.ExtFieldNamesUnQuotedSQL[f])<0 then begin
         // add new missing Field
         Finalize(Field);
         FillcharFast(Field,sizeof(Field),0);

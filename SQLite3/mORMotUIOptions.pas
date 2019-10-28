@@ -300,7 +300,7 @@ begin
           end;
         {$endif}
         tkClass: begin
-          O := pointer(P^.GetOrdValue(Obj));
+          O := P^.GetObjProp(Obj);
           if (O<>nil) and (PtrInt(O)<>-1) then
             if O.InheritsFrom(TCollection) then
             with TCollection(O) do
@@ -466,7 +466,7 @@ begin // update the properties of the settings object from screen
             if CC.Checked then
               SetBit64(ToolbarValue,ord(fAddToolbar[ToolbarIndex])) else
               UnsetBit64(ToolbarValue,ord(fAddToolbar[ToolbarIndex]));
-            P^.SetInt64Value(Obj,ToolbarValue);
+            P^.SetInt64Prop(Obj,ToolbarValue);
           end;
         end else
           P^.SetOrdValue(Obj,integer(CC.Checked)) else

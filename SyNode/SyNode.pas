@@ -72,7 +72,7 @@ unit SyNode;
 
 }
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 {$I SyNode.inc}   // define SM_DEBUG CONSIDER_TIME_IN_Z
 {$IFDEF CORE_MODULES_IN_RES}
   {$R 'core_modules.res' 'core_modules.rc'}

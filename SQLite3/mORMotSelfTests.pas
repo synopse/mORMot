@@ -65,7 +65,7 @@ unit mORMotSelfTests;
 
 interface
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64
 
 /// this is the main entry point of the tests
 // - this procedure will create a console, then run all available tests

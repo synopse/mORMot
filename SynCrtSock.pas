@@ -1157,6 +1157,12 @@ type
   // contain the proper 'Content-type: ....'
   TOnHttpServerRequest = function(Ctxt: THttpServerRequest): cardinal of object;
 
+  /// event handler used by THttpServerGeneric.OnAfterResponse property
+  // - Ctxt defines both input and output parameters
+  // - Code defines the HTTP response code the (200 if OK, e.g.)
+  TOnHttpServerAfterResponse = procedure(Ctxt: THttpServerRequest;
+    const Code: cardinal) of object;
+
   /// event handler used by THttpServerGeneric.OnBeforeBody property
   // - if defined, is called just before the body is retrieved from the client
   // - supplied parameters reflect the current input state
@@ -1193,7 +1199,7 @@ type
     fOnBeforeBody: TOnHttpServerBeforeBody;
     fOnBeforeRequest: TOnHttpServerRequest;
     fOnAfterRequest: TOnHttpServerRequest;
-    fOnAfterResponse: TOnHttpServerRequest;
+    fOnAfterResponse: TOnHttpServerAfterResponse;
     fMaximumAllowedContentLength: cardinal;
     /// list of all registered compression algorithms
     fCompress: THttpSocketCompressRecDynArray;
@@ -1210,7 +1216,7 @@ type
     procedure SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody); virtual;
     procedure SetOnBeforeRequest(const aEvent: TOnHttpServerRequest); virtual;
     procedure SetOnAfterRequest(const aEvent: TOnHttpServerRequest); virtual;
-    procedure SetOnAfterResponse(const aEvent: TOnHttpServerRequest); virtual;
+    procedure SetOnAfterResponse(const aEvent: TOnHttpServerAfterResponse); virtual;
     procedure SetMaximumAllowedContentLength(aMax: cardinal); virtual;
     procedure SetRemoteIPHeader(const aHeader: SockString); virtual;
     procedure SetRemoteConnIDHeader(const aHeader: SockString); virtual;
@@ -1218,7 +1224,8 @@ type
     procedure SetHTTPQueueLength(aValue: Cardinal); virtual; abstract;
     function DoBeforeRequest(Ctxt: THttpServerRequest): cardinal;
     function DoAfterRequest(Ctxt: THttpServerRequest): cardinal;
-    procedure DoAfterResponse(Ctxt: THttpServerRequest); virtual;
+    procedure DoAfterResponse(Ctxt: THttpServerRequest;
+      const Code: cardinal); virtual;
     function NextConnectionID: integer;
   public
     /// initialize the server instance, in non suspended state
@@ -1287,6 +1294,11 @@ type
     // - warning: this handler must be thread-safe (can be called by several
     // threads simultaneously)
     property OnAfterRequest: TOnHttpServerRequest  read fOnAfterRequest write SetOnAfterRequest;
+    /// event handler called after response is sent back to client
+    // - main purpose is to apply post-response analysis, logging, etc.
+    // - warning: this handler must be thread-safe (can be called by several
+    // threads simultaneously)
+    property OnAfterResponse: TOnHttpServerAfterResponse read fOnAfterResponse write SetOnAfterResponse;
     /// event handler called after each working Thread is just initiated
     // - called in the thread context at first place in THttpServerGeneric.Execute
     property OnHttpThreadStart: TNotifyThreadEvent
@@ -1457,7 +1469,7 @@ type
     procedure SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody); override;
     procedure SetOnBeforeRequest(const aEvent: TOnHttpServerRequest); override;
     procedure SetOnAfterRequest(const aEvent: TOnHttpServerRequest); override;
-    procedure SetOnAfterResponse(const aEvent: TOnHttpServerRequest); override;
+    procedure SetOnAfterResponse(const aEvent: TOnHttpServerAfterResponse); override;
     procedure SetMaximumAllowedContentLength(aMax: cardinal); override;
     procedure SetRemoteIPHeader(const aHeader: SockString); override;
     procedure SetRemoteConnIDHeader(const aHeader: SockString); override;
@@ -1812,7 +1824,8 @@ type
     procedure SetOnWSThreadStart(const Value: TNotifyThreadEvent);
   protected
     function UpgradeToWebSocket(Ctxt: THttpServerRequest): cardinal;
-    procedure DoAfterResponse(Ctxt: THttpServerRequest); override;
+    procedure DoAfterResponse(Ctxt: THttpServerRequest;
+      const Code: cardinal); override;
     function GetSendResponseFlags(Ctxt: THttpServerRequest): Integer; override;
     constructor CreateClone(From: THttpApiServer); override;
     procedure DestroyMainThread; override;
@@ -3214,6 +3227,15 @@ type
 function WinHTTP_WebSocketEnabled: boolean;
 {$endif}
 
+var
+  /// Queue length for completely established sockets waiting to be accepted,
+  // a backlog parameter for listen() function. If queue overflows client
+  // got ECONNREFUSED error for connect() call
+  // - for windows default is taken from SynWinSock ($7fffffff) and should
+  // not be modified. Actual limit is 200;
+  // - for Unix default is taken from SynFPCSock (128 as in linux cernel >2.2),
+  // but actual value is min(DefaultListenBacklog, /proc/sys/net/core/somaxconn)
+  DefaultListenBacklog: integer = SOMAXCONN;
 
 implementation
 
@@ -4255,19 +4277,47 @@ end;
 
 {$endif MSWINDOWS}
 
-var
-  // should not change during process livetime
+{$ifdef MSWINDOWS}
+var // not available before Vista -> Lazy loading
+  GetTick64: function: Int64; stdcall;
+  GetTickXP: Int64Rec;
+
+function GetTick64ForXP: Int64; stdcall;
+var t32: cardinal;
+    t64: Int64Rec absolute result;
+begin // warning: GetSystemTimeAsFileTime() is fast, but not monotonic!
+  t32 := Windows.GetTickCount;
+  t64 := GetTickXP; // (almost) atomic read
+  if t32<t64.Lo then
+    inc(t64.Hi); // wrap-up overflow after 49 days
+  t64.Lo := t32;
+  GetTickXP := t64; // (almost) atomic write
+end; // warning: FPC's GetTickCount64 doesn't handle 49 days wrap :(
+{$else}
+function GetTick64: Int64;
+begin
+  result := {$ifdef FPC}SynFPCLinux.{$endif}GetTickCount64;
+end;
+{$endif MSWINDOWS}
+
+var // GetIPAddressesText(Sep=' ') cache
   IPAddressesText: array[boolean] of SockString;
+  IPAddressesTix: array[boolean] of integer;
 
 function GetIPAddressesText(const Sep: SockString; PublicOnly: boolean): SockString;
 var ip: TSockStringDynArray;
-    i: integer;
+    tix, i: integer;
 begin
-  if Sep=' ' then
-    result := IPAddressesText[PublicOnly] else
-    result := '';
-  if result<>'' then
-    exit;
+  result := '';
+  if Sep=' ' then begin
+    tix := GetTick64 shr 16; // refresh every minute
+    if tix<>IPAddressesTix[PublicOnly] then
+      IPAddressesTix[PublicOnly] := tix else begin
+      result := IPAddressesText[PublicOnly];
+      if result<>'' then
+        exit;
+    end;
+  end;
   if PublicOnly then
     ip := GetIPAddresses(tiaPublic) else
     ip := GetIPAddresses(tiaAny);
@@ -4281,10 +4331,11 @@ begin
 end;
 
 var
-  MacAddressesSearched: boolean;
+  MacAddressesSearched: boolean; // will not change during process lifetime
   MacAddresses: TMacAddressDynArray;
   MacAddressesText: SockString;
 
+{$ifdef LINUX}
 procedure GetSmallFile(const fn: TFileName; out result: SockString);
 var tmp: array[byte] of AnsiChar;
     F: THandle;
@@ -4299,6 +4350,7 @@ begin
   if t > 0 then
     SetString(result, PAnsiChar(@tmp), t);
 end;
+{$endif LINUX}
 
 procedure RetrieveMacAddresses;
 var n: integer;
@@ -4313,44 +4365,51 @@ var n: integer;
    p: PIP_ADAPTER_ADDRESSES;
 {$endif MSWINDOWS}
 begin
-  n := 0;
-  {$ifdef LINUX}
-  if FindFirst('/sys/class/net/*', faDirectory, SR) = 0 then begin
-    repeat
-      if (SR.Name <> 'lo') and (SR.Name[1] <> '.') then begin
-        fn := '/sys/class/net/' + SR.Name;
-        GetSmallFile(fn + '/flags', f);
-        if (length(f) > 2) and // e.g. '0x40' or '0x1043'
-           (HttpChunkToHex32(@f[3]) and (IFF_UP or IFF_LOOPBACK) = IFF_UP) then begin
-          GetSmallFile(fn + '/address', f);
-          if f <> '' then begin
-            SetLength(MacAddresses, n + 1);
-            MacAddresses[n].name := SR.Name;
-            MacAddresses[n].address := f;
-            inc(n);
+  EnterCriticalSection(SynSockCS);
+  try
+    if MacAddressesSearched then
+      exit;
+    n := 0;
+    {$ifdef LINUX}
+    if FindFirst('/sys/class/net/*', faDirectory, SR) = 0 then begin
+      repeat
+        if (SR.Name <> 'lo') and (SR.Name[1] <> '.') then begin
+          fn := '/sys/class/net/' + SR.Name;
+          GetSmallFile(fn + '/flags', f);
+          if (length(f) > 2) and // e.g. '0x40' or '0x1043'
+             (HttpChunkToHex32(@f[3]) and (IFF_UP or IFF_LOOPBACK) = IFF_UP) then begin
+            GetSmallFile(fn + '/address', f);
+            if f <> '' then begin
+              SetLength(MacAddresses, n + 1);
+              MacAddresses[n].name := SR.Name;
+              MacAddresses[n].address := f;
+              inc(n);
+            end;
           end;
         end;
-      end;
-    until FindNext(SR) <> 0;
-    FindClose(SR);
+      until FindNext(SR) <> 0;
+      FindClose(SR);
+    end;
+    {$endif LINUX}
+    {$ifdef MSWINDOWS}
+    siz := SizeOf(tmp);
+    p := @tmp;
+    if GetAdaptersAddresses(AF_UNSPEC, GAA_FLAGS, nil, p, @siz) = ERROR_SUCCESS then begin
+      repeat
+        if (p^.Flags <> 0) and (p^.OperStatus = IfOperStatusUp) and
+           (p^.PhysicalAddressLength = 6) then begin
+          SetLength(MacAddresses, n + 1);
+          MacAddresses[n].name := {$ifdef UNICODE}UTF8String{$else}UTF8Encode{$endif}(WideString(p^.Description));
+          MacAddresses[n].address := MacToText(@p^.PhysicalAddress);
+          inc(n);
+        end;
+        p := p^.Next;
+      until p = nil;
+    end;
+    {$endif MSWINDOWS}
+  finally
+    LeaveCriticalSection(SynSockCS);
   end;
-  {$endif LINUX}
-  {$ifdef MSWINDOWS}
-  siz := SizeOf(tmp);
-  p := @tmp;
-  if GetAdaptersAddresses(AF_UNSPEC, GAA_FLAGS, nil, p, @siz) = ERROR_SUCCESS then begin
-    repeat
-      if (p^.Flags <> 0) and (p^.OperStatus = IfOperStatusUp) and
-         (p^.PhysicalAddressLength = 6) then begin
-        SetLength(MacAddresses, n + 1);
-        MacAddresses[n].name := {$ifdef UNICODE}UTF8String{$else}UTF8Encode{$endif}(WideString(p^.Description));
-        MacAddresses[n].address := MacToText(@p^.PhysicalAddress);
-        inc(n);
-      end;
-      p := p^.Next;
-    until p = nil;
-  end;
-  {$endif MSWINDOWS}
   MacAddressesSearched := true;
 end;
 
@@ -4583,7 +4642,7 @@ begin
     SetInt32Option(result,SO_LINGER,5);
     // bind and listen to this port
     if (Bind(result,sin)<>0) or
-       ((aLayer<>cslUDP) and (Listen(result,SOMAXCONN)<>0)) then begin
+       ((aLayer<>cslUDP) and (Listen(result,DefaultListenBacklog)<>0)) then begin
       CloseSocket(result);
       result := -1;
     end;
@@ -4903,29 +4962,6 @@ begin
   if not TrySndLow(P,Len) then
     raise ECrtSocket.CreateFmt('SndLow(%s) len=%d',[fServer,Len],-1);
 end;
-
-{$ifdef MSWINDOWS}
-var // not available before Vista -> Lazy loading
-  GetTick64: function: Int64; stdcall;
-  GetTickXP: Int64Rec;
-
-function GetTick64ForXP: Int64; stdcall;
-var t32: cardinal;
-    t64: Int64Rec absolute result;
-begin // warning: GetSystemTimeAsFileTime() is fast, but not monotonic!
-  t32 := Windows.GetTickCount;
-  t64 := GetTickXP; // (almost) atomic read
-  if t32<t64.Lo then
-    inc(t64.Hi); // wrap-up overflow after 49 days
-  t64.Lo := t32;
-  GetTickXP := t64; // (almost) atomic write
-end; // warning: FPC's GetTickCount64 doesn't handle 49 days wrap :(
-{$else}
-function GetTick64: Int64;
-begin
-  result := {$ifdef FPC}SynFPCLinux.{$endif}GetTickCount64;
-end;
-{$endif MSWINDOWS}
 
 function TCrtSocket.TrySndLow(P: pointer; Len: integer): boolean;
 var sent, err: integer;
@@ -5882,7 +5918,8 @@ begin
   fOnAfterRequest := aEvent;
 end;
 
-procedure THttpServerGeneric.SetOnAfterResponse(const aEvent: TOnHttpServerRequest);
+procedure THttpServerGeneric.SetOnAfterResponse(
+  const aEvent: TOnHttpServerAfterResponse);
 begin
   fOnAfterResponse := aEvent;
 end;
@@ -5901,10 +5938,11 @@ begin
     result := 0;
 end;
 
-procedure THttpServerGeneric.DoAfterResponse(Ctxt: THttpServerRequest);
+procedure THttpServerGeneric.DoAfterResponse(Ctxt: THttpServerRequest;
+  const Code: cardinal);
 begin
   if Assigned(fOnAfterResponse) then
-    fOnAfterResponse(Ctxt);
+    fOnAfterResponse(Ctxt, Code);
 end;
 
 procedure THttpServerGeneric.SetMaximumAllowedContentLength(aMax: cardinal);
@@ -6256,7 +6294,7 @@ begin
       if afterCode>0 then
         Code := afterCode;
       if respsent or SendResponse then
-        DoAfterResponse(ctxt);
+        DoAfterResponse(ctxt, Code);
       {$ifdef SYNCRTDEBUGLOW}
       TSynLog.Add.Log(sllCustom1, 'DoAfterResponse respsent=% ErrorMsg=%', [respsent,ErrorMsg], self);
       {$endif}
@@ -8938,7 +8976,7 @@ begin
           if not RespSent then
             if not SendResponse then
               continue;
-          DoAfterResponse(Context);
+          DoAfterResponse(Context, OutStatusCode);
         except
           on E: Exception do
             // handle any exception raised during process: show must go on!
@@ -9232,10 +9270,10 @@ begin
       THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetOnAfterRequest(aEvent);
 end;
 
-procedure THttpApiServer.SetOnAfterResponse(const aEvent: TOnHttpServerRequest);
+procedure THttpApiServer.SetOnAfterResponse(const aEvent: TOnHttpServerAfterResponse);
 var i: integer;
 begin
-  inherited SetOnAfterRequest(aEvent);
+  inherited SetOnAfterResponse(aEvent);
   if fClones<>nil then // event is shared by all clones
     for i := 0 to fClones.Count-1 do
       THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetOnAfterResponse(aEvent);
@@ -10110,12 +10148,13 @@ begin
   inherited;
 end;
 
-procedure THttpApiWebSocketServer.DoAfterResponse(Ctxt: THttpServerRequest);
+procedure THttpApiWebSocketServer.DoAfterResponse(Ctxt: THttpServerRequest;
+  const Code: cardinal);
 begin
   if Assigned(fLastConnection) then
     PostQueuedCompletionStatus(fThreadPoolServer.FRequestQueue, 0, 0,
       @fLastConnection.fOverlapped);
-  inherited DoAfterResponse(Ctxt);
+  inherited DoAfterResponse(Ctxt, Code);
 end;
 
 function THttpApiWebSocketServer.GetProtocol(index: integer): THttpApiWebSocketServerProtocol;
@@ -12524,12 +12563,6 @@ initialization
   Initialize;
 
 finalization
-  {$ifdef USELIBCURL}
-  if PtrInt(curl.Module)>0 then begin
-    curl.global_cleanup;
-    FreeLibrary(curl.Module);
-  end;
-  {$endif USELIBCURL}
   if WsaDataOnce.wVersion<>0 then
   try
     {$ifdef MSWINDOWS}

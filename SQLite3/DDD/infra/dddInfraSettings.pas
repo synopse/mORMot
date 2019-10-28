@@ -787,7 +787,7 @@ class function TDDDAppSettingsAbstract.PasswordFields: RawUTF8;
         end;
         PI := PI^.Next;
       end;
-      C := C.ClassParent;
+      C := GetClassParent(C);
     end;
   end;
 var i: integer;

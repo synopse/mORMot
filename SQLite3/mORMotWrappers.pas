@@ -55,7 +55,7 @@ unit mORMotWrappers;
 
 }
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+{$I Synopse.inc} // define HASINLINE CPU32 CPU64 OWNNORMTOUPPER
 
 interface
 
@@ -246,9 +246,14 @@ function GenerateAsynchServices(const services: array of TGUID;
 
 
 type
+  /// the options retrieved during a ExecuteFromCommandLine() call
+  TServiceClientCommandLineOptions = set of (cloPrompt,
+    cloNoColor, cloPipe, cloHeaders, cloVerbose, cloNoExpand, cloNoBody);
+
   /// event handler to let ExecuteFromCommandLine call a remote server
   // - before call, aParams.InBody will be set with the expected JSON content
-  TOnCommandLineCall = procedure(const aService: TInterfaceFactory; aMethod: PServiceMethod;
+  TOnCommandLineCall = procedure(aOptions: TServiceClientCommandLineOptions;
+    const aService: TInterfaceFactory; aMethod: PServiceMethod;
     var aParams: TSQLRestURIParams) of object;
 
 const
@@ -1432,9 +1437,6 @@ end;
 { TServiceClientCommandLine }
 
 type
-  TServiceClientCommandLineOptions = set of (
-    cloNoColor, cloPipe, cloHeaders, cloVerbose, cloNoExpand, cloNoBody);
-
   /// a class implementing ExecuteFromCommandLine()
   TServiceClientCommandLine = class(TSynPersistent)
   protected
@@ -1620,7 +1622,7 @@ begin
   if not Assigned(fOnCall) then
     raise EServiceException.CreateUTF8('No Client available to call %',
       [method.InterfaceDotMethodName]);
-  fOnCall(service, method, call); // will set URI + Bearer
+  fOnCall(fOptions, service, method, call); // will set URI + Bearer
   if [cloVerbose, cloHeaders] * fOptions <> [] then
     ToConsole('HTTP %'#13#10'%', [call.OutStatus, call.OutHead], ccLightGray);
   if (call.OutBody <> '') and (call.OutBody[1] = '[') then

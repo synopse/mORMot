@@ -46,17 +46,16 @@ unit SynLZ;
 
      SynLZ Compression / Decompression library
      =========================================
-      by Arnaud Bouchez http://bouchez.info
 
     * SynLZ is a very FAST lossless data compression library
-      written in optimized pascal code for Delphi 3 up to Delphi 2009
+      written in optimized pascal code for FPC and Delphi 3 and up
       with a tuned asm version available
     * symetrical compression and decompression speed (which is
       very rare above all other compression algorithms in the wild)
     * good compression rate (usualy better than LZO)
     * fastest averrage compression speed (ideal for xml/text communication, e.g.)
 
-    SynLZ implements a new compression algorithm with the following features:
+    SynLZ implements a new LZ compression algorithm with the following features:
     * hashing+dictionary compression in one pass, with no huffman table
     * optimized 32bits control word, embedded in the data stream
     * in-memory compression (the dictionary is the input stream itself)
@@ -75,26 +74,27 @@ unit SynLZ;
     under the License.
 
     The Initial Developer of the Original Code is Arnaud Bouchez.
-    This work is Copyright (C)2008 Arnaud Bouchez - http://bouchez.info
+    This work is Copyright (C)2008-2019 Arnaud Bouchez - https://synopse.info
 
-    Conversion notes:
+    Implementation notes:
     - this format is NOT stream compatible with any lz* official format
+       => meant for proprietary server-side content real-time compression
        => use it internally in your application, not as exchange format
+       => consider our SynLizard.pas unit for Lizard (LZ5) compression standard
     - very small code size (less than 1KB for both compressor/decompressor)
     - the uncompressed data length is stored in the beginning of the stream
        and can be retrieved easily for proper out_p memory allocation
     - please give correct data to the decompressor (i.e. first CRC in_p data)
-       => we recommend our very fast Adler32 procedure, or a zip-like container
+       => we recommend crc32c() from SynCommons, or a zip-like container
     - a 2nd more tuned algorithm is included, but is somewhat slower in practice
        => use SynLZ[de]compres1*() functions in your applications
     - tested and benchmarked with a lot of data types/sizes
        => use the asm code, which is very tuned: SynLZ[de]compress1asm()
-    - tested under Delphi 7, Delphi 2007 and Delphi 2009
     - a hashing limitation makes SynLZ sometimes unable to pack continuous
-       blocks of same byte -> SynLZ is perfect for xml/text, but SynLZO
-       is prefered for database files
+       blocks of same byte -> SynLZ is perfect for xml/text (e.g. log files),
+       but SynZip or SynLizard may be prefered for database files
     - if you include it in your application, please give me some credits:
-       "use SynLZ compression by http://bouchez.info"
+       "use SynLZ compression by https://synopse.info"
     - use at your own risk!
 
     Some benchmark on a Sempron computer:
@@ -201,7 +201,7 @@ unit SynLZ;
   - Use RawByteString type for CompressSynLZ() function prototype
 
   Version 1.18
-  - unit fixed and tested with Delphi XE2 and up 64-bit compiler
+  - unit fixed and tested with Delphi 64-bit compiler, and cross-platform FPC
   - introducing SynLZCompress1/SynLZDecompress1 low-level functions
   - added SynLZdecompress1partial() function for partial and secure (but slower)
     decompression - implements feature request [82ca067959]
@@ -243,11 +243,11 @@ function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 {$else}
 var
-  /// fastest available SynLZ compression (using 1st algorithm)
+  /// fast redirection to pure pascal SynLZ compression (using 1st algorithm)
   SynLZCompress1: function(
     src: PAnsiChar; size: integer; dst: PAnsiChar): integer = SynLZcompress1pas;
 
-  /// fastest available SynLZ decompression (using 1st algorithm)
+  /// fast redirection to pure pascal SynLZ decompression (using 1st algorithm)
   SynLZDecompress1: function(
     src: PAnsiChar; size: integer; dst: PAnsiChar): integer = SynLZDecompress1pas;
 {$endif CPUINTEL}
@@ -263,12 +263,11 @@ function SynLZdecompress2(src: PAnsiChar; size: integer; dst: PAnsiChar): intege
 implementation
 
 function SynLZcompressdestlen(in_len: integer): integer;
-// get maximum possible (worse) compressed size for out_p
-begin
-  result := in_len+in_len shr 3+16; // worse case
+begin // get maximum possible (worse) compressed size for out_p
+  result := in_len+in_len shr 3+16;
 end;
 
-type
+type // some cross-platform and cross-compiler definitions
   {$ifndef FPC}
   PtrUInt = {$ifdef CPU64}NativeUInt{$else}cardinal{$endif};
   {$endif}
@@ -283,8 +282,7 @@ type
   TOffsets = array[0..4095] of PAnsiChar; // 16KB/32KB hashing code
 
 function SynLZdecompressdestlen(in_p: PAnsiChar): integer;
-// get uncompressed size from lz-compressed buffer (to reserve memory, e.g.)
-begin
+begin // get uncompressed size from lz-compressed buffer (to reserve memory, e.g.)
   result := PWord(in_p)^;
   if result and $8000<>0 then
     result := (result and $7fff) or (integer(PWord(in_p+2)^) shl 15);
@@ -466,14 +464,15 @@ function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 var off: TOffsets;
     cache: array[0..4095] of cardinal; // uses 32KB+16KB=48KB on stack
 asm // rcx=src, edx=size, r8=dest
-        {$ifndef win64} // Linux 64-bit ABI
+        {$ifdef win64} // additional registers to preserve
+        push    rdi
+        push    rsi
+        {$else} // Linux 64-bit ABI
         mov     r8, rdx
         mov     rdx, rsi
         mov     rcx, rdi
         {$endif win64}
         push    rbx
-        push    rdi
-        push    rsi
         push    r12
         push    r13
         push    r14
@@ -610,9 +609,11 @@ asm // rcx=src, edx=size, r8=dest
         pop     r14
         pop     r13
         pop     r12
+        pop     rbx
+        {$ifdef win64} // additional registers to preserve
         pop     rsi
         pop     rdi
-        pop     rbx
+        {$endif win64}
 {$endif CPUX86}
 end;
 {$endif CPUINTEL}
@@ -983,14 +984,15 @@ asm
 function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 var off: TOffsets;
 asm // rcx=src, edx=size, r8=dest
-        {$ifndef win64} // Linux 64-bit ABI
+        {$ifdef win64} // additional registers to preserve
+        push    rsi
+        push    rdi
+        {$else} // Linux 64-bit ABI
         mov     r8, rdx
         mov     rdx, rsi
         mov     rcx, rdi
         {$endif win64}
         push    rbx
-        push    rsi
-        push    rdi
         push    r12
         push    r13
         push    r14
@@ -1103,9 +1105,11 @@ asm // rcx=src, edx=size, r8=dest
         pop     r14
         pop     r13
         pop     r12
+        pop     rbx
+        {$ifdef win64} // additional registers to preserve
         pop     rdi
         pop     rsi
-        pop     rbx
+        {$endif win64}
 {$endif CPUX86}
 end;
 {$endif CPUINTEL}
@@ -1554,41 +1558,5 @@ nextCW:
   assert(result=dst-dst_beg);
   {$endif}
 end;
-
-function Hash32(P: PIntegerArray; L: integer): cardinal;
-// faster than Adler32, even asm version, because read DWORD aligned data
-var s1,s2: cardinal;
-    i: integer;
-begin
-  if P<>nil then begin
-    s1 := 0;
-    s2 := 0;
-    for i := 1 to L shr 4 do begin // 16 bytes (4 DWORD) by loop - aligned read
-      inc(s1,P^[0]);
-      inc(s2,s1);
-      inc(s1,P^[1]);
-      inc(s2,s1);
-      inc(s1,P^[2]);
-      inc(s2,s1);
-      inc(s1,P^[3]);
-      inc(s2,s1);
-      inc(PByte(P),16);
-    end;
-    for i := 1 to (L shr 2)and 3 do begin // 4 bytes (DWORD) by loop
-      inc(s1,P^[0]);
-      inc(s2,s1);
-      inc(PInteger(P));
-    end;
-    case L and 3 of // remaining 0..3 bytes
-    1: inc(s1,PByte(P)^);
-    2: inc(s1,PWord(P)^);
-    3: inc(s1,PWord(P)^ or (ord(PAnsiChar(P)[2]) shl 16));
-    end;
-    inc(s2,s1);
-    result := s1 xor (s2 shl 16);
-  end else
-    result := 0;
-end;
-
 
 end.
