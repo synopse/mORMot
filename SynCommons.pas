@@ -4845,7 +4845,7 @@ type
   /// map the Delphi/FPC dynamic array header (stored before each instance)
   // - define globally for proper inlining with FPC
   // - match tdynarray type definition in dynarr.inc
-  TDynArrayRec = packed record
+  TDynArrayRec = {packed} record
     /// dynamic array reference count (basic garbage memory mechanism)
     refCnt: PtrInt;
     /// equals length-1
@@ -20952,10 +20952,14 @@ begin
 end;
 
 {$ifdef HASALIGNTYPEDATA}
-function FPCTypeInfoOverName(P: pointer): pointer; inline;
+function FPCTypeInfoOverName(P: pointer): pointer;// inline;
 begin // aligned result := @PAnsiChar(info)[info^.NameLen]
+  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
   result := AlignTypeData(P+2+PTypeInfo(P)^.NameLen);
   dec(PByte(result),2*SizeOf(pointer)); // -2 pointers to point on PTypeInfo^.kind
+  {$else}
+    result := AlignTypeData(P+PByte(P+1)^);
+  {$endif}
 end;
 {$endif HASALIGNTYPEDATA}
 
@@ -40407,14 +40411,25 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
 end;
 
 function GetManagedFields(info: PTypeInfo; out firstfield: PFieldInfo): integer;
-  {$ifdef HASINLINE}inline;{$endif}
+ // {$ifdef HASINLINE}inline;{$endif}
 {$ifdef FPC_NEWRTTI}
-var recInitData: PFPCRecInitData; // low-level type redirected from SynFPCTypInfo
+var
+  recInitData: PFPCRecInitData; // low-level type redirected from SynFPCTypInfo
 begin
-  //recInitData := GetFPCRecInitData(info^.RecInitInfo);
-  recInitData := GetFPCRecInitData(AlignTypeData(PByte(info)+2)); // +2=Kind+NameLen
+  if Assigned(info^.RecInitInfo) then
+begin
+    recInitData := PFPCRecInitData(AlignToPtr(PTypeInfo(info^.RecInitInfo+2+PByte(info^.RecInitInfo+1)^)));
   firstfield := pointer(PtrUInt(recInitData)+SizeOf(recInitData^)); // =ManagedFields[0]
   result := recInitData^.ManagedFieldCount;
+  end
+  else
+  begin
+    inc(PByte(info),2);
+    dec(PByte(info),SizeOf(PFPCAttributeTable));
+    recInitData := PFPCRecInitData(pointer(info));
+    firstfield := pointer(PtrUInt(recInitData)+SizeOf(recInitData^)); // =ManagedFields[0]
+    result := recInitData^.ManagedFieldCount;
+  end;
 {$else}
 begin
   firstfield := @info^.ManagedFields[0];

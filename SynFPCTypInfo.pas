@@ -93,7 +93,6 @@ type
 {$ifdef FPC_NEWRTTI}
   PFPCRecInitData = TypInfo.PRecInitData;
 
-function GetFPCRecInitData(AlignedTypeData: Pointer): PFPCRecInitData;
 {$endif FPC_NEWRTTI}
 
 procedure FPCDynArrayClear(var a: Pointer; TypeInfo: Pointer);
@@ -106,15 +105,15 @@ procedure FPCRecordAddRef(var Data; TypeInfo : pointer);
 implementation
 
 procedure FPCDynArrayClear(var a: Pointer; TypeInfo: Pointer);
-  [external name 'FPC_DYNARRAY_CLEAR'];
+  external name 'FPC_DYNARRAY_CLEAR';
 procedure FPCFinalizeArray(p: Pointer; TypeInfo: Pointer; elemCount: PtrUInt);
-  [external name 'FPC_FINALIZE_ARRAY'];
+  external name 'FPC_FINALIZE_ARRAY';
 procedure FPCFinalize(Data: Pointer; TypeInfo: Pointer);
-  [external name 'FPC_FINALIZE'];
+  external name 'FPC_FINALIZE';
 procedure FPCRecordCopy(const Source; var Dest; TypeInfo: pointer);
-  [external name 'FPC_COPY'];
+  external name 'FPC_COPY';
 procedure FPCRecordAddRef(var Data; TypeInfo : pointer);
-  [external name 'FPC_ADDREF'];
+  external name 'FPC_ADDREF';
 
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT} // copied from latest typinfo.pp
 function AlignToPtr(p: pointer): pointer;
@@ -145,27 +144,9 @@ end;
 function AlignTypeData(p: pointer): pointer;
 begin
   result := p;
-  inc(PFPCAttributeTable(result)); // ignore attributes table
+  inc(PByte(result),SizeOf(PFPCAttributeTable)); // ignore attributes table
 end;
 {$endif FPC_PROVIDE_ATTR_TABLE}
 {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
-
-{$ifdef FPC_NEWRTTI}
-function GetFPCRecInitData(AlignedTypeData: Pointer): PFPCRecInitData;
-begin
-  {$ifdef FPC_PROVIDE_ATTR_TABLE}
-  dec(PFPCAttributeTable(AlignedTypeData)); // un-adjust AlignTypeData() above
-  {$endif FPC_PROVIDE_ATTR_TABLE}
-  if TypInfo.PTypeData(AlignedTypeData)^.RecInitInfo=nil then
-    result := AlignedTypeData else // no RecInitData, but regular list of fields
-    begin
-    result := TypInfo.PTypeData(AlignedTypeData)^.RecInitData;
-      {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-      result := PFPCRecInitData(AlignTypeData(pointer(result)));
-      {$endif}
-    end;
-end;
-{$endif FPC_NEWRTTI}
-
 
 end.

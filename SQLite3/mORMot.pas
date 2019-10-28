@@ -31443,7 +31443,7 @@ end;
 function TTypeInfo.AttributeTable: PFPCAttributeTable;
 begin
   result := GetTypeData(self);
-  dec(result); // re-adjust after SynFPCTypInfo.AlignTypeData() in GetTypeData()
+  dec(PByte(result),SizeOf(PFPCAttributeTable)); // ignore attributes table; // re-adjust after SynFPCTypInfo.AlignTypeData() in GetTypeData()
 end;
 {$endif FPC_PROVIDE_ATTR_TABLE}
 
@@ -56175,7 +56175,7 @@ begin
   P := GetTypeData(aInterface^);
   {$ifdef FPC}
   {$ifdef FPC_PROVIDE_ATTR_TABLE}
-  dec(PFPCAttributeTable(P)); // re-adjust our GetTypeData() to match TypInfo.pp
+  dec(PByte(P),SizeOf(PFPCAttributeTable)); // re-adjust our GetTypeData() to match TypInfo.pp
   {$endif FPC_PROVIDE_ATTR_TABLE}
   PI := P;
   if PI^.Parent<>nil then
