@@ -1211,10 +1211,14 @@ destructor TSMEngineManager.Destroy;
 var
   dllModule: PDllModuleRec;
   i: Integer;
+  endtix: Int64;
 begin
   FWorkersManager.Free;
   FWorkersManager := nil;
   stopDebugger;
+  endtix := GetTickCount64 + 10000;
+  while (FEnginePool.Count > 0) and (endtix > GetTickCount64) do
+    SleepHiRes(50);
   if FEnginePool.Count>0 then
     raise ESMException.Create('There are unreleased engines');
   FEnginePool.Free;
