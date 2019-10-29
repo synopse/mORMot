@@ -248,6 +248,7 @@ const
 
 var
   COUNTRY_ISO2: array[TCountryIdentifier] of word;
+  COUNTRYU_ISO2, COUNTRYU_ISO3: array[TCountryIdentifier] of RawUTF8;
   COUNTRY_ISONUM_ORDERED: record // for fast binary search of the ISO numeric
     Values, Indexes: array[TCountryIdentifier] of integer;
   end;
@@ -261,6 +262,8 @@ begin
       Values[c] := COUNTRY_ISONUM[c];
       ps := pointer(GetEnumName(TypeInfo(TCountryIdentifier),ord(c)));
       COUNTRY_ISO2[c] := PWord(ps+3)^;
+      ShortStringToAnsi7String(ps^,COUNTRYU_ISO2[c]);
+      FastSetString(COUNTRYU_ISO3[c],@COUNTRY_ISO3[c],3);
     end;
     FillIncreasing(@Indexes,0,length(Indexes));
     QuickSortInteger(@Values,@Indexes,0,length(Values)-1);
@@ -274,12 +277,12 @@ end;
 
 class function TCountry.ToAlpha2(id: TCountryIdentifier): TCountryIsoAlpha2;
 begin
-  FastSetString(RawUTF8(result),@COUNTRY_ISO2[id],2);
+  result := COUNTRYU_ISO2[id];
 end;
 
 class function TCountry.ToAlpha3(id: TCountryIdentifier): TCountryIsoAlpha3;
 begin
-  FastSetString(RawUTF8(result),@COUNTRY_ISO3[id],3);
+  result := COUNTRYU_ISO3[id];
 end;
 
 class function TCountry.ToIso(id: TCountryIdentifier): TCountryIsoNumeric;
@@ -295,7 +298,8 @@ begin
   P := @COUNTRY_NAME_EN[ccFirst];
   for result := ccFirst to high(result) do
     if (length(P^)=L) and IdemPropNameUSameLen(pointer(P^),pointer(Text),L) then
-      exit;
+      exit else
+      inc(P);
   result := ccUndefined;
 end;
 
@@ -411,6 +415,7 @@ begin
     c.Alpha3 := ' frz ';
     Check(c.Iso=0);
     Check(c.Identifier=ccUndefined);
+    Check(TCountry.FromEnglish('none')=ccUndefined);
     for i := low(i) to high(i) do begin
       c.Iso := COUNTRY_ISONUM[i];
       t := c.Alpha2;
@@ -439,6 +444,7 @@ begin
       Check(c2.Alpha3=c.Alpha3);
       Check(ObjectEquals(c,c2,false));
       Check(ObjectEquals(c,c2,true));
+      Check(c.FromEnglish(c.English)=i);
     end;
   finally
     c2.Free;

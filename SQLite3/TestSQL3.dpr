@@ -131,6 +131,7 @@ uses
           mORMotMVC in 'mORMotMVC.pas',
           mORMotDDD in 'mORMotDDD.pas',
           dddDomAuthInterfaces in 'DDD\dom\dddDomAuthInterfaces.pas',
+          dddDomCountry in 'DDD\dom\dddDomCountry.pas',
           dddDomUserTypes in 'DDD\dom\dddDomUserTypes.pas',
           dddDomUserInterfaces in 'DDD\dom\dddDomUserInterfaces.pas',
           dddDomUserCQRS in 'DDD\dom\dddDomUserCQRS.pas',
