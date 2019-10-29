@@ -175,10 +175,12 @@ begin
   {$endif VER3_0}
 end;
 {$else}
+{$ifdef HASALIGNTYPEDATA}
 function AlignTypeDataClean(p: pointer): pointer;
 begin
   result := p;
 end;
+{$endif HASALIGNTYPEDATA}
 {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
 

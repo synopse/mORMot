@@ -40432,7 +40432,9 @@ begin
   else
   begin
     inc(PByte(info),2);
+    {$ifdef FPC_PROVIDE_ATTR_TABLE}
     dec(PByte(info),SizeOf(PFPCAttributeTable));
+    {$endif}
     recInitData := PFPCRecInitData(AlignToPtr(pointer(info)));
     firstfield := PFieldInfo(PtrUInt(@recInitData^.ManagedFieldCount));
     Inc(PByte(firstfield),SizeOf(integer));
