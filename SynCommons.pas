@@ -40420,6 +40420,7 @@ function GetManagedFields(info: PTypeInfo; out firstfield: PFieldInfo): integer;
 {$ifdef FPC_NEWRTTI}
 var
   recInitData: PFPCRecInitData; // low-level type redirected from SynFPCTypInfo
+  aPointer:pointer;
 begin
   if Assigned(info^.RecInitInfo) then
   begin
@@ -40431,11 +40432,14 @@ begin
   end
   else
   begin
-    inc(PByte(info),2);
+    aPointer:=@info^.RecInitInfo;
     {$ifdef FPC_PROVIDE_ATTR_TABLE}
-    dec(PByte(info),SizeOf(PFPCAttributeTable));
+    dec(PByte(aPointer),SizeOf(Pointer));
+    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+    dec(PByte(aPointer),SizeOf(Pointer));
     {$endif}
-    recInitData := PFPCRecInitData(AlignToPtr(pointer(info)));
+    {$endif}
+    recInitData := PFPCRecInitData(aPointer);
     firstfield := PFieldInfo(PtrUInt(@recInitData^.ManagedFieldCount));
     Inc(PByte(firstfield),SizeOf(integer));
     firstfield := AlignToPtr(firstfield);
