@@ -20585,6 +20585,7 @@ type
   {$packrecords c} // as expected by FPC's RTTI record definitions
 
   TStrRec =
+  {packed}
   record // see TAnsiRec/TUnicodeRec in astrings/ustrings.inc
   {$ifdef ISFPC27}
     codePage: TSystemCodePage; // =Word
@@ -20799,6 +20800,10 @@ type
     NameIndex: SmallInt;
     {$ifdef FPC}
     PropProcs : Byte;
+    {$ifdef FPC_PROVIDE_ATTR_TABLE}
+    /// property attributes, introduced since FPC SVN 42356-42411 (2019/07)
+    AttributeTable: Pointer;
+    {$endif FPC_PROVIDE_ATTR_TABLE}
     {$endif}
     NameLen: byte;
   end;
@@ -20844,7 +20849,7 @@ begin
     sr^.elemSize := 1;
     sr^.refCnt := 1;
     sr^.length := len;
-    inc(sr);
+    inc(PByte(sr),STRRECSIZE);
     PWord(PAnsiChar(sr)+len)^ := 0; // ensure ends with two #0
     r := pointer(sr);
     if p<>nil then
@@ -20860,14 +20865,14 @@ var r: PAnsiChar;
 begin
   if len<=0 then
     r := nil else begin
-    GetMem(r,len+(STRRECSIZE+4));
+    GetMem(r,len+(STRRECSIZE+2));
     sr := pointer(r);
     sr^.codePage := CP_UTF8;
     sr^.elemSize := 1;
     sr^.refCnt := 1;
     sr^.length := len;
-    inc(sr);
-    PCardinal(PAnsiChar(sr)+len)^ := 0; // ends with four #0
+    inc(PByte(sr),STRRECSIZE);
+    PWord(PAnsiChar(sr)+len)^ := 0; // ensure ends with two #0
     r := pointer(sr);
     if p<>nil then
       {$ifdef FPC}Move{$else}MoveFast{$endif}(p^,sr^,len);
@@ -20952,11 +20957,11 @@ begin
 end;
 
 {$ifdef HASALIGNTYPEDATA}
-function FPCTypeInfoOverName(P: pointer): pointer;// inline;
-begin // aligned result := @PAnsiChar(info)[info^.NameLen]
+function FPCTypeInfoOverName(P: pointer): pointer; inline;
+begin
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  result := AlignTypeData(P+2+PTypeInfo(P)^.NameLen);
-  dec(PByte(result),2*SizeOf(pointer)); // -2 pointers to point on PTypeInfo^.kind
+    result := AlignTypeData(P+2+PByte(P+1)^);
+    dec(PByte(result),2*SizeOf(pointer)); // -2 pointers to point on PTypeInfo^.kind
   {$else}
     result := AlignTypeData(P+PByte(P+1)^);
   {$endif}
@@ -40411,23 +40416,27 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
 end;
 
 function GetManagedFields(info: PTypeInfo; out firstfield: PFieldInfo): integer;
- // {$ifdef HASINLINE}inline;{$endif}
+{$ifdef HASINLINE}inline;{$endif}
 {$ifdef FPC_NEWRTTI}
 var
   recInitData: PFPCRecInitData; // low-level type redirected from SynFPCTypInfo
 begin
   if Assigned(info^.RecInitInfo) then
-begin
-    recInitData := PFPCRecInitData(AlignToPtr(PTypeInfo(info^.RecInitInfo+2+PByte(info^.RecInitInfo+1)^)));
-  firstfield := pointer(PtrUInt(recInitData)+SizeOf(recInitData^)); // =ManagedFields[0]
-  result := recInitData^.ManagedFieldCount;
+  begin
+    recInitData := PFPCRecInitData(AlignTypeDataClean(PTypeInfo(info^.RecInitInfo+2+PByte(info^.RecInitInfo+1)^)));
+    firstfield := PFieldInfo(PtrUInt(@recInitData^.ManagedFieldCount));
+    Inc(PByte(firstfield),SizeOf(integer));
+    firstfield := AlignToPtr(firstfield);
+    result := recInitData^.ManagedFieldCount;
   end
   else
   begin
     inc(PByte(info),2);
     dec(PByte(info),SizeOf(PFPCAttributeTable));
-    recInitData := PFPCRecInitData(pointer(info));
-    firstfield := pointer(PtrUInt(recInitData)+SizeOf(recInitData^)); // =ManagedFields[0]
+    recInitData := PFPCRecInitData(AlignToPtr(pointer(info)));
+    firstfield := PFieldInfo(PtrUInt(@recInitData^.ManagedFieldCount));
+    Inc(PByte(firstfield),SizeOf(integer));
+    firstfield := AlignToPtr(firstfield);
     result := recInitData^.ManagedFieldCount;
   end;
 {$else}

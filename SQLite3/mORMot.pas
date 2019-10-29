@@ -21040,9 +21040,16 @@ type
 
 { some inlined methods }
 
-function GetTypeData(const info: TTypeInfo): pointer; {$ifdef HASINLINE}inline;{$endif}
+function GetTypeData(const info: TTypeInfo): pointer;
+{$ifdef HASINLINE}inline;{$endif}
 begin
   result := AlignTypeData(pointer(@info)+2+PByte(pointer(@info)+1)^);
+end;
+
+function GetTypeDataClean(const info: TTypeInfo): pointer;
+{$ifdef HASINLINE}inline;{$endif}
+begin
+  result := AlignTypeDataClean(pointer(@info)+2+PByte(pointer(@info)+1)^);
 end;
 
 function TTypeInfo.ClassType: PClassType;
@@ -31442,8 +31449,7 @@ end;
 {$ifdef FPC_PROVIDE_ATTR_TABLE}
 function TTypeInfo.AttributeTable: PFPCAttributeTable;
 begin
-  result := GetTypeData(self);
-  dec(PByte(result),SizeOf(PFPCAttributeTable)); // ignore attributes table; // re-adjust after SynFPCTypInfo.AlignTypeData() in GetTypeData()
+  result := GetTypeDataClean(self);
 end;
 {$endif FPC_PROVIDE_ATTR_TABLE}
 
@@ -56172,11 +56178,8 @@ var P: Pointer;
 
 begin
   // handle interface inheritance via recursive calls
-  P := GetTypeData(aInterface^);
+  P := GetTypeDataClean(aInterface^);
   {$ifdef FPC}
-  {$ifdef FPC_PROVIDE_ATTR_TABLE}
-  dec(PByte(P),SizeOf(PFPCAttributeTable)); // re-adjust our GetTypeData() to match TypInfo.pp
-  {$endif FPC_PROVIDE_ATTR_TABLE}
   PI := P;
   if PI^.Parent<>nil then
     Ancestor := Deref(pointer(PI^.Parent)) else

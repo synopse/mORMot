@@ -77,6 +77,14 @@ type
   AlignTypeData = pointer;
 {$endif HASALIGNTYPEDATA}
 
+{$ifdef HASALIGNTYPEDATA}
+function AlignTypeDataClean(p: pointer): pointer; inline;
+{$else}
+type
+  AlignTypeDataClean = pointer;
+{$endif HASALIGNTYPEDATA}
+
+
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
 function AlignToPtr(p: pointer): pointer; inline;
 {$else FPC_REQUIRES_PROPER_ALIGNMENT}
@@ -133,10 +141,11 @@ begin
 {$ifdef VER3_0}
   result := Pointer(align(p,SizeOf(Pointer)));
 {$else VER3_0}
-  result := Pointer(align(p,PtrInt(@TAlignCheck(nil^).q)))
+    result := Pointer(align(p,PtrInt(@TAlignCheck(nil^).q)));
 {$endif VER3_0}
   {$ifdef FPC_PROVIDE_ATTR_TABLE}
-  inc(PFPCAttributeTable(result)); // ignore attributes table
+    inc(PByte(result),SizeOf(PFPCAttributeTable)); // ignore attributes table
+    result := Pointer(align(result,PtrInt(@TAlignCheck(nil^).q)));
   {$endif FPC_PROVIDE_ATTR_TABLE}
 end;
 {$else}
@@ -148,5 +157,29 @@ begin
 end;
 {$endif FPC_PROVIDE_ATTR_TABLE}
 {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+
+{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT} // copied from latest typinfo.pp
+function AlignTypeDataClean(p: pointer): pointer;
+{$packrecords c}
+  type
+    TAlignCheck = record // match RTTI TTypeInfo definition
+      b : byte;    // = TTypeKind
+      q : qword;   // = this is where the PTypeData begins
+    end;
+{$packrecords default}
+begin
+  {$ifdef VER3_0}
+    result := Pointer(align(p,SizeOf(Pointer)));
+  {$else VER3_0}
+    result := Pointer(align(p,PtrInt(@TAlignCheck(nil^).q)));
+  {$endif VER3_0}
+end;
+{$else}
+function AlignTypeDataClean(p: pointer): pointer;
+begin
+  result := p;
+end;
+{$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+
 
 end.
