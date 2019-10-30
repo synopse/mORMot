@@ -2024,6 +2024,11 @@ type
   {$endif}
   /// the non-number values potentially stored in an IEEE floating point
   TSynExtendedNan = (seNumber, seNan, seInf, seNegInf);
+  {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
+  /// will actually change anything only on FPC ARM/Aarch64 plaforms
+  unaligned = Double;
+  {$endif}
+
 
 const
   /// the JavaScript-like values of non-number IEEE constants
@@ -20583,10 +20588,7 @@ end;
 type
 {$ifdef FPC}
   {$packrecords c} // as expected by FPC's RTTI record definitions
-
-  TStrRec =
-  {packed}
-  record // see TAnsiRec/TUnicodeRec in astrings/ustrings.inc
+  TStrRec = record // see TAnsiRec/TUnicodeRec in astrings/ustrings.inc
   {$ifdef ISFPC27}
     codePage: TSystemCodePage; // =Word
     elemSize: Word;
@@ -20750,7 +20752,7 @@ type
     tkEnumeration: (
       EnumType: TOrdType;
       {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-      EnumDummy: DWORD; // needed on ARM for correct alignment !!??
+      EnumDummy: DWORD; // needed on ARM for correct alignment
       {$endif}
       {$ifdef FPC_ENUMHASINNER} inner:
       {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT} packed {$endif} record
@@ -20770,7 +20772,7 @@ type
     tkSet: (
       SetType: TOrdType;
       {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-      SetDummy: DWORD; // needed on ARM for correct alignment !!??
+      SetDummy: DWORD; // needed on ARM for correct alignment
       {$endif}
       {$ifdef FPC}
       {$ifndef VER3_0}
@@ -20865,14 +20867,14 @@ var r: PAnsiChar;
 begin
   if len<=0 then
     r := nil else begin
-    GetMem(r,len+(STRRECSIZE+2));
+    GetMem(r,len+(STRRECSIZE+4));
     sr := pointer(r);
     sr^.codePage := CP_UTF8;
     sr^.elemSize := 1;
     sr^.refCnt := 1;
     sr^.length := len;
     inc(PByte(sr),STRRECSIZE);
-    PWord(PAnsiChar(sr)+len)^ := 0; // ensure ends with two #0
+    PCardinal(PAnsiChar(sr)+len)^ := 0; // ensure ends with four #0
     r := pointer(sr);
     if p<>nil then
       {$ifdef FPC}Move{$else}MoveFast{$endif}(p^,sr^,len);
@@ -35673,11 +35675,6 @@ begin
       result := false;
 end;
 
-{$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
-type
-  unaligned = Double;
-{$endif}
-
 function Char2ToByte(P: PUTF8Char; out Value: Cardinal): Boolean;
 var B: PtrUInt;
 begin
@@ -40422,16 +40419,13 @@ var
   recInitData: PFPCRecInitData; // low-level type redirected from SynFPCTypInfo
   aPointer:pointer;
 begin
-  if Assigned(info^.RecInitInfo) then
-  begin
+  if Assigned(info^.RecInitInfo) then begin
     recInitData := PFPCRecInitData(AlignTypeDataClean(PTypeInfo(info^.RecInitInfo+2+PByte(info^.RecInitInfo+1)^)));
     firstfield := PFieldInfo(PtrUInt(@recInitData^.ManagedFieldCount));
-    Inc(PByte(firstfield),SizeOf(integer));
+    inc(PByte(firstfield),SizeOf(integer));
     firstfield := AlignToPtr(firstfield);
     result := recInitData^.ManagedFieldCount;
-  end
-  else
-  begin
+  end else begin
     aPointer:=@info^.RecInitInfo;
     {$ifdef FPC_PROVIDE_ATTR_TABLE}
     dec(PByte(aPointer),SizeOf(Pointer));
@@ -40441,7 +40435,7 @@ begin
     {$endif}
     recInitData := PFPCRecInitData(aPointer);
     firstfield := PFieldInfo(PtrUInt(@recInitData^.ManagedFieldCount));
-    Inc(PByte(firstfield),SizeOf(integer));
+    inc(PByte(firstfield),SizeOf(integer));
     firstfield := AlignToPtr(firstfield);
     result := recInitData^.ManagedFieldCount;
   end;

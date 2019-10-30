@@ -2843,9 +2843,6 @@ type
     function AttributeTable: PFPCAttributeTable; inline;
     {$endif FPC_PROVIDE_ATTR_TABLE}
   end;
-  {$ifdef FPC}
-    {$pop}
-  {$endif}
 
   /// how a RTTI property definition access its value
   // - as returned by TPropInfo.Getter/Setter methods
@@ -2854,7 +2851,7 @@ type
 
   /// a wrapper containing a RTTI property definition
   // - used for direct Delphi / UTF-8 SQL type mapping/conversion
-  {$ifdef UNICODE}TPropInfo = packed record{$else}TPropInfo = packed object{$endif}
+  {$ifdef UNICODE}TPropInfo = record{$else}TPropInfo = object{$endif}
   public
     /// raw retrieval of the property read access definition
     // - note: 'var Call' generated incorrect code on Delphi XE4 -> use PMethod
@@ -3149,6 +3146,10 @@ type
     function ClassFromJSON(Instance: TObject; From: PUTF8Char; var Valid: boolean;
       Options: TJSONToObjectOptions=[]): PUTF8Char;
   end;
+
+  {$ifdef FPC}
+    {$pop}
+  {$endif}
 
   /// the available methods calling conventions
   // - this is by design only relevant to the x86 model
@@ -21035,6 +21036,7 @@ end;
 type
   AlignToPtr = pointer;
   AlignTypeData = pointer;
+  AlignTypeDataClean = pointer;
   UnalignToDouble = Double;
 {$endif FPC}
 
@@ -21043,13 +21045,13 @@ type
 function GetTypeData(const info: TTypeInfo): pointer;
 {$ifdef HASINLINE}inline;{$endif}
 begin
-  result := AlignTypeData(pointer(@info)+2+PByte(pointer(@info)+1)^);
+  result := AlignTypeData(PAnsiChar(@info)+2+PByte(PAnsiChar(@info)+1)^);
 end;
 
 function GetTypeDataClean(const info: TTypeInfo): pointer;
 {$ifdef HASINLINE}inline;{$endif}
 begin
-  result := AlignTypeDataClean(pointer(@info)+2+PByte(pointer(@info)+1)^);
+  result := AlignTypeDataClean(PAnsiChar(@info)+2+PByte(PAnsiChar(@info)+1)^);
 end;
 
 function TTypeInfo.ClassType: PClassType;
@@ -21233,8 +21235,7 @@ end;
 {$ifdef HASINLINENOTX86}
 function TPropInfo.Next: PPropInfo;
 begin
-  //result := AlignToPtr(PAnsiChar(@Name[1])+ord(Name[0]));
-  result := AlignToPtr(PByte(@Name[0]) + SizeOf(Name[0]) + Length(Name));
+  result := AlignToPtr(PAnsiChar(@Name[0]) + SizeOf(Name[0]) + Length(Name));
 end;
 {$else}
 function TPropInfo.Next: PPropInfo;
@@ -55941,10 +55942,9 @@ begin
   while start<stop do begin // try whole -STUB_INTERV..+STUB_INTERV range
     inc(start,STUB_SIZE);
     result := fpmmap(pointer(start),STUB_SIZE,flProtect,MAP_PRIVATE or MAP_ANONYMOUS,-1,0);
-    if result<>MAP_FAILED then // close enough for a 24/32-bit relative jump?
-    begin
-      dist:= abs(stub-PtrUInt(result));
-      if (dist<STUB_RELJMP) then begin
+    if result<>MAP_FAILED then begin // close enough for a 24/32-bit relative jump?
+      dist := abs(stub-PtrUInt(result));
+      if dist<STUB_RELJMP then begin
         StubCallAllocMemLastStart := start;
         exit;
       end else
