@@ -2913,6 +2913,14 @@ begin
                 oData := pointer(VData);
               end else begin
                 VDBTYPE := SQLT_LVB;
+                {$ifdef CPU64}
+                // Oracle expect SQLT_LVB layout as raw data prepended by int32 data length
+                // in case of CPU64 TSQLDBParam.VData is a String and length is stored as SizeInt = Int64 (not int32)
+                // I (mpv) dont like DIRTY hack below, but currently do not now how do did it better
+                // Line below copy string length to the HI bytes of TStrRec.length
+                PInteger(Pointer(PtrInt(VData)-sizeof(Integer)))^ := PInteger(Pointer(PtrInt(VData)-sizeof(PtrInt)))^;
+                // do we need to cleanup HI bytes of length or delphy/FPC ignores it?
+                {$endif}
                 oData := Pointer(PtrInt(VData)-sizeof(Integer));
                 Inc(oLength,sizeof(Integer));
               end;
