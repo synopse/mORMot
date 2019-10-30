@@ -172,6 +172,7 @@ uses
     {$endif}
     SynBidirSock,
     mORMotDDD,
+    dddDomCountry,
     dddDomUserTypes,
     dddDomUserInterfaces,
     dddDomAuthInterfaces,

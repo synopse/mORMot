@@ -1510,7 +1510,7 @@ type
   // in monetary calculations which may occur with sftFloat type
   // - sftObject is a TEXT containing an ObjectToJSON serialization, able to
   // handle published properties of any not TPersistent as JSON object,
-  // TStrings or TRawUTF8List  as JSON arrays of strings, TCollection or
+  // TStrings or TRawUTF8List as JSON arrays of strings, TCollection or
   // TObjectList as JSON arrays of JSON objects
   // - sftVariant is a TEXT containing a variant value encoded as JSON:
   // string values are stored between quotes, numerical values directly stored,
