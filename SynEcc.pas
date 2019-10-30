@@ -1894,16 +1894,17 @@ end;
 {$endif CPUX86}
 
 {$ifdef CPUX64}
-  {$ifdef MSWINDOWS} // same .o format under Win64 for Delphi and FPC :)
-  {$ifdef ECC_O1}
-    {$L static/x86_64-win64/eccwin64O1.o}
-  {$endif}
-  {$ifdef ECC_O2}
-    {$L static/x86_64-win64/eccwin64O2.o}
-  {$endif}
-  {$ifdef ECC_O3}
-    {$L static/x86_64-win64/eccwin64O3.o}
-  {$endif}
+  {$ifdef MSWINDOWS}
+    // same .o format under Win64 for Delphi and FPC :)
+    {$ifdef ECC_O1}
+      {$L static\x86_64-win64\eccwin64O1.o}
+    {$endif}
+    {$ifdef ECC_O2}
+      {$L static\x86_64-win64\eccwin64O2.o}
+    {$endif}
+    {$ifdef ECC_O3}
+      {$L static\x86_64-win64\eccwin64O3.o}
+    {$endif}
   {$else}
   {$ifdef FPC}
     {$ifdef ECC_O1}
