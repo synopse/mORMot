@@ -256,10 +256,10 @@ type
 
   /// element types for BSON internal representation
   TBSONElementType = (
-    betEOF, betFloat, betString, betDoc, betArray, betBinary,
+    betMinKey=-1, betEOF=0, betFloat, betString, betDoc, betArray, betBinary,
     betDeprecatedUndefined, betObjectID, betBoolean, betDateTime,
     betNull, betRegEx, betDeprecatedDbptr, betJS, betDeprecatedSymbol,
-    betJSScope, betInt32, betTimestamp, betInt64, betDecimal128);
+    betJSScope, betInt32, betTimestamp, betInt64, betDecimal128, betMaxKey);
 
   /// points to an element type for BSON internal representation
   PBSONElementType = ^TBSONElementType;
@@ -822,13 +822,6 @@ type
 
 
 const
-  /// fake BSON element type which compares lower than all other possible values
-  // - element type sounds to be stored as shortint, so here $ff=-1<0=betEOF
-  betMinKey = TBSONElementType($ff);
-  /// fake BSON element type which compares higher than all other possible values
-  // - element type sounds to be stored as shortint, so here betInt64=$12<$7f
-  betMaxKey = TBSONElementType($7f);
-
   /// kind of elements which will store a RawByteString/RawUTF8 content
   // within its TBSONVariant kind
   // - i.e. TBSONVariantData.VBlob/VText field is to be managed
@@ -2689,26 +2682,26 @@ var
   // - equals -1 for varying elements
   BSON_ELEMENTSIZE: array[TBSONElementType] of integer = (
     //betEOF, betFloat, betString, betDoc, betArray, betBinary,
-      0,     sizeof(Double), -1,     -1,     -1,       -1,
+    0,  0,     sizeof(Double), -1,     -1,     -1,       -1,
     //betDeprecatedUndefined, betObjectID, betBoolean, betDateTime,
       0,                    sizeof(TBSONObjectID), 1, sizeof(Int64),
     //betNull, betRegEx, betDeprecatedDbptr, betJS, betDeprecatedSymbol,
       0,        -1,           -1,             -1,        -1,
     //betJSScope, betInt32, betTimestamp, betInt64, betDecimal128
-      -1, sizeof(Integer), sizeof(Int64), SizeOf(Int64), Sizeof(TDecimal128));
+      -1, sizeof(Integer), sizeof(Int64), SizeOf(Int64), Sizeof(TDecimal128), 0);
 
   /// types which do not have an exact equivalency to a standard variant
   // type will be mapped as varUnknown - and will be changed into
   // BSONVariantType.VarType
   BSON_ELEMENTTYPES: array[TBSONElementType] of word = (
     //betEOF, betFloat, betString, betDoc, betArray, betBinary,
-    varEmpty, varDouble, varString, varUnknown, varUnknown, varUnknown,
+    varEmpty, varEmpty, varDouble, varString, varUnknown, varUnknown, varUnknown,
     //betDeprecatedUndefined, betObjectID, betBoolean, betDateTime,
     varEmpty, varUnknown, varBoolean, varDate,
     //betNull, betRegEx, betDeprecatedDbptr, betJS, betDeprecatedSymbol,
     varNull, varUnknown, varUnknown, varUnknown, varUnknown,
     //betJSScope, betInt32, betTimestamp, betInt64, betDecimal128
-    varUnknown, varInteger, varUnknown, varInt64, varUnknown);
+    varUnknown, varInteger, varUnknown, varInt64, varUnknown, varEmpty);
 
 function TBSONElement.ToVariant(DocArrayConversion: TBSONDocArrayConversion): variant;
 begin
@@ -2725,7 +2718,7 @@ begin
   ZeroFill(@result); // set result.VType=varEmpty and result.VAny=nil
   case Kind of
   betFloat:
-    res.VDouble := PDouble(Element)^;
+    res.VDouble := unaligned(PDouble(Element)^);
   betString:
     FastSetString(RawUTF8(res.VAny),Data.Text,Data.TextLen);
   betJS, betDeprecatedSymbol:
@@ -2763,7 +2756,7 @@ begin
   betBoolean:
     result := PByte(Element)^;
   betFloat:
-    result := Trunc(PDouble(Element)^);
+    result := Trunc(unaligned(PDouble(Element)^));
   betInt32:
     result := PInteger(Element)^;
   betInt64:
@@ -2784,7 +2777,7 @@ end;
 begin
   case Kind of
   betFloat:
-    ExtendedToStr(PDouble(Element)^,DOUBLE_PRECISION,result);
+    ExtendedToStr(unaligned(PDouble(Element)^),DOUBLE_PRECISION,result);
   betString:
     FastSetString(result,Data.Text,Data.TextLen);
   betInt32:
@@ -2829,7 +2822,7 @@ label bin,regex;
 begin
   case Kind of
   betFloat:
-    W.AddDouble(PDouble(Element)^);
+    W.AddDouble(unaligned(PDouble(Element)^));
   betString, betJS, betDeprecatedSymbol: begin
     W.Add('"');
     W.AddJSONEscape(Data.Text,Data.TextLen);
@@ -2942,7 +2935,7 @@ begin
     Kind := ELEMKIND[aVarData.VType];
     case Kind of
     betFloat:
-      PDouble(Element)^ := double(aValue);
+      unaligned(PDouble(Element)^) := double(aValue);
     betDateTime:
       PUnixMSTime(Element)^ := DateTimeToUnixMSTime(aVarData.VDate);
     betBoolean:

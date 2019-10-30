@@ -2600,7 +2600,7 @@ type
     // - is prefered to MaxValue to identify the number of stored bytes
     OrdType: TOrdType;
     {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-    Dummy: DWORD; // needed on ARM for correct alignment !!??
+    EnumDummy: DWORD; // needed on ARM for correct alignment !!??
     {$endif}
     { this seemingly extraneous inner record is here for alignment purposes, so
     that its data gets aligned properly (if FPC_REQUIRES_PROPER_ALIGNMENT is set) }
@@ -2764,6 +2764,10 @@ type
   // & type NewType = OldType;
   // - user types defined as new types have this type information:
   // & type NewType = type OldType;
+  {$ifdef FPC}
+    {$push}
+    {$PACKRECORDS 1}
+  {$endif}
   {$ifdef UNICODE}TTypeInfo = record{$else}TTypeInfo = object{$endif}
   public
     /// the value type family
@@ -2839,6 +2843,9 @@ type
     function AttributeTable: PFPCAttributeTable; inline;
     {$endif FPC_PROVIDE_ATTR_TABLE}
   end;
+  {$ifdef FPC}
+    {$pop}
+  {$endif}
 
   /// how a RTTI property definition access its value
   // - as returned by TPropInfo.Getter/Setter methods
@@ -2847,7 +2854,7 @@ type
 
   /// a wrapper containing a RTTI property definition
   // - used for direct Delphi / UTF-8 SQL type mapping/conversion
-  {$ifdef UNICODE}TPropInfo = record{$else}TPropInfo = object{$endif}
+  {$ifdef UNICODE}TPropInfo = packed record{$else}TPropInfo = packed object{$endif}
   public
     /// raw retrieval of the property read access definition
     // - note: 'var Call' generated incorrect code on Delphi XE4 -> use PMethod
@@ -21033,9 +21040,16 @@ type
 
 { some inlined methods }
 
-function GetTypeData(const info: TTypeInfo): pointer; {$ifdef HASINLINE}inline;{$endif}
+function GetTypeData(const info: TTypeInfo): pointer;
+{$ifdef HASINLINE}inline;{$endif}
 begin
-  result := AlignTypeData(PAnsiChar(@info.Name[1])+ord(info.Name[0]));
+  result := AlignTypeData(pointer(@info)+2+PByte(pointer(@info)+1)^);
+end;
+
+function GetTypeDataClean(const info: TTypeInfo): pointer;
+{$ifdef HASINLINE}inline;{$endif}
+begin
+  result := AlignTypeDataClean(pointer(@info)+2+PByte(pointer(@info)+1)^);
 end;
 
 function TTypeInfo.ClassType: PClassType;
@@ -21219,7 +21233,8 @@ end;
 {$ifdef HASINLINENOTX86}
 function TPropInfo.Next: PPropInfo;
 begin
-  result := AlignToPtr(PAnsiChar(@Name[1])+ord(Name[0]));
+  //result := AlignToPtr(PAnsiChar(@Name[1])+ord(Name[0]));
+  result := AlignToPtr(PByte(@Name[0]) + SizeOf(Name[0]) + Length(Name));
 end;
 {$else}
 function TPropInfo.Next: PPropInfo;
@@ -30583,7 +30598,7 @@ type
 var call: TMethod;
 begin
   case Getter(Instance,@call) of
-    picField:   result := PDouble(call.Data)^;
+    picField:   result := unaligned(PDouble(call.Data)^);
     picMethod:  result := TGetProc(call);
     picIndexed: result := TGetIndexed(call)(Index);
     else result := 0;
@@ -30597,7 +30612,7 @@ type
 var call: TMethod;
 begin
   case Setter(Instance,@call) of
-    picField:   PDouble(call.Data)^ := Value;
+    picField:   unaligned(PDouble(call.Data)^) := Value;
     picMethod:  TSetProc(call)(Value);
     picIndexed: TSetIndexed(call)(Index,Value);
   end;
@@ -30623,7 +30638,7 @@ begin
     picField:
       case ft of
         ftSingle:    result := PSingle(call.Data)^;
-        ftDoub:      result := PDouble(call.Data)^;
+        ftDoub:      result := unaligned(PDouble(call.Data)^);
         ftExtended:  result := PExtended(call.Data)^;
         ftCurr:      result := PCurrency(call.Data)^;
       end;
@@ -30663,7 +30678,7 @@ begin
     picField:
       case ft of
         ftSingle:    PSingle(call.Data)^ := Value;
-        ftDoub:      PDouble(call.Data)^ := Value;
+        ftDoub:      unaligned(PDouble(call.Data)^) := Value;
         ftExtended:  PExtended(call.Data)^ := Value;
         ftCurr:      PCurrency(call.Data)^ := Value;
       end;
@@ -31380,21 +31395,21 @@ function TTypeInfo.InterfaceGUID: PGUID;
 begin
   if (@self=nil) or (Kind<>tkInterface) then
     result := nil else
-    result := @InterfaceType.IntfGuid;
+    result := @InterfaceType^.IntfGuid;
 end;
 
 function TTypeInfo.InterfaceUnitName: PShortString;
 begin
   if (@self=nil) or (Kind<>tkInterface) then
     result := @NULL_SHORTSTRING else
-    result := @InterfaceType.IntfUnit;
+    result := @InterfaceType^.IntfUnit;
 end;
 
 function TTypeInfo.InterfaceAncestor: PTypeInfo;
 begin
   if (@self=nil) or (Kind<>tkInterface) then
     result := nil else
-    result := Deref(InterfaceType.IntfParent);
+    result := Deref(InterfaceType^.IntfParent);
 end;
 
 procedure TTypeInfo.InterfaceAncestors(out Ancestors: PTypeInfoDynArray;
@@ -31434,8 +31449,7 @@ end;
 {$ifdef FPC_PROVIDE_ATTR_TABLE}
 function TTypeInfo.AttributeTable: PFPCAttributeTable;
 begin
-  result := GetTypeData(self);
-  dec(result); // re-adjust after SynFPCTypInfo.AlignTypeData() in GetTypeData()
+  result := GetTypeDataClean(self);
 end;
 {$endif FPC_PROVIDE_ATTR_TABLE}
 
@@ -54899,7 +54913,7 @@ begin
   InternalProcess; // use an inner proc to ensure direct fld/fild FPU ops
   case resultType of // al/ax/eax/eax:edx/rax already in result
   {$ifdef HAS_FPREG}
-  smvDouble,smvDateTime: aCall.FPRegs[FPREG_FIRST] := PDouble(@result)^;
+  smvDouble,smvDateTime: aCall.FPRegs[FPREG_FIRST] := unaligned(PDouble(@result)^);
   {$else}
   smvDouble,smvDateTime: asm fld  qword ptr [result] end;  // in st(0)
   smvCurrency:           asm fild qword ptr [result] end;  // in st(0)
@@ -55910,7 +55924,7 @@ const
   STUB_RELJMP = {$ifdef CPUARM}$7fffff{$else}$7fffffff{$endif}; // relative jmp
   STUB_INTERV = STUB_RELJMP+1; // try to reserve in closed stub interval
   STUB_ALIGN = QWord($ffffffffffff0000); // align to STUB_SIZE
-var start,stop,stub: PtrUInt;
+var start,stop,stub,dist: PtrUInt;
 begin
   stub := PtrUInt(@TInterfacedObjectFake.ArmFakeStub);
   if StubCallAllocMemLastStart<>0 then
@@ -55928,11 +55942,14 @@ begin
     inc(start,STUB_SIZE);
     result := fpmmap(pointer(start),STUB_SIZE,flProtect,MAP_PRIVATE or MAP_ANONYMOUS,-1,0);
     if result<>MAP_FAILED then // close enough for a 24/32-bit relative jump?
-      if (PtrUInt(result)-stub<STUB_RELJMP) or (stub-PtrUInt(result)<STUB_RELJMP) then begin
+    begin
+      dist:= abs(stub-PtrUInt(result));
+      if (dist<STUB_RELJMP) then begin
         StubCallAllocMemLastStart := start;
         exit;
       end else
         fpmunmap(result,STUB_SIZE);
+    end;
   end;
   result := nil; // error
 end;
@@ -56161,11 +56178,8 @@ var P: Pointer;
 
 begin
   // handle interface inheritance via recursive calls
-  P := GetTypeData(aInterface^);
+  P := GetTypeDataClean(aInterface^);
   {$ifdef FPC}
-  {$ifdef FPC_PROVIDE_ATTR_TABLE}
-  dec(PFPCAttributeTable(P)); // re-adjust our GetTypeData() to match TypInfo.pp
-  {$endif FPC_PROVIDE_ATTR_TABLE}
   PI := P;
   if PI^.Parent<>nil then
     Ancestor := Deref(pointer(PI^.Parent)) else
@@ -58880,6 +58894,7 @@ end;
 type
   PCallMethodArgs = ^TCallMethodArgs;
   {$ifdef FPC}
+  {$push}
   {$PACKRECORDS 16}
   {$endif}
   TCallMethodArgs = record
@@ -58893,7 +58908,7 @@ type
     resKind: TServiceMethodValueType;
   end;
   {$ifdef FPC}
-  {$PACKRECORDS DEFAULT}
+  {$pop}
   {$endif}
 
 // ARM/AARCH64 code below provided by ALF, greatly inspired by pascalscript
@@ -60236,7 +60251,7 @@ begin
       PInt64(V)^ := 0 else
       if wasString then
         Iso8601ToDateTimePUTF8CharVar(Val,ValLen,PDateTime(V)^) else
-        PDouble(V)^ := GetExtended(Val); // allow JSON number decoding
+        unaligned(PDouble(V)^) := GetExtended(Val); // allow JSON number decoding
   end;
   smvBoolean..smvDouble, smvCurrency..smvWideString: begin
     Val := GetJSONField(R,R,@wasString,nil,@ValLen);
@@ -60261,7 +60276,7 @@ doint:case SizeInStorage of
         SetQWord(Val,PQWord(V)^) else
         SetInt64(Val,PInt64(V)^);
     smvDouble:
-      PDouble(V)^ := GetExtended(Val);
+      unaligned(PDouble(V)^) := GetExtended(Val);
     smvCurrency:
       PInt64(V)^ := StrToCurr64(Val);
     smvRawUTF8:
@@ -60330,7 +60345,7 @@ begin
          WR.Add(PInt64(V)^);
   end;
   smvBoolean:    WR.Add(PBoolean(V)^);
-  smvDouble:     WR.AddDouble(PDouble(V)^);
+  smvDouble:     WR.AddDouble(unaligned(PDouble(V)^));
   smvDateTime:   WR.AddDateTime(PDateTime(V)^,vIsDateTimeMS in ValueKindAsm);
   smvCurrency:   WR.AddCurr64(PInt64(V)^);
   smvRawUTF8:    WR.AddJSONEscape(PPointer(V)^);
@@ -60380,7 +60395,7 @@ begin
          Int64ToUtf8(PInt64(V)^,DestValue);
   end;
   smvDouble:
-    ExtendedToStr(PDouble(V)^,DOUBLE_PRECISION,DestValue);
+    ExtendedToStr(unaligned(PDouble(V)^),DOUBLE_PRECISION,DestValue);
   smvCurrency:
     Curr64ToStr(PInt64(V)^,DestValue);
   smvRawJSON:
@@ -60462,7 +60477,7 @@ begin
          DestValue := PInt64(V)^;
   end;
   smvDouble, smvDateTime:
-    DestValue := PDouble(V)^;
+    DestValue := unaligned(PDouble(V)^);
   smvCurrency:
     DestValue := PCurrency(V)^;
   smvRawUTF8:
@@ -61556,7 +61571,7 @@ begin
             end;
             {$ifndef CPUX86}
             if FPRegisterIdent>0 then
-              call.FPRegs[FPRegisterIdent] := PDouble(Value)^;
+              call.FPRegs[FPRegisterIdent] := unaligned(PDouble(Value)^);
             {$endif}
             if (RegisterIdent>0) and (FPRegisterIdent>0) then
               raise EInterfaceFactoryException.CreateUTF8('Unexpected % reg=% FP=%',

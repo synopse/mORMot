@@ -1896,13 +1896,13 @@ end;
 {$ifdef CPUX64}
   {$ifdef MSWINDOWS} // same .o format under Win64 for Delphi and FPC :)
   {$ifdef ECC_O1}
-    {$L SynEcc64O1.o}
+    {$L static/x86_64-win64/eccwin64O1.o}
   {$endif}
   {$ifdef ECC_O2}
-    {$L SynEcc64O2.o}
+    {$L static/x86_64-win64/eccwin64O2.o}
   {$endif}
   {$ifdef ECC_O3}
-    {$L SynEcc64O3.o}
+    {$L static/x86_64-win64/eccwin64O3.o}
   {$endif}
   {$else}
   {$ifdef FPC}

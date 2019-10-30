@@ -1089,7 +1089,7 @@ begin
       case VType of
       ftNull:     fStatement.SetNull(i+FirstDbcIndex,stUnknown);
       ftInt64:    fStatement.SetLong(i+FirstDbcIndex,VInt64);
-      ftDouble:   fStatement.SetDouble(i+FirstDbcIndex,PDouble(@VInt64)^);
+      ftDouble:   fStatement.SetDouble(i+FirstDbcIndex,unaligned(PDouble(@VInt64)^));
       ftCurrency: {$ifdef ZEOS72UP}
                   fStatement.SetCurrency(i+FirstDbcIndex,PCurrency(@VInt64)^);
                   {$else}

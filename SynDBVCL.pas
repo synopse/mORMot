@@ -317,7 +317,7 @@ begin
       result := @fTemp64;
     end;
     SynTable.ftCurrency: begin // ftFloat expects a DOUBLE value
-      PDouble(@fTemp64)^ := PCurrency(result)^;
+      unaligned(PDouble(@fTemp64)^) := PCurrency(result)^;
       result := @fTemp64;
     end;
     SynTable.ftUTF8, SynTable.ftBlob:

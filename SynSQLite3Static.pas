@@ -288,7 +288,7 @@ end;
 {$ifdef MSWINDOWS}
 {$ifdef CPUX86} // not a compiler intrinsic on x86
 function _InterlockedCompareExchange(var Dest: longint; New,Comp: longint): longint; stdcall;
-  [public, alias: '_InterlockedCompareExchange@12'];
+  public alias: '_InterlockedCompareExchange@12';
 begin
   result := InterlockedCompareExchange(Dest,New,Comp);
 end;

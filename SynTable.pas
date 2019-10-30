@@ -3997,7 +3997,7 @@ begin
   if P1<>P2 then
     if P1<>nil then
       if P2<>nil then begin
-        V := PDouble(P1)^-PDouble(P2)^;
+        V := unaligned(PDouble(P1)^)-unaligned(PDouble(P2)^);
         if V<0 then
           result := -1 else
         if V=0 then
@@ -4839,7 +4839,7 @@ begin
   tftCurrency:
     W.AddCurr64(PInt64(FieldBuffer)^);
   tftDouble:
-    W.AddDouble(PDouble(FieldBuffer)^);
+    W.AddDouble(unaligned(PDouble(FieldBuffer)^));
   // some variable-size field value
   tftVarUInt32:
     W.Add(FromVarUInt32(PByte(FieldBuffer)));
@@ -4933,7 +4933,7 @@ begin
   tftCurrency:
     result := PCurrency(FieldBuffer)^;
   tftDouble:
-    result := PDouble(FieldBuffer)^;
+    result := unaligned(PDouble(FieldBuffer)^);
   // some variable-size field value
   tftVarUInt32:
     result := FromVarUInt32(PB);
@@ -5005,7 +5005,7 @@ begin
   tftCurrency:
     Curr64ToStr(PInt64(FieldBuffer)^,result);
   tftDouble:
-    ExtendedToStr(PDouble(FieldBuffer)^,DOUBLE_PRECISION,result);
+    ExtendedToStr(unaligned(PDouble(FieldBuffer)^),DOUBLE_PRECISION,result);
   // some variable-size field value
   tftVarUInt32:
     UInt32ToUtf8(FromVarUInt32(PB),result);
@@ -5545,7 +5545,7 @@ begin
     result := 0 else
     case FieldType of
     tftDouble:
-      result := PDouble(Owner.GetData(RecordBuffer,self))^;
+      result := unaligned(PDouble(Owner.GetData(RecordBuffer,self))^);
     else
       result := GetInt64(RecordBuffer);
     end;
@@ -5626,10 +5626,10 @@ begin
       tftInt32:
         result := PInteger(P1)^-PInteger(P2)^;
       tftDouble: begin
-        PDouble(@SortCompareTmp)^ := PDouble(P1)^-PDouble(P2)^;
-        if PDouble(@SortCompareTmp)^<0 then
+        unaligned(PDouble(@SortCompareTmp)^) := unaligned(PDouble(P1)^)-unaligned(PDouble(P2)^);
+        if unaligned(PDouble(@SortCompareTmp)^)<0 then
           goto minus else
-        if PDouble(@SortCompareTmp)^>0 then
+        if unaligned(PDouble(@SortCompareTmp)^)>0 then
           goto plus else
           goto zer;
       end;
@@ -5819,12 +5819,12 @@ begin
   if SBF<>nil then
   repeat
     case Oper of
-      soEqualTo:              if PDouble(SBF)^=Value then exit;
-      soNotEqualTo:           if PDouble(SBF)^<>Value then exit;
-      soLessThan:             if PDouble(SBF)^<Value then exit;
-      soLessThanOrEqualTo:    if PDouble(SBF)^<=Value then exit;
-      soGreaterThan:          if PDouble(SBF)^>Value then exit;
-      soGreaterThanOrEqualTo: if PDouble(SBF)^>=Value then exit;
+      soEqualTo:              if unaligned(PDouble(SBF)^)=Value then exit;
+      soNotEqualTo:           if unaligned(PDouble(SBF)^)<>Value then exit;
+      soLessThan:             if unaligned(PDouble(SBF)^)<Value then exit;
+      soLessThanOrEqualTo:    if unaligned(PDouble(SBF)^)<=Value then exit;
+      soGreaterThan:          if unaligned(PDouble(SBF)^)>Value then exit;
+      soGreaterThanOrEqualTo: if unaligned(PDouble(SBF)^)>=Value then exit;
       else break;
     end;
     // not found: go to next value
@@ -8274,7 +8274,7 @@ begin
     exit;
   Safe.Lock;
   try
-    fFalsePositivePercent := PDouble(P)^; inc(P,8);
+    fFalsePositivePercent := unaligned(PDouble(P)^); inc(P,8);
     if (fFalsePositivePercent<=0) or (fFalsePositivePercent>100) then
       exit;
     fSize := PCardinal(P)^; inc(P,4);

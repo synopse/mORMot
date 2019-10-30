@@ -4845,7 +4845,7 @@ type
   /// map the Delphi/FPC dynamic array header (stored before each instance)
   // - define globally for proper inlining with FPC
   // - match tdynarray type definition in dynarr.inc
-  TDynArrayRec = packed record
+  TDynArrayRec = {packed} record
     /// dynamic array reference count (basic garbage memory mechanism)
     refCnt: PtrInt;
     /// equals length-1
@@ -20584,7 +20584,9 @@ type
 {$ifdef FPC}
   {$packrecords c} // as expected by FPC's RTTI record definitions
 
-  TStrRec = packed record // see TAnsiRec/TUnicodeRec in astrings/ustrings.inc
+  TStrRec =
+  {packed}
+  record // see TAnsiRec/TUnicodeRec in astrings/ustrings.inc
   {$ifdef ISFPC27}
     codePage: TSystemCodePage; // =Word
     elemSize: Word;
@@ -20663,7 +20665,11 @@ type
   PFieldInfo = ^TFieldInfo;
   {$ifdef ISDELPHI2010_OR_FPC_NEWRTTI}
   /// map the Delphi record field enhanced RTTI (available since Delphi 2010)
-  TEnhancedFieldInfo = packed record
+  TEnhancedFieldInfo =
+    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
+    packed
+    {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+    record
     TypeInfo: PTypeInfoStored;
     Offset: PtrUInt; // match TInitManagedField/TManagedField in FPC typinfo.pp
     {$ifdef ISDELPHI2010}
@@ -20743,6 +20749,9 @@ type
     );
     tkEnumeration: (
       EnumType: TOrdType;
+      {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+      EnumDummy: DWORD; // needed on ARM for correct alignment !!??
+      {$endif}
       {$ifdef FPC_ENUMHASINNER} inner:
       {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT} packed {$endif} record
       {$endif FPC_ENUMHASINNER}
@@ -20760,6 +20769,9 @@ type
     );
     tkSet: (
       SetType: TOrdType;
+      {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+      SetDummy: DWORD; // needed on ARM for correct alignment !!??
+      {$endif}
       {$ifdef FPC}
       {$ifndef VER3_0}
       SetSize: SizeInt;
@@ -20788,6 +20800,10 @@ type
     NameIndex: SmallInt;
     {$ifdef FPC}
     PropProcs : Byte;
+    {$ifdef FPC_PROVIDE_ATTR_TABLE}
+    /// property attributes, introduced since FPC SVN 42356-42411 (2019/07)
+    AttributeTable: Pointer;
+    {$endif FPC_PROVIDE_ATTR_TABLE}
     {$endif}
     NameLen: byte;
   end;
@@ -20833,7 +20849,7 @@ begin
     sr^.elemSize := 1;
     sr^.refCnt := 1;
     sr^.length := len;
-    inc(sr);
+    inc(PByte(sr),STRRECSIZE);
     PWord(PAnsiChar(sr)+len)^ := 0; // ensure ends with two #0
     r := pointer(sr);
     if p<>nil then
@@ -20849,14 +20865,14 @@ var r: PAnsiChar;
 begin
   if len<=0 then
     r := nil else begin
-    GetMem(r,len+(STRRECSIZE+4));
+    GetMem(r,len+(STRRECSIZE+2));
     sr := pointer(r);
     sr^.codePage := CP_UTF8;
     sr^.elemSize := 1;
     sr^.refCnt := 1;
     sr^.length := len;
-    inc(sr);
-    PCardinal(PAnsiChar(sr)+len)^ := 0; // ends with four #0
+    inc(PByte(sr),STRRECSIZE);
+    PWord(PAnsiChar(sr)+len)^ := 0; // ensure ends with two #0
     r := pointer(sr);
     if p<>nil then
       {$ifdef FPC}Move{$else}MoveFast{$endif}(p^,sr^,len);
@@ -20942,9 +20958,13 @@ end;
 
 {$ifdef HASALIGNTYPEDATA}
 function FPCTypeInfoOverName(P: pointer): pointer; inline;
-begin // aligned result := @PAnsiChar(info)[info^.NameLen]
-  result := AlignTypeData(P+2+PTypeInfo(P)^.NameLen);
-  dec(PtrUInt(result),2*SizeOf(pointer)); // -2 pointers to point on PTypeInfo^.kind
+begin
+  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+    result := AlignTypeData(P+2+PByte(P+1)^);
+    dec(PByte(result),2*SizeOf(pointer)); // -2 pointers to point on PTypeInfo^.kind
+  {$else}
+    result := AlignTypeData(P+PByte(P+1)^);
+  {$endif}
 end;
 {$endif HASALIGNTYPEDATA}
 
@@ -21087,11 +21107,11 @@ begin
     info := GetTypeInfo(aTypeInfo);
     base := info^.{$ifdef FPC_ENUMHASINNER}inner.{$endif}EnumBaseType;
     {$ifdef FPC} // no redirection if aTypeInfo is already the base type
-    if (base<>nil) and (base<>aTypeInfo) then
+    if (base<>nil) and (base{$ifndef HASDIRECTTYPEINFO}^{$endif}<>aTypeInfo) then
     {$endif}
       info := GetTypeInfo(base{$ifndef HASDIRECTTYPEINFO}^{$endif});
     MaxValue := info^.{$ifdef FPC_ENUMHASINNER}inner.{$endif}MaxValue;
-    result := @info.NameList;
+    result := @info^.NameList;
   end else
     result := nil;
 end;
@@ -23666,7 +23686,7 @@ begin
       'D': PInt64(values[v])^ := GetNextItemInt64(P,#0);
       'u': PCardinal(values[v])^ := GetNextItemCardinal(P,#0);
       'U': PQword(values[v])^ := GetNextItemQword(P,#0);
-      'f': PDouble(values[v])^ := GetNextItemDouble(P,#0);
+      'f': unaligned(PDouble(values[v])^) := GetNextItemDouble(P,#0);
       'F': GetNextItemCurrency(P,PCurrency(values[v])^,#0);
       'x': if not GetNextItemHexDisplayToBin(P,values[v],4,#0) then
              exit;
@@ -40396,13 +40416,35 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
 end;
 
 function GetManagedFields(info: PTypeInfo; out firstfield: PFieldInfo): integer;
-  {$ifdef HASINLINE}inline;{$endif}
+{$ifdef HASINLINE}inline;{$endif}
 {$ifdef FPC_NEWRTTI}
-var recInitData: PFPCRecInitData; // low-level type redirected from SynFPCTypInfo
+var
+  recInitData: PFPCRecInitData; // low-level type redirected from SynFPCTypInfo
+  aPointer:pointer;
 begin
-  recInitData := GetFPCRecInitData(AlignTypeData(PByte(info)+2)); // +2=Kind+NameLen
-  firstfield := pointer(PtrUInt(recInitData)+SizeOf(recInitData^)); // =ManagedFields[0]
-  result := recInitData^.ManagedFieldCount;
+  if Assigned(info^.RecInitInfo) then
+  begin
+    recInitData := PFPCRecInitData(AlignTypeDataClean(PTypeInfo(info^.RecInitInfo+2+PByte(info^.RecInitInfo+1)^)));
+    firstfield := PFieldInfo(PtrUInt(@recInitData^.ManagedFieldCount));
+    Inc(PByte(firstfield),SizeOf(integer));
+    firstfield := AlignToPtr(firstfield);
+    result := recInitData^.ManagedFieldCount;
+  end
+  else
+  begin
+    aPointer:=@info^.RecInitInfo;
+    {$ifdef FPC_PROVIDE_ATTR_TABLE}
+    dec(PByte(aPointer),SizeOf(Pointer));
+    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+    dec(PByte(aPointer),SizeOf(Pointer));
+    {$endif}
+    {$endif}
+    recInitData := PFPCRecInitData(aPointer);
+    firstfield := PFieldInfo(PtrUInt(@recInitData^.ManagedFieldCount));
+    Inc(PByte(firstfield),SizeOf(integer));
+    firstfield := AlignToPtr(firstfield);
+    result := recInitData^.ManagedFieldCount;
+  end;
 {$else}
 begin
   firstfield := @info^.ManagedFields[0];
@@ -43084,7 +43126,7 @@ Error:      Prop.FinalizeNestedArray(PPtrUInt(Data)^);
       ptByte:      PByte(Data)^ := GetCardinal(PropValue);
       ptCardinal:  PCardinal(Data)^ := GetCardinal(PropValue);
       ptCurrency:  PInt64(Data)^ := StrToCurr64(PropValue);
-      ptDouble:    PDouble(Data)^ := GetExtended(PropValue);
+      ptDouble:    unaligned(PDouble(Data)^) := GetExtended(PropValue);
       ptExtended:  PExtended(Data)^ := GetExtended(PropValue);
       ptInt64,ptID,ptTimeLog: SetInt64(PropValue,PInt64(Data)^);
       ptQWord:     SetQWord(PropValue,PQWord(Data)^);

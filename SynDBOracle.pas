@@ -2242,7 +2242,7 @@ begin
   if V=nil then // column is NULL
     result := 0 else
     case C^.ColumnType of // optimized for ToDataSet() in SynDBVCL.pas
-    ftDouble:   result := PDouble(V)^;
+    ftDouble:   result := unaligned(PDouble(V)^);
     ftInt64:    result := PInt64(V)^;
     ftCurrency: begin
       PInt64(@Curr)^ := StrToCurr64(V); // handle '.5' - not GetExtended()
@@ -2304,7 +2304,7 @@ begin // dedicated version to avoid as much memory allocation than possible
            WR.Add(PInt64(V)^) else
            WR.AddNoJSONEscape(V); // already as SQLT_STR
        ftDouble:
-         WR.AddDouble(PDouble(V)^);
+         WR.AddDouble(unaligned(PDouble(V)^));
        ftCurrency:
          WR.AddFloatStr(V); // already as SQLT_STR
        ftDate:
@@ -2872,7 +2872,7 @@ begin
                     goto txt; // IN huge integers will be managed as text
                   end else begin
                   VDBType := SQLT_FLT; // OUT values will be converted as double
-                  PDouble(oData)^ := VInt64;
+                  unaligned(PDouble(oData)^) := VInt64;
                 end;
             ftDouble:
               VDBType := SQLT_FLT;
@@ -2882,7 +2882,7 @@ begin
                 goto txt; // input-only currency values will be managed as text
               end else begin
                 VDBType := SQLT_FLT; // OUT values will be converted as double
-                PDouble(oData)^ := PCurrency(oData)^;
+                unaligned(PDouble(oData)^) := PCurrency(oData)^;
               end;
             ftDate:
               if VInOut=paramIn then begin
@@ -2957,10 +2957,10 @@ begin
               SynDBLog.Add.Log(sllError,'SQLT_RSET param release');
       ftInt64:
         if VDBType=SQLT_FLT then // retrieve OUT integer parameter
-          VInt64 := trunc(PDouble(@VInt64)^);
+          VInt64 := trunc(unaligned(PDouble(@VInt64)^));
       ftCurrency:
         if VDBType=SQLT_FLT then // retrieve OUT currency parameter
-          PCurrency(@VInt64)^ := PDouble(@VInt64)^;
+          PCurrency(@VInt64)^ := unaligned(PDouble(@VInt64)^);
       ftDate:
         case VDBType of
         SQLT_DAT: // retrieve OUT date parameter

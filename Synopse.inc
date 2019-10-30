@@ -259,7 +259,7 @@
     {$define FPC_PROVIDE_ATTR_TABLE} // introducing TTypeData.AttributeTable
   {$endif}
   {$if not defined(VER3_0) and not defined(VER3_2) and not defined(VER2)}
-    {.$define FPC_PROVIDE_ATTR_TABLE} // to be defined since SVN 42356-42411
+    {$define FPC_PROVIDE_ATTR_TABLE} // to be defined since SVN 42356-42411
     // on compilation error in SynFPCTypInfo, undefine the above conditional
     // see https://lists.freepascal.org/pipermail/fpc-announce/2019-July/000612.html
   {$ifend}
@@ -392,6 +392,7 @@
     {$define HASALIGNTYPEDATA} // to ignore attributes RTTI table
   {$endif FPC_PROVIDE_ATTR_TABLE}
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+    //{$define FPC_CMEM}
     {$define FPC_ENUMHASINNER}
     {$define HASALIGNTYPEDATA} // to ensure proper RTTI alignment
   {$endif FPC_REQUIRES_PROPER_ALIGNMENT}

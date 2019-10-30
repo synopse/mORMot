@@ -1746,7 +1746,7 @@ begin
             if VInOut=paramIn then
               VData := Curr64ToStr(VInt64) else begin
               CValueType := SQL_C_DOUBLE;
-              PDouble(@VInt64)^ := PCurrency(@VInt64)^;
+              unaligned(PDouble(@VInt64)^) := PCurrency(@VInt64)^;
               ParameterValue := pointer(@VInt64);
             end;
           ftDate: begin
@@ -1844,7 +1844,7 @@ begin
     case VType of
       ftCurrency:
         if VInOut<>paramIn then
-          PCurrency(@VInt64)^ := PDouble(@VInt64)^;
+          PCurrency(@VInt64)^ := unaligned(PDouble(@VInt64)^);
       ftDate:
         if VInOut<>paramIn then
           PDateTime(@VInt64)^ := PSQL_TIMESTAMP_STRUCT(VData)^.ToDateTime;
