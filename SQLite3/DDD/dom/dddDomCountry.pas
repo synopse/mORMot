@@ -262,7 +262,7 @@ begin
       Values[c] := COUNTRY_ISONUM[c];
       ps := pointer(GetEnumName(TypeInfo(TCountryIdentifier),ord(c)));
       COUNTRY_ISO2[c] := PWord(ps+3)^;
-      ShortStringToAnsi7String(ps^,COUNTRYU_ISO2[c]);
+      FastSetString(COUNTRYU_ISO2[c],ps+3,2);
       FastSetString(COUNTRYU_ISO3[c],@COUNTRY_ISO3[c],3);
     end;
     FillIncreasing(@Indexes,0,length(Indexes));
@@ -364,12 +364,12 @@ end;
 
 function TCountry.GetIsoAlpha2: TCountryIsoAlpha2;
 begin
-  FastSetString(RawUTF8(result),@COUNTRY_ISO2[GetIdentifier],2);
+  result := COUNTRYU_ISO2[GetIdentifier];
 end;
 
 function TCountry.GetIsoAlpha3: TCountryIsoAlpha3;
 begin
-  FastSetString(RawUTF8(result),@COUNTRY_ISO3[GetIdentifier],3);
+  result := COUNTRYU_ISO3[GetIdentifier];
 end;
 
 procedure TCountry.SetIdentifier(const Value: TCountryIdentifier);
@@ -418,7 +418,9 @@ begin
     Check(TCountry.FromEnglish('none')=ccUndefined);
     for i := low(i) to high(i) do begin
       c.Iso := COUNTRY_ISONUM[i];
+      Check(c.Iso=c.ToIso(i));
       t := c.Alpha2;
+      Check(c.ToAlpha2(i)=t);
       Check(c.Identifier=i);
       c.Iso := 0;
       c.Alpha2 := t;
@@ -435,6 +437,7 @@ begin
       Check(c.Iso=COUNTRY_ISONUM[i]);
       Check(c.Identifier=i);
       t := c.Alpha3;
+      check(c.ToAlpha3(i)=t);
       c.Iso := 0;
       c.Alpha3 := t;
       Check(c.Identifier=i);
@@ -444,7 +447,9 @@ begin
       Check(c2.Alpha3=c.Alpha3);
       Check(ObjectEquals(c,c2,false));
       Check(ObjectEquals(c,c2,true));
-      Check(c.FromEnglish(c.English)=i);
+      t := c.English;
+      Check(c.ToEnglish(i)=t);
+      Check(c.FromEnglish(t)=i);
     end;
   finally
     c2.Free;
