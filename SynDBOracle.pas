@@ -2671,6 +2671,9 @@ var i,j: integer;
     num_val: OCINumber;
     tmp: RawUTF8;
     str_val: POCIString;
+    {$ifdef CPU64}
+    isStringHacked: boolean;
+    {$endif}
 label txt;
 begin
   if (fStatement=nil) then
@@ -2695,6 +2698,9 @@ begin
           [self,fPreparedParamsCount,fParamCount]);
       if not fExpectResults then
         fRowCount := 1; // to avoid ORA-24333 error
+      {$ifdef CPU64}
+      isStringHacked := false;
+      {$endif}
       if (fParamCount>0) then
       if (fParamsArrayCount>0) and not fExpectResults then begin
         // 1.1. Array DML binding
@@ -2907,6 +2913,11 @@ begin
               if VInOut<>paramIn then
                 raise ESQLDBOracle.CreateUTF8(
                   '%.ExecutePrepared: Unexpected OUT blob parameter #%',[self,i+1]) else begin
+              {$ifdef CPU64}
+              if Length(VData) > MaxInt then
+                raise ESQLDBOracle.CreateUTF8(
+                  '%.ExecutePrepared: Maximum blob parameter length exceeded for parameter #%',[self,i+1]);
+              {$endof}
               oLength := Length(VData);
               if oLength<2000 then begin
                 VDBTYPE := SQLT_BIN;
@@ -2917,9 +2928,9 @@ begin
                 // Oracle expect SQLT_LVB layout as raw data prepended by int32 data length
                 // in case of CPU64 TSQLDBParam.VData is a String and length is stored as SizeInt = Int64 (not int32)
                 // I (mpv) dont like DIRTY hack below, but currently do not now how do did it better
-                // Line below copy string length to the HI bytes of TStrRec.length
+                // Line below copy string length to the HI bytes of TStrRec.length. Length is restored leter
                 PInteger(Pointer(PtrInt(VData)-sizeof(Integer)))^ := PInteger(Pointer(PtrInt(VData)-sizeof(PtrInt)))^;
-                // do we need to cleanup HI bytes of length or delphy/FPC ignores it?
+                isStringHacked := true;
                 {$endif}
                 oData := Pointer(PtrInt(VData)-sizeof(Integer));
                 Inc(oLength,sizeof(Integer));
@@ -2946,6 +2957,14 @@ begin
       FetchTest(Status); // error + set fRowCount+fCurrentRow+fRowFetchedCurrent
       Status := OCI_SUCCESS; // mark OK for fBoundCursor[] below
     finally
+      {$ifdef CPU64}
+      if isStringHacked then // restore hacked strings length ASAP
+        for i := 0 to fParamCount-1 do
+          with fParams[i] do
+            if (VInOut=paramIn) and (VType=ftBlob) and (Length(VData)>2000) then
+              // actually Length(VData) is a huge number here. Reset last 4 byte to 0
+              PInteger(Pointer(PtrInt(VData)-sizeof(Integer)))^ := 0;
+      {$endif}
       for i := 0 to ociArraysCount-1 do
         OCI.Check(nil,self,OCI.ObjectFree(Env, fError, ociArrays[i], OCI_OBJECTFREE_FORCE), fError);
       // 3. release and/or retrieve OUT bound parameters
