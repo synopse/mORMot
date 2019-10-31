@@ -2917,7 +2917,7 @@ begin
               if Length(VData) > MaxInt then
                 raise ESQLDBOracle.CreateUTF8(
                   '%.ExecutePrepared: Maximum blob parameter length exceeded for parameter #%',[self,i+1]);
-              {$endof}
+              {$endif}
               oLength := Length(VData);
               if oLength<2000 then begin
                 VDBTYPE := SQLT_BIN;
