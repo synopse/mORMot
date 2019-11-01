@@ -2650,7 +2650,7 @@ const
   MAX_INLINED_PARAM_SIZE = 32*1024*1024;
 
 procedure TSQLDBOracleStatement.ExecutePrepared;
-var i,j: integer;
+var i,j: PtrInt;
     Env: POCIEnv;
     Context: POCISvcCtx;
     Type_List: POCIType;
@@ -2672,7 +2672,7 @@ var i,j: integer;
     tmp: RawUTF8;
     str_val: POCIString;
     {$ifdef CPU64}
-    isStringHacked: boolean;
+    wasStringHacked: TByteDynArray;
     {$endif}
 label txt;
 begin
@@ -2698,9 +2698,6 @@ begin
           [self,fPreparedParamsCount,fParamCount]);
       if not fExpectResults then
         fRowCount := 1; // to avoid ORA-24333 error
-      {$ifdef CPU64}
-      isStringHacked := false;
-      {$endif}
       if (fParamCount>0) then
       if (fParamsArrayCount>0) and not fExpectResults then begin
         // 1.1. Array DML binding
@@ -2913,11 +2910,6 @@ begin
               if VInOut<>paramIn then
                 raise ESQLDBOracle.CreateUTF8(
                   '%.ExecutePrepared: Unexpected OUT blob parameter #%',[self,i+1]) else begin
-              {$ifdef CPU64}
-              if Length(VData) > MaxInt then
-                raise ESQLDBOracle.CreateUTF8(
-                  '%.ExecutePrepared: Maximum blob parameter length exceeded for parameter #%',[self,i+1]);
-              {$endif}
               oLength := Length(VData);
               if oLength<2000 then begin
                 VDBTYPE := SQLT_BIN;
@@ -2925,13 +2917,18 @@ begin
               end else begin
                 VDBTYPE := SQLT_LVB;
                 {$ifdef CPU64}
+                if Length(VData)>MaxInt then
+                  raise ESQLDBOracle.CreateUTF8('%.ExecutePrepared: Maximum blob parameter ' +
+                    'length exceeded for parameter #%: %',[self,i+1,KB(oLength)]);
                 // Oracle expect SQLT_LVB layout as raw data prepended by int32 data length
-                // in case of CPU64 TSQLDBParam.VData is a String and length is stored as SizeInt = Int64 (not int32)
-                // I (mpv) dont like DIRTY hack below, but currently do not now how do did it better
-                // Line below copy string length to the HI bytes of TStrRec.length. Length is restored leter
-                PInteger(Pointer(PtrInt(VData)-sizeof(Integer)))^ := PInteger(Pointer(PtrInt(VData)-sizeof(PtrInt)))^;
-                isStringHacked := true;
-                {$endif}
+                // in case of CPU64 TSQLDBParam.VData is a RawByteString and length
+                // is stored as SizeInt = Int64 (not int32) -> change header
+                UniqueString(VData); // for thread-safety
+                PInteger(PtrInt(VData)-sizeof(Integer))^ := oLength;
+                if wasStringHacked=nil then
+                  SetLength(wasStringHacked,fParamCount shr 3+1);
+                SetBitPtr(pointer(wasStringHacked),i); // to restore the original header
+                {$endif CPU64}
                 oData := Pointer(PtrInt(VData)-sizeof(Integer));
                 Inc(oLength,sizeof(Integer));
               end;
@@ -2958,15 +2955,13 @@ begin
       Status := OCI_SUCCESS; // mark OK for fBoundCursor[] below
     finally
       {$ifdef CPU64}
-      if isStringHacked then // restore hacked strings length ASAP
+      if wasStringHacked<>nil then // restore hacked strings length ASAP
         for i := 0 to fParamCount-1 do
-          with fParams[i] do
-            if (VInOut=paramIn) and (VType=ftBlob) and (Length(VData)>2000) then
-              // actually Length(VData) is a huge number here. Reset last 4 byte to 0
-              PInteger(Pointer(PtrInt(VData)-sizeof(Integer)))^ := 0;
+          if GetBitPtr(pointer(wasStringHacked),i) then
+            PInteger(PtrInt(fParams[i].VData)-sizeof(Integer))^ := 0;
       {$endif}
       for i := 0 to ociArraysCount-1 do
-        OCI.Check(nil,self,OCI.ObjectFree(Env, fError, ociArrays[i], OCI_OBJECTFREE_FORCE), fError);
+        OCI.Check(nil,self,OCI.ObjectFree(Env, fError, ociArrays[i], OCI_OBJECTFREE_FORCE), fError, false, sllError);
       // 3. release and/or retrieve OUT bound parameters
       if fParamsArrayCount>0 then
       for i := 0 to fParamCount-1 do

@@ -176,8 +176,8 @@ uses
       {$endif FPC}
       SynDB in '..\SynDB.pas',
       SynDBSQLite3 in '..\SynDBSQLite3.pas',
+      SynDBOracle in '..\SynDBOracle.pas',
       {$ifdef MSWINDOWS}
-        SynDBOracle in '..\SynDBOracle.pas',
         SynOleDB in '..\SynOleDB.pas',
         SynDBODBC in '..\SynDBODBC.pas',
         {$ifdef USEZEOS}
