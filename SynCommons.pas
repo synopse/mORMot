@@ -845,6 +845,8 @@ type
     procedure wr(const val; len: integer);
     /// append some shortstring as binary to the internal buffer
     procedure wrss(const str: shortstring); {$ifdef HASINLINE}inline;{$endif}
+    /// append some string as binary to the internal buffer
+    procedure wrs(const str: RawByteString); {$ifdef HASINLINE}inline;{$endif}
     /// append some 8-bit value as binary to the internal buffer
     procedure wrb(b: byte);                 {$ifdef HASINLINE}inline;{$endif}
     /// append some 16-bit value as binary to the internal buffer
@@ -859,9 +861,11 @@ type
     // - returns a pointer to the first byte of the added memory chunk
     function wrfillchar(count: integer; value: byte): PAnsiChar;
     /// returns the current offset position in the internal buffer
-    function Position: integer; {$ifdef HASINLINE}inline;{$endif}
+    function Position: PtrInt; {$ifdef HASINLINE}inline;{$endif}
     /// returns the buffer as a RawByteString instance
     function AsBinary: RawByteString;
+    /// returns the buffer as a RawUTF8 instance
+    procedure AsUTF8(var result: RawUTF8);
   end;
 
   /// function prototype to be used for hashing of an element
@@ -17099,6 +17103,7 @@ begin
   until PtrUInt(Dest)=Count;
 end;
 
+
 { TSynTempBuffer }
 
 procedure TSynTempBuffer.Init(Source: pointer; SourceLen: integer);
@@ -18108,7 +18113,12 @@ begin
   FastSetStringCP(result,tmp.buf,pos-PAnsiChar(tmp.buf),CP_RAWBYTESTRING);
 end;
 
-function TSynTempWriter.Position: integer;
+procedure TSynTempWriter.AsUTF8(var result: RawUTF8);
+begin
+  FastSetString(result,tmp.buf,pos-PAnsiChar(tmp.buf));
+end;
+
+function TSynTempWriter.Position: PtrInt;
 begin
   result := pos-PAnsiChar(tmp.buf);
 end;
@@ -18146,6 +18156,12 @@ end;
 procedure TSynTempWriter.wrss(const str: shortstring);
 begin
   wr(str,ord(str[0])+1);
+end;
+
+procedure TSynTempWriter.wrs(const str: RawByteString);
+begin
+  if str<>'' then
+    wr(pointer(str),length(str));
 end;
 
 procedure TSynTempWriter.wrw(w: word);
