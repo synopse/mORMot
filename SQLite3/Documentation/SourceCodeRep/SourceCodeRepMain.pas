@@ -100,7 +100,6 @@ const
 {$else}
 const
   SHELL = '.sh';
-  SHELLEXE = '/usr/bin/gnome-terminal';
   GITDEF = '/usr/bin/git';
 var
   REPFOSSIL: TFileName;
@@ -316,12 +315,20 @@ end;
 
 procedure TMainForm.btnGitShellClick(Sender: TObject);
 begin
+  {$ifdef MSWINDOWS}
   Exec(fGitRepository, SHELLEXE, '', '', '', '', '');
+  {$else}
+  Exec(fGitRepository, '/usr/bin/meld', fGitRepository, fDevPath, '', '', '', false);
+  {$endif}
 end;
 
 procedure TMainForm.btnFossilShellClick(Sender: TObject);
 begin
+  {$ifdef MSWINDOWS}
   Exec(fFossilRepository, SHELLEXE, '', '', '', '', '');
+  {$else}
+  Exec(fFossilRepository, '/usr/bin/meld', fFossilRepository, fDevPath, '', '', '', false);
+  {$endif}
 end;
 
 procedure TMainForm.btnTestsClick(Sender: TObject);
