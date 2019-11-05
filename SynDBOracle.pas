@@ -2917,14 +2917,16 @@ begin
               end else begin
                 VDBTYPE := SQLT_LVB;
                 {$ifdef CPU64}
-                if Length(VData)>MaxInt then
+                if Length(VData)>MaxInt shr 2 then
                   raise ESQLDBOracle.CreateUTF8('%.ExecutePrepared: Maximum blob parameter ' +
                     'length exceeded for parameter #%: %',[self,i+1,KB(oLength)]);
                 // Oracle expect SQLT_LVB layout as raw data prepended by int32 data length
                 // in case of CPU64 TSQLDBParam.VData is a RawByteString and length
                 // is stored as SizeInt = Int64 (not int32) -> change header
+                {$ifdef FPC} // @VData[1] won't call UniqueString() under FPC :(
                 UniqueString(VData); // for thread-safety
-                PInteger(PtrInt(VData)-sizeof(Integer))^ := oLength;
+                {$endif}
+                PInteger(PtrInt(@VData[1])-sizeof(Integer))^ := oLength;
                 if wasStringHacked=nil then
                   SetLength(wasStringHacked,fParamCount shr 3+1);
                 SetBitPtr(pointer(wasStringHacked),i); // to restore the original header
