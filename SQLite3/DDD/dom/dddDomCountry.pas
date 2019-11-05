@@ -1,4 +1,4 @@
-/// shared DDD Domains: User objects definition
+/// shared DDD Domains: TCountry object definition
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit dddDomCountry;
@@ -86,13 +86,19 @@ type
     ccTT,ccTN,ccTR,ccTM,ccTC,ccTV,ccUG,ccUA,ccAE,ccGB,ccUS,ccUM,ccUY,ccUZ,ccVU,
     ccVE,ccVN,ccVG,ccVI,ccWF,ccEH,ccYE,ccZM,ccZW);
 
+  /// store ISO 3166-1 alpha-2 code
   TCountryIsoAlpha2 = type RawUTF8;
+  /// store ISO 3166-1 alpha-3 code
   TCountryIsoAlpha3 = type RawUTF8;
+  /// store a ISO 3166-1 numeric value as 16-bit unsigned integer
   TCountryIsoNumeric = type word;
 
-  /// Country object
+  /// defines a Country identifier object
+  // - will store internally the country as 16-bit ISO 3166-1 numeric value
   // - includes conversion methods for ISO 3166-1 alpha-2/alpha-3/numeric codes
   // as explained in http://en.wikipedia.org/wiki/ISO_3166-1
+  // - see also some low-level class methods for direct values conversions
+  // with no persistence
   TCountry = class(TSynPersistent)
   protected
     fIso: TCountryIsoNumeric;
@@ -117,12 +123,16 @@ type
     /// low-level Country conversion to its ISO 3166-1 numeric 3-digit code
     class function ToIso(id: TCountryIdentifier): TCountryIsoNumeric;
     /// low-level case-insensitive Country conversion from its plain English text
+    // - returns ccUndefined if the supplied Text has no case-insensitive match
     class function FromEnglish(const text: RawUTF8): TCountryIdentifier;
     /// low-level Country conversion from its alpha-2 code
+    // - returns ccUndefined if the supplied text has no case-insensitive match
     class function FromAlpha2(const alpha: TCountryIsoAlpha2): TCountryIdentifier;
     /// low-level Country conversion from its alpha-3 code
+    // - returns ccUndefined if the supplied Text has no case-insensitive match
     class function FromAlpha3(const alpha: TCountryIsoAlpha3): TCountryIdentifier;
     /// low-level Country conversion from its alpha-2 code
+    // - returns ccUndefined if the supplied 16-bit number as no match
     class function FromIso(iso: TCountryIsoNumeric): TCountryIdentifier;
     /// built-in simple unit tests
     class procedure RegressionTests(test: TSynTestCase);

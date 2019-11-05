@@ -95,7 +95,7 @@ program TestSQL3;
 {$endif}
 
 uses
-  {$ifdef KYLIX3} // strip down to the minimum files including /
+  {$ifdef KYLIX3} // strip down to the minimum files needed
     FastMM4,
     ECCProcess in 'Samples/33 - ECC/ECCProcess.pas',
     mORMotSelfTests;

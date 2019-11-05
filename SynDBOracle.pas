@@ -2926,7 +2926,7 @@ begin
                 {$ifdef FPC} // @VData[1] won't call UniqueString() under FPC :(
                 UniqueString(VData); // for thread-safety
                 {$endif}
-                PInteger(PtrInt(@VData[1])-sizeof(Integer))^ := oLength;
+                PInteger(PtrUInt(@VData[1])-sizeof(Integer))^ := oLength;
                 if wasStringHacked=nil then
                   SetLength(wasStringHacked,fParamCount shr 3+1);
                 SetBitPtr(pointer(wasStringHacked),i); // to restore the original header

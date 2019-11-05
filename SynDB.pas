@@ -6171,7 +6171,8 @@ procedure TSQLDBConnectionProperties.MultipleValuesInsertFirebird(
   const FieldNames: TRawUTF8DynArray; const FieldTypes: TSQLDBFieldTypeArray;
   RowCount: integer; const FieldValues: TRawUTF8DynArrayDynArray);
 var W: TTextWriter;
-    maxf,sqllenwitoutvalues,sqllen,r,f: Integer;
+    maxf,sqllenwitoutvalues,sqllen,r,f,i: Integer;
+    v: RawUTF8;
 begin
   maxf := length(FieldNames);     // e.g. 2 fields
   if (Props=nil) or (FieldNames=nil) or (TableName='') or (length(FieldValues)<>maxf) or
@@ -6182,7 +6183,7 @@ begin
   dec(maxf);
   for f := 0 to maxf do
     case FieldTypes[f] of
-    ftBlob: begin // not possible to inline BLOBs
+    ftBlob: begin // not possible to inline BLOBs -> fallback to regular
       MultipleValuesInsert(Props,TableName,FieldNames,FieldTypes,RowCount,FieldValues);
       exit;
     end;
@@ -6217,7 +6218,13 @@ begin
             if FieldValues[f,r]=#39#39 then
               W.AddShort('null') else begin
               W.AddShort('timestamp ');
-              W.AddString(FieldValues[f,r]);
+              v := FieldValues[f,r];
+              if length(v)<>10 then begin // not 'CCYY-MM-DD' -> fix needed?
+                i := PosExChar('T',v);
+                if i>0 then // see https://firebirdsql.org/en/firebird-date-literals
+                  v[i] := ' ';
+              end;
+              W.AddString(v)
             end else
             W.AddString(FieldValues[f,r]);
           W.Add(',');
