@@ -17090,7 +17090,6 @@ begin
     PPtrInt(p)^ := 0 else
     VarClearProc(PVarData(p)^);
 end;
-
 {$endif FPC}
 
 procedure MoveSmall(Source, Dest: Pointer; Count: PtrUInt);
@@ -20634,7 +20633,7 @@ type
   TStrRec = packed record
  {$ifdef UNICODE}
     {$ifdef CPU64}
-    /// padding bytes for 16 byte alignment of the header
+    /// padding bytes for 16 bytes alignment of the header
     _Padding: LongInt;
     {$endif}
     /// the associated code page used for this string

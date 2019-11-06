@@ -2671,9 +2671,9 @@ var i,j: PtrInt;
     num_val: OCINumber;
     tmp: RawUTF8;
     str_val: POCIString;
-    {$ifdef CPU64}
+    {$ifdef FPC_64}
     wasStringHacked: TByteDynArray;
-    {$endif}
+    {$endif FPC_64}
 label txt;
 begin
   if (fStatement=nil) then
@@ -2915,22 +2915,20 @@ begin
                 VDBTYPE := SQLT_BIN;
                 oData := pointer(VData);
               end else begin
-                VDBTYPE := SQLT_LVB;
-                {$ifdef CPU64}
-                if Length(VData)>MaxInt shr 2 then
-                  raise ESQLDBOracle.CreateUTF8('%.ExecutePrepared: Maximum blob parameter ' +
-                    'length exceeded for parameter #%: %',[self,i+1,KB(oLength)]);
-                // Oracle expect SQLT_LVB layout as raw data prepended by int32 data length
-                // in case of CPU64 TSQLDBParam.VData is a RawByteString and length
-                // is stored as SizeInt = Int64 (not int32) -> change header
-                {$ifdef FPC} // @VData[1] won't call UniqueString() under FPC :(
+                VDBTYPE := SQLT_LVB; // layout: raw data prepended by int32 len
+                {$ifdef FPC_64}
+                // in case of FPC+CPU64 TSQLDBParam.VData is a RawByteString and
+                // length is stored as SizeInt = Int64 (not int32) -> patch
+                // (no patch needed for Delphi, in which len is always longint)
+                if Length(VData)>MaxInt then
+                  raise ESQLDBOracle.CreateUTF8('%.ExecutePrepared: % blob length ' +
+                    'exceeds max size for parameter #%',[self,KB(oLength),i+1]);
                 UniqueString(VData); // for thread-safety
-                {$endif}
-                PInteger(PtrUInt(@VData[1])-sizeof(Integer))^ := oLength;
+                PInteger(PtrInt(VData)-sizeof(Integer))^ := oLength;
                 if wasStringHacked=nil then
                   SetLength(wasStringHacked,fParamCount shr 3+1);
-                SetBitPtr(pointer(wasStringHacked),i); // to restore the original header
-                {$endif CPU64}
+                SetBitPtr(pointer(wasStringHacked),i); // for unpatching below
+                {$endif FPC_64}
                 oData := Pointer(PtrInt(VData)-sizeof(Integer));
                 Inc(oLength,sizeof(Integer));
               end;
@@ -2956,12 +2954,12 @@ begin
       FetchTest(Status); // error + set fRowCount+fCurrentRow+fRowFetchedCurrent
       Status := OCI_SUCCESS; // mark OK for fBoundCursor[] below
     finally
-      {$ifdef CPU64}
-      if wasStringHacked<>nil then // restore hacked strings length ASAP
+      {$ifdef FPC_64}
+      if wasStringHacked<>nil then // restore patched strings length ASAP
         for i := 0 to fParamCount-1 do
           if GetBitPtr(pointer(wasStringHacked),i) then
             PInteger(PtrInt(fParams[i].VData)-sizeof(Integer))^ := 0;
-      {$endif}
+      {$endif FPC_64}
       for i := 0 to ociArraysCount-1 do
         OCI.Check(nil,self,OCI.ObjectFree(Env, fError, ociArrays[i], OCI_OBJECTFREE_FORCE), fError, false, sllError);
       // 3. release and/or retrieve OUT bound parameters
