@@ -8685,6 +8685,7 @@ type
     procedure AddOnSameLineW(P: PWord; Len: PtrInt);
 
     /// return the last char appended
+    // - returns #0 if no char has been written yet
     function LastChar: AnsiChar;
     /// how many bytes are currently in the internal buffer and not on disk
     // - see TextLength for the total number of bytes, on both disk and memory
@@ -8695,10 +8696,16 @@ type
     // - see TextLength for the total number of bytes, on both disk and memory
     property WrittenBytes: PtrUInt read fTotalFileSize;
     /// the last char appended is canceled
+    // - only one char cancelation is allowed at the same position: don't call
+    // CancelLastChar/CancelLastComma more than once without appending text inbetween
     procedure CancelLastChar; overload; {$ifdef HASINLINE}inline;{$endif}
     /// the last char appended is canceled, if match the supplied one
+    // - only one char cancelation is allowed at the same position: don't call
+    // CancelLastChar/CancelLastComma more than once without appending text inbetween
     procedure CancelLastChar(aCharToCancel: AnsiChar); overload; {$ifdef HASINLINE}inline;{$endif}
     /// the last char appended is canceled if it was a ','
+    // - only one char cancelation is allowed at the same position: don't call
+    // CancelLastChar/CancelLastComma more than once without appending text inbetween
     procedure CancelLastComma; {$ifdef HASINLINE}inline;{$endif}
     /// rewind the Stream to the position when Create() was called
     // - note that this does not clear the Stream content itself, just
@@ -12181,6 +12188,7 @@ type
     function Compare({$ifdef FPC}constref{$else}const{$endif} another{$ifndef DELPHI5OROLDER}: TSynDate{$endif}): integer;
       {$ifdef HASINLINE}inline;{$endif}
     /// fill the DayOfWeek field from the stored Year/Month/Day
+    // - by default, most methods will just store 0 in the DayOfWeek field
     // - sunday is DayOfWeek 1, saturday is 7
     procedure ComputeDayOfWeek;
     /// convert the stored date into a Delphi TDate floating-point value
@@ -12235,25 +12243,36 @@ type
     /// fill Year/Month/Day and Hour/Minute/Second fields from the given ISO-8601 text
     // - returns true on success
     function FromText(const iso: RawUTF8): boolean;
-    /// encode the stored date/time as ISO-8601 text
+    /// encode the stored date/time as ISO-8601 text with Milliseconds
     function ToText(Expanded: boolean=true; FirstTimeChar: AnsiChar='T'; const TZD: RawUTF8=''): RawUTF8;
     /// append the stored date and time, in a log-friendly format
     // - e.g. append '20110325 19241502' - with no trailing space nor tab
     // - as called by TTextWriter.AddCurrentLogTime()
     procedure AddLogTime(WR: TTextWriter);
-    /// append the stored data and time, in apache-like format, to a TTextWriter
+    /// append the stored date and time, in apache-like format, to a TTextWriter
     // - e.g. append '19/Feb/2019:06:18:55 ' - including a trailing space
     procedure AddNCSAText(WR: TTextWriter);
-    /// append the stored data and time, in apache-like format, to a memory buffer
+    /// append the stored date and time, in apache-like format, to a memory buffer
     // - e.g. append '19/Feb/2019:06:18:55 ' - including a trailing space
     // - returns the number of chars added to P, i.e. always 21
     function ToNCSAText(P: PUTF8Char): PtrInt;
+    /// convert the stored date and time to its text in HTTP-like format
+    // - i.e. "Tue, 15 Nov 1994 12:45:26 GMT" to be used as a value of
+    // "Date", "Expires" or "Last-Modified" HTTP header
+    // - handle UTC/GMT time zone by default
+    procedure ToHTTPDate(out text: RawUTF8; const tz: RawUTF8='GMT');
+    /// convert the stored date and time into its Iso-8601 text, with no Milliseconds
+    procedure ToIsoDateTime(out text: RawUTF8; const FirstTimeChar: AnsiChar='T');
+    /// convert the stored date into its Iso-8601 text with no time part
+    procedure ToIsoDate(out text: RawUTF8);
+    /// convert the stored time into its Iso-8601 text with no date part nor Milliseconds
+    procedure ToIsoTime(out text: RawUTF8; const FirstTimeChar: RawUTF8='T');
     /// convert the stored time into a TDateTime
     function ToDateTime: TDateTime;
     /// copy Year/Month/DayOfWeek/Day fields to a TSynDate
     procedure ToSynDate(out date: TSynDate); {$ifdef HASINLINE}inline;{$endif}
     /// fill the DayOfWeek field from the stored Year/Month/Day
-    // - by default, most methods won't compute the DayOfWeek field
+    // - by default, most methods will just store 0 in the DayOfWeek field
     // - sunday is DayOfWeek 1, saturday is 7
     procedure ComputeDayOfWeek; {$ifdef HASINLINE}inline;{$endif}
     /// add some 1..999 milliseconds to the stored time
@@ -12627,7 +12646,7 @@ function Char3ToWord(P: PUTF8Char; out Value: Cardinal): Boolean;
 function Char4ToWord(P: PUTF8Char; out Value: Cardinal): Boolean;
 
 /// our own fast version of the corresponding low-level function
-function TryEncodeDate(Year, Month, Day: Word; out Date: TDateTime): Boolean;
+function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): Boolean;
 
 /// retrieve the current Date, in the ISO 8601 layout, but expanded and
 // ready to be displayed
@@ -12655,8 +12674,8 @@ function DateTimeMSToString(HH,MM,SS,MS,Y,M,D: cardinal; Expanded: boolean;
 // - i.e. "Tue, 15 Nov 1994 12:45:26 GMT" to be used as a value of
 // "Date", "Expires" or "Last-Modified" HTTP header
 // - if you care about timezones Value must be converted to UTC first
-// using TSynTimeZone.LocalToUtc
-function DateTimeToHTTPDate(UTCDateTime: TDateTime): RawUTF8;
+// using TSynTimeZone.LocalToUtc, or tz should be properly set
+function DateTimeToHTTPDate(dt: TDateTime; const tz: RawUTF8='GMT'): RawUTF8; overload;
 
 /// convert some TDateTime to a small text layout, perfect e.g. for naming a local file
 // - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits, expecting
@@ -36343,7 +36362,7 @@ begin
     result := EncodeTime((lo shr(6+6))and 31, (lo shr 6)and 63, lo and 63, 0);
 end;
 
-function TryEncodeDate(Year, Month, Day: Word; out Date: TDateTime): Boolean;
+function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): Boolean;
 var d100: TDiv100Rec;
 begin // faster version by AB
   Result := False;
@@ -36544,24 +36563,14 @@ begin //  'YYYY-MM-DD hh:mm:ss.sssZ' or 'YYYYMMDD hhmmss.sssZ' format
     UInt2DigitsToShortFast(MM),UInt2DigitsToShortFast(SS),UInt3DigitsToShort(MS),TZD], result);
 end;
 
-const
-  HTML_WEEK_DAYS: array[1..7] of string[3] =
-    ('Sun','Mon','Tue','Wed','Thu','Fri','Sat');
-  HTML_MONTH_NAMES: array[1..12] of string[3] =
-    ('Jan','Feb','Mar','Apr','May','Jun', 'Jul','Aug','Sep','Oct','Nov','Dec');
-
-function DateTimeToHTTPDate(UTCDateTime: TDateTime): RawUTF8;
+function DateTimeToHTTPDate(dt: TDateTime; const tz: RawUTF8): RawUTF8;
 var T: TSynSystemTime;
 begin
-  if UTCDateTime=0 then begin
-    result := '';
-    exit;
+  if dt=0 then
+    result := '' else begin
+    T.FromDateTime(dt);
+    T.ToHTTPDate(result,tz);
   end;
-  T.FromDateTime(UTCDateTime);
-  FormatUTF8('%, % % % %:%:% GMT', [HTML_WEEK_DAYS[DayOfWeek(UTCDateTime)],
-    UInt2DigitsToShortFast(T.Day),HTML_MONTH_NAMES[T.Month],UInt4DigitsToShort(T.Year),
-    UInt2DigitsToShortFast(T.Hour),UInt2DigitsToShortFast(T.Minute),
-    UInt2DigitsToShortFast(T.Second)], result);
 end;
 
 function TimeToString: RawUTF8;
@@ -36861,6 +36870,12 @@ begin
   inc(WR.B,17);
 end;
 
+const
+  HTML_WEEK_DAYS: array[1..7] of string[3] =
+    ('Sun','Mon','Tue','Wed','Thu','Fri','Sat');
+  HTML_MONTH_NAMES: array[1..12] of string[3] =
+    ('Jan','Feb','Mar','Apr','May','Jun', 'Jul','Aug','Sep','Oct','Nov','Dec');
+
 function TSynSystemTime.ToNCSAText(P: PUTF8Char): PtrInt;
 var y,d100: PtrUInt;
     tab: {$ifdef CPUX86NOTPIC}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
@@ -36882,6 +36897,35 @@ begin
   PWord(P+18)^ := tab[Second];
   P[20] := ' ';
   result := 21;
+end;
+
+procedure TSynSystemTime.ToHTTPDate(out text: RawUTF8; const tz: RawUTF8);
+begin
+  if DayOfWeek=0 then
+    PSynDate(@self)^.ComputeDayOfWeek; // first 4 fields do match
+  FormatUTF8('%, % % % %:%:% %', [HTML_WEEK_DAYS[DayOfWeek],
+    UInt2DigitsToShortFast(Day),HTML_MONTH_NAMES[Month],UInt4DigitsToShort(Year),
+    UInt2DigitsToShortFast(Hour),UInt2DigitsToShortFast(Minute),
+    UInt2DigitsToShortFast(Second),tz],text);
+end;
+
+procedure TSynSystemTime.ToIsoDateTime(out text: RawUTF8; const FirstTimeChar: AnsiChar);
+begin
+  FormatUTF8('%-%-%%%:%:%', [UInt4DigitsToShort(Year),UInt2DigitsToShortFast(Month),
+    UInt2DigitsToShortFast(Day),FirstTimeChar,UInt2DigitsToShortFast(Hour),
+    UInt2DigitsToShortFast(Minute),UInt2DigitsToShortFast(Second)],text);
+end;
+
+procedure TSynSystemTime.ToIsoDate(out text: RawUTF8);
+begin
+  FormatUTF8('%-%-%', [UInt4DigitsToShort(Year),UInt2DigitsToShortFast(Month),
+    UInt2DigitsToShortFast(Day)],text);
+end;
+
+procedure TSynSystemTime.ToIsoTime(out text: RawUTF8; const FirstTimeChar: RawUTF8);
+begin
+  FormatUTF8('%%:%:%', [FirstTimeChar,UInt2DigitsToShortFast(Hour),
+    UInt2DigitsToShortFast(Minute),UInt2DigitsToShortFast(Second)],text);
 end;
 
 procedure TSynSystemTime.AddNCSAText(WR: TTextWriter);
@@ -51744,7 +51788,7 @@ function TTextWriter.LastChar: AnsiChar;
 begin
   if B>=fTempBuf then
     result := B^ else
-    result := #0; // returns #0 if no char has been written yet
+    result := #0;
 end;
 
 procedure TTextWriter.CancelLastChar(aCharToCancel: AnsiChar);
