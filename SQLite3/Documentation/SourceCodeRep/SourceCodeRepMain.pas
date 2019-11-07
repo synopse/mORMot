@@ -130,7 +130,7 @@ begin
     path := exe;
   screen.Cursor := crHourGlass;
   try
-    result := RunProcess(q(path), q(arg1), wait, q(arg2), q(arg3), q(arg4), q(arg5)) = 0;
+    result := RunProcess(path, q(arg1), wait, q(arg2), q(arg3), q(arg4), q(arg5)) = 0;
   finally
     if bak <> '' then
       SetCurrentDir(bak);

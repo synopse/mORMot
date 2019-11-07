@@ -6986,12 +6986,15 @@ function RecordLoadBase64(Source: PAnsiChar; Len: integer; var Rec; TypeInfo: po
 // enhanced RTTI), if available
 // - returns nil on error, or the end of buffer on success
 // - warning: the JSON buffer will be modified in-place during process - use
-// a temporary copy if you need to access it later, or the overloaded RecordLoadJSON()
+// a temporary copy if you need to access it later or if the string comes from
+// a constant (refcount=-1) - see e.g. the overloaded RecordLoadJSON()
 function RecordLoadJSON(var Rec; JSON: PUTF8Char; TypeInfo: pointer;
   EndOfObject: PUTF8Char=nil): PUTF8Char; overload;
 
 /// fill a record content from a JSON serialization as saved by
 // TTextWriter.AddRecordJSON / RecordSaveJSON
+// - this overloaded function will make a private copy before parsing it,
+// so is safe with a read/only or shared string - but slightly slower
 // - will use default Base64 encoding over RecordSave() binary - or custom true
 // JSON format (as set by TTextWriter.RegisterCustomJSONSerializer or via
 // enhanced RTTI), if available
@@ -7035,9 +7038,16 @@ function DynArraySave(var Value; TypeInfo: pointer): RawByteString;
 // - to be used e.g. for custom record JSON unserialization, within a
 // TDynArrayJSONCustomReader callback
 // - warning: the JSON buffer will be modified in-place during process - use
-// a temporary copy if you need to access it later
+// a temporary copy if you need to access it later or if the string comes from
+// a constant (refcount=-1) - see e.g. the overloaded DynArrayLoadJSON()
 function DynArrayLoadJSON(var Value; JSON: PUTF8Char; TypeInfo: pointer;
-  EndOfObject: PUTF8Char=nil): PUTF8Char;
+  EndOfObject: PUTF8Char=nil): PUTF8Char; overload;
+
+/// fill a dynamic array content from a JSON serialization as saved by
+// TTextWriter.AddDynArrayJSON, which won't be modified
+// - this overloaded function will make a private copy before parsing it,
+// so is safe with a read/only or shared string - but slightly slower
+function DynArrayLoadJSON(var Value; const JSON: RawUTF8; TypeInfo: pointer): boolean; overload;
 
 /// serialize a dynamic array content as JSON
 // - Value shall be set to the source dynamic array field
@@ -47614,11 +47624,22 @@ begin
 end;
 
 function DynArrayLoadJSON(var Value; JSON: PUTF8Char; TypeInfo: pointer;
-  EndOfObject: PUTF8Char=nil): PUTF8Char;
+  EndOfObject: PUTF8Char): PUTF8Char;
 var DynArray: TDynArray;
 begin
   DynArray.Init(TypeInfo,Value);
   result := DynArray.LoadFromJSON(JSON,EndOfObject);
+end;
+
+function DynArrayLoadJSON(var Value; const JSON: RawUTF8; TypeInfo: pointer): boolean;
+var tmp: TSynTempBuffer;
+begin
+  tmp.Init(JSON); // make private copy before in-place decoding
+  try
+    result := DynArrayLoadJSON(Value,tmp.buf,TypeInfo)<>nil;
+  finally
+    tmp.Done;
+  end;
 end;
 
 function DynArraySaveJSON(const Value; TypeInfo: pointer;
