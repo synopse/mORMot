@@ -600,6 +600,9 @@ function RunProcess(const path, arg1: TFileName; waitfor: boolean;
   const arg2: TFileName=''; const arg3: TFileName=''; const arg4: TFileName='';
   const arg5: TFileName=''; const env: TFileName=''; envaddexisting: boolean=false): integer;
 
+/// like fpSystem, but cross-platform and calling bash only if needed
+function RunCommand(const cmd: TFileName; waitfor: boolean;
+  const env: TFileName=''; envaddexisting: boolean=false): integer;
 
 { *** cross-plaform high-level services/daemons }
 
@@ -1425,50 +1428,78 @@ function GetExitCodeProcess(hProcess: THandle; out lpExitCode: DWORD): BOOL; std
 
 function RunProcess(const path, arg1: TFileName; waitfor: boolean;
   const arg2,arg3,arg4,arg5,env: TFileName; envaddexisting: boolean): integer;
+begin
+  result := RunCommand(FormatString('"%" % % % % %', [path, arg1, arg2, arg3, arg4, arg5]),
+    waitfor, env, envaddexisting);
+end;
+
+var
+  EnvironmentCache: SynUnicode;
+
+function RunCommand(const cmd: TFileName; waitfor: boolean;
+  const env: TFileName; envaddexisting: boolean): integer;
 var
   startupinfo: TStartupInfo; // _STARTUPINFOW or _STARTUPINFOA is equal here
   processinfo: TProcessInformation;
-  cmdline, runpath: TFileName;
-  wcmdline, wenv, wenv2, currentdir: SynUnicode;
+  path: TFileName;
+  wcmd, wenv, wpath: SynUnicode;
   e, p: PWideChar;
   exitcode: DWORD;
+  i: integer;
 begin
   // https://support.microsoft.com/en-us/help/175986/info-understanding-createprocess-and-command-line-arguments
-  cmdline := FormatString('"%" % % % % %', [path, arg1, arg2, arg3, arg4, arg5]);
+  result := -1;
+  if cmd = '' then
+    exit;
   // CreateProcess can alter the strings -> use local SynUnicode
-  StringToSynUnicode(cmdline, wcmdline);
-  runpath := ExtractFilePath(path);
-  if runpath = '' then
-    runpath := ExeVersion.ProgramFilePath;
-  StringToSynUnicode(runpath, currentdir);
+  StringToSynUnicode(cmd, wcmd);
+  if cmd[1] = '"' then begin
+    i := {$ifdef FPC_OR_UNICODE}Pos{$else}PosEx{$endif}('"', cmd, 2);
+    if i = 0 then
+      exit;
+    path := copy(cmd, 2, i - 2);
+  end
+  else begin
+    i := {$ifdef FPC_OR_UNICODE}Pos{$else}PosEx{$endif}(' ', cmd, 1);
+    if i <= 1 then
+      exit;
+    path := copy(cmd, 1, i - 1);
+  end;
+  path := ExtractFilePath(path);
+  if path = '' then
+    path := ExeVersion.ProgramFilePath;
+  StringToSynUnicode(path, wpath);
   if env <> '' then begin
     StringToSynUnicode(env, wenv);
     if envaddexisting then begin
-      e := GetEnvironmentStringsW;
-      p := e;
-      while p^ <> #0 do
-        inc(p, StrLenW(p) + 1); // go to name=value#0 pairs end
-      SetString(wenv2, e, (PtrUInt(p) - PtrUInt(e)) shr 1);
-      FreeEnvironmentStringsW(e);
-      wenv := wenv2 + wenv;
+      GlobalLock;
+      if EnvironmentCache = '' then begin
+        e := GetEnvironmentStringsW;
+        p := e;
+        while p^ <> #0 do
+          inc(p, StrLenW(p) + 1); // go to name=value#0 pairs end
+        SetString(EnvironmentCache, e, (PtrUInt(p) - PtrUInt(e)) shr 1);
+        FreeEnvironmentStringsW(e);
+      end;
+      wenv := EnvironmentCache + wenv;
+      GlobalUnLock;
     end;
   end;
   FillCharFast(startupinfo, SizeOf(startupinfo), 0);
   startupinfo.cb := SizeOf(startupinfo);
   FillCharFast(processinfo, SizeOf(processinfo), 0);
   // https://docs.microsoft.com/pl-pl/windows/desktop/ProcThread/process-creation-flags
-  if CreateProcessW(nil, pointer(wcmdline), nil, nil, false, CREATE_UNICODE_ENVIRONMENT or
-   CREATE_DEFAULT_ERROR_MODE or DETACHED_PROCESS or CREATE_NEW_PROCESS_GROUP,
-   pointer(wenv), pointer(currentdir), startupinfo, processinfo) then begin
-    if waitfor then begin
+  if CreateProcessW(nil, pointer(wcmd), nil, nil, false, CREATE_UNICODE_ENVIRONMENT or
+      CREATE_DEFAULT_ERROR_MODE or DETACHED_PROCESS or CREATE_NEW_PROCESS_GROUP,
+      pointer(wenv), pointer(wpath), startupinfo, processinfo) then begin
+    if waitfor then
       if WaitForSingleObject(processinfo.hProcess,INFINITE) = WAIT_FAILED then
         result := -GetLastError
+      else if not GetExitCodeProcess(processinfo.hProcess, exitcode) then
+        result := -GetLastError
       else
-        if not GetExitCodeProcess(processinfo.hProcess, exitcode) then
-          result := -GetLastError
-        else
-          result := exitcode;
-    end else
+        result := exitcode
+    else
       result := 0;
     CloseHandle(processinfo.hProcess);
     CloseHandle(processinfo.hThread);
@@ -1666,11 +1697,10 @@ begin
 end;
 {$endif FPC}
 
-function RunProcess(const path, arg1: TFileName; waitfor: boolean;
-  const arg2,arg3,arg4,arg5,env: TFileName; envaddexisting: boolean): integer;
+function RunInternal(args: PPAnsiChar; waitfor: boolean;
+  const env: TFileName; envaddexisting: boolean): integer;
 var
   pid: {$ifdef FPC}TPID{$else}pid_t{$endif};
-  a: array[0..6] of PAnsiChar;   // assume no UNICODE on BSD, i.e. TFileName is
   e: array[0..511] of PAnsiChar; // max 512 environment variables
   envpp: PPAnsiChar;
   P: PAnsiChar;
@@ -1692,16 +1722,9 @@ begin
   if pid = 0 then begin // we are in child process -> switch to new executable
     if not waitfor then
       CleanAfterFork; // don't share the same console
-    a[0] := pointer(path);
-    a[1] := pointer(arg1);
-    a[2] := pointer(arg2);
-    a[3] := pointer(arg3);
-    a[4] := pointer(arg4);
-    a[5] := pointer(arg5);
-    a[6] := nil; // end with null
     envpp := envp;
     if env <> '' then begin
-      n := 0;      fpsystem('');
+      n := 0;
       result := -7; // E2BIG
       if envaddexisting and (envpp <> nil) then begin
         while envpp^ <> nil do begin
@@ -1726,10 +1749,10 @@ begin
       envpp := @e;
     end;
     {$ifdef FPC}
-    FpExecve(a[0], @a, envpp);
+    FpExecve(args^, args, envpp);
     FpExit(127);
     {$else}
-    execve(a[0], @a, envpp);
+    execve(args^, args, envpp);
     _exit(127);
     {$endif}
   end;
@@ -1739,6 +1762,36 @@ begin
       result := -result; // execv() failed in child process
   end else
     result := 0; // fork success (don't wait for the child process to fail)
+end;
+
+function RunProcess(const path, arg1: TFileName; waitfor: boolean;
+  const arg2,arg3,arg4,arg5,env: TFileName; envaddexisting: boolean): integer;
+var
+  a: array[0..6] of PAnsiChar;   // assume no UNICODE on BSD, i.e. as TFileName
+begin
+  a[0] := pointer(path);
+  a[1] := pointer(arg1);
+  a[2] := pointer(arg2);
+  a[3] := pointer(arg3);
+  a[4] := pointer(arg4);
+  a[5] := pointer(arg5);
+  a[6] := nil; // end with null
+  result := RunInternal(@a, waitfor, env, envaddexisting);
+end;
+
+function RunCommand(const cmd: TFileName; waitfor: boolean;
+  const env: TFileName; envaddexisting: boolean): integer;
+const sh0: PAnsiChar = '/bin/sh';
+      sh1: PAnsiChar = '-c';
+var
+  a: array[0..3] of PAnsiChar;
+begin
+  { TODO : parse arguments and call RunInternal() directly for simple commands }
+  a[0] := sh0;
+  a[1] := sh1;
+  a[2] := pointer(cmd);
+  a[3] := nil;
+  result := RunInternal(@a, waitfor, env, envaddexisting);
 end;
 
 {$endif MSWINDOWS}
