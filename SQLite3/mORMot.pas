@@ -28346,7 +28346,7 @@ function TSQLTable.ExpandAsSynUnicode(Row,Field: integer; Client: TObject; out T
 var s: string;
 begin
   result := ExpandAsString(Row,Field,Client,s);
-  Text := StringToSynUnicode(s);
+  StringToSynUnicode(s,Text);
 end;
 
 function TSQLTable.GetTimeLog(Row, Field: integer; Expanded: boolean;

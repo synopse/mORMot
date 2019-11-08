@@ -1554,7 +1554,12 @@ function StringToRawUnicode(const S: string): RawUnicode; overload;
 // - under older version of Delphi (no unicode), it will use the
 // current RTL codepage, as with WideString conversion (but without slow
 // WideString usage)
-function StringToSynUnicode(const S: string): SynUnicode;
+function StringToSynUnicode(const S: string): SynUnicode; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// convert any generic VCL Text into a SynUnicode encoded String
+// - overloaded to avoid a copy to a temporary result string of a function
+procedure StringToSynUnicode(const S: string; var result: SynUnicode); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert any generic VCL Text into a Raw Unicode encoded String
@@ -3042,8 +3047,10 @@ function Split(const Str, SepStr: RawUTF8; StartPos: integer=1): RawUTF8; overlo
 /// split a RawUTF8 string into several strings, according to SepStr separator
 // - this overloaded function will fill a DestPtr[] array of PRawUTF8
 // - if any DestPtr[]=nil, the item will be skipped
-procedure Split(const Str: RawUTF8; const SepStr: array of RawUTF8;
-  const DestPtr: array of PRawUTF8); overload;
+// - if input Str end before al SepStr[] are found, DestPtr[] is set to ''
+// - returns the number of values extracted into DestPtr[]
+function Split(const Str: RawUTF8; const SepStr: array of RawUTF8;
+  const DestPtr: array of PRawUTF8): PtrInt; overload;
 
 /// returns the last occurence of the given SepChar separated context
 // - e.g. SplitRight('01/2/34','/')='34'
@@ -19885,121 +19892,92 @@ function StringToRawUnicode(const S: string): RawUnicode;
 begin
   SetString(result,PAnsiChar(pointer(S)),length(S)*2+1); // +1 for last wide #0
 end;
-{$else}
-function StringToRawUnicode(const S: string): RawUnicode;
-begin
-  result := CurrentAnsiConvert.AnsiToRawUnicode(S);
-end;
-{$endif}
-
-{$ifdef UNICODE}
 function StringToSynUnicode(const S: string): SynUnicode;
 begin
   result := S;
 end;
-{$else}
-function StringToSynUnicode(const S: string): SynUnicode;
+procedure StringToSynUnicode(const S: string; var result: SynUnicode); overload;
 begin
-  result := CurrentAnsiConvert.AnsiToUnicodeString(pointer(S),length(S));
+  result := S;
 end;
-{$endif}
-
-{$ifdef UNICODE}
 function StringToRawUnicode(P: PChar; L: integer): RawUnicode;
 begin
   SetString(result,PAnsiChar(P),L*2+1); // +1 for last wide #0
 end;
-{$else}
-function StringToRawUnicode(P: PChar; L: integer): RawUnicode;
-begin
-  result := CurrentAnsiConvert.AnsiToRawUnicode(P,L);
-end;
-{$endif}
-
-
-{$ifdef UNICODE}
 function RawUnicodeToString(P: PWideChar; L: integer): string;
 begin
   SetString(result,P,L);
 end;
-{$else}
-function RawUnicodeToString(P: PWideChar; L: integer): string;
-begin
-  result := CurrentAnsiConvert.UnicodeBufferToAnsi(P,L);
-end;
-{$endif}
-
-{$ifdef UNICODE}
 procedure RawUnicodeToString(P: PWideChar; L: integer; var result: string);
 begin
   SetString(result,P,L);
 end;
-{$else}
-procedure RawUnicodeToString(P: PWideChar; L: integer; var result: string);
-begin
-  result := CurrentAnsiConvert.UnicodeBufferToAnsi(P,L);
-end;
-{$endif}
-
-{$ifdef UNICODE}
 function RawUnicodeToString(const U: RawUnicode): string;
 begin // uses StrLenW() and not length(U) to handle case when was used as buffer
   SetString(result,PWideChar(pointer(U)),StrLenW(Pointer(U)));
 end;
-{$else}
-function RawUnicodeToString(const U: RawUnicode): string;
-begin // uses StrLenW() and not length(U) to handle case when was used as buffer
-  result := CurrentAnsiConvert.UnicodeBufferToAnsi(Pointer(U),StrLenW(Pointer(U)));
-end;
-{$endif}
-
-{$ifdef UNICODE}
 function SynUnicodeToString(const U: SynUnicode): string;
 begin
   result := U;
 end;
-{$else}
-function SynUnicodeToString(const U: SynUnicode): string;
-begin
-  result := CurrentAnsiConvert.UnicodeBufferToAnsi(Pointer(U),length(U));
-end;
-{$endif}
-
-{$ifdef UNICODE}
 function UTF8DecodeToString(P: PUTF8Char; L: integer): string;
 begin
   UTF8DecodeToUnicodeString(P,L,result);
 end;
-{$else}
-function UTF8DecodeToString(P: PUTF8Char; L: integer): string;
-begin
-  CurrentAnsiConvert.UTF8BufferToAnsi(P,L,RawByteString(result));
-end;
-{$endif}
-
-{$ifdef UNICODE}
 procedure UTF8DecodeToString(P: PUTF8Char; L: integer; var result: string);
 begin
   UTF8DecodeToUnicodeString(P,L,result);
 end;
-{$else}
-procedure UTF8DecodeToString(P: PUTF8Char; L: integer; var result: string);
-begin
-  CurrentAnsiConvert.UTF8BufferToAnsi(P,L,RawByteString(result));
-end;
-{$endif}
-
-{$ifdef UNICODE}
 function UTF8ToString(const Text: RawUTF8): string;
 begin
   UTF8DecodeToUnicodeString(pointer(Text),length(Text),result);
 end;
 {$else}
+function StringToRawUnicode(const S: string): RawUnicode;
+begin
+  result := CurrentAnsiConvert.AnsiToRawUnicode(S);
+end;
+function StringToSynUnicode(const S: string): SynUnicode;
+begin
+  result := CurrentAnsiConvert.AnsiToUnicodeString(pointer(S),length(S));
+end;
+procedure StringToSynUnicode(const S: string; var result: SynUnicode); overload;
+begin
+  result := CurrentAnsiConvert.AnsiToUnicodeString(pointer(S),length(S));
+end;
+function StringToRawUnicode(P: PChar; L: integer): RawUnicode;
+begin
+  result := CurrentAnsiConvert.AnsiToRawUnicode(P,L);
+end;
+function RawUnicodeToString(P: PWideChar; L: integer): string;
+begin
+  result := CurrentAnsiConvert.UnicodeBufferToAnsi(P,L);
+end;
+procedure RawUnicodeToString(P: PWideChar; L: integer; var result: string);
+begin
+  result := CurrentAnsiConvert.UnicodeBufferToAnsi(P,L);
+end;
+function RawUnicodeToString(const U: RawUnicode): string;
+begin // uses StrLenW() and not length(U) to handle case when was used as buffer
+  result := CurrentAnsiConvert.UnicodeBufferToAnsi(Pointer(U),StrLenW(Pointer(U)));
+end;
+function SynUnicodeToString(const U: SynUnicode): string;
+begin
+  result := CurrentAnsiConvert.UnicodeBufferToAnsi(Pointer(U),length(U));
+end;
+function UTF8DecodeToString(P: PUTF8Char; L: integer): string;
+begin
+  CurrentAnsiConvert.UTF8BufferToAnsi(P,L,RawByteString(result));
+end;
+procedure UTF8DecodeToString(P: PUTF8Char; L: integer; var result: string);
+begin
+  CurrentAnsiConvert.UTF8BufferToAnsi(P,L,RawByteString(result));
+end;
 function UTF8ToString(const Text: RawUTF8): string;
 begin
   CurrentAnsiConvert.UTF8BufferToAnsi(pointer(Text),length(Text),RawByteString(result));
 end;
-{$endif}
+{$endif UNICODE}
 
 procedure UTF8ToWideString(const Text: RawUTF8; var result: WideString);
 begin
@@ -25818,8 +25796,8 @@ begin
     LeftStr := tmp;
   end;
   if ToUpperCase then begin
-    LeftStr := UpperCaseU(LeftStr);
-    RightStr := UpperCaseU(RightStr);
+    UpperCaseSelf(LeftStr);
+    UpperCaseSelf(RightStr);
   end;
 end;
 
@@ -25828,30 +25806,30 @@ begin
   Split(Str,SepStr,LeftStr,result,ToUpperCase);
 end;
 
-procedure Split(const Str: RawUTF8; const SepStr: array of RawUTF8;
-  const DestPtr: array of PRawUTF8);
-var s,i,j,n: integer;
+function Split(const Str: RawUTF8; const SepStr: array of RawUTF8;
+  const DestPtr: array of PRawUTF8): PtrInt;
+var s,i,j: PtrInt;
 begin
   j := 1;
-  n := 0;
+  result := 0;
   s := 0;
   if high(SepStr)>=0 then
-    while n<=high(DestPtr) do begin
+    while result<=high(DestPtr) do begin
       i := PosEx(SepStr[s],Str,j);
       if i=0 then begin
-        if DestPtr[n]<>nil then
-          DestPtr[n]^ := copy(Str,j,MaxInt);
-        inc(n);
+        if DestPtr[result]<>nil then
+          DestPtr[result]^ := copy(Str,j,MaxInt);
+        inc(result);
         break;
       end;
-      if DestPtr[n]<>nil then
-        DestPtr[n]^ := copy(Str,j,i-j);
-      inc(n);
+      if DestPtr[result]<>nil then
+        DestPtr[result]^ := copy(Str,j,i-j);
+      inc(result);
       if s<high(SepStr) then
         inc(s);
       j := i+1;
     end;
-  for i := n to high(DestPtr) do
+  for i := result to high(DestPtr) do
     if DestPtr[i]<>nil then
       DestPtr[i]^ := '';
 end;
@@ -38907,7 +38885,7 @@ begin
     shell32,'SetCurrentProcessExplicitAppUserModelID');
   if not Assigned(SetCurrentProcessExplicitAppUserModelID) then
     exit; // API available since Windows Seven / Server 2008 R2
-  id := StringToSynUnicode(AppUserModelID);
+  StringToSynUnicode(AppUserModelID,id);
   if Pos('.',AppUserModelID)=0 then
     id := id+'.'+id; // at least CompanyName.ProductName
   if SetCurrentProcessExplicitAppUserModelID(pointer(id))<>S_OK then
@@ -54477,7 +54455,7 @@ begin
     fStream.Seek(fInitialStreamPosition,soBeginning);
     fStream.Read(pointer(result)^,Len);
   end;
-  if reformat <> jsonCompact then begin // reformat using the very same instance
+  if reformat<>jsonCompact then begin // reformat using the very same instance
     CancelAll;
     AddJSONReformat(pointer(result),reformat,nil);
     SetText(result);
