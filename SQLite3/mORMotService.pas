@@ -595,9 +595,10 @@ procedure SynDaemonIntercept(log: TSynLog=nil);
 {$endif MSWINDOWS}
 
 /// like SysUtils.ExecuteProcess, but allowing not to wait for the process to finish
+// - optional env value follows 'n1=v1'#0'n2=v2'#0'n3=v3'#0#0 Windows layout
 function RunProcess(const path, arg1: TFileName; waitfor: boolean;
   const arg2: TFileName=''; const arg3: TFileName=''; const arg4: TFileName='';
-  const arg5: TFileName=''): integer;
+  const arg5: TFileName=''; const env: TFileName=''; envaddexisting: boolean=false): integer;
 
 
 { *** cross-plaform high-level services/daemons }
@@ -912,7 +913,7 @@ var desc: SynUnicode;
 begin
   if Description='' then
     exit;
-  desc := StringToSynUnicode(Description);
+  StringToSynUnicode(Description, desc);
   ChangeServiceConfig2(FHandle, SERVICE_CONFIG_DESCRIPTION, @desc);
 end;
 
@@ -1423,28 +1424,42 @@ function GetExitCodeProcess(hProcess: THandle; out lpExitCode: DWORD): BOOL; std
   external kernel32;
 
 function RunProcess(const path, arg1: TFileName; waitfor: boolean;
-  const arg2,arg3,arg4,arg5: TFileName): integer;
+  const arg2,arg3,arg4,arg5,env: TFileName; envaddexisting: boolean): integer;
 var
   startupinfo: TStartupInfo; // _STARTUPINFOW or _STARTUPINFOA is equal here
   processinfo: TProcessInformation;
   cmdline, runpath: TFileName;
-  wcmdline, currentdir: SynUnicode;
+  wcmdline, wenv, wenv2, currentdir: SynUnicode;
+  e, p: PWideChar;
   exitcode: DWORD;
 begin
   // https://support.microsoft.com/en-us/help/175986/info-understanding-createprocess-and-command-line-arguments
   cmdline := FormatString('"%" % % % % %', [path, arg1, arg2, arg3, arg4, arg5]);
-  // CreateProcess can alter the strings so do the copy!
-  wcmdline := StringToSynUnicode(cmdline);
+  // CreateProcess can alter the strings -> use local SynUnicode
+  StringToSynUnicode(cmdline, wcmdline);
   runpath := ExtractFilePath(path);
   if runpath = '' then
     runpath := ExeVersion.ProgramFilePath;
-  currentdir := StringToSynUnicode(runpath);
+  StringToSynUnicode(runpath, currentdir);
+  if env <> '' then begin
+    StringToSynUnicode(env, wenv);
+    if envaddexisting then begin
+      e := GetEnvironmentStringsW;
+      p := e;
+      while p^ <> #0 do
+        inc(p, StrLenW(p) + 1); // go to name=value#0 pairs end
+      SetString(wenv2, e, (PtrUInt(p) - PtrUInt(e)) shr 1);
+      FreeEnvironmentStringsW(e);
+      wenv := wenv2 + wenv;
+    end;
+  end;
   FillCharFast(startupinfo, SizeOf(startupinfo), 0);
   startupinfo.cb := SizeOf(startupinfo);
+  FillCharFast(processinfo, SizeOf(processinfo), 0);
   // https://docs.microsoft.com/pl-pl/windows/desktop/ProcThread/process-creation-flags
-  if CreateProcessW(nil, pointer(wcmdline), nil, nil, false,
+  if CreateProcessW(nil, pointer(wcmdline), nil, nil, false, CREATE_UNICODE_ENVIRONMENT or
    CREATE_DEFAULT_ERROR_MODE or DETACHED_PROCESS or CREATE_NEW_PROCESS_GROUP,
-   nil, pointer(currentdir), startupinfo, processinfo) then begin
+   pointer(wenv), pointer(currentdir), startupinfo, processinfo) then begin
     if waitfor then begin
       if WaitForSingleObject(processinfo.hProcess,INFINITE) = WAIT_FAILED then
         result := -GetLastError
@@ -1652,10 +1667,14 @@ end;
 {$endif FPC}
 
 function RunProcess(const path, arg1: TFileName; waitfor: boolean;
-  const arg2,arg3,arg4,arg5: TFileName): integer;
+  const arg2,arg3,arg4,arg5,env: TFileName; envaddexisting: boolean): integer;
 var
   pid: {$ifdef FPC}TPID{$else}pid_t{$endif};
-  a: array[0..6] of PAnsiChar; // assume no UNICODE on BSD, i.e. TFileName is
+  a: array[0..6] of PAnsiChar;   // assume no UNICODE on BSD, i.e. TFileName is
+  e: array[0..511] of PAnsiChar; // max 512 environment variables
+  envpp: PPAnsiChar;
+  P: PAnsiChar;
+  n: PtrInt;
 begin
   {$ifdef FPC}
   {$if (defined(BSD) or defined(SUNOS)) and defined(FPC_USE_LIBC)}
@@ -1674,17 +1693,43 @@ begin
     if not waitfor then
       CleanAfterFork; // don't share the same console
     a[0] := pointer(path);
-    a[1] := pointer(arg1); // some (may be quoted) arguments
+    a[1] := pointer(arg1);
     a[2] := pointer(arg2);
     a[3] := pointer(arg3);
     a[4] := pointer(arg4);
     a[5] := pointer(arg5);
-    a[6] := nil;
+    a[6] := nil; // end with null
+    envpp := envp;
+    if env <> '' then begin
+      n := 0;      fpsystem('');
+      result := -7; // E2BIG
+      if envaddexisting and (envpp <> nil) then begin
+        while envpp^ <> nil do begin
+          if PosChar(envpp^, #10) = nil then begin // filter simple variables
+            if n = high(e) - 1 then
+              exit;
+            e[n] := envpp^;
+            inc(n);
+          end;
+          inc(envpp);
+        end;
+      end;
+      P := pointer(env); // env follows Windows layout 'n1=v1'#0'n2=v2'#0#0
+      while P^ <> #0 do begin
+        if n = high(e) - 1 then
+          exit;
+        e[n] := P; // makes POSIX compatible
+        inc(n);
+        inc(P, StrLen(P) + 1);
+      end;
+      e[n] := nil; // end with null
+      envpp := @e;
+    end;
     {$ifdef FPC}
-    FpExecV(a[0], @a);
+    FpExecve(a[0], @a, envpp);
     FpExit(127);
     {$else}
-    execv(a[0], @a);
+    execve(a[0], @a, envpp);
     _exit(127);
     {$endif}
   end;
