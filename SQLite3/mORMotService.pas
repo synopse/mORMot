@@ -604,6 +604,32 @@ function RunProcess(const path, arg1: TFileName; waitfor: boolean;
 function RunCommand(const cmd: TFileName; waitfor: boolean;
   const env: TFileName=''; envaddexisting: boolean=false): integer;
 
+type
+  /// command line patterns recognized by ParseCommandArgs()
+  TParseCommand = (
+    pcHasRedirection, pcHasSubCommand, pcHasParenthesis,
+    pcHasJobControl, pcHasWildcard, pcHasShellVariable,
+    pcUnbalancedSingleQuote, pcUnbalancedDoubleQuote,
+    pcTooManyArguments, pcInvalidCommand, pcHasEndingBackSlash);
+  TParseCommands = set of TParseCommand;
+  /// used to store references of arguments recognized by ParseCommandArgs()
+  TParseCommandsArgs = array[0..31] of PAnsiChar;
+
+const
+  /// identifies some bash-specific processing
+  PARSECOMMAND_BASH = [pcHasRedirection .. pcHasShellVariable];
+  /// identifies obvious invalid content
+  PARSECOMMAND_ERROR = [pcUnbalancedSingleQuote .. pcHasEndingBackSlash];
+
+/// low-level parsing of a RunCommand() execution command
+// - parse and fills argv[0..argc-1] with corresponding arguments, after
+// un-escaping and un-quoting if applicable, using temp to store the content
+function ParseCommandArgs(const cmd: RawUTF8; out argv: TParseCommandsArgs;
+  out argc: integer; out temp: RawUTF8): TParseCommands;
+
+function ToText(cmd: TParseCommands): shortstring; overload;
+
+
 { *** cross-plaform high-level services/daemons }
 
 type
@@ -1631,7 +1657,7 @@ procedure RunUntilSigTerminated(daemon: TObject; dofork: boolean;
   const start, stop: TThreadMethod; log: TSynLog; const servicename: string);
 var
   pid, sid: {$ifdef FPC}TPID{$else}pid_t{$endif};
-  pidfilename, pidfilelockname: TFileName;
+  pidfilename: TFileName;
 const
   TXT: array[boolean] of string[4] = ('run', 'fork');
 begin
@@ -1795,6 +1821,133 @@ begin
 end;
 
 {$endif MSWINDOWS}
+
+function ToText(cmd: TParseCommands): shortstring;
+begin
+  GetSetNameShort(TypeInfo(TParseCommands), cmd, result, {trim=}true);
+end;
+
+function ParseCommandArgs(const cmd: RawUTF8; out argv: TParseCommandsArgs;
+  out argc: integer; out temp: RawUTF8): TParseCommands;
+var
+  state: set of (sWhite, sInArg, sInSQ, sInDQ, sSpecial, sBslash);
+  c: AnsiChar;
+  D, P: PAnsiChar;
+begin
+  argv[0] := nil;
+  argc := 0;
+  result := [pcInvalidCommand];
+  if cmd = '' then
+    exit;
+  state := [];
+  SetLength(temp, length(cmd));
+  D := pointer(temp);
+  P := pointer(cmd);
+  repeat
+    c := P^;
+    D^ := c;
+    inc(P);
+    case c of
+      #0: begin
+        if sInSQ in state then
+          include(result, pcUnbalancedSingleQuote);
+        if sInDQ in state then
+          include(result, pcUnbalancedDoubleQuote);
+        exclude(result, pcInvalidCommand);
+        argv[argc] := nil;
+        exit;
+      end;
+      #1 .. ' ': begin
+       if state = [sInArg] then begin
+         state := [];
+         D^ := #0;
+         inc(D);
+         continue;
+       end;
+       if state * [sInSQ, sInDQ] = [] then
+         continue;
+      end;
+      '\':
+        if state * [sInSQ, sBslash] = [] then
+          if sInDQ in state then begin
+            case P^ of
+              '"', '\', '$', '`': begin
+                include(state, sBslash);
+                continue;
+              end;
+            end;
+          end else if P^ = #0 then begin
+            include(result, pcHasEndingBackSlash);
+            exit;
+          end else
+            inc(P);
+        '''':
+          if not(sInDQ in state) then
+            if sInSQ in state then begin
+              exclude(state, sInSQ);
+              continue;
+            end else if state = [] then begin
+              argv[argc] := D;
+              inc(argc);
+              if argc = high(argv) then
+                exit;
+              state := [sInSQ, sInArg];
+              continue;
+            end else if state = [sInArg] then begin
+              state := [sInSQ, sInArg];
+              continue;
+            end;
+        '"':
+          if not(sInSQ in state) then
+            if sInDQ in state then begin
+              exclude(state, sInDQ);
+              continue;
+            end else if state = [] then begin
+              argv[argc] := D;
+              inc(argc);
+              if argc = high(argv) then
+                exit;
+              state := [sInDQ, sInArg];
+              continue;
+            end else if state = [sInArg] then begin
+              state := [sInDQ, sInArg];
+              continue;
+            end;
+        '|', '<', '>':
+          if state * [sInSQ, sInDQ] = [] then
+            include(result, pcHasRedirection);
+        '&', ';':
+          if state * [sInSQ, sInDQ] = [] then begin
+            include(state, sSpecial);
+            include(result, pcHasJobControl);
+          end;
+        '`':
+          if state * [sInSQ, sBslash] = [] then
+             include(result, pcHasSubCommand);
+        '(', ')':
+          if state * [sInSQ, sInDQ] = [] then
+            include(result, pcHasParenthesis);
+        '$':
+          if state * [sInSQ, sBslash] = [] then
+            if p^ = '(' then
+              include(result, pcHasSubCommand)
+            else
+              include(result, pcHasShellVariable);
+        '*', '?':
+          if state * [sInSQ, sInDQ] = [] then
+            include(result, pcHasWildcard);
+    end;
+    exclude(state, sBslash);
+    if state = [] then begin
+      argv[argc] := D;
+      inc(argc);
+      if argc = high(argv) then
+        exit;
+      state := [sInArg];
+    end;
+    inc(D);
+  until false;
+end;
 
 
 { *** cross-plaform high-level services }
