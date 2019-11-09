@@ -845,6 +845,8 @@ type
     procedure wr(const val; len: integer);
     /// append some shortstring as binary to the internal buffer
     procedure wrss(const str: shortstring); {$ifdef HASINLINE}inline;{$endif}
+    /// append some string as binary to the internal buffer
+    procedure wrs(const str: RawByteString); {$ifdef HASINLINE}inline;{$endif}
     /// append some 8-bit value as binary to the internal buffer
     procedure wrb(b: byte);                 {$ifdef HASINLINE}inline;{$endif}
     /// append some 16-bit value as binary to the internal buffer
@@ -859,9 +861,11 @@ type
     // - returns a pointer to the first byte of the added memory chunk
     function wrfillchar(count: integer; value: byte): PAnsiChar;
     /// returns the current offset position in the internal buffer
-    function Position: integer; {$ifdef HASINLINE}inline;{$endif}
+    function Position: PtrInt; {$ifdef HASINLINE}inline;{$endif}
     /// returns the buffer as a RawByteString instance
     function AsBinary: RawByteString;
+    /// returns the buffer as a RawUTF8 instance
+    procedure AsUTF8(var result: RawUTF8);
   end;
 
   /// function prototype to be used for hashing of an element
@@ -1550,7 +1554,12 @@ function StringToRawUnicode(const S: string): RawUnicode; overload;
 // - under older version of Delphi (no unicode), it will use the
 // current RTL codepage, as with WideString conversion (but without slow
 // WideString usage)
-function StringToSynUnicode(const S: string): SynUnicode;
+function StringToSynUnicode(const S: string): SynUnicode; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// convert any generic VCL Text into a SynUnicode encoded String
+// - overloaded to avoid a copy to a temporary result string of a function
+procedure StringToSynUnicode(const S: string; var result: SynUnicode); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert any generic VCL Text into a Raw Unicode encoded String
@@ -2024,6 +2033,11 @@ type
   {$endif}
   /// the non-number values potentially stored in an IEEE floating point
   TSynExtendedNan = (seNumber, seNan, seInf, seNegInf);
+  {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
+  /// will actually change anything only on FPC ARM/Aarch64 plaforms
+  unaligned = Double;
+  {$endif}
+
 
 const
   /// the JavaScript-like values of non-number IEEE constants
@@ -3033,8 +3047,10 @@ function Split(const Str, SepStr: RawUTF8; StartPos: integer=1): RawUTF8; overlo
 /// split a RawUTF8 string into several strings, according to SepStr separator
 // - this overloaded function will fill a DestPtr[] array of PRawUTF8
 // - if any DestPtr[]=nil, the item will be skipped
-procedure Split(const Str: RawUTF8; const SepStr: array of RawUTF8;
-  const DestPtr: array of PRawUTF8); overload;
+// - if input Str end before al SepStr[] are found, DestPtr[] is set to ''
+// - returns the number of values extracted into DestPtr[]
+function Split(const Str: RawUTF8; const SepStr: array of RawUTF8;
+  const DestPtr: array of PRawUTF8): PtrInt; overload;
 
 /// returns the last occurence of the given SepChar separated context
 // - e.g. SplitRight('01/2/34','/')='34'
@@ -6977,12 +6993,15 @@ function RecordLoadBase64(Source: PAnsiChar; Len: integer; var Rec; TypeInfo: po
 // enhanced RTTI), if available
 // - returns nil on error, or the end of buffer on success
 // - warning: the JSON buffer will be modified in-place during process - use
-// a temporary copy if you need to access it later, or the overloaded RecordLoadJSON()
+// a temporary copy if you need to access it later or if the string comes from
+// a constant (refcount=-1) - see e.g. the overloaded RecordLoadJSON()
 function RecordLoadJSON(var Rec; JSON: PUTF8Char; TypeInfo: pointer;
   EndOfObject: PUTF8Char=nil): PUTF8Char; overload;
 
 /// fill a record content from a JSON serialization as saved by
 // TTextWriter.AddRecordJSON / RecordSaveJSON
+// - this overloaded function will make a private copy before parsing it,
+// so is safe with a read/only or shared string - but slightly slower
 // - will use default Base64 encoding over RecordSave() binary - or custom true
 // JSON format (as set by TTextWriter.RegisterCustomJSONSerializer or via
 // enhanced RTTI), if available
@@ -7026,9 +7045,16 @@ function DynArraySave(var Value; TypeInfo: pointer): RawByteString;
 // - to be used e.g. for custom record JSON unserialization, within a
 // TDynArrayJSONCustomReader callback
 // - warning: the JSON buffer will be modified in-place during process - use
-// a temporary copy if you need to access it later
+// a temporary copy if you need to access it later or if the string comes from
+// a constant (refcount=-1) - see e.g. the overloaded DynArrayLoadJSON()
 function DynArrayLoadJSON(var Value; JSON: PUTF8Char; TypeInfo: pointer;
-  EndOfObject: PUTF8Char=nil): PUTF8Char;
+  EndOfObject: PUTF8Char=nil): PUTF8Char; overload;
+
+/// fill a dynamic array content from a JSON serialization as saved by
+// TTextWriter.AddDynArrayJSON, which won't be modified
+// - this overloaded function will make a private copy before parsing it,
+// so is safe with a read/only or shared string - but slightly slower
+function DynArrayLoadJSON(var Value; const JSON: RawUTF8; TypeInfo: pointer): boolean; overload;
 
 /// serialize a dynamic array content as JSON
 // - Value shall be set to the source dynamic array field
@@ -8676,6 +8702,7 @@ type
     procedure AddOnSameLineW(P: PWord; Len: PtrInt);
 
     /// return the last char appended
+    // - returns #0 if no char has been written yet
     function LastChar: AnsiChar;
     /// how many bytes are currently in the internal buffer and not on disk
     // - see TextLength for the total number of bytes, on both disk and memory
@@ -8686,10 +8713,16 @@ type
     // - see TextLength for the total number of bytes, on both disk and memory
     property WrittenBytes: PtrUInt read fTotalFileSize;
     /// the last char appended is canceled
+    // - only one char cancelation is allowed at the same position: don't call
+    // CancelLastChar/CancelLastComma more than once without appending text inbetween
     procedure CancelLastChar; overload; {$ifdef HASINLINE}inline;{$endif}
     /// the last char appended is canceled, if match the supplied one
+    // - only one char cancelation is allowed at the same position: don't call
+    // CancelLastChar/CancelLastComma more than once without appending text inbetween
     procedure CancelLastChar(aCharToCancel: AnsiChar); overload; {$ifdef HASINLINE}inline;{$endif}
     /// the last char appended is canceled if it was a ','
+    // - only one char cancelation is allowed at the same position: don't call
+    // CancelLastChar/CancelLastComma more than once without appending text inbetween
     procedure CancelLastComma; {$ifdef HASINLINE}inline;{$endif}
     /// rewind the Stream to the position when Create() was called
     // - note that this does not clear the Stream content itself, just
@@ -12172,6 +12205,7 @@ type
     function Compare({$ifdef FPC}constref{$else}const{$endif} another{$ifndef DELPHI5OROLDER}: TSynDate{$endif}): integer;
       {$ifdef HASINLINE}inline;{$endif}
     /// fill the DayOfWeek field from the stored Year/Month/Day
+    // - by default, most methods will just store 0 in the DayOfWeek field
     // - sunday is DayOfWeek 1, saturday is 7
     procedure ComputeDayOfWeek;
     /// convert the stored date into a Delphi TDate floating-point value
@@ -12226,25 +12260,36 @@ type
     /// fill Year/Month/Day and Hour/Minute/Second fields from the given ISO-8601 text
     // - returns true on success
     function FromText(const iso: RawUTF8): boolean;
-    /// encode the stored date/time as ISO-8601 text
+    /// encode the stored date/time as ISO-8601 text with Milliseconds
     function ToText(Expanded: boolean=true; FirstTimeChar: AnsiChar='T'; const TZD: RawUTF8=''): RawUTF8;
     /// append the stored date and time, in a log-friendly format
     // - e.g. append '20110325 19241502' - with no trailing space nor tab
     // - as called by TTextWriter.AddCurrentLogTime()
     procedure AddLogTime(WR: TTextWriter);
-    /// append the stored data and time, in apache-like format, to a TTextWriter
+    /// append the stored date and time, in apache-like format, to a TTextWriter
     // - e.g. append '19/Feb/2019:06:18:55 ' - including a trailing space
     procedure AddNCSAText(WR: TTextWriter);
-    /// append the stored data and time, in apache-like format, to a memory buffer
+    /// append the stored date and time, in apache-like format, to a memory buffer
     // - e.g. append '19/Feb/2019:06:18:55 ' - including a trailing space
     // - returns the number of chars added to P, i.e. always 21
     function ToNCSAText(P: PUTF8Char): PtrInt;
+    /// convert the stored date and time to its text in HTTP-like format
+    // - i.e. "Tue, 15 Nov 1994 12:45:26 GMT" to be used as a value of
+    // "Date", "Expires" or "Last-Modified" HTTP header
+    // - handle UTC/GMT time zone by default
+    procedure ToHTTPDate(out text: RawUTF8; const tz: RawUTF8='GMT');
+    /// convert the stored date and time into its Iso-8601 text, with no Milliseconds
+    procedure ToIsoDateTime(out text: RawUTF8; const FirstTimeChar: AnsiChar='T');
+    /// convert the stored date into its Iso-8601 text with no time part
+    procedure ToIsoDate(out text: RawUTF8);
+    /// convert the stored time into its Iso-8601 text with no date part nor Milliseconds
+    procedure ToIsoTime(out text: RawUTF8; const FirstTimeChar: RawUTF8='T');
     /// convert the stored time into a TDateTime
     function ToDateTime: TDateTime;
     /// copy Year/Month/DayOfWeek/Day fields to a TSynDate
     procedure ToSynDate(out date: TSynDate); {$ifdef HASINLINE}inline;{$endif}
     /// fill the DayOfWeek field from the stored Year/Month/Day
-    // - by default, most methods won't compute the DayOfWeek field
+    // - by default, most methods will just store 0 in the DayOfWeek field
     // - sunday is DayOfWeek 1, saturday is 7
     procedure ComputeDayOfWeek; {$ifdef HASINLINE}inline;{$endif}
     /// add some 1..999 milliseconds to the stored time
@@ -12618,7 +12663,7 @@ function Char3ToWord(P: PUTF8Char; out Value: Cardinal): Boolean;
 function Char4ToWord(P: PUTF8Char; out Value: Cardinal): Boolean;
 
 /// our own fast version of the corresponding low-level function
-function TryEncodeDate(Year, Month, Day: Word; out Date: TDateTime): Boolean;
+function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): Boolean;
 
 /// retrieve the current Date, in the ISO 8601 layout, but expanded and
 // ready to be displayed
@@ -12646,8 +12691,8 @@ function DateTimeMSToString(HH,MM,SS,MS,Y,M,D: cardinal; Expanded: boolean;
 // - i.e. "Tue, 15 Nov 1994 12:45:26 GMT" to be used as a value of
 // "Date", "Expires" or "Last-Modified" HTTP header
 // - if you care about timezones Value must be converted to UTC first
-// using TSynTimeZone.LocalToUtc
-function DateTimeToHTTPDate(UTCDateTime: TDateTime): RawUTF8;
+// using TSynTimeZone.LocalToUtc, or tz should be properly set
+function DateTimeToHTTPDate(dt: TDateTime; const tz: RawUTF8='GMT'): RawUTF8; overload;
 
 /// convert some TDateTime to a small text layout, perfect e.g. for naming a local file
 // - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits, expecting
@@ -17081,7 +17126,6 @@ begin
     PPtrInt(p)^ := 0 else
     VarClearProc(PVarData(p)^);
 end;
-
 {$endif FPC}
 
 procedure MoveSmall(Source, Dest: Pointer; Count: PtrUInt);
@@ -17093,6 +17137,7 @@ begin
     inc(PtrUInt(Dest));
   until PtrUInt(Dest)=Count;
 end;
+
 
 { TSynTempBuffer }
 
@@ -18103,7 +18148,12 @@ begin
   FastSetStringCP(result,tmp.buf,pos-PAnsiChar(tmp.buf),CP_RAWBYTESTRING);
 end;
 
-function TSynTempWriter.Position: integer;
+procedure TSynTempWriter.AsUTF8(var result: RawUTF8);
+begin
+  FastSetString(result,tmp.buf,pos-PAnsiChar(tmp.buf));
+end;
+
+function TSynTempWriter.Position: PtrInt;
 begin
   result := pos-PAnsiChar(tmp.buf);
 end;
@@ -18141,6 +18191,12 @@ end;
 procedure TSynTempWriter.wrss(const str: shortstring);
 begin
   wr(str,ord(str[0])+1);
+end;
+
+procedure TSynTempWriter.wrs(const str: RawByteString);
+begin
+  if str<>'' then
+    wr(pointer(str),length(str));
 end;
 
 procedure TSynTempWriter.wrw(w: word);
@@ -19836,121 +19892,92 @@ function StringToRawUnicode(const S: string): RawUnicode;
 begin
   SetString(result,PAnsiChar(pointer(S)),length(S)*2+1); // +1 for last wide #0
 end;
-{$else}
-function StringToRawUnicode(const S: string): RawUnicode;
-begin
-  result := CurrentAnsiConvert.AnsiToRawUnicode(S);
-end;
-{$endif}
-
-{$ifdef UNICODE}
 function StringToSynUnicode(const S: string): SynUnicode;
 begin
   result := S;
 end;
-{$else}
-function StringToSynUnicode(const S: string): SynUnicode;
+procedure StringToSynUnicode(const S: string; var result: SynUnicode); overload;
 begin
-  result := CurrentAnsiConvert.AnsiToUnicodeString(pointer(S),length(S));
+  result := S;
 end;
-{$endif}
-
-{$ifdef UNICODE}
 function StringToRawUnicode(P: PChar; L: integer): RawUnicode;
 begin
   SetString(result,PAnsiChar(P),L*2+1); // +1 for last wide #0
 end;
-{$else}
-function StringToRawUnicode(P: PChar; L: integer): RawUnicode;
-begin
-  result := CurrentAnsiConvert.AnsiToRawUnicode(P,L);
-end;
-{$endif}
-
-
-{$ifdef UNICODE}
 function RawUnicodeToString(P: PWideChar; L: integer): string;
 begin
   SetString(result,P,L);
 end;
-{$else}
-function RawUnicodeToString(P: PWideChar; L: integer): string;
-begin
-  result := CurrentAnsiConvert.UnicodeBufferToAnsi(P,L);
-end;
-{$endif}
-
-{$ifdef UNICODE}
 procedure RawUnicodeToString(P: PWideChar; L: integer; var result: string);
 begin
   SetString(result,P,L);
 end;
-{$else}
-procedure RawUnicodeToString(P: PWideChar; L: integer; var result: string);
-begin
-  result := CurrentAnsiConvert.UnicodeBufferToAnsi(P,L);
-end;
-{$endif}
-
-{$ifdef UNICODE}
 function RawUnicodeToString(const U: RawUnicode): string;
 begin // uses StrLenW() and not length(U) to handle case when was used as buffer
   SetString(result,PWideChar(pointer(U)),StrLenW(Pointer(U)));
 end;
-{$else}
-function RawUnicodeToString(const U: RawUnicode): string;
-begin // uses StrLenW() and not length(U) to handle case when was used as buffer
-  result := CurrentAnsiConvert.UnicodeBufferToAnsi(Pointer(U),StrLenW(Pointer(U)));
-end;
-{$endif}
-
-{$ifdef UNICODE}
 function SynUnicodeToString(const U: SynUnicode): string;
 begin
   result := U;
 end;
-{$else}
-function SynUnicodeToString(const U: SynUnicode): string;
-begin
-  result := CurrentAnsiConvert.UnicodeBufferToAnsi(Pointer(U),length(U));
-end;
-{$endif}
-
-{$ifdef UNICODE}
 function UTF8DecodeToString(P: PUTF8Char; L: integer): string;
 begin
   UTF8DecodeToUnicodeString(P,L,result);
 end;
-{$else}
-function UTF8DecodeToString(P: PUTF8Char; L: integer): string;
-begin
-  CurrentAnsiConvert.UTF8BufferToAnsi(P,L,RawByteString(result));
-end;
-{$endif}
-
-{$ifdef UNICODE}
 procedure UTF8DecodeToString(P: PUTF8Char; L: integer; var result: string);
 begin
   UTF8DecodeToUnicodeString(P,L,result);
 end;
-{$else}
-procedure UTF8DecodeToString(P: PUTF8Char; L: integer; var result: string);
-begin
-  CurrentAnsiConvert.UTF8BufferToAnsi(P,L,RawByteString(result));
-end;
-{$endif}
-
-{$ifdef UNICODE}
 function UTF8ToString(const Text: RawUTF8): string;
 begin
   UTF8DecodeToUnicodeString(pointer(Text),length(Text),result);
 end;
 {$else}
+function StringToRawUnicode(const S: string): RawUnicode;
+begin
+  result := CurrentAnsiConvert.AnsiToRawUnicode(S);
+end;
+function StringToSynUnicode(const S: string): SynUnicode;
+begin
+  result := CurrentAnsiConvert.AnsiToUnicodeString(pointer(S),length(S));
+end;
+procedure StringToSynUnicode(const S: string; var result: SynUnicode); overload;
+begin
+  result := CurrentAnsiConvert.AnsiToUnicodeString(pointer(S),length(S));
+end;
+function StringToRawUnicode(P: PChar; L: integer): RawUnicode;
+begin
+  result := CurrentAnsiConvert.AnsiToRawUnicode(P,L);
+end;
+function RawUnicodeToString(P: PWideChar; L: integer): string;
+begin
+  result := CurrentAnsiConvert.UnicodeBufferToAnsi(P,L);
+end;
+procedure RawUnicodeToString(P: PWideChar; L: integer; var result: string);
+begin
+  result := CurrentAnsiConvert.UnicodeBufferToAnsi(P,L);
+end;
+function RawUnicodeToString(const U: RawUnicode): string;
+begin // uses StrLenW() and not length(U) to handle case when was used as buffer
+  result := CurrentAnsiConvert.UnicodeBufferToAnsi(Pointer(U),StrLenW(Pointer(U)));
+end;
+function SynUnicodeToString(const U: SynUnicode): string;
+begin
+  result := CurrentAnsiConvert.UnicodeBufferToAnsi(Pointer(U),length(U));
+end;
+function UTF8DecodeToString(P: PUTF8Char; L: integer): string;
+begin
+  CurrentAnsiConvert.UTF8BufferToAnsi(P,L,RawByteString(result));
+end;
+procedure UTF8DecodeToString(P: PUTF8Char; L: integer; var result: string);
+begin
+  CurrentAnsiConvert.UTF8BufferToAnsi(P,L,RawByteString(result));
+end;
 function UTF8ToString(const Text: RawUTF8): string;
 begin
   CurrentAnsiConvert.UTF8BufferToAnsi(pointer(Text),length(Text),RawByteString(result));
 end;
-{$endif}
+{$endif UNICODE}
 
 procedure UTF8ToWideString(const Text: RawUTF8; var result: WideString);
 begin
@@ -20583,10 +20610,7 @@ end;
 type
 {$ifdef FPC}
   {$packrecords c} // as expected by FPC's RTTI record definitions
-
-  TStrRec =
-  {packed}
-  record // see TAnsiRec/TUnicodeRec in astrings/ustrings.inc
+  TStrRec = record // see TAnsiRec/TUnicodeRec in astrings/ustrings.inc
   {$ifdef ISFPC27}
     codePage: TSystemCodePage; // =Word
     elemSize: Word;
@@ -20616,7 +20640,7 @@ type
   TStrRec = packed record
  {$ifdef UNICODE}
     {$ifdef CPU64}
-    /// padding bytes for 16 byte alignment of the header
+    /// padding bytes for 16 bytes alignment of the header
     _Padding: LongInt;
     {$endif}
     /// the associated code page used for this string
@@ -20750,7 +20774,7 @@ type
     tkEnumeration: (
       EnumType: TOrdType;
       {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-      EnumDummy: DWORD; // needed on ARM for correct alignment !!??
+      EnumDummy: DWORD; // needed on ARM for correct alignment
       {$endif}
       {$ifdef FPC_ENUMHASINNER} inner:
       {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT} packed {$endif} record
@@ -20770,7 +20794,7 @@ type
     tkSet: (
       SetType: TOrdType;
       {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-      SetDummy: DWORD; // needed on ARM for correct alignment !!??
+      SetDummy: DWORD; // needed on ARM for correct alignment
       {$endif}
       {$ifdef FPC}
       {$ifndef VER3_0}
@@ -20865,14 +20889,14 @@ var r: PAnsiChar;
 begin
   if len<=0 then
     r := nil else begin
-    GetMem(r,len+(STRRECSIZE+2));
+    GetMem(r,len+(STRRECSIZE+4));
     sr := pointer(r);
     sr^.codePage := CP_UTF8;
     sr^.elemSize := 1;
     sr^.refCnt := 1;
     sr^.length := len;
     inc(PByte(sr),STRRECSIZE);
-    PWord(PAnsiChar(sr)+len)^ := 0; // ensure ends with two #0
+    PCardinal(PAnsiChar(sr)+len)^ := 0; // ensure ends with four #0
     r := pointer(sr);
     if p<>nil then
       {$ifdef FPC}Move{$else}MoveFast{$endif}(p^,sr^,len);
@@ -25772,8 +25796,8 @@ begin
     LeftStr := tmp;
   end;
   if ToUpperCase then begin
-    LeftStr := UpperCaseU(LeftStr);
-    RightStr := UpperCaseU(RightStr);
+    UpperCaseSelf(LeftStr);
+    UpperCaseSelf(RightStr);
   end;
 end;
 
@@ -25782,30 +25806,30 @@ begin
   Split(Str,SepStr,LeftStr,result,ToUpperCase);
 end;
 
-procedure Split(const Str: RawUTF8; const SepStr: array of RawUTF8;
-  const DestPtr: array of PRawUTF8);
-var s,i,j,n: integer;
+function Split(const Str: RawUTF8; const SepStr: array of RawUTF8;
+  const DestPtr: array of PRawUTF8): PtrInt;
+var s,i,j: PtrInt;
 begin
   j := 1;
-  n := 0;
+  result := 0;
   s := 0;
   if high(SepStr)>=0 then
-    while n<=high(DestPtr) do begin
+    while result<=high(DestPtr) do begin
       i := PosEx(SepStr[s],Str,j);
       if i=0 then begin
-        if DestPtr[n]<>nil then
-          DestPtr[n]^ := copy(Str,j,MaxInt);
-        inc(n);
+        if DestPtr[result]<>nil then
+          DestPtr[result]^ := copy(Str,j,MaxInt);
+        inc(result);
         break;
       end;
-      if DestPtr[n]<>nil then
-        DestPtr[n]^ := copy(Str,j,i-j);
-      inc(n);
+      if DestPtr[result]<>nil then
+        DestPtr[result]^ := copy(Str,j,i-j);
+      inc(result);
       if s<high(SepStr) then
         inc(s);
       j := i+1;
     end;
-  for i := n to high(DestPtr) do
+  for i := result to high(DestPtr) do
     if DestPtr[i]<>nil then
       DestPtr[i]^ := '';
 end;
@@ -35673,11 +35697,6 @@ begin
       result := false;
 end;
 
-{$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
-type
-  unaligned = Double;
-{$endif}
-
 function Char2ToByte(P: PUTF8Char; out Value: Cardinal): Boolean;
 var B: PtrUInt;
 begin
@@ -36331,7 +36350,7 @@ begin
     result := EncodeTime((lo shr(6+6))and 31, (lo shr 6)and 63, lo and 63, 0);
 end;
 
-function TryEncodeDate(Year, Month, Day: Word; out Date: TDateTime): Boolean;
+function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): Boolean;
 var d100: TDiv100Rec;
 begin // faster version by AB
   Result := False;
@@ -36532,24 +36551,14 @@ begin //  'YYYY-MM-DD hh:mm:ss.sssZ' or 'YYYYMMDD hhmmss.sssZ' format
     UInt2DigitsToShortFast(MM),UInt2DigitsToShortFast(SS),UInt3DigitsToShort(MS),TZD], result);
 end;
 
-const
-  HTML_WEEK_DAYS: array[1..7] of string[3] =
-    ('Sun','Mon','Tue','Wed','Thu','Fri','Sat');
-  HTML_MONTH_NAMES: array[1..12] of string[3] =
-    ('Jan','Feb','Mar','Apr','May','Jun', 'Jul','Aug','Sep','Oct','Nov','Dec');
-
-function DateTimeToHTTPDate(UTCDateTime: TDateTime): RawUTF8;
+function DateTimeToHTTPDate(dt: TDateTime; const tz: RawUTF8): RawUTF8;
 var T: TSynSystemTime;
 begin
-  if UTCDateTime=0 then begin
-    result := '';
-    exit;
+  if dt=0 then
+    result := '' else begin
+    T.FromDateTime(dt);
+    T.ToHTTPDate(result,tz);
   end;
-  T.FromDateTime(UTCDateTime);
-  FormatUTF8('%, % % % %:%:% GMT', [HTML_WEEK_DAYS[DayOfWeek(UTCDateTime)],
-    UInt2DigitsToShortFast(T.Day),HTML_MONTH_NAMES[T.Month],UInt4DigitsToShort(T.Year),
-    UInt2DigitsToShortFast(T.Hour),UInt2DigitsToShortFast(T.Minute),
-    UInt2DigitsToShortFast(T.Second)], result);
 end;
 
 function TimeToString: RawUTF8;
@@ -36849,6 +36858,12 @@ begin
   inc(WR.B,17);
 end;
 
+const
+  HTML_WEEK_DAYS: array[1..7] of string[3] =
+    ('Sun','Mon','Tue','Wed','Thu','Fri','Sat');
+  HTML_MONTH_NAMES: array[1..12] of string[3] =
+    ('Jan','Feb','Mar','Apr','May','Jun', 'Jul','Aug','Sep','Oct','Nov','Dec');
+
 function TSynSystemTime.ToNCSAText(P: PUTF8Char): PtrInt;
 var y,d100: PtrUInt;
     tab: {$ifdef CPUX86NOTPIC}TWordArray absolute TwoDigitLookupW{$else}PWordArray{$endif};
@@ -36870,6 +36885,35 @@ begin
   PWord(P+18)^ := tab[Second];
   P[20] := ' ';
   result := 21;
+end;
+
+procedure TSynSystemTime.ToHTTPDate(out text: RawUTF8; const tz: RawUTF8);
+begin
+  if DayOfWeek=0 then
+    PSynDate(@self)^.ComputeDayOfWeek; // first 4 fields do match
+  FormatUTF8('%, % % % %:%:% %', [HTML_WEEK_DAYS[DayOfWeek],
+    UInt2DigitsToShortFast(Day),HTML_MONTH_NAMES[Month],UInt4DigitsToShort(Year),
+    UInt2DigitsToShortFast(Hour),UInt2DigitsToShortFast(Minute),
+    UInt2DigitsToShortFast(Second),tz],text);
+end;
+
+procedure TSynSystemTime.ToIsoDateTime(out text: RawUTF8; const FirstTimeChar: AnsiChar);
+begin
+  FormatUTF8('%-%-%%%:%:%', [UInt4DigitsToShort(Year),UInt2DigitsToShortFast(Month),
+    UInt2DigitsToShortFast(Day),FirstTimeChar,UInt2DigitsToShortFast(Hour),
+    UInt2DigitsToShortFast(Minute),UInt2DigitsToShortFast(Second)],text);
+end;
+
+procedure TSynSystemTime.ToIsoDate(out text: RawUTF8);
+begin
+  FormatUTF8('%-%-%', [UInt4DigitsToShort(Year),UInt2DigitsToShortFast(Month),
+    UInt2DigitsToShortFast(Day)],text);
+end;
+
+procedure TSynSystemTime.ToIsoTime(out text: RawUTF8; const FirstTimeChar: RawUTF8);
+begin
+  FormatUTF8('%%:%:%', [FirstTimeChar,UInt2DigitsToShortFast(Hour),
+    UInt2DigitsToShortFast(Minute),UInt2DigitsToShortFast(Second)],text);
 end;
 
 procedure TSynSystemTime.AddNCSAText(WR: TTextWriter);
@@ -38841,7 +38885,7 @@ begin
     shell32,'SetCurrentProcessExplicitAppUserModelID');
   if not Assigned(SetCurrentProcessExplicitAppUserModelID) then
     exit; // API available since Windows Seven / Server 2008 R2
-  id := StringToSynUnicode(AppUserModelID);
+  StringToSynUnicode(AppUserModelID,id);
   if Pos('.',AppUserModelID)=0 then
     id := id+'.'+id; // at least CompanyName.ProductName
   if SetCurrentProcessExplicitAppUserModelID(pointer(id))<>S_OK then
@@ -40422,16 +40466,13 @@ var
   recInitData: PFPCRecInitData; // low-level type redirected from SynFPCTypInfo
   aPointer:pointer;
 begin
-  if Assigned(info^.RecInitInfo) then
-  begin
+  if Assigned(info^.RecInitInfo) then begin
     recInitData := PFPCRecInitData(AlignTypeDataClean(PTypeInfo(info^.RecInitInfo+2+PByte(info^.RecInitInfo+1)^)));
     firstfield := PFieldInfo(PtrUInt(@recInitData^.ManagedFieldCount));
-    Inc(PByte(firstfield),SizeOf(integer));
+    inc(PByte(firstfield),SizeOf(integer));
     firstfield := AlignToPtr(firstfield);
     result := recInitData^.ManagedFieldCount;
-  end
-  else
-  begin
+  end else begin
     aPointer:=@info^.RecInitInfo;
     {$ifdef FPC_PROVIDE_ATTR_TABLE}
     dec(PByte(aPointer),SizeOf(Pointer));
@@ -40441,7 +40482,7 @@ begin
     {$endif}
     recInitData := PFPCRecInitData(aPointer);
     firstfield := PFieldInfo(PtrUInt(@recInitData^.ManagedFieldCount));
-    Inc(PByte(firstfield),SizeOf(integer));
+    inc(PByte(firstfield),SizeOf(integer));
     firstfield := AlignToPtr(firstfield);
     result := recInitData^.ManagedFieldCount;
   end;
@@ -47561,11 +47602,22 @@ begin
 end;
 
 function DynArrayLoadJSON(var Value; JSON: PUTF8Char; TypeInfo: pointer;
-  EndOfObject: PUTF8Char=nil): PUTF8Char;
+  EndOfObject: PUTF8Char): PUTF8Char;
 var DynArray: TDynArray;
 begin
   DynArray.Init(TypeInfo,Value);
   result := DynArray.LoadFromJSON(JSON,EndOfObject);
+end;
+
+function DynArrayLoadJSON(var Value; const JSON: RawUTF8; TypeInfo: pointer): boolean;
+var tmp: TSynTempBuffer;
+begin
+  tmp.Init(JSON); // make private copy before in-place decoding
+  try
+    result := DynArrayLoadJSON(Value,tmp.buf,TypeInfo)<>nil;
+  finally
+    tmp.Done;
+  end;
 end;
 
 function DynArraySaveJSON(const Value; TypeInfo: pointer;
@@ -51735,7 +51787,7 @@ function TTextWriter.LastChar: AnsiChar;
 begin
   if B>=fTempBuf then
     result := B^ else
-    result := #0; // returns #0 if no char has been written yet
+    result := #0;
 end;
 
 procedure TTextWriter.CancelLastChar(aCharToCancel: AnsiChar);
@@ -54403,7 +54455,7 @@ begin
     fStream.Seek(fInitialStreamPosition,soBeginning);
     fStream.Read(pointer(result)^,Len);
   end;
-  if reformat <> jsonCompact then begin // reformat using the very same instance
+  if reformat<>jsonCompact then begin // reformat using the very same instance
     CancelAll;
     AddJSONReformat(pointer(result),reformat,nil);
     SetText(result);

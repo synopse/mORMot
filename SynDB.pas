@@ -6171,7 +6171,8 @@ procedure TSQLDBConnectionProperties.MultipleValuesInsertFirebird(
   const FieldNames: TRawUTF8DynArray; const FieldTypes: TSQLDBFieldTypeArray;
   RowCount: integer; const FieldValues: TRawUTF8DynArrayDynArray);
 var W: TTextWriter;
-    maxf,sqllenwitoutvalues,sqllen,r,f: Integer;
+    maxf,sqllenwitoutvalues,sqllen,r,f,i: PtrInt;
+    v: RawUTF8;
 begin
   maxf := length(FieldNames);     // e.g. 2 fields
   if (Props=nil) or (FieldNames=nil) or (TableName='') or (length(FieldValues)<>maxf) or
@@ -6182,11 +6183,11 @@ begin
   dec(maxf);
   for f := 0 to maxf do
     case FieldTypes[f] of
-    ftBlob: begin // not possible to inline BLOBs
+    ftBlob: begin // not possible to inline BLOBs -> fallback to regular
       MultipleValuesInsert(Props,TableName,FieldNames,FieldTypes,RowCount,FieldValues);
       exit;
     end;
-    ftDate: inc(sqllenwitoutvalues,Length(FieldNames[f])+20); // 'cast(..)'
+    ftDate: inc(sqllenwitoutvalues,Length(FieldNames[f])+20); // 'timestamp '
     else
       inc(sqllenwitoutvalues,Length(FieldNames[f]));
     end;
@@ -6195,11 +6196,11 @@ begin
     r := 0;
     repeat
       W.AddShort('execute block as begin'#10);
+      sqllen := sqllenwitoutvalues;
       repeat
-        sqllen := sqllenwitoutvalues;
         for f := 0 to maxf do
           inc(sqllen,length(FieldValues[f,r]));
-        if sqllen+integer(W.TextLength)>30000 then
+        if sqllen+PtrInt(W.TextLength)>30000 then
           break;
         W.AddShort('INSERT INTO ');
         W.AddString(TableName);
@@ -6211,15 +6212,24 @@ begin
         W.CancelLastComma;
         W.AddShort(') VALUES (');
         for f := 0 to maxf do begin
-          if (FieldValues[f,r]='') or (FieldValues[f,r]='null') then
+          v := FieldValues[f,r]; // includes single quotes (#39)
+          if (v='') or (v='null') then
             W.AddShort('null') else
           if FieldTypes[f]=ftDate then
-            if FieldValues[f,r]=#39#39 then
+            if v=#39#39 then
               W.AddShort('null') else begin
               W.AddShort('timestamp ');
-              W.AddString(FieldValues[f,r]);
+              if length(v)>12 then begin // not 'CCYY-MM-DD' -> fix needed?
+                if v[12]='T' then // handle 'CCYY-MM-DDTHH:MM:SS' common case
+                  v[12] := ' ' else begin
+                  i := PosExChar('T',v);
+                  if i>0 then
+                    v[i] := ' ';
+                end; // see https://firebirdsql.org/en/firebird-date-literals
+              end;
+              W.AddString(v)
             end else
-            W.AddString(FieldValues[f,r]);
+            W.AddString(v);
           W.Add(',');
         end;
         W.CancelLastComma;

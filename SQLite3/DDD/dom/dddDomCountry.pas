@@ -1,4 +1,4 @@
-/// shared DDD Domains: User objects definition
+/// shared DDD Domains: TCountry object definition
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit dddDomCountry;
@@ -86,13 +86,19 @@ type
     ccTT,ccTN,ccTR,ccTM,ccTC,ccTV,ccUG,ccUA,ccAE,ccGB,ccUS,ccUM,ccUY,ccUZ,ccVU,
     ccVE,ccVN,ccVG,ccVI,ccWF,ccEH,ccYE,ccZM,ccZW);
 
+  /// store ISO 3166-1 alpha-2 code
   TCountryIsoAlpha2 = type RawUTF8;
+  /// store ISO 3166-1 alpha-3 code
   TCountryIsoAlpha3 = type RawUTF8;
+  /// store a ISO 3166-1 numeric value as 16-bit unsigned integer
   TCountryIsoNumeric = type word;
 
-  /// Country object
+  /// defines a Country identifier object
+  // - will store internally the country as 16-bit ISO 3166-1 numeric value
   // - includes conversion methods for ISO 3166-1 alpha-2/alpha-3/numeric codes
   // as explained in http://en.wikipedia.org/wiki/ISO_3166-1
+  // - see also some low-level class methods for direct values conversions
+  // with no persistence
   TCountry = class(TSynPersistent)
   protected
     fIso: TCountryIsoNumeric;
@@ -117,12 +123,16 @@ type
     /// low-level Country conversion to its ISO 3166-1 numeric 3-digit code
     class function ToIso(id: TCountryIdentifier): TCountryIsoNumeric;
     /// low-level case-insensitive Country conversion from its plain English text
+    // - returns ccUndefined if the supplied Text has no case-insensitive match
     class function FromEnglish(const text: RawUTF8): TCountryIdentifier;
     /// low-level Country conversion from its alpha-2 code
+    // - returns ccUndefined if the supplied text has no case-insensitive match
     class function FromAlpha2(const alpha: TCountryIsoAlpha2): TCountryIdentifier;
     /// low-level Country conversion from its alpha-3 code
+    // - returns ccUndefined if the supplied Text has no case-insensitive match
     class function FromAlpha3(const alpha: TCountryIsoAlpha3): TCountryIdentifier;
     /// low-level Country conversion from its alpha-2 code
+    // - returns ccUndefined if the supplied 16-bit number as no match
     class function FromIso(iso: TCountryIsoNumeric): TCountryIdentifier;
     /// built-in simple unit tests
     class procedure RegressionTests(test: TSynTestCase);
@@ -262,7 +272,7 @@ begin
       Values[c] := COUNTRY_ISONUM[c];
       ps := pointer(GetEnumName(TypeInfo(TCountryIdentifier),ord(c)));
       COUNTRY_ISO2[c] := PWord(ps+3)^;
-      ShortStringToAnsi7String(ps^,COUNTRYU_ISO2[c]);
+      FastSetString(COUNTRYU_ISO2[c],ps+3,2);
       FastSetString(COUNTRYU_ISO3[c],@COUNTRY_ISO3[c],3);
     end;
     FillIncreasing(@Indexes,0,length(Indexes));
@@ -364,12 +374,12 @@ end;
 
 function TCountry.GetIsoAlpha2: TCountryIsoAlpha2;
 begin
-  FastSetString(RawUTF8(result),@COUNTRY_ISO2[GetIdentifier],2);
+  result := COUNTRYU_ISO2[GetIdentifier];
 end;
 
 function TCountry.GetIsoAlpha3: TCountryIsoAlpha3;
 begin
-  FastSetString(RawUTF8(result),@COUNTRY_ISO3[GetIdentifier],3);
+  result := COUNTRYU_ISO3[GetIdentifier];
 end;
 
 procedure TCountry.SetIdentifier(const Value: TCountryIdentifier);
@@ -418,7 +428,9 @@ begin
     Check(TCountry.FromEnglish('none')=ccUndefined);
     for i := low(i) to high(i) do begin
       c.Iso := COUNTRY_ISONUM[i];
+      Check(c.Iso=c.ToIso(i));
       t := c.Alpha2;
+      Check(c.ToAlpha2(i)=t);
       Check(c.Identifier=i);
       c.Iso := 0;
       c.Alpha2 := t;
@@ -435,6 +447,7 @@ begin
       Check(c.Iso=COUNTRY_ISONUM[i]);
       Check(c.Identifier=i);
       t := c.Alpha3;
+      check(c.ToAlpha3(i)=t);
       c.Iso := 0;
       c.Alpha3 := t;
       Check(c.Identifier=i);
@@ -444,7 +457,9 @@ begin
       Check(c2.Alpha3=c.Alpha3);
       Check(ObjectEquals(c,c2,false));
       Check(ObjectEquals(c,c2,true));
-      Check(c.FromEnglish(c.English)=i);
+      t := c.English;
+      Check(c.ToEnglish(i)=t);
+      Check(c.FromEnglish(t)=i);
     end;
   finally
     c2.Free;

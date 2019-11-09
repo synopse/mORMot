@@ -95,7 +95,7 @@ program TestSQL3;
 {$endif}
 
 uses
-  {$ifdef KYLIX3} // strip down to the minimum files including /
+  {$ifdef KYLIX3} // strip down to the minimum files needed
     FastMM4,
     ECCProcess in 'Samples/33 - ECC/ECCProcess.pas',
     mORMotSelfTests;
@@ -176,8 +176,8 @@ uses
       {$endif FPC}
       SynDB in '..\SynDB.pas',
       SynDBSQLite3 in '..\SynDBSQLite3.pas',
+      SynDBOracle in '..\SynDBOracle.pas',
       {$ifdef MSWINDOWS}
-        SynDBOracle in '..\SynDBOracle.pas',
         SynOleDB in '..\SynOleDB.pas',
         SynDBODBC in '..\SynDBODBC.pas',
         {$ifdef USEZEOS}

@@ -256,10 +256,10 @@ type
 
   /// element types for BSON internal representation
   TBSONElementType = (
-    betMinKey=-1, betEOF=0, betFloat, betString, betDoc, betArray, betBinary,
+    betEOF, betFloat, betString, betDoc, betArray, betBinary,
     betDeprecatedUndefined, betObjectID, betBoolean, betDateTime,
     betNull, betRegEx, betDeprecatedDbptr, betJS, betDeprecatedSymbol,
-    betJSScope, betInt32, betTimestamp, betInt64, betDecimal128, betMaxKey);
+    betJSScope, betInt32, betTimestamp, betInt64, betDecimal128);
 
   /// points to an element type for BSON internal representation
   PBSONElementType = ^TBSONElementType;
@@ -822,6 +822,13 @@ type
 
 
 const
+  /// fake BSON element type which compares lower than all other possible values
+  // - element type sounds to be stored as shortint, so here $ff=-1<0=betEOF
+  betMinKey = TBSONElementType($ff);
+  /// fake BSON element type which compares higher than all other possible values
+  // - element type sounds to be stored as shortint, so here betInt64=$12<$7f
+  betMaxKey = TBSONElementType($7f);
+
   /// kind of elements which will store a RawByteString/RawUTF8 content
   // within its TBSONVariant kind
   // - i.e. TBSONVariantData.VBlob/VText field is to be managed
@@ -2682,26 +2689,26 @@ var
   // - equals -1 for varying elements
   BSON_ELEMENTSIZE: array[TBSONElementType] of integer = (
     //betEOF, betFloat, betString, betDoc, betArray, betBinary,
-    0,  0,     sizeof(Double), -1,     -1,     -1,       -1,
+      0,     sizeof(Double), -1,     -1,     -1,       -1,
     //betDeprecatedUndefined, betObjectID, betBoolean, betDateTime,
       0,                    sizeof(TBSONObjectID), 1, sizeof(Int64),
     //betNull, betRegEx, betDeprecatedDbptr, betJS, betDeprecatedSymbol,
       0,        -1,           -1,             -1,        -1,
     //betJSScope, betInt32, betTimestamp, betInt64, betDecimal128
-      -1, sizeof(Integer), sizeof(Int64), SizeOf(Int64), Sizeof(TDecimal128), 0);
+      -1, sizeof(Integer), sizeof(Int64), SizeOf(Int64), Sizeof(TDecimal128));
 
   /// types which do not have an exact equivalency to a standard variant
   // type will be mapped as varUnknown - and will be changed into
   // BSONVariantType.VarType
   BSON_ELEMENTTYPES: array[TBSONElementType] of word = (
     //betEOF, betFloat, betString, betDoc, betArray, betBinary,
-    varEmpty, varEmpty, varDouble, varString, varUnknown, varUnknown, varUnknown,
+    varEmpty, varDouble, varString, varUnknown, varUnknown, varUnknown,
     //betDeprecatedUndefined, betObjectID, betBoolean, betDateTime,
     varEmpty, varUnknown, varBoolean, varDate,
     //betNull, betRegEx, betDeprecatedDbptr, betJS, betDeprecatedSymbol,
     varNull, varUnknown, varUnknown, varUnknown, varUnknown,
     //betJSScope, betInt32, betTimestamp, betInt64, betDecimal128
-    varUnknown, varInteger, varUnknown, varInt64, varUnknown, varEmpty);
+    varUnknown, varInteger, varUnknown, varInt64, varUnknown);
 
 function TBSONElement.ToVariant(DocArrayConversion: TBSONDocArrayConversion): variant;
 begin

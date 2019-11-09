@@ -1314,7 +1314,7 @@ end;
 { TOleDBStatement }
 
 procedure TOleDBStatement.BindTextU(Param: Integer; const Value: RawUTF8;
-  IO: TSQLDBParamInOutType=paramIn);
+  IO: TSQLDBParamInOutType);
 begin
   if (Value='') and fConnection.Properties.StoreVoidStringAsNull then
     CheckParam(Param,ftNull,IO) else
@@ -1352,13 +1352,13 @@ begin
 end;
 
 procedure TOleDBStatement.BindBlob(Param: Integer; Data: pointer; Size: integer;
-  IO: TSQLDBParamInOutType=paramIn);
+  IO: TSQLDBParamInOutType);
 begin
   SetString(CheckParam(Param,ftBlob,IO)^.VBlob,PAnsiChar(Data),Size);
 end;
 
 procedure TOleDBStatement.Bind(Param: Integer; Value: double;
-  IO: TSQLDBParamInOutType=paramIn);
+  IO: TSQLDBParamInOutType);
 begin
   CheckParam(Param,ftDouble,IO)^.VInt64 := PInt64(@Value)^;
 end;
@@ -1386,19 +1386,19 @@ begin
 end;
 
 procedure TOleDBStatement.Bind(Param: Integer; Value: Int64;
-  IO: TSQLDBParamInOutType=paramIn);
+  IO: TSQLDBParamInOutType);
 begin
   CheckParam(Param,ftInt64,IO)^.VInt64 := Value;
 end;
 
 procedure TOleDBStatement.BindCurrency(Param: Integer; Value: currency;
-  IO: TSQLDBParamInOutType=paramIn);
+  IO: TSQLDBParamInOutType);
 begin
   CheckParam(Param,ftCurrency,IO)^.VInt64 := PInt64(@Value)^;
 end;
 
 procedure TOleDBStatement.BindDateTime(Param: Integer; Value: TDateTime;
-  IO: TSQLDBParamInOutType=paramIn);
+  IO: TSQLDBParamInOutType);
 begin
   CheckParam(Param,ftDate,IO)^.VInt64 := PInt64(@Value)^;
 end;

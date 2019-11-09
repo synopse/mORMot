@@ -129,8 +129,7 @@ end;
 procedure TTestSynopsemORMotFramework.SynopseLibraries;
 begin
   //AddCase(TTestCompression);
-  //
-  exit;
+  //exit;
   AddCase([TTestLowLevelCommon,
     TTestLowLevelTypes,
 {$ifdef MSWINDOWS}
@@ -156,10 +155,8 @@ type // mORMot.pas unit doesn't compile with Delphi 5 yet
 {$else}
 procedure TTestSynopsemORMotFramework._mORMot;
 begin
-  //
-  AddCase(TTestDDDSharedUnits);
-  //
-  exit; // (*
+  //AddCase(TTestDDDSharedUnits);
+  //exit; // (*
   AddCase([TTestFileBased,TTestFileBasedMemoryMap,TTestFileBasedWAL]);
   AddCase(TTestMemoryBased);
   AddCase(TTestBasicClasses);

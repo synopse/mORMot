@@ -68,7 +68,7 @@ type
     fGitExe: TFileName;
     fGitRepository: TFileName;
     function Exec(const folder, exe, arg1, arg2, arg3, arg4, arg5: TFileName;
-      exeisshell: boolean=true): boolean;
+      exeisshell: boolean=true; wait: boolean=true): boolean;
     procedure ReadStatus;
   public
     { Public declarations }
@@ -100,7 +100,6 @@ const
 {$else}
 const
   SHELL = '.sh';
-  SHELLEXE = '/usr/bin/gnome-terminal';
   GITDEF = '/usr/bin/git';
 var
   REPFOSSIL: TFileName;
@@ -109,7 +108,7 @@ var
 {$endif}
 
 function TMainForm.Exec(const folder, exe, arg1, arg2, arg3, arg4, arg5: TFileName;
-  exeisshell: boolean): boolean;
+  exeisshell, wait: boolean): boolean;
 var
   bak, path: TFileName;
   {$ifdef MSWINDOWS}
@@ -131,8 +130,7 @@ begin
     path := exe;
   screen.Cursor := crHourGlass;
   try
-    result := RunProcess(q(path), q(arg1),
-      {wait=}true, q(arg2), q(arg3), q(arg4), q(arg5)) = 0;
+    result := RunProcess(path, q(arg1), wait, q(arg2), q(arg3), q(arg4), q(arg5)) = 0;
   finally
     if bak <> '' then
       SetCurrentDir(bak);
@@ -316,12 +314,20 @@ end;
 
 procedure TMainForm.btnGitShellClick(Sender: TObject);
 begin
+  {$ifdef MSWINDOWS}
   Exec(fGitRepository, SHELLEXE, '', '', '', '', '');
+  {$else}
+  Exec(fGitRepository, '/usr/bin/meld', fGitRepository, fDevPath, '', '', '', false, false);
+  {$endif}
 end;
 
 procedure TMainForm.btnFossilShellClick(Sender: TObject);
 begin
+  {$ifdef MSWINDOWS}
   Exec(fFossilRepository, SHELLEXE, '', '', '', '', '');
+  {$else}
+  Exec(fFossilRepository, '/usr/bin/meld', fFossilRepository, fDevPath, '', '', '', false, false);
+  {$endif}
 end;
 
 procedure TMainForm.btnTestsClick(Sender: TObject);
