@@ -1879,8 +1879,10 @@ begin
           end else if P^ = #0 then begin
             include(result, pcHasEndingBackSlash);
             exit;
-          end else
+          end else begin
+            D^ := P^;
             inc(P);
+          end;
         '''':
           if not(sInDQ in state) then
             if sInSQ in state then begin
