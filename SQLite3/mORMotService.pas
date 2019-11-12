@@ -594,6 +594,41 @@ procedure SynDaemonIntercept(log: TSynLog=nil);
 
 {$endif MSWINDOWS}
 
+type
+  /// command line patterns recognized by ParseCommandArgs()
+  TParseCommand = (
+    pcHasRedirection, pcHasSubCommand, pcHasParenthesis,
+    pcHasJobControl, pcHasWildcard, pcHasShellVariable,
+    pcUnbalancedSingleQuote, pcUnbalancedDoubleQuote,
+    pcTooManyArguments, pcInvalidCommand, pcHasEndingBackSlash);
+  TParseCommands = set of TParseCommand;
+  PParseCommands = ^TParseCommands;
+  /// used to store references of arguments recognized by ParseCommandArgs()
+  TParseCommandsArgs = array[0..31] of PAnsiChar;
+  PParseCommandsArgs = ^TParseCommandsArgs;
+
+const
+  /// identifies some bash-specific processing
+  PARSECOMMAND_BASH = [pcHasRedirection .. pcHasShellVariable];
+  /// identifies obvious invalid content
+  PARSECOMMAND_ERROR = [pcUnbalancedSingleQuote .. pcHasEndingBackSlash];
+
+/// low-level parsing of a RunCommand() execution command
+// - parse and fills argv^[0..argc^-1] with corresponding arguments, after
+// un-escaping and un-quoting if applicable, using temp^ to store the content
+// - if argv=nil, do only the parsing, not the argument extraction - could be
+// used for fast validation of the command line syntax
+// - you can force arguments OS flavor using the posix parameter - note that
+// Windows parsing is not consistent by itself (e.g. double quoting or
+// escaping depends on the actual executable called) so returned flags
+// should be considered as indicative only with posix=false
+function ParseCommandArgs(const cmd: RawUTF8; argv: PParseCommandsArgs = nil;
+  argc: PInteger = nil; temp: PRawUTF8 = nil;
+  posix: boolean = {$ifdef MSWINDOWS}false{$else}true{$endif}): TParseCommands;
+
+function ToText(cmd: TParseCommands): shortstring; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// like SysUtils.ExecuteProcess, but allowing not to wait for the process to finish
 // - optional env value follows 'n1=v1'#0'n2=v2'#0'n3=v3'#0#0 Windows layout
 function RunProcess(const path, arg1: TFileName; waitfor: boolean;
@@ -605,32 +640,8 @@ function RunProcess(const path, arg1: TFileName; waitfor: boolean;
 // - under Windows (especially Windows 10), creating a process can be dead slow
 // https://randomascii.wordpress.com/2019/04/21/on2-in-createprocess
 function RunCommand(const cmd: TFileName; waitfor: boolean;
-  const env: TFileName=''; envaddexisting: boolean=false): integer;
-
-type
-  /// command line patterns recognized by ParseCommandArgs()
-  TParseCommand = (
-    pcHasRedirection, pcHasSubCommand, pcHasParenthesis,
-    pcHasJobControl, pcHasWildcard, pcHasShellVariable,
-    pcUnbalancedSingleQuote, pcUnbalancedDoubleQuote,
-    pcTooManyArguments, pcInvalidCommand, pcHasEndingBackSlash);
-  TParseCommands = set of TParseCommand;
-  /// used to store references of arguments recognized by ParseCommandArgs()
-  TParseCommandsArgs = array[0..31] of PAnsiChar;
-
-const
-  /// identifies some bash-specific processing
-  PARSECOMMAND_BASH = [pcHasRedirection .. pcHasShellVariable];
-  /// identifies obvious invalid content
-  PARSECOMMAND_ERROR = [pcUnbalancedSingleQuote .. pcHasEndingBackSlash];
-
-/// low-level parsing of a RunCommand() execution command
-// - parse and fills argv[0..argc-1] with corresponding arguments, after
-// un-escaping and un-quoting if applicable, using temp to store the content
-function ParseCommandArgs(const cmd: RawUTF8; out argv: TParseCommandsArgs;
-  out argc: integer; out temp: RawUTF8): TParseCommands;
-
-function ToText(cmd: TParseCommands): shortstring; overload;
+  const env: TFileName=''; envaddexisting: boolean=false;
+  parsed: PParseCommands=nil): integer;
 
 
 { *** cross-plaform high-level services/daemons }
@@ -1466,7 +1477,7 @@ var
   EnvironmentCache: SynUnicode;
 
 function RunCommand(const cmd: TFileName; waitfor: boolean;
-  const env: TFileName; envaddexisting: boolean): integer;
+  const env: TFileName; envaddexisting: boolean; parsed: PParseCommands): integer;
 var
   startupinfo: TStartupInfo; // _STARTUPINFOW or _STARTUPINFOA is equal here
   processinfo: TProcessInformation;
@@ -1809,14 +1820,16 @@ begin
 end;
 
 function RunCommand(const cmd: TFileName; waitfor: boolean;
-  const env: TFileName; envaddexisting: boolean): integer;
+  const env: TFileName; envaddexisting: boolean;
+  parsed: PParseCommands): integer;
 var
-  n: integer;
   temp: RawUTF8;
   err: TParseCommands;
   a: TParseCommandsArgs;
 begin
-  err := ParseCommandArgs(cmd, a, n, temp);
+  err := ParseCommandArgs(cmd, @a, nil, @temp);
+  if parsed <> nil then
+    parsed^ := err;
   if err = [] then
     // no need to spawn the shell for simple commands
     result := RunInternal(a, waitfor, env, envaddexisting)
@@ -1836,28 +1849,42 @@ end;
 
 function ToText(cmd: TParseCommands): shortstring;
 begin
-  GetSetNameShort(TypeInfo(TParseCommands), cmd, result, {trim=}true);
+  if cmd = [] then
+    result[0] := #0
+  else
+    GetSetNameShort(TypeInfo(TParseCommands), cmd, result, {trim=}true);
 end;
 
-function ParseCommandArgs(const cmd: RawUTF8; out argv: TParseCommandsArgs;
-  out argc: integer; out temp: RawUTF8): TParseCommands;
+function ParseCommandArgs(const cmd: RawUTF8; argv: PParseCommandsArgs;
+  argc: PInteger; temp: PRawUTF8; posix: boolean): TParseCommands;
 var
+  n: PtrInt;
   state: set of (sWhite, sInArg, sInSQ, sInDQ, sSpecial, sBslash);
   c: AnsiChar;
   D, P: PAnsiChar;
 begin
-  argv[0] := nil;
-  argc := 0;
   result := [pcInvalidCommand];
+  if argv <> nil then
+    argv[0] := nil;
+  if argc <> nil then
+    argc^ := 0;
   if cmd = '' then
     exit;
+  if argv = nil then
+    D := nil
+  else begin
+    if temp = nil then
+      exit;
+    SetLength(temp^, length(cmd));
+    D := pointer(temp^);
+  end;
   state := [];
-  SetLength(temp, length(cmd));
-  D := pointer(temp);
+  n := 0;
   P := pointer(cmd);
   repeat
     c := P^;
-    D^ := c;
+    if D <> nil then
+      D^ := c;
     inc(P);
     case c of
       #0: begin
@@ -1866,21 +1893,26 @@ begin
         if sInDQ in state then
           include(result, pcUnbalancedDoubleQuote);
         exclude(result, pcInvalidCommand);
-        argv[argc] := nil;
+        if argv <> nil then
+          argv[n] := nil;
+        if argc <> nil then
+          argc^ := n;
         exit;
       end;
       #1 .. ' ': begin
        if state = [sInArg] then begin
          state := [];
-         D^ := #0;
-         inc(D);
+         if D <> nil then begin
+           D^ := #0;
+           inc(D);
+         end;
          continue;
        end;
        if state * [sInSQ, sInDQ] = [] then
          continue;
       end;
       '\':
-        if state * [sInSQ, sBslash] = [] then
+        if posix and (state * [sInSQ, sBslash] = []) then
           if sInDQ in state then begin
             case P^ of
               '"', '\', '$', '`': begin
@@ -1892,74 +1924,96 @@ begin
             include(result, pcHasEndingBackSlash);
             exit;
           end else begin
-            D^ := P^;
+            if D <> nil then
+              D^ := P^;
             inc(P);
           end;
-        '''':
-          if not(sInDQ in state) then
-            if sInSQ in state then begin
-              exclude(state, sInSQ);
-              continue;
-            end else if state = [] then begin
-              argv[argc] := D;
-              inc(argc);
-              if argc = high(argv) then
-                exit;
-              state := [sInSQ, sInArg];
-              continue;
-            end else if state = [sInArg] then begin
-              state := [sInSQ, sInArg];
-              continue;
-            end;
-        '"':
-          if not(sInSQ in state) then
-            if sInDQ in state then begin
-              exclude(state, sInDQ);
-              continue;
-            end else if state = [] then begin
-              argv[argc] := D;
-              inc(argc);
-              if argc = high(argv) then
-                exit;
-              state := [sInDQ, sInArg];
-              continue;
-            end else if state = [sInArg] then begin
-              state := [sInDQ, sInArg];
-              continue;
-            end;
-        '|', '<', '>':
-          if state * [sInSQ, sInDQ] = [] then
-            include(result, pcHasRedirection);
-        '&', ';':
-          if state * [sInSQ, sInDQ] = [] then begin
-            include(state, sSpecial);
-            include(result, pcHasJobControl);
+      '^':
+        if not posix and (state * [sInSQ, sInDQ, sBslash] = []) then
+          if PWord(P)^ = $0a0d then begin
+            inc(P, 2);
+            continue;
+          end
+          else if P^ = #0 then begin
+            include(result, pcHasEndingBackSlash);
+            exit;
+          end else begin
+            if D <> nil then
+              D^ := P^;
+            inc(P);
           end;
-        '`':
-          if state * [sInSQ, sBslash] = [] then
-             include(result, pcHasSubCommand);
-        '(', ')':
-          if state * [sInSQ, sInDQ] = [] then
-            include(result, pcHasParenthesis);
-        '$':
-          if state * [sInSQ, sBslash] = [] then
-            if p^ = '(' then
-              include(result, pcHasSubCommand)
-            else
-              include(result, pcHasShellVariable);
-        '*', '?':
-          if state * [sInSQ, sInDQ] = [] then
-            include(result, pcHasWildcard);
+      '''':
+        if posix and not(sInDQ in state) then
+          if sInSQ in state then begin
+            exclude(state, sInSQ);
+            continue;
+          end else if state = [] then begin
+            if argv <> nil then begin
+              argv[n] := D;
+              inc(n);
+              if n = high(argv^) then
+                exit;
+            end;
+            state := [sInSQ, sInArg];
+            continue;
+          end else if state = [sInArg] then begin
+            state := [sInSQ, sInArg];
+            continue;
+          end;
+      '"':
+        if not(sInSQ in state) then
+          if sInDQ in state then begin
+            exclude(state, sInDQ);
+            continue;
+          end else if state = [] then begin
+            if argv <> nil then begin
+              argv[n] := D;
+              inc(n);
+              if n = high(argv^) then
+                exit;
+            end;
+            state := [sInDQ, sInArg];
+            continue;
+          end else if state = [sInArg] then begin
+            state := [sInDQ, sInArg];
+            continue;
+          end;
+      '|', '<', '>':
+        if state * [sInSQ, sInDQ] = [] then
+          include(result, pcHasRedirection);
+      '&', ';':
+        if posix and (state * [sInSQ, sInDQ] = []) then begin
+          include(state, sSpecial);
+          include(result, pcHasJobControl);
+        end;
+      '`':
+        if posix and (state * [sInSQ, sBslash] = []) then
+           include(result, pcHasSubCommand);
+      '(', ')':
+        if posix and (state * [sInSQ, sInDQ] = []) then
+          include(result, pcHasParenthesis);
+      '$':
+        if posix and (state * [sInSQ, sBslash] = []) then
+          if p^ = '(' then
+            include(result, pcHasSubCommand)
+          else
+            include(result, pcHasShellVariable);
+      '*', '?':
+        if posix and (state * [sInSQ, sInDQ] = []) then
+          include(result, pcHasWildcard);
     end;
     exclude(state, sBslash);
     if state = [] then begin
-      argv[argc] := D;
-      inc(argc);
-      if argc = high(argv) then
-        exit;
+      if argv <> nil then begin
+        argv[n] := D;
+        inc(n);
+        if n = high(argv^) then
+          exit;
+      end;
       state := [sInArg];
     end;
-    inc(D);
+    if D <> nil then
+      inc(D);
   until false;
 end;
 
