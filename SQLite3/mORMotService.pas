@@ -601,6 +601,8 @@ function RunProcess(const path, arg1: TFileName; waitfor: boolean;
   const arg5: TFileName=''; const env: TFileName=''; envaddexisting: boolean=false): integer;
 
 /// like fpSystem, but cross-platform and calling bash only if needed
+// - under Windows (especially Windows 10), creating a process can be dead slow
+// https://randomascii.wordpress.com/2019/04/21/on2-in-createprocess
 function RunCommand(const cmd: TFileName; waitfor: boolean;
   const env: TFileName=''; envaddexisting: boolean=false): integer;
 
@@ -1751,7 +1753,7 @@ begin
     envpp := envp;
     if env <> '' then begin
       n := 0;
-      result := -7; // E2BIG
+      result := {$ifdef FPC}-ESysE2BIG{$else}-7{$endif};
       if envaddexisting and (envpp <> nil) then begin
         while envpp^ <> nil do begin
           if PosChar(envpp^, #10) = nil then begin // filter simple variables
@@ -1807,17 +1809,26 @@ end;
 
 function RunCommand(const cmd: TFileName; waitfor: boolean;
   const env: TFileName; envaddexisting: boolean): integer;
-const sh0: PAnsiChar = '/bin/sh';
-      sh1: PAnsiChar = '-c';
 var
-  a: array[0..3] of PAnsiChar;
+  n: integer;
+  temp: RawUTF8;
+  err: TParseCommands;
+  a: TParseCommandsArgs;
 begin
-  { TODO : parse arguments and call RunInternal() directly for simple commands }
-  a[0] := sh0;
-  a[1] := sh1;
-  a[2] := pointer(cmd);
-  a[3] := nil;
-  result := RunInternal(@a, waitfor, env, envaddexisting);
+  err := ParseCommandArgs(cmd, a, n, temp);
+  if err = [] then
+    // no need to spawn the shell for simple commands
+    result := RunInternal(a, waitfor, env, envaddexisting)
+  else if err * PARSECOMMAND_ERROR <> [] then
+    // no system call for clearly invalid command line
+    result := {$ifdef FPC}-ESysELIBBAD{$else}-80{$endif}
+  else begin // execute complex commands via the shell
+    a[0] := '/bin/sh';
+    a[1] := '-c';
+    a[2] := pointer(cmd);
+    a[3] := nil;
+    result := RunInternal(@a, waitfor, env, envaddexisting);
+  end;
 end;
 
 {$endif MSWINDOWS}
