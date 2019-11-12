@@ -2920,13 +2920,15 @@ end;
 
 procedure TTestLowLevelCommon._ParseCommandArguments;
   procedure Test(const cmd: RawUTF8; const expected: array of RawUTF8;
-    const flags: TParseCommands = []);
+    const flags: TParseCommands = []; posix: boolean=true);
   var tmp: RawUTF8;
       n, i: integer;
       a: TParseCommandsArgs;
   begin
+    if checkfailed(ParseCommandArgs(cmd, nil, nil, nil, posix) = flags) then
+      exit;
     FillcharFast(a, SizeOf(a), 255);
-    check(ParseCommandArgs(cmd, a, n, tmp) = flags);
+    check(ParseCommandArgs(cmd, @a, @n, @tmp, posix) = flags);
     if (flags = []) and not CheckFailed(n = length(expected)) then begin
       for i := 0 to high(expected) do
         check(StrComp(pointer(a[i]), pointer(expected[i])) = 0);
@@ -2975,6 +2977,15 @@ begin
   Test('one\ two', ['one two'], []);
   Test('one\\two', ['one\two'], []);
   Test('one\\\\\\two', ['one\\\two'], []);
+  Test('one|two', [], [pcHasRedirection], {posix=}false);
+  Test('one&two', ['one&two'], [], false);
+  Test(''' one'' two', ['''', 'one''', 'two'], [], false);
+  Test('"one" two', ['one', 'two'], [], false);
+  Test('one "two"', ['one', 'two'], [], false);
+  Test('one     "two"', ['one', 'two'], [], false);
+  Test('one " two"', ['one', ' two'], [], false);
+  Test('" one" two', [' one', 'two'], [], false);
+  Test('"one one" two', ['one one', 'two'], [], false);
 end;
 
 procedure TTestLowLevelCommon._IsMatch;
