@@ -600,7 +600,8 @@ function RunProcess(const path, arg1: TFileName; waitfor: boolean;
   const arg2: TFileName=''; const arg3: TFileName=''; const arg4: TFileName='';
   const arg5: TFileName=''; const env: TFileName=''; envaddexisting: boolean=false): integer;
 
-/// like fpSystem, but cross-platform and calling bash only if needed
+/// like fpSystem, but cross-platform
+// - under POSIX, calls bash only if needed, after ParseCommandArgs() analysis
 // - under Windows (especially Windows 10), creating a process can be dead slow
 // https://randomascii.wordpress.com/2019/04/21/on2-in-createprocess
 function RunCommand(const cmd: TFileName; waitfor: boolean;
@@ -1821,7 +1822,7 @@ begin
     result := RunInternal(a, waitfor, env, envaddexisting)
   else if err * PARSECOMMAND_ERROR <> [] then
     // no system call for clearly invalid command line
-    result := {$ifdef FPC}-ESysELIBBAD{$else}-80{$endif}
+    result := {$ifdef FPCLINUXNOTBSD}-ESysELIBBAD{$else}-80{$endif}
   else begin // execute complex commands via the shell
     a[0] := '/bin/sh';
     a[1] := '-c';
