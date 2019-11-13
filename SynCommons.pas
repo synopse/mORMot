@@ -21326,7 +21326,7 @@ begin
   inc(P1P2Len,PtrInt(PtrUInt(P1))-SizeOf(cardinal));
   if P1P2Len>=PtrInt(PtrUInt(P1)) then
     repeat // case-insensitive compare 4 bytes per loop
-      if PCardinal(P1)^ xor PCardinal(P2)^ and $dfdfdfdf<>0 then
+      if (PCardinal(P1)^ xor PCardinal(P2)^) and $dfdfdfdf<>0 then
         goto zero;
       inc(P1,SizeOf(cardinal));
       inc(P2,SizeOf(cardinal));
@@ -43539,8 +43539,7 @@ end;
 function DynArrayItemTypeLen(const aDynArrayTypeName: RawUTF8): integer;
 begin
   result := length(aDynArrayTypeName);
-  if (result>12) and
-     IdemPropNameUSameLen('DynArray',@PByteArray(aDynArrayTypeName)[result-8],8) then
+  if (result>12) and IdemPropName('DynArray',@PByteArray(aDynArrayTypeName)[result-8],8) then
     dec(result,8) else
   if (result>3) and (aDynArrayTypeName[result] in ['s','S']) then
     dec(result) else
