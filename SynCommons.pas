@@ -2134,6 +2134,7 @@ function PosChar(Str: PUTF8Char; Chr: AnsiChar): PUTF8Char;
   {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// fast retrieve the position of any value of a given set of characters
+// - see also strspn() function which is likely to be faster
 function PosCharAny(Str: PUTF8Char; Characters: PAnsiChar): PUTF8Char;
 
 /// a non case-sensitive RawUTF8 version of Pos()
@@ -4253,6 +4254,12 @@ function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: Byte): integer;
 // - return -1 if Value was not found
 function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): integer;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// fast search of a binary value position in a fixed-size array
+// - Count is the number of entries in P^[]
+// - return index of P^[index]=Elem^, comparing ElemSize bytes
+// - return -1 if Value was not found
+function AnyScanIndex(P,Elem: pointer; Count,ElemSize: PtrInt): PtrInt;
 
 /// sort an Integer array, low values first
 procedure QuickSortInteger(ID: PIntegerArray; L, R: PtrInt); overload;
@@ -7093,7 +7100,7 @@ function DynArrayElementTypeName(TypeInfo: pointer; ElemTypeInfo: PPointer=nil;
 
 /// trim ending 'DynArray' or 's' chars from a dynamic array type name
 // - used internally to guess the associated item type name
-function DynArrayItemTypeLen(const aDynArrayTypeName: RawUTF8): integer;
+function DynArrayItemTypeLen(const aDynArrayTypeName: RawUTF8): PtrInt;
 
 /// was dynamic array item after RegisterCustomJSONSerializerFromTextBinaryType()
 // - calls DynArrayItemTypeLen() to guess the internal type name
@@ -21385,6 +21392,7 @@ end;
 function CompareMemFixed(P1, P2: Pointer; Length: PtrInt): Boolean;
 label zero;
 begin // cut-down version of our pure pascal CompareMem() function
+  {$ifndef CPUX86} result := false; {$endif}
   inc(Length,PtrInt(PtrUInt(P1))-SizeOf(PtrInt));
   if Length>=PtrInt(PtrUInt(P1)) then
     repeat // compare one PtrInt per loop
@@ -21394,17 +21402,17 @@ begin // cut-down version of our pure pascal CompareMem() function
       inc(PPtrInt(P2));
     until Length<PtrInt(PtrUInt(P1));
   inc(Length,SizeOf(PtrInt));
+  dec(PtrUInt(P2),PtrUInt(P1));
   if PtrInt(PtrUInt(P1))<Length then
     repeat
-      if PByte(P1)^<>PByte(P2)^ then
+      if PByte(P1)^<>PByteArray(P2)[PtrUInt(P1)] then
         goto zero;
       inc(PByte(P1));
-      inc(PByte(P2));
     until PtrInt(PtrUInt(P1))>=Length;
   result := true;
   exit;
 zero:
-  result := false;
+  {$ifdef CPUX86} result := false; {$endif}
 end;
 {$endif HASINLINE}
 
@@ -22613,13 +22621,21 @@ end;
 {$endif PUREPASCAL}
 
 function CompareMemSmall(P1, P2: Pointer; Length: PtrInt): Boolean;
-var i: PtrInt;
+label zero;
 begin
-  result := false;
-  for i := 0 to Length-1 do
-    if PByteArray(P1)[i]<>PByteArray(P2)[i] then
-      exit;
+  {$ifndef CPUX86} result := false; {$endif}
+  inc(Length,PtrInt(PtrUInt(P1)));
+  dec(PtrUInt(P2),PtrUInt(P1));
+  if PtrInt(PtrUInt(P1))<Length then
+    repeat
+      if PByte(P1)^<>PByteArray(P2)[PtrUInt(P1)] then
+        goto zero;
+      inc(PByte(P1));
+    until PtrInt(PtrUInt(P1))>=Length;
   result := true;
+  exit;
+zero:
+  {$ifdef CPUX86} result := false; {$endif}
 end;
 
 {$ifdef HASINLINE}
@@ -31030,6 +31046,32 @@ begin
       exit;
   result := -1;
 {$endif FPC}
+end;
+
+function AnyScanIndex(P,Elem: pointer; Count,ElemSize: PtrInt): PtrInt;
+begin
+  case ElemSize of
+    // optimized versions for arrays of byte,word,integer,Int64,Currency,Double
+    1: result := ByteScanIndex(P,Count,PByte(Elem)^);
+    2: result := WordScanIndex(P,Count,PWord(Elem)^);
+    4: result := IntegerScanIndex(P,Count,PInteger(Elem)^);
+    8: result := Int64ScanIndex(P,Count,PInt64(Elem)^);
+    // small ElemSize version (<SizeOf(PtrInt))
+    3{$ifdef CPU64},5..7{$endif}: begin
+      for result := 0 to Count-1 do
+        if CompareMemSmall(P,Elem,ElemSize) then
+          exit else
+          inc(PByte(P),ElemSize);
+      result := -1;
+    end;
+  else begin // generic binary comparison (fast with inlined CompareMemFixed)
+    for result := 0 to Count-1 do
+      if CompareMemFixed(P,Elem,ElemSize) then
+        exit else
+        inc(PByte(P),ElemSize);
+    result := -1;
+  end;
+  end;
 end;
 
 procedure QuickSortInteger(ID: PIntegerArray; L,R: PtrInt);
@@ -43536,7 +43578,7 @@ begin
       [self,fRoot.fCustomTypeName,recordInfoSize,fRoot.fDataSize]);
 end;
 
-function DynArrayItemTypeLen(const aDynArrayTypeName: RawUTF8): integer;
+function DynArrayItemTypeLen(const aDynArrayTypeName: RawUTF8): PtrInt;
 begin
   result := length(aDynArrayTypeName);
   if (result>12) and IdemPropName('DynArray',@PByteArray(aDynArrayTypeName)[result-8],8) then
@@ -49549,66 +49591,50 @@ end;
 {$endif DELPHI5OROLDER}
 
 function TDynArray.IndexOf(const Elem): PtrInt;
-var P: pointer;
-    PP: PPointerArray absolute P;
+var P: PPointerArray;
     max: PtrInt;
 begin
-  if fValue=nil then begin
-    result := -1;
-    exit; // avoid GPF if void
-  end;
-  max := GetCount-1;
-  P := fValue^;
-  if @Elem<>nil then
-  if ElemType=nil then
-    case ElemSize of
-      // optimized versions for arrays of byte,word,integer,Int64,Currency,Double
-      1: for result := 0 to max do
-           if PByteArray(P)^[result]=byte(Elem) then exit;
-      2: for result := 0 to max do
-           if PWordArray(P)^[result]=word(Elem) then exit;
-      4: for result := 0 to max do // integer,single,32bitPointer
-           if PIntegerArray(P)^[result]=integer(Elem) then exit;
-      8: for result := 0 to max do // Int64,Currency,Double,64bitPointer
-           if PInt64Array(P)^[result]=Int64(Elem) then exit;
-    else // generic binary comparison (fast with our overloaded CompareMemFixed)
+  if fValue<>nil then begin
+    max := GetCount-1;
+    P := fValue^;
+    if @Elem<>nil then
+    if ElemType=nil then begin
+      result := AnyScanIndex(P,@Elem,max+1,ElemSize);
+      exit;
+    end else
+    case PTypeKind(ElemType)^ of
+    tkLString{$ifdef FPC},tkLStringOld{$endif}:
       for result := 0 to max do
-        if CompareMemFixed(P,@Elem,ElemSize) then
+        if AnsiString(P^[result])=AnsiString(Elem) then exit;
+    tkWString:
+      for result := 0 to max do
+        if WideString(P^[result])=WideString(Elem) then exit;
+    {$ifdef HASVARUSTRING}
+    tkUString:
+      for result := 0 to max do
+        if UnicodeString(P^[result])=UnicodeString(Elem) then exit;
+    {$endif}
+    {$ifndef NOVARIANTS}
+    tkVariant:
+      for result := 0 to max do
+        if SortDynArrayVariantComp(PVarDataStaticArray(P)^[result],
+          TVarData(Elem),false)=0 then exit;
+    {$endif}
+    tkRecord{$ifdef FPC},tkObject{$endif}:
+      // RecordEquals() works with packed records containing binary and string types
+      for result := 0 to max do
+        if RecordEquals(P^,Elem,ElemType) then
           exit else
           inc(PByte(P),ElemSize);
-    end else
-  case PTypeKind(ElemType)^ of
-  tkLString{$ifdef FPC},tkLStringOld{$endif}:
-    for result := 0 to max do
-      if AnsiString(PP^[result])=AnsiString(Elem) then exit;
-  tkWString:
-    for result := 0 to max do
-      if WideString(PP^[result])=WideString(Elem) then exit;
-  {$ifdef HASVARUSTRING}
-  tkUString:
-    for result := 0 to max do
-      if UnicodeString(PP^[result])=UnicodeString(Elem) then exit;
-  {$endif}
-  {$ifndef NOVARIANTS}
-  tkVariant:
-    for result := 0 to max do
-      if SortDynArrayVariantComp(PVarDataStaticArray(P)^[result],
-        TVarData(Elem),false)=0 then exit;
-  {$endif}
-  tkRecord{$ifdef FPC},tkObject{$endif}:
-    // RecordEquals() works with packed records containing binary and string types
-    for result := 0 to max do
-      if RecordEquals(P^,Elem,ElemType) then
-        exit else
-        inc(PByte(P),ElemSize);
-  tkInterface:
-    for result := 0 to max do
-      if PP^[result]=pointer(Elem) then exit;
-  else
-    for result := 0 to max do
-      if ManagedTypeCompare(P,@Elem,ElemType)>0 then
-        exit else
-        inc(PByte(P),ElemSize);
+    tkInterface:
+      for result := 0 to max do
+        if P^[result]=pointer(Elem) then exit;
+    else
+      for result := 0 to max do
+        if ManagedTypeCompare(pointer(P),@Elem,ElemType)>0 then
+          exit else
+          inc(PByte(P),ElemSize);
+    end;
   end;
   result := -1;
 end;
@@ -62203,15 +62229,18 @@ end;
 
 function GetLineContains(p,pEnd, up: PUTF8Char): boolean;
 var i: PtrInt;
+    table: {$ifdef CPUX86NOTPIC}TNormTableByte absolute NormToUpperAnsi7Byte{$else}PNormTableByte{$endif};
 label Fnd;
 begin
+  {$ifndef CPUX86NOTPIC}table := @NormToUpperAnsi7Byte;{$endif}
   if (p<>nil) and (up<>nil) then
   if pEnd=nil then
     repeat
       i := ord(p^);
       if not (AnsiChar(i) in ANSICHARNOT01310) then break;
       inc(p);
-      if (NormToUpperAnsi7Byte[i]=ord(up^)) and IdemPChar(p,@up[1]) then begin
+      if (table[i]=ord(up^)) and IdemPChar2(
+         {$ifdef CPUX86NOTPIC}@{$else}pointer{$endif}(table),p,@up[1]) then begin
         result := true;
         exit;
       end;
@@ -62221,22 +62250,22 @@ begin
     if p>=pEnd then break;
     i := ord(p^);
     if i in [10,13] then break;
-    if NormToUpperAnsi7Byte[i]=ord(up^) then goto Fnd;
+    if table[i]=ord(up^) then goto Fnd;
     inc(p);
     if p>=pEnd then break;
     i := ord(p^);
     if i in [10,13] then break;
-    if NormToUpperAnsi7Byte[i]=ord(up^) then goto Fnd;
+    if table[i]=ord(up^) then goto Fnd;
     inc(p);
     if p>=pEnd then break;
     i := ord(p^);
     if i in [10,13] then break;
-    if NormToUpperAnsi7Byte[i]=ord(up^) then goto Fnd;
+    if table[i]=ord(up^) then goto Fnd;
     inc(p);
     if p>=pEnd then break;
     i := ord(p^);
     if i in [10,13] then break;
-    if NormToUpperAnsi7Byte[i]<>ord(up^) then begin
+    if table[i]<>ord(up^) then begin
       inc(p);
       continue;
     end;
@@ -62247,7 +62276,7 @@ Fnd:i := 0;
         result := true; // found
         exit;
       end;
-    until NormToUpperAnsi7[p[i]]<>up[i];
+    until table[ord(p[i])]<>ord(up[i]);
     inc(p);
   until false;
   result := false;
