@@ -307,6 +307,7 @@
   {$else}
     {$ifdef LINUX}
       {$define LINUXNOTBSD} // e.g. to disable epoll API
+      {$define FPCLINUXNOTBSD}
     {$endif}
   {$endif}
 

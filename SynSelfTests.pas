@@ -182,6 +182,7 @@ uses
     dddInfraRepoUser,
     ECCProcess,
   {$endif DELPHI5OROLDER}
+  mORMotService,
   SynProtoRTSPHTTP,
   {$ifdef TEST_REGEXP}
     SynSQLite3RegEx,
@@ -343,6 +344,8 @@ type
     procedure UrlEncoding;
     /// test our internal fast TGUID process functions
     procedure _GUID;
+    /// test ParseCommandArguments() function
+    procedure _ParseCommandArguments;
     /// test IsMatch() function
     procedure _IsMatch;
     /// test TExprParserMatch class
@@ -2913,6 +2916,76 @@ begin
   Check(RecordLoadJSON(g2,pointer(s),TypeInfo(TGUID))<>nil);
   Check(IsEqualGUID(g2,g));
   {$endif}
+end;
+
+procedure TTestLowLevelCommon._ParseCommandArguments;
+  procedure Test(const cmd: RawUTF8; const expected: array of RawUTF8;
+    const flags: TParseCommands = []; posix: boolean=true);
+  var tmp: RawUTF8;
+      n, i: integer;
+      a: TParseCommandsArgs;
+  begin
+    if checkfailed(ParseCommandArgs(cmd, nil, nil, nil, posix) = flags) then
+      exit;
+    FillcharFast(a, SizeOf(a), 255);
+    check(ParseCommandArgs(cmd, @a, @n, @tmp, posix) = flags);
+    if (flags = []) and not CheckFailed(n = length(expected)) then begin
+      for i := 0 to high(expected) do
+        check(StrComp(pointer(a[i]), pointer(expected[i])) = 0);
+      check(a[n] = nil);
+    end;
+  end;
+begin
+  Test('', [], [pcInvalidCommand]);
+  Test('one', ['one']);
+  Test('one two', ['one', 'two']);
+  Test('    one     two    ', ['one', 'two']);
+  Test('"one" two', ['one', 'two']);
+  Test('one "two"', ['one', 'two']);
+  Test('one     "two"', ['one', 'two']);
+  Test('one " two"', ['one', ' two']);
+  Test('" one" two', [' one', 'two']);
+  Test(''' one'' two', [' one', 'two']);
+  Test('"one one" two', ['one one', 'two']);
+  Test('one "two two"', ['one', 'two two']);
+  Test('"1  2"    "3    4"', ['1  2', '3    4']);
+  Test('"1 '' 2"    "3    4"', ['1 '' 2', '3    4']);
+  Test('''1  2''    "3    4"', ['1  2', '3    4']);
+  Test('1 ( "3    4"', [], [pcHasParenthesis]);
+  Test('1 "3  "  4"', [], [pcUnbalancedDoubleQuote]);
+  Test(''' "3  4"', [], [pcUnbalancedSingleQuote]);
+  Test('one|two', [], [pcHasRedirection]);
+  Test('one\|two', ['one|two'], []);
+  Test('"one|two"', ['one|two']);
+  Test('one>two', [], [pcHasRedirection]);
+  Test('one\>two', ['one>two'], []);
+  Test('"one>two"', ['one>two']);
+  Test('one&two', [], [pcHasJobControl]);
+  Test('one\&two', ['one&two'], []);
+  Test('"one&two"', ['one&two']);
+  Test('one`two', [], [pcHasSubCommand]);
+  Test('''one`two''', ['one`two']);
+  Test('one$two', [], [pcHasShellVariable]);
+  Test('''one$two''', ['one$two']);
+  Test('one$(two)', [], [pcHasSubCommand, pcHasParenthesis]);
+  Test('one\$two', ['one$two'], []);
+  Test('''one$(two)''', ['one$(two)']);
+  Test('one*two', [], [pcHasWildcard]);
+  Test('"one*two"', ['one*two']);
+  Test('one*two', [], [pcHasWildcard]);
+  Test('''one*two''', ['one*two']);
+  Test('one\ two', ['one two'], []);
+  Test('one\\two', ['one\two'], []);
+  Test('one\\\\\\two', ['one\\\two'], []);
+  Test('one|two', [], [pcHasRedirection], {posix=}false);
+  Test('one&two', ['one&two'], [], false);
+  Test(''' one'' two', ['''', 'one''', 'two'], [], false);
+  Test('"one" two', ['one', 'two'], [], false);
+  Test('one "two"', ['one', 'two'], [], false);
+  Test('one     "two"', ['one', 'two'], [], false);
+  Test('one " two"', ['one', ' two'], [], false);
+  Test('" one" two', [' one', 'two'], [], false);
+  Test('"one one" two', ['one one', 'two'], [], false);
 end;
 
 procedure TTestLowLevelCommon._IsMatch;

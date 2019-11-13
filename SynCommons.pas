@@ -21321,18 +21321,28 @@ end;
 
 {$ifdef PUREPASCAL} // for proper inlining
 function IdemPropNameUSameLen(P1,P2: PUTF8Char; P1P2Len: PtrInt): boolean;
-var i,j: PtrInt;
+label zero;
 begin
-  result := false;
-  j := 0;
-  for i := 1 to P1P2Len shr 2 do
-    if (PCardinalArray(P1)[j] xor PCardinalArray(P2)[j]) and $dfdfdfdf<>0 then
-      exit else
-      inc(j);
-  for i := j*4 to P1P2Len-1 do
-    if (ord(P1[i]) xor ord(P2[i])) and $df<>0 then
-      exit;
+  inc(P1P2Len,PtrInt(PtrUInt(P1))-SizeOf(cardinal));
+  if P1P2Len>=PtrInt(PtrUInt(P1)) then
+    repeat // case-insensitive compare 4 bytes per loop
+      if PCardinal(P1)^ xor PCardinal(P2)^ and $dfdfdfdf<>0 then
+        goto zero;
+      inc(P1,SizeOf(cardinal));
+      inc(P2,SizeOf(cardinal));
+    until P1P2Len<PtrInt(PtrUInt(P1));
+  inc(P1P2Len,SizeOf(cardinal));
+  dec(PtrUInt(P2),PtrUInt(P1));
+  if PtrInt(PtrUInt(P1))<P1P2Len then
+    repeat
+      if (ord(P1^) xor ord(P2[PtrUInt(P1)])) and $df<>0 then
+        goto zero;
+      inc(P1);
+    until PtrInt(PtrUInt(P1))>=P1P2Len;
   result := true;
+  exit;
+zero:
+  result := false;
 end;
 {$endif PUREPASCAL}
 
