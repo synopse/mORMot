@@ -2416,55 +2416,54 @@ begin
 end;
 {$endif}
 
+function PrintUSAscii(P: PUTF8Char; const text: RawUTF8): PUTF8Char;
+var i: PtrInt;
+begin
+  P^ := ' ';
+  inc(P);
+  for i := 1 to length(text) do
+    if ord(text[i]) in [33..126] then begin // only printable ASCII chars
+      P^ := text[i];
+      inc(P);
+    end;
+  if P[-1]=' ' then begin
+    P^ := '-'; // nothing appended -> NILVALUE
+    inc(P);
+  end;
+  result := P;
+end;
+
 function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
   const msg, procid, msgid: RawUTF8; destbuffer: PUTF8Char; destsize: integer;
   trimmsgfromlog: boolean): integer;
-  procedure PrintUSAscii(const text: RawUTF8);
-  var i: PtrInt;
-  begin
-    destbuffer^ := ' ';
-    inc(destbuffer);
-    for i := 1 to length(text) do
-      if ord(text[i]) in [33..126] then begin // only printable ASCII chars
-        destbuffer^ := text[i];
-        inc(destbuffer);
-      end;
-    if destbuffer[-1]=' ' then begin
-      destbuffer^ := '-'; // nothing appended -> NILVALUE
-      inc(destbuffer);
-    end;
-  end;
-var tmp: array[0..15] of AnsiChar;
-    P: PAnsiChar;
+var P: PAnsiChar;
     start: PUTF8Char;
-    D: TDateTime;
     len: integer;
+    st: TSynSystemTime;
 begin
   result := 0;
   if destsize<127 then
     exit;
   start := destbuffer;
   destbuffer^ := '<';
-  inc(destbuffer);
-  P := StrUInt32(@tmp[15],ord(severity)+ord(facility) shl 3);
-  len := @tmp[15]-P;
-  MoveFast(P^,destbuffer^,len);
-  inc(destbuffer,len);
+  destbuffer := AppendUInt32ToBuffer(destbuffer+1,ord(severity)+ord(facility) shl 3);
   PInteger(destbuffer)^ := ord('>')+ord('1')shl 8+ord(' ')shl 16; // VERSION=1
   inc(destbuffer,3);
-  D := NowUTC;
-  DateToIso8601PChar(D,destbuffer,true);
-  TimeToIso8601PChar(D,destbuffer+10,True,'T',true);
+  st.FromNowUTC;
+  DateToIso8601PChar(destbuffer,true,st.Year,st.Month,st.Day);
+  TimeToIso8601PChar(destbuffer+10,true,st.Hour,st.Minute,st.Second,st.MilliSecond,'T',true);
   destbuffer[23] := 'Z';
   inc(destbuffer,24);
-  if length(ExeVersion.Host)+length(ExeVersion.ProgramName)+length(procid)+length(msgid)+
-     (destbuffer-start)+15>destsize then
-    exit; // avoid buffer overflow
-  PrintUSAscii(ExeVersion.Host); // HOST
-  PrintUSAscii(ExeVersion.ProgramName); // APP-NAME
-  PrintUSAscii(procid); // PROCID
-  PrintUSAscii(msgid);  // MSGID
-  PrintUSAscii('');     // no STRUCTURED-DATA
+  with ExeVersion do begin
+    if length(Host)+length(ProgramName)+length(procid)+length(msgid)+
+       (destbuffer-start)+15>destsize then
+      exit; // avoid buffer overflow
+    destbuffer := PrintUSAscii(destbuffer,Host); // HOST
+    destbuffer := PrintUSAscii(destbuffer,ProgramName); // APP-NAME
+  end;
+  destbuffer := PrintUSAscii(destbuffer,procid); // PROCID
+  destbuffer := PrintUSAscii(destbuffer,msgid);  // MSGID
+  destbuffer := PrintUSAscii(destbuffer,'');     // no STRUCTURED-DATA
   destbuffer^ := ' ';
   inc(destbuffer);
   len := length(msg);
