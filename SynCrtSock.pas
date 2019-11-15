@@ -3302,7 +3302,7 @@ begin
   end else begin
     Hi := Code div 100;
     Lo := Code-Hi*100;
-    if not ((Hi in [1..5]) and (Lo in [0..8])) then begin
+    if not ((Hi in [1..5]) and (Lo in [0..13])) then begin
       result := StatusCodeToReasonInternal(Code);
       exit;
     end;
@@ -3375,7 +3375,7 @@ var i, j, len: integer;
 begin
   result:= '';
   len := length(s);
-  if (len = 0) or (len mod 4 <> 0) then
+  if (len <= 0) or (len and 3 <> 0) then
     exit;
   len := len shr 2;
   SetLength(result, len * 3);
