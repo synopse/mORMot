@@ -1022,15 +1022,15 @@ function IsAnsiCompatible(PC: PAnsiChar): boolean; overload;
 /// return TRUE if the supplied buffer only contains 7-bits Ansi characters
 function IsAnsiCompatible(PC: PAnsiChar; Len: integer): boolean; overload;
 
-/// return TRUE if the supplied buffer only contains 7-bits Ansi characters
-function IsAnsiCompatible(PW: PWideChar): boolean; overload;
+/// return TRUE if the supplied UTF-16 buffer only contains 7-bits Ansi characters
+function IsAnsiCompatibleW(PW: PWideChar): boolean; overload;
 
 /// return TRUE if the supplied text only contains 7-bits Ansi characters
 function IsAnsiCompatible(const Text: RawByteString): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// return TRUE if the supplied buffer only contains 7-bits Ansi characters
-function IsAnsiCompatible(PW: PWideChar; Len: integer): boolean; overload;
+/// return TRUE if the supplied UTF-16 buffer only contains 7-bits Ansi characters
+function IsAnsiCompatibleW(PW: PWideChar; Len: integer): boolean; overload;
 
 /// return TRUE if the supplied unicode buffer only contains WinAnsi characters
 // - i.e. if the text can be displayed using ANSI_CHARSET
@@ -1205,21 +1205,21 @@ function Utf8TruncateToUnicodeLength(var text: RawUTF8; maxUtf16: integer): bool
 // - this function will ensure that the returned content will contain only valid
 // UTF-8 sequence, i.e. will trim the whole trailing UTF-8 sequence
 // - returns FALSE if text was not truncated, TRUE otherwise
-function Utf8TruncateToLength(var text: RawUTF8; maxBytes: cardinal): boolean;
+function Utf8TruncateToLength(var text: RawUTF8; maxBytes: PtrUInt): boolean;
 
 /// compute the truncated length of the supplied UTF-8 value if it exceeds the
 // specified bytes count
 // - this function will ensure that the returned content will contain only valid
 // UTF-8 sequence, i.e. will trim the whole trailing UTF-8 sequence
 // - returns maxUTF8 if text was not truncated, or the number of fitting bytes
-function Utf8TruncatedLength(const text: RawUTF8; maxBytes: cardinal): integer; overload;
+function Utf8TruncatedLength(const text: RawUTF8; maxBytes: PtrUInt): PtrInt; overload;
 
 /// compute the truncated length of the supplied UTF-8 value if it exceeds the
 // specified bytes count
 // - this function will ensure that the returned content will contain only valid
 // UTF-8 sequence, i.e. will trim the whole trailing UTF-8 sequence
 // - returns maxUTF8 if text was not truncated, or the number of fitting bytes
-function Utf8TruncatedLength(text: PAnsiChar; textlen,maxBytes: cardinal): integer; overload;
+function Utf8TruncatedLength(text: PAnsiChar; textlen,maxBytes: PtrUInt): PtrInt; overload;
 
 /// calculate the UTF-16 Unicode characters count of the UTF-8 encoded first line
 // - count may not match the UCS4 glyphs number, in case of UTF-16 surrogates
@@ -18407,7 +18407,7 @@ begin
   result := IsAnsiCompatible(PAnsiChar(pointer(Text)),length(Text));
 end;
 
-function IsAnsiCompatible(PW: PWideChar): boolean;
+function IsAnsiCompatibleW(PW: PWideChar): boolean;
 begin
   result := false;
   if PW<>nil then
@@ -18420,7 +18420,7 @@ begin
   result := true;
 end;
 
-function IsAnsiCompatible(PW: PWideChar; Len: integer): boolean;
+function IsAnsiCompatibleW(PW: PWideChar; Len: integer): boolean;
 var i: integer;
 begin
   result := false;
@@ -18807,9 +18807,9 @@ begin
   result := false;
 end;
 
-function Utf8TruncateToLength(var text: RawUTF8; maxBytes: cardinal): boolean;
+function Utf8TruncateToLength(var text: RawUTF8; maxBytes: PtrUInt): boolean;
 begin
-  if cardinal(length(text))<maxBytes then begin
+  if PtrUInt(length(text))<maxBytes then begin
     result := false;
     exit; // nothing to truncate
   end;
@@ -18819,17 +18819,17 @@ begin
   result := true;
 end;
 
-function Utf8TruncatedLength(const text: RawUTF8; maxBytes: cardinal): integer;
+function Utf8TruncatedLength(const text: RawUTF8; maxBytes: PtrUInt): PtrInt;
 begin
   result := length(text);
-  if cardinal(result)<maxBytes then
+  if PtrUInt(result)<maxBytes then
     exit;
   result := maxBytes;
   while (result>0) and (ord(text[result]) and $c0=$80) do dec(result);
   if (result>0) and (ord(text[result]) and $80<>0) then dec(result);
 end;
 
-function Utf8TruncatedLength(text: PAnsiChar; textlen,maxBytes: cardinal): integer;
+function Utf8TruncatedLength(text: PAnsiChar; textlen,maxBytes: PtrUInt): PtrInt;
 begin
   if textlen<maxBytes then begin
     result := textlen;
@@ -18841,8 +18841,7 @@ begin
 end;
 
 function Utf8FirstLineToUnicodeLength(source: PUTF8Char): PtrInt;
-var c: PtrUInt;
-    extra: Integer;
+var c,extra: PtrUInt;
 begin
   result := 0;
   if source<>nil then
@@ -22812,16 +22811,18 @@ end;
 
 function AppendUInt32ToBuffer(Buffer: PUTF8Char; Value: cardinal): PUTF8Char;
 var L: PtrInt;
-    tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
+    tmp: array[0..23] of AnsiChar;
 begin
-  if Value<=high(SmallUInt32UTF8) then
-    result := AppendRawUTF8ToBuffer(Buffer,SmallUInt32UTF8[Value]) else begin
+  if Value<=high(SmallUInt32UTF8) then begin
+    P := pointer(SmallUInt32UTF8[Value]);
+    L := {$ifdef FPC}_LStrLenP(P){$else}PInteger(P-4)^{$endif};
+  end else begin
     P := StrUInt32(@tmp[23],Value);
     L := @tmp[23]-P;
-    MoveSmall(P,Buffer,L);
-    result := Buffer+L;
   end;
+  MoveSmall(P,Buffer,L);
+  result := Buffer+L;
 end;
 
 function QuotedStr(const S: RawUTF8; Quote: AnsiChar): RawUTF8;
@@ -51971,7 +51972,7 @@ end;
 procedure TTextWriter.AddU(Value: cardinal);
 var tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
-    Len: integer;
+    Len: PtrInt;
 begin
   if BEnd-B<=24 then
     FlushToStream;
