@@ -1022,15 +1022,15 @@ function IsAnsiCompatible(PC: PAnsiChar): boolean; overload;
 /// return TRUE if the supplied buffer only contains 7-bits Ansi characters
 function IsAnsiCompatible(PC: PAnsiChar; Len: integer): boolean; overload;
 
-/// return TRUE if the supplied buffer only contains 7-bits Ansi characters
-function IsAnsiCompatible(PW: PWideChar): boolean; overload;
+/// return TRUE if the supplied UTF-16 buffer only contains 7-bits Ansi characters
+function IsAnsiCompatibleW(PW: PWideChar): boolean; overload;
 
 /// return TRUE if the supplied text only contains 7-bits Ansi characters
 function IsAnsiCompatible(const Text: RawByteString): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// return TRUE if the supplied buffer only contains 7-bits Ansi characters
-function IsAnsiCompatible(PW: PWideChar; Len: integer): boolean; overload;
+/// return TRUE if the supplied UTF-16 buffer only contains 7-bits Ansi characters
+function IsAnsiCompatibleW(PW: PWideChar; Len: integer): boolean; overload;
 
 /// return TRUE if the supplied unicode buffer only contains WinAnsi characters
 // - i.e. if the text can be displayed using ANSI_CHARSET
@@ -18407,7 +18407,7 @@ begin
   result := IsAnsiCompatible(PAnsiChar(pointer(Text)),length(Text));
 end;
 
-function IsAnsiCompatible(PW: PWideChar): boolean;
+function IsAnsiCompatibleW(PW: PWideChar): boolean;
 begin
   result := false;
   if PW<>nil then
@@ -18420,7 +18420,7 @@ begin
   result := true;
 end;
 
-function IsAnsiCompatible(PW: PWideChar; Len: integer): boolean;
+function IsAnsiCompatibleW(PW: PWideChar; Len: integer): boolean;
 var i: integer;
 begin
   result := false;
