@@ -38996,7 +38996,6 @@ begin
             aRelease := dwFileVersionLS shr 16;
           end;
           aBuild := word(dwFileVersionLS);
-          BuildYear := 2010;
           if (dwFileDateLS<>0) and (dwFileDateMS<>0) then begin
             FileTime.dwLowDateTime:= dwFileDateLS; // built date from version info
             FileTime.dwHighDateTime:= dwFileDateMS;
