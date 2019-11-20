@@ -1395,9 +1395,8 @@ Faster and safer way of comparing two {\f1\fs20 @*currency@} values is certainly
 !begin
 !  result := A64-B64;
 !end;
-This will avoid any rounding error during comparison (working with *10000 integer values), and will be faster than the default implementation, which uses the FPU (or SSE2 under {\i x64} architecture) instructions.
-You some direct {\f1\fs20 currency} handling in the {\f1\fs20 SynCommons.pas} unit. It will by-pass the FPU use, and is therefore very fast.
-There are some functions using the {\f1\fs20 Int64} binary representation (accessible either as {\f1\fs20 PInt64(@aCurrencyVar)^} or the {\f1\fs20 absolute} syntax):
+This will avoid any rounding error during comparison (working with *10000 integer values), and is likely to be faster than the default implementation, which uses the FPU (or SSE2 under {\i x64} architecture) instructions.
+Some direct {\f1\fs20 currency} processing is available in the {\f1\fs20 SynCommons.pas} unit. It will by-pass the FPU use, and is therefore very fast.\line There are some functions using the {\f1\fs20 Int64} binary representation (accessible either as {\f1\fs20 PInt64(@aCurrencyVar)^} or the {\f1\fs20 absolute} syntax):
 - {\f1\fs20 function Curr64ToString(Value: Int64): string;}
 - {\f1\fs20 function StrToCurr64(P: PUTF8Char): Int64;}
 - {\f1\fs20 function Curr64ToStr(Value: Int64): RawUTF8;}
@@ -1405,6 +1404,7 @@ There are some functions using the {\f1\fs20 Int64} binary representation (acces
 - {\f1\fs20 function StrCurr64(P: PAnsiChar; const Value: Int64): PAnsiChar;}
 Using those functions can be {\i much} faster for textual conversion than using the standard {\f1\fs20 FloatToText()} implementation. They are validated with provided regression tests.
 Of course, in normal code, it is certainly not worth using the {\f1\fs20 Int64} binary representation of {\f1\fs20 currency}, but rely on the default compiler/RTL implementation. In all cases, having optimized functions was a need for both speed and accuracy of our ORM data processing, and also for @27@.
+Note that we discovered some issue in the FPC compiler, when {\f1\fs20 currency} is used when compiling from {\i x64-win64}: {\f1\fs20 currency} values comparison may be wrongly implemented using {\i x87} registers: we found out that using a {\i i386-win32} FPC compiler is a safer approach, even targetting {\i x64-win64} - at least for the trunk in 2019/11.
 \page
 :48 TDynArray dynamic array wrapper
 Version 1.13 of the {\f1\fs20 SynCommons.pas} unit introduced two kinds of wrapper:
