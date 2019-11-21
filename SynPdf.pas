@@ -11196,8 +11196,8 @@ end;
 
 initialization
   {$ifdef USE_SYNGDIPLUS}
-  // initialize the Gdi+ library if necessary
-  if Gdip=nil then
+  // initialize Gdi+ if necessary (and possible, i.e. not from a dll)
+  if (Gdip=nil) and not IsLibrary then
     Gdip := TGDIPlus.Create('gdiplus.dll');
   {$endif}
 
