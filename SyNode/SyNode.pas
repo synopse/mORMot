@@ -688,7 +688,7 @@ begin
 // MPV as Mozilla recommend in https://bugzilla.mozilla.org/show_bug.cgi?id=950044
 //TODO - USE JS_SetGCParametersBasedOnAvailableMemory for SM32 and override JSGC_MAX_MALLOC_BYTES
   if (FManager.MaxPerEngineMemory >= 512 * 1024 * 1024) then begin
-    fCx.GCParameter[JSGC_MAX_MALLOC_BYTES] :=  96 * 1024 * 1024;
+    fCx.GCParameter[JSGC_MAX_MALLOC_BYTES] := 6 * 1024 * 1024;
     fCx.GCParameter[JSGC_SLICE_TIME_BUDGET] :=  30;
     fCx.GCParameter[JSGC_HIGH_FREQUENCY_TIME_LIMIT] := 1000;
     fCx.GCParameter[JSGC_HIGH_FREQUENCY_HIGH_LIMIT] := 500;
