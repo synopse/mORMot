@@ -1135,6 +1135,8 @@ type
     function Random64: QWord;
     /// returns a floating-point random number in range [0..1]
     function RandomExt: TSynExtended;
+    /// returns a 64-bit floating-point random number in range [0..1]
+    function RandomDouble: double;
     /// computes a random ASCII password
     // - will contain uppercase/lower letters, digits and $.:()?%!-+*/@#
     // excluding ;,= to allow direct use in CSV content
@@ -1268,6 +1270,19 @@ procedure SetMainAESPRNG;
 // - you should not have to call this procedure, but faster and safer TAESPRNG
 procedure FillSystemRandom(Buffer: PByteArray; Len: integer; AllowBlocking: boolean);
 
+/// low-level function able to derivate a 0..1 floating-point from 128-bit of data
+// - used e.g. by TAESPRNG.RandomExt
+function Hash128ToExt({$ifdef FPC}constref{$else}const{$endif} r: THash128): TSynExtended;
+  {$ifdef FPC}inline;{$endif}
+
+/// low-level function able to derivate a 0..1 64-bit floating-point from 128-bit of data
+// - used e.g. by TAESPRNG.RandomDouble
+function Hash128ToDouble({$ifdef FPC}constref{$else}const{$endif} r: THash128): double;
+  {$ifdef FPC}inline;{$endif}
+
+/// low-level function able to derivate a 0..1 32-bit floating-point from 128-bit of data
+function Hash128ToSingle({$ifdef FPC}constref{$else}const{$endif} r: THash128): double;
+  {$ifdef FPC}inline;{$endif}
 
 type
   PSHA1Digest = ^TSHA1Digest;
@@ -13693,12 +13708,39 @@ begin
   result := block.L xor block.H;
 end;
 
-function TAESPRNG.RandomExt: TSynExtended;
-const coeff: double = (1.0/$80000000)/$100000000;  // 2^-63
-var block: THash128Rec;
+function Hash128ToExt({$ifdef FPC}constref{$else}const{$endif} r: THash128): TSynExtended;
+const
+  COEFF64: TSynExtended = (1.0/$80000000)/$100000000;  // 2^-63
 begin
-  FillRandom(block.b);
-  result := ((block.Lo xor block.Hi) and $7fffffffffffffff)*coeff;
+  result := ((THash128Rec(r).Lo xor THash128Rec(r).Hi) and $7fffffffffffffff)*COEFF64;
+end;
+
+function Hash128ToDouble({$ifdef FPC}constref{$else}const{$endif} r: THash128): double;
+const
+  COEFF64: double = (1.0/$80000000)/$100000000;  // 2^-63
+begin
+  result := ((THash128Rec(r).Lo xor THash128Rec(r).Hi) and $7fffffffffffffff)*COEFF64;
+end;
+
+function Hash128ToSingle({$ifdef FPC}constref{$else}const{$endif} r: THash128): double;
+const
+  COEFF64: single = (1.0/$80000000)/$100000000;  // 2^-63
+begin
+  result := ((THash128Rec(r).Lo xor THash128Rec(r).Hi) and $7fffffffffffffff)*COEFF64;
+end;
+
+function TAESPRNG.RandomExt: TSynExtended;
+var block: THash128;
+begin
+  FillRandom(block);
+  result := Hash128ToExt(block);
+end;
+
+function TAESPRNG.RandomDouble: double;
+var block: THash128;
+begin
+  FillRandom(block);
+  result := Hash128ToDouble(block);
 end;
 
 function TAESPRNG.RandomPassword(Len: integer): RawUTF8;
