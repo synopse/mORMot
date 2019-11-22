@@ -687,7 +687,7 @@ constructor TSQLRestStorageExternal.Create(aClass: TSQLRecordClass;
   begin
     n := length(fFieldsExternal);
     SetLength(fFieldsExternalToInternal,n);
-    with StoredClassProps.ExternalDB do begin
+    with fStoredClassMapping^ do begin
       SetLength(fFieldsInternalToExternal,length(ExtFieldNames)+1);
       for i := 0 to high(fFieldsInternalToExternal) do
         fFieldsInternalToExternal[i] := -1;
@@ -742,7 +742,7 @@ constructor TSQLRestStorageExternal.Create(aClass: TSQLRecordClass;
       exit; // ignore unknown/virtual fields
     end;
     Column.DBType := mORMotType[Prop.SQLFieldTypeStored];
-    Column.Name := StoredClassProps.ExternalDB.ExtFieldNames[Prop.PropertyIndex];
+    Column.Name := fStoredClassMapping^.ExtFieldNames[Prop.PropertyIndex];
     if Column.DBType=ftUTF8 then
       Column.Width := Prop.FieldWidth else
       Column.Width := 0;
@@ -785,9 +785,9 @@ begin
   {$endif}
   inherited Create(aClass,aServer);
   // initialize external DB properties
-  options := fStoredClassProps.ExternalDB.Options;
-  fTableName := StoredClassProps.ExternalDB.TableName;
-  fProperties := StoredClassProps.ExternalDB.ConnectionProperties as TSQLDBConnectionProperties;
+  options := fStoredClassMapping^.Options;
+  fTableName := fStoredClassMapping^.TableName;
+  fProperties := fStoredClassMapping^.ConnectionProperties as TSQLDBConnectionProperties;
   log.Log(sllInfo,'% % Server=%',[StoredClass,fProperties,Owner],self);
   if fProperties=nil then
     raise EBusinessLayerException.CreateUTF8(
@@ -796,17 +796,17 @@ begin
   for f := 0 to StoredClassRecordProps.Fields.Count-1 do begin
     nfo := StoredClassRecordProps.Fields.List[f];
     if nfo.SQLFieldType in COPIABLE_FIELDS then begin // ignore sftMany
-      SQL := fStoredClassProps.ExternalDB.ExtFieldNames[f];
+      SQL := fStoredClassMapping^.ExtFieldNames[f];
       if fProperties.IsSQLKeyword(SQL) then begin
         log.Log(sllWarning,'%.%: Field name "%" is not compatible with %',
           [fStoredClass,nfo.Name,SQL,fProperties.DBMSEngineName],self);
         if rpmAutoMapKeywordFields in options then begin
           log.Log(sllWarning,'-> %.% mapped to "%_"',[fStoredClass,nfo.Name,SQL],self);
-          fStoredClassProps.ExternalDB.MapField(nfo.Name,SQL+'_');
+          fStoredClassMapping^.MapField(nfo.Name,SQL+'_');
         end else
           log.Log(sllWarning,'-> you should better use MapAutoKeywordFields',self);
       end else if rpmQuoteFieldName in options then
-        fStoredClassProps.ExternalDB.MapField(nfo.Name,'"'+SQL+'"');
+        fStoredClassMapping^.MapField(nfo.Name,'"'+SQL+'"');
     end;
   end;
   // create corresponding external table if necessary, and retrieve its fields info
@@ -817,7 +817,7 @@ begin
     // table is not yet existing -> try to create it
     with aClass.RecordProps do begin
       SetLength(CreateColumns,Fields.Count+1);
-      CreateColumns[0].Name := fStoredClassProps.ExternalDB.RowIDFieldName;
+      CreateColumns[0].Name := fStoredClassMapping^.RowIDFieldName;
       CreateColumns[0].DBType := ftInt64;
       CreateColumns[0].Unique := true;
       CreateColumns[0].NonNullable := true;
@@ -848,7 +848,7 @@ begin
     for f := 0 to Fields.Count-1 do
       if Fields.List[f].SQLFieldType in COPIABLE_FIELDS then // ignore sftMany
       /// real database columns exist for Simple + Blob fields (not Many)
-      if FieldsExternalIndexOf(fStoredClassProps.ExternalDB.ExtFieldNamesUnQuotedSQL[f])<0 then begin
+      if FieldsExternalIndexOf(fStoredClassMapping^.ExtFieldNamesUnQuotedSQL[f])<0 then begin
         // add new missing Field
         Finalize(Field);
         FillcharFast(Field,sizeof(Field),0);
@@ -867,7 +867,7 @@ begin
     end;
   end;
   // compute the SQL statements used internaly for external DB requests
-  with StoredClassProps.ExternalDB do begin
+  with fStoredClassMapping^ do begin
     fSelectOneDirectSQL := FormatUTF8('select % from % where %=?',
       [SQL.TableSimpleFields[true,false],fTableName,RowIDFieldName]);
     fSelectAllDirectSQL := FormatUTF8('select %,% from %',
@@ -893,7 +893,6 @@ var Stmt: TSynTableStatement;
     limit: TSQLDBDefinitionLimitClause;
     limitSQL,name: RawUTF8;
     f,n: integer;
-    extFieldName: function(FieldIndex: Integer): RawUTF8 of object;
 begin
   result := false;
   if SQL='' then
@@ -925,7 +924,6 @@ begin
         FormatUTF8(limit.InsertFmt,['%', Stmt.Limit],limitSQL) else
         FormatUTF8(limit.InsertFmt,[Stmt.Limit],limitSQL);
     end;
-    extFieldName := fStoredClassProps.ExternalDB.FieldNameByIndex;
     W := TTextWriter.CreateOwnedStream(1024);
     try
       W.AddShort('select ');
@@ -938,8 +936,10 @@ begin
           W.Add('(');
         end;
         if FunctionKnown=funcCountStar then
-          W.Add('*') else
-          W.AddString(extFieldName(Field-1));
+          W.Add('*') else begin
+          W.AddString(fStoredClassMapping^.FieldNameByIndex(Field-1));
+          W.AddString(SubField);
+        end;
         if FunctionName<>'' then
           W.Add(')');
         if ToBeAdded<>0 then begin
@@ -951,7 +951,7 @@ begin
           W.AddShort(' as ');
           W.AddString(Alias);
         end else
-        if not (Field in StoredClassProps.ExternalDB.FieldNamesMatchInternal) then begin
+        if not (Field in fStoredClassMapping^.FieldNamesMatchInternal) then begin
           if Field=0 then
             name := 'ID' else // RowID may be reserved (e.g. for Oracle)
             name := fStoredClassRecordProps.Fields.List[Field-1].Name;
@@ -998,7 +998,8 @@ begin
             W.AddShort('not ');
           if ParenthesisBefore<>'' then
             W.AddString(ParenthesisBefore);
-          W.AddString(extFieldName(Field-1));
+          W.AddString(fStoredClassMapping^.FieldNameByIndex(Field-1));
+          W.AddString(SubField);
           W.AddString(DB_SQLOPERATOR[Operator]);
           if not (Operator in [opIsNull, opIsNotNull]) then
             W.AddNoJSONEscape(ValueSQL,ValueSQLLen);
@@ -1009,7 +1010,7 @@ begin
       if Stmt.GroupByField<>nil then begin
         W.AddShort(' group by ');
         for f := 0 to high(Stmt.GroupByField) do begin
-          W.AddString(extFieldName(Stmt.GroupByField[f]-1));
+          W.AddString(fStoredClassMapping^.FieldNameByIndex(Stmt.GroupByField[f]-1));
           W.Add(',');
         end;
         W.CancelLastComma;
@@ -1017,7 +1018,7 @@ begin
       if Stmt.OrderByField<>nil then begin
         W.AddShort(' order by ');
         for f := 0 to high(Stmt.OrderByField) do begin
-          W.AddString(extFieldName(Stmt.OrderByField[f]-1));
+          W.AddString(fStoredClassMapping^.FieldNameByIndex(Stmt.OrderByField[f]-1));
           W.Add(',');
         end;
         W.CancelLastComma;
@@ -1046,7 +1047,7 @@ function TSQLRestStorageExternal.EngineLockedNextID: TID;
   var Rows: ISQLDBRows;
   begin
     Rows := ExecuteDirect('select max(%) from %',
-      [StoredClassProps.ExternalDB.RowIDFieldName,fTableName],[],true);
+      [fStoredClassMapping^.RowIDFieldName,fTableName],[],true);
     if (Rows<>nil) and Rows.Step then
       fEngineLockedMaxID := Rows.ColumnInt(0) else
       fEngineLockedMaxID := 0;
@@ -1167,7 +1168,7 @@ begin
       end;
       mDelete: begin
         SQL := FormatUTF8('delete from % where %=?',
-          [fTableName,fStoredClassProps.ExternalDB.RowIDFieldName]);
+          [fTableName,fStoredClassMapping^.RowIDFieldName]);
         n := BatchEnd-BatchBegin+1;
         if n+1>=max then begin
           n := max; // do not send too much items at once, for better speed
@@ -1305,7 +1306,7 @@ begin
       if Owner<>nil then // notify BEFORE deletion
         Owner.InternalUpdateEvent(seDelete,TableModelIndex,ID,'',nil);
       result := ExecuteDirect('delete from % where %=?',
-        [fTableName,StoredClassProps.ExternalDB.RowIDFieldName],[ID],false)<>nil;
+        [fTableName,fStoredClassMapping^.RowIDFieldName],[ID],false)<>nil;
       if result and (Owner<>nil) then
         Owner.FlushInternalDBCache;
     end;
@@ -1329,7 +1330,7 @@ begin
     if Owner<>nil then // notify BEFORE deletion
       for i := 0 to n-1 do
         Owner.InternalUpdateEvent(seDelete,TableModelIndex,IDs[i],'',nil);
-    rowid := StoredClassProps.ExternalDB.RowIDFieldName;
+    rowid := fStoredClassMapping^.RowIDFieldName;
     pos := 0;
     repeat // delete by chunks using primary key
       chunk := n-pos;
@@ -1419,7 +1420,7 @@ begin
   if (aID<=0) or not BlobField^.IsBlob or
      (TableModelIndex<0) or (Model.Tables[TableModelIndex]<>fStoredClass) then
     exit;
-  with StoredClassProps.ExternalDB do
+  with fStoredClassMapping^ do
     Rows := ExecuteDirect('select % from % where %=?',
       [InternalToExternal(BlobField^.Name),fTableName,RowIDFieldName],[aID],true);
   if (Rows<>nil) and Rows.Step then
@@ -1444,7 +1445,7 @@ begin
   with Value.RecordProps do
   if BlobFields<>nil then begin
     Rows := ExecuteDirect('select % from % where %=?',
-      [fRetrieveBlobFieldsSQL,fTableName,StoredClassProps.ExternalDB.RowIDFieldName],
+      [fRetrieveBlobFieldsSQL,fTableName,fStoredClassMapping^.RowIDFieldName],
       [Value.ID],true);
     if (Rows<>nil) and Rows.Step then
     try
@@ -1468,7 +1469,7 @@ var Rows: ISQLDBRows;
 begin
   if (TableModelIndex<0) or (Model.Tables[TableModelIndex]<>fStoredClass) then
     result := false else
-    with StoredClassProps.ExternalDB do begin
+    with fStoredClassMapping^ do begin
       ExtWhereFieldName := InternalToExternal(WhereFieldName);
       result := ExecuteInlined('update % set %=:(%): where %=:(%):',
         [fTableName,InternalToExternal(SetFieldName),SetValue,
@@ -1500,7 +1501,7 @@ begin
     result := OneFieldValue(fStoredClass,FieldName,'ID=?',[],[ID],Value) and
               UpdateField(fStoredClass,ID,FieldName,[Value+Increment]) else
     try
-      with StoredClassProps.ExternalDB do begin
+      with fStoredClassMapping^ do begin
         extField := InternalToExternal(FieldName);
         result := ExecuteInlined('update % set %=%+:(%): where %=:(%):',
           [fTableName,extField,extField,Increment,RowIDFieldName,ID],false)<>nil;
@@ -1525,7 +1526,7 @@ begin
   try
     if Owner<>nil then
       Owner.FlushInternalDBCache;
-    with StoredClassProps.ExternalDB do
+    with fStoredClassMapping^ do
       Statement := fProperties.NewThreadSafeStatementPrepared(
         'update % set %=? where %=?',
         [fTableName,InternalToExternal(BlobField^.Name),RowIDFieldName],false);
@@ -1568,7 +1569,7 @@ begin
     for f := 0 to high(Params) do
       BlobFields[f].GetFieldSQLVar(Value,Params[f],temp[f]);
     result := ExecuteDirectSQLVar('update % set % where %=?',
-      [fTableName,fUpdateBlobFieldsSQL,StoredClassProps.ExternalDB.RowIDFieldName],
+      [fTableName,fUpdateBlobFieldsSQL,fStoredClassMapping^.RowIDFieldName],
        Params,aID,false);
     if result and (Owner<>nil) then begin
       Owner.InternalUpdateEvent(seUpdateBlob,fStoredClassProps.TableIndex,aID,'',
@@ -1708,7 +1709,7 @@ var n: Integer;
 begin
   n := 0;
   Rows := ExecuteDirect('select % from % where %=?',
-    [StoredClassProps.ExternalDB.RowIDFieldName,fTableName,FieldName],FieldValue,true);
+    [fStoredClassMapping^.RowIDFieldName,fTableName,FieldName],FieldValue,true);
   if Rows<>nil then
     while Rows.Step do
       AddInt64(TInt64DynArray(ResultID),n,Rows.ColumnInt(0));
@@ -1765,8 +1766,7 @@ begin
   n := length(FieldNames);
   if (self=nil) or (fProperties=nil) or (Table<>fStoredClass) or (n<=0) then
     exit;
-  StoredClassProps.ExternalDB.InternalToExternalDynArray(
-    FieldNames,ExtFieldNames,@IntFieldIndex);
+  fStoredClassMapping^.InternalToExternalDynArray(FieldNames,ExtFieldNames,@IntFieldIndex);
   if n=1 then begin // handle case of index over a single column
     if IntFieldIndex[0]<0 then // ID/RowID?
       case fProperties.DBMS of
@@ -1918,7 +1918,7 @@ begin
   SetLength(ExternalFields,Decoder.FieldCount);
   for f := 0 to Decoder.FieldCount-1 do begin
     k := fStoredClassRecordProps.Fields.IndexByNameOrExcept(Decoder.FieldNames[f]);
-    ExternalFields[f] := fStoredClassProps.ExternalDB.FieldNameByIndex(k);
+    ExternalFields[f] := fStoredClassMapping^.FieldNameByIndex(k);
     k := fFieldsInternalToExternal[k+1]; // retrieve exact Types[f] from SynDB
     if k<0 then
       raise ESQLDBException.CreateUTF8(
@@ -1929,7 +1929,7 @@ begin
   // compute SQL statement and associated bound parameters
   Decoder.DecodedFieldNames := pointer(ExternalFields);
   result := Decoder.EncodeAsSQLPrepared(fTableName,Occasion,
-    StoredClassProps.ExternalDB.RowIDFieldName,BatchOptions);
+    fStoredClassMapping^.RowIDFieldName,BatchOptions);
   if Occasion=soUpdate then
     if Decoder.FieldCount=MAX_SQLFIELDS then
       raise EParsingException.CreateUTF8('Too many fields for '+
@@ -1970,7 +1970,7 @@ begin
     if i=0 then
       result := result+' where ' else
       result := result+' and ';
-    if StoredClassProps.ExternalDB.AppendFieldName(constraint^.Column,result) then
+    if fStoredClassMapping^.AppendFieldName(constraint^.Column,result) then
       exit; // invalid column index -> abort search
     result := result+SQL_OPER_WITH_PARAM[constraint^.Operation];
   end;
@@ -1980,7 +1980,7 @@ begin
     if i=0 then
       result := result+' order by ' else
       result := result+', ';
-    if StoredClassProps.ExternalDB.AppendFieldName(Column,result) then
+    if fStoredClassMapping^.AppendFieldName(Column,result) then
       exit; // invalid column index -> abort search
     if Desc then
       result := result+' desc';
@@ -2130,7 +2130,7 @@ begin
   if (self<>nil) and (Static<>nil) and (aRowID>0) then
     with Static as TSQLRestStorageExternal do
       result := ExecuteDirect('delete from % where %=?',
-        [fTableName,StoredClassProps.ExternalDB.RowIDFieldName],[aRowID],false)<>nil else
+        [fTableName,fStoredClassMapping^.RowIDFieldName],[aRowID],false)<>nil else
     result := false;
 end;
 
@@ -2143,7 +2143,7 @@ begin // aRowID is just ignored here since IDs are always auto calculated
     StorageLock(false,'Insert'); // to avoid race condition against max(RowID)
     try
       insertedRowID := EngineLockedNextID;
-      with StoredClassProps.ExternalDB do
+      with fStoredClassMapping^ do
         result := ExecuteDirectSQLVar('insert into % (%,%) values (%,?)',
           [fTableName,SQL.InsertSet,RowIDFieldName,CSVOfValue('?',length(Values))],
           Values,insertedRowID,true);
@@ -2158,7 +2158,7 @@ function TSQLVirtualTableExternal.Update(oldRowID, newRowID: Int64;
 begin
   if (self<>nil) and (Static<>nil) and
      (oldRowID=newRowID) and (newRowID>0) then // don't allow ID change
-    with Static as TSQLRestStorageExternal, StoredClassProps.ExternalDB do
+    with Static as TSQLRestStorageExternal, fStoredClassMapping^ do
       result := ExecuteDirectSQLVar('update % set % where %=?',
         [fTableName,SQL.UpdateSetAll,RowIDFieldName],Values,oldRowID,true) else
     result := false;

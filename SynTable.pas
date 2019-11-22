@@ -1049,6 +1049,10 @@ type
     // - e.g. funcCountStar for the special Count(*) expression or
     // funcDistinct, funcMax for distinct(...)/max(...) aggregation
     FunctionKnown: (funcNone, funcCountStar, funcDistinct, funcMax);
+    /// MongoDB-like sub field e.g. 'mainfield.subfield1.subfield2'
+    // - still identifying 'mainfield' in Field index, and setting
+    // SubField='.subfield1.subfield2'
+    SubField: RawUTF8;
   end;
 
   /// the recognized SELECT expressions for TSynTableStatement
@@ -1068,6 +1072,10 @@ type
     // - WhereField=0 for ID, 1 for field # 0, 2 for field #1,
     // and so on... (i.e. WhereField = RTTI field index +1)
     Field: integer;
+    /// MongoDB-like sub field e.g. 'mainfield.subfield1.subfield2'
+    // - still identifying 'mainfield' in Field index, and setting
+    // SubField='.subfield1.subfield2'
+    SubField: RawUTF8;
     /// the operator of the WHERE expression
     Operator: TSynTableStatementOperator;
     /// the SQL function name associated to a Field and Value
@@ -1109,7 +1117,7 @@ type
     fWhere: TSynTableStatementWhereDynArray;
     fOrderByField: TSQLFieldIndexDynArray;
     fGroupByField: TSQLFieldIndexDynArray;
-    fWhereHasParenthesis: boolean;
+    fWhereHasParenthesis, fHasSelectSubFields, fWhereHasSubFields: boolean;
     fOrderByDesc: boolean;
     fLimit: integer;
     fOffset: integer;
@@ -1129,7 +1137,10 @@ type
       SimpleFieldsBits: TSQLFieldBits=[0..MAX_SQLFIELDS-1];
       FieldProp: TSynTableFieldProperties=nil);
     /// compute the SELECT column bits from the SelectFields array
-    procedure SelectFieldBits(var Fields: TSQLFieldBits; var withID: boolean);
+    // - optionally set Select[].SubField into SubFields[Select[].Field]
+    // (e.g. to include specific fields from MongoDB embedded document)
+    procedure SelectFieldBits(var Fields: TSQLFieldBits; var withID: boolean;
+      SubFields: PRawUTF8Array=nil);
 
     /// the SELECT SQL statement parsed
     // - equals '' if the parsing failed
@@ -1140,10 +1151,14 @@ type
     property SelectFunctionCount: integer read fSelectFunctionCount;
     /// the retrieved table name
     property TableName: RawUTF8 read fTableName;
+    /// if any Select[].SubField was actually set
+    property HasSelectSubFields: boolean read fHasSelectSubFields;
     /// the WHERE clause of this SQL statement
     property Where: TSynTableStatementWhereDynArray read fWhere;
     /// if the WHERE clause contains any ( ) parenthesis expression
     property WhereHasParenthesis: boolean read fWhereHasParenthesis;
+    /// if the WHERE clause contains any Where[].SubField
+    property WhereHasSubFields: boolean read fWhereHasSubFields;
     /// recognize an GROUP BY clause with one or several fields
     // - here 0 = ID, otherwise RTTI field index +1
     property GroupByField: TSQLFieldIndexDynArray read fGroupByField;
@@ -5982,15 +5997,16 @@ function GetPropIndex: integer;
 begin
   if not GetNextFieldProp(P,Prop) then
     result := -1 else
-  if IsRowID(pointer(Prop)) then
-    result := 0 else begin // 0 = ID field
-    result := GetFieldIndex(Prop);
-    if result>=0 then // -1 = no valid field name
-      inc(result);  // otherwise: PropertyIndex+1
-  end;
+    if IsRowID(pointer(Prop)) then
+      result := 0 else begin // 0 = ID field
+      result := GetFieldIndex(Prop);
+      if result>=0 then // -1 = no valid field name
+        inc(result);  // otherwise: PropertyIndex+1
+    end;
 end;
 function SetFields: boolean;
 var select: TSynTableStatementSelect;
+    B: PUTF8Char;
 begin
   result := false;
   FillcharFast(select,SizeOf(select),0);
@@ -6017,7 +6033,15 @@ begin
     if P^<>')' then
       exit;
     P := GotoNextNotSpace(P+1);
-  end;
+  end else
+    if P^='.' then begin // MongoDB-like field.subfield1.subfield2
+      B := P;
+      repeat
+        inc(P);
+      until not(ord(P^) in IsJsonIdentifier);
+      FastSetString(select.SubField,B,P-B);
+      fHasSelectSubFields := true;
+    end;
   if P^ in ['+','-'] then begin
     select.ToBeAdded := GetNextItemInteger(P,' ');
     if select.ToBeAdded=0 then
@@ -6060,6 +6084,7 @@ begin
     {$ifndef NOVARIANTS}
     SetVariantNull(Where.ValueVariant);
     {$endif}
+    inc(P,4);
   end else begin
     // numeric statement or 'true' or 'false' (OK for NormalizeValue)
     B := P;
@@ -6132,12 +6157,22 @@ begin
 end;
 {$endif}
 function GetWhereExpression(FieldIndex: integer; var Where: TSynTableStatementWhere): boolean;
+var B: PUTF8Char;
 begin
   result := false;
   Where.ParenthesisBefore := whereBefore;
   Where.JoinedOR := whereWithOR;
   Where.NotClause := whereNotClause;
   Where.Field := FieldIndex; // 0 = ID, otherwise PropertyIndex+1
+  if P^='.' then begin // MongoDB-like field.subfield1.subfield2
+    B := P;
+    repeat
+      inc(P);
+    until not(ord(P^) in IsJsonIdentifier);
+    FastSetString(Where.SubField,B,P-B);
+    fWhereHasSubFields := true;
+    P := GotoNextNotSpace(P);
+  end;
   case P^ of
   '=': Where.Operator := opEqualTo;
   '>': if P[1]='=' then begin
@@ -6381,15 +6416,22 @@ lim2: if IdemPropNameU(Prop,'LIMIT') then
   fSQLStatement := SQL; // make a private copy e.g. for Where[].ValueSQL
 end;
 
-procedure TSynTableStatement.SelectFieldBits(var Fields: TSQLFieldBits; var withID: boolean);
+procedure TSynTableStatement.SelectFieldBits(var Fields: TSQLFieldBits;
+  var withID: boolean; SubFields: PRawUTF8Array);
 var i: integer;
+    f: ^TSynTableStatementSelect;
 begin
   FillcharFast(Fields,SizeOf(Fields),0);
   withID := false;
-  for i := 0 to Length(Select)-1 do
-    if Select[i].Field=0 then
+  f := pointer(Select);
+  for i := 1 to Length(Select) do begin
+    if f^.Field=0 then
       withID := true else
-      include(Fields,Select[i].Field-1);
+      include(Fields,f^.Field-1);
+    if (SubFields<>nil) and fHasSelectSubFields then
+      SubFields^[f^.Field] := f^.SubField;
+    inc(f);
+  end;
 end;
 
 
