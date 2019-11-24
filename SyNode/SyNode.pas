@@ -562,6 +562,20 @@ uses
   synodebinding_os;
 
 const
+  jsGlobal_opt: JSClassOps = (
+    addProperty: nil;
+    delProperty: nil;
+    getProperty: nil;
+    setProperty: nil;
+    enumerate:   nil;
+    resolve:     nil;
+    mayResolve:  nil;
+    finalize:    nil;
+    call:        nil;
+    hasInstance: nil;
+    construct:   nil;
+    trace:       @JS_GlobalObjectTraceHook;
+  );
   jsglobal_class: JSClass = (
     name: 'global';
     flags:
@@ -569,7 +583,7 @@ const
       JSCLASS_HAS_PRIVATE or
       (255 shl JSCLASS_RESERVED_SLOTS_SHIFT);
     {$IFDEF SM52}
-    cOps: nil;
+    cOps: @jsGlobal_opt;
     reserved: (nil, nil, nil);
     {$ENDIF}
   );
@@ -685,7 +699,7 @@ begin
   fCx.SetNativeStackQuota(gMaxStackSize);
 {$ENDIF}
   fCx.GCParameter[JSGC_MAX_BYTES] := FManager.MaxPerEngineMemory;
-// MPV as Mozilla recommend in https://bugzilla.mozilla.org/show_bug.cgi?id=950044
+// MPV as Mozilla recommend in https://bugzilla.mo zilla.org/show_bug.cgi?id=950044
 //TODO - USE JS_SetGCParametersBasedOnAvailableMemory for SM32 and override JSGC_MAX_MALLOC_BYTES
   if (FManager.MaxPerEngineMemory >= 512 * 1024 * 1024) then begin
     fCx.GCParameter[JSGC_MAX_MALLOC_BYTES] := 6 * 1024 * 1024;
@@ -746,6 +760,7 @@ begin
   cOpts.Baseline := True;
   cOpts.Ion := True;
   cOpts.AsmJS := True;
+  cOpts.NativeRegExp := True;
 {$ELSE}
   // You must set jsoBaseLine,jsoTypeInference,jsoIon for the enabling ION
   // ION is disabled without these options
@@ -765,44 +780,49 @@ begin
   fRt.ErrorReporter := ErrorReporter;
 {$ENDIF}
 
-  FGlobalObject := cx.NewRootedObject(cx.NewGlobalObject(@jsglobal_class));
-  if FGlobalObject.ptr = nil then
-    raise ESMException.Create('Create global object');
-  fcomp := cx.EnterCompartment(FGlobalObject.ptr);
-  if not cx.InitStandardClasses(FGlobalObject.ptr) then
-    raise ESMException.Create('InitStandardClasses failure');
-  if not cx.InitCTypesClass(FGlobalObject.ptr) then
-    raise ESMException.Create('InitCTypesClass failure');
-//  if not cx.InitReflectParse(FGlobalObject.ptr) then
-//    raise ESMException.Create('InitReflectParse failure');
-  if not cx.InitModuleClasses(FGlobalObject.ptr) then
-    raise ESMException.Create('InitModuleClasses failure');
+  cx.BeginRequest;
+  try
+    FGlobalObject := cx.NewRootedObject(cx.NewGlobalObject(@jsglobal_class));
+    if FGlobalObject.ptr = nil then
+      raise ESMException.Create('Create global object');
+    fcomp := cx.EnterCompartment(FGlobalObject.ptr);
+    if not cx.InitStandardClasses(FGlobalObject.ptr) then
+      raise ESMException.Create('InitStandardClasses failure');
+    if not cx.InitCTypesClass(FGlobalObject.ptr) then
+      raise ESMException.Create('InitCTypesClass failure');
+  //  if not cx.InitReflectParse(FGlobalObject.ptr) then
+  //    raise ESMException.Create('InitReflectParse failure');
+    if not cx.InitModuleClasses(FGlobalObject.ptr) then
+      raise ESMException.Create('InitModuleClasses failure');
 
-  FGlobalObject.ptr.DefineProperty(cx, 'global', FGlobalObject.ptr.ToJSValue,
-    JSPROP_ENUMERATE or JSPROP_PERMANENT or JSPROP_READONLY, nil, nil);
+    FGlobalObject.ptr.DefineProperty(cx, 'global', FGlobalObject.ptr.ToJSValue,
+      JSPROP_ENUMERATE or JSPROP_PERMANENT or JSPROP_READONLY, nil, nil);
 
-  fTimeoutValue := -1;
-  if not InitWatchdog then
-    raise ESMException.Create('InitWatchDog failure');
+    fTimeoutValue := -1;
+    if not InitWatchdog then
+      raise ESMException.Create('InitWatchDog failure');
 
-{$IFDEF SM52}
-  fcx.AddInterruptCallback(OperationCallback);
-{$ELSE}
-  fRt.InterruptCallback := OperationCallback;
-{$ENDIF}
-  FDllModulesUnInitProcList := TList.Create;
-  DefineProcessBinding;
-  DefineNodeProcess;
-  DefineModuleLoader;
+  {$IFDEF SM52}
+    fcx.AddInterruptCallback(OperationCallback);
+  {$ELSE}
+    fRt.InterruptCallback := OperationCallback;
+  {$ENDIF}
+    FDllModulesUnInitProcList := TList.Create;
+    DefineProcessBinding;
+    DefineNodeProcess;
+    DefineModuleLoader;
 
-  EvaluateModule('synode.js');
-  FGlobalTimerLoopFunc := cx.NewRootedValue(FGlobalObject.ptr.GetPropValue(cx, '_timerLoop'));
-  if not (FGlobalTimerLoopFunc.ptr.isObject and FGlobalTimerLoopFunc.ptr.asObject.isFunction(cx)) then begin
-    cx.FreeRootedValue(FGlobalTimerLoopFunc);
-    FGlobalTimerLoopFunc := nil;
+    EvaluateModule('synode.js');
+    FGlobalTimerLoopFunc := cx.NewRootedValue(FGlobalObject.ptr.GetPropValue(cx, '_timerLoop'));
+    if not (FGlobalTimerLoopFunc.ptr.isObject and FGlobalTimerLoopFunc.ptr.asObject.isFunction(cx)) then begin
+      cx.FreeRootedValue(FGlobalTimerLoopFunc);
+      FGlobalTimerLoopFunc := nil;
+    end;
+
+    FGlobalObjectDbg := cx.NewRootedObject(cx.NewGlobalObject(@jsglobal_class));
+  finally
+    cx.EndRequest;
   end;
-
-  FGlobalObjectDbg := cx.NewRootedObject(cx.NewGlobalObject(@jsglobal_class));
 end;
 
 procedure TSMEngine.defineEnum(ti: PTypeInfo; aObj: PJSRootedObject);
@@ -934,50 +954,56 @@ var
   process: PJSRootedObject;
   procExitCodeVal: jsval;
 begin
+  cx.BeginRequest;
   try
-    process := cx.NewRootedObject(GlobalObject.ptr.GetPropValue(cx,'process').asObject);
     try
-      process.ptr.SetProperty(cx, '_exiting', jsval.TrueValue);
-      if process.ptr.HasProperty(cx, 'emit') then
-        CallObjectFunction(process, 'emit', [cx.NewJSString('exit').ToJSVal])
-      else
-        raise Exception.Create('`process` initialized incorrectly (dont have `emit` method)');
-      procExitCodeVal := process.ptr.GetPropValue(cx, 'exitCode');
-      if procExitCodeVal.isInteger then
-        ExitCode := procExitCodeVal.asInteger;
-    finally
-      cx.FreeRootedObject(process);
+      process := cx.NewRootedObject(GlobalObject.ptr.GetPropValue(cx,'process').asObject);
+      try
+        process.ptr.SetProperty(cx, '_exiting', jsval.TrueValue);
+        if process.ptr.HasProperty(cx, 'emit') then
+          CallObjectFunction(process, 'emit', [cx.NewJSString('exit').ToJSVal])
+        else
+          raise Exception.Create('`process` initialized incorrectly (dont have `emit` method)');
+        procExitCodeVal := process.ptr.GetPropValue(cx, 'exitCode');
+        if procExitCodeVal.isInteger then
+          ExitCode := procExitCodeVal.asInteger;
+      finally
+        cx.FreeRootedObject(process);
+      end;
+    except
+      on E: Exception do begin
+        ExitCode := 1;
+      end;
     end;
-  except
-    on E: Exception do begin
-      ExitCode := 1;
+
+    if Manager.FRemoteDebuggerThread <> nil then begin
+      TSMRemoteDebuggerThread(Manager.FRemoteDebuggerThread).stopDebugCurrentThread(Self);
     end;
-  end;
+    while FDllModulesUnInitProcList.Count > 0 do begin
+      unInitProc := FDllModulesUnInitProcList[FDllModulesUnInitProcList.Count - 1];
+      FDllModulesUnInitProcList.Delete(FDllModulesUnInitProcList.Count - 1);
+      unInitProc();
+    end;
+    FDllModulesUnInitProcList.Free;
 
-  if Manager.FRemoteDebuggerThread <> nil then begin
-    TSMRemoteDebuggerThread(Manager.FRemoteDebuggerThread).stopDebugCurrentThread(Self);
+    if FGlobalTimerLoopFunc <> nil then cx.FreeRootedValue(FGlobalTimerLoopFunc);
+    if FGlobalObjectDbg <> nil then cx.FreeRootedObject(FGlobalObjectDbg);
+    if FGlobalObject <> nil then cx.FreeRootedObject(FGlobalObject);
+    with TSynFPUException.ForLibraryCode do begin
+      cx.LeaveCompartment(comp);
+      KillWatchdog;
+    end;
+  finally
+    cx.EndRequest;
   end;
-  while FDllModulesUnInitProcList.Count > 0 do begin
-    unInitProc := FDllModulesUnInitProcList[FDllModulesUnInitProcList.Count - 1];
-    FDllModulesUnInitProcList.Delete(FDllModulesUnInitProcList.Count - 1);
-    unInitProc();
-  end;
-  FDllModulesUnInitProcList.Free;
-  inherited Destroy;
-
-  if FGlobalTimerLoopFunc <> nil then cx.FreeRootedValue(FGlobalTimerLoopFunc);
-  if FGlobalObjectDbg <> nil then cx.FreeRootedObject(FGlobalObjectDbg);
-  if FGlobalObject <> nil then cx.FreeRootedObject(FGlobalObject);
-  with TSynFPUException.ForLibraryCode do begin
-    cx.LeaveCompartment(comp);
-    if FThreadID=GetCurrentThreadId then
+  if FThreadID=GetCurrentThreadId then
+    with TSynFPUException.ForLibraryCode do begin
       cx^.Destroy; // SM 45 expects the context to be released in the same thread
-    KillWatchdog;
-  {$IFNDEF SM52}
-    if FThreadID=GetCurrentThreadId then
-      rt^.Destroy;
-  {$ENDIF}
-  end;
+      {$IFNDEF SM52}
+        rt^.Destroy;
+      {$ENDIF}
+    end;
+  inherited Destroy;
 end;
 
 {$IFDEF SM52}
@@ -1651,7 +1677,8 @@ begin
     ScheduleWatchdog;
     isFirst := not cx.IsRunning;
     opts := cx.NewCompileOptions;
-    opts.filename := Pointer(ResName);
+    opts.SetFileLineAndUtf8(Pointer(ResName), 0, false);
+    //opts.filename := Pointer(ResName);
 
     if not getResCharsAndLength(ResName, pScript, scriptLength) then
       raise ESMException.CreateUTF8('Resource "%" not found', [ResName]);
@@ -1679,7 +1706,8 @@ begin
     ScheduleWatchdog;
     isFirst := not cx.IsRunning;
     opts := cx.NewCompileOptions;
-    opts.filename := Pointer(scriptName);
+    opts.SetFileLineAndUtf8(Pointer(scriptName), 0, false);
+    //opts.filename := Pointer(scriptName);
 
     remChar13FromScript(script);
     r := cx.EvaluateUCScript(
@@ -1702,23 +1730,29 @@ var r: Boolean;
     rval: jsval;
 begin
   with TSynFPUException.ForLibraryCode do begin
-    ClearLastError;
-    ScheduleWatchdog;
-    isFirst := not cx.IsRunning;
-    opts := cx.NewCompileOptions;
-    opts.filename := Pointer(scriptName);
-    opts.utf8 := true;
+    cx.BeginRequest;
+    try
+      ClearLastError;
+      ScheduleWatchdog;
+      isFirst := not cx.IsRunning;
+      opts := cx.NewCompileOptions;
+      opts.SetFileLineAndUtf8(Pointer(scriptName), 0, true);
+      //opts.filename := Pointer(scriptName);
+      //opts.utf8 := true;
 
-    remChar13FromScriptU(script);
-    r := cx.EvaluateScript(
-        opts, pointer(script), length(script), result);
-    cx.FreeCompileOptions(opts);
-    if r and isFirst and GlobalObject.ptr.HasProperty(cx, '_timerLoop') then
-      r := GlobalObject.ptr.CallFunctionName(cx, '_timerLoop', 0, nil, rval);
-    if not r then
-      r := false;
-    StopWatchdog;
-    CheckJSError(r);
+      remChar13FromScriptU(script);
+      r := cx.EvaluateScript(
+          opts, pointer(script), length(script), result);
+      cx.FreeCompileOptions(opts);
+      if r and isFirst and GlobalObject.ptr.HasProperty(cx, '_timerLoop') then
+        r := GlobalObject.ptr.CallFunctionName(cx, '_timerLoop', 0, nil, rval);
+      if not r then
+        r := false;
+      StopWatchdog;
+      CheckJSError(r);
+    finally
+      cx.EndRequest;
+    end;
   end;
 end;
 
@@ -2008,7 +2042,8 @@ begin
     global := cx.NewRootedObject(cx.CurrentGlobalOrNull);
     try
       options := cx.NewCompileOptions;
-      options.filename := Pointer(FileName);
+      options.SetFileLineAndUtf8(Pointer(FileName), 0, false);
+      //options.filename := Pointer(FileName);
       res := cx.NewRootedObject(cx.CompileModule(global.ptr, options, Pointer(Script), Length(Script)));
       result := res <> nil;
       if result then
@@ -2061,7 +2096,8 @@ begin
     global := cx.NewRootedObject(cx.CurrentGlobalOrNull);
     try
       options := cx.NewCompileOptions;
-      options.filename := Pointer(FileName);
+      options.SetFileLineAndUtf8(Pointer(FileName), 0, false);
+      //options.filename := Pointer(FileName);
       res := cx.NewRootedObject(cx.CompileModule(global.ptr, options, pScript, scriptLength));
       result := res <> nil;
       if result then
@@ -2136,7 +2172,8 @@ begin
     pScriptString := cx.NewRootedString(in_argv[0].asJSString);
     try
       opts := cx.NewCompileOptions;
-      opts.filename := Pointer(FileName);
+      opts.SetFileLineAndUtf8(Pointer(FileName), 0, false);
+      //opts.filename := Pointer(FileName);
       if pScriptString.ptr.HasLatin1Chars then begin
         pScriptContent := pScriptString.ptr.GetLatin1StringCharsAndLength(cx, scriptLength);
         Result := cx.EvaluateScript(opts, pScriptContent, scriptLength, res);
@@ -2192,7 +2229,8 @@ begin
     cx.BeginRequest;
     try
       opts := cx.NewCompileOptions;
-      opts.filename := Pointer(FileName);
+      opts.SetFileLineAndUtf8(Pointer(FileName), 0, false);
+      //opts.filename := Pointer(FileName);
       Result := cx.EvaluateUCScript(opts, pScript, scriptLength, res);
       cx.FreeCompileOptions(opts);
       if Result then

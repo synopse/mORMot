@@ -61,7 +61,7 @@ unit SyNodeProto;
 interface
 
 {$I Synopse.inc} // define HASINLINE
-{$I SyNode.inc}
+{$I SyNode.inc}  // define WITH_NEW_PROTO
 
 uses
   {$ifdef ISDELPHIXE2}System.SysUtils,{$else}SysUtils,{$endif}
@@ -71,7 +71,6 @@ uses
   SpiderMonkey;
 
 type
-
   TSMRTTIPropCache = record
     mbr: pointer;//TRttiMember;
     jsName: AnsiString;
@@ -98,15 +97,15 @@ type
   TSMMethodDynArray = array of TSMMethodRec;
 
   TSMObjectType = (otProto, otInstance, otOther);
-
-  {$ifdef UNICODE}
-  TSMObjectRecord = record
-  {$else}
-  TSMObjectRecord = object
-  {$endif}
+  TSMObjectRecord = {$ifdef UNICODE}record{$else}object{$endif}
     Magic: Word;
     DataType: TSMObjectType;
     Data: Pointer;
+    //case DataType: TSMObjectType of
+    //  otProto: (Data: Pointer);
+    //  otInstance: (Data: PSMInstanceRecord);
+    //  otOther (Data: Pointer); // PSMIdxPropReader from NewProto
+    //end;
     procedure init(aDataType: TSMObjectType; aData: Pointer);
     function IsMagicCorrect: boolean;
   end;
@@ -117,19 +116,18 @@ type
 
   PSMInstanceRecord = ^TSMInstanceRecord;
   TFreeInstanceRecord = procedure (aInstanceRecord: PSMInstanceRecord);
- {$ifdef UNICODE}
-  TSMInstanceRecord = record
-  {$else}
-  TSMInstanceRecord = object
-  {$endif}
+
+  TSMInstanceRecord = {$ifdef UNICODE}record{$else}object{$endif}
   private
     function InternalCreate(cx: PJSContext; AInstance: TObject; AProto: TSMCustomProtoObject): jsval;
   public
     proto: TSMCustomProtoObject;
     instance: TObject;
     OwnInstance: Boolean;
+    {$ifdef WITH_NEW_PROTO}
     AddData: pointer;
     onFree: TFreeInstanceRecord;
+    {$ENDIF}
     procedure freeNative;
     function CreateNew(acx: PJSContext; AProto: TSMCustomProtoObject; argc: uintN; var vp: JSArgRec): jsval;
     function CreateForObj(acx: PJSContext; AInstance: TObject; AProto: TSMCustomProtoObjectClass; aParent: PJSRootedObject): jsval; overload;
@@ -275,7 +273,7 @@ const
   );
   jsdef_class: JSClass = (
     name: '';
-    flags: uint32(JSCLASS_HAS_PRIVATE);
+    flags: uint32(JSCLASS_HAS_PRIVATE) or JSCLASS_FOREGROUND_FINALIZE;
     cOps: @jsdef_classOpts;
     reserved: (nil, nil, nil)
     );
@@ -547,10 +545,12 @@ end;
 
 procedure TSMInstanceRecord.freeNative;
 begin
+  {$ifdef WITH_NEW_PROTO}
   if Assigned(onFree) then
     onFree(@Self);
+  {$endif}
   if OwnInstance then begin
-    if Assigned(instance) then
+    if instance<>nil then
       FreeAndNil(instance);
   end;
   Instance := nil; // in case the FInstance is IUnknown
@@ -564,8 +564,10 @@ var
   protoObj: PJSRootedObject;
 begin
   proto := AProto;
+  {$ifdef WITH_NEW_PROTO}
   onFree := nil;
   AddData := nil;
+  {$ENDIF}
 
   cx.BeginRequest;
   try

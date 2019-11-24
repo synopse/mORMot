@@ -64,6 +64,10 @@
 
 {$DEFINE CORE_MODULES_IN_RES} // core_modules is compiled into resources
 
+// define this in case SyNodeNewProto unit isused
+// if undefined each native object wrapper will take 2*sizeof(pointer) less memory
+{-$DEFINE WITH_NEW_PROTO}
+
 {$ifndef FPC}
 {$IFDEF CONDITIONALEXPRESSIONS}
 {$if CompilerVersion = 24.0}

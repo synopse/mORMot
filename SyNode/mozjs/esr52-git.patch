@@ -1,5 +1,5 @@
 diff --git a/js/public/Initialization.h b/js/public/Initialization.h
-index 8a1cf91..597fbd0 100644
+index 8a1cf9101a1a..597fbd05f921 100644
 --- a/js/public/Initialization.h
 +++ b/js/public/Initialization.h
 @@ -119,7 +119,7 @@ JS_IsInitialized(void)
@@ -12,7 +12,7 @@ index 8a1cf91..597fbd0 100644
  
  #endif /* js_Initialization_h */
 diff --git a/js/src/jsalloc.h b/js/src/jsalloc.h
-index 7805c5f..e0e1b48 100644
+index 7805c5f8cb63..e0e1b4801501 100644
 --- a/js/src/jsalloc.h
 +++ b/js/src/jsalloc.h
 @@ -17,7 +17,7 @@
@@ -25,10 +25,10 @@ index 7805c5f..e0e1b48 100644
  namespace js {
  
 diff --git a/js/src/jsapi.cpp b/js/src/jsapi.cpp
-index a99d089..6525f64 100644
+index a99d08951a1c..8e93b9179b34 100644
 --- a/js/src/jsapi.cpp
 +++ b/js/src/jsapi.cpp
-@@ -6865,3 +6865,178 @@ js::GetStackFormat(JSContext* cx)
+@@ -6865,3 +6865,191 @@ js::GetStackFormat(JSContext* cx)
  {
      return cx->stackFormat();
  }
@@ -84,6 +84,13 @@ index a99d089..6525f64 100644
 +JS_NewCompileOptions(JSContext* cx)
 +{
 +    return js_new<JS::CompileOptions>(cx);
++}
++
++JS_PUBLIC_API(void*)
++JS_SetCompileOptionsFileLineAndUtf8(JS::CompileOptions& options, const char* f, unsigned l, bool isUtf8)
++{
++  options.setFileAndLine(f, l);
++  options.setUTF8(isUtf8);
 +}
 +
 +JS_PUBLIC_API(void)
@@ -207,8 +214,14 @@ index a99d089..6525f64 100644
 +{
 +    delete v;
 +}
++
++JS_PUBLIC_API(void)
++JS_DisableExtraThreads(void)
++{
++  js::DisableExtraThreads();
++}
 diff --git a/js/src/jsapi.h b/js/src/jsapi.h
-index 46aa159..41c0a14 100644
+index 46aa159471c9..8831431a072a 100644
 --- a/js/src/jsapi.h
 +++ b/js/src/jsapi.h
 @@ -915,41 +915,41 @@ class MOZ_STACK_CLASS SourceBufferHolder final
@@ -2096,7 +2109,7 @@ index 46aa159..41c0a14 100644
  JS_IsIdentifier(JSContext* cx, JS::HandleString str, bool* isIdentifier);
  
  /**
-@@ -6631,4 +6631,78 @@ SetGetPerformanceGroupsCallback(JSContext*, GetGroupsCallback, void*);
+@@ -6631,4 +6631,87 @@ SetGetPerformanceGroupsCallback(JSContext*, GetGroupsCallback, void*);
  } /* namespace js */
  
  
@@ -2130,6 +2143,12 @@ index 46aa159..41c0a14 100644
 +
 +extern "C" JS_PUBLIC_API(void*)
 +JS_NewCompileOptions(JSContext* cx);
++
++extern "C" JS_PUBLIC_API(void*)
++JS_SetCompileOptionsFileLineAndUtf8(JS::CompileOptions& options, const char* f, unsigned l, bool isUtf8);
++
++extern "C" JS_PUBLIC_API(void*)
++JS_SetCompileOptionsFileAndLine(const char* f, unsigned l);
 +
 +extern "C" JS_PUBLIC_API(void)
 +JS_FreeCompileOptions(void* co);
@@ -2172,11 +2191,14 @@ index 46aa159..41c0a14 100644
 +JS_EnumerateToAutoIdVector(JSContext* cx, JS::HandleObject obj, size_t* length, jsid** data);
 +
 +extern "C" JS_PUBLIC_API(void)
++JS_DisableExtraThreads(void);
++
++extern "C" JS_PUBLIC_API(void)
 +JS_DestroyAutoIdVector(JS::AutoIdVector* v);
 +
  #endif /* jsapi_h */
 diff --git a/js/src/jsfriendapi.h b/js/src/jsfriendapi.h
-index b1c7cb0..a95d7a4 100644
+index b1c7cb0dcb11..a95d7a438fe7 100644
 --- a/js/src/jsfriendapi.h
 +++ b/js/src/jsfriendapi.h
 @@ -1637,23 +1637,23 @@ scalarByteSize(Type atype) {
@@ -2582,7 +2604,7 @@ index b1c7cb0..a95d7a4 100644
  
  /**
 diff --git a/js/src/old-configure.in b/js/src/old-configure.in
-index 1c5c9e2..eed3de8 100644
+index 1c5c9e2145f6..eed3de89d57f 100644
 --- a/js/src/old-configure.in
 +++ b/js/src/old-configure.in
 @@ -1623,16 +1623,21 @@ dnl ========================================================

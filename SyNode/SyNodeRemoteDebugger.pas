@@ -711,6 +711,7 @@ begin
   fLogQueue.SafeClear;
 
   cx := aEng.cx;
+  cx.BeginRequest;
   cmpDbg := cx.EnterCompartment(aEng.GlobalObjectDbg.ptr);
   try
     if not aEng.GlobalObjectDbg.ptr.GetProperty(cx, 'Debugger', rval) or rval.isVoid then begin
@@ -744,6 +745,7 @@ begin
     end;
   finally
     cx.LeaveCompartment(cmpDbg);
+    cx.EndRequest;
   end;
   fIsJustInited := true;
 end;

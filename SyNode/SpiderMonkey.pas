@@ -1827,31 +1827,34 @@ type
 {$ENDIF}
   end;
 
-  // internal alignment of JSCompileOptions is a HACK and depends on C++ pragma
-  // TODO - add a functions in C++ patch to expose a setUtf8() and setFileName
-  // see jsapi.h: class JS_FRIEND_API(TransitiveCompileOptions)
-  // Asserted in JSContext.NewCompileOptions
-  JSCompileOptions = record
-    reserved: array[0..1] of Pointer;
-    filename: PCChar;
-
-    introducerFilename_: PCChar;
-    sourceMapURL_: PCChar16;
-    version: JSVersion; //JSVersion version;
-    versionSet: boolean; //bool versionSet;
-    utf8: boolean; //bool utf8
-    selfHostingMode: boolean; // bool selfHostingMode
-    canLazilyParse: boolean; // bool canLazilyParse
-    //strictOption: boolean;
-    //extraWarningsOption: boolean;
-    //werrorOption: boolean;
-    //AsmJSOption asmJSOption;
-    //bool throwOnAsmJSValidationFailureOption;
-    //bool forceAsync;
-    //bool installedFile;  // 'true' iff pre-compiling js file in packaged app
-    //bool sourceIsLazy;
-    reserved1: array[{$ifdef CPUX64}6{$else}7{$endif}..24] of Pointer;
+  { JSCompileOptions }
+  JSCompileOptions = object
+    procedure SetFileLineAndUtf8(const f: PChar; l: cardinal; isUtf8: boolean);
   end;
+
+  // internal alignment of JSCompileOptions is a HACK and depends on C++ pragma
+  // the only function we need is JSCompileOptions.SetFileLineAndUtf8
+  //JSCompileOptions = record
+  //  reserved: array[0..1] of Pointer;
+  //  filename: PCChar;
+  //
+  //  introducerFilename_: PCChar;
+  //  sourceMapURL_: PCChar16;
+  //  version: JSVersion; //JSVersion version;
+  //  versionSet: boolean; //bool versionSet;
+  //  utf8: boolean; //bool utf8
+  //  selfHostingMode: boolean; // bool selfHostingMode
+  //  canLazilyParse: boolean; // bool canLazilyParse
+  //  //strictOption: boolean;
+  //  //extraWarningsOption: boolean;
+  //  //werrorOption: boolean;
+  //  //AsmJSOption asmJSOption;
+  //  //bool throwOnAsmJSValidationFailureOption;
+  //  //bool forceAsync;
+  //  //bool installedFile;  // 'true' iff pre-compiling js file in packaged app
+  //  //bool sourceIsLazy;
+  //  reserved1: array[{$ifdef CPUX64}6{$else}7{$endif}..24] of Pointer;
+  //end;
 
   JSRootedValue = record
     Stack: JSUnknown;
@@ -2017,6 +2020,7 @@ const
   JSCLASS_USERBIT3               = (1 shl (JSCLASS_HIGH_FLAGS_SHIFT+7));
 
   JSCLASS_BACKGROUND_FINALIZE    = (1 shl (JSCLASS_HIGH_FLAGS_SHIFT+8));
+  JSCLASS_FOREGROUND_FINALIZE    = (1 shl (JSCLASS_HIGH_FLAGS_SHIFT+9));
 // Bits 26 through 31 are reserved for the CACHED_PROTO_KEY mechanism, see
 // below.
 
@@ -2248,6 +2252,7 @@ const
  // is, calling JS_Init/JSAPI methods/JS_ShutDown in that order, then doing so
  // again).  This restriction may eventually be lifted.
 function JS_Init: Boolean; cdecl; external SpiderMonkeyLib {$IFDEF SM52}name 'JS_Initialize'{$ENDIF};
+procedure JS_DisableExtraThreads; cdecl; external SpiderMonkeyLib;
  /// Destroy free-standing resources allocated by SpiderMonkey, not associated
  // with any runtime, context, or other structure.
  // - This method should be called after all other JSAPI data has been properly
@@ -2861,6 +2866,11 @@ procedure JS_FreeRootedString(str: PJSRootedString); cdecl; external SpiderMonke
 
 /// Create Compile Options
 function JS_NewCompileOptions(cx: PJSContext): PJSCompileOptions; cdecl; external SpiderMonkeyLib;
+/// expose to Pascal
+// JS::CompileOptions.setFileAndLine + setUTF8
+procedure JS_SetCompileOptionsFileLineAndUtf8(co: PJSCompileOptions;
+  const f: PChar; l: cardinal; isUtf8: boolean); cdecl; external SpiderMonkeyLib;
+
 /// Free Compile Options
 procedure JS_FreeCompileOptions(opt: PJSCompileOptions); cdecl; external SpiderMonkeyLib;
 ///////////////////
@@ -3480,12 +3490,24 @@ end;
 
 function InitJS: Boolean;
 begin
+  // remove extra threads + allow GS to finalize native objects;
+  // See for details the same issue in modgoDB:
+  // https://jira.mongodb.org/browse/SERVER-21728
+  JS_DisableExtraThreads();
   Result := JS_Init;
 end;
 
 procedure ShutDownJS;
 begin
   JS_ShutDown;
+end;
+
+{ JSCompileOptions }
+
+procedure JSCompileOptions.SetFileLineAndUtf8(const f: PChar; l: cardinal;
+  isUtf8: boolean);
+begin
+  JS_SetCompileOptionsFileLineAndUtf8(@Self, f, l, isUtf8);
 end;
 
 { JSString }
@@ -4069,7 +4091,6 @@ end;
 function JSContext.NewCompileOptions: PJSCompileOptions;
 begin
   result := JS_NewCompileOptions(@self);
-  Assert(result.canLazilyParse = true, 'wrong align of JSCompileOptions')
 end;
 
 function JSContext.CompileModule(var obj: PJSObject; opts: PJSCompileOptions;

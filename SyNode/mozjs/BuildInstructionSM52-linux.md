@@ -65,6 +65,10 @@ After that configure sources. This should be done by issuing the following comma
 ```
 ../configure --enable-ctypes --disable-jemalloc --enable-nspr-build --disable-debug-symbols
 ```
+Or for debug build
+```
+../configure --enable-debug --disable-optimize --enable-ctypes --disable-jemalloc --disable-tests --enable-nspr-build
+```
 
 The options stated should be used to successfully build and run SyNode.
 
