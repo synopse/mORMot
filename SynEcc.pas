@@ -3131,12 +3131,12 @@ begin
 end;
 
 function ECCText(const Issuer: TECCCertificateIssuer): RawUTF8;
-var tmp: array[0..sizeof(Issuer)] of byte;
+var tmp: array[0..1] of TECCCertificateIssuer;
 begin
   if IsZero(Issuer) then
     result := '' else begin
-    PAESBlock(@tmp)^ := TAESBlock(Issuer);
-    tmp[sizeof(Issuer)] := 0; // add a trailing #0 as expected for trailing bits
+    tmp[0] := Issuer;
+    tmp[1][0] := 0; // add a trailing #0 as expected for trailing bits
     result := BaudotToAscii(@tmp,sizeof(Issuer));
     if result='' then
       result := SynCommons.BinToHex(@Issuer,sizeof(Issuer));
