@@ -4210,8 +4210,10 @@ var R: TSQLRequest;
     Count: PtrInt;
     Timer: TPrecisionTimer;
 begin
-  if self=nil then
+  if self=nil then begin
+    result := '';
     exit; // avoid GPF in case of call from a static-only server
+  end;
   Timer.Start;
   result := LockJSON(aSQL,aResultCount); // lock and try getting the request from the cache
   if result='' then // only Execute the DB request if not got from cache
@@ -4375,8 +4377,10 @@ end;
 
 function TSQLDataBase.LockJSON(const aSQL: RawUTF8; aResultCount: PPtrInt): RawUTF8;
 begin
-  if self=nil then
+  if self=nil then begin
+    result := '';
     exit; // avoid GPF in case of call from a static-only server
+  end;
   fSafe.Lock; // cache access is also protected by fSafe
   try
     if IsCacheable(aSQL) then begin
