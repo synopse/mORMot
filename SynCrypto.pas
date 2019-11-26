@@ -1964,6 +1964,11 @@ procedure PBKDF2_HMAC_SHA256(const password,salt: RawByteString; count: Integer;
 procedure PBKDF2_HMAC_SHA256(const password,salt: RawByteString; count: Integer;
   var result: THash256DynArray; const saltdefault: RawByteString=''); overload;
 
+/// low-level anti-forensic diffusion of a memory buffer using SHA-256
+// - as used by TAESPRNG.AFSplit and TAESPRNG.AFUnSplit
+procedure AFDiffusion(buf,rnd: pointer; size: cardinal);
+
+
 /// direct SHA-3 hash calculation of some data (string-encoded)
 // - result is returned in hexadecimal format
 // - default DigestBits=0 will write the default number of bits to Digest
@@ -13780,7 +13785,7 @@ begin
   result := MainAESPRNG;
 end;
 
-procedure _afdiffusesha256(buf,rnd: pointer; size: cardinal);
+procedure AFDiffusion(buf,rnd: pointer; size: cardinal);
 var sha: TSHA256;
     dig: TSHA256Digest;
     last, iv: cardinal;
@@ -13803,7 +13808,7 @@ begin
   sha.Update(@iv,SizeOf(iv));
   sha.Update(buf,size);
   sha.Final(dig);
-  MoveFast(dig,buf^,size);
+  MoveSmall(@dig,buf,size);
 end;
 
 function TAESPRNG.AFSplit(const Buffer; BufferBytes, StripesCount: integer): RawByteString;
@@ -13820,7 +13825,7 @@ begin
   SetLength(tmp,BufferBytes);
   for i := 1 to StripesCount do begin
     FillRandom(dst,BufferBytes);
-    _afdiffusesha256(pointer(tmp),dst,BufferBytes);
+    AFDiffusion(pointer(tmp),dst,BufferBytes);
     inc(PByte(dst),BufferBytes);
   end;
   XorMemory(dst,@Buffer,pointer(tmp),BufferBytes);
@@ -13845,7 +13850,7 @@ begin
   src := pointer(Split);
   SetLength(tmp,BufferBytes);
   for i := 2 to len div cardinal(BufferBytes) do begin
-    _afdiffusesha256(pointer(tmp),src,BufferBytes);
+    AFDiffusion(pointer(tmp),src,BufferBytes);
     inc(PByte(src),BufferBytes);
   end;
   XorMemory(@Buffer,src,pointer(tmp),BufferBytes);
