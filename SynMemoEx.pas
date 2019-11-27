@@ -1362,7 +1362,7 @@ begin
         if Assigned(_Text) then
         begin
           {$ifdef UNICODE}
-          if fmt = CF_TEXT then
+          if fmt in [CF_TEXT, CF_UNICODETEXT] then
             Txt := _Text
           else
             Txt := UnicodeString(AnsiString(PAnsiChar(_Text)));
