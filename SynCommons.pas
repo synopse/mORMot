@@ -6009,13 +6009,13 @@ type
     // LockedInt64[], LockedUTF8[] or LockedPointer[] methods
     // - if you want to access those array values, ensure you protect them
     // using a Safe.Lock; try ... Padding[n] ... finally Safe.Unlock structure,
-    // and maintain the PaddingMaxUsedIndex field accurately
+    // and maintain the PaddingUsedCount field accurately
     Padding: array[0..6] of TVarData;
-    /// maximum index of the last value stored in the internal Padding[] array
-    // - equals -1 if no value is actually stored, or a 0..6 number otherwise
+    /// number of values stored in the internal Padding[] array
+    // - equals 0 if no value is actually stored, or a 1..7 number otherwise
     // - you should not have to use this field, but for optimized low-level
     // direct access to Padding[] values, within a Lock/UnLock safe block
-    PaddingMaxUsedIndex: integer;
+    PaddingUsedCount: integer;
     /// initialize the mutex
     // - calling this method is mandatory (e.g. in the class constructor owning
     // the TSynLocker instance), otherwise you may encounter unexpected
@@ -11659,6 +11659,7 @@ type
   4: (c: TBlock128);
   5: (b: THash128);
   6: (w: array[0..7] of word);
+  7: (l64,h64: Int64Rec);
   end;
   /// pointer to 128-bit hash map variable record
   PHash128Rec = ^THash128Rec;
@@ -11684,6 +11685,7 @@ type
   5: (q: array[0..3] of QWord);
   6: (c: array[0..7] of cardinal);
   7: (w: array[0..15] of word);
+  8: (l,h: THash128Rec);
   end;
   /// pointer to 256-bit hash map variable record
   PHash256Rec = ^THash256Rec;
@@ -11711,6 +11713,7 @@ type
   7: (b384: THash384);
   8: (w: array[0..31] of word);
   9: (c: array[0..15] of cardinal);
+  10: (l,h: THash256Rec);
   end;
   /// pointer to 512-bit hash map variable record
   PHash512Rec = ^THash512Rec;
@@ -38996,7 +38999,6 @@ begin
             aRelease := dwFileVersionLS shr 16;
           end;
           aBuild := word(dwFileVersionLS);
-          BuildYear := 2010;
           if (dwFileDateLS<>0) and (dwFileDateMS<>0) then begin
             FileTime.dwLowDateTime:= dwFileDateLS; // built date from version info
             FileTime.dwHighDateTime:= dwFileDateMS;
@@ -51283,20 +51285,23 @@ end;
 
 { TSynLocker }
 
+const
+  SYNLOCKER_VTYPENOCLEAR = [varEmpty..varDate,varBoolean,varShortInt..varWord64,varUnknown];
+
 procedure TSynLocker.Init;
 begin
   fSectionPadding := 0;
+  PaddingUsedCount := 0;
   InitializeCriticalSection(fSection);
-  PaddingMaxUsedIndex := -1;
   fLocked := false;
   fInitialized := true;
 end;
 
 procedure TSynLocker.Done;
-var i: integer;
+var i: PtrInt;
 begin
-  for i := 0 to PaddingMaxUsedIndex do
-    if Padding[i].VType<>varUnknown then
+  for i := 0 to PaddingUsedCount-1 do
+    if not(Padding[i].VType in SYNLOCKER_VTYPENOCLEAR) then
       VarClear(variant(Padding[i]));
   DeleteCriticalSection(fSection);
   fInitialized := false;
@@ -51346,7 +51351,7 @@ end;
 
 function TSynLocker.GetVariant(Index: integer): Variant;
 begin
-  if (Index>=0) and (Index<=PaddingMaxUsedIndex) then // PaddingMaxUsedIndex may be -1
+  if cardinal(Index)<cardinal(PaddingUsedCount) then
     try
       EnterCriticalSection(fSection);
       fLocked := true;
@@ -51364,8 +51369,8 @@ begin
     try
       EnterCriticalSection(fSection);
       fLocked := true;
-      if Index>PaddingMaxUsedIndex then
-        PaddingMaxUsedIndex := Index;
+      if Index>=PaddingUsedCount then
+        PaddingUsedCount := Index+1;
       variant(Padding[Index]) := Value;
     finally
       fLocked := false;
@@ -51375,7 +51380,7 @@ end;
 
 function TSynLocker.GetInt64(Index: integer): Int64;
 begin
-  if (Index>=0) and (Index<=PaddingMaxUsedIndex) then
+  if cardinal(Index)<cardinal(PaddingUsedCount) then
     try
       EnterCriticalSection(fSection);
       fLocked := true;
@@ -51395,7 +51400,7 @@ end;
 
 function TSynLocker.GetBool(Index: integer): boolean;
 begin
-  if (Index>=0) and (Index<=PaddingMaxUsedIndex) then
+  if cardinal(Index)<cardinal(PaddingUsedCount) then
     try
       EnterCriticalSection(fSection);
       fLocked := true;
@@ -51415,7 +51420,7 @@ end;
 
 function TSynLocker.GetUnLockedInt64(Index: integer): Int64;
 begin
-  if (Index<0) or (Index>PaddingMaxUsedIndex) or
+  if (cardinal(Index)>=cardinal(PaddingUsedCount)) or
      not VariantToInt64(variant(Padding[index]),result) then
     result := 0;
 end;
@@ -51423,15 +51428,15 @@ end;
 procedure TSynLocker.SetUnlockedInt64(Index: integer; const Value: Int64);
 begin
   if cardinal(Index)<=high(Padding) then begin
-    if Index>PaddingMaxUsedIndex then
-      PaddingMaxUsedIndex := Index;
+    if Index>=PaddingUsedCount then
+      PaddingUsedCount := Index+1;
     variant(Padding[Index]) := Value;
   end;
 end;
 
 function TSynLocker.GetPointer(Index: integer): Pointer;
 begin
-  if (Index>=0) and (Index<=PaddingMaxUsedIndex) then
+  if cardinal(Index)<cardinal(PaddingUsedCount) then
     try
       EnterCriticalSection(fSection);
       fLocked := true;
@@ -51452,13 +51457,12 @@ begin
     try
       EnterCriticalSection(fSection);
       fLocked := true;
-      if Index>PaddingMaxUsedIndex then
-        PaddingMaxUsedIndex := Index;
+      if Index>=PaddingUsedCount then
+        PaddingUsedCount := Index+1;
       with Padding[index] do begin
-        if VType<>varUnknown then begin
+        if not(VType in SYNLOCKER_VTYPENOCLEAR) then
           VarClear(PVariant(@VType)^);
-          VType := varUnknown;
-        end;
+        VType := varUnknown;
         VUnknown := Value;
       end;
     finally
@@ -51470,7 +51474,7 @@ end;
 function TSynLocker.GetUTF8(Index: integer): RawUTF8;
 var wasString: Boolean;
 begin
-  if (Index>=0) and (Index<=PaddingMaxUsedIndex) then
+  if cardinal(Index)<cardinal(PaddingUsedCount) then
     try
       EnterCriticalSection(fSection);
       fLocked := true;
@@ -51490,8 +51494,8 @@ begin
     try
       EnterCriticalSection(fSection);
       fLocked := true;
-      if Index>PaddingMaxUsedIndex then
-        PaddingMaxUsedIndex := Index;
+      if Index>=PaddingUsedCount then
+        PaddingUsedCount := Index+1;
       RawUTF8ToVariant(Value,Padding[Index],varString);
     finally
       fLocked := false;
@@ -51506,9 +51510,9 @@ begin
       EnterCriticalSection(fSection);
       fLocked := true;
       result := 0;
-      if Index<=PaddingMaxUsedIndex then
+      if Index<PaddingUsedCount then
         VariantToInt64(variant(Padding[index]),result) else
-        PaddingMaxUsedIndex := Index;
+        PaddingUsedCount := Index+1;
       variant(Padding[Index]) := Int64(result+Increment);
     finally
       fLocked := false;
@@ -51524,9 +51528,9 @@ begin
       EnterCriticalSection(fSection);
       fLocked := true;
       with Padding[index] do begin
-        if Index<=PaddingMaxUsedIndex then
+        if Index<PaddingUsedCount then
           result := PVariant(@VType)^ else begin
-          PaddingMaxUsedIndex := Index;
+          PaddingUsedCount := Index+1;
           VarClear(result);
         end;
         PVariant(@VType)^ := Value;
@@ -51545,13 +51549,13 @@ begin
       EnterCriticalSection(fSection);
       fLocked := true;
       with Padding[index] do begin
-        if Index<=PaddingMaxUsedIndex then
+        if Index<PaddingUsedCount then
           if VType=varUnknown then
             result := VUnknown else begin
             VarClear(PVariant(@VType)^);
             result := nil;
           end else begin
-          PaddingMaxUsedIndex := Index;
+          PaddingUsedCount := Index+1;
           result := nil;
         end;
         VType := varUnknown;
@@ -58883,7 +58887,7 @@ begin
   fSafe.Padding[DIC_TIMECOUNT].VType := varInteger;
   fSafe.Padding[DIC_TIMESEC].VType := varInteger;
   fSafe.Padding[DIC_TIMETIX].VType := varInteger;
-  fSafe.PaddingMaxUsedIndex := DIC_TIMETIX;
+  fSafe.PaddingUsedCount := DIC_TIMETIX+1;
   fKeys.Init(aKeyTypeInfo,fSafe.Padding[DIC_KEY].VAny,nil,nil,nil,
     @fSafe.Padding[DIC_KEYCOUNT].VInteger,aKeyCaseInsensitive);
   if not Assigned(fKeys.fHashElement) then

@@ -1378,7 +1378,8 @@ end;
 function TSQLRestServerDB.MainEngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8;
 var aSQL: RawUTF8;
 begin
-  if (ID<0) or (TableModelIndex<0) or (result<>'') then
+  result := '';
+  if (ID<0) or (TableModelIndex<0) then
     exit;
   with Model.TableProps[TableModelIndex] do
     FormatUTF8('SELECT % FROM % WHERE RowID=:(%):;',

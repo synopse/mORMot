@@ -18196,6 +18196,7 @@ type
     fStoredClass: TSQLRecordClass;
     fStoredClassProps: TSQLModelRecordProperties;
     fStoredClassRecordProps: TSQLRecordProperties;
+    fStoredClassMapping: PSQLRecordPropertiesMapping;
     fStorageLockShouldIncreaseOwnerInternalState: boolean;
     fStorageLockLogTrace: boolean;
     fModified: boolean;
@@ -20913,7 +20914,7 @@ function CurrentServiceContextServer: TSQLRestServer;
 
 /// returns a safe 256-bit hexadecimal nonce, changing every 5 minutes
 // - as used e.g. by TSQLRestServerAuthenticationDefault.Auth
-// - this function is very fast, even if cryptographically-level secure
+// - this function is very fast, even if cryptographically-level SHA-3 secure
 function CurrentServerNonce(Previous: boolean=false): RawUTF8;
 
 function ToText(ft: TSQLFieldType): PShortString; overload;
@@ -26560,8 +26561,10 @@ begin
   for i := 2 to fRowCount do begin
     {$ifdef FPC}Move{$else}MoveFast{$endif}(U^^,P^,len^);
     inc(P,len^);
-    {$ifdef FPC}Move{$else}MoveFast{$endif}(pointer(Sep)^,P^,SepLen);
-    inc(P,SepLen);
+    if SepLen>0 then begin
+      MoveSmall(pointer(Sep),P,SepLen);
+      inc(P,SepLen);
+    end;
     inc(len);
     inc(U,FieldCount); // go to next row
   end;
@@ -28772,7 +28775,7 @@ begin
       end;
     end;
     else
-      raise EORMException.Create('Invalid EncodeAsSQLPrepared() call');
+      raise EORMException.CreateUTF8('Unexpected EncodeAsSQLPrepared(%)',[ord(Occasion)]);
     end;
     W.SetText(result);
   finally
@@ -46393,7 +46396,7 @@ begin
 end;
 
 function TSQLRestStorageInMemory.EngineList(const SQL: RawUTF8;
-  ForceAJAX: Boolean=false; ReturnedRowCount: PPtrInt=nil): RawUTF8;
+  ForceAJAX: Boolean; ReturnedRowCount: PPtrInt): RawUTF8;
 // - GetJSONValues/FindWhereEqual will handle basic REST commands (not all SQL)
 // only valid SQL command is "SELECT Field1,Field2 FROM Table WHERE ID=120;",
 // i.e one Table SELECT with one optional "WHERE fieldname = value" statement
@@ -47857,6 +47860,7 @@ begin
      fModel.Owner := self;
    end;
   fStoredClassProps := fModel.Props[aClass];
+  fStoredClassMapping := @fStoredClassProps.ExternalDB;
   fIsUnique := fStoredClassRecordProps.IsUniqueFieldsBits;
   fBasicSQLCount := 'SELECT COUNT(*) FROM '+fStoredClassRecordProps.SQLTableName;
   fBasicSQLHasRows[false] := 'SELECT RowID FROM '+fStoredClassRecordProps.SQLTableName+' LIMIT 1';
@@ -50866,7 +50870,7 @@ begin
 end;
 
 function TSQLRecordMany.IDWhereSQL(aClient: TSQLRest; aID: TID; isDest: boolean;
-  const aAndWhereSQL: RawUTF8=''): RawUTF8;
+  const aAndWhereSQL: RawUTF8): RawUTF8;
 const FieldName: array[boolean] of RawUTF8 = ('Source=','Dest=');
 begin
   if (self=nil) or (aID=0) or (fSourceID=nil) or (fDestID=nil) or
@@ -51476,10 +51480,6 @@ end;
 
 function TSQLRecordProperties.SQLAddField(FieldIndex: integer): RawUTF8;
 begin
-  if (self=nil) or (cardinal(FieldIndex)>=cardinal(Fields.Count)) then begin
-    result := '';
-    exit;
-  end;
   result := SQLFieldTypeToSQL(FieldIndex);
   if result='' then
     exit; // some fields won't have any column created in the database

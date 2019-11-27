@@ -11289,13 +11289,22 @@ procedure TTestCryptographicRoutines._TAESPNRG;
 var b1,b2: TAESBlock;
     a1,a2: TAESPRNG;
     s1,s2,split: RawByteString;
+    c: cardinal;
     d: double;
+    e: TSynExtended;
     i,stripes: integer;
+    clo, chi, dlo, dhi, elo, ehi: integer;
 begin
   TAESPRNG.Main.FillRandom(b1);
   TAESPRNG.Main.FillRandom(b2);
   Check(not IsEqual(b1,b2));
   Check(not CompareMem(@b1,@b2,sizeof(b1)));
+  clo := 0;
+  chi := 0;
+  dlo := 0;
+  dhi := 0;
+  elo := 0;
+  ehi := 0;
   a1 := TAESPRNG.Create;
   a2 := TAESPRNG.Create;
   try
@@ -11318,18 +11327,44 @@ begin
       s1 := a1.FillRandomHex(i);
       check(length(s1)=i*2);
       check(SynCommons.HexToBin(pointer(s1),nil,i));
-      check(a1.Random32<>a2.Random32);
+      c := a1.Random32;
+      check(c<>a2.Random32,'Random32 collision');
+      if c<maxint then
+        inc(clo) else
+        inc(chi);
       check(a1.Random64<>a2.Random64);
       check(a1.Random32(i)<cardinal(i));
-      d := a1.RandomExt;
+      d := a1.RandomDouble;
       check((d>=0)and(d<1));
-      d := a2.RandomExt;
+      if d<0.5 then
+        inc(dlo) else
+        inc(dhi);
+      d := a2.RandomDouble;
       check((d>=0)and(d<1));
+      if d<0.5 then
+        inc(dlo) else
+        inc(dhi);
+      e := a1.Randomext;
+      check((e>=0)and(e<1));
+      if e<0.5 then
+        inc(elo) else
+        inc(ehi);
+      e := a2.Randomext;
+      check((e>=0)and(e<1));
+      if e<0.5 then
+        inc(elo) else
+        inc(ehi);
     end;
   finally
     a1.Free;
     a2.Free;
   end;
+  Check(clo+chi=2000);
+  Check(dlo+dhi=4000);
+  Check(elo+ehi=4000);
+  CheckUTF8((clo>=950) and (clo<=1050),'Random32 distribution clo=%',[clo]);
+  CheckUTF8((dlo>=1900) and (dlo<=2100),'RandomDouble distribution dlo=%',[dlo]);
+  CheckUTF8((elo>=1900) and (elo<=2100),'RandomExt distribution elo=%',[elo]);
   s1 := TAESPRNG.Main.FillRandom(100);
   for i := 1 to length(s1) do
     for stripes := 0 to 10 do begin

@@ -943,7 +943,9 @@ end;
 
 function TServiceController.Start(const Args: array of PChar): boolean;
 begin
-  Result := StartService(FHandle, length(Args), @Args[0]);
+  if length(Args)=0 then
+    Result := StartService(FHandle, 0, nil) else
+    Result := StartService(FHandle, length(Args), @Args[0]);
 end;
 
 function TServiceController.Stop: boolean;

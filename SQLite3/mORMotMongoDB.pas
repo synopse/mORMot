@@ -137,7 +137,8 @@ type
       var Doc: TDocVariantData): TID;
     procedure JSONFromDoc(var doc: TDocVariantData; var result: RawUTF8);
     function BSONProjectionSet(var Projection: variant; WithID: boolean;
-      const Fields: TSQLFieldBits; BSONFieldNames: PRawUTF8DynArray): integer;
+      const Fields: TSQLFieldBits; BSONFieldNames: PRawUTF8DynArray;
+      const SubFields: TRawUTF8DynArray): integer;
     function GetJSONValues(const Res: TBSONDocument;
       const extFieldNames: TRawUTF8DynArray; W: TJSONSerializer): integer;
     // overridden methods calling the MongoDB external server
@@ -403,44 +404,53 @@ constructor TSQLRestStorageMongoDB.Create(aClass: TSQLRecordClass; aServer: TSQL
 begin
   inherited Create(aClass,aServer);
   // ConnectionProperties should have been set in StaticMongoDBRegister()
-  fCollection := fStoredClassProps.ExternalDB.ConnectionProperties as TMongoCollection;
+  fCollection := fStoredClassMapping^.ConnectionProperties as TMongoCollection;
   {$ifdef WITHLOG}
   fOwner.LogFamily.SynLog.Log(sllInfo,'will store % using %',[aClass,Collection],self);
   {$endif}
   BSONProjectionSet(fBSONProjectionSimpleFields,true,
-    fStoredClassRecordProps.SimpleFieldsBits[soSelect],nil);
+    fStoredClassRecordProps.SimpleFieldsBits[soSelect],nil,nil);
   BSONProjectionSet(fBSONProjectionBlobFields,false,
-    fStoredClassRecordProps.FieldBits[sftBlob],@fBSONProjectionBlobFieldsNames);
+    fStoredClassRecordProps.FieldBits[sftBlob],@fBSONProjectionBlobFieldsNames,nil);
 end;
 
 function TSQLRestStorageMongoDB.BSONProjectionSet(var Projection: variant;
-  WithID: boolean; const Fields: TSQLFieldBits; BSONFieldNames: PRawUTF8DynArray): integer;
-var i,n: integer;
+  WithID: boolean; const Fields: TSQLFieldBits; BSONFieldNames: PRawUTF8DynArray;
+  const SubFields: TRawUTF8DynArray): integer;
+var i,n,sf: integer;
     W: TBSONWriter;
+    name: RawUTF8;
 begin
+  sf := length(SubFields);
   W := TBSONWriter.Create(TRawByteStringStream);
   try
     W.BSONDocumentBegin;
     if withID then
       result := 1 else
       result := 0;
-    W.BSONWrite(fStoredClassProps.ExternalDB.RowIDFieldName,result);
-    for i := 0 to fStoredClassProps.Props.Fields.Count-1 do
+    name := fStoredClassMapping^.RowIDFieldName;
+    if sf>0 then
+      name := name+SubFields[0];
+    W.BSONWrite(name,result);
+    for i := 0 to fStoredClassRecordProps.Fields.Count-1 do
       if i in Fields then begin
-        W.BSONWrite(fStoredClassProps.ExternalDB.ExtFieldNames[i],1);
+        name := fStoredClassMapping^.ExtFieldNames[i];
+        if i+1<sf then
+          name := name+SubFields[i+1];
+        W.BSONWrite(name,1);
         inc(result);
       end;
     W.BSONDocumentEnd;
     W.ToBSONVariant(Projection);
     if BSONFieldNames<>nil then
-    with fStoredClassProps.ExternalDB do begin
+    with fStoredClassMapping^ do begin
       SetLength(BSONFieldNames^,result);
       if WithID then begin
         BSONFieldNames^[0] := RowIDFieldName;
         n := 1;
       end else
         n := 0;
-      for i := 0 to fStoredClassProps.Props.Fields.Count-1 do
+      for i := 0 to fStoredClassRecordProps.Fields.Count-1 do
         if i in Fields then begin
           BSONFieldNames^[n] := ExtFieldNames[i];
           inc(n);
@@ -577,18 +587,18 @@ begin
   MissingID := true;
   for i := doc.Count-1 downto 0 do // downwards for doc.Delete(i) below
     if IsRowID(pointer(doc.Names[i])) then begin
-      doc.Names[i] := fStoredClassProps.ExternalDB.RowIDFieldName;
+      doc.Names[i] := fStoredClassMapping^.RowIDFieldName;
       VariantToInt64(doc.Values[i],Int64(result));
       if (Occasion=soUpdate) or (result=0) then
         doc.Delete(i) else  // update does not expect any $set:{_id:..}
         MissingID := false; // leave true if value is not an integer (=0)
     end else begin
-      ndx := fStoredClassProps.Props.Fields.IndexByName(doc.Names[i]);
+      ndx := fStoredClassRecordProps.Fields.IndexByName(doc.Names[i]);
       if ndx<0 then
         raise EORMMongoDBException.CreateUTF8(
           '%.DocFromJSON: unkwnown field name "%"',[self,doc.Names[i]]);
-      doc.Names[i] := fStoredClassProps.ExternalDB.ExtFieldNames[ndx];
-      info := fStoredClassProps.Props.Fields.List[ndx];
+      doc.Names[i] := fStoredClassMapping^.ExtFieldNames[ndx];
+      info := fStoredClassRecordProps.Fields.List[ndx];
       V := @doc.Values[i];
       case V^.VType of
       varInteger:
@@ -651,7 +661,7 @@ begin
   if Occasion=soInsert then
     if MissingID then begin
       result := EngineNextID;
-      doc.AddValue(fStoredClassProps.ExternalDB.RowIDFieldName,result);
+      doc.AddValue(fStoredClassMapping^.RowIDFieldName,result);
     end else begin
       if fEngineAddCompute=eacSynUniqueIdentifier then
         raise EORMMongoDBException.CreateUTF8('%.DocFromJSON: unexpected set '+
@@ -662,7 +672,7 @@ begin
       LeaveCriticalSection(fStorageCriticalSection);
     end;
   if fStoredClassRecordProps.RecordVersionField<>nil then begin
-    RecordVersionName := fStoredClassProps.ExternalDB.ExtFieldNames[
+    RecordVersionName := fStoredClassMapping^.ExtFieldNames[
       fStoredClassRecordProps.RecordVersionField.PropertyIndex];
     if doc.GetValueIndex(RecordVersionName)<0 then
       if Owner=nil then
@@ -739,10 +749,10 @@ begin
      (SetFieldName='') or (SetValue='') or (WhereFieldName='') or (WhereValue='') then
     result := false else
     try // use {%:%} here since WhereValue/SetValue are already JSON encoded
-      query := BSONVariant('{%:%}',[fStoredClassProps.ExternalDB.
-        InternalToExternal(WhereFieldName),WhereValue],[]);
-      update := BSONVariant('{$set:{%:%}}',[fStoredClassProps.ExternalDB.
-        InternalToExternal(SetFieldName),SetValue],[]);
+      query := BSONVariant('{%:%}',[fStoredClassMapping^.InternalToExternal(
+        WhereFieldName),WhereValue],[]);
+      update := BSONVariant('{$set:{%:%}}',[fStoredClassMapping^.InternalToExternal(
+        SetFieldName),SetValue],[]);
       fCollection.Update(query,update);
       if Owner<>nil then begin
         if Owner.InternalUpdateEventNeeded(TableModelIndex) and
@@ -772,7 +782,7 @@ begin
               UpdateField(fStoredClass,ID,FieldName,[Value+Increment]) else
     try
       fCollection.Update(BSONVariant(['_id',ID]),BSONVariant('{$inc:{%:%}}',
-        [StoredClassProps.ExternalDB.InternalToExternal(FieldName),Increment],[]));
+        [fStoredClassMapping^.InternalToExternal(FieldName),Increment],[]));
       if Owner<>nil then
         Owner.FlushInternalDBCache;
       result := true;
@@ -793,7 +803,7 @@ begin
     result := false else
     try
       query := BSONVariant(['_id',aID]);
-      FieldName := fStoredClassProps.ExternalDB.InternalToExternal(BlobField^.Name);
+      FieldName := fStoredClassMapping^.InternalToExternal(BlobField^.Name);
       BSONVariantType.FromBinary(BlobData,bbtGeneric,blob);
       update := BSONVariant(['$set',BSONVariant([FieldName,blob])]);
       fCollection.Update(query,update);
@@ -829,7 +839,7 @@ begin
     if info.SQLFieldType=sftBlob then begin
       (info as TSQLPropInfoRTTIRawBlob).GetBlob(Value,blobRaw);
       BSONVariantType.FromBinary(blobRaw,bbtGeneric,blob);
-      update.AddValue(fStoredClassProps.ExternalDB.ExtFieldNames[f],blob);
+      update.AddValue(fStoredClassMapping^.ExtFieldNames[f],blob);
     end;
   end;
   if update.Count>0 then
@@ -903,7 +913,7 @@ begin
   try
     W.Add('{');
     for i := 0 to doc.Count-1 do begin
-      name := fStoredClassProps.ExternalDB.ExternalToInternalOrNull(doc.Names[i]);
+      name := fStoredClassMapping^.ExternalToInternalOrNull(doc.Names[i]);
       if name='' then
         raise EORMMongoDBException.CreateUTF8(
           '%.JSONFromDoc: Unknown field "%" for %',[self,doc.Names[i],fStoredClass]);
@@ -940,7 +950,7 @@ begin
      (TableModelIndex<0) or (Model.Tables[TableModelIndex]<>fStoredClass) then
     result := false else
     try
-      FieldName := fStoredClassProps.ExternalDB.InternalToExternal(BlobField^.Name);
+      FieldName := fStoredClassMapping^.InternalToExternal(BlobField^.Name);
       doc := fCollection.FindDoc(BSONVariant(['_id',aID]),BSONVariant([FieldName,1]),1);
       if _Safe(doc)^.GetVarData(FieldName,data) then
         BSONVariantType.ToBlob(variant(data),RawByteString(BlobData));
@@ -1080,7 +1090,6 @@ function TSQLRestStorageMongoDB.EngineList(const SQL: RawUTF8;
   ForceAJAX: Boolean; ReturnedRowCount: PPtrInt): RawUTF8;
 var ResCount: PtrInt;
     Stmt: TSynTableStatement;
-    extFieldName: function(FieldIndex: Integer): RawUTF8 of object;
     Query: variant;
     TextOrderByField: RawUTF8;
 const ORDERBY_FIELD: array[boolean] of Integer=(1,-1);
@@ -1105,7 +1114,7 @@ begin
     if joinedOR then
       B.BSONDocumentBegin(UInt32ToUtf8(w));
     with Stmt.Where[w] do begin
-      FieldName := extFieldName(Field-1);
+      FieldName := fStoredClassMapping^.FieldNameByIndex(Field-1)+SubField;
       if not B.BSONWriteQueryOperator(FieldName,NotClause,Operator,ValueVariant) then begin
         InternalLog('%.EngineList: operator % not supported for field "%" in [%]',
           [ClassType,ToText(Operator)^,FieldName,SQL],sllError);
@@ -1147,11 +1156,11 @@ begin // here we compute a BSON query, since it is the fastest
       if (n=0) and (Stmt.OrderByField[0]>0) and (Stmt.Limit=0) and
          (Stmt.Offset=0) and (fStoredClassRecordProps.Fields.List[
           Stmt.OrderByField[0]-1].SQLFieldType in [sftAnsiText,sftUTF8Text]) then
-        TextOrderByField := extFieldName(Stmt.OrderByField[0]-1) else
+        TextOrderByField := fStoredClassMapping^.FieldNameByIndex(Stmt.OrderByField[0]-1) else
       if n>=0 then begin
         B.BSONDocumentBegin('$orderby');
         for i := 0 to n do
-          B.BSONWrite(extFieldName(Stmt.OrderByField[i]-1),ORDERBY_FIELD[Stmt.OrderByDesc]);
+          B.BSONWrite(fStoredClassMapping^.FieldNameByIndex(Stmt.OrderByField[i]-1),ORDERBY_FIELD[Stmt.OrderByDesc]);
         B.BSONDocumentEnd;
       end;
       B.BSONDocumentEnd;
@@ -1170,7 +1179,7 @@ begin
 end;
 procedure ComputeAggregate;
 type TFunc = (funcMax,funcMin,funcAvg,funcSum,funcCount);
-const FUNCT: array[TFunc] of string[4] = ('$max','$min','$avg','$sum','$sum');
+const FUNCT: array[TFunc] of RawUTF8 = ('$max','$min','$avg','$sum','$sum');
 var i: integer;
     func: TFunc;
     distinct: integer;
@@ -1186,7 +1195,7 @@ begin
         exit;
       end else begin
       distinct := Stmt.Select[i].Field;
-      distinctName := extFieldName(distinct-1);
+      distinctName := fStoredClassMapping^.FieldNameByIndex(distinct-1);
     end;
   B := TBSONWriter.Create(TRawByteStringStream);
   try
@@ -1209,7 +1218,7 @@ begin
       B.BSONWrite('_id',betNull) else begin
       B.BSONDocumentBegin('_id');
       for i := 0 to high(Stmt.GroupByField) do begin
-        name := extFieldName(Stmt.GroupByField[i]-1);
+        name := fStoredClassMapping^.FieldNameByIndex(Stmt.GroupByField[i]-1);
         B.BSONWrite(name,'$'+name);
       end;
       B.BSONDocumentEnd;
@@ -1227,7 +1236,7 @@ begin
       B.BSONDocumentBegin('f'+UInt32ToUTF8(i));
       if func=funcCount then
         B.BSONWrite(FUNCT[func],1) else
-        B.BSONWrite(FUNCT[func],'$'+extFieldName(Field-1));
+        B.BSONWrite(FUNCT[func],'$'+fStoredClassMapping^.FieldNameByIndex(Field-1));
       B.BSONDocumentEnd;
     end;
     B.BSONDocumentEnd;
@@ -1245,17 +1254,19 @@ begin
     B.BSONWrite('_id',0);
     for i := 0 to high(Stmt.Select) do
     with Stmt.Select[i] do begin
-      if Alias<>'' then
+      if Alias<>'' then // name is the output ODM TSQLRecord field
         name := Alias else begin
         if Field=0 then
           name := 'RowID' else
           name := fStoredClassRecordProps.Fields.List[Field-1].Name;
+        if SubField<>'' then // 'field.subfield1.subfield2'
+          name := name+SubField;
         if FunctionName<>'' then
-        if FunctionKnown=funcDistinct then begin
-          B.BSONWrite(name,'$_id');
-          continue;
-        end else
-          name := FunctionName+'('+name+')';
+          if FunctionKnown=funcDistinct then begin
+            B.BSONWrite(name,'$_id');
+            continue;
+          end else
+            name := FunctionName+'('+name+')';
       end;
       value := '$f'+UInt32ToUTF8(i);
       if ToBeAdded<>0 then begin
@@ -1278,7 +1289,7 @@ var W: TJSONSerializer;
     MS: TRawByteStringStream;
     Res: TBSONDocument;
     limit: PtrInt;
-    extFieldNames: TRawUTF8DynArray;
+    extFieldNames, subFields: TRawUTF8DynArray;
     bits: TSQLFieldBits;
     withID: boolean;
     Projection: variant;
@@ -1309,7 +1320,6 @@ begin // same logic as in TSQLRestStorageInMemory.EngineList()
           not IdemPropNameU(Stmt.TableName,fStoredClassRecordProps.SQLTableName) then
           // invalid request -> return '' to mark error
           exit;
-        extFieldName := fStoredClassProps.ExternalDB.FieldNameByIndex;
         if Stmt.SelectFunctionCount<>0 then
           if (length(Stmt.Select)=1) and (Stmt.Select[0].Alias='') and
              IdemPropNameU(Stmt.Select[0].FunctionName,'count') then
@@ -1324,8 +1334,10 @@ begin // same logic as in TSQLRestStorageInMemory.EngineList()
             ComputeAggregate else
         // save rows as JSON from returned BSON
         if ComputeQuery then begin
-          Stmt.SelectFieldBits(bits,withID);
-          BSONProjectionSet(Projection,withID,bits,@extFieldNames);
+          if Stmt.HasSelectSubFields then
+            SetLength(subFields,fStoredClassRecordProps.Fields.Count+1);
+          Stmt.SelectFieldBits(bits,withID,pointer(subFields));
+          BSONProjectionSet(Projection,withID,bits,@extFieldNames,subFields);
           if Stmt.Limit=0 then
             limit := maxInt else
             limit := Stmt.Limit;
