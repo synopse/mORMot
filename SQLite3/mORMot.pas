@@ -21492,6 +21492,7 @@ function ClassFieldNamesAllProps(ClassType: TClass; IncludePropType: boolean;
 var props: PPropInfoDynArray;
     n,i: integer;
 begin
+  result := nil;
   props := ClassFieldAllProps(ClassType,Types);
   n := length(props);
   SetLength(result,n);
@@ -30972,6 +30973,7 @@ procedure TEnumType.GetEnumNameAll(var result: TRawUTF8DynArray;
 var max,i: integer;
     V: PShortString;
 begin
+  Finalize(result);
   max := MaxValue-MinValue;
   SetLength(result,max+1);
   V := @NameList;
@@ -34409,6 +34411,7 @@ function TSQLModel.GetTablesFromSQLSelect(const SQL: RawUTF8): TSQLRecordClassDy
 var t: TIntegerDynArray;
     n,i: integer;
 begin
+  result := nil;
   t := GetTableIndexesFromSQLSelect(SQL);
   n := length(t);
   if n=0 then
@@ -55254,6 +55257,7 @@ class function TInterfaceFactory.GUID2TypeInfo(
   const aGUIDs: array of TGUID): PTypeInfoDynArray;
 var i: integer;
 begin
+  result := nil;
   SetLength(result,length(aGUIDs));
   for i := 0 to high(aGUIDs) do
     result[i] := GUID2TypeInfo(aGUIDs[i]);
@@ -61278,6 +61282,7 @@ end;
 function TServiceMethod.ArgsNames(Input: Boolean): TRawUTF8DynArray;
 var a,n: integer;
 begin
+  result := nil;
   if Input then begin
     SetLength(result,ArgsInputValuesCount);
     n := 0;

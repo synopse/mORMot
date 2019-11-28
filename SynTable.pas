@@ -4360,7 +4360,7 @@ begin
 end;
 
 procedure TSynTable.UpdateFieldData(RecordBuffer: PUTF8Char; RecordBufferLen,
-  FieldIndex: integer; var result: TSBFString; const NewFieldData: TSBFString='');
+  FieldIndex: integer; var result: TSBFString; const NewFieldData: TSBFString);
 var NewSize, DestOffset, OldSize: integer;
     F: TSynTableFieldProperties;
     NewData, Dest: PAnsiChar;
@@ -4390,7 +4390,7 @@ begin
   // update content
   OldSize :=  F.GetLength(Dest);
   dec(RecordBufferLen,OldSize);
-  SetLength(Result,RecordBufferLen+NewSize);
+  SetString(Result,nil,RecordBufferLen+NewSize);
   MoveFast(RecordBuffer^,PByteArray(result)[0],DestOffset);
   MoveFast(NewData^,PByteArray(result)[DestOffset],NewSize);
   MoveFast(Dest[OldSize],PByteArray(result)[DestOffset+NewSize],RecordBufferLen-DestOffset);
@@ -7268,7 +7268,7 @@ var
   m: PSBNDMQ2Mask absolute result;
   c: PCardinal;
 begin
-  SetLength(result, SizeOf(m^));
+  SetString(result, nil, SizeOf(m^));
   {$ifdef FPC}FillChar{$else}FillCharFast{$endif}(m^, SizeOf(m^), 0);
   for i := 0 to length(Pattern) - 1 do begin
     c := @m^[u[p[i]]]; // for FPC code generation
@@ -10410,9 +10410,9 @@ end;
 constructor TSynAuthenticationAbstract.Create;
 begin
   fSafe.Init;
-  fTokenSeed := Random32;
+  fTokenSeed := Random32gsl;
   fSessionGenerator := abs(fTokenSeed*PPtrInt(self)^);
-  fTokenSeed := abs(fTokenSeed*Random32);
+  fTokenSeed := abs(fTokenSeed*Random32gsl);
 end;
 
 destructor TSynAuthenticationAbstract.Destroy;
@@ -10691,22 +10691,22 @@ end;
 
 function DateToSQL(Date: TDateTime): RawUTF8;
 begin
+  result := '';
   if Date<=0 then
-    result := '' else begin
-    SetLength(result,13);
-    PCardinal(pointer(result))^ := JSON_SQLDATE_MAGIC;
-    DateToIso8601PChar(Date,PUTF8Char(pointer(result))+3,True);
-  end;
+     exit;
+  FastSetString(result,nil,13);
+  PCardinal(pointer(result))^ := JSON_SQLDATE_MAGIC;
+  DateToIso8601PChar(Date,PUTF8Char(pointer(result))+3,True);
 end;
 
 function DateToSQL(Year,Month,Day: Cardinal): RawUTF8;
 begin
+  result := '';
   if (Year=0) or (Month-1>11) or (Day-1>30) then
-    result := '' else begin
-    SetLength(result,13);
-    PCardinal(pointer(result))^ := JSON_SQLDATE_MAGIC;
-    DateToIso8601PChar(PUTF8Char(pointer(result))+3,True,Year,Month,Day);
-  end;
+    exit;
+  FastSetString(result,nil,13);
+  PCardinal(pointer(result))^ := JSON_SQLDATE_MAGIC;
+  DateToIso8601PChar(PUTF8Char(pointer(result))+3,True,Year,Month,Day);
 end;
 
 var
@@ -12634,6 +12634,7 @@ end;
 function EnumAllProcesses(out Count: Cardinal): TCardinalDynArray;
 var n: cardinal;
 begin
+  result := nil;
   n := 2048;
   repeat
     SetLength(result, n);
@@ -13000,6 +13001,7 @@ function TSystemUse.History(aProcessID,aDepth: integer): TSingleDynArray;
 var i,n: integer;
     data: TSystemUseDataDynArray;
 begin
+  result := nil;
   data := HistoryData(aProcessID,aDepth);
   n := length(data);
   SetLength(result,n);

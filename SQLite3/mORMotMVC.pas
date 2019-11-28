@@ -1218,7 +1218,7 @@ begin
   inherited Create;
   fContext.CookieName := 'mORMot';
   // temporary secret for encryption
-  fContext.CryptNonce := Random32;
+  fContext.CryptNonce := Random32gsl;
   TAESPRNG.Main.FillRandom(@fContext.Crypt,sizeof(fContext.Crypt));
   // temporary secret for HMAC-CRC32C
   TAESPRNG.Main.FillRandom(@rnd,sizeof(rnd));
@@ -1308,7 +1308,7 @@ begin
   if len>sizeof(tmp.data) then // all cookies storage should be < 4K
     raise EMVCApplication.CreateGotoError('Big Fat Cookie');
   result := InterlockedIncrement(fContext.SessionCount);
-  tmp.head.cryptnonce := Random32;
+  tmp.head.cryptnonce := Random32gsl;
   tmp.head.session := result;
   tmp.head.issued := UnixTimeUTC;
   if SessionTimeOutMinutes=0 then
