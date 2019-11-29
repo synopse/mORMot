@@ -12133,6 +12133,7 @@ end;
 function TAESAbstract.EncryptPKCS7(const Input: TBytes;
   IVAtBeginning: boolean): TBytes;
 begin
+  result := nil;
   SetLength(result,EncryptPKCS7Length(length(Input),IVAtBeginning));
   EncryptPKCS7Buffer(Pointer(Input),pointer(result),
     length(Input),length(result),IVAtBeginning);
@@ -13677,6 +13678,8 @@ end;
 
 function TAESPRNG.FillRandomBytes(Len: integer): TBytes;
 begin
+  if Len<>length(result) then
+    result := nil;
   SetLength(result,Len);
   FillRandom(pointer(result),Len);
 end;

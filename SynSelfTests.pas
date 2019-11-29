@@ -11329,7 +11329,7 @@ begin
       check(SynCommons.HexToBin(pointer(s1),nil,i));
       c := a1.Random32;
       check(c<>a2.Random32,'Random32 collision');
-      if c<maxint then
+      if c<cardinal(maxint) then
         inc(clo) else
         inc(chi);
       check(a1.Random64<>a2.Random64);

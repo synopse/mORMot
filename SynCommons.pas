@@ -37575,8 +37575,12 @@ end;
 function Random32: cardinal;
 begin
   {$ifdef CPUINTEL}
-  if cfRAND in CpuFeatures then
-    result := RdRand32 else
+  if cfRAND in CpuFeatures then begin
+    result := RdRand32;
+    if (integer(result)<>-1) or (integer(RdRand32)<>-1) then
+      exit; // seems fine
+    exclude(CpuFeatures,cfRAND); // disable if weakness detected (e.g. AMD bug)
+  end;
   {$endif}
     result := _Lecuyer.Next;
 end;
@@ -62985,6 +62989,7 @@ end;
 {$ifdef CPUINTEL}
 procedure TestIntelCpuFeatures;
 var regs: TRegisters;
+    c: cardinal;
 begin
   regs.edx := 0;
   regs.ecx := 0;
@@ -62995,6 +63000,11 @@ begin
   PIntegerArray(@CpuFeatures)^[2] := regs.ebx;
   PIntegerArray(@CpuFeatures)^[3] := regs.ecx;
   PByte(@PIntegerArray(@CpuFeatures)^[4])^ := regs.edx;
+  if cfRAND in CpuFeatures then begin
+     c := RdRand32;
+     if RdRand32=c then // most probably a RDRAND bug, e.g. on AMD
+       exclude(CpuFeatures,cfRAND);
+  end;
   {$ifdef DISABLE_SSE42}
   // may be needed on Darwin x64 (as reported by alf)
   Exclude(CpuFeatures, cfSSE42);

@@ -5451,6 +5451,7 @@ end;
 function TSynLogFile.ThreadNames(CurrentLogIndex: integer): TRawUTF8DynArray;
 var i: integer;
 begin
+  result := nil;
   SetLength(result,fThreadMax);
   if fThreadInfo=nil then
     exit;

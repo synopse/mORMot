@@ -3857,13 +3857,13 @@ end;
 function Ansi7ToUnicode(const Ansi: SockString): SockString;
 var n, i: integer;
 begin  // fast ANSI 7 bit conversion
+  result := '';
   if Ansi='' then
-    result := '' else begin
-    n := length(Ansi);
-    SetLength(result,n*2+1);
-    for i := 0 to n do // to n = including last #0
-      PWordArray(pointer(result))^[i] := PByteArray(pointer(Ansi))^[i];
-  end;
+    exit;
+  n := length(Ansi);
+  SetLength(result,n*2+1);
+  for i := 0 to n do // to n = including last #0
+    PWordArray(pointer(result))^[i] := PByteArray(pointer(Ansi))^[i];
 end;
 
 function DefaultUserAgent(Instance: TObject): SockString;
