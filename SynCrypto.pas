@@ -13510,14 +13510,14 @@ begin
     finally
       FileClose(dev);
     end;
-  {$endif}
+  {$endif LINUX}
   {$ifdef MSWINDOWS}
   if CryptoAPI.Available then
     if CryptoAPI.AcquireContextA(prov,nil,nil,PROV_RSA_FULL,CRYPT_VERIFYCONTEXT) then begin
       fromos := CryptoAPI.GenRandom(prov,len,Buffer);
       CryptoAPI.ReleaseContext(prov,0);
     end;
-  {$endif}
+  {$endif MSWINDOWS}
   if fromos then
     exit;
   i := Len;
