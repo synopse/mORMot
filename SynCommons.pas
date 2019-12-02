@@ -22773,7 +22773,7 @@ label Loop2, Loop6, TestT, Test0, Test1, Test2, Test3, Test4,
       AfterTestT, AfterTest0, Ret, Exit;
 begin
   result := 0;
-  if (p=nil) or (pSub=nil) or (Offset<1) then
+  if (p=nil) or (pSub=nil) or (PtrInt(Offset)<=0) then
     goto Exit;
   {$ifdef FPC}
   len := _LStrLenP(p);
@@ -24193,7 +24193,7 @@ label Loop2, Loop6, TestT, Test0, Test1, Test2, Test3, Test4,
       AfterTestT, AfterTest0, Ret, Exit;
 begin
   result := 0;
-  if (p=nil) or (pSub=nil) or (Offset<1) then
+  if (p=nil) or (pSub=nil) or (PtrInt(Offset)<=0) then
     goto Exit;
   {$ifdef FPC}
   len := _LStrLenP(p);
