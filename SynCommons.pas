@@ -3025,6 +3025,10 @@ function PosEx(const SubStr, S: RawUTF8; Offset: PtrUInt=1): integer;
 
 {$endif PUREPASCAL}
 
+/// our own PosEx() function dedicated to VCL string process
+// - Delphi XE or older don't support Pos() with an Offset
+var PosExString: function(const SubStr, S: string; Offset: PtrUInt=1): PtrInt;
+
 /// optimized version of PosEx() with search text as one AnsiChar
 function PosExChar(Chr: AnsiChar; const Str: RawUTF8): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
@@ -22758,6 +22762,79 @@ begin
     until p^=#0;
   end;
   result := 0;
+end;
+
+// same as PosExPas() but using PChar internally for proper string process
+function PosExStringPas(pSub, p: PChar; Offset: PtrUInt): PtrInt;
+var len, lenSub: PtrInt;
+    ch: char;
+    pStart, pStop: PChar;
+label Loop2, Loop6, TestT, Test0, Test1, Test2, Test3, Test4,
+      AfterTestT, AfterTest0, Ret, Exit;
+begin
+  result := 0;
+  if (p=nil) or (pSub=nil) or (Offset<1) then
+    goto Exit;
+  {$ifdef FPC}
+  len := _LStrLenP(p);
+  lenSub := _LStrLenP(pSub)-1;
+  {$else}
+  len := PInteger(p-4)^;
+  lenSub := PInteger(pSub-4)^-1;
+  {$endif FPC}
+  if (len<lenSub+PtrInt(Offset)) or (lenSub<0) then
+    goto Exit;
+  pStop := p+len;
+  inc(p,lenSub);
+  inc(pSub,lenSub);
+  pStart := p;
+  inc(p,Offset+3);
+  ch := pSub[0];
+  lenSub := -lenSub;
+  if p<pStop then goto Loop6;
+  dec(p,4);
+  goto Loop2;
+Loop6: // check 6 chars per loop iteration
+  if ch=p[-4] then goto Test4;
+  if ch=p[-3] then goto Test3;
+  if ch=p[-2] then goto Test2;
+  if ch=p[-1] then goto Test1;
+Loop2:
+  if ch=p[0] then goto Test0;
+AfterTest0:
+  if ch=p[1] then goto TestT;
+AfterTestT:
+  inc(p,6);
+  if p<pStop then goto Loop6;
+  dec(p,4);
+  if p>=pStop then goto Exit;
+  goto Loop2;
+Test4: dec(p,2);
+Test2: dec(p,2);
+  goto Test0;
+Test3: dec(p,2);
+Test1: dec(p,2);
+TestT: len := lenSub;
+  if lenSub<>0 then
+    repeat
+      if (psub[len]<>p[len+1]) or (psub[len+1]<>p[len+2]) then
+        goto AfterTestT;
+      inc(len,2);
+    until len>=0;
+  inc(p,2);
+  if p<=pStop then goto Ret;
+  goto Exit;
+Test0: len := lenSub;
+  if lenSub<>0 then
+    repeat
+      if (psub[len]<>p[len]) or (psub[len+1]<>p[len+1]) then
+        goto AfterTest0;
+      inc(len,2);
+    until len>=0;
+  inc(p);
+Ret:
+  result := p-pStart;
+Exit:
 end;
 
 procedure AppendCharToRawUTF8(var Text: RawUTF8; Ch: AnsiChar);
@@ -63234,6 +63311,13 @@ initialization
   {$ifndef HASINLINE}
   PosEx := @PosExPas;
   {$endif}
+  PosExString := @PosExStringPas; // fast pure pascal process
+  {$else}
+  {$ifdef UNICODE}
+  PosExString := @PosExStringPas; // fast PWideChar process
+  {$else}
+  PosExString := @PosEx; // use optimized PAnsiChar asm
+  {$endif}
   {$endif}
   crc32c := @crc32cfast; // now to circumvent Internal Error C11715 for Delphi 5
   crc32cBy4 := @crc32cBy4fast;
@@ -63280,6 +63364,7 @@ initialization
   Assert(SizeOf(TFileTime)=SizeOf(Int64)); // see e.g. FileTimeToInt64
   {$endif}
   {$endif}
+  PosExstring('','');
 
 finalization
   GarbageCollectorFree;
