@@ -19084,7 +19084,7 @@ end;
 
 function Ansi7ToString(const Text: RawByteString): string;
 {$ifdef UNICODE}
-var i: integer;
+var i: PtrInt;
 begin
   SetString(result,nil,length(Text));
   for i := 0 to length(Text)-1 do
@@ -19107,7 +19107,7 @@ end;
 
 procedure Ansi7ToString(Text: PWinAnsiChar; Len: integer; var result: string);
 {$ifdef UNICODE}
-var i: integer;
+var i: PtrInt;
 begin
   SetString(result,nil,Len);
   for i := 0 to Len-1 do
@@ -19121,7 +19121,7 @@ end;
 
 function StringToAnsi7(const Text: string): RawByteString;
 {$ifdef UNICODE}
-var i: integer;
+var i: PtrInt;
 begin
   SetString(result,nil,length(Text));
   for i := 0 to length(Text)-1 do
@@ -22779,8 +22779,8 @@ begin
   len := _LStrLenP(p);
   lenSub := _LStrLenP(pSub)-1;
   {$else}
-  len := PInteger(p-4)^;
-  lenSub := PInteger(pSub-4)^-1;
+  len := PInteger(PtrInt(p)-4)^;
+  lenSub := PInteger(PtrInt(pSub)-4)^-1;
   {$endif FPC}
   if (len<lenSub+PtrInt(Offset)) or (lenSub<0) then
     goto Exit;
