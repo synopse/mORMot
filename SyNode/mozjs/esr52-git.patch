@@ -86,7 +86,7 @@ index a99d08951a1c..8e93b9179b34 100644
 +    return js_new<JS::CompileOptions>(cx);
 +}
 +
-+JS_PUBLIC_API(void*)
++JS_PUBLIC_API(void)
 +JS_SetCompileOptionsFileLineAndUtf8(JS::CompileOptions& options, const char* f, unsigned l, bool isUtf8)
 +{
 +  options.setFileAndLine(f, l);
@@ -2144,7 +2144,7 @@ index 46aa159471c9..8831431a072a 100644
 +extern "C" JS_PUBLIC_API(void*)
 +JS_NewCompileOptions(JSContext* cx);
 +
-+extern "C" JS_PUBLIC_API(void*)
++extern "C" JS_PUBLIC_API(void)
 +JS_SetCompileOptionsFileLineAndUtf8(JS::CompileOptions& options, const char* f, unsigned l, bool isUtf8);
 +
 +extern "C" JS_PUBLIC_API(void*)
@@ -2638,3 +2638,4 @@ index 1c5c9e2145f6..eed3de89d57f 100644
  
  if test "$MOZ_MEMORY"; then
    if test "x$MOZ_DEBUG" = "x1"; then
+
