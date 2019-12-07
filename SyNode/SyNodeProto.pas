@@ -134,6 +134,8 @@ type
     function CreateForObj(acx: PJSContext; AInstance: TObject; AProto: TSMCustomProtoObjectClass; aParentProto: TSMCustomProtoObject): jsval; overload;
   end;
 
+  { TSMCustomProtoObject }
+
   TSMCustomProtoObject = class
   private
     fFirstDeterministicSlotIndex: uint32;
@@ -156,6 +158,8 @@ type
     /// Add method to internal FMethods array for future define it into JS prototype
     // to be called only inside InitObject method!
     procedure definePrototypeMethod(const ajsName: SynUnicode; const aCall: JSNative; aNargs: uintN; aFlags: TJSPropertyAttrs);
+    // Add property with getter and setter to prototype
+    procedure definePrototypeProperty(const ajsName: AnsiString; const aGetter, aSetter: JSNative);
     property SlotIndex: integer read fSlotIndex;
   public
     property RTTIPropsCache[index: integer]: TSMRTTIPropCache read getRTTIPropsCache;
@@ -693,6 +697,30 @@ begin
     end;
   end else
     raise ESMException.CreateUtf8('Duplicated native function %()',[ajsName]);
+end;
+
+procedure TSMCustomProtoObject.definePrototypeProperty(
+  const ajsName: AnsiString; const aGetter, aSetter: JSNative);
+var
+  idx: integer;
+begin
+  idx := length(FJSProps);
+  SetLength(FJSProps, idx + 1);
+  SetLength(FRTTIPropsCache, idx + 1);
+  FRTTIPropsCache[idx].jsName := ajsName;
+  FRTTIPropsCache[idx].mbr := nil;
+  FRTTIPropsCache[idx].typeInfo := nil;
+  FRTTIPropsCache[idx].isReadOnly := not Assigned(aSetter);
+  FRTTIPropsCache[idx].DeterministicIndex := -1;
+
+  FJSProps[idx].flags := JSPROP_ENUMERATE or JSPROP_PERMANENT or JSPROP_SHARED;
+  if not Assigned(aSetter) then
+    FJSProps[idx].flags := FJSProps[idx].flags or JSPROP_READONLY;
+  FJSProps[idx].Name := PCChar(RTTIPropsCache[idx].jsName);
+  FJSProps[idx].setter.native.info := nil;
+  FJSProps[idx].setter.native.op := aSetter;
+  FJSProps[idx].getter.native.info := nil;
+  FJSProps[idx].getter.native.op := aGetter;
 end;
 
 function TSMCustomProtoObject.getMethod(const aJSFunction: PJSFunction; var obj: PJSObject): PSMMethodRec;
