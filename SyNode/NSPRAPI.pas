@@ -105,6 +105,9 @@ function PR_SetCurrentThreadName(name: PAnsiChar): PRStatus;
 /// returns the number of ticks per seconds as expected by NSPR
 function PR_TicksPerSecond(): PRUint32; cdecl; external NSPRLib;
 
+/// must be called by the primordial thread near the end of the main function
+function PR_Cleanup(): PRStatus; cdecl; external NSPRLib;
+
 implementation
 
 end.

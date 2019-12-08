@@ -571,40 +571,40 @@ type
   private
     _l: jsval_layout;
 
-    function getIsVoid: Boolean;
-    function getIsNull: Boolean;
+    function getIsVoid: Boolean; {$ifdef HASINLINE}inline;{$endif}
+    function getIsNull: Boolean; {$ifdef HASINLINE}inline;{$endif}
 
-    function getIsInteger: Boolean;
-    function getAsInteger: Integer;
-    procedure setAsInteger(const Value: Integer);
+    function getIsInteger: Boolean; {$ifdef HASINLINE}inline;{$endif}
+    function getAsInteger: Integer; {$ifdef HASINLINE}inline;{$endif}
+    procedure setAsInteger(const Value: Integer); {$ifdef HASINLINE}inline;{$endif}
 
-    function getAsInt64: Int64;
-    procedure setAsInt64(const Value: Int64);
+    function getAsInt64: Int64; {$ifdef HASINLINE}inline;{$endif}
+    procedure setAsInt64(const Value: Int64); {$ifdef HASINLINE}inline;{$endif}
 
-    function getIsDouble: Boolean;
-    function getAsDouble: Double;
-    procedure setAsDouble(const Value: Double);
+    function getIsDouble: Boolean;{$ifdef HASINLINE}inline;{$endif}
+    function getAsDouble: Double;{$ifdef HASINLINE}inline;{$endif}
+    procedure setAsDouble(const Value: Double);{$ifdef HASINLINE}inline;{$endif}
 
-    function getIsNumber: Boolean;
+    function getIsNumber: Boolean;{$ifdef HASINLINE}inline;{$endif}
 
-    function getIsBoolean: Boolean;
-    function getAsBoolean: Boolean;
-    procedure setAsBoolean(const Value: Boolean);
+    function getIsBoolean: Boolean;{$ifdef HASINLINE}inline;{$endif}
+    function getAsBoolean: Boolean;{$ifdef HASINLINE}inline;{$endif}
+    procedure setAsBoolean(const Value: Boolean);{$ifdef HASINLINE}inline;{$endif}
 
-    function getIsObject: Boolean;
-    function getAsObject: PJSObject;
-    procedure setAsObject(const Value: PJSObject);
+    function getIsObject: Boolean;{$ifdef HASINLINE}inline;{$endif}
+    function getAsObject: PJSObject;{$ifdef HASINLINE}inline;{$endif}
+    procedure setAsObject(const Value: PJSObject);{$ifdef HASINLINE}inline;{$endif}
 
-    function getIsString: Boolean;
-    function getJSString: PJSString;
-    procedure setJSString(const Value: PJSString);
+    function getIsString: Boolean; {$ifdef HASINLINE}inline;{$endif}
+    function getJSString: PJSString; {$ifdef HASINLINE}inline;{$endif}
+    procedure setJSString(const Value: PJSString);{$ifdef HASINLINE}inline;{$endif}
 
-    function getIsSimpleVariant(cx: PJSContext): Boolean;
+    function getIsSimpleVariant(cx: PJSContext): Boolean;{$ifdef HASINLINE}inline;{$endif}
     function getSimpleVariant(cx: PJSContext): Variant;
     procedure setSimpleVariant(cx: PJSContext; const Value: Variant);
 
-    function getPrivate: Pointer;
-    procedure setPrivate(const Value: Pointer);
+    function getPrivate: Pointer;{$ifdef HASINLINE}inline;{$endif}
+    procedure setPrivate(const Value: Pointer);{$ifdef HASINLINE}inline;{$endif}
 
     function getAsDate(cx: PJSContext): TDateTime;
     procedure setAsDate(cx: PJSContext; const Value: TDateTime);
@@ -612,8 +612,8 @@ type
     function getAsJson(cx: PJSContext): RawUTF8;
     procedure setAsJson(cx: PJSContext; const Value: RawUTF8);
 
-    function IsPrimitive: Boolean;
-    function IsMagic: Boolean;
+    function IsPrimitive: Boolean;{$ifdef HASINLINE}inline;{$endif}
+    function IsMagic: Boolean;{$ifdef HASINLINE}inline;{$endif}
 
   public
     /// Is vaule void
@@ -914,7 +914,7 @@ type
   JSContext = object
   private
     function GetPrivate: Pointer; {$ifdef HASINLINE}inline;{$endif}
-    procedure SetPrivate(const Value: Pointer);
+    procedure SetPrivate(const Value: Pointer);{$ifdef HASINLINE}inline;{$endif}
 {$IFDEF SM52}
     function GetEmptyString: PJSString; {$ifdef HASINLINE}inline;{$endif}
     function GetGCParameter(key: JSGCParamKey): uint32; {$ifdef HASINLINE}inline;{$endif}
@@ -986,10 +986,10 @@ type
     /// Enter a different compartment on the given context, so that objects in that
     // compartment can be accessed.
     // - NB: This API is infallible; a NULL return value does not indicate error
-    function EnterCompartment(target: PJSObject): PJSCompartment;
+    function EnterCompartment(target: PJSObject): PJSCompartment;{$ifdef HASINLINE}inline;{$endif}
     /// Leave a the compartment, returning to the compartment active before the
     // corresponding JS_EnterCompartment.
-    procedure LeaveCompartment(oldCompartment: PJSCompartment);
+    procedure LeaveCompartment(oldCompartment: PJSCompartment);{$ifdef HASINLINE}inline;{$endif}
     /// indicates to the JS engine that the calling thread is entering a region
     // of code that may call into the JSAPI but does not block
     procedure BeginRequest; {$ifdef HASINLINE}inline;{$endif}
@@ -1034,13 +1034,13 @@ type
 
     /// Invoke a constructor, like the JS expression `new ctor(...args)`. Returns
     // the new object, or null on error.
-    function New(var ctor: PJSObject; argc: uintN; argv: PjsvalVector): PJSObject;
+    function New(var ctor: PJSObject; argc: uintN; argv: PjsvalVector): PJSObject;{$ifdef HASINLINE}inline;{$endif}
     /// Create a new object based on a specified class and root it
-    function NewObject(clasp: PJSClass): PJSObject;
+    function NewObject(clasp: PJSClass): PJSObject;{$ifdef HASINLINE}inline;{$endif}
     /// Create a new object based on a specified class
     // - Unlike JS_NewObject, JS_NewObjectWithGivenProto does not compute a default
     // proto. If proto is nullptr, the JS object will have `null` as [[Prototype]].
-    function NewObjectWithGivenProto(clasp: PJSClass; var proto: PJSObject): PJSObject;
+    function NewObjectWithGivenProto(clasp: PJSClass; var proto: PJSObject): PJSObject;{$ifdef HASINLINE}inline;{$endif}
 
     /// Create/Free rooted value(put value in rooting stack)
     // Garbage collection not performs to rooted values
@@ -1050,7 +1050,7 @@ type
     // and unroot them (in reverse order) just before destroy context.
     // For other cases use reserved slots
     function NewRootedValue(val: jsval): PJSRootedValue; {$ifdef HASINLINE}inline;{$endif}
-    procedure FreeRootedValue(str: PJSRootedValue);
+    procedure FreeRootedValue(str: PJSRootedValue);{$ifdef HASINLINE}inline;{$endif}
 
     /// Create/Free rooted object(put object in rooting stack)
     // Garbage collection not performs to rooted objects
@@ -1060,7 +1060,7 @@ type
     // and unroot them (in reverse order) just before destroy context.
     // For other cases use reserved slots
     function NewRootedObject(obj: PJSObject): PJSRootedObject; {$ifdef HASINLINE}inline;{$endif}
-    procedure FreeRootedObject(obj: PJSRootedObject);
+    procedure FreeRootedObject(obj: PJSRootedObject);{$ifdef HASINLINE}inline;{$endif}
 
     /// Create/Free rooted string(put string in rooting stack)
     // Garbage collection not performs to rooted strings
@@ -1070,7 +1070,7 @@ type
     // and unroot them (in reverse order) just before destroy context.
     // For other cases use reserved slots
     function NewRootedString(obj: PJSString): PJSRootedString; {$ifdef HASINLINE}inline;{$endif}
-    procedure FreeRootedString(str: PJSRootedString);
+    procedure FreeRootedString(str: PJSRootedString);{$ifdef HASINLINE}inline;{$endif}
 
     /// create a new JavaScript string instance
     function NewJSString(const Value: SynUnicode): PJSString; overload; {$ifdef HASINLINE}inline;{$endif}
@@ -1420,7 +1420,7 @@ type
     function DefineProperties(cx: PJSContext; ps: PJSPropertySpec): boolean; {$ifdef HASINLINE}inline;{$endif}
 
     /// Find a specified property and retrieve its value.
-    function GetPropValue(cx: PJSContext; const name: SynUnicode): jsval;
+    function GetPropValue(cx: PJSContext; const name: SynUnicode): jsval;{$ifdef HASINLINE}inline;{$endif}
     function GetProperty(cx: PJSContext; const name: PCChar; out vp: jsval): boolean; {$ifdef HASINLINE}inline;{$endif}
     function GetUCProperty(cx: PJSContext; const name: PCChar16; namelen: size_t; out vp: jsval): boolean; {$ifdef HASINLINE}inline;{$endif}
     function GetPropertyById(cx: PJSContext; const id: jsid; out vp: jsval): boolean; {$ifdef HASINLINE}inline;{$endif}
