@@ -4335,10 +4335,11 @@ procedure TTestLowLevelCommon._UTF8;
     Check(C.RawUnicodeToAnsi(C.AnsiToRawUnicode(W))=W);
     {$endif}
   end;
-var i, len, CP, L: integer;
+var i, j, k, len, lenup100, CP, L: integer;
     W: WinAnsiString;
     WS: WideString;
     SU: SynUnicode;
+    str: string;
     U, res, Up,Up2: RawUTF8;
     arr: TRawUTF8DynArray;
     PB: PByte;
@@ -4444,6 +4445,28 @@ begin
     len := i*5;
     W := RandomAnsi7(len);
     Check(length(W)=len);
+    str := Ansi7ToString(W); // should be fine on any code page
+    if len>0 then begin
+      Check(length(str)=len);
+      check(PosExString(str[1],str)=1);
+      if str[1]<>str[2] then begin
+        check(PosExString(str[2],str)=2);
+        if (str[1]<>str[2]) and (str[2]<>str[3]) and (str[1]<>str[3]) then
+          check(PosExString(str[3],str)=3);
+      end;
+      lenup100 := len;
+      if lenup100>100 then
+        lenup100 := 100;
+      for j := 1 to lenup100 do begin
+        check(PosExString(#13,str,j)=0);
+        check(PosExString(str[j],str,j)=j);
+        if (j>1) and (str[j-1]<>str[j]) then
+          check(PosExString(str[j],str,j-1)=j);
+        k := PosExString(str[j],str);
+        check((k>0) and (str[k]=str[j]));
+      end;
+    end else
+      check(PosExString(#0,str)=0);
     for CP := 1250 to 1258 do
       Test(CP,W);
     Test(932,W);
@@ -4456,6 +4479,22 @@ begin
     Test(CP_UTF16,W);
     W := WinAnsiString(RandomString(len));
     U := WinAnsiToUtf8(W);
+    if len>0 then begin
+      check(PosEx(U[1],U)=1);
+      if (len>1) and (U[1]<>U[2]) then begin
+        check(PosEx(U[2],U)=2);
+        if (len>2) and (U[1]<>U[2]) and (U[2]<>U[3]) and (U[1]<>U[3]) then
+          check(PosEx(U[3],U)=3);
+      end;
+    end;
+    for j := 1 to lenup100 do begin // validates with offset parameter
+      check(PosEx(#13,U,j)=0);
+      check(PosEx(U[j],U,j)=j);
+      if (j>1) and (U[j-1]<>U[j]) then
+        check(PosEx(U[j],U,j-1)=j);
+      k := PosEx(U[j],U);
+      check((k>0) and (U[k]=U[j]));
+    end;
     Unic := Utf8DecodeToRawUnicode(U);
     {$ifndef FPC_HAS_CPSTRING} // buggy FPC
     Check(Utf8ToWinAnsi(U)=W);

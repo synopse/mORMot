@@ -59153,7 +59153,8 @@ asm
 end;
 {$endif CPUX64}
 
-{$ifdef ISDELPHI7ANDUP}{$WARN COMPARING_SIGNED_UNSIGNED OFF}{$endif} // W1023 FPC_STACKALIGNMENT
+{$ifdef ISDELPHI7ANDUP}{$WARN COMPARING_SIGNED_UNSIGNED OFF}{$endif}
+// disable W1023 FPC_STACKALIGNMENT (not possible on Delphi 6)
 
 {$ifdef CPUX86}
 
@@ -61139,12 +61140,6 @@ end;
 
 { TServiceMethod }
 
-type
-  TDynArrayFake = record
-    Value: Pointer;
-    Wrapper: TDynArray;
-  end;
-
 function TServiceMethod.ArgIndex(ArgName: PUTF8Char; ArgNameLen: integer;
   Input: boolean): integer;
 begin
@@ -61309,10 +61304,12 @@ procedure TServiceMethod.ArgsStackAsDocVariant(const Values: TPPointerDynArray;
 var a: integer;
 begin
   if Input then begin
+    Dest.InitFast(ArgsInputValuesCount,dvObject);
     for a := ArgsInFirst to ArgsInLast do
       if Args[a].ValueDirection in [smdConst,smdVar] then
         Args[a].AddAsVariant(Dest,Values[a]);
   end else begin
+    Dest.InitFast(ArgsOutputValuesCount,dvObject);
     for a := ArgsOutFirst to ArgsOutLast do
       if Args[a].ValueDirection in [smdVar,smdOut,smdResult] then
         Args[a].AddAsVariant(Dest,Values[a]);

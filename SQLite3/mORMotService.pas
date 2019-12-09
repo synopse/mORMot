@@ -1496,13 +1496,14 @@ begin
   // CreateProcess can alter the strings -> use local SynUnicode
   StringToSynUnicode(cmd, wcmd);
   if cmd[1] = '"' then begin
-    i := {$ifdef FPC_OR_UNICODE}Pos{$else}PosEx{$endif}('"', cmd, 2);
+    path := copy(cmd, 2, maxInt);
+    i := Pos('"', path);
     if i = 0 then
       exit;
-    path := copy(cmd, 2, i - 2);
+    SetLength(path, i - 1); // unquote "path" string
   end
   else begin
-    i := {$ifdef FPC_OR_UNICODE}Pos{$else}PosEx{$endif}(' ', cmd, 1);
+    i := Pos(' ', cmd);
     if i <= 1 then
       exit;
     path := copy(cmd, 1, i - 1);
