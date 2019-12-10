@@ -5258,11 +5258,15 @@ begin
     pending := 0;
     res := Select(fSock+1,@fdset,nil,nil,@tv);
     if res<0 then
-      result := cspSocketError else
-      if (res>0) and(fdset.fd_count=1) and (fdset.fd_array[0]=fSock) and
-         (IoctlSocket(fSock,FIONREAD,pending)=0) and (pending>0) then
-        result := cspDataAvailable else
-        result := cspNoData;
+      result := cspSocketError else begin
+      result := cspNoData;
+      if (res>0) and (fdset.fd_count=1) and (fdset.fd_array[0]=fSock) and
+         (IoctlSocket(fSock,FIONREAD,pending)=0) then
+        if pending=0 then // indicates socket closed gracefully
+          result := cspSocketError else
+        if pending>0 then
+          result := cspDataAvailable;
+    end;
     {$ifdef SYNCRTDEBUGLOW}
     tsynlog.add.log(sllcustom1, 'SockReceivePending sock=% timeout=% fd_count=% fd_array[0]=% res=% select=% pending=% time=%',
       [fsock, TimeOutMS, fdset.fd_count, fdset.fd_array[0], res, ord(result), pending, time.Stop], self);
@@ -5507,8 +5511,9 @@ begin
   if SockIn=nil then // done once
     CreateSockIn; // use SockIn by default if not already initialized: 2x faster
   Content := '';
-  if fSock<=0 then
-    DoRetry(STATUS_NOTFOUND) else // socket closed (e.g. KeepAlive=0) -> reconnect
+  if SockReceivePending(0)=cspSocketError then
+    // socket closed (e.g. KeepAlive timeout) -> reconnect
+    DoRetry(STATUS_NOTFOUND) else
   try
   try
     // send request - we use SockSend because writeln() is calling flush()
@@ -6432,7 +6437,7 @@ procedure THttpServerResp.Execute;
               TSynLog.Add.Log(sllCustom1, 'HandleRequestsProcess: sock=% LOWDELAY=%',
                 [fServerSock.fSock, tix-beforetix], self);
               {$endif}
-              sleep(10); // seen only on Windows in practice
+              sleep(1); // seen only on Windows in practice
               if (fServer=nil) or fServer.Terminated then
                 exit; // server is down -> disconnect the client
             end;
