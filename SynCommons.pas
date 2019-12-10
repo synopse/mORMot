@@ -26466,6 +26466,7 @@ var
   P: pointer;
   Vers: TWindowsVersion;
   cpu, manuf, prod, prodver: string;
+  i: integer;
 begin
   Kernel := GetModuleHandle(kernel32);
   GetTickCount64 := GetProcAddress(Kernel,'GetTickCount64');
@@ -26547,6 +26548,16 @@ begin
       prodver := SysUtils.Trim(ReadString('SystemVersion'));
       if prodver='' then
         prodver := SysUtils.Trim(ReadString('BIOSVersion'));
+      if OpenKeyReadOnly('\Hardware\Description\System') then begin
+        if prod='' then
+          prod := SysUtils.Trim(ReadString('SystemBiosVersion'));
+        if prodver='' then begin
+          prodver := SysUtils.Trim(ReadString('VideoBiosVersion'));
+          i := Pos(#13,prodver);
+          if i>0 then // e.g. multilines 'Oracle VM VirtualBox Version 5.2.33'
+            SetLength(prodver,i-1);
+        end;
+      end;
       if prodver<>'' then
         FormatUTF8('%% %',[manuf,prod,prodver],BiosInfoText) else
         FormatUTF8('%%',[manuf,prod],BiosInfoText);

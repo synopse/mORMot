@@ -4445,6 +4445,9 @@ begin
     len := i*5;
     W := RandomAnsi7(len);
     Check(length(W)=len);
+    lenup100 := len;
+    if lenup100>100 then
+      lenup100 := 100;
     str := Ansi7ToString(W); // should be fine on any code page
     if len>0 then begin
       Check(length(str)=len);
@@ -4454,9 +4457,6 @@ begin
         if (str[1]<>str[2]) and (str[2]<>str[3]) and (str[1]<>str[3]) then
           check(PosExString(str[3],str)=3);
       end;
-      lenup100 := len;
-      if lenup100>100 then
-        lenup100 := 100;
       for j := 1 to lenup100 do begin
         check(PosExString(#13,str,j)=0);
         check(PosExString(str[j],str,j)=j);
