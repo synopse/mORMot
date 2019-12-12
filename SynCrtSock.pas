@@ -3814,10 +3814,9 @@ var tmpLen: DWORD;
     err: PChar;
 {$endif}
 begin
-  if Code=NO_ERROR then begin
-    result := '';
+  result := '';
+  if Code=NO_ERROR then
     exit;
-  end;
   {$ifdef MSWINDOWS}
   tmpLen := FormatMessage(
     FORMAT_MESSAGE_FROM_HMODULE or FORMAT_MESSAGE_ALLOCATE_BUFFER,
