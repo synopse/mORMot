@@ -2482,141 +2482,144 @@ function JS_ExecuteScript(cx: PJSContext; var script: PJSScript;
 // - Important note: Additional callbacks can occur inside the callback handler
 // if it re-enters the JS engine. The embedding must ensure that the callback
 // is disconnected before attempting such re-entry.
-function JS_CheckForInterrupt(cx: PJSContext): Boolean; cdecl; external SpiderMonkeyLib;
+function JS_CheckForInterrupt(cx: PJSContext): Boolean; cdecl; external SpiderMonkeyLib name 'SM_CheckForInterrupt';
 function JS_AddInterruptCallback(cx: PJSContext; callback: JSInterruptCallback):
-  Boolean; cdecl; external SpiderMonkeyLib;
-function JS_DisableInterruptCallback(cx: PJSContext):Boolean; cdecl; external SpiderMonkeyLib;
-procedure JS_ResetInterruptCallback(cx: PJSContext; enable: Boolean); cdecl; external SpiderMonkeyLib;
+  Boolean; cdecl; external SpiderMonkeyLib name 'SM_AddInterruptCallback';
+function JS_DisableInterruptCallback(cx: PJSContext):Boolean; cdecl; external SpiderMonkeyLib name 'SM_DisableInterruptCallback';
+procedure JS_ResetInterruptCallback(cx: PJSContext; enable: Boolean); cdecl; external SpiderMonkeyLib name 'SM_ResetInterruptCallback';
 /// Request a callback set using JS_SetInterruptCallback
-procedure JS_RequestInterruptCallback(cx: PJSContext); cdecl; external SpiderMonkeyLib;
+procedure JS_RequestInterruptCallback(cx: PJSContext); cdecl; external SpiderMonkeyLib name 'SM_RequestInterruptCallback';
 /// Indicates whether or not a script or function is currently executing in a given context.
-function JS_IsRunning(cx: PJSContext): Boolean; cdecl; external SpiderMonkeyLib;
+function JS_IsRunning(cx: PJSContext): Boolean; cdecl; external SpiderMonkeyLib name 'SM_IsRunning';
 
 /// Allocate space for a JavaScript string and its underlying storage,
 // and copy n characters from a character array, s, into the new JSString
 // Ansi version
-function JS_NewStringCopyN(cx: PJSContext; s: PCChar; n: size_t): PJSString; cdecl; external SpiderMonkeyLib;
+function JS_NewStringCopyN(cx: PJSContext; s: PCChar; n: size_t): PJSString; cdecl; external SpiderMonkeyLib name 'SM_NewStringCopyN';
 /// Allocate space for a JavaScript string and its underlying storage,
 // and copy characters from NULL TERMINATED! UTF8 character array
-function JS_NewStringCopyUTF8Z(cx: PJSContext; pNullTerminatedUTF8: PUTF8Char): PJSString; cdecl; external SpiderMonkeyLib;
+function JS_NewStringCopyUTF8Z(cx: PJSContext; pNullTerminatedUTF8: PUTF8Char): PJSString; cdecl; external SpiderMonkeyLib name 'SM_NewStringCopyUTF8Z';
 /// Returns the empty JSString as a JS value
-function JS_GetEmptyStringValue(cx: PJSContext): jsval; cdecl; external SpiderMonkeyLib;
+function JS_GetEmptyStringValue(cx: PJSContext): jsval; cdecl; external SpiderMonkeyLib name 'SM_GetEmptyStringValue';
 /// Allocate space for a JavaScript string and its underlying storage,
 // and copy n characters from a character array, s, into the new JSString
 // Unicode version
-function JS_NewUCStringCopyN(cx: PJSContext; s: PCChar16; n: size_t): PJSString; cdecl; external SpiderMonkeyLib;
+function JS_NewUCStringCopyN(cx: PJSContext; s: PCChar16; n: size_t): PJSString; cdecl; external SpiderMonkeyLib name 'SM_NewUCStringCopyN';
 
 /// Return the length of a JavaScript string.
-function JS_GetStringLength(str: PJSString): size_t; cdecl; external SpiderMonkeyLib;
+function JS_GetStringLength(str: PJSString): size_t; cdecl; external SpiderMonkeyLib name 'SM_GetStringLength';
 
 /// Return true if the string's characters are stored as Latin1.
-function JS_StringHasLatin1Chars(str: PJSString): boolean; cdecl; external SpiderMonkeyLib;
+function JS_StringHasLatin1Chars(str: PJSString): boolean; cdecl; external SpiderMonkeyLib name 'SM_StringHasLatin1Chars';
 /// Return a pointer to the string, and store the length to *length
 // Use it when characters are stored as Latin1.
-function JS_GetLatin1StringCharsAndLength(cx: PJSContext; nogc: PJSAutoCheckCannotGC; str: PJSString; plength: psize_t):PCChar; cdecl; external SpiderMonkeyLib;
+function JS_GetLatin1StringCharsAndLength(cx: PJSContext; nogc: PJSAutoCheckCannotGC; str: PJSString; plength: psize_t):PCChar;
+  cdecl; external SpiderMonkeyLib name 'SM_GetLatin1StringCharsAndLength';
 /// Return a pointer to the string, and store the length to *length
 // Use it when characters are stored as Unicode
-function JS_GetTwoByteStringCharsAndLength(cx: PJSContext; nogc: PJSAutoCheckCannotGC; str: PJSString; plength: psize_t):PCChar16; cdecl; external SpiderMonkeyLib;
+function JS_GetTwoByteStringCharsAndLength(cx: PJSContext; nogc: PJSAutoCheckCannotGC; str: PJSString; plength: psize_t):PCChar16;
+  cdecl; external SpiderMonkeyLib name 'SM_GetTwoByteStringCharsAndLength';
 
 /// converts a value to JSON, optionally replacing values if a replacer
 // function is specified, or optionally including only the specified properties
 // if a replacer array is specified
 function JS_Stringify(cx: PJSContext; var vp: jsval; var replacer: PJSObject;
     var space: jsval; callback: JSONWriteCallback; data: pointer): Boolean;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_Stringify';
 
 /// parse a string using the JSON syntax described in ECMAScript 5 and
 // return the corresponding value into vp
 function JS_ParseJSON(cx: PJSContext; const chars: PCChar16;
-    len: uint32; out vp: jsval): Boolean;  cdecl; external SpiderMonkeyLib;
+    len: uint32; out vp: jsval): Boolean;  cdecl; external SpiderMonkeyLib name 'SM_ParseJSON';
 
 /// Create a new JavaScript Error object and set it to be the pending exception on cx.
 // The callback must then return JS_FALSE to cause the exception to be propagated
 // to the calling script.
 procedure JS_ReportError(cx: PJSContext; const format: PCChar);
-  cdecl; varargs; external SpiderMonkeyLib name 'JS_ReportErrorASCII';
+  cdecl; varargs; external SpiderMonkeyLib name 'SM_ReportErrorASCII';
 /// Report an error with an application-defined error code.
 // - varargs is Additional arguments for the error message.
 //- These arguments must be of type jschar*
 // - The number of additional arguments required depends on the error
 // message, which is determined by the errorCallback
 procedure JS_ReportErrorNumberUC(cx: PJSContext; errorCallback: JSErrorCallback;
-  userRef: pointer; const erroNubmer: uintN); cdecl; varargs; external SpiderMonkeyLib;
+  userRef: pointer; const erroNubmer: uintN); cdecl; varargs; external SpiderMonkeyLib name 'SM_ReportErrorNumberUC';
 /// Reports a memory allocation error
 // - Call JS_ReportOutOfMemory to report that an operation failed because the
 // system is out of memory
 // - When the JavaScript engine tries to allocate memory and allocation fails,
 // it reports an error as though by calling this function
-procedure JS_ReportOutOfMemory(cx: PJSContext); cdecl; external SpiderMonkeyLib;
+procedure JS_ReportOutOfMemory(cx: PJSContext); cdecl; external SpiderMonkeyLib name 'SM_ReportOutOfMemory';
 
 /// Get the warning reporting mechanism for an application. It is not working for errors.
 function JS_GetWarningReporter(cx: PJSContext): JSWarningReporter;
-  cdecl; external SpiderMonkeyLib name 'GetWarningReporter';
+  cdecl; external SpiderMonkeyLib name 'SM_GetWarningReporter';
 /// Specify the warning reporting mechanism for an application.  It is not working for errors.
 function JS_SetWarningReporter(cx: PJSContext; reporter: JSWarningReporter): JSWarningReporter;
-  cdecl; external SpiderMonkeyLib name 'SetWarningReporter';
+  cdecl; external SpiderMonkeyLib name 'SM_SetWarningReporter';
 
 /// Create a new JavaScript date object
 function JS_NewDateObject(cx: PJSContext; year, mon, mday, hour, min, sec: int32): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_NewDateObject';
 /// Create a new JavaScript date object from the Unix millisecond elapsed since EPOC
 function JS_NewDateObjectMsec(cx: PJSContext; msec: double): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_NewDateObjectMsec';
 // Returns true and sets |*isDate| indicating whether |obj| is a Date object or
 // a wrapper around one, otherwise returns false on failure.
 // - This method returns true with |*isDate == false| when passed a proxy whose
 // target is a Date, or when passed a revoked proxy.
-function JS_ObjectIsDate(cx: PJSContext; var obj: PJSObject; out isDate: boolean): boolean; cdecl; external SpiderMonkeyLib;
+function JS_ObjectIsDate(cx: PJSContext; var obj: PJSObject; out isDate: boolean): boolean; cdecl;
+  external SpiderMonkeyLib name 'SM_ObjectIsDate';
 
 /// Determine whether an exception is pending in the JS engine.
-function JS_IsExceptionPending(cx: PJSContext): Boolean; cdecl; external SpiderMonkeyLib;
+function JS_IsExceptionPending(cx: PJSContext): Boolean; cdecl; external SpiderMonkeyLib name 'SM_IsExceptionPending';
 /// Get the current pending exception for a given JSContext.
-function JS_GetPendingException(cx: PJSContext; out vp: jsval): Boolean; cdecl; external SpiderMonkeyLib;
+function JS_GetPendingException(cx: PJSContext; out vp: jsval): Boolean; cdecl; external SpiderMonkeyLib name 'SM_GetPendingException';
 /// Sets the current exception being thrown within a context.
-procedure JS_SetPendingException(cx: PJSContext; var vp: jsval); cdecl; external SpiderMonkeyLib;
+procedure JS_SetPendingException(cx: PJSContext; var vp: jsval); cdecl; external SpiderMonkeyLib name 'SM_SetPendingException';
 /// Clear the currently pending exception in a context.
-procedure JS_ClearPendingException(cx: PJSContext); cdecl; external SpiderMonkeyLib;
+procedure JS_ClearPendingException(cx: PJSContext); cdecl; external SpiderMonkeyLib name 'SM_ClearPendingException';
 /// If the given object is an exception object, the exception will have (or be
 // able to lazily create) an error report struct, and this function will return
 // the address of that struct.  Otherwise, it returns nullptr. The lifetime
 // of the error report struct that might be returned is the same as the
 // lifetime of the exception object.
 function JS_ErrorFromException(cx: PJSContext; var obj: PJSObject): PJSErrorReport;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_ErrorFromException';
 
 /// Get options of context
-function JS_GetContextOptions(cx: PJSContext): PJSContextOptions; cdecl; external SpiderMonkeyLib;
+function JS_GetContextOptions(cx: PJSContext): PJSContextOptions; cdecl; external SpiderMonkeyLib name 'SM_GetContextOptions';
 
 //function JS_NewRootedValue(cx: PJSContext; val: jsval): PJSRootedValue; cdecl; external SpiderMonkeyLib;
-function JS_NewRootedValue(cx: PJSContext; val: Int64): PJSRootedValue; cdecl; external SpiderMonkeyLib;
-procedure JS_FreeRootedValue(val: PJSRootedValue); cdecl; external SpiderMonkeyLib name 'JS_FreeRooteValue';
+function JS_NewRootedValue(cx: PJSContext; val: Int64): PJSRootedValue; cdecl; external SpiderMonkeyLib name 'SM_NewRootedValue';
+procedure JS_FreeRootedValue(val: PJSRootedValue); cdecl; external SpiderMonkeyLib name 'JS_FreeRooteValue' name 'SM_FreeRootedValue';
 
-function JS_NewRootedObject(cx: PJSContext; obj: PJSObject): PJSRootedObject; cdecl; external SpiderMonkeyLib;
-procedure JS_FreeRootedObject(obj: PJSRootedObject); cdecl; external SpiderMonkeyLib;
+function JS_NewRootedObject(cx: PJSContext; obj: PJSObject): PJSRootedObject; cdecl; external SpiderMonkeyLib name 'SM_NewRootedObject';
+procedure JS_FreeRootedObject(obj: PJSRootedObject); cdecl; external SpiderMonkeyLib name 'SM_FreeRootedObject';
 
-function JS_NewRootedString(cx: PJSContext; obj: PJSString): PJSRootedString; cdecl; external SpiderMonkeyLib;
-procedure JS_FreeRootedString(str: PJSRootedString); cdecl; external SpiderMonkeyLib;
+function JS_NewRootedString(cx: PJSContext; obj: PJSString): PJSRootedString; cdecl; external SpiderMonkeyLib name 'SM_NewRootedString';
+procedure JS_FreeRootedString(str: PJSRootedString); cdecl; external SpiderMonkeyLib name 'SM_FreeRootedString';
 
 /// Create Compile Options
-function JS_NewCompileOptions(cx: PJSContext): PJSCompileOptions; cdecl; external SpiderMonkeyLib;
+function JS_NewCompileOptions(cx: PJSContext): PJSCompileOptions; cdecl; external SpiderMonkeyLib name 'SM_NewCompileOptions';
 /// expose to Pascal
 // JS::CompileOptions.setFileAndLine + setUTF8
 procedure JS_SetCompileOptionsFileLineAndUtf8(co: PJSCompileOptions;
-  const f: PChar; l: cardinal; isUtf8: boolean); cdecl; external SpiderMonkeyLib;
+  const f: PChar; l: cardinal; isUtf8: boolean); cdecl; external SpiderMonkeyLib name 'SM_SetCompileOptionsFileLineAndUtf8';
 
 /// Free Compile Options
-procedure JS_FreeCompileOptions(opt: PJSCompileOptions); cdecl; external SpiderMonkeyLib;
+procedure JS_FreeCompileOptions(opt: PJSCompileOptions); cdecl; external SpiderMonkeyLib name 'SM_FreeCompileOptions';
 ///////////////////
 
 function JS_EvaluateScript(cx: PJSContext;
    options: PJSCompileOptions;
    bytes: PCChar; length: size_t;
-   out rval: jsval): Boolean; cdecl; external SpiderMonkeyLib;
+   out rval: jsval): Boolean; cdecl; external SpiderMonkeyLib name 'SM_EvaluateScript';
 
 function JS_EvaluateUCScript(cx: PJSContext;
    options: PJSCompileOptions;
    chars: PCChar16; length: size_t;
-   out rval: jsval): Boolean; cdecl; external SpiderMonkeyLib;
+   out rval: jsval): Boolean; cdecl; external SpiderMonkeyLib name 'SM_EvaluateUCScript';
 
 /// Compute |this| for the |vp| inside a JSNative, either boxing primitives or
 // replacing with the global object as necessary.
@@ -2626,10 +2629,9 @@ function JS_EvaluateUCScript(cx: PJSContext;
 // the value is some other primitive, use |JS_ValueToObject| to box it.
 // - low-level API used by JS_THIS() macro.
 //function JS_ComputeThis(cx: PJSContext; var vp: jsval): jsval; cdecl; external SpiderMonkeyLib;
-function JS_ComputeThis(cx: PJSContext; var vp: jsval): Int64; cdecl; external SpiderMonkeyLib;
+function JS_ComputeThis(cx: PJSContext; var vp: jsval): Int64; cdecl; external SpiderMonkeyLib name 'SM_ComputeThis';
 
-procedure strFinalizeOp(fin: PJSStringFinalizer; chars: PCChar16);  cdecl;
-
+procedure strFinalizeOp(fin: PJSStringFinalizer; chars: PCChar16); cdecl;
 const
   strFinalizer: JSStringFinalizer = (
     finalize: strFinalizeOp;
@@ -2640,47 +2642,47 @@ const
 /// Create a new signed 8 bit integer typed array with nelements elements
 // - will fill the newly created array with zeros
 function JS_NewInt8Array(cx: PJSContext; nelements: uint32): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_NewInt8Array';
 
 /// Create a new unsigned 8 bit integer (byte) typed array with nelements elements
 // - will fill the newly created array with zeros
 function JS_NewUint8Array(cx: PJSContext; nelements: uint32): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_NewUint8Array';
 
 /// Create a new 8 bit integer typed array with nelements elements
 // - will fill the newly created array with zeros
 function JS_NewUint8ClampedArray(cx: PJSContext; nelements: uint32): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_NewUint8ClampedArray';
 
 /// Create a new signed 16 bit integer typed array with nelements elements
 // - will fill the newly created array with zeros
 function JS_NewInt16Array(cx: PJSContext; nelements: uint32): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_NewInt16Array';
 
 /// Create a new unsigned 16 bit integer typed array with nelements elements
 // - will fill the newly created array with zeros
 function JS_NewUint16Array(cx: PJSContext; nelements: uint32): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_NewUint16Array';
 
 /// Create a new signed 32 bit integer typed array with nelements elements
 // - will fill the newly created array with zeros
 function JS_NewInt32Array(cx: PJSContext; nelements: uint32): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_NewInt32Array';
 
 /// Create a new unsigned 32 bit integer typed array with nelements elements
 // - will fill the newly created array with zeros
 function JS_NewUint32Array(cx: PJSContext; nelements: uint32): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_NewUint32Array';
 
 /// Create a new signed 32 bit float (single) typed array with nelements elements
 // - will fill the newly created array with zeros
 function JS_NewFloat32Array(cx: PJSContext; nelements: uint32): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_NewFloat32Array';
 
 /// Create a new signed 64 bit float (double) typed array with nelements elements
 // - will fill the newly created array with zeros
 function JS_NewFloat64Array(cx: PJSContext; nelements: uint32): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_NewFloat64Array';
 
 /// Create a new 8 bit signed integer typed array and copy in values
 // from a given object
@@ -2689,7 +2691,7 @@ function JS_NewFloat64Array(cx: PJSContext; nelements: uint32): PJSObject;
 // elements will be those specified by array[0], array[1], and so on, after
 // conversion to the typed array element type.
 function JS_NewInt8ArrayFromArray(cx: PJSContext; var arr: PJSObject): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_NewInt8ArrayFromArray';
 
 /// Create a new 8 bit unsigned integer typed array and copy in values
 // from a given object
@@ -2698,7 +2700,7 @@ function JS_NewInt8ArrayFromArray(cx: PJSContext; var arr: PJSObject): PJSObject
 // elements will be those specified by array[0], array[1], and so on, after
 // conversion to the typed array element type.
 function JS_NewUint8ArrayFromArray(cx: PJSContext; var arr: PJSObject): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_NewUint8ArrayFromArray';
 
 /// Create a new 8 bit unsigned integer typed array and copy in values
 // from a given object
@@ -2707,7 +2709,7 @@ function JS_NewUint8ArrayFromArray(cx: PJSContext; var arr: PJSObject): PJSObjec
 // elements will be those specified by array[0], array[1], and so on, after
 // conversion to the typed array element type.
 function JS_NewUint8ClampedArrayFromArray(cx: PJSContext; var arr: PJSObject): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_NewUint8ClampedArrayFromArray';
 
 /// Create a new 16 bit signed integer typed array and copy in values
 // from a given object
@@ -2716,7 +2718,7 @@ function JS_NewUint8ClampedArrayFromArray(cx: PJSContext; var arr: PJSObject): P
 // elements will be those specified by array[0], array[1], and so on, after
 // conversion to the typed array element type.
 function JS_NewInt16ArrayFromArray(cx: PJSContext; var arr: PJSObject): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_NewInt16ArrayFromArray';
 
 /// Create a new 16 bit unsigned integer typed array and copy in values
 // from a given object
@@ -2725,7 +2727,7 @@ function JS_NewInt16ArrayFromArray(cx: PJSContext; var arr: PJSObject): PJSObjec
 // elements will be those specified by array[0], array[1], and so on, after
 // conversion to the typed array element type.
 function JS_NewUint16ArrayFromArray(cx: PJSContext; var arr: PJSObject): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_NewUint16ArrayFromArray';
 
 /// Create a new 32 bit signed integer typed array and copy in values
 // from a given object
@@ -2734,7 +2736,7 @@ function JS_NewUint16ArrayFromArray(cx: PJSContext; var arr: PJSObject): PJSObje
 // elements will be those specified by array[0], array[1], and so on, after
 // conversion to the typed array element type.
 function JS_NewInt32ArrayFromArray(cx: PJSContext; var arr: PJSObject): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_NewInt32ArrayFromArray';
 
 /// Create a new 32 bit unsigned integer typed array and copy in values
 // from a given object
@@ -2743,7 +2745,7 @@ function JS_NewInt32ArrayFromArray(cx: PJSContext; var arr: PJSObject): PJSObjec
 // elements will be those specified by array[0], array[1], and so on, after
 // conversion to the typed array element type.
 function JS_NewUint32ArrayFromArray(cx: PJSContext; var arr: PJSObject): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_NewUint32ArrayFromArray';
 
 /// Create a new 32 bit float (single) typed array and copy in values
 // from a given object
@@ -2752,7 +2754,7 @@ function JS_NewUint32ArrayFromArray(cx: PJSContext; var arr: PJSObject): PJSObje
 // elements will be those specified by array[0], array[1], and so on, after
 // conversion to the typed array element type.
 function JS_NewFloat32ArrayFromArray(cx: PJSContext; var arr: PJSObject): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_NewFloat32ArrayFromArray';
 
 /// Create a new 64 bit float (double) typed array and copy in values
 // from a given object
@@ -2761,119 +2763,119 @@ function JS_NewFloat32ArrayFromArray(cx: PJSContext; var arr: PJSObject): PJSObj
 // elements will be those specified by array[0], array[1], and so on, after
 // conversion to the typed array element type.
 function JS_NewFloat64ArrayFromArray(cx: PJSContext; var arr: PJSObject): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_NewFloat64ArrayFromArray';
 
 /// Create a new 8 bit signed integer typed array using the given
 // ArrayBuffer for storage
 // - The length value is optional; if -1 is passed, enough elements to use up the
 // remainder of the byte array is used as the default value
 function JS_NewInt8ArrayWithBuffer(cx: PJSContext; var arrayBuffer: PJSObject;
- byteOffset: uint32; length: int32): PJSObject; cdecl; external SpiderMonkeyLib;
+ byteOffset: uint32; length: int32): PJSObject; cdecl; external SpiderMonkeyLib name 'SM_NewInt8ArrayWithBuffer';
 
 /// Create a new 8 bit unsigned integer typed array using the given
 // ArrayBuffer for storage
 // - The length value is optional; if -1 is passed, enough elements to use up the
 // remainder of the byte array is used as the default value
 function JS_NewUint8ArrayWithBuffer(cx: PJSContext; var arrayBuffer: PJSObject;
- byteOffset: uint32; length: int32): PJSObject; cdecl; external SpiderMonkeyLib;
+ byteOffset: uint32; length: int32): PJSObject; cdecl; external SpiderMonkeyLib name 'SM_NewUint8ArrayWithBuffer';
 
 /// Create a new 8 bit unsigned integer typed array using the given
 // ArrayBuffer for storage
 // - The length value is optional; if -1 is passed, enough elements to use up the
 // remainder of the byte array is used as the default value
 function JS_NewUint8ClampedArrayWithBuffer(cx: PJSContext; var arrayBuffer: PJSObject;
- byteOffset: uint32; length: int32): PJSObject; cdecl; external SpiderMonkeyLib;
+ byteOffset: uint32; length: int32): PJSObject; cdecl; external SpiderMonkeyLib name 'SM_NewUint8ClampedArrayWithBuffer';
 
 /// Create a new 16 bit signed integer typed array using the given
 // ArrayBuffer for storage
 // - The length value is optional; if -1 is passed, enough elements to use up the
 // remainder of the byte array is used as the default value
 function JS_NewInt16ArrayWithBuffer(cx: PJSContext; var arrayBuffer: PJSObject;
- byteOffset: uint32; length: int32): PJSObject; cdecl; external SpiderMonkeyLib;
+ byteOffset: uint32; length: int32): PJSObject; cdecl; external SpiderMonkeyLib name 'SM_NewInt16ArrayWithBuffer';
 
 /// Create a new 16 bit unsigned integer typed array using the given
 // ArrayBuffer for storage
 // - The length value is optional; if -1 is passed, enough elements to use up the
 // remainder of the byte array is used as the default value
 function JS_NewUint16ArrayWithBuffer(cx: PJSContext; var arrayBuffer: PJSObject;
- byteOffset: uint32; length: int32): PJSObject; cdecl; external SpiderMonkeyLib;
+ byteOffset: uint32; length: int32): PJSObject; cdecl; external SpiderMonkeyLib name 'SM_NewUint16ArrayWithBuffer';
 
 /// Create a new 32 bit signed integer typed array using the given
 // ArrayBuffer for storage
 // - The length value is optional; if -1 is passed, enough elements to use up the
 // remainder of the byte array is used as the default value
 function JS_NewInt32ArrayWithBuffer(cx: PJSContext; var arrayBuffer: PJSObject;
- byteOffset: uint32; length: int32): PJSObject; cdecl; external SpiderMonkeyLib;
+ byteOffset: uint32; length: int32): PJSObject; cdecl; external SpiderMonkeyLib name 'SM_NewInt32ArrayWithBuffer';
 
 /// Create a new 32 bit unsigned integer typed array using the given
 // ArrayBuffer for storage
 // - The length value is optional; if -1 is passed, enough elements to use up the
 // remainder of the byte array is used as the default value
 function JS_NewUint32ArrayWithBuffer(cx: PJSContext; var arrayBuffer: PJSObject;
- byteOffset: uint32; length: int32): PJSObject; cdecl; external SpiderMonkeyLib;
+ byteOffset: uint32; length: int32): PJSObject; cdecl; external SpiderMonkeyLib name 'SM_NewUint32ArrayWithBuffer';
 
 /// Create a new 32 bit float (single) typed array using the given
 // ArrayBuffer for storage
 // - The length value is optional; if -1 is passed, enough elements to use up the
 // remainder of the byte array is used as the default value
 function JS_NewFloat32ArrayWithBuffer(cx: PJSContext; var arrayBuffer: PJSObject;
- byteOffset: uint32; length: int32): PJSObject; cdecl; external SpiderMonkeyLib;
+ byteOffset: uint32; length: int32): PJSObject; cdecl; external SpiderMonkeyLib name 'SM_NewFloat32ArrayWithBuffer';
 
 /// Create a new 64 bit float (double) typed array using the given
 // ArrayBuffer for storage
 // - The length value is optional; if -1 is passed, enough elements to use up the
 // remainder of the byte array is used as the default value
 function JS_NewFloat64ArrayWithBuffer(cx: PJSContext; var arrayBuffer: PJSObject;
- byteOffset: uint32; length: int32): PJSObject; cdecl; external SpiderMonkeyLib;
+ byteOffset: uint32; length: int32): PJSObject; cdecl; external SpiderMonkeyLib name 'SM_NewFloat64ArrayWithBuffer';
 
 /// Create a new SharedArrayBuffer with the given byte length.
 function JS_NewSharedArrayBuffer(cx: PJSContext; nbytes: uint32): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_NewSharedArrayBuffer';
 
 /// Create a new ArrayBuffer with the given byte length.
 function JS_NewArrayBuffer(cx: PJSContext; nbytes: uint32): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_NewArrayBuffer';
 
 /// Check whether obj supports JS_GetTypedArray* APIs
 // - Note that this may return false if a security wrapper is encountered that
 // denies the unwrapping.
 // - if this test or one of the JS_Is*Array tests succeeds, then it is safe to call
 // the dedicated accessor JSAPI calls
-function JS_IsTypedArrayObject(obj: PJSObject): Boolean; cdecl; external SpiderMonkeyLib;
+function JS_IsTypedArrayObject(obj: PJSObject): Boolean; cdecl; external SpiderMonkeyLib name 'SM_IsTypedArrayObject';
 
 /// Check whether obj supports JS_GetArrayBufferView* APIs
 // - Note that this may return false if a security wrapper is encountered that
 // denies the unwrapping.
 // - if this test or one of the JS_Is*Array tests succeeds, then it is safe to call
 // the dedicated ArrayBufferView accessor JSAPI calls
-function JS_IsArrayBufferViewObject(obj: PJSObject): Boolean; cdecl; external SpiderMonkeyLib;
+function JS_IsArrayBufferViewObject(obj: PJSObject): Boolean; cdecl; external SpiderMonkeyLib name 'SM_IsArrayBufferViewObject';
 
 /// Test for specific 8 bit signed integer typed array types (ArrayBufferView subtypes)
-function JS_IsInt8Array(obj: PJSObject): Boolean; cdecl; external SpiderMonkeyLib;
+function JS_IsInt8Array(obj: PJSObject): Boolean; cdecl; external SpiderMonkeyLib name 'SM_IsInt8Array';
 
 /// Test for specific 8 bit unsigned integer typed array types (ArrayBufferView subtypes)
-function JS_IsUint8Array(obj: PJSObject): Boolean; cdecl; external SpiderMonkeyLib;
+function JS_IsUint8Array(obj: PJSObject): Boolean; cdecl; external SpiderMonkeyLib name 'SM_IsUint8Array';
 
 /// Test for specific 8 bit unsigned integer typed array types (ArrayBufferView subtypes)
-function JS_IsUint8ClampedArray(obj: PJSObject): Boolean; cdecl; external SpiderMonkeyLib;
+function JS_IsUint8ClampedArray(obj: PJSObject): Boolean; cdecl; external SpiderMonkeyLib name 'SM_IsUint8ClampedArray';
 
 /// Test for specific 16 bit signed integer typed array types (ArrayBufferView subtypes)
-function JS_IsInt16Array(obj: PJSObject): Boolean; cdecl; external SpiderMonkeyLib;
+function JS_IsInt16Array(obj: PJSObject): Boolean; cdecl; external SpiderMonkeyLib name 'SM_IsInt16Array';
 
 /// Test for specific 16 bit unsigned integer typed array types (ArrayBufferView subtypes)
-function JS_IsUint16Array(obj: PJSObject): Boolean; cdecl; external SpiderMonkeyLib;
+function JS_IsUint16Array(obj: PJSObject): Boolean; cdecl; external SpiderMonkeyLib name 'SM_IsUint16Array';
 
 /// Test for specific 32 bit signed integer typed array types (ArrayBufferView subtypes)
-function JS_IsInt32Array(obj: PJSObject): Boolean; cdecl; external SpiderMonkeyLib;
+function JS_IsInt32Array(obj: PJSObject): Boolean; cdecl; external SpiderMonkeyLib name 'SM_IsInt32Array';
 
 /// Test for specific 32 bit unsigned integer typed array types (ArrayBufferView subtypes)
-function JS_IsUint32Array(obj: PJSObject): Boolean; cdecl; external SpiderMonkeyLib;
+function JS_IsUint32Array(obj: PJSObject): Boolean; cdecl; external SpiderMonkeyLib name 'SM_IsUint32Array';
 
 /// Test for specific 32 bit float (single) typed array types (ArrayBufferView subtypes)
-function JS_IsFloat32Array(obj: PJSObject): Boolean; cdecl; external SpiderMonkeyLib;
+function JS_IsFloat32Array(obj: PJSObject): Boolean; cdecl; external SpiderMonkeyLib name 'SM_IsFloat32Array';
 
 /// Test for specific 64 bit float (double) typed array types (ArrayBufferView subtypes)
-function JS_IsFloat64Array(obj: PJSObject): Boolean; cdecl; external SpiderMonkeyLib;
+function JS_IsFloat64Array(obj: PJSObject): Boolean; cdecl; external SpiderMonkeyLib name 'SM_IsFloat64Array';
 
 /// Return the isShared flag of a typed array, which denotes whether
 // the underlying buffer is a SharedArrayBuffer.
@@ -2881,101 +2883,98 @@ function JS_IsFloat64Array(obj: PJSObject): Boolean; cdecl; external SpiderMonke
 // |obj| must have passed a JS_IsTypedArrayObject/JS_Is*Array test, or somehow
 // be known that it would pass such a test: it is a typed array or a wrapper of
 // a typed array, and the unwrapping will succeed.
-function JS_GetTypedArraySharedness(obj: PJSObject): Boolean; cdecl; external SpiderMonkeyLib;
+function JS_GetTypedArraySharedness(obj: PJSObject): Boolean; cdecl; external SpiderMonkeyLib name 'SM_GetTypedArraySharedness';
 
 /// Unwrap 8 bit signed integer typed array into direct memory buffer
 // - Return nil without throwing any exception if the object cannot be viewed as the
 // correct typed array, or the typed array object on success, filling both out parameters
 function JS_GetObjectAsInt8Array(obj: PJSObject; out length: uint32; out isSharedMemory:Boolean; out Data: Pint8Vector): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_GetObjectAsInt8Array';
 
 /// Unwrap 8 bit unsigned integer typed array into direct memory buffer
 // - Return nil without throwing any exception if the object cannot be viewed as the
 // correct typed array, or the typed array object on success, filling both out parameters
 function JS_GetObjectAsUint8Array(obj: PJSObject; out length: uint32; out isSharedMemory:Boolean; out  Data: Puint8Vector): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_GetObjectAsUint8Array';
 
 /// Unwrap 8 bit unsigned integer typed array into direct memory buffer
 // - Return nil without throwing any exception if the object cannot be viewed as the
 // correct typed array, or the typed array object on success, filling both out parameters
 function JS_GetObjectAsUint8ClampedArray(obj: PJSObject; out length: uint32; out isSharedMemory:Boolean; out  Data: Puint8Vector): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_GetObjectAsUint8ClampedArray';
 
 /// Unwrap 16 bit signed integer typed array into direct memory buffer
 // - Return nil without throwing any exception if the object cannot be viewed as the
 // correct typed array, or the typed array object on success, filling both out parameters
 function JS_GetObjectAsInt16Array(obj: PJSObject; out length: uint32; out isSharedMemory:Boolean; out  Data: Pint16Vector): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_GetObjectAsInt16Array';
 
 /// Unwrap 16 bit unsigned integer typed array into direct memory buffer
 // - Return nil without throwing any exception if the object cannot be viewed as the
 // correct typed array, or the typed array object on success, filling both out parameters
 function JS_GetObjectAsUint16Array(obj: PJSObject; out length: uint32; out isSharedMemory:Boolean; out  Data: Puint16Vector): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_GetObjectAsUint16Array';
 
 /// Unwrap 32 bit signed integer typed array into direct memory buffer
 // - Return nil without throwing any exception if the object cannot be viewed as the
 // correct typed array, or the typed array object on success, filling both out parameters
 function JS_GetObjectAsInt32Array(obj: PJSObject; out length: uint32; out isSharedMemory:Boolean; out  Data: Pint32Vector): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_GetObjectAsInt32Array';
 
 /// Unwrap 32 bit unsigned integer typed array into direct memory buffer
 // - Return nil without throwing any exception if the object cannot be viewed as the
 // correct typed array, or the typed array object on success, filling both out parameters
 function JS_GetObjectAsUint32Array(obj: PJSObject; out length: uint32; out isSharedMemory:Boolean; out  Data: Puint32Vector): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_GetObjectAsUint32Array';
 
 /// Unwrap 32 bit float (single) typed array into direct memory buffer
 // - Return nil without throwing any exception if the object cannot be viewed as the
 // correct typed array, or the typed array object on success, filling both out parameters
 function JS_GetObjectAsFloat32Array(obj: PJSObject; out length: uint32; out isSharedMemory:Boolean; out  Data: Pfloat32Vector): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_GetObjectAsFloat32Array';
 
 /// Unwrap 64 bit float (double) typed array into direct memory buffer
 // - Return nil without throwing any exception if the object cannot be viewed as the
 // correct typed array, or the typed array object on success, filling both out parameters
 function JS_GetObjectAsFloat64Array(obj: PJSObject; out length: uint32; out isSharedMemory:Boolean; out  Data: Pfloat64Vector): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_GetObjectAsFloat64Array';
 
 /// Unwrap an object as its raw binary memory buffer
 // - Return nil without throwing any exception if the object cannot be viewed as the
 // correct typed array, or the typed array object on success, filling both out parameters
 function JS_GetObjectAsArrayBufferView(obj: PJSObject; out length: uint32; out isSharedMemory:Boolean; out  Data: Puint8Vector): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_GetObjectAsArrayBufferView';
 
 /// Unwrap an object as its raw binary memory buffer
 // - Return nil without throwing any exception if the object cannot be viewed as the
 // correct typed array, or the typed array object on success, filling both out parameters
 function JS_GetObjectAsArrayBuffer(obj: PJSObject; out length: uint32; out Data: Puint8Vector): PJSObject;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_GetObjectAsArrayBuffer';
 
 
   /// Get the type of elements in a typed array, or jsabTYPE_DATAVIEW if a DataView
 function JS_GetArrayBufferViewType(obj: PJSObject): JSArrayBufferViewType;
-  cdecl; external SpiderMonkeyLib;
-
-//function JS_GetSharedArrayBufferViewType(obj: PJSObject): JSArrayBufferViewType;
-//  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_GetArrayBufferViewType';
 
 /// Check whether obj supports the JS_GetArrayBuffer* APIs
 // - Note that this may return false if a security wrapper is encountered that denies the
 // unwrapping
 // - If this test succeeds, then it is safe to call the various accessor JSAPI calls
 function JS_IsArrayBufferObject(obj: PJSObject): Boolean;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_IsArrayBufferObject';
 
 function JS_IsSharedArrayBufferObject(obj: PJSObject): Boolean;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_IsSharedArrayBufferObject';
 
 /// Return the available byte length of an array buffer
 // - obj must have passed a JS_IsArrayBufferObject test, or somehow be known
 // that it would pass such a test: it is an ArrayBuffer or a wrapper of an
 // ArrayBuffer, and the unwrapping will succeed
 function JS_GetArrayBufferByteLength(obj: PJSObject): uint32;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_GetArrayBufferByteLength';
 
 function JS_GetSharedArrayBufferByteLength(obj: PJSObject): uint32;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_GetSharedArrayBufferByteLength';
 
 /// Return true if the arrayBuffer contains any data. This will return false for
 // ArrayBuffer.prototype and neutered ArrayBuffers.
@@ -2984,7 +2983,7 @@ function JS_GetSharedArrayBufferByteLength(obj: PJSObject): uint32;
 // that it would pass such a test: it is an ArrayBuffer or a wrapper of an
 // ArrayBuffer, and the unwrapping will succeed.
 function JS_ArrayBufferHasData(obj: PJSObject): Boolean;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_ArrayBufferHasData';
 
 /// Return a pointer to an array buffer's data
 // - The buffer is still owned by the array buffer object, and should not
@@ -2992,35 +2991,36 @@ function JS_ArrayBufferHasData(obj: PJSObject): Boolean;
 // - obj must have passed a JS_IsArrayBufferObject test, or somehow be known
 // that it would pass such a test: it is an ArrayBuffer or a wrapper of an
 // ArrayBuffer, and the unwrapping will succeed.
-function JS_GetArrayBufferData(obj: PJSObject; out isSharedMemory: Boolean; nogc: PJSAutoCheckCannotGC): Puint8Vector; cdecl; external SpiderMonkeyLib;
+function JS_GetArrayBufferData(obj: PJSObject; out isSharedMemory: Boolean; nogc: PJSAutoCheckCannotGC{Not used in SM code}): Puint8Vector;
+  cdecl; external SpiderMonkeyLib name 'SM_GetArrayBufferData';
 
 /// Check whether the obj is ArrayBufferObject and memory mapped. Note that this
 // may return false if a security wrapper is encountered that denies the
 // unwrapping.
 function JS_IsMappedArrayBufferObject(obj: PJSObject): Boolean;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_IsMappedArrayBufferObject';
 
 /// Return the number of elements in a typed array
 // - obj must have passed a JS_IsTypedArrayObject/JS_Is*Array test, or somehow
 // be known that it would pass such a test: it is a typed array or a wrapper of
 // a typed array, and the unwrapping will succeed.
-function JS_GetTypedArrayLength(obj: PJSObject): uint32; cdecl; external SpiderMonkeyLib;
+function JS_GetTypedArrayLength(obj: PJSObject): uint32; cdecl; external SpiderMonkeyLib name 'SM_GetTypedArrayLength';
 
 /// Return the byte offset from the start of an array buffer to the start of a
 // typed array view
 // - obj must have passed a JS_IsTypedArrayObject/JS_Is*Array test, or somehow
 // be known that it would pass such a test: it is a typed array or a wrapper of
 // a typed array, and the unwrapping will succeed.
-function JS_GetTypedArrayByteOffset(obj: PJSObject): uint32; cdecl; external SpiderMonkeyLib;
+function JS_GetTypedArrayByteOffset(obj: PJSObject): uint32; cdecl; external SpiderMonkeyLib name 'SM_GetTypedArrayByteOffset';
 
 /// Return the byte length of a typed array
 // - obj must have passed a JS_IsTypedArrayObject/JS_Is*Array test, or somehow
 // be known that it would pass such a test: it is a typed array or a wrapper of
 // a typed array, and the unwrapping will succeed
-function JS_GetTypedArrayByteLength(obj: PJSObject): uint32; cdecl; external SpiderMonkeyLib;
+function JS_GetTypedArrayByteLength(obj: PJSObject): uint32; cdecl; external SpiderMonkeyLib name 'SM_GetTypedArrayByteLength';
 
 /// More generic name for JS_GetTypedArrayByteLength to cover DataViews as well
-function JS_GetArrayBufferViewByteLength(obj: PJSObject): uint32; cdecl; external SpiderMonkeyLib;
+function JS_GetArrayBufferViewByteLength(obj: PJSObject): uint32; cdecl; external SpiderMonkeyLib name 'SM_GetArrayBufferViewByteLength';
 
 /// Return a pointer to the start of the data referenced by a typed 8 bit signed integer array
 // - The data is still owned by the typed array, and should not be modified on
@@ -3028,7 +3028,8 @@ function JS_GetArrayBufferViewByteLength(obj: PJSObject): uint32; cdecl; externa
 // - obj must have passed a JS_Is*Array test, or somehow be known that it would
 // pass such a test: it is a typed array or a wrapper of a typed array, and the
 // unwrapping will succeed
-function JS_GetInt8ArrayData(obj: PJSObject; out isSharedMemory: Boolean; nogc: PJSAutoCheckCannotGC): Pint8Vector; cdecl; external SpiderMonkeyLib;
+function JS_GetInt8ArrayData(obj: PJSObject; out isSharedMemory: Boolean; nogc: PJSAutoCheckCannotGC): Pint8Vector; cdecl;
+  external SpiderMonkeyLib name 'SM_GetInt8ArrayData';
 
 /// Return a pointer to the start of the data referenced by a typed 8 bit unsigned integer array
 // - The data is still owned by the typed array, and should not be modified on
@@ -3036,7 +3037,8 @@ function JS_GetInt8ArrayData(obj: PJSObject; out isSharedMemory: Boolean; nogc: 
 // - obj must have passed a JS_Is*Array test, or somehow be known that it would
 // pass such a test: it is a typed array or a wrapper of a typed array, and the
 // unwrapping will succeed
-function JS_GetUint8ArrayData(obj: PJSObject; out isSharedMemory: Boolean; nogc: PJSAutoCheckCannotGC): Puint8Vector; cdecl; external SpiderMonkeyLib;
+function JS_GetUint8ArrayData(obj: PJSObject; out isSharedMemory: Boolean; nogc: PJSAutoCheckCannotGC): Puint8Vector; cdecl;
+  external SpiderMonkeyLib name 'SM_GetUint8ArrayData';
 
 /// Return a pointer to the start of the data referenced by a typed 8 bit unsigned integer array
 // - The data is still owned by the typed array, and should not be modified on
@@ -3044,7 +3046,8 @@ function JS_GetUint8ArrayData(obj: PJSObject; out isSharedMemory: Boolean; nogc:
 // - obj must have passed a JS_Is*Array test, or somehow be known that it would
 // pass such a test: it is a typed array or a wrapper of a typed array, and the
 // unwrapping will succeed
-function JS_GetUint8ClampedArrayData(obj: PJSObject; out isSharedMemory: Boolean; nogc: PJSAutoCheckCannotGC): Puint8Vector; cdecl; external SpiderMonkeyLib;
+function JS_GetUint8ClampedArrayData(obj: PJSObject; out isSharedMemory: Boolean; nogc: PJSAutoCheckCannotGC): Puint8Vector; cdecl;
+  external SpiderMonkeyLib name 'SM_GetUint8ClampedArrayData';
 
 /// Return a pointer to the start of the data referenced by a typed 16 bit signed integer array
 // - The data is still owned by the typed array, and should not be modified on
@@ -3052,7 +3055,8 @@ function JS_GetUint8ClampedArrayData(obj: PJSObject; out isSharedMemory: Boolean
 // - obj must have passed a JS_Is*Array test, or somehow be known that it would
 // pass such a test: it is a typed array or a wrapper of a typed array, and the
 // unwrapping will succeed
-function JS_GetInt16ArrayData(obj: PJSObject; out isSharedMemory: Boolean; nogc: PJSAutoCheckCannotGC): Pint16Vector; cdecl; external SpiderMonkeyLib;
+function JS_GetInt16ArrayData(obj: PJSObject; out isSharedMemory: Boolean; nogc: PJSAutoCheckCannotGC): Pint16Vector; cdecl;
+  external SpiderMonkeyLib name 'SM_GetInt16ArrayData';
 
 /// Return a pointer to the start of the data referenced by a typed 16 bit unsigned integer array
 // - The data is still owned by the typed array, and should not be modified on
@@ -3060,7 +3064,8 @@ function JS_GetInt16ArrayData(obj: PJSObject; out isSharedMemory: Boolean; nogc:
 // - obj must have passed a JS_Is*Array test, or somehow be known that it would
 // pass such a test: it is a typed array or a wrapper of a typed array, and the
 // unwrapping will succeed
-function JS_GetUint16ArrayData(obj: PJSObject; out isSharedMemory: Boolean; nogc: PJSAutoCheckCannotGC): Puint16Vector; cdecl; external SpiderMonkeyLib;
+function JS_GetUint16ArrayData(obj: PJSObject; out isSharedMemory: Boolean; nogc: PJSAutoCheckCannotGC): Puint16Vector; cdecl;
+  external SpiderMonkeyLib name 'SM_GetUint16ArrayData';
 
 /// Return a pointer to the start of the data referenced by a typed 32 bit signed integer array
 // - The data is still owned by the typed array, and should not be modified on
@@ -3068,7 +3073,8 @@ function JS_GetUint16ArrayData(obj: PJSObject; out isSharedMemory: Boolean; nogc
 // - obj must have passed a JS_Is*Array test, or somehow be known that it would
 // pass such a test: it is a typed array or a wrapper of a typed array, and the
 // unwrapping will succeed
-function JS_GetInt32ArrayData(obj: PJSObject; out isSharedMemory: Boolean; nogc: PJSAutoCheckCannotGC): Pint32Vector; cdecl; external SpiderMonkeyLib;
+function JS_GetInt32ArrayData(obj: PJSObject; out isSharedMemory: Boolean; nogc: PJSAutoCheckCannotGC): Pint32Vector; cdecl;
+  external SpiderMonkeyLib name 'SM_GetInt32ArrayData';
 
 /// Return a pointer to the start of the data referenced by a typed 32 bit unsigned integer array
 // - The data is still owned by the typed array, and should not be modified on
@@ -3076,7 +3082,8 @@ function JS_GetInt32ArrayData(obj: PJSObject; out isSharedMemory: Boolean; nogc:
 // - obj must have passed a JS_Is*Array test, or somehow be known that it would
 // pass such a test: it is a typed array or a wrapper of a typed array, and the
 // unwrapping will succeed
-function JS_GetUint32ArrayData(obj: PJSObject; out isSharedMemory: Boolean; nogc: PJSAutoCheckCannotGC): Puint32Vector; cdecl; external SpiderMonkeyLib;
+function JS_GetUint32ArrayData(obj: PJSObject; out isSharedMemory: Boolean; nogc: PJSAutoCheckCannotGC): Puint32Vector; cdecl;
+  external SpiderMonkeyLib name 'SM_GetUint32ArrayData';
 
 /// Return a pointer to the start of the data referenced by a typed 32 bit float (single) array
 // - The data is still owned by the typed array, and should not be modified on
@@ -3084,7 +3091,8 @@ function JS_GetUint32ArrayData(obj: PJSObject; out isSharedMemory: Boolean; nogc
 // - obj must have passed a JS_Is*Array test, or somehow be known that it would
 // pass such a test: it is a typed array or a wrapper of a typed array, and the
 // unwrapping will succeed
-function JS_GetFloat32ArrayData(obj: PJSObject; out isSharedMemory: Boolean; nogc: PJSAutoCheckCannotGC): Pfloat32Vector; cdecl; external SpiderMonkeyLib;
+function JS_GetFloat32ArrayData(obj: PJSObject; out isSharedMemory: Boolean; nogc: PJSAutoCheckCannotGC): Pfloat32Vector; cdecl;
+  external SpiderMonkeyLib name 'SM_GetFloat32ArrayData';
 
 /// Return a pointer to the start of the data referenced by a typed 64 bit float (double) array
 // - The data is still owned by the typed array, and should not be modified on
@@ -3092,7 +3100,8 @@ function JS_GetFloat32ArrayData(obj: PJSObject; out isSharedMemory: Boolean; nog
 // - obj must have passed a JS_Is*Array test, or somehow be known that it would
 // pass such a test: it is a typed array or a wrapper of a typed array, and the
 // unwrapping will succeed
-function JS_GetFloat64ArrayData(obj: PJSObject; out isSharedMemory: Boolean; nogc: PJSAutoCheckCannotGC): Pfloat64Vector; cdecl; external SpiderMonkeyLib;
+function JS_GetFloat64ArrayData(obj: PJSObject; out isSharedMemory: Boolean; nogc: PJSAutoCheckCannotGC): Pfloat64Vector; cdecl;
+  external SpiderMonkeyLib name 'SM_GetFloat64ArrayData';
 
 /// Return a pointer to the start of the data referenced by any typed array
 // - The data is still owned by the typed array, and should not be modified on
@@ -3101,25 +3110,27 @@ function JS_GetFloat64ArrayData(obj: PJSObject; out isSharedMemory: Boolean; nog
 // pass such a test: it is a typed array or a wrapper of a typed array, and the
 // unwrapping will succeed
 // - Prefer the type-specific versions when possible
-function JS_GetArrayBufferViewData(obj: PJSObject; out isSharedMemory: Boolean; nogc: PJSAutoCheckCannotGC): Pointer; cdecl; external SpiderMonkeyLib;
+function JS_GetArrayBufferViewData(obj: PJSObject; out isSharedMemory: Boolean; nogc: PJSAutoCheckCannotGC): Pointer; cdecl;
+  external SpiderMonkeyLib name 'SM_GetArrayBufferViewData';
 
 /// Return the ArrayBuffer underlying an ArrayBufferView
 // - If the buffer has been neutered, this will still return the neutered buffer.
 // - obj must be an object that would return true for JS_IsArrayBufferViewObject()
-function JS_GetArrayBufferViewBuffer(cx: PJSContext; var obj: PJSObject; out isSharedMemory: Boolean): PJSObject; cdecl; external SpiderMonkeyLib;
+function JS_GetArrayBufferViewBuffer(cx: PJSContext; var obj: PJSObject; out isSharedMemory: Boolean): PJSObject; cdecl;
+  external SpiderMonkeyLib name 'SM_GetArrayBufferViewBuffer';
 
 
 ////modules
 
-/// Initialize modeles classes next 2 functions cannot work without calling this function
-function JS_InitModuleClasses(cx: PJSContext; var obj: PJSObject): boolean; cdecl; external SpiderMonkeyLib;
+/// Initialize modeles classes next 2 functions cannot work without calling this function                !!! EMPTY !!!
+function JS_InitModuleClasses(cx: PJSContext; var obj: PJSObject): boolean; cdecl; external SpiderMonkeyLib name 'SM_InitModuleClasses';
 /// Compile script as module
 function JS_CompileModule(cx: PJSContext;
    var obj: PJSObject;
    options: PJSCompileOptions;
-   chars: PCChar16; length: size_t): PJSObject; cdecl; external SpiderMonkeyLib;
+   chars: PCChar16; length: size_t): PJSObject; cdecl; external SpiderMonkeyLib name 'SM_CompileModule';
 /// Set handler for module resolving
-procedure JS_SetModuleResolveHook(cx: PJSContext; var hook: PJSFunction); cdecl; external SpiderMonkeyLib;
+procedure JS_SetModuleResolveHook(cx: PJSContext; var hook: PJSFunction); cdecl; external SpiderMonkeyLib name 'SM_SetModuleResolveHook';
 
 type
   pjsval = ^jsval;
