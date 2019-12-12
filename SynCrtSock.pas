@@ -5239,6 +5239,7 @@ var res: integer;
     tv: TTimeVal;
     fdset: TFDSet;
     pending: integer;
+    endtix: Int64;
     {$ifdef SYNCRTDEBUGLOW}
     time: TPrecisionTimer;
     {$endif}
@@ -5252,22 +5253,38 @@ begin
   end;
   {$ifdef MSWINDOWS}
     {$ifdef SYNCRTDEBUGLOW} time.Start; {$endif}
-    fdset.fd_array[0] := fSock;
-    fdset.fd_count := 1;
-    tv.tv_usec := TimeOutMS*1000;
-    tv.tv_sec := 0;
-    pending := 0;
-    res := Select(fSock+1,@fdset,nil,nil,@tv);
-    if res<0 then
-      result := cspSocketError else begin
-      result := cspNoData;
-      if (res>0) and (fdset.fd_count=1) and (fdset.fd_array[0]=fSock) and
-         (IoctlSocket(fSock,FIONREAD,pending)=0) then
-        if pending=0 then // indicates socket closed gracefully
-          result := cspSocketError else
-        if pending>0 then
-          result := cspDataAvailable;
-    end;
+    if TimeOutMS<=16 then
+      endtix := 0 else
+      endtix := GetTick64+TimeOutMS-16;
+    repeat
+      fdset.fd_array[0] := fSock;
+      fdset.fd_count := 1;
+      tv.tv_usec := 0; // TimeOutMS*1000 here seems ignored :(
+      tv.tv_sec := 0;
+      pending := 0;
+      res := Select(fSock+1,@fdset,nil,nil,@tv);
+      if res<0 then
+        result := cspSocketError else begin
+        result := cspNoData;
+        if (res>0) and (fdset.fd_count=1) and (fdset.fd_array[0]=fSock) and
+           (IoctlSocket(fSock,FIONREAD,pending)=0) then
+          if pending=0 then
+            // indicates socket closed gracefully
+            // https://docs.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-select#remarks
+            result := cspSocketError else
+            result := cspDataAvailable;
+      end;
+      if (TimeOutMS=0) or (result<>cspNoData) then
+        break;
+      // circumvent Select() bug: TTimeVal ignored
+      if TimeOutMS<=16 then begin // GetTickCount64 resolution is about 16ms
+        TimeOutMS := (TimeOutMS*3) shr 2; // wait at least some part of it
+        sleep(TimeOutMS);
+      end else
+        if GetTick64>=endtix then
+          break else
+          sleep(1); // don't burn CPU
+    until false;
     {$ifdef SYNCRTDEBUGLOW}
     tsynlog.add.log(sllcustom1, 'SockReceivePending sock=% timeout=% fd_count=% fd_array[0]=% res=% select=% pending=% time=%',
       [fsock, TimeOutMS, fdset.fd_count, fdset.fd_array[0], res, ord(result), pending, time.Stop], self);
