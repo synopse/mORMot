@@ -824,10 +824,10 @@ type
 const
   /// fake BSON element type which compares lower than all other possible values
   // - element type sounds to be stored as shortint, so here $ff=-1<0=betEOF
-  betMinKey = TBSONElementType($ff);
+  betMinKey = ($ff);
   /// fake BSON element type which compares higher than all other possible values
   // - element type sounds to be stored as shortint, so here betInt64=$12<$7f
-  betMaxKey = TBSONElementType($7f);
+  betMaxKey = ($7f);
 
   /// kind of elements which will store a RawByteString/RawUTF8 content
   // within its TBSONVariant kind
@@ -2909,9 +2909,9 @@ regex:  W.AddShort(BSON_JSON_REGEX[0]);
     W.AddShort(BSON_JSON_DECIMAL[true,Mode]);
   end;
   else
-  if Kind=betMinKey then
+  if Ord(Kind)=betMinKey then
     W.AddShort(BSON_JSON_MINKEY[Mode=modMongoShell]) else
-  if Kind=betMaxKey then
+  if Ord(Kind)=betMaxKey then
     W.AddShort(BSON_JSON_MAXKEY[Mode=modMongoShell]) else
     raise EBSONException.CreateUTF8('TBSONElement.AddMongoJSON: unexpected type %',
       [ord(Kind)]);
@@ -4075,7 +4075,7 @@ function TBSONVariant.TryJSONToVariant(var JSON: PUTF8Char;
 var bsonvalue: TBSONVariantData absolute Value;
     varvalue: TVarData absolute Value;
 // warning: code should NOT modify JSON buffer in-place, unless it returns true
-  procedure Return(kind: TBSONElementType; P: PUTF8Char; GotoEndOfObject: AnsiChar='}');
+  procedure Return(kind: TBSONElementType; P: PUTF8Char; GotoEndOfObject: AnsiChar='}');overload;
   begin
     if GotoEndOfObject<>#0 then
       while P^<>GotoEndOfObject do
@@ -4100,6 +4100,23 @@ var bsonvalue: TBSONVariantData absolute Value;
     end;
     result := true;
   end;
+  procedure Return(kind: shortint; P: PUTF8Char; GotoEndOfObject: AnsiChar='}');overload;
+  begin
+    if GotoEndOfObject<>#0 then
+      while P^<>GotoEndOfObject do
+      if P^=#0 then
+        exit
+      else
+        inc(P);
+    P := GotoNextNotSpace(P+1);
+    if EndOfObject<>nil then
+      EndOfObject^ := P^;
+    if P^<>#0 then
+      JSON := P+1 else
+      JSON := P;
+    result := true;
+  end;
+
   procedure TryDate(P: PUTF8Char; GotoEndOfObject: AnsiChar);
   var L: integer;
   begin
