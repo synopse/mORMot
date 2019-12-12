@@ -92,8 +92,8 @@ uses
   SynCommons,
   SynLog,
   SynCrtSock,
-  SynCrypto,
-  SynEcc;
+  SynCrypto, // for SHA and AES
+  SynEcc;    // for TECDHEProtocol
 
 
 { -------------- high-level SynCrtSock classes depending on SynCommons }
@@ -843,10 +843,11 @@ type
     /// callback methods run by ProcessLoop
     procedure ProcessStart; virtual;
     procedure ProcessStop; virtual;
-    /// called by ProcessLoop - TRUE=continue, FALSE=ended
-    // caller may have checked that some data is pending to read
+    // called by ProcessLoop - TRUE=continue, FALSE=ended
+    // - caller may have checked that some data is pending to read
     function ProcessLoopStepReceive: boolean;
-    // caller may check that LastPingDelay>fSettings.SendDelay and Socket is writable
+    // called by ProcessLoop - TRUE=continue, FALSE=ended
+    // - caller may check that LastPingDelay>fSettings.SendDelay and Socket is writable
     function ProcessLoopStepSend: boolean;
     // blocking process, for one thread handling all WebSocket connection process
     procedure ProcessLoop;
@@ -2418,7 +2419,6 @@ end;
 function TWebSocketProcess.ProcessLoopStepSend: boolean;
 var request: TWebSocketFrame;
     elapsed: cardinal;
-    sockerror: integer;
 begin
   if fState=wpsRun then begin
     InterlockedIncrement(fProcessCount); // flag currently processing
@@ -3434,7 +3434,7 @@ begin
       pseWrite: begin
         fOwner.fClients.ProcessWrite(30000);
         if {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64>=idletix then begin
-          fOwner.IdleEverySecond;
+          fOwner.IdleEverySecond; // may take some time -> retrieve ticks again
           idletix := {$ifdef FPCLINUX}SynFPCLinux.{$endif}GetTickCount64+1000;
         end;
       end;

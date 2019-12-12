@@ -971,7 +971,7 @@ type
     fContentionCount: cardinal;
     fContentionAbortDelay: integer;
     {$ifdef USE_WINIOCP}
-    fRequestQueue: THandle;
+    fRequestQueue: THandle; // IOCSP has its own internal queue
     {$else}
     fQueuePendingContext: boolean;
     fPendingContext: array of pointer;
@@ -5271,7 +5271,7 @@ begin
         if (res>0) and (fdset.fd_count=1) and (fdset.fd_array[0]=fSock) and
            (IoctlSocket(fSock,FIONREAD,pending)=0) then
           if pending=0 then
-            // indicates socket closed gracefully
+            // notifies socket closed gracefully
             // https://docs.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-select#remarks
             result := cspSocketError else
             result := cspDataAvailable;
@@ -7036,7 +7036,7 @@ function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boo
         exit;
       n := fPendingContextCount;
       if n+fSubThread.Count>QueueLength then
-        exit; // too many connection limit reached
+        exit; // too many connection limit reached (see QueueIsFull)
       if n=length(fPendingContext) then
         SetLength(fPendingContext,n+n shr 3+64);
       fPendingContext[n] := aContext;
@@ -7093,13 +7093,8 @@ begin
 end;
 
 function TSynThreadPool.QueueIsFull: boolean;
-var i: integer;
 begin
-  result := fQueuePendingContext;
-  if result then begin
-    i := QueueLength;
-    result := GetPendingContextCount+fSubThread.Count>i;
-  end;
+  result := fQueuePendingContext and (GetPendingContextCount+fSubThread.Count>QueueLength);
 end;
 
 function TSynThreadPool.PopPendingContext: pointer;
@@ -11791,7 +11786,7 @@ var tv: TTimeVal;
     rd,wr: TFDSet;
     rdp,wrp: PFDSet;
     ev: TPollSocketEvents;
-    i: integer;
+    i, pending: integer;
     tmp: array[0..FD_SETSIZE-1] of TPollSocketResult;
 begin
   result := -1; // error
@@ -11816,8 +11811,12 @@ begin
   for i := 0 to fCount-1 do
     with fTag[i] do begin
       byte(ev) := 0;
-      if (rdp<>nil) and FD_ISSET(socket,rd) then
-        include(ev,pseRead);
+      if (rdp<>nil) and FD_ISSET(socket,rd) then begin
+        if (IoctlSocket(socket,FIONREAD,pending)=0) and (pending=0) then
+          // socket closed gracefully - see TCrtSocket.SockReceivePending
+          include(ev,pseClosed) else
+          include(ev,pseRead);
+      end;
       if (wrp<>nil) and FD_ISSET(socket,wr) then
         include(ev,pseWrite);
       if byte(ev)<>0 then begin
@@ -12156,10 +12155,11 @@ end;
 function TPollSockets.GetOne(timeoutMS: integer; out notif: TPollSocketResult): boolean;
   function PollAndSearchWithinPending(p: integer): boolean;
   begin
-    if not fTerminated and (fPoll[p].WaitForModified(fPending,0)>0) then begin
+    if not fTerminated and
+       (fPoll[p].WaitForModified(fPending,{timeout=}0)>0) then begin
       result := GetOneWithinPending(notif);
       if result then
-        fPollIndex := p; // continue getting data from fPoll[fPendingPoll]
+        fPollIndex := p; // next call to continue from fPoll[fPollIndex+1]
     end else
       result := false;
   end;
@@ -12172,23 +12172,25 @@ begin
     exit;
   start := GetTick64;
   repeat
-    // non-blocking search within fPollLock
+    // non-blocking search within fPoll[]
     EnterCriticalSection(fPollLock);
     try
+      // check if some already notified as pending in fPoll[]
       if GetOneWithinPending(notif) then
-        exit; // found some in fPending[] from fPoll[fPendingPoll]
+        exit;
+      // calls fPoll[].WaitForModified({timeout=}0) to refresh pending state
       n := length(fPoll);
       if n>0 then begin
-        for p := fPollIndex+1 to n-1 do
+        for p := fPollIndex+1 to n-1 do // search from fPollIndex = last found
           if PollAndSearchWithinPending(p) then
             exit;
-        for p := 0 to fPollIndex do // finally retry on fPendingPoll
+        for p := 0 to fPollIndex do // search from beginning up to fPollIndex
           if PollAndSearchWithinPending(p) then
             exit;
       end;
     finally
       LeaveCriticalSection(fPollLock);
-      result := byte(notif.events)<>0;
+      result := byte(notif.events)<>0; // exit would comes here and set result
     end;
     // wait a little for something to happen
     if fTerminated or (timeoutMS=0) then
@@ -12197,7 +12199,7 @@ begin
     if elapsed>timeoutMS then
       exit else
     if elapsed>300 then
-      sleep(100) else
+      sleep(50) else
     if elapsed>50 then
       sleep(10) else
       sleep(1);
