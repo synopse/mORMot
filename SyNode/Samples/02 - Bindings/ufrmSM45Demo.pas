@@ -101,12 +101,8 @@ procedure TfrmSM45Demo.cmd_Itenterupt(var aMessage: TMessage);
 begin
   if FEngine = nil then
     raise Exception.Create('JS engine not initialized');
-{$IFDEF SM52}
   FEngine.cx.RequestInterruptCallback;
   FEngine.cx.CheckForInterrupt;
-{$ELSE}
-  FEngine.rt.InterruptCallback(FEngine.cx);
-{$ENDIF}
 end;
 
 procedure TfrmSM45Demo.doInteruptInOwnThread;

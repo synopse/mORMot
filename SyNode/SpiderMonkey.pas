@@ -1,5 +1,4 @@
 /// SpiderMonkey 45/52 *.h header port to Delphi
-// if defined SM52 condition then SpiderMonkey 52 is used
 // - this unit is a part of the freeware Synopse framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SpiderMonkey;
@@ -114,63 +113,55 @@ type
   );
 
   JSGCParamKey = (
-	// Maximum nominal heap before last ditch GC.
-	JSGC_MAX_BYTES = 0,
-	// Number of JS_malloc bytes before last ditch GC.
-	JSGC_MAX_MALLOC_BYTES = 1,
-	// Amount of bytes allocated by the GC.
-	JSGC_BYTES = 3,
-	// Number of times GC has been invoked. Includes both major and minor GC.
-	JSGC_NUMBER = 4,
-	// Max size of the code cache in bytes.
-	JSGC_MAX_CODE_CACHE_BYTES = 5,
-	// Select GC mode.
-	JSGC_MODE = 6,
-	// Number of cached empty GC chunks.
-	JSGC_UNUSED_CHUNKS = 7,
-	// Total number of allocated GC chunks.
-	JSGC_TOTAL_CHUNKS = 8,
-	// Max milliseconds to spend in an incremental GC slice.
-	JSGC_SLICE_TIME_BUDGET = 9,
-	// Maximum size the GC mark stack can grow to.
-	JSGC_MARK_STACK_LIMIT = 10,
-	// GCs less than this far apart in time will be considered 'high-frequency GCs'.
-	// See setGCLastBytes in jsgc.cpp.
-	JSGC_HIGH_FREQUENCY_TIME_LIMIT = 11,
-	// Start of dynamic heap growth.
-	JSGC_HIGH_FREQUENCY_LOW_LIMIT = 12,
-	// End of dynamic heap growth.
-	JSGC_HIGH_FREQUENCY_HIGH_LIMIT = 13,
-	// Upper bound of heap growth.
-	JSGC_HIGH_FREQUENCY_HEAP_GROWTH_MAX = 14,
-	// Lower bound of heap growth.
-	JSGC_HIGH_FREQUENCY_HEAP_GROWTH_MIN = 15,
-	// Heap growth for low frequency GCs.
-	JSGC_LOW_FREQUENCY_HEAP_GROWTH = 16,
-	// If false, the heap growth factor is fixed at 3. If true, it is determined
-	// based on whether GCs are high- or low- frequency.
-	JSGC_DYNAMIC_HEAP_GROWTH = 17,
-	// If true, high-frequency GCs will use a longer mark slice.
-	JSGC_DYNAMIC_MARK_SLICE = 18,
-	// Lower limit after which we limit the heap growth.
-	JSGC_ALLOCATION_THRESHOLD = 19,
-{$IFNDEF SM52}
-	// We decommit memory lazily. If more than this number of megabytes is
-	// available to be decommitted, then JS_MaybeGC will trigger a shrinking GC
-	// to decommit it.
-	JSGC_DECOMMIT_THRESHOLD = 20,
-{$ENDIF}
-	// We try to keep at least this many unused chunks in the free chunk pool at
-	// all times, even after a shrinking GC.
-	JSGC_MIN_EMPTY_CHUNK_COUNT = 21,
-	// We never keep more than this many unused chunks in the free chunk pool.
-	JSGC_MAX_EMPTY_CHUNK_COUNT = 22,
-	// Whether compacting GC is enabled.
-	JSGC_COMPACTING_ENABLED = 23
-  {$IFDEF SM52}
-  // If true, painting can trigger IGC slices.
-  ,JSGC_REFRESH_FRAME_SLICES_ENABLED = 24
-  {$ENDIF}
+    // Maximum nominal heap before last ditch GC.
+    JSGC_MAX_BYTES = 0,
+    // Number of JS_malloc bytes before last ditch GC.
+    JSGC_MAX_MALLOC_BYTES = 1,
+    // Amount of bytes allocated by the GC.
+    JSGC_BYTES = 3,
+    // Number of times GC has been invoked. Includes both major and minor GC.
+    JSGC_NUMBER = 4,
+    // Max size of the code cache in bytes.
+    JSGC_MAX_CODE_CACHE_BYTES = 5,
+    // Select GC mode.
+    JSGC_MODE = 6,
+    // Number of cached empty GC chunks.
+    JSGC_UNUSED_CHUNKS = 7,
+    // Total number of allocated GC chunks.
+    JSGC_TOTAL_CHUNKS = 8,
+    // Max milliseconds to spend in an incremental GC slice.
+    JSGC_SLICE_TIME_BUDGET = 9,
+    // Maximum size the GC mark stack can grow to.
+    JSGC_MARK_STACK_LIMIT = 10,
+    // GCs less than this far apart in time will be considered 'high-frequency GCs'.
+    // See setGCLastBytes in jsgc.cpp.
+    JSGC_HIGH_FREQUENCY_TIME_LIMIT = 11,
+    // Start of dynamic heap growth.
+    JSGC_HIGH_FREQUENCY_LOW_LIMIT = 12,
+    // End of dynamic heap growth.
+    JSGC_HIGH_FREQUENCY_HIGH_LIMIT = 13,
+    // Upper bound of heap growth.
+    JSGC_HIGH_FREQUENCY_HEAP_GROWTH_MAX = 14,
+    // Lower bound of heap growth.
+    JSGC_HIGH_FREQUENCY_HEAP_GROWTH_MIN = 15,
+    // Heap growth for low frequency GCs.
+    JSGC_LOW_FREQUENCY_HEAP_GROWTH = 16,
+    // If false, the heap growth factor is fixed at 3. If true, it is determined
+    // based on whether GCs are high- or low- frequency.
+    JSGC_DYNAMIC_HEAP_GROWTH = 17,
+    // If true, high-frequency GCs will use a longer mark slice.
+    JSGC_DYNAMIC_MARK_SLICE = 18,
+    // Lower limit after which we limit the heap growth.
+    JSGC_ALLOCATION_THRESHOLD = 19,
+    // We try to keep at least this many unused chunks in the free chunk pool at
+    // all times, even after a shrinking GC.
+    JSGC_MIN_EMPTY_CHUNK_COUNT = 21,
+    // We never keep more than this many unused chunks in the free chunk pool.
+    JSGC_MAX_EMPTY_CHUNK_COUNT = 22,
+    // Whether compacting GC is enabled.
+    JSGC_COMPACTING_ENABLED = 23
+    // If true, painting can trigger IGC slices.
+    ,JSGC_REFRESH_FRAME_SLICES_ENABLED = 24
   );
 
   JSGCMode = (
@@ -231,7 +222,6 @@ type
     DontFireOnNewGlobalHook
   );
 /// Dense index into cached prototypes and class atoms for standard objects.
-{$IFDEF SM52}
   JSProtoKey = (
   JSProto_Null = 0,
   JSProto_Object,
@@ -340,7 +330,6 @@ type
   JSProto_SavedFrame,
   JSProto_LIMIT
   );
-{$ENDIF}
 {$Z1}
 /// Type of JSValue
   JSValueType = (
@@ -351,14 +340,9 @@ type
     JSVAL_TYPE_MAGIC    = $04,
     JSVAL_TYPE_STRING   = $05,
     JSVAL_TYPE_SYMBOL   = $06,
-    {$IFDEF SM52}
     JSVAL_TYPE_PRIVATE_GCTHING = $07,
     JSVAL_TYPE_NULL     = $08,
     JSVAL_TYPE_OBJECT   = $0C,
-    {$ELSE}
-    JSVAL_TYPE_NULL     = $07,
-    JSVAL_TYPE_OBJECT   = $08,
-    {$ENDIF}
     // These never appear in a jsval; they are only provided as an out-of-band value.
     JSVAL_TYPE_UNKNOWN  = $20,
     JSVAL_TYPE_MISSING  = $21
@@ -401,12 +385,10 @@ type
     JSEXN_SYNTAXERR,
     JSEXN_TYPEERR,
     JSEXN_URIERR,
-    {$IFDEF SM52}
     JSEXN_DEBUGGEEWOULDRUN,
     JSEXN_WASMCOMPILEERROR,
     JSEXN_WASMRUNTIMEERROR,
     JSEXN_WARN,
-    {$ENDIF}
     JSEXN_LIMIT
   );
 {$Z1}
@@ -459,13 +441,8 @@ const
   JSVERSION_LATEST  = JSVERSION_ECMA_5;
 type
 // pointers
-{$IFDEF SM52}
   JSFreeOp = pointer;
   PJSContextOptions = ^JSContextOptions;
-{$ELSE}
-  PJSRuntime = ^JSRuntime;
-  PJSRuntimeOptions = ^JSRuntimeOptions;
-{$ENDIF}
   PJSContext = ^JSContext;
   PJSCompartment = ^JSCompartment;
   PJS_CompartmentOptions = ^JS_CompartmentOptions;
@@ -733,11 +710,7 @@ type
   /// callback prototype for returning an execution error
   JSErrorCallback = function(userRef: Pointer; const errorNumber: uintN): PJSErrorFormatString; cdecl;
   /// callback prototype for reporting error for a given runtime context
-{$IFDEF SM52}
   JSWarningReporter = procedure(cx: PJSContext; report: PJSErrorReport); cdecl;
-{$ELSE}
-  JSErrorReporter = procedure(cx: PJSContext; _message: PCChar; report: PJSErrorReport); cdecl;
-{$ENDIF}
   JSStringFinalizerOp = procedure(fin: PJSStringFinalizer; chars: PCChar16);  cdecl;
 
 // Add or get a property named by id in obj.  Note the jsid id type -- id may
@@ -788,11 +761,7 @@ type
 // can be nullptr: during JIT compilation we sometimes know the Class but not
 // the object.
   JSMayResolveOp = function(names: PJSAtomState; id: jsid; maybeObj: PJSObject): Boolean; cdecl;
-{$IFDEF SM52}
   JSFinalizeOp = procedure(var fop: JSFreeOp; obj: PJSObject); cdecl;
-{$ELSE}
-  JSFinalizeOp = procedure(var rt: PJSRuntime; obj: PJSObject); cdecl;
-{$ENDIF}
 // Check whether v is an instance of obj.  Return false on error or exception,
 // true on success with true in *bp if v is an instance of obj, false in
 // *bp otherwise.
@@ -813,78 +782,6 @@ type
 // marking its native structures.
   JSTraceOp = JSUnknown;
 
-{$IFNDEF SM52}
-  /// JavaScript execution runtime
-  // - this object does not store anything, but just provide some helper methods
-  JSRuntime = object
-  private
-    function GetPrivate: Pointer;
-    procedure SetPrivate(const Value: Pointer);
-    function GetOptions: PJSRuntimeOptions;
-    function GetGCParameter(key: JSGCParamKey): uint32;
-    procedure SetGCParameter(key: JSGCParamKey; const Value: uint32);
-    function GetErrorReporter: JSErrorReporter;
-    procedure SetErrorReporter(er: JSErrorReporter);
-    function GetInterruptCallback: JSInterruptCallback;
-    procedure SetInterruptCallback(callback: JSInterruptCallback);
-    function GetEmptyString: PJSString; {$ifdef HASINLINE}inline;{$endif}
-    function GetNowMs: int64; {$ifdef HASINLINE}inline;{$endif}
-
-  public
-    /// Initializes the JavaScript runtime.
-    class function New(maxbytes: uint32; maxNurseryBytes: uint32; parentRuntime: PJSRuntime): PJSRuntime;
-    /// Frees a JavaScript runtime.
-    procedure Destroy;
-    /// Wrote access a JSRuntime field for application-specific data.
-    // Memory management for this private data is the application's responsibility.
-    // The JavaScript engine itself never uses it.
-    procedure SetNativeStackQuota(systemCodeStackSize: size_t);
-    /// Performs garbage collection in the JS memory pool.
-    procedure GC;
-    /// Request a callback set using JS_SetInterruptCallback
-    procedure RequestInterruptCallback;
-    /// Create a new JSContext
-    function NewContext(stackChunkSize: size_t): PJSContext;
-    /// Read/write access a JSRuntime field for application-specific data.
-    // Memory management for this private data is the application's responsibility.
-    // The JavaScript engine itself never uses it.
-    property PrivateData: Pointer read GetPrivate write SetPrivate;
-    /// Get options of runtime
-    property Options: PJSRuntimeOptions read GetOptions;
-    /// Get/Set performance parameters related to garbage collection.
-    property GCParameter[key: JSGCParamKey]: uint32 read GetGCParameter write SetGCParameter;
-    /// Adjust performance parameters related to garbage collection based on available memory(in megabytes).
-    procedure SetGCParametersBasedOnAvailableMemory(availMem: uint32);
-    /// Get/Set the error reporting mechanism for an application.
-    property ErrorReporter: JSErrorReporter read GetErrorReporter write SetErrorReporter;
-    /// Get/Set a callback function that is automatically called periodically while JavaScript code runs.
-    property InterruptCallback:JSInterruptCallback read GetInterruptCallback write SetInterruptCallback;
-
-    /// Microseconds since the epoch, midnight, January 1, 1970 UTC.
-    property NowMs: int64 read GetNowMs;
-    /// Returns the empty string as a JSString object.
-    property EmptyString: PJSString read GetEmptyString;
-  end;
-
-/// Options of runtime
-  JSRuntimeOptions = object
-  private
-    function getOptions(const Index: Integer): Boolean;
-    procedure setOptions(const Index: Integer; const Value: Boolean);
-  public
-    property Baseline: Boolean index 0 read getOptions write setOptions;
-    property Ion: Boolean index 1 read getOptions write setOptions;
-    property AsmJS: Boolean index 2 read getOptions write setOptions;
-    property ThrowOnAsmJSValidationFailure: Boolean index 3 read getOptions write setOptions;
-    property NativeRegExp: Boolean index 4 read getOptions write setOptions;
-    property UnboxedArrays: Boolean index 5 read getOptions write setOptions;
-    property AsyncStack: Boolean index 6 read getOptions write setOptions;
-    property Werror: Boolean index 7 read getOptions write setOptions;
-    property StrictMode: Boolean index 8 read getOptions write setOptions;
-    property ExtraWarnings: Boolean index 9 read getOptions write setOptions;
-  end;
-{$ENDIF}
-{$IFDEF SM52}
 /// Options of context
   JSContextOptions = object
   private
@@ -905,7 +802,6 @@ type
     property StrictMode: Boolean index 11 read getOptions write setOptions;
     property ExtraWarnings: Boolean index 12 read getOptions write setOptions;
   end;
-{$ENDIF}
   /// JavaScript execution context
   // - this object does not store anything, but just provide some helper methods
 
@@ -915,7 +811,6 @@ type
   private
     function GetPrivate: Pointer; {$ifdef HASINLINE}inline;{$endif}
     procedure SetPrivate(const Value: Pointer);{$ifdef HASINLINE}inline;{$endif}
-{$IFDEF SM52}
     function GetEmptyString: PJSString; {$ifdef HASINLINE}inline;{$endif}
     function GetGCParameter(key: JSGCParamKey): uint32; {$ifdef HASINLINE}inline;{$endif}
     procedure SetGCParameter(key: JSGCParamKey; const Value: uint32); {$ifdef HASINLINE}inline;{$endif}
@@ -923,9 +818,6 @@ type
     function GetWarningReporter: JSWarningReporter; {$ifdef HASINLINE}inline;{$endif}
     procedure SetWarningReporter(reporter: JSWarningReporter); {$ifdef HASINLINE}inline;{$endif}
     function GetOptions: PJSContextOptions; {$ifdef HASINLINE}inline;{$endif}
-{$ELSE}
-    function GetRuntime: PJSRuntime; {$ifdef HASINLINE}inline;{$endif}
-{$ENDIF}
     function GetIsRunning: boolean; {$ifdef HASINLINE}inline;{$endif}
   protected
     // Return the ArrayBuffer underlying an ArrayBufferView
@@ -934,7 +826,6 @@ type
     function GetArrayBufferViewBuffer(var obj: PJSObject; out isSharedMemory: Boolean): PJSObject; overload;{$ifdef HASINLINE}inline;{$endif}
     function GetArrayBufferViewBuffer(var obj: PJSObject): PJSObject; overload;{$ifdef HASINLINE}inline;{$endif}
   public
-{$IFDEF SM52}
     /// Initializes the JavaScript context.
     class function CreateNew(maxbytes: uint32; maxNurseryBytes: uint32 = 16 * (1 SHL 20); parentContext: PJSContext = nil): PJSContext;
     /// Performs garbage collection in the JS memory pool.
@@ -975,10 +866,6 @@ type
     procedure ResetInterruptCallback(disable: boolean); {$ifdef HASINLINE}inline;{$endif}
     /// Call interrupt callback if it is requested
     function CheckForInterrupt: Boolean; {$ifdef HASINLINE}inline;{$endif}
-{$ELSE}
-    /// Runtime of this context
-    property rt: PJSRuntime read GetRuntime;
-{$ENDIF}
     /// Read/Write access a JSContext field for application-specific data.
     // Memory management for this private data is the application's responsibility.
     // The JavaScript engine itself never uses it.
@@ -1754,7 +1641,6 @@ type
     function GetBufferDataAndLength(out data: Puint8Vector; out len: uint32): boolean;{$ifdef HASINLINE}inline;{$endif}
   end;
 
-
   JSString = object
     /// get the UTF-8 text corresponding to this string, for a given
     // runtime execution context
@@ -1787,7 +1673,7 @@ type
     function GetLatin1StringCharsAndLength(cx: PJSContext; out len: size_t):PCChar;
     function GetTwoByteStringCharsAndLength(cx: PJSContext; out len: size_t):PCChar16;
   end;
-{$IFDEF SM52}
+
   JSClassOps = record
     addProperty:        JSAddPropertyOp;
     delProperty:        JSDeletePropertyOp;
@@ -1803,28 +1689,12 @@ type
     trace:              JSTraceOp;
   end;
   PJSClassOps = ^JSClassOps;
-{$ENDIF}
+
   JSClass =  record
     name:               PCChar;
     flags:              uint32;
-{$IFDEF SM52}
     cOps:               PJSClassOps;
     reserved:           array [0..2] of pointer;
-{$ELSE}
-    addProperty:        JSAddPropertyOp;
-    delProperty:        JSDeletePropertyOp;
-    getProperty:        JSGetterOp;
-    setProperty:        JSSetterOp;
-    enumerate:          JSEnumerateOp;
-    resolve:            JSResolveOp;
-    mayResolve:         JSMayResolveOp;
-    finalize:           JSFinalizeOp;
-    call:               JSNative;
-    hasInstance:        JSHasInstanceOp;
-    construct:          JSNative;
-    trace:              JSTraceOp;
-    reserved:           array [0..22] of pointer;
-{$ENDIF}
   end;
 
   { JSCompileOptions }
@@ -1910,7 +1780,6 @@ type
 
   /// internal structure used to report JavaScript errors
   JSErrorReport = record
-{$IFDEF SM52}
     /// The (default) error message.
     // If ownsMessage is true, the it is freed in destructor.
     message_: PUTF8Char;
@@ -1937,40 +1806,12 @@ type
     isMuted: Boolean;
     ownsLinebuf: Boolean;
     ownsMessage: Boolean;
-{$ELSE}
-    /// offending source line without final #13
-    linebuf: PCChar16;
-    /// number of chars in linebuf_. Does not include trailing '\0'
-    linebufLength: size_t;
-    /// the 0-based offset of error token in linebuf_
-    tokenOffset:size_t;
-    /// source file name, URL, etc., or null
-    filename: PCChar;
-    /// source line number
-    lineno: uint32;
-    /// zero-based column index in line
-    column: uint32;
-    /// See the comment in ReadOnlyCompileOptions.
-    isMuted: Boolean;
-    /// error/warning, etc.
-    flags: uint32;
-    /// the error number, e.g. see js.msg
-    errorNumber: uint32;
-    /// the (default) error message
-    ucmessage: PCChar16;
-    /// arguments for the error message
-    messageArgs: PPCChar16;
-    /// One of the JSExnType constants
-    exnType: JSExnType;
-{$ENDIF}
   end;
 
   /// used by JSErrorCallback() callback
   JSErrorFormatString = record
-{$IFDEF SM52}
     /// The error message name in ASCII.
     name: PCChar;
-{$ENDIF}
     /// The error format string (UTF-8 if js_CStringsAreUTF8)
     format: PCChar;
     /// The number of arguments to expand in the formatted error message
@@ -2027,11 +1868,7 @@ const
   JSCLASS_GLOBAL_APPLICATION_SLOTS = 5;
 
 //  JSProto_LIMIT = 46;
-{$IFDEF SM52}
   JSCLASS_GLOBAL_SLOT_COUNT         = (JSCLASS_GLOBAL_APPLICATION_SLOTS + ord(JSProto_LIMIT) * 2 + 39);
-{$ELSE}
-  JSCLASS_GLOBAL_SLOT_COUNT         = (JSCLASS_GLOBAL_APPLICATION_SLOTS + ord(JSProto_LIMIT) * 3 + 36);
-{$ENDIF}
 
   JSCLASS_GLOBAL_FLAGS              = JSCLASS_IS_GLOBAL or
                                       (((JSCLASS_GLOBAL_SLOT_COUNT) and JSCLASS_RESERVED_SLOTS_MASK) shl JSCLASS_RESERVED_SLOTS_SHIFT);
@@ -2070,23 +1907,8 @@ const
   JSFUN_CONSTRUCTOR      = $400; // native that can be called as a ctor
   /// enumerabl eread-only property attributes
   JSPROPS_STATIC_RO      = JSPROP_ENUMERATE or JSPROP_READONLY or JSPROP_PERMANENT;
-{$IFDEF SM52}
-// unused
-{$ELSE}
-// Specify a generic native prototype methods, i.e., methods of a class
-// prototype that are exposed as static methods taking an extra leading
-// argument: the generic |this| parameter.
-// If you set this flag in a JSFunctionSpec struct's flags initializer, then
-// that struct must live at least as long as the native static method object
-// created due to this flag by JS_DefineFunctions or JS_InitClass.  Typically
-// JSFunctionSpec structs are allocated in static arrays.
-//  JSFUN_GENERIC_NATIVE   = $800;
 
-  JSFUN_GENERIC_NATIVE = $800;
-{$ENDIF}
-{$IFDEF SM52}
   JSFUN_HAS_REST = $1000; // function has ...rest parameter.
-{$ENDIF}
 
   JSPROP_REDEFINE_NONCONFIGURABLE = $1000; // If set, will allow redefining a
                                            // non-configurable property, but
@@ -2236,11 +2058,7 @@ const
 function SimpleVariantToJSval(cx: PJSContext; val: Variant): jsval;
 
 const
-{$IFDEF SM52}
-  SpiderMonkeyLib = 'synmozjs52'{$IFDEF MSWINDOWS} + '.dll'{$ENDIF};
-{$ELSE}
-  SpiderMonkeyLib = 'mozjs-45'{$IFDEF MSWINDOWS} + '.dll'{$ENDIF};
-{$ENDIF}
+  SpiderMonkeyLib = 'synsm'{$IFDEF MSWINDOWS} + '.dll'{$ENDIF};
 
  /// Initialize SpiderMonkey, returning true only if initialization succeeded.
  // Once this method has succeeded, it is safe to call JS_NewRuntime and other
@@ -2251,8 +2069,8 @@ const
  // - It is currently not possible to initialize SpiderMonkey multiple times (that
  // is, calling JS_Init/JSAPI methods/JS_ShutDown in that order, then doing so
  // again).  This restriction may eventually be lifted.
-function JS_Init: Boolean; cdecl; external SpiderMonkeyLib {$IFDEF SM52}name 'JS_Initialize'{$ENDIF};
-procedure JS_DisableExtraThreads; cdecl; external SpiderMonkeyLib;
+function JS_Init: Boolean; cdecl; external SpiderMonkeyLib name 'SM_Initialize';
+procedure JS_DisableExtraThreads; cdecl; external SpiderMonkeyLib name 'SM_DisableExtraThreads';
  /// Destroy free-standing resources allocated by SpiderMonkey, not associated
  // with any runtime, context, or other structure.
  // - This method should be called after all other JSAPI data has been properly
@@ -2265,145 +2083,95 @@ procedure JS_DisableExtraThreads; cdecl; external SpiderMonkeyLib;
  // - It is currently not possible to initialize SpiderMonkey multiple times (that
  // is, calling JS_Init/JSAPI methods/JS_ShutDown in that order, then doing so
  // again).  This restriction may eventually be lifted.
-procedure JS_ShutDown; cdecl; external SpiderMonkeyLib;
+procedure JS_ShutDown; cdecl; external SpiderMonkeyLib name 'SM_ShutDown';
 
 /// Microseconds since the epoch, midnight, January 1, 1970 UTC.
-function JS_Now: int64; cdecl; external SpiderMonkeyLib;
+function JS_Now: int64; cdecl; external SpiderMonkeyLib name 'SM_Now';
 
 /// Returns the empty string as a JSString object.
-{$IFDEF SM52}
-function JS_GetEmptyString(cx: PJSContext): PJSString; cdecl; external SpiderMonkeyLib;
-{$ELSE}
-function JS_GetEmptyString(rt: PJSRuntime): PJSString; cdecl; external SpiderMonkeyLib;
-{$ENDIF}
+function JS_GetEmptyString(cx: PJSContext): PJSString; cdecl; external SpiderMonkeyLib name 'SM_GetEmptyString';
 
 /// Determines the JS data type of a JS value.
-function JS_TypeOfValue(cx: PJSContext; var v: jsval): JSType; cdecl; external SpiderMonkeyLib;
-
-{$IFNDEF SM52}
-/// Initializes the JavaScript runtime.
-function JS_NewRuntime(maxbytes: uint32; maxNurseryBytes: uint32; parentRuntime: PJSRuntime): PJSRuntime;
-  cdecl; external SpiderMonkeyLib;
-
-/// Frees a JavaScript runtime.
-procedure JS_DestroyRuntime(runtime: PJSRuntime); cdecl; external SpiderMonkeyLib;
-
-/// Read access a JSRuntime field for application-specific data.
-// Memory management for this private data is the application's responsibility.
-// The JavaScript engine itself never uses it.
-function JS_GetRuntimePrivate(rt: PJSRuntime): pointer; cdecl; external SpiderMonkeyLib;
-
-/// Wrote access a JSRuntime field for application-specific data.
-// Memory management for this private data is the application's responsibility.
-// The JavaScript engine itself never uses it.
-procedure JS_SetRuntimePrivate(rt: PJSRuntime; data: pointer); cdecl; external SpiderMonkeyLib;
-{$ENDIF}
+function JS_TypeOfValue(cx: PJSContext; var v: jsval): JSType; cdecl; external SpiderMonkeyLib name 'SM_TypeOfValue';
 
 /// indicates to the JS engine that the calling thread is entering a region
 // of code that may call into the JSAPI but does not block
-procedure JS_BeginRequest(cx: PJSContext); cdecl; external SpiderMonkeyLib;
+procedure JS_BeginRequest(cx: PJSContext); cdecl; external SpiderMonkeyLib name 'SM_BeginRequest';
 
 /// indicates to the JS engine that the calling thread is leaving a region
 // of code that may call into the JSAPI but does not block
-procedure JS_EndRequest(cx: PJSContext); cdecl; external SpiderMonkeyLib;
+procedure JS_EndRequest(cx: PJSContext); cdecl; external SpiderMonkeyLib name 'SM_EndRequest';
 
 /// Create a new JSContext
-{$IFDEF SM52}
 function JS_NewContext(maxbytes: uint32; maxNurseryBytes: uint32 = 16 * (1 SHL 20); parentContext: PJSContext = nil): PJSContext;
-  cdecl; external SpiderMonkeyLib;
-function InitSelfHostedCode(cx: PJSContext): boolean; cdecl; external SpiderMonkeyLib;
-{$ELSE}
-function JS_NewContext(rt: PJSRuntime; stackChunkSize: size_t): PJSContext;
-  cdecl; external SpiderMonkeyLib;
-{$ENDIF}
+  cdecl; external SpiderMonkeyLib name 'SM_NewContext';
+function InitSelfHostedCode(cx: PJSContext): boolean; cdecl; external SpiderMonkeyLib name 'SM_InitSelfHostedCode';
+
 /// Destroy a JSContext.
-procedure JS_DestroyContext(cx: PJSContext); cdecl; external SpiderMonkeyLib;
+procedure JS_DestroyContext(cx: PJSContext); cdecl; external SpiderMonkeyLib name 'SM_DestroyContext';
 
 /// Read access a JSContext field for application-specific data.
 // Memory management for this private data is the application's responsibility.
 // The JavaScript engine itself never uses it.
-function JS_GetContextPrivate(cx: PJSContext): Pointer; cdecl; external SpiderMonkeyLib;
+function JS_GetContextPrivate(cx: PJSContext): Pointer; cdecl; external SpiderMonkeyLib name 'SM_GetContextPrivate';
 /// Write access a JSContext field for application-specific data.
 // Memory management for this private data is the application's responsibility.
 // The JavaScript engine itself never uses it.
-procedure JS_SetContextPrivate(cx: PJSContext; data: Pointer); cdecl; external SpiderMonkeyLib;
+procedure JS_SetContextPrivate(cx: PJSContext; data: Pointer); cdecl; external SpiderMonkeyLib name 'SM_SetContextPrivate';
 
-{$IFNDEF SM52}
-/// Retrieves a pointer to the JSRuntime with which a specified JSContext, cx, is associated
-function JS_GetRuntime(cx: PJSContext): PJSRuntime; cdecl; external SpiderMonkeyLib;
-{$ENDIF}
 /// This function makes a cross-compartment wrapper for the given JS object.
 // Details see here http://stackoverflow.com/questions/18730477/what-does-js-wrapobject-do
-function JS_WrapObject(cx: PJSContext; var obj: PJSObject): boolean; cdecl; external SpiderMonkeyLib;
+function JS_WrapObject(cx: PJSContext; var obj: PJSObject): boolean; cdecl; external SpiderMonkeyLib name 'SM_WrapObject';
 
 /// Enter a different compartment on the given context, so that objects in that
 // compartment can be accessed.
 // - NB: This API is infallible; a NULL return value does not indicate error
 function JS_EnterCompartment(cx: PJSContext; target: PJSObject): PJSCompartment;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_EnterCompartment';
 
 /// Leave a the compartment, returning to the compartment active before the
 // corresponding JS_EnterCompartment.
 procedure JS_LeaveCompartment(cx: PJSContext; oldCompartment: PJSCompartment);
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_LeaveCompartment';
 
 /// Initialize standard JS class constructors, prototypes, and any top-level
 // functions and constants associated with the standard classes (e.g. isNaN
 // for Number).
 // - NB: This sets cx's global object to obj if it was null.
-function JS_InitStandardClasses(cx: PJSContext; var obj: PJSObject): boolean; cdecl; external SpiderMonkeyLib;
+function JS_InitStandardClasses(cx: PJSContext; var obj: PJSObject): boolean; cdecl; external SpiderMonkeyLib name 'SM_InitStandardClasses';
 
 ///Return the global object for the active function on the context.
-function JS_CurrentGlobalOrNull(cx: PJSContext):PJSObject; cdecl; external SpiderMonkeyLib name 'CurrentGlobalOrNull';
+function JS_CurrentGlobalOrNull(cx: PJSContext):PJSObject; cdecl; external SpiderMonkeyLib name 'SM_CurrentGlobalOrNull';
 
 /// Add 'Reflect.parse', a SpiderMonkey extension, to the Reflect object on the
 // given global.
-function JS_InitReflectParse(cx: PJSContext; var obj: PJSObject): boolean; cdecl; external SpiderMonkeyLib;
+function JS_InitReflectParse(cx: PJSContext; var obj: PJSObject): boolean; cdecl; external SpiderMonkeyLib name 'SM_InitReflectParse';
 
 /// Initialize the 'ctypes' object on a global variable 'obj'. The 'ctypes'
 // object will be sealed.
-function JS_InitCTypesClass(cx: PJSContext; var obj: PJSObject): boolean; cdecl; external SpiderMonkeyLib;
+function JS_InitCTypesClass(cx: PJSContext; var obj: PJSObject): boolean; cdecl; external SpiderMonkeyLib name 'SM_InitCTypesClass';
 
 /// Initialize the 'Debugger' object on a global variable 'obj'. The 'ctypes'
 // object will be sealed.
-function JS_DefineDebuggerObject(cx: PJSContext; var obj: PJSObject): boolean; cdecl; external SpiderMonkeyLib;
+function JS_DefineDebuggerObject(cx: PJSContext; var obj: PJSObject): boolean; cdecl; external SpiderMonkeyLib name 'SM_DefineDebuggerObject';
 
 /// Performs garbage collection in the JS memory pool.
-{$IFDEF SM52}
-procedure JS_GC(cx: PJSContext); cdecl; external SpiderMonkeyLib;
-{$ELSE}
-procedure JS_GC(rt: PJSRuntime); cdecl; external SpiderMonkeyLib;
-{$ENDIF}
+procedure JS_GC(cx: PJSContext); cdecl; external SpiderMonkeyLib name 'SM_GC';
 
 /// Offer the JavaScript engine an opportunity to perform garbage collection if needed.
-procedure JS_MaybeGC(cx: PJSContext); cdecl; external SpiderMonkeyLib;
+procedure JS_MaybeGC(cx: PJSContext); cdecl; external SpiderMonkeyLib name 'SM_MaybeGC';
 
 ///Set performance parameters related to garbage collection.
-{$IFDEF SM52}
 procedure JS_SetGCParameter(cx: PJSContext; key: JSGCParamKey; value: uint32);
-  cdecl; external SpiderMonkeyLib;
-{$ELSE}
-procedure JS_SetGCParameter(rt: PJSRuntime; key: JSGCParamKey; value: uint32);
-  cdecl; external SpiderMonkeyLib;
-{$ENDIF}
+  cdecl; external SpiderMonkeyLib name 'SM_SetGCParameter';
 
 ///Get performance parameters related to garbage collection.
-{$IFDEF SM52}
 function JS_GetGCParameter(cx: PJSContext; key: JSGCParamKey): uint32;
-  cdecl; external SpiderMonkeyLib;
-{$ELSE}
-function JS_GetGCParameter(rt: PJSRuntime; key: JSGCParamKey): uint32;
-  cdecl; external SpiderMonkeyLib;
-{$ENDIF}
+  cdecl; external SpiderMonkeyLib name 'SM_GetGCParameter';
 
 ///Adjust performance parameters related to garbage collection based on available memory(in megabytes).
-{$IFDEF SM52}
 procedure JS_SetGCParametersBasedOnAvailableMemory(cx: PJSContext; availMem: uint32);
-  cdecl; external SpiderMonkeyLib;
-{$ELSE}
-procedure JS_SetGCParametersBasedOnAvailableMemory(rt: PJSRuntime; availMem: uint32);
-  cdecl; external SpiderMonkeyLib;
-{$ENDIF}
+  cdecl; external SpiderMonkeyLib name 'SM_SetGCParametersBasedOnAvailableMemory';
 
 /// Creates a new JSString whose characters are stored in external memory, i.e.,
 //  memory allocated by the application, not the JavaScript engine
@@ -2418,7 +2186,7 @@ procedure JS_SetGCParametersBasedOnAvailableMemory(rt: PJSRuntime; availMem: uin
 // call the string finalizer callback, allowing the application to free the array)
 //  - The text buffer array does not need to be zero-terminated.
 function JS_NewExternalString(cx: PJSContext; chars: PCChar16; length: size_t;
-  fin: PJSStringFinalizer): PJSString; cdecl; external SpiderMonkeyLib;
+  fin: PJSStringFinalizer): PJSString; cdecl; external SpiderMonkeyLib name 'SM_NewExternalString';
 
 /// Set the size of the native stack that should not be exceed. To disable
 // stack size checking pass 0.
@@ -2433,20 +2201,15 @@ function JS_NewExternalString(cx: PJSContext; chars: PCChar16; length: size_t;
 // of code, it defaults to the value of the next-highest-priority kind.
 // - This function may only be called immediately after the runtime is initialized
 // and before any code is executed and/or interrupts requested.
-{$IFDEF SM52}
 procedure JS_SetNativeStackQuota(cx: PJSContext; systemCodeStackSize: size_t;
-  trustedScriptStackSize: size_t = 0; untrustedScriptStackSize: size_t = 0); cdecl; external SpiderMonkeyLib;
-{$ELSE}
-procedure JS_SetNativeStackQuota(runtime: PJSRuntime; systemCodeStackSize: size_t;
-  trustedScriptStackSize: size_t = 0; untrustedScriptStackSize: size_t = 0); cdecl; external SpiderMonkeyLib;
-{$ENDIF}
+  trustedScriptStackSize: size_t = 0; untrustedScriptStackSize: size_t = 0); cdecl; external SpiderMonkeyLib name 'SM_SetNativeStackQuota';
 
 /// Convert a JS::Value to type jsid.
-function JS_ValueToId(cx: PJSContext; var v: jsval; out id: jsid): Boolean; cdecl; external SpiderMonkeyLib;
+function JS_ValueToId(cx: PJSContext; var v: jsval; out id: jsid): Boolean; cdecl; external SpiderMonkeyLib name 'SM_ValueToId';
 /// Convert a jsid to type JS::Value.
-function JS_IdToValue(cx: PJSContext; id: jsid; out v: jsval): Boolean; cdecl; external SpiderMonkeyLib;
+function JS_IdToValue(cx: PJSContext; id: jsid; out v: jsval): Boolean; cdecl; external SpiderMonkeyLib name 'SM_IdToValue';
 
-function JS_ValueToSource(cx: PJSContext; var v: jsval): PJSString; cdecl; external SpiderMonkeyLib;
+function JS_ValueToSource(cx: PJSContext; var v: jsval): PJSString; cdecl; external SpiderMonkeyLib name 'SM_ValueToSource';
 
 
 /// Make a JSClass accessible to JavaScript code by creating its prototype,
@@ -2455,31 +2218,34 @@ function JS_InitClass(cx: PJSContext; var obj: PJSObject; var parent_proto: PJSO
     clasp: PJSClass; _constructor: JSNative; nargs: uintN;
     ps: PJSPropertySpec; fs: PJSFunctionSpec;
     static_ps: PJSPropertySpec; static_fs: PJSFunctionSpec): PJSObject;
-  cdecl; external SpiderMonkeyLib ;
+  cdecl; external SpiderMonkeyLib name 'SM_InitClass';
 
 /// Retrieves the class associated with an object.
-function JS_GetClass(obj: PJSObject): PJSClass; cdecl; external SpiderMonkeyLib;
+function JS_GetClass(obj: PJSObject): PJSClass; cdecl; external SpiderMonkeyLib name 'SM_GetClass';
 
 /// JSAPI method equivalent to the instanceof operator in JavaScript.
-function JS_HasInstance(cx: PJSContext; var obj: PJSObject; var val: jsval; out res: Boolean): Boolean; cdecl; external SpiderMonkeyLib;
+function JS_HasInstance(cx: PJSContext; var obj: PJSObject; var val: jsval; out res: Boolean): Boolean; cdecl;
+  external SpiderMonkeyLib name 'SM_HasInstance';
 
 /// Access the private data field of an object.
-function JS_GetPrivate(obj: PJSObject): Pointer; cdecl; external SpiderMonkeyLib;
+function JS_GetPrivate(obj: PJSObject): Pointer; cdecl; external SpiderMonkeyLib name 'SM_GetPrivate';
 
 /// Sets the private data field of an object.
-procedure JS_SetPrivate(obj: PJSObject; data: Pointer); cdecl; external SpiderMonkeyLib;
+procedure JS_SetPrivate(obj: PJSObject; data: Pointer); cdecl; external SpiderMonkeyLib name 'SM_SetPrivate';
 
 /// Retrieves the constructor for an object.
-function JS_GetConstructor(cx: PJSContext; var proto: PJSObject): PJSObject; cdecl; external SpiderMonkeyLib;
+function JS_GetConstructor(cx: PJSContext; var proto: PJSObject): PJSObject; cdecl;
+  external SpiderMonkeyLib name 'SM_GetConstructor';
 
 /// Retrieve the private data associated with an object, if that object is an
 // instance of a specified class.
 function JS_GetInstancePrivate(cx: PJSContext; var obj: PJSObject; clasp: PJSClass; args: JSUnknown): Pointer;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_GetInstancePrivate';
 
 /// Create a new JavaScript object for use as a global object.
 function JS_NewGlobalObject(cx: PJSContext; clasp: PJSClass; principals: PJSPrincipals;
-  hookOption: OnNewGlobalHookOption; options: PJS_CompartmentOptions): PJSObject; cdecl; external SpiderMonkeyLib;
+  hookOption: OnNewGlobalHookOption; options: PJS_CompartmentOptions): PJSObject; cdecl;
+  external SpiderMonkeyLib name 'SM_NewGlobalObject';
 
 /// Spidermonkey does not have a good way of keeping track of what compartments should be marked on
 /// their own. We can mark the roots unconditionally, but marking GC things only relevant in live
@@ -2488,19 +2254,22 @@ function JS_NewGlobalObject(cx: PJSContext; clasp: PJSClass; principals: PJSPrin
 ///
 /// It is still possible to specify custom trace hooks for global object classes. They can be
 /// provided via the CompartmentOptions passed to JS_NewGlobalObject.
-procedure JS_GlobalObjectTraceHook(trc: Pointer{ JSTracer }; global: PJSObject); cdecl; external SpiderMonkeyLib;
+procedure JS_GlobalObjectTraceHook(trc: Pointer{ JSTracer }; global: PJSObject); cdecl;
+  external SpiderMonkeyLib name 'SM_GlobalObjectTraceHook';
 
 /// Create a new object based on a specified class
-function JS_NewObject(cx: PJSContext; clasp: PJSClass): PJSObject; cdecl; external SpiderMonkeyLib;
+function JS_NewObject(cx: PJSContext; clasp: PJSClass): PJSObject; cdecl; external SpiderMonkeyLib name 'SM_NewObject';
 
 /// Create a new object based on a specified class
 // - Unlike JS_NewObject, JS_NewObjectWithGivenProto does not compute a default
 // proto. If proto is nullptr, the JS object will have `null` as [[Prototype]].
-function JS_NewObjectWithGivenProto(cx: PJSContext; clasp: PJSClass; var proto: PJSObject): PJSObject; cdecl; external SpiderMonkeyLib;
+function JS_NewObjectWithGivenProto(cx: PJSContext; clasp: PJSClass; var proto: PJSObject): PJSObject; cdecl;
+  external SpiderMonkeyLib name 'SM_NewObjectWithGivenProto';
 
 /// Get the prototype of obj, storing it in result.
 // - Implements: ES6 [[GetPrototypeOf]] internal method.
-function JS_GetPrototype(cx: PJSContext; var obj: PJSObject; out result: PJSObject):Boolean; cdecl; external SpiderMonkeyLib;
+function JS_GetPrototype(cx: PJSContext; var obj: PJSObject; out result: PJSObject):Boolean; cdecl;
+  external SpiderMonkeyLib name 'SM_GetPrototype';
 
 /// Change the prototype of obj.
 // - Implements: ES6 [[SetPrototypeOf]] internal method.
@@ -2510,70 +2279,71 @@ function JS_GetPrototype(cx: PJSContext; var obj: PJSObject; out result: PJSObje
 // cause compiled jit-code to be invalidated. It also causes not only obj but
 // all other objects in the same "group" as obj to be permanently deoptimized.
 // It's better to create the object with the right prototype from the start.
-function JS_SetPrototype(cx: PJSContext; var obj: PJSObject; var proto: PJSObject):Boolean; cdecl; external SpiderMonkeyLib;
+function JS_SetPrototype(cx: PJSContext; var obj: PJSObject; var proto: PJSObject):Boolean; cdecl;
+  external SpiderMonkeyLib name 'SM_SetPrototype';
 
 /// Create a new property on an object.
 // Name indentifies by ID
 function JS_DefinePropertyById(cx: PJSContext; var obj: PJSObject; var id: jsid;
   var value: jsval; attrs: uint32; getter: JSNative; setter: JSNative): boolean;
-    cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_DefinePropertyById';
 /// Create a new property on an object.
 // Name indentifies by ansi string
 function JS_DefineProperty(cx: PJSContext; var obj: PJSObject; const name: PCChar;
-    var value: jsval; attrs: uint32; getter: JSNative; setter: JSNative): boolean;
-    cdecl; external SpiderMonkeyLib;
+  var value: jsval; attrs: uint32; getter: JSNative; setter: JSNative): boolean;
+  cdecl; external SpiderMonkeyLib name 'SM_DefineProperty';
 /// Create a new property on an object.
 // Name indentifies by unicode string
 function JS_DefineUCProperty(cx: PJSContext; var obj: PJSObject; const name: PCChar16;
-    namelen: size_t; var value: jsval; attrs: uint32; getter: JSNative; setter: JSNative): Boolean;
-    cdecl; external SpiderMonkeyLib;
+  namelen: size_t; var value: jsval; attrs: uint32; getter: JSNative; setter: JSNative): Boolean;
+  cdecl; external SpiderMonkeyLib name 'SM_DefineUCProperty';
 
 /// Determine whether a JavaScript object has a specified property.
 // Name indentifies by ansi string
 function JS_HasProperty(cx: PJSContext; var obj: PJSObject;
-    const name: PCChar; var found: Boolean): Boolean;
-  cdecl; external SpiderMonkeyLib;
+  const name: PCChar; var found: Boolean): Boolean;
+  cdecl; external SpiderMonkeyLib name 'SM_HasProperty';
 /// Determine whether a JavaScript object has a specified property.
 // Name indentifies by unicode string
 function JS_HasUCProperty(cx: PJSContext; var obj: PJSObject;
-    const name: PCChar16; namelen: size_t; var found: Boolean): Boolean;
-  cdecl; external SpiderMonkeyLib;
+  const name: PCChar16; namelen: size_t; var found: Boolean): Boolean;
+  cdecl; external SpiderMonkeyLib name 'SM_HasUCProperty';
 
 /// Find a specified property and retrieve its value.
 // Name indentifies by ID
 function JS_GetPropertyById(cx: PJSContext; var obj: PJSObject; var id: jsid;
-    out vp: jsval): boolean; cdecl; external SpiderMonkeyLib;
+  out vp: jsval): boolean; cdecl; external SpiderMonkeyLib name 'SM_GetPropertyById';
 /// Find a specified property and retrieve its value.
 // Name indentifies by ansi string
 function JS_GetProperty(cx: PJSContext; var obj: PJSObject; const name: PCChar;
-    out vp: jsval): boolean; cdecl; external SpiderMonkeyLib;
+  out vp: jsval): boolean; cdecl; external SpiderMonkeyLib name 'SM_GetProperty';
 /// Find a specified property and retrieve its value.
 // Name indentifies by unicode string
 function JS_GetUCProperty(cx: PJSContext; var obj: PJSObject; const name: PCChar16; namelen: size_t;
-    out vp: jsval): boolean; cdecl; external SpiderMonkeyLib;
+  out vp: jsval): boolean; cdecl; external SpiderMonkeyLib name 'SM_GetUCProperty';
 /// Find a specified numeric property of an object and return its current value.
 function JS_GetElement(cx: PJSContext; var obj: PJSObject; index: uint32;
-  out vp: jsval): Boolean; cdecl; external SpiderMonkeyLib;
+  out vp: jsval): Boolean; cdecl; external SpiderMonkeyLib name 'SM_GetElement';
 
 /// Assign a value to a property of an object.
 // Name indentifies by ansi string
 function JS_SetProperty(cx: PJSContext; var obj: PJSObject; const name: PCChar;
-    var vp: jsval): Boolean; cdecl; external SpiderMonkeyLib;
+  var vp: jsval): Boolean; cdecl; external SpiderMonkeyLib name 'SM_SetProperty';
 /// Assign a value to a property of an object.
 // Name indentifies by unicode string
 function JS_SetUCProperty(cx: PJSContext; var obj: PJSObject; const name: PCChar16; namelen: size_t;
-    var vp: jsval): boolean; cdecl; external SpiderMonkeyLib;
+  var vp: jsval): boolean; cdecl; external SpiderMonkeyLib name 'SM_SetUCProperty';
 /// Assign a value to a numeric property of an object.
 function JS_SetElement(cx: PJSContext; var obj: PJSObject; index: uint32;
-    var vp: jsval): Boolean; cdecl; external SpiderMonkeyLib;
+  var vp: jsval): Boolean; cdecl; external SpiderMonkeyLib name 'SM_SetElement';
 
 /// Removes a specified property from an object.
 // Name indentifies by ID
 function JS_DeletePropertyById(cx: PJSContext; var obj: PJSObject; var id: jsid; out res: JS_ObjectOpResult): Boolean;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_DeletePropertyById';
 /// Removes a specified element or numeric property from an object.
 function JS_DeleteElement(cx: PJSContext; var obj: PJSObject; index: uint32; out res: JS_ObjectOpResult): Boolean;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_DeleteElement';
 
 /// Get an array of the non-symbol enumerable properties of obj.
 // This function is roughly equivalent to:
@@ -2590,9 +2360,9 @@ function JS_DeleteElement(cx: PJSContext; var obj: PJSObject; index: uint32; out
 // contents from garbage collection.
 function JS_EnumerateToAutoIdVector(cx: PJSContext; var obj: PJSObject;
   out length: size_t; out data: PjsidVector): PJSIdArray;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_EnumerateToAutoIdVector';
 procedure JS_DestroyAutoIdVector(v: PJSIdArray);
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_DestroyAutoIdVector';
 
 type
   JSHandleValueArray = record
@@ -2603,42 +2373,42 @@ type
 // Function identifies by jsvalue
 // - equivalent of `rval = Reflect.apply(fun, obj, args)`.
 function JS_CallFunctionValue(cx: PJSContext; var obj: PJSObject; var val: jsval;
-  var args: JSHandleValueArray; out rval: jsval): Boolean; cdecl; external SpiderMonkeyLib;
+  var args: JSHandleValueArray; out rval: jsval): Boolean; cdecl; external SpiderMonkeyLib name 'SM_CallFunctionValue';
 /// Calls a specified JS function.
 // Function identifies by PJSFunction
 function JS_CallFunction(cx: PJSContext; var obj: PJSObject; var fun: PJSFunction;
-  var args: JSHandleValueArray; out rval: jsval): Boolean; cdecl; external SpiderMonkeyLib;
+  var args: JSHandleValueArray; out rval: jsval): Boolean; cdecl; external SpiderMonkeyLib name 'SM_CallFunction';
 /// Calls a specified JS function.
 // Function identifies by ansi string
 // - Perform the method call `rval = obj[name](args)`.
 function JS_CallFunctionName(cx: PJSContext; var obj: PJSObject; const name: PCChar;
-  var args: JSHandleValueArray; out rval: jsval): Boolean; cdecl; external SpiderMonkeyLib;
+  var args: JSHandleValueArray; out rval: jsval): Boolean; cdecl; external SpiderMonkeyLib name 'SM_CallFunctionName';
 
 /// Invoke a constructor, like the JS expression `new ctor(...args)`. Returns
 // the new object, or null on error.
-function JS_New(cx: PJSContext; var ctor: PJSObject; var args: JSHandleValueArray): PJSObject; cdecl; external SpiderMonkeyLib;
+function JS_New(cx: PJSContext; var ctor: PJSObject; var args: JSHandleValueArray): PJSObject; cdecl; external SpiderMonkeyLib name 'SM_New';
 
 /// Define multiple properties for a single object.
-function JS_DefineProperties(cx: PJSContext; var obj: PJSObject; ps: PJSPropertySpec): boolean; cdecl; external SpiderMonkeyLib ;
+function JS_DefineProperties(cx: PJSContext; var obj: PJSObject; ps: PJSPropertySpec): boolean; cdecl; external SpiderMonkeyLib name 'SM_DefineProperties';
 
 /// Determine whether a property is already physically present on a JSObject.
 // Name indentifies by unicode string
 function JS_AlreadyHasOwnUCProperty(cx: PJSContext; var obj: PJSObject;
     const name: PCChar16; namelen: size_t; var foundp: Boolean): Boolean;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_AlreadyHasOwnUCProperty';
 
 /// Create a new Array object.
 // Only length passed
-function JS_NewArrayObject(cx: PJSContext; length: size_t): PJSObject; cdecl; external SpiderMonkeyLib;
+function JS_NewArrayObject(cx: PJSContext; length: size_t): PJSObject; cdecl; external SpiderMonkeyLib name 'SM_NewArrayObject';
 /// Create a new Array object.
 // Content passed
-function JS_NewArrayObject2(cx: PJSContext; const contents: JSHandleValueArray): PJSObject; cdecl; external SpiderMonkeyLib;
+function JS_NewArrayObject2(cx: PJSContext; const contents: JSHandleValueArray): PJSObject; cdecl; external SpiderMonkeyLib name 'SM_NewArrayObject2';
 
 /// Returns true and sets |*isArray| indicating whether |obj| is an Array object
 // or a wrapper around one, otherwise returns false on failure.
 // - This method returns true with |*isArray == false| when passed a proxy whose
 // target is an Array, or when passed a revoked proxy.
-function JS_IsArrayObject(cx: PJSContext; var obj: PJSObject; out isArray: Boolean): boolean; cdecl; external SpiderMonkeyLib;
+function JS_IsArrayObject(cx: PJSContext; var obj: PJSObject; out isArray: Boolean): boolean; cdecl; external SpiderMonkeyLib name 'SM_IsArrayObject';
 /// JS_GetArrayLength gets the .length property of obj as though by calling JS_GetProperty
 // and converts it to a 32-bit unsigned integer. If obj is an array (see JS_IsArrayObject),
 // this is guaranteed to succeed, because the .length property of an array is always a number
@@ -2647,70 +2417,62 @@ function JS_IsArrayObject(cx: PJSContext; var obj: PJSObject; out isArray: Boole
 // On failure, it reports an error and returns false, and the value left in *lengthp
 // is undefined.
 function JS_GetArrayLength(cx: PJSContext; var obj: PJSObject;
-  out length: uint32): Boolean; cdecl; external SpiderMonkeyLib;
+  out length: uint32): Boolean; cdecl; external SpiderMonkeyLib name 'SM_GetArrayLength';
 
 /// Read access an object's reserved slots.
-{$IFDEF SM52}
-function JS_GetReservedSlot(obj: PJSObject; index: uint32): Int64; cdecl; external SpiderMonkeyLib name 'JS_GetReservedSlot1';
-{$ELSE}
-function JS_GetReservedSlot(obj: PJSObject; index: uint32): Int64; cdecl; external SpiderMonkeyLib;
-{$ENDIF}
+function JS_GetReservedSlot(obj: PJSObject; index: uint32): Int64; cdecl; external SpiderMonkeyLib name 'SM_GetReservedSlot';
 /// Write access an object's reserved slots
-{$IFDEF SM52}
-procedure JS_SetReservedSlot(obj: PJSObject; index: uint32; var v: jsval); cdecl; external SpiderMonkeyLib;
-{$ELSE}
-procedure JS_SetReservedSlot(obj: PJSObject; index: uint32; v: Int64); cdecl; external SpiderMonkeyLib;
-{$ENDIF}
+procedure JS_SetReservedSlot(obj: PJSObject; index: uint32; var v: jsval); cdecl; external SpiderMonkeyLib name 'SM_SetReservedSlot';
 
 /// Create a new JavaScript function that is implemented as a JSNative.
-function JS_NewFunction(cx: PJSContext; call: JSNative; nargs: uintN; flags: uintN; name: PCChar): PJSObject; cdecl; external SpiderMonkeyLib;
+function JS_NewFunction(cx: PJSContext; call: JSNative; nargs: uintN; flags: uintN; name: PCChar): PJSObject; cdecl;
+  external SpiderMonkeyLib name 'SM_NewFunction';
 
 /// Return the function's identifier as a JSString, or null if fun is unnamed.
 // The returned string lives as long as fun, so you don't need to root a saved
 // reference to it if fun is well-connected or rooted, and provided you bound
 // the use of the saved reference by fun's lifetime.
-function JS_GetFunctionId(fun: PJSFunction): PJSString; cdecl; external SpiderMonkeyLib;
+function JS_GetFunctionId(fun: PJSFunction): PJSString; cdecl; external SpiderMonkeyLib name 'SM_GetFunctionId';
 
 /// Infallible predicate to test whether obj is a function object (faster than
 // comparing obj's class name to "Function", but equivalent unless someone has
 // overwritten the "Function" identifier with a different constructor and then
 // created instances using that constructor that might be passed in as obj).
-function JS_ObjectIsFunction(cx: PJSContext; obj: PJSObject): boolean; cdecl; external SpiderMonkeyLib;
+function JS_ObjectIsFunction(cx: PJSContext; obj: PJSObject): boolean; cdecl; external SpiderMonkeyLib name 'SM_ObjectIsFunction';
 
 /// Create zero or more functions and makes them properties (methods)
 // of a specified object, obj, as if by calling JS_DefineFunction repeatedly
 function JS_DefineFunctions(cx: PJSContext; var obj: PJSObject; fs: PJSFunctionSpec;
     behavior: JSPropertyDefinitionBehavior): Boolean;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_DefineFunctions';
 /// Create a native function and assign it as a property to a specified JS object
 function JS_DefineFunction(cx: PJSContext; var obj: PJSObject; name: PCChar;
     call: JSNative; nargs: uintN; attrs: uintN): PJSFunction;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_DefineFunction';
 /// Unicode version to create a native function
 function JS_DefineUCFunction(cx: PJSContext; var obj: PJSObject; name: PCChar16;
     namelen: size_t; call: JSNative; nargs: uintN; attrs: uintN): PJSFunction;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_DefineUCFunction';
 
 /// Compile a script, source, for execution.
 // Ansi version
 function JS_CompileScript(cx: PJSContext; bytes: PCChar;
     length: size_t; options: PJSCompileOptions; out script: PJSScript): boolean;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_CompileScript';
 /// Compile a script, source, for execution.
 // Unicode version
 function JS_CompileUCScript(cx: PJSContext;
     chars: PCChar16; length: size_t; options: PJSCompileOptions; out script: PJSScript): boolean;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_CompileUCScript';
 
 /// Generate the complete source code of a function declaration from a compiled function
 function JS_DecompileFunction(cx: PJSContext; var fun: PJSFunction; indent: uintN): PJSString;
-  cdecl; external SpiderMonkeyLib;
+  cdecl; external SpiderMonkeyLib name 'SM_DecompileFunction';
 
 /// Evaluate a script in the scope of the current global of cx.
 function JS_ExecuteScript(cx: PJSContext; var script: PJSScript;
-  out rval: jsval): Boolean; cdecl; external SpiderMonkeyLib;
+  out rval: jsval): Boolean; cdecl; external SpiderMonkeyLib name 'SM_ExecuteScript';
 
-{$IFDEF SM52}
 /// These functions allow setting an interrupt callback that will be called
 // from the JS thread some time after any thread triggered the callback using
 // JS_RequestInterruptCallback(cx).
@@ -2727,16 +2489,6 @@ function JS_DisableInterruptCallback(cx: PJSContext):Boolean; cdecl; external Sp
 procedure JS_ResetInterruptCallback(cx: PJSContext; enable: Boolean); cdecl; external SpiderMonkeyLib;
 /// Request a callback set using JS_SetInterruptCallback
 procedure JS_RequestInterruptCallback(cx: PJSContext); cdecl; external SpiderMonkeyLib;
-{$ELSE}
-/// Set a callback function that is automatically called periodically while JavaScript code runs.
-function JS_SetInterruptCallback(rt: PJSRuntime; callback: JSInterruptCallback):
-  JSInterruptCallback; cdecl; external SpiderMonkeyLib;
-/// Return the currently installed interrupt callback, or NULL if none is currently installed
-function JS_GetInterruptCallback(rt: PJSRuntime): JSInterruptCallback;
-  cdecl; external SpiderMonkeyLib;
-/// Request a callback set using JS_SetInterruptCallback
-procedure JS_RequestInterruptCallback(rt: PJSRuntime); cdecl; external SpiderMonkeyLib;
-{$ENDIF}
 /// Indicates whether or not a script or function is currently executing in a given context.
 function JS_IsRunning(cx: PJSContext): Boolean; cdecl; external SpiderMonkeyLib;
 
@@ -2782,7 +2534,7 @@ function JS_ParseJSON(cx: PJSContext; const chars: PCChar16;
 // The callback must then return JS_FALSE to cause the exception to be propagated
 // to the calling script.
 procedure JS_ReportError(cx: PJSContext; const format: PCChar);
-  cdecl; varargs; external SpiderMonkeyLib{$IFDEF SM52} name 'JS_ReportErrorASCII'{$ENDIF};
+  cdecl; varargs; external SpiderMonkeyLib name 'JS_ReportErrorASCII';
 /// Report an error with an application-defined error code.
 // - varargs is Additional arguments for the error message.
 //- These arguments must be of type jschar*
@@ -2797,20 +2549,12 @@ procedure JS_ReportErrorNumberUC(cx: PJSContext; errorCallback: JSErrorCallback;
 // it reports an error as though by calling this function
 procedure JS_ReportOutOfMemory(cx: PJSContext); cdecl; external SpiderMonkeyLib;
 
-{$IFDEF SM52}
 /// Get the warning reporting mechanism for an application. It is not working for errors.
 function JS_GetWarningReporter(cx: PJSContext): JSWarningReporter;
   cdecl; external SpiderMonkeyLib name 'GetWarningReporter';
 /// Specify the warning reporting mechanism for an application.  It is not working for errors.
 function JS_SetWarningReporter(cx: PJSContext; reporter: JSWarningReporter): JSWarningReporter;
   cdecl; external SpiderMonkeyLib name 'SetWarningReporter';
-{$ELSE}
-/// Get the error reporting mechanism for an application.
-function JS_GetErrorReporter(rt: PJSRuntime): JSErrorReporter; cdecl; external SpiderMonkeyLib;
-/// Specify the error reporting mechanism for an application.
-function JS_SetErrorReporter(rt: PJSRuntime; er: JSErrorReporter): JSErrorReporter;
-  cdecl; external SpiderMonkeyLib;
-{$ENDIF}
 
 /// Create a new JavaScript date object
 function JS_NewDateObject(cx: PJSContext; year, mon, mday, hour, min, sec: int32): PJSObject;
@@ -2832,7 +2576,6 @@ function JS_GetPendingException(cx: PJSContext; out vp: jsval): Boolean; cdecl; 
 procedure JS_SetPendingException(cx: PJSContext; var vp: jsval); cdecl; external SpiderMonkeyLib;
 /// Clear the currently pending exception in a context.
 procedure JS_ClearPendingException(cx: PJSContext); cdecl; external SpiderMonkeyLib;
-{$IFDEF SM52}
 /// If the given object is an exception object, the exception will have (or be
 // able to lazily create) an error report struct, and this function will return
 // the address of that struct.  Otherwise, it returns nullptr. The lifetime
@@ -2840,19 +2583,9 @@ procedure JS_ClearPendingException(cx: PJSContext); cdecl; external SpiderMonkey
 // lifetime of the exception object.
 function JS_ErrorFromException(cx: PJSContext; var obj: PJSObject): PJSErrorReport;
   cdecl; external SpiderMonkeyLib;
-{$ELSE}
-/// Forward the current pending exception in a given JSContext
-// to the current JSErrorReporter callback.
-function JS_ReportPendingException(cx: PJSContext): Boolean; cdecl; external SpiderMonkeyLib;
-{$ENDIF}
 
-{$IFDEF SM52}
 /// Get options of context
 function JS_GetContextOptions(cx: PJSContext): PJSContextOptions; cdecl; external SpiderMonkeyLib;
-{$ELSE}
-/// Get options of runtime
-function JS_GetRuntimeOptions(runtime: PJSRuntime): PJSRuntimeOptions; cdecl; external SpiderMonkeyLib;
-{$ENDIF}
 
 //function JS_NewRootedValue(cx: PJSContext; val: jsval): PJSRootedValue; cdecl; external SpiderMonkeyLib;
 function JS_NewRootedValue(cx: PJSContext; val: Int64): PJSRootedValue; cdecl; external SpiderMonkeyLib;
@@ -3428,27 +3161,21 @@ end;
 const
  ErrorUCFormatString: JSErrorFormatString =
   (
-    {$IFDEF SM52}
     name: 'Error';
-    {$ENDIF}
     format: '{0}';
     argCount: 1;
     exnType: JSEXN_ERR;
   );
  RangeErrorUCFormatString: JSErrorFormatString =
   (
-    {$IFDEF SM52}
     name: 'RangeError';
-    {$ENDIF}
     format: '{0}';
     argCount: 1;
     exnType: JSEXN_RANGEERR;
   );
  TypeErrorUCFormatString: JSErrorFormatString =
   (
-    {$IFDEF SM52}
     name: 'TypeError';
-    {$ENDIF}
     format: '{0}';
     argCount: 1;
     exnType: JSEXN_TYPEERR;
@@ -3672,7 +3399,6 @@ begin
 end;
 
 { JSContext }
-{$IFDEF SM52}
 function JSContext.CheckForInterrupt: Boolean;
 begin
   result := JS_CheckForInterrupt(@Self);
@@ -3692,8 +3418,6 @@ procedure JSContext.ResetInterruptCallback(disable: boolean);
 begin
   JS_ResetInterruptCallback(@self, disable);
 end;
-
-{$ENDIF}
 
 procedure JSContext.ClearPendingException;
 begin
@@ -3768,9 +3492,6 @@ var
   Opt: PJS_CompartmentOptions;
 begin
   Opt := JS_NewCompartmentOptions;
-  {$IFNDEF SM52}
-  Opt.version := JSVERSION_LATEST;
-  {$ENDIF}
   Result := JS_NewGlobalObject(@Self, clasp, nil, DontFireOnNewGlobalHook, Opt);
   JS_FreeCompartmentOptions(Opt);
 end;
@@ -4157,13 +3878,6 @@ begin
   Result := JS_NewArrayObject(@Self, length);
 end;
 
-{$IFNDEF SM52}
-function JSContext.GetRuntime: PJSRuntime;
-begin
-  result := JS_GetRuntime(@self);
-end;
-{$ENDIF}
-
 function JSContext.InitCTypesClass(var obj: PJSObject): boolean;
 begin
   Result := JS_InitCTypesClass(@Self, obj);
@@ -4186,21 +3900,12 @@ begin
     result := JS_NewStringCopyUTF8Z(@self, pointer(Value));
 end;
 
-{$IFDEF SM52}
 function JSContextOptions.getOptions(const Index: Integer): Boolean;
-{$ELSE}
-function JSRuntimeOptions.getOptions(const Index: Integer): Boolean;
-{$ENDIF}
-{ JSRuntimeOptions }
 begin
    Result := (pword(@self)^ and (1 shl Index)) <> 0;
 end;
 
-{$IFDEF SM52}
 procedure JSContextOptions.setOptions(const Index: Integer;
-{$ELSE}
-procedure JSRuntimeOptions.setOptions(const Index: Integer;
-{$ENDIF}
   const Value: Boolean);
 var
   val: uint16;
@@ -4212,71 +3917,31 @@ begin
     pword(@self)^ := pword(@self)^ and (not val);
 end;
 
-{$IFNDEF SM52}
-{ JSRuntime }
-procedure JSRuntime.Destroy;
-begin
-  JS_DestroyRuntime(@self);
-end;
-{$ENDIF}
-
-{$IFDEF SM52}
 procedure JSContext.GC;
-{$ELSE}
-procedure JSRuntime.GC;
-{$ENDIF}
 begin
   JS_GC(@self);
 end;
 
-{$IFDEF SM52}
 function JSContext.GetEmptyString: PJSString;
-{$ELSE}
-function JSRuntime.GetEmptyString: PJSString;
-{$ENDIF}
 begin
   Result := JS_GetEmptyString(@self);
 end;
 
-{$IFDEF SM52}
 function JSContext.GetWarningReporter: JSWarningReporter;
 begin
   Result := JS_GetWarningReporter(@self);
 end;
-{$ELSE}
-function JSRuntime.GetErrorReporter: JSErrorReporter;
-begin
-  Result := JS_GetErrorReporter(@self);
-end;
-{$ENDIF}
 
-{$IFDEF SM52}
 function JSContext.GetGCParameter(key: JSGCParamKey): uint32;
-{$ELSE}
-function JSRuntime.GetGCParameter(key: JSGCParamKey): uint32;
-{$ENDIF}
 begin
   Result := JS_GetGCParameter(@Self, key);
 end;
 
-{$IFDEF SM52}
-{$ELSE}
-function JSRuntime.GetInterruptCallback: JSInterruptCallback;
-begin
-  Result := JS_GetInterruptCallback(@self);
-end;
-{$ENDIF}
-
-{$IFDEF SM52}
 function JSContext.GetNowMs: int64;
-{$ELSE}
-function JSRuntime.GetNowMs: int64;
-{$ENDIF}
 begin
   Result := JS_Now;
 end;
 
-{$IFDEF SM52}
 class function JSContext.CreateNew(maxbytes: uint32; maxNurseryBytes: uint32; parentContext: PJSContext): PJSContext;
 begin
   with TSynFPUException.ForLibraryCode do begin
@@ -4284,101 +3949,36 @@ begin
     InitSelfHostedCode(Result);
   end;
 end;
-{$ELSE}
 
-function JSRuntime.GetPrivate: Pointer;
-begin
-  Result := JS_GetRuntimePrivate(@self);
-end;
-
-class function JSRuntime.new(maxbytes: uint32; maxNurseryBytes: uint32; parentRuntime: PJSRuntime): PJSRuntime;
-begin
-  Result := JS_NewRuntime(maxbytes, maxNurseryBytes, parentRuntime);
-end;
-
-function JSRuntime.NewContext(stackChunkSize: size_t): PJSContext;
-begin
-  Result := JS_NewContext(@Self, stackChunkSize)
-end;
-{$ENDIF}
-
-{$IFDEF SM52}
 function JSContext.GetOptions: PJSContextOptions;
 begin
   Result := JS_GetContextOptions(@self);
 end;
-{$ELSE}
-function JSRuntime.GetOptions: PJSRuntimeOptions;
-begin
-  Result := JS_GetRuntimeOptions(@self);
-end;
-{$ENDIF}
 
-
-{$IFDEF SM52}
 procedure JSContext.RequestInterruptCallback;
-{$ELSE}
-procedure JSRuntime.RequestInterruptCallback;
-{$ENDIF}
 begin
   JS_RequestInterruptCallback(@self);
 end;
 
-{$IFDEF SM52}
 procedure JSContext.SetWarningReporter(reporter: JSWarningReporter);
 begin
   JS_SetWarningReporter(@self, reporter);
 end;
-{$ELSE}
-procedure JSRuntime.SetErrorReporter(er: JSErrorReporter);
-begin
-  JS_SetErrorReporter(@self, er);
-end;
-{$ENDIF}
 
-{$IFDEF SM52}
 procedure JSContext.SetGCParameter(key: JSGCParamKey; const Value: uint32);
-{$ELSE}
-procedure JSRuntime.SetGCParameter(key: JSGCParamKey; const Value: uint32);
-{$ENDIF}
 begin
   JS_SetGCParameter(@Self, key, Value);
 end;
 
-{$IFDEF SM52}
 procedure JSContext.SetGCParametersBasedOnAvailableMemory(availMem: uint32);
-{$ELSE}
-procedure JSRuntime.SetGCParametersBasedOnAvailableMemory(availMem: uint32);
-{$ENDIF}
 begin
   JS_SetGCParametersBasedOnAvailableMemory(@Self, availMem);
 end;
 
-{$IFDEF SM52}
-{$ELSE}
-procedure JSRuntime.SetInterruptCallback(callback: JSInterruptCallback);
-begin
-  JS_SetInterruptCallback(@Self, callback);
-end;
-{$ENDIF}
-
-{$IFDEF SM52}
 procedure JSContext.SetNativeStackQuota(systemCodeStackSize: size_t);
-{$ELSE}
-procedure JSRuntime.SetNativeStackQuota(systemCodeStackSize: size_t);
-{$ENDIF}
 begin
   JS_SetNativeStackQuota(@Self, systemCodeStackSize);
 end;
-
-{$IFDEF SM52}
-
-{$ELSE}
-procedure JSRuntime.SetPrivate(const Value: Pointer);
-begin
-  JS_SetRuntimePrivate(@Self, Value);
-end;
-{$ENDIF}
 
 { JSObject }
 
@@ -4637,22 +4237,13 @@ end;
 
 function JSObject.GetReservedSlot(index: uint32): jsval;
 begin
-{$IFDEF SM52}
   result._l.asBits := JS_GetReservedSlot(@Self, index)
-{$ELSE}
-  result._l.asBits := JS_GetReservedSlot(@Self, index)
-{$ENDIF}
 end;
 
 function JSObject.GetSharedArrayBufferByteLength: uint32;
 begin
   result := JS_GetSharedArrayBufferByteLength(@self);
 end;
-
-//function JSObject.GetSharedArrayBufferViewType: JSArrayBufferViewType;
-//begin
-//  result := JS_GetSharedArrayBufferViewType(@self);
-//end;
 
 function JSObject.GetTypedArrayByteLength: uint32;
 begin
@@ -5003,11 +4594,7 @@ end;
 
 procedure JSObject.SetReservedSlot(index: uint32; v: jsval);
 begin
-{$IFDEF SM52}
   JS_SetReservedSlot(@Self, index, v);
-{$ELSE}
-  JS_SetReservedSlot(@Self, index, v._l.asBits);
-{$ENDIF}
 end;
 
 function JSObject.SetUCProperty(cx: PJSContext; const name: PCChar16;

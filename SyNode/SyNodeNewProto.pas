@@ -148,7 +148,6 @@ implementation
 uses SyNode;
 
 const
-{$IFDEF SM52}
   jsdef_classOps: JSClassOps = (
     finalize: SMCustomObjectDestroy; // call then JS object GC}
     construct: SMCustomObjectConstruct
@@ -165,18 +164,6 @@ const
     flags: JSCLASS_HAS_PRIVATE;
     cOps: @jsidxobj_classOps
     );
-{$ELSE}
-  jsdef_class: JSClass = (name: '';
-    flags: uint32(JSCLASS_HAS_PRIVATE);
-    finalize: SMCustomObjectDestroy; // call then JS object GC}
-    construct: SMCustomObjectConstruct
-    );
-  jsidxobj_class: JSClass = (name: 'idxPropReader';
-    flags: JSCLASS_HAS_PRIVATE;
-    getProperty: SMRTTIIdxPropRead;
-    finalize: SMCustomObjectDestroy);
-{$ENDIF}
-
 
 {$REGION 'JS Call functions'}
 function WideStringToAnsiString(const WS: String): AnsiString;
@@ -632,11 +619,7 @@ begin
   found := False;
   for I := 0 to Length((AObj.proto as TSMNewRTTIProtoObject).FRTTIPropsCache)-1 do begin
     Result := @(AObj.proto as TSMNewRTTIProtoObject).FRTTIPropsCache[i];
-{$IFDEF SM52}
     if strComparePropGetterSetter(propName, Result.jsName, false) then begin
-{$ELSE}
-    if Result.jsName = propName then begin
-{$ENDIF}
       found := True;
       Break;
     end;
@@ -752,11 +735,7 @@ begin
       found := False;
       for i := 0 to Length((Instance.proto as TSMNewRTTIProtoObject).FRTTIPropsCache)-1 do begin
         pc := @(Instance.proto as TSMNewRTTIProtoObject).FRTTIPropsCache[i];
-{$IFDEF SM52}
         if strComparePropGetterSetter(prop_name, pc.jsName, true) then begin
-{$ELSE}
-        if pc.jsName = prop_name then begin
-{$ENDIF}
           found := True;
           break;
         end;

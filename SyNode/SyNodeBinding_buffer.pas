@@ -104,11 +104,7 @@ begin
       cx.FreeRootedObject(this);
     end;
     if bufLen = 0 then begin
-{$IFDEF SM52}
       vp.rval := cx.EmptyString.ToJSVal;
-{$ELSE}
-      vp.rval := cx.rt.EmptyString.ToJSVal;
-{$ENDIF}
       Exit;
     end;
 
@@ -194,11 +190,7 @@ begin
       cx.FreeRootedObject(this);
     end;
     if bufLen = 0 then begin
-{$IFDEF SM52}
       vp.rval := cx.EmptyString.ToJSVal;
-{$ELSE}
-      vp.rval := cx.rt.EmptyString.ToJSVal;
-{$ENDIF}
       Exit;
     end;
 
@@ -1819,10 +1811,8 @@ const
   BufferBinding_class: JSClass = (
     name: 'BufferBinding';
     flags: (1 shl JSCLASS_RESERVED_SLOTS_SHIFT);
-    {$IFDEF SM52}
     cOps:  nil;
     reserved: (nil, nil, nil);
-    {$ENDIF}
   );
 
 function SyNodeBindingProc_buffer(const aEngine: TSMEngine; const bindingNamespaceName: SynUnicode): jsval;
