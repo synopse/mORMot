@@ -4077,8 +4077,7 @@ function TBSONVariant.TryJSONToVariant(var JSON: PUTF8Char;
 // warning: code should NOT modify JSON buffer in-place, unless it returns true
 var bsonvalue: TBSONVariantData absolute Value;
     varvalue: TVarData absolute Value;
-  procedure Return(kindint: integer; P: PUTF8Char; GotoEndOfObject: AnsiChar='}'); overload;
-  var kind: TBSONElementType absolute kindint;
+  procedure Return(kind: TBSONElementType; P: PUTF8Char; GotoEndOfObject: AnsiChar);
   begin
     if GotoEndOfObject<>#0 then
       while P^<>GotoEndOfObject do
@@ -4103,10 +4102,11 @@ var bsonvalue: TBSONVariantData absolute Value;
     end;
     result := true;
   end;
-  procedure Return(kind: TBSONElementType; P: PUTF8Char; GotoEndOfObject: AnsiChar='}'); overload;
-    {$ifdef HASINLINE}inline;{$endif} // redirection function to circumvent FPC trunk limitation
+  procedure ReturnInt(kindint: integer; P: PUTF8Char; GotoEndOfObject: AnsiChar);
+  {$ifdef HASINLINE}inline;{$endif} // redirection function to circumvent FPC trunk limitation
+  var kind: TBSONElementType absolute kindint;
   begin
-    Return(ord(kind),P,GotoEndOfObject);
+    Return(kind,P,GotoEndOfObject);
   end;
   procedure TryDate(P: PUTF8Char; GotoEndOfObject: AnsiChar);
   var L: integer;
@@ -4216,11 +4216,11 @@ begin // here JSON does not start with " or 1..9 (obvious simple types)
     if P[0]='$' then
     case P[1] of
     'u': if CompareMemFixed(P+2,@BSON_JSON_UNDEFINED[false][5],10) then
-           Return(betDeprecatedUndefined,P+12);
+           Return(betDeprecatedUndefined,P+12,'}');
     'm': if CompareMemFixed(P+1,@BSON_JSON_MINKEY[false][4],8) then
-           Return(betMinKey,P+9) else
+           ReturnInt(betMinKey,P+9,'}') else
          if CompareMemFixed(P+1,@BSON_JSON_MAXKEY[false][4],8) then
-           Return(betMaxKey,P+9);
+           ReturnInt(betMaxKey,P+9,'}');
     'o': if PInteger(P+2)^=PInteger(@BSON_JSON_OBJECTID[false,modMongoStrict][5])^ then
            TryObjectID(P+6,'}');
     'd': if CompareMemSmall(P+2,@BSON_JSON_DATE[modMongoStrict,false][5],5) then
@@ -4235,9 +4235,9 @@ begin // here JSON does not start with " or 1..9 (obvious simple types)
   'U': if StrCompIL(JSON+1,@BSON_JSON_UNDEFINED[true][2],8)=0 then
          Return(betDeprecatedUndefined,JSON+8,#0);
   'M': if StrCompIL(JSON+1,@BSON_JSON_MINKEY[true][2],5)=0 then
-         Return(betMinKey,JSON+5,#0) else
+         ReturnInt(betMinKey,JSON+5,#0) else
        if StrCompIL(JSON+1,@BSON_JSON_MAXKEY[true][2],7)=0 then
-         Return(betMaxKey,JSON+5,#0);
+         ReturnInt(betMaxKey,JSON+5,#0);
   'O': if StrCompIL(JSON+1,@BSON_JSON_OBJECTID[false,modMongoShell][2],8)=0 then
          TryObjectID(JSON+9,')');
   'N': if StrCompIL(JSON+1,@BSON_JSON_NEWDATE[1],8)=0 then
