@@ -494,15 +494,14 @@ type
       UseOnlySockIn: boolean=false): integer;
     /// returns the number of bytes in SockIn buffer or pending in Sock
     // - if SockIn is available, it first check from any data in SockIn^.Buffer,
-    // then call InputSock to try to receive any pending data if the buffer is
-    // void - unless aSocketForceCheck is TRUE, and both the buffer and the
-    // socket are asked for pending bytes (slower, but sometimes needed, e.g.
-    // if you are currently waiting for a whole header block to be available)
+    // then call InputSock to try to receive any pending data if the buffer is void
+    // - if aPendingAlsoInSocket is TRUE, returns the bytes available in both the buffer
+    // and the socket (sometimes needed, e.g. to process a whole block at once)
     // - will wait up to the specified aTimeOutMS value (in milliseconds) for
-    // incoming data
-    // - returns -1 in case of a socket error (e.g. broken connection); you
-    // can raise a ECrtSocket exception to propagate the error
-    function SockInPending(aTimeOutMS: integer; aSocketForceCheck: boolean=false): integer;
+    // incoming data - may wait a little less time on Windows due to a select bug
+    // - returns -1 in case of a socket error (e.g. broken/closed connection);
+    // you can raise a ECrtSocket exception to propagate the error
+    function SockInPending(aTimeOutMS: integer; aPendingAlsoInSocket: boolean=false): integer;
     /// check the connection status of the socket
     function SockConnected: boolean;
     /// simulate writeln() with direct use of Send(Sock, ..) - includes trailing #13#10
@@ -530,6 +529,8 @@ type
     // - raise ECrtSocket exception on socket error
     procedure SockRecv(Buffer: pointer; Length: integer);
     /// check if there are some pending bytes in the input sockets API buffer
+    // - returns cspSocketError if the connection is broken or closed
+    // - warning: on Windows, may wait a little less than TimeOutMS (select bug)
     function SockReceivePending(TimeOutMS: integer): TCrtSocketPending;
     /// returns the socket input stream as a string
     function SockReceiveString: SockString;
@@ -1332,7 +1333,7 @@ type
     // appear in HTTP.sys log files (normally in
     // C:\Windows\System32\LogFiles\HTTPERR\httperr*.log) - may appear with
     // thousands of concurrent clients accessing at once the same server -
-  	// see @http://msdn.microsoft.com/en-us/library/windows/desktop/aa364501
+    // see @http://msdn.microsoft.com/en-us/library/windows/desktop/aa364501
     // - you can use this property with a reverse-proxy as load balancer, e.g.
     // with nginx configured as such:
     // $ location / {
@@ -5054,7 +5055,7 @@ begin
   end;
 end;
 
-function TCrtSocket.SockInPending(aTimeOutMS: integer; aSocketForceCheck: boolean): integer;
+function TCrtSocket.SockInPending(aTimeOutMS: integer; aPendingAlsoInSocket: boolean): integer;
 var backup: PtrInt;
     insocket: integer;
 begin
@@ -5062,28 +5063,29 @@ begin
     raise ECrtSocket.Create('SockInPending without SockIn');
   if aTimeOutMS<0 then
     raise ECrtSocket.Create('SockInPending(aTimeOutMS<0)');
-  with PTextRec(SockIn)^ do begin
+  with PTextRec(SockIn)^ do
     result := BufEnd-BufPos;
-    if result=0 then
-      // no data in SockIn^.Buffer, so try if some pending at socket level
-      case SockReceivePending(aTimeOutMS) of
-      cspDataAvailable: begin
-        backup := fTimeOut;
-        fTimeOut := 0; // not blocking call to fill SockIn buffer
-        try
-          // call InputSock() to actually retrieve any pending data
-          if InputSock(PTextRec(SockIn)^)=NO_ERROR then
+  if result=0 then
+    // no data in SockIn^.Buffer, so try if some pending at socket level
+    case SockReceivePending(aTimeOutMS) of
+    cspDataAvailable: begin
+      backup := fTimeOut;
+      fTimeOut := 0; // not blocking call to fill SockIn buffer
+      try
+        // call InputSock() to actually retrieve any pending data
+        if InputSock(PTextRec(SockIn)^)=NO_ERROR then
+          with PTextRec(SockIn)^ do
             result := BufEnd-BufPos else
-            result := -1; // indicates broken socket
-        finally
-          fTimeOut := backup;
-        end;
+          result := -1; // indicates broken socket
+      finally
+        fTimeOut := backup;
       end;
-      cspSocketError:
-        result := -1; // indicates broken socket
-      end; // cspNoData will leave result=0
-  end;
-  if aSocketForceCheck then
+    end;
+    cspSocketError:
+      result := -1; // indicates broken/closed socket
+    end; // cspNoData will leave result=0
+  if aPendingAlsoInSocket then
+    // also includes data in socket bigger than TTextRec's buffer
     if (IOCtlSocket(Sock,FIONREAD,insocket)=0) and (insocket>0) then
       inc(result,insocket);
 end;
