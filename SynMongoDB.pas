@@ -824,10 +824,12 @@ type
 const
   /// fake BSON element type which compares lower than all other possible values
   // - element type sounds to be stored as shortint, so here $ff=-1<0=betEOF
-  betMinKey = ($ff);
+  // - defined as an integer to circumvent a compilation issue with FPC trunk
+  betMinKey = $ff;
   /// fake BSON element type which compares higher than all other possible values
   // - element type sounds to be stored as shortint, so here betInt64=$12<$7f
-  betMaxKey = ($7f);
+  // - defined as an integer to circumvent a compilation issue with FPC trunk
+  betMaxKey = $7f;
 
   /// kind of elements which will store a RawByteString/RawUTF8 content
   // within its TBSONVariant kind
@@ -2827,24 +2829,24 @@ end;
 procedure TBSONElement.AddMongoJSON(W: TTextWriter; Mode: TMongoJSONMode);
 label bin,regex;
 begin
-  case Kind of
-  betFloat:
+  case integer(Kind) of
+  ord(betFloat):
     W.AddDouble(unaligned(PDouble(Element)^));
-  betString, betJS, betDeprecatedSymbol: begin
+  ord(betString), ord(betJS), ord(betDeprecatedSymbol): begin
     W.Add('"');
     W.AddJSONEscape(Data.Text,Data.TextLen);
     W.Add('"');
   end;
-  betDoc, betArray:
+  ord(betDoc), ord(betArray):
     BSONListToJSON(Data.DocList,Kind,W,Mode);
-  betObjectID: begin
+  ord(betObjectID): begin
     W.AddShort(BSON_JSON_OBJECTID[false,Mode]);
     W.AddBinToHex(Element,SizeOf(TBSONObjectID));
     W.AddShort(BSON_JSON_OBJECTID[true,Mode]);
   end;
-  betDeprecatedUndefined:
+  ord(betDeprecatedUndefined):
     W.AddShort(BSON_JSON_UNDEFINED[Mode=modMongoShell]);
-  betBinary:
+  ord(betBinary):
     case Mode of
     modNoMongo:
       W.WrBase64(Data.Blob,Data.BlobLen,true);
@@ -2863,7 +2865,7 @@ begin
       W.AddShort('")');
     end;
     end;
-  betRegEx:
+  ord(betRegEx):
     case Mode of
     modNoMongo:
 bin:W.WrBase64(Element,ElementBytes,true);
@@ -2884,37 +2886,37 @@ regex:  W.AddShort(BSON_JSON_REGEX[0]);
         W.AddShort(BSON_JSON_REGEX[2]);
       end;
     end;
-  betDeprecatedDbptr:
+  ord(betDeprecatedDbptr):
     goto bin; // no specific JSON construct for this deprecated item
-  betJSScope:
+  ord(betJSScope):
     goto bin; // no specific JSON construct for this item yet
-  betTimestamp:
+  ord(betTimestamp):
     goto bin; // internal content will always be written as raw binary
-  betBoolean:
+  ord(betBoolean):
     W.Add(PBoolean(Element)^);
-  betDateTime: begin
+  ord(betDateTime): begin
     W.AddShort(BSON_JSON_DATE[Mode,false]);
     W.AddUnixMSTime(Element,false);
     W.AddShort(BSON_JSON_DATE[Mode,true]);
   end;
-  betNull:
+  ord(betNull):
     W.AddShort('null');
-  betInt32:
+  ord(betInt32):
     W.Add(PInteger(Element)^);
-  betInt64:
+  ord(betInt64):
     W.Add(PInt64(Element)^);
-  betDecimal128: begin
+  ord(betDecimal128): begin
     W.AddShort(BSON_JSON_DECIMAL[false,Mode]);
     PDecimal128(Element)^.AddText(W);
     W.AddShort(BSON_JSON_DECIMAL[true,Mode]);
   end;
+  betMinKey:
+    W.AddShort(BSON_JSON_MINKEY[Mode=modMongoShell]);
+  betMaxKey:
+    W.AddShort(BSON_JSON_MAXKEY[Mode=modMongoShell]);
   else
-  if Ord(Kind)=betMinKey then
-    W.AddShort(BSON_JSON_MINKEY[Mode=modMongoShell]) else
-  if Ord(Kind)=betMaxKey then
-    W.AddShort(BSON_JSON_MAXKEY[Mode=modMongoShell]) else
     raise EBSONException.CreateUTF8('TBSONElement.AddMongoJSON: unexpected type %',
-      [ord(Kind)]);
+      [integer(Kind)]);
   end;
 end;
 
@@ -3087,10 +3089,10 @@ begin
     exit;
   end;
   Kind := TBSONElementType(BSON^);
-  case ord(Kind) of
+  case integer(Kind) of
   ord(betEOF):
     result := false;
-  ord(betFloat)..ord(betDecimal128),ord(betMinKey),ord(betMaxKey): begin
+  ord(betFloat)..ord(betDecimal128),betMinKey,betMaxKey: begin
     inc(BSON);
     Name := PUTF8Char(BSON);
     NameLen := StrLen(PUTF8Char(BSON));
@@ -4072,10 +4074,11 @@ const
 {$IFDEF FPC} {$PUSH} {$ENDIF} {$HINTS OFF} // avoid hints with CompareMemFixed() inlining
 function TBSONVariant.TryJSONToVariant(var JSON: PUTF8Char;
   var Value: variant; EndOfObject: PUTF8Char): boolean;
+// warning: code should NOT modify JSON buffer in-place, unless it returns true
 var bsonvalue: TBSONVariantData absolute Value;
     varvalue: TVarData absolute Value;
-// warning: code should NOT modify JSON buffer in-place, unless it returns true
-  procedure Return(kind: TBSONElementType; P: PUTF8Char; GotoEndOfObject: AnsiChar='}');overload;
+  procedure Return(kindint: integer; P: PUTF8Char; GotoEndOfObject: AnsiChar='}'); overload;
+  var kind: TBSONElementType absolute kindint;
   begin
     if GotoEndOfObject<>#0 then
       while P^<>GotoEndOfObject do
@@ -4100,23 +4103,11 @@ var bsonvalue: TBSONVariantData absolute Value;
     end;
     result := true;
   end;
-  procedure Return(kind: shortint; P: PUTF8Char; GotoEndOfObject: AnsiChar='}');overload;
+  procedure Return(kind: TBSONElementType; P: PUTF8Char; GotoEndOfObject: AnsiChar='}'); overload;
+    {$ifdef HASINLINE}inline;{$endif} // redirection function to circumvent FPC trunk limitation
   begin
-    if GotoEndOfObject<>#0 then
-      while P^<>GotoEndOfObject do
-      if P^=#0 then
-        exit
-      else
-        inc(P);
-    P := GotoNextNotSpace(P+1);
-    if EndOfObject<>nil then
-      EndOfObject^ := P^;
-    if P^<>#0 then
-      JSON := P+1 else
-      JSON := P;
-    result := true;
+    Return(ord(kind),P,GotoEndOfObject);
   end;
-
   procedure TryDate(P: PUTF8Char; GotoEndOfObject: AnsiChar);
   var L: integer;
   begin
@@ -4226,17 +4217,17 @@ begin // here JSON does not start with " or 1..9 (obvious simple types)
     case P[1] of
     'u': if CompareMemFixed(P+2,@BSON_JSON_UNDEFINED[false][5],10) then
            Return(betDeprecatedUndefined,P+12);
-    'm': if CompareMemFixed(P+2,@BSON_JSON_MINKEY[false][5],7) then
+    'm': if CompareMemFixed(P+1,@BSON_JSON_MINKEY[false][4],8) then
            Return(betMinKey,P+9) else
-         if CompareMemFixed(P+2,@BSON_JSON_MAXKEY[false][5],7) then
+         if CompareMemFixed(P+1,@BSON_JSON_MAXKEY[false][4],8) then
            Return(betMaxKey,P+9);
     'o': if PInteger(P+2)^=PInteger(@BSON_JSON_OBJECTID[false,modMongoStrict][5])^ then
            TryObjectID(P+6,'}');
-    'd': if CompareMemFixed(P+2,@BSON_JSON_DATE[modMongoStrict,false][5],5) then
+    'd': if CompareMemSmall(P+2,@BSON_JSON_DATE[modMongoStrict,false][5],5) then
            TryDate(P+7,'}');
-    'r': if CompareMemFixed(P+2,@BSON_JSON_REGEX[0][5],6) then
+    'r': if CompareMemFixed(P,@BSON_JSON_REGEX[0][3],8) then
            TryRegExStrict(P+8);
-    'n': if CompareMemFixed(P+2,@BSON_JSON_DECIMAL[false,modMongoStrict][5],14) then
+    'n': if CompareMemFixed(P,@BSON_JSON_DECIMAL[false,modMongoStrict][3],16) then
            TryDecimal(P+16,'}');
     end;
   end;
