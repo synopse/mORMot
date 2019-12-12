@@ -966,6 +966,10 @@ type
     fOnTerminate: TNotifyThreadEvent;
     fOnThreadStart: TNotifyThreadEvent;
     fTerminated: boolean;
+    fContentionAbortCount: cardinal;
+    fContentionTime: Int64;
+    fContentionCount: cardinal;
+    fContentionAbortDelay: integer;
     {$ifdef USE_WINIOCP}
     fRequestQueue: THandle;
     {$else}
@@ -998,9 +1002,12 @@ type
     /// let a task (specified as a pointer) be processed by the Thread Pool
     // - returns false if there is no idle thread available in the pool and
     // Create(aQueuePendingContext=false) was used (caller should retry later);
-    // if aQueuePendingContext was true in Create, the supplied context will
-    // be added to an internal list and handled as soon a thread is available
-    function Push(aContext: pointer): boolean;
+    // if aQueuePendingContext was true in Create, or IOCP is used, the supplied
+    // context will be added to an internal list and handled when possible
+    // - if aWaitOnContention is default false, returns immediately when the
+    // queue is full; set aWaitOnContention=true to wait up to
+    // ContentionAbortDelay ms and retry to queue the task
+    function Push(aContext: pointer; aWaitOnContention: boolean=false): boolean;
     {$ifndef USE_WINIOCP}
     /// may be called after Push() returned false to see if queue was actually full
     // - returns false if QueuePendingContext is false
@@ -1011,6 +1018,24 @@ type
   published
     /// how many threads are currently running in this thread pool
     property RunningThreads: integer read fRunningThreads;
+    /// how many tasks were rejected due to thread pool contention
+    // - if this number is high, consider setting a higher number of threads,
+    // or profile and tune the Task method
+    property ContentionAbortCount: cardinal read fContentionAbortCount;
+    /// milliseconds delay to reject a connection due to contention
+    // - default is 5000, i.e. 5 seconds for IOCP, and disabled otherwise
+    // (since aQueuePendingContext is supposed to be used)
+    property ContentionAbortDelay: integer read fContentionAbortDelay
+      write fContentionAbortDelay;
+    /// total milliseconds spent waiting for an available slot in the queue
+    // - contention won't fail immediately, but will retry until ContentionAbortDelay
+    // - any high number here requires code refactoring of the Task method
+    property ContentionTime: Int64 read fContentionTime;
+    /// how many times the pool waited for an available slot in the queue
+    // - contention won't fail immediately, but will retry until ContentionAbortDelay
+    // - any high number here may better increase the threads count
+    // - use this property and ContentionTime to compute the average contention time
+    property ContentionCount: cardinal read fContentionCount;
     {$ifndef USE_WINIOCP}
     /// how many input tasks are currently waiting to be affected to threads
     property PendingContextCount: integer read GetPendingContextCount;
@@ -1883,6 +1908,8 @@ type
     procedure OnThreadStart(Sender: TThread);
     procedure OnThreadTerminate(Sender: TThread);
     function NeedStopOnIOError: Boolean; override;
+    // aContext is a PHttpApiWebSocketConnection, or fServer.fServiceOverlaped
+    // (SendServiceMessage) or fServer.fSendOverlaped (WriteData)
     procedure Task(aCaller: TSynThread; aContext: Pointer); override;
   public
     /// initialize the thread pool
@@ -1928,10 +1955,6 @@ type
   protected
     /// used to protect Process() call
     fProcessCS: TRTLCriticalSection;
-    fThreadPoolContentionTime: Int64;
-    fThreadPoolContentionCount: cardinal;
-    fThreadPoolContentionAbortCount: cardinal;
-    fThreadPoolContentionAbortDelay: integer;
     fHeaderRetrieveAbortDelay: integer;
     fThreadPool: TSynThreadPoolTHttpServer;
     fInternalHttpServerRespList: TList;
@@ -1946,6 +1969,8 @@ type
     fExecuteFinished: boolean;
     function GetHTTPQueueLength: Cardinal; override;
     procedure SetHTTPQueueLength(aValue: Cardinal); override;
+    procedure InternalHttpServerRespListAdd(resp: THttpServerResp);
+    procedure InternalHttpServerRespListRemove(resp: THttpServerResp);
     function OnNginxAllowSend(Context: THttpServerRequest; const LocalFileName: TFileName): boolean;
     // this overridden version will return e.g. 'Winsock 2.514'
     function GetAPIVersion: string; override;
@@ -2017,29 +2042,6 @@ type
     /// the associated thread pool
     // - may be nil if ServerThreadPoolCount was 0 on constructor
     property ThreadPool: TSynThreadPoolTHttpServer read fThreadPool;
-    /// milliseconds spent waiting for an available thread in the pool
-    // - no available thread won't make any error at first, but try again until
-    // ThreadPoolContentionAbortDelay is reached and the incoming socket aborded
-    // - if this number is high, consider setting a higher number of threads,
-    // or profile and tune the Request method processing
-    property ThreadPoolContentionTime: Int64 read fThreadPoolContentionTime;
-    /// how many time the process was waiting for an available thread in the pool
-    // - no available thread won't make any error at first, but try again until
-    // ThreadPoolContentionAbortDelay is reached and the incoming socket aborded
-    // - if this number is high, consider setting a higher number of threads,
-    // or profile and tune the Request method processing
-    // - use this property and ThreadPoolContentionTime to compute the
-    // average contention time
-    property ThreadPoolContentionCount: cardinal read fThreadPoolContentionCount;
-    /// how many connections were rejected due to thread pool contention
-    // - disconnect the client socket after ThreadPoolContentionAbortDelay, or
-    // if HTTPQueueLength limit has been reached
-    // - any high number here requires code refactoring of Request method! :)
-    property ThreadPoolContentionAbortCount: cardinal read fThreadPoolContentionAbortCount;
-    /// milliseconds delay to reject a connection due to thread pool contention
-    // - default is 5000, i.e. 5 seconds
-    property ThreadPoolContentionAbortDelay: integer read fThreadPoolContentionAbortDelay
-      write fThreadPoolContentionAbortDelay;
     /// milliseconds delay to reject a connection due to too long header retrieval
     // - default is 0, i.e. not checked (typically not needed behind a reverse proxy)
     property HeaderRetrieveAbortDelay: integer read fHeaderRetrieveAbortDelay write fHeaderRetrieveAbortDelay;
@@ -5515,7 +5517,7 @@ procedure DoRetry(Error: integer);
       result := Error else begin
       Close; // close this connection
       try
-        OpenBind(Server,Port,false); // then retry this request with a new socket
+        OpenBind(Server,Port,false); // retry this request with a new socket
         result := Request(url,method,KeepAlive,Header,Data,DataType,true);
       except
         on Exception do
@@ -5997,11 +5999,13 @@ constructor THttpServer.Create(const aPort: SockString; OnStart,
   OnStop: TNotifyThreadEvent; const ProcessName: SockString;
   ServerThreadPoolCount: integer; KeepAliveTimeOut: integer);
 begin
+  fInternalHttpServerRespList := TList.Create;
   InitializeCriticalSection(fProcessCS);
   fSock := TCrtSocket.Bind(aPort); // BIND + LISTEN
   fServerKeepAliveTimeOut := KeepAliveTimeOut; // 3 seconds by default
-  fThreadPoolContentionAbortDelay := 5000; // 5 seconds default
-  fInternalHttpServerRespList := TList.Create;
+  if fThreadPool<>nil then
+    {$ifndef USE_WINIOCP}if not fThreadPool.QueuePendingContext then{$endif}
+      fThreadPool.ContentionAbortDelay := 5000; // 5 seconds default
   // event handlers set before inherited Create to be visible in childs
   fOnHttpThreadStart := OnStart;
   SetOnTerminate(OnStop);
@@ -6025,6 +6029,8 @@ var endtix: Int64;
     resp: THttpServerResp;
 begin
   Terminate; // set Terminated := true for THttpServerResp.Execute
+  if fThreadPool<>nil then
+    fThreadPool.fTerminated := true; // notify background process
   // force Accept() to return and terminate - shutdown(Sock.Sock) is not enough
   if (Sock<>nil) and (Sock.Sock>0) and not fExecuteFinished then
     DirectShutdown(CallServer('localhost',Sock.Port,false,cslTCP,1));
@@ -6060,6 +6066,33 @@ end;
 procedure THttpServer.SetHTTPQueueLength(aValue: Cardinal);
 begin
   fHTTPQueueLength := aValue;
+end;
+
+procedure THttpServer.InternalHttpServerRespListAdd(resp: THttpServerResp);
+begin
+  if (self=nil) or (fInternalHttpServerRespList=nil) or (resp=nil) then
+    exit;
+  EnterCriticalSection(fProcessCS);
+  try
+    fInternalHttpServerRespList.Add(resp);
+  finally
+    LeaveCriticalSection(fProcessCS);
+  end;
+end;
+
+procedure THttpServer.InternalHttpServerRespListRemove(resp: THttpServerResp);
+var i: integer;
+begin
+  if (self=nil) or (fInternalHttpServerRespList=nil) then
+    exit;
+  EnterCriticalSection(fProcessCS);
+  try
+    i := fInternalHttpServerRespList.IndexOf(resp);
+    if i>=0 then
+      fInternalHttpServerRespList.Delete(i);
+  finally
+    LeaveCriticalSection(fProcessCS);
+  end;
 end;
 
 function THttpServer.OnNginxAllowSend(Context: THttpServerRequest;
@@ -6108,7 +6141,6 @@ var ClientSock: TSocket;
     {$ifdef MONOTHREAD}
     ClientCrtSock: THttpServerSocket;
     {$endif}
-    tix,starttix,endtix: Int64;
 begin
   // THttpServerGeneric thread preparation: launch any OnHttpThreadStart event
   NotifyThreadStart(self);
@@ -6145,38 +6177,10 @@ begin
       {$else}
       if Assigned(fThreadPool) then begin
         // use thread pool to process the request header, and probably its body
-        if not fThreadPool.Push(pointer(PtrUInt(ClientSock))) then begin
+        if not fThreadPool.Push(pointer(PtrUInt(ClientSock)),{waitoncontention=}true) then begin
           // returned false if there is no idle thread in the pool, and queue is full
-          {$ifndef USE_WINIOCP}
-          if fThreadPool.QueueIsFull then begin // too many connection limit reached?
-            inc(fThreadPoolContentionAbortCount);
-            DirectShutdown(ClientSock); // expects the proxy to balance to another server
-            continue;
-          end;
-          {$endif USE_WINIOCP}
-          inc(fThreadPoolContentionCount);
-          tix := GetTick64;
-          starttix := tix;
-          endtix := tix+fThreadPoolContentionAbortDelay; // default 5 sec
-          repeat
-            if tix-starttix<50 then // wait for an available thread
-              SleepHiRes(1) else
-              SleepHiRes(10);
-            tix := GetTick64;
-            if Terminated then
-              break;
-            if fThreadPool.Push(pointer(PtrUInt(ClientSock))) then begin
-              endtix := 0; // thread pool acquired the client sock
-              break;
-            end;
-          until Terminated or (tix>endtix);
-          dec(tix,starttix);
-          if tix>0 then
-            inc(fThreadPoolContentionTime,tix);
-          if endtix<>0 then begin
-            inc(fThreadPoolContentionAbortCount);
-            DirectShutdown(ClientSock);
-          end;
+          DirectShutdown(ClientSock); // expects the proxy to balance to another server
+          continue;
         end;
       end else
         // default implementation creates one thread for each incoming socket
@@ -6407,12 +6411,7 @@ begin
   fServer := aServer;
   fServerSock := aServerSock;
   fOnTerminate := fServer.fOnTerminate;
-  EnterCriticalSection(fServer.fProcessCS);
-  try
-    fServer.fInternalHttpServerRespList.Add(self);
-  finally
-    LeaveCriticalSection(fServer.fProcessCS);
-  end;
+  fServer.InternalHttpServerRespListAdd(self);
   if (aServerSock.RemoteConnectionID <> 0) then
     fConnectionID := aServerSock.RemoteConnectionID
   else
@@ -6491,7 +6490,6 @@ procedure THttpServerResp.Execute;
   end;
 
 var aSock: TSocket;
-    i: integer;
 begin
   fServer.NotifyThreadStart(self);
   try
@@ -6517,17 +6515,8 @@ begin
         try
           fServer.OnDisconnect;
         finally
-          EnterCriticalSection(fServer.fProcessCS);
-          try
-            if (fServer.fInternalHttpServerRespList<>nil) then begin
-              i := fServer.fInternalHttpServerRespList.IndexOf(self);
-              if i>=0 then
-                fServer.fInternalHttpServerRespList.Delete(i);
-            end;
-          finally
-            LeaveCriticalSection(fServer.fProcessCS);
-            fServer := nil;
-          end;
+          fServer.InternalHttpServerRespListRemove(self);
+          fServer := nil;
         end;
       finally
         FreeAndNil(fServerSock);
@@ -6777,7 +6766,7 @@ end;
 constructor THttpServerSocket.Create(aServer: THttpServer);
 begin
   inherited Create(5000);
-  if aServer<>nil then begin
+  if aServer<>nil then begin // nil e.g. from TRTSPOverHTTPServer
     fServer := aServer;
     fCompress := aServer.fCompress;
     fCompressAcceptEncoding := aServer.fCompressAcceptEncoding;
@@ -6812,13 +6801,13 @@ begin
     Content := '';
     // get headers and content
     GetHeader;
-    if fServer<>nil then begin // e.g. =nil from TRTSPOverHTTPServer
-     P := FindHeader(pointer(Headers),length(Headers),fServer.fRemoteIPHeaderUpper);
-     if (P<>nil) and (P^<>#0) then
-       fRemoteIP := P;
-     P := FindHeader(pointer(Headers),length(Headers),fServer.fRemoteConnIDHeaderUpper);
-     if P<>nil then
-       fRemoteConnectionID := GetNextItemUInt64(P);
+    if fServer<>nil then begin // nil from TRTSPOverHTTPServer
+      P := FindHeader(pointer(Headers),length(Headers),fServer.fRemoteIPHeaderUpper);
+      if (P<>nil) and (P^<>#0) then
+        fRemoteIP := P;
+      P := FindHeader(pointer(Headers),length(Headers),fServer.fRemoteConnIDHeaderUpper);
+      if P<>nil then
+        fRemoteConnectionID := GetNextItemUInt64(P);
     end;
     if ConnectionClose then
       fKeepAliveClient := false;
@@ -7020,43 +7009,73 @@ begin
   inherited Destroy;
 end;
 
-function TSynThreadPool.Push(aContext: pointer): boolean;
-{$ifndef USE_WINIOCP}
-var i: integer;
-    thread: ^TSynThreadPoolSubThread;
-{$endif}
+function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boolean;
+  {$ifdef USE_WINIOCP}
+  function Enqueue: boolean;
+  begin // IOCP has its own queue
+    result := PostQueuedCompletionStatus(fRequestQueue,0,0,aContext);
+  end;
+  {$else}
+  function Enqueue: boolean;
+  var i, n: integer;
+      thread: ^TSynThreadPoolSubThread;
+  begin
+    result := false;
+    EnterCriticalsection(fSafe);
+    try
+      thread := pointer(fSubThread.List);
+      for i := 1 to fSubThread.Count do
+        if thread^.fProcessingContext=nil then begin
+          thread^.fProcessingContext := aContext;
+          thread^.fEvent.SetEvent;
+          result := true; // found one available thread
+          exit;
+        end else
+          inc(thread);
+      if not fQueuePendingContext then
+        exit;
+      n := fPendingContextCount;
+      if n+fSubThread.Count>QueueLength then
+        exit; // too many connection limit reached
+      if n=length(fPendingContext) then
+        SetLength(fPendingContext,n+n shr 3+64);
+      fPendingContext[n] := aContext;
+      inc(fPendingContextCount);
+      result := true; // added in pending queue
+    finally
+      LeaveCriticalsection(fSafe);
+    end;
+  end;
+  {$endif}
+var tix, starttix, endtix: Int64;
 begin
   result := false;
   if (self=nil) or fTerminated then
     exit;
-  {$ifdef USE_WINIOCP}
-  result := PostQueuedCompletionStatus(fRequestQueue,0,0,aContext);
-  {$else}
-  EnterCriticalsection(fSafe);
-  try
-    thread := pointer(fSubThread.List);
-    for i := 1 to fSubThread.Count do
-      if thread^.fProcessingContext=nil then begin
-        thread^.fProcessingContext := aContext;
-        thread^.fEvent.SetEvent;
-        result := true; // found one available thread
+  result := Enqueue;
+  if result then
+    exit;
+  inc(fContentionCount);
+  if (fContentionAbortDelay>0) and aWaitOnContention then begin
+    tix := GetTick64;
+    starttix := tix;
+    endtix := tix+fContentionAbortDelay; // default 5 sec
+    repeat
+      if tix-starttix<50 then // wait for an available slot in the queue
+        SleepHiRes(1) else
+        SleepHiRes(10);
+      tix := GetTick64;
+      if fTerminated then
         exit;
-      end else
-        inc(thread);
-    if fQueuePendingContext then begin
-      i := QueueLength; // inlined QueueIsFull
-      if (i>0) and (fPendingContextCount+fSubThread.Count>i) then
-        exit; // too many connection limit reached? caller should retry
-      if fPendingContextCount=length(fPendingContext) then
-        SetLength(fPendingContext,fPendingContextCount+fPendingContextCount shr 3+64);
-      fPendingContext[fPendingContextCount] := aContext;
-      inc(fPendingContextCount);
-      result := true; // put in pending queue
-    end;
-  finally
-    LeaveCriticalsection(fSafe);
+      if Enqueue then begin
+        result := true; // thread pool acquired the client sock
+        break;
+      end;
+    until fTerminated or (tix>endtix);
+    inc(fContentionTime,tix-starttix);
   end;
-  {$endif USE_WINIOCP}
+  if not result then
+    inc(fContentionAbortCount);
 end;
 
 {$ifndef USE_WINIOCP}
@@ -7079,7 +7098,7 @@ begin
   result := fQueuePendingContext;
   if result then begin
     i := QueueLength;
-    result := (i>0) and (GetPendingContextCount+fSubThread.Count>i);
+    result := GetPendingContextCount+fSubThread.Count>i;
   end;
 end;
 
@@ -7090,7 +7109,7 @@ begin
     exit;
   EnterCriticalsection(fSafe);
   try
-    if fPendingContextCount > 0 then begin
+    if fPendingContextCount>0 then begin
       result := fPendingContext[0];
       dec(fPendingContextCount);
       Move(fPendingContext[1],fPendingContext[0],fPendingContextCount*SizeOf(pointer));
@@ -9799,7 +9818,7 @@ begin
         conn.fBuffer := sReason;
         conn.fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
         conn.Close(WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS, Pointer(conn.fBuffer), Length(conn.fBuffer));
-//        PostQueuedCompletionStatus(fServer.fThreadPoolServer.FRequestQueue, 0, 0, @conn.fOverlapped);
+// PostQueuedCompletionStatus(fServer.fThreadPoolServer.FRequestQueue, 0, 0, @conn.fOverlapped);
       end;
     end;
   finally
@@ -9960,7 +9979,7 @@ end;
 
 procedure THttpApiWebSocketConnection.CheckIsActive;
 var elapsed: PtrInt;
-const sCloseReason = 'Closed by ellapsed ping timeout';
+const sCloseReason = 'Closed after ping timeout';
 begin
   if (fLastReceiveTickCount>0) and (fProtocol.fServer.fPingTimeout>0) then begin
     elapsed := GetTick64-fLastReceiveTickCount;
@@ -10073,11 +10092,11 @@ begin
           result := False;
           exit;
         end else if BufferType = WEB_SOCKET_PING_PONG_BUFFER_TYPE then begin
-          //todo: may be ansver on client's ping
+          // todo: may be answer to client's ping
           EWebSocketApi.RaiseOnError(hCompleteAction, WebSocketAPI.CompleteAction(fWSHandle, ActionContext, 0));
           exit;
         end else if BufferType = WEB_SOCKET_UNSOLICITED_PONG_BUFFER_TYPE then begin
-          //todo: may be handle this situation
+          // todo: may be handle this situation
           EWebSocketApi.RaiseOnError(hCompleteAction, WebSocketAPI.CompleteAction(fWSHandle, ActionContext, 0));
           exit;
         end else begin
@@ -10371,8 +10390,8 @@ constructor TSynThreadPoolHttpApiWebSocketServer.Create(Server: THttpApiWebSocke
   NumberOfThreads: Integer);
 begin
   fServer := Server;
-  fOnThreadStart := onThreadStart;
-  fOnTerminate := onThreadTerminate;
+  fOnThreadStart := OnThreadStart;
+  fOnTerminate := OnThreadTerminate;
   inherited Create(NumberOfThreads, Server.fReqQueue);
 end;
 
