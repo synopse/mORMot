@@ -72,7 +72,7 @@ unit SynSSPIAuth;
 {$I Synopse.inc} // define HASINLINE and other compatibility switches
 
 interface
-
+{$ifdef WINDOWS}
 uses
   Windows,
   SysUtils,
@@ -148,9 +148,9 @@ var
   /// HTTP header pattern received for SSPI authentication 'AUTHORIZATION: NTLM ' or 'AUTHORIZATION: NEGOTIATE '
   SECPKGNAMEHTTPAUTHORIZATION: PAnsiChar;
 
-
+{$endif}
 implementation
-
+{$ifdef WINDOWS}
 var
   ForceSecKerberosSPN: WideString;
 
@@ -364,4 +364,5 @@ end;
 
 initialization
   ServerForceNTLM(False);
+{$endif}
 end.

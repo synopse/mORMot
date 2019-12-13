@@ -55,7 +55,7 @@ unit SynSSPI;
 {$I Synopse.inc} // define HASINLINE and other compatibility switches
 
 interface
-
+{$ifdef WIONDOWS}
 uses
   Windows,
   SysUtils;
@@ -363,11 +363,11 @@ type
   protected
   public
   end;
-
+{$endif}
 
 implementation
 
-
+{$ifdef WINDOWS}
 (* ========================= Low-Level SSPI / SChannel API types ====== *)
 
 const
@@ -581,4 +581,5 @@ begin
   FreeCredentialsContext(fContext.CredHandle);
 end;
 
+{$endif}
 end.
