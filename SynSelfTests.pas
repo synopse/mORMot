@@ -4340,7 +4340,7 @@ var i, j, k, len, lenup100, CP, L: integer;
     WS: WideString;
     SU: SynUnicode;
     str: string;
-    U, res, Up,Up2: RawUTF8;
+    U,U2, res, Up,Up2: RawUTF8;
     arr: TRawUTF8DynArray;
     PB: PByte;
     {$ifndef DELPHI5OROLDER}
@@ -4441,6 +4441,20 @@ begin
   Check(GetUnQuoteCSVItem('"""one,',0,',','"')='');
   Check(FormatUTF8('abcd',[U],[WS])='abcd');
 {$endif}
+  U := QuotedStr('','"');
+  Check(U='""');
+  U := QuotedStr('abc','"');
+  Check(U='"abc"');
+  U := QuotedStr('a"c','"');
+  Check(U='"a""c"');
+  U := QuotedStr('abcd"efg','"');
+  Check(U='"abcd""efg"');
+  U := QuotedStr('abcd""efg','"');
+  Check(U='"abcd""""efg"');
+  U := QuotedStr('abcd"e"fg"','"');
+  Check(U='"abcd""e""fg"""');
+  U := QuotedStr('"abcd"efg','"');
+  Check(U='"""abcd""efg"');
   for i := 0 to 1000 do begin
     len := i*5;
     W := RandomAnsi7(len);
@@ -4521,7 +4535,7 @@ begin
     Check(IsWinAnsi(pointer(Unic),length(Unic)shr 1)=WA);
     Check(IsWinAnsiU(pointer(U))=WA);
     Up := SynCommons.UpperCase(U);
-    Check(SynCommons.UpperCase(LowerCase(U))=Up);
+    Check(SynCommons.UpperCase(SynCommons.LowerCase(U))=Up);
     Check(UTF8IComp(pointer(U),pointer(U))=0);
     Check(UTF8IComp(pointer(U),pointer(Up))=0);
     Check(UTF8ILComp(pointer(U),pointer(U),length(U),length(U))=0);
@@ -4543,7 +4557,8 @@ begin
     Check(kr32(0,pointer(U),length(U))=kr32reference(pointer(U),length(U)));
     if U='' then
       continue;
-    Check(UnQuoteSQLStringVar(pointer(QuotedStr(U,'"')),res)<>nil);
+    U2 := QuotedStr(U,'"');
+    Check(UnQuoteSQLStringVar(pointer(U2),res)<>nil);
     Check(res=U);
     Check(not IsZero(pointer(W),length(W)));
     FillCharFast(pointer(W)^,length(W),0);
