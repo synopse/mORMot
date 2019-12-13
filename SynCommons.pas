@@ -1572,6 +1572,7 @@ procedure StringToSynUnicode(const S: string; var result: SynUnicode); overload;
 function StringToRawUnicode(P: PChar; L: integer): RawUnicode; overload;
 
 /// convert any Raw Unicode encoded string into a generic VCL Text
+// - uses StrLenW() and not length(U) to handle case when was used as buffer
 function RawUnicodeToString(const U: RawUnicode): string; overload;
 
 /// convert any Raw Unicode encoded buffer into a generic VCL Text
@@ -3093,20 +3094,13 @@ function StringReplaceTabs(const Source,TabText: RawUTF8): RawUTF8;
 function QuotedStr(const S: RawUTF8; Quote: AnsiChar=''''): RawUTF8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// format a buffered text content with SQL-like quotes
+/// format a text content with SQL-like quotes
+// - UTF-8 version of the function available in SysUtils
 // - this function implements what is specified in the official SQLite3
 // documentation: "A string constant is formed by enclosing the string in single
 // quotes ('). A single quote within the string can be encoded by putting two
 // single quotes in a row - as in Pascal."
-function QuotedStr(Text: PUTF8Char; Quote: AnsiChar): RawUTF8; overload;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// format a buffered text content with SQL-like quotes
-// - this function implements what is specified in the official SQLite3
-// documentation: "A string constant is formed by enclosing the string in single
-// quotes ('). A single quote within the string can be encoded by putting two
-// single quotes in a row - as in Pascal."
-procedure QuotedStr(Text: PUTF8Char; Quote: AnsiChar; var result: RawUTF8); overload;
+procedure QuotedStr(const S: RawUTF8; Quote: AnsiChar; var result: RawUTF8); overload;
 
 /// convert a buffered text content into a JSON string
 // - with proper escaping of the content, and surounding " characters
@@ -19896,7 +19890,7 @@ var wasString: boolean;
 begin
   VarRecToUTF8(V,tmp,@wasString);
   if wasString then
-    QuotedStr(pointer(tmp),'"',result) else
+    QuotedStr(tmp,'"',result) else
     result := tmp;
 end;
 
@@ -21831,7 +21825,7 @@ var tmp: RawUTF8;
 begin
   VariantToUTF8(V,tmp,wasString);
   if wasString then
-    QuotedStr(pointer(tmp),'"',result) else
+    QuotedStr(tmp,'"',result) else
     result := tmp;
 end;
 
@@ -22907,79 +22901,58 @@ end;
 
 function QuotedStr(const S: RawUTF8; Quote: AnsiChar): RawUTF8;
 begin
-  QuotedStr(Pointer(S),Quote,result);
+  QuotedStr(S,Quote,result);
 end;
 
-function QuotedStr(Text: PUTF8Char; Quote: AnsiChar): RawUTF8;
-begin
-  QuotedStr(Text,Quote,result);
-end;
-
-procedure QuotedStr(Text: PUTF8Char; Quote: AnsiChar; var result: RawUTF8);
-var n, L, first: PtrInt;
+procedure QuotedStr(const S: RawUTF8; Quote: AnsiChar; var result: RawUTF8);
+var i,L,quote1,nquote: PtrInt;
     P: PUTF8Char;
-label quot;
+    c: AnsiChar;
 begin
-  n := 0;
-  L := 0;
-  first := 0;
-  if Text<>nil then begin
-    P := Text;
-    repeat
-      if P[L]=#0 then
-        break else
-      if P[L]<>Quote then begin
-        inc(L);
-        continue;
-      end;
-      first := L;
-      inc(L);
-      inc(n);
-      repeat
-        if P[L]=#0 then
-          break else
-        if P[L]<>Quote then begin
-          inc(L);
-          continue;
-        end;
-        inc(L);
-        inc(n);
-      until false;
-      break;
-    until false;
-  end;
-  FastSetString(result,nil,L+n+2);
-  P := pointer(Result);
+  L := length(S);
+  {$ifdef FPC} // will use fast FPC SSE version
+  quote1 := IndexByte(pointer(S)^,L,byte(Quote))+1;
+  if quote1>0 then begin
+    nquote := 1;
+    for i := quote1+1 to L do
+      if S[i]=Quote then
+        inc(nquote);
+  end else
+    nquote := 0;
+  {$else}
+  quote1 := 0;
+  nquote := 0;
+  for i := 1 to L do
+    if S[i]=Quote then begin
+      if nquote=0 then
+        quote1 := i;
+      inc(nquote);
+    end;
+  {$endif}
+  FastSetString(result,nil,L+nquote+2);
+  P := pointer(result);
   P^ := Quote;
   inc(P);
-  if n=0 then begin
-    if L<>0 then begin
-      MoveSmall(Text,P,L);
-      inc(P,L);
-    end;
+  if nquote=0 then begin
+    Move(pointer(s)^,P^,L);
+    P[L] := Quote;
   end else begin
-    if first<>0 then
-      MoveSmall(Text,P,first);
-    n := first;
-    L := first;
-    goto quot;
-    repeat
-      if Text[L]=#0 then
-        break else
-      if Text[L]<>Quote then begin
-        P[n] := Text[L];
-        inc(L);
-        inc(n);
+    MoveSmall(pointer(s),P,quote1);
+    inc(P,quote1);
+    P^ := Quote;
+    inc(P);
+    for i := quote1+1 to L do begin
+      c := S[i];
+      if c=Quote then begin
+        PWord(P)^ := ord('"')+ord('"')shl 8;
+        inc(P,2);
       end else begin
-quot:   PWord(P+n)^ := ord(Quote)+ord(Quote) shl 8;
-        inc(L);
-        inc(n,2);
+        P^ := c;
+        inc(P);
       end;
-    until false;
-    inc(P,n);
+    end;
+    P^ := Quote;
   end;
-  P^ := Quote;
-  //Assert(P-pointer(Result)+1=length(result));
 end;
 
 function GotoEndOfQuotedString(P: PUTF8Char): PUTF8Char;
@@ -23738,7 +23711,7 @@ Txt:  len := F-FDeb;
         if wasString then
           if JSONFormat then
             QuotedStrJSON(tmp[tmpN],tmp[tmpN]) else
-            tmp[tmpN] := QuotedStr(pointer(tmp[tmpN]),'''');
+            tmp[tmpN] := QuotedStr(tmp[tmpN],'''');
         if not JSONFormat then begin
           inc(L,4); // space for :():
           include(inlin,tmpN);
