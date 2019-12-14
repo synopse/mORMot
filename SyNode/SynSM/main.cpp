@@ -1,3 +1,5 @@
+#include "SynSM.h"
+
 #include <jsfriendapi.h>
 #include <js/Date.h>
 #include <js/Initialization.h>
@@ -659,7 +661,7 @@ JS_PUBLIC_API(void*) SM_NewRootedValue(JSContext* cx, uint64_t initial)
     return js_new<JS::RootedValue>(cx, JS::Value::fromRawBits(initial));
 }
 
-JS_PUBLIC_API(void) SM_FreeRooteValue(void* val)
+JS_PUBLIC_API(void) SM_FreeRootedValue(void* val)
 {
     js_delete(reinterpret_cast<JS::RootedValue*>(val));
 }
@@ -684,37 +686,37 @@ JS_PUBLIC_API(void) SM_FreeRootedString(void* str)
     js_delete(reinterpret_cast<JS::RootedString*>(str));
 }
 
-JS_PUBLIC_API(void*) JS_NewCompileOptions(JSContext* cx)
+JS_PUBLIC_API(void*) SM_NewCompileOptions(JSContext* cx)
 {
     return js_new<JS::CompileOptions>(cx);
 }
 
-JS_PUBLIC_API(void) JS_SetCompileOptionsFileLineAndUtf8(JS::CompileOptions& options, const char* f, unsigned l, bool isUtf8)
+JS_PUBLIC_API(void) SM_SetCompileOptionsFileLineAndUtf8(JS::CompileOptions& options, const char* f, unsigned l, bool isUtf8)
 {
-  options.setFileAndLine(f, l);
-  options.setUTF8(isUtf8);
+    options.setFileAndLine(f, l);
+    options.setUTF8(isUtf8);
 }
 
-JS_PUBLIC_API(void) JS_FreeCompileOptions(void* co)
+JS_PUBLIC_API(void) SM_FreeCompileOptions(void* co)
 {
     js_delete(reinterpret_cast<JS::CompileOptions*>(co));
 }
 
-JS_PUBLIC_API(bool) JS_EvaluateScript(
+JS_PUBLIC_API(bool) SM_EvaluateScript(
     JSContext* cx, const JS::CompileOptions& options,
     const char* bytes, size_t length, JS::MutableHandleValue rval)
 {
-    return JS_EvaluateScript(cx, options, bytes, length, rval);
+    return JS::Evaluate(cx, options, bytes, length, rval);
 }
 
-JS_PUBLIC_API(bool) JS_EvaluateUCScript(
+JS_PUBLIC_API(bool) SM_EvaluateUCScript(
     JSContext* cx, const JS::CompileOptions& options,
     const char16_t* chars, size_t length, JS::MutableHandleValue rval)
 {
-    return JS_EvaluateUCScript(cx, options, chars, length, rval);
+    return JS::Evaluate(cx, options, chars, length, rval);
 }
 
-JS_PUBLIC_API(JS::Value) JS_ComputeThis(JSContext* cx, JS::Value* vp)
+JS_PUBLIC_API(JS::Value) SM_ComputeThis(JSContext* cx, JS::Value* vp)
 {
     return JS::detail::ComputeThis(cx, vp);
 }
@@ -1146,6 +1148,16 @@ JS_PUBLIC_API(void) SM_SetModuleResolveHook(JSContext* cx, JS::HandleFunction ho
     JS::SetModuleResolveHook(cx, hook);
 }
 
+JS_PUBLIC_API(void*) SM_NewCompartmentOptions()
+{
+    return js_new<JS::CompartmentOptions>();
+}
+
+JS_PUBLIC_API(void) SM_FreeCompartmentOptions(void* opt)
+{
+    js_delete(reinterpret_cast<JS::CompartmentOptions*>(opt));
+}
+
 
 
 
@@ -1295,18 +1307,6 @@ JS_PUBLIC_API(void*) SM_GetZoneUserData(JS::Zone* zone)
 
 
 JS_PUBLIC_API(void*)
-JS_NewCompartmentOptions()
-{
-    return js_new<JS::CompartmentOptions>();
-}
-
-JS_PUBLIC_API(void)
-JS_FreeCompartmentOptions(void* opt)
-{
-    js_delete(reinterpret_cast<JS::CompartmentOptions*>(opt));
-}
-
-JS_PUBLIC_API(void*)
 JS_NewAutoCheckCannotGC()
 {
     return js_new<JS::AutoCheckCannotGC>();
@@ -1316,20 +1316,6 @@ JS_PUBLIC_API(void)
 JS_FreeAutoCheckCannotGC(void* ac)
 {
     js_delete(reinterpret_cast<JS::AutoCheckCannotGC*>(ac));
-}
-
-JS_PUBLIC_API(bool)
-JS_EvaluateScript(JSContext* cx, const JS::CompileOptions& options,
-    const char* bytes, size_t length, JS::MutableHandleValue rval)
-{
-    return JS::Evaluate(cx, options, bytes, length, rval);
-}
-
-JS_PUBLIC_API(bool)
-JS_EvaluateUCScript(JSContext* cx, const JS::CompileOptions& options,
-    const char16_t* chars, size_t length, JS::MutableHandleValue rval)
-{
-    return JS::Evaluate(cx, options, chars, length, rval);
 }
 */
 

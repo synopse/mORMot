@@ -15,6 +15,7 @@
 				<Option createStaticLib="1" />
 				<Compiler>
 					<Add option="-g" />
+					<Add option="-DDEBUG" />
 				</Compiler>
 			</Target>
 			<Target title="Release">
@@ -64,6 +65,9 @@
 		</Compiler>
 		<Linker>
 			<Add option="-m64" />
+			<Add option="--whole-file /usr/local/lib/libjs_static.a --no-whole-file" />
+			<Add option="--whole-file /usr/local/lib/libmozglue.a --no-whole-file" />
+			<Add option="--whole-file /usr/local/lib/libmfbt.a --no-whole-file" />
 		</Linker>
 		<Unit filename="include/SynSM.h" />
 		<Unit filename="main.cpp" />

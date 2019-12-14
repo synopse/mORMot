@@ -305,7 +305,7 @@ extern "C" JS_PUBLIC_API(void*) SM_GetContextOptions(JSContext* cx);
 
 extern "C" JS_PUBLIC_API(void*) SM_NewRootedValue(JSContext* cx, uint64_t initial);
 
-extern "C" JS_PUBLIC_API(void) SM_FreeRooteValue(void* val);
+extern "C" JS_PUBLIC_API(void) SM_FreeRootedValue(void* val);
 
 extern "C" JS_PUBLIC_API(void*) SM_NewRootedObject(JSContext* cx, JSObject* initial);
 
@@ -324,11 +324,11 @@ extern "C" JS_PUBLIC_API(void) SM_FreeCompileOptions(void* co);
 
 extern "C" JS_PUBLIC_API(bool) SM_EvaluateScript(
     JSContext* cx, const JS::CompileOptions& options,
-	const char* bytes, size_t length, JS::MutableHandleValue rval);
+    const char* bytes, size_t length, JS::MutableHandleValue rval);
 
 extern "C" JS_PUBLIC_API(bool) SM_EvaluateUCScript(
     JSContext* cx, const JS::CompileOptions& options,
-	const char16_t* chars, size_t length, JS::MutableHandleValue rval);
+    const char16_t* chars, size_t length, JS::MutableHandleValue rval);
 
 extern "C" JS_PUBLIC_API(JS::Value) SM_ComputeThis(JSContext* cx, JS::Value* vp);
 
@@ -521,10 +521,14 @@ extern "C" JS_PUBLIC_API(bool) SM_InitModuleClasses(
 
 extern "C" JS_PUBLIC_API(JSObject*) SM_CompileModule(
     JSContext* cx, JS::Handle<JSObject*> obj, JS::CompileOptions& options,
-	const char16_t* chars, size_t length);
+    const char16_t* chars, size_t length);
 
 extern "C" JS_PUBLIC_API(void) SM_SetModuleResolveHook(
     JSContext* cx, JS::Handle<JSFunction*> hook);
+
+extern "C" JS_PUBLIC_API(void*) SM_NewCompartmentOptions();
+
+extern "C" JS_PUBLIC_API(void) SM_FreeCompartmentOptions(void* opt);
 
 
 
@@ -1176,12 +1180,6 @@ extern "C" JS_PUBLIC_API(bool)
 
 extern "C" JS_PUBLIC_API(void*)
 JS_SetCompileOptionsFileAndLine(const char* f, unsigned l);
-
-extern "C" JS_PUBLIC_API(void*)
-JS_NewCompartmentOptions();
-
-extern "C" JS_PUBLIC_API(void)
-JS_FreeCompartmentOptions(void* opt);
 
 extern "C" JS_FRIEND_API(js::Scalar::Type)
  JS_GetSharedArrayBufferViewType(JSObject* obj);

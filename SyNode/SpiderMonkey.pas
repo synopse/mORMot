@@ -3497,8 +3497,10 @@ begin
   Result := JS_NewDateObject(@Self, year, mon, mday, hour, min, sec);
 end;
 
-function JS_NewCompartmentOptions(): PJS_CompartmentOptions; cdecl; external SpiderMonkeyLib;
-procedure JS_FreeCompartmentOptions(opt: PJS_CompartmentOptions); cdecl; external SpiderMonkeyLib;
+function JS_NewCompartmentOptions(): PJS_CompartmentOptions; cdecl;
+  external SpiderMonkeyLib name 'SM_NewCompartmentOptions';
+procedure JS_FreeCompartmentOptions(opt: PJS_CompartmentOptions); cdecl;
+  external SpiderMonkeyLib name 'SM_FreeCompartmentOptions';
 
 function JSContext.NewGlobalObject(clasp: PJSClass): PJSObject;
 var
