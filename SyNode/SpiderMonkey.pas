@@ -1122,7 +1122,7 @@ type
     function ValueToId(var v: jsval; out id: jsid): Boolean; //~~~ write delphi realization
 
     /// Determines the JS data type of a JS value.
-    function TypeOfValue(v: jsval): JSType; //~~~ write delphi realization
+    function TypeOfValue(v: jsval): JSType; {$ifdef HASINLINE}inline;{$endif} //~~~ write delphi realization
 
     /// Compile and execute a script in the scope of the current global of cx.
     function EvaluateScript(opts: PJSCompileOptions;
@@ -2068,7 +2068,7 @@ const
                                   // for property holding function
 
   JSFUN_CONSTRUCTOR      = $400; // native that can be called as a ctor
-  /// enumerabl eread-only property attributes
+  /// enumerable read-only property attributes
   JSPROPS_STATIC_RO      = JSPROP_ENUMERATE or JSPROP_READONLY or JSPROP_PERMANENT;
 {$IFDEF SM52}
 // unused
@@ -2167,7 +2167,6 @@ type
 // !   Result := True;
 // ! except
 // ! on E: Exception do begin
-// !   vp.rval := JSVAL_VOID;
 // !   JSError(cx, E);
 // !   Result := False;
 // ! end;

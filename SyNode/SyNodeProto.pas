@@ -714,8 +714,6 @@ begin
   FRTTIPropsCache[idx].DeterministicIndex := -1;
 
   FJSProps[idx].flags := JSPROP_ENUMERATE or JSPROP_PERMANENT or JSPROP_SHARED;
-  if not Assigned(aSetter) then
-    FJSProps[idx].flags := FJSProps[idx].flags or JSPROP_READONLY;
   FJSProps[idx].Name := PCChar(RTTIPropsCache[idx].jsName);
   FJSProps[idx].setter.native.info := nil;
   FJSProps[idx].setter.native.op := aSetter;
