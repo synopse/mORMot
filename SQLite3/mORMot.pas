@@ -4291,7 +4291,8 @@ type
     // - then you can use ObjArrayAdd/ObjArrayFind/ObjArrayDelete to manage
     // the stored items, and never forget to call ObjArrayClear to release
     // the memory
-    //class procedure RegisterObjArrayForJSON(aDynArray: PTypeInfo; aItem: TClass); overload;
+    // - will use the default published properties serializer, unless you specify
+    // your custom Reader/Write callbacks
     class procedure RegisterObjArrayForJSON(aDynArray: PTypeInfo;
       aItem: TClass; aReader: TDynArrayJSONCustomReader=nil; aWriter: TDynArrayJSONCustomWriter=nil);overload;
     /// let T*ObjArray dynamic arrays be used for storage of class instances
@@ -23815,25 +23816,32 @@ end;
 
 type
   TObjArraySerializer = class(TPointerClassHashed)
+  protected
+    procedure DefaultCustomWriter(const aWriter: TTextWriter; const aValue);
+    function DefaultCustomReader(P: PUTF8Char; var aValue; out aValid: Boolean): PUTF8Char;
   public
     Instance: TClassInstance;
     CustomReader: TDynArrayJSONCustomReader;
     CustomWriter: TDynArrayJSONCustomWriter;
-    constructor Create(aInfo: pointer; aItem: TClass); reintroduce;
-    procedure aCustomWriter(const aWriter: TTextWriter; const aValue);
-    function aCustomReader(P: PUTF8Char; var aValue; out aValid: Boolean): PUTF8Char;
+    constructor Create(aInfo: pointer; aItem: TClass;
+      aReader: TDynArrayJSONCustomReader; aWriter: TDynArrayJSONCustomWriter); reintroduce;
   end;
   PTObjArraySerializer = ^TObjArraySerializer;
 
-constructor TObjArraySerializer.Create(aInfo: pointer; aItem: TClass);
+constructor TObjArraySerializer.Create(aInfo: pointer; aItem: TClass;
+  aReader: TDynArrayJSONCustomReader; aWriter: TDynArrayJSONCustomWriter);
 begin
   inherited Create(aInfo);
   Instance.Init(aItem);
-  CustomReader:=aCustomReader;
-  CustomWriter:=aCustomWriter;
+  if Assigned(aReader) then
+    CustomReader := aReader else
+    CustomReader := DefaultCustomReader;
+  if Assigned(aWriter) then
+    CustomWriter := aWriter else
+    CustomWriter := DefaultCustomWriter;
 end;
 
-procedure TObjArraySerializer.aCustomWriter(const aWriter: TTextWriter; const aValue);
+procedure TObjArraySerializer.DefaultCustomWriter(const aWriter: TTextWriter; const aValue);
 var opt: TTextWriterWriteObjectOptions;
 begin
   if twoEnumSetsAsTextInRecord in aWriter.CustomOptions then
@@ -23844,7 +23852,7 @@ begin
   aWriter.WriteObject(TObject(aValue),opt);
 end;
 
-function TObjArraySerializer.aCustomReader(P: PUTF8Char; var aValue;
+function TObjArraySerializer.DefaultCustomReader(P: PUTF8Char; var aValue;
   out aValid: Boolean): PUTF8Char;
 begin
   if TObject(aValue)=nil then
@@ -49393,7 +49401,7 @@ begin
 end;
 
 class procedure TJSONSerializer.RegisterObjArrayForJSON(aDynArray: PTypeInfo;
-  aItem: TClass; aReader: TDynArrayJSONCustomReader=nil; aWriter: TDynArrayJSONCustomWriter=nil);
+  aItem: TClass; aReader: TDynArrayJSONCustomReader; aWriter: TDynArrayJSONCustomWriter);
 var serializer: ^TObjArraySerializer;
 begin
   if (aItem=nil) or (aDynArray^.DynArrayItemSize<>SizeOf(TObject)) then
@@ -49404,9 +49412,7 @@ begin
   serializer := pointer(ObjArraySerializers.TryAdd(aDynArray));
   if serializer=nil then
     exit; // avoid duplicate
-  serializer^ := TObjArraySerializer.Create(aDynArray,aItem);
-  if @aReader<>nil then serializer^.CustomReader:=aReader;
-  if @aWriter<>nil then serializer^.CustomWriter:=aWriter;
+  serializer^ := TObjArraySerializer.Create(aDynArray,aItem,aReader,aWriter);
   TTextWriter.RegisterCustomJSONSerializer(
     aDynArray,serializer^.CustomReader,serializer^.CustomWriter);
 end;
