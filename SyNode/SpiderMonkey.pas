@@ -280,56 +280,6 @@ type
   JSProto_Promise,
   JSProto_LIMIT
   );
-{$ELSE}
-  JSProtoKey = (
-  JSProto_Null = 0,
-  JSProto_Object,
-  JSProto_Function,
-  JSProto_Array,
-  JSProto_Boolean,
-  JSProto_JSON,
-  JSProto_Date,
-  JSProto_Math,
-  JSProto_Number,
-  JSProto_String,
-  JSProto_RegExp,
-  JSProto_Error,
-  JSProto_InternalError,
-  JSProto_EvalError,
-  JSProto_RangeError,
-  JSProto_ReferenceError,
-  JSProto_SyntaxError,
-  JSProto_TypeError,
-  JSProto_URIError,
-  JSProto_Iterator,
-  JSProto_StopIteration,
-  JSProto_ArrayBuffer,
-  JSProto_Int8Array,
-  JSProto_Uint8Array,
-  JSProto_Int16Array,
-  JSProto_Uint16Array,
-  JSProto_Int32Array,
-  JSProto_Uint32Array,
-  JSProto_Float32Array,
-  JSProto_Float64Array,
-  JSProto_Uint8ClampedArray,
-  JSProto_Proxy,
-  JSProto_WeakMap,
-  JSProto_Map,
-  JSProto_Set,
-  JSProto_DataView,
-  JSProto_Symbol,
-  JSProto_SharedArrayBuffer,
-  JSProto_Intl,
-  JSProto_TypedObject,
-  JSProto_Reflect,
-  JSProto_SIMD,
-  JSProto_WeakSet,
-  JSProto_TypedArray,
-  JSProto_Atomics,
-  JSProto_SavedFrame,
-  JSProto_LIMIT
-  );
 {$Z1}
 /// Type of JSValue
   JSValueType = (
@@ -2058,7 +2008,7 @@ const
 function SimpleVariantToJSval(cx: PJSContext; val: Variant): jsval;
 
 const
-  SpiderMonkeyLib = 'synsm'{$IFDEF MSWINDOWS} + '.dll'{$ENDIF};
+  SpiderMonkeyLib = 'SynSM'{$IFDEF MSWINDOWS} + '.dll'{$ENDIF};
 
  /// Initialize SpiderMonkey, returning true only if initialization succeeded.
  // Once this method has succeeded, it is safe to call JS_NewRuntime and other
@@ -2255,7 +2205,7 @@ function JS_NewGlobalObject(cx: PJSContext; clasp: PJSClass; principals: PJSPrin
 /// It is still possible to specify custom trace hooks for global object classes. They can be
 /// provided via the CompartmentOptions passed to JS_NewGlobalObject.
 procedure JS_GlobalObjectTraceHook(trc: Pointer{ JSTracer }; global: PJSObject); cdecl;
-  external SpiderMonkeyLib name 'SM_GlobalObjectTraceHook';
+  external SpiderMonkeyLib name '_Z24JS_GlobalObjectTraceHookP8JSTracerP8JSObject';
 
 /// Create a new object based on a specified class
 function JS_NewObject(cx: PJSContext; clasp: PJSClass): PJSObject; cdecl; external SpiderMonkeyLib name 'SM_NewObject';
@@ -2536,14 +2486,14 @@ function JS_ParseJSON(cx: PJSContext; const chars: PCChar16;
 // The callback must then return JS_FALSE to cause the exception to be propagated
 // to the calling script.
 procedure JS_ReportError(cx: PJSContext; const format: PCChar);
-  cdecl; varargs; external SpiderMonkeyLib name 'SM_ReportErrorASCII';
+  cdecl; varargs; external SpiderMonkeyLib name '_Z19JS_ReportErrorASCIIP9JSContextPKcz';
 /// Report an error with an application-defined error code.
 // - varargs is Additional arguments for the error message.
 //- These arguments must be of type jschar*
 // - The number of additional arguments required depends on the error
 // message, which is determined by the errorCallback
 procedure JS_ReportErrorNumberUC(cx: PJSContext; errorCallback: JSErrorCallback;
-  userRef: pointer; const erroNubmer: uintN); cdecl; varargs; external SpiderMonkeyLib name 'SM_ReportErrorNumberUC';
+  userRef: pointer; const erroNubmer: uintN); cdecl; varargs; external SpiderMonkeyLib name '_Z22JS_ReportErrorNumberUCP9JSContextPFPK19JSErrorFormatStringPvjES4_jz';
 procedure JS_ReportErrorNumberUTF8(cx: PJSContext; errorCallback: JSErrorCallback;
   userRef: pointer; const erroNubmer: uintN); cdecl; varargs; external SpiderMonkeyLib name 'SM_ReportErrorNumberUTF8';
 /// Reports a memory allocation error
@@ -2594,7 +2544,7 @@ function JS_GetContextOptions(cx: PJSContext): PJSContextOptions; cdecl; externa
 
 //function JS_NewRootedValue(cx: PJSContext; val: jsval): PJSRootedValue; cdecl; external SpiderMonkeyLib;
 function JS_NewRootedValue(cx: PJSContext; val: Int64): PJSRootedValue; cdecl; external SpiderMonkeyLib name 'SM_NewRootedValue';
-procedure JS_FreeRootedValue(val: PJSRootedValue); cdecl; external SpiderMonkeyLib name 'JS_FreeRooteValue' name 'SM_FreeRootedValue';
+procedure JS_FreeRootedValue(val: PJSRootedValue); cdecl; external SpiderMonkeyLib name 'SM_FreeRootedValue';
 
 function JS_NewRootedObject(cx: PJSContext; obj: PJSObject): PJSRootedObject; cdecl; external SpiderMonkeyLib name 'SM_NewRootedObject';
 procedure JS_FreeRootedObject(obj: PJSRootedObject); cdecl; external SpiderMonkeyLib name 'SM_FreeRootedObject';
